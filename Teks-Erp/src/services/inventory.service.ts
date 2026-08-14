@@ -561,6 +561,24 @@ export interface ProductionFlowData {
   sevk: { shipments: ProductionFlowSackCard[]; total: number };
 }
 
+/**
+ * `createInitialEntry`in yanıtı — `ApiResponse<Roll>` + REPLAY İŞARETİ.
+ *
+ * ⚠️ `idempotent: true` = "bu çağrıda YENİ top DOĞMADI, aynı `clientToken`la
+ * daha önce yazılmış olan geri döndü". Alan bilgi amaçlı DEĞİL, KARAR
+ * verdiricidir: çağıran taraf bir DEFTER tutuyorsa (miktar sayacı, kapasite,
+ * kota) replay'i saymamalıdır — o mal zaten bir kez sayılmıştır.
+ *
+ * Neden mesaj metnine bakılmıyor: "Top zaten kayıtlı (idempotent retry)"
+ * cümlesi operatöre gösterilen bir METİNDİR; ilk düzenleyen kişi onu
+ * değiştirdiğinde metne bakan çağıran replay'i sessizce "yeni top" saymaya
+ * başlar — hata yok, log yok, yalnız iki kez sayılmış mal. Karar alanı ayrı.
+ *
+ * Alan OPSİYONELDİR ve yalnız replay'de doldurulur: mevcut çağıranların
+ * hiçbiri (`inventory.controller`, `tambur-manual.service`) etkilenmez.
+ */
+export type InitialEntryResult = ApiResponse<Roll> & { idempotent?: true };
+
 export class InventoryService {
   /**
    * Initial goods receipt — creates a new Roll in STOCK status.
@@ -686,6 +704,19 @@ export class InventoryService {
       /** Topu doğuran mal kabul fişi (yalnız `GoodsReceipt` yolu doldurur). */
       goodsReceiptId?: string | null;
       /**
+       * Topun KARŞILADIĞI alış siparişi kalemi (J2, 2026-08-15) — yalnız
+       * `GoodsReceipt` yolu doldurur, orada da yalnız fiş bir siparişe bağlıysa.
+       *
+       * ⚠️ BURADA TÜRETİLMEZ (`entryStationId` / `forcedEntrySource` emsali):
+       * kalem seçimi FIFO kapasite defterine bakar ve o defter fiş boyunca
+       * yaşar (satırlar ayrı tx'lerde doğuyor) — tek satırlık bu create
+       * noktasından görülemez. Çağıran çözer, AÇIKÇA verir.
+       *
+       * ⚠️ İZ BİLGİLENDİRİCİDİR, KARŞILANMA HESABI DEĞİL: `receivedQty`nin tek
+       * kaynağı `purchase-order.service` rollup zinciridir (şema yorumu).
+       */
+      purchaseOrderLineId?: string | null;
+      /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
@@ -722,7 +753,7 @@ export class InventoryService {
        */
       txGate?: (tx: Prisma.TransactionClient) => Promise<void>;
     },
-  ): Promise<ApiResponse<Roll>> {
+  ): Promise<InitialEntryResult> {
     // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
     // UI alanı gizlemek yetmez — kapalıyken gelen ağırlık payload'ını (yanlışlıkla ya da
     // kötü niyetle) backend REDDEDER. Tüm istemcilerin (mobil + Electron + script) tek
@@ -961,6 +992,8 @@ export class InventoryService {
             warehouseId: targetWarehouseId,
             purchasePrice: opts?.purchasePrice ?? null,
             goodsReceiptId: opts?.goodsReceiptId ?? null,
+            // Sipariş kalemi izi (J2) — verilmezse NULL (fabrika yolları hiç vermez).
+            purchaseOrderLineId: opts?.purchaseOrderLineId ?? null,
             clientToken: data.clientToken ?? null,
             itemId: data.itemId,
             colorId: data.colorId ?? null,
@@ -1046,6 +1079,11 @@ export class InventoryService {
               success: true,
               data: existing,
               message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
+              // ⚠️ YENİ TOP DOĞMADI — defter tutan çağıran bunu SAYMAMALI
+              // (`InitialEntryResult` başlığındaki gerekçe). Mal Kabul bu
+              // alana bakarak sipariş kalemi kapasitesini ikinci kez
+              // tüketmiyor; alan düşerse o hata sessizce geri gelir.
+              idempotent: true,
             };
           }
           throw AppError.conflict(

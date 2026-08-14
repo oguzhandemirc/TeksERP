@@ -23,14 +23,24 @@
 //              · İPLİK hareketleri (Σ IN − Σ OUT, kg)            → iplik
 //
 // ⚠️ NEDEN "increment" DEĞİL YENİDEN HESAP (bilinçli sapma, şema yorumundaki
-// "increment" ifadesinden): şemada top ↔ sipariş KALEMİ bağı YOK
-// (`Roll.purchaseOrderLineId` diye bir kolon yok — bkz. rapor). Yani delta'yı
-// zaten kaynaktan (kalem × ürün) türetmek zorundayız. Delta'yı türetip
-// `increment` yazmak, kaynağı okuyup SONUCU yazmakla aynı sorguyu gerektirir
-// ama bir farkı vardır: `increment` KAÇIRILAN her olayı kalıcı hataya çevirir
-// (topun tekil `softDelete`'i, elle veri düzeltmesi, yarım kalmış fiş iptali),
-// yeniden hesap ise bir sonraki çağrıda KENDİNİ ONARIR. `YarnStock.balanceKg`
-// ↔ `YarnMovement` ve `Order.shippedQty` ile aynı aile: rollup + mutabakat.
+// "increment" ifadesinden): `increment` KAÇIRILAN her olayı kalıcı hataya
+// çevirir (topun tekil `softDelete`'i, elle veri düzeltmesi, yarım kalmış fiş
+// iptali), yeniden hesap ise bir sonraki çağrıda KENDİNİ ONARIR.
+// `YarnStock.balanceKg` ↔ `YarnMovement` ve `Order.shippedQty` ile aynı aile:
+// rollup + mutabakat.
+//
+// ⚠️⚠️ `Roll.purchaseOrderLineId` BU HESABIN KAYNAĞI DEĞİLDİR (J2, 2026-08-15).
+// Bu blok bir süre "öyle bir kolon zaten yok" diyordu; kolon ARTIK VAR ve
+// gerekçe onunla ÇÜRÜMEZ, GÜÇLENİR: o kolon bir İZDİR, defter değil. Damgayı
+// toplayıp `receivedQty` türetmek İKİ ölçülmüş sebeple yanlış olurdu —
+//   ① damga miktarı BÖLEMEZ (top fiziksel bir bütündür), `distributeFifo`
+//     böler: 50+100'lük kalemlere 30+30+30 gelince rollup "50 / 40" der,
+//     damga "iki top L1, bir top L2";
+//   ② damga tahsisi eşzamanlı fişlerde YAKLAŞIKTIR (gerekçe + ölçüm:
+//     `goods-receipt.service.claimStampLine`), miktar defteri ise bu dosyanın
+//     advisory kilidi sayesinde eşzamanlılıkta da DOĞRU kalır.
+// Yani hızlandırma isteği doğduğunda çıkış yolu "artık bağ var, increment'e
+// geçelim" DEĞİLDİR; kaynaktan yeniden hesap, kilit ve mutabakat aynen kalır.
 //
 // ⚠️ ATOMİKLİK BUNUNLA KAYBOLMAZ: yeniden hesap "oku → yaz" olduğu için
 // kayıp-güncelleme (lost update) riski taşır; o yüzden HER senkron kendi

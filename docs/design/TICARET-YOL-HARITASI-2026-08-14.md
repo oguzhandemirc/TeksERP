@@ -170,6 +170,36 @@ kapama yön kuralı (ekonomik anlam).
 > ufkuyla). Model düzeni: J yazıcıları OPUS (kullanıcının oturum-limiti
 > uyarısı); Fable yalnız ana oturum orkestrasyon + hassas diff incelemesi.
 
+### J2 — Uygulama kararları (2026-08-15 gecesi; ana oturum tasarımı)
+
+- **Kur farkı v1 = TÜRETİLMİŞ RAPOR** (`GET /api/reports/finance/fx-diff`,
+  commit `c7485f36`): hiçbir şey saklanmaz — fark, kapama satırı + iki belgenin
+  değişmez kur damgasından okunur; kapama çözülünce kendiliğinden düşer.
+  **DEKONT BACAĞI KULLANICI KARARI BEKLİYOR** — şıklar: (a) otomatik kur farkı
+  dekontu (CariTxnSource.FX_DIFF tipli satır, TRY bakiyeye işler — Logo tarzı) ·
+  (b) rapor + elle dekont (dış muhasebede kesilir, ERP yalnız gösterir — bugünkü
+  hâl) · (c) kapama anında sor. Öneri: (b)'de kal, dövizli hacim büyüyünce (a).
+- **Roll.purchaseOrderLineId** (migration `20260814210000`): SET NULL FK
+  (WarehouseMovement.sackId emsali — iz ≠ defter), partial index, damga
+  BİLGİLENDİRİCİ (karşılanma hesabı distributeFifo zincirinde kalır); aşım topu
+  NULL damgalı (hiçbir kalemin planını karşılamıyor).
+- **Mutabakat mektubu + çek bordrosu (#18 planı):** iki YENİ sahiplenen model —
+  `ReconciliationLetter` (cariId + asOf + para birimi bazlı bakiye fotoğrafı;
+  MBT+GGAAYY+NNNN) ve `ChequeDeliveryNote` (+pivot; BRD+GGAAYY+NNNN; H6'nın
+  anlık Electron çıktısına donmuş resmi sürüm) — ikisi de OLUŞTURMADA donar
+  (makbuz emsali), iptalde VOIDED. Bordro çek DURUM MAKİNESİNE DOKUNMAZ (v1
+  belge-only; teslim olayları mevcut çek akışında). PrintedDocType +2 (SONA,
+  kendi enum migration'ı) → altı-yer kontrol listesi zorunlu.
+- **Tam stok sayımı (#19 planı):** `StockCount` (depo + statü DRAFT→COMPLETED/
+  CANCELLED; SAY+GGAAYY+NNNN) + `StockCountLine` (iki tür: ROLL — beklenen top
+  fotoğrafı, bulundu/eksik; YARN — kalem bazında beklenen/sayılan kg).
+  Tamamlanınca FARK FİŞİ: eksik top → softDelete (kayıt düzeltmesi semantiği,
+  `qtyOut=0`) + RollVariance RECORD_CORRECTION (sebep katalog kodu SAYIM);
+  fazla/yabancı top → OTOMATİK DÜZELTİLMEZ, uyarı satırı (sessiz oto-transfer
+  gerçek hatayı örter); iplik farkı → `applyYarnMovementTx` ADJUST_IN/OUT +
+  `YarnMovement.stockCountId` tipli bağ (belge bağı deseni). Belge: STOCK_COUNT
+  PrintedDocType, TAMAMLANMADA donar. Sayım kesiti = tamamlanma anı.
+
 ### J — Karar bekleyenler (ARŞİV — kararlar yukarıda)
 
 - **i18n** — TR sabit (grep: 0 i18n). Yabancı demo yakın değilse "TR-only, bilinçli" notu (0,25g); gerekiyorsa önce YALNIZ ticaret yüzeyleri sözlüğe (~5g+ ve sürekli bakım borcu).

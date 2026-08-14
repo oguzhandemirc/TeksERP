@@ -17,6 +17,13 @@
 // tamamı boyunca tutardı. Sonuç: bir satır düşerse diğerleri KALIR ve düşen satır
 // somut sebebiyle döner (`failed[]`) — "10 top girildi" deyip 2'sini yutmak en
 // kötü davranıştır (kurşun toplu dağıtım emsali).
+//
+// ⚠️ J2 (2026-08-15) — TOPUN SİPARİŞ KALEMİ İZİ (`Roll.purchaseOrderLineId`):
+// fiş bir alış siparişine bağlıysa her top, karşıladığı KALEMİ damgalar
+// ("aynı üründen iki terminli sipariş" sorusunun cevabı). Kural + gerekçeler
+// `claimStampLine`da; damga KOŞULSUZDUR (bayrak yok) çünkü bir DAVRANIŞ değil
+// bir İZDİR — hiçbir satırı reddetmez, hiçbir rakamı değiştirmez. Karşılanma
+// (`receivedQty`) ondan OKUNMAZ: tek kaynak `purchase-order.service` rollup'ı.
 // =============================================================================
 import {
   GoodsReceiptStatus,
@@ -306,7 +313,29 @@ const UNIT_LABEL: Record<string, string> = { MT: "m", KG: "kg", ADET: "adet" };
 /** Kullanıcıya basılan miktar: decimal.js sondaki sıfırları zaten atar. */
 const qtyText = (v: Prisma.Decimal, unit: string): string => `${v.toString()} ${unit}`;
 
-interface OverReceiptContext {
+/**
+ * Bir sipariş kaleminin KALAN KAPASİTESİ — damga tahsisinin defteri (J2).
+ *
+ * ⚠️ Nesne PAYLAŞILIR ve yerinde tüketilir: satır kalemi seçer, satır BAŞARILI
+ * olursa aynı nesneden düşer. Seçimle düşümü ayrı lookup'lara bölmek, arada
+ * düşen bir satırdan sonra "hangi kalemi seçmiştim" sorusunu belirsiz bırakırdı.
+ */
+interface LineCapacity {
+  /** `PurchaseOrderLine.id` — topa yazılacak damga. */
+  id: string;
+  lineNo: number;
+  /** `qty − dağıtılmış`; 0'a düşünce sıradaki kaleme geçilir (asla negatif olmaz). */
+  remaining: Prisma.Decimal;
+}
+
+/**
+ * Fişin bağlı olduğu alış siparişinin ÇAĞRI BAŞINDA okunmuş hâli.
+ *
+ * İKİ TÜKETİCİSİ VAR ve ikisi de aynı "başarılı satır" olayına bağlı:
+ *   ① `assertNotOverReceipt` (J1 bayrağı, OPT-IN) → `ordered`/`received`/`pending`
+ *   ② kalem damgası (J2, KOŞULSUZ)               → `capacity`
+ */
+interface PurchaseOrderReceiptContext {
   orderNo: string;
   /** Ürün başına ISMARLANAN toplam — aynı ürün birden çok kalemde olabilir (farklı termin/fiyat), toplanır. */
   ordered: Map<string, Prisma.Decimal>;
@@ -314,10 +343,12 @@ interface OverReceiptContext {
   received: Map<string, Prisma.Decimal>;
   /** BU çağrıda başarıyla yazılan miktar (kaynak okuması çağrı BAŞINDA yapıldı). */
   pending: Map<string, Prisma.Decimal>;
+  /** Ürün → `lineNo` sırasında kalan kapasiteler (J2 damgası). */
+  capacity: Map<string, LineCapacity[]>;
 }
 
 /**
- * ① Guard'ın veri kaynağı: KARŞILANMA SENKRONUNUN KENDİSİ.
+ * ① + ② ORTAK veri kaynağı: KARŞILANMA SENKRONUNUN KENDİSİ.
  *
  * ⚠️ İKİNCİ BİR "ne geldi" HESABI YAZILMAZ (Sınıf 5). `computeReceivedByItemTx`
  * + `distributeFifo` zinciri `purchase-order.service`te yaşıyor ve fazla kabul
@@ -326,26 +357,96 @@ interface OverReceiptContext {
  * şeyler söyleyen iki rakama böler. `syncPurchaseOrderSafely` aynı zinciri
  * KAYNAKTAN koşar → guard ile döngü sonundaki uyarı tanım gereği aynı evrende.
  *
+ * ⚠️ J2 KAPASİTESİ DE AYNI ZİNCİRDEN TÜRER, KOPYALANMAZ: `sync.lines[].receivedQty`
+ * ZATEN `distributeFifo`nun kalem başına dağıttığı miktardır → kalan kapasite
+ * `qty − receivedQty`dir. Burada ikinci bir FIFO döngüsü yazmak, dağıtım kuralını
+ * iki yere kopyalamak (Sınıf 5) olurdu; kural değişirse damga ile karşılanma
+ * sessizce ayrışırdı. Negatife düşen fark (son kalem fazlayı soğurur) 0'a kırpılır.
+ *
  * ⚠️ Saklanan `PurchaseOrderLine.receivedQty` DOĞRUDAN OKUNMAZ: rollup
  * drift'e açıktır (`getById` bunu `drift` bayrağıyla ekranda söylüyor) ve
  * bayat-YÜKSEK bir sayaç, gerçekte sipariş kapsamındaki meşru bir malı
  * reddederdi — mal kamyonda beklerken. Senkron aynı anda drift'i de onarır.
  *
  * ⚠️ FAIL-OPEN: senkron çözülemezse (sipariş silinmiş / senkron hatası)
- * guard KOŞMAZ. Bir rapor rakamı yüzünden fiziksel mal girişini durdurmak,
- * `syncPurchaseOrderSafely`nin hatayı yutma gerekçesinin aynısıyla yanlıştır;
- * fazla kabul zaten `describeOverReceipt` ile SÖYLENİR.
+ * guard KOŞMAZ ve damga NULL kalır. Bir rapor rakamı yüzünden fiziksel mal
+ * girişini durdurmak, `syncPurchaseOrderSafely`nin hatayı yutma gerekçesinin
+ * aynısıyla yanlıştır; fazla kabul zaten `describeOverReceipt` ile SÖYLENİR.
  */
-async function loadOverReceiptContext(purchaseOrderId: string): Promise<OverReceiptContext | null> {
+async function loadPurchaseOrderContext(purchaseOrderId: string): Promise<PurchaseOrderReceiptContext | null> {
   const sync = await syncPurchaseOrderSafely(purchaseOrderId);
   if (!sync) return null;
   const ordered = new Map<string, Prisma.Decimal>();
   const received = new Map<string, Prisma.Decimal>();
+  const capacity = new Map<string, LineCapacity[]>();
   for (const line of sync.lines) {
     ordered.set(line.itemId, (ordered.get(line.itemId) ?? D0).plus(line.qty));
     received.set(line.itemId, (received.get(line.itemId) ?? D0).plus(line.receivedQty));
+    const free = line.qty.minus(line.receivedQty);
+    const bucket = capacity.get(line.itemId);
+    const entry: LineCapacity = { id: line.id, lineNo: line.lineNo, remaining: free.gt(0) ? free : D0 };
+    if (bucket) bucket.push(entry);
+    else capacity.set(line.itemId, [entry]);
   }
-  return { orderNo: sync.orderNo, ordered, received, pending: new Map() };
+  // `sync.lines` zaten `lineNo` sıralı döner; sıralamayı YEREL olarak da garanti
+  // altına alıyoruz — FIFO'nun anlamı sıradan gelir ve uzak bir sözleşmenin
+  // sessizce değişmesi damgayı sebepsiz kaydırırdı.
+  for (const bucket of capacity.values()) bucket.sort((a, b) => a.lineNo - b.lineNo);
+  return { orderNo: sync.orderNo, ordered, received, pending: new Map(), capacity };
+}
+
+/**
+ * ② J2 — BU TOP HANGİ SİPARİŞ KALEMİNİN MALI?
+ *
+ * KURAL: topun TAMAMI, `lineNo` sırasında kalan kapasitesi > 0 olan İLK kaleme
+ * yazılır. Kapasiteyi aşsa bile o kalemin malıdır — top FİZİKSEL BİR BÜTÜNDÜR,
+ * kısmi bölünmez; sıradaki top sıradaki kaleme geçer.
+ *
+ * ⚠️ DAMGA ile ROLLUP AYNI RAKAMI VERMEK ZORUNDA DEĞİL ve bu bilinçlidir:
+ * `distributeFifo` miktarı kalemler arasında BÖLEBİLİR (50'lik kaleme 50,
+ * artanı sonrakine), damga bölemez. 50 + 100'lük iki kaleme 30+30+30 gelirse
+ * rollup "L1: 50, L2: 40" der, damga "iki top L1, bir top L2" der. Şema
+ * yorumunun dediği gibi: iz BİLGİLENDİRİCİDİR, karşılanma hesabı DEĞİLDİR —
+ * "ne kadar geldi"nin tek kaynağı rollup zinciridir.
+ *
+ * ⚠️ AŞIMDA NULL: tüm kalemler doluysa damga İDDİA EDİLMEZ. Fazla mal hiçbir
+ * kalemin planını karşılamıyor; son kaleme yapıştırmak, o kalemi karşılamış
+ * gösteren bir iz üretirdi (fazlalık `describeOverReceipt` ile zaten söyleniyor).
+ *
+ * ⚠️⚠️ DAMGA TAHSİSİ EŞZAMANLI ÇAĞRILARDA YAKLAŞIKTIR — YAZILI VE BİLİNÇLİ.
+ * Kapasite defteri çağrı BAŞINDA okunur ve yalnız KENDİ çağrısının satırlarıyla
+ * düşülür; aynı siparişe bağlı İKİ fiş eşzamanlı satır alırsa ikisi de bayat
+ * defteri görür. Ölçüldü (bekçi §8): L1:50 + L2:100'lük siparişe iki fişten
+ * paralel 50'şer metre → damgalar `[L1, L1]` (sıralı koşumda `[L1, L2]`), buna
+ * karşılık MİKTAR defteri doğru kalır (`receivedQty = [50, 50]`). Pencere "aynı
+ * milisaniye" kadar dar DEĞİL, bir `addLines` çağrısının SÜRESİ kadardır.
+ *
+ * Bedelin KABUL EDİLME sebebi: bu kolon bir DEFTER değil bir İZDİR (şema
+ * yorumu). Karşılanma rakamı ondan okunmaz; yanlış olan tek şey, o iki topun
+ * hangisinin Mart hangisinin Nisan kalemi olduğudur ve iki kalem de aynı ürünün
+ * aynı miktardaki malıdır. Buna karşılık ÜÇ olası "düzeltmenin" hepsi daha
+ * pahalıdır ve denenmeden önce çürütülmelidir:
+ *   ✗ `addLines`ı sipariş bazında kilitlemek → iki depocuyu birbirine
+ *     serileştirir (perf kuralı 10); iz uğruna FİZİKSEL mal girişini yavaşlatmak
+ *     bu dosyanın "fiş bir kaptır, satır düşse de diğerleri yazılır" kuralının
+ *     tam tersidir.
+ *   ✗ Satır başına kapasiteyi tazelemek → pencereyi KAPATMAZ (tazeleme ile
+ *     insert hâlâ ayrı tx) ama satır başına kilitli bir yazma tx'i ekler
+ *     (perf 7/9/10) ve yukarıdaki kilit sırası uyarısını ihlal eder.
+ *   ✗ Tx İÇİNDE saklı `PurchaseOrderLine.receivedQty`yi okumak → EN KÖTÜSÜ:
+ *     o kolon drift'e açıktır (dosyanın kendi uyarısı) ve rakip topun katkısı
+ *     oraya ancak çağrı SONUNDAKİ senkronla yazılır — yani tazelik GÖRÜNTÜSÜ
+ *     verip aynı bayatlığı taşır.
+ * Pencereyi gerçekten kapatmanın tek tutarlı yolu damgayı insert anında değil,
+ * `distributeFifo` ile AYNI (advisory kilitli) tx'te türetmektir; o, bu kolonun
+ * "senkron zincirini DEĞİŞTİRMEZ" sözleşmesini bozan ayrı bir tasarım kararıdır.
+ */
+function claimStampLine(
+  ctx: PurchaseOrderReceiptContext | null,
+  itemId: string,
+): LineCapacity | null {
+  if (!ctx) return null;
+  return ctx.capacity.get(itemId)?.find((l) => l.remaining.gt(0)) ?? null;
 }
 
 /**
@@ -368,7 +469,7 @@ async function loadOverReceiptContext(purchaseOrderId: string): Promise<OverRece
  * bırakır.
  */
 function assertNotOverReceipt(
-  ctx: OverReceiptContext,
+  ctx: PurchaseOrderReceiptContext,
   itemId: string,
   itemName: string,
   qty: Prisma.Decimal,
@@ -660,8 +761,25 @@ export class GoodsReceiptService {
     // etkisizleşir (acil kapatma yolu).
     const requirePrice = await readGoodsReceiptRequirePriceEnabled();
     const blockOverReceipt = receipt.purchaseOrderId ? await readPurchaseBlockOverReceiptEnabled() : false;
-    const overCtx =
-      blockOverReceipt && receipt.purchaseOrderId ? await loadOverReceiptContext(receipt.purchaseOrderId) : null;
+    // ── SİPARİŞ BAĞLAMI (J1 guard'ı ① + J2 damgası ②) ──────────────────────
+    // ⚠️ BAYRAKTAN BAĞIMSIZ YÜKLENİR ve bu J2 ile geldi: damga bir DAVRANIŞ
+    // değil bir İZDİR (koşulsuz yazılır, hiçbir satırı reddetmez) — bayrağın
+    // arkasına saklamak, izi tam da onu isteyen kurulumda (fazla kabule izin
+    // veren, yani bayrağı KAPALI olan) yok ederdi.
+    // ⚠️ FABRİKA YOLU KORUNUR: sipariş bağı yoksa TEK SORGU BİLE koşmaz
+    // (koşul `receipt.purchaseOrderId`) — üretici kurulumda bu satır görünmez.
+    // ⚠️ BU BİR SALT OKUMA DEĞİLDİR — `syncPurchaseOrderSafely` KENDİ tx'ini
+    // açar, İLK ifadesi `pg_advisory_xact_lock(8027, hashtext(poId))`tir ve
+    // rakam değiştiyse `purchaseOrderLine` satırlarını YAZAR. Yeni bir yazma
+    // SINIFI doğmaz (aynı senkron döngü sonunda zaten koşuyor, idempotenttir ve
+    // kararlı durumda tek satır bile güncellemez), ama KİLİT gerçektir.
+    // ⚠️ BU SATIR HİÇBİR TX'İN İÇİNE ALINMAZ, özellikle de `goods_receipts`
+    // satır kilidini tutan bir bloğun (`claimActiveReceiptTx`) altına: bugünkü
+    // kilit sırası her yolda AYNI (önce advisory, sonra satır) ve ABBA yok;
+    // buradan çağrılan senkronu satır kilidinin altına taşımak o sırayı tersine
+    // çevirir ve iki alt sistem arasında deadlock doğurur.
+    const orderCtx = receipt.purchaseOrderId ? await loadPurchaseOrderContext(receipt.purchaseOrderId) : null;
+    const overCtx = blockOverReceipt ? orderCtx : null;
 
     const created: string[] = [];
     const createdYarn: string[] = [];
@@ -680,6 +798,21 @@ export class GoodsReceiptService {
         line.itemId,
         (overCtx.pending.get(line.itemId) ?? D0).plus(new Prisma.Decimal(line.initialQty)),
       );
+    };
+
+    /**
+     * ①+② tek olay: SATIR BAŞARIYLA YAZILDI.
+     *
+     * ⚠️ Kapasite düşümü de `pending` ile AYNI kuralı izler — yalnız başarılı
+     * satır sayılır. Reddedilen/düşen satır kapasiteyi tüketseydi, aynı fişteki
+     * bir sonraki MEŞRU top kapasitesi hayalet bir miktarla dolmuş bir kalemi
+     * atlayıp sıradakine damgalanırdı (ya da hiç damgalanmazdı).
+     */
+    const noteAccepted = (line: GoodsReceiptLineInput, claim: LineCapacity | null): void => {
+      notePending(line);
+      if (!claim) return;
+      const left = claim.remaining.minus(new Prisma.Decimal(line.initialQty));
+      claim.remaining = left.gt(0) ? left : D0;
     };
 
     for (const [index, line] of lines.entries()) {
@@ -702,6 +835,12 @@ export class GoodsReceiptService {
           }
         }
 
+        // ── J2: SİPARİŞ KALEMİ DAMGASI ────────────────────────────────────
+        // Guard'lardan SONRA seçilir (reddedilen satır kapasite tüketmemeli) ve
+        // yalnız BAŞARILI satırda tüketilir (`noteAccepted`). Sipariş bağı yoksa
+        // ya da kalem siparişte yoksa `null` → damga NULL (bugünkü davranış).
+        const claim = claimStampLine(orderCtx, line.itemId);
+
         // ── İPLİK DALI ────────────────────────────────────────────────────
         // İplik `Roll` DOĞURMAZ: top metreyle/barkodla tek tek izlenir, iplik
         // kg ile ve toplu izlenir. Aynı satırdan hem `Roll` hem `YarnMovement`
@@ -713,8 +852,14 @@ export class GoodsReceiptService {
           if (!info.isActive) throw AppError.notFound("Ürün bulunamadı veya pasif (silinmiş)");
           // Fiyat ÖN-DOLUMU kumaşla AYNI zincir (D2): satırın kendi fiyatı
           // kazanır; yoksa kalem kartının alış fiyatı; o da yoksa NULL.
+          // ⚠️ İPLİK DAMGA TAŞIMAZ (`Roll` doğmuyor) ama kapasiteyi TÜKETİR:
+          // defter "bu kalemden ne kadarı geldi"yi anlatır ve iplik kalemi de
+          // gelmiştir. Pratikte kova ayrıktır (bir kalem ya YARN'dır ya değil),
+          // yani bugün no-op'tur — ama defteri yarım tutmak, ileride aynı
+          // kalemden hem top hem kg doğuran bir yol eklenirse sessizce yanlış
+          // damga üretirdi.
           createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), userId));
-          notePending(line);
+          noteAccepted(line, claim);
           continue;
         }
 
@@ -738,6 +883,8 @@ export class GoodsReceiptService {
             forcedEntrySource: RollEntrySource.PURCHASE_RECEIPT,
             warehouseId: receipt.warehouseId,
             goodsReceiptId: receipt.id,
+            // J2 — "hangi sipariş KALEMİNİ karşılıyor" izi (kural: `claimStampLine`).
+            purchaseOrderLineId: claim?.id ?? null,
             foldType: line.foldType ?? null,
             // Fiyat ÖN-DOLUMU: satırın kendi fiyatı KAZANIR; yoksa kalem
             // kartının alış fiyatı (tedarikçi istisnası > kart varsayılanı)
@@ -751,7 +898,19 @@ export class GoodsReceiptService {
           },
         );
         created.push((res.data as { id: string }).id);
-        notePending(line);
+        // ⚠️ REPLAY SAYILMAZ (`res.idempotent`): aynı `clientToken`la ikinci kez
+        // gelen satır YENİ mal getirmez — mevcut topu geri döndürür ve o top bu
+        // çağrının BAŞINDAKİ kaynak okumasında (`received`) ZATEN sayılmıştır.
+        // Tekrar saymak aynı fiziksel topu iki kez düşürür ve iki yerde birden
+        // yanlış cevap üretir (ölçüldü, bekçi §9):
+        //   ② kapasite erken tükenir → o çağrıdaki GERÇEK yeni top, karşıladığı
+        //     kalemi değil sıradakini damgalar (ya da hiç damgalanmaz);
+        //   ① `pending` şişer → J1 açıkken tam olarak sipariş kadar gelen MEŞRU
+        //     bir satır "siparişten fazla" diye 400 yer, mal kamyondayken.
+        // Ölçüt "satır başarılı mı" DEĞİL "yeni top doğdu mu" — ikisi replay'de
+        // ayrışır. İplik dalında bu ayrım YOKTUR ve olmamalıdır: `addYarnLine`
+        // idempotent değildir, her çağrıda gerçekten yeni bir hareket yazar.
+        if (!res.idempotent) noteAccepted(line, claim);
       } catch (err) {
         failed.push({
           index,
