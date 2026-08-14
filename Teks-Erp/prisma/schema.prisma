@@ -5706,10 +5706,12 @@ model PurchaseOrder {
 
 /// Alış siparişi kalemi.
 ///
-/// ⚠️ `receivedQty` DENORMALİZE ve ATOMİK yazılır (`increment`, tx içinde) —
-/// mal kabul satırı bu kaleme eşlenince artar. Fazla kabulü DB CHECK
-/// engellemez (fiziksel olarak fazla mal GELEBİLİR); servis uyarır, kayıt
-/// gerçeği yazar.
+/// ⚠️ `receivedQty` DENORMALİZE — gerçek desen `increment` DEĞİL, KAYNAKTAN
+/// ROLLUP'tır (yorum 2026-08-14'te servis gerçeğiyle hizalandı): senkron 8027
+/// advisory kilidi altında `computeReceivedByItemTx` ile yeniden hesaplanıp
+/// MUTLAK yazılır (`purchase-order.service.syncPurchaseOrderTx`) — kendini
+/// onaran sayaç. Fazla kabulü DB CHECK engellemez (fiziksel olarak fazla mal
+/// GELEBİLİR); servis uyarır, kayıt gerçeği yazar.
 model PurchaseOrderLine {
   id              String @id @default(uuid()) @db.Uuid
   purchaseOrderId String @db.Uuid

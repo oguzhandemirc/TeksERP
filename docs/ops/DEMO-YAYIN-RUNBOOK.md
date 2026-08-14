@@ -258,3 +258,21 @@ Veritabanı kalır (`tekserp_demo`); silmek gerekirse:
   `sudo docker builder prune` — imajlara dokunmaz.
 - Demo şifresi bu makinede `/opt/stack/apps/tekserp-demo/.env` içinde;
   değiştirmek için `DEMO_USER_PASSWORD` verip demo seed'i yeniden koştur.
+
+
+## 10. Demo sıfırlama (`docs/ops/demo-reset.sh`)
+
+Demoyu bozan olursa tek yol: `zsh docs/ops/demo-reset.sh` (KURU — hiçbir şey
+değişmez, planı basar) → `--apply` (DB adını **elle yazarak** onaylatır; TTY
+yoksa reddeder — otomasyon için `--apply --yes`). Hedef DB **sabit
+`tekserp_demo`**, parametreyle değiştirilemez; DROP'tan önce `pre-restore_`
+önekli güvenlik yedeği alınır. Sıra: stop app → yedek → DROP/CREATE → migrate
+deploy → `seed.ts` → `seed-ticaret-demo.ts` → up -d → doğrulama.
+
+⚠️ Betiğin İLK sürümü fazladan argümanı sessizce yutuyordu ve bir argüman
+testi canlı demoyu sıfırladı (2026-08-14 ~22:20) — o gün sertleştirildi:
+tanınmayan argüman exit 2, onay kapısı, sabit DB. Ders: yıkıcı betik argüman
+kümesini ALLOWLIST'ler, fazlasını reddeder.
+
+⚠️ Migration/doğrulama sayıları `deploy-demo.sh` §3/§6 ile İKİ yerde yaşıyor —
+birini güncellerken diğerine bak (ayrışırsa biri yeşil derken öbürü eksik sayar).

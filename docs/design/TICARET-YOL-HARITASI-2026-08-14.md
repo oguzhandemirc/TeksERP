@@ -78,7 +78,23 @@
 | H7 | Kasa defteri raporuna **kategori kırılımı** bloğu (serbest metin GROUP BY; katalog kararı veri birikince) | 0,75g |
 | H8 | Fatura üretim kısayolları: `financeAutoDraftFromShipment` bayrağı (dört kapı) + **iade → satış-iade faturası** düğmesi (backend bağı hazır; fason kabul tevkifat gerektirdiği için ayrı) | 1,5g |
 
-### I — Sağlamlık kalanları + ops (~6,5 gün)
+### I — Sağlamlık kalanları + ops (~6,5 gün) — ✅ TAMAMLANDI (2026-08-15'e bağlanan gece)
+
+> **I1** GR addLines‖cancel penceresi kapandı (K6 — satır tx'inin ilk işi fiş-claim,
+> `createInitialEntry.txGate` F221 deseni; cancel tx-içi TAZE top kümesiyle; KK1
+> fabrika yolu bayt-bayt) · **I2** 5 uçta eşzamanlı clientToken PO desenine bağlı
+> (cached yanıt şekil paritesi; kilit-altı deterministik replay bekçileri) ·
+> **I3** ekstre satırları ters-kayıt bağı taşıyor (statementDevir KESİN yol +
+> eski-backend sezgisel fallback; ajan yarıda ölünce ana oturum tamamladı) ·
+> **I4** invoice/cheque detay select daraltıldı (clientToken + iç FK'ler dışarıda)
+> · **I5** demo seed zenginleşti (çek ×4 · devir zinciri · mühürlü dönem ×2 ·
+> kategorili kasa · PO ×3 · vade zinciri · iade+iade faturası; MÜKERRER TARAMASI
+> eklendi — "0 yeni" sayacı tek başına yetersiz çıktı, ölçüldü) + `demo-reset.sh`
+> (sertleştirilmiş: sabit DB + argüman allowlist + TTY onayı + ön-yedek; İLK
+> sürümü bir argüman testinde canlı demoyu sıfırladı — ders runbook §10'da) ·
+> **I6** `TICARET-KURULUM.md` + veri üretmeyen `setup-ticaret.ts` (`npm run
+> setup:ticaret`). Kasa guard'ına kablolama taraması (test_cash_negative_guard
+> §9) da eklendi.
 
 | İş | İçerik | Efor |
 |---|---|---|
