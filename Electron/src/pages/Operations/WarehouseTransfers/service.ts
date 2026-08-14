@@ -117,6 +117,21 @@ export async function lookupRollsByBarcodes(barcodes: string[]): Promise<
     }));
 }
 
+/**
+ * Seçilmiş top — okutma ve "listeden seç" yolları AYNI şekli üretir.
+ * (Eskiden `TransferFormDialog` içinde yerel bir kopyaydı; ikinci yol
+ * eklenince iki tanım kaçınılmaz olarak ayrışırdı.)
+ */
+export interface PickedRoll {
+  id: string;
+  barcode: string | null;
+  itemName: string;
+  colorName: string | null;
+  qty: number;
+  warehouseId: string | null;
+  status: string;
+}
+
 export interface PickedSack {
   id: string;
   sackNo: string;
@@ -140,4 +155,74 @@ export async function lookupSacksByCodes(codes: string[]): Promise<{ sacks: Pick
     params: { codes: clean.join(",") },
   });
   return res.data.data as { sacks: PickedSack[]; notFound: string[] };
+}
+
+
+// ---------------------------------------------------------------------------
+// BARKODSUZ SEÇİM — "listeden seç" yolu
+// ---------------------------------------------------------------------------
+// Transferin tek girişi okutmaktı; etiket basmayan kullanıcı (alım-satım
+// personası) fiilen dışarıda kalıyordu. Okutma yolu AYNEN duruyor — bu ikinci
+// bir kapı, yerine geçen değil.
+
+/** Kaynak depodaki transfer edilebilir toplar. Uç YENİ DEĞİL — mevcut liste. */
+export async function listWarehouseRolls(params: {
+  warehouseId: string;
+  search?: string;
+  limit?: number;
+}): Promise<PickedRoll[]> {
+  const res = await apiClient.get("/api/rolls", {
+    params: {
+      page: 1,
+      pageSize: params.limit ?? 100,
+      "filter[warehouseId]": params.warehouseId,
+      // ⚠️ Statü süzgeci `TRANSFERABLE_STATUSES` ile — okutma yolunun kullandığı
+      // AYNI sabit. Ayrı yazılsaydı liste, transferin reddedeceği topu önerirdi.
+      "filter[statusIn]": TRANSFERABLE_STATUSES.join(","),
+      ...(params.search ? { search: params.search } : {}),
+    },
+  });
+  type Row = {
+    id: string; barcode: string | null; status: string; currentQty: string | number; warehouseId: string | null;
+    item?: { name: string }; color?: { name: string } | null;
+  };
+  return ((res.data.data ?? []) as Row[]).map((r) => ({
+    id: r.id,
+    barcode: r.barcode,
+    itemName: r.item?.name ?? "—",
+    colorName: r.color?.name ?? null,
+    qty: Number(r.currentQty),
+    warehouseId: r.warehouseId,
+    status: r.status,
+  }));
+}
+
+/**
+ * Kaynak depodaki transfer edilebilir çuvallar.
+ *
+ * ⚠️ Uç `sack-search` DEĞİL: o `shipping:read` ailesiyle kapılı, transfer
+ * kullanıcısının izni ise `warehouse:transfer`. Ayrı uç, izin sınırını
+ * genişletmeden aynı işi görür.
+ */
+export async function listWarehouseSacks(params: {
+  warehouseId: string;
+  search?: string;
+  limit?: number;
+}): Promise<PickedSack[]> {
+  const res = await apiClient.get("/api/warehouse-transfers/warehouse-sacks", {
+    params: {
+      warehouseId: params.warehouseId,
+      ...(params.search ? { search: params.search } : {}),
+      limit: params.limit ?? 50,
+    },
+  });
+  type Row = { id: string; sackNo: string; customerName: string | null; rollCount: number; totalQty: number };
+  return ((res.data.data ?? []) as Row[]).map((sk) => ({
+    ...sk,
+    // Liste tanım gereği yalnız SERBEST çuval döner (backend `shipmentId: null`
+    // süzüyor) — alan, okutma yoluyla ortak `PickedSack` şeklini korumak için.
+    warehouseId: params.warehouseId,
+    warehouseName: null,
+    shipmentAssigned: false,
+  }));
 }

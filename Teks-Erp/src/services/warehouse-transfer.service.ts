@@ -321,6 +321,69 @@ export class WarehouseTransferService {
   }
 
   /**
+   * BARKODSUZ SEÇİM — bir depodaki transfer edilebilir çuvalları listeler.
+   *
+   * Etiket basmayan / barkod okutmayan kullanıcı (alım-satım personası) için
+   * transferin tek girişi okutmaktı; bu, o kullanıcıyı fiilen dışarıda
+   * bırakıyordu. Top tarafının karşılığı `GET /api/rolls` ile ZATEN vardı
+   * (`filter[warehouseId]` + `filter[statusIn]`); eksik olan yalnız ÇUVAL'dı.
+   *
+   * ⚠️ AYRI UÇ, `sack-search`e filtre EKLEMEK DEĞİL: o uç `shipping:read`
+   * ailesiyle kapılı ve depo/paketleme yüzeylerini besliyor. Transfer
+   * kullanıcısının izni `warehouse:transfer` — oraya filtre eklemek ya bu
+   * kullanıcıya sevkiyat yüzeyini açmak ya da transferi sevk iznine bağlamak
+   * demekti. İkisi de yanlış yönde bir genişleme.
+   *
+   * ⚠️ SEVKİYATA ATANMIŞ ÇUVAL LİSTEDE ÇIKMAZ (`shipmentId: null`): `create`
+   * onu zaten reddediyor ve göstermek "seç → 400 al" döngüsü kurardı. Aynı
+   * gerekçeyle boş çuval da elenir — taşınacak mal yok.
+   */
+  async listWarehouseSacks(params: {
+    warehouseId: string;
+    search?: string | null;
+    limit: number;
+  }): Promise<ApiResponse<unknown>> {
+    const sacks = await prisma.sack.findMany({
+      where: {
+        warehouseId: params.warehouseId,
+        shipmentId: null,
+        ...(params.search ? { sackNo: { contains: params.search.toUpperCase() } } : {}),
+        // ⚠️ YÜKLEM `some` DEĞİL, "boş değil VE hiçbir üyesi uygunsuz değil".
+        // `create` çuvalı BÜTÜN taşır ve TEK bir uygunsuz üye (iptal/fire/
+        // fasonda) çuvalın TAMAMINI reddeder — `some` ile listelemek, sevkin
+        // reddedeceği çuvalı önermek olurdu (bekçide kilitli: §5d).
+        // Boş çuval da elenir: `create` onu ayrıca reddediyor (defter satırı
+        // üretemez).
+        rolls: {
+          some: {},
+          none: { status: { notIn: TRANSFERABLE } },
+        },
+      },
+      select: {
+        id: true,
+        sackNo: true,
+        customer: { select: { name: true } },
+        rolls: { select: { currentQty: true, status: true } },
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: Math.min(Math.max(params.limit, 1), 200),
+    });
+    return {
+      success: true,
+      // Süzgeç gereği bu çuvalların TÜM üyeleri transfer edilebilir — sayım
+      // ayrıca filtrelenmez. (Filtreleseydi ekran, taşınacak olandan DAHA AZ
+      // metraj gösterirdi: çuval bütün gider.)
+      data: sacks.map((sk) => ({
+        id: sk.id,
+        sackNo: sk.sackNo,
+        customerName: sk.customer?.name ?? null,
+        rollCount: sk.rolls.length,
+        totalQty: sk.rolls.reduce((sum, r) => sum + Number(r.currentQty), 0),
+      })),
+    };
+  }
+
+  /**
    * Transferi geri alır (storno) — toplar kaynak depoya döner.
    *
    * ⚠️ Geri dönüş adresi transferin KENDİ satırındadır (`fromWarehouseId`), yani

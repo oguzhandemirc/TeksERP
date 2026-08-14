@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Trash2, Package } from "lucide-react";
+import { Trash2, Package, ListChecks } from "lucide-react";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
@@ -9,22 +9,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useMultiWarehouse, WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
-import { createTransfer, lookupRollsByBarcodes, lookupSacksByCodes, type PickedSack } from "./service";
+import {
+  createTransfer, lookupRollsByBarcodes, lookupSacksByCodes,
+  type PickedRoll, type PickedSack,
+} from "./service";
+import { TransferPickerDialog } from "./TransferPickerDialog";
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreated: (id: string) => void;
-}
-
-interface PickedRoll {
-  id: string;
-  barcode: string | null;
-  itemName: string;
-  colorName: string | null;
-  qty: number;
-  warehouseId: string | null;
-  status: string;
 }
 
 export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
@@ -36,6 +30,7 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
   const [scan, setScan] = useState("");
   const [picked, setPicked] = useState<PickedRoll[]>([]);
   const [pickedSacks, setPickedSacks] = useState<PickedSack[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   /**
    * Okutulan/yapıştırılan kodları çözer (birden fazlası boşlukla): önce TOP
@@ -166,6 +161,18 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
               <Button variant="outline" disabled={!scan.trim() || addM.isPending} onClick={() => addM.mutate(scan.trim())}>
                 Ekle
               </Button>
+              {/* BARKODSUZ YOL — okutmanın yerine geçmez, yanına gelir.
+                  Çıkan depo seçilmeden açılmaz: liste bir depoya aittir ve
+                  "hangi depodan" sorusunu diyaloğun içinde ikinci kez sormak
+                  formdaki seçimle çelişirdi. */}
+              <Button
+                variant="secondary"
+                disabled={!fromId}
+                title={fromId ? "Çıkan depodaki maldan seç" : "Önce çıkan depoyu seçin"}
+                onClick={() => setPickerOpen(true)}
+              >
+                <ListChecks className="mr-1 h-4 w-4" /> Listeden Seç
+              </Button>
             </div>
           </div>
 
@@ -259,6 +266,30 @@ export function TransferFormDialog({ open, onOpenChange, onCreated }: Props) {
           </Button>
         </DialogFooter>
       </DialogContent>
+      {/* Koşullu mount: her açılış taze seçim state'i (yarım kalmış işaretler
+          bir sonraki açılışa taşınmaz). */}
+      {pickerOpen && (
+        <TransferPickerDialog
+          open
+          onOpenChange={setPickerOpen}
+          warehouseId={fromId}
+          alreadyRollIds={picked.map((r) => r.id)}
+          alreadySackIds={pickedSacks.map((s) => s.id)}
+          onConfirm={({ rolls, sacks }) => {
+            // Mükerrer koruması iki katmanlı: picker zaten seçili olanları
+            // listelemiyor, burada da id kümesiyle süzülüyor — aynı topu iki
+            // kez eklemek transferi 400'e düşürürdü.
+            setPicked((prev) => {
+              const seen = new Set(prev.map((r) => r.id));
+              return [...prev, ...rolls.filter((r) => !seen.has(r.id))];
+            });
+            setPickedSacks((prev) => {
+              const seen = new Set(prev.map((s) => s.id));
+              return [...prev, ...sacks.filter((s) => !seen.has(s.id))];
+            });
+          }}
+        />
+      )}
     </Dialog>
   );
 }

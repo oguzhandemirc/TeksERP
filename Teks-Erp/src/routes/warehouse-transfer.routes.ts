@@ -27,6 +27,14 @@ const createSchema = z.object({
   clientToken: z.string().uuid().optional(),
 });
 
+// Barkodsuz çuval seçimi — depo ZORUNLU: deposuz çağrı "sistemdeki tüm
+// çuvallar" demek olurdu ve transfer her zaman BİR depodan çıkar.
+const warehouseSacksSchema = z.object({
+  warehouseId: z.string().uuid("Geçersiz depo ID"),
+  search: z.string().trim().max(64).optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
 /**
  * @openapi
  * /api/warehouse-transfers/sack-lookup:
@@ -57,6 +65,45 @@ router.get(
         .filter(Boolean)
         .slice(0, 100);
       res.json(await warehouseTransferService.lookupSacks(codes));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/warehouse-transfers/warehouse-sacks:
+ *   get:
+ *     tags: [WarehouseTransfers]
+ *     summary: BARKODSUZ SEÇİM — bir depodaki transfer edilebilir çuvallar
+ *     description: >
+ *       Etiket basmayan / barkod okutmayan kullanıcı için transferin çuval
+ *       ayağı. Top ayağının karşılığı `GET /api/rolls`'ta zaten var
+ *       (filter[warehouseId] + filter[statusIn]). Sevkiyata atanmış ve boş
+ *       çuvallar listeye GİRMEZ — `create` onları zaten reddediyor.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: warehouseId, required: true, schema: { type: string } }
+ *       - { in: query, name: search, schema: { type: string }, description: Çuval no parçası }
+ *       - { in: query, name: limit, schema: { type: integer, default: 50, maximum: 200 } }
+ *     responses:
+ *       200: { description: Çuval listesi (üye sayısı + toplam metraj) }
+ */
+router.get(
+  "/warehouse-sacks",
+  verifyToken,
+  requirePermission("warehouse:transfer"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = warehouseSacksSchema.parse(req.query);
+      res.json(
+        await warehouseTransferService.listWarehouseSacks({
+          warehouseId: q.warehouseId,
+          search: q.search ?? null,
+          limit: q.limit ?? 50,
+        }),
+      );
     } catch (e) {
       next(e);
     }
