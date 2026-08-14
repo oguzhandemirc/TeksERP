@@ -109,6 +109,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "rolls", index: "rolls_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "rolls", index: "rolls_labelCustomerId_idx", uniq: false, predicate: `("labelCustomerId" IS NOT NULL)`, why: "null-yoğun FK (stok etiketi yaygın); sorgu yolu hep 'şu müşterinin topları'" },
   { table: "rolls", index: "rolls_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun FK: yalnız mal kabulle doğmuş toplarda dolu (migration 20260813090000)" },
+  { table: "rolls", index: "rolls_purchaseOrderLineId_idx", uniq: false, predicate: `("purchaseOrderLineId" IS NOT NULL)`, why: "null-yoğun FK: yalnız PO'lu mal kabulle doğmuş toplarda dolu (migration 20260814210000)" },
   {
     table: "rolls",
     index: "rolls_finalizedAt_idx",

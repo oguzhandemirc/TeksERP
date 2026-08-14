@@ -1264,6 +1264,21 @@ model Roll {
   /// fasondan DÖNEN malın izidir, bu SATIN ALINAN malın.
   goodsReceiptId String? @db.Uuid
 
+  /// Bu topun karşıladığı ALIŞ SİPARİŞİ KALEMİ (J2, 2026-08-15) — "aynı
+  /// üründen iki terminli sipariş" sorusunun izi. NULL = siparişsiz kabul /
+  /// siparişte olmayan kalem / 2026-08-15 öncesi kayıt (geriye doldurulmaz —
+  /// entryStationId emsali).
+  /// ⚠️ İZ BİLGİLENDİRİCİDİR, KARŞILANMA HESABI DEĞİL: "ne kadar geldi"nin tek
+  /// kaynağı `computeReceivedByItemTx` + `distributeFifo` zinciri (rollup +
+  /// drift onarımı orada). Bu kolon o zinciri DEĞİŞTİRMEZ ve ondan OKUNMAZ;
+  /// yalnız topun hangi kalemin malı olarak geldiğini söyler.
+  /// ⚠️ onDelete SET NULL BİLİNÇLİ (`WarehouseMovement.sackId` emsali, RESTRICT
+  /// değil): PO kalemi replace akışında gerçekten silinir (fiş varken
+  /// `receivedQty > 0` guard'ı düzenlemeyi zaten bloklar → normal yolda bu FK
+  /// hiç tetiklenmez); rollup drift'li kenar durumda izi NULL'a düşürmek, PO
+  /// düzenlemeyi ya da topu kilitlemekten iyidir — iz defter değildir.
+  purchaseOrderLineId String? @db.Uuid
+
   /// Satın alma BİRİM fiyatı (ticaret paketi, 2026-08-14) — topun metre/kg
   /// başına alış bedeli. Para birimi topun KENDİ alanında değil, doğduğu
   /// fişte (`GoodsReceipt.currency`): fiş tek para birimlidir ve fiyatı
@@ -1486,6 +1501,8 @@ model Roll {
   /// Aynı gerekçe: fiş silinirse topun kökeni sessizce kaybolurdu (fişler zaten
   /// silinmez, iptal edilir).
   goodsReceipt         GoodsReceipt?               @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  /// SET NULL gerekçesi kolonun kendi yorumunda (iz ≠ defter).
+  purchaseOrderLine    PurchaseOrderLine?          @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
   warehouseMovements   WarehouseMovement[]
   labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
   properties           RollProperty[]
@@ -1518,6 +1535,10 @@ model Roll {
   // Mal kabul fişinin topları (fiş detayı + iptal kapsamı).
   // PARTIAL (WHERE "goodsReceiptId" IS NOT NULL) — çoğu topta null.
   @@index([goodsReceiptId])
+  // "Bu sipariş kalemini hangi toplar karşıladı" (termin bazlı karşılama izi).
+  // PARTIAL (WHERE "purchaseOrderLineId" IS NOT NULL) — goodsReceiptId ile aynı
+  // desen; migration 20260814210000, test_db_invariants envanterinde kayıtlı.
+  @@index([purchaseOrderLineId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
   // Envanter sekmeleri: status filter + updatedAt desc sort ("son hareket" sıralaması).
@@ -5728,6 +5749,8 @@ model PurchaseOrderLine {
 
   purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
   item          Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  /// Bu kalemi karşılayan toplar (iz — gerekçe `Roll.purchaseOrderLineId`de).
+  rolls         Roll[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

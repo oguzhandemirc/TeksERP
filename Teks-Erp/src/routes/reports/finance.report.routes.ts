@@ -33,6 +33,7 @@ import { dateRangeSchema, reportEnvelope, resolveDateRange } from "../../service
 import { getAgingReport } from "../../services/reports/finance-aging.report";
 import { getCashBookReport } from "../../services/reports/cash-book.report";
 import { getVatSummaryReport } from "../../services/reports/finance-vat.report";
+import { getFxDiffReport } from "../../services/reports/finance-fx-diff.report";
 import { cariService } from "../../services/cari.service";
 import { AppError } from "../../utils/app-error";
 
@@ -243,6 +244,48 @@ router.get("/vat-summary", guard, async (req: Request, res: Response, next: Next
     // sözleşmesi (gün sınırını İSTEMCİ çizer).
     const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
     const data = await getVatSummaryReport({ range });
+    res.status(200).json(reportEnvelope(data, range));
+  } catch (e) {
+    next(e);
+  }
+});
+
+// -----------------------------------------------------------------------------
+// KUR FARKI
+// -----------------------------------------------------------------------------
+
+/**
+ * @openapi
+ * /api/reports/finance/fx-diff:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Kur farkı listesi — dövizli kapamalarda gerçekleşen TL farkı
+ *     description: >
+ *       Dövizli faturayı kapatan her tahsilat/çek satırı için TL kur farkını
+ *       TÜRETİR (saklanmaz): tutar × (kaynak kuru − fatura kuru), yön
+ *       `invoiceLedgerSide`dan (+ lehte / − aleyhte). Dönem çıpası KAPAMANIN
+ *       anıdır; kapama çözülürse satır listeden kendiliğinden düşer. Satır
+ *       bazında kuruşa yuvarlanır, özet toplam satır toplamına birebir eşittir.
+ *       DEFTERE YAZMAZ — dekont bacağı ayrı bir üründür (yol haritası J).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Kapama bazında kur farkı satırları + lehte/aleyhte özet }
+ *       403: { description: Ön muhasebe modülü kapalı ya da yetki yok }
+ */
+router.get("/fx-diff", guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const q = z
+      .object({
+        dateFrom: z.string().datetime({ offset: true }).optional(),
+        dateTo: z.string().datetime({ offset: true }).optional(),
+        cariId: z.string().uuid().optional(),
+        currency: z.enum(CURRENCIES.filter((c) => c !== "TRY") as [string, ...string[]]).optional(),
+      })
+      .strict()
+      .parse(req.query);
+
+    const range = resolveDateRange(dateRangeSchema.parse({ dateFrom: q.dateFrom, dateTo: q.dateTo }));
+    const data = await getFxDiffReport({ range, cariId: q.cariId, currency: q.currency });
     res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);
