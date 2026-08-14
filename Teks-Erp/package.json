@@ -9,6 +9,7 @@
     "seed:fixtures": "tsx prisma/seed-fixtures.ts",
     "seed:demo": "tsx prisma/seed-demo-stations.ts",
     "seed:scenario": "ts-node prisma/seed-shipping-scenario.ts",
+    "seed:ticaret-demo": "tsx prisma/seed-ticaret-demo.ts",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",
