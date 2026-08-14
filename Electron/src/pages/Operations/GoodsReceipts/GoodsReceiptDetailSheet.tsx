@@ -10,6 +10,11 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { BulkRollLabelButton } from "@/components/print/BulkRollLabelButton";
 import { cancelGoodsReceipt, createInvoiceFromReceipt, getGoodsReceipt } from "./service";
+import type { ReceiptDetailYarnLine } from "./service";
+
+/** Decimal JSON'da string gelir — görüntü için sayıya çevirip TR biçimler. */
+const fmt = (v: string | number | null | undefined): string =>
+  v == null ? "—" : Number(v).toLocaleString("tr-TR");
 
 interface Props {
   id: string | null;
@@ -42,6 +47,16 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
   });
   const r = q.data;
 
+  // İPLİK YÜZEYİ TEK KAYNAKTAN (Sınıf 5): satırlar assembler union'ından
+  // (`lines`) okunur, `yarnMovements` ham dizisinden DEĞİL — beşinci tüketici
+  // de aynı kapıdan geçsin. Ters kayıtlar (fiş iptali, movementKind !== "IN")
+  // LİSTEDE KALIR: defter "ne oldu"yu anlatır; satır soluk + "İptal" rozetli.
+  const yarnLines = (r?.lines ?? []).filter((l): l is ReceiptDetailYarnLine => l.kind === "YARN");
+  const yarnKgNet = r?.totals.totalYarnKg ?? 0;
+  // Fiyat kolonu yalnız EN AZ BİR satır fiyat taşıyorsa çizilir — fiyatsız
+  // fişte boş "—" kolonu göstermek soruyu sorup cevabı vermemektir.
+  const yarnHasPrice = yarnLines.some((l) => l.unitPrice != null);
+
   const cancelM = useMutation({
     mutationFn: (reason: string) => cancelGoodsReceipt(id!, reason),
     onSuccess: (res) => {
@@ -49,6 +64,9 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
       void qc.invalidateQueries({ queryKey: ["goods-receipts"] });
       void qc.invalidateQueries({ queryKey: ["goods-receipt", id] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
+      // İptal, iplik satırlarını ters kayıtla (ADJUST_OUT) düşer — İplik Stoku
+      // ekranı ["yarn", …] anahtarlarını kullanır; bakiye bayat kalmasın.
+      void qc.invalidateQueries({ queryKey: ["yarn"] });
       setConfirmCancel(false);
     },
   });
@@ -85,35 +103,91 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
                   <dt className="text-xs text-muted-foreground">Toplam</dt>
                   <dd>
                     {r.totals.rollCount} top · {r.totals.totalQty} m
+                    {/* İplik AYRI birimde — kg metreye TOPLANMAZ (backend
+                        `totalYarnKg` NET'tir: ters kayıtlar düşülmüş). */}
+                    {yarnLines.length > 0 && <> + {fmt(yarnKgNet)} kg iplik</>}
                   </dd>
                 </div>
               </dl>
 
-              <div className="overflow-hidden rounded-md border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
-                    <tr>
-                      <th className="p-2 text-left">Barkod</th>
-                      <th className="p-2 text-left">Ürün / Renk</th>
-                      <th className="p-2 text-right">Metre</th>
-                      <th className="p-2 text-left">Durum</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {r.rolls.map((roll) => (
-                      <tr key={roll.id} className="border-t">
-                        <td className="p-2 font-mono text-xs">{roll.barcode ?? "—"}</td>
-                        <td className="p-2">
-                          {roll.item.name}
-                          {roll.color ? ` · ${roll.color.name}` : ""}
-                        </td>
-                        <td className="p-2 text-right tabular-nums">{String(roll.currentQty)}</td>
-                        <td className="p-2 text-xs text-muted-foreground">{roll.status}</td>
+              {/* Kumaş tablosu — YALNIZ-İPLİK fişte çizilmez (boş başlıklı tablo
+                  "toplar kaybolmuş" okunur); iplik de yoksa eski görünüm aynen
+                  durur (boş fişte boş tablo, bugünkü davranış). */}
+              {(r.rolls.length > 0 || yarnLines.length === 0) && (
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="p-2 text-left">Barkod</th>
+                        <th className="p-2 text-left">Ürün / Renk</th>
+                        <th className="p-2 text-right">Metre</th>
+                        <th className="p-2 text-left">Durum</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {r.rolls.map((roll) => (
+                        <tr key={roll.id} className="border-t">
+                          <td className="p-2 font-mono text-xs">{roll.barcode ?? "—"}</td>
+                          <td className="p-2">
+                            {roll.item.name}
+                            {roll.color ? ` · ${roll.color.name}` : ""}
+                          </td>
+                          <td className="p-2 text-right tabular-nums">{String(roll.currentQty)}</td>
+                          <td className="p-2 text-xs text-muted-foreground">{roll.status}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* KABUL EDİLEN İPLİK — koşullu ikinci tablo (Sınıf 5). Ters kayıt
+                  (movementKind !== "IN") soluk satır + amber "İptal" rozeti:
+                  gizlense fiş "hiç iplik girmemiş" gibi okunur, üstü çizilse
+                  "rakam geçersiz" derdi — oysa defter satırı geçerli bir OLAYDIR. */}
+              {yarnLines.length > 0 && (
+                <div className="overflow-hidden rounded-md border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
+                      <tr>
+                        <th className="p-2 text-left">Kabul Edilen İplik</th>
+                        <th className="p-2 text-right">Kg</th>
+                        {yarnHasPrice && <th className="p-2 text-right">Birim Fiyat</th>}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {yarnLines.map((l) => {
+                        const reversed = l.movementKind !== "IN";
+                        return (
+                          <tr key={l.id} className={`border-t ${reversed ? "opacity-50" : ""}`}>
+                            <td className="p-2">
+                              {l.itemName}
+                              {l.itemCode ? (
+                                <span className="ml-1 font-mono text-xs text-muted-foreground">{l.itemCode}</span>
+                              ) : null}
+                              {reversed && (
+                                <Badge
+                                  variant="outline"
+                                  className="ml-2 border-amber-400 text-amber-700 dark:text-amber-400"
+                                  title={l.reason ?? "Ters kayıt — fiş iptalinin defter düşümü"}
+                                >
+                                  İptal
+                                </Badge>
+                              )}
+                            </td>
+                            {/* Kg POZİTİF basılır — yönü rozet söyler (backend
+                                sözleşmesi: qtyKg her zaman pozitif). */}
+                            <td className="p-2 text-right tabular-nums">{fmt(l.qtyKg)}</td>
+                            {yarnHasPrice && (
+                              <td className="p-2 text-right tabular-nums">{fmt(l.unitPrice)}</td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
 
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={() => setDocOpen(true)}>
@@ -171,7 +245,16 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange }: Props) {
         onOpenChange={setConfirmCancel}
         title="Mal kabul fişi iptal edilsin mi?"
         description={
-          `${r?.receiptNo}: fişteki ${r?.totals.rollCount ?? 0} top da İPTAL edilecek ("mal hiç girmedi" kaydı). ` +
+          // Yıkıcı-işlem kuralı: etkilenen İÇERİK somut söylenir — yalnız-iplik
+          // fişte "0 top iptal edilecek" yazmak operatöre "iplik etkilenmez" derdi.
+          `${r?.receiptNo}: fişteki ${[
+            // "0 top" yalnız iplik de yokken yazılır (eski metin korunur);
+            // yalnız-iplik fişte "0 top + …" gürültüsü basılmaz.
+            ...((r?.totals.rollCount ?? 0) > 0 || yarnLines.length === 0
+              ? [`${r?.totals.rollCount ?? 0} top`]
+              : []),
+            ...(yarnLines.length > 0 ? [`${fmt(yarnKgNet)} kg iplik (ters kayıtla düşülür)`] : []),
+          ].join(" + ")} da İPTAL edilecek ("mal hiç girmedi" kaydı). ` +
           `İşlem görmüş (üretime girmiş / sevk edilmiş) top varsa iptal reddedilir.`
         }
         confirmLabel="Fişi İptal Et"

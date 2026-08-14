@@ -74,7 +74,10 @@ export function GoodsReceiptsPage() {
                   <th className="p-3 text-left">Depo</th>
                   <th className="p-3 text-left">Tedarikçi</th>
                   <th className="p-3 text-left">Tedarikçi İrs.</th>
-                  <th className="p-3 text-right">Top</th>
+                  {/* "Top" değil "İçerik": fiş iplik de taşıyabilir (Sınıf 5) —
+                      yalnız-iplik fiş "0 top" görünürse depocu "kaydedilmemiş"
+                      sanıp ikinci kez girer (backend loadDetail uyarısının ikizi). */}
+                  <th className="p-3 text-right">İçerik</th>
                   <th className="p-3 text-left">Durum</th>
                 </tr>
               </thead>
@@ -90,7 +93,21 @@ export function GoodsReceiptsPage() {
                     <td className="p-3">{r.warehouse?.name ?? "—"}</td>
                     <td className="p-3">{r.supplier?.name ?? <span className="text-muted-foreground">—</span>}</td>
                     <td className="p-3 text-xs text-muted-foreground">{r.deliveryNoteNo ?? "—"}</td>
-                    <td className="p-3 text-right tabular-nums">{r._count.rolls}</td>
+                    {/* Sayaç backend `_count`undan (yarnMovements eski backend'de
+                        yok → ?? 0 kumaş sayacına düşer). ⚠️ İki sayaç da "ne
+                        oldu"yu sayar (iptalli fişte satırlar da sayılır) —
+                        "ne kaldı" detaydaki `totals`tadır; ayrışan tek durum
+                        İptal rozetli satırdır (backend listReceipts yorumu). */}
+                    <td className="p-3 text-right tabular-nums">
+                      {[
+                        ...(r._count.rolls > 0 || (r._count.yarnMovements ?? 0) === 0
+                          ? [`${r._count.rolls} top`]
+                          : []),
+                        ...((r._count.yarnMovements ?? 0) > 0
+                          ? [`${r._count.yarnMovements} iplik`]
+                          : []),
+                      ].join(" + ")}
+                    </td>
                     <td className="p-3">
                       {r.status === "CANCELLED" ? (
                         <Badge variant="outline">İptal</Badge>

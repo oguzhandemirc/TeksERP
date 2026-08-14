@@ -9,7 +9,9 @@ export interface GoodsReceiptListRow {
   cancelledAt: string | null;
   warehouse: { id: string; name: string } | null;
   supplier: { id: string; name: string } | null;
-  _count: { rolls: number };
+  /** `yarnMovements` Sınıf 5 ile geldi (2026-08-14) — eski backend'e karşı
+   *  opsiyonel okunur (`?? 0`), yoksa liste kumaş sayacına düşer. */
+  _count: { rolls: number; yarnMovements?: number };
 }
 
 export interface GoodsReceiptLineInput {
@@ -25,6 +27,44 @@ export interface GoodsReceiptLineInput {
   propertyIds?: string[];
   clientToken?: string;
 }
+
+// ── SINIF 5 (2026-08-14): fişin satırları backend'de TEK assembler'dan gelir
+// (`assembleReceiptLines` → `lines` union'ı). Panel iplik yüzeyini `lines`ten
+// okur; `rolls` (kumaş tablosu) eski sözleşmesiyle AYNEN durur.
+
+/** Assembler union'ının KUMAŞ satırı (backend `ReceiptFabricLine`). */
+export interface ReceiptDetailFabricLine {
+  kind: "FABRIC";
+  id: string;
+  barcode: string | null;
+  status: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string | null;
+  colorName: string | null;
+  qty: string | number;
+  initialQty: string | number;
+  purchasePrice: string | number | null;
+}
+
+/** Assembler union'ının İPLİK satırı (backend `ReceiptYarnLine`).
+ *  `movementKind !== "IN"` = fiş iptalinin ters kaydı → soluk satır + "İptal"
+ *  rozeti (defter "ne oldu"yu anlatır, satır gizlenmez). */
+export interface ReceiptDetailYarnLine {
+  kind: "YARN";
+  id: string;
+  movementKind: "IN" | "OUT" | "ADJUST_IN" | "ADJUST_OUT";
+  itemId: string;
+  itemName: string;
+  itemCode: string | null;
+  /** POZİTİF kg — yönü `movementKind` söyler. Decimal JSON'da string gelir. */
+  qtyKg: string | number;
+  unitPrice: string | number | null;
+  reason: string | null;
+  createdAt: string;
+}
+
+export type ReceiptDetailLine = ReceiptDetailFabricLine | ReceiptDetailYarnLine;
 
 export interface GoodsReceiptDetail {
   id: string;
@@ -47,7 +87,11 @@ export interface GoodsReceiptDetail {
     item: { id: string; name: string };
     color: { id: string; name: string } | null;
   }>;
-  totals: { rollCount: number; totalQty: number };
+  /** Union satırlar (önce kumaş, sonra iplik) — iplik yüzeyinin TEK kaynağı.
+   *  Eski backend'de alan yoktur → `?? []` ile okunur. */
+  lines?: ReceiptDetailLine[];
+  /** İplik alanları Sınıf 5 ile geldi — eski backend'e karşı opsiyonel. */
+  totals: { rollCount: number; totalQty: number; yarnLineCount?: number; totalYarnKg?: number };
   /** Atlanan satırlar — SEBEBİYLE döner (sessiz yutma yok). */
   failed?: Array<{ index: number; itemId: string; reason: string }>;
 }

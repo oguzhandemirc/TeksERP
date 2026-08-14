@@ -10,7 +10,15 @@
 // top" diye bir şey yok ve olmamalı — envanterin birimi TOPTUR; aksi halde
 // kesim/sevk/iade gibi her akış "kaç adedi kaldı" sorusunu yeniden icat ederdi.
 // Bu yüzden çarpan yalnız bu formda yaşar, backend'e N satır olarak gider.
+//
+// İPLİK SATIRI (Sınıf 5, 2026-08-14): kalem türü YARN ise satır `Roll` değil
+// `YarnMovement` doğurur — miktar KG'dir ve renk/en/kg/kat/özellik hücreleri
+// devre dışı "—" çizilir (backend `addYarnLine` bu alanları 400 ile reddeder;
+// operatör kuralı deneme-yanılmayla değil ekrandan öğrenir). Birim Fiyat
+// iplikte de SERBESTTİR (`yarn_movements.unitPrice`, migration 20260814).
+// Adet iplikte de çalışır: N × qtyKg = N ayrı defter satırı (toplam doğru).
 // =============================================================================
+import { useEffect } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,13 +70,51 @@ export function duplicateLine(l: DraftLine): DraftLine {
 interface Props {
   lines: DraftLine[];
   onChange: (lines: DraftLine[]) => void;
+  /** İPLİK kalem id'leri (`useItemTypes` + `yarnIdsFrom`) — verilmezse tüm
+   *  satırlar kumaş sayılır (eski davranış bayt-bayt korunur). */
+  yarnItemIds?: ReadonlySet<string>;
 }
 
-export function ReceiptLineRows({ lines, onChange }: Props) {
+/** İplik satırının TAŞIYAMAYACAĞI alanlar dolu mu? (backend 400 kümesinin aynası) */
+function hasYarnStrays(l: DraftLine): boolean {
+  return Boolean(l.colorId) || l.width != null || l.weightKg != null || Boolean(l.foldType) || l.propertyIds.length > 0;
+}
+
+/** Kumaşa özgü alanları temizlenmiş kopya — iplik satırına geçişte uygulanır. */
+function clearYarnStrays(l: DraftLine): DraftLine {
+  return { ...l, colorId: null, width: null, weightKg: null, foldType: null, propertyIds: [] };
+}
+
+export function ReceiptLineRows({ lines, onChange, yarnItemIds }: Props) {
   const { values: foldValues } = useFoldValues();
+  const isYarn = (itemId: string) => Boolean(itemId && yarnItemIds?.has(itemId));
+
+  // ⚠️ İPLİĞE GEÇEN SATIRIN KUMAŞ ALANLARI SIFIRLANIR (rota editörünün
+  // "istasyon değişince hedef sıfırlanır" kuralının ikizi): kumaş seçiliyken
+  // girilen renk/en/kg/kat/özellik, kalem ipliğe çevrilince SESSİZCE
+  // gönderilirse backend 400 verir — hem de hiç dokunulmamış görünen bir
+  // alandan. Effect olarak yazıldı (patch anında değil) çünkü tür lookup'ı
+  // asenkron çözülür ve satırlar üç kapıdan girer (elle seçim · Excel import ·
+  // siparişten doldur) — üçünü de tek nokta kapsar.
+  useEffect(() => {
+    if (!yarnItemIds || yarnItemIds.size === 0) return;
+    if (!lines.some((l) => isYarn(l.itemId) && hasYarnStrays(l))) return;
+    onChange(lines.map((l) => (isYarn(l.itemId) && hasYarnStrays(l) ? clearYarnStrays(l) : l)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, yarnItemIds]);
 
   const patch = (key: string, p: Partial<DraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
+
+  /** Devre dışı hücre — iplik satırında kumaşa özgü alanın yerine çizilir. */
+  const dash = (title: string) => (
+    <span
+      title={title}
+      className="flex h-9 select-none items-center justify-center rounded-md border border-dashed text-xs text-muted-foreground"
+    >
+      —
+    </span>
+  );
 
   const cols = "grid-cols-[minmax(0,1fr)_128px_80px_66px_66px_96px_84px_58px_60px_76px]";
 
@@ -88,7 +134,10 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
       </div>
 
       <div className="max-h-[38vh] space-y-2 overflow-auto p-3">
-        {lines.map((l) => (
+        {lines.map((l) => {
+          const yarn = isYarn(l.itemId);
+          const yarnTitle = "İplik satırı bu alanı taşımaz — iplik, kalem × depo bazında kg olarak izlenir";
+          return (
           <div key={l.key} className={`grid ${cols} items-center gap-2`}>
             <ReferenceSelect<Item>
               value={l.itemId || null}
@@ -98,32 +147,63 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
               getLabel={(it) => `${it.code} — ${it.name}`}
               placeholder="Kumaş ara..."
             />
-            <ReferenceSelect<Color>
-              value={l.colorId}
-              onChange={(v) => patch(l.key, { colorId: v })}
-              service={colorService}
-              queryKey="colors"
-              getLabel={(c) => c.name}
-              placeholder="Renk..."
-            />
-            <Input
-              type="number" min={0} step="0.01" placeholder="0"
-              value={l.initialQty || ""}
-              onChange={(e) => patch(l.key, { initialQty: Number(e.target.value) })}
-            />
-            <Input
-              type="number" min={0} placeholder="—"
-              value={l.width ?? ""}
-              onChange={(e) => patch(l.key, { width: e.target.value ? Number(e.target.value) : null })}
-            />
-            <Input
-              type="number" min={0} step="0.01" placeholder="—"
-              value={l.weightKg ?? ""}
-              onChange={(e) => patch(l.key, { weightKg: e.target.value ? Number(e.target.value) : null })}
-            />
+            {/* İPLİK: kumaşa özgü hücreler devre dışı "—" — backend'in 400'le
+                reddettiği alanlar hiç sorulmasın (400'e düşmeden öğret). */}
+            {yarn ? (
+              dash(yarnTitle)
+            ) : (
+              <ReferenceSelect<Color>
+                value={l.colorId}
+                onChange={(v) => patch(l.key, { colorId: v })}
+                service={colorService}
+                queryKey="colors"
+                getLabel={(c) => c.name}
+                placeholder="Renk..."
+              />
+            )}
+            {/* Miktar: iplikte KG'dir — kutunun içine "kg" rozeti girer
+                (başlık "Metre" kumaş çoğunluğu için doğru kalır). */}
+            <div className="relative">
+              <Input
+                type="number" min={0} step="0.01" placeholder="0"
+                className={yarn ? "pr-7" : undefined}
+                value={l.initialQty || ""}
+                onChange={(e) => patch(l.key, { initialQty: Number(e.target.value) })}
+              />
+              {yarn && (
+                <span
+                  title="İplikte miktar KG'dir"
+                  className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] font-semibold uppercase text-muted-foreground"
+                >
+                  kg
+                </span>
+              )}
+            </div>
+            {yarn ? (
+              dash(yarnTitle)
+            ) : (
+              <Input
+                type="number" min={0} placeholder="—"
+                value={l.width ?? ""}
+                onChange={(e) => patch(l.key, { width: e.target.value ? Number(e.target.value) : null })}
+              />
+            )}
+            {/* İplikte AYRI kg alanı yok — miktar zaten kg (backend, çelişen
+                weightKg'yi 400 ile reddeder; hücre hiç sorulmaz). */}
+            {yarn ? (
+              dash("İplikte miktar zaten kg — ayrı ağırlık girilmez")
+            ) : (
+              <Input
+                type="number" min={0} step="0.01" placeholder="—"
+                value={l.weightKg ?? ""}
+                onChange={(e) => patch(l.key, { weightKg: e.target.value ? Number(e.target.value) : null })}
+              />
+            )}
             {/* KAT opsiyonel ve KATALOGDAN gelir — sabit liste, panelden eklenen
                 6-KAT'ı görünmez yapardı; boş katalogda seçici hiç çizilmez. */}
-            {foldValues.length > 0 ? (
+            {yarn ? (
+              dash(yarnTitle)
+            ) : foldValues.length > 0 ? (
               <select
                 className="h-9 w-full rounded-md border bg-background px-2 text-sm"
                 value={l.foldType ?? ""}
@@ -137,19 +217,23 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
             ) : (
               <span className="text-center text-xs text-muted-foreground">—</span>
             )}
-            {/* Alış fiyatı OPSİYONEL: girilirse topa yazılır ve alış faturası
-                satırının fiyatı ondan türer; boşsa fatura fiyatsız taslak doğar
-                (onay zaten fiyatsızı reddediyor). */}
+            {/* Alış fiyatı OPSİYONEL ve İPLİKTE DE SERBEST (yarn_movements.unitPrice,
+                Sınıf 5): girilirse satıra yazılır ve alış faturası fiyatı ondan
+                türer; boşsa fatura fiyatsız taslak doğar (onay fiyatsızı reddediyor). */}
             <Input
               type="number" min={0} step="0.0001" placeholder="—"
               value={l.unitPrice ?? ""}
               onChange={(e) => patch(l.key, { unitPrice: e.target.value ? Number(e.target.value) : null })}
             />
-            <LinePropertiesButton
-              itemId={l.itemId}
-              value={l.propertyIds}
-              onChange={(v) => patch(l.key, { propertyIds: v })}
-            />
+            {yarn ? (
+              dash(yarnTitle)
+            ) : (
+              <LinePropertiesButton
+                itemId={l.itemId}
+                value={l.propertyIds}
+                onChange={(v) => patch(l.key, { propertyIds: v })}
+              />
+            )}
             <Input
               type="number" min={1} step="1"
               className="text-center font-medium"
@@ -176,18 +260,38 @@ export function ReceiptLineRows({ lines, onChange }: Props) {
               </Button>
             </div>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-/** Formun canlı özeti — kaç TOP doğacak, kaç metre, kaç para. */
-export function receiptTotals(lines: DraftLine[]): { rolls: number; meters: number; amount: number } {
+export interface ReceiptDraftTotals {
+  /** Doğacak TOP sayısı (kumaş satırları × adet). */
+  rolls: number;
+  /** Kumaş metrajı toplamı. ⚠️ İplik kg'si BUNA EKLENMEZ — m ↔ kg toplanmaz
+   *  (backend `ReceiptTotals` sözleşmesinin aynası). */
+  meters: number;
+  /** Doğacak İPLİK defter satırı sayısı (iplik satırları × adet). */
+  yarnLines: number;
+  /** İplik kg toplamı (kg × adet). */
+  yarnKg: number;
+  /** Para toplamı — kumaş + iplik BİRLİKTE (ikisi de fişin para biriminde). */
+  amount: number;
+}
+
+/** Formun canlı özeti — kaç TOP, kaç metre, kaç kg iplik, kaç para.
+ *  `yarnItemIds` verilmezse tüm satırlar kumaş sayılır (eski davranış). */
+export function receiptTotals(lines: DraftLine[], yarnItemIds?: ReadonlySet<string>): ReceiptDraftTotals {
   const valid = lines.filter((l) => l.itemId && l.initialQty > 0 && l.count > 0);
+  const fabric = valid.filter((l) => !yarnItemIds?.has(l.itemId));
+  const yarn = valid.filter((l) => yarnItemIds?.has(l.itemId));
   return {
-    rolls: valid.reduce((s, l) => s + l.count, 0),
-    meters: valid.reduce((s, l) => s + l.initialQty * l.count, 0),
+    rolls: fabric.reduce((s, l) => s + l.count, 0),
+    meters: fabric.reduce((s, l) => s + l.initialQty * l.count, 0),
+    yarnLines: yarn.reduce((s, l) => s + l.count, 0),
+    yarnKg: yarn.reduce((s, l) => s + l.initialQty * l.count, 0),
     // Fiyat girilmemiş satır tutara 0 katkı verir — "eksik fiyat" uyarısı
     // BİLİNÇLİ olarak yok: fiyat opsiyoneldir ve fatura onayı zaten fiyatsızı
     // reddediyor (uyarıyı iki yerde tekrarlamak gürültüdür).
@@ -195,24 +299,41 @@ export function receiptTotals(lines: DraftLine[]): { rolls: number; meters: numb
   };
 }
 
-/** Taslak satırları backend sözleşmesine açar: 1 satır × adet = N top. */
-export function expandLines(lines: DraftLine[]) {
+/** Taslak satırları backend sözleşmesine açar: 1 satır × adet = N top (kumaş)
+ *  ya da N iplik defter satırı.
+ *
+ *  ⚠️ İPLİK SATIRI KUMAŞA ÖZGÜ ALANLARI HİÇ GÖNDERMEZ (ikinci hat — birinci
+ *  hat ekrandaki devre dışı hücreler + temizleme effect'idir): backend
+ *  `addYarnLine` renk/en/kg/kat/özellik taşıyan iplik satırını 400 ile
+ *  reddeder; buradan sızan bayat bir değer operatörün hiç görmediği bir
+ *  alandan hata üretirdi. */
+export function expandLines(lines: DraftLine[], yarnItemIds?: ReadonlySet<string>) {
   return lines
     .filter((l) => l.itemId && l.initialQty > 0 && l.count > 0)
-    .flatMap((l) =>
-      Array.from({ length: l.count }, () => ({
-        itemId: l.itemId,
-        colorId: l.colorId,
-        initialQty: l.initialQty,
-        width: l.width,
-        weightKg: l.weightKg,
-        foldType: l.foldType,
-        unitPrice: l.unitPrice,
-        propertyIds: l.propertyIds.length > 0 ? l.propertyIds : undefined,
-        // Her TOP kendi idempotency anahtarını taşır (backend uuid bekler).
-        // Asıl koruma FİŞ seviyesindedir — aynı `clientToken` ile ikinci POST
-        // mevcut fişi döner ve satırları TEKRAR İŞLEMEZ; bu ikinci hattır.
-        clientToken: crypto.randomUUID(),
-      })),
-    );
+    .flatMap((l) => {
+      const yarn = yarnItemIds?.has(l.itemId) ?? false;
+      return Array.from({ length: l.count }, () =>
+        yarn
+          ? {
+              itemId: l.itemId,
+              initialQty: l.initialQty, // iplikte KG
+              unitPrice: l.unitPrice,
+              clientToken: crypto.randomUUID(),
+            }
+          : {
+              itemId: l.itemId,
+              colorId: l.colorId,
+              initialQty: l.initialQty,
+              width: l.width,
+              weightKg: l.weightKg,
+              foldType: l.foldType,
+              unitPrice: l.unitPrice,
+              propertyIds: l.propertyIds.length > 0 ? l.propertyIds : undefined,
+              // Her TOP kendi idempotency anahtarını taşır (backend uuid bekler).
+              // Asıl koruma FİŞ seviyesindedir — aynı `clientToken` ile ikinci POST
+              // mevcut fişi döner ve satırları TEKRAR İŞLEMEZ; bu ikinci hattır.
+              clientToken: crypto.randomUUID(),
+            },
+      );
+    });
 }

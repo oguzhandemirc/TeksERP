@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus } from "lucide-react";
@@ -17,6 +17,7 @@ import {
   ReceiptLineRows, emptyLine, expandLines, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
 import { ReceiptImportButton } from "./ReceiptImportButton";
+import { useItemTypes, yarnIdsFrom } from "./useItemTypes";
 
 interface Props {
   open: boolean;
@@ -41,8 +42,22 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   // Tek seçenekli bir liste, cevabı belli bir soruyu sormaktır.
   const effectiveWarehouseId = multiWarehouse ? warehouseId : (defaultWarehouse?.id ?? "");
 
-  const totals = useMemo(() => receiptTotals(lines), [lines]);
-  const valid = Boolean(effectiveWarehouseId) && totals.rolls > 0;
+  // Kalem türleri asenkron çözülür (Sınıf 5): iplik satırı kg'dir ve kumaşa
+  // özgü alan taşımaz. ⚠️ Harita/küme kimliği her render'da değişir — totals
+  // bu yüzden useMemo'suz hesaplanır (memo, lookup çözüldüğünde bayat kalırdı;
+  // maliyet satır sayısıyla sınırlı ve önemsiz).
+  const itemTypes = useItemTypes(lines.map((l) => l.itemId));
+  const yarnIds = yarnIdsFrom(itemTypes);
+  const totals = receiptTotals(lines, yarnIds);
+  // İplik-only fiş MEŞRU — "top yok" diye kilitlemek 500 kg ipliği girilemez yapardı.
+  const valid = Boolean(effectiveWarehouseId) && (totals.rolls > 0 || totals.yarnLines > 0);
+  const submitSummary =
+    [
+      totals.rolls > 0 ? `${totals.rolls} top` : null,
+      totals.yarnLines > 0 ? `${totals.yarnLines} iplik` : null,
+    ]
+      .filter(Boolean)
+      .join(" + ") || "0 top";
 
   const createM = useMutation({
     mutationFn: () =>
@@ -54,7 +69,7 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
         // Fişin KENDİ idempotency anahtarı — çift tıklama/ağ kopması ikinci fiş
         // AÇMAZ ve satırları tekrar İŞLEMEZ (backend mevcut fişi döner).
         clientToken: crypto.randomUUID(),
-        lines: expandLines(lines),
+        lines: expandLines(lines, yarnIds),
       }),
     onSuccess: (res) => {
       // Atlanan satır varsa SESSİZ GEÇME — sebebiyle söyle.
@@ -66,6 +81,9 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       }
       void qc.invalidateQueries({ queryKey: ["goods-receipts"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
+      // İplik satırı `YarnMovement` doğurur — İplik Stoku ekranı ["yarn", …]
+      // anahtarlarını kullanır; invalidate edilmezse bakiye bayat kalır.
+      void qc.invalidateQueries({ queryKey: ["yarn"] });
       void qc.invalidateQueries({ queryKey: WAREHOUSES_QUERY_KEY });
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
@@ -149,7 +167,11 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             }
           />
 
-          <ReceiptLineRows lines={lines} onChange={setLines} />
+          {/* ⚠️ `yarnItemIds` GEÇİLMEK ZORUNDA — verilmezse satır editörü tüm
+              kalemleri kumaş sayar: iplik satırı renk/en/kat sorar, backend
+              400 verir ve "kg" rozeti hiç çizilmez (sözleşme ReceiptLineRows
+              Props yorumunda). */}
+          <ReceiptLineRows lines={lines} onChange={setLines} yarnItemIds={yarnIds} />
 
           <div className="flex items-center justify-between">
             <Button variant="ghost" size="sm" onClick={() => setLines((ls) => [...ls, emptyLine()])}>
@@ -161,6 +183,14 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             <p className="text-sm text-muted-foreground">
               Toplam: <b className="text-foreground">{totals.rolls}</b> top ·{" "}
               <b className="text-foreground">{totals.meters.toLocaleString("tr-TR")}</b> m
+              {/* İplik AYRI birimde eklenir — kg metreye TOPLANMAZ (backend
+                  `ReceiptTotals` sözleşmesi). İplik yokken çıktı bayt-bayt eski. */}
+              {totals.yarnLines > 0 && (
+                <>
+                  {" + "}
+                  <b className="text-foreground">{totals.yarnKg.toLocaleString("tr-TR")}</b> kg iplik
+                </>
+              )}
               {totals.amount > 0 && (
                 <>
                   {" · "}
@@ -176,8 +206,10 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
+          {/* Düğme İÇERİĞİ söyler — yalnız-iplik fişte "0 top" yazmak operatöre
+              "kaydedilecek bir şey yok" derdi (submitSummary iplik dalını taşır). */}
           <Button disabled={!valid || createM.isPending} onClick={() => createM.mutate()}>
-            {createM.isPending ? "Kaydediliyor…" : `Fişi Oluştur (${totals.rolls} top)`}
+            {createM.isPending ? "Kaydediliyor…" : `Fişi Oluştur (${submitSummary})`}
           </Button>
         </DialogFooter>
       </DialogContent>

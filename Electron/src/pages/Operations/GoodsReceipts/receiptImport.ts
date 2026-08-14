@@ -26,6 +26,9 @@ export interface ImportCatalogEntry {
   id: string;
   code?: string | null;
   name: string;
+  /** İPLİK kalemi mi? (Sınıf 5) — verilmezse kumaş varsayılır (eski çağıran
+   *  bozulmaz). İplik satırı Renk/En/Kg/Kat TAŞIYAMAZ ve miktarı KG'dir. */
+  yarn?: boolean;
 }
 
 export interface ImportCatalogs {
@@ -130,6 +133,26 @@ export function parseReceiptRows(
     if (!item) {
       errors.push({ row: rowNo, reason: `Kumaş bulunamadı: ${code || name || "(boş)"}` });
       return;
+    }
+
+    // ④ (Sınıf 5) **İPLİK SATIRI KUMAŞA ÖZGÜ KOLON TAŞIYAMAZ — dolu gelirse
+    //    HATA, sessiz düşürme değil.** Kural ①'in alan ölçeği: değeri sessizce
+    //    atmak, "renk yazdım, kayboldu" üretir ve operatör dosyada ne yazdıysa
+    //    onun kaydedildiğini sanır. Formdaki karşılığı devre dışı "—" hücreler.
+    if (item.yarn) {
+      const strays = [
+        colorText && "Renk",
+        norm(raw["En (cm)"]) && "En",
+        norm(raw["Kg"]) && "Kg",
+        foldText && "Kat",
+      ].filter(Boolean);
+      if (strays.length > 0) {
+        errors.push({
+          row: rowNo,
+          reason: `İplik kalemi ${strays.join("/")} taşıyamaz — kolonları boş bırakın (iplikte Metre kolonu KG okunur).`,
+        });
+        return;
+      }
     }
 
     const qty = toNumber(raw["Metre"]);

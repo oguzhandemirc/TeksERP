@@ -57,6 +57,8 @@ export function ReceiptImportButton({ onImported }: Props) {
           "Kumaş Kodu yazmanız yeterli — ad yalnız kod boşsa kullanılır ve birden fazla kumaşa uyuyorsa satır reddedilir.",
           "Adet = o satırdan kaç TOP geldiği. Her top ayrı barkodla, yazdığınız metrede doğar.",
           "Kg, En ve Kat boş bırakılabilir. Kat yazacaksanız katalogdaki değerlerden biri olmalı.",
+          // Sınıf 5: iplik kalemi de aynı şablonla yüklenir — kural formdakiyle bire bir.
+          "İPLİK kaleminde Metre kolonu KG olarak okunur; Renk, En, Kg ve Kat iplikte boş bırakılır (formda da sorulmaz).",
         ],
       },
     ]);
@@ -97,7 +99,11 @@ export function ReceiptImportButton({ onImported }: Props) {
       }
 
       const result = parseReceiptRows(rows, {
-        items: (itemsQ.data?.data ?? []).map((i) => ({ id: i.id, code: i.code, name: i.name })),
+        // `yarn` bayrağı ayrıştırıcının iplik kuralını açar (Renk/En/Kg/Kat
+        // dolu iplik satırı SEBEBİYLE reddedilir, sessizce düşürülmez).
+        items: (itemsQ.data?.data ?? []).map((i) => ({
+          id: i.id, code: i.code, name: i.name, yarn: i.itemType === "YARN",
+        })),
         colors: (colorsQ.data?.data ?? []).map((c) => ({ id: c.id, code: c.code, name: c.name })),
         folds: foldValues.map((f) => ({ code: f.code, name: f.name })),
       });
@@ -105,8 +111,20 @@ export function ReceiptImportButton({ onImported }: Props) {
       setErrors(result.errors);
       if (result.lines.length > 0) {
         onImported(result.lines);
-        const rolls = result.lines.reduce((s, l) => s + l.count, 0);
-        toast.success(`${result.lines.length} kalem (${rolls} top) yüklendi.`);
+        // Toast İÇERİĞİ türe göre sayar (Sınıf 5): iplik satırını "top" diye
+        // saymak, formun ekranda öğrettiği kuralı toast'ta yalanlamak olurdu.
+        // Katalog zaten elimizde (picker) — ek istek yok; iplik yokken metin
+        // bayt-bayt eski ("N kalem (M top) yüklendi.").
+        const yarnIds = new Set(
+          (itemsQ.data?.data ?? []).filter((i) => i.itemType === "YARN").map((i) => i.id),
+        );
+        const rolls = result.lines.filter((l) => !yarnIds.has(l.itemId)).reduce((s, l) => s + l.count, 0);
+        const yarnCount = result.lines.filter((l) => yarnIds.has(l.itemId)).reduce((s, l) => s + l.count, 0);
+        const parts = [
+          ...(rolls > 0 || yarnCount === 0 ? [`${rolls} top`] : []),
+          ...(yarnCount > 0 ? [`${yarnCount} iplik`] : []),
+        ].join(" + ");
+        toast.success(`${result.lines.length} kalem (${parts}) yüklendi.`);
       }
       // Atlanan satır SESSİZ GEÇMEZ — sayısı toast'ta, sebepleri altta durur.
       if (result.errors.length > 0) {

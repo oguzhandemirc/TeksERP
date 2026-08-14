@@ -18,6 +18,30 @@
 //   §5 Bir fiş → tek aktif fatura (409 + anlamlı mesaj); iptalden sonra serbest
 //   §6 Tedarikçisiz / iptal edilmiş fiş reddedilir
 //   §7 Fatura para birimi ve tedarikçisi fişten gelir
+//   §8 ⭐ Faturalanmış fiş iptal edilemez + kaynağı iptal fatura onaylanamaz
+//   §9 ⭐ İplik satırı faturaya girer (karma + iplik-only)
+//   §10 ⭐ ÇAPRAZ YARIŞ (Sınıf 4): goods-receipt.cancel ‖ invoice.confirm —
+//       pencere ELLE AÇIK TUTULAN tx ile deterministik kurulur (serbest
+//       Promise.allSettled yarışı pencereyi bazen ıskalar ve sahte-yeşil kalır);
+//       her çizelgede TEK kazanan, "fiş CANCELLED ∧ fatura CONFIRMED" imkânsız
+//   §11 ⭐ YARIŞ (Sınıf 4): invoice.updateDraft ‖ invoice.confirm — onay kazandıysa
+//       düzenleme 409 + satırlar DEĞİŞMEZ; düzenleme kazandıysa onay BEKLER ve
+//       defteri claim sonrası TAZE satırlardan yazar
+//
+// NEGATİF SONDALAR (2026-08-14 — üçü de koşuldu, kırmızı GÖRÜLDÜ, dosyalar
+// shasum ile birebir geri yüklendi):
+//   • invoice.confirm'deki GR `FOR UPDATE` silindi → §10b/§10c kırmızı
+//     (confirm İPTAL EDİLMİŞ fişin faturasını onayladı, defter satırı doğdu).
+//     ⚠️ §10a (bekleme ölçümü) bu sondada YEŞİL KALABİLİR: yüklü makinede
+//     kilitsiz confirm bile 400 ms'yi aşabilir — deterministik kırmızı
+//     §10b/§10c'dir, §10a yalnız pozitif yönde anlamlıdır (kilit varken
+//     confirm'in 400 ms'de dönmesi İMKÂNSIZDIR → sahte-kırmızı üretmez);
+//   • goods-receipt.cancel'ın tx-içi `liveInvoiceTx` seddi körleştirildi →
+//     §10e/§10f kırmızı (fiş CANCELLED + fatura CONFIRMED çifti doğdu);
+//   • updateDraft claim'inin `status: DRAFT` yüklemi düşürüldü → §11b/§11c
+//     kırmızı (CONFIRMED faturanın satırları sessizce yeniden yazıldı —
+//     claim'siz WHERE de kilitte BEKLER, yani §11a tek başına yeterli değildir;
+//     asıl sed yüklemdir).
 // =============================================================================
 import { RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -55,6 +79,24 @@ async function expectError(fn: () => Promise<unknown>): Promise<string> {
   } catch (e) {
     return (e as Error).message;
   }
+}
+
+/** §10/§11 yarış sondaları — pencereyi elle açık tutmak için. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+type RaceResult = { ok: boolean; msg: string };
+/** Servis çağrısını "kazandı/kaybetti + mesaj" şekline indirger (yarış sondası). */
+function settle(p: Promise<unknown>, onSettle: () => void): Promise<RaceResult> {
+  return p
+    .then(() => ({ ok: true, msg: "" }))
+    .catch((e: Error) => ({ ok: false, msg: e.message }))
+    .finally(onSettle);
 }
 
 async function main(): Promise<void> {
@@ -347,6 +389,245 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── §10 ⭐ ÇAPRAZ YARIŞ: goods-receipt.cancel ‖ invoice.confirm (Sınıf 4) ──
+  // İki taraf da bir gün check-then-act İDİ: fiş iptalinin fatura kontrolü tx
+  // DIŞINDA, fatura onayının fiş kontrolü kilitsizdi. Sonda ZAMANLAMAYA
+  // GÜVENMEZ: yarışın "aradaki pencere"si, elle açık tutulan bir transaction'la
+  // DETERMİNİSTİK kurulur — kilit alınır, karşı uç çağrılır, BEKLEDİĞİ ölçülür,
+  // pencere kapatılır ve kaybedenin 409 + geri sarımı doğrulanır.
+  // ⚠️ txB'nin kilidi `FOR NO KEY UPDATE` (FOR UPDATE DEĞİL): cancel'ın claim'i
+  // (sıradan UPDATE) yine bloklanır ama manuel CONFIRMED fatura insert'inin FK
+  // `KEY SHARE` kilidi GEÇEBİLİR — FOR UPDATE olsaydı sondanın kendi kurgusu
+  // kilitlenirdi.
+  {
+    // (a) confirm, UÇUŞTAKİ iptali bekler ve kaybeder.
+    const rA = await goodsReceiptService.create(
+      {
+        warehouseId: wh.id,
+        supplierId: supplier.id,
+        lines: [{ itemId: item.id, initialQty: 40, unitPrice: 2, clientToken: crypto.randomUUID() }],
+      },
+      undefined,
+    );
+    const ridA = (rA.data as { id: string }).id;
+    receiptIds.push(ridA);
+    const drA = await invoiceService.createDraftFromGoodsReceipt(ridA);
+    invoiceIds.push(drA.data.id);
+
+    const lockA = deferred();
+    const gateA = deferred();
+    const txA = prisma.$transaction(
+      async (tx) => {
+        // "İptal uçuşta": claim'in yaptığı gibi fiş satırı kilitlenir ve
+        // CANCELLED yazılır ama COMMIT EDİLMEZ.
+        await tx.$executeRaw`UPDATE "goods_receipts" SET "status" = 'CANCELLED', "cancelledAt" = now() WHERE "id" = ${ridA}::uuid`;
+        lockA.resolve();
+        await gateA.promise;
+      },
+      { timeout: 20_000 },
+    );
+    await lockA.promise;
+
+    let confirmSettled = false;
+    const confirmP = settle(invoiceService.confirm(drA.data.id, undefined), () => {
+      confirmSettled = true;
+    });
+    await sleep(400);
+    check("§10a ⭐ confirm uçuştaki iptalin FİŞ KİLİDİNDE bekledi (FOR UPDATE)", !confirmSettled);
+    gateA.resolve();
+    await txA;
+    const confirmRes = await confirmP;
+    check(
+      "§10b ⭐ İptal kazandı → onay 409 (İPTAL EDİLMİŞ)",
+      !confirmRes.ok && /İPTAL EDİLMİŞ/.test(confirmRes.msg),
+      confirmRes.msg.slice(0, 90),
+    );
+    const invA = await prisma.invoice.findUniqueOrThrow({ where: { id: drA.data.id }, select: { status: true } });
+    const ledgerA = await prisma.cariTransaction.count({ where: { invoiceId: drA.data.id } });
+    check(
+      "§10c Onay claim'i GERİ SARILDI: fatura DRAFT + defter satırı YOK",
+      invA.status === "DRAFT" && ledgerA === 0,
+      `status=${invA.status} defter=${ledgerA}`,
+    );
+
+    // (b) cancel claim'de beklerken "onay kazandı" — tx-içi taze kontrol yakalar.
+    const rB = await goodsReceiptService.create(
+      {
+        warehouseId: wh.id,
+        supplierId: supplier.id,
+        lines: [{ itemId: item.id, initialQty: 15, unitPrice: 2, clientToken: crypto.randomUUID() }],
+      },
+      undefined,
+    );
+    const ridB = (rB.data as { id: string }).id;
+    receiptIds.push(ridB);
+
+    const lockB = deferred();
+    const gateB = deferred();
+    const txB = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "goods_receipts" WHERE "id" = ${ridB}::uuid FOR NO KEY UPDATE`;
+        lockB.resolve();
+        await gateB.promise;
+      },
+      { timeout: 20_000 },
+    );
+    await lockB.promise;
+
+    let cancelSettled = false;
+    const cancelP = settle(goodsReceiptService.cancel(ridB, "yarış sondası", undefined), () => {
+      cancelSettled = true;
+    });
+    // Hızlı-yol kontrolleri (fatura henüz yok) GEÇER, claim fiş kilidinde bekler.
+    await sleep(500);
+    check("§10d cancel fiş kilidinde bekliyor (hızlı yol geçti, claim kilitte)", !cancelSettled);
+    // "Onay kazandı"yı KUR: CONFIRMED fatura satırı doğrudan yazılır. Gerçek
+    // confirm çağrısı txB'nin kilidinde KENDİSİ de beklerdi — pencereyi bozmadan
+    // yarışın sonucunu kurmanın tek yolu satırı el ile yazmaktır.
+    const confirmedManual = await prisma.invoice.create({
+      data: {
+        docNo: `${TAG}-RC1`,
+        type: "PURCHASE",
+        status: "CONFIRMED",
+        cariId: inv.cariId,
+        issueDate: new Date(),
+        goodsReceiptId: ridB,
+        confirmedAt: new Date(),
+      },
+      select: { id: true },
+    });
+    invoiceIds.push(confirmedManual.id);
+    gateB.resolve();
+    await txB;
+    const cancelRes = await cancelP;
+    check(
+      "§10e ⭐ cancel claim SONRASI taze fatura kontrolüyle 409",
+      !cancelRes.ok && /faturası kesilmiş/.test(cancelRes.msg) && /iptal edilemez/.test(cancelRes.msg),
+      cancelRes.msg.slice(0, 100),
+    );
+    const grB = await prisma.goodsReceipt.findUniqueOrThrow({ where: { id: ridB }, select: { status: true } });
+    check(
+      "§10f ⭐ Claim GERİ SARILDI — fiş ACTIVE (CANCELLED ∧ CONFIRMED çifti imkânsız)",
+      grB.status === "ACTIVE",
+      `status=${grB.status}`,
+    );
+  }
+
+  // ── §11 ⭐ YARIŞ: invoice.updateDraft ‖ invoice.confirm (Sınıf 4) ─────────
+  {
+    // (a) ONAY kazanır → updateDraft 409 ve satırlara DOKUNAMAZ.
+    const dA = await invoiceService.createDraft(
+      {
+        type: "PURCHASE",
+        customerId: supplier.id,
+        lines: [{ description: "yarış-eski", qty: 10, unitPrice: 2, vatRate: 0 }],
+      },
+      undefined,
+    );
+    invoiceIds.push(dA.data.id);
+
+    const lockC = deferred();
+    const gateC = deferred();
+    const txC = prisma.$transaction(
+      async (tx) => {
+        // "Onay uçuşta": claim'in yazdığı gibi CONFIRMED, commit edilmemiş.
+        await tx.$executeRaw`UPDATE "invoices" SET "status" = 'CONFIRMED', "confirmedAt" = now() WHERE "id" = ${dA.data.id}::uuid AND "status" = 'DRAFT'`;
+        lockC.resolve();
+        await gateC.promise;
+      },
+      { timeout: 20_000 },
+    );
+    await lockC.promise;
+
+    let updSettled = false;
+    const updP = settle(
+      invoiceService.updateDraft(dA.data.id, { lines: [{ description: "yarış-yeni", qty: 999, unitPrice: 5 }] }, undefined),
+      () => {
+        updSettled = true;
+      },
+    );
+    await sleep(400);
+    check("§11a updateDraft onay claim'inin satır kilidinde bekledi", !updSettled);
+    gateC.resolve();
+    await txC;
+    const updRes = await updP;
+    check(
+      "§11b ⭐ Onay kazandı → updateDraft 409 (onaylanmış — düzenlenemez)",
+      !updRes.ok && /onaylanmış/.test(updRes.msg),
+      updRes.msg.slice(0, 90),
+    );
+    const linesA = await prisma.invoiceLine.findMany({
+      where: { invoiceId: dA.data.id },
+      select: { description: true, qty: true },
+    });
+    check(
+      "§11c ⭐ CONFIRMED faturanın satırları YENİDEN YAZILMADI",
+      linesA.length === 1 && linesA[0]?.description === "yarış-eski" && D(linesA[0].qty).equals(10),
+      JSON.stringify(linesA),
+    );
+
+    // (b) DÜZENLEME kazanır → confirm bekler ve defteri YENİ satırlardan yazar.
+    const dB = await invoiceService.createDraft(
+      {
+        type: "PURCHASE",
+        customerId: supplier.id,
+        lines: [{ description: "eski", qty: 10, unitPrice: 2, vatRate: 0 }],
+      },
+      undefined,
+    );
+    invoiceIds.push(dB.data.id);
+
+    const lockD = deferred();
+    const gateD = deferred();
+    const txD = prisma.$transaction(
+      async (tx) => {
+        // updateDraft'ın gövdesi UÇUŞTA: claim + satır yeniden yazımı, commit yok.
+        await tx.invoice.updateMany({ where: { id: dB.data.id, status: "DRAFT" }, data: { status: "DRAFT" } });
+        await tx.invoiceLine.deleteMany({ where: { invoiceId: dB.data.id } });
+        await tx.invoiceLine.create({
+          data: {
+            invoiceId: dB.data.id,
+            lineNo: 1,
+            description: "yeni",
+            qty: 5,
+            unit: "m",
+            unitPrice: 6,
+            discountRate: 0,
+            vatRate: 0,
+            withholdingRate: 0,
+            lineTotal: 30,
+            vatAmount: 0,
+          },
+        });
+        lockD.resolve();
+        await gateD.promise;
+      },
+      { timeout: 20_000 },
+    );
+    await lockD.promise;
+
+    let conSettled = false;
+    const conP = settle(invoiceService.confirm(dB.data.id, undefined), () => {
+      conSettled = true;
+    });
+    await sleep(400);
+    check("§11d confirm uçuştaki düzenlemenin kilidinde bekledi", !conSettled);
+    gateD.resolve();
+    await txD;
+    const conRes = await conP;
+    check("§11e Düzenleme kazandı → onay YENİ içerikle geçti", conRes.ok, conRes.msg.slice(0, 90));
+    const ledgerB = await prisma.cariTransaction.findFirst({
+      where: { invoiceId: dB.data.id, sourceType: "INVOICE" },
+      select: { credit: true },
+    });
+    const invB = await prisma.invoice.findUniqueOrThrow({ where: { id: dB.data.id }, select: { grandTotal: true } });
+    check(
+      "§11f ⭐ Defter tutarı ESKİ (20) değil YENİ (30) — claim sonrası TAZE satırlardan",
+      ledgerB !== null && D(ledgerB.credit).equals(30) && D(invB.grandTotal).equals(30),
+      `credit=${ledgerB?.credit} grand=${invB.grandTotal}`,
+    );
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
@@ -362,6 +643,8 @@ main()
     if (invoiceIds.length > 0) {
       await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
       await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
+      // §11e onayı belge dondurur (INVOICE_INTERNAL, sourceId = fatura id).
+      await prisma.printedDocument.deleteMany({ where: { sourceId: { in: invoiceIds } } });
       await prisma.invoice.deleteMany({ where: { id: { in: invoiceIds } } });
     }
     if (cariIds.length > 0) {

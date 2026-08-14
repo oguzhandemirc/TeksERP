@@ -6,6 +6,7 @@ const catalogs: ImportCatalogs = {
     { id: "i1", code: "KMS-000001", name: "Patos" },
     { id: "i2", code: "KMS-000002", name: "İkiz" },
     { id: "i3", code: "KMS-000003", name: "İkiz" }, // aynı ADLI ikinci kumaş
+    { id: "y1", code: "IPL-000001", name: "Penye İplik", yarn: true }, // Sınıf 5
   ],
   colors: [{ id: "c1", code: "RNK-1", name: "Gri" }],
   folds: [{ code: "4-KAT", name: "4 Kat" }],
@@ -85,5 +86,28 @@ describe("mal kabul Excel ayrıştırma", () => {
     expect(r.lines).toHaveLength(1);
     expect(r.errors).toHaveLength(1);
     expect(at(r.errors, 0).row).toBe(3);
+  });
+
+  // ── Sınıf 5: iplik kalemi (yarn: true) ─────────────────────────────────────
+
+  it("iplik satırı yüklenir — Metre kolonu KG'dir, kumaş alanları null doğar", () => {
+    const r = parseReceiptRows([{ "Kumaş Kodu": "IPL-000001", Metre: 500, Adet: 2, "Birim Fiyat": 4 }], catalogs);
+    expect(r.errors).toEqual([]);
+    expect(at(r.lines, 0)).toMatchObject({
+      itemId: "y1", initialQty: 500, count: 2, unitPrice: 4,
+      colorId: null, width: null, weightKg: null, foldType: null,
+    });
+  });
+
+  // ⚠️ Kural ①'in alan ölçeği: iplik satırındaki Renk/En/Kg/Kat sessizce
+  // DÜŞÜRÜLMEZ — satır sebebiyle reddedilir ("renk yazdım, kayboldu" olmaz).
+  it("iplik satırında Renk/En/Kg/Kat doluysa satırı SEBEBİYLE reddeder", () => {
+    const r = parseReceiptRows(
+      [{ "Kumaş Kodu": "IPL-000001", Metre: 500, Renk: "Gri", "En (cm)": 250, Kat: "4 Kat" }],
+      catalogs,
+    );
+    expect(r.lines).toHaveLength(0);
+    expect(at(r.errors, 0).reason).toContain("İplik kalemi");
+    expect(at(r.errors, 0).reason).toContain("Renk/En/Kat");
   });
 });
