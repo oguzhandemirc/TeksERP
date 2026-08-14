@@ -8,6 +8,8 @@
  * Makineye özgü → secure-store'a (apiBaseUrl gibi) yazılır, backend
  * UserPreference'a değil. İlk açılışta üretilir, sonra sabit kalır.
  */
+import { secureStore } from "@/lib/secure-store";
+
 const STORE_KEY = "config.deviceId";
 let cached: string | null = null;
 
@@ -32,7 +34,7 @@ function genUuid(): string {
 export async function getOrCreateDeviceId(): Promise<string> {
   if (cached) return cached;
   try {
-    const existing = await window.api?.secureStore.get(STORE_KEY);
+    const existing = await secureStore.get(STORE_KEY);
     if (existing && existing.length >= 8) {
       cached = existing;
       return existing;
@@ -42,7 +44,7 @@ export async function getOrCreateDeviceId(): Promise<string> {
   }
   const fresh = genUuid();
   try {
-    await window.api?.secureStore.set(STORE_KEY, fresh);
+    await secureStore.set(STORE_KEY, fresh);
   } catch {
     /* yazılamazsa bu oturum için yine de kullan */
   }

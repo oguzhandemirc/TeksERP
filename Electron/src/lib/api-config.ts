@@ -10,6 +10,7 @@
  * UserPreference'a değil, kasıtlı olarak yerel depoya yazılır.
  */
 import apiClient, { DEFAULT_API_BASE_URL } from "@/services/apiClient";
+import { secureStore } from "@/lib/secure-store";
 
 /** secure-store anahtarı (token ile aynı şifreli blob içinde, ayrı key). */
 const STORE_KEY = "config.apiBaseUrl";
@@ -68,7 +69,7 @@ export function joinApiBaseUrl(parts: ApiBaseUrlParts): string {
 /** Yerel kayıtlı "son kullanılan adresler" (yeni→eski). Hatada boş liste. */
 export async function getRecentApiBaseUrls(): Promise<string[]> {
   try {
-    const raw = await window.api?.secureStore.get(RECENT_STORE_KEY);
+    const raw = await secureStore.get(RECENT_STORE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as unknown;
     if (!Array.isArray(parsed)) return [];
@@ -85,7 +86,7 @@ export async function pushRecentApiBaseUrl(url: string): Promise<void> {
   const current = await getRecentApiBaseUrls();
   const next = [normalized, ...current.filter((u) => u !== normalized)].slice(0, MAX_RECENT);
   try {
-    await window.api?.secureStore.set(RECENT_STORE_KEY, JSON.stringify(next));
+    await secureStore.set(RECENT_STORE_KEY, JSON.stringify(next));
   } catch {
     /* sessiz geç — hızlı seçim listesi kritik değil */
   }
@@ -96,7 +97,7 @@ export async function removeRecentApiBaseUrl(url: string): Promise<string[]> {
   const normalized = normalizeApiBaseUrl(url);
   const next = (await getRecentApiBaseUrls()).filter((u) => u !== normalized);
   try {
-    await window.api?.secureStore.set(RECENT_STORE_KEY, JSON.stringify(next));
+    await secureStore.set(RECENT_STORE_KEY, JSON.stringify(next));
   } catch {
     /* sessiz geç */
   }
@@ -106,7 +107,7 @@ export async function removeRecentApiBaseUrl(url: string): Promise<string[]> {
 /** Yerel kayıtlı adres (yoksa null). IPC hatalarında sessizce null döner. */
 export async function getStoredApiBaseUrl(): Promise<string | null> {
   try {
-    return (await window.api?.secureStore.get(STORE_KEY)) ?? null;
+    return (await secureStore.get(STORE_KEY)) ?? null;
   } catch {
     return null;
   }
@@ -114,12 +115,12 @@ export async function getStoredApiBaseUrl(): Promise<string | null> {
 
 /** Adresi yerel olarak kaydet. */
 export async function setStoredApiBaseUrl(url: string): Promise<void> {
-  await window.api.secureStore.set(STORE_KEY, normalizeApiBaseUrl(url));
+  await secureStore.set(STORE_KEY, normalizeApiBaseUrl(url));
 }
 
 /** Kayıtlı adresi sil — varsayılana dönüş. */
 export async function clearStoredApiBaseUrl(): Promise<void> {
-  await window.api.secureStore.delete(STORE_KEY);
+  await secureStore.delete(STORE_KEY);
 }
 
 /** axios singleton'ın baseURL'ini güncelle — bir sonraki istek anında kullanır. */

@@ -14,6 +14,7 @@
  * (`@/types/preferences`).
  */
 import type { ScannerTransport, ScanTerminatorPref } from "@shared/ipc-contract";
+import { secureStore } from "@/lib/secure-store";
 
 /** secure-store anahtarı — tek JSON blob (sunucu adresiyle aynı şifreli store). */
 const STORE_KEY = "config.workstation";
@@ -103,7 +104,7 @@ export const MACHINE_CONFIG_QUERY_KEY = ["machine-config"] as const;
  */
 export async function getStoredMachineConfig(): Promise<MachineConfig> {
   try {
-    const raw = await window.api?.secureStore.get(STORE_KEY);
+    const raw = await secureStore.get(STORE_KEY);
     if (!raw) return EMPTY_MACHINE_CONFIG;
     const parsed = JSON.parse(raw) as unknown;
     if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
@@ -117,10 +118,10 @@ export async function getStoredMachineConfig(): Promise<MachineConfig> {
 
 /** Ayarları yerel olarak kaydet (tek JSON blob). */
 export async function setStoredMachineConfig(config: MachineConfig): Promise<void> {
-  await window.api.secureStore.set(STORE_KEY, JSON.stringify(config));
+  await secureStore.set(STORE_KEY, JSON.stringify(config));
 }
 
 /** Kayıtlı donanım ayarlarını sil. */
 export async function clearStoredMachineConfig(): Promise<void> {
-  await window.api.secureStore.delete(STORE_KEY);
+  await secureStore.delete(STORE_KEY);
 }
