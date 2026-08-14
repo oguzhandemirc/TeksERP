@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -34,16 +34,15 @@ import {
   rollTabDefaultSortBy,
   type RollStatusTabKey,
 } from "./service";
-import { ROLL_TABS, isRollTabKey, type RollTabKey } from "./tabs-config";
+import { isRollTabKey, type RollTabKey } from "./tabs-config";
+import { resolveRollTabs } from "./tabs-regime";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { downloadInventorySummary } from "./inventorySummary";
 import type { LabelCustomerContext } from "@/services/labelService";
 import type { Roll } from "./types";
 
 // Sekme listesi `tabs-config.ts`te — komut paleti aynı listeden `?tab=` derin
 // bağlantısı üretiyor (kopyalanırsa palet ile sayfa ayrışır).
-const TABS = ROLL_TABS;
-const REORDERABLE_KEYS = TABS.map((t) => t.key);
-
 export function RollsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get("tab");
@@ -59,6 +58,13 @@ export function RollsPage() {
   const [summaryBusy, setSummaryBusy] = useState(false);
   // "Tümünü İndir" ilerlemesi (sağ alt) — 30k'da "N / ~T" göstergesi için.
   const [dlProgress, setDlProgress] = useState<{ loaded: number; total?: number } | null>(null);
+  // TİCARET REJİMİ: üretim sekmeleri süzülür, depo etiketleri değişir.
+  // ⚠️ Şerit, "Envanter Özeti" indirmesi ve sekme sırası AYNI listeyi okur —
+  // biri ham `ROLL_TABS`e dönerse ticaret kullanıcısına gizlenen sekme geri
+  // gelir (ya da özet Excel'i tanım gereği boş sayfalar üretir).
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const TABS = useMemo(() => resolveRollTabs(financeEnabled), [financeEnabled]);
+  const REORDERABLE_KEYS = useMemo(() => TABS.map((t) => t.key), [TABS]);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
   // Depo kolonu + filtresi yalnız ÇOK DEPOLU kurulumda çizilir (tek kaynak hook).
   const { multiWarehouse } = useMultiWarehouse();
@@ -199,6 +205,16 @@ export function RollsPage() {
     }
     setTab(next);
   };
+
+  // ⚠️ REJİM DEĞİŞİNCE / GİZLİ SEKMEYE DERİN BAĞLANTIYLA GELİNİNCE düşülecek
+  // bir yer olmalı: ticarette `?tab=PRODUCTION` sekmeyi ŞERİTTE göstermez ama
+  // state'te tutar → kullanıcı hiçbir sekmesi seçili görünmeyen bir ekranda
+  // tanım gereği boş bir tabloya bakar ve "liste bozuk" der. İlk görünür
+  // sekmeye düşülür. (Bayrak yüklenmeden liste tam olduğu için bu effect
+  // fabrikada HİÇ tetiklenmez.)
+  useEffect(() => {
+    if (TABS.length > 0 && !TABS.some((t) => t.key === tab)) setTab(TABS[0]!.key);
+  }, [TABS, tab]);
 
   // Dashboard'tan `?tab=...` ile gelindiğinde initial state ile senkron;
   // URL'i temizle ki sekme değişimi geri-tuş davranışına karışmasın.
