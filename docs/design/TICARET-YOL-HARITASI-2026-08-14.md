@@ -1,0 +1,99 @@
+# Ticaret Dalı — Eksik Envanteri ve Yol Haritası (2026-08-14)
+
+> **Nasıl çıkarıldı:** A–E planı (`~/.claude/plans/plan-haz-rla-magical-shell.md`) +
+> sağlamlık paketi backlog'u baz alınarak 4 paralel SALT-OKUNUR tarama ajanı worktree'yi
+> ölçtü. Her bulgu **dosya:satır kanıtlı** — tahmin yok. Kapsam: `feature/depo-mal-kabul`
+> dalı, muhasebe + depo. Fabrika sunucusu ve main bu planın DIŞINDA.
+
+## 1) Bitti — ölçümle DOĞRULANDI (özet)
+
+Şüpheye yer kalmasın diye "bitti sanılan"lar da tarandı; şunlar gerçekten tam:
+
+- **B5** sevkiyattan satış faturası (Faturala düğmesi + ön-yükleme + bekçisi) · **B8** fatura/tahsilat
+  makbuzu çıktısı (INVOICE_INTERNAL + PAYMENT_RECEIPT, Belge Şablonları dahil) · **Kasa & Banka
+  Defteri raporu** (üç yazar + yürüyen bakiye + Excel/PDF) · **B7** sipariş ekranı rejim süzgeci ·
+  **PO modeli + "ne ısmarladım ne geldi" detayı + iptal↔kabul etkileşimi** · **B9 Hızlı Sevk**
+  (listeden seçim + miktar modu, FIFO `statusChangedAt`) · **B9b** transfer + iade "listeden seç" ·
+  **İplik**: kg defteri ekranı, ADJUST yüzeyi, Excel fiyat kolonu · **TCMB cron** ·
+  **Fatura Kapama ekranı** (FIFO önerisi + elle düzeltme) · **verilen çek (PAY) akışı** ·
+  finance bekçileri + dist-web docker imajı.
+
+## 2) KRİTİK bulgular — akışı fiilen kıran 6 madde
+
+| # | Bulgu | Kanıt (özet) | Efor |
+|---|---|---|---|
+| K1 | **Vade zinciri panelden girilEMİYOR** — ne fatura `dueDate` ne cari `paymentTermDays`; her fatura aging'de "vadesiz" kovasına düşüyor | backend PATCH uçları VAR (`finance.routes.ts:470,:125`); `InvoiceFormDialog`'da `dueDate` grep'i 0; panelde cari düzenleme diyaloğu yok | 1g |
+| K2 | **Satış fiyatı ön-dolumu HİÇ yok** — `PriceKind.SALE` tüketicisi 0; fatura satırı kalem (item) bile seçtirmiyor → D2'nin satış yarısı ölü | iki `resolveItemPricesFor` çağrısı da PURCHASE | 1,5g |
+| K3 | **Kasa hareketi (masraf/gelir/virman) panel yüzeyi HİÇ yok** — backend 4 uç hazır, operatör besleyemiyor; kasa defteri raporu fiilen boş kalır | `grep cash-transactions Electron/src` = 0; Finance hub 8 karoda yok | 2g |
+| K4 | **Mal kabul ↔ alış siparişi panel dikişi KOPUK** — `GoodsReceiptOrderSection` + `PurchaseOrderSyncBand` YAZILMIŞ ama hiçbir yerden import edilmiyor (kesik oturum kalıntısı); fiş detayı bağlı PO'yu göstermiyor | import grep'i 0; `GoodsReceiptFormDialog` `purchaseOrderId` göndermiyor | 1,25g |
+| K5 | **`resolveStatementOpening` ölü kod** — cari ekstre devri C3 mührünü KULLANMIYOR (düz aggregate); kapanışın değeri hiçbir okuma yolunda yok | tek çağıran bekçi; `cari.service.ts:566` düz SUM | 0,75g |
+| K6 | **GR `addLines` ‖ `cancel` penceresi** — iptal, kontrol ile satır doğumu arasına sızarsa CANCELLED fişe canlı top/iplik yazılır (Sınıf 4'ün kalan üyesi) | status kontrolü tx dışı; satırlar ayrı tx | 1,5g |
+
+## 3) Paketler
+
+### F — Muhasebe akışının kayıp yarısı (~6,5 gün) — ÖNERİLEN BAŞLANGIÇ
+
+| İş | İçerik | Efor |
+|---|---|---|
+| F1 | **Vade + cari kart düzenleme** (K1): `InvoiceFormDialog`'a vade alanı (boşsa cari vade gününden ÖNERİ, formda türet); `CariEditDialog` (paymentTermDays · riskLimit · taxOffice · defaultCurrency) — uçlar hazır, yeni uç yok | 1g |
+| F2 | **Satış fiyat zinciri** (K2): fatura satırına kalem seçici + `resolveItemPrice(SALE)` ön-dolumu; `OrderLine`/`PurchaseOrderLine` editörlerine aynı öneri kancası (ortak hook; boş bırakılan ezilmez, çözülmezse 0 + confirm seddi) | 2g |
+| F3 | **Kasa Hareketleri sayfası** (K3): karo + liste + masraf/gelir fişi + virman + iptal; kapalı-dönem 409 mesajı aynen ekranda | 2g |
+| F4 | **Mühür okuma yolu** (K5 + kasa ikizi): cari statement devri `resolveStatementOpening`'e bağlanır (`carriedFrom` yanıta + panele); kasa defteri için `resolveCashBookOpening` yazılır ("X'e kadar mühürlü" notu) | 1,5g |
+
+### G — Depo / alış dikişleri (~6,25 gün)
+
+| İş | İçerik | Efor |
+|---|---|---|
+| G1 | **Mal kabul ↔ PO dikişi** (K4): `GoodsReceiptOrderSection` monte + sync uyarı bandı (fazla kabul / siparişte olmayan ürün) + fiş detayında PO satırı | 1,25g |
+| G2 | **PO yaşam döngüsü**: `POST /:id/resync` + tekil top iptalinde senkron tetikleyici (bugün `receivedQty` bayat kalıyor); **short-close** ("kalanı gelmeyecek": `shortClosedAt` bayrağı, `deriveStatus` ezmez) | 1g |
+| G3 | **İplik çıkışı + transferi**: satış faturası onayında iplik OUT (`invoiceId` çıpası, stornoda ters) ⚠️ *karar noktası: otomatik düşüm mü, uyarı+kısayol mu*; `POST /api/yarn/transfer` (tek tx, bugün iki ayrı ADJUST gerekiyor ve defterde "düzeltme" gibi görünüyor) | 1,75g |
+| G4 | **Kumaş metraj düzeltme**: `PATCH /rolls/:id/qty` (roll:manual-adjust + zorunlu sebep + varyans izi) — bugün elle giriş/iptal var, metraj düzeltme YOK; tam sayım belgesi J'de | 1,5g |
+| G5 | **Depo hareket defteri okuma yüzeyi**: defter yazılıyor ama hiçbir uç/ekran okumuyor → `GET /api/warehouses/movements` + depo detay dökümü (iplik defterinin ikizi) | 0,75g |
+
+### H — Görünürlük + raporlar (~8,75 gün)
+
+| İş | İçerik | Efor |
+|---|---|---|
+| H1 | Fatura listesi: `paidTotal` → **Kapanan/Açık kolonu + AÇIK/KISMİ/KAPALI rozeti** (türetme, kolon değil) + **vadesi geçti rozeti** (yüklem `allocationMath`'te hazır) | 0,75g |
+| H2 | Cari listede **vadesi geçen toplam** — aging'in FIFO yüklemi `_shared`'a çıkarılıp TEK kaynaktan (ayrı hesap ayrışır); bekçiyle aging'e eşitlenir | 0,75g |
+| H3 | **Ekstre + çek listesi Excel/PDF** (`ReportExportSpec` — altyapı hazır, iki emsal var) | 1g |
+| H4 | **Çek vade takvimi**: özet kartlarına "vadesi yaklaşan (7g) / geçmiş" kovaları + Reports altında vade takvimi raporu (veri + sıralama hazır) | 1,5g |
+| H5 | **KDV dönem özeti** raporu (satış/alış ayrı, oran kırılımlı matrah+KDV+tevkifat; beyanname DEĞİL, muhasebeciye özet) | 1,5g |
+| H6 | **Çek teslim bordrosu** (PrintedDocType — çekte bugün tek baskı yüzeyi yok) | 1g |
+| H7 | Kasa defteri raporuna **kategori kırılımı** bloğu (serbest metin GROUP BY; katalog kararı veri birikince) | 0,75g |
+| H8 | Fatura üretim kısayolları: `financeAutoDraftFromShipment` bayrağı (dört kapı) + **iade → satış-iade faturası** düğmesi (backend bağı hazır; fason kabul tevkifat gerektirdiği için ayrı) | 1,5g |
+
+### I — Sağlamlık kalanları + ops (~6,5 gün)
+
+| İş | İçerik | Efor |
+|---|---|---|
+| I1 | **GR addLines‖cancel kapatma** (K6) + bekçi — en ucuz yol: satır yazımından önce `updateMany WHERE status=ACTIVE` claim'i (iplik tx'i hazır; kumaş tarafı `createInitialEntry` tx client geçirme işi) | 1,5g |
+| I2 | **clientToken eşzamanlı çift-gönderim** — `withBarcodeRetry`'a `!isClientTokenP2002` yüklemi + tx dışı catch→findUnique (PO deseni); ⚠️ AYNI açık 5 uçta: cheque · invoice.createDraft · payment · cash-transaction ×2 | 0,75g |
+| I3 | Ekstre satırına `reversesTxnId`/`reversedBy` → panelin aktif-devir tespiti sezgiselden KESİNE iner (`statementDevir` sadeleşir) | 0,5g |
+| I4 | `DETAIL_SELECT` daraltma (invoice/cheque findById include→select) + doküman düzeltmeleri (şema `receivedQty` yorumu, tasarım `_count` notu, kesim notu rejim etiketi) | 0,75g |
+| I5 | **Demo zenginleştirme**: seed'e çek (portföyde+tahsil edilmiş) + kasa dönem kapanışı + devir-iptal örneği; `demo-reset.sh` (drop→migrate→seed'ler; önce elle-tetikli, cron sonra) | 1,75g |
+| I6 | **`docs/ops/TICARET-KURULUM.md`** (finance bayrakları + WEB_TRADE ataması + depo/kasa/kur/devir; bugün üç yere dağınık) + veri ÜRETMEYEN `scripts/setup-ticaret.ts` bootstrap (bayrak + şablon merge + varsayılan depo/kasa) | 1,25g |
+
+### J — Karar bekleyenler (efor karardan sonra)
+
+- **i18n** — TR sabit (grep: 0 i18n). Yabancı demo yakın değilse "TR-only, bilinçli" notu (0,25g); gerekiyorsa önce YALNIZ ticaret yüzeyleri sözlüğe (~5g+ ve sürekli bakım borcu).
+- **Kur farkı** (dövizli kapama) — bilinçli kapsam dışı, üç katmanda belgeli; dövizli tahsilat hacmi doğunca ~2-3g.
+- **`Roll.purchaseOrderLineId`** — aynı üründen iki terminli sipariş GERÇEK ihtiyaç mı? Değilse FIFO varsayımı kalıcı sınır olarak belgelenir.
+- **Tam stok sayımı belgesi** (sayım listesi + fark fişi + toplu mutabakat) ~3g — G4 hafif sürümü önce.
+- **Resmi mutabakat mektubu** (donmuş PrintedDoc; H3 ekstre exportu ihtiyacın çoğunu kapatır) ~1,5g.
+- **Fatura detay sayfası** (bugün liste + baskı diyaloğu var).
+- **Mobil mal kabul** — plan gereği sonraya; ilk iş `test_single_warehouse_parity` §5c güncellemesi olur.
+- **e-Belge / dış muhasebe entegrasyonu** — SaaS ufku ile birlikte.
+
+## 4) Önerilen sıra
+
+**F → G1-G2 → H1-H3 → kalan H → G3-G5 → I** (F+G çekirdek akış, H görünürlük, I sertleştirme).
+F4 hariç F maddeleri birbirinden bağımsız — paralelleştirilebilir. H1, K1 kapanmadan görünür
+sonuç vermez (vade girilemiyorken rozet hep boş). Toplam ~28 gün efor; paket sınırlarında
+commit + bekçi + (istenirse) demo deploy.
+
+## 5) Değişmez kurallar (bu plana da aynen uygulanır)
+
+Additive migration · fabrika sıfır-fark (`finance.enabled` rejimi) · append-only defter + storno ·
+atomik claim · **her yeni davranışa bekçi + negatif sonda** · beş sağlamlık sınıfı (kök CLAUDE.md) ·
+paylaşılan dosyada dikiş ana oturumda.
