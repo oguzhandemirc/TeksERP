@@ -10,6 +10,17 @@
 // üçüncü şahıs çeki olağandır (müşteri kendi müşterisinin çekini ciro eder).
 // Tek alana indirmek, karşılıksız çıktığında kimin çeki olduğunu kaybettirirdi.
 //
+// ⚠️ İKİ TARİH, İKİ AYRI SORU (SINIF 1, 2026-08-14 — SAP Belegdatum ↔
+// Buchungsdatum ayrımı): "İşlem tarihi" BİZİM defterimizin çıpasıdır — belge
+// no, kur, cari defter satırı ve dönem kilidi ONDAN çözülür; "Keşide tarihi"
+// KÂĞIDIN üzerindeki tarihtir (hukuki veri, TTK 796 ibraz süresi) ve deftere
+// ETKİSİ YOKTUR. Kasım keşideli çek Aralık'ta gelirse işlem tarihi Aralık'tır;
+// eski tek-tarih modeli bu kaydı ya sessizce Kasım'a düşürüyor ya da kapalı
+// dönemde operatörü keşideyi YALAN yazmaya zorluyordu. İşlem tarihi ZORUNLU
+// DEĞİL: boş bırakılırsa hiç gönderilmez ve backend BUGÜNÜ kullanır ("çek
+// bugün işleniyor" doğru varsayılandır — geçiş diyaloglarındaki "boşsa onay
+// kapalı" kuralı burada uygulanmaz, çünkü orada varsayılan YOKTUR).
+//
 // ⚠️ VADE ZORUNLU ve ÖN DOLDURULMAZ: vade kâğıdın üzerindeki gündür, sistemin
 // tahmin edeceği bir şey değil. "Bugün" diye ön doldurmak, acele eden bir
 // kullanıcının yanlış vadeyle kayıt açmasının en kolay yolu olurdu.
@@ -70,6 +81,9 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
   const [amount, setAmount] = useState(0);
   const [rate, setRate] = useState(0);
   const [issueDate, setIssueDate] = useState(() => ymd(new Date()));
+  // İşlem tarihi bugünle ÖN DOLDURULUR (vade doldurulmaz — o kâğıdın verisidir,
+  // bu bizim defterimizin günüdür ve olağan durum "çek bugün işleniyor"dur).
+  const [postingDate, setPostingDate] = useState(() => ymd(new Date()));
   const [dueDate, setDueDate] = useState("");
   const [serialNo, setSerialNo] = useState("");
   const [drawerName, setDrawerName] = useState("");
@@ -81,8 +95,10 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
   const [clientToken] = useState(() => crypto.randomUUID());
 
   // Boş/bozuk tarih `undefined` döner (bkz. dates.ts) — vade zorunlu olduğu için
-  // düğmeyi kapatır, keşide tarihi ise hiç gönderilmez ve backend "şimdi"yi yazar.
+  // düğmeyi kapatır; keşide ve işlem tarihi ise hiç gönderilmez ve backend
+  // keşide için "şimdi"yi, işlem için BUGÜNÜ yazar (route sözleşmesi).
   const issueIso = dayStartIso(issueDate);
+  const postingIso = dayStartIso(postingDate);
   const dueIso = dayStartIso(dueDate);
 
   const valid =
@@ -105,6 +121,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
         exchangeRate: currency !== "TRY" && rate > 0 ? rate : null,
         amount,
         issueDate: issueIso,
+        postingDate: postingIso,
         dueDate: v.dueDate,
         serialNo: serialNo.trim() || null,
         drawerName: drawerName.trim() || null,
@@ -235,11 +252,27 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
                 onChange={(e) => setRate(Number(e.target.value))}
               />
               <p className="mt-1 text-xs text-muted-foreground">
-                Boş bırakılırsa keşide tarihinin kuru Kurlar tablosundan alınır. O tarihe kur girilmemişse kayıt
-                reddedilir ve size söylenir.
+                Boş bırakılırsa işlem tarihinin kuru Kurlar tablosundan alınır (keşide tarihinin DEĞİL). O
+                tarihe kur girilmemişse kayıt reddedilir ve size söylenir.
               </p>
             </div>
           )}
+
+          <div className="col-span-2">
+            <Label>İşlem tarihi</Label>
+            <Input
+              type="date"
+              className="mt-1"
+              value={postingDate}
+              onChange={(e) => setPostingDate(e.target.value)}
+            />
+            {/* Geçiş diyaloglarındaki dil: bu tarihin NEREYE yazıldığı ekranda
+                söylenir — kullanıcı "keşideyle aynı şey" sanmasın. */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Çekin deftere işlendiği gün: belge numarası, kur, cari defter satırı ve dönem kilidi bu
+              tarihten çözülür. Boş bırakılırsa bugün kabul edilir.
+            </p>
+          </div>
 
           <div>
             <Label>Keşide tarihi</Label>
@@ -249,6 +282,12 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
               value={issueDate}
               onChange={(e) => setIssueDate(e.target.value)}
             />
+            {/* Eski yardım metni kuru keşideye bağlıyordu — YANLIŞTI; kur işlem
+                tarihinden çözülür. Keşide artık yalnız kâğıdın bilgisidir. */}
+            <p className="mt-1 text-xs text-muted-foreground">
+              Kâğıdın üzerindeki tarih (ileri keşide olağandır). Deftere, kura ve belge numarasına etkisi
+              yoktur.
+            </p>
           </div>
           <div>
             <Label>Vade</Label>

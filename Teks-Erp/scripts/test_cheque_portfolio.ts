@@ -36,6 +36,17 @@
 //       MEŞRU tahsil 409'a DÜŞMEZ (CAS yalnız para-yok-eden geçişlerde)
 //   §19 ⭐ TAHSİL STORNOSU (K-2): para geri + durum geri + tipli olay +
 //       ikinci storno 409 + mutabakat formülü COLLECT_CANCEL'ı da sayıyor
+//   §19m ⭐ DEPOSIT bankası ≠ COLLECT hesabı: stornoda para TAHSİL hesabından
+//       geri çekilir, başlık bankası DEPOSIT olayından geri kurulur
+//   §19n ⭐ GERİYE TARİHLİ yeniden tahsil: storno zincirinin çıpası `createdAt`
+//       (yazım sırası) — `eventDate` KULLANICI girdisidir; eventDate ile
+//       sıralansaydı para YANLIŞ hesaptan geri çekilirdi
+//   §19o COLLECT olayı hesapsız/yoksa storno FAIL-CLOSED 409 (körlemesine
+//       bakiye oynatılmaz)
+//   §20 ⭐ KASA/BANKA DÖNEM KİLİDİ GERÇEK SERVİS YOLUNDAN (K-1 dikişi):
+//       collect/pay `eventDate` ile kapılanır (kapalı döneme 409 + tx geri
+//       sarılır); cancelCollect çıpası `now` — orijinal tahsil tarihi sonradan
+//       kapanan dönemde kalsa da storno BUGÜNE düşer ve GEÇER
 // =============================================================================
 import { ChequeStatus, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -819,6 +830,164 @@ async function main(): Promise<void> {
     guideErr.slice(0, 110),
   );
 
+  // ── §19m DEPOSIT BANKASI ≠ COLLECT HESABI ───────────────────────────────
+  // Çek bank1'e tahsile verildi ama para bank2'ye girdi (banka farklı hesaba
+  // geçirmiş olabilir — servis yorumundaki senaryo). Storno parayı TAHSİL
+  // hesabından (bank2) geri çekmeli; AT_BANK'a dönüşte başlık bankası ise
+  // DEPOSIT olayından (bank1) geri kurulmalı. İkisi aynı hesap olsaydı bu
+  // ayrım hiç ölçülmezdi (§19h ikisini de aynı bankayla kuruyor).
+  const bank2 = await prisma.bankAccount.create({
+    data: { code: `${TAG}-BN2`, name: `${TAG} Banka 2`, currency: "TRY" },
+    select: { id: true },
+  });
+  bankIds.push(bank2.id);
+  const cSplit = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 800,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  await chequeService.deposit(cSplit, { bankAccountId: bank.id });
+  await chequeService.collect(cSplit, { bankAccountId: bank2.id });
+  const b1BeforeSplitStorno = await bankBalance(bank.id);
+  const b2BeforeSplitStorno = await bankBalance(bank2.id);
+  await chequeService.cancelCollect(cSplit, "dekont başka hesabın");
+  check(
+    "§19m1 ⭐ Para TAHSİL hesabından (bank2) geri çekildi; DEPOSIT bankasına DOKUNULMADI",
+    (await bankBalance(bank2.id)).equals(b2BeforeSplitStorno.minus(800)) &&
+      (await bankBalance(bank.id)).equals(b1BeforeSplitStorno),
+    `bank1=${await bankBalance(bank.id)} bank2=${await bankBalance(bank2.id)}`,
+  );
+  const cSplitRow = await prisma.cheque.findUniqueOrThrow({
+    where: { id: cSplit },
+    select: { status: true, bankAccountId: true },
+  });
+  check(
+    "§19m2 ⭐ Başlık bankası DEPOSIT olayından geri kuruldu (tahsil hesabından DEĞİL)",
+    cSplitRow.status === ChequeStatus.AT_BANK && cSplitRow.bankAccountId === bank.id,
+    `başlık=${cSplitRow.bankAccountId === bank.id ? "bank1 (deposit)" : "YANLIŞ"}`,
+  );
+
+  // ── §19n GERİYE TARİHLİ YENİDEN TAHSİL — storno çıpası `createdAt` ──────
+  // Zincir: kasaya tahsil (eventDate BUGÜN) → storno → bank2'ye tahsil
+  // (eventDate DÜN — dekont dün kesilmiş, bugün giriliyor; meşru) → storno.
+  // Son storno parayı bank2'den çekmeli. Arama `eventDate desc` ile yapılsaydı
+  // "en yeni COLLECT" diye BUGÜN tarihli İLK tahsil (kasa) bulunur ve para
+  // KASADAN geri çekilirdi — hata yok, log yok, iki hesap birden sessizce
+  // yanlış. (Negatif sonda: orderBy eventDate'e çevrilince kırmızı — ölçüldü.)
+  const cBack = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 400,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  await chequeService.collect(cBack, { cashBoxId: box.id });
+  await chequeService.cancelCollect(cBack, "yanlış hesap seçildi");
+  await chequeService.collect(cBack, {
+    bankAccountId: bank2.id,
+    eventDate: new Date(Date.now() - 86400000),
+  });
+  const boxBeforeBackStorno = await boxBalance(box.id);
+  const b2BeforeBackStorno = await bankBalance(bank2.id);
+  await chequeService.cancelCollect(cBack, "o dekont da başka çekin");
+  check(
+    "§19n ⭐ Storno EN SON YAZILAN tahsili buldu (createdAt) — para bank2'den geri, kasa OYNAMADI",
+    (await bankBalance(bank2.id)).equals(b2BeforeBackStorno.minus(400)) &&
+      (await boxBalance(box.id)).equals(boxBeforeBackStorno),
+    `kasa=${await boxBalance(box.id)} bank2=${await bankBalance(bank2.id)}`,
+  );
+
+  // ── §19o COLLECT OLAYI YOKSA STORNO FAIL-CLOSED ─────────────────────────
+  // Başlık COLLECTED ama olay defterinde COLLECT satırı yok (veri tuhaflığı /
+  // elle müdahale). Parayı NEREDEN geri çekeceğini bilmeyen storno körlemesine
+  // bir bakiye OYNATMAMALI — anlamlı 409 ile durmalı.
+  const cGhost = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 120,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  await prisma.cheque.update({ where: { id: cGhost }, data: { status: ChequeStatus.COLLECTED } });
+  const ghostErr = await expectError(() => chequeService.cancelCollect(cGhost, "sebep"));
+  check(
+    "§19o Hesap kaydı olmayan COLLECTED'da storno 409 (körlemesine bakiye oynatılmaz)",
+    /hesap kaydı bulunamadı/i.test(ghostErr),
+    ghostErr.slice(0, 100),
+  );
+  // Zorlanmış durumu geri al — durum↔olay invariant'ı fixture'da da korunsun.
+  await prisma.cheque.update({ where: { id: cGhost }, data: { status: ChequeStatus.PORTFOLIO } });
+
+  // ── §20 KASA/BANKA DÖNEM KİLİDİ — GERÇEK SERVİS YOLUNDAN (K-1 dikişi) ───
+  // `test_cash_period_close` olayları DOĞRUDAN tabloya yazarak formülü ölçer;
+  // burada ölçülen DİKİŞİN KENDİSİ: collect/pay gerçekten `eventDate` ile
+  // guard'ı çağırıyor mu, cancelCollect gerçekten `now` ile mi? Taze kasa
+  // kullanılır — önceki bölümlerin hesaplarına kapanış bulaştırmamak için.
+  const box2 = await prisma.cashBox.create({
+    data: { code: `${TAG}-KS2`, name: `${TAG} Kasa 2`, currency: "TRY" },
+    select: { id: true },
+  });
+  cashBoxIds.push(box2.id);
+  const daysAgo = (n: number) => new Date(Date.now() - n * 86400000);
+  const close1 = await prisma.cashPeriodClose.create({
+    data: { cashBoxId: box2.id, periodEnd: periodDayKey(daysAgo(5)), closingBalance: 0, txnCount: 0 },
+    select: { id: true },
+  });
+  const cP1 = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 900,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  const closedCashErr = await expectError(() =>
+    chequeService.collect(cP1, { cashBoxId: box2.id, eventDate: daysAgo(10) }),
+  );
+  check(
+    "§20a ⭐ Kapalı kasa dönemine GERİYE TARİHLİ tahsil 409 (guard eventDate'i kapılar)",
+    /KAPALI dönemine/i.test(closedCashErr),
+    closedCashErr.slice(0, 90),
+  );
+  check(
+    "§20b Reddedilen tahsil İZ BIRAKMADI (durum + kasa + olay; tx geri sarıldı)",
+    (await statusOf(cP1)) === ChequeStatus.PORTFOLIO &&
+      (await boxBalance(box2.id)).isZero() &&
+      (await prisma.chequeEvent.count({ where: { chequeId: cP1 } })) === 1,
+  );
+  await chequeService.collect(cP1, { cashBoxId: box2.id, eventDate: daysAgo(3) });
+  check(
+    "§20c Açık güne (kapanış sonrası) geriye tarihli tahsil SERBEST",
+    (await boxBalance(box2.id)).equals(900),
+    `kasa2=${await boxBalance(box2.id)}`,
+  );
+  // Kapanış İLERİ çekilir: tahsilin KENDİ tarihi (3 gün önce) artık kapalı
+  // dönemde. Storno çıpası `now` olduğu için yine GEÇMELİ — ters satır bugüne
+  // düşer, kapalı sayfa değişmez (storno sözleşmesi). Çıpa orijinal eventDate
+  // olsaydı burada 409 yenirdi ve yanlış tahsil sonsuza dek düzeltilemezdi.
+  await prisma.cashPeriodClose.delete({ where: { id: close1.id } });
+  await prisma.cashPeriodClose.create({
+    data: { cashBoxId: box2.id, periodEnd: periodDayKey(daysAgo(2)), closingBalance: 900, txnCount: 1 },
+    select: { id: true },
+  });
+  await chequeService.cancelCollect(cP1, "yanlış çek okutuldu");
+  check(
+    "§20d ⭐ Orijinal tahsil tarihi KAPANAN dönemde kalsa da storno GEÇER (çıpa `now`)",
+    (await statusOf(cP1)) === ChequeStatus.PORTFOLIO && (await boxBalance(box2.id)).isZero(),
+    `durum=${await statusOf(cP1)} kasa2=${await boxBalance(box2.id)}`,
+  );
+  const cP2 = await newCheque({
+    kind: "ISSUED",
+    cariId: tedarikci,
+    amount: 350,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  const closedPayErr = await expectError(() =>
+    chequeService.pay(cP2, { cashBoxId: box2.id, eventDate: daysAgo(10) }),
+  );
+  check(
+    "§20e Kapalı kasa dönemine GERİYE TARİHLİ ödeme (pay) de 409 — durum ISSUED kaldı",
+    /KAPALI dönemine/i.test(closedPayErr) && (await statusOf(cP2)) === ChequeStatus.ISSUED,
+    closedPayErr.slice(0, 90),
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
@@ -855,6 +1024,11 @@ main()
     // Yalnız BİZİM yarattığımız kur satırları silinir (P2002 ile atlananlar
     // ortamın verisidir — dokunulmaz).
     if (rateIds.length > 0) await prisma.exchangeRate.deleteMany({ where: { id: { in: rateIds } } });
+    // §20 kapanış satırları hesaba RESTRICT ile bağlı — hesaplardan ÖNCE silinir.
+    if (cashBoxIds.length > 0)
+      await prisma.cashPeriodClose.deleteMany({ where: { cashBoxId: { in: cashBoxIds } } });
+    if (bankIds.length > 0)
+      await prisma.cashPeriodClose.deleteMany({ where: { bankAccountId: { in: bankIds } } });
     if (cashBoxIds.length > 0) await prisma.cashBox.deleteMany({ where: { id: { in: cashBoxIds } } });
     if (bankIds.length > 0) await prisma.bankAccount.deleteMany({ where: { id: { in: bankIds } } });
     if (customerIds.length > 0) await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });

@@ -106,7 +106,11 @@ export function ChequeDetailDialog({ chequeId, open, onOpenChange }: Props) {
               <Field label="Cari" value={cariName(c.cari)} />
               <Field label="Keşideci" value={c.drawerName ?? ""} />
               <Field label="Seri no" value={c.serialNo ?? ""} />
-              <Field label="Keşide tarihi" value={fmtDate(c.issueDate)} />
+              {/* İKİ TARİH AYRI ETİKETLE (SINIF 1): işlem = defterin/kurun/belge
+                  numarasının çıpası; keşide = kâğıdın üzerindeki tarih. Tek
+                  etikete indirmek eski karışıklığı ekranda yeniden üretirdi. */}
+              <Field label="İşlem tarihi (defter)" value={fmtDate(c.postingDate)} />
+              <Field label="Keşide tarihi (kâğıt)" value={fmtDate(c.issueDate)} />
               <Field label="Vade" value={fmtDate(c.dueDate)} />
               <Field
                 label="Banka / şube"

@@ -26,7 +26,15 @@
 import type { ChequeKind, ChequeStatus, DecimalLike } from "./service";
 import { toNum } from "./service";
 
-export type ChequeAction = "deposit" | "collect" | "endorse" | "bounce" | "return" | "pay" | "cancel";
+export type ChequeAction =
+  | "deposit"
+  | "collect"
+  | "collect-cancel"
+  | "endorse"
+  | "bounce"
+  | "return"
+  | "pay"
+  | "cancel";
 
 export interface ChequeActionDef {
   action: ChequeAction;
@@ -68,6 +76,22 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
     needs: "account",
     blockedByAllocation: false,
     destructive: false,
+  },
+  {
+    // K-2 (2026-08-14): COLLECTED artık tam terminal DEĞİL — tek meşru çıkışı
+    // bu TİPLİ stornodur. Hesabı ve dönülecek durumu backend son COLLECT
+    // olayından kendisi çözer; diyalog aynı bilgiyi ONAY METNİNDE somutlar.
+    action: "collect-cancel",
+    label: "Tahsili Geri Al",
+    effect:
+      "TAHSİL STORNOSU — para, tahsil edildiği kasa/banka hesabından TERS hareketle geri çekilir ve çek tahsil öncesi durumuna döner. Cari deftere ve fatura kapamalarına DOKUNULMAZ. Sebep zorunludur ve olay defterine yazılır.",
+    kind: "RECEIVED",
+    from: ["COLLECTED"],
+    needs: "reason",
+    // Backend `cancelCollect` kapama kontrolü YAPMAZ (bilinçli: tahsil stornosu
+    // çekin varlığını yok etmez, kapama meşru kalır) — burada da engellenmez.
+    blockedByAllocation: false,
+    destructive: true,
   },
   {
     action: "endorse",
@@ -129,9 +153,10 @@ export const CHEQUE_ACTIONS: readonly ChequeActionDef[] = [
 /**
  * Bu satırda MEŞRU olan işlemler.
  *
- * Boş dizi dönmesi bir hata değil bir CEVAPTIR: terminal durumdaki (tahsil
- * edilmiş / karşılıksız / iade / ödenmiş / iptal) çekte yapılacak bir şey
- * YOKTUR. Çağıran, gri düğme çizmek yerine menüyü HİÇ çizmez.
+ * Boş dizi dönmesi bir hata değil bir CEVAPTIR: terminal durumdaki (karşılıksız
+ * / iade / ödenmiş / iptal) çekte yapılacak bir şey YOKTUR. Çağıran, gri düğme
+ * çizmek yerine menüyü HİÇ çizmez. TEK istisna COLLECTED (K-2): oradan tek çıkış
+ * "Tahsili Geri Al" stornosudur ve menüde yalnız o görünür.
  */
 export function availableActions(row: { kind: ChequeKind; status: ChequeStatus }): ChequeActionDef[] {
   return CHEQUE_ACTIONS.filter(

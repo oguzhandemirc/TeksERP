@@ -42,6 +42,7 @@ export type ChequeEventType =
   | "ISSUE"
   | "DEPOSIT"
   | "COLLECT"
+  | "COLLECT_CANCEL"
   | "ENDORSE"
   | "BOUNCE"
   | "RETURN"
@@ -73,6 +74,15 @@ export interface ChequeRow {
   currency: Currency;
   amount: DecimalLike;
   amountTry: DecimalLike;
+  /**
+   * İŞLEM tarihi — defterin/belge numarasının/kurun çıpası (SINIF 1, 2026-08-14).
+   * ⚠️ Liste ucu bu alanı HENÜZ dönmüyor (backend `list` select'inde yok) —
+   * tablo alan boşsa yalnız keşideyi basar; detay ucu her zaman döner
+   * (`ChequeDetail` zorunlu kılar). Backend select'e eklendiği gün ekranda
+   * kendiliğinden görünür.
+   */
+  postingDate?: string;
+  /** KEŞİDE tarihi — kâğıdın üzerindeki tarih (hukuki veri); defteri ETKİLEMEZ. */
   issueDate: string;
   dueDate: string;
   serialNo: string | null;
@@ -100,6 +110,8 @@ export interface ChequeEventRow {
 }
 
 export interface ChequeDetail extends ChequeRow {
+  /** Detay ucu (`findById` include) her zaman döner — kolon NOT NULL. */
+  postingDate: string;
   branchName: string | null;
   notes: string | null;
   exchangeRate: DecimalLike;
@@ -174,7 +186,14 @@ export async function createCheque(body: {
   /** Boş bırakılırsa backend kur tablosundan çözer; bulamazsa yol gösteren 400 verir. */
   exchangeRate?: number | null;
   amount: number;
+  /** KEŞİDE tarihi — kâğıdın bilgisi. Verilmezse backend "şimdi"yi yazar. */
   issueDate?: string;
+  /**
+   * İŞLEM tarihi — belge no, kur, cari defter satırı ve dönem kilidi BUNDAN
+   * çözülür (keşideden DEĞİL). Verilmezse backend BUGÜNÜ kullanır — "çek bugün
+   * işleniyor" varsayımı doğru varsayılandır (backend Swagger sözleşmesi).
+   */
+  postingDate?: string;
   dueDate: string;
   serialNo?: string | null;
   bankName?: string | null;
@@ -213,6 +232,17 @@ export async function chequeCollect(
   body: { cashBoxId?: string | null; bankAccountId?: string | null } & ChequeEventBody,
 ): Promise<MutationResult> {
   const res = await apiClient.post(`/api/finance/cheques/${id}/collect`, body);
+  return res.data as MutationResult;
+}
+
+/**
+ * TAHSİL STORNOSU (K-2) — yanlış COLLECT geri alınır. Uç YALNIZ `reason` kabul
+ * eder (`.strict()`; sebep ZORUNLU): tarih/not/hesap GÖNDERİLMEZ — hesabı ve
+ * dönülecek durumu backend son COLLECT olayından kendisi çözer, ters satır
+ * BUGÜNE düşer (storno sözleşmesi).
+ */
+export async function chequeCollectCancel(id: string, reason: string): Promise<MutationResult> {
+  const res = await apiClient.post(`/api/finance/cheques/${id}/collect-cancel`, { reason });
   return res.data as MutationResult;
 }
 

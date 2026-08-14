@@ -780,9 +780,15 @@ export class ChequeService {
       // kasadan tahsili hiç taşımaz). EN YENİ COLLECT alınır: olay defteri
       // append-only olduğu için storno + yeniden tahsil zincirinde birden çok
       // COLLECT satırı meşrudur.
+      // ⚠️ SIRALAMA `createdAt` — `eventDate` DEĞİL: eventDate KULLANICI
+      // girdisidir ve geriye tarihlenebilir ("dün tahsil ettim, bugün
+      // giriyorum"). eventDate ile sıralansaydı storno + GERİYE TARİHLİ
+      // yeniden tahsil zincirinde en yeni satır İLK tahsil sanılır ve para
+      // YANLIŞ hesaptan geri çekilirdi (bekçi §19n bunu kilitler). Zincirin
+      // gerçek sırası append-only defterin yazım sırasıdır = `createdAt`.
       const collectEvent = await tx.chequeEvent.findFirst({
         where: { chequeId: row.id, type: ChequeEventType.COLLECT },
-        orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
+        orderBy: { createdAt: "desc" },
         select: { fromStatus: true, cashBoxId: true, bankAccountId: true },
       });
       if (!collectEvent || (!collectEvent.cashBoxId && !collectEvent.bankAccountId)) {
@@ -800,9 +806,11 @@ export class ChequeService {
       // farklı bir hesaba yapılmış olabilir.
       let headerBankId: string | null = null;
       if (backTo === ChequeStatus.AT_BANK) {
+        // `createdAt desc` — COLLECT aramasıyla AYNI gerekçe: DEPOSIT'in
+        // eventDate'i de kullanıcı girdisidir, kronoloji çıpası yazım sırasıdır.
         const depositEvent = await tx.chequeEvent.findFirst({
           where: { chequeId: row.id, type: ChequeEventType.DEPOSIT },
-          orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
+          orderBy: { createdAt: "desc" },
           select: { bankAccountId: true },
         });
         headerBankId = depositEvent?.bankAccountId ?? collectEvent.bankAccountId;
@@ -1293,6 +1301,11 @@ export class ChequeService {
           currency: true,
           amount: true,
           amountTry: true,
+          // İKİ TARİH BİRDEN döner: `postingDate` işlem (defter) tarihi,
+          // `issueDate` keşide. Panel tablosu postingDate'i opsiyonel bekler ve
+          // "alan gelirse kendiliğinden gösterir" (Cheques/service.ts notu) —
+          // yalnız keşideyi dönmek, listede defter tarihini görünmez bırakırdı.
+          postingDate: true,
           issueDate: true,
           dueDate: true,
           serialNo: true,

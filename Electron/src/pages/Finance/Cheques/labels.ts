@@ -63,6 +63,7 @@ export const EVENT_LABEL: Record<ChequeEventType, string> = {
   ISSUE: "Çıkış — çek/senet verildi",
   DEPOSIT: "Bankaya verildi (tahsile/teminata)",
   COLLECT: "Tahsil edildi",
+  COLLECT_CANCEL: "Tahsil stornosu — para hesaptan geri çekildi",
   ENDORSE: "Ciro edildi",
   BOUNCE: "Karşılıksız çıktı",
   RETURN: "Sahibine iade edildi",
@@ -76,6 +77,8 @@ export const EVENT_DOT: Record<ChequeEventType, string> = {
   ISSUE: "bg-amber-500",
   DEPOSIT: "bg-sky-500",
   COLLECT: "bg-emerald-500",
+  // Storno ailesi gri: "etkisi geri alındı" (CANCEL/RETURN ile aynı anlam kovası).
+  COLLECT_CANCEL: "bg-muted-foreground",
   ENDORSE: "bg-violet-500",
   BOUNCE: "bg-red-500",
   RETURN: "bg-muted-foreground",

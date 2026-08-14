@@ -4,7 +4,8 @@
 // ⚠️ AKSİYONLAR DURUMA GÖRE ÇİZİLİR (`transitions.availableActions`). Terminal
 // durumdaki satırda menü HİÇ ÇİZİLMEZ — gri bir düğme "burada bir yol var ama
 // sana kapalı" der, oysa gerçek şudur: o çekin işi bitmiştir ve kimse için bir
-// yol yoktur.
+// yol yoktur. (Tek istisna COLLECTED — K-2 tahsil stornosu; menüde yalnız
+// "Tahsili Geri Al" görünür.)
 //
 // ⚠️ NEDEN AÇILIR MENÜ, NEDEN SIRA SIRA DÜĞME DEĞİL: elimizdeki bir çekte aynı
 // anda ALTI meşru işlem olabilir (bankaya ver · tahsil · ciro · karşılıksız ·
@@ -49,6 +50,7 @@ export function ChequeTable({ rows, onDetail, onAction }: Props) {
             <th className="px-3 py-2 text-left">Tür</th>
             <th className="px-3 py-2 text-left">Cari</th>
             <th className="px-3 py-2 text-left">Keşideci / Banka</th>
+            <th className="px-3 py-2 text-left">İşlem / Keşide</th>
             <th className="px-3 py-2 text-left">Vade</th>
             <th className="px-3 py-2 text-left">Durum</th>
             <th className="px-3 py-2 text-right">Tutar</th>
@@ -87,6 +89,14 @@ export function ChequeTable({ rows, onDetail, onAction }: Props) {
                 <td className="px-3 py-2 text-muted-foreground">
                   <div>{c.drawerName ?? "—"}</div>
                   {c.bankName && <div className="text-[11px]">{c.bankName}</div>}
+                </td>
+                <td className="px-3 py-2 whitespace-nowrap text-xs text-muted-foreground">
+                  {/* İKİ TARİH AYRI ETİKETLE (SINIF 1) — etiketsiz tek tarih
+                      "keşide mi işlem mi" karışıklığını satırda yeniden üretirdi.
+                      `postingDate` liste ucunda henüz yok (bkz. service.ts) —
+                      alan gelmezse yalnız keşide basılır, "—" uydurulmaz. */}
+                  {c.postingDate && <div>İşlem: {fmtDate(c.postingDate)}</div>}
+                  <div>Keşide: {fmtDate(c.issueDate)}</div>
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">
                   <span className={DUE_TONE_CLASS[tone]}>{fmtDate(c.dueDate)}</span>
