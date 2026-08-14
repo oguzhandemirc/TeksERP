@@ -39,6 +39,7 @@ import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
 import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
+import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
@@ -954,6 +955,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:finance">
         <VatSummaryPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/fx-diff",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <FxDiffPage />
       </ProtectedRoute>
     ),
   },

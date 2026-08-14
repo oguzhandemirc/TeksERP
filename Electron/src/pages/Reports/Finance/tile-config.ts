@@ -24,7 +24,7 @@
 // çağırır.
 // =============================================================================
 
-import { BookOpen, CalendarClock, Hourglass, Percent } from "lucide-react";
+import { ArrowLeftRight, BookOpen, CalendarClock, Hourglass, Percent } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 export const financeReportTiles: HubTile[] = [
@@ -55,5 +55,12 @@ export const financeReportTiles: HubTile[] = [
     description: "Satış/alış KDV'si oran kırılımlı matrah + KDV + tevkifat — beyanname değil, muhasebeciye özet",
     icon: Percent,
     to: "/reports/finance/vat-summary",
+  },
+  {
+    key: "fx-diff",
+    title: "Kur Farkı Raporu",
+    description: "Dövizli kapamalarda gerçekleşen TL kur farkı — lehte/aleyhte ayrı, cari ve para birimi süzgeçli",
+    icon: ArrowLeftRight,
+    to: "/reports/finance/fx-diff",
   },
 ];
