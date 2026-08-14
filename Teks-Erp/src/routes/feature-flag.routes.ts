@@ -108,6 +108,46 @@ export const updateSchema = z.strictObject({
   // default 20). Yalnız ÖN-DOLUM: fatura formunun yeni satırı + mal kabulden
   // üretilen alış taslağı bu değerle açılır, satırda değiştirilebilir.
   financeDefaultVatRate: z.number().min(0).max(100).optional(),
+  // ---------------------------------------------------------------------------
+  // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1 — yalnız KAYIT)
+  // ---------------------------------------------------------------------------
+  // ⚠️ Dokuzu da default FALSE ve bugün hiçbir servis okumuyor. Yine de bu şema
+  // satırları İLK dalgada yazılır: `z.strictObject` yüzünden burada olmayan
+  // anahtar PATCH'i 400 yapar ve asıl tehlike açamamak değil KAPATAMAMAKtır
+  // (2026-08-04 `kk1DuplicateGuardEnabled` vakası — bayrak sahada kapatılamadı).
+  // Guard'lar sonraki dalgada bağlanınca acil kapatma yolu hazır olacak.
+  // finance.riskLimitBlockEnabled — risk limiti aşımında SATIŞ faturası onayı 409.
+  // Bugün limit yalnız uyarıdır. MUAF: alış faturası, taslak yolları, iptal/storno.
+  financeRiskLimitBlockEnabled: z.boolean().optional(),
+  // finance.autoDraftFromShipmentEnabled — sevk onayında otomatik fatura TASLAĞI.
+  // Onay her zaman elle; `financeEnabled` kapalıyken kanca no-op.
+  financeAutoDraftFromShipmentEnabled: z.boolean().optional(),
+  // finance.autoAllocateOnPaymentEnabled — tahsilat/ödemede FIFO otomatik kapama.
+  // Artan tutar avansta kalır; otomatik tahsis elle silinebilir.
+  financeAutoAllocateOnPaymentEnabled: z.boolean().optional(),
+  // yarn.blockNegativeBalanceEnabled — iplik çıkışında eksi bakiye engeli (kasa
+  // emsali). MUAF: ters/düzeltme (ADJUST_OUT) ve belge iptali. ⚠️ ACİL KAPATMA
+  // anahtarı — açılış bakiyeleri girilmemiş kurulumda her çıkış kesilirse tek
+  // geri dönüş yolu budur.
+  yarnBlockNegativeBalanceEnabled: z.boolean().optional(),
+  // purchase.blockOverReceiptEnabled — siparişe bağlı kabulde fazla miktar engeli.
+  // MUAF: siparişsiz kabul, kabul iptali/düzeltmesi. ⚠️ ACİL KAPATMA anahtarı —
+  // fiziksel olarak fazla mal gelirse kabul tıkanır, kapatma yolu açık kalmalı.
+  purchaseBlockOverReceiptEnabled: z.boolean().optional(),
+  // goodsReceipt.requirePriceEnabled — mal kabul satırında birim fiyat zorunlu.
+  // ⚠️ ACİL KAPATMA anahtarı — fiyatı henüz belli olmayan mal depoda beklerse
+  // kabul hiç yapılamaz.
+  goodsReceiptRequirePriceEnabled: z.boolean().optional(),
+  // finance.allowZeroPriceLineEnabled — sıfır fiyatlı fatura satırıyla onaya izin
+  // (promosyon/numune). İzin verilen SIFIRDIR, boş fiyat değil; negatif yine red.
+  financeAllowZeroPriceLineEnabled: z.boolean().optional(),
+  // finance.futureDatedDocumentBlockEnabled — ileri tarihli mali belge engeli.
+  // Sınır FABRİKA günüdür. MUAF (Sınıf 1): çek keşide/vade tarihi.
+  financeFutureDatedDocumentBlockEnabled: z.boolean().optional(),
+  // finance.yarnOutOnInvoiceEnabled — satış faturası onayında iplik stoktan düşer
+  // (varsayılan depodan). ⚠️ Sevkten de düşen kurulumda ÇİFTE DÜŞÜM olur; rejim
+  // sorusudur, ek güvence değil.
+  financeYarnOutOnInvoiceEnabled: z.boolean().optional(),
   productionEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),

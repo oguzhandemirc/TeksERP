@@ -33,7 +33,20 @@
 import { readFileSync, existsSync } from "fs";
 import path from "path";
 import { updateSchema } from "../src/routes/feature-flag.routes";
-import { systemSettingService } from "../src/services/system-setting.service";
+import {
+  systemSettingService,
+  // §10 — 2026-08-14 dalga 1 okuyucuları. İÇE AKTARIM DERLEME BAĞIDIR: helper
+  // silinirse `npm run typecheck:scripts` kırmızı verir (bekçi koşmadan önce).
+  readFinanceRiskLimitBlockEnabled,
+  readFinanceAutoDraftFromShipmentEnabled,
+  readFinanceAutoAllocateOnPaymentEnabled,
+  readYarnBlockNegativeBalanceEnabled,
+  readPurchaseBlockOverReceiptEnabled,
+  readGoodsReceiptRequirePriceEnabled,
+  readFinanceAllowZeroPriceLineEnabled,
+  readFinanceFutureDatedDocumentBlockEnabled,
+  readFinanceYarnOutOnInvoiceEnabled,
+} from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
 
 let pass = 0;
@@ -290,6 +303,86 @@ async function main() {
       (flags.financeDefaultVatRate as number) >= 0 &&
       (flags.financeDefaultVatRate as number) <= 100,
     `değer=${String(flags.financeDefaultVatRate)}`,
+  );
+
+  // ---------------------------------------------------------------------------
+  // 10) TİCARET/MUHASEBE DALGA 1 — "OKUYANI OLMAYAN" BAYRAKLAR ADIYLA KİLİTLİ
+  // ---------------------------------------------------------------------------
+  // ⚠️ NEDEN AYRI BİR BÖLÜM GEREKTİ — yukarıdaki dört küme denetimi bu dokuz
+  // anahtarı KENDİLİĞİNDEN kapsar (ölçüldü: bir tanesi şemadan düşürülünce §1 ve
+  // §3 kırmızı verdi) ama yalnız kümeleri BİRBİRİYLE karşılaştırır. Bir anahtar
+  // dört kapıdan da AYNI ANDA silinirse kümeler tutarlı kalır ve her kontrol
+  // yeşil olur. Bu dalga tam da o riski taşıyor: dokuzunu da bugün HİÇBİR servis
+  // okumuyor (bilinçli ara durum — kapılar önce, guard'lar sonraki dalgada), yani
+  // biri "ölü kod" sanılıp temizlenebilir ve panelden yönetilen bir ayar sessizce
+  // kaybolur. Adı geçen liste bunu yakalar: küme karşılaştırması "tutarlı mı"
+  // sorar, bu bölüm "HÂLÂ VAR MI" sorar.
+  //
+  // Ayrıca 5. KAPIYI (read helper) kapatır — yukarıdaki hiçbir kontrol okuyucuya
+  // bakmıyordu; `getFeatureFlags` üzerinden dolaylı geçiyordu.
+  const WAVE1_TRADE_FLAGS = [
+    "financeRiskLimitBlockEnabled",
+    "financeAutoDraftFromShipmentEnabled",
+    "financeAutoAllocateOnPaymentEnabled",
+    "yarnBlockNegativeBalanceEnabled",
+    "purchaseBlockOverReceiptEnabled",
+    "goodsReceiptRequirePriceEnabled",
+    "financeAllowZeroPriceLineEnabled",
+    "financeFutureDatedDocumentBlockEnabled",
+    "financeYarnOutOnInvoiceEnabled",
+  ] as const;
+
+  const gateGaps = WAVE1_TRADE_FLAGS.flatMap((k) => {
+    const missing = [
+      aBool.includes(k) ? null : "api",
+      B.includes(k) ? null : "şema",
+      C.includes(k) ? null : "servis",
+      !electronFound || D.includes(k) ? null : "panel",
+    ].filter(Boolean);
+    return missing.length ? [`${k}(${missing.join("+")})`] : [];
+  });
+  check(
+    `⭐ dalga 1'in ${WAVE1_TRADE_FLAGS.length} ticaret/muhasebe bayrağı DÖRT KAPIDA da duruyor`,
+    gateGaps.length === 0,
+    `eksik: ${gateGaps.join(", ")}`,
+  );
+
+  // Şema satırı gerçekten `z.boolean()` mı — `z.any()`e gevşetilirse panel bir
+  // yazım hatasını (örn. "true" metni) sessizce DB'ye yazdırırdı.
+  const typeGaps = WAVE1_TRADE_FLAGS.filter((k) => {
+    const ok = updateSchema.safeParse({ [k]: true }).success;
+    const rejectsString = !updateSchema.safeParse({ [k]: "evet" }).success;
+    return !(ok && rejectsString);
+  });
+  check(
+    "dalga 1 bayrakları şemada boolean doğruluyor (true kabul · metin red)",
+    typeGaps.length === 0,
+    `gevşek/eksik: ${typeGaps.join(", ")}`,
+  );
+
+  // KAYIT YOKKEN VARSAYILAN — dalga 1'in ana vaadi: "davranış değişikliği YOK".
+  // Ortam verisinden BAĞIMSIZ ölçülür (satır YOK diyen sahte istemci) — canlı
+  // DB'deki değere bakmak, birinin panelden açtığı bir dev kurulumunda sahte
+  // kırmızı verirdi.
+  const emptyClient = {
+    systemSetting: { findUnique: () => Promise.resolve(null) },
+  } as unknown as Pick<typeof prisma, "systemSetting">;
+  const defaults = await Promise.all([
+    readFinanceRiskLimitBlockEnabled(emptyClient),
+    readFinanceAutoDraftFromShipmentEnabled(emptyClient),
+    readFinanceAutoAllocateOnPaymentEnabled(emptyClient),
+    readYarnBlockNegativeBalanceEnabled(emptyClient),
+    readPurchaseBlockOverReceiptEnabled(emptyClient),
+    readGoodsReceiptRequirePriceEnabled(emptyClient),
+    readFinanceAllowZeroPriceLineEnabled(emptyClient),
+    readFinanceFutureDatedDocumentBlockEnabled(emptyClient),
+    readFinanceYarnOutOnInvoiceEnabled(emptyClient),
+  ]);
+  const onByDefault = WAVE1_TRADE_FLAGS.filter((_, i) => defaults[i] !== false);
+  check(
+    "⭐ dalga 1 okuyucuları kayıt YOKKEN false döner (dokunulmamış kurulumda davranış değişmez)",
+    onByDefault.length === 0,
+    `varsayılanı açık: ${onByDefault.join(", ")}`,
   );
 
   // ---------------------------------------------------------------------------

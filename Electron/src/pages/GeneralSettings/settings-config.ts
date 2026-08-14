@@ -10,6 +10,7 @@ import {
   Tags,
   Layers,
   UsersRound,
+  Warehouse,
   type LucideIcon,
 } from "lucide-react";
 import type { ComponentType } from "react";
@@ -171,7 +172,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     description: "Ön muhasebe modülü — cari hesaplar, fatura, tahsilat/ödeme, kasa ve banka.",
     keywords:
       "muhasebe cari fatura tahsilat ödeme kasa banka bakiye ekstre yaşlandırma vade kur döviz finance " +
-      "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi",
+      "eksi bakiye negatif kasa engeli kdv oran varsayılan vergi " +
+      "risk limiti aşım onay engel taslak otomatik sevk fifo kapama tahsis avans sıfır fiyat promosyon " +
+      "numune bedelsiz ileri tarih çek keşide iplik stok düşme",
     kind: "flags",
     numberFlags: [
       {
@@ -199,6 +202,74 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "financeBlockNegativeCashEnabled",
         title: "Kasa eksi bakiyeye düşemesin",
         desc: "Açıkken kasadan (fiziksel nakit) para ÇIKARAN dört işlem — ödeme, masraf fişi, virmanın çıkan kasa bacağı, çek ödeme — kasayı eksiye düşürecekse reddedilir; hata mesajı kasa adını, mevcut bakiyeyi ve istenen tutarı söyler. BANKA hesapları muaftır (kredili mevduat meşru); iptal/storno her zaman geçer. ⚠️ Açmadan önce kasaların açılış/devir bakiyelerinin girildiğinden emin olun — sistemde bakiyesi 0 görünen dolu bir kasadan tek işlem bile yapılamaz.",
+      },
+      {
+        key: "financeRiskLimitBlockEnabled",
+        group: "Risk & Onay",
+        title: "Risk limiti aşımında satış faturası onayını engelle",
+        desc: "Kapalıyken (varsayılan) cari kartındaki risk limiti yalnız UYARIDIR — satışı durdurma kararı ticari bir karardır ve sistem onu vardiya ortasında sessizce vermez. Açıkken limiti aşan SATIŞ faturasının onayı reddedilir; mesaj cari adını, limiti ve mevcut bakiyeyi söyler. Alış faturaları, taslak oluşturma/düzenleme ve iptal/storno bu kuraldan MUAFTIR — limiti aşan bir faturayı iptal edememek çıkmaz olurdu.",
+      },
+      {
+        key: "financeAllowZeroPriceLineEnabled",
+        group: "Risk & Onay",
+        title: "Sıfır fiyatlı fatura satırına izin ver",
+        desc: "Kapalıyken (varsayılan) fiyatı 0 olan satır faturayı onaya sokmaz. Promosyon, numune ve bedelsiz sevk yapan firmalar açar. ⚠️ İzin verilen şey SIFIRDIR, fiyatı boş bırakmak değil: '0 yazdım' bir karardır, 'fiyat bulunamadı' bir eksiktir ve ikisi aynı kapıdan geçmez. Eksi fiyat bu ayardan bağımsız her zaman reddedilir — indirim/iade ayrı belgeyle yapılır.",
+      },
+      {
+        key: "financeFutureDatedDocumentBlockEnabled",
+        group: "Risk & Onay",
+        title: "İleri tarihli mali belgeyi engelle",
+        desc: "Açıkken fatura, tahsilat/ödeme, masraf ve virman belgelerinin tarihi bugünden ileri olamaz (gün sınırı fabrika günüdür). Kapalıyken (varsayılan) ileri tarih serbesttir. ⚠️ ÇEK bu kuralın DIŞINDADIR: çekin keşide ve vade tarihi her zaman ileri olabilir — ileri tarihli çek işin normalidir, engellemek özelliği kullanılamaz kılardı.",
+      },
+      {
+        key: "financeAutoDraftFromShipmentEnabled",
+        group: "Otomasyon",
+        title: "Sevk onayında otomatik fatura taslağı oluştur",
+        desc: "Açıkken sevk edilen her sevkiyat için satış faturası TASLAĞI kendiliğinden doğar; muhasebeci onu açar, kontrol eder ve onaylar. Fatura ONAYINI sistem asla kendi vermez. Kapalıyken (varsayılan) fatura elle oluşturulur. Not: 'Ön muhasebe modülünü aç' kapalıysa bu ayar açık olsa bile hiçbir taslak üretilmez. Taslak üretilemezse sevk yine tamamlanır — sevkiyat muhasebeye rehin edilmez.",
+      },
+      {
+        key: "financeAutoAllocateOnPaymentEnabled",
+        group: "Otomasyon",
+        title: "Tahsilat/ödemeyi en eski faturalara otomatik kapat (FIFO)",
+        desc: "Açıkken kaydedilen tutar, carinin en eski açık faturalarından başlayarak otomatik kapatılır; artan tutar avans olarak açıkta bırakılır. Kapalıyken (varsayılan) hangi faturanın kapanacağını kullanıcı seçer. Otomatik yapılan kapama elle silinebilir — 'sistem yaptı' diye kilitlenmez. Faturanın para birimi tahsilattan farklıysa o fatura atlanır: kur kararı otomatikleştirilmez.",
+      },
+      {
+        key: "financeYarnOutOnInvoiceEnabled",
+        group: "Otomasyon",
+        title: "Satış faturası onayında iplik stoktan düşsün",
+        desc: "Açıkken satış faturası onaylandığında faturadaki iplik satırları kalemin varsayılan deposundan düşer; fatura iptal edilirse geri yazılır. Kapalıyken (varsayılan) iplik stoğu yalnız sevk/depo hareketiyle düşer. ⚠️ Bu bir EK GÜVENCE DEĞİL, 'stoğu hangi belge düşürüyor' sorusunun cevabıdır: sevkte de düşen bir kurulumda açmak aynı kilogramı İKİ KEZ düşürür.",
+      },
+    ],
+  },
+  // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu üç
+  // ayarı yapan kişi depo/satın alma sorumlusudur ve ayarların değiştirdiği şey
+  // mal kabul + iplik çıkışı EKRANLARININ davranışıdır (fatura/cari değil).
+  // "Mal kabulde fiyat zorunlu" ayarı muhasebeye HİZMET eder ama muhasebecinin
+  // ekranında yaşamaz — sekme, ayarın etkilediği ekranın sahibine göre seçilir.
+  {
+    id: "warehouse",
+    label: "Depo & Satın Alma",
+    icon: Warehouse,
+    description: "Mal kabul, alış siparişi ve iplik stok hareketlerinin katılık ayarları.",
+    keywords:
+      "depo ambar mal kabul giriş irsaliye alış satın alma sipariş tedarikçi fazla kabul tolerans " +
+      "iplik kg stok bakiye eksi negatif birim fiyat zorunlu maliyet",
+    kind: "flags",
+    flags: [
+      {
+        key: "yarnBlockNegativeBalanceEnabled",
+        title: "İplik stoğu eksi bakiyeye düşemesin",
+        desc: "Açıkken iplik ÇIKIŞI, o kalemin ilgili depodaki kg bakiyesini eksiye düşürecekse reddedilir. Kapalıyken (varsayılan) kayıt geçer ve bakiye eksiye düşebilir. Ters/düzeltme kayıtları ile belge iptalleri MUAFTIR — yanlış girilmiş bir hareket 'bakiye yetmiyor' diye geri alınamaz kalmamalı. ⚠️ Açmadan önce depoların açılış/devir bakiyelerinin girildiğinden emin olun: sistemde 0 görünen dolu bir depodan tek çıkış bile yapılamaz.",
+      },
+      {
+        key: "purchaseBlockOverReceiptEnabled",
+        title: "Siparişten fazla mal kabulünü engelle",
+        desc: "Kapalıyken (varsayılan) alış siparişinden fazla mal gelirse kayıt yapılır ve sistem yalnız uyarır — fiziksel olarak fazla mal GELEBİLİR ve kayıt gerçeği yazmalıdır. Açıkken sipariş miktarını aşan satır reddedilir; toleransı sıfır olan firmalar için. Siparişe bağlı OLMAYAN (serbest) mal kabulü ile kabul iptali/düzeltmesi bu kuraldan muaftır.",
+      },
+      {
+        key: "goodsReceiptRequirePriceEnabled",
+        title: "Mal kabul satırında birim fiyat zorunlu olsun",
+        desc: "Açıkken satırda birim fiyat yoksa ve siparişten de çözülemiyorsa mal kabul kaydedilemez. Gerekçe: fiyat kabul ANINDA donar ve alış faturası taslağı ile maliyet oradan doğar; sonradan girilen fiyat geçmişe dönük maliyet düzeltmesi demektir. Kapalıyken (varsayılan) fiyatsız kabul yapılabilir, fatura aşamasında girilir. Ters/iptal satırları fiyat taşımaz, muaftır. Bedelsiz mal için Muhasebe'deki 'Sıfır fiyatlı fatura satırına izin ver' ayarıyla birlikte düşünün.",
       },
     ],
   },
