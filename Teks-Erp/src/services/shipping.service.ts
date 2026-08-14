@@ -121,6 +121,22 @@ export interface ShipmentListSummary {
   totalKg: number;
 }
 
+/**
+ * HIZLI SEVK uygunluk yüklemi — **TEK KAYNAK**.
+ *
+ * İki yer okur ve ayrışmaları YASAK: `findShippableRolls` (FIFO ÖNERİSİ) ve
+ * `createShipmentFromRolls`'un tx içindeki atomik CLAIM'i. Kopyalansaydı arıza
+ * sessiz ve kullanıcıyı suçlayan cinsten olurdu: sistem topu KENDİSİ önerir,
+ * kullanıcı "Sevk Et"e basar, aynı sistem "bu top uygun değil" der.
+ *
+ * Öneri tarafı ek olarak depo/kumaş/renk ile daralır; uygunluk tanımı aynıdır.
+ */
+const SHIPPABLE_ROLL_WHERE = {
+  sackId: null,
+  shipmentId: null,
+  status: { notIn: NON_SACKABLE_STATUSES },
+} as const;
+
 // `NON_SACKABLE_STATUSES` + `SACK_ABSENT_STATUSES` artık `helpers/sack-invariants.helper`
 // içinde TEK kaynak (üstte import edilir). Buradaki dosya-yerel kopya kaldırıldı: aynı
 // küme `label.service`'te de (SHIPPED hariç varyantıyla) yaşıyordu ve yeni guard'lar
@@ -1505,6 +1521,71 @@ export class ShippingService {
    * yöneten kullanıcı birinci sınıf müşteridir; `scanIntoSack`'in barkod
    * anahtarlı yolu (fiziksel okutma) AYNEN durur.
    */
+  /**
+   * HIZLI SEVK — FIFO ÖNERİSİ ("3 top patos sattım, hangileri umurumda değil").
+   *
+   * Alım-satım firmasının en sık cümlesi bu: mal aynı spec'ten, hangi fiziksel
+   * topun gittiği operatörün umurunda değil. Bugüne kadar sistem onu tek tek
+   * top seçmeye (ya da okutmaya) zorluyordu.
+   *
+   * ⚠️ UYGUNLUK `SHIPPABLE_ROLL_WHERE`'DEN GELİR — burada elle yeniden yazma.
+   * Öneri ile sevk claim'i ayrışırsa sistem kendi önerdiği topu reddeder.
+   *
+   * ⚠️ SIRA ÇIPASI `statusChangedAt` ("bu rafta ne zamandır duruyor") —
+   * `createdAt` DEĞİL: depoya sonradan giren eski bir top, doğuş tarihine göre
+   * sıralanırsa hep en öne geçer ve FIFO gerçekte rafta bekleyen malı değil
+   * en eski KAYDI önerir. Damgası olmayan toplar (2026-08-09 trigger'ından
+   * önceki fabrika kayıtları; ticaret kurulumunda mümkün değil, trigger
+   * INSERT'te de damgalar) **SONA** düşer: yaşı bilinmeyen topu "en eski" diye
+   * öne almak, olmayan bir bilgiyi iddia etmek olurdu. `id` son eşitlik
+   * bozucudur — öneri iki çağrıda aynı sırayı vermek zorunda (bekçide kilitli).
+   *
+   * Öneri BAĞLAYICI DEĞİL: kullanıcı listeden tek tek çıkarabilir.
+   */
+  async findShippableRolls(params: {
+    itemId: string;
+    colorId?: string | null;
+    warehouseId?: string | null;
+    limit: number;
+  }): Promise<ApiResponse<unknown>> {
+    const rolls = await prisma.roll.findMany({
+      where: {
+        ...SHIPPABLE_ROLL_WHERE,
+        itemId: params.itemId,
+        ...(params.colorId ? { colorId: params.colorId } : {}),
+        ...(params.warehouseId ? { warehouseId: params.warehouseId } : {}),
+      },
+      select: {
+        id: true,
+        barcode: true,
+        currentQty: true,
+        width: true,
+        statusChangedAt: true,
+        warehouseId: true,
+        item: { select: { name: true } },
+        color: { select: { name: true } },
+      },
+      orderBy: [
+        { statusChangedAt: { sort: "asc", nulls: "last" } },
+        { createdAt: "asc" },
+        { id: "asc" },
+      ],
+      take: Math.min(Math.max(params.limit, 1), 200),
+    });
+    return {
+      success: true,
+      data: rolls.map((r) => ({
+        id: r.id,
+        barcode: r.barcode,
+        qty: Number(r.currentQty),
+        width: r.width === null ? null : Number(r.width),
+        itemName: r.item?.name ?? "—",
+        colorName: r.color?.name ?? null,
+        warehouseId: r.warehouseId,
+      })),
+    };
+  }
+
   async createShipmentFromRolls(
     data: {
       rollIds: string[];
@@ -1590,12 +1671,7 @@ export class ShippingService {
             });
             // 2) Toplar ATOMİK claim ile bağlanır (barkod değil id ile).
             const claimed = await tx.roll.updateMany({
-              where: {
-                id: { in: rollIds },
-                sackId: null,
-                shipmentId: null,
-                status: { notIn: NON_SACKABLE_STATUSES },
-              },
+              where: { id: { in: rollIds }, ...SHIPPABLE_ROLL_WHERE },
               data: { sackId: sack.id },
             });
             if (claimed.count !== rollIds.length) {

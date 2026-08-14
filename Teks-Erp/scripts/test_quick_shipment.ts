@@ -21,6 +21,9 @@
 //   §6 İhracat bu yoldan REDDEDİLİR (çuval tartısı ister) — sessizce yurtiçi
 //      sayılmaz
 //   §7 İdempotency: aynı clientToken ikinci sevkiyat açmaz
+//   §8 ⭐ FIFO ÖNERİSİ: en eski RAF BEKLEMESİ önce (doğuş tarihi DEĞİL),
+//      deterministik sıra, ve önerinin sevk claim'iyle AYNI yüklemi okuduğu
+//      (sistem kendi önerdiği topu reddedemez)
 // =============================================================================
 import { RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -274,6 +277,110 @@ async function main(): Promise<void> {
   const sd = second.data as { id: string };
   check("§7 Aynı token ikinci sevkiyat AÇMADI", sd.id === fd.id, `${fd.shipmentNo}`);
 
+  // ── §8 FIFO ÖNERİSİ ─────────────────────────────────────────────────────
+  // "3 top patos sattım, hangileri umurumda değil" akışı. Öneri iki şeyi
+  // vaat eder: (a) en eski raf beklemesi önce, (b) önerilen top SEVK EDİLEBİLİR.
+  // (b) bu bölümün ⭐'lı kontrolü — sistemin kendi önerdiği topu reddetmesi,
+  // kullanıcıyı kendi hatası sanacağı bir çıkmaza sokar.
+  const fifoItem = await prisma.item.create({
+    data: { code: `${TAG}-FIFO`, name: `${TAG} FIFO Kumaş`, unit: "MT", itemType: "FABRIC" },
+    select: { id: true },
+  });
+  const fifoColor = await prisma.color.create({
+    data: { code: `${TAG}-C`, name: `${TAG} Renk` },
+    select: { id: true },
+  });
+  // ⚠️ DOĞUŞ SIRASI, RAF SIRASININ TERSİ OLMAK ZORUNDA — yoksa bu bölüm KÖR olur.
+  // İlk yazımda üçü de raf sırasıyla yaratılmıştı; `createdAt` ile `statusChangedAt`
+  // aynı cevabı verdiği için "orderBy'ı createdAt'e çevir" sondası YEŞİL kaldı
+  // (ölçüldü). En YENİ raf beklemesini taşıyan top ÖNCE doğar:
+  const fYeni = await makeRoll(fifoItem.id, 30);
+  const fOrta = await makeRoll(fifoItem.id, 20);
+  const fEski = await makeRoll(fifoItem.id, 10);
+  const stamp = async (id: string, iso: string): Promise<void> => {
+    // Statü DEĞİŞMEDİĞİ için trigger no-op — damga aynen kalır (UPDATE dalı
+    // `IS DISTINCT FROM` ile korunuyor).
+    await prisma.$executeRaw`UPDATE "rolls" SET "statusChangedAt" = ${new Date(iso)} WHERE "id"::text = ${id}`;
+  };
+  await stamp(fYeni, "2026-08-10T09:00:00Z");
+  await stamp(fOrta, "2026-06-10T09:00:00Z");
+  await stamp(fEski, "2026-02-10T09:00:00Z");
+
+  const sug = async (limit: number, colorId?: string): Promise<string[]> => {
+    const r = await shippingService.findShippableRolls({ itemId: fifoItem.id, limit, colorId: colorId ?? null });
+    return (r.data as { id: string }[]).map((x) => x.id);
+  };
+
+  const fifo = await sug(10);
+  check(
+    "§8a ⭐ FIFO: en eski RAF BEKLEMESİ önce (createdAt sırası değil)",
+    fifo[0] === fEski && fifo[1] === fOrta && fifo[2] === fYeni,
+    `sıra=${fifo.map((id) => (id === fEski ? "eski" : id === fOrta ? "orta" : id === fYeni ? "yeni" : "?")).join(">")}`,
+  );
+  const fifo2 = await sug(10);
+  check("§8b Öneri DETERMİNİSTİK (iki çağrı aynı sıra)", JSON.stringify(fifo) === JSON.stringify(fifo2));
+  check("§8c Limit uygulanıyor", (await sug(2)).length === 2);
+
+  // §8d — renk süzgeci. Renkli top EN ESKİ damgayı taşır ki süzgeç çalışmazsa
+  // liste başında görünsün (süzgeç kaybolursa kontrol kırmızı verir).
+  const fRenkli = await makeRoll(fifoItem.id, 40);
+  await prisma.roll.update({ where: { id: fRenkli }, data: { colorId: fifoColor.id } });
+  await stamp(fRenkli, "2026-01-01T09:00:00Z");
+  const renkli = await sug(10, fifoColor.id);
+  check("§8d Renk süzgeci daraltıyor", renkli.length === 1 && renkli[0] === fRenkli, `n=${renkli.length}`);
+
+  // §8e ⭐ EŞDEĞERLİK — öneri ile sevk claim'i AYNI yüklemi okuyor mu?
+  // `SHIPPABLE_ROLL_WHERE` kopyalanırsa burada ayrışır: çuvaldaki top önerilmeye
+  // devam eder ve kullanıcı "Sevk Et"e basınca sistem KENDİ ÖNERDİĞİ topu 400 ile
+  // reddeder.
+  //
+  // ⚠️ ÖLÇÜM ARACI ÇUVALDAKİ TOP OLMAK ZORUNDA, sevk EDİLMİŞ top DEĞİL.
+  // İlk yazımda sevk edilmiş top kullanılmıştı ve kontrol KÖRDÜ (ölçüldü):
+  // sevk sonrası statü `SHIPPED` oluyor, o da zaten `NON_SACKABLE_STATUSES`'ta →
+  // yüklemin `sackId`/`shipmentId` ayağı silinse bile süzgeç statüden çalışıyordu.
+  // Çuvaldaki topun statüsü hâlâ `WAREHOUSE`'tur; onu YALNIZ `sackId: null` eler.
+  const fCuvalda = await makeRoll(fifoItem.id, 50);
+  await stamp(fCuvalda, "2026-01-05T09:00:00Z"); // en eskilerden → süzülmezse listenin başında olur
+  const fSack = await shippingService.openSack({ clientToken: crypto.randomUUID() });
+  const fSackId = (fSack.data as { id: string }).id;
+  sackIds.push(fSackId);
+  await prisma.roll.update({ where: { id: fCuvalda }, data: { sackId: fSackId } });
+  const sonrasi = await sug(10);
+  check(
+    "§8e ⭐ Çuvaldaki top (statüsü hâlâ WAREHOUSE) ÖNERİLMİYOR (öneri↔claim tek yüklem)",
+    !sonrasi.includes(fCuvalda),
+    `öneri=${sonrasi.length} top`,
+  );
+  // Aynı topu sevk denemesi GERÇEKTEN reddediyor mu — öneri ile sevkin aynı
+  // cevabı verdiğinin ikinci ucu (biri elense diğeri elemese fark buradan çıkar).
+  const cuvaldaErr = await expectError(() =>
+    shippingService.createShipmentFromRolls({ rollIds: [fCuvalda], customerId: customer.id }),
+  );
+  check("§8e2 ⭐ Ve sevk de aynı topu reddediyor (iki uç aynı cevap)", cuvaldaErr.length > 0, cuvaldaErr.slice(0, 50));
+  // Ve önerilenlerin HEPSİ gerçekten sevk edilebilir olmalı — tersten kanıt.
+  const halaUygun = await prisma.roll.findMany({
+    where: { id: { in: sonrasi }, sackId: null, shipmentId: null },
+    select: { id: true },
+  });
+  check("§8f ⭐ Önerilen HER top sevke uygun (sistem kendi önerisini reddetmez)", halaUygun.length === sonrasi.length);
+
+  // §8g — damgasız top SONA düşer. "Yaşı bilinmiyor" ≠ "en eski": olmayan bir
+  // bilgiyi iddia etmek, öneriyi sessizce yanlış yapar (nulls:"last" kararı).
+  // ⚠️ `createdAt` de EN ESKİYE çekilir: aksi halde damgasız top zaten en son
+  // doğduğu için her sıralamada sona düşer ve kontrol KÖR olur. Böyle kurulunca
+  // "nulls:first" de, "createdAt'e düş" de listeyi BAŞTAN açardı — yalnız
+  // bugünkü kural onu sona koyar.
+  const fDamgasiz = await makeRoll(fifoItem.id, 60);
+  await prisma.$executeRaw`
+    UPDATE "rolls" SET "statusChangedAt" = NULL, "createdAt" = ${new Date("2020-01-01T00:00:00Z")}
+    WHERE "id"::text = ${fDamgasiz}`;
+  const ileDamgasiz = await sug(10);
+  check(
+    "§8g Damgasız top SONA düşer (öne değil)",
+    ileDamgasiz[ileDamgasiz.length - 1] === fDamgasiz,
+    `son=${ileDamgasiz[ileDamgasiz.length - 1] === fDamgasiz ? "damgasız" : "başka"}`,
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
@@ -305,6 +412,9 @@ main()
     if (customerId) await prisma.sack.deleteMany({ where: { customerId } });
     if (warehouseIds.length > 0) await prisma.warehouse.deleteMany({ where: { id: { in: warehouseIds } } });
     if (customerId) await prisma.customer.deleteMany({ where: { id: customerId } });
+    // §8 fixture'ı (FIFO kumaşı + rengi) — topları silindikten SONRA.
+    await prisma.color.deleteMany({ where: { code: { startsWith: TAG } } });
+    await prisma.item.deleteMany({ where: { code: { startsWith: TAG } } });
     await prisma.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

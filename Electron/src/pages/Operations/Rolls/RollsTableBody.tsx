@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { PanelRight, Trash2 } from "lucide-react";
+import { PanelRight, Trash2, Truck } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -15,12 +15,32 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
+import { QuickShipDialog } from "./QuickShipDialog";
+import { ShipmentDispatchNote } from "@/pages/Operations/Shipments/ShipmentDispatchNote";
+import { canQuickShip, type QuickShipRoll } from "./quickShipService";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
 import { entryStationLookupService, entryUserLookupService, warehouseLookupService } from "./entryLookupServices";
 import { useFoldValues } from "@/hooks/useFoldValues";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import type { Roll } from "./types";
+
+/**
+ * Liste satırı → Hızlı Sevk satırı. Ad alanları listede zaten çözülü geliyor
+ * (`ROLL_LIST_INCLUDE`); diyalog ikinci bir istek atmaz.
+ */
+function toQuickShipRoll(r: Roll): QuickShipRoll {
+  return {
+    id: r.id,
+    barcode: r.barcode,
+    qty: Number(r.currentQty),
+    width: r.width,
+    itemName: r.item?.name ?? "—",
+    colorName: r.color?.name ?? null,
+    warehouseId: r.warehouseId ?? null,
+  };
+}
 
 /** Kat filtresinin yer tutucusu — seçenekleri `buildRollFilterDefs` doldurur. */
 const FOLD_FILTER_PLACEHOLDER: FilterDef = {
@@ -237,6 +257,8 @@ interface Props {
 export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBar = false, exportName, paginationActions }: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [quickShipOpen, setQuickShipOpen] = useState(false);
+  const [shippedId, setShippedId] = useState<string | null>(null);
 
   const { values: foldValues } = useFoldValues();
   // Depo filtresi yalnız ÇOK DEPOLU kurulumda listeye girer (tek kaynak hook).
@@ -251,6 +273,16 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
   // topsa çuval/sevkiyattan da çıkarır. Seçili satırlar TanStack table state'inden okunur.
   const selectedRolls = table.getSelectedRowModel().rows.map((r) => r.original);
   const bulkCancelable = tab === "RAW_STOCK" || tab === "FINISHED_STOCK";
+  // HIZLI SEVK GÖRÜNÜRLÜĞÜ — iki koşul, ikisi de gerekli:
+  //  ① Sekme "Bitmiş Depo": sevk edilebilir topların yaşadığı tek sekme. Diğer
+  //     sekmelerdeki toplar tanım gereği sevk edilemez (üretimde/fasonda/çuvalda)
+  //     ve buton orada sürekli 400 üreten ölü bir yol olurdu.
+  //  ② TİCARET REJİMİ (`finance.enabled`): FABRİKADA SIFIR FARK kuralı. Fabrikanın
+  //     sevk akışı FİZİKSEL çuval üzerinden yürür (Paketleme/Çuvallar; ihracatta
+  //     çuval tartısı zorunlu) — orada "tartısız çuvalı otomatik açan" bir kestirme
+  //     yeni bir yol AÇMAK olurdu, mevcut yolu hızlandırmak değil.
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const quickShippable = canQuickShip(tab, financeEnabled);
 
   return (
     <>
@@ -272,19 +304,34 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
         // Ham Stok'ta seçim çubuğuna "Stoktan Kaldır" (iptal) — DataTable bunu
         // alt şeride (Seçimi temizle'nin yanına) koyar; ayrı üst şerit yok.
         bulkActions={
-          bulkCancelable
+          bulkCancelable || quickShippable
             ? (rows) =>
                 rows.length > 0 ? (
-                  <PermissionGate permission="roll:write">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="gap-1.5"
-                      onClick={() => setBulkCancelOpen(true)}
-                    >
-                      <Trash2 className="h-4 w-4" /> Stoktan Kaldır
-                    </Button>
-                  </PermissionGate>
+                  <>
+                    {/* HIZLI SEVK — "seçtiklerimi gönder". Yalnız Bitmiş Depo
+                        sekmesinde: diğer sekmelerdeki toplar tanım gereği
+                        sevk edilemez (üretimde / fasonda / çuvalda) ve buton
+                        orada sürekli 400 üreten ölü bir yol olurdu. */}
+                    {quickShippable && (
+                      <PermissionGate permission="shipping:write">
+                        <Button size="sm" className="gap-1.5" onClick={() => setQuickShipOpen(true)}>
+                          <Truck className="h-4 w-4" /> Seçilenleri Sevk Et
+                        </Button>
+                      </PermissionGate>
+                    )}
+                    {bulkCancelable && (
+                      <PermissionGate permission="roll:write">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="gap-1.5"
+                          onClick={() => setBulkCancelOpen(true)}
+                        >
+                          <Trash2 className="h-4 w-4" /> Stoktan Kaldır
+                        </Button>
+                      </PermissionGate>
+                    )}
+                  </>
                 ) : null
             : undefined
         }
@@ -312,6 +359,26 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
         onOpenChange={setBulkCancelOpen}
         rolls={selectedRolls}
         onDone={() => table.resetRowSelection()}
+      />
+      {/* Koşullu mount: her açılış taze bileşen → seçim `useState` başlangıcı
+          olarak girer, prop senkronu (ve onun sonsuz döngü riski) gerekmez. */}
+      {quickShipOpen && (
+        <QuickShipDialog
+          open
+          onOpenChange={(open) => {
+            setQuickShipOpen(open);
+            if (!open) table.resetRowSelection();
+          }}
+          initialRolls={selectedRolls.map(toQuickShipRoll)}
+          onShipped={setShippedId}
+        />
+      )}
+      {/* Sevk sonrası kestirme: irsaliye. Kullanıcı sevk ekranını aramaz —
+          kâğıt zaten sevk anında istenen tek şeydir. */}
+      <ShipmentDispatchNote
+        shipmentId={shippedId}
+        open={Boolean(shippedId)}
+        onOpenChange={(open) => !open && setShippedId(null)}
       />
     </>
   );

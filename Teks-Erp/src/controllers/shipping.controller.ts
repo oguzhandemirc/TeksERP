@@ -93,6 +93,15 @@ const quickShipmentSchema = z.object({
   carrier: z.string().trim().max(100).nullable().optional(),
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
+// FIFO öneri sorgusu — `itemId` ZORUNLU: kumaşsız çağrı "depodaki en eski 20 top"
+// demek olurdu ve karışık spec'li bir öneri sevk edilemez (tek irsaliye tek müşteri
+// ama operatör neyi sattığını bilir). Renk opsiyonel (renksiz ham kumaş meşru).
+const shippableRollsSchema = z.object({
+  itemId: z.string().uuid("Geçersiz kumaş ID"),
+  colorId: z.string().uuid("Geçersiz renk ID").optional(),
+  warehouseId: z.string().uuid("Geçersiz depo ID").optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
 // Sevk önizleme — çuval + (opsiyonel) müşteri/şube/sipariş; salt-okunur.
 const previewShipmentSchema = z.object({
   sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmeli").max(500),
@@ -301,6 +310,19 @@ export class ShippingController {
         req.user?.userId,
       );
       res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  findShippableRolls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = shippableRollsSchema.parse(req.query);
+      const result = await this.service.findShippableRolls({
+        itemId: q.itemId,
+        colorId: q.colorId ?? null,
+        warehouseId: q.warehouseId ?? null,
+        limit: q.limit ?? 20,
+      });
+      res.status(200).json(result);
     } catch (e) { next(e); }
   };
 
