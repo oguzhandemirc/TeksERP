@@ -11,7 +11,7 @@ import { readDevicePairingRequired, readLoginMethods, readCompanyName } from "..
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
 import {
-  resolveLoginLockoutKey,
+  resolveLoginLockoutKeys,
   reserveLoginAttempt,
   resetLoginLockout,
   releaseLoginAttempt,
@@ -105,17 +105,21 @@ export class AuthController {
     // bcrypt.compare'den) ÖNCE. Ters sırada kilitli bir anahtar da CPU harcamaya
     // devam eder, yani DoS ayağı hiç kapanmaz.
     //
-    // ⚠️ Anahtar kart/PIN ile AYNI (`resolveLoginLockoutKey` → req.ip). Kullanıcı
-    // adını anahtara EKLEMEDİK: `app.set("trust proxy")` verilmediği için req.ip
-    // soket IP'sidir ve fabrika LAN'ında her cihaz kendi IP'sini taşır (paylaşımlı
-    // IP yanlış-pozitifi yok); buna karşılık kullanıcı adını eklemek, saldırganın
-    // kullanıcı adı değiştirerek kilidi atlamasına (password spraying) izin verirdi.
+    // ⚠️ ANAHTAR ORTAMA GÖRE İKİ BİÇİMDE (bkz. login-lockout.ts başlığı):
+    //  • Fabrika (TRUST_PROXY yok) → TEK anahtar = req.ip, yani BUGÜNKÜ davranış.
+    //    Kullanıcı adı bilerek katılmaz: soket IP'si zaten cihaz başınadır ve
+    //    kullanıcı adını eklemek password-spraying'e kapı açardı.
+    //  • Ters vekil arkasında → İKİ kova: dar (`ip|kullanıcı`, ×1) hesabı korur,
+    //    geniş (`ip`, ×5) spraying'i yakalar. Orada tek-IP kilidi ANLAMSIZDIR:
+    //    tüm ziyaretçiler kenar IP'sinden gelir ve şifresini yanlış giren ilk
+    //    kişi herkesi kilitlerdi.
+    // Kimlik olarak kullanıcı adı verilir — SIR DEĞİLDİR (şifre asla anahtara girmez).
     //
     // ⚠️ AYAR PAYLAŞIMI: kilit `auth.pinLockoutEnabled` ile açılıp kapanır
     // (varsayılan TRUE, canlıda ezen kayıt yok → şu an AÇIK). Adı "pin" olsa da
     // artık ŞİFRE girişini de kapsıyor — panelden kapatılırsa üç yol da korumasız
     // kalır. Ayarın etiketi bunu söylemeli.
-    const lockoutKey = resolveLoginLockoutKey(req);
+    const lockoutKey = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {
       next(
@@ -199,7 +203,13 @@ export class AuthController {
 
     const ipAddress = req.ip ?? null;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış kartı throttle et (brute-force).
-    const lockoutKey = resolveLoginLockoutKey(req);
+    // ⚠️ KİMLİK = CİHAZ, kart kodu DEĞİL. Kart kodu bir SIRDIR (`TEKSU:<id>:<token>`) —
+    // onu kova anahtarına yazmak sırrı bellek-içi bir haritaya taşırdı; üstelik
+    // saldırgan her denemede farklı kod gönderdiği için kova hiç dolmaz, yani
+    // koruma sessizce KAYBOLURDU. Cihaz kimliği ise tabletler arası ayrım için
+    // yeterli: ters vekil arkasında aynı IP'yi paylaşan iki tablet birbirini
+    // kilitlemez. Cihaz kimliği yoksa "-" ile tek kovaya düşülür (fabrika davranışı).
+    const lockoutKey = resolveLoginLockoutKeys(req, `card:${resolveLoginDeviceId(req) ?? "-"}`);
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {
@@ -278,7 +288,10 @@ export class AuthController {
 
     const ipAddress = req.ip ?? null;
     // Deneme kilidi: IP/cihaz başına ardışık yanlış PIN'i throttle et (brute-force).
-    const lockoutKey = resolveLoginLockoutKey(req);
+    // ⚠️ KİMLİK = CİHAZ, PIN DEĞİL — kart yolundaki gerekçenin aynısı: PIN hem
+    // kimlik hem sırdır, anahtara yazılamaz ve her denemede değiştiği için kovayı
+    // hiç doldurmazdı.
+    const lockoutKey = resolveLoginLockoutKeys(req, `pin:${resolveLoginDeviceId(req) ?? "-"}`);
     // F20: rezervasyon = blok kontrolü + (fail varsayımıyla) sayaç artışı tek atomik çağrıda.
     const lock = await reserveLoginAttempt(lockoutKey);
     if (lock.blocked) {

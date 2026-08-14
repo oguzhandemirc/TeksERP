@@ -76,10 +76,35 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
+import {
+  readWebHardeningConfig,
+  createRateLimiter,
+  HSTS_MAX_AGE_SEC,
+} from "./middlewares/web-hardening";
 import { getPresence } from "./lib/presence";
 
 const app: Express = express();
 
+// =============================================================================
+// İnternete açma sertleştirmesi (ORTAM DEĞİŞKENİ ARKASINDA)
+// =============================================================================
+// Gerekçelerin tamamı `middlewares/web-hardening.ts` başlığında. Buradaki tek
+// kural: değişken YOKKEN çözülen değerler bugünkü davranışı birebir üretir
+// (trustProxy=null → set edilmez · corsOrigins=null → kısıt yok ·
+// swaggerEnabled=NODE_ENV!=="production" → mevcut kapı · httpsEnabled=false →
+// HSTS kapalı · rateLimit.enabled=false → middleware hiç MOUNT EDİLMEZ).
+const hardening = readWebHardeningConfig();
+
+// ⚠️⚠️ EN KRİTİK SATIR. Ters vekil (nginx/Cloudflare) arkasında `trust proxy`
+// verilmezse `req.ip` HERKES için kenar sunucusunun IP'sidir. Sonuç sessiz ve
+// yıkıcı: giriş kilidi ile hız sınırı tüm ziyaretçileri TEK kovada toplar —
+// şifresini yanlış giren ilk ziyaretçi kurulumun tamamını kilitler. Ayrıca
+// erişim log'undaki (morgan 'combined') IP de kenar IP'si olur, yani olay
+// incelemesi imkânsızlaşır.
+// Değişken yoksa Express varsayılanı (`false`) korunur — LAN'da doğrusu odur.
+if (hardening.trustProxy !== null) {
+  app.set("trust proxy", hardening.trustProxy);
+}
 
 // =============================================================================
 // Core Middlewares
@@ -101,7 +126,12 @@ app.use(
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
-        upgradeInsecureRequests: null,
+        // HTTPS_ENABLED verilmedigi surece direktif null'a cekili kalir (yukaridaki
+        // gerekce: HTTP-only sunucuda tarayici alt-istekleri https'e cevirir ve
+        // durum sayfasi donar). HTTPS arkasinda helmet varsayilani geri gelir:
+        // tum alt-istekler zaten ayni origin'den ve https uzerinden geldigi icin
+        // pratikte no-op'tur, karisik-icerige (mixed content) karsi ucuz bir seddir.
+        ...(hardening.httpsEnabled ? {} : { upgradeInsecureRequests: null }),
         // Panel modunda header CSP'si panelin index.html'indeki meta CSP ile
         // esitlenir (efektif politika iki CSP'nin KESISIMIdir — helmet
         // varsayilanlari daha dar oldugu icin panelin blob: worker'lari ve
@@ -119,13 +149,33 @@ app.use(
           : {}),
       },
     },
-    strictTransportSecurity: false,
+    // HSTS: HTTP-only LAN kurulumunda yalnizca anlamsiz DEGIL, TEHLIKELIDIR —
+    // tarayici basligi bir kez gordugunde o host icin https'i AYLARCA zorunlu
+    // kilar; sunucu 443 dinlemedigi icin panel acilmaz ve geri donus sunucuda
+    // degil kullanicinin HSTS onbelleginde oldugu icin uzaktan duzeltilemez.
+    // Bu yuzden ortamin TAHMINIYLE degil operatorun BEYANIYLA (HTTPS_ENABLED) acilir.
+    ...(hardening.httpsEnabled
+      ? { strictTransportSecurity: { maxAge: HSTS_MAX_AGE_SEC, includeSubDomains: true } }
+      : { strictTransportSecurity: false }),
   })
 );
 // exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
 // header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
 // guard'ı buna bakar) + sunucu saati (apiClient offset) okunabilsin diye gerekli.
-app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"] }));
+//
+// ⚠️ ORIGIN KISITI OPT-IN. Varsayılan (CORS_ORIGINS yok) kısıtsız kalır ve bu
+// LAN'da bilinçlidir: fabrikada panel/tablet birden çok origin'den konuşuyor
+// (Electron renderer, http://<lan-ip>, WEB_DIST_DIR modunda aynı origin) ve
+// listeyi eksik yazmak sahayı sessizce durdururdu. İnternete açılırken liste
+// verilir; `cors` yalnız eşleşen origin'i yansıtır, eşleşmeyene ACAO başlığını
+// HİÇ basmaz ve `Vary: Origin` ekler.
+// ⚠️ CORS BİR YETKİ DUVARI DEĞİLDİR — yalnız tarayıcıyı bağlar (curl/mobil
+// istemci etkilenmez). Uçların asıl koruması `verifyToken` + `requirePermission`;
+// origin listesi onların YERİNE geçmez.
+app.use(cors({
+  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"],
+  ...(hardening.corsOrigins ? { origin: hardening.corsOrigins } : {}),
+}));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
 app.use(compression({ threshold: 1024 }));
@@ -157,7 +207,16 @@ app.use(express.json({ limit: "1mb" }));
 // =============================================================================
 // Swagger UI Documentation
 // =============================================================================
-setupSwagger(app);
+// ⚠️ İKİ KAPI, İKİSİ DE FAIL-CLOSED. `setupSwagger` zaten `NODE_ENV==="production"`
+// iken erken dönüyor; buradaki kapı ONU KALDIRMAZ, ÖNÜNE geçer. Sebep: internete
+// açılan demo `NODE_ENV=production` ile koşmak ZORUNDA değil (dev modda daha hızlı
+// teşhis edilebilir) ve o durumda iç API şeması — tüm uç adları, gövde şemaları,
+// izin isimleri — kimliksiz herkese açık olurdu. `SWAGGER_ENABLED=false` ortamdan
+// bağımsız kapatır. Tersi çalışmaz ve bu bilinçlidir: `SWAGGER_ENABLED=true`
+// üretimde de mount ETMEZ, çünkü içerideki eski kapı hâlâ yerinde durur.
+if (hardening.swaggerEnabled) {
+  setupSwagger(app);
+}
 
 // =============================================================================
 // Durum Sayfası (kök /) + statik varlıklar
@@ -485,6 +544,29 @@ app.get("/health", async (_req: Request, res: Response) => {
     time: new Date().toISOString(),
   });
 });
+
+// =============================================================================
+// Hız sınırı (OPT-IN — RATE_LIMIT_ENABLED)
+// =============================================================================
+// ⚠️ KAPALIYKEN MOUNT BİLE EDİLMEZ: bayrak yoksa aşağıdaki blok hiç koşmaz,
+// middleware zincirine tek layer eklenmez, istek başına tek satır kod çalışmaz.
+// "Devre dışı bir middleware'i her isteğe takmak" fabrikada ölçülebilir bir
+// maliyet olmasa da sıfır-fark iddiasını zayıflatırdı.
+//
+// KONUM: route kayıtlarından hemen ÖNCE, morgan + latency'den SONRA. İkincisi
+// F-CORE-OPS-003 dersinin aynısı — reddedilen istek de erişim log'una ve gecikme
+// metriğine düşmeli, yoksa 429 fırtınasına girmiş bir istemci hiçbir panoda
+// görünmez. Statik varlıklar ve `/health` kapsam DIŞI (sınıflandırma yalnız
+// /api altındaki YAZMA metodlarını ve üç giriş ucunu sayar).
+if (hardening.rateLimit.enabled) {
+  app.use(
+    "/api",
+    createRateLimiter({
+      windowMs: hardening.rateLimit.windowMs,
+      limits: { login: hardening.rateLimit.loginMax, write: hardening.rateLimit.writeMax },
+    }),
+  );
+}
 
 // =============================================================================
 // API Routes

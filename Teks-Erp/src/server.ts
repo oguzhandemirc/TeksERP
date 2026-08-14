@@ -12,6 +12,7 @@ import { startExchangeRateScheduler } from './jobs/exchange-rate.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
+import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -75,8 +76,29 @@ const server = app.listen(Number(PORT), HOST, () => {
             console.log(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
         }
     }
-    if (process.env.NODE_ENV !== "production") {
+    // ⚠️ Swagger satırı artık app.ts ile AYNI kaynaktan çözülür. Eskiden burada
+    // düz `NODE_ENV !== "production"` yazıyordu; `SWAGGER_ENABLED=false` ile
+    // kapatılan bir kurulumda banner var olmayan bir adresi duyururdu — küçük ama
+    // teşhisi zaman yiyen bir yalan. Değişken yokken ifade birebir aynı sonucu verir.
+    const hardening = readWebHardeningConfig();
+    if (hardening.swaggerEnabled) {
         console.log(`  Swagger: http://localhost:${PORT}/api-docs`);
+    }
+    // Sertleştirme yalnız BEYAN EDİLDİĞİNDE basılır — fabrika konsolu birebir
+    // bugünkü gibi kalsın diye. Basıldığında da sessiz varsayım bırakmaz:
+    // operatör hangi korumanın açık olduğunu tek bakışta görür (özellikle
+    // "trust proxy" — yanlış ayarı ancak burada fark edilir).
+    if (isWebHardeningDeclared()) {
+        const rl = hardening.rateLimit;
+        console.log("--------------------------------------------------------");
+        console.log(`  Sertleştirme: trustProxy=${String(hardening.trustProxy ?? "(yok)")}`
+            + ` · cors=${hardening.corsOrigins ? hardening.corsOrigins.join(",") : "(kısıtsız)"}`);
+        console.log(`                swagger=${hardening.swaggerEnabled ? "açık" : "kapalı"}`
+            + ` · hsts=${hardening.httpsEnabled ? "açık" : "kapalı"}`
+            + ` · girişKilidiKapsamı=${hardening.loginLockoutScope}`);
+        console.log(`                hızSınırı=${rl.enabled
+            ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
+            : "kapalı"}`);
     }
     console.log("========================================================");
     console.log("");
