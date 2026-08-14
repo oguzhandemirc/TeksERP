@@ -208,3 +208,25 @@ Deploy eden için not değil, ama sürümün ne düzelttiğinin kaydı:
   ÇEVRİLMEZ — `1,500` hem 1,5 hem 1500 okunur).
 - **İki router hiç mount edilmemişti** (9 uç sessiz 404). Artık mekanik bekçisi
   var: `scripts/test_route_mount_reachability.ts`.
+
+---
+
+## Ek 2 — SAĞLAMLIK PAKETİ deploy'u (2026-08-14 akşam, aynı script)
+
+Tasarım: `docs/design/ON-MUHASEBE-SAGLAMLIK-TASARIM.md` (onaylı: A·A·1·1·C +
+K-1 kasa dönem kilidi + K-2 çek tahsil stornosu). Aynı `deploy-demo.sh`
+kullanılır; farklar:
+
+- **Migration 177 → 180** (üç yeni: `cari_txn_adjustment_cancel` ·
+  `cheque_event_collect_cancel` · `saglamlik_paketi`). `postingDate` backfill'i
+  migration İÇİNDE üç adımlı (nullable → issueDate kopyala → NOT NULL) —
+  dolu demo DB'sinde güvenli, ölçüldü.
+- **Yeni izin YOK** — K-1/K-2 mevcut `finance:read/close/invoice` kapılarını
+  kullanır; seed adımı yine koşar (idempotent) ama izin sayıları DEĞİŞMEZ
+  (83 / 39 / 39 beklentisi aynı).
+- **Yeni uç doğrulaması**: `/api/finance/cash-period-closes` listeye eklendi
+  (404 = mount yok).
+- Sürümün kapattığı sessiz hatalar bu kez tasarım dokümanında ve commit
+  mesajlarında kayıtlı (`e6d70897`…); en önemlisi: çek stornosu son olayı
+  `eventDate` ile arıyordu — geriye tarihli yeniden tahsilde para YANLIŞ
+  hesaptan geri çekilirdi (deploy'dan önce yakalandı, sahaya hiç çıkmadı).
