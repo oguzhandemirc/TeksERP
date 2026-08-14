@@ -43,10 +43,27 @@ const TRADE_LABELS: Partial<Record<RollTabKey, string>> = {
   RAW_STOCK: "Yeni Giren",
 };
 
-/** Rejime göre sekme listesi — TEK KAYNAK (şerit · palet · özet indirmesi). */
-export function resolveRollTabs(financeEnabled: boolean): RollTabDef[] {
-  if (!financeEnabled) return ROLL_TABS;
-  return ROLL_TABS.filter((t) => !PRODUCTION_ONLY_TABS.includes(t.key)).map((t) =>
+/**
+ * Rejime göre sekme listesi — TEK KAYNAK (şerit · palet · özet indirmesi).
+ *
+ * ⚠️ YÜKLEM `productionEnabled`'DIR, `financeEnabled` DEĞİL (2026-08-14 saha
+ * bildirimi). Önceki hâli "muhasebe açıksa üretim sekmelerini gizle" diyordu ve
+ * bu, ön muhasebeyi açan bir FABRİKANIN üretim sekmelerini sessizce
+ * kaybetmesine yol açıyordu. İki soru ayrıdır ve ikisi de aynı anda EVET
+ * olabilir: "muhasebe tutuyor muyum" · "üretim yapıyor muyum".
+ *
+ * `financeEnabled` yalnız ETİKETLERİ etkiler: ticaret kurulumunda bir şey
+ * üretilip bitmediği için "Bitmiş Depo" adı yanlıştır.
+ */
+export function resolveRollTabs(
+  productionEnabled: boolean,
+  financeEnabled = false,
+): RollTabDef[] {
+  const base = productionEnabled
+    ? ROLL_TABS
+    : ROLL_TABS.filter((t) => !PRODUCTION_ONLY_TABS.includes(t.key));
+  if (!financeEnabled) return base;
+  return base.map((t) =>
     TRADE_LABELS[t.key] ? { ...t, label: TRADE_LABELS[t.key] as string } : t,
   );
 }
@@ -65,8 +82,8 @@ export const ROLL_TAB_ENTRY_PREFIX = "rolls-tab:";
  *
  * Roll sekmesi olmayan girişler bu süzgeçten ETKİLENMEZ.
  */
-export function isRollTabEntryVisible(entryKey: string, financeEnabled: boolean): boolean {
+export function isRollTabEntryVisible(entryKey: string, productionEnabled: boolean): boolean {
   if (!entryKey.startsWith(ROLL_TAB_ENTRY_PREFIX)) return true;
   const tabKey = entryKey.slice(ROLL_TAB_ENTRY_PREFIX.length);
-  return resolveRollTabs(financeEnabled).some((t) => t.key === tabKey);
+  return resolveRollTabs(productionEnabled).some((t) => t.key === tabKey);
 }

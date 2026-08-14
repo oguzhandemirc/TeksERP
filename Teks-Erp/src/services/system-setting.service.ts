@@ -59,6 +59,18 @@ export const SETTING_KEYS = {
   // MUHASEBE modülünü (cari/fatura/tahsilat) açar. İki kapı bağımsızdır —
   // fiyatı sipariş ekranında gösteren fabrikanın cari defteri tutması gerekmez.
   FINANCE_ENABLED: "finance.enabled",
+  /**
+   * ÜRETİM modülü açık mı — envanterdeki üretim sekmeleri (Üretimde · Üretim
+   * Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'deki iş emri
+   * yüzeyleri buna bakar.
+   *
+   * ⚠️ VARSAYILAN AÇIK ve `finance.enabled`'dan BAĞIMSIZ. Önceden bu yüzeyler
+   * "finance açıksa gizle" diye çözülüyordu; o kısayol, ön muhasebeyi açan bir
+   * FABRİKANIN üretim sekmelerini sessizce kaybetmesi demekti (2026-08-14 saha
+   * bildirimi). İki soru ayrıdır: "muhasebe tutuyor muyum" ile "üretim yapıyor
+   * muyum" aynı anda EVET olabilir.
+   */
+  PRODUCTION_ENABLED: "production.enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -786,6 +798,8 @@ export interface FeatureFlags {
    *  Varsayılan KAPALI — üretici fabrika bu modülü kullanmıyor ve kapalıyken
    *  menüde tek satır bile görünmez. `pricingEnabled` ile bağımsız. */
   financeEnabled: boolean;
+  /** Üretim modülü (envanter üretim sekmeleri + iş emri yüzeyleri). Varsayılan AÇIK. */
+  productionEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -1097,6 +1111,7 @@ export class SystemSettingService {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
       financeEnabled: await readFinanceEnabled(cacheClient),
+      productionEnabled: await readProductionEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -1180,6 +1195,18 @@ export class SystemSettingService {
         SETTING_KEYS.FINANCE_ENABLED,
         input.financeEnabled,
         "Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "productionEnabled")) {
+      if (typeof input.productionEnabled !== "boolean") {
+        throw AppError.badRequest("productionEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.PRODUCTION_ENABLED,
+        input.productionEnabled,
+        "Üretim modülü (envanter üretim sekmeleri · iş emri yüzeyleri)",
         userId
       );
     }
@@ -1932,6 +1959,24 @@ export async function readFinanceEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Üretim modülü açık mı. ⚠️ VARSAYILAN **TRUE** — ayar satırı yoksa fabrika
+ * bugünkü davranışını aynen sürdürür. Diğer bayraklar varsayılan KAPALI
+ * olduğu için bu tersliği bilerek yazıyoruz: burada "kapalı" demek, kurulmuş
+ * bir fabrikanın üretim ekranlarını yok etmek olurdu.
+ */
+export async function readProductionEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PRODUCTION_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return true;
+  return setting.value === true || setting.value === "true";
 }
 
 /**

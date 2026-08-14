@@ -22,8 +22,8 @@ const PRODUCTION_FILTER_KEYS = ["woState"];
  * (`OrderService.extraWhere`) ve rollup semantiği yerinde kalır; kayıtlı bir
  * URL o filtreyi hâlâ taşıyabilir ve doğru çalışır.
  */
-export function resolveOrderFilters(all: FilterDef[], financeEnabled: boolean): FilterDef[] {
-  if (!financeEnabled) return all;
+export function resolveOrderFilters(all: FilterDef[], productionEnabled: boolean): FilterDef[] {
+  if (productionEnabled) return all;
   return all.filter((f) => !("key" in f) || !PRODUCTION_FILTER_KEYS.includes(f.key as string));
 }
 
@@ -34,6 +34,6 @@ export function resolveOrderFilters(all: FilterDef[], financeEnabled: boolean): 
  * rejim: izinli bir kullanıcı bile ticaret kurulumunda bu düğmeyi görmemeli,
  * çünkü orada üretim akışının kendisi kullanılmıyor.
  */
-export function canBulkCreateWorkOrder(financeEnabled: boolean): boolean {
-  return !financeEnabled;
+export function canBulkCreateWorkOrder(productionEnabled: boolean): boolean {
+  return productionEnabled;
 }

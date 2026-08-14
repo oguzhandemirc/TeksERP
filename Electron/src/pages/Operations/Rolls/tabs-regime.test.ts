@@ -13,28 +13,44 @@ import { describe, it, expect } from "vitest";
 import { ROLL_TABS } from "./tabs-config";
 import { resolveRollTabs, isRollTabEntryVisible, ROLL_TAB_ENTRY_PREFIX } from "./tabs-regime";
 
-const keys = (financeEnabled: boolean) => resolveRollTabs(financeEnabled).map((t) => t.key);
+const keys = (productionEnabled: boolean, financeEnabled = false) =>
+  resolveRollTabs(productionEnabled, financeEnabled).map((t) => t.key);
 
 describe("Envanter sekmeleri — rejim süzgeci", () => {
   it("⭐ FABRİKADA liste BİREBİR ROLL_TABS (sıra dahil)", () => {
-    expect(resolveRollTabs(false)).toEqual(ROLL_TABS);
+    expect(resolveRollTabs(true)).toEqual(ROLL_TABS);
   });
 
   it("⭐ FABRİKADA etiketler de değişmez", () => {
-    const labels = resolveRollTabs(false).map((t) => t.label);
+    const labels = resolveRollTabs(true).map((t) => t.label);
     expect(labels).toContain("Bitmiş Depo");
     expect(labels).toContain("Ham Stok");
   });
 
-  it("ticarette üretim sekmeleri süzülür", () => {
-    const t = keys(true);
+  // ⭐⭐ SAHA BİLDİRİMİNİN ASIL KONTROLÜ (2026-08-14): ön muhasebeyi açan bir
+  // FABRİKA üretim sekmelerini KAYBETMEMELİ. Önceki kurgu bu ikisini tek
+  // bayrağa bağlamıştı ve tam bu durumda sekmeler sessizce yok oluyordu.
+  it("⭐ MUHASEBE AÇIK + ÜRETİM AÇIK: üretim sekmeleri DURUR", () => {
+    const t = keys(true, true);
+    for (const k of ["PRODUCTION", "KANBAN", "SUBCONTRACTOR", "KURSUN_PENDING", "TAMBUR_PENDING"]) {
+      expect(t).toContain(k);
+    }
+  });
+
+  it("muhasebe açıkken ETİKETLER yine ticaret adlarına döner", () => {
+    const depo = resolveRollTabs(true, true).find((x) => x.key === "FINISHED_STOCK");
+    expect(depo?.label).toBe("Depo");
+  });
+
+  it("üretim KAPALIYKEN üretim sekmeleri süzülür", () => {
+    const t = keys(false);
     for (const hidden of ["PRODUCTION", "KANBAN", "SUBCONTRACTOR", "KURSUN_PENDING", "TAMBUR_PENDING"]) {
       expect(t).not.toContain(hidden);
     }
   });
 
-  it("ticarette depo/stok sekmeleri KALIR", () => {
-    const t = keys(true);
+  it("üretim kapalıyken depo/stok sekmeleri KALIR", () => {
+    const t = keys(false);
     expect(t).toContain("RAW_STOCK");
     expect(t).toContain("FINISHED_STOCK");
     // "Çuvalda" bilinçli olarak kalır: çuval ticarette de gerçek bir depo
@@ -43,13 +59,13 @@ describe("Envanter sekmeleri — rejim süzgeci", () => {
   });
 
   it("ticarette etiket değişir ama ANAHTAR değişmez (URL/palet/kayıtlı sıra)", () => {
-    const depo = resolveRollTabs(true).find((t) => t.key === "FINISHED_STOCK");
+    const depo = resolveRollTabs(false, true).find((t) => t.key === "FINISHED_STOCK");
     expect(depo?.label).toBe("Depo");
     expect(depo?.key).toBe("FINISHED_STOCK");
   });
 
-  it("körlük zemini: ticarette liste boşalmıyor", () => {
-    expect(keys(true).length).toBeGreaterThanOrEqual(3);
+  it("körlük zemini: üretim kapalıyken liste boşalmıyor", () => {
+    expect(keys(false).length).toBeGreaterThanOrEqual(3);
     expect(ROLL_TABS.length).toBeGreaterThanOrEqual(8);
   });
 });
@@ -57,13 +73,13 @@ describe("Envanter sekmeleri — rejim süzgeci", () => {
 describe("Komut paleti ile şerit AYNI listeyi okur", () => {
   it("⭐ fabrikada TÜM sekme girişleri palette görünür", () => {
     for (const t of ROLL_TABS) {
-      expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}${t.key}`, false)).toBe(true);
+      expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}${t.key}`, true)).toBe(true);
     }
   });
 
-  it("⭐ ticarette gizlenen sekmenin palet girişi de düşer", () => {
-    expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}PRODUCTION`, true)).toBe(false);
-    expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}FINISHED_STOCK`, true)).toBe(true);
+  it("⭐ üretim kapalıyken gizlenen sekmenin palet girişi de düşer", () => {
+    expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}PRODUCTION`, false)).toBe(false);
+    expect(isRollTabEntryVisible(`${ROLL_TAB_ENTRY_PREFIX}FINISHED_STOCK`, false)).toBe(true);
   });
 
   it("süzgeç YALNIZ roll sekmesi girişlerine dokunur", () => {

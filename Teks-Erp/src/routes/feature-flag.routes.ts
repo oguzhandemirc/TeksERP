@@ -98,6 +98,7 @@ export const updateSchema = z.strictObject({
   // ⚠️ strictObject — burada olmayan anahtar PATCH'i 400 yapar; bayrak eklerken
   // asıl tehlike açamamak değil KAPATAMAMAKtır (2026-08-05 kk1 dersi).
   financeEnabled: z.boolean().optional(),
+  productionEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),

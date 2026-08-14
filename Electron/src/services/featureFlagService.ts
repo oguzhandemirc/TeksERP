@@ -223,6 +223,8 @@ export interface FeatureFlags {
    *  ⚠️ `pricingEnabled` ile bağımsız: o OPERASYON ekranlarındaki fiyat
    *  alanlarını açar, bu ayrı bir MUHASEBE modülünü açar. */
   financeEnabled: boolean;
+  /** Üretim modülü — envanter üretim sekmeleri + iş emri yüzeyleri. Varsayılan AÇIK. */
+  productionEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */

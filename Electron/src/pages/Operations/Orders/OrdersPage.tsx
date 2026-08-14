@@ -281,12 +281,15 @@ export function OrdersPage() {
   const pricingEnabled = usePricingEnabled();
   // TİCARET REJİMİ — üretim yüzeyleri (iş emri kolonu · filtresi · toplu
   // aksiyonu) süzülür. Fabrikada birebir bugünkü.
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const productionEnabled = useFeatureFlags().data?.data?.productionEnabled ?? true;
   const columns = useMemo(
-    () => buildOrderColumns(pricingEnabled, financeEnabled),
-    [pricingEnabled, financeEnabled],
+    () => buildOrderColumns(pricingEnabled, productionEnabled),
+    [pricingEnabled, productionEnabled],
   );
-  const filters = useMemo(() => resolveOrderFilters(FILTERS, financeEnabled), [financeEnabled]);
+  const filters = useMemo(
+    () => resolveOrderFilters(FILTERS, productionEnabled),
+    [productionEnabled],
+  );
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
@@ -400,12 +403,12 @@ export function OrdersPage() {
           </>
         )}
         selectionHint={
-          canBulkCreateWorkOrder(financeEnabled)
+          canBulkCreateWorkOrder(productionEnabled)
             ? "İş emri açmak için bir veya daha fazla sipariş seçin."
             : null
         }
         bulkActions={
-          canBulkCreateWorkOrder(financeEnabled)
+          canBulkCreateWorkOrder(productionEnabled)
             ? (rows) => (
                 <BulkCreateWorkOrderAction
                   orders={rows}

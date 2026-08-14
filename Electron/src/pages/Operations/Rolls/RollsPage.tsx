@@ -62,8 +62,15 @@ export function RollsPage() {
   // ⚠️ Şerit, "Envanter Özeti" indirmesi ve sekme sırası AYNI listeyi okur —
   // biri ham `ROLL_TABS`e dönerse ticaret kullanıcısına gizlenen sekme geri
   // gelir (ya da özet Excel'i tanım gereği boş sayfalar üretir).
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
-  const TABS = useMemo(() => resolveRollTabs(financeEnabled), [financeEnabled]);
+  const flags = useFeatureFlags().data?.data;
+  const financeEnabled = flags?.financeEnabled ?? false;
+  // ⚠️ Varsayılan TRUE: ayar hiç yazılmamış bir kurulumda (ve bayrak henüz
+  // yüklenmemişken) fabrika sekmelerini kaybetmemeli.
+  const productionEnabled = flags?.productionEnabled ?? true;
+  const TABS = useMemo(
+    () => resolveRollTabs(productionEnabled, financeEnabled),
+    [productionEnabled, financeEnabled],
+  );
   const REORDERABLE_KEYS = useMemo(() => TABS.map((t) => t.key), [TABS]);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
   // Depo kolonu + filtresi yalnız ÇOK DEPOLU kurulumda çizilir (tek kaynak hook).

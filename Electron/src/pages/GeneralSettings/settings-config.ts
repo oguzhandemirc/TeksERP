@@ -147,6 +147,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "flags",
     flags: [
       {
+        key: "productionEnabled",
+        title: "Üretim modülünü aç",
+        desc: "AÇIK (varsayılan) olduğunda Envanter'de üretim sekmeleri (Üretimde · Üretim Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'de iş emri kolonu/filtresi/toplu aksiyonu görünür. ⚠️ Ön muhasebeden BAĞIMSIZDIR: ikisi aynı anda açık olabilir — muhasebe tutan bir fabrika üretim ekranlarını kaybetmemeli. Kapatmak yalnız bu yüzeyleri gizler; iş emri verisi ve akışı yerinde kalır.",
+      },
+      {
         key: "financeEnabled",
         title: "Ön muhasebe modülünü aç",
         desc: "Kapalıyken (varsayılan) menüde 'Muhasebe' satırı çizilmez, ekranlar açılmaz ve sevkiyattan otomatik fatura taslağı ÜRETİLMEZ. Bu bir görünürlük ayarı değil rejim anahtarıdır — kapatmak mevcut kayıtları silmez, yalnız modülü devre dışı bırakır. Ekranları görmek için ayrıca 'finance:*' yetkisi gerekir.",
