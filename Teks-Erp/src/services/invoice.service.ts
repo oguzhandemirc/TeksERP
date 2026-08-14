@@ -16,6 +16,7 @@ import {
   Currency,
   CariTxnSource,
   GoodsReceiptStatus,
+  ItemType,
   PriceKind,
   PrintedDocType,
   RollStatus,
@@ -38,7 +39,19 @@ import {
   applyCariBalanceTx,
 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
-import { readFinanceDefaultVatRate } from "./system-setting.service";
+import {
+  readFinanceAllowZeroPriceLineEnabled,
+  readFinanceDefaultVatRate,
+  readFinanceRiskLimitBlockEnabled,
+  readFinanceYarnOutOnInvoiceEnabled,
+} from "./system-setting.service";
+import { assertNotFutureDatedTx } from "./helpers/future-date-guard.helper";
+// ⚠️ İPLİK DEFTERİNE TEK YAZAR `yarn.service`tir (dosya başlığındaki "tek yazar"
+// kuralı). Buradan YALNIZ `applyYarnMovementTx` çağrılır; `yarn_stocks`/
+// `yarn_movements` tablolarına doğrudan yazan tek satır bile eklenmez — bakiye
+// ile hareket satırı ayrışırsa defter sessizce yalan söyler.
+import { applyYarnMovementTx, yarnMovementSign } from "./yarn.service";
+import { getDefaultWarehouseId } from "./helpers/warehouse.helper";
 import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/finance-doc.html";
 import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
 // D2 — kalem fiyatı ÇÖZÜM SIRASININ TEK KAYNAĞI. Sıra burada KOPYALANMAZ.
@@ -84,6 +97,37 @@ export interface CreateInvoiceInput {
   subcontractorReceiptId?: string | null;
   goodsReceiptId?: string | null;
   clientToken?: string | null;
+}
+
+/** Bir fatura yolunun iplik defterine yaptığı etki (çıkış ya da ters kayıt). */
+interface YarnLedgerEffect {
+  itemId: string;
+  itemName: string;
+  warehouseId: string;
+  qtyKg: Prisma.Decimal;
+  /** Hareketten SONRAKİ bakiye — DB'nin döndürdüğü değer. */
+  balanceKg: Prisma.Decimal;
+}
+
+/**
+ * Kullanıcıya dönen mesajın iplik eki.
+ *
+ * ⚠️ Etki YOKSA BOŞ STRING döner — bayrak kapalıyken (ya da faturada iplik
+ * satırı yokken) mesaj bugünküyle BAYT-BAYT aynı kalır.
+ *
+ * ⚠️ EKSİ BAKİYE ENGEL DEĞİL, UYARIDIR ve mutlaka SÖYLENİR (`yarn.service`
+ * başlığındaki kural + mal kabul iptalinin `yarnNote` emsali): sessiz eksi
+ * bakiye, sayım yapılana kadar kimsenin fark etmediği bir hatadır.
+ */
+function describeYarnOut(effects: YarnLedgerEffect[], verb = "stoktan düşüldü"): string {
+  if (effects.length === 0) return "";
+  const negative = effects.filter((e) => e.balanceKg.lt(0));
+  return (
+    ` ${effects.length} iplik kalemi ${verb} (${effects.map((e) => `${e.itemName}: ${e.qtyKg.toString()} kg`).join(", ")}).` +
+    (negative.length > 0
+      ? ` ⚠️ ${negative.length} kalemde bakiye EKSİDE — açılış/sayım girişi eksik olabilir.`
+      : "")
+  );
 }
 
 const LIST_SELECT = {
@@ -201,6 +245,23 @@ export class InvoiceService {
 
     const issueDate = input.issueDate ?? new Date();
     const currency = input.currency ?? Currency.TRY;
+
+    // ── İLERİ TARİHLİ BELGE ENGELİ (finance.futureDatedDocumentBlockEnabled) ─
+    // ⚠️ KAPI BURASIDIR, `confirm` DEĞİL — ve bu bilinçli:
+    //  • `issueDate` yalnız burada belirlenir (`updateDraft` onu KABUL ETMEZ) ve
+    //    belge numarası da ondan türer (`nextInvoiceNo(tx, type, issueDate)`).
+    //    Yanlış tarih daha numara sarf edilmeden reddedilir.
+    //  • Onayda kilitlemek ÇIKMAZ üretirdi: bayrak açılmadan ÖNCE doğmuş ileri
+    //    tarihli bir taslağın tarihi düzeltilemez (düzenleme ucu tarih almıyor),
+    //    yani tek çıkış yolu taslağı silmek olurdu. Guard bir yolu kapatırken
+    //    kullanıcıya başka bir yol bırakmalı.
+    //  • Bedeli yazılıdır: bayrak AÇILMADAN önce girilmiş ileri tarihli taslak
+    //    onaylanabilir ve defter satırı o tarihe düşer. Rejim anahtarı ileriye
+    //    dönük çalışır; geçmişi yeniden yazmaz.
+    // Replay (aynı clientToken) YUKARIDA cevaplanır: mevcut bir faturayı geri
+    // döndüren idempotent yanıt, bugün açılan bir bayrak yüzünden 400'e
+    // dönmemeli — o istek yeni belge yaratmıyor.
+    await assertNotFutureDatedTx(undefined, { date: issueDate, label: "Fatura tarihi" });
 
     // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
     // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
@@ -754,12 +815,33 @@ export class InvoiceService {
         select: { qty: true, unitPrice: true, discountRate: true, vatRate: true, withholdingRate: true, description: true },
       });
       if (lineRows.length === 0) throw AppError.badRequest("Satırsız fatura onaylanamaz.");
-      // ⚠️ FİYATSIZ SATIRLA ONAY REDDEDİLİR: 0 fiyatlı satır deftere 0 yazar ve
-      // "faturalandı" görünür — alacak sessizce kaybolur. Taslakta 0 serbesttir
-      // (fiyat sonradan girilecek), onayda değildir.
-      const zero = lineRows.find((l) => D(l.unitPrice).lte(0));
-      if (zero) {
-        throw AppError.badRequest(`"${zero.description}" satırının birim fiyatı girilmemiş — fiyatsız fatura onaylanamaz.`);
+      // ── FİYAT SEDDİ (finance.allowZeroPriceLineEnabled) ────────────────────
+      // VARSAYILAN (bayrak KAPALI) davranış bayt-bayt korunur: `<= 0` olan İLK
+      // satır aynı mesajla reddedilir. Gerekçe değişmedi — 0 fiyatlı satır
+      // deftere 0 yazar ve "faturalandı" görünür; alacak sessizce kaybolur.
+      // Taslakta 0 serbesttir (fiyat sonradan girilecek), onayda değildir.
+      //
+      // BAYRAK AÇIK: yalnız SIFIR serbestleşir (promosyon · numune · bedelsiz
+      // sevk). ⚠️ NEGATİF FİYAT HER HÂLÜKÂRDA REDDEDİLİR ve bu pazarlık dışı:
+      // eksi satır bir "indirim/iade" belgesidir, satış faturasına gizlenmiş
+      // eksi kalem ise deftere yanlış yönde tutar yazmanın en sessiz yoludur
+      // (iade ayrı belge tipidir: SALES_RETURN). İki dal AYRI yazıldı ki bayrak
+      // kapalıyken mesaj da bugünküyle birebir aynı kalsın.
+      const allowZeroPrice = await readFinanceAllowZeroPriceLineEnabled(tx);
+      if (allowZeroPrice) {
+        const negative = lineRows.find((l) => D(l.unitPrice).lt(0));
+        if (negative) {
+          throw AppError.badRequest(
+            `"${negative.description}" satırının birim fiyatı EKSİ (${D(negative.unitPrice).toFixed(2)}) — ` +
+              `eksi fiyatlı satır faturaya yazılamaz. Sıfır fiyata izin ayarı yalnız BEDELSİZ (0) kalem içindir; ` +
+              `iade/indirim için ayrı bir iade faturası kesin.`,
+          );
+        }
+      } else {
+        const zero = lineRows.find((l) => D(l.unitPrice).lte(0));
+        if (zero) {
+          throw AppError.badRequest(`"${zero.description}" satırının birim fiyatı girilmemiş — fiyatsız fatura onaylanamaz.`);
+        }
       }
 
       const totals = computeInvoiceTotals(lineRows);
@@ -786,6 +868,20 @@ export class InvoiceService {
         cariId: inv.cariId,
         currency: inv.currency,
         txnDate: inv.issueDate,
+      });
+
+      // ── RİSK LİMİTİ ENGELİ (finance.riskLimitBlockEnabled) ────────────────
+      // ⚠️ KİLİT SIRASI LOAD-BEARING (Sınıf 3 — ABBA): guard `cari_balances`
+      // satırını FOR UPDATE ile kilitler ve bu, dönem guard'ının advisory
+      // kilidinden (8026) SONRA olmak ZORUNDA. `payment.service` sırası
+      // "advisory → bakiye satırı"dır; buradaki çağrı `assertPeriodOpenTx`ten
+      // ÖNCE yapılsaydı fatura onayı ile tahsilat kaydı kilitleri ters sırada
+      // alır ve aynı carinin eşzamanlı iki işlemi deadlock üretirdi.
+      await this.assertRiskLimitTx(tx, {
+        type: inv.type,
+        cariId: inv.cariId,
+        currency: inv.currency,
+        amount: totals.grandTotal,
       });
 
       // DEFTER SATIRI — yön tek kaynaktan (`invoiceLedgerSide`).
@@ -858,6 +954,19 @@ export class InvoiceService {
         }
       }
 
+      // ── İPLİK STOK ÇIKIŞI (finance.yarnOutOnInvoiceEnabled) ───────────────
+      // Defter satırlarından SONRA: bir 4xx guard'ına takılacaksa stok
+      // hareketi hiç doğmasın (tx geri sarılırdı ama sıralama niyeti de
+      // okunabilir olmalı). Kilit sırası: fatura satırı → goods_receipts →
+      // advisory 8026 → cari_balances → yarn_stocks; iptal yolu da AYNI sırayı
+      // izler (ikisi de fatura satırını en başta claim'ler) → ABBA yok.
+      const yarnOut = await this.applyYarnOutOnInvoiceTx(tx, {
+        invoiceId: inv.id,
+        docNo: inv.docNo,
+        type: inv.type,
+        userId,
+      });
+
       // ⚠️ BELGE ONAY ANINDA DONAR, taslakta DEĞİL. Taslak serbestçe düzenlenip
       // silinebilir; resmi kayıt onayla doğar. Freeze tx'in İÇİNDE: fatura
       // deftere işlerken belge de donmalı, ikisi ya birlikte olur ya hiç.
@@ -870,7 +979,7 @@ export class InvoiceService {
         userId,
       );
 
-      return { id: inv.id, docNo: inv.docNo };
+      return { id: inv.id, docNo: inv.docNo, yarnOut };
     });
 
     void AuditService.log({
@@ -878,9 +987,254 @@ export class InvoiceService {
       action: "UPDATE",
       tableName: "INVOICE",
       recordId: id,
-      newData: { event: "INVOICE_CONFIRMED", docNo: result.docNo },
+      newData: {
+        event: "INVOICE_CONFIRMED",
+        docNo: result.docNo,
+        // İz: iplik düşümü BAYRAĞA bağlı bir rejim kararıdır; "bu fatura stoğu
+        // düşürdü mü" sorusu altı ay sonra da cevaplanabilmeli.
+        ...(result.yarnOut.length > 0
+          ? {
+              yarnOut: result.yarnOut.map((y) => ({
+                itemId: y.itemId,
+                warehouseId: y.warehouseId,
+                qtyKg: y.qtyKg.toString(),
+                balanceAfter: y.balanceKg.toString(),
+              })),
+            }
+          : {}),
+      },
     });
-    return { success: true, data: result, message: `${result.docNo} onaylandı ve cari hesaba işlendi.` };
+    // Bayrak kapalıyken (ya da iplik satırı yokken) `yarnNote` BOŞ STRING'tir →
+    // mesaj bugünküyle bayt-bayt aynı kalır.
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} onaylandı ve cari hesaba işlendi.${describeYarnOut(result.yarnOut)}`,
+    };
+  }
+
+  /**
+   * RİSK LİMİTİ — satış faturası ONAYINDA cari açık bakiyeyi kontrol eder.
+   *
+   * Bugün limit yalnız bir UYARIDIR (`CariAccount.riskLimit` şema notu: "satışı
+   * durdurma kararı TİCARİ bir karardır"); bayrak açıkken o karar sistemleşir.
+   *
+   * ⚠️ KAPSAM (MUAF listesi bayrağın JSDoc'undan birebir):
+   *  • Yalnız `SALES`. ALIŞ faturası bizim borcumuzdur — müşterinin risk limiti
+   *    onu ilgilendirmez; İADE (SALES_RETURN/PURCHASE_RETURN) ise bakiyeyi
+   *    DÜŞÜRÜR, onu limitle engellemek riski azaltan işlemi yasaklamak olurdu.
+   *  • TASLAK yolları muaf: guard onaydadır, çünkü deftere yazan adım odur;
+   *    taslak hazırlamayı engellemek, muhasebecinin limiti görmesini de
+   *    engellerdi.
+   *  • İPTAL/storno muaf: limiti aşmış bir faturayı geri alamamak çıkmazdır.
+   *  • `riskLimit` NULL → LİMİTSİZ, kontrol hiç koşmaz (kayıt yokluğu "sıfır
+   *    limit" DEĞİLDİR; öyle okunsaydı limit girilmemiş her cariye satış
+   *    yapılamazdı).
+   *
+   * ⚠️ TOCTOU: bakiye `increment` ile yazılır, yani düz okumayla yarışa açıktır
+   * (iki paralel onay aynı bakiyeyi okur, ikisi de "yeter" der). Bakiye satırı
+   * `FOR UPDATE` ile kilitlenerek okunur — `assertCashBalanceCoversTx` ile aynı
+   * desen ve aynı gerekçe. Satır YOKSA (carinin o para biriminde ilk hareketi)
+   * bakiye 0 kabul edilir; kilitlenecek satır da yoktur.
+   *
+   * ⚠️ `riskLimit` PARA BİRİMİ TAŞIMAZ (Decimal, kolon başka bir şey demiyor).
+   * Karşılaştırma FATURANIN para biriminde yapılır: 1.000 USD'lik fatura,
+   * TRY düşünülerek girilmiş 50.000'lik bir limite karşı ölçülür ve ERKEN
+   * engeller — yani hata güvenli yöndedir (satışı durdurur, sessizce geçirmez).
+   * Limit para birimi kazanacaksa kural burada tek noktada değişir.
+   */
+  private async assertRiskLimitTx(
+    tx: Prisma.TransactionClient,
+    ref: { type: InvoiceType; cariId: string; currency: Currency; amount: Prisma.Decimal },
+  ): Promise<void> {
+    if (ref.type !== InvoiceType.SALES) return;
+    // Bayrak ÖNCE okunur: kapalıyken maliyet TEK ayar okumasıdır (cari kartı ve
+    // bakiye satırı hiç sorgulanmaz).
+    const enabled = await readFinanceRiskLimitBlockEnabled(tx);
+    if (!enabled) return;
+
+    const cari = await tx.cariAccount.findUnique({
+      where: { id: ref.cariId },
+      select: {
+        riskLimit: true,
+        customer: { select: { name: true } },
+        subcontractor: { select: { name: true } },
+      },
+    });
+    if (!cari?.riskLimit) return; // limitsiz cari — kontrol yok
+
+    const rows = await tx.$queryRaw<Array<{ balance: string | number | Prisma.Decimal }>>`
+      SELECT balance FROM cari_balances
+       WHERE "cariId" = ${ref.cariId}::uuid AND currency = ${ref.currency}::"Currency"
+       FOR UPDATE
+    `;
+    const balance = rows[0] ? D(String(rows[0].balance)) : D0();
+    // POZİTİF bakiye = cari BİZE borçlu (`applyCariBalanceTx` sözleşmesi).
+    // Risk = mevcut borç + kesilecek faturanın tutarı.
+    const exposure = balance.plus(ref.amount);
+    const limit = D(cari.riskLimit);
+    if (exposure.lte(limit)) return;
+
+    const name = cari.customer?.name ?? cari.subcontractor?.name ?? "Cari";
+    throw AppError.conflict(
+      `"${name}" risk limiti aşılıyor: limit ${limit.toFixed(2)} ${ref.currency}, ` +
+        `mevcut bakiye ${balance.toFixed(2)}, bu fatura ${ref.amount.toFixed(2)} → toplam ${exposure.toFixed(2)}. ` +
+        `Risk limiti engeli açık — limiti Cari Kartından güncelleyebilir, tahsilat girip tekrar deneyebilir ` +
+        `ya da Ayarlar > Muhasebe > "Risk limiti aşımında satış faturası onayını engelle" ayarını kapatabilirsiniz.`,
+    );
+  }
+
+  /**
+   * İPLİK STOK ÇIKIŞI — satış faturası onayında `YARN` satırlarını düşer.
+   *
+   * ⚠️ REJİM SORUSU, EK GÜVENCE DEĞİL: stok ya sevkte ya faturada düşer. Sevkten
+   * de düşen bir kurulumda bu bayrağı açmak AYNI kg'yi iki kez düşürür
+   * (bayrağın JSDoc'undaki "çifte düşüm" uyarısı).
+   *
+   * ⚠️ DEPO SEÇİMİ YOK — VARSAYILAN depo kullanılır ve bu bilinçlidir: fatura
+   * satırı depo TAŞIMAZ (`InvoiceLine`'da kolon yok) ve uydurmak yerine tek,
+   * yazılı bir kural seçildi (`resolveTargetWarehouseId` ile aynı felsefe).
+   * Çok depolu bir kurulum bu bayrağı açmadan önce ya satıra depo alanı
+   * eklemeli ya da stoğu sevk tarafından düşürmeli. Varsayılan depo YOKSA
+   * FAIL-CLOSED (400): sessizce "düşmedim" demek, açıkça isteneni yapmamanın
+   * en zararlı biçimidir — stok ekranı doğru görünür, gerçek yanlıştır.
+   *
+   * ⚠️ `itemId` TAŞIMAYAN serbest satır HİÇ etkilenmez (hizmet/nakliye satırı).
+   * Kalemin iplik olup olmadığı `Item.itemType`'tan çözülür — satır açıklaması
+   * ya da birim METNİNDEN değil (ikisi de serbest metin; "kg" yazan bir kumaş
+   * satırı iplik defterine yazılırdı).
+   */
+  private async applyYarnOutOnInvoiceTx(
+    tx: Prisma.TransactionClient,
+    ref: { invoiceId: string; docNo: string; type: InvoiceType; userId?: string },
+  ): Promise<YarnLedgerEffect[]> {
+    if (ref.type !== InvoiceType.SALES) return [];
+    const enabled = await readFinanceYarnOutOnInvoiceEnabled(tx);
+    if (!enabled) return [];
+
+    const lines = await tx.invoiceLine.findMany({
+      where: { invoiceId: ref.invoiceId, itemId: { not: null } },
+      select: { itemId: true, qty: true },
+    });
+    if (lines.length === 0) return [];
+
+    const yarnItems = await tx.item.findMany({
+      where: { id: { in: [...new Set(lines.map((l) => l.itemId as string))] }, itemType: ItemType.YARN },
+      select: { id: true, name: true },
+    });
+    if (yarnItems.length === 0) return [];
+    const yarnById = new Map(yarnItems.map((i) => [i.id, i.name]));
+
+    // Kalem bazında TOPLANIR: aynı ipliğin iki satırı tek harekete iner. Sebep
+    // simetri — iptal tarafı NET üzerinden ters kayıt yazar (idempotentlik
+    // oradan gelir); çıkışı satır satır yazıp iptali net yazmak, iki tarafın
+    // aynı defteri farklı granülerlikte anlatması olurdu.
+    const totalsByItem = new Map<string, Prisma.Decimal>();
+    for (const l of lines) {
+      const name = yarnById.get(l.itemId as string);
+      if (!name) continue;
+      const qty = D(l.qty);
+      // Miktarı ≤ 0 olan satır stok hareketi doğurmaz: `applyYarnMovementTx`
+      // onu zaten 400'ler ve bir "0 adet" satırı yüzünden ONAYI düşürmek
+      // orantısız olurdu.
+      if (qty.lte(0)) continue;
+      totalsByItem.set(l.itemId as string, (totalsByItem.get(l.itemId as string) ?? D0()).plus(qty));
+    }
+    if (totalsByItem.size === 0) return [];
+
+    const warehouseId = await getDefaultWarehouseId(tx);
+    if (!warehouseId) {
+      throw AppError.badRequest(
+        `${ref.docNo}: iplik satırları stoktan düşülemedi — sistemde VARSAYILAN depo tanımlı değil. ` +
+          `Tanımlar > Depolar'dan bir depoyu varsayılan yapın ya da Ayarlar > Muhasebe > ` +
+          `"Satış faturası onayında iplik satırlarını stoktan düş" ayarını kapatın.`,
+      );
+    }
+
+    const applied: YarnLedgerEffect[] = [];
+    // ⚠️ SIRALI döngü: `tx.*` ile `Promise.all` YASAK (pg adapter tek bağlantıyı
+    // seri çalıştırır; ESLint de yakalar).
+    for (const [itemId, qtyKg] of totalsByItem) {
+      const res = await applyYarnMovementTx(tx, {
+        itemId,
+        warehouseId,
+        kind: YarnMovementKind.OUT,
+        qtyKg,
+        // ÇIPA: iptal, düşülen kg'yi bu bağdan bulur (`@@index([invoiceId])`).
+        invoiceId: ref.invoiceId,
+        reason: `${ref.docNo} satış faturası`,
+        userId: ref.userId ?? null,
+      });
+      applied.push({
+        itemId,
+        itemName: yarnById.get(itemId) ?? itemId,
+        warehouseId,
+        qtyKg,
+        balanceKg: res.balanceKg,
+      });
+    }
+    return applied;
+  }
+
+  /**
+   * İPLİK ÇIKIŞININ TERS KAYDI — fatura iptalinde düşülen kg geri yazılır.
+   *
+   * ⚠️ BAYRAĞA BAKMAZ ve BAKMAMALI: bayrak "bundan sonra düş" der; DÜŞÜLMÜŞ bir
+   * kg'nin geri yazılması ise bir VERİ gerçeğidir. Bayrak koşulu konsaydı,
+   * düşümden sonra bayrağı kapatan bir kurulumda iptal edilen faturanın malı
+   * stokta HİÇ geri gelmezdi (hata yok, log yok, yalnız eksik stok).
+   *
+   * ⚠️ NET üzerinden tek satır (`reverseGoodsReceiptYarnTx` ile aynı desen ve
+   * aynı gerekçe): ikinci çağrıda net 0 çıkar ve hiçbir satır doğmaz — yani
+   * işlem idempotenttir. Satır-satır terslemek, kısmi bir hatadan sonra tekrar
+   * denendiğinde malı İKİ KEZ geri yazardı.
+   *
+   * ⚠️ Ters kayıt `ADJUST_IN`'dir, `IN` DEĞİL: mal depoya yeniden GİRMEDİ,
+   * hiç çıkmamış sayıldı. `IN` yazmak "bu iplik satın alındı/geldi" raporunu
+   * şişirirdi (mal kabul iptalinin `ADJUST_OUT` seçimiyle simetrik).
+   */
+  private async reverseInvoiceYarnTx(
+    tx: Prisma.TransactionClient,
+    invoiceId: string,
+    reason: string,
+    userId?: string,
+  ): Promise<YarnLedgerEffect[]> {
+    const rows = await tx.yarnMovement.findMany({
+      where: { invoiceId },
+      select: { itemId: true, warehouseId: true, kind: true, qtyKg: true, item: { select: { name: true } } },
+    });
+    if (rows.length === 0) return [];
+
+    const nets = new Map<string, { itemId: string; itemName: string; warehouseId: string; net: Prisma.Decimal }>();
+    for (const r of rows) {
+      const key = `${r.itemId}|${r.warehouseId}`;
+      const cur =
+        nets.get(key) ?? { itemId: r.itemId, itemName: r.item?.name ?? r.itemId, warehouseId: r.warehouseId, net: D0() };
+      cur.net = cur.net.plus(D(r.qtyKg).mul(yarnMovementSign(r.kind)));
+      nets.set(key, cur);
+    }
+
+    const applied: YarnLedgerEffect[] = [];
+    for (const n of nets.values()) {
+      if (n.net.isZero()) continue;
+      const res = await applyYarnMovementTx(tx, {
+        itemId: n.itemId,
+        warehouseId: n.warehouseId,
+        kind: n.net.gt(0) ? YarnMovementKind.ADJUST_OUT : YarnMovementKind.ADJUST_IN,
+        qtyKg: n.net.abs(),
+        invoiceId,
+        reason,
+        userId: userId ?? null,
+      });
+      applied.push({
+        itemId: n.itemId,
+        itemName: n.itemName,
+        warehouseId: n.warehouseId,
+        qtyKg: n.net.abs(),
+        balanceKg: res.balanceKg,
+      });
+    }
+    return applied;
   }
 
   // ---------------------------------------------------------------------------
@@ -988,6 +1342,18 @@ export class InvoiceService {
         });
       }
 
+      // ── İPLİK ÇIKIŞININ TERS KAYDI ────────────────────────────────────────
+      // ⚠️ BAYRAKTAN BAĞIMSIZ (gerekçe `reverseInvoiceYarnTx` başlığında):
+      // düşülmüş kg'yi geri yazmak bir VERİ gerçeğidir, rejim tercihi değil.
+      // Hiç düşülmemişse (bayrak hiç açılmamış / iplik satırı yok) sorgu boş
+      // döner ve TEK BAYT yazılmaz — mevcut iptal davranışı korunur.
+      const yarnBack = await this.reverseInvoiceYarnTx(
+        tx,
+        id,
+        reason?.trim() || `${inv.docNo} fatura iptali`,
+        userId,
+      );
+
       // Storno → resmi belge İPTAL filigranıyla VOIDED'e çekilir. Belge SİLİNMEZ
       // (donmuş belge kuralı): dosyaya bakan kişi iptal edilmiş faturayı da
       // yeniden basabilmeli. Taslak iptalinde belge zaten hiç doğmamıştır ve
@@ -999,7 +1365,7 @@ export class InvoiceService {
         reason ?? "Fatura iptal edildi",
       );
 
-      return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted) };
+      return { id: inv.id, docNo: inv.docNo, wasPosted: Boolean(posted), yarnBack };
     });
 
     void AuditService.log({
@@ -1007,14 +1373,30 @@ export class InvoiceService {
       action: "UPDATE",
       tableName: "INVOICE",
       recordId: id,
-      newData: { event: "INVOICE_CANCELLED", docNo: result.docNo, reason, storno: result.wasPosted },
+      newData: {
+        event: "INVOICE_CANCELLED",
+        docNo: result.docNo,
+        reason,
+        storno: result.wasPosted,
+        ...(result.yarnBack.length > 0
+          ? {
+              yarnReversed: result.yarnBack.map((y) => ({
+                itemId: y.itemId,
+                warehouseId: y.warehouseId,
+                qtyKg: y.qtyKg.toString(),
+                balanceAfter: y.balanceKg.toString(),
+              })),
+            }
+          : {}),
+      },
     });
     return {
       success: true,
       data: { id: result.id, docNo: result.docNo },
-      message: result.wasPosted
-        ? `${result.docNo} iptal edildi ve cari hesaptan ters kayıtla geri alındı.`
-        : `${result.docNo} taslağı iptal edildi.`,
+      message:
+        (result.wasPosted
+          ? `${result.docNo} iptal edildi ve cari hesaptan ters kayıtla geri alındı.`
+          : `${result.docNo} taslağı iptal edildi.`) + describeYarnOut(result.yarnBack, "ters kayıtla stoğa geri yazıldı"),
     };
   }
 

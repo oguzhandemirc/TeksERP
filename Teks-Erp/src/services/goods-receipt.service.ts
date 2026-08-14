@@ -38,6 +38,12 @@ import { AuditService } from "./audit.service";
 import { InventoryService } from "./inventory.service";
 import { resolveItemPricesFor } from "./item-price.service";
 import { applyYarnMovementTx, reverseGoodsReceiptYarnTx, yarnMovementSign } from "./yarn.service";
+// J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
+// maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
+import {
+  readGoodsReceiptRequirePriceEnabled,
+  readPurchaseBlockOverReceiptEnabled,
+} from "./system-setting.service";
 // Paket D3 — fiş bir ALIŞ SİPARİŞİNİ karşılayabilir. Bağ OPSİYONELDİR: sipariş
 // bir PLANDIR, kabulün ön koşulu değil (siparişsiz mal kabulü meşru kalır).
 import {
@@ -260,6 +266,163 @@ export function describeOverReceipt(sync: PurchaseOrderSyncResult | null | undef
   return parts.length > 0 ? ` ⚠ ${sync.orderNo}: ${parts.join("; ")}.` : "";
 }
 
+// =============================================================================
+// J1 — İKİ OPT-IN KATILIK BAYRAĞI (ikisi de VARSAYILAN KAPALI)
+// =============================================================================
+// ① `purchase.blockOverReceiptEnabled` — siparişten FAZLA kabulü reddet.
+// ② `goodsReceipt.requirePriceEnabled` — birim fiyatı çözülemeyen satırı reddet.
+//
+// ⚠️ KAPALIYKEN BAYT-BAYT BUGÜNKÜ DAVRANIŞ. Kapalı rejimde tek maliyet ayar
+// okumasıdır (①'inki yalnız fiş bir alış siparişine BAĞLIYSA hiç koşar) ve
+// satır işleme yolu tek bayt değişmez — fazla kabul yine YAZILIR ve yalnız
+// `describeOverReceipt` ile UYARILIR, fiyatsız satır yine kabul edilir.
+// Gerekçe dosyanın en başındaki "fazla mal GELEBİLİR, kayıt gerçeği yazar"
+// kuralıdır; bayrak onu değil, TOLERANSI SIFIR olan kurulumun tercihini
+// temsil eder.
+//
+// ⚠️ İKİSİ DE SATIR BAZLI ve `addLines` DÖNGÜSÜNÜN İÇİNDE koşar → engellenen
+// satır `failed[]`e SEBEBİYLE düşer, diğerleri işlenmeye devam eder. Fişin
+// tamamını 400'lemek "fiş bir kaptır / 42 girdi, 8'ini yutma" kuralının
+// ihlali olurdu: kamyondan inen 40 topun 39'u meşruyken hepsini geri
+// çevirmek, malı sisteme HİÇ girilemez yapar.
+//
+// ⚠️ SIRA SÖZLEŞMESİ (2026-08-04 dersi): önce satırın KENDİ tutarlılığı
+// (fiyat), sonra BAĞLAM çözümü (sipariş kapsaması). Ters sırada, fiyatı da
+// eksik olan bir satır önce "sipariş aşıldı" der; kullanıcı siparişi düzeltir,
+// tekrar dener ve asıl eksiğini İKİ TUR SONRA öğrenir.
+//
+// ⚠️ İPTAL / TERS YOL MUAF ve bu YAPISALDIR: `cancel` satır DOĞURMAZ (toplar
+// `softDelete`, iplik `reverseGoodsReceiptYarnTx` ile geri sarılır) ve
+// `addLines`ten hiç geçmez. Guard'ları buraya değil de "her mal kabul yoluna"
+// koymak, yanlış girilmiş bir fişi geri alınamaz yapardı (eksi kasa guard'ının
+// ters-yol muafiyetiyle aynı ilke).
+// =============================================================================
+
+const D0 = new Prisma.Decimal(0);
+
+/** Mesajda basılan birim — SUNUM amaçlı (kolon/karar değil). */
+const UNIT_LABEL: Record<string, string> = { MT: "m", KG: "kg", ADET: "adet" };
+
+/** Kullanıcıya basılan miktar: decimal.js sondaki sıfırları zaten atar. */
+const qtyText = (v: Prisma.Decimal, unit: string): string => `${v.toString()} ${unit}`;
+
+interface OverReceiptContext {
+  orderNo: string;
+  /** Ürün başına ISMARLANAN toplam — aynı ürün birden çok kalemde olabilir (farklı termin/fiyat), toplanır. */
+  ordered: Map<string, Prisma.Decimal>;
+  /** Ürün başına GELMİŞ toplam — siparişin TAMAMI için, bu fiş için değil. */
+  received: Map<string, Prisma.Decimal>;
+  /** BU çağrıda başarıyla yazılan miktar (kaynak okuması çağrı BAŞINDA yapıldı). */
+  pending: Map<string, Prisma.Decimal>;
+}
+
+/**
+ * ① Guard'ın veri kaynağı: KARŞILANMA SENKRONUNUN KENDİSİ.
+ *
+ * ⚠️ İKİNCİ BİR "ne geldi" HESABI YAZILMAZ (Sınıf 5). `computeReceivedByItemTx`
+ * + `distributeFifo` zinciri `purchase-order.service`te yaşıyor ve fazla kabul
+ * kararının (`over`) tek kaynağı odur; buraya kopyalanan bir toplam, bir gün
+ * o zincir değiştiğinde guard ile UYARIYI (`describeOverReceipt`) farklı
+ * şeyler söyleyen iki rakama böler. `syncPurchaseOrderSafely` aynı zinciri
+ * KAYNAKTAN koşar → guard ile döngü sonundaki uyarı tanım gereği aynı evrende.
+ *
+ * ⚠️ Saklanan `PurchaseOrderLine.receivedQty` DOĞRUDAN OKUNMAZ: rollup
+ * drift'e açıktır (`getById` bunu `drift` bayrağıyla ekranda söylüyor) ve
+ * bayat-YÜKSEK bir sayaç, gerçekte sipariş kapsamındaki meşru bir malı
+ * reddederdi — mal kamyonda beklerken. Senkron aynı anda drift'i de onarır.
+ *
+ * ⚠️ FAIL-OPEN: senkron çözülemezse (sipariş silinmiş / senkron hatası)
+ * guard KOŞMAZ. Bir rapor rakamı yüzünden fiziksel mal girişini durdurmak,
+ * `syncPurchaseOrderSafely`nin hatayı yutma gerekçesinin aynısıyla yanlıştır;
+ * fazla kabul zaten `describeOverReceipt` ile SÖYLENİR.
+ */
+async function loadOverReceiptContext(purchaseOrderId: string): Promise<OverReceiptContext | null> {
+  const sync = await syncPurchaseOrderSafely(purchaseOrderId);
+  if (!sync) return null;
+  const ordered = new Map<string, Prisma.Decimal>();
+  const received = new Map<string, Prisma.Decimal>();
+  for (const line of sync.lines) {
+    ordered.set(line.itemId, (ordered.get(line.itemId) ?? D0).plus(line.qty));
+    received.set(line.itemId, (received.get(line.itemId) ?? D0).plus(line.receivedQty));
+  }
+  return { orderNo: sync.orderNo, ordered, received, pending: new Map() };
+}
+
+/**
+ * ① Satır sipariş miktarını aşıyor mu?
+ *
+ * ⚠️ `pending` LOAD-BEARING: satırlar ayrı tx'lerde doğuyor ama kaynak okuması
+ * çağrı BAŞINDA bir kez yapıldı. Onsuz, 100 ısmarlanmış bir kaleme aynı fişte
+ * 60 + 60 girilir ve İKİSİ de "60 ≤ 100" diye geçerdi — guard tam da kendi
+ * fişinde delinirdi.
+ *
+ * ⚠️ SİPARİŞTE HİÇ OLMAYAN ÜRÜN DE ENGELLENİR (ısmarlanan 0 → her miktar
+ * aşımdır) ve mesajı AYRIDIR. Bilinçli: kalemde 1 metre fazlayı reddedip
+ * siparişte hiç bulunmayan bir ürünü sessizce kabul etmek tutarsız olurdu —
+ * üstelik o durumun en olası sebebi `unmatchedItemIds` uyarısının söylediği
+ * gerçek saha hatasıdır (açılır listeden YANLIŞ sipariş seçilmiş).
+ *
+ * ⚠️ ÇIKIŞ YOLU MESAJDA: mal fiziksel olarak gelmiştir ve kaydı bir yere
+ * yazılmak ZORUNDADIR → siparişsiz ayrı fiş (bu kuraldan muaf), siparişi
+ * düzeltme, ya da ayarı kapatma. Çıkışsız bir 400, depocuyu kayıt dışı
+ * bırakır.
+ */
+function assertNotOverReceipt(
+  ctx: OverReceiptContext,
+  itemId: string,
+  itemName: string,
+  qty: Prisma.Decimal,
+  unit: string,
+): void {
+  const ordered = ctx.ordered.get(itemId) ?? D0;
+  const already = (ctx.received.get(itemId) ?? D0).plus(ctx.pending.get(itemId) ?? D0);
+  const after = already.plus(qty);
+  if (after.lte(ordered)) return;
+
+  const tail =
+    `"Siparişten fazla mal kabulünü engelle" ayarı açık — fazlayı kaydetmek için siparişe bağlı OLMAYAN ` +
+    `ayrı bir mal kabul fişi açın, siparişi düzeltin ya da Ayarlar > Depo & Satın Alma'dan ayarı kapatın.`;
+
+  if (ordered.isZero()) {
+    throw AppError.badRequest(
+      `"${itemName}" ${ctx.orderNo} siparişinde YOK (ısmarlanan 0), bu satırla ${qtyText(qty, unit)} girilecek. ` +
+        `Yanlış sipariş seçilmiş olabilir. ${tail}`,
+    );
+  }
+  throw AppError.badRequest(
+    `"${itemName}": ${ctx.orderNo} siparişinde ${qtyText(ordered, unit)} ısmarlandı, ${qtyText(already, unit)} gelmiş; ` +
+      `bu satırla ${qtyText(after, unit)} olur (${qtyText(after.minus(ordered), unit)} fazla). ${tail}`,
+  );
+}
+
+/**
+ * ② Satırın birim fiyatı ÇÖZÜLEBİLDİ Mİ?
+ *
+ * ⚠️ ÖLÇÜLEN ŞEY MEVCUT ÖN-DOLUM ZİNCİRİNİN SONUCUDUR (`priceFor`): satırın
+ * kendi fiyatı > kalem kartının (tedarikçi istisnası > varsayılan) alış
+ * fiyatı > null. Guard kendi zincirini kurmaz; kurarsa "panel fiyatı buldu,
+ * backend bulamadı" (ya da tersi) sınıfı bir ayrışma doğar. Siparişin ANLAŞILAN
+ * fiyatı bu zincire panel tarafından `unitPrice` olarak ÖN-DOLDURULUR
+ * (`fillLinesFromOrder`) — yani "siparişten miras" bu guard'a satır fiyatı
+ * olarak gelir; backend'de ayrıca sipariş kalemine bakan bir dal YOKTUR.
+ *
+ * ⚠️ `0` MEŞRU BİR FİYATTIR (bedava numune) ve buradan GEÇER — "fiyat yok" ile
+ * "bedava" aynı şey değildir (`priceFor`in kendi kuralının aynası). Sıfır
+ * fiyatlı satırın kaderi FATURA tarafındaki ayrı bir bayrağın işidir.
+ */
+function assertLinePriceResolved(
+  price: Prisma.Decimal.Value | null,
+  itemName: string,
+  currency: string,
+): void {
+  if (price != null) return;
+  throw AppError.badRequest(
+    `"${itemName}": birim fiyat çözülemedi — satırda fiyat yok ve kalem kartında ${currency} alış fiyatı tanımlı değil. ` +
+      `"Mal kabul satırında birim fiyat zorunlu" ayarı açık — satıra fiyatı girin, kalemin ${currency} alış fiyatını ` +
+      `Tanımlar > Kalem Fiyatları'ndan tanımlayın ya da Ayarlar > Depo & Satın Alma'dan ayarı kapatın.`,
+  );
+}
+
 export class GoodsReceiptService {
   /**
    * Fiş açar; `lines` verilmişse satırları da işler.
@@ -477,27 +640,72 @@ export class GoodsReceiptService {
     // kumaşsa reddediliyor, iplikse SESSİZCE deftere yazılıyordu — üstelik
     // `POST /api/yarn/movements` aynı kalemi reddederken. Aynı verinin iki
     // kapısı farklı cevap veriyorsa hangisinin doğru olduğu sorulamaz.
-    const itemInfo = new Map<string, { itemType: ItemType; isActive: boolean; name: string }>();
+    // ⚠️ `unit` de okunur: guard mesajları miktarı BİRİMİYLE basar (kumaş m,
+    // iplik kg) — aynı sorgu, ek maliyet yok.
+    const itemInfo = new Map<string, { itemType: ItemType; isActive: boolean; name: string; unit: string }>();
     const ids = [...new Set(lines.map((l) => l.itemId))];
     if (ids.length > 0) {
       const rows = await prisma.item.findMany({
         where: { id: { in: ids } },
-        select: { id: true, itemType: true, isActive: true, name: true },
+        select: { id: true, itemType: true, isActive: true, name: true, unit: true },
       });
-      for (const r of rows) itemInfo.set(r.id, { itemType: r.itemType, isActive: r.isActive, name: r.name });
+      for (const r of rows) itemInfo.set(r.id, { itemType: r.itemType, isActive: r.isActive, name: r.name, unit: r.unit });
     }
+
+    // ── J1 BAYRAKLARI (ikisi de varsayılan KAPALI — blok yorumu yukarıda) ───
+    // ⚠️ Okuma DÖNGÜ DIŞINDA ve satır sayısından bağımsız (perf kuralı 7/9);
+    // ① yalnız fiş bir alış siparişine BAĞLIYSA sorulur, yani üretici fabrika
+    // yolunda tek ek sorgu bile koşmaz. Enforcement reader kalıbı gereği ayar
+    // okuması cache'sizdir: panelden kapatılan bayrak bir sonraki fişte anında
+    // etkisizleşir (acil kapatma yolu).
+    const requirePrice = await readGoodsReceiptRequirePriceEnabled();
+    const blockOverReceipt = receipt.purchaseOrderId ? await readPurchaseBlockOverReceiptEnabled() : false;
+    const overCtx =
+      blockOverReceipt && receipt.purchaseOrderId ? await loadOverReceiptContext(receipt.purchaseOrderId) : null;
 
     const created: string[] = [];
     const createdYarn: string[] = [];
     const failed: LineFailure[] = [];
 
+    /**
+     * ① sayacı — YALNIZ BAŞARILI satır sayılır (`created`/`createdYarn`
+     * push'undan sonra). Guard'ın kendi reddettiği ya da başka bir sebeple
+     * düşen satır "gelmiş mal" değildir; onu saymak, sonraki meşru satırları
+     * hayalet bir miktar yüzünden reddederdi. Bayrak kapalıyken `overCtx` null
+     * → bu çağrılar no-op.
+     */
+    const notePending = (line: GoodsReceiptLineInput): void => {
+      if (!overCtx) return;
+      overCtx.pending.set(
+        line.itemId,
+        (overCtx.pending.get(line.itemId) ?? D0).plus(new Prisma.Decimal(line.initialQty)),
+      );
+    };
+
     for (const [index, line] of lines.entries()) {
       try {
+        const info = itemInfo.get(line.itemId);
+
+        // ── J1 GUARD'LARI (satır bazlı; kapalıyken tek bayt çalışmaz) ──────
+        // ⚠️ SIRA: önce satırın KENDİ tutarlılığı (fiyat), sonra bağlam
+        // (sipariş kapsaması) — gerekçe yukarıdaki blok yorumda.
+        // ⚠️ Kalem adı çözülemezse (silinmiş/uydurma id) guard SESSİZ GEÇER:
+        // o satır zaten `createInitialEntry`nin "Ürün bulunamadı" hatasına
+        // düşecek ve mevcut `failed[]` mesajı bayt-bayt korunmalı — hatayı
+        // burada farklı bir cümleyle önden yakalamak, aynı durumu iki farklı
+        // şekilde okutur.
+        if (info) {
+          const unit = UNIT_LABEL[info.unit] ?? info.unit;
+          if (requirePrice) assertLinePriceResolved(priceFor(line), info.name, receipt.currency);
+          if (overCtx) {
+            assertNotOverReceipt(overCtx, line.itemId, info.name, new Prisma.Decimal(line.initialQty), unit);
+          }
+        }
+
         // ── İPLİK DALI ────────────────────────────────────────────────────
         // İplik `Roll` DOĞURMAZ: top metreyle/barkodla tek tek izlenir, iplik
         // kg ile ve toplu izlenir. Aynı satırdan hem `Roll` hem `YarnMovement`
         // doğurmak aynı malı İKİ KEZ saydırırdı.
-        const info = itemInfo.get(line.itemId);
         if (info?.itemType === ItemType.YARN) {
           // Pasif kalem: kumaş yolundaki `createInitialEntry` guard'ının ikizi.
           // Mesaj bilerek o yolla AYNI cümleyi kurar — operatör aynı hatayı
@@ -506,6 +714,7 @@ export class GoodsReceiptService {
           // Fiyat ÖN-DOLUMU kumaşla AYNI zincir (D2): satırın kendi fiyatı
           // kazanır; yoksa kalem kartının alış fiyatı; o da yoksa NULL.
           createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), userId));
+          notePending(line);
           continue;
         }
 
@@ -542,6 +751,7 @@ export class GoodsReceiptService {
           },
         );
         created.push((res.data as { id: string }).id);
+        notePending(line);
       } catch (err) {
         failed.push({
           index,

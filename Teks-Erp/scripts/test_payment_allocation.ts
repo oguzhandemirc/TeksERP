@@ -43,8 +43,16 @@
 //       BAYT-BAYT. NEGATİF SONDA: predicate (`!isClientTokenP2002`) düşürülünce
 //       token P2002'si 5 tur boşa retry edilir → ham "Barkod üretimi ...
 //       başarısız" 409'u → kırmızı.
+//   §17 ⭐ OTOMATİK FIFO KAPAMA (J1 dalga 2, `finance.autoAllocateOnPaymentEnabled`):
+//       ① KAPALI PARİTE (mesaj bayt-bayt + sıfır satır) · ② modül şalteri üstte
+//       · ③ FIFO sırası + tam/kısmi · ④ artan tutar AVANS olarak açıkta · ⑤ farklı
+//       para birimi ve iade faturası ATLANIR · ⑥ ⭐ kapama patlasa da TAHSİLAT
+//       AYAKTA (sonda ile deterministik) · ⑦ üretilen tahsis elle SİLİNEBİLİR
+//       · ⑧ replay kancayı ikinci kez çalıştırmaz
 //   §16 MUTABAKAT: SUM(allocation) === üç sayacın hepsi (TÜM DB) — HER ZAMAN
 //       EN SON koşar ki §12-§14'ün yarış artıkları da terazide tartılsın
+//       (⚠️ §17 ondan ÖNCE yazıldı ve bu bilinçli: otomatik kapamanın satırları
+//        da aynı teraziden geçmeli)
 //
 // NEGATİF SONDA — HEPSİ GERÇEKTEN KOŞULDU, sonuçlar ÖLÇÜLEN hâlleriyle
 // yazılmıştır (tahmin edilen değil; ilk dördün tabanı 82/82 yeşil):
@@ -129,6 +137,7 @@ import {
   CHEQUE_NO_MONEY_STATUSES,
 } from "../src/services/payment-allocation.service";
 import { D, D0 } from "../src/services/helpers/finance.helper";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
@@ -153,6 +162,33 @@ const subcontractorIds: string[] = [];
 let cashBoxId: string | null = null;
 /** §14 virman kasaları — cleanup kasa hareketlerini de silmek zorunda. */
 const cashBoxIds: string[] = [];
+
+// ── §17 BAYRAK FOTOĞRAFI ────────────────────────────────────────────────────
+// ⚠️ Paylaşımlı dev DB: bekçi bayrakları KENDİ değerlerine geri döndürmek
+// zorunda, yoksa bir sonraki testin (ya da geliştiricinin) davranışı sessizce
+// değişir. Fotoğraf `finally`de geri yüklenir — satır YOKSA silinir, VARSA eski
+// değeriyle yazılır (ikisi farklı: kayıtsız = "hiç dokunulmamış").
+const AUTO_FLAG_KEY = SETTING_KEYS.FINANCE_AUTO_ALLOCATE_ON_PAYMENT_ENABLED;
+const FINANCE_FLAG_KEY = SETTING_KEYS.FINANCE_ENABLED;
+const flagSnapshot = new Map<string, Prisma.JsonValue | undefined>();
+
+/** Ayarı yazar; ilk yazımdan ÖNCE mevcut hâlini fotoğraflar. */
+async function setSetting(key: string, value: boolean): Promise<void> {
+  if (!flagSnapshot.has(key)) {
+    const row = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
+    flagSnapshot.set(key, row ? row.value : undefined);
+  }
+  // Doğrudan ayar yazımı BİLİNÇLİ: enforcement reader cache'siz olduğu için
+  // anında etkilidir; HTTP/route sözleşmesini `test_feature_flag_contract` ölçer.
+  await prisma.systemSetting.upsert({ where: { key }, create: { key, value }, update: { value } });
+}
+
+async function restoreSettings(): Promise<void> {
+  for (const [key, value] of flagSnapshot) {
+    if (value === undefined) await prisma.systemSetting.deleteMany({ where: { key } });
+    else await prisma.systemSetting.update({ where: { key }, data: { value: value ?? Prisma.JsonNull } });
+  }
+}
 
 /** Hata mesajını çıkaran küçük yardımcı — try/catch gürültüsünü azaltır. */
 async function err(fn: () => Promise<unknown>): Promise<string> {
@@ -1242,6 +1278,339 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §17 ⭐ OTOMATİK FIFO KAPAMA (finance.autoAllocateOnPaymentEnabled) ────
+  // ⚠️ İLK KONTROL PARİTEDİR: bayrak KAPALIYKEN (varsayılan) tahsilat yolunun
+  // yanıt mesajı ve kapama satırı sayısı BAYT-BAYT bugünküdür. Bu bölüm kırmızı
+  // verirse doğru tepki testi gevşetmek değil — dokunulmamış bir kurulumda
+  // davranış değişmiş demektir.
+  //
+  // ⚠️ "VADESİZ SONA" BİR KURAL DEĞİL, FİKSTÜRÜN SONUCUDUR. Sıra tek formülden
+  // gelir: efektif vade = `dueDate ?? issueDate` (§10d aynı formülü ters yönden
+  // ölçer — vadesiz ama ÇOK ESKİ keşideli fatura EN ÜSTTE olmalı). Burada
+  // vadesiz fatura sona düşüyorsa sebebi keşide tarihinin en yeni olmasıdır.
+  // Biri "vadesizi nulls-last yap" diye ikinci bir sıralama yazarsa §10d
+  // kırmızı verir — iki bölüm birbirinin bekçisidir, birini "düzeltip" diğerini
+  // bırakma.
+  {
+    const day = 86400_000;
+    const now = Date.now();
+    const autoCustomer = await prisma.customer.create({
+      data: { code: `${TAG}-AU`, name: `${TAG} Oto FIFO` },
+      select: { id: true },
+    });
+    customerIds.push(autoCustomer.id);
+
+    // Vadesi GEÇMİŞ iki fatura + bugün kesilmiş VADESİZ bir fatura.
+    const invOld = await makeInvoice({
+      customerId: autoCustomer.id,
+      total: 300,
+      issueDate: new Date(now - 60 * day),
+      dueDate: new Date(now - 30 * day),
+    });
+    const invMid = await makeInvoice({
+      customerId: autoCustomer.id,
+      total: 400,
+      issueDate: new Date(now - 40 * day),
+      dueDate: new Date(now - 10 * day),
+    });
+    const invNoDue = await makeInvoice({
+      customerId: autoCustomer.id,
+      total: 500,
+      issueDate: new Date(now),
+      dueDate: null,
+    });
+    const autoCari = await prisma.cariAccount.findFirstOrThrow({
+      where: { customerId: autoCustomer.id },
+      select: { id: true },
+    });
+    cariIds.push(autoCari.id);
+
+    /** Tahsilat kaydeder ve TAM yanıtı döner (mesaj da ölçülüyor). */
+    async function pay(amount: number, clientToken?: string): Promise<{ id: string; docNo: string; message: string }> {
+      const r = await paymentService.create({
+        direction: "IN",
+        method: "CASH",
+        customerId: autoCustomer.id,
+        currency: "TRY",
+        amount,
+        cashBoxId,
+        ...(clientToken ? { clientToken } : {}),
+      });
+      if (!paymentIds.includes(r.data.id)) paymentIds.push(r.data.id);
+      return { id: r.data.id, docNo: r.data.docNo, message: r.message ?? "" };
+    }
+
+    const allocCount = (paymentId: string): Promise<number> =>
+      prisma.paymentAllocation.count({ where: { paymentId } });
+
+    // ── §17a KAPALI PARİTE (varsayılan) ──────────────────────────────────
+    await setSetting(AUTO_FLAG_KEY, false);
+    await setSetting(FINANCE_FLAG_KEY, true);
+    const offPay = await pay(500);
+    check(
+      "§17a KAPALI: yanıt mesajı BAYT-BAYT bugünkü (ek cümle yok)",
+      offPay.message === `${offPay.docNo} kaydedildi.`,
+      offPay.message,
+    );
+    check("§17a2 KAPALI: hiçbir kapama satırı doğmadı", (await allocCount(offPay.id)) === 0);
+    check("§17a3 KAPALI: en eski fatura dokunulmamış", (await invoiceCounters(invOld)).paid.isZero());
+
+    // ── §17b MODÜL ŞALTERİ ÜSTTE ─────────────────────────────────────────
+    // Bayrak AÇIK ama `financeEnabled` KAPALI → kanca no-op. Bu kontrol
+    // olmadan, ön muhasebeyi hiç kullanmayan bir fabrikada yanlışlıkla açılmış
+    // bir bayrak sessizce kapama yazmaya başlardı.
+    await setSetting(AUTO_FLAG_KEY, true);
+    await setSetting(FINANCE_FLAG_KEY, false);
+    const gatedPay = await pay(500);
+    check(
+      "§17b Modül KAPALIYKEN bayrak açık olsa bile kanca no-op",
+      gatedPay.message === `${gatedPay.docNo} kaydedildi.` && (await allocCount(gatedPay.id)) === 0,
+      gatedPay.message,
+    );
+
+    // ── §17c AÇIK: FIFO sırası + tam/kısmi dağıtım ───────────────────────
+    await setSetting(FINANCE_FLAG_KEY, true);
+    const fifoPay = await pay(900);
+    const fifoRows = await prisma.paymentAllocation.findMany({
+      where: { paymentId: fifoPay.id },
+      select: { invoiceId: true, amount: true, notes: true },
+      orderBy: { createdAt: "asc" },
+    });
+    check("§17c 900 TL üç faturaya dağıtıldı", fifoRows.length === 3, `satır=${fifoRows.length}`);
+    check(
+      "§17c2 Sıra efektif vadeye göre: geçmiş vade → geçmiş vade → vadesiz (keşide bugün) SONA",
+      fifoRows.map((r) => r.invoiceId).join(",") === [invOld, invMid, invNoDue].join(","),
+      fifoRows.length === 3 ? "doğru sırada" : "sıra kurulamadı",
+    );
+    check(
+      "§17c3 Tutarlar: 300 tam / 400 tam / 200 KISMİ",
+      fifoRows.map((r) => D(r.amount).toFixed(2)).join("/") === "300.00/400.00/200.00",
+      fifoRows.map((r) => D(r.amount).toFixed(2)).join("/"),
+    );
+    check(
+      "§17c4 İlk iki fatura TAM kapandı",
+      (await invoiceCounters(invOld)).paid.equals(300) && (await invoiceCounters(invMid)).paid.equals(400),
+    );
+    const noDueAfter = await invoiceCounters(invNoDue);
+    check(
+      "§17c5 Üçüncü fatura KISMİ kaldı (500'ün 200'ü kapandı)",
+      noDueAfter.paid.equals(200) && noDueAfter.grand.minus(noDueAfter.paid).equals(300),
+      `paid=${noDueAfter.paid}`,
+    );
+    check(
+      "§17c6 Yanıt mesajı özeti taşıyor (N faturaya otomatik kapandı)",
+      /3 faturaya otomatik kapandı/.test(fifoPay.message),
+      fifoPay.message,
+    );
+    check(
+      "§17c7 Tutar tam dağıldığında AVANS cümlesi BASILMAZ",
+      !/avans/i.test(fifoPay.message),
+      fifoPay.message,
+    );
+    check(
+      "§17c8 Üretilen satır ÖZEL İŞARET taşımaz (notes boş — audit yeterli)",
+      fifoRows.every((r) => r.notes === null),
+    );
+
+    // ── §17d ARTAN TUTAR AÇIKTA KALIR (AVANS — fatura uydurulmaz) ────────
+    const advPay = await pay(1000);
+    check(
+      "§17d Kalan açık (300) kapandı, fazlası hiçbir faturaya yazılmadı",
+      (await paymentAllocated(advPay.id)).equals(300),
+      (await paymentAllocated(advPay.id)).toString(),
+    );
+    check(
+      "§17d2 Avans mesajda söyleniyor (700 açıkta)",
+      /Kalan 700\.00 TRY avans olarak açıkta/.test(advPay.message),
+      advPay.message,
+    );
+    const cariClosed = await prisma.invoice.aggregate({
+      where: { cariId: autoCari.id },
+      _sum: { grandTotal: true, paidTotal: true },
+    });
+    check(
+      "§17d3 Cari toplamı: 1200 fatura / 1200 kapama — hayali fatura doğmadı",
+      D(cariClosed._sum.grandTotal ?? 0).equals(1200) && D(cariClosed._sum.paidTotal ?? 0).equals(1200),
+      `grand=${cariClosed._sum.grandTotal} paid=${cariClosed._sum.paidTotal}`,
+    );
+    const freeAdv = await paymentAllocationService.listUnallocatedPayments({
+      cariId: autoCari.id,
+      currency: "TRY",
+      direction: PaymentDirection.IN,
+    });
+    check(
+      "§17d4 Avans SERBEST tahsilat listesinde görünür (kaybolmuyor)",
+      freeAdv.data.find((r) => r.id === advPay.id)?.freeTotal === "700",
+      freeAdv.data.find((r) => r.id === advPay.id)?.freeTotal ?? "yok",
+    );
+
+    // ── §17e FARKLI PARA BİRİMİ ATLANIR + İADE FATURASI ATLANIR ──────────
+    // Kur farkı kararı otomatikleştirilmez (bayrak JSDoc'unun MUAF satırı);
+    // iade faturası ise yön kuralının dışındadır (§8d'nin otomatik ikizi —
+    // otomasyon elle kapamadan DAHA GENİŞ davranamaz).
+    const fxCustomer = await prisma.customer.create({
+      data: { code: `${TAG}-FX`, name: `${TAG} Döviz` },
+      select: { id: true },
+    });
+    customerIds.push(fxCustomer.id);
+    const usdDraft = await invoiceService.createDraft({
+      type: "SALES",
+      customerId: fxCustomer.id,
+      currency: "USD",
+      exchangeRate: 40,
+      lines: [{ description: `${TAG} USD satır`, qty: 1, unitPrice: 500, vatRate: 0 }],
+    });
+    invoiceIds.push(usdDraft.data.id);
+    await invoiceService.confirm(usdDraft.data.id);
+    const tryInv = await makeInvoice({ customerId: fxCustomer.id, total: 200 });
+    const retInv = await makeInvoice({ customerId: fxCustomer.id, type: "SALES_RETURN", total: 150 });
+    const fxCari = await prisma.cariAccount.findFirstOrThrow({
+      where: { customerId: fxCustomer.id },
+      select: { id: true },
+    });
+    cariIds.push(fxCari.id);
+    const fxPayRes = await paymentService.create({
+      direction: "IN",
+      method: "CASH",
+      customerId: fxCustomer.id,
+      currency: "TRY",
+      amount: 1000,
+      cashBoxId,
+    });
+    paymentIds.push(fxPayRes.data.id);
+    check(
+      "§17e USD fatura ATLANDI (kur kararı otomatikleştirilmez)",
+      (await invoiceCounters(usdDraft.data.id)).paid.isZero(),
+    );
+    check("§17e2 İADE faturası ATLANDI (yön kuralı gevşemedi)", (await invoiceCounters(retInv)).paid.isZero());
+    check(
+      "§17e3 KÖRLÜK ZEMİNİ: aynı carinin TRY faturası kapandı",
+      (await invoiceCounters(tryInv)).paid.equals(200),
+    );
+    check(
+      "§17e4 Atlananlar yüzünden tutar KAYBOLMADI — kalan avans açıkta",
+      (await paymentAllocated(fxPayRes.data.id)).equals(200),
+      (await paymentAllocated(fxPayRes.data.id)).toString(),
+    );
+
+    // ── §17f KAPAMA BOZULSA DA TAHSİLAT KAYDI AYAKTA ─────────────────────
+    // ⚠️ Bu bölüm sözleşmenin en kritik yarısını ölçer: para el değiştirdi ve
+    // kaydı yazılmak ZORUNDA; kapama ikinci bir sorudur. Pencere sonda ile
+    // deterministik üretilir — `allocateBulk` geçici olarak fırlatır.
+    const brokenCustomer = await prisma.customer.create({
+      data: { code: `${TAG}-BR`, name: `${TAG} Bozuk` },
+      select: { id: true },
+    });
+    customerIds.push(brokenCustomer.id);
+    const brokenInv = await makeInvoice({ customerId: brokenCustomer.id, total: 250 });
+    const brokenCari = await prisma.cariAccount.findFirstOrThrow({
+      where: { customerId: brokenCustomer.id },
+      select: { id: true },
+    });
+    cariIds.push(brokenCari.id);
+
+    const svc = paymentAllocationService as unknown as { allocateBulk: unknown };
+    const realBulk = svc.allocateBulk;
+    svc.allocateBulk = async (): Promise<never> => {
+      throw new Error("SONDA: otomatik kapama bilerek düşürüldü");
+    };
+    // ⚠️ `create` FIRLATIRSA bölüm ÇÖKMEMELİ: hata yakalanır ve ayrı bir
+    // kontrole dönüştürülür. Aksi halde "yutma kaldırıldı" sondası ❌ bile
+    // basmadan süreci öldürürdü (bu dosyanın başındaki SONDA FİXTURE DERSİ'nin
+    // aynısı — en sessiz kırmızı). Ölçüldü: sonda ④ önce tam böyle davrandı.
+    let brokenRes: Awaited<ReturnType<typeof paymentService.create>> | null = null;
+    let brokenThrow = "";
+    try {
+      brokenRes = await paymentService.create({
+        direction: "IN",
+        method: "CASH",
+        customerId: brokenCustomer.id,
+        currency: "TRY",
+        amount: 250,
+        cashBoxId,
+      });
+    } catch (e) {
+      brokenThrow = (e as Error).message;
+    } finally {
+      svc.allocateBulk = realBulk;
+    }
+    check(
+      "§17f ⭐ Kapama patlasa da `create` FIRLATMADI (hata yutuldu)",
+      brokenRes !== null,
+      brokenThrow || "fırlatmadı",
+    );
+    // Kayıt, yanıttan BAĞIMSIZ olarak cari üzerinden aranır: tx kanca
+    // çalışmadan ÖNCE commit ettiği için satır her hâlükârda vardır ve
+    // "fırlattı" senaryosunda da ölçülebilir olmalı.
+    const brokenRow = await prisma.payment.findFirst({
+      where: { cariId: brokenCari.id },
+      select: { id: true, status: true, amount: true },
+    });
+    if (brokenRow) paymentIds.push(brokenRow.id);
+    check(
+      "§17f2 ⭐ TAHSİLAT KAYDI yazıldı ve ACTIVE (para kaybolmadı)",
+      brokenRow?.status === "ACTIVE" && D(brokenRow.amount).equals(250),
+      brokenRow ? `${brokenRow.status}/${brokenRow.amount}` : "kayıt yok",
+    );
+    check("§17f3 Kapama satırı doğmadı", brokenRow ? (await allocCount(brokenRow.id)) === 0 : false);
+    check("§17f4 Fatura dokunulmadı", (await invoiceCounters(brokenInv)).paid.isZero());
+    check(
+      "§17f5 SESSİZ DEĞİL: mesaj başarısızlığı söylüyor ve yol gösteriyor",
+      /Otomatik kapama YAPILAMADI/.test(brokenRes?.message ?? "") &&
+        /Fatura Kapama/.test(brokenRes?.message ?? ""),
+      brokenRes?.message ?? `(fırlattı: ${brokenThrow})`,
+    );
+
+    // ── §17g ÜRETİLEN TAHSİS NORMAL TAHSİSTİR: elle silinebilir ──────────
+    const firstAuto = await prisma.paymentAllocation.findFirstOrThrow({
+      where: { paymentId: fifoPay.id, invoiceId: invOld },
+      select: { id: true },
+    });
+    const undone = await paymentAllocationService.deallocate(firstAuto.id);
+    check("§17g Otomatik kapama elle ÇÖZÜLDÜ ('sistem yaptı' kilidi yok)", undone.data.amount === "300");
+    check("§17g2 Fatura yeniden açıldı", (await invoiceCounters(invOld)).paid.isZero());
+    check("§17g3 Tahsilat sayacı düştü (900 → 600)", (await paymentAllocated(fifoPay.id)).equals(600));
+
+    // ── §17h REPLAY KANCAYI İKİNCİ KEZ ÇALIŞTIRMAZ (I2 sözleşmesi) ───────
+    // Aynı `clientToken` ile ikinci istek cached yanıtla ERKEN döner; kanca
+    // yapısal olarak o yola hiç ulaşmaz. Ulaşsaydı hem replay yanıtı ayırt
+    // edilir hale gelir hem de aynı tahsilat ikinci kez dağıtılmaya çalışılırdı.
+    const rplToken = crypto.randomUUID();
+    const rplInv = await makeInvoice({ customerId: autoCustomer.id, total: 100 });
+    const first = await pay(100, rplToken);
+    const firstCount = await allocCount(first.id);
+    const second = await pay(100, rplToken);
+    check("§17h Replay AYNI kaydı döndü", second.id === first.id);
+    check(
+      "§17h2 Replay yanıtı cached sözleşmeyi koruyor (ek özet YOK)",
+      second.message === "Kayıt zaten oluşturulmuş.",
+      second.message,
+    );
+    check(
+      "§17h3 Kapama İKİNCİ KEZ denenmedi (satır sayısı sabit)",
+      (await allocCount(first.id)) === firstCount && firstCount === 1,
+      `önce=${firstCount} sonra=${await allocCount(first.id)}`,
+    );
+    // ⚠️ Körlük zemini bilerek ÇÖZÜLEN fatura üzerinden kurulur: §17g'de elle
+    // açılan `invOld` (vadesi 30 gün geçmiş) sıranın BAŞINA geri döner, yeni
+    // kesilen `rplInv` (vadesiz, bugün) sonda kalır. İlk yazımda zemin
+    // `rplInv`e bakıyordu ve KIRMIZI verdi — test yanlıştı, kod değil: FIFO
+    // doğru davranıp parayı en eski borca yazmıştı.
+    check(
+      "§17h4 KÖRLÜK ZEMİNİ: ilk istek kapama yazdı — ÇÖZÜLEN en eski fatura sıranın BAŞINA döndü",
+      (await invoiceCounters(invOld)).paid.equals(100),
+      (await invoiceCounters(invOld)).paid.toString(),
+    );
+    check(
+      "§17h5 Bugün kesilen vadesiz fatura sırada BEKLİYOR (FIFO atlamadı)",
+      (await invoiceCounters(rplInv)).paid.isZero(),
+    );
+
+    // Bayrağı bu bölümden sonra KAPAT — §16 mutabakatı bayraktan bağımsız
+    // olmalı ve sonraki bölümler bugünkü varsayılanla koşsun.
+    await setSetting(AUTO_FLAG_KEY, false);
+  }
+
   // ── §16 MUTABAKAT (TÜM DB) ───────────────────────────────────────────────
   // Üç sayacın da kapama satırlarıyla birebir olması gerekir. Bu, C2'nin
   // `test_consistency`ye taşınacak çekirdeğidir: sayaçlar defterden bağımsız
@@ -1304,6 +1673,9 @@ main()
     // RESTRICT. Kapama satırları önce silinmezse fatura silinemez ve bekçi bir
     // sonraki koşuda "TAG zaten var" ile çöker.
     try {
+      // Bayrakları fotoğrafına geri döndür — kayıt silinmeden ÖNCE, çünkü
+      // aşağıdaki silmeler patlarsa bile ayar ortamda kirli kalmamalı.
+      await restoreSettings();
       if (invoiceIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { invoiceId: { in: invoiceIds } } });
       if (paymentIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { paymentId: { in: paymentIds } } });
       if (chequeIds.length > 0) await prisma.paymentAllocation.deleteMany({ where: { chequeId: { in: chequeIds } } });

@@ -34,11 +34,43 @@
 //       SABİTLENİR; `clientToken` ve çıplak iç FK'ler (cariId/shipmentId/
 //       createdById…) yanıtta GEZMEZ. Alan düşürme sessizdir (ekran boş basar,
 //       hata vermez) — bu bölüm onu kırmızıya bağlar.
+//
+// ── J1 DALGA 2: DÖRT FATURA BAYRAĞI (2026-08-15) ────────────────────────────
+//   §14 ⭐ BAYRAK KAPALI PARİTESİ — İLK KONTROL. Dördü de kapalıyken bugünkü
+//       davranış BAYT-BAYT: ileri tarihli taslak açılır · risk limiti aşan onay
+//       geçer · sıfır fiyat AYNI MESAJLA reddedilir · iplik satırı stok
+//       hareketi DOĞURMAZ. Parite düşerse geri kalan her şey tartışmasız yanlış.
+//   §15 RİSK LİMİTİ (finance.riskLimitBlockEnabled): limit aşımında SATIŞ onayı
+//       409 (mesaj somut: limit + bakiye + tutar + "Cari Kartından"), reddedilen
+//       onay İZ BIRAKMAZ, bakiye BİRİKİMİ hesaba katılır; MUAF: limitsiz cari ·
+//       ALIŞ faturası · İADE · iptal. + ⭐ TOCTOU (2 paralel onay → TAM BİRİ).
+//   §16 SIFIR FİYAT (finance.allowZeroPriceLineEnabled): açıkken 0'lı satırla
+//       onay geçer ve defter satırı DOĞRU (0 katkılı); NEGATİF fiyat açıkken de
+//       reddedilir (pazarlık dışı).
+//   §17 İPLİK DÜŞÜMÜ (finance.yarnOutOnInvoiceEnabled): satış onayı YARN
+//       satırlarını varsayılan depodan düşer (aynı kalemin iki satırı TEK
+//       harekete iner), FABRIC/serbest satır etkilenmez, ALIŞ muaf; iptal ters
+//       kayıtla geri yazar ve ⭐ TERS KAYIT BAYRAKTAN BAĞIMSIZDIR (bayrak
+//       kapatıldıktan sonra da çalışır — yoksa mal stokta hiç geri gelmezdi);
+//       varsayılan depo yoksa FAIL-CLOSED.
+//   §18 İLERİ TARİHLİ BELGE (finance.futureDatedDocumentBlockEnabled): kapı
+//       TASLAKTADIR; sınır FABRİKA GÜNÜ SONUDUR (bugünün 23:59'u geçer, yarının
+//       00:00'ı reddedilir — "saat" değil "gün" kuralı) ve clientToken REPLAY'i
+//       muaftır.
+//
+// NEGATİF SONDALAR (2026-08-15, boz-ölç-geri yükle cp+shasum TEK zincirde):
+//   • `assertRiskLimitTx` gövdesi no-op'a çevrilince → §15 kırmızı.
+//   • Sıfır-fiyat dalı tek `lte(0)` kontrolüne geri sarılınca → §16a kırmızı.
+//   • `reverseInvoiceYarnTx` bayrak koşuluna bağlanınca → §17f kırmızı
+//     (bayraktan bağımsızlık sondası — özelliğin en sessiz kaybı).
+//   • `assertNotFutureDatedTx` çağrısı `createDraft`ten silinince → §18 kırmızı.
 // =============================================================================
-import { Prisma, InvoiceStatus } from "@prisma/client";
+import { Prisma, InvoiceStatus, YarnMovementKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { invoiceService } from "../src/services/invoice.service";
 import { computeInvoiceTotals, D } from "../src/services/helpers/finance.helper";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
+import { factoryDayStart } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -66,6 +98,83 @@ const LINES = [
 ];
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+// ── J1 dalga 2 fixture'ları ───────────────────────────────────────────────────
+const itemIds: string[] = [];
+const yarnItemIds: string[] = [];
+let createdWarehouseId: string | null = null;
+/** Fail-closed sondasında geçici olarak `isDefault=false` yapılan depo. */
+let unsetDefaultWarehouseId: string | null = null;
+
+const FLAG = {
+  risk: SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_ENABLED,
+  zero: SETTING_KEYS.FINANCE_ALLOW_ZERO_PRICE_LINE_ENABLED,
+  future: SETTING_KEYS.FINANCE_FUTURE_DATED_DOCUMENT_BLOCK_ENABLED,
+  yarn: SETTING_KEYS.FINANCE_YARN_OUT_ON_INVOICE_ENABLED,
+} as const;
+
+/** Bayrağın testten ÖNCEKİ hâli — cleanup birebir geri yükler. */
+const priorFlags = new Map<string, { existed: boolean; value: Prisma.JsonValue }>();
+
+/**
+ * Ayarı doğrudan yazmak BİLİNÇLİ: enforcement reader cache'siz olduğu için
+ * anında etkilidir; HTTP/route/panel sözleşmesini `test_feature_flag_contract`
+ * ölçer (dört kapının bekçisi orası, davranışın bekçisi burası).
+ */
+async function setFlag(key: string, on: boolean): Promise<void> {
+  if (!priorFlags.has(key)) {
+    const row = await prisma.systemSetting.findUnique({ where: { key }, select: { value: true } });
+    priorFlags.set(key, { existed: row != null, value: row?.value ?? null });
+  }
+  await prisma.systemSetting.upsert({ where: { key }, create: { key, value: on }, update: { value: on } });
+}
+
+/** Dördünü birden kapat — bölümler birbirinin bayrağını miras almasın. */
+async function allFlagsOff(): Promise<void> {
+  for (const key of Object.values(FLAG)) await setFlag(key, false);
+}
+
+async function errOf(fn: () => Promise<unknown>): Promise<string> {
+  try {
+    await fn();
+    return "";
+  } catch (e) {
+    return (e as Error).message;
+  }
+}
+
+/** Risk limiti olan (ya da olmayan) taze bir müşteri carisi. */
+async function makeCari(suffix: string, riskLimit: string | null): Promise<{ customerId: string; cariId: string }> {
+  const c = await prisma.customer.create({
+    data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}` },
+    select: { id: true },
+  });
+  const cari = await prisma.cariAccount.create({
+    data: { kind: "CUSTOMER", customerId: c.id, riskLimit: riskLimit ? new Prisma.Decimal(riskLimit) : null },
+    select: { id: true },
+  });
+  extraCustomerIds.push(c.id);
+  cariIds.push(cari.id);
+  return { customerId: c.id, cariId: cari.id };
+}
+
+const extraCustomerIds: string[] = [];
+
+async function balanceOfCari(id: string): Promise<Prisma.Decimal> {
+  const b = await prisma.cariBalance.findUnique({
+    where: { cariId_currency: { cariId: id, currency: "TRY" } },
+    select: { balance: true },
+  });
+  return D(b?.balance ?? 0);
+}
+
+async function yarnBalance(itemId: string, warehouseId: string): Promise<Prisma.Decimal> {
+  const s = await prisma.yarnStock.findUnique({
+    where: { itemId_warehouseId: { itemId, warehouseId } },
+    select: { balanceKg: true },
+  });
+  return D(s?.balanceKg ?? 0);
+}
 
 /** §12 yarış sondası — pencereyi elle açık tutmak için (goods_receipt_invoice §10 emsali). */
 function deferred<T = void>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e?: unknown) => void } {

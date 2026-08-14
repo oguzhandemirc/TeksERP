@@ -21,7 +21,11 @@ import {
 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import { renderPaymentReceiptHtml, type PaymentReceiptDoc } from "./document-render/finance-doc.html";
-import { releaseAllocationsForPaymentTx } from "./payment-allocation.service";
+import { releaseAllocationsForPaymentTx, autoAllocatePaymentFifo } from "./payment-allocation.service";
+import {
+  readFinanceEnabled,
+  readFinanceAutoAllocateOnPaymentEnabled,
+} from "./system-setting.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
@@ -41,6 +45,65 @@ export interface CreatePaymentInput {
   reference?: string | null;
   notes?: string | null;
   clientToken?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// OTOMATİK FIFO KAPAMA KANCASI — `finance.autoAllocateOnPaymentEnabled`
+// -----------------------------------------------------------------------------
+/**
+ * Kayıt BAŞARILI olduktan SONRA çalışan ayrı adım; yanıt mesajına eklenecek
+ * özet cümleyi döner (bayrak kapalıysa boş string → mesaj bayt-bayt bugünkü).
+ *
+ * ⚠️ TX'İN DIŞINDA ve HATASI YUTULUR — tahsilat ASLA kapama yüzünden düşmez.
+ * Para el değiştirdi; "hangi faturaya sayılacağı" ikinci bir sorudur ve yanlış
+ * cevabı düzeltilebilir (kapama elle çözülür), oysa kaydın hiç yazılmaması
+ * düzeltilemez. Aynı gerekçe `financeAutoDraftFromShipmentEnabled` JSDoc'unda
+ * da yazılı ("taslak üretimi başarısız olursa sevk DÜŞMEZ").
+ *
+ * ⚠️ YUTMAK ≠ SUSMAK: başarısızlık hem audit'e yazılır hem de mesajda operatöre
+ * söylenir ve yol gösterilir. Sessiz yutma, tam da "kapandı sanıp bir daha
+ * bakmama" davranışını üretirdi.
+ *
+ * ⚠️ REPLAY YOLLARINDA ÇAĞRILMAZ ve bu YAPISAL: `clientToken` ile gelen ikinci
+ * istek `create`'in başındaki (ya da P2002 catch'indeki) cached yanıtla ERKEN
+ * döner, buraya hiç ulaşmaz. Ulaşsaydı aynı tahsilat ikinci kez dağıtılmaya
+ * çalışılır ve I2 sözleşmesi ("replay yanıtı BİREBİR aynı") bozulurdu.
+ *
+ * ⚠️ BAYRAK SIRASI: önce ÖZEL bayrak, sonra modül şalteri. İkisi de gerekli;
+ * özel olan önce okunur ki dokunulmamış kurulumda (varsayılan KAPALI) toplam
+ * maliyet TEK `system_settings` SELECT'i olsun.
+ */
+async function autoAllocateNoteAfterPayment(
+  paymentId: string,
+  currency: Currency,
+  userId?: string,
+): Promise<string> {
+  if (!(await readFinanceAutoAllocateOnPaymentEnabled())) return "";
+  if (!(await readFinanceEnabled())) return "";
+
+  try {
+    const summary = await autoAllocatePaymentFifo(paymentId, userId);
+    if (summary.count === 0) return "";
+    const leftover = summary.leftover.gt(0)
+      ? ` Kalan ${summary.leftover.toFixed(2)} ${currency} avans olarak açıkta.`
+      : "";
+    return (
+      ` ${summary.count} faturaya otomatik kapandı (${summary.total.toFixed(2)} ${currency}).${leftover}` +
+      ` Kapamalar Fatura Kapama ekranından çözülebilir; otomasyon: Ayarlar → Muhasebe → Otomasyon.`
+    );
+  } catch (e) {
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "PAYMENT",
+      recordId: paymentId,
+      newData: { event: "AUTO_ALLOCATE_FAILED", error: (e as Error).message },
+    });
+    return (
+      " Otomatik kapama YAPILAMADI (tahsilat/ödeme kaydedildi) —" +
+      " kapamayı Fatura Kapama ekranından elle yapabilirsiniz."
+    );
+  }
 }
 
 export class PaymentService {
@@ -246,10 +309,12 @@ export class PaymentService {
       recordId: result.id,
       newData: { docNo: result.docNo, direction: input.direction, amount: amount.toString() },
     });
+    // Otomatik FIFO kapama — kaydın DIŞINDA, ayrı adım (yukarıdaki nota bak).
+    const autoNote = await autoAllocateNoteAfterPayment(result.id, currency, userId);
     return {
       success: true,
       data: result,
-      message: `${result.docNo} kaydedildi.`,
+      message: `${result.docNo} kaydedildi.${autoNote}`,
     };
   }
 

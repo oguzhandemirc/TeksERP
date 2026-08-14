@@ -158,7 +158,19 @@ dönem kapanışı zorunluluğu · transfer IN_TRANSIT (bayrak değil ikinci ya�
 çok-depo bayrağı (veriden türetiliyor) · aging kova günleri (rapor sözleşmesi) ·
 kapama yön kuralı (ekonomik anlam).
 
-### J — Karar bekleyenler (efor karardan sonra)
+### J — Kararlar VERİLDİ (2026-08-15'e bağlanan gece, kullanıcı seçimi)
+
+> **Yapılacak (onaylı):** tam stok sayımı belgesi · mutabakat mektubu + donmuş
+> çek bordrosu · fatura detay sayfası · top→sipariş kalemi izi · kur farkı
+> (öne alındı) · bayrak backlog'unun 4 grubu da (J1 dalgasında uygulanıyor).
+> **TR-only KARARI:** arayüz bilinçli Türkçe kalır — hedef pazar Türk tekstil
+> firmaları; yabancı müşteri doğarsa sınırlı ticaret sözlüğü o gün planlanır
+> (bkz. aşağıdaki i18n maddesi, artık KARAR VERİLDİ durumunda).
+> **Beklemede:** mobil mal kabul (plan gereği) · e-Belge/dış muhasebe (SaaS
+> ufkuyla). Model düzeni: J yazıcıları OPUS (kullanıcının oturum-limiti
+> uyarısı); Fable yalnız ana oturum orkestrasyon + hassas diff incelemesi.
+
+### J — Karar bekleyenler (ARŞİV — kararlar yukarıda)
 
 - **i18n** — TR sabit (grep: 0 i18n). Yabancı demo yakın değilse "TR-only, bilinçli" notu (0,25g); gerekiyorsa önce YALNIZ ticaret yüzeyleri sözlüğe (~5g+ ve sürekli bakım borcu).
 - **Kur farkı** (dövizli kapama) — bilinçli kapsam dışı, üç katmanda belgeli; dövizli tahsilat hacmi doğunca ~2-3g.

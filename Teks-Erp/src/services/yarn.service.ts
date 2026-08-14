@@ -20,6 +20,11 @@
 // "bakiye yetmiyor" diye reddetmek sahayı durdurur (mal fiziksel olarak elde,
 // eksik olan KAYIT); sıfıra kırpmak ise eksiği gizleyip envanteri sessizce
 // yanlışlar — ikisi de yanlış cevaptır. Doğru cevap: YAZ ve UYAR.
+//   ⚠️ BU VARSAYILAN DEĞİŞMEDİ. Üstüne OPT-IN bir kapı kondu:
+//   `yarn.blockNegativeBalanceEnabled` AÇIKKEN yalnız `OUT` reddedilir
+//   (`ADJUST_OUT` = sayım düzeltmesi + storno MUAF). Tek yüklem:
+//   `helpers/yarn-balance-guard.helper.assertYarnBalanceCoversTx`, ve
+//   `applyYarnMovementTx`in İÇİNDEN çağrılır — çağıran bazlı değil.
 //
 // ⚠️ SATIR SİLİNMEZ/DÜZELTİLMEZ: yanlış giriş TERS KAYITLA kapatılır
 // (`ADJUST_OUT` / `ADJUST_IN`). Defter felsefesi cari/kasa ile aynı — geçmişi
@@ -37,6 +42,7 @@ import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import type { ApiResponse } from "../types/api.types";
 
@@ -148,6 +154,20 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
     // operatör ham PG mesajı yerine ne yaptığını anlatan bir cümle görsün.
     throw AppError.badRequest("İplik hareketi miktarı sıfırdan büyük olmalı (yön `kind` ile verilir).");
   }
+
+  // ⚠️ EKSİ BAKİYE ENGELİ (opt-in `yarn.blockNegativeBalanceEnabled`) — TEK
+  // YAZAR kapısının İÇİNDE, her iki yazımdan da ÖNCE. Çağıran bazlı olsaydı
+  // yarın eklenen beşinci çağıran guard'ı yazmayı unutur ve eksi bakiye tam
+  // ondan sızardı; burada "yeni çağıran guard'sız doğamaz". Bayrak kapalıyken
+  // ve `OUT` dışındaki türlerde tek ek sorgu bile koşmaz (sıra load-bearing —
+  // gerekçe helper başlığında). Muafiyet: `ADJUST_OUT` = sayım düzeltmesi +
+  // belge stornosu; guard oraya GENİŞLETİLMEZ (test_yarn_stock §10).
+  await assertYarnBalanceCoversTx(tx, {
+    itemId: input.itemId,
+    warehouseId: input.warehouseId,
+    kind: input.kind,
+    qtyKg: qty,
+  });
 
   const movement = await tx.yarnMovement.create({
     data: {

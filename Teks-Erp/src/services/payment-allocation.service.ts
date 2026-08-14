@@ -1038,3 +1038,134 @@ export class PaymentAllocationService {
 }
 
 export const paymentAllocationService = new PaymentAllocationService();
+
+// -----------------------------------------------------------------------------
+// OTOMATİK FIFO KAPAMA — `finance.autoAllocateOnPaymentEnabled` (dalga 2)
+// -----------------------------------------------------------------------------
+// ⚠️ BU FONKSİYON KURAL YAZMAZ, MEVCUT YOLU ÇAĞIRIR. Aday süzgeci (aynı cari ·
+// aynı para birimi · yön · CONFIRMED · açık > 0), FIFO sırası (efektif vade =
+// `dueDate ?? issueDate`) ve dağıtım aritmetiği ZATEN `listOpenInvoices` +
+// `suggestFifo`'da yaşıyor; yazım tarafı ZATEN `allocateBulk`'ta. Burada ikinci
+// bir formül yazmak, elle kapama ekranıyla otomatiğin bir gün AYRI cevaplar
+// vermesi demekti — ve fark tam da kimsenin bakmadığı yerde (gece kaydedilen
+// tahsilat) doğardı.
+//
+// ⚠️ TX'İN DIŞINDA, AYRI ADIM: tahsilat ASLA kapama yüzünden düşmez. Para el
+// değiştirdi ve kaydı yazıldı; hangi faturaya sayılacağı ikinci bir sorudur ve
+// yanlış/eksik cevabı düzeltilebilir (kapama elle çözülür), oysa kaydın hiç
+// yazılmaması düzeltilemez. Bu yüzden çağıran hatayı YUTAR (bkz. payment.service).
+//
+// ⚠️ HEPSİ-YA-HİÇ (allocateBulk'ın sözleşmesi) BURADA DA DOĞRUDUR: okuma ile
+// yazım arasında bir fatura elle kapanırsa TÜM otomatik dağıtım geri sarılır ve
+// hiçbir satır yazılmaz. Yarısını yazmak, kullanıcının hiç istemediği bir
+// dağıtımı kalıcı yapardı; kaybedilen şey yalnız otomasyonun o turudur.
+
+/** Otomatik kapamanın sonucu — çağıran yanıt mesajını bundan kurar. */
+export interface AutoAllocateSummary {
+  /** Yazılan kapama satırı sayısı (0 = yapacak iş yoktu ya da aday yok). */
+  count: number;
+  /** Kapatılan toplam tutar (tahsilatın para biriminde). */
+  total: Prisma.Decimal;
+  /** Kapamaya girmeyen artan tutar — AVANS olarak açıkta kalır. */
+  leftover: Prisma.Decimal;
+  /** Kapatılan faturaların belge numaraları (audit/mesaj için). */
+  invoiceDocNos: string[];
+}
+
+const EMPTY_AUTO_ALLOCATE: AutoAllocateSummary = {
+  count: 0,
+  total: D0(),
+  leftover: D0(),
+  invoiceDocNos: [],
+};
+
+/**
+ * Bir tahsilatın/ödemenin KAPAMAYA KALAN tutarını en eski açık faturalara FIFO
+ * dağıtır. Bayrağı ÇAĞIRAN okur (payment.service) — bu fonksiyon saf mekanizmadır.
+ *
+ * ⚠️ ÜRETİLEN SATIRLAR NORMAL KAPAMA SATIRLARIDIR: `notes` BOŞ bırakılır ve
+ * "otomatik" olduğunu söyleyen hiçbir kolon/işaret yazılmaz. Sebebi tersinden:
+ * satıra "Otomatik kapama" metni yazsaydık, bir gün biri o metne göre süzen kod
+ * yazardı ("otomatikleri toplu çöz") ve serbest metin sessizce bir DAVRANIŞ
+ * ANAHTARINA dönüşürdü. Provenance'ın yeri audit'tir (aşağıdaki kayıt), satırın
+ * kendisi değil — ve satır elle silinebilir kalır ("sistem yaptı" diye kilit yok).
+ *
+ * @returns Yazılan kapamaların özeti; yapacak iş yoksa sıfırlı özet.
+ */
+export async function autoAllocatePaymentFifo(
+  paymentId: string,
+  userId?: string,
+): Promise<AutoAllocateSummary> {
+  const p = await prisma.payment.findUnique({
+    where: { id: paymentId },
+    select: {
+      id: true,
+      docNo: true,
+      status: true,
+      direction: true,
+      cariId: true,
+      currency: true,
+      amount: true,
+      allocatedTotal: true,
+    },
+  });
+  // Kayıt yok / bu arada iptal edildi → sessiz sıfır. Otomasyon bir KULLANICI
+  // KOMUTU değildir; olmayan bir şey için fırlatmak, çağıranın zaten yuttuğu bir
+  // hatayı gürültüye çevirirdi.
+  if (!p || p.status !== PaymentStatus.ACTIVE) return EMPTY_AUTO_ALLOCATE;
+
+  // Kalan = tutar − zaten bağlanmış. Yeni kayıtta `allocatedTotal` 0'dır; çıkarma
+  // yine de yapılır, çünkü fonksiyon kısmen bağlanmış bir tahsilat için elle de
+  // çağrılabilir ve o durumda tutarın tamamını dağıtmak aşım 409'u üretirdi.
+  const free = D(p.amount).minus(D(p.allocatedTotal));
+  if (free.lte(0)) return EMPTY_AUTO_ALLOCATE;
+
+  // Aday listesi + FIFO önerisi TEK KAYNAK: kapama ekranının gördüğü liste.
+  // `direction` süzgeci yön kuralının (IN↔SALES, OUT↔PURCHASE) aynasıdır;
+  // `currency` eşitliği farklı para birimli faturayı ATLAR (kur farkı kararı
+  // otomatikleştirilmez — bayrak JSDoc'unun MUAF satırı).
+  const open = await paymentAllocationService.listOpenInvoices({
+    cariId: p.cariId,
+    currency: p.currency,
+    direction: p.direction,
+    amount: free,
+  });
+
+  const items = open.data
+    .map((row) => ({ invoiceId: row.id, docNo: row.docNo, amount: D(row.suggested ?? 0) }))
+    .filter((it) => it.amount.gt(0));
+  if (items.length === 0) return EMPTY_AUTO_ALLOCATE;
+
+  await paymentAllocationService.allocateBulk(
+    {
+      paymentId: p.id,
+      items: items.map((it) => ({ invoiceId: it.invoiceId, amount: it.amount, notes: null })),
+    },
+    userId,
+  );
+
+  const total = items.reduce((acc, it) => acc.plus(it.amount), D0());
+  void AuditService.log({
+    userId,
+    action: "CREATE",
+    tableName: "PAYMENT_ALLOCATION",
+    recordId: p.id,
+    newData: {
+      event: "AUTO_ALLOCATE_ON_PAYMENT",
+      paymentDocNo: p.docNo,
+      count: items.length,
+      total: total.toString(),
+      leftover: free.minus(total).toString(),
+      invoiceDocNos: items.map((it) => it.docNo),
+    },
+  });
+
+  return {
+    count: items.length,
+    total,
+    // Artan tutar hiçbir faturaya yazılmaz: AVANS'tır. Buraya "kalanı da bir
+    // yere say" mantığı eklemek, olmayan bir borç uydurmak olurdu.
+    leftover: free.minus(total),
+    invoiceDocNos: items.map((it) => it.docNo),
+  };
+}
