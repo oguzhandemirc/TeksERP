@@ -74,6 +74,12 @@ const DATE_ONLY_FIELDS = new Set([
   // Kur bir TAKVİM GÜNÜ anahtarıdır, an değil: timestamptz olsaydı gün sınırı
   // saat dilimine bağlanır ve "13 Ağustos kuru" iki satıra düşebilirdi.
   "ExchangeRate.rateDate",
+  // Dönem kapanışının bitiş günü de bir TAKVİM GÜNÜ anahtarıdır ("2025 Aralık
+  // kapanışı"), an değil — üstelik `cari_period_close_active_uq` partial
+  // unique'inin PARÇASI. Timestamptz olsaydı aynı kapanış, saat dilimine göre
+  // iki farklı anahtara düşüp benzersizlik seddini sessizce delerdi
+  // (`ExchangeRate.rateDate` ile birebir aynı gerekçe).
+  "CariPeriodClose.periodEnd",
 ]);
 
 // Prisma'nın kendi defteri — bizim şemamız değil, zaten timestamptz.

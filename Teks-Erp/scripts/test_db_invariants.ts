@@ -191,6 +191,32 @@ const PARTIAL_INDEXES: Array<{
   { table: "cash_transactions", index: "cash_txn_one_opening_per_bank", uniq: true, predicate: `((kind = 'OPENING'::"CashTxnKind") AND ("bankAccountId" IS NOT NULL) AND (status <> 'CANCELLED'::"PaymentStatus"))`, why: "banka hesabı başına tek açılış" },
   { table: "cari_accounts", index: "cari_accounts_customerId_key", uniq: true, predicate: `("customerId" IS NOT NULL)`, why: "müşteri başına tek cari; NULL'lar (fason cariler) girmez" },
   { table: "cari_accounts", index: "cari_accounts_subcontractorId_key", uniq: true, predicate: `("subcontractorId" IS NOT NULL)`, why: "fason başına tek cari; NULL'lar (müşteri cariler) girmez" },
+  // ticaret paketi — çek/senet portföyü (migration 20260814101000)
+  { table: "cheques", index: "cheques_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  // ticaret paketi — fatura kapama (migration 20260814102000)
+  // ⚠️ AÇIK FATURA yolu. Predicate LOAD-BEARING ve iki işi var: (1) kapanmış +
+  // iptal edilmiş faturalar indekse hiç girmez → index cironun değil AÇIK
+  // BAKİYENİN büyüklüğünde kalır; (2) predicate düşerse yaşlandırma raporu
+  // sessizce tüm fatura geçmişini tarar (sonuç doğru, sorgu yıllar içinde
+  // yavaşlar — hata da log da yok).
+  {
+    table: "invoices",
+    index: "invoices_open",
+    uniq: false,
+    predicate: `((status = 'CONFIRMED'::"InvoiceStatus") AND ("paidTotal" < "grandTotal"))`,
+    why: "açık fatura taraması (yaşlandırma + kapama ekranı) — kapanan satırlar indeksten düşer",
+  },
+  // ticaret paketi — cari dönem kapanışı (migration 20260814103000)
+  // ⚠️ PARTIAL olması ZORUNLU: reopen satırı SİLMEZ, işaretler. Düz unique
+  // olsaydı yeniden açılan dönem BİR DAHA kapatılamazdı (eski satır anahtarı
+  // tutmaya devam eder, ikinci kapanış P2002 alırdı).
+  {
+    table: "cari_period_closes",
+    index: "cari_period_close_active_uq",
+    uniq: true,
+    predicate: `("reopenedAt" IS NULL)`,
+    why: "cari+para birimi+dönem başına TEK AKTİF kapanış; yeniden açılanlar anahtarı bırakır",
+  },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
   // swatch_stock_reductions
@@ -273,6 +299,30 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   { table: "cash_transactions", name: "cash_txn_cancel_stamp" },
   // Alış fiyatı negatif olamaz (0 meşru: bedelsiz numune).
   { table: "rolls", name: "rolls_purchase_price_nonneg" },
+  // 2026-08-14 — çek/senet portföyü (migration 20260814101000_cheque_portfolio).
+  { table: "cheques", name: "cheques_amount_positive" },
+  { table: "cheques", name: "cheques_rate_positive" },
+  // ⚠️ CİRO TUTARLILIĞI — planın yazdığı KATI çift-yönlü eşitlik
+  // (`status='ENDORSED'` ⇔ `endorsedToCariId IS NOT NULL`) BİLİNÇLİ OLARAK
+  // uygulanmadı, çünkü planın KENDİ kuralıyla çelişiyordu: "BOUNCE → ENDORSED'dan
+  // geldiyse ciro carisine ters CREDIT". Ciro edilmiş çek karşılıksız çıkınca
+  // durum BOUNCED olur ama ters kaydın kime yazılacağı hâlâ BİLİNMEK ZORUNDA.
+  // Korunan iki yarı: ENDORSED ciro carisiz olamaz + canlı/ciro edilmemiş çek
+  // (PORTFOLIO/AT_BANK/ISSUED) sahte ciro izi taşıyamaz.
+  { table: "cheques", name: "cheques_endorsed_cari" },
+  // Olay satırı kasa VEYA banka taşır, ikisi birden değil ("en çok bir" —
+  // olayların çoğu hiçbir hesaba dokunmaz). payments_account_xor ile aynı gerekçe.
+  { table: "cheque_events", name: "cheque_events_account_not_both" },
+  // 2026-08-14 — fatura kapama (migration 20260814102000_payment_allocation).
+  { table: "payment_allocations", name: "payment_allocations_source_xor" },
+  { table: "payment_allocations", name: "payment_allocations_amount_positive" },
+  // ⚠️ SAYAÇ SEDDLERİ — `Order.shippedQty` dersinin (seddi OLMAYAN denormalize
+  // alan, drift'i yıllarca görünmez) muhasebe karşılığı. Üst sınır DB'de kilitli
+  // olduğu için "tutarından fazla kapanmış fatura" satırı YAZILAMAZ; bu üçü
+  // düşerse kapama sayaçları sessizce gerçeğin üstüne çıkabilir.
+  { table: "invoices", name: "invoices_paid_total_range" },
+  { table: "payments", name: "payments_allocated_total_range" },
+  { table: "cheques", name: "cheques_allocated_total_range" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

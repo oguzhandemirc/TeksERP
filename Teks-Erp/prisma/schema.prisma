@@ -4510,6 +4510,17 @@ model CariAccount {
   invoices     Invoice[]
   payments     Payment[]
 
+  /// Çek/senet (C1) — üç ayrı rol, üç ayrı ilişki:
+  ///   `cheques`         : bu cariden ALINAN / bu cariye VERİLEN çekler
+  ///   `endorsedCheques` : bu cariye CİRO EDİLEN çekler (borcumuzu çekle kapattık)
+  ///   `chequeEvents`    : olay defterinde karşı taraf olarak geçtiği satırlar
+  cheques         Cheque[]      @relation("ChequeCari")
+  endorsedCheques Cheque[]      @relation("ChequeEndorsedTo")
+  chequeEvents    ChequeEvent[] @relation("ChequeEventCounterCari")
+
+  /// Dönem kapanışları (C3) — ekstrenin DEVİR satırının kaynağı.
+  periodCloses CariPeriodClose[]
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -4594,6 +4605,19 @@ model Invoice {
   /// TL karşılığı — rapor toplamları tek para biriminde okunabilsin diye.
   grandTotalTry Decimal @default(0) @db.Decimal(14, 2)
 
+  /// KAPANAN TUTAR (C2) — `PaymentAllocation` satırlarının denormalize toplamı.
+  ///
+  /// ⚠️ AÇIK/KISMİ/KAPALI DURUMU AYRI BİR KOLON DEĞİLDİR: `paidTotal` ile
+  /// `grandTotal` KARŞILAŞTIRILARAK türetilir. İki denormalize alan (tutar +
+  /// durum) bir gün birbirinden ayrışır ve o gün "kapalı görünen ama parası
+  /// gelmemiş fatura" doğar; tek sayı + türetme ayrışamaz.
+  ///
+  /// ⚠️ Yazımı RAW ATOMİK SAYAÇTIR: `UPDATE ... SET "paidTotal" = "paidTotal" + $a
+  /// WHERE id = $i AND "paidTotal" + $a <= "grandTotal"` (Prisma `where`'i iki
+  /// kolonu karşılaştıramaz) + `count === 0` → 409. DB seddi ayrıca CHECK ile
+  /// kilitli; ikisi aynı şeyi iki katmanda söyler.
+  paidTotal Decimal @default(0) @db.Decimal(14, 2)
+
   /// KAYNAK BAĞLARI — typed nullable FK (polimorfik sourceType+sourceId DEĞİL:
   /// FK'siz bağ, kaynak silinince sessizce hayalet fatura bırakırdı).
   shipmentId             String? @db.Uuid
@@ -4621,10 +4645,17 @@ model Invoice {
 
   lines        InvoiceLine[]
   transactions CariTransaction[]
+  allocations  PaymentAllocation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  // AÇIK FATURA yolu (C2/C4 yaşlandırmasının tek sorgusu). DB'de PARTIAL'dır:
+  // `WHERE status = 'CONFIRMED' AND "paidTotal" < "grandTotal"` (migration
+  // 20260814102000). Şemada düz `@@index` bırakılır — Prisma 7 predicate farkını
+  // drift SAYMAZ ama index↔unique farkını SAYAR (perf kuralı 4).
+  // Kolon sırası: eşitlikler (cari, para birimi) önce, sıralama (vade) sonra.
+  @@index([cariId, currency, dueDate], map: "invoices_open")
   @@index([cariId, status, issueDate])
   @@index([type, status, issueDate])
   @@index([status, issueDate])
@@ -4674,12 +4705,42 @@ model InvoiceLine {
   @@map("invoice_lines")
 }
 
+/// Cari hareketin KAYNAĞI — ekstrede satırın "neden var olduğu".
+///
+/// ⚠️ ÇEK DEĞERLERİ SONA EKLENDİ (2026-08-14, migration 20260814100000). PG
+/// kuralı: `ALTER TYPE ... ADD VALUE` ile eklenen değer AYNI transaction içinde
+/// KULLANILAMAZ → kendi migration'ında gelirler (RUB / PrintedDocType emsali).
+///
+/// ÇEKİN DEFTER ANLARI (C1 kilitli kararı — Logo "Çek Giriş Bordrosu" davranışı):
+/// çek ALINDIĞI AN cari alacaklanır; müşteri çeki verdiğinde ticari olarak
+/// ödemiştir. Karşılıksız riski, kaydı GECİKTİRMENİN değil TERS KAYITLA geri
+/// almanın gerekçesidir (append-only felsefesi).
+///   • `CHEQUE_RECEIVE`  — müşteriden çek/senet alındı → müşteri CREDIT
+///   • `CHEQUE_ISSUE`    — kendi çekimiz/senedimiz verildi → cari DEBIT
+///   • `CHEQUE_ENDORSE`  — ciro → ciro edilen cariye DEBIT (tek olay, iki cari)
+///   • `CHEQUE_BOUNCE`   — karşılıksız → müşteriye DEBIT (+ ciro edilmişse ciro
+///     carisine ters CREDIT)
+///   • `CHEQUE_CANCEL`   — çek kaydının geri alınması: portföyden İADE (sahibine
+///     geri verildi) ve hatalı kaydın stornosu. `INVOICE_CANCEL`/`PAYMENT_CANCEL`
+///     konvansiyonunun aynısı; ekstrede olayın hangisi olduğunu `description`
+///     söyler. **`CHEQUE_BOUNCE` bunun içine KATLANMADI** çünkü "karşılıksız",
+///     muhasebecinin ekstrede aktif olarak ARADIĞI olaydır — iptalle aynı ada
+///     düşerse aranamaz hâle gelir.
+///
+/// ⚠️ TAHSİL (COLLECT) ve KENDİ ÇEKİMİZİN ÖDENMESİ (PAY) burada YOKTUR ve bu
+/// bilinçlidir: o anlarda yalnız banka/kasa bakiyesi oynar, cari İKİNCİ kez
+/// hareket görmez (görseydi aynı borç iki kez kapanmış sayılırdı).
 enum CariTxnSource {
   INVOICE
   INVOICE_CANCEL
   PAYMENT
   PAYMENT_CANCEL
   ADJUSTMENT
+  CHEQUE_RECEIVE
+  CHEQUE_ISSUE
+  CHEQUE_ENDORSE
+  CHEQUE_BOUNCE
+  CHEQUE_CANCEL
 }
 
 /// Cari hareket defteri — APPEND-ONLY.
@@ -4706,6 +4767,9 @@ model CariTransaction {
   sourceType  CariTxnSource
   invoiceId   String?       @db.Uuid
   paymentId   String?       @db.Uuid
+  /// Çek/senet kaynağı (C1). Diğer iki kaynak bağıyla aynı desen: polimorfik
+  /// sourceId DEĞİL, typed nullable FK — kaynak silinemez, hayalet satır doğmaz.
+  chequeId    String?       @db.Uuid
   description String?       @db.VarChar(300)
 
   createdById String? @db.Uuid
@@ -4713,12 +4777,17 @@ model CariTransaction {
   cari    CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
   invoice Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
   payment Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  cheque  Cheque?     @relation(fields: [chequeId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@index([cariId, currency, txnDate])
   @@index([invoiceId])
   @@index([paymentId])
+  // Bir çekin defterdeki tüm izleri (alış → ciro → karşılıksız zinciri) tek
+  // sorguda okunur. PARTIAL DEĞİL — komşu iki kaynak bağı da (invoiceId,
+  // paymentId) tam index; aynı tablodaki üç bağın üçü aynı desende kalsın.
+  @@index([chequeId])
   @@map("cari_transactions")
 }
 
@@ -4761,6 +4830,10 @@ model Payment {
   amount       Decimal  @db.Decimal(14, 2)
   amountTry    Decimal  @db.Decimal(14, 2)
 
+  /// FATURAYA KAPATILAN tutar (C2) — `amount`'ı AŞAMAZ (CHECK). Kalanı "serbest
+  /// tahsilat"tır ve yaşlandırma raporunda sanal FIFO mahsupla gösterilir.
+  allocatedTotal Decimal @default(0) @db.Decimal(14, 2)
+
   /// Kasa VEYA banka — ikisi birden olamaz (CHECK constraint).
   cashBoxId     String? @db.Uuid
   bankAccountId String? @db.Uuid
@@ -4781,6 +4854,7 @@ model Payment {
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
 
   transactions CariTransaction[]
+  allocations  PaymentAllocation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4814,6 +4888,9 @@ model CashBox {
 
   payments         Payment[]
   cashTransactions CashTransaction[]
+  /// Elden tahsil edilen çekin olay satırı (C1) — kasa bakiyesinin ÜÇÜNCÜ
+  /// yazarı. `test_consistency` §23 formülü bu tabloyu da toplamak zorunda.
+  chequeEvents     ChequeEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4836,6 +4913,10 @@ model BankAccount {
 
   payments         Payment[]
   cashTransactions CashTransaction[]
+  /// Tahsile/teminata verilen çekler (C1) — `Cheque.bankAccountId` denormalize
+  /// başlığı; `chequeEvents` ise o çekin banka bakiyesini oynatan olay satırları.
+  cheques          Cheque[]
+  chequeEvents     ChequeEvent[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4953,4 +5034,348 @@ model ExchangeRate {
   @@unique([rateDate, currency])
   @@index([currency, rateDate])
   @@map("exchange_rates")
+}
+
+// =============================================================================
+// ÇEK / SENET PORTFÖYÜ (Paket C1) — migration 20260814101000
+// =============================================================================
+// ⚠️ NEDEN AYRI MODEL, NEDEN `PaymentMethod`'a CHEQUE DEĞERİ EKLENMEDİ:
+// `Payment` bir ANDIR — para o an el değiştirir ve olay orada biter. Çek bir
+// VARLIKTIR: haftalarca yaşar, vadesi vardır ve dört ayrı yola sapabilir
+// (tahsil · ciro · karşılıksız · iade). Çeki `PaymentMethod`'a bir değer olarak
+// eklemek, sistemin EN HASSAS kod yoluna (tahsilat + cari bakiye + storno)
+// sessiz bir "bu aslında henüz para değil" dalı sokmak olurdu. Logo/Mikro da
+// aynı ayrımı yapar (Çek/Senet ayrı modül, kendi bordro belgeleriyle).
+//
+// ⚠️ KASA/BANKA BAKİYESİNE İKİNCİ YAZAR: `Payment` ve `CashTransaction`'ın
+// yanına şimdi `ChequeEvent` (COLLECT/PAY) da geliyor. `test_consistency`
+// §23/§24 mutabakat formülü ÜÇ tabloyu birden toplamak zorundadır — yalnız
+// ikisine bakan bir sorgu, ilk çek tahsilatında "drift" diye KIRMIZI verir.
+// =============================================================================
+
+/// Çekin yönü — ALINAN (müşteri çeki, portföyümüzde) mi VERİLEN (kendi çekimiz)
+/// mi. Kart ayrı tutulmadı çünkü iki yönün alanları birebir aynı; ayıran şey
+/// yalnız defter işaretleri ve izlenen durum kümesidir.
+enum ChequeKind {
+  RECEIVED
+  ISSUED
+}
+
+/// Çek mi senet mi. Senet AYNI modülde: yaşam döngüsü (portföy → tahsil /
+/// karşılıksız / ciro) birebir aynıdır; ayrı tablo, aynı kodu iki kez yazmak
+/// olurdu. Fark yalnız belge numarası ön ekinde ve baskıda görünür.
+enum ChequeDocType {
+  CHEQUE
+  PROMISSORY_NOTE
+}
+
+/// Çekin DENORMALİZE başlık durumu — gerçek tarihçe `ChequeEvent`'tedir.
+///
+/// ⚠️ Bu kolon bir ÖZETTİR, kaynak değil: portföy listesi ve vade takibi her
+/// satır için olay defterini taramak zorunda kalmasın diye var. Geçişler ATOMİK
+/// CLAIM ile yazılır (`updateMany WHERE {id, beklenen-durum}` + count===0 → 409)
+/// — aksi halde iki eşzamanlı "tahsil et" iki kez banka bakiyesi artırırdı.
+///
+/// TERMİNAL: `COLLECTED` · `BOUNCED` · `RETURNED` · `PAID` · `CANCELLED`.
+/// `ENDORSED` terminal DEĞİLDİR: ciro edilen çek de karşılıksız çıkabilir ve o
+/// zaman İKİ cari birden ters kayıt alır.
+enum ChequeStatus {
+  /// Alınan çek elimizde (kind=RECEIVED doğuş durumu).
+  PORTFOLIO
+  /// Tahsile/teminata bankaya verildi — henüz para gelmedi.
+  AT_BANK
+  /// Ciro edildi (borcumuzu bu çekle kapattık).
+  ENDORSED
+  /// Tahsil edildi — banka/kasa +amount.
+  COLLECTED
+  /// Karşılıksız çıktı — defter TERS KAYITLA geri alınır.
+  BOUNCED
+  /// Sahibine iade edildi (müşteri nakit ödedi, çeki geri istedi).
+  RETURNED
+  /// Kendi çekimiz verildi (kind=ISSUED doğuş durumu).
+  ISSUED
+  /// Kendi çekimiz ödendi — banka −amount.
+  PAID
+  /// Kayıt hatası stornosu. Fiziksel DELETE yok; satır durur, defter ters kayıtla kapanır.
+  CANCELLED
+}
+
+/// Çek / senet — PORTFÖY VARLIĞI.
+///
+/// ⚠️ DEFTER ANI (kilitli karar): çek ALINDIĞI AN cari alacaklanır. Müşteri çeki
+/// verdiğinde ticari olarak ödemiştir; ekstre aksini söylerse iki taraf iki
+/// gerçekle çalışır ve mutabakat imkânsızlaşır. Karşılıksız riski, kaydı
+/// GECİKTİRMENİN değil TERS KAYITLA geri almanın gerekçesidir.
+///
+/// ⚠️ `status` ile `ChequeEvent` AYRIŞAMAZ: her geçiş aynı tx'te hem başlığı
+/// hem olay satırını yazar (`ChequeEvent.toStatus` = yeni başlık). Bekçi bu
+/// mutabakatı mekanik doğrular.
+model Cheque {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// CKA/CKV/SNA/SNV + GGAAYY + NNNN (alınan/verilen çek · alınan/verilen senet).
+  docNo String @unique @db.VarChar(32)
+
+  kind    ChequeKind
+  docType ChequeDocType @default(CHEQUE)
+
+  /// Doğuş durumunu KIND belirler (RECEIVED→PORTFOLIO, ISSUED→ISSUED) → bilinçli
+  /// olarak `@default` YOK: sabit bir varsayılan, iki yönden birini sessizce
+  /// yanlış durumda doğururdu.
+  status ChequeStatus
+
+  /// Çeki VEREN (kind=RECEIVED) ya da çeki ALDIĞIMIZ (kind=ISSUED) cari.
+  cariId String @db.Uuid
+
+  /// Ciro edildiyse ALAN cari. Ciro sonrası da DOLU KALIR (NULL'lanmaz): çek
+  /// karşılıksız çıkarsa ters kaydın kime yazılacağını bu alan söyler ve portföy
+  /// listesi "kimde" sorusunu buradan cevaplar.
+  endorsedToCariId String? @db.Uuid
+
+  /// Tahsile/teminata verildiği ya da (kendi çekimizde) üzerine yazıldığı banka.
+  bankAccountId String? @db.Uuid
+
+  currency Currency @default(TRY)
+  /// Belgeye DAMGALANAN kur — kur tablosu sonradan düzeltilse bile bu çek kendi
+  /// kuruyla okunur (fatura emsali).
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  amount       Decimal  @db.Decimal(14, 2)
+  amountTry    Decimal  @db.Decimal(14, 2)
+
+  /// FATURAYA KAPATILAN tutar (C2) — `amount`'ı AŞAMAZ (CHECK). Çekle kapama,
+  /// tahsilatla kapamayla AYNI `PaymentAllocation` tablosundan geçer: iki ayrı
+  /// kapama motoru, "bu fatura ne kadar kapandı" sorusuna iki cevap üretirdi.
+  allocatedTotal Decimal @default(0) @db.Decimal(14, 2)
+
+  /// Keşide/işlem tarihi — çekin deftere girdiği gün.
+  issueDate DateTime @db.Timestamptz
+  /// VADE — portföyün birinci sıralama anahtarı ve yaşlandırmanın girdisi.
+  /// `@db.Date` DEĞİL: `Invoice.dueDate` ile aynı sözleşmede kalsın (istemci
+  /// yerel gün sınırını mutlak ana çevirip gönderiyor).
+  dueDate   DateTime @db.Timestamptz
+
+  /// Çekin ÜZERİNDEKİ numara — bizim `docNo`'muzdan farklıdır (o bizim iç belge
+  /// numaramız). Opsiyonel: eldivenli girişte okunaksız çeki bloklamamak için.
+  serialNo   String? @db.VarChar(64)
+  bankName   String? @db.VarChar(100)
+  branchName String? @db.VarChar(100)
+  /// KEŞİDECİ — çeki yazan kişi/firma. Sektörde sıkça ÜÇÜNCÜ ŞAHIS çeki alınır
+  /// (müşteri kendi müşterisinin çekini ciro eder), yani cari ile aynı olmayabilir.
+  drawerName String? @db.VarChar(150)
+
+  notes String? @db.VarChar(500)
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  /// Kayıt-yaratan uç sözleşmesi. Olay geçişlerinde clientToken YOK ve gerekmez:
+  /// orada idempotency'yi atomik claim'in kendisi verir (beklenen durum bir kez
+  /// tüketilir, ikinci istek 409 alır).
+  clientToken String? @unique @db.Uuid
+
+  cari           CariAccount  @relation("ChequeCari", fields: [cariId], references: [id], onDelete: Restrict)
+  endorsedToCari CariAccount? @relation("ChequeEndorsedTo", fields: [endorsedToCariId], references: [id], onDelete: Restrict)
+  bankAccount    BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  events       ChequeEvent[]
+  transactions CariTransaction[]
+  allocations  PaymentAllocation[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Şu carinin portföyünde ne var" — eşitlik önce, vade (sıralama) sonra.
+  @@index([cariId, status, dueDate])
+  // "Vadesi yaklaşan / geçen çekler" — portföy ekranının varsayılan sorgusu.
+  @@index([status, dueDate])
+  @@index([endorsedToCariId])
+  @@index([bankAccountId])
+  @@map("cheques")
+}
+
+/// Çek olayının TÜRÜ — `ChequeStatus` ile birebir eşlenmez:
+/// `DEPOSIT`→AT_BANK, `COLLECT`→COLLECTED, `PAY`→PAID gibi olay→durum eşlemesi
+/// serviste yaşar. Ayrı enum olmasının sebebi: durum "nerede", olay "ne oldu"
+/// sorusunu cevaplar; ikisi tek enuma katlanırsa iade ile iptalin AYNI durumda
+/// bitmesi gerekirdi.
+enum ChequeEventType {
+  RECEIVE
+  ISSUE
+  DEPOSIT
+  COLLECT
+  ENDORSE
+  BOUNCE
+  RETURN
+  PAY
+  CANCEL
+}
+
+/// Çekin durum defteri — APPEND-ONLY (`CariTransaction` emsali: `updatedAt` YOK).
+///
+/// ⚠️ UPDATE/DELETE YOK. "Çek ne zaman bankaya verildi, ne zaman karşılıksız
+/// döndü" sorusunun tek güvenilir kaynağı budur; `Cheque.status` yalnız son
+/// satırın özetidir.
+model ChequeEvent {
+  id       String          @id @default(uuid()) @db.Uuid
+  chequeId String          @db.Uuid
+  type     ChequeEventType
+
+  /// Geçişin İKİ ucu da saklanır: `toStatus` başlıkla mutabakatı (son satır =
+  /// `Cheque.status`) mekanik doğrulanabilir yapar, `fromStatus` ise atomik
+  /// claim'in NEYİ tükettiğini kayda geçirir. Doğuş satırında `fromStatus` NULL.
+  fromStatus ChequeStatus?
+  toStatus   ChequeStatus
+
+  eventDate DateTime @db.Timestamptz
+
+  /// ENDORSE'ta ciro edilen cari — olayın karşı tarafı.
+  counterCariId String? @db.Uuid
+  /// COLLECT/PAY/DEPOSIT hesabı. Tahsil elden de olabildiği için kasa da meşru;
+  /// ikisi BİRDEN dolu olamaz (CHECK).
+  bankAccountId String? @db.Uuid
+  cashBoxId     String? @db.Uuid
+
+  notes       String? @db.VarChar(300)
+  createdById String? @db.Uuid
+
+  cheque      Cheque       @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  counterCari CariAccount? @relation("ChequeEventCounterCari", fields: [counterCariId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([chequeId, eventDate])
+  // Kasa defteri (C4): "dönemde tahsil edilen çekler" — tür + tarih aralığı.
+  @@index([type, eventDate])
+  // Hesap bazlı kasa/banka defteri — bakiyenin üçüncü yazarının okuma yolu.
+  @@index([bankAccountId, eventDate])
+  @@index([cashBoxId, eventDate])
+  @@index([counterCariId])
+  @@map("cheque_events")
+}
+
+// =============================================================================
+// FATURA KAPAMA (Paket C2) — migration 20260814102000
+// =============================================================================
+// "Hangi tahsilat hangi faturayı kapattı" bağı. Bu bağ olmadan yaşlandırma
+// raporu yazılamaz: cari bakiyesi TEK sayıdır ve "bu 10.000 TL hangi faturanın
+// karşılığı" sorusunu cevaplayamaz.
+// =============================================================================
+
+/// Fatura ↔ tahsilat/çek kapama satırı.
+///
+/// ⚠️ DEFTERE SATIR YAZMAZ. Cari bakiyesi zaten İKİ kez oynadı (fatura onayında
+/// ve tahsilatta); kapama üçüncü kez yazsaydı aynı para iki kez sayılırdı.
+/// Kapama yalnız EŞLEŞTİRMEDİR — bakiyeyi değil, bakiyenin YAŞINI belirler.
+///
+/// ⚠️ `paymentId` XOR `chequeId` (CHECK): bir kapama satırının kaynağı ya nakit/
+/// havale tahsilatıdır ya çektir. İkisi birden dolu olsaydı aynı kapama iki
+/// sayacı birden tüketir (`Payment.allocatedTotal` + `Cheque.allocatedTotal`) ve
+/// ikisi de fatura tarafıyla ayrışırdı.
+///
+/// ⚠️ FIFO bir ÖNERİDİR, otomatik commit DEĞİL: `GET open-invoices` vade sıralı
+/// aday listesi döner, kullanıcı düzeltebilir. Muhasebede "hangi ödemenin hangi
+/// faturaya sayılacağı" ticari bir karardır (vade farkı, iskonto, itiraz).
+///
+/// ⚠️ Kapsam BİLİNÇLİ DAR (Faz 3'e bırakılanlar): aynı cari + aynı para birimi +
+/// yön eşleşmesi (IN↔SALES, OUT↔PURCHASE). Çapraz kur / çapraz cari kapama
+/// (mahsuplaşma) ayrı bir iştir ve kur farkı hesabı gerektirir.
+model PaymentAllocation {
+  id String @id @default(uuid()) @db.Uuid
+
+  invoiceId String @db.Uuid
+
+  paymentId String? @db.Uuid
+  chequeId  String? @db.Uuid
+
+  /// Kapatılan tutar — FATURANIN para biriminde (eşleşme serviste zorunlu).
+  amount Decimal @db.Decimal(14, 2)
+
+  notes       String? @db.VarChar(300)
+  createdById String? @db.Uuid
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  cheque  Cheque?  @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // ⚠️ `@@unique([invoiceId, paymentId])` BİLİNÇLİ OLARAK YOK: aynı tahsilatın
+  // aynı faturaya birden çok kez kısmi kapaması meşrudur (düzeltme/bölme) ve
+  // toplamı zaten sayaç CHECK'leri sınırlar. Unique koymak, mükerrer tıklamayı
+  // engellemek yerine meşru düzeltmeyi bloklardı.
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([chequeId])
+  @@map("payment_allocations")
+}
+
+// =============================================================================
+// DÖNEM KAPANIŞI (Paket C3) — migration 20260814103000
+// =============================================================================
+// Kapanış bir FOTOĞRAFTIR: "31.12.2025 itibarıyla bu cari bize 42.150 TL
+// borçluydu". Deftere satır YAZMAZ — devir bir hareket değil, hareketlerin o
+// ana kadarki toplamıdır; satır yazsaydı bir sonraki ekstre aynı tutarı hem
+// devir satırında hem hareketlerde sayardı.
+// =============================================================================
+
+/// Cari dönem kapanışı — para birimi BAZINDA.
+///
+/// ⚠️ KAPALI DÖNEME KAYIT = KİLİT (409), uyarı DEĞİL. Uyarı okunmaz; sessiz
+/// yeniden-hesap ise daha kötüdür — kapanmış ve dışarıya beyan edilmiş bir
+/// rakamı kimse istemeden değiştirir. Tek yüklem `assertPeriodOpenTx`;
+/// `CariTransaction` yazan BEŞ yol (fatura onay/storno, tahsilat/storno, çek
+/// olayları) satır yazmadan ÖNCE onu çağırır.
+///   • Storno'lar doğal olarak sızmaz: iptal satırları `txnDate = now` taşır,
+///     yani cari (açık) döneme düşerler — geçmiş dönem yeniden yazılmaz.
+///
+/// ⚠️ REOPEN SATIRI SİLMEZ, İŞARETLER (`reopenedAt`). Kapanış her an yeniden
+/// türetilebilir (kaynak defter append-only), o yüzden kaydın kendisi değil
+/// "kapalı sayılıp sayılmadığı" bilgisi taşınır — ve "bu dönem bir kez kapandı,
+/// sonra açıldı" izi denetimde tam olarak aranan şeydir.
+///
+/// ⚠️ `periodEnd` `@db.Date` — TAKVİM GÜNÜ anahtarıdır, an değil ("2025 Aralık
+/// kapanışı"). Timestamptz olsaydı gün sınırı saat dilimine bağlanır ve aynı
+/// kapanış iki farklı satıra düşebilirdi (`ExchangeRate.rateDate` emsali).
+/// `test_timestamptz_contract` muaf listesine gerekçesiyle yazılmıştır.
+model CariPeriodClose {
+  id       String   @id @default(uuid()) @db.Uuid
+  cariId   String   @db.Uuid
+  currency Currency
+
+  /// Dönemin SON GÜNÜ (dahil). Başlangıç saklanmaz: bir önceki kapanıştan
+  /// türetilir — iki uç da saklansaydı aralarında boşluk/örtüşme doğabilirdi.
+  periodEnd DateTime @db.Date
+
+  /// O ana kadarki bakiye. NEGATİF OLABİLİR (alacaklıysak) → CHECK yok.
+  closingBalance Decimal @db.Decimal(14, 2)
+  /// Kapanışa giren hareket sayısı — "fotoğraf ne kadar hareketten üretildi"
+  /// kontrol toplamı; yeniden türetildiğinde tutmuyorsa defter değişmiş demektir.
+  txnCount       Int
+
+  notes      String? @db.VarChar(500)
+  closedById String? @db.Uuid
+
+  reopenedAt   DateTime? @db.Timestamptz
+  reopenedById String?   @db.Uuid
+  reopenReason String?   @db.VarChar(300)
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // DB'de PARTIAL UNIQUE: `WHERE "reopenedAt" IS NULL` (migration 20260814103000).
+  // Düz unique olsaydı yeniden açılan bir dönem BİR DAHA kapatılamazdı (eski
+  // satır aynı anahtarı tutmaya devam ederdi). Şemada `@@unique` kalmak ZORUNDA:
+  // Prisma predicate farkını drift saymaz ama index↔unique farkını SAYAR.
+  @@unique([cariId, currency, periodEnd], map: "cari_period_close_active_uq")
+  // Kapanış GEÇMİŞİ (yeniden açılmışlar dahil) — partial unique bu sorguyu
+  // karşılayamaz, çünkü PG partial index'i yalnız predicate'i ispatlanabilen
+  // sorguda kullanır.
+  @@index([cariId, periodEnd])
+  @@map("cari_period_closes")
 }
