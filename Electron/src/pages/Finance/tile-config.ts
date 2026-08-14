@@ -9,7 +9,17 @@
 // (`nav-config`): bayrak kapalı bir kurulumda bu karoların hiçbiri çizilmez,
 // izin taşıyan kullanıcıda bile. Bayrak REJİM, izin KİŞİ kapısıdır.
 // =============================================================================
-import { Users, FileText, Wallet, Landmark, ArrowRightLeft, type LucideIcon } from "lucide-react";
+import {
+  Users,
+  FileText,
+  Wallet,
+  Landmark,
+  ArrowRightLeft,
+  ScrollText,
+  Link2,
+  Lock,
+  type LucideIcon,
+} from "lucide-react";
 
 export interface FinanceTile {
   key: string;
@@ -56,6 +66,39 @@ export const financeTiles: FinanceTile[] = [
     description: "Kasa ve banka hesapları — her biri TEK para birimlidir; bakiye hareketten türetilir.",
     to: "/finance/accounts",
     icon: Wallet,
+    tone: "text-station-depo",
+    permissionAny: ["finance:read"],
+  },
+  // ── Paket C (2026-08-14) ──────────────────────────────────────────────────
+  // ⚠️ ÜÇÜNÜN DE `permissionAny` LİSTESİ `content-routes` İLE BİREBİR AYNI
+  // (`finance:read`). Görüntüleme kapısı okumadır; yazma yetkileri
+  // (`finance:cheque` · `finance:payment` · `finance:close`) sayfaların İÇİNDE
+  // `PermissionGate` ile ayrılır. Route'a yazma iznini koymak, kayıtları
+  // GÖRMESİ gereken kişiyi ekrandan tamamen dışarıda bırakırdı.
+  {
+    key: "cheques",
+    title: "Çek / Senet",
+    description: "Portföydeki çek ve senetler — giriş, bankaya verme, tahsil, ciro, karşılıksız, iade.",
+    to: "/finance/cheques",
+    icon: ScrollText,
+    tone: "text-station-fason",
+    permissionAny: ["finance:read"],
+  },
+  {
+    key: "allocations",
+    title: "Fatura Kapama",
+    description: "Tahsilat/çek ile faturayı eşleştir — hangi fatura hâlâ açık.",
+    to: "/finance/allocations",
+    icon: Link2,
+    tone: "text-primary",
+    permissionAny: ["finance:read"],
+  },
+  {
+    key: "period-close",
+    title: "Dönem Kapanışı",
+    description: "Geçmiş dönemi mühürle — kapalı döneme fatura, tahsilat ve çek girilemez.",
+    to: "/finance/period-close",
+    icon: Lock,
     tone: "text-station-depo",
     permissionAny: ["finance:read"],
   },

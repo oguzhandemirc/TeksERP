@@ -114,8 +114,33 @@ export function partyName(c: { customer: { name: string } | null; subcontractor:
   return c.customer?.name ?? c.subcontractor?.name ?? "—";
 }
 
-export function money(value: number, currency: Currency): string {
-  return `${value.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${CURRENCY_SYMBOL[currency]}`;
+/**
+ * Tutar biçimlendirici.
+ *
+ * ⚠️ `number | string` KABUL ETMEK ZORUNDA ve bu tip gevşetmesi DEĞİL, ÖLÇÜLMÜŞ
+ * bir düzeltmedir (2026-08-14): Prisma `Decimal` kolonları JSON'a **STRING**
+ * olarak düşer (`grandTotal: "3324"`), oysa bu dosyadaki arayüzler onları
+ * `number` diye tipliyor. Tip yalanı derlemede yakalanmaz çünkü değer
+ * `fetch`ten `any` olarak gelir; çalışma zamanında ise `String.prototype.
+ * toLocaleString` çağrılır ve o, `minimumFractionDigits` gibi seçenekleri
+ * SESSİZCE YOK SAYAR:
+ *
+ *     "3324".toLocaleString("tr-TR", {…})  →  "3324"      ✗
+ *     (3324).toLocaleString("tr-TR", {…})  →  "3.324,00"  ✓
+ *
+ * Yani hata görünür ama masumdur: rakam DOĞRU, yalnız binlik ayraç ve kuruş
+ * kaybolur — muhasebe ekranında en kolay gözden kaçan, en çok güven kaybettiren
+ * kusur. `RatesPage` bunu satır bazında `Number(r.rate)` ile zaten çözmüştü;
+ * düzeltme TEK PAYLAŞILAN NOKTAYA alındı ki 45 çağrı yerinin her biri kendi
+ * çözümünü icat etmesin.
+ *
+ * ⚠️ Sayıya çevrilemeyen değerde `—` basılır, `NaN ₺` DEĞİL: "0,00 ₺" yazmak da
+ * yasak — sıfır bir TUTARDIR, "bilinmiyor" ile karıştırılamaz.
+ */
+export function money(value: number | string | null | undefined, currency: Currency): string {
+  const n = typeof value === "number" ? value : Number(value);
+  if (value === null || value === undefined || value === "" || !Number.isFinite(n)) return "—";
+  return `${n.toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${CURRENCY_SYMBOL[currency]}`;
 }
 
 type Paged<T> = { data: T[]; pagination: { total: number; totalPages: number } };

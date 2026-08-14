@@ -29,6 +29,13 @@ import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
 import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
 import { AccountsPage } from "@/pages/Finance/AccountsPage";
 import { RatesPage } from "@/pages/Finance/RatesPage";
+// Paket C (2026-08-14) — hepsi NAMED export; default import boş ekran verir.
+import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
+import { AllocationsPage } from "@/pages/Finance/Allocations/AllocationsPage";
+import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
+import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
+import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
+import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
@@ -265,6 +272,35 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="finance:read">
         <RatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── Paket C (2026-08-14) ──────────────────────────────────────────────────
+  // ⚠️ İzin `finance:read` — karo listesiyle (Finance/tile-config) BİREBİR aynı.
+  // Yazma yetkileri (finance:cheque · finance:payment · finance:close) sayfanın
+  // İÇİNDE `PermissionGate` ile ayrılır: route'a yazma iznini koymak, kayıtları
+  // görmesi gereken muhasebeciyi ekrandan tamamen dışarıda bırakırdı.
+  {
+    path: "finance/cheques",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <ChequesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/allocations",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <AllocationsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/period-close",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <PeriodClosePage />
       </ProtectedRoute>
     ),
   },
@@ -822,6 +858,37 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:inventory">
         <StockScorecardPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── Paket C4 — ön muhasebe raporları (2026-08-14) ─────────────────────────
+  // ⚠️ ADRES KALIBI PAZARLIK DIŞI: `/reports/<kategori>/<rapor>` (ÜÇ segment).
+  // `ReportSideRail` kategoriyi path'in İKİNCİ segmentinden çözer ve
+  // `parts.length < 3` ise `return null` yapar → iki segmentli bir adreste
+  // (`/reports/finance-aging` gibi) sağ şerit SESSİZCE kaybolur ve komut paleti
+  // girişi de doğmaz. Adres değişecekse tek dokunulacak yer
+  // `Reports/Finance/tile-config.ts`'teki `to` alanlarıdır.
+  {
+    path: "reports/finance",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <FinanceReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/aging",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <AgingReportPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/cash-book",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <CashBookPage />
       </ProtectedRoute>
     ),
   },
