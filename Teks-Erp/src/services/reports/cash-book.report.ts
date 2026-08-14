@@ -55,6 +55,51 @@
 //
 // ⚠️ Tutarlar JSON'a STRING olarak çıkar (2 hane) — `finance-aging.report.ts`
 // ile aynı gerekçe (float toplamı kuruş kaydırır).
+//
+// ── KATEGORİ KIRILIMI: "bu para NEREDEN geldi / NEREYE gitti" (H7) ───────────
+// Defter satır satır DOĞRUdur ama "geçen ay 40 bin nereye gitti" sorusunu
+// cevaplayamaz; kırılım o soruyu tek blokta yanıtlar. Dört kova tipi vardır ve
+// AYRIMIN TEK ÖLÇÜTÜ ŞUDUR: *kaydın kendi kategori alanı var mı*.
+//   • `CashTransaction` (masraf/gelir/açılış) — KENDİ serbest `category`
+//     metniyle gruplanır; boş bırakılmışsa "Kategorisiz" (operatör doldurabilir,
+//     yani bu bir EKSİKLİK bildirimidir).
+//   • `Payment` ve `ChequeEvent` — tek kova. Bu iki tabloda kategori alanı
+//     YOKTUR; onları "Kategorisiz"e atmak, hiç sorulmamış bir sorunun
+//     cevapsızlığını operatörün hatası gibi göstermek olurdu (uydurma).
+//   • ⚠️ VİRMAN (TRANSFER_OUT/TRANSFER_IN) da AYRI KOVA — `CashTransaction`
+//     satırı olmasına rağmen. Sebep aynı ölçüt: `transfer()` ucu `category`
+//     KABUL ETMEZ (`TransferInput`'ta alan yok), yani virman satırı hiçbir
+//     zaman kategori taşıyamaz ve "Kategorisiz" orada DÜZELTİLEMEZ bir suçlama
+//     olurdu. Üstelik virman bir kaynak/kullanım değil, kendi hesaplarımız
+//     arasında aktarımdır: "5.000 harcandı, kategorisi girilmemiş" diye okunması
+//     rakamın kendisini yanlışlar.
+//
+// ⚠️ İPTAL KIRILIMDA NETLEŞİR ve bu, satır listesindeki "iki satır" kuralının
+// doğal sonucudur: `CASH_TXN_CANCEL` ters satırı ASLININ kategorisini taşır
+// (CTE'de `ct.category`, `cancelReason` DEĞİL), böylece 700 TL "Nakliye" gideri
+// iptal edilince kova `çıkan 700 / giren 700 / net 0` gösterir. Ters satıra
+// kategori taşınmasaydı iptal "Kategorisiz"e düşer, gider kovası şişmiş kalır
+// ve kırılım ile defter toplamı aynı kalsa bile kırılım YANLIŞ olurdu.
+//
+// ⚠️ KIRILIM AYRI SORGUDAN DEĞİL, ÖZETİ ÜRETEN AYNI SATIR KÜMESİNDEN türetilir
+// (Sınıf 5 — tek kaynak satır kuralı). Ayrı bir `GROUP BY` sorgusu daha "doğru"
+// görünürdü ama `MAX_ROWS` kırpması yalnız satır sorgusuna uygulandığı için
+// kırpılmış bir dönemde kırılım ile hesap özeti AYRIŞIRDI: aynı ekranda iki
+// farklı "dönem girişi" rakamı. Mutabakat (`Σ kova = Σ hesap`) bu yüzden
+// yapısaldır, tesadüf değil — bekçi onu kilitler.
+//
+// ⚠️ KIRILIM PARA BİRİMİ BAZINDADIR, bu yüzden hesap seçilmeden de anlamlıdır
+// (yürüyen bakiyenin aksine). Farklı para birimli kasaların TL'siz toplanması
+// `totals`'ta nasıl yasaksa burada da öyle: TRY "Kira" ile USD "Kira" AYRI
+// satırdır.
+//
+// ⚠️ SERBEST METİN AYNEN GRUPLANIR — büyük/küçük harf katlanmaz. "Kira" ile
+// "kira"nın iki satır çıkması bir kusur değil, kataloğun zamanı geldiğini
+// söyleyen SİNYALDİR (yol haritası: "katalog kararı veri birikince"); katlamak
+// tam da beklenen o sinyali gizlerdi. Ayrıca Türkçe yerelde büyük harfe çevirme
+// kimlik bozar (`showIf` dersi: "1.kalite" → "1.KALİTE"). Yalnız `trim`
+// uygulanır (yazma yolu zaten trim'liyor; bu, ham SQL/seed ile girmiş satırlara
+// karşı ikinci hat).
 // =============================================================================
 
 import { Prisma, Currency } from "@prisma/client";
@@ -122,8 +167,34 @@ export interface CashBookAccountSummary {
   sealedThrough: string | null;
 }
 
+/** Kırılım kovasının TİPİ — etiketi değil, hangi kuraldan doğduğunu söyler. */
+export type CashCategoryGroup = "CASH_TXN" | "TRANSFER" | "PAYMENT" | "CHEQUE";
+
+export interface CashBookCategoryRow {
+  /**
+   * Gruplama anahtarı — kasa hareketinde `CAT:<metin>`, diğerlerinde kova tipi.
+   * İstemci satırı bununla eşler; `label` gösterim metnidir ve kategori yeniden
+   * adlandırılırsa değişir.
+   */
+  key: string;
+  label: string;
+  group: CashCategoryGroup;
+  currency: Currency;
+  totalIn: string;
+  totalOut: string;
+  /** totalIn − totalOut. İptal çifti aynı kovaya ters yönde düştüğü için 0'lar. */
+  net: string;
+  movementCount: number;
+}
+
 export interface CashBookReport {
   accounts: CashBookAccountSummary[];
+  /**
+   * Dönem hareketlerinin KAYNAK kırılımı (para birimi bazında). Hesap
+   * seçilmeden de doludur — `rows`'un aksine çok hesapta da anlamlıdır.
+   * Σ(`totalIn`) = Σ(hesap `totalIn`), aynısı `totalOut` için (dosya başlığı).
+   */
+  categories: CashBookCategoryRow[];
   /** Yalnız tek hesap seçiliyse dolu — çok hesapta yürüyen bakiye anlamsızdır. */
   rows: CashBookRow[] | null;
   rowsTruncated: boolean;
@@ -156,6 +227,8 @@ interface MovementRow {
   description: string | null;
   reference: string | null;
   cancelled: boolean;
+  /** Yalnız `CashTransaction` kaynaklı satırlarda dolu (ters satırda ASLININ). */
+  category: string | null;
 }
 
 interface OpeningRow {
@@ -186,7 +259,13 @@ function movementsCte(): Prisma.Sql {
              COALESCE(cu.name, sc.name)                        AS counterparty,
              p.notes                                           AS description,
              p.reference                                       AS reference,
-             (p.status = 'CANCELLED')                          AS cancelled
+             (p.status = 'CANCELLED')                          AS cancelled,
+             -- ⚠️ Kategori alanı payments tablosunda YOK. Buradaki NULL
+             -- "operatör boş bıraktı" DEĞİL "böyle bir soru sorulmadı"
+             -- demektir; kırılım bu satırları Kategorisiz'e değil kendi
+             -- kovasına koyar. (SQL şablonunda BACKTICK kullanma — template
+             -- literal'ı ortadan böler, dosya derlenmez.)
+             NULL::text                                        AS category
         FROM payments p
         JOIN cari_accounts ca ON ca.id = p."cariId"
         LEFT JOIN customers cu ON cu.id = ca."customerId"
@@ -199,7 +278,7 @@ function movementsCte(): Prisma.Sql {
              COALESCE(p."cashBoxId", p."bankAccountId")::text,
              CASE WHEN p.direction = 'IN' THEN 'OUT' ELSE 'IN' END,
              p.amount, p.method::text, COALESCE(cu.name, sc.name),
-             COALESCE(p."cancelReason", 'İptal'), p.reference, TRUE
+             COALESCE(p."cancelReason", 'İptal'), p.reference, TRUE, NULL::text
         FROM payments p
         JOIN cari_accounts ca ON ca.id = p."cariId"
         LEFT JOIN customers cu ON cu.id = ca."customerId"
@@ -213,7 +292,7 @@ function movementsCte(): Prisma.Sql {
              COALESCE(ct."cashBoxId", ct."bankAccountId")::text,
              ct.direction::text, ct.amount, ct.kind::text, NULL,
              COALESCE(ct.description, ct.category), ct.reference,
-             (ct.status = 'CANCELLED')
+             (ct.status = 'CANCELLED'), ct.category
         FROM cash_transactions ct
        WHERE COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 
@@ -223,7 +302,10 @@ function movementsCte(): Prisma.Sql {
              COALESCE(ct."cashBoxId", ct."bankAccountId")::text,
              CASE WHEN ct.direction = 'IN' THEN 'OUT' ELSE 'IN' END,
              ct.amount, ct.kind::text, NULL,
-             COALESCE(ct."cancelReason", 'İptal'), ct.reference, TRUE
+             COALESCE(ct."cancelReason", 'İptal'), ct.reference, TRUE,
+             -- ⚠️ ASLININ kategorisi (cancelReason DEĞİL) — iptal çiftinin
+             -- kırılımda netleşmesi tam olarak buna dayanır (dosya başlığı).
+             ct.category
         FROM cash_transactions ct
        WHERE ct.status = 'CANCELLED' AND ct."cancelledAt" IS NOT NULL
          AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
@@ -238,7 +320,7 @@ function movementsCte(): Prisma.Sql {
              COALESCE(e."cashBoxId", e."bankAccountId")::text,
              CASE WHEN e.type = 'COLLECT' THEN 'IN' ELSE 'OUT' END,
              ch.amount, e.type::text, COALESCE(cu2.name, sc2.name),
-             e.notes, ch."serialNo", (e.type = 'COLLECT_CANCEL')
+             e.notes, ch."serialNo", (e.type = 'COLLECT_CANCEL'), NULL::text
         FROM cheque_events e
         JOIN cheques ch ON ch.id = e."chequeId"
         JOIN cari_accounts ca2 ON ca2.id = ch."cariId"
@@ -247,6 +329,38 @@ function movementsCte(): Prisma.Sql {
        WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL')
          AND COALESCE(e."cashBoxId", e."bankAccountId") IS NOT NULL
     )`;
+}
+
+const UNCATEGORIZED_LABEL = "Kategorisiz";
+
+/** Kategori alanı OLMAYAN kaynakların sabit kovaları (dosya başlığı: ayrım ölçütü). */
+const FIXED_BUCKET_LABEL: Record<Exclude<CashCategoryGroup, "CASH_TXN">, string> = {
+  PAYMENT: "Tahsilat / Ödeme (carili)",
+  CHEQUE: "Çek tahsil / ödeme",
+  TRANSFER: "Virman (hesaplar arası)",
+};
+
+/**
+ * Virmanın İKİ bacağı da kendi kovasına düşer. Ters (iptal) satırda `kind`
+ * ASLININ türüdür — yalnız `direction` çevrilir — yani iptal edilmiş bir virman
+ * da aynı kovada netleşir.
+ */
+const TRANSFER_KINDS = new Set(["TRANSFER_OUT", "TRANSFER_IN"]);
+
+/** Hareketi TEK kovaya eşler. Sıra load-bearing: kaynak → tür → kategori metni. */
+function bucketOf(m: MovementRow): { key: string; label: string; group: CashCategoryGroup } {
+  if (m.source === "PAYMENT" || m.source === "PAYMENT_CANCEL") {
+    return { key: "PAYMENT", label: FIXED_BUCKET_LABEL.PAYMENT, group: "PAYMENT" };
+  }
+  if (m.source === "CHEQUE") {
+    return { key: "CHEQUE", label: FIXED_BUCKET_LABEL.CHEQUE, group: "CHEQUE" };
+  }
+  if (m.kind !== null && TRANSFER_KINDS.has(m.kind)) {
+    return { key: "TRANSFER", label: FIXED_BUCKET_LABEL.TRANSFER, group: "TRANSFER" };
+  }
+  // Serbest metin AYNEN (yalnız trim) — harf katlama yok, gerekçe dosya başlığında.
+  const text = (m.category ?? "").trim();
+  return { key: text ? `CAT:${text}` : "CAT:", label: text || UNCATEGORIZED_LABEL, group: "CASH_TXN" };
 }
 
 export async function getCashBookReport(params: CashBookParams): Promise<CashBookReport> {
@@ -287,7 +401,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       WITH ${accountsCte}, ${movementsCte()}
       SELECT mv.id, mv.source, mv."docNo" AS "docNo", mv.dt, mv."accountId" AS "accountId",
              mv.direction, mv.amount::text AS amount, mv.kind, mv.counterparty,
-             mv.description, mv.reference, mv.cancelled
+             mv.description, mv.reference, mv.cancelled, mv.category
         FROM mv JOIN acc a ON a.id = mv."accountId"
        WHERE mv.dt >= ${from} AND mv.dt <= ${to} ${fAccount} ${fKind}
        -- İkincil anahtar id: aynı ana düşen iki hareketin sırası yoksa yürüyen
@@ -385,6 +499,51 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
   }
   accounts.sort((x, y) => x.accountKind.localeCompare(y.accountKind) || x.code.localeCompare(y.code, "tr"));
 
+  // ── KATEGORİ KIRILIMI ─────────────────────────────────────────────────────
+  // Kaynak, hesap özetini üreten `movements` dizisinin TA KENDİSİ (Sınıf 5).
+  // Kapsam da özetle birebir: yalnız `accounts`'a giren hesapların hareketleri
+  // sayılır — böylece "Σ kova = Σ hesap" eşitliği, listeleme süzgeci ileride
+  // değişse bile YAPISAL kalır (bugün elenen hesapların zaten hareketi yok).
+  const currencyOfIncluded = new Map(accounts.map((a) => [a.accountId, a.currency]));
+  const buckets = new Map<
+    string,
+    { key: string; label: string; group: CashCategoryGroup; currency: Currency; in: Prisma.Decimal; out: Prisma.Decimal; count: number }
+  >();
+  for (const m of movements) {
+    const currency = currencyOfIncluded.get(m.accountId);
+    if (currency === undefined) continue;
+    const b = bucketOf(m);
+    // Para birimi anahtarın PARÇASI: TRY "Kira" ile USD "Kira" toplanmaz.
+    const mapKey = `${currency}|${b.key}`;
+    const entry = buckets.get(mapKey) ?? { ...b, currency, in: D0(), out: D0(), count: 0 };
+    const amt = D(m.amount);
+    if (m.direction === "IN") entry.in = entry.in.plus(amt);
+    else entry.out = entry.out.plus(amt);
+    entry.count += 1;
+    buckets.set(mapKey, entry);
+  }
+  const categories: CashBookCategoryRow[] = [...buckets.values()]
+    // Sıra: para birimi → HACİM (giren+çıkan) azalan → ad. Hacim, "bu dönemde
+    // en çok neye dokunuldu" sorusunun cevabıdır; nete göre sıralamak iptalle
+    // netleşmiş büyük bir kovayı listenin dibine atardı. Ad, eşitlikte
+    // determinizm içindir (aynı sorgu her koşumda aynı sırayı basmalı).
+    .sort(
+      (x, y) =>
+        x.currency.localeCompare(y.currency) ||
+        y.in.plus(y.out).comparedTo(x.in.plus(x.out)) ||
+        x.label.localeCompare(y.label, "tr"),
+    )
+    .map((b) => ({
+      key: b.key,
+      label: b.label,
+      group: b.group,
+      currency: b.currency,
+      totalIn: b.in.toFixed(2),
+      totalOut: b.out.toFixed(2),
+      net: b.in.minus(b.out).toFixed(2),
+      movementCount: b.count,
+    }));
+
   // YÜRÜYEN BAKİYE yalnız TEK hesapta anlamlıdır: iki hesabın hareketleri tek
   // sütunda toplanırsa çıkan sayı hiçbir hesabın bakiyesi olmaz (üstelik para
   // birimleri farklı olabilir).
@@ -438,6 +597,14 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       : []),
     "Çekin tahsile verilmesi (DEPOSIT) para hareketi değildir ve deftere girmez; yalnız TAHSİL (COLLECT) ve kendi çekimizin ÖDENMESİ (PAY) yazılır.",
     "İptal edilen belgeler defterde iki satırla görünür: belge tarihinde asıl hareket, iptal anında ters hareket.",
+    // Kırılım notu KOŞULLU: hareketi olmayan dönemde blok da çizilmiyor, notu
+    // basmak "eksik bir şey mi var" sorusunu boş yere sordururdu.
+    ...(categories.length > 0
+      ? [
+          "Kategori kırılımı hareketin KAYNAĞINA göre toplanır: kasa hareketleri kendi kategori metniyle (boş bırakılmışsa “Kategorisiz”), carili tahsilat/ödemeler ve çek tahsil/ödemeleri kendi tek kovalarında — bu kayıtlarda kategori alanı yoktur, uydurulmaz. Virman kendi hesaplarımız arasında aktarım olduğu için ayrı kovadadır.",
+          "Kırılımda iptal NETLEŞİR: ters satır aslının kategorisine ters yönde düşer, yani iptal edilmiş bir gider kovada “giren = çıkan, net 0” olarak görünür. Kova toplamları dönemin giren/çıkan toplamına eşittir.",
+        ]
+      : []),
   ];
   if (!storedComparable) {
     notes.push(
@@ -459,5 +626,5 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
     );
   }
 
-  return { accounts, rows, rowsTruncated, storedComparable, totals, notes };
+  return { accounts, categories, rows, rowsTruncated, storedComparable, totals, notes };
 }

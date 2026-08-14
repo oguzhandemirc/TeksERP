@@ -30,6 +30,14 @@
 //       fatura LIST_SELECT'i `paidTotal` taşır; bayraksız listede `overdue`
 //       alanı HİÇ yoktur + kaynak taraması (guard `params.withOverdue` içinde,
 //       cari.service kendi gecikme SQL'ini yazmaz, rapor da çekirdekten okur).
+//   §12 ⭐ KASA KATEGORİ KIRILIMI (H7, 2026-08-14): kasa hareketi KENDİ serbest
+//       kategorisiyle, carili tahsilat/ödeme ve çek olayı ise kategori alanları
+//       OLMADIĞI için tek kovada; virman da (uç kategori kabul etmiyor) ayrı
+//       kovada. Asıl kontrol MUTABAKAT: Σ kova giren/çıkan = dönem giren/çıkan
+//       (hem tek hesapta hem TÜM hesaplarda, PARA BİRİMİ bazında). İkinci
+//       kontrol: iptal çifti aynı kovada NETLEŞİR (ters satır aslının
+//       kategorisini taşır) — netleşme bozulsa toplam yine tutar, yani onu
+//       yalnız bu kontrol yakalar.
 //
 // KÖRLÜK ZEMİNİ: her bölümün başında "fixture gerçekten oluştu mu" kontrolü
 // vardır. Aksi halde "sapma bulunamadı" ile "hiçbir şeye bakılmadı" AYNI yeşile
@@ -86,6 +94,8 @@ const chequeIds: string[] = [];
 const cashTxnIds: string[] = [];
 let cashBoxId = "";
 let bankAccountId = "";
+/** §12 virman fixture'ının iki ek banka hesabı — temizlikte de ayrıca geçer. */
+const extraBankIds: string[] = [];
 let usdRateCreated = false;
 
 /** Tek satırlık, KDV'siz fatura — grandTotal tam olarak `amount` olur. */
@@ -571,6 +581,46 @@ async function main(): Promise<void> {
     /const rows = await collectAgingRows\(params\);/.test(agingSrc),
   );
 
+  // ── §12 KIRILIM FİXTURE'I (H7) ────────────────────────────────────────────
+  // ⚠️ İKİSİ DE KASANIN DIŞINDA kurulur. §9c/§9d/§9e/§9p beklentileri tek tek
+  // gerekçelendirilmiş sayılardır ("400 + 1200 + 200 iptal tersi"); kırılım
+  // uğruna oynatmak o gerekçeleri okunamaz hâle getirirdi.
+  //
+  // (1) İPTAL ÇİFTİ — bankaya 700 TL "Nakliye" gideri, ardından iptal. Banka
+  //     kapanışı DEĞİŞMEZ (çıkan 700 + giren 700), yani §9o de ayakta kalır;
+  //     kırılımda ise kova "700 / 700 / net 0" göstermek ZORUNDA.
+  const cancelledExpense = await cashTransactionService.create({
+    kind: "EXPENSE",
+    bankAccountId,
+    amount: 700,
+    txnDate: ago(2),
+    category: "Nakliye",
+    description: `${TAG} iptal edilecek gider`,
+  });
+  cashTxnIds.push(cancelledExpense.data.id);
+  await cashTransactionService.cancel(cancelledExpense.data.id, "bekçi iptali");
+
+  // (2) VİRMAN — İKİ YENİ hesap arasında. Mevcut kasa/banka kullanılsaydı iki
+  //     bacaktan biri onların rakamlarını değiştirirdi; virmanın kırılımdaki
+  //     yeri ise ayrıca test edilmek ZORUNDA, çünkü `TransferInput` kategori
+  //     KABUL ETMEZ (bkz. rapor dosyasının başlığı: virman kendi kovasında).
+  const vbFrom = await prisma.bankAccount.create({
+    data: { code: `${TAG}-V1`, name: `${TAG} Virman kaynak`, currency: "TRY" },
+    select: { id: true },
+  });
+  const vbTo = await prisma.bankAccount.create({
+    data: { code: `${TAG}-V2`, name: `${TAG} Virman hedef`, currency: "TRY" },
+    select: { id: true },
+  });
+  extraBankIds.push(vbFrom.id, vbTo.id);
+  const virman = await cashTransactionService.transfer({
+    fromBankAccountId: vbFrom.id,
+    toBankAccountId: vbTo.id,
+    amount: 100,
+    txnDate: ago(1),
+  });
+  cashTxnIds.push(...virman.data.ids);
+
   // ── §9 KASA DEFTERİ ───────────────────────────────────────────────────────
   const book = await getCashBookReport({
     range: { from: ago(30), to: new Date() },
@@ -626,6 +676,124 @@ async function main(): Promise<void> {
   );
   check("§9r Daraltılmış dönemde de kapanış = kayıtlı bakiye", kasaLate?.closing === "1300.00" && kasaLate.storedDiff === "0.00");
 
+  // ── §12 KASA DEFTERİ: KATEGORİ KIRILIMI (H7) ──────────────────────────────
+  // Kırılımın DEĞERİ "bu para nereden geldi / nereye gitti" sorusudur; RİSKİ
+  // ise sessizce yanlış toplamaktır (bir kova düşerse ekran hâlâ dolu ve
+  // makul görünür). Bu yüzden asıl kontrol MUTABAKATTIR: kova toplamları
+  // dönemin giren/çıkan toplamına EŞİT olmak zorunda.
+  const catOf = (rep: { categories: typeof book.categories }, key: string, currency = "TRY") =>
+    rep.categories.find((c) => c.key === key && c.currency === currency);
+
+  const kasaCats = book.categories;
+  check("§12a KÖRLÜK ZEMİNİ: kasa kırılımı satır üretti", kasaCats.length >= 2, `kova=${kasaCats.length}`);
+  const kira = catOf(book, "CAT:Kira");
+  check(
+    "§12b Kasa hareketi KENDİ kategori metniyle gruplandı (Kira: çıkan 300)",
+    kira?.group === "CASH_TXN" && kira.label === "Kira" && kira.totalOut === "300.00" && kira.totalIn === "0.00" && kira.movementCount === 1,
+    kira ? `${kira.label} in=${kira.totalIn} out=${kira.totalOut} n=${kira.movementCount}` : "YOK",
+  );
+  const kasaPay = catOf(book, "PAYMENT");
+  check(
+    "§12c Carili tahsilat/ödeme TEK kovada (in 1800 · out 200 · 4 hareket — iptal çifti dahil)",
+    kasaPay?.totalIn === "1800.00" && kasaPay.totalOut === "200.00" && kasaPay.movementCount === 4,
+    kasaPay ? `in=${kasaPay.totalIn} out=${kasaPay.totalOut} n=${kasaPay.movementCount}` : "YOK",
+  );
+  check(
+    "§12d Kasada ÇEK kovası YOK (kova gerçekten KAYNAĞA bakıyor, tutara değil)",
+    catOf(book, "CHEQUE") === undefined,
+  );
+  check(
+    "§12e ⭐ MUTABAKAT (kasa): Σ kova giren/çıkan = dönem giren/çıkan",
+    kasaCats.reduce((s, c) => s.plus(new Prisma.Decimal(c.totalIn)), new Prisma.Decimal(0)).toFixed(2) === kasa.totalIn &&
+      kasaCats.reduce((s, c) => s.plus(new Prisma.Decimal(c.totalOut)), new Prisma.Decimal(0)).toFixed(2) === kasa.totalOut,
+    `kova=${kasaCats.reduce((s, c) => s.plus(new Prisma.Decimal(c.totalIn)), new Prisma.Decimal(0)).toFixed(2)}/${kasaCats
+      .reduce((s, c) => s.plus(new Prisma.Decimal(c.totalOut)), new Prisma.Decimal(0))
+      .toFixed(2)} hesap=${kasa.totalIn}/${kasa.totalOut}`,
+  );
+
+  // Banka: üçüncü yazar (çek) + İPTAL ÇİFTİNİN NETLEŞMESİ
+  const cheqBucket = catOf(bankBook, "CHEQUE");
+  check(
+    "§12f Çek olayı tek kovada (banka: giren 500)",
+    cheqBucket?.group === "CHEQUE" && cheqBucket.totalIn === "500.00",
+    cheqBucket ? `in=${cheqBucket.totalIn}` : "YOK",
+  );
+  const nakliye = catOf(bankBook, "CAT:Nakliye");
+  check(
+    "§12g ⭐ İPTAL ÇİFTİ KIRILIMDA NETLEŞTİ (Nakliye: 700 çıkan + 700 giren = net 0, 2 hareket)",
+    nakliye?.totalOut === "700.00" && nakliye.totalIn === "700.00" && nakliye.net === "0.00" && nakliye.movementCount === 2,
+    nakliye ? `in=${nakliye.totalIn} out=${nakliye.totalOut} net=${nakliye.net} n=${nakliye.movementCount}` : "YOK",
+  );
+  // Netleşmenin TEK dayanağı: ters satır ASLININ kategorisini taşıyor. Taşımasa
+  // mutabakat yine tutardı (toplam değişmez) ama gider kovası şişmiş kalır ve
+  // iptal "Kategorisiz"e düşerdi — kırılım sessizce YANLIŞ olurdu.
+  check(
+    "§12h Ters satır ASLININ kategorisini miras aldı (bankada Kategorisiz kovası YOK)",
+    catOf(bankBook, "CAT:") === undefined,
+    JSON.stringify(bankBook.categories.map((c) => c.key)),
+  );
+  check(
+    "§12i ⭐ MUTABAKAT (banka): iptal çiftiyle birlikte de Σ kova = dönem toplamı",
+    bankBook.categories.reduce((s, c) => s.plus(new Prisma.Decimal(c.totalIn)), new Prisma.Decimal(0)).toFixed(2) ===
+      banka?.totalIn &&
+      bankBook.categories.reduce((s, c) => s.plus(new Prisma.Decimal(c.totalOut)), new Prisma.Decimal(0)).toFixed(2) ===
+        banka?.totalOut,
+    `hesap=${banka?.totalIn}/${banka?.totalOut}`,
+  );
+
+  // VİRMAN: kategori alanı OLMAYAN üçüncü kaynak. "Kategorisiz"e düşseydi
+  // operatör düzeltilemeyen bir eksiklik görürdü (uç kategori KABUL ETMİYOR).
+  const virmanOut = await getCashBookReport({ range: { from: ago(30), to: new Date() }, accountId: vbFrom.id });
+  const virmanIn = await getCashBookReport({ range: { from: ago(30), to: new Date() }, accountId: vbTo.id });
+  const vOut = catOf(virmanOut, "TRANSFER");
+  check(
+    "§12j Virman KENDİ kovasında (çıkan bacak 100) — Kategorisiz'e DÜŞMEDİ",
+    vOut?.group === "TRANSFER" && vOut.totalOut === "100.00" && catOf(virmanOut, "CAT:") === undefined,
+    JSON.stringify(virmanOut.categories.map((c) => `${c.key}:${c.totalOut}`)),
+  );
+  check(
+    "§12k Virmanın giren bacağı da aynı kovada (100)",
+    catOf(virmanIn, "TRANSFER")?.totalIn === "100.00",
+    catOf(virmanIn, "TRANSFER")?.totalIn ?? "YOK",
+  );
+
+  // HESAP SEÇİLMEDEN: kırılım para birimi bazlı olduğu için burada da anlamlı
+  // (yürüyen bakiyenin aksine). Bu sorgu DB'deki TÜM hesapları kapsar; bu
+  // yüzden sabit rakam DEĞİL, mutabakat ölçülür — fixture dışı veri varsa da
+  // eşitlik bozulmamalı.
+  const allBook = await getCashBookReport({ range: { from: ago(30), to: new Date() } });
+  check("§12l KÖRLÜK ZEMİNİ: çok hesaplı sorgu birden çok hesap gördü", allBook.accounts.length >= 3, `hesap=${allBook.accounts.length}`);
+  check("§12m Hesap seçilmeden de kırılım DOLU (rows null iken bile)", allBook.rows === null && allBook.categories.length > 0);
+  {
+    const zero = () => ({ in: new Prisma.Decimal(0), out: new Prisma.Decimal(0) });
+    const acc = new Map<string, { in: Prisma.Decimal; out: Prisma.Decimal }>();
+    for (const a of allBook.accounts) {
+      const e = acc.get(a.currency) ?? zero();
+      acc.set(a.currency, { in: e.in.plus(a.totalIn), out: e.out.plus(a.totalOut) });
+    }
+    const cat = new Map<string, { in: Prisma.Decimal; out: Prisma.Decimal }>();
+    for (const c of allBook.categories) {
+      const e = cat.get(c.currency) ?? zero();
+      cat.set(c.currency, { in: e.in.plus(c.totalIn), out: e.out.plus(c.totalOut) });
+    }
+    let diff = 0;
+    const seen = new Set([...acc.keys(), ...cat.keys()]);
+    for (const cur of seen) {
+      const a = acc.get(cur) ?? zero();
+      const c = cat.get(cur) ?? zero();
+      if (!a.in.equals(c.in) || !a.out.equals(c.out)) diff++;
+    }
+    check(
+      "§12n ⭐ MUTABAKAT (tüm hesaplar, PARA BİRİMİ bazında): Σ kova = Σ hesap",
+      diff === 0 && seen.size > 0,
+      `para birimi=${seen.size} sapma=${diff}`,
+    );
+  }
+  check(
+    "§12o Kırılım kuralı DİPNOTLA söylendi (kategori alanı olmayan kaynak uydurulmaz)",
+    book.notes.some((n) => n.includes("Kategori kırılımı")) && book.notes.some((n) => n.includes("NETLEŞİR")),
+  );
+
   // ── §10 REJİM KAPISI (mekanik kaynak taraması) ────────────────────────────
   // Bayrak kapısı fabrika sıfır-fark garantisinin ayağıdır ve bir refactor'da
   // sessizce düşebilir; hiçbir işlevsel test onu göremez.
@@ -670,9 +838,16 @@ main()
           if (!chequeIds.includes(r.id)) chequeIds.push(r.id);
         }
       }
-      if (cashBoxId || bankAccountId) {
+      // ⚠️ OR koşulları TEK TEK eklenir: boş string bir uuid kolonuna filtre
+      // olarak giderse Prisma P2023 fırlatır ve temizliğin TAMAMI yarıda kalır
+      // (yarım koşumda `cashBoxId` hâlâ "" olabilir).
+      const cashTxnAccountFilters: Prisma.CashTransactionWhereInput[] = [];
+      if (cashBoxId) cashTxnAccountFilters.push({ cashBoxId });
+      if (bankAccountId) cashTxnAccountFilters.push({ bankAccountId });
+      if (extraBankIds.length) cashTxnAccountFilters.push({ bankAccountId: { in: extraBankIds } });
+      if (cashTxnAccountFilters.length) {
         for (const r of await prisma.cashTransaction.findMany({
-          where: { OR: [{ cashBoxId }, { bankAccountId }] },
+          where: { OR: cashTxnAccountFilters },
           select: { id: true },
         })) {
           if (!cashTxnIds.includes(r.id)) cashTxnIds.push(r.id);
@@ -708,6 +883,7 @@ main()
       }
       if (cashBoxId) await prisma.cashBox.deleteMany({ where: { id: cashBoxId } });
       if (bankAccountId) await prisma.bankAccount.deleteMany({ where: { id: bankAccountId } });
+      if (extraBankIds.length) await prisma.bankAccount.deleteMany({ where: { id: { in: extraBankIds } } });
       if (customerIds.length) await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
       if (subcontractorIds.length) await prisma.subcontractor.deleteMany({ where: { id: { in: subcontractorIds } } });
       // Kur satırı yalnız BİZ yazdıysak silinir — başka bir bekçinin/verinin

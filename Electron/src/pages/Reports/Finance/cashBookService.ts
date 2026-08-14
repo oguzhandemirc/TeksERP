@@ -57,6 +57,33 @@ export const CASH_KIND_LABEL: Record<string, string> = {
   COLLECT_CANCEL: "Çek tahsil stornosu",
 };
 
+/**
+ * KATEGORİ KIRILIMI (H7) — kovanın TİPİ. Etiketi değil, hangi kuraldan
+ * doğduğunu söyler; ekran bunu "Tür" sütununda basar ki serbest metinle
+ * yazılmış bir "Çek tahsilatı" kategorisi ile GERÇEK çek kovası karışmasın.
+ */
+export type CashCategoryGroup = "CASH_TXN" | "TRANSFER" | "PAYMENT" | "CHEQUE";
+
+export const CASH_CATEGORY_GROUP_LABEL: Record<CashCategoryGroup, string> = {
+  CASH_TXN: "Kasa hareketi",
+  TRANSFER: "Virman",
+  PAYMENT: "Tahsilat / Ödeme",
+  CHEQUE: "Çek",
+};
+
+export interface CashBookCategoryRow {
+  /** Gruplama anahtarı — kasa hareketinde `CAT:<metin>`, diğerlerinde kova tipi. */
+  key: string;
+  label: string;
+  group: CashCategoryGroup;
+  currency: Currency;
+  totalIn: string;
+  totalOut: string;
+  /** totalIn − totalOut. İptal çifti aynı kovaya ters yönde düştüğü için 0'lar. */
+  net: string;
+  movementCount: number;
+}
+
 export interface CashBookRow {
   id: string;
   source: CashBookSource;
@@ -103,6 +130,15 @@ export interface CashBookAccountSummary {
 
 export interface CashBookReport {
   accounts: CashBookAccountSummary[];
+  /**
+   * Dönem hareketlerinin KAYNAK kırılımı — para birimi bazında olduğu için
+   * hesap seçilmeden de anlamlıdır (`rows`'un aksine).
+   *
+   * OPSİYONEL, `sealedThrough` ile aynı gerekçe: 2026-08-14 öncesi backend bu
+   * alanı hiç göndermez → blok ÇİZİLMEZ (boş tablo değil), ekran çökmez ve
+   * bugünkü görünüm birebir kalır.
+   */
+  categories?: CashBookCategoryRow[];
   /** Yalnız TEK hesap seçiliyse dolu — çok hesapta yürüyen bakiye anlamsızdır. */
   rows: CashBookRow[] | null;
   rowsTruncated: boolean;
@@ -139,5 +175,5 @@ export async function getCashBookReport(p: CashBookApiParams): Promise<ReportRes
 
 /** Defter yüklenirken tabloyu iskeletiyle çizebilmek için boş kabuk. */
 export function emptyCashBookReport(): CashBookReport {
-  return { accounts: [], rows: [], rowsTruncated: false, storedComparable: false, totals: null, notes: [] };
+  return { accounts: [], categories: [], rows: [], rowsTruncated: false, storedComparable: false, totals: null, notes: [] };
 }

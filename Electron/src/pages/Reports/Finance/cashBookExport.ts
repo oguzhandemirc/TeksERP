@@ -13,12 +13,27 @@
 // ⚠️ "Fark" (kapanış − kayıtlı bakiye) `storedComparable` false iken YAZILMAZ:
 // kayıtlı bakiye her zaman "şu an"dır, geçmiş bir kesitle karşılaştırmak tanım
 // gereği fark üretir ve o fark UYDURMADIR.
+//
+// ⚠️ ÜÇÜNCÜ TABLO — KATEGORİ KIRILIMI (H7): EKRANDAKİ İLE AYNI KAPSAM. Hesap
+// seçiliyse o hesabın kırılımı, seçili değilse tüm hesapların. Kapsamı burada
+// bağımsızca seçmek (örn. "hep tüm hesaplar") aynı dosyada ekrandakinden farklı
+// bir rakam basardı — dışa aktarımın var oluş sebebi tam olarak ekrandaki
+// rakamı taşımaktır.
+//
+// ⚠️ TOPLAM SATIRI HESAPLANMAZ, BACKEND'DEN ALINIR. Kırılım satırlarını burada
+// toplamak (a) string tutarları float'a çevirip kuruş kaydırırdı, (b) çok para
+// birimli kırılımda anlamsız tek bir sayı üretirdi. Bu yüzden toplam yalnız
+// TEK para biriminin kesin olduğu iki durumda basılır: hesap seçiliyse o
+// hesabın `totalIn/totalOut`'u, seçili değilse `totals` (backend onu zaten
+// yalnız tek para biriminde doldurur). Diğer hâlde toplam satırı YOKTUR ve
+// "Para" sütunu okuyucuya neyi neyle toplayamayacağını söyler.
 // =============================================================================
 
 import type { ReportExportSpec, ReportTableSpec } from "../_components/reportExport";
 import { toNum } from "./service";
 import {
   ACCOUNT_KIND_LABEL,
+  CASH_CATEGORY_GROUP_LABEL,
   CASH_KIND_LABEL,
   CASH_SOURCE_LABEL,
   type CashBookAccountSummary,
@@ -44,9 +59,66 @@ export function buildCashBookExport(opts: {
   }
 
   const tables: ReportTableSpec[] = [accountsTable(summary)];
+  // Kırılım DEFTERİN ÜSTÜNDE durur: "nereye gitti" özeti, satır satır dökümden
+  // ÖNCE okunur (ekrandaki sıra da bu).
+  const catSource = ledger ? ledger.report : summary;
+  if ((catSource.categories ?? []).length > 0) {
+    tables.push(categoriesTable(catSource, ledger?.account ?? null));
+  }
   if (ledger) tables.push(ledgerTable(ledger.account, ledger.report));
 
   return { title: "Kasa & Banka Defteri", subtitle: periodLabel, meta, tables };
+}
+
+function categoriesTable(rep: CashBookReport, account: CashBookAccountSummary | null): ReportTableSpec {
+  const rows = rep.categories ?? [];
+  // Toplam: hesap seçiliyse hesabın kendi rakamı, değilse yalnız tek para
+  // birimindeki genel toplam (bkz. dosya başlığı — burada TOPLAMA YAPILMAZ).
+  const totals = account
+    ? { currency: account.currency, totalIn: account.totalIn, totalOut: account.totalOut }
+    : rep.totals
+      ? { currency: rep.accounts[0]?.currency ?? "", totalIn: rep.totals.totalIn, totalOut: rep.totals.totalOut }
+      : null;
+
+  return {
+    name: account ? `${account.code} Kategori` : "Kategori Kırılımı",
+    columns: [
+      { header: "Para", key: "currency", width: 7 },
+      { header: "Kaynak / Kategori", key: "label", width: 30 },
+      { header: "Tür", key: "group", width: 16 },
+      { header: "Giren", key: "totalIn", width: 15, numFmt: MONEY, align: "right" },
+      { header: "Çıkan", key: "totalOut", width: 15, numFmt: MONEY, align: "right" },
+      { header: "Net", key: "net", width: 15, numFmt: MONEY, align: "right" },
+      { header: "Hareket", key: "movementCount", width: 9, numFmt: "#,##0", align: "right" },
+    ],
+    rows: rows.map((c) => ({
+      currency: c.currency,
+      label: c.label,
+      group: CASH_CATEGORY_GROUP_LABEL[c.group],
+      totalIn: toNum(c.totalIn),
+      totalOut: toNum(c.totalOut),
+      net: toNum(c.net),
+      movementCount: c.movementCount,
+    })),
+    totalRow: totals
+      ? {
+          currency: totals.currency,
+          label: "TOPLAM",
+          group: "",
+          totalIn: toNum(totals.totalIn),
+          totalOut: toNum(totals.totalOut),
+          // Net kolonu toplamda BOŞ: giren−çıkan burada "dönem net değişimi"
+          // olurdu ve kırılımın net sütunuyla aynı anlamı taşımaz (devir yok).
+          net: "",
+          movementCount: rows.reduce((s, c) => s + c.movementCount, 0),
+        }
+      : undefined,
+    notes: [
+      "Kova toplamı dönemin giren/çıkan toplamına EŞİTTİR — kırılım, defteri üreten aynı hareket kümesinden türetilir.",
+      "İptal edilen belge kırılımda NETLEŞİR: ters satır aslının kategorisine ters yönde düşer (giren = çıkan, net 0).",
+      "Kategori alanı yalnız kasa hareketlerinde vardır; tahsilat/ödeme, çek ve virman kendi kovalarında toplanır.",
+    ],
+  };
 }
 
 function accountsTable(rep: CashBookReport): ReportTableSpec {
