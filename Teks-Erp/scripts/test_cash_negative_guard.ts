@@ -30,11 +30,33 @@
 //      kaldırılırsa guard kendi ayakları üstünde durur); silmeden önce yerine
 //      ne koyduğunu bil (CLAUDE.md "tx içi tazeleme" emsali).
 //
+//   §7 ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2, cash-transaction.create):
+//      pencere elle açık tutulan tx ile deterministik (kazananın token'ı unique
+//      indekste UNCOMMITTED → ön kontrol göremez, kaybeden indekste bekler) →
+//      kaybeden cached yanıt alır; TAM BİR kayıt; eşzamanlı = ardışık replay
+//      BAYT-BAYT.
+//   §8 ⭐ AYNISI transfer için: token yalnız ÇIKAN bacakta; cached yanıt İKİ
+//      bacağı OUT-önce sırayla döner (loadTransferByToken tek kaynak — ön
+//      kontrol ile çarpışma catch'i aynı helper'ı çağırır).
+//   §9 ⭐ KABLOLAMA TARAMASI (AST, metot seviyesi): kasa/banka bakiyesine yazan
+//      HER İLERİ servis yolu `assertCashBalanceCoversTx` çağırıyor — yeni yazar
+//      doğarsa guard'sız doğamaz (test_cash_period_close §9 emsali, ama İKİ
+//      YÖNLÜ: ileri yol guard'SIZSA kırmızı, TERS yol guard'LIYSA da kırmızı —
+//      §4 muafiyetinin mekanik ikizi). Körlük zemini + muaf listesi iki yönlü
+//      denetimli. ⚠️ Yazılı sınır: sınıflandırma METOT ADINDAN (/cancel/i =
+//      ters yol); iptali "cancel" içermeyen bir adla yazan yeni yol İLERİ
+//      sayılır ve guard ister — bu bilinçli (yanlış tarafa düşmek gürültülü).
+//
 // NEGATİF SONDALAR (2026-08-14, boz-ölç-geri yükle cp+shasum ile):
 //   • Guard körleştirilince (enabled kontrolü her zaman false) → §2/§3c/§6
 //     kırmızı. • Guard payment.cancel'a eklenince → §4a kırmızı (muafiyet
 //     sondası). • updateSchema'dan financeDefaultVatRate düşünce →
 //     test_feature_flag_contract kırmızı (o bekçinin sondası).
+//   • I2 sondası: cash-transaction.create'in withBarcodeRetry predicate'i
+//     (`!isClientTokenP2002`) düşürülünce token P2002'si 5 tur boşa retry
+//     edilir → §7 kırmızı ("Barkod üretimi ... başarısız" ham 409'u).
+//   • Kablolama sondası: create'ten `assertCashBalanceCoversTx` çağrısı
+//     silinince → §9 kırmızı (+ §2b/§3c işlevsel kırmızı).
 // =============================================================================
 import { Prisma, PaymentDirection, PaymentMethod, ChequeKind } from "@prisma/client";
 import prisma from "../src/lib/prisma";
@@ -105,6 +127,17 @@ async function balanceOf(ref: { cashBoxId?: string; bankAccountId?: string }): P
     select: { balance: true },
   });
   return r.balance.toFixed(2);
+}
+
+/** §7/§8 yarış sondaları — pencereyi elle açık tutmak için (goods_receipt_invoice §10 emsali). */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e?: unknown) => void } {
+  let resolve!: (v: T) => void;
+  let reject!: (e?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 async function expectConflict(fn: () => Promise<unknown>): Promise<{ status: number; message: string }> {
@@ -310,6 +343,278 @@ async function main() {
     rejected ? (rejected.reason as Error).message : "(reddedilen yok)",
   );
   check("§6c bakiye 20.00 (çifte harcama yok)", (await balanceOf({ cashBoxId: box7 })) === "20.00");
+
+  // Bu noktadan sonrası eksi-kasa bayrağını ölçmüyor — kapat ki §7/§8'in
+  // masraf fişleri 0 bakiyeli kasada 409'a takılmasın (bugünkü varsayılan).
+  await setFlag(false);
+
+  // ── §7 ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2, create) ──────────────
+  // Pencere zamanlamayla DEĞİL elle açık tutulan tx ile kurulur (yarış bekçisi
+  // kuralı): kazananın satırı unique indekse UNCOMMITTED yazılıdır → kaybedenin
+  // ön kontrolü göremez (READ COMMITTED), INSERT'i indeks kilidinde bekler;
+  // gate commit → P2002 → predicate propagate → catch cached yanıta çevirir.
+  {
+    const box8 = await makeBox("B8");
+    const rplToken = crypto.randomUUID();
+    const rplLock = deferred<{ id: string; docNo: string }>();
+    const rplGate = deferred<void>();
+    const rplTx = prisma.$transaction(
+      async (tx) => {
+        const winner = await tx.cashTransaction.create({
+          data: {
+            docNo: `${TAG}-RPL1`,
+            kind: "EXPENSE",
+            direction: PaymentDirection.OUT,
+            cashBoxId: box8,
+            amount: new Prisma.Decimal(40),
+            amountTry: new Prisma.Decimal(40),
+            txnDate: new Date(),
+            clientToken: rplToken,
+          },
+          select: { id: true, docNo: true },
+        });
+        rplLock.resolve(winner);
+        await rplGate.promise;
+        return winner;
+      },
+      { timeout: 20_000 },
+    );
+    // Gate-tx promise'i await'ten önce reddedebilir — no-op catch olmadan
+    // unhandled rejection süreci Sonuç satırı basılmadan öldürür (CLAUDE.md eki ②).
+    void rplTx.catch(() => {});
+    const winner = await rplLock.promise;
+
+    let loserSettled = false;
+    const loserP = cashTransactionService
+      .create({ kind: "EXPENSE", cashBoxId: box8, amount: 40, clientToken: rplToken })
+      .finally(() => {
+        loserSettled = true;
+      });
+    void loserP.catch(() => {});
+    await new Promise((r) => setTimeout(r, 400));
+    check("§7a ⭐ kaybeden UNIQUE indekste BEKLEDİ (ön kontrol kazananı görmedi → pencere gerçek)", !loserSettled);
+    rplGate.resolve();
+    await rplTx;
+    const loserRes = await loserP;
+    check(
+      "§7b ⭐ kaybeden BAŞARILI ve KAZANANIN kaydını aldı (ham hata yok, mükerrer yok)",
+      loserRes.success === true && loserRes.data.id === winner.id && loserRes.data.docNo === winner.docNo,
+      `docNo=${loserRes.data?.docNo}`,
+    );
+    const seqRes = await cashTransactionService.create({
+      kind: "EXPENSE",
+      cashBoxId: box8,
+      amount: 40,
+      clientToken: rplToken,
+    });
+    check(
+      "§7c ⭐ eşzamanlı replay yanıtı ardışık replay ile BAYT-BAYT aynı",
+      JSON.stringify(loserRes) === JSON.stringify(seqRes),
+      `eşzamanlı=${JSON.stringify(loserRes)}`,
+    );
+    check("§7d token'lı TAM BİR kayıt", (await prisma.cashTransaction.count({ where: { clientToken: rplToken } })) === 1);
+    check(
+      "§7e kaybedenin tx'i GERİ SARILDI: kasa bakiyesi oynamadı (gate satırı bakiye yazmaz)",
+      (await balanceOf({ cashBoxId: box8 })) === "0.00",
+      await balanceOf({ cashBoxId: box8 }),
+    );
+  }
+
+  // ── §8 ⭐ AYNISI VİRMAN İÇİN (token yalnız ÇIKAN bacakta) ────────────────
+  {
+    const box9 = await makeBox("B9");
+    const bank3 = await makeBank("BK3");
+    const rplToken = crypto.randomUUID();
+    const groupId = crypto.randomUUID();
+    const rplLock = deferred<{ outId: string; outNo: string; inId: string; inNo: string }>();
+    const rplGate = deferred<void>();
+    const rplTx = prisma.$transaction(
+      async (tx) => {
+        const outRow = await tx.cashTransaction.create({
+          data: {
+            docNo: `${TAG}-RPL2A`,
+            kind: "TRANSFER_OUT",
+            direction: PaymentDirection.OUT,
+            cashBoxId: box9,
+            amount: new Prisma.Decimal(25),
+            amountTry: new Prisma.Decimal(25),
+            txnDate: new Date(),
+            transferGroupId: groupId,
+            clientToken: rplToken,
+          },
+          select: { id: true, docNo: true },
+        });
+        const inRow = await tx.cashTransaction.create({
+          data: {
+            docNo: `${TAG}-RPL2B`,
+            kind: "TRANSFER_IN",
+            direction: PaymentDirection.IN,
+            bankAccountId: bank3,
+            amount: new Prisma.Decimal(25),
+            amountTry: new Prisma.Decimal(25),
+            txnDate: new Date(),
+            transferGroupId: groupId,
+          },
+          select: { id: true, docNo: true },
+        });
+        rplLock.resolve({ outId: outRow.id, outNo: outRow.docNo, inId: inRow.id, inNo: inRow.docNo });
+        await rplGate.promise;
+      },
+      { timeout: 20_000 },
+    );
+    void rplTx.catch(() => {});
+    const winner = await rplLock.promise;
+
+    let loserSettled = false;
+    const loserP = cashTransactionService
+      .transfer({ fromCashBoxId: box9, toBankAccountId: bank3, amount: 25, clientToken: rplToken })
+      .finally(() => {
+        loserSettled = true;
+      });
+    void loserP.catch(() => {});
+    await new Promise((r) => setTimeout(r, 400));
+    check("§8a ⭐ kaybeden virman UNIQUE indekste BEKLEDİ", !loserSettled);
+    rplGate.resolve();
+    await rplTx;
+    const loserRes = await loserP;
+    check(
+      "§8b ⭐ kaybeden BAŞARILI: iki bacak, ÇIKAN-önce sırayla (normal yanıtın [out,in] sırası)",
+      loserRes.success === true &&
+        JSON.stringify(loserRes.data.ids) === JSON.stringify([winner.outId, winner.inId]) &&
+        JSON.stringify(loserRes.data.docNos) === JSON.stringify([winner.outNo, winner.inNo]),
+      `ids=${JSON.stringify(loserRes.data?.ids)}`,
+    );
+    const seqRes = await cashTransactionService.transfer({
+      fromCashBoxId: box9,
+      toBankAccountId: bank3,
+      amount: 25,
+      clientToken: rplToken,
+    });
+    check(
+      "§8c ⭐ eşzamanlı replay yanıtı ardışık replay ile BAYT-BAYT aynı (tek kaynak: loadTransferByToken)",
+      JSON.stringify(loserRes) === JSON.stringify(seqRes),
+      `eşzamanlı=${JSON.stringify(loserRes)}`,
+    );
+    check(
+      "§8d grupta TAM İKİ bacak (kaybedenin tx'i geri sarıldı — 4 bacak yok)",
+      (await prisma.cashTransaction.count({ where: { transferGroupId: groupId } })) === 2,
+    );
+    check(
+      "§8e bakiyeler oynamadı (kaybeden yarım virman bırakmadı)",
+      (await balanceOf({ cashBoxId: box9 })) === "0.00" && (await balanceOf({ bankAccountId: bank3 })) === "0.00",
+    );
+  }
+
+  // ── §9 ⭐ KABLOLAMA TARAMASI — eksi-kasa guard'ı HER İLERİ yazara bağlı mı ─
+  // test_cash_period_close §9 emsali (o, DÖNEM guard'ını dosya seviyesinde
+  // tarar); burası EKSİ-KASA guard'ını METOT seviyesinde tarar, çünkü kural
+  // yön ayrımlıdır: aynı dosyada ileri yol guard İSTER (payment.create), ters
+  // yol guard'dan MUAF olmak ZORUNDADIR (payment.cancel — §4'ün mekanik ikizi).
+  // Dosya seviyesi bu ayrımı göremezdi.
+  {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const ts = await import("typescript");
+    const servicesDir = path.resolve(__dirname, "..", "src", "services");
+
+    type Unit = { file: string; name: string; writes: boolean; guards: boolean };
+    const units = new Map<string, Unit>();
+
+    const scanFile = (full: string, rel: string): void => {
+      const sf = ts.createSourceFile(full, fs.readFileSync(full, "utf8"), ts.ScriptTarget.Latest, true);
+      const stack: string[] = [];
+      const unitKey = (): string => `${rel}#${stack[0] ?? "(module)"}`;
+      const mark = (patch: Partial<Unit>): void => {
+        const key = unitKey();
+        const cur = units.get(key) ?? { file: rel, name: stack[0] ?? "(module)", writes: false, guards: false };
+        units.set(key, { ...cur, ...patch });
+      };
+      const visit = (n: import("typescript").Node): void => {
+        // Adlı birim = sınıf metodu ya da modül fonksiyonu. İç içe adlı birim
+        // (tx callback'i gibi ok fonksiyonları ADSIZDIR) dış birime yazılır —
+        // yazma/guard tespiti için doğru atıf budur (kilit-sırası taramasının
+        // tersi; oradaki gövde ayrımı burada yanlış olurdu).
+        const named =
+          (ts.isMethodDeclaration(n) || ts.isFunctionDeclaration(n)) && n.name && ts.isIdentifier(n.name)
+            ? n.name.text
+            : null;
+        if (named) stack.push(named);
+        if (ts.isCallExpression(n)) {
+          const e = n.expression;
+          if (ts.isIdentifier(e)) {
+            if (e.text.startsWith("moveAccountBalance")) mark({ writes: true });
+            if (e.text === "assertCashBalanceCoversTx") mark({ guards: true });
+          }
+          // Doğrudan yazım: `tx.cashBox.update` / `tx.bankAccount.update`
+          // (payment.create sarmalayıcısız yazar — desen adı değil YAPIYI arar).
+          if (ts.isPropertyAccessExpression(e) && e.name.text === "update") {
+            const owner = e.expression;
+            if (
+              ts.isPropertyAccessExpression(owner) &&
+              (owner.name.text === "cashBox" || owner.name.text === "bankAccount")
+            ) {
+              mark({ writes: true });
+            }
+          }
+        }
+        ts.forEachChild(n, visit);
+        if (named) stack.pop();
+      };
+      visit(sf);
+    };
+
+    const walkTs = (dir: string): string[] =>
+      fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) return walkTs(full);
+        return entry.isFile() && entry.name.endsWith(".ts") ? [full] : [];
+      });
+    for (const full of walkTs(servicesDir)) scanFile(full, path.relative(servicesDir, full));
+
+    // `moveAccountBalance*` birimlerinin KENDİSİ yazma ilkelidir (guard çağıranda
+    // yaşar) — yazar listesinden düşülür; sınıflandırma çağıranlar üzerinde.
+    const writers = [...units.values()].filter((u) => u.writes && !u.name.startsWith("moveAccountBalance"));
+    const isReverse = (u: Unit): boolean => /cancel/i.test(u.name);
+    const forward = writers.filter((u) => !isReverse(u));
+    const reverse = writers.filter(isReverse);
+
+    /** İLERİ olup guard İSTEMEYEN tek meşru sınıf: para GİREN yol. İki yönlü
+     *  denetimli — birim kaybolursa YA DA guard kazanırsa muaf bayatlar (red). */
+    const EXEMPT_FORWARD: Record<string, string> = {
+      "cheque.service.ts#collect": "para GİREN yol (tahsilat) — eksi kasa riski yok, guard yalnız ÇIKIŞLARI kapılar",
+    };
+
+    check(
+      "§9a KÖRLÜK ZEMİNİ: kasa/banka bakiyesi yazan birimler bulundu (≥3 dosya, ≥7 birim)",
+      new Set(writers.map((u) => u.file)).size >= 3 && writers.length >= 7,
+      `${writers.length} birim: ${writers.map((u) => `${u.file}#${u.name}`).join(", ")}`,
+    );
+    const unguardedForward = forward.filter((u) => !u.guards && !(`${u.file}#${u.name}` in EXEMPT_FORWARD));
+    check(
+      "§9b ⭐ İLERİ yazan HER birim assertCashBalanceCoversTx çağırıyor (yeni yazar guard'sız doğamaz)",
+      unguardedForward.length === 0,
+      unguardedForward.length === 0
+        ? "hepsi bağlı"
+        : `BAĞLANMAMIŞ: ${unguardedForward.map((u) => `${u.file}#${u.name}`).join(", ")} — bakiye yazımından ÖNCE aynı tx'te çağır (banka/giriş muafsa EXEMPT_FORWARD'a gerekçeyle yaz)`,
+    );
+    const guardedReverse = reverse.filter((u) => u.guards);
+    check(
+      "§9c ⭐ TERS yol (storno/iptal) guard'SIZ — §4 muafiyetinin mekanik ikizi",
+      reverse.length >= 3 && guardedReverse.length === 0,
+      guardedReverse.length > 0
+        ? `guard EKLENMİŞ: ${guardedReverse.map((u) => `${u.file}#${u.name}`).join(", ")} — para gerçeği ekran kuralından önce gelir`
+        : `ters yol=${reverse.map((u) => u.name).join(",")}`,
+    );
+    const staleExempt = Object.keys(EXEMPT_FORWARD).filter((key) => {
+      const u = writers.find((w) => `${w.file}#${w.name}` === key);
+      return !u || u.guards || isReverse(u);
+    });
+    check(
+      "§9d Muaf listesi bayat değil (birim var + hâlâ ileri + hâlâ guard'sız)",
+      staleExempt.length === 0,
+      staleExempt.join(",") || `muaf=${Object.keys(EXEMPT_FORWARD).join(",")}`,
+    );
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

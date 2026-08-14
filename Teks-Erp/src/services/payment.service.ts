@@ -10,6 +10,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { isClientTokenP2002 } from "../utils/p2002";
 import {
   D,
   D0,
@@ -71,8 +72,16 @@ export class PaymentService {
     const paymentDate = input.paymentDate ?? new Date();
     const currency = input.currency ?? Currency.TRY;
 
-    const result = await withBarcodeRetry(async () =>
-      prisma.$transaction(async (tx) => {
+    // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
+    // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
+    // `clientToken` unique'ine çarpar. O P2002 RETRY EDİLMEZ (retry aynı
+    // token'ı 5 tur boşa yazardı → yanıltıcı "Barkod üretimi ... başarısız"
+    // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
+    let result: { id: string; docNo: string };
+    try {
+      result = await withBarcodeRetry(
+        async () =>
+          prisma.$transaction(async (tx) => {
         const cari = await ensureCariAccountTx(tx, {
           customerId: input.customerId ?? null,
           subcontractorId: input.subcontractorId ?? null,
@@ -211,8 +220,24 @@ export class PaymentService {
         );
 
         return payment;
-      }),
-    );
+          }),
+        undefined,
+        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+        // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
+        (err) => !isClientTokenP2002(err),
+      );
+    } catch (err) {
+      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
+      // kontroldekiyle AYNI şekil + AYNI mesaj — replay ayırt edilemez.
+      if (input.clientToken && isClientTokenP2002(err)) {
+        const existing = await prisma.payment.findUnique({
+          where: { clientToken: input.clientToken },
+          select: { id: true, docNo: true },
+        });
+        if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+      }
+      throw err;
+    }
 
     void AuditService.log({
       userId,

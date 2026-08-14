@@ -109,7 +109,7 @@ export interface ChequeEventRow {
 }
 
 export interface ChequeDetail extends ChequeRow {
-  /** Detay ucu (`findById` include) her zaman döner — kolon NOT NULL. */
+  /** Detay ucu (`findById` select) her zaman döner — kolon NOT NULL. */
   postingDate: string;
   branchName: string | null;
   notes: string | null;

@@ -19,6 +19,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { isClientTokenP2002 } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { D, resolveExchangeRate } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
@@ -142,6 +143,35 @@ function compareLockKeys(a: string, b: string): number {
 
 export class CashTransactionService {
   /**
+   * Token → kayıtlı virmanın CACHED yanıtı (idempotent replay). Ön kontrol ve
+   * eşzamanlı-çarpışma catch'i AYNI helper'ı çağırır — iki yol iki ayrı select
+   * yazsaydı cached yanıtın şekli/sırası sessizce ayrışırdı.
+   *
+   * ⚠️ SIRA DETERMİNİSTİK: ÇIKAN (TRANSFER_OUT) önce, GİREN sonra — normal
+   * yanıtın `[outRow, inRow]` sırasının aynısı. `findMany` sırasız dönebilir;
+   * sırasız cached yanıt, replay'i normal yanıttan ayırt edilebilir yapardı.
+   */
+  private async loadTransferByToken(
+    clientToken: string,
+  ): Promise<ApiResponse<{ ids: string[]; docNos: string[] }> | null> {
+    const existing = await prisma.cashTransaction.findUnique({
+      where: { clientToken },
+      select: { transferGroupId: true },
+    });
+    if (!existing?.transferGroupId) return null;
+    const rows = await prisma.cashTransaction.findMany({
+      where: { transferGroupId: existing.transferGroupId },
+      select: { id: true, docNo: true, kind: true },
+    });
+    rows.sort((a, b) => (a.kind === CashTxnKind.TRANSFER_OUT ? -1 : b.kind === CashTxnKind.TRANSFER_OUT ? 1 : 0));
+    return {
+      success: true,
+      data: { ids: rows.map((r) => r.id), docNos: rows.map((r) => r.docNo) },
+      message: "Virman zaten kaydedilmiş.",
+    };
+  }
+
+  /**
    * Masraf / gelir / açılış fişi.
    *
    * ⚠️ Para birimi HESAPTAN gelir, girdide SORULMAZ: kasa tek para birimlidir
@@ -161,8 +191,16 @@ export class CashTransactionService {
     }
 
     const txnDate = input.txnDate ?? new Date();
-    const result = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
+    // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
+    // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
+    // `clientToken` unique'ine çarpar. O P2002 RETRY EDİLMEZ (retry aynı
+    // token'ı 5 tur boşa yazardı → yanıltıcı "Barkod üretimi ... başarısız"
+    // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
+    let result: { id: string; docNo: string };
+    try {
+      result = await withBarcodeRetry(
+        () =>
+          prisma.$transaction(async (tx) => {
         const acc = await loadAccount(tx, input, "Kasa hareketi");
 
         // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1, 2026-08-14). `txnDate` kullanıcı
@@ -234,8 +272,24 @@ export class CashTransactionService {
         }
         await moveAccountBalance(tx, input, signed);
         return row;
-      }),
-    );
+          }),
+        undefined,
+        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+        // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
+        (err) => !isClientTokenP2002(err),
+      );
+    } catch (err) {
+      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
+      // kontroldekiyle AYNI şekil + AYNI mesaj — replay ayırt edilemez.
+      if (input.clientToken && isClientTokenP2002(err)) {
+        const existing = await prisma.cashTransaction.findUnique({
+          where: { clientToken: input.clientToken },
+          select: { id: true, docNo: true },
+        });
+        if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+      }
+      throw err;
+    }
 
     void AuditService.log({
       userId,
@@ -272,26 +326,20 @@ export class CashTransactionService {
     }
 
     if (input.clientToken) {
-      const existing = await prisma.cashTransaction.findUnique({
-        where: { clientToken: input.clientToken },
-        select: { transferGroupId: true },
-      });
-      if (existing?.transferGroupId) {
-        const rows = await prisma.cashTransaction.findMany({
-          where: { transferGroupId: existing.transferGroupId },
-          select: { id: true, docNo: true },
-        });
-        return {
-          success: true,
-          data: { ids: rows.map((r) => r.id), docNos: rows.map((r) => r.docNo) },
-          message: "Virman zaten kaydedilmiş.",
-        };
-      }
+      const cached = await this.loadTransferByToken(input.clientToken);
+      if (cached) return cached;
     }
 
     const txnDate = input.txnDate ?? new Date();
-    const result = await withBarcodeRetry(() =>
-      prisma.$transaction(async (tx) => {
+    // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
+    // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
+    // `clientToken` unique'ine çarpar (token yalnız ÇIKAN bacakta). O P2002
+    // RETRY EDİLMEZ; aşağıdaki catch cached yanıta çevirir (PO emsali).
+    let result: { ids: string[]; docNos: string[]; groupId: string };
+    try {
+      result = await withBarcodeRetry(
+        () =>
+          prisma.$transaction(async (tx) => {
         const fromAcc = await loadAccount(tx, from, "Çıkan hesap");
         const toAcc = await loadAccount(tx, to, "Giren hesap");
 
@@ -378,8 +426,21 @@ export class CashTransactionService {
           await moveAccountBalance(tx, leg.ref, leg.delta);
         }
         return { ids: [outRow.id, inRow.id], docNos: [outRow.docNo, inRow.docNo], groupId };
-      }),
-    );
+          }),
+        undefined,
+        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+        // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
+        (err) => !isClientTokenP2002(err),
+      );
+    } catch (err) {
+      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
+      // kontrolle AYNI helper'dan gelir — şekil + sıra + mesaj birebir.
+      if (input.clientToken && isClientTokenP2002(err)) {
+        const cached = await this.loadTransferByToken(input.clientToken);
+        if (cached) return cached;
+      }
+      throw err;
+    }
 
     void AuditService.log({
       userId,

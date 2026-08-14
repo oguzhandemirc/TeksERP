@@ -47,6 +47,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { isClientTokenP2002 } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { factoryDaySql, factoryYmd } from "../constants/time";
 import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } from "./helpers/finance.helper";
@@ -154,6 +155,82 @@ const TRANSITION_SELECT = {
 } satisfies Prisma.ChequeSelect;
 
 type TransitionRow = Prisma.ChequeGetPayload<{ select: typeof TRANSITION_SELECT }>;
+
+/** Cari referansı — ad, bağlı olduğu taraftan okunur (`partyName` sözleşmesi). */
+const CARI_REF_SELECT = {
+  select: {
+    id: true,
+    customer: { select: { code: true, name: true } },
+    subcontractor: { select: { code: true, name: true } },
+  },
+} as const;
+
+/**
+ * LİSTE yüzeyi — `list()` bunu kullanır; DETAIL_SELECT bunun üstüne kurulur
+ * (tek kaynak: liste ile detay aynı satır için farklı şey söyleyemez).
+ */
+const LIST_SELECT = {
+  id: true,
+  docNo: true,
+  kind: true,
+  docType: true,
+  status: true,
+  currency: true,
+  amount: true,
+  amountTry: true,
+  // İKİ TARİH BİRDEN döner: `postingDate` işlem (defter) tarihi,
+  // `issueDate` keşide. Panel tablosu postingDate'i opsiyonel bekler ve
+  // "alan gelirse kendiliğinden gösterir" (Cheques/service.ts notu) —
+  // yalnız keşideyi dönmek, listede defter tarihini görünmez bırakırdı.
+  postingDate: true,
+  issueDate: true,
+  dueDate: true,
+  serialNo: true,
+  bankName: true,
+  drawerName: true,
+  allocatedTotal: true,
+  bankAccount: { select: { id: true, name: true } },
+  cari: CARI_REF_SELECT,
+  endorsedToCari: CARI_REF_SELECT,
+} as const;
+
+/**
+ * DETAY yüzeyi (I4, 2026-08-14) — `include` DEĞİL `select`.
+ *
+ * ⚠️ Çıplak `include` TÜM skaler kolonları döndürüyordu: `clientToken`
+ * (idempotency iç anahtarı) + çıplak iç FK'ler (`cariId`/`endorsedToCariId`/
+ * `bankAccountId`/`cancelledById`/`createdById`). Panel (`Cheques/service.ts
+ * ChequeDetail`) bunların hiçbirini okumuyor — iç kimlikler ilişkinin KENDİ
+ * `id`'siyle taşınır. Kural: LIST_SELECT + detay alanları + ilişkiler.
+ *
+ * ⚠️ Alan kümesi bekçiyle SABİTLENDİ (`test_cheque_portfolio` detay bölümü).
+ */
+const DETAIL_SELECT = {
+  ...LIST_SELECT,
+  exchangeRate: true,
+  branchName: true,
+  notes: true,
+  cancelledAt: true,
+  cancelReason: true,
+  createdAt: true,
+  updatedAt: true,
+  events: {
+    // Olay defteri KRONOLOJİK okunur — "ne zaman ne oldu" sorusunun
+    // cevabı sıralamadır; ters sıralamak zinciri okunamaz yapardı.
+    orderBy: [{ eventDate: "asc" as const }, { createdAt: "asc" as const }],
+    select: {
+      id: true,
+      type: true,
+      fromStatus: true,
+      toStatus: true,
+      eventDate: true,
+      notes: true,
+      counterCari: CARI_REF_SELECT,
+      bankAccount: { select: { id: true, name: true } },
+      cashBox: { select: { id: true, name: true } },
+    },
+  },
+} satisfies Prisma.ChequeSelect;
 
 // -----------------------------------------------------------------------------
 // ORTAK YARDIMCILAR
@@ -533,9 +610,19 @@ export class ChequeService {
     // ⚠️ `postingDate` ile `dueDate` arasında da KISIT YOK: ileri keşideli çek
     // BUGÜNE işlenir, vadesi gelecektedir — meşru ve olağan.
 
-    const result = await withBarcodeRetry(async () =>
-      prisma.$transaction(async (tx) => {
-        const cari = await resolveCariTx(tx, input, "Çek/senet");
+    // ⚠️ ÖN KONTROL (yukarıdaki findUnique) TEK BAŞINA YETMEZ (check-then-act):
+    // aynı token'la İKİ PARALEL istek ikisi de "token yok" görür, ikisi de
+    // INSERT eder ve biri `clientToken` unique'ine çarpar. O P2002 RETRY
+    // EDİLMEZ — retry her turda AYNI token'ı yazacağı için 5 tur boşa döner ve
+    // kullanıcı yanıltıcı "Barkod üretimi 5 denemede başarısız" 409'u alırdı.
+    // Doğru cevap, çarpan tarafın İLK kaydı cached yanıt olarak dönmesidir
+    // (purchase-order.create emsali; kural kaynağı `utils/p2002.ts`).
+    let result: { id: string; docNo: string };
+    try {
+      result = await withBarcodeRetry(
+        async () =>
+          prisma.$transaction(async (tx) => {
+            const cari = await resolveCariTx(tx, input, "Çek/senet");
 
         const rate =
           input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, postingDate);
@@ -605,8 +692,27 @@ export class ChequeService {
         });
 
         return cheque;
-      }),
-    );
+          }),
+        undefined,
+        // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR — sonraki tur taze
+        // sırayı okur. `clientToken` P2002'si retry EDİLMEZ, aşağıdaki catch
+        // onu cached yanıta çevirir.
+        (err) => !isClientTokenP2002(err),
+      );
+    } catch (err) {
+      // Catch tx DIŞINDA — PG'nin "aborted transaction" tuzağına girilmez
+      // (purchase-order.create emsali). Cached yanıt ön kontroldekiyle AYNI
+      // ŞEKİL ve AYNI MESAJ taşır: istemci, ardışık ve eşzamanlı replay'i
+      // ayırt edemez (sözleşme bozulmaz).
+      if (input.clientToken && isClientTokenP2002(err)) {
+        const existing = await prisma.cheque.findUnique({
+          where: { clientToken: input.clientToken },
+          select: { id: true, docNo: true },
+        });
+        if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+      }
+      throw err;
+    }
 
     void AuditService.log({
       userId,
@@ -1407,42 +1513,7 @@ export class ChequeService {
     const [data, total] = await Promise.all([
       prisma.cheque.findMany({
         where,
-        select: {
-          id: true,
-          docNo: true,
-          kind: true,
-          docType: true,
-          status: true,
-          currency: true,
-          amount: true,
-          amountTry: true,
-          // İKİ TARİH BİRDEN döner: `postingDate` işlem (defter) tarihi,
-          // `issueDate` keşide. Panel tablosu postingDate'i opsiyonel bekler ve
-          // "alan gelirse kendiliğinden gösterir" (Cheques/service.ts notu) —
-          // yalnız keşideyi dönmek, listede defter tarihini görünmez bırakırdı.
-          postingDate: true,
-          issueDate: true,
-          dueDate: true,
-          serialNo: true,
-          bankName: true,
-          drawerName: true,
-          allocatedTotal: true,
-          bankAccount: { select: { id: true, name: true } },
-          cari: {
-            select: {
-              id: true,
-              customer: { select: { code: true, name: true } },
-              subcontractor: { select: { code: true, name: true } },
-            },
-          },
-          endorsedToCari: {
-            select: {
-              id: true,
-              customer: { select: { code: true, name: true } },
-              subcontractor: { select: { code: true, name: true } },
-            },
-          },
-        },
+        select: LIST_SELECT,
         // VADE birinci anahtar: portföy ekranının tek sorusu "sırada ne var".
         orderBy: [{ dueDate: "asc" }, { createdAt: "asc" }],
         skip: (page - 1) * pageSize,
@@ -1454,47 +1525,11 @@ export class ChequeService {
   }
 
   async findById(id: string) {
+    // I4: `include` → `select` (gerekçe DETAIL_SELECT başlığında — clientToken
+    // ve çıplak iç FK'ler yanıtta gezmez).
     const cheque = await prisma.cheque.findUnique({
       where: { id },
-      include: {
-        cari: {
-          select: {
-            id: true,
-            customer: { select: { code: true, name: true } },
-            subcontractor: { select: { code: true, name: true } },
-          },
-        },
-        endorsedToCari: {
-          select: {
-            id: true,
-            customer: { select: { code: true, name: true } },
-            subcontractor: { select: { code: true, name: true } },
-          },
-        },
-        bankAccount: { select: { id: true, name: true } },
-        events: {
-          // Olay defteri KRONOLOJİK okunur — "ne zaman ne oldu" sorusunun
-          // cevabı sıralamadır; ters sıralamak zinciri okunamaz yapardı.
-          orderBy: [{ eventDate: "asc" }, { createdAt: "asc" }],
-          select: {
-            id: true,
-            type: true,
-            fromStatus: true,
-            toStatus: true,
-            eventDate: true,
-            notes: true,
-            counterCari: {
-              select: {
-                id: true,
-                customer: { select: { code: true, name: true } },
-                subcontractor: { select: { code: true, name: true } },
-              },
-            },
-            bankAccount: { select: { id: true, name: true } },
-            cashBox: { select: { id: true, name: true } },
-          },
-        },
-      },
+      select: DETAIL_SELECT,
     });
     if (!cheque) throw AppError.notFound("Çek/senet bulunamadı.");
     return { success: true, data: cheque };

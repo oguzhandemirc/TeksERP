@@ -36,6 +36,13 @@
 //       kilit sırası kaynak taraması + iptal bacağı işlevsel
 //   §15 GÜVENLİK AĞI: error.middleware sınıf-40 → 409 (iki kılık + P2010'un
 //       META alt-kılığı) + 23514 finans mesajları + YANLIŞ POZİTİF korumaları
+//   §15r ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2, payment.create): pencere
+//       elle açık tutulan tx ile deterministik (kazananın token'ı unique
+//       indekste UNCOMMITTED → ön kontrol göremez, kaybeden indekste bekler) →
+//       kaybeden cached yanıt alır; TAM BİR kayıt; eşzamanlı = ardışık replay
+//       BAYT-BAYT. NEGATİF SONDA: predicate (`!isClientTokenP2002`) düşürülünce
+//       token P2002'si 5 tur boşa retry edilir → ham "Barkod üretimi ...
+//       başarısız" 409'u → kırmızı.
 //   §16 MUTABAKAT: SUM(allocation) === üç sayacın hepsi (TÜM DB) — HER ZAMAN
 //       EN SON koşar ki §12-§14'ün yarış artıkları da terazide tartılsın
 //
@@ -158,6 +165,17 @@ async function err(fn: () => Promise<unknown>): Promise<string> {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** §15r yarış sondası — pencereyi elle açık tutmak için (goods_receipt_invoice §10 emsali). */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e?: unknown) => void } {
+  let resolve!: (v: T) => void;
+  let reject!: (e?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 /**
  * Bir hatayı GERÇEK `errorHandler` üzerinden HTTP sözleşmesine eşler (§13-§15).
@@ -1127,6 +1145,101 @@ async function main(): Promise<void> {
     check("§15h KÖRLÜK ZEMİNİ: gerçek AppError statüsünü koruyarak geçti", real.status === 409 && real.message === "zemin 409", `${real.status} ${real.message}`);
     const real404 = mapThroughErrorHandler(AppError.notFound("zemin 404"));
     check("§15i KÖRLÜK ZEMİNİ: 404 da korunuyor (harness her şeyi 409 yapmıyor)", real404.status === 404, `${real404.status}`);
+  }
+
+  // ── §15r ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2, payment.create) ────
+  // Pencere zamanlamayla DEĞİL elle açık tutulan tx ile kurulur (yarış bekçisi
+  // kuralı): kazananın satırı unique indekse UNCOMMITTED yazılıdır → kaybedenin
+  // ön kontrolü göremez (READ COMMITTED), INSERT'i indeks kilidinde bekler;
+  // gate commit → P2002 → predicate propagate → catch cached yanıta çevirir.
+  {
+    const cariRow = await prisma.cariAccount.findFirstOrThrow({
+      where: { customerId: customerIds[0] },
+      select: { id: true },
+    });
+    const boxBefore = D(
+      (await prisma.cashBox.findUniqueOrThrow({ where: { id: cashBoxId as string }, select: { balance: true } })).balance,
+    );
+    const rplToken = crypto.randomUUID();
+    const rplLock = deferred<{ id: string; docNo: string }>();
+    const rplGate = deferred<void>();
+    const rplTx = prisma.$transaction(
+      async (tx) => {
+        const winner = await tx.payment.create({
+          data: {
+            docNo: `${TAG}-RPL1`,
+            direction: "IN",
+            method: "CASH",
+            cariId: cariRow.id,
+            amount: new Prisma.Decimal(75),
+            amountTry: new Prisma.Decimal(75),
+            cashBoxId,
+            paymentDate: new Date(),
+            clientToken: rplToken,
+          },
+          select: { id: true, docNo: true },
+        });
+        rplLock.resolve(winner);
+        await rplGate.promise;
+        return winner;
+      },
+      { timeout: 20_000 },
+    );
+    // Gate-tx promise'i await'ten önce reddedebilir — no-op catch olmadan
+    // unhandled rejection süreci Sonuç satırı basılmadan öldürür (§12m dersi).
+    void rplTx.catch(() => {});
+    const winner = await rplLock.promise;
+    paymentIds.push(winner.id);
+
+    let loserSettled = false;
+    const loserP = paymentService
+      .create({
+        direction: "IN",
+        method: "CASH",
+        customerId: customerIds[0],
+        amount: 75,
+        cashBoxId,
+        clientToken: rplToken,
+      })
+      .finally(() => {
+        loserSettled = true;
+      });
+    void loserP.catch(() => {});
+    await sleep(400);
+    check("§15r-a ⭐ kaybeden UNIQUE indekste BEKLEDİ (ön kontrol kazananı görmedi → pencere gerçek)", !loserSettled);
+    rplGate.resolve();
+    await rplTx;
+    const loserRes = await loserP;
+    check(
+      "§15r-b ⭐ kaybeden BAŞARILI ve KAZANANIN kaydını aldı (ham hata yok, mükerrer yok)",
+      loserRes.success === true && loserRes.data.id === winner.id && loserRes.data.docNo === winner.docNo,
+      `docNo=${loserRes.data?.docNo}`,
+    );
+    const seqRes = await paymentService.create({
+      direction: "IN",
+      method: "CASH",
+      customerId: customerIds[0],
+      amount: 75,
+      cashBoxId,
+      clientToken: rplToken,
+    });
+    check(
+      "§15r-c ⭐ eşzamanlı replay yanıtı ardışık replay ile BAYT-BAYT aynı",
+      JSON.stringify(loserRes) === JSON.stringify(seqRes),
+      `eşzamanlı=${JSON.stringify(loserRes)}`,
+    );
+    check(
+      "§15r-d token'lı TAM BİR kayıt",
+      (await prisma.payment.count({ where: { clientToken: rplToken } })) === 1,
+    );
+    const boxAfter = D(
+      (await prisma.cashBox.findUniqueOrThrow({ where: { id: cashBoxId as string }, select: { balance: true } })).balance,
+    );
+    check(
+      "§15r-e kaybedenin tx'i GERİ SARILDI: kasa bakiyesi oynamadı",
+      boxAfter.equals(boxBefore),
+      `önce=${boxBefore} sonra=${boxAfter}`,
+    );
   }
 
   // ── §16 MUTABAKAT (TÜM DB) ───────────────────────────────────────────────

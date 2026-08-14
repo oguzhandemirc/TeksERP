@@ -52,6 +52,15 @@
 //       değil · statü süzgeci (tahsil/ciro/iptal takvimden ÇIKAR) · para
 //       birimleri toplanmaz · kovalar pencereden BAĞIMSIZ, takvim pencereli ·
 //       Σ(kova) = canlı çek adedi mutabakatı
+//   §22 ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2): pencere elle açık tutulan
+//       tx ile deterministik (kazananın token'ı unique indekste UNCOMMITTED →
+//       ön kontrol göremez, kaybeden indekste bekler) → kaybeden cached yanıt
+//       alır; TAM BİR kayıt; eşzamanlı = ardışık replay BAYT-BAYT. NEGATİF
+//       SONDA: predicate (`!isClientTokenP2002`) düşürülünce ham "Barkod
+//       üretimi ... başarısız" 409'u → kırmızı.
+//   §23 DETAY ALAN KÜMESİ (I4): findById include→select — anahtar kümesi
+//       sabit; clientToken + çıplak iç FK'ler yanıtta yok; olay satırı
+//       anahtarları panel `ChequeEventRow` sözleşmesiyle birebir.
 // =============================================================================
 import { ChequeStatus, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -88,6 +97,17 @@ async function expectError(fn: () => Promise<unknown>): Promise<string> {
   } catch (e) {
     return (e as Error).message;
   }
+}
+
+/** §22 yarış sondası — pencereyi elle açık tutmak için (goods_receipt_invoice §10 emsali). */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e?: unknown) => void } {
+  let resolve!: (v: T) => void;
+  let reject!: (e?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 const bankBalance = async (id: string) =>
@@ -1195,6 +1215,127 @@ async function main(): Promise<void> {
     weekSum === monthSum && weekSum > 0,
     `hafta=${weekSum} ay=${monthSum}`,
   );
+
+  // ── §22 ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2) ────────────────────
+  // §12 ARDIŞIK replay'i ölçüyor (ön kontrol yolu); burası TOCTOU penceresini
+  // ölçer. Pencere zamanlamayla DEĞİL elle açık tutulan tx ile kurulur (yarış
+  // bekçisi kuralı): kazananın satırı unique indekse UNCOMMITTED yazılıdır →
+  // kaybedenin ön kontrolü göremez, INSERT'i indeks kilidinde bekler; gate
+  // commit → P2002 → catch cached yanıta çevirir (PO deseni).
+  {
+    const rplToken = crypto.randomUUID();
+    const rplLock = deferred<{ id: string; docNo: string }>();
+    const rplGate = deferred<void>();
+    const now = new Date();
+    const rplTx = prisma.$transaction(
+      async (tx) => {
+        const winner = await tx.cheque.create({
+          data: {
+            docNo: `${TAG}-RPL1`,
+            kind: "RECEIVED",
+            status: ChequeStatus.PORTFOLIO,
+            cariId: musteri,
+            amount: new Prisma.Decimal(60),
+            amountTry: new Prisma.Decimal(60),
+            issueDate: now,
+            postingDate: now,
+            dueDate: new Date(now.getTime() + 7 * 86400000),
+            clientToken: rplToken,
+          },
+          select: { id: true, docNo: true },
+        });
+        rplLock.resolve(winner);
+        await rplGate.promise;
+        return winner;
+      },
+      { timeout: 20_000 },
+    );
+    // Gate-tx promise'i await'ten önce reddedebilir — no-op catch olmadan
+    // unhandled rejection süreci Sonuç satırı basılmadan öldürür (CLAUDE.md eki ②).
+    void rplTx.catch(() => {});
+    const winner = await rplLock.promise;
+    chequeIds.push(winner.id);
+
+    const balBefore = await cariBalance(musteri);
+    let loserSettled = false;
+    const loserP = chequeService
+      .create({
+        kind: "RECEIVED",
+        cariId: musteri,
+        amount: 60,
+        dueDate: new Date(now.getTime() + 7 * 86400000),
+        clientToken: rplToken,
+      })
+      .finally(() => {
+        loserSettled = true;
+      });
+    void loserP.catch(() => {});
+    await new Promise((r) => setTimeout(r, 400));
+    check("§22a ⭐ kaybeden UNIQUE indekste BEKLEDİ (ön kontrol kazananı görmedi → pencere gerçek)", !loserSettled);
+    rplGate.resolve();
+    await rplTx;
+    const loserRes = await loserP;
+    check(
+      "§22b ⭐ kaybeden BAŞARILI ve KAZANANIN kaydını aldı (ham hata yok, mükerrer yok)",
+      loserRes.success === true && loserRes.data.id === winner.id && loserRes.data.docNo === winner.docNo,
+      `docNo=${loserRes.data?.docNo}`,
+    );
+    const seqRes = await chequeService.create({
+      kind: "RECEIVED",
+      cariId: musteri,
+      amount: 60,
+      dueDate: new Date(now.getTime() + 7 * 86400000),
+      clientToken: rplToken,
+    });
+    check(
+      "§22c ⭐ eşzamanlı replay yanıtı ardışık replay ile BAYT-BAYT aynı",
+      JSON.stringify(loserRes) === JSON.stringify(seqRes),
+      `eşzamanlı=${JSON.stringify(loserRes)}`,
+    );
+    check(
+      "§22d token'lı TAM BİR kayıt",
+      (await prisma.cheque.count({ where: { clientToken: rplToken } })) === 1,
+    );
+    check(
+      "§22e kaybedenin tx'i GERİ SARILDI: cari bakiyesi oynamadı (defter yarım yazılmadı)",
+      (await cariBalance(musteri)).equals(balBefore),
+      `bakiye=${await cariBalance(musteri)}`,
+    );
+  }
+
+  // ── §23 DETAY ALAN KÜMESİ (I4: include → select) ────────────────────────
+  // Panel `ChequeDetail`/`ChequeEventRow` sözleşmesi buradan sabitlenir — alan
+  // düşürme sessizdir (ekran boş basar, hata vermez). Olaylı gerçek örnek: c1.
+  {
+    const det = await chequeService.findById(chequeIds[0] as string);
+    const data = det.data as unknown as Record<string, unknown>;
+    const EXPECTED_KEYS = [
+      "allocatedTotal", "amount", "amountTry", "bankAccount", "bankName", "branchName",
+      "cancelReason", "cancelledAt", "cari", "createdAt", "currency", "docNo", "docType",
+      "drawerName", "dueDate", "endorsedToCari", "events", "exchangeRate", "id",
+      "issueDate", "kind", "notes", "postingDate", "serialNo", "status", "updatedAt",
+    ];
+    check(
+      "§23a ⭐ detay anahtar kümesi SABİT",
+      JSON.stringify(Object.keys(data).sort()) === JSON.stringify(EXPECTED_KEYS),
+      `fark=${Object.keys(data).filter((k) => !EXPECTED_KEYS.includes(k)).join(",") || "-"} eksik=${EXPECTED_KEYS.filter((k) => !(k in data)).join(",") || "-"}`,
+    );
+    check("§23b ⭐ clientToken yanıtta GEZMİYOR", !("clientToken" in data));
+    const bareFks = ["cariId", "endorsedToCariId", "bankAccountId", "cancelledById", "createdById"];
+    check(
+      "§23c çıplak iç FK'ler yok (cari/banka ilişkinin kendi id'siyle taşınır)",
+      bareFks.every((k) => !(k in data)),
+      bareFks.filter((k) => k in data).join(",") || "-",
+    );
+    const events = data.events as Array<Record<string, unknown>>;
+    check(
+      "§23d olay satırı anahtarları panel ChequeEventRow ile birebir",
+      events.length > 0 &&
+        JSON.stringify(Object.keys(events[0] as object).sort()) ===
+          JSON.stringify(["bankAccount", "cashBox", "counterCari", "eventDate", "fromStatus", "id", "notes", "toStatus", "type"]),
+      events[0] ? Object.keys(events[0]).join(",") : "(olay yok)",
+    );
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

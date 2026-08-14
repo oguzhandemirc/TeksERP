@@ -25,6 +25,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { isClientTokenP2002 } from "../utils/p2002";
 import {
   D,
   D0,
@@ -116,6 +117,62 @@ const LIST_SELECT = {
   },
 } as const;
 
+/**
+ * DETAY yüzeyi (I4, 2026-08-14) — `include` DEĞİL `select`.
+ *
+ * ⚠️ Çıplak `include` TÜM skaler kolonları döndürür: `clientToken` (idempotency
+ * iç anahtarı — istemcinin İŞİ OLMAYAN ve loglanan yanıtlarda gezmemesi gereken
+ * değer) + çıplak iç FK'ler (`cariId`/`shipmentId`/`directShipmentId`/
+ * `returnGroupId`/`subcontractorReceiptId`/`goodsReceiptId`/`confirmedById`/
+ * `cancelledById`/`createdById`). Panel bunların HİÇBİRİNİ okumuyor (ölçüm
+ * 2026-08-14: Electron fatura detay ucunu hiç çağırmıyor; kaynak bağı insanca
+ * adıyla `goodsReceipt` ilişkisinden basılır). Kural: LIST_SELECT + detay
+ * alanları + ilişkiler; iç kimlikler ilişkinin KENDİ `id`'siyle taşınır.
+ *
+ * ⚠️ Alan kümesi bekçiyle SABİTLENDİ (`test_finance_invoice` detay bölümü) —
+ * alan ekleyip/düşürürken bekçiyi de güncelle; sessiz alan kaybı ekranda hata
+ * değil BOŞ HÜCRE üretir.
+ */
+const DETAIL_SELECT = {
+  ...LIST_SELECT,
+  notes: true,
+  subtotal: true,
+  discountTotal: true,
+  vatTotal: true,
+  withholdingTotal: true,
+  cancelReason: true,
+  updatedAt: true,
+  // Listedekinden ZENGİN cari: detay vergi no/dairesi de basar (spread'den
+  // SONRA yazıldığı için LIST_SELECT.cari'yi ezer — sıra load-bearing).
+  cari: {
+    select: {
+      id: true,
+      kind: true,
+      taxOffice: true,
+      customer: { select: { id: true, code: true, name: true, taxNumber: true } },
+      subcontractor: { select: { id: true, code: true, name: true, taxNumber: true } },
+    },
+  },
+  goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
+  lines: {
+    orderBy: { lineNo: "asc" },
+    select: {
+      id: true,
+      lineNo: true,
+      description: true,
+      qty: true,
+      unit: true,
+      unitPrice: true,
+      discountRate: true,
+      vatRate: true,
+      withholdingRate: true,
+      lineTotal: true,
+      vatAmount: true,
+      item: { select: { id: true, code: true, name: true } },
+    },
+  },
+} as const;
+
 export class InvoiceService {
   // ---------------------------------------------------------------------------
   // TASLAK
@@ -145,7 +202,13 @@ export class InvoiceService {
     const issueDate = input.issueDate ?? new Date();
     const currency = input.currency ?? Currency.TRY;
 
-    return withBarcodeRetry(async () => {
+    // ⚠️ ÖN KONTROL TEK BAŞINA YETMEZ (check-then-act): aynı token'la İKİ
+    // PARALEL istek ikisi de "token yok" görür, ikisi de INSERT eder ve biri
+    // `clientToken` unique'ine çarpar. O P2002 RETRY EDİLMEZ (retry aynı
+    // token'ı 5 tur boşa yazardı → yanıltıcı "Barkod üretimi ... başarısız"
+    // 409'u); aşağıdaki catch onu cached yanıta çevirir (purchase-order emsali).
+    try {
+      return await withBarcodeRetry(async () => {
       const result = await prisma.$transaction(async (tx) => {
         const cari = await ensureCariAccountTx(tx, {
           customerId: input.customerId ?? null,
@@ -225,7 +288,23 @@ export class InvoiceService {
         newData: { docNo: result.docNo, type: input.type },
       });
       return { success: true, data: result, message: `${result.docNo} taslağı oluşturuldu.` };
-    });
+      },
+      undefined,
+      // Belge numarası yarışı (P2002 `docNo`) RETRY EDİLİR; `clientToken`
+      // P2002'si retry EDİLMEZ — catch cached yanıta çevirir.
+      (err) => !isClientTokenP2002(err));
+    } catch (err) {
+      // Catch tx DIŞINDA (aborted-transaction tuzağı). Cached yanıt ön
+      // kontroldekiyle AYNI şekil + AYNI mesaj — replay ayırt edilemez.
+      if (input.clientToken && isClientTokenP2002(err)) {
+        const existing = await prisma.invoice.findUnique({
+          where: { clientToken: input.clientToken },
+          select: { id: true, docNo: true },
+        });
+        if (existing) return { success: true, data: existing, message: "Fatura zaten oluşturulmuş." };
+      }
+      throw err;
+    }
   }
 
   /**
@@ -989,21 +1068,11 @@ export class InvoiceService {
   }
 
   async findById(id: string) {
+    // I4: `include` → `select` (gerekçe DETAIL_SELECT başlığında — clientToken
+    // ve çıplak iç FK'ler yanıtta gezmez).
     const row = await prisma.invoice.findUnique({
       where: { id },
-      include: {
-        cari: {
-          select: {
-            id: true,
-            kind: true,
-            taxOffice: true,
-            customer: { select: { id: true, code: true, name: true, taxNumber: true } },
-            subcontractor: { select: { id: true, code: true, name: true, taxNumber: true } },
-          },
-        },
-        goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
-        lines: { orderBy: { lineNo: "asc" }, include: { item: { select: { id: true, code: true, name: true } } } },
-      },
+      select: DETAIL_SELECT,
     });
     if (!row) throw AppError.notFound("Fatura bulunamadı.");
     return { success: true, data: row };

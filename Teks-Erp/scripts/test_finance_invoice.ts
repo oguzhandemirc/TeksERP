@@ -22,6 +22,18 @@
 //   §10 MUTABAKAT: SUM(defter) === CariBalance
 //   §11 KAYNAK DAMGASI: onay sevkiyata invoiceNo damgalar (DISPATCHED),
 //       iptal YALNIZ kendi damgasını temizler, elle işaret ÇAKIŞMA verir
+//   §12 ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2): pencere elle açık tutulan
+//       tx ile DETERMİNİSTİK kurulur (kazananın token'ı unique indekse
+//       UNCOMMITTED yazılı → ön kontrol onu GÖREMEZ, kaybeden INSERT indekste
+//       BEKLER) → kaybeden P2002'yi cached yanıta çevirir: TAM BİR kayıt +
+//       eşzamanlı ve ardışık replay yanıtı BAYT-BAYT aynı. NEGATİF SONDA:
+//       withBarcodeRetry predicate'i (`!isClientTokenP2002`) düşürülünce token
+//       P2002'si 5 tur boşa retry edilir ve kaybeden "Barkod üretimi ...
+//       başarısız" 409'u alır → §12b/§12c/§12d kırmızı.
+//   §13 DETAY ALAN KÜMESİ (I4): findById include→select — dönen anahtar kümesi
+//       SABİTLENİR; `clientToken` ve çıplak iç FK'ler (cariId/shipmentId/
+//       createdById…) yanıtta GEZMEZ. Alan düşürme sessizdir (ekran boş basar,
+//       hata vermez) — bu bölüm onu kırmızıya bağlar.
 // =============================================================================
 import { Prisma, InvoiceStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -52,6 +64,19 @@ const LINES = [
   { description: "Perde kumaşı", qty: 100, unitPrice: 25, vatRate: 20 },
   { description: "Fason işçilik", qty: 2, unitPrice: 150, vatRate: 20, discountRate: 10 },
 ];
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** §12 yarış sondası — pencereyi elle açık tutmak için (goods_receipt_invoice §10 emsali). */
+function deferred<T = void>(): { promise: Promise<T>; resolve: (v: T) => void; reject: (e?: unknown) => void } {
+  let resolve!: (v: T) => void;
+  let reject!: (e?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 async function balanceOf(currency: "TRY" | "USD" = "TRY"): Promise<Prisma.Decimal> {
   if (!cariId) return new Prisma.Decimal(0);
@@ -329,6 +354,126 @@ async function main(): Promise<void> {
   check("§11e Çakışan onay fatura durumunu YARIM BIRAKMADI (taslak/iptal değil ama defter boş)",
     (await prisma.cariTransaction.count({ where: { invoiceId: conflictInv.data.id } })) === 0);
   await prisma.shipment.update({ where: { id: dispatched.id }, data: { invoiceNo: null } });
+
+  // ── §12 ⭐ EŞZAMANLI clientToken ÇİFT-GÖNDERİMİ (I2) ────────────────────
+  // Ardışık replay'i §7 dolaylı kapsıyor; burası TOCTOU penceresini ölçer: iki
+  // paralel istek ikisi de "token yok" görür, ikisi de INSERT eder. Pencere
+  // zamanlamayla DEĞİL, elle açık tutulan tx ile kurulur (yarış bekçisi kuralı):
+  // kazananın satırı unique indekse UNCOMMITTED yazılıdır → kaybedenin ön
+  // kontrolü onu GÖREMEZ (READ COMMITTED), kaybedenin INSERT'i indeks kilidinde
+  // BEKLER; gate commit edilince P2002 düşer ve catch cached yanıta çevirir.
+  {
+    const rplToken = crypto.randomUUID();
+    const rplLock = deferred<{ id: string; docNo: string }>();
+    const rplGate = deferred();
+    const rplTx = prisma.$transaction(
+      async (tx) => {
+        // "Kazanan uçuşta": gerçek create'in yazdığı satırın asgarisi — token
+        // unique indekse girer ama COMMIT edilmez.
+        const winner = await tx.invoice.create({
+          data: {
+            docNo: `${TAG}-RPL1`,
+            type: "SALES",
+            status: "DRAFT",
+            cariId: cariId as string,
+            issueDate: new Date(),
+            clientToken: rplToken,
+          },
+          select: { id: true, docNo: true },
+        });
+        rplLock.resolve(winner);
+        await rplGate.promise;
+        return winner;
+      },
+      { timeout: 20_000 },
+    );
+    // Gate-tx promise'i await'ten ÖNCE reddedebilir — no-op catch olmadan
+    // unhandled rejection süreci Sonuç satırı basılmadan öldürür (CLAUDE.md
+    // 2026-08-14 eki ②; test_payment_allocation §12m'de canlı ölçüldü).
+    void rplTx.catch(() => {});
+    const winner = await rplLock.promise;
+    invoiceIds.push(winner.id);
+
+    let loserSettled = false;
+    const loserP = invoiceService
+      .createDraft({ type: "SALES", customerId, lines: [LINES[0] as never], clientToken: rplToken })
+      .finally(() => {
+        loserSettled = true;
+      });
+    void loserP.catch(() => {});
+    await sleep(400);
+    check(
+      "§12a ⭐ kaybeden UNIQUE indekste BEKLEDİ (ön kontrol kazananı görmedi → pencere gerçek)",
+      !loserSettled,
+    );
+    rplGate.resolve();
+    await rplTx;
+    const loserRes = await loserP;
+    check(
+      "§12b ⭐ kaybeden BAŞARILI ve KAZANANIN kaydını aldı (mükerrer değil, ham hata değil)",
+      loserRes.success === true && loserRes.data.id === winner.id && loserRes.data.docNo === winner.docNo,
+      `id=${loserRes.data?.id === winner.id} docNo=${loserRes.data?.docNo}`,
+    );
+    check(
+      "§12c veri anahtarları normal create ile AYNI ({id,docNo} — sözleşme bozulmaz)",
+      JSON.stringify(Object.keys(loserRes.data).sort()) === JSON.stringify(["docNo", "id"]),
+      Object.keys(loserRes.data).join(","),
+    );
+    // Ardışık replay (ön kontrol yolu) ile BAYT-BAYT aynı mı? Farklı şekil,
+    // replay'i ayırt edilebilir yapar ve istemci sözleşmesini bozar.
+    const seqRes = await invoiceService.createDraft({
+      type: "SALES",
+      customerId,
+      lines: [LINES[0] as never],
+      clientToken: rplToken,
+    });
+    check(
+      "§12d ⭐ eşzamanlı replay yanıtı ardışık replay ile BAYT-BAYT aynı",
+      JSON.stringify(loserRes) === JSON.stringify(seqRes),
+      `eşzamanlı=${JSON.stringify(loserRes)} ardışık=${JSON.stringify(seqRes)}`,
+    );
+    const rplCount = await prisma.invoice.count({ where: { clientToken: rplToken } });
+    check("§12e token'lı TAM BİR kayıt (kaybedenin tx'i geri sarıldı)", rplCount === 1, `adet=${rplCount}`);
+  }
+
+  // ── §13 DETAY ALAN KÜMESİ (I4: include → select) ────────────────────────
+  // Panel alan kaybını GÖREMEZ (boş hücre basar, hata vermez) — küme burada
+  // sabitlenir. `usd` faturası satır + cari taşıyan gerçek bir detay örneğidir.
+  {
+    const det = await invoiceService.findById(usd.data.id);
+    const data = det.data as Record<string, unknown>;
+    const EXPECTED_KEYS = [
+      "cancelReason", "cancelledAt", "cari", "confirmedAt", "createdAt", "currency",
+      "discountTotal", "docNo", "dueDate", "exchangeRate", "externalNo", "goodsReceipt",
+      "grandTotal", "grandTotalTry", "id", "issueDate", "lines", "notes", "paidTotal",
+      "status", "subtotal", "type", "updatedAt", "vatTotal", "withholdingTotal",
+    ];
+    check(
+      "§13a ⭐ detay anahtar kümesi SABİT (alan düşürme/ekleme bekçisiz geçemez)",
+      JSON.stringify(Object.keys(data).sort()) === JSON.stringify(EXPECTED_KEYS),
+      `fark=${Object.keys(data).filter((k) => !EXPECTED_KEYS.includes(k)).join(",") || "-"} eksik=${EXPECTED_KEYS.filter((k) => !(k in data)).join(",") || "-"}`,
+    );
+    check("§13b ⭐ clientToken yanıtta GEZMİYOR (idempotency iç anahtarı)", !("clientToken" in data));
+    const bareFks = ["cariId", "shipmentId", "directShipmentId", "returnGroupId", "subcontractorReceiptId", "goodsReceiptId", "confirmedById", "cancelledById", "createdById"];
+    check(
+      "§13c çıplak iç FK'ler yanıtta yok (kaynak bağı ilişkinin kendi id'siyle taşınır)",
+      bareFks.every((k) => !(k in data)),
+      bareFks.filter((k) => k in data).join(",") || "-",
+    );
+    const line0 = (data.lines as Array<Record<string, unknown>>)[0];
+    check(
+      "§13d satır anahtarları sabit (invoiceId/itemId çıplak FK'leri yok; item ilişki olarak var)",
+      Boolean(line0) &&
+        JSON.stringify(Object.keys(line0 as object).sort()) ===
+          JSON.stringify(["description", "discountRate", "id", "item", "lineNo", "lineTotal", "qty", "unit", "unitPrice", "vatAmount", "vatRate", "withholdingRate"]),
+      line0 ? Object.keys(line0).join(",") : "(satır yok)",
+    );
+    const cariDet = data.cari as { taxOffice?: unknown; customer?: { taxNumber?: unknown } | null };
+    check(
+      "§13e detay carisi listeden ZENGİN (taxOffice + customer.taxNumber)",
+      cariDet != null && "taxOffice" in cariDet && cariDet.customer != null && "taxNumber" in cariDet.customer,
+    );
+  }
 
   // ── §10 MUTABAKAT ───────────────────────────────────────────────────────
   // Bu, `test_consistency`nin muhasebe bölümünün çekirdeği: bakiye denormalize
