@@ -26,6 +26,7 @@
 // hiçbir alan, başka hiçbir kind, hiçbir `Sack.notes` VERİSİ silinmez — not
 // alanı ekranlarda ve iç kayıtta AYNEN kalır, yalnız KÂĞIDA basılmaz.
 // =============================================================================
+import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { AuditService } from "../src/services/audit.service";
 
@@ -84,7 +85,14 @@ async function main(): Promise<void> {
     // dizisi süzülür; blob'u baştan kurmak sürüm alanını düşürür ve renderer
     // bilinmeyen bir şekil görür.
     const next = { ...blob, elements: list.filter((e) => e.bind !== "sackNote") };
-    await prisma.labelTemplateVariant.update({ where: { id: v.id }, data: { elements: next } });
+    // ⚠️ Cast ZORUNLU: Prisma'nın `InputJsonValue` tipi indeks imzalı bir nesne
+    // bekler; bizim `Element[]` şeklimiz ona atanamaz. `tsx` tip kontrolü
+    // YAPMAZ, yani bu satır cast'siz de KOŞAR — ama `npm test`'in tip geçidi
+    // (`tsconfig.scripts.json`) onu düşürür. İlk yazımda tam bu oldu.
+    await prisma.labelTemplateVariant.update({
+      where: { id: v.id },
+      data: { elements: next as unknown as Prisma.InputJsonValue },
+    });
 
     await AuditService.log({
       userId: undefined,
