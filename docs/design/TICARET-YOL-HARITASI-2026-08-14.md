@@ -95,8 +95,24 @@
 > aritmetiği, yalnız CONFIRMED) · cari listede "Gecikmiş" kolonu (aging çekirdeği
 > `collectAgingRows` ile TEK kaynak — bekçi birebir eşitliği kilitler) · ekstre + çek
 > Excel/PDF exportları (paylaşılan katmana PDF tr-TR sayı biçimi + `orientation`
-> eklendi — tüm rapor PDF'leri düzeldi). Kalan H: H4 çek vade takvimi · H5 KDV özeti ·
-> H6 çek bordrosu · H7 kategori kırılımı · H8'in iade-fatura düğmesi.
+> eklendi — tüm rapor PDF'leri düzeldi).
+>
+> **H4–H8 de TAMAMLANDI (2026-08-15'e bağlanan gece):** H4 çek vade takvimi
+> (kovalar+hafta/ay tek sorgudan; ENDORSED takvim dışı — alacak ciroya geçti;
+> özet kartlarında 5. kart listeye süzgeç yazar) · H5 KDV dönem özeti (oran
+> kırılımı SATIR seviyesinden; TL kendi kur damgasından, kuruş kalıntısı
+> mutabakat bekçili; beyanname DEĞİL) · H6 çek teslim bordrosu (ANLIK çıktı —
+> bordro grubunu sahiplenen kaynak model yok, donmuş PrintedDoc sürümü J kararı;
+> aynı-yön kuralı İKİ katmanda) · H7 kasa defteri kategori kırılımı (virman
+> kendi kovasında — TransferInput kategori almaz; kırılım özethesabıyla AYNI
+> hareket kümesinden) · H8 iadeden satış-iade faturası (InvoicePrefill type+
+> returnGroupId dikişi + listReturns invoiceDocNo besleyicisi eklendi — düğme
+> faturalanmış grupta çıkmaz). **G4** metraj düzeltme (FREE_STOCK+çuvalsız dar
+> kapsam, CAS claim, WAREHOUSE_QTY_ADJUST varyans izi kataloğa alındı,
+> labelDirty; panel yalnız ticaret rejiminde) ve **G5** depo hareket defteri
+> okuma yüzeyi (yön SUNUCUDA bakan depoya göre; rejim kapısı BİLİNÇLİ yok —
+> defter fabrika olaylarını da taşır; defter başlangıcı 2026-08-14, backfill
+> yok) da tamam. Kalan: G3 (bayraklı tasarım, bayrak bölümünde) · I paketi · J.
 
 ### BAYRAKLAR (2026-08-14 sektör-standardı analizi — 4 tarama ajanı + uygulama)
 
