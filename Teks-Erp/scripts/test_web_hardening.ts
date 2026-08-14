@@ -40,6 +40,8 @@ import {
   classifyRateLimitRequest,
   createRateLimiter,
   normalizeRequestPath,
+  resolveClientIp,
+  resolveRateLimitKey,
   type RateLimiter,
   type WebHardeningConfig,
 } from "../src/middlewares/web-hardening";
@@ -77,6 +79,7 @@ const HARDENING_VARS = [
   "RATE_LIMIT_WRITE_MAX",
   "RATE_LIMIT_LOGIN_MAX",
   "LOGIN_LOCKOUT_SCOPE",
+  "CLIENT_IP_HEADER",
 ] as const;
 
 const silent = (): void => {};
@@ -740,6 +743,82 @@ function sectionWiring(): void {
 }
 
 // -----------------------------------------------------------------------------
+
+// =============================================================================
+// §CLIENT_IP — gerçek istemci IP'sini taşıyan güvenilen başlık
+// =============================================================================
+// ⚠️ NEDEN VAR: canlı demoda ÖLÇÜLDÜ ki Traefik gelen X-Forwarded-For'u silip
+// kendi gördüğü adresi (Cloudflare kenarı) yazıyor → `req.ip` TÜM ziyaretçiler
+// için aynı. Giriş kilidi ve hız sınırı o hâlde tek kovada toplanır ve tek
+// kişinin hatası herkesi etkiler. Bu bölüm hem çözümü hem de çözümün FABRİKAYI
+// ETKİLEMEDİĞİNİ kilitler.
+function sectionClientIp(): void {
+  const req = (headers: Record<string, string | string[]>, ip?: string): Request =>
+    ({ headers, ip, method: "POST", originalUrl: "/api/auth/login" }) as unknown as Request;
+
+  // ⭐ FABRİKA DALI: başlık yapılandırılmamışsa davranış bugünküyle BİREBİR.
+  check(
+    "§CI-1 ⭐ başlık YOKKEN req.ip kullanılır (fabrika davranışı)",
+    resolveClientIp(req({ "cf-connecting-ip": "9.9.9.9" }, "10.0.0.7"), null) === "10.0.0.7",
+  );
+  check(
+    "§CI-2 başlık VARKEN o okunur (kenar IP'si değil)",
+    resolveClientIp(req({ "cf-connecting-ip": "9.9.9.9" }, "172.68.1.1"), "cf-connecting-ip") === "9.9.9.9",
+  );
+  // Başlık beyan edilmiş ama gelmemişse isteği REDDETMEK yanlış olurdu —
+  // eksik bir başlık yüzünden giriş yolunu kapatmak korumadan beklenen şey değil.
+  check(
+    "§CI-3 başlık beyan edildi ama gelmedi → req.ip'e düşer",
+    resolveClientIp(req({}, "10.0.0.7"), "cf-connecting-ip") === "10.0.0.7",
+  );
+  check(
+    "§CI-4 virgüllü listede İLK değer alınır (XFF sözleşmesi)",
+    resolveClientIp(req({ "x-forwarded-for": "1.2.3.4, 172.68.1.1" }, "172.68.1.1"), "x-forwarded-for") === "1.2.3.4",
+  );
+
+  // ⭐ ASIL İDDİA: başlık devredeyken İKİ FARKLI ziyaretçi AYRI kova alır.
+  // Bu kontrol düşerse "tek kişi demoyu kilitler" arızası geri gelmiş demektir.
+  const envIle = cleanEnv({ TRUST_PROXY: "1", CLIENT_IP_HEADER: "cf-connecting-ip" });
+  const a = resolveLoginLockoutKeys(req({ "cf-connecting-ip": "1.1.1.1" }, "172.68.1.1"), "demo", envIle);
+  const b = resolveLoginLockoutKeys(req({ "cf-connecting-ip": "2.2.2.2" }, "172.68.1.1"), "demo", envIle);
+  check(
+    "§CI-5 ⭐ AYNI kenar IP'sinden gelen İKİ ziyaretçi AYRI kilit kovası alır",
+    a[0]?.key !== b[0]?.key,
+    `${a[0]?.key} vs ${b[0]?.key}`,
+  );
+  // Ve başlıksızken (fabrika) aynı iki istek AYNI kovaya düşmeli — yani yukarıdaki
+  // ayrımı sağlayan şey gerçekten BAŞLIK, tesadüf değil (körlük zemini).
+  const envsiz = cleanEnv({ TRUST_PROXY: "1" });
+  const c = resolveLoginLockoutKeys(req({ "cf-connecting-ip": "1.1.1.1" }, "172.68.1.1"), "demo", envsiz);
+  const d = resolveLoginLockoutKeys(req({ "cf-connecting-ip": "2.2.2.2" }, "172.68.1.1"), "demo", envsiz);
+  check(
+    "§CI-6 KÖRLÜK ZEMİNİ: başlıksız aynı kenardan gelenler AYNI kovada (ayrımı başlık sağlıyor)",
+    c[0]?.key === d[0]?.key,
+    `${c[0]?.key}`,
+  );
+
+  // Hız sınırı da AYNI kaynağı okumalı — biri kenar IP'sini, diğeri gerçek
+  // ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
+  check(
+    "§CI-7 hız sınırı anahtarı da başlığı okuyor",
+    resolveRateLimitKey(req({ "cf-connecting-ip": "3.3.3.3" }, "172.68.1.1"), "login", "cf-connecting-ip")
+      === "login|3.3.3.3",
+  );
+  check(
+    "§CI-8 ⭐ hız sınırı: başlık YOKKEN req.ip (fabrika davranışı)",
+    resolveRateLimitKey(req({ "cf-connecting-ip": "3.3.3.3" }, "10.0.0.7"), "login", null) === "login|10.0.0.7",
+  );
+  check(
+    "§CI-9 config: CLIENT_IP_HEADER küçük harfe indirilir",
+    readWebHardeningConfig(cleanEnv({ CLIENT_IP_HEADER: "CF-Connecting-IP" }), silent).clientIpHeader
+      === "cf-connecting-ip",
+  );
+  check(
+    "§CI-10 ⭐ config: değişken YOKKEN null (fabrika)",
+    readWebHardeningConfig(cleanEnv(), silent).clientIpHeader === null,
+  );
+}
+
 async function main(): Promise<void> {
   console.log("=== İnternete açma sertleştirmesi ===");
 
@@ -756,6 +835,7 @@ async function main(): Promise<void> {
   sectionRateLimiter();
   await sectionLoginLockout();
   await sectionLiveDefault();
+  sectionClientIp();
   await sectionLiveHardened();
   await sectionLiveProxyNegative();
   sectionWiring();

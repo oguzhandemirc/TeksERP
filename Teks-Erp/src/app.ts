@@ -564,6 +564,9 @@ if (hardening.rateLimit.enabled) {
     createRateLimiter({
       windowMs: hardening.rateLimit.windowMs,
       limits: { login: hardening.rateLimit.loginMax, write: hardening.rateLimit.writeMax },
+      // ⚠️ Giriş kilidiyle AYNI istemci kaynağı: biri kenar IP'sini, diğeri
+      // gerçek ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
+      clientIpHeader: hardening.clientIpHeader,
     }),
   );
 }

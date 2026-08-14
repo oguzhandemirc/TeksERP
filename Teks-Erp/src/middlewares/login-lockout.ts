@@ -14,7 +14,7 @@
 
 import type { Request } from "express";
 import { readPinLockoutConfig } from "../services/system-setting.service";
-import { readWebHardeningConfig } from "./web-hardening";
+import { readWebHardeningConfig, resolveClientIp } from "./web-hardening";
 import "../types/express-augment";
 
 /** Anahtar başına deneme durumu: ardışık yanlış (fails), toplam ceza turu
@@ -31,9 +31,13 @@ const MAX_ENTRIES = 5000;
  * device-id'den daha sağlam — device-id spoof edilebilir). IP yoksa cihaz
  * kimliği (eşleşmiş cihaz ya da ham x-device-id), o da yoksa "unknown".
  */
-export function resolveLoginLockoutKey(req: Request): string {
-  const ip = req.ip;
-  if (typeof ip === "string" && ip.trim()) return ip.trim();
+export function resolveLoginLockoutKey(
+  req: Request,
+  /** Gerçek istemci IP'sini taşıyan güvenilen başlık — bkz. resolveClientIp. */
+  clientIpHeader: string | null = null,
+): string {
+  const ip = resolveClientIp(req, clientIpHeader);
+  if (ip) return ip;
   if (req.device?.deviceId) return `dev:${req.device.deviceId}`;
   const h = req.headers["x-device-id"];
   const v = Array.isArray(h) ? h[0] : h;
@@ -105,10 +109,10 @@ export function resolveLoginLockoutKeys(
    *  koşumda sızdıran bir desendir; kapsam kararı buradan enjekte edilebilir. */
   env: NodeJS.ProcessEnv = process.env,
 ): LockoutKeySpec[] {
-  const ipKey = resolveLoginLockoutKey(req);
   // Uyarılar boot'ta app.ts tarafından basılıyor — her giriş denemesinde
   // tekrarlamak log'u boğar, o yüzden burada sessiz okunur.
-  const { loginLockoutScope } = readWebHardeningConfig(env, () => {});
+  const { loginLockoutScope, clientIpHeader } = readWebHardeningConfig(env, () => {});
+  const ipKey = resolveLoginLockoutKey(req, clientIpHeader);
   if (loginLockoutScope === "ip") return [{ key: ipKey, budgetMultiplier: 1 }];
   return [
     { key: `${ipKey}|${normalizeIdentity(identity)}`, budgetMultiplier: 1 },

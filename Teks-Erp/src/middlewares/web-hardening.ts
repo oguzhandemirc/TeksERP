@@ -61,6 +61,19 @@ export type WebHardeningConfig = {
    * `ip` = bugünkü davranış · `ip+identity` = dar (ip+kimlik) + geniş (ip) iki katman.
    */
   loginLockoutScope: "ip" | "ip+identity";
+  /**
+   * Gerçek istemci IP'sini taşıyan GÜVENİLEN başlık (küçük harf), örn.
+   * `cf-connecting-ip`. Boşsa `req.ip` kullanılır (bugünkü davranış).
+   *
+   * ⚠️ BU BİR GÜVEN BEYANIDIR ve YALNIZ ağ katmanı o başlığı garanti ediyorsa
+   * doldurulmalı. İstemcinin gönderdiği bir başlığa körlemesine güvenmek,
+   * saldırganın her istekte farklı bir değer yazıp hem giriş kilidini hem hız
+   * sınırını tamamen etkisizleştirmesi demektir.
+   *
+   * Demo kurulumunda meşru: güvenlik duvarı 80/443'ü YALNIZ Cloudflare IP
+   * aralıklarına açıyor, yani başlık dışarıdan uydurulamaz.
+   */
+  clientIpHeader: string | null;
 };
 
 /** Uyarı kanalı — bekçi gürültüsüz koşabilsin diye enjekte edilebilir. */
@@ -233,6 +246,9 @@ export function readWebHardeningConfig(
       ),
     },
     loginLockoutScope,
+    // Başlık adı küçük harfe indirilir: Node gelen başlıkları küçük harfle
+    // saklar, "CF-Connecting-IP" yazan bir .env sessizce eşleşmezdi.
+    clientIpHeader: (env.CLIENT_IP_HEADER ?? "").trim().toLowerCase() || null,
   };
 }
 
@@ -240,6 +256,7 @@ export function readWebHardeningConfig(
 export function isWebHardeningDeclared(env: NodeJS.ProcessEnv = process.env): boolean {
   return [
     "TRUST_PROXY",
+    "CLIENT_IP_HEADER",
     "CORS_ORIGINS",
     "SWAGGER_ENABLED",
     "HTTPS_ENABLED",
@@ -293,8 +310,37 @@ export function classifyRateLimitRequest(method: string, originalUrl: string): R
  * iki durumda da elimizdeki en iyi kaynak. Cihaz kimliği yalnız IP yokken
  * (soketsiz taşıma) devreye girer; başlık olduğu için tek başına güvenilmez.
  */
-export function resolveRateLimitKey(req: Request, bucket: RateLimitBucket): string {
-  const ip = typeof req.ip === "string" && req.ip.trim() ? req.ip.trim() : null;
+/**
+ * İSTEMCİ IP'Sİ — tek çözüm noktası (giriş kilidi ve hız sınırı ORTAK kullanır).
+ *
+ * ⚠️ NEDEN `req.ip` YETMEDİ (2026-08-14, canlı demoda ÖLÇÜLDÜ): Traefik gelen
+ * `X-Forwarded-For` başlığını güvenilmeyen kaynaktan geldiği için SİLİYOR ve
+ * kendi gördüğü adresi (Cloudflare kenarı) yazıyor. Cloudflare'in taşıdığı
+ * gerçek ziyaretçi IP'si orada kayboluyor; `TRUST_PROXY` 1 ve 2 ile ayrı ayrı
+ * denendi, ikisi de kenar IP'si döndü. Yani hiçbir Express ayarı bunu
+ * kurtaramaz — çözüm, ağın koruduğu ayrı bir başlığı okumaktır.
+ *
+ * Başlık YAPILANDIRILMAMIŞSA davranış bugünküyle BİREBİR aynı (`req.ip`).
+ * Başlık VAR ama boş/bozuk gelirse yine `req.ip`'e düşülür: eksik bir başlık
+ * yüzünden isteği reddetmek, korumadan beklenen şey değil.
+ */
+export function resolveClientIp(req: Request, header: string | null): string | null {
+  if (header) {
+    const raw = req.headers[header];
+    const v = Array.isArray(raw) ? raw[0] : raw;
+    // Virgüllü liste gelirse İLK değer istemcidir (XFF sözleşmesi).
+    const first = typeof v === "string" ? v.split(",")[0]?.trim() : "";
+    if (first) return first.slice(0, 64);
+  }
+  return typeof req.ip === "string" && req.ip.trim() ? req.ip.trim() : null;
+}
+
+export function resolveRateLimitKey(
+  req: Request,
+  bucket: RateLimitBucket,
+  clientIpHeader: string | null = null,
+): string {
+  const ip = resolveClientIp(req, clientIpHeader);
   if (ip) return `${bucket}|${ip}`;
   const h = req.headers["x-device-id"];
   const v = Array.isArray(h) ? h[0] : h;
@@ -309,6 +355,12 @@ export type RateLimiterOptions = {
   now?: () => number;
   /** Bellek tavanı: bu sayının üstünde bayat anahtarlar budanır. */
   maxKeys?: number;
+  /**
+   * Gerçek istemci IP'sini taşıyan güvenilen başlık. Verilmezse `req.ip`.
+   * ⚠️ Giriş kilidiyle AYNI kaynaktan beslenmeli: biri kenar IP'sini, diğeri
+   * gerçek istemciyi sayarsa iki koruma farklı kişileri sınırlar.
+   */
+  clientIpHeader?: string | null;
 };
 
 export type RateLimiter = RequestHandler & {
@@ -363,7 +415,7 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
     if (!bucket) return next();
 
     const limit = opts.limits[bucket];
-    const key = resolveRateLimitKey(req, bucket);
+    const key = resolveRateLimitKey(req, bucket, opts.clientIpHeader ?? null);
     const t = now();
     const windowStart = t - opts.windowMs;
 
