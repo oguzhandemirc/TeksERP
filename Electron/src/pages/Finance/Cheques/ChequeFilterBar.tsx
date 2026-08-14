@@ -19,6 +19,9 @@ export const LIVE_STATUS = "PORTFOLIO,AT_BANK,ENDORSED,ISSUED";
 
 const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
   { value: LIVE_STATUS, label: "Canlı olanlar" },
+  // Vade kartının listeye yazdığı küme (H4): backend'in CHEQUE_DUE_LIVE_STATUSES
+  // birleşimi — ciro edilen çekte alacak ciroya geçtiği için takvim dışıdır.
+  { value: "PORTFOLIO,AT_BANK,ISSUED", label: "Vade takibi (ciro hariç)" },
   { value: "", label: "Tümü (geçmiş dahil)" },
   { value: "PORTFOLIO", label: "Elimizde" },
   { value: "AT_BANK", label: "Bankada (tahsilde)" },

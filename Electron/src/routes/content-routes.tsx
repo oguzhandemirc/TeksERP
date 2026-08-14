@@ -37,6 +37,8 @@ import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
 import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
 import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
 import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
+import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
+import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
 // Paket D (2026-08-14) — hepsi NAMED export.
 import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
@@ -936,6 +938,22 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:finance">
         <CashBookPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/cheque-due",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <ChequeDuePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/vat-summary",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <VatSummaryPage />
       </ProtectedRoute>
     ),
   },

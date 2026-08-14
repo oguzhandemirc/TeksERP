@@ -48,6 +48,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { factoryDaySql, factoryYmd } from "../constants/time";
 import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
@@ -385,6 +386,112 @@ export interface EndorseInput extends ChequeEventInput {
   toCariId?: string | null;
   toCustomerId?: string | null;
   toSubcontractorId?: string | null;
+}
+
+// -----------------------------------------------------------------------------
+// VADE TAKVİMİ (H4) — kovalar + haftalık/aylık takvim
+// -----------------------------------------------------------------------------
+// ⚠️ EKSEN VADE TARİHİDİR, işlem tarihi DEĞİL. Portföyün defter tarafı
+// `postingDate`ten okunur (SINIF 1) ama "sırada ne var, ne zaman para girecek"
+// sorusu yalnız `dueDate` ile cevaplanır. İkisini karıştıran bir takvim, ileri
+// keşideli çeki bugüne yazardı.
+//
+// ⚠️ KAPSAM = PARA BEKLENEN ÇEK. Tahsil edilmiş / karşılıksız / iade / iptal
+// çekler GİRMEZ (beklenen bir hareket yok) — takvime alınsalardı "önümüzdeki
+// hafta 400.000 TL girecek" rakamının içinde geçen ay çoktan tahsil edilmiş
+// para olurdu ve kimse farkı göremezdi.
+//
+// ⚠️ CİRO EDİLEN (`ENDORSED`) ÇEK DE GİRMEZ ve bu bir eksiklik değil KARARDIR:
+// alacak ciroyla üçüncü tarafa geçmiştir, o çekten artık bize para girmez.
+// Karşılıksız dönerse `bounce` alacağı yeni bir olayla geri açar ve çek o an
+// yeniden canlanır. Kapsam yanıtta `liveStatuses` ile AÇIKÇA söylenir + notlara
+// yazılır: sessizce dışarıda bırakılan bir kova, eksik rakamın en sessiz hâlidir.
+
+/** Vade kovaları — SIRA anlamlıdır (geçmiş → yakın → uzak). */
+export const CHEQUE_DUE_BUCKETS = ["OVERDUE", "SOON", "MONTH", "LATER", "NO_DUE"] as const;
+export type ChequeDueBucket = (typeof CHEQUE_DUE_BUCKETS)[number];
+
+/**
+ * "Yaklaşan" penceresi (gün).
+ *
+ * ⚠️ Panelin satır rengiyle (`Cheques/dates.dueTone` → `soon`) BİREBİR aynı
+ * olmak ZORUNDA: kart "3 çek yaklaşıyor" derken listede 4 satır amber
+ * yanıyorsa kullanıcı hangisinin doğru olduğunu bilemez. Değer yanıtta
+ * `soonDays` olarak DÖNER — istemci kendi "7"sini yazmaz.
+ */
+export const CHEQUE_DUE_SOON_DAYS = 7;
+
+/**
+ * PARA BEKLENEN durumlar — kapsamın TEK KAYNAĞI.
+ * SQL süzgeci de bu tablodan üretilir (aşağı); ikinci bir literal liste,
+ * kovalar ile listenin sessizce ayrışması demekti.
+ */
+export const CHEQUE_DUE_LIVE_STATUSES: Record<ChequeKind, ChequeStatus[]> = {
+  RECEIVED: [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK],
+  ISSUED: [ChequeStatus.ISSUED],
+};
+
+export interface ChequeDueBucketRow {
+  bucket: ChequeDueBucket;
+  kind: ChequeKind;
+  currency: Currency;
+  count: number;
+  /** Kendi para biriminde — TL karşılığı TOPLANMAZ (`summary` ile aynı gerekçe). */
+  amount: string;
+}
+
+export interface ChequeDueCalendarRow {
+  /** Hafta: pazartesi günü (`YYYY-MM-DD`) · Ay: `YYYY-MM`. */
+  key: string;
+  /** Kapsanan ilk/son takvim günü — etiketi İSTEMCİ biçimler (yerel ay adları). */
+  start: string;
+  end: string;
+  kind: ChequeKind;
+  currency: Currency;
+  count: number;
+  amount: string;
+}
+
+export interface ChequeDueSummary {
+  /** Fabrika takvim günü (`YYYY-MM-DD`) — kova sınırlarının çıpası. */
+  today: string;
+  soonDays: number;
+  /** Portföyün TAMAMI — takvim penceresinden BAĞIMSIZ. */
+  buckets: ChequeDueBucketRow[];
+  /** Takvimin kapsadığı pencere (`YYYY-MM-DD`, iki uç da DAHİL). */
+  window: { from: string; to: string };
+  weeks: ChequeDueCalendarRow[];
+  months: ChequeDueCalendarRow[];
+  liveStatuses: Record<ChequeKind, ChequeStatus[]>;
+  notes: string[];
+}
+
+const DUE_DAY_MS = 86_400_000;
+
+/** `YYYY-MM-DD` → UTC gece yarısı ms. Takvim anahtarı aritmetiği tz'siz yapılır. */
+function ymdToUtcMs(ymd: string): number {
+  const [y, m, d] = ymd.split("-").map(Number);
+  return Date.UTC(y ?? 1970, (m ?? 1) - 1, d ?? 1);
+}
+
+/** UTC ms → `YYYY-MM-DD` (yalnız takvim anahtarı üretir, saat taşımaz). */
+function utcMsToYmd(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+}
+
+/**
+ * Takvim gününün ait olduğu haftanın PAZARTESİ'si.
+ *
+ * ⚠️ Hafta pazartesi başlar (TR/ISO). `getUTCDay()` pazarı 0 döndürür; ham
+ * kullanılırsa hafta pazar başlar ve pazartesi vadeli bir çek bir ÖNCEKİ
+ * haftanın satırına yazılır — planlamacı "bu hafta" derken geçen haftayı okur.
+ */
+function weekStartYmd(ymd: string): string {
+  const ms = ymdToUtcMs(ymd);
+  const back = (new Date(ms).getUTCDay() + 6) % 7;
+  return utcMsToYmd(ms - back * DUE_DAY_MS);
 }
 
 export class ChequeService {
@@ -1417,6 +1524,193 @@ export class ChequeService {
         amount: r._sum.amount ?? D0(),
         amountTry: r._sum.amountTry ?? D0(),
       })),
+    };
+  }
+
+  /**
+   * VADE TAKVİMİ (H4) — vade kovaları + haftalık/aylık nakit takvimi.
+   *
+   * Yukarıdaki bölüm başlığındaki üç kural (eksen = vade · kapsam = para
+   * beklenen · ciro dışarıda) BURADA uygulanır. Ek olarak:
+   *
+   * ⚠️ İKİ ZAMAN ANLAYIŞI TEK YANITTA (WIP karnesi emsali): **kovalar** portföyün
+   * TAMAMINI kapsar ve pencereden BAĞIMSIZDIR ("elimde toplam ne var, ne kadarı
+   * gecikmiş"), **takvim** ise yalnız seçilen pencereyi ("önümüzdeki 30 günde
+   * hangi hafta ne girecek"). Kovaları da pencereye kısmak, tarih aralığını
+   * daraltan kullanıcıya "vadesi geçmiş çekim kalmadı" derdi.
+   *
+   * ⚠️ GÜN SINIRI FABRİKA TAKVİMİNDEN (`factoryDaySql` + `factoryYmd`). UTC'de
+   * kesilseydi Türkiye'de yerel 00:00–03:00 arasında vadesi dolan her çek bir
+   * ÖNCEKİ güne düşer, yani bugün vadesi gelen çek "vadesi GEÇMİŞ" kovasına
+   * yazılırdı — hata yok, log yok, yalnız yanlış kova.
+   *
+   * ⚠️ GÜN ANAHTARI SQL'den **METİN** olarak alınır (`TO_CHAR`), `date` kolonu
+   * olarak DEĞİL: sürücünün `date` → JS `Date` dönüşümü gece yarısını UTC'de mi
+   * yerelde mi kurduğuna bağlıdır ve o varsayım kırılırsa TÜM seri bir gün
+   * kayar. Metin böyle bir varsayım taşımaz.
+   *
+   * ⚠️ PARA BİRİMLERİ TOPLANMAZ; her satır kendi biriminde döner. TL karşılığı
+   * da üretilmez — çekler kendi DAMGALANMIŞ kurlarını taşır ve onları toplamak
+   * "bugünkü kurla" sanılan ama geçmiş kurların karışımı olan bir sayı üretirdi
+   * (`summary` ile aynı karar).
+   *
+   * PERF: tek `groupBy` sorgusu, `cheques(status, dueDate)` index'i üzerinden;
+   * satır sayısı canlı çek sayısıyla değil, farklı (yön × birim × vade GÜNÜ)
+   * kombinasyonuyla sınırlıdır. Kova/hafta/ay üçü de AYNI satırlardan türetilir
+   * — üç ayrı sorgu, üç ayrı rakam demekti.
+   */
+  async dueSummary(params: { from?: Date; to?: Date } = {}): Promise<ApiResponse<ChequeDueSummary>> {
+    const today = factoryYmd(new Date());
+    const todayMs = ymdToUtcMs(today);
+
+    // Varsayılan pencere İLERİ bakar: bugün + 30 gün. Rapor sözleşmesindeki
+    // "son 30 gün" geriye bakar ve burada anlamsızdır — vade takviminin sorusu
+    // geçmişte ne olduğu değil, ÖNÜMÜZDE ne olduğudur.
+    const fromYmd = params.from ? factoryYmd(params.from) : today;
+    const toYmd = params.to ? factoryYmd(params.to) : utcMsToYmd(todayMs + 30 * DUE_DAY_MS);
+
+    // Kapsam süzgeci TEK KAYNAKTAN (`CHEQUE_DUE_LIVE_STATUSES`) üretilir.
+    // Elle yazılmış ikinci bir `status IN (...)` listesi, sabit güncellenip
+    // SQL unutulduğunda sessizce ayrışırdı.
+    const liveWhere = Prisma.join(
+      (Object.keys(CHEQUE_DUE_LIVE_STATUSES) as ChequeKind[]).map(
+        (kind) => Prisma.sql`(c.kind::text = ${kind} AND c.status::text IN (${Prisma.join(
+          CHEQUE_DUE_LIVE_STATUSES[kind].map((s) => Prisma.sql`${s}`),
+        )}))`,
+      ),
+      " OR ",
+    );
+
+    const rows = await prisma.$queryRaw<
+      Array<{ kind: string; currency: string; day: string | null; cnt: number; amount: string | null }>
+    >(Prisma.sql`
+      SELECT c.kind::text     AS kind,
+             c.currency::text AS currency,
+             TO_CHAR(${factoryDaySql('c."dueDate"')}, 'YYYY-MM-DD') AS day,
+             COUNT(*)::int    AS cnt,
+             SUM(c.amount)::text AS amount
+        FROM cheques c
+       WHERE (${liveWhere})
+       GROUP BY 1, 2, 3
+    `);
+
+    type Acc = { count: number; amount: Prisma.Decimal };
+    const bump = (map: Map<string, Acc>, key: string, count: number, amount: Prisma.Decimal): void => {
+      const cur = map.get(key);
+      if (cur) {
+        cur.count += count;
+        cur.amount = cur.amount.plus(amount);
+      } else {
+        map.set(key, { count, amount });
+      }
+    };
+
+    const buckets = new Map<string, Acc>();
+    const weeks = new Map<string, Acc>();
+    const months = new Map<string, Acc>();
+
+    for (const r of rows) {
+      const kind = r.kind as ChequeKind;
+      const currency = r.currency as Currency;
+      const count = Number(r.cnt);
+      const amount = D(r.amount ?? 0);
+      // `dueDate` bugün NOT NULL — bu dal ölü görünür ama bilinçli duruyor:
+      // kolon bir gün nullable olursa satırlar kovalardan SESSİZCE düşmek
+      // yerine `NO_DUE` kovasında görünür (kaybolmak, yanlış görünmekten kötü).
+      const day: string | null = r.day ?? null;
+
+      let bucket: ChequeDueBucket;
+      if (day === null) {
+        bucket = "NO_DUE";
+      } else {
+        const diffDays = Math.round((ymdToUtcMs(day) - todayMs) / DUE_DAY_MS);
+        if (diffDays < 0) bucket = "OVERDUE";
+        else if (diffDays <= CHEQUE_DUE_SOON_DAYS) bucket = "SOON";
+        else if (day.slice(0, 7) === today.slice(0, 7)) bucket = "MONTH";
+        else bucket = "LATER";
+      }
+      bump(buckets, `${bucket}|${kind}|${currency}`, count, amount);
+
+      // TAKVİM yalnız pencereye düşen günleri sayar (kovalar zaten tamamını
+      // saydı). Sınırların İKİSİ DE DAHİLDİR — `<` yazmak, kullanıcının seçtiği
+      // son günün çeklerini sessizce düşürürdü.
+      if (day !== null && day >= fromYmd && day <= toYmd) {
+        const ws = weekStartYmd(day);
+        bump(weeks, `${ws}|${kind}|${currency}`, count, amount);
+        bump(months, `${day.slice(0, 7)}|${kind}|${currency}`, count, amount);
+      }
+    }
+
+    const bucketRows: ChequeDueBucketRow[] = [...buckets.entries()]
+      .map(([key, acc]) => {
+        const [bucket, kind, currency] = key.split("|");
+        return {
+          bucket: bucket as ChequeDueBucket,
+          kind: kind as ChequeKind,
+          currency: currency as Currency,
+          count: acc.count,
+          amount: acc.amount.toFixed(2),
+        };
+      })
+      .sort(
+        (a, b) =>
+          CHEQUE_DUE_BUCKETS.indexOf(a.bucket) - CHEQUE_DUE_BUCKETS.indexOf(b.bucket) ||
+          a.kind.localeCompare(b.kind) ||
+          a.currency.localeCompare(b.currency),
+      );
+
+    const calendarRows = (map: Map<string, Acc>, kindOf: "week" | "month"): ChequeDueCalendarRow[] =>
+      [...map.entries()]
+        .map(([key, acc]) => {
+          const [period, kind, currency] = key.split("|");
+          const p = period as string;
+          const start = kindOf === "week" ? p : `${p}-01`;
+          const end =
+            kindOf === "week"
+              ? utcMsToYmd(ymdToUtcMs(p) + 6 * DUE_DAY_MS)
+              : // Ayın son günü: ERTESİ ayın 1'inden bir gün geri. Sabit 30/31
+                // yazmak şubatı ve artık yılı yanlışlardı.
+                utcMsToYmd(
+                  Date.UTC(Number(p.slice(0, 4)), Number(p.slice(5, 7)), 1) - DUE_DAY_MS,
+                );
+          return {
+            key: p,
+            start,
+            end,
+            kind: kind as ChequeKind,
+            currency: currency as Currency,
+            count: acc.count,
+            amount: acc.amount.toFixed(2),
+          };
+        })
+        .sort(
+          (a, b) =>
+            a.key.localeCompare(b.key) || a.kind.localeCompare(b.kind) || a.currency.localeCompare(b.currency),
+        );
+
+    const notes = [
+      `Eksen VADE tarihidir — işlem (defter) tarihi değil. Bugün: ${today} (fabrika takvimi).`,
+      "Takvim yalnız PARA BEKLENEN çekleri sayar: aldığımız çeklerden elimizde ve bankada (tahsilde) olanlar, verdiğimiz çeklerden henüz ödenmemiş olanlar.",
+      "Tahsil edilmiş · karşılıksız · iade edilmiş · iptal edilmiş çekler GİRMEZ — bunlarda beklenen bir para hareketi yoktur.",
+      "CİRO EDİLEN çek de girmez: alacak ciroyla üçüncü tarafa geçmiştir. Çek karşılıksız dönerse alacak yeni bir olayla geri doğar ve o an takvimde yeniden görünür.",
+      `Kovalar portföyün TAMAMINI kapsar; haftalık/aylık takvim yalnız ${fromYmd} – ${toYmd} penceresini. Pencereyi daraltmak kovaları DEĞİŞTİRMEZ.`,
+      `"Yaklaşan" penceresi ${CHEQUE_DUE_SOON_DAYS} gündür (bugün dahil) ve liste satırlarındaki vade uyarısıyla aynı eşiktir.`,
+      "Para birimleri TOPLANMAZ — her satır kendi biriminde okunur; çekler kendi damgalanmış kurlarını taşır.",
+      "Gün sınırı fabrika takvimine göre çizilir (Europe/Istanbul): gece yarısından sonra vadesi dolan çek bir önceki güne yazılmaz.",
+    ];
+
+    return {
+      success: true,
+      data: {
+        today,
+        soonDays: CHEQUE_DUE_SOON_DAYS,
+        buckets: bucketRows,
+        window: { from: fromYmd, to: toYmd },
+        weeks: calendarRows(weeks, "week"),
+        months: calendarRows(months, "month"),
+        liveStatuses: CHEQUE_DUE_LIVE_STATUSES,
+        notes,
+      },
     };
   }
 }

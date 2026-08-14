@@ -24,7 +24,7 @@
 // çağırır.
 // =============================================================================
 
-import { BookOpen, Hourglass } from "lucide-react";
+import { BookOpen, CalendarClock, Hourglass, Percent } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 export const financeReportTiles: HubTile[] = [
@@ -41,5 +41,19 @@ export const financeReportTiles: HubTile[] = [
     description: "Devir, dönem hareketleri ve yürüyen bakiye — tahsilat, kasa hareketi ve çek tahsili",
     icon: BookOpen,
     to: "/reports/finance/cash-book",
+  },
+  {
+    key: "cheque-due",
+    title: "Çek Vade Takvimi",
+    description: "Hangi hafta/ay ne kadar tahsilat girecek, ne kadar ödeme çıkacak — vadesi geçmişler ayrı blokta",
+    icon: CalendarClock,
+    to: "/reports/finance/cheque-due",
+  },
+  {
+    key: "vat-summary",
+    title: "KDV Dönem Özeti",
+    description: "Satış/alış KDV'si oran kırılımlı matrah + KDV + tevkifat — beyanname değil, muhasebeciye özet",
+    icon: Percent,
+    to: "/reports/finance/vat-summary",
   },
 ];

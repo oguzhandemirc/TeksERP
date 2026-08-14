@@ -21,9 +21,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
 import { chequeService } from "../services/cheque.service";
+import { resolveDateRange } from "../services/reports/_shared";
 
 const router = Router();
 
@@ -146,6 +147,69 @@ router.get("/summary", requirePermission("finance:read"), async (req, res, next)
     next(e);
   }
 });
+
+/**
+ * @openapi
+ * /api/finance/cheques/due-summary:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Vade kovaları + haftalık/aylık vade takvimi
+ *     description: >
+ *       Eksen VADE tarihidir (işlem tarihi değil) ve kapsam PARA BEKLENEN
+ *       çeklerdir: aldığımız çeklerden PORTFOLIO/AT_BANK, verdiğimiz çeklerden
+ *       ISSUED. Tahsil edilmiş / karşılıksız / iade / iptal çekler GİRMEZ; CİRO
+ *       EDİLEN de girmez (alacak üçüncü tarafa geçti). Kapsam yanıtta
+ *       `liveStatuses` + `notes` ile açıkça söylenir.
+ *       İKİ ZAMAN ANLAYIŞI: `buckets` portföyün TAMAMINI kapsar ve pencereden
+ *       BAĞIMSIZDIR; `weeks`/`months` yalnız pencereyi. Pencere İLERİ bakar —
+ *       varsayılan bugün + 30 gün (rapor katmanının "son 30 gün" varsayılanı
+ *       burada anlamsızdır).
+ *       `dateFrom`/`dateTo` BİRLİKTE gönderilir; ortak `resolveDateRange` ile
+ *       doğrulanır (366 gün tavanı).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Kovalar + takvim + kapsam notları }
+ *       400: { description: Yalnız bir tarih ucu gönderildi / geçersiz aralık }
+ *       403: { description: Ön muhasebe modülü kapalı ya da yetki yok }
+ */
+// ⚠️ `/:id`'den ÖNCE — `/summary` ile aynı gerekçe (aksi halde "due-summary"
+// bir uuid sanılır ve 400 döner).
+//
+// ⚠️ İZİN İKİ KAPILI (`finance:read` VEYA `report:finance`) ve İKİSİ DE GEREKLİ:
+// bu uç HEM portföy ekranındaki vade kartını (kullanıcısı `finance:read`) HEM
+// Raporlar altındaki vade takvimini (kullanıcısı `report:finance`) besler. Tek
+// izne bağlansaydı iki ekrandan biri sessiz 403 alır ve boş görünürdü — tam da
+// `Reports/Finance/tile-config.ts`'te yazılı "cari seçici 403" tuzağı. Katalog
+// DEĞİŞMEDİ: yeni izin kodu YOK, mevcut ikisinden biri yeterli.
+router.get(
+  "/due-summary",
+  requireAnyPermission("finance:read", "report:finance"),
+  async (req, res, next) => {
+    try {
+      const q = z
+        .object({
+          dateFrom: isoDate.optional(),
+          dateTo: isoDate.optional(),
+        })
+        .strict()
+        // Tek uç gönderilirse `resolveDateRange` eksik ucu GERİYE bakan
+        // varsayılanla doldurur (son 30 gün) — vade takviminde bu, kullanıcının
+        // hiç istemediği bir pencereyi sessizce kurmaktır. Açıkça reddedilir.
+        .refine((v) => Boolean(v.dateFrom) === Boolean(v.dateTo), {
+          message: "Vade penceresi için dateFrom ve dateTo BİRLİKTE gönderilmelidir.",
+        })
+        .parse(req.query);
+
+      const range =
+        q.dateFrom && q.dateTo
+          ? resolveDateRange({ dateFrom: q.dateFrom, dateTo: q.dateTo })
+          : null;
+      res.json(await chequeService.dueSummary({ from: range?.from, to: range?.to }));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 router.get("/:id", requirePermission("finance:read"), async (req, res, next) => {
   try {

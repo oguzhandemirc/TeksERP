@@ -47,6 +47,11 @@
 //       collect/pay `eventDate` ile kapılanır (kapalı döneme 409 + tx geri
 //       sarılır); cancelCollect çıpası `now` — orijinal tahsil tarihi sonradan
 //       kapanan dönemde kalsa da storno BUGÜNE düşer ve GEÇER
+//   §21 ⭐ VADE TAKVİMİ (H4): kova sınırı FABRİKA takviminden (gece 00:30
+//       vadeli çek "vadesi geçmiş" DEĞİL) · +7. gün sınırı DAHİL, +8. gün
+//       değil · statü süzgeci (tahsil/ciro/iptal takvimden ÇIKAR) · para
+//       birimleri toplanmaz · kovalar pencereden BAĞIMSIZ, takvim pencereli ·
+//       Σ(kova) = canlı çek adedi mutabakatı
 // =============================================================================
 import { ChequeStatus, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -54,6 +59,7 @@ import { chequeService } from "../src/services/cheque.service";
 import { D, resolveExchangeRate } from "../src/services/helpers/finance.helper";
 import { periodDayKey } from "../src/services/helpers/period-guard.helper";
 import { dailyCodePrefix } from "../src/utils/code-format";
+import { factoryDayStart, factoryYmd } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -986,6 +992,208 @@ async function main(): Promise<void> {
     "§20e Kapalı kasa dönemine GERİYE TARİHLİ ödeme (pay) de 409 — durum ISSUED kaldı",
     /KAPALI dönemine/i.test(closedPayErr) && (await statusOf(cP2)) === ChequeStatus.ISSUED,
     closedPayErr.slice(0, 90),
+  );
+
+  // ── §21 VADE TAKVİMİ (H4) ───────────────────────────────────────────────
+  // ⚠️ TÜM KONTROLLER **DELTA** ÖLÇER. `dueSummary` portföyün TAMAMINI toplar
+  // (cari süzgeci YOK) ve dev/CI veritabanında başka çekler bulunabilir; mutlak
+  // sayı beklemek testi ortamın verisine bağlardı (CLAUDE.md "ortamdaki veriye
+  // BAĞIMLI OLMA"). Önce taban alınır, sonra fark ölçülür.
+  const dueBank = await prisma.bankAccount.create({
+    data: { code: `${TAG}-BN3`, name: `${TAG} Vade Banka`, currency: "TRY" },
+    select: { id: true },
+  });
+  bankIds.push(dueBank.id);
+
+  /** Kova/para/yön kırılımından TEK satırın (adet, tutar) değeri. */
+  const bucketOf = (
+    s: Awaited<ReturnType<typeof chequeService.dueSummary>>["data"],
+    bucket: string,
+    kind: "RECEIVED" | "ISSUED",
+    currency = "TRY",
+  ) => {
+    const row = s.buckets.find((b) => b.bucket === bucket && b.kind === kind && b.currency === currency);
+    return { count: row?.count ?? 0, amount: D(row?.amount ?? 0) };
+  };
+  const totalCount = (s: Awaited<ReturnType<typeof chequeService.dueSummary>>["data"]) =>
+    s.buckets.reduce((n, b) => n + b.count, 0);
+  const snap = async (p?: { from?: Date; to?: Date }) => (await chequeService.dueSummary(p ?? {})).data;
+
+  const base = await snap();
+
+  // Vade çıpaları FABRİKA takvim gününden kurulur — `new Date()` + gün eklemek
+  // saat dilimini örtük bırakırdı ve gece koşan bir CI'da sınır kontrolleri
+  // (D probu) anlamını yitirirdi.
+  const todayStart = factoryDayStart();
+  const dayPlus = (n: number, hourMs = 12 * 3_600_000) =>
+    new Date(todayStart.getTime() + n * 86_400_000 + hourMs);
+
+  const dA = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 100, dueDate: dayPlus(-3) });
+  const dB = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 200, dueDate: dayPlus(7) });
+  const dC = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 300, dueDate: dayPlus(8) });
+  // ⭐ GECE SINIRI PROBU: bugünün fabrika günü 00:30'u. Bu an UTC'de DÜNE düşer
+  // (Istanbul UTC+3 → dün 21:30Z). Kova sınırı UTC'de kesilseydi bu çek
+  // "vadesi GEÇMİŞ" olurdu; fabrika takviminde BUGÜNDÜR → SOON.
+  const dD = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 400,
+    dueDate: new Date(todayStart.getTime() + 30 * 60_000),
+  });
+  const dE = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    currency: "USD",
+    exchangeRate: 34,
+    amount: 50,
+    dueDate: dayPlus(2),
+  });
+  const dF = await newCheque({ kind: "ISSUED", cariId: tedarikci, amount: 500, dueDate: dayPlus(3) });
+  const dJ = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 900, dueDate: dayPlus(200) });
+  void dA;
+  void dC;
+
+  const s1 = await snap();
+
+  check(
+    "§21a KÖRLÜK ZEMİNİ: yeni çekler kovalara GİRDİ (aksi halde aşağıdaki her fark vakumen 0 olurdu)",
+    totalCount(s1) - totalCount(base) === 7,
+    `delta=${totalCount(s1) - totalCount(base)}`,
+  );
+  check(
+    "§21b VADESİ GEÇMİŞ kovası: yalnız dünkü çek (adet +1, tutar +100)",
+    bucketOf(s1, "OVERDUE", "RECEIVED").count - bucketOf(base, "OVERDUE", "RECEIVED").count === 1 &&
+      bucketOf(s1, "OVERDUE", "RECEIVED").amount.minus(bucketOf(base, "OVERDUE", "RECEIVED").amount).equals(100),
+    `adet=${bucketOf(s1, "OVERDUE", "RECEIVED").count - bucketOf(base, "OVERDUE", "RECEIVED").count}`,
+  );
+  check(
+    "§21c ⭐ SINIR GÜNÜ: +7. gün YAKLAŞAN kovasında, +8. gün DEĞİL (eşik panelin `dueTone` ile birebir)",
+    bucketOf(s1, "SOON", "RECEIVED").count - bucketOf(base, "SOON", "RECEIVED").count === 2 &&
+      bucketOf(s1, "SOON", "RECEIVED").amount.minus(bucketOf(base, "SOON", "RECEIVED").amount).equals(600),
+    `TRY yaklaşan delta adet=${bucketOf(s1, "SOON", "RECEIVED").count - bucketOf(base, "SOON", "RECEIVED").count} tutar=${bucketOf(s1, "SOON", "RECEIVED").amount.minus(bucketOf(base, "SOON", "RECEIVED").amount)}`,
+  );
+  check(
+    "§21d ⭐ GECE SINIRI: bugün 00:30 vadeli çek YAKLAŞAN'dır, vadesi geçmiş DEĞİL (UTC kesim onu düne atardı)",
+    bucketOf(s1, "OVERDUE", "RECEIVED").count - bucketOf(base, "OVERDUE", "RECEIVED").count === 1,
+    `vadesi geçmiş delta=${bucketOf(s1, "OVERDUE", "RECEIVED").count - bucketOf(base, "OVERDUE", "RECEIVED").count} (2 ise gün sınırı UTC'de kesiliyor)`,
+  );
+  check(
+    "§21e +8. gün çeki BU AY ya da SONRASI kovasında — hangisi olduğu koşum gününe bağlıdır, ikisinin TOPLAMI +2 (o çek + 200 günlük)",
+    bucketOf(s1, "MONTH", "RECEIVED").count +
+      bucketOf(s1, "LATER", "RECEIVED").count -
+      bucketOf(base, "MONTH", "RECEIVED").count -
+      bucketOf(base, "LATER", "RECEIVED").count ===
+      2,
+  );
+  check(
+    "§21f PARA BİRİMLERİ TOPLANMAZ: USD çek KENDİ satırında (TL tutarına karışmadı)",
+    bucketOf(s1, "SOON", "RECEIVED", "USD").count - bucketOf(base, "SOON", "RECEIVED", "USD").count === 1 &&
+      bucketOf(s1, "SOON", "RECEIVED", "USD").amount
+        .minus(bucketOf(base, "SOON", "RECEIVED", "USD").amount)
+        .equals(50),
+  );
+  check(
+    "§21g YÖN AYRIMI: verdiğimiz çek ISSUED satırında (ödenecek), aldığımızla toplanmadı",
+    bucketOf(s1, "SOON", "ISSUED").count - bucketOf(base, "SOON", "ISSUED").count === 1 &&
+      bucketOf(s1, "SOON", "ISSUED").amount.minus(bucketOf(base, "SOON", "ISSUED").amount).equals(500),
+  );
+
+  // ── §21h STATÜ SÜZGECİ — ASIL NEGATİF SONDA ────────────────────────────
+  // Üç çek CANLI doğar, sayılır; sonra üçü de para-beklentisini yok eden bir
+  // duruma geçer. Kova sayısı DÜŞMEK ZORUNDA. Süzgeç gevşerse (ör. COLLECTED
+  // takvime girerse) sayı düşmez ve bu kontrol kırmızı verir.
+  const dG = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 11, dueDate: dayPlus(5) });
+  const dH = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 22, dueDate: dayPlus(5) });
+  const dI = await newCheque({ kind: "RECEIVED", cariId: musteri, amount: 33, dueDate: dayPlus(5) });
+  const s2 = await snap();
+  check(
+    "§21h KÖRLÜK ZEMİNİ: üç canlı çek YAKLAŞAN kovasına girdi (+3 / +66)",
+    bucketOf(s2, "SOON", "RECEIVED").count - bucketOf(s1, "SOON", "RECEIVED").count === 3 &&
+      bucketOf(s2, "SOON", "RECEIVED").amount.minus(bucketOf(s1, "SOON", "RECEIVED").amount).equals(66),
+  );
+  await chequeService.collect(dG, { bankAccountId: dueBank.id });
+  await chequeService.endorse(dH, { toCariId: tedarikci });
+  await chequeService.cancel(dI, "vade takvimi kapsam sondası");
+  const s3 = await snap();
+  check(
+    "§21i ⭐ TAHSİL EDİLMİŞ · CİRO EDİLMİŞ · İPTAL EDİLMİŞ çekler takvimden ÇIKTI (−3 / −66)",
+    bucketOf(s3, "SOON", "RECEIVED").count === bucketOf(s1, "SOON", "RECEIVED").count &&
+      bucketOf(s3, "SOON", "RECEIVED").amount.equals(bucketOf(s1, "SOON", "RECEIVED").amount),
+    `adet=${bucketOf(s3, "SOON", "RECEIVED").count} (beklenen ${bucketOf(s1, "SOON", "RECEIVED").count}) tutar=${bucketOf(s3, "SOON", "RECEIVED").amount}`,
+  );
+  check(
+    "§21j Kapsam yanıtta AÇIKÇA yazılı — ENDORSED canlı listede YOK (sessiz dışlama yok)",
+    s3.liveStatuses.RECEIVED.includes(ChequeStatus.PORTFOLIO) &&
+      s3.liveStatuses.RECEIVED.includes(ChequeStatus.AT_BANK) &&
+      !s3.liveStatuses.RECEIVED.includes(ChequeStatus.ENDORSED) &&
+      s3.notes.some((n) => /ciro/i.test(n)),
+    JSON.stringify(s3.liveStatuses),
+  );
+
+  // ── §21k MUTABAKAT — kova toplamı canlı çek adedine EŞİT ────────────────
+  const liveCount = await prisma.cheque.count({
+    where: {
+      OR: [
+        { kind: "RECEIVED", status: { in: [ChequeStatus.PORTFOLIO, ChequeStatus.AT_BANK] } },
+        { kind: "ISSUED", status: ChequeStatus.ISSUED },
+      ],
+    },
+  });
+  check(
+    "§21k ⭐ MUTABAKAT: Σ(kova adetleri) = canlı çek adedi (hiçbir çek iki kovaya düşmez, hiçbiri kaybolmaz)",
+    totalCount(s3) === liveCount,
+    `kova=${totalCount(s3)} canlı=${liveCount}`,
+  );
+
+  // ── §21l İKİ ZAMAN ANLAYIŞI: takvim PENCERELİ, kovalar DEĞİL ────────────
+  const dueDayJ = factoryYmd(dayPlus(200));
+  const inWindow = (s: Awaited<ReturnType<typeof chequeService.dueSummary>>["data"], ymdKey: string) =>
+    s.weeks.some((w) => w.start <= ymdKey && ymdKey <= w.end);
+  const wide = await snap({ from: todayStart, to: dayPlus(365) });
+  check(
+    "§21l ⭐ 200 gün sonrasına vadeli çek VARSAYILAN pencerede takvime GİRMEZ ama kovada DURUR (pencere kovaları etkilemez)",
+    !inWindow(s3, dueDayJ) && bucketOf(s3, "LATER", "RECEIVED").count > 0,
+    `takvimde=${inWindow(s3, dueDayJ)}`,
+  );
+  check(
+    "§21m Pencere genişletilince AYNI çek takvime girer (süzme sunucuda, istemcide değil)",
+    inWindow(wide, dueDayJ) && totalCount(wide) === totalCount(s3),
+    `geniş takvimde=${inWindow(wide, dueDayJ)} kova toplamı aynı=${totalCount(wide) === totalCount(s3)}`,
+  );
+  void dJ;
+
+  // ── §21n HAFTA PAZARTESİ BAŞLAR ────────────────────────────────────────
+  const dueDayB = factoryYmd(dayPlus(7));
+  const weekOfB = wide.weeks.find((w) => w.start <= dueDayB && dueDayB <= w.end && w.currency === "TRY");
+  const weekStartDow = weekOfB
+    ? new Date(`${weekOfB.start}T00:00:00Z`).getUTCDay()
+    : -1;
+  check(
+    "§21n Hafta PAZARTESİ başlar ve 7 gün sürer (pazar başlasaydı pazartesi vadeli çek geçen haftaya yazılırdı)",
+    Boolean(weekOfB) &&
+      weekStartDow === 1 &&
+      new Date(`${weekOfB?.end}T00:00:00Z`).getTime() -
+        new Date(`${weekOfB?.start}T00:00:00Z`).getTime() ===
+        6 * 86_400_000,
+    `başlangıç=${weekOfB?.start} (gün=${weekStartDow}) bitiş=${weekOfB?.end}`,
+  );
+  check(
+    "§21o Aylık satır ayın SON gününü doğru bulur (28/29/30/31 — sabit 30 yazılmamış)",
+    wide.months.every((m) => {
+      const end = new Date(`${m.end}T00:00:00Z`);
+      const next = new Date(end.getTime() + 86_400_000);
+      return m.start === `${m.key}-01` && next.getUTCDate() === 1;
+    }),
+    `ay satırı=${wide.months.length}`,
+  );
+  // Haftalık ve aylık kırılım AYNI günlerden türer — ikisi ayrı sorgudan
+  // beslenseydi bu eşitlik ilk sapmada bozulurdu (üç rakam, üç kaynak sınıfı).
+  const weekSum = wide.weeks.reduce((n, w) => n + w.count, 0);
+  const monthSum = wide.months.reduce((n, m) => n + m.count, 0);
+  check(
+    "§21p Takvim TEK KAYNAKTAN türetiliyor: haftalık toplam = aylık toplam",
+    weekSum === monthSum && weekSum > 0,
+    `hafta=${weekSum} ay=${monthSum}`,
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
