@@ -10,7 +10,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
-import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
+import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CariListRow {
@@ -306,13 +306,34 @@ export class CariService {
 
     const txnDate = input.txnDate ?? new Date();
     const created = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İFADESİ: KİLİT — mükerrer devir kontrolünden ÖNCE (TOCTOU).
+      // Eskiden dup-kontrolü kilitsiz koşuyordu (KK1 tuzağının birebir tekrarı):
+      // 5 paralel devir isteğinin 5'i de "devir yok" görüyor, sonra kilitte
+      // SERİLEŞİP 5 satır yazıyordu — tx'ler sıralanmıştı, kontroller
+      // sıralanmamıştı. Kilit korunan okumadan SONRA alınırsa hiçbir şey
+      // kazanılmaz. (`assertPeriodOpenTx` aşağıda AYNI kilidi tekrar alır —
+      // advisory xact lock reentrant, çift alma zararsız.)
+      await lockCariPeriodScopeTx(tx, input.cariId, input.currency);
+
+      // Mükerrer devir kontrolü — artık KİLİT ALTINDA taze okuma. "Devir var mı"
+      // sorusu "TERS KAYDI OLMAYAN ADJUSTMENT var mı" sorusudur: iptal edilmiş
+      // (ADJUSTMENT_CANCEL ile terslenmiş) devir, yeni devrin önünü KESMEZ —
+      // düzeltme akışının tamamı budur (iptal et → doğrusunu gir).
       const dup = await tx.cariTransaction.findFirst({
-        where: { cariId: input.cariId, currency: input.currency, sourceType: CariTxnSource.ADJUSTMENT },
+        where: {
+          cariId: input.cariId,
+          currency: input.currency,
+          sourceType: CariTxnSource.ADJUSTMENT,
+          reversedBy: { is: null },
+        },
         select: { id: true, txnDate: true },
       });
       if (dup) {
+        // 409 GERÇEK yolu gösterir — "ters bir düzeltme kaydı girin" diyen eski
+        // mesajın gösterdiği uç ürün genelinde YOKTU (Sınıf 2'nin kök bulgusu).
         throw AppError.conflict(
-          `Bu cari için ${input.currency} devri zaten girilmiş (${dup.txnDate.toLocaleDateString("tr-TR")}). Düzeltmek için ters bir düzeltme kaydı girin.`,
+          `Bu cari için ${input.currency} devri zaten girilmiş (${dup.txnDate.toLocaleDateString("tr-TR")}). ` +
+            `Düzeltmek için önce mevcut devri iptal edin (Devri İptal Et).`,
         );
       }
 
@@ -362,6 +383,148 @@ export class CariService {
       newData: { event: "OPENING_BALANCE", currency: input.currency, balance: amount.toString() },
     });
     return { success: true, data: created, message: "Devir bakiyesi kaydedildi." };
+  }
+
+  /**
+   * DEVİR STORNOSU — `ADJUSTMENT`ın tipli ters yolu (Sınıf 2, 2026-08-14).
+   *
+   * Yanlış girilen devir (4.250 yerine 42.500) düzeltilemiyordu: 409 mesajı
+   * "ters bir düzeltme kaydı girin" diyordu ama o yolu yazan uç ürün genelinde
+   * YOKTU. Defter APPEND-ONLY olduğu için düzeltme daima TERS SATIRDIR (SAP
+   * FB08 storno belgesi modeli): orijinal satır SİLİNMEZ, `ADJUSTMENT_CANCEL`
+   * kaynaklı ters satır `reversesTxnId` bağıyla yazılır.
+   *
+   * ⚠️ TERS KAYIT **BUGÜNE** yazılır (`txnDate = now`) — diğer storno yollarıyla
+   * (fatura/tahsilat iptali) aynı sözleşme. Devir kapanmış bir dönemin içinde
+   * olsa bile o dönemin İLAN EDİLMİŞ fotoğrafı DEĞİŞMEZ; düzeltme açık döneme
+   * düşer ve `assertPeriodOpenTx` yalnız BUGÜNÜ sorar.
+   *
+   * ⚠️ TUTAR/KUR ORİJİNALDEN AYNEN: debit↔credit yer değiştirir, `amountTry` ve
+   * `exchangeRate` birebir kopyalanır — TL karşılığı ters yönde birebir kapansın.
+   * "Bugünün kuruyla tersle" YANLIŞ olurdu: aradaki kur farkı defterde hayalet
+   * bir TL bakiyesi bırakırdı.
+   *
+   * ⚠️ ÇİFT STORNO İMKÂNSIZ — üç katman: (1) aktif devir araması kilit altında
+   * `reversedBy: null` ister, (2) `reversesTxnId` partial unique (ikinci ters
+   * satır P2002 → anlamlı 409), (3) storno sonrası aktif devir kalmadığı için
+   * ikinci çağrı 404 alır. Storno'nun kendisi de geri alınabilir: yeni devir
+   * girmek serbesttir (dup-kontrolü yalnız TERSLENMEMİŞ devri sayar).
+   *
+   * İZİN: `finance:invoice` — YENİ İZİN YOK (tasarım kararı). Devri giren
+   * iptalini de yapar; iptal append-only'dir ve kendisi de yeni devirle telafi
+   * edilir — `roll:manual-adjust` sınıfı "geçmişi serbest yeniden yazma" burada
+   * doğmuyor.
+   */
+  async cancelOpeningBalance(
+    input: {
+      cariId: string;
+      currency: Currency;
+      /** ZORUNLU — storno bir düzeltme kararıdır, gerekçesiz kayda geçmez. */
+      reason: string;
+    },
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; reversesTxnId: string }>> {
+    const reason = input.reason?.trim() ?? "";
+    if (reason.length < 3) {
+      throw AppError.badRequest(
+        "İptal gerekçesi zorunlu (en az 3 karakter) — storno kaydı gerekçesiyle anlamlıdır.",
+      );
+    }
+
+    const cari = await prisma.cariAccount.findUnique({
+      where: { id: input.cariId },
+      select: { id: true, isActive: true },
+    });
+    if (!cari) throw AppError.notFound("Cari hesap bulunamadı.");
+    // Pasif cari sıfır bakiye şartıyla pasifleşti; storno bakiyesini sıfırdan
+    // uzaklaştırır ve açık bakiye pasif caride GÖRÜNMEZ olurdu (update'teki
+    // pasifleştirme guard'ının ayna kuralı).
+    if (!cari.isActive) {
+      throw AppError.badRequest("Pasif caride devir iptali yapılamaz — önce cariyi aktifleştirin.");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İFADESİ: aktif devir okuması kilit ALTINDA yapılır —
+      // eşzamanlı ikinci storno / yeni devir girişi bu kilitte serileşir
+      // (`setOpeningBalance` ile aynı kilit: iki yazar birbirini görür).
+      await lockCariPeriodScopeTx(tx, input.cariId, input.currency);
+
+      // AKTİF devir = ters kaydı OLMAYAN ADJUSTMENT. Aynı anda en fazla bir
+      // tane olabilir (dup-guard); `orderBy` yalnız determinizm için.
+      const original = await tx.cariTransaction.findFirst({
+        where: {
+          cariId: input.cariId,
+          currency: input.currency,
+          sourceType: CariTxnSource.ADJUSTMENT,
+          reversedBy: { is: null },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, txnDate: true, debit: true, credit: true, amountTry: true, exchangeRate: true },
+      });
+      if (!original) {
+        throw AppError.notFound(
+          `Bu cari için iptal edilecek ${input.currency} devri yok — devir hiç girilmemiş ya da zaten iptal edilmiş. ` +
+            `Yeni devir girmek için "Devir Bakiyesi" ekranını kullanın.`,
+        );
+      }
+
+      // Ters kayıt BUGÜNE düşer — kapanmış dönem fotoğrafı değişmez (yukarıda).
+      const txnDate = new Date();
+      await assertPeriodOpenTx(tx, { cariId: input.cariId, currency: input.currency, txnDate });
+
+      let row: { id: string };
+      try {
+        row = await tx.cariTransaction.create({
+          data: {
+            cariId: input.cariId,
+            currency: input.currency,
+            txnDate,
+            // Birebir ters: borç ↔ alacak yer değiştirir.
+            debit: D(original.credit),
+            credit: D(original.debit),
+            amountTry: D(original.amountTry),
+            exchangeRate: D(original.exchangeRate),
+            sourceType: CariTxnSource.ADJUSTMENT_CANCEL,
+            reversesTxnId: original.id,
+            description: `Devir iptali — ${reason}`,
+            createdById: userId ?? null,
+          },
+          select: { id: true },
+        });
+      } catch (e) {
+        // Partial unique (`reversesTxnId WHERE NOT NULL`) — advisory kilit aynı
+        // anahtarı serileştirdiği için pratikte ulaşılmaz; kilit bir gün
+        // kaldırılırsa tek sed budur (period-close P2002 emsali).
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw AppError.conflict(
+            "Bu devir zaten iptal edilmiş (ters kaydı var). Yeni devir girmek için \"Devir Bakiyesi\" ekranını kullanın.",
+          );
+        }
+        throw e;
+      }
+
+      // Ters delta: orijinal bakiye etkisi (debit − credit) idi → tersi.
+      await applyCariBalanceTx(tx, input.cariId, input.currency, D(original.credit).minus(D(original.debit)));
+      return { id: row.id, reversesTxnId: original.id };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "CREATE",
+      tableName: "CARI_ACCOUNT",
+      recordId: input.cariId,
+      newData: {
+        event: "OPENING_BALANCE_CANCEL",
+        currency: input.currency,
+        reversesTxnId: result.reversesTxnId,
+        reason,
+      },
+    });
+    return {
+      success: true,
+      data: result,
+      message: "Devir iptal edildi — ters kayıt bugüne yazıldı; doğru devri şimdi girebilirsiniz.",
+    };
   }
 
   /**

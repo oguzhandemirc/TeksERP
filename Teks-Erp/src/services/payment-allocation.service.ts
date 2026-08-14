@@ -132,22 +132,32 @@ export function chequeKindMatchesInvoice(kind: ChequeKind, type: InvoiceType): b
 }
 
 /**
- * Çek KAPAMAYA UYGUN mu — durum bazında.
+ * PARASI YOK statüler — kapamanın DIŞLADIĞI küme (Sınıf 4'ün tek kaynağı).
  *
- * PORTFOLIO / AT_BANK / ENDORSED / COLLECTED / PAID / ISSUED: çek CANLI bir
- * varlıktır (ya elimizde ya yolda ya tahsil edilmiş) → kapatabilir.
- * BOUNCED / RETURNED / CANCELLED: çekin parası GELMEDİ ya da geri verildi →
- * onunla fatura kapatmak, olmayan parayla borç kapatmaktır.
+ * BOUNCED / RETURNED / CANCELLED: çekin parası GELMEDİ ya da çek geri verildi →
+ * onunla fatura kapatmak, olmayan parayla borç kapatmaktır. COLLECTED bilinçli
+ * olarak LİSTEDE DEĞİL: tahsil edilmiş çeke kapama MEŞRUDUR (müşterinin ödemesi
+ * gerçekleşti; dışlanan yalnız paranın YOK olduğu durumlardır).
+ *
+ * ⚠️ ÜÇ YÜZEY AYNI KÜMEYİ SÖYLEMEK ZORUNDA: ① bu liste — ön kontrol
+ * (`chequeCanAllocate`) ve `bumpChequeAllocated`'ın SQL süzgeci İKİSİ DE
+ * buradan okur, ayrışmaları yapısal olarak imkânsız; ② DB CHECK'i
+ * `cheques_terminal_not_allocated` (migration 20260814110200 — SQL literal'i
+ * bu sabiti OKUYAMAZ, listeyi değiştirirken migration da değişir); ③
+ * `error.middleware`'in o CHECK için bastığı Türkçe mesaj. Blocklist biçimi
+ * bilinçli (allowlist DEĞİL): DB CHECK de blocklist'tir — yarın yeni bir çek
+ * statüsü doğarsa iki katman AYNI cevabı verir; allowlist'te uygulama "hayır"
+ * derken sed "evet" derdi (ya da tersi).
  */
+export const CHEQUE_NO_MONEY_STATUSES: readonly ChequeStatus[] = [
+  ChequeStatus.BOUNCED,
+  ChequeStatus.RETURNED,
+  ChequeStatus.CANCELLED,
+];
+
+/** Çek KAPAMAYA UYGUN mu — parası-yok statüler dışında her durum kapatabilir. */
 export function chequeCanAllocate(status: ChequeStatus): boolean {
-  return (
-    status === ChequeStatus.PORTFOLIO ||
-    status === ChequeStatus.AT_BANK ||
-    status === ChequeStatus.ENDORSED ||
-    status === ChequeStatus.COLLECTED ||
-    status === ChequeStatus.ISSUED ||
-    status === ChequeStatus.PAID
-  );
+  return !CHEQUE_NO_MONEY_STATUSES.includes(status);
 }
 
 /**
@@ -257,9 +267,15 @@ async function dropPaymentAllocated(
 /**
  * `Cheque.allocatedTotal += amount`.
  *
- * ⚠️ Durum süzgeci burada `chequeCanAllocate` listesiyle BİREBİR olmalı; ön
- * kontrol ile SQL koşulu ayrışırsa ekran "kapatabilirsin" derken uç 409 verir
- * (ya da tersi, daha kötüsü: ekran engellerken uç yazar).
+ * ⚠️ Durum süzgeci `CHEQUE_NO_MONEY_STATUSES` sabitinden gelir — ön kontrol
+ * (`chequeCanAllocate`) ile AYNI kaynak, ayrışmaları yapısal olarak imkânsız
+ * (eskiden burada elle yazılmış bir allowlist vardı ve "BİREBİR tut" kuralı
+ * yalnız bir yorumdu). Süzgecin buradaki varlığı LOAD-BEARING (Sınıf 4 —
+ * çift yönlü CAS'ın kapama bacağı): ön kontrol ile bu UPDATE arasında çek
+ * karşılıksız/iade/iptal EDİLEBİLİR; koşul PG satır kilidi ALTINDA yeniden
+ * değerlendirildiği için (EvalPlanQual) yarışta parasız çeke kapama YAZILAMAZ.
+ * `count === 0` tanısı çağırandadır (`explainChequeBumpZeroTx`), üçüncü katman
+ * DB CHECK'i `cheques_terminal_not_allocated`.
  */
 async function bumpChequeAllocated(
   tx: Prisma.TransactionClient,
@@ -272,7 +288,7 @@ async function bumpChequeAllocated(
        SET "allocatedTotal" = "allocatedTotal" + ${a}::numeric,
            "updatedAt" = NOW()  -- tz-ok: kolon timestamptz; ham UPDATE Prisma'nin @updatedAt kancasını atlar, elle yazılmazsa sayaç değişir ama damga BAYAT kalır
      WHERE "id" = ${chequeId}::uuid
-       AND "status" IN ('PORTFOLIO', 'AT_BANK', 'ENDORSED', 'COLLECTED', 'ISSUED', 'PAID')
+       AND NOT ("status" = ANY(${[...CHEQUE_NO_MONEY_STATUSES]}::"ChequeStatus"[]))
        AND "allocatedTotal" + ${a}::numeric <= "amount"
   `;
 }
@@ -663,6 +679,11 @@ export class PaymentAllocationService {
       ? await bumpPaymentAllocated(tx, input.paymentId, amount)
       : await bumpChequeAllocated(tx, input.chequeId as string, amount);
     if (srcBumped === 0) {
+      // Çek dalında 0'ın İKİ ayrı sebebi olabilir (tavan ya da parasız-terminal
+      // statü) ve ikisine aynı mesajı basmak yanlış dalda YALAN olur — tanı tx
+      // İÇİNDE taze okumayla konur; sebep terminalse aşağıdaki satıra hiç
+      // düşülmez (fırlatır).
+      if (input.chequeId) await this.explainChequeBumpZeroTx(tx, input.chequeId);
       throw AppError.conflict(
         `${src.label} üzerinde kapamaya kalan tutar ${srcFree.toString()} ${src.currency} — ${amount.toString()} yazılamaz.`,
       );
@@ -691,6 +712,36 @@ export class PaymentAllocationService {
       invoiceDocNo: inv.docNo,
       invoiceClosed: D(after.paidTotal).gte(D(after.grandTotal)),
     };
+  }
+
+  /**
+   * Çek bump'ı 0 döndüğünde SEBEBİ tx İÇİNDE taze okumayla ayırt eder (Sınıf 4).
+   *
+   * Ön kontrol (`loadChequeTx`) İYİ MESAJ içindir, koruma değil: kontrol ile
+   * ham UPDATE arasında çek karşılıksız/iade/iptal edilebilir (canlı yarış —
+   * bekçinin §12 kilit-altı sondası bu pencereyi deterministik üretir). O
+   * durumda "kapamaya kalan tutar X" tavan mesajı YALAN olurdu: kalan tutar
+   * değil, paranın KENDİSİ yok. Üç dal:
+   *   kayıt yok → 404 · parası-yok statü → anlamlı 409 · değilse → dönüş
+   *   (çağıran mevcut tavan 409'unu basar).
+   */
+  private async explainChequeBumpZeroTx(tx: Prisma.TransactionClient, chequeId: string): Promise<void> {
+    const fresh = await tx.cheque.findUnique({
+      where: { id: chequeId },
+      select: { docNo: true, status: true },
+    });
+    if (!fresh) throw AppError.notFound("Çek/senet bulunamadı.");
+    if (!chequeCanAllocate(fresh.status)) {
+      const label =
+        fresh.status === ChequeStatus.BOUNCED
+          ? "karşılıksız çıktı"
+          : fresh.status === ChequeStatus.RETURNED
+            ? "sahibine iade edildi"
+            : "iptal edildi";
+      throw AppError.conflict(
+        `${fresh.docNo} bu sırada ${label} — karşılıksız/iade/iptal çekle kapama yapılamaz (çekin parası yoktur). Listeyi yenileyip başka bir kaynak seçin.`,
+      );
+    }
   }
 
   private async loadPaymentTx(tx: Prisma.TransactionClient, paymentId: string, invoiceType: InvoiceType): Promise<SourceInfo> {

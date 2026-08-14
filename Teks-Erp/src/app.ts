@@ -65,6 +65,7 @@ import goodsReceiptRoutes from "./routes/goods-receipt.routes";
 import financeRoutes from "./routes/finance.routes";
 import chequeRoutes from "./routes/cheque.routes";
 import financePeriodRoutes from "./routes/finance-period.routes";
+import cashPeriodRoutes from "./routes/cash-period.routes";
 // Paket D (ticaret) — üçü de KENDİ `verifyToken + requireFinanceEnabled`
 // kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
 import yarnRoutes from "./routes/yarn.routes";
@@ -639,6 +640,8 @@ app.use("/api/finance/cheques", chequeRoutes);
 // MİRAS ALAN alt router (`/allocations`) ise `finance.routes.ts` İÇİNE bağlanır.
 // İkisini karıştırmak ya kapıyı ikilemek ya da hiç koşmamasına yol açar.
 app.use("/api/finance/period-closes", financePeriodRoutes);
+// Kasa/banka dönem kapanışı (K-1) — aynı desen, aynı sıra kuralı.
+app.use("/api/finance/cash-period-closes", cashPeriodRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);

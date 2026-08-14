@@ -56,6 +56,15 @@ export interface GoodsReceiptDoc {
     createdBy: string | null;
   };
   lines: WarehouseDocLine[];
+  /**
+   * İPLİK satırları (SINIF 5, 2026-08-14) — YALNIZ iplik içeren fişin
+   * snapshot'ında bulunur. OPSİYONEL olması sözleşmedir (sackNote/batchNumber
+   * emsali): alan yoksa TEK BAYT basılmaz, yani 2026-08-14 öncesi snapshot'lar
+   * ve kumaş-only fişler bayt-bayt aynı çıkar. Bu alan gelmeden karma fişin
+   * resmî kâğıdında 500 kg iplik HİÇ görünmüyordu (denetim #17 — depocu ile
+   * tedarikçinin mutabakat belgesi eksik basılıyordu).
+   */
+  yarnLines?: Array<{ itemName: string; qtyKg: number }>;
   notes: string | null;
 }
 
@@ -99,6 +108,8 @@ function renderWarehouseDoc(
     signatureLabels: string[];
     notes: string | null;
     lines: WarehouseDocLine[];
+    /** Hazır-render EK tablo (iplik gibi) — boş string'de HİÇ basılmaz. */
+    extraTableHtml?: string;
     documentNo: string;
     date: string | null;
   },
@@ -205,7 +216,7 @@ function renderWarehouseDoc(
     </header>
     ${blocksTop}
     ${partyBox}
-    ${table}
+    ${table}${opts.extraTableHtml ?? ""}
     ${notesBox}
     ${noteBlock}
     ${blocksBottom}
@@ -244,6 +255,34 @@ export function renderGoodsReceiptHtml(snapshot: PrintedDocSnapshot, meta: Rende
   const doc = snapshot.doc as unknown as GoodsReceiptDoc;
   const h = doc.header;
   const cfg = snapshot.docConfigOverride ?? {};
+
+  // ⚠️ İPLİK TABLOSU KOŞULLU (SINIF 5): `yarnLines` YALNIZ doluysa basılır —
+  // alan taşımayan eski snapshot'lar ve kumaş-only fişler BAYT-BAYT aynı çıkar
+  // (interface'teki sözleşme). Boş dizi de basmaz: "KABUL EDİLEN İPLİK" başlıklı
+  // boş bir tablo, kâğıdı okuyana "iplik bekleniyor muydu?" sorusu sordurur.
+  const yarnRows = doc.yarnLines ?? [];
+  const totalKg = yarnRows.reduce((s, y) => s + (Number(y.qtyKg) || 0), 0);
+  const yarnTable =
+    yarnRows.length > 0
+      ? buildDocTable<{ itemName: string; qtyKg: number }>({
+          className: "sec",
+          caption: "KABUL EDİLEN İPLİK (kg)",
+          rows: yarnRows,
+          footLabel: `TOPLAM (${yarnRows.length} kalem)`,
+          cols: [
+            { key: "itemName", label: "İPLİK", align: "l", cell: (r) => esc(r.itemName) },
+            {
+              key: "qtyKg",
+              label: "KG",
+              align: "r",
+              width: "90px",
+              cell: (r) => esc(fmtQty(r.qtyKg)),
+              foot: esc(fmtQty(totalKg)),
+            },
+          ],
+        })
+      : "";
+
   return renderWarehouseDoc(snapshot, meta, {
     defaultTitle: "MAL KABUL FİŞİ",
     configKey: "malKabul",
@@ -265,6 +304,7 @@ export function renderGoodsReceiptHtml(snapshot: PrintedDocSnapshot, meta: Rende
     signatureLabels: ["Teslim Eden (Tedarikçi)", "Teslim Alan"],
     notes: doc.notes,
     lines: doc.lines ?? [],
+    extraTableHtml: yarnTable,
     documentNo: h.documentNo,
     date: h.date,
   });

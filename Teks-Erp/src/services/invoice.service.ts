@@ -18,6 +18,7 @@ import {
   GoodsReceiptStatus,
   PriceKind,
   PrintedDocType,
+  RollStatus,
   YarnMovementKind,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
@@ -40,6 +41,15 @@ import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/fi
 import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
 // D2 — kalem fiyatı ÇÖZÜM SIRASININ TEK KAYNAĞI. Sıra burada KOPYALANMAZ.
 import { resolveItemPricesFor } from "./item-price.service";
+// Sınıf 5 — fişin satırları TEK KAYNAK assembler'dan okunur; `rolls`/`yarnMovements`
+// tablolarına doğrudan gitmek (eski davranış) her tüketicide ayrı bir "hangi
+// tablo" kararı doğuruyordu. (Döngü yok: goods-receipt.service bu dosyayı
+// import ETMEZ — fatura kontrolünü prisma üzerinden yapar.)
+import {
+  goodsReceiptService,
+  type ReceiptFabricLine,
+  type ReceiptYarnLine,
+} from "./goods-receipt.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
@@ -244,34 +254,6 @@ export class InvoiceService {
         supplierId: true,
         deliveryNoteNo: true,
         createdAt: true,
-        rolls: {
-          where: { status: { not: "CANCELLED" } },
-          select: {
-            initialQty: true,
-            purchasePrice: true,
-            item: { select: { id: true, name: true, unit: true } },
-            color: { select: { name: true } },
-          },
-        },
-        // ⚠️ İPLİK SATIRLARI DA FATURAYA GİRER (2026-08-14 denetim bulgusu,
-        // KRİTİK). Eskiden select YALNIZ `rolls` okuyordu: karma bir fişte
-        // (2 top kumaş + 500 kg iplik) taslak SADECE kumaşı taşıyor, 500 kg
-        // iplik ne satır ne uyarı olarak görünmüyordu. Tedarikçinin gerçek
-        // faturası ipliği de içerdiği için ERP'deki alış faturası O KADAR
-        // EKSİK onaylanıyor → cari borç eksik kalıyor, iplik depoda ama
-        // karşılığında hiçbir yükümlülük yok. Hata çıkmıyor, log çıkmıyor.
-        //
-        // ⚠️ Yalnız `IN`: fiş iptali `ADJUST_OUT` yazar ve aynı
-        // `goodsReceiptId`yi taşır — süzgeç olmasa ters kayıt da faturaya
-        // satır olarak girerdi. (İptal edilmiş fiş zaten yukarıda
-        // reddediliyor; bu süzgeç derinlik savunmasıdır.)
-        yarnMovements: {
-          where: { kind: YarnMovementKind.IN },
-          select: {
-            qtyKg: true,
-            item: { select: { id: true, name: true } },
-          },
-        },
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
@@ -283,37 +265,62 @@ export class InvoiceService {
         `${receipt.receiptNo} fişinde tedarikçi seçilmemiş — alış faturası için tedarikçi gerekli.`,
       );
     }
+
+    // ── SATIRLAR TEK KAYNAKTAN (Sınıf 5, 2026-08-14) ────────────────────────
+    // ⚠️ İPLİK SATIRLARI DA FATURAYA GİRER (aynı günün denetim bulgusu,
+    // KRİTİK). Eskiden buradaki select YALNIZ `rolls` okuyordu: karma bir fişte
+    // (2 top kumaş + 500 kg iplik) taslak SADECE kumaşı taşıyor, iplik ne satır
+    // ne uyarı olarak görünüyordu → cari borç eksik kalıyor, iplik depoda ama
+    // karşılığında yükümlülük yok; hata da log da çıkmıyordu. Düzeltme önce
+    // buraya ikinci bir el-yazımı select olarak girdi; aynı akşam satır okuma
+    // `assembleReceiptLines`e TEKLEŞTİ — tabloya giden her kopya, bir sonraki
+    // satır tipinde (CONSUMABLE) aynı deliği yeniden açar.
+    //
+    // Süzgeçler assembler SÖZLEŞMESİNİN tüketici tarafı:
+    //  • Kumaşta CANCELLED dışarıda — iptal "bu mal hiç gelmedi" demektir
+    //    (softDelete qtyOut=0 semantiği); faturaya girerse gelmeyen mala para
+    //    ödenir.
+    //  • İplikte yalnız `IN` — fiş iptali `ADJUST_OUT` yazar ve aynı fiş bağını
+    //    taşır; süzgeç olmasa ters kayıt da faturaya satır olarak girerdi
+    //    (iptalli fiş yukarıda zaten reddediliyor; bu derinlik savunmasıdır).
+    const asm = await goodsReceiptService.assembleReceiptLines(receipt.id);
+    const fabricLines = asm.lines.filter(
+      (l): l is ReceiptFabricLine => l.kind === "FABRIC" && l.status !== RollStatus.CANCELLED,
+    );
+    const yarnInLines = asm.lines.filter(
+      (l): l is ReceiptYarnLine => l.kind === "YARN" && l.movementKind === YarnMovementKind.IN,
+    );
+
     // ⚠️ "top YOK" değil "faturalanacak SATIR yok": iplik-ONLY bir fiş eskiden
     // burada 400 alıyordu ("faturalanacak top yok") ve generic fatura ucu
     // `.strict()` şemasında `goodsReceiptId` KABUL ETMEDİĞİ için o fişe BAĞLI
     // fatura kesmenin hiçbir yolu kalmıyordu — 500 kg mal fiilen gelmişken.
     // Bağsız fatura kesilirse `invoices_one_active_per_goods_receipt` koruması
     // da devre dışı kalır, yani aynı iplik İKİ KEZ faturalanabilirdi.
-    if (receipt.rolls.length === 0 && receipt.yarnMovements.length === 0) {
+    if (fabricLines.length === 0 && yarnInLines.length === 0) {
       throw AppError.badRequest(`${receipt.receiptNo} fişinde faturalanacak satır yok.`);
     }
 
     // ── FİYAT ÖN-DOLUMU (D2) ────────────────────────────────────────────────
-    // Fişte fiyat girilmemiş toplar için kalem kartının ALIŞ fiyatı çözülür
+    // Fişte fiyat girilmemiş satırlar için kalem kartının ALIŞ fiyatı çözülür
     // (tedarikçi istisnası > kart varsayılanı > null).
-    // ⚠️ ASLA EZMEZ: `purchasePrice` DOLUYSA o kazanır — sıfır dahil, çünkü
+    // ⚠️ ASLA EZMEZ: fişte donan fiyat DOLUYSA o kazanır — sıfır dahil, çünkü
     // sıfır depocunun bilinçli girdisi olabilir (bedava numune).
     // ⚠️ Çözülemezse ESKİ DAVRANIŞ korunur (`0`) — bu, faturayı "bedava" ilan
     // etmek değil, `confirm`in sıfır fiyatlı satırı REDDEDEN seddine düşürmektir
     // (o sed 2026-08 öncesinden beri var). Buradan uydurma bir fiyat üretmek,
     // muhasebecinin göreceği tek uyarıyı susturmuş olurdu.
-    // ⚠️ TEK sorgu (perf kuralı 9): fişte kaç top olursa olsun tek lookup.
-    // ⚠️ İplik kalemleri fiyat çözümüne HER ZAMAN girer: `YarnMovement`in
-    // birim fiyat kolonu YOK (bilinçli şema boşluğu, ayrı iş) — yani iplik
-    // satırının fiyatı yalnız kalem kartından gelebilir. Çözülemezse `0` kalır
-    // ve satır faturaya SIFIR FİYATLA girer; bu "bedava" ilan etmek DEĞİL,
-    // `confirm`in sıfır fiyatlı satırı REDDEDEN seddine düşürmektir. Sonuç
-    // olarak muhasebeci satırı GÖRÜR ve fiyatı yazmak zorunda kalır — eski
-    // davranışta satır hiç görünmüyor ve tutar sessizce eksik kalıyordu.
+    // ⚠️ TEK sorgu (perf kuralı 9): fişte kaç satır olursa olsun tek lookup.
+    // ⚠️ İPLİK KUMAŞLA BİREBİR AYNI ZİNCİRE GİRDİ: `movement.unitPrice ?? kart
+    // ?? 0`. TARİHÇE: `YarnMovement.unitPrice` kolonu 2026-08-14'e kadar YOKTU
+    // — iplik satırının fiyatı yalnız kalem kartından gelebiliyor, fişte açıkça
+    // yazılan fiyat ise 400 yiyordu. Kolon geldi (Sınıf 5 migration'ı), fiyat
+    // artık kabul ANINDA donuyor; kart fallback'i kolon-öncesi/fiyatsız
+    // hareketler için duruyor.
     const missingPrice = [
       ...new Set([
-        ...receipt.rolls.filter((r) => r.purchasePrice == null).map((r) => r.item.id),
-        ...receipt.yarnMovements.map((y) => y.item.id),
+        ...fabricLines.filter((l) => l.purchasePrice == null).map((l) => l.itemId),
+        ...yarnInLines.filter((l) => l.unitPrice == null).map((l) => l.itemId),
       ]),
     ];
     const priceMap =
@@ -330,19 +337,19 @@ export class InvoiceService {
       string,
       { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }
     >();
-    for (const r of receipt.rolls) {
-      const price = D(r.purchasePrice ?? priceMap?.get(r.item.id)?.price ?? 0);
-      const key = `${r.item.id}|${r.color?.name ?? ""}|${price.toString()}`;
+    for (const r of fabricLines) {
+      const price = D(r.purchasePrice ?? priceMap?.get(r.itemId)?.price ?? 0);
+      const key = `${r.itemId}|${r.colorName ?? ""}|${price.toString()}`;
       const existing = groups.get(key);
       if (existing) {
         existing.qty = existing.qty.plus(D(r.initialQty));
       } else {
         groups.set(key, {
-          itemId: r.item.id,
-          description: r.color?.name ? `${r.item.name} · ${r.color.name}` : r.item.name,
+          itemId: r.itemId,
+          description: r.colorName ? `${r.itemName} · ${r.colorName}` : r.itemName,
           qty: D(r.initialQty),
           unitPrice: price,
-          unit: r.item.unit ?? "m",
+          unit: r.itemUnit ?? "m",
         });
       }
     }
@@ -353,19 +360,22 @@ export class InvoiceService {
     // taşıyamaz (ItemType farklı) ama renk alanı boş olduğu için anahtarlar
     // çakışabilirdi ve iki farklı BİRİMDEKİ (m ↔ kg) miktar tek satırda
     // toplanırdı — sessizce yanlış bir fatura tutarı.
+    // ⚠️ Gruplama anahtarına FİYAT dahil (kumaş kuralının aynısı): aynı ipliğin
+    // farklı fiyatlı partileri tek satırda toplanamaz — ortalama fiyat uydurmak
+    // olurdu.
     // ⚠️ Birim SABİT "kg": iplik defterinin birimi kg'dir (`YarnMovement.qtyKg`)
     // ve `Item.unit` bundan farklı olabilir; kalem kartındaki birime güvenmek,
     // deftere kg yazılıp faturaya metre basmak demekti.
-    for (const y of receipt.yarnMovements) {
-      const price = D(priceMap?.get(y.item.id)?.price ?? 0);
-      const key = `yarn|${y.item.id}|${price.toString()}`;
+    for (const y of yarnInLines) {
+      const price = D(y.unitPrice ?? priceMap?.get(y.itemId)?.price ?? 0);
+      const key = `yarn|${y.itemId}|${price.toString()}`;
       const existing = groups.get(key);
       if (existing) {
         existing.qty = existing.qty.plus(D(y.qtyKg));
       } else {
         groups.set(key, {
-          itemId: y.item.id,
-          description: y.item.name,
+          itemId: y.itemId,
+          description: y.itemName,
           qty: D(y.qtyKg),
           unitPrice: price,
           unit: "kg",
@@ -426,7 +436,18 @@ export class InvoiceService {
     }
   }
 
-  /** Taslak satırlarını TOPTAN değiştirir (onaylıda 409). */
+  /**
+   * Taslak satırlarını TOPTAN değiştirir (onaylıda 409).
+   *
+   * ⚠️ ATOMİK CLAIM tx İÇİNDE (Sınıf 4, 2026-08-14): statü kontrolü eskiden tx
+   * DIŞINDA düz okumaydı ve son yazım koşulsuzdu — `confirm` ile yarışta
+   * CONFIRMED faturanın satırları SESSİZCE yeniden yazılıyordu (defter eski
+   * tutar, satırlar yeni tutar; hiçbir CHECK yakalamaz). Claim'in no-op yazımı
+   * fatura satırının KİLİDİNİ tx sonuna kadar tutar: eşzamanlı `confirm` bu
+   * kilitte bekler ve commit'imizden sonra YENİ satırlardan hesaplar; `confirm`
+   * önce davrandıysa claim 0 döner ve 409 veririz. Satır deleteMany+create ve
+   * toplam güncellemesi aynı tx'te — yarım yeniden-yazım kalamaz.
+   */
   async updateDraft(
     id: string,
     input: {
@@ -438,18 +459,27 @@ export class InvoiceService {
     },
     userId?: string,
   ): Promise<ApiResponse<{ id: string }>> {
-    const existing = await prisma.invoice.findUnique({
-      where: { id },
-      select: { id: true, status: true, docNo: true, currency: true, exchangeRate: true },
-    });
-    if (!existing) throw AppError.notFound("Fatura bulunamadı.");
-    if (existing.status !== InvoiceStatus.DRAFT) {
-      throw AppError.conflict(
-        `${existing.docNo} ${existing.status === "CONFIRMED" ? "onaylanmış" : "iptal edilmiş"} — düzenlenemez. Düzeltme için iptal edip yeni fatura kesin.`,
-      );
-    }
-
     await prisma.$transaction(async (tx) => {
+      // No-op yazım (`status: DRAFT` → DRAFT) bilinçli: `updateMany` satır
+      // kilidini alır ve WHERE yüklemi statüyü ATOMİK doğrular — `findUnique →
+      // if → update` check-then-act'i tam da kapatılan hataydı.
+      const claimed = await tx.invoice.updateMany({
+        where: { id, status: InvoiceStatus.DRAFT },
+        data: { status: InvoiceStatus.DRAFT },
+      });
+      if (claimed.count === 0) {
+        const cur = await tx.invoice.findUnique({ where: { id }, select: { status: true, docNo: true } });
+        if (!cur) throw AppError.notFound("Fatura bulunamadı.");
+        throw AppError.conflict(
+          `${cur.docNo} ${cur.status === "CONFIRMED" ? "onaylanmış" : "iptal edilmiş"} — düzenlenemez. Düzeltme için iptal edip yeni fatura kesin.`,
+        );
+      }
+      // Claim SONRASI içerik tx İÇİNDE taze yüklenir (`confirm` ile aynı desen).
+      const existing = await tx.invoice.findUniqueOrThrow({
+        where: { id },
+        select: { exchangeRate: true },
+      });
+
       const rate = input.exchangeRate != null ? D(input.exchangeRate) : D(existing.exchangeRate);
       if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
 
@@ -516,14 +546,31 @@ export class InvoiceService {
     }));
   }
 
-  /** Taslak SİLİNEBİLİR (deftere hiçbir şey yazmadı). Onaylı fatura silinemez. */
+  /**
+   * Taslak SİLİNEBİLİR (deftere hiçbir şey yazmadı). Onaylı fatura silinemez.
+   *
+   * ⚠️ CLAIM'Lİ SİLME (Sınıf 4, 2026-08-14): eski hâli `findUnique → if →
+   * delete` idi — `confirm` ile yarışta statü kontrolü DRAFT görüp koşulsuz
+   * delete, o sırada onaylanmış (defter satırı doğmuş) faturayı silmeye
+   * kalkıyor ve kullanıcıya `CariTransaction` FK'sının HAM P2003'ü çıkıyordu.
+   * `deleteMany WHERE {id, status: DRAFT}` tek ifadede hem doğrular hem siler;
+   * yarışı kaybedince anlamlı 409 döner. (Üstteki hızlı-yol okuma yalnız
+   * `docNo`/mesaj içindir — yüklemi TAŞIMAZ, silme kararını deleteMany verir.)
+   */
   async deleteDraft(id: string, userId?: string): Promise<ApiResponse<{ id: string }>> {
     const existing = await prisma.invoice.findUnique({ where: { id }, select: { status: true, docNo: true } });
     if (!existing) throw AppError.notFound("Fatura bulunamadı.");
     if (existing.status !== InvoiceStatus.DRAFT) {
       throw AppError.conflict(`${existing.docNo} taslak değil — silinemez. Onaylı fatura ancak İPTAL (storno) edilir.`);
     }
-    await prisma.invoice.delete({ where: { id } });
+    const del = await prisma.invoice.deleteMany({ where: { id, status: InvoiceStatus.DRAFT } });
+    if (del.count === 0) {
+      // Yarışı kaybettik: hızlı-yol DRAFT gördü ama silme anında statü
+      // değişmişti (eşzamanlı onay/iptal) ya da kayıt başka uçtan silindi.
+      const cur = await prisma.invoice.findUnique({ where: { id }, select: { status: true, docNo: true } });
+      if (!cur) throw AppError.notFound("Fatura bulunamadı.");
+      throw AppError.conflict(`${cur.docNo} taslak değil — silinemez. Onaylı fatura ancak İPTAL (storno) edilir.`);
+    }
     void AuditService.log({
       userId,
       action: "DELETE",
@@ -579,20 +626,35 @@ export class InvoiceService {
           issueDate: true,
           shipmentId: true,
           directShipmentId: true,
-          // ⚠️ 2026-08-14 denetim bulgusu (KRİTİK) — İKİNCİ HAT. Asıl sed
-          // `goods-receipt.service.cancel`te: faturalanmış fiş artık iptal
-          // EDİLEMEZ. Bu kontrol o guard'dan ÖNCE doğmuş faturalar için
-          // duruyor (canlı veride örneği vardı): kaynak fiş iptal edilmişse
-          // onay, hiç gelmemiş mal için tedarikçi carisine borç yazar ve belge
-          // donar — hata da log da çıkmaz.
-          goodsReceipt: { select: { receiptNo: true, status: true } },
+          goodsReceiptId: true,
         },
       });
-      if (inv.goodsReceipt && inv.goodsReceipt.status === GoodsReceiptStatus.CANCELLED) {
-        throw AppError.conflict(
-          `${inv.docNo}: kaynak mal kabul fişi ${inv.goodsReceipt.receiptNo} İPTAL EDİLMİŞ — ` +
-            `bu fatura onaylanamaz (mal fiilen girmedi). Faturayı iptal edin.`,
-        );
+      // ⚠️ KAYNAK FİŞ SATIR KİLİDİYLE OKUNUR (Sınıf 4, 2026-08-14 akşam).
+      // Sabah eklenen ilk hâli kilitsiz bir ilişki okumasıydı — o da
+      // check-then-act: `goods-receipt.cancel` ile yarışta okuma ACTIVE görür,
+      // iptal hemen ardından commit'ler ve onay hiç gelmemiş mal için tedarikçi
+      // carisine borç yazardı (belge donar, hata da log da çıkmaz). `FOR UPDATE`
+      // iki tarafı AYNI satırda serileştirir: iptalin claim'i (UPDATE
+      // goods_receipts) bu kilidi bekler; iptal önce commit'lediyse bu okuma
+      // CANCELLED'ı görür ve 409 veririz. Kontrol ayrıca fiş-iptal guard'ından
+      // ÖNCE doğmuş faturalar için de tek hattır (canlı veride örneği vardı).
+      // Kilit sırası: fatura satırı (claim) → goods_receipts (FOR UPDATE);
+      // iptal tarafı goods_receipts (claim) → fatura OKUMASI (kilitsiz) — ortak
+      // kilitli kaynak tek olduğu için ABBA çevrimi yok. (Zaman fonksiyonu yok
+      // → `-- tz-ok` gerekmez.)
+      if (inv.goodsReceiptId) {
+        const grRows = await tx.$queryRaw<Array<{ receiptNo: string; status: string }>>`
+          SELECT "receiptNo", "status"::text AS "status"
+          FROM "goods_receipts" WHERE "id" = ${inv.goodsReceiptId}::uuid
+          FOR UPDATE
+        `;
+        const gr = grRows[0];
+        if (gr && gr.status === GoodsReceiptStatus.CANCELLED) {
+          throw AppError.conflict(
+            `${inv.docNo}: kaynak mal kabul fişi ${gr.receiptNo} İPTAL EDİLMİŞ — ` +
+              `bu fatura onaylanamaz (mal fiilen girmedi). Faturayı iptal edin.`,
+          );
+        }
       }
 
       const lineRows = await tx.invoiceLine.findMany({

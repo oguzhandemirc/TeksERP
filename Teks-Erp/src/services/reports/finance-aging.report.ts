@@ -398,11 +398,16 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
       // burada İKİNCİ KEZ yazmak, iki kopyanın ayrıştığı gün raporu sessizce
       // yanlışlardı (karşılıksız çıkan çek "hâlâ kredi veriyor" görünürdü).
       // Defter ne yazdıysa o okunur — ters kayıt otomatik olarak krediyi siler.
+      // ⚠️ DEVİR NETİ STORNO'YU DA KAPSAR: `adjNet` = ADJUSTMENT − ADJUSTMENT_CANCEL
+      // (ters satır debit/credit'i yer değiştirmiş yazar, SUM kendiliğinden
+      // netler). CANCEL süzgeçten düşürülürse iptal edilmiş devir raporda
+      // "hâlâ açık DEVİR" görünür ve `reconDiff` tam devir tutarı kadar sahte
+      // "defter uyuşmuyor" bandı basar — bekçide kilitli (test_finance_opening).
       prisma.$queryRaw<LedgerRow[]>(Prisma.sql`
         SELECT t."cariId" AS "cariId", t.currency::text AS currency,
                SUM(t.debit - t.credit)::text AS "net",
                (SUM(t.debit - t.credit) FILTER (WHERE t."sourceType"::text LIKE 'CHEQUE%'))::text AS "chqNet",
-               (SUM(t.debit - t.credit) FILTER (WHERE t."sourceType" = 'ADJUSTMENT'))::text AS "adjNet"
+               (SUM(t.debit - t.credit) FILTER (WHERE t."sourceType" IN ('ADJUSTMENT','ADJUSTMENT_CANCEL')))::text AS "adjNet"
           FROM cari_transactions t
           JOIN cari_accounts ca ON ca.id = t."cariId"
          WHERE t."txnDate" <= ${asOf} ${fCari} ${fKind} ${fCurTxn}

@@ -34,6 +34,22 @@
 //  tarihli girilebildiği için tam da kapalı döneme düşme adayıdır.)
 // Yeni bir defter yazarı doğarsa listeye eklenir; guard'ı ATLAYAN bir yazar,
 // kilidin tamamını sessizce delik yapar.
+//
+// ── ADVISORY KİLİT UZAYI ENVANTERİ (2026-08-14 sağlamlık paketi, Sınıf 3) ───
+// Repo genelindeki `pg_advisory_xact_lock(UZAY, anahtar)` uzayları:
+//   8021  KK1 mükerrer-top tuzağı        (inventory.service)
+//   8022  parti numarası sayacı          (batch.service)
+//   8024  oturum kayıt defteri           (session-registry.service)
+//   8025  izin yönetimi                  (permission-management.service)
+//   8026  CARİ dönem kilidi              (BU DOSYA — hashtext(cariId|currency))
+//   8027  alış siparişi karşılanma       (purchase-order / goods-receipt)
+//   8028  KASA/BANKA dönem kilidi        (cash-period-guard.helper — hashtext(hesapId))
+// İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
+// (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
+// bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı
+// deadlock üretti). ② Bir tx birden çok UZAYDAN kilit alacaksa uzay numarası
+// ARTAN sırada alınır — bugün çapraz-uzay çifti yok (ölçüldü); doğduğu gün bu
+// satır kuralın adresidir.
 // =============================================================================
 
 import { Prisma, Currency } from "@prisma/client";

@@ -26,11 +26,23 @@
 //   §12 İdempotency (clientToken) — ikinci istek yeni çek AÇMAZ
 //   §13 ⭐ MUTABAKAT: §23/§24 formülü çek olaylarını da sayıyor mu
 //   §14 Belge numarası ön eki türe/yöne göre ayrışıyor
+//   §15 ⭐ POSTING ÇIPASI (SINIF 1): defter/belge-no/kur/olay DÖRDÜ DE
+//       `postingDate`ten — keşide GEÇMİŞ, posting BUGÜN olan çekte satır bugüne
+//   §16 DÖNEM KİLİDİ postingDate'i kapılar; GEÇMİŞ KEŞİDE serbest kalır
+//       (operatör keşide tarihini yalan yazmaya ZORLANMAZ)
+//   §17 ⭐ AYNA-CİRO deadlock REGRESYONU (SINIF 3): iki çift paralel
+//       karşılıksız → 40P01 YOK, iki taraf da tam yazılır
+//   §18 KAPAMALI ÇEK (SINIF 4): bounce/iade/iptal 409 "kapamayı kaldırın";
+//       MEŞRU tahsil 409'a DÜŞMEZ (CAS yalnız para-yok-eden geçişlerde)
+//   §19 ⭐ TAHSİL STORNOSU (K-2): para geri + durum geri + tipli olay +
+//       ikinci storno 409 + mutabakat formülü COLLECT_CANCEL'ı da sayıyor
 // =============================================================================
 import { ChequeStatus, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { chequeService } from "../src/services/cheque.service";
-import { D } from "../src/services/helpers/finance.helper";
+import { D, resolveExchangeRate } from "../src/services/helpers/finance.helper";
+import { periodDayKey } from "../src/services/helpers/period-guard.helper";
+import { dailyCodePrefix } from "../src/utils/code-format";
 
 let pass = 0;
 let fail = 0;
@@ -50,6 +62,7 @@ const cariIds: string[] = [];
 const cashBoxIds: string[] = [];
 const bankIds: string[] = [];
 const chequeIds: string[] = [];
+const rateIds: string[] = [];
 
 async function expectError(fn: () => Promise<unknown>): Promise<string> {
   try {
@@ -433,7 +446,10 @@ async function main(): Promise<void> {
   // ⚠️ Bu bölüm, ürün kodundaki bakiye yazımını DEĞİL bekçinin FORMÜLÜNÜ ölçer.
   // Formül çek olaylarını saymazsa banka bakiyesi "drift" görünür ve ilk çek
   // tahsilatında §24 kırmızıya döner — genişletme unutulamaz.
-  const drift = await prisma.$queryRaw<Array<{ hesap: string; fark: Prisma.Decimal }>>`
+  // ⚠️ COLLECT_CANCEL formülde NEGATİF sayılır (K-2): tahsil stornosu parayı
+  // geri çeker; formül onu görmezse İLK stornoda bekçi "drift" raporlar.
+  // §19k bu satırı storno SONRASI yeniden koşarak yükü taşıtır.
+  const bankDriftRows = () => prisma.$queryRaw<Array<{ hesap: string; fark: Prisma.Decimal }>>`
     SELECT a.id::text AS hesap, a.balance - COALESCE(p.toplam, 0) AS fark
     FROM bank_accounts a
     LEFT JOIN (
@@ -446,10 +462,11 @@ async function main(): Promise<void> {
         UNION ALL
         SELECT e."bankAccountId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
           FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
-          WHERE e.type IN ('COLLECT', 'PAY') AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
+          WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL') AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
       ) u GROUP BY "bankAccountId"
     ) p ON p."bankAccountId" = a.id
     WHERE a.id = ${bank.id}::uuid AND a.balance <> COALESCE(p.toplam, 0)`;
+  const drift = await bankDriftRows();
   check("§13a ⭐ Banka bakiyesi ÜÇ YAZARLI formülle mutabık", drift.length === 0, `sapma=${drift.length}`);
 
   const cariDrift = await prisma.$queryRaw<Array<{ c: string }>>`
@@ -503,6 +520,305 @@ async function main(): Promise<void> {
   const senetNo = (await prisma.cheque.findUniqueOrThrow({ where: { id: senet }, select: { docNo: true } })).docNo;
   check("§14c Senet SNA ön ekli (aynı modül, ayrı sayaç)", senetNo.startsWith("SNA"), senetNo);
 
+  // ── §15 POSTING TARİHİ ÇIPASI (SINIF 1) ─────────────────────────────────
+  // Keşide GEÇMİŞ, posting BUGÜN olan çekte dört tüketici (kur · belge no ·
+  // defter txnDate · doğuş olayı) İŞLEM tarihinden okumalı. Kur beklentileri
+  // MUTLAK değer değil, `resolveExchangeRate`'in kendisiyle kurulur: paylaşımlı
+  // dev DB'de GBP kuru zaten olabilir; helper-bazlı beklenti ortam verisinden
+  // etkilenmez, ıraksama olmazsa da §15-zemin AÇIKÇA kırmızı verir (sessiz
+  // vakum-yeşili yerine).
+  const utcDay = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const ensureRate = async (day: Date, rate: string) => {
+    try {
+      const row = await prisma.exchangeRate.create({
+        data: { currency: "GBP", rateDate: day, rate: new Prisma.Decimal(rate) },
+        select: { id: true },
+      });
+      rateIds.push(row.id);
+    } catch {
+      // P2002 — o güne GBP kuru zaten var (paylaşımlı dev DB): DOKUNMA, silme
+      // listesine de ALMA. Beklentiler helper'dan kurulduğu için sorun değil.
+    }
+  };
+  const issueOld = new Date(Date.now() - 33 * 86400000);
+  await ensureRate(utcDay(issueOld), "31.1234");
+  await ensureRate(utcDay(new Date(Date.now() - 86400000)), "39.5678");
+  const rateAtPosting = await resolveExchangeRate(prisma, "GBP", new Date());
+  const rateAtIssue = await resolveExchangeRate(prisma, "GBP", issueOld);
+  check(
+    "§15-zemin KÖRLÜK: kur fixture'ı ıraksadı (posting kuru ≠ keşide kuru)",
+    rateAtPosting != null && rateAtIssue != null && !rateAtPosting.equals(rateAtIssue),
+    `posting=${rateAtPosting} keşide=${rateAtIssue}`,
+  );
+
+  const cPost = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    currency: "GBP",
+    amount: 100,
+    issueDate: issueOld,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  const cPostRow = await prisma.cheque.findUniqueOrThrow({
+    where: { id: cPost },
+    select: { docNo: true, exchangeRate: true, amountTry: true, postingDate: true, issueDate: true },
+  });
+  check(
+    "§15a ⭐ KUR posting gününden damgalandı (keşide gününden DEĞİL)",
+    rateAtPosting != null && rateAtIssue != null &&
+      D(cPostRow.exchangeRate).equals(rateAtPosting) && !D(cPostRow.exchangeRate).equals(rateAtIssue),
+    `damga=${cPostRow.exchangeRate}`,
+  );
+  check(
+    "§15b TL karşılığı posting kurundan hesaplandı",
+    rateAtPosting != null &&
+      D(cPostRow.amountTry).equals(D(100).mul(rateAtPosting).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)),
+    `TL=${cPostRow.amountTry}`,
+  );
+  check(
+    "§15c ⭐ Belge no GGAAYY'si BUGÜNÜN (keşide gününün DEĞİL)",
+    cPostRow.docNo.startsWith(dailyCodePrefix("CKA", new Date())) &&
+      !cPostRow.docNo.startsWith(dailyCodePrefix("CKA", issueOld)),
+    cPostRow.docNo,
+  );
+  const cPostTxn = await prisma.cariTransaction.findFirstOrThrow({
+    where: { chequeId: cPost, sourceType: "CHEQUE_RECEIVE" },
+    select: { txnDate: true },
+  });
+  const cPostEvent = await prisma.chequeEvent.findFirstOrThrow({
+    where: { chequeId: cPost, type: "RECEIVE" },
+    select: { eventDate: true },
+  });
+  const nearNow = (d: Date) => Math.abs(d.getTime() - Date.now()) < 5 * 60_000;
+  check("§15d ⭐ Defter satırı BUGÜNE düştü (gönderilmiş eski ekstre DEĞİŞMEZ)", nearNow(cPostTxn.txnDate));
+  check("§15e Doğuş olayının tarihi de posting", nearNow(cPostEvent.eventDate));
+  check(
+    "§15f Keşide tarihi KAYBOLMADI (kâğıdın hukuki verisi — TTK 796)",
+    Math.abs(cPostRow.issueDate.getTime() - issueOld.getTime()) < 1000,
+  );
+
+  // Açık posting tarihi: "işlem tarihi kullanıcınındır" — dün girilen çek
+  // dünün defterine ve dünün belge sayacına düşer.
+  const postY = new Date(Date.now() - 86400000);
+  const cYesterday = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 500,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+    postingDate: postY,
+  });
+  const cYRow = await prisma.cheque.findUniqueOrThrow({
+    where: { id: cYesterday },
+    select: { docNo: true },
+  });
+  const cYTxn = await prisma.cariTransaction.findFirstOrThrow({
+    where: { chequeId: cYesterday, sourceType: "CHEQUE_RECEIVE" },
+    select: { txnDate: true },
+  });
+  check(
+    "§15g Açık postingDate belge sayacını O GÜNE anahtarlar",
+    cYRow.docNo.startsWith(dailyCodePrefix("CKA", postY)),
+    cYRow.docNo,
+  );
+  check("§15h Defter satırı verilen işlem ANINI birebir taşır", cYTxn.txnDate.getTime() === postY.getTime());
+
+  // ── §16 DÖNEM KİLİDİ postingDate'İ KAPILAR ──────────────────────────────
+  // Kapalı döneme POSTING → 409; ama aynı cariye GEÇMİŞ KEŞİDELİ çek girmek
+  // serbesttir (posting bugüne düşer). Eski davranışta operatör meşru tahsilatı
+  // girmek için keşide tarihini YALAN yazmaya zorlanıyordu — veri tahrifine
+  // iten kilit tam da buydu.
+  const kapaliCariId = await makeCari("KPL");
+  // Kapanış satırı doğrudan yazılır (kapanış servisi başka paketin dosyası);
+  // temizlik `cariPeriodClose.deleteMany({ cariId })` ile yapılır.
+  await prisma.cariPeriodClose.create({
+    data: {
+      cariId: kapaliCariId,
+      currency: "TRY",
+      periodEnd: periodDayKey(new Date(Date.now() - 10 * 86400000)),
+      closingBalance: 0,
+      txnCount: 0,
+    },
+    select: { id: true },
+  });
+  const closedErr = await expectError(() =>
+    chequeService.create({
+      kind: "RECEIVED",
+      cariId: kapaliCariId,
+      amount: 1000,
+      dueDate: new Date(Date.now() + 20 * 86400000),
+      postingDate: new Date(Date.now() - 15 * 86400000),
+    }),
+  );
+  check("§16a ⭐ Kapalı döneme POSTING 409 (yol gösteren mesajla)", /KAPALI döneme/i.test(closedErr), closedErr.slice(0, 80));
+  check(
+    "§16b Reddedilen giriş ÇEK SATIRI BIRAKMADI (tx geri sarıldı)",
+    (await prisma.cheque.count({ where: { cariId: kapaliCariId } })) === 0,
+  );
+  const cOldIssue = await newCheque({
+    kind: "RECEIVED",
+    cariId: kapaliCariId,
+    amount: 1000,
+    issueDate: new Date(Date.now() - 15 * 86400000),
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  const cOldIssueTxn = await prisma.cariTransaction.findFirstOrThrow({
+    where: { chequeId: cOldIssue, sourceType: "CHEQUE_RECEIVE" },
+    select: { txnDate: true },
+  });
+  check(
+    "§16c ⭐ Aynı carinin GEÇMİŞ KEŞİDELİ çeki SERBEST — satır bugüne düşer, keşide yalanına gerek yok",
+    nearNow(cOldIssueTxn.txnDate),
+    `txnDate=${cOldIssueTxn.txnDate.toISOString()}`,
+  );
+
+  // ── §17 AYNA-CİRO DEADLOCK REGRESYONU (SINIF 3) ─────────────────────────
+  // A'nın çeki B'ye, B'ninki A'ya ciro edilmiş; ikisi AYNI ANDA karşılıksız.
+  // Eski kod iki dönem kilidini veri sırasıyla (drawer→endorsee) alıyordu →
+  // ayna çiftte ters sıra → PG 40P01 → operatöre anlamsız 500. `bounce` artık
+  // `assertPeriodsOpenTx` ile kilitleri DETERMİNİSTİK sırada ÖNDEN alır.
+  // ⚠️ `Promise.allSettled` MEŞRU (§3 ile aynı gerekçe): iki AYRI transaction.
+  const musBefore17 = await cariBalance(musteri);
+  const tedBefore17 = await cariBalance(tedarikci);
+  const BOUNCE_ROUNDS = 4;
+  const bounceFailures: string[] = [];
+  for (let r = 0; r < BOUNCE_ROUNDS; r++) {
+    const cx = await newCheque({
+      kind: "RECEIVED",
+      cariId: musteri,
+      amount: 111,
+      dueDate: new Date(Date.now() + 20 * 86400000),
+    });
+    const cy = await newCheque({
+      kind: "RECEIVED",
+      cariId: tedarikci,
+      amount: 222,
+      dueDate: new Date(Date.now() + 20 * 86400000),
+    });
+    await chequeService.endorse(cx, { toCariId: tedarikci });
+    await chequeService.endorse(cy, { toCariId: musteri });
+    const pair = await Promise.allSettled([chequeService.bounce(cx, {}), chequeService.bounce(cy, {})]);
+    for (const p of pair) {
+      if (p.status === "rejected") bounceFailures.push((p.reason as Error).message.slice(0, 100));
+    }
+  }
+  check(
+    `§17a ⭐ ${BOUNCE_ROUNDS} ayna-ciro çifti paralel karşılıksızda HİÇ hata yok (deadlock/500 dahil)`,
+    bounceFailures.length === 0,
+    bounceFailures[0] ?? "",
+  );
+  check(
+    "§17b İki cari de tur sonunda başlangıç bakiyesine döndü (çift yazım TAM)",
+    (await cariBalance(musteri)).equals(musBefore17) && (await cariBalance(tedarikci)).equals(tedBefore17),
+    `müşteri=${await cariBalance(musteri)} tedarikçi=${await cariBalance(tedarikci)}`,
+  );
+
+  // ── §18 KAPAMALI ÇEK (SINIF 4) ──────────────────────────────────────────
+  // Para-yok-eden üç geçiş (karşılıksız · iade · iptal) kapamalı çekte 409
+  // "kapamayı kaldırın" der; MEŞRU tahsil ise 409'a DÜŞMEZ. Kapama sayacı
+  // DOĞRUDAN yazılır — PaymentAllocation motoru başka paketin dosyası; burada
+  // ölçülen, geçiş tarafının kapıyı görmesidir. Üç katman birden korur
+  // (hızlı-yol assert · claim WHERE allocatedTotal=0 · DB CHECK) — negatif
+  // sondada ilk ikisi körleştirilince mesaj kaybolup DB CHECK ham hatası
+  // kaldığı için bu bölüm YİNE kırmızı verir.
+  const cAlloc = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 1000,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  await prisma.cheque.update({ where: { id: cAlloc }, data: { allocatedTotal: 250 } });
+  const allocBounceErr = await expectError(() => chequeService.bounce(cAlloc, {}));
+  const allocReturnErr = await expectError(() => chequeService.returnToDrawer(cAlloc, {}));
+  const allocCancelErr = await expectError(() => chequeService.cancel(cAlloc, "x"));
+  check("§18a Kapamalı çekte KARŞILIKSIZ 409 'kapamayı kaldırın'", /kapamayı kaldırın/i.test(allocBounceErr), allocBounceErr.slice(0, 90));
+  check("§18b Kapamalı çekte İADE 409 'kapamayı kaldırın'", /kapamayı kaldırın/i.test(allocReturnErr), allocReturnErr.slice(0, 90));
+  check("§18c Kapamalı çekte İPTAL 409 'kapamayı kaldırın'", /kapamayı kaldırın/i.test(allocCancelErr), allocCancelErr.slice(0, 90));
+  check(
+    "§18d Reddedilen üç deneme durumu ve defteri KİRLETMEDİ",
+    (await statusOf(cAlloc)) === ChequeStatus.PORTFOLIO &&
+      (await prisma.cariTransaction.count({ where: { chequeId: cAlloc } })) === 1 &&
+      (await prisma.chequeEvent.count({ where: { chequeId: cAlloc } })) === 1,
+  );
+  await chequeService.collect(cAlloc, { cashBoxId: box.id });
+  check(
+    "§18e ⭐ Kapamalı çekin MEŞRU tahsili 409'a DÜŞMEDİ (CAS yalnız para-yok-eden geçişlerde)",
+    (await statusOf(cAlloc)) === ChequeStatus.COLLECTED,
+  );
+
+  // ── §19 TAHSİL STORNOSU (K-2) ───────────────────────────────────────────
+  const boxAfterCollect = await boxBalance(box.id);
+  const noReasonErr = await expectError(() => chequeService.cancelCollect(cAlloc, "   "));
+  check("§19a Sebepsiz storno 400 (para hareketi sebepsiz geri alınmaz)", /sebep zorunlu/i.test(noReasonErr), noReasonErr.slice(0, 80));
+  await chequeService.cancelCollect(cAlloc, "yanlış çek okutuldu");
+  check(
+    "§19b ⭐ Para AYNI hesaptan (kasa) GERİ çekildi",
+    (await boxBalance(box.id)).equals(boxAfterCollect.minus(1000)),
+    `kasa=${await boxBalance(box.id)}`,
+  );
+  check("§19c ⭐ Durum COLLECT'in tükettiği duruma döndü (PORTFOLIO)", (await statusOf(cAlloc)) === ChequeStatus.PORTFOLIO);
+  const stornoEvent = await prisma.chequeEvent.findFirstOrThrow({
+    where: { chequeId: cAlloc, type: "COLLECT_CANCEL" },
+    select: { fromStatus: true, toStatus: true, notes: true, cashBoxId: true, bankAccountId: true },
+  });
+  check(
+    "§19d Tipli olay yazıldı: COLLECT_CANCEL + sebep + hesap",
+    stornoEvent.fromStatus === ChequeStatus.COLLECTED &&
+      stornoEvent.toStatus === ChequeStatus.PORTFOLIO &&
+      stornoEvent.notes === "yanlış çek okutuldu" &&
+      stornoEvent.cashBoxId === box.id,
+  );
+  check(
+    "§19e Kapamaya DOKUNULMADI (storno çekin varlığını yok etmez)",
+    D((await prisma.cheque.findUniqueOrThrow({ where: { id: cAlloc }, select: { allocatedTotal: true } })).allocatedTotal).equals(250),
+  );
+  check(
+    "§19f Cari deftere satır YAZILMADI (COLLECT yazmıyordu, tersi de yazmaz)",
+    (await prisma.cariTransaction.count({ where: { chequeId: cAlloc } })) === 1,
+  );
+  const secondStornoErr = await expectError(() => chequeService.cancelCollect(cAlloc, "tekrar"));
+  check("§19g İkinci storno 409 (para İKİ KEZ geri çekilmez)", /portföyde/i.test(secondStornoErr), secondStornoErr.slice(0, 80));
+
+  // AT_BANK yolu: bankadan tahsil edilen çek stornoda BANKAYA (AT_BANK) döner.
+  const cBank = await newCheque({
+    kind: "RECEIVED",
+    cariId: musteri,
+    amount: 600,
+    dueDate: new Date(Date.now() + 20 * 86400000),
+  });
+  await chequeService.deposit(cBank, { bankAccountId: bank.id });
+  await chequeService.collect(cBank, { bankAccountId: bank.id });
+  const bankAfterCollect = await bankBalance(bank.id);
+  await chequeService.cancelCollect(cBank, "banka dekontu başka çekin");
+  const cBankRow = await prisma.cheque.findUniqueOrThrow({
+    where: { id: cBank },
+    select: { status: true, bankAccountId: true },
+  });
+  check(
+    "§19h AT_BANK'tan tahsil edilen çek stornoda AT_BANK'a döner (banka başlıkta)",
+    cBankRow.status === ChequeStatus.AT_BANK && cBankRow.bankAccountId === bank.id,
+  );
+  check(
+    "§19i Banka bakiyesi geri düştü",
+    (await bankBalance(bank.id)).equals(bankAfterCollect.minus(600)),
+    `banka=${await bankBalance(bank.id)}`,
+  );
+  await chequeService.collect(cBank, { bankAccountId: bank.id });
+  check(
+    "§19j ⭐ Storno sonrası YENİDEN TAHSİL serbest (doğru dekont geldi)",
+    (await statusOf(cBank)) === ChequeStatus.COLLECTED &&
+      (await bankBalance(bank.id)).equals(bankAfterCollect),
+  );
+  // Mutabakat formülü storno SONRASI da tutmalı — COLLECT_CANCEL formülden
+  // düşürülürse tam burada kırmızı verir (formül genişletmesinin yükü).
+  const driftAfterStorno = await bankDriftRows();
+  check("§19k ⭐ MUTABAKAT storno sonrası da tutuyor (formül COLLECT_CANCEL'ı sayıyor)", driftAfterStorno.length === 0, `sapma=${driftAfterStorno.length}`);
+  const guideErr = await expectError(() => chequeService.bounce(cBank, {}));
+  check(
+    "§19l COLLECTED çeke başka olay denenince mesaj STORNO yolunu gösterir (çıkmaz 409 yasak)",
+    /Tahsilatı Geri Al/.test(guideErr),
+    guideErr.slice(0, 110),
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
@@ -515,16 +831,30 @@ main()
     // ⚠️ TEMİZLİK SIRASI FK'ye BAĞLI: olay + defter satırları çeke, çek cariye
     // RESTRICT ile bağlı. Ters sırada silmek FK ihlaliyle düşer ve fixture
     // ortamda kalır.
-    if (chequeIds.length > 0) {
-      await prisma.chequeEvent.deleteMany({ where: { chequeId: { in: chequeIds } } });
-      await prisma.cariTransaction.deleteMany({ where: { chequeId: { in: chequeIds } } });
-      await prisma.cheque.deleteMany({ where: { id: { in: chequeIds } } });
+    // ⚠️ ÇEK KÜMESİ cariIds ÜZERİNDEN DE toplanır: negatif-yol kontrolleri
+    // (`expectError` içindeki create) hata BEKLER ve id kaydetmez — guard bir
+    // gün regrese olup create BAŞARILI olursa o çek `chequeIds`te olmaz, FK
+    // Restrict cari silmeyi düşürür ve tüm temizlik zinciri yarıda kalırdı
+    // (negatif sondada birebir yaşandı, 2026-08-14).
+    const strayCheques =
+      cariIds.length > 0
+        ? await prisma.cheque.findMany({ where: { cariId: { in: cariIds } }, select: { id: true } })
+        : [];
+    const allChequeIds = [...new Set([...chequeIds, ...strayCheques.map((c) => c.id)])];
+    if (allChequeIds.length > 0) {
+      await prisma.chequeEvent.deleteMany({ where: { chequeId: { in: allChequeIds } } });
+      await prisma.cariTransaction.deleteMany({ where: { chequeId: { in: allChequeIds } } });
+      await prisma.cheque.deleteMany({ where: { id: { in: allChequeIds } } });
     }
     if (cariIds.length > 0) {
       await prisma.cariTransaction.deleteMany({ where: { cariId: { in: cariIds } } });
       await prisma.cariBalance.deleteMany({ where: { cariId: { in: cariIds } } });
+      await prisma.cariPeriodClose.deleteMany({ where: { cariId: { in: cariIds } } });
       await prisma.cariAccount.deleteMany({ where: { id: { in: cariIds } } });
     }
+    // Yalnız BİZİM yarattığımız kur satırları silinir (P2002 ile atlananlar
+    // ortamın verisidir — dokunulmaz).
+    if (rateIds.length > 0) await prisma.exchangeRate.deleteMany({ where: { id: { in: rateIds } } });
     if (cashBoxIds.length > 0) await prisma.cashBox.deleteMany({ where: { id: { in: cashBoxIds } } });
     if (bankIds.length > 0) await prisma.bankAccount.deleteMany({ where: { id: { in: bankIds } } });
     if (customerIds.length > 0) await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });

@@ -13,6 +13,12 @@
 // ÖDEMİŞTİR; ekstre aksini söylerse iki taraf iki gerçekle çalışır ve
 // mutabakat imkânsızlaşır. Karşılıksız riski, kaydı GECİKTİRMENİN değil TERS
 // KAYITLA geri almanın gerekçesidir (append-only defter felsefesi).
+// ⚠️ "ALINDIĞI AN" = `postingDate` (İŞLEM tarihi, SAP Buchungsdatum) — KEŞİDE
+// tarihi DEĞİL (2026-08-14 SINIF 1). Keşide kâğıdın üzerindeki tarihtir: ileri
+// keşide standart pratik, geçmiş keşideli çek almak olağan. Kur çözümü, belge
+// numarasının GGAAYY'si, defter `txnDate`i ve doğuş olayının tarihi DÖRDÜ DE
+// `postingDate`ten okunur; dönem kilidi de onu kapılar. `issueDate` kâğıdın
+// hukuki verisi olarak KALIR (TTK 796 ibraz süresi keşideden hesaplanır).
 //
 // OLAY → DEFTER TABLOSU (tek kaynak, aşağıdaki metotlar bunu uygular):
 //   RECEIVE  → müşteri CREDIT (borcu azaldı)
@@ -21,6 +27,8 @@
 //   BOUNCE   → müşteriye DEBIT + ENDORSED'dan geldiyse ciro carisine ters CREDIT
 //   RETURN   → çekin defter etkisi ters kayıtla geri alınır (iki yönde de)
 //   ISSUE    → cariye DEBIT (borcumuz azaldı) · PAY → YALNIZ banka/kasa −amount
+//   COLLECT_CANCEL → YALNIZ banka/kasa −amount (tahsil stornosu, K-2); cari
+//                    yine OYNAMAZ — COLLECT oynatmamıştı, tersi de oynatmaz
 //
 // ⚠️ KASA/BANKA BAKİYESİNİN ÜÇÜNCÜ YAZARI BURASIDIR (Payment · CashTransaction ·
 // ChequeEvent). `scripts/test_consistency.ts` §23/§24 formülü bu üçünü BİRLİKTE
@@ -41,7 +49,8 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } from "./helpers/finance.helper";
-import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
+import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
+import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 // -----------------------------------------------------------------------------
@@ -88,11 +97,16 @@ async function nextChequeNo(
 // -----------------------------------------------------------------------------
 
 /**
- * TERMİNAL durumlar — bunlardan sonra olay YOKTUR.
+ * TERMİNAL durumlar — normal AKIŞ olayları bunlardan sonra YOKTUR.
  *
- * Terminalden çıkış "düzeltme" ile de yapılmaz: tahsil edilmiş bir çeki geri
- * almak, banka bakiyesini de geri almak demektir ve o para gerçekten geldi.
- * Yanlış tahsil kaydının doğru cevabı kasa hareketi tarafındaki storno'dur.
+ * TEK bilinçli istisna (K-2, 2026-08-14): `COLLECTED`'dan `cancelCollect`
+ * (tahsil stornosu) ile çıkılır. Yanlış COLLECT işaretlenen çek eskiden
+ * SONSUZA DEK "tahsil edildi" kalıyordu — kasa tarafındaki storno kasayı
+ * düzeltir ama çekin durumunu düzeltemezdi ve çek sonradan GERÇEKTEN
+ * karşılıksız çıkarsa portföy yalan söylerdi. Storno TİPLİ olaydır
+ * (`COLLECT_CANCEL`): parayı AYNI hesaptan geri çeker ve durumu COLLECT'in
+ * tükettiği duruma döndürür; `loadForTransition` onu `allowedFrom=[COLLECTED]`
+ * ile AÇIKÇA ister, yani bu liste "genel geçiş kapısı" olma işini sürdürür.
  */
 const TERMINAL_STATUSES: readonly ChequeStatus[] = [
   ChequeStatus.COLLECTED,
@@ -341,7 +355,15 @@ export interface CreateChequeInput {
   currency?: Currency;
   exchangeRate?: Prisma.Decimal.Value | null;
   amount: Prisma.Decimal.Value;
+  /** KEŞİDE tarihi — kâğıdın üzerindeki tarih (hukuki veri, TTK 796). */
   issueDate?: Date;
+  /**
+   * İŞLEM tarihi — DEFTER ÇIPASI (kur · belge no · txnDate · doğuş olayı ·
+   * dönem kilidi). Verilmezse BUGÜN: "işlem tarihi kullanıcınındır, kilit
+   * kapılar" (payment emsali). Eski panel bu alanı göndermez → bugüne düşer;
+   * bu DOĞRU davranıştır (çek bugün işleniyor).
+   */
+  postingDate?: Date;
   dueDate: Date;
   serialNo?: string | null;
   bankName?: string | null;
@@ -390,28 +412,34 @@ export class ChequeService {
     const kind = input.kind;
     const docType = input.docType ?? ChequeDocType.CHEQUE;
     const issueDate = input.issueDate ?? new Date();
+    // İŞLEM TARİHİ — defter çıpası (SINIF 1, 2026-08-14). Kur, belge no, defter
+    // `txnDate`i ve doğuş olayının tarihi DÖRDÜ DE buradan okunur; dönem kilidi
+    // `writeChequeLedgerTx` içinde otomatik izler.
+    const postingDate = input.postingDate ?? new Date();
     const dueDate = input.dueDate;
     const currency = input.currency ?? Currency.TRY;
 
     // ⚠️ `dueDate >= issueDate` DAYATILMAZ: vadesi geçmiş çek almak sektörde
     // olağandır (gecikmiş müşteri elindeki eski çeki verir) ve bunu bloklamak
     // gerçek bir tahsilatı sisteme sokulamaz yapardı.
+    // ⚠️ `postingDate` ile `dueDate` arasında da KISIT YOK: ileri keşideli çek
+    // BUGÜNE işlenir, vadesi gelecektedir — meşru ve olağan.
 
     const result = await withBarcodeRetry(async () =>
       prisma.$transaction(async (tx) => {
         const cari = await resolveCariTx(tx, input, "Çek/senet");
 
         const rate =
-          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, issueDate);
+          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, postingDate);
         if (rate == null) {
           throw AppError.badRequest(
-            `${currency} için ${issueDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
+            `${currency} için ${postingDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
           );
         }
         if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
 
         const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-        const docNo = await nextChequeNo(tx, kind, docType, issueDate);
+        const docNo = await nextChequeNo(tx, kind, docType, postingDate);
         const isReceived = kind === ChequeKind.RECEIVED;
 
         const cheque = await tx.cheque.create({
@@ -419,10 +447,7 @@ export class ChequeService {
             docNo,
             kind,
             docType,
-            // GEÇİCİ KÖPRÜ (şema fazı): postingDate şemaya geldi, dört tüketicinin
-            // yeniden çıpalanması servis fazının işi. Bugünkü davranış BİREBİR
-            // korunur (defter hâlâ issueDate akışında) — köprü servis fazında sökülür.
-            postingDate: issueDate,
+            postingDate,
             status: isReceived ? ChequeStatus.PORTFOLIO : ChequeStatus.ISSUED,
             cariId: cari.id,
             currency,
@@ -444,10 +469,11 @@ export class ChequeService {
 
         // DEFTER ANI — dosya başlığındaki kilitli karar. Alınan çek müşteriyi
         // ALACAKLANDIRIR (borcu azaldı), verilen çek bizim borcumuzu azaltır.
+        // Satır İŞLEM tarihine düşer (postingDate) — keşideye değil.
         await writeChequeLedgerTx(tx, {
           cariId: cari.id,
           currency,
-          txnDate: issueDate,
+          txnDate: postingDate,
           side: isReceived ? "credit" : "debit",
           amount,
           amountTry,
@@ -465,7 +491,7 @@ export class ChequeService {
           type: isReceived ? ChequeEventType.RECEIVE : ChequeEventType.ISSUE,
           fromStatus: null,
           toStatus: isReceived ? ChequeStatus.PORTFOLIO : ChequeStatus.ISSUED,
-          eventDate: issueDate,
+          eventDate: postingDate,
           notes: input.notes ?? null,
           userId,
         });
@@ -519,9 +545,15 @@ export class ChequeService {
       // durumu, ikincisi eksik bir adımı anlatır. Tek mesaj kullanıcıyı yanlış
       // yöne (destek çağırmaya) gönderirdi.
       const isTerminal = TERMINAL_STATUSES.includes(row.status);
+      // COLLECTED'ın artık tipli bir çıkışı var (K-2) — çıkmaz 409 yasak
+      // kuralı gereği yol GÖSTERİLİR: yanlış tahsil kaydının çözümü stornodur.
+      const collectedHint =
+        row.status === ChequeStatus.COLLECTED
+          ? ' Tahsil kaydı HATALIYSA önce "Tahsilatı Geri Al" (tahsil stornosu) yapın.'
+          : "";
       throw AppError.conflict(
         isTerminal
-          ? `${row.docNo} zaten ${STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.`
+          ? `${row.docNo} zaten ${STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${collectedHint}`
           : `${row.docNo} şu an ${STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.`,
       );
     }
@@ -534,18 +566,44 @@ export class ChequeService {
    * ⚠️ `findUnique → if → update` YASAK: iki eşzamanlı "tahsil et" isteği banka
    * bakiyesini İKİ KEZ artırırdı ve fark hiçbir yerde log'lanmazdı. `updateMany`
    * WHERE'i durumu da içerdiği için ikinci istek 0 satır günceller.
+   *
+   * ⚠️ `requireUnallocated` (SINIF 4 — çift yönlü CAS'ın geçiş tarafı): yalnız
+   * PARA-YOK-EDEN üç geçiş (bounce · iade · iptal) ister — kapama sayacını da
+   * kendi atomik WHERE'ine koyar (`allocatedTotal: 0`). Ön yoldaki
+   * `assertNotAllocated` bir HIZLI-YOL kontrolüdür (UX: mesaj claim'e gelmeden
+   * verilir) ama kilitsiz `findUnique` üzerinden koşar; `allocate` ile yarışta
+   * kapama, kontrol ile claim ARASINDA doğabilir ve eski WHERE onu görmezdi —
+   * sonuç "kapalı görünen ama parası yok olmuş fatura" olurdu. DİĞER geçişler
+   * bunu KULLANMAZ: kapamalı çekin tahsili MEŞRUDUR (müşterinin ödemesi
+   * gerçekleşiyor), blanket eklemek onu 409'a düşürürdü. Üçüncü katman DB
+   * CHECK'idir (`cheques_terminal_not_allocated`) — uygulama yüklemi bir gün
+   * atlanırsa satırın kendisi direnir.
    */
   private async claimTx(
     tx: Prisma.TransactionClient,
     row: TransitionRow,
     to: ChequeStatus,
     extra: Prisma.ChequeUncheckedUpdateManyInput = {},
+    requireUnallocated?: { action: string },
   ): Promise<void> {
     const claimed = await tx.cheque.updateMany({
-      where: { id: row.id, status: row.status },
+      where: {
+        id: row.id,
+        status: row.status,
+        ...(requireUnallocated ? { allocatedTotal: 0 } : {}),
+      },
       data: { status: to, ...extra },
     });
     if (claimed.count === 0) {
+      if (requireUnallocated) {
+        // Tanı tx İÇİNDE taze okumayla: claim'i düşüren DURUM mu, KAPAMA mı?
+        // Durum hâlâ beklenense düşüren kapamadır (yarışta doğdu) — mesaj
+        // `assertNotAllocated`'ın "kapamayı kaldırın" cümlesi, TAZE tutarla.
+        const fresh = await tx.cheque.findUnique({ where: { id: row.id }, select: TRANSITION_SELECT });
+        if (fresh && fresh.status === row.status) {
+          this.assertNotAllocated(fresh, requireUnallocated.action);
+        }
+      }
       throw AppError.conflict(
         `${row.docNo} bu sırada başka bir kullanıcı tarafından güncellendi. Ekranı yenileyip tekrar deneyin.`,
       );
@@ -641,6 +699,11 @@ export class ChequeService {
       const ref: AccountRef = { cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null };
       await loadAccountTx(tx, ref, row.currency);
 
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1): tahsil, hesap bakiyesinin ÜÇÜNCÜ
+      // yazarıdır (Payment · CashTransaction · burası) ve `eventDate` geçmişe
+      // girilebilir — kapalı kasa sayfasına para akıtmak yasak.
+      await assertCashPeriodOpenTx(tx, { ...ref, txnDate: eventDate });
+
       await this.claimTx(tx, row, ChequeStatus.COLLECTED, {
         // Tahsil bankadan olduysa hesabı başlığa da yaz — portföy listesi
         // "hangi hesaba girdi" sorusunu satırdan cevaplayabilsin.
@@ -674,6 +737,119 @@ export class ChequeService {
       success: true,
       data: { id: result.id, docNo: result.docNo },
       message: `${result.docNo} tahsil edildi.`,
+    };
+  }
+
+  /**
+   * TAHSİL STORNOSU (K-2) — yanlış COLLECT işaretlenen çek geri açılır.
+   *
+   * ⚠️ TERMİNALDEN TEK MEŞRU ÇIKIŞ budur ve TİPLİDİR (`COLLECT_CANCEL`):
+   * para AYNI hesaptan ters hareketle geri çekilir, durum COLLECT olayının
+   * tükettiği duruma (`fromStatus`: PORTFOLIO ya da AT_BANK) döner, olay
+   * defterine sebep zorunlu satır yazılır. Sonrasında çek yeniden tahsil
+   * edilebilir ya da gerçekte olan neyse (karşılıksız / iade) o kaydedilir.
+   *
+   * ⚠️ CARİ DEFTERE DOKUNULMAZ: COLLECT cari yazmıyordu (dosya başındaki
+   * tablo), tersi de yazmaz. KAPAMALARA DA DOKUNULMAZ: tahsil stornosu çekin
+   * varlığını yok etmez, faturaya kapama meşru kalır (DB CHECK'i de izin
+   * verir — PORTFOLIO/AT_BANK terminal-parasız durum değildir).
+   *
+   * ⚠️ HESAP PASİFLEŞMİŞ OLSA DA GEÇER — `loadAccountTx` BİLEREK çağrılmaz:
+   * aktiflik kontrolü YENİ para kabulünü kapılar; var olan yanlış parayı geri
+   * çekmeyi kapılamaz (para gerçeği ekran kuralından önce gelir).
+   */
+  async cancelCollect(
+    id: string,
+    reason: string,
+    userId?: string,
+  ): Promise<ApiResponse<{ id: string; docNo: string }>> {
+    if (!reason?.trim()) {
+      throw AppError.badRequest("Tahsil stornosu için sebep zorunludur — para hareketi geri alınıyor.");
+    }
+    const now = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      const row = await this.loadForTransition(
+        tx,
+        id,
+        [ChequeStatus.COLLECTED],
+        ChequeKind.RECEIVED,
+        "tahsil stornosu",
+      );
+
+      // Hesap ve önceki durum COLLECT olayından okunur (başlık `bankAccountId`
+      // kasadan tahsili hiç taşımaz). EN YENİ COLLECT alınır: olay defteri
+      // append-only olduğu için storno + yeniden tahsil zincirinde birden çok
+      // COLLECT satırı meşrudur.
+      const collectEvent = await tx.chequeEvent.findFirst({
+        where: { chequeId: row.id, type: ChequeEventType.COLLECT },
+        orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
+        select: { fromStatus: true, cashBoxId: true, bankAccountId: true },
+      });
+      if (!collectEvent || (!collectEvent.cashBoxId && !collectEvent.bankAccountId)) {
+        // FAIL-CLOSED: parayı NEREDEN geri çekeceğimizi bilmeden storno yapmak
+        // bir bakiyeyi körlemesine oynatmak olurdu.
+        throw AppError.conflict(
+          `${row.docNo} tahsil edilmiş görünüyor ama tahsil olayının hesap kaydı bulunamadı — storno otomatik yapılamaz, kaydı süpervizörle inceleyin.`,
+        );
+      }
+      const backTo = collectEvent.fromStatus ?? ChequeStatus.PORTFOLIO;
+
+      // Başlık hesabı geri kurulur: PORTFOLIO'ya dönüşte tahsilin damgaladığı
+      // banka SİLİNİR (tahsil öncesi başlıkta banka yoktu); AT_BANK'a dönüşte
+      // "hangi bankada" sorusunun cevabı DEPOSIT olayından geri okunur — tahsil
+      // farklı bir hesaba yapılmış olabilir.
+      let headerBankId: string | null = null;
+      if (backTo === ChequeStatus.AT_BANK) {
+        const depositEvent = await tx.chequeEvent.findFirst({
+          where: { chequeId: row.id, type: ChequeEventType.DEPOSIT },
+          orderBy: [{ eventDate: "desc" }, { createdAt: "desc" }],
+          select: { bankAccountId: true },
+        });
+        headerBankId = depositEvent?.bankAccountId ?? collectEvent.bankAccountId;
+      }
+
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1) — çıpa `now` (storno sözleşmesi):
+      // olay defteri append-only olduğu için ters satır BUGÜNE düşer ve kapalı
+      // kasa sayfası DEĞİŞMEZ; guard yine de sorulur ("pratikte düşmez" bir
+      // invariant değildir — bugünün de kapalı olabileceği teorik köşe dahil).
+      await assertCashPeriodOpenTx(tx, {
+        cashBoxId: collectEvent.cashBoxId,
+        bankAccountId: collectEvent.bankAccountId,
+        txnDate: now,
+      });
+
+      // Atomik claim {id, status: COLLECTED} — iki eşzamanlı storno isteğinden
+      // yalnız biri geçer; ikincisi 409 alır (para İKİ KEZ geri çekilmez).
+      await this.claimTx(tx, row, backTo, { bankAccountId: headerBankId });
+
+      const ref: AccountRef = { cashBoxId: collectEvent.cashBoxId, bankAccountId: collectEvent.bankAccountId };
+      await moveAccountBalanceTx(tx, ref, D(row.amount).negated());
+
+      await writeEventTx(tx, {
+        chequeId: row.id,
+        type: ChequeEventType.COLLECT_CANCEL,
+        fromStatus: ChequeStatus.COLLECTED,
+        toStatus: backTo,
+        eventDate: now,
+        bankAccountId: collectEvent.bankAccountId,
+        cashBoxId: collectEvent.cashBoxId,
+        notes: reason,
+        userId,
+      });
+      return { id: row.id, docNo: row.docNo, backTo };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "CHEQUE",
+      recordId: id,
+      newData: { event: "COLLECT_CANCEL", docNo: result.docNo, reason },
+    });
+    return {
+      success: true,
+      data: { id: result.id, docNo: result.docNo },
+      message: `${result.docNo} tahsil stornosu yapıldı — para hesaptan geri çekildi, çek ${STATUS_LABEL[result.backTo]} durumuna döndü.`,
     };
   }
 
@@ -777,10 +953,26 @@ export class ChequeService {
         ChequeKind.RECEIVED,
         "karşılıksız kaydı",
       );
+      // HIZLI-YOL (UX): kapama varsa mesaj claim'e gelmeden verilir. Gerçek
+      // koruma claim'in `requireUnallocated` yüklemidir — bu kontrol kilitsizdir.
       this.assertNotAllocated(row, "karşılıksız kaydı");
 
       const cameFromEndorsed = row.status === ChequeStatus.ENDORSED;
-      await this.claimTx(tx, row, ChequeStatus.BOUNCED);
+      await this.claimTx(tx, row, ChequeStatus.BOUNCED, {}, { action: "karşılıksız kaydı" });
+
+      // SINIF 3 — ÇOK CARİLİ tek olay: iki dönem kilidi DETERMİNİSTİK sırayla
+      // ÖNDEN alınır (`assertPeriodsOpenTx` anahtara göre sıralar). Ayna-ciro
+      // çiftinde (A'nın çeki B'ye, B'ninki A'ya ciro edilmiş; ikisi aynı anda
+      // karşılıksız) iki tx kilitleri TERS sırada isteyip PG deadlock'una
+      // (40P01 → anlamsız 500) düşüyordu — canlı sondayla üretildi. İçteki
+      // tekil guard'lar AYNEN kalır: advisory xact kilidin yeniden-alımı bedava
+      // ve "satır yazan nokta guard taşır" kapsama garantisi bozulmaz.
+      if (cameFromEndorsed && row.endorsedToCariId) {
+        await assertPeriodsOpenTx(tx, [
+          { cariId: row.cariId, currency: row.currency, txnDate: eventDate },
+          { cariId: row.endorsedToCariId, currency: row.currency, txnDate: eventDate },
+        ]);
+      }
 
       await writeChequeLedgerTx(tx, {
         cariId: row.cariId,
@@ -864,10 +1056,11 @@ export class ChequeService {
         null,
         "iade",
       );
+      // HIZLI-YOL (UX) — gerçek koruma claim'in `requireUnallocated` yüklemi.
       this.assertNotAllocated(row, "iade");
       const isReceived = row.kind === ChequeKind.RECEIVED;
 
-      await this.claimTx(tx, row, ChequeStatus.RETURNED);
+      await this.claimTx(tx, row, ChequeStatus.RETURNED, {}, { action: "iade" });
 
       // Doğuşun TERSİ: alınan çek CREDIT yazmıştı → iade DEBIT; verilen çek
       // DEBIT yazmıştı → iade CREDIT.
@@ -928,6 +1121,10 @@ export class ChequeService {
       const ref: AccountRef = { cashBoxId: input.cashBoxId ?? null, bankAccountId: input.bankAccountId ?? null };
       await loadAccountTx(tx, ref, row.currency);
 
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1) — collect ile aynı gerekçe: para
+      // hesaptan ÇIKAR ve `eventDate` geçmişe girilebilir.
+      await assertCashPeriodOpenTx(tx, { ...ref, txnDate: eventDate });
+
       await this.claimTx(tx, row, ChequeStatus.PAID, {
         ...(ref.bankAccountId ? { bankAccountId: ref.bankAccountId } : {}),
       });
@@ -982,14 +1179,21 @@ export class ChequeService {
         null,
         "iptal",
       );
+      // HIZLI-YOL (UX) — gerçek koruma claim'in `requireUnallocated` yüklemi.
       this.assertNotAllocated(row, "iptal");
       const isReceived = row.kind === ChequeKind.RECEIVED;
 
-      await this.claimTx(tx, row, ChequeStatus.CANCELLED, {
-        cancelledAt: now,
-        cancelledById: userId ?? null,
-        cancelReason: reason ?? null,
-      });
+      await this.claimTx(
+        tx,
+        row,
+        ChequeStatus.CANCELLED,
+        {
+          cancelledAt: now,
+          cancelledById: userId ?? null,
+          cancelReason: reason ?? null,
+        },
+        { action: "iptal" },
+      );
 
       await writeChequeLedgerTx(tx, {
         cariId: row.cariId,

@@ -26,13 +26,22 @@
 //   §9  ROTA TARAMASI: her uç izin guard'ı taşıyor + bayrak kapısına mount edilmiş
 //   §10 FIFO ÖNERİSİ: vade sıralı, deterministik, saf fonksiyon
 //   §11 DEALLOCATE (elle düzeltme) — sayaçlar düşer, negatife inmez
-//   §12 MUTABAKAT: SUM(allocation) === üç sayacın hepsi (TÜM DB)
+//   §12 ⭐ SINIF 4 (2026-08-14): terminal çek süzgeci ATOMİK — kilit-altı
+//       yeniden değerlendirme deterministik sondayla + count-0 TANISI
+//   §13 ⭐ EŞZAMANLILIK: allocate ‖ bounce yarışı (5 tur) — tam olarak BİR
+//       taraf kazanır, kaybeden 409'a eşlenir, BOUNCED+kapama birlikte ASLA
+//   §14 SINIF 3: virman ayna-çift yarışı (deadlock yok / 500 asla) + kanonik
+//       kilit sırası kaynak taraması + iptal bacağı işlevsel
+//   §15 GÜVENLİK AĞI: error.middleware sınıf-40 → 409 (iki kılık) + 23514
+//       finans mesajları + YANLIŞ POZİTİF korumaları
+//   §16 MUTABAKAT: SUM(allocation) === üç sayacın hepsi (TÜM DB) — HER ZAMAN
+//       EN SON koşar ki §12-§14'ün yarış artıkları da terazide tartılsın
 //
-// NEGATİF SONDA — DÖRDÜ DE GERÇEKTEN KOŞULDU, sonuçlar ÖLÇÜLEN hâlleriyle
-// yazılmıştır (tahmin edilen değil; taban 82/82 yeşil):
+// NEGATİF SONDA — HEPSİ GERÇEKTEN KOŞULDU, sonuçlar ÖLÇÜLEN hâlleriyle
+// yazılmıştır (tahmin edilen değil; ilk dördün tabanı 82/82 yeşil):
 //   ① `bumpInvoicePaid`'ten `AND "paidTotal" + $a <= "grandTotal"` silindi
 //      → 80/2: §3a + §3e kırmızı.
-//      ⚠️ ÖNEMLİ VE SEZGİYE AYKIRI: §5 (yarış) ve §12 (mutabakat) YEŞİL KALDI.
+//      ⚠️ ÖNEMLİ VE SEZGİYE AYKIRI: §5 (yarış) ve §16 (mutabakat) YEŞİL KALDI.
 //      Sebep kusur değil TASARIM: aşımı ikinci katman — DB CHECK'i
 //      `invoices_paid_total_range` — yakaladı, tx geri sardı ve yarışta yine
 //      tam 3 kapama geçti. Yani §5'in ölçtüğü şey "uygulama koşulu" değil
@@ -40,31 +49,61 @@
 //      kontrolleri §3a/§3e'dir. Bu ayrımı bilmeden §3'ü zayıflatan biri,
 //      uygulama katmanının anlamlı 409'unu kaybedip yerine çıplak bir
 //      constraint hatası koyduğunu fark etmez. (CHECK de kaldırılırsa §5 ve
-//      §12 kırmızıya döner — ikinci katmanın gerçekten yük taşıdığının kanıtı.)
+//      §16 kırmızıya döner — ikinci katmanın gerçekten yük taşıdığının kanıtı.)
 //   ② `allocateOneTx`'teki `src.cariId !== inv.cariId` kontrolü silindi
 //      → 81/1: §8a kırmızı (başka carinin parasıyla kapama sessizce geçti).
 //   ③ `releaseRowsTx`'teki `dropInvoicePaid` çağrısı silindi
-//      → 78/4: §7b2 · §7b4 · §7d4 · §12a kırmızı. En değerli sonda: storno
+//      → 78/4: §7b2 · §7b4 · §7d4 · §16a kırmızı. En değerli sonda: storno
 //      satırları siliyor ama sayacı düşürmüyor → "kapalı görünen ama parası
-//      yok olmuş fatura" tam olarak bu şekilde doğar ve §12a onu adıyla
+//      yok olmuş fatura" tam olarak bu şekilde doğar ve §16a onu adıyla
 //      raporladı (SF…09: 600≠0, SF…11: 900≠0, SF…08: 800≠0).
 //   ④ `allocateBulk`'un tek `$transaction` sarmalayıcısı kaldırılıp her bacak
 //      ayrı tx yapıldı → §8m + §8n kırmızı (ilk bacak kalıcı yazıldı).
+// 2026-08-14 SAĞLAMLIK PAKETİ sondaları — BEŞİ DE GERÇEKTEN KOŞULDU, dosyalar
+// her sondadan sonra shasum ile birebir geri yüklendi (taban 119/119 yeşil):
+//   ⑤ `bumpChequeAllocated`'tan status süzgeci (`AND NOT ("status" = ANY…)`)
+//      silindi → 117/2: §12a + §12i kırmızı. Kilit-altı sondada bump BOUNCED
+//      çeke yazmaya kalktı, DB CHECK'i `cheques_terminal_not_allocated` 23514
+//      fırlattı ve mesaj anlamlı 409 olmaktan çıktı (ikinci katmanın yük
+//      taşıdığının kanıtı — §12b/§12c tx geri sarıldığı için yeşil kaldı,
+//      ayrım ①'dekiyle aynı).
+//   ⑥ `allocateOneTx`'teki `explainChequeBumpZeroTx` çağrısı silindi → 118/1:
+//      §12a kırmızı — kaybeden allocate YANLIŞ dalda konuştu ("kapamaya kalan
+//      tutar 500 TRY — 300 yazılamaz" tavan mesajı; oysa kalan tutar değil
+//      paranın KENDİSİ yoktu).
+//   ⑦ `cash-transaction.transfer`'ın kanonik `legs.sort`'u kaldırılıp eski
+//      from→to sırasına döndürüldü → 118/1: §14f kırmızı (kullanım=2, kaynak
+//      taraması). ⚠️ Davranış sondaları (§14a-c) ÖLÇÜLDÜ VE YEŞİL KALDI —
+//      deadlock penceresi olasılıksaldır ve oluşsa bile §15'in ağı 409'a
+//      eşlerdi; sıralamanın bekçisi bu yüzden kaynak taramasıdır, yarış değil.
+//   ⑧ error.middleware'den sınıf-40 dalı silindi → 116/3: §15a ("500 Sunucu
+//      hatası oluştu.") + §15b + §15c ("500 Sunucu yapılandırma hatası") —
+//      düzeltme öncesi iki arıza şekli de birebir geri geldi.
+//   ⑨ `CHECK_CONSTRAINT_MESSAGES`'tan `cheques_terminal_not_allocated` satırı
+//      silindi → 118/1: §15f kırmızı ("Veri bütünlüğü kuralı engelledi
+//      (cheques_terminal_not_allocated)" — operatör Türkçe sebep yerine çıplak
+//      constraint adını görür).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type { NextFunction, Request, Response } from "express";
 import { Prisma, PaymentDirection, ChequeKind, ChequeStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { invoiceService } from "../src/services/invoice.service";
 import { paymentService } from "../src/services/payment.service";
+import { chequeService } from "../src/services/cheque.service";
+import { cashTransactionService } from "../src/services/cash-transaction.service";
+import { errorHandler } from "../src/middlewares/error.middleware";
 import {
   paymentAllocationService,
   releaseAllocationsForPaymentTx,
   releaseAllocationsForInvoiceTx,
   releaseAllocationsForChequeTx,
   suggestFifo,
+  CHEQUE_NO_MONEY_STATUSES,
 } from "../src/services/payment-allocation.service";
 import { D, D0 } from "../src/services/helpers/finance.helper";
+import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
 let fail = 0;
@@ -86,6 +125,8 @@ const cariIds: string[] = [];
 const customerIds: string[] = [];
 const subcontractorIds: string[] = [];
 let cashBoxId: string | null = null;
+/** §14 virman kasaları — cleanup kasa hareketlerini de silmek zorunda. */
+const cashBoxIds: string[] = [];
 
 /** Hata mesajını çıkaran küçük yardımcı — try/catch gürültüsünü azaltır. */
 async function err(fn: () => Promise<unknown>): Promise<string> {
@@ -95,6 +136,40 @@ async function err(fn: () => Promise<unknown>): Promise<string> {
   } catch (e) {
     return (e as Error).message;
   }
+}
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Bir hatayı GERÇEK `errorHandler` üzerinden HTTP sözleşmesine eşler (§13-§15).
+ *
+ * Servis katmanı testinde middleware devrede değildir; "operatör 500 mü 409 mu
+ * görür" sorusunun tek doğru ölçümü, hatayı middleware'in kendisinden
+ * geçirmektir. `res` sahte ama `errorHandler` senkron yazar → çağrı dönünce
+ * status/body okunabilir (audit `void` ile arkada akar, sonucu etkilemez).
+ */
+function mapThroughErrorHandler(e: unknown): { status: number; message: string } {
+  const out = { status: 0, message: "" };
+  const res = {
+    headersSent: false,
+    setHeader: () => undefined,
+    status(code: number) {
+      out.status = code;
+      return this;
+    },
+    json(body: { message?: string }) {
+      out.message = body?.message ?? "";
+      return this;
+    },
+  };
+  const req = { method: "POST", originalUrl: "/bekci-sondasi", ip: "127.0.0.1", user: undefined };
+  errorHandler(
+    e as Error,
+    req as unknown as Request,
+    res as unknown as Response,
+    (() => undefined) as NextFunction,
+  );
+  return out;
 }
 
 async function invoiceCounters(id: string): Promise<{ grand: Prisma.Decimal; paid: Prisma.Decimal }> {
@@ -632,10 +707,305 @@ async function main(): Promise<void> {
     check("§11d İkinci çözme → 404 (sayaç İKİNCİ KEZ düşmez)", /bulunamadı/i.test(m), m.slice(0, 60));
   }
 
-  // ── §12 MUTABAKAT (TÜM DB) ───────────────────────────────────────────────
+  // ── §12 SINIF 4 — TERMİNAL ÇEK SÜZGECİ ATOMİK + count-0 TANISI ──────────
+  // (2026-08-14 sağlamlık paketi.) Ön kontrol `loadChequeTx` İYİ MESAJ içindir;
+  // gerçek koruma `bumpChequeAllocated`'ın WHERE'indeki durum süzgecidir ve
+  // yalnız YARIŞTA yük taşır. Yarış penceresi burada DETERMİNİSTİK üretilir:
+  // elle açılan bir tx çeki BOUNCED'a çekip satır kilidini TUTAR; allocate'in
+  // ön kontrolü (read-committed, kilitlenmez) hâlâ PORTFOLIO okur, bump ise
+  // kilitte bekler; tx commit edince koşul kilit altında YENİDEN değerlendirilir
+  // (EvalPlanQual) → 0 satır → taze-okuma tanısı anlamlı 409 basar.
+  {
+    const chqT = await makeCheque({ cariId: cari.id, amount: 500 });
+    const invT = await makeInvoice({ customerId: customer.id, total: 500 });
+
+    let releaseGate!: () => void;
+    const gate = new Promise<void>((r) => (releaseGate = r));
+    const bounceTx = prisma.$transaction(async (tx) => {
+      await tx.cheque.updateMany({
+        where: { id: chqT, status: ChequeStatus.PORTFOLIO },
+        data: { status: ChequeStatus.BOUNCED },
+      });
+      await gate; // satır kilidini commit'e kadar tut
+    });
+    await sleep(80); // updateMany kilidi aldı
+    const allocP = err(() => paymentAllocationService.allocate({ invoiceId: invT, chequeId: chqT, amount: 300 }));
+    await sleep(200); // allocate ön kontrolü geçti, bump kilitte bekliyor
+    releaseGate();
+    await bounceTx;
+    const mT = await allocP;
+    check(
+      "§12a Kilit-altı yarışta kaybeden allocate ANLAMLI 409 aldı (tavan değil, 'parası yok')",
+      /karşılıksız\/iade\/iptal çekle kapama yapılamaz/.test(mT),
+      mT.replace(/\s+/g, " ").slice(0, 130),
+    );
+    check("§12b Fatura sayacı GERİ SARDI (bump'tan önce yazılmıştı)", (await invoiceCounters(invT)).paid.isZero());
+    check("§12c Çek sayacına tek kuruş yazılmadı", (await chequeAllocated(chqT)).isZero());
+    check(
+      "§12d Çek BOUNCED kaldı (sonda tx'i kazandı)",
+      (await prisma.cheque.findUniqueOrThrow({ where: { id: chqT }, select: { status: true } })).status ===
+        ChequeStatus.BOUNCED,
+    );
+
+    // KÖRLÜK ZEMİNİ: tanı dalı TAVAN mesajını yutmamalı — canlı çekte 0'ın
+    // sebebi hâlâ tavansa eski mesaj aynen konuşur.
+    const chqLive = await makeCheque({ cariId: cari.id, amount: 100 });
+    const invLive = await makeInvoice({ customerId: customer.id, total: 300 });
+    await paymentAllocationService.allocate({ invoiceId: invLive, chequeId: chqLive, amount: 100 });
+    const mCap = await err(() => paymentAllocationService.allocate({ invoiceId: invLive, chequeId: chqLive, amount: 50 }));
+    check("§12e KÖRLÜK ZEMİNİ: canlı çekte tavan aşımı hâlâ TAVAN mesajı basıyor", /kapamaya kalan tutar/i.test(mCap), mCap.slice(0, 80));
+
+    // Ön kontrol yüzeyi: BOUNCED'ı §8g ölçtü; RETURNED + CANCELLED de aynı
+    // kapıdan reddedilmeli (küme üç üyeli — biri düşerse burası kırmızı).
+    const chqRet = await makeCheque({ cariId: cari.id, amount: 40, status: ChequeStatus.RETURNED });
+    const chqCan = await makeCheque({ cariId: cari.id, amount: 40, status: ChequeStatus.CANCELLED });
+    const mRet = await err(() => paymentAllocationService.allocate({ invoiceId: invLive, chequeId: chqRet, amount: 10 }));
+    const mCan = await err(() => paymentAllocationService.allocate({ invoiceId: invLive, chequeId: chqCan, amount: 10 }));
+    check("§12f RETURNED çekle kapama → RED", /kapatılamaz/i.test(mRet), mRet.slice(0, 70));
+    check("§12g CANCELLED çekle kapama → RED", /kapatılamaz/i.test(mCan), mCan.slice(0, 70));
+
+    // Kaynak taraması: SQL süzgeci ile ön kontrol AYNI sabitten okumalı — elle
+    // yazılmış ikinci bir liste, tam da kapatılan "BİREBİR tut" yorum-kuralını
+    // geri getirirdi. Küme de üç üyeli kalmalı (COLLECTED sızarsa kırmızı).
+    const svcSrc = readFileSync(join(__dirname, "..", "src", "services", "payment-allocation.service.ts"), "utf8");
+    const constUses = (svcSrc.match(/CHEQUE_NO_MONEY_STATUSES/g) ?? []).length;
+    check("§12h KÖRLÜK ZEMİNİ + tek kaynak: sabit tanım + SQL + ön kontrol (≥3 kullanım)", constUses >= 3, `kullanım=${constUses}`);
+    check(
+      "§12i SQL süzgeci sabitten besleniyor (elle liste değil)",
+      /AND NOT \("status" = ANY\(\$\{\[\.\.\.CHEQUE_NO_MONEY_STATUSES\]\}/.test(svcSrc),
+      "bumpChequeAllocated WHERE",
+    );
+    check(
+      "§12j Küme üç üyeli ve COLLECTED içermiyor",
+      CHEQUE_NO_MONEY_STATUSES.length === 3 && !CHEQUE_NO_MONEY_STATUSES.includes(ChequeStatus.COLLECTED),
+      CHEQUE_NO_MONEY_STATUSES.join(","),
+    );
+  }
+
+  // ── §13 EŞZAMANLILIK: allocate ‖ bounce (5 tur) ─────────────────────────
+  // `test_kk1_duplicate_guard` emsali: gerçek yarış, gerçek servisler. Her tur
+  // taze çek+fatura ile allocate ve chequeService.bounce AYNI ANDA ateşlenir.
+  // Sözleşme: tam olarak BİR taraf kazanır; kaybeden hangi katmana takılırsa
+  // takılsın (ön kontrol · atomik süzgeç tanısı · claim · DB CHECK'i) operatöre
+  // 409 olarak eşlenir (500 ASLA); BOUNCED + canlı kapama BİRLİKTE var olamaz.
+  {
+    const rounds: Array<{
+      allocOk: boolean;
+      bounceOk: boolean;
+      loserStatus: number;
+      loserMsg: string;
+      consistent: boolean;
+    }> = [];
+    for (let i = 0; i < 5; i++) {
+      const chq = await makeCheque({ cariId: cari.id, amount: 400 });
+      const inv = await makeInvoice({ customerId: customer.id, total: 400 });
+      // ⚠️ Tek turlu eşzamanlı ateşlemede bounce'ın tx'i kısa olduğu için hep o
+      // kazanıyordu (ilk koşumda ölçüldü: BBBBB) ve "allocate kazandı → bounce
+      // anlamlı 409 aldı" yönü hiç ölçülmüyordu. Tek sayılı turlarda bounce
+      // 100 ms geciktirilir ki iki yön de yaşansın; kontroller yine kazanan-
+      // agnostiktir (yarış yarıştır, sıra garanti edilmez).
+      const bounceDelayed = i % 2 === 1;
+      const [a, b] = await Promise.allSettled([
+        paymentAllocationService.allocate({ invoiceId: inv, chequeId: chq, amount: 400 }),
+        (async () => {
+          if (bounceDelayed) await sleep(100);
+          return chequeService.bounce(chq, {});
+        })(),
+      ]);
+      const allocOk = a.status === "fulfilled";
+      const bounceOk = b.status === "fulfilled";
+      const loser = allocOk ? b : a;
+      const mapped =
+        loser.status === "rejected" ? mapThroughErrorHandler(loser.reason) : { status: -1, message: "" };
+
+      const after = await prisma.cheque.findUniqueOrThrow({
+        where: { id: chq },
+        select: { status: true, allocatedTotal: true },
+      });
+      const allocRows = await prisma.paymentAllocation.count({ where: { chequeId: chq } });
+      // Tur tutarlılığı: bounce kazandıysa çekte NE satır NE sayaç kalır;
+      // allocate kazandıysa çek BOUNCED değildir ve satır+sayaç birebirdir.
+      const consistent = bounceOk
+        ? after.status === ChequeStatus.BOUNCED && D(after.allocatedTotal).isZero() && allocRows === 0
+        : after.status !== ChequeStatus.BOUNCED && D(after.allocatedTotal).equals(400) && allocRows === 1;
+      rounds.push({ allocOk, bounceOk, loserStatus: mapped.status, loserMsg: mapped.message, consistent });
+    }
+    const winners = rounds.map((r) => (r.allocOk ? "A" : r.bounceOk ? "B" : "-")).join("");
+    check(
+      "§13a Her turda TAM BİR taraf kazandı",
+      rounds.every((r) => r.allocOk !== r.bounceOk),
+      `kazananlar=${winners}`,
+    );
+    check(
+      "§13b Kaybeden HER turda 409'a eşlendi (500 ASLA)",
+      rounds.every((r) => r.loserStatus === 409),
+      rounds.map((r) => r.loserStatus).join(","),
+    );
+    check(
+      "§13c Kaybedenin mesajı Türkçe ve yol gösteriyor",
+      rounds.every((r) => r.loserMsg.length > 10),
+      rounds[0]?.loserMsg.slice(0, 90),
+    );
+    check("§13d Tur sonu DB tutarlı (BOUNCED ⊕ kapama)", rounds.every((r) => r.consistent), winners);
+    check(
+      "§13d2 İKİ YÖN DE yaşandı (allocate kazanan tur + bounce kazanan tur)",
+      winners.includes("A") && winners.includes("B"),
+      `kazananlar=${winners} — tek harf görüyorsan gecikme dengesini (100ms) gözden geçir`,
+    );
+    // Küresel sed ölçümü: parasız-terminal + canlı kapama HİÇBİR satırda yok.
+    const terminalAllocated = await prisma.cheque.count({
+      where: { status: { in: [...CHEQUE_NO_MONEY_STATUSES] }, allocatedTotal: { gt: 0 } },
+    });
+    check("§13e TÜM DB: parasız-terminal çekte canlı kapama tutarı YOK", terminalAllocated === 0, `satır=${terminalAllocated}`);
+  }
+
+  // ── §14 SINIF 3: VİRMAN — ayna çift yarışı + kanonik kilit sırası ───────
+  {
+    const mk = async (suffix: string): Promise<string> => {
+      const b = await prisma.cashBox.create({
+        data: { code: `${TAG}-${suffix}`.slice(0, 32), name: `${TAG} ${suffix}`, currency: "TRY" },
+        select: { id: true },
+      });
+      cashBoxIds.push(b.id);
+      return b.id;
+    };
+    const boxA = await mk("VA");
+    const boxB = await mk("VB");
+    await cashTransactionService.create({ kind: "OPENING", amount: 1000, cashBoxId: boxA, exchangeRate: 1 });
+    await cashTransactionService.create({ kind: "OPENING", amount: 1000, cashBoxId: boxB, exchangeRate: 1 });
+
+    // Ayna çift: A→B ‖ B→A, 3 tur. Kanonik sıra ile deadlock YAPISAL olarak
+    // imkânsız; yine de bir hata sızarsa 500'e değil 409'a eşlenmeli (§15 ağı).
+    let fulfilled = 0;
+    let netAtoB = 0;
+    const mappedFails: number[] = [];
+    for (let i = 0; i < 3; i++) {
+      const [ab, ba] = await Promise.allSettled([
+        cashTransactionService.transfer({ fromCashBoxId: boxA, toCashBoxId: boxB, amount: 10 }),
+        cashTransactionService.transfer({ fromCashBoxId: boxB, toCashBoxId: boxA, amount: 10 }),
+      ]);
+      if (ab.status === "fulfilled") {
+        fulfilled++;
+        netAtoB += 10;
+      } else mappedFails.push(mapThroughErrorHandler(ab.reason).status);
+      if (ba.status === "fulfilled") {
+        fulfilled++;
+        netAtoB -= 10;
+      } else mappedFails.push(mapThroughErrorHandler(ba.reason).status);
+    }
+    check("§14a Ayna çift yarışında hiçbir bacak 500'e eşlenmedi", mappedFails.every((s) => s === 409), `haritalar=${mappedFails.join(",") || "hata yok"}`);
+    const balA = D((await prisma.cashBox.findUniqueOrThrow({ where: { id: boxA }, select: { balance: true } })).balance);
+    const balB = D((await prisma.cashBox.findUniqueOrThrow({ where: { id: boxB }, select: { balance: true } })).balance);
+    check("§14b Para KORUNDU (A+B toplamı sabit)", balA.plus(balB).equals(2000), `${balA.toString()} + ${balB.toString()}`);
+    check(
+      "§14c Bakiyeler geçen bacaklarla BİREBİR",
+      balA.equals(D(1000).minus(netAtoB)) && balB.equals(D(1000).plus(netAtoB)),
+      `A=${balA.toString()} B=${balB.toString()} net=${netAtoB} geçen=${fulfilled}/6`,
+    );
+
+    // İptal bacağı (kanonik sıraya alınan İKİNCİ yol) işlevsel: virman + iptal
+    // → iki bacak birden CANCELLED, bakiyeler geri.
+    const tr = await cashTransactionService.transfer({ fromCashBoxId: boxA, toCashBoxId: boxB, amount: 50 });
+    const cn = await cashTransactionService.cancel(tr.data.ids[0] as string, "bekçi iptal sondası");
+    check("§14d Virman iptali iki bacağı birden aldı ve bakiyeler geri sardı",
+      cn.data.ids.length === 2 &&
+        D((await prisma.cashBox.findUniqueOrThrow({ where: { id: boxA }, select: { balance: true } })).balance).equals(balA) &&
+        D((await prisma.cashBox.findUniqueOrThrow({ where: { id: boxB }, select: { balance: true } })).balance).equals(balB),
+    );
+
+    // KAYNAK TARAMASI — sıralamanın asıl bekçisi (⚠️ yarış sondası değil):
+    // deadlock penceresi olasılıksaldır ve §15 ağı oluşanı 409'a eşlediği için
+    // sıralama satırı silinse davranış testi YEŞİL KALABİLİR. Yapının varlığı
+    // bu yüzden mekanik ölçülür: kanonik anahtar tanımlı + virman VE iptal
+    // yolu onunla SIRALIYOR.
+    const cashSrc = readFileSync(join(__dirname, "..", "src", "services", "cash-transaction.service.ts"), "utf8");
+    check("§14e KÖRLÜK ZEMİNİ + kanonik anahtar tanımlı", /function accountLockKey\(/.test(cashSrc), "accountLockKey");
+    const sortUses = (cashSrc.match(/compareLockKeys\(/g) ?? []).length;
+    check("§14f Virman + iptal İKİSİ DE kanonik sırayla yazıyor (tanım + 2 kullanım ≥ 3)", sortUses >= 3, `kullanım=${sortUses}`);
+    // ⚠️ ÇAĞRI biçimi aranır (`.localeCompare(`) — düz kelime araması, kuralı
+    // ANLATAN yorumu da yakalayıp sahte kırmızı verir (ilk yazımda ölçüldü).
+    check("§14g localeCompare ÇAĞRILMIYOR (locale'e bağlı sıra deterministik değildir)", !/\.localeCompare\(/.test(cashSrc));
+  }
+
+  // ── §15 GÜVENLİK AĞI: error.middleware eşlemeleri ───────────────────────
+  // Servis testinde middleware devrede değildir; buradaki ölçüm hatayı GERÇEK
+  // errorHandler'dan geçirir. İki kılık da (çıplak DriverAdapterError · P2010
+  // sarımı) canlıda gözlenen yapılardır — sahte hatalar o yapıları birebir taklit
+  // eder, uydurma alan adı kullanmaz.
+  {
+    // (a) Çıplak DriverAdapterError kılığı: cause.code = 40P01
+    const bare40 = Object.assign(new Error("deadlock detected"), {
+      cause: { code: "40P01", originalMessage: "deadlock detected" },
+    });
+    const m1 = mapThroughErrorHandler(bare40);
+    check("§15a Çıplak 40P01 → 409 'tekrar deneyin'", m1.status === 409 && /İşlem çakışması/.test(m1.message), `${m1.status} ${m1.message}`);
+
+    // (b) originalCode alanı taşıyan kılık (23514'te canlıda gözlenen yapı)
+    const bare40001 = Object.assign(new Error("could not serialize access"), {
+      cause: { originalCode: "40001", originalMessage: "could not serialize access due to concurrent update" },
+    });
+    const m2 = mapThroughErrorHandler(bare40001);
+    check("§15b Çıplak 40001 (originalCode) → 409", m2.status === 409 && /tekrar deneyin/.test(m2.message), `${m2.status}`);
+
+    // (c) P2010 sarımı — advisory kilit / $executeRaw yolu (Sınıf 3'ün canlıda
+    // ölçülen asıl arıza şekli: eskiden 500 "Sunucu yapılandırma hatası").
+    const p2010 = new Prisma.PrismaClientKnownRequestError(
+      "Raw query failed. Code: `40P01`. Message: `deadlock detected`",
+      { code: "P2010", clientVersion: "7.0.0" },
+    );
+    const m3 = mapThroughErrorHandler(p2010);
+    check("§15c P2010'a sarılı 40P01 → 409 (500 'yapılandırma hatası' DEĞİL)", m3.status === 409 && /İşlem çakışması/.test(m3.message), `${m3.status} ${m3.message}`);
+
+    // (d) YANLIŞ POZİTİF: mesajında '40001' geçen sıradan hata → sınıf-40 DEĞİL.
+    const plain = new Error("tutar 40001 TL olamaz");
+    const m4 = mapThroughErrorHandler(plain);
+    check("§15d Mesajında '40001' geçen düz hata 409'a EŞLENMEDİ (genel regex yasak)", m4.status === 500, `${m4.status}`);
+
+    // (e) YANLIŞ POZİTİF: P2010 ama başka SQLSTATE → sunucu arızası dalında kalır.
+    const p2010Other = new Prisma.PrismaClientKnownRequestError(
+      "Raw query failed. Code: `23505`. Message: `duplicate key`",
+      { code: "P2010", clientVersion: "7.0.0" },
+    );
+    const m5 = mapThroughErrorHandler(p2010Other);
+    check("§15e P2010 + 23505 sınıf-40 dalına GİRMEDİ", m5.status === 500, `${m5.status}`);
+
+    // (f) Finans CHECK sedleri Türkçe konuşur — çift yönlü CAS'ın DB katmanı
+    // bir gün tek başına kalırsa operatör constraint adı değil İŞ dili görür.
+    const chk = Object.assign(new Error("check violation"), {
+      cause: {
+        code: "23514",
+        originalMessage: 'new row for relation "cheques" violates check constraint "cheques_terminal_not_allocated"',
+      },
+    });
+    const m6 = mapThroughErrorHandler(chk);
+    check(
+      "§15f cheques_terminal_not_allocated → Türkçe iş mesajı",
+      m6.status === 409 && /karşılıksız\/iade\/iptal edilemez/.test(m6.message) && /kapamasını kaldırın/.test(m6.message),
+      `${m6.status} ${m6.message.slice(0, 90)}`,
+    );
+    const chkXor = Object.assign(new Error("check violation"), {
+      cause: {
+        code: "23514",
+        originalMessage: 'new row for relation "cash_period_closes" violates check constraint "cash_period_close_account_xor"',
+      },
+    });
+    const m7 = mapThroughErrorHandler(chkXor);
+    check("§15g cash_period_close_account_xor → Türkçe iş mesajı", m7.status === 409 && /kasa VEYA banka/.test(m7.message), `${m7.status} ${m7.message.slice(0, 80)}`);
+
+    // (h) Harness körlük zemini: gerçek AppError kendi statüsüyle DEĞİŞMEDEN
+    // geçer — geçmeseydi §13b/§14a "her şey 409" diye vakumen yeşile dönebilirdi
+    // (harness'ın 409'u gerçekten middleware'den geldiğinin kanıtı).
+    const real = mapThroughErrorHandler(AppError.conflict("zemin 409"));
+    check("§15h KÖRLÜK ZEMİNİ: gerçek AppError statüsünü koruyarak geçti", real.status === 409 && real.message === "zemin 409", `${real.status} ${real.message}`);
+    const real404 = mapThroughErrorHandler(AppError.notFound("zemin 404"));
+    check("§15i KÖRLÜK ZEMİNİ: 404 da korunuyor (harness her şeyi 409 yapmıyor)", real404.status === 404, `${real404.status}`);
+  }
+
+  // ── §16 MUTABAKAT (TÜM DB) ───────────────────────────────────────────────
   // Üç sayacın da kapama satırlarıyla birebir olması gerekir. Bu, C2'nin
   // `test_consistency`ye taşınacak çekirdeğidir: sayaçlar defterden bağımsız
-  // yaşadığı için sapmalarını başka hiçbir kontrol göremez.
+  // yaşadığı için sapmalarını başka hiçbir kontrol göremez. ⚠️ HER ZAMAN EN SON
+  // koşar — §12-§14'ün yarış/kilit artıkları da bu teraziden geçsin.
   {
     const invDrift = await prisma.$queryRaw<Array<{ docNo: string; stored: string; summed: string }>>`
       SELECT i."docNo", i."paidTotal"::text AS stored, COALESCE(a.total, 0)::text AS summed
@@ -645,7 +1015,7 @@ async function main(): Promise<void> {
        WHERE i."paidTotal" <> COALESCE(a.total, 0)
     `;
     check(
-      "§12a SUM(allocation) === Invoice.paidTotal (tüm faturalar)",
+      "§16a SUM(allocation) === Invoice.paidTotal (tüm faturalar)",
       invDrift.length === 0,
       invDrift.length > 0 ? invDrift.map((d) => `${d.docNo}: ${d.stored}≠${d.summed}`).join(", ") : "sapma yok",
     );
@@ -657,7 +1027,7 @@ async function main(): Promise<void> {
        WHERE p."allocatedTotal" <> COALESCE(a.total, 0)
     `;
     check(
-      "§12b SUM(allocation) === Payment.allocatedTotal (tüm tahsilatlar)",
+      "§16b SUM(allocation) === Payment.allocatedTotal (tüm tahsilatlar)",
       payDrift.length === 0,
       payDrift.length > 0 ? payDrift.map((d) => `${d.docNo}: ${d.stored}≠${d.summed}`).join(", ") : "sapma yok",
     );
@@ -669,7 +1039,7 @@ async function main(): Promise<void> {
        WHERE c."allocatedTotal" <> COALESCE(a.total, 0)
     `;
     check(
-      "§12c SUM(allocation) === Cheque.allocatedTotal (tüm çekler)",
+      "§16c SUM(allocation) === Cheque.allocatedTotal (tüm çekler)",
       chqDrift.length === 0,
       chqDrift.length > 0 ? chqDrift.map((d) => `${d.docNo}: ${d.stored}≠${d.summed}`).join(", ") : "sapma yok",
     );
@@ -677,7 +1047,7 @@ async function main(): Promise<void> {
     const over = await prisma.$queryRaw<Array<{ docNo: string }>>`
       SELECT "docNo" FROM "invoices" WHERE "paidTotal" > "grandTotal" OR "paidTotal" < 0
     `;
-    check("§12d Hiçbir faturada paidTotal > grandTotal (DB CHECK'in ikinci ölçümü)", over.length === 0, over.map((o) => o.docNo).join(", ") || "temiz");
+    check("§16d Hiçbir faturada paidTotal > grandTotal (DB CHECK'in ikinci ölçümü)", over.length === 0, over.map((o) => o.docNo).join(", ") || "temiz");
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
@@ -699,6 +1069,9 @@ main()
 
       if (chequeIds.length > 0) {
         await prisma.chequeEvent.deleteMany({ where: { chequeId: { in: chequeIds } } });
+        // §13 bounce'ları çeke bağlı defter satırı yazar (CHEQUE_BOUNCE) —
+        // FK Restrict yüzünden çekten ÖNCE silinmek zorunda.
+        await prisma.cariTransaction.deleteMany({ where: { chequeId: { in: chequeIds } } });
         await prisma.cheque.deleteMany({ where: { id: { in: chequeIds } } });
       }
       if (invoiceIds.length > 0) {
@@ -718,6 +1091,11 @@ main()
         await prisma.cariTransaction.deleteMany({ where: { cariId: { in: cariIds } } });
         await prisma.cariBalance.deleteMany({ where: { cariId: { in: cariIds } } });
         await prisma.cariAccount.deleteMany({ where: { id: { in: cariIds } } });
+      }
+      // §14 virman kasaları: önce hareketler (FK), sonra kasalar.
+      if (cashBoxIds.length > 0) {
+        await prisma.cashTransaction.deleteMany({ where: { cashBoxId: { in: cashBoxIds } } });
+        await prisma.cashBox.deleteMany({ where: { id: { in: cashBoxIds } } });
       }
       if (cashBoxId) await prisma.cashBox.deleteMany({ where: { id: cashBoxId } });
       if (customerIds.length > 0) await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });

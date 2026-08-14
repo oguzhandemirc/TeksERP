@@ -168,7 +168,10 @@ router.get("/:id", requirePermission("finance:read"), async (req, res, next) => 
  *     description: >
  *       DEFTER ANI: alınan çek ALINDIĞI AN cariyi alacaklandırır, verilen çek
  *       borçlandırır. Doğuş durumunu `kind` belirler (RECEIVED→PORTFOLIO,
- *       ISSUED→ISSUED).
+ *       ISSUED→ISSUED). İKİ TARİH: `issueDate` KEŞİDE tarihidir (kâğıdın
+ *       bilgisi, TTK 796); `postingDate` İŞLEM tarihidir — kur, belge no,
+ *       defter satırı ve dönem kilidi ONDAN okunur. `postingDate` verilmezse
+ *       BUGÜN kabul edilir (eski panel göndermez → bugüne düşer, doğru davranış).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Kaydedildi }
@@ -186,6 +189,7 @@ router.post("/", requirePermission("finance:cheque"), async (req, res, next) => 
         exchangeRate: decimalString.nullable().optional(),
         amount: decimalString,
         issueDate: isoDate.optional(),
+        postingDate: isoDate.optional(),
         dueDate: isoDate,
         serialNo: z.string().max(64).nullable().optional(),
         bankName: z.string().max(100).nullable().optional(),
@@ -202,6 +206,7 @@ router.post("/", requirePermission("finance:cheque"), async (req, res, next) => 
         {
           ...b,
           issueDate: b.issueDate ? new Date(b.issueDate) : undefined,
+          postingDate: b.postingDate ? new Date(b.postingDate) : undefined,
           dueDate: new Date(b.dueDate),
         },
         req.user?.userId,
@@ -272,6 +277,41 @@ router.post("/:id/collect", requirePermission("finance:cheque"), async (req, res
         req.user?.userId,
       ),
     );
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/cheques/{id}/collect-cancel:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Tahsil stornosu (yanlış COLLECT geri alınır)
+ *     description: >
+ *       Para AYNI hesaptan ters hareketle geri çekilir (hesap pasifleşmiş olsa
+ *       da — para gerçeği), durum COLLECT olayının tükettiği duruma
+ *       (PORTFOLIO/AT_BANK) döner, olay defterine COLLECT_CANCEL satırı yazılır.
+ *       Sebep ZORUNLU. Cari deftere ve faturaya kapamalara DOKUNULMAZ — tahsil
+ *       stornosu çekin varlığını yok etmez.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Storno yapıldı }
+ *       409: { description: Çek COLLECTED değil / yarış }
+ */
+router.post("/:id/collect-cancel", requirePermission("finance:cheque"), async (req, res, next) => {
+  try {
+    const b = z
+      .object({
+        reason: z
+          .string()
+          .trim()
+          .min(1, "Tahsil stornosu için sebep zorunludur.")
+          .max(300),
+      })
+      .strict()
+      .parse(req.body ?? {});
+    res.json(await chequeService.cancelCollect(req.params.id as string, b.reason, req.user?.userId));
   } catch (e) {
     next(e);
   }

@@ -22,6 +22,7 @@ import { printedDocumentService, registerPrintedDocBuilder } from "./printed-doc
 import { renderPaymentReceiptHtml, type PaymentReceiptDoc } from "./document-render/finance-doc.html";
 import { releaseAllocationsForPaymentTx } from "./payment-allocation.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
+import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -144,6 +145,15 @@ export class PaymentService {
         // kapanmış bir döneme düşebilir ve o dönemin ilan edilmiş bakiyesini
         // geriye dönük değiştirirdi. Storno yolundan farkı tam olarak budur.
         await assertPeriodOpenTx(tx, { cariId: cari.id, currency, txnDate: paymentDate });
+        // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1, 2026-08-14): tahsilat kasa bakiyesine
+        // de yazar ve kasa defteri raporlanmış bir sayfadır — geçmişe tarihli
+        // hareket o sayfayı sessizce değiştirirdi. Cari kilidiyle AYNI çıpa
+        // (paymentDate), AYRI kilit uzayı (8028).
+        await assertCashPeriodOpenTx(tx, {
+          cashBoxId: input.cashBoxId ?? null,
+          bankAccountId: input.bankAccountId ?? null,
+          txnDate: paymentDate,
+        });
 
         const isIn = input.direction === PaymentDirection.IN;
         await tx.cariTransaction.create({
@@ -243,7 +253,21 @@ export class PaymentService {
           amountTry: true,
           cashBoxId: true,
           bankAccountId: true,
+          paymentDate: true,
         },
+      });
+
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ — İPTALDE ÇIPA ORİJİNAL `paymentDate`,
+      // `now` DEĞİL (cari tarafının tersi ve sebebi yapısal): cari defteri
+      // append-only'dir, iptal BUGÜNE ters SATIR yazar → kapalı fotoğraf
+      // değişmez. Kasa defteri ise toplam-bazlıdır: iptal, satırı CANCELLED'a
+      // çekip geçmiş sayfanın toplamından GERİYE DÖNÜK düşürür. Kapalı dönemin
+      // ödemesini iptal etmek o sayfayı değiştirmektir — kilit tam bunu sorar
+      // ("önce dönemi yeniden açın").
+      await assertCashPeriodOpenTx(tx, {
+        cashBoxId: p.cashBoxId,
+        bankAccountId: p.bankAccountId,
+        txnDate: p.paymentDate,
       });
 
       // ⚠️ KAPAMA ÇÖZÜLMESİ TERS DEFTER SATIRINDAN ÖNCE. Bu tahsilat bir ya da

@@ -17,8 +17,16 @@
 //   F) İptal: toplar CANCELLED + fiş CANCELLED
 //   G) ⭐ İŞLEM GÖRMÜŞ top varsa fiş iptal EDİLEMEZ — "mal hiç girmedi" storno
 //      semantiği defteri yalanlayamaz
+//   H) ⭐ TEK KAYNAK ASSEMBLER (Sınıf 5, 2026-08-14): karma fişte (kumaş+iplik)
+//      ÜÇ yüzey — detay `totals` · liste `_count` · donmuş belge snapshot'ı —
+//      AYNI rakamı söyler; kumaş-only fişin snapshot'ına `yarnLines` anahtarı
+//      TEK BAYT bile yazılmaz (eski snapshot/belge parmak izi korunur).
+//      NEGATİF SONDA: `fresh` builder'daki `yarnIn.length > 0` koşulu
+//      kaldırılıp `yarnLines: []` koşulsuz yazılırsa B6 kırmızı; builder
+//      assembler yerine tabloyu kendi okumaya dönüp iplik süzgecini
+//      unutursa H5/H6 kırmızı verir.
 // =============================================================================
-import { GoodsReceiptStatus, RollEntrySource, RollStatus, WarehouseEventType } from "@prisma/client";
+import { GoodsReceiptStatus, RollEntrySource, RollStatus, WarehouseEventType, YarnMovementKind } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
@@ -40,6 +48,8 @@ function check(label: string, ok: boolean, detail = ""): void {
 const TAG = `TEST-GR-${Date.now()}`;
 const receiptIds: string[] = [];
 const warehouseIds: string[] = [];
+/** §H fixture'ı — testin KENDİ yarattığı YARN kalemi (ortam verisine bağımlılık YASAK). */
+let yarnItemId: string | null = null;
 
 async function main(): Promise<void> {
   console.log("=== Mal kabul bekçisi ===\n");
@@ -95,6 +105,22 @@ async function main(): Promise<void> {
   check("B4) İlk baskıda belge üretildi ve tedarikçi irsaliyesini yazıyor", grHtml.includes("MAL KABUL") && grHtml.includes("IRS-12345"), `uzunluk=${grHtml.length}`);
   const afterPrint = await prisma.printedDocument.count({ where: { docType: "GOODS_RECEIPT", sourceId: detail.id } });
   check("B5) Baskı belgeyi dondurdu (lazy-init)", afterPrint === 1, `belge=${afterPrint}`);
+
+  // ── B6-B7) ⭐ KUMAŞ-ONLY SNAPSHOT PARMAK İZİ (Sınıf 5 bayt-parite kuralı) ──
+  // `yarnLines` YALNIZ doluysa yazılır: kumaş-only fişin snapshot'ı eski
+  // builder'ın ürettiği ÜÇ anahtarı (header · lines · notes) birebir taşımalı.
+  // Boş dizi bile yazılsa eski belgelerin parmak izi bozulur (sackNote emsali).
+  const frozenPlain = await prisma.printedDocument.findFirst({
+    where: { docType: "GOODS_RECEIPT", sourceId: detail.id },
+    select: { snapshot: true },
+  });
+  const plainDoc = (frozenPlain?.snapshot as { doc?: Record<string, unknown> } | null)?.doc ?? {};
+  check(
+    "B6) ⭐ Kumaş-only snapshot'ta yarnLines anahtarı YOK (anahtar kümesi birebir eski)",
+    !("yarnLines" in plainDoc) && Object.keys(plainDoc).sort().join(",") === "header,lines,notes",
+    Object.keys(plainDoc).sort().join(","),
+  );
+  check("B7) Kumaş-only HTML'de iplik tablosu başlığı YOK", !grHtml.includes("KABUL EDİLEN İPLİK"));
 
   // ── C) İdempotency ──────────────────────────────────────────────────────
   const token = randomUUID();
@@ -157,7 +183,116 @@ async function main(): Promise<void> {
   const stillActive = await prisma.goodsReceipt.findUnique({ where: { id: guardedData.id }, select: { status: true } });
   check("G2) Guard yan etki bırakmadı (fiş hâlâ ACTIVE)", stillActive?.status === GoodsReceiptStatus.ACTIVE);
 
-  check("Körlük zemini: en az 4 fiş üretildi", receiptIds.length >= 4, `${receiptIds.length} fiş`);
+  // ── H) ⭐ TEK KAYNAK ASSEMBLER — üç yüzey aynı rakamı söyler ─────────────
+  const yarnItem = await prisma.item.create({
+    data: { code: `${TAG}-YRN`, name: `${TAG} İplik`, itemType: "YARN", unit: "KG" },
+    select: { id: true, name: true },
+  });
+  yarnItemId = yarnItem.id;
+
+  const mixed = await goodsReceiptService.create({
+    warehouseId: wh.id,
+    deliveryNoteNo: `${TAG}-KARMA`,
+    lines: [
+      { itemId: item.id, initialQty: 80 },
+      { itemId: item.id, initialQty: 40 },
+      { itemId: yarnItem.id, initialQty: 500 },
+    ],
+  });
+  const mixedData = mixed.data as {
+    id: string;
+    receiptNo: string;
+    totals: { rollCount: number; totalQty: number; yarnLineCount: number; totalYarnKg: number };
+  };
+  receiptIds.push(mixedData.id);
+
+  // H1 — DETAY yüzeyi (loadDetail → assembler totals)
+  check(
+    "H1) Karma fiş detayı: 2 top / 120 m + 1 iplik / 500 kg",
+    mixedData.totals.rollCount === 2 &&
+      mixedData.totals.totalQty === 120 &&
+      mixedData.totals.yarnLineCount === 1 &&
+      mixedData.totals.totalYarnKg === 500,
+    JSON.stringify(mixedData.totals),
+  );
+
+  // H2 — assembler union sözleşmesi: önce kumaş, sonra iplik; kind ayracı doğru
+  const asm = await goodsReceiptService.assembleReceiptLines(mixedData.id);
+  check(
+    "H2) Assembler union: FABRIC×2 önde, YARN×1 sonda",
+    asm.lines.length === 3 &&
+      asm.lines[0]?.kind === "FABRIC" &&
+      asm.lines[1]?.kind === "FABRIC" &&
+      asm.lines[2]?.kind === "YARN",
+    asm.lines.map((l) => l.kind).join(","),
+  );
+
+  // H3 — LİSTE yüzeyi (`_count` — bilinçli ucuz yol; ham satır sayısı)
+  const listed = await goodsReceiptService.list({ page: 1, pageSize: 5, filters: {}, search: mixedData.receiptNo });
+  const listRow = (listed.rows as Array<{ id: string; _count: { rolls: number; yarnMovements: number } }>).find(
+    (r) => r.id === mixedData.id,
+  );
+  check(
+    "H3) Liste sayaçları: _count.rolls=2 + _count.yarnMovements=1",
+    listRow?._count.rolls === 2 && listRow?._count.yarnMovements === 1,
+    JSON.stringify(listRow?._count),
+  );
+
+  // H4 — BELGE yüzeyi (donmuş snapshot: kumaş tablosu + yarnLines)
+  const mixedHtml = (await printedDocumentService.getHtml("GOODS_RECEIPT" as never, mixedData.id)).data?.html ?? "";
+  check("H4a) Karma fiş belgesi render edildi", mixedHtml.length > 0 && mixedHtml.includes("MAL KABUL"));
+  // ⚠️ Bu kontrol renderer dikişi (2026-08-14) tamamlanınca eklendi: H4b
+  // snapshot'ı ölçüyordu ama KÂĞIDI ölçmüyordu — yarnLines snapshot'ta durup
+  // renderer basmasaydı bekçi yeşil kalırdı ("listede var ama basılamıyor"
+  // sınıfı, test_workorder_documents dersi). B7 negatif tarafı zaten kilitliyor
+  // (kumaş-only HTML'de başlık YOK).
+  check(
+    "H4a2) ⭐ Karma fiş KÂĞIDINDA iplik tablosu basılı (başlık + kalem adı + kg)",
+    mixedHtml.includes("KABUL EDİLEN İPLİK") && mixedHtml.includes(yarnItem.name) && /\b500\b/.test(mixedHtml),
+  );
+  const frozenMixed = await prisma.printedDocument.findFirst({
+    where: { docType: "GOODS_RECEIPT", sourceId: mixedData.id },
+    select: { snapshot: true },
+  });
+  const mixedDoc = (frozenMixed?.snapshot as {
+    doc?: { lines?: unknown[]; yarnLines?: Array<{ itemName: string; qtyKg: number }> };
+  } | null)?.doc;
+  check(
+    "H4b) ⭐ Snapshot'ta yarnLines VAR: 1 satır, 500 kg, doğru kalem adı",
+    mixedDoc?.yarnLines?.length === 1 &&
+      mixedDoc.yarnLines[0]?.qtyKg === 500 &&
+      mixedDoc.yarnLines[0]?.itemName === yarnItem.name,
+    JSON.stringify(mixedDoc?.yarnLines),
+  );
+
+  // H5 — ÜÇ YÜZEY AYNI RAKAM (assembler'dan sapan yüzey burada kırmızı verir)
+  check(
+    "H5) ⭐ Detay = Liste = Belge (top adedi ve iplik)",
+    mixedData.totals.rollCount === listRow?._count.rolls &&
+      listRow._count.rolls === mixedDoc?.lines?.length &&
+      mixedData.totals.yarnLineCount === listRow._count.yarnMovements &&
+      mixedData.totals.totalYarnKg === mixedDoc.yarnLines?.[0]?.qtyKg,
+  );
+
+  // H6 — iptal sonrası defter görünümü: hareket SİLİNMEZ, net düşer
+  await goodsReceiptService.cancel(mixedData.id, "TEST — assembler iptal");
+  const afterCancelDetail = (await goodsReceiptService.loadDetail(mixedData.id)) as {
+    totals: { rollCount: number; totalYarnKg: number; yarnLineCount: number };
+  };
+  check(
+    "H6) İptal sonrası: rollCount=0, yarnLineCount=2 (IN + ters kayıt), net kg=0",
+    afterCancelDetail.totals.rollCount === 0 &&
+      afterCancelDetail.totals.yarnLineCount === 2 &&
+      afterCancelDetail.totals.totalYarnKg === 0,
+    JSON.stringify(afterCancelDetail.totals),
+  );
+  const reversal = await prisma.yarnMovement.findFirst({
+    where: { goodsReceiptId: mixedData.id, kind: YarnMovementKind.ADJUST_OUT },
+    select: { unitPrice: true },
+  });
+  check("H7) Ters iplik kaydı fiyat TAŞIMIYOR (geri sarım ticari olay değil)", reversal !== null && reversal.unitPrice === null);
+
+  check("Körlük zemini: en az 5 fiş üretildi", receiptIds.length >= 5, `${receiptIds.length} fiş`);
 }
 
 main()
@@ -173,9 +308,19 @@ main()
         await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: ids } } });
         await prisma.rollOperation.deleteMany({ where: { rollId: { in: ids } } });
         await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } });
+        await prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } });
         await prisma.roll.deleteMany({ where: { id: { in: ids } } });
       }
-      if (receiptIds.length) await prisma.goodsReceipt.deleteMany({ where: { id: { in: receiptIds } } });
+      if (receiptIds.length) {
+        await prisma.printedDocument.deleteMany({ where: { sourceId: { in: receiptIds } } });
+        await prisma.yarnMovement.deleteMany({ where: { goodsReceiptId: { in: receiptIds } } });
+        await prisma.goodsReceipt.deleteMany({ where: { id: { in: receiptIds } } });
+      }
+      if (yarnItemId) {
+        await prisma.yarnStock.deleteMany({ where: { itemId: yarnItemId } });
+        await prisma.yarnMovement.deleteMany({ where: { itemId: yarnItemId } });
+        await prisma.item.deleteMany({ where: { id: yarnItemId } });
+      }
       if (warehouseIds.length) await prisma.warehouse.deleteMany({ where: { id: { in: warehouseIds } } });
     } catch (e) {
       console.warn("Temizlik uyarısı:", (e as Error).message.slice(0, 200));

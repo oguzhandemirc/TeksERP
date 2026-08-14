@@ -178,6 +178,46 @@ router.post("/cari/:id/opening-balance", requirePermission("finance:invoice"), a
   }
 });
 
+/**
+ * @openapi
+ * /api/finance/cari/{id}/opening-balance/cancel:
+ *   post:
+ *     tags: [Finance]
+ *     summary: Devir stornosu — açılış/devir bakiyesini tipli ters kayıtla iptal eder
+ *     description: >
+ *       Aktif (terslenmemiş) ADJUSTMENT devrini ADJUSTMENT_CANCEL kaynaklı ters
+ *       satırla kapatır (SAP FB08 modeli — defter append-only, satır silinmez).
+ *       Ters kayıt BUGÜNE yazılır: devir kapanmış bir dönemde olsa bile o
+ *       dönemin ilan edilmiş fotoğrafı değişmez. Tutar/kur orijinalden aynen
+ *       kopyalanır. Sebep ZORUNLU. Sonrasında yeni devir girilebilir.
+ *       İzin `finance:invoice` — deftere işleyen her şeyle aynı kapı, yeni izin yok.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Devir iptal edildi (ters kayıt yazıldı) }
+ *       404: { description: İptal edilecek aktif devir yok }
+ *       409: { description: Devir zaten iptal edilmiş (çift storno) }
+ */
+router.post("/cari/:id/opening-balance/cancel", requirePermission("finance:invoice"), async (req, res, next) => {
+  try {
+    const b = z
+      .object({
+        currency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]),
+        // Sebep ZORUNLU — storno bir düzeltme kararıdır, gerekçesiz kayda geçmez.
+        reason: z.string().trim().min(3).max(300),
+      })
+      .strict()
+      .parse(req.body);
+    res.status(201).json(
+      await cariService.cancelOpeningBalance(
+        { cariId: req.params.id as string, currency: b.currency, reason: b.reason },
+        req.user?.userId,
+      ),
+    );
+  } catch (e) {
+    next(e);
+  }
+});
+
 // -----------------------------------------------------------------------------
 // KASA HAREKETLERİ — carisiz (masraf · gelir · virman · açılış)
 // -----------------------------------------------------------------------------

@@ -111,6 +111,109 @@ export interface AddLinesResult {
   purchaseOrder?: PurchaseOrderSyncResult | null;
 }
 
+// =============================================================================
+// SINIF 5 (2026-08-14) — TEK KAYNAK SATIR ASSEMBLER
+// =============================================================================
+// Fişin satırları İKİ tabloda yaşar (`Roll` + `YarnMovement`) ve her tüketici
+// yüzey hangisini okuyacağına KENDİ karar verdiğinde sınıf yeniden açılır
+// (detay "0 top" derken belge iplik basmaz, liste yalnız `_count.rolls` sayar —
+// 2026-08-14 denetiminin #17 bulgusu). Kural: İÇERİK okuyan her yüzey
+// (`loadDetail`, donmuş belge builder'ı, `invoice.createDraftFromGoodsReceipt`,
+// gelecekteki Excel/mobil/rapor) satırları BURADAN alır; tabloya doğrudan
+// gitmez. `kind` ayracı, `CONSUMABLE` (boya/kimyasal) türü doğduğu gün üçüncü
+// satır tipinin genişleme noktasıdır. Emsal: `_shipped.ts`, `producedOutputWhere`.
+//
+// ⚠️ Miktar alanları `Prisma.Decimal` taşır — JS float aritmetiği YASAK; Number
+// çevirimi yalnız SUNUM kenarında (belge/ekran) yapılır.
+// =============================================================================
+
+const RECEIPT_ROLL_SELECT = {
+  id: true,
+  barcode: true,
+  status: true,
+  currentQty: true,
+  initialQty: true,
+  width: true,
+  weightKg: true,
+  purchasePrice: true,
+  item: { select: { id: true, name: true, code: true, unit: true } },
+  color: { select: { id: true, name: true } },
+} as const;
+
+const RECEIPT_YARN_SELECT = {
+  id: true,
+  kind: true,
+  qtyKg: true,
+  unitPrice: true,
+  reason: true,
+  createdAt: true,
+  item: { select: { id: true, name: true, code: true } },
+  warehouse: { select: { id: true, name: true } },
+} as const;
+
+export type ReceiptRollRow = Prisma.RollGetPayload<{ select: typeof RECEIPT_ROLL_SELECT }>;
+export type ReceiptYarnRow = Prisma.YarnMovementGetPayload<{ select: typeof RECEIPT_YARN_SELECT }>;
+
+/** Kumaş satırı — top başına bir satır. `status` ayracı tüketicinindir
+ *  (belge/fatura CANCELLED'ı dışlar, detay "ne oldu"yu gösterir). */
+export interface ReceiptFabricLine {
+  kind: "FABRIC";
+  id: string;
+  barcode: string | null;
+  status: RollStatus;
+  itemId: string;
+  itemName: string;
+  itemCode: string | null;
+  /** `Item.unit` (ItemUnit enum kodu: MT/KG/ADET) — fatura satırının birimi. */
+  itemUnit: string;
+  colorName: string | null;
+  width: Prisma.Decimal | null;
+  weightKg: Prisma.Decimal | null;
+  /** Topun ŞU ANKİ metrajı (liste kuralı: tek okunur değer). */
+  qty: Prisma.Decimal;
+  /** Kabul ANINDAKİ metraj — fatura bunu kullanır (borç kesimle değişmez). */
+  initialQty: Prisma.Decimal;
+  purchasePrice: Prisma.Decimal | null;
+}
+
+/** İplik satırı — kg defteri hareketi. Ters kayıtlar (fiş iptali) DAHİLDİR;
+ *  `movementKind` ayracı tüketicinindir (belge/fatura yalnız `IN` basar). */
+export interface ReceiptYarnLine {
+  kind: "YARN";
+  id: string;
+  movementKind: YarnMovementKind;
+  itemId: string;
+  itemName: string;
+  itemCode: string | null;
+  /** POZİTİF kg; yönü `movementKind` söyler (`yarnMovementSign`). */
+  qtyKg: Prisma.Decimal;
+  unitPrice: Prisma.Decimal | null;
+  reason: string | null;
+  createdAt: Date;
+}
+
+export type ReceiptLine = ReceiptFabricLine | ReceiptYarnLine;
+
+export interface ReceiptTotals {
+  /** İptal edilmemiş top adedi ("ne kaldı"). */
+  rollCount: number;
+  /** İptal edilmemiş topların GÜNCEL metraj toplamı (m). */
+  totalQty: number;
+  /** TÜM iplik hareketi satırı sayısı — ters kayıt DAHİL (defter "ne oldu"). */
+  yarnLineCount: number;
+  /** NET iplik kg'si (IN − ters kayıtlar). ⚠️ Metrajla TOPLANMAZ: m ↔ kg. */
+  totalYarnKg: number;
+}
+
+export interface AssembledReceipt {
+  /** Union satırlar: önce kumaş, sonra iplik (ikisi de `createdAt asc`). */
+  lines: ReceiptLine[];
+  totals: ReceiptTotals;
+  /** Ham satırlar — `loadDetail` yanıt sözleşmesi (Electron bu şekli okur). */
+  rolls: ReceiptRollRow[];
+  yarnMovements: ReceiptYarnRow[];
+}
+
 async function nextReceiptNo(tx: Prisma.TransactionClient): Promise<string> {
   const now = new Date();
   const prefix = dailyCodePrefix(RECEIPT_PREFIX, now);
@@ -358,7 +461,9 @@ export class GoodsReceiptService {
           // Mesaj bilerek o yolla AYNI cümleyi kurar — operatör aynı hatayı
           // fişin iki farklı satırında iki farklı şekilde okumasın.
           if (!info.isActive) throw AppError.notFound("Ürün bulunamadı veya pasif (silinmiş)");
-          createdYarn.push(await this.addYarnLine(receipt, line, userId));
+          // Fiyat ÖN-DOLUMU kumaşla AYNI zincir (D2): satırın kendi fiyatı
+          // kazanır; yoksa kalem kartının alış fiyatı; o da yoksa NULL.
+          createdYarn.push(await this.addYarnLine(receipt, line, priceFor(line), userId));
           continue;
         }
 
@@ -431,6 +536,8 @@ export class GoodsReceiptService {
   private async addYarnLine(
     receipt: { id: string; receiptNo: string; warehouseId: string },
     line: GoodsReceiptLineInput,
+    /** D2 zinciriyle ÇÖZÜLMÜŞ birim fiyat (satır > kart > null) — fişin para biriminde. */
+    unitPrice: Prisma.Decimal.Value | null,
     userId?: string,
   ): Promise<string> {
     const qtyKg = new Prisma.Decimal(line.initialQty);
@@ -454,22 +561,21 @@ export class GoodsReceiptService {
       );
     }
 
-    // ⚠️ FİYAT: iplik satırının birim fiyatını taşıyacak bir kolon ŞU AN YOK
-    // (kumaşta fiyat `Roll.purchasePrice`'a yazılır ve alış faturası ondan
-    // türer; `YarnMovement`in fiyat kolonu yok). Sessizce düşürmek, alış
-    // faturasının o kalemi FİYATSIZ doğurması demekti; operatörün AÇIKÇA
-    // yazdığı fiyat bu yüzden SEBEBİYLE reddedilir — susup yutmaktansa.
-    // (D2 kart fiyatı ön-dolumu da iplikte taşınamaz; kolon eklenene kadar
-    // fiyat alış faturasına elle girilir. Bkz. rapor: `YarnMovement.unitPrice`.)
-    if (line.unitPrice != null) {
-      throw AppError.badRequest(
-        "İplik satırında birim fiyat henüz taşınmıyor (fiyatı taşıyacak kolon yok) — " +
-          "satırı fiyatsız girin, alış faturasında fiyatı elle yazın.",
-      );
-    }
-
-    const res = await prisma.$transaction((tx) =>
-      applyYarnMovementTx(tx, {
+    // FİYAT (`YarnMovement.unitPrice`, migration 20260814 — Sınıf 5): fişin
+    // para biriminde, kabul ANINDA donar (`Roll.purchasePrice` simetriği) —
+    // alış faturası taslağı önce bu değere bakar. TARİHÇE: kolon gelmeden önce
+    // burada AÇIK yazılmış fiyat 400 ile reddediliyordu ("kolon yok — faturada
+    // elle yazın"); o guard kolonla birlikte kalktı.
+    //
+    // ⚠️ Fiyat `applyYarnMovementTx` imzasına EKLENMEDİ, satıra AYNI tx içinde
+    // yazılır: o kapı defterin MİKTAR sözleşmesidir ve ters kayıt yolları da
+    // (`reverseGoodsReceiptYarnTx` → ADJUST_OUT) oradan geçer — imzaya fiyat
+    // koymak, geri sarımın (ticari olay değildir) fiyat taşımasına kapı açardı.
+    // Aynı tx şart: satır ile fiyatı ayrı commit'lere bölmek "fiyatlı girildi,
+    // fiyatsız kaldı" yarım durumunu doğururdu. Satır tx dışına henüz görünür
+    // olmadığı için bu, append-only defterde bir "düzeltme" DEĞİLDİR.
+    const res = await prisma.$transaction(async (tx) => {
+      const applied = await applyYarnMovementTx(tx, {
         itemId: line.itemId,
         warehouseId: receipt.warehouseId,
         kind: YarnMovementKind.IN,
@@ -477,8 +583,15 @@ export class GoodsReceiptService {
         goodsReceiptId: receipt.id,
         reason: `Mal kabul (${receipt.receiptNo})`,
         userId: userId ?? null,
-      }),
-    );
+      });
+      if (unitPrice != null) {
+        await tx.yarnMovement.update({
+          where: { id: applied.movementId },
+          data: { unitPrice: new Prisma.Decimal(unitPrice) },
+        });
+      }
+      return applied;
+    });
 
     void AuditService.log({
       userId,
@@ -492,6 +605,7 @@ export class GoodsReceiptService {
         warehouseId: receipt.warehouseId,
         kind: YarnMovementKind.IN,
         qtyKg: qtyKg.toString(),
+        unitPrice: unitPrice != null ? new Prisma.Decimal(unitPrice).toString() : null,
         balanceAfter: res.balanceKg.toString(),
       },
     });
@@ -521,29 +635,30 @@ export class GoodsReceiptService {
     // Guard eskiden YALNIZ topların statüsüne bakıyordu; faturaya hiç
     // bakmıyordu. Ölçülen saha senaryosu: depocu "yanlış fiş" deyip iptal eder
     // (toplar WAREHOUSE olduğu için guard geçer), muhasebeci ertesi gün bağlı
-    // TASLAK faturayı onaylar — `confirm` kaynak fişi hiç okumadığı için onay
-    // GEÇER ve tedarikçi carisine, hiç gelmemiş mal için borç yazılır. Belge
-    // donar, hata çıkmaz, log çıkmaz. ONAYLI faturada da aynısı ters yönde:
-    // fiş iptal edilse defter satırı yerinde kalır.
+    // TASLAK faturayı onaylar — onay geçer ve tedarikçi carisine, hiç gelmemiş
+    // mal için borç yazılır. Belge donar, hata çıkmaz, log çıkmaz. ONAYLI
+    // faturada da aynısı ters yönde: fiş iptal edilse defter satırı yerinde
+    // kalır. Emsal karar aynı repoda var: `shipping.service` faturalanmış
+    // sevkiyatın geri alınmasını reddediyor.
     //
-    // ⚠️ Ters yön ZATEN korunuyordu (`invoice.service`: iptal edilmiş fişten
-    // fatura kesilemez) — yani guard TEK YÖNLÜYDÜ. Emsal karar aynı repoda
-    // var: `shipping.service` faturalanmış sevkiyatın geri alınmasını
-    // reddediyor ("Bu sevkiyat faturalanmış — geri alınamaz").
-    //
-    // ⚠️ Sıra: bu kontrol TOP kontrolünden ÖNCE. İkisi de engelliyorsa
-    // kullanıcı ÖNCE faturayı iptal etmeli — topları ayıklamak fatura dururken
-    // hiçbir işe yaramaz ve kullanıcıyı iki tur gezdirirdi.
+    // ⚠️ BURASI HIZLI YOLDUR (aynı gün akşam düzeltmesi — Sınıf 4): tx dışı bu
+    // kontrol tek başına check-then-act'ti; kontrol ile aşağıdaki claim
+    // arasında taslak doğup ONAYLANABİLİYORDU (fiş CANCELLED + fatura CONFIRMED
+    // — ikisi birden). ASIL SED tx İÇİNDE, claim'den SONRA tekrarlanır (aşağı
+    // bak); burası UX için kalır: iki engel birden varken kullanıcıya doğru
+    // SIRAYI söyler (bu kontrol TOP kontrolünden ÖNCE — ikisi de engelliyorsa
+    // kullanıcı önce faturayı iptal etmeli; topları ayıklamak fatura dururken
+    // hiçbir işe yaramaz ve kullanıcıyı iki tur gezdirirdi).
+    const invoiceBlockMessage = (docNo: string, status: InvoiceStatus): string =>
+      `${receipt.receiptNo}: bu fişten ${docNo} numaralı alış faturası kesilmiş ` +
+      `(${status === InvoiceStatus.CONFIRMED ? "onaylı" : "taslak"}) — fiş iptal edilemez. ` +
+      `Önce faturayı iptal edin.`;
     const liveInvoice = await prisma.invoice.findFirst({
       where: { goodsReceiptId: id, status: { not: InvoiceStatus.CANCELLED } },
       select: { docNo: true, status: true },
     });
     if (liveInvoice) {
-      throw AppError.conflict(
-        `${receipt.receiptNo}: bu fişten ${liveInvoice.docNo} numaralı alış faturası kesilmiş ` +
-          `(${liveInvoice.status === InvoiceStatus.CONFIRMED ? "onaylı" : "taslak"}) — fiş iptal edilemez. ` +
-          `Önce faturayı iptal edin.`,
-      );
+      throw AppError.conflict(invoiceBlockMessage(liveInvoice.docNo, liveInvoice.status));
     }
 
     const rolls = await prisma.roll.findMany({
@@ -608,6 +723,23 @@ export class GoodsReceiptService {
       });
       if (claim.count === 0) {
         throw AppError.conflict("Fiş bu sırada başka bir işleme girdi — yenileyip tekrar deneyin.");
+      }
+      // ⚠️ ÇAPRAZ YARIŞ SEDDİ — fatura kontrolünün ASIL kopyası (Sınıf 4,
+      // 2026-08-14 akşam). Yukarıdaki hızlı-yol kontrolü tx DIŞINDA; onunla
+      // claim arasında bir taslak doğup onaylanabilir. Serileşme `goods_receipts`
+      // SATIRI üzerinden: yukarıdaki claim bu satırı kilitledi; `invoice.confirm`
+      // aynı satırı `SELECT … FOR UPDATE` ile kilitleyip durumunu okuyor. Onay
+      // önce commit'lediyse buradaki taze okuma canlı faturayı görür ve iptal
+      // (claim DAHİL) geri sarılır; biz önce commit'lersek onayın kilitli okuması
+      // fişi CANCELLED görür ve 409 verir — iki uçtan YALNIZ biri kazanır.
+      // (Kilit sırası: biz GR satırı → fatura OKUMASI (kilitsiz); confirm fatura
+      // satırı → GR satırı. Ortak kilitli kaynak tek (GR) olduğu için ABBA yok.)
+      const liveInvoiceTx = await tx.invoice.findFirst({
+        where: { goodsReceiptId: id, status: { not: InvoiceStatus.CANCELLED } },
+        select: { docNo: true, status: true },
+      });
+      if (liveInvoiceTx) {
+        throw AppError.conflict(invoiceBlockMessage(liveInvoiceTx.docNo, liveInvoiceTx.status));
       }
       return reverseGoodsReceiptYarnTx(
         tx,
@@ -720,7 +852,17 @@ export class GoodsReceiptService {
           cancelledAt: true,
           warehouse: { select: { id: true, name: true } },
           supplier: { select: { id: true, name: true } },
-          _count: { select: { rolls: true } },
+          // ⚠️ LİSTE SAYACI BİLİNÇLİ OLARAK `_count` — assembler DEĞİL.
+          // Assembler İÇERİK yüzeylerinin tek kaynağıdır; listeye satır başına
+          // assembler koşturmak N+1'dir (perf kuralı 7/9). `_count` aynı
+          // sorguda gelir ve semantiği HAM satır sayısıdır (iptal edilmiş top /
+          // ters iplik kaydı DAHİL) — liste "fişte kaç kayıt var" sayacıdır,
+          // "ne kaldı" sorusunun cevabı detaydaki `totals`tadır. İki sayacın
+          // ayrıştığı tek durum iptalli fiştir ve o satır zaten CANCELLED
+          // rozetiyle çizilir. `yarnMovements` sayacı Sınıf 5 ile eklendi:
+          // yalnız `rolls` saymak, 500 kg iplik alınmış fişi listede "0 satır"
+          // gösteriyordu (2026-08-14 denetim bulgusu #17'nin liste yüzü).
+          _count: { select: { rolls: true, yarnMovements: true } },
         },
       }),
       prisma.goodsReceipt.count({ where }),
@@ -729,12 +871,103 @@ export class GoodsReceiptService {
   }
 
   /**
+   * TEK KAYNAK SATIR ASSEMBLER (Sınıf 5) — fişin İKİ çocuk tablosunu tek
+   * union'da + türetilmiş toplamlarla verir. İçerik okuyan her yüzey buradan
+   * beslenir (dosya başındaki blok yorum).
+   *
+   * `db` parametresi donmuş belge builder'ı için: `fresh` bir tx İÇİNDEN de
+   * çağrılabilir (`freezeForSource`). ⚠️ İki sorgu SIRALI koşar — tx client'ta
+   * `Promise.all` YASAK (perf kuralı 11).
+   */
+  async assembleReceiptLines(
+    receiptId: string,
+    db: Prisma.TransactionClient | typeof prisma = prisma,
+  ): Promise<AssembledReceipt> {
+    const rolls = await db.roll.findMany({
+      where: { goodsReceiptId: receiptId },
+      orderBy: { createdAt: "asc" },
+      select: RECEIPT_ROLL_SELECT,
+    });
+    // Ters kayıtlar (iptal) DAHİL — defter görünümü "ne oldu"yu anlatır,
+    // "ne kaldı"yı değil. "Ne kaldı" sorusunun cevabı `totals`tadır.
+    const yarnMovements = await db.yarnMovement.findMany({
+      where: { goodsReceiptId: receiptId },
+      orderBy: { createdAt: "asc" },
+      select: RECEIPT_YARN_SELECT,
+    });
+
+    // Union sırası: önce kumaş, sonra iplik (fiş ekranı ve belge topları önce
+    // basar; iplik ikinci tablodur). Her küme kendi içinde `createdAt asc`.
+    const lines: ReceiptLine[] = [
+      ...rolls.map(
+        (r): ReceiptFabricLine => ({
+          kind: "FABRIC",
+          id: r.id,
+          barcode: r.barcode,
+          status: r.status,
+          itemId: r.item.id,
+          itemName: r.item.name,
+          itemCode: r.item.code,
+          itemUnit: r.item.unit,
+          colorName: r.color?.name ?? null,
+          width: r.width,
+          weightKg: r.weightKg,
+          qty: r.currentQty,
+          initialQty: r.initialQty,
+          purchasePrice: r.purchasePrice,
+        }),
+      ),
+      ...yarnMovements.map(
+        (m): ReceiptYarnLine => ({
+          kind: "YARN",
+          id: m.id,
+          movementKind: m.kind,
+          itemId: m.item.id,
+          itemName: m.item.name,
+          itemCode: m.item.code,
+          qtyKg: m.qtyKg,
+          unitPrice: m.unitPrice,
+          reason: m.reason,
+          createdAt: m.createdAt,
+        }),
+      ),
+    ];
+
+    const liveRolls = rolls.filter((r) => r.status !== RollStatus.CANCELLED);
+    const totalQty = liveRolls.reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
+    // İplik NET kg — ters kayıtlar düşülür. ⚠️ Metrajla TOPLANMAZ: 100 metre
+    // kumaş ile 100 kg iplik farklı birimlerdir ve tek sayıya indirmek
+    // anlamsız bir "toplam" üretirdi.
+    const totalYarnKg = yarnMovements.reduce(
+      (s, m) => s.plus(new Prisma.Decimal(m.qtyKg).mul(yarnMovementSign(m.kind))),
+      new Prisma.Decimal(0),
+    );
+
+    return {
+      lines,
+      totals: {
+        rollCount: liveRolls.length,
+        totalQty: Number(totalQty),
+        yarnLineCount: yarnMovements.length,
+        totalYarnKg: Number(totalYarnKg),
+      },
+      rolls,
+      yarnMovements,
+    };
+  }
+
+  /**
    * Fiş detayı — başlık + toplar + iplik satırları.
    *
    * ⚠️ İPLİK SATIRLARI BURADA GÖRÜNMEK ZORUNDA: iplik `Roll` doğurmadığı için,
    * yalnız `rolls` dönseydi 500 kg iplik alınan fiş ekranda BOŞ görünürdü ve
-   * depocu "kaydedilmemiş" sanıp ikinci kez girerdi. `yarnLines` EK bir
-   * anahtardır — mevcut alanların hiçbiri değişmedi (kumaş fişi bayt-bayt aynı).
+   * depocu "kaydedilmemiş" sanıp ikinci kez girerdi.
+   *
+   * Satırlar + toplamlar `assembleReceiptLines`ten gelir (Sınıf 5 — 2026-08-14):
+   * mevcut yanıt anahtarları (`rolls`, `yarnMovements`, `totals`) AYNI şekilde
+   * döner; `lines` union'ı ve satırlardaki fiyat alanları EK'tir (Electron'un
+   * okuduğu hiçbir alan değişmedi). Bir yerine üç sorgu bilinçli bedel: detay
+   * tekil ekrandır ve içerik tek kaynaktan sapamaz.
    */
   async loadDetail(id: string): Promise<Record<string, unknown>> {
     const receipt = await prisma.goodsReceipt.findUnique({
@@ -745,58 +978,17 @@ export class GoodsReceiptService {
         createdBy: { select: { id: true, fullName: true, username: true } },
         // D3 — bağlı alış siparişinin başlığı (fişten siparişe tıkla-git).
         purchaseOrder: { select: { id: true, orderNo: true, status: true, currency: true, expectedDate: true } },
-        // Bu fişin doğurduğu iplik hareketleri — ters kayıtlar (iptal) DAHİL,
-        // çünkü defter görünümü "ne oldu"yu anlatır, "ne kaldı"yı değil.
-        yarnMovements: {
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            kind: true,
-            qtyKg: true,
-            reason: true,
-            createdAt: true,
-            item: { select: { id: true, name: true, code: true } },
-            warehouse: { select: { id: true, name: true } },
-          },
-        },
-        rolls: {
-          orderBy: { createdAt: "asc" },
-          select: {
-            id: true,
-            barcode: true,
-            status: true,
-            currentQty: true,
-            initialQty: true,
-            width: true,
-            weightKg: true,
-            item: { select: { id: true, name: true, code: true } },
-            color: { select: { id: true, name: true } },
-          },
-        },
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
 
-    const totalQty = receipt.rolls
-      .filter((r) => r.status !== RollStatus.CANCELLED)
-      .reduce((s, r) => s.plus(r.currentQty), new Prisma.Decimal(0));
-
-    // İplik NET kg — ters kayıtlar düşülür. ⚠️ Metrajla TOPLANMAZ: 100 metre
-    // kumaş ile 100 kg iplik farklı birimlerdir ve tek sayıya indirmek
-    // anlamsız bir "toplam" üretirdi.
-    const totalYarnKg = receipt.yarnMovements.reduce(
-      (s, m) => s.plus(new Prisma.Decimal(m.qtyKg).mul(yarnMovementSign(m.kind))),
-      new Prisma.Decimal(0),
-    );
-
+    const asm = await this.assembleReceiptLines(id);
     return {
       ...receipt,
-      totals: {
-        rollCount: receipt.rolls.filter((r) => r.status !== RollStatus.CANCELLED).length,
-        totalQty: Number(totalQty),
-        yarnLineCount: receipt.yarnMovements.length,
-        totalYarnKg: Number(totalYarnKg),
-      },
+      rolls: asm.rolls,
+      yarnMovements: asm.yarnMovements,
+      lines: asm.lines,
+      totals: asm.totals,
     };
   }
 }
@@ -814,6 +1006,15 @@ export default goodsReceiptService;
 //
 // İptal edilmiş fişin belgesi İPTAL filigranıyla basılır (`voidInfo`) — kâğıt
 // sahada dolaşmış olabilir, kaydı yok sayılmaz.
+/** Belgeye basılan iplik satırı — şekil renderer'daki `GoodsReceiptDoc.yarnLines?`
+ *  sözleşmesinin AYNISI (dikiş 2026-08-14'te tamamlandı: renderer koşullu
+ *  "KABUL EDİLEN İPLİK (kg)" tablosunu basıyor; alan yoksa tek bayt basılmaz). */
+interface GoodsReceiptYarnDocLine {
+  itemName: string;
+  qtyKg: number;
+}
+type GoodsReceiptDocWithYarn = GoodsReceiptDoc & { yarnLines?: GoodsReceiptYarnDocLine[] };
+
 registerPrintedDocBuilder(PrintedDocType.GOODS_RECEIPT, {
   fresh: async (db, sourceId) => {
     const r = await db.goodsReceipt.findUnique({
@@ -824,19 +1025,28 @@ registerPrintedDocBuilder(PrintedDocType.GOODS_RECEIPT, {
         warehouse: { select: { name: true, code: true } },
         supplier: { select: { name: true, code: true } },
         createdBy: { select: { fullName: true, username: true } },
-        rolls: {
-          orderBy: { createdAt: "asc" },
-          select: {
-            barcode: true, currentQty: true, width: true, status: true,
-            item: { select: { name: true } },
-            color: { select: { name: true } },
-          },
-        },
       },
     });
     if (!r) return null;
 
-    const doc: GoodsReceiptDoc = {
+    // SATIRLAR TEK KAYNAKTAN (Sınıf 5): builder eskiden `rolls`u KENDİ okuyordu
+    // ve resmi fiş belgesi — depocu-tedarikçi mutabakatının ana kâğıdı — 500 kg
+    // ipliği HİÇ basmıyordu. Tabloya giden dördüncü kopya olmak yerine assembler
+    // tüketilir; `db` geçilir ki freeze bir tx içindeyken de aynı anı okusun.
+    const asm = await goodsReceiptService.assembleReceiptLines(sourceId, db);
+    // İPTAL EDİLMİŞ top belgede GÖRÜNMEZ: fiş "bu mal girdi" der; iptal edilen
+    // satır girmemiş sayılır (softDelete = qtyOut 0 stornosu ile aynı semantik).
+    const fabric = asm.lines.filter(
+      (l): l is ReceiptFabricLine => l.kind === "FABRIC" && l.status !== RollStatus.CANCELLED,
+    );
+    // İplikte belgeye YALNIZ `IN` girer: ters kayıt (ADJUST_OUT) fiş iptalinin
+    // defter iziidir, "kabul edilen mal" değildir (iptalli fiş zaten İPTAL
+    // filigranıyla basılır).
+    const yarnIn = asm.lines.filter(
+      (l): l is ReceiptYarnLine => l.kind === "YARN" && l.movementKind === YarnMovementKind.IN,
+    );
+
+    const doc: GoodsReceiptDocWithYarn = {
       header: {
         documentNo: r.receiptNo,
         date: r.createdAt.toISOString(),
@@ -847,18 +1057,21 @@ registerPrintedDocBuilder(PrintedDocType.GOODS_RECEIPT, {
         deliveryNoteNo: r.deliveryNoteNo,
         createdBy: r.createdBy?.fullName ?? r.createdBy?.username ?? null,
       },
-      // İPTAL EDİLMİŞ top belgede GÖRÜNMEZ: fiş "bu mal girdi" der; iptal edilen
-      // satır girmemiş sayılır (softDelete = qtyOut 0 stornosu ile aynı semantik).
-      lines: r.rolls
-        .filter((x) => x.status !== RollStatus.CANCELLED)
-        .map((x) => ({
-          barcode: x.barcode,
-          itemName: x.item.name,
-          colorName: x.color?.name ?? null,
-          width: x.width != null ? Number(x.width) : null,
-          qty: Number(x.currentQty),
-        })),
+      lines: fabric.map((x) => ({
+        barcode: x.barcode,
+        itemName: x.itemName,
+        colorName: x.colorName,
+        width: x.width != null ? Number(x.width) : null,
+        qty: Number(x.qty),
+      })),
       notes: r.notes,
+      // ⚠️ `yarnLines` YALNIZ DOLUYSA yazılır — kumaş-only fişin snapshot'ı ve
+      // ESKİ snapshot'ların render'ı BAYT-BAYT aynı kalır (opsiyonel-alan
+      // konvansiyonu: `sackNote`/`batchNumber` emsali — alan yoksa TEK BAYT
+      // basılmaz). Boş dizi bile yazmak, eski belgelerin parmak izini bozardı.
+      ...(yarnIn.length > 0
+        ? { yarnLines: yarnIn.map((y): GoodsReceiptYarnDocLine => ({ itemName: y.itemName, qtyKg: Number(y.qtyKg) })) }
+        : {}),
     };
 
     return {

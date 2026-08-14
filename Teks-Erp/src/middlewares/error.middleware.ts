@@ -114,6 +114,9 @@ const POOL_TIMEOUT_RECORD_ID = "POOL_TIMEOUT";
 /** CHECK ihlali audit'inde ayırt edici recordId (POOL_TIMEOUT emsali). */
 const CHECK_VIOLATION_RECORD_ID = "CHECK_VIOLATION";
 
+/** Sınıf-40 (geçici çakışma) audit recordId'si — canlıda sıklığı ÖLÇÜLEBİLSİN. */
+const TRANSIENT_CONFLICT_RECORD_ID = "DB_TRANSIENT_CONFLICT";
+
 // =============================================================================
 // Prisma kod SINIFLANDIRMASI (2026-08-09, denetim F-CORE-OPS-002)
 // =============================================================================
@@ -202,7 +205,80 @@ const CHECK_CONSTRAINT_MESSAGES: Record<string, string> = {
   order_lines_quantity_pos: "Sipariş satırı miktarı pozitif olmalı.",
   "order_lines_shippedQty_nonneg": "Sevk edilen miktar negatif olamaz.",
   work_order_steps_time_order: "Adımın bitiş zamanı başlangıcından önce olamaz.",
+  // ── Ön muhasebe (2026-08-14 sağlamlık paketi) — CHECK sedleri operatöre ham
+  // 500/constraint adı olarak DÜŞMEMELİ. Sed son katmandır; buraya düşmek
+  // "uygulama yüklemi atlandı" demektir ama mesaj yine İŞ dilinde konuşur.
+  cheques_terminal_not_allocated:
+    "Kapaması olan çek karşılıksız/iade/iptal edilemez — önce fatura kapamasını kaldırın.",
+  cash_period_close_account_xor:
+    "Dönem kapanışı kasa VEYA banka hesabına bağlanmalı (ikisi birden değil).",
+  invoices_paid_total_range:
+    "Fatura kapama toplamı fatura tutarını aşamaz ve negatif olamaz — kapama tutarlarını kontrol edin.",
+  payment_allocations_amount_positive: "Kapama tutarı sıfırdan büyük olmalı.",
+  cheques_amount_positive: "Çek/senet tutarı sıfırdan büyük olmalı.",
+  payments_amount_positive: "Tahsilat/ödeme tutarı sıfırdan büyük olmalı.",
+  cash_txn_amount_positive: "Kasa hareketi tutarı sıfırdan büyük olmalı.",
+  cheques_endorsed_cari:
+    "Ciro kaydı tutarsız: ciro edilen cari olmadan çek ciro edilmiş sayılamaz.",
+  cari_txn_debit_credit_xor:
+    "Cari hareket satırı ya borç ya alacak olmalı (ikisi birden ya da negatif olamaz).",
 };
+
+// =============================================================================
+// Geçici PG çakışması — SQLSTATE sınıf 40 → 409 (Sınıf 3 güvenlik ağı, 2026-08-14)
+// =============================================================================
+// 40P01 (deadlock) / 40001 (serialization) GEÇİCİ hatalardır: tekrar denemek
+// çözer. Eskiden iki kılıkta da 500'e düşüyorlardı — çıplak DriverAdapterError
+// generic "Sunucu hatası oluştu."ya, `$executeRaw`/advisory-lock yolundaki
+// P2010 sarımı ise "Sunucu yapılandırma hatası"na (operatör yöneticiye
+// yönlendiriliyordu, oysa doğru tepki TEKRAR DENEMEKTİ). Yapısal önleme kilit
+// SIRALAMASIDIR (assertPeriodsOpenTx, cash-transaction accountLockKey); bu dal
+// yalnız GÜVENLİK AĞIdır ve gelecekteki öngörülemeyen kilit çiftlerini de kapsar.
+
+const TRANSIENT_SQLSTATES = new Set(["40P01", "40001"]);
+
+/**
+ * Sınıf-40 SQLSTATE'i İKİ kılıktan çıkarır (extractCheckConstraint emsali —
+ * ikisi de canlı sondayla ölçüldü, tahmin değil):
+ *   • ÇIPLAK `DriverAdapterError` (ORM yolu): bilgi `err.cause.code` /
+ *     `err.cause.originalCode` alanlarında (23514'te aynı yapı gözlendi).
+ *   • P2010 sarımı ($queryRaw/$executeRaw yolu): `meta.driverAdapterError.cause`
+ *     alanları; meta yoksa mesaj metnindeki "Code: `40P01`" biçimi.
+ *
+ * ⚠️ YANLIŞ POZİTİF KORUMASI: eşleşme YALNIZ kod alanından ya da P2010
+ * mesajındaki açık "Code: `40P01`/`40001`" kalıbından — genel regex YASAK
+ * ("40001" düz sayı olarak meşru bir tutar/metin içinde geçebilir; "deadlock"
+ * kelimesi kullanıcı verisinde bile olabilir).
+ */
+function extractTransientSqlState(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const e = err as Record<string, unknown>;
+
+  const causes: Record<string, unknown>[] = [];
+  const own = e.cause;
+  if (own && typeof own === "object") causes.push(own as Record<string, unknown>);
+  const meta = e.meta;
+  if (meta && typeof meta === "object") {
+    const dae = (meta as Record<string, unknown>).driverAdapterError;
+    if (dae && typeof dae === "object") {
+      const c = (dae as Record<string, unknown>).cause;
+      if (c && typeof c === "object") causes.push(c as Record<string, unknown>);
+    }
+  }
+  for (const c of causes) {
+    for (const field of [c.code, c.originalCode]) {
+      if (typeof field === "string" && TRANSIENT_SQLSTATES.has(field)) return field;
+    }
+  }
+
+  // P2010 sarımı, meta'sız/alan adı değişmiş sürüm: Prisma mesajı SQLSTATE'i
+  // "Code: `40P01`" biçiminde taşır — yalnız o açık kalıp eşlenir.
+  if (e.code === "P2010" && typeof e.message === "string") {
+    const m = /Code:\s*`?(40P01|40001)`?/.exec(e.message);
+    if (m) return m[1] as string;
+  }
+  return null;
+}
 
 /**
  * Geçici sunucu tıkanıklığı yanıtı (havuz / transaction zaman aşımı).
@@ -356,6 +432,30 @@ export const errorHandler = (
       },
     });
     res.status(409).json({ success: false, message });
+    return;
+  }
+
+  // Sınıf-40 (deadlock/serialization) — Prisma known-error dalından ÖNCE:
+  // çıplak DriverAdapterError o dala hiç girmez, P2010 sarımı ise girerse
+  // SERVER_FAULT kümesine düşüp 500 "yapılandırma hatası" olurdu. Geçici bir
+  // çakışma için doğru sözleşme 409 + tekrar-dene (P2034 dalıyla aynı ruh).
+  const transientState = extractTransientSqlState(err);
+  if (transientState !== null) {
+    console.error(`[error.middleware] Geçici PG çakışması (${transientState}): ${err.message}`);
+    void AuditService.logEvent({
+      category: "SYSTEM",
+      action: "ERROR",
+      userId: req.user?.userId,
+      recordId: TRANSIENT_CONFLICT_RECORD_ID,
+      ipAddress: req.ip ?? null,
+      payload: {
+        sqlstate: transientState,
+        method: req.method,
+        path: req.originalUrl,
+        message: err.message?.slice(0, 300),
+      },
+    });
+    res.status(409).json({ success: false, message: "İşlem çakışması — lütfen tekrar deneyin." });
     return;
   }
 

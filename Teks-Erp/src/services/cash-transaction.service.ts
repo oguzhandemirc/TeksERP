@@ -21,6 +21,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { D, resolveExchangeRate } from "./helpers/finance.helper";
+import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const CASH_PREFIX = "KH";
@@ -112,6 +113,32 @@ async function moveAccountBalance(
   }
 }
 
+/**
+ * KANONİK HESAP ANAHTARI — bakiye satır-kilidi SIRASININ tek kaynağı (Sınıf 3).
+ *
+ * Virman ve iptali AYNI tx'te İKİ hesabın bakiyesini günceller; PG satır
+ * kilidini UPDATE sırasıyla alır. Sıra ROL'den gelirse (önce çıkan, sonra
+ * giren) ayna çift (A→B ‖ B→A) kilitleri TERS sırada ister → klasik ABBA
+ * deadlock'u (40P01) ve operatöre generic 500. Tablo adı + id string
+ * karşılaştırması DETERMİNİSTİK TOPLAM SIRA verir: hangi tx hangi yönde olursa
+ * olsun aynı iki satır AYNI sırayla kilitlenir, bekleme döngüsü yapısal olarak
+ * imkânsızlaşır. `error.middleware`'in sınıf-40 → 409 ağı yalnız YEDEKTİR
+ * (öngörülemeyen kombinasyonlar için); asıl önleme burasıdır.
+ *
+ * ⚠️ Karşılaştırma `<`/`>` kod-noktası sırasıyladır, `localeCompare` DEĞİL:
+ * locale'e bağlı sıra iki süreçte/iki makinede farklı çıkabilir ve o gün sıra
+ * "deterministik" olmaktan çıkar (2026-08-02 `toLocaleUpperCase` dersinin
+ * sıralama ikizi). Tablo adı ön eki, aynı UUID'nin teorik olarak iki tabloda
+ * yaşayabilmesine karşı — anahtar uzayları ayrışsın.
+ */
+function accountLockKey(ref: AccountRef): string {
+  return ref.cashBoxId ? `cash_boxes|${ref.cashBoxId}` : `bank_accounts|${ref.bankAccountId ?? ""}`;
+}
+
+function compareLockKeys(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 export class CashTransactionService {
   /**
    * Masraf / gelir / açılış fişi.
@@ -136,6 +163,17 @@ export class CashTransactionService {
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         const acc = await loadAccount(tx, input, "Kasa hareketi");
+
+        // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1, 2026-08-14). `txnDate` kullanıcı
+        // girdisidir ve kasa defteri RAPORLANMIŞ bir sayfadır — bu guard
+        // gelmeden geçmişe tarihli bir masraf/gelir fişi, Excel'e alınmış kasa
+        // defterini sessizce değiştirebiliyordu (Sınıf 1 taramasının "sessiz
+        // ikinci üye" bulgusu). Kilit uzayı 8028 (cari 8026'dan ayrı).
+        await assertCashPeriodOpenTx(tx, {
+          cashBoxId: input.cashBoxId ?? null,
+          bankAccountId: input.bankAccountId ?? null,
+          txnDate,
+        });
 
         const rate =
           input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, acc.currency, txnDate);
@@ -249,6 +287,15 @@ export class CashTransactionService {
       prisma.$transaction(async (tx) => {
         const fromAcc = await loadAccount(tx, from, "Çıkan hesap");
         const toAcc = await loadAccount(tx, to, "Giren hesap");
+
+        // ⚠️ KASA/BANKA DÖNEM KİLİDİ (K-1) — İKİ hesap → ÇOĞUL helper, iki
+        // tekil çağrı DEĞİL (Sınıf 3: sırasız çift kilit = ayna virmanda
+        // deadlock; çoğul helper anahtarları kendisi sıralar).
+        await assertCashPeriodsOpenTx(tx, [
+          { ...from, txnDate },
+          { ...to, txnDate },
+        ]);
+
         if (fromAcc.currency !== toAcc.currency) {
           throw AppError.badRequest(
             `"${fromAcc.name}" ${fromAcc.currency}, "${toAcc.name}" ${toAcc.currency} — farklı para birimleri arasında virman yapılamaz (kur işlemi ayrı kaydedilmeli).`,
@@ -306,8 +353,15 @@ export class CashTransactionService {
           select: { id: true, docNo: true },
         });
 
-        await moveAccountBalance(tx, from, amount.negated());
-        await moveAccountBalance(tx, to, amount);
+        // ⚠️ KİLİT SIRASI KANONİK, ROL SIRASI DEĞİL (Sınıf 3 — `accountLockKey`
+        // yorumundaki gerekçe): from→to sırası ayna çiftte ABBA deadlock'uydu.
+        const legs = [
+          { ref: from, delta: amount.negated() },
+          { ref: to, delta: amount },
+        ].sort((x, y) => compareLockKeys(accountLockKey(x.ref), accountLockKey(y.ref)));
+        for (const leg of legs) {
+          await moveAccountBalance(tx, leg.ref, leg.delta);
+        }
         return { ids: [outRow.id, inRow.id], docNos: [outRow.docNo, inRow.docNo], groupId };
       }),
     );
@@ -345,11 +399,11 @@ export class CashTransactionService {
       const scope = target.transferGroupId
         ? await tx.cashTransaction.findMany({
             where: { transferGroupId: target.transferGroupId },
-            select: { id: true, docNo: true, direction: true, amount: true, cashBoxId: true, bankAccountId: true },
+            select: { id: true, docNo: true, direction: true, amount: true, cashBoxId: true, bankAccountId: true, txnDate: true },
           })
         : await tx.cashTransaction.findMany({
             where: { id },
-            select: { id: true, docNo: true, direction: true, amount: true, cashBoxId: true, bankAccountId: true },
+            select: { id: true, docNo: true, direction: true, amount: true, cashBoxId: true, bankAccountId: true, txnDate: true },
           });
 
       const claimed = await tx.cashTransaction.updateMany({
@@ -366,7 +420,28 @@ export class CashTransactionService {
         throw AppError.conflict("Virmanın bacakları bu sırada değişti — yenileyip tekrar deneyin.");
       }
 
-      for (const row of scope) {
+      // ⚠️ KASA/BANKA DÖNEM KİLİDİ — İPTALDE ÇIPA ORİJİNAL `txnDate`, `now`
+      // DEĞİL (payment.cancel ile aynı gerekçe): kasa defteri toplam-bazlıdır,
+      // iptal satırı CANCELLED'a çekip GEÇMİŞ sayfanın toplamından düşürür.
+      // Kapalı dönemin fişini iptal etmek o sayfayı değiştirmektir. Virman iki
+      // bacaklı → ÇOĞUL helper (sırasız çift kilit ayna çiftte deadlock'tu).
+      await assertCashPeriodsOpenTx(
+        tx,
+        scope.map((r) => ({ cashBoxId: r.cashBoxId, bankAccountId: r.bankAccountId, txnDate: r.txnDate })),
+      );
+
+      // ⚠️ KİLİT SIRASI KANONİK (Sınıf 3): virman iptali iki hesabın bakiyesine
+      // dokunur ve `scope` satırları veri sırasıyla gelir — ayna çiftin iptali
+      // (ya da iptal ‖ virman) paralel koşarsa sırasız güncelleme ABBA üretirdi.
+      // Virman yazımıyla (transfer'deki `legs.sort`) AYNI anahtar uzayı: iki yol
+      // aynı iki satırı her zaman aynı sırayla kilitler.
+      const orderedScope = [...scope].sort((x, y) =>
+        compareLockKeys(
+          accountLockKey({ cashBoxId: x.cashBoxId, bankAccountId: x.bankAccountId }),
+          accountLockKey({ cashBoxId: y.cashBoxId, bankAccountId: y.bankAccountId }),
+        ),
+      );
+      for (const row of orderedScope) {
         const back = row.direction === PaymentDirection.IN ? D(row.amount).negated() : D(row.amount);
         await moveAccountBalance(tx, { cashBoxId: row.cashBoxId, bankAccountId: row.bankAccountId }, back);
       }
