@@ -15,9 +15,10 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useHideCancelled } from "@/hooks/useHideCancelled";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
-import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { buildOrderColumns } from "./columns";
+import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
 import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
@@ -278,7 +279,14 @@ export function OrdersPage() {
   }, [searchParams, setSearchParams]);
 
   const pricingEnabled = usePricingEnabled();
-  const columns = useMemo(() => buildOrderColumns(pricingEnabled), [pricingEnabled]);
+  // TİCARET REJİMİ — üretim yüzeyleri (iş emri kolonu · filtresi · toplu
+  // aksiyonu) süzülür. Fabrikada birebir bugünkü.
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const columns = useMemo(
+    () => buildOrderColumns(pricingEnabled, financeEnabled),
+    [pricingEnabled, financeEnabled],
+  );
+  const filters = useMemo(() => resolveOrderFilters(FILTERS, financeEnabled), [financeEnabled]);
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
@@ -361,7 +369,7 @@ export function OrdersPage() {
           />
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
+      <FilterBar filters={filters} defaultDateRangeDays={30} />
 
       <DataTable<Order>
         table={table}
@@ -391,13 +399,21 @@ export function OrdersPage() {
             <CopyMenuItem label="Sipariş no" value={order.orderNumber} />
           </>
         )}
-        selectionHint="İş emri açmak için bir veya daha fazla sipariş seçin."
-        bulkActions={(rows) => (
-          <BulkCreateWorkOrderAction
-            orders={rows}
-            onDone={() => table.resetRowSelection()}
-          />
-        )}
+        selectionHint={
+          canBulkCreateWorkOrder(financeEnabled)
+            ? "İş emri açmak için bir veya daha fazla sipariş seçin."
+            : null
+        }
+        bulkActions={
+          canBulkCreateWorkOrder(financeEnabled)
+            ? (rows) => (
+                <BulkCreateWorkOrderAction
+                  orders={rows}
+                  onDone={() => table.resetRowSelection()}
+                />
+              )
+            : undefined
+        }
       />
 
       <OrderDetailSheet
