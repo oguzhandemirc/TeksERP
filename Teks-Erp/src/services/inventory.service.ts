@@ -106,6 +106,7 @@ import {
   RollOperationType,
   RollEntrySource,
   RollForm,
+  GoodsReceiptStatus,
   ItemType,
   StationKind,
   StationPropertyMode,
@@ -114,6 +115,11 @@ import {
   ShipmentStatus,
   WarehouseEventType,
 } from "@prisma/client";
+// G2 (2026-08-14): tekil top iptali alış siparişi rollup'ını tetikler.
+// Yön TEK TARAFLI (inventory → purchase-order); purchase-order.service
+// inventory'yi import ETMEZ — döngü yok (goods-receipt.service ikisini
+// birden import eden üst katmandır).
+import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import {
   ensureWorkOrderInProgress,
   openMovementForNextStep,
@@ -3156,6 +3162,42 @@ export class InventoryService {
         labelPrinted: existing.labelPrintedAt != null,
       },
     });
+
+    // ── G2 (2026-08-14): ALIŞ SİPARİŞİ ROLLUP SENKRONU ─────────────────────
+    // Bu top bir mal kabul fişinden doğduysa (`goodsReceiptId`) ve fiş bir alış
+    // siparişine bağlıysa, iptal karşılanma kaynağını değiştirdi → rollup
+    // tazelenir. Eskiden bu yol senkronu HİÇ çağırmıyordu ve `receivedQty`
+    // bayat kalıyordu (detaydaki `drift` bandının en olası sebebi buydu).
+    //
+    // ⚠️ NEDEN AYRI TX (fiş-iptal deseninin aynısı — goods-receipt.service:782):
+    //   ① İptal fiziksel bir gerçeği kaydeder; rapor rakamı güncellenemedi diye
+    //     geri alınmaz (`syncPurchaseOrderSafely` hatayı warn'layıp yutar,
+    //     rollup bir sonraki senkronda/`resync`te kendini onarır — drift bandı
+    //     + "Tazele" görünür kılar, sessiz değil).
+    //   ② `syncPurchaseOrder` kendi tx'ini açar ve 8027 advisory kilidini tx'in
+    //     İLK ifadesi olarak alır; yukarıdaki iptal tx'inin İÇİNE gömmek kilidi
+    //     top satır kilitlerinden SONRAYA düşürürdü (kilit sırası kuralı).
+    //
+    // ⚠️ FİŞ CANCELLED İSE SENKRON KOŞMAZ: `computeReceivedByItemTx` yalnız
+    // ACTIVE fişleri sayar → iptal fişin topu zaten kaynak dışında, senkron
+    // tanım gereği no-op olurdu. Bu dal ayrıca fiş-iptal döngüsünün (fişi ÖNCE
+    // CANCELLED'a çeken `goodsReceiptService.cancel`, sonra topları tek tek
+    // buradan geçiren yol) N gereksiz senkron tx'i ödemesini önler — o yolun
+    // kendi tek senkronu zaten sonda koşuyor.
+    if (existing.goodsReceiptId) {
+      try {
+        const receipt = await prisma.goodsReceipt.findUnique({
+          where: { id: existing.goodsReceiptId },
+          select: { purchaseOrderId: true, status: true },
+        });
+        if (receipt?.purchaseOrderId && receipt.status === GoodsReceiptStatus.ACTIVE) {
+          await syncPurchaseOrderSafely(receipt.purchaseOrderId);
+        }
+      } catch (e) {
+        // Fiş okuması da best-effort: iptal tamamlandı, rakam drift bandında görünür.
+        console.warn(`[inventory] top iptali PO senkronu başarısız (${id}):`, (e as Error).message);
+      }
+    }
 
     return {
       success: true,

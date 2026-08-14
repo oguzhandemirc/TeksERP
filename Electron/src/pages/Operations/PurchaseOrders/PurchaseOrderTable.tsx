@@ -90,7 +90,12 @@ export function PurchaseOrderTable({ rows, onDetail, onEdit, onCancel }: Props) 
                 </td>
                 <td className="px-3 py-2">
                   <Badge className={PO_STATUS_BADGE[o.status]}>{PO_STATUS_LABEL[o.status]}</Badge>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">{PO_STATUS_HINT[o.status]}</div>
+                  {/* Short-close AYRI söylenir (G2 dikişi): CLOSED rozetinin
+                      "tüm kalemler karşılandı" ipucu short-closed siparişte
+                      YALAN olurdu — kapanış kullanıcı kararıydı, karşılanma değil. */}
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">
+                    {o.shortClosedAt ? "kalanı gelmeyecek (kapatıldı)" : PO_STATUS_HINT[o.status]}
+                  </div>
                 </td>
                 {/* Satır tıklaması detayı açıyor; buradaki düğmeler onu tetiklemesin. */}
                 <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>

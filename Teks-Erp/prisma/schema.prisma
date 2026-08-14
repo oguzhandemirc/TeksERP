@@ -396,6 +396,7 @@ model User {
   yarnMovements              YarnMovement[]           @relation("YarnMovementUser")
   createdPurchaseOrders      PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
   cancelledPurchaseOrders    PurchaseOrder[]          @relation("PurchaseOrderCancelledBy")
+  shortClosedPurchaseOrders  PurchaseOrder[]          @relation("PurchaseOrderShortClosedBy")
   manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
   preference                 UserPreference?
@@ -5675,9 +5676,23 @@ model PurchaseOrder {
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(300)
 
+  /// SHORT-CLOSE ("kalanı kapat", G2 2026-08-14): dolu ise sipariş, kalan
+  /// miktarlar GELMEYECEK kararıyla kapatılmıştır. İPTALDEN FARKI: iptal "bu
+  /// sipariş hiç olmadı" der (kabul görmüşse reddedilir); short-close "olan
+  /// KALIR, kalanı gelmeyecek" der — gelen malın kaydı ve karşılanması durur.
+  /// ⚠️ `status` türetilmiş olmaya devam eder; bu bayrak doluyken senkron
+  /// durumu CLOSED bırakır (`syncPurchaseOrderTx` — EZMEZ). Bayrağı temizleyen
+  /// tek yol `reopenShortClose`tur ve durum kaynaktan yeniden türetilir.
+  shortClosedAt    DateTime? @db.Timestamptz
+  /// Düşük-trafik audit FK — perf kuralı 1'in bilinçli istisnası (indexsiz;
+  /// `printedById`/`grantedById` emsali). Sorgu yolu doğarsa index eklenir.
+  shortClosedById  String?   @db.Uuid
+  shortCloseReason String?   @db.VarChar(300)
+
   supplier      Customer            @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
   createdBy     User?               @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
   cancelledBy   User?               @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id])
+  shortClosedBy User?               @relation("PurchaseOrderShortClosedBy", fields: [shortClosedById], references: [id])
   lines         PurchaseOrderLine[]
   goodsReceipts GoodsReceipt[]
 

@@ -18,11 +18,12 @@
 // KENDİ satırına yazılmalı. Serbest metin, denetimde "aaa" doldurmalarına açık
 // olduğu için placeholder somut örnek verir.
 //
-// ⚠️ İPTAL, "kalanı gelmeyecek, kapat" DEMEK DEĞİLDİR. Sistemde short-close
-// yoktur (`CLOSED` türetilmiş bir durumdur, elle işaretlenirse ilk senkronda
-// geri döner) — bu ayrım diyalogda AÇIKÇA yazılır, yoksa satın almacı yarısı
-// gelmiş bir siparişi "kapatmak" için iptal eder ve gelen malın taahhüt kaydını
-// yok eder.
+// ⚠️ İPTAL, "kalanı gelmeyecek, kapat" DEMEK DEĞİLDİR. O iş için sistemde
+// artık SHORT-CLOSE var (2026-08-14 G2 — detay ekranındaki "Kalanı Kapat":
+// gelen mal kalır, kalan beklenti kapanır, sebep kayda geçer, geri açılabilir).
+// Bu ayrım diyalogda AÇIKÇA yazılır ve kullanıcı doğru yola YÖNLENDİRİLİR;
+// yoksa satın almacı yarısı gelmiş bir siparişi "kapatmak" için iptal eder ve
+// gelen malın taahhüt kaydını yok eder.
 //
 // ⚠️ ÖZETTE TEK BİR "TOPLAM MİKTAR" BASILMAZ. Kalemlerin birimleri farklı olabilir
 // (kumaş METRE, iplik KİLO); ikisini toplayıp "700 birim" yazmak hiçbir şeyi
@@ -87,7 +88,8 @@ export function CancelPurchaseOrderDialog({ orderId, onOpenChange, onCancelled }
           <DialogTitle>Siparişi iptal et</DialogTitle>
           <DialogDescription>
             İptal, siparişin TAAHHÜT kaydını kapatır. “Kalanı gelmeyecek, kapatalım” için bu yol
-            KULLANILMAZ — o durumda sipariş kısmen karşılanmış olarak kalır ve geçmişi korunur.
+            KULLANILMAZ — onun yeri sipariş detayındaki “Kalanı Kapat” düğmesidir (gelen mal
+            kalır, kalan beklenti sebebiyle kapanır ve gerekirse geri açılır).
           </DialogDescription>
         </DialogHeader>
 

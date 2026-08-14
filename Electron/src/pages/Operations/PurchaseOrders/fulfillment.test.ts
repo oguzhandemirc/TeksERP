@@ -83,6 +83,34 @@ describe("remainingText", () => {
   it("birim verilmezse boşluk artığı bırakmaz", () => {
     expect(remainingText(fulfillmentOf({ qty: 10, receivedQty: 4 }))).toBe("6 kaldı");
   });
+
+  // ⭐ SHORT-CLOSE (G2): sipariş "kalanı gelmeyecek" kararıyla kapatıldıysa
+  // "kaldı/bekleniyor" YALANDIR — kimse o malı beklemiyor. Rakam durur (o kadar
+  // mal gerçekten gelmedi), yalnız beklenti cümlesi değişir.
+  it("⭐ short-closed siparişte bekleyen kalem 'gelmeyecek (kapatıldı)' der", () => {
+    expect(remainingText(fulfillmentOf({ qty: 500, receivedQty: 100 }), "MT", { shortClosed: true })).toBe(
+      "400 mt gelmeyecek (kapatıldı)",
+    );
+    expect(remainingText(fulfillmentOf({ qty: 500, receivedQty: 0 }), "MT", { shortClosed: true })).toBe(
+      "500 mt gelmeyecek (kapatıldı)",
+    );
+  });
+
+  it("⭐ short-close, gelmiş malın cümlelerine DOKUNMAZ (tamamlanan + fazla)", () => {
+    expect(remainingText(fulfillmentOf({ qty: 500, receivedQty: 500 }), "MT", { shortClosed: true })).toBe(
+      "Tamamlandı",
+    );
+    expect(remainingText(fulfillmentOf({ qty: 500, receivedQty: 505 }), "MT", { shortClosed: true })).toBe(
+      "5 mt fazla geldi",
+    );
+  });
+
+  it("bayrak verilmezse eski cümleler bayt bayt korunur", () => {
+    expect(remainingText(fulfillmentOf({ qty: 500, receivedQty: 100 }), "MT")).toBe("400 mt kaldı");
+    expect(remainingText(fulfillmentOf({ qty: 500, receivedQty: 100 }), "MT", { shortClosed: false })).toBe(
+      "400 mt kaldı",
+    );
+  });
 });
 
 describe("orderProgress", () => {

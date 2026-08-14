@@ -18,7 +18,10 @@
 // (`Finance/service.money()` aynı dersin tutar tarafı).
 //
 // ⚠️ `status` TÜRETİLİR (OPEN/PARTIAL/CLOSED); kullanıcı elle işaretlemez ve bu
-// dosyada durum YAZAN hiçbir uç YOKTUR. `CANCELLED` ayrı bir yoldur (`cancel`).
+// dosyada durumu DOĞRUDAN yazan hiçbir uç YOKTUR. İki istisna kendi adlarıyla
+// ayrı uçlardır: `CANCELLED` (`cancel` — "hiç olmadı") ve SHORT-CLOSE
+// (`shortClose` — "kalanı gelmeyecek, olan KALIR"; `shortClosedAt` bayrağı
+// doluyken backend senkronu durumu CLOSED bırakır, EZMEZ).
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ItemType } from "@/types/enums";
@@ -73,6 +76,8 @@ export interface PurchaseOrderListRow {
   expectedDate: string | null;
   notes: string | null;
   cancelledAt: string | null;
+  /** Dolu ise CLOSED "kalanı gelmeyecek" kararıdır, "tüm kalemler geldi" değil. */
+  shortClosedAt: string | null;
   createdAt: string;
   supplier: SupplierRef;
   _count: { lines: number; goodsReceipts: number };
@@ -116,10 +121,18 @@ export interface PurchaseOrderDetail {
   notes: string | null;
   cancelledAt: string | null;
   cancelReason: string | null;
+  /**
+   * SHORT-CLOSE ("kalanı kapat"): dolu ise kalan miktarlar GELMEYECEK kararıyla
+   * kapatılmış demektir. İPTAL DEĞİLDİR — gelen malın kaydı ve karşılanması
+   * durur; yalnız beklenti kapanır. Geri alma `reopenShortClosePurchaseOrder`.
+   */
+  shortClosedAt: string | null;
+  shortCloseReason: string | null;
   createdAt: string;
   supplier: SupplierRef;
   createdBy: { id: string; fullName: string | null; username: string } | null;
   cancelledBy: { id: string; fullName: string | null; username: string } | null;
+  shortClosedBy: { id: string; fullName: string | null; username: string } | null;
   lines: PurchaseOrderLine[];
   goodsReceipts: PurchaseOrderReceiptRef[];
   /**
@@ -311,5 +324,33 @@ export async function updatePurchaseOrder(
  */
 export async function cancelPurchaseOrder(id: string, reason?: string): Promise<MutationResult> {
   const res = await apiClient.post(`/api/purchase-orders/${id}/cancel`, { reason });
+  return res.data as MutationResult;
+}
+
+/**
+ * SHORT-CLOSE — "kalanı gelmeyecek, olan KALIR". İptalden farkı: iptal kabul
+ * görmüş siparişte REDDEDİLİR ve taahhüdü yok sayar; short-close gelen malın
+ * kaydını korur, yalnız kalan beklentiyi kapatır. Sebep ZORUNLU (min 3) —
+ * "kalan neden gelmeyecek" tedarikçi değerlendirmesinin verisidir.
+ * Zaten kapatılmışsa backend idempotent başarı döner (409 fırtınası yok).
+ */
+export async function shortClosePurchaseOrder(id: string, reason: string): Promise<MutationResult> {
+  const res = await apiClient.post(`/api/purchase-orders/${id}/short-close`, { reason });
+  return res.data as MutationResult;
+}
+
+/** Kapatmayı geri alır — bayrak temizlenir, durum backend'de kaynaktan yeniden türetilir. */
+export async function reopenShortClosePurchaseOrder(id: string): Promise<MutationResult> {
+  const res = await apiClient.post(`/api/purchase-orders/${id}/reopen-short-close`);
+  return res.data as MutationResult;
+}
+
+/**
+ * Karşılanmayı kaynaktan yeniden hesaplatır (drift bandındaki "Tazele").
+ * POST çünkü YAZAR (rollup + durum); idempotent — mesaj değişip değişmediğini
+ * söyler ve BACKEND'İN cümlesidir, ezme.
+ */
+export async function resyncPurchaseOrder(id: string): Promise<MutationResult> {
+  const res = await apiClient.post(`/api/purchase-orders/${id}/resync`);
   return res.data as MutationResult;
 }

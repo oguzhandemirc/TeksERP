@@ -294,4 +294,81 @@ router.post("/:id/cancel", requirePermission("purchase-order:write"), async (req
   }
 });
 
+/**
+ * @openapi
+ * /api/purchase-orders/{id}/short-close:
+ *   post:
+ *     tags: [PurchaseOrders]
+ *     summary: Kalanı kapat (short-close) — "kalanı gelmeyecek, olan KALIR"
+ *     description: >
+ *       İPTALDEN FARKLIDIR: iptal "bu sipariş hiç olmadı" der ve kabul görmüş
+ *       siparişte reddedilir; short-close gelen malın kaydını KORUR, yalnız
+ *       kalan beklentiyi kapatır. Durum CLOSED'a çekilir ve senkron bunu
+ *       EZMEZ (`shortClosedAt` bayrağı). Sebep ZORUNLU (min 3 karakter) —
+ *       "kalan neden gelmeyecek" tedarikçi değerlendirmesinin verisidir.
+ *       Zaten kapatılmışsa idempotent başarı döner.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Kapatıldı }
+ *       400: { description: Sebep eksik/kısa }
+ *       409: { description: Sipariş iptal edilmiş ya da zaten tam karşılanmış }
+ */
+router.post("/:id/short-close", requirePermission("purchase-order:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Sebep ZORUNLU — iptaldeki `optional()` ile karıştırma: orada karar
+    // "belge açılmasın"dı, burada "kalan gelmeyecek" ve gerekçesi veridir.
+    const { reason } = z.object({ reason: z.string().trim().min(3).max(300) }).parse(req.body ?? {});
+    res.status(200).json(await purchaseOrderService.shortClose(assertValidUuid(req.params.id), reason, req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/purchase-orders/{id}/reopen-short-close:
+ *   post:
+ *     tags: [PurchaseOrders]
+ *     summary: Kapatmayı geri al — bayrak temizlenir, durum yeniden türetilir
+ *     description: >
+ *       `shortClosedAt` temizlenir ve durum AYNI transaction içinde kaynaktan
+ *       yeniden türetilir (tam karşılanmışsa CLOSED kalır, değilse
+ *       OPEN/PARTIAL'a döner ve kalemler açık-kalem listesine geri gelir).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Yeniden açıldı }
+ *       409: { description: Sipariş kapatılmış değil ya da iptal edilmiş }
+ */
+router.post("/:id/reopen-short-close", requirePermission("purchase-order:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json(await purchaseOrderService.reopenShortClose(assertValidUuid(req.params.id), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/purchase-orders/{id}/resync:
+ *   post:
+ *     tags: [PurchaseOrders]
+ *     summary: Karşılanmayı kaynaktan yeniden hesapla (drift bandındaki "Tazele")
+ *     description: >
+ *       Rollup (`receivedQty`) + durum, 8027 advisory kilidi altında kaynaktan
+ *       yeniden yazılır; `shortClosedAt` doluysa durum CLOSED bırakılır.
+ *       İdempotent — değişiklik yoksa mesaj bunu söyler. POST çünkü YAZAR
+ *       (GET'in yan etkisi olmaz kuralının öteki yüzü).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Yeniden hesaplandı }
+ *       404: { description: Bulunamadı }
+ */
+router.post("/:id/resync", requirePermission("purchase-order:write"), async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    res.status(200).json(await purchaseOrderService.resync(assertValidUuid(req.params.id), req.user?.userId));
+  } catch (e) {
+    next(e);
+  }
+});
+
 export default router;

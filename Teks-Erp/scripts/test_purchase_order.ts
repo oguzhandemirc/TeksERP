@@ -28,6 +28,11 @@
 //   P) ⭐ FAZLA-KABUL UYARISI `POST /:id/lines` YOLUNDA DA GÖRÜNÜR — fiş bir
 //      KAPTIR, satırlar tipik olarak oradan eklenir
 //   Q) ⭐ `clientToken` PARALEL YARIŞI — ön kontrol tek başına yetmez
+//   R) ⭐ SHORT-CLOSE (G2) — "kalanı gelmeyecek": senkron CLOSED'u EZMEZ,
+//      open-lines'tan düşer, geri almada durum yeniden türetilir, claim yarışı
+//   S) ⭐ RESYNC — bayat sayacı kaynaktan onarır + short-close'a saygılı
+//   T) ⭐ TOP İPTALİ SENKRONU — `InventoryService.softDelete` fiş→sipariş
+//      zinciri doluysa rollup'ı tetikler (eskiden sayaç BAYAT kalıyordu)
 //   Z) KÖRLÜK ZEMİNİ — fixture gerçekten kuruldu mu
 // =============================================================================
 import { GoodsReceiptStatus, ItemType, ItemUnit, PurchaseOrderStatus } from "@prisma/client";
@@ -36,6 +41,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
 import { describeOverReceipt, goodsReceiptService } from "../src/services/goods-receipt.service";
+import { InventoryService } from "../src/services/inventory.service";
 import { purchaseOrderService, syncPurchaseOrder } from "../src/services/purchase-order.service";
 
 let pass = 0;
@@ -519,6 +525,218 @@ async function main(): Promise<void> {
     raceResults.flatMap((r) => (r.status === "fulfilled" ? [(r.value.data as unknown as Detail).orderNo] : [])),
   );
   check("Q4) ⭐ Tüm çağrılar AYNI belge numarasını döndü", raceNos.size === 1, [...raceNos].join(","));
+
+  // ── R) SHORT-CLOSE — "kalanı gelmeyecek, olan KALIR" (G2) ───────────────
+  // ⚠️ Özelliğin asıl işi: `CLOSED` türetilmiş bir durumdur ve short-close
+  // olmadan elle işaretlenmesi ilk senkronda geri PARTIAL olurdu. Bayrak
+  // (`shortClosedAt`) doluyken senkron durumu EZMEMELİ — negatif sonda:
+  // `syncPurchaseOrderTx`teki `po.shortClosedAt ? CLOSED :` dalı düşürülünce
+  // R3/R5/S1 kırmızı vermeli.
+  const poR = (await purchaseOrderService.create({ supplierId: supplier.id, lines: [{ itemId: fabric.id, qty: 100 }] }))
+    .data as unknown as Detail;
+  orderIds.push(poR.id);
+  const rR = await goodsReceiptService.create({
+    warehouseId: wh.id,
+    purchaseOrderId: poR.id,
+    lines: [{ itemId: fabric.id, initialQty: 40 }],
+  });
+  receiptIds.push((rR.data as { id: string }).id);
+  const rBefore = await detail(poR.id);
+  check("R0) Körlük zemini: sipariş PARTIAL (40/100)", rBefore.status === PurchaseOrderStatus.PARTIAL, rBefore.status);
+
+  let rShortMsg = "";
+  try {
+    await purchaseOrderService.shortClose(poR.id, "ab");
+  } catch (err) {
+    rShortMsg = (err as Error).message;
+  }
+  check("R1) ⭐ Sebepsiz/kısa sebeple kapatma REDDEDİLDİ", rShortMsg.includes("sebep") || rShortMsg.includes("Kapatma"), rShortMsg.slice(0, 80));
+
+  const rClosed = await purchaseOrderService.shortClose(poR.id, `${TAG} tedarikçi kalanını üretmeyecek`);
+  const rRow = await prisma.purchaseOrder.findUnique({
+    where: { id: poR.id },
+    select: { status: true, shortClosedAt: true, shortCloseReason: true },
+  });
+  check("R2) ⭐ Short-close: durum CLOSED + bayrak dolu", rRow?.status === PurchaseOrderStatus.CLOSED && rRow.shortClosedAt !== null);
+  check("R2b) Sebep kaydın kendi satırında", (rRow?.shortCloseReason ?? "").includes(TAG));
+  check("R2c) Mesaj açık kalem sayısını söyledi", (rClosed.message ?? "").includes("1 açık kalem"), rClosed.message ?? "");
+
+  // ⭐ ASIL ÖLÇÜM: senkron short-close'u EZMEZ.
+  const rSync = await syncPurchaseOrder(poR.id);
+  const rAfterSync = await prisma.purchaseOrder.findUnique({ where: { id: poR.id }, select: { status: true } });
+  check(
+    "R3) ⭐ Senkron short-close'u EZMEDİ (CLOSED kaldı)",
+    rAfterSync?.status === PurchaseOrderStatus.CLOSED && rSync?.status === PurchaseOrderStatus.CLOSED,
+    rAfterSync?.status,
+  );
+
+  const rOpen = await purchaseOrderService.openLines({ supplierId: supplier.id, limit: 500 });
+  const rOpenIds = new Set((rOpen.rows as Array<{ purchaseOrder: { id: string } }>).map((r) => r.purchaseOrder.id));
+  check("R4) ⭐ Short-closed siparişin kalanı open-lines'tan DÜŞTÜ", !rOpenIds.has(poR.id));
+
+  // Short-closed siparişe SONRADAN mal gelirse: kayıt gerçeği yazar (rollup
+  // artar) ama durum kararı korunur — mal kabul reddedilmez (yalnız CANCELLED
+  // reddedilir), rakam dürüst kalır.
+  const rLate = await goodsReceiptService.create({
+    warehouseId: wh.id,
+    purchaseOrderId: poR.id,
+    lines: [{ itemId: fabric.id, initialQty: 10 }],
+  });
+  receiptIds.push((rLate.data as { id: string }).id);
+  const rLateDetail = await detail(poR.id);
+  check(
+    "R5) ⭐ Kapalıyken gelen mal rollup'a yazıldı AMA durum CLOSED kaldı",
+    num(rLateDetail.lines[0]!.receivedQty) === 50 && rLateDetail.status === PurchaseOrderStatus.CLOSED,
+    `received=${rLateDetail.lines[0]!.receivedQty.toString()} durum=${rLateDetail.status}`,
+  );
+
+  const rAgain = await purchaseOrderService.shortClose(poR.id, `${TAG} tekrar`);
+  const rRowAgain = await prisma.purchaseOrder.findUnique({ where: { id: poR.id }, select: { shortCloseReason: true } });
+  check("R6) İkinci kapatma idempotent (409 yok, 'zaten' mesajı)", (rAgain.message ?? "").includes("zaten"), rAgain.message ?? "");
+  check("R6b) İdempotent tekrar İLK sebebi EZMEDİ", (rRowAgain?.shortCloseReason ?? "").includes("üretmeyecek"));
+
+  let rCancelledMsg = "";
+  try {
+    await purchaseOrderService.shortClose(poG.id, `${TAG} olmamalı`);
+  } catch (err) {
+    rCancelledMsg = (err as Error).message;
+  }
+  check("R7) İptal edilmiş sipariş kapatılamaz (409)", rCancelledMsg.includes("iptal edilmiş"), rCancelledMsg.slice(0, 80));
+
+  let rFullMsg = "";
+  try {
+    await purchaseOrderService.shortClose(poE.id, `${TAG} olmamalı`);
+  } catch (err) {
+    rFullMsg = (err as Error).message;
+  }
+  check("R8) Tam karşılanmış siparişte kapatılacak kalan yok (409)", rFullMsg.includes("kalan yok"), rFullMsg.slice(0, 90));
+
+  // ── S) RESYNC — bayat sayacı onarır + short-close'a saygılı ─────────────
+  await prisma.purchaseOrderLine.updateMany({ where: { purchaseOrderId: poR.id }, data: { receivedQty: 999 } });
+  const sDrifted = await detail(poR.id);
+  check("S0) Körlük zemini: sayaç gerçekten bozuldu (drift görünür)", sDrifted.totals.driftLineCount === 1);
+
+  const sRes = await purchaseOrderService.resync(poR.id);
+  const sHealed = await detail(poR.id);
+  check(
+    "S1) ⭐ Resync bayat sayacı KAYNAKTAN onardı ve short-close'u EZMEDİ",
+    num(sHealed.lines[0]!.receivedQty) === 50 && sHealed.totals.driftLineCount === 0 && sHealed.status === PurchaseOrderStatus.CLOSED,
+    `received=${sHealed.lines[0]!.receivedQty.toString()} durum=${sHealed.status}`,
+  );
+  check("S2) Resync değişikliği mesajda söyledi", (sRes.message ?? "").includes("güncellendi"), sRes.message ?? "");
+  const sRes2 = await purchaseOrderService.resync(poR.id);
+  check("S3) İkinci resync idempotent ('zaten güncel')", (sRes2.message ?? "").includes("zaten güncel"), sRes2.message ?? "");
+
+  // ── R devam) GERİ ALMA — durum kaynaktan yeniden türetilir ──────────────
+  const rReopen = await purchaseOrderService.reopenShortClose(poR.id);
+  const rReopened = await prisma.purchaseOrder.findUnique({
+    where: { id: poR.id },
+    select: { status: true, shortClosedAt: true, shortCloseReason: true },
+  });
+  check(
+    "R9) ⭐ Geri almada bayrak temizlendi ve durum YENİDEN TÜRETİLDİ (PARTIAL)",
+    rReopened?.status === PurchaseOrderStatus.PARTIAL && rReopened.shortClosedAt === null && rReopened.shortCloseReason === null,
+    `${rReopened?.status} bayrak=${rReopened?.shortClosedAt}`,
+  );
+  check("R9b) Geri alma mesajı", (rReopen.message ?? "").includes("yeniden açıldı"), rReopen.message ?? "");
+
+  const rOpen2 = await purchaseOrderService.openLines({ supplierId: supplier.id, limit: 500 });
+  const rOpen2Ids = new Set((rOpen2.rows as Array<{ purchaseOrder: { id: string } }>).map((r) => r.purchaseOrder.id));
+  check("R10) ⭐ Geri almadan sonra kalemler open-lines'a GERİ GELDİ", rOpen2Ids.has(poR.id));
+
+  let rReopenMsg = "";
+  try {
+    await purchaseOrderService.reopenShortClose(poR.id);
+  } catch (err) {
+    rReopenMsg = (err as Error).message;
+  }
+  check("R11) Kapatılmamış siparişte geri alma 409", rReopenMsg.includes("kapatılmış değil"), rReopenMsg.slice(0, 80));
+
+  // ── R12) CLAIM YARIŞI — 4 paralel kapatma, TEK karar ────────────────────
+  // Advisory kilit + atomik claim: kazanan yazar, kaybedenler kilit açılınca
+  // taze okumada bayrağı görür ve idempotent başarı döner (409 fırtınası yok).
+  const poR2 = (await purchaseOrderService.create({ supplierId: supplier.id, lines: [{ itemId: fabric.id, qty: 20 }] }))
+    .data as unknown as Detail;
+  orderIds.push(poR2.id);
+  const rR2 = await goodsReceiptService.create({
+    warehouseId: wh.id,
+    purchaseOrderId: poR2.id,
+    lines: [{ itemId: fabric.id, initialQty: 5 }],
+  });
+  receiptIds.push((rR2.data as { id: string }).id);
+
+  const raceReasons = [1, 2, 3, 4].map((i) => `${TAG} yarış sebebi ${i}`);
+  const shortRace = await Promise.allSettled(raceReasons.map((r) => purchaseOrderService.shortClose(poR2.id, r)));
+  const raceRejected = shortRace.filter((r) => r.status === "rejected");
+  const r2Row = await prisma.purchaseOrder.findUnique({
+    where: { id: poR2.id },
+    select: { status: true, shortClosedAt: true, shortCloseReason: true },
+  });
+  check("R12) Körlük zemini: 4 paralel kapatma gerçekten koştu", shortRace.length === 4);
+  check(
+    "R13) ⭐ Claim yarışı: hiçbiri hata almadı, TEK karar yazıldı",
+    raceRejected.length === 0 && r2Row?.status === PurchaseOrderStatus.CLOSED && r2Row.shortClosedAt !== null,
+    raceRejected.map((r) => String(((r as PromiseRejectedResult).reason as Error | undefined)?.message ?? "")).join(" | ").slice(0, 120),
+  );
+  check(
+    "R14) Kazanan sebep dört adaydan biri (karışık/yarım yazım yok)",
+    raceReasons.includes(r2Row?.shortCloseReason ?? ""),
+    r2Row?.shortCloseReason ?? "",
+  );
+
+  // ── T) TOP İPTALİ SENKRONU — softDelete rollup'ı tetikler ───────────────
+  // ⚠️ ESKİ DAVRANIŞ (G2 öncesi, ölçülmüştü): fiş→sipariş zinciri doluyken bir
+  // topun TEKİL iptali (`InventoryService.softDelete`) senkronu ÇAĞIRMIYORDU →
+  // `receivedQty` bayat kalıyor, satın almacı gelmemiş malı gelmiş görüyordu.
+  // Negatif sonda: softDelete sonundaki `syncPurchaseOrderSafely` tetiği
+  // koparılınca T1/T2 kırmızı vermeli.
+  const inventory = new InventoryService();
+  const poT = (await purchaseOrderService.create({ supplierId: supplier.id, lines: [{ itemId: fabric.id, qty: 100 }] }))
+    .data as unknown as Detail;
+  orderIds.push(poT.id);
+  const rT = await goodsReceiptService.create({
+    warehouseId: wh.id,
+    purchaseOrderId: poT.id,
+    lines: [
+      { itemId: fabric.id, initialQty: 40 },
+      { itemId: fabric.id, initialQty: 30 },
+    ],
+  });
+  const rTId = (rT.data as { id: string }).id;
+  receiptIds.push(rTId);
+
+  const tBefore = await detail(poT.id);
+  check("T0) Körlük zemini: iki topla karşılanma 70", num(tBefore.lines[0]!.receivedQty) === 70, tBefore.lines[0]!.receivedQty.toString());
+
+  const tRolls = await prisma.roll.findMany({
+    where: { goodsReceiptId: rTId },
+    select: { id: true, initialQty: true },
+    orderBy: { initialQty: "desc" },
+  });
+  check("T0b) Körlük zemini: fiş gerçekten 2 top doğurdu", tRolls.length === 2, `${tRolls.length} top`);
+
+  await inventory.softDelete(tRolls[0]!.id, undefined, {
+    confirmActive: true,
+    confirmLabelPrinted: true,
+    reason: `${TAG} tekil top iptali`,
+  });
+
+  const tAfter = await detail(poT.id);
+  check(
+    "T1) ⭐ Tekil top iptali rollup'ı TETİKLEDİ (70 → 30, sayaç bayat DEĞİL)",
+    num(tAfter.lines[0]!.receivedQty) === 30,
+    tAfter.lines[0]!.receivedQty.toString(),
+  );
+  check("T2) ⭐ Saklanan ile kaynak MUTABIK (drift yok — tetik gerçek yazdı)", tAfter.totals.driftLineCount === 0, `drift=${tAfter.totals.driftLineCount}`);
+  check("T3) Durum PARTIAL kaldı (30/100)", tAfter.status === PurchaseOrderStatus.PARTIAL, tAfter.status);
+
+  // Zinciri olmayan top iptali senkrona HİÇ dokunmaz (fabrika sıfır-fark):
+  // goodsReceiptId NULL → tetik tek sorgu bile koşmaz. Burada ayrıca fiş
+  // CANCELLED dalını ölçüyoruz: fiş iptalinden sonra kalan topun tekil iptali
+  // no-op senkronu ATLAR ama rakam zaten fiş iptalinde sıfırlanmıştır.
+  await goodsReceiptService.cancel(rTId, `${TAG} fiş iptali`);
+  const tCancelled = await detail(poT.id);
+  check("T4) Fiş iptali rollup'ı sıfırladı (mevcut yol korunuyor)", num(tCancelled.lines[0]!.receivedQty) === 0, tCancelled.lines[0]!.receivedQty.toString());
 
   // ── Z) KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────
   // "Hiç satır bulunamadı" ile "ihlal yok" AYNI yeşile çıkmamalı: aşağıdaki

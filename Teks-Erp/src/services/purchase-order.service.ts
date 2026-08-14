@@ -53,6 +53,10 @@
 // ⚠️ `status` TÜRETİLİR, kullanıcı elle işaretlemez: hiç kabul yok → OPEN,
 // kısmen → PARTIAL, tüm kalemler karşılandı → CLOSED. `CANCELLED` bunun DIŞINDA
 // ayrı bir yoldur ve senkron onu ASLA diriltmez (`where: status not CANCELLED`).
+// İKİNCİ istisna SHORT-CLOSE (G2, 2026-08-14): `shortClosedAt` dolu ise durum
+// CLOSED'dur ve senkron bunu EZMEZ — "kalanı gelmeyecek" kullanıcı kararıdır,
+// türetme ona saygı duyar. Geri alma `reopenShortClose` ile (bayrak temizlenir,
+// durum yeniden türetilir).
 // =============================================================================
 import {
   GoodsReceiptStatus,
@@ -298,6 +302,7 @@ export async function syncPurchaseOrderTx(
       id: true,
       orderNo: true,
       status: true,
+      shortClosedAt: true,
       lines: { select: { id: true, lineNo: true, itemId: true, qty: true, receivedQty: true } },
     },
   });
@@ -333,7 +338,15 @@ export async function syncPurchaseOrderTx(
   const distributed = distributeFifo(po.lines, receivedByItem);
 
   const nextLines: LineRow[] = po.lines.map((l) => ({ ...l, receivedQty: distributed.get(l.id) ?? ZERO }));
-  const nextStatus = deriveStatus(nextLines);
+  // ⚠️ SHORT-CLOSE SENKRON TARAFINDAN EZİLMEZ — özelliğin asıl işi bu satır
+  // (G2, 2026-08-14). `shortClosedAt` dolu = "kalanı gelmeyecek" KULLANICI
+  // kararıdır; türetme onu her senkronda geri PARTIAL yapsaydı bayrak anlamsız
+  // olurdu (short-close'un bugüne kadar YAZILAMAMASININ sebebi tam buydu).
+  // Karşılanma (`receivedQty`) yine kaynaktan yazılır — rakam gerçeği söylemeye
+  // devam eder, yalnız DURUM kararı kullanıcının kararına saygı duyar.
+  // Bayrağı temizleyen tek yol `reopenShortClose`tur (durum orada yeniden
+  // türetilir). Bekçi: test_purchase_order.ts §R (negatif sondalı).
+  const nextStatus = po.shortClosedAt ? PurchaseOrderStatus.CLOSED : deriveStatus(nextLines);
 
   let changed = false;
   for (const line of nextLines) {
@@ -403,6 +416,10 @@ const LIST_SELECT = {
   expectedDate: true,
   notes: true,
   cancelledAt: true,
+  // Liste rozetinin tek kaynağı: CLOSED + shortClosedAt = "kalanı gelmeyecek
+  // olarak kapatıldı" ≠ "tüm kalemler karşılandı". Alan taşınmazsa liste,
+  // short-close'u "Tamamlandı" diye YANLIŞ anlatır.
+  shortClosedAt: true,
   createdAt: true,
   supplier: { select: { id: true, code: true, name: true } },
   _count: { select: { lines: true, goodsReceipts: true } },
@@ -687,10 +704,11 @@ export class PurchaseOrderService {
    * raporu o miktarı hiçbir yerde göstermez ve alış faturası mutabakatı
    * dayanaksız kalır. Doğru sıra: önce fişi iptal et, sonra siparişi.
    *
-   * ⚠️ "Kalanı gelmeyecek, kapat" (short-close) BU YOL DEĞİLDİR ve bugün YOK —
-   * `CLOSED` türetilmiş bir durumdur, elle işaretlenirse ilk senkronda geri
-   * PARTIAL olur. Gerçek bir short-close, siparişte ayrı bir "kapatıldı"
-   * bayrağı ister (rapor edildi).
+   * ⚠️ "Kalanı gelmeyecek, kapat" (short-close) BU YOL DEĞİLDİR — o iş
+   * `shortClose()`tadır (G2, 2026-08-14). AYRIM SEKTÖREL: iptal "bu sipariş
+   * hiç olmadı" der ve kabul görmüş siparişte REDDEDİLİR; short-close "olan
+   * KALIR, kalanı gelmeyecek" der — gelen malın kaydı ve karşılanması durur,
+   * yalnız beklenti kapanır.
    *
    * ⚠️ Advisory kilit, mal kabul tarafındaki bağlama ile bu iptali serileştirir
    * (`goods-receipt.service` fişi bağlarken aynı kilidi alır) — aksi hâlde
@@ -747,6 +765,184 @@ export class PurchaseOrderService {
       success: true,
       data: await this.getById(id),
       message: result.alreadyCancelled ? `${result.orderNo} zaten iptal edilmiş.` : `${result.orderNo} iptal edildi.`,
+    };
+  }
+
+  // ---------------------------------------------------------------------------
+  // SHORT-CLOSE — "kalanı gelmeyecek, olan KALIR" (G2, 2026-08-14)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Siparişi short-close eder: kalan miktarlar GELMEYECEK olarak işaretlenir,
+   * durum `CLOSED`a çekilir ve senkron bunu bir daha EZMEZ (`shortClosedAt`
+   * bayrağına `syncPurchaseOrderTx` saygı duyar).
+   *
+   * ⚠️ İPTALDEN FARKI: iptal "bu sipariş HİÇ OLMADI" der ve kabul görmüş
+   * siparişte reddedilir; short-close "olan KALIR, kalanı gelmeyecek" der —
+   * gelen malın kaydı, karşılanma rakamı ve fiş bağları aynen durur. SAP
+   * karşılığı teslimat kaleminin "delivery completed" işareti; sevk tarafındaki
+   * storno ↔ iade ayrımının alış ikizi.
+   *
+   * ⚠️ SEBEP ZORUNLU (iptalde opsiyonel, burada değil): "kalan neden
+   * gelmeyecek" sorusunun cevabı tedarikçi performans değerlendirmesinin ta
+   * kendisidir ve kaydın KENDİ satırına yazılır (`SystemLog` 6 ayda arşivlenir
+   * — `Roll.entryReason` dersi). 3 karakterden kısa doldurma reddedilir.
+   *
+   * ⚠️ ATOMİK CLAIM + advisory kilit: claim `status IN (OPEN, PARTIAL)` +
+   * `shortClosedAt: null` arar; kilit senkronla AYNI (8027) ve tx'in İLK
+   * ifadesi — eşzamanlı bir mal kabulünün senkronu ile bu karar serileşir
+   * (Sınıf 4'ün iki yazarı: senkron bayrağı OKUR, burası durumu koşullu YAZAR).
+   *
+   * ⚠️ count=0 TANISI TX İÇİNDE TAZE OKUMAYLA (Sınıf 4 eki ①): kaybeden tarafa
+   * "tavan/durum" YALANI değil gerçek sebep söylenir. Zaten short-closed →
+   * idempotent başarı (zaman aşımı tekrarı 409 yememeli); CLOSED (tam
+   * karşılanmış) → 409 "kapatılacak kalan yok"; CANCELLED → 409.
+   */
+  async shortClose(id: string, reason: string, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
+    const trimmed = reason?.trim() ?? "";
+    if (trimmed.length < 3) {
+      throw AppError.badRequest("Kapatma sebebi zorunlu (en az 3 karakter) — kalan neden gelmeyecek?");
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+      // ⚠️ SIRA LOAD-BEARING: kilit HER SORGUDAN ÖNCE (senkron/iptal ile aynı).
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_LOCK_NS}::int, hashtext(${id}))`;
+
+      const claimed = await tx.purchaseOrder.updateMany({
+        where: {
+          id,
+          status: { in: [PurchaseOrderStatus.OPEN, PurchaseOrderStatus.PARTIAL] },
+          shortClosedAt: null,
+        },
+        data: {
+          status: PurchaseOrderStatus.CLOSED,
+          shortClosedAt: new Date(),
+          shortClosedById: userId ?? null,
+          shortCloseReason: trimmed,
+        },
+      });
+
+      const po = await tx.purchaseOrder.findUnique({
+        where: { id },
+        select: {
+          orderNo: true,
+          status: true,
+          shortClosedAt: true,
+          lines: { select: { lineNo: true, qty: true, receivedQty: true } },
+        },
+      });
+      if (!po) throw AppError.notFound("Alış siparişi bulunamadı.");
+
+      if (claimed.count === 0) {
+        if (po.shortClosedAt) return { orderNo: po.orderNo, already: true, openLineCount: 0 };
+        if (po.status === PurchaseOrderStatus.CANCELLED) {
+          throw AppError.conflict(`${po.orderNo} iptal edilmiş — kapatılacak bir taahhüt yok.`);
+        }
+        // CLOSED (tam karşılanmış): kalan yok, işaret anlamsız olurdu.
+        throw AppError.conflict(`${po.orderNo} zaten tüm kalemleriyle karşılanmış — kapatılacak kalan yok.`);
+      }
+
+      const openLines = po.lines.filter((l) => l.receivedQty.lt(l.qty));
+      return { orderNo: po.orderNo, already: false, openLineCount: openLines.length };
+    });
+
+    if (!result.already) {
+      void AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "PURCHASE_ORDER",
+        recordId: id,
+        newData: { kind: "SHORT_CLOSE", orderNo: result.orderNo, reason: trimmed, openLineCount: result.openLineCount },
+      });
+    }
+
+    return {
+      success: true,
+      data: await this.getById(id),
+      message: result.already
+        ? `${result.orderNo} zaten kapatılmış (kalanı gelmeyecek).`
+        : `${result.orderNo} kapatıldı — ${result.openLineCount} açık kalem "gelmeyecek" olarak işaretlendi. Gelen malın kaydı DURUYOR.`,
+    };
+  }
+
+  /**
+   * Short-close'u geri alır: bayrak temizlenir ve durum AYNI TX İÇİNDE
+   * kaynaktan yeniden türetilir (`syncPurchaseOrderTx` — advisory kilit zaten
+   * elimizde, fonksiyonun "çağıran kendi kilidini alır" sözleşmesi sağlanıyor).
+   * Bayrağı temizleyip senkronu sonraya bırakmak, arada kalan pencerede
+   * "bayraksız ama CLOSED" yarım durum sergilerdi.
+   */
+  async reopenShortClose(id: string, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_LOCK_NS}::int, hashtext(${id}))`;
+
+      const claimed = await tx.purchaseOrder.updateMany({
+        // CANCELLED dışlanır: iptal ayrı bir yoldur, buradan diriltilmez.
+        where: { id, shortClosedAt: { not: null }, status: { not: PurchaseOrderStatus.CANCELLED } },
+        data: { shortClosedAt: null, shortClosedById: null, shortCloseReason: null },
+      });
+
+      if (claimed.count === 0) {
+        const po = await tx.purchaseOrder.findUnique({ where: { id }, select: { orderNo: true, status: true, shortClosedAt: true } });
+        if (!po) throw AppError.notFound("Alış siparişi bulunamadı.");
+        if (po.status === PurchaseOrderStatus.CANCELLED) {
+          throw AppError.conflict(`${po.orderNo} iptal edilmiş — geri açılamaz.`);
+        }
+        throw AppError.conflict(`${po.orderNo} kapatılmış değil — geri alınacak bir şey yok.`);
+      }
+
+      // Durum kaynaktan yeniden türetilir: tam karşılanmışsa CLOSED kalır,
+      // değilse OPEN/PARTIAL'a döner ve kalemler open-lines listesine geri gelir.
+      const sync = await syncPurchaseOrderTx(tx, id);
+      return { orderNo: sync?.orderNo ?? "", status: sync?.status };
+    });
+
+    void AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "PURCHASE_ORDER",
+      recordId: id,
+      newData: { kind: "REOPEN_SHORT_CLOSE", orderNo: result.orderNo, status: result.status ?? null },
+    });
+
+    return {
+      success: true,
+      data: await this.getById(id),
+      message: `${result.orderNo} yeniden açıldı — kalan miktarlar tekrar bekleniyor.`,
+    };
+  }
+
+  /**
+   * Karşılanmayı kaynaktan İSTEĞE BAĞLI yeniden hesaplar (drift bandındaki
+   * "Tazele"). Rollup'ı tazeleyen olaylar (fiş açılışı/iptali, düzenleme,
+   * tekil top iptali) senkronu zaten çağırır; bu uç, herhangi bir yol
+   * kaçırıldığında ya da elle veri düzeltmesinden sonra operatörün beklemeden
+   * kendini onarabilmesi içindir. İdempotent — değişiklik yoksa `changed:false`.
+   *
+   * GET DEĞİL POST: senkron YAZAR (rollup + durum) — okuma ucunun yan etkisi
+   * olmaz kuralının tersi yönü de geçerli, yazan uç GET olamaz.
+   */
+  async resync(id: string, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
+    // Advisory kilidi `syncPurchaseOrder` kendi tx'inin İLK ifadesi olarak alır.
+    const sync = await syncPurchaseOrder(id);
+    if (!sync) throw AppError.notFound("Alış siparişi bulunamadı.");
+
+    if (sync.changed) {
+      void AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "PURCHASE_ORDER",
+        recordId: id,
+        newData: { kind: "RESYNC", orderNo: sync.orderNo, status: sync.status },
+      });
+    }
+
+    return {
+      success: true,
+      data: await this.getById(id),
+      message: sync.changed
+        ? `${sync.orderNo} kaynaktan yeniden hesaplandı — rakamlar güncellendi.`
+        : `${sync.orderNo} zaten günceldi — değişiklik yok.`,
     };
   }
 
@@ -826,9 +1022,11 @@ export class PurchaseOrderService {
    *
    * ⚠️ `liveReceivedQty` + `drift`: kalemin SAKLANAN karşılanması ile o anda
    * kaynaktan hesaplanan değer birlikte döner. Fark varsa ekran bunu söyler.
-   * Sebep: rollup'ı tazeleyen olaylar (fiş açılışı/iptali) senkronu çağırır ama
-   * topun TEKİL iptali (`InventoryService.softDelete`) çağırmaz — sessiz kalmak
-   * yerine görünür kılmak, "sessizlik yok" kuralının gereği.
+   * Rollup'ı tazeleyen olayların HEPSİ senkronu çağırır (fiş açılışı/iptali,
+   * düzenleme ve 2026-08-14'ten beri topun TEKİL iptali de —
+   * `InventoryService.softDelete` sonundaki tetik); drift yine de mümkündür
+   * (senkron best-effort'tur, çökme penceresi + elle veri düzeltmesi) ve
+   * görünür kalır — çıkış yolu `resync` ("Tazele").
    *
    * ⚠️ OKUMA YAZMAZ: burada senkron KOŞULMAZ. GET'in yan etkisi olmamalı
    * (refakat kartı `?/html` dersinin aynısı).
@@ -840,6 +1038,7 @@ export class PurchaseOrderService {
         supplier: { select: { id: true, code: true, name: true } },
         createdBy: { select: { id: true, fullName: true, username: true } },
         cancelledBy: { select: { id: true, fullName: true, username: true } },
+        shortClosedBy: { select: { id: true, fullName: true, username: true } },
         lines: {
           orderBy: { lineNo: "asc" },
           include: { item: { select: { id: true, code: true, name: true, unit: true, itemType: true } } },

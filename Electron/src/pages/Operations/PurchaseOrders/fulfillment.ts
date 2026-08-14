@@ -76,12 +76,24 @@ export function fulfillmentOf(line: { qty: DecimalLike; receivedQty: DecimalLike
  * Varsayılan okuyucu: vardiya ortasındaki, Türkçesi zayıf olabilen depo
  * personeli. "−5" işareti onun için bir hata kodudur; "5 m fazla geldi" ise
  * doğrudan anlaşılan bir cümle.
+ *
+ * ⚠️ SHORT-CLOSE (G2): sipariş "kalanı gelmeyecek" kararıyla kapatıldıysa
+ * (`shortClosedAt` dolu) bekleyen kalem için "kaldı/bekleniyor" YALANDIR —
+ * kimse onu beklemiyor. Çağıran `opts.shortClosed` geçirir ve metin
+ * "gelmeyecek (kapatıldı)" olur; rakam DURUR çünkü gerçektir (o kadar mal
+ * gelmedi), yalnız beklenti cümlesi değişir. Fazlalık/tamamlanma metinleri
+ * bu karardan ETKİLENMEZ — onlar gelmiş malı anlatır.
  */
-export function remainingText(f: Fulfillment, unit?: string | null): string {
+export function remainingText(
+  f: Fulfillment,
+  unit?: string | null,
+  opts?: { shortClosed?: boolean },
+): string {
   const u = unit ? ` ${unit.toLocaleLowerCase("tr")}` : "";
   const n = (v: number) => v.toLocaleString("tr-TR", { maximumFractionDigits: 2 });
   if (f.excess > 0) return `${n(f.excess)}${u} fazla geldi`;
   if (f.state === "COMPLETE") return "Tamamlandı";
+  if (opts?.shortClosed) return `${n(f.remaining)}${u} gelmeyecek (kapatıldı)`;
   if (f.state === "NONE") return `${n(f.remaining)}${u} bekleniyor`;
   return `${n(f.remaining)}${u} kaldı`;
 }

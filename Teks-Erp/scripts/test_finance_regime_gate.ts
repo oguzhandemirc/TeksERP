@@ -98,6 +98,17 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "KONULAMAZ. Ticaret alanlarına (alış fiyatı, iplik hareketi, alış siparişi bağı) " +
       "dokunan dallar servis içinde ayrıca kapılıdır; fabrika yolu bayt-bayt aynı kalır.",
   },
+  {
+    dosya: "routes/inventory.routes.ts",
+    neden:
+      "Envanter FABRİKANIN ana router'ıdır → rejim kapısı KONULAMAZ. purchaseOrder izi tek " +
+      "daldan gelir (G2, 2026-08-14): `softDelete`, iptal edilen top bir mal kabul fişinden " +
+      "doğduysa (`Roll.goodsReceiptId` dolu) PO rollup senkronunu tetikler. Fabrikada " +
+      "goodsReceiptId'li top VAR OLAMAZ (fişi yazan tek yol goods-receipt akışı ve onun " +
+      "uçları rejim kapılı) → dal tek sorgu bile koşmaz, fabrika yolu bayt-bayt aynı kalır. " +
+      "Yeni yazma yüzeyi de açılmaz: senkron purchaseOrderId'yi istemciden değil topun " +
+      "kendi fiş zincirinden çözer. Bekçi: test_purchase_order.ts §T (negatif sondalı).",
+  },
 ];
 
 function oku(dosya: string): ts.SourceFile {
