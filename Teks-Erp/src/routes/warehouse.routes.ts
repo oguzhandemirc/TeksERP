@@ -7,6 +7,8 @@
 // =============================================================================
 
 import { Router } from "express";
+import { z } from "zod";
+import { WarehouseEventType } from "@prisma/client";
 import { BaseController } from "../controllers/base.controller";
 import { warehouseService } from "../services/warehouse.service";
 import { verifyToken } from "../middlewares/auth.middleware";
@@ -14,6 +16,8 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 
 const controller = new BaseController(warehouseService);
 const router = Router();
+
+const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
 
 /**
  * @openapi
@@ -39,6 +43,102 @@ router.get(
   // salt-okuma yetkisi geniş tutulur (yazma dar kalır).
   requireAnyPermission("warehouse:read", "warehouse:write", "warehouse:transfer", "goods-receipt:read", "goods-receipt:write", "roll:read"),
   controller.findAll,
+);
+
+/**
+ * @openapi
+ * /api/warehouses/movements:
+ *   get:
+ *     tags: [Warehouses]
+ *     summary: Depo hareket dökümü (cursor'lu)
+ *     description: >
+ *       Append-only depo defteri — "mal hangi depoya girdi / hangisinden çıktı".
+ *       İplik defterinin (`GET /api/yarn/movements`) ikizidir; DÜZELTME/SİLME ucu
+ *       YOKTUR ve eklenmeyecek (yanlış satır ters olayla kapanır).
+ *       `warehouseId` verilirse her satır o depoya göre `direction` (IN/OUT)
+ *       taşır; verilmezse `direction` null'dur (hangi depodan bakıldığı belirsiz).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: cursor
+ *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, maximum: 200 }
+ *       - in: query
+ *         name: warehouseId
+ *         schema: { type: string, format: uuid }
+ *         description: Bu depoya DOKUNAN hareketler (giren VEYA çıkan)
+ *       - in: query
+ *         name: eventType
+ *         schema:
+ *           type: string
+ *           enum: [ENTRY, TRANSFER, TRANSFER_REVERSAL, SHIPMENT, SHIPMENT_REVERSAL, RETURN, CANCEL]
+ *       - in: query
+ *         name: rollId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: sackId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200: { description: Hareket sayfası + nextCursor }
+ */
+// ⚠️ `/:id`'DEN ÖNCE (`/stats` emsali): sonra kaydedilseydi Express "movements"ı
+// path param sanar ve uç ya 404 ya P2007 verirdi.
+//
+// ⚠️ REJİM KAPISI (`requireFinanceEnabled`) BİLEREK YOK — gerekçe
+// `warehouse.service.ts` başlığında: defteri fabrika yolları da yazıyor
+// (KK1 girişi · top iptali · sevk · iade), kapı koymak fabrikada YAZILAN
+// defteri fabrikada OKUNAMAZ yapardı. Kardeş depo/transfer uçları da rejimsiz.
+//
+// ⚠️ UUID alanları `.uuid()` ile doğrulanır: ham CSV/serbest metin doğrudan
+// Prisma'ya giderse P2007 doğar ve `error.middleware` onu jenerik "Geçersiz veri
+// formatı" 400'üne çevirir — HANGİ alanın hatalı olduğu hiçbir yerde yazmaz.
+router.get(
+  "/movements",
+  verifyToken,
+  // Okuma geniş: transfer yapan kişi de defteri görebilmeli (transfer detayının
+  // kendisi zaten defterden okunuyor). Yazma yetkisi okumayı KAPSAR.
+  requireAnyPermission("warehouse:read", "warehouse:write", "warehouse:transfer"),
+  async (req, res, next) => {
+    try {
+      const q = z
+        .object({
+          cursor: z.string().optional(),
+          limit: z.coerce.number().int().min(1).max(200).optional(),
+          warehouseId: z.string().uuid().optional(),
+          eventType: z.nativeEnum(WarehouseEventType).optional(),
+          rollId: z.string().uuid().optional(),
+          sackId: z.string().uuid().optional(),
+          dateFrom: isoDate.optional(),
+          dateTo: isoDate.optional(),
+        })
+        .parse(req.query);
+
+      res.json(
+        await warehouseService.listMovements({
+          cursor: q.cursor,
+          limit: q.limit,
+          warehouseId: q.warehouseId,
+          eventType: q.eventType,
+          rollId: q.rollId,
+          sackId: q.sackId,
+          // Gün sınırı İSTEMCİNİNDİR (yerel 00:00 / 23:59:59.999); backend
+          // ekstra yuvarlama YAPMAZ, yoksa istemcinin niyeti iki kez yorumlanır.
+          dateFrom: q.dateFrom ? new Date(q.dateFrom) : undefined,
+          dateTo: q.dateTo ? new Date(q.dateTo) : undefined,
+        }),
+      );
+    } catch (e) {
+      next(e);
+    }
+  },
 );
 
 /**

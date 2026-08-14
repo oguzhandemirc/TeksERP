@@ -1,5 +1,5 @@
 import type { ColumnDef } from "@tanstack/react-table";
-import { Star } from "lucide-react";
+import { ScrollText, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
@@ -14,6 +14,7 @@ export function buildWarehouseColumns(opts: {
   canWrite: boolean;
   onSetDefault: (w: Warehouse) => void;
   isSettingDefault: boolean;
+  onShowMovements: (w: Warehouse) => void;
 }): ColumnDef<Warehouse>[] {
   return [
     {
@@ -56,6 +57,31 @@ export function buildWarehouseColumns(opts: {
         <Badge variant={row.original.isActive ? "default" : "outline"}>
           {row.original.isActive ? "Aktif" : "Pasif"}
         </Badge>
+      ),
+    },
+    {
+      // HAREKETLER — "bu depoya ne girdi / bundan ne çıktı" defterinin kapısı.
+      // ⚠️ İzinle SÜZÜLMEZ ve süzülmemeli: bu sayfayı açabilen kişi zaten
+      // `warehouse:read` taşıyor ve defter ucunun okuma kümesi onu KAPSIYOR
+      // (`warehouse:read | write | transfer`). Ayrıca bir `PermissionGate`
+      // koymak, ekranı gören ama düğmeyi göremeyen bir kullanıcı sınıfı
+      // uydururdu — iki listenin ayrışması "tıklıyorum, hiçbir şey olmuyor"un
+      // en yaygın sebebi (kart ↔ route hizası dersi).
+      id: "movements",
+      header: "",
+      size: 130,
+      cell: ({ row }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            opts.onShowMovements(row.original);
+          }}
+        >
+          <ScrollText className="mr-1 h-3.5 w-3.5" />
+          Hareketler
+        </Button>
       ),
     },
     {

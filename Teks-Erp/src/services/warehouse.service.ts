@@ -10,10 +10,76 @@
 // sessiz boşluk. Bu yüzden guard servis katmanında AÇIK; DB tarafında da
 // `rolls_warehouseId_fkey` RESTRICT ile ikinci hat var.
 // =============================================================================
+import { Prisma, WarehouseEventType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { BaseService } from "./base.service";
 import { AppError } from "../utils/app-error";
+import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import type { ApiResponse } from "../types/api.types";
+
+// =============================================================================
+// DEPO HAREKET DEFTERİ — OKUMA YÜZEYİ
+// =============================================================================
+// Defter 2026-08-14'ten beri YAZILIYOR (`warehouse-ledger.helper`) ama tek okuma
+// yolu transfer detayıydı (`transferId` ile süzülmüş TRANSFER satırları). Yani
+// "bu depoya ne girdi / bundan ne çıktı" sorusunun hiçbir ekranda cevabı yoktu:
+// veri vardı, kapısı yoktu. Bu, iplik defterinin (`GET /api/yarn/movements` +
+// `YarnMovementsSheet`) birebir ikizidir ve o emsalin sözleşmesini izler.
+//
+// ⚠️ `requireFinanceEnabled` KOYULMADI — ve bu ÖLÇÜLMÜŞ bir karardır, ihmal
+// değil. İplik uçları rejim kapısı taşır çünkü İPLİK ticaret paketine ait bir
+// kavramdır (fabrikada iplik stoğu yoktur). Depo defteri ise fabrikada da
+// yazılıyor: satırları `inventory` (KK1 girişi, top iptali), `shipping` (sevk +
+// storno), `return.service` (müşteri iadesi) ve `subcontractor` üretiyor —
+// dördü de fabrika yollarıdır ve `finance.enabled` KAPALIYKEN de koşar. Kapı
+// koymak, fabrikada YAZILAN defteri fabrikada OKUNAMAZ yapardı. Kardeş uçlar
+// (`GET /api/warehouses`, `/api/warehouse-transfers/*`) de rejimsizdir; tutarlı.
+//
+// ⚠️ YÖN (`direction`) SUNUCUDA TÜRETİLİR, istemcide DEĞİL. "Giren mi çıkan mı"
+// sorusunun cevabı BAKAN DEPOYA görelidir (aynı TRANSFER satırı kaynak depo
+// için çıkan, hedef depo için girendir). İki istemci bu kuralı ayrı ayrı
+// yazsaydı biri er geç `eventType`e bakıp (ENTRY=giren, SHIPMENT=çıkan) TRANSFER
+// satırını hep aynı yöne basardı — rakam doğru, cümle yalan.
+//
+// ⚠️ SAYFA TOPLAMI YOK (iplik dökümündeki "yürüyen bakiye yok" kuralının ikizi):
+// döküm cursor'lu ve kısmidir; elimizdeki sayfadan "bu depoya N m girdi" yazmak
+// görünmeyen satırları yok saymak olurdu. Gerçekten gerekirse çözüm istemcide
+// toplamak değil, backend'in filtre bazlı aggregate döndürmesidir.
+// =============================================================================
+
+/** Defter satırının, BAKAN DEPOYA göre yönü. */
+export type WarehouseMovementDirection = "IN" | "OUT";
+
+/**
+ * Satırın yönü — `warehouseId` verilmemişse (tüm depolar dökümü) yön YOKTUR ve
+ * `null` döner: hangi depodan bakıldığı belli değilken "giren" demek uydurmadır.
+ *
+ * ⚠️ from === to durumunda da `null` döner. Şema TRANSFER'de ikisinin FARKLI
+ * olmasını şart koşar, yani bu satır bugün doğamaz; yine de sessizce "giren"
+ * demek yerine yönsüz bırakılır — veri tuhaflığı ekranda görünmeli, gizlenmemeli.
+ */
+export function warehouseMovementDirection(
+  row: { fromWarehouseId: string | null; toWarehouseId: string | null },
+  warehouseId?: string,
+): WarehouseMovementDirection | null {
+  if (!warehouseId) return null;
+  const isIn = row.toWarehouseId === warehouseId;
+  const isOut = row.fromWarehouseId === warehouseId;
+  if (isIn === isOut) return null; // ikisi de / hiçbiri
+  return isIn ? "IN" : "OUT";
+}
+
+export interface WarehouseMovementListParams {
+  limit?: number;
+  cursor?: string;
+  /** Bu depoya DOKUNAN hareketler (giren VEYA çıkan). */
+  warehouseId?: string;
+  eventType?: WarehouseEventType;
+  rollId?: string;
+  sackId?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
 
 class WarehouseService extends BaseService {
   constructor() {
@@ -126,6 +192,106 @@ class WarehouseService extends BaseService {
     });
 
     return { success: true, data: { id, name: target.name }, message: `"${target.name}" varsayılan depo yapıldı.` };
+  }
+
+  /**
+   * DEPO HAREKET DÖKÜMÜ — cursor'lu, en yeniden eskiye.
+   *
+   * ⚠️ CURSOR, OFFSET DEĞİL: defter append-only ve yıllarca büyür; `skip`
+   * kullanmak perf kuralı 5 ihlalidir (ayrıca `MAX_OFFSET=10000` seddine
+   * çarpardı). Sıralama `createdAt desc, id desc` — `cursorWhere`ın tie-breaker
+   * sözleşmesiyle birebir aynı olmak ZORUNDA, ayrışırsa sayfa sınırındaki
+   * satırlar ya tekrarlanır ya sessizce atlanır.
+   *
+   * ⚠️ SÜZME SUNUCUDA. Döküm sayfalı olduğu için istemcide süzmek yalnız O ANKİ
+   * SAYFAYI süzer ve kullanıcı "kayıt yok" sanır — oysa kayıt bir sonraki
+   * sayfadadır (2026-08-12 top listesi filtresi dersi).
+   *
+   * ⚠️ `warehouseId` KOŞULU `OR`DUR (from VEYA to) ve bu yüzden koşullar
+   * `AND` dizisinde toplanır: cursor koşulu da bir `OR` üretir, ikisini aynı
+   * nesnenin kökünde tutmak İKİNCİSİNİN BİRİNCİYİ EZMESİ demekti — filtre
+   * sessizce düşer ve liste "filtresizmiş gibi" döner (hata yok, log yok).
+   *
+   * ⚠️ İNDEX — ÖLÇÜLDÜ, YENİSİ EKLENMEDİ (perf kuralı 12 + 13). Bugünkü tabloda
+   * (39 satır) planlayıcı Seq Scan seçiyor ve haklı; sorgu 0,05 ms. Mevcut
+   * `[toWarehouseId, eventType, createdAt]` / `[fromWarehouseId, …]` çiftleri
+   * OLAY TÜRÜ DE SEÇİLDİĞİNDE tam önek eşleşmesi verir. TETİKLEYİCİ: tür
+   * seçilmeden yapılan depo dökümünde `createdAt` sıralaması index'ten
+   * gelemiyor (aradaki `eventType` yüzünden) — `warehouse_movements` ~50k
+   * satırı geçtiğinde bu sorguyu EXPLAIN'le; gerekirse `[toWarehouseId,
+   * createdAt]` + `[fromWarehouseId, createdAt]` eklenir (vardiya dışında,
+   * kural 14).
+   */
+  async listMovements(params: WarehouseMovementListParams): Promise<{
+    success: true;
+    data: unknown[];
+    nextCursor: string | null;
+  }> {
+    const limit = Math.min(200, Math.max(1, params.limit ?? 50));
+
+    const and: Prisma.WarehouseMovementWhereInput[] = [];
+    if (params.warehouseId) {
+      and.push({
+        OR: [{ fromWarehouseId: params.warehouseId }, { toWarehouseId: params.warehouseId }],
+      });
+    }
+    if (params.eventType) and.push({ eventType: params.eventType });
+    if (params.rollId) and.push({ rollId: params.rollId });
+    if (params.sackId) and.push({ sackId: params.sackId });
+    if (params.dateFrom || params.dateTo) {
+      and.push({
+        createdAt: {
+          ...(params.dateFrom ? { gte: params.dateFrom } : {}),
+          ...(params.dateTo ? { lte: params.dateTo } : {}),
+        },
+      });
+    }
+    const cur = decodeCursor(params.cursor);
+    if (cur) and.push(cursorWhere(cur));
+
+    const rows = await prisma.warehouseMovement.findMany({
+      where: and.length > 0 ? { AND: and } : {},
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: limit + 1,
+      // Perf kuralı 7 — `include` değil `select`: defter satırının kendisi
+      // küçüktür, ilişkiler şişirir. Yalnız ekranda BASILAN alanlar çekilir.
+      select: {
+        id: true,
+        eventType: true,
+        qty: true,
+        notes: true,
+        createdAt: true,
+        fromWarehouseId: true,
+        toWarehouseId: true,
+        fromWarehouse: { select: { id: true, code: true, name: true } },
+        toWarehouse: { select: { id: true, code: true, name: true } },
+        roll: {
+          select: {
+            id: true,
+            barcode: true,
+            width: true,
+            item: { select: { id: true, name: true } },
+            color: { select: { id: true, name: true } },
+          },
+        },
+        sack: { select: { id: true, sackNo: true } },
+        transfer: { select: { id: true, transferNo: true } },
+        goodsReceipt: { select: { id: true, receiptNo: true } },
+        shipment: { select: { id: true, shipmentNo: true } },
+        rollReturn: { select: { id: true } },
+        user: { select: { id: true, fullName: true, username: true } },
+      },
+    });
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    return {
+      success: true,
+      // Yön SUNUCUDA türetilir (dosya başlığı) — istemci `eventType`ten kendi
+      // kuralını uydurmasın.
+      data: page.map((r) => ({ ...r, direction: warehouseMovementDirection(r, params.warehouseId) })),
+      nextCursor: hasMore ? buildNextCursor(page[page.length - 1]) : null,
+    };
   }
 }
 
