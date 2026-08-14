@@ -38,7 +38,7 @@ import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { D } from "./helpers/finance.helper";
+import { D, D0 } from "./helpers/finance.helper";
 import {
   CashAccountRef,
   CashAccountScope,
@@ -511,6 +511,139 @@ export class CashPeriodCloseService {
         closeId: row?.id ?? null,
       },
     };
+  }
+
+  /**
+   * KASA DEFTERİ DEVRİ — ÜÇ ADIM (`resolveStatementOpening`ın hesap-bazlı ikizi;
+   * K5'in kasa yarısı, 2026-08-14).
+   *
+   *   1. `from`'un gününden ÖNCE biten en yeni AKTİF kapanışı bul → mühürlü rakam
+   *   2. kapanış kesiminden (`cut`) `from`'a kadarki hareketleri topla
+   *   3. ikisini topla                                            → dönem devri
+   *
+   * ÜRETİM YOLU: `cash-book.report` devri buradan alır. Gün kesimi FABRİKA
+   * takvimidir (`periodDayKey`) — UTC kesimi gece vardiyasının 00:00–03:00
+   * hareketini yanlış güne atardı.
+   *
+   * ⚠️ KAPANIŞ HİÇ YOKSA DÜZ YOL: tüm geçmişin toplamı — kasa defteri raporunun
+   * bugünkü devir CTE'siyle AYNI evren, AYNI sonuç (mühürsüz kurulum birebir).
+   *
+   * ⚠️ PENCERE TOPLAMI ZAMAN-ÇIPALIDIR, measureTx'in status-süzgeci DEĞİL.
+   * Evren aynı ÜÇ YAZARDIR (payments · cash_transactions · cheque_events
+   * COLLECT/PAY/COLLECT_CANCEL; DEPOSIT dışarıda) ama iptal, kasa defteri
+   * raporundaki gibi İKİ satırla temsil edilir: asıl hareket belge tarihinde,
+   * ters hareket `cancelledAt` anında. Nedeni raporla TUTARLILIK: pencerede
+   * doğmuş bir belge rapor dönemi İÇİNDE iptal edilirse parası `from` anında
+   * hâlâ kasadaydı — status-süzgeci onu devirden düşürür, dönem satırları ise
+   * ters kaydı ayrıca gösterir ve yürüyen bakiye/`storedDiff` sahte alarma
+   * düşerdi. (measureTx'in status-süzgeci KAPANIŞ ölçümü için doğrudur: orada
+   * sınırı kesen iptal guard'la zaten yasaktır.)
+   *
+   * ⚠️ MÜHÜRLÜ ORİJİNALİN TERS SATIRI PENCEREYE ALINMAZ (`docDate >= cut`
+   * şartı): kapanış CANCELLED orijinali zaten dışlamıştı — tersini bir daha
+   * saymak çift düşümdür. (Bu ters satırlar yalnız "belge kapalı dönemde,
+   * iptali kapanıştan ÖNCE ama kesimden SONRA" dar penceresinde var olabilir;
+   * kapanış doğduktan sonra guard orijinal tarihle 409 verir.)
+   *
+   * ⚠️ AYRIM: mühürden okuyan yol yalnız SUNUM yüzeyidir (kasa defteri devri).
+   * `verify` BİLEREK yeniden hesaplar — drift alarmı ancak bağımsız türetimle
+   * çalışır; onu buraya bağlama.
+   */
+  async resolveCashBookOpening(
+    ref: CashAccountRef,
+    from: Date,
+    client: Prisma.TransactionClient = prisma,
+  ): Promise<{
+    opening: Prisma.Decimal;
+    /** Devrin dayandığı kapanış — yoksa `null` (tam geçmiş toplandı). */
+    carriedFrom: { id: string; periodEnd: Date; closingBalance: Prisma.Decimal } | null;
+    /** Kapanıştan `from`'a kadar biriken hareketlerin net etkisi. */
+    sinceClose: Prisma.Decimal;
+  }> {
+    const scope = resolveCashAccountScope(ref);
+    const scopeWhere = cashScopeWhere(ref);
+    const fromKey = periodDayKey(from);
+
+    // ADIM 1 — `from`'un gününden ÖNCE biten en yeni aktif kapanış.
+    // `lt fromKey` (lte DEĞİL) — cari ikizindeki gerekçe: kapanış `from`'un
+    // kendi gününde bitiyorsa o gün hem kapanışın içinde hem pencerede olurdu.
+    const close = await client.cashPeriodClose.findFirst({
+      where: { ...scopeWhere, reopenedAt: null, periodEnd: { lt: fromKey } },
+      orderBy: { periodEnd: "desc" },
+      select: { id: true, periodEnd: true, closingBalance: true },
+    });
+
+    if (!close) {
+      return {
+        opening: await this.sumTimeAnchoredTx(client, scope, null, from),
+        carriedFrom: null,
+        sinceClose: D0(),
+      };
+    }
+
+    // ADIM 2 + 3.
+    const cut = periodEndCutExclusive(close.periodEnd);
+    const sinceClose = await this.sumTimeAnchoredTx(client, scope, cut, from);
+    return { opening: D(close.closingBalance).plus(sinceClose), carriedFrom: close, sinceClose };
+  }
+
+  /**
+   * Zaman-çıpalı hareket toplamı `[cut, from)` — `cut = null` ise tüm geçmiş.
+   * Evren, kasa defteri raporunun `movementsCte`iyle BİREBİR aynıdır (üç yazar,
+   * iptal = iki satır, DEPOSIT dışarıda); tek ek kural yukarıda gerekçeli:
+   * `cut` verildiğinde mühürlü orijinalin ters satırı sayılmaz.
+   */
+  private async sumTimeAnchoredTx(
+    tx: Prisma.TransactionClient,
+    scope: CashAccountScope,
+    cut: Date | null,
+    from: Date,
+  ): Promise<Prisma.Decimal> {
+    const col = scope.field === "cashBoxId" ? Prisma.sql`"cashBoxId"` : Prisma.sql`"bankAccountId"`;
+    const eCol = scope.field === "cashBoxId" ? Prisma.sql`e."cashBoxId"` : Prisma.sql`e."bankAccountId"`;
+    const pLow = cut ? Prisma.sql`AND "paymentDate" >= ${cut}` : Prisma.empty;
+    const kLow = cut ? Prisma.sql`AND "txnDate" >= ${cut}` : Prisma.empty;
+    const eLow = cut ? Prisma.sql`AND e."eventDate" >= ${cut}` : Prisma.empty;
+    const cLow = cut ? Prisma.sql`AND "cancelledAt" >= ${cut}` : Prisma.empty;
+    // Mühürlü orijinalin tersi pencere dışı (yukarıdaki çift-düşüm gerekçesi).
+    const pOrigInWindow = cut ? Prisma.sql`AND "paymentDate" >= ${cut}` : Prisma.empty;
+    const kOrigInWindow = cut ? Prisma.sql`AND "txnDate" >= ${cut}` : Prisma.empty;
+
+    const rows = await tx.$queryRaw<Array<{ toplam: string }>>(Prisma.sql`
+      SELECT COALESCE(SUM(u.t), 0)::text AS toplam
+      FROM (
+        -- 1) TAHSİLAT/ÖDEME — asıl satır, BELGE tarihinde (status'a BAKILMAZ:
+        -- iptal ters satırıyla kendi anında düşer, zaman-çıpası bozulmaz)
+        SELECT CASE WHEN direction = 'IN' THEN amount ELSE -amount END AS t
+          FROM payments
+          WHERE ${col} = ${scope.accountId}::uuid AND "paymentDate" < ${from} ${pLow}
+        UNION ALL
+        -- 1b) TAHSİLAT İPTALİ — ters satır, İPTAL anında
+        SELECT CASE WHEN direction = 'IN' THEN -amount ELSE amount END AS t
+          FROM payments
+          WHERE status = 'CANCELLED' AND "cancelledAt" IS NOT NULL
+            AND ${col} = ${scope.accountId}::uuid AND "cancelledAt" < ${from} ${cLow} ${pOrigInWindow}
+        UNION ALL
+        -- 2) KASA HAREKETİ — asıl satır
+        SELECT CASE WHEN direction = 'IN' THEN amount ELSE -amount END AS t
+          FROM cash_transactions
+          WHERE ${col} = ${scope.accountId}::uuid AND "txnDate" < ${from} ${kLow}
+        UNION ALL
+        -- 2b) KASA HAREKETİ İPTALİ — ters satır, İPTAL anında
+        SELECT CASE WHEN direction = 'IN' THEN -amount ELSE amount END AS t
+          FROM cash_transactions
+          WHERE status = 'CANCELLED' AND "cancelledAt" IS NOT NULL
+            AND ${col} = ${scope.accountId}::uuid AND "cancelledAt" < ${from} ${cLow} ${kOrigInWindow}
+        UNION ALL
+        -- 3) ÇEK OLAYI — defter append-only, olay kendi anında (COLLECT + ·
+        -- PAY − · COLLECT_CANCEL −); DEPOSIT bilinçli dışarıda (§23 notu)
+        SELECT CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END AS t
+          FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
+          WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL')
+            AND ${eCol} = ${scope.accountId}::uuid AND e."eventDate" < ${from} ${eLow}
+      ) u
+    `);
+    return D(rows[0]?.toplam ?? 0);
   }
 
   /**

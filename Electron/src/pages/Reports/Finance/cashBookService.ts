@@ -52,6 +52,9 @@ export const CASH_KIND_LABEL: Record<string, string> = {
   OPENING: "Açılış / devir",
   COLLECT: "Çek tahsili",
   PAY: "Çek ödemesi",
+  // K-2 tahsil stornosu — backend defteri 2026-08-14'ten beri bu olayı da
+  // basıyor (measureTx/§23-§24 evren eşitliği); etiketsiz kalsa HAM enum çıkardı.
+  COLLECT_CANCEL: "Çek tahsil stornosu",
 };
 
 export interface CashBookRow {
@@ -89,6 +92,13 @@ export interface CashBookAccountSummary {
   /** closing − storedBalance; YALNIZ dönem sonu bugünü kapsıyorsa dolu. */
   storedDiff: string | null;
   movementCount: number;
+  /**
+   * Devrin dayandığı aktif dönem kapanışının son günü (ISO gün anahtarı) —
+   * hesap o güne kadar MÜHÜRLÜ, devir o kapanışın rakamından (K5, 2026-08-14).
+   * OPSİYONEL: mühürsüz hesapta `null`, eski backend alanı hiç göndermez —
+   * iki durumda da kaynak notu basılmaz, bugünkü görünüm birebir.
+   */
+  sealedThrough?: string | null;
 }
 
 export interface CashBookReport {

@@ -11,6 +11,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { D0, D, applyCariBalanceTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, lockCariPeriodScopeTx } from "./helpers/period-guard.helper";
+import { periodCloseService } from "./period-close.service";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CariListRow {
@@ -23,6 +24,10 @@ export interface CariListRow {
   defaultCurrency: Currency;
   paymentTermDays: number | null;
   riskLimit: Prisma.Decimal | null;
+  /** Serbest not. Yanıtta TAŞINMAK ZORUNDA (2026-08-14): alan yazılabilir ama
+   *  okunamazken paneldeki düzenleme diyaloğu boş bir Not kutusu çizip mevcut
+   *  notu kullanıcı görmeden ezerdi — yazma-tek-yönlü alan yüzey almaz. */
+  notes: string | null;
   isActive: boolean;
   balances: Array<{ currency: Currency; balance: Prisma.Decimal }>;
 }
@@ -104,6 +109,7 @@ export class CariService {
           defaultCurrency: r.defaultCurrency,
           paymentTermDays: r.paymentTermDays,
           riskLimit: r.riskLimit,
+          notes: r.notes,
           isActive: r.isActive,
           // Sıfır bakiyeli para birimi satırları gürültüdür; ekranda yer kaplar.
           balances: r.balances.filter((b) => !D(b.balance).isZero()),
@@ -132,6 +138,7 @@ export class CariService {
         defaultCurrency: row.defaultCurrency,
         paymentTermDays: row.paymentTermDays,
         riskLimit: row.riskLimit,
+        notes: row.notes,
         isActive: row.isActive,
         balances: row.balances,
       },
@@ -534,6 +541,20 @@ export class CariService {
    * toplamıdır ve ayrı sorgulanır. Yalnız dönem içi satırları göstermek,
    * ekstrenin en çok bakılan sayısını (kapanış bakiyesi) YANLIŞ üretirdi.
    *
+   * ⚠️ DEVİR MÜHÜRDEN OKUNUR (K5, 2026-08-14): devir düz aggregate DEĞİL,
+   * `periodCloseService.resolveStatementOpening`un üç adımıyla çözülür —
+   * `from`'dan önce biten en yeni AKTİF kapanışın MÜHÜRLÜ rakamı + kapanıştan
+   * pencereye kadar biriken hareketler. Böylece kapanmış dönemin resmi rakamı
+   * ile ekstre devri TEK kaynaktan gelir; kapanıştan sonra geçmişe sızmış bir
+   * satır (guard atlaması) devri sessizce değiştiremez — o fark `verify`de
+   * görünür. Kapanış YOKSA fallback bugünkü tek aggregate ile BAYT-BAYT aynıdır
+   * (bekçi: `test_period_close` §11). Yanıttaki `carriedFrom` devrin dayandığı
+   * kapanışı söyler (mühürsüz kurulumda `null` — istemciler alanı OPSİYONEL okur).
+   *
+   * ⚠️ AYRIM: mühürden okuyan yol yalnız bu SUNUM yüzeyidir. `verify` ve
+   * yaşlandırma gibi DENETİM yüzeyleri BİLEREK yeniden hesaplar — drift alarmı
+   * ancak bağımsız türetimle çalışır; oraları mühre bağlama.
+   *
    * ⚠️ Para birimi ZORUNLU: iki para birimini tek ekstrede yürüyen bakiyeyle
    * göstermek matematiksel olarak anlamsızdır.
    */
@@ -548,6 +569,8 @@ export class CariService {
       closing: Prisma.Decimal;
       totalDebit: Prisma.Decimal;
       totalCredit: Prisma.Decimal;
+      /** Devrin dayandığı dönem kapanışı — mühürsüz kurulumda `null`. */
+      carriedFrom: { periodEnd: Date; closingBalance: Prisma.Decimal } | null;
       rows: Array<{
         id: string;
         txnDate: Date;
@@ -563,11 +586,12 @@ export class CariService {
     const cari = await prisma.cariAccount.findUnique({ where: { id: params.cariId }, select: { id: true } });
     if (!cari) throw AppError.notFound("Cari hesap bulunamadı.");
 
-    const openingAgg = await prisma.cariTransaction.aggregate({
-      where: { cariId: params.cariId, currency: params.currency, txnDate: { lt: params.from } },
-      _sum: { debit: true, credit: true },
+    const resolved = await periodCloseService.resolveStatementOpening({
+      cariId: params.cariId,
+      currency: params.currency,
+      from: params.from,
     });
-    const opening = D(openingAgg._sum.debit ?? 0).minus(D(openingAgg._sum.credit ?? 0));
+    const opening = resolved.opening;
 
     const txns = await prisma.cariTransaction.findMany({
       where: {
@@ -612,7 +636,16 @@ export class CariService {
 
     return {
       success: true,
-      data: { opening, closing: running, totalDebit, totalCredit, rows },
+      data: {
+        opening,
+        closing: running,
+        totalDebit,
+        totalCredit,
+        carriedFrom: resolved.carriedFrom
+          ? { periodEnd: resolved.carriedFrom.periodEnd, closingBalance: resolved.carriedFrom.closingBalance }
+          : null,
+        rows,
+      },
     };
   }
 }

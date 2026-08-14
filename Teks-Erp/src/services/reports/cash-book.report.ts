@@ -8,7 +8,8 @@
 // Kasa/banka bakiyesinin ÜÇ yazarı vardır ve şema bunu açıkça söyler:
 //   1) `Payment`         — carili tahsilat/ödeme
 //   2) `CashTransaction` — carisiz masraf/gelir/virman/açılış
-//   3) `ChequeEvent`     — COLLECT (tahsil, +) ve PAY (kendi çekimiz, −)
+//   3) `ChequeEvent`     — COLLECT (tahsil, +) · PAY (kendi çekimiz, −) ·
+//                          COLLECT_CANCEL (tahsil stornosu K-2, −)
 // Üçüncüyü atlayan bir defter, ilk çek tahsilatında bakiyeyle ayrışır ve
 // operatöre "para nereden geldi" sorusunu cevaplayamaz. (`test_consistency`
 // §23/§24 mutabakat formülü de aynı üçlüyü toplar — bu rapor onun EKRAN
@@ -29,11 +30,23 @@
 // geri döndü. Belge tarihine yazılsaydı geçmiş bir dönemin kapanış bakiyesi
 // bugün değişirdi (donmuş rakamı geriye dönük değiştirmek yasak).
 //
-// ── DEVİR: SAKLANAN BİR SAYIDAN DEĞİL, HAREKETLERDEN ─────────────────────────
+// ── DEVİR: SAKLANAN BİR SAYIDAN DEĞİL, HAREKETLERDEN — VE MÜHÜR VARSA MÜHÜRDEN ─
 // Açılış bakiyesi `CashBox.balance`'tan geriye doğru hesaplanmaz; dönemden
 // ÖNCEKİ hareketlerin toplamıdır. Böylece defter, denormalize bakiye kolonunun
 // İKİNCİ bir yolu olur: `storedDiff` sıfır değilse ya bir yazar unutulmuş ya
 // bakiyeye elle dokunulmuştur — ikisi de sessiz kalmamalı.
+//
+// K-1 OKUMA YOLU (2026-08-14, K5'in kasa yarısı): hesabın `from`'dan önce biten
+// AKTİF bir dönem kapanışı (`CashPeriodClose`) varsa devir artık tüm geçmişin
+// yeniden toplanmasıyla DEĞİL, `resolveCashBookOpening` üç adımıyla kurulur —
+// kapanışın MÜHÜRLÜ rakamı + kapanıştan dönem başına kadarki hareketler. Bu bir
+// performans oyunu değil DOĞRULUK beyanıdır: kapanmış dönemin resmi rakamı ile
+// defter deviri tek kaynaktan gelir; kapanıştan sonra geçmişe sızmış bir satır
+// (guard atlaması) devri sessizce değiştiremez — fark `storedDiff`te ve
+// kapanışın `verify`inde GÖRÜNÜR. Kapanışı olmayan hesapta bugünkü CTE yolu
+// bayt-bayt korunur (bekçi: `test_cash_period_close` §11).
+// ⚠️ `verify` BİLEREK yeniden hesaplar (drift alarmı bağımsız türetim ister) —
+// onu mühre bağlama; mühürden okuyan yol yalnız bu SUNUM yüzeyidir.
 //
 // ⚠️ `storedDiff` YALNIZ dönem sonu BUGÜNÜ KAPSIYORSA anlamlıdır: saklanan
 // bakiye her zaman "şu an"dır, geçmiş bir kesitle karşılaştırmak tanım gereği
@@ -47,6 +60,8 @@
 import { Prisma, Currency } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { D, D0 } from "../helpers/finance.helper";
+import { cashPeriodCloseService } from "../cash-period-close.service";
+import { formatDayKeyTr, periodDayKey } from "../helpers/period-guard.helper";
 import type { DateRange } from "./_shared";
 
 /** Tek sayfada basılabilir satır tavanı — aşılırsa kırpılır ve SÖYLENİR. */
@@ -99,6 +114,12 @@ export interface CashBookAccountSummary {
   /** closing − storedBalance; yalnız dönem sonu bugünü kapsıyorsa dolu. */
   storedDiff: string | null;
   movementCount: number;
+  /**
+   * Devrin dayandığı aktif dönem kapanışının son günü (ISO, `@db.Date` anahtarı)
+   * — hesap o güne kadar MÜHÜRLÜDÜR ve devir o kapanışın rakamından kurulmuştur.
+   * Kapanış yoksa `null` (devir tüm geçmişin toplamı — bugünkü yol).
+   */
+  sealedThrough: string | null;
 }
 
 export interface CashBookReport {
@@ -208,18 +229,22 @@ function movementsCte(): Prisma.Sql {
          AND COALESCE(ct."cashBoxId", ct."bankAccountId") IS NOT NULL
 
       UNION ALL
-      -- 3) ÇEK OLAYI — yalnız PARA HAREKETİ olanlar (COLLECT / PAY)
+      -- 3) ÇEK OLAYI — yalnız PARA HAREKETİ olanlar: COLLECT (+) · PAY (−) ·
+      -- COLLECT_CANCEL (−, tahsil stornosu K-2 — measureTx/§23-§24 ile AYNI
+      -- evren; dışarıda kalsaydı ilk collect-stornosunda defter hem bakiyeyle
+      -- hem dönem kapanışı devriyle ayrışırdı). Storno satırı cancelled işareti
+      -- taşır — Payment/CashTransaction iptal satırlarıyla aynı görsel sözleşme.
       SELECT e.id::text, 'CHEQUE', ch."docNo", e."eventDate",
              COALESCE(e."cashBoxId", e."bankAccountId")::text,
              CASE WHEN e.type = 'COLLECT' THEN 'IN' ELSE 'OUT' END,
              ch.amount, e.type::text, COALESCE(cu2.name, sc2.name),
-             e.notes, ch."serialNo", FALSE
+             e.notes, ch."serialNo", (e.type = 'COLLECT_CANCEL')
         FROM cheque_events e
         JOIN cheques ch ON ch.id = e."chequeId"
         JOIN cari_accounts ca2 ON ca2.id = ch."cariId"
         LEFT JOIN customers cu2 ON cu2.id = ca2."customerId"
         LEFT JOIN subcontractors sc2 ON sc2.id = ca2."subcontractorId"
-       WHERE e.type IN ('COLLECT', 'PAY')
+       WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL')
          AND COALESCE(e."cashBoxId", e."bankAccountId") IS NOT NULL
     )`;
 }
@@ -276,6 +301,40 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
   const movements = rowsTruncated ? movementRows.slice(0, MAX_ROWS) : movementRows;
 
   const openingByAccount = new Map(openingRows.map((r) => [r.accountId, D(r.opening ?? 0)]));
+
+  // ── DEVİR MÜHRE BAĞLANIR (dosya başlığı: "K-1 OKUMA YOLU") ─────────────────
+  // `from`'un gününden önce biten aktif kapanışı olan HER hesabın deviri
+  // `resolveCashBookOpening` ile (mühürlü rakam + pencere) yeniden kurulur ve
+  // CTE toplamının ÜZERİNE yazılır. Kapanışı olmayan hesapta harita satırına
+  // DOKUNULMAZ — mühürsüz kurulumda tek ek sorgu boş dönen `findMany`dir ve
+  // çıktı bugünküyle bayt-bayt aynıdır. Sıralı `await` bilinçli: hesap sayısı
+  // master-data ölçeğindedir (birkaç kasa/banka) ve tx yok.
+  const fromKey = periodDayKey(from);
+  const sealedThroughByAccount = new Map<string, Date>();
+  const sealedBoxIds = accountRows.filter((a) => a.accountKind === "CASH").map((a) => a.id);
+  const sealedBankIds = accountRows.filter((a) => a.accountKind === "BANK").map((a) => a.id);
+  if (sealedBoxIds.length > 0 || sealedBankIds.length > 0) {
+    const activeCloses = await prisma.cashPeriodClose.findMany({
+      where: {
+        reopenedAt: null,
+        periodEnd: { lt: fromKey },
+        OR: [{ cashBoxId: { in: sealedBoxIds } }, { bankAccountId: { in: sealedBankIds } }],
+      },
+      select: { cashBoxId: true, bankAccountId: true },
+    });
+    const sealedIds = new Set(activeCloses.map((c) => (c.cashBoxId ?? c.bankAccountId) as string));
+    for (const a of accountRows) {
+      if (!sealedIds.has(a.id)) continue;
+      const ref = a.accountKind === "CASH" ? { cashBoxId: a.id } : { bankAccountId: a.id };
+      const resolved = await cashPeriodCloseService.resolveCashBookOpening(ref, from);
+      // `carriedFrom` teorik olarak daima dolu (hesap az önce mühürlü bulundu);
+      // yarışta kapanış tam bu arada yeniden açıldıysa CTE deviri zaten doğrudur.
+      if (resolved.carriedFrom) {
+        openingByAccount.set(a.id, resolved.opening);
+        sealedThroughByAccount.set(a.id, resolved.carriedFrom.periodEnd);
+      }
+    }
+  }
   const movementsByAccount = new Map<string, MovementRow[]>();
   for (const m of movements) {
     const list = movementsByAccount.get(m.accountId) ?? [];
@@ -321,6 +380,7 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
       storedBalance: stored.toFixed(2),
       storedDiff: storedComparable ? closing.minus(stored).toFixed(2) : null,
       movementCount: list.length,
+      sealedThrough: sealedThroughByAccount.get(a.id)?.toISOString() ?? null,
     });
   }
   accounts.sort((x, y) => x.accountKind.localeCompare(y.accountKind) || x.code.localeCompare(y.code, "tr"));
@@ -370,6 +430,12 @@ export async function getCashBookReport(params: CashBookParams): Promise<CashBoo
 
   const notes: string[] = [
     "Devir, dönemden ÖNCEKİ hareketlerin toplamıdır (saklanan bakiyeden geriye hesaplanmaz) — böylece defter, bakiye kolonunun ikinci bir doğrulama yoludur.",
+    // Mühür notu koşullu — mühürsüz kurulumda yanıt bugünküyle birebir kalsın.
+    ...(params.accountId && sealedThroughByAccount.has(params.accountId)
+      ? [
+          `Devir, ${formatDayKeyTr(sealedThroughByAccount.get(params.accountId) as Date)} dönem kapanışının MÜHÜRLÜ rakamından alındı — hesap o güne kadar mühürlüdür; kapanıştan dönem başına kadarki hareketler üstüne eklendi.`,
+        ]
+      : []),
     "Çekin tahsile verilmesi (DEPOSIT) para hareketi değildir ve deftere girmez; yalnız TAHSİL (COLLECT) ve kendi çekimizin ÖDENMESİ (PAY) yazılır.",
     "İptal edilen belgeler defterde iki satırla görünür: belge tarihinde asıl hareket, iptal anında ters hareket.",
   ];

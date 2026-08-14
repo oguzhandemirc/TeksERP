@@ -34,6 +34,17 @@
 //      çağrısı YASAK (Sınıf 3 — sırasız çift kilit ayna çiftte deadlock;
 //      çok hesap = ÇOĞUL helper). ⚠️ Bilinen statik sınır: döngü içinden tek
 //      çağrı noktasıyla N kilit almayı AST göremez.
+//   §11 ⭐ ÜRETİM YOLU (K5 kasa yarısı): kasa defteri DEVRİ mühürden okunur —
+//      guard-atlatan sızıntı devri DEĞİŞTİRMEZ, storedDiff'te GÖRÜNÜR;
+//      pencere üç yazardan + zaman-çıpalı (dönem içinde iptal edilen pencere
+//      belgesi devirde durur). Negatif sonda 2026-08-14: cash-book.report'taki
+//      mühür override'ı körleştirildi → TAM 3 kırmızı ölçüldü (§11b devir ·
+//      §11d kapanış · §11e storedDiff 0'a düştü — yani sızıntı da görünmez
+//      olurdu); §11f yeşil kaldı (resolver'ı doğrudan ölçer, rapor bağını
+//      değil — bu yüzden §11b silinemez). cp yedeği shasum ile BİREBİR geri
+//      yüklendi (dosya değiştirilmiş/izlenen — git checkout değil).
+//   §12 ⭐ MÜHÜRSÜZ PARİTE: kapanış yokken rapor CTE'si ile resolver'ın düz
+//      yolu AYNI sayı; mühür izi (sealedThrough/not) basılmaz.
 //
 // KÖRLÜK ZEMİNİ: §0 fixture sayımı — üç yazar tablosunun ÜÇÜ de fixture'da
 // temsil edilmeden fotoğraf kontrolleri koşmaz ("hiçbir şey ölçülmedi" ile
@@ -42,6 +53,7 @@
 import { Prisma, PaymentDirection, PaymentStatus, CashTxnKind } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { cashPeriodCloseService } from "../src/services/cash-period-close.service";
+import { getCashBookReport } from "../src/services/reports/cash-book.report";
 import {
   assertCashPeriodOpenTx,
   assertCashPeriodsOpenTx,
@@ -785,6 +797,104 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  // ── §11 ⭐ ÜRETİM YOLU: KASA DEFTERİ DEVRİ MÜHÜRDEN OKUNUR (K5 kasa yarısı) ─
+  // `test_period_close` §11'in hesap-bazlı ikizi: kapanış kur → kapalı döneme
+  // guard'ı ATLAYAN ham hareket enjekte et → kasa defteri raporunun deviri
+  // MÜHÜRLÜ rakamda kalmalı (yeniden hesap DEĞİL) ve sızıntı `storedDiff`te
+  // GÖRÜNMELİ. Pencere ÜÇ YAZARDAN da beslenir (cash + payment + cheque) ve
+  // pencerede doğup rapor dönemi İÇİNDE iptal edilen belge ZAMAN-ÇIPALI sayılır
+  // (aksi yürüyen bakiyeyi/storedDiff'i sahte alarma düşürürdü — servis başlığı).
+  // ⚠️ NEGATİF SONDA HEDEFİ: cash-book.report'taki mühür override satırı
+  // (`openingByAccount.set(a.id, resolved.opening)`) silinirse §11b kırmızı.
+  const STATEMENT_FROM = new Date("2026-04-30T21:00:00Z"); // yerel 01.05.2026 00:00
+  const boxD = await makeBox("D");
+  const refD: CashAccountRef = { cashBoxId: boxD };
+  await cashRow(refD, CashTxnKind.INCOME, 1000, T_INSIDE); // mühürlenecek
+  await cashRow(refD, CashTxnKind.INCOME, 700, T_EDGE_OUT); // pencere: yazar-2
+  const closeD = await cashPeriodCloseService.close({ cashBoxId: boxD, periodEnd: PERIOD_END });
+  check("§11a Kapanış fixture'ı mühürledi (1000)", D(closeD.data.closingBalance).equals(1000));
+
+  // Pencereye diğer iki yazar + rapor dönemi içinde iptal edilecek bir belge.
+  await payRow(refD, cariId, PaymentDirection.IN, 60, T_EDGE_OUT); // pencere: yazar-1
+  await chequeRow(refD, cariId, "COLLECT", 40, T_EDGE_OUT); // pencere: yazar-3
+  // Pencerede doğdu, ŞİMDİ iptal (cancelledAt=now ≥ from): parası `from` anında
+  // kasadaydı → devir +50 saymalı; ters satır rapor döneminde −50 görünür.
+  await payRow(refD, cariId, PaymentDirection.IN, 50, T_EDGE_OUT, PaymentStatus.CANCELLED);
+  // Guard'ı ATLAYAN sızıntı — kapalı döneme ham satır (§5'teki yol).
+  await cashRow(refD, CashTxnKind.INCOME, 999, T_INSIDE);
+
+  const bookD = await getCashBookReport({ range: { from: STATEMENT_FROM, to: new Date() }, accountId: boxD });
+  const kasaD = bookD.accounts.find((a) => a.accountId === boxD);
+  check("§11 Körlük zemini: mühürlü kasa raporda", Boolean(kasaD), kasaD?.opening ?? "YOK");
+  if (!kasaD) throw new Error("boxD raporda yok");
+  check(
+    "§11b ⭐ Devir MÜHÜRLÜ rakamdan: 1000 + pencere (700+60+40+50) = 1850 — sızıntıyla YENİDEN HESAPLANMADI",
+    kasaD.opening === "1850.00",
+    `opening=${kasaD.opening} (düz CTE olsaydı 2849.00)`,
+  );
+  check(
+    "§11c ⭐ Yanıt mührü söylüyor: sealedThrough=31.03.2026 + not MÜHÜRLÜ diyor",
+    kasaD.sealedThrough === "2026-03-31T00:00:00.000Z" && bookD.notes.some((n) => n.includes("MÜHÜRLÜ")),
+    `sealedThrough=${kasaD.sealedThrough}`,
+  );
+  const rowsD = bookD.rows ?? [];
+  check(
+    "§11d Dönem satırı yalnız iptal tersi (−50) → kapanış 1800, yürüyen bakiye tutarlı",
+    kasaD.closing === "1800.00" &&
+      rowsD.length === 1 &&
+      rowsD[0]?.source === "PAYMENT_CANCEL" &&
+      rowsD[rowsD.length - 1]?.running === kasaD.closing,
+    `closing=${kasaD.closing} satır=${rowsD.length} kaynak=${rowsD[0]?.source}`,
+  );
+  check(
+    "§11e ⭐ Sızıntı SESSİZ DEĞİL: storedDiff tam enjekte edilen tutarı gösteriyor (−999)",
+    kasaD.storedDiff === "-999.00" && bookD.notes.some((n) => n.includes("UYUŞMUYOR")),
+    `storedDiff=${kasaD.storedDiff} stored=${kasaD.storedBalance}`,
+  );
+  // Resolver'ın kendi sözleşmesi (üç adım) — rapor bağından bağımsız ölçüm.
+  const resD = await cashPeriodCloseService.resolveCashBookOpening(refD, STATEMENT_FROM);
+  check(
+    "§11f Resolver üç adımı söylüyor: mühür 1000 + pencere 850 = 1850",
+    resD.carriedFrom != null &&
+      D(resD.carriedFrom.closingBalance).equals(1000) &&
+      D(resD.sinceClose).equals(850) &&
+      D(resD.opening).equals(1850),
+    `opening=${resD.opening} sinceClose=${resD.sinceClose}`,
+  );
+
+  // ── §12 ⭐ MÜHÜRSÜZ PARİTE: kapanış yokken eski/yeni yol AYNI sayı ─────────
+  // Aynı hareket deseni + kapanış YOK → rapor deviri bugünkü CTE yolundan gelir,
+  // resolver'ın düz yolu da (tüm geçmişin zaman-çıpalı toplamı) AYNI sayıyı
+  // vermeli. İkisi ayrışsaydı mühürlü/mühürsüz kurulum aynı kasa için iki farklı
+  // devir basardı.
+  const boxE = await makeBox("E");
+  const refE: CashAccountRef = { cashBoxId: boxE };
+  await cashRow(refE, CashTxnKind.INCOME, 1000, T_INSIDE);
+  await cashRow(refE, CashTxnKind.INCOME, 700, T_EDGE_OUT);
+  await payRow(refE, cariId, PaymentDirection.IN, 60, T_EDGE_OUT);
+  await chequeRow(refE, cariId, "COLLECT", 40, T_INSIDE);
+  await payRow(refE, cariId, PaymentDirection.IN, 50, T_EDGE_OUT, PaymentStatus.CANCELLED);
+  await cashRow(refE, CashTxnKind.INCOME, 999, T_INSIDE);
+
+  const bookE = await getCashBookReport({ range: { from: STATEMENT_FROM, to: new Date() }, accountId: boxE });
+  const kasaE = bookE.accounts.find((a) => a.accountId === boxE);
+  const resE = await cashPeriodCloseService.resolveCashBookOpening(refE, STATEMENT_FROM);
+  check(
+    "§12a ⭐ Kapanış yokken rapor deviri bugünkü yol: 1000+700+60+40+50+999 = 2849",
+    kasaE?.opening === "2849.00",
+    `opening=${kasaE?.opening}`,
+  );
+  check(
+    "§12b ⭐ Resolver'ın düz yolu raporla AYNI sayı + carriedFrom null",
+    resE.carriedFrom === null && D(resE.opening).equals(2849) && D(resE.sinceClose).isZero(),
+    `resolver=${resE.opening}`,
+  );
+  check(
+    "§12c Mühürsüz yanıtta mühür izi YOK (sealedThrough null, not basılmadı)",
+    kasaE?.sealedThrough === null && !bookE.notes.some((n) => n.includes("MÜHÜRLÜ")),
+    `sealedThrough=${kasaE?.sealedThrough}`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

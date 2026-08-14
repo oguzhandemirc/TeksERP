@@ -25,6 +25,13 @@
 //       (Sınıf 3 madde 4; `test_cash_period_close` §10'un cari ikizi.
 //       Negatif sonda 2026-08-14: cari.service'e çift-çağrılı sahte fonksiyon
 //       eklendi → TAM 1 kırmızı, dosya adıyla; shasum ile birebir geri yüklendi)
+//   §11 ⭐ ÜRETİM YOLU (K5): `cariService.statement` devri MÜHÜRDEN okur —
+//       kapalı döneme guard-atlatan ham satır enjekte edilir, devir mühürlü
+//       rakamda KALIR (yeniden hesap değil) + `carriedFrom` kaynağı söyler +
+//       mühürsüz parite (kapanış yokken çıktı bugünkü yol ile birebir).
+//       Negatif sonda 2026-08-14: statement'taki resolver bağı düz aggregate'e
+//       çevrildi → §11e+§11g kırmızı (2 kontrol); cp yedeği shasum ile BİREBİR
+//       geri yüklendi (dosya o sırada değiştirilmiş/izlenen — git checkout değil).
 //
 // KÖRLÜK ZEMİNİ: §5 taraması ve §1 fixture'ı, "hiçbir şeye bakılmadı" ile
 // "ihlal bulunamadı"nın aynı yeşile çıkmasını engelleyen alt sınırlar taşır.
@@ -35,6 +42,7 @@ import * as ts from "typescript";
 import { Prisma, Currency, CariTxnSource } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { periodCloseService } from "../src/services/period-close.service";
+import { cariService } from "../src/services/cari.service";
 import {
   assertPeriodOpenTx,
   periodDayKey,
@@ -565,6 +573,82 @@ async function main(): Promise<void> {
       doubles.length === 0 ? "temiz" : `İHLAL: ${doubles.join(" · ")} — assertPeriodsOpenTx kullan`,
     );
   }
+
+  // ── §11 ⭐ ÜRETİM YOLU: `cariService.statement` DEVRİ MÜHÜRDEN OKUR ────────
+  // §6 resolver'ın KENDİSİNİ ölçer; bu bölüm resolver'ın ekstre servisine
+  // gerçekten BAĞLI olduğunu ölçer (K5'in özü: resolver doğruyken statement
+  // düz aggregate okumaya devam edebilirdi ve hiçbir test kırmızı vermezdi).
+  // KURGU test_period_close §7'nin ekstre karşılığı: kapanış kur → kapalı
+  // döneme guard'ı ATLAYAN ham satır enjekte et → statement devri MÜHÜRLÜ
+  // rakamı vermeli, yeniden hesap (naif toplam) DEĞİL.
+  // ⚠️ NEGATİF SONDA HEDEFİ: statement'taki `resolveStatementOpening` bağı
+  // koparılıp düz aggregate'e döndürülürse §11d/§11e kırmızı verir.
+  const cariE = await makeCari("E");
+  const STATEMENT_TO = new Date("2026-06-30T12:00:00Z");
+  await ledger(cariE, "TRY", T_INSIDE, 1000, 0, "E kapanış içi");
+  await ledger(cariE, "TRY", T_EDGE_OUT, 700, 0, "E pencere (kapanış→dönem başı)");
+  await ledger(cariE, "TRY", T_AFTER, 0, 100, "E dönem içi");
+
+  // MÜHÜRSÜZ PARİTE: kapanış yokken çıktı bugünkü yol ile BAYT-BAYT.
+  const stNoClose = await cariService.statement({
+    cariId: cariE,
+    currency: "TRY",
+    from: STATEMENT_FROM,
+    to: STATEMENT_TO,
+  });
+  const naiveE = await naiveOpening(cariE, "TRY", STATEMENT_FROM);
+  check(
+    "§11a ⭐ MÜHÜRSÜZ PARİTE: devir naif toplamla birebir + carriedFrom null",
+    stNoClose.data.carriedFrom === null && D(stNoClose.data.opening).equals(naiveE) && D(naiveE).equals(1700),
+    `opening=${stNoClose.data.opening} naive=${naiveE}`,
+  );
+  check(
+    "§11b Mühürsüz kapanış bakiyesi de doğru (1700 − 100 = 1600)",
+    D(stNoClose.data.closing).equals(1600) && stNoClose.data.rows.length === 1,
+    `closing=${stNoClose.data.closing} satır=${stNoClose.data.rows.length}`,
+  );
+
+  const closeE = await periodCloseService.close({ cariId: cariE, currency: "TRY", periodEnd: PERIOD_END });
+  check("§11c Kapanış fixture'ı mühürledi (1000)", D(closeE.data.closingBalance).equals(1000));
+
+  // Guard'ı ATLAYAN sızıntı — kapalı döneme ham satır (§7'deki `ledger` yolu).
+  await ledger(cariE, "TRY", T_INSIDE, 999, 0, "E guard'sız sızıntı");
+  const naiveELeak = await naiveOpening(cariE, "TRY", STATEMENT_FROM);
+  check("§11d Sonda anlamlı: naif toplam sızıntıyı GÖRÜYOR (2699)", D(naiveELeak).equals(2699), `naive=${naiveELeak}`);
+
+  const stSealed = await cariService.statement({
+    cariId: cariE,
+    currency: "TRY",
+    from: STATEMENT_FROM,
+    to: STATEMENT_TO,
+  });
+  check(
+    "§11e ⭐ Devir MÜHÜRLÜ rakamdan: 1000 (mühür) + 700 (pencere) = 1700 — sızıntıyla YENİDEN HESAPLANMADI",
+    D(stSealed.data.opening).equals(1700),
+    `opening=${stSealed.data.opening} (düz aggregate olsaydı ${naiveELeak})`,
+  );
+  check(
+    "§11f ⭐ Yanıt devrin kaynağını söylüyor (carriedFrom: 31.03.2026 · 1000)",
+    stSealed.data.carriedFrom != null &&
+      stSealed.data.carriedFrom.periodEnd.toISOString() === "2026-03-31T00:00:00.000Z" &&
+      D(stSealed.data.carriedFrom.closingBalance).equals(1000),
+    `carriedFrom=${stSealed.data.carriedFrom?.periodEnd.toISOString()} / ${stSealed.data.carriedFrom?.closingBalance}`,
+  );
+  check(
+    "§11g Dönem satırları/toplamları mühürden ETKİLENMEDİ (yalnız devir mühre bağlandı)",
+    D(stSealed.data.closing).equals(1600) &&
+      stSealed.data.rows.length === 1 &&
+      D(stSealed.data.totalDebit).isZero() &&
+      D(stSealed.data.totalCredit).equals(100),
+    `closing=${stSealed.data.closing}`,
+  );
+  // Sızıntının kendisi kayıp değil: verify onu drift olarak GÖRÜR (§7 sözleşmesi).
+  const verE = await periodCloseService.verify(closeE.data.id);
+  check(
+    "§11h Sızıntı sessiz kalmadı — verify drift'i gösteriyor (Δ=999)",
+    verE.data.drift === true && D(verE.data.balanceDelta).equals(999),
+    `Δ=${verE.data.balanceDelta}`,
+  );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

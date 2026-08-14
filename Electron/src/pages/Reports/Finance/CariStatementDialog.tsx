@@ -29,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fmtDate } from "../_components/formatters";
+import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { ReportErrorCard } from "./ReportErrorCard";
 import {
   CARI_TXN_SOURCE_LABEL,
@@ -174,6 +175,16 @@ export function CariStatementDialog({ target, open, onOpenChange }: Props) {
                 <tr className="border-t bg-muted/30 font-medium">
                   <td className="px-3 py-2" colSpan={6}>
                     Dönem devri ({fmtDate(from)} öncesi)
+                    {/* Kaynak notu (K5): devir mühürlü kapanıştan kuruluyorsa
+                        söylenir. Alan yoksa (mühürsüz cari / eski backend) not
+                        basılmaz — bugünkü görünüm birebir. Gün anahtarı UTC
+                        parçalarından basılır (`formatDayKey`), yerel saatle
+                        değil: `@db.Date` UTC gece yarısıdır. */}
+                    {data.carriedFrom ? (
+                      <span className="ml-2 text-xs font-normal text-muted-foreground">
+                        · {formatDayKey(data.carriedFrom.periodEnd)} kapanışından devir
+                      </span>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">
                     {moneyStr(data.opening, activeCurrency)}

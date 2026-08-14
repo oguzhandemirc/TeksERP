@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
 import { OpeningBalanceDialog } from "./OpeningBalanceDialog";
+import { formatDayKey } from "./PeriodClose/service";
 import { findActiveDevirRowId } from "./statementDevir";
 import {
   getStatement,
@@ -113,6 +114,11 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
   // (`statementDevir.findActiveDevirRowId`, gerekçesi + bekçisi orada; ekran-içi
   // useMemo'da yaşasaydı tersine çevrilmesi hiçbir testi kırmazdı).
   const activeDevirRowId = useMemo(() => findActiveDevirRowId(q.data?.rows ?? []), [q.data]);
+
+  // Devrin kaynağı (K5, 2026-08-14): backend devri artık dönem kapanışının
+  // MÜHÜRLÜ rakamından kuruyor ve dayandığı kapanışı `carriedFrom` ile söylüyor.
+  // Alan gelmiyorsa (mühürsüz cari / eski backend) not basılmaz — görünüm birebir.
+  const carriedFrom = q.data?.carriedFrom ?? null;
 
   const cancelM = useMutation({
     mutationFn: (input: { reason: string }) =>
@@ -210,6 +216,13 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                   <tr className="border-t bg-muted/30 font-medium">
                     <td className="px-3 py-2" colSpan={5}>
                       Dönem devri
+                      {/* Kaynak notu — yalnız devir mühürlü kapanıştan kuruluysa.
+                          Gün anahtarı UTC parçalarından basılır (formatDayKey). */}
+                      {carriedFrom ? (
+                        <span className="ml-2 text-xs font-normal text-muted-foreground">
+                          · {formatDayKey(carriedFrom.periodEnd)} kapanışından devir
+                        </span>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 text-right">{money(q.data.opening, currency)}</td>
                   </tr>

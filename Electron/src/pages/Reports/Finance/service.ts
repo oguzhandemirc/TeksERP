@@ -272,6 +272,14 @@ export interface StatementReport {
   closing: string;
   totalDebit: string;
   totalCredit: string;
+  /**
+   * Devrin dayandığı dönem kapanışı (K5, 2026-08-14): devir artık düz yeniden
+   * hesap değil, aktif kapanışın MÜHÜRLÜ rakamı + kapanıştan dönem başına
+   * kadarki hareketlerdir. OPSİYONEL: mühürsüz cari/kurulumda `null`, eski
+   * backend alanı hiç göndermez — iki durumda da devir satırı bugünkü metinle
+   * birebir basılır (kaynak notu yalnız alan doluyken çıkar).
+   */
+  carriedFrom?: { periodEnd: string; closingBalance: string } | null;
   rows: StatementRow[];
 }
 

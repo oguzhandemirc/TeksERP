@@ -18,12 +18,14 @@
 // =============================================================================
 
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Info, Landmark, Wallet } from "lucide-react";
 import { MetricCard, ReportDateRange, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtDate } from "../_components/formatters";
+import { formatDayKey } from "../../Finance/PeriodClose/service";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
+import { Button } from "@/components/ui/button";
 import { CashAccountsTable } from "./CashAccountsTable";
 import { CashBookFilterBar } from "./CashBookFilterBar";
 import { CashLedgerTable } from "./CashLedgerTable";
@@ -42,6 +44,7 @@ const DEFAULT_DAYS = 30;
 
 export function CashBookPage() {
   const { params, dateFrom, dateTo } = useReportDateRange(DEFAULT_DAYS);
+  const navigate = useNavigate();
   const [sp, setSp] = useSearchParams();
   const [picked, setPicked] = useState<CashBookAccountSummary | null>(null);
 
@@ -115,7 +118,16 @@ export function CashBookPage() {
     <ReportPageLayout
       title="Kasa & Banka Defteri"
       description="Devir, dönem hareketleri ve yürüyen bakiye — tahsilat, kasa hareketi ve çek tahsili birlikte."
-      actions={<ReportExportBar disabled={!summary} buildSpec={spec} />}
+      actions={
+        <div className="flex items-center gap-2">
+          {/* Defteri açıp eksik/yanlış fiş gören kişinin gideceği yer (F3 dikişi):
+              masraf/gelir/virman girişi rapor değil, Kasa Hareketleri ekranıdır. */}
+          <Button variant="outline" size="sm" onClick={() => navigate("/finance/cash-transactions")}>
+            Kasa Hareketleri
+          </Button>
+          <ReportExportBar disabled={!summary} buildSpec={spec} />
+        </div>
+      }
       filters={
         <>
           <ReportDateRange defaultDays={DEFAULT_DAYS} />
@@ -147,7 +159,14 @@ export function CashBookPage() {
           <MetricCard
             label={account ? "Devir" : "Devir (tüm hesaplar)"}
             value={moneyStr(cardSource.opening, cardCurrency)}
-            hint="Dönemden ÖNCEKİ hareketlerin toplamı — saklanan bakiyeden hesaplanmaz"
+            // Kaynak notu (K5): hesabın aktif dönem kapanışı varsa devir o
+            // kapanışın MÜHÜRLÜ rakamından kurulur ve kaynağı burada söylenir.
+            // Alan yoksa (mühürsüz hesap / eski backend) bugünkü metin birebir.
+            hint={
+              account?.sealedThrough
+                ? `${formatDayKey(account.sealedThrough)} kapanışından devir — hesap o güne kadar mühürlü`
+                : "Dönemden ÖNCEKİ hareketlerin toplamı — saklanan bakiyeden hesaplanmaz"
+            }
             icon={Wallet}
             isLoading={summaryQ.isLoading}
           />

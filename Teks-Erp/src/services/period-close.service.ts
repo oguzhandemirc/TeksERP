@@ -478,6 +478,10 @@ export class PeriodCloseService {
    *   2. o kapanışın bitiş anından `from`'a kadarki hareketleri topla
    *   3. ikisini topla                                      → dönem devri
    *
+   * ÜRETİM YOLU (K5, 2026-08-14): `cariService.statement` devri BURADAN alır —
+   * bu fonksiyon artık yalnız bekçinin çağırdığı ölü kod değildir. Kasa
+   * ikizi: `cashPeriodCloseService.resolveCashBookOpening` (kasa defteri devri).
+   *
    * ⚠️ KAPANIŞ HİÇ YOKSA BUGÜNKÜ YOL BAYT-BAYT: tüm geçmişin tek aggregate'i.
    * Kapanış OPSİYONELDİR — kullanmayan kurulumun ekstresi tek satır bile
    * değişmemeli.
@@ -488,6 +492,11 @@ export class PeriodCloseService {
    * beyanıdır: kapanmış dönem tekrar toplanmaz, MÜHÜRLÜ rakam kullanılır.
    * Fark çıkarsa kapanıştan sonra geçmişe yazılmış demektir — `verify` onu
    * söyler; ekstrenin sessizce başka bir rakam basması engellenir.
+   *
+   * ⚠️ SINIR: mühürden okuyan yol yalnız SUNUM yüzeyleridir (ekstre devri; kasa
+   * defteri devri). `verify` ve yaşlandırma gibi DENETİM yüzeyleri BİLEREK
+   * yeniden hesaplar — drift alarmı ancak bağımsız türetimle çalışır; onları
+   * mühre bağlamak alarmın kendisini köreltir. O yolları buraya BAĞLAMA.
    */
   async resolveStatementOpening(
     params: { cariId: string; currency: Currency; from: Date },
