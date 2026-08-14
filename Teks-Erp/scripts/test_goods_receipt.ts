@@ -25,6 +25,22 @@
 //      kaldırılıp `yarnLines: []` koşulsuz yazılırsa B6 kırmızı; builder
 //      assembler yerine tabloyu kendi okumaya dönüp iplik süzgecini
 //      unutursa H5/H6 kırmızı verir.
+//   I) ⭐ YARIŞ (Sınıf 4, I1 — 2026-08-14): addLines ‖ cancel. Pencere ELLE
+//      AÇIK TUTULAN tx ile deterministik kurulur (kök CLAUDE.md yarış bekçisi
+//      kuralı). İki yön: (a) iptal uçuşta → addLines fiş kilidinde BEKLER,
+//      iptal commit'lenince İKİ satır tipi de 409 ile failed[] ve CANCELLED
+//      fişe satır doğmaz; (b) satır claim'i öndeyken → cancel BEKLER ve tx-içi
+//      TAZE okuma uçuştaki topu görüp iptal eder ("satır sayımı doğru").
+//
+// NEGATİF SONDALAR (§I — 2026-08-14, ikisi de koşuldu, kırmızı GÖRÜLDÜ, dosya
+// sha256 ile birebir geri yüklendi):
+//   • `claimActiveReceiptTx` gövdesi körleştirildi (erken return) → exit 1,
+//     I1a/I1b/I1c kırmızı — I1c detayı asıl hatayı basıyor: CANCELLED fişe
+//     top=1 iplik=1 CANLI satır doğdu. ⚠️ I1a (bekleme ölçümü) yalnız pozitif
+//     yönde anlamlıdır; deterministik kırmızı I1b/I1c'dir.
+//   • cancel'ın softDelete döngüsü `freshRolls` yerine bayat tx-dışı `rolls`
+//     kümesine döndürüldü → exit 1, I2b/I2c kırmızı (cancelledRolls=1,
+//     uçuştaki top WAREHOUSE kaldı — yarım iptal).
 // =============================================================================
 import { GoodsReceiptStatus, RollEntrySource, RollStatus, WarehouseEventType, YarnMovementKind } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -50,6 +66,18 @@ const receiptIds: string[] = [];
 const warehouseIds: string[] = [];
 /** §H fixture'ı — testin KENDİ yarattığı YARN kalemi (ortam verisine bağımlılık YASAK). */
 let yarnItemId: string | null = null;
+
+/** §I yarış sondaları — pencereyi ELLE AÇIK TUTULAN tx ile kurmak için
+ *  (kök CLAUDE.md yarış bekçisi kuralı: serbest Promise.allSettled yarışı
+ *  pencereyi bazen ıskalar ve sahte-yeşil kalır). */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((r) => {
+    resolve = r;
+  });
+  return { promise, resolve };
+}
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 async function main(): Promise<void> {
   console.log("=== Mal kabul bekçisi ===\n");
@@ -291,6 +319,149 @@ async function main(): Promise<void> {
     select: { unitPrice: true },
   });
   check("H7) Ters iplik kaydı fiyat TAŞIMIYOR (geri sarım ticari olay değil)", reversal !== null && reversal.unitPrice === null);
+
+  // ── §I ⭐ YARIŞ (Sınıf 4, I1): addLines ‖ cancel ──────────────────────────
+  // addLines fiş statüsünü tx DIŞINDA okuyordu ve satırlar ayrı tx'lerde
+  // doğuyordu → iptal o pencereye sızarsa CANCELLED fişe CANLI top/iplik
+  // yazılıyordu (hata yok, log yok). Sed: her satır tx'inin İLK işi fiş-claim
+  // (`updateMany WHERE status=ACTIVE`) + cancel'ın tx-İÇİ TAZE top okuması.
+  // Pencere ELLE AÇIK TUTULAN tx ile deterministik kurulur; "bekledi"
+  // ölçümleri yalnız pozitif yönde anlamlıdır, deterministik kırmızılar
+  // SONUÇ kontrolleridir (I1b/I1c/I2b/I2c).
+  {
+    // (a) İPTAL UÇUŞTA → addLines fiş kilidinde BEKLER ve kaybeder.
+    const rI = await goodsReceiptService.create({ warehouseId: wh.id });
+    const ridI = (rI.data as { id: string }).id;
+    receiptIds.push(ridI);
+
+    const lockI = deferred();
+    const gateI = deferred();
+    const txI = prisma.$transaction(
+      async (tx) => {
+        // "İptal uçuşta": cancel claim'inin yaptığı gibi fiş satırı kilitlenir
+        // ve CANCELLED yazılır ama COMMIT EDİLMEZ. Sıradan UPDATE = FOR NO KEY
+        // UPDATE — satır tx'inin claim'ini bloklar, ama claim'siz (bozuk) bir
+        // roll-insert'in FK KEY SHARE'i GEÇEBİLİR: negatif sonda tam bu yüzden
+        // canlı satır doğurur (kök CLAUDE.md yarış bekçisi kilit notu).
+        await tx.$executeRaw`UPDATE "goods_receipts" SET "status" = 'CANCELLED', "cancelledAt" = now() WHERE "id" = ${ridI}::uuid`;
+        lockI.resolve();
+        await gateI.promise;
+      },
+      { timeout: 20_000 },
+    );
+    // Gate-tx promise'i await'ten önce reddedebilir — no-op catch olmadan
+    // unhandled rejection süreci Sonuç satırı basılmadan öldürür (kök CLAUDE.md ②).
+    txI.catch(() => {});
+    await lockI.promise;
+
+    type LinesOut = { created: string[]; createdYarn: string[]; failed: Array<{ reason: string }> };
+    let linesSettled = false;
+    const linesP = goodsReceiptService
+      .addLines(ridI, [
+        { itemId: item.id, initialQty: 33 },
+        { itemId: yarnItem.id, initialQty: 250 },
+      ])
+      .then(
+        (r) => ({ res: r as unknown as LinesOut, err: "" }),
+        (e: Error) => ({ res: null as LinesOut | null, err: e.message }),
+      )
+      .finally(() => {
+        linesSettled = true;
+      });
+    await sleep(400);
+    check("I1a) addLines uçuştaki iptalin fiş kilidinde bekledi", !linesSettled);
+    gateI.resolve();
+    await txI;
+    const linesOut = await linesP;
+    check(
+      "I1b) ⭐ İptal kazandı → İKİ satır da (kumaş+iplik) 409 sebebiyle failed[]",
+      linesOut.err === "" &&
+        linesOut.res !== null &&
+        linesOut.res.created.length === 0 &&
+        linesOut.res.createdYarn.length === 0 &&
+        linesOut.res.failed.length === 2 &&
+        linesOut.res.failed.every((f) => f.reason.includes("iptal edilmiş")),
+      linesOut.err || JSON.stringify(linesOut.res?.failed.map((f) => f.reason.slice(0, 40))),
+    );
+    const liveAfterI = await prisma.roll.count({
+      where: { goodsReceiptId: ridI, status: { not: RollStatus.CANCELLED } },
+    });
+    const yarnAfterI = await prisma.yarnMovement.count({ where: { goodsReceiptId: ridI } });
+    check(
+      "I1c) ⭐ CANCELLED fişe canlı satır DOĞMADI (top=0, iplik hareketi=0)",
+      liveAfterI === 0 && yarnAfterI === 0,
+      `top=${liveAfterI} iplik=${yarnAfterI}`,
+    );
+
+    // (b) SATIR UÇUŞTA → cancel satır claim'inde BEKLER ve TAZE kümeyi görür.
+    const rJ = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      lines: [{ itemId: item.id, initialQty: 20 }],
+    });
+    const ridJ = (rJ.data as { id: string }).id;
+    receiptIds.push(ridJ);
+
+    const lockJ = deferred();
+    const gateJ = deferred();
+    const inflight = { rollId: "" };
+    const txJ = prisma.$transaction(
+      async (tx) => {
+        // Satır tx'inin birebir emülasyonu: fiş-claim + top doğumu, COMMIT YOK.
+        // Gerçek addLines çağrısı pencereyi kapatmadan tutulamaz — §10 emsali
+        // ("yarışın sonucunu kurmanın tek yolu satırı el ile yazmaktır").
+        const c = await tx.goodsReceipt.updateMany({
+          where: { id: ridJ, status: GoodsReceiptStatus.ACTIVE },
+          data: { updatedAt: new Date() },
+        });
+        if (c.count === 0) throw new Error("beklenmedik: fiş ACTIVE değil");
+        const r = await tx.roll.create({
+          data: {
+            barcode: `${TAG}-INFLIGHT`,
+            itemId: item.id,
+            initialQty: 25,
+            currentQty: 25,
+            status: RollStatus.WAREHOUSE,
+            entrySource: RollEntrySource.PURCHASE_RECEIPT,
+            goodsReceiptId: ridJ,
+            warehouseId: wh.id,
+          },
+          select: { id: true },
+        });
+        inflight.rollId = r.id;
+        lockJ.resolve();
+        await gateJ.promise;
+      },
+      { timeout: 20_000 },
+    );
+    txJ.catch(() => {});
+    await lockJ.promise;
+
+    let cancelSettled = false;
+    const cancelP = goodsReceiptService
+      .cancel(ridJ, "TEST — yarış ters yön")
+      .then(
+        (r) => ({ res: r.data as { cancelledRolls: number }, err: "" }),
+        (e: Error) => ({ res: null as { cancelledRolls: number } | null, err: e.message }),
+      )
+      .finally(() => {
+        cancelSettled = true;
+      });
+    await sleep(500);
+    check("I2a) cancel uçuştaki satır claim'inde bekledi (hızlı yol geçti, claim kilitte)", !cancelSettled);
+    gateJ.resolve();
+    await txJ;
+    const cancelOut = await cancelP;
+    check(
+      "I2b) ⭐ Satır kazandı → iptal TAZE kümeyi gördü, uçuştaki top da sayıldı (cancelledRolls=2)",
+      cancelOut.err === "" && cancelOut.res?.cancelledRolls === 2,
+      cancelOut.err.slice(0, 80) || `cancelledRolls=${cancelOut.res?.cancelledRolls}`,
+    );
+    const inflightRow = await prisma.roll.findUnique({
+      where: { id: inflight.rollId },
+      select: { status: true },
+    });
+    check("I2c) ⭐ Uçuştaki top DB'de CANCELLED (bayat snapshot'la atlanmadı)", inflightRow?.status === RollStatus.CANCELLED, `status=${inflightRow?.status}`);
+  }
 
   check("Körlük zemini: en az 5 fiş üretildi", receiptIds.length >= 5, `${receiptIds.length} fiş`);
 }

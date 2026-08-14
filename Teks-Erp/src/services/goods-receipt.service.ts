@@ -382,8 +382,43 @@ export class GoodsReceiptService {
   }
 
   /**
+   * SINIF 4 (I1, 2026-08-14) — SATIR ‖ İPTAL YARIŞ KAPISI.
+   *
+   * `addLines` fiş statüsünü tx DIŞINDA okuyordu (check-then-act) ve satırlar
+   * ayrı tx'lerde doğuyordu → `cancel` o pencereye sızarsa CANCELLED fişe
+   * CANLI top/iplik yazılıyordu (hata yok, log yok). Kapama: satırı yazan HER
+   * tx'in İLK işi fişi `status=ACTIVE` şartıyla claim'lemektir. `cancel`ın
+   * claim'i AYNI satırı kilitler → iki taraftan yalnız biri kazanır:
+   *   · iptal önce commit'lendiyse → count=0 → 409, satır tx'i geri sarılır
+   *     (top/iplik/barkod hiçbir iz bırakmaz);
+   *   · satır claim'i öndeyse → `cancel`ın claim'i satır commit'ini BEKLER ve
+   *     iptalin tx-içi TAZE top okuması yeni satırı görür (aşağıdaki `cancel`).
+   *
+   * `updatedAt` bump'ı kilidin taşıyıcısıdır (sıradan UPDATE → FOR NO KEY
+   * UPDATE) ve semantik olarak da doğrudur: fişe satır ekleniyor. Mesaj,
+   * tx-dışı hızlı-yol kontrolüyle AYNI cümledir — operatör aynı durumu iki
+   * farklı şekilde okumasın.
+   */
+  private async claimActiveReceiptTx(
+    tx: Prisma.TransactionClient,
+    receiptId: string,
+    receiptNo: string,
+  ): Promise<void> {
+    const claim = await tx.goodsReceipt.updateMany({
+      where: { id: receiptId, status: GoodsReceiptStatus.ACTIVE },
+      data: { updatedAt: new Date() },
+    });
+    if (claim.count === 0) {
+      throw AppError.conflict(`${receiptNo} iptal edilmiş — satır eklenemez.`);
+    }
+  }
+
+  /**
    * Fişe top ekler. Her satır kendi transaction'ında doğar (yukarıdaki "fiş bir
    * kaptır" notu); düşen satır `failed[]` içinde SEBEBİYLE döner.
+   *
+   * ⚠️ Baştaki statü kontrolü HIZLI YOLDUR (UX) — asıl sed her satır tx'inin
+   * içindeki `claimActiveReceiptTx`tir (Sınıf 4, I1).
    */
   async addLines(receiptId: string, lines: GoodsReceiptLineInput[], userId?: string): Promise<AddLinesResult> {
     const receipt = await prisma.goodsReceipt.findUnique({
@@ -501,6 +536,9 @@ export class GoodsReceiptService {
             purchasePrice: priceFor(line),
             // Mal kabulde istasyon YOK (üretim noktası değil) — kolon NULL kalır.
             entryStationId: null,
+            // SINIF 4 (I1): topu yazan tx'in İLK işi fiş-claim — iptal ile
+            // satır doğumu aynı satır kilidinde serileşir (helper başlığı).
+            txGate: (tx) => this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo),
           },
         );
         created.push((res.data as { id: string }).id);
@@ -582,6 +620,10 @@ export class GoodsReceiptService {
     // fiyatsız kaldı" yarım durumunu doğururdu. Satır tx dışına henüz görünür
     // olmadığı için bu, append-only defterde bir "düzeltme" DEĞİLDİR.
     const res = await prisma.$transaction(async (tx) => {
+      // SINIF 4 (I1): İLK ifade — kumaş yolundaki `txGate`in ikizi. İptal bu
+      // satır kilidinde bekler; iptal önce commit'lendiyse count=0 → 409 ve
+      // CANCELLED fişe iplik satırı DOĞMAZ.
+      await this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo);
       const applied = await applyYarnMovementTx(tx, {
         itemId: line.itemId,
         warehouseId: receipt.warehouseId,
@@ -668,9 +710,16 @@ export class GoodsReceiptService {
       throw AppError.conflict(invoiceBlockMessage(liveInvoice.docNo, liveInvoice.status));
     }
 
+    const rollCancelSelect = {
+      id: true,
+      barcode: true,
+      status: true,
+      sackId: true,
+      shipmentId: true,
+    } as const;
     const rolls = await prisma.roll.findMany({
       where: { goodsReceiptId: id },
-      select: { id: true, barcode: true, status: true, sackId: true, shipmentId: true },
+      select: rollCancelSelect,
     });
 
     // Guard: iptal yalnız "mal hiç kullanılmadı" iken meşru.
@@ -688,15 +737,23 @@ export class GoodsReceiptService {
     // `softDelete` topu çuvaldan SESSİZCE çıkarıyor ama çuvalın denormalize
     // `weightKg`'si bayat kalıyordu (`resetSackWeightsTx` çağrılmıyor) — ve o
     // kg irsaliyeye gidiyordu.
-    const used = rolls.filter(
-      (r) =>
-        (r.status !== RollStatus.WAREHOUSE &&
-          r.status !== RollStatus.A1_STOCK &&
-          r.status !== RollStatus.CANCELLED) ||
-        r.sackId !== null ||
-        r.shipmentId !== null,
-    );
-    if (used.length > 0) {
+    type CancelRollRow = {
+      id: string;
+      barcode: string | null;
+      status: RollStatus;
+      sackId: string | null;
+      shipmentId: string | null;
+    };
+    const assertRollsUnused = (list: CancelRollRow[]): void => {
+      const used = list.filter(
+        (r) =>
+          (r.status !== RollStatus.WAREHOUSE &&
+            r.status !== RollStatus.A1_STOCK &&
+            r.status !== RollStatus.CANCELLED) ||
+          r.sackId !== null ||
+          r.shipmentId !== null,
+      );
+      if (used.length === 0) return;
       const sample = used
         .slice(0, 5)
         .map((r) => {
@@ -708,7 +765,10 @@ export class GoodsReceiptService {
         `${receipt.receiptNo}: ${used.length} top işlem görmüş (${sample}${used.length > 5 ? "…" : ""}) — fiş iptal edilemez. ` +
           `Önce o topları ayıklayın.`,
       );
-    }
+    };
+    // Hızlı yol (UX): iki engel birden varken sıra mesajı korunur (önce fatura,
+    // sonra top). ASIL kopya tx İÇİNDE, claim'den sonra TAZE kümeyle koşar.
+    assertRollsUnused(rolls);
 
     // ⚠️ CLAIM ile İPLİK STORNOSU AYNI TX'TE.
     // Claim atomiktir (iki paralel iptalden yalnız biri geçer) ve ters kayıt
@@ -718,7 +778,7 @@ export class GoodsReceiptService {
     //
     // ⚠️ KUMAŞ-ONLY FİŞTE DAVRANIŞ AYNI: ters kayıt fonksiyonu indeksli
     // `goodsReceiptId` üzerinden 0 satır okur ve HİÇBİR ŞEY yazmaz.
-    const yarnReversal = await prisma.$transaction(async (tx) => {
+    const { yarnReversal, freshRolls } = await prisma.$transaction(async (tx) => {
       const claim = await tx.goodsReceipt.updateMany({
         where: { id, status: GoodsReceiptStatus.ACTIVE },
         data: {
@@ -748,12 +808,26 @@ export class GoodsReceiptService {
       if (liveInvoiceTx) {
         throw AppError.conflict(invoiceBlockMessage(liveInvoiceTx.docNo, liveInvoiceTx.status));
       }
-      return reverseGoodsReceiptYarnTx(
+      // ⚠️ TAZE TOP KÜMESİ CLAIM'DEN SONRA OKUNUR (Sınıf 4, I1). Tx-dışı
+      // `rolls` snapshot'ı BAYATTIR: claim'imizi bekleten uçuştaki bir satır
+      // tx'i (fiş-claim'i bizden önce almış `addLines`) commit'lenince topu
+      // o snapshot GÖRMEZ — iptal loop'u onu atlar ve CANCELLED fişte canlı
+      // top kalırdı (yarışın ters yönü). Claim commit'lendikten sonra yeni
+      // satır DOĞAMAZ (satır claim'leri 409 alır) → bu okuma tam ve kararlıdır.
+      // Guard da TAZE kümeyle TEKRARLANIR: ihlalde tx geri sarılır, fiş ACTIVE
+      // kalır (yarım iptal yok).
+      const freshRolls = await tx.roll.findMany({
+        where: { goodsReceiptId: id },
+        select: rollCancelSelect,
+      });
+      assertRollsUnused(freshRolls);
+      const yarnReversal = await reverseGoodsReceiptYarnTx(
         tx,
         id,
         reason?.trim() || `Mal kabul fişi iptali (${receipt.receiptNo})`,
         userId ?? null,
       );
+      return { yarnReversal, freshRolls };
     });
 
     // Eksi bakiye ENGEL DEĞİL: iplik fişten sonra sarf edilmiş olabilir ve
@@ -761,10 +835,11 @@ export class GoodsReceiptService {
     const yarnNegative = yarnReversal.filter((y) => y.balanceKg.lt(0));
 
     // Toplar tek tek iptal edilir (`softDelete` kendi tx'ini açar + kendi
-    // guard'larını koşar — ölü etiket onayı dahil).
+    // guard'larını koşar — ölü etiket onayı dahil). Küme TAZE okumadan gelir
+    // (`freshRolls`) — bayat tx-dışı snapshot uçuştaki satırı kaçırırdı.
     const cancelled: string[] = [];
     const skipped: LineFailure[] = [];
-    for (const [index, r] of rolls.entries()) {
+    for (const [index, r] of freshRolls.entries()) {
       if (r.status === RollStatus.CANCELLED) continue;
       try {
         await inventory.softDelete(r.id, userId, {

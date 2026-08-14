@@ -704,6 +704,23 @@ export class InventoryService {
        * bağlıdır (default KAPALI — bkz. system-setting.service).
        */
       duplicateGuard?: { confirmed: boolean };
+      /**
+       * TX KAPISI (Sınıf 4 — I1, 2026-08-14): top'u yazan transaction'ın İLK
+       * ifadesi olarak çağrılır. Mal Kabul yolu buradan fişi
+       * `updateMany WHERE status=ACTIVE` ile kilitler (satır doğumu ile fiş
+       * iptali AYNI satır kilidinde serileşir); kapı throw ederse tx geri
+       * sarılır — top hiç doğmaz, barkod sayacı da artmaz (kilit barkod
+       * üretiminden ÖNCE olduğu için boşluk oluşmaz).
+       *
+       * F221 deseni: verilmezse TEK ifade bile eklenmez — KK1 ham giriş /
+       * Tambur manuel yolları bayt-bayt aynı kalır. Kilit sırası notu: kapı
+       * (goods_receipts satır kilidi) mükerrer tuzağının advisory kilidinden
+       * (8021) ÖNCE koşar; iki kilidi birden alan başka yazar yok (KK1
+       * fiş satırına, `cancel` 8021'e hiç dokunmaz) → ABBA imkânsız. Mal Kabul
+       * yolu `duplicateGuard` da geçirmediği için bugün ikisi aynı tx'te
+       * zaten buluşmuyor.
+       */
+      txGate?: (tx: Prisma.TransactionClient) => Promise<void>;
     },
   ): Promise<ApiResponse<Roll>> {
     // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
@@ -844,6 +861,10 @@ export class InventoryService {
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
       roll = await prisma.$transaction(async (tx) => {
+        // TX KAPISI (Sınıf 4 — I1): İLK ifade. Mal Kabul satırı burada fişi
+        // claim'ler; `cancel` ile yarış bu satır kilidinde serileşir. Kapı
+        // verilmemişse (fabrika yolları) tek ifade bile eklenmez.
+        if (opts?.txGate) await opts.txGate(tx);
         if (guardActive) {
           // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcode`'dan da ÖNCE.
           //
