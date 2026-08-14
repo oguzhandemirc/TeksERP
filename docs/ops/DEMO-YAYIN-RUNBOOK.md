@@ -170,6 +170,52 @@ Kimlik **sır olmamalı**: şifre yolunda kullanıcı adı, kart/PIN yolunda cih
 kimliği kullanılır. Kart kodunu anahtara yazmak hem sızıntı hem de "kova hiç
 dolmaz, koruma sessizce kaybolur" demekti.
 
+### ⚠️ 6b. AÇIK MADDE — gerçek istemci IP'si origin'e ULAŞMIYOR (ölçüldü)
+
+`TRUST_PROXY` **1 ve 2 ile ayrı ayrı ölçüldü**; ikisinde de uygulama Cloudflare
+kenar IP'sini görüyor, gerçek ziyaretçiyi değil:
+
+```
+benim genel IP : 176.43.198.27
+TRUST_PROXY=1  → morgan: 172.68.194.171   (CF kenarı)
+TRUST_PROXY=2  → morgan: 172.70.248.162   (CF kenarı)
+```
+
+**Sebep Express'te değil Traefik'te:** Traefik gelen `X-Forwarded-For`'u
+güvenilmeyen kaynaktan geldiği için **siliyor** ve kendi gördüğü adresi (CF
+kenarı) yazıyor. Cloudflare'in gönderdiği gerçek istemci IP'si o noktada
+kayboluyor — hiçbir Express ayarı geri getiremez.
+
+**Etkisi:** IP'ye dayanan iki mekanizma tüm ziyaretçileri tek kovada topluyor:
+giriş kilidi ve hız sınırı. Paylaşımlı `demo` hesabında bu, birkaç yazım
+hatasının herkesi kilitlemesi demekti.
+
+**Şimdilik yapılan (yeterli, riski düşük):** kilit KAPATILMADI — kapatmak,
+bilinen kullanıcı adı + paylaşılan şifreyle açık bir kaba kuvvet yüzeyi
+bırakırdı. Eşikler demoya uyarlandı:
+
+| Ayar | Değer | Neden |
+|---|---|---|
+| `auth.pinLockoutAttempts` | 30 | dürüst yazım hataları kilide ulaşmasın |
+| `auth.pinLockoutPenaltySec` | 30 | ulaşırsa ceza kısa |
+| `auth.pinLockoutEscalateAfter` | 20 | uzun cezaya kolay tırmanmasın |
+| `auth.pinLockoutLongPenaltyMin` | 5 | 15 dk yerine 5 dk |
+
+Hız sınırı (giriş 10/60 sn) ikinci hat olarak duruyor.
+
+**KÖK ÇÖZÜM (kullanıcı onayı gerektirir, YAPILMADI):** Traefik'in
+`entryPoints.websecure.forwardedHeaders.trustedIPs` listesine Cloudflare
+aralıkları yazılır (sunucuda `/opt/stack/.cloudflare-ips` zaten mevcut, UFW
+onu kullanıyor). Bu, gerçek istemci IP'sini tüm sitelere kazandırır ve
+`TRUST_PROXY=2` doğru çalışmaya başlar.
+
+⚠️ **Neden gece yarısı yapılmadı:** Traefik bu sunucudaki **paylaşımlı**
+altyapıdır ve üzerinde kullanıcının canlı siteleri var (mail sunucusu, iki
+WordPress, bir Next.js sitesi). `traefik.yml` STATİK yapılandırmadır → değişiklik
+Traefik'in yeniden başlatılmasını ister; yazım hatası tüm siteleri birden
+düşürür. Demoyu ayağa kaldırmak için gerekli değildi, bu yüzden karar
+kullanıcıya bırakıldı.
+
 ---
 
 ## 7. Yolda çıkan iki tuzak (ikisi de düzeltildi)
