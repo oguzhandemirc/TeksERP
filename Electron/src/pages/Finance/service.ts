@@ -266,13 +266,16 @@ export interface InvoiceLineRow {
  * ZENGİNDİR (vergi no/dairesi) — bu yüzden `InvoiceRow`'un cari'si spread ile
  * miras alınmaz, yeniden yazılır.
  *
- * ⚠️ KAYNAK BAĞLARINDAN YALNIZ `goodsReceipt` GELİR. `shipmentId` /
- * `directShipmentId` / `returnGroupId` / `subcontractorReceiptId` DETAIL_SELECT'te
- * bilinçli olarak YOK (çıplak iç FK'ler yanıtta gezmesin diye) ve o kaynakların
- * insanca adını taşıyan bir ilişki de seçilmiyor. Yani sevkiyattan/iadeden doğan
- * faturada kaynak satırı BASILAMAZ — uydurulmaz, hiç gösterilmez.
+ * KAYNAK BAĞLARI (2026-08-15): dördü de İNSANCA ADIYLA gelir (goodsReceipt /
+ * shipment / directShipment / subcontractorReceipt — id + belge no). Çıplak iç
+ * FK'ler yanıtta yine GEZMEZ; tek istisna `returnGroupId` — iade grubunun
+ * ilişkisi yoktur (grup lideri RollReturn id'sidir), skaler tek taşıyıcıdır.
  */
 export interface InvoiceDetail extends Omit<InvoiceRow, "cari"> {
+  shipment: { id: string; shipmentNo: string } | null;
+  directShipment: { id: string; shipmentNo: string } | null;
+  subcontractorReceipt: { id: string; receiptNo: string } | null;
+  returnGroupId: string | null;
   notes: string | null;
   subtotal: number;
   discountTotal: number;

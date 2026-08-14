@@ -553,9 +553,10 @@ async function main(): Promise<void> {
     const data = det.data as Record<string, unknown>;
     const EXPECTED_KEYS = [
       "cancelReason", "cancelledAt", "cari", "confirmedAt", "createdAt", "currency",
-      "discountTotal", "docNo", "dueDate", "exchangeRate", "externalNo", "goodsReceipt",
-      "grandTotal", "grandTotalTry", "id", "issueDate", "lines", "notes", "paidTotal",
-      "status", "subtotal", "type", "updatedAt", "vatTotal", "withholdingTotal",
+      "directShipment", "discountTotal", "docNo", "dueDate", "exchangeRate", "externalNo",
+      "goodsReceipt", "grandTotal", "grandTotalTry", "id", "issueDate", "lines", "notes",
+      "paidTotal", "returnGroupId", "shipment", "status", "subcontractorReceipt",
+      "subtotal", "type", "updatedAt", "vatTotal", "withholdingTotal",
     ];
     check(
       "§13a ⭐ detay anahtar kümesi SABİT (alan düşürme/ekleme bekçisiz geçemez)",
@@ -563,11 +564,20 @@ async function main(): Promise<void> {
       `fark=${Object.keys(data).filter((k) => !EXPECTED_KEYS.includes(k)).join(",") || "-"} eksik=${EXPECTED_KEYS.filter((k) => !(k in data)).join(",") || "-"}`,
     );
     check("§13b ⭐ clientToken yanıtta GEZMİYOR (idempotency iç anahtarı)", !("clientToken" in data));
-    const bareFks = ["cariId", "shipmentId", "directShipmentId", "returnGroupId", "subcontractorReceiptId", "goodsReceiptId", "confirmedById", "cancelledById", "createdById"];
+    // ⚠️ `returnGroupId` bu listede DEĞİL (2026-08-15): kaynak bağlarının insanca
+    // adlı ilişkileri DETAIL_SELECT'e eklendi (shipment/directShipment/
+    // subcontractorReceipt) ama iade grubunun İLİŞKİSİ YOKTUR — grup lideri bir
+    // RollReturn id'sidir, ayrı model değil. Tek taşıyıcı skalerdir ve detay
+    // ekranı "İade grubu" satırını ondan basar. Diğer çıplak FK'ler yasak kalır.
+    const bareFks = ["cariId", "shipmentId", "directShipmentId", "subcontractorReceiptId", "goodsReceiptId", "confirmedById", "cancelledById", "createdById"];
     check(
       "§13c çıplak iç FK'ler yanıtta yok (kaynak bağı ilişkinin kendi id'siyle taşınır)",
       bareFks.every((k) => !(k in data)),
       bareFks.filter((k) => k in data).join(",") || "-",
+    );
+    check(
+      "§13c2 kaynak ilişkileri İNSANCA ADIYLA mevcut (shipment/directShipment/subcontractorReceipt anahtarları)",
+      "shipment" in data && "directShipment" in data && "subcontractorReceipt" in data,
     );
     const line0 = (data.lines as Array<Record<string, unknown>>)[0];
     check(

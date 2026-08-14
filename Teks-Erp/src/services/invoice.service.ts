@@ -198,6 +198,16 @@ const DETAIL_SELECT = {
     },
   },
   goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
+  // KAYNAK BAĞLARI İNSANCA ADIYLA (2026-08-15, fatura detay yüzeyinin bulgusu):
+  // sevkiyattan/fasondan doğan faturada detay ekranı kaynak satırı basamıyordu —
+  // çıplak FK bilinçli dışarıda kalmaya devam eder, bağ ilişkinin kendi id'si +
+  // belge numarasıyla taşınır (goodsReceipt emsali). `returnGroupId` İSTİSNA:
+  // ilişkisi yok (grup lideri RollReturn id'sidir, ayrı model değil) → skaler
+  // olarak döner; istemci onu yalnız "İade grubu" satırı basmak için kullanır.
+  shipment: { select: { id: true, shipmentNo: true } },
+  directShipment: { select: { id: true, shipmentNo: true } },
+  subcontractorReceipt: { select: { id: true, receiptNo: true } },
+  returnGroupId: true,
   lines: {
     orderBy: { lineNo: "asc" },
     select: {

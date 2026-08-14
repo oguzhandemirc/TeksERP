@@ -187,10 +187,10 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onShowDocum
               />
               <Field label="Onay" value={fmtDate(inv.confirmedAt)} />
               <Field label="İptal" value={fmtDate(inv.cancelledAt)} />
-              {/* KAYNAK BAĞI — bugün yalnız mal kabul fişi çözülebiliyor
-                  (detay ucu diğer kaynakların ilişkisini seçmiyor; gerekçe
-                  `InvoiceDetail` başlığında). Yoksa satır hiç basılmaz —
-                  boş "Kaynak: —" hücresi "kaynağı yok" yalanı olurdu. */}
+              {/* KAYNAK BAĞLARI (2026-08-15: detay ucu artık dördünü de insanca
+                  adıyla taşıyor; iade grubu İLİŞKİSİZDİR — skaler id, yalnız
+                  varlık bilgisi basılır). Kaynağı olmayan faturada satır hiç
+                  basılmaz — boş "Kaynak: —" hücresi "kaynağı yok" yalanı olurdu. */}
               {inv.goodsReceipt && (
                 <Field
                   label="Kaynak (mal kabul)"
@@ -199,6 +199,14 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onShowDocum
                     .join(" · irsaliye ")}
                 />
               )}
+              {inv.shipment && <Field label="Kaynak (sevkiyat)" value={inv.shipment.shipmentNo} />}
+              {inv.directShipment && (
+                <Field label="Kaynak (fasondan sevk)" value={inv.directShipment.shipmentNo} />
+              )}
+              {inv.subcontractorReceipt && (
+                <Field label="Kaynak (fason kabul)" value={inv.subcontractorReceipt.receiptNo} />
+              )}
+              {inv.returnGroupId && <Field label="Kaynak" value="İade grubu (satış iadesi)" />}
               {inv.notes && (
                 <div className="col-span-2 sm:col-span-3">
                   <Field label="Not" value={inv.notes} />
