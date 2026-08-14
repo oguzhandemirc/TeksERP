@@ -374,7 +374,7 @@ Fabrika **çözgü/dokuma yapmaz** — kumaş hazır gelir, sadece process + QC 
 ## Ortak Konvansiyonlar
 
 - UUID primary key, tüm modellerde `createdAt`/`updatedAt` (M:N pivot ve append-only log tabloları hariç — bunlarda sadece `createdAt`).
-- Sadece soft delete — `isActive: false` veya `RollStatus.CANCELLED` (`SCRAP` = gerçek fire **kararıdır**, arşivleme değil); **asla** fiziksel DELETE. Bilinçli istisnalar: bağımlılık-guard'lı master-data `DELETE /:id/permanent` uçları, boş çuval silme, cihaz unpair, pivot replace.
+- Sadece soft delete — `isActive: false` veya `RollStatus.CANCELLED` (`SCRAP` = gerçek fire **kararıdır**, arşivleme değil); **asla** fiziksel DELETE. Bilinçli istisnalar: bağımlılık-guard'lı master-data `DELETE /:id/permanent` uçları, boş çuval silme, cihaz unpair, pivot replace, **`ItemPrice` satırı silme** (2026-08-14, Paket D — şemada `isActive` YOK ve bilinçli: pasif bir fiyat satırı `resolveItemPrice`'ın "müşteri istisnası > kart varsayılanı > null" sırasına ÜÇÜNCÜ bir durum ekler ve "fiyat yok" ile "fiyat vardı, kaldırıldı" ayrımı hiçbir karara girmez; geçmiş belgeler zaten `InvoiceLine.unitPrice` / `Roll.purchasePrice` ile DONMUŞTUR, yani silme geçmişi değiştirmez).
 - Her CUD operasyonu → `AuditService.log()` → `SystemLog` tablosu. (İstisna: `UserPreference` kişisel UI blob'u. Audit **best-effort**'tur — yazım hatası isteği düşürmez, `/health` sayacına düşer; çağrı tx **dışında** yapılır.)
 - Validation hata mesajları Türkçe.
 - **Yıkıcı işlemlerde detaylı onay zorunlu** (iptal/sil/scrap): confirm dialog'unda etkilenen her kaydı (WO, rulo, sipariş vb.) somut olarak listele. Backend tarafında preview endpoint döner, frontend per-record seçim sunar — "X kayıt etkilenecek" gibi soyut sayı yetmez.
