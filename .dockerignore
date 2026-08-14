@@ -1,0 +1,22 @@
+# Demo imajı için build context'i küçük tut — depo kökü context olduğu için
+# mobil/, out/, node_modules ve .git olmazsa transfer dakikalarca sürer.
+.git
+.gitignore
+.claude
+mobil/
+docs/
+scripts/
+**/node_modules
+**/dist
+**/dist-web
+**/out
+**/.env
+**/.env.*
+!**/.env.example
+**/coverage
+**/.vite
+**/*.log
+**/.DS_Store
+Electron/release
+Electron/dist-electron
+Teks-Erp/backups
