@@ -6,7 +6,7 @@
 // İki iş yapar:
 //
 //   1. KAT KATALOĞU — `FabricProperty(code="KAT", valueType=CHOICE)` + değerleri
-//      (2-KAT / 4-KAT / TÜP) + Tambur istasyonuna bağı (mod OPTIONAL — REQUIRED
+//      (2-KAT / 4-KAT) + Tambur istasyonuna bağı (mod OPTIONAL — REQUIRED
 //      yalancı beyan olurdu, Tambur akışı capability kapısını çağırmıyor; SEK-5).
 //      Bu satır olmadan `resolveFoldTypeForWrite` FAIL-OPEN çalışır: kat
 //      doğrulanmaz, tablet tuşlarını çizemez. Yani script koşmazsa özellik
@@ -42,10 +42,17 @@ const APPLY = process.argv.includes("--apply");
  * ASCII yazan her istemciyi ("TUP") sessizce reddettirirdi. Görünen ad Türkçe
  * kalır — kullanıcı "Tüp" görür, sistem "TUP" saklar.
  */
+// ⚠️ TÜP KATALOĞA GİRMEZ (2026-08-15, kullanıcı kararı). Ölçüldü: fabrika
+// verisinde 806 topun 44'ü 4-KAT, 1'i 2-KAT, TÜP taşıyan **sıfır** top var ve
+// katalog o tarihte DB'de henüz hiç oluşmamıştı — yani çıkarmak ne veriyi
+// öksüz bırakır ne de silinecek bir katalog satırı doğurur.
+// Kaldırmak TÜP'ü YASAKLAMAZ: `normalizeFoldType` katalog dışı değeri aynen
+// geçirir (fold-type.ts:45), yani API'den gelen "TÜP" hâlâ reddedilmez —
+// yalnız tablette seçenek olarak ÇIKMAZ. Fabrika ileride isterse bu satır
+// geri eklenir ya da panelden değer olarak tanımlanır.
 const FOLD_VALUES = [
   { code: "2-KAT", name: "2 Kat", sortOrder: 10 },
   { code: "4-KAT", name: "4 Kat", sortOrder: 20 },
-  { code: "TUP", name: "Tüp", sortOrder: 30 },
 ];
 
 /**
