@@ -56,6 +56,14 @@ export interface InvoicePrefill {
   }>;
   /** Diyalog başlığının altında "Kaynak: SVK…" olarak gösterilir. */
   sourceLabel?: string;
+  /**
+   * Ön-dolum hakkında söylenmesi gereken tek cümle (kaynak belge doldurdu).
+   *
+   * ⚠️ TOAST DEĞİL, BANT: fiyat çelişkisi gibi bir uyarı "onaylamadan önce
+   * kontrol et" der ve kullanıcı tam da o kontrolü yaparken toast çoktan
+   * kaybolmuş olur. Diyalog kapanana kadar ekranda durur.
+   */
+  notice?: { tone: "warn" | "info"; message: string } | null;
 }
 
 interface Props {
@@ -449,6 +457,19 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
             işlemesi için ayrıca <b>Onayla</b> demeniz gerekir.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Kaynak belgenin ön-dolum notu (C1: sipariş fiyatı çelişkisi vb.). */}
+        {prefill?.notice && (
+          <p
+            className={
+              prefill.notice.tone === "warn"
+                ? "rounded-md bg-amber-100 px-3 py-2 text-[12px] text-amber-900 dark:bg-amber-950 dark:text-amber-200"
+                : "rounded-md bg-muted px-3 py-2 text-[12px] text-muted-foreground"
+            }
+          >
+            {prefill.notice.message}
+          </p>
+        )}
 
         <div className="grid grid-cols-4 gap-3">
           <div>

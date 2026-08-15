@@ -126,6 +126,60 @@ async function main(): Promise<void> {
   for (const [kod, gerekce] of Object.entries(ROLE_COVERAGE_EXEMPT))
     console.log(`   ℹ️  muaf ${kod} — ${gerekce.split(".")[0]}.`);
 
+  console.log("\n=== §2b EKRAN BAĞIMLILIKLARI: yazan, okuduğu ucu da görebiliyor mu? ===");
+  // ⚠️ §2 "her izin BİR rolde var mı" diye sorar ve bu soru YETMEZ: bir izin
+  // fabrika rollerinde bulunduğu için §2 yeşil kalırken, o izne İHTİYAÇ DUYAN
+  // ekranın bulunduğu rolde eksik olabilir. 2026-08-15'te tam bu oldu —
+  // `subcontractor:read` üç fabrika rolündeydi, `goods-receipt:*` taşıyan TEK
+  // rolde (WEB_TRADE) yoktu; C4 tedarikçi seçicisinin fason bacağı sahada 403
+  // alıyor, kutu "yalnız cari kartlar" bandıyla YARIM açılıyordu.
+  //
+  // Bu bölüm sorunun sınıfını kilitler: bir ekranın ANA izni bir roldeyse, o
+  // ekranın çizerken ÇAĞIRDIĞI uçların izinleri de aynı rolde olmalı. Tablo
+  // elle tutulur (panel kaynağını backend tarayamaz) ama tek satırlıktır ve
+  // sebebi yazılıdır.
+  const EKRAN_BAGIMLILIKLARI: Array<{
+    ana: string;
+    gerekli: string[];
+    neden: string;
+  }> = [
+    {
+      ana: "goods-receipt:write",
+      gerekli: ["customer:read", "subcontractor:read"],
+      neden:
+        "Mal Kabul formundaki tedarikçi seçicisi (SupplierSelect) İKİ uçtan besleniyor: /api/customers + /api/subcontractors",
+    },
+    {
+      ana: "purchase-order:read",
+      gerekli: ["customer:read", "subcontractor:read"],
+      neden: "Alış Siparişi listesinin filtre şeridi ile formu aynı iki-kaynaklı seçiciyi çiziyor",
+    },
+  ];
+  // Körlük zemini: tablodaki her ANA izin gerçekten katalogda olmalı — biri
+  // yeniden adlandırılırsa kontrol sessizce hiçbir role uygulanmaz olur.
+  const oluAna = EKRAN_BAGIMLILIKLARI.filter((d) => !izinKodlari.has(d.ana)).map((d) => d.ana);
+  check("Bağımlılık tablosunda ölü ANA izin yok", oluAna.length === 0, oluAna.join(", "));
+  const oluGerekli = EKRAN_BAGIMLILIKLARI.flatMap((d) => d.gerekli).filter((c) => !izinKodlari.has(c));
+  check("Bağımlılık tablosunda ölü GEREKLİ izin yok", oluGerekli.length === 0, oluGerekli.join(", "));
+
+  const bagimlilikIhlali: string[] = [];
+  let olculenRol = 0;
+  for (const d of EKRAN_BAGIMLILIKLARI) {
+    for (const rol of darRoller) {
+      if (!rol.codes.includes(d.ana)) continue;
+      olculenRol++;
+      const eksik = d.gerekli.filter((c) => !rol.codes.includes(c));
+      if (eksik.length > 0) bagimlilikIhlali.push(`${rol.code} → ${d.ana} var ama ${eksik.join(", ")} yok (${d.neden})`);
+    }
+  }
+  // İkinci körlük zemini: hiçbir rol eşleşmediyse kontrol VAKUMEN yeşildir.
+  check("Körlük zemini: bağımlılık en az bir role uygulandı", olculenRol > 0, `${olculenRol} eşleşme`);
+  check(
+    "Yazma izni taşıyan rol, ekranın okuduğu uçların iznini de taşıyor",
+    bagimlilikIhlali.length === 0,
+    bagimlilikIhlali.join(" | "),
+  );
+
   console.log("\n=== §3 DB UZLAŞTIRMASI ===");
   // ⚠️ ÖN KOŞULU TEST KENDİSİ KURAR — "backend'i yeniden başlatın" beklemez.
   // Uzlaştırma yalnız server boot'unda koşuyor (`server.ts`). CI backend'i HİÇ

@@ -58,6 +58,14 @@ import {
   syncPurchaseOrderSafely,
   type PurchaseOrderSyncResult,
 } from "./purchase-order.service";
+// C4 — tedarikçi İKİ tabloda olabilir (müşteri-tipli cari XOR fason firma);
+// XOR + varlık + aktiflik TEK kapıdan sorulur (alış siparişiyle ORTAK).
+import {
+  isPartyEmpty,
+  resolveSupplierParty,
+  samePartyAs,
+  type ResolvedSupplierParty,
+} from "./helpers/supplier-party.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { buildWhereClause } from "../utils/query-parser";
@@ -88,12 +96,25 @@ export interface GoodsReceiptLineInput {
 export interface GoodsReceiptCreateInput {
   warehouseId: string;
   supplierId?: string | null;
+  /**
+   * FASON TEDARİKÇİ (C4, 2026-08-15) — `supplierId` ile XOR; ikisi birden
+   * DOLU OLAMAZ, ikisi birden BOŞ olabilir (fişte tedarikçi opsiyoneldir).
+   * Kural tek kapıda: `helpers/supplier-party.helper`.
+   */
+  subcontractorId?: string | null;
   deliveryNoteNo?: string | null;
   currency?: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
   notes?: string | null;
   clientToken?: string;
   /** Bu fişin karşıladığı ALIŞ SİPARİŞİ (opsiyonel — D3). */
   purchaseOrderId?: string | null;
+  /**
+   * HAM STOK GİRİŞİ (C2, 2026-08-15): işlenmek üzere alınan mal `STOCK`
+   * rafına doğar (varsayılan `false` → satılabilir `WAREHOUSE`, bugünkü
+   * davranış bayt-bayt). Karar FİŞ seviyesindedir — satır seviyesi bilinçli
+   * AÇILMADI ("fiş bir kaptır"; karışık alım için ikinci fiş açılır).
+   */
+  rawStockEntry?: boolean;
   lines?: GoodsReceiptLineInput[];
 }
 
@@ -540,14 +561,14 @@ export class GoodsReceiptService {
     if (!warehouse) throw AppError.badRequest("Depo bulunamadı.");
     if (!warehouse.isActive) throw AppError.badRequest(`"${warehouse.name}" deposu pasif — mal bu depoya alınamaz.`);
 
-    if (input.supplierId) {
-      const sup = await prisma.customer.findUnique({
-        where: { id: input.supplierId },
-        select: { id: true, name: true, isActive: true },
-      });
-      if (!sup) throw AppError.badRequest("Tedarikçi bulunamadı.");
-      if (!sup.isActive) throw AppError.badRequest(`"${sup.name}" pasif durumda.`);
-    }
+    // ── TEDARİKÇİ TARAFI (C4) ───────────────────────────────────────────────
+    // ⚠️ Fişte tedarikçi OPSİYONELDİR (`required: false`) — mal önce girer,
+    // tedarikçi sonra netleşir. Kural yalnız "EN FAZLA biri dolu". Zorunluluk
+    // FATURA kapısındadır (`createDraftFromGoodsReceipt`).
+    const inputParty = await resolveSupplierParty(
+      { supplierId: input.supplierId, subcontractorId: input.subcontractorId },
+      { required: false },
+    );
 
     // İdempotent tekrar: aynı fiş iki kez açılmaz (ağ kopması / çift tıklama).
     if (input.clientToken) {
@@ -573,12 +594,12 @@ export class GoodsReceiptService {
         // bağladım" arasına bir iptal sızabilir ve fiş, iptal edilmiş bir
         // siparişi işaret ederek karşılanma raporundan sessizce düşerdi.
         // ⚠️ Kilit HER SORGUDAN ÖNCE alınır (TOCTOU dersi).
-        let supplierId = input.supplierId ?? null;
+        let party: ResolvedSupplierParty = inputParty;
         if (input.purchaseOrderId) {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_LOCK_NS}::int, hashtext(${input.purchaseOrderId}))`;
           const po = await tx.purchaseOrder.findUnique({
             where: { id: input.purchaseOrderId },
-            select: { id: true, orderNo: true, status: true, supplierId: true },
+            select: { id: true, orderNo: true, status: true, supplierId: true, subcontractorId: true },
           });
           if (!po) throw AppError.badRequest("Alış siparişi bulunamadı.");
           if (po.status === PurchaseOrderStatus.CANCELLED) {
@@ -587,14 +608,23 @@ export class GoodsReceiptService {
           // Tedarikçi ÇELİŞKİSİ sessizce çözülmez: hangisinin doğru olduğunu
           // yalnız operatör bilir ve yanlış tarafa yazmak alış faturası
           // mutabakatını yanlış cariye bağlardı.
-          if (supplierId && supplierId !== po.supplierId) {
+          // ⚠️ C4: karşılaştırma BACAK + KİMLİK birlikte yapılır. Yalnız
+          // `supplierId` eşitliğine bakan eski satır, fişi fason firmaya /
+          // siparişi müşteri-tipli cariye bağlı iken "iki taraf da null" diye
+          // EŞİT sayardı ve fiş sessizce YANLIŞ cariye yazılırdı.
+          const poParty: ResolvedSupplierParty = {
+            supplierId: po.supplierId,
+            subcontractorId: po.subcontractorId,
+          };
+          if (!isPartyEmpty(party) && !samePartyAs(party, poParty)) {
             throw AppError.badRequest(
               `Fişteki tedarikçi ${po.orderNo} siparişinin tedarikçisiyle aynı değil — birini düzeltin.`,
             );
           }
           // Fişte tedarikçi seçilmemişse siparişten MİRAS ALINIR: alış faturası
-          // tedarikçisiz fişten kesilemiyor ve bilgi zaten elimizde.
-          supplierId = supplierId ?? po.supplierId;
+          // tedarikçisiz fişten kesilemiyor ve bilgi zaten elimizde. Miras İKİ
+          // BACAĞI BİRDEN taşır (siparişin tarafı neyse fişin tarafı da odur).
+          if (isPartyEmpty(party)) party = poParty;
         }
 
         const receiptNo = await nextReceiptNo(tx);
@@ -602,12 +632,15 @@ export class GoodsReceiptService {
           data: {
             receiptNo,
             warehouseId: input.warehouseId,
-            supplierId,
+            supplierId: party.supplierId,
+            subcontractorId: party.subcontractorId,
             deliveryNoteNo: input.deliveryNoteNo?.trim() || null,
             currency: input.currency ?? "TRY",
             notes: input.notes?.trim() || null,
             clientToken: input.clientToken ?? null,
             purchaseOrderId: input.purchaseOrderId ?? null,
+            // C2 — fiş seviyesinde raf kararı (varsayılan false = WAREHOUSE).
+            rawStockEntry: input.rawStockEntry === true,
             createdById: userId ?? null,
           },
           select: { id: true, receiptNo: true },
@@ -620,7 +653,13 @@ export class GoodsReceiptService {
       action: "CREATE",
       tableName: "GOODS_RECEIPT",
       recordId: receipt.id,
-      newData: { receiptNo: receipt.receiptNo, warehouseId: input.warehouseId, supplierId: input.supplierId ?? null },
+      newData: {
+        receiptNo: receipt.receiptNo,
+        warehouseId: input.warehouseId,
+        supplierId: input.supplierId ?? null,
+        subcontractorId: input.subcontractorId ?? null,
+        rawStockEntry: input.rawStockEntry === true,
+      },
     });
 
     const lineResult: AddLinesResult = input.lines?.length
@@ -699,6 +738,8 @@ export class GoodsReceiptService {
         currency: true,
         // D3 — satırlardan sonra alış siparişinin karşılanması tazelenir.
         purchaseOrderId: true,
+        // C2 — topun doğacağı raf (aşağıdaki `targetStatus`).
+        rawStockEntry: true,
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
@@ -717,6 +758,11 @@ export class GoodsReceiptService {
     // olağan durum tersidir (depocu fiyat yazmaz) → fiş başına BİR ek sorgu
     // vardır. "Sıfır ek maliyet" DEĞİL, "satır sayısından bağımsız tek sorgu".
     // Fiyat satırı olmayan kurulumda sorgu boş küme döner ve ön-dolum yapılmaz.
+    // ⚠️ C4 — FASON TEDARİKÇİDE CARİ İSTİSNASI YOKTUR ve bu yapısaldır:
+    // `ItemPrice.customerId` FK'sı `Customer`a bakar, yani fason firmaya özel
+    // alış fiyatı SAKLANAMAZ. Fason bacaklı fişte `receipt.supplierId` NULL
+    // olduğu için zincir doğal olarak KART VARSAYILANINA düşer — uydurma bir
+    // eşleme (örn. aynı adlı müşteriyi aramak) yanlış fiyatı sessizce yazardı.
     const priceNeeded = [...new Set(lines.filter((l) => l.unitPrice == null).map((l) => l.itemId))];
     const priceMap =
       priceNeeded.length > 0
@@ -780,6 +826,15 @@ export class GoodsReceiptService {
     // çevirir ve iki alt sistem arasında deadlock doğurur.
     const orderCtx = receipt.purchaseOrderId ? await loadPurchaseOrderContext(receipt.purchaseOrderId) : null;
     const overCtx = blockOverReceipt ? orderCtx : null;
+
+    // ── C2: TOPUN DOĞACAĞI RAF ────────────────────────────────────────────
+    // ⚠️ Karar FİŞİN kolonundan okunur, çağrı parametresinden DEĞİL: satırlar
+    // `POST /:id/lines` ile parça parça eklenir ve raf kararı fişin TAMAMINA
+    // aittir. Parametre olsaydı aynı fişin ikinci partisi sessizce başka rafa
+    // düşebilirdi ("fiş bir kaptır" okumasının ihlali).
+    // ⚠️ `false` ve alanı hiç taşımayan eski fiş AYNI dala düşer (kolon
+    // `@default(false)`) → mevcut davranış bayt-bayt.
+    const targetStatus = receipt.rawStockEntry ? RollStatus.STOCK : RollStatus.WAREHOUSE;
 
     const created: string[] = [];
     const createdYarn: string[] = [];
@@ -845,6 +900,11 @@ export class GoodsReceiptService {
         // İplik `Roll` DOĞURMAZ: top metreyle/barkodla tek tek izlenir, iplik
         // kg ile ve toplu izlenir. Aynı satırdan hem `Roll` hem `YarnMovement`
         // doğurmak aynı malı İKİ KEZ saydırırdı.
+        // ⚠️ C2 (`rawStockEntry`) BU DALI ETKİLEMEZ ve etkileyemez: iplik
+        // defteri kalem × DEPO bazında kg tutar, RAF (statü) kavramı taşımaz —
+        // `YarnStock`ta yazılacak bir alan yoktur. Ham iplik ile satılabilir
+        // ipliği ayırmak istendiğinde doğru çözüm ayrı bir DEPO (ya da
+        // `YarnLot`) olur, buraya sessiz bir bayrak eklemek değil.
         if (info?.itemType === ItemType.YARN) {
           // Pasif kalem: kumaş yolundaki `createInitialEntry` guard'ının ikizi.
           // Mesaj bilerek o yolla AYNI cümleyi kurar — operatör aynı hatayı
@@ -879,7 +939,11 @@ export class GoodsReceiptService {
           false,
           {
             // Satın alınan mal ÜRETİME girmez → doğrudan satılabilir depoya.
-            forcedStatus: RollStatus.WAREHOUSE,
+            // C2 İSTİSNASI: fiş "ham stok girişi" işaretliyse mal İŞLENMEK
+            // ÜZERE alınmıştır (fasona gidecek) → `STOCK`. Barkod tipi de
+            // statüden türer (`finalBarcodeType`): ham girişte "H", satılabilir
+            // girişte "F" — yani etiket de doğru şeyi söyler.
+            forcedStatus: targetStatus,
             forcedEntrySource: RollEntrySource.PURCHASE_RECEIPT,
             warehouseId: receipt.warehouseId,
             goodsReceiptId: receipt.id,
@@ -1118,14 +1182,21 @@ export class GoodsReceiptService {
       sackId: string | null;
       shipmentId: string | null;
     };
+    // ⚠️ `STOCK` LİSTEDE OLMAK ZORUNDA (C2, 2026-08-15). Ham stok girişli fişin
+    // topları `WAREHOUSE` değil `STOCK` doğar; liste eski hâliyle bırakılsaydı
+    // o fişlerin İPTALİ tanım gereği İMKÂNSIZ olurdu ("N top işlem görmüş"),
+    // üstelik hiçbir top işlem görmemişken. `STOCK` "ham rafta bekliyor"
+    // demektir — üretime giren top zaten `IN_PRODUCTION`a geçer ve engelde
+    // kalır, yani guard'ın ölçtüğü şey (mal kullanıldı mı) korunur.
+    const CANCELLABLE_STATUSES = new Set<RollStatus>([
+      RollStatus.WAREHOUSE,
+      RollStatus.A1_STOCK,
+      RollStatus.STOCK,
+      RollStatus.CANCELLED,
+    ]);
     const assertRollsUnused = (list: CancelRollRow[]): void => {
       const used = list.filter(
-        (r) =>
-          (r.status !== RollStatus.WAREHOUSE &&
-            r.status !== RollStatus.A1_STOCK &&
-            r.status !== RollStatus.CANCELLED) ||
-          r.sackId !== null ||
-          r.shipmentId !== null,
+        (r) => !CANCELLABLE_STATUSES.has(r.status) || r.sackId !== null || r.shipmentId !== null,
       );
       if (used.length === 0) return;
       const sample = used
@@ -1306,8 +1377,16 @@ export class GoodsReceiptService {
           deliveryNoteNo: true,
           createdAt: true,
           cancelledAt: true,
+          // C2 — liste rozeti: "ham stok" fişi satılabilir fişten ayırt edilir
+          // (topların düştüğü sekme farklıdır; alan olmadan liste onu söylemez).
+          rawStockEntry: true,
           warehouse: { select: { id: true, name: true } },
-          supplier: { select: { id: true, name: true } },
+          // ⚠️ C4 — İKİ BACAK AYNI ŞEKİLDE döner (`{id, code, name}`): panel tek
+          // "tedarikçi" kolonunda dolu olanı basar. Şekiller ayrışsaydı panel
+          // hangi bacağın hangi alanı taşıdığını ezberlemek zorunda kalırdı;
+          // `code` bu yüzden müşteri bacağına da eklendi (additif, kırıcı değil).
+          supplier: { select: { id: true, code: true, name: true } },
+          subcontractorSupplier: { select: { id: true, code: true, name: true } },
           // ⚠️ LİSTE SAYACI BİLİNÇLİ OLARAK `_count` — assembler DEĞİL.
           // Assembler İÇERİK yüzeylerinin tek kaynağıdır; listeye satır başına
           // assembler koşturmak N+1'dir (perf kuralı 7/9). `_count` aynı
@@ -1431,6 +1510,9 @@ export class GoodsReceiptService {
       include: {
         warehouse: { select: { id: true, code: true, name: true } },
         supplier: { select: { id: true, code: true, name: true } },
+        // C4 — fason tedarikçi bacağı; `supplier` ile AYNI şekil (liste emsali).
+        // `rawStockEntry` (C2) skaler olduğu için `include` ile zaten döner.
+        subcontractorSupplier: { select: { id: true, code: true, name: true } },
         createdBy: { select: { id: true, fullName: true, username: true } },
         // D3 — bağlı alış siparişinin başlığı (fişten siparişe tıkla-git).
         purchaseOrder: { select: { id: true, orderNo: true, status: true, currency: true, expectedDate: true } },
@@ -1480,6 +1562,12 @@ registerPrintedDocBuilder(PrintedDocType.GOODS_RECEIPT, {
         status: true, cancelledAt: true, cancelReason: true,
         warehouse: { select: { name: true, code: true } },
         supplier: { select: { name: true, code: true } },
+        // ⚠️ C4 — BELGE DE İKİ BACAĞI OKUR. Yalnız `supplier` okunsaydı fason
+        // firmadan alınan malın RESMİ fişi tedarikçi hanesine "—" basardı;
+        // o kâğıt depocu-tedarikçi mutabakatının kendisidir. Eski donmuş
+        // belgeler ETKİLENMEZ (builder yalnız fresh/lazy-init yolunda koşar ve
+        // C4 öncesi fişlerin `subcontractorId`si zaten NULL).
+        subcontractorSupplier: { select: { name: true, code: true } },
         createdBy: { select: { fullName: true, username: true } },
       },
     });
@@ -1508,8 +1596,8 @@ registerPrintedDocBuilder(PrintedDocType.GOODS_RECEIPT, {
         date: r.createdAt.toISOString(),
         warehouseName: r.warehouse.name,
         warehouseCode: r.warehouse.code,
-        supplierName: r.supplier?.name ?? null,
-        supplierCode: r.supplier?.code ?? null,
+        supplierName: r.supplier?.name ?? r.subcontractorSupplier?.name ?? null,
+        supplierCode: r.supplier?.code ?? r.subcontractorSupplier?.code ?? null,
         deliveryNoteNo: r.deliveryNoteNo,
         createdBy: r.createdBy?.fullName ?? r.createdBy?.username ?? null,
       },

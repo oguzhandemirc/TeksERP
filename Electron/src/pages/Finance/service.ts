@@ -477,6 +477,37 @@ export async function createInvoice(body: {
   return res.data as { data: { id: string; docNo: string }; message?: string };
 }
 
+/**
+ * SEVKİYATTAN FATURA TASLAĞI — SATIR ÖNİZLEMESİ (C1).
+ *
+ * ⚠️ TEK KAYNAK: aynı kurucuyu sevk sonrası otomatik kanca da kullanıyor
+ * (`shipment-auto-draft.helper`). Panel satırları kendi kurarsa aynı sevkiyat
+ * iki yoldan iki farklı faturaya dönüşür — ve fark, kimsenin karşılaştırmadığı
+ * yerde (fiyat) doğar.
+ *
+ * ⚠️ YALNIZ ÇUVAL SEVKİYATI (`Shipment`). Fasondan doğrudan sevk ayrı bir
+ * tablodur (`DirectShipment`) ve bu uç onu tanımaz — 404 döner.
+ */
+export async function getShipmentInvoiceDraftLines(shipmentId: string) {
+  const res = await apiClient.get(`/api/finance/shipments/${shipmentId}/invoice-draft-lines`);
+  return (res.data as { data: ShipmentInvoiceDraftLines }).data;
+}
+
+/** Uç yanıtının gövdesi — Decimal alanlar JSON'da STRING gelir. */
+export interface ShipmentInvoiceDraftLines {
+  lines: Array<{
+    itemId: string;
+    description: string;
+    qty: number | string;
+    unit: string;
+    unitPrice: number | string;
+    vatRate: number;
+  }>;
+  orderPriced: number;
+  orderConflicts: number;
+  currency: Currency;
+}
+
 export async function confirmInvoice(id: string) {
   const res = await apiClient.post(`/api/finance/invoices/${id}/confirm`);
   return res.data as { message?: string };
@@ -492,12 +523,30 @@ export async function deleteInvoice(id: string) {
   return res.data as { message?: string };
 }
 
+/**
+ * Tahsilat/ödeme listesi.
+ *
+ * ⚠️ SÜZME SUNUCUDA (liste sayfalı) ve süzgeç parametreleri saf katmanda
+ * kurulur (`paymentFilters.buildPaymentListQuery`) — boş değer HİÇ gönderilmez,
+ * gün sınırı istemcinindir. Geçersiz `method` backend'de **400**'dür ve bu
+ * bilinçli: sessizce süzülüp atılan bir filtre, listeyi "filtresizmiş gibi"
+ * döndürürdü (boş listeden kötüsü, YANLIŞ liste).
+ */
 export async function listPayments(params: {
   page: number;
   pageSize: number;
   direction?: string;
   status?: string;
+  /** Tek değer ya da CSV — uç ikisini de tanır. */
+  method?: string;
+  /** CARİ id (müşteri/fason id'si DEĞİL). */
+  cariId?: string;
+  cashBoxId?: string;
+  bankAccountId?: string;
   search?: string;
+  /** Ödeme tarihi aralığı — mutlak an; gün sınırı İSTEMCİNİNDİR. */
+  from?: string;
+  to?: string;
 }): Promise<Paged<PaymentRow>> {
   const res = await apiClient.get("/api/finance/payments", { params });
   return res.data;

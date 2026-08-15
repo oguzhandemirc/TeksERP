@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { PermissionGate } from "@/components/PermissionGate";
+import { SUPPLIER_KIND_TAG, supplierRefOf } from "@/components/forms/supplierParty";
 import { listGoodsReceipts } from "./service";
 import { GoodsReceiptFormDialog } from "./GoodsReceiptFormDialog";
 import { GoodsReceiptDetailSheet } from "./GoodsReceiptDetailSheet";
@@ -88,41 +89,64 @@ export function GoodsReceiptsPage() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="cursor-pointer border-t hover:bg-muted/40"
-                    onClick={() => setDetailId(r.id)}
-                  >
-                    <td className="p-3 font-mono text-xs">{r.receiptNo}</td>
-                    <td className="p-3">{format(new Date(r.createdAt), "dd MMM yyyy HH:mm", { locale: tr })}</td>
-                    <td className="p-3">{r.warehouse?.name ?? "—"}</td>
-                    <td className="p-3">{r.supplier?.name ?? <span className="text-muted-foreground">—</span>}</td>
-                    <td className="p-3 text-xs text-muted-foreground">{r.deliveryNoteNo ?? "—"}</td>
-                    {/* Sayaç backend `_count`undan (yarnMovements eski backend'de
+                {rows.map((r) => {
+                  // C4 — DOLU bacak basılır (cari kart / fason firma); rozet
+                  // yalnız fason tarafta (bugünkü satırlar bayt bayt aynı).
+                  const sup = supplierRefOf(r);
+                  return (
+                    <tr
+                      key={r.id}
+                      className="cursor-pointer border-t hover:bg-muted/40"
+                      onClick={() => setDetailId(r.id)}
+                    >
+                      <td className="p-3 font-mono text-xs">{r.receiptNo}</td>
+                      <td className="p-3">
+                        {format(new Date(r.createdAt), "dd MMM yyyy HH:mm", { locale: tr })}
+                      </td>
+                      <td className="p-3">{r.warehouse?.name ?? "—"}</td>
+                      <td className="p-3">
+                        {sup ? (
+                          <span className="flex items-center gap-1.5">
+                            {sup.name}
+                            {sup.kind === "SUBCONTRACTOR" && (
+                              <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                                {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
+                              </span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="p-3 text-xs text-muted-foreground">{r.deliveryNoteNo ?? "—"}</td>
+                      {/* Sayaç backend `_count`undan (yarnMovements eski backend'de
                         yok → ?? 0 kumaş sayacına düşer). ⚠️ İki sayaç da "ne
                         oldu"yu sayar (iptalli fişte satırlar da sayılır) —
                         "ne kaldı" detaydaki `totals`tadır; ayrışan tek durum
                         İptal rozetli satırdır (backend listReceipts yorumu). */}
-                    <td className="p-3 text-right tabular-nums">
-                      {[
-                        ...(r._count.rolls > 0 || (r._count.yarnMovements ?? 0) === 0
-                          ? [`${r._count.rolls} top`]
-                          : []),
-                        ...((r._count.yarnMovements ?? 0) > 0
-                          ? [`${r._count.yarnMovements} iplik`]
-                          : []),
-                      ].join(" + ")}
-                    </td>
-                    <td className="p-3">
-                      {r.status === "CANCELLED" ? (
-                        <Badge variant="outline">İptal</Badge>
-                      ) : (
-                        <Badge variant="default">Aktif</Badge>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                      <td className="p-3 text-right tabular-nums">
+                        {[
+                          ...(r._count.rolls > 0 || (r._count.yarnMovements ?? 0) === 0
+                            ? [`${r._count.rolls} top`]
+                            : []),
+                          ...((r._count.yarnMovements ?? 0) > 0 ? [`${r._count.yarnMovements} iplik`] : []),
+                        ].join(" + ")}
+                      </td>
+                      <td className="p-3">
+                        <span className="flex items-center gap-1.5">
+                          {r.status === "CANCELLED" ? (
+                            <Badge variant="outline">İptal</Badge>
+                          ) : (
+                            <Badge variant="default">Aktif</Badge>
+                          )}
+                          {/* C2 — ham stok fişi ayırt edilir: toplar Bitmiş Depo
+                            değil Ham Stok sekmesinde durur. */}
+                          {r.rawStockEntry && <Badge variant="outline">Ham stok</Badge>}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

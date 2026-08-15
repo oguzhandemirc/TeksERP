@@ -68,6 +68,29 @@ export function resolveRollTabs(
   );
 }
 
+/**
+ * TEK sekmenin rejime göre çözülmüş adı — Envanter DIŞINDAKİ ekranlar için.
+ *
+ * ⚠️⚠️ ENVANTER SEKMESİNE YÖNLENDİREN HER CÜMLE BURADAN GEÇMELİ, adı elle
+ * YAZMAMALI. 2026-08-15'te tam bu oldu: Mal Kabul'ün başarı toast'ı ve fiş
+ * detayındaki "Ham stok" rozeti sekme adlarını sabit yazıyordu ("Bitmiş Depo" /
+ * "Ham Stok"), oysa Mal Kabul ekranı YALNIZ ticaret kurulumunda çıkıyor ve o
+ * kurulumda `financeEnabled` AÇIK olduğu için şeritte "Depo" / "Yeni Giren"
+ * yazıyor. Yani kullanıcıyı OLMAYAN bir sekmeye gönderiyorduk — hem de tam
+ * olarak o cümlenin çözmek için yazıldığı şikâyeti ("malı bulamıyorum") yeniden
+ * üreterek.
+ *
+ * `productionEnabled` bilerek SORULMAZ: bu iki sekme (RAW_STOCK/FINISHED_STOCK)
+ * üretim süzgecinin dışındadır ve her rejimde çizilir. Yine de liste bir gün
+ * değişirse yer tutucuya düşmek yerine ham etikete düşülür (yönlendirme cümlesi
+ * "undefined" basmamalı).
+ */
+export function rollTabLabel(key: RollTabKey, financeEnabled: boolean): string {
+  const fromRegime = resolveRollTabs(true, financeEnabled).find((t) => t.key === key);
+  if (fromRegime) return fromRegime.label;
+  return ROLL_TABS.find((t) => t.key === key)?.label ?? key;
+}
+
 /** Komut paleti girişinin anahtar ön eki — palet ve sayfa AYNI kuralı okusun. */
 export const ROLL_TAB_ENTRY_PREFIX = "rolls-tab:";
 

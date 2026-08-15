@@ -16,9 +16,7 @@ import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
-import prisma from "../lib/prisma";
-import { AppError } from "../utils/app-error";
-import { collectShipmentInvoiceDraftLines } from "../services/helpers/shipment-auto-draft.helper";
+import { buildShipmentInvoiceDraftPreview } from "../services/helpers/shipment-auto-draft.helper";
 import { cariService } from "../services/cari.service";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
@@ -528,20 +526,93 @@ router.post("/invoices/:id/cancel", requirePermission("finance:invoice"), async 
 // TAHSİLAT / ÖDEME
 // -----------------------------------------------------------------------------
 
+/**
+ * Tahsilat/ödeme LİSTE sorgusu (B4).
+ *
+ * ⚠️ `.strict()` DEĞİL: query string'e panelin eklediği (ya da tarayıcının
+ * taşıdığı) fazladan bir anahtar listeyi 400'e düşürmemeli — burası bir OKUMA
+ * ucu. Yazma uçlarındaki `.strict()` kararı ayrıdır ve orada doğrudur.
+ * ⚠️ CSV taşıyan alanlar (`method`, `cariId`, …) BURADA parçalanmaz: tek kaynak
+ * servisteki `readFilterList`/`readIdCondition`tir. İki yerde parçalamak, iki
+ * farklı boşluk/boş-eleman kuralı demekti.
+ */
+const paymentListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  pageSize: z.coerce.number().int().min(1).max(200).optional(),
+  direction: z.enum(["IN", "OUT"]).optional(),
+  status: z.enum(["ACTIVE", "CANCELLED"]).optional(),
+  method: z.string().max(200).optional(),
+  cariId: z.string().max(400).optional(),
+  cashBoxId: z.string().max(400).optional(),
+  bankAccountId: z.string().max(400).optional(),
+  search: z.string().max(200).optional(),
+  from: isoDate.optional().transform((v) => (v ? new Date(v) : undefined)),
+  to: isoDate.optional().transform((v) => (v ? new Date(v) : undefined)),
+  dateFrom: isoDate.optional().transform((v) => (v ? new Date(v) : undefined)),
+  dateTo: isoDate.optional().transform((v) => (v ? new Date(v) : undefined)),
+});
+
+/**
+ * @openapi
+ * /api/finance/payments:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Tahsilat / ödeme listesi (filtreli)
+ *     description: >
+ *       Süzme SUNUCUDA yapılır — istemcide süzmek yalnız o anki sayfayı süzer
+ *       ve muhasebeci "kayıt yok" sanardı. `cariId` · `method` · `cashBoxId` ·
+ *       `bankAccountId` VİRGÜLLÜ LİSTE kabul eder; `direction` ve `status` iki
+ *       değerli enum oldukları için TEKİLDİR. Tarih çıpası `paymentDate`tir ve
+ *       sınır İSTEMCİNİNDİR (panel yerel gün başı/sonu anını gönderir; backend
+ *       ayrıca yuvarlamaz). `dateFrom`/`dateTo`, `from`/`to` ile AYNI alandır
+ *       (jenerik query-parser adlandırmasıyla uyum).
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: direction
+ *         schema: { type: string, enum: [IN, OUT] }
+ *       - in: query
+ *         name: method
+ *         schema: { type: string }
+ *         description: CASH · BANK_TRANSFER · CREDIT_CARD · OTHER (virgüllü liste)
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [ACTIVE, CANCELLED] }
+ *       - in: query
+ *         name: cariId
+ *         schema: { type: string }
+ *         description: Tek uuid ya da virgüllü liste
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200: { description: Sayfalanmış tahsilat/ödeme listesi }
+ *       400: { description: Geçersiz yön/yöntem/durum değeri }
+ */
 router.get("/payments", requirePermission("finance:read"), async (req, res, next) => {
   try {
-    const q = req.query as Record<string, string | undefined>;
+    // ⚠️ ENUM'LAR ZOD'DAN GEÇER. Eskiden `q.direction as never` ile ham string
+    // doğrudan Prisma'ya gidiyordu: yazım hatası `PrismaClientValidationError`
+    // → generic *"Geçersiz veri yapısı"* 400'ü, yani HANGİ alanın yanlış
+    // olduğunu söylemeyen bir mesaj. Zod alan adını basar.
+    const q = paymentListQuerySchema.parse(req.query);
     const result = await paymentService.list({
-      page: q.page ? Number(q.page) : undefined,
-      pageSize: q.pageSize ? Number(q.pageSize) : undefined,
-      direction: q.direction as never,
-      status: q.status as never,
+      page: q.page,
+      pageSize: q.pageSize,
+      direction: q.direction,
+      status: q.status,
+      method: q.method,
       cariId: q.cariId,
       cashBoxId: q.cashBoxId,
       bankAccountId: q.bankAccountId,
       search: q.search,
-      from: q.from ? new Date(q.from) : undefined,
-      to: q.to ? new Date(q.to) : undefined,
+      // `dateFrom`/`dateTo` = `from`/`to` (takma ad). İkisi de gelirse AÇIK
+      // olan (`from`) kazanır — sessiz bir birleştirme yerine tek kural.
+      from: q.from ?? q.dateFrom,
+      to: q.to ?? q.dateTo,
     });
     res.json({ success: true, ...result });
   } catch (e) {
@@ -700,19 +771,10 @@ router.post("/exchange-rates/fetch-tcmb", requirePermission("finance:write"), as
 router.get("/shipments/:id/invoice-draft-lines", requirePermission("finance:read"), async (req, res, next) => {
   try {
     const id = z.string().uuid().parse(req.params.id);
-    const sh = await prisma.shipment.findUnique({
-      where: { id },
-      select: { id: true, customerId: true },
-    });
-    if (!sh?.customerId) throw AppError.notFound("Sevkiyat bulunamadı ya da müşterisi yok.");
-    // Para birimi kancayla AYNI kural: cari kartının ön-dolum tercihi, yoksa TRY.
-    const cari = await prisma.cariAccount.findUnique({
-      where: { customerId: sh.customerId },
-      select: { defaultCurrency: true },
-    });
-    const currency = cari?.defaultCurrency ?? "TRY";
-    const result = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency as never);
-    res.json({ success: true, data: { ...result, currency } });
+    // ⚠️ Sevkiyat okuması + para birimi çözümü SERVİS KATMANINDA (katman kuralı;
+    // route'ta `prisma` import etmek ESLint `no-restricted-imports` ile yasak).
+    // Para birimi kuralı otomatik kancayla AYNI kaynaktan gelir.
+    res.json({ success: true, data: await buildShipmentInvoiceDraftPreview(id) });
   } catch (e) {
     next(e);
   }

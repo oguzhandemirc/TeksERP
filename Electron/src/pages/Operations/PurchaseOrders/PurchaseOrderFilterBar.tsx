@@ -29,9 +29,8 @@
 import { RotateCcw, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { customerService } from "@/pages/Customers/service";
-import type { Customer } from "@/pages/Customers/types";
+import { SupplierSelect } from "@/components/forms/SupplierSelect";
+import type { SupplierParty } from "@/components/forms/supplierParty";
 import { poFilterControls, type PoFilterScope } from "./filterScope";
 
 /** Canlı kovalar — "işi bitmemiş" siparişler. Backend CSV'yi `IN`'e çevirir. */
@@ -49,7 +48,9 @@ const STATUS_OPTIONS: Array<{ value: string; label: string }> = [
 export interface PurchaseOrderFilterState {
   search: string;
   status: string;
-  supplierId: string | null;
+  /** C4 — daraltma cari kart YA DA fason firma olabilir; sorgu anahtarını
+   *  `supplierPartyQuery` seçer (yanlış bacağa yazmak boş liste demekti). */
+  supplier: SupplierParty | null;
   dateFrom: string;
   dateTo: string;
 }
@@ -57,13 +58,13 @@ export interface PurchaseOrderFilterState {
 export const EMPTY_PO_FILTERS: PurchaseOrderFilterState = {
   search: "",
   status: LIVE_PO_STATUS,
-  supplierId: null,
+  supplier: null,
   dateFrom: "",
   dateTo: "",
 };
 
 export function isPoFilterDirty(f: PurchaseOrderFilterState): boolean {
-  return f.status !== LIVE_PO_STATUS || Boolean(f.search || f.supplierId || f.dateFrom || f.dateTo);
+  return f.status !== LIVE_PO_STATUS || Boolean(f.search || f.supplier || f.dateFrom || f.dateTo);
 }
 
 interface Props {
@@ -88,7 +89,7 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
   const hasHidden = !show.search || !show.status || !show.dateRange;
   // Temizle düğmesi yalnız GÖRÜNEN bir filtre açıkken çıkar: gizli bir kutu
   // yüzünden belirseydi kullanıcı neyi temizlediğini göremezdi.
-  const showClear = orderScope ? isPoFilterDirty(value) : Boolean(value.supplierId);
+  const showClear = orderScope ? isPoFilterDirty(value) : Boolean(value.supplier);
 
   return (
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-6 py-3">
@@ -105,18 +106,19 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
       )}
 
       {show.supplier && (
-        <div className="w-60">
-          <ReferenceSelect<Customer>
-            value={value.supplierId}
-            onChange={(v) => set("supplierId", v)}
-            service={customerService}
-            queryKey="customers"
-            getLabel={(c) => `${c.code} — ${c.name}`}
-            placeholder="Tüm tedarikçiler"
-            nullable
-            noneLabel="Tüm tedarikçiler"
-          />
-        </div>
+        <SupplierSelect
+          className="w-60"
+          value={value.supplier}
+          onChange={(v) => set("supplier", v)}
+          placeholder="Tüm tedarikçiler"
+          nullable
+          noneLabel="Tüm tedarikçiler"
+          // ⚠️ FİLTRE BAĞLAMI: pasif tedarikçiler de listelenir. Sezon sonunda
+          // kapatılan bir firmanın GEÇMİŞ siparişleri duruyor ve aranabilmeli;
+          // aktif süzgeci burada satın almacıya "bu firmanın siparişi yok" yalanı
+          // söyletirdi (formda tersi doğru — orada pasif kayıt zaten reddedilir).
+          includeInactive
+        />
       )}
 
       {show.status && (
@@ -166,7 +168,7 @@ export function PurchaseOrderFilterBar({ value, onChange, scope = "orders" }: Pr
             // Kalem sekmesinde yalnız GÖRÜNEN filtre temizlenir — diğer
             // sekmenin daraltmasını haber vermeden sıfırlamak, kullanıcının
             // görmediği bir şeyi değiştirmek olurdu.
-            onChange(orderScope ? EMPTY_PO_FILTERS : { ...value, supplierId: null })
+            onChange(orderScope ? EMPTY_PO_FILTERS : { ...value, supplier: null })
           }
         >
           <RotateCcw className="mr-1 h-3.5 w-3.5" />

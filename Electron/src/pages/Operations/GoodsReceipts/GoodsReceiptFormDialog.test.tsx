@@ -10,11 +10,19 @@
 // ⭐ FABRİKADA TEK BAYT ÇİZİLMEZ (ticaret paketinin "sıfır görünür fark" kuralı).
 //    Görünürlük kararı bölümün KENDİ saf fonksiyonundadır; buradaki iddia,
 //    kararın forma da yansıdığıdır.
+// ⭐⭐ B5 TOAST'INDAKİ SEKME ADI SABİT YAZILMAZ. Bu dosyanın iki iddiası
+//    2026-08-15'e kadar `"Bitmiş Depo"` / `"Ham Stok"` diyordu ve YANLIŞI
+//    KİLİTLİYORDU: mock'ta `financeEnabled = true` (yani ticaret kurulumu) ve o
+//    rejimde Envanter şeridi aynı sekmeleri "Depo" / "Yeni Giren" diye çiziyor.
+//    Yani toast, ekranda OLMAYAN bir sekmeye yönlendiriyordu — hem de tam olarak
+//    B5'in çözmek için yazıldığı şikâyeti ("malı bulamıyorum") yeniden üreterek.
+//    Beklentiler artık `tabs-regime`den ÜRETİLİR; toast ile şerit ayrışamaz.
 // =============================================================================
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
+import { resolveRollTabs } from "@/pages/Operations/Rolls/tabs-regime";
 import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
 // TİP-ONLY import — `vi.mock` fabrikaları hoist edilir, değer taşıyan import'a
 // dokunamaz; tip silindiği için burada güvenlidir.
@@ -23,6 +31,13 @@ import type { DraftLine } from "./ReceiptLineRows";
 // Rejim bayrağı + yetki: iki iddiayı da kurabilmek için değişken.
 let financeEnabled = true;
 let canReadPurchaseOrders = true;
+
+/** Envanter şeridinin GERÇEKTEN çizdiği sekme adı — beklentinin tek kaynağı. */
+const stripLabel = (key: "RAW_STOCK" | "FINISHED_STOCK", finance: boolean): string => {
+  const tab = resolveRollTabs(true, finance).find((t) => t.key === key);
+  if (!tab) throw new Error(`Sekme şeritte yok: ${key}`);
+  return tab.label;
+};
 
 vi.mock("@/hooks/usePricingEnabled", () => ({
   useFeatureFlags: () => ({ data: { data: { financeEnabled } } }),
@@ -35,9 +50,24 @@ vi.mock("@/hooks/useRoleAccess", () => ({
   }),
 }));
 
+// Toast metni B5'in TEK yüzeyi — mesajın içeriği ölçülüyor.
+const toastSuccess = vi.fn();
+const toastWarning = vi.fn();
+vi.mock("sonner", () => ({
+  toast: {
+    success: (...a: unknown[]) => toastSuccess(...a),
+    warning: (...a: unknown[]) => toastWarning(...a),
+    info: vi.fn(),
+    error: vi.fn(),
+  },
+}));
+
 // Formun ağır çocukları — bu testin konusu değil (kendi bekçileri var).
 vi.mock("./ReceiptImportButton", () => ({ ReceiptImportButton: () => null }));
 vi.mock("@/components/forms/ReferenceSelect", () => ({ ReferenceSelect: () => null }));
+// Tedarikçi seçicisinin KENDİ bekçisi var (`supplierParty.test.ts`); burada
+// yalnız formun geri kalanı ölçülüyor.
+vi.mock("@/components/forms/SupplierSelect", () => ({ SupplierSelect: () => null }));
 vi.mock("./ReceiptLineRows", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./ReceiptLineRows")>();
   // Saf yardımcılar (emptyLine/expandLines/receiptTotals) GERÇEK kalır — form
@@ -194,6 +224,59 @@ describe("GoodsReceiptFormDialog — alış siparişi bölümü", () => {
     );
   });
 
+  it("⭐ C4 — FASON tedarikçili siparişte miras DOĞRU BACAĞA yazılır", async () => {
+    // Eski miras satırı yalnız `supplier.id` okuyordu: fason tedarikçili
+    // siparişte hiçbir şey devralınmaz, fiş tedarikçisiz kaydedilir ve backend
+    // "taraf uyuşmuyor" derdi — ekranda ise devralma yazıyor görünürdü.
+    getPurchaseOrder.mockResolvedValue({
+      id: "po-1",
+      orderNo: "AS1408260001",
+      status: "OPEN",
+      currency: "TRY",
+      supplier: null,
+      subcontractorSupplier: { id: "f1", code: "F001", name: "BOYER BOYA" },
+      lines: [],
+    });
+    listPurchaseOrders.mockResolvedValue({
+      data: [
+        {
+          id: "po-1",
+          orderNo: "AS1408260001",
+          status: "OPEN",
+          currency: "TRY",
+          orderDate: "2026-08-14T00:00:00Z",
+          expectedDate: null,
+          supplier: null,
+          subcontractorSupplier: { id: "f1", code: "F001", name: "BOYER BOYA" },
+        },
+      ],
+      pagination: { total: 1, totalPages: 1 },
+    });
+    createGoodsReceipt.mockResolvedValue({ data: { id: "r1" } });
+    const user = userEvent.setup();
+
+    renderWithProviders(
+      <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+
+    const picker = (await screen.findByRole("option", { name: /AS1408260001/ })).closest(
+      "select",
+    ) as HTMLSelectElement;
+    await user.selectOptions(picker, "po-1");
+
+    // Devralma ekranda AÇIKÇA yazılır (seçicide de, bant cümlesinde de).
+    expect(await screen.findByText(/Tedarikçi siparişten alındı/)).toBeInTheDocument();
+    expect(screen.getAllByText(/BOYER BOYA/).length).toBeGreaterThan(0);
+    await user.click(screen.getByText("stub-satır-gir"));
+    await user.click(screen.getByText(/Fişi Oluştur/));
+
+    await vi.waitFor(() =>
+      expect(createGoodsReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ subcontractorId: "f1", supplierId: null }),
+      ),
+    );
+  });
+
   it("⭐ 'Kalemleri siparişten doldur' satırları EKLER — elle girileni SİLMEZ", async () => {
     getPurchaseOrder.mockResolvedValue({
       id: "po-1",
@@ -298,5 +381,120 @@ describe("GoodsReceiptFormDialog — alış siparişi bölümü", () => {
     );
     expect(await screen.findByText("Yeni Mal Kabul")).toBeInTheDocument();
     expect(screen.queryByText("Alış siparişi (opsiyonel)")).not.toBeInTheDocument();
+  });
+});
+
+// =============================================================================
+// C2 (ham stok tiki) + B5 (toast "nereye düştü") — GÖVDEYE VE EKRANA ULAŞIYOR MU
+// =============================================================================
+describe("GoodsReceiptFormDialog — ham stok girişi ve kayıt geri bildirimi", () => {
+  beforeEach(() => {
+    financeEnabled = true;
+    canReadPurchaseOrders = true;
+    listPurchaseOrders.mockResolvedValue({ data: [], pagination: { total: 0, totalPages: 0 } });
+    createGoodsReceipt.mockResolvedValue({
+      data: { id: "r1", receiptNo: "MK1508260001", totals: { rollCount: 3, yarnLineCount: 0 } },
+    });
+  });
+
+  it("⭐ 'Ham stok olarak al' tiki GÖVDEYE ULAŞIR (özelliğin kesileceği yer)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+
+    await user.click(await screen.findByText(/Ham stok olarak al/));
+    await user.click(screen.getByText("stub-satır-gir"));
+    await user.click(screen.getByText(/Fişi Oluştur/));
+
+    await vi.waitFor(() =>
+      expect(createGoodsReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ rawStockEntry: true }),
+      ),
+    );
+  });
+
+  it("tik atılmazsa varsayılan KAPALIDIR (bugünkü davranış)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+
+    await user.click(await screen.findByText("stub-satır-gir"));
+    await user.click(screen.getByText(/Fişi Oluştur/));
+
+    await vi.waitFor(() =>
+      expect(createGoodsReceipt).toHaveBeenCalledWith(
+        expect.objectContaining({ rawStockEntry: false }),
+      ),
+    );
+  });
+
+  it("⭐ B5 — toast HEDEF SEKMEYİ söyler ve sayıyı YANITTAN alır (taslaktan değil)", async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+
+    // Taslakta 1 satır var; yanıt 3 top diyor. Taslaktan sayan bir toast "1 top"
+    // derdi — envanterde 3 top varken.
+    await user.click(await screen.findByText("stub-satır-gir"));
+    await user.click(screen.getByText(/Fişi Oluştur/));
+
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    const msg = String(toastSuccess.mock.calls[0]?.[0] ?? "");
+    expect(msg).toContain("3 top");
+    // ⚠️ Bu senaryo `financeEnabled = true` ile koşuyor (ticaret kurulumu) —
+    // yani beklenen ad ŞERİTTEKİ addır, fabrika adı DEĞİL.
+    expect(msg).toContain(stripLabel("FINISHED_STOCK", true));
+    expect(msg).not.toContain(stripLabel("FINISHED_STOCK", false));
+  });
+
+  it("⭐ B5 — ham stok fişinde toast HAM STOK sekmesini söyler", async () => {
+    createGoodsReceipt.mockResolvedValue({
+      data: {
+        id: "r1",
+        receiptNo: "MK1508260002",
+        rawStockEntry: true,
+        totals: { rollCount: 2, yarnLineCount: 0 },
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(
+      <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+
+    await user.click(await screen.findByText(/Ham stok olarak al/));
+    await user.click(screen.getByText("stub-satır-gir"));
+    await user.click(screen.getByText(/Fişi Oluştur/));
+
+    await vi.waitFor(() => expect(toastSuccess).toHaveBeenCalled());
+    const msg = String(toastSuccess.mock.calls[0]?.[0] ?? "");
+    expect(msg).toContain(stripLabel("RAW_STOCK", true));
+    expect(msg).not.toContain(stripLabel("RAW_STOCK", false));
+    // Tutulamayacak süreç vaadi verilmez: Fason Sevk yüzeyi `workorder:*`
+    // arkasında ve ham stok fişi açabilen tek rol (WEB_TRADE) o izni taşımıyor.
+    expect(msg).not.toMatch(/fason/i);
+  });
+
+  it("atlanan satır varsa UYARI basılır — başarı cümlesi onu örtmez", async () => {
+    createGoodsReceipt.mockResolvedValue({
+      data: {
+        id: "r1",
+        receiptNo: "MK3",
+        totals: { rollCount: 0, yarnLineCount: 0 },
+        failed: [{ index: 0, itemId: "i1", reason: "Ürün pasif" }],
+      },
+    });
+    const user = userEvent.setup();
+    renderWithProviders(
+      <GoodsReceiptFormDialog open onOpenChange={() => {}} onCreated={() => {}} />,
+    );
+
+    await user.click(await screen.findByText("stub-satır-gir"));
+    await user.click(screen.getByText(/Fişi Oluştur/));
+
+    await vi.waitFor(() => expect(toastWarning).toHaveBeenCalled());
+    expect(toastSuccess).not.toHaveBeenCalled();
   });
 });

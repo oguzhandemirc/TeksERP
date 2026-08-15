@@ -22,11 +22,33 @@ vi.mock("./service", () => ({
   cancelGoodsReceipt: vi.fn(),
   createInvoiceFromReceipt: vi.fn(),
 }));
+const mockCreateInvoice = createInvoiceFromReceipt as unknown as ReturnType<typeof vi.fn>;
 
 // Baskı yüzeyleri bu testin konusu değil (yazıcı/IPC bağımlılıkları taşırlar).
 vi.mock("@/components/print/PrintedDocDialog", () => ({ PrintedDocDialog: () => null }));
 vi.mock("@/components/print/BulkRollLabelButton", () => ({ BulkRollLabelButton: () => null }));
 
+// Yetki kapıları: test kullanıcısı oturumsuz olduğu için PermissionGate her şeyi
+// gizlerdi; "Alış Faturası Oluştur" düğmesi de o kapının arkasında.
+vi.mock("@/hooks/useRoleAccess", () => ({
+  useRoleAccess: () => ({
+    hasPermission: () => true,
+    hasAnyPermission: () => true,
+    hasAllPermissions: () => true,
+  }),
+}));
+
+// Fatura detayı ayrı bir yüzey (kendi bekçisi var) — burada YALNIZ AÇILDIĞI
+// ölçülüyor: B2'nin kesildiği yer tam olarak burasıydı (toast basılıyor, belge
+// gösterilmiyordu).
+vi.mock("@/pages/Finance/InvoiceDetailDialog", () => ({
+  InvoiceDetailDialog: ({ invoiceId }: { invoiceId: string }) => (
+    <div data-testid="fatura-detay">{invoiceId}</div>
+  ),
+}));
+
+import userEvent from "@testing-library/user-event";
+import { createInvoiceFromReceipt } from "./service";
 import { GoodsReceiptDetailSheet } from "./GoodsReceiptDetailSheet";
 
 const DETAIL: GoodsReceiptDetail = {
@@ -145,5 +167,80 @@ describe("GoodsReceiptDetailSheet — alış siparişi yüzeyleri", () => {
 
     expect(await screen.findByText("AS1408260001")).toBeInTheDocument();
     expect(screen.queryByText(/faturalanır/)).not.toBeInTheDocument();
+  });
+});
+
+// =============================================================================
+// B1 (ham enum) · B2 (taslak açılır) · C2 (ham stok rozeti) · C4 (fason bacağı)
+// =============================================================================
+describe("GoodsReceiptDetailSheet — dil, belge ve tedarikçi yüzeyleri", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getGoodsReceipt.mockResolvedValue(DETAIL);
+  });
+
+  it("⭐ B1 — top durumu TÜRKÇE basılır, ham enum EKRANA ÇIKMAZ", async () => {
+    getGoodsReceipt.mockResolvedValue({
+      ...DETAIL,
+      rolls: [
+        {
+          id: "roll-1",
+          barcode: "TP0001",
+          status: "WAREHOUSE",
+          currentQty: 100,
+          width: null,
+          item: { id: "i1", name: "PATOS" },
+          color: null,
+        },
+      ],
+      totals: { rollCount: 1, totalQty: 100 },
+    } satisfies GoodsReceiptDetail);
+
+    renderWithProviders(<GoodsReceiptDetailSheet id="r1" onOpenChange={() => {}} />);
+
+    expect(await screen.findByText("Depoda")).toBeInTheDocument();
+    expect(screen.queryByText("WAREHOUSE")).not.toBeInTheDocument();
+  });
+
+  it("⭐ B2 — 'Alış Faturası Oluştur' doğan TASLAĞI AÇAR (yalnız toast değil)", async () => {
+    mockCreateInvoice.mockResolvedValue({ data: { id: "inv-9", docNo: "AF0001" } });
+    const user = userEvent.setup();
+
+    renderWithProviders(<GoodsReceiptDetailSheet id="r1" onOpenChange={() => {}} />);
+    await user.click(await screen.findByText("Alış Faturası Oluştur"));
+
+    // Belge üreten eylem belgeyi gösterir; id doğru taslağın id'sidir.
+    expect(await screen.findByTestId("fatura-detay")).toHaveTextContent("inv-9");
+  });
+
+  it("fatura üretilmediyse taslak diyaloğu HİÇ açılmaz", async () => {
+    renderWithProviders(<GoodsReceiptDetailSheet id="r1" onOpenChange={() => {}} />);
+    expect(await screen.findByText("Merkez Depo")).toBeInTheDocument();
+    expect(screen.queryByTestId("fatura-detay")).not.toBeInTheDocument();
+  });
+
+  it("⭐ C4 — FASON tedarikçi bacağı basılır (kolon boş kalmaz)", async () => {
+    getGoodsReceipt.mockResolvedValue({
+      ...DETAIL,
+      supplier: null,
+      subcontractorSupplier: { id: "f1", code: "F001", name: "BOYER BOYA" },
+    } satisfies GoodsReceiptDetail);
+
+    renderWithProviders(<GoodsReceiptDetailSheet id="r1" onOpenChange={() => {}} />);
+    expect(await screen.findByText("BOYER BOYA")).toBeInTheDocument();
+  });
+
+  it("⭐ C2 — ham stok fişi ROZETLE ayrışır; normal fişte rozet YOK", async () => {
+    getGoodsReceipt.mockResolvedValue({ ...DETAIL, rawStockEntry: true } satisfies GoodsReceiptDetail);
+    const { unmount } = renderWithProviders(
+      <GoodsReceiptDetailSheet id="r1" onOpenChange={() => {}} />,
+    );
+    expect(await screen.findByText("Ham stok")).toBeInTheDocument();
+    unmount();
+
+    getGoodsReceipt.mockResolvedValue(DETAIL);
+    renderWithProviders(<GoodsReceiptDetailSheet id="r1" onOpenChange={() => {}} />);
+    expect(await screen.findByText("Merkez Depo")).toBeInTheDocument();
+    expect(screen.queryByText("Ham stok")).not.toBeInTheDocument();
   });
 });

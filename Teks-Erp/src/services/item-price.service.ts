@@ -50,7 +50,7 @@ import { randomUUID } from "node:crypto";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { buildWhereClause, buildTurkishSearch, readIdCondition } from "../utils/query-parser";
+import { buildWhereClause, buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 type Db = Prisma.TransactionClient | typeof prisma;
@@ -267,8 +267,11 @@ export class ItemPriceService {
       if (custCond) where.customerId = custCond;
     }
 
-    if (typeof kind === "string" && kind in PriceKind) where.kind = kind as PriceKind;
-    if (typeof currency === "string" && currency in Currency) where.currency = currency as Currency;
+    // ⚠️ `kind in PriceKind` YAZMA — `in` prototip zincirini tarar ve
+    // `filter[kind]=toString` bu ALLOWLIST'i geçip `where.kind = "toString"`
+    // olarak Prisma'ya giderdi (jenerik "Geçersiz veri yapısı" 400'ü).
+    if (typeof kind === "string" && isEnumMember(PriceKind, kind)) where.kind = kind;
+    if (typeof currency === "string" && isEnumMember(Currency, currency)) where.currency = currency;
 
     // ⚠️ Düz `mode:"insensitive"` (ILIKE) Türkçe çiftlerini KATLAMAZ — adlar
     // BÜYÜK saklandığı için "patos" araması sessizce boş dönerdi. Ortak yardımcı

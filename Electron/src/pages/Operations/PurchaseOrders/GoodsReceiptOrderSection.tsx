@@ -14,6 +14,12 @@
 // almak, çelişkiyi seçim ANINDA kapatır ve bu ekranda AÇIKÇA yazılır (sessiz
 // düzeltme, kullanıcının girdiğini haber vermeden değiştirmektir).
 //
+// ⚠️⚠️ MİRAS/KARŞILAŞTIRMA İKİ BACAĞI BİRDEN TAŞIR (C4). Backend uyumu artık
+// "bacak + kimlik" (`samePartyAs`): yalnız `supplierId` karşılaştıran eski
+// satır İKİ NULL'u "eşit" sayardı — yani fason tedarikçili bir siparişe
+// müşteri-tipli tedarikçili fiş bağlanabilir görünürdü ve red ancak KAYDET'te,
+// hiç dokunulmamış bir alandan gelirdi.
+//
 // ⚠️⚠️ "KALEMLERİ SİPARİŞTEN DOLDUR" METRAJI DOLDURMAZ (kumaşta). Fiş formunda
 // metre TOP BAŞINA, siparişteki kalan ise TOPLAMDIR: 500 m bekleyen kalemi tek
 // satıra yazmak sisteme 500 metrelik TEK bir top girmek demektir (gerçekte 5 top
@@ -31,6 +37,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import {
+  sameSupplierParty, supplierPartyOf, supplierRefOf, type SupplierParty,
+} from "@/components/forms/supplierParty";
 import type { DraftLine } from "../GoodsReceipts/ReceiptLineRows";
 import { PurchaseOrderPicker } from "./PurchaseOrderPicker";
 import { fmtQty, getPurchaseOrder } from "./service";
@@ -41,9 +50,9 @@ interface Props {
   /** Seçili alış siparişi — fiş gövdesinde `purchaseOrderId` olarak gider. */
   value: string | null;
   onChange: (id: string | null) => void;
-  /** Fişteki tedarikçi — sipariş seçilince ondan MİRAS ALINIR. */
-  supplierId: string | null;
-  onSupplierChange: (id: string | null) => void;
+  /** Fişteki tedarikçi TARAFI — sipariş seçilince ondan MİRAS ALINIR. */
+  supplier: SupplierParty | null;
+  onSupplierChange: (party: SupplierParty | null) => void;
   /** Üretilen taslak satırlar — çağıran bunları MEVCUT satırlara EKLER. */
   onFillLines: (lines: DraftLine[]) => void;
   disabled?: boolean;
@@ -52,7 +61,7 @@ interface Props {
 export function GoodsReceiptOrderSection({
   value,
   onChange,
-  supplierId,
+  supplier,
   onSupplierChange,
   onFillLines,
   disabled,
@@ -71,16 +80,20 @@ export function GoodsReceiptOrderSection({
   });
   const po = detailQ.data;
 
+  // Siparişin tedarikçi TARAFI — dolu bacak (cari kart ya da fason firma).
+  const poParty = supplierPartyOf(po);
+  const poSupplierRef = supplierRefOf(po);
+
   // Tedarikçiyi siparişten devral. Etki, prop geri döndüğü an kendini kapatır
   // (koşul false olur) → döngü yok. `ref` yalnız "hangi sipariş için devrettik"
   // bilgisini tutar; kullanıcı tedarikçiyi ELLE değiştirirse üstüne yazmayız.
   const inheritedFor = useRef<string | null>(null);
   useEffect(() => {
-    if (!po?.supplier?.id) return;
+    if (!po || !poParty) return;
     if (inheritedFor.current === po.id) return;
     inheritedFor.current = po.id;
-    if (supplierId !== po.supplier.id) onSupplierChange(po.supplier.id);
-  }, [po, supplierId, onSupplierChange]);
+    if (!sameSupplierParty(supplier, poParty)) onSupplierChange(poParty);
+  }, [po, poParty, supplier, onSupplierChange]);
 
   if (!visible) return null;
 
@@ -118,7 +131,7 @@ export function GoodsReceiptOrderSection({
               inheritedFor.current = null;
               onChange(id);
             }}
-            supplierId={supplierId}
+            supplier={supplier}
             disabled={disabled}
           />
         </div>
@@ -149,19 +162,20 @@ export function GoodsReceiptOrderSection({
               "tedarikçi siparişten alındı" demek, tam da çeliştikleri anda
               ekranda duran bir yalan olurdu — backend ise kaydı 400 ile
               reddedecek. İki hâl AYRI cümle kurar. */}
-          {supplierId && po.supplier?.id && supplierId !== po.supplier.id ? (
+          {supplier && poParty && !sameSupplierParty(supplier, poParty) ? (
             <p className="mt-2 flex items-start gap-2 rounded-md bg-amber-100 px-3 py-2 text-[11px] text-amber-900 dark:bg-amber-950 dark:text-amber-200">
               <Info className="mt-0.5 h-3 w-3 shrink-0" />
               <span>
                 Fişteki tedarikçi ile <b>{po.orderNo}</b> siparişinin tedarikçisi (
-                <b>{po.supplier.name}</b>) aynı değil — bu fiş <b>kaydedilemez</b>. Hangisinin doğru
-                olduğunu yalnız siz bilirsiniz: ya fişin tedarikçisini düzeltin ya da siparişi
-                bırakın.
+                <b>{poSupplierRef?.name ?? "—"}</b>) aynı değil — bu fiş <b>kaydedilemez</b>.
+                Hangisinin doğru olduğunu yalnız siz bilirsiniz: ya fişin tedarikçisini düzeltin ya
+                da siparişi bırakın.
               </span>
             </p>
           ) : (
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Tedarikçi siparişten alındı: <b>{po.supplier?.name ?? "—"}</b>. Fişteki tedarikçi ile
+              Tedarikçi siparişten alındı: <b>{poSupplierRef?.name ?? "—"}</b>
+              {poSupplierRef?.kind === "SUBCONTRACTOR" && " (fason firma)"}. Fişteki tedarikçi ile
               siparişinki farklı olamaz — sistem hangisinin doğru olduğunu bilemez.
             </p>
           )}

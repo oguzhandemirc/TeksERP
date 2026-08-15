@@ -31,6 +31,13 @@
 //   R) ⭐ SHORT-CLOSE (G2) — "kalanı gelmeyecek": senkron CLOSED'u EZMEZ,
 //      open-lines'tan düşer, geri almada durum yeniden türetilir, claim yarışı
 //   S) ⭐ RESYNC — bayat sayacı kaynaktan onarır + short-close'a saygılı
+//   U) ⭐ C4 (2026-08-15) — TEDARİKÇİ = müşteri-tipli cari **XOR** fason firma.
+//      Siparişte kural mal kabulden DAHA SIKI: TAM BİRİ zorunlu (sipariş bir
+//      taahhüttür). Ölçülenler: XOR ihlali + boş taraf 400 ve İZ BIRAKMAZ ·
+//      fason bacağı kolona yazılır · detay/liste AYNI şekli taşır · arama fason
+//      adını görür · taraf değişiminde ESKİ bacak NULL'lanır (yarım taraf yok) ·
+//      taraf gönderilmeyen düzenleme tedarikçiye dokunmaz · KARŞILANMA zinciri
+//      fason bacağında da işler · `open-lines`ta iki id uzayı birbirine karışmaz.
 //   T) ⭐ TOP İPTALİ SENKRONU — `InventoryService.softDelete` fiş→sipariş
 //      zinciri doluysa rollup'ı tetikler (eskiden sayaç BAYAT kalıyordu)
 //   Z) KÖRLÜK ZEMİNİ — fixture gerçekten kuruldu mu
@@ -43,6 +50,9 @@ import prisma, { pool } from "../src/lib/prisma";
 import { describeOverReceipt, goodsReceiptService } from "../src/services/goods-receipt.service";
 import { InventoryService } from "../src/services/inventory.service";
 import { purchaseOrderService, syncPurchaseOrder } from "../src/services/purchase-order.service";
+// §U — fason firma TEST tarafından üretilir (seed'in `BOYER`i pasif olabilir ve
+// `findFirst` onu yine bulur; fixture dosyası başlığındaki 2026-08-02 bulgusu).
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 let pass = 0;
 let fail = 0;
@@ -737,6 +747,148 @@ async function main(): Promise<void> {
   await goodsReceiptService.cancel(rTId, `${TAG} fiş iptali`);
   const tCancelled = await detail(poT.id);
   check("T4) Fiş iptali rollup'ı sıfırladı (mevcut yol korunuyor)", num(tCancelled.lines[0]!.receivedQty) === 0, tCancelled.lines[0]!.receivedQty.toString());
+
+  // ── §U ⭐ C4 (2026-08-15) — TEDARİKÇİ İKİ BACAKLI: cari **XOR** fason ─────
+  // Alış HER cariden yapılabilir (Logo/Mikro/SAP BP) ama TEK cariden. Siparişte
+  // kural mal kabulden DAHA SIKI: TAM BİRİ zorunlu — sipariş bir TAAHHÜTTÜR ve
+  // kime verildiği belirsiz bir taahhüt yoktur (şemada `supplierId` bu yüzden
+  // NOT NULL'dı; C4 ile nullable oldu ve kısıt kolondan SERVİSE TAŞINDI).
+  {
+    const dye = await ensureTestDyeHouse();
+
+    // U1 — XOR ihlali + boş taraf: ikisi de 400 ve sipariş DOĞMAZ.
+    const poBefore = await prisma.purchaseOrder.count();
+    let bothErr = "";
+    try {
+      await purchaseOrderService.create({
+        supplierId: supplier.id,
+        subcontractorId: dye.id,
+        lines: [{ itemId: fabric.id, qty: 10 }],
+      });
+    } catch (e) {
+      bothErr = (e as Error).message;
+    }
+    let noneErr = "";
+    try {
+      await purchaseOrderService.create({ lines: [{ itemId: fabric.id, qty: 10 }] });
+    } catch (e) {
+      noneErr = (e as Error).message;
+    }
+    const poAfter = await prisma.purchaseOrder.count();
+    check("U1a) ⭐ İki tedarikçi birden → 400", bothErr.includes("ikisi birden seçilemez"), bothErr.slice(0, 80));
+    check("U1b) ⭐ Tedarikçisiz sipariş → 400 (mal kabulden DAHA SIKI kural)", noneErr.includes("Tedarikçi zorunlu"), noneErr.slice(0, 80));
+    check("U1c) Reddedilen iki denemeden hiçbiri sipariş DOĞURMADI", poBefore === poAfter, `${poBefore} → ${poAfter}`);
+
+    // U2 — Fason firmaya sipariş: kolon yazılır, müşteri bacağı NULL.
+    const poFason = (await purchaseOrderService.create({
+      subcontractorId: dye.id,
+      lines: [{ itemId: fabric.id, qty: 200 }],
+    })).data as unknown as Detail;
+    orderIds.push(poFason.id);
+    const fasonRow = await prisma.purchaseOrder.findUnique({
+      where: { id: poFason.id },
+      select: { supplierId: true, subcontractorId: true, status: true },
+    });
+    check(
+      "U2a) ⭐ Fason firmaya alış siparişi açıldı (subcontractorId dolu, supplierId NULL)",
+      fasonRow?.subcontractorId === dye.id && fasonRow?.supplierId === null,
+      `sub=${fasonRow?.subcontractorId?.slice(0, 8)} sup=${fasonRow?.supplierId}`,
+    );
+    const fasonDetail = (await purchaseOrderService.getById(poFason.id)) as unknown as {
+      subcontractorSupplier?: { id: string; code: string; name: string } | null;
+    };
+    check(
+      "U2b) ⭐ Detay `subcontractorSupplier` {id, code, name} döndürüyor (müşteri bacağıyla AYNI şekil)",
+      fasonDetail.subcontractorSupplier?.id === dye.id &&
+        typeof fasonDetail.subcontractorSupplier?.code === "string" &&
+        typeof fasonDetail.subcontractorSupplier?.name === "string",
+      JSON.stringify(fasonDetail.subcontractorSupplier),
+    );
+
+    // U3 — LİSTE: fason bacağı AYRI bir filtre anahtarıdır (id uzayları farklı;
+    // tek anahtara katlamak müşteri id'sini fason kolonunda aratıp sessiz 0
+    // satır üretirdi) ve ARAMA da fason adını görür.
+    const listByFason = await purchaseOrderService.list({
+      page: 1,
+      pageSize: 100,
+      filters: { subcontractorId: dye.id },
+    });
+    const fasonRowInList = (listByFason.rows as Array<{ id: string; subcontractorSupplier?: { id: string } | null }>)
+      .find((r) => r.id === poFason.id);
+    check(
+      "U3a) ⭐ `filter[subcontractorId]` süzüyor + satır fason bacağını taşıyor",
+      fasonRowInList !== undefined && fasonRowInList.subcontractorSupplier?.id === dye.id,
+      `bulundu=${fasonRowInList !== undefined}`,
+    );
+    const listBySearch = await purchaseOrderService.list({
+      page: 1,
+      pageSize: 100,
+      filters: {},
+      search: dye.name,
+    });
+    check(
+      "U3b) ⭐ Arama fason firma ADINI da görüyor (yoksa kullanıcı kendi siparişini bulamaz)",
+      (listBySearch.rows as Array<{ id: string }>).some((r) => r.id === poFason.id),
+      `${(listBySearch.rows as unknown[]).length} satır`,
+    );
+
+    // U4 — TARAF DEĞİŞİMİ BÜTÜNDÜR: müşteri→fason geçişinde ESKİ bacak NULL'lanır.
+    // ⚠️ Yalnız gönderilen kolonu yazan eski kod, iki bacaklı dünyada "iki
+    // tedarikçili sipariş" üretirdi ve XOR'u koruyan tek mekanizmayı delerdi.
+    const poSwap = (await purchaseOrderService.create({
+      supplierId: supplier.id,
+      lines: [{ itemId: fabric.id, qty: 50 }],
+    })).data as unknown as Detail;
+    orderIds.push(poSwap.id);
+    await purchaseOrderService.update(poSwap.id, { subcontractorId: dye.id });
+    const swapped = await prisma.purchaseOrder.findUnique({
+      where: { id: poSwap.id },
+      select: { supplierId: true, subcontractorId: true },
+    });
+    check(
+      "U4a) ⭐ Müşteri → fason geçişinde ESKİ bacak NULL'landı (yarım taraf yok)",
+      swapped?.subcontractorId === dye.id && swapped?.supplierId === null,
+      `sub=${swapped?.subcontractorId?.slice(0, 8)} sup=${swapped?.supplierId}`,
+    );
+    // Taraf anahtarı GÖNDERİLMEZSE tedarikçiye DOKUNULMAZ (not düzenlemesi
+    // siparişi tedarikçisiz bırakmamalı).
+    await purchaseOrderService.update(poSwap.id, { notes: `${TAG} not` });
+    const untouched = await prisma.purchaseOrder.findUnique({
+      where: { id: poSwap.id },
+      select: { supplierId: true, subcontractorId: true, notes: true },
+    });
+    check(
+      "U4b) ⭐ Taraf gönderilmeyen düzenleme tedarikçiye DOKUNMADI",
+      untouched?.subcontractorId === dye.id && untouched?.supplierId === null && untouched?.notes === `${TAG} not`,
+      `sub=${untouched?.subcontractorId?.slice(0, 8)} not=${untouched?.notes}`,
+    );
+
+    // U5 — KARŞILANMA ZİNCİRİ FASON BACAĞINDA DA ÇALIŞIR: fişten sipariş
+    // rollup'ına giden yol tedarikçinin HANGİ tabloda olduğunu bilmez ve
+    // bilmemeli. (Bilseydi, C4 sessizce yalnız yarısı çalışan bir köprü olurdu.)
+    const rFason = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      purchaseOrderId: poFason.id,
+      lines: [{ itemId: fabric.id, initialQty: 120 }],
+    });
+    receiptIds.push((rFason.data as { id: string }).id);
+    const fasonAfter = await detail(poFason.id);
+    check(
+      "U5a) ⭐ Fason siparişte karşılanma işledi (120/200 → PARTIAL)",
+      num(fasonAfter.lines[0]!.receivedQty) === 120 && fasonAfter.status === PurchaseOrderStatus.PARTIAL,
+      `${fasonAfter.lines[0]!.receivedQty.toString()} / ${fasonAfter.status}`,
+    );
+    check("U5b) Saklanan ile kaynak MUTABIK (drift yok)", fasonAfter.totals.driftLineCount === 0, `drift=${fasonAfter.totals.driftLineCount}`);
+
+    // U6 — AÇIK KALEMLER: fason bacağı kendi anahtarıyla süzülür ve müşteri
+    // anahtarıyla süzülünce GÖRÜNMEZ (iki uzay birbirine karışmıyor).
+    const openFason = await purchaseOrderService.openLines({ subcontractorId: dye.id, itemId: fabric.id });
+    const openCustomer = await purchaseOrderService.openLines({ supplierId: supplier.id, itemId: fabric.id });
+    const inFason = (openFason.rows as Array<{ purchaseOrder: { id: string } }>).some((r) => r.purchaseOrder.id === poFason.id);
+    const inCustomer = (openCustomer.rows as Array<{ purchaseOrder: { id: string } }>).some((r) => r.purchaseOrder.id === poFason.id);
+    check("U6a) ⭐ `open-lines` fason anahtarıyla kalemi buluyor", inFason, `fason=${openFason.total}`);
+    check("U6b) ⭐ Müşteri anahtarıyla fason kalemi GÖRÜNMÜYOR (uzaylar ayrı)", !inCustomer, `müşteri=${openCustomer.total}`);
+  }
 
   // ── Z) KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────
   // "Hiç satır bulunamadı" ile "ihlal yok" AYNI yeşile çıkmamalı: aşağıdaki

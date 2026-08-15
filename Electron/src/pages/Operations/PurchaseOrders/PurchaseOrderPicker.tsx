@@ -29,6 +29,9 @@
 // ile reddeder; kutu o reddi kullanıcının gözü önünde önceden söyler).
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
+import {
+  supplierDisplayName, supplierPartyQuery, type SupplierParty,
+} from "@/components/forms/supplierParty";
 import { listPurchaseOrders } from "./service";
 import { fmtDate } from "./dates";
 import { LIVE_PO_STATUS } from "./PurchaseOrderFilterBar";
@@ -39,21 +42,23 @@ const LIMIT = 200;
 interface Props {
   value: string | null;
   onChange: (id: string | null) => void;
-  /** Fişte seçili tedarikçi — verilirse liste ona daraltılır. */
-  supplierId?: string | null;
+  /** Fişte seçili tedarikçi TARAFI — verilirse liste ona daraltılır. Daraltma
+   *  DOĞRU BACAKTAN yapılır (C4): fason tedarikçiyi `supplierId` ile aramak
+   *  boş liste döndürür ve depocu "bu firmanın siparişi yok" sanır. */
+  supplier?: SupplierParty | null;
   disabled?: boolean;
   className?: string;
 }
 
-export function PurchaseOrderPicker({ value, onChange, supplierId, disabled, className }: Props) {
+export function PurchaseOrderPicker({ value, onChange, supplier, disabled, className }: Props) {
   const q = useQuery({
-    queryKey: ["purchase-orders", "picker", supplierId ?? null],
+    queryKey: ["purchase-orders", "picker", supplier?.kind ?? null, supplier?.id ?? null],
     queryFn: () =>
       listPurchaseOrders({
         page: 1,
         pageSize: LIMIT,
         status: LIVE_PO_STATUS,
-        supplierId: supplierId ?? undefined,
+        ...supplierPartyQuery(supplier),
       }),
     staleTime: 30_000,
   });
@@ -80,7 +85,7 @@ export function PurchaseOrderPicker({ value, onChange, supplierId, disabled, cla
         )}
         {rows.map((o) => (
           <option key={o.id} value={o.id}>
-            {o.orderNo} — {o.supplier?.name ?? "tedarikçisiz"}
+            {o.orderNo} — {supplierDisplayName(o, "tedarikçisiz")}
             {o.expectedDate ? ` · beklenen ${fmtDate(o.expectedDate)}` : ""}
           </option>
         ))}
@@ -101,7 +106,7 @@ export function PurchaseOrderPicker({ value, onChange, supplierId, disabled, cla
         </p>
       ) : !q.isLoading && rows.length === 0 ? (
         <p className="mt-1 text-[11px] text-muted-foreground">
-          {supplierId
+          {supplier
             ? "Bu tedarikçinin açık siparişi yok. Sipariş başka bir tedarikçiye açılmış olabilir."
             : "Açık alış siparişi yok — fiş siparişsiz kaydedilebilir."}
         </p>

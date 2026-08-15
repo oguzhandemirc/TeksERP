@@ -29,6 +29,9 @@ import {
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
+// B4 — liste filtreleri: CSV çoklu seçim tek kaynaktan çözülür (ham CSV bir
+// uuid kolonuna giderse P2007 → 400; CLAUDE.md 2026-08-06).
+import { isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -439,14 +442,40 @@ export class PaymentService {
     return { success: true, data: result, message: `${result.docNo} iptal edildi ve ters kayıtla geri alındı.` };
   }
 
+  /**
+   * TAHSİLAT / ÖDEME LİSTESİ — filtreler (B4, 2026-08-15).
+   *
+   * Süzme SUNUCUDADIR. İstemcide süzmek yalnız O ANKİ SAYFAYI süzer ve
+   * muhasebeci "kayıt yok" sanar — oysa kayıt bir sonraki sayfadadır (top
+   * listesi filtresi dersinin finans ikizi).
+   *
+   * ⚠️ ÇOKLU SEÇİM YALNIZ ANLAMLI OLDUĞU YERDE (CLAUDE.md 2026-08-06 kuralı):
+   *   • `cariId` ve `method` → CSV kabul eder (`readIdCondition`/`readFilterList`).
+   *     ⚠️ `cariId` bir UUID kolonudur: ham CSV geçirilirse Postgres
+   *     "invalid input syntax for type uuid" → Prisma P2007 → 400. Elle okunan
+   *     HER id filtresi `readIdCondition`ten geçmeli.
+   *   • `direction` (IN/OUT) ve `status` (ACTIVE/CANCELLED) → TEKİL. İki değerli
+   *     NOT NULL enum'da "ikisini de seç", "filtre yok" ile aynı sonucu verir;
+   *     çoklu seçim kullanıcıya anlamsız bir kombinasyon vaat eder.
+   *
+   * ⚠️ TARİH ÇIPASI `paymentDate` (kaydın `createdAt`i DEĞİL): geçmişe tarihli
+   * bir tahsilat bugün girilebilir ve muhasebecinin sorduğu şey paranın EL
+   * DEĞİŞTİRDİĞİ gündür. Sınır İSTEMCİNİNDİR (`resolveDateRange` sözleşmesi):
+   * panel seçilen günün YEREL 00:00 / 23:59:59.999 anını gönderir, backend
+   * ayrıca gün yuvarlaması YAPMAZ — yaparsa istemcinin niyeti iki kez
+   * yorumlanır.
+   */
   async list(params: {
     page?: number;
     pageSize?: number;
     direction?: PaymentDirection;
     status?: PaymentStatus;
-    cariId?: string;
-    cashBoxId?: string;
-    bankAccountId?: string;
+    /** Tek değer ya da CSV/çoklu (`readFilterList` sözleşmesi). */
+    method?: string | string[];
+    /** Tek uuid ya da CSV/çoklu. */
+    cariId?: string | string[];
+    cashBoxId?: string | string[];
+    bankAccountId?: string | string[];
     from?: Date;
     to?: Date;
     search?: string;
@@ -456,9 +485,36 @@ export class PaymentService {
     const where: Prisma.PaymentWhereInput = {};
     if (params.direction) where.direction = params.direction;
     if (params.status) where.status = params.status;
-    if (params.cariId) where.cariId = params.cariId;
-    if (params.cashBoxId) where.cashBoxId = params.cashBoxId;
-    if (params.bankAccountId) where.bankAccountId = params.bankAccountId;
+
+    // YÖNTEM: katalog 4 değerli (NAKİT/HAVALE/KART/DİĞER) → çoklu seçim
+    // ANLAMLIDIR ("nakit + kart").
+    // ⚠️ GEÇERSİZ DEĞER SESSİZCE ATILMAZ, 400 OLUR. Süzüp atmak en tehlikeli
+    // davranıştır: filtre ekranda seçili görünürken sorgudan DÜŞER ve liste
+    // "filtresizmiş gibi" döner — boş listeden kötüsü, YANLIŞ liste (CSV
+    // tuzağının üçüncü arıza modu).
+    // ⚠️ Route Zod'u `method`i ENUM OLARAK DOĞRULAMAZ (CSV parçalama burada
+    // yapıldığı için orada `z.string()`tir) — yani bu satır tek kapıdır, "ikinci
+    // hat" değil.
+    // ⚠️ `m in PaymentMethod` YAZMA: `in` prototip zincirini de tarar ve
+    // `?method=toString` guard'ı geçip ham Prisma hatasına düşerdi
+    // (`isEnumMember` başlığında ölçümüyle yazılı).
+    const methods = readFilterList(params.method);
+    const unknownMethod = methods.find((m) => !isEnumMember(PaymentMethod, m));
+    if (unknownMethod) {
+      throw AppError.badRequest(
+        `Geçersiz ödeme yöntemi: "${unknownMethod}". Beklenen: ${Object.keys(PaymentMethod).join(", ")}.`,
+      );
+    }
+    const methodList = methods as PaymentMethod[];
+    if (methodList.length === 1) where.method = methodList[0];
+    else if (methodList.length > 1) where.method = { in: methodList };
+
+    const cari = readIdCondition(params.cariId);
+    if (cari) where.cariId = cari;
+    const cashBox = readIdCondition(params.cashBoxId);
+    if (cashBox) where.cashBoxId = cashBox;
+    const bankAccount = readIdCondition(params.bankAccountId);
+    if (bankAccount) where.bankAccountId = bankAccount;
     if (params.from || params.to) {
       where.paymentDate = { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) };
     }

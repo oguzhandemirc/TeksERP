@@ -9,6 +9,13 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { BulkRollLabelButton } from "@/components/print/BulkRollLabelButton";
+import {
+  SUPPLIER_KIND_TAG, supplierDisplayName, supplierRefOf,
+} from "@/components/forms/supplierParty";
+import { rollStatusLabels, type RollStatus } from "@/types/enums";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { receiptShelfTab } from "./receiptFeedback";
+import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
 import { cancelGoodsReceipt, createInvoiceFromReceipt, getGoodsReceipt } from "./service";
 import type { ReceiptDetailYarnLine } from "./service";
 import { PurchaseOrderSyncBand } from "../PurchaseOrders/PurchaseOrderSyncBand";
@@ -35,10 +42,19 @@ interface Props {
 export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
   const qc = useQueryClient();
   const [confirmCancel, setConfirmCancel] = useState(false);
+  // ⚠️ Rozet tooltip'i kullanıcıyı bir SEKMEYE yönlendiriyor; adı rejimden
+  // çözülür (`receiptShelfTab` → `tabs-regime`), sabit yazılmaz — ticarette o
+  // sekmenin adı "Yeni Giren"dir ve "Ham Stok" diyen bir tooltip kullanıcıyı
+  // ekranda olmayan bir sekmeyi aramaya gönderirdi.
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   // #2 (saha isteği): "Bas" doğrudan yazdırmaz — ÖNİZLEME açar. Operatör ne
   // basacağını görmeden kâğıt harcamasın. Genel bileşen versiyon çubuğunu,
   // revizyonu ve PDF'i de getirir (ShipmentDispatchNote ile aynı yüzey).
   const [docOpen, setDocOpen] = useState(false);
+  // B2 — "Alış Faturası Oluştur" doğurduğu belgeyi AÇAR. Toast birkaç saniyede
+  // kaybolur ve muhasebeci taslağı Faturalar ekranında aramak zorunda kalırdı;
+  // sektör kuralı: belge üreten eylem belgeyi gösterir.
+  const [draftInvoiceId, setDraftInvoiceId] = useState<string | null>(null);
 
   // Fişten alış faturası taslağı — satırları backend gruplar (ürün+renk+FİYAT).
   // Hata toast'ı apiClient interceptor'undan gelir (onError eklenmez).
@@ -48,6 +64,7 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
     onSuccess: (res) => {
       toast.success(res.message ?? `${res.data.docNo} taslağı oluşturuldu.`);
       void qc.invalidateQueries({ queryKey: ["finance"] });
+      setDraftInvoiceId(res.data.id);
     },
   });
 
@@ -90,6 +107,16 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
             <SheetTitle className="flex items-center gap-2">
               <span className="font-mono">{r?.receiptNo ?? "…"}</span>
               {r?.status === "CANCELLED" && <Badge variant="outline">İptal</Badge>}
+              {/* C2 — "bu fişin topları Ham Stok'ta" işareti. Rozetsiz bir ham
+                  stok fişi, satılabilir fişten hiçbir yerde ayırt edilemezdi. */}
+              {r?.rawStockEntry && (
+                <Badge
+                  variant="outline"
+                  title={`Toplar işlenecek mal olarak alındı: Envanter → ${receiptShelfTab(true, financeEnabled)} sekmesinde`}
+                >
+                  Ham stok
+                </Badge>
+              )}
             </SheetTitle>
           </SheetHeader>
 
@@ -109,7 +136,15 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Tedarikçi</dt>
-                  <dd>{r.supplier?.name ?? "—"}</dd>
+                  {/* C4 — dolu bacak basılır; rozet yalnız fason tarafta. */}
+                  <dd className="flex items-center gap-1.5">
+                    {supplierDisplayName(r)}
+                    {supplierRefOf(r)?.kind === "SUBCONTRACTOR" && (
+                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                        {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
+                      </span>
+                    )}
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-xs text-muted-foreground">Tedarikçi İrsaliyesi</dt>
@@ -174,7 +209,12 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                             {roll.color ? ` · ${roll.color.name}` : ""}
                           </td>
                           <td className="p-2 text-right tabular-nums">{String(roll.currentQty)}</td>
-                          <td className="p-2 text-xs text-muted-foreground">{roll.status}</td>
+                          {/* B1 — HAM ENUM BASILMAZ. "WAREHOUSE" yazan bir
+                              hücre, tam da malın nereye düştüğünü soran
+                              depocuya cevap vermiyordu; sözlük zaten vardı. */}
+                          <td className="p-2 text-xs text-muted-foreground">
+                            {rollStatusLabels[roll.status as RollStatus] ?? roll.status}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -280,6 +320,17 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
         description="Belge İLK BASKIDA donar (fiş bir kaptır; satırlar sonradan eklenebilir)."
         writePermission="goods-receipt:write"
       />
+
+      {/* Koşullu mount: her açılış taze bileşen (detay diyaloğunun kendi
+          sözleşmesi). Fiş paneli AÇIK KALIR — kullanıcı taslağı kapatınca
+          fişin başına döner. */}
+      {draftInvoiceId && (
+        <InvoiceDetailDialog
+          invoiceId={draftInvoiceId}
+          open
+          onOpenChange={(o) => !o && setDraftInvoiceId(null)}
+        />
+      )}
 
       <ConfirmDialog
         open={confirmCancel}

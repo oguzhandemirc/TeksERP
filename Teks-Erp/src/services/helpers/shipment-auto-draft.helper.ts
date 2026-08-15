@@ -238,6 +238,35 @@ export async function collectShipmentInvoiceDraftLines(
 }
 
 /**
+ * Panelin "Sevkiyattan Fatura Taslağı" diyaloğunun ÖNİZLEME cevabı.
+ *
+ * ⚠️ Bu fonksiyon var çünkü sevkiyat okuması + para birimi çözümü ROUTE'un
+ * içinde duruyordu ve orada `prisma` doğrudan import ediliyordu (katman kuralı
+ * ihlali; `eslint no-restricted-imports` uzun süredir kırmızıydı). İş mantığı
+ * servis katmanında yaşar — ayrıca para birimi kuralı ("cari kartının ön-dolum
+ * tercihi, yoksa TRY") otomatik kancayla AYNI olmak zorunda ve iki yerde
+ * yazılırsa tam da kimsenin bakmadığı yerde ayrışır.
+ *
+ * Davranış route'taki hâliyle BİREBİR: müşterisiz/eksik sevkiyat 404.
+ */
+export async function buildShipmentInvoiceDraftPreview(
+  shipmentId: string,
+): Promise<ShipmentDraftLinesResult & { currency: Currency }> {
+  const sh = await prisma.shipment.findUnique({
+    where: { id: shipmentId },
+    select: { id: true, customerId: true },
+  });
+  if (!sh?.customerId) throw AppError.notFound("Sevkiyat bulunamadı ya da müşterisi yok.");
+  const cari = await prisma.cariAccount.findUnique({
+    where: { customerId: sh.customerId },
+    select: { defaultCurrency: true },
+  });
+  const currency = (cari?.defaultCurrency ?? Currency.TRY) as Currency;
+  const result = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
+  return { ...result, currency };
+}
+
+/**
  * SEVK ONAYI SONRASI OTOMATİK TASLAK — üç dispatch yolunun ORTAK kancası.
  *
  * Çağıranlar (`shipping.service` wrapper'ı üzerinden): `dispatchShipment`

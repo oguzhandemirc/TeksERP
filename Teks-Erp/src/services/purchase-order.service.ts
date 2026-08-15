@@ -83,7 +83,14 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { readIdCondition } from "../utils/query-parser";
+import { isEnumMember, readIdCondition } from "../utils/query-parser";
+// C4 — tedarikçi İKİ tabloda olabilir (müşteri-tipli cari XOR fason firma);
+// XOR + varlık + aktiflik TEK kapıdan sorulur (mal kabul ile ORTAK).
+import {
+  hasSupplierPartyInput,
+  resolveSupplierParty,
+  type ResolvedSupplierParty,
+} from "./helpers/supplier-party.helper";
 import type { ApiResponse } from "../types/api.types";
 
 /**
@@ -118,7 +125,15 @@ export interface PurchaseOrderLineInput {
 }
 
 export interface PurchaseOrderCreateInput {
-  supplierId: string;
+  /**
+   * Müşteri-tipli cari tedarikçi. C4'ten (2026-08-15) beri OPSİYONEL ama
+   * `subcontractorId` ile XOR: TAM BİRİ dolu olmak ZORUNDA (sipariş bir
+   * taahhüttür; kime verildiği belirsiz kalamaz). Kapı:
+   * `helpers/supplier-party.helper`.
+   */
+  supplierId?: string | null;
+  /** Fason firma tedarikçi (C4) — `supplierId` ile XOR. */
+  subcontractorId?: string | null;
   currency?: Currency;
   orderDate?: Date;
   expectedDate?: Date | null;
@@ -128,7 +143,14 @@ export interface PurchaseOrderCreateInput {
 }
 
 export interface PurchaseOrderUpdateInput {
-  supplierId?: string;
+  /**
+   * ⚠️ TARAF DEĞİŞİMİ BÜTÜNDÜR: iki anahtardan biri gönderilirse tedarikçi
+   * TOPTAN değiştirilir ve DİĞER bacak NULL'lanır (müşteri→fason geçişinde eski
+   * kolonun dolu kalması "iki tedarikçili sipariş" demekti). İkisi de
+   * gönderilmezse tedarikçiye DOKUNULMAZ.
+   */
+  supplierId?: string | null;
+  subcontractorId?: string | null;
   currency?: Currency;
   orderDate?: Date;
   expectedDate?: Date | null;
@@ -432,6 +454,9 @@ const LIST_SELECT = {
   shortClosedAt: true,
   createdAt: true,
   supplier: { select: { id: true, code: true, name: true } },
+  // C4 — fason tedarikçi bacağı; `supplier` ile AYNI şekil. Panel tek
+  // "tedarikçi" kolonunda dolu olanı basar (mal kabul listesiyle simetrik).
+  subcontractorSupplier: { select: { id: true, code: true, name: true } },
   _count: { select: { lines: true, goodsReceipts: true } },
 } as const;
 
@@ -441,7 +466,11 @@ export class PurchaseOrderService {
   // ---------------------------------------------------------------------------
 
   /**
-   * Tedarikçi kartı var + aktif mi.
+   * Tedarikçi tarafı: XOR + kart var + aktif mi.
+   *
+   * ⚠️ C4'ten (2026-08-15) beri İKİ BACAK var (müşteri-tipli cari XOR fason
+   * firma) ve kural mal kabulle ORTAK bir kapıda yaşıyor — iki servis aynı
+   * soruya farklı cümlelerle cevap veremesin (`supplier-party.helper`).
    *
    * ⚠️ `CompanyType` KONTROL EDİLMEZ ve bu bilinçli: şemanın kendi notu tipin
    * "bir ETİKET, duvar DEĞİL" olduğunu söylüyor ve kardeş akış `GoodsReceipt`
@@ -449,13 +478,12 @@ export class PurchaseOrderService {
    * kabulünü kabul eden tutarsız bir çift üretirdi — yani guard yanlış yerde
    * dururdu.
    */
-  private async assertSupplier(supplierId: string): Promise<void> {
-    const supplier = await prisma.customer.findUnique({
-      where: { id: supplierId },
-      select: { id: true, name: true, isActive: true },
-    });
-    if (!supplier) throw AppError.badRequest("Tedarikçi bulunamadı.");
-    if (!supplier.isActive) throw AppError.badRequest(`"${supplier.name}" pasif durumda.`);
+  private async assertSupplierParty(
+    input: { supplierId?: string | null; subcontractorId?: string | null },
+  ): Promise<ResolvedSupplierParty> {
+    // `required: true` — sipariş bir TAAHHÜTTÜR; tedarikçisiz açılamaz. (Mal
+    // kabulde aynı kapı `required: false` ile çağrılır: mal önce girer.)
+    return resolveSupplierParty(input, { required: true });
   }
 
   /** Kalem ürünleri var + aktif mi; miktar pozitif mi. Tek sorguda toplu kontrol. */
@@ -500,7 +528,7 @@ export class PurchaseOrderService {
    * cevap, çarpan tarafın ilk siparişi cached yanıt olarak dönmesidir.
    */
   async create(input: PurchaseOrderCreateInput, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
-    await this.assertSupplier(input.supplierId);
+    const party = await this.assertSupplierParty(input);
     await this.assertLines(input.lines);
 
     if (input.clientToken) {
@@ -528,7 +556,8 @@ export class PurchaseOrderService {
             return tx.purchaseOrder.create({
               data: {
                 orderNo,
-                supplierId: input.supplierId,
+                supplierId: party.supplierId,
+                subcontractorId: party.subcontractorId,
                 currency: input.currency ?? "TRY",
                 status: PurchaseOrderStatus.OPEN,
                 orderDate,
@@ -579,7 +608,12 @@ export class PurchaseOrderService {
       action: "CREATE",
       tableName: "PURCHASE_ORDER",
       recordId: created.id,
-      newData: { orderNo: created.orderNo, supplierId: input.supplierId, lineCount: input.lines.length },
+      newData: {
+        orderNo: created.orderNo,
+        supplierId: party.supplierId,
+        subcontractorId: party.subcontractorId,
+        lineCount: input.lines.length,
+      },
     });
 
     return {
@@ -621,7 +655,13 @@ export class PurchaseOrderService {
    * sonraki kabul olayında kendini onarıyordu.
    */
   async update(id: string, input: PurchaseOrderUpdateInput, userId?: string): Promise<ApiResponse<Record<string, unknown>>> {
-    if (input.supplierId) await this.assertSupplier(input.supplierId);
+    // ⚠️ C4 — TARAF GÖNDERİLDİYSE BÜTÜN OLARAK ÇÖZÜLÜR. Eski kod yalnız
+    // `input.supplierId` doluysa yazıyordu; iki bacaklı dünyada bu, müşteri→
+    // fason geçişinde ESKİ kolonu dolu bırakır ve şemada XOR'u koruyan tek
+    // mekanizmayı (servis kapısı) sessizce delerdi. Anahtarlardan hiçbiri
+    // gönderilmezse tedarikçiye dokunulmaz (`hasSupplierPartyInput`).
+    const partyTouched = hasSupplierPartyInput(input);
+    const party = partyTouched ? await this.assertSupplierParty(input) : null;
     if (input.lines) await this.assertLines(input.lines);
 
     const before = await prisma.purchaseOrder.findUnique({
@@ -655,7 +695,8 @@ export class PurchaseOrderService {
       const claimed = await tx.purchaseOrder.updateMany({
         where: { id, status: PurchaseOrderStatus.OPEN },
         data: {
-          ...(input.supplierId ? { supplierId: input.supplierId } : {}),
+          // İki kolon BİRLİKTE yazılır (biri mutlaka NULL) — yarım taraf yok.
+          ...(party ? { supplierId: party.supplierId, subcontractorId: party.subcontractorId } : {}),
           ...(input.currency ? { currency: input.currency } : {}),
           ...(input.orderDate ? { orderDate: input.orderDate } : {}),
           ...(input.expectedDate !== undefined ? { expectedDate: input.expectedDate } : {}),
@@ -977,13 +1018,26 @@ export class PurchaseOrderService {
   }): Promise<{ rows: unknown[]; total: number | null; nextCursor: string | null }> {
     const where: Prisma.PurchaseOrderWhereInput = {};
 
+    // ⚠️ İKİ BACAK AYRI FİLTRELERDİR, tek "tedarikçi" anahtarına katlanmaz:
+    // panel iki farklı tablodan seçim yaptırıyor ve id uzayları ayrı; tek
+    // anahtar altında birleştirmek, bir müşteri id'sinin fason kolonunda
+    // aranmasına (sessiz 0 satır) kapı açardı.
+    // ⚠️ `readIdCondition` — CSV çoklu seçim tuzağı (CLAUDE.md 2026-08-06):
+    // ham string geçirilirse uuid kolonunda P2007 → 400.
     const supplier = readIdCondition(params.filters.supplierId);
     if (supplier) where.supplierId = supplier;
+    const subcontractor = readIdCondition(params.filters.subcontractorId);
+    if (subcontractor) where.subcontractorId = subcontractor;
 
     const statusRaw = params.filters.status;
     const statusList = (Array.isArray(statusRaw) ? statusRaw : statusRaw ? statusRaw.split(",") : [])
       .map((s) => s.trim().toUpperCase())
-      .filter((s): s is PurchaseOrderStatus => s in PurchaseOrderStatus);
+      // ⚠️ `s in PurchaseOrderStatus` YAZMA: `in` prototip zincirini tarar.
+      // Burada üstteki `.toUpperCase()` bugün KAZAYLA koruyor (prototip
+      // anahtarlarının hepsi küçük/camelCase), yani güvence koda değil bir yan
+      // etkiye dayanıyordu — o satır kaldırılırsa `?filter[status]=toString`
+      // süzgeci geçip Prisma'ya giderdi.
+      .filter((s): s is PurchaseOrderStatus => isEnumMember(PurchaseOrderStatus, s));
     if (statusList.length === 1) where.status = statusList[0];
     else if (statusList.length > 1) where.status = { in: statusList };
 
@@ -1000,6 +1054,9 @@ export class PurchaseOrderService {
         { orderNo: { contains: q, mode: "insensitive" } },
         { notes: { contains: q, mode: "insensitive" } },
         { supplier: { name: { contains: q, mode: "insensitive" } } },
+        // C4 — fason bacağı aramaya da girer; yoksa "boyahane" yazan kullanıcı
+        // kendi verdiği siparişi bulamaz ve liste "kayıt yok" der.
+        { subcontractorSupplier: { name: { contains: q, mode: "insensitive" } } },
       ];
     }
 
@@ -1046,6 +1103,8 @@ export class PurchaseOrderService {
       where: { id },
       include: {
         supplier: { select: { id: true, code: true, name: true } },
+        // C4 — fason tedarikçi bacağı (liste ile AYNI şekil).
+        subcontractorSupplier: { select: { id: true, code: true, name: true } },
         createdBy: { select: { id: true, fullName: true, username: true } },
         cancelledBy: { select: { id: true, fullName: true, username: true } },
         shortClosedBy: { select: { id: true, fullName: true, username: true } },
@@ -1115,6 +1174,8 @@ export class PurchaseOrderService {
    */
   async openLines(params: {
     supplierId?: string;
+    /** C4 — fason tedarikçi bacağı (müşteri bacağıyla AYRI anahtar). */
+    subcontractorId?: string;
     itemId?: string;
     overdueOnly?: boolean;
     limit?: number;
@@ -1125,6 +1186,7 @@ export class PurchaseOrderService {
       purchaseOrder: {
         status: { in: [PurchaseOrderStatus.OPEN, PurchaseOrderStatus.PARTIAL] },
         ...(params.supplierId ? { supplierId: params.supplierId } : {}),
+        ...(params.subcontractorId ? { subcontractorId: params.subcontractorId } : {}),
         // "Gecikmiş" = beklenen tarih GEÇMİŞ. Tarihi olmayan kalem gecikmiş
         // SAYILMAZ — bilgi yokluğunu suçlamaya çevirmek yanlış rapor üretir.
         ...(params.overdueOnly ? { expectedDate: { lt: new Date() } } : {}),
@@ -1153,6 +1215,7 @@ export class PurchaseOrderService {
             orderDate: true,
             expectedDate: true,
             supplier: { select: { id: true, code: true, name: true } },
+            subcontractorSupplier: { select: { id: true, code: true, name: true } },
           },
         },
       },

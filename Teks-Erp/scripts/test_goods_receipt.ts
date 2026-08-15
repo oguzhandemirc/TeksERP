@@ -39,6 +39,21 @@
 //      satır KALIR ("42 girdi, 8'ini yutma" kuralı) ve iki guard'ın SIRASI
 //      (önce fiyat = satırın kendi tutarlılığı, sonra sipariş kapsaması =
 //      bağlam) mekanik olarak kilitlidir.
+//   K) ⭐ C4 (2026-08-15) — TEDARİKÇİ = müşteri-tipli cari **XOR** fason firma.
+//      Alış HER cariden yapılabilir (Logo/Mikro/SAP BP) ama TEK cariden. XOR
+//      ihlali 400 + İZ BIRAKMAZ; fason bacağı kolona yazılır; detay/liste İKİ
+//      bacağı da AYNI şekilde (`{id, code, name}`) döner; alış siparişi uyumu
+//      BACAK+KİMLİK birlikte ölçülür (yalnız `supplierId` karşılaştıran eski
+//      kural iki NULL'u "eşit" sayıp fişi yanlış cariye yazardı); donmuş fiş
+//      belgesi fason adını basar; GR→alış faturası `CariKind.SUBCONTRACTOR`
+//      hesabına bağlanır.
+//   L) ⭐ C2 (2026-08-15) — FİŞ SEVİYESİNDE HAM STOK GİRİŞİ (`rawStockEntry`).
+//      İLK KONTROL KAPALI-PARİTE: alan yokken (ve `false` iken) toplar
+//      `WAREHOUSE` doğar — bugünkü davranış bayt-bayt. Açıkken `STOCK` + 'H'
+//      barkod tipi; karar FİŞTE saklandığı için SONRADAN eklenen satır da aynı
+//      rafa düşer; İPLİK dalı ETKİLENMEZ (kg defteri raf taşımaz); ham stok
+//      fişi İPTAL EDİLEBİLİR (`STOCK` iptal-edilebilir statü listesinde —
+//      olmasaydı bu fişler tanım gereği iptal edilemezdi).
 //   I) ⭐ YARIŞ (Sınıf 4, I1 — 2026-08-14): addLines ‖ cancel. Pencere ELLE
 //      AÇIK TUTULAN tx ile deterministik kurulur (kök CLAUDE.md yarış bekçisi
 //      kuralı). İki yön: (a) iptal uçuşta → addLines fiş kilidinde BEKLER,
@@ -70,10 +85,14 @@ import {
 import { randomUUID } from "node:crypto";
 import prisma, { pool } from "../src/lib/prisma";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
+import { invoiceService } from "../src/services/invoice.service";
 import { printedDocumentService } from "../src/services/printed-document.service";
 import { purchaseOrderService } from "../src/services/purchase-order.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
+// §K — fason firma TEST tarafından üretilir; seed'in `BOYER`i pasif olabilir
+// ve `findFirst` onu yine bulur (2026-08-02 saha bulgusu, fixture dosyası başlığı).
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 let pass = 0;
 let fail = 0;
@@ -98,6 +117,11 @@ let yarnItemId: string | null = null;
 const jItemIds: string[] = [];
 const jOrderIds: string[] = [];
 const jCustomerIds: string[] = [];
+/** §K + §L fixture'ları (C4 fason bacağı + C2 raf kararı). */
+const kItemIds: string[] = [];
+const kOrderIds: string[] = [];
+const kCustomerIds: string[] = [];
+const kInvoiceIds: string[] = [];
 
 const OVER_KEY = SETTING_KEYS.PURCHASE_BLOCK_OVER_RECEIPT_ENABLED;
 const PRICE_KEY = SETTING_KEYS.GOODS_RECEIPT_REQUIRE_PRICE_ENABLED;
@@ -835,7 +859,326 @@ async function main(): Promise<void> {
     );
   }
 
+  // ── §K ⭐ C4 — TEDARİKÇİ = MÜŞTERİ-TİPLİ CARİ **XOR** FASON FİRMA ─────────
+  // Alış HER cariden yapılabilir (Logo/Mikro/SAP BP standardı) ama TEK cariden:
+  // "iki tedarikçili fiş" diye bir şey yoktur. Kural şemada CHECK ile değil
+  // SERVİSTE (tek kapı) yaşıyor — çünkü operatörün duyması gereken şey bir
+  // constraint adı değil somut bir cümledir; o cümlenin de tek kopyası olmalı.
+  {
+    // ⚠️ §J BAYRAKLARI AÇIK BIRAKIYOR (geri yükleme `finally`de). Aşağıdaki iki
+    // bölüm o rejimi MİRAS ALMAMALI: `requirePriceEnabled` açıkken fiyatsız her
+    // satır reddedilir ve §L'in ölçtüğü şey (topun hangi rafa doğduğu) hiç
+    // ölçülemez — üstelik `every` boş dizide TRUE döndüğü için bazı kontroller
+    // sahte-yeşil kalırdı (ilk yazımda tam bu oldu, ölçüldü).
+    await setFlag(OVER_KEY, false);
+    await setFlag(PRICE_KEY, false);
+
+    const dye = await ensureTestDyeHouse();
+    const kSupplier = await prisma.customer.create({
+      data: { code: `${TAG}-KTED`, name: `${TAG} K Tedarikçi`, type: "SUPPLIER" },
+      select: { id: true },
+    });
+    kCustomerIds.push(kSupplier.id);
+    const kItem = await prisma.item.create({
+      data: { code: `${TAG}-KKUM`, name: `${TAG} K Kumaş`, itemType: ItemType.FABRIC, unit: ItemUnit.MT },
+      select: { id: true },
+    });
+    kItemIds.push(kItem.id);
+
+    // K1 — XOR: iki bacak birden → 400 ve fiş DOĞMAZ. (İhlalin sessizce
+    // "birini seçmesi" en kötü davranış olurdu: alış faturası yanlış cariye
+    // borç yazar ve kimse sebebini göremez.)
+    const beforeCount = await prisma.goodsReceipt.count();
+    let xorErr = "";
+    try {
+      await goodsReceiptService.create({
+        warehouseId: wh.id,
+        supplierId: kSupplier.id,
+        subcontractorId: dye.id,
+      });
+    } catch (e) {
+      xorErr = (e as Error).message;
+    }
+    const afterCount = await prisma.goodsReceipt.count();
+    check(
+      "K1a) ⭐ XOR: iki tedarikçi birden → 400 (mesaj somut)",
+      xorErr.includes("ikisi birden seçilemez"),
+      xorErr.slice(0, 100),
+    );
+    check("K1b) ⭐ Reddedilen fiş İZ BIRAKMADI (fiş sayısı değişmedi)", beforeCount === afterCount, `${beforeCount} → ${afterCount}`);
+
+    // K2 — Fason bacaklı fiş: kolon yazılır, müşteri bacağı NULL kalır.
+    const kFason = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      subcontractorId: dye.id,
+      lines: [{ itemId: kItem.id, initialQty: 60, unitPrice: 5 }],
+    });
+    const kFasonId = (kFason.data as { id: string }).id;
+    receiptIds.push(kFasonId);
+    const kRow = await prisma.goodsReceipt.findUnique({
+      where: { id: kFasonId },
+      select: { supplierId: true, subcontractorId: true },
+    });
+    check(
+      "K2a) ⭐ Fason firmadan mal kabul YAZILDI (subcontractorId dolu, supplierId NULL)",
+      kRow?.subcontractorId === dye.id && kRow?.supplierId === null,
+      `sub=${kRow?.subcontractorId?.slice(0, 8)} sup=${kRow?.supplierId}`,
+    );
+
+    // K3 — YÜZEY PARİTESİ: detay ve liste İKİ bacağı da AYNI şekilde döner.
+    // Şekiller ayrışırsa panel hangi bacağın hangi alanı taşıdığını ezberler
+    // ve ilk unutan yüzeyde tedarikçi hanesi sessizce boş kalır.
+    const kDetail = (await goodsReceiptService.loadDetail(kFasonId)) as {
+      subcontractorSupplier?: { id: string; code: string; name: string } | null;
+      supplier?: unknown;
+      rawStockEntry?: boolean;
+    };
+    check(
+      "K3a) ⭐ Detay `subcontractorSupplier` {id, code, name} döndürüyor",
+      kDetail.subcontractorSupplier?.id === dye.id &&
+        typeof kDetail.subcontractorSupplier?.code === "string" &&
+        typeof kDetail.subcontractorSupplier?.name === "string",
+      JSON.stringify(kDetail.subcontractorSupplier),
+    );
+    const kList = await goodsReceiptService.list({ page: 1, pageSize: 200, filters: { subcontractorId: dye.id } });
+    const kListRow = (kList.rows as Array<{ id: string; subcontractorSupplier?: { id: string; code: string; name: string } | null }>)
+      .find((r) => r.id === kFasonId);
+    check(
+      "K3b) ⭐ Liste `filter[subcontractorId]` ile süzüyor + aynı şekli taşıyor",
+      kListRow !== undefined && kListRow.subcontractorSupplier?.id === dye.id,
+      `bulundu=${kListRow !== undefined}`,
+    );
+
+    // K4 — ALIŞ SİPARİŞİ UYUMU BACAK + KİMLİK BİRLİKTE ölçülür.
+    // ⚠️ Yalnız `supplierId` eşitliğine bakan eski kural, fason siparişe
+    // müşteri-tipli tedarikçili fiş bağlanmasına izin VERİRDİ ("iki taraf da
+    // null" diye eşit sayılırdı) ve fiş sessizce yanlış cariye yazılırdı.
+    const kFasonPo = (await purchaseOrderService.create({
+      subcontractorId: dye.id,
+      lines: [{ itemId: kItem.id, qty: 100 }],
+    })).data as unknown as { id: string; orderNo: string };
+    kOrderIds.push(kFasonPo.id);
+    let mismatchErr = "";
+    try {
+      await goodsReceiptService.create({
+        warehouseId: wh.id,
+        supplierId: kSupplier.id,
+        purchaseOrderId: kFasonPo.id,
+      });
+    } catch (e) {
+      mismatchErr = (e as Error).message;
+    }
+    check(
+      "K4a) ⭐ Fason siparişe MÜŞTERİ-tipli tedarikçili fiş bağlanamaz (bacak+kimlik)",
+      mismatchErr.includes("aynı değil"),
+      mismatchErr.slice(0, 90),
+    );
+    const kInherit = await goodsReceiptService.create({ warehouseId: wh.id, purchaseOrderId: kFasonPo.id });
+    const kInheritId = (kInherit.data as { id: string }).id;
+    receiptIds.push(kInheritId);
+    const kInheritRow = await prisma.goodsReceipt.findUnique({
+      where: { id: kInheritId },
+      select: { supplierId: true, subcontractorId: true },
+    });
+    check(
+      "K4b) ⭐ Tedarikçisiz fiş siparişten MİRAS aldı — fason bacağıyla",
+      kInheritRow?.subcontractorId === dye.id && kInheritRow?.supplierId === null,
+      `sub=${kInheritRow?.subcontractorId?.slice(0, 8)}`,
+    );
+
+    // K5 — RESMİ FİŞ BELGESİ de iki bacağı okur. Yalnız `supplier` okunsaydı
+    // fason alımın kâğıdı tedarikçi hanesine "—" basardı; o kâğıt tam da
+    // depocu-tedarikçi mutabakatının kendisidir.
+    const kHtml = (await printedDocumentService.getHtml("GOODS_RECEIPT" as never, kFasonId)).data?.html ?? "";
+    const kFrozen = await prisma.printedDocument.findFirst({
+      where: { docType: "GOODS_RECEIPT", sourceId: kFasonId },
+      select: { snapshot: true },
+    });
+    const kDoc = (kFrozen?.snapshot as { doc?: { header?: { supplierName?: string | null } } } | null)?.doc ?? {};
+    check(
+      "K5) ⭐ Donmuş fiş belgesi fason firmayı TEDARİKÇİ olarak basıyor",
+      kDoc.header?.supplierName === dye.name && kHtml.includes(dye.name),
+      `snapshot=${kDoc.header?.supplierName ?? "—"}`,
+    );
+
+    // K6 — GR → ALIŞ FATURASI: fason bacağı `invoice.subcontractorId` ile
+    // doğar. Fatura katmanı iki tarafı zaten taşıyordu; eksik olan tek şey
+    // fişin bacağını OKUMAKTI — okunmasaydı bu fişten fatura kesmenin hiçbir
+    // yolu olmazdı (generic uç `goodsReceiptId` kabul etmiyor).
+    // ⚠️ Hata YUTULMAZ, SEBEBE ÇEVRİLİR (L4 ile aynı gerekçe): fason bacağı
+    // düşerse çağrı 400 fırlatır ve `await` main'i çökertir — kırmızı görünür
+    // ama HANGİ kontrolün düştüğü yazmaz.
+    let kInvErr = "";
+    const kInv = await invoiceService.createDraftFromGoodsReceipt(kFasonId).catch((e: unknown) => {
+      kInvErr = (e as Error).message;
+      return { data: { id: "" } };
+    });
+    if (kInvErr) check("K6-hata) Fatura taslağı üretilemedi (sebep aşağıda)", false, kInvErr.slice(0, 120));
+    const kInvId = (kInv.data as { id: string }).id;
+    if (kInvId) kInvoiceIds.push(kInvId);
+    // ⚠️ Taslak hiç doğmadıysa (yukarıdaki catch) `findUnique` boş id ile
+    // çağrılıp ham bir Prisma hatasıyla ÇÖKERDİ; sonda koşan kişi K6a/K6b'yi
+    // adıyla kırmızı görmeli.
+    const kInvRow = kInvId
+      ? await prisma.invoice.findUnique({
+          where: { id: kInvId },
+          select: {
+            type: true,
+            status: true,
+            cari: { select: { kind: true, customerId: true, subcontractorId: true } },
+          },
+        })
+      : null;
+    check(
+      "K6a) ⭐ Fason tedarikçili fişten ALIŞ FATURASI taslağı doğdu",
+      kInvRow?.type === "PURCHASE" && kInvRow?.status === "DRAFT",
+      `${kInvRow?.type}/${kInvRow?.status}`,
+    );
+    check(
+      "K6b) ⭐ Taslak FASON carisine bağlandı (kind=SUBCONTRACTOR, customerId NULL)",
+      kInvRow?.cari?.kind === "SUBCONTRACTOR" &&
+        kInvRow?.cari?.subcontractorId === dye.id &&
+        kInvRow?.cari?.customerId === null,
+      `kind=${kInvRow?.cari?.kind} sub=${kInvRow?.cari?.subcontractorId?.slice(0, 8)}`,
+    );
+  }
+
+  // ── §L ⭐ C2 — FİŞ SEVİYESİNDE HAM STOK GİRİŞİ (`rawStockEntry`) ─────────
+  // Perde/tekstil ticaretinde İKİ meşru alım var: satılacak BİTMİŞ mal
+  // (`WAREHOUSE`) ve işlenmek üzere alınan HAM mal (fasona gidecek → `STOCK`).
+  // İLK KONTROL KAPALI-PARİTEDİR: alan verilmeyince davranış bayt-bayt
+  // bugünküdür — özelliğin bedeli yoksa gerisi konuşulabilir.
+  {
+    const lItem = await prisma.item.create({
+      data: { code: `${TAG}-LKUM`, name: `${TAG} L Kumaş`, itemType: ItemType.FABRIC, unit: ItemUnit.MT },
+      select: { id: true },
+    });
+    kItemIds.push(lItem.id);
+    const lYarn = await prisma.item.create({
+      data: { code: `${TAG}-LIPL`, name: `${TAG} L İplik`, itemType: ItemType.YARN, unit: ItemUnit.KG },
+      select: { id: true },
+    });
+    kItemIds.push(lYarn.id);
+
+    // L1 — ALAN YOK → WAREHOUSE (bayt-bayt bugünkü davranış).
+    const lDefault = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      lines: [{ itemId: lItem.id, initialQty: 30 }],
+    });
+    const lDefaultId = (lDefault.data as { id: string }).id;
+    receiptIds.push(lDefaultId);
+    const lDefaultRolls = await prisma.roll.findMany({
+      where: { goodsReceiptId: lDefaultId },
+      select: { status: true, barcode: true },
+    });
+    check(
+      "L1a) ⭐ KAPALI PARİTE: alan verilmeyince toplar WAREHOUSE doğar",
+      lDefaultRolls.length === 1 && lDefaultRolls[0]!.status === RollStatus.WAREHOUSE,
+      `status=${lDefaultRolls[0]?.status}`,
+    );
+    check(
+      "L1b) Barkod tipi statüden türer — satılabilir girişte 'F'",
+      /^T\d{6}F/.test(lDefaultRolls[0]?.barcode ?? ""),
+      lDefaultRolls[0]?.barcode ?? "—",
+    );
+    const lFalse = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      rawStockEntry: false,
+      lines: [{ itemId: lItem.id, initialQty: 20 }],
+    });
+    const lFalseId = (lFalse.data as { id: string }).id;
+    receiptIds.push(lFalseId);
+    const lFalseStatus = (await prisma.roll.findFirst({ where: { goodsReceiptId: lFalseId }, select: { status: true } }))?.status;
+    check("L1c) `rawStockEntry: false` de WAREHOUSE (açık ve örtük aynı dal)", lFalseStatus === RollStatus.WAREHOUSE, `${lFalseStatus}`);
+
+    // L2 — AÇIK → STOCK. Karar FİŞTE saklanır ve satırlar SONRADAN eklense
+    // bile aynı rafa düşer ("fiş bir kaptır": ikinci parti sessizce başka rafa
+    // düşemez).
+    const lRaw = await goodsReceiptService.create({
+      warehouseId: wh.id,
+      rawStockEntry: true,
+      lines: [{ itemId: lItem.id, initialQty: 40 }],
+    });
+    const lRawId = (lRaw.data as { id: string }).id;
+    receiptIds.push(lRawId);
+    await goodsReceiptService.addLines(lRawId, [{ itemId: lItem.id, initialQty: 25 }]);
+    const lRawRolls = await prisma.roll.findMany({
+      where: { goodsReceiptId: lRawId },
+      select: { status: true, barcode: true, entrySource: true, warehouseId: true },
+    });
+    check(
+      "L2a) ⭐ `rawStockEntry: true` → İKİ satır da STOCK (create + sonradan eklenen)",
+      lRawRolls.length === 2 && lRawRolls.every((r) => r.status === RollStatus.STOCK),
+      lRawRolls.map((r) => r.status).join(","),
+    );
+    // ⚠️ `every` BOŞ DİZİDE TRUE döner → satır sayısı da ölçülür, yoksa
+    // "hiç top doğmadı" ile "hepsi doğru" AYNI yeşile çıkar (ilk yazımda tam
+    // bu oldu ve bayrak sızıntısını gizledi).
+    check(
+      "L2b) ⭐ Ham girişte barkod tipi 'H' (etiket de doğru şeyi söyler)",
+      lRawRolls.length === 2 && lRawRolls.every((r) => /^T\d{6}H/.test(r.barcode ?? "")),
+      lRawRolls.map((r) => r.barcode).join(","),
+    );
+    check(
+      "L2c) Kaynak/depo damgası DEĞİŞMEDİ (yalnız RAF değişti)",
+      lRawRolls.length === 2 &&
+        lRawRolls.every((r) => r.entrySource === RollEntrySource.PURCHASE_RECEIPT && r.warehouseId === wh.id),
+      `${lRawRolls[0]?.entrySource}`,
+    );
+    const lRawDetail = (await goodsReceiptService.loadDetail(lRawId)) as { rawStockEntry?: boolean };
+    check("L2d) Detay `rawStockEntry` alanını taşıyor (panel rozeti)", lRawDetail.rawStockEntry === true, `${lRawDetail.rawStockEntry}`);
+
+    // L3 — İPLİK ETKİLENMEZ ve etkilenemez: kg defteri kalem × DEPO bazında
+    // tutulur, RAF (statü) kavramı taşımaz. Ham iplik ayrımı istenirse doğru
+    // çözüm ayrı DEPO'dur, buraya sessiz bir bayrak eklemek değil.
+    const lYarnOut = await goodsReceiptService.addLines(lRawId, [{ itemId: lYarn.id, initialQty: 15 }]);
+    const lYarnMove = await prisma.yarnMovement.findFirst({
+      where: { goodsReceiptId: lRawId, itemId: lYarn.id },
+      select: { kind: true, qtyKg: true, warehouseId: true },
+    });
+    check(
+      "L3) ⭐ Ham stok fişinde İPLİK satırı normal IN yazdı (raf ayrımı taşımaz)",
+      lYarnOut.createdYarn.length === 1 &&
+        lYarnOut.failed.length === 0 &&
+        lYarnMove?.kind === YarnMovementKind.IN &&
+        lYarnMove?.warehouseId === wh.id,
+      `kind=${lYarnMove?.kind} kg=${lYarnMove?.qtyKg?.toString()}`,
+    );
+
+    // L4 — ⭐ HAM STOK FİŞİ İPTAL EDİLEBİLİR. `STOCK` iptal-edilebilir statü
+    // listesine EKLENMESEYDİ bu fişlerin iptali tanım gereği İMKÂNSIZ olurdu
+    // ("N top işlem görmüş" 409'u), üstelik hiçbir top işlem görmemişken.
+    // ⚠️ HATA YUTULMAZ, SEBEBE ÇEVRİLİR: iptal 409 fırlatırsa `await` main'i
+    // çökertir ve paket "1 başarısız" der ama HANGİ kontrolün düştüğünü
+    // söylemez. Sonda koşan kişi kırmızıyı adıyla görmeli.
+    let lCancelErr = "";
+    const lCancel = await goodsReceiptService
+      .cancel(lRawId, `${TAG} ham stok iptali`)
+      .catch((e: unknown) => {
+        lCancelErr = (e as Error).message;
+        return { data: { cancelledRolls: -1, skipped: [] } };
+      });
+    const lCancelData = lCancel.data as { cancelledRolls: number; skipped: unknown[] };
+    if (lCancelErr) check("L4-hata) İptal 409 verdi (sebep aşağıda)", false, lCancelErr.slice(0, 120));
+    const lAfter = await prisma.roll.findMany({ where: { goodsReceiptId: lRawId }, select: { status: true } });
+    check(
+      "L4a) ⭐ Ham stok fişi İPTAL EDİLEBİLDİ (STOCK guard listesinde)",
+      lCancelData.cancelledRolls === 2 && lCancelData.skipped.length === 0,
+      `iptal=${lCancelData.cancelledRolls} atlanan=${lCancelData.skipped.length}`,
+    );
+    check(
+      "L4b) Toplar CANCELLED, yarım iptal yok",
+      lAfter.length === 2 && lAfter.every((r) => r.status === RollStatus.CANCELLED),
+      lAfter.map((r) => r.status).join(","),
+    );
+  }
+
   check("Körlük zemini: en az 5 fiş üretildi", receiptIds.length >= 5, `${receiptIds.length} fiş`);
+  check(
+    "Körlük zemini: §K/§L fixture'ı kuruldu (3 kalem + fason sipariş)",
+    kItemIds.length === 3 && kOrderIds.length === 1 && kInvoiceIds.length === 1,
+    `kalem=${kItemIds.length} sipariş=${kOrderIds.length} fatura=${kInvoiceIds.length}`,
+  );
 }
 
 main()
@@ -853,6 +1196,16 @@ main()
         await prisma.rollMovement.deleteMany({ where: { rollId: { in: ids } } });
         await prisma.rollVariance.deleteMany({ where: { rollId: { in: ids } } });
         await prisma.roll.deleteMany({ where: { id: { in: ids } } });
+      }
+      // ⚠️ FATURA FİŞTEN ÖNCE SİLİNİR: `invoices_goodsReceiptId_fkey` RESTRICT'tir
+      // (§K6 fişten taslak fatura üretiyor). Sıra ters yazılırsa temizlik
+      // "violates RESTRICT setting" ile düşer ve fişler bir sonraki koşuma
+      // artık olarak kalır.
+      if (kInvoiceIds.length) {
+        await prisma.cariTransaction.deleteMany({ where: { invoiceId: { in: kInvoiceIds } } });
+        await prisma.invoiceLine.deleteMany({ where: { invoiceId: { in: kInvoiceIds } } });
+        await prisma.printedDocument.deleteMany({ where: { sourceId: { in: kInvoiceIds } } });
+        await prisma.invoice.deleteMany({ where: { id: { in: kInvoiceIds } } });
       }
       if (receiptIds.length) {
         await prisma.printedDocument.deleteMany({ where: { sourceId: { in: receiptIds } } });
@@ -875,6 +1228,19 @@ main()
         await prisma.item.deleteMany({ where: { id: { in: jItemIds } } }); // itemPrice CASCADE
       }
       if (jCustomerIds.length) await prisma.customer.deleteMany({ where: { id: { in: jCustomerIds } } });
+      // §K/§L temizliği (faturalar yukarıda, fişlerden ÖNCE düşürüldü).
+      if (kOrderIds.length) await prisma.purchaseOrder.deleteMany({ where: { id: { in: kOrderIds } } });
+      if (kItemIds.length) {
+        await prisma.yarnStock.deleteMany({ where: { itemId: { in: kItemIds } } });
+        await prisma.yarnMovement.deleteMany({ where: { itemId: { in: kItemIds } } });
+        await prisma.roll.deleteMany({ where: { itemId: { in: kItemIds } } });
+        await prisma.item.deleteMany({ where: { id: { in: kItemIds } } });
+      }
+      if (kCustomerIds.length) await prisma.customer.deleteMany({ where: { id: { in: kCustomerIds } } });
+      // ⚠️ FASON FİRMANIN `CariAccount`u SİLİNMEZ ve bu bilinçli: fixture firma
+      // KALICIDIR (29 test paylaşıyor) ve hesap lazy açılır — bakiyesiz, defter
+      // satırsız boş bir kayıttır, mutabakat bekçilerinde nötrdür. Silmek,
+      // aynı anda koşan başka bir testin hesabını yok etme riskidir.
       // Bayrak satırları TESTTEN ÖNCEKİ hâline döner (varsa değer, yoksa satır
       // silinir) — bekçi ortamın ayarını kalıcı olarak değiştiremez.
       for (const [key, prior] of priorFlags) {

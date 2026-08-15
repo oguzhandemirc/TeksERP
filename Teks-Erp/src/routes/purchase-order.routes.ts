@@ -60,8 +60,15 @@ const lineSchema = z.object({
   notes: z.string().max(300).nullable().optional(),
 });
 
+// ⚠️ C4 (2026-08-15) — TEDARİKÇİ İKİ BACAKLI: `supplierId` (müşteri-tipli cari)
+// XOR `subcontractorId` (fason firma). Zod'da İKİSİ DE opsiyonel çünkü "tam
+// biri dolu" kuralı bir XOR'dur ve şema seviyesinde ifade edilirse İKİ yerde
+// (burada + serviste) yaşar; kural TEK kapıda kalsın diye zorunluluk servise
+// bırakıldı (`supplier-party.helper`, mal kabulle ORTAK). Panelin gördüğü mesaj
+// böylece iki uçta da AYNI cümledir.
 const createSchema = z.object({
-  supplierId: z.string().uuid(),
+  supplierId: z.string().uuid().nullable().optional(),
+  subcontractorId: z.string().uuid().nullable().optional(),
   currency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).optional(),
   orderDate: isoDate.optional(),
   expectedDate: isoDate.nullable().optional(),
@@ -73,7 +80,10 @@ const createSchema = z.object({
 });
 
 const updateSchema = z.object({
-  supplierId: z.string().uuid().optional(),
+  // Taraf anahtarlarından biri gönderilirse tedarikçi TOPTAN değişir (diğer
+  // bacak NULL'lanır); hiçbiri gönderilmezse tedarikçiye dokunulmaz.
+  supplierId: z.string().uuid().nullable().optional(),
+  subcontractorId: z.string().uuid().nullable().optional(),
   currency: z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]).optional(),
   orderDate: isoDate.optional(),
   expectedDate: isoDate.nullable().optional(),
@@ -98,6 +108,10 @@ const updateSchema = z.object({
  *         name: filter[supplierId]
  *         schema: { type: string }
  *         description: Tek uuid ya da virgüllü liste
+ *       - in: query
+ *         name: filter[subcontractorId]
+ *         schema: { type: string }
+ *         description: Fason tedarikçi bacağı (C4) — tek uuid ya da virgüllü liste
  *       - in: query
  *         name: filter[status]
  *         schema: { type: string, enum: [OPEN, PARTIAL, CLOSED, CANCELLED] }
@@ -154,6 +168,10 @@ router.get("/", requireAnyPermission(...READ_PERMS), async (req: Request, res: R
  *         name: supplierId
  *         schema: { type: string, format: uuid }
  *       - in: query
+ *         name: subcontractorId
+ *         schema: { type: string, format: uuid }
+ *         description: Fason tedarikçi bacağı (C4)
+ *       - in: query
  *         name: itemId
  *         schema: { type: string, format: uuid }
  *       - in: query
@@ -168,6 +186,9 @@ router.get("/open-lines", requireAnyPermission(...READ_PERMS), async (req: Reque
     const q = z
       .object({
         supplierId: z.string().uuid().optional(),
+        // C4 — fason tedarikçi bacağı (müşteri bacağıyla AYRI anahtar: id
+        // uzayları farklı, tek anahtara katlamak sessiz 0 satır üretirdi).
+        subcontractorId: z.string().uuid().optional(),
         itemId: z.string().uuid().optional(),
         overdueOnly: z
           .union([z.literal("true"), z.literal("false"), z.boolean()])
@@ -216,10 +237,13 @@ router.get("/:id", requireAnyPermission(...READ_PERMS), async (req: Request, res
  *     description: >
  *       Belge numarası `AS + GGAAYY + NNNN`. `clientToken` verilirse idempotent
  *       (zaman aşımı tekrarında ikinci sipariş açılmaz).
+ *       TEDARİKÇİ (C4): `supplierId` (müşteri-tipli cari) **YA** `subcontractorId`
+ *       (fason firma) — TAM BİRİ zorunlu; ikisi birden ya da hiçbiri → 400.
+ *       (Mal kabulde aynı XOR geçerlidir ama orada ikisi de boş kalabilir.)
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Oluşturuldu }
- *       400: { description: Tedarikçi/ürün geçersiz ya da kalem yok }
+ *       400: { description: Tedarikçi/ürün geçersiz, iki tedarikçi birden ya da kalem yok }
  */
 router.post("/", requirePermission("purchase-order:write"), async (req: Request, res: Response, next: NextFunction) => {
   try {

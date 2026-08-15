@@ -49,6 +49,12 @@
 //       para birimi ve iade faturası ATLANIR · ⑥ ⭐ kapama patlasa da TAHSİLAT
 //       AYAKTA (sonda ile deterministik) · ⑦ üretilen tahsis elle SİLİNEBİLİR
 //       · ⑧ replay kancayı ikinci kez çalıştırmaz
+//   §18 ⭐ LİSTE FİLTRELERİ (B4, 2026-08-15): yön · yöntem (CSV çoklu) · durum ·
+//       cari (CSV çoklu) · tarih penceresi. Süzme SUNUCUDA; çıpa `paymentDate`
+//       (kaydın `createdAt`i DEĞİL); geçersiz yöntem 400 verir (sessizce
+//       süzülüp "tüm kayıtlar"a düşmez — boş listeden kötüsü YANLIŞ liste);
+//       CSV `cariId` `readIdCondition`ten geçer (ham CSV uuid kolonunda P2007);
+//       ROTA parametreleri gerçekten servise geçiriyor (uç sözleşmesi taraması).
 //   §16 MUTABAKAT: SUM(allocation) === üç sayacın hepsi (TÜM DB) — HER ZAMAN
 //       EN SON koşar ki §12-§14'ün yarış artıkları da terazide tartılsın
 //       (⚠️ §17 ondan ÖNCE yazıldı ve bu bilinçli: otomatik kapamanın satırları
@@ -1609,6 +1615,191 @@ async function main(): Promise<void> {
     // Bayrağı bu bölümden sonra KAPAT — §16 mutabakatı bayraktan bağımsız
     // olmalı ve sonraki bölümler bugünkü varsayılanla koşsun.
     await setSetting(AUTO_FLAG_KEY, false);
+  }
+
+  // ── §18 ⭐ TAHSİLAT/ÖDEME LİSTE FİLTRELERİ (B4, 2026-08-15) ───────────────
+  // Ekran filtresiz açılıyordu (ölçüldü: 0 filtre) ve muhasebeci 3 aylık kaydı
+  // gözle tarıyordu. Süzme SUNUCUDA yapılmak ZORUNDA: liste sayfalı olduğu için
+  // istemcide süzmek yalnız O ANKİ SAYFAYI süzer ve kullanıcı "kayıt yok" sanar
+  // — oysa kayıt sonraki sayfadadır (top listesi filtresi dersinin finans ikizi).
+  //
+  // ⚠️ ÇOKLU SEÇİM YALNIZ ANLAMLI OLDUĞU YERDE: `cariId`/`method` CSV kabul
+  // eder, `direction`/`status` (iki değerli NOT NULL enum) TEKİLDİR — ikisini
+  // birden seçmek "filtre yok" ile aynı sonucu verir, yani gürültüdür.
+  {
+    const fCustomer = await prisma.customer.create({
+      data: { code: `${TAG}-FLT1`, name: `${TAG} Filtre A` },
+      select: { id: true },
+    });
+    customerIds.push(fCustomer.id);
+    const fOther = await prisma.customer.create({
+      data: { code: `${TAG}-FLT2`, name: `${TAG} Filtre B` },
+      select: { id: true },
+    });
+    customerIds.push(fOther.id);
+
+    const dayMs = 86_400_000;
+    const dAt = (daysAgo: number): Date => new Date(Date.now() - daysAgo * dayMs);
+    // ⚠️ YÖNTEM ile KASA/BANKA BAĞIMSIZDIR (servis yalnız PARA BİRİMİ eşitliği
+    // arar): `BANK_TRANSFER` bir kasa kaydına da yazılabilir. Bekçi bunu
+    // sömürüyor ki ikinci bir `BankAccount` fixture'ı + temizliği doğmasın.
+    const mk = async (o: {
+      customerId: string;
+      direction: "IN" | "OUT";
+      method: "CASH" | "BANK_TRANSFER" | "CREDIT_CARD" | "OTHER";
+      amount: number;
+      at: Date;
+    }): Promise<string> => {
+      const r = await paymentService.create({
+        direction: o.direction,
+        method: o.method,
+        customerId: o.customerId,
+        currency: "TRY",
+        amount: o.amount,
+        cashBoxId,
+        paymentDate: o.at,
+      });
+      paymentIds.push(r.data.id);
+      return r.data.id;
+    };
+
+    const pCash = await mk({ customerId: fCustomer.id, direction: "IN", method: "CASH", amount: 100, at: dAt(3) });
+    const pCard = await mk({ customerId: fCustomer.id, direction: "IN", method: "CREDIT_CARD", amount: 200, at: dAt(2) });
+    const pOut = await mk({ customerId: fCustomer.id, direction: "OUT", method: "BANK_TRANSFER", amount: 50, at: dAt(1) });
+    const pCancel = await mk({ customerId: fCustomer.id, direction: "IN", method: "OTHER", amount: 75, at: dAt(1) });
+    const pOtherCari = await mk({ customerId: fOther.id, direction: "IN", method: "CASH", amount: 300, at: dAt(2) });
+    await paymentService.cancel(pCancel, `${TAG} filtre iptali`);
+
+    const fCari = await prisma.cariAccount.findFirstOrThrow({ where: { customerId: fCustomer.id }, select: { id: true } });
+    cariIds.push(fCari.id);
+    const oCari = await prisma.cariAccount.findFirstOrThrow({ where: { customerId: fOther.id }, select: { id: true } });
+    cariIds.push(oCari.id);
+
+    const ids = async (p: Parameters<typeof paymentService.list>[0]): Promise<string[]> =>
+      (await paymentService.list({ pageSize: 200, ...p })).data.map((r) => r.id);
+    const has = (list: string[], id: string): boolean => list.includes(id);
+
+    // §18a KÖRLÜK ZEMİNİ — filtre "çalışıyor" demeden önce fixture'ın gerçekten
+    // kurulduğu ölçülür; yoksa aşağıdaki her "görünmüyor" kontrolü VAKUMEN
+    // yeşil kalır (boş liste her negatifi doğrular).
+    const base = await ids({ cariId: fCari.id });
+    check(
+      "§18a KÖRLÜK ZEMİNİ: cariId filtresi bu carinin 4 kaydını getirdi",
+      base.length === 4 && has(base, pCash) && has(base, pCard) && has(base, pOut) && has(base, pCancel),
+      `${base.length} kayıt`,
+    );
+    check("§18a2 Başka carinin kaydı SIZMADI", !has(base, pOtherCari));
+
+    // §18b YÖN — tekil (iki değerli enum).
+    const outs = await ids({ cariId: fCari.id, direction: "OUT" });
+    check("§18b Yön filtresi (OUT) yalnız ödemeyi getirdi", outs.length === 1 && outs[0] === pOut, `${outs.length} kayıt`);
+
+    // §18c YÖNTEM — tekil VE çoklu (4 değerli enum → çoklu seçim anlamlı).
+    const cards = await ids({ cariId: fCari.id, method: "CREDIT_CARD" });
+    check("§18c Yöntem filtresi (CREDIT_CARD) tek kaydı getirdi", cards.length === 1 && cards[0] === pCard, `${cards.length} kayıt`);
+    const csvMethods = await ids({ cariId: fCari.id, method: "CASH,CREDIT_CARD" });
+    check(
+      "§18c2 ⭐ Yöntem CSV çoklu seçimi (`CASH,CREDIT_CARD`) İKİ kaydı getirdi",
+      csvMethods.length === 2 && has(csvMethods, pCash) && has(csvMethods, pCard),
+      `${csvMethods.length} kayıt`,
+    );
+    // ⚠️ GEÇERSİZ DEĞER SESSİZCE SÜZÜLMEZ. Süzüp atmak en tehlikeli davranış:
+    // filtre ekranda seçili görünürken sorgudan DÜŞER ve liste "filtresizmiş
+    // gibi" döner — boş listeden kötüsü, YANLIŞ liste.
+    const badMethod = await err(() => paymentService.list({ cariId: fCari.id, method: "NAKIT" }));
+    check("§18c3 ⭐ Geçersiz yöntem → 400 (sessizce tüm kayıtlara düşmez)", /Geçersiz ödeme yöntemi/.test(badMethod), badMethod.slice(0, 80));
+
+    // §18c4 ⭐⭐ PROTOTİP ANAHTARLARI — enum kapısının EN KOLAY kaçırılan deliği.
+    // `deger in EnumNesnesi` prototip zincirini de tarar: `"toString" in
+    // PaymentMethod` → TRUE (ölçüldü). Yani `?method=toString` kapıyı geçer,
+    // `where.method = "toString"` Prisma'ya gider ve kullanıcı alanın adını
+    // SÖYLEMEYEN jenerik bir 400 görür — kapının var oluş sebebi tam da bu
+    // değerlerde kaybolur. `isEnumMember` (hasOwnProperty) bunu kapatır.
+    // ⚠️ Beklenti "hata versin" DEĞİL, "AYNI ADLI hatayı versin": ham Prisma
+    // hatası da bir hatadır ve gevşek bir kontrol onu yeşil sayardı.
+    for (const proto of ["toString", "__proto__", "constructor", "valueOf"]) {
+      const m = await err(() => paymentService.list({ cariId: fCari.id, method: proto }));
+      check(
+        `§18c4 ⭐ Prototip anahtarı "${proto}" → ADIYLA 400 (ham Prisma hatası DEĞİL)`,
+        /Geçersiz ödeme yöntemi/.test(m),
+        m.slice(0, 90),
+      );
+    }
+    // CSV'nin İÇİNDE gizlenmiş prototip anahtarı da yakalanmalı — geçerli bir
+    // değerin yanına saklanan bozuk değer, tek başına gönderilenden daha sinsi
+    // (istemci "filtre çalışıyor" görür, liste patlar).
+    const mixedProto = await err(() => paymentService.list({ cariId: fCari.id, method: "CASH,constructor" }));
+    check(
+      "§18c5 ⭐ CSV içindeki prototip anahtarı da ADIYLA 400 veriyor",
+      /Geçersiz ödeme yöntemi/.test(mixedProto),
+      mixedProto.slice(0, 90),
+    );
+    // Ve doğru davranış korunuyor: `hasOwnProperty` ile kapatılan kapı GERÇEK
+    // değerleri elemiyor (aşırı sıkı bir düzeltme filtreyi tamamen öldürürdü).
+    const stillWorks = await ids({ cariId: fCari.id, method: "CASH" });
+    check(
+      "§18c6 Körlük zemini: geçerli yöntem (CASH) hâlâ süzüyor",
+      stillWorks.length === 1 && stillWorks[0] === pCash,
+      `${stillWorks.length} kayıt`,
+    );
+
+    // §18d DURUM — iptaller ayrılabiliyor.
+    const cancelled = await ids({ cariId: fCari.id, status: "CANCELLED" });
+    const active = await ids({ cariId: fCari.id, status: "ACTIVE" });
+    check("§18d Durum filtresi: 1 iptal / 3 aktif", cancelled.length === 1 && cancelled[0] === pCancel && active.length === 3, `${cancelled.length}/${active.length}`);
+
+    // §18e TARİH — çıpa `paymentDate` (kaydın `createdAt`i DEĞİL: dördü de
+    // BUGÜN yazıldı ama farklı günlere tarihlendi; `createdAt` çıpası bu
+    // pencereyi 4 kayıtla doldururdu).
+    const window = await ids({ cariId: fCari.id, from: dAt(2.5), to: dAt(1.5) });
+    check(
+      "§18e ⭐ Tarih penceresi `paymentDate` üzerinden süzüyor (createdAt DEĞİL)",
+      window.length === 1 && window[0] === pCard,
+      `${window.length} kayıt`,
+    );
+
+    // §18f ⭐ CSV cariId — `readIdCondition` tek kaynağı. Ham CSV bir uuid
+    // kolonuna giderse Postgres "invalid input syntax for type uuid" → Prisma
+    // P2007 (HTTP yolunda 400) verir; yani bu satır düşerse çoklu cari seçimi
+    // sahada ÇÖKER (CLAUDE.md 2026-08-06 çoklu seçim tuzağı).
+    // ⚠️ Hata YUTULMAZ, SEBEBE ÇEVRİLİR: ham CSV Prisma'ya giderse çağrı
+    // FIRLATIR ve `await` main'i çökertir — paket "başarısız" der ama hangi
+    // kontrolün düştüğünü söylemez. Sonda koşan kişi kırmızıyı adıyla görmeli.
+    let csvCari: string[] = [];
+    let csvErr = "";
+    try {
+      csvCari = await ids({ cariId: `${fCari.id},${oCari.id}` });
+    } catch (e) {
+      csvErr = (e as Error).message.replace(/\s+/g, " ");
+    }
+    check(
+      "§18f ⭐ cariId CSV çoklu seçimi çalışıyor (P2007'ye düşmüyor)",
+      csvErr === "" && csvCari.length === 5 && has(csvCari, pOtherCari) && has(csvCari, pCash),
+      csvErr ? csvErr.slice(0, 120) : `${csvCari.length} kayıt`,
+    );
+
+    // §18g ⭐ UÇ SÖZLEŞMESİ — servis desteklese de ROTA parametreyi geçirmezse
+    // panel filtreyi gönderir, backend sessizce düşürür ve liste "bozuk"
+    // görünür (Zod'un tanımadığı anahtarı atması sınıfının rota ikizi).
+    const financeRoutesSrc = readFileSync(join(__dirname, "..", "src", "routes", "finance.routes.ts"), "utf8");
+    const paymentsHandler = financeRoutesSrc.slice(financeRoutesSrc.indexOf('router.get("/payments"'));
+    check(
+      "§18g Rota `method` + `cariId` filtrelerini servise GEÇİRİYOR",
+      /method:\s*q\.method/.test(paymentsHandler) && /cariId:\s*q\.cariId/.test(paymentsHandler),
+      "finance.routes.ts",
+    );
+    check(
+      "§18g2 `dateFrom`/`dateTo` takma adları `from`/`to` ile aynı alana bağlı",
+      /from:\s*q\.from\s*\?\?\s*q\.dateFrom/.test(paymentsHandler) && /to:\s*q\.to\s*\?\?\s*q\.dateTo/.test(paymentsHandler),
+      "alias",
+    );
+    check(
+      "§18g3 Sorgu şeması yön/durum enum'larını DOĞRULUYOR (ham string Prisma'ya gitmiyor)",
+      /paymentListQuerySchema/.test(financeRoutesSrc) &&
+        /direction:\s*z\.enum\(\["IN", "OUT"\]\)/.test(financeRoutesSrc) &&
+        /status:\s*z\.enum\(\["ACTIVE", "CANCELLED"\]\)/.test(financeRoutesSrc),
+      "zod",
+    );
   }
 
   // ── §16 MUTABAKAT (TÜM DB) ───────────────────────────────────────────────

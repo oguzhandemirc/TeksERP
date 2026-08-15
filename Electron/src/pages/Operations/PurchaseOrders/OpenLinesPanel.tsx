@@ -28,6 +28,9 @@ import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 import { cn } from "@/lib/utils";
+import {
+  supplierDisplayName, supplierPartyQuery, type SupplierParty,
+} from "@/components/forms/supplierParty";
 import { fmtQty, listOpenLines, type OpenLineRow } from "./service";
 import { FIFO_HINT, fulfillmentOf, remainingText } from "./fulfillment";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
@@ -36,8 +39,9 @@ import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./date
 const LIMIT = 200;
 
 interface Props {
-  /** Sayfa şeridindeki tedarikçi filtresi — iki görünüm aynı daraltmayı paylaşır. */
-  supplierId: string | null;
+  /** Sayfa şeridindeki tedarikçi filtresi — iki görünüm aynı daraltmayı paylaşır.
+   *  C4: taraf {kind,id} taşır; sorgu anahtarını `supplierPartyQuery` seçer. */
+  supplier: SupplierParty | null;
   itemId: string | null;
   onItemChange: (id: string | null) => void;
   overdueOnly: boolean;
@@ -46,7 +50,7 @@ interface Props {
 }
 
 export function OpenLinesPanel({
-  supplierId,
+  supplier,
   itemId,
   onItemChange,
   overdueOnly,
@@ -54,10 +58,12 @@ export function OpenLinesPanel({
   onOpenOrder,
 }: Props) {
   const q = useQuery({
-    queryKey: ["purchase-order-open-lines", supplierId, itemId, overdueOnly],
+    queryKey: [
+      "purchase-order-open-lines", supplier?.kind ?? "", supplier?.id ?? "", itemId, overdueOnly,
+    ],
     queryFn: () =>
       listOpenLines({
-        supplierId: supplierId ?? undefined,
+        ...supplierPartyQuery(supplier),
         itemId: itemId ?? undefined,
         overdueOnly,
         limit: LIMIT,
@@ -114,7 +120,7 @@ export function OpenLinesPanel({
         <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
           {overdueOnly
             ? "Termini geçmiş açık kalem yok. (Beklenen tarihi girilmemiş kalemler bu listeye girmez.)"
-            : supplierId || itemId
+            : supplier || itemId
               ? "Bu daraltmayla bekleyen kalem yok — filtreleri gevşetip tekrar bakın."
               : "Bekleyen kalem yok: açık siparişlerin tamamı karşılanmış."}
         </div>
@@ -156,7 +162,7 @@ export function OpenLinesPanel({
                         <div className="font-medium">{r.item.name}</div>
                         <div className="text-[11px] text-muted-foreground">{r.item.code}</div>
                       </td>
-                      <td className="px-3 py-2">{po.supplier?.name ?? "—"}</td>
+                      <td className="px-3 py-2">{supplierDisplayName(po)}</td>
                       <td className="px-3 py-2 font-mono text-xs">
                         {po.orderNo}
                         <div className="text-[11px] text-muted-foreground">{r.lineNo}. kalem</div>

@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
+import { SUPPLIER_KIND_TAG, supplierRefOf } from "@/components/forms/supplierParty";
 import type { PurchaseOrderListRow } from "./service";
 import { PO_STATUS_BADGE, PO_STATUS_HINT, PO_STATUS_LABEL } from "./labels";
 import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./dates";
@@ -59,6 +60,9 @@ export function PurchaseOrderTable({ rows, onDetail, onEdit, onCancel }: Props) 
             // cevapsız bırakırdı. Ama ipucu bunu ÖNCEDEN söyler, boşuna diyalog
             // açtırmaz.
             const goodsReceived = o.status === "PARTIAL" || o.status === "CLOSED";
+            // C4 — DOLU bacak basılır (cari kart ya da fason firma). Rozet yalnız
+            // fason tarafta: bugüne kadarki satırlar bayt bayt aynı kalır.
+            const sup = supplierRefOf(o);
             return (
               <tr
                 key={o.id}
@@ -70,10 +74,15 @@ export function PurchaseOrderTable({ rows, onDetail, onEdit, onCancel }: Props) 
                   <div className="text-[11px] text-muted-foreground">{o.currency}</div>
                 </td>
                 <td className="px-3 py-2">
-                  <div className="font-medium">{o.supplier?.name ?? "—"}</div>
-                  {o.supplier?.code && (
-                    <div className="text-[11px] text-muted-foreground">{o.supplier.code}</div>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-medium">{sup?.name ?? "—"}</span>
+                    {sup?.kind === "SUBCONTRACTOR" && (
+                      <span className="rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                        {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
+                      </span>
+                    )}
+                  </div>
+                  {sup?.code && <div className="text-[11px] text-muted-foreground">{sup.code}</div>}
                 </td>
                 <td className="px-3 py-2 whitespace-nowrap">{fmtDate(o.orderDate)}</td>
                 <td className="px-3 py-2 whitespace-nowrap">

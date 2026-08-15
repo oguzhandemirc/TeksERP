@@ -159,6 +159,32 @@ export function readIdCondition(
 }
 
 /**
+ * Bir istemci değerinin gerçekten enum ÜYESİ olup olmadığı.
+ *
+ * ⚠️⚠️ `deger in EnumNesnesi` YAZMA — `in` operatörü PROTOTİP ZİNCİRİNİ de tarar.
+ * Prisma'nın ürettiği enum nesneleri düz `Object` literalleridir (ölçüldü:
+ * `Object.getPrototypeOf(PaymentMethod) === Object.prototype`), dolayısıyla
+ * `"toString" in PaymentMethod` → **true**, aynısı `"__proto__"`, `"constructor"`,
+ * `"valueOf"`, `"hasOwnProperty"` için de geçerli. Sonuç: istemciden gelen
+ * `?method=toString` enum kapısını GEÇER, `where.method = "toString"` Prisma'ya
+ * gider ve `PrismaClientValidationError` → error middleware'de **jenerik**
+ * *"Geçersiz veri yapısı"* 400'üne düşer. Yani kapının var oluş sebebi (hangi
+ * alanın yanlış olduğunu ADIYLA söyleyen 400) tam da bu değerlerde kaybolur.
+ *
+ * `Object.prototype.hasOwnProperty.call` yalnız kendi anahtarlarına bakar; nesne
+ * `Object.create(null)` ile kurulmuş olsa bile `.hasOwnProperty` çağrısı üzerinden
+ * değil `Object.prototype`ten yapıldığı için güvenlidir.
+ *
+ * Bekçi: `scripts/test_payment_allocation.ts` §18 (prototip anahtarı sondaları).
+ */
+export function isEnumMember<T extends Record<string, string>>(
+  enumObj: T,
+  value: string
+): value is T[keyof T] {
+  return Object.prototype.hasOwnProperty.call(enumObj, value);
+}
+
+/**
  * Build Prisma `where` clause from parsed filters.
  * Supports: exact match, enum match, comma-separated IN, boolean.
  */

@@ -25,6 +25,8 @@
 // =============================================================================
 import apiClient from "@/services/apiClient";
 import type { ItemType } from "@/types/enums";
+// C4 — tedarikçi iki tablodan gelebilir; XOR ve okuma önceliği TEK saf katmanda.
+import type { SupplierRefLike } from "@/components/forms/supplierParty";
 
 /** Backend `Currency` enum'unun aynası (Electron backend'i import edemez). */
 export type PoCurrency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
@@ -59,6 +61,19 @@ export interface SupplierRef {
   name: string;
 }
 
+/**
+ * C4 — İKİ TEDARİKÇİ BACAĞI, tam biri dolu.
+ *
+ * ⚠️ Panel bu ikisini ASLA elle okumaz; `supplierDisplayName`/`supplierPartyOf`
+ * kullanır. Elle okuyan her yüzey kendi önceliğini kurar ve aynı sipariş listede
+ * bir, detayda başka bir tedarikçi basar.
+ */
+export interface SupplierParties {
+  supplier: SupplierRefLike | null;
+  /** Eski backend alanı hiç göndermez → `undefined` (görünüm bugünküyle aynı). */
+  subcontractorSupplier?: SupplierRefLike | null;
+}
+
 export interface ItemRef {
   id: string;
   code: string;
@@ -67,7 +82,7 @@ export interface ItemRef {
   itemType: ItemType;
 }
 
-export interface PurchaseOrderListRow {
+export interface PurchaseOrderListRow extends SupplierParties {
   id: string;
   orderNo: string;
   status: PurchaseOrderStatus;
@@ -79,9 +94,9 @@ export interface PurchaseOrderListRow {
   /** Dolu ise CLOSED "kalanı gelmeyecek" kararıdır, "tüm kalemler geldi" değil. */
   shortClosedAt: string | null;
   createdAt: string;
-  supplier: SupplierRef;
   _count: { lines: number; goodsReceipts: number };
 }
+
 
 export interface PurchaseOrderLine {
   id: string;
@@ -111,7 +126,7 @@ export interface PurchaseOrderReceiptRef {
   createdAt: string;
 }
 
-export interface PurchaseOrderDetail {
+export interface PurchaseOrderDetail extends SupplierParties {
   id: string;
   orderNo: string;
   status: PurchaseOrderStatus;
@@ -129,7 +144,6 @@ export interface PurchaseOrderDetail {
   shortClosedAt: string | null;
   shortCloseReason: string | null;
   createdAt: string;
-  supplier: SupplierRef;
   createdBy: { id: string; fullName: string | null; username: string } | null;
   cancelledBy: { id: string; fullName: string | null; username: string } | null;
   shortClosedBy: { id: string; fullName: string | null; username: string } | null;
@@ -175,8 +189,7 @@ export interface OpenLineRow {
     currency: PoCurrency;
     orderDate: string;
     expectedDate: string | null;
-    supplier: SupplierRef;
-  };
+  } & SupplierParties;
 }
 
 export interface PurchaseOrderLineInput {
@@ -213,6 +226,9 @@ export async function listPurchaseOrders(params: {
   pageSize: number;
   search?: string;
   supplierId?: string;
+  /** C4 — fason tedarikçi bacağı. `supplierId` ile BİRLİKTE gönderilmez;
+   *  çağıran `supplierPartyQuery` ile tek anahtar üretir. */
+  subcontractorId?: string;
   /** Tek durum ya da CSV ("OPEN,PARTIAL") — backend virgülle böler. */
   status?: string;
   /** Sipariş tarihi aralığı (mutlak an; gün sınırı İSTEMCİNİNDİR). */
@@ -225,6 +241,7 @@ export async function listPurchaseOrders(params: {
       pageSize: params.pageSize,
       ...(params.search ? { search: params.search } : {}),
       ...(params.supplierId ? { "filter[supplierId]": params.supplierId } : {}),
+      ...(params.subcontractorId ? { "filter[subcontractorId]": params.subcontractorId } : {}),
       ...(params.status ? { "filter[status]": params.status } : {}),
       ...(params.dateFrom ? { dateFrom: params.dateFrom } : {}),
       ...(params.dateTo ? { dateTo: params.dateTo } : {}),
@@ -247,6 +264,8 @@ export async function getPurchaseOrder(id: string): Promise<PurchaseOrderDetail>
  */
 export async function listOpenLines(params: {
   supplierId?: string;
+  /** C4 — fason tedarikçi bacağı (uç DÜZ query param bekler, `filter[...]` DEĞİL). */
+  subcontractorId?: string;
   itemId?: string;
   overdueOnly?: boolean;
   limit?: number;
@@ -254,6 +273,7 @@ export async function listOpenLines(params: {
   const res = await apiClient.get("/api/purchase-orders/open-lines", {
     params: {
       ...(params.supplierId ? { supplierId: params.supplierId } : {}),
+      ...(params.subcontractorId ? { subcontractorId: params.subcontractorId } : {}),
       ...(params.itemId ? { itemId: params.itemId } : {}),
       // Backend `"true"`/`"false"` literal'i bekliyor; `false` göndermek gereksiz
       // ama zararsız — yine de yalnız açıkken gönderiyoruz ki istek sade kalsın.
@@ -280,7 +300,10 @@ export async function listOpenLines(params: {
  * geri döner (`ChequeFormDialog` emsali).
  */
 export async function createPurchaseOrder(body: {
-  supplierId: string;
+  /** C4 — İKİSİNDEN TAM BİRİ dolu (backend: "Tedarikçi zorunlu — müşteri-tipli
+   *  cari ya da fason firma seçin."). XOR'u `supplierPartyPayload` kurar. */
+  supplierId: string | null;
+  subcontractorId: string | null;
   currency?: PoCurrency;
   orderDate?: string;
   expectedDate?: string | null;
@@ -303,7 +326,12 @@ export async function createPurchaseOrder(body: {
 export async function updatePurchaseOrder(
   id: string,
   body: {
-    supplierId?: string;
+    /** ⚠️ TARAF BÜTÜNDÜR (C4): anahtarlardan biri gönderilirse İKİ kolon
+     *  birlikte yazılır (diğeri NULL'lanır). Yalnız değişen kolonu göndermek
+     *  "iki tedarikçili sipariş" üretir ve servis kapısını sessizce deler —
+     *  bu yüzden `supplierPartyPayload` ikisini birden döndürür. */
+    supplierId?: string | null;
+    subcontractorId?: string | null;
     currency?: PoCurrency;
     orderDate?: string;
     expectedDate?: string | null;

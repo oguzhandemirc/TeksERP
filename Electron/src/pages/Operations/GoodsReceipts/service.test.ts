@@ -69,3 +69,37 @@ describe("createGoodsReceipt — alış siparişi alanı", () => {
     expect(mockPost.mock.calls[0]![0]).toBe("/api/goods-receipts");
   });
 });
+
+// =============================================================================
+// C4 (fason tedarikçi bacağı) + C2 (ham stok girişi) — gövde sözleşmesi
+// =============================================================================
+describe("createGoodsReceipt — tedarikçi bacağı ve ham stok bayrağı", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPost.mockResolvedValue({ data: { data: { id: "r1" } } });
+  });
+
+  it("⭐ fason tedarikçide `subcontractorId` GİDER", async () => {
+    await createGoodsReceipt({ ...BASE, supplierId: null, subcontractorId: "f1" });
+    const body = mockPost.mock.calls[0]![1] as Record<string, unknown>;
+    expect(body.subcontractorId).toBe("f1");
+    expect(body.supplierId).toBeNull();
+  });
+
+  it("⭐ fason bacağı BOŞKEN anahtar gövdede HİÇ YOKTUR (bugünkü istek korunur)", async () => {
+    await createGoodsReceipt({ ...BASE, subcontractorId: null });
+    const body = mockPost.mock.calls[0]![1] as Record<string, unknown>;
+    expect("subcontractorId" in body).toBe(false);
+  });
+
+  it("⭐ `rawStockEntry` YALNIZ TRUE iken gönderilir (varsayılan = bugünkü davranış)", async () => {
+    await createGoodsReceipt({ ...BASE, rawStockEntry: false });
+    const off = mockPost.mock.calls[0]![1] as Record<string, unknown>;
+    expect("rawStockEntry" in off).toBe(false);
+
+    vi.clearAllMocks();
+    await createGoodsReceipt({ ...BASE, rawStockEntry: true });
+    const on = mockPost.mock.calls[0]![1] as Record<string, unknown>;
+    expect(on.rawStockEntry).toBe(true);
+  });
+});

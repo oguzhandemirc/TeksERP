@@ -409,6 +409,14 @@ export class InvoiceService {
         status: true,
         currency: true,
         supplierId: true,
+        // C4 (2026-08-15) — FASON TEDARİKÇİ BACAĞI. Fatura katmanı iki tarafı
+        // zaten taşıyor (`CreateInvoiceInput.subcontractorId` →
+        // `ensureCariAccountTx` CariKind.SUBCONTRACTOR); eksik olan tek şey bu
+        // select'ti. Okunmasaydı fason firmadan alınan mal "tedarikçi
+        // seçilmemiş" diye 400 alır ve o fişten fatura kesmenin HİÇBİR yolu
+        // olmazdı (generic uç `.strict()` şemasında `goodsReceiptId` kabul
+        // etmiyor → bağsız fatura da kesilemez).
+        subcontractorId: true,
         deliveryNoteNo: true,
         createdAt: true,
       },
@@ -417,7 +425,7 @@ export class InvoiceService {
     if (receipt.status === "CANCELLED") {
       throw AppError.conflict(`${receipt.receiptNo} iptal edilmiş — faturası kesilemez.`);
     }
-    if (!receipt.supplierId) {
+    if (!receipt.supplierId && !receipt.subcontractorId) {
       throw AppError.badRequest(
         `${receipt.receiptNo} fişinde tedarikçi seçilmemiş — alış faturası için tedarikçi gerekli.`,
       );
@@ -549,7 +557,12 @@ export class InvoiceService {
     return this.createDraft(
       {
         type: InvoiceType.PURCHASE,
+        // ⚠️ İKİSİ BİRDEN GEÇİLİR ama fişte tanım gereği yalnız biri doludur
+        // (XOR servis kapısı: `supplier-party.helper`). `ensureCariAccountTx`
+        // "tam biri" şartını ayrıca arar ve ihlalde 400 verir — yani bu satır
+        // iki katmanla korunuyor; birini "sadeleştirip" tek tarafa indirme.
         customerId: receipt.supplierId,
+        subcontractorId: receipt.subcontractorId,
         currency: receipt.currency,
         issueDate: receipt.createdAt,
         externalNo: receipt.deliveryNoteNo,

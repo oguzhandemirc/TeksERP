@@ -345,6 +345,15 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "purchase-order:read",
       "purchase-order:write",
       "price:write",
+      // ⚠️ C4 KÖPRÜSÜNÜN OKUMA AYAĞI — SÜS DEĞİL. Alış artık HER cariden
+      // yapılabiliyor ve cari kartları iki tabloda yaşıyor; panelin tedarikçi
+      // seçicisi (`SupplierSelect`) fason bacağını `GET /api/subcontractors`
+      // ile çekiyor ve o uç `subcontractor:read` istiyor. Bu satır olmadan
+      // ekran ÇALIŞIYOR görünür ama kutu her açılışta 403 alır, yalnız cari
+      // kartlar listelenir ve fason firmadan alım panelden ULAŞILAMAZ hâle
+      // gelir (arıza geçici bir ağ hatası gibi okunur). Yazma izni bilinçli
+      // VERİLMEDİ: ticaret kullanıcısı fason firma kartı AÇMAZ, var olanı seçer.
+      "subcontractor:read",
       // Satış & sevkiyat
       "order:read",
       "order:write",

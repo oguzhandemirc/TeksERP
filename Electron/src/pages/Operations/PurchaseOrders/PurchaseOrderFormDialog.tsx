@@ -40,9 +40,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { customerService } from "@/pages/Customers/service";
-import type { Customer } from "@/pages/Customers/types";
+import { SupplierSelect } from "@/components/forms/SupplierSelect";
+import {
+  sameSupplierParty, supplierOptionLabel, supplierPartyOf, supplierPartyPayload, supplierRefOf,
+  type SupplierParty,
+} from "@/components/forms/supplierParty";
 import {
   createPurchaseOrder, getPurchaseOrder, toNum, updatePurchaseOrder, type PoCurrency,
 } from "./service";
@@ -69,7 +71,9 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
   const qc = useQueryClient();
   const editing = Boolean(orderId);
 
-  const [supplierId, setSupplierId] = useState<string | null>(null);
+  // C4 — tedarikçi cari kart YA DA fason firma olabilir; taraf {kind, id}
+  // taşınır ve gövdedeki XOR'u `supplierPartyPayload` kurar.
+  const [supplier, setSupplier] = useState<SupplierParty | null>(null);
   const [currency, setCurrency] = useState<PoCurrency>("TRY");
   const [orderDate, setOrderDate] = useState(() => ymd(new Date()));
   // ⚠️ Beklenen tarih ÖN DOLDURULMAZ: termin tedarikçiyle konuşulan gündür,
@@ -103,7 +107,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
     if (!detail) return;
     if (seededFor.current === detail.id) return;
     seededFor.current = detail.id;
-    setSupplierId(detail.supplier?.id ?? null);
+    setSupplier(supplierPartyOf(detail));
     setCurrency(detail.currency);
     setOrderDate(detail.orderDate ? ymd(new Date(detail.orderDate)) : ymd(new Date()));
     setExpectedDate(detail.expectedDate ? ymd(new Date(detail.expectedDate)) : "");
@@ -120,6 +124,15 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
     setInitialLinesKey(linesKey(seeded));
   }, [detail]);
 
+  // Düzenlemede seçili tedarikçinin etiketi ZATEN elimizde (detay yanıtı) —
+  // id ile ikinci bir istek atmak kutuyu bir an "Yükleniyor…" gösterirdi.
+  // ⚠️ Karşılaştırma TARAF ile yapılır (kind + id): kullanıcı aynı id'li başka
+  // bir bacağa geçemez ama kural yine de tek yerden gelsin.
+  const detailParty = supplierPartyOf(detail);
+  const detailRef = supplierRefOf(detail);
+  const detailLabel =
+    detailRef && sameSupplierParty(supplier, detailParty) ? supplierOptionLabel(detailRef) : null;
+
   const totals = useMemo(() => poTotals(lines), [lines]);
   const orderIso = dayStartIso(orderDate);
   // Boş/temizlenmiş tarih `undefined` döner (bkz. dates.ts) — `null` göndererek
@@ -129,7 +142,9 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
   // Mal görmüş sipariş düzenlenemez — sebep ekranda YAZILI, düğme sessizce
   // kapalı değil.
   const editBlocked = editing && Boolean(detail) && detail?.status !== "OPEN";
-  const valid = Boolean(supplierId) && totals.lineCount > 0 && Boolean(orderIso) && !editBlocked;
+  // ⚠️ TEDARİKÇİ ZORUNLU (backend: "Tedarikçi zorunlu — müşteri-tipli cari ya da
+  // fason firma seçin."): sipariş bir TAAHHÜTTÜR, kime verildiği belirsiz olamaz.
+  const valid = Boolean(supplier) && totals.lineCount > 0 && Boolean(orderIso) && !editBlocked;
 
   const saveM = useMutation({
     mutationFn: async () => {
@@ -137,7 +152,9 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
       if (editing && orderId) {
         const changed = initialLinesKey === null || linesKey(lines) !== initialLinesKey;
         return updatePurchaseOrder(orderId, {
-          supplierId: supplierId as string,
+          // Taraf BÜTÜN gider — yalnız seçilen bacağı yazmak eskisini kayıtta
+          // bırakır (iki tedarikçili sipariş).
+          ...supplierPartyPayload(supplier),
           currency,
           orderDate: orderIso,
           expectedDate: expectedIso,
@@ -147,7 +164,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
         });
       }
       return createPurchaseOrder({
-        supplierId: supplierId as string,
+        ...supplierPartyPayload(supplier),
         currency,
         orderDate: orderIso,
         expectedDate: expectedIso,
@@ -206,17 +223,17 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
             <div className="grid grid-cols-4 gap-3">
               <div className="col-span-2">
                 <Label>Tedarikçi</Label>
-                <div className="mt-1">
-                  <ReferenceSelect<Customer>
-                    value={supplierId}
-                    onChange={setSupplierId}
-                    service={customerService}
-                    queryKey="customers"
-                    getLabel={(c) => `${c.code} — ${c.name}`}
-                    placeholder="Tedarikçi ara..."
-                    disabled={editBlocked}
-                  />
-                </div>
+                {/* C4 — cari kartlar VE fason firmalar tek kutuda. Düzenlemede
+                    etiket detaydan gelir: kayıt zaten elimizdeyken id ile ikinci
+                    bir istek atmak, kutunun bir an "Yükleniyor…" görünmesi
+                    demekti. */}
+                <SupplierSelect
+                  className="mt-1"
+                  value={supplier}
+                  onChange={setSupplier}
+                  selectedLabel={detailLabel}
+                  disabled={editBlocked}
+                />
               </div>
               <div>
                 <Label>Para birimi</Label>
@@ -278,7 +295,7 @@ export function PurchaseOrderFormDialog({ open, orderId, onOpenChange, onSaved }
               lines={lines}
               onChange={setLines}
               disabled={editBlocked}
-              supplierId={supplierId}
+              supplier={supplier}
               currency={currency}
             />
 

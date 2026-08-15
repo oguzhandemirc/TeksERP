@@ -535,6 +535,36 @@ async function main(): Promise<void> {
   const listSearch = await itemPriceService.list({ page: 1, pageSize: 20, filters: { itemId: item.id }, search: "şık" });
   check("§9f Türkçe arama BÜYÜK saklanan adı buluyor", listSearch.total === listAll.total, `total=${listSearch.total}`);
 
+  // §9g ⭐⭐ PROTOTİP ANAHTARI — `kind`/`currency` bir ALLOWLIST'ten geçiyor ve
+  // o allowlist `deger in PriceKind` ile kurulmuştu. `in` prototip zincirini de
+  // tarar (`"toString" in PriceKind` → TRUE, ölçüldü), yani
+  // `filter[kind]=toString` allowlist'i GEÇER ve `where.kind = "toString"`
+  // Prisma'ya gider → ham doğrulama hatası. Doğru davranış: değer enum üyesi
+  // olmadığı için filtre HİÇ uygulanmaz (liste süzülmemiş hâliyle döner),
+  // çağrı ÇÖKMEZ.
+  for (const proto of ["toString", "__proto__", "constructor"]) {
+    let protoTotal = -1;
+    let protoErr = "";
+    try {
+      protoTotal = (await itemPriceService.list({ page: 1, pageSize: 20, filters: { itemId: item.id, kind: proto } })).total;
+    } catch (e) {
+      protoErr = (e as Error).message.replace(/\s+/g, " ").slice(0, 90);
+    }
+    check(
+      `§9g ⭐ \`filter[kind]=${proto}\` Prisma'ya SIZMIYOR (allowlist prototipi saymıyor)`,
+      protoErr === "" && protoTotal === listAll.total,
+      protoErr || `total=${protoTotal} (beklenen ${listAll.total})`,
+    );
+  }
+  // Körlük zemini: kapı sıkılaştırıldı ama GERÇEK enum değeri hâlâ süzüyor.
+  const listKind = await itemPriceService.list({ page: 1, pageSize: 20, filters: { itemId: item.id, kind: "SALE" } });
+  check(
+    "§9h Körlük zemini: geçerli `kind=SALE` filtresi hâlâ uygulanıyor",
+    listKind.total > 0 && listKind.total <= listAll.total &&
+      (listKind.rows as Array<{ kind: string }>).every((r) => r.kind === "SALE"),
+    `total=${listKind.total}/${listAll.total}`,
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 

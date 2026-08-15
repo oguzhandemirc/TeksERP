@@ -8,11 +8,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
-import { customerService } from "@/pages/Customers/service";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SupplierSelect } from "@/components/forms/SupplierSelect";
+import { supplierPartyPayload, type SupplierParty } from "@/components/forms/supplierParty";
 import { useMultiWarehouse, useDefaultWarehouse, WAREHOUSES_QUERY_KEY } from "@/hooks/useWarehouses";
-import type { Customer } from "@/pages/Customers/types";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { createGoodsReceipt } from "./service";
+import { receiptSuccessText } from "./receiptFeedback";
 import {
   ReceiptLineRows, emptyLine, expandLines, receiptTotals, type DraftLine,
 } from "./ReceiptLineRows";
@@ -43,9 +45,19 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
   const { multiWarehouse, warehouses } = useMultiWarehouse();
   const defaultWarehouse = useDefaultWarehouse();
   const qc = useQueryClient();
+  // ⚠️ Başarı cümlesindeki SEKME ADI rejime bağlı ("Bitmiş Depo" ↔ "Depo") ve
+  // bu ekran tam da adların değiştiği kurulumda yaşıyor. Bayrak yüklenmemişse
+  // `false` = fabrika adlandırması (bugünkü davranış).
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
 
   const [warehouseId, setWarehouseId] = useState<string>("");
-  const [supplierId, setSupplierId] = useState<string | null>(null);
+  // C4 — tedarikçi İKİ kaynaktan gelebilir (cari kart / fason firma); seçim
+  // {kind, id} taşır ve gövdedeki XOR'u `supplierPartyPayload` kurar. Yalnız id
+  // tutmak, fason firmayı sessizce müşteri-tipli cari olarak kaydederdi.
+  const [supplier, setSupplier] = useState<SupplierParty | null>(null);
+  // C2 — "işlenecek mal": toplar `WAREHOUSE` yerine `STOCK` doğar. VARSAYILAN
+  // KAPALI = bugünkü davranış (satılabilir bitmiş mal alımı).
+  const [rawStockEntry, setRawStockEntry] = useState(false);
   const [deliveryNoteNo, setDeliveryNoteNo] = useState("");
   // Fiş TEK para birimlidir — satır fiyatları bu birimde. Karışık fiş, alış
   // faturasını iki para biriminde kesmeyi gerektirirdi (fatura tek birimli).
@@ -80,7 +92,10 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
     mutationFn: () =>
       createGoodsReceipt({
         warehouseId: effectiveWarehouseId,
-        supplierId,
+        // XOR TEK NOKTADAN: iki anahtarı elle yazmak, bacak değiştiğinde
+        // eskisini temizlemeyi unutmak demekti (iki tedarikçili kayıt).
+        ...supplierPartyPayload(supplier),
+        rawStockEntry,
         deliveryNoteNo: deliveryNoteNo || null,
         currency,
         // Fişin KENDİ idempotency anahtarı — çift tıklama/ağ kopması ikinci fiş
@@ -96,7 +111,18 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       if (failed.length > 0) {
         toast.warning(`${failed.length} satır atlandı: ${failed.map((f) => f.reason).slice(0, 2).join(" · ")}`);
       } else {
-        toast.success(res.message ?? "Mal kabul fişi oluşturuldu.");
+        // B5 — "toplar nereye düştü" CÜMLESİ. ⚠️ Sayılar YANITTAN okunur,
+        // taslaktan değil: backend satır atlayabilir ve taslaktan sayan bir
+        // toast envanterde olmayan topu "eklendi" diye bildirirdi.
+        toast.success(
+          receiptSuccessText({
+            receiptNo: res.data.receiptNo,
+            rollCount: res.data.totals?.rollCount ?? 0,
+            yarnLineCount: res.data.totals?.yarnLineCount ?? 0,
+            rawStockEntry: res.data.rawStockEntry ?? rawStockEntry,
+            financeEnabled,
+          }),
+        );
       }
       void qc.invalidateQueries({ queryKey: ["goods-receipts"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
@@ -106,7 +132,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
       void qc.invalidateQueries({ queryKey: WAREHOUSES_QUERY_KEY });
       setLines([emptyLine()]);
       setDeliveryNoteNo("");
-      setSupplierId(null);
+      setSupplier(null);
+      setRawStockEntry(false);
       setPurchaseOrderId(null);
       // ⚠️ SENKRON SONUCU YUKARI TAŞINIR, TOAST'A DEĞİL: toast birkaç saniyede
       // kaybolur ve "fazla mal geldi" / "bu ürün siparişte yok" bilgisi hiçbir
@@ -135,8 +162,8 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
           <GoodsReceiptOrderSection
             value={purchaseOrderId}
             onChange={setPurchaseOrderId}
-            supplierId={supplierId}
-            onSupplierChange={setSupplierId}
+            supplier={supplier}
+            onSupplierChange={setSupplier}
             // Satırlar EKLENİR, üstüne yazılmaz — kural saf katmanda.
             onFillLines={(filled) => setLines((ls) => mergeFilledLines(ls, filled))}
             disabled={createM.isPending}
@@ -160,16 +187,16 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
             )}
             <div>
               <Label>Tedarikçi (opsiyonel)</Label>
-              <div className="mt-1">
-                <ReferenceSelect<Customer>
-                  value={supplierId}
-                  onChange={setSupplierId}
-                  service={customerService}
-                  queryKey="customers"
-                  getLabel={(c) => `${c.code} — ${c.name}`}
-                  placeholder="Tedarikçi ara..."
-                />
-              </div>
+              {/* C4 — cari kartlar VE fason firmalar tek kutuda aranır.
+                  Kullanıcı firmanın adını bilir, hangi tabloda durduğunu değil. */}
+              <SupplierSelect
+                className="mt-1"
+                value={supplier}
+                onChange={setSupplier}
+                nullable
+                noneLabel="— (tedarikçisiz)"
+                disabled={createM.isPending}
+              />
             </div>
             <div>
               <Label>Para Birimi</Label>
@@ -193,6 +220,29 @@ export function GoodsReceiptFormDialog({ open, onOpenChange, onCreated }: Props)
               />
             </div>
           </div>
+
+          {/* ── C2 — RAF SEÇİMİ (fiş SEVİYESİNDE, satır seviyesinde DEĞİL) ──
+              Ürünün niteliği kartındadır; buradaki soru topun hangi RAFA
+              gireceğidir. Satır bazına açmak "fiş bir kaptır" okumasını bozardı
+              (karışık fiş → iki farklı sekmeye düşen toplar); iki tür mal aynı
+              irsaliyeyle geldiyse ikinci fiş açılır.
+              ⚠️ İPLİK BU SEÇİMDEN ETKİLENMEZ: `YarnStock` kalem × DEPO bazında
+              kg tutar, raf/statü kavramı yoktur (backend'de de yazılı). */}
+          <label className="flex cursor-pointer items-start gap-2 rounded-md border bg-muted/20 p-3">
+            <Checkbox
+              className="mt-0.5"
+              checked={rawStockEntry}
+              disabled={createM.isPending}
+              onCheckedChange={(c) => setRawStockEntry(Boolean(c))}
+            />
+            <span className="text-sm">
+              Ham stok olarak al (işlenecek mal)
+              <span className="mt-0.5 block text-[11px] text-muted-foreground">
+                Toplar <b>Ham Stok</b> sekmesine düşer ve fasona sevk edilebilir. İşaretlenmezse
+                satılabilir bitmiş mal olarak <b>Bitmiş Depo</b>ya girer (varsayılan).
+              </span>
+            </span>
+          </label>
 
           {/* İçe aktarma satırları EKLER, üstüne yazmaz — elle girilmiş bir
               kalem yüklemeyle sessizce kaybolmasın. */}

@@ -48,6 +48,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
 import { cn } from "@/lib/utils";
+import {
+  SUPPLIER_KIND_TAG, supplierDisplayName, supplierRefOf,
+} from "@/components/forms/supplierParty";
 import { money } from "@/pages/Finance/service";
 import {
   fmtQty, getPurchaseOrder, reopenShortClosePurchaseOrder, resyncPurchaseOrder,
@@ -140,7 +143,14 @@ export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel }:
             <dl className="grid grid-cols-3 gap-3 text-sm">
               <div>
                 <dt className="text-xs text-muted-foreground">Tedarikçi</dt>
-                <dd className="font-medium">{po.supplier?.name ?? "—"}</dd>
+                <dd className="font-medium">
+                  {supplierDisplayName(po)}
+                  {supplierRefOf(po)?.kind === "SUBCONTRACTOR" && (
+                    <span className="ml-1.5 rounded bg-muted px-1 py-0.5 text-[10px] uppercase text-muted-foreground">
+                      {SUPPLIER_KIND_TAG.SUBCONTRACTOR}
+                    </span>
+                  )}
+                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">Sipariş tarihi</dt>
@@ -455,7 +465,7 @@ function ShortCloseDialog({
         <div className="space-y-3">
           <div className="rounded-md border bg-muted/30 p-3 text-sm">
             <p>
-              <b className="font-mono">{po.orderNo}</b> · {po.supplier?.name ?? "—"}
+              <b className="font-mono">{po.orderNo}</b> · {supplierDisplayName(po)}
             </p>
             {openLines.length === 0 ? (
               <p className="mt-2 text-xs text-muted-foreground">

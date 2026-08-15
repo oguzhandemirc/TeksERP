@@ -33,6 +33,7 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PermissionGate } from "@/components/PermissionGate";
+import { supplierPartyQuery } from "@/components/forms/supplierParty";
 import { listPurchaseOrders, type PurchaseOrderListRow } from "./service";
 import { PurchaseOrderTable } from "./PurchaseOrderTable";
 import { PurchaseOrderFormDialog } from "./PurchaseOrderFormDialog";
@@ -57,17 +58,19 @@ export function PurchaseOrdersPage() {
   const [openLineItemId, setOpenLineItemId] = useState<string | null>(null);
   const [overdueOnly, setOverdueOnly] = useState(false);
 
-  const { search, status, supplierId, dateFrom, dateTo } = filters;
+  const { search, status, supplier, dateFrom, dateTo } = filters;
 
   const q = useQuery({
-    queryKey: ["purchase-orders", search, status, supplierId, dateFrom, dateTo],
+    queryKey: ["purchase-orders", search, status, supplier?.kind ?? "", supplier?.id ?? "", dateFrom, dateTo],
     queryFn: () =>
       listPurchaseOrders({
         page: 1,
         pageSize: PAGE_SIZE,
         search: search || undefined,
         status: status || undefined,
-        supplierId: supplierId ?? undefined,
+        // C4 — daraltma DOĞRU BACAKTAN gider; yanlış anahtar boş liste döndürür
+        // ve satın almacı "bu tedarikçiye sipariş yok" sanır.
+        ...supplierPartyQuery(supplier),
         // Gün sınırı İSTEMCİNİNDİR: yerel 00:00 / 23:59:59.999 (bkz. dates.ts).
         // Boş/bozuk değer `undefined` döner → parametre hiç gitmez.
         dateFrom: dayStartIso(dateFrom),
@@ -165,7 +168,7 @@ export function PurchaseOrdersPage() {
 
           <TabsContent value="open-lines">
             <OpenLinesPanel
-              supplierId={supplierId}
+              supplier={supplier}
               itemId={openLineItemId}
               onItemChange={setOpenLineItemId}
               overdueOnly={overdueOnly}

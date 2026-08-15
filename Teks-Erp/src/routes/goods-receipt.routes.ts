@@ -32,6 +32,14 @@ const lineSchema = z.object({
 const createSchema = z.object({
   warehouseId: z.string().uuid(),
   supplierId: z.string().uuid().nullable().optional(),
+  // C4 — FASON tedarikçi bacağı; `supplierId` ile XOR (servis kapısı 400 verir,
+  // mesajı tek kaynaktan: `supplier-party.helper`). ⚠️ Zod tanımadığı anahtarı
+  // SESSİZCE ATAR: bu satır olmadan panel fason firmayı seçer, backend düşürür
+  // ve fiş tedarikçisiz doğar — üstelik hiçbir hata çıkmadan.
+  subcontractorId: z.string().uuid().nullable().optional(),
+  // C2 — "ham stok girişi": toplar satılabilir `WAREHOUSE` yerine `STOCK`
+  // rafına doğar. Fiş SEVİYESİNDE (satır seviyesi bilinçli açılmadı).
+  rawStockEntry: z.boolean().optional(),
   deliveryNoteNo: z.string().max(64).nullable().optional(),
   // Fiş TEK para birimlidir (satır fiyatları bu birimde).
   currency: z.enum(["TRY","USD","EUR","GBP","RUB"]).optional(),
@@ -60,8 +68,16 @@ const createSchema = z.object({
  *         name: filter[supplierId]
  *         schema: { type: string, format: uuid }
  *       - in: query
+ *         name: filter[subcontractorId]
+ *         schema: { type: string, format: uuid }
+ *         description: Fason tedarikçi bacağı (C4) — `supplierId` ile AYRI anahtar
+ *       - in: query
  *         name: filter[status]
  *         schema: { type: string, enum: [ACTIVE, CANCELLED] }
+ *       - in: query
+ *         name: filter[rawStockEntry]
+ *         schema: { type: boolean }
+ *         description: Ham stok girişli fişler (C2)
  *     responses:
  *       200: { description: Sayfalanmış fiş listesi }
  */
@@ -123,10 +139,17 @@ router.get(
  *       Her satır ayrı transaction'da doğar — düşen satır `failed[]` içinde
  *       SEBEBİYLE döner, diğerleri kalır. `clientToken` verilirse fiş
  *       idempotenttir (ağ kopmasında ikinci fiş açılmaz).
+ *       TEDARİKÇİ (C4): `supplierId` (müşteri-tipli cari) **YA** `subcontractorId`
+ *       (fason firma) — ikisi birden dolu olamaz; ikisi de boş bırakılabilir
+ *       (zorunluluk fatura kapısındadır). Fiş bir alış siparişine bağlıysa taraf
+ *       siparişinkiyle AYNI olmalıdır, boşsa siparişten miras alınır.
+ *       RAF (C2): `rawStockEntry: true` → toplar `STOCK` (işlenmek üzere alınan
+ *       ham mal), aksi hâlde `WAREHOUSE` (satılabilir). İPLİK satırları bundan
+ *       ETKİLENMEZ (kg defteri raf ayrımı taşımaz).
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Oluşturuldu }
- *       400: { description: Depo/tedarikçi geçersiz }
+ *       400: { description: Depo/tedarikçi geçersiz ya da iki tedarikçi birden }
  */
 router.post(
   "/",

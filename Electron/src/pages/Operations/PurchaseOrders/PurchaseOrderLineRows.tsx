@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { useItemPriceSuggestion, describeSuggestion } from "@/hooks/useItemPriceSuggestion";
+import type { SupplierParty } from "@/components/forms/supplierParty";
 import { itemService } from "@/pages/Items/service";
 import type { Item } from "@/pages/Items/types";
 
@@ -96,8 +97,15 @@ interface Props {
    * ALIŞ fiyat önerisi bağlamı (D2/F2): tedarikçi + siparişin para birimi.
    * İkisi de verilmezse öneri isteği HİÇ atılmaz — form bugünkü gibi elle
    * çalışır (form diyaloğu bu prop'ları geçirene kadar davranış birebir aynı).
+   *
+   * ⚠️⚠️ FASON TEDARİKÇİDE CARİ-ÖZEL FİYAT ARANMAZ ve bu bir eksik değil,
+   * modelin kendisidir: `ItemPrice.customerId` FK'sı `Customer`a bakıyor —
+   * fason firmanın id'sini oraya göndermek BAŞKA BİR TABLONUN id'siyle sorgu
+   * atmaktır. Bugün sonuç boş döner (kart varsayılanına düşülür, doğru davranış)
+   * ama iki tablonun id uzayı bir gün kesişirse SESSİZCE YANLIŞ fiyat önerilir.
+   * Bu yüzden zincir, taraf fason olduğunda müşteri istisnasını hiç sormaz.
    */
-  supplierId?: string | null;
+  supplier?: SupplierParty | null;
   currency?: string;
 }
 
@@ -112,10 +120,11 @@ interface Props {
  * değişikliği sessizce üretmekti.
  */
 function PoLinePriceField({
-  line, supplierId, currency, disabled, onPatch,
+  line, priceCustomerId, currency, disabled, onPatch,
 }: {
   line: PoDraftLine;
-  supplierId: string | null;
+  /** Yalnız MÜŞTERİ-TİPLİ cari tedarikçide dolu (bkz. Props yorumu). */
+  priceCustomerId: string | null;
   currency: string | null;
   disabled?: boolean;
   onPatch: (p: Partial<PoDraftLine>) => void;
@@ -126,7 +135,7 @@ function PoLinePriceField({
     itemId: line.itemId || null,
     kind: "PURCHASE",
     currency,
-    customerId: supplierId,
+    customerId: priceCustomerId,
     enabled: !disabled,
     current: line.unitPrice,
     onApply: (p) => patchRef.current({ unitPrice: p }),
@@ -154,7 +163,9 @@ function PoLinePriceField({
   );
 }
 
-export function PurchaseOrderLineRows({ lines, onChange, disabled, supplierId, currency }: Props) {
+export function PurchaseOrderLineRows({ lines, onChange, disabled, supplier, currency }: Props) {
+  // Fason tarafta müşteri istisnası HİÇ sorulmaz → kart varsayılanı önerilir.
+  const priceCustomerId = supplier?.kind === "CUSTOMER" ? supplier.id : null;
   const patch = (key: string, p: Partial<PoDraftLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...p } : l)));
 
@@ -206,7 +217,7 @@ export function PurchaseOrderLineRows({ lines, onChange, disabled, supplierId, c
             />
             <PoLinePriceField
               line={l}
-              supplierId={supplierId ?? null}
+              priceCustomerId={priceCustomerId}
               currency={currency ?? null}
               disabled={disabled}
               onPatch={(p) => patch(l.key, p)}

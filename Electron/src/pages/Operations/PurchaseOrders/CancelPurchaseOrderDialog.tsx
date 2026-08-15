@@ -41,6 +41,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { supplierDisplayName } from "@/components/forms/supplierParty";
 import { cancelPurchaseOrder, fmtQty, getPurchaseOrder } from "./service";
 import { fulfillmentOf, remainingText } from "./fulfillment";
 
@@ -112,7 +113,7 @@ export function CancelPurchaseOrderDialog({ orderId, onOpenChange, onCancelled }
           <div className="space-y-3">
             <div className="rounded-md border bg-muted/30 p-3 text-sm">
               <p>
-                <b className="font-mono">{po.orderNo}</b> · {po.supplier?.name ?? "—"} ·{" "}
+                <b className="font-mono">{po.orderNo}</b> · {supplierDisplayName(po)} ·{" "}
                 {po.lines.length} kalem
               </p>
               <ul className="mt-2 space-y-1 text-xs">

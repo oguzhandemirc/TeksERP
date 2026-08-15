@@ -4,6 +4,8 @@ import apiClient from "@/services/apiClient";
 // girmesin). Şeklin tek kaynağı orada durur; ikinci bir kopya yazmak, backend
 // sözleşmesi değiştiğinde ikisinin sessizce ayrışması demekti.
 import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
+// C4 — tedarikçi iki tablodan gelebilir; XOR ve okuma önceliği TEK saf katmanda.
+import type { SupplierRefLike } from "@/components/forms/supplierParty";
 
 export interface GoodsReceiptListRow {
   id: string;
@@ -13,7 +15,13 @@ export interface GoodsReceiptListRow {
   createdAt: string;
   cancelledAt: string | null;
   warehouse: { id: string; name: string } | null;
-  supplier: { id: string; name: string } | null;
+  supplier: SupplierRefLike | null;
+  /** C4 — fason tedarikçi bacağı; `supplier` ile AYNI şekil. Liste tek
+   *  "Tedarikçi" kolonunda DOLU olanı basar (`supplierDisplayName`). Eski
+   *  backend alanı hiç göndermez → `undefined` ve kolon bugünküyle aynı. */
+  subcontractorSupplier?: SupplierRefLike | null;
+  /** C2 — "ham stok olarak alındı" (toplar `STOCK`, Ham Stok sekmesine düşer). */
+  rawStockEntry?: boolean;
   /** `yarnMovements` Sınıf 5 ile geldi (2026-08-14) — eski backend'e karşı
    *  opsiyonel okunur (`?? 0`), yoksa liste kumaş sayacına düşer. */
   _count: { rolls: number; yarnMovements?: number };
@@ -101,7 +109,11 @@ export interface GoodsReceiptDetail {
   notes: string | null;
   createdAt: string;
   warehouse: { id: string; code: string; name: string };
-  supplier: { id: string; code: string; name: string } | null;
+  supplier: SupplierRefLike | null;
+  /** C4 — fason tedarikçi bacağı (liste ile AYNI şekil). */
+  subcontractorSupplier?: SupplierRefLike | null;
+  /** C2 — ham stok fişi: toplar `STOCK` doğar (satılabilir depo yerine). */
+  rawStockEntry?: boolean;
   createdBy: { fullName: string | null; username: string } | null;
   rolls: Array<{
     id: string;
@@ -151,22 +163,36 @@ export async function getGoodsReceipt(id: string): Promise<GoodsReceiptDetail> {
 export async function createGoodsReceipt(body: {
   warehouseId: string;
   supplierId?: string | null;
+  /** C4 — fason firma tedarikçisi. `supplierId` ile BİRLİKTE gönderilemez
+   *  (backend 400); XOR'u `supplierPartyPayload` kurar, çağıran elle yazmaz. */
+  subcontractorId?: string | null;
   deliveryNoteNo?: string | null;
   currency?: "TRY" | "USD" | "EUR" | "GBP" | "RUB";
   notes?: string | null;
   clientToken?: string;
   /** Bu fişin karşıladığı ALIŞ SİPARİŞİ — yalnız ticaret rejiminde (D3). */
   purchaseOrderId?: string | null;
+  /** C2 — "işlenecek mal": toplar `WAREHOUSE` yerine `STOCK` doğar. */
+  rawStockEntry?: boolean;
   lines?: GoodsReceiptLineInput[];
 }): Promise<{ data: GoodsReceiptCreateData; message?: string }> {
-  // ⚠️ SİPARİŞSİZ FİŞTE ALAN HİÇ GÖNDERİLMEZ — `purchaseOrderId: null` yazmak
+  // ⚠️ DEĞERİ OLMAYAN ALAN HİÇ GÖNDERİLMEZ — `purchaseOrderId: null` yazmak
   // teknik olarak da geçerli (Zod `.nullable()`) ama gövdeyi fabrikadaki
   // bugünkü isteğinden AYIRIR: "sıfır görünür fark" kuralı istek gövdesini de
   // kapsar. Ayıklama servis KATINDA yapılır, çağıranın hatırlamasına bırakılmaz
   // — ikinci bir çağıran (mobil/toplu içe aktarma) doğduğunda kural onunla
   // birlikte gelir. Bekçi: `service.test.ts`.
-  const { purchaseOrderId, ...rest } = body;
-  const payload = purchaseOrderId ? { ...rest, purchaseOrderId } : rest;
+  //
+  // ⚠️ `subcontractorId` ve `rawStockEntry` C4/C2 ile geldi ve AYNI kurala
+  // uyar: fason bacağı boşken anahtar hiç yazılmaz, `rawStockEntry` yalnız
+  // TRUE iken gider (varsayılan davranış = bugünkü davranış).
+  const { purchaseOrderId, subcontractorId, rawStockEntry, ...rest } = body;
+  const payload = {
+    ...rest,
+    ...(purchaseOrderId ? { purchaseOrderId } : {}),
+    ...(subcontractorId ? { subcontractorId } : {}),
+    ...(rawStockEntry ? { rawStockEntry: true } : {}),
+  };
   const res = await apiClient.post("/api/goods-receipts", payload);
   return res.data;
 }
