@@ -182,16 +182,23 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     fail++;
     console.error("HATA:", e instanceof Error ? e.message : e);
   } finally {
-    try {
-      // dead.parentRollId=alive → önce dead silinir (createdIds ters sırası).
-      for (const id of [...createdIds].reverse()) {
+    // ⚠️ HATA SATIR-BAŞINA yutulur, döngü DURMAZ (2026-08-15 dersi): eski hâli
+    // ilk FK hatasında (örn. RollVariance RESTRICT — bellek notundaki sınıf)
+    // TÜM kalanları sızdırıyordu ve depo damgasız artıklar
+    // `test_roll_warehouse_stamp`ın DB-geneli zeminini kırmızıya düşürdü.
+    for (const id of [...createdIds].reverse()) {
+      try {
+        await p.rollVariance.deleteMany({ where: { rollId: id } });
+        await p.warehouseMovement.deleteMany({ where: { rollId: id } });
+        await p.rollMovement.deleteMany({ where: { rollId: id } });
+        await p.rollOperation.deleteMany({ where: { rollId: id } });
         await p.systemLog.deleteMany({ where: { recordId: id } });
         await p.roll.delete({ where: { id } });
+      } catch (e) {
+        console.error(`cleanup hata (${id}):`, e instanceof Error ? e.message : e);
       }
-      console.log("(temizlendi — TEST- fixture topları silindi)");
-    } catch (e) {
-      console.error("cleanup hata:", e instanceof Error ? e.message : e);
     }
+    console.log("(temizlendi — TEST- fixture topları silindi)");
     await p.$disconnect();
   }
 
