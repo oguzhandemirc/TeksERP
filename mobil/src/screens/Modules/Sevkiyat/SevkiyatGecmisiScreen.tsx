@@ -8,7 +8,6 @@ import {
   ActivityIndicator,
   TouchableRipple,
   Divider,
-  Menu,
   Chip,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
@@ -17,6 +16,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import dayjs from 'dayjs';
 import ScreenChrome from '../../../components/ScreenChrome';
+// paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
+import AppMenu from '../../../components/AppMenu';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
@@ -152,7 +153,7 @@ export default function SevkiyatGecmisiScreen() {
           onChangeText={setSearch}
           left={<TextInput.Icon icon="magnify" />}
         />
-        <Menu
+        <AppMenu
           visible={custMenuOpen}
           onDismiss={() => setCustMenuOpen(false)}
           anchor={
@@ -166,7 +167,7 @@ export default function SevkiyatGecmisiScreen() {
             </Button>
           }
         >
-          <Menu.Item
+          <AppMenu.Item
             title="Tüm müşteriler"
             onPress={() => {
               setCustomerFilter(null);
@@ -176,7 +177,7 @@ export default function SevkiyatGecmisiScreen() {
             }}
           />
           {customers.map((c) => (
-            <Menu.Item
+            <AppMenu.Item
               key={c.id}
               title={c.name}
               onPress={() => {
@@ -187,7 +188,7 @@ export default function SevkiyatGecmisiScreen() {
               }}
             />
           ))}
-        </Menu>
+        </AppMenu>
         {customerFilter && branches.length > 1 && (
           <View style={styles.branchRow}>
             <Chip compact selected={!branchFilter} onPress={() => setBranchFilter(null)}>

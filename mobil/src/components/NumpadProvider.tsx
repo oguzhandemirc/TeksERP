@@ -58,8 +58,9 @@ const NumpadContext = createContext<NumpadContextValue | null>(null);
 /**
  * Provider YOKSA null döner — FIRLATMAZ.
  *
- * NEDEN GEREKLİ (2026-08-04 saha çökmesi): `AppModal` içeriğini react-native-paper
- * `Portal`ı ile render eder; Portal çocukları `Portal.Host` altında, yani AĞACIN
+ * NEDEN GEREKLİ (2026-08-04 saha çökmesi): `AppModal` içeriğini portal ile render
+ * eder (2026-08-15'ten beri paper `Portal` değil `SimplePortal` — kural taşıyıcıdan
+ * BAĞIMSIZ); portal çocukları kökteki host katmanında, yani AĞACIN
  * BAŞKA YERİNDE canlanır. React context ağaca bağlı olduğu için modal içindeki
  * bileşen ekranın `NumpadProvider`ını GÖRMEZ. `useNumpadContext` fırlatınca bu
  * "sağlam bir hata" değil, uygulamayı komple düşüren FATAL EXCEPTION oluyordu

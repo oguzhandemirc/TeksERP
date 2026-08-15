@@ -1,8 +1,8 @@
 // =============================================================================
 // Kök navigation ref — NavigationContainer DIŞINDA render edilen ağaçlar için
 // =============================================================================
-// react-native-paper Portal'ı (AppModal dahil) içeriği PaperProvider'daki
-// PortalHost'a taşır; orası NavigationContainer'ın DIŞINDA kalır → portal
+// Portal (AppModal → SimplePortal; ayrıca paper `Portal`) içeriği App.tsx'teki
+// kök host katmanına taşır; orası NavigationContainer'ın DIŞINDA kalır → portal
 // içinde useNavigation() "Couldn't find a navigation object" fırlatır.
 // Portal'lanan bileşenler (örn. chip modalındaki PlaceConfirmView) navigasyonu
 // bu ref üzerinden yapar. isReady() kontrolü şart: container mount olmadan

@@ -8,7 +8,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import { Portal } from 'react-native-paper';
+import { SimplePortal } from './SimplePortal';
 import Animated, {
   Easing,
   runOnJS,
@@ -49,9 +49,8 @@ const H_DISMISS_VEL = 800; // yatay: fırlatma hız eşiği
 const SPRING_BACK_MS = 160;
 
 // =============================================================================
-// AppModal — uygulama geneli modal primitifi. react-native-paper Portal (z-order)
-// + react-native-reanimated (animasyon) üzerine kuruludur. react-native-modal'ı
-// TAMAMEN değiştirir.
+// AppModal — uygulama geneli modal primitifi. Portal (z-order) + reanimated
+// (animasyon) üzerine kuruludur. react-native-modal'ı TAMAMEN değiştirir.
 //
 // NEDEN react-native-modal değil: @14-rc, New Architecture/Fabric'te backdrop ile
 // içeriği ayrı animasyonlarla sürüyor; kapanışta desenkron olup "perde kapan→aç→
@@ -59,13 +58,24 @@ const SPRING_BACK_MS = 160;
 // hem içeriği sürer → ikisi her zaman senkron, flicker yapısal olarak imkânsız.
 //
 // NEDEN Portal: ayrı native pencere YOK → modal üstüne modal / drawer stack
-// çakışması olmaz, edge-to-edge backdrop boşluğu olmaz. Kök App.tsx'te
-// PaperProvider var, Portal.Host hazır.
+// çakışması olmaz, edge-to-edge backdrop boşluğu olmaz. Bu sözleşme AYNEN
+// GEÇERLİ; 2026-08-15'te değişen tek şey TAŞIYICI oldu.
+//
+// NEDEN paper `Portal` DEĞİL (2026-08-15, saha çökmesi SM-X230): paper'ın
+// `PortalConsumer`/`PortalManager` makinesi Fabric'te kendini besleyen bir
+// güncelleme döngüsüne giriyor ve `Maximum update depth exceeded` ile uygulamayı
+// düşürüyordu — 14 çökmenin 6'sı `Portal > ThemedComponent > AppModal` yığınında
+// (paper #4754/#4807/#3395). Tema sabit olduğu hâlde tekrarladı → sorun tüketicide
+// değil taşıyıcıdaydı. Yerine bağımlılıksız `SimplePortal` (bkz. o dosyanın
+// başlığı): tüketici store'a yalnız YAZAR, host yalnız OKUR → geri akış yapısal
+// olarak imkânsız. Host App.tsx'te kökte, PaperProvider'ın İÇİNDE mount edilir
+// (tema/settings context'i ve Toast/kilit altındaki z-düzlemi korunsun diye).
 //
 // ⚠️⚠️ İÇERİK BU AĞAÇTA RENDER EDİLMEZ — UYGULAMA CONTEXT'LERİ GÖRÜNMEZ.
-// Paper `Portal` çocukları `Portal.Host`a TAŞIR; React context ağaca bağlı
-// olduğu için modal içeriği, AppModal'ı çağıran ekranın sağladığı hiçbir
-// context'i göremez. Bugüne kadar İKİ kez ısırdı:
+// Portal çocukları host'a TAŞINIR; React context ağaca bağlı olduğu için modal
+// içeriği, AppModal'ı çağıran ekranın sağladığı hiçbir context'i göremez (kural
+// paper döneminden BİREBİR aynı — host da aynı z-düzleminde durur). Bugüne kadar
+// İKİ kez ısırdı:
 //   • `useNavigation()` → portal içinde fırlatır (bkz. navigation/navigationRef.ts)
 //   • `useNumpadContext()` → 2026-08-04, Tambur → Düzelt → Manuel Top Ekle:
 //     `FATAL EXCEPTION: mqt_v_native` ile uygulama komple çöktü (logcat ile
@@ -327,7 +337,7 @@ export default function AppModal({
       : undefined;
 
   return (
-    <Portal>
+    <SimplePortal>
       <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
         <Pressable
           style={StyleSheet.absoluteFill}
@@ -352,7 +362,7 @@ export default function AppModal({
           </Animated.View>
         </GestureDetector>
       </Animated.View>
-    </Portal>
+    </SimplePortal>
   );
 }
 

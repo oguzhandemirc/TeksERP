@@ -14,6 +14,7 @@ import React, { type ReactNode } from 'react';
 import { render } from '@testing-library/react-native';
 import { PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SimplePortalHost } from '../../../components/SimplePortal';
 
 // KK1Screen import zinciri native modüller çeker — render bekçisinin konusu
 // değiller, jest ortamında yüklenemeyenler mock'lanır (scanFeedback.test emsali).
@@ -34,9 +35,16 @@ const metrics = {
   frame: { x: 0, y: 0, width: 800, height: 1280 },
   insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
+// SimplePortalHost = App.tsx'teki kök modal katmanının testteki karşılığı.
+// AppModal içeriğini SimplePortal host'a taşır; host yoksa modal hiçbir yerde
+// çizilmez ve bu bekçi (tam da "modal GERÇEKTEN çiziliyor mu" sorusu) sessizce
+// boşa düşerdi.
 const Wrap = ({ children }: { children: ReactNode }) => (
   <SafeAreaProvider initialMetrics={metrics}>
-    <PaperProvider>{children}</PaperProvider>
+    <PaperProvider>
+      {children}
+      <SimplePortalHost />
+    </PaperProvider>
   </SafeAreaProvider>
 );
 

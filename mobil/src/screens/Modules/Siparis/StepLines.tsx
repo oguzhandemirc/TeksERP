@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
-import { Text, Button, TouchableRipple, IconButton, Menu, Surface, Icon } from 'react-native-paper';
+import { Text, Button, TouchableRipple, IconButton, Surface, Icon } from 'react-native-paper';
+// paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
+import AppMenu from '../../../components/AppMenu';
 
 import { colors, spacing, radius } from '../../../theme';
 import type { DraftLine, NewOrderState } from './useNewOrder';
@@ -46,7 +48,7 @@ export default function StepLines({ state, onAdd, onEdit }: Props) {
                     </Text>
                   </View>
                   <Text style={styles.cardQty}>{l.quantity.toLocaleString('tr-TR')} m</Text>
-                  <Menu
+                  <AppMenu
                     visible={menuFor === l.clientId}
                     onDismiss={() => setMenuFor(null)}
                     anchor={
@@ -57,7 +59,7 @@ export default function StepLines({ state, onAdd, onEdit }: Props) {
                       />
                     }
                   >
-                    <Menu.Item
+                    <AppMenu.Item
                       leadingIcon="pencil"
                       title="Düzenle"
                       onPress={() => {
@@ -65,7 +67,7 @@ export default function StepLines({ state, onAdd, onEdit }: Props) {
                         onEdit(l);
                       }}
                     />
-                    <Menu.Item
+                    <AppMenu.Item
                       leadingIcon="content-copy"
                       title="Kopyala"
                       onPress={() => {
@@ -73,7 +75,7 @@ export default function StepLines({ state, onAdd, onEdit }: Props) {
                         state.duplicateLine(l.clientId);
                       }}
                     />
-                    <Menu.Item
+                    <AppMenu.Item
                       leadingIcon="delete-outline"
                       title="Sil"
                       onPress={() => {
@@ -81,7 +83,7 @@ export default function StepLines({ state, onAdd, onEdit }: Props) {
                         state.removeLine(l.clientId);
                       }}
                     />
-                  </Menu>
+                  </AppMenu>
                 </View>
               </TouchableRipple>
             </Surface>

@@ -12,7 +12,14 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, Dialog, Divider, Icon, Menu, Portal, Text, TouchableRipple } from 'react-native-paper';
+import { ActivityIndicator, Button, Divider, Icon, Text, TouchableRipple } from 'react-native-paper';
+// 2026-08-15 saha çökmesi: paper Portal'ın Fabric'te kendini besleyen güncelleme
+// döngüsü (Maximum update depth — SM-X230'da deterministik). Devralma diyaloğu
+// uygulamadaki SON paper Portal/Dialog kullanıcısıydı; AppModal'a (SimplePortal)
+// taşındı. paper Dialog görseli elle kuruldu (ikon + başlık + içerik + aksiyon).
+import AppModal from '../AppModal';
+// paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
+import AppMenu from '../AppMenu';
 import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Toast from 'react-native-toast-message';
@@ -424,15 +431,15 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
           ÖNCESİ tüm aksiyonlar burada: Ayarlar (sunucu adresi — yanlış IP'de tek
           çıkış yolu), Bölüm değiştir (ModuleSelect), Kilitle/operatör değiştir,
           Çıkış. DIŞ konteyner absolute + buton NORMAL akışta: butonu absolute yapıp
-          Menu'ye anchor verince Menu'nün flow wrapper'ına göre konumlanıp ekran
-          dışına kayıyordu (eski hata) — dış View absolute, buton wrapper içinde. */}
+          menüye anchor verince flow wrapper'ına göre konumlanıp ekran dışına
+          kayıyordu (eski hata) — dış View absolute, buton wrapper içinde.
+          AppMenu tetiği `measureInWindow` ile PENCERE koordinatında ölçtüğü için
+          bu risk zaten kalktı; yerleşim yine de korunuyor (buton konumu aynı). */}
       {!onCancel && (
         <View style={[styles.profileAnchor, { top: insets.top + 6 }]}>
-          <Menu
+          <AppMenu
             visible={profileMenuVisible}
             onDismiss={() => setProfileMenuVisible(false)}
-            anchorPosition="bottom"
-            style={styles.profileMenu}
             anchor={
               <TouchableRipple
                 onPress={() => setProfileMenuVisible(true)}
@@ -449,7 +456,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               </TouchableRipple>
             }
           >
-            <Menu.Item
+            <AppMenu.Item
               leadingIcon="cog"
               onPress={() => {
                 setProfileMenuVisible(false);
@@ -460,7 +467,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               titleStyle={styles.profileMenuItemTitle}
             />
             <Divider />
-            <Menu.Item
+            <AppMenu.Item
               leadingIcon="view-grid"
               onPress={() => {
                 setProfileMenuVisible(false);
@@ -471,7 +478,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               titleStyle={styles.profileMenuItemTitle}
             />
             <Divider />
-            <Menu.Item
+            <AppMenu.Item
               leadingIcon="lock"
               onPress={() => {
                 setProfileMenuVisible(false);
@@ -482,7 +489,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               titleStyle={styles.profileMenuItemTitle}
             />
             <Divider />
-            <Menu.Item
+            <AppMenu.Item
               leadingIcon="logout"
               onPress={() => {
                 setProfileMenuVisible(false);
@@ -492,7 +499,7 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               style={styles.profileMenuItem}
               titleStyle={styles.profileMenuItemTitle}
             />
-          </Menu>
+          </AppMenu>
         </View>
       )}
 
@@ -505,15 +512,17 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
       />
 
       {/* Devralma teyidi — makinede başka oturum açık. */}
-      <Portal>
-        <Dialog
-          visible={takeover != null}
-          onDismiss={() => setTakeover(null)}
-          style={styles.takeoverDialog}
-        >
-          <Dialog.Icon icon="account-switch" />
-          <Dialog.Title style={styles.takeoverTitle}>Makine dolu — devral?</Dialog.Title>
-          <Dialog.Content>
+      <AppModal
+        visible={takeover != null}
+        onDismiss={() => setTakeover(null)}
+        position="center"
+        contentStyle={styles.takeoverDialog}
+      >
+        <View style={styles.takeoverIconRow}>
+          <Icon source="account-switch" size={26} color={C.warn} />
+        </View>
+        <Text style={styles.takeoverTitle}>Makine dolu — devral?</Text>
+        <View style={styles.takeoverBody}>
             {/* Kimden devralınacak — belirgin blok. */}
             <View style={styles.occupantBox}>
               <View style={styles.occupantIcon}>
@@ -535,21 +544,20 @@ export default function PlaceConfirmView({ expectedKind, onDone, onCancel, autoO
               {takeover?.label} makinesini devralırsan onun oturumu kapanır ve bir
               sonraki işleminde yeniden yer onayı istenir.
             </Text>
-          </Dialog.Content>
-          <Dialog.Actions>
-            <Button onPress={() => setTakeover(null)}>Vazgeç</Button>
-            <Button
-              mode="contained"
-              buttonColor={C.warn}
-              loading={busy}
-              disabled={busy}
-              onPress={() => takeover && void open(takeover.input, takeover.label, true)}
-            >
-              Devral
-            </Button>
-          </Dialog.Actions>
-        </Dialog>
-      </Portal>
+        </View>
+        <View style={styles.takeoverActions}>
+          <Button onPress={() => setTakeover(null)}>Vazgeç</Button>
+          <Button
+            mode="contained"
+            buttonColor={C.warn}
+            loading={busy}
+            disabled={busy}
+            onPress={() => takeover && void open(takeover.input, takeover.label, true)}
+          >
+            Devral
+          </Button>
+        </View>
+      </AppModal>
 
       {/* Çıkış akışı modalları (offline-onay + "çıkış yapılıyor") — ScreenChrome
           ile paylaşımlı. Gate'te profil menüsündeki "Çıkış" bunları tetikler. */}
@@ -570,7 +578,7 @@ const styles = StyleSheet.create({
   // paddingTop/Bottom: sayfanın üstünden ve altından nefes payı (içerik kenara yapışmaz).
   root: { flex: 1, backgroundColor: C.bg, paddingTop: 16, paddingBottom: 16 },
   // Profil menüsü — sağ üst köşe. DIŞ konteyner absolute; buton NORMAL akışta
-  // (Paper Menu component-anchor'ı doğru ölçsün — absolute buton Menu wrapper'ında
+  // (menü tetiği doğru ölçülsün — absolute buton eski Paper Menu wrapper'ında
   // ekran dışına kayıyordu). DOLU marka-indigo (ScreenChrome tetiğiyle aynı dil).
   profileAnchor: { position: 'absolute', right: 10, zIndex: 10, elevation: 4 },
   profileBtn: {
@@ -588,8 +596,7 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   profileBtnText: { color: C.text, fontSize: 14, fontWeight: '700', maxWidth: 180 },
-  // Menü barın alt kenarından başlasın + saha dokunma hedefi (min ~56dp).
-  profileMenu: { marginTop: 8 },
+  // Saha dokunma hedefi (min ~56dp).
   profileMenuItem: { height: 58 },
   profileMenuItemTitle: { fontSize: 17 },
   // Sabit başlık (sayfa kaymaz); makine listesi kendi içinde kayar.
@@ -625,8 +632,29 @@ const styles = StyleSheet.create({
   subtitle: { color: C.subtext, fontSize: 14, textAlign: 'center', lineHeight: 20 },
   // Devralma modalı (paper Dialog = açık tema): tablette genişliği sınırla +
   // kimden devralınacağı belirgin olsun.
-  takeoverDialog: { alignSelf: 'center', width: '100%', maxWidth: 440 },
-  takeoverTitle: { textAlign: 'center' },
+  // AppModal kartı — paper Dialog paritesi (beyaz yüzey, 28 radius, MD3 boşlukları).
+  takeoverDialog: {
+    alignSelf: 'center',
+    width: '100%',
+    maxWidth: 440,
+    backgroundColor: '#fff',
+    borderRadius: 28,
+    paddingTop: 24,
+    paddingBottom: 12,
+  },
+  takeoverIconRow: { alignItems: 'center', marginBottom: 8 },
+  takeoverTitle: { textAlign: 'center', fontSize: 22, color: '#1e293b', marginBottom: 14 },
+  // paper Dialog.Content yatay boşluğu (24) — içerik bloğu.
+  takeoverBody: { paddingHorizontal: 24 },
+  // paper Dialog.Actions: sağa yaslı buton satırı.
+  takeoverActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
   occupantBox: {
     flexDirection: 'row',
     alignItems: 'center',

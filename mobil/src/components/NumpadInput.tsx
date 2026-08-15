@@ -48,8 +48,9 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
 ) {
   // Stable callbacks via destructure (her ikisi de provider'da useCallback([])'lı).
   //
-  // ⚠️ OPSİYONEL BAĞLAM (2026-08-04 saha çökmesi): `AppModal` içeriğini Paper
-  // `Portal`ı ile ağacın BAŞKA YERİNDE render eder → modal içindeki NumpadInput
+  // ⚠️ OPSİYONEL BAĞLAM (2026-08-04 saha çökmesi): `AppModal` içeriğini portal
+  // (2026-08-15'ten beri `SimplePortal`) ile ağacın BAŞKA YERİNDE render eder →
+  // kural taşıyıcıdan bağımsızdır: modal içindeki NumpadInput
   // ekranın `NumpadProvider`ını GÖRMEZ. Eskiden `useNumpadContext()` burada
   // fırlatıyordu ve uygulama komple çöküyordu (Tambur → Düzelt → Manuel Top Ekle;
   // logcat: `FATAL EXCEPTION: mqt_v_native — useNumpadContext must be used inside

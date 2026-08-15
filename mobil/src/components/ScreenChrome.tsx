@@ -1,6 +1,9 @@
 import React, { useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Appbar, Text, Menu, TouchableRipple, Icon, Divider } from 'react-native-paper';
+import { Appbar, Text, TouchableRipple, Icon, Divider } from 'react-native-paper';
+// paper `Menu` YERİNE — Fabric'te profil menüsü açılırken "Maximum update depth
+// exceeded" ile çöküyordu (Menu > Portal > PortalConsumer). Bkz. AppMenu.tsx.
+import AppMenu from './AppMenu';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -147,13 +150,11 @@ export default function ScreenChrome({
         {/* Ekran-spesifik tetikleyici — profilden önce, profil en sağda kalsın */}
         {headerExtras}
 
-        <Menu
+        {/* Konum tetiğin GERÇEK ölçümünden gelir (measureInWindow) — eski
+            `anchorPosition`/`marginTop` telafisi artık gerekmiyor. */}
+        <AppMenu
           visible={menuVisible}
           onDismiss={() => setMenuVisible(false)}
-          anchorPosition="bottom"
-          // Tetik (profil ikonu) barın içinde birkaç px yukarıda biter — menüyü
-          // barın ALT KENARINDAN başlat (üstüne binmesin).
-          style={styles.menu}
           anchor={
             <TouchableRipple
               onPress={() => setMenuVisible(true)}
@@ -196,7 +197,7 @@ export default function ScreenChrome({
               <Divider />
             </>
           )}
-          <Menu.Item
+          <AppMenu.Item
             leadingIcon="cog"
             onPress={openSettings}
             title="Ayarlar"
@@ -209,7 +210,7 @@ export default function ScreenChrome({
             <>
               <Divider />
               {placeActions.showMachine && (
-                <Menu.Item
+                <AppMenu.Item
                   leadingIcon="swap-horizontal"
                   onPress={() => {
                     setMenuVisible(false);
@@ -221,7 +222,7 @@ export default function ScreenChrome({
                 />
               )}
               {placeActions.showStation && (
-                <Menu.Item
+                <AppMenu.Item
                   leadingIcon="view-grid"
                   onPress={() => {
                     setMenuVisible(false);
@@ -235,7 +236,7 @@ export default function ScreenChrome({
             </>
           )}
           <Divider />
-          <Menu.Item
+          <AppMenu.Item
             leadingIcon="lock"
             onPress={doLock}
             title="Kilitle / operatör değiştir"
@@ -243,7 +244,7 @@ export default function ScreenChrome({
             titleStyle={styles.menuItemTitle}
           />
           <Divider />
-          <Menu.Item
+          <AppMenu.Item
             leadingIcon="logout"
             onPress={() => {
               setMenuVisible(false);
@@ -253,7 +254,7 @@ export default function ScreenChrome({
             style={styles.menuItem}
             titleStyle={styles.menuItemTitle}
           />
-        </Menu>
+        </AppMenu>
       </Appbar.Header>
 
       {/* 2. kat — makine adı çipi (hidePlaceChip değilse) İLK öğe olarak eklenir,
@@ -350,7 +351,5 @@ const styles = StyleSheet.create({
   // Menü maddeleri — saha dokunma hedefi (min 56dp kuralı) + büyük yazı.
   menuItem: { height: 58, maxWidth: 340 },
   menuItemTitle: { fontSize: 17 },
-  // Menü penceresi barın alt kenarından başlasın (tetik bar içinde yukarıda bitiyor).
-  menu: { marginTop: 12 },
   content: { flex: 1 },
 });

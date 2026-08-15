@@ -6,7 +6,6 @@ import {
   TouchableRipple,
   Icon,
   ActivityIndicator,
-  Menu,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useNavigation } from '@react-navigation/native';
@@ -17,6 +16,8 @@ import Toast from 'react-native-toast-message';
 import dayjs from 'dayjs';
 
 import ScreenChrome from '../../../components/ScreenChrome';
+// paper `Menu` YERİNE — Fabric "Maximum update depth exceeded" ailesi. Bkz. AppMenu.tsx.
+import AppMenu from '../../../components/AppMenu';
 import RefreshButton from '../../../components/RefreshButton';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
@@ -319,7 +320,7 @@ export default function FasonSevkGecmisiScreen() {
 }
 
 // ---------------------------------------------------------------------------
-// FilterDropdown — kompakt dropdown (Paper Menu). İki tanesi yan yana dizilir;
+// FilterDropdown — kompakt dropdown (AppMenu). İki tanesi yan yana dizilir;
 // segmented control'e göre yer kazandırır. Seçili değer + chevron gösterir.
 // ---------------------------------------------------------------------------
 function FilterDropdown<T extends string>({
@@ -337,7 +338,7 @@ function FilterDropdown<T extends string>({
   const current = tabs.find((t) => t.key === value) ?? tabs[0];
   return (
     <View style={styles.dropdownWrap}>
-      <Menu
+      <AppMenu
         visible={open}
         onDismiss={() => setOpen(false)}
         anchor={
@@ -353,7 +354,7 @@ function FilterDropdown<T extends string>({
         }
       >
         {tabs.map((t) => (
-          <Menu.Item
+          <AppMenu.Item
             key={t.key}
             title={t.label}
             onPress={() => {
@@ -363,7 +364,7 @@ function FilterDropdown<T extends string>({
             trailingIcon={value === t.key ? 'check' : undefined}
           />
         ))}
-      </Menu>
+      </AppMenu>
     </View>
   );
 }
