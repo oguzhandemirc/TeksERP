@@ -16,6 +16,9 @@ import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { requireFinanceEnabled } from "../middlewares/finance.middleware";
+import prisma from "../lib/prisma";
+import { AppError } from "../utils/app-error";
+import { collectShipmentInvoiceDraftLines } from "../services/helpers/shipment-auto-draft.helper";
 import { cariService } from "../services/cari.service";
 import { invoiceService } from "../services/invoice.service";
 import { paymentService } from "../services/payment.service";
@@ -673,6 +676,43 @@ router.post("/exchange-rates/fetch-tcmb", requirePermission("finance:write"), as
   try {
     const summary = await fetchTcmbRates(req.user?.userId);
     res.json({ success: true, data: summary });
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/finance/shipments/{id}/invoice-draft-lines:
+ *   get:
+ *     tags: [Finance]
+ *     summary: Sevkiyattan fatura taslağı SATIR ÖNİZLEMESİ (tek kaynak)
+ *     description: >
+ *       Panelin "Sevkiyattan Fatura Taslağı" diyaloğu satırları BURADAN alır —
+ *       otomatik kanca (finance.autoDraftFromShipmentEnabled) ile elle taslak
+ *       aynı kurucuyu paylaşır (C1): ürün kırılımı + sipariş (sözleşme) fiyatı
+ *       > D2 zinciri; çelişkili sipariş fiyatı UYDURULMAZ, sayaçla söylenir.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ lines, orderPriced, orderConflicts, currency }" }
+ *       404: { description: Sevkiyat bulunamadı ya da müşterisiz }
+ */
+router.get("/shipments/:id/invoice-draft-lines", requirePermission("finance:read"), async (req, res, next) => {
+  try {
+    const id = z.string().uuid().parse(req.params.id);
+    const sh = await prisma.shipment.findUnique({
+      where: { id },
+      select: { id: true, customerId: true },
+    });
+    if (!sh?.customerId) throw AppError.notFound("Sevkiyat bulunamadı ya da müşterisi yok.");
+    // Para birimi kancayla AYNI kural: cari kartının ön-dolum tercihi, yoksa TRY.
+    const cari = await prisma.cariAccount.findUnique({
+      where: { customerId: sh.customerId },
+      select: { defaultCurrency: true },
+    });
+    const currency = cari?.defaultCurrency ?? "TRY";
+    const result = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency as never);
+    res.json({ success: true, data: { ...result, currency } });
   } catch (e) {
     next(e);
   }

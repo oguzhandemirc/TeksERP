@@ -88,11 +88,34 @@ import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
  * gerekçe `createDraftFromGoodsReceipt`'in iplik satırındaki sabit "kg"da da
  * yazılı.
  */
-async function collectShipmentInvoiceDraftLines(
+export interface ShipmentDraftLine {
+  itemId: string;
+  description: string;
+  qty: Prisma.Decimal;
+  unit: string;
+  unitPrice: Prisma.Decimal;
+  vatRate: number;
+}
+
+export interface ShipmentDraftLinesResult {
+  lines: ShipmentDraftLine[];
+  /** Sipariş (sözleşme) fiyatıyla dolan satır sayısı. */
+  orderPriced: number;
+  /** Çelişkili sipariş fiyatı yüzünden D2'ye düşen satır sayısı — mesajda söylenir. */
+  orderConflicts: number;
+}
+
+/**
+ * EXPORT (C1): panelin "Sevkiyattan Fatura Taslağı" diyaloğu da AYNI satır
+ * kurucusunu kullanabilsin diye dışa açıldı (`finance.routes` önizleme ucu) —
+ * otomatik kanca ile elle taslak, satırları iki ayrı formülle kurarsa fark tam
+ * da kimsenin bakmadığı yerde doğar (autoAllocatePaymentFifo gerekçesinin ikizi).
+ */
+export async function collectShipmentInvoiceDraftLines(
   shipmentId: string,
   customerId: string,
   currency: Currency,
-): Promise<Array<{ itemId: string; description: string; qty: Prisma.Decimal; unit: string; unitPrice: Prisma.Decimal; vatRate: number }>> {
+): Promise<ShipmentDraftLinesResult> {
   // Hayalet toplar DIŞARIDA — resmi belgenin (`collectShipmentDocContent`)
   // kullandığı kümenin AYNISI. `SHIPPED` bu kümede YOK, yani sevk edilmiş
   // toplar sayılır (sack-invariants.helper başlığı).
@@ -100,27 +123,82 @@ async function collectShipmentInvoiceDraftLines(
     where: { shipmentId, status: { notIn: SACK_ABSENT_STATUSES } },
     select: {
       itemId: true,
+      colorId: true,
       currentQty: true,
       width: true,
       item: { select: { name: true } },
       color: { select: { name: true } },
     },
   });
-  if (rolls.length === 0) return [];
+  if (rolls.length === 0) return { lines: [], orderPriced: 0, orderConflicts: 0 };
 
   // Gruplama anahtarı `itemId` + görünen ad. Ad TEK BAŞINA anahtar olamaz:
   // fiyat kalem KARTINDAN çözülüyor ve aynı ada sahip iki farklı kart tek
   // satırda toplanırsa ortalama bir fiyat uydurmak zorunda kalırdık (aynı
   // kural `createDraftFromGoodsReceipt`'in fiyat-dahil anahtarında da var).
-  const groups = new Map<string, { itemId: string; description: string; qty: Prisma.Decimal }>();
+  // `colorId`/`width` sipariş-fiyat eşleşmesi için taşınır (aynı description
+  // aynı renk adını taşıdığından ilk topun değeri grubu temsil eder).
+  const groups = new Map<
+    string,
+    { itemId: string; colorId: string | null; width: Prisma.Decimal | null; description: string; qty: Prisma.Decimal }
+  >();
   for (const r of rolls) {
     const widthStr = r.width != null ? `${Number(r.width)}cm.` : "";
     const description = [r.item.name, r.color?.name ?? "", widthStr].filter(Boolean).join(" ");
     const key = `${r.itemId}|${description}`;
     const existing = groups.get(key);
     if (existing) existing.qty = existing.qty.plus(r.currentQty);
-    else groups.set(key, { itemId: r.itemId, description, qty: D0().plus(r.currentQty) });
+    else groups.set(key, { itemId: r.itemId, colorId: r.colorId, width: r.width, description, qty: D0().plus(r.currentQty) });
   }
+
+  // ── SİPARİŞ FİYATI (saha planı C1, 2026-08-15) — D2 zincirinin ÖNÜNDE ────
+  // `OrderLine.unitPrice` sözleşme fiyatıdır ("for future finance module"
+  // diye şemada bekliyordu, tüketicisi yoktu): kullanıcı siparişte fiyat girip
+  // faturada AYNI fiyatı ikinci kez yazmak zorunda kalıyordu. Sevkiyatın bağlı
+  // siparişlerinin (ShipmentOrder) kalemleri ürün+renk (gerekirse +en) ile
+  // eşlenir; TEK tutarlı fiyat varsa satır onu alır.
+  // ⚠️ ÇELİŞKİDE UYDURULMAZ (ortalama YASAK): aynı ürün+renge farklı fiyatlı
+  // iki sipariş kalemi düşüyorsa önce EN ile daraltılır; hâlâ çelişkiliyse D2
+  // zincirine düşülür ve sayaç mesajda söylenir — sessiz yanlış fiyat, boş
+  // fiyattan kötüdür (fiyat 0 kalırsa onay seddi zaten yakalar).
+  const orderLinks = await prisma.shipmentOrder.findMany({
+    where: { shipmentId },
+    select: { orderId: true },
+  });
+  const orderLines =
+    orderLinks.length > 0
+      ? await prisma.orderLine.findMany({
+          where: { orderId: { in: orderLinks.map((o) => o.orderId) }, unitPrice: { not: null } },
+          select: { itemId: true, colorId: true, width: true, unitPrice: true },
+        })
+      : [];
+  let orderPriced = 0;
+  let orderConflicts = 0;
+  const contractPriceOf = (g: { itemId: string; colorId: string | null; width: Prisma.Decimal | null }): Prisma.Decimal | null => {
+    if (orderLines.length === 0) return null;
+    let cands = orderLines.filter((l) => l.itemId === g.itemId && (l.colorId ?? null) === (g.colorId ?? null));
+    if (cands.length === 0) return null;
+    const distinct = (rows: typeof cands): Prisma.Decimal[] => {
+      const seen = new Map<string, Prisma.Decimal>();
+      for (const l of rows) {
+        const p = new Prisma.Decimal(l.unitPrice as Prisma.Decimal.Value);
+        seen.set(p.toString(), p);
+      }
+      return [...seen.values()];
+    };
+    let prices = distinct(cands);
+    if (prices.length > 1 && g.width != null) {
+      // EN ile daralt: sipariş kalemi en belirtmişse ve topunkiyle eşleşiyorsa.
+      const narrowed = cands.filter((l) => l.width != null && new Prisma.Decimal(l.width).equals(g.width as Prisma.Decimal));
+      if (narrowed.length > 0) {
+        cands = narrowed;
+        prices = distinct(cands);
+      }
+    }
+    if (prices.length === 1) return prices[0];
+    orderConflicts += 1;
+    return null;
+  };
 
   // FİYAT — D2 çözüm zinciri (müşteri istisnası > kart varsayılanı). TEK
   // sorgu (perf kuralı 9). Çözülemeyen kalem `0` ile geçer ve bu BİLİNÇLİ:
@@ -143,14 +221,20 @@ async function collectShipmentInvoiceDraftLines(
   // mal kabul taslağı da AYNI ayardan okur (oran üç yerde ayrı sürüklenmez).
   const vatRate = await readFinanceDefaultVatRate();
 
-  return [...groups.values()].map((g) => ({
-    itemId: g.itemId,
-    description: g.description,
-    qty: g.qty,
-    unit: "m",
-    unitPrice: priceMap.get(g.itemId)?.price ?? D0(),
-    vatRate,
-  }));
+  const lines = [...groups.values()].map((g) => {
+    const contract = contractPriceOf(g);
+    if (contract != null) orderPriced += 1;
+    return {
+      itemId: g.itemId,
+      description: g.description,
+      qty: g.qty,
+      unit: "m",
+      // Sıra: sipariş (sözleşme) fiyatı > D2 zinciri (müşteri istisnası > kart).
+      unitPrice: contract ?? priceMap.get(g.itemId)?.price ?? D0(),
+      vatRate,
+    };
+  });
+  return { lines, orderPriced, orderConflicts };
 }
 
 /**
@@ -212,7 +296,7 @@ export async function autoDraftInvoiceAfterDispatch(
     });
     const currency = cari?.defaultCurrency ?? Currency.TRY;
 
-    const lines = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
+    const { lines, orderConflicts } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
     if (lines.length === 0) return null;
 
     const res = await invoiceService.createDraft(
@@ -229,7 +313,13 @@ export async function autoDraftInvoiceAfterDispatch(
       },
       userId,
     );
-    return `${res.data.docNo} fatura taslağı oluşturuldu`;
+    return (
+      `${res.data.docNo} fatura taslağı oluşturuldu` +
+      // Çelişki gizlenmez: sipariş fiyatları aynı ürüne farklı düşüyorsa satır
+      // kart fiyatıyla dolar ve muhasebeci taslakta kontrol etmesi gerektiğini
+      // buradan öğrenir (sessiz yanlış fiyat, boş fiyattan kötüdür).
+      (orderConflicts > 0 ? ` (${orderConflicts} kalemde sipariş fiyatı çelişkili — kart fiyatı kullanıldı, taslakta kontrol edin)` : "")
+    );
   } catch (err) {
     // ② HATA YUTULUR — sevk zaten COMMIT oldu, geri sarılacak bir şey yok.
     // 409 = yarışın kaybedeni ya da tekrar (idempotent kanca): BEKLENEN

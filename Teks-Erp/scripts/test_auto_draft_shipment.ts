@@ -68,6 +68,7 @@ function check(label: string, ok: boolean, detail = ""): void {
 const TAG = `TEST-ADS-${Date.now()}`;
 const rollIds: string[] = [];
 const shipmentIds: string[] = [];
+const orderIds: string[] = [];
 const itemIds: string[] = [];
 let customerId: string | null = null;
 let colorId: string | null = null;
@@ -327,6 +328,77 @@ async function main(): Promise<void> {
     JSON.stringify(dispatched.message),
   );
 
+  // ── §7 SİPARİŞ (SÖZLEŞME) FİYATI (saha planı C1, 2026-08-15) ────────────
+  // `OrderLine.unitPrice` D2 zincirinin ÖNÜNE girer: sevkiyata bağlı sipariş
+  // kalemi ürün+renk ile eşleşir ve TEK tutarlı fiyat varsa satır onu alır —
+  // müşteri İSTİSNASINI bile ezer (sözleşme > liste fiyatı). Çelişkide
+  // UYDURULMAZ (ortalama yasak): D2'ye düşülür ve mesaj sayaçla söyler.
+  {
+    // §5 onay rejimini açık bırakıyor — burada sevk ANINDA olmalı ki kanca koşsun.
+    await setFlag(CONF_KEY, false);
+    const ord = await prisma.order.create({
+      data: {
+        orderNumber: `${TAG}-SIP1`,
+        customerId: customer.id,
+        lines: { create: [{ itemId: itemA.id, colorId: color.id, quantity: 100, width: 150, unitPrice: 77.5 }] },
+      },
+      select: { id: true },
+    });
+    orderIds.push(ord.id);
+    const o1 = await makeRoll(itemA.id, 50, wh.id, { colorId: color.id, width: 150 });
+    const shipRes = (await shippingService.createShipmentFromRolls({
+      rollIds: [o1],
+      customerId: customer.id,
+      orderIds: [ord.id],
+      clientToken: crypto.randomUUID(),
+    })) as QuickResult;
+    shipmentIds.push(shipRes.data.id);
+    const inv7 = await prisma.invoice.findFirst({
+      where: { shipmentId: shipRes.data.id },
+      select: { id: true, lines: { select: { unitPrice: true, description: true } } },
+    });
+    check(
+      "§7a ⭐ Sipariş fiyatı satıra AKTI ve müşteri istisnasını (12.50) EZDİ (77.5)",
+      inv7 != null && inv7.lines.length === 1 && Number(inv7.lines[0]!.unitPrice) === 77.5,
+      inv7 ? `fiyat=${inv7.lines[0]?.unitPrice}` : "taslak yok",
+    );
+
+    // Çelişki: aynı ürün+renge FARKLI fiyatlı ikinci sipariş de bağlanır.
+    const ord2 = await prisma.order.create({
+      data: {
+        orderNumber: `${TAG}-SIP2`,
+        customerId: customer.id,
+        lines: { create: [{ itemId: itemA.id, colorId: color.id, quantity: 40, unitPrice: 88 }] },
+      },
+      select: { id: true },
+    });
+    orderIds.push(ord2.id);
+    const o2 = await makeRoll(itemA.id, 30, wh.id, { colorId: color.id, width: 120 });
+    const conflictRes = (await shippingService.createShipmentFromRolls({
+      rollIds: [o2],
+      customerId: customer.id,
+      orderIds: [ord.id, ord2.id],
+      clientToken: crypto.randomUUID(),
+    })) as QuickResult;
+    shipmentIds.push(conflictRes.data.id);
+    const inv7b = await prisma.invoice.findFirst({
+      where: { shipmentId: conflictRes.data.id },
+      select: { lines: { select: { unitPrice: true } } },
+    });
+    // Top eni 120 — SIP1 kalemi en 150 dediği için EN daraltması da çözemez
+    // (120'ye eşit kalem yok) → çelişki kalır → D2 (müşteri istisnası 12.50).
+    check(
+      "§7b ⭐ Çelişkili sipariş fiyatı UYDURULMADI — D2'ye düştü (12.50)",
+      inv7b != null && Number(inv7b.lines[0]?.unitPrice) === 12.5,
+      `fiyat=${inv7b?.lines[0]?.unitPrice}`,
+    );
+    check(
+      "§7c Mesaj çelişkiyi SÖYLÜYOR (sessiz düşüş yok)",
+      (conflictRes.message ?? "").includes("sipariş fiyatı çelişkili"),
+      JSON.stringify(conflictRes.message),
+    );
+  }
+
   // ── §6 KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────
   // "İhlal bulunamadı" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın:
   // fixture gerçekten kurulmadıysa yukarıdaki tüm sayımlar vakumen doğrudur.
@@ -371,6 +443,12 @@ main()
       await prisma.sackAllocation.deleteMany({ where: { sack: { shipmentId: { in: shipmentIds } } } });
       await prisma.shipmentOrder.deleteMany({ where: { shipmentId: { in: shipmentIds } } });
       await prisma.printedDocument.deleteMany({ where: { sourceId: { in: shipmentIds } } });
+    }
+    // §7 siparişleri — tahsisler (varsa) satırdan önce, satırlar siparişten önce.
+    if (orderIds.length > 0) {
+      await prisma.sackAllocation.deleteMany({ where: { orderLine: { orderId: { in: orderIds } } } });
+      await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
+      await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
     }
     if (rollIds.length > 0) {
       await prisma.roll.updateMany({ where: { id: { in: rollIds } }, data: { sackId: null, shipmentId: null } });
