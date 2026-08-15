@@ -453,10 +453,20 @@ function gradleKos(adres) {
   bilgi(`Gömülecek adres: ${adres}`);
   bilgi('(Bu adım birkaç dakika sürer; önbellek silindiği için bundle sıfırdan üretilir.)\n');
 
-  const gradlew = path.join(ANDROID_DIR, process.platform === 'win32' ? 'gradlew.bat' : 'gradlew');
-  const sonuc = spawnSync(gradlew, ['assembleRelease'], {
+  const win = process.platform === 'win32';
+  const gradlew = path.join(ANDROID_DIR, win ? 'gradlew.bat' : 'gradlew');
+  // WINDOWS: `.bat`/`.cmd` Node 20+ ile `shell` OLMADAN spawn EDİLEMEZ — spawnSync
+  // `EINVAL` döner ve derleme daha başlamadan düşer (CVE-2024-27980 sonrası kapatılan
+  // yol; Node 26'da da geçerli). 2026-08-15'te bu makinede birebir gözlendi ve APK'nın
+  // neden hep Mac'te alındığının sebebiydi. macOS/Linux'ta `gradlew` düz bir betik,
+  // shell GEREKMEZ ve açılması gereksiz bir ayrıştırma katmanı ekler → yalnız Windows.
+  // ⚠️ shell:true komutu cmd'ye METİN olarak geçirir: yol TIRNAKLANMAK ZORUNDA, yoksa
+  // boşluk içeren bir kurulum dizini ("C:\Program Files\...") sessizce bölünür.
+  const komut = win ? `"${gradlew}"` : gradlew;
+  const sonuc = spawnSync(komut, ['assembleRelease'], {
     cwd: ANDROID_DIR,
     stdio: 'inherit',
+    shell: win,
     // Adres AÇIKÇA çocuk sürece geçiyor: @expo/env sistem ortamındaki
     // değişkenin üstüne YAZMAZ, dolayısıyla `.env.local` bunu ezemez.
     env: { ...process.env, EXPO_PUBLIC_API_URL: adres },

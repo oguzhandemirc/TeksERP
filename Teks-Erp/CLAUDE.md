@@ -41,11 +41,25 @@ Eksik adım = sessiz bozulma. `prisma generate` atlanırsa TS derlenmez (`Proper
 ```bash
 npm install                  # package.json değiştiyse
 npm run prisma:generate      # schema.prisma güncellendiyse client yenilensin
-npx prisma migrate dev       # pending migration varsa DB'ye uygula (dev)
+npm run prisma:migrate       # pending migration'ı DB'ye uygula (= migrate deploy)
 npm run dev                  # sunucuyu kaldır
 ```
 
-Production'da `migrate dev` yerine `npm run prisma:migrate` (= `prisma migrate deploy`) kullanılır.
+**Pull'lanmış migration'ı `deploy` uygular, `dev` DEĞİL** — `migrate dev` yeni migration *yazmak* içindir ve bu repoda diff aldığı her seferde iki DEFERRABLE composite FK'yı (`rolls_sackId_shipmentId_consistency`, `swatches_...`) DROP etmek ister (bkz. perf kuralı 4). Başkasının yazdığı migration'ı almak için diff'e hiç ihtiyaç yok: `deploy` yalnız dizindeki bekleyen dosyaları sırayla koşar. Production'da da aynı komut kullanılır.
+
+**⚠️ Prisma komutları `Teks-Erp/` İÇİNDEN koşulur; kökten koşacaksan `--config` ver.** `prisma.config.ts` çalışma dizinine göre keşfedilir — repo kökünde bir `prisma.config.ts` yok, `--schema` ile şemayı göstermek de yetmez ve komut şu hatayla düşer:
+
+```
+Error: The datasource.url property is required in your Prisma config file
+```
+
+Mesaj config'i suçluyor ama sorun oradaki `url` satırı değil, **`.env`'in bulunamamış olması**: config `DATABASE_URL`'i `process.env`'den okur ve dotenv `.env`'i CWD'ye göre arar. 2026-08-15'te `prisma.config.ts` dotenv'i **kendi dizinine** sabitleyecek şekilde düzeltildi (`path.join(__dirname, ".env")`), böylece kökten de koşulabilir:
+
+```bash
+npx --prefix Teks-Erp prisma migrate status --config Teks-Erp/prisma.config.ts
+```
+
+Bu düzeltme *nereden* koşulduğunu değiştirmez, yalnız kök kullanımını mümkün kılar — **önerilen yol hâlâ `Teks-Erp/` içinden `npm run prisma:*`**, çünkü `.env`'i tek yerden çözmek DB adresinin hangi ortamdan geldiği sorusunu tek cevaplı bırakır.
 
 ## Environment (`.env`)
 
