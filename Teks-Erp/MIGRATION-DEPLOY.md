@@ -4,18 +4,34 @@ Geliştirme (dev) DB'sine uygulanan migration'lar production'a (üretim DB'si
 `TeksErpDb`, ya da hangi ortamsa) **`prisma migrate deploy` ile** taşınır.
 `migrate dev` PRODUCTION'da ASLA çalıştırılmaz (reset riski).
 
-## Standart deploy sırası (KANONİK — `docs/ops/DEPLOY-RUNBOOK.md §3` ile birebir)
+## Standart deploy sırası (KANONİK)
 
 ```bash
 # Production sunucuda, uygulama dizininde:
 git pull                       # yeni migration dosyaları gelir
-npm install                    # package.json değiştiyse
+npm ci                         # ⚠️ `npm install` DEĞİL — aşağıya bak
 npm run prisma:generate        # = prisma generate (client yenilensin; tsc buna karşı derler)
 npm run build                  # tsc → dist/   ← DB'ye DOKUNMAZ; patlarsa TEMİZ ABORT
 npm run prisma:migrate         # = prisma migrate deploy  ← GERİ ALINAMAZ, bu yüzden EN SON
-pm2 restart teks-erp-backend
+pm2 restart tekserp-backend
 pm2 save
 ```
+
+> **⚠️ pm2 süreç adı `tekserp-backend`** (2026-08-15'te canlı `pm2 list` ile doğrulandı).
+> Bu dosya eskiden `teks-erp-backend`, başka bir belge `tekserp-api` diyordu — **ikisi de
+> YANLIŞ**. O adlarla komut `[PM2][ERROR] process not found` der ve **sıfır kodla çıkmaz
+> ama hiçbir şey de yapmaz**: deploy eden "restart ettim" sanır, oysa migration uygulanmış
+> hâlde ESKİ kod koşmaya devam eder. Kontrol: `pm2 list` çıktısındaki `name` sütunu.
+
+> **⚠️ `npm ci`, `npm install` DEĞİL.** `package.json` caret taşır (`^7.7.0`); `npm install`
+> o gün registry'de ne varsa ona çözer ve üretim deterministik olmaktan çıkar. `npm ci`
+> `package-lock.json`'ı birebir kurar. **`--omit=dev` HİÇBİR KOŞULDA** — `prisma.config.ts`
+> `ts-node`'a, veri göçü script'leri `tsx`'e (devDependency) bağlı. `npm ci` `node_modules`'ü
+> sildiği için ardından `prisma:generate` zorunludur (yukarıdaki sırada zaten var).
+
+> **Sürüme özel adımlar** (veri göçü, izin atama, duyuru) ayrı dosyalarda:
+> `docs/ops/DEPLOY-2.7.0.md`. Migration'a ek olarak koşulması gereken bir veri göçü varsa
+> onu ATLAMAK sessiz gerileme üretir — sürüm notunu okumadan deploy etme.
 
 > **⚠️ `build`, `migrate`'ten ÖNCE (2026-07-30 kararı — sıra DÜZELTİLDİ).**
 > Bu dosya eskiden `migrate → build` diyordu; `DEPLOY-RUNBOOK.md` ve
