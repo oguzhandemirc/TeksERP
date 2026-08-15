@@ -332,7 +332,7 @@ router.post(
  * /api/labels/name-preview:
  *   get:
  *     tags: [Labels]
- *     summary: "Bu hedefe basarsam etikette hangi ad çıkar?" (top doğmadan)
+ *     summary: '"Bu hedefe basarsam etikette hangi ad çıkar?" (top doğmadan)'
  *     description: |
  *       Tambur kesim ekranı, KESMEDEN ÖNCE müşterideki kumaş/renk adını gösterir.
  *       Zincir `getRollLabel` ile AYNI: sipariş satırı override'ı → müşteri master
