@@ -85,7 +85,7 @@ defteri tutması gerekmez — bu yüzden tek bayrağa indirilmedi.
 > bu yüzden en sık atlanan adımdır: 2026-08-06 denetiminde canlı kurulumda **7 izin hiçbir
 > kullanıcıda yoktu** — ekranlar deploy edilmişti, `admin` dahil kimse açamıyordu.
 
-**Rol:** `WEB_TRADE` — "Ticaret (Depo + Satış + Muhasebe)". 39 izin; mal kabul, depo/transfer,
+**Rol:** `WEB_TRADE` — "Ticaret (Depo + Satış + Muhasebe)". 40 izin; mal kabul, depo/transfer,
 stok, alış siparişi, fiyatlama, sipariş, sevkiyat, iade ve ön muhasebeyi kapsar. **Üretim ve
 mobil izni içermez.**
 
@@ -96,6 +96,14 @@ mobil izni içermez.**
 > (metraj/kayıt düzeltme) — ikisi de süpervizör yetkisidir, günlük iş değil; gerekiyorsa
 > panelden tek kişiye verilir.
 
+> ⚠️ **`subcontractor:read` bu rolde VARDIR ve süs değildir** (2026-08-15'te eklendi). Alış her
+> cariden yapılabiliyor ve cari kartları iki tabloda yaşıyor; Mal Kabul / Alış Siparişi
+> formundaki tedarikçi kutusu fason bacağını `GET /api/subcontractors` ile çekiyor. İzin
+> sökülürse ekran **çalışıyor görünür** ama kutu her açılışta 403 alır, yalnız cari kartlar
+> listelenir ve **fason firmadan alım panelden yapılamaz** — arıza geçici bir ağ hatası gibi
+> okunur. Yazma izni (`subcontractor:write`) bilinçli olarak YOK: ticaret kullanıcısı fason
+> firma kartı açmaz, var olanı seçer.
+
 **Panel yolu:** Yönetim → **Yetkilendirme** → **Kullanıcılar** (`/access/users`) → kullanıcı →
 **Yetkiler** sekmesi → **Şablon Uygula** → *Ticaret (Depo + Satış + Muhasebe)* → **Ekle (merge)**.
 
@@ -105,7 +113,7 @@ mobil izni içermez.**
 - Uygulama sonrası kullanıcı **yeniden giriş yapmalı**: JWT'deki izin listesi bayat olabilir.
   (Merge dalı `tokenVersion`'ı artırdığı için oturum zaten düşer; yine de "çıkış→giriş" söyle.)
 
-**Alternatif (elle 39 kutu işaretlemeden):** `npx tsx scripts/setup-ticaret.ts --user <kullanıcı>`
+**Alternatif (elle 40 kutu işaretlemeden):** `npx tsx scripts/setup-ticaret.ts --user <kullanıcı>`
 — bkz. §9.
 
 ### Doğrulama — "N yetki hiçbir kullanıcıda yok" bandı
