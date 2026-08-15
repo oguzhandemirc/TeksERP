@@ -2899,6 +2899,9 @@ model Subcontractor {
   plannedRouteSteps RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts   KartelaReceipt[]          @relation("KartelaReceiptSub")
+  // C4 (2026-08-15) — fason firmadan ALIŞ bacağı (mal kabul + alış siparişi).
+  goodsReceiptsAsSupplier  GoodsReceipt[]  @relation("GoodsReceiptSubcontractorSupplier")
+  purchaseOrdersAsSupplier PurchaseOrder[] @relation("PurchaseOrderSubcontractorSupplier")
   documentProfile   DocumentProfile?          @relation("SubcontractorDocProfile", fields: [documentProfileId], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -4472,6 +4475,13 @@ model GoodsReceipt {
   /// Tedarikçi — `Customer` (`CompanyType.SUPPLIER`). Ayrı tedarikçi modeli
   /// AÇILMADI: cari kart tek yerde kalsın (ön muhasebe de oraya bağlanacak).
   supplierId     String? @db.Uuid
+  /// FASON TEDARİKÇİ (saha planı C4, 2026-08-15): alış HER cariden yapılabilir
+  /// (Logo/Mikro/SAP BP standardı) — boyahaneden mal alımı meşrudur ve fatura/
+  /// tahsilat katmanı zaten iki tarafı da taşıyor (CariAccount customerId XOR
+  /// subcontractorId). `supplierId` ile XOR — İKİSİ BİRDEN DOLU OLAMAZ (servis
+  /// guard'ı; "iki tedarikçili fiş" diye bir şey yok). Tam cari birleşmesi
+  /// (tek tablo, SAP BP) ayrı ve büyük bir iştir — bu köprüdür.
+  subcontractorId String? @db.Uuid
   /// Tedarikçinin kendi irsaliye numarası (serbest metin) — alış faturası
   /// mutabakatının çıpası.
   deliveryNoteNo String? @db.VarChar(64)
@@ -4484,6 +4494,14 @@ model GoodsReceipt {
 
   status GoodsReceiptStatus @default(ACTIVE)
   notes  String?            @db.VarChar(500)
+
+  /// HAM STOK GİRİŞİ (saha planı C2, 2026-08-15): perde/tekstil ticaretinde iki
+  /// meşru alım var — satılacak BİTMİŞ mal (varsayılan, toplar `WAREHOUSE`) ve
+  /// işlenmek üzere alınan HAM mal (fasona gidecek → toplar `STOCK`). Karar FİŞ
+  /// seviyesindedir (satır seviyesi bilinçli AÇILMADI: karışık fiş "fiş bir
+  /// kaptır" okumasını bozar; ikinci fiş açılır). Varsayılan false → mevcut
+  /// davranış bayt-bayt.
+  rawStockEntry Boolean @default(false)
 
   clientToken String? @unique @db.Uuid
 
@@ -4498,6 +4516,9 @@ model GoodsReceipt {
 
   warehouse     Warehouse           @relation(fields: [warehouseId], references: [id])
   supplier      Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  /// C4 — fason tedarikçi bacağı (Restrict: tedarikçisi silinen fiş kalamaz;
+  /// subcontractor zaten soft-delete dünyasında).
+  subcontractorSupplier Subcontractor? @relation("GoodsReceiptSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
   purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
   yarnMovements YarnMovement[]
   createdBy   User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
@@ -4511,6 +4532,8 @@ model GoodsReceipt {
 
   @@index([warehouseId, createdAt])
   @@index([supplierId, createdAt])
+  // C4 — "bu fason firmadan alınan fişler" (tedarikçi bacağının simetriği).
+  @@index([subcontractorId, createdAt])
   @@index([status, createdAt])
   // Paket D — "bu siparişin fişleri" sorgusu (sipariş detayı + karşılanma).
   @@index([purchaseOrderId])
@@ -5724,7 +5747,11 @@ model PurchaseOrder {
 
   /// Tedarikçi = `Customer` (`CompanyType.SUPPLIER`) — `GoodsReceipt.supplierId`
   /// ile AYNI kaynak. Ayrı tedarikçi modeli açılmadı (cari kart tek yerde).
-  supplierId String   @db.Uuid
+  /// C4 (2026-08-15): fason tedarikçi bacağı gelince NULLABLE oldu — sipariş ya
+  /// müşteri-tipli tedarikçiden ya FASON firmadan verilir; TAM BİRİ dolu olmak
+  /// ZORUNDA (XOR, servis guard'ı — GoodsReceipt ile aynı sözleşme).
+  supplierId      String? @db.Uuid
+  subcontractorId String? @db.Uuid
   currency   Currency @default(TRY)
 
   status       PurchaseOrderStatus @default(OPEN)
@@ -5752,7 +5779,8 @@ model PurchaseOrder {
   shortClosedById  String?   @db.Uuid
   shortCloseReason String?   @db.VarChar(300)
 
-  supplier      Customer            @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  supplier      Customer?           @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  subcontractorSupplier Subcontractor? @relation("PurchaseOrderSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
   createdBy     User?               @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
   cancelledBy   User?               @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id])
   shortClosedBy User?               @relation("PurchaseOrderShortClosedBy", fields: [shortClosedById], references: [id])
@@ -5763,6 +5791,7 @@ model PurchaseOrder {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([supplierId, status])
+  @@index([subcontractorId, status])
   @@index([status, orderDate])
   @@map("purchase_orders")
 }
