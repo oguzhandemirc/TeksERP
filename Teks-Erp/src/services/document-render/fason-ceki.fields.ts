@@ -91,6 +91,15 @@ export const FASON_FIELDS: FasonFieldDef[] = [
   { key: "totalsFoot", label: "TOPLAM satırı", group: "totals", selector: ".totals tbody tr.tot td", base: (d) => d.totalsCell, weight: 800 },
 
   // ── kutular ────────────────────────────────────────────────────────────────
+  // ⚠️ TALİMAT KUTUSU AYRI ANAHTARLAR TAŞIR (`cmdLabel`/`cmdValue`), mevcut
+  // `boxLabel`/`boxText` ile PAYLAŞMAZ. Sebep bu dosyanın var oluş sebebiyle
+  // aynı: o ikisi `.instr-lbl`/`.instr-txt`e bağlıdır ve İKİ kutuyu birden
+  // yönetir — talimat kutusu onlara bağlansaydı saha "boyanacak rengi büyüttüm,
+  // FASON TALİMATI da büyüdü" derdi.
+  // Renk ile işlemler için AYRI punto anahtarı bilinçli AÇILMADI (tek `cmdValue`):
+  // kullanıcı ikisini de eşit derecede "net" istedi.
+  { key: "cmdLabel", label: "Talimat kutusu etiketi (BOYANACAK RENK / YAPILACAK İŞLEMLER)", group: "boxes", selector: ".cmd-lbl, .cmd-sep", base: (d) => d.cmdLbl, weight: 700 },
+  { key: "cmdValue", label: "Talimat kutusu değeri (renk / işlemler)", group: "boxes", selector: ".cmd-val", base: (d) => d.cmdVal, weight: 800 },
   { key: "boxLabel", label: "Kutu etiketi (İSTENEN ÖZELLİKLER / FASON TALİMATI)", group: "boxes", selector: ".instr-lbl", base: (d) => d.instrLbl, weight: 700 },
   { key: "boxText", label: "Kutu metni", group: "boxes", selector: ".instr-txt", base: (d) => d.instrTxt, weight: 600 },
   { key: "note", label: "Not / alt bilgi", group: "boxes", selector: ".note", base: (d) => d.note, weight: 400 },

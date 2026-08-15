@@ -276,6 +276,11 @@ export const FASON_FIELD_DEFS: DocFieldDef[] = [
   { key: "totalsCell", label: "Alt tablo değerleri", group: "totals" },
   { key: "totalsFoot", label: "TOPLAM satırı", group: "totals" },
 
+  // ⚠️ Talimat kutusu AYRI anahtarlar taşır — `boxLabel`/`boxText` İKİ kutuyu
+  // (İSTENEN ÖZELLİKLER + FASON TALİMATI) birden yönetir; paylaşılsaydı rengi
+  // büyüten kullanıcı fason talimatını da büyütürdü.
+  { key: "cmdLabel", label: "Talimat kutusu etiketi (BOYANACAK RENK / YAPILACAK İŞLEMLER)", group: "boxes" },
+  { key: "cmdValue", label: "Talimat kutusu değeri (renk / işlemler)", group: "boxes" },
   { key: "boxLabel", label: "Kutu etiketi (İSTENEN ÖZELLİKLER / FASON TALİMATI)", group: "boxes" },
   { key: "boxText", label: "Kutu metni", group: "boxes" },
   { key: "note", label: "Not / alt bilgi", group: "boxes" },
@@ -517,7 +522,17 @@ export const DOC_DEFS: DocDef[] = [
       // OPT-IN: yeni blok `sections` blocklist'inde varsayılan AÇIK doğsaydı,
       // sahadaki her eski çeki yeniden basıldığında sormadan yeni satır kazanırdı.
       { key: "fabricHeader", label: "Cins / En / Renk — parti no altına da yaz", defaultHidden: true },
-      { key: "productionProps", label: "İstenen özellikler kutusu" },
+      // ── TALİMAT KUTUSU (2026-08-15 saha isteği) ────────────────────────────
+      // "BOYANACAK RENK : MAVİ" / "YAPILACAK İŞLEMLER : APRE" — başlık altındaki
+      // 2px çerçeveli kutu. İkisi de BLOCKLIST (`defaultHidden` YOK → varsayılan
+      // AÇIK): belge fasona gider ve fason belgelerinde varsayılan AÇIKtır.
+      // Eski donmuş çekiler korunur çünkü kutu `doc.commands` payload alanına
+      // bağlıdır ve o alan 2026-08-15 öncesi snapshot'larda YOKTUR.
+      { key: "dyeColorLine", label: "BOYANACAK RENK talimat satırı" },
+      // ⚠️ Bu anahtar İKİ yüzeyi yönetir: YENİ belgelerde "YAPILACAK İŞLEMLER"
+      // satırı, ESKİ (commands'sız) donmuş belgelerde "İSTENEN ÖZELLİKLER" kutusu.
+      { key: "productionProps", label: "YAPILACAK İŞLEMLER talimat satırı" },
+      { key: "instructionWarning", label: "Talimat yoksa uyarı satırı" },
       { key: "dyehouseNote", label: "Fason talimatı kutusu" },
       { key: "notes", label: "Not / alt bilgi" },
       // ⚠️ Bu sütun ELLE DOLDURULAN boş kutudur — top başına EN değeri BASMAZ

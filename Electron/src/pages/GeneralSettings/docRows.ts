@@ -82,7 +82,16 @@ const SECTION_GROUP: Record<string, Record<string, DocFieldGroup>> = {
   // kaldırıldığı için (sütun artık boş kutu, punto ayarlanacak metni yok) satır
   // "eşleşmemiş bölüm" dalından geliyor ve o dalın varsayılanı `header` —
   // yazılmazsa kutu, ilgisiz biçimde başlık bandının altında çıkardı.
-  fasonSevk: { productionProps: "boxes", dyehouseNote: "boxes", gridWidth: "grid" },
+  // ⚠️ Talimat kutusunun iki satırı da KUTULAR grubunda listelenmeli; eşleşmemiş
+  // bölüm dalının varsayılanı `header` ve yazılmazsa ayarlar ilgisiz biçimde
+  // başlık bandının altında çıkardı (`gridWidth` emsali, yukarı).
+  fasonSevk: {
+    dyeColorLine: "boxes",
+    productionProps: "boxes",
+    instructionWarning: "boxes",
+    dyehouseNote: "boxes",
+    gridWidth: "grid",
+  },
   fasonDirectShip: { directShipInfo: "boxes" },
   fasonKabul: { appliedInfo: "boxes" },
   iadeIrsaliyesi: { reason: "boxes" },

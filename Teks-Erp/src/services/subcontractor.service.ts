@@ -72,6 +72,11 @@ import { generateRollBarcode, reserveRollBarcodes } from "./helpers/roll-barcode
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
+import {
+  resolveStepWorkInstructions,
+  resolveStepDyeColor,
+  type FasonWorkInstruction,
+} from "./helpers/fason-work-instructions.helper";
 // Fasondan doğrudan sevk önizlemesi karşılanma projeksiyonunu shipping'in saf
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
@@ -1742,6 +1747,9 @@ export class SubcontractorService {
       where: { id: stepId },
       include: {
         station: { select: { name: true, code: true, type: true } },
+        // "BOYANACAK RENK" satırı bu adımın renk VERİP vermediğine bakar
+        // (`resolveStepDyeColor`) — taslak ile gerçek sevk aynı yüklemi kullanır.
+        requiredCategory: { select: { appliesColor: true } },
         plannedSubcontractor: { select: { id: true, name: true, code: true } },
         workOrder: {
           select: {
@@ -1752,7 +1760,8 @@ export class SubcontractorService {
             // Çekideki tek EN değerinin kaynağı (bkz. assembleFasonCekiDoc notu).
             width: true,
             targetColor: { select: { name: true } },
-            targetProperties: { select: { property: { select: { name: true } } } },
+            // `propertyId` → adım süzgeci (bkz. resolveStepWorkInstructions).
+            targetProperties: { select: { propertyId: true, property: { select: { name: true } } } },
             steps: {
               orderBy: { stepSequence: "asc" },
               select: { id: true, stationId: true },
@@ -1838,6 +1847,17 @@ export class SubcontractorService {
       },
       requestedColor: step.workOrder.targetColor?.name ?? null,
       targetProperties: step.workOrder.targetProperties.map((p) => p.property.name),
+      // ⚠️ TASLAK da GERÇEK sevkle AYNI yardımcıdan beslenir — ayrışırsa
+      // planlamacının önizlemede gördüğü talimat ile boyahaneye giden kâğıt
+      // sessizce farklı olur (bu belgede iki üreticinin ortak kuralı).
+      commands: {
+        color: resolveStepDyeColor(step, step.workOrder.targetColor?.name ?? null),
+        works: await resolveStepWorkInstructions(
+          prisma,
+          step.stationId,
+          step.workOrder.targetProperties.map((p) => ({ propertyId: p.propertyId, name: p.property.name })),
+        ),
+      },
       batchNumber: draftBatchNumbers.length ? draftBatchNumbers.join(", ") : null,
       step: {
         id: step.id,
@@ -5668,8 +5688,16 @@ function assembleFasonCekiDoc(args: {
   };
   subcontractor: { id: string; name: string; code: string | null };
   requestedColor: string | null;
-  /** WO hedef üretim özellikleri (FabricProperty adları) — boyahaneye "bu özellikleri uygula" der. */
+  /** WO hedef üretim özellikleri (FabricProperty adları) — boyahaneye "bu özellikleri uygula" der.
+   *  ⚠️ 2026-08-15'ten sonra kâğıda basılan liste `commands.works`tir; bu alan
+   *  payload'da DURUR (eski donmuş belgelerin şekli değişmesin + izlenebilirlik). */
   targetProperties: string[];
+  /** BOYAHANEYE GİDEN İKİ TALİMAT (2026-08-15 saha isteği).
+   *  ⚠️ `color` YALNIZ `WorkOrder.targetColor.name`; topların mevcut rengine
+   *  DÜŞMEZ — "BOYANACAK RENK" etiketi ham/ekru topa "EKRU'ya boya" diyemesin.
+   *  ⚠️ `works` BU ADIMA süzülmüş hedeflerdir (istasyon yeteneğiyle kesişim),
+   *  iş emrinin TÜM hedefleri DEĞİL — boyahane çekisinde "KURŞUNLU" yazamaz. */
+  commands: { color: string | null; works: FasonWorkInstruction[] };
   /** Sevkin partisi (K10: bir sevk = bir parti). Belge DONARKEN zaten bilinir —
    *  `SubcontractorDispatch.batchId` NOT NULL ve aynı create tx'inde yazılır.
    *  Taslak çekide (previewDownstreamFasonCeki) henüz sevk yoktur → projekte edilen
@@ -5703,6 +5731,7 @@ function assembleFasonCekiDoc(args: {
     subcontractor: args.subcontractor,
     requestedColor: args.requestedColor,
     targetProperties: args.targetProperties,
+    commands: args.commands,
     batchNumber: args.batchNumber,
     step: args.step,
     rolls,
@@ -5732,10 +5761,20 @@ async function buildFasonDispatchDoc(
           // çeki listesi boyahaneye "şu renge boya" der → WO.targetColor gösterilir.
           targetColor: { select: { name: true } },
           // Üretim özellikleri de aynı mantıkla çekiye basılır ("bu apreleri uygula").
-          targetProperties: { select: { property: { select: { name: true } } } },
+          // ⚠️ `propertyId` DE seçilir: "YAPILACAK İŞLEMLER" satırı bu listeyi
+          // sevkin gittiği ADIMIN istasyon yetenekleriyle KESİŞTİRİR
+          // (`resolveStepWorkInstructions`) ve kesişim id üzerinden kurulur.
+          targetProperties: { select: { propertyId: true, property: { select: { name: true } } } },
         },
       },
-      step: { include: { station: { select: { name: true, code: true } } } },
+      step: {
+        include: {
+          station: { select: { name: true, code: true } },
+          // "BOYANACAK RENK" satırının adım süzgeci (`resolveStepDyeColor`):
+          // renk VERMEYEN kategoriye (örn. Zımpara) boya talimatı gitmesin.
+          requiredCategory: { select: { appliesColor: true } },
+        },
+      },
       items: {
         include: {
           roll: {
@@ -5764,6 +5803,16 @@ async function buildFasonDispatchDoc(
     qualityGrade: item.roll.qualityGrade ?? "",
     width: item.roll.width != null ? Number(item.roll.width) : null,
   }));
+
+  // "YAPILACAK İŞLEMLER" = iş emri hedefleri ∩ BU ADIMIN istasyon yetenekleri.
+  // `dispatch.step` zaten include ile geldi → `stationId` elde, ek sorgu yok
+  // (yalnız yetenek satırları okunur). Fail-closed: kesişim boşsa satır basılmaz.
+  const works = await resolveStepWorkInstructions(
+    db,
+    dispatch.step.stationId,
+    dispatch.workOrder.targetProperties.map((p) => ({ propertyId: p.propertyId, name: p.property.name })),
+  );
+
   return {
     documentNo: dispatch.dispatchNo,
     voidInfo: dispatch.cancelledAt
@@ -5792,6 +5841,15 @@ async function buildFasonDispatchDoc(
       },
       requestedColor: dispatch.workOrder.targetColor?.name ?? null,
       targetProperties: dispatch.workOrder.targetProperties.map((p) => p.property.name),
+      // ⚠️ Renk BURADA fallback TAŞIMAZ (`requestedColor` ile aynı ifade gibi
+      // görünüyor ama anlamı farklı ve öyle kalmalı): "BOYANACAK RENK" etiketi
+      // yalnız GERÇEK hedefe basılabilir. Hedef yoksa satır hiç doğmaz.
+      // ⚠️ Ayrıca ADIMA süzülür: renk vermeyen kategorideki adıma (Zımpara)
+      // yapılan sevkin çekisinde boya talimatı BASILMAZ (`resolveStepDyeColor`).
+      commands: {
+        color: resolveStepDyeColor(dispatch.step, dispatch.workOrder.targetColor?.name ?? null),
+        works,
+      },
       batchNumber: dispatch.batch?.batchNumber ?? null,
       step: {
         id: dispatch.step.id,

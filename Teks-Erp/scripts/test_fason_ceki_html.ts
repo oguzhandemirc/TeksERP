@@ -11,6 +11,10 @@ import { renderFasonCekiHtml } from "../src/services/document-render/fason-ceki.
 import { FASON_FIELDS } from "../src/services/document-render/fason-ceki.fields";
 import { sanitizeDocumentsConfig } from "../src/services/system-setting.service";
 import { SAMPLE_PRINTED_DOCS } from "../src/services/document-render/sample-data";
+import {
+  resolveStepWorkInstructions,
+  resolveStepDyeColor,
+} from "../src/services/helpers/fason-work-instructions.helper";
 
 let pass = 0;
 let fail = 0;
@@ -784,9 +788,450 @@ function testStorageGate(): void {
   // Boş/anlamsız girdi kayda GİRMEZ (yarım `{}` birikmesin).
   const empty = sanitizeDocumentsConfig({ fasonSevk: { fields: { y: {} } } }).fasonSevk;
   check("boş alan kaydı atılır", empty?.fields === undefined);
+
+  // ⚠️ §18-EK (2026-08-15) — `sections` DALI BEKÇİSİZDİ. Dosyadaki tüm bölüm
+  // kontrolleri `cfg` nesnesini ELLE kurup doğrudan renderer'a veriyor, yani kayıt
+  // kapısını BYPASS ediyorlar: `sanitizeDocumentsConfig`ten `o.sections` bloğu
+  // silinse hiçbir test kırmızı vermiyordu (negatif sondayla ölçüldü). Bu, §18'in
+  // yazılma gerekçesinin birebir tekrarı — kullanıcı bölümü kapatır, Kaydet'e
+  // basar, istek 200 döner ve hiçbir şey olmaz.
+  const sec = sanitizeDocumentsConfig({
+    fasonSevk: { sections: { dyeColorLine: false, productionProps: true } },
+  }).fasonSevk;
+  check("§18-EK bölüm ayarı kaydedilir",
+    sec?.sections?.dyeColorLine === false && sec?.sections?.productionProps === true);
+  const badSec = sanitizeDocumentsConfig({
+    fasonSevk: { sections: { x: "evet", y: 1, z: null, gercek: true } },
+  }).fasonSevk;
+  check("§18-EK boolean olmayan bölüm değeri elenir",
+    badSec?.sections !== undefined &&
+      !("x" in badSec.sections) && !("y" in badSec.sections) && !("z" in badSec.sections) &&
+      badSec.sections.gercek === true);
 }
 
-function main(): void {
+// ── 14c) TALİMAT KUTUSU — "BOYANACAK RENK" / "YAPILACAK İŞLEMLER" ──────────
+//
+// SAHA (2026-08-15, birebir): "boyahaneye gönderilen çeki listesinde boyanacak
+// renk daha belirgin ve birkaç yerde yazsın … 'BOYANACAK RENK : MAVİ' bunun gibi
+// net şekilde istiyor" + "iş emrinde renk olmayabilir ama mutlaka boyahanede
+// yapılacak bir üretim özelliği vardır. o özellikler de 'YAPILACAK İŞLEMLER :
+// APRE' örnekteki gibi net şekilde yazalım".
+//
+// ⚠️ İKİ TUZAK BU BÖLÜMDE MEKANİK OLARAK KİLİTLİ:
+//   1. ETİKET YALAN SÖYLEYEMEZ — `requestedColor` bilinçli olarak "hedef yoksa
+//      TOPLARIN mevcut rengi"dir (renderer'daki `renk` değişkeni). O değerin
+//      üstüne "BOYANACAK RENK" etiketi konulsaydı ham/ekru topa "EKRU'ya boya"
+//      talimatı giderdi. Kutu YALNIZ `doc.commands.color`'ı okur; fallback YOK.
+//   2. DONMUŞ BELGE — koruma CONFIG'ten değil VERİDEN gelir: `sections` bir
+//      blocklist'tir ("anahtar yoksa AÇIK") ve `docConfigOverride` da donmuştur,
+//      yani config kapılaması geçmişe karşı SIFIR koruma verirdi. `doc.commands`
+//      2026-08-15 öncesi 113 snapshot'ın hiçbirinde yok → tek bayt basılmaz.
+function testCommandBox(): void {
+  console.log("\n── 14c) Talimat kutusu (BOYANACAK RENK / YAPILACAK İŞLEMLER) ──");
+
+  const cmdDoc = (color: string | null, works: Array<{ name: string; value?: string | null }>) => ({
+    commands: { color, works },
+  });
+  const plainLegacy = renderFasonCekiHtml(makeSnap()); // `commands` YOK = eski snapshot
+
+  // (1-2) VARSAYILAN AÇIK — blocklist ispatı: hiçbir config verilmeden basılır.
+  const both = renderFasonCekiHtml(makeSnap({ doc: cmdDoc("MAVİ", [{ name: "APRE" }]) }));
+  check("§14c-1 config YOK + renk dolu → BOYANACAK RENK basılır",
+    both.includes("BOYANACAK RENK") && both.includes(">MAVİ<"));
+  check("§14c-2 config YOK + işlem dolu → YAPILACAK İŞLEMLER basılır",
+    both.includes("YAPILACAK İŞLEMLER") && both.includes(">APRE<"));
+  check("iki nokta AYRI hücre (etiketler hizalanır)",
+    countOccur(both, '<div class="cmd-sep">:</div>') === 2);
+
+  // (3) KAPATMA TEK BAYT EKLEMEZ — renk satırı kapalıyken çıktı, rengi hiç
+  // olmayan belgeyle BİREBİR aynı olmalı.
+  const colorOff = renderFasonCekiHtml(
+    makeSnap({ doc: cmdDoc("MAVİ", [{ name: "APRE" }]), docConfigOverride: { sections: { dyeColorLine: false } } }),
+  );
+  const colorNull = renderFasonCekiHtml(makeSnap({ doc: cmdDoc(null, [{ name: "APRE" }]) }));
+  check("§14c-3 dyeColorLine=false → renksiz çıktıyla BİREBİR aynı", colorOff === colorNull);
+
+  // (4) ⚠️ EN KRİTİK — ESKİ SNAPSHOT BAYT-BAYT. Yeni bloğun eklediği bayt kümesi
+  // TAM OLARAK kendi HTML satırı + kendi CSS kurallarıdır; onları çıkarınca eski
+  // çıktı BİREBİR geri gelmeli. (Bu, `${...}`i kendi satırına koyma tuzağını da
+  // yakalar: blok kapalıyken gövdeye boş satır girseydi eşitlik bozulurdu.)
+  const stripped = both
+    .replace(/\n {4}<div class="cmd">.*<\/div>/, "")
+    .replace(
+      /\n {2}\.cmd \{[^}]*\}\n {2}\.cmd-lbl \{[^}]*\}\n {2}\.cmd-sep \{[^}]*\}\n {2}\.cmd-val \{[^}]*\}/,
+      "",
+    );
+  check("§14c-4 blok+CSS çıkarılınca ESKİ çıktı BİREBİR geri gelir", stripped === plainLegacy);
+  check("eski snapshot'ta talimat kutusu YOK",
+    !plainLegacy.includes("BOYANACAK RENK") && !plainLegacy.includes('class="cmd"'));
+
+  // (5) ESKİ SNAPSHOT + TAZE CONFIG (`?currentTemplate=1` benzetimi): ayar AÇIKÇA
+  // açık gelse bile veri yoksa kutu doğmaz. Config kapılaması olsaydı burada
+  // 74 eski belge sessizce yeni bir satır kazanırdı.
+  const legacyFreshCfg = renderFasonCekiHtml(
+    makeSnap({ docConfigOverride: { sections: { dyeColorLine: true, instructionWarning: true } } }),
+  );
+  check("§14c-5 taze config + commands'sız doc → kutu YOK", legacyFreshCfg === plainLegacy);
+
+  // (6) KULLANICININ AÇIK KURALI: renk yoksa satır BASILMAZ, işlemler tek başına yeter.
+  check("§14c-6 renk yok + işlem var → boş 'BOYANACAK RENK' etiketi ÇIKMAZ",
+    colorNull.includes("YAPILACAK İŞLEMLER") && !colorNull.includes("BOYANACAK RENK"));
+
+  // (7) ⚠️ ETİKET YALAN SÖYLEMEZ — hedef renk yokken topun MEVCUT rengi
+  // "BOYANACAK RENK" diye basılmaz; ama CİNSİ hücresindeki envanter beyanı DURUR.
+  const ekru = renderFasonCekiHtml(
+    makeSnap({
+      doc: { ...cmdDoc(null, [{ name: "APRE" }]), requestedColor: "EKRU" },
+      rolls: [roll(1, 50, 150, { colorName: "EKRU" })],
+    }),
+  );
+  check("§14c-7 hedef renk yokken mevcut renk TALİMAT olarak basılmaz",
+    !ekru.includes("BOYANACAK RENK"));
+  check("§14c-7 aynı çıktıda CİNSİ hücresi rengi (envanter) DURUR", ekru.includes("· EKRU"));
+
+  // (8) İki alan gerçekten bağımsız: `requestedColor` boş olsa da talimat basılır.
+  const targetOnly = renderFasonCekiHtml(
+    makeSnap({ doc: { ...cmdDoc("MAVİ", []), requestedColor: null } }),
+  );
+  check("§14c-8 requestedColor=null iken bile BOYANACAK RENK: MAVİ basılır",
+    targetOnly.includes("BOYANACAK RENK") && targetOnly.includes(">MAVİ<"));
+
+  // (9-12) BOŞLUK UYARISI. Ölçüldü: 94 sevkin 11'i (%11,7) hiçbir yazılı talimat
+  // taşımıyor ve küme büyüyor — sessiz boşluk yerine görünür işaret basılır.
+  const empty = renderFasonCekiHtml(makeSnap({ doc: cmdDoc(null, []) }));
+  check("§14c-9 ikisi de yok → 'GİRİLMEMİŞ — SEVK EDENE SORUNUZ'",
+    empty.includes("GİRİLMEMİŞ — SEVK EDENE SORUNUZ") && empty.includes(">TALİMAT<"));
+  const propsOff = renderFasonCekiHtml(
+    makeSnap({ doc: cmdDoc(null, [{ name: "APRE" }]), docConfigOverride: { sections: { productionProps: false } } }),
+  );
+  check("§14c-10 uyarı VERİ boşluğuna bakar (ayar kapalı ama veri dolu → uyarı YOK)",
+    !propsOff.includes("GİRİLMEMİŞ") && !propsOff.includes('class="cmd"'));
+  const warnOff = renderFasonCekiHtml(
+    makeSnap({ doc: cmdDoc(null, []), docConfigOverride: { sections: { instructionWarning: false } } }),
+  );
+  check("§14c-11 instructionWarning=false → uyarı yok, kutu hiç doğmaz",
+    !warnOff.includes("GİRİLMEMİŞ") && !warnOff.includes('class="cmd"'));
+  check("§14c-12 commands'sız ESKİ belge aniden suçlayıcı kutu KAZANMAZ",
+    !plainLegacy.includes("GİRİLMEMİŞ"));
+
+  // (12b-12e) UYARI YÜKLEMİNİN ÜÇ EKSİK SİNYALİ (2026-08-15 doğrulama turu).
+  // İlk hâli yalnız `color` + `works`e bakıyordu → belge KENDİ KENDİSİYLE
+  // çelişebiliyordu. Üçü de gerçek veri yollarıdır, üçü de burada kilitli.
+  const withInstr = renderFasonCekiHtml(
+    makeSnap({ doc: { ...cmdDoc(null, []), instruction: "Yıkama yapma, matlaştır" } }),
+  );
+  check("§14c-12b FASON TALİMATI dolu iken 'GİRİLMEMİŞ' BASILMAZ (çelişki yok)",
+    withInstr.includes("FASON TALİMATI") && !withInstr.includes("GİRİLMEMİŞ"));
+  check("§14c-12b talimat tek başına yeterli → kutu hiç doğmaz",
+    !withInstr.includes('class="cmd"'));
+  // Adım süzgeci TÜM hedefleri elediyse talimat GİRİLMİŞTİR, sadece bu adıma ait
+  // değildir (gerçek şekil: IE2207260001 → yalnız KURŞUNLU).
+  const outOfScope = renderFasonCekiHtml(
+    makeSnap({ doc: { ...cmdDoc(null, []), targetProperties: ["KURŞUNLU"] } }),
+  );
+  check("§14c-12c hedef VAR ama bu adıma ait değil → planlamacı SUÇLANMAZ",
+    !outOfScope.includes("GİRİLMEMİŞ"));
+  check("§14c-12c aynı çıktıda kapsam dışı hedef TALİMAT olarak da basılmaz",
+    !outOfScope.includes("KURŞUNLU"));
+  // Boş string / yalnız-boşluk: eskiden ne satır doğuyordu ne uyarı → belge
+  // talimatsız olduğunu HİÇBİR ŞEKİLDE söylemiyordu (sessiz üçüncü hâl).
+  const blankish = renderFasonCekiHtml(makeSnap({ doc: cmdDoc("   ", [{ name: " " }]) }));
+  check("§14c-12d boş/boşluklu değer sessiz boş kutu üretmez → uyarı basılır",
+    blankish.includes("GİRİLMEMİŞ") && !blankish.includes("BOYANACAK RENK"));
+  check("§14c-12e adsız işlem satırı ': değer' olarak SIZMAZ",
+    !renderFasonCekiHtml(makeSnap({ doc: cmdDoc(null, [{ name: "", value: "50 gr" }]) }))
+      .includes("50 gr"));
+
+  // (13-14) ÇİFT BASIM YASAĞI — yeni kutu doğunca eski "İSTENEN ÖZELLİKLER" susar.
+  const legacyProps = renderFasonCekiHtml(makeSnap({ doc: { targetProperties: ["APRE", "AÇMAZLIK"] } }));
+  const newProps = renderFasonCekiHtml(
+    makeSnap({ doc: { targetProperties: ["APRE", "AÇMAZLIK"], ...cmdDoc(null, [{ name: "APRE" }]) } }),
+  );
+  check("§14c-13 commands VARKEN 'İSTENEN ÖZELLİKLER' basılmaz (tek talimat)",
+    !newProps.includes("İSTENEN ÖZELLİKLER") && newProps.includes("YAPILACAK İŞLEMLER"));
+  check("§14c-14 commands YOKKEN eski kutu AYNEN basılır",
+    legacyProps.includes("İSTENEN ÖZELLİKLER") && legacyProps.includes("APRE, AÇMAZLIK"));
+
+  // (15) ÇOKLU İŞLEM — tekil gösterime düşmez (ölçüm: sevk başına 0-2, WO'da maks 4).
+  const many = renderFasonCekiHtml(
+    makeSnap({
+      doc: cmdDoc("EKRU", [
+        { name: "APRE" },
+        { name: "AÇMAZLIK" },
+        { name: "YUMUŞAK TUŞE-6" },
+        { name: "JET BOYA PİŞİRME" },
+      ]),
+    }),
+  );
+  check("§14c-15 dört işlemin dördü de basılır",
+    ["APRE", "AÇMAZLIK", "YUMUŞAK TUŞE-6", "JET BOYA PİŞİRME"].every((w) => many.includes(w)));
+  check("§14c-15 ayırıcı belgenin kendi standardı (·)", many.includes("&nbsp;·&nbsp;"));
+
+  // (16) DETERMİNİSTİK SIRA — Prisma ilişkide satır sırasını garanti etmez; sıra
+  // oynarsa freeze ile reissue aynı içeriği farklı sırada basar.
+  const asc = renderFasonCekiHtml(makeSnap({ doc: cmdDoc("EKRU", [{ name: "AÇMAZLIK" }, { name: "APRE" }]) }));
+  const desc = renderFasonCekiHtml(makeSnap({ doc: cmdDoc("EKRU", [{ name: "APRE" }, { name: "AÇMAZLIK" }]) }));
+  check("§14c-16 ters sıralı works aynı HTML'i üretir", asc === desc);
+
+  // (17) DEĞER-HAZIR ŞEKİL — bugün `value` hep undefined (hedef özelliklerde değer
+  // kolonu YOK, SEÇİM tipli özellik hedef olamaz) → düz ad listesiyle BİREBİR aynı.
+  const valued = renderFasonCekiHtml(makeSnap({ doc: cmdDoc(null, [{ name: "GRAMAJ", value: "50 gr" }]) }));
+  check("§14c-17 değer varsa 'AD: DEĞER' basılır", valued.includes("GRAMAJ: 50 gr"));
+  const noValue = renderFasonCekiHtml(makeSnap({ doc: cmdDoc(null, [{ name: "GRAMAJ" }]) }));
+  const nullValue = renderFasonCekiHtml(makeSnap({ doc: cmdDoc(null, [{ name: "GRAMAJ", value: null }]) }));
+  check("§14c-17 değer yokken yalnız ad, çıktı düz-ad fixture'ıyla BİREBİR aynı",
+    noValue === nullValue && noValue.includes(">GRAMAJ<"));
+
+  // (18) ESCAPING.
+  const evil = renderFasonCekiHtml(makeSnap({ doc: cmdDoc("<script>x</script>", []) }));
+  check("§14c-18 talimat değeri escape edilir",
+    evil.includes("&lt;script&gt;") && !evil.includes("<script>x</script>"));
+
+  // (19) CSS KOŞULLU EMİT — A4 parmak izi: kutu yokken tek bayt CSS basılmaz.
+  check("§14c-19 commands'sız belgede .cmd kuralı HİÇ basılmaz",
+    rule(plainLegacy, ".cmd") === "" && !plainLegacy.includes(".cmd {") && !plainLegacy.includes(".cmd-val"));
+  check("kutu varken CSS basılır (koşul gerçekten çalışıyor)",
+    rule(both, ".cmd").includes("border: 2px solid #000") && rule(both, ".cmd-val").length > 0);
+  check("alan CSS'inde calc()/var() YOK (scaleDocCss regex'i görmez)",
+    !both.includes("calc(") && !both.includes("var(--"));
+
+  // (20) A5 BÜTÇESİ — canlı fabrika ayarıyla. Tarihsel vaka: A5'te %105 doluluk,
+  // imza bloğu ikinci kâğıda düşüyordu. Kutunun en pahalı gerçekçi hâli ölçüldü
+  // (renk + 4 işlem, iri punto) ve yazı alanının %12'sinin altında kalmalı.
+  //
+  // ⚠️ ÖLÇÜM (headless Chrome, gerçek belge + CANLI fabrika ayarı, 2026-08-15):
+  // A5 yazı alanı ≈756px. Gerçek sevkler tek sayfa ve rahat — FS1308260009
+  // 400px (%53, kutu +15px), FS1208260010 377px (kutu eski "İSTENEN
+  // ÖZELLİKLER" kutusunun YERİNE geçtiği için −8px), FS1308260006 383px.
+  // ⚠️ BİLİNEN SINIR, GİZLENMİYOR: imza AÇIK **+** gridRows 20 **+** fontScale
+  // 1.4 ÜÇÜ BİRDEN açılırsa sayfa 785px olur (kutusuz 714px) → ikinci kâğıt.
+  // Yani o uç kombinasyonda kutu belirleyici olabiliyor. Canlı ayar üçünü de
+  // taşımıyor (imza kapalı · gridRows 10 · 1.1) ve ikili kombinasyonların
+  // hiçbiri taşmıyor. Kutuyu küçültmek çözüm DEĞİL (saha "belirgin" istedi);
+  // taşarsa doğru kol gridRows/fontScale'dir.
+  const liveCfg = {
+    style: { pageSize: "A5", fontScale: 1.1, fontWeight: "bold", tableDensity: "compact" },
+    gridGroups: 4,
+    showSignatures: false,
+    sections: { gridWidth: false, vehicleInfo: false, fabricHeader: true },
+  };
+  const a5Live = renderFasonCekiHtml(
+    makeSnap({
+      doc: cmdDoc("078-BYR-K.KAHVE", [
+        { name: "JET BOYA PİŞİRME" },
+        { name: "AÇMAZLIK" },
+        { name: "YUMUŞAK TUŞE -1" },
+        { name: "KURŞUNLU" },
+      ]),
+      docConfigOverride: liveCfg,
+    }),
+  );
+  const numOf = (css: string, prop: string): number => {
+    const m = new RegExp(`${prop}:\\s*([\\d.]+)px`).exec(css);
+    return m ? Number(m[1]) : NaN;
+  };
+  const valPx = numOf(rule(a5Live, ".cmd-val"), "font-size");
+  const lblPx = numOf(rule(a5Live, ".cmd-lbl"), "font-size");
+  // ⚠️ FORMÜL GERÇEKTEN ÖLÇER — ilk hâli satır sayısını 2'ye SABİTLİYOR ve yalnız
+  // `.cmd-val` puntosunu okuyordu; `estH` her koşumda 53px, eşik 110px'ti, yani
+  // kontrol MATEMATİKSEL OLARAK kırmızı veremezdi (dekoratif bekçi). Artık:
+  //   • satır sayısı ÇIKTIDAN sayılır (`.cmd-lbl` adedi),
+  //   • kutunun BÜTÜN dikey ölçüleri (dolgu, satır arası, üst boşluk, çerçeve)
+  //     yoğunluk profilinden okunur,
+  //   • uzun işlem listesinin SARMASI karakter genişliğinden kestirilir
+  //     (A5 yazı alanı 132mm ≈ 499px; etiket sütunu + iki nokta düşülür),
+  //   • eşik %12'ye çekilir → A5 `cmdVal`i 13→26 yapan bir "iyileştirme" kırmızı
+  //     verir (eski eşikle 30'a çıksa bile yeşil kalıyordu).
+  const rows = countOccur(a5Live, '<div class="cmd-lbl">');
+  const longestVal = Math.max(
+    ...[...a5Live.matchAll(/<div class="cmd-val">([\s\S]*?)<\/div>/g)].map((m) =>
+      m[1]!.replace(/&nbsp;/g, " ").length,
+    ),
+    1,
+  );
+  const availPx = 499 - lblPx * 12 - 10; // etiket sütunu (≈12 karakter) + iki nokta
+  const wrapLines = Math.max(1, Math.ceil((longestVal * valPx * 0.55) / availPx));
+  const pad = numOf(rule(a5Live, ".cmd"), "padding") || 5;
+  const estH =
+    (rows - 1 + wrapLines) * valPx * 1.4 +
+    (rows - 1) * numOf(rule(a5Live, ".cmd"), "row-gap") +
+    2 * pad +
+    numOf(rule(a5Live, ".cmd"), "margin-top") +
+    4; // 2px × 2 çerçeve
+  check("§14c-20 formül gerçekten okudu (körlük zemini)",
+    rows === 2 && longestVal > 40 && Number.isFinite(estH) && estH > 20,
+    `satır=${rows} enUzunDeğer=${longestVal} sarma=${wrapLines} h=${estH.toFixed(0)}px`);
+  check("§14c-20 A5 canlı ayarda kutu yazı alanının %12'sini aşmaz (733px)",
+    Number.isFinite(estH) && estH < 733 * 0.12, `${estH.toFixed(0)}px`);
+  check("§14c-20 A5 puntoları A4'ten küçük (yoğunluk profili gerçekten uygulanıyor)",
+    valPx < numOf(rule(both, ".cmd-val"), "font-size") &&
+      lblPx < numOf(rule(both, ".cmd-lbl"), "font-size"));
+
+  // ALAN BAZLI PUNTO — talimat kutusu KENDİ anahtarlarını taşır; `boxLabel`/
+  // `boxText` (İSTENEN ÖZELLİKLER + FASON TALİMATI) ile paylaşmaz.
+  const styled = renderFasonCekiHtml(
+    makeSnap({
+      doc: cmdDoc("MAVİ", [{ name: "APRE" }]),
+      docConfigOverride: { fields: { cmdValue: { size: 22, weight: "black" } } },
+    }),
+  );
+  check("fields.cmdValue talimat değerine uygulanır",
+    rule(styled, ".sheet .cmd-val").includes("font-size: 22px"));
+  check("fields.cmdValue FASON TALİMATI kutusuna DOKUNMAZ", !styled.includes(".sheet .instr-txt {"));
+
+  // ⚠️ ÖNİZLEME = GERÇEK BASKI (§14b'nin kardeşi): örnek veri kutuyu taşımazsa
+  // Belge Şablonları'nın canlı önizlemesi kutuyu göstermez, baskı gösterir.
+  const sample = SAMPLE_PRINTED_DOCS.SUBCONTRACTOR_DISPATCH as {
+    commands?: { color?: unknown; works?: unknown[] };
+  };
+  check("§14b-EK örnek veri talimat nesnesi taşır",
+    typeof sample.commands?.color === "string" && (sample.commands?.works?.length ?? 0) > 0);
+}
+
+// ── 19) ELECTRON BÖLÜM AYNASI (2026-08-15) ─────────────────────────────────
+// §16 `fields` aynasını denetliyordu; `sections` tarafının HİÇ bekçisi yoktu ve
+// `sections` için GERÇEKTEN DEĞİŞEN TEK KAPI Electron'dur (üç backend kapısı da
+// generic `Record<string, boolean>` taşır). Yani bir bölüm anahtarı backend'de
+// çalışıp panelde hiç görünmeyebilir — ayar kaydedilir, baskıda etkisini gösterir,
+// ama kimse açıp kapatamaz. Üç yönlü denetlenir: eksik · fazla · SEMANTİK.
+function testElectronSectionMirror(): void {
+  console.log("\n── 19) Electron bölüm (sections) aynası ──");
+  const UI = path.resolve(__dirname, "../../Electron/src/services/documentConfig.ts");
+  const ROWS = path.resolve(__dirname, "../../Electron/src/pages/GeneralSettings/docRows.ts");
+  const RENDERER = path.resolve(__dirname, "../src/services/document-render/fason-ceki.html.ts");
+  if (!fs.existsSync(UI) || !fs.existsSync(ROWS)) {
+    console.log("  ⚠️  Electron kaynağı bulunamadı, bölüm aynası atlandı");
+    return;
+  }
+
+  // Panel tarafı: DOC_DEFS → fasonSevk → sections[] (tek satırlık nesne kayıtları).
+  const ui = fs.readFileSync(UI, "utf8");
+  const fasonAt = ui.indexOf('key: "fasonSevk"');
+  const secStart = ui.indexOf("sections: [", fasonAt);
+  const secEnd = ui.indexOf("\n    ],", secStart);
+  check("Electron fasonSevk.sections bloğu okunabildi", fasonAt > 0 && secStart > 0 && secEnd > secStart);
+  if (fasonAt < 0 || secStart < 0 || secEnd < 0) return;
+  const secBlock = ui.slice(secStart, secEnd);
+  const uiSections = new Map<string, boolean>();
+  for (const line of secBlock.split("\n")) {
+    const m = /\{\s*key:\s*"(\w+)"/.exec(line);
+    if (m) uiSections.set(m[1]!, /defaultHidden:\s*true/.test(line));
+  }
+
+  // Renderer tarafı: `cfg.sections?.X !== false` / `=== true` okuma noktaları.
+  const rnd = fs.readFileSync(RENDERER, "utf8");
+  const rendererOps = new Map<string, string>();
+  for (const m of rnd.matchAll(/cfg\.sections\?\.(\w+)\s*(!==|===)\s*(false|true)/g)) {
+    rendererOps.set(m[1]!, `${m[2]} ${m[3]}`);
+  }
+
+  // KÖRLÜK ZEMİNİ — regex bir refactor'da boşa düşerse "fark yok" ile "hiçbir
+  // şeye bakılmadı" aynı yeşile çıkardı.
+  check("panel bölüm listesi anlamlı büyüklükte (>10)", uiSections.size > 10, `${uiSections.size}`);
+  check("renderer okuma noktası anlamlı büyüklükte (>9)", rendererOps.size > 9, `${rendererOps.size}`);
+
+  const oluToggle = [...uiSections.keys()].filter((k) => !rendererOps.has(k));
+  check("§19-1 ÖLÜ TOGGLE YOK (panelde var, renderer okumuyor)", oluToggle.length === 0, oluToggle.join(", "));
+  const ayarlanamaz = [...rendererOps.keys()].filter((k) => !uiSections.has(k));
+  check("§19-2 AYARLANAMAZ BÖLÜM YOK (renderer okuyor, panelde yok)",
+    ayarlanamaz.length === 0, ayarlanamaz.join(", "));
+
+  // ⚠️ EN KRİTİK: `defaultHidden` (allowlist) ↔ `=== true`, aksi (blocklist) ↔
+  // `!== false`. Ayrışma SESSİZDİR ve iki yönü de kullanıcıyı çıkmaza sokar:
+  // panel "açık" derken belge boş çıkar, ya da panel "kapalı" derken belge basar.
+  const semantikDrift = [...uiSections.entries()]
+    .filter(([k, hidden]) => rendererOps.get(k) !== (hidden ? "=== true" : "!== false"))
+    .map(([k, hidden]) => `${k}(${hidden ? "allowlist" : "blocklist"}→${rendererOps.get(k)})`);
+  check("§19-3 defaultHidden ↔ karşılaştırma operatörü hizalı",
+    semantikDrift.length === 0, semantikDrift.join(", "));
+
+  // Yeni bölümler gerçekten eklenmiş mi (bu işin kendi kilidi).
+  check("dyeColorLine paneldedir ve BLOCKLIST'tir (varsayılan AÇIK)",
+    uiSections.get("dyeColorLine") === false);
+  check("instructionWarning paneldedir ve BLOCKLIST'tir",
+    uiSections.get("instructionWarning") === false);
+
+  // §19-5 PANEL GRUBU — yazılmazsa satır "eşleşmemiş bölüm" dalından gelir ve
+  // varsayılanı `header`dır → kutu ayarı başlık bandının altında çıkar.
+  const rows = fs.readFileSync(ROWS, "utf8");
+  const grpAt = rows.indexOf("const SECTION_GROUP");
+  const grpBlock = rows.slice(grpAt, rows.indexOf("\n};", grpAt));
+  const fasonGrp = grpBlock.slice(grpBlock.indexOf("fasonSevk:"), grpBlock.indexOf("fasonDirectShip:"));
+  check("§19-5 dyeColorLine 'boxes' grubunda", /dyeColorLine:\s*"boxes"/.test(fasonGrp));
+  check("§19-5 instructionWarning 'boxes' grubunda", /instructionWarning:\s*"boxes"/.test(fasonGrp));
+}
+
+// ── 20) ADIM SÜZGECİ — "YAPILACAK İŞLEMLER" bu adımın işidir ───────────────
+// Çeki BU SEVKİN gittiği ADIMIN işini anlatır; iş emrinin TÜM hedeflerini basmak
+// "BOYANACAK RENK: EKRU" ile aynı sınıf bir yalandır. Şekli olan gerçek kayıt
+// var: IE2207260001 hedefleri = YUMUŞAK TUŞE -1 + AÇMAZLIK + JET BOYA PİŞİRME +
+// KURŞUNLU; KURŞUNLU yalnız "Kurşun + KK2" istasyonunun yeteneğidir.
+type FakeDb = Parameters<typeof resolveStepWorkInstructions>[0];
+function fakeDb(caps: string[], counter: { n: number }): FakeDb {
+  return {
+    stationProperty: {
+      findMany: async () => {
+        counter.n++;
+        return caps.map((propertyId) => ({ propertyId }));
+      },
+    },
+  } as unknown as FakeDb;
+}
+
+async function testStepFilter(): Promise<void> {
+  console.log("\n── 20) Adım süzgeci (hedef ∩ istasyon yeteneği) ──");
+
+  const targets = [
+    { propertyId: "p-kursun", name: "KURŞUNLU" },
+    { propertyId: "p-apre", name: "APRE" },
+  ];
+  const c1 = { n: 0 };
+  const only = await resolveStepWorkInstructions(fakeDb(["p-apre"], c1), "st-boya", targets);
+  check("§20-1 SIZINTI YOK — yalnız istasyonun yapabildiği iş döner",
+    only.length === 1 && only[0]!.name === "APRE");
+
+  const c2 = { n: 0 };
+  const none = await resolveStepWorkInstructions(fakeDb(["p-zimpara"], c2), "st-boya", targets);
+  check("§20-2 FAIL-CLOSED — kesişim boşsa BOŞ dizi (hepsini basan dal YOK)", none.length === 0);
+
+  const c3 = { n: 0 };
+  const empty = await resolveStepWorkInstructions(fakeDb(["p-apre"], c3), "st-boya", []);
+  check("§20-3 hedef yoksa boş dizi VE sorgu KOŞMAZ", empty.length === 0 && c3.n === 0);
+  check("§20-3 hedef varken sorgu bir kez koşar", c1.n === 1 && c2.n === 1);
+
+  // Sıra deterministik ve TÜRKÇE — "İ"/"I" içeren adlarda da aynı sonuç.
+  const caps = ["a", "b", "c"];
+  const mixed = [
+    { propertyId: "c", name: "IŞIL APRE" },
+    { propertyId: "a", name: "AÇMAZLIK" },
+    { propertyId: "b", name: "İNCE TUŞE" },
+  ];
+  const s1 = await resolveStepWorkInstructions(fakeDb(caps, { n: 0 }), "st", mixed);
+  const s2 = await resolveStepWorkInstructions(fakeDb(caps, { n: 0 }), "st", [...mixed].reverse());
+  check("§20-4 karışık sıra → aynı sonuç (localeCompare tr)",
+    s1.map((w) => w.name).join("|") === s2.map((w) => w.name).join("|"), s1.map((w) => w.name).join("|"));
+  check("§20-4 hepsi korunur (süzgeç yalnız yetenek dışını eler)", s1.length === 3);
+
+  // ── §20-5..8 RENK DE ADIMA SÜZÜLÜR (2026-08-15 doğrulama turu) ────────────
+  // İşlemler tarafına kurulan "bu adımın işini anlat" kuralı renk tarafında
+  // YOKTU: `WorkOrder.targetColor` doğrudan basılıyordu. Canlıda `ZIMPARA`
+  // kategorisi AKTİF ve `appliesColor=false` → rota Boyahane→Zımpara olduğunda
+  // zımparacıya giden çekinin ÜZERİNDEKİ TEK TALİMAT "BOYANACAK RENK : MAVİ"
+  // olurdu. Yüklem fason KABULÜYLE aynı (`!!step.requiredCategory?.appliesColor`)
+  // — ayrışsalardı kâğıt "boya" derken kabul rengi hiç yazmazdı.
+  const dye = { requiredCategory: { appliesColor: true } };
+  const sander = { requiredCategory: { appliesColor: false } };
+  check("§20-5 renk VEREN kategori (Boyahane) → talimat basılır",
+    resolveStepDyeColor(dye, "MAVİ") === "MAVİ");
+  check("§20-6 renk VERMEYEN kategori (Zımpara) → boya talimatı GİTMEZ",
+    resolveStepDyeColor(sander, "MAVİ") === null);
+  check("§20-7 kategorisiz adımda FAIL-CLOSED (kabul de renk kopyalamaz)",
+    resolveStepDyeColor({}, "MAVİ") === null &&
+      resolveStepDyeColor({ requiredCategory: null }, "MAVİ") === null);
+  check("§20-8 hedef renk yoksa kategori fark etmez", resolveStepDyeColor(dye, null) === null);
+}
+
+async function main(): Promise<void> {
   testBasic();
   testGrid();
   testMultiPage();
@@ -803,11 +1248,14 @@ function main(): void {
   testNewSections();
   testSingleWidth();
   testGridGroups();
+  testCommandBox();
   testElectronMirror();
+  testElectronSectionMirror();
   testPreviewSchemaParity();
   testStorageGate();
+  await testStepFilter();
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main();
+void main();

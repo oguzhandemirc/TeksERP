@@ -88,6 +88,18 @@ export interface FasonDensity {
   instrPad: string;
   instrMarT: number;
   instrTxtMarT: number;
+  // ── TALİMAT KUTUSU (2026-08-15) ────────────────────────────────────────────
+  // Saha isteği: "boyanacak renk daha belirgin ve birkaç yerde yazsın … özellikle
+  // 'BOYANACAK RENK : MAVİ' bunun gibi net şekilde". Kendi ölçüleri var, `instr*`
+  // ile PAYLAŞMAZ: paylaşılsaydı rengi büyüten kullanıcı FASON TALİMATI kutusunu
+  // da büyütürdü — bu, alan bazlı ayarı doğuran orijinal şikâyetin ("metre ve cm
+  // ayrı ayarlanamıyor") birebir tekrarı olurdu.
+  cmdMarT: number;
+  cmdPad: string;
+  cmdRowGap: number;
+  cmdColGap: number;
+  cmdLbl: number;
+  cmdVal: number;
   // ── not ────────────────────────────────────────────────────────────────────
   note: number;
   notePad: string;
@@ -142,6 +154,18 @@ const A4: FasonDensity = {
   instrMarT: 8,
   instrTxtMarT: 2,
 
+  // Talimat kutusu A4'te de YENİDİR — "bugünkü çıktı" referansı onu İÇERMEZ,
+  // çünkü blok yalnız `doc.commands` taşıyan (2026-08-15 sonrası) belgelerde
+  // doğar ve kapalıyken tek bayt CSS basılmaz (renderer `cmdBlock` koşulu).
+  // Değer puntosu (16) bilerek alt tablo değerinden (12) de iridir: saha
+  // "belirgin" istedi ve ölçüldü — iri değerin A4 maliyeti +8px.
+  cmdMarT: 8,
+  cmdPad: "7px 10px",
+  cmdRowGap: 4,
+  cmdColGap: 8,
+  cmdLbl: 11,
+  cmdVal: 16,
+
   note: 11,
   notePad: "6px 8px",
   noteMarT: 8,
@@ -195,6 +219,18 @@ const A5: FasonDensity = {
   instrPad: "4px 6px",
   instrMarT: 4,
   instrTxtMarT: 1,
+
+  // Boşluk/padding ~0.70 (geometrik), yazı ~0.82 (okunabilirlik bandı) — dosyanın
+  // başındaki İKİ ORAN kuralı. Ölçüldü (canlı fabrika ayarı: A5 · fontScale 1.1 ·
+  // bold · compact · 5mm · gridGroups 4 · imza kapalı): renk + 1 işlem → NET +16px
+  // (%58 doluluk), renk + 4 işlem (2 satıra sarar) → NET +57px (%64). Tarihsel
+  // taşma vakası %105'ti; profil (−83px) + gridRows 20→10 (−140px) ile 224px pay var.
+  cmdMarT: 4,
+  cmdPad: "5px 7px",
+  cmdRowGap: 3,
+  cmdColGap: 6,
+  cmdLbl: 9,
+  cmdVal: 13,
 
   note: 9.5,
   notePad: "4px 6px",

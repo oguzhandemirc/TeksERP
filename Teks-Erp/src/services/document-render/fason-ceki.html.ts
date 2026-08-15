@@ -21,6 +21,17 @@
 //   3. YERLEŞİM ANAHTARLARI — `sections.fabricHeader` (kumaş+renk üst bloğu),
 //      `sections.accountNo` (hesap no satırı), `placements.batchInfo` (parti no
 //      sol/sağ), `gridGroups` (satır başına grup sayısı).
+//
+// ── 2026-08-15: TALİMAT KUTUSU (`.cmd`) ─────────────────────────────────────
+// Saha: "boyanacak renk daha belirgin ve birkaç yerde yazsın … 'BOYANACAK RENK :
+// MAVİ' bunun gibi net" + "o özellikler de 'YAPILACAK İŞLEMLER : APRE' örnekteki
+// gibi". Başlık bandının altına, grid'in ÜSTÜNE, 2px çerçeveli tek kutu; içinde
+// hizalı-iki-nokta düzeninde en fazla iki satır. TAMAMEN yeni ve OPSİYONEL bir
+// payload nesnesine (`doc.commands`) bağlıdır → 2026-08-15 öncesi 113 donmuş
+// çekinin çıktısı BAYT-BAYT korunur (koruma config'ten değil VERİDEN gelir).
+// Yeni bölüm anahtarları: `sections.dyeColorLine`, `sections.instructionWarning`
+// (ikisi de blocklist = varsayılan AÇIK; işlem satırı mevcut `productionProps`e
+// bağlıdır). Alan bazlı punto: `fields.cmdLabel` / `fields.cmdValue`.
 // =============================================================================
 
 import type { PrintedDocStatus } from "@prisma/client";
@@ -85,8 +96,45 @@ interface FasonCekiDoc {
    *  `documents.config sections.dyehouseNote` ile aç/kapa (default açık). */
   instruction?: string | null;
   /** WO hedef üretim özellikleri (FabricProperty adları) — "bu apreleri uygula".
-   *  Eski donmuş snapshot'larda yok → blok basılmaz. `sections.productionProps` ile aç/kapa. */
+   *  Eski donmuş snapshot'larda yok → blok basılmaz. `sections.productionProps` ile aç/kapa.
+   *  ⚠️ 2026-08-15'ten sonra doğan belgelerde bu alanın YERİNE `commands.works`
+   *  basılır (aşağı). Alan payload'da DURUR ve ESKİ donmuş belgeleri beslemeye
+   *  devam eder — o 94 belgenin çıktısı bayt-bayt korunur. */
   targetProperties?: string[];
+  /** BOYAHANEYE GİDEN İKİ TALİMAT — saha isteği (2026-08-15): "boyanacak renk daha
+   *  belirgin ve birkaç yerde yazsın … 'BOYANACAK RENK : MAVİ' bunun gibi net
+   *  şekilde" + "o özellikler de 'YAPILACAK İŞLEMLER : APRE' örnekteki gibi".
+   *
+   *  ⚠️ ALANIN VARLIĞI SÜRÜM İŞARETİDİR ve donmuş belge korumasının TAMAMI budur:
+   *  2026-08-15 öncesi 113 snapshot'ın HİÇBİRİNDE yoktur → talimat kutusu ve
+   *  `.cmd` CSS'i TEK BAYT basılmaz, eski "İSTENEN ÖZELLİKLER" kutusu aynen çıkar.
+   *  Koruma CONFIG'ten GELMEZ: `sections` bir blocklist'tir ("anahtar yoksa AÇIK")
+   *  ve `docConfigOverride` da donmuştur; ayrıca `?currentTemplate=1` yalnız zarfı
+   *  tazeler, `snapshot.doc` donuk kalır — yani veri kapılaması o yolda da yaşar,
+   *  config kapılaması yaşamazdı. Alanı mevcut `requestedColor`a BAĞLAMA.
+   *
+   *  ⚠️ `color` YALNIZ `WorkOrder.targetColor.name`'dir — topların MEVCUT rengine
+   *  DÜŞMEZ. `requestedColor` (aşağıdaki `renk` değişkeni) bilinçli olarak
+   *  "hedef yoksa topun rengi" semantiği taşır; o CİNSİ hücresinde ve
+   *  `fabricHeader`da MEŞRUDUR (envanter beyanı), ama "BOYANACAK RENK" etiketinin
+   *  altında YALAN olur: hedefi olmayan ham topa, kendi mevcut rengi boya
+   *  talimatı olarak giderdi. İki ayrı alan, etiketi yapısal olarak dürüst tutar.
+   *  ⚠️ GARANTİNİN SINIRI: engellenen şey FALLBACK'tir. Fabrika `targetColor`ı
+   *  bilerek EKRU'ya SET edebilir (ölçüm: 98 sevkin 16'sı) ve o zaman kâğıtta
+   *  "BOYANACAK RENK : EKRU" yazar — bu bir ÜRÜN kararıdır, `colors` tablosunda
+   *  "ham/doğal renk" diye bir işaret yoktur ve kod bunu ayırt EDEMEZ.
+   *  ⚠️ `color` AYRICA ADIMA SÜZÜLÜR (`resolveStepDyeColor`): sevkin gittiği
+   *  adımın kategorisi renk vermiyorsa (`appliesColor=false`, örn. Zımpara)
+   *  alan `null` gelir — zımparacıya "BOYANACAK RENK" talimatı gitmez.
+   *
+   *  ⚠️ İKİ SKALER DEĞİL TEK NESNE: %11,7 vaka (94 sevkin 11'i) ne renk ne işlem
+   *  taşıyor ve o belgelerde "TALİMAT: GİRİLMEMİŞ" uyarısı basılır. İki opsiyonel
+   *  skaler kullanılsaydı "eski snapshot" ile "yeni belge, gerçekten boş" AYIRT
+   *  EDİLEMEZDİ ve uyarı ya 113 eski belgeye de basılırdı ya hiç basılamazdı. */
+  commands?: {
+    color: string | null;
+    works: Array<{ name: string; value?: string | null }>;
+  };
   /** Sevkin parti no'su (K10: bir sevk = bir parti). Boyahane parti bazında boyar ve
    *  dönüş parti bazında eşleşir — fason belgesinin kimlik alanıdır.
    *  ⚠️ OPSİYONEL: alan 2026-08-05'ten önce donmuş snapshot'larda YOKTUR → o belgeler
@@ -229,10 +277,16 @@ export function renderFasonCekiHtml(
       : ["Teslim Eden", "Teslim Alan"];
 
   const cins = doc.rolls[0]?.itemName ?? "";
-  // Renk bilgisi tek anahtarla yönetilir (`sections.requestedColor`): hem alt
-  // tablodaki CİNSİ hücresinin renk eki hem üst bloğun RENK parçası ona bakar.
+  // Renk bilgisinin ENVANTER yüzeyleri tek anahtarla yönetilir
+  // (`sections.requestedColor`): hem alt tablodaki CİNSİ hücresinin renk eki hem
+  // üst bloğun RENK parçası ona bakar.
   // ⚠️ Bu anahtar 2026-08-05'e kadar panelde VARDI ama renderer onu HİÇ OKUMUYORDU
   // — kullanıcı kapatıyor, hiçbir şey olmuyordu ("ölü toggle").
+  // ⚠️ KAPSAM 2026-08-15'te DARALDI: talimat kutusundaki "BOYANACAK RENK" satırı
+  // BU ANAHTARA BAĞLI DEĞİLDİR, kendi anahtarını taşır (`sections.dyeColorLine`).
+  // Bilinçli: ikisi farklı şeyler söyler — burası "sevkte ne var" (envanter
+  // beyanı), orası "ne yapılacak" (talimat) ve fabrika birini basıp diğerini
+  // kapatmak isteyebilir. Panel etiketleri de kapsamı ayrı ayrı yazar.
   const showColor = cfg.sections?.requestedColor !== false;
   // İstenen (hedef) renk öncelikli; yoksa topların mevcut rengi (boyanmış dönüşte).
   const renk = showColor ? (doc.requestedColor ?? doc.rolls[0]?.colorName ?? "") : "";
@@ -383,8 +437,96 @@ export function renderFasonCekiHtml(
   // Üretim özellikleri bloğu — WO hedef özellikleri (apre vb.) fasoncuya talimattır;
   // talimat kutusuyla aynı stil. sections.productionProps !== false ise (default açık).
   const showProps = cfg.sections?.productionProps !== false;
+
+  // ── TALİMAT KUTUSU (2026-08-15) ────────────────────────────────────────────
+  // Saha iki cümle yazdı ve ikisi de ETİKETLİ + BELİRGİN istiyordu:
+  //   "BOYANACAK RENK : MAVİ"  ·  "YAPILACAK İŞLEMLER : APRE"
+  // Kutu başlık bandının hemen ALTINDA, elle doldurulan grid'in ÜSTÜNDEDİR —
+  // altta kalsaydı okuma akışı "kutuları doldur → sonra ne yapacağını öğren"
+  // olurdu. İki nokta AYRI bir grid hücresidir (`.cmd-sep`) ki iki satırın iki
+  // noktası HİZALANSIN (kullanıcının çizdiği düzen birebir bu).
+  const cmd = doc.commands;
+  // İki satır BAĞIMSIZ kapatılabilir: kullanıcının açık kararı "renk olmayabilir
+  // ama işlem vardır" — tek anahtar bunu yapısal olarak imkânsız kılardı.
+  // İkisi de BLOCKLIST (`!== false`, varsayılan AÇIK): bu belge FASONA gider ve
+  // fasona giden belgelerde varsayılan AÇIKtır (kök CLAUDE.md). Geçmişi koruyan
+  // şey config değil, `doc.commands`ın eski snapshot'larda YOKLUĞUdur.
+  const showDyeColorLine = cfg.sections?.dyeColorLine !== false;
+  const showWarning = cfg.sections?.instructionWarning !== false;
+  // ⚠️ `renk` DEĞİŞKENİ BURAYA GİRMEZ (fallback'li). Yalnız `cmd.color`.
+  const cmdColor = cmd && showDyeColorLine ? (cmd.color ?? "") : "";
+  // Değer-hazır şekil: bugün `value` her zaman undefined (hedef özelliklerde
+  // değer kolonu YOK ve SEÇİM tipli özellik hedef olamaz) → düz ad listesi basılır.
+  // Sıra JS'te deterministik: aynı içerik her baskıda aynı HTML üretmeli.
+  // ⚠️ Boş/boşluklu AD önce elenir, SONRA biçimlenir: ters sıra `{name:"",
+  // value:"50 gr"}` girdisini ": 50 gr" olarak basardı (`filter` map'ten sonra
+  // koştuğu için elenmezdi de).
+  const cmdWorks = (cmd && showProps ? [...(cmd.works ?? [])] : [])
+    .filter((w) => w.name.trim())
+    .sort((a, b) => a.name.localeCompare(b.name, "tr"))
+    .map((w) => (w.value ? `${w.name}: ${w.value}` : w.name));
+  // ── UYARI SATIRININ YÜKLEMİ ────────────────────────────────────────────────
+  // ⚠️ UYARI **VERİ** BOŞLUĞUNA BAKAR, RENDER BOŞLUĞUNA DEĞİL: kullanıcı
+  // `productionProps`/`dyeColorLine`'ı bilerek kapattıysa ve talimat ASLINDA
+  // varsa uyarı basılmaz — ayarını kullanan kişiye "talimat girilmemiş" yalanı
+  // basılırdı. Bu yüzden aşağıdaki dört sinyal de HAM veriden okunur (`cfg` yok).
+  //
+  // ⚠️ DÖRT SİNYAL, ÜÇÜ SONRADAN EKLENDİ (2026-08-15 doğrulama turu) — ilk hâli
+  // yalnız `color` + `works`e bakıyordu ve belge KENDİ KENDİSİYLE ÇELİŞEBİLİYORDU:
+  //   • `instruction` = `dispatch.instruction ?? step.notes`, yani boyahaneye
+  //     yazılan SERBEST TALİMATIN ta kendisi ve aynı kâğıtta "FASON TALİMATI"
+  //     kutusu olarak BASILIYOR. Üstte "GİRİLMEMİŞ — SEVK EDENE SORUNUZ",
+  //     altta talimatın kendisi → boyahane hangisinin geçerli olduğunu bilemez.
+  //     (Ölçüm: 94 sevkin 11'i talimatsız, 3'ü serbest talimat taşıyor; kesişim
+  //     bugün 0 — yani bomba kurulu, patlamamış.)
+  //   • `targetProperties` = iş emrinin SÜZÜLMEMİŞ hedefleri. Adım süzgeci
+  //     (`resolveStepWorkInstructions`) hepsini elediyse talimat GİRİLMİŞTİR,
+  //     sadece BU adıma ait değildir — "girilmemiş" demek planlamacıyı olmadığı
+  //     bir ihmalle suçlar. (Gerçek şekil: IE2207260001 → yalnız KURŞUNLU.)
+  //   • `trim()`: boş string / yalnız-boşluk değer "render boşluğu" üretip
+  //     "veri boşluğu" sayılmıyordu → kutu HİÇ doğmuyor, uyarı da basılmıyordu;
+  //     yani belge talimatsız olduğunu HİÇBİR ŞEKİLDE söylemiyordu.
+  const hasColorData = (cmd?.color ?? "").trim() !== "";
+  const hasWorksData = (cmd?.works ?? []).some((w) => w.name.trim() !== "");
+  const hasWrittenInstruction = (doc.instruction ?? "").trim() !== "";
+  const hasAnyTarget = (doc.targetProperties ?? []).some((p) => p.trim() !== "");
+  const cmdEmptyData =
+    !!cmd && !hasColorData && !hasWorksData && !hasWrittenInstruction && !hasAnyTarget;
+  const cmdRow = (l: string, v: string): string =>
+    `<div class="cmd-lbl">${l}</div><div class="cmd-sep">:</div><div class="cmd-val">${v}</div>`;
+  const cmdRows = [
+    cmdColor.trim() ? cmdRow("BOYANACAK RENK", esc(cmdColor)) : "",
+    cmdWorks.length ? cmdRow("YAPILACAK İŞLEMLER", cmdWorks.map(esc).join(" &nbsp;·&nbsp; ")) : "",
+    // Ölçüldü: 94 iptal edilmemiş sevkin 11'inde (%11,7) ne hedef renk, ne bu
+    // adımda uygulanacak özellik, ne fason talimatı, ne adım notu var — ve küme
+    // BÜYÜYOR (08-03 haftası 5/33 → 08-10 haftası 6/59). Sessiz boşluk yerine
+    // boyahanenin telefon açmasını sağlayan görünür bir işaret basılır.
+    cmdEmptyData && showWarning ? cmdRow("TALİMAT", "GİRİLMEMİŞ — SEVK EDENE SORUNUZ") : "",
+  ]
+    .filter(Boolean)
+    .join("");
+  // ⚠️ Kendi satır başını TAŞIR — gövdede kendi satırında `${...}` olarak DURMAZ
+  // (kapalıyken çıktıya boş satır sokup eski belgelerin parmak izini bozardı;
+  // `batchRow`/`fabricRows` ile aynı disiplin).
+  const cmdBlock = cmdRows ? `\n    <div class="cmd">${cmdRows}</div>` : "";
+
+  // ⚠️ `!cmd` GUARD'I LOAD-BEARING: yeni kutu doğduğunda eski "İSTENEN
+  // ÖZELLİKLER" kutusu SUSAR. Yoksa AYNI liste, aynı belgede, İKİ FARKLI
+  // etiketle iki kez basılır — bir talimat belgesinde bu, hiç basmamaktan
+  // kötüdür (boyahane hangisinin geçerli olduğunu soramaz).
+  //
+  // ⚠️ BİLİNEN BEDEL (kabul edildi, 2026-08-15): adım süzgeci TÜM hedefleri
+  // elerse yeni kutu boş kalır ve eski kutu da susturulmuş olduğu için kâğıtta
+  // hedeflerle ilgili tek kelime kalmaz. Bu SESSİZ ama YANLIŞ DEĞİLDİR — elenen
+  // hedefler tanım gereği BAŞKA adımın işidir ve onları bu firmaya basmak, tam
+  // olarak önlenmek istenen yanlış talimattır. Sessizliğin suçlayıcıya dönmesi
+  // ayrıca engellendi: `hasAnyTarget` uyarı satırını bastırır (yukarı).
+  // Riskli olan tek yol `StationProperty` bağlarının panelden REPLACE edilmesi
+  // (`setCapabilities` / `fabric-property.update`) — canlı bir iş emrinin hedefi
+  // listeden düşerse liste sessizce kısalır. Çözüm burada değil, o yazma
+  // yolunda bir guard'dadır (ayrı iş).
   const propsBlock =
-    showProps && doc.targetProperties && doc.targetProperties.length
+    showProps && !cmd && doc.targetProperties && doc.targetProperties.length
       ? `<div class="instr"><div class="instr-lbl">İSTENEN ÖZELLİKLER</div><div class="instr-txt">${doc.targetProperties
           .map(esc)
           .join(", ")}</div></div>`
@@ -473,7 +615,11 @@ export function renderFasonCekiHtml(
   .note { margin-top: ${d.noteMarT}px; font-size: ${d.note}px; white-space: pre-wrap; border: 1px solid #cbd5e1; padding: ${d.notePad}; border-radius: 4px; }
   .instr { margin-top: ${d.instrMarT}px; border: 2px solid #000; padding: ${d.instrPad}; border-radius: 4px; }
   .instr-lbl { font-size: ${d.instrLbl}px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #333; }
-  .instr-txt { margin-top: ${d.instrTxtMarT}px; font-size: ${d.instrTxt}px; font-weight: 600; white-space: pre-wrap; }
+  .instr-txt { margin-top: ${d.instrTxtMarT}px; font-size: ${d.instrTxt}px; font-weight: 600; white-space: pre-wrap; }${cmdBlock ? `
+  .cmd { margin-top: ${d.cmdMarT}px; border: 2px solid #000; border-radius: 4px; padding: ${d.cmdPad}; display: grid; grid-template-columns: max-content max-content 1fr; column-gap: ${d.cmdColGap}px; row-gap: ${d.cmdRowGap}px; align-items: baseline; }
+  .cmd-lbl { font-size: ${d.cmdLbl}px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; color: #333; white-space: nowrap; }
+  .cmd-sep { font-size: ${d.cmdLbl}px; font-weight: 700; color: #333; }
+  .cmd-val { font-size: ${d.cmdVal}px; font-weight: 800; min-width: 0; overflow-wrap: anywhere; }` : ""}
   .sign { display: flex; gap: ${d.signGap}px; margin-top: ${d.signMarT}px; }
   .sign-box { flex: 1; text-align: center; }
   .sign-line { border-top: 1px solid #000; margin-bottom: ${d.signLineMarB}px; }
@@ -515,7 +661,7 @@ export function renderFasonCekiHtml(
         <div class="ln ln-date">Tarih: <b>${esc(fmtDate(doc.dispatchedAt))}</b></div>${batchRowRight}${headerFabRight}
       </div>
     </header>
-    ${vehicleRow}
+    ${vehicleRow}${cmdBlock}
     ${blocksTop}
     ${grids}
 

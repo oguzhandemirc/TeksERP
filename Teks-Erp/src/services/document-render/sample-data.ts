@@ -65,6 +65,17 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     subcontractor: { id: "sub1", name: "Yıldız Boyahane", code: "FB-03" },
     requestedColor: "Bej",
     targetProperties: ["Yanmazlık Apresi", "Su İtici"],
+    // ⚠️ `commands` ZORUNLU: talimat kutusu ("BOYANACAK RENK" / "YAPILACAK
+    // İŞLEMLER") YALNIZ bu alandan doğar. Örnek veride eksik kalırsa Belge
+    // Şablonları'nın canlı önizlemesi kutuyu HİÇ göstermez ama gerçek baskı
+    // gösterir — "önizleme = gerçek baskı" sözleşmesi tam da ayarı yapan kişinin
+    // gözü önünde bozulur. `targetProperties` de KALIR — ama DİKKAT: `commands`
+    // koşulsuz olduğu için renderer'ın `!cmd` guard'ı eski "İSTENEN ÖZELLİKLER"
+    // dalını bu örnek üzerinden ULAŞILMAZ kılar (önizleme onu göstermez). Alan
+    // burada payload ŞEKLİNİ eksiksiz tutmak için duruyor; eski dalın regresyon
+    // ölçümü örnekten DEĞİL, bekçinin kendi fixture'ından yapılır
+    // (`test_fason_ceki_html.ts` §14c-14).
+    commands: { color: "Bej", works: [{ name: "Yanmazlık Apresi" }, { name: "Su İtici" }] },
     batchNumber: "P1207261",
     instruction: "Yıkama yapma, matlaştır",
     step: { stepSequence: 2, station: { name: "Boyahane (Fason)", code: "DYE" } },
