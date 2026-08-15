@@ -33,7 +33,12 @@
 import { readFileSync, existsSync } from "fs";
 import path from "path";
 import { updateSchema } from "../src/routes/feature-flag.routes";
+// §11-§12 tüm modülü ad alanı olarak alır: `getFeatureFlags` gövdesinden çözülen
+// okuyucu ADI ile çağrı yapılabilsin diye (33 okuyucuyu tek tek import etmek,
+// listeyi elle güncel tutma borcu demekti — tam da bekçinin önlediği şey).
+import * as systemSettingModule from "../src/services/system-setting.service";
 import {
+  SETTING_KEYS,
   systemSettingService,
   // §10 — 2026-08-14 dalga 1 okuyucuları. İÇE AKTARIM DERLEME BAĞIDIR: helper
   // silinirse `npm run typecheck:scripts` kırmızı verir (bekçi koşmadan önce).
@@ -386,6 +391,442 @@ async function main() {
   );
 
   // ---------------------------------------------------------------------------
+  // 11) ⭐ SETTING_KEYS EVRENİ — bekçinin 2026-08-15'e kadarki KÖR NOKTASI
+  // ---------------------------------------------------------------------------
+  // Yukarıdaki her kontrolün evreni `getFeatureFlags()` ÇIKTISIDIR (A kümesi).
+  // Ama `SETTING_KEYS` daha büyüktür: feature-flag yükünde DÖNMEYEN anahtarlar
+  // (uygulama açılış yükünü şişirmesin diye) hiçbir kontrole girmez. Sonuç:
+  // davranış değiştiren bir ayar panelde HİÇ YÜZEYİ OLMADAN yaşayabilir ve tüm
+  // bekçiler yeşil kalır.
+  //
+  // ÖLÇÜLDÜ (2026-08-15 envanteri): `shipping.toleranceMeters` tam bu
+  // durumdaydı — sipariş kaleminin "TAMAMLANDI" eşiğini belirliyor
+  // (`order-status.helper.recomputeOrderStatus`, varsayılan 5 m) ve panelde
+  // hiçbir ekrandan değiştirilemiyordu; tek yol ham `PUT /api/admin/settings/:key`
+  // ucuydu ve onu çağıran bir yüzey yoktu.
+  //
+  // KURAL: her `SETTING_KEYS` satırı ya (a) feature-flag yükünden okunur, ya da
+  // (b) burada GEREKÇE + KANIT ile muaftır. Kanıt bir dosya + o dosyada bulunması
+  // gereken bir metindir; yüzey silinirse bekçi kırmızı verir (ölü muaf, gerçek
+  // bir ihlali sessizce kapsam dışında tutar).
+  const REPO_ROOT = path.resolve(__dirname, "../..");
+  const NON_FLAG_SETTING_SURFACE: Record<
+    string,
+    { why: string; file: string; needle: string }
+  > = {
+    SHIPPING_TOLERANCE_METERS: {
+      why: "Panel: Genel Ayarlar → Siparişler → 'Sipariş tamamlanma toleransı' (settingFields)",
+      file: "Electron/src/pages/GeneralSettings/settings-config.ts",
+      needle: "RAW_SETTING_KEYS.SHIPPING_TOLERANCE_METERS",
+    },
+    ORDER_DEFAULT_DEADLINE_DAYS: {
+      why: "Panel: Genel Ayarlar → Siparişler → 'Sipariş termini varsayılanı' (settingFields)",
+      file: "Electron/src/pages/GeneralSettings/settings-config.ts",
+      needle: "RAW_SETTING_KEYS.ORDER_DEFAULT_DEADLINE_DAYS",
+    },
+    WORKORDER_DEFAULT_PLAN_DURATION_DAYS: {
+      why: "Panel: Genel Ayarlar → İş Emirleri → 'Planlama süresi varsayılanı' (settingFields)",
+      file: "Electron/src/pages/GeneralSettings/settings-config.ts",
+      needle: "RAW_SETTING_KEYS.WORKORDER_DEFAULT_PLAN_DURATION_DAYS",
+    },
+    DOCUMENTS_LOGO: {
+      why: "Kendi ucu var (base64 yükü flag payload'ına konmaz); panel Şirket Bilgileri kartından yazar",
+      file: "Teks-Erp/src/routes/feature-flag.routes.ts",
+      needle: "/documents-logo",
+    },
+    BACKUP_OFFSITE_REMOTE: {
+      why: "Panel: Sistem → Yedekler → Offsite Yedek kartı (PATCH /api/admin/backups/offsite)",
+      file: "Teks-Erp/src/routes/admin.routes.ts",
+      needle: "SETTING_KEYS.BACKUP_OFFSITE_REMOTE",
+    },
+    BACKUP_OFFSITE_DIR: {
+      why: "Panel: Sistem → Yedekler → Offsite Yedek kartı (PATCH /api/admin/backups/offsite)",
+      file: "Teks-Erp/src/routes/admin.routes.ts",
+      needle: "SETTING_KEYS.BACKUP_OFFSITE_DIR",
+    },
+  };
+
+  // `getFeatureFlags` gövdesinden çağrılan okuyucular → okudukları SETTING_KEYS.
+  // İKİ HOP çünkü tek hop yetmiyor: gövde `apiKey: await readX(...)` yazar,
+  // anahtarın kendisi `readX`in İÇİNDEDİR.
+  const svc = readFileSync(SERVICE_SRC, "utf8");
+  const gffBody = (() => {
+    const start = svc.indexOf("async getFeatureFlags(");
+    const end = svc.indexOf("\n  }", start);
+    return start >= 0 && end > start ? svc.slice(start, end) : "";
+  })();
+  const readersInGff = [...new Set([...gffBody.matchAll(/\b(read[A-Z]\w*)\s*\(/g)].map((m) => m[1]!))];
+  const readerBody = (name: string): string => {
+    const re = new RegExp(`export (?:async )?function ${name}\\(`);
+    const at = svc.search(re);
+    if (at < 0) return "";
+    const end = svc.indexOf("\n}", at);
+    return end > at ? svc.slice(at, end) : "";
+  };
+  const coveredConsts = new Set<string>();
+  for (const r of readersInGff) {
+    for (const m of readerBody(r).matchAll(/SETTING_KEYS\.([A-Z0-9_]+)/g)) coveredConsts.add(m[1]!);
+  }
+
+  check(
+    "zemin: getFeatureFlags gövdesinden ≥ 25 okuyucu çözüldü",
+    readersInGff.length >= 25,
+    `okuyucu=${readersInGff.length} — gövde ayrıştırılamadıysa §11/§12 vakumen yeşil kalır`,
+  );
+  check(
+    "zemin: okuyucular üzerinden ≥ 25 SETTING_KEYS satırı kapsandı",
+    coveredConsts.size >= 25,
+    `kapsanan=${coveredConsts.size}`,
+  );
+
+  const allConsts = Object.keys(SETTING_KEYS);
+  const uncovered = allConsts.filter(
+    (c) => !coveredConsts.has(c) && !NON_FLAG_SETTING_SURFACE[c],
+  );
+  check(
+    "⭐ her SETTING_KEYS satırı ya feature-flag yükünde ya gerekçeli muaf listesinde",
+    uncovered.length === 0,
+    `YÜZEYSİZ olabilir: ${uncovered.join(", ")} → panele yüzey ekle ya da gerekçeli muaf yaz`,
+  );
+
+  // Muaf BAYATLIĞI — iki yönlü.
+  const staleSurfaceKeys = Object.keys(NON_FLAG_SETTING_SURFACE).filter(
+    (c) => !allConsts.includes(c),
+  );
+  check(
+    "muaf listesinde artık var olmayan SETTING_KEYS yok",
+    staleSurfaceKeys.length === 0,
+    `SETTING_KEYS'te yok: ${staleSurfaceKeys.join(", ")}`,
+  );
+  const nowCovered = Object.keys(NON_FLAG_SETTING_SURFACE).filter((c) => coveredConsts.has(c));
+  check(
+    "muaf listesindeki anahtar flag yüküne alınmamış (alındıysa muafı kaldır)",
+    nowCovered.length === 0,
+    `artık flag yükünde: ${nowCovered.join(", ")}`,
+  );
+
+  // KANIT — muafın söylediği yüzey GERÇEKTEN var mı.
+  const brokenProofs = Object.entries(NON_FLAG_SETTING_SURFACE).flatMap(([c, s]) => {
+    const abs = path.resolve(REPO_ROOT, s.file);
+    if (!existsSync(abs)) return [`${c}(dosya yok: ${s.file})`];
+    return readFileSync(abs, "utf8").includes(s.needle) ? [] : [`${c}(iz yok: ${s.needle})`];
+  });
+  check(
+    "⭐ muaf edilen her anahtarın YÜZEYİ hâlâ yerinde (kanıt taraması)",
+    brokenProofs.length === 0,
+    brokenProofs.join(", "),
+  );
+
+  // ---------------------------------------------------------------------------
+  // 12) PANELDEKİ "VARSAYILAN" ROZETİ ↔ BACKEND OKUYUCUSUNUN GERÇEK VARSAYILANI
+  // ---------------------------------------------------------------------------
+  // Panel her satırın altına "Varsayılan: AÇIK/KAPALI" basıyor. Bu bir BEYANDIR
+  // ve beyan ikinci bir kaynaktır: `batchShortNumberEnabled` (AÇIK) ile
+  // `tamburOverQuantityEnabled` (AÇIK) dışındaki her şey KAPALI olduğu için
+  // yanlış yazmak kolay, fark etmek imkânsızdır. Burada beyan ÖLÇÜLÜR: ilgili
+  // okuyucu, "kayıt yok" diyen sahte istemciyle çağrılır (§10 emsali) — canlı
+  // DB'deki değere BAKILMAZ, çünkü birinin panelden açtığı bir dev kurulumu
+  // sahte kırmızı üretirdi.
+  const emptyClient2 = {
+    systemSetting: { findUnique: () => Promise.resolve(null) },
+  } as unknown as Pick<typeof prisma, "systemSetting">;
+
+  // apiKey → okuyucu adı (gövdedeki `apiKey: await readX(` yazımı; çok satırlı
+  // sarma da eşleşsin diye araya boşluk/satır sonu serbest).
+  const readerByApiKey = new Map<string, string>();
+  for (const m of gffBody.matchAll(/(\w+):\s*await\s+(read[A-Z]\w*)\s*\(/g)) {
+    readerByApiKey.set(m[1]!, m[2]!);
+  }
+
+  // Panelin beyanı: `key: "X"` satırından SONRAKİ ilk `defaultOn:` değeri.
+  const declaredDefaults = new Map<string, boolean>();
+  if (electronFound) {
+    const cfg = readFileSync(ELECTRON_CONFIG, "utf8");
+    // ⚠️ ARADAKİ BAŞKA BİR `key:` SATIRI GEÇİLEMEZ. Düz `[\s\S]{0,4000}?` yazımı
+    // ilk denemede tam bu yüzden yanlış eşleşti: `defaultOn` TAŞIMAYAN bir satır
+    // (sayısal `financeDefaultVatRate`), kendinden SONRAKİ bir bayrağın
+    // `defaultOn`ını sahiplendi ve bekçi sahte kırmızı verdi.
+    for (const m of cfg.matchAll(
+      /key:\s*"([^"]+)"(?:(?!key:\s*")[\s\S])*?defaultOn:\s*(true|false)/g,
+    )) {
+      if (!declaredDefaults.has(m[1]!)) declaredDefaults.set(m[1]!, m[2] === "true");
+    }
+  }
+  check(
+    "zemin: panelde ≥ 20 `defaultOn` beyanı okundu",
+    !electronFound || declaredDefaults.size >= 20,
+    `beyan=${declaredDefaults.size}`,
+  );
+
+  const defaultMismatches: string[] = [];
+  const unreadable: string[] = [];
+  for (const [key, declared] of declaredDefaults) {
+    const readerName = readerByApiKey.get(key);
+    const fn = readerName
+      ? (systemSettingModule as unknown as Record<string, unknown>)[readerName]
+      : undefined;
+    if (typeof fn !== "function") {
+      unreadable.push(`${key}${readerName ? `(${readerName} export değil)` : "(okuyucu çözülemedi)"}`);
+      continue;
+    }
+    const actual = await (fn as (c: unknown) => Promise<unknown>)(emptyClient2);
+    if (actual !== declared) {
+      defaultMismatches.push(`${key}: panel=${declared} ↔ backend=${String(actual)}`);
+    }
+  }
+  check(
+    "⭐ panelin 'Varsayılan' rozeti backend okuyucusuyla birebir",
+    defaultMismatches.length === 0,
+    defaultMismatches.join(" · "),
+  );
+  check(
+    "her panel satırının okuyucusu getFeatureFlags'ten çözülebiliyor",
+    unreadable.length === 0,
+    unreadable.join(", "),
+  );
+
+  // ---------------------------------------------------------------------------
+  // 13) PANELİN HAM SYSTEM-SETTING ALANLARI ↔ BACKEND SETTING_KEYS
+  // ---------------------------------------------------------------------------
+  // Panel `settingFields` satırlarını ham anahtarla yazar. Anahtar adı ya da
+  // DEĞERİ ayrışırsa panel `system_settings`e kimsenin OKUMADIĞI bir satır yazar:
+  // ekran "kaydedildi" der, davranış hiç değişmez, hata hiçbir yerde görünmez.
+  const ELECTRON_SETTING_SERVICE = path.resolve(
+    __dirname,
+    "../../Electron/src/services/systemSettingService.ts",
+  );
+  if (electronFound && existsSync(ELECTRON_SETTING_SERVICE)) {
+    const cfg = readFileSync(ELECTRON_CONFIG, "utf8");
+    const usedConsts = [
+      ...new Set([...cfg.matchAll(/RAW_SETTING_KEYS\.([A-Z0-9_]+)/g)].map((m) => m[1]!)),
+    ];
+    check(
+      "zemin: panelde ≥ 3 ham system-setting alanı var",
+      usedConsts.length >= 3,
+      `bulunan=${usedConsts.length}`,
+    );
+    const unknownConsts = usedConsts.filter((c) => !allConsts.includes(c));
+    check(
+      "panelin kullandığı her ham ayar anahtarı backend SETTING_KEYS'te var",
+      unknownConsts.length === 0,
+      `backend'de yok: ${unknownConsts.join(", ")}`,
+    );
+
+    const elecSrc = readFileSync(ELECTRON_SETTING_SERVICE, "utf8");
+    const elecValues = new Map<string, string>();
+    for (const m of elecSrc.matchAll(/^\s+([A-Z0-9_]+):\s*"([^"]+)"/gm)) {
+      elecValues.set(m[1]!, m[2]!);
+    }
+    const valueDrift = usedConsts.filter((c) => {
+      const backend = (SETTING_KEYS as Record<string, string>)[c];
+      return elecValues.get(c) !== backend;
+    });
+    check(
+      "⭐ panel aynasındaki ham anahtar DEĞERLERİ backend ile birebir",
+      valueDrift.length === 0,
+      valueDrift
+        .map(
+          (c) =>
+            `${c}: panel="${elecValues.get(c) ?? "—"}" ↔ backend="${(SETTING_KEYS as Record<string, string>)[c]}"`,
+        )
+        .join(" · "),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // 14) ⭐ REJİMLE GİZLENEN AYAR, REJİMSİZ BİR YOLDAN HÂLÂ TETİKLENİYOR MU?
+  // ---------------------------------------------------------------------------
+  // VAKA (2026-08-15): panelin "Depo & Satın Alma" sekmesi `financeEnabled`
+  // kapısının arkasına alındı. Ama Mal Kabul ekranı O KAPIYA BAĞLI DEĞİL —
+  // `goods-receipt.routes.ts` `requireFinanceEnabled` TAŞIMAZ ve karo yalnız
+  // izinle süzülür. Sonuç: "mal kabul satırında birim fiyat zorunlu" ayarını
+  // açıp ön muhasebeyi bırakan firmada fişler 400 almaya DEVAM eder ve bayrağı
+  // kapatacak hiçbir ekran kalmaz (tek yol ham `PUT /api/admin/settings/:key`).
+  // Simetrik hâli: ön muhasebe kullanmayan ama mal kabul kullanan firma o ayarı
+  // hiç AÇAMAZ. Sınıf tanıdık — "asıl tehlike açamamak değil KAPATAMAMAK".
+  //
+  // KURAL: bir ayarı rejimle gizlemek ancak ENFORCEMENT'ı o rejim kapalıyken
+  // ULAŞILAMAZ ise meşrudur. Burada ölçülür, beyan edilmez: `src/` import
+  // grafiği kurulur, REJİMSİZ route dosyalarından BFS yapılır (kendi
+  // `readXEnabled()` kapısını taşıyan dosyada durulur) ve panelde gizlenen her
+  // bayrağın okuyucusunu tüketen dosya bu kümede mi diye bakılır.
+  //
+  // ⚠️ `productionEnabled` bugün hiçbir kategoriyi kapılayamaz ve bu KURALIN
+  // SONUCUDUR, ayrı bir istisna değil: backend'de `requireProductionEnabled`
+  // diye bir middleware yoktur → hiçbir yol kapalı değildir → her tüketici
+  // ulaşılabilir çıkar. Gün gelir üretim yüzeyleri gerçekten rejime alınırsa
+  // bu bölüm kendiliğinden izin verir.
+  const SRC_ROOT = path.resolve(__dirname, "../src");
+  const REGIME_GATES: Record<string, { middleware: string; selfGate: string }> = {
+    financeEnabled: { middleware: "requireFinanceEnabled", selfGate: "readFinanceEnabled(" },
+    productionEnabled: {
+      middleware: "requireProductionEnabled",
+      selfGate: "readProductionEnabled(",
+    },
+  };
+
+  // --- src ağacı + import grafiği ---------------------------------------------
+  const { readdirSync, statSync } = await import("fs");
+  const srcFiles: string[] = [];
+  (function walk(dir: string) {
+    for (const e of readdirSync(dir)) {
+      const p = path.join(dir, e);
+      if (statSync(p).isDirectory()) walk(p);
+      else if (p.endsWith(".ts")) srcFiles.push(p);
+    }
+  })(SRC_ROOT);
+  const relOf = (f: string) => path.relative(SRC_ROOT, f).split(path.sep).join("/");
+  const srcText = new Map(srcFiles.map((f) => [relOf(f), readFileSync(f, "utf8")]));
+  const SETTING_SERVICE_REL = "services/system-setting.service.ts";
+
+  const importsOf = new Map<string, string[]>();
+  for (const [rel, text] of srcText) {
+    const dir = path.posix.dirname(rel);
+    const outs: string[] = [];
+    // ⚠️ DİNAMİK `import("./x")` DE SAYILIR. Yalnız statik `from "./x"` taransa
+    // grafik SESSİZCE eksik kalır ve sızıntı kontrolü sahte YEŞİL verir: bu
+    // bekçi yazılırken ölçüldü — `shipping.service` (rejimsiz) fatura taslağı
+    // kancasını `await import("./helpers/shipment-auto-draft.helper")` ile
+    // çağırıyor, yani statik grafikte o dosyaya HİÇ ulaşılamıyordu.
+    for (const m of text.matchAll(/(?:from\s+"|import\(\s*")(\.[^"]+)"/g)) {
+      const base = path.posix.normalize(path.posix.join(dir, m[1]!));
+      for (const cand of [`${base}.ts`, `${base}/index.ts`]) {
+        if (srcText.has(cand)) outs.push(cand);
+      }
+    }
+    importsOf.set(rel, outs);
+  }
+  const routeFiles = [...srcText.keys()].filter(
+    (r) => r.startsWith("routes/") && r.endsWith(".routes.ts"),
+  );
+
+  check(
+    "zemin: src ağacı ve import grafiği tarandı (≥300 dosya · ≥50 route)",
+    srcText.size >= 300 && routeFiles.length >= 50,
+    `dosya=${srcText.size} route=${routeFiles.length}`,
+  );
+
+  /** Bu rejim kapalıyken hâlâ ULAŞILABİLİR olan `src` dosyaları. */
+  const ungatedReach = (regime: string): Set<string> => {
+    const gate = REGIME_GATES[regime]!;
+    const reached = new Set<string>();
+    const queue = routeFiles.filter((r) => !srcText.get(r)!.includes(gate.middleware));
+    for (let i = 0; i < queue.length; i++) {
+      for (const next of importsOf.get(queue[i]!) ?? []) {
+        // ⚠️ system-setting.service ATLANIR: her okuyucunun TANIMI orada yaşıyor;
+        // grafikte geçilirse "tüketici" kavramı anlamını yitirir.
+        if (next === SETTING_SERVICE_REL || reached.has(next)) continue;
+        // ⚠️ Kendi rejim kapısını taşıyan dosya BİR KAPIDIR: içine girilmez.
+        // `shipment-auto-draft.helper` tam bu durumda — rejimsiz sevk yolundan
+        // çağrılıyor ama ilk ifadesi `readFinanceEnabled()`.
+        if (srcText.get(next)!.includes(gate.selfGate)) continue;
+        reached.add(next);
+        queue.push(next);
+      }
+    }
+    return reached;
+  };
+
+  // --- panelin gizlediği bayraklar -------------------------------------------
+  // Kategori blokları 4 boşluk girintili `id:`/`regime:`, satırlar 8 boşluk
+  // girintili `key:` ile yazılır (bkz. `SETTINGS_CATEGORIES`).
+  type PanelCat = { id: string; regime?: string; flagKeys: string[]; rawConsts: string[] };
+  const panelCats: PanelCat[] = [];
+  if (electronFound) {
+    const cfg = readFileSync(ELECTRON_CONFIG, "utf8");
+    const catStart = cfg.indexOf("export const SETTINGS_CATEGORIES");
+    const body = catStart >= 0 ? cfg.slice(catStart) : "";
+    // Kategori sınırı: 4 boşluk girintili `id: "..."` satırı.
+    const marks = [...body.matchAll(/^ {4}id:\s*"([^"]+)",$/gm)];
+    for (let i = 0; i < marks.length; i++) {
+      const from = marks[i]!.index!;
+      const to = i + 1 < marks.length ? marks[i + 1]!.index! : body.length;
+      const block = body.slice(from, to);
+      panelCats.push({
+        id: marks[i]![1]!,
+        regime: /^ {4}regime:\s*"([^"]+)",$/m.exec(block)?.[1],
+        flagKeys: [...block.matchAll(/^ {8}key:\s*"([^"]+)",$/gm)].map((m) => m[1]!),
+        rawConsts: [...block.matchAll(/RAW_SETTING_KEYS\.([A-Z0-9_]+)/g)].map((m) => m[1]!),
+      });
+    }
+  }
+  const gatedCats = panelCats.filter((c) => c.regime);
+  check(
+    "zemin: panel kategorileri ayrıştırıldı (≥12 kategori · ≥25 satır · ≥1 rejim kapılı)",
+    !electronFound ||
+      (panelCats.length >= 12 &&
+        panelCats.reduce((n, c) => n + c.flagKeys.length, 0) >= 25 &&
+        gatedCats.length >= 1),
+    `kategori=${panelCats.length} satır=${panelCats.reduce((n, c) => n + c.flagKeys.length, 0)} kapılı=${gatedCats.length} — ayrıştırma bozulduysa §14 vakumen yeşil kalır`,
+  );
+
+  // Bilinmeyen rejim adı = sessiz kapsam dışı kalma; açıkça düşür.
+  const unknownRegimes = gatedCats.filter((c) => !REGIME_GATES[c.regime!]);
+  check(
+    "panelin kullandığı her rejim anahtarının backend kapısı TANIMLI",
+    unknownRegimes.length === 0,
+    unknownRegimes.map((c) => `${c.id}→${c.regime}`).join(", "),
+  );
+
+  // Rejimin backend'de GERÇEKTEN bir kapısı var mı? Yoksa o rejimle hiçbir şey
+  // gizlenemez — ve bunu "0 route kapılı" diye söylemek, aşağıdaki sızıntı
+  // listesinden çok daha anlaşılır bir kırmızıdır.
+  for (const regime of new Set(gatedCats.map((c) => c.regime!))) {
+    const gate = REGIME_GATES[regime];
+    const gatedRoutes = gate
+      ? routeFiles.filter((r) => srcText.get(r)!.includes(gate.middleware))
+      : [];
+    check(
+      `rejim '${regime}' backend'de gerçekten bir kapı (≥1 route ${gate?.middleware ?? "?"} taşıyor)`,
+      gatedRoutes.length >= 1,
+      "kapı yoksa bu rejim hiçbir ayarı gizleyemez — ilgili kategoriden `regime` alanını kaldır",
+    );
+  }
+
+  // apiKey/ham anahtar → okuyucu adları
+  const readersForConst = (constName: string): string[] =>
+    [...svc.matchAll(/export (?:async )?function (read[A-Z]\w*)\(/g)]
+      .map((m) => m[1]!)
+      .filter((n) => readerBody(n).includes(`SETTING_KEYS.${constName}`));
+
+  const leaks: string[] = [];
+  for (const cat of gatedCats) {
+    const gate = REGIME_GATES[cat.regime!];
+    if (!gate) continue;
+    const reach = ungatedReach(cat.regime!);
+    const readerNames = [
+      ...cat.flagKeys.map((k) => readerByApiKey.get(k)).filter((n): n is string => !!n),
+      ...cat.rawConsts.flatMap(readersForConst),
+    ];
+    for (const reader of new Set(readerNames)) {
+      const re = new RegExp(`\\b${reader}\\b`);
+      const consumers = [...srcText.entries()]
+        .filter(([rel, text]) => rel !== SETTING_SERVICE_REL && !rel.startsWith("routes/") && re.test(text))
+        .map(([rel]) => rel);
+      const open = consumers.filter((c) => reach.has(c));
+      if (open.length > 0) {
+        leaks.push(`${cat.id}/${reader} → ${open.join(", ")}`);
+      }
+    }
+  }
+  check(
+    "⭐ rejimle gizlenen her ayarın enforcement'ı o rejim kapalıyken ULAŞILAMAZ",
+    leaks.length === 0,
+    leaks.length
+      ? `rejimsiz yoldan hâlâ tetiklenebiliyor (kategoriden 'regime' alanını kaldır): ${leaks.join(" · ")}`
+      : "",
+  );
+
+  console.log(
+    `\n   §14 — rejim kapılı kategoriler: ${gatedCats.map((c) => `${c.id}(${c.regime})`).join(", ") || "(yok)"}`,
+  );
+
+  // ---------------------------------------------------------------------------
+  console.log("\n   SETTING_KEYS muafları (feature-flag yükünde DÖNMEYEN, kendi yüzeyi olan):");
+  for (const [k, s] of Object.entries(NON_FLAG_SETTING_SURFACE)) {
+    console.log(`     · ${k} — ${s.why}`);
+  }
+
   console.log("\n   Muaflar (panelde generic toggle olarak görünmeyen boolean bayraklar):");
   for (const [k, why] of Object.entries(PANEL_EXEMPT)) {
     console.log(`     · ${k} — ${why}`);

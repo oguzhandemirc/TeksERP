@@ -24,6 +24,9 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const { multiWarehouse } = useMultiWarehouse();
   const flagsQuery = useFeatureFlags();
   const financeEnabled = flagsQuery.data?.data?.financeEnabled ?? false;
+  // Backend varsayılanı AÇIK — belirsizken de açık kabul edilir (panelin her
+  // yerindeki yazım: `productionEnabled ?? true`).
+  const productionEnabled = flagsQuery.data?.data?.productionEnabled ?? true;
 
   // Çıkış bekleyen sevkiyat SONDASI — yalnız karar bunu gerektiriyorsa koşar:
   // bayrak açıksa karo zaten görünür (sorgu gereksiz), izin yoksa uç 403 verir.
@@ -39,6 +42,7 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   return {
     shipmentConfirmationEnabled,
     financeEnabled,
+    productionEnabled,
     pendingPlannedShipments: pending.data?.data?.length ?? 0,
     // Tek kaynak `useMultiWarehouse` — karar burada YENİDEN hesaplanmaz
     // (kopyalansa biri gün gelir "aktif" süzgecini unuturdu).

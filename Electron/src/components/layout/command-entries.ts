@@ -10,6 +10,7 @@ import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
 } from "@/pages/GeneralSettings/settings-config";
+import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
@@ -136,6 +137,9 @@ export const commandSections: CommandSection[] = [
       // atan bir giriş, izni olmayan kullanıcıya "yetkim varmış ama bozuk"
       // dedirtir ("Kurşun Sırası" dersi, `visibleWhen` notu).
       permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
+      // Rejim yüklemi ayar ekranından TAŞINIR (kopyalanmaz): fabrikada gizli
+      // olan "Muhasebe" sekmesine palet derin bağlantı vermemeli.
+      visibleWhen: settingsCategoryVisibleWhen(cat),
       keywords: cat.keywords,
     })),
   },

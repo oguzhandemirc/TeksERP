@@ -106,6 +106,14 @@ bayrak JSDoc'unda uyarı). Bu cevap kullanım kılavuzuna/CLAUDE.md'ye yazılır
 ## D) BENZER SORUN TARAMASI — SONUÇLAR (6 mercek, 2026-08-15 04:30; tam rapor
 ## workflow çıktısında, burada uygulanacak damıtım)
 
+> **DURUM (2026-08-15 sabah): A1 + B + C1-C4 + SF1 + SF2 TAMAMLANDI** —
+> commitler: `a2fde551` (A1) · `400708aa` (C1 backend) · `9dc16510` (C2+C4
+> şema) · `59099b86` (B+C dalgası) · `98426b04` (SF dalgası). Çapraz
+> incelemeler toplam 13 bulguyu GERÇEK çıkarıp kapattı; en derinleri: sözleşme
+> fiyatı katmanının kart-fiyatı donması yüzünden ölü doğması (karar noktasına
+> taşındı) ve Türkçe aramanın İ/ı ailesinde iki-katman gereksinimi. E dalgası
+> (bayrak envanteri + Ayarlar yeniden düzeni) koşuyor.
+
 ### D-Yüksek (kodlanacak — dalga SF1 backend / SF2 panel)
 
 **SF1 (backend):**

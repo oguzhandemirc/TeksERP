@@ -29,6 +29,8 @@ function ctx(
     multiWarehouse: false,
     // Varsayılan FABRİKA rejimi (muhasebe kapalı) — Cariler karosu çizilmemeli.
     financeEnabled: false,
+    // Üretim modülü varsayılan AÇIK (backend default'u ile aynı yön).
+    productionEnabled: true,
     ...over,
   };
 }

@@ -66,6 +66,21 @@ export interface OperationsVisibilityContext {
    * karo titremesi demekti, ticarette yalnız kısa bir gecikme).
    */
   financeEnabled: boolean;
+  /**
+   * Üretim modülü açık mı (`production.enabled`, varsayılan AÇIK). Belirsizken
+   * TRUE'ya düşülür — backend varsayılanı da odur.
+   *
+   * ⚠️ ALAN LOAD-BEARING AMA BUGÜN HİÇBİR KARARI DEĞİŞTİRMİYOR, ve bu bilinçli:
+   * komut paletinin Genel Ayarlar girişleri `settingsCategoryVisibleWhen`
+   * yüklemini TAŞIYOR (kopyalamıyor) ve o yüklem `SettingsRegime` bekliyor —
+   * yani bu bağlamın iki rejim anahtarını da taşıması TİP ZORUNLULUĞU. Bugün
+   * hiçbir ayar kategorisi `productionEnabled` ile kapılı DEĞİL, çünkü backend'de
+   * `requireProductionEnabled` diye bir kapı yok ve o ayarların yönettiği
+   * davranışlar (KK1 tuzağı, scan-back, Tambur aşımı, parti no biçimi) bayrak
+   * kapalıyken de koşuyor — gizlemek yalnız geri dönüş yolunu kapatırdı.
+   * Ölçen bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14.
+   */
+  productionEnabled: boolean;
 }
 
 export interface OperationsTile {
