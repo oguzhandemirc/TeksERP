@@ -10,6 +10,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { foldCodeForCompare } from "../utils/code-format";
 
 const TABLE = "CUSTOMER_BRANCH";
 
@@ -42,6 +43,12 @@ async function assertBranchNameAvailable(
  * Aynı müşteride aynı şube İHRACAT KODUNA izin verme (opsiyonel; verilmişse
  * tekil). Kolon adı tarihsel `code`; kavramsal olarak şube ihracat kodudur —
  * bir müşterinin iki şubesinde aynı ihracat kodu büyük olasılıkla veri hatası.
+ *
+ * ⚠️ §18 (2026-08-15): katlama `foldNameForCompare` (tr-TR BÜYÜK) ile yapılıyordu —
+ * KOD İÇİN YANLIŞ. Türkçe kuralda `i → İ` olduğu için `"sip"` → `"SİP"`, `"SIP"`
+ * → `"SIP"` olur ve koruma tam da harf-farkı çiftinde SESSİZCE düşerdi. Kod
+ * kimliktir → yerel-bağımsız `foldCodeForCompare`. DB'deki
+ * `UNIQUE(customerId, code)` case-DUYARLI olduğu için tek koruma budur.
  */
 async function assertBranchCodeAvailable(
   customerId: string,
@@ -49,12 +56,12 @@ async function assertBranchCodeAvailable(
   excludeId?: string,
 ): Promise<void> {
   if (typeof code !== "string" || code.trim().length === 0) return;
-  const target = foldNameForCompare(code);
+  const target = foldCodeForCompare(code);
   const candidates = await prisma.customerBranch.findMany({
     where: { customerId, ...(excludeId ? { id: { not: excludeId } } : {}) },
     select: { code: true },
   });
-  if (candidates.some((b) => b.code != null && foldNameForCompare(b.code) === target)) {
+  if (candidates.some((b) => b.code != null && foldCodeForCompare(b.code) === target)) {
     throw AppError.conflict(`Bu müşteride '${code.trim()}' ihracat kodlu bir şube zaten var.`);
   }
 }
@@ -170,7 +177,7 @@ export class CustomerBranchService {
     }
     if (
       code !== undefined && code !== null &&
-      foldNameForCompare(code) !== foldNameForCompare(existing.code ?? "")
+      foldCodeForCompare(code) !== foldCodeForCompare(existing.code ?? "")
     ) {
       await assertBranchCodeAvailable(customerId, code, id);
     }

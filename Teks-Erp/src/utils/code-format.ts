@@ -111,6 +111,67 @@ export function isDailyCode(code: string, prefix: string, digits = 4): boolean {
   return re.test(code.toUpperCase());
 }
 
+/**
+ * KOD karşılaştırma anahtarı (tekillik kontrolü): `trim()` + iç boşluk tekleme +
+ * **i-AİLESİ ASCII'ye indirgeme** + **YEREL-BAĞIMSIZ** büyük harf. Depolanan
+ * değeri DEĞİŞTİRMEZ — yalnız "bu kod zaten var mı" sorusunu cevaplar.
+ *
+ * ⚠️ `foldNameForCompare` (name-normalize.helper) KOD İÇİN KULLANILAMAZ. O
+ * fonksiyon `toLocaleUpperCase("tr-TR")` yapar; Türkçe kuralda `i → İ` ve
+ * `I → I` olduğu için `"sip"` → `"SİP"`, `"SIP"` → `"SIP"` olur ve **tam da
+ * korunmak istenen harf-farkı çifti eşleşmez**. Canlı fabrika verisinde 218
+ * ürün kodunun 62'si `i/I` içeriyor (mitra, kristal, linen, piramit, victoria…)
+ * — yanlış katlama korumanın büyük kısmını doğar doğmaz öldürürdü.
+ *
+ * ⚠️⚠️ AMA DÜZ `toUpperCase()` DE YETMEZ (2026-08-15 denetim düzeltmesi) —
+ * TERS yönde aynı deliği açar ve o delik ölçüldü:
+ *   • `"İ".toUpperCase() === "İ"` (U+0130 sabit kalır) → `"İSTANBUL"` ile
+ *     `"istanbul"` ASLA eşleşmez. Bu, harf-duyarsızlığın en sık ihtiyaç duyulan
+ *     hâlidir ve `customer-branch` şube ihracat kodunda ZATEN ÇALIŞIYORDU
+ *     (orası eskiden tr-TR katlaması kullanıyordu) — düz `toUpperCase()`'e
+ *     geçmek orada var olan bir korumayı SESSİZCE kaybettirirdi.
+ *   • Kod alanında ASCII regex bulunmayan modeller (QualityGrade —
+ *     canlı kod `1.KALITE`, PeripheralDevice, SubcontractorCategory,
+ *     CustomerBranch) Türkçe harf kabul ediyor → `"1.KALİTE"` ikinci bir kimlik
+ *     olarak sessizce doğabilirdi. `Roll.qualityGrade` bir SNAPSHOT KOD olduğu
+ *     için etiketteki koşullu eleman (`label-elements.normalizeConditionValue`)
+ *     o topları hiç eşleştiremezdi: hata yok, log yok.
+ *
+ * Bu yüzden i-ailesi (`i ı İ I`) karşılaştırmadan ÖNCE tek bir `I`'ya indirgenir.
+ * Türkçe'de büyük/küçük eşlemesi İngilizce'den ayrışan **tek** harf ailesi budur;
+ * `ç/ğ/ö/ş/ü` düz `toUpperCase()` ile zaten doğru döner.
+ *
+ * ⚠️ BEDELİ BİLİNÇLİ: `AKıN` ile `AKIN` artık AYNI kod sayılır (yanlış pozitif →
+ * 409). Yön tercihi fail-closed: kimlik alanında "iki kayıt aynı kodu taşıyor"
+ * sessiz ve kalıcı bir hatadır, "farklı bir kod girin" ise ekranda okunan ve
+ * anında düzeltilebilen bir uyarıdır.
+ *
+ * İç boşluk teklenir (`"TR 34"` ≡ `"TR  34"`) — kod alanında boşluğa izin veren
+ * tek yüzey `CustomerBranch.code`'dur ve orada bu davranış tr-TR katlamasından
+ * MİRAS ALINMIŞTIR; kaldırmak yine sessiz bir koruma kaybı olurdu.
+ *
+ * Aynı ayrım repoda üç yerde daha yazılı (kod KİMLİKTİR, görüntü metni değil):
+ * `config/label-elements.normalizeConditionValue`, `helpers/fold-type.ts`,
+ * `fabric-property.service` değer kodu normalizasyonu. Bu, o kuralın kod
+ * tekilliğine uygulanmış hâlidir.
+ *
+ * ⚠️ Katlama PG'YE BIRAKILMAZ (`mode:'insensitive'` / ILIKE / `lower()`):
+ *   • Prisma `equals` + `mode:'insensitive'` **ILIKE** üretir → kullanıcının
+ *     yazdığı kod PATTERN olur; `CODE_REGEX` alt çizgiye izin verdiği için
+ *     `MUS_T10` arayan kullanıcı ilgisiz `MUSXT10` kaydına çarpıp SAHTE 409 alır.
+ *   • `upper()/lower()` kolonun COLLATION'ına bağlıdır → dev'de yeşil, sahada
+ *     kırmızı (ya da tersi) olabilir ve fark hiçbir yerde loglanmaz.
+ *   • i-ailesi indirgemesinin SQL karşılığı zaten yok.
+ * Karşılaştırma her zaman JS'te yapılır (base.service.ts:504-510 ile aynı kural).
+ */
+export function foldCodeForCompare(code: string): string {
+  return code
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[iıİI]/g, "I")
+    .toUpperCase();
+}
+
 // =============================================================================
 // KISA PARTİ NO — P01 … P99, körlemesine sarar (bayrak: batch.shortNumberEnabled)
 // =============================================================================

@@ -12,6 +12,13 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
 import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { foldCodeForCompare } from "../utils/code-format";
+import {
+  decideCodeUniqueness,
+  assertCodeAvailable,
+  type CodeCandidate,
+  type CodeUniquenessTexts,
+} from "./helpers/code-unique.helper";
 import {
   parseQueryParams,
   buildWhereClause,
@@ -50,6 +57,37 @@ async function assertSubNameAvailable(
       : `'${name.trim()}' adında PASİF bir ${label} zaten var (kod: ${hit.code}). Yenisini eklemek yerine mevcut kaydı aktifleştirin.`,
   );
 }
+
+/**
+ * KOD tekilliği (§18, 2026-08-15) — bu iki servis BaseService kullanmadığından
+ * tekilliğin kendi kopyasını taşıyor ve o kopya `findFirst({ where: { code } })`
+ * ile TAM EŞLEŞME arıyordu: `BOYER` ile `boyer` iki ayrı kimlik sayılıyordu.
+ * Kod bu sistemde KİMLİKTİR — harf büyüklüğü kimlik farkı değildir. Gerekçe +
+ * kapsam + tarihsel kayıt politikası: `helpers/code-unique.helper.ts` başlığı.
+ *
+ * Adaylar tek select ile çekilir (fason tabloları onlarca satır), katlama JS'te.
+ */
+async function loadSubCodeCandidates(
+  model: "subcontractor" | "subcontractorCategory",
+  excludeId?: string,
+): Promise<CodeCandidate[]> {
+  const where = excludeId ? { id: { not: excludeId } } : {};
+  const select = { id: true, code: true, name: true, isActive: true } as const;
+  return model === "subcontractor"
+    ? prisma.subcontractor.findMany({ where, select })
+    : prisma.subcontractorCategory.findMany({ where, select });
+}
+
+const SUB_CODE_TEXTS: CodeUniquenessTexts = {
+  // Eski cümle korunur; yeni bilgi arkasına eklenir. (Eskiden 400 dönüyordu —
+  // F43 standardı duplicate = 409 Conflict der, helper onu uygular.)
+  activeExactLead: "Bu kod ile aktif fason firma zaten var",
+  entityLabel: "fason firma",
+};
+const SUB_CATEGORY_CODE_TEXTS: CodeUniquenessTexts = {
+  activeExactLead: "Bu kod ile aktif kategori zaten var",
+  entityLabel: "fason kategorisi",
+};
 
 /**
  * Aynı vergi numaralı (VKN/TCKN) ikinci fason firmaya izin verme (müşteri
@@ -132,17 +170,20 @@ export class SubcontractorCategoryService {
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    const existing = await prisma.subcontractorCategory.findFirst({
-      where: { code: data.code },
-    });
-    if (existing?.isActive) {
-      throw AppError.badRequest("Bu kod ile aktif kategori zaten var");
-    }
+    // §18: kod tekilliği harf-duyarsız. TAM eşleşmeli aktif kayıt → 409; TAM
+    // eşleşmeli pasif kayıt → diriltme; YALNIZ harf farkıyla eşleşme → 409
+    // (diriltme yok — gerekçe `decideCodeUniqueness` docstring'inde).
+    const decision = decideCodeUniqueness(
+      data.code,
+      await loadSubCodeCandidates("subcontractorCategory"),
+      SUB_CATEGORY_CODE_TEXTS,
+    );
+    const existing = decision.kind === "REACTIVATE" ? decision.target : null;
     await assertSubNameAvailable(
       "subcontractorCategory",
       "fason kategorisi",
       data.name,
-      existing && !existing.isActive ? existing.id : undefined,
+      existing ? existing.id : undefined,
     );
 
     const cat = existing
@@ -199,6 +240,19 @@ export class SubcontractorCategoryService {
       foldNameForCompare(data.name) !== foldNameForCompare(before.name)
     ) {
       await assertSubNameAvailable("subcontractorCategory", "fason kategorisi", data.name, id);
+    }
+    // §18: kod tekilliği — YALNIZ kod gerçekten (katlanmış hâliyle) değişirken.
+    // Tarihsel ikizin kendisi düzenlenebilir kalsın diye ad guard'ıyla aynı kural.
+    if (
+      typeof data.code === "string" &&
+      before &&
+      foldCodeForCompare(data.code) !== foldCodeForCompare(before.code)
+    ) {
+      assertCodeAvailable(
+        data.code,
+        await loadSubCodeCandidates("subcontractorCategory", id),
+        SUB_CATEGORY_CODE_TEXTS,
+      );
     }
     const cat = await prisma.subcontractorCategory.update({ where: { id }, data });
     await AuditService.log({
@@ -418,29 +472,28 @@ export class SubcontractorManagementService {
     if (address !== undefined) payload.address = address;
     if (typeof rest.isFavorite === "boolean") payload.isFavorite = rest.isFavorite;
 
-    const existing = await prisma.subcontractor.findFirst({
-      where: { code: payload.code },
-      select: { id: true, isActive: true },
-    });
-    if (existing?.isActive) {
-      throw AppError.badRequest("Bu kod ile aktif fason firma zaten var");
-    }
+    // §18: kod tekilliği harf-duyarsız. TAM eşleşmeli aktif kayıt → 409; TAM
+    // eşleşmeli pasif kayıt → diriltme; YALNIZ harf farkıyla eşleşme → 409
+    // (diriltme yok — gerekçe `decideCodeUniqueness` docstring'inde).
+    const decision = decideCodeUniqueness(
+      payload.code,
+      await loadSubCodeCandidates("subcontractor"),
+      SUB_CODE_TEXTS,
+    );
+    const existing = decision.kind === "REACTIVATE" ? decision.target : null;
     await assertSubNameAvailable(
       "subcontractor",
       "fason firma",
       payload.name,
-      existing && !existing.isActive ? existing.id : undefined,
+      existing ? existing.id : undefined,
     );
     if (payload.taxNumber != null) {
-      await assertSubTaxAvailable(
-        payload.taxNumber,
-        existing && !existing.isActive ? existing.id : undefined,
-      );
+      await assertSubTaxAvailable(payload.taxNumber, existing ? existing.id : undefined);
     }
 
     const sub = await prisma.$transaction(async (tx) => {
       let createdId: string;
-      if (existing && !existing.isActive) {
+      if (existing) {
         // F87: reaktivasyonu atomik claim'e çevir — eşzamanlı iki istek birbirini
         // sessizce ezmesin; kaybeden 'aktif zaten var' 409 alır.
         const claim = await tx.subcontractor.updateMany({
@@ -547,6 +600,19 @@ export class SubcontractorManagementService {
       foldNameForCompare(rest.name) !== foldNameForCompare(before.name)
     ) {
       await assertSubNameAvailable("subcontractor", "fason firma", rest.name, id);
+    }
+    // §18: kod tekilliği — YALNIZ kod gerçekten (katlanmış hâliyle) değişirken
+    // (tarihsel ikiz düzenlenebilir kalsın; ad guard'ıyla aynı kural).
+    if (
+      typeof rest.code === "string" &&
+      before &&
+      foldCodeForCompare(rest.code) !== foldCodeForCompare(before.code)
+    ) {
+      assertCodeAvailable(
+        rest.code,
+        await loadSubCodeCandidates("subcontractor", id),
+        SUB_CODE_TEXTS,
+      );
     }
     // Vergi no yalnız gerçekten değişirken kontrol (tarihsel mükerrer düzenlenebilir).
     if (

@@ -15,7 +15,10 @@ function check(label: string, ok: boolean, extra = ""): void {
 const svc = new SubcontractorManagementService();
 const stamp = Date.now().toString(36);
 const CODE = `TEST-SUBMGMT-${stamp}`;
-const is400 = (e: unknown) => e instanceof AppError && e.statusCode === 400;
+// §18 (2026-08-15): kod-mükerrer artık 409 Conflict — F43 standardı ("duplicate
+// = 409"; 400 dönüşü Swagger sözleşmesinden sapmaydı ve BaseService/Item zaten
+// 409 veriyordu). Kontrol harf-duyarsız hâle gelirken bu sapma da kapatıldı.
+const is409 = (e: unknown) => e instanceof AppError && e.statusCode === 409;
 async function catSet(id: string): Promise<Set<string>> {
   const rows = await prisma.subcontractorToCategory.findMany({ where: { subcontractorId: id }, select: { categoryId: true } });
   return new Set(rows.map((r) => r.categoryId));
@@ -33,9 +36,17 @@ async function main(): Promise<void> {
     subId = (r1.data as { id: string }).id;
     check("create → {c1,c2} tam bağ", eqSet(await catSet(subId), [c1.id, c2.id]));
 
-    // 2) aktif duplicate code → 400
+    // 2) aktif duplicate code → 409
     let dup: unknown; try { await svc.create({ code: CODE, name: "X", categoryIds: [] }, undefined); } catch (e) { dup = e; }
-    check("aktif duplicate code → 400", is400(dup));
+    check("aktif duplicate code → 409", is409(dup));
+    // 2b) §18: aynı kod HARF FARKIYLA da reddedilir (kod kimliktir)
+    let dupCase: unknown;
+    try { await svc.create({ code: CODE.toLowerCase(), name: "X2", categoryIds: [] }, undefined); } catch (e) { dupCase = e; }
+    check(
+      "harf farkıyla duplicate code → 409",
+      is409(dupCase) && (dupCase as AppError).message.includes("büyük/küçük harf"),
+      dupCase instanceof AppError ? dupCase.message : String(dupCase),
+    );
 
     // 3) soft-remove (isActive=false, fiziksel DELETE yok)
     await svc.remove(subId, undefined);

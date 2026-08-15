@@ -24,6 +24,12 @@ import {
 import { nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
+import {
+  decideCodeUniqueness,
+  lockCodeScopeTx,
+  type CodeCandidate,
+  type CodeUniquenessTexts,
+} from "./helpers/code-unique.helper";
 
 export interface ItemCreateInput {
   /** Boş/verilmezse backend `STK-NNNNNN` üretir; doluysa manuel kod kabul edilir. */
@@ -51,12 +57,54 @@ const ITEM_NAME_MAX_LEN = 100;
 const ITEM_CODE_SCAN_RE = /^STK-\d{1,12}$/;
 
 /**
+ * Kod tekilliği metinleri + kilit kapsamı (§18, 2026-08-15).
+ *
+ * SAHA VAKASI: canlıda `SANTUK` (ad: BORANCIK) ile `santuk` (ad: ŞANTUK) aynı
+ * kodu taşıyor — İKİ FARKLI ÜRÜN. Ad-mükerrer guard'ı bunu YAKALAYAMAZ (adlar
+ * gerçekten farklı), kod guard'ı da yakalamıyordu çünkü `findFirst({ code })`
+ * TAM EŞLEŞME arıyordu. Bu sistemde kod KİMLİKTİR (etikete basılır, belgede
+ * görünür) → harf büyüklüğü kimlik farkı sayılmaz. Ayrıntı + kapsam + tarihsel
+ * kayıt politikası: `helpers/code-unique.helper.ts` dosya başlığı.
+ *
+ * ⚠️ `activeExactLead` metni bilinçli olarak KORUNDU ("Bu kod ile aktif ürün
+ * zaten var") — Swagger sözleşmesi ve `scripts/test_item_code_autogen.ts` §C2
+ * o cümleye bakıyor; yeni bilgi cümlenin ARKASINA eklenir.
+ */
+const ITEM_CODE_TEXTS: CodeUniquenessTexts = {
+  activeExactLead: "Bu kod ile aktif ürün zaten var",
+  entityLabel: "ürün",
+};
+const ITEM_CODE_LOCK_SCOPE = "item";
+/** Kod çakışması araması: tüm ürünler tek select ile çekilir, katlama JS'te yapılır
+ *  (assertNameNotDuplicate emsali — `items` master tablosu birkaç yüz satır). */
+const ITEM_CODE_CANDIDATE_SELECT = {
+  id: true,
+  code: true,
+  name: true,
+  isActive: true,
+} as const;
+
+/**
  * Sıradaki stok kodu: `STK-000001` gibi. OZL/MUS gündelik-kod deseninin tarihsiz
  * hali — tek global sayaç, kaynak items tablosunun kendisi (MAX+1). collation-güvenli
  * sorgu (gte + startsWith); `STK-` ile başlayıp sayısal parse edilemeyen manuel
  * kodlar max hesabında atlanır (nextDailySeq sözleşmesi). Eşzamanlı çakışma (P2002)
  * çağırandaki withBarcodeRetry ile taze max okunarak telafi edilir.
  */
+/**
+ * Kod çakışmasını çözer: aktif eş → 409 fırlatır, pasif eş → diriltilecek kayıt,
+ * eş yok → `null`. `decideCodeUniqueness`in Item'a özel ince sarmalayıcısı —
+ * aynı karar hem tx ÖNCESİ (ucuz 409) hem tx İÇİNDE (kilit altında, nihai)
+ * verilsin ve iki yer ayrışmasın diye tek fonksiyon.
+ */
+function resolveReactivateTarget(
+  code: string,
+  candidates: CodeCandidate[],
+): CodeCandidate | null {
+  const decision = decideCodeUniqueness(code, candidates, ITEM_CODE_TEXTS);
+  return decision.kind === "REACTIVATE" ? decision.target : null;
+}
+
 async function nextItemCode(): Promise<string> {
   const rows = await prisma.item.findMany({
     where: { code: { gte: ITEM_CODE_PREFIX, startsWith: ITEM_CODE_PREFIX } },
@@ -121,26 +169,25 @@ export class ItemService extends BaseService {
     const allowedColorIds = [...new Set(input.allowedColorIds ?? [])];
     const allowedPropertyIds = [...new Set(input.allowedPropertyIds ?? [])];
 
-    // Reactivate kontrolü (yalnız manuel kod): aynı code ile pasif kayıt varsa
-    // diriltir. Otomatik kod her zaman taze üretilir — mevcutla eşleşemez.
+    // Kod çakışması / reactivate kontrolü (yalnız manuel kod) — HARF-DUYARSIZ
+    // (§18). Aktif eş → 409 (Swagger sözleşmesi + F43: duplicate = 409 Conflict);
+    // pasif eş → diriltme. Otomatik kod her zaman taze üretilir, mevcutla
+    // eşleşemez → tarama hiç koşmaz.
+    //
+    // Bu ön kontrol UCUZ 409 + ad-guard'ının excludeId'si içindir; NİHAİ KARAR
+    // tx içinde, advisory kilidin ARDINDAN yeniden verilir (aşağı).
     const existing = manualCode
-      ? await prisma.item.findFirst({
-          where: { code: manualCode },
-          select: { id: true, isActive: true },
-        })
+      ? resolveReactivateTarget(
+          manualCode,
+          await prisma.item.findMany({ select: ITEM_CODE_CANDIDATE_SELECT }),
+        )
       : null;
-    if (existing?.isActive) {
-      // Swagger sözleşmesi + BaseService F43 standardı: duplicate = 409 Conflict.
-      throw AppError.conflict("Bu kod ile aktif ürün zaten var");
-    }
 
     // Ad-mükerrer koruması — create super.create'e girmeyen custom yol olduğundan
     // BaseService kancası burada elle çağrılır; reactivate'te diriltilen kaydın
-    // kendi adı hariç tutulur.
-    await this.assertNameNotDuplicate(
-      data,
-      existing && !existing.isActive ? existing.id : undefined,
-    );
+    // kendi adı hariç tutulur (`resolveReactivateTarget` yalnız PASİF eş döner —
+    // aktif eşte zaten 409 fırlatmış olurdu).
+    await this.assertNameNotDuplicate(data, existing ? existing.id : undefined);
 
     if (allowedColorIds.length > 0) {
       const colors = await prisma.color.findMany({
@@ -175,25 +222,42 @@ export class ItemService extends BaseService {
     // Otomatik kodda sequence okuma retry kapsamı İÇİNDE — P2002'de taze max
     // okunur. Manuel kod P2002'si retry edilmez (hep aynı değeri yazar), error
     // middleware'i anlamlı 409'a çevirir.
-    const created = await withBarcodeRetry(
+    const result = await withBarcodeRetry(
       async () => {
         const code = manualCode ?? (await nextItemCode());
         return prisma.$transaction(async (tx) => {
-          if (existing && !existing.isActive) {
+          // ⚠️ KİLİT tx'in İLK ifadesi ve KOD TARAMASINDAN ÖNCE (§18). Tam-eşleşme
+          // yarışını `items_code_key` kapatıyor; KATLANMIŞ tekillikte DB'de
+          // karşılık YOK (bilinçli — 9 tarihsel satır sedi patlatırdı), yani
+          // eşzamanlı `sefa2` + `SEFA2` guard'ı ikisi de geçerdi. Kilit sonraya
+          // alınırsa hiçbir şey kazanılmaz (KK1 tuzağında birebir yaşandı).
+          // Otomatik kodda tarama zaten koşmuyor → kilit de alınmaz.
+          let target: CodeCandidate | null = null;
+          if (manualCode) {
+            await lockCodeScopeTx(tx, ITEM_CODE_LOCK_SCOPE, manualCode);
+            target = resolveReactivateTarget(
+              manualCode,
+              await tx.item.findMany({ select: ITEM_CODE_CANDIDATE_SELECT }),
+            );
+          }
+          if (target) {
             // Atomik claim: diriltme yalnız hâlâ pasifse — eşzamanlı ikinci istek
             // count=0 görüp 409 alır (findFirst→if→update check-then-act yasağı).
             const claimed = await tx.item.updateMany({
-              where: { id: existing.id, isActive: false },
+              where: { id: target.id, isActive: false },
               data: { isActive: true },
             });
             if (claimed.count === 0) {
               throw AppError.conflict("Bu kod ile aktif ürün zaten var");
             }
             // Reactivate: M:N'leri replace + güncel veri.
-            await tx.itemAllowedColor.deleteMany({ where: { itemId: existing.id } });
-            await tx.itemAllowedProperty.deleteMany({ where: { itemId: existing.id } });
-            return tx.item.update({
-              where: { id: existing.id },
+            // ⚠️ `code` YAZILMAZ ve YAZILMASINA GEREK YOK — `decideCodeUniqueness`
+            // yalnız TAM EŞLEŞMELİ pasif kaydı diriltir (harf farkı 409'dur), yani
+            // hedefin kodu gönderilen kodla zaten birebir aynıdır.
+            await tx.itemAllowedColor.deleteMany({ where: { itemId: target.id } });
+            await tx.itemAllowedProperty.deleteMany({ where: { itemId: target.id } });
+            const revived = await tx.item.update({
+              where: { id: target.id },
               data: {
                 name: input.name.trim(),
                 unit: (input.unit ?? "MT") as ItemUnit,
@@ -211,8 +275,9 @@ export class ItemService extends BaseService {
                 allowedProperties: { include: { property: true } },
               },
             });
+            return { record: revived, revivedFrom: target };
           }
-          return tx.item.create({
+          const fresh = await tx.item.create({
             data: {
               code,
               name: input.name.trim(),
@@ -235,15 +300,21 @@ export class ItemService extends BaseService {
               allowedProperties: { include: { property: true } },
             },
           });
+          return { record: fresh, revivedFrom: null as CodeCandidate | null };
         });
       },
       undefined,
       () => isAutoCode,
     );
 
+    // Diriltme kararının SAHİBİ tx içindeki (kilit altındaki) taze karardır;
+    // audit/mesaj da ondan okunur — ön kontrol ile ayrışırsa yanıt yalan söylerdi.
+    const created = result.record;
+    const revivedFrom = result.revivedFrom;
+
     await AuditService.log({
       userId,
-      action: existing ? "UPDATE" : "CREATE",
+      action: revivedFrom ? "UPDATE" : "CREATE",
       tableName: this.config.tableName,
       recordId: created.id,
       newData: {
@@ -252,7 +323,7 @@ export class ItemService extends BaseService {
         itemType: created.itemType,
         allowedColorIds,
         allowedPropertyIds,
-        ...(existing ? { reactivated: true } : {}),
+        ...(revivedFrom ? { reactivated: true } : {}),
         ...(opts?.pendingReview ? { pendingReview: true } : {}),
       },
     });
@@ -260,7 +331,7 @@ export class ItemService extends BaseService {
     return {
       success: true,
       data: created,
-      message: existing ? "Pasif ürün yeniden aktive edildi" : "Ürün oluşturuldu",
+      message: revivedFrom ? "Pasif ürün yeniden aktive edildi" : "Ürün oluşturuldu",
     };
   }
 

@@ -12,7 +12,7 @@ import { validateName, validateCode } from "../lib/string-validators";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
 import prisma from "../lib/prisma";
 import { OrderStatus } from "@prisma/client";
-import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
 /**
@@ -150,7 +150,9 @@ function validateAndShapeBranches(raw: unknown): InlineBranchData[] | undefined 
     seenNames.set(nameKey, idx);
     const code = optBranchStr(rec.code, "İhracat kodu", 50, idx);
     if (code) {
-      const codeKey = foldNameForCompare(code);
+      // §18: KOD katlaması yerel-BAĞIMSIZ olmalı — `foldNameForCompare` (tr-TR
+      // BÜYÜK) `i → İ` çevirdiği için "sip"/"SIP" çifti sessizce eşleşmezdi.
+      const codeKey = foldCodeForCompare(code);
       const firstCodeIdx = seenCodes.get(codeKey);
       if (firstCodeIdx !== undefined) {
         throw AppError.badRequest(

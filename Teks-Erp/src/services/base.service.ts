@@ -27,8 +27,14 @@ import {
 import { PaginatedResponse, ApiResponse } from "../types/api.types";
 import { Request } from "express";
 import { foldNameForCompare } from "./helpers/name-normalize.helper";
-import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import {
+  decideCodeUniqueness,
+  assertCodeAvailable,
+  type CodeCandidate,
+  type CodeUniquenessTexts,
+} from "./helpers/code-unique.helper";
 
 // Model adı → sıralanabilir (scalar/enum) alan adları. Prisma dmmf'ten lazy build
 // + cache. İstemciden gelen sortBy bu kümede (veya relationSortMap'te) değilse
@@ -566,6 +572,53 @@ export class BaseService {
   }
 
   /**
+   * Kod-tekilliği 409 metinleri. `activeExactLead` BİLİNÇLİ olarak eski cümledir
+   * (`Bu code ile aktif kayıt zaten var`) — `scripts/test_recipe.ts` ve route
+   * Swagger'ları o metne bakıyor; yeni bilgi cümlenin ARKASINA eklenir.
+   */
+  private codeTexts(key: string): CodeUniquenessTexts {
+    return {
+      activeExactLead: `Bu ${key} ile aktif kayıt zaten var`,
+      entityLabel: this.config.entityLabel ?? "kayıt",
+    };
+  }
+
+  /**
+   * Kod çakışması adayları — TEK select, katlama JS'te (`assertNameNotDuplicate`
+   * ile aynı gerekçe: PG `lower()` İ/ı'da hatalı, `mode:'insensitive'` ILIKE
+   * üretir ve `_` joker olur). Master-data tabloları küçüktür.
+   *
+   * `duplicateNameWhere` aday süzgeci KOD tarafında da uygulanır — PeripheralDevice'ta
+   * `{ deletedAt: null }` demektir: hard-delete tombstone'ları (`DEL-<t36>-<eski kod>`)
+   * aday sayılmaz. Sayılsaydı silinmiş cihazın kodu süresiz bloke olurdu (ad
+   * tarafında aynı sorun aynı süzgeçle çözülmüştü).
+   */
+  private async loadCodeCandidates(
+    key: string,
+    excludeId?: string,
+  ): Promise<CodeCandidate[]> {
+    const nameField = this.config.duplicateNameField;
+    const rows = (await this.delegate.findMany({
+      where: {
+        ...(this.config.duplicateNameWhere ?? {}),
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: {
+        id: true,
+        isActive: true,
+        [key]: true,
+        ...(nameField ? { [nameField]: true } : {}),
+      },
+    })) as Record<string, unknown>[];
+    return rows.map((r) => ({
+      id: r.id as string,
+      code: typeof r[key] === "string" ? (r[key] as string) : null,
+      name: nameField && typeof r[nameField] === "string" ? (r[nameField] as string) : null,
+      isActive: r.isActive === true,
+    }));
+  }
+
+  /**
    * Sıradaki otomatik günlük kod: `PREFIX + GGAAYY + NNNN`. `autoCode` config'i
    * gerektirir. collation-güvenli sorgu (gte + startsWith) + sayısal max+1 —
    * customer/fabricProperty `nextXxxCode` ile aynı kalıp ([[code-format]]).
@@ -645,22 +698,26 @@ export class BaseService {
       const key = this.config.uniqueField;
       const incomingValue = data[key];
       if (typeof incomingValue === "string" && incomingValue.length > 0) {
-        const existing = (await this.delegate.findFirst({
-          where: { [key]: incomingValue },
-        })) as Record<string, unknown> | null;
-
-        if (existing) {
-          if (existing.isActive === true) {
-            // F43: aktif duplicate = 409 Conflict — her route'un Swagger'ı '409 Kod
-            // zaten mevcut' belgeliyordu; kod 400 dönüyordu (contract sapması).
-            throw AppError.conflict(
-              `Bu ${key} ile aktif kayıt zaten var`,
-            );
-          }
+        // §18 (2026-08-15): tekillik artık TAM EŞLEŞME değil, HARF-DUYARSIZ.
+        // Eski `findFirst({ [key]: value })` `sefa` ile `SEFA`yı ayrı kimlikler
+        // sayıyordu; kod bu sistemde kimliktir. Gerekçe + kapsam + tarihsel
+        // kayıt politikası: `helpers/code-unique.helper.ts` dosya başlığı.
+        //
+        // ⚠️ Burada advisory kilit YOK (item.service'te var): BaseService.create
+        // transaction AÇMAZ ve audit bilinçli olarak tx dışında yazılır. Guard
+        // `assertNameNotDuplicate` ile aynı sınıftadır — panelden yapılan
+        // master-data yaratımını korur, yarış korumasını değil (tam-eşleşme
+        // yarışını DB'deki `@unique` kapatmaya devam eder).
+        const candidates = await this.loadCodeCandidates(key);
+        const decision = decideCodeUniqueness(incomingValue, candidates, this.codeTexts(key));
+        if (decision.kind === "REACTIVATE") {
           // Reactivate edilen kaydın kendi adı hariç tutulur — yeni ad başka
           // bir kayıtla çakışıyorsa reactivate de reddedilir.
-          await this.assertNameNotDuplicate(data, existing.id as string);
-          return this.reactivate(existing.id as string, data, userId);
+          // ⚠️ Hedefin kodu gönderilen kodla BİREBİR aynıdır (harf farkı 409'a
+          // düşer, bkz. `decideCodeUniqueness`) → payload dokunulmadan geçer ve
+          // bu yolun audit çıktısı §18 öncesiyle bayt-bayt aynı kalır.
+          await this.assertNameNotDuplicate(data, decision.target.id);
+          return this.reactivate(decision.target.id, data, userId);
         }
       }
     }
@@ -747,6 +804,27 @@ export class BaseService {
         data[scopeField] !== old[scopeField];
       if ((nameChanged || scopeChanged) && typeof effectiveName === "string") {
         await this.assertNameNotDuplicate({ ...data, [dupField]: effectiveName }, id);
+      }
+    }
+
+    // §18 — KOD tekilliği update yolunda da harf-duyarsız. Eskiden update kodu
+    // HİÇ kontrol etmiyordu (yalnız DB `@unique` seddi vardı, o da harf-duyarlı):
+    // `PATCH { code: "sefa" }` mevcut `SEFA` kaydının yanına ikinci bir kimlik
+    // yazabiliyordu. ⚠️ Kontrol YALNIZ kod GERÇEKTEN (katlanmış hâliyle)
+    // değişirken koşar — aksi halde canlıdaki tarihsel ikizin KENDİSİ
+    // düzenlenemez hâle gelirdi (kendi ikizine çarpar); ad guard'ının yukarıdaki
+    // kuralıyla birebir aynı gerekçe.
+    const codeField = this.config.uniqueField;
+    if (codeField && oldRecord && typeof data[codeField] === "string") {
+      const old = oldRecord as Record<string, unknown>;
+      const nextCode = data[codeField] as string;
+      const prevCode = typeof old[codeField] === "string" ? (old[codeField] as string) : "";
+      if (foldCodeForCompare(nextCode) !== foldCodeForCompare(prevCode)) {
+        assertCodeAvailable(
+          nextCode,
+          await this.loadCodeCandidates(codeField, id),
+          this.codeTexts(codeField),
+        );
       }
     }
 
