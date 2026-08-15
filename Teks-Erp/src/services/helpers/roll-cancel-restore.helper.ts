@@ -18,6 +18,19 @@
 // söyler; sessiz 409, yanlış işlem yaptırmaktan sonra en kötüsüdür. Bu dosya saf
 // tutuldu (DB yok) ki yüklem kilit/sorgu kurmadan birim testlenebilsin —
 // `duplicate-guard.helper` emsali.
+//
+// ⚠️⚠️ `movementCount > 0` KURALI GÖRÜNENDEN FAZLA İŞ YAPIYOR (2026-08-15).
+// `WorkOrderStep.status` türetilen bir alandır ve `recomputeStepStatus` onu topun
+// statüsünden hesaplar — AÇIK hareketten de, KAPALI hareketten de. Yani bir topun
+// statüsünü değiştirmek, o topun geçtiği adımların (ve aynı iş emrindeki kardeş
+// adımların) değerini de değiştirir. `softDelete`/`hardDelete` bu yüzden iptalden
+// sonra kapsamı `collectRollStepScopeTx` ile çözüp recompute koşuyor.
+// `restoreCancelledRoll` bunu YAPMIYOR ve YAPMASI GEREKMİYOR — çünkü bu guard
+// hareketi olan topu zaten reddediyor, hareketsiz top ise hiçbir adım sayacına
+// girmiyor. Guard gevşetilirse (örn. "süpervizör hareketli topu da geri alsın")
+// adım durumları SESSİZCE bayat kalır: `restoreCancelledRoll` tx bile açmıyor.
+// O gün recompute EKLENMEK ZORUNDA — reçete `inventory.restoreCancelledRoll`
+// docstring'inde yazılı.
 // =============================================================================
 
 import { RollStatus } from "@prisma/client";

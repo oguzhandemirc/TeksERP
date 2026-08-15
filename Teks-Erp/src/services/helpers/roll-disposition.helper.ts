@@ -12,13 +12,20 @@
 // ⚠️ TRANSFER burada YOK. O bir statü kararı değil WO-graf işlemidir (klon + repoint);
 //    `completeWorkOrder` onu kendi içinde çözer.
 //
-// Servis import etmez (yalnız @prisma/client + AppError + iki saf helper) → döngü yok;
+// Servis import etmez (yalnız @prisma/client + AppError + dört saf helper) → döngü yok;
 // `traveler-card-dirty.helper` ile aynı disiplin.
+//
+// ⚠️ YAN ETKİ SÖZLEŞMESİNE 2026-08-15'te BİR MADDE EKLENDİ: motor artık etkilenen
+// `WorkOrderStep.status` alanlarını da yeniden hesaplıyor (gövdedeki gerekçeye bak).
+// Yeni bir çağıran eklerken bunu "fazladan iş" sanıp devre dışı bırakma — o alan
+// sedsiz/denormalizedir ve §20 bekçisi onu canlı veride ölçüyor.
 // =============================================================================
 import { Prisma, RollStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { finalBarcodeType } from "./roll-finalize.helper";
 import { reserveRollBarcodes } from "./roll-barcode.helper";
+import { collectRollStepScopeTx } from "./roll-step-scope.helper";
+import { recomputeStepStatus } from "./roll-step.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -152,6 +159,37 @@ export async function applyRollDispositionsTx(
 
   const applied: AppliedRollDisposition[] = [];
 
+  // ── ADIM DURUMU ETKİ ALANI (2026-08-15 denetim düzeltmesi) ─────────────────
+  // Kapsam MUTASYONDAN ÖNCE çözülür: aşağıdaki claim `currentStepId`'yi null'lar
+  // ve `closeOpenMovementsTx` hareketleri kapatır — sonra sorulsaydı "topun hangi
+  // iş emrindeydi" sorusu kısmen cevapsız kalırdı. (`collectRollStepScopeTx`
+  // hareketleri AÇIK/KAPALI ayırmadan okuduğu için kapanış tek başına zararsız,
+  // ama `currentStepId` gerçekten kaybolur.)
+  //
+  // NEDEN GEREKLİ: `WorkOrderStep.status` türetilen bir alandır ve `CANCELLED`
+  // aksiyonu topu `recomputeStepStatus`'un ÜÇ sayacından da düşürür (açık hareket,
+  // KAPALI hareket, "bu adıma henüz gelmemiş canlı top"). Bu motor 2026-08-15'e
+  // kadar HİÇ recompute çağırmıyordu → `inventory.softDelete`'te kapatılan §20
+  // drift'inin birebir aynısı, üç ana operatör akışından (WO kapatma · WO iptali ·
+  // parti düşürme) ÜRETİLMEYE DEVAM EDİYORDU. Ölçülen saha vakası IE0608260004
+  // tam da kapanış dispozisyonundan geçmişti.
+  //
+  // ⚠️ İş emrini KAPATMAZ (`completeWorkOrderIfStepsDone` çağrılmaz) ve
+  // diriltemez: `recomputeStepStatus`'un tek yan etkisi `ensureWorkOrderInProgress`
+  // ve o yalnız PLANNED'ı hedefler. Dispozisyon topları üretimden ÇIKARIR, yani
+  // hiçbir sayaç büyüyemez → bu yol bir adımı ACTIVE'e çeviremez.
+  //
+  // ⚠️ Ek WO KİLİDİ ALINMAZ: üç çağıranın üçü de kendi iş emrini tx başında
+  // `touchWorkOrderTx` ile kilitliyor. Topun BAŞKA bir iş emrinde de hareketi
+  // varsa (fason tüketimi) o WO kilitsiz kalır — bilinçli: burada kilit almak
+  // çağıranın kilidiyle ters sıraya girip deadlock riski doğurur, kazanç ise
+  // yalnız türetilmiş bir alanın nadir bir yarışıdır (bir sonraki recompute
+  // düzeltir).
+  const stepScope = await collectRollStepScopeTx(
+    tx,
+    dispositions.map((d) => d.rollId),
+  );
+
   // Grupla — SIRALI await (tx client'ında Promise.all YASAK, perf kuralı 11).
   const groups = new Map<string, RollDispositionRow[]>();
   for (const d of dispositions) {
@@ -269,6 +307,14 @@ export async function applyRollDispositionsTx(
         barcodeGenerated: generated.has(id),
       });
     }
+  }
+
+  // Adım durumlarını YENİDEN HESAPLA — statü claim'lerinden SONRA (sayaçlar topun
+  // statüsünü okur; önce koşsaydı eski/yanlış değeri hesaplardı; `softDelete`'teki
+  // "SIRA LOAD-BEARING" notunun aynısı). Kapsam DEDUPLE olduğu için her adım
+  // yalnız bir kez hesaplanır (perf kuralı 10).
+  for (const st of stepScope.steps) {
+    await recomputeStepStatus(tx, st.id);
   }
 
   return applied;

@@ -277,6 +277,16 @@ WHERE rm."exitedAt" IS NOT NULL
       //                     (workorder-manual-move.service.ts:628)
       //   REDYE_REWIND    → redye/parti geri sarmada movement iptal edilir
       //                     (workorder-split.service.ts:356,473)
+      //   CANCELLED[ (…)] → TEKİL top iptali (`inventory.softDelete`) — storno,
+      //                     qtyOut BİLİNÇLİ 0. Parantez içi eski nottur
+      //                     (2026-08-04: not artık EZİLMİYOR, korunuyor).
+      //   ARCHIVED[ (…)]  → tekil top arşivleme (`inventory.hardDelete`); aynı
+      //                     storno semantiği, aynı not koruması (2026-08-15).
+      //                     ⚠️ Bu iki desen 2026-08-15'e kadar muaf listesinde
+      //                     YOKTU ve canlıda karşılığı olmadığı için §12 sessizce
+      //                     yeşildi; ilk gerçek kullanımda bekçi, konusuyla hiç
+      //                     ilgisi yokmuş gibi görünen bir satırla kırmızıya
+      //                     dönecekti.
       //   CANCEL:<sevkNo> → fason SEVK İPTALİ; top hiç çıkmadan STOCK'a geri döner
       //                     (subcontractor.service.ts:1953). qtyOut yazmak, hiç
       //                     yapılmamış bir işin çıktısını UYDURMAK olurdu — kasıtlı
@@ -294,8 +304,12 @@ WHERE rm."exitedAt" IS NOT NULL
                        OR rm_n.notes IN ('MANUAL_MOVE_OUT','REDYE_REWIND','WO_CANCELLED','DETACHED_FROM_WO')
                        OR rm_n.notes LIKE '%| WO_CANCELLED'
                        OR rm_n.notes LIKE 'CANCEL:%'
-                       OR rm_n.notes LIKE '%| CANCEL:%'))`,
-      why: "dispozisyon motoru / iş emri iptali / manuel taşıma / redye geri sarma / fason sevk iptali istasyon bitirmesi değildir",
+                       OR rm_n.notes LIKE '%| CANCEL:%'
+                       OR rm_n.notes = 'CANCELLED'
+                       OR rm_n.notes LIKE 'CANCELLED (%'
+                       OR rm_n.notes = 'ARCHIVED'
+                       OR rm_n.notes LIKE 'ARCHIVED (%'))`,
+      why: "dispozisyon motoru / iş emri iptali / manuel taşıma / redye geri sarma / fason sevk iptali / tekil top iptali+arşivleme istasyon bitirmesi değildir",
     },
   },
   {

@@ -4944,22 +4944,35 @@ export class WorkOrderService {
         await tx.workOrderStep.delete({ where: { id: old.id } });
       }
 
-      // 1b) Başlamış (PENDING olmayan) adımların GÖRELİ SIRASI değişemez —
+      // ⚠️ "BAŞLAMIŞ ADIM" = statü PENDING değil **VEYA** üzerinde hareket var
+      // (2026-08-15 denetim düzeltmesi). Eskiden yalnız statüye bakılıyordu ve
+      // statü TÜRETİLEN bir alandır: `recomputeStepStatus` bir adımı COMPLETED'tan
+      // PENDING'e düşürebilir (o adımdan geçmiş son topun iptali / kapanış
+      // dispozisyonu). Adımın `roll_movements` satırları YERİNDE DURUR; guard
+      // yalnız statüye baksaydı, üzerinde geçmiş kayıt olan bir adımın İSTASYONU
+      // değiştirilebilir ve o adım yeniden sıralanabilir hâle gelirdi → `GET
+      // /rolls/:id/history` ve istasyon iş-hacmi raporu, topun HİÇ uğramadığı bir
+      // istasyondan geçtiğini söylerdi (hata yok, log yok). Guard'ın kendi
+      // gerekçesi zaten "üzerinde açık movement/geçmiş kayıt var" diyordu —
+      // yüklem artık o cümleyle birebir aynı şeyi ölçüyor. Silme guard'ı bu sınıfı
+      // `refCount`(=_count toplamı) ile zaten kapatıyordu.
+      const stepHasStarted = (s: (typeof existingStepRows)[number]): boolean =>
+        s.status !== "PENDING" || s._count.movements > 0;
+
+      // 1b) Başlamış adımların GÖRELİ SIRASI değişemez —
       //     COMPLETED bir adım ACTIVE'in arkasına taşınırsa kart okutma ve
       //     "sonraki adım" hesabı (stepSequence) bozulur. Silme zaten guard'lı;
       //     bu kontrol yeniden sıralamayı yakalar. (Araya yeni PENDING adım
       //     eklemek serbesttir — göreli sıra korunur.)
       const startedOldOrder = existingStepRows
-        .filter((s) => s.status !== "PENDING")
+        .filter(stepHasStarted)
         .sort((a, b) => a.stepSequence - b.stepSequence)
         .map((s) => s.id);
       const startedNewOrder = finalSteps
         .map((s) => s.id)
         .filter(
           (sid): sid is string =>
-            !!sid &&
-            existingStepById.has(sid) &&
-            existingStepById.get(sid)!.status !== "PENDING",
+            !!sid && existingStepById.has(sid) && stepHasStarted(existingStepById.get(sid)!),
         );
       if (startedOldOrder.join("|") !== startedNewOrder.join("|")) {
         throw AppError.conflict(
@@ -4986,7 +4999,7 @@ export class WorkOrderService {
           // movement/geçmiş kayıt var) ayakta duruyor. Rota düzenlemesi bir atamayı
           // sessizce bozamaz, çünkü atama adımın istasyonunda değil kendi satırında yaşar.
           const old = existingStepById.get(incoming.id)!;
-          if (old.status !== "PENDING" && old.stationId !== incoming.stationId) {
+          if (stepHasStarted(old) && old.stationId !== incoming.stationId) {
             throw AppError.conflict(
               `${old.stepSequence}. adım başlamış — istasyonu değiştirilemez (yalnız not/kategori/planlanan firma güncellenebilir).`,
             );

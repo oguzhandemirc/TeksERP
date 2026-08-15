@@ -117,6 +117,7 @@ import {
   recomputeStepStatus,
   completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
+import { collectRollStepScopeTx } from "./helpers/roll-step-scope.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { hasBypassClosureOnProcessQcTx } from "./helpers/kursun-bypass-guard.helper";
 import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
@@ -3001,14 +3002,38 @@ export class InventoryService {
     }
 
     const updated = await prisma.$transaction(async (tx) => {
-      // Açık RollMovement'ları topla — sonra status recompute için step ID'leri lazım
+      // ── ETKİ ALANI (2026-08-15 düzeltmesi) ───────────────────────────────
+      // Eskiden burada küme ELLE kuruluyordu: "AÇIK hareketlerin adımları +
+      // currentStepId". İkisi de topun ŞU ANKİ konumuna bakıyordu, oysa
+      // `recomputeStepStatus` topun statüsünü ÜÇ yerden okur — açık hareket,
+      // KAPALI hareket ve "aynı iş emrinde bu adıma henüz gelmemiş canlı top"
+      // sayacı. Yani bir topu iptal etmek, onun GEÇMİŞTE geçtiği (hareketi
+      // kapanmış) adımların ve hiç uğramadığı kardeş adımların türetilen
+      // değerini de değiştirir.
+      //
+      // SAHA VAKASI (IE0608260004, canlı veride doğrulandı): T080826F0001
+      // 6 Ağu'da "Kurşun + KK2" adımından ÇIKTI (hareket kapandı, adım
+      // COMPLETED oldu); 8 Ağu'da iş emri kapanış dispozisyonu topu WAREHOUSE'a
+      // çekti (`currentStepId = null`, açık hareket kalmadı); 22 saniye sonra
+      // top iptal edildi. Eski küme BOŞ kaldı → recompute HİÇ koşmadı → adım
+      // bayat COMPLETED kaldı (türetilen doğru değer PENDING). Hata yok, log
+      // yok; drift'i yalnız `test_consistency` §20 gösteriyordu.
+      //
+      // Kapsam artık TEK KAYNAKTAN (`collectRollStepScopeTx`) gelir — dört
+      // çağıran dört farklı elle liste kurduğu için hata dört kez tekrarlanmıştı.
+      const scope = await collectRollStepScopeTx(tx, [id], [existing.currentStepId]);
+
+      // Kilit sırası DETERMİNİSTİK (yardımcı id ASC döner): bir top İKİ ayrı iş
+      // emrinde hareket etmiş olabilir (fason tüketimi) ve aynı tx iki WO'nun
+      // adımlarına yazar. Sabit sıra deadlock'ı yapısal olarak keser;
+      // `completeWorkOrderIfStepsDone` docstring'i de bu kilidi şart koşuyor.
+      for (const woId of scope.workOrderIds) await touchWorkOrderTx(tx, woId);
+
+      // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
       const openMovements = await tx.rollMovement.findMany({
         where: { rollId: id, exitedAt: null },
         select: { id: true, workOrderStepId: true, notes: true },
       });
-      const affectedStepIds = new Set<string>();
-      for (const m of openMovements) affectedStepIds.add(m.workOrderStepId);
-      if (existing.currentStepId) affectedStepIds.add(existing.currentStepId);
 
       // Açık movement'ları kapat.
       //
@@ -3063,12 +3088,49 @@ export class InventoryService {
       }
       const r = await tx.roll.findUniqueOrThrow({ where: { id } });
 
-      // Etkilenen step'lerin status'unu recompute et
-      for (const stepId of affectedStepIds) {
-        await recomputeStepStatus(tx, stepId);
+      // Etkilenen step'lerin status'unu recompute et.
+      //
+      // ⚠️ SIRA LOAD-BEARING: recompute ATOMİK CLAIM'den SONRA koşmak ZORUNDA —
+      // sayaçları topun statüsünden okuyor, top henüz CANCELLED değilse eski
+      // (yanlış) değeri hesaplar.
+      //
+      // ⚠️ `completedAt` VERİ KAYBI, BİLİNÇLİ KABUL: `recomputeStepStatus`
+      // COMPLETED'tan düşen adımda `completedAt: null` yazar (roll-step.helper).
+      // Adımın gerçekten bittiği tarih geri dönülemez silinir. Alternatif
+      // ("damgayı koru") COMPLETED olmayan ama completedAt dolu adımlar üretir
+      // ve bugün böyle satır YOK — yani yeni bir tutarsızlık SINIFI açardı.
+      // Bunun yerine eski değer aşağıda AUDIT'e yazılır (audit zaten tx dışında,
+      // alan eklemek bedava). Karar `recomputeStepStatus`'un TÜM çağıranlarını
+      // ilgilendirir; burada tek taraflı değiştirilmedi.
+      const stepChanges: Array<{
+        stepId: string;
+        from: StepStatus;
+        to: StepStatus;
+        /** ISO metin — audit JSON'ına Date koymak sessiz serileştirme sürprizi doğurur. */
+        previousCompletedAt: string | null;
+      }> = [];
+      for (const st of scope.steps) {
+        const next = await recomputeStepStatus(tx, st.id);
+        if (next !== st.status) {
+          stepChanges.push({
+            stepId: st.id,
+            from: st.status,
+            to: next,
+            previousCompletedAt: st.completedAt ? st.completedAt.toISOString() : null,
+          });
+        }
       }
 
-      return r;
+      // ⚠️ `completeWorkOrderIfStepsDone` BİLEREK ÇAĞRILMIYOR. Genişleyen kapsam
+      // bir adımı ACTIVE→COMPLETED'a çevirebilir (iptal edilen top o adımın tek
+      // "bekleyen"iydi) ve o durumda iş emri "tüm adımları bitmiş ama kendisi
+      // IN_PROGRESS" kalır. Bunu otomatik kapatmak *"bir topu iptal etmek iş
+      // emrini kapatabilir"* demektir — refakat kartlarını da COMPLETED'a çeker
+      // (`setWorkOrderCardStatuses`) ve bu bir ÜRÜN KARARIDIR, refactor yan
+      // etkisi değil. Planlamacı isterse eklenecek tek satır:
+      //   for (const woId of scope.workOrderIds) await completeWorkOrderIfStepsDone(tx, woId);
+      // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
+      return { roll: r, stepChanges };
     });
 
     await AuditService.log({
@@ -3085,12 +3147,17 @@ export class InventoryService {
         cancelled: true,
         reason,
         labelPrinted: existing.labelPrintedAt != null,
+        // Adım durumu türetilen bir değerdir; iptalin onu nasıl kaydırdığı
+        // başka hiçbir yerde yazmıyor. `previousCompletedAt` özellikle önemli:
+        // COMPLETED'tan düşen adım o damgayı satırında kaybediyor (yukarıdaki
+        // gerekçeye bak) — tek izi bu kayıt.
+        stepStatusChanges: updated.stepChanges.length ? updated.stepChanges : undefined,
       },
     });
 
     return {
       success: true,
-      data: updated,
+      data: updated.roll,
       message: `Top iptal edildi: ${existing.barcode}`,
     };
   }
@@ -3113,6 +3180,21 @@ export class InventoryService {
    * ⚠️ `hardDelete` ("Arşivle") ile karışabilir: o da topu `CANCELLED` yapar ama
    * `preCancelStatus` yazmaz → burada `STOCK`'a düşer. Kabul edilebilir: arşivleme
    * zaten yalnız `STOCK` topa uygulanıyor.
+   *
+   * ⚠️⚠️ ADIM DURUMU BURADA YENİDEN HESAPLANMAZ — ve bu bir EKSİK DEĞİL, kapsam
+   * guard'ının sonucudur (2026-08-15 denetimi). `resolveRollRestoreBlockReason`
+   * `movementCount > 0` (AÇIK + KAPALI tüm hareketler) olan topu reddediyor;
+   * hareketi olmayan top ise `recomputeStepStatus`'un hiçbir sayacına girmez
+   * (üç sayacın üçü de "bu iş emrinde hareketi olan top" üzerinden çalışır) →
+   * geri alınabilen bir topun geri alınması hiçbir adımın türetilen değerini
+   * değiştiremez. Yani `softDelete`/`hardDelete`'teki boşluğun ikizi burada YOK.
+   *
+   * ⚠️ KIRILGAN: guard gevşetilirse ("süpervizör hareketli topu da geri alsın")
+   * aynı boşluk SIFIR kodla açılır — bu fonksiyonda ne recompute çağrısı vardır
+   * ne de transaction. O gün yapılacak iş: gövdeyi `prisma.$transaction`'a al,
+   * `collectRollStepScopeTx(tx, [id], [existing.currentStepId])` ile kapsamı çöz,
+   * `touchWorkOrderTx` + `recomputeStepStatus` uygula (aynı sıra: claim SONRASI).
+   * Aynı uyarı `helpers/roll-cancel-restore.helper.ts` başında da duruyor.
    */
   async restoreCancelledRoll(
     id: string,
@@ -3255,6 +3337,17 @@ export class InventoryService {
     // STOCK'tan çıkardıysa count===0 → 409 (koşulsuz update dangling CANCELLED
     // üretiyordu). CANCELLED top hiçbir istasyon/sevk/çuval referansı taşımamalı.
     const updated = await prisma.$transaction(async (tx) => {
+      // ── ETKİ ALANI (2026-08-15 düzeltmesi) ───────────────────────────────
+      // Buradaki boşluk `softDelete`'inkinin AYNISI, ama daha kötüsüydü: recompute
+      // `if (existing.currentStepId)` dalının İÇİNDEYDİ ve arşivleme yalnız STOCK
+      // topa uygulandığı için o alan tanımı gereği NULL'dur → recompute NORMAL
+      // YOLDA HİÇ KOŞMUYORDU. Eski yorum bunu "anomali/defansif" diye niteliyordu;
+      // yanlıştı: STOCK top pekâlâ KAPALI hareket taşır (detach → renksiz top
+      // STOCK'a döner) ve arşivleme onu adım sayımından düşürür. Canlı ölçüm
+      // (2026-08-15): 4 STOCK top hareket kaydı taşıyor.
+      const scope = await collectRollStepScopeTx(tx, [id], [existing.currentStepId]);
+      for (const woId of scope.workOrderIds) await touchWorkOrderTx(tx, woId);
+
       const claim = await tx.roll.updateMany({
         where: { id, status: RollStatus.STOCK },
         data: {
@@ -3269,16 +3362,54 @@ export class InventoryService {
           "Top az önce başka bir akışa girdi (durumu değişti) — tekrar deneyin",
         );
       }
-      // STOCK topun currentStepId'si normalde null; anomali olarak takılıysa açık
-      // movement'ı kapat + step recompute (softDelete hijyeni; defansif).
-      if (existing.currentStepId) {
-        await tx.rollMovement.updateMany({
-          where: { rollId: id, exitedAt: null },
-          data: { exitedAt: new Date(), qtyOut: 0, weightOut: 0, notes: "ARCHIVED" },
+
+      // Açık movement'ları kapat — qtyOut = 0 (storno; `softDelete` ile aynı semantik).
+      //
+      // ⚠️ NOT EZİLMİYOR: burada `notes` körlemesine "ARCHIVED" yazılıyordu ve bu,
+      // `softDelete`'te 2026-08-04'te düzeltilen not-ezme hatasının hâlâ açık
+      // kopyasıydı (elle eklenen topun "TAMBUR_MANUAL_ROLL: <sebep>" izi siliniyordu).
+      const openMovements = await tx.rollMovement.findMany({
+        where: { rollId: id, exitedAt: null },
+        select: { id: true, notes: true },
+      });
+      for (const m of openMovements) {
+        await tx.rollMovement.update({
+          where: { id: m.id },
+          data: {
+            exitedAt: new Date(),
+            qtyOut: 0,
+            weightOut: 0,
+            notes: m.notes?.trim() ? `ARCHIVED (${m.notes.trim()})`.slice(0, 500) : "ARCHIVED",
+          },
         });
-        await recomputeStepStatus(tx, existing.currentStepId);
       }
-      return tx.roll.findUniqueOrThrow({ where: { id } });
+
+      // Claim'den SONRA (sayaçlar topun statüsünü okur — bkz. softDelete notu).
+      //
+      // ⚠️ `completedAt` VERİ KAYBI, `softDelete` ile AYNI: COMPLETED'tan düşen
+      // adım damgasını geri dönülemez kaybeder. Bu yüzden iz de aynı şekilde
+      // audit'e yazılır — 2026-08-15 denetiminde bu dal atlanmıştı ve "arşivleme"
+      // tam da recompute'un ESKİDEN HİÇ KOŞMADIĞI yol, yani kaybın YENİ doğduğu
+      // yerdi (softDelete'te iz kalıyor, burada kalmıyordu).
+      const stepChanges: Array<{
+        stepId: string;
+        from: StepStatus;
+        to: StepStatus;
+        /** ISO metin — audit JSON'ına Date koymak sessiz serileştirme sürprizi doğurur. */
+        previousCompletedAt: string | null;
+      }> = [];
+      for (const st of scope.steps) {
+        const next = await recomputeStepStatus(tx, st.id);
+        if (next !== st.status) {
+          stepChanges.push({
+            stepId: st.id,
+            from: st.status,
+            to: next,
+            previousCompletedAt: st.completedAt ? st.completedAt.toISOString() : null,
+          });
+        }
+      }
+      return { roll: await tx.roll.findUniqueOrThrow({ where: { id } }), stepChanges };
     });
 
     await AuditService.log({
@@ -3291,12 +3422,16 @@ export class InventoryService {
         status: existing.status,
         currentQty: existing.currentQty,
       },
-      newData: { status: RollStatus.CANCELLED, event: "ARCHIVED" },
+      newData: {
+        status: RollStatus.CANCELLED,
+        event: "ARCHIVED",
+        stepStatusChanges: updated.stepChanges.length ? updated.stepChanges : undefined,
+      },
     });
 
     return {
       success: true,
-      data: updated,
+      data: updated.roll,
       message: `Top arşivlendi: ${existing.barcode}`,
     };
   }
