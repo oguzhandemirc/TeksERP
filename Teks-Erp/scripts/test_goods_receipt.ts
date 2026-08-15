@@ -162,6 +162,31 @@ async function main(): Promise<void> {
   check("A7) Barkod üretildi", rollRows.every((r) => Boolean(r.barcode)));
   check("A8) Giriş istasyonu NULL (mal kabul üretim noktası değil)", rollRows.every((r) => r.entryStationId === null));
 
+  // ── A9) KK1 AĞIRLIK POLİTİKASI MAL KABULE SIZMAZ (saha planı A1, 2026-08-15)
+  // `kk1.weightEntryEnabled` bir KK1 İSTASYON politikasıdır (kantar yoksa elle
+  // kg girilmesin); mal kabul ise DEPO GİRİŞİDİR ve kumaş kg+metre çift birimle
+  // alınır. Muafiyet (`skipKk1WeightPolicy`) düşerse bu satır "Ağırlık (kg)
+  // girişi bu istasyonda kapalı" ile reddedilir — saha vakası: 10 satır birden.
+  // AYRI fişte ölçülür ki A/B bölümlerinin defter beklentileri değişmesin.
+  await rememberFlag("kk1.weightEntryEnabled");
+  await setFlag("kk1.weightEntryEnabled", false);
+  const kgReceipt = await goodsReceiptService.create({ warehouseId: wh.id });
+  const kgReceiptId = (kgReceipt.data as { id: string }).id;
+  receiptIds.push(kgReceiptId);
+  const kgOut = (await goodsReceiptService.addLines(kgReceiptId, [
+    { itemId: item.id, initialQty: 40, weightKg: 12.5 },
+  ])) as unknown as { created: string[]; failed: Array<{ reason: string }> };
+  check(
+    "A9) ⭐ Bayrak KAPALIYKEN kg'li mal kabul satırı KABUL edildi",
+    kgOut.created.length === 1 && kgOut.failed.length === 0,
+    kgOut.failed[0]?.reason?.slice(0, 70) ?? "",
+  );
+  const kgRoll = await prisma.roll.findFirst({
+    where: { goodsReceiptId: kgReceiptId },
+    select: { weightKg: true },
+  });
+  check("A9b) Ağırlık topa yazıldı (12.5 kg)", kgRoll != null && Number(kgRoll.weightKg) === 12.5, String(kgRoll?.weightKg));
+
   const ledger = await prisma.warehouseMovement.findMany({
     where: { rollId: { in: rollRows.map((r) => r.id) } },
     select: { eventType: true, toWarehouseId: true, goodsReceiptId: true },

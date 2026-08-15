@@ -892,6 +892,11 @@ export class GoodsReceiptService {
             purchasePrice: priceFor(line),
             // Mal kabulde istasyon YOK (üretim noktası değil) — kolon NULL kalır.
             entryStationId: null,
+            // A1 (2026-08-15): kg girişi mal kabulde STANDARTTIR — KK1 istasyon
+            // politikası (`kk1.weightEntryEnabled`) burada uygulanmaz. Muafiyet
+            // olmadan bayrak KAPALI kurulumda kg'li her satır KK1 mesajıyla
+            // reddediliyordu (saha vakası: 10 satır). Gerekçe opts JSDoc'unda.
+            skipKk1WeightPolicy: true,
             // SINIF 4 (I1): topu yazan tx'in İLK işi fiş-claim — iptal ile
             // satır doğumu aynı satır kilidinde serileşir (helper başlığı).
             txGate: (tx) => this.claimActiveReceiptTx(tx, receipt.id, receipt.receiptNo),

@@ -717,6 +717,20 @@ export class InventoryService {
        */
       purchaseOrderLineId?: string | null;
       /**
+       * KK1 AĞIRLIK POLİTİKASINDAN MUAFİYET (saha planı A1, 2026-08-15).
+       *
+       * `kk1.weightEntryEnabled` bir KK1 İSTASYON politikasıdır: o istasyonda
+       * kantar yoksa/kapalıysa operatörün elle kg girmesi engellenir. Mal Kabul
+       * ise bir DEPO GİRİŞİDİR — perde/tekstil ticaretinde kumaş kg+metre çift
+       * birimle alınır ve kg girişi standarttır. Muafiyet verilmeden önce bu
+       * bayrak KAPALI kurulumlarda mal kabulün kg'li HER satırı "Ağırlık (kg)
+       * girişi bu istasyonda kapalı" ile reddediliyordu (saha vakası: 10 satır).
+       *
+       * F221 deseni: alan verilmezse politika AYNEN uygulanır (KK1 + tambur
+       * yolları davranış değiştirmez); yalnız Mal Kabul yolu bilerek geçer.
+       */
+      skipKk1WeightPolicy?: boolean;
+      /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
@@ -759,7 +773,7 @@ export class InventoryService {
     // kötü niyetle) backend REDDEDER. Tüm istemcilerin (mobil + Electron + script) tek
     // choke-point'i burası (defense-in-depth). Zod weightKg'yi pozitif zorunlu kıldığından
     // >0 kontrolü, undefined/eksik girişleri serbest bırakır.
-    if ((data.weightKg ?? 0) > 0 && !(await readKk1WeightEntryEnabled())) {
+    if ((data.weightKg ?? 0) > 0 && !opts?.skipKk1WeightPolicy && !(await readKk1WeightEntryEnabled())) {
       throw AppError.badRequest("Ağırlık (kg) girişi bu istasyonda kapalı");
     }
 
