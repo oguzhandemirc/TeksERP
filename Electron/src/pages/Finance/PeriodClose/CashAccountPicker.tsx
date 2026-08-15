@@ -19,7 +19,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronsUpDown } from "lucide-react";
+import { AlertOctagon, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Command,
@@ -91,6 +91,11 @@ export function useCashAccountOptions() {
     currencyByKey,
     isLoading: boxes.isLoading || banks.isLoading,
     isError: boxes.isError || banks.isError,
+    /** İki sorguyu birden yeniden dener — hata kutusundaki "Tekrar dene". */
+    refetch: () => {
+      void boxes.refetch();
+      void banks.refetch();
+    },
   };
 }
 
@@ -115,7 +120,10 @@ export function CashAccountPicker({
   className,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const { options, isLoading } = useCashAccountOptions();
+  // ⚠️ `isError` HOOK'TA ÜRETİLİYORDU AMA HİÇBİR TÜKETİCİ OKUMUYORDU — niyet
+  // yazılmış, kablosu bağlanmamıştı. Okunmadığı sürece liste hatası "Tanımlı
+  // kasa/banka hesabı yok." diye basılır ve kullanıcı mükerrer hesap açar.
+  const { options, isLoading, isError, refetch } = useCashAccountOptions();
 
   const boxes = options.filter((o) => o.kind === "CASH_BOX");
   const banks = options.filter((o) => o.kind === "BANK_ACCOUNT");
@@ -171,7 +179,28 @@ export function CashAccountPicker({
         <Command>
           <CommandInput placeholder="Hesap ara (kod / ad)…" />
           <CommandList>
-            {!isLoading && options.length === 0 && <CommandEmpty>Tanımlı kasa/banka hesabı yok.</CommandEmpty>}
+            {isError ? (
+              <div className="flex items-start gap-2 px-3 py-3 text-xs">
+                <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-destructive">Hesap listesi okunamadı</p>
+                  <p className="mt-0.5 text-muted-foreground">
+                    Bu “tanımlı hesap yok” DEMEK DEĞİLDİR — yeni hesap açmadan önce tekrar deneyin.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 h-6 px-2 text-xs"
+                    onClick={() => void refetch()}
+                  >
+                    Tekrar dene
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              !isLoading && options.length === 0 && <CommandEmpty>Tanımlı kasa/banka hesabı yok.</CommandEmpty>
+            )}
             {nullable && (
               <CommandGroup>
                 <CommandItem

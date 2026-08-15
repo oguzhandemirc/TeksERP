@@ -140,7 +140,12 @@ export function ReceiptImportButton({ onImported }: Props) {
     }
   };
 
-  const ready = !itemsQ.isLoading && !colorsQ.isLoading;
+  // ⚠️ HATA DA `isLoading:false` ÜRETİR. Katalog sorgusu düşmüşken buton açık
+  // kalırsa dosya BOŞ katalogla ayrıştırılır ve 50 satırın 50'si "Kumaş
+  // bulunamadı: KMS-…" ile reddedilir — kullanıcı KENDİ EXCEL'İNİ düzeltmeye
+  // başlar, oysa sorun `/api/items` sorgusudur. Kapı burada kapanır.
+  const catalogError = itemsQ.isError || colorsQ.isError;
+  const ready = !itemsQ.isLoading && !colorsQ.isLoading && !catalogError;
 
   return (
     <div className="space-y-2">
@@ -170,6 +175,14 @@ export function ReceiptImportButton({ onImported }: Props) {
           }}
         />
       </div>
+
+      {catalogError && (
+        <p className="rounded-md border border-destructive/40 bg-destructive/5 px-2 py-1.5 text-xs text-destructive">
+          Ürün/renk kataloğu okunamadı — <strong>dosyanızda sorun yok</strong>, bağlantı ya da
+          yetki sorunu var. Katalog gelmeden yüklenirse her satır “Kumaş bulunamadı” ile
+          reddedilir. Diyaloğu kapatıp tekrar açın.
+        </p>
+      )}
 
       {errors.length > 0 && (
         <div className="max-h-28 overflow-auto rounded-md border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-900 dark:bg-amber-950/40">

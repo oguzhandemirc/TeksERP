@@ -24,6 +24,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-for
 import { D, resolveExchangeRate } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 const CASH_PREFIX = "KH";
@@ -563,13 +564,13 @@ export class CashTransactionService {
       where.txnDate = { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) };
     }
     if (params.search?.trim()) {
-      const q = params.search.trim();
-      where.OR = [
-        { docNo: { contains: q, mode: "insensitive" } },
-        { category: { contains: q, mode: "insensitive" } },
-        { description: { contains: q, mode: "insensitive" } },
-        { reference: { contains: q, mode: "insensitive" } },
-      ];
+      // ⚠️ TÜRKÇE-DUYARLI (kural + gerekçe: `utils/query-parser`).
+      // ⚠️ SERBEST METİN = EN KIRILGAN YÜZEY: açıklama/kategori kullanıcının
+      // yazdığı gibi saklanır ("İşçi Avansı", "Şoför avansı") — ne BÜYÜĞE
+      // çevrilir ne bir kataloğa bağlıdır. ILIKE noktalı/noktasız i'yi
+      // katlamadığı için düz `contains` ile muhasebeci "işçi avansı" arayınca
+      // 0 satır alıyor ve gideri İKİNCİ KEZ giriyordu.
+      where.OR = buildTurkishSearch(params.search, ["docNo", "category", "description", "reference"]);
     }
 
     const [data, total] = await Promise.all([

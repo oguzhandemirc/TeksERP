@@ -22,7 +22,7 @@
 // donar, taslağın resmi kaydı yoktur ve düğme "yok" bir şeyi vaat ederdi.
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
-import { Printer } from "lucide-react";
+import { Pencil, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
 import {
   INVOICE_STATUS_BADGE,
   INVOICE_TYPE_LABEL,
@@ -56,14 +57,56 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Belge önizlemesini açan sayfa geri çağrısı; verilmezse düğme çizilmez. */
   onShowDocument?: (inv: InvoiceDetail) => void;
+  /**
+   * TASLAĞI DÜZENLE — verilmezse düğme çizilmez.
+   *
+   * ⚠️ Bu, dosya başlığındaki "salt okunur" kuralının İSTİSNASI DEĞİL: diyalog
+   * yine hiçbir mutasyon çalıştırmaz, yalnız sayfanın form diyaloğunu açar
+   * (durum geçişleri — onay/iptal/sil — hâlâ TEK yerde, liste satırında).
+   * Gerekçe: 0 fiyatlı otomatik taslağı inceleyen kullanıcı hatayı tam BURADA
+   * görür; düzeltmek için diyaloğu kapatıp listede satırı yeniden bulması
+   * gereksiz bir tur attırırdı.
+   */
+  onEditDraft?: (inv: InvoiceDetail) => void;
+  /** Kaynak MAL KABUL fişini açar (verilmezse satır düz metin kalır). */
+  onOpenGoodsReceipt?: (id: string) => void;
+  /** Kaynak SEVKİYATI açar — çuval sevkiyatı ve fasondan doğrudan sevk ayrı. */
+  onOpenShipment?: (target: { id: string; kind: "SHIPMENT" | "DIRECT" }) => void;
 }
 
-/** Bilgi satırı — boş değer daima "—", boş string değil. */
-function Field({ label, value }: { label: string; value: string }) {
+/**
+ * Bilgi satırı — boş değer daima "—", boş string değil.
+ *
+ * ⚠️ `onClick` OPSİYONEL ve verilmezse satır BUGÜNKÜYLE BİREBİR düz metindir:
+ * tıklanabilir görünüp hiçbir yere gitmeyen bir bağ, olmayan bir yolu vaat eder
+ * (kaynak id'leri backend'den 2026-08-15'te gelmeye başladı; eski yanıtta yok).
+ */
+function Field({
+  label,
+  value,
+  onClick,
+  title,
+}: {
+  label: string;
+  value: string;
+  onClick?: () => void;
+  title?: string;
+}) {
   return (
     <div>
       <div className="text-[11px] uppercase text-muted-foreground">{label}</div>
-      <div className="text-sm">{value || "—"}</div>
+      {onClick ? (
+        <button
+          type="button"
+          className="text-left text-sm text-primary underline-offset-2 hover:underline"
+          title={title}
+          onClick={onClick}
+        >
+          {value || "—"}
+        </button>
+      ) : (
+        <div className="text-sm">{value || "—"}</div>
+      )}
     </div>
   );
 }
@@ -83,7 +126,15 @@ function pct(v: number): string {
   return `%${Number(v ?? 0).toLocaleString("tr-TR", { maximumFractionDigits: 2 })}`;
 }
 
-export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onShowDocument }: Props) {
+export function InvoiceDetailDialog({
+  invoiceId,
+  open,
+  onOpenChange,
+  onShowDocument,
+  onEditDraft,
+  onOpenGoodsReceipt,
+  onOpenShipment,
+}: Props) {
   const q = useQuery({
     queryKey: ["finance", "invoice", invoiceId],
     queryFn: () => getInvoice(invoiceId),
@@ -152,6 +203,24 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onShowDocum
                   ≈ {money(inv.grandTotalTry, "TRY")} (kur {Number(inv.exchangeRate).toFixed(4)})
                 </span>
               )}
+              {/* TASLAKTA "Düzenle", diğerlerinde "Belgeyi aç" — ikisi aynı
+                  konumda çünkü ikisi de o statünün DOĞAL SONRAKİ İŞİdir.
+                  ⚠️ İZİN KAPISI ZORUNLU ve liste satırındakiyle AYNI kod
+                  olmalı (`InvoicesPage` → `PermissionGate finance:write`):
+                  `PATCH /api/finance/invoices/:id` `finance:write` istiyor.
+                  Kapısız hâlinde "Kasa / Tahsilat" rolü (finance:read +
+                  finance:payment) düğmeyi LİSTEDE görmüyor ama DETAYDA
+                  görüyordu → formu açıp 8 satırın fiyatını giriyor, "Kaydet"te
+                  403 yiyor ve emeğin tamamını kaybediyordu. Kod tabanının
+                  kuralı: iş yapmayan düğme konmaz. */}
+              {inv.status === "DRAFT" && onEditDraft && (
+                <PermissionGate permission="finance:write">
+                  <Button variant="outline" size="sm" className="ml-auto" onClick={() => onEditDraft(inv)}>
+                    <Pencil className="mr-1 h-4 w-4" />
+                    Düzenle
+                  </Button>
+                </PermissionGate>
+              )}
               {inv.status !== "DRAFT" && onShowDocument && (
                 <Button
                   variant="outline"
@@ -197,11 +266,37 @@ export function InvoiceDetailDialog({ invoiceId, open, onOpenChange, onShowDocum
                   value={[inv.goodsReceipt.receiptNo, inv.goodsReceipt.deliveryNoteNo]
                     .filter(Boolean)
                     .join(" · irsaliye ")}
+                  title="Mal kabul fişini aç"
+                  onClick={
+                    onOpenGoodsReceipt
+                      ? () => onOpenGoodsReceipt(inv.goodsReceipt!.id)
+                      : undefined
+                  }
                 />
               )}
-              {inv.shipment && <Field label="Kaynak (sevkiyat)" value={inv.shipment.shipmentNo} />}
+              {inv.shipment && (
+                <Field
+                  label="Kaynak (sevkiyat)"
+                  value={inv.shipment.shipmentNo}
+                  title="Sevkiyat detayını aç"
+                  onClick={
+                    onOpenShipment
+                      ? () => onOpenShipment({ id: inv.shipment!.id, kind: "SHIPMENT" })
+                      : undefined
+                  }
+                />
+              )}
               {inv.directShipment && (
-                <Field label="Kaynak (fasondan sevk)" value={inv.directShipment.shipmentNo} />
+                <Field
+                  label="Kaynak (fasondan sevk)"
+                  value={inv.directShipment.shipmentNo}
+                  title="Fasondan doğrudan sevk detayını aç"
+                  onClick={
+                    onOpenShipment
+                      ? () => onOpenShipment({ id: inv.directShipment!.id, kind: "DIRECT" })
+                      : undefined
+                  }
+                />
               )}
               {inv.subcontractorReceipt && (
                 <Field label="Kaynak (fason kabul)" value={inv.subcontractorReceipt.receiptNo} />

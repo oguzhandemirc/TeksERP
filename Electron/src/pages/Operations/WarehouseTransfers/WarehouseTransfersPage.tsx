@@ -52,6 +52,7 @@ export function WarehouseTransfersPage() {
   });
 
   const rows = listQ.data?.data ?? [];
+  const total = listQ.data?.pagination?.total ?? 0;
 
   return (
     <PageShell>
@@ -71,12 +72,34 @@ export function WarehouseTransfersPage() {
       <PageBody className="p-6">
         {listQ.isLoading ? (
           <div className="text-sm text-muted-foreground">Yükleniyor…</div>
+        ) : listQ.isError && rows.length === 0 ? (
+          /* ⚠️ "Henüz transfer yok." hata anında basılırsa depocu az önce yaptığı
+             taşımayı yok sanıp AYNI TOPLARI ikinci kez transfer etmeye kalkar;
+             ikinci deneme reddedilir ("bu depoda değil") ve sebebi de o mesajdan
+             anlaşılmaz — çıkmaz. */
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+            <p className="font-medium text-destructive">Transfer listesi yüklenemedi.</p>
+            <p className="mt-1 text-muted-foreground">
+              Bu bir “transfer yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+              Yeni transfer açmadan önce tekrar deneyin.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void listQ.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
             Henüz transfer yok.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="space-y-3">
+            {listQ.isError && (
+              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                Liste tazelenemedi — aşağıdaki belgeler son başarılı okumaya aittir; az önce
+                yapılmış bir transfer burada görünmeyebilir.
+              </p>
+            )}
+            <div className="overflow-hidden rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -107,6 +130,13 @@ export function WarehouseTransfersPage() {
                 ))}
               </tbody>
             </table>
+            </div>
+            {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
+            {total > rows.length && (
+              <p className="text-xs text-amber-700 dark:text-amber-500">
+                {total} transferin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
+              </p>
+            )}
           </div>
         )}
       </PageBody>

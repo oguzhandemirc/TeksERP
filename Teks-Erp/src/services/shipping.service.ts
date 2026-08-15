@@ -18,6 +18,7 @@
 
 import {
   Prisma,
+  InvoiceStatus,
   RollStatus,
   SackWeightSource,
   ShipmentStatus,
@@ -2600,6 +2601,24 @@ export class ShippingService {
       createdAt: true,
       invoiceNo: true,
       invoicedAt: true,
+      // ── İÇ FATURA BAĞI (2026-08-15) ────────────────────────────────────────
+      // ⚠️ `invoiceNo` DIŞ muhasebe programındaki belgenin izidir ("ERP fatura
+      // KESMEZ", `schema.prisma`), iç fatura bağı ise `Invoice.shipmentId`dir.
+      // Panelin "Faturala (iç)" düğmesi yükleminin `invoiceNo`ya bakması İKİ
+      // YÖNLÜ yanlıştı: (a) iç TASLAK varken düğme çıkıyor, kullanıcı formu
+      // dolduruyor ve `assertSourceFree` 409 veriyordu (emek çöpe); (b) dış
+      // numarası işaretlenmiş sevkiyatta düğme HİÇ çıkmıyor, iç fatura
+      // kesilemiyordu. Yüklem artık bu alana bağlanabilir.
+      // ⚠️ İPTAL EDİLMİŞ FATURA DIŞARIDA: `assertSourceFree` ile AYNI süzgeç
+      // (`status <> CANCELLED`) — ayrışsalardı panel "faturası var" der, uç
+      // yeni faturayı kabul ederdi (ya da tersi).
+      // ⚠️ Perf: to-many `select` Prisma'da sayfadaki id'ler üzerinde TEK ek
+      // sorgudur (`_count` ile aynı sınıf); snapshot/JSON kolonu ÇEKİLMEZ
+      // (perf kuralı 13).
+      invoices: {
+        where: { status: { not: InvoiceStatus.CANCELLED } },
+        select: { id: true, docNo: true, status: true },
+      },
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
       _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: { cancelledAt: null } } } },
@@ -2620,6 +2639,13 @@ export class ShippingService {
       reason: true,
       invoiceNo: true,
       invoicedAt: true,
+      // Doğrudan sevkin de iç faturası olabilir (`Invoice.directShipmentId` +
+      // kendi partial unique'i) — iki dal AYNI şekli döndürmeli, yoksa panel
+      // satırın hangi tür olduğuna göre farklı alan ezberlemek zorunda kalır.
+      invoices: {
+        where: { status: { not: InvoiceStatus.CANCELLED } },
+        select: { id: true, docNo: true, status: true },
+      },
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
       _count: { select: { allocations: true } },
@@ -2647,6 +2673,7 @@ export class ShippingService {
       reason: d.reason,
       invoiceNo: d.invoiceNo,
       invoicedAt: d.invoicedAt,
+      invoices: d.invoices,
       customer: d.customer,
       branch: d.branch,
       totalMeters: Number(d.totalQty),

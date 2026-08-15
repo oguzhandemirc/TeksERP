@@ -31,7 +31,7 @@ import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 // B4 — liste filtreleri: CSV çoklu seçim tek kaynaktan çözülür (ham CSV bir
 // uuid kolonuna giderse P2007 → 400; CLAUDE.md 2026-08-06).
-import { isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
+import { buildTurkishSearch, isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -519,11 +519,8 @@ export class PaymentService {
       where.paymentDate = { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) };
     }
     if (params.search?.trim()) {
-      const q = params.search.trim();
-      where.OR = [
-        { docNo: { contains: q, mode: "insensitive" } },
-        { reference: { contains: q, mode: "insensitive" } },
-      ];
+      // ⚠️ TÜRKÇE-DUYARLI: `reference` serbest metindir (dekont açıklaması).
+      where.OR = buildTurkishSearch(params.search, ["docNo", "reference"]);
     }
 
     const [data, total] = await Promise.all([

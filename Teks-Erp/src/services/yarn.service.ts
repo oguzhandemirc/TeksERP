@@ -44,6 +44,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 type Tx = Prisma.TransactionClient;
@@ -321,8 +322,12 @@ export class YarnService {
     if (whCond) where.warehouseId = whCond;
     if (params.onlyNonZero) where.NOT = { balanceKg: 0 };
     if (params.search?.trim()) {
-      const q = params.search.trim();
-      where.item = { OR: [{ name: { contains: q, mode: "insensitive" } }, { code: { contains: q, mode: "insensitive" } }] };
+      // ⚠️ TÜRKÇE-DUYARLI ARAMA ZORUNLU — bu, düz `contains + insensitive`in
+      // KESİN KIRIK olduğu yer: `Item.name` `normalizeItemName` ile tr-TR
+      // BÜYÜĞE çevrilerek saklanıyor ("PENYE") ve ILIKE noktalı/noktasız i'yi
+      // katlamaz (kural + gerekçe: `query-parser.ts`) → "penye" yazan kullanıcı
+      // kaydı HİÇBİR ZAMAN bulamaz; hata da log da çıkmaz, liste boş döner.
+      where.item = { OR: buildTurkishSearch(params.search, ["name", "code"]) };
     }
 
     const [rows, total, agg] = await Promise.all([

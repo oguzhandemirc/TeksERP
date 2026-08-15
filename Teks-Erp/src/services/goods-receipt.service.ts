@@ -66,9 +66,13 @@ import {
   samePartyAs,
   type ResolvedSupplierParty,
 } from "./helpers/supplier-party.helper";
+// C1 (2026-08-15) — SÖZLEŞME fiyatı kart fiyatının ÖNÜNE geçer; kural fatura
+// tarafıyla ORTAK tek dosyada yaşar (ayrışırlarsa fiş ile fatura farklı rakam
+// söylerdi).
+import { describeContractPricing, loadContractPrices } from "./helpers/contract-price.helper";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
-import { buildWhereClause } from "../utils/query-parser";
+import { applyDateRange, buildWhereClause } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 const inventory = new InventoryService();
@@ -143,6 +147,16 @@ export interface AddLinesResult {
    * çağıranlar (üretici fabrika akışı) bunu hiç okumaz ve okumamalı.
    */
   purchaseOrder?: PurchaseOrderSyncResult | null;
+  /**
+   * SÖZLEŞME FİYATI SAYAÇLARI (2026-08-15) — kaç kalemde sipariş fiyatı
+   * uygulandı / çelişkili çıktı. Sipariş bağı yoksa ikisi de 0.
+   *
+   * ⚠️ RAPORLANMASI ZORUNLU: fiyat kararı artık BURADA veriliyor (fatura
+   * tarafında değil), yani "sipariş fiyatı kullanıldı" cümlesinin doğal yeri de
+   * burasıdır. Sessizce uygulamak, depocunun kart fiyatı sandığı bir rakamla
+   * fişi kapatması demekti.
+   */
+  contractPricing?: { pricedItems: number; conflictItems: number };
 }
 
 // =============================================================================
@@ -545,6 +559,44 @@ function assertLinePriceResolved(
   );
 }
 
+/**
+ * FİŞ ↔ ALIŞ SİPARİŞİ PARA BİRİMİ ÇELİŞKİSİ (2026-08-15).
+ *
+ * ⚠️ NEDEN GUARD, NEDEN SESSİZ DEVİR DEĞİL: fişin fiyatları siparişten
+ * doldurulunca (`fillLinesFromOrder`) rakamlar SİPARİŞİN para birimindedir.
+ * Fiş TRY kaydedilirse aynı rakamlar TL sanılır; alış faturası `receipt.
+ * currency` ile kesilir, TRY kuru 1'dir ve cari defter büyüklük mertebesinde
+ * yanlışlanır — ne hata ne log çıkar. Tedarikçi çelişkisinin kurduğu kuralın
+ * aynısı geçerli: hangisinin doğru olduğunu yalnız operatör bilir.
+ *
+ * ⚠️ İKİ NOKTADA ÇAĞRILIR: bağ KURULURKEN (`create`) ve fiş bağlıyken satır
+ * EKLENİRKEN (`addLines`). İkincisi teorik değil — sipariş OPEN'ken para birimi
+ * düzenlenebiliyor (`purchase-order.update`), yani boş bir fiş bağlandıktan
+ * sonra sipariş USD'ye çevrilirse ilk satır tam da o çelişkiyi taşırdı.
+ */
+function assertReceiptOrderCurrency(
+  receiptCurrency: string,
+  orderCurrency: string,
+  orderNo: string,
+): void {
+  if (receiptCurrency === orderCurrency) return;
+  throw AppError.badRequest(
+    `Fişin para birimi (${receiptCurrency}) ${orderNo} siparişinin para biriminden (${orderCurrency}) farklı — ` +
+      `birini düzeltin. Siparişten doldurulan fiyatlar ${orderCurrency} cinsindendir; ` +
+      `farklı para birimiyle kaydedilirse alış faturası yanlış tutarla kesilir.`,
+  );
+}
+
+/**
+ * Liste tarih aralığı için kabul edilen kolonlar.
+ *
+ * ⚠️ TEK KOLON, bilinçli: `cancelledAt` de bir tarihtir ama "iptal edilenleri
+ * tarihe göre süz" ayrı bir soru ve liste onunla SIRALANMIYOR — index'siz bir
+ * kolona range filtresi açmak, listenin en sık yolunu seq scan'e düşürürdü
+ * (perf kuralı 2/12).
+ */
+const GOODS_RECEIPT_DATE_FIELDS = ["createdAt"] as const;
+
 export class GoodsReceiptService {
   /**
    * Fiş açar; `lines` verilmişse satırları da işler.
@@ -599,12 +651,21 @@ export class GoodsReceiptService {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(${PURCHASE_ORDER_LOCK_NS}::int, hashtext(${input.purchaseOrderId}))`;
           const po = await tx.purchaseOrder.findUnique({
             where: { id: input.purchaseOrderId },
-            select: { id: true, orderNo: true, status: true, supplierId: true, subcontractorId: true },
+            select: { id: true, orderNo: true, status: true, currency: true, supplierId: true, subcontractorId: true },
           });
           if (!po) throw AppError.badRequest("Alış siparişi bulunamadı.");
           if (po.status === PurchaseOrderStatus.CANCELLED) {
             throw AppError.conflict(`${po.orderNo} iptal edilmiş — bu siparişe mal kabul yapılamaz.`);
           }
+          // ── PARA BİRİMİ ÇELİŞKİSİ (2026-08-15) — TEDARİKÇİ GUARD'ININ İKİZİ ──
+          // "Kalemleri siparişten doldur" fiyatları SİPARİŞİN para biriminde
+          // satıra yazıyor; fiş TRY olarak kaydedilirse o rakamlar TL sanılır,
+          // `createDraftFromGoodsReceipt` alış faturasını TRY keser ve TRY kuru
+          // 1 olduğu için cari defter ~30 kat yanlışlanır — hata yok, log yok.
+          // ⚠️ SESSİZ DÜZELTME YAPILMAZ (tedarikçi çelişkisiyle aynı gerekçe):
+          // hangisinin doğru olduğunu yalnız operatör bilir. Mesaj İKİ para
+          // birimini de söyler ki düzeltilecek alan belli olsun.
+          assertReceiptOrderCurrency(input.currency ?? "TRY", po.currency, po.orderNo);
           // Tedarikçi ÇELİŞKİSİ sessizce çözülmez: hangisinin doğru olduğunu
           // yalnız operatör bilir ve yanlış tarafa yazmak alış faturası
           // mutabakatını yanlış cariye bağlardı.
@@ -680,7 +741,10 @@ export class GoodsReceiptService {
         (lineResult.failed.length > 0
           ? `${receipt.receiptNo}: ${describeLineResult(lineResult)} girildi, ${lineResult.failed.length} satır atlandı.`
           : `${receipt.receiptNo} oluşturuldu (${describeLineResult(lineResult)}).`) +
-        describeOverReceipt(lineResult.purchaseOrder),
+        describeOverReceipt(lineResult.purchaseOrder) +
+        // C1 — sözleşme fiyatı uygulandıysa SÖYLENİR (sessiz doğru cevap,
+        // görünmez cevaptır); sipariş bağı yoksa boş string, mesaj bayt-bayt aynı.
+        describeContractPricing(lineResult.contractPricing),
     };
   }
 
@@ -738,6 +802,10 @@ export class GoodsReceiptService {
         currency: true,
         // D3 — satırlardan sonra alış siparişinin karşılanması tazelenir.
         purchaseOrderId: true,
+        // ⚠️ Para birimi çelişkisi guard'ı için siparişin para birimi de okunur.
+        // İlişki üzerinden gelir → EK SORGU YOK ve sipariş bağı olmayan fişte
+        // (üretici fabrika yolu) alan `null` döner, dal hiç çalışmaz.
+        purchaseOrder: { select: { orderNo: true, currency: true } },
         // C2 — topun doğacağı raf (aşağıdaki `targetStatus`).
         rawStockEntry: true,
       },
@@ -745,6 +813,16 @@ export class GoodsReceiptService {
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
     if (receipt.status === GoodsReceiptStatus.CANCELLED) {
       throw AppError.conflict(`${receipt.receiptNo} iptal edilmiş — satır eklenemez.`);
+    }
+    // ⚠️ Para birimi çelişkisi: fiş SATIR ALMADAN ÖNCE reddedilir. `create`
+    // guard'ıyla aynı fonksiyon — mesajın ve kuralın iki yerde ayrışması,
+    // "fiş açılırken engellendim ama satır eklerken geçti" demekti.
+    if (receipt.purchaseOrder) {
+      assertReceiptOrderCurrency(
+        receipt.currency,
+        receipt.purchaseOrder.currency,
+        receipt.purchaseOrder.orderNo,
+      );
     }
 
     // ── FİYAT ÖN-DOLUMU (D2) ────────────────────────────────────────────────
@@ -773,8 +851,20 @@ export class GoodsReceiptService {
             customerId: receipt.supplierId,
           })
         : null;
+    // ── SÖZLEŞME (SİPARİŞ) FİYATI — KART FİYATININ ÖNÜNDE ────────────────────
+    // ⚠️ KATMANIN YERİ BURASIDIR, FATURA DEĞİL. Kart fiyatı bu satırda
+    // `Roll.purchasePrice`e DONUYOR; katman yalnız faturada dursaydı
+    // (2026-08-15 öncesi hâli) fatura zinciri ilk terimde durur ve sözleşme
+    // fiyatına HİÇ inmezdi — yani anlaşılan rakam, tam da anlaşıldığı
+    // senaryoda sessizce terk edilirdi. Gerekçe + ölçüm:
+    // `helpers/contract-price.helper.ts` başlığı.
+    // ⚠️ TEK SORGU ve yalnız fiş bir siparişe BAĞLIYSA koşar (siparişsiz
+    // üretici yolunda tek sorgu bile eklenmez); satır sayısından bağımsızdır.
+    const contract = await loadContractPrices(
+      priceNeeded.length > 0 ? receipt.purchaseOrderId : null,
+    );
     const priceFor = (line: GoodsReceiptLineInput): Prisma.Decimal.Value | null =>
-      line.unitPrice ?? priceMap?.get(line.itemId)?.price ?? null;
+      line.unitPrice ?? contract.priceOf(line.itemId) ?? priceMap?.get(line.itemId)?.price ?? null;
 
     // Kalem TÜRLERİ TEK sorguda okunur (N+1 yok — 500 satırlık fişte satır
     // başına lookup perf kuralı 7/9 ihlali olurdu). Bulunamayan kalem burada
@@ -998,7 +1088,16 @@ export class GoodsReceiptService {
     // görünmez (`syncPurchaseOrderSafely` null'da hemen döner).
     const purchaseOrder = await syncPurchaseOrderSafely(receipt.purchaseOrderId);
 
-    return { created, createdYarn, failed, purchaseOrder };
+    return {
+      created,
+      createdYarn,
+      failed,
+      purchaseOrder,
+      contractPricing: {
+        pricedItems: contract.pricedItems.size,
+        conflictItems: contract.conflictItems.size,
+      },
+    };
   }
 
   /**
@@ -1362,8 +1461,18 @@ export class GoodsReceiptService {
     pageSize: number;
     filters: Record<string, string | string[]>;
     search?: string;
+    /** `?dateField=createdAt&dateFrom=…&dateTo=…` — üçü BİRLİKTE gider. */
+    dateField?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
   }): Promise<{ rows: unknown[]; total: number }> {
     const where = buildWhereClause(params.filters, ["receiptNo", "deliveryNoteNo", "notes"], params.search);
+    // ⚠️ TARİH ARALIĞI (2026-08-15): `applyDateRange` bu serviste HİÇ
+    // çağrılmıyordu → `dateFrom` gönderen istemci filtresinin çalıştığını
+    // sanıyor, liste TAM dönüyordu (sessiz yanlış cevap; "bu tedarikçiden bu ay
+    // ne geldi" sorusu cevaplanamıyordu). Whitelist DAR: `createdAt` fişin
+    // AÇILDIĞI andır ve liste zaten onunla sıralanıyor.
+    applyDateRange(where, params, GOODS_RECEIPT_DATE_FIELDS);
     const [rows, total] = await Promise.all([
       prisma.goodsReceipt.findMany({
         where,

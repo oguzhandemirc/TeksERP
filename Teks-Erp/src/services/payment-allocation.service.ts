@@ -39,6 +39,10 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { D, D0 } from "./helpers/finance.helper";
+// ⚠️ Çek durum adları TEK KAYNAK: `cheque.service` sözlüğü ("Ekranda ve hata
+// mesajında okunan durum adları"). Buraya ikinci bir sözlük yazmak, aynı
+// durumun iki farklı adla anılmasına giden en kısa yoldur.
+import { CHEQUE_STATUS_LABEL } from "./cheque.service";
 import type { ApiResponse } from "../types/api.types";
 
 // -----------------------------------------------------------------------------
@@ -820,7 +824,7 @@ export class PaymentAllocationService {
     if (!c) throw AppError.notFound("Çek/senet bulunamadı.");
     if (!chequeCanAllocate(c.status)) {
       throw AppError.conflict(
-        `${c.docNo} durumu ${c.status} — bu çekle fatura kapatılamaz (karşılıksız/iade/iptal çekin parası yoktur).`,
+        `${c.docNo} durumu "${CHEQUE_STATUS_LABEL[c.status]}" — bu çekle fatura kapatılamaz (karşılıksız/iade/iptal çekin parası yoktur).`,
       );
     }
     if (!chequeKindMatchesInvoice(c.kind, invoiceType)) {

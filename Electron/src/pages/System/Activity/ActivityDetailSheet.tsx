@@ -63,8 +63,19 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                 </Row>
               </div>
 
-              <AuditDataBlock title="Önceki Değer" data={query.data.oldData} />
-              <AuditDataBlock title="Yeni Değer" data={query.data.newData} />
+              {/* ⚠️ `tableName` bağlam OLARAK geçer: bazı enum değerleri iki
+                  enum'da çelişir (`PURCHASE` fatura türü ↔ fiyat türü) ve
+                  yalnız `TABLO.alan` çifti onları ayırabilir. */}
+              <AuditDataBlock
+                title="Önceki Değer"
+                data={query.data.oldData}
+                tableName={query.data.tableName}
+              />
+              <AuditDataBlock
+                title="Yeni Değer"
+                data={query.data.newData}
+                tableName={query.data.tableName}
+              />
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Kayıt bulunamadı.</p>

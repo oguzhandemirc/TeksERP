@@ -106,12 +106,35 @@ export function RatesPage() {
 
         {q.isLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+        ) : q.isError && rows.length === 0 ? (
+          /* ⚠️ BU EKRANDA YANLIŞ BOŞ-DURUM METNİ EYLEME YÖNLENDİRİR: aşağıdaki
+             cümle "önce o güne ait kuru girin" diyor. Hata anında basılırsa
+             kullanıcı zaten var olan kuru İKİNCİ KEZ girer — mükerrer kur satırı,
+             ve fatura hangi satırı damgaladığına göre farklı tutar üretir. */
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+            <p className="font-medium text-destructive">Kur listesi yüklenemedi.</p>
+            <p className="mt-1 text-muted-foreground">
+              Bu “kur girilmemiş” anlamına GELMEZ — istek sunucuya ulaşamadı ya da reddedildi.
+              Yeni kur girmeden önce tekrar deneyin; aksi halde aynı güne ikinci bir kur
+              yazabilirsiniz.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
             Kur girilmemiş. Döviz cinsinden fatura kesmek için önce o güne ait kuru girin.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-md border">
+          <div className="space-y-3">
+            {q.isError && (
+              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                Liste tazelenemedi — aşağıdaki kurlar son başarılı okumaya aittir; bugün girilmiş
+                bir kur burada görünmeyebilir.
+              </p>
+            )}
+            <div className="overflow-hidden rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
                 <tr>
@@ -136,6 +159,7 @@ export function RatesPage() {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </PageBody>

@@ -54,6 +54,7 @@ import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } f
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 // -----------------------------------------------------------------------------
@@ -119,8 +120,15 @@ const TERMINAL_STATUSES: readonly ChequeStatus[] = [
   ChequeStatus.CANCELLED,
 ];
 
-/** Ekranda ve hata mesajında okunan durum adları (tek kaynak). */
-const STATUS_LABEL: Record<ChequeStatus, string> = {
+/**
+ * Ekranda ve hata mesajında okunan durum adları (tek kaynak).
+ *
+ * ⚠️ EXPORT EDİLDİ (2026-08-15): `payment-allocation.service` çekle fatura
+ * kapatmayı reddederken ham enum basıyordu ("durumu BOUNCED"). Sözlüğün kendi
+ * yorumu zaten "tek kaynak" diyordu; eksik olan yalnız dışa açılmasıydı.
+ * Kopyalama — ikinci bir sözlük, aynı durumun iki adla anılması demektir.
+ */
+export const CHEQUE_STATUS_LABEL: Record<ChequeStatus, string> = {
   PORTFOLIO: "portföyde",
   AT_BANK: "bankada (tahsilde)",
   ENDORSED: "ciro edildi",
@@ -767,8 +775,8 @@ export class ChequeService {
           : "";
       throw AppError.conflict(
         isTerminal
-          ? `${row.docNo} zaten ${STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${collectedHint}`
-          : `${row.docNo} şu an ${STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.`,
+          ? `${row.docNo} zaten ${CHEQUE_STATUS_LABEL[row.status]} — bu kayıt kapanmıştır, "${action}" yapılamaz.${collectedHint}`
+          : `${row.docNo} şu an ${CHEQUE_STATUS_LABEL[row.status]}; "${action}" bu durumda yapılamaz.`,
       );
     }
     return row;
@@ -1071,7 +1079,7 @@ export class ChequeService {
     return {
       success: true,
       data: { id: result.id, docNo: result.docNo },
-      message: `${result.docNo} tahsil stornosu yapıldı — para hesaptan geri çekildi, çek ${STATUS_LABEL[result.backTo]} durumuna döndü.`,
+      message: `${result.docNo} tahsil stornosu yapıldı — para hesaptan geri çekildi, çek ${CHEQUE_STATUS_LABEL[result.backTo]} durumuna döndü.`,
     };
   }
 
@@ -1497,16 +1505,12 @@ export class ChequeService {
       };
     }
     if (params.search?.trim()) {
-      const q = params.search.trim();
+      // ⚠️ TÜRKÇE-DUYARLI: keşideci/banka adı serbest metindir ve Türkçe harf
+      // taşır; düz ILIKE onları katlamaz → "şeker bankası" hiç eşleşmez.
+      // ⚠️ `AND` sarmalayıcı KORUNUR: `where.OR` yukarıda cari filtresine ait
+      // (`cariId` ∨ `endorsedToCariId`) — aynı anahtara yazmak onu EZERDİ.
       where.AND = [
-        {
-          OR: [
-            { docNo: { contains: q, mode: "insensitive" } },
-            { serialNo: { contains: q, mode: "insensitive" } },
-            { drawerName: { contains: q, mode: "insensitive" } },
-            { bankName: { contains: q, mode: "insensitive" } },
-          ],
-        },
+        { OR: buildTurkishSearch(params.search, ["docNo", "serialNo", "drawerName", "bankName"]) },
       ];
     }
 

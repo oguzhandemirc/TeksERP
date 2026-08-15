@@ -41,6 +41,12 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
     ],
     [cashQ.data, bankQ.data],
   );
+  // ⚠️ "TANIM YOK" YALNIZ OKUMA BAŞARILIYKEN SÖYLENİR. Liste düşerse `accounts`
+  // boş kalır ve aşağıdaki uyarı kullanıcıyı Kasa & Banka ekranına yollar; oradaki
+  // liste de aynı sebeple boş görünürse MÜKERRER KASA açılır ve sonraki tahsilatlar
+  // yanlış hesaba yazılır. Hata ile boşluk ayrı cümlelerdir.
+  const accountsError = cashQ.isError || bankQ.isError;
+  const accountsResolved = !cashQ.isLoading && !bankQ.isLoading && !accountsError;
   const selected = accounts.find((a) => a.id === accountId);
 
   // ⚠️ Para birimi HESAPTAN gelir, ayrıca sorulmaz: kasa tek para birimlidir ve
@@ -109,6 +115,12 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
           </div>
           <div>
             <Label>{party === "CUSTOMER" ? "Müşteri" : "Fason firma"}</Label>
+            {/* ⚠️ PASİF KART DA SEÇİLEBİLİR (`includeInactive`): uç kartın
+                değil `CariAccount`ın aktifliğine bakıyor — pasifleştirilmiş bir
+                firmanın AÇIK BAKİYESİNE tahsilat girmek meşrudur ve mahsup
+                ekranı bu kararı zaten yazılı vermiş. Süzgeç açıkken aynı firma
+                Mahsup'ta bulunuyor, burada "yok" görünüyordu. Seçilen kayıt
+                pasifse alan bunu rozetle ve altındaki uyarıyla söyler. */}
             <div className="mt-1">
               {party === "CUSTOMER" ? (
                 <ReferenceSelect<Customer>
@@ -118,6 +130,7 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
                   queryKey="customers"
                   getLabel={(c) => `${c.code} — ${c.name}`}
                   placeholder="Müşteri ara..."
+                  includeInactive
                 />
               ) : (
                 <ReferenceSelect
@@ -127,6 +140,7 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
                   queryKey="subcontractors"
                   getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
                   placeholder="Fason firma ara..."
+                  includeInactive
                 />
               )}
             </div>
@@ -146,7 +160,13 @@ export function PaymentFormDialog({ open, direction, onOpenChange, onCreated }: 
                 </option>
               ))}
             </select>
-            {accounts.length === 0 && (
+            {accountsError && (
+              <p className="mt-1 text-xs text-destructive">
+                Kasa/banka listesi okunamadı — bu “tanım yok” DEMEK DEĞİLDİR. Yeni kasa açmayın;
+                diyaloğu kapatıp tekrar açın.
+              </p>
+            )}
+            {accountsResolved && accounts.length === 0 && (
               // Boş liste "bozuk" değil "henüz tanım yok" demektir — kullanıcıyı
               // doğru ekrana yönlendirmeden bırakmak en sık şikâyet sebebi.
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">

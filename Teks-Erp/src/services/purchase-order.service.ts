@@ -83,7 +83,8 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { isEnumMember, readIdCondition } from "../utils/query-parser";
+import { buildTurkishSearch, isEnumMember, readIdCondition } from "../utils/query-parser";
+import { PURCHASE_ORDER_STATUS_TR } from "../constants/status-labels";
 // C4 — tedarikçi İKİ tabloda olabilir (müşteri-tipli cari XOR fason firma);
 // XOR + varlık + aktiflik TEK kapıdan sorulur (mal kabul ile ORTAK).
 import {
@@ -671,7 +672,7 @@ export class PurchaseOrderService {
     if (!before) throw AppError.notFound("Alış siparişi bulunamadı.");
     if (before.status !== PurchaseOrderStatus.OPEN) {
       throw AppError.conflict(
-        `${before.orderNo} artık düzenlenemez (durum: ${before.status}). Mal görmüş sipariş revize edilmez; yeni sipariş açın.`,
+        `${before.orderNo} artık düzenlenemez (durum: ${PURCHASE_ORDER_STATUS_TR[before.status]}). Mal görmüş sipariş revize edilmez; yeni sipariş açın.`,
       );
     }
     // İkinci hat: durum OPEN görünüp karşılanma taşıyorsa (drift) yine reddet.
@@ -1050,14 +1051,18 @@ export class PurchaseOrderService {
 
     const q = params.search?.trim();
     if (q) {
-      where.OR = [
-        { orderNo: { contains: q, mode: "insensitive" } },
-        { notes: { contains: q, mode: "insensitive" } },
-        { supplier: { name: { contains: q, mode: "insensitive" } } },
-        // C4 — fason bacağı aramaya da girer; yoksa "boyahane" yazan kullanıcı
-        // kendi verdiği siparişi bulamaz ve liste "kayıt yok" der.
-        { subcontractorSupplier: { name: { contains: q, mode: "insensitive" } } },
-      ];
+      // ⚠️ TÜRKÇE-DUYARLI (kural + gerekçe: `utils/query-parser`): ILIKE
+      // noktalı/noktasız i'yi katlamaz; ayrıca TEDARİKÇİ ADI normalize EDİLMEZ
+      // (başlık düzeninde saklanabilir) → düz `contains + insensitive` ne
+      // "şahin"i ne "iş bankası"nı bulur.
+      // C4 — fason bacağı aramaya da girer; yoksa "boyahane" yazan kullanıcı
+      // kendi verdiği siparişi bulamaz ve liste "kayıt yok" der.
+      where.OR = buildTurkishSearch(q, [
+        "orderNo",
+        "notes",
+        "supplier.name",
+        "subcontractorSupplier.name",
+      ]);
     }
 
     if (params.cursorMode) {

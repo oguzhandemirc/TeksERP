@@ -16,6 +16,7 @@ import { periodCloseService } from "./period-close.service";
 // efektif vade + açık tutar + sanal FIFO mahsup kuralı ORADA yaşar, burada
 // ikinci bir formül YAZILMAZ (bkz. finance-aging.report.ts başlığı).
 import { collectAgingRows } from "./reports/finance-aging.report";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CariListRow {
@@ -86,13 +87,18 @@ export class CariService {
     if (params.kind) where.kind = params.kind;
     if (params.isActive !== undefined) where.isActive = params.isActive;
     if (params.search?.trim()) {
-      const q = params.search.trim();
-      where.OR = [
-        { customer: { name: { contains: q, mode: "insensitive" } } },
-        { customer: { code: { contains: q, mode: "insensitive" } } },
-        { subcontractor: { name: { contains: q, mode: "insensitive" } } },
-        { subcontractor: { code: { contains: q, mode: "insensitive" } } },
-      ];
+      // ⚠️ TÜRKÇE-DUYARLI (kural + gerekçe: `utils/query-parser`).
+      // ⚠️ CARİ ADI **NORMALİZE EDİLMEZ** — `Item.name`in aksine BÜYÜĞE
+      // çevrilmez (bu kurulumda 49 müşterinin 22'si başlık düzeninde) ve
+      // düzeltmenin en kritik yeri burasıdır: ILIKE noktalı/noktasız i'yi
+      // katlamadığı için "iş bankası" yazan kullanıcı "T. İş Bankası"yı düz
+      // `contains + insensitive` ile HİÇ bulamaz.
+      where.OR = buildTurkishSearch(params.search, [
+        "customer.name",
+        "customer.code",
+        "subcontractor.name",
+        "subcontractor.code",
+      ]);
     }
     if (params.onlyWithBalance) {
       where.balances = { some: { NOT: { balance: 0 } } };
@@ -620,6 +626,15 @@ export class CariService {
         description: string | null;
         sourceType: string;
         docNo: string | null;
+        /** Satırı doğuran FATURANIN id'si — ekstre satırından belgeye tıkla-git
+         *  (2026-08-15). `docNo` düz metindi; muhasebecinin en sık sorusu ("bu
+         *  satır hangi fatura?") ancak Faturalar ekranında elle arayarak
+         *  cevaplanabiliyordu. Fatura kaynaklı olmayan satırda `null`. */
+        invoiceId: string | null;
+        /** Satırı doğuran TAHSİLAT/ÖDEMENİN id'si. `invoiceId` ile AYRI alan:
+         *  tek bir `documentId`, satırın türünü `sourceType`ten yeniden
+         *  çıkarmayı zorunlu kılardı (o alan devir/storno satırlarında da dolu). */
+        paymentId: string | null;
         debit: Prisma.Decimal;
         credit: Prisma.Decimal;
         running: Prisma.Decimal;
@@ -659,8 +674,12 @@ export class CariService {
         sourceType: true,
         debit: true,
         credit: true,
-        invoice: { select: { docNo: true } },
-        payment: { select: { docNo: true } },
+        // ⚠️ `id` DE TAŞINIR (2026-08-15): ekstre satırından belgeye TIKLA-GİT'in
+        // ön koşulu. `docNo` düz metin olarak dönerken muhasebecinin en sık
+        // sorusu ("bu satır hangi fatura?") ancak Faturalar ekranına gidip elle
+        // arayarak cevaplanabiliyordu. Ek sorgu YOK — aynı ilişkiden bir kolon.
+        invoice: { select: { id: true, docNo: true } },
+        payment: { select: { id: true, docNo: true } },
         reversesTxnId: true,
         // Terslenme bilgisi SATIRIN KENDİSİNDE taşınır (I3): pencere kesmesi
         // sorununu kökten kaldırır — satır kendi terslenip terslenmediğini bilir.
@@ -681,6 +700,12 @@ export class CariService {
         description: t.description,
         sourceType: t.sourceType,
         docNo: t.invoice?.docNo ?? t.payment?.docNo ?? null,
+        // Panel satırı doğru diyaloğa açsın diye İKİ ALAN AYRI: tek bir
+        // `documentId` alanı, satırın fatura mı tahsilat mı olduğunu
+        // `sourceType`ten yeniden çıkarmayı zorunlu kılardı (ve o alan devir/
+        // storno satırlarında da dolu).
+        invoiceId: t.invoice?.id ?? null,
+        paymentId: t.payment?.id ?? null,
         debit: t.debit,
         credit: t.credit,
         reversesTxnId: t.reversesTxnId,

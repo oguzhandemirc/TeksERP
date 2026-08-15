@@ -21,6 +21,10 @@ import type { ReceiptDetailYarnLine } from "./service";
 import { PurchaseOrderSyncBand } from "../PurchaseOrders/PurchaseOrderSyncBand";
 import type { ReceiptPurchaseOrderSync } from "../PurchaseOrders/receiptSync";
 import { PO_STATUS_LABEL } from "../PurchaseOrders/labels";
+// ⚠️ TEK YÖNLÜ İMPORT: fiş → sipariş. Sipariş detayı fiş sheet'ini İMPORT ETMEZ;
+// oradaki karşı bağ geri çağrı ile (`onOpenReceipt`) sayfa katmanından kurulur.
+// İki bileşen birbirini import etseydi modül döngüsü doğardı.
+import { PurchaseOrderDetailSheet } from "../PurchaseOrders/PurchaseOrderDetailSheet";
 
 /** Decimal JSON'da string gelir — görüntü için sayıya çevirip TR biçimler. */
 const fmt = (v: string | number | null | undefined): string =>
@@ -55,6 +59,8 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
   // kaybolur ve muhasebeci taslağı Faturalar ekranında aramak zorunda kalırdı;
   // sektör kuralı: belge üreten eylem belgeyi gösterir.
   const [draftInvoiceId, setDraftInvoiceId] = useState<string | null>(null);
+  // Bağlı alış siparişi — fişten siparişe TIKLA-GİT (2026-08-15).
+  const [poDetailId, setPoDetailId] = useState<string | null>(null);
 
   // Fişten alış faturası taslağı — satırları backend gruplar (ürün+renk+FİYAT).
   // Hata toast'ı apiClient interceptor'undan gelir (onError eklenmez).
@@ -127,7 +133,22 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
 
           {q.isLoading ? (
             <p className="mt-4 text-sm text-muted-foreground">Yükleniyor…</p>
-          ) : !r ? null : (
+          ) : !r ? (
+            /* ⚠️ SESSİZ `return null` YASAK (LockStatusCard kalıbı): `getGoodsReceipt`
+               non-nullable döner, yani `!r` YALNIZCA hata demektir. Eski hâlinde
+               çekmece açılıyor, başlıkta "…" yazıyor ve gövde tamamen boş kalıyordu
+               — depocu fişin içeriğinin silindiğini/bozulduğunu sanardı. */
+            <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+              <p className="font-medium text-destructive">Fiş detayı yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu, fişin boş ya da bozuk olduğu anlamına GELMEZ — içerik sunucudan alınamadı.
+                Fişi iptal etmeden önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
+          ) : (
             <div className="mt-4 space-y-4">
               <dl className="grid grid-cols-2 gap-2 text-sm">
                 <div>
@@ -166,7 +187,18 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
                   <div className="col-span-2">
                     <dt className="text-xs text-muted-foreground">Alış siparişi</dt>
                     <dd className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono">{r.purchaseOrder.orderNo}</span>
+                      {/* ⭐ TIKLA-GİT: `purchaseOrder.id` yanıtta ZATEN geliyordu
+                          (backend yorumu bunu "fişten siparişe tıkla-git" diye
+                          vaat ediyor) ama bağ hiç kurulmamıştı. Fiş paneli AÇIK
+                          KALIR — kullanıcı siparişi kapatınca fişin başına döner. */}
+                      <button
+                        type="button"
+                        className="font-mono text-primary underline-offset-2 hover:underline"
+                        title="Alış siparişini aç (ne ısmarladım, ne geldi, ne kaldı)"
+                        onClick={() => setPoDetailId(r.purchaseOrder!.id)}
+                      >
+                        {r.purchaseOrder.orderNo}
+                      </button>
                       <span className="text-xs text-muted-foreground">
                         ({PO_STATUS_LABEL[r.purchaseOrder.status]})
                       </span>
@@ -330,6 +362,13 @@ export function GoodsReceiptDetailSheet({ id, onOpenChange, sync }: Props) {
           open
           onOpenChange={(o) => !o && setDraftInvoiceId(null)}
         />
+      )}
+
+      {/* BAĞLI ALIŞ SİPARİŞİ — koşullu mount. `onOpenReceipt` GEÇİLMEZ: buradan
+          açılan siparişin fiş satırları tıklanabilir olsaydı, kullanıcının
+          zaten baktığı fişi ikinci kez açan bir döngü kurulurdu. */}
+      {poDetailId && (
+        <PurchaseOrderDetailSheet id={poDetailId} onOpenChange={(o) => !o && setPoDetailId(null)} />
       )}
 
       <ConfirmDialog

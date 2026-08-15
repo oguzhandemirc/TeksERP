@@ -153,6 +153,46 @@ export function invoiceLedgerSide(type: InvoiceType): "debit" | "credit" {
 }
 
 // -----------------------------------------------------------------------------
+// VADE ÖN-DOLUMU
+// -----------------------------------------------------------------------------
+
+const DAY_MS = 86_400_000;
+
+/**
+ * OTOMATİK TASLAKLARIN VADESİ — `issueDate + CariAccount.paymentTermDays`.
+ *
+ * ⚠️ NEDEN VAR (2026-08-15 saha planı, D-Karar "vade fallback ayrışması"):
+ * iki otomatik üretici yol (`createDraftFromGoodsReceipt` ve
+ * `autoDraftInvoiceAfterDispatch`) `dueDate` HİÇ yazmıyordu. Sonuç: aynı fatura
+ * Faturalar listesinde sonsuza dek "gecikmemiş" (`settlementOf` yalnız
+ * `Invoice.dueDate`e bakar) ama Yaşlandırma raporunda KIRMIZI görünüyordu —
+ * çünkü rapor `dueDate ?? issueDate + paymentTermDays` fallback'ini uyguluyor
+ * (`finance-aging.report.ts`). İki ekran aynı faturaya iki farklı cevap
+ * veriyordu; kusur ekranlardan birinde değil, taslağın vadesiz doğmasındaydı.
+ *
+ * ⚠️ VADE UYDURULMAZ: `paymentTermDays` tanımsızsa `null` döner ve fatura
+ * VADESİZ kalır. "Peşin say" (aynı gün) ya da sabit bir varsayılan (30 gün)
+ * yazmak, hiç anlaşılmamış bir vadeyi anlaşılmış gibi gösterirdi — yaşlandırma
+ * raporu o uydurma tarihe göre alacağı "gecikmiş" ilan ederdi.
+ *
+ * ⚠️ ÖN-DOLUMDUR, KİLİT DEĞİL: taslak `PATCH /invoices/:id` ile düzenlenebilir
+ * ve panel fatura formu aynı değeri zaten öneriyor (`usePartyTermDays`).
+ *
+ * ⚠️ Hesap MUTLAK ANDIR (fabrika takvim günü DEĞİL): vade "fatura anı + N×24
+ * saat" olarak yaşlandırma raporundaki formülle BİREBİR aynı yazılır — iki
+ * yerde farklı yuvarlanırsa aynı fatura bir ekranda gecikmiş, diğerinde
+ * gecikmemiş görünür ve bu notun kapattığı delik aynen geri açılır.
+ */
+export function deriveInvoiceDueDate(
+  issueDate: Date,
+  paymentTermDays: number | null | undefined,
+): Date | null {
+  if (paymentTermDays === null || paymentTermDays === undefined) return null;
+  if (!Number.isFinite(paymentTermDays) || paymentTermDays < 0) return null;
+  return new Date(issueDate.getTime() + paymentTermDays * DAY_MS);
+}
+
+// -----------------------------------------------------------------------------
 // KUR
 // -----------------------------------------------------------------------------
 

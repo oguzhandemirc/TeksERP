@@ -39,6 +39,7 @@ export function GoodsReceiptsPage() {
   });
 
   const rows = q.data?.data ?? [];
+  const total = q.data?.pagination?.total ?? 0;
 
   return (
     <PageShell>
@@ -67,12 +68,34 @@ export function GoodsReceiptsPage() {
       <PageBody className="p-6">
         {q.isLoading ? (
           <div className="text-sm text-muted-foreground">Yükleniyor…</div>
+        ) : q.isError && rows.length === 0 ? (
+          /* ⚠️ HATA, "HENÜZ FİŞ YOK"UN ÖNÜNDE: boş-durum cümlesi doğrudan
+             "Yeni Mal Kabul" davetidir. Hata anında basılırsa depocu az önce
+             kaydettiği fişi yok sanıp AYNI MALI ikinci kez girer — stok iki
+             katına çıkar ve iki fişin de barkodları basılmış olur. */
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+            <p className="font-medium text-destructive">Mal kabul listesi yüklenemedi.</p>
+            <p className="mt-1 text-muted-foreground">
+              Bu bir “fiş yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+              Yeni fiş açmadan önce tekrar deneyin; kaydettiğiniz fiş duruyor olabilir.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="rounded-lg border border-dashed p-8 text-center text-sm text-muted-foreground">
             Henüz mal kabul fişi yok. “Yeni Mal Kabul” ile tedarikçiden gelen malı depoya alın.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border">
+          <div className="space-y-3">
+            {q.isError && (
+              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                Liste tazelenemedi — aşağıdaki fişler son başarılı okumaya aittir; az önce
+                kaydedilmiş bir fiş burada görünmeyebilir.
+              </p>
+            )}
+            <div className="overflow-hidden rounded-lg border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-xs uppercase text-muted-foreground">
                 <tr>
@@ -149,6 +172,14 @@ export function GoodsReceiptsPage() {
                 })}
               </tbody>
             </table>
+            </div>
+            {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). */}
+            {total > rows.length && (
+              <p className="text-xs text-amber-700 dark:text-amber-500">
+                {total} fişin ilk {rows.length} tanesi gösteriliyor (en yeniden geriye).
+                Aradığınızı bulmak için fiş no / irsaliye no aramasını kullanın.
+              </p>
+            )}
           </div>
         )}
         {rows.length > 0 && (

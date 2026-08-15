@@ -52,6 +52,7 @@ import {
   readFinanceEnabled,
 } from "./../system-setting.service";
 import { D0 } from "./allocation.helper";
+import { deriveInvoiceDueDate } from "./finance.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
 
 /**
@@ -321,21 +322,29 @@ export async function autoDraftInvoiceAfterDispatch(
     // kalır ve onay seddi devreye girer — sessiz yanlış değil, görünür eksik).
     const cari = await prisma.cariAccount.findUnique({
       where: { customerId: sh.customerId },
-      select: { defaultCurrency: true },
+      // ⚠️ `paymentTermDays` AYNI SORGUDAN gelir (ek sorgu yok) — vade
+      // ön-dolumu için; kural `deriveInvoiceDueDate`de (tek kaynak).
+      select: { defaultCurrency: true, paymentTermDays: true },
     });
     const currency = cari?.defaultCurrency ?? Currency.TRY;
 
     const { lines, orderConflicts } = await collectShipmentInvoiceDraftLines(sh.id, sh.customerId, currency);
     if (lines.length === 0) return null;
 
+    // Tahakkuk tarihi = malın çıktığı an. `new Date()` yazmak, gece yarısını
+    // geçen bir sevkte faturayı ertesi güne atardı.
+    const issueDate = sh.dispatchedAt ?? new Date();
     const res = await invoiceService.createDraft(
       {
         type: InvoiceType.SALES,
         customerId: sh.customerId,
         currency,
-        // Tahakkuk tarihi = malın çıktığı an. `new Date()` yazmak, gece
-        // yarısını geçen bir sevkte faturayı ertesi güne atardı.
-        issueDate: sh.dispatchedAt ?? new Date(),
+        issueDate,
+        // ⚠️ VADE ÖN-DOLUMU (2026-08-15): taslak vadesiz doğduğunda fatura
+        // listesi "gecikmemiş", yaşlandırma raporu "gecikmiş" diyordu — iki
+        // ekran aynı faturaya iki cevap veriyordu. Kural TEK KAYNAKTA
+        // (`deriveInvoiceDueDate`); cari vade taşımıyorsa vade YAZILMAZ.
+        dueDate: deriveInvoiceDueDate(issueDate, cari?.paymentTermDays),
         notes: `${sh.shipmentNo} sevkiyatından üretildi.`,
         shipmentId: sh.id,
         lines,

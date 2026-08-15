@@ -126,6 +126,11 @@ export interface StatementRow {
   reversesTxnId?: string | null;
   /** Bu satırı tersleyen satırın id'si — doluysa satır TERSLENMİŞTİR. */
   reversedByTxnId?: string | null;
+  /** Belgeye TIKLA-GİT (2026-08-15) — eski backend'de gelmez; yoksa satır düz
+   *  metin kalır (`statementLink.statementTargetOf`). İki alan AYRI çünkü hedef
+   *  diyalog türe göre farklı: fatura → detay, tahsilat → donmuş makbuz. */
+  invoiceId?: string | null;
+  paymentId?: string | null;
 }
 
 /** Cari tarafın görünen adı — hangi tarafa bağlıysa oradan. */
@@ -506,6 +511,37 @@ export interface ShipmentInvoiceDraftLines {
   orderPriced: number;
   orderConflicts: number;
   currency: Currency;
+}
+
+/**
+ * TASLAK GÜNCELLEME — `PATCH /api/finance/invoices/:id` (updateDraft).
+ *
+ * ⚠️ Uç 2026-08-14'ten beri VARDI ve panel onu HİÇ ÇAĞIRMIYORDU. Sonuç bir
+ * KİLİTLENMEYDİ: otomatik doğan 0 fiyatlı taslak onaylanamıyor (`confirm`
+ * sıfır fiyatı reddediyor) ve düzeltilemiyor; tek çıkış silmekti, silmek de
+ * kaynak bağını (mal kabul fişi / sevkiyat) götürüyordu çünkü oluşturma şeması
+ * `goodsReceiptId` kabul etmiyor.
+ *
+ * ⚠️ GÖVDE `.strict()`: yalnız `lines · dueDate · externalNo · notes ·
+ * exchangeRate`. Tek fazla anahtar (örn. `currency`) tüm isteği 400'e düşürür —
+ * gövdeyi elle kurma, `invoiceForm.buildUpdateBody` kullan.
+ *
+ * ⚠️ Yalnız DRAFT: onaylı/iptal faturada uç 409 döner ve mesajı yolu söyler
+ * ("düzeltme için iptal edip yeni fatura kesin"). `suppressErrorToast` YOK —
+ * o cümle aynen gösterilmeli.
+ */
+export async function updateInvoice(
+  id: string,
+  body: {
+    lines?: InvoiceLineInput[];
+    dueDate?: string | null;
+    externalNo?: string | null;
+    notes?: string | null;
+    exchangeRate?: number;
+  },
+) {
+  const res = await apiClient.patch(`/api/finance/invoices/${id}`, body);
+  return res.data as { data: { id: string }; message?: string };
 }
 
 export async function confirmInvoice(id: string) {

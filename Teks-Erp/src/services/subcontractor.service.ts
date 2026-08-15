@@ -3499,7 +3499,8 @@ export class SubcontractorService {
 
     const search = params?.search?.trim();
     if (search) {
-      // Y-2/Y-3: Türkçe-duyarlı arama (C-locale ILIKE İ/ı katlamaz).
+      // Türkçe-duyarlı arama — ILIKE noktalı/noktasız i'yi katlamaz
+      // (kural + gerekçe: `utils/query-parser`).
       where.OR = buildTurkishSearch<Prisma.SubcontractorDispatchWhereInput>(search, [
         "dispatchNo",
         "subcontractor.name",

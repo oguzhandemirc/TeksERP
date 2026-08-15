@@ -17,6 +17,7 @@
 // sayım); amaç kullanıcıya sonradan reddedilecek bir işlem yaptırmamaktır.
 // =============================================================================
 import { dayEndIso, dayStartIso } from "@/pages/Finance/Cheques/dates";
+import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import type { DecimalLike, StockCountLine, StockCountStatus } from "./service";
 
 // -----------------------------------------------------------------------------
@@ -201,7 +202,12 @@ export function predictedOutOfScope(line: StockCountLine): string | null {
   if (status === "SHIPPED") return "Bu sırada sevk edilmiş";
   if (status === "CANCELLED" || status === "SCRAP") return "Zaten kayıttan düşülmüş";
   if (!(COUNTABLE_ROLL_STATUSES as readonly string[]).includes(status)) {
-    return `Statüsü değişmiş (${status})`;
+    // ⚠️ BACKEND İKİZİYLE AYNI ANDA DÜZELTİLDİ (`stock-count.service.blockReason`
+    // → `ROLL_STATUS_TR`). Biri Türkçeleşip diğeri kalsaydı aynı satır ekranda
+    // "Fasonda", TUTANAKTA "AT_SUBCONTRACTOR" yazardı ve "önizleme = gerçek
+    // belge" sözleşmesi, üstelik geriye dönük düzeltilemeyen bir kâğıtta bozulurdu.
+    // Sözlükler metin metin aynıdır (bekçi: Teks-Erp/scripts/test_status_labels.ts).
+    return `Statüsü değişmiş (${rollStatusLabels[status as RollStatus] ?? status})`;
   }
   return null;
 }

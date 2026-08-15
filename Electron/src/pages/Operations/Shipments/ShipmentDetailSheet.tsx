@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/operations/StatusBadge";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
+import { apiErrorText } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { shipmentService } from "./service";
 import { shipmentStatusLabels, shipmentStatusTones } from "./types";
@@ -94,7 +95,26 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
             <Skeleton className="h-48 w-full" />
           </div>
         ) : !d ? (
-          <p className="mt-4 text-sm text-muted-foreground">Sevkiyat bulunamadı.</p>
+          /* ⚠️ "Sevkiyat bulunamadı." YAZILAMAZ (GoodsReceiptDetailSheet kalıbı):
+             `getDetail` non-nullable döner, yani `!d` YALNIZCA hata demektir —
+             yetki (403), ağ ya da 5xx. Sevkiyatın YOK olduğunu iddia etmek
+             düpedüz yanlıştır ve bu çekmece 2026-08-15'ten beri FATURA
+             detayından da açılıyor: `finance:read` taşıyıp `shipping:read`
+             taşımayan "Kasa / Tahsilat" rolü, faturanın dayandığı sevk
+             belgesine tıklayınca ekranda kalan tek cümle olarak onu okurdu
+             (interceptor'ın 403 toast'ı saniyelerde kaybolur). */
+          <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+            <p className="font-medium text-destructive">Sevkiyat detayı yüklenemedi.</p>
+            <p className="mt-1 text-muted-foreground">
+              {apiErrorText(
+                query.error,
+                "Bu, sevkiyatın silindiği anlamına GELMEZ — içerik sunucudan alınamadı. Yetkiniz yoksa sevkiyat ekranına erişim isteyin.",
+              )}
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void query.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : (
           <div className="mt-4 space-y-4">
             <div className="flex flex-wrap gap-2">

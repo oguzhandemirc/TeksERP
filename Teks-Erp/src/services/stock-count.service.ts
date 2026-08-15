@@ -58,6 +58,7 @@ import { applyYarnMovementTx } from "./yarn.service";
 import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import { RollVarianceKind } from "@prisma/client";
 import { STOCK_COUNT_REASON_CODE, VARIANCE_SOURCES } from "../constants/variance-reasons";
+import { ROLL_STATUS_TR } from "../constants/status-labels";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
   renderStockCountHtml,
@@ -1025,7 +1026,11 @@ function blockReason(
     return "Zaten kayıttan düşülmüş";
   }
   if (!COUNTABLE_ROLL_STATUSES.includes(roll.status)) {
-    return `Statüsü değişti (${roll.status})`;
+    // ⚠️ TÜRKÇE ZORUNLU — bu metin `outOfScopeReason` kolonuna YAZILIR ve
+    // sayım tutanağı DONDURULUR (`warehouse-doc.html`): ham enum bir kez
+    // kâğıda basıldığında geriye dönük düzeltilemez. Diğer altı dal zaten
+    // Türkçe; tek sırıtan bu satırdı.
+    return `Statüsü değişti (${ROLL_STATUS_TR[roll.status]})`;
   }
   if (roll.warehouseId !== countWarehouseId) return "Bu sırada başka depoya taşındı";
   if (roll.shipmentId) return "Bu sırada bir sevkiyata atandı";

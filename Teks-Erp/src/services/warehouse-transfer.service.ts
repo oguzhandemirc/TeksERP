@@ -20,7 +20,8 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
-import { buildWhereClause } from "../utils/query-parser";
+import { applyDateRange, buildWhereClause } from "../utils/query-parser";
+import { ROLL_STATUS_TR } from "../constants/status-labels";
 import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import type { ApiResponse } from "../types/api.types";
 
@@ -65,6 +66,12 @@ async function nextTransferNo(tx: Prisma.TransactionClient): Promise<string> {
   });
   return buildDailyCode(TRANSFER_PREFIX, nextDailySeq(rows.map((r) => r.transferNo), prefix), now);
 }
+
+/**
+ * Liste tarih aralığı için kabul edilen kolonlar (mal kabul listesiyle simetrik).
+ * `cancelledAt` bilinçli olarak DIŞARIDA — bkz. `GOODS_RECEIPT_DATE_FIELDS`.
+ */
+const WAREHOUSE_TRANSFER_DATE_FIELDS = ["createdAt"] as const;
 
 export class WarehouseTransferService {
   /**
@@ -133,7 +140,7 @@ export class WarehouseTransferService {
         }
         for (const r of rolls) {
           if (r.warehouseId !== input.fromWarehouseId) problems.push(`${ref(r)}: bu depoda değil`);
-          else if (!TRANSFERABLE.includes(r.status)) problems.push(`${ref(r)}: durumu uygun değil (${r.status})`);
+          else if (!TRANSFERABLE.includes(r.status)) problems.push(`${ref(r)}: durumu uygun değil (${ROLL_STATUS_TR[r.status]})`);
           // Çuvaldaki top TEK taşınmaz — çuval bütünlüğü. Çuval da seçildiyse
           // mesaj yol gösterir: top zaten çuvalıyla gidiyor, tekrar seçme.
           else if (r.sackId && sackIds.includes(r.sackId)) problems.push(`${ref(r)}: seçilen çuvalın içinde — çuvalla birlikte zaten taşınacak`);
@@ -168,7 +175,7 @@ export class WarehouseTransferService {
           }
           for (const r of sk.rolls) {
             if (r.warehouseId !== input.fromWarehouseId) problems.push(`${sk.sackNo}/${ref(r)}: çuval üyesi bu depoda değil`);
-            else if (!TRANSFERABLE.includes(r.status)) problems.push(`${sk.sackNo}/${ref(r)}: durumu uygun değil (${r.status})`);
+            else if (!TRANSFERABLE.includes(r.status)) problems.push(`${sk.sackNo}/${ref(r)}: durumu uygun değil (${ROLL_STATUS_TR[r.status]})`);
             else if (r.shipmentId) problems.push(`${sk.sackNo}/${ref(r)}: sevkiyata bağlı`);
             else sackRollIds.push(r.id);
           }
@@ -420,15 +427,36 @@ export class WarehouseTransferService {
       // hâlâ serbest olmalı. Çuvaldan çıkarılmış/başka çuvala konmuş top,
       // "transfer sonrası işlem görmüş"tür ve geri sarma yanlış defter yazar.
       const expectedSack = new Map(rows.map((r) => [r.rollId, r.sackId ?? null]));
+      // ⚠️ MESAJ SEBEBİ SÖYLER, DURUMU DEĞİL. Filtre DÖRT ayrı sebeple eliyor
+      // (depo değişmiş · çuval üyeliği değişmiş · sevkiyata bağlanmış · durum
+      // uygun değil) ama eski satır her sebepte `(${r.status})` basıyordu:
+      // çuvala konmuş bir top için "T15… (WAREHOUSE)" yazıyordu — kullanıcı
+      // durumu okuyor, hiçbir sorun görmüyor ve engeli çözemiyordu. Ham enum'u
+      // Türkçeleştirmek TEK BAŞINA yetmez; söylenmesi gereken şey SEBEPTİR.
+      // Sıra ön-kontroldeki (`create`) sırayla aynı: en somut olan önce.
+      const undoBlockReason = (r: {
+        status: RollStatus;
+        warehouseId: string | null;
+        sackId: string | null;
+        shipmentId: string | null;
+        id: string;
+      }): string | null => {
+        if (r.warehouseId !== transfer.toWarehouseId) return "hedef depoda değil — başka depoya taşınmış";
+        const expected = expectedSack.get(r.id) ?? null;
+        if (r.sackId !== expected) {
+          if (expected === null) return "transferden sonra bir çuvala konmuş";
+          return r.sackId === null
+            ? "transferden sonra çuvaldan çıkarılmış"
+            : "transferden sonra başka bir çuvala konmuş";
+        }
+        if (r.shipmentId) return "bir sevkiyata bağlanmış";
+        if (!TRANSFERABLE.includes(r.status)) return `durumu uygun değil (${ROLL_STATUS_TR[r.status]})`;
+        return null;
+      };
       const problems = rolls
-        .filter(
-          (r) =>
-            r.warehouseId !== transfer.toWarehouseId ||
-            r.sackId !== (expectedSack.get(r.id) ?? null) ||
-            r.shipmentId ||
-            !TRANSFERABLE.includes(r.status),
-        )
-        .map((r) => `${r.barcode ?? r.id.slice(0, 8)} (${r.status})`);
+        .map((r) => ({ r, reason: undoBlockReason(r) }))
+        .filter((x): x is { r: (typeof rolls)[number]; reason: string } => x.reason !== null)
+        .map(({ r, reason }) => `${r.barcode ?? r.id.slice(0, 8)}: ${reason}`);
       if (problems.length > 0) {
         throw AppError.conflict(
           `${transfer.transferNo}: ${problems.length} top transfer sonrası işlem görmüş (${problems.slice(0, 5).join(", ")}` +
@@ -527,8 +555,17 @@ export class WarehouseTransferService {
     pageSize: number;
     filters: Record<string, string | string[]>;
     search?: string;
+    /** `?dateField=createdAt&dateFrom=…&dateTo=…` — üçü BİRLİKTE gider. */
+    dateField?: string;
+    dateFrom?: Date;
+    dateTo?: Date;
   }): Promise<{ rows: unknown[]; total: number }> {
     const where = buildWhereClause(params.filters, ["transferNo", "notes"], params.search);
+    // ⚠️ TARİH ARALIĞI (2026-08-15): mal kabul listesiyle aynı boşluk —
+    // `applyDateRange` hiç çağrılmadığı için `dateFrom` SESSİZCE yok sayılıyor
+    // ve liste tam dönüyordu. Whitelist DAR: `createdAt` transferin yapıldığı
+    // andır ve liste zaten onunla sıralanıyor.
+    applyDateRange(where, params, WAREHOUSE_TRANSFER_DATE_FIELDS);
     const [rows, total] = await Promise.all([
       prisma.warehouseTransfer.findMany({
         where,

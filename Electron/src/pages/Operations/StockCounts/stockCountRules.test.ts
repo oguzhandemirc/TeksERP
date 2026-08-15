@@ -179,7 +179,15 @@ describe("kapsam dışı öngörüsü", () => {
     expect(predictedOutOfScope(rollLine({ status: "SHIPPED" }))).toContain("sevk");
     expect(predictedOutOfScope(rollLine({ status: "CANCELLED" }))).toContain("düşülmüş");
     expect(predictedOutOfScope(rollLine({ status: "SCRAP" }))).toContain("düşülmüş");
-    expect(predictedOutOfScope(rollLine({ status: "IN_PRODUCTION" }))).toContain("IN_PRODUCTION");
+    // ⭐ 2026-08-15: sebep artık TÜRKÇE. Bu satır eskiden ham enum'u ("IN_PRODUCTION")
+    //    bekliyordu — yani düzeltilmesi gereken davranışı KİLİTLİYORDU. Metin
+    //    backend ikiziyle (`stock-count.service.blockReason` → `ROLL_STATUS_TR`)
+    //    birebir aynı olmak zorunda: bu cümle `outOfScopeReason` kolonuna yazılıp
+    //    sayım TUTANAĞINDA donuyor ve "önizleme = gerçek belge" sözleşmesi orada
+    //    kanıtlanıyor. Ham enum bir kez kâğıda basılınca geri alınamaz.
+    const wip = predictedOutOfScope(rollLine({ status: "IN_PRODUCTION" }));
+    expect(wip).toContain("Üretimde");
+    expect(wip).not.toContain("IN_PRODUCTION");
   });
 
   it("backend kümesi aynalı — üç statü (fason dönüşü BİLEREK dışarıda)", () => {

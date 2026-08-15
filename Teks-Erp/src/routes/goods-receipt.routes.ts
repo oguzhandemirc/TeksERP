@@ -8,6 +8,7 @@
 import { Router, type Request, type Response, type NextFunction } from "express";
 import { z } from "zod";
 import { describeOverReceipt, goodsReceiptService } from "../services/goods-receipt.service";
+import { describeContractPricing } from "../services/helpers/contract-price.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { parseQueryParams } from "../utils/query-parser";
@@ -78,6 +79,19 @@ const createSchema = z.object({
  *         name: filter[rawStockEntry]
  *         schema: { type: boolean }
  *         description: Ham stok girişli fişler (C2)
+ *       - in: query
+ *         name: dateField
+ *         schema: { type: string, enum: [createdAt] }
+ *         description: >
+ *           Tarih aralığının uygulanacağı kolon. ⚠️ ÜÇÜ BİRLİKTE gönderilir —
+ *           `dateField` yoksa `dateFrom`/`dateTo` SESSİZCE yok sayılır
+ *           (whitelist dışı değer de aynı şekilde). Whitelist: `createdAt`.
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200: { description: Sayfalanmış fiş listesi }
  */
@@ -87,8 +101,16 @@ router.get(
   requireAnyPermission("goods-receipt:read", "goods-receipt:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, pageSize, filters, search } = parseQueryParams(req);
-      const { rows, total } = await goodsReceiptService.list({ page, pageSize, filters, search });
+      const { page, pageSize, filters, search, dateField, dateFrom, dateTo } = parseQueryParams(req);
+      const { rows, total } = await goodsReceiptService.list({
+        page,
+        pageSize,
+        filters,
+        search,
+        dateField,
+        dateFrom,
+        dateTo,
+      });
       res.status(200).json({
         success: true,
         data: rows,
@@ -209,7 +231,12 @@ router.post(
         message:
           (result.failed.length > 0
             ? `${summary} eklendi, ${result.failed.length} satır atlandı.`
-            : `${summary} eklendi.`) + describeOverReceipt(result.purchaseOrder),
+            : `${summary} eklendi.`) +
+          describeOverReceipt(result.purchaseOrder) +
+          // C1 — sözleşme (sipariş) fiyatı uygulandıysa/çeliştiyse SÖYLENİR.
+          // Fiyat kararı satırın DOĞDUĞU yerde veriliyor; depocunun kart fiyatı
+          // sandığı bir rakamla fişi kapatmasının önündeki tek işaret budur.
+          describeContractPricing(result.contractPricing),
       });
     } catch (e) {
       next(e);

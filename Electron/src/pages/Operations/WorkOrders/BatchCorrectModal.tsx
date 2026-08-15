@@ -15,6 +15,7 @@ import { Callout } from "@/components/ui/callout";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatNumber } from "@/lib/format";
+import { rollStatusLabels, type RollStatus } from "@/types/enums";
 import { cn } from "@/lib/utils";
 import { workOrderService } from "./service";
 
@@ -220,7 +221,12 @@ export function BatchCorrectModal({
                       )}
                     >
                       <Checkbox checked={on} onCheckedChange={() => toggle(r.id)} />
-                      <span className="flex-1 truncate text-muted-foreground">{r.status}</span>
+                      {/* Ham enum YASAK: satırın TEK açıklayıcı alanı buydu ve
+                          "IN_PRODUCTION" yazıyordu (yanında yalnız metraj var).
+                          Sözlük tek kaynak: `types/enums.rollStatusLabels`. */}
+                      <span className="flex-1 truncate text-muted-foreground">
+                        {rollStatusLabels[r.status as RollStatus] ?? r.status}
+                      </span>
                       <span className="shrink-0 tabular-nums text-muted-foreground">
                         {formatNumber(r.currentQty, 0)} m
                       </span>

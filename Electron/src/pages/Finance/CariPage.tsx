@@ -35,6 +35,7 @@ export function CariPage() {
   });
 
   const rows = q.data?.data ?? [];
+  const total = q.data?.pagination?.total ?? 0;
 
   return (
     <PageShell>
@@ -74,6 +75,22 @@ export function CariPage() {
       <PageBody className="p-6">
         {q.isLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+        ) : q.isError && rows.length === 0 ? (
+          /* ⚠️ HATA, "HENÜZ CARİ YOK"UN ÖNÜNDE. Aşağıdaki boş-durum cümlesi
+             AÇIKLAYICI ve kendinden emin ("kendiliğinden açılır") — hata anında
+             basılırsa kullanıcı sistemin doğru çalıştığına ikna olur ve carinin
+             gerçekten yok olduğunu sanıp elle ikinci bir kart açtırmaya çalışır.
+             Ticaret rejiminde cariye TEK kapı bu ekrandır. */
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+            <p className="font-medium text-destructive">Cari listesi yüklenemedi.</p>
+            <p className="mt-1 text-muted-foreground">
+              Bu bir “cari yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi.
+              Kayıtlarınız yerinde duruyor; bakiyeye göre karar vermeden önce tekrar deneyin.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
             {/* Cari LAZY açılır — boş liste "bozuk" değil "henüz işlem yok" demektir
@@ -82,7 +99,15 @@ export function CariPage() {
             kendiliğinden açılır.
           </div>
         ) : (
-          <div className="overflow-hidden rounded-md border">
+          <div className="space-y-3">
+            {/* İKİNCİ KATMAN — bayat satırlar duruyor: liste gizlenmez, uyarılır. */}
+            {q.isError && (
+              <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                Liste tazelenemedi — aşağıdaki bakiyeler son başarılı okumaya aittir ve eski
+                olabilir.
+              </p>
+            )}
+            <div className="overflow-hidden rounded-md border">
             <table className="w-full text-sm">
               <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
                 <tr>
@@ -189,6 +214,15 @@ export function CariPage() {
                 ))}
               </tbody>
             </table>
+            </div>
+            {/* KIRPMA SESSİZ DEĞİL (norm: CashTransactionsPage). Kesilen liste bu
+                üründe "o cari yok" diye okunur ve mükerrer karta yol açar. */}
+            {total > rows.length && (
+              <p className="text-xs text-amber-700 dark:text-amber-500">
+                {total} carinin ilk {rows.length} tanesi gösteriliyor. Aradığınızı bulmak için
+                arama kutusunu ya da tür/bakiye süzgecini kullanın.
+              </p>
+            )}
           </div>
         )}
       </PageBody>

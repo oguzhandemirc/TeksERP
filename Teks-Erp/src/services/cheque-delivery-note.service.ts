@@ -48,6 +48,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildTurkishSearch } from "../utils/query-parser";
 import { D, D0 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
@@ -431,11 +432,8 @@ export class ChequeDeliveryNoteService {
       };
     }
     if (params.search?.trim()) {
-      const q = params.search.trim();
-      where.OR = [
-        { docNo: { contains: q, mode: "insensitive" } },
-        { targetLabel: { contains: q, mode: "insensitive" } },
-      ];
+      // ⚠️ TÜRKÇE-DUYARLI: `targetLabel` serbest metindir (banka/cari adı).
+      where.OR = buildTurkishSearch(params.search, ["docNo", "targetLabel"]);
     }
 
     const [data, total] = await Promise.all([

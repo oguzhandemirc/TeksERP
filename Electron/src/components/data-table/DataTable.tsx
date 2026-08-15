@@ -16,7 +16,17 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Copy, FileText, FileSpreadsheet, GripVertical, Inbox, Info, X } from "lucide-react";
+import {
+  AlertOctagon,
+  Copy,
+  FileText,
+  FileSpreadsheet,
+  GripVertical,
+  Inbox,
+  Info,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   ContextMenu,
@@ -44,6 +54,20 @@ const ROW_OPEN_DELAY_MS = 160;
 interface Props<T> {
   table: TanstackTable<T>;
   isLoading?: boolean;
+  /**
+   * Liste sorgusu DÜŞTÜ. Verilirse "Kayıt bulunamadı." YERİNE hata satırı çizilir.
+   *
+   * ⚠️ BU AYRIM ZORUNLU: hata anında `rows` boş kalır ve boş-durum metnini basmak
+   * OLUMLU bir iddiadır — "böyle bir kayıt yok". Kullanıcı kaydın silindiğini
+   * sanıp ikinci kez tanımlar (mükerrer depo / cari / kasa). İstek düştüğünde
+   * ekranda kalan tek metin doğruyu söylemek zorundadır; interceptor toast'ı
+   * saniyelerde kaybolur. Emsal: `Reports/Finance/ReportErrorCard`.
+   */
+  isError?: boolean;
+  /** Verilirse hata satırında "Tekrar dene" çıkar. İş yapmayan düğme konmaz. */
+  onRetry?: () => void;
+  /** Hata satırının açıklama cümlesi — verilmezse bağlamsız ortak cümle. */
+  errorText?: string;
   pagination?: Pagination;
   emptyText?: string;
   onRowClick?: (row: T) => void;
@@ -75,6 +99,9 @@ interface Props<T> {
 export function DataTable<T>({
   table,
   isLoading,
+  isError,
+  onRetry,
+  errorText,
   pagination,
   emptyText = "Kayıt yok.",
   onRowClick,
@@ -177,6 +204,31 @@ export function DataTable<T>({
               ))}
             </TableHeader>
             <TableBody>
+              {/* İKİNCİ KATMAN — hata VAR ama elde (bayat) satır de var: liste
+                  gizlenmez, üstüne "tazelenemedi" bandı konur. Kalıp
+                  `PeriodClose/CashPeriodSection`ten alındı. */}
+              {isError && rows.length > 0 && (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={colCount} className="bg-amber-100 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                    <span className="flex items-center gap-2">
+                      <Info className="h-3.5 w-3.5 shrink-0" />
+                      Liste tazelenemedi — aşağıdaki satırlar son başarılı okumaya aittir ve eski
+                      olabilir.
+                      {onRetry ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="ml-1 h-6 px-2 text-xs"
+                          onClick={onRetry}
+                        >
+                          Tekrar dene
+                        </Button>
+                      ) : null}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              )}
               {isLoading && rows.length === 0
                 ? Array.from({ length: 8 }).map((_, i) => (
                     <TableRow key={`sk-${i}`}>
@@ -192,7 +244,43 @@ export function DataTable<T>({
                       ))}
                     </TableRow>
                   ))
-                : rows.length === 0
+                : /* ⚠️ HATA SATIRI BOŞ DURUMUN ÖNÜNDE — sıra load-bearing:
+                     altta kalsaydı hata anında yine "Kayıt bulunamadı." basılırdı
+                     ve düzeltmenin tamamı boşa düşerdi (ReportErrorCard emsali). */
+                  isError && rows.length === 0
+                  ? (
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell colSpan={colCount} className="h-48">
+                          <div className="mx-auto flex max-w-md items-start gap-3 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+                            <AlertOctagon className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
+                            <div className="min-w-0 flex-1 text-left">
+                              <p className="font-semibold text-destructive">Liste yüklenemedi</p>
+                              <p className="mt-1 text-muted-foreground">
+                                {errorText ??
+                                  "İstek sunucuya ulaşamadı ya da reddedildi."}
+                              </p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                Bu <strong>“kayıt yok”</strong> anlamına GELMEZ — kayıtlarınız
+                                yerinde duruyor. Yeni kayıt eklemeden önce tekrar deneyin.
+                              </p>
+                              {onRetry ? (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="mt-3 h-7 px-2 text-xs"
+                                  onClick={onRetry}
+                                >
+                                  <RefreshCw className="mr-1 h-3.5 w-3.5" />
+                                  Tekrar dene
+                                </Button>
+                              ) : null}
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  : rows.length === 0
                   ? (
                       <TableRow>
                         <TableCell colSpan={colCount} className="h-48">

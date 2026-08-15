@@ -686,10 +686,24 @@ const bankAccountService = new BaseService({
   entityLabel: "banka hesabı",
   autoCode: { prefix: "BN" },
 });
-const exchangeRateService = new BaseService({
+// ⚠️ EXPORT bekçi içindir (`test_ticaret_links_and_filters` §5): kur listesinin
+// `dateFields` sözleşmesini GERÇEK config üzerinden ölçer. Bekçi kendi
+// `BaseService`ini kursaydı, buradan `dateFields` silindiğinde yeşil kalırdı —
+// yani tam da koruduğu şeyi göremezdi.
+export const exchangeRateService = new BaseService({
   modelName: "exchangeRate",
   tableName: "EXCHANGE_RATE",
   searchFields: [],
+  // ⚠️ `dateFields` TANIMSIZ OLDUĞU İÇİN `?dateField=rateDate&dateFrom=…`
+  // SESSİZCE YOK SAYILIYORDU (`applyDateRange` whitelist dışını atar). Günlük
+  // TCMB çekimi 4 satır üretiyor → 100 satırlık sayfa ≈ 25 günlük geçmiş;
+  // "15 Temmuz'daki EUR kuru neydi" (fatura kuru itirazlarının sorusu)
+  // cevaplanamıyordu. `rateDate` `@@unique([rateDate, currency])` ve
+  // `@@index([currency, rateDate])` ile indeksli — range güvenli.
+  // ⚠️ Kolon `@db.Date`tir: istemci mutlak an gönderse bile PG gün bazında
+  // karşılaştırır; gün sınırını İSTEMCİ belirler (rapor filtreleriyle aynı
+  // sözleşme, backend ekstra yuvarlama YAPMAZ).
+  dateFields: ["rateDate"],
   entityLabel: "kur",
 });
 

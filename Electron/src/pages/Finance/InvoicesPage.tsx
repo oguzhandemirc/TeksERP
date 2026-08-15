@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Check, Ban, Trash2, Printer, Eye } from "lucide-react";
+import { Plus, Check, Ban, Trash2, Printer, Eye, Pencil } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
+import { apiErrorText } from "@/lib/api-error";
 import {
   listInvoices,
   confirmInvoice,
@@ -28,6 +29,14 @@ import {
 import { fromKurus } from "./Allocations/allocationMath";
 import { InvoiceFormDialog } from "./InvoiceFormDialog";
 import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
+import { draftBadgeText, trimNotice } from "./invoicesList";
+// Kaynak belgeye TIKLA-GİT — hedef yüzeyler sahiplerinin bileşenleridir; burada
+// yalnız MOUNT edilirler. (Fatura detayı onları import ETMEZ: mal kabul sheet'i
+// kendi taslağını `InvoiceDetailDialog` ile açıyor ve karşılıklı import bir
+// modül döngüsü olurdu — bağ bu yüzden geri çağrı ile kurulur.)
+import { GoodsReceiptDetailSheet } from "@/pages/Operations/GoodsReceipts/GoodsReceiptDetailSheet";
+import { ShipmentDetailSheet } from "@/pages/Operations/Shipments/ShipmentDetailSheet";
+import { DirectShipmentDetailSheet } from "@/pages/Operations/Shipments/DirectShipmentDetailSheet";
 
 // ⚠️ Rozet sözlükleri 2026-08-14'te `service.ts`'e TAŞINDI (buradan kopyalanmadı,
 // taşındı): detay yüzeyi ikinci tüketici oldu ve iki kopya, aynı faturayı iki
@@ -39,8 +48,14 @@ export function InvoicesPage() {
   const [status, setStatus] = useState("");
   const [type, setType] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  // Düzenlenen TASLAK — aynı diyalog, `editInvoiceId` ile PATCH yolunda açılır.
+  const [editId, setEditId] = useState<string | null>(null);
   const [printTarget, setPrintTarget] = useState<{ id: string; docNo: string } | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
+  // Kaynak belge yüzeyleri (tıkla-git) — koşullu mount.
+  const [receiptId, setReceiptId] = useState<string | null>(null);
+  const [shipmentId, setShipmentId] = useState<string | null>(null);
+  const [directShipmentId, setDirectShipmentId] = useState<string | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<InvoiceRow | null>(null);
   const [cancelTarget, setCancelTarget] = useState<InvoiceRow | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<InvoiceRow | null>(null);
@@ -55,6 +70,27 @@ export function InvoicesPage() {
         status: status || undefined,
         type: type || undefined,
       }),
+  });
+
+  // ⭐ TASLAK SAYACI — KESİN sayı, yüklenen sayfadan DEĞİL. Otomatik doğan alış
+  // taslağı `issueDate = fişin tarihi` ile doğuyor (geriye tarihli!) ve liste
+  // `issueDate desc` sıralı 100 satır; o taslak ilk sayfaya hiç girmeyebilir →
+  // rozet sessizce sıfırlanırdı. Aynı uç `pagination.total` döndürdüğü için
+  // `pageSize: 1` ile TEK HAFİF istek yeter (satır gövdesi taşınmaz).
+  // ⚠️ Kapsam ekrandaki filtrelerle AYNI (yalnız `status` TASLAĞA sabit) —
+  // filtreli bir listenin üstünde global bir sayı alakasız olurdu.
+  // ⚠️ Durum süzgeci zaten TASLAK iken istek HİÇ atılmaz (rozet totoloji).
+  const draftCountQ = useQuery({
+    queryKey: ["finance", "invoices", "draft-count", search, type],
+    queryFn: () =>
+      listInvoices({
+        page: 1,
+        pageSize: 1,
+        search: search || undefined,
+        status: "DRAFT",
+        type: type || undefined,
+      }),
+    enabled: status !== "DRAFT",
   });
 
   const invalidate = () => {
@@ -87,6 +123,10 @@ export function InvoicesPage() {
   });
 
   const rows = q.data?.data ?? [];
+  // Sayaç ve kırpma bandı saf katmanda (`invoicesList`) — ikisi de "ekranda ne
+  // var" ile "sistemde ne var" ayrımını korur.
+  const draftBadge = draftBadgeText(draftCountQ.data?.pagination?.total, status);
+  const trimBand = trimNotice(q.data?.pagination?.total, rows.length);
 
   return (
     <PageShell>
@@ -94,12 +134,33 @@ export function InvoicesPage() {
         title="Faturalar"
         description="Taslak serbestçe düzenlenir. Onaylanan fatura cari deftere işler ve bir daha DEĞİŞTİRİLEMEZ — düzeltme iptal (storno) + yeni fatura ile yapılır."
         actions={
-          <PermissionGate permission="finance:write">
-            <Button onClick={() => setFormOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Yeni Fatura
-            </Button>
-          </PermissionGate>
+          <div className="flex items-center gap-2">
+            {/* ⭐ "N TASLAK" — sevkten/mal kabulden OTOMATİK doğan taslakların
+                tek görünür işareti. O taslaklar yalnız geçici bir toast ile
+                duyuruluyor (üstelik çoğu sevk mobilden yapılıyor ve orada
+                Faturalar ekranı yok) → onaylanmayı bekleyen fatura sessizce
+                birikiyordu.
+                ⚠️ Sayı SUNUCUDAN gelir (yüklenen sayfadan DEĞİL) ve tıklanınca
+                durum süzgecini TASLAĞA çeker: sayan bir rozet, saydığı satırlara
+                götürmüyorsa yarım kalır. */}
+            {draftBadge && (
+              <button
+                type="button"
+                onClick={() => setStatus("DRAFT")}
+                title="Onay bekleyen taslak sayısı (aynı arama/tür süzgeciyle, sunucudan). Tıklayın: yalnız taslaklar listelenir."
+              >
+                <Badge className="cursor-pointer bg-amber-100 text-amber-900 hover:bg-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:hover:bg-amber-900">
+                  {draftBadge}
+                </Badge>
+              </button>
+            )}
+            <PermissionGate permission="finance:write">
+              <Button onClick={() => setFormOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Yeni Fatura
+              </Button>
+            </PermissionGate>
+          </div>
         }
       />
 
@@ -135,6 +196,28 @@ export function InvoicesPage() {
       <PageBody className="p-6">
         {q.isLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+        ) : q.isError ? (
+          /* ⚠️ "HATA" ile "KAYIT YOK" AYRI EKRANLAR: boş diziyi "fatura yok"
+             diye basmak, kullanıcıyı AYNI FATURAYI İKİNCİ KEZ kesmeye iter —
+             ve fatura, iki kez kesilmesi en pahalı belgedir. Interceptor'ın
+             toast'ı birkaç saniyede kaybolur; ekranda kalan cümle doğruyu
+             söylemek zorunda (emsal: PurchaseOrdersPage). */
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+            <p className="font-medium text-destructive">Fatura listesi yüklenemedi.</p>
+            {/* Backend'in KENDİ cümlesi ("Ön muhasebe modülü kapalı" gibi) ortak
+                çıkarıcıdan gelir ve yeniden yazılmaz; altındaki satır ise bu
+                ekrana özel sonucu söyler. */}
+            <p className="mt-1 text-muted-foreground">
+              {apiErrorText(q.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
+            </p>
+            <p className="mt-1 text-muted-foreground">
+              Bu bir “fatura yok” cevabı DEĞİLDİR. Kayıtlarınız yerinde duruyor; yeni fatura
+              kesmeden önce tekrar deneyin.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
         ) : rows.length === 0 ? (
           <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
             Fatura yok. "Yeni Fatura" ile taslak oluşturabilirsiniz.
@@ -236,6 +319,25 @@ export function InvoicesPage() {
                           )}
                           {inv.status === "DRAFT" && (
                             <>
+                              {/* ⭐ DÜZENLE — `PATCH /invoices/:id` (updateDraft)
+                                  ucu 2026-08-14'ten beri VARDI ve panel onu HİÇ
+                                  çağırmıyordu. Otomatik doğan 0 fiyatlı taslak
+                                  ne onaylanabiliyor (confirm sıfır fiyatı
+                                  reddediyor) ne düzeltilebiliyordu; tek çıkış
+                                  silmekti ve silmek kaynak bağını da götürüyordu
+                                  (oluşturma şeması `goodsReceiptId` kabul etmez).
+                                  Onaydan ÖNCE gelir: doğal sıra "düzelt → onayla". */}
+                              <PermissionGate permission="finance:write">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  title="Taslağı düzenle — satırlar, vade, dış belge no, not"
+                                  onClick={() => setEditId(inv.id)}
+                                >
+                                  <Pencil className="mr-1 h-3.5 w-3.5" />
+                                  Düzenle
+                                </Button>
+                              </PermissionGate>
                               <PermissionGate permission="finance:invoice">
                                 <Button size="sm" onClick={() => setConfirmTarget(inv)}>
                                   <Check className="mr-1 h-3.5 w-3.5" />
@@ -269,11 +371,29 @@ export function InvoicesPage() {
                 })}
               </tbody>
             </table>
+            {/* ⚠️ SESSİZ KIRPMA YOK: sunucu sayfası (100) dolduğunda kullanıcı
+                bulamadığı faturayı "yok" sayıp ikinci kez kesebilir. */}
+            {trimBand && (
+              <p className="border-t bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                {trimBand}
+              </p>
+            )}
           </div>
         )}
       </PageBody>
 
       <InvoiceFormDialog open={formOpen} onOpenChange={setFormOpen} onCreated={invalidate} />
+
+      {/* TASLAK DÜZENLEME — aynı form, PATCH yolunda. Koşullu mount: her açılış
+          taze bileşen (form durumu kapanınca ölür, bir sonraki taslağa taşmaz). */}
+      {editId && (
+        <InvoiceFormDialog
+          open
+          editInvoiceId={editId}
+          onOpenChange={(o) => !o && setEditId(null)}
+          onCreated={invalidate}
+        />
+      )}
 
       {/* ⚠️ Detay ile belge önizlemesi ÜST ÜSTE AÇILMAZ: "Belgeyi aç" detayı
           kapatır ve aşağıdaki `PrintedDocDialog`'u açar. İki yığılı diyalog,
@@ -287,8 +407,33 @@ export function InvoicesPage() {
             setDetailId(null);
             setPrintTarget({ id: inv.id, docNo: inv.docNo });
           }}
+          // Düzenleme detayı KAPATIR (aynı gerekçe: iki yığılı diyalog, iki
+          // odak tuzağı) ve düzenleme formunu açar.
+          onEditDraft={(inv) => {
+            setDetailId(null);
+            setEditId(inv.id);
+          }}
+          // KAYNAK BELGEYE GİT — detay AÇIK KALIR: kaynağı kontrol eden kişi
+          // faturaya geri dönmek ister (mal kabul → taslak akışıyla aynı karar).
+          onOpenGoodsReceipt={setReceiptId}
+          onOpenShipment={(t) =>
+            t.kind === "DIRECT" ? setDirectShipmentId(t.id) : setShipmentId(t.id)
+          }
         />
       )}
+
+      {/* Kaynak belge yüzeyleri — sahiplerinin bileşenleri, burada yalnız mount. */}
+      <GoodsReceiptDetailSheet id={receiptId} onOpenChange={(o) => !o && setReceiptId(null)} />
+      <ShipmentDetailSheet
+        shipmentId={shipmentId}
+        open={Boolean(shipmentId)}
+        onOpenChange={(o) => !o && setShipmentId(null)}
+      />
+      <DirectShipmentDetailSheet
+        directShipmentId={directShipmentId}
+        open={Boolean(directShipmentId)}
+        onOpenChange={(o) => !o && setDirectShipmentId(null)}
+      />
 
       {/* ⚠️ Yıkıcı/geri alınamaz işlemlerde onay somut: hangi belge, hangi cari,
           hangi tutar. "Emin misiniz?" tek başına yeterli değil. */}

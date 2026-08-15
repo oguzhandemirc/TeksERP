@@ -12,6 +12,7 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
+import { apiErrorText } from "@/lib/api-error";
 import { PermissionGate } from "@/components/PermissionGate";
 import type { CrudService } from "@/services/crudService";
 
@@ -250,9 +251,16 @@ export function CrudPage<T extends { id: string }>({
         }
       />
 
+      {/* ⚠️ `isError` GEÇİLMEK ZORUNDA: bu tek satır 14 tanım ekranını birden
+          kapatır. Geçilmezse liste hatası "Kayıt bulunamadı." diye basılır ve
+          kullanıcı silinmiş sandığı kaydı YENİDEN tanımlar (mükerrer depo/cari).
+          Ayrıntı: `DataTable` prop yorumu. */}
       <DataTable<T>
         table={table}
         isLoading={query.isLoading}
+        isError={query.isError}
+        onRetry={() => void query.refetch()}
+        errorText={apiErrorText(query.error, "İstek sunucuya ulaşamadı ya da reddedildi.")}
         pagination={pagination}
         emptyText="Kayıt bulunamadı."
       />

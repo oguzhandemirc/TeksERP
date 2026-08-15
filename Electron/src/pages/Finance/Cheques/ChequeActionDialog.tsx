@@ -120,6 +120,12 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
     return [...cash, ...bank];
   }, [cashQ.data, bankQ.data, def.needs, row.currency]);
 
+  // ⚠️ "TANIM YOK" YALNIZ OKUMA BAŞARILIYKEN SÖYLENİR (PaymentFormDialog ikizi).
+  // Buradaki cümle kullanıcıyı Kasa & Banka ekranına gönderir; liste hatası
+  // "tanım yok" diye okunursa mükerrer kasa/banka açılır ve çek tahsilatı yanlış
+  // hesaba yazılır. `needsAccount` false iken sorgular hiç koşmaz (isError false).
+  const accountsError = cashQ.isError || bankQ.isError;
+  const accountsResolved = !cashQ.isLoading && !bankQ.isLoading && !accountsError;
   const selected = accounts.find((a) => a.id === accountId);
 
   // Diyalog çağıran tarafından koşullu mount ediliyor; yine de kapanışta
@@ -259,7 +265,13 @@ export function ChequeActionDialog({ row, def, open, onOpenChange, onDone }: Pro
                 </option>
               ))}
             </select>
-            {accounts.length === 0 && (
+            {accountsError && (
+              <p className="mt-1 text-xs text-destructive">
+                Hesap listesi okunamadı — bu “tanım yok” DEMEK DEĞİLDİR. Yeni hesap açmayın;
+                diyaloğu kapatıp tekrar açın.
+              </p>
+            )}
+            {accountsResolved && accounts.length === 0 && (
               <p className="mt-1 text-xs text-amber-700 dark:text-amber-500">
                 {row.currency} para biriminde aktif {def.needs === "bank" ? "banka hesabı" : "kasa/banka"} tanımı
                 yok. Önce Muhasebe → Kasa &amp; Banka ekranından ekleyin.

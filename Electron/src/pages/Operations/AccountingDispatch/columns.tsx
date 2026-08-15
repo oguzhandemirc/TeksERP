@@ -6,7 +6,7 @@ import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat, formatNumber } from "@/lib/format";
-import { canDraftInvoice } from "./invoiceDraftVisibility";
+import { canDraftInvoice, internalInvoiceOf, invoiceLinkLabel } from "./invoiceDraftVisibility";
 import type { DispatchListItem } from "./types";
 
 export function buildDispatchColumns(
@@ -16,6 +16,8 @@ export function buildDispatchColumns(
   onDraftInvoice: (row: DispatchListItem) => void,
   /** Ticaret rejimi — `finance.enabled`. */
   financeEnabled: boolean,
+  /** Mevcut İÇ faturayı açar (taslak ya da onaylı). */
+  onOpenInvoice: (invoiceId: string) => void,
 ): ColumnDef<DispatchListItem>[] {
   return [
     {
@@ -149,6 +151,34 @@ export function buildDispatchColumns(
                 </Button>
               </PermissionGate>
             )}
+            {/* ⭐ İÇ FATURA VARSA DÜĞMENİN YERİNE BAĞ: eskiden yüklem dış ize
+                (`invoiceNo`) baktığı için taslağı olan sevkiyatta yine "Faturala"
+                çıkıyor ve kullanıcı formu doldurup 409 yiyordu. Şimdi doğrudan o
+                taslağa/faturaya gidiliyor — sevkten OTOMATİK doğan taslakların
+                bu listedeki tek görünür izi de budur. İzin `finance:read`:
+                belgeyi GÖRMEK yazma yetkisi istemez. */}
+            {(() => {
+              const label = invoiceLinkLabel(r, financeEnabled);
+              const inv = internalInvoiceOf(r);
+              if (!label || !inv) return null;
+              return (
+                <PermissionGate permission="finance:read">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-6 gap-1 px-2 text-[11px]"
+                    title={`${inv.docNo} — bu sevkiyatın iç faturası`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onOpenInvoice(inv.id);
+                    }}
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    {label}
+                  </Button>
+                </PermissionGate>
+              );
+            })()}
           </div>
         );
       },

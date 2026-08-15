@@ -27,6 +27,9 @@ import { ReconciliationLetterDialog } from "./ReconciliationLetterDialog";
 import { ReconciliationLetterListDialog } from "./ReconciliationLetterListDialog";
 import { formatDayKey } from "./PeriodClose/service";
 import { findActiveDevirRowId } from "./statementDevir";
+import { statementTargetOf, type StatementTarget } from "./statementLink";
+import { InvoiceDetailDialog } from "./InvoiceDetailDialog";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import {
   getStatement,
   cancelOpeningBalance,
@@ -107,6 +110,9 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
   const [letterOpen, setLetterOpen] = useState(false);
   // KESİLMİŞ mektupların listesi — belgeye dönüş yolu (`officialDocs.ts`).
   const [letterListOpen, setLetterListOpen] = useState(false);
+  // TIKLA-GİT hedefi (2026-08-15): ekstre satırı → fatura detayı ya da donmuş
+  // makbuz. Hangi diyaloğun açılacağı saf katmanda çözülür (`statementLink`).
+  const [linkTarget, setLinkTarget] = useState<StatementTarget | null>(null);
 
   const q = useQuery({
     queryKey: ["finance", "statement", cari.id, currency, from, to],
@@ -251,7 +257,23 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
           {q.isLoading ? (
             <p className="py-8 text-center text-sm text-muted-foreground">Yükleniyor…</p>
           ) : !q.data ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">Kayıt bulunamadı.</p>
+            /* ⚠️ BURADA "Kayıt bulunamadı." MATEMATİKSEL OLARAK HER ZAMAN YALANDI:
+               `getStatement` non-nullable döner — boş defter bile `rows: []` +
+               açılış/kapanış ile gelir. Yani `!q.data` YALNIZCA sorgu düştüğünde
+               oluşur. Yüzlerce hareketi olan bir cariye "kayıt yok" demek, bu
+               ekran mutabakat mektubunu beslediği için SIFIR BAKİYELİ bir mektup
+               riskidir. (`ReportExportBar disabled={!q.data}` bunu zaten biliyordu
+               — eksik olan tek şey metindi.) */
+            <div className="mx-auto my-6 max-w-md rounded-md border border-destructive/40 bg-destructive/5 p-4 text-center text-sm">
+              <p className="font-medium text-destructive">Ekstre yüklenemedi.</p>
+              <p className="mt-1 text-muted-foreground">
+                Bu, <strong>kayıt yok demek DEĞİLDİR</strong> — hareketler yerinde duruyor, liste
+                sunucudan alınamadı. Mutabakat mektubu kesmeden önce tekrar deneyin.
+              </p>
+              <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+                Tekrar dene
+              </Button>
+            </div>
           ) : (
             <div className="max-h-[52vh] overflow-auto rounded-md border">
               <table className="w-full text-sm">
@@ -282,12 +304,34 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                     </td>
                     <td className="px-3 py-2 text-right">{money(q.data.opening, currency)}</td>
                   </tr>
-                  {q.data.rows.map((r) => (
+                  {q.data.rows.map((r) => {
+                    // ⚠️ Hedefi OLMAYAN satır (devir/storno ya da eski backend)
+                    // tıklanabilir GÖRÜNMEZ: tıklanır görünüp hiçbir şey
+                    // yapmayan satır, olmayan bir yolu vaat eder.
+                    const target = statementTargetOf(r);
+                    return (
                     <tr key={r.id} className="border-t">
                       <td className="px-3 py-2 whitespace-nowrap">
                         {new Date(r.txnDate).toLocaleDateString("tr-TR")}
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs">{r.docNo ?? "—"}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {target ? (
+                          <button
+                            type="button"
+                            className="text-primary underline-offset-2 hover:underline"
+                            title={
+                              target.kind === "INVOICE"
+                                ? "Faturayı aç (satırlar + kapamalar)"
+                                : "Makbuzu aç (kayıt anında donmuş belge)"
+                            }
+                            onClick={() => setLinkTarget(target)}
+                          >
+                            {r.docNo}
+                          </button>
+                        ) : (
+                          (r.docNo ?? "—")
+                        )}
+                      </td>
                       <td className="px-3 py-2 text-muted-foreground">
                         {r.id === activeDevirRowId ? (
                           <span className="flex items-center justify-between gap-2">
@@ -317,7 +361,8 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
                       <td className="px-3 py-2 text-right">{r.credit ? money(r.credit, currency) : ""}</td>
                       <td className="px-3 py-2 text-right font-medium">{money(r.running, currency)}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                   <tr className="border-t-2 bg-muted/50 font-semibold">
                     <td className="px-3 py-2" colSpan={3}>
                       Dönem toplamı
@@ -358,6 +403,26 @@ export function StatementDialog({ cari, open, onOpenChange }: Props) {
           onOpenChange={setLetterListOpen}
         />
       )}
+
+      {/* EKSTRE SATIRINDAN BELGEYE — koşullu mount, iki AYRI hedef.
+          ⚠️ Ekstre diyaloğu AÇIK KALIR: kullanıcı belgeyi kapatınca baktığı
+          döneme geri döner (mal kabul → taslak akışıyla aynı karar). */}
+      {linkTarget?.kind === "INVOICE" && (
+        <InvoiceDetailDialog
+          invoiceId={linkTarget.id}
+          open
+          onOpenChange={(o) => !o && setLinkTarget(null)}
+        />
+      )}
+      <PrintedDocDialog
+        docType="PAYMENT_RECEIPT"
+        sourceId={linkTarget?.kind === "PAYMENT" ? linkTarget.id : null}
+        open={linkTarget?.kind === "PAYMENT"}
+        onOpenChange={(o) => !o && setLinkTarget(null)}
+        title={linkTarget?.kind === "PAYMENT" ? `Makbuz — ${linkTarget.docNo}` : "Makbuz"}
+        description="Belge KAYIT anında dondu; iptal edilen makbuz İPTAL filigranıyla basılır."
+        writePermission="finance:payment"
+      />
 
       {/* DEVİR GİRİŞİ — koşullu mount (form durumu kapanınca ölür). */}
       {openingFormOpen && (

@@ -28,6 +28,8 @@
 //   §5 ONAY AÇIK REJİMİ — PLANNED sevkiyatta taslak YOK; `dispatchShipment`
 //      ile onaylanınca DOĞAR (kancanın üç çağrı yolundan ikisi ölçülmüş olur)
 //   §6 KÖRLÜK ZEMİNİ — fixture gerçekten kuruldu mu (yeşil ≠ "hiç bakılmadı")
+//   §8 ⭐ VADE ÖN-DOLUMU — `dueDate = issueDate + CariAccount.paymentTermDays`;
+//      cari vade taşımıyorsa dueDate NULL (uydurma vade YAZILMAZ)
 //
 // NEGATİF SONDA (2026-08-14 — koşuldu, kırmızı GÖRÜLDÜ, dosya shasum ile
 // birebir geri yüklendi: dc724ae3…). `shipping.service.
@@ -42,6 +44,12 @@
 //      "kanca çalışmıyor" hâlini ölçer — sondada da doğru cevabı verir.
 //      Sonda §1'i de kırmızıya düşürseydi, §1 kapalı-pariteyi değil kancanın
 //      varlığını ölçüyor olurdu.
+//
+// NEGATİF SONDA #2 (2026-08-15, §8 için — koşuldu, kırmızı GÖRÜLDÜ, dosya
+// shasum ile geri yüklendi): `autoDraftInvoiceAfterDispatch`in `createDraft`
+// çağrısından `dueDate` satırı düşürüldü → **37/0** yerine **36 geçti/1
+// başarısız**: ❌ §8c ("due=(yok)"). ⚠️ §8a YEŞİL KALIR ve bu DOĞRUDUR —
+// o kontrol "vade tanımsızsa yazılmaz" der, sonda da aynısını yapar.
 // =============================================================================
 import { Currency, InvoiceStatus, InvoiceType, PriceKind, RollStatus, ShipmentStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
@@ -397,6 +405,41 @@ async function main(): Promise<void> {
       (conflictRes.message ?? "").includes("sipariş fiyatı çelişkili"),
       JSON.stringify(conflictRes.message),
     );
+  }
+
+  // ── §8 VADE ÖN-DOLUMU (saha planı D-Karar, 2026-08-15) ──────────────────
+  // Taslak `dueDate` HİÇ yazmıyordu → Faturalar listesi (`settlementOf` yalnız
+  // `Invoice.dueDate`e bakar) faturayı sonsuza dek "gecikmemiş" gösteriyor,
+  // Yaşlandırma raporu ise (`dueDate ?? issueDate + paymentTermDays`) aynı
+  // faturayı KIRMIZI basıyordu. Kusur ekranlarda değil, taslağın vadesiz
+  // doğmasındaydı. Kural TEK KAYNAKTA: `finance.helper.deriveInvoiceDueDate`.
+  {
+    // §2'nin faturası cari kartında vade YOKKEN doğdu → vadesiz olmalı.
+    const firstInv = await prisma.invoice.findFirst({
+      where: { shipmentId: { in: shipmentIds } },
+      orderBy: { createdAt: "asc" },
+      select: { dueDate: true },
+    });
+    check("§8a Vade tanımsızken dueDate NULL (uydurma vade yazılmaz)", firstInv?.dueDate === null, String(firstInv?.dueDate));
+
+    // Cari kancanın LAZY açtığı kayıttır; vadeyi ona yazıp yeni sevk yapıyoruz.
+    const cari = await prisma.cariAccount.findFirst({ where: { customerId: customer.id }, select: { id: true } });
+    check("§8b Ön koşul: cari kartı (lazy) açılmış", cari != null);
+    if (cari) {
+      await prisma.cariAccount.update({ where: { id: cari.id }, data: { paymentTermDays: 30 } });
+      const dRoll = await makeRoll(itemA.id, 25, wh.id, { colorId: color.id, width: 150 });
+      const dShip = await quickShip([dRoll], customer.id);
+      const dInv = await prisma.invoice.findFirst({
+        where: { shipmentId: dShip.data.id },
+        select: { issueDate: true, dueDate: true },
+      });
+      const want = dInv ? new Date(dInv.issueDate.getTime() + 30 * 86_400_000) : null;
+      check(
+        "§8c ⭐ Vade = sevk tarihi + cari vade günü (30)",
+        dInv?.dueDate != null && want != null && Math.abs(dInv.dueDate.getTime() - want.getTime()) < 1000,
+        `issue=${dInv?.issueDate.toISOString()} due=${dInv?.dueDate?.toISOString() ?? "(yok)"}`,
+      );
+    }
   }
 
   // ── §6 KÖRLÜK ZEMİNİ ────────────────────────────────────────────────────

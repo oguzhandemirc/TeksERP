@@ -37,6 +37,7 @@ import {
   resolveExchangeRate,
   ensureCariAccountTx,
   applyCariBalanceTx,
+  deriveInvoiceDueDate,
 } from "./helpers/finance.helper";
 import { printedDocumentService, registerPrintedDocBuilder } from "./printed-document.service";
 import {
@@ -56,6 +57,7 @@ import { renderInvoiceInternalHtml, type InvoiceDoc } from "./document-render/fi
 import { releaseAllocationsForInvoiceTx } from "./payment-allocation.service";
 // D2 — kalem fiyatı ÇÖZÜM SIRASININ TEK KAYNAĞI. Sıra burada KOPYALANMAZ.
 import { resolveItemPricesFor } from "./item-price.service";
+import { describeContractPricing, loadContractPrices } from "./helpers/contract-price.helper";
 // Sınıf 5 — fişin satırları TEK KAYNAK assembler'dan okunur; `rolls`/`yarnMovements`
 // tablolarına doğrudan gitmek (eski davranış) her tüketicide ayrı bir "hangi
 // tablo" kararı doğuruyordu. (Döngü yok: goods-receipt.service bu dosyayı
@@ -66,6 +68,7 @@ import {
   type ReceiptYarnLine,
 } from "./goods-receipt.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
+import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
 
 export interface InvoiceLineInput {
@@ -419,6 +422,11 @@ export class InvoiceService {
         subcontractorId: true,
         deliveryNoteNo: true,
         createdAt: true,
+        // ⚠️ SÖZLEŞME FİYATI KATMANI (2026-08-15) — satış tarafının aynası.
+        // Bağ olmadan sipariş fiyatı sorulamaz; alan olmadan da o soru hiç
+        // sorulmuyordu (`invoice.service` içinde "purchaseOrder" kelimesi HİÇ
+        // geçmiyordu — bu, C1'in alış tarafındaki boşluğuydu).
+        purchaseOrderId: true,
       },
     });
     if (!receipt) throw AppError.notFound("Mal kabul fişi bulunamadı.");
@@ -498,12 +506,49 @@ export class InvoiceService {
           })
         : null;
 
+    // ── SİPARİŞ (SÖZLEŞME) FİYATI — D2 ZİNCİRİNİN ÖNÜNDE ────────────────────
+    // C1'in ALIŞ ikizi (satış tarafı: `shipment-auto-draft.helper`). Satın
+    // almacının siparişe yazdığı `PurchaseOrderLine.unitPrice` hiç okunmuyordu:
+    // depocu "Kalemleri siparişten doldur" demediyse (ya da fişi elle girdiyse)
+    // anlaşılan fiyat kayboluyor, fatura KART fiyatıyla doğuyor ve muhasebeci
+    // aynı rakamı ÜÇÜNCÜ kez yazıyordu.
+    //
+    // ⚠️ SIRA: `satırın kendi fiyatı > SİPARİŞ fiyatı > kalem kartı > 0`.
+    // Fişte donan fiyat HÂLÂ KAZANIR (dosyanın "ASLA EZMEZ" kuralı; sıfır
+    // dahil) — o, malı teslim alan kişinin BİLİNÇLİ girdisidir ve zaten çoğu
+    // zaman siparişten doldurulmuş hâlidir.
+    //
+    // ⚠️⚠️ BU KATMAN TEK BAŞINA YETMEZ ve 2026-08-15'e kadar tarif edildiği
+    // senaryoda HİÇ ÇALIŞMADI: mal kabul D2 ön-dolumu KART fiyatını KABUL
+    // ANINDA `Roll.purchasePrice`e donduruyor → zincir ilk terimde duruyor,
+    // buraya hiç inmiyordu (ölçüldü: kart 2,00 · sipariş 3,50 → fatura 2,00).
+    // Asıl katman o yüzden `goods-receipt.addLines`e kondu; burası artık ARTIK
+    // DURUMLARI kapsar (aşağıdaki "ORTAK TEK KAYNAK" notu).
+    //
+    // ⚠️ EŞLEŞME YALNIZ `itemId` İLE: `PurchaseOrderLine` renk/en TAŞIMAZ
+    // (şema) — fiş satırı renkli olsa bile daraltacak bir alan yoktur.
+    // ⚠️ ÇELİŞKİDE UYDURULMAZ (ortalama YASAK): aynı ürüne farklı fiyatlı iki
+    // sipariş kalemi varsa satır D2 zincirine düşer ve sayaç MESAJDA söylenir.
+    // Sessiz yanlış fiyat, boş fiyattan kötüdür (fiyat 0 kalırsa `confirm`in
+    // sıfır-fiyat seddi zaten yakalar).
+    // ⚠️ TEK SORGU ve yalnız fiş bir siparişe bağlıysa koşar — bağsız fişte
+    // (üretici fabrika yolu) tek sorgu bile eklenmez.
+    // ⚠️ ORTAK TEK KAYNAK (`helpers/contract-price.helper`): asıl karar noktası
+    // MAL KABULdür (satırın fiyatı orada `Roll.purchasePrice`e donar). Buradaki
+    // katman yalnız o kolonun BOŞ kaldığı satırlar için çalışır — 2026-08-15
+    // öncesi doğmuş toplar ve sözleşme fiyatı çelişkili olduğu için hiçbir
+    // katmanın dolduramadığı satırlar. İki yüzey aynı çelişki kuralını
+    // uygulamak zorundadır; ayrışsalardı fiş ile fatura farklı rakam söylerdi.
+    const contract = await loadContractPrices(receipt.purchaseOrderId);
+    const contractPriceOf = (itemId: string): Prisma.Decimal | null => contract.priceOf(itemId);
+
     const groups = new Map<
       string,
       { itemId: string; description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal; unit: string }
     >();
     for (const r of fabricLines) {
-      const price = D(r.purchasePrice ?? priceMap?.get(r.itemId)?.price ?? 0);
+      // Sıra: satırın donmuş fiyatı > SİPARİŞ fiyatı > kalem kartı > 0.
+      const price = D(r.purchasePrice ?? contractPriceOf(r.itemId) ?? priceMap?.get(r.itemId)?.price ?? 0);
       const key = `${r.itemId}|${r.colorName ?? ""}|${price.toString()}`;
       const existing = groups.get(key);
       if (existing) {
@@ -532,7 +577,10 @@ export class InvoiceService {
     // ve `Item.unit` bundan farklı olabilir; kalem kartındaki birime güvenmek,
     // deftere kg yazılıp faturaya metre basmak demekti.
     for (const y of yarnInLines) {
-      const price = D(y.unitPrice ?? priceMap?.get(y.itemId)?.price ?? 0);
+      // İPLİK DE AYNI ZİNCİRE GİRER: sipariş kalemi kumaş/iplik ayrımı yapmaz
+      // (`PurchaseOrderLine.itemId`), dolayısıyla ipliği dışarıda bırakmak
+      // aynı siparişin iki satırını farklı kurallarla fiyatlandırmak olurdu.
+      const price = D(y.unitPrice ?? contractPriceOf(y.itemId) ?? priceMap?.get(y.itemId)?.price ?? 0);
       const key = `yarn|${y.itemId}|${price.toString()}`;
       const existing = groups.get(key);
       if (existing) {
@@ -554,7 +602,24 @@ export class InvoiceService {
     // satırında değiştirilebilir, `confirm` satır bazında geleni kullanır.
     const defaultVatRate = await readFinanceDefaultVatRate();
 
-    return this.createDraft(
+    // ── VADE ÖN-DOLUMU (2026-08-15) ─────────────────────────────────────────
+    // Taslak vadesiz doğduğu için Faturalar listesi "gecikmemiş", Yaşlandırma
+    // raporu "gecikmiş" diyordu (rapor `issueDate + paymentTermDays`
+    // fallback'ini uyguluyor). Kural TEK KAYNAKTA: `deriveInvoiceDueDate`.
+    // ⚠️ Cari HENÜZ AÇILMAMIŞ olabilir (lazy): o zaman `null` → vade YOK.
+    // Uydurma vade yazmak, hiç anlaşılmamış bir vadeyi anlaşılmış göstermekti.
+    const supplierCari =
+      receipt.supplierId || receipt.subcontractorId
+        ? await prisma.cariAccount.findFirst({
+            where: receipt.supplierId
+              ? { customerId: receipt.supplierId }
+              : { subcontractorId: receipt.subcontractorId! },
+            select: { paymentTermDays: true },
+          })
+        : null;
+    const dueDate = deriveInvoiceDueDate(receipt.createdAt, supplierCari?.paymentTermDays);
+
+    const created = await this.createDraft(
       {
         type: InvoiceType.PURCHASE,
         // ⚠️ İKİSİ BİRDEN GEÇİLİR ama fişte tanım gereği yalnız biri doludur
@@ -565,6 +630,7 @@ export class InvoiceService {
         subcontractorId: receipt.subcontractorId,
         currency: receipt.currency,
         issueDate: receipt.createdAt,
+        dueDate,
         externalNo: receipt.deliveryNoteNo,
         notes: `${receipt.receiptNo} mal kabul fişinden üretildi.`,
         goodsReceiptId: receipt.id,
@@ -579,6 +645,19 @@ export class InvoiceService {
       },
       userId,
     );
+
+    // ⚠️ ÇELİŞKİ GİZLENMEZ (satış tarafındaki `orderConflicts` deseni): sipariş
+    // fiyatı aynı ürüne farklı düşüyorsa satır kart fiyatıyla doldu ve
+    // muhasebeci taslakta kontrol etmesi gerektiğini BURADAN öğrenir. Kaç
+    // satırın sipariş fiyatını aldığı da söylenir — sessiz doğru cevap,
+    // görünmez cevaptır.
+    // "0 kalemde kullanıldı" YAZILMAZ: sıfır bir bilgi değil gürültüdür ve
+    // çelişki cümlesinin önünde durup onu zayıflatır (kural helper'da).
+    const priceNote = describeContractPricing({
+      pricedItems: contract.pricedItems.size,
+      conflictItems: contract.conflictItems.size,
+    });
+    return priceNote ? { ...created, message: `${created.message ?? ""}${priceNote}` } : created;
   }
 
   /**
@@ -1447,13 +1526,15 @@ export class InvoiceService {
       where.issueDate = { ...(params.from ? { gte: params.from } : {}), ...(params.to ? { lte: params.to } : {}) };
     }
     if (params.search?.trim()) {
-      const q = params.search.trim();
-      where.OR = [
-        { docNo: { contains: q, mode: "insensitive" } },
-        { externalNo: { contains: q, mode: "insensitive" } },
-        { cari: { customer: { name: { contains: q, mode: "insensitive" } } } },
-        { cari: { subcontractor: { name: { contains: q, mode: "insensitive" } } } },
-      ];
+      // ⚠️ TÜRKÇE-DUYARLI: cari adları BÜYÜK saklanıyor; düz ILIKE Türkçe
+      // çiftlerini katlamaz (`query-parser` Y-2/Y-3) → küçük harfli arama
+      // faturayı bulamaz ve muhasebeci "fatura yok" sanır.
+      where.OR = buildTurkishSearch(params.search, [
+        "docNo",
+        "externalNo",
+        "cari.customer.name",
+        "cari.subcontractor.name",
+      ]);
     }
 
     const [data, total] = await Promise.all([

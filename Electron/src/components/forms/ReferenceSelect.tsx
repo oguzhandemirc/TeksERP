@@ -13,6 +13,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type { CrudService } from "@/services/crudService";
+import { PASSIVE_HINT, decorateSelectedLabel, isPassiveRecord } from "./referenceSelectState";
 
 const NULL_SENTINEL = "__none__";
 const PAGE_SIZE = 50;
@@ -30,6 +31,21 @@ interface Props<T extends { id: string }> {
   /** Backend filter'larına eklenir. Örn: { isDerived: "true" }. */
   extraFilters?: Record<string, string>;
   disabled?: boolean;
+  /**
+   * PASİF kayıtlar da listelensin (varsayılan: yalnız aktifler).
+   *
+   * ⚠️ Bu bir kolaylık değil, KURAL HİZASI: ön muhasebe uçları müşteri/fason
+   * KARTININ aktifliğine bakmaz, `CariAccount.isActive`'e bakar
+   * (`finance.helper.ensureCariAccountTx`). Yani pasifleştirilmiş bir kartın
+   * açık bakiyesine tahsilat girmek MEŞRUDUR ve mahsup ekranı bu kararı
+   * yazılı olarak zaten vermiştir (`Allocations/service.cariPickerService`:
+   * "cariyi kapatmak geçmişini kilitlemek anlamına gelmez"). Süzgeç açık
+   * kalınca aynı firma bir ekranda seçilebiliyor, diğerinde "yok" görünüyordu.
+   *
+   * Açıldığında pasif kayıt LİSTEDE de görünür → satırda ve tetikleyicide
+   * "(pasif)" işareti taşır (rozet `isActive === false` ile çözülür).
+   */
+  includeInactive?: boolean;
 }
 
 export function ReferenceSelect<T extends { id: string }>({
@@ -43,11 +59,14 @@ export function ReferenceSelect<T extends { id: string }>({
   noneLabel = "— (yok)",
   extraFilters,
   disabled,
+  includeInactive,
 }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [labelCache, setLabelCache] = useState<Map<string, string>>(new Map());
+  // Pasif kayıtların id'leri — hem listede hem tetikleyicide işaretlenir.
+  const [passiveIds, setPassiveIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), DEBOUNCE_MS);
@@ -59,7 +78,10 @@ export function ReferenceSelect<T extends { id: string }>({
   }, [open]);
 
   const listQuery = useQuery({
-    queryKey: [queryKey, "ref-select", debouncedSearch, extraFilters],
+    // ⚠️ `includeInactive` anahtara GİRER: aynı servisin iki farklı kapsamı
+    // (yalnız aktifler / hepsi) aynı cache satırını paylaşırsa, formu açan
+    // ekrana göre liste "bazen pasifleri içerir" olur.
+    queryKey: [queryKey, "ref-select", debouncedSearch, extraFilters, includeInactive ?? false],
     queryFn: () =>
       service.getAll({
         page: 1,
@@ -67,7 +89,9 @@ export function ReferenceSelect<T extends { id: string }>({
         sortBy: "name",
         sortOrder: "asc",
         search: debouncedSearch || undefined,
-        filters: { isActive: "true", ...extraFilters },
+        // Süzgeç YOK EDİLİR, "false" YAZILMAZ: istenen "hepsi", "yalnız
+        // pasifler" değil (backend listesi süzgeçsiz iken ikisini de döner).
+        filters: includeInactive ? { ...extraFilters } : { isActive: "true", ...extraFilters },
       }),
     staleTime: 30_000,
   });
@@ -100,9 +124,30 @@ export function ReferenceSelect<T extends { id: string }>({
       if (fromSelected) upsert(fromSelected);
       return changed ? next : prev;
     });
+    // Pasiflik AYRI tutulur: etiket bir metin, pasiflik bir DURUM — etikete
+    // gömülseydi (ad + " (pasif)") aynı kayıt listede ve tetikleyicide farklı
+    // yazılır, arama da uydurma eke çarpardı.
+    setPassiveIds((prev) => {
+      const next = new Set(prev);
+      let changed = false;
+      const mark = (item: T) => {
+        const passive = isPassiveRecord(item);
+        if (passive && !next.has(item.id)) {
+          next.add(item.id);
+          changed = true;
+        } else if (!passive && next.has(item.id)) {
+          next.delete(item.id);
+          changed = true;
+        }
+      };
+      for (const item of fromList) mark(item);
+      if (fromSelected) mark(fromSelected);
+      return changed ? next : prev;
+    });
   }, [listQuery.data?.data, selectedQuery.data?.data, getLabel]);
 
-  const selectedLabel = value ? labelCache.get(value) : undefined;
+  const selectedPassive = Boolean(value) && passiveIds.has(value as string);
+  const selectedLabel = decorateSelectedLabel(value ? labelCache.get(value) : undefined, selectedPassive);
   const triggerText =
     selectedLabel ??
     (needsSelectedFetch && selectedQuery.isLoading ? "Yükleniyor..." : placeholder);
@@ -111,6 +156,18 @@ export function ReferenceSelect<T extends { id: string }>({
     !listQuery.isLoading && items.length === 0 && !(nullable && debouncedSearch.length === 0);
 
   return (
+    /* ⚠️ TEK KÖK ELEMAN — Fragment DEĞİL. Pasif uyarısı bir KARDEŞ olarak
+       eklendiğinde bileşen bazen 1, bazen 2 düğüm döndürüyordu; doğrudan bir
+       `grid` çocuğu olduğu yerde (`GoodsReceipts/ReceiptLineRows` — hem kumaş
+       hem renk seçicisi grid'in DOĞRUDAN çocuğu) ikinci düğüm fazladan bir
+       HÜCRE açar ve satırdaki tüm sonraki kolonlar (metraj/en/kg/kat/sil) bir
+       kolon kayar, sonuncusu alt satıra düşer — hata yok, log yok, yalnız
+       bozuk satır. Tetiklenmesi teorik değil: "Kalemleri siparişten doldur"
+       satırları sipariş kalemleriyle ön-doldurur ve sonradan pasife alınmış bir
+       kalem `getById` ile `isActive:false` olarak çözülür.
+       ⚠️ `min-w-0`: flex satırında sarmalayıcı, içeriğinden küçülemeyip komşu
+       hücreye taşabilir (projede yazılı "flex picker taşması" dersi). */
+    <div className="w-full min-w-0">
     <Popover open={open} onOpenChange={disabled ? undefined : setOpen}>
       <PopoverTrigger asChild>
         <Button
@@ -122,6 +179,9 @@ export function ReferenceSelect<T extends { id: string }>({
           className={cn(
             "w-full justify-between font-normal",
             !selectedLabel && "text-muted-foreground",
+            // Pasif seçim SESSİZ KALMAZ: aynı hata bugün ancak "Kaydet"e
+            // basınca, üstelik hangi alandan geldiği yazmadan görünüyordu.
+            selectedPassive && "border-amber-400 dark:border-amber-700",
           )}
         >
           <span className="truncate">{triggerText}</span>
@@ -180,6 +240,14 @@ export function ReferenceSelect<T extends { id: string }>({
                     )}
                   />
                   <span className="truncate">{getLabel(item)}</span>
+                  {/* Pasif satır listede de işaretlenir — `includeInactive`
+                      açıkken pasif kayıt aktiflerin arasında yer alır ve
+                      ayırt edilemezse kullanıcı bilmeden onu seçer. */}
+                  {isPassiveRecord(item) && (
+                    <span className="ml-2 shrink-0 text-[11px] text-amber-700 dark:text-amber-500">
+                      pasif
+                    </span>
+                  )}
                 </CommandItem>
               ))}
             </CommandGroup>
@@ -187,5 +255,9 @@ export function ReferenceSelect<T extends { id: string }>({
         </Command>
       </PopoverContent>
     </Popover>
+    {selectedPassive && (
+      <p className="mt-1 text-[11px] text-amber-700 dark:text-amber-500">{PASSIVE_HINT}</p>
+    )}
+    </div>
   );
 }

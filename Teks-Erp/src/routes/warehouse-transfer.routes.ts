@@ -124,6 +124,18 @@ router.get(
  *       - in: query
  *         name: filter[fromWarehouseId]
  *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: dateField
+ *         schema: { type: string, enum: [createdAt] }
+ *         description: >
+ *           Tarih aralığının uygulanacağı kolon. ⚠️ ÜÇÜ BİRLİKTE gönderilir —
+ *           `dateField` yoksa `dateFrom`/`dateTo` SESSİZCE yok sayılır.
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
  *     responses:
  *       200: { description: Sayfalanmış transfer listesi }
  */
@@ -133,8 +145,16 @@ router.get(
   requireAnyPermission("warehouse:transfer", "warehouse:read"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { page, pageSize, filters, search } = parseQueryParams(req);
-      const { rows, total } = await warehouseTransferService.list({ page, pageSize, filters, search });
+      const { page, pageSize, filters, search, dateField, dateFrom, dateTo } = parseQueryParams(req);
+      const { rows, total } = await warehouseTransferService.list({
+        page,
+        pageSize,
+        filters,
+        search,
+        dateField,
+        dateFrom,
+        dateTo,
+      });
       res.status(200).json({
         success: true,
         data: rows,

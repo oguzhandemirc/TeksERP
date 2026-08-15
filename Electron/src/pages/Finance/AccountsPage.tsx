@@ -63,7 +63,14 @@ export function AccountsPage() {
               </Button>
             </PermissionGate>
           </div>
-          <AccountTable rows={cashQ.data?.data ?? []} loading={cashQ.isLoading} empty="Kasa tanımı yok." />
+          <AccountTable
+            rows={cashQ.data?.data ?? []}
+            loading={cashQ.isLoading}
+            isError={cashQ.isError}
+            onRetry={() => void cashQ.refetch()}
+            empty="Kasa tanımı yok."
+            errorTitle="Kasa listesi yüklenemedi."
+          />
         </section>
 
         <section>
@@ -82,7 +89,10 @@ export function AccountsPage() {
           <AccountTable
             rows={bankQ.data?.data ?? []}
             loading={bankQ.isLoading}
+            isError={bankQ.isError}
+            onRetry={() => void bankQ.refetch()}
             empty="Banka hesabı tanımı yok."
+            errorTitle="Banka hesabı listesi yüklenemedi."
             showBank
           />
         </section>
@@ -146,22 +156,55 @@ export function AccountsPage() {
 function AccountTable({
   rows,
   loading,
+  isError,
+  onRetry,
   empty,
+  errorTitle,
   showBank = false,
 }: {
   rows: Array<{ id: string; code: string; name: string; bankName?: string | null; iban?: string | null; currency: Currency; balance: number; isActive: boolean }>;
   loading: boolean;
+  isError?: boolean;
+  onRetry?: () => void;
   empty: string;
+  errorTitle: string;
   showBank?: boolean;
 }) {
   if (loading) return <p className="text-sm text-muted-foreground">Yükleniyor…</p>;
+  // ⚠️ "TANIM YOK" ZİNCİRİNİN KÖKÜ. Tahsilat formu kasa listesini okuyamayınca
+  // "Önce Muhasebe → Kasa & Banka ekranından ekleyin" der; kullanıcı buraya gelir
+  // ve burası da aynı sebeple "Kasa tanımı yok." derse MÜKERRER KASA açar —
+  // sonraki tahsilatlar yanlış hesaba yazılır ve iki hesabın bakiyesi de eksik
+  // kalır. Hata dalı boş dalın ÖNÜNDE olmak zorunda.
+  if (isError && rows.length === 0) {
+    return (
+      <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+        <p className="font-medium text-destructive">{errorTitle}</p>
+        <p className="mt-1 text-muted-foreground">
+          Bu “tanım yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Yeni hesap
+          açmadan önce tekrar deneyin; hesaplarınız duruyor olabilir.
+        </p>
+        {onRetry ? (
+          <Button variant="outline" size="sm" className="mt-3" onClick={onRetry}>
+            Tekrar dene
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
   if (rows.length === 0) {
     return (
       <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">{empty}</div>
     );
   }
   return (
-    <div className="overflow-hidden rounded-md border">
+    <div className="space-y-2">
+      {isError && (
+        <p className="rounded-md bg-amber-100 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Liste tazelenemedi — aşağıdaki hesaplar ve bakiyeler son başarılı okumaya aittir.
+        </p>
+      )}
+      <div className="overflow-hidden rounded-md border">
       <table className="w-full text-sm">
         <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
           <tr>
@@ -189,6 +232,7 @@ function AccountTable({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

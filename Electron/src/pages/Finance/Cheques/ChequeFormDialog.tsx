@@ -191,6 +191,8 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
           </div>
           <div>
             <Label>{party === "CUSTOMER" ? "Müşteri" : "Fason firma"}</Label>
+            {/* Pasif kart da seçilebilir — gerekçe `PaymentFormDialog`'daki
+                notla aynı (uç `CariAccount.isActive`'e bakar, karta değil). */}
             <div className="mt-1">
               {party === "CUSTOMER" ? (
                 <ReferenceSelect<Customer>
@@ -200,6 +202,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
                   queryKey="customers"
                   getLabel={(c) => `${c.code} — ${c.name}`}
                   placeholder="Müşteri ara..."
+                  includeInactive
                 />
               ) : (
                 <ReferenceSelect
@@ -209,6 +212,7 @@ export function ChequeFormDialog({ open, initialKind, onOpenChange, onCreated }:
                   queryKey="subcontractors"
                   getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
                   placeholder="Fason firma ara..."
+                  includeInactive
                 />
               )}
             </div>

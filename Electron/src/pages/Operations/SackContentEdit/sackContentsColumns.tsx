@@ -31,7 +31,9 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
           </span>
           {absent && (
             <span
-              title={`Bu top fiziksel olarak çuvalda DEĞİL (${r.status}). Çuvaldan çıkarın — sayımlara ve belgelere girmiyor, ama sevkiyat kurulumunu bloklar.`}
+              // Rozet doğru sözlüğü kullanıyordu, tooltip ham enum basıyordu
+              // ("(SHIPPED)") — aynı satırda iki dil. Tek kaynak: sackAbsentLabels.
+              title={`Bu top fiziksel olarak çuvalda DEĞİL (${sackAbsentLabels[r.status!] ?? r.status}). Çuvaldan çıkarın — sayımlara ve belgelere girmiyor, ama sevkiyat kurulumunu bloklar.`}
               className="inline-flex shrink-0 items-center gap-1 rounded border border-destructive/40 bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive"
             >
               <AlertTriangle className="h-3 w-3" />

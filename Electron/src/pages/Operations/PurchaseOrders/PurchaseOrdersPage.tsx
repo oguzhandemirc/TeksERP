@@ -39,6 +39,8 @@ import { PurchaseOrderTable } from "./PurchaseOrderTable";
 import { PurchaseOrderFormDialog } from "./PurchaseOrderFormDialog";
 import { PurchaseOrderDetailSheet } from "./PurchaseOrderDetailSheet";
 import { CancelPurchaseOrderDialog } from "./CancelPurchaseOrderDialog";
+// Sipariş → fiş tıkla-git; bağ geri çağrıyla kurulur (gerekçe: mount noktası).
+import { GoodsReceiptDetailSheet } from "../GoodsReceipts/GoodsReceiptDetailSheet";
 import { OpenLinesPanel } from "./OpenLinesPanel";
 import {
   EMPTY_PO_FILTERS, PurchaseOrderFilterBar, isPoFilterDirty, type PurchaseOrderFilterState,
@@ -54,6 +56,8 @@ export function PurchaseOrdersPage() {
   const [editId, setEditId] = useState<string | null>(null);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [cancelId, setCancelId] = useState<string | null>(null);
+  // Sipariş detayından açılan mal kabul fişi (tıkla-git, 2026-08-15).
+  const [receiptId, setReceiptId] = useState<string | null>(null);
   // Kalem görünümünün kendi daraltmaları (sipariş satırında ürün/termin yok).
   const [openLineItemId, setOpenLineItemId] = useState<string | null>(null);
   const [overdueOnly, setOverdueOnly] = useState(false);
@@ -207,7 +211,17 @@ export function PurchaseOrdersPage() {
           setDetailId(null);
           setCancelId(id);
         }}
+        // ⭐ SİPARİŞ → FİŞ: uyarı bandı "aşağıdaki fişleri açıp kontrol edin"
+        // diyor; eylem artık gerçekten var. Sipariş sheet'i AÇIK KALIR —
+        // kullanıcı fişi kapatınca siparişin başına döner.
+        onOpenReceipt={setReceiptId}
       />
+
+      {/* Fiş yüzeyi sahibinin bileşeni; burada yalnız mount edilir. Bu bağ
+          İMPORT ile değil geri çağrı ile kuruldu: fiş sheet'i sipariş sheet'ini
+          zaten import ediyor (fiş → sipariş yönü) ve karşılıklı import modül
+          döngüsü demekti. */}
+      <GoodsReceiptDetailSheet id={receiptId} onOpenChange={(o) => !o && setReceiptId(null)} />
 
       {cancelId && (
         <CancelPurchaseOrderDialog

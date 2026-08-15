@@ -26,8 +26,22 @@ import {
   type ItemPriceKind,
 } from "@/hooks/useItemPriceSuggestion";
 import {
-  createInvoice, listCari, money, INVOICE_TYPE_LABEL, type Currency, type InvoiceType,
+  createInvoice, getInvoice, listCari, money, updateInvoice,
+  INVOICE_TYPE_LABEL, type Currency, type InvoiceType,
 } from "./service";
+import {
+  DEFAULT_INVOICE_CURRENCY,
+  buildUpdateBody,
+  canSubmitInvoiceForm,
+  initialAppliedCurrency,
+  initialFromDetail,
+  isInvoiceEditable,
+  payloadLines,
+  shouldApplyCurrencySuggestion,
+  type InvoiceFormInitial,
+  type InvoiceFormLine,
+  type PartyKind,
+} from "./invoiceForm";
 
 /**
  * Bir kaynak belgeden (sevkiyat / mal kabul) ön-doldurulmuş taslak.
@@ -69,23 +83,23 @@ export interface InvoicePrefill {
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Kaydetme SONRASI tazeleme kancası — hem oluşturma hem düzenleme çağırır. */
   onCreated: () => void;
   /** Verilirse form bu değerlerle açılır (kullanıcı hepsini değiştirebilir). */
   prefill?: InvoicePrefill;
+  /**
+   * Verilirse form DÜZENLEME modunda açılır: kayıtlı TASLAK yüklenir ve
+   * kaydetme `PATCH /invoices/:id` (updateDraft) ile yapılır.
+   *
+   * ⚠️ Düzenlemede TÜR / CARİ / PARA BİRİMİ değiştirilemez — PATCH gövdesi
+   * onları kabul etmiyor (`.strict()`). Alanlar salt-okunur çizilir; düzenlenir
+   * göstermek "kaydettim ama değişmedi" yalanı olurdu.
+   */
+  editInvoiceId?: string | null;
 }
 
-interface DraftLine {
-  key: string;
-  /** Katalog kalemi — OPSİYONEL. Kalemsiz serbest satır (nakliye vb.) meşrudur. */
-  itemId: string | null;
-  description: string;
-  qty: number;
-  unit: string;
-  unitPrice: number;
-  discountRate: number;
-  vatRate: number;
-  withholdingRate: number;
-}
+/** Satır tipi tek kaynakta (saf katman) — `invoiceForm.InvoiceFormLine`. */
+type DraftLine = InvoiceFormLine;
 
 /**
  * Boş satır — KDV oranı FİRMA PARAMETRESİNDEN gelir (finance.defaultVatRate;
@@ -133,14 +147,18 @@ function lineTotals(l: DraftLine) {
 }
 
 /**
- * Seçili tarafın CARİ vade günü (`CariAccount.paymentTermDays`).
+ * Seçili tarafın CARİ kartı — vade günü + varsayılan para birimi.
  *
  * Cari hesap LAZY açılır (ilk fatura/tahsilat anında) — kartı OLMAYABİLİR ve bu
  * meşrudur: o durumda öneri yoktur, alan boş kalır. Cari ucu partiye id ile
  * bakmadığı için zincir iki adımdır: parti kartı → kod → cari listesinde TAM kod
  * eşleşmesi (contains araması ada da çarpabilir; kod benzersizdir, kimlik odur).
+ *
+ * ⚠️ `defaultCurrency` de BURADAN okunur, ikinci bir sorgu açılmaz: aynı satır
+ * zaten çekiliyor. Ayrı bir kanca yazmak, iki isteğin farklı anlarda settle
+ * olup vade ile para biriminin farklı carilerden gelmesi riskini doğururdu.
  */
-function usePartyTermDays(party: "CUSTOMER" | "SUBCONTRACTOR", partyId: string | null) {
+function usePartyTermDays(party: PartyKind, partyId: string | null) {
   // Bu diyalog yalnız finance rejiminde açılır; kapı yine de burada da durur —
   // `/api/finance/cari` rejim kapılıdır, bayraksız kurulumda istek 403 üretirdi.
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
@@ -168,6 +186,14 @@ function usePartyTermDays(party: "CUSTOMER" | "SUBCONTRACTOR", partyId: string |
 
   return {
     termDays: row?.paymentTermDays ?? null,
+    /**
+     * Carinin varsayılan para birimi — `CariAccount.defaultCurrency`.
+     *
+     * ⚠️ Kartı OLMAYAN caride `null` döner ve alana DOKUNULMAZ. Sessizce TRY'ye
+     * düşmek bugünkü hatanın ta kendisidir: USD'li müşteriye TRY fatura kesilir,
+     * kur 1 kalır ve defter ~30 kat yanlış olur.
+     */
+    defaultCurrency: (row?.defaultCurrency ?? null) as Currency | null,
     // Sorgu HATASI "vade yok" demek değildir — settled olmadan alana dokunulmaz
     // (bayat öneriyi hata anında temizlemek, yanlış anda veri silmek olurdu).
     settled: Boolean(partyId) && partyQ.isSuccess && cariQ.isSuccess,
@@ -303,7 +329,90 @@ function InvoiceLineRow({
   );
 }
 
-export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Props) {
+/**
+ * DIŞ KAPI — yeni fatura mı, kayıtlı taslağın düzenlenmesi mi?
+ *
+ * Düzenleme yolunda form açılış değerleri SUNUCUDAN gelir, yani gövde ancak
+ * veri geldikten sonra mount edilebilir (state başlatıcıları bir kez çalışır ve
+ * sonradan prop senkronlamak, kullanıcının sildiği satırı geri getirirdi —
+ * dosyanın kendi kuralı). Bu yüzden yükleme/hata/uygunluk kapıları BURADA,
+ * formun kendisi `InvoiceFormBody`'de.
+ */
+export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill, editInvoiceId }: Props) {
+  const editQ = useQuery({
+    // Anahtar detay diyaloğuyla PAYLAŞILIR: aynı taslağı iki yüzey de aynı
+    // cache satırından okur (kaydetme sonrası tek invalidate ikisini de tazeler).
+    queryKey: ["finance", "invoice", editInvoiceId],
+    queryFn: () => getInvoice(editInvoiceId as string),
+    enabled: open && Boolean(editInvoiceId),
+  });
+
+  if (editInvoiceId) {
+    const inv = editQ.data;
+    if (!inv || !isInvoiceEditable(inv.status)) {
+      return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Taslağı Düzenle</DialogTitle>
+              <DialogDescription>Kayıtlı taslak yükleniyor.</DialogDescription>
+            </DialogHeader>
+            {editQ.isLoading ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">Yükleniyor…</p>
+            ) : editQ.isError ? (
+              // "Bulunamadı" DEMEYİZ: istek düşmüş olabilir ve kaydın var
+              // olmadığını söylemek kullanıcıyı faturayı yeniden kesmeye iter.
+              <p className="py-6 text-center text-sm text-destructive">
+                Taslak yüklenemedi — bağlantı ya da yetki sorunu olabilir. Faturanın silindiği anlamına
+                gelmez.
+              </p>
+            ) : (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                Bu fatura artık taslak değil; onaylanmış ya da iptal edilmiş bir belge DÜZENLENEMEZ.
+                Düzeltme iptal (storno) + yeni fatura ile yapılır.
+              </p>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => onOpenChange(false)}>Kapat</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      );
+    }
+    return (
+      <InvoiceFormBody
+        key={inv.id}
+        open={open}
+        onOpenChange={onOpenChange}
+        onSaved={onCreated}
+        initial={initialFromDetail(inv)}
+        edit={{ id: inv.id, docNo: inv.docNo }}
+      />
+    );
+  }
+
+  return (
+    <InvoiceFormBody
+      open={open}
+      onOpenChange={onOpenChange}
+      onSaved={onCreated}
+      prefill={prefill}
+    />
+  );
+}
+
+function InvoiceFormBody({
+  open, onOpenChange, onSaved, prefill, initial, edit,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+  prefill?: InvoicePrefill;
+  /** Düzenleme yolunda sunucudan gelen açılış değerleri. */
+  initial?: InvoiceFormInitial;
+  /** Dolu ise PATCH yolu (kayıtlı taslak). */
+  edit?: { id: string; docNo: string };
+}) {
   // ⚠️ Ön-doldurma YALNIZ başlangıç değeridir; çağıran diyaloğu koşullu mount
   // eder (her açılış taze bileşen). Prop'u render fazında senkronlamak,
   // kullanıcının sildiği satırı geri getirirdi.
@@ -311,30 +420,50 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
   // açılışta taze mount edildiği ve flag'ler app açılışında cache'lendiği için
   // ilk render'da hazırdır; yüklenmemişse 20 (bugünkü davranış, sıfır fark).
   const defaultVatRate = useFeatureFlags().data?.data?.financeDefaultVatRate ?? 20;
+  const isEdit = Boolean(edit);
 
-  const [type, setType] = useState<InvoiceType>(prefill?.type ?? "SALES");
-  const [party, setParty] = useState<"CUSTOMER" | "SUBCONTRACTOR">("CUSTOMER");
-  const [customerId, setCustomerId] = useState<string | null>(prefill?.customerId ?? null);
-  const [subcontractorId, setSubcontractorId] = useState<string | null>(null);
-  const [currency, setCurrency] = useState<Currency>(prefill?.currency ?? "TRY");
-  const [externalNo, setExternalNo] = useState("");
-  const [dueDate, setDueDate] = useState("");
+  const [type, setType] = useState<InvoiceType>(initial?.type ?? prefill?.type ?? "SALES");
+  const [party, setParty] = useState<PartyKind>(initial?.party ?? "CUSTOMER");
+  const [customerId, setCustomerId] = useState<string | null>(
+    initial?.customerId ?? prefill?.customerId ?? null,
+  );
+  const [subcontractorId, setSubcontractorId] = useState<string | null>(initial?.subcontractorId ?? null);
+  const [currency, setCurrency] = useState<Currency>(
+    initial?.currency ?? prefill?.currency ?? DEFAULT_INVOICE_CURRENCY,
+  );
+  const [externalNo, setExternalNo] = useState(initial?.externalNo ?? "");
+  const [dueDate, setDueDate] = useState(initial?.dueDate ?? "");
+  // ⚠️ NOT ALANI YALNIZ DÜZENLEMEDE ÇİZİLİR — ve çizilmek ZORUNDA: PATCH gövdesi
+  // `notes`'u taşır ve boş gönderim alanı TEMİZLER; alan gizli kalsaydı,
+  // otomatik taslağın "sipariş fiyatı çelişkili — kontrol edin" notu kullanıcı
+  // sadece fiyat düzeltip kaydettiğinde sessizce silinirdi.
+  const [notes, setNotes] = useState(initial?.notes ?? "");
   // Vade alanına en son YAZDIĞIMIZ öneri — kullanıcı dokunduysa artık eşleşmez
   // ve alana bir daha dokunulmaz (fiyat önerisiyle aynı saf yüklem).
   const [appliedDueSuggestion, setAppliedDueSuggestion] = useState<string | null>(null);
+  // Para birimi alanının "dokunulmamış" hâli — gerekçe `initialAppliedCurrency`.
+  const [appliedCurrency, setAppliedCurrency] = useState<Currency | null>(() =>
+    initial
+      ? initialAppliedCurrency(initial)
+      : initialAppliedCurrency({
+          currency: prefill?.currency ?? DEFAULT_INVOICE_CURRENCY,
+          currencyFromSource: Boolean(prefill?.currency),
+        }),
+  );
   // Öneri tabanı diyalog oturumu boyunca sabit (gece yarısı geçişinde alan
   // kendi kendine oynamasın).
   const [issueYmd] = useState(() => todayYmd());
-  const [lines, setLines] = useState<DraftLine[]>(() =>
-    prefill?.lines.length
+  const [lines, setLines] = useState<DraftLine[]>(() => {
+    if (initial) return initial.lines;
+    return prefill?.lines.length
       ? prefill.lines.map((l) => ({
           ...emptyLine(defaultVatRate),
           ...l,
           unitPrice: l.unitPrice ?? 0,
           itemId: l.itemId ?? null,
         }))
-      : [emptyLine(defaultVatRate)],
-  );
+      : [emptyLine(defaultVatRate)];
+  });
 
   // Taraf iki AYRI karttan gelir: Müşteri/Tedarikçi (Customer — tedarikçi de
   // bu karttadır, CompanyType.SUPPLIER) ve Fason (Subcontractor). Alış faturası
@@ -353,7 +482,11 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
   const dueDateRef = useRef(dueDate);
   dueDateRef.current = dueDate;
   useEffect(() => {
-    if (!partyId || !terms.settled) return;
+    // ⚠️ DÜZENLEME MODUNDA ÖNERİ KOŞMAZ: cari değişmiyor (alan kilitli) ve
+    // öneri tabanı BUGÜN — kayıtlı faturanın vadesini bugüne göre yeniden
+    // hesaplamak, kullanıcının açıp kapattığı her taslakta vadeyi sessizce
+    // ileri atardı.
+    if (isEdit || !partyId || !terms.settled) return;
     const resolved = computeDueDateSuggestion(issueYmd, terms.termDays);
     if (resolved !== null) {
       if (
@@ -373,7 +506,33 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
       setDueDate("");
       setAppliedDueSuggestion(null);
     }
-  }, [partyId, terms.settled, terms.termDays, appliedDueSuggestion, issueYmd]);
+  }, [isEdit, partyId, terms.settled, terms.termDays, appliedDueSuggestion, issueYmd]);
+
+  // ── PARA BİRİMİ ÖNERİSİ (②) ───────────────────────────────────────────────
+  // Vade önerisiyle AYNI yüklem, aynı üç kural. Buradaki hata sınıfı vadeden
+  // AĞIRDIR: USD'li müşteriye sessizce TRY fatura kesilir, kur 1 kalır ve cari
+  // defter ~30 kat yanlış olur (hata yok, log yok). Kaynak belge para birimi
+  // dayattıysa (sevkiyat/fiş) öneri hiç devreye girmez — gerekçe
+  // `initialAppliedCurrency` başlığında.
+  const currencyRef = useRef(currency);
+  currencyRef.current = currency;
+  useEffect(() => {
+    if (isEdit || !partyId || !terms.settled) return;
+    if (
+      shouldApplyCurrencySuggestion({
+        current: currencyRef.current,
+        lastApplied: appliedCurrency,
+        resolved: terms.defaultCurrency,
+      })
+    ) {
+      setCurrency(terms.defaultCurrency as Currency);
+      setAppliedCurrency(terms.defaultCurrency as Currency);
+    }
+    // Cari kartı yoksa (`defaultCurrency === null`) alan OLDUĞU GİBİ kalır:
+    // vade önerisindeki `shouldClearSuggestion` karşılığı burada YOKTUR, çünkü
+    // para biriminin "temiz" hâli diye bir şey yok — temizlemek TRY'ye düşmek
+    // demektir ve bu, düzeltilmek istenen hatanın ta kendisidir.
+  }, [isEdit, partyId, terms.settled, terms.defaultCurrency, appliedCurrency]);
 
   const totals = useMemo(() => {
     let net = 0;
@@ -389,9 +548,8 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
     return { net, vat, wh, grand: Math.round((net + vat - wh) * 100) / 100 };
   }, [lines]);
 
-  const valid =
-    (isCustomerParty ? Boolean(customerId) : Boolean(subcontractorId)) &&
-    lines.some((l) => l.description.trim() && l.qty > 0);
+  // Kaydedilebilirlik saf katmanda (yeni ve düzenleme yolu AYNI kural).
+  const valid = canSubmitInvoiceForm({ party, customerId, subcontractorId, lines });
 
   const createM = useMutation({
     mutationFn: () =>
@@ -412,18 +570,9 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
         // bağsız faturadan kötüdür. Sed backend'de partial unique.
         returnGroupId: type === "SALES_RETURN" ? (prefill?.returnGroupId ?? null) : null,
         clientToken: crypto.randomUUID(),
-        lines: lines
-          .filter((l) => l.description.trim() && l.qty > 0)
-          .map((l) => ({
-            itemId: l.itemId ?? null,
-            description: l.description.trim(),
-            qty: l.qty,
-            unit: l.unit,
-            unitPrice: l.unitPrice,
-            discountRate: l.discountRate,
-            vatRate: l.vatRate,
-            withholdingRate: l.withholdingRate,
-          })),
+        // Satır süzgeci saf katmanda — düzenleme yolu da AYNI fonksiyonu
+        // kullanır (iki kopya, "hangi satır gider" sorusuna iki cevap demekti).
+        lines: payloadLines(lines),
       }),
     onSuccess: (r) => {
       toast.success(r.message ?? "Taslak oluşturuldu.");
@@ -431,10 +580,27 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
       setExternalNo("");
       setDueDate("");
       setAppliedDueSuggestion(null);
-      onCreated();
+      onSaved();
       onOpenChange(false);
     },
   });
+
+  /**
+   * DÜZENLEME — `PATCH /invoices/:id`.
+   *
+   * ⚠️ Yeni bir `clientToken` YOK: idempotency anahtarı KAYIT YARATAN uçlara
+   * aittir; güncelleme zaten kaydın kimliğiyle (id) adreslenir.
+   */
+  const updateM = useMutation({
+    mutationFn: () => updateInvoice(edit!.id, buildUpdateBody({ lines, dueDate, externalNo, notes })),
+    onSuccess: (r) => {
+      toast.success(r.message ?? "Taslak güncellendi.");
+      onSaved();
+      onOpenChange(false);
+    },
+  });
+
+  const saving = createM.isPending || updateM.isPending;
 
   const patch = (key: string, p: Partial<DraftLine>) =>
     setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)));
@@ -446,15 +612,25 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl">
         <DialogHeader>
-          <DialogTitle>Yeni Fatura (Taslak)</DialogTitle>
+          <DialogTitle>{isEdit ? `Taslağı Düzenle — ${edit?.docNo}` : "Yeni Fatura (Taslak)"}</DialogTitle>
           <DialogDescription>
             {prefill?.sourceLabel && (
               <span className="mr-1 rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-foreground">
                 Kaynak: {prefill.sourceLabel}
               </span>
             )}
-            Taslak deftere işlemez — serbestçe düzenleyip silebilirsiniz. Cari hesaba
-            işlemesi için ayrıca <b>Onayla</b> demeniz gerekir.
+            {isEdit ? (
+              <>
+                Taslak deftere işlemez — satırları, vadeyi ve notu değiştirebilirsiniz.{" "}
+                <b>Tür, cari ve para birimi değiştirilemez</b>; yanlışsa taslağı silip yeniden
+                oluşturun. Cari hesaba işlemesi için ayrıca <b>Onayla</b> demeniz gerekir.
+              </>
+            ) : (
+              <>
+                Taslak deftere işlemez — serbestçe düzenleyip silebilirsiniz. Cari hesaba
+                işlemesi için ayrıca <b>Onayla</b> demeniz gerekir.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -471,12 +647,17 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
           </p>
         )}
 
+        {/* ⚠️ DÜZENLEMEDE ÜÇ ALAN KİLİTLİ (tür · cari · para birimi): PATCH
+            gövdesi onları taşımıyor (`.strict()`), yani düzenlenebilir çizmek
+            "kaydettim ama değişmedi" yalanı olurdu. Gizlemek yerine DEVRE DIŞI
+            bırakılırlar — kullanıcı hangi faturayı düzenlediğini görmeli. */}
         <div className="grid grid-cols-4 gap-3">
           <div>
             <Label>Fatura türü</Label>
             <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-60"
               value={type}
+              disabled={isEdit}
               onChange={(e) => setType(e.target.value as InvoiceType)}
             >
               {Object.entries(INVOICE_TYPE_LABEL).map(([k, v]) => (
@@ -487,9 +668,10 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
           <div>
             <Label>Cari türü</Label>
             <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-60"
               value={party}
-              onChange={(e) => setParty(e.target.value as "CUSTOMER" | "SUBCONTRACTOR")}
+              disabled={isEdit}
+              onChange={(e) => setParty(e.target.value as PartyKind)}
             >
               <option value="CUSTOMER">Müşteri / Tedarikçi</option>
               <option value="SUBCONTRACTOR">Fason firma</option>
@@ -497,6 +679,8 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
           </div>
           <div>
             <Label>{isCustomerParty ? "Müşteri / Tedarikçi" : "Fason firma"}</Label>
+            {/* Pasif kart da seçilebilir — gerekçe `PaymentFormDialog`'daki
+                notla aynı (uç `CariAccount.isActive`'e bakar, karta değil). */}
             <div className="mt-1">
               {isCustomerParty ? (
                 <ReferenceSelect<Customer>
@@ -506,6 +690,8 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
                   queryKey="customers"
                   getLabel={(c) => `${c.code} — ${c.name}`}
                   placeholder="Kart ara..."
+                  includeInactive
+                  disabled={isEdit}
                 />
               ) : (
                 <ReferenceSelect
@@ -515,6 +701,8 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
                   queryKey="subcontractors"
                   getLabel={(s: { code: string; name: string }) => `${s.code} — ${s.name}`}
                   placeholder="Fason firma ara..."
+                  includeInactive
+                  disabled={isEdit}
                 />
               )}
             </div>
@@ -522,14 +710,22 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
           <div>
             <Label>Para birimi</Label>
             <select
-              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm"
+              className="mt-1 h-9 w-full rounded-md border bg-background px-2 text-sm disabled:opacity-60"
               value={currency}
+              disabled={isEdit}
               onChange={(e) => setCurrency(e.target.value as Currency)}
             >
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>{c}</option>
               ))}
             </select>
+            {/* Öneri SÖYLENİR: sessizce değişen bir para birimi, kullanıcının
+                fark etmeden onayladığı yanlış kur demektir. */}
+            {!isEdit && terms.settled && terms.defaultCurrency && currency === appliedCurrency && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Cari kartından geldi ({terms.defaultCurrency}) — değiştirebilirsiniz.
+              </p>
+            )}
           </div>
         </div>
 
@@ -558,6 +754,21 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
               onChange={(e) => setExternalNo(e.target.value)}
             />
           </div>
+          {/* ⚠️ NOT ALANI DÜZENLEMEDE ÇİZİLMEK ZORUNDA: PATCH gövdesi `notes`
+              taşır ve boş gönderim alanı TEMİZLER. Gizli kalsaydı, otomatik
+              taslağın "sipariş fiyatı çelişkili — kontrol edin" notu, kullanıcı
+              yalnız fiyat düzeltip kaydettiğinde sessizce silinirdi. */}
+          {isEdit && (
+            <div className="min-w-[16rem] flex-1">
+              <Label>Not (opsiyonel)</Label>
+              <Input
+                className="mt-1"
+                placeholder="Fatura üzerindeki iç not"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+          )}
         </div>
 
         <div className="rounded-md border">
@@ -614,8 +825,11 @@ export function InvoiceFormDialog({ open, onOpenChange, onCreated, prefill }: Pr
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>İptal</Button>
-          <Button disabled={!valid || createM.isPending} onClick={() => createM.mutate()}>
-            {createM.isPending ? "Kaydediliyor…" : "Taslağı Oluştur"}
+          <Button
+            disabled={!valid || saving}
+            onClick={() => (isEdit ? updateM.mutate() : createM.mutate())}
+          >
+            {saving ? "Kaydediliyor…" : isEdit ? "Değişiklikleri Kaydet" : "Taslağı Oluştur"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -63,11 +63,28 @@ import { EXPECTED_TONE_CLASS, expectedHint, expectedTone, fmtDate } from "./date
 interface Props {
   id: string | null;
   onOpenChange: (open: boolean) => void;
-  onEdit: (id: string) => void;
-  onCancel: (id: string) => void;
+  /**
+   * Düzenleme / iptal — sipariş SAYFASININ formlarını açar.
+   *
+   * ⚠️ OPSİYONEL: bu sheet artık başka bağlamlardan da açılıyor (mal kabul
+   * fişi → sipariş). Orada düzenleme formu MOUNT EDİLMEMİŞTİR; düğmeyi yine de
+   * çizmek, basınca hiçbir şey olmayan bir yol vaat ederdi — verilmezse
+   * ÇİZİLMEZ (gri buton da aynı yalanın yumuşak hâli).
+   */
+  onEdit?: (id: string) => void;
+  onCancel?: (id: string) => void;
+  /**
+   * Bağlı mal kabul fişini açar (sipariş → fiş tıkla-git).
+   *
+   * ⚠️ Geri çağrı, doğrudan import DEĞİL: fiş sheet'i bu bileşeni import
+   * ediyor (fiş → sipariş yönü) ve karşılıklı import bir modül döngüsü olurdu.
+   * Sağlayan taraf sayfadır (`PurchaseOrdersPage`), yani fiş sheet'ini zaten
+   * mount edebilen katman.
+   */
+  onOpenReceipt?: (id: string) => void;
 }
 
-export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel }: Props) {
+export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel, onOpenReceipt }: Props) {
   const qc = useQueryClient();
   const [shortCloseOpen, setShortCloseOpen] = useState(false);
   const q = useQuery({
@@ -356,7 +373,24 @@ export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel }:
                 <ul className="divide-y rounded-md border text-sm">
                   {po.goodsReceipts.map((r) => (
                     <li key={r.id} className="flex items-center justify-between px-3 py-2">
-                      <span className="font-mono text-xs">{r.receiptNo}</span>
+                      {/* ⭐ Yukarıdaki uyarı bandı "aşağıdaki fişleri AÇIP
+                          kontrol edin" diyor; o eylem ekranda YOKTU (satır düz
+                          metindi) — `id` ise zaten yanıtta geliyordu. Geri
+                          çağrı verilmediğinde (fişten açılan sipariş) satır düz
+                          metin kalır: kullanıcının zaten baktığı fişi ikinci kez
+                          açan bir döngü kurulmasın. */}
+                      {onOpenReceipt ? (
+                        <button
+                          type="button"
+                          className="font-mono text-xs text-primary underline-offset-2 hover:underline"
+                          title="Mal kabul fişini aç"
+                          onClick={() => onOpenReceipt(r.id)}
+                        >
+                          {r.receiptNo}
+                        </button>
+                      ) : (
+                        <span className="font-mono text-xs">{r.receiptNo}</span>
+                      )}
                       <span className="flex items-center gap-2 text-xs text-muted-foreground">
                         {r.deliveryNoteNo && <span>İrs: {r.deliveryNoteNo}</span>}
                         <span>{fmtDate(r.createdAt)}</span>
@@ -373,7 +407,7 @@ export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel }:
             {/* ── AKSİYONLAR ──────────────────────────────────────────── */}
             <PermissionGate permission="purchase-order:write">
               <div className="flex justify-end gap-2 border-t pt-3">
-                {po.status === "OPEN" && (
+                {po.status === "OPEN" && onEdit && (
                   <Button variant="outline" onClick={() => onEdit(po.id)}>
                     <Pencil className="mr-1 h-4 w-4" />
                     Düzenle
@@ -387,7 +421,7 @@ export function PurchaseOrderDetailSheet({ id, onOpenChange, onEdit, onCancel }:
                     Kalanı Kapat
                   </Button>
                 )}
-                {po.status !== "CANCELLED" && (
+                {po.status !== "CANCELLED" && onCancel && (
                   <Button variant="outline" className="text-destructive" onClick={() => onCancel(po.id)}>
                     <Ban className="mr-1 h-4 w-4" />
                     Siparişi iptal et

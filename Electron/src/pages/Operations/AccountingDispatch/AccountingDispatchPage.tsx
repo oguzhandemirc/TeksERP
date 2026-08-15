@@ -21,6 +21,7 @@ import { InvoiceDialog } from "./InvoiceDialog";
 import { useAccountingExport } from "./useAccountingExport";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { ShipmentInvoiceDraft } from "./ShipmentInvoiceDraft";
+import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
 import type { DispatchCursorResponse, DispatchListItem } from "./types";
 
 const QUERY_KEY = "accounting-dispatch";
@@ -46,8 +47,10 @@ export function AccountingDispatchPage() {
   // kapalı olduğu için düğme hiç çizilmez (fabrika sıfır-fark).
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
   const [draftFor, setDraftFor] = useState<DispatchListItem | null>(null);
+  // Mevcut İÇ fatura (taslak ya da onaylı) — satırdaki bağdan açılır.
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const columns = useMemo(
-    () => buildDispatchColumns(setReceiptFor, setInvoiceFor, setDraftFor, financeEnabled),
+    () => buildDispatchColumns(setReceiptFor, setInvoiceFor, setDraftFor, financeEnabled, setOpenInvoiceId),
     [financeEnabled],
   );
 
@@ -175,6 +178,16 @@ export function AccountingDispatchPage() {
         onClose={() => setDraftFor(null)}
         onCreated={() => void query.refetch()}
       />
+
+      {/* Sevkiyatın İÇ faturası — koşullu mount. Liste AÇIK KALIR: muhasebeci
+          taslağı kapatınca baktığı sevk listesine döner. */}
+      {openInvoiceId && (
+        <InvoiceDetailDialog
+          invoiceId={openInvoiceId}
+          open
+          onOpenChange={(o) => !o && setOpenInvoiceId(null)}
+        />
+      )}
     </PageShell>
   );
 }

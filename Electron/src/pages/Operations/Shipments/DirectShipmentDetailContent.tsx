@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { safeFormat } from "@/lib/format";
+import { apiErrorText } from "@/lib/api-error";
 import { shipmentService } from "./service";
 import { DirectShipPrintDialog } from "./DirectShipPrintDialog";
 
@@ -56,7 +57,24 @@ export function DirectShipmentDetailContent({
           <Skeleton className="h-48 w-full" />
         </div>
       ) : !d ? (
-        <p className="mt-4 text-sm text-muted-foreground">Fasondan sevk kaydı bulunamadı.</p>
+        /* ⚠️ "…kaydı bulunamadı." YAZILAMAZ: `getDirectShipmentDetail`
+           non-nullable döner → `!d` YALNIZCA hata demektir (403/ağ/5xx). Bu
+           içerik 2026-08-15'ten beri FATURA detayındaki "Kaynak (fasondan
+           sevk)" bağından da açılıyor ve `finance:read` taşıyıp `shipping:read`
+           taşımayan bir rol, faturanın dayandığı belgenin YOK olduğunu okurdu.
+           Kalıp: `GoodsReceiptDetailSheet`. */
+        <div className="mt-4 rounded-md border border-destructive/40 bg-destructive/5 p-4 text-sm">
+          <p className="font-medium text-destructive">Fasondan sevk detayı yüklenemedi.</p>
+          <p className="mt-1 text-muted-foreground">
+            {apiErrorText(
+              q.error,
+              "Bu, kaydın silindiği anlamına GELMEZ — içerik sunucudan alınamadı. Yetkiniz yoksa sevkiyat ekranına erişim isteyin.",
+            )}
+          </p>
+          <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+            Tekrar dene
+          </Button>
+        </div>
       ) : (
         <div className="mt-4 space-y-4">
           {/* Künye */}
