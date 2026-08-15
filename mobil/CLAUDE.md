@@ -48,6 +48,18 @@ içindir) sahaya giden paketi sessizce ele geçiremez.
 | Metro transform önbelleği env değerini anahtarına almaz | Görev yeniden koşsa bile eski gömülü değer önbellekten döner | `os.tmpdir()/metro-cache` silinir |
 | `localhost` / `/api` soneki eksik adres | Uygulama açılır, her istek 404 | Derleme öncesi biçim kontrolü, gürültülü hata |
 | Adres biçimsel olarak geçerli ama o makine yok | Ölü IP de "geçerli IP"dir | Derleme öncesi `GET <kök>/health` yoklaması — **uyarı**, derlemeyi durdurmaz (derleyen Mac fabrika ağında olmayabilir) |
+| **`prebuild` manifesti sıfırlar → cleartext HTTP düşer** (2026-08-15) | Uygulama açılır, HER istek "Network Error"; paket cihazdan ÇIKMAZ, sunucu log'unda İZ YOK, aynı tabletten `curl` 200 verir (o politikaya tabi değil) | **BEKÇİ YOK** — `expo-build-properties` altına taşındı, aşağıya bak |
+
+> ⚠️ **`usesCleartextTraffic` `app.json` → `android` ALTINDA GEÇERSİZDİR.** Expo SDK 54 o anahtarı
+> orada tanımaz ve **sessizce atar**; `expo-build-properties` eklentisinin `android` bloğuna
+> yazılmak zorundadır. `android/` gitignore'da ve `prebuild` ÇIKTISIDIR: eski klasörde bayrak
+> elle/eski bir prebuild'den kalmış olabilir ve her şey çalışıyor görünür — ta ki biri `prebuild`
+> koşana kadar (sürüm bump'ı bunu gerektirir). O an manifest `app.json`'dan sıfırdan üretilir,
+> bayrak düşer ve Android 9+ düz HTTP'yi engellemeye başlar. 2026-08-15'te birebir yaşandı:
+> APK 2.7.0 kuruldu, tablet hiçbir isteği yollayamadı, teşhis saatler aldı çünkü ağ/port/güvenlik
+> duvarı/IP'nin hepsi sağlamdı. **Doğrulama tek satır** — derlemeden sonra:
+> `grep -o 'usesCleartextTraffic="[^"]*"' android/app/src/main/AndroidManifest.xml`
+> (Sunucu HTTPS'e geçerse bu bayrak kaldırılabilir; bugün backend düz HTTP konuşuyor.)
 
 > Metro satırı **ölçüldü** (2026-08-01, `expo export:embed`, aynı bayraklar, yalnız
 > env değişti): sıcak önbellek + yeni adres → bundle'da **ESKİ** adres çıktı (17,9 sn);
