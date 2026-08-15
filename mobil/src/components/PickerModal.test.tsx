@@ -1,4 +1,4 @@
-import { fireEvent } from "@testing-library/react-native";
+import { act, fireEvent } from "@testing-library/react-native";
 import PickerModal from "./PickerModal";
 import { renderWithPaper } from "../test/render";
 
@@ -53,9 +53,11 @@ describe("PickerModal — leadingAction (mor 'yeni ekle' kartı)", () => {
     expect(labels.slice(1)).toEqual(["Antrasit Dokuma", "Bordo Jakar"]);
   });
 
-  it("arama hiçbir seçenek bırakmasa da görünür kalır", () => {
+  it("arama hiçbir seçenek bırakmasa da görünür kalır", async () => {
     const { getByPlaceholderText, getByText, queryByText } = setup();
     fireEvent.changeText(getByPlaceholderText("Ara..."), "zzz-yok");
+    // SimplePortal bildirimi mikrotaskta gelir (2.7.2 çökme düzeltmesi).
+    await act(async () => {});
     expect(getByText("Yeni Desen")).toBeTruthy();
     expect(getByText("Seçenek yok")).toBeTruthy();
     expect(queryByText("Bordo Jakar")).toBeNull();

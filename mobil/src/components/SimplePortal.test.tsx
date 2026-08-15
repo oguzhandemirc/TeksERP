@@ -1,30 +1,37 @@
 // =============================================================================
-// Bekçi: SimplePortal — paper `Portal`ın Fabric döngüsünden çıkışın sözleşmesi
+// Bekçi: SimplePortal — paper `Portal`ın Fabric çökmesinden çıkışın sözleşmesi
 // =============================================================================
-// Saha çökmesi (2026-08-15, SM-X230): `Maximum update depth exceeded`; 14
-// çökmenin 6'sı `Portal > ThemedComponent > AppModal` yığınında. AppModal artık
-// paper `Portal` yerine `SimplePortal` kullanıyor. Bu dosya taşıyıcının BEŞ
-// özelliğini kilitler:
-//   1. register / update / unregister (içerik host'ta doğar, güncellenir, ölür)
-//   2. sıralama: sonra mount olan ÜSTTE (modal üstüne modal — paper davranışı)
-//   3. ⚠️ HOST GÜNCELLEMESİ TÜKETİCİYİ YENİDEN ÇİZMEZ — döngünün yapısal olarak
-//      kurulamamasının sebebi budur. Tüketici store'a yalnız YAZAR; okumaz.
-//      (§3 render sayacı + §3c "tüketici subscribe ÇAĞIRMAZ" yapısal kilidi —
-//      ikincisi §3'ün göremediği yolu kapatır, bkz. oradaki gerekçe.)
-//   4. `getSnapshot` referans kararlılığı — her çağrıda yeni dizi dönseydi
-//      `useSyncExternalStore` tam da kaçılan sonsuz döngüye girerdi.
-//   5. KAPSAM: en yakın host kazanır (kilit katmanının modalı kök host'a düşmez —
-//      düşseydi kilit ekranının arkasında kalırdı; bkz. o bölümün başlığı).
+// İki saha dersi, iki ayrı kilit:
+// • 2026-08-15 #1 (2.7.1): paper `Portal` Fabric'te `Maximum update depth
+//   exceeded` ile çöktü → taşıyıcı SimplePortal oldu (tek yönlü veri akışı).
+// • 2026-08-15 #2 (2.7.2): tek yönlü akış YETMEDİ — senkron `emit`, tüketicinin
+//   passive-effect fazı içinde host commit'ini zorluyor ve Fabric'in commit-içi
+//   SENKRON layout olayları (FlashList ölçümü, skeleton→hata takası) aynı
+//   "nested update" patlamasına zincirlenip 50 sınırında yine çökertiyordu.
+//   Düzeltme: bildirim mikrotask'a ERTELENİR ve birleştirilir. §3d bu sözleşmenin
+//   doğrudan regresyon kilididir.
 //
-// NEGATİF SONDA (§3b): store'a ABONE OLAN bir "geri-beslemeli" tüketici varyantı
-// çizilir ve SAHA İMZASININ AYNISIYLA (`Maximum update depth exceeded`) patladığı
-// doğrulanır. Yani §3'ün render sayacı kör değil: `SimplePortal`e store okuyan bir
-// hook eklendiği gün bu sınıf geri gelir ve bekçi onu gösterir.
+// Bu dosyanın kilitleri:
+//   §1  register / update / unregister (içerik host'ta doğar, güncellenir, ölür)
+//   §2  sıralama: sonra mount olan ÜSTTE (modal üstüne modal — paper davranışı)
+//   §3  host güncellemesi tüketiciyi YENİDEN ÇİZMEZ (tek yönlü akışın ölçümü)
+//   §3c tüketici store'a ABONE OLMAZ (yapısal kilit — §3'ün göremediği yol)
+//   §3d ⚠️ `set`/`remove` dinleyiciyi SENKRON ÇAĞIRMAZ; bildirim mikrotaskta
+//       gelir ve peş peşe yazımlar TEK bildirimde birleşir. Bu satır gevşerse
+//       2.7.2'nin saha çökmesi (commit-içi zincirlenme) geri gelir.
+//   §3e geri-besleme STORE katında sonsuz SENKRON zincir kuramaz — her bildirim
+//       kendi mikrotask turunda koşar. (Eski React-ağacı sondası kaldırıldı:
+//       erteleme, geri-beslemeyi "senkron çökme"den "asenkron spin"e çevirdiği
+//       için o sonda artık fırlatmaz, test ortamında da güvenle koşturulamaz —
+//       çalışma zamanı kanaryası (1 sn'de 120+ bildirim → console.warn) ve §3c
+//       o sınıfı kapatır.)
+//   §4  `getSnapshot` referans kararlılığı (uSES sözleşmesi)
+//   §5  KAPSAM: en yakın host kazanır (kilit katmanının modalı kök host'a düşmez)
 // =============================================================================
 
-import React, { useEffect, useSyncExternalStore } from 'react';
+import React, { useEffect } from 'react';
 import { Text, View } from 'react-native';
-import { act, cleanup, render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 
 import {
   SimplePortal,
@@ -32,6 +39,12 @@ import {
   SimplePortalScope,
   simplePortalStore,
 } from './SimplePortal';
+
+/** Ertelenmiş portal bildirimini (mikrotask) React içinde akıt. */
+const flushPortals = () =>
+  act(async () => {
+    await Promise.resolve();
+  });
 
 /** Ağaçtaki testID'leri render sırasıyla düz listeye çıkarır. */
 function testIdsInOrder(json: unknown): string[] {
@@ -51,14 +64,16 @@ function testIdsInOrder(json: unknown): string[] {
   return out;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   // Önceki testin ağacı RNTL tarafından zaten sökülmüş olur (dinleyici yok) →
   // emit güvenli. Anahtar sayacı da sıfırlanır, sıralama kontrolü deterministik.
   simplePortalStore.__resetForTests();
+  // Reset'in ertelenmiş bildirimi bir sonraki teste sarkmasın.
+  await Promise.resolve();
 });
 
 describe('SimplePortal — kayıt yaşam döngüsü', () => {
-  it('mount → içerik HOST ağacında çizilir, tüketicinin yerinde DEĞİL', () => {
+  it('mount → içerik HOST ağacında çizilir, tüketicinin yerinde DEĞİL', async () => {
     const { getByTestId, toJSON } = render(
       <View testID="ekran">
         <SimplePortal>
@@ -67,6 +82,7 @@ describe('SimplePortal — kayıt yaşam döngüsü', () => {
         <SimplePortalHost />
       </View>,
     );
+    await flushPortals();
 
     expect(getByTestId('modal-icerik')).toBeTruthy();
     // Tüketici `null` render eder: içerik host'un katmanında durur, yani
@@ -75,7 +91,7 @@ describe('SimplePortal — kayıt yaşam döngüsü', () => {
     expect(ids).toEqual(['ekran', 'modal-icerik']);
   });
 
-  it('içerik değişince host TAZELENİR (update)', () => {
+  it('içerik değişince host TAZELENİR (update)', async () => {
     const Screen = ({ label }: { label: string }) => (
       <View>
         <SimplePortal>
@@ -85,13 +101,15 @@ describe('SimplePortal — kayıt yaşam döngüsü', () => {
       </View>
     );
     const { getByTestId, rerender } = render(<Screen label="ilk" />);
+    await flushPortals();
     expect(getByTestId('icerik').props.children).toBe('ilk');
 
     rerender(<Screen label="ikinci" />);
+    await flushPortals();
     expect(getByTestId('icerik').props.children).toBe('ikinci');
   });
 
-  it('unmount → kayıt SİLİNİR, host boşalır', () => {
+  it('unmount → kayıt SİLİNİR, host boşalır', async () => {
     const Screen = ({ open }: { open: boolean }) => (
       <View>
         {open ? (
@@ -103,11 +121,14 @@ describe('SimplePortal — kayıt yaşam döngüsü', () => {
       </View>
     );
     const { queryByTestId, rerender } = render(<Screen open />);
+    await flushPortals();
     expect(queryByTestId('icerik')).toBeTruthy();
 
     rerender(<Screen open={false} />);
-    expect(queryByTestId('icerik')).toBeNull();
+    // Kayıt store'dan SENKRON düşer (yalnız bildirim ertelenir).
     expect(simplePortalStore.getSnapshot()).toHaveLength(0);
+    await flushPortals();
+    expect(queryByTestId('icerik')).toBeNull();
   });
 
   it('host YOKSA içerik hiçbir yerde çizilmez (host zorunlu — paper sözleşmesi)', () => {
@@ -128,7 +149,7 @@ describe('SimplePortal — kayıt yaşam döngüsü', () => {
 });
 
 describe('SimplePortal — sıralama (sonra mount olan ÜSTTE)', () => {
-  it('iki portal mount sırasına göre dizilir', () => {
+  it('iki portal mount sırasına göre dizilir', async () => {
     const { toJSON } = render(
       <View>
         <SimplePortal>
@@ -140,11 +161,12 @@ describe('SimplePortal — sıralama (sonra mount olan ÜSTTE)', () => {
         <SimplePortalHost />
       </View>,
     );
+    await flushPortals();
     const ids = testIdsInOrder(toJSON());
     expect(ids.indexOf('alt')).toBeLessThan(ids.indexOf('ust'));
   });
 
-  it('içerik güncellemesi sırayı DEĞİŞTİRMEZ (yeniden kayıt sona atmaz)', () => {
+  it('içerik güncellemesi sırayı DEĞİŞTİRMEZ (yeniden kayıt sona atmaz)', async () => {
     const Screen = ({ label }: { label: string }) => (
       <View>
         <SimplePortal>
@@ -158,6 +180,7 @@ describe('SimplePortal — sıralama (sonra mount olan ÜSTTE)', () => {
     );
     const { rerender, toJSON } = render(<Screen label="ilk" />);
     rerender(<Screen label="ikinci" />);
+    await flushPortals();
     const ids = testIdsInOrder(toJSON());
     expect(ids.indexOf('alt')).toBeLessThan(ids.indexOf('ust'));
   });
@@ -170,7 +193,7 @@ describe('SimplePortal — kapsam (EN YAKIN host kazanır)', () => {
   // ekranının ARKASINDA kalır ve yanlış IP girmiş operatör ayarlara ulaşamaz
   // (paper döneminde bunu ikinci PaperProvider'ın Portal.Host'u sağlıyordu).
 
-  it("kapsam içindeki portal KÖK host'a DÜŞMEZ, kapsamın katmanında çizilir", () => {
+  it("kapsam içindeki portal KÖK host'a DÜŞMEZ, kapsamın katmanında çizilir", async () => {
     const { getByTestId, toJSON } = render(
       <View>
         <SimplePortalHost />
@@ -183,6 +206,7 @@ describe('SimplePortal — kapsam (EN YAKIN host kazanır)', () => {
         </View>
       </View>,
     );
+    await flushPortals();
 
     expect(getByTestId('kilit-modali')).toBeTruthy();
     // Kök store'a HİÇ yazılmamalı — yazılsaydı içerik kilit katmanının altında
@@ -193,7 +217,7 @@ describe('SimplePortal — kapsam (EN YAKIN host kazanır)', () => {
     expect(ids.indexOf('kilit-katmani')).toBeLessThan(ids.indexOf('kilit-modali'));
   });
 
-  it("kapsam DIŞINDAKİ portal kök host'ta kalır (iki katman karışmaz)", () => {
+  it("kapsam DIŞINDAKİ portal kök host'ta kalır (iki katman karışmaz)", async () => {
     const { getByTestId } = render(
       <View>
         <SimplePortal>
@@ -207,13 +231,14 @@ describe('SimplePortal — kapsam (EN YAKIN host kazanır)', () => {
         </SimplePortalScope>
       </View>,
     );
+    await flushPortals();
 
     expect(getByTestId('ekran-modali')).toBeTruthy();
     expect(getByTestId('kilit-modali')).toBeTruthy();
     expect(simplePortalStore.getSnapshot()).toHaveLength(1); // yalnız ekran modalı
   });
 
-  it("kapsam store'u KARARLI: yeniden render modal içeriğini SÖKÜP KURMAZ", () => {
+  it("kapsam store'u KARARLI: yeniden render modal içeriğini SÖKÜP KURMAZ", async () => {
     // Kapsam store'u her render'da yeniden kurulsaydı context yeni değer yayar,
     // `SimplePortal` yeni bir anahtar alır ve host'taki satır kimliği değişirdi →
     // modal içeriği unmount/remount olur (form/animasyon durumu sıfırlanır,
@@ -234,10 +259,12 @@ describe('SimplePortal — kapsam (EN YAKIN host kazanır)', () => {
     );
 
     const { rerender, getByTestId } = render(<Agac />);
+    await flushPortals();
     expect(mountSayisi).toBe(1);
 
     rerender(<Agac />);
     rerender(<Agac />);
+    await flushPortals();
     expect(getByTestId('icerik')).toBeTruthy();
     expect(mountSayisi).toBe(1); // ⚠️ tek mount — kayıt sökülüp kurulmadı
   });
@@ -247,7 +274,7 @@ describe('SimplePortal — döngü güvenliği (asıl bekçi)', () => {
   // Store'a doğrudan yazmak için ayrılmış anahtar: otomatik sayaçla çakışmasın.
   const DIS_ANAHTAR = 1_000_000;
 
-  it('§3 host güncellemesi tüketiciyi YENİDEN ÇİZMEZ', () => {
+  it('§3 host güncellemesi tüketiciyi YENİDEN ÇİZMEZ', async () => {
     let guvenliRender = 0;
 
     // Gerçek sözleşme: store'a yalnız YAZAR, okumaz.
@@ -266,30 +293,28 @@ describe('SimplePortal — döngü güvenliği (asıl bekçi)', () => {
         <SimplePortalHost />
       </View>,
     );
+    await flushPortals();
 
     const baslangic = guvenliRender;
 
     // Host'u DIŞARIDAN güncelle: tüketicinin React ağacına hiç dokunulmuyor.
-    act(() => {
-      simplePortalStore.set(DIS_ANAHTAR, <Text testID="disaridan">dış</Text>);
-    });
+    simplePortalStore.set(DIS_ANAHTAR, <Text testID="disaridan">dış</Text>);
+    await flushPortals();
 
     expect(getByTestId('disaridan')).toBeTruthy(); // host gerçekten güncellendi
     expect(guvenliRender).toBe(baslangic); // ⚠️ döngünün kırıldığı yer
 
-    act(() => {
-      simplePortalStore.remove(DIS_ANAHTAR);
-    });
+    simplePortalStore.remove(DIS_ANAHTAR);
+    await flushPortals();
     expect(guvenliRender).toBe(baslangic);
   });
 
   it('§3c tüketici store\'a ABONE OLMAZ (yapısal kilit — §3 sayacının göremediği yol)', () => {
     // NEDEN AYRI BİR KONTROL: §3 tüketicinin EBEVEYN render'ını sayar. `SimplePortal`
     // bileşeninin KENDİSİNE abonelik eklenirse ebeveyn hiç yeniden çizilmez ve §3
-    // yeşil kalır (negatif sondayla ölçüldü). O hâlde ölümcül değildir — çünkü
-    // `set`in `Object.is` erken dönüşü döngüyü keser — ama emniyet payı biter:
-    // aynı anda `Object.is` de düşerse saha çökmesi geri gelir. Bu yüzden abonelik
-    // doğrudan, yapısal olarak kilitlenir.
+    // yeşil kalır (negatif sondayla ölçüldü). Erteleme sonrası bu yol çökme değil
+    // SONSUZ ASENKRON SPİN üretir (kanarya logcat'te bağırır) — yani hâlâ hatadır
+    // ve kapısı yapısal olarak kilitli kalmalıdır.
     const subSpy = jest.spyOn(simplePortalStore, 'subscribe');
     try {
       render(
@@ -307,88 +332,92 @@ describe('SimplePortal — döngü güvenliği (asıl bekçi)', () => {
     }
   });
 
-  it('§3b NEGATİF SONDA: tüketiciye geri-besleme eklenirse SAHA ÇÖKMESİ aynen doğar', () => {
-    // Bu test §3'ün kör olmadığını kanıtlar ve saha imzasını (`Maximum update
-    // depth exceeded`) BİREBİR yeniden üretir. Zincir: tüketici store'u okur →
-    // kendi kaydı emit eder → tüketici yeniden çizilir → effect yeni bir children
-    // ELEMENTİ yazar (referans farklı) → emit → ... React 50 iç içe güncellemede
-    // durdurur. paper `PortalConsumer`ın Fabric'te yaptığı da tam olarak budur.
-    //
-    // ⚠️ Bu yüzden `SimplePortal` içine store okuyan hiçbir hook eklenmemeli.
-    function GeriBeslemeliTuketici() {
-      useSyncExternalStore(
-        simplePortalStore.subscribe,
-        simplePortalStore.getSnapshot,
-        simplePortalStore.getSnapshot,
-      );
-      return (
-        <SimplePortal>
-          <Text testID="geri-beslemeli">geri</Text>
-        </SimplePortal>
-      );
-    }
-
-    // React döngüyü console.error ile de bildirir — test çıktısını kirletmesin.
-    const sessiz = jest.spyOn(console, 'error').mockImplementation(() => {});
+  it('§3d `set`/`remove` dinleyiciyi SENKRON ÇAĞIRMAZ; bildirim mikrotaskta ve BİRLEŞİK gelir', async () => {
+    // ⚠️ 2.7.2 SAHA ÇÖKMESİNİN DOĞRUDAN REGRESYON KİLİDİ. Bildirim `set`in
+    // çağrıldığı senkron işin (React passive-effect fazı) içinde koşarsa, host
+    // commit'i ve Fabric'in commit-içi layout çalkantısı aynı "nested update"
+    // patlamasına zincirlenir ve React 50 sınırında uygulamayı düşürür
+    // (logcat: `emit → forceStoreRerender → getRootForUpdatedFiber`).
+    const dinleyici = jest.fn();
+    const un = simplePortalStore.subscribe(dinleyici);
     try {
-      expect(() =>
-        render(
-          <View>
-            <GeriBeslemeliTuketici />
-            <SimplePortalHost />
-          </View>,
-        ),
-      ).toThrow(/Maximum update depth exceeded/);
+      simplePortalStore.set(DIS_ANAHTAR, null);
+      simplePortalStore.set(DIS_ANAHTAR, <Text>x</Text>);
+      simplePortalStore.remove(DIS_ANAHTAR);
+      // Senkron faz bitti — hiçbir dinleyici ÇAĞRILMAMIŞ olmalı.
+      expect(dinleyici).not.toHaveBeenCalled();
+      // Snapshot yine de SENKRON günceldir (yalnız bildirim ertelenir).
+      expect(simplePortalStore.getSnapshot()).toHaveLength(0);
+
+      await Promise.resolve(); // mikrotask turu
+      // Üç mutasyon TEK bildirimde birleşti (dinleyici en son durumu okur).
+      expect(dinleyici).toHaveBeenCalledTimes(1);
     } finally {
-      sessiz.mockRestore();
-      cleanup(); // yarıda kalan ağacı sök → dinleyici sızmasın
+      un();
     }
   });
 
-  it('§4 getSnapshot referans KARARLI (mutasyon yoksa aynı dizi)', () => {
+  it('§3e geri-besleme SENKRON zincir kuramaz — her bildirim kendi mikrotask turunda', async () => {
+    // Kasıtlı geri-besleme: dinleyici her bildirimde store'a TEKRAR yazar.
+    // Eski (senkron) emit'te bu, tek senkron yığında 5 iç içe bildirim olurdu —
+    // tam da React sayacını dolduran desen. Ertelemeyle her yazım bir SONRAKİ
+    // mikrotask turunda bildirilir: senkron derinlik hep 1 kalır.
+    let tur = 0;
+    const un = simplePortalStore.subscribe(() => {
+      tur++;
+      if (tur < 5) simplePortalStore.set(DIS_ANAHTAR, tur);
+    });
+    try {
+      simplePortalStore.set(DIS_ANAHTAR, 0);
+      expect(tur).toBe(0); // senkron hiçbir şey koşmadı
+      for (let i = 0; i < 10 && tur < 5; i++) await Promise.resolve();
+      expect(tur).toBe(5); // besleme ilerledi ama tur tur — patlama yok
+    } finally {
+      un();
+      simplePortalStore.remove(DIS_ANAHTAR);
+      await Promise.resolve();
+    }
+  });
+
+  it('§4 getSnapshot referans KARARLI (mutasyon yoksa aynı dizi)', async () => {
     // useSyncExternalStore sözleşmesi: her çağrıda yeni dizi → React "snapshot
     // değişti" der ve sonsuz döngüye girer (tam da kaçılan çökme sınıfı).
     const a = simplePortalStore.getSnapshot();
     expect(simplePortalStore.getSnapshot()).toBe(a);
 
-    act(() => {
-      simplePortalStore.set(DIS_ANAHTAR, <Text>x</Text>);
-    });
+    simplePortalStore.set(DIS_ANAHTAR, <Text>x</Text>);
     const b = simplePortalStore.getSnapshot();
     expect(b).not.toBe(a);
     expect(simplePortalStore.getSnapshot()).toBe(b);
 
     // Aynı içeriğin tekrar yazılması boş güncelleme üretmez (referans korunur).
     const ayniIcerik = b[0].children;
-    act(() => {
-      simplePortalStore.set(DIS_ANAHTAR, ayniIcerik);
-    });
+    simplePortalStore.set(DIS_ANAHTAR, ayniIcerik);
     expect(simplePortalStore.getSnapshot()).toBe(b);
 
     // Olmayan kaydı silmek de boş güncelleme üretmez.
-    act(() => {
-      simplePortalStore.remove(DIS_ANAHTAR + 1);
-    });
+    simplePortalStore.remove(DIS_ANAHTAR + 1);
     expect(simplePortalStore.getSnapshot()).toBe(b);
 
-    act(() => {
-      simplePortalStore.remove(DIS_ANAHTAR);
-    });
+    simplePortalStore.remove(DIS_ANAHTAR);
     expect(simplePortalStore.getSnapshot()).toHaveLength(0);
+    await Promise.resolve(); // sarkan bildirim bu testte ölsün
   });
 
-  it('dinleyici, emit SIRASINDA çıkabilir (unmount) — iterasyon patlamaz', () => {
+  it('dinleyici, bildirim SIRASINDA çıkabilir (unmount) — iterasyon patlamaz', async () => {
     const gorulen: string[] = [];
     const un1 = simplePortalStore.subscribe(() => {
       gorulen.push('bir');
-      un1(); // kendini emit ortasında çıkarır
+      un1(); // kendini bildirim ortasında çıkarır
     });
     const un2 = simplePortalStore.subscribe(() => gorulen.push('iki'));
 
     expect(() => simplePortalStore.set(DIS_ANAHTAR, null)).not.toThrow();
+    await Promise.resolve();
     expect(gorulen).toEqual(['bir', 'iki']);
 
     un2();
     simplePortalStore.remove(DIS_ANAHTAR);
+    await Promise.resolve();
   });
 });

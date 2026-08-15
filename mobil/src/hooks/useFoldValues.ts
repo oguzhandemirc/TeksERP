@@ -15,16 +15,28 @@ export const FOLD_VALUES_QUERY_KEY = ['fabric-properties', 'fold-values'] as con
  * fabrika 6-KAT ekleyince tablette görünmüyordu. Fallback bilinçli olarak YOK
  * (bkz. `fabricPropertyService.getFoldValues`).
  *
- * Çevrimdışı: react-query kalıcı cache'i (AsyncStorage) son başarılı listeyi
- * tutar; ilk kurulumda ağ yoksa liste boş gelir ve ekran uyarı basar.
+ * Çevrimdışı: bu anahtar kalıcı cache allowlist'inde DEĞİL (persistPolicy yalnız
+ * bootstrap + tercihleri diske yazar) — ağ yoksa liste BOŞ gelir ve ekran uyarı
+ * basar. (Buradaki eski "AsyncStorage son listeyi tutar" iddiası yanlıştı.)
+ *
+ * ⚠️⚠️ BOŞ LİSTE KARARLI SABİTTİR (`EMPTY_FOLD_VALUES`) — `q.data ?? []` YAZMA.
+ * 2026-08-15 saha çökmesinin (SM-X230, 2.7.0–2.7.2) KÖK NEDENİ tam buydu:
+ * sunucu erişilemez + cache yokken `q.data` süresiz `undefined` kalır ve `?? []`
+ * HER render'da YENİ dizi üretir. TamburScreen'in kat-varsayılanı effect'i bu
+ * diziyi bağımlılık listesinde taşıdığı için effect her render'da yeniden koşup
+ * `setWork({...})` (yeni nesne, bail yok) çağırdı → gerçek sonsuz döngü →
+ * `Maximum update depth exceeded` → uygulama ekran açılır açılmaz düştü.
+ * Aynı kural veri dönen HER hook için geçerli: boşluk değeri modül sabitidir.
  */
+const EMPTY_FOLD_VALUES: FabricPropertyValue[] = [];
+
 export function useFoldValues() {
   const q = useQuery({
     queryKey: FOLD_VALUES_QUERY_KEY,
     queryFn: fabricPropertyService.getFoldValues,
     staleTime: 10 * 60 * 1000,
   });
-  const values: FabricPropertyValue[] = q.data ?? [];
+  const values: FabricPropertyValue[] = q.data ?? EMPTY_FOLD_VALUES;
   return {
     values,
     isLoading: q.isLoading,

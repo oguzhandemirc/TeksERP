@@ -17,6 +17,7 @@ import Toast from 'react-native-toast-message';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RootNavigator from './src/navigation/RootNavigator';
 import { NumpadProvider } from './src/components/NumpadProvider';
+import { SimplePortalHost, SimplePortalScope } from './src/components/SimplePortal';
 import { toastConfig } from './src/components/ToastConfig';
 import {
   queryClient,
@@ -138,25 +139,50 @@ export default function App() {
               <NumpadProvider>
                 <RootNavigator />
               </NumpadProvider>
+              {/* Modal katmanı (AppModal → SimplePortal). RootNavigator'ın KARDEŞİ
+                  ve ondan SONRA → modallar ekranın üstüne biner. Konumu üç sınırla
+                  çevrili, üçü de bilinçli:
+                  • PaperProvider'ın İÇİNDE → portal içeriği paper tema + settings
+                    context'ini görür (paper `Portal` bunu ThemeProvider ile elle
+                    taşıyordu; burada ağaçtan gelir). Dışarı alınsaydı modallardaki
+                    Paper bileşenleri varsayılan MD3 moruna düşerdi.
+                  • NumpadProvider'ın DIŞINDA → modal içeriği ekranın numpad/navigation
+                    context'ini GÖRMEZ; paper Portal.Host da tam burada duruyordu,
+                    yani context görünürlüğü BİREBİR korunur (AppModal.tsx uyarısı).
+                  • Toast ve IdleLockGate'in ALTINDA → onlar PaperProvider'dan sonra
+                    gelmeye devam eder, yani her zaman modalların üstünde çizilir.
+                  Kayıt yokken hiçbir şey render etmez; her kayıt kendi absoluteFill
+                  + box-none katmanında (paper PortalManager yerleşiminin aynısı). */}
+              <SimplePortalHost />
             </PaperProvider>
             {/* Toast, PaperProvider'ın DIŞINDA ve ondan SONRA durur. Tüm modallar
-                (AppModal → react-native-paper Portal) PaperProvider'ın Portal.Host'una
-                mount olur; Portal içeriği host'un normal çocuklarının üstüne biner.
-                Toast host'un içindeyken (eski hali) modalın ARKASINDA kalıyordu. Burada
-                host dışında ve sonra render edildiğinden her zaman modalların üstünde
-                görünür. toastConfig yalnız react-native-toast-message + View kullanır,
-                Paper context'ine ihtiyacı yok. */}
+                (AppModal → SimplePortal) PaperProvider içindeki SimplePortalHost'a
+                mount olur. Toast host'un içindeyken (eski hali) modalın ARKASINDA
+                kalıyordu; host dışında ve sonra render edildiğinden artık her zaman
+                modalların üstünde görünür. toastConfig yalnız
+                react-native-toast-message + View kullanır, Paper context'ine
+                ihtiyacı yok. */}
             <Toast config={toastConfig} />
-            {/* Idle kilit / geri sayım / auto-logout — Toast ile AYNI slotta (Paper
-                Portal modallarının üstünde). Kendi PaperProvider'ı ile sarılı ki
-                kilit ekranı Paper bileşenlerini + kendi Portal.Host'unu kullanabilsin.
-                absoluteFill + box-none: PortalHost flex:1 olduğu için düz sibling
-                bırakılırsa ana app ile ekranı BÖLERdi; mutlak konum flex akışından
-                çıkarır, box-none boşken dokunmayı ana app'e geçirir (kilitliyken
+            {/* Idle kilit / geri sayım / auto-logout — Toast ile AYNI slotta (modal
+                katmanının üstünde). Kendi PaperProvider'ı ile sarılı ki kilit ekranı
+                Paper bileşenlerini + kendi Portal.Host'unu kullanabilsin.
+                absoluteFill + box-none: PaperProvider'ın Portal.Host'u flex:1 olduğu
+                için düz sibling bırakılırsa ana app ile ekranı BÖLERdi; mutlak konum
+                flex akışından çıkarır, box-none boşken dokunmayı ana app'e geçirir (kilitliyken
                 LockScreen kendi dokunmasını yutar). */}
             <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
               <PaperProvider theme={theme}>
-                <IdleLockGate />
+                {/* ⚠️ KİLİT KATMANININ KENDİ PORTAL KATMANI — süs değil.
+                    LockScreen, LoginScreen'i `lock` prop'uyla çizer ve orada
+                    "sunucu adresi" sheet'i (ServerAddressSheet → AppModal)
+                    açılabilir. Kapsam olmadan o modal KÖK host'a düşerdi; kök
+                    host kilit katmanının ALTINDA olduğu için sheet kilit
+                    ekranının ARKASINDA kalır, yanlış IP girmiş operatör
+                    ayarlara hiç ulaşamazdı. Paper döneminde bu işi buradaki
+                    ikinci PaperProvider'ın kendi Portal.Host'u görüyordu. */}
+                <SimplePortalScope>
+                  <IdleLockGate />
+                </SimplePortalScope>
               </PaperProvider>
             </View>
           </View>

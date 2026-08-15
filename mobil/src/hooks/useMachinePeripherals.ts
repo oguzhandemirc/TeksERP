@@ -11,6 +11,8 @@ import { useSessionStore } from '../store/sessionStore';
 // Cihaz seçimi device-local DEĞİL — admin Makine/Donanım kaydında.
 // =============================================================================
 
+const EMPTY_PERIPHERALS: DevicePeripheral[] = [];
+
 export function useMachinePeripherals(kind: 'METER' | 'SCALE'): DevicePeripheral[] {
   const sessionId = useSessionStore((s) => s.active?.id ?? null);
   const q = useQuery({
@@ -19,7 +21,10 @@ export function useMachinePeripherals(kind: 'METER' | 'SCALE'): DevicePeripheral
     staleTime: 5 * 60 * 1000,
     enabled: sessionId != null,
   });
-  return q.data ?? [];
+  // ⚠️ Boşluk değeri KARARLI sabit — `?? []` her render'da yeni dizi üretir ve
+  // bu diziyi effect bağımlılığına koyan tüketici çevrimdışında sonsuz döngüye
+  // girer (2026-08-15 useFoldValues saha çökmesi; gerekçe o dosyanın başlığında).
+  return q.data ?? EMPTY_PERIPHERALS;
 }
 
 /**

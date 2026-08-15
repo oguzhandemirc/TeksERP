@@ -66,10 +66,15 @@ const SPRING_BACK_MS = 160;
 // güncelleme döngüsüne giriyor ve `Maximum update depth exceeded` ile uygulamayı
 // düşürüyordu — 14 çökmenin 6'sı `Portal > ThemedComponent > AppModal` yığınında
 // (paper #4754/#4807/#3395). Tema sabit olduğu hâlde tekrarladı → sorun tüketicide
-// değil taşıyıcıdaydı. Yerine bağımlılıksız `SimplePortal` (bkz. o dosyanın
-// başlığı): tüketici store'a yalnız YAZAR, host yalnız OKUR → geri akış yapısal
-// olarak imkânsız. Host App.tsx'te kökte, PaperProvider'ın İÇİNDE mount edilir
-// (tema/settings context'i ve Toast/kilit altındaki z-düzlemi korunsun diye).
+// değil taşıyıcıdaydı. Yerine bağımlılıksız `SimplePortal`: tüketici store'a
+// yalnız YAZAR, host yalnız OKUR, ve — 2.7.2'nin ikinci saha dersi — bildirim
+// commit İÇİNDE koşmaz, mikrotask'a ertelenir. Tek yönlü akış tek başına
+// YETMEDİ: senkron emit, Fabric'in commit-içi senkron layout olaylarını aynı
+// "nested update" patlamasına zincirleyip 50 sınırında yine çökertti (Çıkanlar/
+// Tara modalları, sunucu erişilemezken sorgu hata geçişinde). Mekanizmanın
+// tamamı SimplePortal.tsx başlığında. Host App.tsx'te kökte, PaperProvider'ın
+// İÇİNDE mount edilir (tema/settings context'i ve Toast/kilit altındaki
+// z-düzlemi korunsun diye).
 //
 // ⚠️⚠️ İÇERİK BU AĞAÇTA RENDER EDİLMEZ — UYGULAMA CONTEXT'LERİ GÖRÜNMEZ.
 // Portal çocukları host'a TAŞINIR; React context ağaca bağlı olduğu için modal

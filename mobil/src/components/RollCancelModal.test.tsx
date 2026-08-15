@@ -1,4 +1,4 @@
-import { fireEvent } from "@testing-library/react-native";
+import { act, fireEvent } from "@testing-library/react-native";
 import RollCancelModal from "./RollCancelModal";
 import { renderWithPaper } from "../test/render";
 import { CANCEL_REASON_PRESETS } from "../constants/cancelReasons";
@@ -74,9 +74,12 @@ describe("RollCancelModal — sadeleştirilmiş iptal onayı", () => {
     expect(onConfirm).toHaveBeenCalledWith(undefined);
   });
 
-  it("chip TEK DOKUNUŞTA iptal eder ve sunucuya UZUN metni gönderir", () => {
+  it("chip TEK DOKUNUŞTA iptal eder ve sunucuya UZUN metni gönderir", async () => {
     const { getByText, onConfirm } = setup(PREVIEW_LABELLED);
     fireEvent.press(getByText("Sebep ekle (opsiyonel)"));
+    // SimplePortal bildirimi mikrotaskta gelir (2.7.2 çökme düzeltmesi) —
+    // chip'lerin host'ta belirmesi için bir tur akıt.
+    await act(async () => {});
     const preset = CANCEL_REASON_PRESETS[0];
     // Chip'te kısa etiket yazar…
     fireEvent.press(getByText(preset.short));

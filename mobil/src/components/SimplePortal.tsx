@@ -13,18 +13,34 @@ import { StyleSheet, View } from 'react-native';
 // #4754/#4807/#3395 ailesi). Tema sabit olduğu hâlde tekrarladı — yani sorun
 // tüketicide değil, TAŞIYICIDA.
 //
-// DÖNGÜ-GÜVENLİĞİ BURADA YAPISAL, DİKKATLE SAĞLANMIŞ DEĞİL:
-//   • Tüketici (`SimplePortal`) store'a yalnız YAZAR (`useEffect` içinde),
-//     OKUMAZ; `null` render eder.
-//   • Host (`SimplePortalHost`) store'u `useSyncExternalStore` ile yalnız OKUR.
-//   • Host'un re-render'ı tüketicinin ağacına DOKUNMAZ (ayrı alt ağaç, geri akış
-//     yok) → "host güncellendi → tüketici yeniden çizildi → host güncellendi"
-//     döngüsü kurulamaz.
+// DÖNGÜ-GÜVENLİĞİ İKİ AYAKLI — ikisi de zorunlu, biri 2.7.2'de sahada eksikti:
+//   1. TEK YÖNLÜ VERİ AKIŞI: tüketici (`SimplePortal`) store'a yalnız YAZAR
+//      (`useEffect` içinde), OKUMAZ, `null` render eder; host store'u
+//      `useSyncExternalStore` ile yalnız OKUR. Bu, MANTIKSAL sonsuz döngüyü
+//      (host → tüketici → host) keser.
+//   2. ⚠️ BİLDİRİM COMMIT İÇİNDE KOŞMAZ — `emit` mikrotask'a ERTELENİR.
+//      2.7.2 saha dersi (SM-X230, 4 çökme, hepsi `AppModal → SimplePortal`):
+//      1. madde tek başına ÇÖKMEYİ ENGELLEMEZ, çünkü React'in "Maximum update
+//      depth" sayacı fiber'e değil KESİNTİSİZ SENKRON PATLAMAYA bakar. Senkron
+//      `emit`, tüketicinin passive-effect fazının İÇİNDE `forceStoreRerender` →
+//      host commit'ini zorluyordu; Fabric layout olaylarını commit sırasında
+//      SENKRON dağıttığı için modal içeriğinin yerleşme çalkantısı (FlashList
+//      ölçümü, skeleton→hata görünümü takası, entering animasyonları) aynı
+//      patlamaya ZİNCİRLENDİ ve sayaç 50'ye çarptı — logcat imzası:
+//      `emit → forceStoreRerender → getRootForUpdatedFiber` (throw). Erteleme
+//      bu zinciri fiziksel olarak koparır: bildirim her zaman BOŞ JS yığınında
+//      başlar, her patlama kendi içerik çalkantısıyla sınırlı kalır ve sayaç
+//      commit'ler arasında sıfırlanır. (Eski mimaride layout olayları asenkron
+//      geldiği için paper `Portal` aynı ekranlarda yalnız ARALIKLI çökerdi —
+//      "eski tablette intermittent" gözleminin açıklaması budur.)
 // ⚠️ `SimplePortal` tarafına store'u OKUYAN bir hook (`useSyncExternalStore` /
-// store verisi taşıyan context / zustand selector) eklenirse tam da kaçılan sınıf
-// geri gelir. Aşağıdaki `useContext` bunun İSTİSNASI DEĞİL: context yalnız
+// store verisi taşıyan context / zustand selector) eklenirse 1. ayak delinir ve
+// erteleme çökmeyi değil yalnız biçimini değiştirir (senkron çökme yerine sonsuz
+// asenkron spin). Aşağıdaki `useContext` bunun İSTİSNASI DEĞİL: context yalnız
 // KARARLI store NESNESİNİ taşır (veriyi değil), yani hiçbir zaman değişmez ve
-// re-render üretmez. Bekçi: `SimplePortal.test.tsx` (§3, §3b sonda, §3c yapısal).
+// re-render üretmez. Bekçi: `SimplePortal.test.tsx` (§3 sayaç, §3c yapısal,
+// §3d senkron-bildirim sözleşmesi). Spin'e karşı çalışma zamanı kanaryası
+// aşağıda (1 sn'de 120+ bildirim → console.warn, logcat'te görünür).
 //
 // HOST ZORUNLUDUR: host mount edilmemişse içerik hiçbir yerde çizilmez (paper'ın
 // "Portal.Host olmadan çalışmaz" sözleşmesiyle aynı). Kökte App.tsx mount eder;
@@ -77,10 +93,42 @@ export function createSimplePortalStore(): SimplePortalStore {
     );
   };
 
+  // ⚠️ BİLDİRİM ERTELENİR VE BİRLEŞTİRİLİR (yukarıdaki başlık, 2. ayak).
+  // Mikrotask, mevcut senkron işin (render/commit/passive-effect) TAMAMI bitip
+  // JS yığını boşaldıktan sonra, bir sonraki kare ÇİZİLMEDEN önce koşar — yani
+  // içerik gecikmesi görünmez ama React'in iç içe güncelleme sayacı asla
+  // store sınırından beslenmez. Peş peşe set/remove tek bildirimde birleşir
+  // (map senkron güncel; dinleyici en son durumu okur).
+  const scheduleNotify: (cb: () => void) => void =
+    typeof queueMicrotask === 'function'
+      ? queueMicrotask
+      : (cb) => {
+          void Promise.resolve().then(cb);
+        };
+  let notifyScheduled = false;
+  // Geri-besleme kanaryası: tek yönlü akış delinirse (tüketici store okumaya
+  // başlarsa) erteleme çökmeyi sonsuz asenkron spin'e çevirir — sessiz kalmasın.
+  let notifyWindowStart = 0;
+  let notifyWindowCount = 0;
   const emit = () => {
-    // Kopya üzerinde gez: dinleyici kendini çıkarırsa (unmount) Set mutasyonu
-    // iterasyonu bozmasın.
-    for (const l of Array.from(listeners)) l();
+    if (notifyScheduled) return;
+    notifyScheduled = true;
+    scheduleNotify(() => {
+      notifyScheduled = false;
+      const now = Date.now();
+      if (now - notifyWindowStart > 1000) {
+        notifyWindowStart = now;
+        notifyWindowCount = 0;
+      }
+      if (++notifyWindowCount === 120) {
+        console.warn(
+          '[SimplePortal] 1 sn içinde 120+ host bildirimi — muhtemel geri-besleme; SimplePortal.tsx başlığını oku.',
+        );
+      }
+      // Kopya üzerinde gez: dinleyici kendini çıkarırsa (unmount) Set mutasyonu
+      // iterasyonu bozmasın.
+      for (const l of Array.from(listeners)) l();
+    });
   };
 
   return {

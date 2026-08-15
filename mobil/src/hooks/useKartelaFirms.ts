@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { subcontractorService } from '../services/subcontractor.service';
 import type { Subcontractor } from '../types/models';
 
+const EMPTY_FIRMS: Subcontractor[] = [];
+
 /** Kartela fason kategorisinin kodu — seed + canlı DB ile aynı. */
 export const KARTELA_CATEGORY_CODE = 'KARTELA';
 
@@ -48,7 +50,10 @@ export function useKartelaFirms(): {
   }, [catsQuery, firmsQuery]);
 
   return {
-    firms: firmsQuery.data?.data ?? [],
+    // ⚠️ Kararlı sabit — `?? []` her render'da yeni dizi üretir; effect
+    // bağımlılığına giren tüketici çevrimdışında sonsuz döngüye girer
+    // (2026-08-15 useFoldValues saha çökmesi; gerekçe o dosyanın başlığında).
+    firms: firmsQuery.data?.data ?? EMPTY_FIRMS,
     isLoading: catsQuery.isLoading || (!!kartelaCatId && firmsQuery.isLoading),
     categoryMissing: catsQuery.isSuccess && !kartelaCatId,
     refetch,
