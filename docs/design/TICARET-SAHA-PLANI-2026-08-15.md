@@ -103,13 +103,75 @@ Tek istisna: `finance.yarnOutOnInvoiceEnabled` (iplik kg'sini SALES onayında
 düşürür; varsayılan KAPALI; sevkten de düşen kurulumda açılırsa ÇİFTE düşüm —
 bayrak JSDoc'unda uyarı). Bu cevap kullanım kılavuzuna/CLAUDE.md'ye yazılır.
 
-## D) BENZER SORUN TARAMASI (salt-okunur süpürme — sonuçlar bu bölüme işlenecek)
+## D) BENZER SORUN TARAMASI — SONUÇLAR (6 mercek, 2026-08-15 04:30; tam rapor
+## workflow çıktısında, burada uygulanacak damıtım)
 
-Sınıflar: ① ham enum/İngilizce metin basan yüzeyler ② filtresiz liste sayfaları
-③ ön-dolumsuz çifte veri girişi ④ "oluştur→kayboldu" çıkmaz akışları (belge/
-kayıt üretip göstermeyen eylemler) ⑤ eksik lookup birleşimleri (customer↔
-subcontractor ayrımına takılan seçiciler) ⑥ boş-durum mesajları ("kayıt yok"
-mu "istek düştü" mü).
+### D-Yüksek (kodlanacak — dalga SF1 backend / SF2 panel)
+
+**SF1 (backend):**
+- **Türkçe-duyarsız arama 8 ticaret servisinde** — yarn(⭐ kesin kırık: ad
+  BÜYÜK saklanıyor, küçük arama asla bulamaz) · cari · purchase-order · invoice
+  · cheque · cash-transaction · cheque-delivery-note · payment → hepsi
+  `buildTurkishSearch`e (fabrika servislerindeki desen).
+- **Backend ROLL_STATUS_TR sözlüğü** (`constants/status-labels.ts`) + 4 kullanım:
+  stok sayım tutanağı `outOfScopeReason` (⭐ DONMUŞ belgeye ham enum yazılıyor —
+  stock-count:1028; panel ikizi stockCountRules:204 AYNI anda) · depo transferi
+  ön-kontrol/geri-alma (geri-almada mesaj dört sebepten hangisi olursa olsun
+  `status` basıyor — sebep-başına cümleye çevrilecek) · payment-allocation çek
+  reddi (cheque.service STATUS_LABEL'ı export edilip kullanılacak) ·
+  purchase-order revizyon reddi (PO_STATUS_LABEL'ın backend eşi).
+- **GR↔PO para birimi**: sipariş seçilince currency devri (panel) + tedarikçi
+  guard'ının ikizi para birimi guard'ı (backend) — USD siparişten TRY fiş sessiz
+  ve büyük.
+- **Alış faturasında PO fiyat katmanı** — C1'in alış ikizi:
+  `createDraftFromGoodsReceipt` `PurchaseOrderLine.unitPrice`i hiç okumuyor;
+  çelişkide uydurma yok (orderConflicts deseni).
+- **Ekstre satırına `invoice.id`/`payment.id`** (belgeye tıkla-git'in ön koşulu).
+- **listShipments iç fatura bağı** (`invoices {id,docNo,status}`) — "Faturala"
+  düğmesi dış-muhasebe izi `invoiceNo`ya bakıyor: taslak varken düğme çıkıp 409
+  yediriyor, dış-nolu sevkiyatta hiç çıkmıyor.
+- Küçük: GR + depo transferi listelerine `applyDateRange` çağrısı ·
+  `exchangeRate` servisine `dateFields`.
+
+**SF2 (panel):**
+- **isError SINIFI (en yaygın kusur)**: `DataTable`/`CrudPage` isError tanımıyor
+  (14 tanım sayfası hatada "Kayıt bulunamadı" basıyor) · `FilterBar` 3 lookup
+  varyantı (2026-08-12 vakasının sınıfı hâlâ açık) · 7 ticaret listesi (Cari/
+  Faturalar/Tahsilat/Kurlar/Kasa&Banka/MalKabul/Transfer — hatalı metinler
+  yanlış eyleme YÖNLENDİRİYOR: "kuru girin"→mükerrer kur) · Cari Ekstre `!q.data`
+  = yalnız hata dalı ("Kayıt bulunamadı" yalanı → sıfır bakiyeli mutabakat
+  mektubu riski) · GR detay sheet `!r → null` (boş çekmece) · kasa/banka "tanım
+  yok" zinciri (dört yüzey; hata → mükerrer kasa) · Excel içe aktarma `ready`
+  hata okumuyor (18 satırın 18'i "Kumaş bulunamadı"). Emsaller kod içinde hazır:
+  ReportErrorCard · CashPeriodSection iki-katman · LockStatusCard.
+- **Fatura TASLAĞI düzenleme** — PATCH ucu var, panel çağırmıyor; 0-fiyatlı
+  otomatik taslak ONAYLANAMIYOR + DÜZELTİLEMİYOR = kilitlenme. InvoiceFormDialog
+  edit modu + DRAFT satırına "Düzenle".
+- **InvoiceFormDialog `defaultCurrency` ön-dolumu** — USD müşteriye sessiz TRY
+  fatura → kur 1 → defter ~30 kat yanlış (usePartyTermDays zaten cari satırını
+  çekiyor).
+- **5 listede 100-satır sessiz kırpması** → kırpma bandı (norm aynı klasörde 4
+  sayfada yazılı ve uygulanmış).
+- **Audit sözlükleri**: TABLE_LABELS +17 ticaret tablosu · FIELD_LABELS +16 alan
+  · ENUM_LABELS +9 ticaret enum'u (IN/OUT bağlamsız en kötüsü).
+- **CarilerPage 500+ kayıtta boşalıyor** (ticaret rejiminde TEK cari kapısı!) →
+  sunucu taraflı arama+sayfalama; ara adım isError kartı.
+- **Pasif kayıt/pasif cari seçim sınıfı**: seçili pasif kayda "(pasif)" rozeti
+  (ReferenceSelect ortak düzeltme) · Tahsilat/Çek/Fatura formları pasif carinin
+  açık bakiyesi için `cariPickerService`e (mahsup ekranının yazılı kararı).
+- **Tıkla-git bağları**: fatura detay Kaynak satırları · GR↔PO çift yön · ekstre
+  satırı → belge diyaloğu · PO detay "fişleri açın" bandı.
+- Küçük TR'ler: BatchCorrectModal roll.status · OrderCancelDialog shipment
+  status · SackContentEdit tooltip · sevk-oto-taslak görünürlüğü (Faturalar
+  karosuna "N taslak" rozeti — karar: rozet, kalıcı işaret değil).
+
+### D-Karar/ertelenen (plana not)
+- `supplierId → cariId` kalıcı birleşmesi (L; C4 köprüsü bu gece kuruldu).
+- Vade fallback ayrışması (settlementOf yalnız dueDate ↔ aging paymentTermDays
+  fallback'li) — sözleşme kararı: taslaklara vade ön-dolumu (defaultCurrency
+  ile aynı dalgada) + rozet mantığı aging'le hizalanır.
+- Sevk-oto-taslağın tablet görünürlüğü (mobil Faturalar yüzeyi yok) — mobil işi,
+  beklemede (plan gereği).
 
 ## E) BAYRAK PAKETİ 2 (kullanıcı talimatı, 2026-08-15 gece)
 
