@@ -118,6 +118,12 @@ export interface YarnMovementTxInput {
   qtyKg: Prisma.Decimal.Value;
   goodsReceiptId?: string | null;
   invoiceId?: string | null;
+  /**
+   * Satırı doğuran TAM SAYIM (J2 #19). Tipli bağ — serbest `reason` metni
+   * aranabilir değildir ve "bu sayım hangi düzeltmeleri yazdı" sorusu LIKE ile
+   * cevaplanamaz (`goodsReceiptId` emsali).
+   */
+  stockCountId?: string | null;
   reason?: string | null;
   userId?: string | null;
 }
@@ -177,6 +183,9 @@ export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): P
       qtyKg: qty,
       goodsReceiptId: input.goodsReceiptId ?? null,
       invoiceId: input.invoiceId ?? null,
+      // ⚠️ Bu nesne bir ALLOWLIST'tir (elle kurulan gövde dersi): `YarnMovementTxInput`e
+      // eklenip BURAYA yazılmayan alan SESSİZCE düşer ve bağ hiç kurulmaz.
+      stockCountId: input.stockCountId ?? null,
       reason: input.reason?.trim() || null,
       userId: input.userId ?? null,
     },

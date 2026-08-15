@@ -15,6 +15,7 @@ import {
   Share2,
   Boxes,
   ShoppingBasket,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
@@ -22,6 +23,7 @@ import type { OperationGroupKey } from "./groups-config";
 // zinciri tersine çevrilse hiçbir testi kırmazdı; projenin yazılı deseni).
 import { isYarnStockVisible } from "./Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "./PurchaseOrders/po-regime";
+import { isStockCountVisible, STOCK_COUNTS_PATH } from "./StockCounts/stockCount-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -183,6 +185,18 @@ export const operationsTiles: OperationsTile[] = [
     // Tek depolu kurulumda taşınacak ikinci depo YOK → karo çizilmez (fabrikada
     // sıfır görünür fark). İkinci depo açıldığı gün kendiliğinden belirir.
     visibleWhen: (ctx) => ctx.multiWarehouse,
+  },
+  {
+    key: "stock-counts",
+    title: "Stok Sayımı",
+    description: "Depoyu say, defterle karşılaştır, farkı fark fişiyle kayda geçir",
+    icon: ClipboardCheck,
+    to: STOCK_COUNTS_PATH,
+    group: "warehouse",
+    permission: "warehouse:read",
+    // Saf yüklem DOĞRUDAN geçirilir (sarmalayan ok fonksiyonu YAZILMAZ) — palet
+    // paritesi bekçisi karo ile girişin AYNI fonksiyon nesnesini taşımasını arar.
+    visibleWhen: isStockCountVisible,
   },
   {
     key: "shipments",

@@ -75,6 +75,7 @@ import yarnRoutes from "./routes/yarn.routes";
 import itemPriceRoutes from "./routes/item-price.routes";
 import purchaseOrderRoutes from "./routes/purchase-order.routes";
 import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
+import stockCountRoutes from "./routes/stock-count.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import adminRoutes from "./routes/admin.routes";
@@ -631,6 +632,10 @@ app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
 app.use("/api/warehouse-transfers", warehouseTransferRoutes);
+// Tam stok sayımı (J2 #19) — kendi `verifyToken + requireFinanceEnabled`
+// kapısını taşır; fark fişi TOP ve İPLİK defterlerine yazdığı için rejim kapısı
+// pazarlık dışıdır (bekçi: scripts/test_finance_regime_gate.ts).
+app.use("/api/stock-counts", stockCountRoutes);
 // Ön muhasebe — router'ın KENDİSİ `requireFinanceEnabled` taşır (bayrak
 // kapalıysa hepsi 403). Tek tek uçlarda tekrarlanmaz.
 // ⚠️ Çek/senet router'ı DAHA SPESİFİK prefix taşıdığı için `/api/finance`ten

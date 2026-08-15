@@ -1,0 +1,22 @@
+-- =============================================================================
+-- Tam stok sayımı — yeni belge tipi (2026-08-15, J2 #19)
+-- =============================================================================
+-- `PrintedDocType` enum'una SONA tek değer: sayım listesi + fark fişi.
+--
+-- ⚠️ AYRI MIGRATION olmasının sebebi PG kuralıdır: `ALTER TYPE ... ADD VALUE`
+-- ile eklenen değer AYNI transaction içinde KULLANILAMAZ. Bir sonraki migration
+-- (20260815090100) tabloları kurar ve bu değeri DDL'de KULLANMAZ — sıra yine de
+-- pazarlık dışıdır, çünkü uygulama katmanı ikisini birlikte bekler
+-- (20260814220000/20260814220100 emsali).
+--
+-- ⚠️ `IF NOT EXISTS`: ekleme idempotent olmalı — yarıda kalan bir uygulamada
+-- migration tekrar koşturulabilsin.
+--
+-- ⚠️ FABRİKAYA ETKİSİ SIFIR: enum'a değer eklemek mevcut satırlara dokunmaz,
+-- tabloyu yeniden yazmaz. Bu tipi üreten tek yüzey (`stock-count.routes`)
+-- `finance.enabled` rejiminin arkasında.
+--
+-- GÜVENLİ: yalnız EKLEME.
+-- =============================================================================
+
+ALTER TYPE "PrintedDocType" ADD VALUE IF NOT EXISTS 'STOCK_COUNT';

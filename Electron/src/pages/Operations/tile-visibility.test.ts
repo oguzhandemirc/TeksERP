@@ -86,6 +86,7 @@ describe("karo bağlantıları", () => {
     expect(conditional.sort()).toEqual([
       "purchase-orders",
       "sack-store",
+      "stock-counts",
       "warehouse-transfers",
       "yarn-stock",
     ]);

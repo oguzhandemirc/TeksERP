@@ -61,6 +61,9 @@ export const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   // 2026-08-15 resmi ön muhasebe belgeleri (J2 #18).
   RECONCILIATION_LETTER: "mutabakatMektubu",
   CHEQUE_DELIVERY_NOTE: "cekTeslimBordrosu",
+  // 2026-08-15 tam stok sayımı (J2 #19) — depo belgesi ailesi (transfer/mal kabul
+  // ile aynı iskelet: antet + taraf kutusu + tablo + imza).
+  STOCK_COUNT: "stokSayimi",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */

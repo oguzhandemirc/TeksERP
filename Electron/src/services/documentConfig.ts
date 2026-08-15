@@ -246,6 +246,23 @@ export interface DocDef {
    *  YALNIZ önizleme çerçevesini çizmek için kullanılır; sapma baskıyı etkilemez
    *  (baskıda gerçek değer backend'den gelir). */
   defaultMarginMm?: number;
+  /**
+   * TİCARET REJİMİNE AİT BELGE — `finance.enabled` kapalıyken Belge Şablonları
+   * seçicisinde LİSTELENMEZ.
+   *
+   * ⚠️ ÖLÇÜT: belgenin KAYNAĞI fabrika kurulumunda var olabilir mi? Kaynağını
+   * yazan uçlar `requireFinanceEnabled` arkasındaysa o belge fabrikada TANIM
+   * GEREĞİ doğamaz; şablonunu ayarlatmak "hiç basılmayacak bir kâğıdın
+   * yerleşimini kurcalatmak"tır ve "sıfır görünür fark" garantisini bozar.
+   *
+   * ⚠️ `depoTransfer` ve `malKabul` BİLEREK İŞARETSİZ: `warehouse-transfer
+   * .routes` ve `goods-receipt.routes` rejim kapısı TAŞIMAZ (depo defterini
+   * fabrika yolları da yazıyor — KK1 girişi/sevk/iade; mal kabul ise İZİNLE
+   * kapılı). Kaynakları fabrikada meşru olduğu için belgeleri de meşrudur.
+   * Bu alanı bir belgeye eklemeden önce sorulacak soru "ticaret gibi mi
+   * duruyor" değil, "kaynağını yazan uç rejim kapılı mı" olmalıdır.
+   */
+  requiresFinance?: boolean;
 }
 
 /**
@@ -303,6 +320,8 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18).
   RECONCILIATION_LETTER: "mutabakatMektubu",
   CHEQUE_DELIVERY_NOTE: "cekTeslimBordrosu",
+  // Tam stok sayımı (2026-08-15, J2 #19) — depo belgesi ailesi.
+  STOCK_COUNT: "stokSayimi",
 };
 
 /**
@@ -459,6 +478,29 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
   ],
   malKabul: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // Stok sayım tutanağı (2026-08-15, J2 #19) — transfer/mal kabul ile AYNI
+  // iskelet (`warehouse-doc.html.ts` üçünü tek gövdeden basar), dolayısıyla
+  // alan listesi de birebir aynı sırada.
+  stokSayimi: [
     { key: "company", label: "Firma adı", group: "header" },
     { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
     { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
@@ -902,10 +944,53 @@ export const DOC_DEFS: DocDef[] = [
     ],
   },
   {
+    // ⚠️ Bölüm/kolon anahtarları `warehouse-doc.renderStockCountHtml`in
+    // okuduklarıyla BİREBİR olmak zorunda — ayrışırsa panelde ayar görünür ama
+    // belgede karşılığı olmaz ("ayar var, kapısı yok").
+    key: "stokSayimi",
+    // Rejim: stok sayımı `stock-count.routes` (router.use requireFinanceEnabled) → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
+    label: "Stok Sayım Tutanağı",
+    defaultTitle: "Stok Sayım Tutanağı",
+    fields: DOC_FIELD_CATALOGS.stokSayimi,
+    // ⚠️ ÜÇ imza, "Teslim Eden / Teslim Alan" DEĞİL: bu kâğıtla teslim edilen
+    // bir şey yok. Sayan · kontrol · onay ayrımı, fark fişinin arkasındaki
+    // görev ayrılığının kâğıt üzerindeki karşılığıdır (renderer ile aynı).
+    defaultSignatures: ["Sayan", "Kontrol Eden", "Onaylayan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "countStatus", label: "Sayım durumu (taslak / tamamlandı)" },
+      { key: "createdBy", label: "Sayımı açan / tamamlayan" },
+      { key: "rollTable", label: "Sayım listesi — toplar" },
+      { key: "yarnTable", label: "Sayım listesi — iplik (kg)" },
+      // ⚠️ Fark özeti KAPATILABİLİR ama varsayılan AÇIK: tutanağın kanıt değeri
+      // (kaç top düşüldü, kaç kg fark yazıldı) tam olarak bu bloktadır.
+      { key: "countSummary", label: "Fark özeti bloğu" },
+    ],
+    tables: [
+      {
+        key: "rollTable",
+        label: "Sayım Listesi — Toplar",
+        columns: [
+          { key: "barcode", label: "Barkod" },
+          { key: "itemColor", label: "Ürün / renk" },
+          { key: "expectedQty", label: "Beklenen (defter)" },
+          { key: "countedQty", label: "Sayılan" },
+          // "Durum" kolonu kapsam-dışı SEBEBİNİ de taşır; kapatmak, atlanan
+          // satırların nedenini kâğıttan siler.
+          { key: "state", label: "Durum" },
+        ],
+      },
+    ],
+  },
+  {
     // ⚠️ `sections` ve `columns` anahtarları renderer'ın okuduklarıyla BİREBİR
     // olmak zorunda (`finance-doc.html.ts`) — ayrışırsa panelde ayar görünür
     // ama belgede karşılığı olmaz ("ayar var, kapısı yok").
     key: "fatura",
+    // Rejim: fatura `finance.routes` (router seviyesinde requireFinanceEnabled) → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
     label: "Fatura (İç)",
     defaultTitle: "Satış Faturası",
     fields: DOC_FIELD_CATALOGS.fatura,
@@ -939,6 +1024,8 @@ export const DOC_DEFS: DocDef[] = [
     // bilinçli: boş bir tablo tanımı panelde "kolonları ayarla" vaadi verir ve
     // karşılığı olmayan bir ayar üretir.
     key: "tahsilatMakbuzu",
+    // Rejim: tahsilat/ödeme `finance.routes` → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
     label: "Tahsilat / Ödeme Makbuzu",
     defaultTitle: "Tahsilat Makbuzu",
     fields: DOC_FIELD_CATALOGS.tahsilatMakbuzu,
@@ -955,6 +1042,8 @@ export const DOC_DEFS: DocDef[] = [
     // ⚠️ `sections`/`columns` anahtarları renderer'ın okuduklarıyla BİREBİR
     // (`finance-doc.renderReconciliationLetterHtml`).
     key: "mutabakatMektubu",
+    // Rejim: `reconciliation-letter.routes` kendi rejim kapısını taşır → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
     label: "Mutabakat Mektubu",
     defaultTitle: "Cari Mutabakat Mektubu",
     fields: DOC_FIELD_CATALOGS.mutabakatMektubu,
@@ -989,6 +1078,8 @@ export const DOC_DEFS: DocDef[] = [
   },
   {
     key: "cekTeslimBordrosu",
+    // Rejim: `cheque-delivery-note.routes` kendi rejim kapısını taşır → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
     label: "Çek / Senet Teslim Bordrosu",
     // ⚠️ GERÇEK başlık YÖNDEN gelir ("Alınan …" / "Verilen …"); buradaki değer
     // yalnız panelin varsayılanı ve override edilmediğinde renderer kendi

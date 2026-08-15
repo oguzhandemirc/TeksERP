@@ -86,6 +86,12 @@ const TICARET_MODELLERI = new Set([
   "reconciliationLetter",
   "chequeDeliveryNote",
   "chequeDeliveryNoteItem",
+  // Tam stok sayımı (J2 #19). ⚠️ Kapsam bugün ZATEN türetiliyor (servis
+  // `yarnStock`/`yarnMovement` okuyor) — listede durmalarının sebebi İLERİSİ:
+  // yalnız bu tablolara dokunan bir servis/router yazıldığı gün (ör. salt-okunur
+  // sayım raporu) kapsam dışında kalmasın.
+  "stockCount",
+  "stockCountLine",
   // Paket D
   "yarnStock",
   "yarnMovement",

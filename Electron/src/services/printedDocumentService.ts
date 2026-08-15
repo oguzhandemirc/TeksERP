@@ -29,7 +29,9 @@ export type PrintedDocType =
   // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18) — donmuş mutabakat mektubu
   // ve donmuş çek/senet teslim bordrosu (H6'nın ANLIK çıktısının resmi ikizi).
   | "RECONCILIATION_LETTER"
-  | "CHEQUE_DELIVERY_NOTE";
+  | "CHEQUE_DELIVERY_NOTE"
+  // Tam stok sayımı (2026-08-15, J2 #19) — fark fişinin donmuş tutanağı.
+  | "STOCK_COUNT";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

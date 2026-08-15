@@ -118,6 +118,13 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
   // Ticaret paketi — iç depo belgeleri (iade irsaliyesiyle aynı iskelet).
   depoTransfer: [...COMMON, ...BOXES, SEC_CAPTION],
   malKabul: [...COMMON, ...BOXES, SEC_CAPTION],
+  // Stok sayım tutanağı (2026-08-15, J2 #19) — AYNI depo belgesi ailesi
+  // (`warehouse-doc.html.ts` üçünü de tek gövdeden basıyor), dolayısıyla alan
+  // listesi de aynı. ⚠️ Bu satır Electron aynasıyla (`services/documentConfig.ts`
+  // → `DOC_FIELD_CATALOGS.stokSayimi`) AYNI commit'te eklendi:
+  // `test_doc_density_fields` §5 birebirliği SIRA DAHİL ölçer ve yalnız bir
+  // tarafı eklemek bekçiyi anında kırmızıya çevirir.
+  stokSayimi: [...COMMON, ...BOXES, SEC_CAPTION],
   // Ön muhasebe çıktıları — aynı iskelet (başlık · kutu · tablo · imza).
   fatura: [...COMMON, ...BOXES, SEC_CAPTION],
   tahsilatMakbuzu: [...COMMON, ...BOXES, SEC_CAPTION],

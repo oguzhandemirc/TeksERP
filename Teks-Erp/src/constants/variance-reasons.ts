@@ -48,6 +48,15 @@ export const VARIANCE_SOURCES = {
   TAMBUR_UNDO_FULL: "TAMBUR_UNDO_FULL",
   /** Depoda SAYIM metraj düzeltmesi (G4, 2026-08-14) — `inventory.service.adjustRollQty`. */
   WAREHOUSE_QTY_ADJUST: "WAREHOUSE_QTY_ADJUST",
+  /**
+   * TAM STOK SAYIMI fark fişi (J2 #19, 2026-08-15) — `stock-count.service.complete`.
+   *
+   * ⚠️ `WAREHOUSE_QTY_ADJUST` ile KARIŞTIRMA, ikisi ayrı soruyu yanıtlar:
+   * o TEKİL bir topun metrajını düzeltir (mal var, sayı yanlış), bu bir
+   * SAYIM BELGESİNE bağlı olarak topun tamamını kayıttan düşer (mal yok).
+   * Tek kovaya atmak, "sayımda kaç top kayboldu" sorusunu cevapsız bırakırdı.
+   */
+  STOCK_COUNT: "STOCK_COUNT",
 } as const;
 
 export type VarianceSource = (typeof VARIANCE_SOURCES)[keyof typeof VARIANCE_SOURCES];
@@ -110,6 +119,27 @@ export const VARIANCE_MIN_REASON_TEXT = 3;
  */
 export const LEGACY_REASON_CODE = "BELIRTILMEDI";
 
+/**
+ * SİSTEM KODU — tam stok sayımında bulunamayan top (J2 #19, 2026-08-15).
+ * Seçilebilir bir sebep DEĞİLDİR ve `reasonsForKind` onu DÖNDÜRMEZ.
+ *
+ * ⚠️ NEDEN `RECORD_CORRECTION_REASONS` DİZİSİNE EKLENMEDİ (bilinçli):
+ *   ① O dizi bir OPERATÖR SEÇİCİSİDİR (Tambur kalan-metraj kararı, mobil).
+ *      Oraya "Sayım farkı" koymak, sayımla hiç ilgisi olmayan bir ekranda
+ *      seçilebilir bir yanlış kova doğururdu — kataloğun kendi kuralı
+ *      ("listeyi BÜYÜTME, sürtünme ölçütüne bak") tam da bunu yasaklar.
+ *   ② Burada sebebi OPERATÖR SEÇMEZ, SİSTEM BİLİR: satır "bulunamadı" diye
+ *      işaretlendiği için kayıt düşülüyor. Sorulacak bir soru yok.
+ *   ③ Mobil ayna (`mobil/src/constants/varianceReasons.ts`) bu yolla
+ *      DEĞİŞMEZ — sayım bir panel/depo işidir, tablet ekranı yoktur.
+ *      `test_roll_variance`'ın birebirlik kontrolü de olduğu gibi kalır.
+ * Emsal: `LEGACY_REASON_CODE` (kabul edilir, hiçbir seçicide görünmez).
+ *
+ * Raporda AYRI BİR KOVADIR: "sayımda kaç metre kayboldu" sorusunun cevabı
+ * `reasonCode = 'SAYIM_FARKI'` satırlarının toplamıdır.
+ */
+export const STOCK_COUNT_REASON_CODE = "SAYIM_FARKI";
+
 /** Türe göre geçerli sebep listesi. OVERAGE sebep İSTEMEZ (sistem tespit eder). */
 export function reasonsForKind(kind: RollVarianceKind): readonly VarianceReason[] {
   if (kind === RollVarianceKind.SCRAP) return SCRAP_REASONS;
@@ -150,6 +180,8 @@ export function validateVarianceReason(
   // sahadaki her tablette "Bitir"i kırardı.
   if (!code) return { reasonCode: LEGACY_REASON_CODE, reasonText: text };
   if (code === LEGACY_REASON_CODE) return { reasonCode: code, reasonText: text };
+  // Sistem kodu — seçicide yok, katalogda yok, ama GEÇERLİ (bkz. sabit notu).
+  if (code === STOCK_COUNT_REASON_CODE) return { reasonCode: code, reasonText: text };
 
   const catalog = reasonsForKind(kind);
   const hit = catalog.find((r) => r.code === code);

@@ -1057,6 +1057,7 @@ model Item {
   yarnMovements      YarnMovement[]
   prices             ItemPrice[]
   purchaseOrderLines PurchaseOrderLine[]
+  stockCountLines    StockCountLine[]
 
   @@map("items")
 }
@@ -1510,6 +1511,8 @@ model Roll {
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
   returns              RollReturn[]
   batch                Batch?                      @relation(fields: [batchId], references: [id])
+  /// Ticaret paketi (J2 #19) — bu topun göründüğü sayım satırları.
+  stockCountLines      StockCountLine[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -3191,6 +3194,12 @@ enum PrintedDocType {
   // yoksa belgenin numarası, sürümü ve revizyon geçmişi olamaz.
   RECONCILIATION_LETTER // Cari mutabakat mektubu (ReconciliationLetter — OLUŞTURMADA donar)
   CHEQUE_DELIVERY_NOTE // Çek/senet teslim bordrosu (ChequeDeliveryNote — OLUŞTURMADA donar)
+  // 2026-08-15 tam stok sayımı (yine SONA — ALTER TYPE ADD VALUE kuralı).
+  // ⚠️ İÇ belgedir (depo ekibi + denetçi) ama zincir aynı: TAMAMLANMADA donar.
+  // Donma anı bilinçli olarak TAMAMLANMA'dır, oluşturma DEĞİL: taslak sayım bir
+  // ÇALIŞMA KÂĞIDIDIR (satırlar işaretlendikçe değişir) ve resmileşen şey
+  // "sayım kesiti + uygulanan fark"tır.
+  STOCK_COUNT // Sayım listesi + fark fişi (StockCount — TAMAMLANMADA donar)
 }
 
 enum PrintedDocStatus {
@@ -4310,6 +4319,9 @@ model Warehouse {
   // Paket D (ticaret) — iplik kg-stoğu depo bazlıdır.
   yarnStocks    YarnStock[]
   yarnMovements YarnMovement[]
+
+  // J2 #19 — tam stok sayımı depo bazlıdır (bir sayım = bir depo).
+  stockCounts StockCount[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -5606,9 +5618,17 @@ model YarnMovement {
   qtyKg Decimal @db.Decimal(14, 3)
 
   /// Belge bağları — typed FK (polimorfik değil), `WarehouseMovement` emsali.
-  /// Hepsi opsiyoneldir: elle sayım düzeltmesinin belgesi yoktur.
+  /// Hepsi opsiyoneldir: BELGESİZ elle düzeltme (`POST /api/yarn/movements`)
+  /// meşru bir yoldur ve öyle kalır.
+  ///
+  /// ⚠️ `stockCountId` (2026-08-15, J2 #19): satırı doğuran TAM SAYIM. Serbest
+  /// `reason` metnine "SAY... sayım farkı" yazmak YETMEZ — metin aranabilir
+  /// değildir ve "bu sayım hangi düzeltmeleri yazdı" sorusu tipli bağ olmadan
+  /// LIKE ile cevaplanırdı. Bağ ayrıca sayımın kendisini silinemez yapar
+  /// (Restrict): fişi doğuran belge ortadan kaybolamaz.
   goodsReceiptId String? @db.Uuid
   invoiceId      String? @db.Uuid
+  stockCountId   String? @db.Uuid
 
   /// Satın alma BİRİM fiyatı — fişin para biriminde, `Roll.purchasePrice`
   /// simetriği (2026-08-14, Sınıf 5). Bu alan gelmeden iplik satırı fiyat
@@ -5630,6 +5650,7 @@ model YarnMovement {
   warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
   invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  stockCount   StockCount?   @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
   user         User?         @relation("YarnMovementUser", fields: [userId], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -5638,6 +5659,7 @@ model YarnMovement {
   @@index([warehouseId, createdAt])
   @@index([goodsReceiptId])
   @@index([invoiceId])
+  @@index([stockCountId])
   @@map("yarn_movements")
 }
 
@@ -5951,4 +5973,136 @@ model ChequeDeliveryNoteItem {
   @@unique([noteId, chequeId])
   @@index([chequeId])
   @@map("cheque_delivery_note_items")
+}
+
+// =============================================================================
+// TAM STOK SAYIMI (2026-08-15, J2 #19)
+// =============================================================================
+
+/// Sayımın yaşam döngüsü. `DRAFT` bir ÇALIŞMA KÂĞIDIDIR (hiçbir deftere satır
+/// yazmaz), `COMPLETED` fark fişinin YAZILDIĞI andır, `CANCELLED` sayımdan
+/// vazgeçildiğini söyler.
+///
+/// ⚠️ `COMPLETED` TERMİNALDİR — geri alma v1'de YOKTUR ve bu bilinçlidir:
+/// tamamlama iki ayrı deftere (top iptali + iplik hareketi) yazar ve o
+/// yazımların doğru geri alma yolu kendi ters kayıtlarıdır (topta "iptali geri
+/// al", iplikte ADJUST tersi). Sayıma "geri al" eklemek, iki defteri sayım
+/// belgesi üzerinden ikinci kez oynatan üçüncü bir yol açardı.
+enum StockCountStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+/// Sayım satırının türü — iki farklı stok modelinin AYNI belgede yaşaması.
+///
+/// ⚠️ Ayrı tablo AÇILMADI (`StockCountRollLine` + `StockCountYarnLine`): sayım
+/// belgesi tek bir olaydır ve iki tablo, "bu sayımın satırları" sorusunu her
+/// yerde iki sorguya bölerdi. Ayrım `kind` + karşılıklı-dışlayan iki nullable FK
+/// ile taşınır (`rollId` XOR `itemId`); tutarlılığı servis kurar.
+enum StockCountLineKind {
+  ROLL
+  YARN
+}
+
+/// TAM STOK SAYIMI — bir deponun belirli bir andaki FOTOĞRAFI + sayım sonucu.
+///
+/// ⚠️ FOTOĞRAF OLUŞTURMADA ÇEKİLİR (satırlar aynı tx'te doğar), fark fişi
+/// TAMAMLANMADA yazılır. İkisi arasında geçen sürede stok hareket edebilir; bu
+/// yüzden tamamlama HER SATIRDA TX-İÇİ TAZE CLAIM yapar ve kayan satırı
+/// "kapsam dışı" olarak işaretler (sessizce eski fotoğrafa göre yazmak, gerçekte
+/// sevk edilmiş bir topu iptal etmek demekti).
+///
+/// ⚠️ Bir depoda AYNI ANDA tek DRAFT sayım olabilir (servis guard'ı, 409). İki
+/// açık sayım aynı malı iki kez sayar ve iki fark fişi doğurur — ikincisi
+/// birincinin düzelttiği farkı bir kez daha yazardı.
+model StockCount {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// SAY + GGAAYY + NNNN (düzenleme günü).
+  countNo String @unique @db.VarChar(32)
+
+  warehouseId String @db.Uuid
+
+  status StockCountStatus @default(DRAFT)
+  notes  String?          @db.VarChar(500)
+
+  completedAt   DateTime? @db.Timestamptz
+  completedById String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  /// ⚠️ FK YOK ve index YOK — ön muhasebe/belge konvansiyonu
+  /// (`ReconciliationLetter.createdById` emsali): düşük trafikli "kim yaptı" izi.
+  createdById String? @db.Uuid
+
+  warehouse     Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines         StockCountLine[]
+  yarnMovements YarnMovement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Bu depoda açık sayım var mı" (create guard'ı) + "bu deponun sayımları"
+  // (liste) — eşitlik önce, statü sonra.
+  @@index([warehouseId, status])
+  @@map("stock_counts")
+}
+
+/// SAYIM SATIRI — beklenen (fotoğraf) ile sayılan (fiziksel) arasındaki karşılaşma.
+///
+/// ⚠️ `found` ÜÇ DURUMLUDUR ve `null` LOAD-BEARING'dir: `true` = bulundu,
+/// `false` = BULUNAMADI (fark fişi topu iptal eder), `null` = HENÜZ SAYILMADI.
+/// İşaretsiz satırı "eksik" saymak, yarım kalmış bir sayımın tamamlanmasıyla
+/// deponun yarısını sessizce silmek olurdu — bu yüzden yalnız AÇIKÇA `false`
+/// işaretlenen satır işlem görür.
+///
+/// ⚠️ ROLL satırında `countedQty` BİLGİ NOTUDUR, emir değil: metraj düzeltmesi
+/// G4'ün işidir (`inventory.adjustRollQty` — kendi sapma kaydı, kendi izni).
+/// Sayım fark fişi topun metrajına DOKUNMAZ.
+model StockCountLine {
+  id           String             @id @default(uuid()) @db.Uuid
+  stockCountId String             @db.Uuid
+  kind         StockCountLineKind
+
+  /// ROLL satırında dolu, YARN satırında NULL (ve tersi). PG'de NULL'lar
+  /// birbirinden AYRIDIR — bu yüzden aşağıdaki iki `@@unique` birbirini bozmaz:
+  /// "aynı sayımda aynı top iki satır olamaz" ve "aynı sayımda aynı kalem iki
+  /// satır olamaz" AYNI ANDA geçerlidir.
+  rollId String? @db.Uuid
+  itemId String? @db.Uuid
+
+  /// Fotoğraf anındaki DEFTER değeri (ROLL: metre, YARN: kg).
+  expectedQty Decimal @db.Decimal(14, 3)
+
+  /// Fiziksel sayım sonucu. YARN'da farkın kaynağıdır; ROLL'da bilgi notudur.
+  countedQty Decimal? @db.Decimal(14, 3)
+
+  /// YALNIZ ROLL satırında anlamlı (üç durumlu — model notuna bak).
+  found Boolean?
+
+  notes String? @db.VarChar(300)
+
+  /// Tamamlamada satır İŞLENEMEDİYSE somut sebep ("bu sırada sevk edildi",
+  /// "bakiye değişti"). ⚠️ `notes` ile karıştırma: o SAYAN kişinin yazdığı
+  /// serbest nottur, bu SİSTEMİN cevabıdır ve donmuş belgede sebep satırı olur.
+  /// Sessiz atlama en kötü davranış olurdu: fark fişi eksik yazılır, kimse
+  /// nedenini bilmez.
+  outOfScopeReason String? @db.VarChar(200)
+
+  stockCount StockCount @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
+  roll       Roll?      @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  item       Item?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // `stockCountId` FK indeksi bu iki composite unique'in ÖN EKİNDEN gelir
+  // (ayrı @@index([stockCountId]) yazmak dördüncü bir ağaç bakımı demekti).
+  @@unique([stockCountId, rollId])
+  @@unique([stockCountId, itemId])
+  @@index([rollId])
+  @@index([itemId])
+  @@map("stock_count_lines")
 }

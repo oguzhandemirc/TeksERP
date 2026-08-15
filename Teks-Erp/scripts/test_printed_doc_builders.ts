@@ -47,6 +47,7 @@ import "../src/services/invoice.service";
 import "../src/services/payment.service";
 import "../src/services/reconciliation-letter.service";
 import "../src/services/cheque-delivery-note.service";
+import "../src/services/stock-count.service";
 
 let pass = 0;
 let fail = 0;
@@ -93,6 +94,11 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
     (await prisma.reconciliationLetter.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
   [PrintedDocType.CHEQUE_DELIVERY_NOTE]: async () =>
     (await prisma.chequeDeliveryNote.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // Tam stok sayımı: TASLAK sayım da geçerli bir kaynaktır — `fresh` onu
+  // bilinçli olarak `null`la geçer (belge yalnız tamamlanmada doğar), ama SORGU
+  // ŞEKLİ yine de koşar ve bu bekçinin ölçtüğü şey odur.
+  [PrintedDocType.STOCK_COUNT]: async () =>
+    (await prisma.stockCount.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

@@ -45,6 +45,9 @@ import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
 import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
 import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
 import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
+// Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
+import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
+import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
 import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesPage";
@@ -376,6 +379,25 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="warehouse:transfer">
         <WarehouseTransfersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // İzin backend'le BİREBİR: `stock-count.routes.ts` okuma uçları `warehouse:read`.
+    // Detay da aynı izinle açılır; YAZMA yüzeyi sayfanın İÇİNDE ayrıca kapılı
+    // (`warehouse:transfer` · Tamamla için `roll:manual-adjust` + `yarn:write`).
+    path: "operations/stock-counts",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <StockCountsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/stock-counts/:id",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <StockCountDetailPage />
       </ProtectedRoute>
     ),
   },

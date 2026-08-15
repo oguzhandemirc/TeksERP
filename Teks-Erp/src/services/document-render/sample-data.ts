@@ -303,4 +303,41 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     ],
     notes: "Tahsile verilmek üzere teslim edilmiştir.",
   },
+
+  // Tam stok sayımı (2026-08-15, J2 #19). SINIR DURUMLARI BİLİNÇLİ OLARAK
+  // ÖRNEKTE: dört top durumunun DÖRDÜ de (bulundu · eksik · sayılmadı · kapsam
+  // dışı) ve iplikte hem uygulanan fark hem kapsam dışı satır var — şablonu
+  // ayarlayan kişi "DURUM" kolonunun neye benzediğini önizlemede görmeli.
+  STOCK_COUNT: {
+    header: {
+      documentNo: "SAY1508260001",
+      date: ISO,
+      warehouseName: "Merkez Depo",
+      warehouseCode: "DP-MERKEZ",
+      createdBy: "Ayşe Kaya",
+      completedBy: "Mehmet Yılmaz",
+      status: "Tamamlandı",
+      // Örnek TAMAMLANMIŞ tutanaktır (panel önizlemesi belgenin resmi hâlini
+      // göstermeli) — bayrak açıkça yazılır ki "alan yoksa true" yedeğine
+      // dayanmasın; o yedek yalnız 2026-08-15 öncesi snapshot'lar için var.
+      finalized: true,
+    },
+    rollLines: [
+      { barcode: "T150826F0301", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, expectedQty: 120, countedQty: 120, state: "FOUND", outOfScopeReason: null, notes: null },
+      { barcode: "T150826F0302", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, expectedQty: 85.5, countedQty: null, state: "MISSING", outOfScopeReason: null, notes: "Rafta bulunamadı" },
+      { barcode: "T150826F0303", itemName: "Tül", colorName: null, width: 280, expectedQty: 150, countedQty: null, state: "UNCOUNTED", outOfScopeReason: null, notes: null },
+      { barcode: "T150826F0304", itemName: "Tül", colorName: null, width: 280, expectedQty: 60, countedQty: null, state: "OUT_OF_SCOPE", outOfScopeReason: "Bu sırada sevk edildi", notes: null },
+    ],
+    yarnLines: [
+      { itemName: "Pamuk İplik Ne 30", expectedKg: 500, countedKg: 487.5, diffKg: -12.5, state: "APPLIED", outOfScopeReason: null },
+      { itemName: "Polyester İplik 150D", expectedKg: 200, countedKg: 200, diffKg: 0, state: "MATCH", outOfScopeReason: null },
+      { itemName: "Viskon İplik Ne 40", expectedKg: 75, countedKg: 80, diffKg: null, state: "OUT_OF_SCOPE", outOfScopeReason: "Bakiye sayımdan sonra değişti (defter 95 kg)" },
+    ],
+    summary: {
+      rollTotal: 4, rollFound: 1, rollMissing: 1, rollUncounted: 1, rollOutOfScope: 1,
+      expectedMeters: 415.5, missingMeters: 85.5,
+      yarnTotal: 3, yarnApplied: 1, yarnUncounted: 0, yarnOutOfScope: 1, yarnDiffKg: -12.5,
+    },
+    notes: "Yıl sonu tam sayımı.",
+  },
 };
