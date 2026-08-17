@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Palette, Ruler } from "lucide-react";
+import { Palette, Ruler } from "lucide-react";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { colorService } from "@/pages/Colors/service";
 import { workOrderService } from "./service";
+import type { RollAttributeTarget } from "./types";
 
 type Mode = "color" | "width";
 
@@ -55,12 +56,15 @@ export function ChangeTargetDialog({
   const [colorId, setColorId] = useState<string | null>(currentColorId);
   const [width, setWidth] = useState<string>(currentWidth != null ? String(currentWidth) : "");
   const [reason, setReason] = useState("");
+  /** Seçili top id'leri — "bu değişiklik toplara da yansısın mı?" (madde 12). */
+  const [selectedRolls, setSelectedRolls] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (open) {
       setColorId(currentColorId);
       setWidth(currentWidth != null ? String(currentWidth) : "");
       setReason("");
+      setSelectedRolls(new Set());
     }
   }, [open, currentColorId, currentWidth]);
 
@@ -78,15 +82,61 @@ export function ChangeTargetDialog({
     staleTime: 60_000,
   });
 
+  // "Toplara da uygula" adayları. İş emri = PLAN, top = ÖLÇÜM: plan değişikliği
+  // ölçümü kendiliğinden ezmez. Ama mal baştan yanlış kaydedilmiş olabilir, o
+  // yüzden karar AYNI ekranda tek dokunuşla veriliyor (2026-08-17 kullanıcı
+  // kararı) — ayrı bir ekrana gönderilseydi sahada unutulurdu.
+  const targetsQ = useQuery({
+    queryKey: ["work-order-roll-targets", workOrderId],
+    queryFn: () => workOrderService.getRollAttributeTargets(workOrderId),
+    enabled: open,
+    staleTime: 30_000,
+  });
+  const batches = targetsQ.data?.data ?? [];
+  const editableOf = (b: RollAttributeTarget) => b.rolls.filter((r) => !r.blocked);
+  const toggleBatch = (b: RollAttributeTarget) => {
+    const ids = editableOf(b).map((r) => r.id);
+    const allOn = ids.length > 0 && ids.every((id) => selectedRolls.has(id));
+    setSelectedRolls((prev) => {
+      const next = new Set(prev);
+      for (const id of ids) {
+        if (allOn) next.delete(id);
+        else next.add(id);
+      }
+      return next;
+    });
+  };
+
   // Dönüş şekilleri farklı (`warnings` ↔ `previousWidth`) — ortak dar bir tipe
   // indiriyoruz; ekranın ihtiyacı yalnız mesaj ve varsa uyarılar.
   const mutation = useMutation<{ message?: string; data: { warnings?: string[] } }>({
     mutationFn: async () => {
-      const res =
-        mode === "color"
+      // İş emri ZATEN doğru değerdeyse plan yazımı atlanır ve yalnız toplar
+      // düzeltilir. Bu, diyaloğu ikinci kez açan operatörün tek çıkış yolu:
+      // aksi halde "değer değişmedi" diye kapıya takılır ve yanlış kaydedilmiş
+      // topları hiçbir yerden düzeltemezdi.
+      const res = !changed
+        ? { message: undefined, data: {} as { warnings?: string[] } }
+        : mode === "color"
           ? await workOrderService.changeTargetColor(workOrderId, colorId, reason)
           : await workOrderService.changeWidth(workOrderId, width === "" ? null : Number(width), reason);
-      return { message: res.message, data: res.data as { warnings?: string[] } };
+      // Sıra ÖNEMLİ: önce plan, sonra toplar. Tersi olsaydı plan yazımı
+      // düşünce toplar iş emriyle çelişen bir değere çekilmiş olurdu.
+      if (selectedRolls.size > 0) {
+        const applied = await workOrderService.applyAttributeToRolls(workOrderId, {
+          rollIds: [...selectedRolls],
+          ...(mode === "color" ? { colorId } : { width: width === "" ? null : Number(width) }),
+          reason,
+        });
+        if (applied.data.updated > 0) toast.success(`${applied.data.updated} top güncellendi`);
+        for (const f of applied.data.failed) {
+          toast.warning(`${f.barcode ?? "barkodsuz"}: ${f.message}`);
+        }
+      }
+      return {
+        message: res.message ?? (selectedRolls.size > 0 ? "Toplar güncellendi" : "Güncellendi"),
+        data: res.data as { warnings?: string[] },
+      };
     },
     onSuccess: (res) => {
       toast.success(res.message ?? "Güncellendi");
@@ -94,8 +144,14 @@ export function ChangeTargetDialog({
       // Ama planlamacı sipariş satırını da düzeltmek isteyebilir → görünür kalsın.
       const warnings = (res.data as { warnings?: string[] }).warnings ?? [];
       for (const w of warnings) toast.warning(w);
+      // ⚠️ Anahtarlar EKRANLARIN kullandığıyla birebir olmalı. İlk yazımda
+      // `["work-order", id]` invalidate ediliyordu — böyle bir sorgu YOK:
+      // liste tazeleniyor, yan panel ve detay sayfası ESKİ rengi göstermeye
+      // devam ediyordu (2026-08-17 saha bildirimi, ekran görüntülü).
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
-      void qc.invalidateQueries({ queryKey: ["work-order", workOrderId] });
+      void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
+      void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
+      void qc.invalidateQueries({ queryKey: ["rolls"] });
       onOpenChange(false);
     },
   });
@@ -104,7 +160,10 @@ export function ChangeTargetDialog({
   const changed = isColor
     ? colorId !== currentColorId
     : (width === "" ? null : Number(width)) !== currentWidth;
-  const canSubmit = changed && reason.trim().length >= 3 && !mutation.isPending;
+  // Gönderilebilir: ya iş emri değeri değişiyor, ya da (değişmese bile) toplara
+  // uygulanacak bir seçim var. İkisi de yoksa yapılacak bir şey yok.
+  const canSubmit =
+    (changed || selectedRolls.size > 0) && reason.trim().length >= 3 && !mutation.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -173,13 +232,41 @@ export function ChangeTargetDialog({
             />
           </FormField>
 
-          {isColor && (
-            <div className="flex items-start gap-2 rounded-md border border-amber-500/50 bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>
-                Renk değişikliği refakat kartını da etkiler — kart yeniden basılmalı.
-                Boyahanedeki mal için ayrıca fasona haber verin.
-              </span>
+          {batches.length > 0 && (
+            <div className="rounded-md border">
+              <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs">
+                <span className="font-medium">Toplara da uygula</span>
+                <span className="text-muted-foreground">
+                  {selectedRolls.size > 0 ? `${selectedRolls.size} top seçili` : "seçili değil"}
+                </span>
+              </div>
+              <div className="max-h-40 overflow-auto">
+                {batches.map((b) => {
+                  const editable = editableOf(b);
+                  const blocked = b.rolls.length - editable.length;
+                  const on = editable.length > 0 && editable.every((r) => selectedRolls.has(r.id));
+                  return (
+                    <label
+                      key={b.batchId ?? "none"}
+                      className="flex cursor-pointer items-center gap-2 border-b px-3 py-1.5 text-xs last:border-b-0 hover:bg-accent/40"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={on}
+                        disabled={editable.length === 0}
+                        onChange={() => toggleBatch(b)}
+                      />
+                      <span className="font-mono">{b.batchNumber ?? "Partisiz"}</span>
+                      <span className="text-muted-foreground">{editable.length} top</span>
+                      {blocked > 0 && (
+                        <span className="ml-auto text-muted-foreground">
+                          {blocked} uygun değil
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>

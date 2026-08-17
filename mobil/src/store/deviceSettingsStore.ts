@@ -9,6 +9,7 @@ import { storage } from '../utils/storage';
 const MANUAL_BARCODE_KEY = 'device_manual_barcode_entry';
 const LAST_ROUTE_KEY = 'device_quick_wo_last_route';
 const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
+const TAMBUR_RESET_QUALITY_KEY = 'tambur_reset_quality_after_cut';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
@@ -38,6 +39,16 @@ interface DeviceSettingsState {
    *  AYNI tercihi paylaşır (bilinçli): seçim aslında "bu istasyonda metre
    *  makinesi çalışıyor mu" gerçeğini yansıtır, o da tek bir gerçektir. */
   tamburCutMode: MeterEntryMode;
+  /**
+   * Tambur kesiminde bir çıktı alındıktan sonra KALİTE sıfırlansın mı?
+   *   true  → her kesimden sonra "1. Kalite"ye döner (yanlışlıkla A1 basılmasın).
+   *   false → son seçilen kalite kalır (bugünkü davranış; seri A1 kesiminde hızlı).
+   *
+   * CİHAZDA tutulur, sunucuya gitmez: tercih "bu tamburda nasıl çalışıyoruz"
+   * gerçeğine bağlı, kişiye değil (`tamburCutMode` ile aynı gerekçe).
+   * Varsayılan FALSE — bugünkü davranışı sessizce değiştirmemek için.
+   */
+  tamburResetQualityAfterCut: boolean;
   /**
    * Tambur "MANUEL EKLE" modu: true → ekran refakat kartı BEKLEMEZ, operatör
    * ürün/metraj/müşteri seçip topu doğrudan BİTMİŞ DEPO'ya yazar
@@ -85,6 +96,7 @@ interface DeviceSettingsState {
   setTamburOutputCollapsed: (v: boolean) => Promise<void>;
   setKk1ManualEntry: (v: boolean) => Promise<void>;
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
+  setTamburResetQualityAfterCut: (v: boolean) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
   setScanSoundEnabled: (v: boolean) => Promise<void>;
   setDocPageSize: (docType: string, v: DocPageSize) => Promise<void>;
@@ -119,6 +131,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   lastRouteTemplateId: null,
   kk1ManualEntry: false,
   tamburCutMode: 'manual',
+  tamburResetQualityAfterCut: false,
   tamburManualMode: false,
   tamburOutputCollapsed: false,
   scanSoundEnabled: true,
@@ -126,12 +139,13 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburManual, scanSound, docSizes, outputCollapsed] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
         storage.getItem(KK1_MANUAL_METER_KEY),
         storage.getItem(TAMBUR_CUT_MODE_KEY),
+        storage.getItem(TAMBUR_RESET_QUALITY_KEY),
         storage.getItem(TAMBUR_MANUAL_MODE_KEY),
         storage.getItem(SCAN_SOUND_KEY),
         storage.getItem(DOC_PAGE_SIZE_KEY),
@@ -144,6 +158,9 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       tamburOutputCollapsed: outputCollapsed === 'true',
       // Bilinmeyen/bozuk değer → varsayılan 'manual' (kayıt yoksa da öyle).
       tamburCutMode: tamburMode === 'auto' ? 'auto' : 'manual',
+      // Varsayılan KAPALI (bugünkü davranış: kalite korunur) — yalnız birebir
+      // 'true' sıfırlamayı açar.
+      tamburResetQualityAfterCut: tamburResetQuality === 'true',
       // Güvenli varsayılan KAPALI: yalnız birebir 'true' modu açar (bozuk değer
       // kart-atlayan modu sessizce açmasın).
       tamburManualMode: tamburManual === 'true',
@@ -181,6 +198,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setTamburCutMode: async (v) => {
     set({ tamburCutMode: v });
     await storage.setItem(TAMBUR_CUT_MODE_KEY, v);
+  },
+
+  setTamburResetQualityAfterCut: async (v) => {
+    set({ tamburResetQualityAfterCut: v });
+    await storage.setItem(TAMBUR_RESET_QUALITY_KEY, v ? 'true' : 'false');
   },
 
   // Aynı desen (önce state, sonra disk): mod anahtarı ekranda ANINDA dönmeli —

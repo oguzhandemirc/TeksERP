@@ -134,6 +134,10 @@ export interface WorkOrder {
   /** Liste response'unda — şu an mal tutulan fason istasyon adları (genelde tek;
    *  AT_SUBCONTRACTOR toplar). Boş = şu an fasonda mal yok. "Şu an: Boyahane" rozeti. */
   currentFasonStations?: string[];
+  /** Liste response'unda — bu iş emrinin gittiği fason firmalar (geçmiş DAHİL).
+   *  `current: true` → mal ŞU AN orada. 2026-08-17 talebi: adım geçse de
+   *  "bu işi kim yaptı" görünsün. */
+  fasonFirms?: { name: string; current: boolean }[];
   /** Liste response'unda — canlı (birleştirilmemiş) partilerin İLK üçü,
    *  doğuş sırasına göre. Kolon `+N` rozetini `_count.batches` ile kurar. */
   batches?: { id: string; batchNumber: string }[];
@@ -323,4 +327,38 @@ export interface LinkableOrderLine {
   openQty: number;
   deadline: string | null;
   warnings: string[];
+}
+
+/** "Toplara da uygula" adayı — parti başına toplar (2026-08-17, madde 12). */
+export interface RollAttributeTarget {
+  batchId: string | null;
+  batchNumber: string | null;
+  rolls: {
+    id: string;
+    barcode: string | null;
+    status: string;
+    colorName: string | null;
+    width: number | null;
+    /** null → değiştirilebilir. Doluysa kısa sebep ("fasonda", "sevk edildi"). */
+    blocked: string | null;
+  }[];
+}
+
+/** `GET /work-orders/:id/fason-quick-receive` — kapatmayı engelleyen fason yükü. */
+export interface FasonQuickPreview {
+  groups: Array<{
+    dispatchId: string;
+    dispatchNo: string;
+    stepId: string;
+    stationName: string;
+    subcontractorId: string;
+    subcontractorName: string;
+    rolls: { id: string; barcode: string | null; qty: number }[];
+    /** Giden toplam metraj — "dikilerek geldi" modunda tek topun varsayılanı. */
+    totalQty: number;
+    /** Kabulde RENK sorulmalı mı (hedef rengi olmayan "ekru" iş emirleri). */
+    colorRequired: boolean;
+  }>;
+  /** Fasonda görünüp açık sevke bağlanamayan toplar — buradan kabul EDİLEMEZ. */
+  orphanRolls: { id: string; barcode: string | null; qty: number }[];
 }

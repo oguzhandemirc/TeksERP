@@ -37,6 +37,13 @@ const service = new OrderService({
     "lines.some.item.name",
     "lines.some.customerItemName",
   ],
+  // İŞ EMRİ NO ile sipariş arama (2026-08-17 saha talebi). `codeSearchFields`
+  // çünkü yol derin (sipariş → kalem → pivot → iş emri) ve terim kod biçiminde
+  // değilse (ör. müşteri adı) bu tarama BOŞUNA olurdu.
+  // Ölçüm (EXPLAIN ANALYZE, dev DB): PostgreSQL semi-join kuruyor —
+  // `Seq Scan on work_orders` TEK KEZ koşuyor (loops=1), sipariş satırı başına
+  // değil. Yani maliyet eklenir, çarpılmaz.
+  codeSearchFields: ["lines.some.workOrderLinks.some.workOrder.workOrderNumber"],
   dateFields: ["createdAt", "deadline"],
   defaultInclude: {
     customer: true,

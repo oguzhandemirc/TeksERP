@@ -22,6 +22,7 @@ import {
   type DispositionChoice,
 } from "./WorkOrderCompleteDispositionList";
 import { WorkOrderCompleteBlockedRolls } from "./WorkOrderCompleteBlockedRolls";
+import { FasonQuickReceivePanel } from "./FasonQuickReceivePanel";
 import { WorkOrderCompleteEffects } from "./WorkOrderCompleteEffects";
 
 interface Props {
@@ -171,6 +172,16 @@ export function WorkOrderCompleteDialog({
                   <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                   <span>{preview.blockReason}</span>
                 </div>
+              )}
+
+              {/* Engeli AYNI EKRANDA çöz (2026-08-17): "önce fason kabul yapın"
+                  demek doğruydu ama operatörü başka bir ekrana gönderiyordu.
+                  Kabul bitince önizleme tazelenir ve kapatma açılır. */}
+              {workOrderId && (
+                <FasonQuickReceivePanel
+                  workOrderId={workOrderId}
+                  onReceived={() => void previewQ.refetch()}
+                />
               )}
 
               <WorkOrderCompleteBlockedRolls rolls={blockedRolls} />

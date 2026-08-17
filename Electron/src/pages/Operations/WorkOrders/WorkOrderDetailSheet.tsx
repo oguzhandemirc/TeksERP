@@ -261,6 +261,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               onOpenChange={setLinkOrderOpen}
               workOrderId={wo.id}
               workOrderNumber={wo.workOrderNumber}
+              targetItemId={wo.targetItemId}
+              targetItemName={wo.targetItem?.name ?? null}
+              targetColorId={wo.targetColorId}
+              targetColorName={wo.targetColor?.name ?? null}
+              targetWidth={wo.width}
             />
             <ChangeTargetDialog
               open={changeMode !== null}

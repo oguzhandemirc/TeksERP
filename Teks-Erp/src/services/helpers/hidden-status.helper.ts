@@ -13,6 +13,13 @@
 
 /** Panelin gönderdiği filtre anahtarı. Tek yerde tanımlı — servislere kopyalama. */
 export const HIDE_CANCELLED_FILTER = "hideCancelled";
+/**
+ * "Tamamlananları gizle" (2026-08-17, iş emri listesi). İptalden AYRI bir
+ * anahtar çünkü iki karar bağımsız: planlamacı bitmiş işleri gizleyip iptalleri
+ * görmek isteyebilir. Aynı anahtarı paylaşsalardı biri açılınca diğeri de
+ * açılırdı.
+ */
+export const HIDE_COMPLETED_FILTER = "hideCompleted";
 
 /**
  * İptal-gizleme `where` parçası üretir. Uygulanmayacaksa `undefined` döner.
@@ -27,7 +34,28 @@ export function buildHideCancelledWhere(
   filters: Record<string, string | string[]>,
   cancelledStatuses: readonly string[],
 ): { status: { notIn: string[] } } | undefined {
-  if (filters[HIDE_CANCELLED_FILTER] !== "true") return undefined;
+  return buildHiddenStatusWhere(filters, { cancelled: cancelledStatuses });
+}
+
+/**
+ * ÇOK BAYRAKLI hâli — gizlenecek statüler TEK `notIn` listesinde birleşir.
+ *
+ * ⚠️ Birleştirme ZORUNLU: iki ayrı `{ status: { notIn } }` nesnesi aynı `where`
+ * içinde üst üste yazılırdı (ikincisi birinciyi EZER) ve "iptalleri de
+ * tamamlananları da gizle" isteyen kullanıcı yalnız birinin uygulandığını
+ * hiçbir yerde göremezdi.
+ *
+ * Durum filtresi açıkça seçilmişse HİÇBİRİ uygulanmaz — gerekçe yukarıdaki
+ * `buildHideCancelledWhere` notunda (kullanıcı niyetini zaten söyledi).
+ */
+export function buildHiddenStatusWhere(
+  filters: Record<string, string | string[]>,
+  opts: { cancelled?: readonly string[]; completed?: readonly string[] },
+): { status: { notIn: string[] } } | undefined {
   if (filters.status) return undefined;
-  return { status: { notIn: [...cancelledStatuses] } };
+  const hidden: string[] = [];
+  if (filters[HIDE_CANCELLED_FILTER] === "true" && opts.cancelled) hidden.push(...opts.cancelled);
+  if (filters[HIDE_COMPLETED_FILTER] === "true" && opts.completed) hidden.push(...opts.completed);
+  if (hidden.length === 0) return undefined;
+  return { status: { notIn: [...new Set(hidden)] } };
 }

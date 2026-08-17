@@ -849,7 +849,19 @@ export class LabelService {
     kindOverride?: LabelKind,
     opts?: RollLabelRenderOpts,
   ): Promise<ApiResponse<{ mode: "svg" | "html" | "text"; language: PrinterLanguage; content: string; kind: LabelKind; meta: LabelResolutionMeta }>> {
-    const { input, kind, meta } = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const built = await this.buildRollRenderInput(rollId, kindOverride, opts);
+    const { kind, meta } = built;
+    /**
+     * ⚠️ ÖNİZLEME HER ZAMAN TEK KOPYA (2026-08-17 saha geri bildirimi).
+     *
+     * `buildRollRenderInput` kopya adedini BASKI için çözer (`label.copies`,
+     * varsayılan 2). Önizleme o sayıyı devralınca aynı etiket ekranda 2 kez
+     * alt alta çiziliyordu — operatörün kontrol edeceği yeni bir bilgi yok,
+     * yalnız kaydırma yükü. Kopya adedi bir ÇIKTI kararıdır, içerik kararı
+     * değil. Raster dalı bunu zaten `copies: 1` ile yapıyordu; HTML ve komut
+     * dalları devralmaya devam ediyordu — burada tek yerde kapatıldı.
+     */
+    const input = { ...built.input, copies: 1 };
     const language = input.format.language;
     if (language === PrinterLanguage.RASTER_HTML) {
       return { success: true, data: { mode: "html", language, content: (await renderLabel(language, input)).content, kind, meta } };

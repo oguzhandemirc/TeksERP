@@ -52,11 +52,20 @@ const EXEMPT: Record<string, string> = {
 /**
  * Kimlik doğrulaması VAR ama route satırında izin guard'ı olmayan uç SAYISI.
  * Bugünkü küme: self-servis 4 (`/me`, `/logout`, `/preferences` ×2) +
- * salt-okuma lookup 5 (currency, document-profiles ×2, feature-flags ×2).
+ * salt-okuma lookup 5 (currency, document-profiles ×2, feature-flags ×2) +
+ * kayıt bilgisi 1 (`GET /record-info/:table/:id`).
  * Bu sayı ARTARSA karar BİLİNÇLİ olmak zorundadır — yeni bir guard'sız uç,
  * yukarıdaki "gerçek risk penceresi"ni büyütür.
+ *
+ * ⚠️ `record-info` GUARD'SIZ DEĞİLDİR — yetkiyi handler İÇİNDE, istenen KAYIT
+ * TÜRÜNE göre çözer (`TABLE_PERMISSIONS`), çünkü tek bir statik izin kodu
+ * doğru cevabı veremez: siparişi okuyamayan biri siparişin "kim değiştirdi"sini
+ * de okuyamamalı, ama iş emrini okuyabilen okuyabilmeli. Route satırına sabit
+ * bir izin yazmak ya hepsini fazla açardı ya da hepsini gereksiz kısardı.
+ * Dinamik çözüm `test_permission_catalog`'un `DINAMIK_IZIN_KAYNAKLARI`
+ * tablosunda beyanlıdır — yani kapsam boşluğu görünür kalır.
  */
-const BARE_CHAIN_BASELINE = 9;
+const BARE_CHAIN_BASELINE = 10;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

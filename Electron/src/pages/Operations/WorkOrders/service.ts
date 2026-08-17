@@ -8,6 +8,8 @@ import type {
   TravelerCard,
   WorkOrderDocument,
   LinkableOrderLine,
+  RollAttributeTarget,
+  FasonQuickPreview,
 } from "./types";
 
 const base = createCrudService<WorkOrder>("/api/work-orders");
@@ -71,6 +73,28 @@ export const workOrderService = {
     apiClient
       .post<ApiResponse<BatchDropResult>>(
         `/api/work-orders/${workOrderId}/batches/${batchId}/drop`,
+        payload,
+      )
+      .then((r) => r.data),
+
+  /** Kapatmayı engelleyen açık fason sevkleri (kabul önizlemesi, 2026-08-17). */
+  getFasonQuickReceive: (id: string) =>
+    apiClient
+      .get<ApiResponse<FasonQuickPreview>>(`/api/work-orders/${id}/fason-quick-receive`)
+      .then((r) => r.data),
+
+  /** Açık fason sevklerini tek adımda kabul et (dikilerek geldi / birebir). */
+  applyFasonQuickReceive: (
+    id: string,
+    payload: {
+      mode: "MERGE" | "ONE_TO_ONE";
+      overrides?: { dispatchId: string; pieces: number[] }[];
+      notes?: string;
+    },
+  ) =>
+    apiClient
+      .post<ApiResponse<{ receipts: number; newRolls: number }>>(
+        `/api/work-orders/${id}/fason-quick-receive`,
         payload,
       )
       .then((r) => r.data),
@@ -140,6 +164,24 @@ export const workOrderService = {
         colorId,
         reason,
       })
+      .then((r) => r.data),
+
+  /** "Toplara da uygula" adayları — partiye göre gruplu (engelliler işaretli). */
+  getRollAttributeTargets: (id: string) =>
+    apiClient
+      .get<ApiResponse<RollAttributeTarget[]>>(`/api/work-orders/${id}/roll-attribute-targets`)
+      .then((r) => r.data),
+
+  /** Seçilen topların rengini/enini iş emriyle eşitler. Kısmi başarı normaldir. */
+  applyAttributeToRolls: (
+    id: string,
+    payload: { rollIds: string[]; colorId?: string | null; width?: number | null; reason: string },
+  ) =>
+    apiClient
+      .post<ApiResponse<{ updated: number; failed: { barcode: string | null; message: string }[] }>>(
+        `/api/work-orders/${id}/apply-attribute-to-rolls`,
+        payload,
+      )
       .then((r) => r.data),
 
   /** İş emrinin enini değiştir — sebep ZORUNLU, iz bırakır. */
@@ -933,6 +975,12 @@ export interface CancelWorkOrderPayload {
   reason: string;
   /** Gönderilmeyen top varsayılan STOCK'a döner. */
   dispositions?: { rollId: string; action: CancelDisposition }[];
+  /**
+   * Fasondaki topların TAMAMI için tek karar (2026-08-17). Fason artık iptali
+   * ENGELLEMİYOR; karar gönderilmezse backend `FASON_DECISION_REQUIRED` ile
+   * reddeder ve modal iki düğmeyi çizer.
+   */
+  fasonAction?: "RETURN_TO_STOCK" | "SCRAP";
 }
 
 export interface BatchDropPreviewRoll {

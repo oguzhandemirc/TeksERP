@@ -182,6 +182,11 @@ export const SETTING_KEYS = {
    *  kullanılır (2026-08-05 kullanıcı kararı — numaralı fiziksel parti plakası).
    *  Bu yüzden `batches.batchNumber` üzerindeki `@unique` kaldırıldı; kimlik `Batch.id`. */
   BATCH_SHORT_NUMBER_ENABLED: "batch.shortNumberEnabled",
+  /** İş emri formunda "Son Kullanılan Parti No" rozeti görünsün mü? Default TRUE.
+   *  Yalnız GÖSTERİM — hiçbir numara üretimini etkilemez. Kapatma gerekçesi:
+   *  rozet SON KULLANILANI yazar, sıradakini VAAT ETMEZ; fabrika bunu yanlış
+   *  okuyup "sıradaki numara bu" sanarsa tek kapatma yolu budur. */
+  BATCH_LAST_NUMBER_HINT_ENABLED: "batch.lastNumberHintEnabled",
   /** Oturum (JWT token) ömrü, SAAT. Default 8. Giriş yaptıktan sonra token kaç saat
    *  geçerli kalır — süre dolunca (aktif kullanırken bile) yeniden giriş gerekir.
    *  Backend ENFORCE eder: login'de jwt.sign expiresIn buradan okunur. Değişiklik
@@ -836,6 +841,7 @@ export interface FeatureFlags {
   /** Parti no kısa ve dönen mi (P01…P99)? Default TRUE/açık. Backend ENFORCE eder.
    *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
   batchShortNumberEnabled: boolean;
+  batchLastNumberHintEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat). Dakika-granüler ayar; UI bunu
    *  yönetir. Backend ENFORCE eder (login'de jwt.sign expiresIn = ×60 sn). */
   sessionDurationMinutes: number;
@@ -1110,6 +1116,7 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
+      batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
       sessionDurationMinutes: sessionMinutes,
       sessionDurationHours: Math.max(1, Math.round(sessionMinutes / 60)),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
@@ -1362,6 +1369,18 @@ export class SystemSettingService {
         SETTING_KEYS.BATCH_SHORT_NUMBER_ENABLED,
         input.batchShortNumberEnabled,
         "Parti no kısa ve dönen (P01…P99, sonra başa sarar) — kapalıyken P + GGAAYY + günlük sıra",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "batchLastNumberHintEnabled")) {
+      if (typeof input.batchLastNumberHintEnabled !== "boolean") {
+        throw AppError.badRequest("batchLastNumberHintEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.BATCH_LAST_NUMBER_HINT_ENABLED,
+        input.batchLastNumberHintEnabled,
+        "İş emri formunda 'Son Kullanılan Parti No' rozeti — yalnız gösterim, numara üretimini etkilemez",
         userId
       );
     }
@@ -2201,6 +2220,19 @@ export async function readKursunBypassEnabled(
  * zamanda ACİL KAPATMA anahtarıdır: kısa numara sahada sorun çıkarırsa tek geri
  * dönüş yolu bayrağı kapatmaktır (eski `P + GGAAYY + sıra` kalıbına düşülür).
  */
+export async function readBatchLastNumberHintEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.BATCH_LAST_NUMBER_HINT_ENABLED },
+    select: { value: true },
+  });
+  // Default AÇIK: talebi eden fabrika, kayıt yoksa görsün.
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
 export async function readBatchShortNumberEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

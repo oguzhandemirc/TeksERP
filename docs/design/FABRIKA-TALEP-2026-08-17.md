@@ -205,3 +205,86 @@ eski eni basıyor.
   "Rengi Değiştir" ile aynı aile.
 - Fason kabulde beyan edilen en iş emrine de yazılır; yalnız **iş emri açıkken**
   (kapanmış/iptal WO'da yalnız topa yazılır) ve iz kaydı düşer.
+
+
+---
+
+# İKİNCİ TUR — saha geri bildirimi (aynı gün)
+
+İlk turun ardından gelen düzeltmeler ve dört yeni madde.
+
+## Düzeltilen iki arıza (ikisi de ilk turun eksiği)
+
+**12 — panel tazelenmiyordu.** Renk/en değişikliği DB'ye yazılıyordu (liste
+sütunu güncelleniyordu) ama yan panel ve detay sayfası eski değeri gösteriyordu:
+diyaloglar `["work-order", id]` sorgusunu invalidate ediyordu — **öyle bir sorgu
+yok**. Ekranlar `["work-order-detail", id]` kullanıyor. Düzeltildi.
+
+**11 — kutu ÖLÜ BİLEŞENDEYDİ.** "Fasona renksiz gitsin" `RouteDesignerStepRow`a
+konmuştu; o bileşen (`RouteDesignerDialog`) hiçbir yerden import EDİLMİYOR —
+canlı rota editörü `RouteEditor` + `RouteStepDetail`. Kutu oraya taşındı, ölü
+dosyanın başına uyarı yazıldı. (`ZIMPARALI` vakasının aynısı — CLAUDE.md.)
+
+## 4 — Son parti rozeti (yeniden)
+
+- Metin: **"Son Kullanılan Parti No: P47"** (sıradakini VAAT ETMEZ).
+- İki yerde: önizleme panelinin ilk bölümünde Parti Kodu'nun altında + formda
+  input'un **ÜSTÜNDE** (altta kalınca yazmaya başladıktan sonra görülüyordu).
+- Rozet biçiminde, kendini belli eder. Ayrı uyarı metni YOK.
+- **Bayrak:** `batch.lastNumberHintEnabled` (varsayılan AÇIK) — dört kapıdan da
+  geçirildi (SystemSetting anahtarı + tip + sanitize + Zod + Electron aynası).
+
+## 8 — Modal içinde hızlı sipariş
+
+"Uyumlu sipariş yok" çıkmazı sayfa değiştirmeden aşılır: müşteri + metraj +
+termin sorulur; **kumaş/renk/en iş emrinden gelir ve sorulmaz** (zaten uyumlu
+olmak zorunda). Sipariş oluşur oluşmaz bağlanır. `order:write` ile korunur.
+
+## 9 — Yarı mamül
+
+- **Electron:** iki buton TEK butona indi. `ManualEntryDialog` içinde
+  "Dışarıdan yarı mamül" kutusu. İkisi zaten aynı ucu ve aynı formu
+  kullanıyordu — ayrı buton fazlalıktı.
+- **Mobil KK1:** üstte **"Ham Giriş | Yarı Mamül"** mod anahtarı; yalnız
+  `mobile:kk1-yari-mamul` yetkisi olanda çizilir. Yarı mamülde renk alanı açılır
+  ve ZORUNLU olur; en + metre zaten vardı. Mod seçili kalır (seri giriş).
+  ⚠️ Renk `entryFingerprint`e de girer — yoksa yalnız renkte ayrılan iki giriş
+  "aynı yük" sayılıp ikincisi sessizce yutulurdu.
+
+## 12 — "Toplara da uygula" (yeni akış)
+
+**Karar:** iş emri = PLAN, top = ÖLÇÜM. Plan değişikliği ölçümü geriye dönük
+EZMEZ (üretim kaydını tahrif etmek olur). Ama yanlış kayıt gerçek bir saha
+vakası, o yüzden yansıtma **aynı modalda tek dokunuşla** seçilir — ayrı bir
+ekrana gönderilseydi sahada unutulurdu.
+
+- `GET /work-orders/:id/roll-attribute-targets` → partiye göre gruplu toplar;
+  değiştirilemeyenler kısa sebeple işaretli ("fasonda", "sevk edildi").
+- `POST /work-orders/:id/apply-attribute-to-rolls` → `roll:manual-adjust` ister,
+  her top **tekil düzeltme motorundan** geçer (kural kopyalanmaz), kısmi başarı
+  normaldir ve `failed[]` ile döner.
+- Modalda parti bazında kutucuk; sıra ÖNEMLİ — önce plan, sonra toplar.
+
+## 13 — Tambur'da kalite sıfırlama tercihi
+
+Kesimden sonra kalite bilerek korunuyordu ("seri kesim"). Artık seçilebilir:
+**"1. Kaliteye dön"** ya da **"Son seçtiğim kalsın"** (varsayılan: bugünkü
+davranış). **Cihazda** tutulur, sunucuya gitmez.
+
+Ayrıca **Çalışma Tercihleri sayfası yetkiye göre bölümlendi**: herkes yalnız
+kendi kullandığı ekranların ayarını görür (Tambur ayarı `mobile:tambur`, fason
+varsayılanı `mobile:hizli-is-emri`). İki ayrı saklama yeri bilinçli: fason
+varsayılanı KİŞİYE (sunucu), Tambur kalitesi CİHAZA bağlı.
+
+## 14 — İş emri listesinde fason sütunu
+
+Yeni **"Fason"** sütunu: iş emrinin gittiği firmalar — **adım geçmiş olsa bile**
+(iptal edilmemiş tüm sevkler). Mal ŞU AN orada olan firma farklı tonda.
+
+## 15 — Siparişte kalem kapsaması
+
+Sipariş listesindeki "İş Emri" rozeti ve detaydaki "Bağlı İş Emirleri" kartı
+zaten vardı; eksik olan **kaçta kaç kalemin bağlı olduğuydu**. 3 kalemli
+siparişin 1 kalemi bağlıysa rozet "Üretimde" diyor, diğer ikisi bağsız olduğu
+halde. Artık **"2/3 kalem"** rozeti çıkar — yalnız EKSİK olduğunda (tam bağlıysa
+yazılmaz, gürültü olurdu).

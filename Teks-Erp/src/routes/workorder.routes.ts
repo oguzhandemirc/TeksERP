@@ -627,6 +627,44 @@ router.patch(
  *     responses:
  *       200: { description: En güncellendi }
  */
+/**
+ * @openapi
+ * /api/work-orders/{id}/roll-attribute-targets:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: "Toplara da uygula" için aday toplar (partiye göre gruplu)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Parti → top listesi (engellenenler sebebiyle işaretli) }
+ */
+router.get(
+  "/:id/roll-attribute-targets",
+  verifyToken,
+  requirePermission("workorder:read"),
+  controller.getRollAttributeTargets,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/apply-attribute-to-rolls:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Seçilen topların rengini/enini iş emriyle eşitle (sebep zorunlu)
+ *     description: >
+ *       İş emri PLAN, top ÖLÇÜMDÜR — bu uç ölçümü DÜZELTİR, bu yüzden
+ *       `roll:manual-adjust` ister ve her top için tekil düzeltme motorundan
+ *       geçer (kapsam kuralları orada). Kısmi başarı normaldir.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ updated, failed[] }" }
+ */
+router.post(
+  "/:id/apply-attribute-to-rolls",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.applyAttributeToRolls,
+);
+
 router.patch(
   "/:id/width",
   verifyToken,
@@ -809,6 +847,41 @@ router.get("/:id/cancel-impact", verifyToken, requireAnyPermission("workorder:wr
  */
 // Manuel kapatma: istasyonda kalan toplar için dispozisyon kararıyla kapatır.
 router.get("/:id/complete-preview", verifyToken, requirePermission("workorder:write"), controller.completePreview);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/fason-quick-receive:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Kapatmayı engelleyen açık fason sevkleri (kabul önizlemesi)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ groups[], orphanRolls[] }" }
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Açık fason sevklerini TEK adımda kabul et (dikilerek geldi / birebir)
+ *     description: >
+ *       İş emrini kapatmanın önündeki fiziksel engeli kapatma ekranından çözer.
+ *       Motor mevcut fason kabulüdür; burası yalnız parça sayısını/metrajını
+ *       moddan türetir. `subcontractor:write` ister — bu bir MAL KABULÜDÜR.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ receipts, newRolls }" }
+ */
+router.get(
+  "/:id/fason-quick-receive",
+  verifyToken,
+  requireAnyPermission("workorder:write", "subcontractor:read"),
+  controller.fasonQuickPreview,
+);
+router.post(
+  "/:id/fason-quick-receive",
+  verifyToken,
+  // Mal kabulü fason yetkisidir — kapatma ekranından yapılıyor olması onu
+  // "iş emri düzenleme" yapmaz (stok yaratıyor).
+  requirePermission("subcontractor:write"),
+  controller.fasonQuickApply,
+);
 router.post("/:id/complete", verifyToken, requirePermission("workorder:write"), controller.completeWorkOrder);
 
 /**

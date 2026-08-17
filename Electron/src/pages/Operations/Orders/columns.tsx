@@ -11,6 +11,7 @@ import { orderStatusLabels } from "@/types/enums";
 import {
   collectLinkedWorkOrders,
   deriveWoRollup,
+  deriveLineCoverage,
   woRollupLabels,
   woRollupTones,
 } from "./work-order-rollup";
@@ -110,6 +111,11 @@ function WorkOrderRollupCell({ order }: { order: Order }) {
   const active = collectLinkedWorkOrders(order.lines).filter((w) => w.status !== "SUPERSEDED");
   const single = active.length === 1 ? active[0] : null;
   const badge = <StatusBadge status={rollup.state} labels={woRollupLabels} tones={woRollupTones} />;
+  // "2/3 kalem" — rozetin tek başına söyleyemediği şey (madde 15). Tüm kalemler
+  // bağlıysa oran YAZILMAZ: her satırda "3/3" görmek gürültüdür, eksik olan
+  // durum görünmez kalırdı.
+  const coverage = deriveLineCoverage(order.lines);
+  const partial = coverage.total > 0 && coverage.linked < coverage.total;
 
   return (
     <div className="flex items-center gap-1">
@@ -138,6 +144,15 @@ function WorkOrderRollupCell({ order }: { order: Order }) {
         badge
       )}
       {rollup.activeCount > 1 && <Badge variant="muted">{rollup.activeCount}</Badge>}
+      {partial && (
+        <Badge
+          variant="outline"
+          className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
+          title={`${coverage.total} kalemin ${coverage.linked} tanesi bir iş emrine bağlı`}
+        >
+          {coverage.linked}/{coverage.total} kalem
+        </Badge>
+      )}
     </div>
   );
 }

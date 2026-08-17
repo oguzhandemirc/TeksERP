@@ -395,6 +395,10 @@ model User {
   kursunBypassCompleted      KursunBypassAssignment[] @relation("KursunBypassCompletedBy")
   kursunBypassCancelled      KursunBypassAssignment[] @relation("KursunBypassCancelledBy")
 
+  /// İptal ettiği iş emirleri (2026-08-17 iptal izi). Düşük trafik "kim yaptı"
+  /// FK'sı — sorgulanmadıkça indexlenmez (CLAUDE.md perf kuralı 1 istisnası).
+  cancelledWorkOrders WorkOrder[] @relation("WorkOrderCancelledBy")
+
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
@@ -1772,6 +1776,16 @@ model WorkOrder {
   splitFrom        WorkOrder?                @relation("WorkOrderSplitLineage", fields: [splitFromId], references: [id])
   splitChildren    WorkOrder[]               @relation("WorkOrderSplitLineage")
   kursunBypasses   KursunBypassAssignment[] // Kurşun bypass atamaları (append-only)
+
+  /// İPTAL İZİ (2026-08-17). Sebep şimdiye kadar YALNIZ audit'e yazılıyordu ve
+  /// `SystemLog` 6 ayda bir ARŞİVLENİYOR → "bu iş emri neden iptal edildi, kim
+  /// iptal etti" sorusunun cevabı altı ay sonra sessizce kayboluyordu. Kalıcı iz
+  /// kolonda durur; audit yine yazılır (ikisi birbirinin yerine geçmez —
+  /// audit "her değişiklik", bu kolonlar "son karar").
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?
+  cancelledBy   User?     @relation("WorkOrderCancelledBy", fields: [cancelledById], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz

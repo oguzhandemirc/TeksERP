@@ -129,6 +129,13 @@ export interface InitialEntryRequest {
    */
   confirmDuplicate?: boolean;
   /**
+   * DIŞARIDAN ALINAN YARI MAMÜL (2026-08-17). Backend `entrySource=SEMI_FINISHED`
+   * yazar VE statü sezgisini bypass eder (renkli top normalde BİTMİŞ DEPO'ya
+   * düşerdi; yarı mamül ham stokta kalıp kurşun/tambur görecek). `mobile:kk1-yari-mamul`
+   * yetkisi ister; renk ZORUNLU.
+   */
+  semiFinished?: boolean;
+  /**
    * Operatörün "Kaydet"e BASTIĞI an (ISO-8601, UTC). Backend mükerrer tuzağının
    * 90 sn'lik penceresini SUNUCU SAATİYLE DEĞİL bununla ölçer.
    *

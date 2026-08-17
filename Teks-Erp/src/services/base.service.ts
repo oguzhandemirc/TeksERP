@@ -136,6 +136,12 @@ export interface BaseServiceConfig {
   modelName: string; // Prisma model name (e.g., "item", "customer")
   tableName: string; // For SystemLog (e.g., "ITEM", "CUSTOMER")
   searchFields?: string[]; // Fields to search via ?search= param
+  /**
+   * Yalnız KOD BİÇİMLİ terimde (rakam içeren) aranan, Türkçe varyanta
+   * açılmayan alanlar — tipik olarak derin ilişkilerin ucundaki belge
+   * numaraları. Gerekçe: `buildCodeSearch` (query-parser).
+   */
+  codeSearchFields?: string[];
   /** `?dateField=...&dateFrom=...&dateTo=...` için kabul edilen kolonlar. */
   dateFields?: readonly string[];
   defaultInclude?: Record<string, unknown>; // Default relations to include
@@ -295,7 +301,8 @@ export class BaseService {
     const built = buildWhereClause(
       params.filters,
       this.config.searchFields,
-      params.search
+      params.search,
+      this.config.codeSearchFields
     );
     applyDateRange(built, params, this.config.dateFields ?? []);
     const extra = this.extraWhere(req);
@@ -360,7 +367,8 @@ export class BaseService {
     const builtWhere = buildWhereClause(
       params.filters,
       this.config.searchFields,
-      params.search
+      params.search,
+      this.config.codeSearchFields
     );
     applyDateRange(builtWhere, params, this.config.dateFields ?? []);
     const extra = this.extraWhere(req);

@@ -123,6 +123,22 @@ check(
 // Türkçe harf İÇERMEYEN terim tek yaprak kalmalı — bedelsiz yol korunuyor.
 check("Katlanacak harf yoksa tek yaprak", leaves("XYZ-4471").length === 1);
 
+// ── 5b. KOD BİÇİMLİ TERİM varyant ÜRETMEZ (sorgu kabarmasın) ────────────────
+// Belge numaralarında Türkçe harf yok; varyant üretmek her alan için fazladan
+// OR dalı (ve derin alanlarda fazladan semi-join) demek. Ölçüm 2026-08-17:
+// "IE2007260001" araması 20 daldan 4'e indi.
+check('"IE2007260001" tek yaprak (varyant yok)', leaves("IE2007260001").length === 1);
+check('"SIP2007260018" tek yaprak', leaves("SIP2007260018").length === 1);
+check('"TST-WHA-178692" tek yaprak (ayraçlı kod)', leaves("TST-WHA-178692").length === 1);
+// ⚠️ SÜZGEÇ DAR OLMALI. Boşluk içeren karışık terim ("PATOS 300") bir KOD
+// DEĞİLDİR — orada varyant üretimi sürmeli, yoksa "PATOS" arayan operatör
+// "PATOŞ"u bulamaz ve sebebi hiçbir yerde görünmez.
+check('"PATOS 300" hâlâ varyant üretiyor (boşluklu → kod değil)', leaves("PATOS 300").length > 1);
+check('"cisem" hâlâ varyant üretiyor (rakam yok → kod değil)', leaves("cisem").length > 1);
+// Kod süzgecine takılan terim de eşleşmeye devam etmeli (dar ama işlevsel).
+check('"IE2007260001" kendini buluyor', finds("IE2007260001", "IE2007260001"));
+check('"ie2007260001" büyük/küçük fark etmiyor', finds("ie2007260001", "IE2007260001"));
+
 // ── 6. Sözleşme: boş terim / boş alan listesi ────────────────────────────────
 check("Boş terim → boş dizi", buildTurkishSearch("   ", ["name"]).length === 0);
 check("Alan yoksa → boş dizi", buildTurkishSearch("cisem", []).length === 0);

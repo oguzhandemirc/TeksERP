@@ -10,7 +10,7 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
-import { useHideCancelled } from "@/hooks/useHideCancelled";
+import { useListToggles } from "@/hooks/useListToggles";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { itemService } from "@/pages/Items/service";
@@ -85,7 +85,15 @@ export function WorkOrdersPage() {
   const openTarget = useOpenTarget();
   const navigateActive = useTabsStore((s) => s.navigateActive);
 
-  const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
+  // İki bağımsız anahtar + KALICI (localStorage): operatör "tamamlananları
+  // gizle" dediyse bir sonraki girişte de gizli gelsin (2026-08-17 isteği).
+  const {
+    showCancelled,
+    setShowCancelled,
+    showCompleted,
+    setShowCompleted,
+    forceFilters,
+  } = useListToggles({ scope: "work-orders", withCompleted: true });
 
   const { table, query, search, setSearch, pagination } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
@@ -131,12 +139,20 @@ export function WorkOrdersPage() {
         table={table}
         exportName="İş Emirleri"
         actions={
-          <ToolbarToggle
-            checked={showCancelled}
-            onCheckedChange={setShowCancelled}
-            label="İptalleri göster"
-            title="İptal edilmiş iş emirleri varsayılan olarak gizlidir."
-          />
+          <>
+            <ToolbarToggle
+              checked={showCompleted}
+              onCheckedChange={setShowCompleted}
+              label="Tamamlananları göster"
+              title="Tamamlanmış iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
+            />
+            <ToolbarToggle
+              checked={showCancelled}
+              onCheckedChange={setShowCancelled}
+              label="İptalleri göster"
+              title="İptal edilmiş iş emirleri varsayılan olarak gizlidir. Seçimin hatırlanır."
+            />
+          </>
         }
       />
       <FilterBar filters={FILTERS} defaultDateRangeDays={30} />

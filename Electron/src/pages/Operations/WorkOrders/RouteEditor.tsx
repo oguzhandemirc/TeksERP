@@ -55,7 +55,10 @@ interface Props {
   onReorder: (activeId: string, overId: string) => void;
   onPickStation: (clientId: string, stationId: string | null) => void;
   onSetNotes: (clientId: string, notes: string) => void;
-  onSetFirm: (clientId: string, patch: { plannedSubcontractorId?: string | null }) => void;
+  onSetFirm: (
+    clientId: string,
+    patch: { plannedSubcontractorId?: string | null; dispatchWithoutColor?: boolean },
+  ) => void;
   onSeed: (routeId: string | null) => void;
   /** İç "Şablondan başla" picker'ını gizle — WO formu onu bölüm başlığına taşıdı. */
   hideSeedPicker?: boolean;

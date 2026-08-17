@@ -23,12 +23,16 @@
 // `changeWidth` ile düzeltilir.
 // =============================================================================
 
-import { Prisma, OrderStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
+import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
+import { InventoryService } from "./inventory.service";
+
+/** Toplu uygulama TEKİL motoru çağırır — kural kopyalanmaz (bkz. applyAttributeToRolls). */
+const inventoryService = new InventoryService();
 
 /** Değişiklik sebebi için asgari uzunluk — "x" gibi geçiştirme izleri işe yaramaz. */
 const MIN_REASON_LENGTH = 3;
@@ -97,6 +101,63 @@ async function loadWo(workOrderId: string): Promise<WoForLink> {
   });
   if (!wo) throw AppError.notFound("İş emri bulunamadı");
   return wo;
+}
+
+/**
+ * Toplu düzeltmeye KAPALI statüler — tekil `applyManualProperties`'in
+ * `ALWAYS_BLOCKED` listesiyle BİREBİR aynı. Burada tekrar yazılmasının sebebi
+ * ÖNİZLEME: operatöre "bu top neden değişmeyecek" diye önceden söyleyebilmek
+ * için listeye ihtiyacımız var. Uygulama yine tekil motordan geçer, yani
+ * gerçek koruma orada — bu liste yalnız erken ve dürüst bir cevap.
+ */
+const ROLL_EDIT_BLOCKED: RollStatus[] = [
+  RollStatus.AT_SUBCONTRACTOR,
+  RollStatus.AT_KARTELA,
+  RollStatus.TAMBUR_CONSUMED,
+  RollStatus.SUBCONTRACTOR_CONSUMED,
+  RollStatus.KARTELA_CONSUMED,
+  RollStatus.RETURNED_FROM_SUBCONTRACTOR,
+  RollStatus.SHIPPED,
+  RollStatus.CANCELLED,
+];
+
+const BLOCK_LABEL: Partial<Record<RollStatus, string>> = {
+  AT_SUBCONTRACTOR: "fasonda",
+  AT_KARTELA: "kartelada",
+  TAMBUR_CONSUMED: "kesildi",
+  SUBCONTRACTOR_CONSUMED: "fasona verildi",
+  KARTELA_CONSUMED: "kartelaya gitti",
+  RETURNED_FROM_SUBCONTRACTOR: "fason dönüşü",
+  SHIPPED: "sevk edildi",
+  CANCELLED: "iptal",
+};
+
+/**
+ * "Bu iş emrinin topları" — üç bağdan herhangi biri yeter (kolon yok, ilişki var).
+ * `batch` dahil çünkü finalize olup adımdan düşmüş toplar da düzeltilebilmeli.
+ */
+function whereRollsOfWorkOrder(workOrderId: string): Prisma.RollWhereInput {
+  return {
+    OR: [
+      { producedInStep: { workOrderId } },
+      { currentStep: { workOrderId } },
+      { batch: { workOrderId } },
+    ],
+  };
+}
+
+export interface RollAttributeTarget {
+  batchId: string | null;
+  batchNumber: string | null;
+  rolls: {
+    id: string;
+    barcode: string | null;
+    status: RollStatus;
+    colorName: string | null;
+    width: number | null;
+    /** null → değiştirilebilir. Doluysa kısa sebep ("fasonda", "sevk edildi"). */
+    blocked: string | null;
+  }[];
 }
 
 export class WorkOrderLinkService {
@@ -487,6 +548,169 @@ export class WorkOrderLinkService {
       success: true,
       data: { previousWidth },
       message: `İş emrinin eni ${width ?? "—"} cm olarak güncellendi.`,
+    };
+}
+
+  /**
+   * "Bu değişiklik toplara da yansısın mı?" — hedef listesi (partiye göre).
+   *
+   * İŞ EMRİ = PLAN, TOP = ÖLÇÜM. Plan değişikliği ölçümü kendiliğinden EZMEZ;
+   * ama saha vakası gerçek: mal baştan yanlış kaydedilmiş olabilir ("pembe 330
+   * yazıyor, aslında ekru 325"). O yüzden yansıtma otomatik değil, aynı
+   * ekranda TEK DOKUNUŞLA seçilebilen ayrı bir adım (2026-08-17 kullanıcı
+   * kararı: "sahadaki eleman unutmasın, orada sorulsun").
+   *
+   * Parti bazında gruplanır çünkü yanlış kayıt tipik olarak PARTİ bazında olur
+   * (bir dönüş, bir kabul, bir vardiya).
+   */
+  async getRollAttributeTargets(workOrderId: string): Promise<ApiResponse<RollAttributeTarget[]>> {
+    await loadWo(workOrderId);
+    const rolls = await prisma.roll.findMany({
+      // ⚠️ `Roll.workOrderId` DİYE BİR KOLON YOK. Bir topun iş emrine bağı üç
+      // yoldan kurulur ve üçü de meşru: üretildiği adım, şu an durduğu adım,
+      // ya da üyesi olduğu parti. `getAttachedRolls` ilk ikisini kullanıyor;
+      // burada partiyi de ekliyoruz çünkü ekran PARTİ bazında gruplayacak ve
+      // adımı geçmiş (finalize olmuş) toplar da düzeltme adayıdır.
+      where: whereRollsOfWorkOrder(workOrderId),
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        width: true,
+        color: { select: { name: true } },
+        batch: { select: { id: true, batchNumber: true } },
+      },
+      orderBy: [{ createdAt: "asc" }],
+    });
+
+    const byBatch = new Map<string, RollAttributeTarget>();
+    for (const r of rolls) {
+      const key = r.batch?.id ?? "__none__";
+      if (!byBatch.has(key)) {
+        byBatch.set(key, {
+          batchId: r.batch?.id ?? null,
+          batchNumber: r.batch?.batchNumber ?? null,
+          rolls: [],
+        });
+      }
+      byBatch.get(key)!.rolls.push({
+        id: r.id,
+        barcode: r.barcode,
+        status: r.status,
+        colorName: r.color?.name ?? null,
+        width: num(r.width),
+        blocked: ROLL_EDIT_BLOCKED.includes(r.status) ? (BLOCK_LABEL[r.status] ?? "uygun değil") : null,
+      });
+    }
+    return { success: true, data: [...byBatch.values()] };
+  }
+
+  /**
+   * Seçilen topların rengini/enini iş emriyle aynı hale getirir.
+   *
+   * Motor TEKİL `applyManualProperties`tir — kapsam kuralları, yetki kontrolü
+   * ve audit izi orada yaşıyor; burada ikinci bir kural kümesi KURULMAZ
+   * (ayrışırsa toplu yol tekil yolun reddettiği şeyi yapar). Bu metot yalnız
+   * döngü + kısmi sonuç raporudur.
+   *
+   * Kısmi başarı BİLİNÇLİ: 40 topluk bir partide biri sevk edilmişse diğer 39'u
+   * düzeltmemek orantısız olurdu. Değişmeyenler `failed[]` ile geri döner.
+   */
+  async applyAttributeToRolls(
+    workOrderId: string,
+    data: { rollIds: string[]; colorId?: string | null; width?: number | null; reason: string },
+    userId?: string,
+    permissions?: readonly string[],
+  ): Promise<ApiResponse<{ updated: number; failed: { rollId: string; barcode: string | null; message: string }[] }>> {
+    const reason = (data.reason ?? "").trim();
+    if (reason.length < MIN_REASON_LENGTH) {
+      throw AppError.badRequest("Sebep yazmalısınız.");
+    }
+    const ids = [...new Set(data.rollIds)].filter(Boolean);
+    if (ids.length === 0) throw AppError.badRequest("En az bir top seçmelisiniz.");
+    if (data.colorId === undefined && data.width === undefined) {
+      throw AppError.badRequest("Uygulanacak bir değer yok (renk veya en).");
+    }
+
+    const wo = await loadWo(workOrderId);
+    assertPlanEditable(wo);
+
+    const rolls = await prisma.roll.findMany({
+      where: { AND: [{ id: { in: ids } }, whereRollsOfWorkOrder(workOrderId)] },
+      select: {
+        id: true,
+        barcode: true,
+        colorId: true,
+        width: true,
+        // ⚠️ ÖZELLİKLER GERİ YAZILMAK ZORUNDA. `applyManualProperties`
+        // BAYRAK özelliklerinde REPLACE semantiği uygular: koşulsuz
+        // `deleteMany(valueType:FLAG)` + gönderilen listeden `createMany`.
+        // Boş dizi göndermek, yalnız RENGİ düzeltmek isterken topun
+        // ZIMPARALI/vb. bayraklarını SESSİZCE SİLERDİ. (SEÇİM tipli satırlara
+        // motor zaten dokunmuyor — onları taşımaya gerek yok.)
+        properties: {
+          where: { property: { valueType: "FLAG" } },
+          select: { propertyId: true },
+        },
+      },
+    });
+    if (rolls.length !== ids.length) {
+      // Başka bir iş emrinin topunu buradan değiştirmek, kapsamı sessizce
+      // genişletirdi — seçim listesi zaten bu WO'dan geliyor.
+      throw AppError.badRequest("Seçilen toplardan bazıları bu iş emrine ait değil.");
+    }
+
+    const failed: { rollId: string; barcode: string | null; message: string }[] = [];
+    let updated = 0;
+    for (const roll of rolls) {
+      try {
+        await inventoryService.applyManualProperties(
+          roll.id,
+          {
+            // `applyManualProperties` renk için NULL'ı "temizle" sayar; alan
+            // gönderilmediğinde mevcut değeri korumak için topun kendi değerini
+            // geri yazıyoruz (motorun sözleşmesi: colorId her zaman beklenir).
+            colorId: data.colorId !== undefined ? data.colorId : roll.colorId,
+            propertyIds: roll.properties.map((p) => p.propertyId),
+            ...(data.width !== undefined ? { width: data.width } : {}),
+            reason,
+          },
+          userId,
+          permissions !== undefined ? { permissions } : undefined,
+        );
+        updated++;
+      } catch (err) {
+        failed.push({
+          rollId: roll.id,
+          barcode: roll.barcode,
+          message: err instanceof Error ? err.message : "Bilinmeyen hata",
+        });
+      }
+    }
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "WORK_ORDER",
+      recordId: workOrderId,
+      newData: {
+        event: "ROLL_ATTRIBUTE_BULK_APPLY",
+        rollIds: ids,
+        colorId: data.colorId,
+        width: data.width,
+        reason,
+        updated,
+        failedCount: failed.length,
+      },
+    });
+
+    return {
+      success: true,
+      data: { updated, failed },
+      message:
+        failed.length === 0
+          ? `${updated} top güncellendi.`
+          : `${updated} top güncellendi, ${failed.length} top değişmedi.`,
     };
   }
 }

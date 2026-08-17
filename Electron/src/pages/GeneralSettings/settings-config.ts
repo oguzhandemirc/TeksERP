@@ -162,6 +162,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken (varsayılan) parti numarası P01'den başlar, P99'a kadar gider ve sonra tekrar P01'e döner — fabrikadaki numaralı fiziksel parti plakası düzenine karşılık gelir. ⚠️ Bu numara BENZERSİZ DEĞİLDİR: aynı numara birkaç günde bir yeniden kullanılır ve sistem numaranın o an başka bir partide olup olmadığına BAKMAZ. Partiyi kayıt olarak birbirinden ayıran şey numara değil, iş emri + tarihtir; parti no ile arama bu yüzden birden çok sonuç döndürür. Kapatırsan eski biçime dönülür: P + gün-ay-yıl + günlük sıra (P0508261) — o biçim benzersizdir. Ayarı değiştirmek MEVCUT partilerin numarasını değiştirmez, yalnız bundan sonra doğacakları etkiler.",
         hint: BatchNumberHint,
       },
+      {
+        key: "batchLastNumberHintEnabled",
+        title: "İş emri formunda 'Son Kullanılan Parti No' rozetini göster",
+        desc: "Açıkken (varsayılan) yeni iş emri formundaki Parti Kodu alanının üstünde son verilmiş parti numarası rozet olarak yazar. Planlamacıya fikir verir; SIRADAKİ numarayı VAAT ETMEZ (numara parti doğduğu anda atanır, aradaki her yeni parti sırayı kaydırır). Yalnız gösterimdir — numara üretimini etkilemez.",
+      },
     ],
   },
   {

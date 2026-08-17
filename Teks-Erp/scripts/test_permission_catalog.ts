@@ -98,6 +98,12 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   "src/routes/printed-document.routes.ts": ["DOC_PERMISSIONS"],
   // matchesPermission(perms, needM) — needM = STATION_KIND_PERM[station.kind]
   "src/services/work-session.service.ts": ["STATION_KIND_PERM"],
+  // matchesPermission(perms, permission) — permission =
+  // requiredPermissionForTable(table) → TABLE_PERMISSIONS[tableName].
+  // Yetki KAYIT TÜRÜNE göre çözülür: siparişi okuyamayan biri siparişin
+  // "kim değiştirdi"sini de okuyamamalı. Allowlist DIŞI tablo 400 ile reddedilir
+  // (serbest tableName, audit'i dolaylı bir arama yüzeyine çevirirdi).
+  "src/routes/record-info.routes.ts": ["TABLE_PERMISSIONS"],
 };
 
 // Taramanın gerçekten "bir şeye baktığını" doğrulayan zeminler. Bir refactor

@@ -1,7 +1,8 @@
 # Devir Notu — Fabrika Talep Listesi (2026-08-17 gecesi)
 
 **Dal:** `adnansahin` · **Plan:** [`docs/design/FABRIKA-TALEP-2026-08-17.md`](../design/FABRIKA-TALEP-2026-08-17.md)
-**APK:** `2.7.4` / versionCode `41` — masaüstünde, tablette açılışı doğrulandı.
+**APK:** `2.7.5` / versionCode `42` — masaüstünde, tablette açılışı doğrulandı.
+(2.7.4 aynı gün ikinci turla değiştirildi; sahaya **2.7.5** kurulur.)
 
 ---
 
@@ -72,7 +73,7 @@ adı). "Ekran açılıyor ama şu tuş çalışmıyor" sorusunun cevabı artık 
    — `RollEntrySource.SEMI_FINISHED` + `dispatchWithoutColor` (2 tablo).
    Kolonlar `DEFAULT false`, veri dönüşümü YOK, vardiya dışı gerektirmez.
 3. **Electron build** (senin Windows makinende).
-4. **APK 2.7.4** tabletlere: `adb install -r` (kaldırma YOK — kaldırırsan cihaz
+4. **APK 2.7.5** tabletlere: `adb install -r` (kaldırma YOK — kaldırırsan cihaz
    kimliği silinir ve eşleştirme tekrar ister; madde 7 hâlâ açık).
 5. **İzin ataması (ELLE):** `mobile:kk1-yari-mamul` hiçbir kullanıcıda yok.
    Yarı mamül kabulü yapacak kişiye panelden verilir. (Katalog koda, atama panele.)
@@ -117,3 +118,39 @@ Gece başında, **hiçbir şeye dokunmadan önce** de kırmızıydılar:
 - **Madde 9'un KK1 arayüzü** (yukarıda).
 - **Arama (madde 3) B yolu:** hacim büyür de yavaşlarsa PostgreSQL `unaccent` +
   ifade index'i. Bugünkü A yolu terim başına en fazla ~39 yaprak üretiyor.
+
+
+---
+
+# İKİNCİ TUR (aynı gün) — ek 4 madde + 2 düzeltme
+
+Tam liste ve gerekçeler: [`docs/design/FABRIKA-TALEP-2026-08-17.md`](../design/FABRIKA-TALEP-2026-08-17.md)
+→ "İKİNCİ TUR" bölümü.
+
+| # | İş | Durum |
+|---|---|---|
+| 12 | Panel tazelenmiyordu (yanlış sorgu anahtarı) | ✅ Düzeltildi |
+| 11 | Kutu ölü bileşendeydi, sahada görünmüyordu | ✅ Canlı editöre taşındı |
+| 4 | "Son Kullanılan Parti No" rozeti + bayrak | ✅ |
+| 8 | Modal içinde hızlı sipariş oluştur+bağla | ✅ |
+| 9 | Electron tek buton + kutu · mobil KK1 mod anahtarı | ✅ |
+| 12 | "Toplara da uygula" (parti bazında seçim) | ✅ |
+| 13 | Tambur kalite sıfırlama tercihi (cihazda) | ✅ |
+| 14 | İş emri listesinde Fason sütunu (geçmiş dahil) | ✅ |
+| 15 | Siparişte "2/3 kalem bağlı" sayacı | ✅ |
+
+## Ek deploy adımları (ilk turdakilere EK)
+
+- **Migration YOK** (ikinci turda şema değişmedi).
+- **Yeni ayar:** Genel Ayarlar → Parti → *"Son Kullanılan Parti No rozetini
+  göster"* (varsayılan AÇIK, kayıt gerekmez).
+- **APK 2.7.5** — KK1'de yarı mamül mod anahtarı ve Çalışma Tercihleri'ndeki
+  yeni Tambur ayarı bu sürümde.
+- **`mobile:kk1-yari-mamul` izni** hâlâ elle atanmalı; KK1'deki mod anahtarı
+  yalnız o yetkiyle çizilir.
+
+## Bu turda açılan yeni kapı
+
+`GET /colors` artık `mobile:kk1-yari-mamul` iznini de kabul ediyor (KK1'in renk
+seçicisi). Bekçi bunu geliştirme anında yakaladı ve muaf listesine gerekçesiyle
+yazıldı — "ekran açılıyor ama liste boş" sınıfı bir hata sahaya inmedi.

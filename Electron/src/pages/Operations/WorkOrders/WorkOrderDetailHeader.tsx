@@ -16,6 +16,7 @@ import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
+import { RecordInfoButton } from "@/components/RecordInfoButton";
 import type { WorkOrder } from "./types";
 
 /**
@@ -74,7 +75,17 @@ export function WorkOrderDetailHeader({
         title={wo?.workOrderNumber ?? "İş Emri"}
         titleExtra={
           wo && (
-            <StatusBadge status={wo.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
+            <>
+              <StatusBadge status={wo.status} labels={workOrderStatusLabels} tones={workOrderStatusTones} />
+              {/* ⓘ — kim oluşturdu / en son kim değiştirdi. Tarihler zaten
+                  elimizde, sunucuya yalnız "kim" sorulur ve YALNIZ tıklanınca. */}
+              <RecordInfoButton
+                table="WORK_ORDER"
+                id={wo.id}
+                createdAt={wo.createdAt}
+                updatedAt={wo.updatedAt}
+              />
+            </>
           )
         }
         description={
@@ -180,6 +191,11 @@ export function WorkOrderDetailHeader({
             onOpenChange={setLinkOrderOpen}
             workOrderId={wo.id}
             workOrderNumber={wo.workOrderNumber}
+            targetItemId={wo.targetItemId}
+            targetItemName={wo.targetItem?.name ?? null}
+            targetColorId={wo.targetColorId}
+            targetColorName={wo.targetColor?.name ?? null}
+            targetWidth={wo.width}
           />
           <ChangeTargetDialog
             open={changeMode !== null}

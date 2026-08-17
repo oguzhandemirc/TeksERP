@@ -33,6 +33,7 @@ import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
 import { PartyCard } from "@/components/operations/PartyCard";
 import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
+import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { OrderLineWoChips } from "./OrderLineWoChips";
 import { OrderShipmentsCard } from "./OrderShipmentsCard";
 import type { Order, OrderLine } from "./types";
@@ -175,11 +176,20 @@ export function OrderDetailSheet({
           <SheetTitle className="flex items-center gap-2">
             <span className="font-mono">{order?.orderNumber}</span>
             {order && (
-              <StatusBadge
-                status={order.status}
-                labels={orderStatusLabels}
-                tones={orderStatusTones}
-              />
+              <>
+                <StatusBadge
+                  status={order.status}
+                  labels={orderStatusLabels}
+                  tones={orderStatusTones}
+                />
+                {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-17). */}
+                <RecordInfoButton
+                  table="ORDER"
+                  id={order.id}
+                  createdAt={order.createdAt}
+                  updatedAt={order.updatedAt}
+                />
+              </>
             )}
           </SheetTitle>
           {/* a11y açıklaması — görsel kimlik PartyCard'da; burası ekran

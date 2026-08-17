@@ -165,7 +165,20 @@ export function readIdCondition(
 export function buildWhereClause(
   filters: Record<string, string | string[]>,
   searchFields?: string[],
-  search?: string
+  search?: string,
+  /**
+   * KOD ALANLARI — yalnız terim KOD BİÇİMİNDEYSE aramaya katılır ve Türkçe
+   * denklik varyantlarına AÇILMAZ (bkz. `buildCodeSearch`).
+   *
+   * Neden ayrı: bu alanlar tipik olarak derin ilişkilerin ucundadır (siparişten
+   * iş emri numarasına gitmek order_lines + pivot + work_orders üzerinden bir
+   * semi-join ister). Ölçüldü (2026-08-17, EXPLAIN ANALYZE): PostgreSQL bunu
+   * satır başına değil TEK GEÇİŞTE çözüyor (`hashed SubPlan`) — yani maliyet
+   * eklenir, çarpılmaz. Ama her Türkçe varyant AYRI bir semi-join doğurur;
+   * "gülşen" gibi bir müşteri aramasında ~20 varyant × ilişki taraması boşuna
+   * ödenirdi. Kod alanları bu yüzden yalnız kod-biçimli terimde koşar.
+   */
+  codeSearchFields?: string[]
 ): Record<string, unknown> {
   const where: Record<string, unknown> = {};
 
@@ -183,7 +196,11 @@ export function buildWhereClause(
 
   // Full-text search — Türkçe-duyarlı (Y-2/Y-3: C-locale ILIKE İ/ı/ğ/ş katlamaz).
   if (search && searchFields && searchFields.length > 0) {
-    where.OR = buildTurkishSearch(search, searchFields);
+    const leaves = buildTurkishSearch(search, searchFields);
+    if (codeSearchFields && codeSearchFields.length > 0) {
+      leaves.push(...buildCodeSearch(search, codeSearchFields));
+    }
+    where.OR = leaves;
   }
 
   return where;
@@ -350,6 +367,17 @@ export function buildTurkishSearch<T = Record<string, unknown>>(
   const term = search.trim();
   if (!term || paths.length === 0) return [];
   const leaves: Record<string, unknown>[] = [{ contains: term, mode: "insensitive" }];
+  // KOD BİÇİMLİ TERİMDE VARYANT ÜRETME. Belge numaralarımızın hiçbirinde Türkçe
+  // harf yok (İE/SIP/CV/RK/FS/P + tarih + sıra) — onlar için varyant üretmek
+  // sorguyu boşuna kabartır. Ölçüldü (2026-08-17): "IE2007260001" araması 20 OR
+  // dalından 5'e iner. Süzgeç DAR: boşluksuz + rakam içeren + yalnız
+  // ASCII harf/rakam/ayraç. "PATOS 300" gibi karışık bir terim BU DALA GİRMEZ
+  // (boşluk var) → adın Türkçe varyantları üretilmeye devam eder.
+  if (/^[A-Za-z0-9._/-]+$/.test(term) && /\d/.test(term)) {
+    const clauses: Record<string, unknown>[] = [];
+    for (const path of paths) clauses.push(nestPath(path, leaves[0]));
+    return clauses as unknown as T[];
+  }
   const seen = new Set<string>([term]);
   const push = (v: string, insensitive: boolean) => {
     if (seen.has(v)) return;
@@ -369,6 +397,30 @@ export function buildTurkishSearch<T = Record<string, unknown>>(
     for (const leaf of leaves) clauses.push(nestPath(path, leaf));
   }
   return clauses as unknown as T[];
+}
+
+/**
+ * KOD ARAMASI — belge/kayıt numaraları için dar ve ucuz eşleşme.
+ *
+ * İki farkı var ve ikisi de bilinçli:
+ *   1. Terim KOD BİÇİMİNDE değilse HİÇ koşmaz (boş dizi). Kod biçimi = en az
+ *      bir RAKAM içeriyor. Numaralarımızın tamamı (İE/SIP/CV/RK/FS/P + tarih +
+ *      sıra) rakam taşır; "gülşen" gibi bir ad taşımaz. Böylece ad araması,
+ *      derin ilişki taramasının bedelini ödemez.
+ *   2. Türkçe DENKLİK varyantına açılmaz — kodlarda ç/ş/ğ yok. Yalnız
+ *      `mode:"insensitive"` (ASCII büyük/küçük) uygulanır. Bu, tek bir
+ *      semi-join demektir; varyant başına bir tane değil.
+ */
+export function buildCodeSearch<T = Record<string, unknown>>(
+  search: string,
+  paths: readonly string[]
+): T[] {
+  const term = search.trim();
+  if (!term || paths.length === 0) return [];
+  if (!/\d/.test(term)) return [];
+  return paths.map(
+    (path) => nestPath(path, { contains: term, mode: "insensitive" }) as unknown as T
+  );
 }
 
 /**

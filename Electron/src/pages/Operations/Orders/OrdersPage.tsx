@@ -349,7 +349,7 @@ export function OrdersPage() {
       <DataTableToolbar
         search={search}
         onSearchChange={setSearch}
-        placeholder="Sipariş no, firma veya kumaş ara..."
+        placeholder="Sipariş no, iş emri no, firma veya kumaş ara..."
         table={table}
         exportName="Siparişler"
         actions={

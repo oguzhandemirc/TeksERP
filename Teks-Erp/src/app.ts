@@ -31,6 +31,7 @@ import routeRoutes from "./routes/route.routes";
 import productRecipeRoutes from "./routes/product-recipe.routes";
 import inventoryRoutes from "./routes/inventory.routes";
 import orderRoutes from "./routes/order.routes";
+import recordInfoRoutes from "./routes/record-info.routes";
 import workOrderRoutes from "./routes/workorder.routes";
 import productionBalanceRoutes from "./routes/production-balance.routes";
 import tamburRoutes from "./routes/tambur.routes";
@@ -466,6 +467,8 @@ app.use("/api/routes", routeRoutes);
 app.use("/api/product-recipes", productRecipeRoutes);
 app.use("/api/rolls", inventoryRoutes);
 app.use("/api/orders", orderRoutes);
+// ⚠️ MOUNT — "yazıldı ama mount edilmedi" sınıfı hata için bkz. reboot-kurtarma notu.
+app.use("/api/record-info", recordInfoRoutes);
 app.use("/api/work-orders", workOrderRoutes);
 app.use("/api/production-balance", productionBalanceRoutes);
 app.use("/api/tambur", tamburRoutes);

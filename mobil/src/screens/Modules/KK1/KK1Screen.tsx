@@ -121,6 +121,7 @@ import {
   type RollHistoryFilterState,
 } from '../../../components/filters/rollHistoryFilter';
 import { usePermissions } from '../../../hooks/usePermission';
+import { colorService } from '../../../services/color.service';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import {
   usePrintQueue,
@@ -148,6 +149,9 @@ interface FormState {
   /** EN (cm) — kaydetler ARASI korunur (aynı en toptan onlarca seri giriş). */
   width: string;
   qualityGrade: string;
+  /** YARI MAMÜL modunda ZORUNLU renk (ham girişte kullanılmaz). */
+  colorId: string;
+  colorLabel: string;
 }
 
 const EMPTY_FORM: FormState = {
@@ -155,6 +159,8 @@ const EMPTY_FORM: FormState = {
   itemLabel: '',
   width: '',
   qualityGrade: '',
+  colorId: '',
+  colorLabel: '',
 };
 
 // ── "Yeni Desen" ad girişi (inline, "Desen Seç" picker'ı içinde) ─────────────
@@ -401,7 +407,37 @@ export default function KK1Screen() {
   // Compact'ta sağ panel drawer'a taşınır.
   const [recentsDrawerOpen, setRecentsDrawerOpen] = useState(false);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [pickerOpen, setPickerOpen] = useState<'item' | null>(null);
+  const [pickerOpen, setPickerOpen] = useState<'item' | 'color' | null>(null);
+  /**
+   * YARI MAMÜL MODU (2026-08-17) — dışarıdan alınan, boyalı ama BİTMEMİŞ kumaş.
+   * Ekranın kendisi değişmez; yalnız renk alanı açılır ve payload'a bayrak
+   * eklenir. Mod SEÇİLİ KALIR: saha bir kamyon malı arka arkaya girer.
+   * Yetkisi olmayanda anahtar hiç çizilmez → ekran bugünküyle birebir aynı.
+   */
+  const [semiMode, setSemiMode] = useState(false);
+  const canSemiFinished = has('mobile:kk1-yari-mamul');
+  /**
+   * EN alanı bu modda açık mı? İKİ REJİM AYRI:
+   *   · HAM giriş  → `kk1.rawWidthEnabled` bayrağı (varsayılan KAPALI;
+   *     "ham kumaşın eni önemsiz" kararı). Kapalıysa en GİRİLEMEZ.
+   *   · YARI MAMÜL → HER ZAMAN açık. Mal işlenmiş geliyor; eni bilinen ve
+   *     kâğıda basılan bir değer. Tek bayrağa bağlasaydık, ham girişi açmadan
+   *     yarı mamülde en girmek imkânsız olurdu (2026-08-17 saha geri bildirimi).
+   * Tek kaynak: alanın kendisi, numpad görünürlüğü ve otomatik odak bunu okur.
+   */
+  const widthFieldEnabled = rawWidthEnabled || semiMode;
+  // Renk kataloğu yalnız yarı mamül modunda çekilir — ham girişte gereksiz istek.
+  const colorsQuery = useQuery({
+    queryKey: ['colors', 'kk1-semi'],
+    queryFn: () => colorService.listPublicForPicker({ pageSize: 500, sortBy: 'name', sortOrder: 'asc' }),
+    enabled: semiMode,
+    staleTime: 5 * 60_000,
+  });
+  const colorOptions = useMemo(
+    () => (colorsQuery.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code })),
+    [colorsQuery.data],
+  );
+
   const [pulling, setPulling] = useState(false);
   // Manuel mod: makine arızasında operatör mt + kg'yi elle girer. Varsayılan
   // kapalı (normalde değerler "Kaydet"e basınca makineden çekilir).
@@ -622,10 +658,11 @@ export default function KK1Screen() {
   // Operatör mt/kg'den çıkınca tuşlar yine En'i değiştirir. En girişi flag ile
   // kapalıysa odaklanacak alan yok → atla (numpad zaten render edilmez).
   useEffect(() => {
-    if (!compact && !manualMode && rawWidthEnabled) {
+    // Yarı mamülde en alanı bayraktan bağımsız açık → odak da öyle olmalı.
+    if (!compact && !manualMode && widthFieldEnabled) {
       requestAnimationFrame(() => widthRef.current?.focus());
     }
-  }, [compact, manualMode, rawWidthEnabled]);
+  }, [compact, manualMode, widthFieldEnabled]);
 
   // NUMPAD ASLA ÖLÜ KALMASIN (2026-08-12 saha isteği). `NumpadHost`
   // `disabled = !target` çalışıyor: hedef boşalırsa tuşlar gri olur ve operatör
@@ -1290,6 +1327,13 @@ export default function KK1Screen() {
     }
     // Kalite OPSİYONEL — boş bırakılabilir (Belirsiz); "kalite seçilmedi" guard'ı YOK.
 
+    // Yarı mamül RENKLİ gelir — renksiz kayıt onu ham maldan ayırt edilemez
+    // kılar ve backend de reddeder. Erken dur, net söyle.
+    if (semiMode && !form.colorId) {
+      Toast.show({ type: 'error', text1: 'Yarı mamülde renk zorunlu' });
+      return;
+    }
+
     // Metraj (+ağırlık) kaynağı: manuel modda elle, otomatik modda makineden
     // ("Kaydet"e basınca paralel okunur).
     let qty: number;
@@ -1333,10 +1377,14 @@ export default function KK1Screen() {
     // ⚠️ DAMGA TAZELENMEZ. `clientEnteredAt` operatörün BASTIĞI andır; retry ya da
     // uçuş tekrarı onu yenilerse backend'in 90 sn'lik mükerrer penceresi kayar ve
     // koruma tam da en çok gerektiği anda kapanır (bkz. entryAttempt sözleşmesi).
+    // ⚠️ Renk parmak izine GİRMEK ZORUNDA: iki yarı mamül girişi yalnız renkte
+    // ayrılıyorsa ve renk dışarıda kalsaydı, uçuştaki deneme "aynı yük" sayılıp
+    // ikinci top sessizce YUTULURDU.
     const fingerprint = entryFingerprint({
       itemId: form.itemId,
       initialQty: qty,
       width: width ?? null,
+      colorId: semiMode ? form.colorId : null,
     });
     const action = decideSubmit(attempt, fingerprint);
     const fresh = freshEntryIdentity();
@@ -1354,6 +1402,10 @@ export default function KK1Screen() {
       width,
       weightKg,
       qualityGrade: form.qualityGrade || undefined,
+      // Yarı mamülde renk ZORUNLU (yukarıda doğrulandı) ve bayrak backend'de
+      // statü sezgisini bypass eder — bayraksız gönderilse renkli top doğrudan
+      // BİTMİŞ DEPO'ya düşerdi.
+      ...(semiMode ? { colorId: form.colorId, semiFinished: true } : {}),
       clientToken: identity.clientToken,
       clientEnteredAt: identity.clientEnteredAt,
     });
@@ -1515,6 +1567,26 @@ export default function KK1Screen() {
       // yerine); tablet eskisi gibi çipi başlığın yanında gösterir.
       subtitle={compact ? machineName : undefined}
       hidePlaceChip={compact}
+      // MOD TUŞU makine adının YANINDA (2026-08-17 saha geri bildirimi):
+      // "neredeyim + ne giriyorum" tek bakışta okunmalı. Tuş HEDEF modu yazar
+      // (yarı mamüldeyken "Ham Giriş"), yani bir sonraki durumu — iki durumlu
+      // bir anahtarda "şu ankini yazan" etiket, hangisinin seçili olduğunu
+      // belirsizleştirir.
+      titleRowExtras={
+        canSemiFinished ? (
+          <HeaderChip
+            icon="swap-horizontal"
+            label={semiMode ? 'Ham Giriş' : 'Yarı Mamül'}
+            onPress={() => {
+              blurAll();
+              setSemiMode((v) => !v);
+              // Ham girişe dönerken rengi TEMİZLE — yarı mamülden kalan renk
+              // sonraki ham topa sessizce yazılırdı.
+              if (semiMode) setForm((f) => ({ ...f, colorId: '', colorLabel: '' }));
+            }}
+          />
+        ) : undefined
+      }
       headerExtras={
         <View style={styles.headerExtrasRow}>
           {/* ÇİP YALNIZ "AKIYOR" DURUMUNU GÖSTERİR — hata kısmı 2026-08-12'de
@@ -1662,6 +1734,32 @@ export default function KK1Screen() {
                     autoActivate={!compact && manualMode}
                   />
                 </View>
+                {/* EN — manuel moddayken BURADA, metrajın yanında (2026-08-17
+                    saha isteği: iki input yan yana, aynı genişlik → bir satır
+                    kazanılır ve aşağıdaki kalite tuşlarına yer açılır).
+                    Otomatik modda metraj makineden geldiği için bu panel hiç
+                    çizilmez; En o durumda aşağıdaki kendi satırında kalır. */}
+                {widthFieldEnabled && (
+                  <View style={styles.manualField}>
+                    {!compact && (
+                      <Text style={[styles.manualFieldLabel, styles.manualFieldLabelTablet]}>En (cm)</Text>
+                    )}
+                    <NumpadInput
+                      ref={widthRef}
+                      mode="outlined"
+                      value={form.width}
+                      onChangeText={(v) => setForm((f) => ({ ...f, width: v }))}
+                      numpadLabel="En (cm)"
+                      placeholder={compact ? 'En (cm)' : 'örn: 280'}
+                      style={styles.input}
+                      contentStyle={[styles.manualInputContent, !compact && styles.manualInputContentTablet]}
+                      useNativeKeyboard={compact}
+                      // ⚠️ autoActivate YOK: manuel modda numpad'in varsayılan
+                      // hedefi METRAJDIR (yukarıdaki nota bak). İki alan da
+                      // isteseydi kazanan mount sırası olurdu.
+                    />
+                  </View>
+                )}
                 {weightEntryEnabled && (
                   <View style={styles.manualField}>
                     {!compact && (
@@ -1686,6 +1784,7 @@ export default function KK1Screen() {
 
           {/* ── Üretim ayarı: ürün + en + kalite (kaydetler ARASI kalıcı) ── */}
           <Surface style={[styles.card, !compact && styles.cardTablet]} elevation={1}>
+
             {compact ? (
               // Telefon: tablettekiyle AYNI dil ama YAN YANA — "Desen Seç" butonu
               // 1/4 (flex:1), "Seçilen Desen" kutusu 3/4 (flex:3). Dar butona
@@ -1749,6 +1848,7 @@ export default function KK1Screen() {
                   style={styles.productBtnTablet}
                   contentStyle={styles.productBtnTabletContent}
                   labelStyle={styles.productBtnTabletLabel}
+                  buttonColor={BTN_ITEM_TONE}
                 >
                   Desen Seç
                 </Button>
@@ -1777,7 +1877,102 @@ export default function KK1Screen() {
               </View>
             )}
 
-            {rawWidthEnabled && (
+            {/* RENK — yalnız yarı mamülde (ham kumaş renksizdir). Kalıp "Desen
+                Seç" ile BİREBİR aynı: aynı ekranda iki farklı seçim geometrisi
+                operatörü yavaşlatır. */}
+            {semiMode &&
+              (compact ? (
+                <View style={[styles.productRowCompact, styles.colorRowSpaced]}>
+                  <TouchableRipple
+                    borderless
+                    onPressIn={blurAll}
+                    onPress={() => {
+                      blurAll();
+                      setPickerOpen('color');
+                    }}
+                    rippleColor="rgba(79,70,229,0.16)"
+                    style={[styles.productBtnCompact, styles.productBtnCompactColor]}
+                    accessibilityLabel="Renk seç"
+                  >
+                    <View style={styles.productBtnCompactInner}>
+                      <Text style={styles.productBtnCompactLabel}>{'Renk\nSeç'}</Text>
+                    </View>
+                  </TouchableRipple>
+                  <View
+                    style={[
+                      styles.productSelectedBox,
+                      styles.productSelectedBoxCompact,
+                      !!form.colorId && styles.productSelectedBoxActive,
+                    ]}
+                  >
+                    <Text style={styles.productSelectedCaption}>Seçilen Renk</Text>
+                    <View style={styles.productSelectedValueRow}>
+                      {!!form.colorId && (
+                        <Icon source="check-circle" size={18} color={colors.success} />
+                      )}
+                      <Text
+                        style={[
+                          styles.productSelectedName,
+                          styles.productSelectedNameCompact,
+                          !form.colorId && styles.productSelectedNameEmpty,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {form.colorLabel || 'Henüz renk seçilmedi'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ) : (
+                <View style={[styles.productRowTablet, styles.colorRowSpaced]}>
+                  <Button
+                    mode="contained-tonal"
+                    icon="palette"
+                    uppercase={false}
+                    onPressIn={blurAll}
+                    onPress={() => {
+                      blurAll();
+                      setPickerOpen('color');
+                    }}
+                    style={styles.productBtnTablet}
+                    contentStyle={styles.productBtnTabletContent}
+                    labelStyle={styles.productBtnTabletLabel}
+                    buttonColor={BTN_COLOR_TONE}
+                  >
+                    Renk Seç
+                  </Button>
+                  <View
+                    style={[
+                      styles.productSelectedBox,
+                      !!form.colorId && styles.productSelectedBoxActive,
+                    ]}
+                  >
+                    <Text style={styles.productSelectedCaption}>Seçilen Renk</Text>
+                    <View style={styles.productSelectedValueRow}>
+                      {!!form.colorId && (
+                        <Icon source="check-circle" size={20} color={colors.success} />
+                      )}
+                      <Text
+                        style={[
+                          styles.productSelectedName,
+                          !form.colorId && styles.productSelectedNameEmpty,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {form.colorLabel || 'Henüz renk seçilmedi'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+            {/* EN — iki rejim AYRI bayrakla yönetilir. `kk1.rawWidthEnabled`
+                HAM giriş içindir ve varsayılan KAPALI ("ham kumaşın eni
+                önemsiz"). Yarı mamül tam tersi: mal işlenmiş geliyor ve eni
+                bilinen, kâğıda basılan bir değer → o modda alan HER ZAMAN
+                açıktır. İkisini tek bayrağa bağlamak, ham girişi açmadan yarı
+                mamülde en girmeyi imkânsız kılardı. */}
+            {widthFieldEnabled && !manualMode && (
               <>
                 <Text style={[styles.label, styles.labelSpaced]}>En (cm)</Text>
                 <View style={styles.widthRow}>
@@ -2086,7 +2281,7 @@ export default function KK1Screen() {
                 manuel mt/kg açık. İkisi de kapalıysa girilecek değer yok →
                 numpad gizlenir, boşuna yer kaplamaz. Üstünde kalın marka-renkli
                 ayraç → "Son Kayıtlar" ile numpad ayrımı net. */}
-            {(rawWidthEnabled || manualMode) && (
+            {(widthFieldEnabled || manualMode) && (
               <>
                 <View style={styles.numpadDivider} />
                 <NumpadHost style={styles.numpadHost} />
@@ -2220,6 +2415,19 @@ export default function KK1Screen() {
             />
           ) : undefined
         }
+      />
+
+      <PickerModal
+        visible={pickerOpen === 'color'}
+        title="Renk Seç"
+        options={colorOptions}
+        selectedValue={form.colorId}
+        loading={colorsQuery.isLoading}
+        onDismiss={() => setPickerOpen(null)}
+        onSelect={(value) => {
+          const c = colorOptions.find((o) => o.value === value);
+          setForm((f) => ({ ...f, colorId: value, colorLabel: c ? c.label : '' }));
+        }}
       />
 
       {/* ── Etiket yazıcı (headless): activePrintRoll set olunca QR + A4 PDF üretir.
@@ -3389,7 +3597,17 @@ function RollListItem({
   );
 }
 
+/** Desen ve renk seçicilerin tonları — aynı ailede ama ayrık (indigo ↔ mor). */
+const BTN_ITEM_TONE = '#e0e7ff';
+const BTN_COLOR_TONE = '#ede9fe';
+
 const styles = StyleSheet.create({
+  /** Renk satırı desen satırının hemen altında — aralarında nefes payı. */
+  // Desen ve renk satırları BİRBİRİNE YAKIN dursun — kazanılan dikey boşluk
+  // aşağıdaki kalite tuşlarına gidiyor (2026-08-17 isteği).
+  colorRowSpaced: { marginTop: 4 },
+  /** Renk butonu deseninkinden AYRI ton — iki tuş bir bakışta ayrışsın. */
+  productBtnCompactColor: { backgroundColor: '#ede9fe' },
   body: { flex: 1, flexDirection: 'row' },
   headerExtrasRow: { flexDirection: 'row', alignItems: 'center' },
   // Koyu header pill aksiyonu (Tambur ile aynı stil).
@@ -3667,7 +3885,10 @@ const styles = StyleSheet.create({
 
   // ── Tablet ürün seçimi: büyük buton + yanında seçili ürün adı ──
   productRowTablet: { flexDirection: 'row', alignItems: 'stretch', gap: 16 },
-  productBtnTablet: { borderRadius: 12 },
+  // ⚠️ SABİT GENİŞLİK: `contained-tonal` butonun genişliği metne göre büyür ve
+  // "Desen Seç" ile "Renk Seç" farklı uzunlukta → alt alta iki satırda kutular
+  // kayık duruyordu. Sabit genişlik ikisini birebir hizalar.
+  productBtnTablet: { borderRadius: 12, width: 210 },
   productBtnTabletContent: { height: 96, paddingHorizontal: 24 },
   productBtnTabletLabel: { fontSize: 24, fontWeight: '700' },
   // Seçili ürün gösterimi — "form alanı içinde seçili değer" kalıbı: başlık

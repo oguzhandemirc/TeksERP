@@ -92,6 +92,30 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     },
   },
   {
+    id: "fasonFirms",
+    header: "Fason",
+    cell: ({ row }) => {
+      const firms = row.original.fasonFirms ?? [];
+      if (firms.length === 0) return <span className="text-muted-foreground">—</span>;
+      return (
+        <div className="flex flex-wrap items-center gap-1">
+          {firms.map((f) => (
+            // "Şu an orada" ile "gitmişti" AYNI renkte olsaydı planlamacı malın
+            // hâlâ dışarıda olup olmadığını ayırt edemezdi.
+            <Badge
+              key={f.name}
+              variant={f.current ? "secondary" : "muted"}
+              className="max-w-[9rem] truncate text-[10px]"
+              title={f.current ? `${f.name} — mal şu an burada` : `${f.name} — işi yapmıştı`}
+            >
+              {f.name}
+            </Badge>
+          ))}
+        </div>
+      );
+    },
+  },
+  {
     id: "progress",
     header: "İlerleme",
     cell: ({ row }) => {

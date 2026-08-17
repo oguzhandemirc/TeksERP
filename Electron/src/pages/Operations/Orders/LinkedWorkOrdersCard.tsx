@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { workOrderStatusLabels } from "@/types/enums";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
-import { collectLinkedWorkOrders } from "./work-order-rollup";
+import { deriveLineCoverage, collectLinkedWorkOrders } from "./work-order-rollup";
 import type { OrderLine } from "./types";
 
 interface Props {
@@ -21,6 +21,9 @@ interface Props {
 export function LinkedWorkOrdersCard({ lines, onNavigate }: Props) {
   const openTarget = useOpenTarget();
   const workOrders = collectLinkedWorkOrders(lines);
+  // Kapsama detayda da yazar (madde 15): kart "3 iş emri var" derken siparişin
+  // bir kalemi hiç bağlanmamış olabilir — o boşluk yalnız burada görünür.
+  const coverage = deriveLineCoverage(lines);
   if (workOrders.length === 0) return null;
 
   return (
@@ -28,6 +31,17 @@ export function LinkedWorkOrdersCard({ lines, onNavigate }: Props) {
       <CardContent className="p-3">
         <div className="mb-2 flex items-center gap-1.5 text-sm text-muted-foreground">
           <Factory className="h-3.5 w-3.5" /> Bağlı İş Emirleri ({workOrders.length})
+          {coverage.total > 0 && (
+            <span
+              className={
+                coverage.linked < coverage.total
+                  ? "ml-auto text-[11px] text-amber-700 dark:text-amber-400"
+                  : "ml-auto text-[11px]"
+              }
+            >
+              {coverage.linked}/{coverage.total} kalem bağlı
+            </span>
+          )}
         </div>
         <ul className="space-y-1.5">
           {workOrders.map((wo) => (

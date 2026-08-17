@@ -283,6 +283,8 @@ export interface FeatureFlags {
    *  kullanılır (fabrika numaralı fiziksel parti plakası kullanıyor). Partinin
    *  kimliği `id`'dir; hiçbir yerde `batchNumber` ile eşleştirme yapma. */
   batchShortNumberEnabled: boolean;
+  /** İş emri formundaki "Son Kullanılan Parti No" rozeti (yalnız gösterim). */
+  batchLastNumberHintEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat; 1..43200 = 30 gün). Giriş
    *  sonrası token kaç dakika geçerli kalır; süre dolunca (aktif kullanırken bile)
    *  yeniden giriş gerekir. Backend ENFORCE eder (yalnız sonraki girişlere uygulanır;

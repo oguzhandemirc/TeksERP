@@ -52,11 +52,18 @@ export function WorkOrderCancelDialog({
 
   const [choices, setChoices] = useState<CancelChoices>({});
   const [reason, setReason] = useState("");
+  /**
+   * Fasondaki toplar için TEK karar (2026-08-17). Eskiden fason varsa iptal
+   * tamamen engelleniyordu ve kullanıcı çıkışsız kalıyordu — sahadaki
+   * "iptal etmek çok zor" şikâyetinin kaynağı buydu. Artık iki düğme.
+   */
+  const [fasonAction, setFasonAction] = useState<"RETURN_TO_STOCK" | "SCRAP" | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setChoices({});
     setReason("");
+    setFasonAction(null);
   }, [open, workOrderId]);
 
   const impactQ = useQuery({
@@ -78,6 +85,7 @@ export function WorkOrderCancelDialog({
       workOrderService.cancelWithDecisions(workOrderId as string, {
         reason: reason.trim(),
         ...(dispositions.length > 0 ? { dispositions } : {}),
+        ...(fasonAction ? { fasonAction } : {}),
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? "İş emri iptal edildi");
@@ -93,11 +101,18 @@ export function WorkOrderCancelDialog({
   });
 
   const pending = cancelMut.isPending;
+  const fasonCount = impact?.fasonInFlightCount ?? 0;
+  // FİRE kararı envanteri yok eder → süpervizör yetkisi (backend de arar).
+  const needsAdjustForFason = fasonAction === "SCRAP";
   const canSubmit =
     Boolean(impact?.canCancel) &&
     !pending &&
     reason.trim().length >= MIN_REASON_LENGTH &&
-    (!needsAdjust || canAdjustRolls);
+    // Fasonda top varsa karar ZORUNLU — backend kararsız isteği reddediyor,
+    // düğmeyi burada da kapatmak kullanıcıyı gereksiz bir hataya sokmuyor.
+    (fasonCount === 0 || fasonAction !== null) &&
+    (!needsAdjust || canAdjustRolls) &&
+    (!needsAdjustForFason || canAdjustRolls);
 
   const setChoice = (rollId: string, action: CancelDisposition) =>
     setChoices((prev) => ({ ...prev, [rollId]: action }));
@@ -139,6 +154,43 @@ export function WorkOrderCancelDialog({
                 {impact.processedCount > 0 && ` · ${impact.processedCount} işlenmiş`}
                 {impact.rollsTruncated && " · liste ilk 200"}
               </div>
+
+              {/* FASONDAKİ TOPLAR — iki düğme, tek karar (2026-08-17).
+                  Metin bilinçli KISA: saha kullanıcısı paragraf okumuyor,
+                  düğme arıyor. Karar TOPLU verilir; 40 top için 40 seçim yok. */}
+              {fasonCount > 0 && (
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+                  <div className="text-sm font-medium">
+                    {fasonCount} top fasonda. Ne yapılsın?
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Button
+                      type="button"
+                      variant={fasonAction === "RETURN_TO_STOCK" ? "default" : "outline"}
+                      className="h-auto justify-start whitespace-normal py-2 text-left"
+                      onClick={() => setFasonAction("RETURN_TO_STOCK")}
+                    >
+                      <div>
+                        <div className="font-medium">Ham stoğa geri al</div>
+                        <div className="text-xs opacity-80">Açık sevkler iptal edilir</div>
+                      </div>
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={fasonAction === "SCRAP" ? "destructive" : "outline"}
+                      className="h-auto justify-start whitespace-normal py-2 text-left"
+                      disabled={!canAdjustRolls}
+                      onClick={() => setFasonAction("SCRAP")}
+                      title={canAdjustRolls ? undefined : "'roll:manual-adjust' yetkisi gerekli"}
+                    >
+                      <div>
+                        <div className="font-medium">Fire yaz</div>
+                        <div className="text-xs opacity-80">Mal kullanılamaz</div>
+                      </div>
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               {/* Engel + çıkış yolu. */}
               {!impact.canCancel && (

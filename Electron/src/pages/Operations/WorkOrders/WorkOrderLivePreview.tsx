@@ -19,6 +19,7 @@ import { colorService } from "@/pages/Colors/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import type { WorkOrderFormValues } from "./schema";
 import type { DesignerStep } from "./RouteDesignerDialog";
+import { LastBatchBadge } from "./LastBatchBadge";
 import type { PickedOrderLine } from "./OrderPickerDialog";
 
 interface Props {
@@ -147,6 +148,10 @@ export function WorkOrderLivePreview({
               <span className="text-muted-foreground">Otomatik atanacak</span>
             )}
           </Row>
+          {/* Rozet önizlemenin İLK bölümünde, parti kodunun hemen altında
+              (2026-08-17 talebi). Kendini belli etmesi bilinçli: planlamacı
+              formu doldururken fabrikadaki fiziksel plaka setiyle kıyaslıyor. */}
+          {!isEdit && <LastBatchBadge className="mt-1" />}
           <Row label="Tip">
             <Badge
               variant={isOrderProduction ? "secondary" : "muted"}

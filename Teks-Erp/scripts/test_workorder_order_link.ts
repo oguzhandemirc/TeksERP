@@ -45,6 +45,9 @@ async function main(): Promise<void> {
   const created: { customers: string[]; items: string[]; colors: string[]; orders: string[]; wos: string[] } = {
     customers: [], items: [], colors: [], orders: [], wos: [],
   };
+  const createdRolls: string[] = [];
+  const createdBatches: string[] = [];
+  const createdProps: string[] = [];
 
   try {
     const customer = await prisma.customer.create({
@@ -246,6 +249,107 @@ async function main(): Promise<void> {
     const badWidth = await expectError(() => workOrderLinkService.changeWidth(wo.id, 5000, "saçma"));
     check("aralık dışı en reddedildi", badWidth !== null);
 
+    // ── 7b) "Toplara da uygula" (madde 12) ──────────────────────────────────
+    // İş emri PLAN, top ÖLÇÜM: plan değişikliği ölçümü kendiliğinden EZMEZ.
+    // Ama yanlış kaydedilmiş mal düzeltilebilmeli — bu adım o kapıdır ve
+    // kapsam kuralları TEKİL motordan gelir (sevk edilmiş top değişmez).
+    const batch = await prisma.batch.create({
+      data: { batchNumber: `TEST-WOLINK-B-${ts}`.slice(0, 60), workOrderId: wo.id },
+      select: { id: true },
+    });
+    const editableRoll = await prisma.roll.create({
+      data: {
+        itemId: itemA.id,
+        colorId: mavi.id,
+        initialQty: 100,
+        currentQty: 100,
+        width: 300,
+        status: "STOCK",
+        batchId: batch.id,
+      },
+      select: { id: true },
+    });
+    const shippedRoll = await prisma.roll.create({
+      data: {
+        itemId: itemA.id,
+        colorId: mavi.id,
+        initialQty: 50,
+        currentQty: 50,
+        width: 300,
+        status: "SHIPPED",
+        batchId: batch.id,
+      },
+      select: { id: true },
+    });
+    createdRolls.push(editableRoll.id, shippedRoll.id);
+    createdBatches.push(batch.id);
+
+    // Topun BAYRAK özelliği olsun — toplu düzeltmenin onu silmediğini ölçeceğiz.
+    const flagProp = await prisma.fabricProperty.create({
+      data: { code: `TEST-WOLINK-FLAG-${ts}`.slice(0, 30), name: `TEST FLAG ${ts}`, valueType: "FLAG" },
+      select: { id: true },
+    });
+    createdProps.push(flagProp.id);
+    await prisma.rollProperty.create({
+      data: { rollId: editableRoll.id, propertyId: flagProp.id },
+    });
+
+    const targets = await workOrderLinkService.getRollAttributeTargets(wo.id);
+    const group = targets.data.find((g) => g.batchId === batch.id);
+    check("aday toplar partiye göre gruplandı", Boolean(group) && group!.rolls.length === 2);
+    check(
+      "sevk edilmiş top ENGELLİ işaretli",
+      group?.rolls.find((r) => r.id === shippedRoll.id)?.blocked === "sevk edildi",
+    );
+    check(
+      "serbest stok topu değiştirilebilir",
+      group?.rolls.find((r) => r.id === editableRoll.id)?.blocked === null,
+    );
+
+    const applied = await workOrderLinkService.applyAttributeToRolls(
+      wo.id,
+      { rollIds: [editableRoll.id, shippedRoll.id], width: 295, reason: "Kabulde ölçüldü" },
+      undefined,
+      ["roll:manual-adjust"],
+    );
+    check("kısmi başarı: 1 güncellendi", applied.data.updated === 1, `updated=${applied.data.updated}`);
+    check("sevk edilmiş top failed listesinde", applied.data.failed.length === 1);
+    const afterRoll = await prisma.roll.findUnique({
+      where: { id: editableRoll.id },
+      select: { width: true },
+    });
+    check("topun eni gerçekten değişti", Number(afterRoll?.width) === 295);
+    const afterShipped = await prisma.roll.findUnique({
+      where: { id: shippedRoll.id },
+      select: { width: true },
+    });
+    check("sevk edilmiş topun eni DEĞİŞMEDİ", Number(afterShipped?.width) === 300);
+
+    // ⚠️ REGRESYON SONDASI. Tekil motor BAYRAK özelliklerinde REPLACE uygular
+    // (koşulsuz deleteMany + gönderilen listeden createMany). Toplu yol boş
+    // dizi gönderirse yalnız EN düzeltirken topun ZIMPARALI gibi bayrakları
+    // SESSİZCE SİLİNİR — ilk yazımda tam bu hata vardı.
+    const keptProps = await prisma.rollProperty.count({
+      where: { rollId: editableRoll.id, propertyId: flagProp.id },
+    });
+    check("topun BAYRAK özelliği korundu (silinmedi)", keptProps === 1);
+
+    // Başka iş emrinin topu buradan değiştirilemez (kapsam sızıntısı).
+    const foreignRoll = await prisma.roll.create({
+      data: { itemId: itemA.id, initialQty: 10, currentQty: 10, status: "STOCK" },
+      select: { id: true },
+    });
+    createdRolls.push(foreignRoll.id);
+    const foreignErr = await expectError(() =>
+      workOrderLinkService.applyAttributeToRolls(
+        wo.id,
+        { rollIds: [foreignRoll.id], width: 280, reason: "olmaz" },
+        undefined,
+        ["roll:manual-adjust"],
+      ),
+    );
+    check("başka WO'nun topu reddedildi", foreignErr !== null);
+
     // ── 8) İptal edilmiş iş emrinde hiçbiri çalışmaz ────────────────────────
     await prisma.workOrder.update({ where: { id: wo.id }, data: { status: "CANCELLED" } });
     const cancelledLink = await expectError(() => workOrderLinkService.linkOrderLines(wo.id, [lineWidthDiff.id]));
@@ -256,7 +360,15 @@ async function main(): Promise<void> {
     check("iptal WO'da en değişmez", cancelledWidth !== null);
   } finally {
     // Temizlik — bağımlılık sırasına göre.
-    await prisma.systemLog.deleteMany({ where: { recordId: { in: created.wos } } }).catch(() => {});
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: [...created.wos, ...createdRolls] } } }).catch(() => {});
+    // RollVariance FK'sı RESTRICT — top silen her temizlik onu da silmeli.
+    await prisma.rollVariance.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
+    await prisma.rollMovement.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
+    await prisma.rollOperation.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
+    await prisma.rollProperty.deleteMany({ where: { rollId: { in: createdRolls } } }).catch(() => {});
+    await prisma.roll.deleteMany({ where: { id: { in: createdRolls } } });
+    await prisma.fabricProperty.deleteMany({ where: { id: { in: createdProps } } }).catch(() => {});
+    await prisma.batch.deleteMany({ where: { id: { in: createdBatches } } });
     await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: created.wos } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: created.wos } } });
     await prisma.orderLine.deleteMany({ where: { orderId: { in: created.orders } } });

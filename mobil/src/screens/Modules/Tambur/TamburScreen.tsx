@@ -176,10 +176,13 @@ const EMPTY_ERROR_ENTRY: ErrorEntryState = {
 };
 // Default kesim girişi: kalite "1.KALITE" pre-select (seed sabit kayıt).
 // Operatör çoğunlukla 1. kalite kesim yapar; A1/Fire ihtiyaç anında değiştirir.
+/** Varsayılan kalite — tek kaynak (sıfırlama ayarı da bunu kullanır). */
+const DEFAULT_QUALITY_CODE = '1.KALITE';
+const DEFAULT_QUALITY_NAME = '1. Kalite';
 const EMPTY_VOLUNTARY_ENTRY: VoluntaryEntryState = {
   length: '',
-  qualityGrade: '1.KALITE',
-  qualityName: '1. Kalite',
+  qualityGrade: DEFAULT_QUALITY_CODE,
+  qualityName: DEFAULT_QUALITY_NAME,
   targetOrderLineId: null,
   targetCustomerId: null,
   targetCustomerName: undefined,
@@ -397,6 +400,8 @@ export default function TamburScreen() {
   // OLMADAN çözen bir okuma yolu (ör. `context`e `allowEmpty` dalı). Buraya
   // uydurma bir stepId türetme — yanlış adıma top bağlamak sessiz hatadır.
   const { has: hasPermission } = usePermissions();
+  // Cihaz tercihi (sunucuya gitmez): kesimden sonra kalite 1. Kaliteye dönsün mü?
+  const resetQualityAfterCut = useDeviceSettingsStore((st) => st.tamburResetQualityAfterCut);
   const canFieldFix =
     hasPermission('mobile:tambur-duzelt') || hasPermission('roll:manual-adjust');
   const [fieldFixOpen, setFieldFixOpen] = useState(false);
@@ -1129,10 +1134,19 @@ export default function TamburScreen() {
 
         startPrint(data.childRoll, printKindForRoll(data.childRoll));
       }
-      // Uzunluk input'unu sıfırla; kalite/sipariş aynen kalsın (seri kesim).
+      // Uzunluk input'unu sıfırla. Kalite/sipariş varsayılan olarak KALIR
+      // (seri kesim), ama Ayarlar → Çalışma Tercihleri'nden "her çıktıdan sonra
+      // 1. Kaliteye dön" seçilebilir (2026-08-17 saha talebi: en son A1'e
+      // basıldıysa orada takılı kalıyordu ve yanlış kalite basılabiliyordu).
       setWork((w) => ({
         ...w,
-        voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+        voluntaryEntry: {
+          ...w.voluntaryEntry,
+          length: '',
+          ...(resetQualityAfterCut
+            ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+            : {}),
+        },
       }));
       // ⚠️ OTOMATİK BİTİŞ KALDIRILDI (2026-08-09, saha kararı).
       //
@@ -1525,11 +1539,18 @@ export default function TamburScreen() {
         },
         'ROLL_FINISHED',
       );
-      // Metraj sıfırlanır (sıradaki top), ürün/renk/kalite/sebep KALIR: aynı
-      // sebeple arka arkaya birkaç top girmek tipik saha davranışı.
+      // Metraj sıfırlanır (sıradaki top), ürün/renk/sebep KALIR: aynı sebeple
+      // arka arkaya birkaç top girmek tipik saha davranışı. Kalite ise cihaz
+      // ayarına bağlı (bkz. yukarıdaki not).
       setWork((w) => ({
         ...w,
-        voluntaryEntry: { ...w.voluntaryEntry, length: '' },
+        voluntaryEntry: {
+          ...w.voluntaryEntry,
+          length: '',
+          ...(resetQualityAfterCut
+            ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+            : {}),
+        },
       }));
     },
     onError: (err: Error) => {

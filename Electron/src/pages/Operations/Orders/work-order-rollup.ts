@@ -82,6 +82,31 @@ export function deriveWoRollup(lines: LineWithWorkOrderLinks[] | undefined): WoR
   return { state, activeCount: active.length };
 }
 
+/**
+ * KALEM KAPSAMASI — "kaç kalemden kaçı bir iş emrine bağlı" (2026-08-17, madde 15).
+ *
+ * Rollup TEK BAŞINA yanıltıcı: 3 kalemli siparişin yalnız 1 kalemi bağlıysa ve o
+ * iş emri üretimdeyse rozet "Üretimde" der — diğer iki kalem için hiç iş emri
+ * açılmamış olduğu halde. Bağ zaten gevşek bir ilişki (bir WO birden çok
+ * siparişe, bir sipariş birden çok WO'ya bağlanabilir), o yüzden rakam bir
+ * TAAHHÜT değil GÖRÜNÜRLÜK aracıdır.
+ *
+ * SUPERSEDED/CANCELLED bağ sayılmaz — devredilmiş iş emri o kalemi karşılamıyor.
+ */
+export function deriveLineCoverage(
+  lines: LineWithWorkOrderLinks[] | undefined,
+): { linked: number; total: number } {
+  const list = lines ?? [];
+  let linked = 0;
+  for (const line of list) {
+    const active = (line.workOrderLinks ?? []).filter(
+      (l) => l.workOrder && l.workOrder.status !== "SUPERSEDED" && l.workOrder.status !== "CANCELLED",
+    );
+    if (active.length > 0) linked++;
+  }
+  return { linked, total: list.length };
+}
+
 export const woRollupLabels: Record<Exclude<WoRollupState, "NONE">, string> = {
   PLANNED: "Planlandı",
   IN_PROGRESS: "Üretimde",

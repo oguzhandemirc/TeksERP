@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
 import { workOrderLinkService } from "../services/workorder-link.service";
+import { workOrderFasonQuickService } from "../services/workorder-fason-quick.service";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
@@ -148,6 +149,11 @@ const cancelSchema = z.object({
    * istemci 400 almaz, alan düşer. Üç aksiyonda kalite anlamsız olduğu için bu
    * kabul edilir; aksiyon kümesi genişletilirse şema da genişletilmeli.
    */
+  /**
+   * Fasondaki toplar için TEK karar (2026-08-17). Yokken iptal sert
+   * engelleniyordu; artık kullanıcı iki seçenekten birini söyler.
+   */
+  fasonAction: z.enum(["RETURN_TO_STOCK", "SCRAP"]).optional(),
   dispositions: z
     .array(
       z.object({
@@ -162,6 +168,11 @@ const cancelSchema = z.object({
 /** Parti düşürme — iptalle AYNI üç aksiyon (kapsam farklı, karar dili aynı). */
 const batchDropSchema = z.object({
   reason: z.string().trim().min(3, "Düşürme nedeni en az 3 karakter olmalı").max(500),
+  /**
+   * Fasondaki toplar için TEK karar (2026-08-17). Yokken iptal sert
+   * engelleniyordu; artık kullanıcı iki seçenekten birini söyler.
+   */
+  fasonAction: z.enum(["RETURN_TO_STOCK", "SCRAP"]).optional(),
   dispositions: z
     .array(
       z.object({
@@ -206,6 +217,28 @@ const linkOrderLinesSchema = z.object({
 // Sebepsiz bir renk/en değişikliği zaten "Düzenle" ekranında vardı.
 const changeTargetColorSchema = z.object({
   colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
+  reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
+});
+// `colorId`/`width` OPSİYONEL ama en az biri gelmeli — servis de doğruluyor.
+// `.optional()` ile `null` FARKLI anlamlar taşır: alan yoksa dokunma, null ise temizle.
+// Parça metrajları düzenlenebilir: operatör "10 top dikilerek 1 top geldi"
+// dedikten sonra metrajı da elle düzeltebilmeli.
+const fasonQuickSchema = z.object({
+  mode: z.enum(["ONE_TO_ONE", "MERGE"]),
+  overrides: z
+    .array(
+      z.object({
+        dispatchId: z.string().uuid(),
+        pieces: z.array(z.number().positive()).min(1).max(200),
+      }),
+    )
+    .optional(),
+  notes: z.string().max(500).optional(),
+});
+const applyAttributeSchema = z.object({
+  rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçmelisiniz"),
+  colorId: z.string().uuid().nullable().optional(),
+  width: z.number().positive().max(1000).nullable().optional(),
   reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
 });
 const changeWidthSchema = z.object({
@@ -300,6 +333,10 @@ export class WorkOrderController {
     this.unlinkOrderLine = this.unlinkOrderLine.bind(this);
     this.changeTargetColor = this.changeTargetColor.bind(this);
     this.changeWidth = this.changeWidth.bind(this);
+    this.fasonQuickPreview = this.fasonQuickPreview.bind(this);
+    this.fasonQuickApply = this.fasonQuickApply.bind(this);
+    this.getRollAttributeTargets = this.getRollAttributeTargets.bind(this);
+    this.applyAttributeToRolls = this.applyAttributeToRolls.bind(this);
     this.update = this.update.bind(this);
     this.replace = this.replace.bind(this);
     this.lockWorkOrder = this.lockWorkOrder.bind(this);
@@ -600,6 +637,58 @@ export class WorkOrderController {
     }
   }
 
+  /** GET /api/work-orders/:id/fason-quick-receive */
+  async fasonQuickPreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await workOrderFasonQuickService.preview(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/work-orders/:id/fason-quick-receive */
+  async fasonQuickApply(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = fasonQuickSchema.parse(req.body ?? {});
+      const result = await workOrderFasonQuickService.apply(
+        req.params.id as string,
+        body,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** GET /api/work-orders/:id/roll-attribute-targets */
+  async getRollAttributeTargets(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await workOrderLinkService.getRollAttributeTargets(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/work-orders/:id/apply-attribute-to-rolls */
+  async applyAttributeToRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = applyAttributeSchema.parse(req.body);
+      const result = await workOrderLinkService.applyAttributeToRolls(
+        req.params.id as string,
+        body,
+        req.user?.userId,
+        // Kapsam kontrolü tekil motorda; izinler HER ZAMAN geçirilir (F221).
+        req.user?.permissions ?? [],
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   /** PATCH /api/work-orders/:id/target-color */
   async changeTargetColor(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
@@ -795,7 +884,10 @@ export class WorkOrderController {
       // ile ürettiği sonuçtur, onun için süpervizör yetkisi istemek mobil iptali
       // yeni APK açık karar göndermeye başladığı gün kırardı. Envanteri yok eden
       // `SCRAP`/`CANCELLED` ise tam olarak `roll:manual-adjust`'ın konusudur.
-      const needsAdjust = (body.dispositions ?? []).some((d) => d.action !== "STOCK");
+      // FİRE fason kararı da envanteri yok eder → aynı süpervizör yetkisi.
+      const needsAdjust =
+        (body.dispositions ?? []).some((d) => d.action !== "STOCK") ||
+        body.fasonAction === "SCRAP";
       if (needsAdjust && !matchesPermission(req.user?.permissions ?? [], "roll:manual-adjust")) {
         throw AppError.forbidden(
           "Fire / hatalı kayıt kararı için 'roll:manual-adjust' yetkisi gerekli."
@@ -832,7 +924,10 @@ export class WorkOrderController {
   async dropBatch(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const body = batchDropSchema.parse(req.body ?? {});
-      const needsAdjust = (body.dispositions ?? []).some((d) => d.action !== "STOCK");
+      // FİRE fason kararı da envanteri yok eder → aynı süpervizör yetkisi.
+      const needsAdjust =
+        (body.dispositions ?? []).some((d) => d.action !== "STOCK") ||
+        body.fasonAction === "SCRAP";
       if (needsAdjust && !matchesPermission(req.user?.permissions ?? [], "roll:manual-adjust")) {
         throw AppError.forbidden(
           "Fire / hatalı kayıt kararı için 'roll:manual-adjust' yetkisi gerekli."

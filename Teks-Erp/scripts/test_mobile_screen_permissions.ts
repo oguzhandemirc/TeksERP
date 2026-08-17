@@ -290,6 +290,11 @@ function collectUsages(screens: Screen[]): { usages: Usage[]; unresolved: number
 const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "mobile:kk1",
+    path: "GET /",
+    why: "Renk listesi YALNIZ yarı mamül modunda çağrılır; o mod ayrı bir yetenek yetkisine bağlı (`mobile:kk1-yari-mamul`). Yetkisiz operatörde renk seçici hiç çizilmez, uç de çağrılmaz.",
+  },
+  {
+    screen: "mobile:kk1",
     path: "POST /quick-create",
     why: "Saha içi desen oluşturma ayrı bir YETENEK yetkisi (`mobile:kk1-desen`) — her KK1 operatörü ürün kartı açamasın.",
   },

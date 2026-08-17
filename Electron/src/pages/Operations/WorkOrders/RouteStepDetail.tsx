@@ -40,7 +40,11 @@ interface Props {
   canMoveDown: boolean;
   onPickStation: (id: string | null) => void;
   onSetNotes: (notes: string) => void;
-  onSetFirm: (patch: { plannedSubcontractorId?: string | null }) => void;
+  onSetFirm: (patch: {
+    plannedSubcontractorId?: string | null;
+    /** Fasona renksiz git (2026-08-17 "ekru" kuralı). */
+    dispatchWithoutColor?: boolean;
+  }) => void;
   onMove: (dir: -1 | 1) => void;
   onRemove: () => void;
   target: RouteTargetBinding;
@@ -200,6 +204,28 @@ export function RouteStepDetail({
               placeholder={step.requiredCategoryId ? "Firma seç..." : "İstasyona kategori atanmamış"}
               triggerClassName="h-8 text-xs"
             />
+            {/* "Fasona renksiz git" — 2026-08-17 "ekru" kuralı.
+                Sipariş EKRU der ve iş emrinin hedefi de EKRU'dur; ama boyahane
+                o rengi BOYAMAZ — kumaş kimyasal işlemden geçer, çıkan ton
+                "ekru" diye satılır. Kutu YALNIZ çekideki "boyanacak renk"
+                satırını susturur; iş emrinin rengine dokunmaz (planlama ve
+                sipariş karşılama bozulmasın). Gerçek renk kabulde beyan edilir.
+
+                ⚠️ Kutu önce `RouteDesignerStepRow`a konmuştu — o bileşen ÖLÜ
+                (hiçbir yerden import edilmiyor), bu yüzden sahada hiç
+                görünmedi. Canlı editör burasıdır. */}
+            <label className="mt-2 flex items-start gap-2 rounded-md border border-dashed bg-muted/20 px-2 py-1.5 text-[11px]">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={step.dispatchWithoutColor ?? false}
+                onChange={(e) => onSetFirm({ dispatchWithoutColor: e.target.checked })}
+              />
+              <span>
+                <strong>Fasona renksiz gitsin</strong> — çekide “boyanacak renk”
+                satırı basılmaz. İş emrinin rengi değişmez.
+              </span>
+            </label>
           </div>
         )}
       </div>

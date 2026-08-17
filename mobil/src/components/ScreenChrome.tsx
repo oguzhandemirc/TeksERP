@@ -37,6 +37,11 @@ interface Props {
   /** true: makine adı çipini (PlaceChip) HİÇ gösterme — makine adını ekranın
    *  kendisi başka yerde (ör. subtitle) gösteriyorsa. */
   hidePlaceChip?: boolean;
+  /** Başlık satırında, makine adı çipinin HEMEN YANINDA duracak ekran-özel
+   *  tetik. `headerExtras` sağ uçta durur ve ekranın MODUNU değiştiren bir
+   *  tuş orada "diğer aksiyonlar" arasında kaybolur — mod, bulunulan yerin
+   *  yanında okunmalı (2026-08-17 saha geri bildirimi, KK1 yarı mamül). */
+  titleRowExtras?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -49,6 +54,7 @@ export default function ScreenChrome({
   secondRow,
   secondRowSpread,
   hidePlaceChip,
+  titleRowExtras,
   children,
 }: Props) {
   const user = useAuthStore((s) => s.user);
@@ -139,6 +145,7 @@ export default function ScreenChrome({
                 hemen yanında kalır. hidePlaceChip → hiç gösterilmez (makine adı
                 subtitle'a taşınmışsa). */}
             {!secondRow && !hidePlaceChip && <PlaceChip />}
+            {titleRowExtras}
           </View>
           {subtitle && (
             <Text variant="labelMedium" style={styles.subtitle} numberOfLines={1}>

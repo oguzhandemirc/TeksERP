@@ -25,6 +25,14 @@ interface Props {
   onUpdate: (patch: Partial<DesignerStep>) => void;
 }
 
+/**
+ * ⚠️ ÖLÜ BİLEŞEN (2026-08-17'de ölçüldü). `RouteDesignerDialog` hiçbir yerden
+ * BİLEŞEN olarak import edilmiyor — yalnız tipleri kullanılıyor. Canlı rota
+ * editörü `RouteEditor` + `RouteStepDetail`tir.
+ *
+ * Buraya yeni alan eklersen SAHADA GÖRÜNMEZ (2026-08-17'de "fasona renksiz git"
+ * kutusu tam bu yüzden kayboldu; `ZIMPARALI` vakasının aynısı).
+ */
 export function RouteDesignerStepRow({
   step,
   index,
@@ -153,25 +161,6 @@ export function RouteDesignerStepRow({
                 extraFilters={subFilter}
               />
             </div>
-            {/* "Fasona renksiz git" — 2026-08-17 "ekru" kuralı.
-                Sipariş EKRU der, iş emrinin hedefi de EKRU'dur; ama boyahane o
-                rengi BOYAMAZ, kumaş kimyasal işlemden geçer ve çıkan ton "ekru"
-                diye satılır. Bu kutu yalnız ÇEKİDEKİ renk satırını susturur;
-                iş emrinin rengine DOKUNMAZ (planlama ve sipariş karşılama
-                bozulmasın). Gerçek renk kabulde personel tarafından beyan edilir. */}
-            <label className="col-span-full flex items-start gap-2 rounded-md border border-dashed bg-muted/20 px-3 py-2 text-xs">
-              <input
-                type="checkbox"
-                className="mt-0.5"
-                checked={step.dispatchWithoutColor ?? false}
-                onChange={(e) => onUpdate({ dispatchWithoutColor: e.target.checked })}
-              />
-              <span>
-                <strong>Fasona renksiz gitsin</strong> — çekide “boyanacak renk”
-                satırı basılmaz. İş emrinin rengi değişmez; gerçek renk kabulde
-                beyan edilir. (Boyanmayan işlemler için: ekru, kimyasal apre.)
-              </span>
-            </label>
           </>
         )}
       </div>

@@ -98,7 +98,7 @@ interface Props {
    * - "FINISHED_STOCK" (Bitmiş Depo): renk ZORUNLU → top WAREHOUSE (depo) doğar.
    * - "RAW_STOCK" (default, Ham Stok): renk opsiyonel; renksiz → STOCK.
    */
-  target?: "RAW_STOCK" | "FINISHED_STOCK" | "SEMI_FINISHED";
+  target?: "RAW_STOCK" | "FINISHED_STOCK";
   /**
    * "Ekle ve Etiket Bas" ile çağrılır: yeni topun id'si + (varsa) etiket müşteri
    * bağlamı. Üst sayfa RollLabelDialog'u bu topla açar (önizleme + Bas).
@@ -119,7 +119,11 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
    * `semiFinished` bayrağı statü sezgisini (`renk varsa WAREHOUSE`) bypass eder;
    * bayrak gönderilmezse mal doğrudan Bitmiş Depo'ya düşer ve üretime hiç girmez.
    */
-  const isSemiFinished = target === "SEMI_FINISHED";
+  // 2026-08-17: AYRI BİR MODAL DEĞİL, aynı modalda bir kutu. İki buton
+  // koymuştuk ama ikisi de aynı ucu (`/rolls/initial-entry`) ve aynı formu
+  // kullanıyordu — fark yalnız bir ön ayardı. Kutu yalnız Ham Stok sekmesinde
+  // anlamlı (Bitmiş Depo girişi zaten bitmiş maldır).
+  const [isSemiFinished, setIsSemiFinished] = useState(false);
   const colorRequired = isWarehouse || isSemiFinished;
   // KK1 ağırlık girişi admin ayarıyla kapatılabilir (default kapalı). Kapalıyken
   // alan gizlenir ve payload'a weightKg konmaz — aksi halde backend guard'ı
@@ -236,21 +240,30 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>
-            {isSemiFinished
-              ? "Yarı Mamül Girişi"
-              : isWarehouse
-                ? "Depoya Manuel Top Ekle"
-                : "Manuel Top Ekle"}
-          </DialogTitle>
+          <DialogTitle>{isWarehouse ? "Depoya Manuel Top Ekle" : "Manuel Top Ekle"}</DialogTitle>
           <DialogDescription>
-            {isSemiFinished
-              ? "Dışarıdan alınan, boyalı ama BİTMEMİŞ kumaş — top Ham Stok'a düşer ve kurşun/tambur işlemi görecek şekilde iş emrine bağlanır. Renk zorunlu."
-              : isWarehouse
-                ? "Bitmiş (renkli) stok girişi — renk zorunlu; top Bitmiş Depo (WAREHOUSE) statüsünde eklenir, barkodu otomatik atanır."
-                : "Dışarıdan/geçmiş ham stok girişi — top Ham Stok (STOCK) statüsünde eklenir, barkodu otomatik atanır."}
+            {isWarehouse
+              ? "Bitmiş (renkli) stok girişi — renk zorunlu; top Bitmiş Depo (WAREHOUSE) statüsünde eklenir, barkodu otomatik atanır."
+              : "Dışarıdan/geçmiş ham stok girişi — top Ham Stok (STOCK) statüsünde eklenir, barkodu otomatik atanır."}
           </DialogDescription>
         </DialogHeader>
+
+        {/* Yarı mamül = dışarıdan alınan, boyalı ama BİTMEMİŞ kumaş. İşaretlenince
+            renk zorunlu olur ve top ham stoğa düşer (kurşun/tambur görecek).
+            Bayraksız gönderilirse renkli top doğrudan Bitmiş Depo'ya düşerdi. */}
+        {!isWarehouse && (
+          <label className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs">
+            <input
+              type="checkbox"
+              checked={isSemiFinished}
+              onChange={(e) => setIsSemiFinished(e.target.checked)}
+            />
+            <span>
+              <strong>Dışarıdan yarı mamül</strong> — boyalı geldi, kurşun/tambur görecek.
+              Renk zorunlu olur, top ham stokta kalır.
+            </span>
+          </label>
+        )}
 
         <form onSubmit={doSubmit(false)} className="space-y-3">
           <FormField label="Kumaş" error={form.formState.errors.itemId} required>
