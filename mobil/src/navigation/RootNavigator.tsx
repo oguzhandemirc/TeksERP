@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { markLinkSuspect } from '../services/hal/btClassic.transport';
 import { AppState, View, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { NavigationContainer } from '@react-navigation/native';
@@ -112,6 +113,12 @@ export default function RootNavigator() {
         }
         announceFailures = 0; // öne geliş = taze başlangıç, backoff sıfırlanır
         void announce();
+      } else {
+        // Arka planda Android RFCOMM soketini koparabilir ama HC-06 köprüsü bunu
+        // her zaman görmez → `isDeviceConnected` "bağlı" der, yazma ÖLÜ sokete
+        // gider ve etiket çıkmaz (2026-08-17 Tambur saha vakası). Burada yalnız
+        // İŞARETLERİZ; temizlik bir sonraki baskıda, tek sefer yapılır.
+        markLinkSuspect();
       }
     });
 

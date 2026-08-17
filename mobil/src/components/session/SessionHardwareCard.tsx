@@ -24,7 +24,7 @@ import { ActivityIndicator, Button, Icon, Text } from 'react-native-paper';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { peripheralService, type DevicePeripheral } from '../../services/peripheral.service';
-import { isBtSupported, isBonded, listBonded, pairByMac } from '../../services/hal/btClassic.transport';
+import { isBtSupported, isBonded, listBonded, pairByMac, resetConnection } from '../../services/hal/btClassic.transport';
 import { buildIoFromPeripheral } from '../../hooks/usePeripheralIO';
 import { useSessionStore } from '../../store/sessionStore';
 import { useManualRefresh } from '../../hooks/useManualRefresh';
@@ -113,6 +113,42 @@ export default function SessionHardwareCard() {
     ],
     'Donanım listesi güncellendi',
   );
+
+  /**
+   * BAĞLANTIYI SIFIRLA — bayat/yarı-açık RFCOMM soketini temizler (2026-08-17).
+   *
+   * Saha vakası (Tambur): "yazıcıyla bağlantı ara ara kopuyor, yazıcıyı kapatıp
+   * açınca düzeliyor". HC-06 köprüsü tek bağlantı kabul eder; tablet tarafı
+   * düştüğünde köprü hâlâ "bağlıyım" sanabiliyor. Bu düğme operatörün yazıcıya
+   * kadar yürümeden deneyebileceği çıkış yolu.
+   *
+   * ⚠️ Mesaj DÜRÜST: başarıda bile "kesin düzeldi" DENMEZ — köprü, Android'in
+   * haberi olmayan bir hayalet bağlantıda takılıysa tabletten çözülemez ve tek
+   * çare yazıcının elektriğini kesmektir. Başarısızlıkta bunu açıkça söyler.
+   */
+  const resetLink = async (r: DevicePeripheral) => {
+    if (!r.address) return;
+    setBusyId(r.id);
+    try {
+      await resetConnection(r.address);
+      Toast.show({
+        type: 'success',
+        text1: 'Bağlantı yenilendi',
+        text2: 'Etiketi tekrar basmayı deneyin.',
+      });
+    } catch (e) {
+      Toast.show({
+        type: 'error',
+        text1: 'Bağlantı kurulamadı',
+        text2:
+          (e instanceof Error ? `${e.message} — ` : '') +
+          'Yazıcıyı kapatıp açın, sonra tekrar deneyin.',
+        visibilityTime: 8000,
+      });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const pair = async (r: DevicePeripheral) => {
     if (!r.address) return;
@@ -267,6 +303,23 @@ export default function SessionHardwareCard() {
                   onPress={() => void pair(r)}
                 >
                   Eşleştir
+                </Button>
+              )}
+              {/* "Sıfırla" yalnız EŞLEŞİK ÇIKIŞ cihazında (yazıcı): bağlanmamış
+                  cihazda sıfırlanacak bir soket yok, giriş cihazında (metre/kantar)
+                  zaten "Oku" var ve satırda üçüncü aksiyona yer kalmaz. Bonded
+                  yazıcıda "Eşleştir" gizli olduğu için burası boştadır. */}
+              {isSpp && btOk && !r.simulate && isBonded_ && !isInput && (
+                <Button
+                  mode="text"
+                  compact
+                  icon="restart"
+                  loading={busyId === r.id}
+                  disabled={busyId != null}
+                  textColor={C.accentLight}
+                  onPress={() => void resetLink(r)}
+                >
+                  Sıfırla
                 </Button>
               )}
               {/* "Oku" yalnız bond edilmiş girişte — bağlı olmayan cihaz zaten okunamaz.

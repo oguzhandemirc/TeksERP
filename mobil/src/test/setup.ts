@@ -51,6 +51,10 @@ jest.mock(
       pairDevice: jest.fn(async () => ({})),
       isDeviceConnected: jest.fn(async () => false),
       connectToDevice: jest.fn(async () => ({})),
+      // ⚠️ 2026-08-17'de EKLENDİ: bayat RFCOMM soketini koparan yol (forceDisconnect)
+      // bu metot yoksa SESSİZCE no-op'a düşer — yani mock eksik kalsaydı yeni
+      // davranışın testleri vakumen yeşil olurdu.
+      disconnectFromDevice: jest.fn(async () => true),
       writeToDevice: jest.fn(async () => true),
       availableFromDevice: jest.fn(async () => 0),
       readFromDevice: jest.fn(async () => null),

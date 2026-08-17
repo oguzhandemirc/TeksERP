@@ -9,6 +9,8 @@ import {
   writeRaw,
   readResponse,
   testConnection,
+  resetConnection,
+  markLinkSuspect,
   btClassicTransport,
   decodeCommand,
   splitFrames,
@@ -28,6 +30,7 @@ describe('btClassic.transport', () => {
     mod.pairDevice.mockResolvedValue({});
     mod.isDeviceConnected.mockResolvedValue(false);
     mod.connectToDevice.mockResolvedValue({});
+    mod.disconnectFromDevice.mockResolvedValue(true);
     mod.writeToDevice.mockResolvedValue(true);
     mod.availableFromDevice.mockResolvedValue(0);
     mod.readFromDevice.mockResolvedValue(null);
@@ -67,6 +70,41 @@ describe('btClassic.transport', () => {
     await writeRaw('AA:11', 'X', 'latin1');
     expect(mod.connectToDevice).toHaveBeenCalledTimes(1); // yalnız retry'da reconnect
     expect(mod.writeToDevice).toHaveBeenCalledTimes(2);
+  });
+
+  // ── Bayat RFCOMM soketi (2026-08-17 Tambur saha vakası) ────────────────────
+  // HC-06 köprüsü AYNI ANDA TEK bağlantı kabul eder. Tablet tarafı düştüğünde
+  // köprü hâlâ "bağlıyım" sanabiliyor → yeni bağlantı kabul etmiyor ve tek çare
+  // yazıcının elektriğini kesmek oluyordu ("restart edince düzeliyor").
+
+  it('yeniden denemede ÖNCE koparır — yarı-açık soket temizlensin', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    mod.writeToDevice.mockRejectedValueOnce(new Error('broken')).mockResolvedValueOnce(true);
+    await writeRaw('AA:11', 'X', 'latin1');
+    // Sıra LOAD-BEARING: disconnect YAPILMADAN connect çağrılırsa Android "zaten
+    // bağlı" deyip no-op'a düşer, yazma AYNI ÖLÜ sokete gider ve tekrar deneme
+    // hiçbir şey kazandırmaz (düzeltmeden önceki davranış buydu).
+    expect(mod.disconnectFromDevice).toHaveBeenCalledWith('AA:11');
+    const dcOrder = mod.disconnectFromDevice.mock.invocationCallOrder[0];
+    const cnOrder = mod.connectToDevice.mock.invocationCallOrder[0];
+    expect(dcOrder).toBeLessThan(cnOrder);
+  });
+
+  it('arka plana düşünce sonraki yazma soketi TAZELER (bir kez)', async () => {
+    mod.isDeviceConnected.mockResolvedValue(true);
+    markLinkSuspect();
+    await writeRaw('AA:11', 'X', 'latin1');
+    expect(mod.disconnectFromDevice).toHaveBeenCalledTimes(1);
+    // Bayrak TÜKETİLİR: her baskıda tekrar koparmak seri etiket akışını yavaşlatır.
+    await writeRaw('AA:11', 'Y', 'latin1');
+    expect(mod.disconnectFromDevice).toHaveBeenCalledTimes(1);
+  });
+
+  it('resetConnection: kopar → yeniden bağlan', async () => {
+    mod.isDeviceConnected.mockResolvedValue(false);
+    await resetConnection('AA:11');
+    expect(mod.disconnectFromDevice).toHaveBeenCalledWith('AA:11');
+    expect(mod.connectToDevice).toHaveBeenCalledWith('AA:11');
   });
 
   it('writeRaw timeoutMs: askıda kalan connect zaman aşımıyla NET hata verir (kuyruk donmaz)', async () => {
