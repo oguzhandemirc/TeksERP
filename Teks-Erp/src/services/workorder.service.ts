@@ -40,6 +40,14 @@ const WORKORDER_DATE_FIELDS = [
   "plannedStartDate",
   "plannedEndDate",
 ] as const;
+
+/**
+ * Liste satırında gösterilecek parti no adedi; kalanı `batchCount` ile `+N`
+ * olarak yazılır. 3: ölçülen gerçek veride bir iş emrinin partisi en fazla 2
+ * (2026-08-03 ölçümü), yani üçüncüsü zaten nadir — kolonu şişirmeden "birden
+ * fazla var" bilgisini taşır.
+ */
+const BATCH_PREVIEW_LIMIT = 3;
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -374,6 +382,8 @@ export interface WorkOrderCreateInput {
     notes?: string | null;
     requiredCategoryId?: string | null;
     plannedSubcontractorId?: string | null;
+    /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — bkz. schema.prisma. */
+    dispatchWithoutColor?: boolean;
   }[];
   /**
    * routeTemplateId ile birlikte verilebilir: şablondan klonlanan adımların fason
@@ -384,6 +394,7 @@ export interface WorkOrderCreateInput {
     requiredCategoryId?: string | null;
     plannedSubcontractorId?: string | null;
     notes?: string | null;
+    dispatchWithoutColor?: boolean;
   }[];
   /**
    * Tercih edilen: her satıra tahsis miktarı.
@@ -627,6 +638,8 @@ export class WorkOrderService {
           // formdaki stepPlanning overlay'i yine ezebilir.
           requiredCategoryId:     overlay?.requiredCategoryId ?? s.requiredCategoryId ?? null,
           plannedSubcontractorId: overlay?.plannedSubcontractorId ?? s.plannedSubcontractorId ?? null,
+          // 2026-08-17: "fasona renksiz git" işareti de şablondan klonlanır.
+          dispatchWithoutColor:   overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false,
         };
       });
     } else {
@@ -640,6 +653,7 @@ export class WorkOrderService {
         notes:     s.notes ?? null,
         requiredCategoryId:     s.requiredCategoryId ?? null,
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+        dispatchWithoutColor:   s.dispatchWithoutColor ?? false,
       }));
     }
 
@@ -1405,6 +1419,21 @@ export class WorkOrderService {
       targetColor: { select: { id: true, code: true, name: true, hex: true } },
       createdAt: true,
       updatedAt: true,
+      // Parti no LİSTE KOLONU (2026-08-17 saha talebi) — planlamacı iş emrini
+      // sahadaki fiziksel parti plakasıyla eşleştirebilsin diye. Arama zaten
+      // `batches.some.batchNumber` üzerinden çalışıyordu, gösterim yoktu.
+      //
+      // `orderBy: createdAt` ZORUNLU: parti no kısa/dönen biçimde (P01…P99,
+      // sarmalı) olabilir → numaraya göre sıralamak "en yeni"yi vermez.
+      // `mergedIntoId: null` süzgeci: birleştirilmiş parti TARİHÇEDİR, kâğıtta
+      // ve listede görünmemeli (refakat kartındaki `resolveLiveBatches` ile aynı kural).
+      batches: {
+        where: { mergedIntoId: null },
+        select: { id: true, batchNumber: true },
+        orderBy: { createdAt: "asc" },
+        take: BATCH_PREVIEW_LIMIT,
+      },
+      _count: { select: { batches: { where: { mergedIntoId: null } } } },
       steps: {
         select: {
           id: true,
@@ -4586,6 +4615,7 @@ export class WorkOrderService {
           // Saha #14: şablondaki fason planlaması replace'te de default klonlanır.
           requiredCategoryId: overlay?.requiredCategoryId ?? s.requiredCategoryId ?? null,
           plannedSubcontractorId: overlay?.plannedSubcontractorId ?? s.plannedSubcontractorId ?? null,
+          dispatchWithoutColor: overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false,
         };
       });
     } else {
@@ -4600,6 +4630,7 @@ export class WorkOrderService {
         notes: s.notes ?? null,
         requiredCategoryId: s.requiredCategoryId ?? null,
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+        dispatchWithoutColor: s.dispatchWithoutColor ?? false,
       }));
     }
 
@@ -5312,6 +5343,8 @@ export class WorkOrderService {
     data: {
       requiredCategoryId?: string | null;
       plannedSubcontractorId?: string | null;
+      /** 2026-08-17 — adım fasona renksiz gitsin ("ekru" kuralı). */
+      dispatchWithoutColor?: boolean;
     },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
@@ -5392,6 +5425,7 @@ export class WorkOrderService {
       data: {
         requiredCategoryId: data.requiredCategoryId,
         plannedSubcontractorId: data.plannedSubcontractorId,
+        dispatchWithoutColor: data.dispatchWithoutColor,
       },
     });
     if (claim.count === 0) {

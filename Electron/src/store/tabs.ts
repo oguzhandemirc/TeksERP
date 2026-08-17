@@ -6,6 +6,7 @@ import {
   navigateTabRouter,
   disposeTabRouter,
 } from "@/components/layout/tabs/tab-routers";
+import { recallRoute } from "@/components/layout/tabs/route-memory";
 
 export interface TabItem {
   /** Kararlı kimlik — router registry + React key. */
@@ -61,12 +62,20 @@ export const useTabsStore = create<TabsState>()(
       openTab: (rawPath, opts = {}) => {
         const { state, forceNew, background } = opts;
         const pathname = tabPathname(rawPath);
+        // Sorgusuz bir yol isteniyorsa o sayfanın SON görünümünü (filtre/sıralama)
+        // geri getir. Çağıran açıkça sorgu gönderdiyse (panodan gelen daraltılmış
+        // bağlantı) onun niyeti kazanır — hafıza ezilmez, ezmez.
+        const wanted = rawPath === pathname && state === undefined
+          ? (recallRoute(pathname) ?? rawPath)
+          : rawPath;
         const { tabs, activeId } = get();
 
         if (!forceNew) {
           const existing = tabs.find((t) => t.path === pathname);
           if (existing) {
             // Aynı sayfa açık → odakla; farklı sorgu/state geldiyse o sekmeyi taşı.
+            // Sorgusuz istekte sekme YERİNDE bırakılır: zaten açık olan görünümü
+            // (kullanıcının kurduğu filtreyi) sıfırlamak istenmez.
             if (rawPath !== pathname || state !== undefined) {
               navigateTabRouter(existing.id, rawPath, state);
             }
@@ -77,7 +86,7 @@ export const useTabsStore = create<TabsState>()(
 
         const id = newId();
         const { title } = resolveTabMeta(pathname);
-        getTabRouter(id, rawPath, state); // router'ı şimdi kur (arka plan dahil hazır)
+        getTabRouter(id, wanted, state); // router'ı şimdi kur (arka plan dahil hazır)
         set({
           tabs: [...tabs, { id, path: pathname, title }],
           activeId: background ? activeId : id,
@@ -99,7 +108,10 @@ export const useTabsStore = create<TabsState>()(
         // Zaten bu sayfadaysak (sorgu/state yok) hiçbir şey yapma — filtreleri sıfırlama.
         if (active.path === pathname && rawPath === pathname && state === undefined) return;
 
-        navigateTabRouter(active.id, rawPath, state);
+        const wanted = rawPath === pathname && state === undefined
+          ? (recallRoute(pathname) ?? rawPath)
+          : rawPath;
+        navigateTabRouter(active.id, wanted, state);
         const { title } = resolveTabMeta(pathname);
         set({
           tabs: tabs.map((t) => (t.id === active.id ? { ...t, path: pathname, title } : t)),

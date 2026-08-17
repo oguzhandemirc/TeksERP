@@ -98,7 +98,7 @@ interface Props {
    * - "FINISHED_STOCK" (Bitmiş Depo): renk ZORUNLU → top WAREHOUSE (depo) doğar.
    * - "RAW_STOCK" (default, Ham Stok): renk opsiyonel; renksiz → STOCK.
    */
-  target?: "RAW_STOCK" | "FINISHED_STOCK";
+  target?: "RAW_STOCK" | "FINISHED_STOCK" | "SEMI_FINISHED";
   /**
    * "Ekle ve Etiket Bas" ile çağrılır: yeni topun id'si + (varsa) etiket müşteri
    * bağlamı. Üst sayfa RollLabelDialog'u bu topla açar (önizleme + Bas).
@@ -111,6 +111,16 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
   const { hasPermission } = useRoleAccess();
   const canPrint = hasPermission("label:print");
   const isWarehouse = target === "FINISHED_STOCK";
+  /**
+   * Dışarıdan alınan YARI MAMÜL (2026-08-17, madde 9): boyalı/işlenmiş gelir ama
+   * bitmiş DEĞİLDİR — fabrikada kurşun + tambur görecek.
+   *
+   * Renk zorunlu (tanımı gereği renkli), ama top HAM STOĞA düşer. Backend'de
+   * `semiFinished` bayrağı statü sezgisini (`renk varsa WAREHOUSE`) bypass eder;
+   * bayrak gönderilmezse mal doğrudan Bitmiş Depo'ya düşer ve üretime hiç girmez.
+   */
+  const isSemiFinished = target === "SEMI_FINISHED";
+  const colorRequired = isWarehouse || isSemiFinished;
   // KK1 ağırlık girişi admin ayarıyla kapatılabilir (default kapalı). Kapalıyken
   // alan gizlenir ve payload'a weightKg konmaz — aksi halde backend guard'ı
   // (createInitialEntry) ağırlıklı girişi 400 ile reddeder.
@@ -179,8 +189,12 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
       // Bitmiş Depo hedefi WAREHOUSE ister → backend bunu yalnız colorId ile üretir.
       // Renksiz gönderim STOCK'a düşer (Ham Stok'ta çıkar, kullanıcı depoda arar) →
       // erken engelle, net hata göster.
-      if (isWarehouse && !v.colorId) {
-        form.setError("colorId", { message: "Bitmiş depo girişi için renk zorunlu" });
+      if (colorRequired && !v.colorId) {
+        form.setError("colorId", {
+          message: isSemiFinished
+            ? "Yarı mamül girişinde renk zorunlu — mal boyalı geliyor"
+            : "Bitmiş depo girişi için renk zorunlu",
+        });
         return;
       }
       mutation.mutate({
@@ -193,6 +207,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           // Boş = Belirsiz → payload'dan düş (backend null yazar).
           qualityGrade: v.qualityGrade || undefined,
           propertyIds: v.propertyIds,
+          ...(isSemiFinished ? { semiFinished: true } : {}),
           clientToken,
           ...(confirmDuplicate ? { confirmDuplicate: true } : {}),
         },
@@ -221,11 +236,19 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
     >
       <DialogContent className="max-w-xl">
         <DialogHeader>
-          <DialogTitle>{isWarehouse ? "Depoya Manuel Top Ekle" : "Manuel Top Ekle"}</DialogTitle>
+          <DialogTitle>
+            {isSemiFinished
+              ? "Yarı Mamül Girişi"
+              : isWarehouse
+                ? "Depoya Manuel Top Ekle"
+                : "Manuel Top Ekle"}
+          </DialogTitle>
           <DialogDescription>
-            {isWarehouse
-              ? "Bitmiş (renkli) stok girişi — renk zorunlu; top Bitmiş Depo (WAREHOUSE) statüsünde eklenir, barkodu otomatik atanır."
-              : "Dışarıdan/geçmiş ham stok girişi — top Ham Stok (STOCK) statüsünde eklenir, barkodu otomatik atanır."}
+            {isSemiFinished
+              ? "Dışarıdan alınan, boyalı ama BİTMEMİŞ kumaş — top Ham Stok'a düşer ve kurşun/tambur işlemi görecek şekilde iş emrine bağlanır. Renk zorunlu."
+              : isWarehouse
+                ? "Bitmiş (renkli) stok girişi — renk zorunlu; top Bitmiş Depo (WAREHOUSE) statüsünde eklenir, barkodu otomatik atanır."
+                : "Dışarıdan/geçmiş ham stok girişi — top Ham Stok (STOCK) statüsünde eklenir, barkodu otomatik atanır."}
           </DialogDescription>
         </DialogHeader>
 
@@ -250,10 +273,16 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
           {/* Renk + Özellikler yan yana — ikisi de tıklayınca modal açar. */}
           <div className="grid grid-cols-2 gap-3">
             <FormField
-              label={isWarehouse ? "Renk" : "Renk (opsiyonel)"}
-              required={isWarehouse}
+              label={colorRequired ? "Renk" : "Renk (opsiyonel)"}
+              required={colorRequired}
               error={form.formState.errors.colorId}
-              hint={isWarehouse ? "Bitmiş depo topu renklidir — zorunlu." : "Ham mal genelde boş."}
+              hint={
+                isSemiFinished
+                  ? "Yarı mamül boyalı gelir — zorunlu."
+                  : isWarehouse
+                    ? "Bitmiş depo topu renklidir — zorunlu."
+                    : "Ham mal genelde boş."
+              }
             >
               <Controller
                 control={form.control}
@@ -262,7 +291,7 @@ export function ManualEntryDialog({ open, onOpenChange, target = "RAW_STOCK", on
                   <ColorPickerModal
                     value={field.value}
                     onChange={field.onChange}
-                    allowNone={!isWarehouse}
+                    allowNone={!colorRequired}
                     placeholder="Renk seç..."
                   />
                 )}

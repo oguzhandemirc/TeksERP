@@ -81,6 +81,8 @@ import {
 // FIFO/spec-eşleşmesiyle üretir (tek karşılanma kaynağı; circular yok — shipping
 // subcontractor'ı import etmez).
 import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./helpers/allocation.helper";
+// Kabulde ölçülen eni iş emrine yansıtmak için (2026-08-17, madde 12).
+import { workOrderLinkService } from "./workorder-link.service";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -2896,6 +2898,33 @@ export class SubcontractorService {
         appliedPropertyIds: resolvedAppliedPropertyIds,
       },
     });
+
+    // ── Kabulde ÖLÇÜLEN en iş emrine de yansır (2026-08-17, madde 12) ────────
+    // Eskiden ölçülen en yalnız DOĞAN TOPA yazılıyordu; iş emrinin eni eski
+    // değerde kalıyor ve bir sonraki fason çekisi hâlâ o eski eni basıyordu.
+    // Kullanıcı kararı: kabul personeli ölçtüğü eni beyan eder, kimseden onay
+    // ALMAZ, doğrudan iş emrine yansır.
+    //
+    // Tx DIŞINDA ve best-effort: kabul tamamlandı, mal içeride. Bu bir
+    // GÜNCELLEME; başarısız olursa kabulü geri almak orantısız olurdu (audit
+    // yazımıyla aynı gerekçe). Terminal WO'da servis zaten reddeder → o durumda
+    // en yalnız topa yazılmış olur, iz de audit'te durur.
+    if (measuredWidth && Number(measuredWidth) !== (wo.width == null ? null : Number(wo.width))) {
+      try {
+        await workOrderLinkService.changeWidth(
+          data.workOrderId,
+          Number(measuredWidth),
+          `Fason kabulünde ölçüldü (${result!.receiptNo})`,
+          userId,
+          "FASON_RECEIPT",
+        );
+      } catch (err) {
+        console.warn(
+          `[fason-kabul] İş emri eni güncellenemedi (WO ${data.workOrderId}):`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+    }
 
     return {
       success: true,

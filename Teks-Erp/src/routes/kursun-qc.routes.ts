@@ -198,10 +198,13 @@ router.post(
  *       404: { description: Kayıt bulunamadı }
  *       500: { description: Sunucu hatası }
  */
+// `mobile:tambur` — Tambur ekranı da işlenmemiş hata kaydını siliyor
+// (`tamburService.deleteError` bilerek BU ucu kullanıyor; ayrı bir tambur ucu
+// yok). 2026-08-17'ye kadar guard'da yoktu → Tambur operatörü sessiz 403.
 router.delete(
   "/error",
   verifyToken,
-  requireAnyPermission("quality:write", "mobile:kk2-kursun"),
+  requireAnyPermission("quality:write", "mobile:kk2-kursun", "mobile:tambur"),
   controller.deleteError
 );
 

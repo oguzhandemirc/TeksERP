@@ -126,6 +126,22 @@ const CURRENT_STATION_FILTER: FilterDef = {
 
 export const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
 
+// GİRİŞ TÜRÜ — yalnız Ham Stok (2026-08-17, madde 9). Dışarıdan alınan yarı
+// mamül ham stoğa düşer ve orada "içeride ürettiğimiz ham" ile yan yana durur;
+// ayrı bir DEPO açmak yerine (fabrikada fiziksel karşılığı yok) ayrım bu
+// filtreyle yapılır. Diğer sekmelerde eklenmez: Tambur kesimi / fason dönüşü
+// gibi değerler oralarda tek seçenek olur ve filtre "bozuk" görünür.
+const ENTRY_SOURCE_FILTER: FilterDef = {
+  kind: "multi-select",
+  key: "entrySource",
+  label: "Giriş Türü",
+  options: [
+    { value: "SUPPLIER_RECEIPT", label: "Ham Giriş" },
+    { value: "SEMI_FINISHED", label: "Yarı Mamül (Dış Alım)" },
+    { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
+  ],
+};
+
 // Sadece "Bitmiş Depo" sekmesinde anlamlı: WAREHOUSE topu serbest mi yoksa bir
 // çuvala/sevkiyata rezerve mi? (backend filter[shipmentScope]=free|committed)
 const SHIPMENT_SCOPE_FILTER: FilterDef = {
@@ -175,6 +191,7 @@ export function buildRollFilterDefs(
     if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
     return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
   });
+  if (tab === "RAW_STOCK") return [...base, ENTRY_SOURCE_FILTER];
   if (tab === "FINISHED_STOCK") return [...base, SHIPMENT_SCOPE_FILTER];
   if (tab === "SUBCONTRACTOR") return [...base, ...FASON_FILTERS];
   // İSTASYON (currentStationId) YALNIZ topun gerçekten bir istasyonda DURDUĞU

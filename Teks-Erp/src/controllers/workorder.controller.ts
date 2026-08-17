@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { WorkOrderService } from "../services/workorder.service";
+import { workOrderLinkService } from "../services/workorder-link.service";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
@@ -191,6 +192,26 @@ const completeSchema = z.object({
 const updateStepPlanningSchema = z.object({
   requiredCategoryId: z.string().uuid().nullable().optional(),
   plannedSubcontractorId: z.string().uuid().nullable().optional(),
+  // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
+  dispatchWithoutColor: z.boolean().optional(),
+});
+
+// ── Sipariş bağlama + hedef düzeltme şemaları (2026-08-17) ───────────────────
+const linkOrderLinesSchema = z.object({
+  orderLineIds: z
+    .array(z.string().uuid("Geçersiz sipariş satırı ID"))
+    .min(1, "En az bir sipariş satırı seçmelisiniz"),
+});
+// `reason` ZORUNLU ve boş geçilemez: bu iki uç varlık sebebini sebepten alıyor.
+// Sebepsiz bir renk/en değişikliği zaten "Düzenle" ekranında vardı.
+const changeTargetColorSchema = z.object({
+  colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
+  reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
+});
+const changeWidthSchema = z.object({
+  width: z.number().positive("En pozitif olmalı").max(1000, "En en fazla 1000 cm").nullable().optional(),
+  reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
+  source: z.enum(["MANUAL", "FASON_RECEIPT"]).optional().default("MANUAL"),
 });
 
 const updateWorkOrderSchema = z.object({
@@ -272,6 +293,13 @@ export class WorkOrderController {
     this.getManualMovePreview = this.getManualMovePreview.bind(this);
     this.manualMove = this.manualMove.bind(this);
     this.updateStepPlanning = this.updateStepPlanning.bind(this);
+    // ⚠️ Yeni metot ekleyen HERKES buraya da yazmalı. `print-event` ucu 2026-08-05'te
+    // tam bu satır unutulduğu için aylarca 500 verdi ve servis testleri göremedi.
+    this.getLinkableOrderLines = this.getLinkableOrderLines.bind(this);
+    this.linkOrderLines = this.linkOrderLines.bind(this);
+    this.unlinkOrderLine = this.unlinkOrderLine.bind(this);
+    this.changeTargetColor = this.changeTargetColor.bind(this);
+    this.changeWidth = this.changeWidth.bind(this);
     this.update = this.update.bind(this);
     this.replace = this.replace.bind(this);
     this.lockWorkOrder = this.lockWorkOrder.bind(this);
@@ -524,6 +552,80 @@ export class WorkOrderController {
         req.params.stepId as string,
         body,
         req.user?.userId
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // ── Sipariş bağlama + hedef düzeltme (2026-08-17 talepleri 8/10/12) ────────
+
+  /** GET /api/work-orders/:id/linkable-order-lines */
+  async getLinkableOrderLines(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await workOrderLinkService.getLinkableOrderLines(req.params.id as string);
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/work-orders/:id/order-links — YALNIZ bağ kurar, miras almaz. */
+  async linkOrderLines(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = linkOrderLinesSchema.parse(req.body);
+      const result = await workOrderLinkService.linkOrderLines(
+        req.params.id as string,
+        body.orderLineIds,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** DELETE /api/work-orders/:id/order-links/:orderLineId */
+  async unlinkOrderLine(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const result = await workOrderLinkService.unlinkOrderLine(
+        req.params.id as string,
+        req.params.orderLineId as string,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** PATCH /api/work-orders/:id/target-color */
+  async changeTargetColor(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = changeTargetColorSchema.parse(req.body);
+      const result = await workOrderLinkService.changeTargetColor(
+        req.params.id as string,
+        body.colorId ?? null,
+        body.reason,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** PATCH /api/work-orders/:id/width */
+  async changeWidth(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = changeWidthSchema.parse(req.body);
+      const result = await workOrderLinkService.changeWidth(
+        req.params.id as string,
+        body.width ?? null,
+        body.reason,
+        req.user?.userId,
+        body.source,
       );
       res.status(200).json(result);
     } catch (error) {

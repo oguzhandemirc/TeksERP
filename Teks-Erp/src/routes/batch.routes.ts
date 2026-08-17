@@ -31,10 +31,12 @@ const router = Router();
 // `admin:settings` DE kabul edilir: göstergenin tüketicisi Genel Ayarlar ekranı ve
 // oradaki yönetici `workorder:read` taşımak zorunda değil. Tersi kurgu göstergeyi
 // panelde sessizce boş bırakırdı.
+// `mobile:hizli-is-emri` — Hızlı İş Emri sihirbazının ilk adımı "SON PARTİ: P47"
+// göstergesini basar (2026-08-17). Saha kullanıcısı `workorder:read` taşımaz.
 router.get(
   "/number-state",
   verifyToken,
-  requireAnyPermission("workorder:read", "admin:settings"),
+  requireAnyPermission("workorder:read", "admin:settings", "mobile:hizli-is-emri"),
   controller.numberState,
 );
 

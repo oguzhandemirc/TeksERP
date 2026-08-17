@@ -196,6 +196,139 @@ export function buildWhereClause(
 // için ILIKE (ASCII fold) + Türkçe BÜYÜK ve KÜÇÜK case-sensitive varyantları.
 const TR_FOLD = /[iıİIçÇğĞöÖşŞüÜ]/;
 
+// ── Türkçe harf DENKLİĞİ (2026-08-17 saha talebi) ────────────────────────────
+// "cisem" · "CISEM" · "ÇİSEM" · "çisem" AYNI sonucu vermeli. Yukarıdaki case
+// katlaması bunu çözmez: o yalnız BÜYÜK/küçük farkını kapatır, `c` ile `ç`yi
+// AYRI harf saymaya devam eder.
+//
+// Sütunu katlayamıyoruz (Prisma `contains` bir ILIKE üretir; `translate()`/
+// `unaccent()` gibi ifadeler where cümlesine giremez), o yüzden TERİMİ
+// varyantlarına açıyoruz. Kalıcı çözüm PostgreSQL `unaccent` + ifade index'i
+// ve aramanın raw SQL'e taşınmasıdır (~40 çağrı noktası) — bugünkü hacimde
+// gerekmiyor, gerektiğinde buradaki sözleşme korunarak değiştirilebilir.
+//
+// Seçenekler neden BÜYÜK Türkçe harf: adlar/kodlar DB'ye BÜYÜK yazılıyor
+// (name-normalize.helper), ASCII seçeneği de `mode:"insensitive"` sayesinde
+// hem `c` hem `C`yi yakalıyor. Küçük Türkçe (ç, ğ, ı…) yazımı için ayrıca tek
+// bir "tümü küçük" varyantı eklenir — kombinasyona sokulmaz, çünkü maliyeti
+// ikiye katlar ve pratikte serbest metin alanlarında karşılığı olur.
+const TR_EQUIV: Record<string, string> = {
+  c: "Ç",
+  g: "Ğ",
+  i: "İ",
+  o: "Ö",
+  s: "Ş",
+  u: "Ü",
+};
+/** Küçük yazım karşılıkları — `i` → `ı` (dotsuz), `İ` → `i` DEĞİL. */
+const TR_EQUIV_LOWER: Record<string, string> = {
+  c: "ç",
+  g: "ğ",
+  i: "ı",
+  o: "ö",
+  s: "ş",
+  u: "ü",
+};
+/** Türkçe harfi ASCII karşılığına indirger (varyant üretiminin ortak anahtarı). */
+const TR_TO_ASCII: Record<string, string> = {
+  ç: "c", Ç: "c",
+  ğ: "g", Ğ: "g",
+  ı: "i", İ: "i", I: "i",
+  ö: "o", Ö: "o",
+  ş: "s", Ş: "s",
+  ü: "u", Ü: "u",
+};
+/**
+ * Kaç konumda dallanılacağı. 4 → en fazla 16 varyant; her varyant her alan için
+ * bir ILIKE demek, yani 6 alanlı bir aramada ~100 koşul. Sınır AŞILIRSA fazlası
+ * dallanmaz (ASCII hâliyle kalır) — sonuç daralır ama sorgu patlamaz. Sessiz
+ * değil: bilinçli ve belgeli bir azalma.
+ */
+const TR_MAX_FOLD_POSITIONS = 4;
+/**
+ * Aile başına varyant tavanı. Üst sınır: 2 aile × 2^4 + 2 (tam katlama) + 2
+ * (Türkçe büyük/küçük) + 1 (terimin kendisi) = 39 yaprak; altı alanlı bir
+ * aramada ~230 ILIKE koşulu. Sorgu planı seq scan olduğu için maliyet
+ * doğrusaldır ve bu hacimde ölçülebilir bir gecikme üretmiyor.
+ */
+const TR_MAX_VARIANTS = 32;
+
+/** Terimi Türkçe denklik varyantlarına açar (kendisi HARİÇ). */
+function turkishEquivalents(term: string): string[] {
+  const chars = [...term];
+  // Dallanılacak konumlar: ASCII karşılığı TR_EQUIV'de olan her harf.
+  const positions: number[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    const ascii = TR_TO_ASCII[chars[i]] ?? chars[i].toLowerCase();
+    if (TR_EQUIV[ascii]) positions.push(i);
+  }
+  if (positions.length === 0) return [];
+  const folded = positions.slice(0, TR_MAX_FOLD_POSITIONS);
+
+  // ASCII tabanı: her katlanabilir harf ASCII'ye indirgenir (ILIKE büyük/küçüğü
+  // zaten kapatır), sonra seçili konumlar tek tek Türkçe harfe çevrilir.
+  const base = chars.map((c) => TR_TO_ASCII[c] ?? c);
+
+  /**
+   * Bir konumun seçenekleri. `i` ÜÇ seçenek alır (ASCII + `İ` + `ı`): tekstil
+   * verisinde en sık karışan çift budur ve dotsuz `ı` yalnız "tümü küçük"
+   * varyantında kalsaydı "isitma" → "ISITMA"yı bulur, "cısem"i bulamazdı.
+   * Diğer harflerde BÜYÜK Türkçe yeter (adlar/kodlar büyük saklanıyor);
+   * küçük yazımı aşağıdaki tek "tümü küçük" varyantı karşılar.
+   */
+  /**
+   * Türkçe karşılık. ⚠️ Anahtar KÜÇÜK harf olmalı: `TR_TO_ASCII` yalnız Türkçe
+   * harfleri çevirir, `"C"` gibi BÜYÜK ASCII harfler olduğu gibi kalır ve
+   * `TR_EQUIV["C"]` undefined döner → o konum varyantta SİLİNİRDİ ("CISEM" →
+   * "iSEM"). Sessiz ve zehirli bir hata: arama daha ÇOK sonuç bulur, sebebi
+   * hiçbir yerde görünmez.
+   */
+  const equivAt = (idx: number, upper: boolean): string | null => {
+    const key = base[idx].toLocaleLowerCase("tr-TR");
+    return (upper ? TR_EQUIV[key] : TR_EQUIV_LOWER[key]) ?? null;
+  };
+
+  const out = new Set<string>();
+
+  // İKİ AİLE: "tümü BÜYÜK Türkçe" ve "tümü küçük Türkçe". Aynı konumda hem `Ç`
+  // hem `ç` denemek kombinasyonu üçe katlardı; oysa gerçek veride yazım kendi
+  // içinde tutarlıdır (adlar/kodlar BÜYÜK normalize edilir, serbest metin
+  // küçük yazılır). Karışık yazım ("Çişem") bilinçli olarak kapsam dışı.
+  for (const upper of [true, false]) {
+    let combos: string[][] = [[...base]];
+    for (const idx of folded) {
+      const eq = equivAt(idx, upper);
+      if (!eq) continue;
+      const next: string[][] = [];
+      for (const combo of combos) {
+        next.push(combo);
+        const v = [...combo];
+        v[idx] = eq;
+        next.push(v);
+      }
+      combos = next;
+      if (combos.length >= TR_MAX_VARIANTS) break;
+    }
+    for (const combo of combos) out.add(combo.join(""));
+  }
+
+  // Sınırı aşan uzun kelimeler için TÜM konumları katlanmış iki varyant daha
+  // ("gümüşoğlu" gibi baştan sona Türkçe yazımlar dallanma tavanına takılıp
+  // hiç üretilmezdi — bu iki satır onları doğrusal maliyetle kurtarır).
+  if (positions.length > folded.length) {
+    for (const upper of [true, false]) {
+      const v = [...base];
+      for (const idx of positions) {
+        const eq = equivAt(idx, upper);
+        if (eq) v[idx] = eq;
+      }
+      out.add(v.join(""));
+    }
+  }
+  out.delete(term);
+  return [...out];
+}
+
 /** "a.b.c" → { a: { b: { c: leaf } } } (list-relation `some` dahil düz iç içe). */
 function nestPath(path: string, leaf: unknown): Record<string, unknown> {
   const segs = path.split(".");
@@ -217,12 +350,20 @@ export function buildTurkishSearch<T = Record<string, unknown>>(
   const term = search.trim();
   if (!term || paths.length === 0) return [];
   const leaves: Record<string, unknown>[] = [{ contains: term, mode: "insensitive" }];
+  const seen = new Set<string>([term]);
+  const push = (v: string, insensitive: boolean) => {
+    if (seen.has(v)) return;
+    seen.add(v);
+    leaves.push(insensitive ? { contains: v, mode: "insensitive" } : { contains: v });
+  };
   if (TR_FOLD.test(term)) {
-    const upper = term.toLocaleUpperCase("tr-TR");
-    if (upper !== term) leaves.push({ contains: upper });
-    const lower = term.toLocaleLowerCase("tr-TR");
-    if (lower !== term && lower !== upper) leaves.push({ contains: lower });
+    // Türkçe BÜYÜK/küçük katlaması (C-locale ILIKE bunu yapmaz).
+    push(term.toLocaleUpperCase("tr-TR"), false);
+    push(term.toLocaleLowerCase("tr-TR"), false);
   }
+  // Türkçe harf DENKLİĞİ — `c`↔`ç`, `s`↔`ş`, `i`↔`ı`… Varyantlar `insensitive`
+  // ile eklenir: içlerindeki ASCII harfler yine büyük/küçük bağımsız eşleşsin.
+  for (const v of turkishEquivalents(term)) push(v, true);
   const clauses: Record<string, unknown>[] = [];
   for (const path of paths) {
     for (const leaf of leaves) clauses.push(nestPath(path, leaf));

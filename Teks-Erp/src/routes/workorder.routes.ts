@@ -502,6 +502,138 @@ router.patch(
  */
 router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), controller.lockWorkOrder);
 
+// ── Sipariş bağlama + hedef düzeltme (2026-08-17 saha talepleri 8/10/12) ─────
+// Bu dört uç, "Düzenle" ekranını hiç açmadan TEK bir şeyi değiştirir. Gerekçe:
+// düzenleme ekranı iş emrinin her şeyini (rota, hedef, metraj) açar ve saha
+// personeli sipariş bağlarken yanlışlıkla üretimi bozabiliyordu.
+// ⚠️ `POST /:id/order-links` sipariş satırından HİÇBİR ŞEY MİRAS ALMAZ —
+// gerekçe workorder-link.service.ts başlığında.
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/linkable-order-lines:
+ *   get:
+ *     tags: [WorkOrders]
+ *     summary: Bu iş emrine bağlanabilecek sipariş satırları (kumaş+renk uyumlu)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Aday sipariş satırları (açık metrajıyla) }
+ */
+router.get(
+  "/:id/linkable-order-lines",
+  verifyToken,
+  requireAnyPermission("workorder:read", "mobile:hizli-is-emri"),
+  controller.getLinkableOrderLines,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/order-links:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Sipariş satırlarını bağla (YALNIZ bağ kurar — hedef/rota/metraj değişmez)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderLineIds]
+ *             properties:
+ *               orderLineIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Bağlandı }
+ *       400: { description: Kumaş/renk uyuşmuyor }
+ */
+router.post(
+  "/:id/order-links",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:hizli-is-emri"),
+  controller.linkOrderLines,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/order-links/{orderLineId}:
+ *   delete:
+ *     tags: [WorkOrders]
+ *     summary: Sipariş bağını kaldır
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Bağ kaldırıldı }
+ */
+router.delete(
+  "/:id/order-links/:orderLineId",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.unlinkOrderLine,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/target-color:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: Üretim rengini değiştir (sebep zorunlu, iz bırakır)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               colorId: { type: string, format: uuid, nullable: true }
+ *               reason:  { type: string }
+ *     responses:
+ *       200: { description: Renk güncellendi }
+ */
+router.patch(
+  "/:id/target-color",
+  verifyToken,
+  requirePermission("workorder:write"),
+  controller.changeTargetColor,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/width:
+ *   patch:
+ *     tags: [WorkOrders]
+ *     summary: İş emrinin enini değiştir (sebep zorunlu, iz bırakır)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               width:  { type: number, nullable: true }
+ *               reason: { type: string }
+ *     responses:
+ *       200: { description: En güncellendi }
+ */
+router.patch(
+  "/:id/width",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  controller.changeWidth,
+);
+
 /**
  * @openapi
  * /api/work-orders/{id}/rolls:

@@ -51,7 +51,9 @@ export function RollsPage() {
   );
   const [manualOpen, setManualOpen] = useState(false);
   // Manuel giriş hangi sekmeden açıldı — Bitmiş Depo'da renk zorunlu + WAREHOUSE doğar.
-  const [manualTarget, setManualTarget] = useState<"RAW_STOCK" | "FINISHED_STOCK">("RAW_STOCK");
+  // SEMI_FINISHED (2026-08-17): dışarıdan alınan YARI MAMÜL — renkli gelir ama
+  // bitmiş değildir; ham stoğa düşer ve kurşun+tambur görür.
+  const [manualTarget, setManualTarget] = useState<"RAW_STOCK" | "FINISHED_STOCK" | "SEMI_FINISHED">("RAW_STOCK");
   // "Ekle ve Etiket Bas": yeni topun etiket diyalogu (önizleme + Bas). ctx = etiket müşterisi.
   const [labelRoll, setLabelRoll] = useState<{ id: string; ctx?: LabelCustomerContext } | null>(null);
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
@@ -225,6 +227,21 @@ export function RollsPage() {
                   }}
                 >
                   <Plus className="h-4 w-4" /> Manuel Top Ekle
+                </Button>
+              </PermissionGate>
+            )}
+            {tab === "RAW_STOCK" && (
+              <PermissionGate permission="roll:write">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setManualTarget("SEMI_FINISHED");
+                    setManualOpen(true);
+                  }}
+                  title="Dışarıdan alınan, boyalı ama bitmemiş kumaş — kurşun/tambur görecek"
+                >
+                  <Plus className="h-4 w-4" /> Yarı Mamül Girişi
                 </Button>
               </PermissionGate>
             )}

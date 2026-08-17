@@ -85,6 +85,15 @@ enum RollEntrySource {
   TAMBUR_MANUAL
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
+  /// DIŞARIDAN ALINAN YARI MAMÜL (2026-08-17). Kumaş boyalı/işlenmiş gelir ama
+  /// bitmiş DEĞİLDİR: fabrikada kurşun + tambur (ya da yalnız tambur) görecek.
+  ///
+  /// Neden `SUPPLIER_RECEIPT`ten AYRI: ikisi de "dışarıdan mal kabul" ama stok
+  /// TÜRÜ farklı — biri hammadde, diğeri yarı mamül (SAP'de HALB). Ayrı bir
+  /// DEPO açılmadı (fabrikada fiziksel karşılığı yok); ayrım bu işaretle
+  /// yapılır ve Ham Stok listesinde süzülür. Raporda "içeride ürettiğimiz ham"
+  /// ile "dışarıdan aldığımız yarı mamül" birbirine karışmasın diye gerekli.
+  SEMI_FINISHED
 }
 
 /// ÜRETİM SAPMASININ TÜRÜ (`RollVariance.kind`, 2026-08-09).
@@ -888,6 +897,9 @@ model RouteStep {
   /// 2026-08-06). Boş bırakmak meşru ve varsayılandır: renksiz rota her renkte
   /// yeniden kullanılır.
   plannedColorId         String? @db.Uuid
+  /// Şablon varsayılanı — iş emri açılışında `WorkOrderStep.dispatchWithoutColor`a
+  /// kopyalanır. Gerekçe için oradaki nota bak (2026-08-17 "ekru" kuralı).
+  dispatchWithoutColor   Boolean @default(false)
 
   // Relations
   route                Route                  @relation(fields: [routeId], references: [id], onDelete: Cascade)
@@ -1850,6 +1862,23 @@ model WorkOrderStep {
   /// Acil rozeti — planlama işaretler, operatör tablette kırmızı görür.
   isUrgent       Boolean   @default(false)
   urgentMarkedAt DateTime? @db.Timestamptz
+
+  /// FASONA RENKSİZ GİT (2026-08-17 saha kuralı — "ekru" vakası).
+  ///
+  /// Müşteri siparişi rengi EKRU der ve iş emrinin hedefi de EKRU'dur; ama o
+  /// renk boyahanede fiilen BOYANMAZ — kumaş bir kimyasal işlemden geçer ve
+  /// ortaya çıkan ton "ekru" diye satılır. Boyahaneye "EKRU" yazılı bir çeki
+  /// gitmesi yanlış talimattır (boyacı gerçekten ekru boyar).
+  ///
+  /// Bayrak ADIMDA yaşar, RENKTE değil: aynı renk bir iş emrinde gerçekten
+  /// boyanır, başkasında kimyasal işlemle çıkar. Kuralı renge bağlamak, o rengi
+  /// TÜM iş emirlerinde "boyanmaz" ilan ederdi.
+  ///
+  /// Etkisi YALNIZ fason talimat/çeki yüzeyindedir (`resolveStepDyeColor`):
+  /// `WorkOrder.targetColorId` DEĞİŞMEZ → planlama ekranları, sipariş karşılama
+  /// ve etiket eskisi gibi çalışır. Gerçek renk kabulde personel tarafından
+  /// beyan edilir (fason kabul ekranında renk alanı zaten var).
+  dispatchWithoutColor Boolean @default(false)
 
   // Relations
   workOrder            WorkOrder                @relation(fields: [workOrderId], references: [id])

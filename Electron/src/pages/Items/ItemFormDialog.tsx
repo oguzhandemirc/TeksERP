@@ -52,6 +52,8 @@ export function ItemFormDialog({
   const isEdit = Boolean(initial);
   const [colorsOpen, setColorsOpen] = useState(false);
   const [propsOpen, setPropsOpen] = useState(false);
+  /** Stok kodunu elle yazma modu — varsayılan KAPALI, kutu hiç çizilmez. */
+  const [manualCode, setManualCode] = useState(false);
 
   const defaults: ItemFormValues = initial
     ? {
@@ -73,7 +75,10 @@ export function ItemFormDialog({
   });
 
   useEffect(() => {
-    if (open) form.reset(defaults);
+    if (open) {
+      form.reset(defaults);
+      setManualCode(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initial?.id]);
 
@@ -156,31 +161,20 @@ export function ItemFormDialog({
         )}
 
         <form onSubmit={handleSubmit} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
-            <FormField
-              label="Stok Kodu"
-              htmlFor="code"
-              error={form.formState.errors.code}
-              hint={
-                isEdit
-                  ? "Kumaş oluşturulduktan sonra değiştirilemez."
-                  : "Boş bırakın — sistem otomatik versin."
-              }
-            >
-              <Input
-                id="code"
-                placeholder={isEdit ? undefined : "Otomatik (STK-000123)"}
-                readOnly={isEdit}
-                tabIndex={isEdit ? -1 : 0}
-                className={isEdit ? "cursor-not-allowed bg-muted" : undefined}
-                {...form.register("code")}
-              />
+          {/* Sıra bilinçli: ÖNCE ad. Stok kodu forma EN ALTA, kapalı bir satır
+              olarak alındı (2026-08-17 saha geri bildirimi) — ilk alan olduğu
+              sürece personel "boş bırakın" yazsa da oraya kumaşın ADINI
+              yazmaya çalışıyordu. Kodu sistem veriyor; elle giriş çok nadir
+              ve artık bilinçli bir tıklama istiyor. */}
+          <div className="grid grid-cols-[1fr_180px_120px] gap-3">
+            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
+              <Input id="name" placeholder="Patos" {...form.register("name")} />
             </FormField>
             <FormField
               label="Tip"
               error={form.formState.errors.itemType}
               required={!isEdit}
-              hint={isEdit ? "Kumaş oluşturulduktan sonra değiştirilemez." : undefined}
+              hint={isEdit ? "Değiştirilemez." : undefined}
             >
               <Controller
                 control={form.control}
@@ -195,13 +189,7 @@ export function ItemFormDialog({
                 )}
               />
             </FormField>
-          </div>
-
-          <div className="grid grid-cols-[1fr_140px] gap-3">
-            <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
-              <Input id="name" placeholder="Patos" {...form.register("name")} />
-            </FormField>
-            <FormField label="Birim" hint="Tipe göre otomatik">
+            <FormField label="Birim" hint="Otomatik">
               <Input
                 value={derivedUnit}
                 readOnly
@@ -245,6 +233,20 @@ export function ItemFormDialog({
             <input type="checkbox" {...form.register("isActive")} /> Aktif
           </label>
 
+          <StockCodeRow
+            isEdit={isEdit}
+            code={initial?.code ?? null}
+            manual={manualCode}
+            onManualChange={(next) => {
+              setManualCode(next);
+              // Otomatiğe dönerken alanı TEMİZLE — yarım yazılmış bir kod
+              // görünmez halde payload'a gidip 409/validasyon hatası üretirdi.
+              if (!next) form.setValue("code", "", { shouldValidate: true });
+            }}
+            error={form.formState.errors.code}
+            register={form.register}
+          />
+
           <DialogFooter className="pt-2">
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               İptal
@@ -281,6 +283,75 @@ export function ItemFormDialog({
         />
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Stok kodu satırı — formun EN ALTINDA ve varsayılan KAPALI.
+ *
+ * Gerekçe (2026-08-17): alan formun ilk kutusuydu ve "boş bırakın, sistem
+ * versin" ipucuna rağmen personel oraya kumaşın adını yazıyordu. Kapalı
+ * durumda `<input>` HİÇ render edilmez — gri/disabled bir kutu bırakmak
+ * "buraya bir şey yazılabilir" izlenimini sürdürürdü ve sekme sırasına da
+ * girerdi. Elle giriş bilinçli bir tıklama ister.
+ */
+function StockCodeRow({
+  isEdit,
+  code,
+  manual,
+  onManualChange,
+  error,
+  register,
+}: {
+  isEdit: boolean;
+  code: string | null;
+  manual: boolean;
+  onManualChange: (next: boolean) => void;
+  error?: { message?: string };
+  register: ReturnType<typeof useForm<ItemFormValues>>["register"];
+}) {
+  if (isEdit) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <span>Stok Kodu</span>
+        <span className="font-mono text-foreground">{code ?? "—"}</span>
+        <span className="ml-auto">Oluşturulduktan sonra değiştirilemez.</span>
+      </div>
+    );
+  }
+
+  if (!manual) {
+    return (
+      <div className="flex items-center gap-2 rounded-md border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+        <span>
+          Stok kodunu <strong className="text-foreground">sistem verecek</strong>{" "}
+          <span className="font-mono">(STK-000123)</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => onManualChange(true)}
+          className="ml-auto rounded px-2 py-0.5 underline underline-offset-2 transition-colors hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+        >
+          Elle gir
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <FormField
+      label="Stok Kodu (elle)"
+      htmlFor="code"
+      error={error}
+      hint="STK- öneki otomatik kodlara ayrılmıştır; kendi kodunuzu yazın."
+    >
+      <div className="flex items-center gap-2">
+        <Input id="code" autoFocus placeholder="ÖRN-001" {...register("code")} />
+        <Button type="button" variant="outline" size="sm" onClick={() => onManualChange(false)}>
+          Otomatiğe dön
+        </Button>
+      </div>
+    </FormField>
   );
 }
 

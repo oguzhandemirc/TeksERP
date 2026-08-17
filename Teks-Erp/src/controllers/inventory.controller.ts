@@ -11,6 +11,8 @@ import { InventoryService } from "../services/inventory.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
+import { AppError } from "../utils/app-error";
+import { RollEntrySource, RollStatus } from "@prisma/client";
 import "../types/express-augment";
 
 // Zod validation schemas
@@ -32,6 +34,18 @@ const initialEntrySchema = z.object({
    *  penceresi bununla ölçülür — sunucu `createdAt`'i offline flush'ta girişin
    *  anı DEĞİLDİR. Sunucu doğrular (makul aralık) ve güvenilmezse yok sayar. */
   clientEnteredAt: z.coerce.date().optional(),
+  /**
+   * DIŞARIDAN ALINAN YARI MAMÜL (2026-08-17, madde 9). Kumaş boyalı/işlenmiş
+   * gelir ama bitmiş DEĞİLDİR — fabrikada kurşun + tambur görecek.
+   *
+   * İki şeyi birden değiştirir ve İKİSİ DE gerekli:
+   *   · `entrySource = SEMI_FINISHED` → envanterde ham girişten ayrılır.
+   *   · `forcedStatus = STOCK` → **statü sezgisi BYPASS edilir.** KK1 yolunda
+   *     statü renkten çıkarılıyor (`colorId != null ? WAREHOUSE : STOCK`) ve
+   *     yarı mamül tanımı gereği RENKLİ. Zorlanmasaydı mal doğrudan Bitmiş
+   *     Depo'ya düşer, üretime hiç girmez ve operatör onu ham stokta arardı.
+   */
+  semiFinished: z.boolean().optional(),
 });
 // ⚠️ Bu şema BİLEREK düz `z.object` (strict DEĞİL): bilinmeyen alan sessizce
 // atılır. `feature-flag.routes.ts`'te strict doğru karardı (panel ↔ backend, tek
@@ -238,7 +252,29 @@ export class InventoryController {
    */
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const { confirmDuplicate, ...body } = initialEntrySchema.parse(req.body);
+      const { confirmDuplicate, semiFinished, ...body } = initialEntrySchema.parse(req.body);
+      // Yarı mamül kabulü AYRI bir yetenek yetkisi ister (2026-08-17 kullanıcı
+      // kararı): yetkisi olmayan operatörde ekran bugünkü gibi kalır ve renk
+      // seçemez. Kapı BURADA — istemcinin kutuyu gizlemesine güvenilmez.
+      if (semiFinished) {
+        const perms = req.user?.permissions ?? [];
+        // Web tarafındaki `roll:write` de kabul edilir: Electron "Manuel Top
+        // Ekle" yolu aynı ucu kullanıyor ve büro personeline ikinci bir mobil
+        // yetki atatmak gereksiz bir adım olurdu.
+        const allowed =
+          matchesPermission(perms, "mobile:kk1-yari-mamul") ||
+          matchesPermission(perms, "roll:write");
+        if (!allowed) {
+          throw AppError.forbidden(
+            "Yarı mamül kabulü için 'mobile:kk1-yari-mamul' yetkisi gerekli.",
+          );
+        }
+        if (!body.colorId) {
+          throw AppError.badRequest(
+            "Yarı mamül girişinde renk zorunludur — mal boyalı/işlenmiş geliyor.",
+          );
+        }
+      }
       // KK1 makine atfı: aktif çalışma oturumu → GEÇİŞ fallback'i cihazın statik ataması.
       const stamp = await getStampContext(req, { enforceForMobile: true });
       // entrySource ayrımı: Electron ASLA x-device-id göndermez (bkz. Electron
@@ -260,6 +296,13 @@ export class InventoryController {
           // girilmiş görünür — kolonun var olma sebebi tam da bu. Oturum yoksa
           // damga NULL kalır ve bu dürüst cevaptır.
           entryStationId: stamp?.stationId ?? null,
+          // Yarı mamülde İKİSİ BİRDEN — gerekçe şema notunda.
+          ...(semiFinished
+            ? {
+                forcedEntrySource: RollEntrySource.SEMI_FINISHED,
+                forcedStatus: RollStatus.STOCK,
+              }
+            : {}),
         },
       );
       res.status(201).json(result);

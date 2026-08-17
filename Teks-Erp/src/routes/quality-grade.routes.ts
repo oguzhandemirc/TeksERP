@@ -12,7 +12,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
 
-const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"] as const;
+const MOBILE_QUALITY_READ = ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur", "mobile:iade"] as const;
 
 // QualityGrade.targetStatus / returnTargetStatus = RollStatus enum; Tambur çıktısı bu
 // değeri DOĞRUDAN child Roll.status'a uyguluyor (tambur.service resolveCutStatus). Bare

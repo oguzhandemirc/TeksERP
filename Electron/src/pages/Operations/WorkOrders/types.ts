@@ -82,6 +82,8 @@ export interface WorkOrderStepLite {
   notes?: string | null;
   requiredCategoryId?: string | null;
   plannedSubcontractorId?: string | null;
+  /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — çekide renk satırı basılmaz. */
+  dispatchWithoutColor?: boolean;
   /** Sadece findById response'unda — şu an bu adımda bekleyen rulolar (özet). */
   currentRolls?: StepRollSummary;
   /** Sadece findById response'unda — bekleyen rullaların tek tek listesi. */
@@ -132,6 +134,11 @@ export interface WorkOrder {
   /** Liste response'unda — şu an mal tutulan fason istasyon adları (genelde tek;
    *  AT_SUBCONTRACTOR toplar). Boş = şu an fasonda mal yok. "Şu an: Boyahane" rozeti. */
   currentFasonStations?: string[];
+  /** Liste response'unda — canlı (birleştirilmemiş) partilerin İLK üçü,
+   *  doğuş sırasına göre. Kolon `+N` rozetini `_count.batches` ile kurar. */
+  batches?: { id: string; batchNumber: string }[];
+  /** Liste response'unda — canlı parti TOPLAMI (önizlemedeki 3'ten fazlası için). */
+  _count?: { batches: number };
   plannedStartDate: string | null;
   plannedEndDate: string | null;
   routeTemplateId: string | null;
@@ -292,4 +299,28 @@ export interface TravelerCard {
    *  config'i. PDF bunu canlı WO yerine kullanır → reprint orijinali birebir basar.
    *  Eski kartlarda null → canlı WO'ya fallback. WorkOrder alt-kümesi şeklindedir. */
   snapshot?: (WorkOrder & { config?: TravelerCardConfig }) | null;
+}
+
+/**
+ * `GET /api/work-orders/:id/linkable-order-lines` satırı (2026-08-17, madde 8).
+ *
+ * Liste zaten kumaş+renk uyumuna göre süzülmüş gelir; `warnings` yalnız
+ * ENGEL OLMAYAN uyumsuzlukları (bugün: en farkı) taşır.
+ */
+export interface LinkableOrderLine {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  itemId: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  width: number | null;
+  quantity: number;
+  shippedQty: number;
+  /** İstenen − sevk edilen (negatife düşmez). */
+  openQty: number;
+  deadline: string | null;
+  warnings: string[];
 }

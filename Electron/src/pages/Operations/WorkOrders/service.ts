@@ -7,6 +7,7 @@ import type {
   TargetPropertyChangeImpact,
   TravelerCard,
   WorkOrderDocument,
+  LinkableOrderLine,
 } from "./types";
 
 const base = createCrudService<WorkOrder>("/api/work-orders");
@@ -105,6 +106,49 @@ export const workOrderService = {
         `/api/work-orders/${id}/target-properties`,
         { propertyIds },
       )
+      .then((r) => r.data),
+
+  // ── Sipariş bağlama + hedef düzeltme (2026-08-17 talepleri 8/10/12) ────────
+  // Bu üçü "Düzenle"nin YERİNE GEÇMEZ, onun yanında dar birer kapıdır: her biri
+  // tek bir şeyi değiştirir. `linkOrderLines` iş emrinin hedefinden HİÇBİR ŞEY
+  // miras almaz (bkz. backend workorder-link.service.ts başlığı).
+
+  /** Bu iş emrine bağlanabilecek sipariş satırları (kumaş+renk uyumlu). */
+  getLinkableOrderLines: (id: string) =>
+    apiClient
+      .get<ApiResponse<LinkableOrderLine[]>>(`/api/work-orders/${id}/linkable-order-lines`)
+      .then((r) => r.data),
+
+  /** Sipariş satırlarını bağla — uyuşmazlıkta backend 400 döner. */
+  linkOrderLines: (id: string, orderLineIds: string[]) =>
+    apiClient
+      .post<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>>(
+        `/api/work-orders/${id}/order-links`,
+        { orderLineIds },
+      )
+      .then((r) => r.data),
+
+  unlinkOrderLine: (id: string, orderLineId: string) =>
+    apiClient
+      .delete<ApiResponse<{ removed: boolean }>>(`/api/work-orders/${id}/order-links/${orderLineId}`)
+      .then((r) => r.data),
+
+  /** Üretim rengini değiştir — sebep ZORUNLU, iz bırakır. */
+  changeTargetColor: (id: string, colorId: string | null, reason: string) =>
+    apiClient
+      .patch<ApiResponse<{ warnings: string[] }>>(`/api/work-orders/${id}/target-color`, {
+        colorId,
+        reason,
+      })
+      .then((r) => r.data),
+
+  /** İş emrinin enini değiştir — sebep ZORUNLU, iz bırakır. */
+  changeWidth: (id: string, width: number | null, reason: string) =>
+    apiClient
+      .patch<ApiResponse<{ previousWidth: number | null }>>(`/api/work-orders/${id}/width`, {
+        width,
+        reason,
+      })
       .then((r) => r.data),
 
   /**

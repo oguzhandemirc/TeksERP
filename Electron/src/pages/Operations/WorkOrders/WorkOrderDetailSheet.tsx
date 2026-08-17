@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, CheckCircle2, FileText, Maximize2, Pencil } from "lucide-react";
+import { Ban, CheckCircle2, FileText, Link2, Maximize2, Palette, Pencil, Ruler } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -11,6 +11,8 @@ import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
+import { LinkOrderDialog } from "./LinkOrderDialog";
+import { ChangeTargetDialog } from "./ChangeTargetDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
 import { KunyeCard } from "./detail-v3/KunyeCard";
@@ -48,6 +50,9 @@ const STATUS_PILL: Record<string, string> = {
  */
 export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: Props) {
   const [documentsOpen, setDocumentsOpen] = useState(false);
+  const [linkOrderOpen, setLinkOrderOpen] = useState(false);
+  // null = kapalı; "color"/"width" hangi hedefin değiştirileceğini söyler.
+  const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
   const [printDispatchId, setPrintDispatchId] = useState<string | null>(null);
   const [inProgressConfirmOpen, setInProgressConfirmOpen] = useState(false);
@@ -157,6 +162,21 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       </PermissionGate>
                     )}
 
+                    {/* Dar kapılar (2026-08-17): tek bir şeyi değiştirirler ve
+                        "Düzenle"nin aksine rota/hedef/metrajı açmazlar. Üretim
+                        başlamış iş emrinde de kullanılabilirler — asıl amaç bu. */}
+                    <PermissionGate permission="workorder:write">
+                      <button type="button" className="btn" onClick={() => setLinkOrderOpen(true)}>
+                        <Link2 className="h-3.5 w-3.5" /> Sipariş Bağla
+                      </button>
+                      <button type="button" className="btn" onClick={() => setChangeMode("color")}>
+                        <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
+                      </button>
+                      <button type="button" className="btn" onClick={() => setChangeMode("width")}>
+                        <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
+                      </button>
+                    </PermissionGate>
+
                     <button type="button" className="btn" onClick={() => setDocumentsOpen(true)}>
                       <FileText className="h-3.5 w-3.5" /> Belgeler
                     </button>
@@ -233,6 +253,27 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
             setPrintDispatchId(id);
           }}
         />
+
+        {wo && (
+          <>
+            <LinkOrderDialog
+              open={linkOrderOpen}
+              onOpenChange={setLinkOrderOpen}
+              workOrderId={wo.id}
+              workOrderNumber={wo.workOrderNumber}
+            />
+            <ChangeTargetDialog
+              open={changeMode !== null}
+              onOpenChange={(o) => !o && setChangeMode(null)}
+              mode={changeMode ?? "color"}
+              workOrderId={wo.id}
+              workOrderNumber={wo.workOrderNumber}
+              currentColorId={wo.targetColorId}
+              currentColorName={wo.targetColor?.name ?? null}
+              currentWidth={wo.width}
+            />
+          </>
+        )}
 
         <TravelerCardPrintDialog
           workOrder={wo ?? null}

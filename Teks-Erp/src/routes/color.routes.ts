@@ -50,7 +50,10 @@ const router = Router();
  *     responses:
  *       200: { description: Sayfalanmış renk listesi }
  */
-router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri", "mobile:siparis", "mobile:kumas"), controller.findAll);
+// `mobile:tambur` — Tambur ekranı renk seçicisi (manuel top ekleme + alan
+// düzeltme) bu listeyi çağırıyor. 2026-08-17'ye kadar YOKTU: yalnız Tambur
+// yetkisi taşıyan operatör sessiz 403 alıyordu (bekçi: test_mobile_screen_permissions).
+router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri", "mobile:siparis", "mobile:kumas", "mobile:tambur", "mobile:tarti-paket"), controller.findAll);
 
 /**
  * @openapi

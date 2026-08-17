@@ -111,9 +111,18 @@ export async function resolveStepWorkInstructions(
  * (kabul de o durumda renk kopyalamaz).
  */
 export function resolveStepDyeColor(
-  step: { requiredCategory?: { appliesColor: boolean } | null },
+  step: {
+    requiredCategory?: { appliesColor: boolean } | null;
+    /** Adım "fasona renksiz gitsin" işaretli mi (2026-08-17 "ekru" kuralı). */
+    dispatchWithoutColor?: boolean | null;
+  },
   targetColorName: string | null,
 ): string | null {
   if (!targetColorName) return null;
+  // ⚠️ İşaret KATEGORİ SÜZGECİNDEN ÖNCE bakılır ve onu EZER. Planlamacı bu
+  // adımda "renk yazma" dedi; kategori boya yapıyor olsa bile kâğıda renk
+  // BASILMAZ. Sipariş/iş emri rengi (ör. EKRU) yerinde kalır — o renk gerçekte
+  // boyanmıyor, kimyasal işlemin sonucu olarak adlandırılıyor.
+  if (step.dispatchWithoutColor) return null;
   return step.requiredCategory?.appliesColor ? targetColorName : null;
 }

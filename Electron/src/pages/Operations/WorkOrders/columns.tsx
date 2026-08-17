@@ -28,6 +28,36 @@ export const workOrderColumns: ColumnDef<WorkOrder>[] = [
     cell: ({ row }) => <span className="font-mono text-xs">{row.original.workOrderNumber}</span>,
   },
   {
+    id: "batches",
+    header: "Parti",
+    cell: ({ row }) => {
+      const shown = row.original.batches ?? [];
+      if (shown.length === 0) return <span className="text-muted-foreground">—</span>;
+      const total = row.original._count?.batches ?? shown.length;
+      const extra = total - shown.length;
+      return (
+        <div className="flex items-center gap-1">
+          {shown.map((b) => (
+            <span key={b.id} className="font-mono text-xs">
+              {b.batchNumber}
+            </span>
+          ))}
+          {extra > 0 && (
+            // Farklı ton bilinçli: "+2" bir parti NUMARASI değil, sayaçtır —
+            // aynı renkte olsaydı dördüncü bir numara gibi okunurdu.
+            <Badge
+              variant="muted"
+              className="border-amber-500/40 bg-amber-500/10 px-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300"
+              title={`Toplam ${total} parti`}
+            >
+              +{extra}
+            </Badge>
+          )}
+        </div>
+      );
+    },
+  },
+  {
     accessorKey: "type",
     header: "Tip",
     cell: ({ row }) => (

@@ -73,6 +73,11 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
     const statusColor = WORK_ORDER_STATUS_COLOR[item.status] ?? colors.textMuted;
     const itemName = item.targetItem?.name ?? item.orderLinks?.[0]?.orderLine?.item?.name ?? '—';
     const colorName = item.targetColor?.name ?? null;
+    const shownBatches = item.batches ?? [];
+    const extraBatches = (item._count?.batches ?? shownBatches.length) - shownBatches.length;
+    const batchLine = shownBatches.length
+      ? `Parti: ${shownBatches.map((b) => b.batchNumber).join(' · ')}${extraBatches > 0 ? `  +${extraBatches}` : ''}`
+      : '';
     return (
       <TouchableRipple onPress={() => onOpen(item.id)} style={styles.row} borderless rippleColor="rgba(79,70,229,0.10)">
         <View style={styles.rowInner}>
@@ -95,6 +100,14 @@ export default function WorkOrderListView({ onOpen, refreshKey = 0 }: Props) {
               {trLabel(WORK_ORDER_TYPE_LABEL, item.type)}
               {item.createdAt ? ` · ${dayjs(item.createdAt).format('DD.MM.YYYY')}` : ''}
             </Text>
+            {/* Parti no (2026-08-17 saha talebi): arama kutusu "Parti no ara"
+                diyordu ama satırda parti hiç yazmıyordu — operatör aradığı
+                numarayı sonuçta göremiyordu. */}
+            {batchLine ? (
+              <Text style={styles.rowBatches} numberOfLines={1}>
+                {batchLine}
+              </Text>
+            ) : null}
           </View>
           <Icon source="chevron-right" size={22} color={colors.textMuted} />
         </View>
@@ -197,5 +210,6 @@ const styles = StyleSheet.create({
   statusChipText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   rowSub: { fontSize: 13, color: colors.textSecondary, marginTop: 2 },
   rowMeta: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  rowBatches: { fontSize: 13, fontWeight: '700', color: colors.brand, marginTop: 2 },
   footerLoader: { paddingVertical: spacing.lg, alignItems: 'center' },
 });

@@ -83,7 +83,10 @@ const quickCreateBody = z
  *       401:
  *         description: Yetkisiz erişim
  */
-router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mobile:siparis", "mobile:kumas"), controller.findAll);
+// `mobile:tambur` — Tambur ekranı kumaş seçicisi (manuel top ekleme + alan
+// düzeltme) bu listeyi çağırıyor. 2026-08-17'ye kadar YOKTU: yalnız Tambur
+// yetkisi taşıyan operatör sessiz 403 alıyordu (bekçi: test_mobile_screen_permissions).
+router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mobile:siparis", "mobile:kumas", "mobile:tambur", "mobile:hizli-is-emri"), controller.findAll);
 
 /**
  * @openapi

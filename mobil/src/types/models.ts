@@ -260,6 +260,10 @@ export interface WorkOrder {
   /** Tambur katman sayısı (1-20), opsiyonel. */
   layerCount?: number | null;
   dispatchedTotalQty?: number;
+  /** Liste response'unda — canlı (birleştirilmemiş) partilerin ilk üçü. */
+  batches?: { id: string; batchNumber: string }[];
+  /** Liste response'unda — canlı parti toplamı ("+N" için). */
+  _count?: { batches: number };
 }
 
 // =============================================================================

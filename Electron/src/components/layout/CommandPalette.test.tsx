@@ -37,9 +37,9 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 }));
 vi.mock("next-themes", () => ({ useTheme: () => ({ theme: "light", setTheme: vi.fn() }) }));
 
-const navigateActive = vi.fn();
+const openTab = vi.fn();
 vi.mock("@/store/tabs", () => ({
-  useTabsStore: (sel: (s: { navigateActive: unknown }) => unknown) => sel({ navigateActive }),
+  useTabsStore: (sel: (s: { openTab: unknown }) => unknown) => sel({ openTab }),
 }));
 vi.mock("@/store/auth", () => ({
   useAuthStore: (sel: (s: { logout: unknown }) => unknown) => sel({ logout: vi.fn() }),
@@ -59,7 +59,7 @@ const type = (text: string) =>
 describe("CommandPalette", () => {
   beforeEach(() => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
-    navigateActive.mockClear();
+    openTab.mockClear();
   });
 
   it("rapor sayfaları arama yapmadan da listede", () => {
@@ -88,12 +88,12 @@ describe("CommandPalette", () => {
     type("mükerrer");
 
     fireEvent.click(await screen.findByText(/mükerrer top uyarısı/i));
-    expect(navigateActive).toHaveBeenCalledWith("/system/settings?tab=production");
+    expect(openTab).toHaveBeenCalledWith("/system/settings?tab=production");
   });
 
-  it("seçim aktif sekmede gezinir (yeni pencere açmaz)", () => {
+  it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {
     open();
     fireEvent.click(screen.getByText("Nerede Takıldı (WIP)"));
-    expect(navigateActive).toHaveBeenCalledWith("/reports/production/wip");
+    expect(openTab).toHaveBeenCalledWith("/reports/production/wip");
   });
 });

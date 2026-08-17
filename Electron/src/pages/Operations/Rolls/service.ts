@@ -66,6 +66,10 @@ export interface InitialEntryPayload {
    *  açık onayı ("evet, bu gerçekten ayrı bir top"). Tuzak `kk1.duplicateGuardEnabled`
    *  ile açılır (varsayılan kapalı). */
   confirmDuplicate?: boolean;
+  /** Dışarıdan alınan YARI MAMÜL (2026-08-17): backend `entrySource=SEMI_FINISHED`
+   *  yazar VE statü sezgisini bypass edip topu Ham Stok'a düşürür (renkli olduğu
+   *  için aksi halde Bitmiş Depo'ya giderdi). */
+  semiFinished?: boolean;
 }
 
 export interface RollStats {

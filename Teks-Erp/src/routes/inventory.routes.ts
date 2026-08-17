@@ -20,6 +20,10 @@ const MOBILE_ROLL_READ = [
   "mobile:fason-sevk",
   "mobile:fason-kabul",
   "mobile:hizli-is-emri",
+  // Kartela Sevk ekranı topu BARKODLA okutup listeye ekliyor
+  // (`KartelaSevkScreen` → `rollService.getByBarcode`). 2026-08-17'ye kadar
+  // yoktu: yalnız `mobile:kartela-sevk` taşıyan operatör okutmada 403 alıyordu.
+  "mobile:kartela-sevk",
 ] as const;
 const MOBILE_ROLL_WRITE_KK1 = ["mobile:kk1"] as const;
 const MOBILE_ROLL_WRITE_KURSUN = ["mobile:kk2-kursun"] as const;

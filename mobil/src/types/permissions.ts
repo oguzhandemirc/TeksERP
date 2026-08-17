@@ -24,6 +24,9 @@ export type MobilePermission =
   | 'mobile:kursun-dagitim'
   // Ekran değil, KK1-içi yetenek: seçili operatöre inline yeni desen oluşturma.
   | 'mobile:kk1-desen'
+  // KK1-içi yetenek (2026-08-17): dışarıdan alınan YARI MAMÜL kabulü. Yoksa
+  // ekran bugünkü gibi kalır (renk seçimi hiç çizilmez).
+  | 'mobile:kk1-yari-mamul'
   // Ekran değil, Tambur-içi yetenek: saha düzeltmesi (mevcut topu Tambur adımına
   // al + sistemde olmayan topu elle ekle). Varsayılan operatör paketinde YOKTUR;
   // panelden SEÇİLİ Tambur operatörüne verilir. Backend uçları bunu ya da

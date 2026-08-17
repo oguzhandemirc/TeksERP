@@ -33,6 +33,8 @@ export interface DesignerStep {
   notes: string;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
+  /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — yalnız EXTERNAL adımda. */
+  dispatchWithoutColor?: boolean;
 }
 
 export interface CustomRouteStep {
@@ -42,6 +44,7 @@ export interface CustomRouteStep {
   notes: string | null;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
+  dispatchWithoutColor?: boolean;
 }
 
 export type RouteDesignerResult =

@@ -24,7 +24,7 @@ interface Props {
 }
 
 export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
-  const navigateActive = useTabsStore((s) => s.navigateActive);
+  const openTab = useTabsStore((s) => s.openTab);
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
   // Operasyon karolarının duruma bağlı görünürlüğü palette de geçerlidir — aksi
   // halde hub'da gizlenen ekran buradan hâlâ açılırdı. "Kurşun Sırası"nda bu
@@ -58,9 +58,12 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [open, onOpenChange]);
 
+  // Komut paleti de ÜST DÜZEY hedef açar (menü ile aynı sözleşme, 2026-08-17):
+  // sekmeyi yerinde ezmek yerine varsa odaklar, yoksa yeni sekme açar ve o
+  // sayfanın son görünümünü (filtre/sıralama) geri getirir.
   const go = (to: string) => {
     onOpenChange(false);
-    navigateActive(to);
+    openTab(to);
   };
 
   const runAction = (fn: () => void) => {

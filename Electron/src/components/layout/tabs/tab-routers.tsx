@@ -2,6 +2,7 @@ import { createMemoryRouter } from "react-router-dom";
 import { contentRoutes } from "@/routes/content-routes";
 import { TabRootLayout } from "./TabRootLayout";
 import { RouteErrorFallback } from "@/components/RouteErrorFallback";
+import { rememberRoute } from "./route-memory";
 
 type TabRouter = ReturnType<typeof createMemoryRouter>;
 
@@ -16,10 +17,17 @@ function toEntry(path: string, state?: unknown) {
 }
 
 function build(path: string, state?: unknown): TabRouter {
-  return createMemoryRouter(
+  const router = createMemoryRouter(
     [{ path: "/", element: <TabRootLayout />, errorElement: <RouteErrorFallback />, children: contentRoutes }],
     { initialEntries: [toEntry(path, state)], initialIndex: 0 },
   );
+  // Sekmenin her konum değişimini rota hafızasına yaz — aynı sayfaya sonradan
+  // dönüldüğünde filtre/sıralama son hâlinden açılsın. Abonelik router'ın
+  // ömrüne bağlı; `dispose()` onu da kapatır.
+  router.subscribe((state) => {
+    rememberRoute(state.location.pathname, state.location.search);
+  });
+  return router;
 }
 
 // Sekme id → kendi izole memory router'ı. Sekme ömrü boyunca tek örnek yaşar;

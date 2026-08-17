@@ -60,6 +60,7 @@ import {
   type RouteStepTargetPlan,
 } from "./workOrderPrefill";
 import type { WorkOrder } from "./types";
+import { BatchNumberHint } from "@/pages/GeneralSettings/BatchNumberHint";
 
 /**
  * react-hook-form hata ağacından tüm mesajları toplar (toast özeti için). Her
@@ -890,6 +891,10 @@ export function WorkOrderFormView({
                     <Lock className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                   )}
                 </div>
+                {/* "Son kullanılan parti no" — planlamacıya fikir verir (2026-08-17
+                    talebi). Kesin sıradaki numarayı VAAT ETMEZ: numara doğuşta
+                    atanır ve aradaki her yeni parti sırayı kaydırır. */}
+                {!isEdit && <BatchNumberHint />}
               </FormField>
 
               {/* Planlama tarihleri — kendi başlarına, her zaman açık (accordion yok). */}

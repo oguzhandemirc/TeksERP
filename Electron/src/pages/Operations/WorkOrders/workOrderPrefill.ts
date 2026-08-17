@@ -137,6 +137,7 @@ export function routeStateFromWorkOrder(wo: WorkOrder): RoutePrefillState {
     notes: s.notes ?? null,
     requiredCategoryId: s.requiredCategoryId ?? null,
     plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+    dispatchWithoutColor: s.dispatchWithoutColor ?? false,
   }));
   const designerSnapshot: DesignerStep[] = sortedSteps.map((s, i) => ({
     clientId: `ds-prefill-${i}`,
@@ -148,6 +149,7 @@ export function routeStateFromWorkOrder(wo: WorkOrder): RoutePrefillState {
     notes: s.notes ?? "",
     requiredCategoryId: s.requiredCategoryId ?? null,
     plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+    dispatchWithoutColor: s.dispatchWithoutColor ?? false,
   }));
 
   return { customSteps, fasonPlans: [], designerSnapshot };
@@ -171,6 +173,7 @@ export function designerStepsFromWorkOrder(wo: WorkOrder): DesignerStep[] {
       notes: s.notes ?? "",
       requiredCategoryId: s.requiredCategoryId ?? null,
       plannedSubcontractorId: s.plannedSubcontractorId ?? null,
+      dispatchWithoutColor: s.dispatchWithoutColor ?? false,
     }));
 }
 
@@ -182,6 +185,10 @@ export function stepsToCustom(steps: DesignerStep[]): CustomRouteStep[] {
     notes: s.notes.trim() || null,
     requiredCategoryId: s.requiredCategoryId,
     plannedSubcontractorId: s.plannedSubcontractorId,
+    // ⚠️ Payload ELLE kurulduğu için bu dosya sessiz bir allowlist: yeni alan
+    // buraya yazılmazsa panelde seçilir, kaydedilir gibi görünür ve sunucuya
+    // HİÇ gitmez (2026-08-13 "kesimde kat sessizce düşüyordu" dersi).
+    dispatchWithoutColor: s.dispatchWithoutColor ?? false,
   }));
 }
 
