@@ -44,6 +44,10 @@ const DOC_CONFIG_KEYS: Record<PrintedDocType, string> = {
   SUBCONTRACTOR_RECEIPT: "fasonKabul",
   QUALITY_CERTIFICATE: "kaliteSertifikasi",
   RETURN_DISPATCH: "iadeIrsaliyesi",
+  // Refakat kartı belge şablonu ayarını KULLANMAZ — kendi config/şablonunu
+  // snapshot'ında taşır (Refakat Kartı Şablonları ekranı). Anahtar yalnız bu
+  // Record'un tam olması için var; okuyan yol yok.
+  TRAVELER_CARD: "travelerCard",
 };
 
 /** Snapshot zarfı — `doc` tip-bazlı payload, geri kalanı ortak meta. */
@@ -151,7 +155,25 @@ export function getRegisteredDocBuilders(): ReadonlyMap<PrintedDocType, BuilderE
   return builders;
 }
 
+/**
+ * KENDİ KENDİNİ YÖNETEN belge tipleri — defterde satırı vardır ama sürümü bu
+ * servis ÜRETMEZ (2026-08-17).
+ *
+ * Refakat kartı: sürüm kartın kendi satırında artar ve kâğıda basılan numara ile
+ * kayıtlı numaranın eşitliği `travelerCardService.resolvePrintPlan` TEK karar
+ * noktasına dayanır. Buradaki generic freeze/reissue/lazy-init yolları ikinci bir
+ * sürüm üretici olurdu ve o eşitliği sessizce bozardı (kâğıtta v2, defterde v3).
+ * Okuma uçları (`listVersions` / `getVersion`) domain bilmez, onlar AÇIK KALIR —
+ * versiyon geçmişi zaten oradan okunur.
+ */
+const SELF_MANAGED_DOC_TYPES = new Set<PrintedDocType>([PrintedDocType.TRAVELER_CARD]);
+
 function requireBuilder(docType: PrintedDocType): BuilderEntry {
+  if (SELF_MANAGED_DOC_TYPES.has(docType)) {
+    throw AppError.badRequest(
+      `${docType} belgesi bu uçtan üretilmez — sürümleri kaynağın kendi baskı akışı yazar.`,
+    );
+  }
   const entry = builders.get(docType);
   if (!entry) throw AppError.internal(`Belge builder kayıtlı değil: ${docType}`);
   return entry;

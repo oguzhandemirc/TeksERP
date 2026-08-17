@@ -244,9 +244,17 @@ travelerCardRouter.get(
  *           config'ini EZER, hiçbir yere YAZILMAZ, yeni versiyon doğurmaz.
  *           Geçersiz değer yok sayılır.
  *         schema: { type: string, enum: [A4, A5] }
+ *       - in: query
+ *         name: version
+ *         required: false
+ *         description: |
+ *           Geçmiş bir sürümün ARŞİV kopyası (printed_documents defteri).
+ *           Parametresiz çağrı güncel plandan üretir (varsayılan davranış).
+ *           İçerik donmuştur, sunum (şablon/sayfa) güncel ayardan çözülür.
+ *         schema: { type: integer, minimum: 1 }
  *     responses:
  *       200: { description: HTML belge, content: { text/html: {} } }
- *       404: { description: Kart bulunamadı }
+ *       404: { description: Kart ya da istenen sürüm bulunamadı }
  */
 travelerCardRouter.get(
   "/:id/html",

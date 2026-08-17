@@ -170,4 +170,11 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
     note: "Müşteri partiyle uyumsuz olduğunu bildirdi",
     receivedBy: "Ayşe Kaya",
   },
+
+  // Refakat kartı (2026-08-17) — bu ekranda ÖRNEĞİ YOK, bilerek boş.
+  // Kartın kendi canlı önizlemesi ayrı bir uçtur (`/api/traveler-cards/sample-html`,
+  // Refakat Kartı Şablonları ekranı) ve kendi config/şablon zincirini kullanır.
+  // Buraya sahte bir kart koymak, iki ayrı örnek verinin zamanla ayrışması demekti.
+  // Ulaşılamaz: generic sample-html yolu bu tipte 400 verir (SELF_MANAGED_DOC_TYPES).
+  TRAVELER_CARD: {},
 };

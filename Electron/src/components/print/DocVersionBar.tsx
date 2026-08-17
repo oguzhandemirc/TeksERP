@@ -153,7 +153,7 @@ export function DocVersionBar({
           </Button>
         )}
 
-        <VersionHistory
+        <DocVersionHistory
           docType={docType}
           sourceId={sourceId}
           currentVersion={current.version}
@@ -190,7 +190,15 @@ export function DocVersionBar({
   );
 }
 
-function VersionHistory({
+/**
+ * Versiyon geçmişi açılır listesi — şeritten AYRI kullanılabilir (export).
+ *
+ * Refakat kartı (2026-08-17) tam şeridi kullanamaz: onun "Revize Et"i yoktur
+ * (sürüm baskıda otomatik doğar) ve belgesi kendi HTML ucundan basılır. Yeni bir
+ * geçmiş açılır listesi yazmak yerine bu bileşen paylaşılır — iki geçmiş listesi
+ * zamanla ayrışırdı.
+ */
+export function DocVersionHistory({
   docType,
   sourceId,
   currentVersion,

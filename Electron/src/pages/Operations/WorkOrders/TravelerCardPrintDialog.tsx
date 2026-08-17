@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DocVersionHistory } from "@/components/print/DocVersionBar";
 import { printHtmlString } from "@/lib/print";
 import { workOrderService } from "./service";
 import type { WorkOrder, TravelerCard } from "./types";
@@ -60,10 +61,18 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
   // ve kartın donmuş snapshot'ına yazılmaz. `undefined` = kartın kendi boyutu.
   const [pageSize, setPageSize] = useState<"A4" | "A5" | undefined>(undefined);
 
+  /**
+   * Geçmişten seçilen sürüm — `null` = güncel plan (VARSAYILAN ve saha kuralı:
+   * kartı açan kişi her zaman yürürlükteki planı görür, ayrı bir "revize et"
+   * tuşuna basması gerekmez).
+   */
+  const [viewVersion, setViewVersion] = useState<number | null>(null);
+
   // ÖNİZLEME + BASKI tek kaynak: kartın backend HTML'i.
   const htmlQuery = useQuery({
-    queryKey: ["traveler-card-html", activeCard?.id, pageSize ?? "default"],
-    queryFn: () => workOrderService.getTravelerCardHtml(activeCard!.id, pageSize),
+    queryKey: ["traveler-card-html", activeCard?.id, pageSize ?? "default", viewVersion ?? "current"],
+    queryFn: () =>
+      workOrderService.getTravelerCardHtml(activeCard!.id, pageSize, viewVersion ?? undefined),
     enabled: open && Boolean(activeCard?.id),
     staleTime: 0,
   });
@@ -107,6 +116,11 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["traveler-cards", workOrder?.id] }),
         queryClient.invalidateQueries({ queryKey: ["work-order", workOrder?.id] }),
+        // Baskı yeni bir sürüm doğurmuş olabilir (içerik değiştiyse) — geçmiş
+        // listesi bayat kalırsa kullanıcı az önce bastığı sürümü göremez.
+        queryClient.invalidateQueries({
+          queryKey: ["printed-doc-versions", "TRAVELER_CARD", activeCard.id],
+        }),
       ]);
     } catch {
       toast.warning("Kart yazdırıldı — baskı kaydı sunucuya işlenemedi.", {
@@ -119,8 +133,18 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
 
   if (!workOrder) return null;
 
+  const viewingOld = viewVersion !== null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        // Kapanışta güncele dön: bir dahaki açılışta ESKİ bir sürümün açık kalması,
+        // sahadaki en tehlikeli hata (yürürlükten kalkmış planı basmak).
+        if (!next) setViewVersion(null);
+        onOpenChange(next);
+      }}
+    >
       <DialogContent className="flex h-[85vh] max-h-[85vh] max-w-4xl flex-col gap-3">
         <DialogHeader>
           <DialogTitle>Refakat Kartı — Önizleme</DialogTitle>
@@ -129,6 +153,20 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
             hâlinden üretilir; plan değiştiyse kart yeni versiyona geçer.
           </DialogDescription>
         </DialogHeader>
+
+        {/* Eski sürüm görüntüleniyor — baskı yolu KAPALI. Gerekçe: kart sahaya
+            inen kontrollü bir belgedir; yürürlükten kalkmış planı yanlışlıkla
+            basmak, geçmişi görememekten çok daha pahalıdır. */}
+        {viewingOld && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-amber-500/60 bg-amber-500/10 px-3 py-2 text-xs">
+            <span>
+              <strong>Rev.{viewVersion}</strong> — geçmiş kopya. Basmak için güncel sürüme dönün.
+            </span>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setViewVersion(null)}>
+              Güncele dön
+            </Button>
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
           {cardQuery.isLoading ? (
@@ -193,6 +231,16 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
             </div>
           </div>
           <div className="flex gap-2">
+          {activeCard && (
+            <DocVersionHistory
+              docType="TRAVELER_CARD"
+              sourceId={activeCard.id}
+              // Geçmişteki "seçili" satır = şu an bakılan sürüm. Güncel plandayken
+              // kartın kendi sürümünü işaretleriz (o da defterdeki ACTIVE satırdır).
+              currentVersion={viewVersion ?? activeCard.version}
+              onSelectVersion={(v) => setViewVersion(v)}
+            />
+          )}
           <Button
             type="button"
             variant="outline"
@@ -211,9 +259,11 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Kapat
           </Button>
-          <Button type="button" className="gap-1" disabled={!html} onClick={() => void handlePrint()}>
-            <Printer className="h-4 w-4" /> Yazdır
-          </Button>
+          {!viewingOld && (
+            <Button type="button" className="gap-1" disabled={!html} onClick={() => void handlePrint()}>
+              <Printer className="h-4 w-4" /> Yazdır
+            </Button>
+          )}
           </div>
         </DialogFooter>
       </DialogContent>

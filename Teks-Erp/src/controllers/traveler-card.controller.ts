@@ -175,12 +175,24 @@ export class TravelerCardController {
    * `?pageSize=A4|A5` TEK SEFERLİK ezmedir: kalıcı ayara/snapshot'a YAZILMAZ.
    * Geçersiz değer sessizce yok sayılır (kartın kendi boyutuyla basılır) — baskı
    * yolunu bir yazım hatası yüzünden 400'e düşürmek sahada kâğıtsız bırakır.
+   *
+   * `?version=N` → o sürümün ARŞİV kopyası (2026-08-17). Parametresiz çağrı
+   * bugünkü davranışı birebir korur: güncel plandan üretir. ⚠️ Sayfa boyutunun
+   * aksine geçersiz sürüm SESSİZCE YOK SAYILMAZ — servis 404 verir; "istediğin
+   * sürüm yok" durumunda güncel kâğıdı basmak, operatöre baktığını sandığından
+   * başka bir belgeyi vermek olurdu.
    */
   async getCardHtml(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const raw = req.query.pageSize;
       const pageSize = raw === "A4" || raw === "A5" ? raw : undefined;
-      const html = await this.service.getCardHtml(req.params.id as string, { pageSize });
+      const rawVersion = Number(req.query.version);
+      const version =
+        Number.isInteger(rawVersion) && rawVersion > 0 ? rawVersion : undefined;
+      const html = await this.service.getCardHtml(req.params.id as string, {
+        pageSize,
+        version,
+      });
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.status(200).send(html);
     } catch (error) {

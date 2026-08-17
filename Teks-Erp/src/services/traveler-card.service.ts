@@ -53,6 +53,8 @@ import { K18_DEAD_STATUSES } from "./batch.service";
 import { parseQueryParams, buildPagination, resolveSortBy, buildTurkishSearch } from "../utils/query-parser";
 import {
   Prisma,
+  PrintedDocStatus,
+  PrintedDocType,
   TravelerCard,
   TravelerCardScan,
   TravelerCardStatus,
@@ -360,15 +362,26 @@ export class TravelerCardService {
 
     const plan = await this.resolvePrintPlan(card);
 
-    await prisma.travelerCard.update({
-      where: { id: cardId },
-      data: {
-        contentDirty: false,
-        printedAt: new Date(),
-        printedById: userId ?? null,
-        snapshot: plan.snapshot as unknown as Prisma.InputJsonValue,
+    // Kart satırı ve belge defteri AYNI transaction'da yazılır: kâğıda basılan
+    // sürüm numarası (kart) ile o sürümün arşiv kopyası (defter) ayrışamamalı.
+    await prisma.$transaction(async (tx) => {
+      await tx.travelerCard.update({
+        where: { id: cardId },
+        data: {
+          contentDirty: false,
+          printedAt: new Date(),
+          printedById: userId ?? null,
+          snapshot: plan.snapshot as unknown as Prisma.InputJsonValue,
+          version: plan.version,
+        },
+      });
+      await this.archivePrintedVersionTx(tx, {
+        cardId,
+        cardNumber: card.cardNumber,
         version: plan.version,
-      },
+        snapshot: plan.snapshot,
+        userId,
+      });
     });
 
     await AuditService.log({
@@ -393,6 +406,73 @@ export class TravelerCardService {
         ? `Refakat kartı güncel içerikle basıldı — revizyon v${plan.version}`
         : "Baskı kaydedildi",
     };
+  }
+
+  /**
+   * BASILAN SÜRÜMÜ DEFTERE ARŞİVLER (2026-08-17 saha isteği: "eski versiyonu da
+   * görebilelim").
+   *
+   * ⚠️ YENİ TABLO AÇILMADI — `printed_documents` yeniden kullanılır. Kolonlar
+   * birebir uyuyor (docType/sourceId/version/status/snapshot/printedById) ve
+   * `listVersions`/`getVersion` uçları zaten domain bilmez, yani geçmiş listesi
+   * ve tek sürüm okuma bedelsiz gelir. `sourceId` = **kart id'si**: iş emri belge
+   * listesi (`getDocuments`) refakat kartını zaten bu kimlikle basıyor.
+   *
+   * ⚠️ CREATE DEĞİL UPSERT. "Aynı içeriğin ikinci kopyası revizyon değildir"
+   * kuralı gereği sürüm ARTMAZ; düz `create` ikinci kopyada
+   * `@@unique([docType,sourceId,version])`'a çarpar ve **baskı yolunu düşürürdü**
+   * — hem de operatör elinde kâğıt tutarken.
+   *
+   * Kart tek satırdır (`workOrderId @unique`) ve sürüm orada artar; defter yalnız
+   * ARŞİVDİR. Bu yüzden bu tip için generic freeze/reissue yolları KAPALIDIR
+   * (bkz. `SELF_MANAGED_DOC_TYPES`) — ikinci bir sürüm üretici, kâğıda basılan
+   * numara ile kayıtlı numaranın eşitliğini sessizce bozardı.
+   */
+  private async archivePrintedVersionTx(
+    tx: Prisma.TransactionClient,
+    p: {
+      cardId: string;
+      cardNumber: string;
+      version: number;
+      snapshot: TravelerCardSnapshot;
+      userId?: string;
+    },
+  ): Promise<void> {
+    const snapshot = p.snapshot as unknown as Prisma.InputJsonValue;
+    await tx.printedDocument.upsert({
+      where: {
+        docType_sourceId_version: {
+          docType: PrintedDocType.TRAVELER_CARD,
+          sourceId: p.cardId,
+          version: p.version,
+        },
+      },
+      create: {
+        docType: PrintedDocType.TRAVELER_CARD,
+        sourceId: p.cardId,
+        version: p.version,
+        status: PrintedDocStatus.ACTIVE,
+        documentNo: p.cardNumber,
+        snapshot,
+        printedById: p.userId ?? null,
+      },
+      // Aynı sürümün yeniden basımı: içerik tanım gereği aynı (planKey eşit),
+      // yalnız sunum tazelenmiş olabilir + son basan kişi güncellenir.
+      update: { snapshot, printedById: p.userId ?? null },
+    });
+
+    // Önceki sürümler tarihsel kopyaya düşer. Koşulsuz koşar (revize olmayan
+    // baskıda hiçbir satır eşleşmez) — "yalnız revizyonda çalıştır" dalı, bir
+    // sonraki değişiklikte unutulacak ikinci bir kural olurdu.
+    await tx.printedDocument.updateMany({
+      where: {
+        docType: PrintedDocType.TRAVELER_CARD,
+        sourceId: p.cardId,
+        status: PrintedDocStatus.ACTIVE,
+        version: { not: p.version },
+      },
+      data: { status: PrintedDocStatus.SUPERSEDED, supersededAt: new Date() },
+    });
   }
 
   /**
@@ -805,12 +885,62 @@ export class TravelerCardService {
    * ⚠️ `snapshot` NULL olan eski kartta sürüm ARTMAZ — karşılaştırılacak bir önceki
    * içerik yok; revize edilecek bir şey de yok, sadece ilk kayıt oluşur.
    */
+  /**
+   * ARŞİV KOPYASI — `?version=N` ile geçmiş bir sürümü çözer.
+   *
+   * İÇERİK donmuştur (o gün basılan plan), SUNUM güncel ayardan gelir — canlı
+   * kartla birebir aynı ayrım (`resolvePrintPlan` başlığı: bir şey revizyon
+   * değilse dondurmanın da işi yoktur). Yani eski sürüme bakan kişi "o gün ne
+   * yazıyordu"yu görür, "o gün hangi puntoyla basılmıştı"yı değil.
+   *
+   * Bilinmeyen sürüm 404 — sessizce güncele düşmek, operatöre baktığını sandığı
+   * belgeden BAŞKASINI göstermek olurdu.
+   */
+  private async resolveArchivedPlan(
+    cardId: string,
+    version: number,
+  ): Promise<{
+    snapshot: TravelerCardSnapshot;
+    version: number;
+    revised: boolean;
+    printedAt?: Date;
+  }> {
+    const row = await prisma.printedDocument.findUnique({
+      where: {
+        docType_sourceId_version: {
+          docType: PrintedDocType.TRAVELER_CARD,
+          sourceId: cardId,
+          version,
+        },
+      },
+      select: { snapshot: true, version: true, createdAt: true },
+    });
+    if (!row) throw AppError.notFound(`Refakat kartının v${version} kopyası bulunamadı`);
+
+    const { template, config } = await travelerTemplateService.resolveForPrint(null, prisma);
+    return {
+      snapshot: {
+        ...(row.snapshot as unknown as TravelerCardSnapshot),
+        config,
+        template,
+      } as TravelerCardSnapshot,
+      version: row.version,
+      revised: false,
+      printedAt: row.createdAt,
+    };
+  }
+
   private async resolvePrintPlan(card: {
     status: TravelerCardStatus;
     version: number;
     snapshot: Prisma.JsonValue | null;
     workOrderId: string;
-  }): Promise<{ snapshot: TravelerCardSnapshot; version: number; revised: boolean }> {
+  }): Promise<{
+    snapshot: TravelerCardSnapshot;
+    version: number;
+    revised: boolean;
+    printedAt?: Date;
+  }> {
     const stored = card.snapshot as unknown as TravelerCardSnapshot | null;
     // SUNUM her yolda GÜNCEL — tek çözüm noktası, dallardan ÖNCE (aşağıdaki her
     // dönüş onu kullanır; dala kopyalanırsa biri sessizce donmuş kalır).
@@ -856,7 +986,10 @@ export class TravelerCardService {
    * Meşru sayılmasının sebebi: sayfa boyutu SUNUM kararıdır, belgenin İÇERİĞİ
    * değil — kart hangi kâğıda basılırsa basılsın aynı şeyi söyler.
    */
-  async getCardHtml(cardId: string, opts?: { pageSize?: TravelerPageSize }): Promise<string> {
+  async getCardHtml(
+    cardId: string,
+    opts?: { pageSize?: TravelerPageSize; version?: number },
+  ): Promise<string> {
     const card = await prisma.travelerCard.findUnique({
       where: { id: cardId },
       select: {
@@ -872,7 +1005,9 @@ export class TravelerCardService {
     });
     if (!card) throw new AppError("Refakat kartı bulunamadı", 404);
 
-    const plan = await this.resolvePrintPlan(card);
+    const plan = opts?.version
+      ? await this.resolveArchivedPlan(cardId, opts.version)
+      : await this.resolvePrintPlan(card);
     // Tek seferlik ezme yalnız BU render'ın kopyasına uygulanır — `card.snapshot`
     // satırına dokunulmaz (kartın kendi sayfa boyutu korunur).
     const snapshot: TravelerCardSnapshot = opts?.pageSize
@@ -894,10 +1029,15 @@ export class TravelerCardService {
       barcode: card.barcode,
       // Kâğıda basılan sürüm = baskı kaydedildiğinde yazılacak sürüm (tek kaynak).
       version: plan.version,
-      printedAt: card.printedAt.toISOString(),
+      // Arşiv kopyasında tarih O BASKININ tarihidir; kartın son baskı tarihini
+      // yazmak geçmiş kâğıda bugünün damgasını vurmak olurdu.
+      printedAt: (plan.printedAt ?? card.printedAt).toISOString(),
       status: card.status,
       voidReason: card.voidReason,
       qrSvg,
+      // ⚠️ Partiler arşiv kopyasında da CANLI çözülür: parti bloğu baştan beri
+      // snapshot'ta değil (kart WO açılışında doğar, parti attachRolls'ta) —
+      // donmuş bir parti listesi diye bir şey hiç var olmadı.
       batches: await this.resolveLiveBatches(card.workOrderId),
     });
   }

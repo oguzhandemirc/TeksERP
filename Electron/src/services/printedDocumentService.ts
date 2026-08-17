@@ -17,7 +17,12 @@ export type PrintedDocType =
   | "KARTELA_DISPATCH"
   | "SUBCONTRACTOR_RECEIPT"
   | "QUALITY_CERTIFICATE"
-  | "RETURN_DISPATCH";
+  | "RETURN_DISPATCH"
+  // Refakat kartı (2026-08-17): defterde SÜRÜM GEÇMİŞİ tutar ama belge içeriği
+  // buradan basılmaz — kartın kendi HTML ucu (`/api/traveler-cards/:id/html`)
+  // kullanılır. Bu tipte yalnız `listVersions` çağrılır; `getCurrent`/`reissue`
+  // backend'de bilerek 400 verir (SELF_MANAGED_DOC_TYPES).
+  | "TRAVELER_CARD";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

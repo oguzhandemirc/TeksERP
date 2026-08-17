@@ -73,6 +73,25 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     read: ["return:read", "return:write", "mobile:iade"],
     write: ["return:write"],
   },
+  /**
+   * Refakat kartı (2026-08-17). Okuma listesi kartın kendi HTML ucuyla (`/api/
+   * traveler-cards/:id/html`) BİREBİR aynıdır — ayrışırsa operatör sürüm
+   * geçmişini görür ama açtığı sürümü basamaz (ya da tersi).
+   *
+   * ⚠️ `write` = revizyon yolu ve bu tipte KAPALI: sürümü yalnız kartın baskı
+   * olayı üretir (bkz. SELF_MANAGED_DOC_TYPES). Liste yine de `workorder:write`
+   * taşır ki izin eşlemesi eksik kalmasın; uç zaten 400 döner.
+   */
+  TRAVELER_CARD: {
+    read: [
+      "workorder:read",
+      "workorder:write",
+      "mobile:kk1",
+      "mobile:fason-sevk",
+      "mobile:hizli-is-emri",
+    ],
+    write: ["workorder:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

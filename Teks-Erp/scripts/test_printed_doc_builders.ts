@@ -71,6 +71,10 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
     (await prisma.kartelaDispatch.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
   [PrintedDocType.RETURN_DISPATCH]: async () =>
     (await prisma.rollReturn.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // Refakat kartının builder'ı YOK (kendi kendini yönetir) → derin sonda B/C
+  // bölümlerinde zaten atlanır. Kaynak çözücüsü yine de yazılır: `null` dönmek
+  // "veri yok" demektir ve muaflığı sessizce gizlemez.
+  [PrintedDocType.TRAVELER_CARD]: async () => null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.
@@ -105,11 +109,27 @@ async function main(): Promise<void> {
     registry.size >= 7,
     `${registry.size} builder kayıtlı`,
   );
-  const missing = allTypes.filter((t) => !registry.has(t));
+  // KENDİ KENDİNİ YÖNETEN tipler builder KAYDETMEZ ve bu bilinçlidir: sürümlerini
+  // kaynağın kendi baskı akışı yazar, generic freeze/reissue yolu onlara kapalıdır
+  // (printed-document.service → SELF_MANAGED_DOC_TYPES). Builder kaydetmek, tam da
+  // kapatılmak istenen ikinci sürüm üreticisini geri açardı.
+  //
+  // ⚠️ Muaf listesi İKİ YÖNLÜ denetlenir: builder'ı OLAN bir tip burada durursa
+  // ölü muaftır ve gerçek bir eksiği sessizce kapsam dışında tutardı.
+  const SELF_MANAGED: PrintedDocType[] = [PrintedDocType.TRAVELER_CARD];
+  const staleExempt = SELF_MANAGED.filter((t) => registry.has(t));
   check(
-    "Her PrintedDocType'ın kayıtlı builder'ı var",
+    "muaf listesi bayat değil (muaf tipin builder'ı YOK)",
+    staleExempt.length === 0,
+    staleExempt.length ? `ÖLÜ MUAF: ${staleExempt.join(", ")}` : `${SELF_MANAGED.length} muaf`,
+  );
+  const missing = allTypes.filter((t) => !registry.has(t) && !SELF_MANAGED.includes(t));
+  check(
+    "Her PrintedDocType'ın kayıtlı builder'ı var (kendi kendini yönetenler hariç)",
     missing.length === 0,
-    missing.length ? `EKSİK: ${missing.join(", ")}` : `${allTypes.length}/${allTypes.length}`,
+    missing.length
+      ? `EKSİK: ${missing.join(", ")}`
+      : `${allTypes.length - SELF_MANAGED.length}/${allTypes.length - SELF_MANAGED.length}`,
   );
 
   // ── B) Sorgu şekli — var olmayan id (DB verisinden BAĞIMSIZ garanti) ─────

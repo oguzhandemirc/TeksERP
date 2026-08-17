@@ -3091,6 +3091,13 @@ enum PrintedDocType {
   SUBCONTRACTOR_RECEIPT // Fason kabul makbuzu (SubcontractorReceipt)
   QUALITY_CERTIFICATE // Kalite/sevk sertifikası (Shipment — kalite özeti)
   RETURN_DISPATCH // İade irsaliyesi (RollReturn)
+  // 2026-08-17 — Refakat kartı versiyon geçmişi. sourceId = TravelerCard.id.
+  // ⚠️ KENDİ KENDİNİ YÖNETEN belge tipi: satırları YALNIZ traveler-card.service
+  //    (`recordPrintEvent`) yazar, generic freeze/reissue/getHtml yolları bu tipe
+  //    KAPALIDIR (bkz. SELF_MANAGED_DOC_TYPES). Sebep: kâğıda basılan sürüm ile
+  //    kayıtlı sürümün aynı olması `resolvePrintPlan` tek karar noktasına dayanır;
+  //    ikinci bir sürüm üretici o eşitliği sessizce bozar.
+  TRAVELER_CARD // Refakat kartı — basılan her sürümün donmuş kopyası
 }
 
 enum PrintedDocStatus {

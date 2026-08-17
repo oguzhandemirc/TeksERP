@@ -78,7 +78,15 @@ async function main(): Promise<void> {
   check("resolve: A5/12mm/1.2/bold(+100)/compact/zebra", r1.pageSize === "A5" && r1.margins.top === 12 && r1.fontScale === 1.2 && r1.weightDelta === 100 && r1.tableDensity === "compact" && r1.tableStyle === "zebra");
 
   // ── 3) 4 renderer'da stil CSS'i ─────────────────────────────────────────
-  for (const docType of Object.values(PrintedDocType)) {
+  // Refakat kartı bu döngünün DIŞINDA: belge stili ayarını kullanmaz, kendi
+  // şablon/config zincirini taşır ve generic sample-html yolu ona kapalıdır
+  // (SELF_MANAGED_DOC_TYPES). Kartın stil bekçileri ayrı: test_traveler_template
+  // + test_traveler_card_a5_batches.
+  const STYLED_TYPES = Object.values(PrintedDocType).filter(
+    (t) => t !== PrintedDocType.TRAVELER_CARD,
+  );
+  check("körlük zemini: en az 7 belge tipi stil için denendi", STYLED_TYPES.length >= 7, `${STYLED_TYPES.length} tip`);
+  for (const docType of STYLED_TYPES) {
     const html = await printedDocumentService.renderSampleHtml(docType, STYLE_CFG);
     check(`${docType}: @page A5 + 12mm margin`, html.includes("size: A5") && html.includes("margin: 12mm 12mm 12mm 12mm"));
     // body 11px × 1.2 = 13.2px (scaleDocCss)

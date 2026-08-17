@@ -245,12 +245,18 @@ export const workOrderService = {
    *  + Electron birebir aynısını basar. QR sunucuda gömülü, text/html döner. */
   /** `pageSize` verilirse SADECE BU BASKI için sayfa boyutunu ezer — kalıcı ayara
    *  ve kartın donmuş snapshot'ına yazılmaz (backend sözleşmesi). */
-  getTravelerCardHtml: (cardId: string, pageSize?: "A4" | "A5") =>
+  /** `version` verilirse o sürümün ARŞİV kopyası basılır (printed_documents
+   *  defteri). Parametresiz çağrı güncel plandan üretir — sahadaki asıl kural
+   *  budur: kartı açan kişi her zaman yürürlükteki planı görür. */
+  getTravelerCardHtml: (cardId: string, pageSize?: "A4" | "A5", version?: number) =>
     apiClient
       .get<string>(`/api/traveler-cards/${cardId}/html`, {
         responseType: "text",
         headers: { Accept: "text/html" },
-        params: pageSize ? { pageSize } : undefined,
+        params: {
+          ...(pageSize ? { pageSize } : {}),
+          ...(version ? { version } : {}),
+        },
       })
       .then((r) => r.data),
 
