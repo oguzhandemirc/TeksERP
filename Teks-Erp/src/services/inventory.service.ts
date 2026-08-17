@@ -7,6 +7,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
@@ -2236,7 +2237,7 @@ export class InventoryService {
    */
   async findRollByBarcode(barcode: string): Promise<ApiResponse<Roll | null>> {
     const roll = await prisma.roll.findUnique({
-      where: { barcode },
+      where: { barcode: normalizeScanCode(barcode) },
       include: {
         item: true,
         color: true,
@@ -2296,7 +2297,7 @@ export class InventoryService {
     ref: { barcode: string } | { rollId: string },
   ): Promise<ApiResponse<RelabelContext | null>> {
     const roll = await prisma.roll.findUnique({
-      where: "barcode" in ref ? { barcode: ref.barcode } : { id: ref.rollId },
+      where: "barcode" in ref ? { barcode: normalizeScanCode(ref.barcode) } : { id: ref.rollId },
       select: {
         id: true,
         barcode: true,

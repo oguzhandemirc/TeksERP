@@ -25,7 +25,12 @@ const woIds: string[] = [];
 const sackIds: string[] = [];
 const rollIds: string[] = [];
 let bc = 0;
-const barcode = (): string => `TST-WHA-${Math.floor(Math.random() * 0xffffff).toString(16)}${bc++}`;
+// ⚠️ `.toUpperCase()` load-bearing: `toString(16)` küçük harf hex üretir, oysa
+// GERÇEK barkodlar her zaman BÜYÜK harftir (kod üretimi + canlı veride 0 istisna)
+// ve okutma yolu artık girdiyi büyütüyor (normalizeScanCode, 2026-08-17). Küçük
+// harfli fixture, üretimde var olmayan bir durumu sınayıp testi yanlış yere
+// kırmızıya düşürüyordu. Diğer ~20 test dosyası bu konvansiyonu zaten taşıyor.
+const barcode = (): string => `TST-WHA-${Math.floor(Math.random() * 0xffffff).toString(16).toUpperCase()}${bc++}`;
 
 async function fixtures(): Promise<void> {
   const need = (v: { id: string } | null, l: string): string => { if (!v) throw new Error(`fixture eksik: ${l}`); return v.id; };

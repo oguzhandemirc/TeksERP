@@ -48,7 +48,7 @@ import {
   readSimulatedWeightEnabled,
 } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
-import { dailyCodePrefix, isDailyCode, nextDailySeq } from "../utils/code-format";
+import { dailyCodePrefix, isDailyCode, nextDailySeq, normalizeScanCode } from "../utils/code-format";
 import {
   touchWarehouseSackTx,
   touchShipmentPlannedTx,
@@ -487,7 +487,7 @@ export class ShippingService {
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
     if (sack.shipmentId != null) throw AppError.conflict("Çuval bir sevkiyata atanmış — içerik değiştirilemez");
 
-    const code = data.barcode.trim();
+    const code = normalizeScanCode(data.barcode);
     // ÇUVAL KODU okutulduysa (CV+GGAAYY+NNNN) bu bir top DEĞİL. Çuval etiketi
     // basılabildiği için operatör kaçınılmaz olarak bunu top alanına okutur;
     // yanıltıcı "Bu barkodla top bulunamadı" yerine ne olduğunu söyleyelim.

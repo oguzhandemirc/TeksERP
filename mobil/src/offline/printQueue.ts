@@ -26,6 +26,7 @@
 // =============================================================================
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { normalizeScanCode } from '../utils/scanCode';
 import { create } from 'zustand';
 import { isAmbiguousFailure } from './entryAttempt';
 import type { Roll } from '../types/models';
@@ -314,7 +315,10 @@ export const usePrintQueue = create<PrintQueueState>((set, get) => ({
   },
 
   confirmVerify: (code) => {
-    const norm = code.trim();
+    // Geri-okutma doğrulaması: kuyruktaki barkod sunucudan gelir (BÜYÜK harf).
+    // Ham metinle karşılaştırılırsa tabancadan küçük harf gelen kod "bilinmeyen"
+    // sayılır ve basılan etiket asla doğrulanmaz.
+    const norm = normalizeScanCode(code);
     if (!norm) return 'unknown';
     const { jobs, verifies } = get();
     const hit = verifies.find((v) => v.barcode === norm);

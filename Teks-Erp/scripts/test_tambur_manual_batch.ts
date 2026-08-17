@@ -105,7 +105,7 @@ async function main(): Promise<void> {
     // Partiyi "açık" yapan şey canlı topudur; ölü top parti kapanmış demektir.
     const r = await prisma.roll.create({
       data: {
-        barcode: `TEST-PB-R-${suffix}-${randomUUID().slice(0, 8)}`,
+        barcode: `TEST-PB-R-${suffix}-${randomUUID().slice(0, 8).toUpperCase()}`,
         itemId: (await prisma.roll.findUniqueOrThrow({
           where: { id: fx.rollIds[0] },
           select: { itemId: true },

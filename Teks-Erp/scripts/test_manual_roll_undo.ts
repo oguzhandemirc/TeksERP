@@ -201,7 +201,7 @@ async function main(): Promise<void> {
     const r3 = await addManual(80);
     const child = await prisma.roll.create({
       data: {
-        barcode: `TEST-MU-CHILD-${randomUUID().slice(0, 8)}`,
+        barcode: `TEST-MU-CHILD-${randomUUID().slice(0, 8).toUpperCase()}`,
         itemId: (await prisma.roll.findUniqueOrThrow({
           where: { id: r3.rollId },
           select: { itemId: true },

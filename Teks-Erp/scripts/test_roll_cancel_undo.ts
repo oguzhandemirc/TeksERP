@@ -55,7 +55,10 @@ async function makeRoll(opts: {
 }): Promise<{ id: string; barcode: string }> {
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
   if (!item) throw new Error("Aktif ürün yok — seed koşulmamış olabilir");
-  const barcode = `T-TEST-${randomUUID().slice(0, 8)}`;
+  // ⚠️ BÜYÜK harf: gerçek barkodlar hep büyüktür ve okutma yolu girdiyi
+  // büyütür (normalizeScanCode). Küçük harfli fixture, üretimde olmayan bir
+  // durumu sınayıp testi yanlış yerden kırmızıya düşürür.
+  const barcode = `T-TEST-${randomUUID().slice(0, 8).toUpperCase()}`;
   const roll = await prisma.roll.create({
     data: {
       itemId: item.id,

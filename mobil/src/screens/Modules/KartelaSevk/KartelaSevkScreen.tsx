@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { normalizeScanCode } from '../../../utils/scanCode';
 import { View, StyleSheet } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Text, TextInput, IconButton, Surface, TouchableRipple, Chip, Icon, ActivityIndicator, Button } from 'react-native-paper';
@@ -121,7 +122,7 @@ export default function KartelaSevkScreen() {
 
   const addRoll = useCallback(
     async (code: string) => {
-      const trimmed = code.trim();
+      const trimmed = normalizeScanCode(code);
       if (!trimmed) return;
       if (rolls.some((r) => r.barcode === trimmed)) {
         Toast.show({ type: 'info', text1: 'Bu top zaten eklendi' });

@@ -15,6 +15,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { normalizeScanCode } from "../utils/code-format";
 import { randomUUID } from "crypto";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -208,7 +209,7 @@ export class KursunQcService {
    */
   async getByCardBarcode(cardBarcode: string): Promise<ApiResponse<StepSummary>> {
     const card = await prisma.travelerCard.findUnique({
-      where: { barcode: cardBarcode },
+      where: { barcode: normalizeScanCode(cardBarcode) },
       select: {
         id: true,
         status: true,

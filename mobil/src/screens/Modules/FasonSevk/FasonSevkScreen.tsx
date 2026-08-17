@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { normalizeScanCode } from '../../../utils/scanCode';
 import { View, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -818,7 +819,7 @@ export default function FasonSevkScreen() {
   const resolvingBarcodesRef = useRef<Set<string>>(new Set());
 
   const addBarcodeFromString = async (raw: string) => {
-    const barcode = raw.trim();
+    const barcode = normalizeScanCode(raw);
     if (!barcode) return;
 
     if (scannedRolls.some((r) => r.barcode === barcode)) {

@@ -28,8 +28,12 @@ import {
 } from './printQueue';
 import type { Roll } from '../types/models';
 
+// ⚠️ Barkod BÜYÜK harf: gerçek barkodlar hep büyüktür (sunucu üretir) ve
+// geri-okutma doğrulaması okutulan kodu büyüterek karşılaştırır
+// (normalizeScanCode, 2026-08-17). Küçük harfli fixture, üretimde var olmayan
+// bir durumu sınardı.
 const roll = (id: string): Roll =>
-  ({ id, barcode: `T-${id}`, item: { name: 'KUMAS' } }) as unknown as Roll;
+  ({ id, barcode: `T-${id.toUpperCase()}`, item: { name: 'KUMAS' } }) as unknown as Roll;
 
 const job = (id: string, extra?: Partial<PrintJob>): PrintJob => ({
   roll: roll(id),
@@ -190,7 +194,10 @@ describe('printQueue — scan-back (etiket geri-okutma)', () => {
     usePrintQueue.getState().addVerify(roll('a')); // barcode T-a
     expect(usePrintQueue.getState().confirmVerify('YANLIS-KOD')).toBe('unknown');
     expect(usePrintQueue.getState().verifies).toHaveLength(1);
-    expect(usePrintQueue.getState().confirmVerify('  T-a  ')).toBe('ok'); // trim
+    // Boşluk VE küçük harf toleransı: el tarayıcısı kâğıttaki BÜYÜK barkodu
+    // küçük harf gönderebiliyor (2026-08-17 saha vakası) — geri-okutma o yüzden
+    // doğrulanamıyordu.
+    expect(usePrintQueue.getState().confirmVerify('  t-a  ')).toBe('ok');
     expect(usePrintQueue.getState().verifies).toHaveLength(0);
   });
 

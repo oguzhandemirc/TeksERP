@@ -18,7 +18,7 @@ import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
-import { isDailyCode } from "../utils/code-format";
+import { isDailyCode, normalizeScanCode } from "../utils/code-format";
 import { buildTurkishSearch } from "../utils/query-parser";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 
@@ -539,7 +539,7 @@ export class SackSearchService {
    * konum cevabı verir (statü = depoda/üretimde/sevk edildi).
    */
   async locateRoll(barcode: string): Promise<ApiResponse<unknown>> {
-    const code = barcode.trim();
+    const code = normalizeScanCode(barcode);
     if (!code) throw AppError.badRequest("Barkod gerekli");
     // Çuval kodu okutulduysa top araması anlamsız — ne yapacağını söyle
     // (çuval etiketi basılabiliyor, bu okutma kaçınılmaz).

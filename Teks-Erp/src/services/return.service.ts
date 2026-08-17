@@ -17,6 +17,7 @@
 // =============================================================================
 
 import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus } from "@prisma/client";
+import { normalizeScanCode } from "../utils/code-format";
 import prisma from "../lib/prisma";
 import {
   printedDocumentService,
@@ -96,7 +97,7 @@ export class ReturnService {
   // LOOKUP — QR okut → iade ekranı için top + aday siparişler
   // =========================================================================
   async lookupForReturn(barcode: string): Promise<ApiResponse<unknown>> {
-    const code = barcode.trim();
+    const code = normalizeScanCode(barcode);
     if (!code) throw AppError.badRequest("Barkod gerekli");
 
     const roll = await prisma.roll.findUnique({
@@ -221,7 +222,7 @@ export class ReturnService {
    * doğal olarak dışarıda bırakır; ayrı bir "iade edildi mi" süzgeci gerekmez.
    */
   async lookupSackForReturn(sackCode: string): Promise<ApiResponse<unknown>> {
-    const code = sackCode.trim();
+    const code = normalizeScanCode(sackCode);
     if (!code) throw AppError.badRequest("Çuval kodu gerekli");
 
     const sack = await prisma.sack.findUnique({

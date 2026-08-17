@@ -66,6 +66,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { normalizeScanCode } from "../utils/code-format";
 import {
   Prisma,
   RollEntrySource,
@@ -275,7 +276,7 @@ export class TamburManualService {
 
   /** Barkod (okutma) ya da ID ile topu çöz. Barkod TAM eşleşme (unique index seek). */
   private async resolveRoll(ref: RollRef): Promise<ResolvedRoll> {
-    const barcode = ref.barcode?.trim();
+    const barcode = ref.barcode ? normalizeScanCode(ref.barcode) : undefined;
     const where: Prisma.RollWhereInput | null = ref.rollId
       ? { id: ref.rollId }
       : barcode

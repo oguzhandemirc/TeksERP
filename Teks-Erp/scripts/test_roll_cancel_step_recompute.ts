@@ -157,7 +157,7 @@ async function makeRoll(
 ): Promise<string> {
   const r = await prisma.roll.create({
     data: {
-      barcode: `TEST-RCSR-${stamp}-${randomUUID().slice(0, 8)}`,
+      barcode: `TEST-RCSR-${stamp}-${randomUUID().slice(0, 8).toUpperCase()}`,
       itemId,
       initialQty: 100,
       currentQty: 100,

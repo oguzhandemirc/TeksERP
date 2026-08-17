@@ -172,6 +172,37 @@ export function foldCodeForCompare(code: string): string {
     .toUpperCase();
 }
 
+/**
+ * OKUTULAN KODU DEPOLANMIŞ BİÇİME ÇEVİRİR — barkod/kart/çuval aramalarının TEK kapısı.
+ *
+ * SAHA VAKASI (2026-08-17): kâğıda BÜYÜK harfle basılan barkod, el tarayıcısından
+ * KÜÇÜK harf olarak geliyordu (klavye-taklidi düzen / Caps Lock inversiyonu — kodun
+ * kontrolünde değil). Tam-eşleşme aramaları (`where: { barcode: code }`) yalnız
+ * `.trim()` yapıyordu → top "yok" görünüyor, operatör sevkiyatı tamamlayamıyordu.
+ * Ölçüldü: `T130826F0230` bulunuyor, `t130826f0230` bulunmuyor. Kayıtlı kodların
+ * TAMAMI zaten büyük harf (rolls/traveler_cards/sacks: 0 istisna), yani düzeltilecek
+ * olan VERİ değil GİRDİ.
+ *
+ * ⚠️ ÇÖZÜM `mode:"insensitive"` DEĞİL: Prisma onu ILIKE'a çevirir, `barcode`
+ * üzerindeki unique index devre dışı kalır ve top tablosu büyüdükçe her okutma
+ * seq scan'e döner. Girdiyi büyütmek index'i OLDUĞU GİBİ bırakır.
+ *
+ * ⚠️ `toLocaleUpperCase("tr")` KULLANMA: "i" → "İ" üretir ve ASCII barkodu bozar
+ * (kodlarımızda Türkçe harf yok — `code-format` başlığındaki kalıba bak).
+ *
+ * ⚠️ `foldCodeForCompare` İLE KARIŞTIRMA: o bir KARŞILAŞTIRMA katlamasıdır
+ * (i-ailesini `I`ya indirger, mükerrer ad/kod kontrolü için) ve sonucu bir
+ * arama anahtarı olarak kullanılamaz. Bu fonksiyon ise "kullanıcının okuttuğu
+ * şeyin DB'deki yazımı" sorusunu cevaplar.
+ *
+ * ⚠️ SERBEST METNE UYGULAMA: yalnız okutulan/yazılan KOD alanları içindir
+ * (barkod, kart no, çuval no, sevk belge no). Müşteri adı, not, açıklama gibi
+ * alanları büyütmek veriyi bozar.
+ */
+export function normalizeScanCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
 // =============================================================================
 // KISA PARTİ NO — P01 … P99, körlemesine sarar (bayrak: batch.shortNumberEnabled)
 // =============================================================================

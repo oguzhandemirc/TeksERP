@@ -115,7 +115,7 @@ import { TravelerCardService } from "./traveler-card.service";
 import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
-import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
+import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from "../utils/code-format";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
@@ -1119,7 +1119,9 @@ export class WorkOrderService {
     }>
   > {
     const { rollBarcodes, dispatchFirstStep, ...woInput } = data;
-    const barcodes = [...new Set(rollBarcodes.map((b) => b.trim()).filter(Boolean))];
+    // Okutulan kod DEPOLANMIŞ biçime çekilir (bkz. normalizeScanCode) — büyütme
+    // TEKİLLEŞTİRMEDEN ÖNCE yapılır, yoksa "T1" ve "t1" iki ayrı kod sayılırdı.
+    const barcodes = [...new Set(rollBarcodes.map(normalizeScanCode).filter(Boolean))];
     if (barcodes.length === 0) {
       throw AppError.badRequest("En az bir top barkodu okutmalısınız.");
     }
@@ -4213,9 +4215,12 @@ export class WorkOrderService {
    */
   async attachRolls(
     workOrderId: string,
-    barcodes: string[],
+    rawBarcodes: string[],
     userId?: string
   ): Promise<ApiResponse<{ attached: number; errors: string[]; batch: { id: string; batchNumber: string } | null }>> {
+    // Okutulan kod DEPOLANMIŞ biçime çekilir — el tarayıcısı küçük harf
+    // gönderebiliyor (2026-08-17 saha vakası; bkz. normalizeScanCode).
+    const barcodes = rawBarcodes.map(normalizeScanCode).filter(Boolean);
     const wo = await prisma.workOrder.findUnique({
       where: { id: workOrderId },
       include: {

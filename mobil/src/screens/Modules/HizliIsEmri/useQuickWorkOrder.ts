@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { normalizeScanCode } from '../../../utils/scanCode';
 import { useMutation, useQuery, useQueryClient, onlineManager } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import Toast from 'react-native-toast-message';
@@ -558,7 +559,10 @@ export function useQuickWorkOrder() {
 
   const handleScan = useCallback(
     async (raw: string) => {
-      const barcode = raw.trim();
+      // Okutulan kod DEPOLANMIŞ biçime çekilir — aşağıdaki mükerrer kontrolü
+      // sunucudan gelen (BÜYÜK harfli) barkodla karşılaştırıyor; ham metinle
+      // karşılaştırılırsa aynı top listeye iki kez girer (bkz. normalizeScanCode).
+      const barcode = normalizeScanCode(raw);
       if (!barcode) return;
       if (scannedRef.current.some((s) => s.barcode === barcode)) {
         // Bilinen mükerrer: ağ çağrısı YOK ama SESSİZ de değil. Eskiden hiçbir

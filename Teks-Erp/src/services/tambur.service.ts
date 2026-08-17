@@ -15,6 +15,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -460,7 +461,7 @@ export class TamburService {
     cardBarcode: string
   ): Promise<ApiResponse<TamburStepSummary>> {
     const card = await prisma.travelerCard.findUnique({
-      where: { barcode: cardBarcode },
+      where: { barcode: normalizeScanCode(cardBarcode) },
       // Kart iş emri başına — doğrudan workOrderId.
       select: { id: true, status: true, workOrderId: true },
     });
@@ -1495,7 +1496,7 @@ export class TamburService {
     barcode: string
   ): Promise<ApiResponse<Swatch | null>> {
     const swatch = await prisma.swatch.findUnique({
-      where: { barcode },
+      where: { barcode: normalizeScanCode(barcode) },
       include: {
         item: { select: { id: true, code: true, name: true } },
         color: { select: { id: true, code: true, name: true } },
@@ -3392,7 +3393,7 @@ export class TamburService {
     }>
   > {
     const card = await prisma.travelerCard.findUnique({
-      where: { barcode: cardBarcode },
+      where: { barcode: normalizeScanCode(cardBarcode) },
       // Kart iş emri başına — doğrudan workOrderId.
       select: { id: true, status: true, workOrderId: true },
     });

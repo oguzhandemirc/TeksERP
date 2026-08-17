@@ -35,7 +35,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
-import { isDailyCode } from "../utils/code-format";
+import { isDailyCode, normalizeScanCode } from "../utils/code-format";
 // NOT: `readTravelerCardConfig` artık BURADAN çağrılmıyor — kart config'i
 // şablon çözümünden gelir (`travelerTemplateService.resolveForPrint`, şablon
 // yoksa o zaten sistem ayarına düşer). Tip hâlâ gerekli.
@@ -535,12 +535,17 @@ export class TravelerCardService {
     },
     userId?: string,
   ): Promise<ApiResponse<TravelerCardScan>> {
-    if (!isCardCode(data.barcode)) {
+    // ⚠️ BİÇİM KONTROLÜ NORMALİZE EDİLMİŞ KODLA (2026-08-17): eskiden ham değere
+    // bakıyordu ve küçük harf gelen kart okutması, arama yapılmadan ÖNCE
+    // "Geçersiz barkod formatı" ile düşüyordu — mesaj da yanıltıcıydı (kod
+    // geçerliydi, yalnız yazımı farklıydı).
+    const scanned = normalizeScanCode(data.barcode);
+    if (!isCardCode(scanned)) {
       throw AppError.badRequest("Geçersiz barkod formatı");
     }
 
     const card = await prisma.travelerCard.findUnique({
-      where: { barcode: data.barcode.toUpperCase() },
+      where: { barcode: scanned },
       include: {
         workOrder: { include: { steps: { orderBy: { stepSequence: "asc" } } } },
       },
@@ -719,7 +724,7 @@ export class TravelerCardService {
   async findByBarcode(
     input: string,
   ): Promise<ApiResponse<(Omit<TravelerCard, "snapshot"> & { hasOpenDispatch: boolean }) | null>> {
-    const normalized = input.trim().toUpperCase();
+    const normalized = normalizeScanCode(input);
     if (!isCardCode(normalized)) {
       throw AppError.badRequest("Geçersiz format. Beklenen: İE1207260001 (iş emri kartı)");
     }

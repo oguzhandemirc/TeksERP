@@ -42,6 +42,7 @@
 // =============================================================================
 
 import { randomUUID } from "crypto";
+import { normalizeScanCode } from "../utils/code-format";
 import {
   KursunBypassCompletionSource,
   Prisma,
@@ -1723,7 +1724,7 @@ export class KursunBypassService {
 
     // ── Ön kontroller (tx dışı) ────────────────────────────────────────────
     const card = await prisma.travelerCard.findUnique({
-      where: { barcode: input.cardBarcode },
+      where: { barcode: normalizeScanCode(input.cardBarcode) },
       select: { id: true, status: true, workOrderId: true },
     });
     if (!card) {
