@@ -75,12 +75,26 @@ export class PermissionManagementService {
       orderBy: [{ category: "asc" }, { module: "asc" }, { code: "asc" }],
       include: {
         _count: { select: { userPermissions: true, templateMemberships: true } },
+        // ROL ADLARI (2026-08-19): "bu yetki normalde kime verilir" sorusunun
+        // cevabı. Panelde ÖNERİ olarak gösterilir, KISIT olarak DEĞİL — saha
+        // personelinin bir kısmı kilit rolde ve rol dışı yetki taşıyabiliyor
+        // (kullanıcı kararı). Türetilmiş veri: rol kataloğu değişince kendi
+        // kendine güncellenir, elle bakım gerektiren ikinci bir liste doğmaz.
+        templateMemberships: {
+          select: { template: { select: { name: true, isActive: true } } },
+        },
       },
     });
-    return rows.map(({ _count, ...p }) => ({
+    return rows.map(({ _count, templateMemberships, ...p }) => ({
       ...p,
       userCount: _count.userPermissions,
       templateCount: _count.templateMemberships,
+      // Pasif şablonlar dışarıda: "kullanmıyoruz" kararı verilmiş bir rolü
+      // öneri diye göstermek yanlış yönlendirir.
+      roleNames: templateMemberships
+        .filter((m) => m.template.isActive)
+        .map((m) => m.template.name)
+        .sort((a, b) => a.localeCompare(b, "tr")),
     }));
   }
 

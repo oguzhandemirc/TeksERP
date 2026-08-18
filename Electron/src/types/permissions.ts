@@ -11,6 +11,15 @@ export interface Permission {
   userCount?: number;
   /** Bu yetkiyi içeren şablon (rol) sayısı. */
   templateCount?: number;
+  /**
+   * Bu yetkiyi içeren AKTİF rollerin adları — "normalde kime verilir" ipucu.
+   *
+   * ⚠️ ÖNERİ, KISIT DEĞİL: rolde geçmeyen bir yetki de pekâlâ verilebilir
+   * (saha personelinin bir kısmı kilit rolde ve rol dışı yetki taşıyor —
+   * 2026-08-19 kullanıcı kararı). Liste TÜRETİLMİŞTİR: rol kataloğu değişince
+   * kendiliğinden güncellenir, elle bakılacak ikinci bir eşleme doğmaz.
+   */
+  roleNames?: string[];
 }
 
 export interface UserPermissionGrant {

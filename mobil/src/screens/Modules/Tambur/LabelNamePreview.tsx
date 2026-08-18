@@ -30,6 +30,7 @@ import Toast from 'react-native-toast-message';
 import AppModal from '../../../components/AppModal';
 import { labelService, type LabelNamePreview as Preview } from '../../../services/label.service';
 import { usePermissions } from '../../../hooks/usePermission';
+import { shouldShowOriginalName } from './labelNameCompare';
 
 /** Ad kaynağının operatöre görünen karşılığı. */
 function sourceLabel(src: Preview['itemNameSource'] | null): string {
@@ -53,6 +54,11 @@ export function LabelNamePreview({
   // Kalıcı (master alias) yazma yetkisi. Yoksa o seçenek HİÇ çizilmez — gri
   // buton, alınamayacak bir yetkiyi vaat etmektir (proje kuralı).
   const canPermanent = has('customer-alias:write');
+  // ⚠️ Sipariş kapsamı da AYNI kuralı izlemeli (2026-08-19'da eklendi): eskiden
+  // kart yetkiden bağımsız çiziliyordu → operatör adı yazıp Kaydet'e basıyor ve
+  // SEBEPSİZ 403 alıyordu. Ölçüldü: sahadaki Tambur operatöründe `label:edit`
+  // yoktu, yani düzeltme akışı hiç çalışmamış.
+  const canOrder = has('label:edit');
 
   const q = useQuery({
     queryKey: ['label', 'name-preview', rollId, orderLineId, customerId],
@@ -74,8 +80,14 @@ export function LabelNamePreview({
     if (!editOpen || !p) return;
     setItemName(p.itemName);
     setColorName(p.colorName ?? '');
-    setScope(orderLineId ? null : canPermanent ? 'PERMANENT' : null);
-  }, [editOpen, p, orderLineId, canPermanent]);
+    // Tek seçenek varsa onu ön-seç: iki seçenekliyken ön seçim YANLIŞ tarafa
+    // yazma riskidir, tek seçenekliyken fazladan dokunuştur.
+    const orderOk = Boolean(orderLineId) && canOrder;
+    if (orderOk && canPermanent) setScope(null);
+    else if (orderOk) setScope('ORDER');
+    else if (canPermanent) setScope('PERMANENT');
+    else setScope(null);
+  }, [editOpen, p, orderLineId, canOrder, canPermanent]);
 
   const saveMut = useMutation({
     mutationFn: async () => {
@@ -119,6 +131,10 @@ export function LabelNamePreview({
   // düzeltilecek bir şey de yok. Yalnız bilgi satırı.
   const isStock = !p.customerId;
 
+  // Kural TEK KAYNAKTA (labelNameCompare) — bileşende tekrar yazmak, testin
+  // gerçek davranışı değil kopyasını sınaması demekti.
+  const showOriginal = shouldShowOriginalName(p);
+
   return (
     <>
       <TouchableRipple
@@ -131,6 +147,18 @@ export function LabelNamePreview({
             Etikette: <Text style={s.value}>{p.itemName}</Text>
             {p.colorName ? <Text style={s.value}> · {p.colorName}</Text> : null}
           </Text>
+          {/* Referans satırı — "Etikette" ile AYNI biçimde ama soluk. Karşılaştırma
+              alt alta yapılır; operatör iki satırı göz gezdirerek eşler.
+              "Bizde:" etiketi, müşteri belgelerindeki "(Müşteride: X)"
+              konvansiyonunun aynadaki karşılığıdır (tek kelime, tek yön). */}
+          {showOriginal ? (
+            <Text style={s.orig} numberOfLines={1}>
+              Bizde: <Text style={s.origValue}>{p.itemNameDefault}</Text>
+              {p.colorNameDefault ? (
+                <Text style={s.origValue}> · {p.colorNameDefault}</Text>
+              ) : null}
+            </Text>
+          ) : null}
           <Text style={s.sub}>
             {isStock
               ? 'Stok — müşteriye özel ad basılmaz'
@@ -169,12 +197,15 @@ export function LabelNamePreview({
           ) : null}
 
           <Text style={s.fieldLabel}>Nereye yazılsın?</Text>
-          {orderLineId ? (
+          {orderLineId && canOrder ? (
             <ScopeCard
               active={scope === 'ORDER'}
               onPress={() => setScope('ORDER')}
-              title="Sadece bu siparişte"
-              desc="Bu siparişin toplarında geçerli; müşterinin diğer siparişleri etkilenmez."
+              // ⚠️ "Sadece bu siparişte" YANILTICIYDI: yazma tek SİPARİŞ KALEMİNE
+              // gider. Aynı kumaş siparişte iki kalemde geçiyorsa diğeri eski adla
+              // basılmaya devam eder — operatör düzelttiğini sanıyordu.
+              title="Sadece bu sipariş kaleminde"
+              desc="Bu kalemin tüm toplarında geçerli (eskiler yeniden basılırsa da). Aynı siparişin diğer kalemleri ve müşterinin başka siparişleri etkilenmez."
             />
           ) : null}
           {canPermanent ? (
@@ -185,10 +216,13 @@ export function LabelNamePreview({
               desc="Kalıcı: bu müşteride bu kumaş bundan sonra hep böyle basılır."
             />
           ) : null}
-          {!orderLineId && !canPermanent ? (
+          {/* Hiç seçenek çizilmediyse SEBEBİ söylenir — boş bir modal, operatöre
+              "bozuk" diye okunur ve destek çağrısı üretir. */}
+          {!(orderLineId && canOrder) && !canPermanent ? (
             <Text style={s.warn}>
-              Bu top bir siparişe bağlı değil ve kalıcı ad değiştirme yetkiniz yok —
-              düzeltmeyi büro yapmalı.
+              {orderLineId
+                ? 'Etiketteki adı değiştirme yetkiniz yok — düzeltmeyi büro yapmalı.'
+                : 'Bu top bir siparişe bağlı değil ve kalıcı ad değiştirme yetkiniz yok — düzeltmeyi büro yapmalı.'}
             </Text>
           ) : null}
           {/* ⚠️ Sıra uyarısı: sipariş override'ı zincirde alias'ın ÖNÜNDE gelir.
@@ -254,6 +288,10 @@ const s = StyleSheet.create({
   title: { fontSize: 13, color: '#475569' },
   value: { fontWeight: '800', color: '#0f172a' },
   sub: { fontSize: 11, color: '#94a3b8', marginTop: 1 },
+  // Basılan addan BELİRGİN ŞEKİLDE daha sönük (kalın değil, bir punto küçük) —
+  // istek buydu: görünsün ama "asıl ad bu" diye okunmasın.
+  orig: { fontSize: 12, color: '#94a3b8', marginTop: 2 },
+  origValue: { color: '#64748b', fontWeight: '600' },
 
   sheet: { backgroundColor: '#fff', borderRadius: 14, padding: 16, gap: 6, width: 460, maxWidth: '96%' },
   sheetTitle: { fontSize: 17, fontWeight: '800', color: '#0f172a' },

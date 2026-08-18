@@ -9,6 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/types/permissions";
 
+import { scopeOf, splitScopeStats, SCOPE_LABEL, type PermScope } from "./permission-scope";
+
 interface Props {
   permissions: Permission[];
   value: string[];
@@ -32,17 +34,36 @@ export function PermissionGrid({
   onDateChange,
 }: Props) {
   const [search, setSearch] = useState("");
+  /**
+   * MOBİL / MASAÜSTÜ SEKMESİ (2026-08-19 saha isteği: "çok fazla yetki var,
+   * karışıyor"). Ayrım yeni bir veri DEĞİL — `Permission.category` zaten
+   * `mobile` | `web` | `admin` taşıyor; sekme yalnız onu görünür kılar.
+   *
+   * ⚠️ SEKME BİR KISIT DEĞİL, GÖRÜNÜM. Aynı kullanıcı iki sekmeden de yetki
+   * alabilir ve seçim sekme değişince KORUNUR — saha personelinin bir kısmı
+   * kilit rolde ve masaüstü yetkisi de taşıyor (kullanıcı kararı).
+   */
+  const [scope, setScope] = useState<PermScope>("mobile");
+
+  const matchesSearch = (p: Permission): boolean => {
+    if (!search) return true;
+    const q = search.toLowerCase();
+    return (
+      p.code.toLowerCase().includes(q) ||
+      (p.description ?? "").toLowerCase().includes(q) ||
+      (moduleLabels[p.module] ?? p.module).toLowerCase().includes(q)
+    );
+  };
+
+  /** Sekme başına toplam + seçili sayısı — rozetler ve "diğer sekme" ipucu için. */
+  const scopeStats = useMemo(
+    () => splitScopeStats(permissions, value, matchesSearch),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [permissions, search, value],
+  );
 
   const grouped = useMemo(() => {
-    const filtered = permissions.filter((p) => {
-      if (!search) return true;
-      const q = search.toLowerCase();
-      return (
-        p.code.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q) ||
-        (moduleLabels[p.module] ?? p.module).toLowerCase().includes(q)
-      );
-    });
+    const filtered = permissions.filter((p) => scopeOf(p) === scope && matchesSearch(p));
 
     const byCat = new Map<string, Map<string, Permission[]>>();
     for (const p of filtered) {
@@ -53,7 +74,8 @@ export function PermissionGrid({
       byCat.set(p.category, cat);
     }
     return byCat;
-  }, [permissions, search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permissions, search, scope]);
 
   const selected = useMemo(() => new Set(value), [value]);
   const toggle = (id: string) => {
@@ -80,8 +102,43 @@ export function PermissionGrid({
   const hasWildcard = permissions.some((p) => isWildcard(p.code) && selected.has(p.id));
   const columnCount = onDateChange ? 4 : 3;
 
+  const other: PermScope = scope === "mobile" ? "desktop" : "mobile";
+  // ARAMA + SEKME KLASİK TUZAĞI: aranan yetki diğer sekmedeyse ekran "sonuç yok"
+  // der ve kullanıcı yetkinin var olmadığını sanır. Sayı hep gösterilir.
+  const hiddenHits = search ? scopeStats[other].hits : 0;
+
   return (
     <div className="flex h-full flex-col gap-3">
+      {/* Sekmeler — seçim sekmeye bağlı DEĞİL; rozetler her iki taraftaki seçili
+          sayısını gösterir ki "diğer tarafta ne verdim" sorusu ekranda cevaplansın. */}
+      <div className="flex items-center gap-1 rounded-md bg-muted p-1">
+        {(["mobile", "desktop"] as const).map((sc) => (
+          <button
+            key={sc}
+            type="button"
+            onClick={() => setScope(sc)}
+            className={
+              "flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors " +
+              (scope === sc
+                ? "bg-background shadow-sm text-foreground"
+                : "text-muted-foreground hover:text-foreground")
+            }
+          >
+            {SCOPE_LABEL[sc]}
+            <span
+              className={
+                "ml-2 rounded-full px-1.5 py-0.5 text-[11px] " +
+                (scopeStats[sc].selected > 0
+                  ? "bg-primary/15 text-primary font-semibold"
+                  : "bg-muted-foreground/15 text-muted-foreground")
+              }
+            >
+              {scopeStats[sc].selected}/{scopeStats[sc].total}
+            </span>
+          </button>
+        ))}
+      </div>
+
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -93,18 +150,35 @@ export function PermissionGrid({
           />
         </div>
         <div className="text-xs text-muted-foreground">
+          {/* TOPLAM seçili — sekme değil. Kullanıcının aldığı yetki iki sekmeye
+              yayılabilir; burada sekme sayısını göstermek eksik okuma üretirdi. */}
           <span className="text-foreground font-medium">{value.length}</span> / {permissions.length} seçili
         </div>
+        {/* ⚠️ "Temizle" HER İKİ sekmedeki seçimi siler. Sekmeli ekranda bu sürpriz
+            olabileceği için etiket kapsamı söylüyor — sessizce diğer sekmedeki
+            yetkileri düşürmek, kullanıcının görmediği bir yan etkidir. */}
         <Button
           type="button"
           variant="outline"
           size="sm"
-          disabled={disabled}
+          disabled={disabled || value.length === 0}
           onClick={() => onChange([])}
+          title="Mobil ve masaüstü dahil tüm seçimi kaldırır"
         >
-          Temizle
+          Tümünü Temizle
         </Button>
       </div>
+
+      {hiddenHits > 0 && (
+        <button
+          type="button"
+          onClick={() => setScope(other)}
+          className="rounded-md border border-primary/40 bg-primary/5 px-2 py-1.5 text-left text-xs text-primary hover:bg-primary/10"
+        >
+          “{search}” için <span className="font-semibold">{SCOPE_LABEL[other]}</span> sekmesinde{" "}
+          <span className="font-semibold">{hiddenHits}</span> sonuç daha var — geçmek için tıklayın.
+        </button>
+      )}
 
       {hasWildcard && (
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
@@ -250,6 +324,26 @@ function ModuleRows({
             </TableCell>
             <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
               {p.description}
+              {/* "Normalde kim alır" ipucu — yetkiyi ikinci bir başlık altında
+                  TEKRAR YAZMAK yerine (sektör pratiğinde anti-desen: iki kutu,
+                  tek gerçek) rollerden TÜRETİLİR. Süzmez, kısıtlamaz; yalnız
+                  yol gösterir. */}
+              {p.roleNames && p.roleNames.length > 0 && (
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+                    roller
+                  </span>
+                  {p.roleNames.map((r) => (
+                    <span
+                      key={r}
+                      className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                      title="Bu yetki bu rolün paketinde var — öneridir, zorunluluk değil."
+                    >
+                      {r.replace(/^Mobil — |^Web — /, "")}
+                    </span>
+                  ))}
+                </div>
+              )}
             </TableCell>
             {onDateChange && (
               <TableCell className="py-1.5">

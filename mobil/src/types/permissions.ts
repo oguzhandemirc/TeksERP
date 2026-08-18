@@ -40,6 +40,7 @@ export type MobilePermission =
  *   label:read    → etiket payload'unu görüntüleme + template fetch
  *   label:print   → POST /labels/rolls/:id/print (audit izi)
  *   label:edit    → PATCH /labels/order-lines/:id (müşteri-isim override)
+ *   customer-alias:write → PUT /customers/:id/item-aliases/:itemId (KALICI ad)
  *   label-template:read  → template listele + catalog
  *   label-template:write → template oluştur/güncelle/default değiştir/pasifleştir
  */
@@ -47,6 +48,11 @@ export type LabelPermission =
   | 'label:read'
   | 'label:print'
   | 'label:edit'
+  // Tambur "etiketteki adı düzelt" akışının KALICI seçeneği. Listede olmaması
+  // bir tip hatası ÜRETMİYORDU (`has()` düz string alır) — yani kod doğru
+  // yazılmış olmasına rağmen koruma yoktu; yanlış yazılan bir kod sonsuza dek
+  // sessizce `false` dönerdi.
+  | 'customer-alias:write'
   | 'label-template:read'
   | 'label-template:write';
 

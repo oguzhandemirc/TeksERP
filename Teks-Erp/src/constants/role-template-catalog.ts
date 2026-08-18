@@ -274,11 +274,28 @@ const MOBILE_ROLES: readonly RoleTemplateEntry[] = [
     name: "Mobil — Üretim Operatörü",
     description: "KK1 + Kurşun/KK2 + Tambur (varsayılan istasyon rotasyonu)",
     mode: "list",
-    codes: ["mobile:kk1", "mobile:kk2-kursun", "mobile:tambur"],
+    codes: [
+      "mobile:kk1",
+      "mobile:kk2-kursun",
+      "mobile:tambur",
+      // Etiketteki MÜŞTERİ ADINI düzeltme (2026-08-19 saha kararı). Tambur'da
+      // kesim ve etiket baskısı AYNI dokunuşta olur; operatörün "müşteride bu
+      // kumaş ne diye geçiyor" sorusunu gördüğü tek an odur. Yetkiler yoksa
+      // ekran kartı çizip Kaydet'te 403 veriyordu (ölçüldü: sahadaki Tambur
+      // operatöründe ikisi de YOKTU → özellik hiç çalışmamış).
+      "label:edit", // sipariş KALEMİ kapsamlı düzeltme
+      "customer-alias:write", // bu müşteride kalıcı ad
+    ],
   },
   { code: "MOBILE_KK1", name: "Mobil — KK1 Operatörü", description: "Ham kumaş kabul ekranı", mode: "list", codes: ["mobile:kk1"] },
   { code: "MOBILE_KK2_KURSUN", name: "Mobil — KK2/Kurşun Operatörü", description: "Kurşun + QC2 ekranı", mode: "list", codes: ["mobile:kk2-kursun"] },
-  { code: "MOBILE_TAMBUR", name: "Mobil — Tambur Operatörü", description: "Tambur karar / kesim ekranı", mode: "list", codes: ["mobile:tambur"] },
+  {
+    code: "MOBILE_TAMBUR",
+    name: "Mobil — Tambur Operatörü",
+    description: "Tambur karar / kesim ekranı + etiketteki müşteri adını düzeltme",
+    mode: "list",
+    codes: ["mobile:tambur", "label:edit", "customer-alias:write"],
+  },
   { code: "MOBILE_DEPO", name: "Mobil — Depo Operatörü", description: "Depo ekranı (salt-okunur)", mode: "list", codes: ["mobile:depo"] },
   { code: "MOBILE_FASON_SEVK", name: "Mobil — Fason Sevk Operatörü", description: "Fason firmaya sevk ekranı", mode: "list", codes: ["mobile:fason-sevk"] },
   { code: "MOBILE_FASON_KABUL", name: "Mobil — Fason Kabul Operatörü", description: "Fason firmadan mal kabul ekranı", mode: "list", codes: ["mobile:fason-kabul"] },
