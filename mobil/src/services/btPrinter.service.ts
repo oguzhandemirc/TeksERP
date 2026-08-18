@@ -95,6 +95,32 @@ export async function printPpla(address: string, content: string): Promise<void>
   }
 }
 
+/**
+ * YAZICIYI TAKILDIĞI YERDEN ÇIKARMAYI DENE (2026-08-19 saha vakası).
+ *
+ * Saha: "yazıcı takıldı, üstündeki fiziksel tuşla kapat-aç yaptık." Bu, soket
+ * sorunundan FARKLI bir durumdur — yazıcının KOMUT AYRIŞTIRICISI takılıdır:
+ * yarım kalmış bir blok yüzünden kalan baytları bekler ve sonraki her şeyi VERİ
+ * olarak yutar. Bağlantıyı yenilemek bunu çözmez; yalnız yazıcının kendi durumunu
+ * sıfırlamak çözer.
+ *
+ * Gönderilen dizi bilinçli olarak DİL-AGNOSTİKTİR — mobil taraf yazıcının dilini
+ * (PPLA/PPLB/ZPL) bilmiyor (`DevicePeripheral` bu alanı taşımıyor):
+ *   • `\x18` (CAN) — akış iptali, çoğu firmware'de yarım bloğu düşürür
+ *   • `\x01#`      — PPLA/DPL "immediate" RESET; veri beklerken bile taranır
+ *   • `~JA`         — ZPL "tüm işleri iptal et"
+ *   • CR/LF dolgusu — yarım kalmış metin satırını kapatır
+ * Yabancı dilde bu belirteçler geçersiz sayılıp yok sayılır.
+ *
+ * ⚠️ GARANTİ DEĞİL ve öyle sunulmamalı: yazıcı, saydığı bayt kotasını doldurmayı
+ * bekliyorsa bu diziyi de veri olarak yutabilir. O zaman tek çare hâlâ elektriği
+ * kesmektir. Arayüz metni bunu açıkça söyler.
+ */
+export async function unstickPrinter(address: string): Promise<void> {
+  const seq = '\x18\r\n\x01#\r\n~JA\r\n';
+  await writeRaw(address, seq);
+}
+
 /** Raster binary (GW bitmap) chunk boyu + parça arası bekleme. FİZİKSEL AYAR: HC-06
  *  taşarsa (çöp çıktı) DELAY artır; çok yavaşsa azalt (asıl sınır HC-06 baud'u). */
 const RASTER_CHUNK_BYTES = 256;

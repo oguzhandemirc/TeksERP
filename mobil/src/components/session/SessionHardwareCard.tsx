@@ -25,6 +25,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 import { peripheralService, type DevicePeripheral } from '../../services/peripheral.service';
 import { isBtSupported, isBonded, listBonded, pairByMac, resetConnection } from '../../services/hal/btClassic.transport';
+import { unstickPrinter } from '../../services/btPrinter.service';
 import { buildIoFromPeripheral } from '../../hooks/usePeripheralIO';
 import { useSessionStore } from '../../store/sessionStore';
 import { useManualRefresh } from '../../hooks/useManualRefresh';
@@ -131,10 +132,19 @@ export default function SessionHardwareCard() {
     setBusyId(r.id);
     try {
       await resetConnection(r.address);
+      // İKİ FARKLI ARIZA, TEK DOKUNUŞ: (1) bayat RFCOMM soketi — yukarıdaki
+      // resetConnection çözer; (2) yazıcının KOMUT AYRIŞTIRICISI takılı — yalnız
+      // aşağıdaki dizi çözebilir. Operatörden ikisini ayırt etmesini beklemek
+      // gerçekçi değil, bu yüzden ikisi birden denenir.
+      await unstickPrinter(r.address).catch(() => {
+        // Yazıcı diziyi de yutmuş olabilir — bağlantı yenilendiği için bunu
+        // BAŞARISIZLIK saymayız; alttaki mesaj zaten "çıkmazsa kapat-aç" diyor.
+      });
       Toast.show({
         type: 'success',
         text1: 'Bağlantı yenilendi',
-        text2: 'Etiketi tekrar basmayı deneyin.',
+        text2: 'Etiketi tekrar basın. Yine çıkmazsa yazıcıyı kapatıp açın.',
+        visibilityTime: 6000,
       });
     } catch (e) {
       Toast.show({

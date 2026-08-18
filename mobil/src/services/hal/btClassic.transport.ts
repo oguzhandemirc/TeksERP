@@ -216,9 +216,47 @@ const normMac = (a: string): string => a.trim().toUpperCase();
 // başlar. Farklı MAC'ler paralel kalır (kilit adrese özel).
 const macLocks = new Map<string, Promise<unknown>>();
 
+/**
+ * UÇUŞTA KALAN yazma — zaman aşımı sonrası tahliye kuyruğu (2026-08-19).
+ *
+ * ⚠️ SAHA VAKASI: "yazıcı takıldı, fiziksel tuşla kapat-aç yaptık." `withDeadline`
+ * SÜREYİ doldurunca ÇAĞIRANI reddeder ama native `writeToDevice` promise'i HÂLÂ
+ * UÇUŞTADIR — kilit ise `run`a zincirlendiği için o anda SERBEST KALIYORDU. Sonuç:
+ * bir sonraki etiket, yarım kalmış yazmanın baytları hâlâ akarken AYNI RFCOMM
+ * soketine yazıyor → yazıcının komut ayrıştırıcısına İKİ KOMUT İÇ İÇE giriyor.
+ * PPLA'da bu, tamamlanmamış bir bloğun peşine yeni `<STX>` eklenmesi demektir;
+ * yazıcı kalan baytları beklerken sonraki her şeyi VERİ olarak yutar ve
+ * ELEKTRİĞİ KESİLENE KADAR takılı kalır. Tam olarak sahadaki tarif.
+ *
+ * Bu yüzden zaman aşımında iş kuyruktan DÜŞMEZ: uçuştaki promise buraya park
+ * edilir ve bir sonraki iş ONU DA bekler. Beklemenin tavanı var — native promise
+ * hiç çözülmezse kuyruğu sonsuza dek dondurmak, iç içe yazmadan da kötüdür.
+ */
+const macDrains = new Map<string, Promise<unknown>>();
+
+/** Uçuşta kalan yazmanın tahliyesi en fazla bu kadar beklenir. */
+const DRAIN_CAP_MS = 4_000;
+
+/** Zaman aşımına düşen native işi "tahliye edilecek" diye kaydet. */
+function registerDrain(address: string, inflight: Promise<unknown>): void {
+  const key = normMac(address);
+  const settled = inflight.then(
+    () => undefined,
+    () => undefined,
+  );
+  const capped = Promise.race([settled, delay(DRAIN_CAP_MS)]);
+  macDrains.set(key, capped);
+  void capped.finally(() => {
+    if (macDrains.get(key) === capped) macDrains.delete(key);
+  });
+}
+
 function withMacLock<T>(address: string, fn: () => Promise<T>): Promise<T> {
   const key = normMac(address);
-  const prev = macLocks.get(key) ?? Promise.resolve();
+  const prevTail = macLocks.get(key) ?? Promise.resolve();
+  // Zaman aşımına düşmüş ama HÂLÂ AKAN bir yazma varsa onu da bekle — yoksa iki
+  // komut aynı sokete iç içe girer (yukarıdaki nota bak).
+  const prev = Promise.all([prevTail, macDrains.get(key) ?? Promise.resolve()]);
   // Önceki iş başarılı da olsa hata da verse fn'i çalıştır (zincir kopmasın).
   const run = prev.then(fn, fn);
   // Kuyruk-ucu: settle'ı yut ki bir sonraki iş her koşulda başlayabilsin.
@@ -376,10 +414,20 @@ async function writeRawUnlocked(
   };
   const ms = opts?.timeoutMs;
   if (!ms) return run();
-  return withDeadline(run(), ms, () => {
-    // Askıda kalan connect/write'ı koparmayı dene — sonraki deneme temiz başlasın.
-    void getModule()?.disconnectFromDevice?.(address).catch(() => {});
-  });
+  // Uçuştaki iş AYRI tutulur: `withDeadline` çağıranı reddetse de bu promise
+  // akmaya devam eder ve bir sonraki yazma onu beklemek ZORUNDADIR.
+  const inflight = run();
+  try {
+    return await withDeadline(inflight, ms, () => {
+      // Askıda kalan connect/write'ı koparmayı dene — sonraki deneme temiz başlasın.
+      void getModule()?.disconnectFromDevice?.(address).catch(() => {});
+    });
+  } catch (e) {
+    // ⚠️ Zaman aşımında native yazma HÂLÂ AKIYOR olabilir. Çağıran hızlıca hata
+    // alsın (kuyruk donmasın) ama sıradaki etiket bu baytların üstüne YAZMASIN.
+    registerDrain(address, inflight);
+    throw e;
+  }
 }
 
 type ReadMode = 'POLL' | 'STREAM';

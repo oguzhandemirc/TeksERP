@@ -100,6 +100,59 @@ describe('btClassic.transport', () => {
     expect(mod.disconnectFromDevice).toHaveBeenCalledTimes(1);
   });
 
+  it('zaman aşımına düşen yazma AKARKEN sıradaki yazma BAŞLAMAZ', async () => {
+    // ⚠️ SAHA VAKASI (2026-08-19): "yazıcı takıldı, fiziksel tuşla kapat-aç."
+    // `withDeadline` çağıranı reddediyor ama native yazma uçuşta kalıyordu ve
+    // kilit serbest kaldığı için SIRADAKİ etiket aynı sokete yazıyordu → yazıcının
+    // komut ayrıştırıcısında iki komut iç içe → elektrik kesilene kadar takılı.
+    mod.isDeviceConnected.mockResolvedValue(true);
+
+    let firstResolve!: () => void;
+    const firstDone = new Promise<void>((r) => {
+      firstResolve = r;
+    });
+    const order: string[] = [];
+    mod.writeToDevice
+      .mockImplementationOnce(async () => {
+        order.push('1-basladi');
+        await firstDone;
+        order.push('1-bitti');
+        return true;
+      })
+      .mockImplementationOnce(async () => {
+        order.push('2-basladi');
+        return true;
+      });
+
+    // 1. yazma 50ms'de zaman aşımına düşer ama native tarafı HÂLÂ akıyor.
+    const first = writeRaw('AA:11', 'BIR', 'latin1', { timeoutMs: 50 }).catch(() => 'timeout');
+    await expect(first).resolves.toBe('timeout');
+
+    // 2. yazma hemen kuyruğa girer; birincinin baytları akarken BAŞLAMAMALI.
+    const second = writeRaw('AA:11', 'IKI', 'latin1');
+    await new Promise((r) => setTimeout(r, 120));
+    expect(order).toEqual(['1-basladi']); // 2 henüz başlamadı
+
+    firstResolve();
+    await second;
+    // Sıra LOAD-BEARING: ikinci yazma ancak birinci BİTTİKTEN sonra.
+    expect(order).toEqual(['1-basladi', '1-bitti', '2-basladi']);
+  });
+
+  it('tahliye beklemesinin TAVANI var — hiç çözülmeyen yazma kuyruğu kilitlemez', async () => {
+    // Karşı-denge: native promise hiç çözülmezse sonsuza dek beklemek, iç içe
+    // yazmadan DAHA kötüdür (vardiya boyunca tek etiket basılamaz).
+    mod.isDeviceConnected.mockResolvedValue(true);
+    mod.writeToDevice
+      .mockImplementationOnce(() => new Promise(() => {})) // asla çözülmez
+      .mockImplementationOnce(async () => true);
+
+    await writeRaw('AA:11', 'BIR', 'latin1', { timeoutMs: 30 }).catch(() => undefined);
+    const t0 = Date.now();
+    await writeRaw('AA:11', 'IKI', 'latin1');
+    expect(Date.now() - t0).toBeLessThan(6000); // DRAIN_CAP_MS (4sn) + pay
+  }, 15000);
+
   it('resetConnection: kopar → yeniden bağlan', async () => {
     mod.isDeviceConnected.mockResolvedValue(false);
     await resetConnection('AA:11');
