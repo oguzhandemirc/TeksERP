@@ -8,7 +8,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService, type FeatureFlags } from "@/services/featureFlagService";
 import { systemSettingService, SETTING_KEYS } from "@/services/systemSettingService";
-import type { FlagDef } from "./settings-config";
+import type { FlagDef, NumberFlagKey } from "./settings-config";
 import { FlagToggle, ReadOnlyRow } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
@@ -72,6 +72,26 @@ export function FeatureFlagSection({
   const serverFlagStr = JSON.stringify(flagKeys.map((k) => server?.[k] ?? false));
   const [flagDraft, setFlagDraft] = useState<Record<string, boolean>>({});
   const [deadlineDraft, setDeadlineDraft] = useState(serverDeadline);
+  // `numberField` taşıyan flag'lerin sayısal taslağı — METİN olarak tutulur:
+  // kullanıcı alanı boşaltırken ara durumda sayıya zorlamak imleci zıplatır.
+  // Boş metin = "eşik girilmemiş" (null) demektir ve backend'e null gider.
+  const numberKeys = flags.map((f) => f.numberField?.numberKey).filter(Boolean) as NumberFlagKey[];
+  const serverNumberStr = JSON.stringify(numberKeys.map((k) => server?.[k] ?? null));
+  const [numberDraft, setNumberDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const k of numberKeys) {
+      const v = server?.[k] ?? null;
+      next[k] = v == null ? "" : String(v);
+    }
+    setNumberDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverNumberStr]);
+  /** Taslak metni sunucu sözleşmesine çevirir: boş/geçersiz → null (kural inert). */
+  const parseNumberDraft = (raw: string | undefined): number | null => {
+    const n = parseFloat((raw ?? "").replace(",", "."));
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
   useEffect(() => {
     const next: Record<string, boolean> = {};
     for (const k of flagKeys) next[k] = server?.[k] ?? false;
@@ -81,8 +101,18 @@ export function FeatureFlagSection({
   useEffect(() => setDeadlineDraft(serverDeadline), [serverDeadline]);
 
   const flagsDirty = flagKeys.some((k) => (flagDraft[k] ?? false) !== (server?.[k] ?? false));
+  const numbersDirty = numberKeys.some(
+    (k) => parseNumberDraft(numberDraft[k]) !== (server?.[k] ?? null),
+  );
+  // Sayısal alan aralık DIŞINDAysa kaydetme kapanır (backend zaten 400 verir —
+  // kullanıcıyı sunucuya kadar götürmeden söyle).
+  const numbersValid = flags.every((f) => {
+    if (!f.numberField) return true;
+    const v = parseNumberDraft(numberDraft[f.numberField.numberKey]);
+    return v === null || (v >= f.numberField.min && v <= f.numberField.max);
+  });
   const deadlineDirty = Boolean(meta) && deadlineDraft !== serverDeadline;
-  const dirty = flagsDirty || deadlineDirty;
+  const dirty = flagsDirty || deadlineDirty || numbersDirty;
   const deadlineValid = !meta || (Number.isInteger(deadlineDraft) && deadlineDraft >= 1 && deadlineDraft <= 365);
   useRegisterSettingsDirty(dirty);
 
@@ -92,6 +122,13 @@ export function FeatureFlagSection({
       for (const k of flagKeys) {
         const v = flagDraft[k] ?? false;
         if (v !== (server?.[k] ?? false)) (patch as Record<string, boolean>)[k] = v;
+      }
+      // Sayısal alanlar AYNI PATCH'e girer (ayrı istek değil): tek Kaydet, tek
+      // yazım — bayrak yazılıp eşik yazılamazsa "açık ama etkisiz" ara durum
+      // kalıcı olurdu.
+      for (const k of numberKeys) {
+        const v = parseNumberDraft(numberDraft[k]);
+        if (v !== (server?.[k] ?? null)) (patch as Record<string, number | null>)[k] = v;
       }
       if (Object.keys(patch).length > 0) await featureFlagService.update(patch);
       if (meta && deadlineDirty) {
@@ -110,6 +147,12 @@ export function FeatureFlagSection({
     for (const k of flagKeys) next[k] = server?.[k] ?? false;
     setFlagDraft(next);
     setDeadlineDraft(serverDeadline);
+    const nextNums: Record<string, string> = {};
+    for (const k of numberKeys) {
+      const v = server?.[k] ?? null;
+      nextNums[k] = v == null ? "" : String(v);
+    }
+    setNumberDraft(nextNums);
   };
 
   if (flagsQ.isLoading || (meta && sysQ.isLoading)) {
@@ -144,6 +187,45 @@ export function FeatureFlagSection({
             TASLAK değil SUNUCU değerine bakar: gösterge kaydedilmiş durumu anlatır,
             kaydedilmemiş bir toggle'ın vaadini değil. */}
         {flag.hint && (server?.[flag.key] ?? false) ? <flag.hint /> : null}
+        {/* Sayısal eşik — TASLAK toggle'a bakar (sunucuya değil): kullanıcı
+            anahtarı açar açmaz eşiği girebilmeli, önce kaydetmek zorunda
+            kalmamalı. Kapalıyken çizilmez (kullanılmayan alan gürültüdür). */}
+        {flag.numberField && checked ? (
+          canEdit ? (
+            <div className="mt-3 space-y-1.5 pl-1">
+              <label className="text-xs font-medium">{flag.numberField.label}</label>
+              <div className="flex items-center gap-1.5">
+                <Input
+                  type="number"
+                  min={flag.numberField.min}
+                  max={flag.numberField.max}
+                  value={numberDraft[flag.numberField.numberKey] ?? ""}
+                  disabled={mut.isPending}
+                  onChange={(e) =>
+                    setNumberDraft((d) => ({
+                      ...d,
+                      [flag.numberField!.numberKey]: e.target.value,
+                    }))
+                  }
+                  className="w-28 text-center tabular-nums"
+                />
+                <span className="text-xs text-muted-foreground">{flag.numberField.unit}</span>
+              </div>
+              {parseNumberDraft(numberDraft[flag.numberField.numberKey]) === null ? (
+                <p className="text-xs text-amber-600 dark:text-amber-500">
+                  {flag.numberField.emptyWarning}
+                </p>
+              ) : null}
+            </div>
+          ) : (
+            <div className="mt-2 pl-1 text-sm">
+              <span className="text-xs text-muted-foreground">{flag.numberField.label}: </span>
+              <span className="font-semibold">
+                {server?.[flag.numberField.numberKey] ?? "—"} {flag.numberField.unit}
+              </span>
+            </div>
+          )
+        ) : null}
       </div>
     );
   };
@@ -204,7 +286,7 @@ export function FeatureFlagSection({
         <SettingsSaveBar
           dirty={dirty}
           saving={mut.isPending}
-          canSave={deadlineValid}
+          canSave={deadlineValid && numbersValid}
           onSave={() => mut.mutate()}
           onReset={reset}
         />

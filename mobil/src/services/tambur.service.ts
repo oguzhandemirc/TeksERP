@@ -107,6 +107,40 @@ export interface TamburBringPreview {
   } | null;
 }
 
+/** "Boyahaneye Geri Gönder" önizlemesi — hedefi SUNUCU çözer (rota istemcide yok). */
+export interface TamburSendToDyePreview {
+  roll: TamburFieldRoll;
+  targetStep: {
+    id: string;
+    stationName: string;
+    /** Fason adımı mı — TRUE ise mal ayrıca Fason Sevk ile gönderilmeli. */
+    isExternal: boolean;
+    workOrderId: string;
+    workOrderNumber: string;
+  };
+  /** Topun ŞU AN bulunduğu adım (Tambur) — "nereden nereye" cümlesi için. */
+  fromStepName: string | null;
+  canApply: boolean;
+  blockCode: string | null;
+  blockReason: string | null;
+  warnings: string[];
+  effects: {
+    direction: 'forward' | 'backward';
+    fromStepName: string | null;
+    /** Geri gönderimde yeniden açılacak adımlar. */
+    reopenedStepNames: string[];
+    qualityWillVoid: boolean;
+    newParty: boolean;
+  } | null;
+}
+
+export interface TamburSendToDyeResult {
+  rollId: string;
+  barcode: string | null;
+  targetStep: { id: string; stationName: string; isExternal: boolean };
+  workOrderNumber: string;
+}
+
 export interface TamburBringResult {
   rollId: string;
   barcode: string | null;
@@ -493,6 +527,29 @@ export const tamburService = {
   }): Promise<ApiResponse<TamburBringResult>> =>
     apiClient
       .post<ApiResponse<TamburBringResult>>('/tambur/manual/bring', data)
+      .then((r) => r.data),
+
+  /**
+   * "Boyahaneye Geri Gönder" ÖNİZLEME (2026-08-19) — plan-sapma kararının rework
+   * kolu. ⚠️ `targetStepId` GÖNDERİLMEZ: hedef boya adımını sunucu rotadan çözer
+   * (tablette rota bilgisi yok ve olsaydı bile yüklem ikinci kez yazılırdı).
+   */
+  sendToDyePreview: (data: {
+    barcode?: string;
+    rollId?: string;
+  }): Promise<ApiResponse<TamburSendToDyePreview>> =>
+    apiClient
+      .post<ApiResponse<TamburSendToDyePreview>>('/tambur/manual/send-to-dye-preview', data)
+      .then((r) => r.data),
+
+  /** "Boyahaneye Geri Gönder" UYGULA — sebep ZORUNLU; online-only (bring ile aynı sınıf). */
+  sendToDye: (data: {
+    barcode?: string;
+    rollId?: string;
+    reason: string;
+  }): Promise<ApiResponse<TamburSendToDyeResult>> =>
+    apiClient
+      .post<ApiResponse<TamburSendToDyeResult>>('/tambur/manual/send-to-dye', data)
       .then((r) => r.data),
 
   /**

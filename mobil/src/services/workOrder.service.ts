@@ -295,6 +295,20 @@ export const workOrderService = {
       .then((r) => r.data),
 
   /**
+   * Sipariş bağını KALDIR. Backend kuralları: iptal/devredilmiş iş emrinde 409;
+   * **siparişe özel (ORDER_PRODUCTION) iş emrinin SON bağı 400** ("önce başka
+   * sipariş bağlayın") — istemci bunu önden gösterir (`canUnlinkOrderLine`),
+   * yarışta backend son sözü söyler.
+   */
+  unlinkOrderLine: (
+    id: string,
+    orderLineId: string,
+  ): Promise<ApiResponse<{ removed: boolean }>> =>
+    apiClient
+      .delete<ApiResponse<{ removed: boolean }>>(`/work-orders/${id}/order-links/${orderLineId}`)
+      .then((r) => r.data),
+
+  /**
    * UYUMSUZ satırı onayla-düzelt-bağla zinciri (süpervizör): plan siparişe
    * eşitlenir + iş emrinin düzeltilebilir topları çekilir + bağ kurulur.
    * ÇİFT yetki ister: workorder:write + roll:manual-adjust. Kumaş farkı 400.

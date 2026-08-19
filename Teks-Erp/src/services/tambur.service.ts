@@ -38,7 +38,8 @@ import { buildTextSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 import { K18_DEAD_STATUSES } from "./batch.service";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
-import { assertRollMatchesPlan } from "./helpers/tambur-plan-gate.helper";
+import { assertRollMatchesPlan, recordPlanDeviationTx } from "./helpers/tambur-plan-gate.helper";
+import type { PlanMismatchItem } from "../constants/tambur-plan-gate";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 
 export interface SwatchStats {
@@ -705,7 +706,8 @@ export class TamburService {
     // Ortak yüklem: helpers/tambur-plan-gate.helper (üç depo-indiriş yolu aynı
     // kapı). Pre-tx; idempotent retry erken döndüğü için onaylı işin replay'i
     // kapıya çarpmaz.
-    await assertRollMatchesPlan(
+    // Dönüş = ONAYLANAN sapmalar; tx İÇİNDE deftere yazılır (aşağıda).
+    const planDeviations = await assertRollMatchesPlan(
       { id: roll.id, barcode: roll.barcode, colorId: roll.colorId, width: roll.width },
       { workOrderId: wo?.id ?? null, targetColorId: wo?.targetColorId ?? null, width: wo?.width ?? null },
       data.confirmMismatch,
@@ -1241,6 +1243,23 @@ export class TamburService {
         });
         await recomputeStepStatus(tx, oldStepId);
       }
+
+      // PLAN-SAPMA DEFTERİ (2026-08-19) — onaylı plan-dışı kabulün KALICI izi.
+      // Granülerlik GEÇİŞ başına (çocuk başına DEĞİL): sapan şey topun KİMLİĞİdir,
+      // kaç parçaya bölündüğü değil — çocuk başına satır "onay sayısı" metriğini
+      // kesim adedi kadar şişirirdi (operatör BİR kez imzaladı). Çocuklar zaten
+      // `parentRollId` üzerinden türetilebilir.
+      await recordPlanDeviationTx(tx, {
+        mismatches: planDeviations,
+        rollId: data.rollId,
+        childRollId: null,
+        workOrderId: wo.id,
+        workOrderStepId: oldStepId ?? null,
+        // Topun TAMAMI o kimlikle depoya iner (fire dahil — mal öyle kaydedildi).
+        qtyM: totalQty,
+        source: "finalize",
+        confirmedById: userId,
+      });
 
       // AŞIM DEFTERİ (2026-08-09) — klasik karar akışının artı yönü.
       // `cumulativeLenD > totalQtyD` kontrolü yukarıda zaten yapıldı ve bayrak
@@ -2711,7 +2730,7 @@ export class TamburService {
     // PLAN-GERÇEK SAPMA KAPISI: per-cut modelde çocuk KESİM ANINDA depoya iner —
     // kapı bitirmeyi bekleyemez. Operatör topta BİR KEZ onaylar; istemci aynı
     // topun sonraki kesimlerine bayrağı kendisi taşır (tek soru / top).
-    await assertRollMatchesPlan(
+    const planDeviations = await assertRollMatchesPlan(
       { id: parent.id, barcode: parent.barcode, colorId: parent.colorId, width: parent.width },
       {
         workOrderId: parent.currentStep.workOrder?.id ?? null,
@@ -2876,6 +2895,20 @@ export class TamburService {
           })),
         });
       }
+
+      // PLAN-SAPMA DEFTERİ — per-cut modelde geçiş = KESİM, satır çocuk bazlı.
+      // ⚠️ TX İÇİNDE: aynı `clientToken` ile replay child create'te P2002 verir →
+      // tx rollback → defter satırı da geri sarılır (çift satır imkânsız).
+      await recordPlanDeviationTx(tx, {
+        mismatches: planDeviations,
+        rollId: parent.id,
+        childRollId: child.id,
+        workOrderId: woId,
+        workOrderStepId: tamburStepId,
+        qtyM: data.lengthMeters,
+        source: "cut",
+        confirmedById: userId,
+      });
 
       // Parent atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
       // Aşımda (lengthMeters > currentQty) decrement negatife düşer → bunun yerine açık
@@ -3089,11 +3122,12 @@ export class TamburService {
     }
     // PLAN-GERÇEK SAPMA KAPISI — yalnız kalan kuyruk DEPOYA inerken (keep_*).
     // scrap/discard kapı dışı: fire satılabilir stok üretmez, sormak gürültü.
+    let planDeviations: PlanMismatchItem[] = [];
     {
       // Aşağıdaki gerçek türetmeyle (3100) BİREBİR aynı: varsayılan "discard".
       const act = data.remainingAction ?? (data.scrapRemaining === true ? "scrap" : "discard");
       if ((act === "keep_1kalite" || act === "keep_a1") && Number(parent.currentQty) > 0) {
-        await assertRollMatchesPlan(
+        planDeviations = await assertRollMatchesPlan(
           { id: parent.id, barcode: parent.barcode, colorId: parent.colorId, width: parent.width },
           {
             workOrderId: parent.currentStep.workOrder.id,
@@ -3237,6 +3271,21 @@ export class TamburService {
           });
         }
         remainingChildId = child.id;
+
+        // PLAN-SAPMA DEFTERİ — YALNIZ bu dalda: kapı pre-tx `currentQty > 0`
+        // gördü ama tx içindeki TAZE kalan 0'a düşmüş olabilir (araya kesim
+        // girdi). O durumda depoya inen bir şey yok → 0 metrajlık satır
+        // gürültüsü yazılmaz. Metraj da taze `remainingQty`dir.
+        await recordPlanDeviationTx(tx, {
+          mismatches: planDeviations,
+          rollId: parent.id,
+          childRollId: child.id,
+          workOrderId: woId,
+          workOrderStepId: tamburStepId,
+          qtyM: remainingQty,
+          source: "finalize-open-fabric",
+          confirmedById: userId,
+        });
       }
 
       // #8 — parent tüketilmeden kalan açık hatalar NO_CUT olarak kapansın.

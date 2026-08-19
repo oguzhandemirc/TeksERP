@@ -91,6 +91,17 @@ src/
 
 ## Donanım Katmanı
 
+### Tambur: "Boyahaneye Geri Gönder" (2026-08-19)
+
+Plan-sapma onay modalının 3. tuşu (`TamburSendToDyeModal`) — YALNIZ saha düzeltme
+yetkisi olanda ve çevrimiçiyken çizilir (uç online-only). ⚠️ **Hedef adımı SUNUCU
+çözer** (`/tambur/manual/send-to-dye-preview`): tablette rota yok ve olsaydı bile
+"hangi adım boya veriyor" yüklemi ikinci kez yazılırdı. Önizlemesiz uygulama YOK,
+sebep ≥3 zorunlu (TamburBringRollModal sözleşmesi). Başarı toast'ı hedef istasyon
+adını MUTLAKA taşır — top Tambur listesinden düşer, operatör nereye gittiğini
+görmezse "kayboldu" der. Fason adımına taşıma malı AT_SUBCONTRACTOR YAPMAZ: çıkış
+ayrıca Fason Sevk ekranından yapılır (taşınan top orada kendiliğinden görünür).
+
 ### Kamera (Barkod Okuma)
 - **Kütüphane:** `expo-camera` v17 (CameraView + `onBarcodeScanned`) — `expo-barcode-scanner` deprecated, kullanma
 - **Kullanım:** Refakat Kartı, top barkodu, iş emri QR okuma
@@ -212,6 +223,20 @@ Kanonik örnek: çuval tartısı (`hooks/useSackWeigh.ts` + `TartiPaket/Paketlem
 - Çuval mutasyonları (tartı dahil) **online-only** — offline kuyruğa (`offline/mutations.ts`) girmez.
 
 ### Tambur: kısa kesim → otomatik A1 (2026-08-19, saha isteği)
+
+⚠️ **2026-08-19 ikinci pakette MERKEZE taşındı:** bayrak + eşik artık FABRİKA
+ayarıdır (panel → Üretim → Tambur; `feature-flags`), cihazda yalnız **üç durumlu
+override** yaşar (`tamburShortCutA1Override: 'server' | 'on' | 'off'`, varsayılan
+`server`) ve ikisini `resolveShortCutConfig` birleştirir — "hangi değer geçerli"
+sorusunun TEK cevabı orasıdır. Üç durum ŞART: iki durumlu modelde "girilmemiş" ile
+"sunucuyu izle" aynı değere düşer ve fabrika ayarı değişince cihazın onu izleyip
+izlemediği belirsiz kalırdı; bilinmeyen disk değeri de `server`a düşer (cihaz
+sessizce fabrikadan AYRILMAZ). `'on'` modunda eşik CİHAZINKİdir — fabrika eşiğine
+**SIZMAZ** (operatörün görmediği bir sayıyla kesim yapılmaz). Override kontrolleri
+YALNIZ süpervizöre çizilir (`roll:manual-adjust || mobile:tambur-duzelt`); sıradan
+operatör fabrika ayarını salt-okunur görür. Bekçi: `resolveShortCutConfig.test.ts`.
+
+Aşağıdaki kural (ne zaman ateşler / ne zaman geri döner) DEĞİŞMEDİ:
 
 Çalışma Tercihleri'nde **bayrak + eşik** (ikisi de cihazda, varsayılan KAPALI —
 kullanıcı isteği: "sadece aktifken geçerli olsun"): kesim uzunluğu eşiğin

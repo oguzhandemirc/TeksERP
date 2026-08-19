@@ -493,6 +493,84 @@ router.post(
 
 /**
  * @openapi
+ * /api/tambur/manual/send-to-dye-preview:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: "Boyahaneye Geri Gönder — ÖNİZLEME (plan-sapma kararının rework kolu)"
+ *     description: |
+ *       Topu rotadaki ÖNCEKİ renk veren adıma geri almanın etkilerini söyler;
+ *       hiçbir şeyi değiştirmez. **Hedef adım gövdede GÖNDERİLMEZ** — sunucu
+ *       rotadan çözer (kanonik `stepCanApplyColor`: istasyon bayrağı VEYA adımda
+ *       seçilmiş fason hizmeti), mevcut adımdan önceki EN YAKIN boya adımını seçer.
+ *
+ *       Cevap: `targetStep{ stationName, isExternal }`, `canApply`, `blockCode`,
+ *       `warnings[]` (kalite VOID, yeni parti, fason sevk hatırlatması),
+ *       `effects{ direction, reopenedStepNames, qualityWillVoid, newParty }`.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               barcode: { type: string }
+ *               rollId:  { type: string, format: uuid }
+ *     responses:
+ *       200: { description: "Önizleme (canApply=false ise blockCode/blockReason dolu)" }
+ *       400: { description: "Top Tambur'da değil / rotada önce boya adımı yok" }
+ *       409: { description: "Oturum başka istasyonda / iptal-devredilmiş iş emri" }
+ */
+router.post(
+  "/manual/send-to-dye-preview",
+  verifyToken,
+  requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
+  manualController.getSendToDyePreview,
+);
+
+/**
+ * @openapi
+ * /api/tambur/manual/send-to-dye:
+ *   post:
+ *     tags: [Tambur]
+ *     summary: "Boyahaneye Geri Gönder — UYGULA (önizleme onaylı akış)"
+ *     description: |
+ *       Topu rotadaki önceki boya adımına taşır. SEBEP ZORUNLUDUR (≥3 karakter);
+ *       audit `event=TAMBUR_SEND_TO_DYE` (taşımanın kendi `MANUAL_MOVE` izine EK).
+ *
+ *       Taşımanın tamamı `WorkOrderManualMoveService.manualMove`de: hedef sonrası
+ *       kalite/kurşun kararları VOID olur (kalite Belirsiz), hayalet hareketler
+ *       silinir, SKIPPED adımlar PENDING'e açılır, tamamlanmış iş emri dirilir.
+ *
+ *       ⚠️ Taşıma topu `AT_SUBCONTRACTOR` YAPMAZ — mal fason adımında ÜRETİMDE
+ *       bekler; boyahaneye fiziksel çıkış ayrıca **Fason Sevk** ile yapılır
+ *       (taşınan top o ekranın listesinde kendiliğinden görünür).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [reason]
+ *             properties:
+ *               barcode: { type: string }
+ *               rollId:  { type: string, format: uuid }
+ *               reason:  { type: string, minLength: 3, maxLength: 500 }
+ *     responses:
+ *       200: { description: "Top boya adımına alındı" }
+ *       400: { description: "Sebep eksik / top Tambur'da değil / rotada boya adımı yok" }
+ *       409: { description: "Engelli top (çuval/sevk/fason/kesim yapılmış) — hiçbir şey değişmedi" }
+ */
+router.post(
+  "/manual/send-to-dye",
+  verifyToken,
+  requireAnyPermission("roll:manual-adjust", "mobile:tambur-duzelt"),
+  manualController.sendToDye,
+);
+
+/**
+ * @openapi
  * /api/tambur/manual/roll:
  *   post:
  *     tags: [Tambur]

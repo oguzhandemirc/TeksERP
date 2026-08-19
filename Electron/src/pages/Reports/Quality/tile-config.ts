@@ -1,4 +1,4 @@
-import { Award, Trash2 } from "lucide-react";
+import { Award, ShieldAlert, Trash2 } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -27,5 +27,12 @@ export const qualityReportTiles: HubTile[] = [
     description: "Hurda metrajı ve nedeni — hata türü, kumaş, kaynak kırılımıyla",
     icon: Trash2,
     to: "/reports/quality/scrap-scorecard",
+  },
+  {
+    key: "plan-deviation-scorecard",
+    title: "Plan-Sapma Karnesi",
+    description: "Tamburda plan dışı onayla depoya inen mal — renk/en, operatör, kumaş kırılımıyla",
+    icon: ShieldAlert,
+    to: "/reports/quality/plan-deviation-scorecard",
   },
 ];

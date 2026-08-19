@@ -6,6 +6,8 @@ import { SettingsPage, settingsStyles } from './settingsUi';
 import { useSubcontractorDefault, type SubcontractorDefaultMode } from '../../../hooks/useSubcontractorDefault';
 import { usePermissions } from '../../../hooks/usePermission';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
+import { useTamburShortCutA1 } from '../../../hooks/useFeatureFlags';
+import { resolveShortCutConfig } from '../../Modules/Tambur/resolveShortCutConfig';
 
 // =============================================================================
 // ÇALIŞMA TERCİHLERİ — kişisel (2026-08-09)
@@ -48,19 +50,43 @@ export default function WorkPreferencesScreen() {
   const canTambur = has('mobile:tambur');
   const resetQuality = useDeviceSettingsStore((s) => s.tamburResetQualityAfterCut);
   const setResetQuality = useDeviceSettingsStore((s) => s.setTamburResetQualityAfterCut);
-  const shortCutEnabled = useDeviceSettingsStore((s) => s.tamburShortCutA1Enabled);
-  const setShortCutEnabled = useDeviceSettingsStore((s) => s.setTamburShortCutA1Enabled);
-  const shortCutThreshold = useDeviceSettingsStore((s) => s.tamburShortCutA1ThresholdM);
-  const setShortCutThreshold = useDeviceSettingsStore((s) => s.setTamburShortCutA1ThresholdM);
+  // KISA KESİM → OTOMATİK A1: bayrak+eşik FABRİKA ayarıdır (panelden yönetilir);
+  // burada yalnız CİHAZ override'ı yaşar ve YALNIZ süpervizöre çizilir.
+  const shortCutServer = useTamburShortCutA1();
+  const shortCutOverride = useDeviceSettingsStore((s) => s.tamburShortCutA1Override);
+  const setShortCutOverride = useDeviceSettingsStore((s) => s.setTamburShortCutA1Override);
+  const shortCutDeviceThreshold = useDeviceSettingsStore(
+    (s) => s.tamburShortCutA1DeviceThresholdM,
+  );
+  const setShortCutDeviceThreshold = useDeviceSettingsStore(
+    (s) => s.setTamburShortCutA1DeviceThresholdM,
+  );
+  // Override yetkisi = saha düzeltme çifti (tabletteki "Düzelt"/"Manuel Ekle" ile
+  // AYNI kapı). Sıradan operatör fabrika ayarını salt-okunur görür — kalite
+  // kuralını ezmek denetim gerektiren bir karardır.
+  const canOverrideShortCut = has('roll:manual-adjust') || has('mobile:tambur-duzelt');
   // Eşik input'u yazım sırasında serbest metin — store'a yalnız geçerli sayı
   // iner (virgül de kabul: "12,5"). Boş bırakmak eşiği siler (kural inert).
   const [thresholdInput, setThresholdInput] = React.useState(
-    shortCutThreshold != null ? String(shortCutThreshold) : '',
+    shortCutDeviceThreshold != null ? String(shortCutDeviceThreshold) : '',
   );
   const commitThreshold = (raw: string) => {
     const n = parseFloat(raw.replace(',', '.'));
-    void setShortCutThreshold(Number.isFinite(n) && n > 0 ? n : null);
+    void setShortCutDeviceThreshold(Number.isFinite(n) && n > 0 ? n : null);
   };
+  /** Fabrika ayarının insan-okur özeti (herkese gösterilir). */
+  const factoryLabel = !shortCutServer.enabled
+    ? 'KAPALI'
+    : shortCutServer.thresholdM == null
+      ? 'AÇIK · eşik girilmemiş (etkisiz)'
+      : `AÇIK · ${shortCutServer.thresholdM} m altı`;
+  /** Bu cihazda fiilen ne uygulanıyor — override + fabrika birleşimi. */
+  const effective = resolveShortCutConfig(
+    shortCutServer.enabled,
+    shortCutServer.thresholdM,
+    shortCutOverride,
+    shortCutDeviceThreshold,
+  );
 
   return (
     <SettingsPage title="Çalışma Tercihleri">
@@ -111,71 +137,115 @@ export default function WorkPreferencesScreen() {
             TAMBUR — KISA KESİMDE OTOMATİK A1
           </Text>
           <Text style={settingsStyles.hint}>
-            Kesim uzunluğu girilen metrenin ALTINDAYSA kalite kendiliğinden A1
-            yazılır. Yalnız 1. Kalite seçiliyken devreye girer — A1 ya da Fire'ı
-            kendin seçtiysen dokunmaz; otomatik yazılan A1'i de elle geri
-            çevirebilirsin.
+            Kesim uzunluğu eşiğin ALTINDAYSA kalite kendiliğinden A1 yazılır.
+            Yalnız 1. Kalite seçiliyken devreye girer — A1 ya da Fire'ı kendin
+            seçtiysen dokunmaz; otomatik yazılan A1'i de elle geri çevirebilirsin.
           </Text>
-          {[
-            { value: false, label: 'Kapalı', desc: 'Bugünkü davranış — kalite hep elle seçilir.' },
-            { value: true, label: 'Açık', desc: 'Eşiğin altındaki kesim A1 yazılır (makine ölçümü dahil).' },
-          ].map((o) => {
-            const active = shortCutEnabled === o.value;
-            return (
-              <TouchableRipple
-                key={`sc-${String(o.value)}`}
-                onPress={() => void setShortCutEnabled(o.value)}
-                style={[
-                  settingsStyles.card,
-                  {
-                    borderWidth: active ? 2 : 1,
-                    borderColor: active ? '#6366f1' : '#334155',
-                    minHeight: 64,
-                    justifyContent: 'center',
-                  },
-                ]}
-              >
-                <View>
-                  <Text
-                    style={{
-                      fontSize: 16,
-                      fontWeight: active ? '800' : '600',
-                      color: active ? '#c7d2fe' : '#e2e8f0',
-                    }}
+
+          {/* FABRİKA AYARI — HERKESE salt-okunur. Operatör kuralın nereden
+              geldiğini görmeden "neden A1 yazdı?" sorusuna cevap bulamaz. */}
+          <View style={[settingsStyles.card, { minHeight: 0, paddingVertical: 12 }]}>
+            <Text style={{ fontSize: 13, color: '#94a3b8' }}>Fabrika ayarı (panelden yönetilir)</Text>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#e2e8f0', marginTop: 2 }}>
+              {factoryLabel}
+            </Text>
+          </View>
+
+          {canOverrideShortCut ? (
+            <>
+              <Text style={settingsStyles.hint}>
+                Bu cihaz fabrika ayarını izleyebilir ya da kendi kararını uygulayabilir.
+              </Text>
+              {([
+                {
+                  value: 'server' as const,
+                  label: 'Fabrika ayarını kullan',
+                  desc: 'Önerilen — panelden değişirse bu cihaz da otomatik uyar.',
+                },
+                {
+                  value: 'on' as const,
+                  label: 'Bu cihazda AÇIK',
+                  desc: 'Fabrika kapalı olsa da burada uygulanır; eşiği aşağıda gir.',
+                },
+                {
+                  value: 'off' as const,
+                  label: 'Bu cihazda KAPALI',
+                  desc: 'Fabrika açık olsa da burada uygulanmaz (kalite hep elle seçilir).',
+                },
+              ]).map((o) => {
+                const active = shortCutOverride === o.value;
+                return (
+                  <TouchableRipple
+                    key={`sc-${o.value}`}
+                    onPress={() => void setShortCutOverride(o.value)}
+                    style={[
+                      settingsStyles.card,
+                      {
+                        borderWidth: active ? 2 : 1,
+                        borderColor: active ? '#6366f1' : '#334155',
+                        minHeight: 64,
+                        justifyContent: 'center',
+                      },
+                    ]}
                   >
-                    {o.label}
-                    {active ? '  ✓' : ''}
-                  </Text>
-                  <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>{o.desc}</Text>
+                    <View>
+                      <Text
+                        style={{
+                          fontSize: 16,
+                          fontWeight: active ? '800' : '600',
+                          color: active ? '#c7d2fe' : '#e2e8f0',
+                        }}
+                      >
+                        {o.label}
+                        {active ? '  ✓' : ''}
+                      </Text>
+                      <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>{o.desc}</Text>
+                    </View>
+                  </TouchableRipple>
+                );
+              })}
+              {shortCutOverride === 'on' && (
+                <View style={{ gap: 6 }}>
+                  <TextInput
+                    mode="outlined"
+                    dense
+                    label="Bu cihazın eşiği (metre)"
+                    placeholder="örn: 15"
+                    keyboardType="numeric"
+                    value={thresholdInput}
+                    onChangeText={(v) => {
+                      setThresholdInput(v);
+                      commitThreshold(v);
+                    }}
+                    style={{ maxWidth: 240 }}
+                  />
+                  {shortCutDeviceThreshold == null ? (
+                    <Text style={[settingsStyles.hint, { color: '#f59e0b' }]}>
+                      ⚠ Eşik girilmeden kural ÇALIŞMAZ — bu cihazda açık ama etkisiz.
+                      (Fabrika eşiği KULLANILMAZ; burada ne yazarsan o geçerli.)
+                    </Text>
+                  ) : (
+                    <Text style={settingsStyles.hint}>
+                      {shortCutDeviceThreshold} metrenin altındaki kesimler A1 yazılacak.
+                    </Text>
+                  )}
                 </View>
-              </TouchableRipple>
-            );
-          })}
-          {shortCutEnabled && (
-            <View style={{ gap: 6 }}>
-              <TextInput
-                mode="outlined"
-                dense
-                label="Eşik (metre)"
-                placeholder="örn: 15"
-                keyboardType="numeric"
-                value={thresholdInput}
-                onChangeText={(v) => {
-                  setThresholdInput(v);
-                  commitThreshold(v);
-                }}
-                style={{ maxWidth: 220 }}
-              />
-              {shortCutThreshold == null ? (
-                <Text style={[settingsStyles.hint, { color: '#f59e0b' }]}>
-                  ⚠ Eşik girilmeden kural ÇALIŞMAZ — bayrak açık ama etkisiz.
-                </Text>
-              ) : (
-                <Text style={settingsStyles.hint}>
-                  {shortCutThreshold} metrenin altındaki kesimler A1 yazılacak.
-                </Text>
               )}
-            </View>
+              {/* Fiilen uygulanan — override + fabrika birleşimi tek satırda. */}
+              <Text style={settingsStyles.hint}>
+                Şu an bu cihazda:{' '}
+                {effective.enabled && effective.thresholdM != null
+                  ? `AÇIK · ${effective.thresholdM} m altı A1`
+                  : effective.enabled
+                    ? 'AÇIK · eşik yok (etkisiz)'
+                    : 'KAPALI'}
+              </Text>
+            </>
+          ) : (
+            <Text style={settingsStyles.hint}>
+              Bu ayarı yalnız saha düzeltme yetkisi olan personel bu cihaz için
+              değiştirebilir.
+            </Text>
           )}
           <Text style={settingsStyles.hint}>Bu ayar yalnız BU CİHAZDA geçerlidir.</Text>
         </View>

@@ -159,6 +159,20 @@ export const SETTING_KEYS = {
    *  kapatırsa çıkış ≤ giriş zorunlu olur (aşan giriş 400 ile reddedilir). Diğer flag'lerin
    *  aksine backend ENFORCE eder (guard bu flag'e bağlı). */
   TAMBUR_OVER_QUANTITY_ENABLED: "tambur.overQuantityEnabled",
+  /**
+   * KISA KESİM → OTOMATİK A1 (2026-08-19, saha isteği).
+   * Kesim uzunluğu eşiğin ALTINDAysa ve operatör 1. Kaliteyi değiştirmemişse
+   * kalite A1'e çevrilir. Kural İSTEMCİDE yaşar (mobil `shortCutQuality.ts`) —
+   * bu iki anahtar yalnız FABRİKA VARSAYILANIdır. Backend ENFORCE ETMEZ: kalite
+   * zaten operatörün kararıdır ve kesim uçları A1'i her hâlükârda kabul eder;
+   * sunucuda ikinci bir kural kurmak, tabletin gösterdiği ile yazılanın
+   * ayrışabileceği bir çift kaynak üretirdi.
+   * Yetkili operatör tablette CİHAZ BAZINDA ezebilir (override) — o tercih
+   * sunucuya gitmez (`deviceSettingsStore`).
+   */
+  TAMBUR_SHORT_CUT_A1_ENABLED: "tambur.shortCutA1Enabled",
+  /** Eşik (metre). NULL/0 = eşik girilmemiş → bayrak açık olsa da kural ateşlemez. */
+  TAMBUR_SHORT_CUT_A1_THRESHOLD_M: "tambur.shortCutA1ThresholdM",
   /** Tambur "TÜMDEN geri al" yalnız AYNI FABRİKA GÜNÜ içinde yapılabilsin mi.
    *  Default FALSE (sınır yok) — bilinçli. Asıl koruma parçaların kendisindedir
    *  (çuvala okutulmuş / sevke girmiş / yeniden kesilmiş parça zaten reddedilir);
@@ -834,6 +848,11 @@ export interface FeatureFlags {
   tamburOverQuantityEnabled: boolean;
   /** Tambur "TÜMDEN geri al" yalnız aynı fabrika günü içinde mi (default FALSE). */
   tamburUndoFullSameDayOnly: boolean;
+  /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (default FALSE/kapalı).
+   *  Kural istemcide koşar; tablet yetkilisi cihaz bazında ezebilir. */
+  tamburShortCutA1Enabled: boolean;
+  /** Kısa kesim eşiği (metre); NULL = girilmemiş → kural ateşlemez. */
+  tamburShortCutA1ThresholdM: number | null;
   /** Kurşun bypass düzeni açık mı (default FALSE/kapalı). ENFORCE edilir ama YALNIZ
    *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
    *  rejiminde biter (rejim atama satırında kalıcıdır). */
@@ -1114,6 +1133,8 @@ export class SystemSettingService {
       documentsConfig: await readDocumentsConfig(cacheClient),
       tamburOverQuantityEnabled: await readTamburOverQuantityEnabled(cacheClient),
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
+      tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
+      tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
@@ -1463,6 +1484,37 @@ export class SystemSettingService {
       );
     }
 
+    if (Object.prototype.hasOwnProperty.call(input, "tamburShortCutA1Enabled")) {
+      if (typeof input.tamburShortCutA1Enabled !== "boolean") {
+        throw AppError.badRequest("tamburShortCutA1Enabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_SHORT_CUT_A1_ENABLED,
+        input.tamburShortCutA1Enabled,
+        "Tambur: kesim uzunluğu eşiğin altındaysa kalite otomatik A1 yazılsın (fabrika varsayılanı)",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "tamburShortCutA1ThresholdM")) {
+      const v = input.tamburShortCutA1ThresholdM;
+      // NULL = "eşiği temizle" (kural inert kalır) — bilinçli olarak geçerli bir
+      // değer; bayrağı kapatmadan kuralı etkisizleştirmenin yolu budur.
+      if (v !== null) {
+        if (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || v > 10_000) {
+          throw AppError.badRequest("Kısa kesim eşiği 0 ile 10.000 metre arasında olmalı");
+        }
+      }
+      await this.set(
+        SETTING_KEYS.TAMBUR_SHORT_CUT_A1_THRESHOLD_M,
+        // ⚠️ `set()` `InputJsonValue` alır — TS'te ne `null` ne `Prisma.JsonNull`
+        // geçer. Eşiği TEMİZLEMENİN kaydı `0`dır: okuma tarafı (`parsed <= 0 →
+        // null`) bunu "eşik girilmemiş"e çözer, yani depoda tek bir "boş" değeri
+        // olur ve `asNumber`ın null dalıyla aynı sonucu verir.
+        v === null ? 0 : v,
+        "Tambur kısa kesim eşiği (metre) — altındaki kesimler A1 yazılır",
+        userId
+      );
+    }
     if (Object.prototype.hasOwnProperty.call(input, "tamburOverQuantityEnabled")) {
       if (typeof input.tamburOverQuantityEnabled !== "boolean") {
         throw AppError.badRequest("tamburOverQuantityEnabled boolean olmalı");
@@ -2274,6 +2326,45 @@ export async function readCustomerBranchesEnabled(
  * flag'lerin aksine backend ENFORCE eder: tambur guard'ları (finalize / cutOpenFabric /
  * cutWarehouseRoll) yalnız aşım anında okur.
  */
+/**
+ * Kısa kesim → otomatik A1 FABRİKA VARSAYILANI. Kayıt yoksa **false**.
+ *
+ * Yön gerekçesi (`readTamburUndoFullSameDayOnly` emsali): bu bayrak bir ÜRETİM
+ * GERÇEĞİNİ kabul etmez, operatörün kalite seçimini DEĞİŞTİRİR — davranış
+ * değiştiren kurallar sessizce açık doğmaz, fabrika bilerek açar.
+ */
+export async function readTamburShortCutA1Enabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_SHORT_CUT_A1_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return false;
+  return asBoolean(setting.value);
+}
+
+/**
+ * Kısa kesim eşiği (metre). Kayıt yok / geçersiz / pozitif değilse **null** —
+ * yani kural inert. `readLabelCopies` kırpma kalıbının null-varyantı: bozuk
+ * ayar yüzünden istek DÜŞÜRÜLMEZ, kural sessizce devre dışı kalır (kalite
+ * kararı zaten operatörde; fail-safe yön "otomatik yazma").
+ */
+export async function readTamburShortCutA1ThresholdM(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number | null> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TAMBUR_SHORT_CUT_A1_THRESHOLD_M },
+    select: { value: true },
+  });
+  if (!setting) return null;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
 export async function readTamburOverQuantityEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

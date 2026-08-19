@@ -45,6 +45,24 @@ const bringSchema = z
   })
   .refine((v) => Boolean(v.rollId || v.barcode), rollRefRule);
 
+// Boyahaneye geri gönder: hedef adım GÖNDERİLMEZ — sunucu rotadan çözer
+// (bkz. `TamburManualService.resolveDyeStepForRoll`). Tablette rota bilgisi yok
+// ve olsaydı bile "hangi adım boya veriyor" yüklemi ikinci kez yazılırdı.
+const sendToDyePreviewSchema = z
+  .object({ ...rollRefFields })
+  .refine((v) => Boolean(v.rollId || v.barcode), rollRefRule);
+
+const sendToDyeSchema = z
+  .object({
+    ...rollRefFields,
+    reason: z
+      .string()
+      .trim()
+      .min(3, "İşlem nedeni en az 3 karakter olmalı")
+      .max(500, "İşlem nedeni çok uzun"),
+  })
+  .refine((v) => Boolean(v.rollId || v.barcode), rollRefRule);
+
 // Manuel top: metraj + sebep + idempotency anahtarı ZORUNLU; gerisi opsiyonel.
 // `colorId: null` AÇIKÇA "renksiz" demektir (iş emri hedef rengi miras alınmaz);
 // alan hiç gönderilmezse iş emrinin hedef rengi uygulanır.
@@ -128,6 +146,10 @@ export class TamburManualController {
     this.service = new TamburManualService();
     this.getBringPreview = this.getBringPreview.bind(this);
     this.bringRoll = this.bringRoll.bind(this);
+    // ⚠️ bind UNUTULURSA uç 500 verir ve servis-katmanı bekçileri bunu GÖREMEZ
+    // (2026-08-17 `print-event` dersi: eksik bind uç aylarca hep 500 kaldı).
+    this.getSendToDyePreview = this.getSendToDyePreview.bind(this);
+    this.sendToDye = this.sendToDye.bind(this);
     this.createManualRoll = this.createManualRoll.bind(this);
     this.produceFinishedRoll = this.produceFinishedRoll.bind(this);
   }
@@ -156,6 +178,40 @@ export class TamburManualController {
       const stamp = await getStampContext(req, { enforceForMobile: true });
       res.status(200).json(
         await this.service.bringRoll(body, {
+          userId: req.user?.userId,
+          machineId: stamp?.machineId ?? req.device?.machineId ?? null,
+          stationId: stamp?.stationId ?? null,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/tambur/manual/send-to-dye-preview — geri gönderim önizlemesi. */
+  async getSendToDyePreview(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = sendToDyePreviewSchema.parse(req.body);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
+      res.status(200).json(
+        await this.service.getSendToDyePreview(body, {
+          userId: req.user?.userId,
+          machineId: stamp?.machineId ?? req.device?.machineId ?? null,
+          stationId: stamp?.stationId ?? null,
+        }),
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/tambur/manual/send-to-dye — topu rotadaki önceki boya adımına geri al. */
+  async sendToDye(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = sendToDyeSchema.parse(req.body);
+      const stamp = await getStampContext(req, { enforceForMobile: true });
+      res.status(200).json(
+        await this.service.sendToDye(body, {
           userId: req.user?.userId,
           machineId: stamp?.machineId ?? req.device?.machineId ?? null,
           stationId: stamp?.stationId ?? null,

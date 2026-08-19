@@ -16,8 +16,12 @@ const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
 const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
 const CAMERA_FACING_KEY = 'device_camera_facing';
-const TAMBUR_SHORT_CUT_A1_ENABLED_KEY = 'tambur_short_cut_a1_enabled';
-const TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY = 'tambur_short_cut_a1_threshold';
+// ⚠️ 2026-08-19: kısa kesim ayarı MERKEZE taşındı (feature-flags). Cihazda artık
+// "bayrak + eşik" değil, ÜÇ DURUMLU override yaşar. Eski anahtarlar
+// (`tambur_short_cut_a1_enabled` / `..._threshold`) sahaya HİÇ ÇIKMADI (APK
+// dağıtılmadı) → migrasyon/geriye-uyum kodu yok; varsa artık okunmaz.
+const TAMBUR_SHORT_CUT_A1_OVERRIDE_KEY = 'tambur_short_cut_a1_override';
+const TAMBUR_SHORT_CUT_A1_DEVICE_THRESHOLD_KEY = 'tambur_short_cut_a1_device_threshold';
 
 /** Metraj kaynağı: makineden oku (auto) ya da operatör elle girsin (manual). */
 export type MeterEntryMode = 'manual' | 'auto';
@@ -27,6 +31,9 @@ export type DocPageSize = 'A4' | 'A5';
 
 /** Barkod/QR okuyucunun kamera yönü. */
 export type CameraFacing = 'front' | 'back';
+
+/** Kısa kesim kuralının bu cihazdaki kaynağı — bkz. `tamburShortCutA1Override`. */
+export type ShortCutOverrideMode = 'server' | 'on' | 'off';
 
 interface DeviceSettingsState {
   /** true → barkod ekranlarında manuel giriş input'ları görünür. Default false:
@@ -105,20 +112,25 @@ interface DeviceSettingsState {
    */
   cameraFacing: CameraFacing;
   /**
-   * Tambur KISA KESİM → OTOMATİK A1 (2026-08-19 saha isteği): bayrak AÇIK ve
-   * eşik girilmişken, eşiğin ALTINDA çözülen kesim uzunluğu — seçili kalite
-   * varsayılan (1. KALİTE) ise — A1'e çevrilir. Kuralın tamamı
-   * `screens/Modules/Tambur/shortCutQuality.ts`te; burada yalnız ayar yaşar.
+   * Tambur KISA KESİM → OTOMATİK A1 — CİHAZ OVERRIDE'ı (2026-08-19).
    *
-   * İKİ AYRI ALAN, bilinçli: bayrağı kapatmak eşiği SİLMEZ — operatör geçici
-   * kapatıp açtığında "kaç metreydi?" diye hatırlamak zorunda kalmaz.
-   * Varsayılan KAPALI (kullanıcı isteği: "sadece aktifken geçerli olsun") —
-   * davranış değişikliği opt-in doğar. CİHAZDA kalıcı (`tamburCutMode` ile
-   * aynı gerekçe: "bu tamburda nasıl çalışıyoruz" gerçeği, kişi değil).
+   * Kuralın kendisi `screens/Modules/Tambur/shortCutQuality.ts`te; bayrak+eşiğin
+   * FABRİKA değeri sunucudadır (feature-flags). Burada yalnız "bu cihaz fabrika
+   * ayarını mı izliyor, yoksa kendi kararını mı uyguluyor" yaşar:
+   *   • 'server' (varsayılan) → fabrika ayarı geçerli
+   *   • 'on'                  → bu cihazda AÇIK, eşik aşağıdaki cihaz değeri
+   *   • 'off'                 → bu cihazda KAPALI (fabrika açık olsa da)
+   *
+   * ⚠️ ÜÇ DURUM ŞART: iki durumlu (boolean) bir modelde "girilmemiş" ile
+   * "sunucuyu kullan" aynı değere düşerdi ve fabrika ayarı değiştiğinde cihazın
+   * bunu izleyip izlemediği belirsiz kalırdı.
+   *
+   * Override kontrolleri yalnız SÜPERVİZÖRE çizilir (saha düzeltme yetkisi —
+   * `WorkPreferencesScreen`); sıradan operatör fabrika ayarını salt-okunur görür.
    */
-  tamburShortCutA1Enabled: boolean;
-  /** Eşik (metre) — null = girilmemiş (bayrak açık olsa bile kural ateşlemez). */
-  tamburShortCutA1ThresholdM: number | null;
+  tamburShortCutA1Override: ShortCutOverrideMode;
+  /** 'on' modunda geçerli eşik (metre). null = girilmemiş → kural inert. */
+  tamburShortCutA1DeviceThresholdM: number | null;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -136,8 +148,8 @@ interface DeviceSettingsState {
   setScanSoundEnabled: (v: boolean) => Promise<void>;
   setDocPageSize: (docType: string, v: DocPageSize) => Promise<void>;
   setCameraFacing: (v: CameraFacing) => Promise<void>;
-  setTamburShortCutA1Enabled: (v: boolean) => Promise<void>;
-  setTamburShortCutA1ThresholdM: (v: number | null) => Promise<void>;
+  setTamburShortCutA1Override: (v: ShortCutOverrideMode) => Promise<void>;
+  setTamburShortCutA1DeviceThresholdM: (v: number | null) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -175,12 +187,12 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   scanSoundEnabled: true,
   docPageSize: {},
   cameraFacing: 'back',
-  tamburShortCutA1Enabled: false,
-  tamburShortCutA1ThresholdM: null,
+  tamburShortCutA1Override: 'server',
+  tamburShortCutA1DeviceThresholdM: null,
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutEnabled, shortCutThreshold] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -192,8 +204,8 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(DOC_PAGE_SIZE_KEY),
         storage.getItem(TAMBUR_OUTPUT_COLLAPSED_KEY),
         storage.getItem(CAMERA_FACING_KEY),
-        storage.getItem(TAMBUR_SHORT_CUT_A1_ENABLED_KEY),
-        storage.getItem(TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY),
+        storage.getItem(TAMBUR_SHORT_CUT_A1_OVERRIDE_KEY),
+        storage.getItem(TAMBUR_SHORT_CUT_A1_DEVICE_THRESHOLD_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -216,11 +228,12 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // 'back' (barkod okumanın güvenli tarafı: ön kamerayla okuyamayan bir
       // operatör "kamera bozuk" der, arka kamerayla okuyamayan yönü çevirir).
       cameraFacing: cameraFacing === 'front' ? 'front' : 'back',
-      // Güvenli varsayılan KAPALI: yalnız birebir 'true' bayrağı açar (bozuk
-      // değer kaliteyi sessizce değiştiren bir kuralı açmamalı — tamburManual
-      // ile aynı gerekçe). Eşik: pozitif sonlu sayı değilse null (kural inert).
-      tamburShortCutA1Enabled: shortCutEnabled === 'true',
-      tamburShortCutA1ThresholdM: (() => {
+      // Bilinmeyen/eksik değer → 'server' (fabrika ayarını izle). 'on'/'off'
+      // AÇIK BEYANDIR; bozuk bir kayıt yüzünden cihaz sessizce fabrikadan
+      // ayrılmaz. Eşik: pozitif sonlu sayı değilse null (kural inert).
+      tamburShortCutA1Override:
+        shortCutOverride === 'on' ? 'on' : shortCutOverride === 'off' ? 'off' : 'server',
+      tamburShortCutA1DeviceThresholdM: (() => {
         const n = shortCutThreshold == null ? NaN : Number(shortCutThreshold);
         return Number.isFinite(n) && n > 0 ? n : null;
       })(),
@@ -304,16 +317,18 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
     await storage.setItem(CAMERA_FACING_KEY, v);
   },
 
-  setTamburShortCutA1Enabled: async (v) => {
-    set({ tamburShortCutA1Enabled: v });
-    await storage.setItem(TAMBUR_SHORT_CUT_A1_ENABLED_KEY, v ? 'true' : 'false');
+  setTamburShortCutA1Override: async (v) => {
+    set({ tamburShortCutA1Override: v });
+    await storage.setItem(TAMBUR_SHORT_CUT_A1_OVERRIDE_KEY, v);
   },
 
-  // null/geçersiz → kayıt SİLİNİR (eşik girilmemiş durumuna döner).
-  setTamburShortCutA1ThresholdM: async (v) => {
+  // null/geçersiz → kayıt SİLİNİR (eşik girilmemiş durumuna döner). Override
+  // 'server'a dönse bile cihaz eşiği SİLİNMEZ: operatör geçici olarak fabrikaya
+  // dönüp geri geldiğinde "kaç metreydi?" diye hatırlamak zorunda kalmasın.
+  setTamburShortCutA1DeviceThresholdM: async (v) => {
     const valid = v != null && Number.isFinite(v) && v > 0 ? v : null;
-    set({ tamburShortCutA1ThresholdM: valid });
-    if (valid == null) await storage.deleteItem(TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY);
-    else await storage.setItem(TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY, String(valid));
+    set({ tamburShortCutA1DeviceThresholdM: valid });
+    if (valid == null) await storage.deleteItem(TAMBUR_SHORT_CUT_A1_DEVICE_THRESHOLD_KEY);
+    else await storage.setItem(TAMBUR_SHORT_CUT_A1_DEVICE_THRESHOLD_KEY, String(valid));
   },
 }));

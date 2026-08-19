@@ -94,6 +94,13 @@ async function main() {
   >;
   const A = Object.keys(flags);
   const aBool = A.filter((k) => typeof flags[k] === "boolean");
+  // SAYISAL AYAK (2026-08-19): sözleşmenin bu tarafı bugüne kadar HİÇ ölçülmüyordu
+  // — `aBool` daraltması sayısal anahtarları (eşik/dakika) eliyordu ve onların
+  // A/B/C üçlüsü kopsa kimse görmezdi. `null` değerli anahtar da sayısaldır
+  // (girilmemiş eşik): tipi değerden okumak onu kaçırırdı, bu yüzden şemadan
+  // türetiyoruz — `updateSchema`da tanımlı VE panelin sayısal alan olarak
+  // gösterdiği anahtarlar.
+  const aNumeric = A.filter((k) => typeof flags[k] === "number" || flags[k] === null);
   const B = Object.keys(updateSchema.shape);
   const C = readKeys(SERVICE_SRC, /hasOwnProperty\.call\(input,\s*"([^"]+)"\)/g);
 
@@ -108,10 +115,18 @@ async function main() {
   const D = electronFound
     ? readKeys(ELECTRON_CONFIG, /^\s*key:\s*"([^"]+)"/gm)
     : [];
+  // ⚠️ Panelin SAYISAL alanları `numberKey:` ile yazılır — `key:` DEĞİL. Ad
+  // bilinçli farklı: yukarıdaki D regex'i satır başı `key:` yakaladığı için
+  // aynı adla yazılsalardı sayısal anahtarlar boolean kümesine sızar ve 5.
+  // kontrol ("yönetilemez boolean bayrak") yanlış şey ölçerdi.
+  const DNum = electronFound
+    ? readKeys(ELECTRON_CONFIG, /^\s*numberKey:\s*"([^"]+)"/gm)
+    : [];
 
   console.log(
     `\n   A(api)=${A.length} (boolean ${aBool.length}) · B(şema)=${B.length} · ` +
-      `C(servis)=${C.length} · D(panel)=${D.length}\n`,
+      `C(servis)=${C.length} · D(panel)=${D.length} · ` +
+      `A(sayısal)=${aNumeric.length} · D(sayısal alan)=${DNum.length}\n`,
   );
 
   // ---------------------------------------------------------------------------
@@ -170,6 +185,32 @@ async function main() {
   // ---------------------------------------------------------------------------
   // 5) Yönetilemez bayrak olmamalı (panelde ne toggle'ı ne özel section'ı olan)
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // 1b/2b) SAYISAL AYAK — A ⊆ B ⊆ C (boolean ile aynı zincir, ayrı küme)
+  // ---------------------------------------------------------------------------
+  // Zemin: sayısal anahtar bulunamıyorsa (regex/şekil değişti) "ihlal yok" ile
+  // "hiçbir şeye bakmadım" aynı yeşile çıkardı.
+  check("zemin: A sayısal ≥ 2 anahtar", aNumeric.length >= 2, `aNumeric=${aNumeric.join(", ")}`);
+  const numMissingInSchema = aNumeric.filter((k) => !B.includes(k));
+  check(
+    "⭐ API'nin döndüğü her SAYISAL ayar updateSchema'da var",
+    numMissingInSchema.length === 0,
+    `şemada YOK: ${numMissingInSchema.join(", ")} → panelden PATCH 400 alır`,
+  );
+  const numMissingInService = aNumeric.filter((k) => B.includes(k) && !C.includes(k));
+  check(
+    "API'nin döndüğü her SAYISAL ayarın setFeatureFlags yazma dalı var",
+    numMissingInService.length === 0,
+    `yazılmıyor: ${numMissingInService.join(", ")} → uç 200 der, DB değişmez`,
+  );
+  // Panelin sayısal alanı hayalet olmamalı (API'de karşılığı var mı).
+  const numPanelGhosts = DNum.filter((k) => !A.includes(k));
+  check(
+    "panelin sayısal alanları API yanıtında var",
+    numPanelGhosts.length === 0,
+    `API'de YOK: ${numPanelGhosts.join(", ")}`,
+  );
+
   const unmanaged = aBool.filter((k) => !D.includes(k) && !PANEL_EXEMPT[k]);
   check(
     "yönetilemez boolean bayrak yok (panelde yok + muaf değil)",

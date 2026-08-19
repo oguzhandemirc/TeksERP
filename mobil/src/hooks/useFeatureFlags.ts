@@ -79,6 +79,20 @@ export function useTamburOverQuantityEnabled(): boolean {
   return useFeatureFlags().data?.tamburOverQuantityEnabled ?? true;
 }
 
+/**
+ * Kısa kesim → otomatik A1 FABRİKA ayarı (bayrak + eşik birlikte).
+ *
+ * Tek hook: ikisi ayrı okunursa bir render'da bayrak yeni, eşik eski olabilir.
+ * Cihaz override'ıyla birleştirme `resolveShortCutConfig`te (saf fonksiyon).
+ */
+export function useTamburShortCutA1(): { enabled: boolean; thresholdM: number | null } {
+  const d = useFeatureFlags().data;
+  return {
+    enabled: d?.tamburShortCutA1Enabled ?? false,
+    thresholdM: d?.tamburShortCutA1ThresholdM ?? null,
+  };
+}
+
 /** Token süresi dolunca otomatik logout açık mı? Default TRUE (yüklenene kadar da açık). */
 export function useAutoLogoutOnExpiry(): boolean {
   return useFeatureFlags().data?.autoLogoutOnExpiry ?? true;

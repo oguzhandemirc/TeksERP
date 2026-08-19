@@ -57,6 +57,14 @@ export interface FeatureFlags {
    *  Açıkken operatör kayıtlıdan fazla ölçtüğünde onay diyaloğu sonrası kabul edilir;
    *  backend ENFORCE eder (admin kapatırsa aşan giriş 400 döner). */
   tamburOverQuantityEnabled: boolean;
+  /** KISA KESİM → OTOMATİK A1 fabrika varsayılanı (default FALSE/kapalı).
+   *  Kural İSTEMCİDE koşar (`shortCutQuality.ts`) — backend enforce etmez; bu
+   *  bayrak yalnız "fabrika ne diyor" sorusunun cevabıdır. Yetkili operatör
+   *  cihaz bazında ezebilir (`deviceSettingsStore.tamburShortCutA1Override`). */
+  tamburShortCutA1Enabled: boolean;
+  /** Kısa kesim eşiği (metre); null = girilmemiş → bayrak açık olsa da kural
+   *  ateşlemez. Sayısal ayarın mobil sözleşmede emsali `mobileIdleLockMinutes`. */
+  tamburShortCutA1ThresholdM: number | null;
   /** ERP'nin kurulduğu firmanın adı — sevk irsaliyesi künyesinde basılır. */
   companyName: string;
   /** Belge künyesi (adres/tel/vergi) — irsaliye üst bloğunda basılır. */
@@ -108,6 +116,10 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   shipmentConfirmationEnabled: false,
   // Default AÇIK (backend ile aynı) — yüklenene/offline'da da aşıma izin var.
   tamburOverQuantityEnabled: true,
+  // FAIL-SAFE: bayrak yüklenemezse kural KAPALI — kaliteyi kendiliğinden
+  // değiştiren bir otomasyon "belki açıktır" varsayımıyla çalışmaz.
+  tamburShortCutA1Enabled: false,
+  tamburShortCutA1ThresholdM: null,
   companyName: DEFAULT_COMPANY_NAME,
   companyLetterhead: DEFAULT_COMPANY_LETTERHEAD,
   documentsConfig: {},

@@ -1,6 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, TouchableRipple, Icon, ActivityIndicator, TextInput } from 'react-native-paper';
+import { Text, TouchableRipple, Icon, IconButton, ActivityIndicator, TextInput } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
@@ -22,13 +22,14 @@ import {
   type LinkableOrderLine,
   type OrderLinkOverrideResult,
 } from '../../../services/workOrder.service';
+import { canUnlinkOrderLine } from './canUnlinkOrderLine';
 import { colors, spacing, radius } from '../../../theme';
 
 const PAGE_SIZE = 20;
 // OrderLinkPicker ile aynı gerekçe: "yazmayı bıraktım" sinyali, hecede bir istek değil.
 const SEARCH_DEBOUNCE_MS = 800;
 
-type Tab = 'uygun' | 'tumu';
+type Tab = 'uygun' | 'tumu' | 'bagli';
 
 /** Satırın iş emri hedefiyle uyumu — null = uyumlu, doluysa kısa sebep listesi. */
 interface Mismatch {
@@ -54,6 +55,9 @@ interface Props {
 //     (backend süzer: linkable-order-lines; en farkı UYARIDIR, engel değil).
 //   • TÜMÜ — tüm açık satırlar (arama + müşteri/kumaş/renk/en filtreli,
 //     debounce'lu, cursor sayfalı). Uyumsuz satır GRİ ve sebebi üstünde yazar.
+//   • BAĞLI (N) — bu iş emrine BAĞLI satırlar + kaldırma (2026-08-19). Veri
+//     mevcut `woQ`dan gelir (ek istek YOK). Kaldırma onay ister; siparişe özel
+//     iş emrinin SON bağında tuş kapalıdır (backend de 400 verir — ayna).
 //
 // Uyumsuz seçim YETKİYLE açılır, soruyla değil (mükerrer-modal dersi: acele
 // eden operatör onay ekranını okumaz): roll:manual-adjust TAŞIMAYAN kullanıcı
@@ -198,6 +202,31 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
     },
   });
 
+  /** Bağ kaldırma onayı — hangi satır, hangi etiket. */
+  const [confirmUnlink, setConfirmUnlink] = useState<{ lineId: string; label: string } | null>(null);
+
+  const unlinkMut = useMutation({
+    mutationFn: (lineId: string) => workOrderService.unlinkOrderLine(workOrderId, lineId),
+    onSuccess: (res) => {
+      Toast.show({ type: 'success', text1: res.message ?? 'Sipariş bağı kaldırıldı' });
+      invalidateAfterLink();
+    },
+    onError: (err: Error) => {
+      // Yarış (son bağ / iptal edilmiş İE) → backend son sözü söyler.
+      Toast.show({ type: 'error', text1: 'Bağ kaldırılamadı', text2: err.message });
+    },
+  });
+
+  /** Bağlı satırlar — mevcut `woQ` yanıtından (ek istek YOK). */
+  const linkedRows = useMemo(
+    () =>
+      (wo?.orderLinks ?? [])
+        .map((l) => l.orderLine)
+        .filter((l): l is NonNullable<typeof l> => Boolean(l)),
+    [wo?.orderLinks],
+  );
+  const unlinkVerdict = canUnlinkOrderLine(wo?.type, linkedRows.length);
+
   /** Uyumsuz satır için süpervizör onay soruları — "elindeki GERÇEKTEN bu mu?" */
   const buildQuestions = useCallback(
     (line: { colorName: string | null; width: number | null }, mm: Mismatch): string[] => {
@@ -317,6 +346,47 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
     [onRowPress],
   );
 
+  /** Bağlı satır — sağda "Kaldır". Son-bağ kuralında tuş kapalı + sebep yazar. */
+  const renderLinkedRow = useCallback(
+    ({ item }: { item: NonNullable<(typeof linkedRows)[number]> }) => (
+      <View style={styles.row}>
+        <View style={styles.rowInner}>
+          <Icon source="link-variant" size={22} color={colors.brand} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowTitle} numberOfLines={1}>
+              {item.order?.orderNumber ?? '—'} · {item.order?.customer?.name ?? '—'}
+            </Text>
+            <Text style={styles.rowSub} numberOfLines={1}>
+              {item.item?.name ?? '—'}
+              {item.color?.name ? ` · ${item.color.name}` : ''}
+              {item.width != null ? ` · ${item.width}cm` : ''}
+              {item.quantity != null ? ` · ${Math.round(Number(item.quantity))}m` : ''}
+            </Text>
+            {!unlinkVerdict.allowed ? (
+              <Text style={styles.lastLinkNote} numberOfLines={2}>
+                {unlinkVerdict.reason}
+              </Text>
+            ) : null}
+          </View>
+          <IconButton
+            icon="link-variant-off"
+            size={22}
+            iconColor={unlinkVerdict.allowed ? '#b91c1c' : colors.textMuted}
+            disabled={!unlinkVerdict.allowed || unlinkMut.isPending}
+            onPress={() =>
+              setConfirmUnlink({
+                lineId: item.id,
+                label: `${item.order?.orderNumber ?? '—'} · ${item.order?.customer?.name ?? '—'}`,
+              })
+            }
+            accessibilityLabel="Sipariş bağını kaldır"
+          />
+        </View>
+      </View>
+    ),
+    [unlinkVerdict.allowed, unlinkVerdict.reason, unlinkMut.isPending],
+  );
+
   const renderAllRow = useCallback(
     ({ item }: { item: AvailableOrderLine }) => {
       const mm = mismatchOf(item);
@@ -364,7 +434,8 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
     [mismatchOf, canOverride, onRowPress],
   );
 
-  const loading = tab === 'uygun' ? linkableQ.isLoading : allQ.isLoading;
+  const loading =
+    tab === 'uygun' ? linkableQ.isLoading : tab === 'tumu' ? allQ.isLoading : woQ.isLoading;
   const linkableLines = linkableQ.data?.data ?? [];
 
   return (
@@ -402,8 +473,11 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
           <View style={styles.tabRow}>
             {(
               [
-                ['uygun', 'Uygun Siparişler'],
+                ['uygun', 'Uygun'],
                 ['tumu', 'Tüm Siparişler'],
+                // Sayaç etiketin İÇİNDE: bağlı satırlar ayrı bir sekmede
+                // olduğu için görünürlüğü ancak bu rakam sağlar.
+                ['bagli', `Bağlı (${linkedRows.length})`],
               ] as [Tab, string][]
             ).map(([key, label]) => (
               <TouchableRipple
@@ -458,6 +532,18 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
             <View style={styles.center}>
               <ActivityIndicator />
             </View>
+          ) : tab === 'bagli' ? (
+            <FlashList
+              data={linkedRows}
+              keyExtractor={(l) => l.id}
+              renderItem={renderLinkedRow}
+              ListEmptyComponent={
+                <Text style={styles.empty}>
+                  Bu iş emrine bağlı sipariş yok.{'\n'}
+                  Stok için üretim olabilir — bağlamak istersen "Uygun" sekmesine bak.
+                </Text>
+              }
+            />
           ) : tab === 'uygun' ? (
             <FlashList
               data={linkableLines}
@@ -538,6 +624,23 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         }}
       />
 
+      {/* Bağ kaldırma onayı — yıkıcı değil ama SONUÇLU: karşılanma tablosu ve
+          refakat kartı bilgisi etkilenir, operatör bunu bilerek onaylasın. */}
+      <ConfirmDialog
+        kind="simple"
+        visible={!!confirmUnlink}
+        onDismiss={() => setConfirmUnlink(null)}
+        title="Sipariş bağını kaldır"
+        description={`«${confirmUnlink?.label ?? ''}» bağı kaldırılacak. Bu iş emrinin karşılanma tablosu ve refakat kartındaki sipariş bilgisi etkilenir.`}
+        confirmLabel="Kaldır"
+        confirming={unlinkMut.isPending}
+        onConfirm={() => {
+          const c = confirmUnlink;
+          setConfirmUnlink(null);
+          if (c) unlinkMut.mutate(c.lineId);
+        }}
+      />
+
       <OrderLineFilterSheet
         visible={filterOpen}
         onDismiss={() => setFilterOpen(false)}
@@ -606,6 +709,7 @@ const styles = StyleSheet.create({
   rowSub: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
   rowTextDead: { color: colors.textMuted },
   openQty: { fontSize: 13, fontWeight: '700', color: colors.brand },
+  lastLinkNote: { fontSize: 11, color: '#b45309', marginTop: 3, lineHeight: 15 },
   chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 },
   chip: { borderRadius: radius.sm, paddingHorizontal: 6, paddingVertical: 1, borderWidth: 1 },
   chipHard: { backgroundColor: '#fef2f2', borderColor: '#fca5a5' },

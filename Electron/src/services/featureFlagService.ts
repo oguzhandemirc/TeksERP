@@ -267,6 +267,13 @@ export interface FeatureFlags {
    *  bir süre sınırı dün akşamki hatayı sabah düzeltmeyi imkânsız kılabilir.
    *  TEK PARÇA iptali bu ayardan ETKİLENMEZ. Emsal: shipping.undoDispatchSameDayOnly. */
   tamburUndoFullSameDayOnly: boolean;
+  /** Kısa kesimde otomatik A1 — FABRİKA VARSAYILANI (false=default). Kural mobil
+   *  tarafta koşar (`shortCutQuality.ts`); backend ENFORCE ETMEZ. Tablet
+   *  yetkilisi cihaz bazında ezebilir (o tercih sunucuya gitmez). */
+  tamburShortCutA1Enabled: boolean;
+  /** Kısa kesim eşiği (metre). null = girilmemiş → bayrak açık olsa da kural
+   *  ateşlemez (panel bunu uyarı satırıyla söyler). */
+  tamburShortCutA1ThresholdM: number | null;
   /** Kurşun bypass düzeni açık mı (false=default). Kurşun makinelerinde tablet YOK:
    *  iş fiziksel olarak yapılır ama dijital izlenmez; yetkili "Kurşun Dağıtım"
    *  ekranından işi fiziksel bir kurşun MAKİNESİNE atar (istasyon değil — PROCESS_QC

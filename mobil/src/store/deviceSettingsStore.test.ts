@@ -193,69 +193,81 @@ describe('deviceSettingsStore — kamera yönü tercihi', () => {
   });
 });
 
-// Tambur kısa kesim → otomatik A1 ayarı (2026-08-19 saha isteği). Kuralın
-// kendisi shortCutQuality.test.ts'te; burada yalnız ayarın kalıcılığı ve
-// güvenli varsayılanları ölçülür.
-describe('deviceSettingsStore — Tambur kısa kesim A1 ayarı', () => {
-  it('kayıt yokken KAPALI + eşik girilmemiş (opt-in doğar)', async () => {
+// Tambur kısa kesim → otomatik A1: CİHAZ OVERRIDE'ı (2026-08-19).
+// Bayrak+eşik artık FABRİKA ayarıdır (feature-flags); cihazda yalnız üç durumlu
+// override yaşar. Üç durum ŞART: iki durumlu modelde "girilmemiş" ile "sunucuyu
+// kullan" aynı değere düşer ve fabrika ayarı değiştiğinde cihazın onu izleyip
+// izlemediği belirsiz kalırdı.
+describe('deviceSettingsStore — kısa kesim cihaz override', () => {
+  it("kayıt yokken 'server' (fabrika ayarını izle) + eşik yok", async () => {
     fakeDisk();
+    // Ters değerden başla: aksi halde store'un doğuştan varsayılanını ölçerdik.
     useDeviceSettingsStore.setState({
-      tamburShortCutA1Enabled: true,
-      tamburShortCutA1ThresholdM: 99,
+      tamburShortCutA1Override: 'on',
+      tamburShortCutA1DeviceThresholdM: 99,
       isLoaded: false,
     });
     await useDeviceSettingsStore.getState().init();
     const s = useDeviceSettingsStore.getState();
-    expect(s.tamburShortCutA1Enabled).toBe(false);
-    expect(s.tamburShortCutA1ThresholdM).toBeNull();
+    expect(s.tamburShortCutA1Override).toBe('server');
+    expect(s.tamburShortCutA1DeviceThresholdM).toBeNull();
   });
 
-  it('bayrak + eşik diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
+  it('override + cihaz eşiği diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
     const disk = fakeDisk();
-    await useDeviceSettingsStore.getState().setTamburShortCutA1Enabled(true);
-    await useDeviceSettingsStore.getState().setTamburShortCutA1ThresholdM(15);
-    expect(disk['tambur_short_cut_a1_enabled']).toBe('true');
-    expect(disk['tambur_short_cut_a1_threshold']).toBe('15');
+    await useDeviceSettingsStore.getState().setTamburShortCutA1Override('on');
+    await useDeviceSettingsStore.getState().setTamburShortCutA1DeviceThresholdM(15);
+    expect(disk['tambur_short_cut_a1_override']).toBe('on');
+    expect(disk['tambur_short_cut_a1_device_threshold']).toBe('15');
 
     useDeviceSettingsStore.setState({
-      tamburShortCutA1Enabled: false,
-      tamburShortCutA1ThresholdM: null,
+      tamburShortCutA1Override: 'server',
+      tamburShortCutA1DeviceThresholdM: null,
       isLoaded: false,
     });
     await useDeviceSettingsStore.getState().init();
     const s = useDeviceSettingsStore.getState();
-    expect(s.tamburShortCutA1Enabled).toBe(true);
-    expect(s.tamburShortCutA1ThresholdM).toBe(15);
+    expect(s.tamburShortCutA1Override).toBe('on');
+    expect(s.tamburShortCutA1DeviceThresholdM).toBe(15);
   });
 
-  it('bayrağı kapatmak eşiği SİLMEZ (aç-kapa eşik kaybettirmez)', async () => {
-    const disk = fakeDisk({ tambur_short_cut_a1_enabled: 'true', tambur_short_cut_a1_threshold: '20' });
-    await useDeviceSettingsStore.getState().setTamburShortCutA1Enabled(false);
-    expect(disk['tambur_short_cut_a1_threshold']).toBe('20');
+  it("'server'a dönmek cihaz eşiğini SİLMEZ (geri gelince hatırlansın)", async () => {
+    const disk = fakeDisk({
+      tambur_short_cut_a1_override: 'on',
+      tambur_short_cut_a1_device_threshold: '20',
+    });
+    await useDeviceSettingsStore.getState().setTamburShortCutA1Override('server');
+    expect(disk['tambur_short_cut_a1_device_threshold']).toBe('20');
 
-    useDeviceSettingsStore.setState({ tamburShortCutA1ThresholdM: null, isLoaded: false });
+    useDeviceSettingsStore.setState({ tamburShortCutA1DeviceThresholdM: null, isLoaded: false });
     await useDeviceSettingsStore.getState().init();
-    expect(useDeviceSettingsStore.getState().tamburShortCutA1ThresholdM).toBe(20);
-    expect(useDeviceSettingsStore.getState().tamburShortCutA1Enabled).toBe(false);
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1DeviceThresholdM).toBe(20);
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1Override).toBe('server');
   });
 
-  it('diskteki bozuk değerler güvenli tarafa düşer (bayrak KAPALI, eşik null)', async () => {
-    fakeDisk({ tambur_short_cut_a1_enabled: 'TRUE', tambur_short_cut_a1_threshold: 'ÇÖP' });
+  it("diskteki bozuk override → 'server' (cihaz sessizce fabrikadan AYRILMAZ)", async () => {
+    fakeDisk({ tambur_short_cut_a1_override: 'ÇÖP', tambur_short_cut_a1_device_threshold: 'ÇÖP' });
     useDeviceSettingsStore.setState({
-      tamburShortCutA1Enabled: true,
-      tamburShortCutA1ThresholdM: 15,
+      tamburShortCutA1Override: 'off',
+      tamburShortCutA1DeviceThresholdM: 15,
       isLoaded: false,
     });
     await useDeviceSettingsStore.getState().init();
     const s = useDeviceSettingsStore.getState();
-    expect(s.tamburShortCutA1Enabled).toBe(false);
-    expect(s.tamburShortCutA1ThresholdM).toBeNull();
+    expect(s.tamburShortCutA1Override).toBe('server');
+    expect(s.tamburShortCutA1DeviceThresholdM).toBeNull();
+  });
+
+  it("'off' AÇIK BEYANDIR — bozuk değerle karışmaz, diskten aynen döner", async () => {
+    fakeDisk({ tambur_short_cut_a1_override: 'off' });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1Override).toBe('off');
   });
 
   it('geçersiz eşik yazımı kaydı temizler (0/negatif/NaN → girilmemiş)', async () => {
-    const disk = fakeDisk({ tambur_short_cut_a1_threshold: '15' });
-    await useDeviceSettingsStore.getState().setTamburShortCutA1ThresholdM(0);
-    expect(disk['tambur_short_cut_a1_threshold']).toBeUndefined();
-    expect(useDeviceSettingsStore.getState().tamburShortCutA1ThresholdM).toBeNull();
+    const disk = fakeDisk({ tambur_short_cut_a1_device_threshold: '15' });
+    await useDeviceSettingsStore.getState().setTamburShortCutA1DeviceThresholdM(0);
+    expect(disk['tambur_short_cut_a1_device_threshold']).toBeUndefined();
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1DeviceThresholdM).toBeNull();
   });
 });

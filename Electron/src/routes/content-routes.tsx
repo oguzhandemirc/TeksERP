@@ -66,6 +66,7 @@ import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPa
 import { QualityReportsHubPage } from "@/pages/Reports/Quality/QualityReportsHubPage";
 import { QualityScorecardPage } from "@/pages/Reports/Quality/QualityScorecardPage";
 import { ScrapScorecardPage } from "@/pages/Reports/Quality/ScrapScorecardPage";
+import { PlanDeviationScorecardPage } from "@/pages/Reports/Quality/PlanDeviationScorecardPage";
 import { InventoryReportsHubPage } from "@/pages/Reports/Inventory/InventoryReportsHubPage";
 import { StockScorecardPage } from "@/pages/Reports/Inventory/StockScorecardPage";
 import { SubcontractReportsHubPage } from "@/pages/Reports/Subcontract/SubcontractReportsHubPage";
@@ -737,6 +738,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:quality">
         <ScrapScorecardPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/quality/plan-deviation-scorecard",
+    element: (
+      <ProtectedRoute requirePermission="report:quality">
+        <PlanDeviationScorecardPage />
       </ProtectedRoute>
     ),
   },

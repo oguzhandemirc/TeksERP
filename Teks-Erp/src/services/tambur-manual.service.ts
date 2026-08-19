@@ -91,6 +91,7 @@ import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper"
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
+import { STEP_CAPABILITY_SELECT, stepCanApplyColor } from "./helpers/step-capability.helper";
 import { buildIntentSnapshot } from "./label.service";
 
 /**
@@ -111,6 +112,15 @@ export const TAMBUR_MANUAL_BRING_EVENT = "TAMBUR_MANUAL_BRING";
  *   • `TAMBUR_MANUAL_PRODUCE` → "kart YOK" (hiçbir iş emrine bağlanmadı, doğrudan Bitmiş Depo)
  */
 export const TAMBUR_MANUAL_PRODUCE_EVENT = "TAMBUR_MANUAL_PRODUCE";
+
+/**
+ * "Boyahaneye Geri Gönder" audit olayı (2026-08-19) — `TAMBUR_MANUAL_BRING`den
+ * ayrı: ikisi de taşımadır ama farklı soruların cevabıdır.
+ *   • BRING        → "top buraya GELSİN" (operatör malı kendi kuyruğuna alır)
+ *   • SEND_TO_DYE  → "bu mal yanlış renkte, GERİ gitsin" (plan-sapma kararının
+ *                     rework kolu; hedefi operatör değil SUNUCU çözer)
+ */
+export const TAMBUR_SEND_TO_DYE_EVENT = "TAMBUR_SEND_TO_DYE";
 
 /** Operatörün istekte topu gösterme biçimi — barkod (okutma) ya da ID (listeden seçim). */
 export interface RollRef {
@@ -203,9 +213,14 @@ const ROLL_SELECT = {
   },
   currentStep: {
     select: {
+      id: true,
+      // stationId + kind: "Boyahaneye Geri Gönder" kaynak adımın Tambur olduğunu
+      // ve oturumun O istasyonda açıldığını doğrular (bring'de hedef adımdan
+      // okunuyordu; geri gönderimde hedefi SUNUCU çözdüğü için kaynak taraf).
+      stationId: true,
       workOrderId: true,
-      station: { select: { name: true } },
-      workOrder: { select: { workOrderNumber: true } },
+      station: { select: { name: true, kind: true } },
+      workOrder: { select: { workOrderNumber: true, status: true } },
     },
   },
 } as const;
@@ -593,6 +608,243 @@ export class TamburManualService {
       message: roll.barcode
         ? `${roll.barcode} barkodlu top "${step.station.name}" adımına alındı.`
         : `Top "${step.station.name}" adımına alındı.`,
+    };
+  }
+
+  // ===========================================================================
+  // 1c) BOYAHANEYE GERİ GÖNDER (2026-08-19) — plan-sapma kararının REWORK kolu
+  // ===========================================================================
+  //
+  // Saha senaryosu: tamburdaki top MAVİ, iş emri GRİ istiyor. Plan kapısı sorar;
+  // operatörün önünde bugüne kadar iki cevap vardı ("yine de bitir" / "vazgeç").
+  // Gerçek karar çoğu zaman üçüncüsüdür: mal geri gitsin, yeniden boyansın.
+  //
+  // ⚠️ HEDEFİ İSTEMCİ SEÇMEZ, SUNUCU ÇÖZER. Tablette rota bilgisi yok
+  // (`GET /work-orders/:id` izni `mobile:tambur`u kapsamıyor) ve olsaydı bile
+  // "hangi adım boya veriyor" sorusunu istemciye çözdürmek yüklemin ikinci bir
+  // kopyasını doğururdu (F221 dersi). Bu yüzden `bring`den farklı olarak
+  // `targetStepId` PARAMETRE DEĞİL.
+
+  /**
+   * Topun bulunduğu Tambur adımından GERİYE, en yakın "renk veren" adımı çözer.
+   *
+   * ⚠️ Yüklem KANONİK olanıdır (`stepCanApplyColor` — istasyon bayrağı VEYA adımda
+   * seçilmiş fason hizmeti). `WorkOrderManualMoveService`in kendi `colorStep`
+   * çözümü YALNIZ `requiredCategory.appliesColor` okur, yani İÇ boyahane adımını
+   * GÖRMEZ; buradan o kullanılsaydı iç boyahaneli rotalarda tuş "rotada boya adımı
+   * yok" derdi. Bekçi: `test_tambur_send_to_dye.ts` (iç boyahane senaryosu).
+   *
+   * ÇOKLU BOYA ADIMI: mevcut adımdan ÖNCEKİLERİN en yakını (max `stepSequence`).
+   * Gerekçe: niyet "bu malın boyası yanlış, yeniden boyansın" — en yakın boya
+   * adımına dönmek yalnız onu ve arasını yeniden açar; daha erkene dönmek aradaki
+   * adımları (yıkama/ram) gereksiz diriltir ve kalite VOID kapsamını büyütür.
+   * Tambur'dan SONRAKİ boya adımı hedef DEĞİLDİR (ileri atlama "geri gönderme"
+   * değil; o iş panel taşımasının).
+   */
+  private async resolveDyeStepForRoll(ref: RollRef, ctx: TamburFieldContext) {
+    const roll = await this.resolveRoll(ref);
+    const current = roll.currentStep;
+    if (
+      roll.status !== RollStatus.IN_PRODUCTION ||
+      !current ||
+      current.station.kind !== StationKind.TAMBUR
+    ) {
+      throw AppError.badRequest(
+        `Bu top Tambur'da üretimde değil (${this.locationLabel(roll)}) — geri gönderme yalnız Tambur'daki toplar için yapılır.`,
+        { code: "ROLL_NOT_AT_TAMBUR", status: roll.status },
+      );
+    }
+    // Oturum istasyonu KAYNAK adımla eşleşmeli (bring'de hedefle eşleşiyordu —
+    // burada hedefi sunucu çözdüğü için tek doğrulanabilir taraf kaynaktır).
+    if (ctx.stationId && ctx.stationId !== current.stationId) {
+      throw AppError.conflict(
+        `Bu cihazın çalışma oturumu başka bir istasyonda — "${current.station.name}" adımındaki topa buradan müdahale edilemez.`,
+        { code: "STATION_MISMATCH", sessionStationId: ctx.stationId, stepStationId: current.stationId },
+      );
+    }
+    const woBlock = manualMoveWoBlockReason(current.workOrder.status);
+    if (woBlock) {
+      throw AppError.conflict(woBlock, {
+        code: "WORKORDER_DEAD",
+        workOrderStatus: current.workOrder.status,
+        workOrderNumber: current.workOrder.workOrderNumber,
+      });
+    }
+
+    const steps = await prisma.workOrderStep.findMany({
+      where: { workOrderId: current.workOrderId },
+      orderBy: { stepSequence: "asc" },
+      select: {
+        id: true,
+        stepSequence: true,
+        requiredCategoryId: true,
+        station: { select: { name: true, ...STEP_CAPABILITY_SELECT } },
+        requiredCategory: { select: { ...STEP_CAPABILITY_SELECT } },
+      },
+    });
+    const currentSeq = steps.find((st) => st.id === current.id)?.stepSequence ?? null;
+    if (currentSeq === null) {
+      throw AppError.badRequest("Topun adımı bu iş emrinin rotasında bulunamadı — ekranı yenileyin", {
+        code: "STEP_NOT_IN_ROUTE",
+      });
+    }
+    const dyeStep = steps
+      .filter((st) => st.stepSequence < currentSeq && stepCanApplyColor(st.station, st.requiredCategory))
+      .sort((a, b) => b.stepSequence - a.stepSequence)[0];
+    if (!dyeStep) {
+      throw AppError.badRequest(
+        "Bu iş emrinin rotasında topun bulunduğu adımdan ÖNCE renk veren bir adım yok — geri gönderme yapılamaz. Panelden süpervizör taşıması gerekir.",
+        { code: "NO_DYE_STEP_IN_ROUTE" },
+      );
+    }
+    return {
+      roll,
+      workOrderId: current.workOrderId,
+      workOrderNumber: current.workOrder.workOrderNumber,
+      fromStepName: current.station.name,
+      dyeStep: {
+        id: dyeStep.id,
+        stationName: dyeStep.station.name,
+        /** Fason mu — `WorkOrderStep`te tip alanı YOK, fasonluk kategoriden okunur.
+         *  Toast ayrımı buna bağlı: fasonda mal ayrıca SEVK edilmeli. */
+        isExternal: dyeStep.requiredCategoryId != null,
+      },
+    };
+  }
+
+  /** Geri gönderme ÖNİZLEMESİ — hiçbir şeyi değiştirmez (önizlemesiz uygulama yok). */
+  async getSendToDyePreview(
+    input: RollRef,
+    ctx: TamburFieldContext = {},
+  ): Promise<ApiResponse<unknown>> {
+    const { roll, workOrderId, workOrderNumber, fromStepName, dyeStep } =
+      await this.resolveDyeStepForRoll(input, ctx);
+    const summary = this.toSummary(roll);
+    const target = { id: dyeStep.id, stationName: dyeStep.stationName, isExternal: dyeStep.isExternal, workOrderId, workOrderNumber };
+
+    // Saha engelleri `bring` ile ORTAK (çuval/sevk/fason/ölü statü/başka İE) —
+    // ikinci bir kural kümesi kurulmaz.
+    const block = this.bringBlockReason(roll, workOrderId, dyeStep.id);
+    if (block) {
+      return {
+        success: true,
+        data: { roll: summary, targetStep: target, fromStepName, canApply: false, blockCode: block.code, blockReason: block.reason, warnings: [], effects: null },
+      };
+    }
+
+    const preview = (
+      await this.moveService.getManualMovePreview(workOrderId, {
+        rollIds: [roll.id],
+        targetStepId: dyeStep.id,
+      })
+    ).data as ManualMovePreviewShape;
+    const row = preview.rolls.find((r) => r.id === roll.id);
+    if (!row) {
+      return {
+        success: true,
+        data: { roll: summary, targetStep: target, fromStepName, canApply: false, blockCode: "ROLL_STATE_CHANGED", blockReason: "Top bu sırada başka bir işleme girdi — ekranı yenileyin.", warnings: [], effects: null },
+      };
+    }
+
+    const warnings = [...preview.warnings];
+    const newParty = !preview.isWholeParty;
+    if (newParty) warnings.push("Bu top için yeni bir parti numarası oluşturulacak.");
+    if (row.qcWillVoid) {
+      warnings.push("Kalite/kurşun kararı geri alınacak — topun kalitesi Belirsiz olur.");
+    }
+    if (dyeStep.isExternal) {
+      warnings.push(`Mal ${dyeStep.stationName} adımında ÜRETİMDE bekler — boyahaneye çıkışı ayrıca Fason Sevk ile yapılır.`);
+    }
+
+    // CUT hard-stop (hedef sonrası doğmuş çocuk top) buradan `movable=false`
+    // olarak gelir — saha ekranı ayrı bir tahmin yürütmez.
+    const canApply = row.movable && !preview.woBlocked;
+    return {
+      success: true,
+      data: {
+        roll: summary,
+        targetStep: target,
+        fromStepName,
+        canApply,
+        blockCode: canApply ? null : !row.movable ? "ROLL_NOT_MOVABLE" : "WORKORDER_DEAD",
+        blockReason: canApply ? null : !row.movable ? row.blockReason : preview.woBlockReason,
+        warnings,
+        effects: {
+          direction: preview.backflush.direction,
+          fromStepName: row.currentStepName,
+          reopenedStepNames: preview.backflush.skippedStepNames,
+          qualityWillVoid: row.qcWillVoid,
+          newParty,
+        },
+      },
+    };
+  }
+
+  /** Geri gönderimi UYGULAR — taşımanın tamamı `manualMove`de (QC VOID, adım/WO recompute). */
+  async sendToDye(
+    input: RollRef & { reason: string },
+    ctx: TamburFieldContext = {},
+  ): Promise<ApiResponse<unknown>> {
+    const reason = input.reason?.trim() ?? "";
+    if (reason.length < 3) {
+      throw AppError.badRequest("İşlem nedeni zorunlu (en az 3 karakter)", { code: "REASON_REQUIRED" });
+    }
+    const { roll, workOrderId, workOrderNumber, dyeStep } = await this.resolveDyeStepForRoll(input, ctx);
+    const block = this.bringBlockReason(roll, workOrderId, dyeStep.id);
+    if (block) throw AppError.conflict(block.reason, { code: block.code });
+
+    let moved: ApiResponse<unknown>;
+    try {
+      moved = await this.moveService.manualMove(
+        workOrderId,
+        { rollIds: [roll.id], targetStepId: dyeStep.id, reason },
+        ctx.userId,
+      );
+    } catch (err) {
+      if (err instanceof AppError) {
+        throw new AppError(err.message, err.statusCode, err.isOperational, {
+          ...(err.details ?? {}),
+          code: (err.details?.code as string | undefined) ?? "MOVE_REJECTED",
+        });
+      }
+      throw err;
+    }
+
+    await AuditService.log({
+      userId: ctx.userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: roll.id,
+      newData: {
+        event: TAMBUR_SEND_TO_DYE_EVENT,
+        reason,
+        rollBarcode: roll.barcode,
+        fromStepId: roll.currentStepId,
+        fromLocation: this.locationLabel(roll),
+        targetStepId: dyeStep.id,
+        targetStationName: dyeStep.stationName,
+        targetIsExternal: dyeStep.isExternal,
+        workOrderId,
+        workOrderNumber,
+        machineId: ctx.machineId ?? null,
+        sessionStationId: ctx.stationId ?? null,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId: roll.id,
+        barcode: roll.barcode,
+        targetStep: { id: dyeStep.id, stationName: dyeStep.stationName, isExternal: dyeStep.isExternal },
+        workOrderNumber,
+        move: moved.data,
+      },
+      // ⚠️ Mesaj hedef istasyon adını MUTLAKA taşır: top Tambur listesinden düşer,
+      // operatör nereye gittiğini görmezse "top kayboldu" der.
+      message: dyeStep.isExternal
+        ? `Top "${dyeStep.stationName}" adımına alındı — boyahaneye çıkışı Fason Sevk ekranından yapın.`
+        : `Top "${dyeStep.stationName}" kuyruğuna alındı.`,
     };
   }
 

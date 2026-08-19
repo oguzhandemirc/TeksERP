@@ -14,6 +14,7 @@ import {
 } from "../../services/reports/_shared";
 import { getQualityScorecard } from "../../services/reports/quality-scorecard.report.service";
 import { getScrapScorecard } from "../../services/reports/scrap-scorecard.report.service";
+import { getPlanDeviationScorecard } from "../../services/reports/plan-deviation-scorecard.report.service";
 
 const router = Router();
 const guard = [verifyToken, requirePermission("report:quality")];
@@ -53,5 +54,29 @@ router.get("/scrap-scorecard", ...guard, async (req: Request, res: Response, nex
     next(e);
   }
 });
+
+/**
+ * PLAN-SAPMA KARNESİ (2026-08-19) — Tambur plan kapısında "yine de bitir" ile
+ * onaylanan, yani plan dışı kimlikle depoya inen malın karnesi.
+ *
+ * ⚠️ Kaynağı `roll_plan_deviations` KALICI defteridir, audit DEĞİL: audit 6 ayda
+ * arşive taşınır ve rapor katmanı arşivi okumaz (aynı ders `Roll.entryReason`
+ * notunda yazılı). Yeni izin kodu YOK — `report:quality` kategorisi.
+ */
+router.get(
+  "/plan-deviation-scorecard",
+  ...guard,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const input = compareRangeSchema.parse(req.query);
+      const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+      const compareRange = resolveCompareRange(input, range);
+      const data = await getPlanDeviationScorecard(range, compareRange);
+      res.status(200).json(reportEnvelope(data, range, compareRange));
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 export default router;

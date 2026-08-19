@@ -2,6 +2,10 @@
 // Tambur plan-gerçek sapma kapısı + uyumsuz sipariş override zinciri (2026-08-19)
 // =============================================================================
 // İki kullanıcı kararının bekçisi:
+//   C) PLAN-SAPMA DEFTERİ (roll_plan_deviations, 2026-08-19): onaylı her geçiş
+//      KALICI satır bırakır (audit 6 ayda arşivlenir + rapor arşivi okumaz).
+//      Granülerlik: geçiş × sapan alan, `confirmationId` geçişi gruplar —
+//      renk+en birlikte sapan onay 2 satır ama TEK imzadır (karne çift saymasın).
 //   A) Tambur finalize ONAYLI DEVAM: topun rengi/eni iş emri hedefinden saparsa
 //      409 PLAN_MISMATCH; confirmMismatch:true ile geçer ve karar audit'e düşer.
 //      Kapsam: renk (farklı VEYA hedef varken renksiz) + EŞİKLİ en (>10 cm).
@@ -12,6 +16,9 @@
 //      yine kurulur (kısmi başarı bilinçli).
 // Fixture TEST- prefix'li, kendi ürettiğini siler; seed'e yalnız kalite
 // kodu (1.KALITE) ile bağlanır.
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { Prisma, RollStatus, StationKind } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
@@ -172,6 +179,55 @@ const batchIds: string[] = [];
     const auditMm = ((auditRow?.newData ?? {}) as { mismatches?: unknown[] }).mismatches;
     ok(Array.isArray(auditMm) && auditMm.length === 2, "A5 audit sapma detayını taşıyor", `n=${Array.isArray(auditMm) ? auditMm.length : "-"}`);
 
+    // ── C1. DEFTER: finalize geçişi — alan başına satır, TEK confirmationId ──
+    const dev1 = await prisma.rollPlanDeviation.findMany({
+      where: { rollId: f1.rollId },
+      select: {
+        confirmationId: true, field: true, childRollId: true, qtyM: true,
+        source: true, workOrderId: true, workOrderStepId: true, confirmedById: true,
+        rollValue: true, planValue: true,
+      },
+    });
+    ok(dev1.length === 2, "C1 finalize: renk+en → 2 defter satırı", `n=${dev1.length}`);
+    ok(new Set(dev1.map((d) => d.confirmationId)).size === 1, "C1 iki satır TEK confirmationId (imza bir)");
+    ok(
+      dev1.some((d) => d.field === "color") && dev1.some((d) => d.field === "width"),
+      "C1 alanlar color+width",
+      dev1.map((d) => d.field).join(","),
+    );
+    ok(
+      dev1.every((d) => d.childRollId === null && d.source === "finalize"),
+      "C1 finalize satırı çocuk-bağımsız (childRollId null) + source=finalize",
+    );
+    ok(
+      dev1.every((d) => new Prisma.Decimal(d.qtyM).equals(100)),
+      "C1 qtyM = topun TÜM metrajı (100)",
+      String(dev1[0]?.qtyM),
+    );
+    ok(
+      dev1.every((d) => d.workOrderId === f1.woId && d.workOrderStepId === f1.stepId),
+      "C1 iş emri + adım damgası doğru",
+    );
+    const colorRow = dev1.find((d) => d.field === "color");
+    ok(
+      (colorRow?.rollValue ?? "").includes("MAVI") && (colorRow?.planValue ?? "").includes("GRI"),
+      "C1 değerler insan-okur metin olarak dondu",
+      `${colorRow?.rollValue} → ${colorRow?.planValue}`,
+    );
+
+    // ── C2. NEG: onaysız 409 defter satırı SIZDIRMAZ ──
+    const fNeg = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
+    await expectAppError(() => svc.finalize(finalizeArgs(fNeg.rollId)));
+    const devNeg = await prisma.rollPlanDeviation.count({ where: { rollId: fNeg.rollId } });
+    ok(devNeg === 0, "C2 onaysız (409) geçişte defter satırı YOK", `n=${devNeg}`);
+
+    // ── C3. NEG: sapmasız finalize defter satırı üretmez ──
+    const fClean = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: gri.id });
+    const resClean = await svc.finalize(finalizeArgs(fClean.rollId));
+    resClean.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    const devClean = await prisma.rollPlanDeviation.count({ where: { rollId: fClean.rollId } });
+    ok(devClean === 0, "C3 sapmasız finalize → 0 satır (sıcak yol temiz)", `n=${devClean}`);
+
     // ── A6. Onaylı finalize'ın idempotent retry'ı kapıya ÇARPMAZ ──
     const res6 = await svc.finalize(finalizeArgs(f1.rollId)); // confirm YOK — yine de geçmeli
     ok(
@@ -179,6 +235,8 @@ const batchIds: string[] = [];
       "A6 tamamlanmış topun replay'i onaysız da idempotent döner",
       res6.message ?? "",
     );
+    const devAfterReplay = await prisma.rollPlanDeviation.count({ where: { rollId: f1.rollId } });
+    ok(devAfterReplay === 2, "C4 finalize replay defteri BÜYÜTMEZ (erken dönüş kapıdan önce)", `n=${devAfterReplay}`);
 
     // ── A7. cutOpenFabric AYNI kapıdan geçer (çocuk kesim anında depoya iner) ──
     const f7 = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
@@ -191,6 +249,34 @@ const batchIds: string[] = [];
     if (child7) rollIds.push(child7.id);
     ok(!!child7, "A7 onayla kesim geçti");
 
+    // ── C5. DEFTER: cut geçişi — çocuk bazlı + kesim metrajı ──
+    const dev7 = await prisma.rollPlanDeviation.findMany({
+      where: { rollId: f7.rollId, source: "cut" },
+      select: { childRollId: true, qtyM: true, field: true, confirmationId: true },
+    });
+    ok(dev7.length === 1, "C5 cut: yalnız renk sapıyor → 1 satır", `n=${dev7.length}`);
+    ok(dev7[0]?.childRollId === child7?.id, "C5 satır KESİMİN çocuğunu işaret eder");
+    ok(
+      dev7[0] != null && new Prisma.Decimal(dev7[0].qtyM).equals(30),
+      "C5 qtyM = kesim metrajı (30)",
+      String(dev7[0]?.qtyM),
+    );
+
+    // ── C6. NEG (idempotency): aynı clientToken ile kesim replay'i satır EKLEMEZ ──
+    // Kanıt: child create P2002 → tx rollback → defter satırı da geri sarılır.
+    const tokenRoll = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
+    const replayToken = randomUUID();
+    const cutA = await svc.cutOpenFabric(tokenRoll.rollId, {
+      lengthMeters: 20, status: "WAREHOUSE", confirmMismatch: true, clientToken: replayToken,
+    });
+    const childA = cutA.data?.childRoll as { id: string } | undefined;
+    if (childA) rollIds.push(childA.id);
+    await svc.cutOpenFabric(tokenRoll.rollId, {
+      lengthMeters: 20, status: "WAREHOUSE", confirmMismatch: true, clientToken: replayToken,
+    });
+    const devToken = await prisma.rollPlanDeviation.count({ where: { rollId: tokenRoll.rollId } });
+    ok(devToken === 1, "C6 aynı clientToken replay'i defterde 1 satır bırakır (2 ise tx bağı kopmuş)", `n=${devToken}`);
+
     // ── A8. finalizeOpenFabric: keep_* kapıya çarpar, scrap/discard ÇARPMAZ ──
     const e8 = await expectAppError(() =>
       svc.finalizeOpenFabric(f7.rollId, { remainingAction: "keep_1kalite" }),
@@ -202,6 +288,20 @@ const batchIds: string[] = [];
     });
     if (res8.data?.remainingChildId) rollIds.push(res8.data.remainingChildId);
     ok(res8.success === true, "A8 onayla bitirme geçti");
+    const dev8 = await prisma.rollPlanDeviation.findMany({
+      where: { rollId: f7.rollId, source: "finalize-open-fabric" },
+      select: { childRollId: true, qtyM: true },
+    });
+    ok(dev8.length === 1, "C7 finalize-open-fabric: 1 satır", `n=${dev8.length}`);
+    ok(
+      dev8[0]?.childRollId === (res8.data?.remainingChildId ?? null) && dev8[0]?.childRollId !== null,
+      "C7 satır KALAN kuyruk çocuğunu işaret eder",
+    );
+    ok(
+      dev8[0] != null && new Prisma.Decimal(dev8[0].qtyM).equals(70),
+      "C7 qtyM = TAZE kalan metraj (100−30=70)",
+      String(dev8[0]?.qtyM),
+    );
     // scrap yolu: fire depoya inmez → kapı hiç açılmaz (ayrı fixture).
     const f9 = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
     const res9 = await svc.finalizeOpenFabric(f9.rollId, {
@@ -211,6 +311,54 @@ const batchIds: string[] = [];
     });
     if (res9.data?.remainingChildId) rollIds.push(res9.data.remainingChildId);
     ok(res9.success === true, "A8b scrap bitirme kapı DIŞI (fire depoya inmez)");
+    const dev9 = await prisma.rollPlanDeviation.count({ where: { rollId: f9.rollId } });
+    ok(dev9 === 0, "C8 scrap yolunda defter satırı YOK (kapı hiç açılmadı)", `n=${dev9}`);
+
+    // ── C9. KALAN 0'ken keep ile bitirme → depoya inen yok → 0 satır ──
+    // ⚠️ Bu kontrol KAPININ `currentQty > 0` şartını ölçer, yazımın `wantChild`
+    // dalında olmasını DEĞİL (ölçüldü: defter dala dışına taşınınca yeşil kaldı,
+    // çünkü kapı hiç açılmadığı için `mismatches` zaten boş). Yerleşimin kendisi
+    // C10'da yapısal olarak kilitlenir — gerçek yarış (kapı açıldı, tx içinde
+    // taze kalan 0'a düştü) deterministik kurulamıyor.
+    const f10 = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
+    const cutAll = await svc.cutOpenFabric(f10.rollId, {
+      lengthMeters: 100, status: "WAREHOUSE", confirmMismatch: true,
+    });
+    const childAll = cutAll.data?.childRoll as { id: string } | undefined;
+    if (childAll) rollIds.push(childAll.id);
+    const devAfterCut = await prisma.rollPlanDeviation.count({ where: { rollId: f10.rollId } });
+    const res10 = await svc.finalizeOpenFabric(f10.rollId, {
+      remainingAction: "keep_1kalite",
+      confirmMismatch: true,
+    });
+    if (res10.data?.remainingChildId) rollIds.push(res10.data.remainingChildId);
+    const devAfterFinalize = await prisma.rollPlanDeviation.count({ where: { rollId: f10.rollId } });
+    ok(
+      devAfterFinalize === devAfterCut,
+      "C9 kalan 0'ken bitirme defteri BÜYÜTMEZ (0 metrajlı satır yok)",
+      `kesim sonrası=${devAfterCut} bitirme sonrası=${devAfterFinalize}`,
+    );
+
+    // ── C10. YAPISAL: open-fabric defteri `wantChild` dalının İÇİNDE mi ──
+    // Gerekçe: kapı pre-tx "kalan var" görüp de tx içindeki TAZE kalan 0'a
+    // düşerse (araya kesim girdi) depoya inen bir şey yoktur — dal dışında
+    // yazan bir kod 0 metrajlı hayalet satır üretir ve karne metrajı şişer.
+    // Kilit `child.id` üzerinden: o değişken YALNIZ `wantChild` bloğunda
+    // kapsamdadır (dışarı taşınırsa TS derlemez) → üçlü birlikte aranır.
+    // `import.meta` KULLANILMAZ — kök tsconfig CommonJS derler (typecheck:scripts
+    // geçidi TS1343 ile düşer). Yol repo kökünden çözülür.
+    const svcSrc = await readFile(
+      path.join(__dirname, "..", "src", "services", "tambur.service.ts"),
+      "utf-8",
+    );
+    const ofCall = svcSrc.match(
+      /recordPlanDeviationTx\(tx, \{[\s\S]{0,600}?source: "finalize-open-fabric"[\s\S]{0,120}?\}\);/,
+    )?.[0] ?? "";
+    ok(
+      ofCall.includes("childRollId: child.id") && ofCall.includes("qtyM: remainingQty"),
+      "C10 open-fabric defteri wantChild dalında (child.id + taze remainingQty)",
+      ofCall ? ofCall.split("\n")[0] : "çağrı bulunamadı!",
+    );
 
     // ── B. Override zinciri ──
     console.log("B) Uyumsuz sipariş override zinciri");
@@ -336,6 +484,11 @@ const batchIds: string[] = [];
     try {
       // Söküm: variance → op → movement → property → log → roll → link → batch → step → WO → order → master.
       await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...woIds] } } }).catch(() => undefined);
+      // ⚠️ RESTRICT FK (RollVariance dersi): top silen her temizlik defteri de
+      // silmeli — `rollId` RESTRICT, `childRollId` SET NULL.
+      await prisma.rollPlanDeviation.deleteMany({
+        where: { OR: [{ rollId: { in: rollIds } }, { childRollId: { in: rollIds } }] },
+      });
       await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
       await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });

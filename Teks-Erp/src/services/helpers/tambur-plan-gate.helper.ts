@@ -9,12 +9,22 @@
 // Kapsam + gerekçe: constants/tambur-plan-gate.ts başlığı. Kural TEK yerde
 // yaşar; üç yola kopyalanırsa biri sessizce ayrışır (F221 dersi).
 //
+// ⚠️ İKİ İZ, İKİ AMAÇ (2026-08-19):
+//   • `AuditService` satırı — "kim ne zaman imzaladı" (best-effort, tx DIŞI).
+//   • `RollPlanDeviation` defteri — RAPORUN kaynağı (tx İÇİNDE, çağıran yazar).
+// Audit tek başına yetmiyordu: 6 ayda arşive taşınıyor ve rapor katmanı arşivi
+// okumuyor; `newData` JSON'u indekssiz; `recordId` PARENT topu gösteriyor.
+// Bu yüzden `assertRollMatchesPlan` onaylı geçişte sapmaları DÖNDÜRÜR ve üç
+// çağıran kendi tx'inde `recordPlanDeviationTx` ile deftere yazar.
+//
 // İstemci sözleşmesi: operatör bir topta sapmayı BİR KEZ onaylar; aynı topun
 // sonraki kesim/bitirme istekleri `confirmMismatch: true` taşır (tablet
 // oturum-içi hatırlar). Retry payload'ı birebir gittiği için offline replay
 // de onaylı gider; onaysız kuyruk kaydı replay'de 409'a düşerse kalıcı-düşüş
 // toast'ı sebebi söyler (kayıt yazılmadı — mal ekranda durur, tekrar denenir).
 // =============================================================================
+import { randomUUID } from "node:crypto";
+import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
@@ -44,6 +54,12 @@ interface GatePlan {
  *
  * Pre-tx çağrılmalı (salt okuma; kilit süresi uzamaz). İdempotent-retry erken
  * dönüşlerinden SONRA çağrılırsa onaylanmış işin replay'i kapıya çarpmaz.
+ *
+ * @returns ONAYLANAN sapmalar (sapma yoksa boş dizi). Çağıran bunu kendi tx'i
+ * içinde `recordPlanDeviationTx`e verir — defter satırı tx'e bağlı olmalı ki
+ * iş geri sarılırsa (P2002 replay, claim kaybı) sapma kaydı da geri sarılsın.
+ * ⚠️ Dönüşü YOK SAYAN bir çağıran TS'te uyarı ÜRETMEZ; bekçi
+ * `test_tambur_plan_gate.ts` üç yolun da satır yazdığını mekanik doğrular.
  */
 export async function assertRollMatchesPlan(
   roll: GateRoll,
@@ -52,7 +68,7 @@ export async function assertRollMatchesPlan(
   userId: string | undefined,
   /** Audit'te hangi yoldan onaylandığı okunsun ("finalize" | "cut" | "finalize-open-fabric"). */
   source: string,
-): Promise<void> {
+): Promise<PlanMismatchItem[]> {
   const mismatches: PlanMismatchItem[] = [];
   if (plan.targetColorId && roll.colorId !== plan.targetColorId) {
     const [rollColor, planColor] = await Promise.all([
@@ -86,7 +102,7 @@ export async function assertRollMatchesPlan(
       planValue: planWidth,
     });
   }
-  if (mismatches.length === 0) return;
+  if (mismatches.length === 0) return [];
 
   if (!confirmMismatch) {
     throw AppError.conflict(
@@ -113,5 +129,57 @@ export async function assertRollMatchesPlan(
       workOrderId: plan.workOrderId,
       mismatches: mismatches as unknown as Record<string, unknown>[],
     },
+  });
+  return mismatches;
+}
+
+/**
+ * Onaylanan sapmaları KALICI deftere yazar (`roll_plan_deviations`).
+ *
+ * ⚠️ ÇAĞIRANIN TX'İ İÇİNDE çağrılmalı: iş geri sarılırsa (aynı `clientToken`
+ * ile kesim replay'i → P2002 → rollback; finalize claim kaybı) defter satırı da
+ * geri sarılmalıdır. Aksi halde "hiç olmamış" bir kesim raporda sapma olarak
+ * görünür ve rakam sessizce şişer.
+ *
+ * Satır granülerliği = onaylı kapı-geçişi × sapan alan; `confirmationId` tek
+ * geçişin satırlarını gruplar. Renk+en birlikte sapan top İKİ satır üretir ama
+ * BİR imzadır — karne `COUNT(DISTINCT confirmationId)` ve confirmationId başına
+ * TEK `qtyM` ile sayar (naif `SUM(qtyM)` metrajı çift sayardı).
+ *
+ * Boş `mismatches` → no-op (sıcak yol maliyeti sıfır).
+ */
+export async function recordPlanDeviationTx(
+  tx: Prisma.TransactionClient,
+  input: {
+    mismatches: PlanMismatchItem[];
+    rollId: string;
+    /** Bu geçişte depoya inen çocuk; `finalize` yolunda null (bkz. şema notu). */
+    childRollId: string | null;
+    workOrderId: string;
+    workOrderStepId: string | null;
+    /** Plan-dışı kimlikle depoya inen metraj. */
+    qtyM: number;
+    source: string;
+    confirmedById: string | undefined;
+  },
+): Promise<void> {
+  if (input.mismatches.length === 0) return;
+  const confirmationId = randomUUID();
+  await tx.rollPlanDeviation.createMany({
+    data: input.mismatches.map((m) => ({
+      confirmationId,
+      rollId: input.rollId,
+      childRollId: input.childRollId,
+      workOrderId: input.workOrderId,
+      workOrderStepId: input.workOrderStepId,
+      field: m.field,
+      // Değerler İNSAN-OKUR metin olarak donar: renk adı sonradan değişse bile
+      // o günkü karar olduğu gibi okunur (donmuş belge ilkesinin defter hâli).
+      rollValue: m.rollValue == null ? null : String(m.rollValue),
+      planValue: m.planValue == null ? null : String(m.planValue),
+      qtyM: input.qtyM,
+      source: input.source,
+      confirmedById: input.confirmedById ?? null,
+    })),
   });
 }

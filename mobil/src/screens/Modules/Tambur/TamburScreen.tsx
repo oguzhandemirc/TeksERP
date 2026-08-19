@@ -52,7 +52,7 @@ import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRe
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useTamburOverQuantityEnabled } from '../../../hooks/useFeatureFlags';
+import { useTamburOverQuantityEnabled, useTamburShortCutA1 } from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
@@ -66,6 +66,8 @@ import {
 import AppModal from '../../../components/AppModal';
 import TamburOrderLinkSheet from './TamburOrderLinkSheet';
 import { shortCutOverride, shortCutRevert, SHORT_CUT_QUALITY_CODE } from './shortCutQuality';
+import { resolveShortCutConfig } from './resolveShortCutConfig';
+import TamburSendToDyeModal from './TamburSendToDyeModal';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
@@ -406,10 +408,22 @@ export default function TamburScreen() {
   const { has: hasPermission } = usePermissions();
   // Cihaz tercihi (sunucuya gitmez): kesimden sonra kalite 1. Kaliteye dönsün mü?
   const resetQualityAfterCut = useDeviceSettingsStore((st) => st.tamburResetQualityAfterCut);
-  // KISA KESİM → OTOMATİK A1 (2026-08-19 saha isteği; kural: shortCutQuality.ts).
-  // Bayrak + eşik cihaz tercihi; YALNIZ bayrak açıkken devreye girer.
-  const shortCutEnabled = useDeviceSettingsStore((st) => st.tamburShortCutA1Enabled);
-  const shortCutThresholdM = useDeviceSettingsStore((st) => st.tamburShortCutA1ThresholdM);
+  // KISA KESİM → OTOMATİK A1 (kural: shortCutQuality.ts). Bayrak + eşik artık
+  // FABRİKA ayarıdır (feature-flags); cihaz yalnız 3-durumlu override taşır ve
+  // ikisini `resolveShortCutConfig` birleştirir — "hangisi geçerli" sorusunun
+  // tek cevabı orası. Değişken adları KORUNDU: aşağıdaki kural çağrıları ve
+  // toast metinleri değişmiyor.
+  const shortCutServer = useTamburShortCutA1();
+  const shortCutOverrideMode = useDeviceSettingsStore((st) => st.tamburShortCutA1Override);
+  const shortCutDeviceThresholdM = useDeviceSettingsStore(
+    (st) => st.tamburShortCutA1DeviceThresholdM,
+  );
+  const { enabled: shortCutEnabled, thresholdM: shortCutThresholdM } = resolveShortCutConfig(
+    shortCutServer.enabled,
+    shortCutServer.thresholdM,
+    shortCutOverrideMode,
+    shortCutDeviceThresholdM,
+  );
   // "Şu an seçili A1'i KURAL mı yazdı?" — elle yazımda eşik üstüne çıkınca geri
   // dönüş yalnız otomatik yazılan A1 için (operatörün kendi A1'i geri alınmaz).
   // Ana kesim + manuel mod aynı formu (voluntaryEntry) paylaşır → tek ref;
@@ -423,6 +437,8 @@ export default function TamburScreen() {
   // operatörde tuş HİÇ çizilmez (403'lük gri buton bırakılmaz — proje kuralı).
   const canLinkOrders = hasPermission('workorder:write');
   const [orderLinkOpen, setOrderLinkOpen] = useState(false);
+  /** "Boyahaneye Geri Gönder" — plan-sapma modalının 3. seçeneği (süpervizör). */
+  const [sendToDyeRollId, setSendToDyeRollId] = useState<string | null>(null);
   // Saha düzeltmesi uçları ONLINE-ONLY (barkodu sunucu üretir, taşıma tx'i
   // sunucuda çözülür) — offline kuyruğuna girmez; modal bunu banda yazar.
   const isOnline = useOnlineStatus();
@@ -542,6 +558,9 @@ export default function TamburScreen() {
   const [planMismatch, setPlanMismatch] = useState<{
     messages: string[];
     retry: () => void;
+    /** Sapan top — "Boyahaneye Geri Gönder" tuşu hangi topu göndereceğini
+     *  buradan bilir. İki set-site de doldurur; boş kalırsa tuş çizilmez. */
+    rollId: string;
   } | null>(null);
   const planMismatchConfirmedRef = useRef<Set<string>>(new Set());
   /** 409 PLAN_MISMATCH mi — doluysa insan-okur sapma satırları. */
@@ -1226,6 +1245,7 @@ export default function TamburScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setPlanMismatch({
           messages: mm,
+          rollId: variables.rollId,
           retry: () => {
             planMismatchConfirmedRef.current.add(variables.rollId);
             cutOpenFabricMutation.mutate({ ...variables, confirmMismatch: true });
@@ -1348,6 +1368,7 @@ export default function TamburScreen() {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setPlanMismatch({
           messages: mm,
+          rollId: vars.rollId,
           retry: () => {
             planMismatchConfirmedRef.current.add(vars.rollId);
             finalizeOpenFabricMutation.mutate({ ...vars, confirmMismatch: true });
@@ -4400,6 +4421,21 @@ export default function TamburScreen() {
         />
       ) : null}
 
+      {/* Boyahaneye Geri Gönder — plan-sapma kararının rework kolu. Hedef adımı
+          SUNUCU çözer; modal önizleme + sebep alır (önizlemesiz uygulama yok). */}
+      <TamburSendToDyeModal
+        visible={sendToDyeRollId !== null}
+        onDismiss={() => setSendToDyeRollId(null)}
+        rollId={sendToDyeRollId}
+        online={isOnline}
+        onApplied={() => {
+          setSendToDyeRollId(null);
+          void refetchActiveJob();
+          qc.invalidateQueries({ queryKey: ['rolls'] });
+          qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
+        }}
+      />
+
       {/* PLAN-GERÇEK SAPMA onayı — backend 409 PLAN_MISMATCH cevabı (soru, hata
           değil). Renk/en sapan top yine de depoya inecekse operatör imza atar;
           karar backend audit'inde. colorlessConfirm ile aynı görsel dil. */}
@@ -4425,6 +4461,24 @@ export default function TamburScreen() {
             bu onay topun kaydını DEĞİŞTİRMEZ. Yanlış olan iş emriyse süpervizör
             "Sipariş Bağla / Düzelt" ile düzeltir.
           </Text>
+          {/* ÜÇÜNCÜ SEÇENEK (2026-08-19): mal yanlış renkteyse gerçek karar
+              çoğu zaman "geri gitsin, yeniden boyansın"dır. YALNIZ saha düzeltme
+              yetkisi olanda ve ÇEVRİMİÇİYKEN çizilir — uç online-only, işlevsiz
+              gri buton bırakılmaz. */}
+          {canFieldFix && isOnline && planMismatch ? (
+            <Button
+              mode="outlined"
+              icon="palette-swatch-outline"
+              style={overCutStyles.sendBackBtn}
+              onPress={() => {
+                const id = planMismatch.rollId;
+                setPlanMismatch(null);
+                setSendToDyeRollId(id);
+              }}
+            >
+              Boyahaneye Geri Gönder
+            </Button>
+          ) : null}
           <View style={overCutStyles.actions}>
             <Button
               mode="outlined"
@@ -5266,6 +5320,11 @@ const overCutStyles = StyleSheet.create({
   },
   btn: {
     minWidth: 120,
+  },
+  /** "Boyahaneye Geri Gönder" — İKİNCİL yol olduğu için tam genişlik + outlined:
+   *  birincil karar hâlâ "Onayla ve Devam Et", ama bu seçenek de kaybolmasın. */
+  sendBackBtn: {
+    marginBottom: spacing.md,
   },
 });
 

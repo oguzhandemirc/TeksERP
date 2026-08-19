@@ -84,8 +84,51 @@ export interface ScrapScorecard {
   daily: Array<{ day: string; scrapQty: number; scrapCount: number }>;
 }
 
+// ---------- Plan-Sapma Karnesi (backend plan-deviation-scorecard ile birebir)
+
+export interface PlanDeviationBreakdownRow {
+  key: string;
+  label: string;
+  /** İmza (onay) sayısı — DISTINCT confirmationId. */
+  confirmations: number;
+  qtyM: number;
+}
+
+export interface PlanDeviationDetailRow {
+  id: string;
+  createdAt: string;
+  rollBarcode: string | null;
+  childBarcode: string | null;
+  workOrderNumber: string;
+  field: string;
+  rollValue: string | null;
+  planValue: string | null;
+  qtyM: number;
+  source: string;
+  confirmedBy: string | null;
+}
+
+export interface PlanDeviationScorecard {
+  summary: {
+    /** "Kaç kez plan dışına çıkıldı" — imza sayısı. */
+    confirmations: number;
+    /** Plan dışı depoya inen metraj (imza başına TEK sayılır). */
+    deviatedQtyM: number;
+    /** Alan bazlı OLAY sayısı — aynı imzada renk+en saparsa ikisi de sayılır. */
+    byField: { color: { events: number; qtyM: number }; width: { events: number; qtyM: number } };
+    affectedRolls: number;
+  };
+  previous: { confirmations: number; deviatedQtyM: number } | null;
+  byOperator: PlanDeviationBreakdownRow[];
+  byItemColor: PlanDeviationBreakdownRow[];
+  daily: Array<{ day: string; confirmations: number; qtyM: number }>;
+  detail: PlanDeviationDetailRow[];
+}
+
 export const qualityReportsApi = {
   scorecard: (p: ReportCompareParams) => reportsClient.get<QualityScorecard>("quality/scorecard", p),
   scrapScorecard: (p: ReportCompareParams) =>
     reportsClient.get<ScrapScorecard>("quality/scrap-scorecard", p),
+  planDeviationScorecard: (p: ReportCompareParams) =>
+    reportsClient.get<PlanDeviationScorecard>("quality/plan-deviation-scorecard", p),
 };

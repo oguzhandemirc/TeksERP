@@ -22,6 +22,11 @@ type BooleanFlagKey = {
   [K in keyof FeatureFlags]: FeatureFlags[K] extends boolean ? K : never;
 }[keyof FeatureFlags];
 
+/** Sayısal (nullable) değerli anahtarlar — `FlagDef.numberField` yalnız bunları alır. */
+export type NumberFlagKey = {
+  [K in keyof FeatureFlags]: FeatureFlags[K] extends number | null ? K : never;
+}[keyof FeatureFlags];
+
 /** Tek bir özellik anahtarının ekranda görünen metinleri. `key` backend kontratına bağlanır. */
 export interface FlagDef {
   key: BooleanFlagKey;
@@ -39,6 +44,24 @@ export interface FlagDef {
    * Bileşen kendi sorgusunu yönetir ve gösterecek bir şey yoksa `null` döner.
    */
   hint?: ComponentType;
+  /**
+   * Toggle AÇIKKEN altında çizilen sayısal alan (opsiyonel) — "bayrak + eşik"
+   * ikilisi tek satırda, TEK Kaydet altında yaşasın diye.
+   *
+   * ⚠️ İç alan adı `numberKey` — `key:` OLMAMALI: sözleşme bekçisi
+   * (`test_feature_flag_contract.ts`) panel kümesini satır başı `key: "..."`
+   * regex'iyle okur; `key` adıyla yazılsaydı sayısal anahtar boolean D kümesine
+   * sızar ve bekçi yanlış şey ölçerdi.
+   */
+  numberField?: {
+    numberKey: NumberFlagKey;
+    label: string;
+    unit: string;
+    min: number;
+    max: number;
+    /** Alan boş bırakıldığında (null) gösterilecek uyarı — kural etkisiz kalır. */
+    emptyWarning: string;
+  };
 }
 
 /**
@@ -232,6 +255,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         group: "Tambur",
         title: "Tambur'da çıkan top metresi giriş metresini aşabilsin",
         desc: "Açıkken (varsayılan) — Tambur asıl ölçüm noktası olduğu için — operatör kayıtlıdan fazla ölçtüğünde (örn. 100m açık kumaşı 150m top yapma) mobilde onay sonrası kabul edilir; kaynak top tamamen tüketilir. Kapatırsan Tambur'da çıkan top kayıtlı metrajdan fazla olamaz (örn. 100m topa 110m girilemez). Yalnızca aşım anında devreye girer, normal kesim etkilenmez.",
+      },
+      {
+        key: "tamburShortCutA1Enabled",
+        group: "Tambur",
+        title: "Kısa kesimde kalite otomatik A1 yazılsın",
+        desc: "Kapalıyken (varsayılan) tamburda kalite her zaman elle seçilir. Açıkken kesim uzunluğu aşağıdaki eşiğin ALTINDA kalırsa kalite kendiliğinden A1'e çevrilir — kısa parça fiziksel olarak 2. kalitedir ve operatör kaliteyi çevirmeyi unutunca 1. Kalite etiketiyle depoya iniyordu. Kural YALNIZ 1. Kalite seçiliyken devreye girer: operatör A1 ya da Fire'ı kendisi seçtiyse dokunulmaz, otomatik yazılan A1 de elle geri çevrilebilir. Makineden ölçüm ve 'kalanı kes' yolları dahil. Bu ayar FABRİKA VARSAYILANIDIR — tablette yetkili operatör (saha düzeltme yetkisi olan) cihaz bazında açıp kapatabilir ya da kendi eşiğini girebilir.",
+        numberField: {
+          numberKey: "tamburShortCutA1ThresholdM",
+          label: "Eşik",
+          unit: "metre",
+          min: 1,
+          max: 10000,
+          emptyWarning: "Eşik girilmeden kural ÇALIŞMAZ — ayar açık ama etkisiz.",
+        },
       },
       {
         key: "tamburUndoFullSameDayOnly",

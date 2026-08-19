@@ -139,6 +139,20 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **DB'de olmalı** (
 
 **Uzlaştırma yalnız EKLER — silmez, güncellemez.** Katalogdan bir kodu çıkarmak onu DB'den kaldırmaz (kullanıcı atamaları sessizce düşmesin diye); mevcut satırın `description`/`module` alanları da ezilmez (fabrika panelden düzeltmiş olabilir). Gerçekten kaldırmak/yeniden adlandırmak **bilinçli bir veri migration'ı** ister.
 
+### Sayısal feature-flag eklerken (2026-08-19)
+
+Boolean bayrağın üç yeri (`SETTING_KEYS` + `updateSchema` + `setFeatureFlags`) sözleşme
+bekçisiyle korunuyordu; **sayısal ayarların aynı zinciri hiç ölçülmüyordu** (`aBool`
+daraltması onları eliyordu). `test_feature_flag_contract.ts` artık sayısal anahtarları
+da A(api)+B(şema)+C(servis) üçlüsünde arar. Panelde sayısal alan `FlagDef.numberField`
+ile yazılır ve ⚠️ iç alan adı **`numberKey:`** olmak ZORUNDA — bekçi panel kümesini
+satır başı `key: "..."` regex'iyle okuduğu için `key` adıyla yazılan sayısal anahtar
+boolean kümesine sızar ve "yönetilemez bayrak" kontrolü yanlış şey ölçer.
+
+`set()` `Prisma.InputJsonValue` alır: TS'te ne `null` ne `Prisma.JsonNull` geçer →
+"değeri temizle" semantiği **0 yazarak** kurulur, okuma tarafı (`parsed <= 0 → null`)
+onu "girilmemiş"e çözer.
+
 ### ROL (yetki şablonu) kataloğu — aynı üç parça, ikinci tur (2026-08-06)
 
 Yeni izin **kodunun** DB'ye gelmesi yetmiyordu; onu kullanıcıya götüren **paketin** de gelmesi gerekiyor. Şablonlar (`PermissionTemplate`) da yalnız `seed.ts`'te yaşıyordu ve aynı boşluk aynı şekilde açıldı — bu kez ölçüldü: canlı fabrikada **"Admin (Tam Yetki)" şablonu 55 izin taşıyordu, katalog 67**. O şablonla açılan yeni yönetici 12 yetkiyi ALMIYOR ve bunu hiçbir yerde göremiyordu. Ayrıca **masaüstü (büro) rolü HİÇ YOKTU**: 16 şablonun 15'i tek-ekran mobil, biri tam yetki → üç masaüstü kullanıcısı (Eda · Enes · Samet) **birebir aynı 40 izne** sahipti.

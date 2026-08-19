@@ -137,6 +137,11 @@ export const updateSchema = z.strictObject({
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
   tamburOverQuantityEnabled: z.boolean().optional(),
+  // Kısa kesim → otomatik A1 (2026-08-19). ⚠️ `strictObject`: bu iki satır
+  // eklenmezse panel PATCH'i 400 alır ve ayar hiç kaydedilemez.
+  tamburShortCutA1Enabled: z.boolean().optional(),
+  // `null` = eşiği temizle (kural inert kalır) — bilinçli olarak geçerli değer.
+  tamburShortCutA1ThresholdM: z.number().positive().max(10_000).nullable().optional(),
   // ⚠️ Bu satır UNUTULURSA bayrak panelden AÇILAMAZ **ve daha kötüsü
   // KAPATILAMAZ** (`z.strictObject` → PATCH 400). 2026-08-05'te
   // `kk1DuplicateGuardEnabled` tam bu boşluktan geçti; bekçi:
