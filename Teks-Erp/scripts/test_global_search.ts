@@ -89,7 +89,10 @@ async function main(): Promise<void> {
   // kodları servis dosyasında değil bu katalogda yaşadığı için orada AST ile
   // çözülemiyorlar ve o bekçi kapsamı buraya devrediyor. Devir ÖLÜ OLMAMALI —
   // yani katalogda tanımsız bir kod buradan geçmemeli.
-  const catalogCodes = new Set(PERMISSION_CATALOG.map((p) => p.code));
+  // `Set<string>` — katalog tipi dar bir union, aranan değerler ise serbest
+  // string (kova katalogundan geliyor). Amaç zaten "bu string katalogda VAR MI"
+  // sorusunu sormak; daraltmak kontrolü derleme anında vakumen doğru yapardı.
+  const catalogCodes = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
   const undefinedCodes = SEARCH_ENTITIES.flatMap((e) =>
     e.permissions.filter((p) => !catalogCodes.has(p)),
   );

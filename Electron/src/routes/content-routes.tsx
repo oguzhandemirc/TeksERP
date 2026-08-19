@@ -42,6 +42,7 @@ import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
 import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
 import { DataImportPage } from "@/pages/System/DataImport/DataImportPage";
+import { DuplicatesPage } from "@/pages/System/Duplicates/DuplicatesPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { DbRestorePage } from "@/pages/System/DbRestore/DbRestorePage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
@@ -407,6 +408,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="data:import">
         <DataImportPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Mükerrer Kayıtlar — `master-data:merge`. ⚠️ tile-config.ts'teki karo ile
+    // AYNI kod; ayrışırsa kullanıcı karoyu görür, tıklar ve /forbidden'a düşer.
+    path: "system/duplicates",
+    element: (
+      <ProtectedRoute requirePermission="master-data:merge">
+        <DuplicatesPage />
       </ProtectedRoute>
     ),
   },

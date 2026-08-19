@@ -14,6 +14,7 @@ export function ItemsPage() {
       title="Kumaşlar"
       description="Kumaş kataloğu — izinli renk ve özellik listesi opsiyoneldir."
       entityName="Kumaş"
+      mergeEntity="item"
       importEntity="item"
       queryKey="items"
       service={itemService}

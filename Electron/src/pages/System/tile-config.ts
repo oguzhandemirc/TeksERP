@@ -1,4 +1,4 @@
-import { Activity, Archive, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, Upload, type LucideIcon } from "lucide-react";
+import { Activity, Archive, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, Upload, type LucideIcon, Merge } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -57,6 +57,18 @@ export const systemTiles: SystemTile[] = [
     group: "config",
     // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
     permission: "data:import",
+  },
+  {
+    key: "duplicates",
+    title: "Mükerrer Kayıtlar",
+    description: "Aynı kaydın iki kez açılmış hâllerini tek kayda birleştir",
+    icon: Merge,
+    to: "/system/duplicates",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
+    // Yerleşim: araç DÖRT tanım ekranını birden keser (müşteri/kumaş/renk/fason);
+    // birinin içine koymak diğer üçünden gizlerdi — Veri Aktarımı ile aynı şekil.
+    permission: "master-data:merge",
   },
   {
     key: "activity",

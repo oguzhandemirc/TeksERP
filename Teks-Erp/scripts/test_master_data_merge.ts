@@ -45,7 +45,9 @@ async function main(): Promise<void> {
 
   // ── 1) İzin kapsamı (permission-catalog'un devrettiği kontrol) ───────────
   console.log("── 1) Çift kapı izinleri katalogda tanımlı ──");
-  const codes = new Set(PERMISSION_CATALOG.map((p) => p.code));
+  // `Set<string>`: aranan değer `adapter.writePermission` (serbest string).
+  // Dar union'da tutmak, kontrolü derleme anında vakumen doğru yapardı.
+  const codes = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
   check("master-data:merge katalogda", codes.has("master-data:merge"));
   for (const entity of MERGE_ENTITIES) {
     const adapter = getImportAdapter(entity);

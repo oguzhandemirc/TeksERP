@@ -1,6 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Pencil, Trash2, RotateCcw, PowerOff, Upload } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Plus, Pencil, Trash2, RotateCcw, PowerOff, Upload, Merge } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
@@ -38,6 +39,15 @@ interface Props<T extends { id: string }> {
   filterBar?: ReactNode;
   /** Sayfa başlığındaki aksiyonların SOLUNA (Yenile'den önce) eklenecek ek buton(lar) —
    * başka sayfaya götüren bağlantılar gibi tablo-dışı eylemler için. */
+  /**
+   * Bu liste birleştirilebilir bir ana veri ise varlık anahtarı. Verilirse
+   * "Mükerrerler" düğmesi çizilir ve mükerrer temizlik ekranını O VARLIKLA
+   * açar. ⚠️ Yerleşim gerekçesi: ekranın kendisi Sistem hub'ının altında ve
+   * hub `admin:settings` istiyor — yani aracı asıl kullanacak kişi (satış,
+   * planlama) oraya HİÇ ulaşamaz. Operatör mükerreri zaten LİSTEYE BAKARKEN
+   * fark ediyor; giriş kapısı da orada olmalı.
+   */
+  mergeEntity?: "customer" | "item" | "color" | "subcontractor";
   headerExtra?: ReactNode;
   /** Kayıt yokken "Yeni" butonunu glow animasyonuyla vurgula. */
   glowWhenEmpty?: boolean;
@@ -77,6 +87,7 @@ export function CrudPage<T extends { id: string }>({
   writePermission,
   extraFilters,
   filterBar,
+  mergeEntity,
   headerExtra,
   glowWhenEmpty,
   hideHeader,
@@ -212,11 +223,25 @@ export function CrudPage<T extends { id: string }>({
     setEditing(null);
   };
 
+  const navigate = useNavigate();
   const isEmpty = glowWhenEmpty && query.isSuccess && !search && !showInactive && pagination.total === 0;
 
   const headerActions = (
     <>
       {headerExtra}
+      {mergeEntity ? (
+        // Çift kapı — birleştirme ucununkiyle BİREBİR aynı: `master-data:merge`
+        // (yetenek) + varlığın write izni (bu veriye dokunabilme).
+        <PermissionGate allOf={["master-data:merge", writePermission]}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate(`/system/duplicates?entity=${mergeEntity}`)}
+          >
+            <Merge className="h-4 w-4" /> Mükerrerler
+          </Button>
+        </PermissionGate>
+      ) : null}
       {importEntity ? (
         <PermissionGate allOf={["data:import", writePermission]}>
           <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
