@@ -35,6 +35,26 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
   const changes = (log?.changes ?? []) as AuditChange[];
   const reasonText = pickReason(log?.newData);
 
+  // ── AYNI İŞLEMDEKİ DİĞER KAYITLAR (2026-08-19) ──────────────────────────
+  // Bir kaydetme tuşu birden çok audit satırı üretir (iş emri + adımlar +
+  // sipariş bağları). `requestId` onları bağlar; SAP'ta bu bilgi `CDHDR`
+  // başlığında yaşar.
+  // ⚠️ requestId YOKSA sorgu HİÇ atılmaz: null filtre backend'de "filtre yok"
+  // anlamına gelir ve alakasız satırlar dönerdi. Eski (19.08.2026 öncesi) ve
+  // iş/script kaynaklı kayıtlarda bölüm hiç çizilmez.
+  const requestId = log?.requestId ?? null;
+  const siblingQuery = useQuery({
+    queryKey: ["system-log-siblings", source, requestId],
+    queryFn: () =>
+      (source === "archive"
+        ? systemLogService.listArchive({ requestId: requestId!, limit: 20 })
+        : systemLogService.list({ requestId: requestId!, limit: 20 })
+      ).then((r) => r.data),
+    enabled: !!logId && !!requestId,
+    staleTime: 60_000,
+  });
+  const siblings = (siblingQuery.data ?? []).filter((r) => r.id !== log?.id);
+
   return (
     <Sheet open={!!logId} onOpenChange={(o) => !o && onClose()}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-xl">
@@ -70,7 +90,42 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                     locale: tr,
                   })}
                 </Row>
+                {requestId && (
+                  <Row label="İşlem no">
+                    <span
+                      className="font-mono text-xs text-muted-foreground"
+                      title={requestId}
+                    >
+                      {requestId.slice(0, 8)}
+                    </span>
+                  </Row>
+                )}
               </div>
+
+              {/* AYNI İŞLEMDE — tek kaydetme tuşunun ürettiği diğer satırlar.
+                  ⚠️ SIRA VAADİ YOK: satırlar aynı transaction'da, aynı
+                  `createdAt` ile yazılır ve id'leri rastgeledir; "önce şu oldu"
+                  denemez, yalnız "aynı işlem" denir. */}
+              {requestId && siblings.length > 0 && (
+                <div className="rounded-md border bg-card/40 p-3">
+                  <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+                    Aynı işlemde ({siblings.length} kayıt daha)
+                  </div>
+                  <div className="space-y-1">
+                    {siblings.map((s) => (
+                      <div key={s.id} className="flex flex-wrap items-baseline gap-2 text-sm">
+                        <Badge variant={actionVariant(s.action)} className="text-[10px]">
+                          {actionLabel(s.action)}
+                        </Badge>
+                        <span>{tableLabel(s.tableName)}</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {s.recordId}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* NE DEĞİŞTİ — birincil okuma yüzeyi. Ham JSON blokları altta ve
                   KATLI durur: adli inceleme için gerekli, günlük okuma için

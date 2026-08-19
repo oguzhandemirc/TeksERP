@@ -242,7 +242,7 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string }> 
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 6) TRIGGER'lar (1) — migration 20260809090000_roll_production_timestamps
+// 6) TRIGGER'lar (3) — 20260809090000 (roll damgası) + 20260819161000 (audit guard)
 //    Prisma trigger modelleyemez → şema-dışı ve DİĞERLERİNDEN DAHA KRİTİK:
 //    partial index kaybolursa sorgu yavaşlar (sonuç doğru kalır), trigger
 //    kaybolursa kolon HİÇ yazılmaz ve tüm dönem raporları sessizce boşalır.
@@ -256,6 +256,25 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
     // toplar (fason kabul çocuğu) başka hiçbir yerde damgalanmaz.
     timing: ["BEFORE INSERT OR UPDATE", "FOR EACH ROW"],
     why: "Roll.finalizedAt / statusChangedAt'in TEK yazma noktası — kalite/fire/fason karnelerinin dönem çıpası",
+  },
+  {
+    table: "system_logs",
+    trigger: "system_logs_block_tamper",
+    // ⚠️ OLAY SIRASI PG'NİN KANONİK SIRASI OLMAK ZORUNDA. Migration'da
+    // "UPDATE OR DELETE OR TRUNCATE" yazılmıştır ama `pg_get_triggerdef`
+    // ruleutils sırasına çevirir (INSERT, DELETE, UPDATE, TRUNCATE) →
+    // buraya yazım sırasını kopyalarsan kontrol DAİMA kırmızı verir.
+    timing: ["BEFORE DELETE OR UPDATE OR TRUNCATE", "FOR EACH STATEMENT"],
+    why: "Audit değiştirilemezliği (ISO 27001 A.8.15) — koruma teks.audit_guard GUC'u ile PROD'da açılır, arşivleyici teks.audit_purge ile geçer (migration 20260819161000)",
+  },
+  {
+    // ⚠️ AYRI AD ZORUNLU: aşağıdaki envanter trigger'ları YALNIZ ADA GÖRE
+    // haritalıyor (`trgByName`); iki tabloda aynı adı kullanmak Map'te tekini
+    // bırakır ve envanter sessizce yanlış çalışır. Fonksiyon tek, trigger iki.
+    table: "system_log_archives",
+    trigger: "system_log_archives_block_tamper",
+    timing: ["BEFORE DELETE OR UPDATE OR TRUNCATE", "FOR EACH STATEMENT"],
+    why: "Arşiv de audit'tir — koruma yalnız sıcak tabloda olsaydı 6 aylık gecikmeyle beklenen kurcalama yolu açık kalırdı",
   },
 ];
 

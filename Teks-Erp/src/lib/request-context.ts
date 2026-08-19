@@ -23,17 +23,21 @@
 // =============================================================================
 
 import { AsyncLocalStorage } from "async_hooks";
+import { randomUUID } from "crypto";
 import type { Request } from "express";
 
 interface RequestContext {
   req: Request;
+  /// İSTEK KİMLİĞİ — bağlam kurulurken BİR KEZ üretilir (2026-08-19).
+  /// `req`ten farklı olarak bu değer kopyalanabilir: istek boyunca değişmez.
+  requestId: string;
 }
 
 const storage = new AsyncLocalStorage<RequestContext>();
 
 /** İsteği bağlam içinde çalıştırır — middleware tarafından çağrılır. */
 export function runWithRequestContext(req: Request, fn: () => void): void {
-  storage.run({ req }, fn);
+  storage.run({ req, requestId: randomUUID() }, fn);
 }
 
 /** Audit için "nereden" bilgisi. Bağlam yoksa hepsi null. */
@@ -42,11 +46,17 @@ export interface RequestOrigin {
   deviceId: string | null;
   machineId: string | null;
   userId: string | null;
+  /// İŞLEM GRUPLAMA (SAP `CDHDR` karşılığı): aynı istekte yazılan tüm audit
+  /// satırları bu id'yi paylaşır. Bağlam yoksa (job/script) null — uydurmak
+  /// yanlış olurdu, çünkü o satırlar gerçekten bir isteğe ait değil.
+  requestId: string | null;
 }
 
 export function currentOrigin(): RequestOrigin {
   const ctx = storage.getStore();
-  if (!ctx) return { ipAddress: null, deviceId: null, machineId: null, userId: null };
+  if (!ctx) {
+    return { ipAddress: null, deviceId: null, machineId: null, userId: null, requestId: null };
+  }
   const { req } = ctx;
   return {
     // `req.ip` proxy arkasında X-Forwarded-For'u okur (app'te trust proxy ayarı).
@@ -54,5 +64,6 @@ export function currentOrigin(): RequestOrigin {
     deviceId: req.device?.deviceId ?? null,
     machineId: req.device?.machineId ?? null,
     userId: req.user?.userId ?? null,
+    requestId: ctx.requestId,
   };
 }

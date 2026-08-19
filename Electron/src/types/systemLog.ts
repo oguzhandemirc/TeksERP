@@ -34,6 +34,14 @@ export interface SystemLogListItem {
    */
   changes?: AuditChange[] | null;
   deviceId?: string | null;
+  /**
+   * İŞLEM GRUPLAMA (2026-08-19) — aynı HTTP isteğinde yazılan tüm audit
+   * satırları aynı id'yi taşır ("bu üç değişiklik aynı kaydetme tuşundan mı
+   * çıktı?"). Genel listede DE gelir (küçük skaler).
+   * ⚠️ İş/script kaynaklı satırlarda null; o hâlde gruplama sorgusu ATILMAZ
+   * (null filtre yanlış davranır).
+   */
+  requestId?: string | null;
 }
 
 export interface SystemLogDetail extends SystemLogListItem {
@@ -53,6 +61,8 @@ export interface SystemLogListParams {
   action?: SystemLogAction;
   dateFrom?: string;
   dateTo?: string;
+  /** TEK İŞLEMİN tüm satırları. Geçersiz UUID backend'de boş sonuca çevrilir. */
+  requestId?: string;
 }
 
 export interface SystemLogStats {

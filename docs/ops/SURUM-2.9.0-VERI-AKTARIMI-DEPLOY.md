@@ -106,10 +106,10 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 18 migration, dört iş
+## 0) Bu deploy'da ne var — 22 migration, altı iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **19 bekleyen** gösteriyor.
-Beşi ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **22 bekleyen** gösteriyor.
+Altısı ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -122,6 +122,19 @@ Beşi ayrı iş, hepsi aynı pull'da:
 | 17 | `20260819060000_search_fold` | **Arama katlaması** — 31 gölge kolon, 9 trigram GIN, 18 kolona Türkçe collation |
 | 18 | `20260819120000_import_runs` | **Veri aktarımı** — yeni tablo + enum (mevcut tabloya dokunmaz) |
 | 19 | `20260819140000_alias_search` | **Müşteri alias'ı aranabilir** — iki alias tablosuna gölge kolon + index |
+| 20 | `20260819140000_systemlog_archive_changes_device` | Arşive `changes` + `deviceId` — taşınmasaydı B2/B3 6 ay sonra buharlaşırdı |
+| 21 | `20260819160000_audit_requestid_devicefix` | **İşlem gruplaması** (`requestId`) + arşiv `deviceId` UUID→TEXT **tip hatası düzeltmesi** |
+| 22 | `20260819161000_audit_tamper_guard` | **Audit değiştirilemezliği** — UPDATE/DELETE/TRUNCATE engeli (2 trigger + 1 fonksiyon) |
+
+> ⚠️ **20 ve 21 aynı damgayla başlıyor ama farklı işler** (`..._alias_search` ile
+> `..._systemlog_archive_changes_device`); Prisma dizin adına göre sıralar,
+> alfabetik sıra deterministik — sorun değil.
+>
+> ⚠️ **22 numaralı migration TEK BAŞINA HİÇBİR ŞEYİ KORUMAZ.** Trigger kurulur
+> ama koruma kapalı doğar; açan şey §7b'deki `ALTER DATABASE` adımıdır. Bu
+> bilinçli: geliştirme ve test veritabanlarında koruma kapalı kalmalı (79 test
+> dosyası cleanup'ta audit satırı siler ZORUNDA — `system_logs.userId → users`
+> FK'sı RESTRICT).
 
 Diğer notlar (arka plan; deploy adımı içermezler):
 `SURUM-2026-08-09-RAPORLAR-DEPLOY.md` · `SURUM-2026-08-10-KAT-KATALOGU-DEPLOY.md` ·
@@ -333,6 +346,52 @@ psql -U postgres -d tekserp -c "SELECT code FROM permissions WHERE code IN ('dat
 
 ---
 
+## 7b) ⏳ ELLE YAPILACAK — audit değiştirilemezlik korumasını AÇ
+
+Migration trigger'ı **kurar** ama koruma **kapalı doğar**; açan tek şey aşağıdaki
+komuttur. Bu, `statement_timeout` ile aynı sınıf bir ayardır: ortama aittir,
+migration'a değil.
+
+```powershell
+psql -U postgres -d tekserp -c "ALTER DATABASE tekserp SET teks.audit_guard = 'on';"
+# Ayar YALNIZ YENİ oturumlara etki eder → backend'i yeniden başlat:
+pm2 restart tekserp-backend
+```
+
+**Doğrulama (üç yüzey, üçü de aynı şeyi söylemeli):**
+
+```powershell
+# 1) Yeni oturumda değer 'on' mu
+psql -U postgres -d tekserp -c "SHOW teks.audit_guard;"
+
+# 2) Koruma gerçekten ısırıyor mu — 0 satır etkileyen bir DELETE bile REDDEDİLMELİ
+psql -U postgres -d tekserp -c "BEGIN; DELETE FROM system_logs WHERE false; ROLLBACK;"
+#    Beklenen: ERROR: Audit kaydı değiştirilemez veya silinemez ...
+
+# 3) Backend ne diyor
+curl -s http://localhost:4000/health | findstr auditGuard
+#    Beklenen: "auditGuard":"on"
+```
+
+Açılış log'unda da görünür: `[audit-guard] koruma AÇIK — audit kayıtları
+salt-yazılır.` Kapalıysa aynı yerde ⚠️ uyarısı basar (adım unutulduğunda sessiz
+kalmasın diye — 2026-08-01'de bir ops adımı tam da böyle unutulmuştu).
+
+> **Ne yapar:** `system_logs` ve `system_log_archives` üzerinde UPDATE / DELETE /
+> TRUNCATE'i reddeder (ISO 27001 A.8.15 — denetim kaydı sonradan oynanamaz).
+> **Ne yapmaz:** INSERT'e dokunmaz, performansa etkisi yoktur (trigger yalnız
+> engellenen işlemlerde ateşlenir).
+>
+> **Arşivleme etkilenmez:** `archiveOlderThan` kendi transaction'ında
+> `SET LOCAL teks.audit_purge = 'on'` ile geçer. Bu arka kapı değildir —
+> uygulama bağlantısından gelen sıradan bir sorgu o ayarı taşımaz. Prova
+> edildi: guard açıkken arşivleme koştu, satırlar taşındı.
+>
+> **Geri alma** (gerekirse): `ALTER DATABASE tekserp RESET teks.audit_guard;`
+> + restart. Trigger yerinde kalır, yalnız etkisizleşir.
+
+---
+
 ## 8) Veri Aktarımı — 5 dakikalık kabul testi
 
 1. **Sistem → Veri Aktarımı** açılıyor mu? (izni verdiğin kullanıcıyla gir)
@@ -485,7 +544,7 @@ Raporu fabrikaya ver, birleştirmeyi onlar söylesin. **Veriye kendi başına do
 
 ---
 
-## 13) İLERİDE DOKUNACAK OLAN İÇİN — iki teknik tuzak
+## 13) İLERİDE DOKUNACAK OLAN İÇİN — dört teknik tuzak
 
 1. **Sıra load-bearing:** collation değişimi generated kolondan **ÖNCE** gelmek
    zorunda; tersi PostgreSQL tarafından reddedilir
@@ -497,6 +556,17 @@ Raporu fabrikaya ver, birleştirmeyi onlar söylesin. **Veriye kendi başına do
    i-ailesini **ayırırdı** (arama sessizce bozulurdu). Aynı pin, geliştirme
    ortamı (ICU en-US) ile sahadaki C locale kurulumunun **aynı** cevabı vermesini
    sağlıyor.
+3. **`system_logs`'a UPDATE/DELETE yapan GELECEKTEKİ bir veri migration'ı
+   `SET LOCAL teks.audit_purge = 'on'` ile BAŞLAMALI.** Koruma açıldıktan sonra
+   `prisma migrate deploy` oturumu da guard'ı miras alır — düz bir `UPDATE
+   system_logs SET ...` deploy'u yarıda kesip migration'ı yarım uygulanmış
+   bırakır. Aynı şey elle `psql` düzeltmeleri için de geçerli.
+4. **Trigger adları tablolar arası benzersiz olmak zorunda.**
+   `scripts/test_db_invariants.ts` trigger envanterini YALNIZ ADA GÖRE haritalar;
+   iki tabloda aynı adı kullanmak Map'te tekini bırakır ve envanter sessizce
+   yanlış çalışır. Ayrıca beklenen "timing" metni PG'nin **kanonik** olay
+   sırasını taşımalı (`BEFORE DELETE OR UPDATE OR TRUNCATE`) — migration'da ne
+   sırayla yazıldığının önemi yok, `pg_get_triggerdef` onu yeniden sıralar.
 
 ---
 
@@ -513,6 +583,10 @@ system_logs changes/device: ☐
 Backfill'ler              : timestamps ☐  provenance ☐  entry_station ☐  label_customer ☐  fold_and_reason ☐
 İzin ataması              : data:import → ................  ·  mobile:kk1-yari-mamul → ................
 Tambur rolü yeniden      : ☐ (label:edit + customer-alias:write — kullanıcı: ................)
+audit_guard AÇILDI       : ☐  ALTER DATABASE + restart (§7b)
+  SHOW teks.audit_guard  : ......      (beklenen: on)
+  /health auditGuard     : ......      (beklenen: on)
+  DELETE reddedildi mi   : ☐  (0 satırlık DELETE bile hata vermeli)
 find_fold_duplicates      : ...... grup / ...... fazla satır  → fabrikaya iletildi mi ☐
 Veri Aktarımı kabul testi : ☐ (§8'in 6 adımı)
 Electron sürümü           :

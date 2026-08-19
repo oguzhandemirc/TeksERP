@@ -58,6 +58,40 @@ try {
     process.exit(1);
 }
 
+/**
+ * AUDIT DEĞİŞTİRİLEMEZLİK KORUMASI AÇIK MI (2026-08-19).
+ *
+ * Trigger her ortamda KURULUDUR ama koruma `teks.audit_guard` GUC'u ile açılır
+ * ve o, migration'a DEĞİL ortama aittir (`ALTER DATABASE ... SET`, tıpkı
+ * `statement_timeout` gibi). Bunun bedeli, unutulabilir bir ops adımıdır — ve
+ * bu projede tam olarak bu sınıf adım bir kez unutuldu (2026-08-01 izin satırı,
+ * teşhis saatler sürdü). Bu yüzden iki görünürlük yüzeyi var: açılışta bu uyarı
+ * ve kalıcı olarak `/health` → `auditGuard`.
+ *
+ * ⚠️ Yalnız production'da uyarır: geliştirmede koruma BİLEREK kapalıdır (79 test
+ * dosyası cleanup'ta audit satırı siler; `system_logs.userId → users` FK'sı
+ * RESTRICT olduğu için mecburlar).
+ */
+async function warnIfAuditGuardDisabled(): Promise<void> {
+    if (process.env.NODE_ENV !== "production") return;
+    try {
+        const rows = await prisma.$queryRaw<Array<{ guard: string | null }>>`
+            SELECT coalesce(current_setting('teks.audit_guard', true), '') AS guard`;
+        if (rows[0]?.guard !== "on") {
+            console.warn(
+                "[audit-guard] ⚠️ KORUMA KAPALI — audit kayıtları silinebilir/değiştirilebilir durumda.\n" +
+                "             Açmak için (bir kez, sonra restart):\n" +
+                "               ALTER DATABASE <db> SET teks.audit_guard = 'on';"
+            );
+        } else {
+            console.log("[audit-guard] koruma AÇIK — audit kayıtları salt-yazılır.");
+        }
+    } catch (err) {
+        // Best-effort: bu kontrol yüzünden sunucu açılışı düşmez.
+        console.warn("[audit-guard] durum okunamadı:", err instanceof Error ? err.message : err);
+    }
+}
+
 const server = app.listen(Number(PORT), HOST, () => {
     const lan = getLanAddresses();
 
@@ -93,6 +127,7 @@ const server = app.listen(Number(PORT), HOST, () => {
     // da güncellemez, dolayısıyla kimsenin yetkisi sessizce düşmez. Best-effort:
     // başarısız olursa sunucuyu düşürmez, gürültülü loglar.
     startPermissionCatalogReconciler();
+    void warnIfAuditGuardDisabled();
 
     void AuditService.logEvent({
         category: "SYSTEM",

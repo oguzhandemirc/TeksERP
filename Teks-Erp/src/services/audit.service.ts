@@ -94,6 +94,11 @@ export class AuditService {
           // yazılır: cihaz bilgisi eksik diye izi düşürmek daha kötüdür.
           ipAddress: origin.ipAddress,
           deviceId: origin.deviceId,
+          // ── HANGİ İŞLEM (2026-08-19) ────────────────────────────────────
+          // Aynı istekte yazılan tüm satırlar aynı id. SAP `CDHDR` bunu ayrı
+          // bir başlık kaydıyla yapar; bizde tek kolon yetiyor çünkü gruplama
+          // sorgusu index'li tek eşitlik.
+          requestId: origin.requestId,
           oldData: (params.oldData ?? Prisma.JsonNull) as JsonValue,
           newData: (params.newData ?? Prisma.JsonNull) as JsonValue,
           // Faz B2 — alan-bazlı değişiklik. Boş dizi de `JsonNull` yazılır:
@@ -138,6 +143,9 @@ export class AuditService {
           recordId: e.recordId,
           ipAddress: origin.ipAddress,
           deviceId: origin.deviceId,
+          // Toplu yazımın TAMAMI tek istekten çıktığı için hepsi AYNI id'yi
+          // taşır — gruplamanın tanımı zaten budur.
+          requestId: origin.requestId,
           oldData: (e.oldData ?? Prisma.JsonNull) as JsonValue,
           newData: (e.newData ?? Prisma.JsonNull) as JsonValue,
         })),
@@ -176,6 +184,9 @@ export class AuditService {
           tableName: params.tableName ?? params.category,
           recordId: params.recordId ?? "-",
           ipAddress: params.ipAddress ?? null,
+          // Giriş olayı da bir isteğin parçasıdır; STARTUP/ERROR gibi bağlamsız
+          // olaylarda null kalır.
+          requestId: origin.requestId,
           newData: (params.payload ?? Prisma.JsonNull) as JsonValue,
         },
       });
@@ -207,6 +218,20 @@ export class AuditService {
     const ids = logsToArchive.map((l) => l.id);
 
     await prisma.$transaction(async (tx) => {
+      // ── ARŞİVLEYİCİNİN MEŞRU SİLME İZNİ (2026-08-19) ──────────────────────
+      // `system_logs` üzerinde UPDATE/DELETE/TRUNCATE'i engelleyen trigger var
+      // (migration 20260819161000, ISO 27001 A.8.15). Arşivleme o engelin TEK
+      // meşru istisnasıdır — satır silinmiyor, TAŞINIYOR.
+      //
+      // ⚠️ `SET LOCAL` bu transaction'a özeldir ve COMMIT'te söner; havuzdaki
+      // diğer bağlantılara SIZMAZ. Prisma interactive tx'i adanmış bir client
+      // alır, dolayısıyla aşağıdaki `deleteMany` ile AYNI oturumda koşar.
+      //
+      // ⚠️ SIRA LOAD-BEARING: bu ifade `deleteMany`den ÖNCE gelmek zorunda.
+      // Bekçi (test_audit_depth §10) iki ifadenin kaynak sırasını da doğrular —
+      // "var mı" kontrolü sonradan aşağı kaydırılmasına karşı kör olurdu.
+      await tx.$executeRaw`SET LOCAL teks.audit_purge = 'on'`;
+
       await tx.systemLogArchive.createMany({
         data: logsToArchive.map((log) => ({
           id: log.id,
@@ -217,6 +242,9 @@ export class AuditService {
           tableName: log.tableName,
           recordId: log.recordId,
           deviceId: log.deviceId,
+          // İşlem gruplaması arşivde de yaşamalı — taşınmasaydı 6 ay sonra
+          // "bu değişiklikler aynı işlemden mi" sorusu cevapsız kalırdı.
+          requestId: log.requestId,
           changes: log.changes as Prisma.InputJsonValue,
           oldData: log.oldData as Prisma.InputJsonValue,
           newData: log.newData as Prisma.InputJsonValue,

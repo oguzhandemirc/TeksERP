@@ -52,6 +52,7 @@ import qualityGradeRoutes from "./routes/quality-grade.routes";
 import colorRoutes from "./routes/color.routes";
 import fabricPropertyRoutes from "./routes/fabric-property.routes";
 import stationCapabilityRoutes from "./routes/station-capability.routes";
+import reasonPresetRoutes from "./routes/reason-preset.routes";
 import labelRoutes from "./routes/label.routes";
 import labelTemplateRoutes from "./routes/label-template.routes";
 import { peripheralRouter } from "./routes/peripheral.routes";
@@ -342,6 +343,9 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
   let dbBlockedCount: number | null = null;
   let restoreCopyCount: number | null = null;
   let restoreCopyBytes: number | null = null;
+  // DB okunamazsa null kalır — "kapalı" DEMEK DEĞİL, "bilinmiyor". İkisini
+  // aynı değere indirgemek, DB düştüğünde sahte bir "koruma kapalı" alarmı üretirdi.
+  let auditGuard: "on" | "off" | null = null;
   try {
     // Tek round-trip: DB canlılığı + boyut + bağlantı + ucuz sağlık metrikleri
     // (cache isabeti, rolls ölü-satır oranı, en uzun aktif sorgu süresi). Hepsi
@@ -357,9 +361,16 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
         blocked: bigint;
         copy_count: bigint;
         copy_bytes: bigint;
+        audit_guard: string | null;
       }>
     >`
       SELECT pg_database_size(current_database()) AS size,
+             -- Audit değiştirilemezlik koruması AÇIK MI (2026-08-19). Koruma
+             -- ortama özgü bir ops adımıyla açılır (ALTER DATABASE ... SET),
+             -- yani UNUTULABİLİR — ve unutulduğunda hiçbir yerde görünmezdi.
+             -- Tek atımlık boot uyarısı yerine kalıcı yüzey: bu satır.
+             -- (Şablon içinde backtick YOK: JS template literal'ını böler.)
+             coalesce(current_setting('teks.audit_guard', true), '') AS audit_guard,
              -- Unutulmuş geri yükleme kopyaları disk yer: ServerStatus'un mevcut
              -- 5sn poll'unda görünsün diye buraya eklendi (yeni round-trip YOK).
              (SELECT count(*) FROM pg_database
@@ -393,6 +404,7 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
       dbBlockedCount = Number(rows[0].blocked);
       restoreCopyCount = Number(rows[0].copy_count);
       restoreCopyBytes = Number(rows[0].copy_bytes);
+      auditGuard = rows[0].audit_guard === "on" ? "on" : "off";
     }
   } catch {
     db = "DOWN";
@@ -434,6 +446,9 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     auditWriteFailures: auditHealth.failureCount,
     lastAuditError: auditHealth.lastError,
     lastAuditFailureAt: auditHealth.lastFailureAt,
+    // Audit değiştirilemezliği (ISO 27001 A.8.15) — "on" = UPDATE/DELETE engelli.
+    // null = DB okunamadı, "off" ile karıştırma.
+    auditGuard,
     // Backend prosesinin + makinenin kaynak kullanımı (CPU/RAM)
     ...readResourceMetrics(),
   };
@@ -496,6 +511,7 @@ app.use("/api/quality-grades", qualityGradeRoutes);
 app.use("/api/colors", colorRoutes);
 app.use("/api/fabric-properties", fabricPropertyRoutes);
 app.use("/api/station-capabilities", stationCapabilityRoutes);
+app.use("/api/reason-presets", reasonPresetRoutes);
 app.use("/api/labels", labelRoutes);
 app.use("/api/label-templates", labelTemplateRoutes);
 app.use("/api/shipping", shippingRoutes);

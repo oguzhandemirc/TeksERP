@@ -338,6 +338,182 @@ async function main(): Promise<void> {
   const archiverSrc = archSrc; // yukarıda okundu — ikinci kez açmaya gerek yok
   check("arşivleyici iki kolonu KOPYALIYOR",
     /changes: log\.changes/.test(archiverSrc) && /deviceId: log\.deviceId/.test(archiverSrc));
+
+  // ── 10) DEĞİŞTİRİLEMEZLİK — trigger gerçekten engelliyor mu? ─────────────
+  // ISO 27001 A.8.15: denetim kaydının değeri "sonradan oynanamaz" olmasında.
+  // Trigger her ortamda kurulu ama koruma `teks.audit_guard` GUC'u ile açılır
+  // (dev'de KAPALI — 79 test dosyası cleanup'ta audit siler ZORUNDA, çünkü
+  // `system_logs.userId → users` FK'sı RESTRICT). Bu yüzden bekçi korumayı
+  // KENDİ transaction'ında açar: hem açık hem kapalı davranışı ölçülür.
+  //
+  // ⚠️ Her dal kendi BEGIN…ROLLBACK'inde: RAISE sonrası oturum "aborted" hâle
+  // geçer ve sonraki her sorgu 25P02 verir — ROLLBACK'siz ikinci kontrol
+  // sahte-kırmızı olurdu.
+  const guardClient = await pool.connect();
+  try {
+    // Bir dalı koştur, hata mesajını döndür (hata yoksa null).
+    async function tryInTx(setup: string[], sql: string): Promise<string | null> {
+      await guardClient.query("BEGIN");
+      try {
+        for (const s of setup) await guardClient.query(s);
+        await guardClient.query(sql);
+        return null;
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+      } finally {
+        await guardClient.query("ROLLBACK");
+      }
+    }
+    const GUARD_ON = ["SET LOCAL teks.audit_guard = 'on'"];
+    const GUARD_AND_PURGE = [...GUARD_ON, "SET LOCAL teks.audit_purge = 'on'"];
+    const blocked = (m: string | null): boolean => !!m && /değiştirilemez|silinemez/i.test(m);
+
+    // 10.1 — koruma AÇIKKEN üç işlem de reddedilmeli, İKİ TABLODA da.
+    for (const t of ["system_logs", "system_log_archives"]) {
+      check(`${t}: guard açıkken UPDATE reddedilir`,
+        blocked(await tryInTx(GUARD_ON, `UPDATE "${t}" SET action = 'X' WHERE false`)));
+      check(`${t}: guard açıkken DELETE reddedilir`,
+        blocked(await tryInTx(GUARD_ON, `DELETE FROM "${t}" WHERE false`)));
+      // TRUNCATE transactional → ROLLBACK ile geri alınır, veri riski yok.
+      check(`${t}: guard açıkken TRUNCATE reddedilir`,
+        blocked(await tryInTx(GUARD_ON, `TRUNCATE "${t}"`)));
+    }
+
+    // 10.2 — arşivleyicinin bypass'ı: guard AÇIK + purge AÇIK → geçmeli.
+    check("purge GUC'u guard'ı geçer (arşivleyici yolu)",
+      (await tryInTx(GUARD_AND_PURGE, `DELETE FROM "system_logs" WHERE false`)) === null);
+
+    // 10.3 — koruma KAPALIYKEN serbest. Bu, 83 script dosyasının değişmeden
+    // çalışmaya devam etme SÖZLEŞMESİDİR; düşerse dev paketi topluca kırılır.
+    check("guard kapalıyken (varsayılan) DELETE serbest",
+      (await tryInTx([], `DELETE FROM "system_logs" WHERE false`)) === null);
+    const { rows: gr } = await guardClient.query(
+      "SELECT coalesce(current_setting('teks.audit_guard', true), '') AS g",
+    );
+    check("dev veritabanında koruma KAPALI (beklenen)", gr[0].g !== "on", `değer='${gr[0].g}'`);
+  } finally {
+    guardClient.release();
+  }
+
+  // ── 10.4) ARŞİVLEYİCİ FONKSİYONEL — tx yolu gerçekten koşuyor mu? ────────
+  // ⚠️ Mevcut `archiveOlderThan(999)` kuru koşumu tx'e HİÇ GİRMEZ (0 satır →
+  // erken dönüş), yani "SET LOCAL yolu çalışıyor" kanıtını üretmez. Burada
+  // geçmişe damgalı bir fixture yaratılır ve gerçekten taşındığı doğrulanır.
+  const OLD_STAMP = new Date("1930-01-01T00:00:00.000Z");
+  const archRecordId = `bekci-arsiv-${Date.now()}`;
+  const archLog = await prisma.systemLog.create({
+    data: {
+      category: "DOMAIN", action: "UPDATE", tableName: "BEKCI_ARSIV",
+      recordId: archRecordId, createdAt: OLD_STAMP,
+      // deviceId TEXT olmak zorunda: arşiv kolonu UUID açılmıştı ve bu satır
+      // 22P02 ile TÜM batch'i düşürürdü (migration 20260819160000 düzeltti).
+      deviceId: "BEKCI-TABLET-01",
+      requestId: "11111111-1111-4111-8111-111111111111",
+      changes: [{ field: "x", old: 1, new: 2 }] as never,
+    },
+    select: { id: true },
+  });
+  try {
+    await AuditService.archiveOlderThan(999);
+    const moved = await prisma.systemLogArchive.findUnique({
+      where: { id: archLog.id },
+      select: { deviceId: true, requestId: true, changes: true },
+    });
+    const stillHot = await prisma.systemLog.findUnique({ where: { id: archLog.id } });
+    check("arşivleyici satırı gerçekten TAŞIDI (tx + SET LOCAL yolu)",
+      moved != null && stillHot == null);
+    check("arşiv deviceId'yi TEXT olarak taşıyor (22P02 regresyonu)",
+      moved?.deviceId === "BEKCI-TABLET-01", String(moved?.deviceId));
+    check("arşiv requestId'yi taşıyor (gruplama 6 ay sonra da yaşar)",
+      moved?.requestId === "11111111-1111-4111-8111-111111111111");
+    check("arşiv changes'i taşıyor", Array.isArray(moved?.changes));
+  } finally {
+    await prisma.systemLogArchive.deleteMany({ where: { id: archLog.id } }).catch(() => {});
+    await prisma.systemLog.deleteMany({ where: { id: archLog.id } }).catch(() => {});
+  }
+
+  // 10.5 — KAYNAK SIRASI: `SET LOCAL` deleteMany'den ÖNCE gelmeli. Yalnız
+  // "var mı" diye baksaydık, ifadenin aşağı kaydırılmasına kör kalırdık.
+  const purgeIdx = archSrc.indexOf("SET LOCAL teks.audit_purge");
+  const delIdx = archSrc.indexOf("systemLog.deleteMany");
+  check("arşivleyici purge GUC'unu deleteMany'den ÖNCE açıyor",
+    purgeIdx > 0 && delIdx > 0 && purgeIdx < delIdx, `purge@${purgeIdx} < delete@${delIdx}`);
+
+  // ── 10.6) requestId — işlem gruplaması (SAP CDHDR karşılığı) ─────────────
+  const reqActor = await prisma.user.findFirst({ select: { id: true } });
+  const reqRecordId = `bekci-req-${Date.now()}`;
+  try {
+    await new Promise<void>((resolve) => {
+      const fakeReq = { ip: "10.1.2.3", user: { userId: reqActor!.id } } as never;
+      runWithRequestContext(fakeReq, () => {
+        void (async () => {
+          await AuditService.log({
+            userId: reqActor!.id, action: "UPDATE",
+            tableName: "BEKCI_REQ", recordId: reqRecordId,
+            oldData: { name: "a" }, newData: { name: "b" },
+          });
+          await AuditService.log({
+            userId: reqActor!.id, action: "UPDATE",
+            tableName: "BEKCI_REQ", recordId: `${reqRecordId}-2`,
+            oldData: { name: "c" }, newData: { name: "d" },
+          });
+          resolve();
+        })();
+      });
+    });
+    const reqRows = await prisma.systemLog.findMany({
+      where: { tableName: "BEKCI_REQ" },
+      select: { requestId: true, recordId: true },
+    });
+    const ids = new Set(reqRows.map((r) => r.requestId));
+    check("aynı istekteki İKİ ayrı kayıt AYNI requestId'yi taşır",
+      reqRows.length === 2 && ids.size === 1 && [...ids][0] != null,
+      `${reqRows.length} satır / ${ids.size} farklı id`);
+    check("requestId geçerli UUID",
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        String([...ids][0]),
+      ));
+
+    // Bağlam DIŞINDA null kalmalı — job/script satırı bir isteğe ait değildir.
+    await AuditService.log({
+      userId: reqActor!.id, action: "UPDATE",
+      tableName: "BEKCI_REQ_JOB", recordId: reqRecordId,
+      oldData: { a: 1 }, newData: { a: 2 },
+    });
+    const jobRow = await prisma.systemLog.findFirst({
+      where: { tableName: "BEKCI_REQ_JOB" }, select: { requestId: true },
+    });
+    check("bağlam yokken requestId null (uydurulmuyor)", jobRow?.requestId === null);
+
+    // Liste sözleşmesi: filtre çalışır + LIST_SELECT alanı taşır.
+    const groupId = [...ids][0]!;
+    const grouped = await SystemLogService.list({ requestId: groupId, limit: 10 });
+    const gRows = ((grouped as { data?: unknown[] }).data ?? []) as Array<{ requestId?: string }>;
+    check("list({requestId}) aynı işlemin satırlarını döndürür",
+      gRows.length === 2 && gRows.every((r) => r.requestId === groupId),
+      `${gRows.length} satır`);
+
+    // ⚠️ Kolon @db.Uuid: ham metin P2023 → 500 üretirdi. Boş sonuç dönmeli.
+    const badFilter = await SystemLogService.list({ requestId: "elma-armut", limit: 5 });
+    check("geçersiz requestId 500 üretmez, boş döner",
+      (((badFilter as { data?: unknown[] }).data ?? []) as unknown[]).length === 0);
+  } finally {
+    await prisma.systemLog.deleteMany({
+      where: { tableName: { in: ["BEKCI_REQ", "BEKCI_REQ_JOB"] } },
+    }).catch(() => {});
+  }
+
+  // 10.7 — boot görünürlüğü: unutulabilir ops adımının iki yüzeyi de duruyor mu?
+  const serverSrc = (await import("fs")).readFileSync(
+    (await import("path")).join(__dirname, "..", "src", "server.ts"), "utf8",
+  );
+  check("açılışta guard durumu kontrol ediliyor",
+    /warnIfAuditGuardDisabled/.test(serverSrc) && /teks\.audit_guard/.test(serverSrc));
+  const appSrc = (await import("fs")).readFileSync(
+    (await import("path")).join(__dirname, "..", "src", "app.ts"), "utf8",
+  );
+  check("/health auditGuard alanını döndürüyor",
+    /auditGuard/.test(appSrc) && /teks\.audit_guard/.test(appSrc));
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

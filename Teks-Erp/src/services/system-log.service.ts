@@ -32,6 +32,12 @@ export interface SystemLogListParams {
   action?: string;
   dateFrom?: string;
   dateTo?: string;
+  /**
+   * TEK İSTEĞİN tüm satırları (2026-08-19) — "bu üç değişiklik aynı kaydetme
+   * tuşundan mı çıktı?" sorusunun cevabı. Değer UUID'dir ve `readRequestId`
+   * ile elenir: kolon `@db.Uuid` olduğu için ham metin P2023 → 500 üretirdi.
+   */
+  requestId?: string;
 }
 
 const LIST_SELECT = {
@@ -42,6 +48,10 @@ const LIST_SELECT = {
   recordId: true,
   ipAddress: true,
   createdAt: true,
+  // İşlem gruplaması genel listede DE gerekli: detay ekranı satırdan okuyup
+  // "aynı işlemdekiler" sorgusunu kurar. Küçük skaler — perf kuralı 13'ün
+  // (devasa JSON'ları listede çekme) kapsamına girmez.
+  requestId: true,
   user: { select: { id: true, username: true, fullName: true } },
 } as const;
 
@@ -61,6 +71,24 @@ const RECORD_HISTORY_SELECT = {
   changes: true,
   deviceId: true,
 } as const;
+
+/**
+ * requestId filtresi — YALNIZ geçerli UUID kabul eder.
+ *
+ * ⚠️ Kolon `@db.Uuid`: ham metin gönderilirse Prisma P2023 fırlatır ve uç 500
+ * verir. Geçersiz değeri sessizce YOK SAYMAK da yanlış olurdu — kullanıcı hatalı
+ * bir id ile filtresiz "tüm kayıtlar" görürdü. Bu yüzden eşleşmeyen bir sabite
+ * çevrilir ve sonuç boş gelir. (`readIdCondition` dersinin bu uca uyarlanmış
+ * hâli: uuid→400 · düz string→sessiz 0 satır · ön-süzgeçli→filtre sessizce düşer.)
+ */
+const REQUEST_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const NO_MATCH_UUID = "00000000-0000-0000-0000-000000000000";
+
+function readRequestId(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  const v = raw.trim();
+  return REQUEST_ID_RE.test(v) ? v : NO_MATCH_UUID;
+}
 
 function parseCategories(raw: string | undefined): SystemLogCategory[] | undefined {
   if (!raw) return undefined;
@@ -82,6 +110,8 @@ export class SystemLogService {
     if (params.tableName) where.tableName = params.tableName;
     if (params.recordId) where.recordId = params.recordId;
     if (params.action) where.action = params.action;
+    const reqId = readRequestId(params.requestId);
+    if (reqId) where.requestId = reqId;
     const cats = parseCategories(params.category);
     if (cats) where.category = cats.length === 1 ? cats[0] : { in: cats };
 
@@ -165,6 +195,8 @@ export class SystemLogService {
     if (params.tableName) where.tableName = params.tableName;
     if (params.recordId) where.recordId = params.recordId;
     if (params.action) where.action = params.action;
+    const reqId = readRequestId(params.requestId);
+    if (reqId) where.requestId = reqId;
     const cats = parseCategories(params.category);
     if (cats) where.category = cats.length === 1 ? cats[0] : { in: cats };
 
@@ -196,6 +228,9 @@ export class SystemLogService {
         ipAddress: true,
         userId: true,
         createdAt: true,
+        // Arşiv paritesi BİLİNÇLİ: `deviceId`/`changes` bir kez unutulmuştu ve
+        // özellik 6 ay sonra sessizce ölecekti. Gruplama arşivde de çalışır.
+        requestId: true,
       },
     });
 
@@ -220,6 +255,7 @@ export class SystemLogService {
       tableName: d.tableName,
       recordId: d.recordId,
       ipAddress: d.ipAddress,
+      requestId: d.requestId,
       createdAt: d.createdAt,
       user: d.userId ? userMap.get(d.userId) ?? null : null,
     }));

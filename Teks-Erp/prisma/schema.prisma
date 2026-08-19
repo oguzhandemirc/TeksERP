@@ -4685,6 +4685,13 @@ model SystemLog {
   /// ayrı tablo yazma hacmini 2-3× artırır ve her okumaya join ekler, jsonb
   /// bunu gerektirmez. Alan-bazlı sorgu gerekirse `jsonb_path_ops` GIN yeter.
   changes   Json?
+  /// İŞLEM GRUPLAMA (2026-08-19) — SAP `CDHDR` karşılığı. Aynı HTTP isteğinde
+  /// yazılan TÜM audit satırları aynı id'yi taşır: "bu üç değişiklik aynı
+  /// kaydetme tuşundan mı çıktı?" sorusunun tek cevabı.
+  /// ⚠️ İstek İÇİNDEKİ satırlarda deterministik SIRA YOKTUR (aynı `createdAt`,
+  /// rastgele uuid) — arayüz sıra vaadi vermez, yalnız "aynı işlem" der.
+  /// Job/script/test bağlamında null (bağlam yok, uydurmak yanlış olurdu).
+  requestId String?           @db.Uuid
 
   // Relations
   user User? @relation(fields: [userId], references: [id])
@@ -4704,6 +4711,9 @@ model SystemLog {
   @@index([category, createdAt])
   // Kullanıcı aktivite raporu (userId filtreli + zaman sıralı)
   @@index([userId, createdAt])
+  // İşlem gruplaması ("bu isteğin diğer satırları") — düz index; partial DEĞİL
+  // (test_db_invariants iki-yönlü partial envanteri, kazancı olmadan yük olurdu).
+  @@index([requestId])
   @@map("system_logs")
 }
 
@@ -4722,8 +4732,17 @@ model SystemLogArchive {
   /// TAŞINIR. Taşınmasaydı 6 ay sonra denetim "kim, neyi, hangi tabletten"
   /// sorusunu cevaplayamazdı; oysa geriye dönük denetim tam da o yaştaki
   /// kayıtlara bakar (canlı tablo zaten son 6 ayı tutuyor).
-  deviceId   String?           @db.Uuid
+  /// ⚠️ TEXT, UUID DEĞİL — sıcak tablodaki ikiziyle AYNI tip olmak ZORUNDA.
+  /// Değer `x-device-id` BAŞLIĞINDAN gelir (serbest metin: "TAB-01"). İlk
+  /// yazımda UUID açılmıştı; arşivleyici 6 ayda bir koştuğu için hata aylar
+  /// sonra, kimsenin bakmadığı bir işte 22P02 ile TÜM batch'i düşürecekti
+  /// (migration `20260819160000` düzeltti).
+  deviceId   String?
   changes    Json?
+  /// İşlem gruplaması — sıcak tablodaki `requestId`in ikizi. Arşiv paritesi
+  /// bilinçli: taşınmasaydı gruplama 6 ay sonra SESSİZCE ölürdü (deviceId ve
+  /// changes'te bir kez yaşandı).
+  requestId  String?           @db.Uuid
   oldData    Json?
   newData    Json?
   archivedAt DateTime          @default(now()) @db.Timestamptz
@@ -4733,6 +4752,7 @@ model SystemLogArchive {
   @@index([tableName, recordId])
   @@index([createdAt])
   @@index([category, createdAt])
+  @@index([requestId])
   @@map("system_log_archives")
 }
 
