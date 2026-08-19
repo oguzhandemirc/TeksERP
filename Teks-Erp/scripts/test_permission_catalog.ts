@@ -124,6 +124,10 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
   // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
   "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
+  // Aynı desen: izinler `BUNDLE_PERMISSIONS` haritasından (config-bundle.service)
+  // TÜRE göre çözülür. `test_config_bundle.ts` her türün iki iznini de katalogla
+  // karşılaştırır ve tür sayısı zeminini korur.
+  "src/routes/config-bundle.routes.ts": [`${DELEGE}scripts/test_config_bundle.ts`],
 };
 
 // Taramanın gerçekten "bir şeye baktığını" doğrulayan zeminler. Bir refactor

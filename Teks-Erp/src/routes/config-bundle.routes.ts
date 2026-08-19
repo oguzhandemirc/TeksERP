@@ -2,7 +2,7 @@ import { Router, type NextFunction, type Request, type Response } from "express"
 import express from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { matchesPermission } from "../middlewares/rbac.middleware";
+import { matchesPermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { AppError } from "../utils/app-error";
 import {
   applyBundle,
@@ -25,6 +25,15 @@ import {
 
 const router = Router();
 const jsonBig = express.json({ limit: "10mb" });
+
+// KABA KAPI (route satırında görünür) — ince kapı `assertKindPermissions`.
+// İkisi birlikte: kaba kapı "bu uçla hiç işi olmayan"ı gövde ayrıştırılmadan
+// çevirir (10 MB'lık bir paketi doğrulayıp sonra 403 vermek israftır ve
+// gereksiz bir saldırı yüzeyidir); ince kapı pakette HANGİ türler varsa YALNIZ
+// onların iznini arar. Türlerden ilgili olanı BURADAN türetilir — ikinci bir
+// liste tutmak, zamanla ayrışan iki gerçek demekti.
+const ANY_BUNDLE_READ = [...new Set(Object.values(BUNDLE_PERMISSIONS).map((p) => p.read))];
+const ANY_BUNDLE_WRITE = [...new Set(Object.values(BUNDLE_PERMISSIONS).map((p) => p.write))];
 
 const conflictSchema = z.enum(["rename", "overwrite", "skip"]).default("rename");
 const bodySchema = z.object({
@@ -68,7 +77,7 @@ function parseKinds(raw: unknown): BundleKind[] {
  *     summary: Taşınabilir yapılandırma türleri (kullanıcının yetkisiyle işaretli)
  *     security: [{ bearerAuth: [] }]
  */
-router.get("/kinds", verifyToken, (req: Request, res: Response) => {
+router.get("/kinds", verifyToken, requireAnyPermission(...ANY_BUNDLE_READ), (req: Request, res: Response) => {
   const perms = req.user?.permissions ?? [];
   res.json({
     success: true,
@@ -94,15 +103,20 @@ router.get("/kinds", verifyToken, (req: Request, res: Response) => {
  *         schema: { type: string }
  *         description: Virgülle ayrılmış tür listesi; boş = izinli tüm türler
  */
-router.get("/export", verifyToken, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const kinds = parseKinds(req.query.kinds);
-    assertKindPermissions(req, kinds, "read");
-    res.json({ success: true, data: await exportBundle(kinds) });
-  } catch (e) {
-    next(e);
-  }
-});
+router.get(
+  "/export",
+  verifyToken,
+  requireAnyPermission(...ANY_BUNDLE_READ),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const kinds = parseKinds(req.query.kinds);
+      assertKindPermissions(req, kinds, "read");
+      res.json({ success: true, data: await exportBundle(kinds) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /**
  * @openapi
@@ -112,16 +126,22 @@ router.get("/export", verifyToken, async (req: Request, res: Response, next: Nex
  *     summary: Paketin hedefte ne yapacağını gösterir — HİÇBİR ŞEY yazmaz
  *     security: [{ bearerAuth: [] }]
  */
-router.post("/preview", verifyToken, jsonBig, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const body = bodySchema.parse(req.body);
-    const envelope = validateEnvelope(body.envelope);
-    assertKindPermissions(req, kindsInBundle(envelope), "write");
-    res.json({ success: true, data: await planBundle(envelope, body.onConflict) });
-  } catch (e) {
-    next(e);
-  }
-});
+router.post(
+  "/preview",
+  verifyToken,
+  requireAnyPermission(...ANY_BUNDLE_WRITE),
+  jsonBig,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = bodySchema.parse(req.body);
+      const envelope = validateEnvelope(body.envelope);
+      assertKindPermissions(req, kindsInBundle(envelope), "write");
+      res.json({ success: true, data: await planBundle(envelope, body.onConflict) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /**
  * @openapi
@@ -131,15 +151,21 @@ router.post("/preview", verifyToken, jsonBig, async (req: Request, res: Response
  *     summary: Paketi uygular (planı SIFIRDAN yeniden hesaplar)
  *     security: [{ bearerAuth: [] }]
  */
-router.post("/apply", verifyToken, jsonBig, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const body = bodySchema.parse(req.body);
-    const envelope = validateEnvelope(body.envelope);
-    assertKindPermissions(req, kindsInBundle(envelope), "write");
-    res.json({ success: true, data: await applyBundle(envelope, body.onConflict, req.user?.userId) });
-  } catch (e) {
-    next(e);
-  }
-});
+router.post(
+  "/apply",
+  verifyToken,
+  requireAnyPermission(...ANY_BUNDLE_WRITE),
+  jsonBig,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = bodySchema.parse(req.body);
+      const envelope = validateEnvelope(body.envelope);
+      assertKindPermissions(req, kindsInBundle(envelope), "write");
+      res.json({ success: true, data: await applyBundle(envelope, body.onConflict, req.user?.userId) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 export default router;
