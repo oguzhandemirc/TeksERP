@@ -44,6 +44,23 @@ const LIST_SELECT = {
   user: { select: { id: true, username: true, fullName: true } },
 } as const;
 
+/**
+ * KAYIT-BAZLI geçmişte ek alanlar (Faz C, 2026-08-19).
+ *
+ * ⚠️ Genel listeye EKLENMEZ: perf kuralı 13 ("snapshot JSON'ları liste
+ * sorgusunda çekme"). Ama kayıt-bazlı geçmiş SINIRLI bir listedir (tek kayıt,
+ * ≤100 satır) ve `changes` zaten o ekranın TEK amacı — orada çekmemek, ekranı
+ * satır başına ikinci bir isteğe (N+1) zorlardı.
+ *
+ * `changes` küçüktür (birkaç alanlık dizi); `snapshot` gibi devasa JSON'lar
+ * diff'e zaten girmiyor ("<değişti>" yazılıyor).
+ */
+const RECORD_HISTORY_SELECT = {
+  ...LIST_SELECT,
+  changes: true,
+  deviceId: true,
+} as const;
+
 function parseCategories(raw: string | undefined): SystemLogCategory[] | undefined {
   if (!raw) return undefined;
   const allowed = new Set<string>(Object.values(SystemLogCategory));
@@ -86,7 +103,9 @@ export class SystemLogService {
       where: finalWhere,
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: limit + 1,
-      select: LIST_SELECT,
+      // Kayıt-bazlı geçmişte alan-bazlı değişiklik + cihaz da döner (yukarıdaki
+      // nota bak); genel listede dönmez.
+      select: params.recordId ? RECORD_HISTORY_SELECT : LIST_SELECT,
     });
 
     const hasMore = items.length > limit;

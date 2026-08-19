@@ -10,6 +10,7 @@
 //   · audit satırı `updatedAt` taşıyordu → "değiştirilebilir" izlenimi
 //   · saklama 6 ay KALDI (kullanıcı kararı) → her okuma yolu ARŞİVİ DE taramalı
 // =============================================================================
+import { Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { SystemLogService } from "../src/services/system-log.service";
 
@@ -220,6 +221,49 @@ async function main(): Promise<void> {
   check("bağlam YOKKEN kayıt yine yazılır (job/script)", noCtx !== null && noCtx.deviceId === null);
 
   await prisma.systemLog.deleteMany({ where: { tableName: "BEKCI_B3" } });
+
+  // ── 8) KAYIT-BAZLI GEÇMİŞ `changes` DÖNDÜRÜYOR mu (Faz C) ───────────────
+  // Genel liste bunu SEÇMEZ (perf kuralı: listede JSON çekme); yalnız
+  // `recordId` verildiğinde döner. İki yönü de ölç — yanlış yön "N+1 istek" ya
+  // da "şişmiş liste payload'ı" demektir ve ikisi de sessizdir.
+  // ⚠️ FIXTURE'I KENDİ ÜRETİR — ortamdaki veriye bağlanmak yasak (CLAUDE.md):
+  // dev DB dolu olduğu için yerelde geçer, TEMİZ CI DB'sinde sessizce atlanırdı.
+  const { ColorService } = await import("../src/services/color.service");
+  const svc = new ColorService({
+    model: prisma.color, modelName: "color", tableName: "COLOR",
+    searchFields: ["code", "name"], duplicateNameField: "name", entityLabel: "renk",
+  } as never);
+  const stamp = Date.now();
+  let fixtureId = "";
+  try {
+    const created = (await svc.create(
+      { code: `TEST-AD-${stamp}`, name: `TEST AUDIT DEPTH ${stamp}` }, actor!.id,
+    )) as unknown as { data: { id: string } };
+    fixtureId = created.data.id;
+    await svc.update(fixtureId, { name: `TEST AUDIT DEPTH ${stamp} V2` }, actor!.id);
+
+    const scoped = await SystemLogService.list({
+      tableName: "COLOR", recordId: fixtureId, limit: 10,
+    });
+    const scopedRows = ((scoped as { data?: unknown[] }).data ?? []) as Array<{ changes?: unknown }>;
+    check(
+      "kayıt-bazlı geçmiş `changes` döndürür",
+      scopedRows.some((r) => r.changes != null),
+      `${scopedRows.length} satır`,
+    );
+
+    const general = await SystemLogService.list({ tableName: "COLOR", limit: 5 });
+    const generalRows = ((general as { data?: unknown[] }).data ?? []) as Array<{ changes?: unknown }>;
+    check(
+      "genel liste `changes` DÖNDÜRMEZ (payload şişmesin)",
+      generalRows.every((r) => r.changes === undefined),
+    );
+  } finally {
+    if (fixtureId) {
+      await prisma.systemLog.deleteMany({ where: { tableName: "COLOR", recordId: fixtureId } }).catch(() => {});
+      await prisma.color.deleteMany({ where: { id: fixtureId } }).catch(() => {});
+    }
+  }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

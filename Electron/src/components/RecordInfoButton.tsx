@@ -6,6 +6,7 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse } from "@/types/api";
 import { safeFormat } from "@/lib/format";
 
+import { RecordHistoryDialog } from "./RecordHistoryDialog";
 /** Backend `record-info.service.ts` sözleşmesinin aynası. */
 interface RecordActor {
   at: string;
@@ -55,6 +56,9 @@ const fmt = (v?: string | null) => (v ? safeFormat(v, "dd.MM.yyyy HH:mm") : "—
  */
 export function RecordInfoButton({ table, id, createdAt, updatedAt, className }: Props) {
   const [open, setOpen] = useState(false);
+  // İKİNCİ KATMAN (Faz C): "tam olarak ne değişti". Birinci katman (kim/ne
+  // zaman) kolondan gelir ve asla boş dönmez; bu ise audit'ten okur.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const q = useQuery({
     queryKey: ["record-info", table, id],
@@ -125,8 +129,24 @@ export function RecordInfoButton({ table, id, createdAt, updatedAt, className }:
           {info?.source === "audit" && (
             <div className="text-[10px] text-muted-foreground">işlem kaydından</div>
           )}
+          <button
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              setHistoryOpen(true);
+            }}
+            className="mt-1 w-full rounded border border-primary/40 px-2 py-1 text-[11px] font-medium text-primary hover:bg-primary/5"
+          >
+            Tüm geçmiş →
+          </button>
         </div>
       </PopoverContent>
+      <RecordHistoryDialog
+        open={historyOpen}
+        onOpenChange={setHistoryOpen}
+        table={table}
+        id={id}
+      />
     </Popover>
   );
 }

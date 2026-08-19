@@ -28,6 +28,12 @@ export interface SystemLogListItem {
   ipAddress: string | null;
   createdAt: string;
   user: SystemLogUserOption | null;
+  /**
+   * ⚠️ YALNIZ kayıt-bazlı geçmişte (`recordId` filtresiyle) dolu — genel
+   * listede backend bunları SEÇMEZ (perf kuralı: listede JSON çekme).
+   */
+  changes?: Array<{ field: string; old: unknown; new: unknown }> | null;
+  deviceId?: string | null;
 }
 
 export interface SystemLogDetail extends SystemLogListItem {
@@ -41,6 +47,8 @@ export interface SystemLogListParams {
   limit?: number;
   userId?: string;
   tableName?: string;
+  /** TEK KAYDIN geçmişi (Faz B1). `tableName` ile BİRLİKTE verilir. */
+  recordId?: string;
   category?: string; // "DOMAIN" | "AUTH" | "SYSTEM" | "AUTH,SYSTEM"
   action?: SystemLogAction;
   dateFrom?: string;
