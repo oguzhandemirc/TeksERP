@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Check, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,16 @@ import {
 } from "@/components/ui/command";
 import { cn } from "@/lib/utils";
 import type { CrudService } from "@/services/crudService";
+import { foldSearchText } from "@/lib/search-fold";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { useTruncationWarning } from "@/hooks/useTruncationWarning";
+
+/**
+ * Lookup açılır listesinde gösterilecek en fazla satır. Arama SUNUCUDA
+ * yapıldığı için bu bir "tüm kayıtlar" tavanı DEĞİL, "bu terime en iyi N
+ * eşleşme" sınırıdır — kullanıcı daraltmak için yazar.
+ */
+const LOOKUP_PAGE_SIZE = 200;
 
 // Local-time day boundaries — kullanıcı "07.05.2026" derken İstanbul tz'inde
 // o günün 00:00:00 ile 23:59:59'u kastediyor; UTC midnight değil.
@@ -375,22 +385,50 @@ function MultiSelectFilter({
   );
 }
 
+// =============================================================================
+// LOOKUP FİLTRELERİ — ARAMA SUNUCUDA (2026-08-19)
+// =============================================================================
+// ⚠️ İKİ HATA BİRDEN VARDI ve ikisi de SESSİZDİ:
+//
+// 1) TAVAN: `pageSize: 200` ile tek atış + istemci süzmesi. Bu bileşen JENERİKTİR
+//    — her veri tablosunun lookup filtresi (müşteri, kumaş, renk, fason firma…)
+//    buradan geçer. Ölçüldü (2026-08-19): kumaş **194/200**, yani altı kayıt
+//    sonra filtre sessizce eksik liste göstermeye başlayacaktı.
+//
+// 2) TÜRKÇE: `CommandInput` cmdk'nın VARSAYILAN süzgecini kullanıyordu ve o yalnız
+//    ASCII katlar — "kursun" yazan "Kurşun"u BULAMIYORDU. Komut paletinde
+//    düzeltilen hatanın (2026-08-19) ikizi, burada da vardı.
+//
+// ÇÖZÜM ikisini birden kapatıyor: arama SUNUCUYA gider (`search` parametresi →
+// katlanmış gölge kolon + trigram index) ve `shouldFilter={false}` ile cmdk'nın
+// ikinci kez süzmesi KAPATILIR. Çift süzme burada da bir tuzaktı: sunucu doğru
+// satırı döndürse bile cmdk onu ASCII karşılaştırmasıyla elerdi.
+//
+// ⚠️ `shouldFilter={false}` ZORUNLU. Kaldırılırsa arama "çalışıyor" görünür ama
+// Türkçe terimlerde sonuç sessizce kaybolur.
+// =============================================================================
 function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
   const [open, setOpen] = useState(false);
   const value = sp.get(`filter[${def.key}]`) ?? "";
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
   const { data } = useQuery({
-    queryKey: [def.queryKey, "filter-lookup", def.extraFilters],
+    queryKey: [def.queryKey, "filter-lookup", def.extraFilters, debouncedSearch],
     queryFn: () =>
       def.service.getAll({
         page: 1,
-        pageSize: 200,
+        pageSize: LOOKUP_PAGE_SIZE,
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true", ...def.extraFilters },
+        ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       }),
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const items = data?.data ?? [];
+  // Arama daraltmadığı hâlde tavan doluysa operatör eksik liste görüyor demektir.
+  useTruncationWarning(data?.pagination, def.label);
   const labelOf = (it: LookupItemBase) =>
     def.getLabel ? def.getLabel(it) : it.name ?? it.code ?? it.id;
 
@@ -423,8 +461,15 @@ function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
-        <Command>
-          <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
+        {/* shouldFilter={false}: arama SUNUCUDA yapılıyor — cmdk ikinci kez
+            süzerse (ASCII karşılaştırmasıyla) Türkçe sonuçlar sessizce kaybolur. */}
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={`${def.label} ara...`}
+            className="h-8"
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList>
             <CommandEmpty>Sonuç yok.</CommandEmpty>
             <CommandGroup>
@@ -594,19 +639,25 @@ function MultiLookupFilter({
     [csv],
   );
 
+  // Çoklu seçim de aynı sözleşme — bkz. `LookupFilter` başlığındaki gerekçe.
+  const [search, setSearch] = useState("");
+  const debouncedSearch = useDebouncedValue(search, 300);
   const { data } = useQuery({
-    queryKey: [def.queryKey, "filter-lookup-multi", def.extraFilters],
+    queryKey: [def.queryKey, "filter-lookup-multi", def.extraFilters, debouncedSearch],
     queryFn: () =>
       def.service.getAll({
         page: 1,
-        pageSize: 200,
+        pageSize: LOOKUP_PAGE_SIZE,
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true", ...def.extraFilters },
+        ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       }),
     staleTime: 60_000,
+    placeholderData: keepPreviousData,
   });
   const items = data?.data ?? [];
+  useTruncationWarning(data?.pagination, def.label);
   const labelOf = (it: LookupItemBase) =>
     def.getLabel ? def.getLabel(it) : it.name ?? it.code ?? it.id;
 
@@ -649,8 +700,15 @@ function MultiLookupFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
-        <Command>
-          <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
+        {/* shouldFilter={false}: arama SUNUCUDA yapılıyor — cmdk ikinci kez
+            süzerse (ASCII karşılaştırmasıyla) Türkçe sonuçlar sessizce kaybolur. */}
+        <Command shouldFilter={false}>
+          <CommandInput
+            placeholder={`${def.label} ara...`}
+            className="h-8"
+            value={search}
+            onValueChange={setSearch}
+          />
           <CommandList>
             <CommandEmpty>Sonuç yok.</CommandEmpty>
             <CommandGroup>
@@ -783,7 +841,16 @@ function DependentLookupFilter({
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
-        <Command>
+        {/* Küme çağıranın verdiği dar listedir (ör. seçili müşterinin şubeleri) —
+            sunucu araması gereksiz. Ama cmdk'nın VARSAYILAN süzgeci yalnız ASCII
+            katlar; "kursun" ile "Kurşun" eşleşmez. Katlama sunucudakiyle aynı. */}
+        <Command
+          filter={(value, search) => {
+            const q = foldSearchText(search);
+            if (!q) return 1;
+            return q.split(" ").every((t) => foldSearchText(value).includes(t)) ? 1 : 0;
+          }}
+        >
           <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
           <CommandList>
             <CommandEmpty>Sonuç yok.</CommandEmpty>
