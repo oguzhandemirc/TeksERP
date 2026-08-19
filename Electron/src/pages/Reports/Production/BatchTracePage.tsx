@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { DetailTable, MetricCard, ReportExportBar, ReportPageLayout } from "../_components";
 import { fmtDate, fmtInt, fmtNum } from "../_components/formatters";
 import { batchTraceApi, buildBatchTraceExport, type BatchTrace } from "./batchTrace";
+import { useScanSeed } from "@/hooks/useScanSeed";
 
 type CustomerRow = BatchTrace["customers"][number];
 
@@ -79,6 +80,19 @@ export function BatchTracePage() {
   const [term, setTerm] = useState("");
   const [query, setQuery] = useState("");
   const [batchId, setBatchId] = useState<string | null>(null);
+
+  // Global aramadan (Ctrl+K) gelen parti terimi. ⚠️ Bu sayfa bugüne kadar
+  // DEEP-LINK'LENEMİYORDU — arama/sonuç durumu tamamen sayfa-lokaldi, yani
+  // dışarıdan "şu partiyi aç" demenin yolu yoktu. `useScanSeed` mevcut ve
+  // denenmiş köprü (barkod okutma da aynı mekanizmayı kullanıyor); StrictMode
+  // güvenli ve aynı state için tekrar tetiklemez.
+  //
+  // ⚠️ Parti no BENZERSİZ DEĞİL (P01…P99 döner) — seed tek kayda değil ARAMA
+  // TERİMİNE bağlanır; sayfa aday listesini gösterir, seçimi operatör yapar.
+  useScanSeed("batchTerm", (value) => {
+    setTerm(value);
+    setQuery(value);
+  });
 
   const search = useQuery({
     queryKey: ["reports", "production", "batch-search", query],

@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { Keyboard, LogOut, Moon, RotateCw, Rows3, Star, type LucideIcon } from "lucide-react";
+import {
+  Keyboard,
+  Loader2,
+  LogOut,
+  Moon,
+  RotateCw,
+  Rows3,
+  Search,
+  Star,
+  type LucideIcon,
+} from "lucide-react";
 import { useTheme } from "next-themes";
 import {
   CommandDialog,
@@ -17,6 +27,15 @@ import { useAuthStore } from "@/store/auth";
 import { useTabsStore } from "@/store/tabs";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 import { foldSearchText } from "@/lib/search-fold";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { globalSearch } from "@/lib/search/globalSearch";
+import {
+  SEARCH_TARGETS,
+  SERVER_ITEM_PREFIX,
+  serverItemValue,
+  type SearchRow,
+} from "@/lib/search/search-targets";
 
 interface Props {
   open: boolean;
@@ -122,6 +141,118 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     },
   ];
 
+  // ── GLOBAL ARAMA (sunucu) ───────────────────────────────────────────────────
+  // ⚠️ `enabled: open` kritik: palet kapalıyken istek gitmez. Min 2 karakter —
+  // trigram 3-gram üzerinden çalışır, tek harf her kovayı seq scan'e sokar.
+  const debouncedSearch = useDebouncedValue(search, 250);
+  const serverTerm = debouncedSearch.trim();
+  const serverQuery = useQuery({
+    queryKey: ["global-search", serverTerm],
+    queryFn: () => globalSearch(serverTerm),
+    enabled: open && serverTerm.length >= 2,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+    // ⚠️ Arama hatası TOAST BASMAZ: yardımcı bir yüzey, ana akışı bozmamalı.
+    retry: false,
+  });
+
+  const goRow = (entity: string, row: SearchRow) => {
+    const target = SEARCH_TARGETS[entity];
+    if (!target) return;
+    const { to, state } = target.to(row);
+    onOpenChange(false);
+    openTab(to, state ? { state } : undefined);
+  };
+
+  const exact = serverQuery.data?.exact ?? null;
+  const exactTarget = exact ? SEARCH_TARGETS[exact.entity] : undefined;
+  const exactRow =
+    exact && exactTarget && hasAnyPermission(exactTarget.permissions) ? (
+      <CommandGroup heading="Okutulan kod">
+        <CommandItem
+          key={serverItemValue(exact.entity, exact.row.id)}
+          value={serverItemValue(exact.entity, exact.row.id)}
+          onSelect={() => goRow(exact.entity, exact.row)}
+        >
+          <exactTarget.icon className="mr-2 h-4 w-4 shrink-0" />
+          <span className="truncate font-medium">{exact.row.title}</span>
+          {exact.row.subtitle && (
+            <span className="ml-2 truncate text-xs text-muted-foreground">
+              {exact.row.subtitle}
+            </span>
+          )}
+        </CommandItem>
+      </CommandGroup>
+    ) : null;
+
+  const groups = serverQuery.data?.groups ?? [];
+  const recordGroups =
+    serverTerm.length < 2 ? null : (
+      <>
+        {serverQuery.isFetching && groups.length === 0 && (
+          <CommandGroup heading="Kayıtlar">
+            <CommandItem value={`${SERVER_ITEM_PREFIX}loading`} disabled>
+              <Loader2 className="mr-2 h-4 w-4 shrink-0 animate-spin" />
+              <span className="text-muted-foreground">Kayıtlar aranıyor…</span>
+            </CommandItem>
+          </CommandGroup>
+        )}
+        {groups.map((g) => {
+          const target = SEARCH_TARGETS[g.entity];
+          // ⚠️ BİLİNMEYEN KOVA SESSİZCE DÜŞÜRÜLMEZ. Backend'e yeni varlık eklenip
+          // panel katalogu güncellenmediyse (iki proje ayrı sürümleniyor) grup
+          // yine çizilir, satırlar devre dışıdır ve sebebi yazar.
+          if (!target) {
+            return (
+              <CommandGroup key={g.entity} heading={g.label}>
+                <CommandItem value={`${SERVER_ITEM_PREFIX}unknown:${g.entity}`} disabled>
+                  <span className="text-muted-foreground">
+                    Bu sonuç türü için hedef tanımlı değil ({g.entity}) — panel güncellenmeli.
+                  </span>
+                </CommandItem>
+              </CommandGroup>
+            );
+          }
+          if (!hasAnyPermission(target.permissions)) return null;
+          const Icon = target.icon;
+          return (
+            <CommandGroup key={g.entity} heading={g.label}>
+              {g.rows.map((row) => (
+                <CommandItem
+                  key={serverItemValue(g.entity, row.id)}
+                  value={serverItemValue(g.entity, row.id)}
+                  onSelect={() => goRow(g.entity, row)}
+                >
+                  <Icon className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="truncate">{row.title}</span>
+                  {row.subtitle && (
+                    <span className="ml-2 truncate text-xs text-muted-foreground">
+                      {row.subtitle}
+                    </span>
+                  )}
+                </CommandItem>
+              ))}
+              {g.hasMore && (
+                <CommandItem
+                  key={`${SERVER_ITEM_PREFIX}more:${g.entity}`}
+                  value={`${SERVER_ITEM_PREFIX}more:${g.entity}`}
+                  onSelect={() => {
+                    onOpenChange(false);
+                    openTab(target.listTo(serverTerm));
+                  }}
+                >
+                  <Search className="mr-2 h-4 w-4 shrink-0 opacity-60" />
+                  <span className="text-muted-foreground">
+                    Tüm {g.label.toLocaleLowerCase("tr")} içinde ara…
+                  </span>
+                </CommandItem>
+              )}
+            </CommandGroup>
+          );
+        })}
+      </>
+    );
+
   return (
     // ⚠️ `filter` VERİLMEZSE cmdk kendi `command-score`'unu kullanır ve o yalnız
     // ASCII katlar: "kursun" yazan operatör "Kurşun Sırası"nı BULAMAZDI (ölçüldü
@@ -130,6 +261,12 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       open={open}
       onOpenChange={onOpenChange}
       filter={(value: string, search: string, keywords?: string[]) => {
+        // ⚠️ ÇİFT SÜZME NÖBETİ: sunucu satırları ZATEN süzülmüş geldi. Burada
+        // ikinci kez süzülürlerse, alias üzerinden eşleşen bir satır (terim
+        // "belle", başlık "18152") cmdk tarafından ELENİR — arama çalışır ama
+        // sonuç görünmez. `value` sorgudan bağımsız ve kararlı tutuluyor
+        // (sorguyu value'ya gömmek cmdk'nın seçim durumunu her tuşta sıfırlar).
+        if (value.startsWith(SERVER_ITEM_PREFIX)) return 1;
         const q = foldSearchText(search);
         if (!q) return 1;
         const hay = foldSearchText([value, ...(keywords ?? [])].join(" "));
@@ -201,6 +338,13 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
             </CommandGroup>
           );
         })}
+        {/* ── KAYITLAR ────────────────────────────────────────────────────
+            ⚠️ HER ZAMAN statik bölümlerin ALTINDA. Sunucu sonuçları ~150 ms
+            sonra gelir; üste eklenselerdi ok tuşuyla gezen kullanıcının
+            altından liste kayar ve yanlış satır seçilirdi. Tek istisna
+            "Okutulan kod": deterministik ve niyeti tartışmasız. */}
+        {exactRow}
+        {recordGroups}
       </CommandList>
     </CommandDialog>
   );
