@@ -156,6 +156,39 @@ async function main(): Promise<void> {
   check("Türkçe harmanlama Ç'yi C'lerden SONRA koyar (DOĞRU)", byTr[2] === "Çanakkale", byTr.join(","));
   check("ikisi FARKLI sonuç veriyor (araçlar ayrı)", JSON.stringify(byFold) !== JSON.stringify(byTr));
 
+  // ── 5) SIRALAMA SÖZLEŞMESİ: sunucu ≡ istemci ────────────────────────────
+  // Liste bazen sunucuda (`ORDER BY name`), bazen istemcide sıralanır. İkisi
+  // ayrışırsa aynı veri iki ekranda farklı sırada görünür ve operatör "kayıt
+  // kaybolmuş" sanır. DB tarafı `COLLATE public.tr_sort`, istemci tarafı
+  // `Intl.Collator("tr", { numeric: true })` — bu bölüm ikisinin AYNI cevabı
+  // verdiğini ölçer.
+  console.log("\n── 5) Sıralama: DB collation ≡ Intl.Collator('tr') ──");
+  const SORT_SAMPLE = [
+    "Çanakkale", "Cebeci", "Ceyhan", "Işık", "İnci", "Zonguldak",
+    "P1", "P2", "P10", "9 YEŞİL", "1000 MAVİ", "01-BEYAZ", "029-TAŞ",
+    "Öz Şahin", "Ozan", "Şahin", "Sahin", "Ünal", "Ulus",
+  ];
+  const collRows = await prisma.$queryRawUnsafe<{ x: string }[]>(
+    `SELECT x FROM unnest($1::text[]) AS x ORDER BY x COLLATE public.tr_sort`,
+    SORT_SAMPLE,
+  );
+  const dbOrder = collRows.map((r) => r.x);
+  const jsOrder = [...SORT_SAMPLE].sort(
+    new Intl.Collator("tr", { numeric: true }).compare,
+  );
+  check(
+    "DB sırası ile istemci sırası BİREBİR",
+    JSON.stringify(dbOrder) === JSON.stringify(jsOrder),
+    dbOrder.join(" < "),
+  );
+  // Türkçe alfabenin iki ayırt edici kuralı — ikisi de sunucuda geçerli olmalı.
+  check("Ç bütün C'lerden SONRA", dbOrder.indexOf("Çanakkale") > dbOrder.indexOf("Ceyhan"));
+  check("I (ışık) İ'den ÖNCE", dbOrder.indexOf("Işık") < dbOrder.indexOf("İnci"));
+  // ⚠️ Sayı-duyarlılık: onsuz "P10" < "P2" olurdu. Renk adları bugün sıfır
+  // dolgulu olduğu için gizli kalır; dolgusuz tek ad girildiğinde görünür.
+  check("sayı-duyarlı: P2 < P10", dbOrder.indexOf("P2") < dbOrder.indexOf("P10"));
+  check("sayı-duyarlı: 9 < 1000", dbOrder.indexOf("9 YEŞİL") < dbOrder.indexOf("1000 MAVİ"));
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

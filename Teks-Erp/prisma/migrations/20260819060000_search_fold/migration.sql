@@ -26,7 +26,12 @@
 --   (b) düzeltme SONRAKİ bir migration'a YAZILAMAZDI — burada patlayan bir
 --       migration `migrate deploy`'u durdurur, sonraki dosya hiç koşmaz.
 -- Dev'in checksum'ı `migrate resolve --applied` ile yeniden üretildi.
--- Bir daha DEĞİŞTİRME: production'a çıktıktan sonra bu dosya gerçekten dondu.
+-- İKİNCİ DÜZENLEME (aynı gün): `tr_sort` sayı-duyarlı hâle getirildi. Sebep aynı
+-- ve buradaki alternatif DAHA KÖTÜYDÜ — collation'ı sonradan değiştirmek, ona
+-- bağlı 31 gölge kolonu DÜŞÜRÜP geri koymayı gerektiriyor (PostgreSQL "cannot
+-- alter type of a column used by a generated column" ile reddediyor, ölçüldü).
+-- Yani production'a ya bu tek temiz dosya gider, ya da gereksiz bir çalkantı
+-- migration'ı. Production'a çıktıktan sonra bu dosya gerçekten donar.
 -- =============================================================================
 
 -- Büyük tabloya index eklerken app DB'sinin statement_timeout=50s'i migration'ı
@@ -103,6 +108,17 @@ $fn$;
 -- Sahadaki kurulum C locale: bugün Ç/Ğ/İ/Ö/Ş/Ü ile başlayan HER ad Z'den sonra
 -- sıralanıyor (ölçüldü: Cebeci < Ceyhan < Işık < Zonguldak < Çanakkale < İnci).
 --
+-- ⚠️ `tr-u-kn` = SAYI-DUYARLI sıralama: "9 YEŞİL" < "1000 MAVİ" ve "P2" < "P10".
+-- Onsuz sözlüksel sıra uygulanır ve "P10" ile "P2"nin arası ters görünür. Panel de
+-- `Intl.Collator('tr', {numeric:true})` kullanıyor — ikisi AYNI kuralı uygulamalı,
+-- yoksa sunucudan sıralı gelen liste ile istemcide sıralanan liste ayrışır.
+-- Renk adları bugün sıfır dolgulu ("01-BEYAZ") olduğu için fark görünmüyor;
+-- dolgusuz tek bir ad girildiği an görünür olur.
+--
+-- ⚠️ libc yedeğinde sayı-duyarlılık YOKTUR (yalnız ICU destekler). O dala
+-- düşülürse Türkçe sıra doğru, sayısal sıra sözlükseldir — kabul edilir bir
+-- azalmadır, arama hiç etkilenmez.
+--
 -- ⚠️ ICU yoksa libc'ye düşülür; ikisi de yoksa sıralama bugünkü hâlinde KALIR
 -- (arama etkilenmez). Sessiz değil: NOTICE basılır.
 DO $$
@@ -113,12 +129,12 @@ BEGIN
     RETURN;
   END IF;
   BEGIN
-    CREATE COLLATION public.tr_sort (provider = icu, locale = 'tr');
-    RAISE NOTICE 'tr_sort ICU ile kuruldu';
+    CREATE COLLATION public.tr_sort (provider = icu, locale = 'tr-u-kn-true');
+    RAISE NOTICE 'tr_sort ICU ile kuruldu (Türkçe + sayı-duyarlı)';
   EXCEPTION WHEN OTHERS THEN
     BEGIN
       CREATE COLLATION public.tr_sort (provider = libc, locale = 'tr_TR.UTF-8');
-      RAISE NOTICE 'tr_sort libc (tr_TR.UTF-8) ile kuruldu — ICU yok';
+      RAISE NOTICE 'tr_sort libc ile kuruldu — ICU yok, SAYI-DUYARLILIK YOK';
     EXCEPTION WHEN OTHERS THEN
       RAISE NOTICE 'tr_sort KURULAMADI (ne ICU ne libc tr_TR) — sıralama değişmedi';
     END;
