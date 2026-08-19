@@ -466,6 +466,8 @@ model User {
   updatedWorkOrders               WorkOrder[]               @relation("WorkOrderUpdatedBy")
   createdShipments                Shipment[]                @relation("ShipmentCreatedBy")
   updatedShipments                Shipment[]                @relation("ShipmentUpdatedBy")
+  /// Bu kullanıcının koşturduğu toplu içe aktarımlar (bkz. ImportRun).
+  importRuns                      ImportRun[]               @relation("ImportRunUser")
 
   @@map("users")
 }
@@ -4783,4 +4785,65 @@ enum TravelerTemplateMode {
   BUILTIN
   SECTIONS
   RAW_HTML
+}
+
+// =============================================================================
+// IMPORT RUN — toplu içe aktarım geçmişi (Excel/CSV yüklemeleri)
+// =============================================================================
+/// Bir "yükle" işleminin KALICI izi. Neden ayrı tablo (audit yetmiyor):
+/// `SystemLog` 6 ayda arşive taşınır (`archiveOlderThan`), oysa "bu 400 müşteriyi
+/// kim, hangi dosyayla, ne zaman yükledi" sorusu yıllar sonra da sorulur —
+/// `createdById` künye kolonlarıyla aynı gerekçe (KAYIT-KUNYESI-TASARIM.md).
+///
+/// ⚠️ `status = PARTIAL` SESSİZ DEĞİLDİR: doğrulama tüm satırlar için önceden
+/// koşar, yazma sırasında beklenmedik bir hata çıkarsa İLK HATADA durulur ve
+/// `stoppedAtRowNo` dolar. Kullanıcı nerede kalındığını buradan görür.
+///
+/// `errorReport` yalnız SORUNLU satırları taşır (hata + uyarı) — 10.000 satırlık
+/// başarılı bir koşumun tamamını JSON'a gömmek tabloyu şişirir ve hiçbir soruya
+/// cevap vermez.
+model ImportRun {
+  id     String @id @default(uuid()) @db.Uuid
+  /// Registry'deki varlık anahtarı ("item", "customer", "color"…).
+  entity String @db.VarChar(40)
+
+  userId String? @db.Uuid
+  user   User?   @relation("ImportRunUser", fields: [userId], references: [id])
+
+  /// Kullanıcının yüklediği dosyanın adı — "hangi dosyaydı" sorusunun tek cevabı.
+  fileName String? @db.VarChar(255)
+  /// İdempotency: aynı deneme (timeout-retry) ikinci kez YAZMAZ, bu koşumu döner.
+  clientToken String? @unique @db.Uuid
+
+  rowCount Int @default(0)
+  created  Int @default(0)
+  updated  Int @default(0)
+  skipped  Int @default(0)
+  failed   Int @default(0)
+
+  status         ImportRunStatus
+  durationMs     Int             @default(0)
+  /// PARTIAL'da: yazma hangi satırda durdu (dosyadaki satır numarası).
+  stoppedAtRowNo Int?
+
+  /// { mode, onError } — koşumun hangi kurallarla yapıldığı.
+  options Json?
+  /// Yalnız hatalı/uyarılı satır sonuçları.
+  errorReport Json?
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([entity, createdAt])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("import_runs")
+}
+
+enum ImportRunStatus {
+  /// Tüm satırlar yazıldı (ya da atlandı) — beklenmedik hata yok.
+  APPLIED
+  /// Bir kısmı yazıldı, yazma sırasında durduruldu. `stoppedAtRowNo` dolu.
+  PARTIAL
+  /// Hiçbir şey yazılamadı.
+  FAILED
 }

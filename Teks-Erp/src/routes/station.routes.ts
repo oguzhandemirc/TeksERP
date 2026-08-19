@@ -12,7 +12,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
 // --- Station ---
-const stationService = new StationService({
+export const stationService = new StationService({
   modelName: "station",
   tableName: "STATION",
   searchFields: ["name"],
@@ -31,7 +31,7 @@ const stationService = new StationService({
 const stationController = new BaseController(stationService);
 
 // --- Machine ---
-const machineService = new BaseService({
+export const machineService = new BaseService({
   modelName: "machine",
   tableName: "MACHINE",
   searchFields: ["name"],

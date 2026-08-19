@@ -11,7 +11,7 @@ import { BaseService } from "../services/base.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
-const service = new BaseService({
+export const returnReasonService = new BaseService({
   modelName: "returnReason",
   tableName: "RETURN_REASON",
   searchFields: ["name", "description"],
@@ -24,7 +24,7 @@ const service = new BaseService({
   autoCode: { prefix: "IADE" },
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(returnReasonService);
 const router = Router();
 
 /**

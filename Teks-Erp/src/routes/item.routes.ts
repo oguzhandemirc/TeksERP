@@ -10,7 +10,7 @@ import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import "../types/express-augment";
 
-const service = new ItemService({
+export const itemService = new ItemService({
   modelName: "item",
   tableName: "ITEM",
   searchFields: ["name"],
@@ -25,7 +25,7 @@ const service = new ItemService({
   entityLabel: "ürün",
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(itemService);
 const router = Router();
 
 const addAllowedColorBody = z.object({
@@ -178,7 +178,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { name } = quickCreateBody.parse(req.body);
-      const result = await service.quickCreateFabric(name, req.user?.userId);
+      const result = await itemService.quickCreateFabric(name, req.user?.userId);
       res.status(201).json(result);
     } catch (err) {
       next(err);
@@ -289,7 +289,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { colorId } = addAllowedColorBody.parse(req.body);
-      const result = await service.addAllowedColor(
+      const result = await itemService.addAllowedColor(
         String(req.params.id),
         colorId,
         req.user?.userId,
@@ -335,7 +335,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { propertyId } = addAllowedPropertyBody.parse(req.body);
-      const result = await service.addAllowedProperty(
+      const result = await itemService.addAllowedProperty(
         String(req.params.id),
         propertyId,
         req.user?.userId,

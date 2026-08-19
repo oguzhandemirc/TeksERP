@@ -13,7 +13,7 @@ import { defectTypeHardRemove } from "../services/helpers/guarded-hard-remove";
 
 const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
 
-const service = new BaseService({
+export const defectTypeService = new BaseService({
   modelName: "defectType",
   tableName: "DEFECT_TYPE",
   searchFields: ["name", "description"],
@@ -26,7 +26,7 @@ const service = new BaseService({
   autoCode: { prefix: "HATA" },
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(defectTypeService);
 const router = Router();
 
 /**

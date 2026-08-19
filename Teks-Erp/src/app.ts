@@ -63,6 +63,8 @@ import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
+import importRoutes from "./routes/import.routes";
+import configBundleRoutes from "./routes/config-bundle.routes";
 import adminRoutes from "./routes/admin.routes";
 import { verifyToken } from "./middlewares/auth.middleware";
 import { requirePermission } from "./middlewares/rbac.middleware";
@@ -504,6 +506,14 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
+// Toplu içe/dışa aktarım. ⚠️ Bu router KENDİ `express.json({limit:"10mb"})`
+// katmanını taşır (route seviyesinde) — global 1 MB limiti DEĞİŞMEZ; 10.000
+// satırlık bir dosya JSON'a çevrilince 1 MB'ı aşar ama gevşemenin diğer TÜM
+// uçlara yayılması gereksiz bir saldırı yüzeyi olurdu.
+app.use("/api/import", importRoutes);
+// Yapılandırma paketi (kurulumlar arası tanım taşıma). Yetki ANAHTAR-KAPSAMLI:
+// pakette hangi tür varsa yalnız onun izni aranır (feature-flags guard dersi).
+app.use("/api/config-bundle", configBundleRoutes);
 // db-copies GENEL admin router'ından ÖNCE: Express 5 prefix eşleşmesinde daha
 // spesifik olan önce gelmeli, yoksa admin.routes içindeki bir yakalayıcı öne geçebilir.
 app.use("/api/admin/db-copies", dbCopyRoutes);

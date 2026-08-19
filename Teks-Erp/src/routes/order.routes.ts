@@ -26,7 +26,7 @@ const availableQuerySchema = z.object({
   withTotal: z.string().optional().transform((v) => v === "true"),
 });
 
-const service = new OrderService({
+export const orderService = new OrderService({
   modelName: "order",
   tableName: "ORDER",
   // Liste araması picker'la (findAvailableForWorkOrder) aynı kapsamda:
@@ -75,7 +75,7 @@ const service = new OrderService({
   },
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(orderService);
 const router = Router();
 
 const reasonSchema = z.object({
@@ -118,7 +118,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { reason } = reasonSchema.parse(req.body);
-      const result = await service.manualComplete(
+      const result = await orderService.manualComplete(
         assertValidUuid(req.params.id),
         reason,
         req.user?.userId
@@ -148,7 +148,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { reason } = reasonSchema.parse(req.body);
-      const result = await service.reopen(
+      const result = await orderService.reopen(
         assertValidUuid(req.params.id),
         reason,
         req.user?.userId
@@ -178,7 +178,7 @@ router.get(
   requirePermission("order:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await service.getCancelPreview(assertValidUuid(req.params.id));
+      const result = await orderService.getCancelPreview(assertValidUuid(req.params.id));
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -212,7 +212,7 @@ router.get(
   requireAnyPermission("order:read", "shipping:read", "shipping:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await service.getOrderShipments(assertValidUuid(req.params.id));
+      const result = await orderService.getOrderShipments(assertValidUuid(req.params.id));
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -265,7 +265,7 @@ router.post(
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const { workOrderActions } = cancelBodySchema.parse(req.body ?? {});
-      const result = await service.cancelWithActions(
+      const result = await orderService.cancelWithActions(
         assertValidUuid(req.params.id),
         workOrderActions,
         req.user?.userId
@@ -349,7 +349,7 @@ router.get(
   requireAnyPermission("order:read", "workorder:read", "workorder:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const result = await service.findAvailableForWorkOrder(req);
+      const result = await orderService.findAvailableForWorkOrder(req);
       res.json(result);
     } catch (e) {
       next(e);
@@ -394,7 +394,7 @@ router.get(
       // itemId opsiyonel: legacy modda (limit yok) servis zorunlu kılar; cursor
       // modda (limit var) "sipariş-önce" aramalı liste için boş bırakılabilir.
       const q = availableQuerySchema.parse(req.query);
-      const result = await service.findAvailableOrderLines({
+      const result = await orderService.findAvailableOrderLines({
         itemId: q.itemId,
         colorId: q.colorId,
         customerId: q.customerId,
@@ -448,7 +448,7 @@ router.post(
         excludeWorkOrderId: z.string().uuid("Geçersiz WO ID").optional(),
       });
       const body = schema.parse(req.body);
-      const result = await service.getCoverageForLines(body);
+      const result = await orderService.getCoverageForLines(body);
       res.json(result);
     } catch (e) {
       next(e);
@@ -496,7 +496,7 @@ router.get(
         width: z.preprocess(emptyToUndef, z.coerce.number().positive("En pozitif olmalı").optional()),
       });
       const q = schema.parse(req.query);
-      const result = await service.getSpecAvailability(q);
+      const result = await orderService.getSpecAvailability(q);
       res.json(result);
     } catch (e) {
       next(e);
@@ -622,7 +622,7 @@ router.post(
         clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
       });
       const body = schema.parse(req.body);
-      const result = await service.quickOrderFromRolls(body, req.user?.userId);
+      const result = await orderService.quickOrderFromRolls(body, req.user?.userId);
       res.status(201).json(result);
     } catch (e) {
       next(e);

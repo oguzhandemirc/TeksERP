@@ -55,7 +55,7 @@ const validateQgUpdate = makeQgValidator(
     "returnTargetStatus yalnız WAREHOUSE/A1_STOCK/SCRAP olabilir.",
 );
 
-const service = new BaseService({
+export const qualityGradeService = new BaseService({
   modelName: "qualityGrade",
   tableName: "QUALITY_GRADE",
   searchFields: ["name", "description"],
@@ -66,7 +66,7 @@ const service = new BaseService({
   entityLabel: "kalite sınıfı",
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(qualityGradeService);
 const router = Router();
 
 /**

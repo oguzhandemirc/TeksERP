@@ -14,7 +14,7 @@ import aliasRoutes from "./customer-alias.routes";
 import templateRouteRoutes from "./customer-template-route.routes";
 import standaloneLabelRoutes from "./customer-standalone-label.routes";
 
-const service = new CustomerService({
+export const customerService = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
   // exportCode aramada: sevk belgesindeki ihracat kodundan müşteri bulunabilsin.
@@ -33,7 +33,7 @@ const service = new CustomerService({
   nestedCreateFields: ["branches"],
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(customerService);
 const router = Router();
 
 router.use("/:customerId/branches", branchRoutes);

@@ -93,6 +93,13 @@ const TANIM_DOSYALARI = ["src/middlewares/rbac.middleware.ts"] as const;
 // Yeni bir dinamik yol eklenirse test "çözülemedi" diye DÜŞER ve buraya
 // eklenmeye zorlar — kapsam boşluğu sessizce büyüyemez.
 // ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Bir dosyanın izin kodları tek bir sabitte durmuyorsa (registry/adaptör deseni)
+ * kapsam BAŞKA bir bekçiye devredilebilir. Devir sessiz bir muafiyet değildir:
+ * hedef bekçi dosyası VAR olmalı ve devir her koşumda ekrana basılır.
+ */
+const DELEGE = "delege:";
+
 const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // requireAnyPermission(...entry[kind]) — entry = DOC_PERMISSIONS[docType]
   "src/routes/printed-document.routes.ts": ["DOC_PERMISSIONS"],
@@ -104,6 +111,19 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // "kim değiştirdi"sini de okuyamamalı. Allowlist DIŞI tablo 400 ile reddedilir
   // (serbest tableName, audit'i dolaylı bir arama yüzeyine çevirirdi).
   "src/routes/record-info.routes.ts": ["TABLE_PERMISSIONS"],
+  // matchesPermission(perms, adapter.writePermission / adapter.readPermission)
+  // — adaptör `import-registry`den `:entity` ile çözülür. Yetki AKTARILAN
+  // VERİYE göredir: `data:import` yalnız "toplu yükleme yapabilir" demektir,
+  // hedefin kendi write izni AYRICA aranır (iki katman, iki ayrı soru).
+  // Kodların katalogda tanımlı olduğunu `test_import_framework.ts` §11
+  // MEKANİK doğrular (registry'deki her adaptör için).
+  // İzinler `import-registry`deki ADAPTÖRLERDEN gelir (adapter.writePermission /
+  // readPermission) — tek bir sabitte durmuyorlar, dolayısıyla AST ile
+  // çözülemezler. Kapsam BAŞKA bir bekçide MEKANİK olarak kuruluyor:
+  // `test_import_framework.ts §11` registry'deki HER adaptörün iki iznini de
+  // katalogla karşılaştırır ve registry boşalırsa körlük zemini düşer.
+  // Bu yüzden burada delegasyon beyan ediyoruz — muafiyet DEĞİL, devir.
+  "src/routes/import.routes.ts": [`${DELEGE}scripts/test_import_framework.ts`],
 };
 
 // Taramanın gerçekten "bir şeye baktığını" doğrulayan zeminler. Bir refactor
@@ -414,6 +434,18 @@ async function main(): Promise<void> {
     }
     const sf = kaynakOku(mutlak);
     for (const sabit of sabitler) {
+      if (sabit.startsWith(DELEGE)) {
+        // Devir: kapsamı kuran bekçi GERÇEKTEN var mı? Ölü bir devir, gerçek
+        // bir kapsam boşluğunu "beyan edildi" diye gizlerdi.
+        const hedef = sabit.slice(DELEGE.length);
+        const bekciVar = fs.existsSync(path.join(KOK, hedef));
+        check(
+          `dinamik kapsam devri: ${dosya} → ${hedef}`,
+          bekciVar,
+          bekciVar ? "" : "devredilen bekçi dosyası YOK — devir ölü, tabloyu güncelle",
+        );
+        continue;
+      }
       const stringler = sabittekiStringler(sf, sabit);
       if (!stringler) {
         check(`dinamik sabit çözüldü: ${dosya} → ${sabit}`, false, "sabit bulunamadı — tabloyu güncelle");

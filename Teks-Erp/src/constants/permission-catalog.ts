@@ -117,6 +117,18 @@ export const PERMISSION_CATALOG = [
   // anında admin dahil herkesi dışarıda bırakırdı. Küme: constants/document-design.ts
   { code: "document-template:read", module: "ADMIN", category: "web", description: "Belge şablonları / refakat kartı ayarı / serbest belgeleri görüntüleme (salt-okunur)" },
   { code: "document-template:write", module: "ADMIN", category: "web", description: "Belge şablonu + refakat kartı ayarı/şablonu + serbest belge oluşturma/düzenleme/silme" },
+  // 2026-08-19: TOPLU İÇE AKTARIM (Excel/CSV yükleme). Ayrı bir yetki olması
+  // sektör standardıdır (Odoo `group_allow_export` / SAP veri aktarım rolü) ve
+  // gerekçesi tekil CRUD'dan farkıdır: tek tıkla YÜZLERCE kaydı değiştirebilen
+  // bir yüzeydir, yanlış dosya "birkaç alanı bozmaz", tüm listeyi bozar.
+  // ⚠️ TEK BAŞINA YETMEZ — her uç ayrıca varlığın kendi write iznini arar
+  // (`data:import` + `item:write` gibi). Yani bu kod "toplu yükleme yapabilir"
+  // demektir, "her şeye yazabilir" DEMEZ.
+  // Kategorisi `admin` DEĞİL `web` (settings:workstation emsali): bir yönetim
+  // yetkisi değil, masaüstü uygulamasının bir yeteneğidir → `admin:*` bunu
+  // VERMEZ, bilinçli olarak elle atanır.
+  // DIŞA aktarım için ek izin YOKTUR (karar D6): okuma yetkisi olan indirebilir.
+  { code: "data:import", module: "ADMIN", category: "web", description: "Toplu içe aktarım (Excel/CSV ile kayıt oluşturma/güncelleme) — varlığın kendi düzenleme yetkisiyle BİRLİKTE aranır" },
   { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
   { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
   { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },

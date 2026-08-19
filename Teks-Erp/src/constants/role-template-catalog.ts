@@ -258,6 +258,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "admin:settings",
       "settings:workstation",
       "report:audit",
+      // Toplu içe aktarım: kurulum/veri taşıma işini yapan kişi sistem
+      // yöneticisidir. Tek başına yetmez — aktarılacak varlığın write izni de
+      // gerekir (bu rolde YOK, yani sysadmin varsayılan olarak yalnız
+      // "geçmişi görebilir"; gerçek yükleme için ilgili write izni eklenir).
+      "data:import",
     ],
   },
 ];

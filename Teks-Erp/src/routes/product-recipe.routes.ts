@@ -12,7 +12,7 @@ import { recipeHardRemove } from "../services/helpers/guarded-hard-remove";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
-const service = new ProductRecipeService({
+export const productRecipeService = new ProductRecipeService({
   modelName: "productRecipe",
   tableName: "PRODUCT_RECIPE",
   searchFields: ["name"],
@@ -33,7 +33,7 @@ const service = new ProductRecipeService({
   autoCode: { prefix: "REC" },
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(productRecipeService);
 const router = Router();
 
 /**

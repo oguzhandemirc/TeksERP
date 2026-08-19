@@ -13,9 +13,9 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 // soft-delete giriş guard'ı için (assertRouteRefsActive'in master-data CRUD karşılığı).
 // Config TEK KAYNAK route.service.ts'te (ROUTE_SERVICE_CONFIG) — regresyon testi
 // aynı config'i tüketir, defaultInclude drift'i test ile yakalanır.
-const service = new RouteService(ROUTE_SERVICE_CONFIG);
+export const routeService = new RouteService(ROUTE_SERVICE_CONFIG);
 
-const controller = new BaseController(service);
+const controller = new BaseController(routeService);
 const router = Router();
 
 /**

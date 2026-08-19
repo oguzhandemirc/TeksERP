@@ -30,7 +30,7 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 // seçilemez). `defaultInclude`'a alınır ki panel ve tablet listeyi tek istekte
 // görsün; master-data ölçeğinde (özellik başına birkaç satır) maliyet ihmal
 // edilebilir.
-const service = new FabricPropertyService({
+export const fabricPropertyService = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
   searchFields: ["name", "category", "description"],
@@ -52,7 +52,7 @@ const service = new FabricPropertyService({
   entityLabel: "özellik",
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(fabricPropertyService);
 const router = Router();
 
 /**

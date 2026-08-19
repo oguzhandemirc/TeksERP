@@ -11,7 +11,7 @@ import { ColorService } from "../services/color.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 
-const service = new ColorService({
+export const colorService = new ColorService({
   modelName: "color",
   tableName: "COLOR",
   searchFields: ["name"],
@@ -22,7 +22,7 @@ const service = new ColorService({
   autoCode: { prefix: "RNK" },
 });
 
-const controller = new BaseController(service);
+const controller = new BaseController(colorService);
 const router = Router();
 
 /**
