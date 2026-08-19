@@ -203,11 +203,18 @@ export function DocVersionHistory({
   sourceId,
   currentVersion,
   onSelectVersion,
+  compact = true,
+  emptyText = "Kayıt yok.",
 }: {
   docType: PrintedDocType;
   sourceId: string;
   currentVersion: number;
   onSelectVersion: (version: number | null) => void;
+  /** Şerit içinde h-7 (varsayılan). Normal boyutlu buton dizisine konacaksa false. */
+  compact?: boolean;
+  /** Boş defterin SEBEBİ belge tipine göre değişir — refakat kartında "henüz
+   *  basılmadı", donarak doğan belgelerde gerçekten anormaldir. */
+  emptyText?: string;
 }) {
   const [open, setOpen] = useState(false);
   const q = useQuery({
@@ -221,8 +228,13 @@ export function DocVersionHistory({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button type="button" size="sm" variant="outline" className="h-7 gap-1">
-          <History className="h-3.5 w-3.5" /> Geçmiş
+        <Button
+          type="button"
+          size={compact ? "sm" : "default"}
+          variant="outline"
+          className={compact ? "h-7 gap-1" : "gap-1"}
+        >
+          <History className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} /> Geçmiş
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-80 p-2">
@@ -231,7 +243,7 @@ export function DocVersionHistory({
         </div>
         {q.isLoading && <div className="p-2 text-[12px] text-muted-foreground">Yükleniyor…</div>}
         {!q.isLoading && versions.length === 0 && (
-          <div className="p-2 text-[12px] text-muted-foreground">Kayıt yok.</div>
+          <div className="p-2 text-[12px] leading-relaxed text-muted-foreground">{emptyText}</div>
         )}
         <div className="max-h-72 space-y-1 overflow-auto">
           {versions.map((v) => (

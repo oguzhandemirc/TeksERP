@@ -239,6 +239,11 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
               // kartın kendi sürümünü işaretleriz (o da defterdeki ACTIVE satırdır).
               currentVersion={viewVersion ?? activeCard.version}
               onSelectVersion={(v) => setViewVersion(v)}
+              // Yanındaki Yenile/Kapat/Yazdır normal boyutlu — şerit ölçüsü burada kaçık durur.
+              compact={false}
+              // Defter baskıyla yazılır: ÖNİZLEME kayıt bırakmaz (GET yan etkisiz).
+              // Sebebi yazılmazsa "geçmiş çalışmıyor" diye okunur.
+              emptyText="Henüz baskı alınmadı — defter ilk baskıda oluşur. Önizleme kayıt bırakmaz."
             />
           )}
           <Button
