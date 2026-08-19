@@ -49,3 +49,26 @@ export function splitScopeStats(
   }
   return stat;
 }
+
+/**
+ * Bir yetki, SEÇİLİ bir wildcard tarafından zaten kapsanıyor mu?
+ *
+ * `mobile:*` ile "19 mobil yetkiyi tek tek işaretlemek" AYNI ŞEY DEĞİLDİR:
+ * wildcard GELECEKTE eklenecek ekranları da kapsar, tekil seçim kapsamaz. Panel
+ * bu farkı gizlemez — yalnız "bunu ayrıca işaretlemenin bir etkisi yok" der.
+ *
+ * Eşleşme ön ek bazlı: `mobile:*` → `mobile:` ile başlayan her kod. Wildcard'ın
+ * KENDİSİ kapsanan sayılmaz (kendini soluklaştırmasın).
+ */
+export function buildWildcardCover(
+  permissions: Permission[],
+  selectedIds: string[],
+): (p: Permission) => boolean {
+  const chosen = new Set(selectedIds);
+  const prefixes = permissions
+    .filter((p) => chosen.has(p.id) && p.code.endsWith(":*"))
+    .map((p) => p.code.slice(0, -1)); // "mobile:*" → "mobile:"
+  if (prefixes.length === 0) return () => false;
+  return (p: Permission) =>
+    !p.code.endsWith(":*") && prefixes.some((pre) => p.code.startsWith(pre));
+}

@@ -68,6 +68,15 @@ export function PermissionsTab({ userId }: Props) {
   const datesDirty = selected.some((id) => (dates[id] ?? "") !== (initialDates[id] ?? ""));
   const dirty = selectionDirty || datesDirty;
 
+  /**
+   * KAYDETMEDEN ÖNCE NE DEĞİŞİYOR (2026-08-19). Eskiden yalnız "Kaydet" aktifti;
+   * 68 satırlık bir gridde kullanıcının ne eklediğini/çıkardığını hatırlaması
+   * bekleniyordu. Yetki kaldırmak sessiz ve geri dönüşü zahmetli bir işlemdir
+   * (hedef kullanıcının oturumu düşer) → sayı ekranda durmalı.
+   */
+  const added = selected.filter((id) => !initialIds.includes(id)).length;
+  const removed = initialIds.filter((id) => !selected.includes(id)).length;
+
   const reset = () => {
     setSelected(initialIds);
     setDates(initialDates);
@@ -158,6 +167,23 @@ export function PermissionsTab({ userId }: Props) {
             Değişiklikleri Geri Al
           </Button>
         </div>
+        <div className="flex items-center gap-3">
+          {dirty && (added > 0 || removed > 0) && (
+            <div className="flex items-center gap-2 text-xs">
+              {added > 0 && (
+                <span className="rounded bg-emerald-500/10 px-2 py-1 font-medium text-emerald-700">
+                  +{added} eklenecek
+                </span>
+              )}
+              {/* Kaldırma AYRI ve daha dikkat çekici: eklemek geri alınabilir bir
+                  genişletme, kaldırmak ise kullanıcının işini durdurabilir. */}
+              {removed > 0 && (
+                <span className="rounded bg-destructive/10 px-2 py-1 font-medium text-destructive">
+                  −{removed} kaldırılacak
+                </span>
+              )}
+            </div>
+          )}
         <Button
           type="button"
           size="sm"
@@ -167,6 +193,7 @@ export function PermissionsTab({ userId }: Props) {
         >
           <Save className="h-4 w-4" /> {mutation.isPending ? "Kaydediliyor..." : "Yetkileri Kaydet"}
         </Button>
+        </div>
       </div>
     </div>
   );

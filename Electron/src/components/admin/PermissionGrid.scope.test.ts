@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scopeOf, splitScopeStats } from "./permission-scope";
+import { scopeOf, splitScopeStats, buildWildcardCover } from "./permission-scope";
 
 // =============================================================================
 // Yetki ekranı MOBİL/MASAÜSTÜ sekmesi (2026-08-19)
@@ -63,5 +63,44 @@ describe("sekme sayaçları", () => {
   it("seçim sekmeye bağlı DEĞİL — iki taraftaki seçili sayısı birlikte durur", () => {
     const st = splitScopeStats(perms, ["m1", "m2", "w1", "a1"], () => true);
     expect(st.mobile.selected + st.desktop.selected).toBe(4);
+  });
+});
+
+// =============================================================================
+// Wildcard kapsaması — "tam yetki için neden 3 kutu var?" (2026-08-19 bulgusu)
+// =============================================================================
+// İki kutu UI gruplamasıydı (tek-modüllü kategoride kategori+modül aynı kümeyi
+// seçiyordu) → birleştirildi. ÜÇÜNCÜSÜ (`mobile:*`) gerçek bir izindir ve AYNI
+// ŞEY DEĞİLDİR: gelecekte eklenecek ekranları da kapsar. Panel farkı gizlemez,
+// yalnız "ayrıca işaretlemenin etkisi yok" der.
+describe("wildcard kapsaması", () => {
+  const perms = [
+    p("w", "mobile"),
+    p("k", "mobile"),
+    p("web1", "web"),
+  ] as unknown as Array<{ id: string; code: string; category: string }>;
+  // kodları gerçekçi yap
+  perms[0]!.code = "mobile:*";
+  perms[1]!.code = "mobile:kk1";
+  perms[2]!.code = "shipping:read";
+
+  it("wildcard seçili değilse hiçbir satır kapsanmaz", () => {
+    const covered = buildWildcardCover(perms as never, []);
+    expect(covered(perms[1] as never)).toBe(false);
+  });
+
+  it("mobile:* seçiliyse mobil satırlar kapsanır", () => {
+    const covered = buildWildcardCover(perms as never, ["w"]);
+    expect(covered(perms[1] as never)).toBe(true);
+  });
+
+  it("BAŞKA ön ekteki yetki kapsanmaz — mobile:* shipping'i vermez", () => {
+    const covered = buildWildcardCover(perms as never, ["w"]);
+    expect(covered(perms[2] as never)).toBe(false);
+  });
+
+  it("wildcard KENDİSİ kapsanan sayılmaz (kendini soluklaştırmasın)", () => {
+    const covered = buildWildcardCover(perms as never, ["w"]);
+    expect(covered(perms[0] as never)).toBe(false);
   });
 });

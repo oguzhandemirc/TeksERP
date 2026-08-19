@@ -9,7 +9,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { DatePickerInput } from "@/components/forms/DatePickerInput";
 import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/types/permissions";
 
-import { scopeOf, splitScopeStats, SCOPE_LABEL, type PermScope } from "./permission-scope";
+import {
+  scopeOf,
+  splitScopeStats,
+  buildWildcardCover,
+  SCOPE_LABEL,
+  type PermScope,
+} from "./permission-scope";
 
 interface Props {
   permissions: Permission[];
@@ -102,6 +108,9 @@ export function PermissionGrid({
   const hasWildcard = permissions.some((p) => isWildcard(p.code) && selected.has(p.id));
   const columnCount = onDateChange ? 4 : 3;
 
+  // Seçili wildcard'ın kapsadığı satırlar — soluklaştırma + rozet için.
+  const isCovered = useMemo(() => buildWildcardCover(permissions, value), [permissions, value]);
+
   const other: PermScope = scope === "mobile" ? "desktop" : "mobile";
   // ARAMA + SEKME KLASİK TUZAĞI: aranan yetki diğer sekmedeyse ekran "sonuç yok"
   // der ve kullanıcı yetkinin var olmadığını sanır. Sayı hep gösterilir.
@@ -184,7 +193,10 @@ export function PermissionGrid({
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <div>
-            <span className="font-mono font-semibold">*</span> ile biten bir yetki seçili — bu yetki, ait olduğu kategorinin <span className="font-medium">tüm alt yetkilerini</span> kapsar.
+            <span className="font-mono font-semibold">*</span> ile biten bir yetki seçili — kategorinin{" "}
+            <span className="font-medium">bugünkü ve İLERİDE EKLENECEK</span> tüm yetkilerini kapsar.
+            Tek tek işaretlemekle aynı şey değildir: yeni bir ekran eklendiğinde bu kullanıcı onu da
+            otomatik görür.
           </div>
         </div>
       )}
@@ -229,20 +241,40 @@ export function PermissionGrid({
                         </label>
                       </TableCell>
                     </TableRow>
-                    {Array.from(modules.entries()).map(([module, perms]) => (
-                      <ModuleRows
-                        key={module}
-                        module={module}
-                        perms={perms}
-                        selected={selected}
-                        toggle={toggle}
-                        setMany={setMany}
-                        disabled={disabled}
-                        dates={dates}
-                        onDateChange={onDateChange}
-                        columnCount={columnCount}
-                      />
-                    ))}
+                    {/* ⚠️ TEK MODÜLLÜ kategoride modül satırı ÇİZİLMEZ (2026-08-19
+                        kullanıcı bulgusu: "tam yetki için neden 3 kutu var?").
+                        `mobile` kategorisinin tek modülü var → kategori ve modül
+                        satırları BİREBİR aynı kümeyi seçiyordu, yani iki kutudan
+                        biri saf gürültüydü. Kalan üçüncü kutu (`mobile:*`) gerçek
+                        bir izindir ve AYNI ŞEY DEĞİLDİR — bkz. wildcard notu. */}
+                    {modules.size === 1
+                      ? Array.from(modules.values())[0]!.map((perm) => (
+                          <PermissionRow
+                            key={perm.id}
+                            p={perm}
+                            selected={selected}
+                            toggle={toggle}
+                            disabled={disabled}
+                            dates={dates}
+                            onDateChange={onDateChange}
+                            coveredByWildcard={isCovered(perm)}
+                          />
+                        ))
+                      : Array.from(modules.entries()).map(([module, perms]) => (
+                          <ModuleRows
+                            key={module}
+                            module={module}
+                            perms={perms}
+                            selected={selected}
+                            toggle={toggle}
+                            setMany={setMany}
+                            disabled={disabled}
+                            dates={dates}
+                            onDateChange={onDateChange}
+                            columnCount={columnCount}
+                            isCovered={isCovered}
+                          />
+                        ))}
                   </Fragment>
                 );
               })}
@@ -264,6 +296,7 @@ interface ModuleRowsProps {
   dates?: Record<string, string | null | undefined>;
   onDateChange?: (permissionId: string, value: string) => void;
   columnCount: number;
+  isCovered: (p: Permission) => boolean;
 }
 
 function ModuleRows({
@@ -276,6 +309,7 @@ function ModuleRows({
   dates,
   onDateChange,
   columnCount,
+  isCovered,
 }: ModuleRowsProps) {
   const ids = perms.map((p) => p.id);
   const allChecked = ids.every((id) => selected.has(id));
@@ -295,74 +329,121 @@ function ModuleRows({
           </label>
         </TableCell>
       </TableRow>
-      {perms.map((p) => {
-        const wild = isWildcard(p.code);
-        const checked = selected.has(p.id);
-        return (
-          <TableRow key={p.id} className={cn(wild && "bg-destructive/5")}>
-            <TableCell className="py-1.5 pl-10">
-              <Checkbox
-                checked={checked}
-                onCheckedChange={() => toggle(p.id)}
-                disabled={disabled}
-              />
-            </TableCell>
-            <TableCell className="py-1.5">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <span
-                  className={cn("truncate font-mono text-xs", wild && "font-semibold text-destructive")}
-                  title={p.code}
-                >
-                  {p.code}
-                </span>
-                {wild && (
-                  <Badge variant="destructive" className="shrink-0 text-[10px]" title="Bu yetki, kategorideki tüm alt yetkileri otomatik kapsar.">
-                    tüm yetkiler
-                  </Badge>
-                )}
-              </div>
-            </TableCell>
-            <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
-              {p.description}
-              {/* "Normalde kim alır" ipucu — yetkiyi ikinci bir başlık altında
-                  TEKRAR YAZMAK yerine (sektör pratiğinde anti-desen: iki kutu,
-                  tek gerçek) rollerden TÜRETİLİR. Süzmez, kısıtlamaz; yalnız
-                  yol gösterir. */}
-              {p.roleNames && p.roleNames.length > 0 && (
-                <div className="mt-1 flex flex-wrap items-center gap-1">
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                    roller
-                  </span>
-                  {p.roleNames.map((r) => (
-                    <span
-                      key={r}
-                      className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
-                      title="Bu yetki bu rolün paketinde var — öneridir, zorunluluk değil."
-                    >
-                      {r.replace(/^Mobil — |^Web — /, "")}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </TableCell>
-            {onDateChange && (
-              <TableCell className="py-1.5">
-                {checked ? (
-                  <DatePickerInput
-                    value={dates?.[p.id] ?? ""}
-                    onChange={(v) => onDateChange(p.id, v)}
-                    disabled={disabled}
-                    placeholder="Süresiz"
-                    className="h-8 w-40"
-                  />
-                ) : (
-                  <div className="flex h-8 w-40 items-center text-xs text-muted-foreground">—</div>
-                )}
-              </TableCell>
-            )}
-          </TableRow>
-        );
-      })}
+      {perms.map((p) => (
+        <PermissionRow
+          key={p.id}
+          p={p}
+          selected={selected}
+          toggle={toggle}
+          disabled={disabled}
+          dates={dates}
+          onDateChange={onDateChange}
+          coveredByWildcard={isCovered(p)}
+        />
+      ))}
     </Fragment>
+  );
+}
+
+/**
+ * Tek yetki satırı — ModuleRows'tan AYRILDI çünkü tek-modüllü kategoride modül
+ * satırı hiç çizilmiyor ve satırların doğrudan basılması gerekiyor.
+ */
+function PermissionRow({
+  p,
+  selected,
+  toggle,
+  disabled,
+  dates,
+  onDateChange,
+  coveredByWildcard,
+}: {
+  p: Permission;
+  selected: Set<string>;
+  toggle: (id: string) => void;
+  disabled?: boolean;
+  dates?: Record<string, string | null | undefined>;
+  onDateChange?: (permissionId: string, value: string) => void;
+  /** Aynı kapsamda seçili bir `*` yetkisi bu satırı zaten kapsıyor mu? */
+  coveredByWildcard: boolean;
+}) {
+  const wild = isWildcard(p.code);
+  const checked = selected.has(p.id);
+  return (
+    <TableRow
+      className={cn(
+        wild && "bg-destructive/5",
+        // Kapsanan satır SOLUKLAŞIR ama DEVRE DIŞI KALMAZ: `mobile:*` sonradan
+        // kaldırılabilir ve o an tekil seçimler yine geçerli olur. Tıklamayı
+        // engellemek, geri dönüşü olan bir kararı tek yönlü yapardı.
+        !wild && coveredByWildcard && "opacity-55",
+      )}
+    >
+      <TableCell className="py-1.5 pl-10">
+        <Checkbox checked={checked} onCheckedChange={() => toggle(p.id)} disabled={disabled} />
+      </TableCell>
+      <TableCell className="py-1.5">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span
+            className={cn("truncate font-mono text-xs", wild && "font-semibold text-destructive")}
+            title={p.code}
+          >
+            {p.code}
+          </span>
+          {wild && (
+            <Badge
+              variant="destructive"
+              className="shrink-0 text-[10px]"
+              title="Bu tek satır, kategorinin bugünkü VE gelecekte eklenecek tüm yetkilerini kapsar."
+            >
+              tüm yetkiler
+            </Badge>
+          )}
+          {!wild && coveredByWildcard && (
+            <Badge
+              variant="muted"
+              className="shrink-0 text-[10px] font-normal"
+              title="Seçili * yetkisi bunu zaten kapsıyor — ayrıca işaretlemek bir şey eklemez."
+            >
+              zaten kapsanıyor
+            </Badge>
+          )}
+        </div>
+      </TableCell>
+      <TableCell className="break-words py-1.5 text-xs text-muted-foreground">
+        {p.description}
+        {p.roleNames && p.roleNames.length > 0 && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground/70">
+              roller
+            </span>
+            {p.roleNames.map((r) => (
+              <span
+                key={r}
+                className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"
+                title="Bu yetki bu rolün paketinde var — öneridir, zorunluluk değil."
+              >
+                {r.replace(/^Mobil — |^Web — /, "")}
+              </span>
+            ))}
+          </div>
+        )}
+      </TableCell>
+      {onDateChange && (
+        <TableCell className="py-1.5">
+          {checked ? (
+            <DatePickerInput
+              value={dates?.[p.id] ?? ""}
+              onChange={(v) => onDateChange(p.id, v)}
+              disabled={disabled}
+              placeholder="Süresiz"
+              className="h-8 w-40"
+            />
+          ) : (
+            <div className="flex h-8 w-40 items-center text-xs text-muted-foreground">—</div>
+          )}
+        </TableCell>
+      )}
+    </TableRow>
   );
 }
