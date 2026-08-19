@@ -5,6 +5,8 @@ import { Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PermissionGrid } from "@/components/admin/PermissionGrid";
+import { ByScreenView } from "./ByScreenView";
+import { screenCatalogService } from "@/services/screenCatalogService";
 import { permissionCatalogService } from "@/services/permissionCatalogService";
 import { adminUserService, type PermissionSetItem } from "@/services/adminUserService";
 import { TemplateApplyPanel } from "./TemplateApplyPanel";
@@ -15,13 +17,29 @@ interface Props {
 
 const CATALOG_KEY = "permission-catalog";
 
+/**
+ * İki pencere, tek gerçek (2026-08-19 — yetki mimarisi Katman 2, adım 2).
+ * "Ekrana göre" varsayılan: yöneticinin kafasındaki soru "bu kişi hangi ekranda
+ * ne yapsın", "hangi modülün write yetkisi olsun" değil. Modül gridi ince ayar
+ * için duruyor. Seçim ORTAK — sekme değiştirmek hiçbir şeyi sıfırlamaz.
+ */
+type ViewMode = "screen" | "module";
+
 export function PermissionsTab({ userId }: Props) {
   const qc = useQueryClient();
   const userKey = ["admin-user-permissions", userId];
 
+  const [view, setView] = useState<ViewMode>("screen");
+
   const catalog = useQuery({
     queryKey: [CATALOG_KEY],
     queryFn: permissionCatalogService.list,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const screens = useQuery({
+    queryKey: ["screen-catalog"],
+    queryFn: screenCatalogService.list,
     staleTime: 5 * 60 * 1000,
   });
 
@@ -134,15 +152,49 @@ export function PermissionsTab({ userId }: Props) {
   return (
     <div className="flex h-full flex-col gap-3">
       <div className="flex min-h-0 flex-1 gap-3">
-        <div className="min-h-0 flex-1">
-          <PermissionGrid
-            permissions={catalog.data?.data ?? []}
-            value={selected}
-            onChange={setSelected}
-            disabled={mutation.isPending}
-            dates={dates}
-            onDateChange={handleDateChange}
-          />
+        <div className="flex min-h-0 flex-1 flex-col gap-2">
+          <div className="flex items-center gap-1 rounded-md bg-muted p-1">
+            {(
+              [
+                ["screen", "Ekrana göre"],
+                ["module", "Modüle göre (ince ayar)"],
+              ] as const
+            ).map(([k, lbl]) => (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setView(k)}
+                className={
+                  "flex-1 rounded px-3 py-1.5 text-sm font-medium transition-colors " +
+                  (view === k
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground")
+                }
+              >
+                {lbl}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1">
+            {view === "screen" ? (
+              <ByScreenView
+                screens={screens.data?.data.screens ?? []}
+                permissions={catalog.data?.data ?? []}
+                value={selected}
+                onChange={setSelected}
+                disabled={mutation.isPending}
+              />
+            ) : (
+              <PermissionGrid
+                permissions={catalog.data?.data ?? []}
+                value={selected}
+                onChange={setSelected}
+                disabled={mutation.isPending}
+                dates={dates}
+                onDateChange={handleDateChange}
+              />
+            )}
+          </div>
         </div>
         <TemplateApplyPanel onApply={applyTemplate} disabled={mutation.isPending} />
       </div>
