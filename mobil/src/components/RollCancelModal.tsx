@@ -10,7 +10,10 @@ import {
 } from 'react-native-paper';
 
 import AppModal from './AppModal';
-import { CANCEL_REASON_PRESETS, CANCEL_MIN_REASON } from '../constants/cancelReasons';
+import { CANCEL_MIN_REASON } from '../constants/cancelReasons';
+import { useReasonPresets } from '../hooks/useReasonPresets';
+import { usePermissions } from '../hooks/usePermission';
+import ReasonPresetManagerSheet from './reasonPresets/ReasonPresetManagerSheet';
 import type { RollCancelPreview } from '../services/roll.service';
 import type { Roll } from '../types/models';
 import { colors } from '../theme';
@@ -126,6 +129,13 @@ export default function RollCancelModal({
   const [reasonOpen, setReasonOpen] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false);
   const [otherText, setOtherText] = useState('');
+  // Hazır iptal sebepleri artık düzenlenebilir katalogdan gelir.
+  const { presets: cancelPresets, isFallback: cancelPresetsOffline } =
+    useReasonPresets('ROLL_CANCEL');
+  const { has: hasPermission } = usePermissions();
+  const canEditPresets =
+    hasPermission('roll:manual-adjust') || hasPermission('mobile:tambur-duzelt');
+  const [managerOpen, setManagerOpen] = useState(false);
   // Modal her açılışta temiz başlamalı — önceki topun sebebi yenisine sızmasın.
   useEffect(() => {
     if (roll) {
@@ -301,21 +311,38 @@ export default function RollCancelModal({
                 Sebebi seç — dokununca iptal olur
               </Text>
               <View style={rollCancelStyles.reasonChips}>
-                {CANCEL_REASON_PRESETS.map((p) => (
+                {/* Liste SUNUCUDAN gelir (fabrika düzenleyebilsin); çevrimdışında
+                    cihazdaki son liste, o da yoksa APK'ya gömülü zemin. Kayda
+                    yazılan değer `fullText`tir — geçmişle gruplama ona dayanır. */}
+                {cancelPresets.map((p) => (
                   <TouchableRipple
-                    key={p.full}
-                    onPress={() => submit(p.full)}
+                    key={p.code}
+                    onPress={() => submit(p.fullText ?? p.label)}
                     disabled={confirmDisabled}
                     style={rollCancelStyles.reasonChip}
                     borderless
                   >
-                    <Text style={rollCancelStyles.reasonChipText}>{p.short}</Text>
+                    <Text style={rollCancelStyles.reasonChipText}>{p.label}</Text>
                   </TouchableRipple>
                 ))}
                 {/* Serbest yazım kaldırılmadı, "Diğer"in altına alındı: hazır
                     seçenek sürtünmeyi kaldırır ve veriyi sayılabilir yapar, ama
                     katalog dışı gerçek durumlar da olur. Tek dokunuşla iptal
                     EDEMEZ — yazılacak metin var, onayı aşağıdaki buton verir. */}
+                {/* ⚠️ Satır içi kalem YOK: bu chip'ler DOKUNUNCA TOPU İPTAL EDER.
+                    Yıkıcı bir aksiyonun yanına düzenleme tuşu koymak, ıskalanan
+                    her dokunuşu iptal edilmiş bir top yapardı. Düzenleme ayrı
+                    yüzeyde (ReasonPresetManagerSheet). */}
+                {canEditPresets && !cancelPresetsOffline && (
+                  <TouchableRipple
+                    onPress={() => setManagerOpen(true)}
+                    style={rollCancelStyles.reasonChip}
+                    borderless
+                    accessibilityLabel="Hazır iptal sebeplerini düzenle"
+                  >
+                    <Text style={rollCancelStyles.reasonChipText}>✏️ Sebepleri düzenle</Text>
+                  </TouchableRipple>
+                )}
                 <TouchableRipple
                   onPress={() => setOtherOpen((v) => !v)}
                   style={[
@@ -381,6 +408,12 @@ export default function RollCancelModal({
           {!stackedActions && confirmButton}
         </View>
       </View>
+
+      <ReasonPresetManagerSheet
+        visible={managerOpen}
+        kind="ROLL_CANCEL"
+        onDismiss={() => setManagerOpen(false)}
+      />
     </AppModal>
   );
 }

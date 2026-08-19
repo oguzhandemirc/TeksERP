@@ -52,8 +52,8 @@ const EXEMPT: Record<string, string> = {
 /**
  * Kimlik doğrulaması VAR ama route satırında izin guard'ı olmayan uç SAYISI.
  * Bugünkü küme: self-servis 4 (`/me`, `/logout`, `/preferences` ×2) +
- * salt-okuma lookup 5 (currency, document-profiles ×2, feature-flags ×2) +
- * kayıt bilgisi 1 (`GET /record-info/:table/:id`).
+ * salt-okuma lookup 6 (currency, document-profiles ×2, feature-flags ×2,
+ * **hazır sebep katalogları**) + kayıt bilgisi 1 (`GET /record-info/:table/:id`).
  * Bu sayı ARTARSA karar BİLİNÇLİ olmak zorundadır — yeni bir guard'sız uç,
  * yukarıdaki "gerçek risk penceresi"ni büyütür.
  *
@@ -65,7 +65,15 @@ const EXEMPT: Record<string, string> = {
  * Dinamik çözüm `test_permission_catalog`'un `DINAMIK_IZIN_KAYNAKLARI`
  * tablosunda beyanlıdır — yani kapsam boşluğu görünür kalır.
  */
-const BARE_CHAIN_BASELINE = 10;
+/**
+ * ⚠️ 10 → 11 (2026-08-19, BİLİNÇLİ): `GET /api/reason-presets` yalnız
+ * `verifyToken` taşır. Hazır sebep listeleri (fire/kayıt düzeltmesi/elle
+ * ekleme/iptal) ZATEN her operatör ekranında çiziliyor; ayrı bir okuma izni
+ * koymak, izni atanmamış her tablette Tambur'un sebep adımını 403'e düşürür ve
+ * fire kararını kaydedilemez yapardı (sebep zorunlu alan). YAZMA uçları guard'lı
+ * (`roll:manual-adjust` ∨ `mobile:tambur-duzelt`) — açık olan yalnız okuma.
+ */
+const BARE_CHAIN_BASELINE = 11;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

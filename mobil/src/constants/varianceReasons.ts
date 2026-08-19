@@ -24,6 +24,8 @@ export interface VarianceReason {
 
 /** FİRE — mal VARDI, kullanılamaz. Gerçek üretim kaybı. */
 export const SCRAP_REASONS: readonly VarianceReason[] = [
+  // ⚠️ SIRA ANLAMLIDIR: en sık seçilen sebep BAŞTA (2026-08-19 saha talebi).
+  { code: 'TOP_BASI', label: 'Top başı' },
   { code: 'DOKUMA_HATASI', label: 'Dokuma hatası' },
   { code: 'BOYA_HATASI', label: 'Boya / renk hatası' },
   { code: 'LEKE', label: 'Leke / kirlenme' },

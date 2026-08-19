@@ -94,6 +94,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/labels", app: "desktop", title: "Etiketler", requires: ["station:read"], capabilities: ["label-template:read", "label-template:write"] },
   { key: "definitions/routes", app: "desktop", title: "Üretim Rotaları", requires: ["station:read"], capabilities: ["property:write", "station:write"] },
   { key: "definitions/product-recipes", app: "desktop", title: "İş Emri Şablonları", requires: ["station:read"], capabilities: ["station:write"] },
+  // TEK EKRAN, DÖRT SEKME (fire · kayıt düzeltmesi · elle ekleme · iptal) —
+  // düzenleme `roll:manual-adjust` YETENEĞİdir, ekranı görmek için gerekmez.
+  { key: "definitions/reason-presets", app: "desktop", title: "Hazır Sebepler", requires: ["roll:read"], capabilities: ["roll:manual-adjust"] },
   { key: "definitions/defect-types", app: "desktop", title: "Hata Tipleri", requires: ["quality:read"], capabilities: ["quality:write"] },
   { key: "definitions/quality-grades", app: "desktop", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
   { key: "definitions/colors", app: "desktop", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },

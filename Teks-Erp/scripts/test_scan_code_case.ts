@@ -31,6 +31,7 @@ import { normalizeScanCode } from "../src/utils/code-format";
 import { InventoryService } from "../src/services/inventory.service";
 import { ReturnService } from "../src/services/return.service";
 import { SackSearchService } from "../src/services/sack-search.service";
+import { TamburService } from "../src/services/tambur.service";
 
 let pass = 0;
 let fail = 0;
@@ -122,6 +123,38 @@ async function testLookups(): Promise<void> {
    * ayrıştırılır. Sadece `data` dolu mu diye bakmak, iş kuralı değişince testi
    * ilgisiz bir sebeple kırmızıya düşürürdü.
    */
+  /**
+   * LİSTE ARAMASI da bir okutma yüzeyidir (2026-08-19 saha vakası):
+   * "top listede yok ama yan panelde açılıyor" — çünkü okutma yolu normalize
+   * ediyor, liste süzgeci etmiyordu. Ana top listesi o gün düzeltildi, Tambur
+   * çıktı listesi ATLANMIŞTI ve arıza sahadan geri geldi. Yüzeyi ADIYLA koruyan
+   * kontrol bu; mekanik bölüm (D) kuralı, bu bölüm ise SONUCU ölçer.
+   */
+  const tambur = new TamburService();
+  const outRoll = await prisma.roll.create({
+    data: {
+      barcode: `T${SUFFIX}B2`.toUpperCase(),
+      itemId: item.id,
+      initialQty: 50,
+      currentQty: 50,
+      status: RollStatus.WAREHOUSE,
+      entrySource: "TAMBUR_SPLIT",
+    },
+    select: { id: true, barcode: true },
+  });
+  cleanup.rollIds.push(outRoll.id);
+
+  const listUpper = await tambur.listRecentOutputRolls({ search: outRoll.barcode });
+  const listLower = await tambur.listRecentOutputRolls({ search: outRoll.barcode.toLowerCase() });
+  const hit = (r: { data?: unknown }): boolean =>
+    Array.isArray(r.data) && (r.data as { id: string }[]).some((x) => x.id === outRoll.id);
+  check("Tambur çıktı listesi: BÜYÜK harf bulur", hit(listUpper));
+  check(
+    "Tambur çıktı listesi: küçük harf BULUR",
+    hit(listLower),
+    "sahadan gelen arıza tam buydu",
+  );
+
   const found = async (fn: () => Promise<{ data?: unknown }>): Promise<boolean> => {
     try {
       return Boolean((await fn()).data);
@@ -220,11 +253,23 @@ function testMechanical(): void {
    */
   const EXEMPT_FILES = new Set([path.join("utils", "code-format.ts")]);
 
+  /**
+   * ⚠️ YORUMLAR SÖKÜLÜR — bu satır load-bearing ve pahalı öğrenildi.
+   * Bağlam testi (`where:` ile eşleşme ARASINDA yalnız ayraç olabilir) yorum
+   * görünce eşleşmeyi "arama değil" sayıp ATLIYOR. Yani tam da riskli yerler —
+   * yanına neden yazılmış aramalar — bekçiden muaf oluyordu. Üstelik 300
+   * karakterlik geriye-bakış penceresini uzun bir açıklama tek başına taşırıyor.
+   * Blok yorum ve SATIR BAŞI `//` sökülür; satır ortasındaki `//` bırakılır
+   * (string içindeki URL'i kesip aynı satırdaki gerçek bir ihlali gizlerdi).
+   */
+  const stripComments = (t: string): string =>
+    t.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/^[ \t]*\/\/.*$/gm, "");
+
   const violations: string[] = [];
   let scanned = 0;
   for (const file of files) {
     if (EXEMPT_FILES.has(path.relative(SRC, file))) continue;
-    const src = fs.readFileSync(file, "utf8");
+    const src = stripComments(fs.readFileSync(file, "utf8"));
     // Yalnız `where:` bağlamındaki eşleşmeler ilgilendiriyor — `select:`/`data:`
     // içindeki `barcode: true` bir arama değildir.
     for (const m of src.matchAll(EXACT)) {
@@ -243,10 +288,26 @@ function testMechanical(): void {
        * Doğru ölçüt: `where:` ile eşleşme arasında YALNIZ ayraç ve iç içe filtre
        * anahtarları (OR/AND/NOT/is/some/every) bulunabilir.
        */
-      const before = src.slice(Math.max(0, m.index! - 300), m.index!);
-      const lastWhere = before.lastIndexOf("where:");
+      const before = src.slice(Math.max(0, m.index! - 600), m.index!);
+      /**
+       * ⚠️ İKİ YAZIM VAR ve ilk sürüm yalnız birincisini görüyordu:
+       *   ① nesne literali → `where: { ... }`
+       *   ② SONRADAN ATAMA → `where.OR = [ { barcode: search } ]`
+       * ②'yi kaçırmak teorik değil, ÖLÇÜLDÜ: 2026-08-19'da üç yüzey
+       * (`listRecentOutputRolls`, `listSwatches`, `getSwatchStats`) tam bu biçimde
+       * normalize etmeden kalmıştı ve bu bekçi YEŞİL veriyordu — arıza sahadan
+       * geldi ("top listede yok ama yan panelde açılıyor"), bekçiden değil.
+       * Liste araması `where` nesnesini adım adım kurduğu için ② en yaygın yazım.
+       */
+      const CTX = /where[A-Za-z0-9_$]*\s*(?::|\.\s*(?:OR|AND|NOT)\s*=)/g;
+      let lastWhere = -1;
+      let lastWhereLen = 0;
+      for (const c of before.matchAll(CTX)) {
+        lastWhere = c.index!;
+        lastWhereLen = c[0].length;
+      }
       if (lastWhere < 0) continue;
-      const between = before.slice(lastWhere + "where:".length);
+      const between = before.slice(lastWhere + lastWhereLen);
       if (!/^[\s{[\]]*((OR|AND|NOT|is|some|every)\s*:\s*[\s{[]*)*$/.test(between)) continue;
       scanned++;
       // Kabul edilen iki biçim: ifadenin kendisi normalize eder, YA DA aynı
@@ -262,7 +323,7 @@ function testMechanical(): void {
     }
   }
 
-  check("körlük zemini: en az 5 tam-eşleşme araması bulundu", scanned >= 5, `${scanned} arama`);
+  check("körlük zemini: en az 8 tam-eşleşme araması bulundu", scanned >= 8, `${scanned} arama`);
   check(
     "her tam-eşleşme araması normalizeScanCode'dan geçiyor",
     violations.length === 0,

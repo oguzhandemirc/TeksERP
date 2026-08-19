@@ -46,6 +46,12 @@ export const VARIANCE_SOURCES = {
    * satır bırakmak yerine sapma kayda geçirilir.
    */
   TAMBUR_UNDO_FULL: "TAMBUR_UNDO_FULL",
+  /**
+   * Fasonda kalan metraj "gelmeyecek" kararıyla kapatıldı (kısmi teslimat
+   * sonrası kalan ya da hiç dönmeyen top). Sebep listesi FİRE kataloğudur
+   * (ReasonPresetKind.ROLL_SCRAP — fabrika panelden düzenler).
+   */
+  SUBCONTRACTOR_REMAINDER: "SUBCONTRACTOR_REMAINDER",
 } as const;
 
 export type VarianceSource = (typeof VARIANCE_SOURCES)[keyof typeof VARIANCE_SOURCES];
@@ -64,6 +70,10 @@ export interface VarianceReason {
  * ZORUNLUDUR, çünkü "fireniz neden %8" sorusunun cevabı sebep kırılımıdır.
  */
 export const SCRAP_REASONS: readonly VarianceReason[] = [
+  // ⚠️ SIRA ANLAMLIDIR: en sık seçilen sebep BAŞTA durur (eldivenli operatör
+  // listenin ilk satırına bakar). "Top başı" tambur kesiminde en yaygın fire
+  // sebebidir — 2026-08-19 saha talebi.
+  { code: "TOP_BASI", label: "Top başı" },
   { code: "DOKUMA_HATASI", label: "Dokuma hatası" },
   { code: "BOYA_HATASI", label: "Boya / renk hatası" },
   { code: "LEKE", label: "Leke / kirlenme" },
@@ -108,11 +118,61 @@ export const VARIANCE_MIN_REASON_TEXT = 3;
  */
 export const LEGACY_REASON_CODE = "BELIRTILMEDI";
 
-/** Türe göre geçerli sebep listesi. OVERAGE sebep İSTEMEZ (sistem tespit eder). */
-export function reasonsForKind(kind: RollVarianceKind): readonly VarianceReason[] {
+// ─────────────────────────────────────────────────────────────────────────────
+// DİNAMİK KATALOG BAĞI (2026-08-19) — fabrika sebepleri panelden düzenleyebilir.
+//
+// Satırların canlı hâli DB'dedir (`ReasonPreset`), ama doğrulama transaction
+// İÇİNDE ve SENKRON koşuyor. Bu yüzden servis kendi önbelleğini buraya KAYDETTİRİR;
+// sabitler servisi import etmez (bağımlılık yönü korunur: services → constants).
+//
+// ⚠️ Kaynak `null` dönerse bu dosyadaki KOD kataloğu geçerlidir. "DB henüz
+// okunmadı" ile "liste gerçekten boş" aynı davranışa düşer ve bu bilinçlidir:
+// sebep zorunlu bir alandır, boş katalog operatörü kilitlerdi.
+// ─────────────────────────────────────────────────────────────────────────────
+export interface ReasonCatalogSource {
+  /** Aktif satırlar (seçicide gösterilecek liste). Bilinmiyorsa `null`. */
+  reasons(kind: RollVarianceKind): VarianceReason[] | null;
+  /**
+   * Tek kod araması — GİZLENMİŞ satırı da bulur (bayat liste taşıyan APK
+   * vardiya ortasında 400 almasın). `null` = kaynak hazır değil,
+   * `undefined` = kaynak hazır ama böyle bir kod YOK (fail-closed).
+   */
+  find(kind: RollVarianceKind, code: string): VarianceReason | null | undefined;
+}
+
+let catalogSource: ReasonCatalogSource | null = null;
+
+export function registerReasonCatalogSource(source: ReasonCatalogSource): void {
+  catalogSource = source;
+}
+
+/** Yalnız testler için — kayıtlı kaynağı düşürür. */
+export function clearReasonCatalogSource(): void {
+  catalogSource = null;
+}
+
+/** Kod kataloğu (DB'siz zemin). */
+function builtinReasonsForKind(kind: RollVarianceKind): readonly VarianceReason[] {
   if (kind === RollVarianceKind.SCRAP) return SCRAP_REASONS;
   if (kind === RollVarianceKind.RECORD_CORRECTION) return RECORD_CORRECTION_REASONS;
   return [];
+}
+
+/** Türe göre geçerli sebep listesi. OVERAGE sebep İSTEMEZ (sistem tespit eder). */
+export function reasonsForKind(kind: RollVarianceKind): readonly VarianceReason[] {
+  const dynamic = catalogSource?.reasons(kind);
+  if (dynamic && dynamic.length > 0) return dynamic;
+  return builtinReasonsForKind(kind);
+}
+
+/** Doğrulamanın kullandığı tek arama noktası (gizli satırları da tanır). */
+function findReason(kind: RollVarianceKind, code: string): VarianceReason | undefined {
+  const dynamic = catalogSource?.find(kind, code);
+  if (dynamic) return dynamic;
+  // `undefined` (kaynak hazır, kod yok) durumunda da kod kataloğuna bakılır:
+  // sistem satırları DB'den gizlenmiş olabilir ve o kodu taşıyan eski bir
+  // istemci hâlâ sahada olabilir.
+  return builtinReasonsForKind(kind).find((r) => r.code === code);
 }
 
 export interface VarianceReasonInput {
@@ -149,9 +209,9 @@ export function validateVarianceReason(
   if (!code) return { reasonCode: LEGACY_REASON_CODE, reasonText: text };
   if (code === LEGACY_REASON_CODE) return { reasonCode: code, reasonText: text };
 
-  const catalog = reasonsForKind(kind);
-  const hit = catalog.find((r) => r.code === code);
+  const hit = findReason(kind, code);
   if (!hit) {
+    const catalog = reasonsForKind(kind);
     throw new Error(
       `Geçersiz sebep kodu: ${code} (geçerli: ${catalog.map((r) => r.code).join(", ")})`,
     );

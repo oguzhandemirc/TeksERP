@@ -110,6 +110,18 @@ interface BaseProps {
   /** Listenin ilk hücresine sabitlenen mor aksiyon kartı — bkz.
    *  `PickerLeadingAction`. Verilmezse hiç render edilmez. */
   leadingAction?: PickerLeadingAction;
+  /** Seçenek kartının SAĞINA eklenen küçük ikon tuşları (ör. hazır sebep
+   *  listesinde "düzenle" / "çoğalt"). Verilmezse hiç çizilmez — diğer picker
+   *  kullanıcılarının yerleşimi değişmez. Dönen dizi boşsa da çizilmez. */
+  optionActions?: (option: PickerOption) => PickerOptionAction[];
+}
+
+export interface PickerOptionAction {
+  /** MaterialCommunityIcons adı. */
+  icon: string;
+  onPress: () => void;
+  /** Erişilebilirlik etiketi — eldivenli operatör için değil, ekran okuyucu için. */
+  accessibilityLabel?: string;
 }
 
 interface PaginatedProps extends BaseProps {
@@ -349,9 +361,10 @@ export default function PickerModal(props: Props) {
           option={item}
           selected={item.value === selectedValue}
           onPress={handlePick}
+          actions={props.optionActions?.(item)}
         />
       ),
-    [selectedValue, handlePick, leadIcon, leadDisabled, handleLeadingPress],
+    [selectedValue, handlePick, leadIcon, leadDisabled, handleLeadingPress, props.optionActions],
   );
 
   // Paginated submit handler
@@ -628,14 +641,34 @@ const PickerCard = React.memo(function PickerCard({
   option,
   selected,
   onPress,
+  actions,
 }: {
   option: PickerOption;
   selected: boolean;
   onPress: (value: string) => void;
+  /** Kartın sağ kenarındaki ikon tuşları — verilmezse hiç çizilmez. */
+  actions?: PickerOptionAction[];
 }) {
   const hasDetails = !!option.details?.length;
   return (
     <View style={styles.cardWrap}>
+      {actions && actions.length > 0 ? (
+        // Aksiyon tuşları kartın ÜSTÜNDE (absolute) durur: karta binmezler ama
+        // grid hücresinin geometrisini de değiştirmezler — diğer picker'ların
+        // yerleşimi bu yüzden aynen korunur.
+        <View style={styles.cardActions} pointerEvents="box-none">
+          {actions.map((a, i) => (
+            <IconButton
+              key={i}
+              icon={a.icon}
+              size={18}
+              onPress={a.onPress}
+              accessibilityLabel={a.accessibilityLabel}
+              style={styles.cardActionBtn}
+            />
+          ))}
+        </View>
+      ) : null}
       <TouchableRipple
         onPress={() => onPress(option.value)}
         borderless
@@ -850,6 +883,15 @@ const styles = StyleSheet.create({
   loadingMore: { paddingVertical: 16, alignItems: 'center' },
 
   cardWrap: { flex: 1, padding: 4 },
+  // Kart üstü aksiyon şeridi — sağ üst köşe; karta binmez, hücreyi büyütmez.
+  cardActions: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    zIndex: 2,
+    flexDirection: 'row',
+  },
+  cardActionBtn: { margin: 0, backgroundColor: 'rgba(255,255,255,0.92)' },
   card: {
     backgroundColor: '#fff',
     borderColor: '#e2e8f0',

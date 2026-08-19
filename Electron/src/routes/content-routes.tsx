@@ -17,6 +17,7 @@ import { EtiketlerPage } from "@/pages/Labels/EtiketlerPage";
 import { MachinesPage } from "@/pages/Machines/MachinesPage";
 import { PeripheralDevicesPage } from "@/pages/PeripheralDevices/PeripheralDevicesPage";
 import { DefectTypesPage } from "@/pages/DefectTypes/DefectTypesPage";
+import { ReasonPresetsPage } from "@/pages/ReasonPresets/ReasonPresetsPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
@@ -168,6 +169,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="station:read">
         <ProductRecipesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/reason-presets",
+    element: (
+      <ProtectedRoute requirePermission="roll:read">
+        <ReasonPresetsPage />
       </ProtectedRoute>
     ),
   },

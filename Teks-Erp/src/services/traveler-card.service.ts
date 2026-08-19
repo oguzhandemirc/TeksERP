@@ -663,7 +663,9 @@ export class TravelerCardService {
 
     if (params.search && params.search.trim()) {
       const q = params.search.trim();
-      const qUpper = q.toUpperCase();
+      // Tek kapı: elle `toUpperCase()` yerine `normalizeScanCode` — davranış aynı
+      // ama kural TEK yerde yaşar (mekanik bekçi de bunu arıyor).
+      const qUpper = normalizeScanCode(q);
       where.OR = [
         { cardNumber: qUpper },
         { barcode: qUpper },
@@ -756,7 +758,7 @@ export class TravelerCardService {
       where: {
         workOrderId: card.workOrderId,
         cancelledAt: null,
-        items: { some: { receiptItems: { none: {} } } },
+        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
       },
     });
 

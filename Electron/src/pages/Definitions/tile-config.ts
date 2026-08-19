@@ -18,6 +18,7 @@ import {
   Printer,
   Ruler,
   LayoutTemplate,
+  MessageSquareText,
   type LucideIcon,
 } from "lucide-react";
 import type { DefinitionGroupKey } from "./groups-config";
@@ -157,6 +158,20 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/product-recipes",
     group: "production",
     permission: "station:read",
+  },
+  {
+    // TEK KART, DÖRT SEKME — dört ayrı kart menüyü kalabalıklaştırırdı ve
+    // dördü de aynı şeyin (operatöre gösterilen hazır mesaj) bağlamları.
+    key: "reason-presets",
+    title: "Hazır Sebepler",
+    description: "Fire · kayıt düzeltmesi · elle top ekleme · iptal ekranlarındaki hazır mesajlar",
+    icon: MessageSquareText,
+    to: "/definitions/reason-presets",
+    group: "production",
+    // ⚠️ Kart ile route AYNI izni taşımalı — ayrışırsa kullanıcı kartı görür,
+    // tıklar, /forbidden'a düşer. Düzenleme ayrıca `roll:manual-adjust` ister
+    // ve o kontrol sayfanın İÇİNDE yapılır (tuşlar çizilmez).
+    permission: "roll:read",
   },
   {
     key: "defect-types",

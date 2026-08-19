@@ -33,6 +33,7 @@ import prisma from "../lib/prisma";
 import { PERMISSION_CATALOG, type PermissionCatalogEntry } from "../constants/permission-catalog";
 import { AuditService } from "../services/audit.service";
 import { reconcileRoleTemplates } from "./role-template-catalog.job";
+import { reconcileReasonPresets } from "./reason-preset-catalog.job";
 
 // Soğuk açılışta DB (özellikle Windows sunucuda PostgreSQL servisi) backend'den
 // sonra hazır olabiliyor. Emsal job'lar bunu 60sn sabit gecikmeyle çözüyor; bu iş
@@ -134,9 +135,11 @@ export async function reconcilePermissionCatalog(): Promise<PermissionReconcileR
  * değişir). Hata sunucuyu düşürmez; sınırlı sayıda yeniden dener, tükenirse
  * gürültülü loglar.
  *
- * İKİ FAZ, sırayla: (1) izin kodları, (2) rol şablonları
- * (`role-template-catalog.job.ts`). Şablon satırları izin satırlarına FK ile
- * bağlı olduğu için sıra zorunludur.
+ * ÜÇ FAZ, sırayla: (1) izin kodları, (2) rol şablonları
+ * (`role-template-catalog.job.ts`), (3) hazır sebep katalogları
+ * (`reason-preset-catalog.job.ts`). İlk ikisinde sıra ZORUNLUDUR (şablon
+ * satırları izin satırlarına FK ile bağlı); üçüncüsü bağımsızdır ama aynı
+ * yeniden-deneme politikasını paylaşsın diye aynı zincirde koşar.
  */
 export function startPermissionCatalogReconciler(): void {
   if (started) return;
@@ -149,6 +152,18 @@ export function startPermissionCatalogReconciler(): void {
     // yeniden-deneme politikasıyla ve izinlerden SONRA.
     void reconcilePermissionCatalog()
       .then(() => reconcileRoleTemplates())
+      // (3) Hazır sebep katalogları — FK bağı YOK ama aynı zincirde koşar:
+      // soğuk açılışta DB'nin hazır olmama ihtimali ortak, dolayısıyla
+      // yeniden-deneme politikası da ortak olmalı. Ayrı timer, aynı hatayı iki
+      // farklı yerde ele almak demekti.
+      .then(async () => {
+        const r = await reconcileReasonPresets();
+        console.log(
+          r.created.length > 0
+            ? `[reason-presets] ${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`
+            : `[reason-presets] katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`,
+        );
+      })
       .catch((err) => {
         if (n < MAX_ATTEMPTS) {
           // Soğuk açılışta DB henüz ayakta olmayabilir — uyarı, hata değil.
