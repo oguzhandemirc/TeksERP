@@ -330,6 +330,12 @@ Atanmazsa ekran/düğme **hiç görünmez** ve sebebi hiçbir yerde yazmaz.
 > ```
 > Çıkan her kullanıcı için panelden `property:write` / `station:write` durumuna
 > bak — eksikse ver.
+>
+> **ÖLÇÜLDÜ (2026-08-19, fabrika verisinden çekilmiş dev DB):** `data:import`
+> taşıyan 7 kullanıcının **tamamı** `property:write` ve `station:write` de
+> taşıyor → **kimse etkilenmiyor, yapılacak atama yok.** Yukarıdaki SQL yine de
+> canlıda koşulsun: dev kopyası 2026-08-02 tarihli, sonrasında yetki
+> düzenlenmiş olabilir.
 
 Boot log'unda beklenen satırlar (provada ölçüldü):
 
