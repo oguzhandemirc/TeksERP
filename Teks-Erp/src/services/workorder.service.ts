@@ -1413,7 +1413,7 @@ export class WorkOrderService {
       (where as Record<string, unknown>).dispatches = {
         none: {
           cancelledAt: null,
-          items: { some: { receiptItems: { none: {} } } },
+          items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
         },
       };
     }
@@ -3118,7 +3118,7 @@ export class WorkOrderService {
       where: {
         workOrderId,
         cancelledAt: null,
-        items: { some: { receiptItems: { none: {} } } },
+        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
       },
       select: { id: true },
     });

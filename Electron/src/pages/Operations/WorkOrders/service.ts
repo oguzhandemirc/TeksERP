@@ -403,16 +403,38 @@ export const workOrderService = {
       .then((r) => r.data),
 
   /** Fason Kabul (receive) — fasondaki topları içeri al: orijinaller emekli, dönen parçalar
-   *  (newRolls, metraj) yeni açık-kumaş toplar olarak doğar (renk appliesColor'da otomatik). */
+   *  (newRolls, metraj) yeni açık-kumaş toplar olarak doğar (renk appliesColor'da otomatik).
+   *  KISMİ KABUL (2026-08-19): returns[].receivedQty kalanın altındaysa top tüketilmez —
+   *  fasonda beklemede kalır, kalan ikinci teslimatla (yeni makbuz + yeni parti) kapanır. */
   receiveFason: (payload: {
     workOrderId: string;
     stepId: string;
     subcontractorId: string;
-    returns: { rollId: string }[];
+    manifestNo?: string;
+    notes?: string;
+    appliedColorId?: string;
+    returns: { rollId: string; receivedQty?: number }[];
     newRolls: { qty: number }[];
+    /** İdempotency anahtarı — retry aynı token'ı taşır, ikinci makbuz doğmaz. */
+    clientToken?: string;
   }) =>
     apiClient
       .post<ApiResponse<unknown>>("/api/subcontractor/receive", payload)
+      .then((r) => r.data),
+
+  /** Fasonda kalan metrajı "gelmeyecek" kararıyla kapat — FİRE (sebep zorunlu,
+   *  sapma defterine yazılır; sevk kalemi kapanır, karneye gerçek fire düşer). */
+  closeFasonRemainder: (payload: {
+    stepId: string;
+    rollId: string;
+    reasonCode: string;
+    reasonText?: string | null;
+  }) =>
+    apiClient
+      .post<ApiResponse<{ rollId: string; closedQty: number }>>(
+        "/api/subcontractor/close-remainder",
+        payload,
+      )
       .then((r) => r.data),
 
   /** WO formu kapsama paneli — seçili sipariş kalemleri için net üretim açığı. */

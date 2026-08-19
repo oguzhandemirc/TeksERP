@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Ban, CheckCircle2, FileText, Link2, Palette, Pencil, Ruler } from "lucide-react";
+import { Ban, CheckCircle2, FileText, Link2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { RefreshButton } from "@/components/RefreshButton";
@@ -14,6 +14,7 @@ import { TravelerCardPrintDialog } from "./TravelerCardPrintDialog";
 import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { FasonSevkPrintDialog } from "./FasonSevkPrintDialog";
+import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
@@ -47,6 +48,9 @@ export function WorkOrderDetailHeader({
   // kullanıcı işi bir ekranda bulup diğerinde bulamaz.
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
   const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
+  // Fason Kabul (2026-08-19): ince ayarlı kabul — top bazında gelen metraj (kısmi),
+  // parçalar, irsaliye no; kalan-kapama (fire) da bu diyalogdan.
+  const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
 
   // Ayırma akışı: WO yüklenince kart diyaloğunu BİR KEZ otomatik aç (kullanıcı
   // kapatınca yeniden açılmasın diye ref ile kilitlenir).
@@ -132,6 +136,9 @@ export function WorkOrderDetailHeader({
                 <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("width")}>
                   <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
                 </Button>
+                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setFasonReceiveOpen(true)}>
+                  <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
+                </Button>
               </PermissionGate>
               <Button
                 type="button"
@@ -186,6 +193,11 @@ export function WorkOrderDetailHeader({
       />
       {wo && (
         <>
+          <FasonReceiveDialog
+            open={fasonReceiveOpen}
+            onOpenChange={setFasonReceiveOpen}
+            workOrderId={wo.id}
+          />
           <LinkOrderDialog
             open={linkOrderOpen}
             onOpenChange={setLinkOrderOpen}

@@ -112,6 +112,8 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
       dispatchedQty: number;
       returnedQty: number | null;
       firstReceivedAt: Date | null;
+      hasFull: boolean | null;
+      remainderClosed: boolean;
       dispatchedAt: Date;
     }>
   >(Prisma.sql`
@@ -121,14 +123,24 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
       sdi."dispatchedQty"::float AS "dispatchedQty",
       ret.qty                    AS "returnedQty",
       ret."firstReceivedAt"      AS "firstReceivedAt",
+      ret."hasFull"              AS "hasFull",
+      (sdi."remainderClosedAt" IS NOT NULL) AS "remainderClosed",
       sd."dispatchedAt"          AS "dispatchedAt"
     FROM subcontractor_dispatch_items sdi
     JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
     JOIN subcontractors sub          ON sub.id = sd."subcontractorId"
     LEFT JOIN LATERAL (
       SELECT
-        SUM(nr."initialQty")::float AS qty,
-        MIN(sr."receivedAt")        AS "firstReceivedAt"
+        -- DÖNEN METRAJ = KABUL DEFTERİ (2026-08-19, kısmi teslimat). receivedQty
+        -- makbuz satırının kabul ettiği metrajdır; eski (NULL) satırlarda topun
+        -- son metrajına düşülür — tüketim anında currentQty = kabul edilen kalan
+        -- olduğundan iki rejim aynı sayıyı verir. Eski initialQty kaynağı YANLIŞTI:
+        -- giden metrajın kendisini "döndü" sayıyor, fire HEP %0 çıkıyordu.
+        SUM(COALESCE(sri."receivedQty", nr."currentQty"))::float AS qty,
+        MIN(sr."receivedAt")        AS "firstReceivedAt",
+        -- Kalem ancak TAM (isPartial=false) bir makbuz satırıyla kapanır;
+        -- kısmi satırlar kalemi AÇIK bırakır (kalan hâlâ fasonda).
+        BOOL_OR(NOT sri."isPartial") AS "hasFull"
       FROM subcontractor_receipt_items sri
       JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
       JOIN rolls nr                  ON nr.id = sri."newRollId"
@@ -158,17 +170,24 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
     const disp = Number(r.dispatchedQty);
     cell.dispatchItems += 1;
     cell.dispatchedQty += disp;
-    // "Kapandı" ölçütü DÖNÜŞ SATIRININ VARLIĞIDIR (metraj > 0 değil): fasondan
-    // sıfır metrajla dönen bir kalem de kapanmıştır ve firesi %100'dür.
-    if (r.firstReceivedAt !== null) {
+    // "Kapandı" ölçütü (kısmi teslimat, 2026-08-19): TAM makbuz satırı VAR ya da
+    // kalan "gelmeyecek" kararıyla kapatıldı (remainderClosedAt). Kısmi satırlar
+    // kalemi kapatmaz — kalan hâlâ fasondadır, açık bakiyede görünür. Sıfır
+    // metrajlı tam dönüş de kapanıştır ve firesi %100'dür.
+    if (r.hasFull === true || r.remainderClosed) {
       cell.closedItems += 1;
       cell.closedDispatchedQty += disp;
       cell.returnedQty += Number(r.returnedQty ?? 0);
-      cell.turnaroundSum += (r.firstReceivedAt.getTime() - r.dispatchedAt.getTime()) / 86_400_000;
-      cell.turnaroundCount += 1;
+      // Süre = ilk dönüş anı; yalnız kalan-kapamayla kapanan (hiç dönüşsüz)
+      // kalemin süresi ölçülmez (dönüş yok — kapama tarihi teslim süresi değildir).
+      if (r.firstReceivedAt !== null) {
+        cell.turnaroundSum += (r.firstReceivedAt.getTime() - r.dispatchedAt.getTime()) / 86_400_000;
+        cell.turnaroundCount += 1;
+      }
     } else {
       cell.openItems += 1;
-      cell.openQty += disp;
+      // Açık bakiye = giden − kısmen dönen (kalan fasonda bekleyen gerçek metraj).
+      cell.openQty += Math.max(0, disp - Number(r.returnedQty ?? 0));
     }
   }
   return [...map.values()];
@@ -223,16 +242,30 @@ export async function getSubcontractScorecard(
         -- sorusu değil, bu yüzden fabrika saat dilimine kesilmez.
         EXTRACT(EPOCH FROM (now() - sd."dispatchedAt")) / 86400.0 AS "daysOpen",
         COUNT(*)                          AS "openItems",
-        SUM(sdi."dispatchedQty")::float   AS "openQty"
+        -- Açık bakiye = giden − kısmen dönen (kısmi teslimat sonrası fasonda
+        -- gerçekten bekleyen metraj; defterden düşülür).
+        SUM(sdi."dispatchedQty" - COALESCE(pret.qty, 0))::float AS "openQty"
       FROM subcontractor_dispatch_items sdi
       JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
       JOIN subcontractors sub          ON sub.id = sd."subcontractorId"
+      LEFT JOIN LATERAL (
+        SELECT SUM(sri."receivedQty") AS qty
+        FROM subcontractor_receipt_items sri
+        JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
+        WHERE sri."sourceDispatchItemId" = sdi.id
+          AND sr."cancelledAt" IS NULL AND sri."isPartial"
+      ) pret ON true
       WHERE sd."cancelledAt" IS NULL
         AND sd."directShippedAt" IS NULL
+        -- Kalan-kapama kalemi kapatır (fire deftere yazıldı, artık açık değil).
+        AND sdi."remainderClosedAt" IS NULL
         AND NOT EXISTS (
+          -- Kalem yalnız TAM (isPartial=false) makbuz satırıyla kapanır; kısmi
+          -- satır kalemi AÇIK bırakır (kalan hâlâ fasonda).
           SELECT 1 FROM subcontractor_receipt_items sri
           JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
           WHERE sri."sourceDispatchItemId" = sdi.id AND sr."cancelledAt" IS NULL
+            AND NOT sri."isPartial"
         )
       GROUP BY sd.id, sd."dispatchNo", sub.name, sd."dispatchedAt"
       ORDER BY sd."dispatchedAt" ASC

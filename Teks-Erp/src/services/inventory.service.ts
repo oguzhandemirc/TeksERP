@@ -472,7 +472,8 @@ const ROLL_LIST_INCLUDE = {
   dispatchItems: {
     where: {
       dispatch: { cancelledAt: null, directShippedAt: null },
-      receiptItems: { none: { receipt: { cancelledAt: null } } },
+      remainderClosedAt: null,
+      receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
     },
     // "En güncel açık kalem" — özet ucu (getRollSubcontractorSummary open_items)
     // ile hizalı: dispatch.dispatchedAt DESC. Bir topun iki açık kalemi zorunlu
@@ -1414,7 +1415,8 @@ export class InventoryService {
                     }
                   : {}),
               },
-              receiptItems: { none: { receipt: { cancelledAt: null } } },
+              remainderClosedAt: null,
+              receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
             },
           },
         },
@@ -1918,12 +1920,16 @@ export class InventoryService {
         WHERE r.status = 'AT_SUBCONTRACTOR'
           AND sd."cancelledAt" IS NULL
           AND sd."directShippedAt" IS NULL
+          AND sdi."remainderClosedAt" IS NULL
           AND NOT EXISTS (
             SELECT 1
             FROM subcontractor_receipt_items sri
             JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
             WHERE sri."sourceDispatchItemId" = sdi.id
               AND sr."cancelledAt" IS NULL
+              -- Kısmi makbuz kalemi kapatmaz (kalan hâlâ fasonda) — kalem yalnız
+              -- TAM satırla dolu sayılır; yoksa yarım kalan top firma atfını yitirirdi.
+              AND NOT sri."isPartial"
           )
         ORDER BY sdi."rollId", sd."dispatchedAt" DESC, sdi."createdAt" DESC
       ),
@@ -2155,7 +2161,8 @@ export class InventoryService {
         dispatchItems: {
           where: {
             dispatch: { cancelledAt: null, directShippedAt: null },
-            receiptItems: { none: { receipt: { cancelledAt: null } } },
+            remainderClosedAt: null,
+            receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
           },
           orderBy: { dispatch: { dispatchedAt: "desc" } },
           take: 1,

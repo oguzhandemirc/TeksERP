@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, CheckCircle2, FileText, Link2, Maximize2, Palette, Pencil, Ruler } from "lucide-react";
+import { Ban, CheckCircle2, FileText, Link2, Maximize2, PackageCheck, Palette, Pencil, Ruler } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -13,6 +13,7 @@ import { WorkOrderCancelDialog } from "./WorkOrderCancelDialog";
 import { WorkOrderCompleteDialog } from "./WorkOrderCompleteDialog";
 import { LinkOrderDialog } from "./LinkOrderDialog";
 import { ChangeTargetDialog } from "./ChangeTargetDialog";
+import { FasonReceiveDialog } from "./FasonReceiveDialog";
 import { summarizeLinkedFulfillment } from "./order-fulfillment";
 import { V3Section } from "./detail-v3/V3Section";
 import { KunyeCard } from "./detail-v3/KunyeCard";
@@ -51,6 +52,8 @@ const STATUS_PILL: Record<string, string> = {
 export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: Props) {
   const [documentsOpen, setDocumentsOpen] = useState(false);
   const [linkOrderOpen, setLinkOrderOpen] = useState(false);
+  // Fason Kabul (2026-08-19): ince ayarlı kabul (kısmi teslimat + kalan-kapama).
+  const [fasonReceiveOpen, setFasonReceiveOpen] = useState(false);
   // null = kapalı; "color"/"width" hangi hedefin değiştirileceğini söyler.
   const [changeMode, setChangeMode] = useState<"color" | "width" | null>(null);
   const [travelerCardOpen, setTravelerCardOpen] = useState(false);
@@ -175,6 +178,9 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <button type="button" className="btn" onClick={() => setChangeMode("width")}>
                         <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
                       </button>
+                      <button type="button" className="btn" onClick={() => setFasonReceiveOpen(true)}>
+                        <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
+                      </button>
                     </PermissionGate>
 
                     <button type="button" className="btn" onClick={() => setDocumentsOpen(true)}>
@@ -256,6 +262,11 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
 
         {wo && (
           <>
+            <FasonReceiveDialog
+              open={fasonReceiveOpen}
+              onOpenChange={setFasonReceiveOpen}
+              workOrderId={wo.id}
+            />
             <LinkOrderDialog
               open={linkOrderOpen}
               onOpenChange={setLinkOrderOpen}

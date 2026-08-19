@@ -608,7 +608,7 @@ export class WorkOrderSplitService {
             stepId: atSubStep.id,
             cancelledAt: null,
             directShippedAt: null,
-            items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+            items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
           },
           select: { id: true, dispatchNo: true },
           orderBy: { dispatchedAt: "desc" },

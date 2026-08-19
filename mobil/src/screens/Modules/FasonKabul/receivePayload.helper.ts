@@ -16,12 +16,33 @@ import type {
   ReceiveRequest,
 } from '../../../types/models';
 import type { NewRollRow } from './newRolls.helper';
+import { generateClientUuid } from '../../../offline/barcode';
 
 /** buildReceivePayload'ın satırlardan (rows) ihtiyaç duyduğu minimal şekil. */
 export interface PayloadRollRow {
   rollId: string;
   checked: boolean;
   notes: string;
+  /**
+   * KISMİ KABUL (2026-08-19): operatörün beyan ettiği GELEN metraj (ham metin,
+   * virgül serbest). Kalanın (remainingQty) ALTINDAYSA payload'a `receivedQty`
+   * yazılır → backend topu tüketmez, kalan fasonda bekler. Kalana eşit/üstünde
+   * ya da parse edilemezse alan GÖNDERİLMEZ → TAM kabul (eski davranış birebir;
+   * eski backend'ler bilinmeyen alanı zaten atar).
+   */
+  receivedQtyStr?: string;
+  /** Topun fasondaki KALANI (currentQty) — kısmi kararının kıyas tabanı. */
+  remainingQty?: number;
+}
+
+/** Satırın kısmi olup olmadığı + payload'a yazılacak gelen metraj (yoksa null). */
+export function partialReceivedQty(row: PayloadRollRow): number | null {
+  if (row.receivedQtyStr == null || row.remainingQty == null) return null;
+  const n = parseFloat(row.receivedQtyStr.replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  // 0.01 m eşiği — FARK bantlarıyla aynı hassasiyet (yüzer-nokta gürültüsü
+  // "kısmi" sayılmasın; kalana eşit giriş TAM kabuldür).
+  return n < row.remainingQty - 0.01 ? n : null;
 }
 
 /**
@@ -100,7 +121,14 @@ export function buildReceivePayload(args: BuildReceivePayloadArgs): ReceiveReque
 
   const returns = rows
     .filter((r) => r.checked)
-    .map((r) => ({ rollId: r.rollId, notes: r.notes.trim() || null }));
+    .map((r) => {
+      const partial = partialReceivedQty(r);
+      return {
+        rollId: r.rollId,
+        notes: r.notes.trim() || null,
+        ...(partial != null ? { receivedQty: partial } : {}),
+      };
+    });
   if (returns.length === 0) return null;
 
   const parsed = parseNewRolls(newRolls);
@@ -130,5 +158,8 @@ export function buildReceivePayload(args: BuildReceivePayloadArgs): ReceiveReque
       : {}),
     returns,
     newRolls: parsed,
+    // İdempotency: payload kurulurken BİR KEZ üretilir — offline kuyruk replay'i
+    // aynı token'ı taşır. Kısmi teslimatta replay'in tek kimliği budur.
+    clientToken: generateClientUuid(),
   };
 }

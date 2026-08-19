@@ -91,7 +91,7 @@ export class WorkOrderFasonQuickService {
       where: {
         workOrderId,
         cancelledAt: null,
-        items: { some: { receiptItems: { none: {} } } },
+        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
       },
       select: {
         id: true,
@@ -101,7 +101,7 @@ export class WorkOrderFasonQuickService {
         subcontractor: { select: { name: true } },
         step: { select: { station: { select: { name: true } } } },
         items: {
-          where: { receiptItems: { none: {} } },
+          where: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } },
           select: {
             roll: { select: { id: true, barcode: true, currentQty: true, status: true } },
           },

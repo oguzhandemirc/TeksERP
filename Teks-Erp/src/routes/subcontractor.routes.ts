@@ -203,6 +203,12 @@ router.patch(
  *
  *       Bu adımın tüm outstanding'i consumed olunca step COMPLETED. Sonraki step
  *       PENDING kalır (Roll yok); Kurşun/KK2'de ilk açık kumaş açıldığında ACTIVE.
+ *
+ *       KISMİ KABUL (2026-08-19): `returns[].receivedQty` kalanın altındaysa top
+ *       tüketilmez — AT_SUBCONTRACTOR kalır, currentQty kalana iner; kalan ikinci
+ *       teslimatla (yeni makbuz) ya da `close-remainder` ile kapanır. Aynı sevkin
+ *       ikinci+ teslimatında doğan toplar YENİ parti numarası alır. `clientToken`
+ *       idempotency anahtarıdır (kısmi teslimatta replay'in tek kimliği).
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -234,6 +240,8 @@ router.patch(
  *                   properties:
  *                     rollId: { type: string, format: uuid }
  *                     notes:  { type: string, nullable: true, description: "Bu topa dair kabul notu" }
+ *                     receivedQty: { type: number, nullable: true, description: "KISMİ kabul: bu teslimatta gelen metraj (verilmez/kalanı aşarsa TAM kabul)" }
+ *               clientToken: { type: string, format: uuid, nullable: true, description: "İdempotency anahtarı (retry'da aynı token)" }
  *               newRolls:
  *                 type: array
  *                 description: |
@@ -259,6 +267,43 @@ router.post(
   verifyToken,
   requireAnyPermission("workorder:write", "mobile:fason-kabul"),
   controller.receive
+);
+
+/**
+ * @openapi
+ * /api/subcontractor/close-remainder:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: Fasonda kalan metrajı "gelmeyecek" kararıyla kapat (fire)
+ *     description: |
+ *       Kısmi teslimat sonrası fasonda bekleyen kalan (ya da hiç dönmemiş top)
+ *       fire kararıyla kapatılır: top SUBCONTRACTOR_CONSUMED olur, kalan metraj
+ *       sapma defterine (RollVariance SCRAP, source=SUBCONTRACTOR_REMAINDER)
+ *       yazılır, açık sevk kalemi remainderClosedAt ile damgalanır. Sebep
+ *       ZORUNLU — fire kataloğundan (ReasonPreset ROLL_SCRAP; "Diğer" → açıklama).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stepId, rollId, reasonCode]
+ *             properties:
+ *               stepId:     { type: string, format: uuid }
+ *               rollId:     { type: string, format: uuid }
+ *               reasonCode: { type: string, maxLength: 64 }
+ *               reasonText: { type: string, nullable: true, maxLength: 500 }
+ *     responses:
+ *       200: { description: Kalan kapatıldı, fire deftere yazıldı }
+ *       400: { description: Validasyon / geçersiz sebep / adım fason değil }
+ *       409: { description: Top bu adımda fasonda beklemiyor / eşzamanlı işlem }
+ */
+router.post(
+  "/close-remainder",
+  verifyToken,
+  requireAnyPermission("workorder:write", "mobile:fason-kabul"),
+  controller.closeRemainder
 );
 
 /**

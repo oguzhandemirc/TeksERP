@@ -260,3 +260,70 @@ describe('buildReceivePayload — appliedWidth (EN)', () => {
     expect(p).not.toHaveProperty('appliedColorId');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KISMİ KABUL (2026-08-19) — "100 gitti, 51 geldi, 49 sonra"
+// ─────────────────────────────────────────────────────────────────────────────
+import { partialReceivedQty } from './receivePayload.helper';
+
+function partialRow(
+  rollId: string,
+  receivedQtyStr: string,
+  remainingQty: number,
+): PayloadRollRow {
+  return { rollId, checked: true, notes: '', receivedQtyStr, remainingQty };
+}
+
+describe('partialReceivedQty — kısmi karar eşiği', () => {
+  it('gelen < kalan → kısmi (değer döner)', () => {
+    expect(partialReceivedQty(partialRow('r1', '51', 100))).toBe(51);
+  });
+  it('virgüllü giriş desteklenir', () => {
+    expect(partialReceivedQty(partialRow('r1', '51,5', 100))).toBe(51.5);
+  });
+  it('gelen = kalan → TAM (null)', () => {
+    expect(partialReceivedQty(partialRow('r1', '100', 100))).toBeNull();
+  });
+  it('gelen > kalan (fazla dönen) → TAM (null; backend clamp zaten var)', () => {
+    expect(partialReceivedQty(partialRow('r1', '104', 100))).toBeNull();
+  });
+  it('0.01 m eşiği: yüzer-nokta gürültüsü kısmi SAYILMAZ', () => {
+    expect(partialReceivedQty(partialRow('r1', '99.995', 100))).toBeNull();
+  });
+  it('parse edilemeyen / boş giriş → TAM (null)', () => {
+    expect(partialReceivedQty(partialRow('r1', '', 100))).toBeNull();
+    expect(partialReceivedQty(partialRow('r1', 'abc', 100))).toBeNull();
+  });
+  it('alanlar hiç yoksa (eski çağıran) → TAM (null)', () => {
+    expect(partialReceivedQty({ rollId: 'r1', checked: true, notes: '' })).toBeNull();
+  });
+});
+
+describe('buildReceivePayload — kısmi kabul + clientToken', () => {
+  it('kısmi satır returns[].receivedQty taşır, tam satır TAŞIMAZ', () => {
+    const p = buildReceivePayload(
+      baseArgs({
+        rows: [partialRow('r1', '51', 100), partialRow('r2', '200', 200)],
+        newRolls: [makeNewRollRow('51', true), makeNewRollRow('200', true)],
+      }),
+    );
+    expect(p?.returns).toEqual([
+      expect.objectContaining({ rollId: 'r1', receivedQty: 51 }),
+      expect.objectContaining({ rollId: 'r2' }),
+    ]);
+    expect(p?.returns[1]).not.toHaveProperty('receivedQty');
+  });
+
+  it('clientToken her payload\'da üretilir ve UUID biçimindedir (replay kimliği)', () => {
+    const p1 = buildReceivePayload(
+      baseArgs({ rows: [row('r1', true)], newRolls: [makeNewRollRow('10', true)] }),
+    );
+    const p2 = buildReceivePayload(
+      baseArgs({ rows: [row('r1', true)], newRolls: [makeNewRollRow('10', true)] }),
+    );
+    expect(p1?.clientToken).toMatch(/^[0-9a-f-]{36}$/);
+    // Her mantıksal deneme YENİ token — aynı token'ı yalnız replay taşır
+    // (offline kuyruk vars'ı olduğu gibi yeniden gönderir).
+    expect(p1?.clientToken).not.toBe(p2?.clientToken);
+  });
+});

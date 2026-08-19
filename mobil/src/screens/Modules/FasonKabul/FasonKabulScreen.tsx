@@ -84,6 +84,7 @@ import {
 } from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
 import { STATION_MUT } from '../../../offline/mutations';
+import { useReasonPresets } from '../../../hooks/useReasonPresets';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
 import {
@@ -116,12 +117,32 @@ interface RollRow {
   barcode: string | null;
   itemName: string;
   colorName?: string | null;
+  /** Topun fasondaki KALANI (currentQty) — kısmi teslimat sonrası düşmüş olabilir. */
   dispatchedQty: number;
+  /** SEVK EDİLEN metraj (sevk kalemi). Kalanın altına düşmüşse top YARIM KALANDIR. */
+  sentQty: number | null;
+  /** Sevk tarihi — "N gündür fasonda" yaş bandı için. */
+  sentAt: string | null;
+  /**
+   * KISMİ KABUL: bu teslimatta GELEN metraj (ham metin; varsayılan = kalan).
+   * Kalanın altına indirilirse kabul KISMİ olur — top fasonda bekler.
+   */
+  receivedQtyStr: string;
   width: number | null;
   qualityGrade: string;
   checked: boolean;
   notes: string;
   noteOpen: boolean;
+}
+
+/** Satırın beyan edilen GELEN metrajı (geçersizse kalanın tamamı = TAM kabul). */
+function rowGelen(r: RollRow): number {
+  const n = parseFloat((r.receivedQtyStr ?? '').replace(',', '.'));
+  return Number.isFinite(n) && n > 0 ? n : Number(r.dispatchedQty ?? 0);
+}
+/** Satır KISMİ mi — gelen, kalanın 0.01 m'den fazla altında. */
+function rowIsPartial(r: RollRow): boolean {
+  return r.checked && rowGelen(r) < Number(r.dispatchedQty ?? 0) - 0.01;
 }
 
 /**
@@ -314,6 +335,9 @@ export default function FasonKabulScreen() {
   // ── Mal kabul onayı ── giden/gelen uyuşmazsa (eksik top ya da metraj farkı)
   // iki-tık yerine belirgin bir uyarı modalı çıkar.
   const [mismatchConfirmOpen, setMismatchConfirmOpen] = useState(false);
+  // ── "Kalan gelmeyecek" kapaması ── hedef top satırı (null = modal kapalı).
+  // Fasondaki kalan FİRE kararıyla kapatılır (sebep zorunlu, sapma defterine yazılır).
+  const [remainderTarget, setRemainderTarget] = useState<RollRow | null>(null);
   // Footer'daki İrsaliye No / Kabul Notu (ikisi de opsiyonel) varsayılan KAPALI;
   // operatör isterse açar. Her kart yüklemesinde kapanır (applyParty/resetForm).
   const [extrasOpen, setExtrasOpen] = useState(false);
@@ -334,7 +358,14 @@ export default function FasonKabulScreen() {
             if (d.selectedGroup) setSelectedGroup(d.selectedGroup as PendingReturnGroup);
             if (d.selectedParty) setSelectedParty(d.selectedParty as PendingReturnParty);
             if (Array.isArray(d.rows) && d.rows.length > 0) {
-              setRows((d.rows as RollRow[]).map((r) => ({ ...r, noteOpen: false })));
+              setRows((d.rows as RollRow[]).map((r) => ({
+                ...r,
+                noteOpen: false,
+                // Eski taslaklar kısmi-kabul alanlarını taşımaz — varsayılana düş.
+                sentQty: r.sentQty ?? null,
+                sentAt: r.sentAt ?? null,
+                receivedQtyStr: r.receivedQtyStr ?? String(Number(r.dispatchedQty ?? 0)),
+              })));
             }
             if (typeof d.manifestNo === 'string' && d.manifestNo) setManifestNo(d.manifestNo);
             if (typeof d.notes === 'string' && d.notes) setNotes(d.notes);
@@ -511,6 +542,33 @@ export default function FasonKabulScreen() {
     },
   });
 
+  // "Kalan gelmeyecek" — ONLINE aksiyon, offline kuyruğa girmez (fire kararı
+  // taze kalan metraj ister; kuyruklanmış kapama bayat rakam yazardı).
+  const closeRemainderMutation = useMutation({
+    mutationFn: (vars: { stepId: string; rollId: string; reasonCode: string; reasonText?: string | null }) =>
+      subcontractorService.closeRemainder(vars),
+    onSuccess: (res) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Kalan kapatıldı', text2: res.message });
+      setRemainderTarget(null);
+      // Kapatılan top formdan düşer; parça prefill'i kalanlara göre yeniden kurulur.
+      setRows((prev) => {
+        const next = prev.filter((r) => r.rollId !== res.data.rollId);
+        setNewRolls((curr) =>
+          rebuildPrefilledNewRolls(curr, next.filter((r) => r.checked).map(rowGelen), receiveMode),
+        );
+        return next;
+      });
+      qc.invalidateQueries({ queryKey: ['pending-returns'] });
+      qc.invalidateQueries({ queryKey: ['rolls'] });
+      qc.invalidateQueries({ queryKey: ['work-orders'] });
+    },
+    onError: (err) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'Kapama başarısız', text2: (err as Error).message });
+    },
+  });
+
   // İptal modali açıldığında backend'den preview çek — operatöre türeyen
   // açık kumaş Roll'larını ve cascade güvenliğini göster.
   const cancelPreviewQuery = useQuery({
@@ -660,6 +718,10 @@ export default function FasonKabulScreen() {
         itemName: r.item?.name ?? '—',
         colorName: r.color?.name ?? null,
         dispatchedQty: r.currentQty,
+        // Kısmi teslimat bilgisi (eski backend'de alanlar yok → null, rozet çizilmez).
+        sentQty: r.dispatchedQty ?? null,
+        sentAt: r.dispatchedAt ?? null,
+        receivedQtyStr: String(Number(r.currentQty ?? 0)),
         width: r.width ?? null,
         qualityGrade: r.qualityGrade,
         checked: true,
@@ -892,11 +954,24 @@ export default function FasonKabulScreen() {
       setNewRolls((curr) =>
         rebuildPrefilledNewRolls(
           curr,
-          nextRows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+          nextRows.filter((r) => r.checked).map(rowGelen),
           receiveMode,
         ),
       );
     }
+  };
+
+  /** Gelen metraj değişince ön-dolu parçaları beyana göre yeniden kur. */
+  const updateRowQty = (rollId: string, value: string) => {
+    const nextRows = rows.map((r) => (r.rollId === rollId ? { ...r, receivedQtyStr: value } : r));
+    setRows(nextRows);
+    setNewRolls((curr) =>
+      rebuildPrefilledNewRolls(
+        curr,
+        nextRows.filter((r) => r.checked).map(rowGelen),
+        receiveMode,
+      ),
+    );
   };
   const toggleAllRows = () => {
     const someUnchecked = rows.some((r) => !r.checked);
@@ -905,7 +980,7 @@ export default function FasonKabulScreen() {
     setNewRolls((curr) =>
       rebuildPrefilledNewRolls(
         curr,
-        nextRows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+        nextRows.filter((r) => r.checked).map(rowGelen),
         receiveMode,
       ),
     );
@@ -919,7 +994,7 @@ export default function FasonKabulScreen() {
     setNewRolls((curr) =>
       rebuildPrefilledNewRolls(
         curr,
-        rows.filter((r) => r.checked).map((r) => Number(r.dispatchedQty ?? 0)),
+        rows.filter((r) => r.checked).map(rowGelen),
         mode,
       ),
     );
@@ -943,8 +1018,15 @@ export default function FasonKabulScreen() {
     () =>
       rows
         .filter((r) => r.checked)
-        .reduce((s, r) => s + Number(r.dispatchedQty ?? 0), 0),
+        .reduce((s, r) => s + rowGelen(r), 0),
     [rows],
+  );
+  // KISMİ satırlar — gelen < kalan: top fasonda beklemede kalacak.
+  const partialRows = useMemo(() => rows.filter(rowIsPartial), [rows]);
+  const partialCount = partialRows.length;
+  const partialRemainder = useMemo(
+    () => partialRows.reduce((s, r) => s + (Number(r.dispatchedQty ?? 0) - rowGelen(r)), 0),
+    [partialRows],
   );
   const returnedTotal = useMemo(
     () => parsedNewRolls.reduce((s, r) => s + r.qty, 0),
@@ -1007,7 +1089,13 @@ export default function FasonKabulScreen() {
     return buildReceivePayload({
       selectedGroup,
       selectedParty,
-      rows,
+      rows: rows.map((r) => ({
+        rollId: r.rollId,
+        checked: r.checked,
+        notes: r.notes,
+        receivedQtyStr: r.receivedQtyStr,
+        remainingQty: Number(r.dispatchedQty ?? 0),
+      })),
       newRolls,
       manifestNo,
       notes,
@@ -1055,7 +1143,7 @@ export default function FasonKabulScreen() {
       return;
     }
     if (!canSubmit) return;
-    if (hasMissing || hasQtyMismatch) {
+    if (hasMissing || hasQtyMismatch || partialCount > 0) {
       // Giden/gelen uyuşmuyor → iki-tık yerine belirgin uyarı modalı.
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setMismatchConfirmOpen(true);
@@ -1498,6 +1586,31 @@ export default function FasonKabulScreen() {
                             <Badge icon="arrow-expand-vertical">
                               {`${Number(row.dispatchedQty ?? 0).toFixed(1)} mt`}
                             </Badge>
+                            {row.sentQty != null &&
+                              Number(row.dispatchedQty ?? 0) < row.sentQty - 0.01 && (
+                                <View style={styles.partialTag}>
+                                  <Text style={styles.partialTagText}>
+                                    {`YARIM · ${fmtMeters(Number(row.dispatchedQty ?? 0))}/${fmtMeters(row.sentQty)} m`}
+                                  </Text>
+                                </View>
+                              )}
+                            {row.sentAt != null &&
+                              (() => {
+                                const days = Math.floor(
+                                  (Date.now() - new Date(row.sentAt).getTime()) / 86_400_000,
+                                );
+                                if (days < 1) return null;
+                                // 7+ gün: amber — "kalan gelmeyecek mi?" sorusunun görünür hâli
+                                // (kapama ELLE yapılır, sistem yalnız yaşı gösterir).
+                                const aged = days >= 7;
+                                return (
+                                  <View style={[styles.ageTag, aged && styles.ageTagWarn]}>
+                                    <Text style={[styles.ageTagText, aged && styles.ageTagTextWarn]}>
+                                      {`${days} gündür fasonda`}
+                                    </Text>
+                                  </View>
+                                );
+                              })()}
                             {row.width != null && (
                               <Badge icon="arrow-expand-horizontal">
                                 {`${row.width} cm`}
@@ -1525,8 +1638,41 @@ export default function FasonKabulScreen() {
                           accessibilityLabel="Topa not ekle"
                           style={{ margin: 0 }}
                         />
+                        {/* Kalan gelmeyecek — fasondaki kalanı FİRE kararıyla kapat
+                            (kısmi teslimat sonrası kalan ya da hiç dönmeyecek top). */}
+                        <IconButton
+                          icon="fire-alert"
+                          size={22}
+                          iconColor="#b45309"
+                          onPress={() => setRemainderTarget(row)}
+                          accessibilityLabel="Fasondaki kalanı kapat (gelmeyecek)"
+                          style={{ margin: 0 }}
+                        />
                       </View>
                     </TouchableRipple>
+                    {row.checked && (
+                      <View style={styles.gelenRow}>
+                        <Text style={styles.gelenLabel}>Gelen (m)</Text>
+                        <TextInput
+                          mode="outlined"
+                          dense
+                          value={row.receivedQtyStr}
+                          onChangeText={(v) => updateRowQty(row.rollId, v)}
+                          keyboardType="numeric"
+                          style={styles.gelenInput}
+                          right={
+                            rowIsPartial(row) ? (
+                              <TextInput.Icon icon="clock-alert-outline" color="#b45309" />
+                            ) : undefined
+                          }
+                        />
+                        {rowIsPartial(row) && (
+                          <Text style={styles.gelenPartialText}>
+                            {`Kalan ${fmtMeters(Number(row.dispatchedQty ?? 0) - rowGelen(row))} m fasonda BEKLEMEDE kalacak`}
+                          </Text>
+                        )}
+                      </View>
+                    )}
                     {row.noteOpen && (
                       <View style={styles.noteWrap}>
                         <TextInput
@@ -1589,8 +1735,19 @@ export default function FasonKabulScreen() {
                         {fmtMeters(qtyDiff)} m
                       </Text>
                       <Text style={styles.diffBannerBody}>
-                        Sevk: {fmtMeters(sentTotal)} m  ·  Dönen:{' '}
+                        Beyan edilen gelen: {fmtMeters(sentTotal)} m  ·  Parça toplamı:{' '}
                         {fmtMeters(returnedTotal)} m
+                      </Text>
+                    </Surface>
+                  )}
+                  {partialCount > 0 && (
+                    <Surface style={styles.partialBanner} elevation={0}>
+                      <Text style={styles.partialBannerTitle}>
+                        {`KISMİ KABUL: ${partialCount} top — ${fmtMeters(partialRemainder)} m fasonda beklemede kalacak`}
+                      </Text>
+                      <Text style={styles.partialBannerBody}>
+                        Kalan geldiğinde AYNI refakat kartını okutup ikinci kabulü yapın
+                        (yeni makbuz + yeni parti). Gelmeyecekse top satırındaki 🔥 ile kapatın.
                       </Text>
                     </Surface>
                   )}
@@ -1973,15 +2130,42 @@ export default function FasonKabulScreen() {
               <View style={styles.mismatchRow}>
                 <Icon source="arrow-expand-vertical" size={18} color="#b45309" />
                 <Text style={styles.mismatchRowText}>
-                  Metraj farkı: Sevk {fmtMeters(sentTotal)} m · Dönen{' '}
+                  Metraj farkı: Beyan edilen gelen {fmtMeters(sentTotal)} m · Parça toplamı{' '}
                   {fmtMeters(returnedTotal)} m ·{' '}
                   {qtyDiff > 0 ? 'FAZLA +' : 'EKSİK '}
                   {fmtMeters(qtyDiff)} m
                 </Text>
               </View>
             )}
+            {partialCount > 0 && (
+              <View style={styles.mismatchRow}>
+                <Icon source="clock-alert-outline" size={18} color="#0369a1" />
+                <Text style={styles.mismatchRowText}>
+                  {`${partialCount} top KISMİ kabul — ${fmtMeters(partialRemainder)} m fasonda `}
+                  BEKLEMEDE kalacak. Kalan geldiğinde aynı kartı okutup ikinci kabulü
+                  yapın; doğan toplar yeni parti numarası alır.
+                </Text>
+              </View>
+            )}
           </View>
         }
+      />
+
+      {/* "Kalan gelmeyecek" — fasondaki kalanı FİRE kararıyla kapat (sebep zorunlu). */}
+      <CloseRemainderModal
+        target={remainderTarget}
+        stepId={selectedGroup?.step.id ?? null}
+        loading={closeRemainderMutation.isPending}
+        onDismiss={() => setRemainderTarget(null)}
+        onConfirm={(reasonCode, reasonText) => {
+          if (!remainderTarget || !selectedGroup) return;
+          closeRemainderMutation.mutate({
+            stepId: selectedGroup.step.id,
+            rollId: remainderTarget.rollId,
+            reasonCode,
+            reasonText,
+          });
+        }}
       />
 
       {/* Detay modal — kendi AppModal'ı (Portal + swipe). Telefon Geçmiş modalı
@@ -2762,6 +2946,127 @@ function Tab({
   );
 }
 
+/**
+ * "Kalan gelmeyecek" onay modalı — fasondaki kalan metrajı FİRE kararıyla kapatır.
+ * Sebep ZORUNLU ve fire kataloğundan gelir (fabrika panelden düzenler; Tambur
+ * kalan-karar modalıyla aynı desen: serbest metin EN ÜSTTE, yazmaya başlamak
+ * "Diğer"i kendiliğinden seçer). ONLINE aksiyondur — kuyruklanmaz.
+ */
+function CloseRemainderModal({
+  target,
+  stepId,
+  loading,
+  onDismiss,
+  onConfirm,
+}: {
+  target: RollRow | null;
+  stepId: string | null;
+  loading: boolean;
+  onDismiss: () => void;
+  onConfirm: (reasonCode: string, reasonText: string | null) => void;
+}) {
+  const [reasonCode, setReasonCode] = useState<string | null>(null);
+  const [reasonText, setReasonText] = useState('');
+  const { presets } = useReasonPresets('ROLL_SCRAP');
+  const freeTextPreset = presets.find((r) => r.requiresText) ?? null;
+  const selected = presets.find((r) => r.code === reasonCode) ?? null;
+  // Her açılışta temiz başla — önceki topun sebebi yenisine yapışmasın.
+  useEffect(() => {
+    if (!target) {
+      setReasonCode(null);
+      setReasonText('');
+    }
+  }, [target]);
+  const canConfirm =
+    !!reasonCode && !loading && (!selected?.requiresText || reasonText.trim().length >= 3);
+  const kalan = target ? Number(target.dispatchedQty ?? 0) : 0;
+
+  return (
+    <ConfirmDialog
+      visible={target != null}
+      kind="destructive"
+      onDismiss={loading ? () => {} : onDismiss}
+      title="Kalan gelmeyecek mi?"
+      confirmLabel={`Kalanı Kapat (${fmtMeters(kalan)} m FİRE)`}
+      cancelLabel="Vazgeç"
+      confirming={loading}
+      onConfirm={() => {
+        // ConfirmDialog buton-kilidi sunmuyor — eksik sebep burada yakalanır
+        // (buton grileşmek yerine NE eksik olduğunu söyler).
+        if (!canConfirm || !stepId) {
+          Toast.show({
+            type: 'error',
+            text1: 'Sebep gerekli',
+            text2: selected?.requiresText
+              ? 'Açıklama en az 3 karakter olmalı'
+              : 'Listeden bir sebep seçin (ya da üstteki kutuya yazın)',
+          });
+          return;
+        }
+        onConfirm(reasonCode!, reasonText.trim() || null);
+      }}
+      description={
+        <View style={{ gap: 8 }}>
+          <Text style={styles.mismatchLead}>
+            {target?.barcode ?? 'Top'} — fasonda bekleyen {fmtMeters(kalan)} m
+            kapatılacak ve FİRE olarak sapma defterine yazılacak. Bu işlem kabul
+            DEĞİLDİR ve geri alınamaz; mal sonradan gelirse yönetici düzeltmesi gerekir.
+          </Text>
+          <TextInput
+            mode="outlined"
+            dense
+            placeholder={
+              freeTextPreset
+                ? 'Kendin yaz (en az 3 karakter) — ya da aşağıdan seç'
+                : 'Açıklama (isteğe bağlı)'
+            }
+            value={reasonText}
+            onChangeText={(t) => {
+              setReasonText(t);
+              if (freeTextPreset) {
+                if (t.trim() && reasonCode !== freeTextPreset.code) setReasonCode(freeTextPreset.code);
+                else if (!t.trim() && reasonCode === freeTextPreset.code) setReasonCode(null);
+              }
+            }}
+            disabled={loading}
+            style={{ backgroundColor: '#fff' }}
+            left={<TextInput.Icon icon="pencil-outline" />}
+          />
+          {presets.map((r) => {
+            const active = reasonCode === r.code;
+            return (
+              <TouchableRipple
+                key={r.code}
+                onPress={() => setReasonCode(r.code)}
+                disabled={loading}
+                style={{
+                  minHeight: 48,
+                  justifyContent: 'center',
+                  paddingHorizontal: 14,
+                  borderRadius: 10,
+                  borderWidth: active ? 2 : 1,
+                  borderColor: active ? '#b45309' : '#cbd5e1',
+                  backgroundColor: active ? '#fffbeb' : '#fff',
+                }}
+              >
+                <Text
+                  style={{
+                    fontSize: 14,
+                    fontWeight: active ? '700' : '500',
+                    color: active ? '#b45309' : '#334155',
+                  }}
+                >
+                  {r.label}
+                </Text>
+              </TouchableRipple>
+            );
+          })}
+        </View>
+      }
+    />
+  );
+}
+
 function Badge({ icon, children }: { icon: string; children: React.ReactNode }) {
   return (
     <View style={styles.badge}>
@@ -3466,6 +3771,47 @@ const styles = StyleSheet.create({
 
   noteWrap: { paddingHorizontal: 10, paddingBottom: 8 },
   input: { backgroundColor: '#fff' },
+
+  // Kısmi teslimat (2026-08-19)
+  partialTag: {
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  partialTagText: { fontSize: 10, fontWeight: '700', color: '#92400e' },
+  ageTag: {
+    backgroundColor: '#e2e8f0',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  ageTagWarn: { backgroundColor: '#fef3c7', borderWidth: 1, borderColor: '#f59e0b' },
+  ageTagText: { fontSize: 10, fontWeight: '600', color: '#475569' },
+  ageTagTextWarn: { color: '#92400e', fontWeight: '700' },
+  gelenRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingBottom: 8,
+  },
+  gelenLabel: { fontSize: 12, fontWeight: '600', color: '#475569' },
+  gelenInput: { backgroundColor: '#fff', width: 110, height: 36 },
+  gelenPartialText: { fontSize: 11, fontWeight: '700', color: '#b45309', flexShrink: 1 },
+  partialBanner: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1,
+    borderColor: '#93c5fd',
+    borderRadius: 10,
+    padding: 10,
+    marginTop: 8,
+  },
+  partialBannerTitle: { fontSize: 13, fontWeight: '800', color: '#1d4ed8' },
+  partialBannerBody: { fontSize: 12, color: '#1e40af', marginTop: 2 },
 
   // Dönen Açık Kumaş
   newRollSection: {

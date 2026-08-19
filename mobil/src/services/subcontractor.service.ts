@@ -250,6 +250,25 @@ export const subcontractorService = {
       .post<ApiResponse<SubcontractorReceipt>>('/subcontractor/receive', data)
       .then((r) => r.data),
 
+  /**
+   * Fasonda kalan metrajı "gelmeyecek" kararıyla kapat (kısmi teslimat, 2026-08-19).
+   * Top tüketilir, kalan metraj sapma defterine FİRE yazılır (sebep zorunlu —
+   * fire kataloğundan). ONLINE aksiyon: offline kuyruğa GİRMEZ (fire kararı
+   * taze veri ister; kuyruklanmış bir kapama bayat kalanla yanlış metraj yazardı).
+   */
+  closeRemainder: (data: {
+    stepId: string;
+    rollId: string;
+    reasonCode: string;
+    reasonText?: string | null;
+  }): Promise<ApiResponse<{ rollId: string; closedQty: number }>> =>
+    apiClient
+      .post<ApiResponse<{ rollId: string; closedQty: number }>>(
+        '/subcontractor/close-remainder',
+        data,
+      )
+      .then((r) => r.data),
+
   listReceipts: (
     params: {
       workOrderId?: string;

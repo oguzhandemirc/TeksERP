@@ -282,7 +282,7 @@ export async function isBatchLockedTx(
       batchId,
       cancelledAt: null,
       directShippedAt: null,
-      items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+      items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
     },
   });
   return outstandingDispatch > 0;
@@ -638,7 +638,7 @@ export async function mergeBatches(
         batchId: { in: allBatchIds },
         cancelledAt: null,
         directShippedAt: null,
-        items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
       },
       select: {
         id: true,

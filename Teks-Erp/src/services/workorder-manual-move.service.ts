@@ -448,7 +448,7 @@ export class WorkOrderManualMoveService {
           where: {
             cancelledAt: null,
             directShippedAt: null,
-            items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+            items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
           },
           select: { id: true },
           take: 1,

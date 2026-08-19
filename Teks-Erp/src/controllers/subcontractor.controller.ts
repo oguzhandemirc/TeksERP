@@ -87,6 +87,15 @@ const directShipSchema = z.object({
     .optional(),
 });
 
+// "Kalan gelmeyecek" kapaması — fire kararı, sebep ZORUNLU (fire kataloğundan;
+// DIGER seçildiyse servis reasonText'i zorlar — validateVarianceReason fail-closed).
+const closeRemainderSchema = z.object({
+  stepId: z.string().uuid(),
+  rollId: z.string().uuid(),
+  reasonCode: z.string().trim().min(1, "Sebep zorunlu").max(64),
+  reasonText: z.string().trim().max(500).nullish(),
+});
+
 const cancelReceiptSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
   /** Receipt'ten doğan açık kumaş roll'larını cascade iptal et. Liste backend
@@ -104,11 +113,17 @@ const receiveSchema = z.object({
       z.object({
         rollId: z.string().uuid(),
         notes: z.string().max(500).nullish(),
+        // KISMİ KABUL: bu teslimatta bu toptan gelen metraj. Verilmez ya da
+        // kalanı aşar/eşitler → TAM kabul (eski APK davranışı birebir). Kalanın
+        // altındaysa top fasonda kalır, kalan ikinci teslimatla kapanır.
+        receivedQty: z.number().positive("Gelen metraj pozitif olmalı").nullish(),
       })
     )
     .min(1, "En az bir dönüş kaydı girin")
     .max(300, "Tek seferde en fazla 300 dönüş kaydı girilebilir"),
   notes: z.string().max(1000).optional(),
+  // İdempotency anahtarı — kısmi teslimatta replay'in tek kimliği (servis notu).
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").nullish(),
   // Receipt seviyesinde uygulanan kimlik (boyahane gibi açık kumaş döndüren
   // fason için). Renk: appliesColor=true kategoride WO.targetColor otomatik;
   // özellik: appliesProperty=true kategoride WO.targetProperties otomatik.
@@ -152,6 +167,7 @@ export class SubcontractorController {
     this.cancelDispatch = this.cancelDispatch.bind(this);
     this.cancelDispatchBulk = this.cancelDispatchBulk.bind(this);
     this.receive = this.receive.bind(this);
+    this.closeRemainder = this.closeRemainder.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
     this.pendingReturnDetail = this.pendingReturnDetail.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
@@ -265,9 +281,11 @@ export class SubcontractorController {
           subcontractorId: body.subcontractorId,
           manifestNo: body.manifestNo,
           notes: body.notes,
+          clientToken: body.clientToken ?? null,
           returns: body.returns.map((r) => ({
             rollId: r.rollId,
             notes: r.notes ?? null,
+            receivedQty: r.receivedQty ?? null,
           })),
           appliedColorId: body.appliedColorId,
           appliedPropertyIds: body.appliedPropertyIds,
@@ -281,6 +299,25 @@ export class SubcontractorController {
         req.user?.userId
       );
       res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  }
+
+  /** POST /api/subcontractor/close-remainder — fasonda kalan "gelmeyecek" kapaması */
+  async closeRemainder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = closeRemainderSchema.parse(req.body);
+      const result = await this.service.closeRemainder(
+        {
+          stepId: body.stepId,
+          rollId: body.rollId,
+          reasonCode: body.reasonCode,
+          reasonText: body.reasonText ?? null,
+        },
+        req.user?.userId
+      );
+      res.status(200).json(result);
     } catch (err) {
       next(err);
     }

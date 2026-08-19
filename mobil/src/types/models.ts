@@ -457,7 +457,7 @@ export interface PendingReturnGroup {
    * Tek parti varsa dizi tek elemanlı; eski payload'larda olmayabilir (guard et).
    */
   parties: PendingReturnParty[];
-  rolls: Roll[];
+  rolls: PendingReturnRoll[];
   rollCount: number;
   totalQty: number;
   /**
@@ -471,6 +471,17 @@ export interface PendingReturnGroup {
   awaitingDispatchQty?: number;
 }
 
+/**
+ * Bekleyen fason topu — Roll + AÇIK sevk kalemi bilgisi (kısmi teslimat, 2026-08-19).
+ * `dispatchedQty` sevk edilen metrajdır; `currentQty < dispatchedQty` ise top
+ * YARIM KALANDIR (bir kısmı önceki teslimatla kabul edildi) → ekran rozet basar.
+ * `dispatchedAt` yaş bandı içindir ("N gündür fasonda"). Eski backend'lerde YOK.
+ */
+export type PendingReturnRoll = Roll & {
+  dispatchedQty?: number | null;
+  dispatchedAt?: string | null;
+};
+
 /** Bekleyen kabul grubu içindeki tek bir sevk partisi (kaynak dispatch lane'i). */
 export interface PendingReturnParty {
   /** Sevkin id'si (kaynak `SubcontractorDispatch`). Eski/kimliksiz akışta null olabilir. */
@@ -481,7 +492,7 @@ export interface PendingReturnParty {
   driverName: string | null;
   subcontractorId: string | null;
   subcontractor: Subcontractor | null;
-  rolls: Roll[];
+  rolls: PendingReturnRoll[];
   rollCount: number;
   totalQty: number;
 }
@@ -527,6 +538,13 @@ export interface PendingReturnSummary {
 export interface ReceiveReturnInput {
   rollId: string;
   notes?: string | null;
+  /**
+   * KISMİ KABUL (2026-08-19): bu teslimatta bu toptan GELEN metraj. Gönderilmez
+   * ya da kalanı aşar/eşitlerse TAM kabul (top tüketilir — eski davranış).
+   * Kalanın altındaysa top fasonda kalır (currentQty kalana iner); kalan ikinci
+   * teslimatla ya da "kalan gelmeyecek" kapamasıyla kapanır.
+   */
+  receivedQty?: number | null;
 }
 
 export interface ReceiveNewRollInput {
@@ -555,6 +573,13 @@ export interface ReceiveRequest {
   returns: ReceiveReturnInput[];
   /** Fasondan dönen açık kumaş parçaları — backend min(1) zorunlu. */
   newRolls: ReceiveNewRollInput[];
+  /**
+   * İdempotency anahtarı — payload kurulurken BİR KEZ üretilir; offline kuyruk
+   * replay'i aynı token'ı gönderir. Kısmi teslimatta replay'in TEK kimliği
+   * (küme-eşitliği guard'ı kısmi makbuzu cached DÖNEMEZ — aynı top ikinci
+   * teslimatta meşru olarak tekrar gelir).
+   */
+  clientToken?: string | null;
 }
 
 export interface ReceiptBornRoll {

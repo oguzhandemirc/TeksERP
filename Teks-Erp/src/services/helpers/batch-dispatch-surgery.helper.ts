@@ -65,7 +65,7 @@ function emptyResult(): DispatchSurgeryResult {
 const OPEN_OUTSTANDING = {
   cancelledAt: null,
   directShippedAt: null,
-  items: { some: { receiptItems: { none: { receipt: { cancelledAt: null } } } } },
+  items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
 } as const;
 
 /**
