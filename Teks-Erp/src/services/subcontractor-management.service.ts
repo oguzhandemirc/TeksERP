@@ -33,8 +33,11 @@ import { Request } from "express";
  * Ad-mükerrer koruması (Türkçe-duyarsız; BaseService.assertNameNotDuplicate
  * emsali — bu servisler BaseService kullanmadığından yerel eş). Pasif kayıt da
  * sayılır (yenisini eklemek yerine aktifleştirme önerilir); excludeId reactivate/
- * update'te kaydın kendisini hariç tutar. Master tablolar küçük olduğundan
- * adaylar tek select ile çekilip JS'te tr-TR katlamayla karşılaştırılır.
+ * update'te kaydın kendisini hariç tutar.
+ *
+ * 2026-08-19: tam tablo taraması + JS katlaması yerine `nameFold` gölge kolonu
+ * (indexli `findFirst`). Katlama artık ASCII'ye de iner, yani "ŞAHİN ZIMPARA"
+ * ile "SAHIN ZIMPARA" aynı firma sayılır (kullanıcı kararı D3).
  */
 async function assertSubNameAvailable(
   model: "subcontractor" | "subcontractorCategory",
@@ -44,13 +47,15 @@ async function assertSubNameAvailable(
 ): Promise<void> {
   if (!name || name.trim().length === 0) return;
   const target = foldNameForCompare(name);
-  const where = excludeId ? { id: { not: excludeId } } : {};
+  const where = { nameFold: target, ...(excludeId ? { id: { not: excludeId } } : {}) };
   const select = { name: true, code: true, isActive: true } as const;
-  const candidates: { name: string; code: string; isActive: boolean }[] =
+  // Aktif eş varsa ONU göster — mesaj "zaten var" ↔ "PASİF, aktifleştirin"
+  // arasında ayrışıyor ve operatöre yapılacak işi söylemeli.
+  const orderBy = [{ isActive: "desc" as const }, { createdAt: "asc" as const }];
+  const hit: { name: string; code: string; isActive: boolean } | null =
     model === "subcontractor"
-      ? await prisma.subcontractor.findMany({ where, select })
-      : await prisma.subcontractorCategory.findMany({ where, select });
-  const hit = candidates.find((c) => foldNameForCompare(c.name) === target);
+      ? await prisma.subcontractor.findFirst({ where, select, orderBy })
+      : await prisma.subcontractorCategory.findFirst({ where, select, orderBy });
   if (!hit) return;
   throw AppError.conflict(
     hit.isActive
@@ -92,18 +97,27 @@ const SUB_CATEGORY_CODE_TEXTS: CodeUniquenessTexts = {
 
 /**
  * Aynı vergi numaralı (VKN/TCKN) ikinci fason firmaya izin verme (müşteri
- * emsali). Yalnız AKTİF kayıtlar; değer normalize sonrası birebir karşılaştırılır.
+ * emsali). Değer normalize sonrası birebir karşılaştırılır.
+ *
+ * ⚠️ 2026-08-19: PASİF kayıtlar da sayılır. Öncesinde `isActive: true` süzgeci
+ * vardı ve aynı dosyadaki AD guard'ı pasifleri sayıyordu — yani pasif bir
+ * firmanın ADI korunuyor ama VERGİ NUMARASI serbest kalıyordu. Aynı vergi
+ * numarasıyla ikinci kayıt açıldığında ilk firma yeniden aktifleştirilemez
+ * hâle gelirdi. İki guard artık aynı politikayı uygular.
  */
 async function assertSubTaxAvailable(taxNumber: unknown, excludeId?: string): Promise<void> {
   if (typeof taxNumber !== "string" || taxNumber.trim().length === 0) return;
   const value = taxNumber.trim();
   const existing = await prisma.subcontractor.findFirst({
-    where: { taxNumber: value, isActive: true, ...(excludeId ? { id: { not: excludeId } } : {}) },
-    select: { code: true, name: true },
+    where: { taxNumber: value, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    select: { code: true, name: true, isActive: true },
+    orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
   });
   if (!existing) return;
   throw AppError.conflict(
-    `'${value}' vergi numarası '${existing.name}' (${existing.code}) fason firmasında zaten kayıtlı. Aynı vergi no ile ikinci firma açılamaz.`,
+    existing.isActive
+      ? `'${value}' vergi numarası '${existing.name}' (${existing.code}) fason firmasında zaten kayıtlı. Aynı vergi no ile ikinci firma açılamaz.`
+      : `'${value}' vergi numarası PASİF '${existing.name}' (${existing.code}) fason firmasında kayıtlı. Yenisini eklemek yerine mevcut kaydı aktifleştirin.`,
   );
 }
 
@@ -114,7 +128,7 @@ async function assertSubTaxAvailable(taxNumber: unknown, excludeId?: string): Pr
 export class SubcontractorCategoryService {
   async findAll(req: Request): Promise<PaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
-    const where = buildWhereClause(params.filters, ["code", "name"], params.search);
+    const where = buildWhereClause(params.filters, ["name"], params.search, ["code"]);
     // F90: sortBy verilmediğinde name/asc default; explicit createdAt saygı görür;
     // bilinmeyen sortBy 500 yerine name'e düşer. (Eski çift-ternary HER createdAt'i
     // — explicit olanı bile — name/asc'a zorluyordu.)
@@ -381,7 +395,9 @@ export class SubcontractorManagementService {
     const params = parseQueryParams(req);
 
     // Standart filtreler (isActive, code...) buildWhereClause halleder
-    const where = buildWhereClause(params.filters, ["code", "name", "taxNumber"], params.search);
+    // `taxNumber` KOD kovasında: rakam alanıdır, katlanmaz ve bir firma ADI
+    // aramasında boşuna koşmaz.
+    const where = buildWhereClause(params.filters, ["name"], params.search, ["code", "taxNumber"]);
 
     // categoryId filter — relation üzerinden M:N filter. F92: dizi | CSV | tek değeri
     // normalize et (birden çok kategori seçimi de çalışsın; tek → eşitlik, çok → {in}).

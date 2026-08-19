@@ -25,7 +25,8 @@ async function expectStatus(status: number, fn: () => Promise<unknown>): Promise
 
 const svc = new PeripheralDeviceService({
   modelName: "peripheralDevice", tableName: "PERIPHERAL_DEVICE",
-  searchFields: ["code"], uniqueField: "code",
+  searchFields: [],
+  codeSearchFields: ["code"], uniqueField: "code",
 });
 
 async function main() {

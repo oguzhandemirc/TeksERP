@@ -15,7 +15,8 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 const service = new ProductRecipeService({
   modelName: "productRecipe",
   tableName: "PRODUCT_RECIPE",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   nestedCreateFields: ["properties"],
   duplicateNameField: "name",
   entityLabel: "iş emri şablonu",

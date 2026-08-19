@@ -18,7 +18,8 @@ function check(label: string, ok: boolean, extra = "") {
 const customerService = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
 });
 

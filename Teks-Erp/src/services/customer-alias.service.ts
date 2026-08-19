@@ -10,6 +10,7 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+import { normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { ApiResponse } from "../types/api.types";
 import {
   CustomerItemAlias,
@@ -50,7 +51,9 @@ export class CustomerAliasService {
   ): Promise<ApiResponse<CustomerItemAlias>> {
     await assertCustomer(customerId);
     await assertItem(itemId);
-    const trimmed = alias.trim();
+    // 2026-08-19 (kullanıcı kararı): alias da BÜYÜK saklanır — etikete/irsaliyeye
+    // basılan müşteri adı `item.name` ile aynı rejimde olsun.
+    const trimmed = normalizeDisplayName(alias);
     if (trimmed.length === 0) {
       throw AppError.badRequest("Alias boş olamaz");
     }
@@ -128,7 +131,9 @@ export class CustomerAliasService {
   ): Promise<ApiResponse<CustomerColorAlias>> {
     await assertCustomer(customerId);
     await assertColor(colorId);
-    const trimmed = alias.trim();
+    // 2026-08-19 (kullanıcı kararı): alias da BÜYÜK saklanır — etikete/irsaliyeye
+    // basılan müşteri adı `item.name` ile aynı rejimde olsun.
+    const trimmed = normalizeDisplayName(alias);
     if (trimmed.length === 0) {
       throw AppError.badRequest("Alias boş olamaz");
     }

@@ -1,155 +1,172 @@
 // =============================================================================
-// BEKÇİ — Türkçe harf ayrımsız arama (2026-08-17)
+// BEKÇİ: Türkçe-duyarsız arama UÇTAN UCA (2026-08-19 — yeniden yazıldı)
+// Çalıştır: npx tsx scripts/test_turkish_search_fold.ts
 // =============================================================================
-// Saha talebi: "cisem", "CISEM", "ÇİSEM", "çisem" AYNI sonucu vermeli.
+// ⚠️ BU DOSYA ESKİDEN SAF BİR BİRİM TESTİYDİ ve yanlış bir dünya modeli kurmuştu:
+// ILIKE'ı "yalnız ASCII katlar" diye modelleyip üretilen varyant SAYISINI
+// sayıyordu. İki kusuru vardı: (1) model dev DB'sinde YANLIŞTI (ICU locale
+// altında ILIKE ü/ş/ğ'yi katlıyor; C locale'de katlamıyor — yani davranış
+// ortama bağlıydı ve test ikisini de temsil etmiyordu), (2) uygulamanın
+// GERÇEKTEN kayıt bulup bulmadığını hiç ölçmüyordu.
 //
-// İki ayrı sorun var ve ikisi de ayrı ayrı çözülüyor:
-//   1. BÜYÜK/küçük — C-locale ILIKE yalnız ASCII a-z↔A-Z katlar; `i↔İ`, `ç↔Ç`
-//      katlamaz (eski davranış, korunuyor).
-//   2. HARF DENKLİĞİ — `c` ile `ç` AYRI harflerdir; hiçbir case kuralı bunları
-//      eşitlemez. Terim varyantlarına açılarak çözülür (2026-08-17).
+// Artık soru tek: OPERATÖR NE YAZARSA YAZSIN KAYDI BULUYOR MU? Bu yüzden test
+// gerçek satır yazar, gerçek servis çağırır ve gerçek sonucu sayar.
 //
-// Bu test SQL koşmaz; üretilen `where` yapraklarının, dört yazımın da birbirini
-// bulmasını sağlayacak biçimde kesiştiğini doğrular. Gerçek eşleşme semantiği
-// ILIKE'ın ASCII katlamasına dayanır ve o kısım aşağıda AÇIKÇA modellenir —
-// yoksa test "yaprak üretildi" der ama eşleşme garantisi vermez.
+// Katlamanın KENDİSİ ayrı bekçide: `test_fold_contract.ts` (JS ≡ SQL, tüm BMP).
+// Burada ölçülen şey o katlamanın SORGU YOLUNA doğru bağlandığı.
 // =============================================================================
-
-import { buildTurkishSearch } from "../src/utils/query-parser";
+import prisma, { pool } from "../src/lib/prisma";
+import { buildTextSearch } from "../src/utils/query-parser";
+import { CustomerService } from "../src/services/customer.service";
+import { Prisma } from "@prisma/client";
 
 let pass = 0;
 let fail = 0;
-function check(label: string, ok: boolean, detail?: string): void {
-  if (ok) {
+function check(label: string, cond: boolean, extra = ""): void {
+  if (cond) {
     pass++;
-    console.log(`✅ ${label}`);
+    console.log(`  ✓ ${label}${extra ? ` — ${extra}` : ""}`);
   } else {
     fail++;
-    console.log(`❌ ${label}${detail ? `\n     ${detail}` : ""}`);
+    console.log(`  ✗ FAIL: ${label}${extra ? ` — ${extra}` : ""}`);
   }
 }
 
-interface Leaf {
-  contains: string;
-  mode?: string;
+const TAG = `TSF${Date.now().toString().slice(-9)}`;
+const created: string[] = [];
+
+async function findCustomers(term: string): Promise<string[]> {
+  const leaves = buildTextSearch<Prisma.CustomerWhereInput>(term, {
+    text: ["name"],
+    code: ["code", "taxNumber"],
+  });
+  if (leaves.length === 0) return [];
+  const rows = await prisma.customer.findMany({
+    where: { AND: [{ code: { startsWith: "TSF" } }, { OR: leaves }] },
+    select: { name: true },
+  });
+  return rows.map((r) => r.name);
 }
 
-function leaves(term: string): Leaf[] {
-  const clauses = buildTurkishSearch<{ name: Leaf }>(term, ["name"]);
-  return clauses.map((c) => c.name);
-}
-
-/**
- * PostgreSQL C-locale ILIKE modeli: `mode:"insensitive"` YALNIZ ASCII a-z↔A-Z
- * katlar. Türkçe harfler (ç/Ç, ş/Ş, ı/İ …) bire bir eşleşmek zorundadır.
- */
-function asciiFold(s: string): string {
-  let out = "";
-  for (const ch of s) {
-    const code = ch.charCodeAt(0);
-    out += code >= 65 && code <= 90 ? String.fromCharCode(code + 32) : ch;
+async function main(): Promise<void> {
+  const svc = new CustomerService({
+    modelName: "customer",
+    tableName: "CUSTOMER",
+    searchFields: ["name"],
+    codeSearchFields: ["code", "taxNumber", "exportCode"],
+    uniqueField: "code",
+    duplicateNameField: "name",
+    entityLabel: "müşteri",
+  });
+  // Fixture: aynı fabrikada gerçekten yan yana duran yazımlar.
+  const NAMES = [
+    `GÜMÜŞOĞLU TEKSTİL ${TAG}`,
+    `ÇİSEM KUMAŞ ${TAG}`,
+    `IŞIK ÖRME ${TAG}`,
+    `AKTOŞ2 ${TAG}`,
+    `ÖZ ŞAHİN TEKSTİL ${TAG}`,
+  ];
+  for (let i = 0; i < NAMES.length; i++) {
+    const c = await prisma.customer.create({
+      data: { code: `TSF-${TAG}-${i}`, name: NAMES[i], type: "CUSTOMER" },
+      select: { id: true },
+    });
+    created.push(c.id);
   }
-  return out;
-}
 
-function matches(leaf: Leaf, stored: string): boolean {
-  return leaf.mode === "insensitive"
-    ? asciiFold(stored).includes(asciiFold(leaf.contains))
-    : stored.includes(leaf.contains);
-}
-
-/** Bu terimle arama yapan biri, bu kaydı bulur mu? */
-function finds(term: string, stored: string): boolean {
-  return leaves(term).some((l) => matches(l, stored));
-}
-
-// ── 1. Dört yazım birbirini bulur (talebin birebir karşılığı) ────────────────
-const SPELLINGS = ["cisem", "CISEM", "ÇİSEM", "çisem", "Çisem", "CİSEM"];
-let crossOk = true;
-const misses: string[] = [];
-for (const term of SPELLINGS) {
-  for (const stored of SPELLINGS) {
-    if (!finds(term, stored)) {
-      crossOk = false;
-      misses.push(`"${term}" → "${stored}"`);
+  try {
+    // ── 1) ASCII yazımla Türkçe kaydı bulmak ────────────────────────────────
+    console.log("\n── 1) ASCII terim → Türkçe kayıt ──");
+    const cases: Array<[string, string]> = [
+      ["gumusoglu", "GÜMÜŞOĞLU"],
+      ["GUMUSOGLU", "GÜMÜŞOĞLU"],
+      ["cisem", "ÇİSEM"],
+      ["CISEM", "ÇİSEM"],
+      ["Çisem", "ÇİSEM"],
+      ["ÇİSEM", "ÇİSEM"],
+      ["isik", "IŞIK"],
+      ["ışık", "IŞIK"],
+      ["ISIK", "IŞIK"],
+      ["oz sahin", "ÖZ ŞAHİN"],
+      ["ÖZ ŞAHİN", "ÖZ ŞAHİN"],
+    ];
+    for (const [term, expect] of cases) {
+      const hits = await findCustomers(term);
+      check(`"${term}" → ${expect}`, hits.some((h) => h.includes(expect)), `${hits.length} sonuç`);
     }
+
+    // ── 2) Rakamlı ürün adı KOD hızlı yoluna kaçmıyor ───────────────────────
+    // Eski motorda "aktos2" kod-biçimli sayılıp Türkçe katlamayı ATLIYORDU ve
+    // "AKTOŞ2" bulunamıyordu. Tekstilde rakamlı ad kuraldır.
+    console.log("\n── 2) Rakamlı ad kod yoluna kaçmıyor ──");
+    const aktos = await findCustomers("aktos2");
+    check('"aktos2" → AKTOŞ2', aktos.some((h) => h.includes("AKTOŞ2")), `${aktos.length} sonuç`);
+
+    // ── 3) Çok kelimeli terim: sıra önemsiz ────────────────────────────────
+    console.log("\n── 3) Çok kelimeli arama (AND, sıradan bağımsız) ──");
+    const a = await findCustomers("oz sahin");
+    const b = await findCustomers("sahin oz");
+    check("kelime sırası sonucu değiştirmiyor", a.length > 0 && a.length === b.length, `${a.length} / ${b.length}`);
+    const c = await findCustomers("sahin gumusoglu");
+    check("iki kelime AND'lenir (aynı kayıtta olmalı)", c.length === 0, `${c.length} sonuç`);
+
+    // ── 4) Alakasız terim eşleşmiyor (katlama her şeyi eşitlemiyor) ────────
+    console.log("\n── 4) Körlük kontrolü ──");
+    const none = await findCustomers(`BURSAXYZ ${TAG}`);
+    check("alakasız terim 0 sonuç", none.length === 0, `${none.length}`);
+
+    // ── 5) LIKE jokerleri terimden düşer ───────────────────────────────────
+    // ⚠️ Prisma `contains` jokerleri KAÇIRMAZ: temizlenmeseydi "%" araması
+    // TÜM kayıtları döndürürdü (ölçüldü 2026-08-19).
+    console.log("\n── 5) Joker karakter sızıntısı ──");
+    const pct = await findCustomers("%");
+    check('"%" tüm tabloyu döndürmüyor', pct.length === 0, `${pct.length} sonuç`);
+    const underscore = await findCustomers("_isem");
+    check('"_isem" joker olarak yorumlanmıyor', underscore.some((h) => h.includes("ÇİSEM")), `${underscore.length}`);
+
+    // ── 6) Mükerrer kontrolü ASCII katlıyor (kullanıcı kararı D3) ──────────
+    console.log("\n── 6) Mükerrer: ŞAHİN ≡ SAHIN ──");
+    let dupErr: unknown = null;
+    try {
+      await svc.create(
+        { code: `TSF-${TAG}-DUP`, name: `OZ SAHIN TEKSTIL ${TAG}`, type: "CUSTOMER" },
+        undefined,
+      );
+    } catch (e) {
+      dupErr = e;
+    }
+    const msg = dupErr instanceof Error ? dupErr.message : "";
+    check("'OZ SAHIN' → 'ÖZ ŞAHİN' ile çakışıyor (409)", msg.includes("zaten var"), msg.slice(0, 90));
+    if (!dupErr) {
+      const stray = await prisma.customer.findFirst({
+        where: { code: `TSF-${TAG}-DUP` },
+        select: { id: true },
+      });
+      if (stray) created.push(stray.id);
+    }
+
+    // ── 7) Gölge kolon gerçekten yazıldı mı ────────────────────────────────
+    console.log("\n── 7) Gölge kolon (DB üretimi) ──");
+    const row = await prisma.$queryRawUnsafe<Array<{ name: string; fold: string }>>(
+      `SELECT name, "nameFold" AS fold FROM customers WHERE code = $1`,
+      `TSF-${TAG}-0`,
+    );
+    check(
+      "nameFold DB tarafından üretildi",
+      row[0]?.fold === `gumusoglu tekstil ${TAG.toLowerCase()}`,
+      row[0]?.fold ?? "YOK",
+    );
+  } finally {
+    await prisma.customer.deleteMany({ where: { id: { in: created } } }).catch(() => {});
   }
-}
-check(
-  `ÇİSEM'in ${SPELLINGS.length} yazımı birbirini buluyor (${SPELLINGS.length ** 2} kombinasyon)`,
-  crossOk,
-  misses.join(", ")
-);
 
-// ── 2. Diğer harf çiftleri ───────────────────────────────────────────────────
-const PAIRS: [string, string][] = [
-  ["gulsen", "GÜLŞEN"],
-  ["GULSEN", "Gülşen"],
-  ["patos", "PATOŞ"],
-  ["sogut", "SÖĞÜT"],
-  ["ısıtma", "ISITMA"],
-  ["isitma", "ısıtma"],
-  ["ucgen", "ÜÇGEN"],
-];
-for (const [term, stored] of PAIRS) {
-  check(`"${term}" → "${stored}" bulunuyor`, finds(term, stored));
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  await prisma.$disconnect();
+  await pool.end();
+  process.exit(fail > 0 ? 1 : 0);
 }
 
-// ── 3. Kelime İÇİNDE arama (contains) bozulmadı ──────────────────────────────
-check('"cisem" → "MUSTAFA ÇİSEM TEKSTİL" bulunuyor', finds("cisem", "MUSTAFA ÇİSEM TEKSTİL"));
-
-// ── 4. YANLIŞ eşleşme üretmiyor (varyantlar alakasız kaydı çekmemeli) ────────
-check('"patos" → "PANOS" BULMUYOR', !finds("patos", "PANOS"));
-check('"cisem" → "GISEM" BULMUYOR', !finds("cisem", "GISEM"));
-// Harf DÜŞÜREN varyant üretilirse ("CISEM" → "iSEM") alakasız kayıtlar gelirdi.
-// Bu, düzeltilmiş gerçek bir hatanın regresyon sondasıdır.
-for (const term of SPELLINGS) {
-  const bad = leaves(term).filter((l) => [...l.contains].length !== [...term].length);
-  check(
-    `"${term}" varyantlarının hepsi ${[...term].length} harf (harf düşmüyor)`,
-    bad.length === 0,
-    bad.map((b) => b.contains).join(", ")
-  );
-}
-
-// ── 5. Sorgu patlaması sınırı ────────────────────────────────────────────────
-const longTerm = "gumusoglu ısıtma sogutma";
-const longLeaves = leaves(longTerm);
-check(
-  `Uzun terimde yaprak sayısı sınırlı (${longLeaves.length} ≤ 40)`,
-  longLeaves.length <= 40,
-  `Terim: "${longTerm}"`
-);
-// Türkçe harf İÇERMEYEN terim tek yaprak kalmalı — bedelsiz yol korunuyor.
-check("Katlanacak harf yoksa tek yaprak", leaves("XYZ-4471").length === 1);
-
-// ── 5b. KOD BİÇİMLİ TERİM varyant ÜRETMEZ (sorgu kabarmasın) ────────────────
-// Belge numaralarında Türkçe harf yok; varyant üretmek her alan için fazladan
-// OR dalı (ve derin alanlarda fazladan semi-join) demek. Ölçüm 2026-08-17:
-// "IE2007260001" araması 20 daldan 4'e indi.
-check('"IE2007260001" tek yaprak (varyant yok)', leaves("IE2007260001").length === 1);
-check('"SIP2007260018" tek yaprak', leaves("SIP2007260018").length === 1);
-check('"TST-WHA-178692" tek yaprak (ayraçlı kod)', leaves("TST-WHA-178692").length === 1);
-// ⚠️ SÜZGEÇ DAR OLMALI. Boşluk içeren karışık terim ("PATOS 300") bir KOD
-// DEĞİLDİR — orada varyant üretimi sürmeli, yoksa "PATOS" arayan operatör
-// "PATOŞ"u bulamaz ve sebebi hiçbir yerde görünmez.
-check('"PATOS 300" hâlâ varyant üretiyor (boşluklu → kod değil)', leaves("PATOS 300").length > 1);
-check('"cisem" hâlâ varyant üretiyor (rakam yok → kod değil)', leaves("cisem").length > 1);
-// Kod süzgecine takılan terim de eşleşmeye devam etmeli (dar ama işlevsel).
-check('"IE2007260001" kendini buluyor', finds("IE2007260001", "IE2007260001"));
-check('"ie2007260001" büyük/küçük fark etmiyor', finds("ie2007260001", "IE2007260001"));
-
-// ── 6. Sözleşme: boş terim / boş alan listesi ────────────────────────────────
-check("Boş terim → boş dizi", buildTurkishSearch("   ", ["name"]).length === 0);
-check("Alan yoksa → boş dizi", buildTurkishSearch("cisem", []).length === 0);
-
-// ── 7. Çok alanlı kullanımda her alan için tüm yapraklar üretilir ────────────
-const multi = buildTurkishSearch<Record<string, Leaf>>("cisem", ["name", "code"]);
-const single = buildTurkishSearch("cisem", ["name"]);
-check(
-  `Çok alanlı: ${multi.length} = 2 × ${single.length}`,
-  multi.length === single.length * 2
-);
-
-console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
-process.exit(fail > 0 ? 1 : 0);
+main().catch((err) => {
+  console.error("Beklenmeyen hata:", err);
+  process.exit(1);
+});

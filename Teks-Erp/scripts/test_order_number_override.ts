@@ -27,7 +27,8 @@ async function main() {
   const svc = new OrderService({
     modelName: "order",
     tableName: "ORDER",
-    searchFields: ["orderNumber"],
+    searchFields: [],
+    codeSearchFields: ["orderNumber"],
     defaultInclude: { lines: true },
     nestedCreateFields: ["lines"],
   });

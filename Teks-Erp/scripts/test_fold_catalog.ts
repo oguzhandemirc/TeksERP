@@ -45,7 +45,8 @@ async function expectErr(label: string, part: string, fn: () => Promise<unknown>
 const propSvc = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   nestedCreateFields: ["stationCapabilities", "values"],
   defaultInclude: {
     stationCapabilities: { select: { stationId: true } },

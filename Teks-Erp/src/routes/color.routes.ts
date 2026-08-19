@@ -14,7 +14,8 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 const service = new ColorService({
   modelName: "color",
   tableName: "COLOR",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   defaultInclude: undefined,
   uniqueField: "code",
   // Kod backend-authoritative: `RNK+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).

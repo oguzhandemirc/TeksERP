@@ -23,7 +23,8 @@ function check(label: string, ok: boolean, extra = "") {
 const service = new ColorService({
   modelName: "color",
   tableName: "COLOR",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   defaultInclude: undefined,
   uniqueField: "code",
 });

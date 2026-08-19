@@ -15,7 +15,8 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 const stationService = new StationService({
   modelName: "station",
   tableName: "STATION",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   defaultInclude: {
     machines: true,
     defaultCategory: { select: { id: true, code: true, name: true } },
@@ -33,7 +34,8 @@ const stationController = new BaseController(stationService);
 const machineService = new BaseService({
   modelName: "machine",
   tableName: "MACHINE",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   defaultInclude: { station: true },
   uniqueField: "code",
   // Makine adı yalnız AYNI istasyon içinde tekil — "Makine 1" farklı

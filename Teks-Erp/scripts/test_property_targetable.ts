@@ -50,14 +50,16 @@ const routeSvc = new RouteService(ROUTE_SERVICE_CONFIG);
 const itemSvc = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   duplicateNameField: "name",
   entityLabel: "ürün",
 });
 const propSvc = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   nestedCreateFields: ["stationCapabilities", "values"],
   duplicateNameField: "name",
   entityLabel: "özellik",

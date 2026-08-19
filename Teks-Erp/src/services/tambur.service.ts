@@ -34,7 +34,7 @@ import {
   dynamicCursorWhere,
   buildNextDynamicCursor,
 } from "../utils/cursor";
-import { buildTurkishSearch } from "../utils/query-parser";
+import { buildTextSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 import { K18_DEAD_STATUSES } from "./batch.service";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -1425,12 +1425,10 @@ export class TamburService {
       // parti küçük master tablolarda kaldığı için `contains` (fuzzy) korunur.
       where.OR = [
         { barcode: search },
-        ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
-          "item.name",
-          "item.code",
-          "color.name",
-          "producedInStep.workOrder.workOrderNumber",
-        ]),
+        ...buildTextSearch<Prisma.RollWhereInput>(search, {
+          text: ["item.name", "color.name"],
+          code: ["item.code", "producedInStep.workOrder.workOrderNumber"],
+        }),
       ];
     }
 
@@ -1534,10 +1532,10 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         { cardNumber: search },
-        ...buildTurkishSearch<Prisma.SwatchWhereInput>(search, [
-          "item.name",
-          "item.code",
-        ]),
+        ...buildTextSearch<Prisma.SwatchWhereInput>(search, {
+          text: ["item.name"],
+          code: ["item.code"],
+        }),
       ];
     }
 
@@ -1634,10 +1632,10 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         { cardNumber: search },
-        ...buildTurkishSearch<Prisma.SwatchWhereInput>(search, [
-          "item.name",
-          "item.code",
-        ]),
+        ...buildTextSearch<Prisma.SwatchWhereInput>(search, {
+          text: ["item.name"],
+          code: ["item.code"],
+        }),
       ];
     }
 

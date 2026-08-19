@@ -22,6 +22,7 @@
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import { round1 } from "./_breakdown";
+import { normalizeScanCode } from "../../utils/code-format";
 
 export interface BatchCandidate {
   batchId: string;
@@ -99,7 +100,11 @@ export async function searchBatches(q: string, limit = 20): Promise<BatchCandida
     LEFT JOIN rolls r        ON r."batchId" = b.id
     WHERE b."batchNumber" ILIKE ${"%" + term + "%"}
        -- Barkodla da bulunur: operatörün elinde parti no değil TOP olur.
-       OR EXISTS (SELECT 1 FROM rolls r2 WHERE r2."batchId" = b.id AND r2.barcode = ${term})
+       -- DİKKAT: normalizeScanCode zorunlu — el tarayıcısı barkodu KÜÇÜK harfle
+       -- gönderebiliyor (2026-08-17 saha vakası); kagida BÜYÜK basilan kodla
+       -- eslesmesi icin tek kapidan gecer. Eksiklik 2026-08-19 denetiminde bulundu.
+       -- (Bu blok bir JS template literal icindedir: BACKTICK KULLANMA.)
+       OR EXISTS (SELECT 1 FROM rolls r2 WHERE r2."batchId" = b.id AND r2.barcode = ${normalizeScanCode(term)})
     GROUP BY b.id, b."batchNumber", wo."workOrderNumber", b."createdAt", b."mergedIntoId"
     -- ⚠️ batchNumber ile SIRALAMA YAPILMAZ (kök CLAUDE.md): numara sardığı için
     -- sözlüksel/sayısal sıra "yenilik" sırası DEĞİLDİR.

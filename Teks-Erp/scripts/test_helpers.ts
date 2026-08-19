@@ -91,7 +91,10 @@ function testCustomerName() {
   check("resolveName: override boş → MASTER", (() => { const r = resolveName("  ", "Master", "Default"); return r.name === "Master" && r.source === "MASTER"; })());
   check("resolveName: ikisi de yok → DEFAULT", (() => { const r = resolveName(null, undefined, "Default"); return r.name === "Default" && r.source === "DEFAULT"; })());
   check("normalizeOverride: boş/whitespace → null", normalizeOverride("   ") === null && normalizeOverride(undefined) === null && normalizeOverride(null) === null);
-  check("normalizeOverride: trim'li değer", normalizeOverride("  abc ") === "abc");
+  // 2026-08-19 (kullanıcı kararı): müşterinin kendi kumaş/renk adı da BÜYÜK
+  // saklanır — `item.name` ile aynı rejim (ikisi irsaliyede yan yana basılıyor).
+  check("normalizeOverride: trim + BÜYÜK", normalizeOverride("  abc ") === "ABC");
+  check("normalizeOverride: Türkçe büyütme (i→İ)", normalizeOverride("iplik") === "İPLİK");
 }
 
 // =============================================================================

@@ -16,7 +16,8 @@ const MOBILE_DEFECT_READ = ["mobile:kk2-kursun", "mobile:tambur"] as const;
 const service = new BaseService({
   modelName: "defectType",
   tableName: "DEFECT_TYPE",
-  searchFields: ["code", "name", "description"],
+  searchFields: ["name", "description"],
+  codeSearchFields: ["code"],
   defaultInclude: undefined,
   uniqueField: "code",
   duplicateNameField: "name",

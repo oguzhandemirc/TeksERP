@@ -43,7 +43,8 @@ const STAMP = `TEST-HC-${process.pid}`;
 const orderService = new OrderService({
   modelName: "order",
   tableName: "ORDER",
-  searchFields: ["orderNumber"],
+  searchFields: [],
+  codeSearchFields: ["orderNumber"],
   dateFields: ["createdAt", "deadline"],
 });
 const woService = new WorkOrderService();

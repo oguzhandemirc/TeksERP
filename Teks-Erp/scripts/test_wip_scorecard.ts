@@ -157,8 +157,20 @@ async function main(): Promise<void> {
 
   // ── 4) EN UZUN BEKLEYENLER ────────────────────────────────────────────────
   console.log("\n── 4) En uzun bekleyen listesi ──");
+  // ⚠️ `oldestWaiting` TÜM VERİTABANI için `LIMIT 25` ile kesilir — yani ortamda
+  // kaç açık hareket olduğuna bağlıdır. Bu test eskiden "üçü de listede" diyordu
+  // ve dev DB'sinde 22'den fazla açık hareket olduğu anda düşüyordu (2026-08-19:
+  // 24 gerçek bekleyen hareket vardı, fixture'ların ikisi listeden taşmıştı).
+  // Bu, testin kendi kusuruydu — CLAUDE.md "ortamdaki veriye BAĞIMLI OLMA".
+  // Doğru iddia: EN ESKİ fixture'ımız listede olmalı (o, yaş sırasında yukarıda)
+  // ve bizim satırlarımız kendi aralarında ESKİDEN YENİYE sıralı olmalı.
   const mine = sc.oldestWaiting.filter((r) => r.barcode?.startsWith(TAG));
-  check("üç bekleyen topumuz listede", mine.length === 3, `gelen: ${mine.length}`);
+  check("en eski bekleyen fixture listede", mine.length >= 1, `gelen: ${mine.length} (liste 25 ile sınırlı)`);
+  check(
+    "bizim satırlarımız kendi aralarında eskiden yeniye sıralı",
+    mine.every((r, i) => i === 0 || (mine[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
+    mine.map((r) => r.daysWaiting).join(" ≥ "),
+  );
   // Sıra EN ESKİDEN başlar → ilk satır C (10 gün), A'nınkiler (3 gün) sonra.
   check("en eski bekleyen başta (C, 10 gün)", mine[0]?.stationName === stC.name, `gelen: ${mine[0]?.stationName}`);
   check("bekleme günü pozitif", (mine[0]?.daysWaiting ?? 0) > 0, `gelen: ${mine[0]?.daysWaiting}`);

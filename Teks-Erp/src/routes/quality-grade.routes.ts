@@ -58,7 +58,8 @@ const validateQgUpdate = makeQgValidator(
 const service = new BaseService({
   modelName: "qualityGrade",
   tableName: "QUALITY_GRADE",
-  searchFields: ["code", "name", "description"],
+  searchFields: ["name", "description"],
+  codeSearchFields: ["code"],
   defaultInclude: undefined,
   uniqueField: "code",
   duplicateNameField: "name",

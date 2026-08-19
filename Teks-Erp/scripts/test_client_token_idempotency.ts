@@ -38,7 +38,8 @@ function uuid(): string {
 }
 
 const orderSvc = new OrderService({
-  modelName: "order", tableName: "ORDER", searchFields: ["orderNumber"],
+  modelName: "order", tableName: "ORDER", searchFields: [],
+ codeSearchFields: ["orderNumber"],
   defaultInclude: { lines: true }, nestedCreateFields: ["lines"],
 });
 const wos = new WorkOrderService();

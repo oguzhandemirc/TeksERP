@@ -621,11 +621,24 @@ export class BaseService {
   }
 
   /**
-   * `duplicateNameField` kolonunda Türkçe-duyarsız ad eşi arar (bkz. config
-   * yorumu). Master-data tabloları küçük olduğundan adaylar tek select ile
-   * çekilip JS'te tr-TR katlamayla karşılaştırılır — PG lower() İ/ı harflerinde
-   * hatalı olduğundan `mode:'insensitive'` bilinçli kullanılmaz. Custom
-   * create/update yazan alt sınıflar (super.* çağırmayan yollar) bu metodu
+   * `duplicateNameField` kolonunda ad eşi arar — KATLANMIŞ GÖLGE KOLON ÜZERİNDEN
+   * (2026-08-19). Sorgu tek `findFirst`tir ve `<kolon>Fold` btree index'ini
+   * kullanır.
+   *
+   * ÖNCESİ: tablonun TAMAMI `findMany` ile çekilip JS'te katlanarak taranıyordu —
+   * her master-data yazımında O(N) satır ağdan geçiyordu. Gerekçe "PG lower()
+   * İ/ı'da hatalı" idi ve DOĞRUYDU; artık karşılaştırma `lower()` ile değil
+   * `tr_fold()` ile yapılıyor ve o, JS ikizi `foldSearchText` ile birebir aynı
+   * (bekçi: `scripts/test_fold_contract.ts`, tüm BMP'de ölçülüyor).
+   *
+   * ⚠️ Anahtar DEPOLANAN DEĞERDEN DB tarafından türetiliyor, yani "kontrol kendi
+   * yazdığı kaydı bulamaz" sınıfı hata artık YAPISAL OLARAK imkânsız.
+   *
+   * ⚠️ Kapsam genişledi: "ŞAHİN" ile "SAHIN" artık AYNI ad sayılır (kullanıcı
+   * kararı D3). DB'de UNIQUE kısıt YOK — gerekçe migration
+   * `20260819060000_search_fold` §6'da; bu metot tek uygulama noktasıdır.
+   *
+   * Custom create/update yazan alt sınıflar (super.* çağırmayan yollar) bu metodu
    * kendileri çağırır.
    */
   protected async assertNameNotDuplicate(
@@ -655,11 +668,15 @@ export class BaseService {
     }
 
     const codeField = this.config.uniqueField;
-    const candidates = (await this.delegate.findMany({
+    // ⚠️ Alan adı sözleşmesi: gölge kolon HER ZAMAN `<kolon>Fold`. Sözleşme DB
+    // tarafında iki yönlü kilitli (`test_db_invariants` §9) ve `sanitizeWriteData`
+    // de aynı son eke bakıyor — üçü birlikte değişir.
+    const hit = (await this.delegate.findFirst({
       where: {
         ...(this.config.duplicateNameWhere ?? {}),
         ...scopeWhere,
         ...(excludeId ? { id: { not: excludeId } } : {}),
+        [`${field}Fold`]: target,
       },
       select: {
         id: true,
@@ -667,11 +684,11 @@ export class BaseService {
         [field]: true,
         ...(codeField ? { [codeField]: true } : {}),
       },
-    })) as Record<string, unknown>[];
-
-    const hit = candidates.find(
-      (c) => typeof c[field] === "string" && foldNameForCompare(c[field] as string) === target,
-    );
+      // Aktif kayıt varsa ONU göster: mesaj "zaten var" ile "PASİF, aktifleştirin"
+      // arasında ayrışıyor ve operatöre doğru eylemi söylemeli. Sırasız bir
+      // findFirst pasif ikizi seçip yanlış talimat verebilirdi.
+      orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
+    })) as Record<string, unknown> | null;
     if (!hit) return;
     const codePart =
       codeField && typeof hit[codeField] === "string"

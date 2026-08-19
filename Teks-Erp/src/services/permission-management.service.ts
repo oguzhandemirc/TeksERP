@@ -808,11 +808,11 @@ export class PermissionManagementService {
    */
   private static async assertTemplateNameAvailable(name: string, excludeId?: string): Promise<void> {
     const target = foldNameForCompare(name);
-    const candidates = await prisma.permissionTemplate.findMany({
-      where: excludeId ? { id: { not: excludeId } } : {},
-      select: { name: true },
+    const clash = await prisma.permissionTemplate.findFirst({
+      where: { nameFold: target, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      select: { id: true },
     });
-    if (candidates.some((t) => foldNameForCompare(t.name) === target)) {
+    if (clash) {
       throw AppError.conflict(
         `'${name.trim()}' adında bir yetki şablonu zaten var. Aynı şablon ikinci kez eklenemez.`,
       );

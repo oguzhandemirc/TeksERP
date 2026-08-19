@@ -34,7 +34,8 @@ function mockReq(query: Record<string, unknown>): Request {
 const service = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
-  searchFields: ["code", "name", "taxNumber"],
+  searchFields: ["name"],
+  codeSearchFields: ["code", "taxNumber"],
   defaultInclude: undefined,
   uniqueField: "code",
   nestedCreateFields: ["branches"], // tek-adım müşteri+şube (route ile birebir)

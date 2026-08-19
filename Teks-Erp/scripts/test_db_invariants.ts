@@ -664,11 +664,33 @@ async function main(): Promise<void> {
       ? `${liveGen.length} kolonun tamamı`
       : `ifadesi FARKLI: ${wrongExpr.map((g) => `${g.tbl}.${g.col}`).join(", ")}`
   );
+  // ⚠️ BU İKİ KONTROL `base.service.ts`'in YAZMA/SIRALAMA/FİLTRE SÜZGECİNİ
+  // TAŞIYOR. Prisma 7 runtime DMMF'i "bu kolonu DB üretiyor" bilgisini taşımıyor
+  // (alan başına yalnız name/kind/type), o yüzden uygulama `Fold` son ekine
+  // bakıyor. Sözleşme İKİ YÖNLÜ olmak zorunda:
+  //   ileri  — GENERATED bir kolon `Fold` ile bitmezse süzgeç onu KAÇIRIR →
+  //            istemci o alanı gönderince PostgreSQL 500 verir.
+  //   geri   — `Fold` ile biten SIRADAN bir kolon eklenirse süzgeç onu YANLIŞLIKLA
+  //            düşürür → alan sessizce hiç yazılmaz (çok daha sinsi).
   const notFoldNamed = liveGen.filter((g) => !g.col.endsWith("Fold"));
   check(
-    "adlandırma sözleşmesi: hepsi `<kolon>Fold`",
+    "adlandırma sözleşmesi (ileri): her GENERATED kolon `<kolon>Fold`",
     notFoldNamed.length === 0,
     notFoldNamed.map((g) => `${g.tbl}.${g.col}`).join(", ") || "sapma yok"
+  );
+  const foldNamedNotGenerated = await prisma.$queryRaw<Array<{ tbl: string; col: string }>>`
+    SELECT c.relname AS tbl, a.attname AS col
+    FROM pg_attribute a
+    JOIN pg_class c     ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE n.nspname = 'public' AND c.relkind = 'r' AND a.attnum > 0 AND NOT a.attisdropped
+      AND a.attname LIKE '%Fold' AND a.attgenerated <> 's'
+  `;
+  check(
+    "adlandırma sözleşmesi (geri): `Fold` ile biten sıradan kolon YOK",
+    foldNamedNotGenerated.length === 0,
+    foldNamedNotGenerated.map((g) => `${g.tbl}.${g.col}`).join(", ") ||
+      "sapma yok — süzgeç yalnız DB-üretimli kolonları düşürüyor"
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -31,7 +31,8 @@ async function expectErr(label: string, part: string, fn: () => Promise<unknown>
 const recipeConfig: BaseServiceConfig = {
   modelName: "productRecipe",
   tableName: "PRODUCT_RECIPE",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   nestedCreateFields: ["properties"],
   defaultInclude: {
     item: { select: { id: true, code: true, name: true } },

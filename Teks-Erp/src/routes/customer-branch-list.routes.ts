@@ -15,7 +15,8 @@ import { requireAnyPermission } from "../middlewares/rbac.middleware";
 const service = new BaseService({
   modelName: "customerBranch",
   tableName: "CUSTOMER_BRANCH",
-  searchFields: ["name", "code", "city"],
+  searchFields: ["name", "city"],
+  codeSearchFields: ["code"],
   // Şube adları müşteri arası tekrar edebilir (örn. "Merkez") — etikette müşteri
   // adıyla ayrışsın diye customer'ı lean select ile getir.
   defaultInclude: { customer: { select: { id: true, name: true, code: true } } },

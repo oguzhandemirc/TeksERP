@@ -32,7 +32,7 @@ import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
-import { buildPagination, buildTurkishSearch, readIdCondition } from "../utils/query-parser";
+import { buildPagination, buildTextSearch, readIdCondition } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -884,9 +884,10 @@ export class KartelaService {
     }
     const search = params?.search?.trim();
     if (search) {
-      where.OR = buildTurkishSearch<Prisma.KartelaDispatchWhereInput>(search, [
-        "dispatchNo", "subcontractor.name",
-      ]);
+      where.OR = buildTextSearch<Prisma.KartelaDispatchWhereInput>(search, {
+        text: ["subcontractor.name"],
+        code: ["dispatchNo"],
+      });
     }
 
     // Liste için hafif select — detay (`getDispatch`) tam veriyi döner.
@@ -1013,9 +1014,10 @@ export class KartelaService {
     }
     const search = params?.search?.trim();
     if (search) {
-      where.OR = buildTurkishSearch<Prisma.KartelaReceiptWhereInput>(search, [
-        "receiptNo", "manifestNo", "subcontractor.name",
-      ]);
+      where.OR = buildTextSearch<Prisma.KartelaReceiptWhereInput>(search, {
+        text: ["subcontractor.name"],
+        code: ["receiptNo", "manifestNo"],
+      });
     }
 
     const select = {

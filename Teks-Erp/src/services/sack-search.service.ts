@@ -19,7 +19,7 @@ import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
 import { isDailyCode, normalizeScanCode } from "../utils/code-format";
-import { buildTurkishSearch } from "../utils/query-parser";
+import { buildTextSearch } from "../utils/query-parser";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
@@ -163,13 +163,21 @@ export class SackSearchService {
     const customerIds = toIdList(params.customerId);
     if (customerIds.length) andClauses.push({ customerId: { in: customerIds } });
     const shipmentNo = params.shipmentNo?.trim();
-    if (shipmentNo) andClauses.push({ shipment: { is: { OR: buildTurkishSearch<Prisma.ShipmentWhereInput>(shipmentNo, ["shipmentNo"]) } } });
+    if (shipmentNo)
+      andClauses.push({
+        shipment: { is: { OR: buildTextSearch<Prisma.ShipmentWhereInput>(shipmentNo, { code: ["shipmentNo"] }) } },
+      });
     const sackCode = params.sackCode?.trim();
-    if (sackCode) andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(sackCode, ["sackNo"]) });
+    if (sackCode) andClauses.push({ OR: buildTextSearch<Prisma.SackWhereInput>(sackCode, { code: ["sackNo"] }) });
     // Serbest arama (DataTable kutusu) — sackNo / müşteri adı-kodu / sevkiyat no.
     const search = params.search?.trim();
     if (search) {
-      andClauses.push({ OR: buildTurkishSearch<Prisma.SackWhereInput>(search, ["sackNo", "customer.name", "customer.code", "shipment.shipmentNo"]) });
+      andClauses.push({
+        OR: buildTextSearch<Prisma.SackWhereInput>(search, {
+          text: ["customer.name"],
+          code: ["sackNo", "customer.code", "shipment.shipmentNo"],
+        }),
+      });
     }
     if (hasContentFilter) andClauses.push({ rolls: { some: rollFilter } });
 

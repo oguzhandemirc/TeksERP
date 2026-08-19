@@ -18,7 +18,11 @@ const service = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
   // exportCode aramada: sevk belgesindeki ihracat kodundan müşteri bulunabilsin.
-  searchFields: ["code", "name", "taxNumber", "exportCode"],
+  searchFields: ["name"],
+  // ⚠️ Kod/rakam alanları KOD kovasında: `taxNumber`/`exportCode` katlanmaz
+  // (rakam) ve eskiden bir müşteri ADI araması bu alanlara da varyant
+  // üretiyordu — tamamen boşa giden koşullar. Kod-biçimli terimde koşarlar.
+  codeSearchFields: ["code", "taxNumber", "exportCode"],
   defaultInclude: undefined,
   uniqueField: "code",
   duplicateNameField: "name",

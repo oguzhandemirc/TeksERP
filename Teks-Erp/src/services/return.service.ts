@@ -67,14 +67,9 @@ function specMatch(
 // Rapor filtreleri — serbest metin alanlarında OR-contains + createdAt tarih penceresi.
 // Arama kapsamı liste kolonlarıyla hizalı: neden/not + müşteri + sipariş no +
 // ürün adı + top barkodu (iade hacmi düşük — contains kabul edilebilir).
-const RETURN_SEARCH_FIELDS = [
-  "reasonText",
-  "note",
-  "customer.name",
-  "order.orderNumber",
-  "item.name",
-  "roll.barcode",
-];
+const RETURN_SEARCH_FIELDS = ["reasonText", "note", "customer.name", "item.name"];
+// Sipariş no + top barkodu üretilmiş ASCII kodlardır — katlanmaz.
+const RETURN_CODE_SEARCH_FIELDS = ["order.orderNumber", "roll.barcode"];
 const RETURN_DATE_FIELDS = ["createdAt"] as const;
 
 /**
@@ -654,7 +649,8 @@ export class ReturnService {
     const where = buildWhereClause(
       params.filters,
       RETURN_SEARCH_FIELDS,
-      params.search
+      params.search,
+      RETURN_CODE_SEARCH_FIELDS
     ) as Prisma.RollReturnWhereInput;
     applyDateRange(where as Record<string, unknown>, params, RETURN_DATE_FIELDS);
 

@@ -25,7 +25,8 @@ const APPLY = process.argv.includes("--apply");
 const itemService = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   duplicateNameField: "name",
   entityLabel: "ürün",
 });
@@ -33,7 +34,8 @@ const itemService = new ItemService({
 const colorService = new ColorService({
   modelName: "color",
   tableName: "COLOR",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
   autoCode: { prefix: "RNK" },
 });

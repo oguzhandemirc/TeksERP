@@ -50,7 +50,7 @@ import { travelerTemplateService } from "./traveler-template.service";
 import type { TravelerPageSize } from "./document-render/traveler-card.density";
 // Ölü top kümesi TEK KAYNAK — parti sayımında elle statü listesi kopyalama (K18).
 import { K18_DEAD_STATUSES } from "./batch.service";
-import { parseQueryParams, buildPagination, resolveSortBy, buildTurkishSearch } from "../utils/query-parser";
+import { parseQueryParams, buildPagination, resolveSortBy, buildTextSearch } from "../utils/query-parser";
 import {
   Prisma,
   PrintedDocStatus,
@@ -667,7 +667,9 @@ export class TravelerCardService {
       where.OR = [
         { cardNumber: qUpper },
         { barcode: qUpper },
-        ...buildTurkishSearch<Prisma.TravelerCardWhereInput>(q, ["workOrder.workOrderNumber"]),
+        ...buildTextSearch<Prisma.TravelerCardWhereInput>(q, {
+          code: ["workOrder.workOrderNumber"],
+        }),
       ];
     }
 

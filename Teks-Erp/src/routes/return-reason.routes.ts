@@ -14,7 +14,8 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 const service = new BaseService({
   modelName: "returnReason",
   tableName: "RETURN_REASON",
-  searchFields: ["code", "name", "description"],
+  searchFields: ["name", "description"],
+  codeSearchFields: ["code"],
   defaultInclude: undefined,
   uniqueField: "code",
   duplicateNameField: "name",

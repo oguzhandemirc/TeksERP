@@ -47,7 +47,8 @@ const routeSvc = new RouteService(ROUTE_SERVICE_CONFIG);
 const stationSvc = new StationService({
   modelName: "station",
   tableName: "STATION",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "istasyon",

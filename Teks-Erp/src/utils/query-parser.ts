@@ -167,16 +167,19 @@ export function buildWhereClause(
   searchFields?: string[],
   search?: string,
   /**
-   * KOD ALANLARI — yalnız terim KOD BİÇİMİNDEYSE aramaya katılır ve Türkçe
-   * denklik varyantlarına AÇILMAZ (bkz. `buildCodeSearch`).
+   * KOD ALANLARI — katlanmaz, `<kolon>Fold` gölgesi ARANMAZ; yalnız terim KOD
+   * BİÇİMİNDEYSE (boşluksuz, ASCII) aramaya katılır.
    *
    * Neden ayrı: bu alanlar tipik olarak derin ilişkilerin ucundadır (siparişten
    * iş emri numarasına gitmek order_lines + pivot + work_orders üzerinden bir
    * semi-join ister). Ölçüldü (2026-08-17, EXPLAIN ANALYZE): PostgreSQL bunu
    * satır başına değil TEK GEÇİŞTE çözüyor (`hashed SubPlan`) — yani maliyet
-   * eklenir, çarpılmaz. Ama her Türkçe varyant AYRI bir semi-join doğurur;
-   * "gülşen" gibi bir müşteri aramasında ~20 varyant × ilişki taraması boşuna
-   * ödenirdi. Kod alanları bu yüzden yalnız kod-biçimli terimde koşar.
+   * eklenir, çarpılmaz. Yine de bir müşteri adı araması için bu ilişki taramasını
+   * ödemenin anlamı yok.
+   *
+   * ⚠️ `searchFields` KATLANMAMIŞ yol yazar ("customer.name"); motor `Fold`
+   * ekini kendisi koyar. Bir KOD kolonunu oraya yazarsan var olmayan bir
+   * `<kolon>Fold` alanına sorulur ve Prisma 500 verir — kova ayrımı bilinçlidir.
    */
   codeSearchFields?: string[]
 ): Record<string, unknown> {
@@ -194,157 +197,42 @@ export function buildWhereClause(
     }
   }
 
-  // Full-text search — Türkçe-duyarlı (Y-2/Y-3: C-locale ILIKE İ/ı/ğ/ş katlamaz).
-  if (search && searchFields && searchFields.length > 0) {
-    const leaves = buildTurkishSearch(search, searchFields);
-    if (codeSearchFields && codeSearchFields.length > 0) {
-      leaves.push(...buildCodeSearch(search, codeSearchFields));
-    }
-    where.OR = leaves;
+  // Serbest metin araması — katlanmış gölge kolonlar üzerinden (bkz. buildTextSearch).
+  if (search && ((searchFields?.length ?? 0) > 0 || (codeSearchFields?.length ?? 0) > 0)) {
+    const leaves = buildTextSearch(search, { text: searchFields, code: codeSearchFields });
+    // ⚠️ Boş yaprak dizisini `.OR`'a ATAMA: Prisma `OR: []` gördüğünde HİÇBİR
+    // kaydı eşlemez, yani "hiç sonuç yok" sessiz yanlışı doğar (terim yalnız
+    // joker karakterden ibaretse veya kod-dışı bir terimde yalnız kod alanı
+    // tanımlıysa bu gerçekten olur).
+    if (leaves.length > 0) where.OR = leaves;
   }
 
   return where;
 }
 
-// ── Türkçe-duyarlı arama (C-locale ILIKE İ/ı/ğ/ş/ç/ö/ü KATLAMAZ) ──────────────
-// PG C-locale'de mode:"insensitive" (ILIKE) YALNIZ ASCII a-z↔A-Z katlar; Türkçe
-// çiftlerini (i↔İ, ı↔I, ç↔Ç, ğ↔Ğ, ö↔Ö, ş↔Ş, ü↔Ü) eşlemez. Adlar BÜYÜK saklanır
-// (name-normalize.helper) → küçük harfli arama sessizce boş döner. Çözüm: her alan
-// için ILIKE (ASCII fold) + Türkçe BÜYÜK ve KÜÇÜK case-sensitive varyantları.
-const TR_FOLD = /[iıİIçÇğĞöÖşŞüÜ]/;
-
-// ── Türkçe harf DENKLİĞİ (2026-08-17 saha talebi) ────────────────────────────
-// "cisem" · "CISEM" · "ÇİSEM" · "çisem" AYNI sonucu vermeli. Yukarıdaki case
-// katlaması bunu çözmez: o yalnız BÜYÜK/küçük farkını kapatır, `c` ile `ç`yi
-// AYRI harf saymaya devam eder.
+// ── ARAMA MOTORU — katlanmış gölge kolon üzerinden (2026-08-19) ──────────────
+// ESKİ YOL (kaldırıldı): terim Türkçe varyantlarına açılıyordu ("gumus" → 31 dal)
+// ve her varyant × her alan bir ILIKE üretiyordu — tek aramada ~200 koşul, plan
+// daima Seq Scan. Ölçüm (200 bin satır, dev DB): 583 ms.
 //
-// Sütunu katlayamıyoruz (Prisma `contains` bir ILIKE üretir; `translate()`/
-// `unaccent()` gibi ifadeler where cümlesine giremez), o yüzden TERİMİ
-// varyantlarına açıyoruz. Kalıcı çözüm PostgreSQL `unaccent` + ifade index'i
-// ve aramanın raw SQL'e taşınmasıdır (~40 çağrı noktası) — bugünkü hacimde
-// gerekmiyor, gerektiğinde buradaki sözleşme korunarak değiştirilebilir.
+// YENİ YOL: aranan her metin kolonunun yanında DB'nin ürettiği `<kolon>Fold`
+// gölgesi var (`GENERATED ALWAYS AS (public.tr_fold(...)) STORED`, migration
+// `20260819060000_search_fold`). Terim de aynı katlamadan geçer → TEK `contains`.
+// Aynı ölçüm: 6,3 ms, Bitmap Index Scan (trigram GIN). Varyant üretimi, dallanma
+// tavanı (`TR_MAX_FOLD_POSITIONS`) ve onun sessiz daralması tamamen kalktı.
 //
-// Seçenekler neden BÜYÜK Türkçe harf: adlar/kodlar DB'ye BÜYÜK yazılıyor
-// (name-normalize.helper), ASCII seçeneği de `mode:"insensitive"` sayesinde
-// hem `c` hem `C`yi yakalıyor. Küçük Türkçe (ç, ğ, ı…) yazımı için ayrıca tek
-// bir "tümü küçük" varyantı eklenir — kombinasyona sokulmaz, çünkü maliyeti
-// ikiye katlar ve pratikte serbest metin alanlarında karşılığı olur.
-const TR_EQUIV: Record<string, string> = {
-  c: "Ç",
-  g: "Ğ",
-  i: "İ",
-  o: "Ö",
-  s: "Ş",
-  u: "Ü",
-};
-/** Küçük yazım karşılıkları — `i` → `ı` (dotsuz), `İ` → `i` DEĞİL. */
-const TR_EQUIV_LOWER: Record<string, string> = {
-  c: "ç",
-  g: "ğ",
-  i: "ı",
-  o: "ö",
-  s: "ş",
-  u: "ü",
-};
-/** Türkçe harfi ASCII karşılığına indirger (varyant üretiminin ortak anahtarı). */
-const TR_TO_ASCII: Record<string, string> = {
-  ç: "c", Ç: "c",
-  ğ: "g", Ğ: "g",
-  ı: "i", İ: "i", I: "i",
-  ö: "o", Ö: "o",
-  ş: "s", Ş: "s",
-  ü: "u", Ü: "u",
-};
-/**
- * Kaç konumda dallanılacağı. 4 → en fazla 16 varyant; her varyant her alan için
- * bir ILIKE demek, yani 6 alanlı bir aramada ~100 koşul. Sınır AŞILIRSA fazlası
- * dallanmaz (ASCII hâliyle kalır) — sonuç daralır ama sorgu patlamaz. Sessiz
- * değil: bilinçli ve belgeli bir azalma.
- */
-const TR_MAX_FOLD_POSITIONS = 4;
-/**
- * Aile başına varyant tavanı. Üst sınır: 2 aile × 2^4 + 2 (tam katlama) + 2
- * (Türkçe büyük/küçük) + 1 (terimin kendisi) = 39 yaprak; altı alanlı bir
- * aramada ~230 ILIKE koşulu. Sorgu planı seq scan olduğu için maliyet
- * doğrusaldır ve bu hacimde ölçülebilir bir gecikme üretmiyor.
- */
-const TR_MAX_VARIANTS = 32;
-
-/** Terimi Türkçe denklik varyantlarına açar (kendisi HARİÇ). */
-function turkishEquivalents(term: string): string[] {
-  const chars = [...term];
-  // Dallanılacak konumlar: ASCII karşılığı TR_EQUIV'de olan her harf.
-  const positions: number[] = [];
-  for (let i = 0; i < chars.length; i++) {
-    const ascii = TR_TO_ASCII[chars[i]] ?? chars[i].toLowerCase();
-    if (TR_EQUIV[ascii]) positions.push(i);
-  }
-  if (positions.length === 0) return [];
-  const folded = positions.slice(0, TR_MAX_FOLD_POSITIONS);
-
-  // ASCII tabanı: her katlanabilir harf ASCII'ye indirgenir (ILIKE büyük/küçüğü
-  // zaten kapatır), sonra seçili konumlar tek tek Türkçe harfe çevrilir.
-  const base = chars.map((c) => TR_TO_ASCII[c] ?? c);
-
-  /**
-   * Bir konumun seçenekleri. `i` ÜÇ seçenek alır (ASCII + `İ` + `ı`): tekstil
-   * verisinde en sık karışan çift budur ve dotsuz `ı` yalnız "tümü küçük"
-   * varyantında kalsaydı "isitma" → "ISITMA"yı bulur, "cısem"i bulamazdı.
-   * Diğer harflerde BÜYÜK Türkçe yeter (adlar/kodlar büyük saklanıyor);
-   * küçük yazımı aşağıdaki tek "tümü küçük" varyantı karşılar.
-   */
-  /**
-   * Türkçe karşılık. ⚠️ Anahtar KÜÇÜK harf olmalı: `TR_TO_ASCII` yalnız Türkçe
-   * harfleri çevirir, `"C"` gibi BÜYÜK ASCII harfler olduğu gibi kalır ve
-   * `TR_EQUIV["C"]` undefined döner → o konum varyantta SİLİNİRDİ ("CISEM" →
-   * "iSEM"). Sessiz ve zehirli bir hata: arama daha ÇOK sonuç bulur, sebebi
-   * hiçbir yerde görünmez.
-   */
-  const equivAt = (idx: number, upper: boolean): string | null => {
-    const key = base[idx].toLocaleLowerCase("tr-TR");
-    return (upper ? TR_EQUIV[key] : TR_EQUIV_LOWER[key]) ?? null;
-  };
-
-  const out = new Set<string>();
-
-  // İKİ AİLE: "tümü BÜYÜK Türkçe" ve "tümü küçük Türkçe". Aynı konumda hem `Ç`
-  // hem `ç` denemek kombinasyonu üçe katlardı; oysa gerçek veride yazım kendi
-  // içinde tutarlıdır (adlar/kodlar BÜYÜK normalize edilir, serbest metin
-  // küçük yazılır). Karışık yazım ("Çişem") bilinçli olarak kapsam dışı.
-  for (const upper of [true, false]) {
-    let combos: string[][] = [[...base]];
-    for (const idx of folded) {
-      const eq = equivAt(idx, upper);
-      if (!eq) continue;
-      const next: string[][] = [];
-      for (const combo of combos) {
-        next.push(combo);
-        const v = [...combo];
-        v[idx] = eq;
-        next.push(v);
-      }
-      combos = next;
-      if (combos.length >= TR_MAX_VARIANTS) break;
-    }
-    for (const combo of combos) out.add(combo.join(""));
-  }
-
-  // Sınırı aşan uzun kelimeler için TÜM konumları katlanmış iki varyant daha
-  // ("gümüşoğlu" gibi baştan sona Türkçe yazımlar dallanma tavanına takılıp
-  // hiç üretilmezdi — bu iki satır onları doğrusal maliyetle kurtarır).
-  if (positions.length > folded.length) {
-    for (const upper of [true, false]) {
-      const v = [...base];
-      for (const idx of positions) {
-        const eq = equivAt(idx, upper);
-        if (eq) v[idx] = eq;
-      }
-      out.add(v.join(""));
-    }
-  }
-  out.delete(term);
-  return [...out];
-}
+// ⚠️ `mode: "insensitive"` KULLANILMAZ ve kullanılmamalı: katlanmış kolon zaten
+// küçük ASCII'dir. `insensitive` Prisma'da ILIKE üretir; ILIKE'ın davranışı
+// veritabanının locale'ine bağlıdır (dev ICU en-US ↔ saha C locale) ve trigram
+// index'ini de her zaman kullanamaz. Katlama tam olarak bu belirsizliği ortadan
+// kaldırmak için var.
+//
+// ⚠️ METİN ve KOD yolları AYRI verilir — otomatik ayırt etme YOK. Bir kod kolonu
+// (`orderNumber`, `sackNo`, `code`) katlanmaz: ASCII ve BÜYÜK saklanır, gölgesi
+// yoktur. Yanlış kovaya konan yol ya var olmayan bir kolona sorar (500) ya da
+// sessizce hiç eşleşmez. Ayrım çağıranın bilinçli kararıdır.
+import { foldSearchTokens } from "./search-fold";
+import { foldCodeForCompare } from "./code-format";
 
 /** "a.b.c" → { a: { b: { c: leaf } } } (list-relation `some` dahil düz iç içe). */
 function nestPath(path: string, leaf: unknown): Record<string, unknown> {
@@ -355,72 +243,78 @@ function nestPath(path: string, leaf: unknown): Record<string, unknown> {
 }
 
 /**
- * Türkçe-duyarlı `contains` OR koşulları üretir. paths nokta-notasyonu ile nested
- * relation destekler ("customer.name", "sacks.some.sackNo").
- * DİKKAT: boş term/paths → [] döner; boş [] doğrudan `.OR`'a atanırsa Prisma HİÇBİR
- * kaydı eşlemez → çağıran mutlaka `if (search)` guard'ını korumalı.
+ * Metin yolunu katlanmış gölgesine çevirir: "customer.name" → "customer.nameFold".
+ * Çağıran yolu KATLANMAMIŞ hâliyle yazar (okunur kalsın); eşleme tek yerde durur.
  */
-export function buildTurkishSearch<T = Record<string, unknown>>(
-  search: string,
-  paths: readonly string[]
-): T[] {
-  const term = search.trim();
-  if (!term || paths.length === 0) return [];
-  const leaves: Record<string, unknown>[] = [{ contains: term, mode: "insensitive" }];
-  // KOD BİÇİMLİ TERİMDE VARYANT ÜRETME. Belge numaralarımızın hiçbirinde Türkçe
-  // harf yok (İE/SIP/CV/RK/FS/P + tarih + sıra) — onlar için varyant üretmek
-  // sorguyu boşuna kabartır. Ölçüldü (2026-08-17): "IE2007260001" araması 20 OR
-  // dalından 5'e iner. Süzgeç DAR: boşluksuz + rakam içeren + yalnız
-  // ASCII harf/rakam/ayraç. "PATOS 300" gibi karışık bir terim BU DALA GİRMEZ
-  // (boşluk var) → adın Türkçe varyantları üretilmeye devam eder.
-  if (/^[A-Za-z0-9._/-]+$/.test(term) && /\d/.test(term)) {
-    const clauses: Record<string, unknown>[] = [];
-    for (const path of paths) clauses.push(nestPath(path, leaves[0]));
-    return clauses as unknown as T[];
-  }
-  const seen = new Set<string>([term]);
-  const push = (v: string, insensitive: boolean) => {
-    if (seen.has(v)) return;
-    seen.add(v);
-    leaves.push(insensitive ? { contains: v, mode: "insensitive" } : { contains: v });
-  };
-  if (TR_FOLD.test(term)) {
-    // Türkçe BÜYÜK/küçük katlaması (C-locale ILIKE bunu yapmaz).
-    push(term.toLocaleUpperCase("tr-TR"), false);
-    push(term.toLocaleLowerCase("tr-TR"), false);
-  }
-  // Türkçe harf DENKLİĞİ — `c`↔`ç`, `s`↔`ş`, `i`↔`ı`… Varyantlar `insensitive`
-  // ile eklenir: içlerindeki ASCII harfler yine büyük/küçük bağımsız eşleşsin.
-  for (const v of turkishEquivalents(term)) push(v, true);
-  const clauses: Record<string, unknown>[] = [];
-  for (const path of paths) {
-    for (const leaf of leaves) clauses.push(nestPath(path, leaf));
-  }
-  return clauses as unknown as T[];
+function toFoldPath(path: string): string {
+  const segs = path.split(".");
+  segs[segs.length - 1] = `${segs[segs.length - 1]}Fold`;
+  return segs.join(".");
 }
 
 /**
- * KOD ARAMASI — belge/kayıt numaraları için dar ve ucuz eşleşme.
+ * Terim KOD biçiminde mi? (boşluksuz + yalnız ASCII harf/rakam/ayraç)
  *
- * İki farkı var ve ikisi de bilinçli:
- *   1. Terim KOD BİÇİMİNDE değilse HİÇ koşmaz (boş dizi). Kod biçimi = en az
- *      bir RAKAM içeriyor. Numaralarımızın tamamı (İE/SIP/CV/RK/FS/P + tarih +
- *      sıra) rakam taşır; "gülşen" gibi bir ad taşımaz. Böylece ad araması,
- *      derin ilişki taramasının bedelini ödemez.
- *   2. Türkçe DENKLİK varyantına açılmaz — kodlarda ç/ş/ğ yok. Yalnız
- *      `mode:"insensitive"` (ASCII büyük/küçük) uygulanır. Bu, tek bir
- *      semi-join demektir; varyant başına bir tane değil.
+ * ⚠️ Eskiden burada bir RAKAM ŞARTI vardı ve iki yönlü hata üretiyordu:
+ *   • rakamsız bir belge öneki hiç aranmıyordu (sessiz boş sonuç);
+ *   • "AKTOS2" gibi RAKAMLI BİR ÜRÜN ADI kod hızlı yoluna girip Türkçe katlamayı
+ *     ATLIYORDU — yani "aktos2" araması "AKTOŞ2"yu bulamıyordu. Tekstilde
+ *     rakamlı ürün adı kuraldır ("PATOS 300" yalnız boşluğu sayesinde kurtuluyordu).
+ * Artık rakam şartı yok ve kod-biçimli terim HEM kod HEM metin yollarına gider.
  */
-export function buildCodeSearch<T = Record<string, unknown>>(
+function isCodeLikeTerm(term: string): boolean {
+  return /^[A-Za-z0-9._/-]+$/.test(term);
+}
+
+/**
+ * Prisma `OR` yaprakları üretir — katlanmış metin kolonları + (varsa) kod kolonları.
+ *
+ * @param search  ham arama terimi (istemciden geldiği gibi; katlama burada yapılır)
+ * @param paths.text  KATLANMAMIŞ metin yolları ("customer.name") — `Fold` eklenir
+ * @param paths.code  kod yolları ("orderNumber") — olduğu gibi kullanılır
+ *
+ * ÇOK KELİMELİ TERİM: kelimeler AND'lenir, yani "şahin tekstil" ile
+ * "tekstil şahin" AYNI kaydı bulur. Her kelime ayrı bir `contains` olduğu için
+ * hepsi trigram index'inden beslenir.
+ *
+ * DİKKAT: boş term/paths → [] döner; boş [] doğrudan `.OR`'a atanırsa Prisma
+ * HİÇBİR kaydı eşlemez → çağıran `if (search)` guard'ını korumalı.
+ */
+export function buildTextSearch<T = Record<string, unknown>>(
   search: string,
-  paths: readonly string[]
+  paths: { text?: readonly string[]; code?: readonly string[] }
 ): T[] {
   const term = search.trim();
-  if (!term || paths.length === 0) return [];
-  if (!/\d/.test(term)) return [];
-  return paths.map(
-    (path) => nestPath(path, { contains: term, mode: "insensitive" }) as unknown as T
-  );
+  if (!term) return [];
+  const textPaths = paths.text ?? [];
+  const codePaths = paths.code ?? [];
+  const clauses: Record<string, unknown>[] = [];
+
+  const tokens = foldSearchTokens(term);
+  if (tokens.length > 0) {
+    for (const path of textPaths) {
+      const foldPath = toFoldPath(path);
+      if (tokens.length === 1) {
+        clauses.push(nestPath(foldPath, { contains: tokens[0] }));
+      } else {
+        // Aynı alanda iki `contains` tek nesneye sığmaz → yol başına AND bloğu.
+        // İlişki listelerinde (`lines.some.…`) bu, kelimelerin FARKLI satırlarda
+        // bulunmasına izin verir; sipariş araması için istenen davranış budur.
+        clauses.push({
+          AND: tokens.map((t) => nestPath(foldPath, { contains: t })),
+        });
+      }
+    }
+  }
+
+  if (codePaths.length > 0 && isCodeLikeTerm(term)) {
+    // `foldCodeForCompare`: BÜYÜK + i-ailesi ASCII'ye (`İE…` yazan Türkçe klavye
+    // de `IE…` kayıtlarını bulsun). Kod kolonları ASCII BÜYÜK saklanır.
+    const codeTerm = foldCodeForCompare(term);
+    for (const path of codePaths) clauses.push(nestPath(path, { contains: codeTerm }));
+  }
+
+  return clauses as unknown as T[];
 }
 
 /**

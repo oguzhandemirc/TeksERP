@@ -33,7 +33,8 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 const service = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
-  searchFields: ["code", "name", "category", "description"],
+  searchFields: ["name", "category", "description"],
+  codeSearchFields: ["code"],
   nestedCreateFields: ["stationCapabilities", "values"],
   defaultInclude: {
     stationCapabilities: {

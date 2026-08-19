@@ -75,7 +75,7 @@ import {
   isCursorRequested,
   buildWhereClause,
   applyDateRange,
-  buildTurkishSearch,
+  buildTextSearch,
   resolveSortBy,
 } from "../utils/query-parser";
 import {
@@ -96,15 +96,12 @@ export {
 // Sevkiyat liste filtreleri (Electron FilterBar + arama).
 // `orders.some.order.orderNumber`: muhasebeci müşteriden gelen soruyu SİPARİŞ NO ile
 // arar (sevk no'yu bilmez). ShipmentOrder to-many pivot → `.some.` zorunlu;
-// buildTurkishSearch nokta-notasyonunu ve some'ı destekler (query-parser.ts:159).
-const SHIPMENT_SEARCH_FIELDS = [
-  "shipmentNo",
-  "plateNumber",
-  "driverName",
-  "carrier",
-  "customer.name",
-  "orders.some.order.orderNumber",
-];
+// buildTextSearch nokta-notasyonunu ve some'ı destekler (query-parser.ts:159).
+// Metin (katlanır) ↔ kod (katlanmaz) ayrımı: plaka/şoför/nakliyeci SERBEST
+// METİNDİR (operatör "34 abc 123" ya da "Mehmet Şahin" yazar), sevk no ve
+// sipariş no ise üretilmiş ASCII koddur.
+const SHIPMENT_SEARCH_FIELDS = ["plateNumber", "driverName", "carrier", "customer.name"];
+const SHIPMENT_CODE_SEARCH_FIELDS = ["shipmentNo", "orders.some.order.orderNumber"];
 // destination = Shipment skaler alanı (DOMESTIC|EXPORT) → buildWhereClause halleder.
 // itemId/colorId/hasReturns/invoiced BİLİNÇLİ dışarıda: relation alt-sorgusu (some) ya da
 // türetilmiş null-testi olarak elle kurulur.
@@ -1058,7 +1055,10 @@ export class ShippingService {
     if (params.customerId) where.customerId = params.customerId;
     const search = params.search?.trim();
     if (search) {
-      where.OR = buildTurkishSearch<Prisma.SackWhereInput>(search, ["customer.name", "customer.code", "sackNo"]);
+      where.OR = buildTextSearch<Prisma.SackWhereInput>(search, {
+        text: ["customer.name"],
+        code: ["customer.code", "sackNo"],
+      });
     }
     const sacks = await prisma.sack.findMany({
       where,
@@ -2098,7 +2098,12 @@ export class ShippingService {
     for (const [k, v] of Object.entries(params.filters)) {
       if ((SHIPMENT_FILTER_FIELDS as readonly string[]).includes(k)) safeFilters[k] = v;
     }
-    const where = buildWhereClause(safeFilters, SHIPMENT_SEARCH_FIELDS, params.search) as Prisma.ShipmentWhereInput;
+    const where = buildWhereClause(
+      safeFilters,
+      SHIPMENT_SEARCH_FIELDS,
+      params.search,
+      SHIPMENT_CODE_SEARCH_FIELDS
+    ) as Prisma.ShipmentWhereInput;
     applyDateRange(where as Record<string, unknown>, params, SHIPMENT_DATE_FIELDS);
 
     const rawStatus = req.query.status as string | undefined;
@@ -2305,16 +2310,14 @@ export class ShippingService {
       if (cust) directBaseWhere.customerId = cust;
       if (typeof safeFilters.branchId === "string") directBaseWhere.branchId = safeFilters.branchId;
       if (params.search)
-        directBaseWhere.OR = buildTurkishSearch<Prisma.DirectShipmentWhereInput>(
+        directBaseWhere.OR = buildTextSearch<Prisma.DirectShipmentWhereInput>(
           params.search,
-          [
-            "shipmentNo",
-            "reason",
-            "customer.name",
+          {
+            text: ["reason", "customer.name"],
             // Sipariş no ile arama — Shipment tarafındaki `orders.some.order.orderNumber`
             // karşılığı; doğrudan sevkte sipariş bağı allocation üzerinden kurulur.
-            "allocations.some.orderLine.order.orderNumber",
-          ]
+            code: ["shipmentNo", "allocations.some.orderLine.order.orderNumber"],
+          }
         );
       if (invoicedFilter !== null) {
         directBaseWhere.invoicedAt = invoicedFilter ? { not: null } : null;
@@ -2890,7 +2893,10 @@ export class ShippingService {
     }
     const search = params.search?.trim();
     if (search) {
-      where.OR = buildTurkishSearch<Prisma.ShipmentWhereInput>(search, ["shipmentNo", "customer.name", "sacks.some.sackNo"]);
+      where.OR = buildTextSearch<Prisma.ShipmentWhereInput>(search, {
+        text: ["customer.name"],
+        code: ["shipmentNo", "sacks.some.sackNo"],
+      });
     }
 
     const cursor = decodeDynamicCursor(params.cursor);

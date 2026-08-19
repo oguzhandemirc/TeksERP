@@ -29,7 +29,8 @@ const rejects = async (fn: () => Promise<unknown>): Promise<boolean> => {
 const colors = new ColorService({
   modelName: "color",
   tableName: "COLOR",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
 });
 const aliases = new CustomerAliasService();

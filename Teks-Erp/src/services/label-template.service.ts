@@ -276,11 +276,11 @@ export class LabelTemplateService {
    */
   private async assertNameAvailable(name: string, excludeId?: string): Promise<void> {
     const target = foldNameForCompare(name);
-    const candidates = await prisma.labelTemplate.findMany({
-      where: { deletedAt: null, ...(excludeId ? { id: { not: excludeId } } : {}) },
+    const hit = await prisma.labelTemplate.findFirst({
+      where: { deletedAt: null, nameFold: target, ...(excludeId ? { id: { not: excludeId } } : {}) },
       select: { name: true, isActive: true },
+      orderBy: [{ isActive: "desc" }, { createdAt: "asc" }],
     });
-    const hit = candidates.find((t) => foldNameForCompare(t.name) === target);
     if (!hit) return;
     throw AppError.conflict(
       hit.isActive

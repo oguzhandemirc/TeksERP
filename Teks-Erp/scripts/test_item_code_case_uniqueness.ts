@@ -121,7 +121,8 @@ async function expectConflict(
 const itemService = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   duplicateNameField: "name",
   entityLabel: "ürün",
 });
@@ -129,7 +130,8 @@ const itemService = new ItemService({
 const gradeService = new BaseService({
   modelName: "qualityGrade",
   tableName: "QUALITY_GRADE",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "kalite sınıfı",

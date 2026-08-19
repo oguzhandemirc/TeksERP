@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
+import { normalizeDisplayName } from "./name-normalize.helper";
 
 export type NameSource = "OVERRIDE" | "MASTER" | "DEFAULT";
 
@@ -43,10 +44,17 @@ export function resolveName(
 /**
  * Boş string / sadece whitespace → null (override silindi sayılır).
  * OrderLine.customerItemName / customerColorName yazılırken normalize.
+ *
+ * 2026-08-19 (kullanıcı kararı): BÜYÜK harfe de çevrilir. Eskiden yalnız trim
+ * ediliyordu ve bu, aynı listede iki ayrı rejim üretiyordu: `item.name` BÜYÜK
+ * saklanırken müşterinin kendi kumaş adı girildiği gibi kalıyordu. Sevk
+ * irsaliyesinde ve etikette yan yana basıldıkları için görsel olarak da
+ * tutarsızdı. (Arama tarafı zaten katlanmış gölge kolondan çözülüyor — bu
+ * değişiklik GÖRÜNÜM tutarlılığı içindir, arama için gerekli değildi.)
  */
 export function normalizeOverride(v: string | null | undefined): string | null {
   if (v === null || v === undefined) return null;
-  const t = v.trim();
+  const t = normalizeDisplayName(v);
   return t.length === 0 ? null : t;
 }
 

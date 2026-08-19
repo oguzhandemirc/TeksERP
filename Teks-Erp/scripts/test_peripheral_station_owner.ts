@@ -26,7 +26,8 @@ async function expectErr(label: string, part: string, fn: () => Promise<unknown>
 const service = new PeripheralDeviceService({
   modelName: "peripheralDevice",
   tableName: "PERIPHERAL_DEVICE",
-  searchFields: ["code", "name", "address"],
+  searchFields: ["name", "address"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
 });
 

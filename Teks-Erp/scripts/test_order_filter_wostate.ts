@@ -53,7 +53,8 @@ async function main(): Promise<void> {
   const svc = new OrderService({
     modelName: "order",
     tableName: "ORDER",
-    searchFields: ["orderNumber"],
+    searchFields: [],
+    codeSearchFields: ["orderNumber"],
     dateFields: ["createdAt", "deadline"],
     defaultInclude: { lines: true },
     nestedCreateFields: ["lines"],

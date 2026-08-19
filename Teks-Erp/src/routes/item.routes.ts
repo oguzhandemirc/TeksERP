@@ -13,7 +13,8 @@ import "../types/express-augment";
 const service = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   defaultInclude: {
     allowedColors: { include: { color: true } },
     allowedProperties: { include: { property: true } },

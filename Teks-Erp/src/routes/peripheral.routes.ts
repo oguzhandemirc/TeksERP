@@ -22,7 +22,8 @@ const MOBILE_LABEL_PRINTERS = ["mobile:kk1", "mobile:tambur", "mobile:tarti-pake
 const service = new PeripheralDeviceService({
   modelName: "peripheralDevice",
   tableName: "PERIPHERAL_DEVICE",
-  searchFields: ["code", "name", "address"],
+  searchFields: ["name", "address"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
   duplicateNameField: "name",
   // hardDelete tombstone'u (deletedAt dolu, aktifleştirilemez) aday sayılmasın —

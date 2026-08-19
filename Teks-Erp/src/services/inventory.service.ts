@@ -32,7 +32,7 @@ import {
   isCursorRequested,
   applyDateRange,
   resolveSortBy,
-  buildTurkishSearch,
+  buildTextSearch,
   readFilterList,
   readIdCondition,
 } from "../utils/query-parser";
@@ -1048,11 +1048,10 @@ export class InventoryService {
       // olarak kalır → "patos" gibi fuzzy ürün araması bozulmadan çalışır.
       where.OR = [
         { barcode: search },
-        ...buildTurkishSearch<Prisma.RollWhereInput>(search, [
-          "item.name",
-          "item.code",
-          "color.name",
-        ]),
+        ...buildTextSearch<Prisma.RollWhereInput>(search, {
+          text: ["item.name", "color.name"],
+          code: ["item.code"],
+        }),
       ];
     }
 

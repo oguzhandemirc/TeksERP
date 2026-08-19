@@ -1387,15 +1387,13 @@ export class WorkOrderService {
     // erişimi tamamlar (sipariş listesindeki rollup rozetinin tersi yönü).
     const where = buildWhereClause(
       params.filters,
+      ["targetItem.name", "targetColor.name", "orderLinks.some.orderLine.order.customer.name"],
+      params.search,
       [
         "workOrderNumber",
         "batches.some.batchNumber",
-        "targetItem.name",
-        "targetColor.name",
-        "orderLinks.some.orderLine.order.customer.name",
         "orderLinks.some.orderLine.order.orderNumber",
-      ],
-      params.search
+      ]
     );
     applyDateRange(where, params, WORKORDER_DATE_FIELDS);
     if (hideCancelledWhere) Object.assign(where, hideCancelledWhere);

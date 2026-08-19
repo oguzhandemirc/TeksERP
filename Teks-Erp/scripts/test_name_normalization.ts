@@ -67,12 +67,14 @@ async function main() {
   const itemSvc = new ItemService({
     modelName: "item",
     tableName: "ITEM",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
   });
   const colorSvc = new ColorService({
     modelName: "color",
     tableName: "COLOR",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
   });
 
   let itemId: string | null = null;

@@ -17,7 +17,8 @@ function check(label: string, ok: boolean, extra = "") {
 
 const svc = new PeripheralDeviceService({
   modelName: "peripheralDevice", tableName: "PERIPHERAL_DEVICE",
-  searchFields: ["code"], uniqueField: "code",
+  searchFields: [],
+  codeSearchFields: ["code"], uniqueField: "code",
 });
 
 async function upsertMeter(code: string, name: string, machineId: string, role: string, address: string) {

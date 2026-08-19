@@ -66,20 +66,23 @@ async function main() {
   const colorSvc = new ColorService({
     modelName: "color",
     tableName: "COLOR",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
     uniqueField: "code",
   });
   const itemSvc = new ItemService({
     modelName: "item",
     tableName: "ITEM",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
     duplicateNameField: "name",
     entityLabel: "ürün",
   });
   const stationSvc = new BaseService({
     modelName: "station",
     tableName: "STATION",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
     uniqueField: "code",
     duplicateNameField: "name",
     entityLabel: "istasyon",
@@ -87,7 +90,8 @@ async function main() {
   const machineSvc = new BaseService({
     modelName: "machine",
     tableName: "MACHINE",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
     uniqueField: "code",
     duplicateNameField: "name",
     duplicateNameScopeField: "stationId",
@@ -96,7 +100,8 @@ async function main() {
   const customerSvc = new CustomerService({
     modelName: "customer",
     tableName: "CUSTOMER",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
     uniqueField: "code",
     duplicateNameField: "name",
     entityLabel: "müşteri",

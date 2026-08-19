@@ -23,7 +23,8 @@ function check(label: string, ok: boolean, extra = ""): void {
 const service = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
 });
 
 const stkSeq = (code: string): number => parseInt(code.slice("STK-".length), 10);

@@ -12,6 +12,7 @@
 // Mükerrer kontrolü fold* fonksiyonlarıyla ayraç-duyarsız yapılır — eski tireli
 // kayıtla yeni boşluklu yazım aynı anahtara düşer, görünmez mükerrer doğmaz.
 // =============================================================================
+import { foldSearchText } from "../../utils/search-fold";
 
 /**
  * GENEL AD NORMALİZASYONU — master-data adlarının DEPOLANAN biçimi (2026-08-19).
@@ -62,24 +63,40 @@ export function normalizeColorName(name: string): string {
 }
 
 /**
- * Genel ad karşılaştırma anahtarı (mükerrer kontrolü): trim + çoklu boşluk
- * tekle + tr-TR BÜYÜK. "Mavi" / "MAVİ" / " mavi " aynı anahtara düşer.
- * Depolanan adı DEĞİŞTİRMEZ — yalnız karşılaştırmada kullanılır. PG lower()
- * İ/ı harflerinde hatalı olduğundan (ILIKE/mode:'insensitive' "MAVİ"≠"mavi"
- * sayar) karşılaştırma her zaman JS tarafında bu katlamayla yapılır.
+ * Genel ad karşılaştırma anahtarı (mükerrer kontrolü) — 2026-08-19'da ARAMA
+ * KATLAMASIYLA BİRLEŞTİRİLDİ: `foldSearchText` ile birebir aynı, yani SQL
+ * `public.tr_fold()` ile de birebir aynı.
+ *
+ * DAVRANIŞ DEĞİŞİKLİĞİ (kullanıcı kararı D3): artık "ŞAHİN" ile "SAHIN" AYNI
+ * kayıt sayılır. Sahada aynı firma üç yazımla giriliyordu ve mükerrer
+ * görünmüyordu; sadece büyük/küçük katlamak bunun yalnız bir bölümünü yakalıyordu
+ * (ölçüldü: canlı veride 'ACTIVO' + 'ACTİVO' ve 'Moda Tekstil' + 'MODA TEKSTİL'
+ * yan yana duruyor).
+ *
+ * ⚠️ ESKİ INVARIANT ("çıktısı `normalizeDisplayName` ile BİREBİR AYNI olmalı")
+ * KALKTI — ama zayıflayarak değil, YAPISALLAŞARAK. Artık anahtar DB'de
+ * `<kolon>Fold` GENERATED kolonu olarak DEPOLANAN DEĞERDEN TÜRETİLİYOR
+ * (`GENERATED ALWAYS AS (public.tr_fold(name)) STORED`). Yani "depolanan biçim
+ * ile mükerrer anahtarı ayrışabilir" ihtimali artık mümkün değil: ikisini elle
+ * hizada tutmak yerine PostgreSQL türetiyor. Depolama BÜYÜK harf olmaya devam
+ * eder (`normalizeDisplayName`), anahtar küçük ASCII'dir; ikisi FARKLI olmalıdır
+ * ve bu bir hata değil, ayrımın kendisidir.
  */
 export function foldNameForCompare(name: string): string {
-  return name.trim().replace(/\s+/g, " ").toLocaleUpperCase("tr-TR");
+  return foldSearchText(name);
 }
 
 /**
  * Renk adı karşılaştırma anahtarı: ayraçlar (boşluk/tire) eşdeğer + salt-rakam
  * bloklar başta. "055-BEYAZ" (legacy) ≡ "055 BEYAZ" ≡ "beyaz 055".
+ *
+ * ⚠️ Renk BİLİNÇLİ olarak DB `nameFold` kolonuna bağlanmadı: bu katlama ayraç
+ * ve token sırasından bağımsızdır, `tr_fold` ise değildir. Karşılaştırma JS'te
+ * kalır (renk kataloğu onlarca satır). Taban katlama yine ortaktır — yani
+ * "BEYAZ" ile "beyaz" gibi "SAHIN" ile "ŞAHİN" de aynı anahtara düşer.
  */
 export function foldColorNameForCompare(name: string): string {
-  const tokens = name
-    .trim()
-    .toLocaleUpperCase("tr-TR")
+  const tokens = foldSearchText(name)
     .split(/[\s-]+/)
     .filter(Boolean);
   const numeric = tokens.filter((t) => /^\d+$/.test(t));

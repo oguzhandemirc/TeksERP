@@ -49,6 +49,12 @@ export class ColorService extends BaseService {
     // Ayraç-duyarsız karşılaştırma: canlıdaki eski tireli adlar ("KREM-GÜMÜŞ",
     // "055-BEYAZ") yeni boşluklu yazımla ("KREM GÜMÜŞ", "beyaz 055") aynı
     // anahtara düşer — normalize artık boşluğu koruduğundan exact-eq yetmez.
+    //
+    // ⚠️ Renk, DB `nameFold` gölge kolonuna BİLİNÇLİ olarak bağlanmadı (diğer
+    // ana veri guard'ları 2026-08-19'da bağlandı): bu katlama ayraçtan VE token
+    // sırasından bağımsızdır, `tr_fold` ise değildir. Tarama JS'te kalır — renk
+    // kataloğu onlarca satırdır. Taban katlama yine ortak, yani "ŞAHİN"≡"SAHIN"
+    // kuralı burada da geçerli.
     const target = foldColorNameForCompare(name);
     const candidates = await prisma.color.findMany({
       where: excludeId ? { id: { not: excludeId } } : {},

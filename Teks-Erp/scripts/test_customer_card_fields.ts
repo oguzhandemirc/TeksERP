@@ -31,7 +31,8 @@ function mockReq(query: Record<string, unknown>): Request {
 const service = new CustomerService({
   modelName: "customer",
   tableName: "CUSTOMER",
-  searchFields: ["code", "name", "taxNumber", "exportCode"],
+  searchFields: ["name"],
+  codeSearchFields: ["code", "taxNumber", "exportCode"],
   defaultInclude: undefined,
   uniqueField: "code",
   nestedCreateFields: ["branches"],

@@ -77,7 +77,8 @@ async function main(): Promise<void> {
   const orderSvc = new OrderService({
     modelName: "order",
     tableName: "ORDER",
-    searchFields: ["orderNumber"],
+    searchFields: [],
+    codeSearchFields: ["orderNumber"],
     dateFields: ["createdAt", "deadline"],
     defaultInclude: { lines: { include: { item: true, color: true } } },
     nestedCreateFields: ["lines"],

@@ -26,7 +26,8 @@ function check(label: string, ok: boolean, extra = "") {
 const itemService = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   defaultInclude: {
     allowedColors: { include: { color: true } },
     allowedProperties: { include: { property: true } },

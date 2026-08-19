@@ -60,7 +60,7 @@ import {
   applyDateRange,
   buildOrderByClause,
   buildPagination,
-  buildTurkishSearch,
+  buildTextSearch,
   buildWhereClause,
   parseQueryParams,
   readIdCondition,
@@ -622,12 +622,10 @@ export class OrderService extends BaseService {
 
     const search = params.search?.trim();
     if (search) {
-      baseWhere.OR = buildTurkishSearch<Prisma.OrderWhereInput>(search, [
-        "orderNumber",
-        "customer.name",
-        "lines.some.item.name",
-        "lines.some.customerItemName",
-      ]);
+      baseWhere.OR = buildTextSearch<Prisma.OrderWhereInput>(search, {
+        text: ["customer.name", "lines.some.item.name", "lines.some.customerItemName"],
+        code: ["orderNumber"],
+      });
     }
 
     // Gap-bazlı picker: bir satır "müsait" ise Açık > 0.
@@ -770,12 +768,10 @@ export class OrderService extends BaseService {
     }
     const term = params.search?.trim();
     if (term) {
-      baseWhere.OR = buildTurkishSearch<Prisma.OrderLineWhereInput>(term, [
-        "order.orderNumber",
-        "order.customer.name",
-        "item.name",
-        "customerItemName",
-      ]);
+      baseWhere.OR = buildTextSearch<Prisma.OrderLineWhereInput>(term, {
+        text: ["order.customer.name", "item.name", "customerItemName"],
+        code: ["order.orderNumber"],
+      });
     }
 
     // ── CURSOR MOD (limit verildi): itemId opsiyonel, "sipariş-önce" aramalı liste.

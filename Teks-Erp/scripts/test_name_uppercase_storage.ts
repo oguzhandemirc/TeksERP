@@ -50,14 +50,41 @@ function testHelper(): void {
   check("çoklu boşluk teklenir", normalizeDisplayName("  a   b  ") === "A B");
   check("idempotent", normalizeDisplayName(normalizeDisplayName("Öz Şahin")) === "ÖZ ŞAHİN");
 
-  // B) SÖZLEŞME: depolama ≡ karşılaştırma anahtarı
-  for (const s of ["öz şahin", "Öz Şahin", "ÖZ  ŞAHİN", "iplik", "ışık"]) {
+  // B) SÖZLEŞME — 2026-08-19'da DEĞİŞTİ: depolama ≡ karşılaştırma anahtarı DEĞİL,
+  // ama ayrışma da mümkün DEĞİL.
+  //
+  // ESKİ KURAL: `normalizeDisplayName` çıktısı `foldNameForCompare` ile BİREBİR
+  // aynı olmalıydı — çünkü ikisi de elle yazılmış iki ayrı fonksiyondu ve
+  // ayrışırlarsa mükerrer kontrolü kendi yazdığı kaydı bulamazdı.
+  //
+  // YENİ KURAL: mükerrer anahtarı artık DB'de `<kolon>Fold` GENERATED kolonudur
+  // ve DEPOLANAN DEĞERDEN türetilir (`GENERATED ALWAYS AS (tr_fold(name)) STORED`).
+  // İki fonksiyonu elle hizada tutmak yerine PostgreSQL türetiyor → "ayrışabilir"
+  // ihtimali ortadan kalktı. Depolama BÜYÜK harf (görünüm), anahtar küçük ASCII
+  // (arama/mükerrer); FARKLI olmaları doğrudur.
+  //
+  // Bu yüzden test artık eşitliği değil DOĞRU İLİŞKİYİ ölçer:
+  //   fold(normalize(x)) === fold(x)   — normalize etmek anahtarı DEĞİŞTİRMEZ.
+  // Bu, kontrolün kendi yazdığı kaydı bulacağının garantisidir ve DB'nin
+  // türetmesiyle birebir aynı şeyi söyler.
+  for (const s of ["öz şahin", "Öz Şahin", "ÖZ  ŞAHİN", "iplik", "ışık", "SAHIN", "ŞAHİN"]) {
     check(
-      `depolama ≡ mükerrer anahtarı: "${s}"`,
-      normalizeDisplayName(s) === foldNameForCompare(s),
-      normalizeDisplayName(s),
+      `normalize anahtarı değiştirmiyor: "${s}"`,
+      foldNameForCompare(normalizeDisplayName(s)) === foldNameForCompare(s),
+      `${normalizeDisplayName(s)} → ${foldNameForCompare(s)}`,
     );
   }
+  // D3 (kullanıcı kararı): ASCII yazım da AYNI kayda düşer.
+  check(
+    'mükerrer anahtarı ASCII katlar: "ŞAHİN" ≡ "SAHIN"',
+    foldNameForCompare("ŞAHİN TEKSTİL") === foldNameForCompare("SAHIN TEKSTIL"),
+    foldNameForCompare("ŞAHİN TEKSTİL"),
+  );
+  check(
+    "depolama BÜYÜK kalır (anahtar küçüktür — ikisi farklı olmalı)",
+    normalizeDisplayName("öz şahin") === "ÖZ ŞAHİN" &&
+      foldNameForCompare("öz şahin") === "oz sahin",
+  );
 }
 
 // ── B) Gerçek yazma yolları ─────────────────────────────────────────────────
@@ -72,7 +99,8 @@ async function testWritePaths(): Promise<void> {
     model: prisma.customer,
     modelName: "customer",
     tableName: "CUSTOMER",
-    searchFields: ["code", "name"],
+    searchFields: ["name"],
+    codeSearchFields: ["code"],
     uniqueField: "code",
     duplicateNameField: "name",
     entityLabel: "müşteri",

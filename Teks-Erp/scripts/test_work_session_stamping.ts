@@ -39,7 +39,8 @@ const tambur = new TamburService();
 const peripherals = new PeripheralDeviceService({
   modelName: "peripheralDevice",
   tableName: "PERIPHERAL_DEVICE",
-  searchFields: ["code", "name"],
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
 });
 

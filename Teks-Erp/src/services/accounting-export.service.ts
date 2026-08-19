@@ -29,10 +29,12 @@ import {
   buildWhereClause,
   readFilterList,
   readIdCondition,
+  buildTextSearch,
 } from "../utils/query-parser";
 
 // listShipments ile aynı whitelist (drift olmaması için aynı değerler).
-const SHIPMENT_SEARCH_FIELDS = ["shipmentNo", "plateNumber", "driverName", "carrier", "customer.name"];
+const SHIPMENT_SEARCH_FIELDS = ["plateNumber", "driverName", "carrier", "customer.name"];
+const SHIPMENT_CODE_SEARCH_FIELDS = ["shipmentNo"];
 const SHIPMENT_DATE_FIELDS = ["createdAt", "dispatchedAt"] as const;
 
 // Tek export isteğinde toplanacak en fazla sevkiyat. Aşılırsa kullanıcı aralığı
@@ -119,7 +121,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
   const where = buildWhereClause(
     params.filters,
     SHIPMENT_SEARCH_FIELDS,
-    params.search
+    params.search,
+    SHIPMENT_CODE_SEARCH_FIELDS
   ) as Prisma.ShipmentWhereInput;
   where.status = ShipmentStatus.DISPATCHED;
   // F248: customerId TEK doğrulanmış kaynak (where + returnWhere). buildWhereClause
@@ -198,10 +201,22 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
 
   // Fasondan DOĞRUDAN sevkler (DirectShipment) de muhasebeye girer — çuval Shipment'larıyla
   // AYNI filtre penceresinde (müşteri + tarih/ids). Doğrudan sevkte çuval/plaka/sürücü/kg
-  // YOK; tarih alanı dispatchedAt ≙ shippedAt, createdAt ≙ createdAt. Arama yalnız shipmentNo.
+  // YOK; tarih alanı dispatchedAt ≙ shippedAt, createdAt ≙ createdAt.
+  //
+  // ⚠️ ARAMA SİMETRİSİ (2026-08-19 denetimi): burası eskiden yalnız
+  // `shipmentNo: { contains }` yapıyordu, Shipment tarafı ise tam aramaydı. Aynı
+  // ekranın aynı arama kutusu iki tabloya FARKLI soru soruyordu → müşteri adıyla
+  // arayan muhasebeci ekranda doğrudan sevkleri GÖRÜYOR, Excel'de göremiyordu.
+  // Artık ikisi de `listDirectShipments` ile aynı alan kümesini kullanır.
   const directWhere: Prisma.DirectShipmentWhereInput = {};
   if (customerId) directWhere.customerId = customerId;
-  if (params.search) directWhere.shipmentNo = { contains: params.search, mode: "insensitive" };
+  if (params.search) {
+    const directLeaves = buildTextSearch<Prisma.DirectShipmentWhereInput>(params.search, {
+      text: ["reason", "customer.name"],
+      code: ["shipmentNo", "allocations.some.orderLine.order.orderNumber"],
+    });
+    if (directLeaves.length > 0) directWhere.OR = directLeaves;
+  }
   if (isSelection) {
     directWhere.id = { in: idList };
   } else {

@@ -19,7 +19,8 @@ async function expectThrow(label: string, fn: () => Promise<unknown>) {
 }
 
 const svc = new PeripheralDeviceService({
-  modelName: "peripheralDevice", tableName: "PERIPHERAL_DEVICE", searchFields: ["code"], uniqueField: "code",
+  modelName: "peripheralDevice", tableName: "PERIPHERAL_DEVICE", searchFields: [],
+ codeSearchFields: ["code"], uniqueField: "code",
 });
 const stamp = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
 const createdPeripheralIds: string[] = [];

@@ -26,7 +26,8 @@ import { FabricPropertyService } from "../src/services/fabric-property.service";
 const svc = new FabricPropertyService({
   modelName: "fabricProperty",
   tableName: "FABRIC_PROPERTY",
-  searchFields: ["code", "name", "category", "description"],
+  searchFields: ["name", "category", "description"],
+  codeSearchFields: ["code"],
   nestedCreateFields: ["stationCapabilities"],
   defaultInclude: {
     stationCapabilities: {

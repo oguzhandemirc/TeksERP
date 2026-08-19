@@ -54,7 +54,7 @@ import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { resolveDispatchCancelBlockReason } from "./helpers/subcontractor-cancel.helper";
 import { renderFasonDirectShipHtml } from "./document-render/fason-direct-ship.html";
 import { renderFasonReceiptHtml, type FasonReceiptDoc } from "./document-render/fason-receipt.html";
-import { buildPagination, buildTurkishSearch } from "../utils/query-parser";
+import { buildPagination, buildTextSearch } from "../utils/query-parser";
 import {
   decodeDynamicCursor,
   dynamicCursorWhere,
@@ -3511,11 +3511,10 @@ export class SubcontractorService {
     const search = params?.search?.trim();
     if (search) {
       // Y-2/Y-3: Türkçe-duyarlı arama (C-locale ILIKE İ/ı katlamaz).
-      where.OR = buildTurkishSearch<Prisma.SubcontractorDispatchWhereInput>(search, [
-        "dispatchNo",
-        "subcontractor.name",
-        "workOrder.workOrderNumber",
-      ]);
+      where.OR = buildTextSearch<Prisma.SubcontractorDispatchWhereInput>(search, {
+        text: ["subcontractor.name"],
+        code: ["dispatchNo", "workOrder.workOrderNumber"],
+      });
     }
 
     // Liste için ÇOK HAFIF select — detay endpoint (`getDispatch`) tam veriyi döner.
