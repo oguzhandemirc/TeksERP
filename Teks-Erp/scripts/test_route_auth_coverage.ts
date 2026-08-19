@@ -73,7 +73,20 @@ const EXEMPT: Record<string, string> = {
  * fire kararını kaydedilemez yapardı (sebep zorunlu alan). YAZMA uçları guard'lı
  * (`roll:manual-adjust` ∨ `mobile:tambur-duzelt`) — açık olan yalnız okuma.
  */
-const BARE_CHAIN_BASELINE = 11;
+/**
+ * ⚠️ 11 → 12 (2026-08-19, BİLİNÇLİ): `GET /api/search` (global arama) yalnız
+ * `verifyToken` taşır. Sebep, uç ÇOK VARLIKLI olmasıdır: tek bir statik izin
+ * kodu doğru cevabı veremez — müşteriyi okuyabilen ama sevkiyatı okuyamayan
+ * kullanıcı aramayı kullanabilmeli, yalnız sevkiyat sonuçlarını GÖRMEMELİ.
+ * Route satırına `customer:read` yazmak aramayı sevkiyatçıya kapatır,
+ * hiçbir şey yazmamak ise KOVA BAZINDA elemeyi zorunlu kılar — ikincisi
+ * seçildi (F221 deseni): `search.service` her kovayı `matchesPermission` ile
+ * eler, yetkisiz kova HİÇ SORGULANMAZ. `record-info` ile birebir aynı gerekçe.
+ * Kapsam `test_permission_catalog`in `DINAMIK_IZIN_KAYNAKLARI` tablosunda
+ * beyanlı ve `test_global_search §1-2` mekanik doğruluyor (kova izni ⊆ liste
+ * ucunun izni + her kod katalogda tanımlı).
+ */
+const BARE_CHAIN_BASELINE = 12;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

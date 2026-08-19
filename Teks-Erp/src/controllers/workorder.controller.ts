@@ -335,6 +335,11 @@ export class WorkOrderController {
     // tam bu satır unutulduğu için aylarca 500 verdi ve servis testleri göremedi.
     this.getLinkableOrderLines = this.getLinkableOrderLines.bind(this);
     this.linkOrderLines = this.linkOrderLines.bind(this);
+    // ⚠️ 2026-08-19: bu satır EKSİKTİ — route'a çıplak geçilen handler'da `this`
+    // undefined kalıyordu ve override yolu ÇAĞRILDIĞI AN 500 veriyordu.
+    // `print-event` vakasının birebir aynısı: servis-katmanı testleri bunu
+    // GÖREMEZ (servis doğru çalışır, kırılan HTTP köprüsüdür).
+    this.linkOrderLineWithOverride = this.linkOrderLineWithOverride.bind(this);
     this.unlinkOrderLine = this.unlinkOrderLine.bind(this);
     this.changeTargetColor = this.changeTargetColor.bind(this);
     this.changeWidth = this.changeWidth.bind(this);

@@ -122,6 +122,11 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // hangi varlığa yazılabileceği ayrıca o varlığın write izniyle sınırlıdır
   // (uç guard'ı iki katmanlıdır — `import.routes.ts`).
   { key: "system/data-import", app: "desktop", title: "Veri Aktarımı", requires: ["data:import"], capabilities: [] },
+  // Mükerrer Kayıtlar — `admin:settings` DEĞİL: "bu iki müşteri aynı firma mı?"
+  // sorusunun cevabını ana veriyi TANIYAN kişi (satış/planlama) bilir, sistem
+  // yöneticisi bilmez. `capabilities` dört varlığın write iznidir: ekran
+  // açılır ama birleştirme ikinci kapıyı da arar (`master-data-merge.routes`).
+  { key: "system/duplicates", app: "desktop", title: "Mükerrer Kayıtlar", requires: ["master-data:merge"], capabilities: ["customer:write", "item:write", "property:write", "subcontractor:write"] },
   { key: "system/db-restore", app: "desktop", title: "Veritabanı Geri Yükleme", requires: ["admin:settings"], capabilities: [] },
   { key: "system/logs", app: "desktop", title: "Sistem Kayıtları", requires: ["admin:settings"], capabilities: [] },
   { key: "system/archive", app: "desktop", title: "Aktivite Arşivi", requires: ["admin:settings"], capabilities: [] },

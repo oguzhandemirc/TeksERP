@@ -41,6 +41,26 @@ const EXPECTED: Record<string, string> = {
   "Customer <- CustomerStandaloneLabel.customer : Cascade": "cascade-intended — müşteri etiket konfigürasyonu",
   "Customer <- CustomerTemplateRoute.customer : Cascade": "cascade-intended — müşteri şablon yönlendirmesi",
   "Customer <- Route.customer : SetNull": "guarded (routeCount, A5 2026-07-31)",
+  // 2026-08-19 — BİRLEŞTİRME SOY BAĞI (`mergedIntoId`). Sayım guard'ı BİLEREK
+  // EKLENMEDİ ve SetNull doğru davranıştır:
+  //   • Bu bir SAHİPLİK bağı değil, bir TARİHÇE işaretidir ("bu kayıt X'e
+  //     birleşti"). Survivor bir gün kalıcı silinirse tombstone'un kendisi
+  //     kaybolmamalı — yalnız kime birleştiği bilinmez olur.
+  //   • Ters yön (tombstone'u silmek) FK'nın işi değil, servis katmanının:
+  //     `master-data-merge.service` hiç DELETE yapmaz ve diriltme iki kapıda
+  //     (`update` + `reactivate`) 400 ile reddedilir.
+  //   • Sayım guard'ı eklemek, "birleştirilmiş kaydı olan müşteri silinemez"
+  //     demek olurdu — oysa silinmesi gereken şey ZATEN tombstone değil,
+  //     survivor'dır ve onun kendi bağları (sipariş/sevkiyat) zaten guard'lı.
+  "Customer <- Customer.mergedInto : SetNull": "merge soy bağı — tarihçe işareti, sahiplik değil (bkz. yukarıdaki not)",
+  "Item <- Item.mergedInto : SetNull": "merge soy bağı — tarihçe işareti, sahiplik değil",
+  // ⚠️ Renk ve fason firma BU TARAMANIN DIŞINDA (`WATCHED` yalnız hard-delete
+  // ucu OLAN modelleri izler; ikisinin kalıcı silme yolu YOK). Soy bağları
+  // aynı şekilde SetNull ama buraya yazılamaz — yazılsaydı "bayat satır"
+  // kontrolü düşerdi. İkisine bir gün kalıcı silme eklenirse `WATCHED`
+  // genişletilmeli; o an renk için ÖZEL bir tehlike doğar: `Roll.colorId`
+  // SetNull'dır ve `colorId IS NULL` bu sistemde "HAM KUMAŞ" demektir, yani
+  // bir rengi silmek boyalı topları sessizce hama çevirir.
   "Customer <- Sack.customer : SetNull": "guarded (sackCount, 2026-07-15)",
   // 2026-08-09 — `Roll.labelCustomerId`, `lastLabelSnapshot.customerId`'nin
   // SORGULANABİLİR aynası (sahiplik DEĞİL, basılmış kâğıdın izi).
