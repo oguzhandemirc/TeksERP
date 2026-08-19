@@ -47,7 +47,13 @@ async function assertSubNameAvailable(
 ): Promise<void> {
   if (!name || name.trim().length === 0) return;
   const target = foldNameForCompare(name);
-  const where = { nameFold: target, ...(excludeId ? { id: { not: excludeId } } : {}) };
+  // ⚠️ Fason firmada BİRLEŞTİRİLMİŞ (tombstone) kayıt aday DEĞİL — `BaseService`
+  // tarafındaki ikizinin birebir aynısı ve sebebi de aynı: aksi hâlde guard, az
+  // önce birleştirilen firma için *"PASİF kayıt var, aktifleştirin"* der ve
+  // operatörü tombstone'u DİRİLTMEYE davet eder. Kategoride soy bağı yok, o
+  // yüzden koşul yalnız firma dalında anlamlı — `undefined` yayılmaz.
+  const lineage = model === "subcontractor" ? { mergedIntoId: null } : {};
+  const where = { nameFold: target, ...lineage, ...(excludeId ? { id: { not: excludeId } } : {}) };
   const select = { name: true, code: true, isActive: true } as const;
   // Aktif eş varsa ONU göster — mesaj "zaten var" ↔ "PASİF, aktifleştirin"
   // arasında ayrışıyor ve operatöre yapılacak işi söylemeli.

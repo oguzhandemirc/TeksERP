@@ -129,6 +129,15 @@ export const PERMISSION_CATALOG = [
   // VERMEZ, bilinçli olarak elle atanır.
   // DIŞA aktarım için ek izin YOKTUR (karar D6): okuma yetkisi olan indirebilir.
   { code: "data:import", module: "ADMIN", category: "web", description: "Toplu içe aktarım (Excel/CSV ile kayıt oluşturma/güncelleme) — varlığın kendi düzenleme yetkisiyle BİRLİKTE aranır" },
+  // 2026-08-19: MÜKERRER KAYIT BİRLEŞTİRME. `data:import` ile birebir aynı
+  // gerekçe ve aynı çift-kapı düzeni (`master-data:merge` + varlığın write
+  // izni), ama tehlike sınıfı daha ağır: birleştirme GERİ ALINAMAZ ve tek
+  // işlemde binlerce satırın sahibini değiştirir. Bu yüzden "toplu yükleme
+  // yapabilen herkes birleştirebilir" DEMEDİK — ayrı kod, ayrı atama.
+  // Kategori `web` (admin:* bunu VERMEZ) — sistem yönetimi değil, ana veriyi
+  // tanıyan kişinin (satış/planlama) işidir; "bu iki müşteri aynı firma mı?"
+  // sorusuna cevabı sysadmin bilmez.
+  { code: "master-data:merge", module: "MASTER_DATA", category: "web", description: "Mükerrer ana veri kaydını birleştirme (müşteri/kumaş/renk/fason) — varlığın kendi düzenleme yetkisiyle BİRLİKTE aranır; GERİ ALINAMAZ" },
   { code: "admin:*", module: "ADMIN", category: "admin", description: "Tüm admin yetkileri (wildcard)" },
   { code: "report:production", module: "REPORTS", category: "web", description: "Üretim raporları" },
   { code: "report:sales", module: "REPORTS", category: "web", description: "Sipariş raporları" },

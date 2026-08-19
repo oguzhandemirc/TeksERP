@@ -65,6 +65,7 @@ import returnReasonRoutes from "./routes/return-reason.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import importRoutes from "./routes/import.routes";
+import masterDataMergeRoutes from "./routes/master-data-merge.routes";
 import configBundleRoutes from "./routes/config-bundle.routes";
 import adminRoutes from "./routes/admin.routes";
 import { verifyToken } from "./middlewares/auth.middleware";
@@ -528,6 +529,7 @@ app.use("/api/feature-flags", featureFlagRoutes);
 // satırlık bir dosya JSON'a çevrilince 1 MB'ı aşar ama gevşemenin diğer TÜM
 // uçlara yayılması gereksiz bir saldırı yüzeyi olurdu.
 app.use("/api/import", importRoutes);
+app.use("/api/master-data", masterDataMergeRoutes);
 // Yapılandırma paketi (kurulumlar arası tanım taşıma). Yetki ANAHTAR-KAPSAMLI:
 // pakette hangi tür varsa yalnız onun izni aranır (feature-flags guard dersi).
 app.use("/api/config-bundle", configBundleRoutes);

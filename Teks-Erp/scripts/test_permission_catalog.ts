@@ -128,6 +128,19 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // TÜRE göre çözülür. `test_config_bundle.ts` her türün iki iznini de katalogla
   // karşılaştırır ve tür sayısı zeminini korur.
   "src/routes/config-bundle.routes.ts": [`${DELEGE}scripts/test_config_bundle.ts`],
+  // GLOBAL ARAMA (2026-08-19): kova başına izin `SEARCH_ENTITIES` katalogunda
+  // durur ve servis `matchesPermission(perms, code)` ile kovayı ELER — yani
+  // yetkisiz kova hiç sorgulanmaz (route katmanı yalnız `verifyToken` ister,
+  // F221 deseni). Kodlar servis dosyasında DEĞİL katalogda olduğu için AST ile
+  // çözülemezler; kapsamı `test_global_search.ts §2` kuruyor: katalogdaki HER
+  // kovanın izni permission-catalog'da tanımlı VE liste ucunun izniyle hizalı mı.
+  "src/services/search.service.ts": [`${DELEGE}scripts/test_global_search.ts`],
+  // BİRLEŞTİRME (2026-08-19): ikinci kapı izni `import-registry`den çözülüyor
+  // (`adapter.writePermission`) — import.routes.ts ile BİREBİR aynı desen ve
+  // aynı gerekçe: ikinci bir varlık→izin listesi tutmamak için. Kapsam
+  // `test_master_data_merge.ts` içinde kuruluyor (dört varlığın da write izni
+  // katalogda tanımlı mı + renk gerçekten `property:write` mi).
+  "src/routes/master-data-merge.routes.ts": [`${DELEGE}scripts/test_master_data_merge.ts`],
 };
 
 // Taramanın gerçekten "bir şeye baktığını" doğrulayan zeminler. Bir refactor

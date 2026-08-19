@@ -15,6 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SEARCH_ENTITIES } from "../src/constants/search-entities";
 import { searchService } from "../src/services/search.service";
 import { buildTextSearch } from "../src/utils/query-parser";
@@ -82,6 +83,25 @@ async function main(): Promise<void> {
   check(
     "körlük zemini: en az 6 kova route'a karşı ölçüldü",
     Object.keys(ROUTE_FILES).length >= 6,
+  );
+
+  // ⚠️ Bu blok `test_permission_catalog.ts`in DEVRETTİĞİ kapsamdır: arama izin
+  // kodları servis dosyasında değil bu katalogda yaşadığı için orada AST ile
+  // çözülemiyorlar ve o bekçi kapsamı buraya devrediyor. Devir ÖLÜ OLMAMALI —
+  // yani katalogda tanımsız bir kod buradan geçmemeli.
+  const catalogCodes = new Set(PERMISSION_CATALOG.map((p) => p.code));
+  const undefinedCodes = SEARCH_ENTITIES.flatMap((e) =>
+    e.permissions.filter((p) => !catalogCodes.has(p)),
+  );
+  check(
+    "her kova izni permission-catalog'da TANIMLI (devredilen kapsam)",
+    undefinedCodes.length === 0,
+    undefinedCodes.join(", ") || `${SEARCH_ENTITIES.length} kova taplandı`,
+  );
+  check(
+    "körlük zemini: izin kataloğu okundu",
+    catalogCodes.size > 50,
+    `${catalogCodes.size} kod`,
   );
 
   // ── 2) Panel katalogu ile anahtar kümesi aynı ─────────────────────────────

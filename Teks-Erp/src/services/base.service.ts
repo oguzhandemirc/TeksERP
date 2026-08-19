@@ -135,8 +135,36 @@ async function hasTrigram(): Promise<boolean> {
   return trigramAvailable;
 }
 
-const modelSortFieldCache = new Map<string, Set<string> | null>();
+/**
+ * Model BİRLEŞTİRME SOY BAĞI taşıyor mu (`mergedIntoId`)? — migration
+ * `20260819210000_master_data_merge_lineage`.
+ *
+ * ⚠️ KONFİGE BAĞLANMADI, BİLİNÇLİ. `duplicateNameWhere: { mergedIntoId: null }`
+ * yazmak dört serviste dört ayrı satır demekti ve beşincisi eklendiğinde
+ * unutulurdu — unutmanın bedeli sessiz: operatör az önce birleştirdiği kaydın
+ * adını yazar, guard tombstone'u bulur ve ona *"PASİF kayıt var, aktifleştirin"*
+ * der. Yani araç, kendi temizlediği mükerreri geri diriltmeye DAVET eder.
+ * Tespit DMMF'ten (alan var mı) → yeni varlık kolonu alır almaz korunur.
+ */
+const modelMergeLineageCache = new Map<string, boolean>();
+export function modelHasMergeLineage(modelName: string): boolean {
+  const key = modelName.toLowerCase();
+  const cached = modelMergeLineageCache.get(key);
+  if (cached !== undefined) return cached;
+  const models = (
+    Prisma as unknown as {
+      dmmf?: { datamodel?: { models?: Array<{ name: string; fields: DmmfField[] }> } };
+    }
+  ).dmmf?.datamodel?.models;
+  const m = models?.find((x) => x.name.toLowerCase() === key);
+  const has = Boolean(m?.fields.some((f) => f.name === "mergedIntoId" && f.kind === "scalar"));
+  modelMergeLineageCache.set(key, has);
+  return has;
+}
+
 type DmmfField = { name: string; kind: string };
+
+const modelSortFieldCache = new Map<string, Set<string> | null>();
 function isDbGenerated(field: DmmfField): boolean {
   return field.name.endsWith(GENERATED_FIELD_SUFFIX);
 }
@@ -714,9 +742,17 @@ export class BaseService {
     // ⚠️ Alan adı sözleşmesi: gölge kolon HER ZAMAN `<kolon>Fold`. Sözleşme DB
     // tarafında iki yönlü kilitli (`test_db_invariants` §9) ve `sanitizeWriteData`
     // de aynı son eke bakıyor — üçü birlikte değişir.
+    // ⚠️ BİRLEŞTİRİLMİŞ (tombstone) kayıtlar ADAY DEĞİLDİR. İki sebep:
+    //   1) Birleşmiş adın yeniden kullanılması MEŞRUDUR — B6'da gelecek partial
+    //      UNIQUE de `WHERE "mergedIntoId" IS NULL` ile tam bunu söyleyecek.
+    //   2) Aksi hâlde guard, az önce temizlenen mükerrer için *"PASİF kayıt var,
+    //      aktifleştirin"* der ve operatörü tombstone'u DİRİLTMEYE davet eder.
+    // Sessiz izin de doğru değil: aynı adı geri yaratmak mükerreri diriltir —
+    // o yüzden uyarı yüzeyi (`findSimilarNames`) tombstone'ları GÖSTERİR.
     const hit = (await this.delegate.findFirst({
       where: {
         ...(this.config.duplicateNameWhere ?? {}),
+        ...(modelHasMergeLineage(this.config.modelName) ? { mergedIntoId: null } : {}),
         ...scopeWhere,
         ...(excludeId ? { id: { not: excludeId } } : {}),
         [`${field}Fold`]: target,
@@ -788,7 +824,17 @@ export class BaseService {
   async findSimilarNames(
     rawName: string,
     opts: { excludeId?: string; scopeValue?: unknown; limit?: number } = {},
-  ): Promise<Array<{ id: string; name: string; code: string | null; isActive: boolean; score: number }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      name: string;
+      code: string | null;
+      isActive: boolean;
+      score: number;
+      /** Dolu ise bu satır bir TOMBSTONE'dur: "→ <ad> altına birleşti". */
+      mergedIntoName: string | null;
+    }>
+  > {
     const field = this.config.similarNameField ?? this.config.duplicateNameField;
     if (!field) return [];
     const target = foldNameForCompare(rawName);
@@ -799,10 +845,19 @@ export class BaseService {
     const codeField = this.config.uniqueField;
 
     const q = (id: string): string => `"${id.replace(/"/g, '""')}"`;
+    // ⚠️ UYARI YÜZEYİ, SERT KAPININ TERSİ: burada tombstone'lar BİLEREK GÖSTERİLİR.
+    // `assertNameNotDuplicate` onları aday saymaz (birleşmiş adı yeniden
+    // kullanmak meşru), ama az önce birleştirilen adı geri yaratmak mükerreri
+    // DİRİLTİR. Sert kapı reddeder, uyarı bilgilendirir — ayrım bilinçli.
+    const hasLineage = modelHasMergeLineage(this.config.modelName);
+    const lineageJoin = hasLineage
+      ? ` LEFT JOIN ${q(table)} m ON m.id = t."mergedIntoId"`
+      : "";
     const cols =
-      `id, ${q(field)} AS name, ` +
-      (codeField ? `${q(codeField)}::text AS code, ` : `NULL::text AS code, `) +
-      `COALESCE("isActive", true) AS "isActive"`;
+      `t.id, t.${q(field)} AS name, ` +
+      (codeField ? `t.${q(codeField)}::text AS code, ` : `NULL::text AS code, `) +
+      `COALESCE(t."isActive", true) AS "isActive", ` +
+      (hasLineage ? `m.${q(field)}::text AS "mergedIntoName"` : `NULL::text AS "mergedIntoName"`);
 
     // Kapsamlı tekillik (Machine.stationId, CustomerBranch.customerId): kapsam
     // verilmişse ARAMA DA o kapsamla sınırlanır, yoksa başka istasyonun makinesi
@@ -812,11 +867,11 @@ export class BaseService {
     const params: unknown[] = [target];
     if (scopeField && opts.scopeValue != null) {
       params.push(opts.scopeValue);
-      where.push(`${q(scopeField)} = $${params.length}`);
+      where.push(`t.${q(scopeField)} = $${params.length}`);
     }
     if (opts.excludeId) {
       params.push(opts.excludeId);
-      where.push(`id <> $${params.length}::uuid`);
+      where.push(`t.id <> $${params.length}::uuid`);
     }
     const scopeSql = where.length ? ` AND ${where.join(" AND ")}` : "";
 
@@ -837,21 +892,29 @@ export class BaseService {
     // İkisi birlikte: aday süzgeci index'ten, kesin eşik ve skor sıralamadan.
     // Birebir katlanmış eşitlik eşikten BAĞIMSIZ olarak her zaman gösterilir —
     // o zaten kesin mükerrerdir.
+    const tf = `t.${foldCol}`;
     const sql = hasTrgm
-      ? `SELECT ${cols}, similarity(${foldCol}, $1) AS score
-         FROM ${q(table)}
-         WHERE (${foldCol} = $1
-                OR (${foldCol} % $1 AND similarity(${foldCol}, $1) >= $${thrIdx}))${scopeSql}
-         ORDER BY score DESC, ${q(field)} LIMIT ${limit}`
-      : `SELECT ${cols}, CASE WHEN ${foldCol} = $1 THEN 1.0 ELSE 0.5 END AS score
-         FROM ${q(table)}
-         WHERE (${foldCol} = $1 OR ${foldCol} LIKE $${params.length + 1})${scopeSql}
-         ORDER BY score DESC, ${q(field)} LIMIT ${limit}`;
+      ? `SELECT ${cols}, similarity(${tf}, $1) AS score
+         FROM ${q(table)} t${lineageJoin}
+         WHERE (${tf} = $1
+                OR (${tf} % $1 AND similarity(${tf}, $1) >= $${thrIdx}))${scopeSql}
+         ORDER BY score DESC, t.${q(field)} LIMIT ${limit}`
+      : `SELECT ${cols}, CASE WHEN ${tf} = $1 THEN 1.0 ELSE 0.5 END AS score
+         FROM ${q(table)} t${lineageJoin}
+         WHERE (${tf} = $1 OR ${tf} LIKE $${params.length + 1})${scopeSql}
+         ORDER BY score DESC, t.${q(field)} LIMIT ${limit}`;
     if (!hasTrgm) params.push(`%${target.split(" ")[0]}%`);
     // (yedek yolda eşik parametresi kullanılmaz ama sırayı bozmamak için durur)
 
     const rows = await prisma.$queryRawUnsafe<
-      Array<{ id: string; name: string; code: string | null; isActive: boolean; score: number }>
+      Array<{
+        id: string;
+        name: string;
+        code: string | null;
+        isActive: boolean;
+        score: number;
+        mergedIntoName: string | null;
+      }>
     >(sql, ...params);
     return rows.map((r) => ({ ...r, score: Math.round(Number(r.score) * 100) / 100 }));
   }
@@ -1001,6 +1064,17 @@ export class BaseService {
   ): Promise<ApiResponse<unknown>> {
     const oldRecord = await this.delegate.findUnique({ where: { id } });
 
+    // ⚠️ İKİNCİ KAPI — `update`'teki yasağın aynısı. Bu yol `create` içinden
+    // "aynı kodda pasif kayıt var, onu canlandır" dalında çağrılıyor ve
+    // `update`'e UĞRAMIYOR; tek kapı bırakmak, yasağın en olası girişini açık
+    // bırakmak olurdu.
+    if (oldRecord && (oldRecord as Record<string, unknown>).mergedIntoId != null) {
+      throw AppError.badRequest(
+        "Bu kayıt başka bir kayda birleştirildi ve yeniden aktifleştirilemez. " +
+          "Aynı ada gerçekten yeni bir kayıt gerekiyorsa yenisini oluşturun.",
+      );
+    }
+
     const updateData: Record<string, unknown> = { ...data, isActive: true };
     if (this.config.nestedCreateFields) {
       for (const field of this.config.nestedCreateFields) {
@@ -1045,6 +1119,22 @@ export class BaseService {
     const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
     // Fetch old data for audit
     const oldRecord = await this.delegate.findUnique({ where: { id } });
+
+    // ⚠️ TOMBSTONE DİRİLTME YASAĞI. Birleştirme GERİ ALINAMAZ ve bu açıkça
+    // söyleniyor; "aktifleştir" ile arka kapıdan geri alınabilseydi söz yalan
+    // olurdu — üstelik yarım: referanslar survivor'da KALIR, yani diriltilen
+    // kayıt boş bir kabuk olarak canlı listelere geri döner ve operatör onu
+    // "çalışan bir müşteri" sanır. Diğer alanların düzenlenmesi serbest (ad
+    // düzeltmesi tarihçeyi okunur kılar); yasak YALNIZ yeniden aktifleştirmede.
+    if (oldRecord && data.isActive === true) {
+      const prev = oldRecord as Record<string, unknown>;
+      if (prev.mergedIntoId != null && prev.isActive !== true) {
+        throw AppError.badRequest(
+          "Bu kayıt başka bir kayda birleştirildi ve yeniden aktifleştirilemez. " +
+            "Aynı ada gerçekten yeni bir kayıt gerekiyorsa yenisini oluşturun.",
+        );
+      }
+    }
 
     // Ad-mükerrer kontrolü yalnız ad (veya kapsam kolonu) GERÇEKTEN değişirken —
     // canlıdaki tarihsel mükerrer kayıtlar aynen düzenlenebilir kalır. Kayıt hiç

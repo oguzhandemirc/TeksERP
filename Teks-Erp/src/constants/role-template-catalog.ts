@@ -184,6 +184,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "label:edit",
       "report:sales",
       "report:customer",
+      // Mükerrer birleştirme: "bu iki müşteri aynı firma mı?" sorusuna cevabı
+      // satış bilir, sysadmin bilmez. Tek başına yetmez — müşteri tarafında
+      // `customer:write` de var, yani bu rol müşteri birleştirebilir;
+      // kumaş/renk için ilgili write izni ayrıca gerekir.
+      "master-data:merge",
     ],
   },
   {
