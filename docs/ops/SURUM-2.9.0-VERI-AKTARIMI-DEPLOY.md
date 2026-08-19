@@ -106,10 +106,10 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 22 migration, altı iş
+## 0) Bu deploy'da ne var — 23 migration, yedi iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **22 bekleyen** gösteriyor.
-Altısı ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **23 bekleyen** gösteriyor.
+Yedisi ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -125,6 +125,7 @@ Altısı ayrı iş, hepsi aynı pull'da:
 | 20 | `20260819140000_systemlog_archive_changes_device` | Arşive `changes` + `deviceId` — taşınmasaydı B2/B3 6 ay sonra buharlaşırdı |
 | 21 | `20260819160000_audit_requestid_devicefix` | **İşlem gruplaması** (`requestId`) + arşiv `deviceId` UUID→TEXT **tip hatası düzeltmesi** |
 | 22 | `20260819161000_audit_tamper_guard` | **Audit değiştirilemezliği** — UPDATE/DELETE/TRUNCATE engeli (2 trigger + 1 fonksiyon) |
+| 23 | `20260819170000_reason_presets` | **Hazır sebep katalogları** — yeni tablo + enum (mevcut tabloya DOKUNMAZ; satırlar boot'ta gelir) |
 
 > ⚠️ **20 ve 21 aynı damgayla başlıyor ama farklı işler** (`..._alias_search` ile
 > `..._systemlog_archive_changes_device`); Prisma dizin adına göre sıralar,
@@ -135,6 +136,13 @@ Altısı ayrı iş, hepsi aynı pull'da:
 > bilinçli: geliştirme ve test veritabanlarında koruma kapalı kalmalı (79 test
 > dosyası cleanup'ta audit satırı siler ZORUNDA — `system_logs.userId → users`
 > FK'sı RESTRICT).
+>
+> ⚠️ **23 numaralı migration BOŞ bir tablo kurar.** 23 sistem sebebi (fire 8 ·
+> kayıt düzeltmesi 5 · elle top ekleme 5 · iptal 5) backend AÇILIRKEN yazılır
+> (`reason-preset-catalog.job`, izin/rol uzlaştırmasının 3. fazı). Migration'dan
+> sonra tabloyu boş görmek NORMALDİR — restart'tan sonra bak. Uzlaştırma
+> koşmazsa arayüz APK'ya gömülü zemine düşer (operatör kilitlenmez), ama
+> düzenleme yapılamaz.
 
 Diğer notlar (arka plan; deploy adımı içermezler):
 `SURUM-2026-08-09-RAPORLAR-DEPLOY.md` · `SURUM-2026-08-10-KAT-KATALOGU-DEPLOY.md` ·
@@ -225,6 +233,9 @@ psql -U postgres -d tekserp -c "SELECT count(*) FROM pg_attribute WHERE attgener
 psql -U postgres -d tekserp -c "SELECT name, \"nameFold\" FROM customers ORDER BY \"nameFold\" LIMIT 5;"
 psql -U postgres -d tekserp -c "\d import_runs"
 psql -U postgres -d tekserp -c "SELECT column_name FROM information_schema.columns WHERE table_name='system_logs' AND column_name IN ('changes','deviceId','updatedAt');"
+# Hazır sebepler — RESTART'TAN SONRA koş (satırları migration değil, boot yazar)
+psql -U postgres -d tekserp -c "SELECT kind, count(*) FROM reason_presets GROUP BY kind ORDER BY kind;"
+psql -U postgres -d tekserp -c "SELECT code, label FROM reason_presets WHERE kind='ROLL_SCRAP' ORDER BY \"sortOrder\" LIMIT 3;"
 ```
 
 Beklenen (hepsi provada ölçüldü):
@@ -238,6 +249,9 @@ Beklenen (hepsi provada ölçüldü):
 | `customers.nameFold` | `ADNAN ŞAHİN ÜRETİM` → `adnan sahin uretim` |
 | `import_runs` | 17 kolon + 5 index; enum `APPLIED, PARTIAL, FAILED` |
 | `system_logs` | `changes` ve `deviceId` VAR, `updatedAt` **YOK** |
+| `reason_presets` (restart sonrası) | 4 satır: `ROLL_SCRAP` **8** · `ROLL_RECORD_CORRECTION` **5** · `ROLL_MANUAL_ENTRY` **5** · `ROLL_CANCEL` **5** |
+| `ROLL_SCRAP` ilk satırı | **`TOP_BASI` — "Top başı"** (sahanın istediği sıra) |
+| Backend log'u | `[reason-presets] 23 yeni sistem sebebi eklendi: …` (ilk açılış) ya da `katalog güncel` |
 
 ---
 
@@ -437,6 +451,50 @@ kalmasın diye — 2026-08-01'de bir ops adımı tam da böyle unutulmuştu).
 
 ---
 
+## 8b) Hazır sebepler — 3 dakikalık kabul testi (izin ataması GEREKMEZ)
+
+Tambur'da fire/kayıt düzeltmesi, elle top ekleme ve top iptali ekranlarındaki
+hazır mesajlar artık **DB'den** geliyor ve fabrika kendisi düzenleyebiliyor.
+
+**Yeni izin kodu YOK** — düzenleme yetkisi zaten atanmış olan `roll:manual-adjust`
+(masaüstü süpervizör) **veya** `mobile:tambur-duzelt` (tablette saha düzeltmesi)
+ile açılıyor. Yani §7'deki gibi elle atanacak bir şey yok; okuma herkese açık.
+
+1. **Tanımlar → Üretim & Kalite → Hazır Sebepler** açılıyor mu? Dört sekme
+   (Fire · Kayıt Düzeltmesi · Elle Top Ekleme · Top İptali) dolu mu?
+   → Boşsa boot uzlaştırması koşmamıştır: backend log'unda `[reason-presets]`
+   satırını ara, gerekirse **backend'i yeniden başlat**.
+2. Fire sekmesinin **ilk satırı "Top başı"** olmalı (sahanın istediği sıra).
+3. Bir satırda **kalem** → adını değiştir → kaydet. Liste anında güncellenmeli.
+   Aynı satırda **çoğalt** → kopya kaynağın **hemen altına** düşmeli.
+4. Tablette Tambur → bir topu bitir → **Fire** → sebep adımında:
+   serbest metin kutusu **listenin ÜSTÜNDE** ve hep görünür olmalı; kutuya
+   yazmaya başlayınca "Diğer" kendiliğinden seçilmeli.
+5. Aynı ekranda bir sebebin yanındaki **kalem/çoğalt** tuşları görünüyor mu?
+   → Görünmüyorsa o kullanıcıda `roll:manual-adjust` / `mobile:tambur-duzelt`
+   yoktur; bu bir **hata değil**, yetki kararıdır.
+
+> ⚠️ **BACKEND ÖNCE, APK SONRA.** Yeni APK, fabrikanın eklediği bir sebep kodunu
+> gönderdiğinde katalogu tanımayan eski bir backend "Geçersiz sebep kodu" der.
+> Ters sıra güvenli: yeni backend + eski APK sorunsuz çalışır (eski APK gömülü
+> listeyi kullanır).
+>
+> ⚠️ **SATIR SİLİNMEZ, GİZLENİR** ve **son aktif satır gizlenemez** (400 döner).
+> Sebep zorunlu bir alan olduğu için boş liste operatörü kilitlerdi.
+>
+> ⚠️ **Elle top ekleme ve iptal listelerinde** kayda metnin KENDİSİ yazılıyor →
+> metni düzenlemek yalnız SONRAKİ kayıtları etkiler, geçmiş kayıtlar eski metinle
+> kalır (ekran bunu uyarıyla söylüyor). Fire/kayıt düzeltmesinde böyle bir risk
+> yok — orada satıra kod yazılıyor.
+
+**Bu pakette ayrıca (adım gerektirmez):** barkod araması küçük/BÜYÜK harf
+duyarsızlığı üçüncü tur — Tambur "Çıkanlar" listesi + kartela liste/istatistik
+aramaları normalize edilmiyordu ("top listede yok ama yan panelde açılıyor").
+Saf backend düzeltmesi; doğrulaması Tambur'da barkodu **küçük harfle** yazıp
+listede çıktığını görmek.
+
+---
+
 ## 9) OPERATÖRE ÖNCEDEN SÖYLENECEKLER
 
 Bunlar hata değil **karar**dır; söylenmezse destek çağrısı gelir.
@@ -469,6 +527,14 @@ ICU varsa: `Cebeci < Ceyhan < Çanakkale < Işık < İnci < Zonguldak` — ayrı
 **Öncesi (C locale):** `… Zonguldak < Çanakkale < İnci` — yani Ç/Ğ/İ/Ö/Ş/Ü ile
 başlayan **her ad listenin en sonundaydı**. Birçok "kayıt yok" şikayetinin sebebi
 buydu.
+
+### 9c-4) Fire sebeplerinde "Top başı" var ve liste artık DÜZENLENEBİLİR
+Tambur'da fire girerken çıkan hazır mesajların **başına "Top başı"** eklendi.
+Ayrıca yetkili kişi (süpervizör / Tambur düzeltme yetkisi olan) her satırın
+yanındaki kalem ve çoğalt tuşlarıyla listeyi kendisi düzenleyebiliyor — yeni
+sebep eklemek için artık bizden yeni sürüm beklemek gerekmiyor. Kendi cümlesini
+yazmak isteyen operatör için metin kutusu artık **listenin en üstünde**.
+Satırlar silinmiyor, **gizleniyor** (eski kayıtların sebebi okunur kalsın diye).
 
 ### 9d) Veri aktarımının davranış sözleşmeleri
 - **Önizleme hiçbir şey yazmaz.** "Uygula" demeden tek kayıt değişmez.
@@ -571,6 +637,10 @@ Raporu fabrikaya ver, birleştirmeyi onlar söylesin. **Veriye kendi başına do
    eski kodu bozmaz.
 6. Trigram index'leri sorun çıkarırsa (beklenmiyor) tek tek `DROP INDEX
    CONCURRENTLY` ile atılabilir; arama index'siz çalışmaya devam eder.
+7. Yalnız **hazır sebep kataloğunu** geri almak: `DROP TABLE reason_presets;
+   DROP TYPE "ReasonPresetKind";` — kaybolan yalnız fabrikanın düzenlemeleridir.
+   Eski backend zaten koda gömülü listeyi kullanır; **geçmiş fire kayıtları
+   etkilenmez** (sebep kodu `roll_variances` satırında saklı, bu tabloya FK YOK).
 
 ---
 
