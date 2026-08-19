@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   View,
   StyleSheet,
@@ -513,9 +513,38 @@ export default function TamburScreen() {
   };
 
   // Kartelalık işareti — bu kesimde doğan çıktı topları depoda kartela sevki için
-  // işaretlensin (yalnız WAREHOUSE çıktılarda etkili; sevki engellemez). Aynı topu
-  // kartelaya kesen operatör için kesimler arası kalıcı, finalize'da sıfırlanır.
+  // işaretlensin (yalnız WAREHOUSE çıktılarda etkili; sevki engellemez).
+  //
+  // ⚠️ 2026-08-19 SAHA VAKASI: anahtar eskiden kesimler arası KOŞULSUZ kalıcıydı
+  // ve yalnız finalize/kumaş geçişinde sıfırlanıyordu. 14:54'te bir kez açıldı →
+  // F0118 + F0119 + F0120 (3 × 40 m) kartelalık doğdu, etikete KARTELALIK basıldı;
+  // arada F0118 geri alındı ama anahtar orada da sıfırlanmadığı için 8 sn sonraki
+  // F0120 yine işaretlendi. Artık davranış CİHAZ AYARINDAN gelir
+  // (`tamburResetKartelaAfterCut`, varsayılan AÇIK = her çıktıdan sonra kapan) ve
+  // geri alma yolu anahtarı KOŞULSUZ sıfırlar (ayar ne olursa olsun).
   const [markAsKartela, setMarkAsKartela] = useState(false);
+  /** Çıktı alındı → cihaz tercihi "sıfırla" diyorsa anahtarı kapat. Store ANLIK
+   *  okunur (hook bağımlılığı yok): tercih vardiya ortasında değişse de bir
+   *  sonraki kesim güncel değeri görür. */
+  const clearKartelaAfterOutput = useCallback(() => {
+    if (useDeviceSettingsStore.getState().tamburResetKartelaAfterCut) {
+      setMarkAsKartela(false);
+    }
+  }, []);
+  /**
+   * KARTELALIK AÇIK uyarı şeridi — kesim barının hemen üstünde (üç akışta da).
+   * CutActionBar'daki anahtar zaten mor doluyor ama compact modda 104 px'lik bir
+   * kutu; sahada (2026-08-19) fark edilmedi ve üç top yanlış işaretlendi. Şerit
+   * "manuel giriş"/"çevrimdışı" bantlarıyla AYNI dil (amber = dikkat, engel değil).
+   */
+  const kartelaStrip = markAsKartela ? (
+    <View style={styles.manualMissingStrip}>
+      <Icon source="tag-multiple" size={16} color="#b45309" />
+      <Text style={styles.manualMissingText}>
+        KARTELALIK AÇIK — bu kesimden çıkan toplar kartelalık işaretlenecek.
+      </Text>
+    </View>
+  ) : null;
 
   // Tambur'da çıkan top metresi kayıtlı kalanı aşabilir mi (admin flag, VARSAYILAN
   // AÇIK — hook fallback'i true, flags yüklenemese de açık; 2026-07-27 ürün kararı).
@@ -1174,6 +1203,8 @@ export default function TamburScreen() {
       }),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
+      clearKartelaAfterOutput();
       // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
       if (cutTokenRef.current?.rollId === variables.rollId) cutTokenRef.current = null;
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
@@ -1450,6 +1481,8 @@ export default function TamburScreen() {
       }),
     onSuccess: (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
+      clearKartelaAfterOutput();
       // Bu denemenin token'ı görevini tamamladı — sıradaki kesim taze token alır.
       if (recutTokenRef.current?.rollId === variables.rollId) recutTokenRef.current = null;
       // Kesim parent metrajını düşürdü + child doğdu — rulo listeleri/picker bayat kalmasın.
@@ -1599,6 +1632,8 @@ export default function TamburScreen() {
     onSuccess: (res, variables) => {
       // Deneme kapandı — sıradaki giriş taze token alır.
       manualTokenRef.current = null;
+      // Çıktı alındı → kartelalık anahtarı cihaz tercihine göre kapanır.
+      clearKartelaAfterOutput();
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']
@@ -3507,6 +3542,7 @@ export default function TamburScreen() {
               )}
 
               {/* Sticky footer — "Bitir" YOK (tüketilecek parent top yok). */}
+              {kartelaStrip}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -3791,6 +3827,7 @@ export default function TamburScreen() {
                   kesimde kalan ~0 olunca depo topu OTOMATİK arşivlenir; kalan
                   varken operatör "Bitir" ile karar modalını (1.KALITE/A1/FIRE)
                   açar — parent arşivlenir, kalan child olarak yaşar. */}
+              {kartelaStrip}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -4134,6 +4171,7 @@ export default function TamburScreen() {
                   vaka (sistemde metraj görünürken fiziksel kumaş bitmiş) o
                   topu sonsuza dek açık bırakırdı. Kalan > 0 iken karar
                   penceresi zorunludur; kalan 0 ise tek dokunuşta biter. */}
+              {kartelaStrip}
               <CutActionBar
                 compact={compact}
                 kartelaOn={markAsKartela}
@@ -4338,6 +4376,10 @@ export default function TamburScreen() {
         onDismiss={() => setPanelUndoTarget(null)}
         onDone={() => {
           setPanelUndoTarget(null);
+          // GERİ ALMA = "bu çıktı yanlıştı" sinyali → kartelalık anahtarı
+          // KOŞULSUZ kapanır (cihaz tercihine bakılmaz). 2026-08-19: F0118 geri
+          // alındı, anahtar açık kaldı ve 8 sn sonra F0120 yine işaretli doğdu.
+          setMarkAsKartela(false);
           void refetchActiveJob();
           void qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
         }}
@@ -4650,6 +4692,8 @@ export default function TamburScreen() {
           // Geri alma ana ekranı değiştirir (SINGLE: kalan metraj artar; FULL:
           // parent Tambur'a döner, WO + kart dirilir) — saha düzeltmesi
           // (`onApplied`) ile AYNI tazeleme sözleşmesi.
+          // Kartelalık anahtarı KOŞULSUZ kapanır (bkz. panel geri alma notu).
+          setMarkAsKartela(false);
           void refetchActiveJob();
           qc.invalidateQueries({ queryKey: ['rolls'] });
       // "Bu işten çıkanlar" paneli AYNI ANDA tazelensin — anahtarı ['rolls']

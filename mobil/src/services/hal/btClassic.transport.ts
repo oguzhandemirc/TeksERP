@@ -133,6 +133,46 @@ async function ensureAdapterEnabled(mod: BtNativeModule): Promise<void> {
 const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * FİZİKSEL ZAMANLAMA AYARLARI (2026-08-19 saha teşhisi) — test edilebilir olsun
+ * diye sabit değil MUTABLE nesne: jest testleri değerleri küçültüp gerçek
+ * beklemeden davranışı ölçer (eski `RASTER_CHUNK_*` sabitleri tam bu yüzden hiç
+ * test edilemiyordu).
+ *
+ * ⚠️ SAHA AYARIDIR, kozmetik değil. Tambur'da PPLB komut akışının BAŞI yazıcıya
+ * ulaşmıyordu (T190826F0143: ilk 220/314 bayt; T190826F0040: ilk ~94-128/299 —
+ * ikisi de kesintisiz ÖN EK, iki kopya birebir aynı bozuk). Ölçülen kayıp
+ * penceresi ~100-230 ms ve hata SON YAZMADAN BU YANA GEÇEN SÜREYE bağlı bir
+ * BASAMAK: <30 sn boşlukta %2, >60 sn'de %15 ve DÜZ. Yani hat ~yarım dakikada
+ * soğuyor ve soğuk hatta yazılan ilk baytlar yeniyor (köprü/yazıcı uyanma
+ * penceresi). Kalıntı hata kalırsa BÜYÜTÜLECEK tek değer `connectSettleMs`'tir.
+ */
+export const btTiming = {
+  /** `connectToDevice` SONRASI oturma. RFCOMM linki kurulur kurulmaz yazmak,
+   *  köprünün seri tarafı hazır olmadan bayt göndermektir. `forceDisconnect`
+   *  tarafındaki 900 ms'in (RECONNECT_SETTLE_MS) ikizi. */
+  connectSettleMs: 400,
+};
+
+/**
+ * MAC başına SON BAŞARILI YAZMA anı — "hat sıcak mı" sorusunun tek kaynağı.
+ * Yazıcı katmanı (btPrinter.service) buradan okuyup soğuk hatta ısınma baytı
+ * gönderir. Okuma yolu (metre/kantar) da yazdığı için burada değil, yalnız
+ * `writeRaw` başarısında damgalanır — ölçüm "bu sokete en son ne zaman komut
+ * gitti" değil, "en son ne zaman SORUNSUZ komut gitti".
+ */
+const macLastWrite = new Map<string, number>();
+
+/**
+ * Bu MAC'e en son başarılı yazmanın üzerinden geçen ms; hiç yazılmadıysa null
+ * (= "soğuk kabul et"). Zaman kaynağı `Date.now()` — testler jest fake timer
+ * kullanmadığı için gerçek saat yeterli.
+ */
+export function msSinceLastWrite(address: string): number | null {
+  const at = macLastWrite.get(normMac(address));
+  return at == null ? null : Date.now() - at;
+}
+
+/**
  * BAĞLANTI ŞÜPHELİ Mİ — uygulama arka plana düştüyse true olur, bir sonraki
  * `ensureReady` onu tüketip soketi ZORLA tazeler (2026-08-17).
  *
@@ -175,6 +215,11 @@ async function ensureReady(address: string): Promise<BtNativeModule> {
       await withSystemDialog(() => mod.pairDevice(address));
     }
     await mod.connectToDevice(address);
+    // TAZE LİNK OTURSUN (2026-08-19): connect çözülür çözülmez yazmak, köprünün
+    // seri tarafı hazır olmadan bayt göndermektir — ilk ~100-230 ms sessizce
+    // yenir ve etiketin BAŞI kaybolur. Yalnız gerçekten bağlanıldığında ödenir
+    // (zaten bağlıysa bu dal hiç koşmaz).
+    await delay(btTiming.connectSettleMs);
   }
   return mod;
 }
@@ -409,8 +454,13 @@ async function writeRawUnlocked(
       // hiçbir şey KAZANDIRMIYORDU. Kopar + kısa bekle, HC-06 slotu boşaltsın.
       await forceDisconnect(address);
       await mod.connectToDevice(address);
+      // ensureReady'deki ile AYNI gerekçe (2026-08-19): taze link otursun, yoksa
+      // yeniden denemenin baytları da baştan yenir.
+      await delay(btTiming.connectSettleMs);
       await mod.writeToDevice(address, content, encoding);
     }
+    // Hat "sıcak" damgası — YALNIZ başarılı yazmada (bkz. macLastWrite).
+    macLastWrite.set(normMac(address), Date.now());
   };
   const ms = opts?.timeoutMs;
   if (!ms) return run();

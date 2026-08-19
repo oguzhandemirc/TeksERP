@@ -10,6 +10,7 @@ const MANUAL_BARCODE_KEY = 'device_manual_barcode_entry';
 const LAST_ROUTE_KEY = 'device_quick_wo_last_route';
 const KK1_MANUAL_METER_KEY = 'device_kk1_manual_meter';
 const TAMBUR_RESET_QUALITY_KEY = 'tambur_reset_quality_after_cut';
+const TAMBUR_RESET_KARTELA_KEY = 'tambur_reset_kartela_after_cut';
 const TAMBUR_CUT_MODE_KEY = 'device_tambur_cut_mode';
 const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
@@ -62,6 +63,23 @@ interface DeviceSettingsState {
    * Varsayılan FALSE — bugünkü davranışı sessizce değiştirmemek için.
    */
   tamburResetQualityAfterCut: boolean;
+  /**
+   * Tambur kesiminde bir çıktı alındıktan sonra KARTELALIK işareti sıfırlansın mı?
+   *   true  → her kesimden sonra kapanır (varsayılan; yanlış işaret sınıfı kapanır).
+   *   false → aynı kumaşın kesimleri arası açık kalır (seri kartela kesiminde hızlı).
+   *
+   * ⚠️ VARSAYILAN TRUE — kalite ikizinden (yukarıda) FARKLI kutup, bilerek.
+   * Oradaki gerekçe "bugünkü davranışı sessizce değiştirme"ydi; burada bugünkü
+   * davranış 2026-08-19'da sahada ISIRDI: 14:54'te bir kez açılan anahtar
+   * F0118 + F0119 + F0120'yi (3 × 40 m) kartelalık işaretledi ve etikete
+   * KARTELALIK bastı. Kartela kesimi NADİR (günde 1-2) ve parçalar KÜÇÜK (10 m);
+   * yapışkan varsayılan yanlış kutuptu. Seri kartela kesen operatör her seferinde
+   * bir kez dokunur — yanlış işaretlenmiş 40 m'lik topu geri almaktan ucuz.
+   *
+   * `tamburCutMode`/`tamburResetQualityAfterCut` ile aynı gerekçeyle CİHAZDA:
+   * tercih "bu tamburda nasıl çalışıyoruz" gerçeğine bağlı, kişiye değil.
+   */
+  tamburResetKartelaAfterCut: boolean;
   /**
    * Tambur "MANUEL EKLE" modu: true → ekran refakat kartı BEKLEMEZ, operatör
    * ürün/metraj/müşteri seçip topu doğrudan BİTMİŞ DEPO'ya yazar
@@ -144,6 +162,7 @@ interface DeviceSettingsState {
   setKk1ManualEntry: (v: boolean) => Promise<void>;
   setTamburCutMode: (v: MeterEntryMode) => Promise<void>;
   setTamburResetQualityAfterCut: (v: boolean) => Promise<void>;
+  setTamburResetKartelaAfterCut: (v: boolean) => Promise<void>;
   setTamburManualMode: (v: boolean) => Promise<void>;
   setScanSoundEnabled: (v: boolean) => Promise<void>;
   setDocPageSize: (docType: string, v: DocPageSize) => Promise<void>;
@@ -182,6 +201,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   kk1ManualEntry: false,
   tamburCutMode: 'manual',
   tamburResetQualityAfterCut: false,
+  tamburResetKartelaAfterCut: true,
   tamburManualMode: false,
   tamburOutputCollapsed: false,
   scanSoundEnabled: true,
@@ -192,13 +212,14 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburResetKartela, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutOverride, shortCutThreshold] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
         storage.getItem(KK1_MANUAL_METER_KEY),
         storage.getItem(TAMBUR_CUT_MODE_KEY),
         storage.getItem(TAMBUR_RESET_QUALITY_KEY),
+        storage.getItem(TAMBUR_RESET_KARTELA_KEY),
         storage.getItem(TAMBUR_MANUAL_MODE_KEY),
         storage.getItem(SCAN_SOUND_KEY),
         storage.getItem(DOC_PAGE_SIZE_KEY),
@@ -217,6 +238,9 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // Varsayılan KAPALI (bugünkü davranış: kalite korunur) — yalnız birebir
       // 'true' sıfırlamayı açar.
       tamburResetQualityAfterCut: tamburResetQuality === 'true',
+      // Varsayılan AÇIK → yalnız birebir 'false' yapışkanlığı geri getirir
+      // (scanSoundEnabled ile aynı ters yön; güvenli taraf "sıfırla").
+      tamburResetKartelaAfterCut: tamburResetKartela !== 'false',
       // Güvenli varsayılan KAPALI: yalnız birebir 'true' modu açar (bozuk değer
       // kart-atlayan modu sessizce açmasın).
       tamburManualMode: tamburManual === 'true',
@@ -272,6 +296,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setTamburResetQualityAfterCut: async (v) => {
     set({ tamburResetQualityAfterCut: v });
     await storage.setItem(TAMBUR_RESET_QUALITY_KEY, v ? 'true' : 'false');
+  },
+
+  setTamburResetKartelaAfterCut: async (v) => {
+    set({ tamburResetKartelaAfterCut: v });
+    await storage.setItem(TAMBUR_RESET_KARTELA_KEY, v ? 'true' : 'false');
   },
 
   // Aynı desen (önce state, sonra disk): mod anahtarı ekranda ANINDA dönmeli —

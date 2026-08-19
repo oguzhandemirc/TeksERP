@@ -50,6 +50,8 @@ export default function WorkPreferencesScreen() {
   const canTambur = has('mobile:tambur');
   const resetQuality = useDeviceSettingsStore((s) => s.tamburResetQualityAfterCut);
   const setResetQuality = useDeviceSettingsStore((s) => s.setTamburResetQualityAfterCut);
+  const resetKartela = useDeviceSettingsStore((s) => s.tamburResetKartelaAfterCut);
+  const setResetKartela = useDeviceSettingsStore((s) => s.setTamburResetKartelaAfterCut);
   // KISA KESİM → OTOMATİK A1: bayrak+eşik FABRİKA ayarıdır (panelden yönetilir);
   // burada yalnız CİHAZ override'ı yaşar ve YALNIZ süpervizöre çizilir.
   const shortCutServer = useTamburShortCutA1();
@@ -105,6 +107,57 @@ export default function WorkPreferencesScreen() {
               <TouchableRipple
                 key={String(o.value)}
                 onPress={() => void setResetQuality(o.value)}
+                style={[
+                  settingsStyles.card,
+                  {
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? '#6366f1' : '#334155',
+                    minHeight: 64,
+                    justifyContent: 'center',
+                  },
+                ]}
+              >
+                <View>
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: active ? '800' : '600',
+                      color: active ? '#c7d2fe' : '#e2e8f0',
+                    }}
+                  >
+                    {o.label}
+                    {active ? '  ✓' : ''}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>{o.desc}</Text>
+                </View>
+              </TouchableRipple>
+            );
+          })}
+          <Text style={settingsStyles.hint}>Bu ayar yalnız BU CİHAZDA geçerlidir.</Text>
+
+          <Text style={[settingsStyles.label, { marginTop: 16 }]}>
+            TAMBUR — ÇIKTIDAN SONRA KARTELALIK
+          </Text>
+          <Text style={settingsStyles.hint}>
+            Bir çıktı aldıktan sonra KARTELALIK anahtarı ne olsun?
+          </Text>
+          {[
+            {
+              value: true,
+              label: 'Kapansın',
+              desc: 'Her çıktıdan sonra sıfırlanır — yanlışlıkla kartelalık işaretleme riski kalkar.',
+            },
+            {
+              value: false,
+              label: 'Açık kalsın',
+              desc: 'Arka arkaya kartela keserken hızlıdır; anahtarı kapatmayı unutursan sonraki toplar da işaretlenir.',
+            },
+          ].map((o) => {
+            const active = resetKartela === o.value;
+            return (
+              <TouchableRipple
+                key={`kartela-${String(o.value)}`}
+                onPress={() => void setResetKartela(o.value)}
                 style={[
                   settingsStyles.card,
                   {

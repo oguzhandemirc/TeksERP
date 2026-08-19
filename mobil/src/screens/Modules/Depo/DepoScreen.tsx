@@ -40,6 +40,7 @@ import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
 import { useIsOnline } from '../../../offline/hooks';
 import { STATION_MUT } from '../../../offline/mutations';
 import { rollService, type RollCancelPreview } from '../../../services/roll.service';
+import { kartelaService } from '../../../services/kartela.service';
 import {
   swatchService,
   type SwatchListItem,
@@ -890,11 +891,37 @@ function RollDetailModal({
   onDismiss: () => void;
   onRemoveFromStock?: (roll: RollListItem) => void;
 }) {
+  const qc = useQueryClient();
   const historyQuery = useQuery({
     queryKey: ['roll-history', roll?.id],
     queryFn: () => (roll ? rollService.getHistory(roll.id) : Promise.resolve(null)),
     enabled: !!roll,
     staleTime: 30 * 1000,
+  });
+
+  /**
+   * KARTELALIK İŞARETİNİ KALDIR (2026-08-19 saha vakası).
+   *
+   * Tambur'daki kartelalık anahtarı açık unutulunca üç top (F0118/F0119/F0120)
+   * yanlışlıkla işaretlendi ve etikete KARTELALIK bastı. Tekrar yazdırmak
+   * DÜZELTMEZ — etiket doğruyu basıyor, hata bayrağın kendisinde. Sahada tek
+   * çare topu yeniden kesmekti. Uç (`POST /kartela/rolls/:id/mark`) ve servis
+   * sarmalayıcısı zaten vardı; eksik olan yalnız bu düğmeydi.
+   */
+  const unmarkKartela = useMutation({
+    mutationFn: (rollId: string) => kartelaService.setRollMarked(rollId, false),
+    onSuccess: () => {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Kartelalık işareti kaldırıldı' });
+      // Liste + kartela stoğu bayat kalmasın (top kartela havuzundan düşer).
+      void qc.invalidateQueries({ queryKey: ['rolls'] });
+      void qc.invalidateQueries({ queryKey: ['kartela'] });
+      onDismiss();
+    },
+    onError: (err: Error) => {
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Toast.show({ type: 'error', text1: 'İşaret kaldırılamadı', text2: err.message });
+    },
   });
 
   if (!roll) return null;
@@ -1016,23 +1043,44 @@ function RollDetailModal({
       summaryTitle={hasAside ? 'Top Bilgisi' : undefined}
       asideTitle={hasAside ? 'Kumaş & Renk' : undefined}
       actions={
-        onRemoveFromStock ? (
-          // Buton statüye göre GİZLENMEZ: hangi topların kaldırılabileceği
-          // (statü beyaz listesi, açık fason sevki, çuval/sevkiyat bağı) yalnız
-          // backend'in bildiği bir sorudur. Burada gizlemek, operatöre sebepsiz
-          // eksik bir ekran gösterirdi; onay modalı hem sorar hem — kaldırılamıyorsa —
-          // somut Türkçe sebebi basar.
-          <Button
-            mode="contained"
-            icon="trash-can-outline"
-            buttonColor="#dc2626"
-            textColor="#fff"
-            onPress={() => onRemoveFromStock(roll)}
-            style={detailActionStyles.btn}
-            contentStyle={detailActionStyles.btnContent}
-          >
-            Stoktan Kaldır
-          </Button>
+        onRemoveFromStock || roll.markedForKartela ? (
+          <View style={detailActionStyles.row}>
+            {/* Kartelalık işareti YALNIZ işaretli topta çizilir — burada gizlemek
+                doğru: koşul topun kendi alanında, backend'e sormaya gerek yok
+                (aşağıdaki "Stoktan Kaldır" ile bilinçli asimetri). */}
+            {roll.markedForKartela && (
+              <Button
+                mode="outlined"
+                icon="tag-off-outline"
+                textColor="#b45309"
+                loading={unmarkKartela.isPending}
+                disabled={unmarkKartela.isPending}
+                onPress={() => unmarkKartela.mutate(roll.id)}
+                style={[detailActionStyles.btn, detailActionStyles.kartelaBtn]}
+                contentStyle={detailActionStyles.btnContent}
+              >
+                Kartelalık İşaretini Kaldır
+              </Button>
+            )}
+            {onRemoveFromStock && (
+              // Buton statüye göre GİZLENMEZ: hangi topların kaldırılabileceği
+              // (statü beyaz listesi, açık fason sevki, çuval/sevkiyat bağı) yalnız
+              // backend'in bildiği bir sorudur. Burada gizlemek, operatöre sebepsiz
+              // eksik bir ekran gösterirdi; onay modalı hem sorar hem — kaldırılamıyorsa —
+              // somut Türkçe sebebi basar.
+              <Button
+                mode="contained"
+                icon="trash-can-outline"
+                buttonColor="#dc2626"
+                textColor="#fff"
+                onPress={() => onRemoveFromStock(roll)}
+                style={detailActionStyles.btn}
+                contentStyle={detailActionStyles.btnContent}
+              >
+                Stoktan Kaldır
+              </Button>
+            )}
+          </View>
         ) : undefined
       }
     >
@@ -1203,8 +1251,10 @@ const styles = StyleSheet.create({
 
 // Detay sheet'inin sabit alt aksiyon çubuğu — 56dp dokunma hedefi (UI kuralı).
 const detailActionStyles = StyleSheet.create({
+  row: { flexDirection: 'row', gap: 10, flex: 1 },
   btn: { flex: 1, borderRadius: 10 },
   btnContent: { minHeight: 56 },
+  kartelaBtn: { borderColor: '#f59e0b', borderWidth: 2 },
 });
 
 // RollDetailModal'a özel event card stilleri — DetailSheet children içinde

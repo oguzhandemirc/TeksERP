@@ -512,6 +512,16 @@ export class LabelController {
   recordPrintEvent = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = printEventSchema.parse(req.body ?? {});
+      // ⚠️ MAKİNE ÖNCELİĞİ BASKI YOLUYLA AYNI OLMALI (2026-08-19'da ayrışmıştı).
+      // Buradaki çözüm eskiden yalnız `req.device.machineId`'ye bakıyordu; sahada
+      // HİÇBİR `devices` satırında o alan dolu değil (yer artık çalışma
+      // oturumundan çözülüyor, cihazın statik ataması emekli oluyor). Sonuç:
+      // audit her mobil baskıyı "makinesiz" sanıp dili SİSTEM VARSAYILANINA
+      // düşürüyordu → fabrikadaki 1500+ baskının TAMAMI `RASTER_HTML` yazıyor,
+      // gerçekte ise BT yazıcıya PPLB gidiyordu. Yani yazıcı teşhisi için
+      // bakılacak tek alan yalan söylüyordu. `resolveFormatOpts` (bu dosya,
+      // baskı yolu) zaten `getStampContext` kullanıyor — aynı sıra buraya da.
+      const stamp = await getStampContext(req);
       const result = await this.service.recordPrintEvent(
         req.params.id as string,
         req.user?.userId,
@@ -520,10 +530,10 @@ export class LabelController {
           customerId: body.customerId ?? undefined,
           stock: body.stock === true,
           // Audit şablon izi için cihaz bağlamı (best-effort): explicit gövde
-          // cihazı > tablete-bağlı yazıcı (x-device-id) > istasyon makinesi.
+          // cihazı > AKTİF ÇALIŞMA OTURUMUNUN makinesi > cihazın statik ataması.
           peripheralId: typeof body.peripheralId === "string" ? body.peripheralId : undefined,
           deviceId: req.device?.id ?? undefined,
-          machineId: req.device?.machineId ?? undefined,
+          machineId: stamp?.machineId ?? req.device?.machineId ?? undefined,
         },
       );
       res.status(200).json(result);

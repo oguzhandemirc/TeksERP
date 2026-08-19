@@ -281,10 +281,15 @@ router.post(
  *     summary: Topu kartelalık işaretle / işareti kaldır
  *     security: [{ bearerAuth: [] }]
  */
+// ⚠️ `mobile:depo` 2026-08-19'da EKLENDİ: Tambur'daki kartelalık anahtarı yanlışlıkla
+// açık kalınca üç top (F0118/F0119/F0120) kartelalık işaretlendi ve etikete KARTELALIK
+// bastı. İşareti kaldıran uç ZATEN vardı ama depo personelinin izni yoktu → sahada
+// düzeltmenin tek yolu topu yeniden kesmekti. Aynı dosyadaki `/stock/reduce` emsali:
+// depo personeli kartela stoğuna elle dokunabiliyor. Yeni izin KODU yok.
 router.post(
   "/rolls/:id/mark",
   verifyToken,
-  requireAnyPermission("kartela:write", "mobile:kartela-sevk", "mobile:tambur"),
+  requireAnyPermission("kartela:write", "mobile:kartela-sevk", "mobile:tambur", "mobile:depo"),
   controller.setRollMarked
 );
 

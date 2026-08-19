@@ -16,6 +16,7 @@ import {
   pairByMac,
   testConnection as halTestConnection,
   writeRaw,
+  msSinceLastWrite,
   type BtBondedDevice,
 } from './hal/btClassic.transport';
 
@@ -74,6 +75,91 @@ export function printRaw(address: string, content: string): Promise<void> {
 }
 
 /**
+ * BASKI ZAMANLAMA AYARLARI (2026-08-19 saha teşhisi) — mutable, test küçültür.
+ *
+ * ⚠️ SAHA VAKASI (Tambur, T190826F0040 + T190826F0143): etiketlerin BAŞTAKİ
+ * alanları (QR, isim, metraj, barkod) basılmıyordu. Render edilen PPLB akışı
+ * bayt bayt karşılaştırıldı: eksik alanlar akışın kesintisiz bir ÖN EKİNE denk
+ * geliyordu (0143'te ilk 220/314 bayt), yani yazıcı komutları YANLIŞ ÇİZMİYOR —
+ * akışın başını HİÇ ALMIYORDU. Hayatta kalan alanlar doğru yerdeydi çünkü EPL2
+ * koordinatları mutlaktır; bu yüzden hata "kaymış" değil "eksik" görünüyordu.
+ *
+ * Ölçüm (17-19 Ağu, 601 baskı): hata oranı son baskıdan bu yana geçen süreye
+ * bağlı bir BASAMAK — <30 sn %2, >60 sn %15 ve düz. Aynı kodu koşan KK1
+ * yazıcısında 195 baskıda 0 hata → yazılım hattı temiz, sorun soğuk BT
+ * hattının/köprünün uyanma penceresi. Çare: soğuk hatta İLK giden şey asıl yük
+ * OLMASIN.
+ */
+export const printTuning = {
+  /** Son başarılı yazmanın üzerinden bu kadar geçtiyse hat SOĞUK sayılır. */
+  coldAfterMs: 20_000,
+  /** Isınma baytından sonra beklenen süre (ölçülen kayıp penceresi ~100-230 ms).
+   *  ⚠️ Sahada kalıntı hata kalırsa BÜYÜTÜLECEK tek değer budur. */
+  warmupSettleMs: 300,
+  /** İki baskı işi arası asgari boşluk — bkz. `prepareLink` A4 notu. */
+  minJobSpacingMs: 3_000,
+  /** Parça boyu + parça arası bekleme. FİZİKSEL AYAR: HC-06 taşarsa (çöp çıktı)
+   *  DELAY artır; çok yavaşsa azalt (asıl sınır HC-06 baud'u). */
+  chunkBytes: 256,
+  chunkDelayMs: 50,
+};
+
+const delay = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** MAC başına son baskı İŞİNİN bitiş anı (başarılı ya da değil). */
+const lastJobEndAt = new Map<string, number>();
+
+/**
+ * HATTI BASKIYA HAZIRLA — ısınma baytı + oturma (2026-08-19).
+ *
+ * İki tetikleyicisi var:
+ *  1. SOĞUK HAT (asıl bahis): son başarılı yazmadan ≥ `coldAfterMs` geçmişse.
+ *     Soğuk hatta yazılan ilk baytlar yeniyor → feda edilecek şey asıl yük değil
+ *     zararsız bir CR/LF olsun. EPL2/PPLA/ZPL üçünde de boş satır no-op'tur;
+ *     üstelik yarım kalmış bir metin satırını KAPATIR (yazıcı ayrıştırıcısı
+ *     takılıysa küçük bir bonus).
+ *  2. EPİSOD (A4, daha zayıf kanıt — dürüstçe yazılıyor): bozuk baskıdan sonra
+ *     <8 sn içinde yapılan tekrar denemelerin %100'ü de bozuk çıkıyordu. Bir
+ *     önceki iş çok yakınsa aradaki farkı bekle ve ısınmayı ZORLA. Asıl çözüm
+ *     1. maddedir; bu, operatörün öfkeyle üst üste basmasını yumuşatır.
+ */
+async function prepareLink(address: string, opts?: { force?: boolean }): Promise<void> {
+  const key = address.trim().toUpperCase();
+  let force = opts?.force === true;
+  const endedAt = lastJobEndAt.get(key);
+  if (endedAt != null) {
+    const sinceJob = Date.now() - endedAt;
+    if (sinceJob < printTuning.minJobSpacingMs) {
+      await delay(printTuning.minJobSpacingMs - sinceJob);
+      force = true;
+    }
+  }
+  const sinceWrite = msSinceLastWrite(address);
+  const cold = sinceWrite == null || sinceWrite >= printTuning.coldAfterMs;
+  if (!cold && !force) return;
+  // Isınma yazması da başarısız olabilir (yazıcı kapalı) — o zaman asıl yük
+  // zaten patlayacak; burada YUTMUYORUZ ki hata mesajı tek yerden gelsin.
+  await writeRaw(address, '\r\n', 'latin1', { retry: true, timeoutMs: 12_000 });
+  await delay(printTuning.warmupSettleMs);
+}
+
+/**
+ * İçeriği PARÇA PARÇA yaz — HC-06 köprüsünde AKIŞ KONTROLÜ YOKTUR, tek seferde
+ * yazılan uzun bir blok yazıcının seri buffer'ını taşırır ve taşan baytlar
+ * sessizce düşer. İlk parça retry'lı (soket bayatsa yeniden bağlanır), sonraki
+ * parçalar retry'sız — akış ortasında reconnect çıktıyı ikiye böler.
+ * ensureReady idempotent → tüm parçalar TEK RFCOMM'u paylaşır.
+ */
+async function writeChunked(address: string, latin1Bytes: string): Promise<void> {
+  const size = printTuning.chunkBytes;
+  for (let i = 0; i < latin1Bytes.length; i += size) {
+    const chunk = latin1Bytes.slice(i, i + size);
+    await writeRaw(address, chunk, 'latin1', { retry: i === 0, timeoutMs: 12_000 });
+    if (i + size < latin1Bytes.length) await delay(printTuning.chunkDelayMs);
+  }
+}
+
+/**
  * Native komut string'ini eşleşmiş yazıcıya yaz. İçerik latin1-güvenli (backend
  * asciiFold) + STX/CR kontrol baytları (<0x20) → 'latin1' encoding bayt-bire-bir korur.
  * Bayat soket halinde bir kez yeniden bağlanıp dener. Her deneme 12 sn sert zaman
@@ -84,14 +170,25 @@ export function printRaw(address: string, content: string): Promise<void> {
  * (tipik baskı ~1-3 sn). Yine olmazsa hata fırlar (KK1 başarısızlar listesi +
  * elle Tekrar Dene devralır). Not: zaman aşımı veri yazıldıktan SONRA gelirse
  * tekrar deneme çift etiket basabilir — eksik etiketten iyidir (fazlası atılır).
+ *
+ * 2026-08-19: yük artık ISINMIŞ hatta ve PARÇA PARÇA gider (bkz. printTuning).
+ * İkinci denemeden önce de `prepareLink` koşar — orada gönderilen CR/LF, yarım
+ * kalmış ilk denemenin satırını kapatarak ayrıştırıcıyı temiz noktaya çeker.
  */
 export async function printPpla(address: string, content: string): Promise<void> {
   if (!content) throw new Error('Etiket verisi boş');
+  const key = address.trim().toUpperCase();
   try {
-    await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
-  } catch {
-    await new Promise((r) => setTimeout(r, 2_500));
-    await writeRaw(address, content, 'latin1', { retry: true, timeoutMs: 12_000 });
+    try {
+      await prepareLink(address);
+      await writeChunked(address, content);
+    } catch {
+      await delay(2_500);
+      await prepareLink(address, { force: true });
+      await writeChunked(address, content);
+    }
+  } finally {
+    lastJobEndAt.set(key, Date.now());
   }
 }
 
@@ -121,26 +218,23 @@ export async function unstickPrinter(address: string): Promise<void> {
   await writeRaw(address, seq);
 }
 
-/** Raster binary (GW bitmap) chunk boyu + parça arası bekleme. FİZİKSEL AYAR: HC-06
- *  taşarsa (çöp çıktı) DELAY artır; çok yavaşsa azalt (asıl sınır HC-06 baud'u). */
-const RASTER_CHUNK_BYTES = 256;
-const RASTER_CHUNK_DELAY_MS = 50;
-
 /**
  * Raster (binary GW bitmap) baskısı — HC-06 BT-SPP köprüsü küçük buffer + AKIŞ
  * KONTROLÜ YOK; ~40KB'i tek yazınca yazıcının seri buffer'ı taşar → boş/çöp. Bu yüzden
- * PARÇA-PARÇA yazılır, aralarında HC-06'nın seri porta boşaltması için beklenir.
- * `latin1Bytes` = base64'ten atob ile çözülmüş ham baytlar (her char = 1 bayt, birebir).
- * İlk parça bağlanır (retry açık); sonraki parçalar retry'sız — akış ortasında reconnect
- * çıktıyı ikiye böler. ensureReady idempotent → tüm parçalar TEK RFCOMM'u paylaşır.
+ * PARÇA-PARÇA yazılır (`writeChunked`), aralarında HC-06'nın seri porta boşaltması
+ * için beklenir. `latin1Bytes` = base64'ten atob ile çözülmüş ham baytlar
+ * (her char = 1 bayt, birebir).
+ *
+ * 2026-08-19: komut yolundaki (`printPpla`) ısınma disiplini buraya da uygulandı —
+ * raster yükü zaten parçalıydı ama İLK parçası da soğuk hatta gidiyordu.
  */
 export async function printRawBytes(address: string, latin1Bytes: string): Promise<void> {
   if (!latin1Bytes) throw new Error('Etiket verisi boş');
-  for (let i = 0; i < latin1Bytes.length; i += RASTER_CHUNK_BYTES) {
-    const chunk = latin1Bytes.slice(i, i + RASTER_CHUNK_BYTES);
-    await writeRaw(address, chunk, 'latin1', { retry: i === 0, timeoutMs: 12_000 });
-    if (i + RASTER_CHUNK_BYTES < latin1Bytes.length) {
-      await new Promise((r) => setTimeout(r, RASTER_CHUNK_DELAY_MS));
-    }
+  const key = address.trim().toUpperCase();
+  try {
+    await prepareLink(address);
+    await writeChunked(address, latin1Bytes);
+  } finally {
+    lastJobEndAt.set(key, Date.now());
   }
 }
