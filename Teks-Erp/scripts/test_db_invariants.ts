@@ -88,7 +88,7 @@ function norm(s: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1) PARTIAL INDEXLER (26) — ad + predicate + uniqueness
+// 1) PARTIAL INDEXLER (30) — ad + predicate + uniqueness
 //    uniq alanı KRİTİK: `schema.prisma:1603-1605` predicate farkını drift
 //    saymaz ama index↔unique farkını SAYAR ("aksi halde migrate dev sonsuz
 //    CREATE üretir"). Bu yüzden ikisi ayrı ayrı doğrulanır.
@@ -159,6 +159,13 @@ const PARTIAL_INDEXES: Array<{
   // batches
   { table: "batches", index: "batches_splitFromId_idx", uniq: false, predicate: `("splitFromId" IS NOT NULL)`, why: "null-yoğun FK" },
   { table: "batches", index: "batches_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK" },
+  // ana veri birleştirme soy bağı (migration 20260819210000) — Batch emsalinin
+  // dört ana-veri varlığına taşınması. Birleşmiş kayıt İSTİSNADIR (binlerce
+  // satırda bir avuç) ve sorgu yolu daima "şu survivor'ın çocukları".
+  { table: "customers", index: "customers_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
+  { table: "items", index: "items_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
+  { table: "colors", index: "colors_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
+  { table: "subcontractors", index: "subcontractors_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
   // label_templates / variants — şema-DIŞI unique'ler
   { table: "label_templates", index: "label_templates_one_default_per_kind", uniq: true, predicate: `("isDefault" = true)`, why: "kind başına TEK varsayılan şablon" },
   { table: "label_template_variants", index: "label_template_variants_one_primary", uniq: true, predicate: `("isPrimary" = true)`, why: "şablon başına TEK primary varyant" },

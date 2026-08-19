@@ -1277,9 +1277,10 @@ model Item {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
-  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
-  /// ile onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
+  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
+  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
+  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
   mergedIntoId   String?   @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
@@ -1823,9 +1824,10 @@ model Customer {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
-  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
-  /// ile onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
+  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
+  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
+  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
   mergedIntoId   String?    @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
@@ -3415,9 +3417,10 @@ model Subcontractor {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
-  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
-  /// ile onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
+  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
+  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
+  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
   mergedIntoId   String?         @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
@@ -4237,9 +4240,10 @@ model Color {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
-  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
-  /// ile onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
+  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
+  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
+  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
   mergedIntoId   String?   @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
