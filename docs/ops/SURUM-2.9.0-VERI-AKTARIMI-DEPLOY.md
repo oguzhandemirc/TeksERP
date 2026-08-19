@@ -361,6 +361,33 @@ Müşteri: Moda Tekstil [aktif]   |  MODA TEKSTİL [aktif]      ← ikisi de AKT
 Kumaş  : ACTIVO [aktif]         |  ACTİVO [PASİF]            ← i/İ tuzağı
 ```
 
+### Kararı hızlandıran ölçüm (salt-okunur, geliştirme kopyasında)
+
+Fabrikaya "birleştirin" demeden önce **hangisinin gerçekten kullanıldığı**
+sorulur. Çiftler için tek sorguyla bakılabilir:
+
+```sql
+SELECT c.code, c.name, c."isActive",
+       (SELECT count(*) FROM orders o            WHERE o."customerId"=c.id)      AS siparis,
+       (SELECT count(*) FROM shipments s         WHERE s."customerId"=c.id)      AS sevkiyat,
+       (SELECT count(*) FROM customer_branches b WHERE b."customerId"=c.id)      AS sube,
+       (SELECT count(*) FROM rolls r             WHERE r."labelCustomerId"=c.id) AS etiketli_top
+FROM customers c WHERE c."nameFold" = public.tr_fold('Moda Tekstil');
+```
+
+Bu çift için ölçülen (geliştirme kopyası, 2026-08-19):
+
+| Kod | Ad | Sipariş | Sevkiyat | Şube | Etiketli top |
+|---|---|---|---|---|---|
+| `MUS1707260010` | MODA TEKSTİL | **6** | 0 | 0 | 0 |
+| `MUS-002` | Moda Tekstil | 0 | 0 | 1 | 1 |
+
+⚠️ **Bu tablo bir öneri DEĞİL, girdidir.** İkisi de bağlantı taşıyor (biri
+siparişleri, diğeri bir şube + bir etiketli top), yani "boş olanı kapat" diye
+otomatik bir cevap YOK. Ayrıca `MUS-002` kodu standart `MUS+GGAAYY+NNNN`
+biçiminde DEĞİL — kurulum/demo kaynaklı olabilir; bu da kararı fabrikanın
+vermesini gerektiren bir sebep, kendi başına birleştirme gerekçesi değil.
+
 Bu **gerçek bir veri sorunudur** ve sürüm onu *yaratmadı*, artık *görebiliyor*
 (`name` Türkçe collation'a geçince `lower('İ')` düzeldi ve kontrol daha önce kör
 olduğu çifti görüyor). **Otomatik birleştirme YOK ve olmamalı** — hangi kaydın
