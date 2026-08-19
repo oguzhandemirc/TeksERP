@@ -206,7 +206,10 @@ export class SubcontractorCategoryService {
           where: { id: existing.id },
           data: { ...data, isActive: true },
         })
-      : await prisma.subcontractorCategory.create({ data });
+      : await prisma.subcontractorCategory.create({
+          // Künye (Faz A2)
+          data: { ...data, createdById: userId ?? null, updatedById: userId ?? null },
+        });
 
     await AuditService.log({
       userId,

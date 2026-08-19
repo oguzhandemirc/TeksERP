@@ -88,6 +88,17 @@ const PROVENANCE_TABLES = {
   CUSTOMER_BRANCH: () => prisma.customerBranch,
   LABEL_TEMPLATE: () => prisma.labelTemplate,
   BATCH: () => prisma.batch,
+  // ── Faz A2 (2026-08-19) ──────────────────────────────────────────────────
+  WORK_ORDER: () => prisma.workOrder,   // "kim açtı" artık KOLONDA (audit'e düşmez)
+  SHIPMENT: () => prisma.shipment,      // planlayan ≠ sevk eden → dispatchedById'den ayrı
+  users: () => prisma.user,             // audit tableName'i küçük harf "users"
+  PERMISSION_TEMPLATE: () => prisma.permissionTemplate,
+  CUSTOMER_ITEM_ALIAS: () => prisma.customerItemAlias,
+  CUSTOMER_COLOR_ALIAS: () => prisma.customerColorAlias,
+  SUBCONTRACTOR_CATEGORY: () => prisma.subcontractorCategory,
+  TRAVELER_CARD_TEMPLATE: () => prisma.travelerCardTemplate,
+  DOCUMENT_PROFILE: () => prisma.documentProfile,
+  CUSTOMER_STANDALONE_LABEL: () => prisma.customerStandaloneLabel,
 } as const;
 
 function toActor(row: {

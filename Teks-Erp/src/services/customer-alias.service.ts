@@ -64,7 +64,8 @@ export class CustomerAliasService {
 
     const row = await prisma.customerItemAlias.upsert({
       where: { customerId_itemId: { customerId, itemId } },
-      create: { customerId, itemId, alias: trimmed },
+      // // Künye (Faz A2) — kaydın kimliği kolonda, audit'te DEĞİL. Müşterideki ad anlaşmazlıkta en çok sorulan yer.
+      create: { customerId, itemId, alias: trimmed, createdById: userId ?? null, updatedById: userId ?? null },
       update: { alias: trimmed },
     });
 
@@ -144,7 +145,8 @@ export class CustomerAliasService {
 
     const row = await prisma.customerColorAlias.upsert({
       where: { customerId_colorId: { customerId, colorId } },
-      create: { customerId, colorId, alias: trimmed },
+      // // Künye (Faz A2) — kaydın kimliği kolonda, audit'te DEĞİL.
+      create: { customerId, colorId, alias: trimmed, createdById: userId ?? null, updatedById: userId ?? null },
       update: { alias: trimmed },
     });
 

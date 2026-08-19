@@ -1372,7 +1372,10 @@ export class ShippingService {
       prisma.$transaction(async (tx) => {
         const shipmentNo = await nextShipmentNo(tx);
         const created = await tx.shipment.create({
-          data: { shipmentNo, clientToken: data.clientToken ?? null, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null },
+          // ⚠️ Künye (Faz A2) `dispatchedById`den FARKLI bilgidir: sevkiyat
+          // PLANNED doğar, sevk SONRA yapılır → planlayan ≠ sevk eden. Bu yüzden
+          // burada createdById eklemek çoğaltma DEĞİL, ikinci bir gerçektir.
+          data: { shipmentNo, clientToken: data.clientToken ?? null, customerId: data.customerId, branchId, status: ShipmentStatus.PLANNED, destination, procedureCode: data.procedureCode?.trim() || null, createdById: userId ?? null, updatedById: userId ?? null },
           select: { id: true, shipmentNo: true },
         });
         // Atomik claim + seq ata (+ müşterisiz çuvala müşteri/şube backfill).

@@ -462,8 +462,6 @@ model User {
   updatedDocumentProfiles         DocumentProfile[]         @relation("DocumentProfileUpdatedBy")
   createdCustomerStandaloneLabels CustomerStandaloneLabel[] @relation("CustomerStandaloneLabelCreatedBy")
   updatedCustomerStandaloneLabels CustomerStandaloneLabel[] @relation("CustomerStandaloneLabelUpdatedBy")
-  createdRollErrors               RollError[]               @relation("RollErrorCreatedBy")
-  updatedRollErrors               RollError[]               @relation("RollErrorUpdatedBy")
   createdWorkOrders               WorkOrder[]               @relation("WorkOrderCreatedBy")
   updatedWorkOrders               WorkOrder[]               @relation("WorkOrderUpdatedBy")
   createdShipments                Shipment[]                @relation("ShipmentCreatedBy")
@@ -2579,12 +2577,6 @@ model RollError {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
-
-  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
-  createdById String? @db.Uuid
-  createdBy   User?   @relation("RollErrorCreatedBy", fields: [createdById], references: [id])
-  updatedById String? @db.Uuid
-  updatedBy   User?   @relation("RollErrorUpdatedBy", fields: [updatedById], references: [id])
 
   // Mükerrer-hata yarışı guard'ı: (rollId,startMeter,defectTypeId) tekil. Migration
   // 20260623100000 bu @@index'i PARTIAL UNIQUE'e (WHERE defectTypeId IS NOT NULL)

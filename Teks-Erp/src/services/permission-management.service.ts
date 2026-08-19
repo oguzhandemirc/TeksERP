@@ -483,6 +483,10 @@ export class PermissionManagementService {
     const passwordHash = await bcrypt.hash(input.password, 10);
     const user = await prisma.user.create({
       data: {
+        // ⚠️ SELF-RELATION: "bu hesabı KİM açtı" — ISO 27001 açısından anlamlı.
+        // Künye (Faz A2) — kaydın kimliği kolonda, audit'te DEĞİL (audit 6 ayda arşivlenir).
+        createdById: actorUserId ?? null,
+        updatedById: actorUserId ?? null,
         username: input.username,
         fullName: normalizeFullName(input.fullName),
         passwordHash,
@@ -833,6 +837,9 @@ export class PermissionManagementService {
 
     const created = await prisma.permissionTemplate.create({
       data: {
+        // Künye (Faz A2) — "bu rolü kim oluşturdu" yetki denetiminde sorulur.
+        createdById: actorUserId ?? null,
+        updatedById: actorUserId ?? null,
         name,
         description: input.description ?? null,
         permissions: {

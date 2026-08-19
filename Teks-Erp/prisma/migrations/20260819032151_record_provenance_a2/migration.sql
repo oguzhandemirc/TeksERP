@@ -7,6 +7,11 @@
 -- ⚠️ `users` KENDİ KENDİNE referans verir ("bu hesabı kim açtı") — adlandırılmış
 -- self-relation, Prisma'da geçerli.
 -- ⚠️ `migrate dev`in ürettiği iki sahte DropForeignKey ELLE SİLİNDİ (perf #4).
+-- ⚠️ RollError KAPSAM DIŞI BIRAKILDI: zaten `detectedByUserId` (kim kaydetti)
+-- ve `processedByUserId` (kim çözdü) taşıyor — künye eklemek "iki alan aynı
+-- soruyu cevaplıyor" belirsizliği olurdu. İlk taramada kaçmıştı çünkü regex
+-- yalnız `*ById` arıyordu, `*UserId` kalıbını görmüyordu.
+--
 -- Hepsi NULLABLE → tablo yeniden yazımı yok, anlık. FK index bilinçli YOK
 -- (kullanıcı hard-delete edilmiyor — bekçi bunu kilitliyor).
 
@@ -28,10 +33,6 @@ ADD COLUMN     "updatedById" UUID;
 
 -- AlterTable
 ALTER TABLE "permission_templates" ADD COLUMN     "createdById" UUID,
-ADD COLUMN     "updatedById" UUID;
-
--- AlterTable
-ALTER TABLE "roll_errors" ADD COLUMN     "createdById" UUID,
 ADD COLUMN     "updatedById" UUID;
 
 -- AlterTable
@@ -71,12 +72,6 @@ ALTER TABLE "work_orders" ADD CONSTRAINT "work_orders_createdById_fkey" FOREIGN 
 
 -- AddForeignKey
 ALTER TABLE "work_orders" ADD CONSTRAINT "work_orders_updatedById_fkey" FOREIGN KEY ("updatedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "roll_errors" ADD CONSTRAINT "roll_errors_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "roll_errors" ADD CONSTRAINT "roll_errors_updatedById_fkey" FOREIGN KEY ("updatedById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "subcontractor_categories" ADD CONSTRAINT "subcontractor_categories_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;

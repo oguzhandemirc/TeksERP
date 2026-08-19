@@ -37,6 +37,17 @@ const MAP: Array<{ model: string; table: string }> = [
   { model: "subcontractor", table: "SUBCONTRACTOR" },
   { model: "labelTemplate", table: "LABEL_TEMPLATE" },
   { model: "batch", table: "BATCH" },
+  // ── Faz A2 (2026-08-19) ──────────────────────────────────────────────────
+  { model: "user", table: "users" },
+  { model: "permissionTemplate", table: "PERMISSION_TEMPLATE" },
+  { model: "customerItemAlias", table: "CUSTOMER_ITEM_ALIAS" },
+  { model: "customerColorAlias", table: "CUSTOMER_COLOR_ALIAS" },
+  { model: "subcontractorCategory", table: "SUBCONTRACTOR_CATEGORY" },
+  { model: "travelerCardTemplate", table: "TRAVELER_CARD_TEMPLATE" },
+  { model: "documentProfile", table: "DOCUMENT_PROFILE" },
+  { model: "customerStandaloneLabel", table: "CUSTOMER_STANDALONE_LABEL" },
+  { model: "workOrder", table: "WORK_ORDER" },
+  { model: "shipment", table: "SHIPMENT" },
 ];
 
 /**
@@ -102,6 +113,13 @@ function tableNameFor(model: string): string {
     productRecipe: "product_recipes", qualityGrade: "quality_grades",
     returnReason: "return_reasons", route: "routes", station: "stations",
     subcontractor: "subcontractors", labelTemplate: "label_templates", batch: "batches",
+    // Faz A2
+    user: "users", permissionTemplate: "permission_templates",
+    customerItemAlias: "customer_item_aliases", customerColorAlias: "customer_color_aliases",
+    subcontractorCategory: "subcontractor_categories",
+    travelerCardTemplate: "traveler_card_templates", documentProfile: "document_profiles",
+    customerStandaloneLabel: "customer_standalone_labels",
+    workOrder: "work_orders", shipment: "shipments",
   };
   return M[model] ?? model;
 }

@@ -917,6 +917,10 @@ export class WorkOrderService {
 
       const wo = await tx.workOrder.create({
         data: {
+          // Künye (Faz A2) — "iş emrini KİM AÇTI" bilgisi bugüne kadar HİÇ
+          // yoktu; yalnız audit'ten okunabiliyordu ve audit 6 ayda arşivlenir.
+          createdById: userId ?? null,
+          updatedById: userId ?? null,
           workOrderNumber,
           clientToken:       data.clientToken ?? null,
           type,

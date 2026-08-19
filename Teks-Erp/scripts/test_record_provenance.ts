@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   // ── Körlük zeminleri ────────────────────────────────────────────────────
   // Tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile
   // çıkar. Zeminler bugünkü gerçeğin belirgin ALTINDA tutulur.
-  check("körlük zemini: şemada künyeli model bulundu", schemaModels.size >= 15, `${schemaModels.size} model`);
+  check("körlük zemini: şemada künyeli model bulundu", schemaModels.size >= 25, `${schemaModels.size} model`);
   check("körlük zemini: BaseService listesi okundu", written.size >= 10, `${written.size} model`);
 
   // ── 1) Liste ⊆ şema (yazdığımız her modelin kolonu var mı) ──────────────
@@ -79,6 +79,28 @@ async function main(): Promise<void> {
       AND is_nullable='NO'`;
   check("künye kolonlarının hepsi NULLABLE", notNull.length === 0,
     notNull.map((r) => `${r.table_name}.${r.column_name}`).join(", "));
+
+  // ── 3b) record-info KAPSAM LİSTESİ ⊆ ŞEMA (Faz A2) ─────────────────────
+  // ⚠️ CANLI TURDAN ÖNCE: liste bozuksa Prisma çalışma-zamanında yığın iziyle
+  // patlıyor ve asıl sebep gürültüde kayboluyor. Statik kontrol önce koşar.
+  // `PROVENANCE_TABLES` elle yazılır: kolonu olmayan tabloyu listeye koymak
+  // çalışma-zamanında Prisma hatası, kolonu olanı KOYMAMAK ise sessiz gerileme
+  // (bilgi kolonda dururken audit'ten okunmaya devam eder). İki yönü de ölç.
+  const riSrc = fs.readFileSync(
+    path.join(__dirname, "..", "src", "services", "record-info.service.ts"), "utf8",
+  );
+  const riBlock = /const PROVENANCE_TABLES = \{([\s\S]*?)\} as const;/.exec(riSrc);
+  check("record-info kapsam listesi okunabildi", Boolean(riBlock));
+  if (riBlock) {
+    const mapped = [...riBlock[1]!.matchAll(/prisma\.(\w+)\s*,/g)].map((m) => m[1]!);
+    check("körlük zemini: kapsam listesi dolu", mapped.length >= 20, `${mapped.length} tablo`);
+    const badMap = mapped.filter((m) => !schemaModels.has(cap(m)));
+    check(
+      "record-info'nun okuduğu her modelin künye kolonu VAR",
+      badMap.length === 0,
+      badMap.join(", ") || `${mapped.length} tablo`,
+    );
+  }
 
   // ── 4) CANLI TUR: create künye yazıyor, update createdById'yi KORUYOR ───
   // En kolay kaybedilen kural bu: update'te `{...data}` yayılırken createdById
@@ -139,11 +161,24 @@ async function main(): Promise<void> {
     check("künyeli kayıt KOLONDAN okunur", false, "fixture yok — backfill koşmamış olabilir");
   }
 
-  const wo = await prisma.workOrder.findFirst({ select: { id: true } });
-  if (wo) {
-    const r = await recordInfoService.get("WORK_ORDER", wo.id);
-    // İş emrinin künye kolonu YOK (2. faz) → audit/arşiv yoluna düşmeli.
-    check("kolonsuz tablo AUDIT yoluna düşer", r.data.source !== "column", r.data.source);
+  // A2 KABUL ÖLÇÜTÜ: iş emrinde "kim açtı" artık KOLONDAN gelir.
+  // Faz A2 öncesi bu bilgi HİÇ yoktu, yalnız audit'ten okunabiliyordu.
+  const woWithActor = await prisma.workOrder.findFirst({
+    where: { createdById: { not: null } }, select: { id: true },
+  });
+  if (woWithActor) {
+    const r = await recordInfoService.get("WORK_ORDER", woWithActor.id);
+    check("iş emri künyesi KOLONDAN gelir (A2)", r.data.source === "column", r.data.source);
+  } else {
+    check("iş emri künyesi KOLONDAN gelir (A2)", false, "backfill koşmamış olabilir");
+  }
+
+  // Kolonu OLMAYAN bir tablo hâlâ audit/arşiv yoluna düşmeli. `SACK` bilinçli
+  // olarak kapsam dışı (mevcut `weighedById` aktörü var) → doğru örnek.
+  const sack = await prisma.sack.findFirst({ select: { id: true } });
+  if (sack) {
+    const r = await recordInfoService.get("SACK", sack.id);
+    check("kolonsuz tablo AUDIT/ARŞİV yoluna düşer", r.data.source !== "column", r.data.source);
   }
 
   // ⚠️ ARŞİV YOLU SERVİSİN KENDİSİYLE sınanır, elle yazılmış bir sorguyla DEĞİL.

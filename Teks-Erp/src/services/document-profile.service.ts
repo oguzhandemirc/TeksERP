@@ -80,7 +80,8 @@ export class DocumentProfileService {
     if (!data.name) throw AppError.badRequest("Profil adı gerekli");
     try {
       const created = await prisma.documentProfile.create({
-        data: { name: data.name, description: data.description ?? null, config: data.config ?? {} },
+        // // Künye (Faz A2) — kaydın kimliği kolonda, audit'te DEĞİL.
+        data: { name: data.name, description: data.description ?? null, config: data.config ?? {}, createdById: userId ?? null, updatedById: userId ?? null },
       });
       await AuditService.log({
         userId,

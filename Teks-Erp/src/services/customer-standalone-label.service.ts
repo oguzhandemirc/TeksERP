@@ -85,7 +85,10 @@ export class CustomerStandaloneLabelService {
     await prisma.$transaction(async (tx) => {
       await tx.customerStandaloneLabel.deleteMany({ where: { customerId } });
       if (ids.length > 0) {
-        await tx.customerStandaloneLabel.createMany({ data: ids.map((templateId) => ({ customerId, templateId })) });
+        // // Künye (Faz A2) — kaydın kimliği kolonda, audit'te DEĞİL.
+        await tx.customerStandaloneLabel.createMany({
+          data: ids.map((templateId) => ({ customerId, templateId, createdById: userId ?? null, updatedById: userId ?? null })),
+        });
       }
     });
 

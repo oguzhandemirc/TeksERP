@@ -112,6 +112,9 @@ export class TravelerTemplateService {
     const row = await prisma.travelerCardTemplate
       .create({
         data: {
+          // Künye (Faz A2)
+          createdById: userId ?? null,
+          updatedById: userId ?? null,
           name,
           mode,
           config: config as unknown as Prisma.InputJsonValue,
