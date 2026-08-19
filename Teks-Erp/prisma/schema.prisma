@@ -120,6 +120,21 @@ enum RollVarianceKind {
   OVERAGE
 }
 
+/// Hazır sebep kataloğunun hangi ekrana ait olduğu (`ReasonPreset.kind`).
+/// ⚠️ İlk iki kind SATIRA KOD yazar (`RollVariance.reasonCode`), son ikisi
+/// serbest METİN (`Roll.entryReason` / `Roll.cancelReason`) — düzenleme
+/// sözleşmesi bu yüzden farklıdır, model notuna bak.
+enum ReasonPresetKind {
+  /// Tambur — "fire diye gir" kararının sebebi (RollVarianceKind.SCRAP).
+  ROLL_SCRAP
+  /// Tambur — "bu metraj hiç yoktu" kararının sebebi (RECORD_CORRECTION).
+  ROLL_RECORD_CORRECTION
+  /// Tambur Manuel Mod + "Manuel Top Ekle" — topun nereden geldiği.
+  ROLL_MANUAL_ENTRY
+  /// KK1 / Depo / Tambur — top iptal sebebi.
+  ROLL_CANCEL
+}
+
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.
 enum SackWeightSource {
   SCALE // Fiziksel kantardan okundu (mobil BT-SPP / Electron seri port)
@@ -468,6 +483,11 @@ model User {
   updatedShipments                Shipment[]                @relation("ShipmentUpdatedBy")
   /// Bu kullanıcının koşturduğu toplu içe aktarımlar (bkz. ImportRun).
   importRuns                      ImportRun[]               @relation("ImportRunUser")
+  /// Birleştirme künyesi ters ilişkileri (kim birleştirdi).
+  mergedCustomers                 Customer[]                @relation("CustomerMergedBy")
+  mergedItems                     Item[]                    @relation("ItemMergedBy")
+  mergedColors                    Color[]                   @relation("ColorMergedBy")
+  mergedSubcontractors            Subcontractor[]           @relation("SubcontractorMergedBy")
 
   @@map("users")
 }
@@ -1253,9 +1273,26 @@ model Item {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ItemUpdatedBy", fields: [updatedById], references: [id])
 
+  /// BİRLEŞTİRME SOY BAĞI — bu kayıt başka bir kayda BİRLEŞTİYSE survivor'ı
+  /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
+  /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
+  ///
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
+  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
+  /// ile onu dışarıda bırakır.
+  mergedIntoId   String?   @db.Uuid
+  /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
+  /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
+  mergedAt       DateTime? @db.Timestamptz
+  mergedById     String?   @db.Uuid
+  mergedInto     Item?     @relation("ItemMergeLineage", fields: [mergedIntoId], references: [id])
+  mergedChildren Item[]    @relation("ItemMergeLineage")
+  mergedBy       User?     @relation("ItemMergedBy", fields: [mergedById], references: [id])
+
   @@index([itemType])
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "items_nameFold_trgm_idx", type: Gin)
+  @@index([mergedIntoId])
   @@map("items")
 }
 
@@ -1782,10 +1819,27 @@ model Customer {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
 
+  /// BİRLEŞTİRME SOY BAĞI — bu kayıt başka bir kayda BİRLEŞTİYSE survivor'ı
+  /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
+  /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
+  ///
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
+  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
+  /// ile onu dışarıda bırakır.
+  mergedIntoId   String?    @db.Uuid
+  /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
+  /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
+  mergedAt       DateTime?  @db.Timestamptz
+  mergedById     String?    @db.Uuid
+  mergedInto     Customer?  @relation("CustomerMergeLineage", fields: [mergedIntoId], references: [id])
+  mergedChildren Customer[] @relation("CustomerMergeLineage")
+  mergedBy       User?      @relation("CustomerMergedBy", fields: [mergedById], references: [id])
+
   @@index([type])
   @@index([documentProfileId])
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "customers_nameFold_trgm_idx", type: Gin)
+  @@index([mergedIntoId])
   @@map("customers")
 }
 
@@ -2727,6 +2781,67 @@ model RollVariance {
 }
 
 // =============================================================================
+// REASON PRESET — operatöre gösterilen HAZIR SEBEP katalogları (2026-08-19)
+// =============================================================================
+// Dört liste tek tabloda yaşar (`kind`): fire · kayıt düzeltmesi · elle top
+// ekleme · top iptali. Öncesinde dördü de KODA gömülüydü (`constants/
+// variance-reasons.ts` + mobil `manualReasons.ts` / `cancelReasons.ts`) ve
+// fabrikanın kendi diliyle sebep ekleyebilmesi için her seferinde bizim deploy
+// yapmamız gerekiyordu — sahadan gelen istek birebir buydu.
+//
+// ── KOD ≠ ETİKET (bu tablonun VAR OLMA sebebi) ──────────────────────────────
+// `code` doğuşta yazılır ve BİR DAHA DEĞİŞMEZ; rapor kırılımının anahtarı odur
+// (`RollVariance.reasonCode` satırda saklı). `label` serbestçe düzenlenebilir —
+// etiketi değiştirmek geçmiş kayıtları BOZMAZ, çünkü satırlar kodu taşır.
+// Kodun düzenlenebilir olduğu bir tasarımda "Top başı" adını düzelten operatör
+// altı aylık fire raporunu ikiye bölerdi.
+//
+// ⚠️ METİN SAKLAYAN İKİ KİND (ROLL_MANUAL_ENTRY / ROLL_CANCEL) İSTİSNADIR:
+// `Roll.entryReason` ve `Roll.cancelReason` serbest METİN kolonlarıdır, kod
+// taşımazlar. Orada gruplama metnin kendisine dayanır → `fullText` düzenlenirse
+// GEÇMİŞ kayıtlar eski metinle kalır ve raporda iki satır olur. Bu yüzden
+// düzenleme yüzeyi o iki listede operatörü açıkça uyarır. (Kodu satıra da
+// yazmak `Roll`a iki yeni kolon + backfill demekti; bilinçli olarak ertelendi.)
+//
+// ⚠️ SİSTEM SATIRI (`isSystem`) SİLİNMEZ, GİZLENİR. Kod kataloğundan doğar ve
+// her boot'ta uzlaştırılır (`jobs/reason-preset-catalog.job.ts`) — sert silme
+// bir sonraki `pm2 restart`'ta DİRİLİŞ olurdu (rol şablonlarında birebir aynı
+// ders). Gizlenen satır listeden düşer, kodu DB'de kalır → eski kayıtların
+// etiketi çözülmeye devam eder.
+// =============================================================================
+model ReasonPreset {
+  id           String           @id @default(uuid()) @db.Uuid
+  kind         ReasonPresetKind
+  /// Rapor anahtarı — `kind` içinde benzersiz, ASLA düzenlenmez.
+  code         String           @db.VarChar(64)
+  /// Butonun üstünde yazan kısa etiket. Serbestçe düzenlenir.
+  label        String           @db.VarChar(120)
+  /// Sunucuya GİDEN tam metin — yalnız metin saklayan kind'larda dolu
+  /// (ROLL_MANUAL_ENTRY / ROLL_CANCEL). Fire ve kayıt düzeltmesinde NULL:
+  /// oralarda satıra `code` yazılır, metin değil.
+  fullText     String?          @db.VarChar(500)
+  /// true → operatörden ayrıca serbest metin istenir ("Diğer" satırı).
+  requiresText Boolean          @default(false)
+  /// Listedeki sıra — en sık seçilen üstte (eldivenli operatör ilk satıra bakar).
+  sortOrder    Int              @default(0)
+  /// false → listede ÇİZİLMEZ ama kod DB'de kalır (geçmiş kayıtlar için).
+  isActive     Boolean          @default(true)
+  /// Kod kataloğundan doğdu → silinemez, boot'ta yeniden uzlaştırılır.
+  isSystem     Boolean          @default(false)
+
+  createdById String? @db.Uuid
+  updatedById String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([kind, code])
+  // Ekran sorgusu: "şu listenin aktif satırları, sırasıyla" (eşitlik önce).
+  @@index([kind, isActive, sortOrder])
+  @@map("reason_presets")
+}
+
+// =============================================================================
 // SYSTEM SETTING — runtime'da güncellenebilir konfigürasyon (key-value)
 // =============================================================================
 // Admin (admin:settings) okur/yazar.
@@ -2949,6 +3064,14 @@ model SubcontractorDispatchItem {
   dispatchedQty    Decimal  @db.Decimal(12, 3)
   dispatchedWeight Decimal? @db.Decimal(12, 3)
 
+  /// "Kalan gelmeyecek" kapaması (fasonda zayi) — kalemi kabul BEKLEMEDEN kapatır.
+  /// Kısmi teslimat sonrası (ya da hiç dönüş olmadan) fasonda kalan metraj fire
+  /// kararıyla kapatıldığında damgalanır; sebep+metraj `RollVariance`
+  /// (source=SUBCONTRACTOR_REMAINDER), kim/ne `SystemLog` audit'inde. Outstanding
+  /// filtreleri bu damgayı "kalem kapandı" sayar — damgasız + tam-makbuzsuz kalem
+  /// sonsuza dek açık görünür ve parti kilidi (isBatchLockedTx b) hiç açılmazdı.
+  remainderClosedAt DateTime? @db.Timestamptz
+
   // Relations
   dispatch     SubcontractorDispatch      @relation(fields: [dispatchId], references: [id], onDelete: Cascade)
   roll         Roll                       @relation(fields: [rollId], references: [id])
@@ -3054,6 +3177,12 @@ model DirectShipment {
 model SubcontractorReceipt {
   id              String   @id @default(uuid()) @db.Uuid
   receiptNo       String   @unique @db.VarChar(64) // SR-YYMM-NNNNNN
+  /// İdempotency anahtarı (offline sync replay). KISMİ kabulle zorunlu hâle geldi:
+  /// eski "aynı top kümesi → cached makbuz" guard'ı kısmi teslimatta İKİNCİ gelişi
+  /// yutardı (aynı top iki ayrı teslimatta meşru olarak tekrar kabul edilir).
+  /// Token varsa replay'in TEK kimliği budur; küme-eşitliği guard'ı yalnız
+  /// tam-tüketimli (isPartial=false) makbuzlar için devrede kalır.
+  clientToken     String?  @unique @db.Uuid
   manifestNo      String?  @db.VarChar(64) // İrsaliye no (fason firma tarafından verilir, opsiyonel)
   workOrderId     String   @db.Uuid
   stepId          String   @db.Uuid
@@ -3152,6 +3281,17 @@ model SubcontractorReceiptItem {
   newRollId            String  @db.Uuid
   sourceDispatchItemId String? @db.Uuid // Göz kontrolü ile eşleştirilen kaynak sevk kalemi
   notes                String?
+
+  /// Bu makbuzun BU TOPTAN kabul ettiği metraj — kısmi teslimat defter satırı
+  /// (SAP fason kısmi mal girişinin karşılığı). NULL = 2026-08-19 öncesi kayıt
+  /// ("tamamı kabul edildi" varsayımı; raporda COALESCE(receivedQty, roll.currentQty)).
+  receivedQty Decimal? @db.Decimal(12, 3)
+  /// true → kabul KISMİ: kaynak top AT_SUBCONTRACTOR kalmaya devam etti
+  /// (currentQty decrement edildi, tüketilmedi). Sevk kaleminin "dönmüş" sayılması
+  /// için isPartial=false (tam) bir aktif makbuz satırı gerekir — tüm outstanding
+  /// filtreleri `none: { isPartial: false, receipt: { cancelledAt: null } }` okur.
+  /// Eski satırlar default(false) = tam kabul → backfill GEREKMEZ.
+  isPartial Boolean @default(false)
 
   // Relations
   receipt            SubcontractorReceipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)
@@ -3271,8 +3411,25 @@ model Subcontractor {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("SubcontractorUpdatedBy", fields: [updatedById], references: [id])
 
+  /// BİRLEŞTİRME SOY BAĞI — bu kayıt başka bir kayda BİRLEŞTİYSE survivor'ı
+  /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
+  /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
+  ///
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
+  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
+  /// ile onu dışarıda bırakır.
+  mergedIntoId   String?         @db.Uuid
+  /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
+  /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
+  mergedAt       DateTime?       @db.Timestamptz
+  mergedById     String?         @db.Uuid
+  mergedInto     Subcontractor?  @relation("SubcontractorMergeLineage", fields: [mergedIntoId], references: [id])
+  mergedChildren Subcontractor[] @relation("SubcontractorMergeLineage")
+  mergedBy       User?           @relation("SubcontractorMergedBy", fields: [mergedById], references: [id])
+
   @@index([documentProfileId])
   @@index([nameFold])
+  @@index([mergedIntoId])
   @@map("subcontractors")
 }
 
@@ -4076,9 +4233,26 @@ model Color {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ColorUpdatedBy", fields: [updatedById], references: [id])
 
+  /// BİRLEŞTİRME SOY BAĞI — bu kayıt başka bir kayda BİRLEŞTİYSE survivor'ı
+  /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
+  /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
+  ///
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü açar: tombstone aynı
+  /// katlanmış adı taşımaya devam eder ama kısıt `WHERE mergedIntoId IS NULL`
+  /// ile onu dışarıda bırakır.
+  mergedIntoId   String?   @db.Uuid
+  /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
+  /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
+  mergedAt       DateTime? @db.Timestamptz
+  mergedById     String?   @db.Uuid
+  mergedInto     Color?    @relation("ColorMergeLineage", fields: [mergedIntoId], references: [id])
+  mergedChildren Color[]   @relation("ColorMergeLineage")
+  mergedBy       User?     @relation("ColorMergedBy", fields: [mergedById], references: [id])
+
   @@index([isActive, sortOrder])
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "colors_nameFold_trgm_idx", type: Gin)
+  @@index([mergedIntoId])
   @@map("colors")
 }
 
