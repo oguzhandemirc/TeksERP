@@ -306,6 +306,30 @@ Atanmazsa ekran/düğme **hiç görünmez** ve sebebi hiçbir yerde yazmaz.
 >
 > ⚠️ **`admin:*` bu izni VERMEZ** (`settings:workstation` emsali): tek tıkla
 > yüzlerce kaydı değiştirebilen bir yüzey wildcard'la sessizce dağıtılmamalı.
+>
+> ⚠️ **İKİ VARLIKTA ARANAN İZİN DEĞİŞTİ — kapanan bir açık, migration DEĞİL.**
+> `renk` ve `ürün reçetesi` adaptörleri yanlış izin beyan ediyordu; toplu yol
+> tekil yoldan GEVŞEKTİ ve fark ölçüldü (`test_import_permissions.ts` canlı
+> sondası): `data:import` + `quality:write` taşıyan kullanıcı panelden tek renk
+> açamıyordu (403) ama **toplu renk yükleyebiliyordu (200)**.
+>
+> | Varlık | ÖNCE aranan | ŞİMDİ aranan (tekil CRUD ile aynı) |
+> |---|---|---|
+> | Renk | `quality:write` | **`property:write`** |
+> | Ürün reçetesi | `item:write` | **`station:write`** |
+>
+> **Operasyonel etki:** bu iki türü toplu yükleyen biri varsa ve yalnız eski
+> izni taşıyorsa deploy sonrası 403 alır. Çözüm izin ataması (yeni izin KODU
+> yok — ikisi de katalogda mevcut), tabloya göre doğru olanı verilir. Hiçbir
+> kullanıcı bunu bugün taşımıyorsa yapılacak bir şey yok. Kontrol:
+> ```sql
+> SELECT u.username FROM users u
+>   JOIN user_permissions up ON up."userId" = u.id
+>   JOIN permissions p ON p.id = up."permissionId"
+>  WHERE p.code = 'data:import';
+> ```
+> Çıkan her kullanıcı için panelden `property:write` / `station:write` durumuna
+> bak — eksikse ver.
 
 Boot log'unda beklenen satırlar (provada ölçüldü):
 
