@@ -107,6 +107,9 @@ export const stationImportAdapter: ImportAdapter = {
   readPermission: "station:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "station", field: "name", label: "istasyon", codeField: "code" },
   notes: [
     "İstasyon kodunu sistem üretir — YENİ istasyon eklerken kod sütununu BOŞ bırakın.",
     "Aynı ada sahip ikinci bir istasyon eklenemez (Türkçe harf duyarsız karşılaştırma).",

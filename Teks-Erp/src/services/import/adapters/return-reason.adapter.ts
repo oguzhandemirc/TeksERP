@@ -59,6 +59,9 @@ export const returnReasonImportAdapter: ImportAdapter = {
   readPermission: "return:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "returnReason", field: "name", label: "iade sebebi", codeField: "code" },
   notes: [
     "Neden kodunu sistem üretir — YENİ neden eklerken kod sütununu BOŞ bırakın.",
     "Aynı ada sahip ikinci bir iade nedeni eklenemez (Türkçe harf duyarsız karşılaştırma).",

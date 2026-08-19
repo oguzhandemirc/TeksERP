@@ -170,6 +170,33 @@ router.get(
 
 /**
  * @openapi
+ * /api/import/runs/{id}/records:
+ *   get:
+ *     tags: [Import]
+ *     summary: Koşumda dokunulan kayıtlar (audit izinden)
+ *     description: >
+ *       Koşum ÖZETİ kalıcıdır, satır bazlı iz audit'tedir ve 6 ayda arşive
+ *       taşınır — sonrasında boş liste döner ("hiçbir şey oluşmadı" DEĞİL).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Kayıt listesi }
+ *       404: { description: Koşum bulunamadı }
+ */
+router.get(
+  "/runs/:id/records",
+  verifyToken,
+  requirePermission("data:import"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      res.json({ success: true, data: await ImportService.getRunRecords(String(req.params.id)) });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
  * /api/import/{entity}/template:
  *   get:
  *     tags: [Import]

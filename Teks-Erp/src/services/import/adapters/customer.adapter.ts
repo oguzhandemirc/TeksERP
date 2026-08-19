@@ -58,6 +58,9 @@ export const customerImportAdapter: ImportAdapter = {
   readPermission: "customer:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "customer", field: "name", label: "müşteri", codeField: "code" },
   notes: [
     "Cari kodunu sistem üretir — YENİ cari eklerken kod sütununu BOŞ bırakın.",
     "Vergi no sistemde tekildir; aynı numarayı taşıyan ikinci satır reddedilir.",

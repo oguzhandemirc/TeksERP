@@ -171,6 +171,33 @@ export interface PreparedRow {
   children?: Array<{ rowNo: number; values: Record<string, unknown> }>;
 }
 
+/**
+ * AD MÜKERRER guard'ının ÖNİZLEMEDEKİ ikizi — varyantı adaptör beyan eder.
+ * Beyan edilmezse kontrol KOŞMAZ (fail-open): yanlış pozitif, meşru bir içe
+ * aktarımı bloklar ve kaçırmaktan kötüdür. Gerekçe: `import-name-guard.ts`.
+ */
+export interface NameGuardSpec {
+  /** Prisma model anahtarı ("item", "color"…). */
+  model: string;
+  /** Ad kolonu (genelde "name"). */
+  field: string;
+  /** 409 mesajındaki Türkçe varlık adı ("renk", "müşteri"). */
+  label: string;
+  /** Katlama: "tr" (varsayılan) | "color" (ayraç + token sırası bağımsız). */
+  fold?: "tr" | "color";
+  /** false → DB gölge kolonu yerine tümünü çekip JS'te katla (küçük katalog). */
+  useFoldColumn?: boolean;
+  /** Mesajı zenginleştiren kod kolonu ("code"). */
+  codeField?: string;
+  /** Ad yalnız bu kapsam içinde tekilse (makine → istasyon, şube → müşteri). */
+  scope?: {
+    /** Kapsam id'sini taşıyan PAYLOAD anahtarı (ör. "stationCode__id"). */
+    valueKey: string;
+    /** Kapsamın DB kolonu (ör. "stationId"). */
+    column: string;
+  };
+}
+
 export interface ImportAdapter {
   /** URL'de görünen kimlik: /api/import/<entity>/preview */
   entity: string;
@@ -187,6 +214,11 @@ export interface ImportAdapter {
   columns: ImportColumn[];
   /** Şablonun başına yazılan kısa kullanım notu. */
   notes?: string[];
+  /**
+   * Ad-mükerrer kontrolünün ÖNİZLEMEDE de koşması için varyant beyanı.
+   * Yoksa kontrol koşmaz ve çakışma ancak YAZMA anında görülür.
+   */
+  nameGuard?: NameGuardSpec;
   /**
    * true → AYNI ANAHTARI taşıyan satırlar TEK kayıt oluşturur (mükerrer anahtar
    * hatası verilmez). Başlık sütunları grubun ilk satırından, `child: true`

@@ -78,6 +78,9 @@ export const itemImportAdapter: ImportAdapter = {
   readPermission: "item:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "item", field: "name", label: "kumaş", codeField: "code" },
   notes: [
     "Kod boş bırakılırsa sistem STK- ile başlayan bir kod üretir.",
     "Tür (Kumaş/İplik/Sarf) sonradan değiştirilemez — yanlışsa yeni kart açın.",

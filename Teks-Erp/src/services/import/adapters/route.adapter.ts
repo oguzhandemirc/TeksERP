@@ -117,6 +117,9 @@ export const routeImportAdapter: ImportAdapter = {
   readPermission: "station:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "route", field: "name", label: "rota", codeField: "code" },
   grouped: true,
   notes: [
     "GRUPLU ŞABLON: bir rotanın her ADIMI ayrı bir satırdır; satırlar 'Rota Kodu' sütununa göre gruplanır.",

@@ -215,20 +215,91 @@ async function main(): Promise<void> {
     const cleared = await prisma.color.findUnique({ where: { id: colA!.id } });
     check("NULL yazılan alan TEMİZLENİR", cleared?.hex === null, String(cleared?.hex));
 
-    // --- 8. Servis guard'ı atlanmaz (ad mükerrer) ---
+    // --- 8. AD MÜKERRER — ÖNİZLEME ile UYGULAMA aynı şeyi söylemeli ---
+    // ⚠️ REGRESYON KAPISI: ilk sürümde guard yalnız serviste (yazma yolunda)
+    // koşuyordu; önizleme "Yeni" diyor, uygulama 409 ile patlıyordu. Kullanıcıya
+    // "sorun yok" deyip sonra patlamak, bu özelliğin önlemek için var olduğu
+    // şeydi. `nameGuard` beyanı kalkarsa bu kontrol KIRMIZI verir.
     const dupName = await ImportService.preview("color", [row(2, { name: nameB })], {});
-    // Ad guard'ı SERVİSTE — önizleme onu çalıştırmaz (yazma yolu), bu yüzden
-    // önizlemede CREATE görünür ama APPLY'da servis 409 atar ve satır FAILED olur.
-    check("önizleme yeni kayıt der (ad guard'ı yazma anında koşar)", dupName.summary.create === 1);
+    check(
+      "ÖNİZLEME ad çakışmasını yakalar (uygulamayı beklemez)",
+      dupName.summary.error === 1,
+      JSON.stringify(dupName.rows[0]?.errors ?? []),
+    );
+    check(
+      "hata mesajı çakışan ADI söyler",
+      JSON.stringify(dupName.rows[0]?.errors ?? []).includes(nameB),
+      JSON.stringify(dupName.rows[0]?.errors ?? []),
+    );
+    // Harf/işaret farkı da yakalanmalı — asıl saha vakası bu ("MODA TEKSTIL"
+    // ile "Moda Tekstil"). Renk katlaması ayraç ve token sırasından da bağımsız.
+    const foldDup = await ImportService.preview(
+      "color",
+      [row(2, { name: nameB.toLocaleLowerCase("tr-TR") })],
+      {},
+    );
+    check(
+      "katlanmış (harf-duyarsız) ad çakışması da önizlemede yakalanır",
+      foldDup.summary.error === 1,
+      JSON.stringify(foldDup.rows[0]?.errors ?? []),
+    );
+    // Dosya İÇİ aynı ad: kodlar boş bırakıldığında (sunucu üretiyor) anahtar
+    // mükerrerliği bunu yakalayamaz — tek yakalayıcı ad kontrolüdür.
+    const sameFile = await ImportService.preview(
+      "color",
+      [row(2, { name: `${uniq}-DUP` }), row(3, { name: `${uniq}-DUP` })],
+      {},
+    );
+    check(
+      "DOSYA İÇİ aynı ad yakalanır (kodsuz satırlarda tek yakalayıcı budur)",
+      sameFile.summary.error >= 1,
+      JSON.stringify(sameFile.rows.map((r) => r.errors)),
+    );
+    // Yanlış POZİTİF olmamalı: kaydın KENDİ adı, kendi güncellemesini bloklamaz.
+    const selfUpdate = await ImportService.preview(
+      "color",
+      [row(2, { code: colA!.code, name: nameA })],
+      {},
+    );
+    check(
+      "kayıt kendi adına çarpmaz (yanlış pozitif yok)",
+      selfUpdate.summary.error === 0,
+      JSON.stringify(selfUpdate.rows[0]?.errors ?? []),
+    );
+    // Uygulama tarafı: artık doğrulamada durur (yazma denemesine bile gitmez).
+    let dupAborted = false;
+    try {
+      await ImportService.apply("color", [row(2, { name: nameB })], {});
+    } catch {
+      dupAborted = true;
+    }
+    check("ad çakışması UYGULAMAYI doğrulamada durdurur", dupAborted);
     const guarded = await ImportService.apply("color", [row(2, { name: nameB })], { onError: "skip" });
     check(
-      "AD MÜKERRER guard'ı import'ta da koşar (kayıt YAZILMAZ)",
+      "AD MÜKERRER kaydı YAZILMAZ",
       guarded.created === 0 && guarded.failed === 1,
       JSON.stringify({ created: guarded.created, failed: guarded.failed }),
     );
-    check("guard düşerse durum PARTIAL/FAILED olur, sessiz kalmaz", guarded.status !== "APPLIED", guarded.status);
+    check("durum APPLIED olmaz, sessiz kalmaz", guarded.status !== "APPLIED", guarded.status);
     const stillTwo = await prisma.color.count({ where: { name: { startsWith: uniq } } });
     check("mükerrer ad ikinci kaydı OLUŞTURMADI", stillTwo === 2, `bulunan=${stillTwo}`);
+
+    // ⚠️ RENGE ÖZGÜ KATLAMA — bu kontrol olmadan `fold: "color"` beyanı KÖR
+    // kalır (ölçüldü: beyanı `tr` fold'a çevirince paket yeşil kalıyordu).
+    // Renk katlaması AYRAÇLARI eşdeğer sayar ve salt-rakam bloğu BAŞA alır:
+    // canlıdaki eski "055-BEYAZ" yazımı ile yeni "beyaz 055" AYNI renktir.
+    // `tr_fold` bunu yapmaz — renk o yüzden DB gölge kolonuna bağlanmadı.
+    // (Token sırası korunur; test tam da katlamanın YAPTIĞI şeyi ölçer.)
+    const colorFoldName = `${uniq} 055 GRI`;
+    await ImportService.apply("color", [row(2, { name: colorFoldName })], {});
+    const foldColor = await prisma.color.findFirst({ where: { name: colorFoldName } });
+    if (foldColor) created.push(foldColor.id);
+    const reordered = await ImportService.preview("color", [row(2, { name: `055-${uniq}-GRI` })], {});
+    check(
+      "RENK katlaması: ayraç farkı + rakam bloğunun yeri çakışma sayılır",
+      reordered.summary.error === 1,
+      JSON.stringify(reordered.rows[0]?.errors ?? []),
+    );
 
     // --- 10. clientToken idempotent ---
     const token = crypto.randomUUID();

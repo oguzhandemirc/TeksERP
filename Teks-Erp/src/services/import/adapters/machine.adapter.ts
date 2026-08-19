@@ -51,6 +51,9 @@ export const machineImportAdapter: ImportAdapter = {
   readPermission: "station:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "machine", field: "name", label: "makine", codeField: "code", scope: { valueKey: "stationCode__id", column: "stationId" } },
   notes: [
     "Makine kodunu sistem üretir — YENİ makine eklerken kod sütununu BOŞ bırakın.",
     "Makine adı YALNIZ aynı istasyon içinde tekildir: 'Makine 1' iki farklı istasyonda olabilir, aynı istasyonda olamaz.",

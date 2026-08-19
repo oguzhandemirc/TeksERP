@@ -70,6 +70,9 @@ export const subcontractorCategoryImportAdapter: ImportAdapter = {
   readPermission: "subcontractor:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "subcontractorCategory", field: "name", label: "fason kategorisi", codeField: "code" },
   notes: [
     "Kategori kodunu SİZ belirlersiniz ve zorunludur (renk/cari şablonlarının tersine sistem üretmez).",
     "Kod eşleşme anahtarıdır — sonradan değiştirilemez; yanlışsa panelden düzeltin.",

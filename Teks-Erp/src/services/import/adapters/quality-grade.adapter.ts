@@ -96,6 +96,9 @@ export const qualityGradeImportAdapter: ImportAdapter = {
   readPermission: "quality:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "qualityGrade", field: "name", label: "kalite", codeField: "code" },
   notes: [
     "Kalite kodunu SİZ yazarsınız — sistem üretmez ve kod sonradan değiştirilemez.",
     "Tambur Hedef Statüsü yeni kayıtta zorunludur: boş bırakılan derece topu FİREYE yazar.",

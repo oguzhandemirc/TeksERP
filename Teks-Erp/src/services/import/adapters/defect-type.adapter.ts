@@ -58,6 +58,9 @@ export const defectTypeImportAdapter: ImportAdapter = {
   readPermission: "quality:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "defectType", field: "name", label: "hata tipi", codeField: "code" },
   notes: [
     "Hata kodunu sistem üretir — YENİ hata tipi eklerken kod sütununu BOŞ bırakın.",
     "Aynı ada sahip ikinci bir hata tipi eklenemez (Türkçe harf duyarsız karşılaştırma).",

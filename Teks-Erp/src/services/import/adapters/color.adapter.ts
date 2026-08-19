@@ -45,6 +45,9 @@ export const colorImportAdapter: ImportAdapter = {
   readPermission: "quality:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "color", field: "name", label: "renk", codeField: "code", fold: "color", useFoldColumn: false },
   notes: [
     "Renk kodunu sistem üretir — YENİ renk eklerken kod sütununu BOŞ bırakın.",
     "Aynı ada sahip ikinci bir renk eklenemez (Türkçe harf duyarsız karşılaştırma).",

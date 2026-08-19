@@ -75,6 +75,9 @@ export const productRecipeImportAdapter: ImportAdapter = {
   readPermission: "item:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "productRecipe", field: "name", label: "iş emri şablonu", codeField: "code" },
   notes: [
     "Şablon kodunu sistem üretir — YENİ şablon eklerken kod sütununu BOŞ bırakın.",
     "Özellik listesi DEĞİŞTİRME (replace) mantığıyla yazılır: dosyadaki liste neyse o kalır.",

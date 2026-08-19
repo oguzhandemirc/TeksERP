@@ -27,6 +27,7 @@ import {
   importService,
   type ImportApplyResult,
   type ImportPreviewResult,
+  type ImportOptions,
   type ImportRowInput,
   type ImportRowResult,
   type ImportTemplateSpec,
@@ -82,6 +83,10 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   const [result, setResult] = useState<ImportApplyResult | null>(null);
   const [busy, setBusy] = useState<null | "parse" | "preview" | "apply">(null);
   const [skipErrors, setSkipErrors] = useState(false);
+  // Yazma modu — sektörde açık bir seçimdir (NetSuite: Add / Update /
+  // Add-or-Update). Olmayınca yanlış anahtarlı bir dosya SESSİZCE mevcut
+  // kayıtları güncelleyebilir; "sadece yeni ekle" bunu yapısal olarak keser.
+  const [mode, setMode] = useState<ImportOptions["mode"]>("upsert");
   const [onlyProblems, setOnlyProblems] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // İdempotency: AYNI deneme yeniden gönderilirse sunucu ikinci kez YAZMAZ.
@@ -109,6 +114,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setPreview(null);
     setResult(null);
     setSkipErrors(false);
+    setMode("upsert");
     attemptToken.current = crypto.randomUUID();
   }, [open]);
 
@@ -176,7 +182,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     if (rows.length === 0) return;
     setBusy("preview");
     try {
-      const res = await importService.preview(entity, rows, { fileName: file?.name });
+      const res = await importService.preview(entity, rows, { mode, fileName: file?.name });
       setPreview(res.data);
       setStep("preview");
     } catch {
@@ -190,6 +196,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setBusy("apply");
     try {
       const res = await importService.apply(entity, rows, {
+        mode,
         onError: skipErrors ? "skip" : "abort",
         clientToken: attemptToken.current,
         fileName: file?.name,
@@ -251,6 +258,8 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
         ) : step === "file" ? (
           <FileStep
             spec={spec}
+            mode={mode}
+            setMode={setMode}
             file={file}
             rowCount={rows.length}
             warnings={parseWarnings}
@@ -270,6 +279,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
           ) : null
         ) : step === "preview" ? (
           <PreviewStep
+            spec={spec}
             preview={preview}
             rows={visibleRows}
             onlyProblems={onlyProblems}
@@ -365,6 +375,8 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
 
 function FileStep({
   spec,
+  mode,
+  setMode,
   file,
   rowCount,
   warnings,
@@ -373,6 +385,8 @@ function FileStep({
   onPick,
 }: {
   spec: ImportTemplateSpec;
+  mode: ImportOptions["mode"];
+  setMode: (m: ImportOptions["mode"]) => void;
   file: File | null;
   rowCount: number;
   warnings: string[];
@@ -399,6 +413,29 @@ function FileStep({
         {busy === "parse" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
         {file ? `${file.name} — değiştirmek için tıklayın` : "Dosya seçin (.xlsx / .csv)"}
       </Button>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <label className="text-xs text-muted-foreground" htmlFor="import-mode">
+          Yazma modu
+        </label>
+        <select
+          id="import-mode"
+          className="h-8 rounded-md border bg-background px-2 text-xs"
+          value={mode}
+          onChange={(e) => setMode(e.target.value as ImportOptions["mode"])}
+        >
+          <option value="upsert">Yeni ekle ve mevcutları güncelle (varsayılan)</option>
+          <option value="createOnly">Yalnız YENİ ekle — mevcutlara dokunma</option>
+          <option value="updateOnly">Yalnız GÜNCELLE — yeni kayıt açma</option>
+        </select>
+      </div>
+      {mode !== "upsert" && (
+        <p className="text-xs text-muted-foreground">
+          {mode === "createOnly"
+            ? "Anahtarı zaten var olan satırlar HATA verir — yanlışlıkla güncellemeyi keser."
+            : "Anahtarı bulunamayan satırlar HATA verir — yanlışlıkla yeni kayıt açmayı keser."}
+        </p>
+      )}
 
       {rowCount > 0 && (
         <p className="flex items-center gap-2 text-sm text-success">
@@ -435,6 +472,30 @@ function FileStep({
 
 // --- Adım 2: önizleme ---------------------------------------------------------
 
+/** Sütun anahtarı → şablondaki Türkçe etiket (yoksa null). */
+function labelOf(spec: ImportTemplateSpec, key: string): string | null {
+  return spec.columns.find((c) => c.key === key)?.label ?? null;
+}
+
+/**
+ * Diff değerini okunur yazar. Boş/null "—" olur: "" ile null arasındaki fark
+ * kullanıcı için değil, sistem içindir ve tabloda gürültü yapar.
+ */
+function fmtValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—";
+  if (Array.isArray(v)) return v.length === 0 ? "—" : v.map(String).join("; ");
+  if (typeof v === "boolean") return v ? "Evet" : "Hayır";
+  if (typeof v === "object") {
+    // Prisma Decimal ve benzeri sarmalayıcılar String()'e düzgün cevap verir.
+    const s = String(v);
+    return s === "[object Object]" ? "—" : s;
+  }
+  const s = String(v);
+  // ISO tarih → GG.AA.YYYY (kullanıcı zaten öyle yazdı).
+  const iso = /^(\d{4})-(\d{2})-(\d{2})T/.exec(s);
+  return iso ? `${iso[3]}.${iso[2]}.${iso[1]}` : s;
+}
+
 const ACTION_LABEL: Record<ImportRowResult["action"], string> = {
   CREATE: "Yeni",
   UPDATE: "Güncelle",
@@ -450,6 +511,7 @@ const ACTION_CLASS: Record<ImportRowResult["action"], string> = {
 };
 
 function PreviewStep({
+  spec,
   preview,
   rows,
   onlyProblems,
@@ -459,6 +521,7 @@ function PreviewStep({
   hasErrors,
   onDownloadErrors,
 }: {
+  spec: ImportTemplateSpec;
   preview: ImportPreviewResult | null;
   rows: ImportRowResult[];
   onlyProblems: boolean;
@@ -561,11 +624,18 @@ function PreviewStep({
                       </div>
                     ))}
                     {r.action === "UPDATE" && r.changes ? (
-                      <div className="text-muted-foreground">
-                        {Object.keys(r.changes)
-                          .map((k) => (k === "__children" ? "alt satırlar" : k))
-                          .join(", ")}{" "}
-                        değişecek
+                      <div className="space-y-0.5 text-muted-foreground">
+                        {Object.entries(r.changes).map(([k, ch]) => (
+                          <div key={k}>
+                            <span className="font-medium">
+                              {k === "__children" ? "alt satırlar" : (labelOf(spec, k) ?? k)}
+                            </span>
+                            {": "}
+                            <span className="line-through opacity-70">{fmtValue(ch.from)}</span>
+                            {" → "}
+                            <span className="text-foreground">{fmtValue(ch.to)}</span>
+                          </div>
+                        ))}
                       </div>
                     ) : null}
                   </td>

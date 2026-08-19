@@ -68,6 +68,9 @@ export const fabricPropertyImportAdapter: ImportAdapter = {
   readPermission: "property:read",
   keyColumns: ["code"],
   columns: COLUMNS,
+  // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
+  // yoksa önizleme 'Yeni' der, uygulama 409 ile patlardı.
+  nameGuard: { model: "fabricProperty", field: "name", label: "özellik", codeField: "code" },
   notes: [
     "Özellik kodunu sistem üretir — YENİ özellik eklerken kod sütununu BOŞ bırakın.",
     "İstasyon listesi YENİ kayıtta zorunludur: hiçbir istasyona bağlı olmayan özellik iş emri ekranlarında GÖRÜNMEZ.",

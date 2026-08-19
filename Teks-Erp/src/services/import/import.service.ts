@@ -28,6 +28,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import { getImportAdapter, listAdapters } from "./import-registry";
+import { applyNameGuard, checkDuplicateNamesInFile } from "./import-name-guard";
 import {
   assertRowLimit,
   isClearLiteral,
@@ -338,6 +339,15 @@ async function prepareRows(
     if (adapter.validateRow) await adapter.validateRow(p, ctx);
   }
 
+  // --- 5b. AD MÜKERRER ön kontrolü ------------------------------------------
+  // Guard servislerde (yazma yolunda) yaşıyor; önizleme onu çalıştırmazsa
+  // "Yeni" der ve uygulama patlar. Adaptör varyantı beyan ettiyse burada aynı
+  // kararı ÖNCEDEN veriyoruz — kapsam başına TEK sorgu.
+  if (adapter.nameGuard) {
+    checkDuplicateNamesInFile(adapter.nameGuard, units);
+    await applyNameGuard(adapter.nameGuard, units);
+  }
+
   // --- 6. hata varsa karar ERROR'a döner -----------------------------------
   for (const p of units) {
     if (p.result.errors.length > 0) p.result.action = "ERROR";
@@ -462,6 +472,10 @@ export class ImportService {
       }
     }
 
+    // ⚠️ Koşum kimliği ÖNCEDEN üretilir: audit satırları `importRunId` taşısın
+    // diye. Kayıt sonda yazılsaydı, satır bazlı iz koşuma BAĞLANAMAZDI ve
+    // "yanlış yükleme yaptım, ne oluştu?" sorusunun cevabı elle arkeoloji olurdu.
+    const runId = crypto.randomUUID();
     const ctx = emptyContext(userId);
     const { prepared, unknownColumns } = await prepareRows(adapter, rows, options, ctx);
     const results = prepared.map((p) => p.result);
@@ -510,7 +524,10 @@ export class ImportService {
           action: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
           tableName: adapter.tableName,
           recordId: out.id,
-          newData: { ...p.values, _source: "IMPORT" },
+          // `importRunId` iki soruyu birden cevaplar: "bu kayıt nasıl oluştu"
+          // ve "bu koşumda neler oluştu". İkincisi olmadan hatalı bir yükleme
+          // geri alınamaz (hangi kayıtların yazıldığı bilinmez).
+          newData: { ...p.values, _source: "IMPORT", importRunId: runId },
         });
       } catch (e) {
         // Doğrulama geçmişti ama yazma düştü (yarış / DB). DURUYORUZ: devam etmek
@@ -534,6 +551,7 @@ export class ImportService {
 
     const run = await prisma.importRun.create({
       data: {
+        id: runId,
         entity,
         userId: userId ?? null,
         fileName: options.fileName ?? null,
@@ -605,6 +623,43 @@ export class ImportService {
         user: { select: { id: true, username: true, fullName: true } },
       },
     });
+  }
+
+  /**
+   * Bir koşumda DOKUNULAN kayıtlar — audit'ten (`newData.importRunId`).
+   *
+   * ⚠️ KAPSAM SINIRI, sessiz değil: koşum ÖZETİ kalıcıdır (`import_runs`), ama
+   * satır bazlı iz AUDIT'tedir ve audit 6 ayda arşive taşınır. Yani "hangi
+   * kayıtlar oluştu" sorusu 6 ay boyunca cevaplanır; sonrasında yanıt BOŞ döner
+   * ve çağıran bunu `archivedAfterMonths` ile bilir (boş liste "hiçbir şey
+   * oluşmadı" DEĞİLDİR — özetteki sayılara bak).
+   */
+  static async getRunRecords(id: string): Promise<{
+    runId: string;
+    records: Array<{ action: string; tableName: string; recordId: string; createdAt: Date }>;
+    archivedAfterMonths: number;
+  }> {
+    const run = await prisma.importRun.findUnique({ where: { id }, select: { id: true } });
+    if (!run) throw AppError.notFound("İçe aktarım kaydı bulunamadı");
+    const rows = await prisma.systemLog.findMany({
+      where: {
+        category: "DOMAIN",
+        newData: { path: ["importRunId"], equals: id },
+      },
+      select: { action: true, tableName: true, recordId: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
+      take: 10000,
+    });
+    return {
+      runId: id,
+      records: rows.map((r) => ({
+        action: r.action,
+        tableName: r.tableName,
+        recordId: r.recordId ?? "",
+        createdAt: r.createdAt,
+      })),
+      archivedAfterMonths: 6,
+    };
   }
 
   static async getRun(id: string): Promise<unknown> {
