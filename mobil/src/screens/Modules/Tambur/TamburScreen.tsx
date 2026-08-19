@@ -43,10 +43,7 @@ import { buildIoFromPeripheral } from '../../../hooks/usePeripheralIO';
 import RefreshButton from '../../../components/RefreshButton';
 import RemoteListSheet from '../../../components/RemoteListSheet';
 import { labelService } from '../../../services/label.service';
-import {
-  reasonsForAction,
-  isVarianceReasonValid,
-} from '../../../constants/varianceReasons';
+import { VARIANCE_MIN_REASON_TEXT } from '../../../constants/varianceReasons';
 import ScannerEntryBar from '../../../components/ScannerEntryBar';
 import { useDrawerActionQueue } from '../../../hooks/useDrawerActionQueue';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
@@ -67,6 +64,8 @@ import {
   type RollHistoryFilterState,
 } from '../../../components/filters/rollHistoryFilter';
 import AppModal from '../../../components/AppModal';
+import TamburOrderLinkSheet from './TamburOrderLinkSheet';
+import { shortCutOverride, shortCutRevert, SHORT_CUT_QUALITY_CODE } from './shortCutQuality';
 import LabelTargetSheet, { type LabelTargetContext } from '../../../components/LabelTargetSheet';
 import { LabelPreviewSheet } from '../../../components/labels/LabelPreviewSheet';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
@@ -94,7 +93,12 @@ import {
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale, AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow } from '../../../theme';
-import { MANUAL_REASON_PRESETS, MANUAL_MIN_REASON } from '../../../constants/manualReasons';
+import { MANUAL_MIN_REASON } from '../../../constants/manualReasons';
+import { useReasonPresets, isBuiltinPreset } from '../../../hooks/useReasonPresets';
+import ReasonPresetEditDialog, {
+  type ReasonPresetEditMode,
+} from '../../../components/reasonPresets/ReasonPresetEditDialog';
+import type { ReasonPreset } from '../../../services/reasonPreset.service';
 import Animated from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
@@ -402,9 +406,23 @@ export default function TamburScreen() {
   const { has: hasPermission } = usePermissions();
   // Cihaz tercihi (sunucuya gitmez): kesimden sonra kalite 1. Kaliteye dönsün mü?
   const resetQualityAfterCut = useDeviceSettingsStore((st) => st.tamburResetQualityAfterCut);
+  // KISA KESİM → OTOMATİK A1 (2026-08-19 saha isteği; kural: shortCutQuality.ts).
+  // Bayrak + eşik cihaz tercihi; YALNIZ bayrak açıkken devreye girer.
+  const shortCutEnabled = useDeviceSettingsStore((st) => st.tamburShortCutA1Enabled);
+  const shortCutThresholdM = useDeviceSettingsStore((st) => st.tamburShortCutA1ThresholdM);
+  // "Şu an seçili A1'i KURAL mı yazdı?" — elle yazımda eşik üstüne çıkınca geri
+  // dönüş yalnız otomatik yazılan A1 için (operatörün kendi A1'i geri alınmaz).
+  // Ana kesim + manuel mod aynı formu (voluntaryEntry) paylaşır → tek ref;
+  // Top Kesme ayrı state taşır → ayrı ref.
+  const shortCutAutoMainRef = useRef(false);
+  const shortCutAutoRecutRef = useRef(false);
   const canFieldFix =
     hasPermission('mobile:tambur-duzelt') || hasPermission('roll:manual-adjust');
   const [fieldFixOpen, setFieldFixOpen] = useState(false);
+  // "Sipariş Bağla" — planlama yetkisi taşıyan kişiye (süpervizör). Sıradan
+  // operatörde tuş HİÇ çizilmez (403'lük gri buton bırakılmaz — proje kuralı).
+  const canLinkOrders = hasPermission('workorder:write');
+  const [orderLinkOpen, setOrderLinkOpen] = useState(false);
   // Saha düzeltmesi uçları ONLINE-ONLY (barkodu sunucu üretir, taşıma tx'i
   // sunucuda çözülür) — offline kuyruğuna girmez; modal bunu banda yazar.
   const isOnline = useOnlineStatus();
@@ -512,6 +530,29 @@ export default function TamburScreen() {
    * fark eder. Onaylanınca kayıt yapılır.
    */
   const [colorlessConfirm, setColorlessConfirm] = useState<(() => void) | null>(null);
+  /**
+   * PLAN-GERÇEK SAPMA onayı (2026-08-19, backend 409 PLAN_MISMATCH):
+   * topun rengi/eni iş emri hedefinden sapıyorsa backend kesimi/bitirmeyi
+   * onaysız yazmaz. Modal sapmayı satır satır gösterir; onaylanırsa AYNI istek
+   * `confirmMismatch: true` ile tekrarlanır ve karar backend audit'ine düşer.
+   * Onay TOP başına BİR KEZ istenir (`planMismatchConfirmedRef`): aynı topun
+   * sonraki kesimleri bayrağı kendiliğinden taşır — seri kesimde her parçada
+   * soru sormak operatöre uyarıyı okumamayı öğretirdi.
+   */
+  const [planMismatch, setPlanMismatch] = useState<{
+    messages: string[];
+    retry: () => void;
+  } | null>(null);
+  const planMismatchConfirmedRef = useRef<Set<string>>(new Set());
+  /** 409 PLAN_MISMATCH mi — doluysa insan-okur sapma satırları. */
+  const readPlanMismatch = (err: unknown): string[] | null => {
+    const e = err as Error & { status?: number; details?: Record<string, unknown> };
+    if (e?.status !== 409 || e?.details?.code !== 'PLAN_MISMATCH') return null;
+    const mm = e.details?.mismatches;
+    return Array.isArray(mm)
+      ? mm.map((m) => String((m as { message?: string }).message ?? '')).filter(Boolean)
+      : [];
+  };
   const [overCutConfirm, setOverCutConfirm] = useState<{
     kind: 'over' | 'all';
     recorded: number;
@@ -634,6 +675,12 @@ export default function TamburScreen() {
   /** 'Diğer' seçildi → picker içinde serbest metin formu açılır. */
   const [manualReasonFreeOpen, setManualReasonFreeOpen] = useState(false);
   const [manualReasonDraft, setManualReasonDraft] = useState('');
+  // Elle top ekleme sebepleri de artık düzenlenebilir katalogdan gelir.
+  const manualReasonPresets = useReasonPresets('ROLL_MANUAL_ENTRY');
+  const [manualPresetEdit, setManualPresetEdit] = useState<{
+    mode: ReasonPresetEditMode;
+    preset: ReasonPreset | null;
+  } | null>(null);
   // Kataloglar YALNIZ picker açılınca çekilir: ürün/renk listeleri ayrı yetki
   // ister (`item:read` / `property:read`) ve saf Tambur operatöründe olmayabilir
   // (TamburManualRollModal ile aynı gerekçe) — boşuna 403 üretme.
@@ -1084,6 +1131,8 @@ export default function TamburScreen() {
       markedForKartela?: boolean;
       /** Ağ-retry idempotency: kesim anında üretilir, retry'da aynı kalır. */
       clientToken?: string;
+      /** Plan-gerçek sapma onayı — 409 PLAN_MISMATCH sonrası true ile tekrar. */
+      confirmMismatch?: boolean;
     }) =>
       tamburService.cutOpenFabric(data.rollId, {
         lengthMeters: data.lengthMeters,
@@ -1100,6 +1149,9 @@ export default function TamburScreen() {
         targetCustomerId: data.targetCustomerId ?? null,
         markedForKartela: data.markedForKartela ?? false,
         clientToken: data.clientToken,
+        // ⚠️ Elle kurulan gövde = sessiz allowlist (KAT dersi, 2026-08-13):
+        // bu satır düşerse operatör onaylar, bayrak isteğe girmez, 409 sürer.
+        confirmMismatch: data.confirmMismatch,
       }),
     onSuccess: async (res, variables) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -1165,8 +1217,22 @@ export default function TamburScreen() {
       Toast.show({ type: 'success', text1: 'Top oluşturuldu' });
       await refetchActiveJob();
     },
-    onError: (err: Error) => {
+    onError: (err: Error, variables) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
+      const mm = readPlanMismatch(err);
+      if (mm) {
+        // Onay modalı konuşur — kırmızı toast basılmaz (409 bir hata değil,
+        // cevabı operatörde olan bir sorudur; KK1 mükerrer modalıyla aynı dil).
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setPlanMismatch({
+          messages: mm,
+          retry: () => {
+            planMismatchConfirmedRef.current.add(variables.rollId);
+            cutOpenFabricMutation.mutate({ ...variables, confirmMismatch: true });
+          },
+        });
+        return;
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Top oluşturulamadı', text2: err.message });
     },
@@ -1260,7 +1326,7 @@ export default function TamburScreen() {
       // GÖREMEYİNCE elle yenilemek zorunda kalıyordu (2026-08-12 saha bulgusu).
       qc.invalidateQueries({ queryKey: ['tambur', 'wo-output'] });
     },
-    onError: (err, _vars, context) => {
+    onError: (err, vars, context) => {
       if (isWorkSessionLost(err)) return; // interceptor devralma/oturum bildirimini zaten gösterdi
       if (context) {
         setOpenJobs((prev) =>
@@ -1274,6 +1340,20 @@ export default function TamburScreen() {
               : j,
           ),
         );
+      }
+      const mm = readPlanMismatch(err);
+      if (mm) {
+        // Optimistic geri alındı (yukarıda) → top yine listede; onaylanırsa
+        // aynı istek bayrakla tekrarlanır. Kırmızı toast basılmaz (soru, hata değil).
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        setPlanMismatch({
+          messages: mm,
+          retry: () => {
+            planMismatchConfirmedRef.current.add(vars.rollId);
+            finalizeOpenFabricMutation.mutate({ ...vars, confirmMismatch: true });
+          },
+        });
+        return;
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Toast.show({ type: 'error', text1: 'Tamamlanamadı', text2: err.message });
@@ -1335,6 +1415,8 @@ export default function TamburScreen() {
       rawDestination?: 'STOCK' | 'WAREHOUSE';
       /** Ağ-retry idempotency: kesim anında üretilir, retry'da aynı kalır. */
       clientToken?: string;
+      /** Plan-gerçek sapma onayı — 409 PLAN_MISMATCH sonrası true ile tekrar. */
+      confirmMismatch?: boolean;
     }) =>
       tamburService.cutWarehouseRoll(rollId, {
         cutLength,
@@ -1658,10 +1740,38 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Kalite seçin' });
       return;
     }
+    // KISA KESİM hunisi: elle yazılan uzunlukta kural formda ZATEN çalıştı
+    // (input flip'i — orada seçim A1 olduğu için burada yeniden ateşlemez).
+    // Bu dal, uzunluğun GÖNDERİM ANINDA çözüldüğü iki yolu kapar: makineden
+    // ölçüm ve "kalanı kes". Kural ateşlerse ekrana da yazılır + toast söyler —
+    // gönderilenle görünen ayrışmasın.
+    const shortCutSug = shortCutOverride({
+      enabled: shortCutEnabled,
+      thresholdM: shortCutThresholdM,
+      lengthM: length,
+      currentCode: work.voluntaryEntry.qualityGrade,
+      defaultCode: DEFAULT_QUALITY_CODE,
+      grades: qualityGrades,
+    });
+    if (shortCutSug) {
+      shortCutAutoMainRef.current = true;
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: {
+          ...w.voluntaryEntry,
+          qualityGrade: shortCutSug.code,
+          qualityName: shortCutSug.name,
+        },
+      }));
+      Toast.show({
+        type: 'info',
+        text1: `Kısa kesim → ${shortCutSug.name}`,
+        text2: `${length} m, ${shortCutThresholdM} m eşiğinin altında`,
+      });
+    }
+    const effectiveCode = shortCutSug?.code ?? work.voluntaryEntry.qualityGrade;
     // Kalite kodu → RollStatus mapping (qualityGrade.targetStatus)
-    const qg = qualityGrades.find(
-      (q) => q.code === work.voluntaryEntry.qualityGrade,
-    );
+    const qg = qualityGrades.find((q) => q.code === effectiveCode);
     const status = (qg?.targetStatus ?? 'WAREHOUSE') as
       | 'WAREHOUSE'
       | 'SCRAP'
@@ -1680,6 +1790,8 @@ export default function TamburScreen() {
         markedForKartela: markAsKartela,
         // Ağ-retry idempotency: deneme başına SABİT token (tekrar basış = aynı token).
         clientToken: takeCutToken(cutTokenRef, selectedRoll.rollId),
+        // Bu topta sapma bir kez onaylandıysa sonraki kesimler bayrağı taşır.
+        confirmMismatch: planMismatchConfirmedRef.current.has(selectedRoll.rollId) || undefined,
       });
     // Aşımda parmak hatası koruması: onay iste (açık kumaşın tamamı tek topa döner).
     if (exceedsRemaining) {
@@ -1903,6 +2015,39 @@ export default function TamburScreen() {
     }
   };
 
+  /** Top Kesme uzunluk girişi — ana kesim input'uyla AYNI kısa-kesim flip/revert
+   *  sözleşmesi (recut ayrı kalite state'i taşıdığı için ayrı sarmalayıcı). */
+  const handleRecutLengthChange = (v: string) => {
+    const len = parseFloat(v.trim().replace(',', '.'));
+    const sug = shortCutOverride({
+      enabled: shortCutEnabled,
+      thresholdM: shortCutThresholdM,
+      lengthM: len,
+      currentCode: recutQualityGrade,
+      defaultCode: DEFAULT_QUALITY_CODE,
+      grades: qualityGrades,
+    });
+    const revert =
+      shortCutRevert({
+        enabled: shortCutEnabled,
+        thresholdM: shortCutThresholdM,
+        lengthM: len,
+        currentCode: recutQualityGrade,
+        autoApplied: shortCutAutoRecutRef.current,
+      }) ||
+      (!Number.isFinite(len) &&
+        shortCutAutoRecutRef.current &&
+        recutQualityGrade === SHORT_CUT_QUALITY_CODE);
+    if (sug) {
+      shortCutAutoRecutRef.current = true;
+      setRecutQualityGrade(sug.code);
+    } else if (revert) {
+      shortCutAutoRecutRef.current = false;
+      setRecutQualityGrade(DEFAULT_QUALITY_CODE);
+    }
+    setRecutCutLength(v);
+  };
+
   const handleRecutSubmit = (lengthOverride?: number) => {
     if (!recutResolvedRollId || !recutRollMeta) return;
     // Manuel modda input BOŞSA → kalanın tamamı (Kes = "kalanı kes"; tekrar metraj
@@ -1932,6 +2077,26 @@ export default function TamburScreen() {
       Toast.show({ type: 'error', text1: 'Kalite seçilmedi' });
       return;
     }
+    // KISA KESİM hunisi — ana kesimle aynı sözleşme (makine ölçümü + "kalanı
+    // kes" yollarını kapar; elle yazımda input flip'i zaten çalıştı).
+    const recutShortCutSug = shortCutOverride({
+      enabled: shortCutEnabled,
+      thresholdM: shortCutThresholdM,
+      lengthM: cut,
+      currentCode: recutQualityGrade,
+      defaultCode: DEFAULT_QUALITY_CODE,
+      grades: qualityGrades,
+    });
+    if (recutShortCutSug) {
+      shortCutAutoRecutRef.current = true;
+      setRecutQualityGrade(recutShortCutSug.code);
+      Toast.show({
+        type: 'info',
+        text1: `Kısa kesim → ${recutShortCutSug.name}`,
+        text2: `${cut} m, ${shortCutThresholdM} m eşiğinin altında`,
+      });
+    }
+    const recutEffectiveCode = recutShortCutSug?.code ?? recutQualityGrade;
     // Ham (renksiz STOCK) top → operatörün seçtiği parça hedefini gönder.
     const isRawStock =
       recutRollMeta.status === 'STOCK' && recutRollMeta.colorId == null;
@@ -1939,7 +2104,7 @@ export default function TamburScreen() {
       cutWarehouseRollMutation.mutate({
         rollId: recutResolvedRollId,
         cutLength: cut,
-        qualityGrade: recutQualityGrade,
+        qualityGrade: recutEffectiveCode,
         targetOrderLineId: recutTargetLineId,
         targetCustomerId: recutTargetCustomerId,
         markedForKartela: markAsKartela,
@@ -2154,6 +2319,34 @@ export default function TamburScreen() {
       });
       return;
     }
+    // KISA KESİM hunisi — manuel modda da aynı kural (makine ölçümü yolu);
+    // katalog olarak manuel modun SEÇİLEBİLİR listesi geçer: A1 orada yoksa
+    // (admin hedefini değiştirmişse) kural ateşlemez, seçilemeyen kod yazılmaz.
+    const manualShortCutSug = shortCutOverride({
+      enabled: shortCutEnabled,
+      thresholdM: shortCutThresholdM,
+      lengthM: qty,
+      currentCode: work.voluntaryEntry.qualityGrade,
+      defaultCode: DEFAULT_QUALITY_CODE,
+      grades: manualQualityGrades,
+    });
+    if (manualShortCutSug) {
+      shortCutAutoMainRef.current = true;
+      setWork((w) => ({
+        ...w,
+        voluntaryEntry: {
+          ...w.voluntaryEntry,
+          qualityGrade: manualShortCutSug.code,
+          qualityName: manualShortCutSug.name,
+        },
+      }));
+      Toast.show({
+        type: 'info',
+        text1: `Kısa metraj → ${manualShortCutSug.name}`,
+        text2: `${qty} m, ${shortCutThresholdM} m eşiğinin altında`,
+      });
+    }
+    const manualEffectiveCode = manualShortCutSug?.code ?? work.voluntaryEntry.qualityGrade;
     const runProduce = () =>
       produceManualRollMutation.mutate({
         itemId: manualItemId,
@@ -2164,7 +2357,7 @@ export default function TamburScreen() {
         width: widthNum,
         // KAT — manuel modda operatör seçer (bu yolda miras alınacak bağlam yok).
         foldType: manualFoldType,
-        qualityGrade: work.voluntaryEntry.qualityGrade,
+        qualityGrade: manualEffectiveCode,
         targetOrderLineId: work.voluntaryEntry.targetOrderLineId,
         targetCustomerId: work.voluntaryEntry.targetCustomerId,
         markedForKartela: markAsKartela,
@@ -2402,12 +2595,50 @@ export default function TamburScreen() {
       <NumpadInput
         mode="outlined"
         value={work.voluntaryEntry.length}
-        onChangeText={(v) =>
+        onChangeText={(v) => {
+          // KISA KESİM kuralı yazım ANINDA görünür çalışır: eşik altına inen
+          // uzunluk kaliteyi A1'e çevirir (yalnız 1. Kalite seçiliyken), eşik
+          // üstüne çıkan/temizlenen uzunluk OTOMATİK yazılmış A1'i geri alır.
+          // Hesap setWork DIŞINDA (updater saf kalsın — kamera flip dersi).
+          const len = parseFloat(v.trim().replace(',', '.'));
+          const current = work.voluntaryEntry.qualityGrade;
+          const sug = shortCutOverride({
+            enabled: shortCutEnabled,
+            thresholdM: shortCutThresholdM,
+            lengthM: len,
+            currentCode: current,
+            defaultCode: DEFAULT_QUALITY_CODE,
+            grades: qualityGrades,
+          });
+          // Boş/geçersiz uzunluk da geri döndürür: input silinip "kalanı kes"e
+          // dönülürse ekranda bayat bir otomatik-A1 kalmasın (kalanın kalitesi
+          // gönderim anında yeniden çözülür).
+          const revert =
+            shortCutRevert({
+              enabled: shortCutEnabled,
+              thresholdM: shortCutThresholdM,
+              lengthM: len,
+              currentCode: current,
+              autoApplied: shortCutAutoMainRef.current,
+            }) ||
+            (!Number.isFinite(len) &&
+              shortCutAutoMainRef.current &&
+              current === SHORT_CUT_QUALITY_CODE);
+          if (sug) shortCutAutoMainRef.current = true;
+          else if (revert) shortCutAutoMainRef.current = false;
           setWork((w) => ({
             ...w,
-            voluntaryEntry: { ...w.voluntaryEntry, length: v },
-          }))
-        }
+            voluntaryEntry: {
+              ...w.voluntaryEntry,
+              length: v,
+              ...(sug
+                ? { qualityGrade: sug.code, qualityName: sug.name }
+                : revert
+                  ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+                  : {}),
+            },
+          }));
+        }}
         numpadLabel="Kesim uzunluğu"
         allowDecimal
         autoActivate
@@ -2425,12 +2656,23 @@ export default function TamburScreen() {
         size={24}
         iconColor="#475569"
         containerColor="#e2e8f0"
-        onPress={() =>
+        onPress={() => {
+          // Otomatik yazılmış A1 uzunlukla birlikte gider (bayat kalite kalmasın).
+          const revert =
+            shortCutAutoMainRef.current &&
+            work.voluntaryEntry.qualityGrade === SHORT_CUT_QUALITY_CODE;
+          if (revert) shortCutAutoMainRef.current = false;
           setWork((w) => ({
             ...w,
-            voluntaryEntry: { ...w.voluntaryEntry, length: '' },
-          }))
-        }
+            voluntaryEntry: {
+              ...w.voluntaryEntry,
+              length: '',
+              ...(revert
+                ? { qualityGrade: DEFAULT_QUALITY_CODE, qualityName: DEFAULT_QUALITY_NAME }
+                : {}),
+            },
+          }));
+        }}
         disabled={!work.voluntaryEntry.length}
         accessibilityLabel="Uzunluğu temizle"
         style={{ margin: 0 }}
@@ -2542,7 +2784,11 @@ export default function TamburScreen() {
               <TouchableRipple
                 key={qg.id}
                 borderless
-                onPress={() =>
+                onPress={() => {
+                  // Elle seçim = kontrol operatörde; kısa-kesim kuralı bu
+                  // seçimi geri almaz (yeni uzunluk yazılana dek yeniden de
+                  // ateşlemez — kural yalnız varsayılan seçiliyken çalışır).
+                  shortCutAutoMainRef.current = false;
                   setWork((w) => ({
                     ...w,
                     voluntaryEntry: {
@@ -2550,8 +2796,8 @@ export default function TamburScreen() {
                       qualityGrade: active ? '' : qg.code,
                       qualityName: active ? undefined : qg.name,
                     },
-                  }))
-                }
+                  }));
+                }}
                 style={[
                   styles.listOption,
                   active && styles.listOptionActive,
@@ -2671,6 +2917,15 @@ export default function TamburScreen() {
               >
                 Top Kesme
               </Button>
+              {/* Sipariş Bağla — yalnız planlama yetkilisinde (workorder:write)
+                  ve açık kart varken (iş emri hedefi ondan okunur). */}
+              {canLinkOrders && activeJob && !manualMode && (
+                <HeaderChip
+                  icon="link-variant"
+                  label="Sipariş Bağla"
+                  onPress={() => setOrderLinkOpen(true)}
+                />
+              )}
               {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken
                   (iki uç da bir Tambur ADIMINI hedef alır). */}
               {canFieldFix && activeJob && (
@@ -2823,6 +3078,14 @@ export default function TamburScreen() {
         fill
       />
       <HeaderChip icon="camera" label="Tara" onPress={() => openScanner()} fill />
+      {canLinkOrders && activeJob && (
+        <HeaderChip
+          icon="link-variant"
+          label="Sipariş Bağla"
+          onPress={() => setOrderLinkOpen(true)}
+          fill
+        />
+      )}
       <HeaderChip
         icon="tag-multiple"
         label="Serbest Etiket"
@@ -2876,6 +3139,15 @@ export default function TamburScreen() {
                   icon="content-cut"
                   label="Kesme"
                   onPress={() => openRecut()}
+                />
+              )}
+              {/* Sipariş Bağla — yalnız planlama yetkilisinde (workorder:write)
+                  ve açık kart varken (iş emri hedefi ondan okunur). */}
+              {canLinkOrders && activeJob && !manualMode && (
+                <HeaderChip
+                  icon="link-variant"
+                  label="Sipariş Bağla"
+                  onPress={() => setOrderLinkOpen(true)}
                 />
               )}
               {/* Saha düzeltmesi — yalnız yetkili operatörde ve açık iş varken
@@ -3301,7 +3573,7 @@ export default function TamburScreen() {
                             <NumpadInput
                               mode="outlined"
                               value={recutCutLength}
-                              onChangeText={setRecutCutLength}
+                              onChangeText={handleRecutLengthChange}
                               numpadLabel="Kesim uzunluğu"
                               allowDecimal
                               autoActivate
@@ -3318,7 +3590,7 @@ export default function TamburScreen() {
                             size={24}
                             iconColor="#475569"
                             containerColor="#e2e8f0"
-                            onPress={() => setRecutCutLength('')}
+                            onPress={() => handleRecutLengthChange('')}
                             disabled={!recutCutLength}
                             accessibilityLabel="Uzunluğu temizle"
                             style={{ margin: 0 }}
@@ -3464,7 +3736,11 @@ export default function TamburScreen() {
                             <TouchableRipple
                               key={qg.id}
                               borderless
-                              onPress={() => setRecutQualityGrade(qg.code)}
+                              onPress={() => {
+                                // Elle seçim = kontrol operatörde (ana kesimle aynı).
+                                shortCutAutoRecutRef.current = false;
+                                setRecutQualityGrade(qg.code);
+                              }}
                               style={[
                                 styles.listOption,
                                 active && styles.listOptionActive,
@@ -4050,6 +4326,7 @@ export default function TamburScreen() {
           açar. Recut'ın modalıyla aynı bileşen: iki akış aynı dili konuşsun
           (kararlar ve sebep katalogu tek yerde). */}
       <FinalizeRemainingModal
+        canEditPresets={canFieldFix}
         visible={openFabricFinalizeOpen}
         remainingQty={selectedRoll?.currentQty ?? 0}
         onDismiss={() => setOpenFabricFinalizeOpen(false)}
@@ -4064,11 +4341,14 @@ export default function TamburScreen() {
             foldType: work.foldType ?? null,
             varianceReasonCode: reasonCode,
             varianceReasonText: reasonText,
+            // Bu topta sapma kesim sırasında onaylandıysa bitirme yeniden sormaz.
+            confirmMismatch: planMismatchConfirmedRef.current.has(rollId) || undefined,
           });
         }}
       />
 
       <FinalizeRemainingModal
+        canEditPresets={canFieldFix}
         visible={recutFinalizeOpen}
         remainingQty={recutRollMeta?.currentQty ?? 0}
         onDismiss={() => setRecutFinalizeOpen(false)}
@@ -4110,6 +4390,65 @@ export default function TamburScreen() {
       {/* RENKSİZ ONAYI — manuel modda renk seçilmeden kayıt. Geçerli bir durum
           (ham beyaz mal) ama unutma ihtimali yüksek: top envantere renksiz
           girdiğinde operatör bunu ancak etikette fark ederdi. */}
+      {/* Sipariş Bağla — süpervizör planlama modalı (uygun/tümü + override). */}
+      {activeJob ? (
+        <TamburOrderLinkSheet
+          visible={orderLinkOpen}
+          onDismiss={() => setOrderLinkOpen(false)}
+          workOrderId={activeJob.stepSummary.workOrderId}
+          onLinked={() => void refetchActiveJob()}
+        />
+      ) : null}
+
+      {/* PLAN-GERÇEK SAPMA onayı — backend 409 PLAN_MISMATCH cevabı (soru, hata
+          değil). Renk/en sapan top yine de depoya inecekse operatör imza atar;
+          karar backend audit'inde. colorlessConfirm ile aynı görsel dil. */}
+      <AppModal
+        visible={!!planMismatch}
+        onDismiss={() => setPlanMismatch(null)}
+        position="center"
+        swipeToDismiss={false}
+        contentStyle={overCutStyles.sheet}
+      >
+        <View>
+          <View style={overCutStyles.header}>
+            <Icon source="alert-circle-outline" size={26} color="#b45309" />
+            <Text style={overCutStyles.title}>Plan ile top uyuşmuyor</Text>
+          </View>
+          {(planMismatch?.messages ?? []).map((m, i) => (
+            <Text key={i} style={overCutStyles.body}>
+              • {m}
+            </Text>
+          ))}
+          <Text style={overCutStyles.body}>
+            Mal <Text style={overCutStyles.strong}>olduğu gibi</Text> depoya iner —
+            bu onay topun kaydını DEĞİŞTİRMEZ. Yanlış olan iş emriyse süpervizör
+            "Sipariş Bağla / Düzelt" ile düzeltir.
+          </Text>
+          <View style={overCutStyles.actions}>
+            <Button
+              mode="outlined"
+              style={overCutStyles.btn}
+              onPress={() => setPlanMismatch(null)}
+            >
+              Vazgeç
+            </Button>
+            <Button
+              mode="contained"
+              style={overCutStyles.btn}
+              buttonColor="#b45309"
+              onPress={() => {
+                const pm = planMismatch;
+                setPlanMismatch(null);
+                pm?.retry();
+              }}
+            >
+              Onayla ve Devam Et
+            </Button>
+          </View>
+        </View>
+      </AppModal>
+
       <AppModal
         visible={!!colorlessConfirm}
         onDismiss={() => setColorlessConfirm(null)}
@@ -4388,7 +4727,36 @@ export default function TamburScreen() {
       <PickerModal
         visible={manualPicker === 'reason'}
         title="İşlem Nedeni"
-        options={MANUAL_REASON_PRESETS.map((r) => ({ value: r, label: r }))}
+        // ⚠️ Liste artık SUNUCUDAN gelir (fabrika düzenleyebilsin) — gömülü
+        // `MANUAL_REASON_PRESETS` yalnız çevrimdışı zemindir (`useReasonPresets`).
+        // `value` kayda yazılan METİNDİR: bu listede satıra kod değil metin
+        // gider (`Roll.entryReason`), o yüzden `fullText` seçilir.
+        options={manualReasonPresets.presets.map((r) => ({
+          value: r.fullText ?? r.label,
+          label: r.label,
+        }))}
+        optionActions={
+          canFieldFix
+            ? (opt) => {
+                const row = manualReasonPresets.presets.find(
+                  (r) => (r.fullText ?? r.label) === opt.value,
+                );
+                if (!row || isBuiltinPreset(row)) return [];
+                return [
+                  {
+                    icon: 'pencil-outline',
+                    accessibilityLabel: `${row.label} — düzenle`,
+                    onPress: () => setManualPresetEdit({ mode: 'edit', preset: row }),
+                  },
+                  {
+                    icon: 'content-copy',
+                    accessibilityLabel: `${row.label} — çoğalt`,
+                    onPress: () => setManualPresetEdit({ mode: 'duplicate', preset: row }),
+                  },
+                ];
+              }
+            : undefined
+        }
         selectedValue={manualReason.trim() || null}
         numColumns={1}
         emptyText="Hazır sebep yok"
@@ -4444,6 +4812,22 @@ export default function TamburScreen() {
         onDismiss={() => {
           setManualReasonFreeOpen(false);
           setManualPicker(null);
+        }}
+      />
+
+      {/* Elle ekleme sebeplerinin düzenleyicisi — Tambur fire ekranındakiyle
+          AYNI bileşen; iki yüzeyde iki farklı düzenleme deneyimi olmasın. */}
+      <ReasonPresetEditDialog
+        visible={!!manualPresetEdit}
+        mode={manualPresetEdit?.mode ?? 'edit'}
+        kind="ROLL_MANUAL_ENTRY"
+        preset={manualPresetEdit?.preset ?? null}
+        onDismiss={() => setManualPresetEdit(null)}
+        onSaved={(row) => {
+          if (manualPresetEdit?.mode !== 'edit') {
+            setManualReason(row.fullText ?? row.label);
+            setManualPicker(null);
+          }
         }}
       />
 
@@ -6454,6 +6838,7 @@ function FinalizeRemainingModal({
   onChoose,
   loading,
   onModalHide,
+  canEditPresets,
 }: {
   visible: boolean;
   remainingQty: number;
@@ -6465,12 +6850,32 @@ function FinalizeRemainingModal({
   ) => void;
   loading: boolean;
   onModalHide?: () => void;
+  /** Hazır mesajları düzenleme/çoğaltma yetkisi (Tambur düzeltme yetkisi). */
+  canEditPresets?: boolean;
 }) {
   const { width: winW, height: winH } = useWindowDimensions();
   // Sebep sorulacak karar (fire / kayıt düzeltmesi) seçilince adım 2'ye geçilir.
   const [pending, setPending] = useState<'scrap' | 'discard' | null>(null);
   const [reasonCode, setReasonCode] = useState<string | null>(null);
   const [reasonText, setReasonText] = useState('');
+  // Düzenleyici — hangi satır, hangi kip (düzenle / çoğalt / yeni).
+  const [editing, setEditing] = useState<{ mode: ReasonPresetEditMode; preset: ReasonPreset | null } | null>(null);
+
+  // Katalog SUNUCUDAN gelir (fabrika düzenleyebilsin); çevrimdışında diskteki
+  // son liste, o da yoksa APK'ya gömülü zemin kullanılır — sebep zorunlu bir
+  // alan olduğu için liste ASLA boş kalmamalı.
+  const scrapPresets = useReasonPresets('ROLL_SCRAP');
+  const correctionPresets = useReasonPresets('ROLL_RECORD_CORRECTION');
+  const presets = pending === 'discard' ? correctionPresets.presets : scrapPresets.presets;
+  const presetKind = pending === 'discard' ? 'ROLL_RECORD_CORRECTION' : 'ROLL_SCRAP';
+  // Serbest metin kutusunun bağlanacağı satır ("Diğer"). Katalogdan gizlenmiş
+  // olabilir — o zaman yazılan metin seçili koda NOT olarak eklenir.
+  const freeTextPreset = presets.find((r) => r.requiresText) ?? null;
+  const selected = presets.find((r) => r.code === reasonCode) ?? null;
+  // ⚠️ EN ÜSTTEKİ KUTUYA YAZMAK, hazır liste yerine serbest metni seçmek demektir:
+  // operatör yazmaya başlayınca "Diğer" KENDİLİĞİNDEN seçilir. Aksi halde
+  // metni yazıp "Kaydet"in hâlâ kapalı olduğunu görürdü (eski akışta serbest
+  // kutu listenin ALTINDA ve yalnız "Diğer" seçiliyse görünüyordu).
   // Modal her kapanışta sıfırlanır — bir sonraki top temiz başlasın, yoksa
   // önceki topun sebebi sessizce yeni karara yapışırdı.
   useEffect(() => {
@@ -6478,6 +6883,7 @@ function FinalizeRemainingModal({
       setPending(null);
       setReasonCode(null);
       setReasonText('');
+      setEditing(null);
     }
   }, [visible]);
   const isCompactPortrait = winH > winW;
@@ -6591,45 +6997,104 @@ function FinalizeRemainingModal({
                 ? 'Mal vardı ama kullanılamaz. Fire oranına girer.'
                 : 'Bu metraj fiziksel olarak hiç yoktu — kayıt yanlıştı. Fire DEĞİLDİR.'}
             </Text>
-            {reasonsForAction(pending).map((r) => {
+            {/* ── SERBEST METİN EN ÜSTTE (2026-08-19 saha isteği) ──────────
+                Eskiden kutu listenin ALTINDAYDI ve yalnız "Diğer" seçilince
+                görünüyordu: kendi cümlesini yazmak isteyen operatör önce sekiz
+                satırı geçip en dibe iniyor, sonra kutuyu bulmak için ikinci kez
+                kaydırıyordu. Artık ilk eleman o; yazmaya başlamak "Diğer"i
+                kendiliğinden seçer. Hazır mesajlar hemen ALTINDA başlar. */}
+            <TextInput
+              mode="outlined"
+              dense
+              placeholder={
+                freeTextPreset
+                  ? 'Kendin yaz (en az 3 karakter) — ya da aşağıdan seç'
+                  : 'Açıklama (isteğe bağlı)'
+              }
+              value={reasonText}
+              onChangeText={(t) => {
+                setReasonText(t);
+                // Yazmaya başlayınca serbest metin satırı seçilir; kutu
+                // temizlenirse seçim de bırakılır (operatör vazgeçti).
+                if (freeTextPreset) {
+                  if (t.trim() && reasonCode !== freeTextPreset.code) setReasonCode(freeTextPreset.code);
+                  else if (!t.trim() && reasonCode === freeTextPreset.code) setReasonCode(null);
+                }
+              }}
+              disabled={loading}
+              style={{ backgroundColor: '#fff' }}
+              left={<TextInput.Icon icon="pencil-outline" />}
+            />
+
+            {presets.map((r) => {
               const active = reasonCode === r.code;
+              const editable = canEditPresets && !isBuiltinPreset(r);
               return (
-                <TouchableRipple
-                  key={r.code}
-                  onPress={() => setReasonCode(r.code)}
-                  disabled={loading}
-                  style={{
-                    minHeight: 52,
-                    justifyContent: 'center',
-                    paddingHorizontal: 14,
-                    borderRadius: 10,
-                    borderWidth: active ? 2 : 1,
-                    borderColor: active ? '#1d4ed8' : '#cbd5e1',
-                    backgroundColor: active ? '#eff6ff' : '#fff',
-                  }}
-                >
-                  <Text
+                <View key={r.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <TouchableRipple
+                    onPress={() => {
+                      setReasonCode(r.code);
+                      // Hazır satıra geçildiyse serbest metin NOT olarak kalır;
+                      // "Diğer"den çıkıldığında da silinmez — operatör yazdığı
+                      // cümleyi kaybetmemeli.
+                    }}
+                    disabled={loading}
                     style={{
-                      fontSize: 15,
-                      fontWeight: active ? '700' : '500',
-                      color: active ? '#1d4ed8' : '#334155',
+                      flex: 1,
+                      minHeight: 52,
+                      justifyContent: 'center',
+                      paddingHorizontal: 14,
+                      borderRadius: 10,
+                      borderWidth: active ? 2 : 1,
+                      borderColor: active ? '#1d4ed8' : '#cbd5e1',
+                      backgroundColor: active ? '#eff6ff' : '#fff',
                     }}
                   >
-                    {r.label}
-                  </Text>
-                </TouchableRipple>
+                    <Text
+                      style={{
+                        fontSize: 15,
+                        fontWeight: active ? '700' : '500',
+                        color: active ? '#1d4ed8' : '#334155',
+                      }}
+                    >
+                      {r.label}
+                    </Text>
+                  </TouchableRipple>
+                  {editable && (
+                    <>
+                      <IconButton
+                        icon="pencil-outline"
+                        size={20}
+                        disabled={loading}
+                        onPress={() => setEditing({ mode: 'edit', preset: r })}
+                        style={{ margin: 0 }}
+                        accessibilityLabel={`${r.label} — düzenle`}
+                      />
+                      <IconButton
+                        icon="content-copy"
+                        size={20}
+                        disabled={loading}
+                        onPress={() => setEditing({ mode: 'duplicate', preset: r })}
+                        style={{ margin: 0 }}
+                        accessibilityLabel={`${r.label} — çoğalt`}
+                      />
+                    </>
+                  )}
+                </View>
               );
             })}
-            {reasonsForAction(pending).find((r) => r.code === reasonCode)?.requiresText && (
-              <TextInput
-                mode="outlined"
-                dense
-                placeholder="Kısaca açıkla (en az 3 karakter)"
-                value={reasonText}
-                onChangeText={setReasonText}
+
+            {canEditPresets && (
+              <Button
+                mode="text"
+                icon="plus"
+                compact
                 disabled={loading}
-                style={{ backgroundColor: '#fff' }}
-              />
+                onPress={() => setEditing({ mode: 'create', preset: null })}
+                labelStyle={{ fontSize: 13 }}
+              >
+                Yeni sebep ekle
+              </Button>
             )}
             <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
               <Button
@@ -6651,7 +7116,15 @@ function FinalizeRemainingModal({
                 // Sebep seçilmeden "Kaydet" AÇIK OLMAZ: backend eski istemciler
                 // için sebepsiz çağrıyı kabul ediyor ("BELIRTILMEDI"), ama YENİ
                 // istemcinin o kovaya yazması özelliği anlamsızlaştırırdı.
-                disabled={loading || !isVarianceReasonValid(pending, reasonCode, reasonText)}
+                // ⚠️ Geçerlilik artık DİNAMİK listeden çözülür: kural
+                // (`isVarianceReasonValid`) gömülü katalogda olmayan yeni bir
+                // fabrika sebebini "katalog dışı" sayıp Kaydet'i sonsuza dek
+                // kapalı bırakırdı.
+                disabled={
+                  loading ||
+                  !reasonCode ||
+                  (!!selected?.requiresText && reasonText.trim().length < VARIANCE_MIN_REASON_TEXT)
+                }
                 loading={loading}
                 buttonColor={pending === 'scrap' ? '#dc2626' : '#475569'}
                 style={{ flex: 2 }}
@@ -6664,6 +7137,21 @@ function FinalizeRemainingModal({
           </View>
         )}
       </View>
+
+      {/* Hazır mesaj düzenleyici — aynı bileşen "düzenle", "çoğalt" ve "yeni"
+          kiplerini taşır; sunucu kaydı yapıp katalogu tazeler. */}
+      <ReasonPresetEditDialog
+        visible={!!editing}
+        mode={editing?.mode ?? 'edit'}
+        kind={presetKind}
+        preset={editing?.preset ?? null}
+        onDismiss={() => setEditing(null)}
+        onSaved={(row) => {
+          // Yeni/çoğaltılmış satır ANINDA seçili gelsin — operatör onu eklemek
+          // için zaten buradaydı, listede ikinci kez aramamalı.
+          if (editing?.mode !== 'edit') setReasonCode(row.code);
+        }}
+      />
     </AppModal>
   );
 }

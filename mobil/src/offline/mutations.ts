@@ -79,6 +79,10 @@ export interface TamburFinalizeOpenFabricVars {
    */
   varianceReasonCode?: string | null;
   varianceReasonText?: string | null;
+  /** Plan-gerçek sapma onayı (renk/en). Eski kuyruk kayıtlarında `undefined`
+   *  gelir — sapma yoksa backend zaten bakmaz; sapma varsa replay 409'a düşer
+   *  ve kalıcı-düşüş toast'ı sebebi söyler (kayıt yazılmadı, mal ekranda). */
+  confirmMismatch?: boolean;
 }
 
 /** NoAuth bekleme aralığı — token gelene dek sunucusuz "yokla" periyodu. */
@@ -192,6 +196,9 @@ export function registerStationMutationDefaults(): void {
         // kod; ikisini birlikte güncelle.)
         varianceReasonCode: vars.varianceReasonCode,
         varianceReasonText: vars.varianceReasonText,
+        // Plan-gerçek sapma onayı — üstteki uyarının kapsamında: bu satır
+        // düşerse operatör onaylar, bayrak isteğe HİÇ girmez, replay 409'da kalır.
+        confirmMismatch: vars.confirmMismatch,
       })),
     ...OFFLINE_AWARE,
   });

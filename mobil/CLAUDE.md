@@ -211,6 +211,22 @@ Kanonik örnek: çuval tartısı (`hooks/useSackWeigh.ts` + `TartiPaket/Paketlem
 - **Modal içinde sayı girişi:** `NumpadInput` + **`useNativeKeyboard`**. Büyük özel numpad bir `NumpadHost` render edilmesini ister (KK1/Tambur kendi kolonlarında yapıyor) — modalda host yoktur, tuşlar görünmez kalır. `useNativeKeyboard` sistem decimal-pad'ini açar VE virgül→nokta normalizasyonunu korur ("40,5" → 40.5).
 - Çuval mutasyonları (tartı dahil) **online-only** — offline kuyruğa (`offline/mutations.ts`) girmez.
 
+### Tambur: kısa kesim → otomatik A1 (2026-08-19, saha isteği)
+
+Çalışma Tercihleri'nde **bayrak + eşik** (ikisi de cihazda, varsayılan KAPALI —
+kullanıcı isteği: "sadece aktifken geçerli olsun"): kesim uzunluğu eşiğin
+ALTINDA çözülürse ve seçili kalite VARSAYILAN (1. KALİTE) ise kalite A1'e
+çevrilir. Kuralın TAMAMI `screens/Modules/Tambur/shortCutQuality.ts`te —
+ekrandaki ÜÇ yol (elle yazım = görünür flip · makine ölçümü ve "kalanı kes" =
+gönderim hunisi + toast) aynı fonksiyonu çağırır, kopyalama. Sınırlar bilinçli:
+operatörün KENDİ seçtiği A1/FIRE'a dokunulmaz (kural yalnız varsayılanla
+ateşler — override mekanizmasının kendisi budur); elle yazımda eşik üstüne
+çıkınca yalnız OTOMATİK yazılmış A1 geri döner (`shortCutRevert` + ekran
+ref'leri — yoksa "12 yazdım, 120'ye tamamladım" topu sessizce A1 kalırdı);
+A1 katalogdan çözülür, yoksa kural hiç ateşlemez (fail-closed); manuel modda
+katalog olarak manuel modun SEÇİLEBİLİR listesi geçer. Bekçi:
+`shortCutQuality.test.ts` (12) + `deviceSettingsStore.test.ts` (5).
+
 ### Manuel/Otomatik metraj tercihi CİHAZDA kalıcı (2026-08-02)
 
 Metraj kaynağı seçimi (elle gir ↔ makineden oku) artık ekran state'i değil **cihaz

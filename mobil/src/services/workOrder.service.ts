@@ -43,6 +43,35 @@ export interface WorkOrderPayload {
   targetPropertyIds?: string[];
 }
 
+/** GET /work-orders/:id/linkable-order-lines satırı — backend aynası. */
+export interface LinkableOrderLine {
+  id: string;
+  orderId: string;
+  orderNumber: string;
+  customerName: string;
+  itemId: string;
+  itemName: string;
+  colorId: string | null;
+  colorName: string | null;
+  width: number | null;
+  quantity: number;
+  shippedQty: number;
+  openQty: number;
+  deadline: string | null;
+  /** En farkı gibi ENGEL OLMAYAN uyumsuzluklar — uyarı çipi olarak gösterilir. */
+  warnings: string[];
+}
+
+/** POST /work-orders/:id/order-links/override sonucu. */
+export interface OrderLinkOverrideResult {
+  changedColor: boolean;
+  changedWidth: boolean;
+  rollsUpdated: number;
+  rollsFailed: { rollId: string; barcode: string | null; message: string }[];
+  linked: boolean;
+  warnings: string[];
+}
+
 /** PATCH /work-orders/:id — temel alan güncelleme (rota/sipariş hariç). */
 export interface WorkOrderUpdatePayload {
   batchNumber?: string;
@@ -245,4 +274,36 @@ export const workOrderService = {
   /** İş emrine bağlı (sepetteki) toplar. */
   getAttachedRolls: (id: string): Promise<ApiResponse<Roll[]>> =>
     apiClient.get<ApiResponse<Roll[]>>(`/work-orders/${id}/rolls`).then((r) => r.data),
+
+  // ── Sipariş bağlama (Tambur "Sipariş Bağla", 2026-08-19) ──────────────────
+  /** İş emrinin hedefiyle UYUMLU açık sipariş satırları (kumaş+renk süzülü, en uyarı). */
+  getLinkableOrderLines: (id: string): Promise<ApiResponse<LinkableOrderLine[]>> =>
+    apiClient
+      .get<ApiResponse<LinkableOrderLine[]>>(`/work-orders/${id}/linkable-order-lines`)
+      .then((r) => r.data),
+
+  /** Uyumlu satırı bağla — YALNIZ bağ kurar, hedef/rota/metraj DEĞİŞMEZ. */
+  linkOrderLines: (
+    id: string,
+    orderLineIds: string[],
+  ): Promise<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>> =>
+    apiClient
+      .post<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>>(
+        `/work-orders/${id}/order-links`,
+        { orderLineIds },
+      )
+      .then((r) => r.data),
+
+  /**
+   * UYUMSUZ satırı onayla-düzelt-bağla zinciri (süpervizör): plan siparişe
+   * eşitlenir + iş emrinin düzeltilebilir topları çekilir + bağ kurulur.
+   * ÇİFT yetki ister: workorder:write + roll:manual-adjust. Kumaş farkı 400.
+   */
+  linkOrderLineWithOverride: (
+    id: string,
+    data: { orderLineId: string; reason: string },
+  ): Promise<ApiResponse<OrderLinkOverrideResult>> =>
+    apiClient
+      .post<ApiResponse<OrderLinkOverrideResult>>(`/work-orders/${id}/order-links/override`, data)
+      .then((r) => r.data),
 };

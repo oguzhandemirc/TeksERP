@@ -94,6 +94,28 @@ export function ChangeTargetDialog({
   });
   const batches = targetsQ.data?.data ?? [];
   const editableOf = (b: RollAttributeTarget) => b.rolls.filter((r) => !r.blocked);
+
+  // ── MEVCUT DAĞILIM BANDI (2026-08-19, kullanıcı kararı) ────────────────────
+  // Saha senaryosu: iş emri MAVİ açıldı, mal boyandı, müşteri "gri olacaktı"
+  // dedi. Planlamacı hedefi GRİ'ye çevirirken elinde ZATEN 12 MAVİ top olduğunu
+  // görmüyordu — renk değişikliği ona kâğıt işi gibi geliyordu, oysa boyanmış
+  // mal için bu bir MAL kararıdır (redye / "mavi stok kalsın" dallanır).
+  // Veri zaten roll-attribute-targets'tan geliyor; bant yalnız onu özetler.
+  const allRolls = batches.flatMap((b) => b.rolls);
+  const distribution = (() => {
+    const counts = new Map<string, number>();
+    for (const r of allRolls) {
+      const key =
+        mode === "color"
+          ? (r.colorName ?? "renksiz")
+          : r.width != null
+            ? `${r.width} cm`
+            : "en girilmemiş";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    // Çoktan aza — planlamacının gözü ilk kalemde ne çoğunluktaysa onu görsün.
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  })();
   const toggleBatch = (b: RollAttributeTarget) => {
     const ids = editableOf(b).map((r) => r.id);
     const allOn = ids.length > 0 && ids.every((id) => selectedRolls.has(id));
@@ -187,6 +209,24 @@ export function ChangeTargetDialog({
               {isColor ? (currentColorName ?? "renksiz") : currentWidth != null ? `${currentWidth} cm` : "—"}
             </strong>
           </div>
+
+          {allRolls.length > 0 && (
+            <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs dark:border-amber-700/60 dark:bg-amber-950/40">
+              <span className="font-medium">Bu iş emrinde şu an: </span>
+              {distribution.map(([label, count], i) => (
+                <span key={label}>
+                  {i > 0 && " · "}
+                  <strong>{count} top</strong> {label}
+                </span>
+              ))}
+              {isColor && (
+                <div className="mt-1 text-muted-foreground">
+                  Boyanmış mal için renk değişikliği kâğıt işi değildir — mal ya
+                  boyahaneye döner (redye) ya da mevcut rengiyle stok kalır.
+                </div>
+              )}
+            </div>
+          )}
 
           {isColor ? (
             <FormField label="Yeni Renk" htmlFor="new-color">

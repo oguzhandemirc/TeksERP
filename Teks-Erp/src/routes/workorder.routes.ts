@@ -527,7 +527,10 @@ router.patch("/:id/lock", verifyToken, requirePermission("workorder:write"), con
 router.get(
   "/:id/linkable-order-lines",
   verifyToken,
-  requireAnyPermission("workorder:read", "mobile:hizli-is-emri"),
+  // `workorder:write` 2026-08-19'da EKLENDİ: Tambur "Sipariş Bağla" tuşu bu
+  // yetkiyle açılır ve tabletteki süpervizörün JWT'sinde read olmayabilir
+  // (yazabilen okuyabilir ilkesi — document-template dersi).
+  requireAnyPermission("workorder:read", "workorder:write", "mobile:hizli-is-emri"),
   controller.getLinkableOrderLines,
 );
 
@@ -561,6 +564,42 @@ router.post(
   verifyToken,
   requireAnyPermission("workorder:write", "mobile:hizli-is-emri"),
   controller.linkOrderLines,
+);
+
+/**
+ * @openapi
+ * /api/work-orders/{id}/order-links/override:
+ *   post:
+ *     tags: [WorkOrders]
+ *     summary: Uyumsuz siparişi onayla-düzelt-bağla (plan + toplar + bağ tek zincir)
+ *     description: >
+ *       Tambur süpervizör akışı — sipariş satırı iş emrinin hedefiyle renk/en
+ *       uyuşmazsa: hedef siparişe eşitlenir (sebep + iz), iş emrinin
+ *       düzeltilebilir topları yeni değere çekilir (tekil düzeltme motoru),
+ *       sonra bağ kurulur. Kumaş (cins) farkı HER ZAMAN 400. ÇİFT yetki kapısı.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [orderLineId, reason]
+ *             properties:
+ *               orderLineId: { type: string, format: uuid }
+ *               reason: { type: string }
+ *     responses:
+ *       200: { description: "{ changedColor, changedWidth, rollsUpdated, rollsFailed[], linked, warnings }" }
+ *       400: { description: Kumaş farkı / zaten uyumlu / sebep eksik }
+ */
+router.post(
+  "/:id/order-links/override",
+  verifyToken,
+  // ÇİFT KAPI (AND): plan yazımı workorder:write, toplara dokunuş roll:manual-adjust.
+  // Middleware zinciri iki ayrı requirePermission = ikisi de şart.
+  requirePermission("workorder:write"),
+  requirePermission("roll:manual-adjust"),
+  controller.linkOrderLineWithOverride,
 );
 
 /**

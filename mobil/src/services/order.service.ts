@@ -151,6 +151,8 @@ export const orderService = {
     withInProduction?: boolean;
     customerId?: string | null;
     colorId?: string | null;
+    /** En (cm) süzgeci — Tambur "Sipariş Bağla" modalı (2026-08-19). */
+    width?: number | null;
     /**
      * "Bu kalemle aynı iş emrinde üretilebilecekler" — backend verilen satırın
      * spec'ini (kumaş + renk + en) okuyup listeyi ona daraltır; kumaş/renk/en
@@ -162,6 +164,7 @@ export const orderService = {
     if (params.itemId) q.set('itemId', params.itemId);
     if (params.customerId) q.set('customerId', params.customerId);
     if (params.colorId) q.set('colorId', params.colorId);
+    if (params.width != null) q.set('width', String(params.width));
     if (params.specOfLineId) q.set('specOfLineId', params.specOfLineId);
     if (params.search) q.set('search', params.search);
     if (params.cursor) q.set('cursor', params.cursor);

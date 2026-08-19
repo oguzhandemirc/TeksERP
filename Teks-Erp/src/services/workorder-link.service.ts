@@ -713,6 +713,163 @@ export class WorkOrderLinkService {
           : `${updated} top güncellendi, ${failed.length} top değişmedi.`,
     };
   }
+
+  /**
+   * UYUMSUZ SİPARİŞİ ONAYLA-DÜZELT-BAĞLA zinciri (2026-08-19, Tambur süpervizör
+   * akışı — kullanıcı kararı: "top + WO hedefi + bağ" tek uçta).
+   *
+   * Saha senaryosu: tamburda süpervizör elindeki topa uyan siparişi listede
+   * görüyor ama sistem "renk uyuşmuyor" diyor — çünkü İŞ EMRİ yanlış renkle
+   * açılmış, mal aslında siparişin istediği renkte. Süpervizör "elindeki
+   * gerçekten KIRMIZI mı?" sorusunu onaylar, sebep yazar; sistem üç işi
+   * SIRAYLA yapar: ① plan düzeltilir (changeTargetColor/changeWidth),
+   * ② iş emrinin düzeltilebilir topları yeni değere eşitlenir
+   * (applyAttributeToRolls → tekil motor, kapsam+yetki orada), ③ bağ kurulur.
+   *
+   * ⚠️ KUMAŞ (cins) FARKI HER ZAMAN RED — topun cinsi hiçbir yoldan
+   * değiştirilemez (applyManualProperties'te alan bilinçli yok); "patos'u
+   * tergal yap" bir düzeltme değil, yanlış topa yanlış kimlik yazmaktır.
+   *
+   * ⚠️ TEK TRANSACTION DEĞİL — BİLİNÇLİ. Her adım kendi başına meşru ve kendi
+   * audit izini bırakan bir işlemdir; sıra öyle seçildi ki sonraki adımın
+   * düşmesi öncekini YANLIŞLAMAZ: plan düzeltmesi bağ kurulamasa da doğrudur
+   * (gerçek buydu diye onaylandı). Toplardaki kısmi başarı (fasonda/sevk
+   * edilmiş top düzeltilemez) bağı ENGELLEMEZ — o toplar zaten kapsam dışı,
+   * kalan her şey rapor edilir.
+   *
+   * Yetki: route çift kapı (workorder:write + roll:manual-adjust) İSTER;
+   * `permissions` yine de tekil motora geçirilir (F221 — çift emniyet,
+   * üretimdeki top başına ikinci kontrol orada da koşar).
+   */
+  async linkOrderLineWithOverride(
+    workOrderId: string,
+    orderLineId: string,
+    reason: string,
+    userId?: string,
+    permissions?: readonly string[],
+  ): Promise<
+    ApiResponse<{
+      changedColor: boolean;
+      changedWidth: boolean;
+      rollsUpdated: number;
+      rollsFailed: { rollId: string; barcode: string | null; message: string }[];
+      linked: boolean;
+      warnings: string[];
+    }>
+  > {
+    const trimmed = (reason ?? "").trim();
+    if (trimmed.length < MIN_REASON_LENGTH) {
+      throw AppError.badRequest("Bu işlem için sebep yazmalısınız.");
+    }
+    const wo = await loadWo(workOrderId);
+    assertPlanEditable(wo);
+
+    const line = await prisma.orderLine.findUnique({
+      where: { id: orderLineId },
+      select: {
+        id: true,
+        itemId: true,
+        colorId: true,
+        width: true,
+        item: { select: { name: true } },
+        color: { select: { name: true } },
+        order: { select: { status: true, orderNumber: true } },
+      },
+    });
+    if (!line) throw AppError.badRequest("Sipariş satırı bulunamadı.");
+    if (line.order.status === OrderStatus.CANCELLED) {
+      throw AppError.badRequest("İptal edilmiş siparişe iş emri bağlanamaz.");
+    }
+    if (wo.targetItemId && line.itemId !== wo.targetItemId) {
+      throw AppError.badRequest(
+        `Kumaş uyuşmuyor — bu zincir kumaşı DEĞİŞTİREMEZ (topun cinsi düzeltilemez). ` +
+          `${line.order.orderNumber} siparişi "${line.item?.name ?? "—"}" istiyor.`,
+      );
+    }
+
+    const colorDiff = (wo.targetColorId ?? null) !== (line.colorId ?? null);
+    const lineWidth = num(line.width);
+    const widthDiff = lineWidth != null && num(wo.width) !== lineWidth;
+    // Fark yoksa bu uç yanlış kapı — normal bağlama yeter; sessizce ona düşmek
+    // yerine söyle (istemci zaten uyumlu satırı normal uçtan bağlar).
+    if (!colorDiff && !widthDiff) {
+      throw AppError.badRequest(
+        "Sipariş zaten iş emriyle uyumlu — normal 'Sipariş Bağla' kullanın.",
+      );
+    }
+
+    // ① Plan düzeltmesi (her biri kendi sebep+audit iziyle).
+    const warnings: string[] = [];
+    if (colorDiff) {
+      const res = await this.changeTargetColor(workOrderId, line.colorId ?? null, trimmed, userId);
+      warnings.push(...res.data.warnings);
+    }
+    if (widthDiff) {
+      await this.changeWidth(workOrderId, lineWidth, trimmed, userId, "MANUAL");
+    }
+
+    // ② Düzeltilebilir topları eşitle. Adaylar tekil motorla aynı engel
+    // kümesinden süzülür; kısmi başarı normaldir (failed[] rapora düşer).
+    const targets = await this.getRollAttributeTargets(workOrderId);
+    const editableIds = targets.data
+      .flatMap((b) => b.rolls)
+      .filter((r) => r.blocked === null)
+      .map((r) => r.id);
+    let rollsUpdated = 0;
+    let rollsFailed: { rollId: string; barcode: string | null; message: string }[] = [];
+    if (editableIds.length > 0) {
+      const applied = await this.applyAttributeToRolls(
+        workOrderId,
+        {
+          rollIds: editableIds,
+          ...(colorDiff ? { colorId: line.colorId ?? null } : {}),
+          ...(widthDiff ? { width: lineWidth } : {}),
+          reason: trimmed,
+        },
+        userId,
+        permissions,
+      );
+      rollsUpdated = applied.data.updated;
+      rollsFailed = applied.data.failed;
+    }
+
+    // ③ Bağ — hedef artık satırla uyumlu, normal doğrulamadan geçer.
+    const linkRes = await this.linkOrderLines(workOrderId, [orderLineId], userId);
+    warnings.push(...linkRes.data.warnings);
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "WORK_ORDER",
+      recordId: workOrderId,
+      newData: {
+        event: "ORDER_LINK_OVERRIDE",
+        orderLineId,
+        reason: trimmed,
+        changedColor: colorDiff,
+        changedWidth: widthDiff,
+        rollsUpdated,
+        rollsFailedCount: rollsFailed.length,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        changedColor: colorDiff,
+        changedWidth: widthDiff,
+        rollsUpdated,
+        rollsFailed,
+        linked: linkRes.data.linked > 0 || linkRes.data.alreadyLinked > 0,
+        warnings,
+      },
+      message:
+        `Sipariş bağlandı; plan ${[colorDiff && "renk", widthDiff && "en"].filter(Boolean).join(" + ")} ` +
+        `düzeltildi, ${rollsUpdated} top eşitlendi` +
+        (rollsFailed.length > 0 ? `, ${rollsFailed.length} top değişmedi` : "") +
+        ".",
+    };
+  }
 }
 
 export const workOrderLinkService = new WorkOrderLinkService();

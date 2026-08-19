@@ -1,6 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
-import { Text, TouchableRipple, ActivityIndicator } from 'react-native-paper';
+import { Text, TextInput, TouchableRipple, ActivityIndicator } from 'react-native-paper';
 
 import { SettingsPage, settingsStyles } from './settingsUi';
 import { useSubcontractorDefault, type SubcontractorDefaultMode } from '../../../hooks/useSubcontractorDefault';
@@ -48,6 +48,19 @@ export default function WorkPreferencesScreen() {
   const canTambur = has('mobile:tambur');
   const resetQuality = useDeviceSettingsStore((s) => s.tamburResetQualityAfterCut);
   const setResetQuality = useDeviceSettingsStore((s) => s.setTamburResetQualityAfterCut);
+  const shortCutEnabled = useDeviceSettingsStore((s) => s.tamburShortCutA1Enabled);
+  const setShortCutEnabled = useDeviceSettingsStore((s) => s.setTamburShortCutA1Enabled);
+  const shortCutThreshold = useDeviceSettingsStore((s) => s.tamburShortCutA1ThresholdM);
+  const setShortCutThreshold = useDeviceSettingsStore((s) => s.setTamburShortCutA1ThresholdM);
+  // Eşik input'u yazım sırasında serbest metin — store'a yalnız geçerli sayı
+  // iner (virgül de kabul: "12,5"). Boş bırakmak eşiği siler (kural inert).
+  const [thresholdInput, setThresholdInput] = React.useState(
+    shortCutThreshold != null ? String(shortCutThreshold) : '',
+  );
+  const commitThreshold = (raw: string) => {
+    const n = parseFloat(raw.replace(',', '.'));
+    void setShortCutThreshold(Number.isFinite(n) && n > 0 ? n : null);
+  };
 
   return (
     <SettingsPage title="Çalışma Tercihleri">
@@ -92,6 +105,78 @@ export default function WorkPreferencesScreen() {
               </TouchableRipple>
             );
           })}
+          <Text style={settingsStyles.hint}>Bu ayar yalnız BU CİHAZDA geçerlidir.</Text>
+
+          <Text style={[settingsStyles.label, { marginTop: 16 }]}>
+            TAMBUR — KISA KESİMDE OTOMATİK A1
+          </Text>
+          <Text style={settingsStyles.hint}>
+            Kesim uzunluğu girilen metrenin ALTINDAYSA kalite kendiliğinden A1
+            yazılır. Yalnız 1. Kalite seçiliyken devreye girer — A1 ya da Fire'ı
+            kendin seçtiysen dokunmaz; otomatik yazılan A1'i de elle geri
+            çevirebilirsin.
+          </Text>
+          {[
+            { value: false, label: 'Kapalı', desc: 'Bugünkü davranış — kalite hep elle seçilir.' },
+            { value: true, label: 'Açık', desc: 'Eşiğin altındaki kesim A1 yazılır (makine ölçümü dahil).' },
+          ].map((o) => {
+            const active = shortCutEnabled === o.value;
+            return (
+              <TouchableRipple
+                key={`sc-${String(o.value)}`}
+                onPress={() => void setShortCutEnabled(o.value)}
+                style={[
+                  settingsStyles.card,
+                  {
+                    borderWidth: active ? 2 : 1,
+                    borderColor: active ? '#6366f1' : '#334155',
+                    minHeight: 64,
+                    justifyContent: 'center',
+                  },
+                ]}
+              >
+                <View>
+                  <Text
+                    style={{
+                      fontSize: 16,
+                      fontWeight: active ? '800' : '600',
+                      color: active ? '#c7d2fe' : '#e2e8f0',
+                    }}
+                  >
+                    {o.label}
+                    {active ? '  ✓' : ''}
+                  </Text>
+                  <Text style={{ fontSize: 13, color: '#94a3b8', marginTop: 2 }}>{o.desc}</Text>
+                </View>
+              </TouchableRipple>
+            );
+          })}
+          {shortCutEnabled && (
+            <View style={{ gap: 6 }}>
+              <TextInput
+                mode="outlined"
+                dense
+                label="Eşik (metre)"
+                placeholder="örn: 15"
+                keyboardType="numeric"
+                value={thresholdInput}
+                onChangeText={(v) => {
+                  setThresholdInput(v);
+                  commitThreshold(v);
+                }}
+                style={{ maxWidth: 220 }}
+              />
+              {shortCutThreshold == null ? (
+                <Text style={[settingsStyles.hint, { color: '#f59e0b' }]}>
+                  ⚠ Eşik girilmeden kural ÇALIŞMAZ — bayrak açık ama etkisiz.
+                </Text>
+              ) : (
+                <Text style={settingsStyles.hint}>
+                  {shortCutThreshold} metrenin altındaki kesimler A1 yazılacak.
+                </Text>
+              )}
+            </View>
+          )}
           <Text style={settingsStyles.hint}>Bu ayar yalnız BU CİHAZDA geçerlidir.</Text>
         </View>
       )}

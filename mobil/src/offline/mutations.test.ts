@@ -216,6 +216,37 @@ describe("istasyon mutation kayıt bütünlüğü", () => {
       queryClient.getDefaultOptions().mutations?.networkMode,
     ).toBe("always");
   });
+
+  it("TAMBUR_FINALIZE_OPEN_FABRIC kuyruk gövdesi vars'ın HER alanını taşır", async () => {
+    // Kuyruk mutationFn'i gövdeyi ELLE kurar = sessiz allowlist (KAT dersi,
+    // 2026-08-13): bir alan düşerse ekran gönderir, isteğe hiç girmez ve
+    // kimse görmez. Bu test o üç kritik alanın sözleşmesi: sapma sebebi
+    // (varianceReason*) + plan-sapma onayı (confirmMismatch).
+    const { tamburService } = jest.requireMock("../services/tambur.service") as {
+      tamburService: { finalizeOpenFabric: jest.Mock };
+    };
+    tamburService.finalizeOpenFabric.mockResolvedValueOnce({ success: true });
+    const fn = defaultsFor(STATION_MUT.TAMBUR_FINALIZE_OPEN_FABRIC)
+      .mutationFn as (vars: unknown) => Promise<unknown>;
+    await fn({
+      rollId: "r-pg",
+      remainingAction: "keep_1kalite",
+      foldType: "2-KAT",
+      varianceReasonCode: "DIGER",
+      varianceReasonText: "test",
+      confirmMismatch: true,
+    });
+    expect(tamburService.finalizeOpenFabric).toHaveBeenCalledWith(
+      "r-pg",
+      expect.objectContaining({
+        remainingAction: "keep_1kalite",
+        foldType: "2-KAT",
+        varianceReasonCode: "DIGER",
+        varianceReasonText: "test",
+        confirmMismatch: true,
+      }),
+    );
+  });
 });
 
 describe("offline pause → online resume (gerçek networkMode + retry)", () => {

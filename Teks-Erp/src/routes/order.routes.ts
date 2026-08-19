@@ -390,6 +390,9 @@ router.get(
   requireAnyPermission(
     "order:read",
     "quality:write",
+    // 2026-08-19: Tambur "Sipariş Bağla" modalının "Tüm siparişler" sekmesi —
+    // tabletteki süpervizörün JWT'sinde order:read olmayabilir.
+    "workorder:write",
     "mobile:tambur",
     "mobile:tarti-paket",
     "mobile:hizli-is-emri",

@@ -64,6 +64,9 @@ const finalizeSchema = z.object({
   // burada yalnız BİÇİM normalleştirilir.
   foldType: foldTypeSchema,
   markedForKartela: z.boolean().optional(),
+  // Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH sonrası aynı istek
+  // bu bayrakla tekrarlanır. bkz. constants/tambur-plan-gate.ts.
+  confirmMismatch: z.boolean().optional(),
 });
 
 // Hata sadece NOKTA olarak girilir (startMeter); endMeter artık tutulmuyor.
@@ -95,6 +98,10 @@ const cutOpenFabricSchema = z.object({
   foldType: foldTypeSchema,
   // Offline/ağ-retry idempotency anahtarı (UUID) — barkod sunucuda sıralı atanır.
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  // Plan-gerçek sapma onayı — ⚠️ Zod tanımadığı anahtarı SESSİZCE SİLER: bu satır
+  // düşerse mobil onayı gönderir, backend hiç görmez ve operatör onayladığı hâlde
+  // 409'a çarpar (varianceReason dersinin aynısı).
+  confirmMismatch: z.boolean().optional(),
 });
 
 // export: `scripts/test_roll_variance.ts` §7 bu şemayı GERÇEK parse ile sınar.
@@ -118,6 +125,8 @@ export const finalizeOpenFabricSchema = z.object({
   // sebebini bulamaz (aynı tuzak 2026-08-05'te `foldType`'ta yaşandı).
   varianceReasonCode: z.string().max(64).optional().nullable(),
   varianceReasonText: z.string().max(500).optional().nullable(),
+  // Plan-gerçek sapma onayı — aynı sessiz-silme tuzağı (üstteki not).
+  confirmMismatch: z.boolean().optional(),
 });
 
 const cutWarehouseRollSchema = z.object({

@@ -16,6 +16,8 @@ const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
 const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
 const CAMERA_FACING_KEY = 'device_camera_facing';
+const TAMBUR_SHORT_CUT_A1_ENABLED_KEY = 'tambur_short_cut_a1_enabled';
+const TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY = 'tambur_short_cut_a1_threshold';
 
 /** Metraj kaynağı: makineden oku (auto) ya da operatör elle girsin (manual). */
 export type MeterEntryMode = 'manual' | 'auto';
@@ -102,6 +104,21 @@ interface DeviceSettingsState {
    * kalır (oturum ömürlü): ışık ihtiyacı okutulan YERE bağlıdır, cihaza değil.
    */
   cameraFacing: CameraFacing;
+  /**
+   * Tambur KISA KESİM → OTOMATİK A1 (2026-08-19 saha isteği): bayrak AÇIK ve
+   * eşik girilmişken, eşiğin ALTINDA çözülen kesim uzunluğu — seçili kalite
+   * varsayılan (1. KALİTE) ise — A1'e çevrilir. Kuralın tamamı
+   * `screens/Modules/Tambur/shortCutQuality.ts`te; burada yalnız ayar yaşar.
+   *
+   * İKİ AYRI ALAN, bilinçli: bayrağı kapatmak eşiği SİLMEZ — operatör geçici
+   * kapatıp açtığında "kaç metreydi?" diye hatırlamak zorunda kalmaz.
+   * Varsayılan KAPALI (kullanıcı isteği: "sadece aktifken geçerli olsun") —
+   * davranış değişikliği opt-in doğar. CİHAZDA kalıcı (`tamburCutMode` ile
+   * aynı gerekçe: "bu tamburda nasıl çalışıyoruz" gerçeği, kişi değil).
+   */
+  tamburShortCutA1Enabled: boolean;
+  /** Eşik (metre) — null = girilmemiş (bayrak açık olsa bile kural ateşlemez). */
+  tamburShortCutA1ThresholdM: number | null;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -119,6 +136,8 @@ interface DeviceSettingsState {
   setScanSoundEnabled: (v: boolean) => Promise<void>;
   setDocPageSize: (docType: string, v: DocPageSize) => Promise<void>;
   setCameraFacing: (v: CameraFacing) => Promise<void>;
+  setTamburShortCutA1Enabled: (v: boolean) => Promise<void>;
+  setTamburShortCutA1ThresholdM: (v: number | null) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -156,10 +175,12 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   scanSoundEnabled: true,
   docPageSize: {},
   cameraFacing: 'back',
+  tamburShortCutA1Enabled: false,
+  tamburShortCutA1ThresholdM: null,
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing, shortCutEnabled, shortCutThreshold] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -171,6 +192,8 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(DOC_PAGE_SIZE_KEY),
         storage.getItem(TAMBUR_OUTPUT_COLLAPSED_KEY),
         storage.getItem(CAMERA_FACING_KEY),
+        storage.getItem(TAMBUR_SHORT_CUT_A1_ENABLED_KEY),
+        storage.getItem(TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -193,6 +216,14 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // 'back' (barkod okumanın güvenli tarafı: ön kamerayla okuyamayan bir
       // operatör "kamera bozuk" der, arka kamerayla okuyamayan yönü çevirir).
       cameraFacing: cameraFacing === 'front' ? 'front' : 'back',
+      // Güvenli varsayılan KAPALI: yalnız birebir 'true' bayrağı açar (bozuk
+      // değer kaliteyi sessizce değiştiren bir kuralı açmamalı — tamburManual
+      // ile aynı gerekçe). Eşik: pozitif sonlu sayı değilse null (kural inert).
+      tamburShortCutA1Enabled: shortCutEnabled === 'true',
+      tamburShortCutA1ThresholdM: (() => {
+        const n = shortCutThreshold == null ? NaN : Number(shortCutThreshold);
+        return Number.isFinite(n) && n > 0 ? n : null;
+      })(),
       isLoaded: true,
     });
   },
@@ -271,5 +302,18 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   setCameraFacing: async (v) => {
     set({ cameraFacing: v });
     await storage.setItem(CAMERA_FACING_KEY, v);
+  },
+
+  setTamburShortCutA1Enabled: async (v) => {
+    set({ tamburShortCutA1Enabled: v });
+    await storage.setItem(TAMBUR_SHORT_CUT_A1_ENABLED_KEY, v ? 'true' : 'false');
+  },
+
+  // null/geçersiz → kayıt SİLİNİR (eşik girilmemiş durumuna döner).
+  setTamburShortCutA1ThresholdM: async (v) => {
+    const valid = v != null && Number.isFinite(v) && v > 0 ? v : null;
+    set({ tamburShortCutA1ThresholdM: valid });
+    if (valid == null) await storage.deleteItem(TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY);
+    else await storage.setItem(TAMBUR_SHORT_CUT_A1_THRESHOLD_KEY, String(valid));
   },
 }));

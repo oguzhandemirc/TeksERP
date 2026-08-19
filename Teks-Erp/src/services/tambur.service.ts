@@ -38,6 +38,7 @@ import { buildTextSearch } from "../utils/query-parser";
 import type { CursorPaginatedResponse } from "./base.service";
 import { K18_DEAD_STATUSES } from "./batch.service";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
+import { assertRollMatchesPlan } from "./helpers/tambur-plan-gate.helper";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
 
 export interface SwatchStats {
@@ -547,6 +548,9 @@ export class TamburService {
       /** Çıktı topları (depoya gidenler) kartelalık işaretlensin — depoda
        *  kartela sevki için kolay bulunsun. Sevki engellemez. */
       markedForKartela?: boolean;
+      /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer.
+       *  Sapma yokken gönderilmesi zararsız (kapı hiç açılmaz). */
+      confirmMismatch?: boolean;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer).
@@ -696,6 +700,18 @@ export class TamburService {
       wo?.targetColorId && !roll.colorId
         ? "Bu rulo henüz renk kazanmadı (boyahane atlandı veya başarısız oldu). Ham olarak depoya geçecek."
         : null;
+
+    // ── PLAN-GERÇEK SAPMA KAPISI (2026-08-19, ONAYLI DEVAM) ────────────────
+    // Ortak yüklem: helpers/tambur-plan-gate.helper (üç depo-indiriş yolu aynı
+    // kapı). Pre-tx; idempotent retry erken döndüğü için onaylı işin replay'i
+    // kapıya çarpmaz.
+    await assertRollMatchesPlan(
+      { id: roll.id, barcode: roll.barcode, colorId: roll.colorId, width: roll.width },
+      { workOrderId: wo?.id ?? null, targetColorId: wo?.targetColorId ?? null, width: wo?.width ?? null },
+      data.confirmMismatch,
+      userId,
+      "finalize",
+    );
 
     // Defect kararlarını topla — sadece lifecycle marker (isProcessed, actionTaken).
     // Kesim üretmez — kesimler `data.cuts` listesinden geliyor.
@@ -1424,7 +1440,13 @@ export class TamburService {
       // yapıştırılır; ortasından substring araması saha akışı değil. Ürün/renk/
       // parti küçük master tablolarda kaldığı için `contains` (fuzzy) korunur.
       where.OR = [
-        { barcode: search },
+        // ⚠️ `normalizeScanCode` ZORUNLU: el tarayıcısı barkodu KÜÇÜK harfle
+        // gönderebiliyor (2026-08-17 saha vakası) ve burada TAM EŞİTLİK arandığı
+        // için küçük harfli girdi SESSİZCE 0 sonuç verir — top listede "yok"
+        // görünür ama yan panelde açılır (okutma yolu normalize ediyor). Ana top
+        // listesi 2026-08-19'da düzeltilmişti; bu üç yüzey (Tambur çıktı listesi +
+        // kartela liste/istatistik) atlanmıştı.
+        { barcode: normalizeScanCode(search) },
         ...buildTextSearch<Prisma.RollWhereInput>(search, {
           text: ["item.name", "color.name", "item.customerAliases.some.alias"],
           code: ["item.code", "producedInStep.workOrder.workOrderNumber"],
@@ -1530,8 +1552,10 @@ export class TamburService {
       // scan eder. SW- barkod/kart hep tam okutulur; kısmi tarama saha akışı değil.
       // Ürün adı/kodu küçük master tabloya join (itemId IN) olduğu için contains kalır.
       where.OR = [
-        { barcode: search },
-        { cardNumber: search },
+        // ⚠️ Barkod/kart no TAM eşleşme → girdi normalize EDİLMEK ZORUNDA
+        // (bkz. `listRecentOutputRolls` notu; aynı sessiz-0-sonuç arızası).
+        { barcode: normalizeScanCode(search) },
+        { cardNumber: normalizeScanCode(search) },
         ...buildTextSearch<Prisma.SwatchWhereInput>(search, {
           text: ["item.name"],
           code: ["item.code"],
@@ -1630,8 +1654,10 @@ export class TamburService {
       // scan eder. SW- barkod/kart hep tam okutulur; kısmi tarama saha akışı değil.
       // Ürün adı/kodu küçük master tabloya join (itemId IN) olduğu için contains kalır.
       where.OR = [
-        { barcode: search },
-        { cardNumber: search },
+        // ⚠️ Barkod/kart no TAM eşleşme → girdi normalize EDİLMEK ZORUNDA
+        // (bkz. `listRecentOutputRolls` notu; aynı sessiz-0-sonuç arızası).
+        { barcode: normalizeScanCode(search) },
+        { cardNumber: normalizeScanCode(search) },
         ...buildTextSearch<Prisma.SwatchWhereInput>(search, {
           text: ["item.name"],
           code: ["item.code"],
@@ -2630,6 +2656,8 @@ export class TamburService {
       foldType?: string | null;
       /** Offline/ağ-retry idempotency anahtarı (UUID) — cutWarehouseRoll ile aynı. */
       clientToken?: string;
+      /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer. */
+      confirmMismatch?: boolean;
     },
     userId?: string,
     /** Kesimin makinesi — "Bu makine" süzgeci + makine raporları (2026-08-12). */
@@ -2649,7 +2677,8 @@ export class TamburService {
           include: {
             station: { select: { kind: true } },
             // WO.foldType = PLANLAMA değeri; istemci ve parent susarsa son fallback.
-            workOrder: { select: { status: true, foldType: true } },
+            // id/targetColorId/width: plan-gerçek sapma kapısı için (aynı select).
+            workOrder: { select: { id: true, status: true, foldType: true, targetColorId: true, width: true } },
           },
         },
         properties: { select: { propertyId: true, valueId: true } },
@@ -2679,6 +2708,20 @@ export class TamburService {
         `Açık kumaş aktif değil (${parent.status})`,
       );
     }
+    // PLAN-GERÇEK SAPMA KAPISI: per-cut modelde çocuk KESİM ANINDA depoya iner —
+    // kapı bitirmeyi bekleyemez. Operatör topta BİR KEZ onaylar; istemci aynı
+    // topun sonraki kesimlerine bayrağı kendisi taşır (tek soru / top).
+    await assertRollMatchesPlan(
+      { id: parent.id, barcode: parent.barcode, colorId: parent.colorId, width: parent.width },
+      {
+        workOrderId: parent.currentStep.workOrder?.id ?? null,
+        targetColorId: parent.currentStep.workOrder?.targetColorId ?? null,
+        width: parent.currentStep.workOrder?.width ?? null,
+      },
+      data.confirmMismatch,
+      userId,
+      "cut",
+    );
     // Aşım: operatör açık kumaşı kayıtlıdan fazla ölçtü (tambur asıl ölçüm noktası).
     // Flag kapalıyken reddet (bugünkü davranış); açıkken kabul → açık kumaşın tamamı
     // tek topa dönüşür, parent tamamen tüketilir (aşağıda currentQty=0).
@@ -2970,6 +3013,8 @@ export class TamburService {
       /// bkz. `constants/variance-reasons.LEGACY_REASON_CODE`.
       varianceReasonCode?: string | null;
       varianceReasonText?: string | null;
+      /** Plan-gerçek sapma onayı (renk/en) — 409 PLAN_MISMATCH'i geçer. */
+      confirmMismatch?: boolean;
     },
     userId?: string,
     /** TAMBUR makine atfı — aktif çalışma oturumundan (controller çözer). */
@@ -3041,6 +3086,25 @@ export class TamburService {
       parent.currentStep.workOrder.status === WorkOrderStatus.SUPERSEDED
     ) {
       throw AppError.conflict("İptal/devredilmiş iş emrinin açık kumaşı finalize edilemez");
+    }
+    // PLAN-GERÇEK SAPMA KAPISI — yalnız kalan kuyruk DEPOYA inerken (keep_*).
+    // scrap/discard kapı dışı: fire satılabilir stok üretmez, sormak gürültü.
+    {
+      // Aşağıdaki gerçek türetmeyle (3100) BİREBİR aynı: varsayılan "discard".
+      const act = data.remainingAction ?? (data.scrapRemaining === true ? "scrap" : "discard");
+      if ((act === "keep_1kalite" || act === "keep_a1") && Number(parent.currentQty) > 0) {
+        await assertRollMatchesPlan(
+          { id: parent.id, barcode: parent.barcode, colorId: parent.colorId, width: parent.width },
+          {
+            workOrderId: parent.currentStep.workOrder.id,
+            targetColorId: parent.currentStep.workOrder.targetColorId,
+            width: parent.currentStep.workOrder.width,
+          },
+          data.confirmMismatch,
+          userId,
+          "finalize-open-fabric",
+        );
+      }
     }
 
     // remainingAction varsa onu kullan; yoksa eski scrapRemaining'den türet.

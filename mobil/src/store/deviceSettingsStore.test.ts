@@ -192,3 +192,70 @@ describe('deviceSettingsStore — kamera yönü tercihi', () => {
     expect(useDeviceSettingsStore.getState().cameraFacing).toBe('front');
   });
 });
+
+// Tambur kısa kesim → otomatik A1 ayarı (2026-08-19 saha isteği). Kuralın
+// kendisi shortCutQuality.test.ts'te; burada yalnız ayarın kalıcılığı ve
+// güvenli varsayılanları ölçülür.
+describe('deviceSettingsStore — Tambur kısa kesim A1 ayarı', () => {
+  it('kayıt yokken KAPALI + eşik girilmemiş (opt-in doğar)', async () => {
+    fakeDisk();
+    useDeviceSettingsStore.setState({
+      tamburShortCutA1Enabled: true,
+      tamburShortCutA1ThresholdM: 99,
+      isLoaded: false,
+    });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect(s.tamburShortCutA1Enabled).toBe(false);
+    expect(s.tamburShortCutA1ThresholdM).toBeNull();
+  });
+
+  it('bayrak + eşik diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
+    const disk = fakeDisk();
+    await useDeviceSettingsStore.getState().setTamburShortCutA1Enabled(true);
+    await useDeviceSettingsStore.getState().setTamburShortCutA1ThresholdM(15);
+    expect(disk['tambur_short_cut_a1_enabled']).toBe('true');
+    expect(disk['tambur_short_cut_a1_threshold']).toBe('15');
+
+    useDeviceSettingsStore.setState({
+      tamburShortCutA1Enabled: false,
+      tamburShortCutA1ThresholdM: null,
+      isLoaded: false,
+    });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect(s.tamburShortCutA1Enabled).toBe(true);
+    expect(s.tamburShortCutA1ThresholdM).toBe(15);
+  });
+
+  it('bayrağı kapatmak eşiği SİLMEZ (aç-kapa eşik kaybettirmez)', async () => {
+    const disk = fakeDisk({ tambur_short_cut_a1_enabled: 'true', tambur_short_cut_a1_threshold: '20' });
+    await useDeviceSettingsStore.getState().setTamburShortCutA1Enabled(false);
+    expect(disk['tambur_short_cut_a1_threshold']).toBe('20');
+
+    useDeviceSettingsStore.setState({ tamburShortCutA1ThresholdM: null, isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1ThresholdM).toBe(20);
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1Enabled).toBe(false);
+  });
+
+  it('diskteki bozuk değerler güvenli tarafa düşer (bayrak KAPALI, eşik null)', async () => {
+    fakeDisk({ tambur_short_cut_a1_enabled: 'TRUE', tambur_short_cut_a1_threshold: 'ÇÖP' });
+    useDeviceSettingsStore.setState({
+      tamburShortCutA1Enabled: true,
+      tamburShortCutA1ThresholdM: 15,
+      isLoaded: false,
+    });
+    await useDeviceSettingsStore.getState().init();
+    const s = useDeviceSettingsStore.getState();
+    expect(s.tamburShortCutA1Enabled).toBe(false);
+    expect(s.tamburShortCutA1ThresholdM).toBeNull();
+  });
+
+  it('geçersiz eşik yazımı kaydı temizler (0/negatif/NaN → girilmemiş)', async () => {
+    const disk = fakeDisk({ tambur_short_cut_a1_threshold: '15' });
+    await useDeviceSettingsStore.getState().setTamburShortCutA1ThresholdM(0);
+    expect(disk['tambur_short_cut_a1_threshold']).toBeUndefined();
+    expect(useDeviceSettingsStore.getState().tamburShortCutA1ThresholdM).toBeNull();
+  });
+});

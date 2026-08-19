@@ -1,0 +1,361 @@
+// =============================================================================
+// Tambur plan-gerçek sapma kapısı + uyumsuz sipariş override zinciri (2026-08-19)
+// =============================================================================
+// İki kullanıcı kararının bekçisi:
+//   A) Tambur finalize ONAYLI DEVAM: topun rengi/eni iş emri hedefinden saparsa
+//      409 PLAN_MISMATCH; confirmMismatch:true ile geçer ve karar audit'e düşer.
+//      Kapsam: renk (farklı VEYA hedef varken renksiz) + EŞİKLİ en (>10 cm).
+//      Hedef renksiz + top boyalı KAPSAM DIŞI (zımpara WO'su meşru).
+//   B) linkOrderLineWithOverride zinciri: plan düzelt + topları eşitle + bağla.
+//      Kumaş farkı HER ZAMAN 400; zaten uyumlu satır 400 (yanlış kapı);
+//      IN_PRODUCTION top yetkisiz permissions ile rollsFailed'a düşer ama bağ
+//      yine kurulur (kısmi başarı bilinçli).
+// Fixture TEST- prefix'li, kendi ürettiğini siler; seed'e yalnız kalite
+// kodu (1.KALITE) ile bağlanır.
+import { Prisma, RollStatus, StationKind } from "@prisma/client";
+import prisma from "../src/lib/prisma";
+import { TamburService } from "../src/services/tambur.service";
+import { workOrderLinkService } from "../src/services/workorder-link.service";
+import {
+  PLAN_MISMATCH_CODE,
+  TAMBUR_PLAN_WIDTH_TOLERANCE_CM,
+} from "../src/constants/tambur-plan-gate";
+import { AppError } from "../src/utils/app-error";
+
+let pass = 0, fail = 0;
+const ok = (c: boolean, m: string, d = "") => {
+  console.log(`${c ? "  ✓" : "  ✗ FAIL"} ${m}${d ? ` — ${d}` : ""}`);
+  c ? pass++ : fail++;
+};
+
+/** AppError yakala — yoksa null. */
+async function expectAppError(fn: () => Promise<unknown>): Promise<AppError | null> {
+  try {
+    await fn();
+    return null;
+  } catch (e) {
+    return e instanceof AppError ? e : null;
+  }
+}
+
+const rollIds: string[] = [];
+const woIds: string[] = [];
+const colorIds: string[] = [];
+const itemIds: string[] = [];
+const orderIds: string[] = [];
+const customerIds: string[] = [];
+const batchIds: string[] = [];
+
+(async () => {
+  const svc = new TamburService();
+  const ts = `${process.pid}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
+  try {
+    const station = await prisma.station.findFirstOrThrow({
+      where: { kind: StationKind.TAMBUR },
+      select: { id: true },
+    });
+    const [mavi, gri] = await Promise.all([
+      prisma.color.create({ data: { code: `TEST-PG-MAVI-${ts}`, name: `TEST PG MAVI ${ts}` }, select: { id: true } }),
+      prisma.color.create({ data: { code: `TEST-PG-GRI-${ts}`, name: `TEST PG GRI ${ts}` }, select: { id: true } }),
+    ]);
+    colorIds.push(mavi.id, gri.id);
+    const [item, item2] = await Promise.all([
+      prisma.item.create({
+        data: { code: `TEST-PG-ITM-${ts}`, name: `TEST PG PATOS ${ts}`, itemType: "FABRIC", unit: "MT" },
+        select: { id: true },
+      }),
+      prisma.item.create({
+        data: { code: `TEST-PG-ITM2-${ts}`, name: `TEST PG TERGAL ${ts}`, itemType: "FABRIC", unit: "MT" },
+        select: { id: true },
+      }),
+    ]);
+    itemIds.push(item.id, item2.id);
+
+    /** WO + aktif TAMBUR adımı + adımda 1 top. */
+    const makeWoWithRoll = async (opts: {
+      targetColorId?: string | null;
+      woWidth?: number | null;
+      rollColorId?: string | null;
+      rollWidth?: number | null;
+    }) => {
+      const wo = await prisma.workOrder.create({
+        data: {
+          workOrderNumber: `TEST-PG-IE-${ts}-${woIds.length}`,
+          status: "IN_PROGRESS",
+          targetItemId: item.id,
+          targetColorId: opts.targetColorId ?? null,
+          width: opts.woWidth ?? null,
+        },
+        select: { id: true },
+      });
+      woIds.push(wo.id);
+      const step = await prisma.workOrderStep.create({
+        data: { workOrderId: wo.id, stationId: station.id, stepSequence: 1, status: "ACTIVE" },
+        select: { id: true },
+      });
+      const roll = await prisma.roll.create({
+        data: {
+          barcode: `TEST-PG-R-${ts}-${rollIds.length}`,
+          itemId: item.id,
+          colorId: opts.rollColorId ?? null,
+          width: opts.rollWidth ?? null,
+          initialQty: 100,
+          currentQty: 100,
+          status: RollStatus.IN_PRODUCTION,
+          currentStepId: step.id,
+          entrySource: "SUPPLIER_RECEIPT",
+        },
+        select: { id: true },
+      });
+      rollIds.push(roll.id);
+      await prisma.rollMovement.create({ data: { rollId: roll.id, workOrderStepId: step.id, qtyIn: 100 } });
+      return { woId: wo.id, stepId: step.id, rollId: roll.id };
+    };
+    const finalizeArgs = (rollId: string, confirm?: boolean) => ({
+      rollId,
+      decisions: [],
+      cuts: [{ length: 40, qualityGrade: "1.KALITE", relatedErrorIds: [] as string[] }],
+      ...(confirm ? { confirmMismatch: true } : {}),
+    });
+
+    // ── A1. Renk + en sapması → 409 PLAN_MISMATCH, top el değmeden kalır ──
+    console.log("A) Finalize kapısı");
+    const f1 = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: mavi.id, rollWidth: 345 });
+    const e1 = await expectAppError(() => svc.finalize(finalizeArgs(f1.rollId)));
+    ok(e1 !== null && e1.statusCode === 409, "A1 sapma → 409", e1 ? `${e1.statusCode}` : "hata yok!");
+    ok(e1?.details?.code === PLAN_MISMATCH_CODE, "A1 details.code=PLAN_MISMATCH", String(e1?.details?.code));
+    const mm1 = (e1?.details?.mismatches ?? []) as { field: string }[];
+    ok(
+      mm1.length === 2 && mm1.some((m) => m.field === "color") && mm1.some((m) => m.field === "width"),
+      "A1 renk + en ikisi de listede",
+      mm1.map((m) => m.field).join(","),
+    );
+    const r1 = await prisma.roll.findUniqueOrThrow({ where: { id: f1.rollId }, select: { status: true } });
+    ok(r1.status === RollStatus.IN_PRODUCTION, "A1 top IN_PRODUCTION kaldı (kapı pre-tx)", r1.status);
+
+    // ── A2. Eşit fark eşiği AŞMAZ (±10 = normal) ──
+    const f2 = await makeWoWithRoll({
+      targetColorId: gri.id, woWidth: 330,
+      rollColorId: gri.id, rollWidth: 330 + TAMBUR_PLAN_WIDTH_TOLERANCE_CM,
+    });
+    const res2 = await svc.finalize(finalizeArgs(f2.rollId));
+    res2.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    ok(res2.success === true, "A2 eşik SINIRINDA fark kapıya çarpmaz (±10 dahil normal)");
+
+    // ── A3. Hedef varken RENKSİZ top → sapma ──
+    const f3 = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: null });
+    const e3 = await expectAppError(() => svc.finalize(finalizeArgs(f3.rollId)));
+    const mm3 = (e3?.details?.mismatches ?? []) as { field: string; rollValue: unknown }[];
+    ok(
+      e3?.details?.code === PLAN_MISMATCH_CODE && mm3.length === 1 && mm3[0]!.field === "color" && mm3[0]!.rollValue === null,
+      "A3 renksiz top hedefli WO'da kapıya çarpar",
+      JSON.stringify(mm3),
+    );
+
+    // ── A4. Hedef RENKSİZ + top boyalı → KAPSAM DIŞI (zımpara WO'su) ──
+    const f4 = await makeWoWithRoll({ targetColorId: null, rollColorId: mavi.id });
+    const res4 = await svc.finalize(finalizeArgs(f4.rollId));
+    res4.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    ok(res4.success === true, "A4 renk-hedefsiz WO'da boyalı top sapma DEĞİL (bilinçli kapsam)");
+
+    // ── A5. confirmMismatch → geçer + imzalı karar audit'te ──
+    const e5 = await expectAppError(() => svc.finalize(finalizeArgs(f1.rollId)));
+    ok(e5 !== null, "A5 ön koşul: onaysız hâlâ 409");
+    const res5 = await svc.finalize(finalizeArgs(f1.rollId, true));
+    res5.data.splitRolls.forEach((c) => rollIds.push(c.id));
+    ok(res5.data.originalRoll.status === RollStatus.TAMBUR_CONSUMED, "A5 onayla finalize geçti", res5.data.originalRoll.status);
+    const auditRow = await prisma.systemLog.findFirst({
+      where: { recordId: f1.rollId, newData: { path: ["event"], equals: "TAMBUR_PLAN_MISMATCH_CONFIRMED" } },
+      select: { newData: true },
+    });
+    ok(auditRow !== null, "A5 onay kararı audit'e düştü (TAMBUR_PLAN_MISMATCH_CONFIRMED)");
+    const auditMm = ((auditRow?.newData ?? {}) as { mismatches?: unknown[] }).mismatches;
+    ok(Array.isArray(auditMm) && auditMm.length === 2, "A5 audit sapma detayını taşıyor", `n=${Array.isArray(auditMm) ? auditMm.length : "-"}`);
+
+    // ── A6. Onaylı finalize'ın idempotent retry'ı kapıya ÇARPMAZ ──
+    const res6 = await svc.finalize(finalizeArgs(f1.rollId)); // confirm YOK — yine de geçmeli
+    ok(
+      res6.success === true && (res6.message ?? "").includes("idempotent"),
+      "A6 tamamlanmış topun replay'i onaysız da idempotent döner",
+      res6.message ?? "",
+    );
+
+    // ── A7. cutOpenFabric AYNI kapıdan geçer (çocuk kesim anında depoya iner) ──
+    const f7 = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
+    const e7 = await expectAppError(() =>
+      svc.cutOpenFabric(f7.rollId, { lengthMeters: 30, status: "WAREHOUSE" }),
+    );
+    ok(e7?.details?.code === PLAN_MISMATCH_CODE, "A7 kesim (cutOpenFabric) kapıya çarpar", e7?.message ?? "hata yok!");
+    const res7 = await svc.cutOpenFabric(f7.rollId, { lengthMeters: 30, status: "WAREHOUSE", confirmMismatch: true });
+    const child7 = res7.data?.childRoll as { id: string } | undefined;
+    if (child7) rollIds.push(child7.id);
+    ok(!!child7, "A7 onayla kesim geçti");
+
+    // ── A8. finalizeOpenFabric: keep_* kapıya çarpar, scrap/discard ÇARPMAZ ──
+    const e8 = await expectAppError(() =>
+      svc.finalizeOpenFabric(f7.rollId, { remainingAction: "keep_1kalite" }),
+    );
+    ok(e8?.details?.code === PLAN_MISMATCH_CODE, "A8 keep_1kalite bitirme kapıya çarpar", e8?.message ?? "hata yok!");
+    const res8 = await svc.finalizeOpenFabric(f7.rollId, {
+      remainingAction: "keep_1kalite",
+      confirmMismatch: true,
+    });
+    if (res8.data?.remainingChildId) rollIds.push(res8.data.remainingChildId);
+    ok(res8.success === true, "A8 onayla bitirme geçti");
+    // scrap yolu: fire depoya inmez → kapı hiç açılmaz (ayrı fixture).
+    const f9 = await makeWoWithRoll({ targetColorId: gri.id, rollColorId: mavi.id });
+    const res9 = await svc.finalizeOpenFabric(f9.rollId, {
+      remainingAction: "scrap",
+      varianceReasonCode: "DIGER",
+      varianceReasonText: "test fire",
+    });
+    if (res9.data?.remainingChildId) rollIds.push(res9.data.remainingChildId);
+    ok(res9.success === true, "A8b scrap bitirme kapı DIŞI (fire depoya inmez)");
+
+    // ── B. Override zinciri ──
+    console.log("B) Uyumsuz sipariş override zinciri");
+    const customer = await prisma.customer.create({
+      data: { code: `TEST-PG-CUS-${ts}`, name: `TEST PG MUSTERI ${ts}` },
+      select: { id: true },
+    });
+    customerIds.push(customer.id);
+    const order = await prisma.order.create({
+      data: {
+        orderNumber: `TEST-PG-ORD-${ts}`,
+        customerId: customer.id,
+        lines: {
+          create: [
+            { itemId: item.id, colorId: mavi.id, width: 345, quantity: 500 },  // renk+en uyumsuz (WO GRİ/330)
+            { itemId: item2.id, colorId: gri.id, width: 330, quantity: 300 },  // kumaş uyumsuz
+            { itemId: item.id, colorId: gri.id, width: 330, quantity: 200 },   // birebir uyumlu
+          ],
+        },
+      },
+      select: { id: true, lines: { select: { id: true, itemId: true, colorId: true } } },
+    });
+    orderIds.push(order.id);
+    const lineMismatch = order.lines.find((l) => l.itemId === item.id && l.colorId === mavi.id)!;
+    const lineWrongItem = order.lines.find((l) => l.itemId === item2.id)!;
+    const lineCompatible = order.lines.find((l) => l.itemId === item.id && l.colorId === gri.id)!;
+
+    // WO: hedef GRİ/330; partiyle bağlı 1 STOCK top (yetkisiz düzeltilebilir)
+    // + 1 IN_PRODUCTION top (roll:manual-adjust ister).
+    const b = await makeWoWithRoll({ targetColorId: gri.id, woWidth: 330, rollColorId: gri.id, rollWidth: 330 });
+    const batch = await prisma.batch.create({
+      data: { batchNumber: `TEST-PG-BT-${ts}`, workOrderId: b.woId },
+      select: { id: true },
+    });
+    batchIds.push(batch.id);
+    const stockRoll = await prisma.roll.create({
+      data: {
+        barcode: `TEST-PG-RS-${ts}`,
+        itemId: item.id,
+        colorId: gri.id,
+        width: 330,
+        initialQty: 80,
+        currentQty: 80,
+        status: RollStatus.STOCK,
+        batchId: batch.id,
+        entrySource: "SUPPLIER_RECEIPT",
+      },
+      select: { id: true },
+    });
+    rollIds.push(stockRoll.id);
+
+    // B1. Kumaş farkı HER ZAMAN 400 (cins düzeltilemez).
+    const eB1 = await expectAppError(() =>
+      workOrderLinkService.linkOrderLineWithOverride(b.woId, lineWrongItem.id, "test sebep", undefined, ["workorder:write", "roll:manual-adjust"]),
+    );
+    ok(eB1 !== null && eB1.statusCode === 400 && eB1.message.includes("Kumaş"), "B1 kumaş farkı → 400", eB1?.message ?? "hata yok!");
+
+    // B2. Zaten uyumlu satır → yanlış kapı, 400.
+    const eB2 = await expectAppError(() =>
+      workOrderLinkService.linkOrderLineWithOverride(b.woId, lineCompatible.id, "test sebep", undefined, ["roll:manual-adjust"]),
+    );
+    ok(eB2 !== null && eB2.message.includes("zaten"), "B2 uyumlu satır → 'normal bağla' 400", eB2?.message ?? "hata yok!");
+
+    // B3. Sebep kısa → 400.
+    const eB3 = await expectAppError(() =>
+      workOrderLinkService.linkOrderLineWithOverride(b.woId, lineMismatch.id, "x", undefined, ["roll:manual-adjust"]),
+    );
+    ok(eB3 !== null && eB3.statusCode === 400, "B3 sebepsiz/kısa sebep → 400");
+
+    // B4. Yetkisiz permissions: STOCK top düzelir, IN_PRODUCTION top failed'a
+    // düşer, bağ YİNE kurulur (kısmi başarı bilinçli).
+    const resB4 = await workOrderLinkService.linkOrderLineWithOverride(
+      b.woId, lineMismatch.id, "planlamaci yanlis renk girmis - mal mavi", undefined, [],
+    );
+    ok(resB4.data.changedColor && resB4.data.changedWidth, "B4 plan renk+en düzeltildi");
+    ok(resB4.data.linked === true, "B4 bağ kuruldu (kısmi top başarısına rağmen)");
+    ok(
+      resB4.data.rollsUpdated === 1 && resB4.data.rollsFailed.length === 1 && resB4.data.rollsFailed[0]!.rollId === b.rollId,
+      "B4 STOCK top düzeldi, IN_PRODUCTION top yetkisiz permissions ile failed",
+      `updated=${resB4.data.rollsUpdated} failed=${resB4.data.rollsFailed.length}`,
+    );
+    const woB4 = await prisma.workOrder.findUniqueOrThrow({
+      where: { id: b.woId },
+      select: { targetColorId: true, width: true },
+    });
+    ok(
+      woB4.targetColorId === mavi.id && woB4.width !== null && new Prisma.Decimal(woB4.width).equals(345),
+      "B4 WO hedefi siparişe eşitlendi (MAVİ/345)",
+      `color=${woB4.targetColorId === mavi.id} w=${woB4.width}`,
+    );
+    const stockAfter = await prisma.roll.findUniqueOrThrow({
+      where: { id: stockRoll.id },
+      select: { colorId: true, width: true },
+    });
+    ok(
+      stockAfter.colorId === mavi.id && stockAfter.width !== null && new Prisma.Decimal(stockAfter.width).equals(345),
+      "B4 STOCK top yeni değere çekildi",
+      `color=${stockAfter.colorId === mavi.id} w=${stockAfter.width}`,
+    );
+    const linkRow = await prisma.workOrderToOrderLine.findFirst({
+      where: { workOrderId: b.woId, orderLineId: lineMismatch.id },
+      select: { orderLineId: true },
+    });
+    ok(linkRow !== null, "B4 workOrderToOrderLine satırı var");
+    const ovAudit = await prisma.systemLog.findFirst({
+      where: { recordId: b.woId, newData: { path: ["event"], equals: "ORDER_LINK_OVERRIDE" } },
+      select: { id: true },
+    });
+    ok(ovAudit !== null, "B4 zincir audit'i (ORDER_LINK_OVERRIDE) yazıldı");
+
+    // B5. IN_PRODUCTION top TAM yetkiyle de düzelir (tekil motor sözleşmesi).
+    const resB5 = await workOrderLinkService.applyAttributeToRolls(
+      b.woId,
+      { rollIds: [b.rollId], colorId: mavi.id, reason: "supervizor duzeltmesi" },
+      undefined,
+      ["roll:manual-adjust"],
+    );
+    ok(resB5.data.updated === 1 && resB5.data.failed.length === 0, "B5 roll:manual-adjust ile IN_PRODUCTION top düzeldi");
+  } catch (e) {
+    fail++;
+    console.error("HATA:", e instanceof Error ? e.message : e);
+  } finally {
+    try {
+      // Söküm: variance → op → movement → property → log → roll → link → batch → step → WO → order → master.
+      await prisma.systemLog.deleteMany({ where: { recordId: { in: [...rollIds, ...woIds] } } }).catch(() => undefined);
+      await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.rollProperty.deleteMany({ where: { rollId: { in: rollIds } } });
+      await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
+      await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: woIds } } });
+      await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
+      await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } });
+      await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } });
+      await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIds } } });
+      await prisma.order.deleteMany({ where: { id: { in: orderIds } } });
+      await prisma.color.deleteMany({ where: { id: { in: colorIds } } });
+      await prisma.item.deleteMany({ where: { id: { in: itemIds } } });
+      await prisma.customer.deleteMany({ where: { id: { in: customerIds } } });
+      console.log("(temizlendi — TEST-PG fixture silindi)");
+    } catch (e) {
+      console.error("cleanup hata:", e instanceof Error ? e.message : e);
+    }
+    await prisma.$disconnect();
+  }
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  process.exit(fail > 0 ? 1 : 0);
+})();

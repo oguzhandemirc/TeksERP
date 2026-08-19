@@ -1089,6 +1089,9 @@ export interface TamburCutRequest {
   targetCustomerId?: string | null;
   /** Çıktı top kartelalık işaretlensin (depoda kartela sevki için). */
   markedForKartela?: boolean;
+  /** Plan-gerçek sapma onayı (renk/en) — backend 409 PLAN_MISMATCH'ini geçer.
+   *  Operatör topta BİR KEZ onaylar; aynı topun sonraki kesimleri bayrağı taşır. */
+  confirmMismatch?: boolean;
   /**
    * Bu kesimde doğan ÇOCUĞUN katı — topun KALICI özelliği (2026-08-04).
    * Kesim anında seçilen değer kazanır: aynı topun iki parçası farklı kat
@@ -1122,6 +1125,8 @@ export interface TamburFinalizeOpenFabricRequest {
   remainingAction?: TamburFinalizeRemainingAction;
   /** Deprecated — `remainingAction` kullan. true ≈ "scrap", false ≈ "discard". */
   scrapRemaining?: boolean;
+  /** Plan-gerçek sapma onayı — bkz. TamburCutRequest.confirmMismatch. */
+  confirmMismatch?: boolean;
   notes?: string | null;
   foldType?: string | null;
   layerCount?: number | null;

@@ -213,6 +213,11 @@ const linkOrderLinesSchema = z.object({
     .array(z.string().uuid("Geçersiz sipariş satırı ID"))
     .min(1, "En az bir sipariş satırı seçmelisiniz"),
 });
+// Uyumsuz sipariş zinciri (Tambur süpervizör) — tek satır + zorunlu sebep.
+const linkOrderLineOverrideSchema = z.object({
+  orderLineId: z.string().uuid("Geçersiz sipariş satırı ID"),
+  reason: z.string().min(3, "Sebep yazmalısınız").max(500),
+});
 // `reason` ZORUNLU ve boş geçilemez: bu iki uç varlık sebebini sebepten alıyor.
 // Sebepsiz bir renk/en değişikliği zaten "Düzenle" ekranında vardı.
 const changeTargetColorSchema = z.object({
@@ -616,6 +621,23 @@ export class WorkOrderController {
         req.params.id as string,
         body.orderLineIds,
         req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /** POST /api/work-orders/:id/order-links/override — düzelt + eşitle + bağla zinciri. */
+  async linkOrderLineWithOverride(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = linkOrderLineOverrideSchema.parse(req.body);
+      const result = await workOrderLinkService.linkOrderLineWithOverride(
+        req.params.id as string,
+        body.orderLineId,
+        body.reason,
+        req.user?.userId,
+        req.user?.permissions ?? [],
       );
       res.status(200).json(result);
     } catch (error) {
