@@ -15,12 +15,16 @@ const TAMBUR_MANUAL_MODE_KEY = 'device_tambur_manual_mode';
 const TAMBUR_OUTPUT_COLLAPSED_KEY = 'tambur_output_collapsed';
 const SCAN_SOUND_KEY = 'device_scan_sound';
 const DOC_PAGE_SIZE_KEY = 'device_doc_page_size';
+const CAMERA_FACING_KEY = 'device_camera_facing';
 
 /** Metraj kaynağı: makineden oku (auto) ya da operatör elle girsin (manual). */
 export type MeterEntryMode = 'manual' | 'auto';
 
 /** Baskı kâğıdı boyu. */
 export type DocPageSize = 'A4' | 'A5';
+
+/** Barkod/QR okuyucunun kamera yönü. */
+export type CameraFacing = 'front' | 'back';
 
 interface DeviceSettingsState {
   /** true → barkod ekranlarında manuel giriş input'ları görünür. Default false:
@@ -84,6 +88,20 @@ interface DeviceSettingsState {
    * göndermez → backend KALICI AYARI uygular (bugünkü davranış korunur).
    */
   docPageSize: Record<string, DocPageSize>;
+  /**
+   * Barkod tarayıcının açılacağı kamera yönü — **en son kullanılan** yön.
+   *
+   * Varsayılan 'back': barkod okumada endüstri varsayılanı arka kameradır
+   * (odak mesafesi, çözünürlük ve fener orada). Ama sabit montajlı / ekranı
+   * operatöre dönük duran tablette ön kamera kullanılıyor ve her tarayıcı
+   * açılışında yönü elle çevirmek gerekiyordu.
+   *
+   * ⚠️ CİHAZDA kalıcı, kullanıcıda DEĞİL (`docPageSize` ile aynı gerekçe): yön
+   * tabletin fiziksel DURUŞUNA bağlıdır, operatörün tercihine değil — vardiya
+   * değişince tabletin montajı değişmez. Fener bilinçli olarak bunun DIŞINDA
+   * kalır (oturum ömürlü): ışık ihtiyacı okutulan YERE bağlıdır, cihaza değil.
+   */
+  cameraFacing: CameraFacing;
   isLoaded: boolean;
 
   init: () => Promise<void>;
@@ -100,6 +118,7 @@ interface DeviceSettingsState {
   setTamburManualMode: (v: boolean) => Promise<void>;
   setScanSoundEnabled: (v: boolean) => Promise<void>;
   setDocPageSize: (docType: string, v: DocPageSize) => Promise<void>;
+  setCameraFacing: (v: CameraFacing) => Promise<void>;
   /** Tercihi kaldır → o belge tipi yine SUNUCUDAKİ kalıcı ayarla basılır. */
   clearDocPageSize: (docType: string) => Promise<void>;
 }
@@ -136,10 +155,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
   tamburOutputCollapsed: false,
   scanSoundEnabled: true,
   docPageSize: {},
+  cameraFacing: 'back',
   isLoaded: false,
 
   init: async () => {
-    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed] =
+    const [stored, lastRoute, kk1Manual, tamburMode, tamburResetQuality, tamburManual, scanSound, docSizes, outputCollapsed, cameraFacing] =
       await Promise.all([
         storage.getItem(MANUAL_BARCODE_KEY),
         storage.getItem(LAST_ROUTE_KEY),
@@ -150,6 +170,7 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
         storage.getItem(SCAN_SOUND_KEY),
         storage.getItem(DOC_PAGE_SIZE_KEY),
         storage.getItem(TAMBUR_OUTPUT_COLLAPSED_KEY),
+        storage.getItem(CAMERA_FACING_KEY),
       ]);
     set({
       manualBarcodeEntry: stored === 'true',
@@ -168,6 +189,10 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       // ters yön: burada güvenli taraf "sinyal ver", "sessiz kal" değil.
       scanSoundEnabled: scanSound !== 'false',
       docPageSize: parseDocPageSizes(docSizes),
+      // Yalnız birebir 'front' ön kamerayı açar; kayıt yok / bozuk değer →
+      // 'back' (barkod okumanın güvenli tarafı: ön kamerayla okuyamayan bir
+      // operatör "kamera bozuk" der, arka kamerayla okuyamayan yönü çevirir).
+      cameraFacing: cameraFacing === 'front' ? 'front' : 'back',
       isLoaded: true,
     });
   },
@@ -240,5 +265,11 @@ export const useDeviceSettingsStore = create<DeviceSettingsState>((set) => ({
       return { docPageSize: next };
     });
     await storage.setItem(DOC_PAGE_SIZE_KEY, JSON.stringify(next));
+  },
+
+  // Aynı desen: kamera ANINDA dönsün diye önce state, sonra disk.
+  setCameraFacing: async (v) => {
+    set({ cameraFacing: v });
+    await storage.setItem(CAMERA_FACING_KEY, v);
   },
 }));

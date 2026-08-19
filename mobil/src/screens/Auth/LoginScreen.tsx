@@ -832,9 +832,12 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
         }}
         title="Personel kartını okut"
         notice="Kartındaki QR kodu kameraya göster"
-        // Kilit modunda (sabit tablet) rozeti önden okutmak kolay → ön kamera;
-        // login'de arka. Flip butonu her iki durumda da var.
-        initialFacing={lock ? 'front' : 'back'}
+        // Kilit modunda (sabit tablet) rozeti önden okutmak kolay → ön kamerayı
+        // ZORLA. Normal login'de zorlama YOK: tarayıcı cihazda kayıtlı son
+        // kullanılan yönle açılır (arka montajlı tablette arka, ekranı operatöre
+        // dönük tablette ön). Flip butonu her iki durumda da var; kilit modunda
+        // yapılan flip cihaz tercihini DEĞİŞTİRMEZ (zorlanmış bağlam).
+        initialFacing={lock ? 'front' : undefined}
       />
 
       <PickerModal

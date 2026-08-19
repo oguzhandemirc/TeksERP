@@ -2,6 +2,7 @@ import { act, fireEvent } from "@testing-library/react-native";
 
 import { BarcodeScannerView } from "./BarcodeScannerView";
 import { renderWithPaper } from "../test/render";
+import { useDeviceSettingsStore } from "../store/deviceSettingsStore";
 
 // =============================================================================
 // Dokunarak okut (trigger="tap") — 2026-08-05 saha bulgusunun bekçisi.
@@ -176,5 +177,89 @@ describe("BarcodeScannerView — merkez bildirim", () => {
     );
     expect(queryByTestId("scan-success-check")).toBeNull();
     expect(queryByTestId("scan-flash")).toBeTruthy();
+  });
+});
+
+// =============================================================================
+// Kamera yönü — "en son ne kullandıysam" (cihaz tercihi)
+// =============================================================================
+// Tarayıcı her açılışta arka kameraya sıfırlanıyordu; sabit montajlı / ekranı
+// operatöre dönük tablette bu, her okutmada bir flip demekti. Tercih CİHAZDA
+// yaşar (deviceSettingsStore) — ama `initialFacing` ile ZORLANMIŞ bağlamda
+// (kilit ekranı) ne okunur ne yazılır: oradaki tek bir flip, fabrikanın geri
+// kalan tüm okutma ekranlarını sessizce çevirirdi.
+describe("BarcodeScannerView — kamera yönü tercihi", () => {
+  const facingOf = (getByTestId: (id: string) => { props: Record<string, unknown> }) =>
+    getByTestId("camera-view").props.facing as string;
+
+  beforeEach(() => {
+    useDeviceSettingsStore.setState({ cameraFacing: "back", isLoaded: true });
+  });
+
+  it("§10 zorlama yokken cihazda kayıtlı yönle açılır", () => {
+    useDeviceSettingsStore.setState({ cameraFacing: "front" });
+    const { getByTestId } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} />,
+    );
+    expect(facingOf(getByTestId)).toBe("front");
+  });
+
+  it("§11 flip tuşu yönü çevirir VE cihaza yazar", () => {
+    const { getByTestId, getByLabelText } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} />,
+    );
+    expect(facingOf(getByTestId)).toBe("back");
+    fireEvent.press(getByLabelText("Ön/arka kamera değiştir"));
+    expect(facingOf(getByTestId)).toBe("front");
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe("front");
+  });
+
+  it("§12 tercih diskten GEÇ gelirse yön yine de uygulanır (hidrasyon yarışı)", () => {
+    // RootNavigator ayarları asenkron yükler; kilit ekranındaki kart okutma
+    // tarayıcısı ondan önce açılabilir. Bu dal olmasaydı tercih "bazen çalışan"
+    // bir özellik olurdu.
+    const { getByTestId } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} />,
+    );
+    expect(facingOf(getByTestId)).toBe("back");
+    act(() => {
+      useDeviceSettingsStore.setState({ cameraFacing: "front" });
+    });
+    expect(facingOf(getByTestId)).toBe("front");
+  });
+
+  it("§13 operatör elle çevirdiyse geç gelen tercih onu EZMEZ", () => {
+    const { getByTestId, getByLabelText } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} />,
+    );
+    fireEvent.press(getByLabelText("Ön/arka kamera değiştir")); // back → front
+    act(() => {
+      // Disk hidrasyonu geç geldi ve 'back' diyor — ama operatör az önce çevirdi.
+      useDeviceSettingsStore.setState({ cameraFacing: "back" });
+    });
+    expect(facingOf(getByTestId)).toBe("front");
+  });
+
+  it("§14 ZORLANMIŞ yön kaydı OKUMAZ — bağlam kazanır (kilit ekranı)", () => {
+    useDeviceSettingsStore.setState({ cameraFacing: "back" });
+    const { getByTestId } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} initialFacing="front" />,
+    );
+    expect(facingOf(getByTestId)).toBe("front");
+  });
+
+  it("§15 ZORLANMIŞ bağlamdaki flip cihaz tercihini YAZMAZ", () => {
+    // ⚠️ Kayıt zorlanan yönle AYNI başlatılır (ikisi de 'front'): farklı
+    // başlatılsaydı sızan yazım tam da mevcut değeri yazar ve kontrol
+    // vakumen yeşil kalırdı (ilk yazımda tam bu oldu — ölçüldü).
+    useDeviceSettingsStore.setState({ cameraFacing: "front" });
+    const { getByTestId, getByLabelText } = renderWithPaper(
+      <BarcodeScannerView active onScan={jest.fn()} initialFacing="front" />,
+    );
+    fireEvent.press(getByLabelText("Ön/arka kamera değiştir"));
+    // Ekranda yön döner (tuş çalışır)…
+    expect(facingOf(getByTestId)).toBe("back");
+    // …ama fabrikanın geri kalan okutma ekranları bundan ETKİLENMEZ.
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe("front");
   });
 });

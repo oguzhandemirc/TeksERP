@@ -35,8 +35,9 @@ interface Props {
    *  kuralı: top okutulan her ekranda listeden seçim alternatifi olmalı
    *  (kamera çalışmasa/etiket okunmasa da akış kilitlenmez). */
   onPickFromList?: () => void;
-  /** Kameranın başlangıç yönü (BarcodeScannerView'e geçer). Default 'back';
-   *  sabit tablette önden okutmak için 'front' geç. Flip butonu her zaman var. */
+  /** Kamera yönünü ZORLA (BarcodeScannerView'e geçer). Verilmezse cihazda
+   *  kayıtlı son kullanılan yön açılır ve flip tuşu tercihi günceller.
+   *  bkz. BarcodeScannerView.initialFacing. */
   initialFacing?: 'front' | 'back';
   /** Okuma tetikleyicisi — `'tap'` ile kamera yalnız "OKUT" tuşuna basılınca
    *  tek okuma yapar. bkz. BarcodeScannerView.trigger. Default 'auto'. */

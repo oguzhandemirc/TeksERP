@@ -95,6 +95,19 @@ src/
 - **Kütüphane:** `expo-camera` v17 (CameraView + `onBarcodeScanned`) — `expo-barcode-scanner` deprecated, kullanma
 - **Kullanım:** Refakat Kartı, top barkodu, iş emri QR okuma
 - **Simülasyon:** Geliştirme modunda elle barkod girişi ile aynı sonuç
+- **Yön tercihi CİHAZDA (2026-08-19):** tarayıcı **en son kullanılan** yönle açılır
+  (`deviceSettingsStore.cameraFacing`, varsayılan `back`); flip tuşu tercihi yazar.
+  Gerekçe: yön tabletin fiziksel DURUŞUNA bağlıdır (sabit montaj / ekranı operatöre
+  dönük tablet), operatörün tercihine değil — her açılışta arkaya sıfırlanması sahada
+  her okutmada bir flip demekti. **Fener bilinçli olarak DIŞARIDA** (oturum ömürlü):
+  ışık ihtiyacı okutulan YERE bağlıdır, cihaza değil.
+  ⚠️ `initialFacing` artık "başlangıç değeri" değil **ZORLAMA**dır: verildiğinde
+  tercih ne okunur ne YAZILIR (tek kullanıcısı kilit ekranı — duvardaki tablette rozet
+  önden okutulur). Yazsaydı orada yapılan tek bir flip fabrikanın TÜM okutma
+  ekranlarını sessizce çevirirdi. Bekçi: `components/BarcodeScannerView.test.tsx` §10-§15
+  (üç negatif sondayla kırmızı verdiği doğrulandı; ilk yazımda "yazmaz" kontrolü
+  **vakumendi** — kayıt zorlanan yönle AYNI başlatılmazsa sızan yazım mevcut değeri
+  yazar ve fark edilmez).
 
 ### Bluetooth (BLE)
 - **Kütüphane:** `react-native-ble-plx`

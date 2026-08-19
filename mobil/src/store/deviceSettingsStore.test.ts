@@ -145,3 +145,50 @@ describe('deviceSettingsStore — geriye dönük uyum', () => {
     expect(s.lastRouteTemplateId).toBe('r-1');
   });
 });
+
+// Kamera yönü — "en son ne kullandıysam" tercihi. Saha gerekçesi: sabit
+// montajlı / ekranı operatöre dönük tablette ön kamera kullanılıyor ve tarayıcı
+// her açılışta arkaya sıfırlandığı için yön elle çevriliyordu.
+describe('deviceSettingsStore — kamera yönü tercihi', () => {
+  it('kayıt yokken ARKA (barkod okumanın endüstri varsayılanı)', async () => {
+    fakeDisk();
+    // Ters değerden başla: aksi halde kontrol store'un doğuştan gelen
+    // varsayılanını ölçer, init()'in kayıt yokluğunu ÇÖZDÜĞÜNÜ değil.
+    useDeviceSettingsStore.setState({ cameraFacing: 'front', isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe('back');
+  });
+
+  it('diske yazılır ve SONRAKİ açılışta geri gelir', async () => {
+    const disk = fakeDisk();
+    await useDeviceSettingsStore.getState().setCameraFacing('front');
+    expect(disk['device_camera_facing']).toBe('front');
+
+    useDeviceSettingsStore.setState({ cameraFacing: 'back', isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe('front');
+  });
+
+  it('arkaya dönüş de kalıcıdır (ön kamerada takılı kalmaz)', async () => {
+    const disk = fakeDisk({ device_camera_facing: 'front' });
+    await useDeviceSettingsStore.getState().setCameraFacing('back');
+    expect(disk['device_camera_facing']).toBe('back');
+
+    useDeviceSettingsStore.setState({ cameraFacing: 'front', isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe('back');
+  });
+
+  it('diskteki değer bozuksa ARKA (yalnız birebir "front" ön kamerayı açar)', async () => {
+    fakeDisk({ device_camera_facing: 'FRONT' });
+    useDeviceSettingsStore.setState({ cameraFacing: 'front', isLoaded: false });
+    await useDeviceSettingsStore.getState().init();
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe('back');
+  });
+
+  it('state ANINDA döner (kamera flip tuşu disk yazımını beklemez)', () => {
+    fakeDisk();
+    void useDeviceSettingsStore.getState().setCameraFacing('front');
+    expect(useDeviceSettingsStore.getState().cameraFacing).toBe('front');
+  });
+});

@@ -17,6 +17,7 @@ import Animated, {
 import { colors, palette } from '../theme/tokens';
 import { springs } from '../theme/motion';
 import { recordActivity, withSystemDialog } from '../store/lockStore';
+import { useDeviceSettingsStore } from '../store/deviceSettingsStore';
 
 /**
  * Kadrajın ORTASINDA kısa süre duran büyük bildirim.
@@ -89,9 +90,19 @@ interface Props {
    * titreşimi olmasın. Çağıran isterse yakalama anında kendi hafif tık'ını verir.
    */
   captureHaptic?: boolean;
-  /** Kameranın başlangıç yönü — 'back' (arka, default) / 'front' (ön). Sabit
-   *  duran tablette QR'ı önden okutmak için kilit ekranı 'front' geçer; sağ-üst
-   *  flip butonuyla her zaman değiştirilebilir. */
+  /**
+   * Kamera yönünü ZORLA — 'front' / 'back'.
+   *
+   * VERİLMEZSE (normal hâl) tarayıcı cihazda kayıtlı **son kullanılan** yönle
+   * açılır ve flip tuşuyla yapılan her değişiklik cihaza yazılır: sabit
+   * montajlı tablette operatör her açılışta yönü çevirmek zorunda kalmasın.
+   *
+   * ⚠️ Verildiğinde tercih ne OKUNUR ne de YAZILIR. Zorlama bir BAĞLAM
+   * kararıdır (kilit ekranı rozeti önden okutur — tablet duvarda, operatörün
+   * yüzü ekranda), operatörün tercihi değil; oraya yazsaydı kilit ekranında
+   * yapılan tek bir flip, fabrikanın geri kalan tüm okutma ekranlarının
+   * yönünü sessizce değiştirirdi.
+   */
   initialFacing?: 'front' | 'back';
   /**
    * Okuma tetikleyicisi.
@@ -150,14 +161,37 @@ export function BarcodeScannerView({
   notice,
   counter,
   captureHaptic = true,
-  initialFacing = 'back',
+  initialFacing,
   trigger = 'auto',
   flash = null,
 }: Props) {
   const [permission, requestPermission] = useCameraPermissions();
   const scannedRef = useRef(false);
   const [busy, setBusy] = useState(false);
-  const [facing, setFacing] = useState<'front' | 'back'>(initialFacing);
+  // Yön tercihi: zorlanmışsa o, değilse cihazda kayıtlı son kullanılan yön.
+  const storedFacing = useDeviceSettingsStore((s) => s.cameraFacing);
+  const setStoredFacing = useDeviceSettingsStore((s) => s.setCameraFacing);
+  const forcedFacing = initialFacing != null;
+  const [facing, setFacing] = useState<'front' | 'back'>(initialFacing ?? storedFacing);
+  // Operatör bu oturumda yönü elle çevirdi mi — çevirdiyse aşağıdaki hidrasyon
+  // dalı onun seçimini EZMEZ.
+  const facingTouchedRef = useRef(false);
+  // Cihaz ayarları diskten ASENKRON yüklenir (RootNavigator açılışta init eder).
+  // Tarayıcı hidrasyondan önce açılırsa (kilit ekranı kart okutma) ilk render
+  // varsayılan 'back' ile gelir; kayıt okunduğunda tercihe geçilir. Bu dal
+  // olmasaydı tercih "bazen çalışan" bir özellik olurdu — en kötü tür.
+  useEffect(() => {
+    if (forcedFacing || facingTouchedRef.current) return;
+    setFacing(storedFacing);
+  }, [forcedFacing, storedFacing]);
+  // Flip tuşu: yönü çevir + (zorlanmamışsa) cihaza yaz. Disk yazımı updater'ın
+  // İÇİNDE değil dışında — updater saf kalmalı (StrictMode iki kez çağırır).
+  const flipFacing = useCallback(() => {
+    const next = facing === 'back' ? 'front' : 'back';
+    facingTouchedRef.current = true;
+    setFacing(next);
+    if (!forcedFacing) void setStoredFacing(next);
+  }, [facing, forcedFacing, setStoredFacing]);
   // Fener — endüstriyel el terminallerinin hepsinde aydınlatma vardır ve sebebi
   // fizik: karanlık koridorda / topun gölgede kalan ucunda kamera odaklanamaz.
   // Oturum ömürlü (cihazda saklanmaz): ışık ihtiyacı okutulan YERE bağlıdır,
@@ -501,7 +535,7 @@ export function BarcodeScannerView({
           icon="camera-flip"
           size={24}
           iconColor="#fff"
-          onPress={() => setFacing((f) => (f === 'back' ? 'front' : 'back'))}
+          onPress={flipFacing}
           style={styles.cornerBtn}
           accessibilityLabel="Ön/arka kamera değiştir"
         />
