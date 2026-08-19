@@ -67,6 +67,13 @@ diff orada hesaplanır, 14 model bedavaya kapsanır (Plan A'daki kaldıracın ay
 Özel servisler için ortak `diffFields(before, after, opts)` yardımcısı; hassas
 alanlar (`passwordHash`, `pin`, token) **maskelenir**.
 
+**GÖSTERİM DİLİ — KARAR (2026-08-19, kullanıcı: "1+3"):** Türkçe alan etiketi
++ ham ada FAIL-OPEN. Tek dosyalık `field → Türkçe etiket` haritası (~50 alan);
+etiketi olmayan alan HAM ADIYLA basılır (ekran boş kalmaz, harita eksikliği
+baskıyı düşürmez). Harita bekçiyle denetlenir: en çok diff üreten alanların
+etiketi yoksa test uyarır — ama KIRMIZI vermez (fail-open kararının test
+karşılığı da fail-open'dır; yoksa her yeni kolon testi kırar).
+
 ### 2. `recordId` ile sorgulama — en ucuz, en yüksek getirili madde
 
 `SystemLogListParams` bugün `userId · tableName · category · action · dateFrom ·
@@ -92,19 +99,18 @@ bu sıklıkta olmaz; önizleme/otomatik kaydetme log üretiyor. Aynı sınıf:
 Kural: **değişiklik YOKSA log YAZMA.** Diff boşsa (madde 1) satır atlanır —
 gürültünün büyük kısmı kendiliğinden düşer.
 
-### 5. Saklama politikası — yazılı hale getir
-Bugün: 6 ayda `system_log_archives`'a taşınır, **arşiv hiç silinmez**.
-Bu KVKK açısından savunulabilir ama **hiçbir yerde yazılı değil**.
+### 5. Saklama politikası — KARAR VERİLDİ (2026-08-19, kullanıcı)
+**6 AY KALIYOR.** 12 ay önerisi soruldu ve reddedildi — arşiv artık her okuma
+yolunda tarandığı için (record-info + recordId geçmişi arşive de bakacak) bilgi
+kaybolmuyor; sıcak pencereyi büyütmenin getirisi kalmadı. Arşiv silinmez.
+⚠️ Bu karardan sonra yeni bir okuma yüzeyi eklerken kural: **arşivi de tara** —
+yalnız sıcak tabloya bakan yüzey, 6 aydan eski kayıtta sessizce boş döner
+(record-info'da bir kez yaşandı, kapatıldı).
 
-Karar: arşiv **silinmez**; taşıma penceresi ayardan yönetilir. Tekstilde müşteri
-şikâyeti/iade penceresi çoğu zaman 1 yıldan uzun olduğu için **taşıma süresini
-12 aya çıkarmayı** öneriyorum (sıcak tabloda 12 ay ≈ 1,1 milyon satır — index'li
-sorgular için sorun değil).
-
-### 6. Erişim/dışa aktarma izi (KVKK)
-Her okumayı loglamak **yanlış** olur (hacim + değersiz gürültü). Loglanacaklar:
-**dışa aktarma** (Excel/CSV), **toplu belge çıkarma**, **müşteri/kişisel veri
-listesi raporları**. Yeni `action: "EXPORT"`.
+### 6. Erişim/dışa aktarma izi (KVKK) — ERTELENDİ (2026-08-19, kullanıcı)
+Kapsam soruldu (CSV/Excel · toplu PDF · müşteri raporları), **"şimdilik
+hiçbiri"** seçildi. KVKK denetimi kapıda değil; ihtiyaç doğduğunda tasarım
+hazır: yeni `action: "EXPORT"`, her okuma DEĞİL yalnız toplu dışa aktarma.
 
 ### 7. `system_logs.updatedAt` kaldırılmalı
 Audit satırı hiç güncellenmemeli; kolonun varlığı yanlış bir kapı önerir

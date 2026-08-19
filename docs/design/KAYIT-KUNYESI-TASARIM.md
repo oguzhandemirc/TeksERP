@@ -82,6 +82,12 @@ insan eliyle yaratılmaz.
 4. `SubcontractorCategory`, `TravelerCardTemplate`, `DocumentProfile`,
    `CustomerStandaloneLabel`, `RollError`
 
+**A2 KARARI (2026-08-19, kullanıcı):** 9 eksik model + **WorkOrder** +
+**Shipment**. İş emrinde "kim açtı" hiç yoktu (kullanıcının ilk sorusu tam
+buydu); Shipment'ta planlayan ≠ sevk eden → gerçekten ayrı bilgi. Kalan 14
+işlem tablosuna EKLENMEZ — mevcut aktör (dispatchedBy/receivedBy/weighedBy)
+yeterli, ikinci alan çoğaltma olurdu.
+
 **Olaya özel aktörü olanlar (16 model) AYRI bir karar ister** — `Shipment`
 (`dispatchedById`), `SubcontractorDispatch` (`dispatchedById`), `RollReturn`
 (`receivedById`), `Sack` (`weighedById`)… Bunlarda `createdById` eklemek "iki
