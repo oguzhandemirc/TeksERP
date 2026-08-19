@@ -507,7 +507,7 @@ model UserPermission {
 /// permission'ları UserPermission'a kopyalanır ve şablon-user bağı kalmaz.
 /// Bu sayede şablonu sonradan değiştirmek mevcut kullanıcıları etkilemez.
 model PermissionTemplate {
-  id String @id @default(uuid()) @db.Uuid
+  id          String  @id @default(uuid()) @db.Uuid
   /// Sistem rolünün KALICI kimliği (`constants/role-template-catalog.ts`).
   /// Boot uzlaştırması şablonu bu kodla bulur — fabrika adı değiştirse bile
   /// ikizi doğmaz. NULL = fabrikanın panelden kendi yarattığı şablon
@@ -522,7 +522,16 @@ model PermissionTemplate {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
+  @@index([nameFold])
   @@map("permission_templates")
 }
 
@@ -604,10 +613,19 @@ model Station {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([type])
   @@index([kind])
   @@index([defaultCategoryId])
+  @@index([nameFold])
   @@map("stations")
 }
 
@@ -632,8 +650,17 @@ model Machine {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([stationId])
+  @@index([nameFold])
   @@map("machines")
 }
 
@@ -744,14 +771,32 @@ model PeripheralDevice {
   templateRoutes PeripheralTemplateRoute[]
   deviceLinks    DevicePeripheral[] // YENİ: bu donanımı kullanan cihaz(lar) (çok-çok)
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold    String?  @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("address")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  addressFold String?  @default(dbgenerated())
 
   @@index([machineId])
   @@index([deviceId])
   @@index([stationId])
   @@index([connectionType])
   @@index([isActive])
+  @@index([nameFold])
+  @@index([addressFold])
   @@map("peripheral_devices")
 }
 
@@ -870,9 +915,18 @@ model Route {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([customerId])
   @@index([isFavorite])
+  @@index([nameFold])
   @@map("routes")
 }
 
@@ -975,10 +1029,19 @@ model ProductRecipe {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([itemId])
   @@index([colorId])
   @@index([routeId])
+  @@index([nameFold])
   @@map("product_recipes")
 }
 
@@ -1036,8 +1099,18 @@ model Item {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([itemType])
+  @@index([nameFold])
+  @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "items_nameFold_trgm_idx", type: Gin)
   @@map("items")
 }
 
@@ -1065,7 +1138,7 @@ model Roll {
   weightKg   Decimal? @db.Decimal(12, 3)
 
   // Status & Quality
-  status         RollStatus @default(STOCK)
+  status         RollStatus  @default(STOCK)
   /// SEVK ÖNCESİ statü — sevk geri alma (storno) topu tam olarak eski rafına koysun diye.
   ///
   /// `performDispatchTx` çuvaldaki HER topu `SHIPPED` yapar ve bunu yaparken önceki
@@ -1085,7 +1158,7 @@ model Roll {
   /// Fiziksel form — TOP (rulo) | ACIK (açık kumaş). Otomatik set: ham giriş & Tambur
   /// çocukları TOP; Tambur-DIŞI son-adım finalize'ı + fason dönüşü doğumları + açık kumaş
   /// = ACIK. Operatör seçmez; "durgunda" (final/serbest) anlamlı — ara-üretim flip'i izlenmez.
-  form           RollForm   @default(TOP)
+  form           RollForm    @default(TOP)
   /// Snapshot — yazıldığı andaki kalite kodu (katalog değişse bile sabit). NULLABLE:
   /// kaliteyi YALNIZ kalite istasyonları belirler (KK1 opsiyonel giriş, KK2/Kurşun, Tambur);
   /// kaliteye bakılmamış top (açık kumaş, fason dönüşü, kalitesiz giriş) NULL kalır → UI "—",
@@ -1093,8 +1166,8 @@ model Roll {
   qualityGrade   String?
   /// Canonical — QualityGrade kataloğundaki gerçek kayda referans.
   /// Eski satırlarda null kalabilir; yeni Tambur finalize kayıtlarında doldurulur.
-  qualityGradeId String?    @db.Uuid
-  width          Decimal?   @db.Decimal(12, 3) // En (cm) — KK1 girişinde ölçülen kumaş eni
+  qualityGradeId String?     @db.Uuid
+  width          Decimal?    @db.Decimal(12, 3) // En (cm) — KK1 girişinde ölçülen kumaş eni
 
   // Top'un sisteme nasıl girdiği — raporlama ayrımı için.
   // itemType "ne olduğunu", entrySource "nereden geldiğini" söyler.
@@ -1543,9 +1616,19 @@ model Customer {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([type])
   @@index([documentProfileId])
+  @@index([nameFold])
+  @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "customers_nameFold_trgm_idx", type: Gin)
   @@map("customers")
 }
 
@@ -1576,12 +1659,30 @@ model CustomerBranch {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("city")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  cityFold  String?  @default(dbgenerated())
 
   // UNIQUE (2026-07-31 denetimi): müşteri-içi şube kodu tekil — diğer master-data'nın
   // code @unique backstop'unun buradaki karşılığı. code NULL'ken serbest (PG'de
   // NULL'lar çakışmaz — partial gerekmez); ad-dup bilinçli app-level (kök CLAUDE.md).
   @@unique([customerId, code])
   @@index([customerId, isActive])
+  @@index([nameFold])
+  @@index([cityFold])
   @@map("customer_branches")
 }
 
@@ -1628,6 +1729,8 @@ model Order {
   @@index([manualClosedById])
   @@index([status, createdAt(sort: Desc)])
   @@index([deadline])
+  /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
+  @@index([orderNumber(ops: raw("gin_trgm_ops"))], map: "orders_orderNumber_trgm_idx", type: Gin)
   @@map("orders")
 }
 
@@ -1673,8 +1776,16 @@ model OrderLine {
   sackAllocations       SackAllocation[]
   directShipAllocations SubcontractorDirectShipAllocation[]
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt            DateTime @default(now()) @db.Timestamptz
+  updatedAt            DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("customerItemName")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  customerItemNameFold String?  @default(dbgenerated())
 
   @@index([orderId])
   // D-6: @@index([itemId]) kaldırıldı — @@index([itemId, createdAt]) sol-prefix'i kapsar.
@@ -1682,6 +1793,8 @@ model OrderLine {
   // Sipariş-önce aramalı liste (cursor keyset createdAt asc) + ürün-filtreli sayfalama.
   @@index([createdAt])
   @@index([itemId, createdAt])
+  @@index([customerItemNameFold])
+  @@index([customerItemNameFold(ops: raw("gin_trgm_ops"))], map: "order_lines_customerItemNameFold_trgm_idx", type: Gin)
   @@map("order_lines")
 }
 
@@ -1801,6 +1914,8 @@ model WorkOrder {
   @@index([isActive])
   // Ayrılma soy bağı — null-yoğun; migration'da partial'a çevrilir (IS NOT NULL)
   @@index([splitFromId])
+  /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
+  @@index([workOrderNumber(ops: raw("gin_trgm_ops"))], map: "work_orders_workOrderNumber_trgm_idx", type: Gin)
   @@map("work_orders")
 }
 
@@ -1848,6 +1963,8 @@ model Batch {
   // Kısa parti sayacının kaynağı: "en son doğan kısa parti" (`createdAt DESC LIMIT 1`).
   // batchNumber ile SIRALANAMAZ — numara sarıyor, en büyük numara "en yeni" demek değil.
   @@index([createdAt])
+  /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
+  @@index([batchNumber(ops: raw("gin_trgm_ops"))], map: "batches_batchNumber_trgm_idx", type: Gin)
   @@map("batches")
 }
 
@@ -2077,10 +2194,28 @@ model QualityGrade {
   rolls       Roll[]
   rollReturns RollReturn[]
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold        String?  @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("description")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  descriptionFold String?  @default(dbgenerated())
 
   @@index([isActive, sortOrder])
+  @@index([nameFold])
+  @@index([descriptionFold])
   @@map("quality_grades")
 }
 
@@ -2098,10 +2233,28 @@ model ReturnReason {
 
   rollReturns RollReturn[]
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold        String?  @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("description")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  descriptionFold String?  @default(dbgenerated())
 
   @@index([isActive, sortOrder])
+  @@index([nameFold])
+  @@index([descriptionFold])
   @@map("return_reasons")
 }
 
@@ -2117,9 +2270,27 @@ model DefectType {
   createdAt   DateTime        @default(now()) @db.Timestamptz
   updatedAt   DateTime        @updatedAt @db.Timestamptz
 
-  rollErrors RollError[]
+  rollErrors      RollError[]
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold        String?     @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("description")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  descriptionFold String?     @default(dbgenerated())
 
   @@index([isActive])
+  @@index([nameFold])
+  @@index([descriptionFold])
   @@map("defect_types")
 }
 
@@ -2298,8 +2469,8 @@ model RollVariance {
   ///
   /// ⚠️ Dönem raporları `reversedAt IS NULL` ile süzmeli. Süzmeyen rapor,
   /// geri alınmış her finalize'ın firesini de sayar.
-  reversedAt      DateTime?        @db.Timestamptz
-  reversedById    String?          @db.Uuid
+  reversedAt   DateTime? @db.Timestamptz
+  reversedById String?   @db.Uuid
 
   // Relations
   roll       Roll           @relation(fields: [rollId], references: [id])
@@ -2627,12 +2798,21 @@ model DirectShipment {
   rolls       Roll[]
   allocations SubcontractorDirectShipAllocation[]
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt  DateTime @default(now()) @db.Timestamptz
+  updatedAt  DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("reason")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  reasonFold String?  @default(dbgenerated())
 
   @@index([dispatchId])
   @@index([customerId])
   @@index([shippedAt])
+  @@index([reasonFold])
   @@map("direct_shipments")
 }
 
@@ -2788,7 +2968,16 @@ model SubcontractorCategory {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
+  @@index([nameFold])
   @@map("subcontractor_categories")
 }
 
@@ -2820,8 +3009,17 @@ model Subcontractor {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@index([documentProfileId])
+  @@index([nameFold])
   @@map("subcontractors")
 }
 
@@ -3287,6 +3485,8 @@ model Sack {
   @@unique([id, shipmentId])
   // Havuz/liste sorguları: müşteri + oluşturma sırası (FIFO = createdAt).
   @@index([customerId, createdAt])
+  /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
+  @@index([sackNo(ops: raw("gin_trgm_ops"))], map: "sacks_sackNo_trgm_idx", type: Gin)
   @@map("sacks")
 }
 
@@ -3343,8 +3543,32 @@ model Shipment {
   swatches     Swatch[] // Atanan çuvalların içindeki kartelalar (siparişe sayılmaz)
   returns      RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt       DateTime @default(now()) @db.Timestamptz
+  updatedAt       DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("plateNumber")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  plateNumberFold String?  @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("driverName")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  driverNameFold  String?  @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("carrier")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  carrierFold     String?  @default(dbgenerated())
 
   @@index([customerId, status])
   @@index([branchId])
@@ -3352,6 +3576,11 @@ model Shipment {
   // Muhasebe listesi sevk tarihine göre sıralanır (status=DISPATCHED sabit filtre) →
   // eşitlik kolonu önce, sıralama kolonu sonra (perf kuralı 2).
   @@index([status, dispatchedAt])
+  @@index([plateNumberFold])
+  @@index([driverNameFold])
+  @@index([carrierFold])
+  /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
+  @@index([shipmentNo(ops: raw("gin_trgm_ops"))], map: "shipments_shipmentNo_trgm_idx", type: Gin)
   @@map("shipments")
 }
 
@@ -3462,16 +3691,32 @@ model RollReturn {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Relations
-  roll         Roll          @relation(fields: [rollId], references: [id])
-  fromShipment Shipment?     @relation(fields: [fromShipmentId], references: [id])
-  customer     Customer      @relation(fields: [customerId], references: [id])
-  order        Order?        @relation(fields: [orderId], references: [id])
-  item         Item          @relation(fields: [itemId], references: [id])
-  color        Color?        @relation(fields: [colorId], references: [id])
-  reason       ReturnReason? @relation(fields: [reasonId], references: [id])
-  qualityGrade QualityGrade? @relation(fields: [qualityGradeId], references: [id])
-  receivedBy   User          @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
-  cancelledBy  User?         @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
+  roll           Roll          @relation(fields: [rollId], references: [id])
+  fromShipment   Shipment?     @relation(fields: [fromShipmentId], references: [id])
+  customer       Customer      @relation(fields: [customerId], references: [id])
+  order          Order?        @relation(fields: [orderId], references: [id])
+  item           Item          @relation(fields: [itemId], references: [id])
+  color          Color?        @relation(fields: [colorId], references: [id])
+  reason         ReturnReason? @relation(fields: [reasonId], references: [id])
+  qualityGrade   QualityGrade? @relation(fields: [qualityGradeId], references: [id])
+  receivedBy     User          @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
+  cancelledBy    User?         @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("reasonText")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  reasonTextFold String?       @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("note")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  noteFold       String?       @default(dbgenerated())
 
   @@index([orderId])
   @@index([customerId, createdAt])
@@ -3490,6 +3735,8 @@ model RollReturn {
   // Grup üyelerini toplama yolu (belge kurulumu + grup iptali). Null-yoğun
   // (tekil iadeler NULL) → partial index migration'da uygulanır.
   @@index([returnGroupId])
+  @@index([reasonTextFold])
+  @@index([noteFold])
   @@map("roll_returns")
 }
 
@@ -3543,8 +3790,18 @@ model Color {
   swatchReductions    SwatchStockReduction[]
   /// Rota şablonu adımlarında planlanan hedef renk (şablon varsayılanı).
   routeStepPlanned    RouteStep[]            @relation("RouteStepPlannedColor")
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold            String?                @default(dbgenerated())
 
   @@index([isActive, sortOrder])
+  @@index([nameFold])
+  @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "colors_nameFold_trgm_idx", type: Gin)
   @@map("colors")
 }
 
@@ -3554,14 +3811,14 @@ model Color {
 ///   - WorkOrderTargetProperty : bir iş emrinin üretim çıktısında olacak özellikler
 ///   - RollProperty   : bir rulonun fiilen sahip olduğu özellikler
 model FabricProperty {
-  id          String   @id @default(uuid()) @db.Uuid
-  code        String   @unique @db.VarChar(32) // "YANMAZLIK", "KAYGAN"
-  name        String   @db.VarChar(100)
+  id          String  @id @default(uuid()) @db.Uuid
+  code        String  @unique @db.VarChar(32) // "YANMAZLIK", "KAYGAN"
+  name        String  @db.VarChar(100)
   category    String? // "Dayanıklılık", "Yüzey", "Kimyasal" vb. (UI gruplama için)
   description String?
-  color       String?  @db.VarChar(7) // UI badge hex
-  sortOrder   Int      @default(0)
-  isActive    Boolean  @default(true)
+  color       String? @db.VarChar(7) // UI badge hex
+  sortOrder   Int     @default(0)
+  isActive    Boolean @default(true)
 
   /// BAYRAK mı, SEÇİM mi? (2026-08-10 — "üretim karakteristiği" modeli)
   ///
@@ -3603,9 +3860,36 @@ model FabricProperty {
   routeStepTargets     RouteStepProperty[]
   /// SEÇİM tipli özelliğin izin verilen değerleri (BAYRAK tipte boş).
   values               FabricPropertyValue[]
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold             String?                        @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("description")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  descriptionFold      String?                        @default(dbgenerated())
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("category")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  categoryFold         String?                        @default(dbgenerated())
 
   @@index([isActive, sortOrder])
   @@index([category])
+  @@index([nameFold])
+  @@index([descriptionFold])
+  @@index([categoryFold])
   @@map("fabric_properties")
 }
 
@@ -3625,18 +3909,18 @@ model FabricProperty {
 /// ile DEĞİL — Türkçe upper "i"yi "İ" yapıp eşleşmeyi sessizce bozar
 /// (2026-08-02 etiket koşulu dersinin aynısı).
 model FabricPropertyValue {
-  id         String @id @default(uuid()) @db.Uuid
-  propertyId String @db.Uuid
+  id         String  @id @default(uuid()) @db.Uuid
+  propertyId String  @db.Uuid
   /// Kayda yazılan değer ("4-KAT"). Özellik içinde benzersiz.
-  code       String @db.VarChar(32)
+  code       String  @db.VarChar(32)
   /// Ekranda görünen ad ("4 Kat"). Kimlik DEĞİL.
-  name       String @db.VarChar(100)
-  sortOrder  Int    @default(0)
+  name       String  @db.VarChar(100)
+  sortOrder  Int     @default(0)
   /// Pasif değer yeni kayıtlarda seçilemez ama GEÇMİŞ kayıtlarda durur —
   /// bu yüzden değer satırı silinmez, pasifleştirilir.
   isActive   Boolean @default(true)
 
-  property FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  property       FabricProperty @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   /// Bu değeri taşıyan toplar — FK `Restrict`, yani kullanılan değer silinemez
   /// (zaten silinmiyor: `fabric-property.service` pasifleştiriyor).
   rollProperties RollProperty[]
@@ -3796,9 +4080,18 @@ model LabelTemplate {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("name")) STORED` (migration
+  /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
+  /// olmadan `migrate dev` her diff'te `DROP DEFAULT` üretir (ölçüldü).
+  /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
+  /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
+  /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
+  nameFold  String?  @default(dbgenerated())
 
   @@unique([name])
   @@index([isActive])
+  @@index([nameFold])
   // F188: DB'de ŞEMA-DIŞI partial unique — label_templates_one_default_per_kind (kind)
   // WHERE isDefault=true (migration 20260708180000; roll_movements_one_open emsali). Kind
   // başına tek isDefault=true garantisi; label-template.service rethrowDefaultConflict yakalar.

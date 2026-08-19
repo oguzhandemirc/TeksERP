@@ -259,6 +259,50 @@ const TRIGGERS: Array<{ table: string; trigger: string; timing: string[]; why: s
   },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 7-8-9) ARAMA KATLAMASI nesneleri (migration 20260819060000_search_fold)
+// ─────────────────────────────────────────────────────────────────────────────
+// Üçü de `schema.prisma`'nın temsil edemediği sınıfta: uzantı, fonksiyon,
+// collation ve GENERATED ifadesi. Kaybolurlarsa belirtiler SESSİZDİR:
+//   • `tr_fold` düşerse → gölge kolonların hepsi düşer (bağımlı), arama patlar.
+//   • `tr_fold`ın GÖVDESİ değişirse → saklanan katlamalar bayatlar, JS ikiziyle
+//     ayrışır ve arama SESSİZCE eksik sonuç verir (asıl tehlike bu).
+//   • `tr_sort` düşerse → ad kolonları varsayılan collation'a döner ve sahadaki
+//     C locale kurulumunda Ç/Ğ/İ/Ö/Ş/Ü ile başlayan her ad Z'den sonra sıralanır.
+//   • GENERATED ifadesi düşerse → kolon sıradan bir kolona döner, uygulama onu
+//     yazmadığı için sonsuza kadar NULL kalır ve arama boş döner.
+const REQUIRED_EXTENSIONS: Array<{ name: string; why: string }> = [
+  { name: "plpgsql", why: "PostgreSQL varsayılanı — trigger fonksiyonları" },
+  { name: "pg_trgm", why: "gin_trgm_ops — `contains` aramasını index'e bağlayan tek yol" },
+];
+// Kurulu olabilir ama HİÇBİR ŞEY KULLANMAZ. `unaccent` dev DB'sinde elle
+// kurulmuş (bu repoda hiçbir migration onu kurmuyor) ve arama tasarımı bilerek
+// ondan VAZGEÇTİ (JS'te birebir üretilemiyordu — bkz. src/utils/search-fold.ts).
+// Sahadaki kurulumda YOKTUR; bu yüzden "zorunlu" listesine konamaz.
+const TOLERATED_EXTENSIONS = new Set(["unaccent"]);
+
+const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragments: string[]; why: string }> = [
+  {
+    name: "tr_fold",
+    volatility: "i", // IMMUTABLE — index/GENERATED ifadesinde kullanılabilmesi için ŞART
+    // Gövde parmak izi: katlamanın DÖRT load-bearing adımı. Biri düşerse JS
+    // ikiziyle ayrışır; `test_fold_contract.ts` bunu ayrıca ölçer ama bu kontrol
+    // "fonksiyon sessizce değiştirildi" senaryosunu envanter tarafında yakalar.
+    bodyFragments: ["normalize", "NFD", 'COLLATE "C"', "translate"],
+    why: "arama katlaması — JS `foldSearchText` ile birebir aynı çıktı",
+  },
+];
+
+const EXPECTED_COLLATIONS: Array<{ name: string; why: string }> = [
+  { name: "tr_sort", why: "Türkçe SIRALAMA (arama katlamasının tersi: ç≠c)" },
+];
+
+// Gölge kolon sayısı — tek tek listelemek yerine ZEMİN + ifade doğrulaması.
+// Tek tek liste 31 satır bakım yükü olurdu ve asıl risk "biri eksildi" değil,
+// "hepsi birden düştü / ifade değişti"dir.
+const FOLD_COLUMN_MIN = 31;
+const FOLD_EXPR_FRAGMENT = "tr_fold";
+
 async function main(): Promise<void> {
   console.log("\n=== Şema-dışı DB invariant guard'ı ===");
   console.log(
@@ -538,6 +582,93 @@ async function main(): Promise<void> {
     liveTriggers.map((r) => r.trigger_name),
     new Set(TRIGGERS.map((e) => e.trigger)),
     (n) => `${trgByName.get(n)?.table_name}.${n}`
+  );
+
+
+  // ── 7) Uzantılar ──────────────────────────────────────────────────────────
+  console.log("\n── 7) Uzantılar ──");
+  const liveExt = await prisma.$queryRaw<Array<{ extname: string; extversion: string }>>`
+    SELECT extname, extversion FROM pg_extension
+  `;
+  const extNames = new Set(liveExt.map((e) => e.extname));
+  for (const exp of REQUIRED_EXTENSIONS) {
+    check(exp.name, extNames.has(exp.name), exp.why);
+  }
+  checkNoExtras(
+    "7) Uzantılar",
+    liveExt.map((e) => e.extname).filter((n) => !TOLERATED_EXTENSIONS.has(n)),
+    new Set(REQUIRED_EXTENSIONS.map((e) => e.name)),
+    (n) => n
+  );
+
+  // ── 8) Fonksiyon + collation ──────────────────────────────────────────────
+  console.log("\n── 8) Katlama fonksiyonu + sıralama collation'ı ──");
+  const liveFns = await prisma.$queryRaw<Array<{ proname: string; vol: string; body: string }>>`
+    SELECT p.proname, p.provolatile::text AS vol, pg_get_functiondef(p.oid) AS body
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE n.nspname = 'public' AND p.prokind = 'f' AND p.proname = ANY(ARRAY['tr_fold'])
+  `;
+  const fnByName = new Map(liveFns.map((f) => [f.proname, f]));
+  for (const exp of EXPECTED_FUNCTIONS) {
+    const live = fnByName.get(exp.name);
+    if (!live) {
+      check(exp.name, false, `fonksiyon YOK — ${exp.why}`);
+      continue;
+    }
+    check(`${exp.name} IMMUTABLE`, live.vol === exp.volatility, `volatility=${live.vol} (beklenen ${exp.volatility})`);
+    const missing = exp.bodyFragments.filter((f) => !live.body.includes(f));
+    check(
+      `${exp.name} gövde parmak izi`,
+      missing.length === 0,
+      missing.length === 0 ? exp.why : `EKSİK adım: ${missing.join(", ")} — JS ikiziyle ayrışmış olabilir`
+    );
+  }
+  const liveColl = await prisma.$queryRaw<Array<{ collname: string; provider: string }>>`
+    SELECT collname, collprovider::text AS provider FROM pg_collation
+    WHERE collnamespace = 'public'::regnamespace
+  `;
+  const collNames = new Set(liveColl.map((c) => c.collname));
+  for (const exp of EXPECTED_COLLATIONS) {
+    check(exp.name, collNames.has(exp.name), exp.why);
+  }
+  checkNoExtras(
+    "8) Collation'lar",
+    liveColl.map((c) => c.collname),
+    new Set(EXPECTED_COLLATIONS.map((e) => e.name)),
+    (n) => n
+  );
+
+  // ── 9) Katlanmış gölge kolonlar ───────────────────────────────────────────
+  console.log("\n── 9) Katlanmış gölge kolonlar (GENERATED STORED) ──");
+  const liveGen = await prisma.$queryRaw<Array<{ tbl: string; col: string; expr: string }>>`
+    SELECT c.relname AS tbl, a.attname AS col,
+           pg_get_expr(d.adbin, d.adrelid) AS expr
+    FROM pg_attribute a
+    JOIN pg_class c     ON c.oid = a.attrelid
+    JOIN pg_namespace n ON n.oid = c.relnamespace
+    LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+    WHERE n.nspname = 'public' AND a.attgenerated = 's' AND NOT a.attisdropped
+  `;
+  // ⚠️ KÖRLÜK ZEMİNİ: sorgu bir refactor'da boşa düşerse "hiç kolon yok" ile
+  // "hepsi doğru" aynı yeşile çıkardı.
+  check(
+    `körlük zemini: ≥${FOLD_COLUMN_MIN} gölge kolon bulundu`,
+    liveGen.length >= FOLD_COLUMN_MIN,
+    `${liveGen.length} kolon`
+  );
+  const wrongExpr = liveGen.filter((g) => !(g.expr ?? "").includes(FOLD_EXPR_FRAGMENT));
+  check(
+    "her gölge kolon tr_fold() ile üretiliyor",
+    wrongExpr.length === 0,
+    wrongExpr.length === 0
+      ? `${liveGen.length} kolonun tamamı`
+      : `ifadesi FARKLI: ${wrongExpr.map((g) => `${g.tbl}.${g.col}`).join(", ")}`
+  );
+  const notFoldNamed = liveGen.filter((g) => !g.col.endsWith("Fold"));
+  check(
+    "adlandırma sözleşmesi: hepsi `<kolon>Fold`",
+    notFoldNamed.length === 0,
+    notFoldNamed.map((g) => `${g.tbl}.${g.col}`).join(", ") || "sapma yok"
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
