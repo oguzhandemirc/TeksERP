@@ -28,6 +28,10 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { AddressInfo } from "node:net";
+import app from "../src/app";
+import prisma from "../src/lib/prisma";
+import { AuthService } from "../src/services/auth.service";
 import { listAdapters } from "../src/services/import/import-registry";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 
@@ -115,7 +119,114 @@ function rootPermissionsOf(routeSrc: string, method: "post" | "get"): string[] {
   return [];
 }
 
-function main(): void {
+// =============================================================================
+// CANLI SONDA — "beyan" değil "gerçekten uyguluyor mu"
+// =============================================================================
+// Yukarısı METİN karşılaştırır: adaptörün beyanı ↔ rota dosyasının kaynağı.
+// İkisi de yanlış okunmuş olabilir (guard bir OR zinciri olabilir, middleware
+// sırası yanlış olabilir, `matchesPermission` wildcard'ı beklenmedik genişletir).
+// Bu bölüm gerçek Express app'ini geçici portta kaldırıp GERÇEK token'la ölçer.
+//
+// ⚠️ İKİ YÖNLÜ olmak ZORUNDA. Tek yön ("403 verdi") her şeyi reddeden bir
+// guard'la da yeşil kalırdı — yani hizanın DOĞRU izne kurulduğunu değil, yalnız
+// bir şeyin reddedildiğini kanıtlardı. Bu yüzden ikinci turda doğru izin
+// verilir ve kapının AÇILDIĞI da ölçülür.
+async function liveProbe(): Promise<void> {
+  console.log("\n--- canlı sonda: içe aktarım kapısı gerçekten uyguluyor mu ---");
+
+  const username = `TEST-IMP-PERM-${Date.now().toString(36)}`;
+  const password = "TestImpPerm2026!";
+  const codes = ["data:import", "quality:write", "property:write"] as const;
+  const perms = Object.fromEntries(
+    (await prisma.permission.findMany({ where: { code: { in: [...codes] } }, select: { id: true, code: true } }))
+      .map((p) => [p.code, p.id] as const),
+  ) as Record<string, string>;
+
+  const missing = codes.filter((c) => !perms[c]);
+  if (missing.length > 0) {
+    // Sessizce atlamak YASAK: bu, en tehlikeli kontrolün hiç koşmadığı hâli.
+    check(`canlı sonda koşabildi (katalog izinleri DB'de)`, false, `eksik: ${missing.join(", ")}`);
+    return;
+  }
+
+  const user = await prisma.user.create({
+    data: {
+      username,
+      fullName: "İçe aktarım izin sondası",
+      passwordHash: await AuthService.hashPassword(password),
+      // İLK TUR: eski (yanlış) renk izniyle — panelden renk açamaz.
+      permissions: { create: [{ permissionId: perms["data:import"]! }, { permissionId: perms["quality:write"]! }] },
+    },
+    select: { id: true },
+  });
+
+  const server = app.listen(0);
+  await new Promise<void>((r) => server.once("listening", () => r()));
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+  const login = async (): Promise<string | null> => {
+    const r = await fetch(`${base}/api/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    if (r.status !== 200) return null;
+    const b = (await r.json()) as { data?: { token?: string }; token?: string };
+    return b?.data?.token ?? b?.token ?? null;
+  };
+  const post = async (path: string, token: string, body: unknown): Promise<number> =>
+    (
+      await fetch(`${base}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      })
+    ).status;
+
+  try {
+    const t1 = await login();
+    check("sonda kullanıcısı giriş yapabildi", Boolean(t1));
+    if (!t1) return;
+
+    // 1) Normal yol: `quality:write` renk AÇMAYA yetmez.
+    const direct = await post("/api/colors", t1, { name: `TEST-IMP-PERM-${Date.now()}` });
+    check(
+      "`quality:write` ile POST /api/colors → 403 (renk izni property:write)",
+      direct === 403,
+      `status=${direct}`,
+    );
+
+    // 2) ASIL KONTROL: toplu yol da aynı kapıyı uygulamalı. Düzeltmeden ÖNCE
+    //    burası 200 dönüyordu — panelden tek renk açamayan kişi TOPLU renk
+    //    yükleyebiliyordu.
+    const bulk = await post("/api/import/color/preview", t1, { rows: [{ rowNo: 2, cells: { name: "X" } }] });
+    check(
+      "`quality:write` ile içe aktarım önizlemesi → 403 (toplu yol da kapalı)",
+      bulk === 403,
+      `status=${bulk}`,
+    );
+
+    // 3) TERS YÖN: doğru izin verilince kapı AÇILMALI. Bu olmadan yukarıdaki
+    //    iki 403, "her şeyi reddeden guard"la da yeşil kalırdı.
+    await prisma.userPermission.create({
+      data: { userId: user.id, permissionId: perms["property:write"]! },
+    });
+    const t2 = await login(); // izinler JWT'de — yeniden giriş ŞART
+    const bulkOk = t2 ? await post("/api/import/color/preview", t2, { rows: [{ rowNo: 2, cells: { name: "X" } }] }) : 0;
+    check(
+      "`property:write` eklenince içe aktarım önizlemesi 403 DEĞİL (hiza doğru izne kurulu)",
+      bulkOk !== 403 && bulkOk !== 0,
+      `status=${bulkOk}`,
+    );
+  } finally {
+    await new Promise<void>((r) => server.close(() => r()));
+    await prisma.userPermission.deleteMany({ where: { userId: user.id } });
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+    await prisma.color.deleteMany({ where: { name: { startsWith: "TEST-IMP-PERM-" } } });
+  }
+}
+
+async function main(): Promise<void> {
   console.log("=== İçe aktarım izni ↔ varlığın gerçek CRUD izni ===\n");
 
   const adapters = listAdapters();
@@ -212,8 +323,13 @@ function main(): void {
   }
   check("tüm adaptör izinleri katalogda tanımlı", inCatalog);
 
+  await liveProbe();
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});
