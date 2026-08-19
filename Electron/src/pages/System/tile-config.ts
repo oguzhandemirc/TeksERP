@@ -1,4 +1,4 @@
-import { Activity, Archive, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, type LucideIcon } from "lucide-react";
+import { Activity, Archive, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, Upload, type LucideIcon } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -10,6 +10,12 @@ export interface SystemTile {
   to: string;
   group: SystemTileGroup;
   adminOnly?: boolean;
+  /**
+   * Karo/palet görünürlüğü için gereken izin — route guard'ıyla AYNI kod olmalı.
+   * Ayrışırsa kullanıcı kartı görür, tıklar, /forbidden'a düşer ("Kurşun Sırası"
+   * dersi). Verilmezse karo `admin:settings` sayılır (Sistem hub'ının varsayılanı).
+   */
+  permission?: string;
 }
 
 export interface SystemTileSection {
@@ -42,6 +48,16 @@ export const systemTileSections: SystemTileSection[] = [
 ];
 
 export const systemTiles: SystemTile[] = [
+  {
+    key: "data-import",
+    title: "Veri Aktarımı",
+    description: "Excel/CSV ile toplu kayıt yükleme + aktarım geçmişi",
+    icon: Upload,
+    to: "/system/data-import",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
+    permission: "data:import",
+  },
   {
     key: "activity",
     title: "Aktivite Günlüğü",

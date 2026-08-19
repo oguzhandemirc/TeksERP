@@ -23,6 +23,7 @@ export function DefectTypesPage() {
       title="Hata Tipleri"
       description="Kalite kontrol hata tanımları."
       entityName="Hata tipi"
+      importEntity="defectType"
       queryKey="defect-types"
       service={defectTypeService}
       columns={defectTypeColumns}

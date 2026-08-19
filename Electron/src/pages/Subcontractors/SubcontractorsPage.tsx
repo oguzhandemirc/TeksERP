@@ -39,6 +39,7 @@ export function SubcontractorsPage() {
       title="Fason Firmalar"
       description="Boyahane, baskı, yıkama gibi dış hizmet sağlayan firmalar."
       entityName="Fason firma"
+      importEntity="subcontractor"
       queryKey="subcontractors"
       service={subcontractorService}
       columns={subcontractorColumns}

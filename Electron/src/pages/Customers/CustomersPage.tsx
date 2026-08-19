@@ -56,6 +56,7 @@ export function CustomersPage() {
       title="Müşteriler"
       description="Müşteri ve tedarikçi firmalar."
       entityName="Müşteri"
+      importEntity="customer"
       queryKey="customers"
       service={customerService}
       columns={customerColumns}

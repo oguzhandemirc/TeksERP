@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Plus, Pencil, Trash2, RotateCcw, PowerOff } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw, PowerOff, Upload } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
@@ -13,12 +13,20 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import { PermissionGate } from "@/components/PermissionGate";
+import { ImportDialog } from "@/components/import/ImportDialog";
 import type { CrudService } from "@/services/crudService";
 
 interface Props<T extends { id: string }> {
   title: string;
   description?: string;
   entityName: string;
+  /**
+   * Verilirse başlığa "İçe Aktar" düğmesi eklenir ve toplu yükleme sihirbazı
+   * açılır. Değer, backend `import-registry`'deki varlık anahtarıdır
+   * ("item", "customer", …). Düğme İKİ yetki ister: `data:import` (toplu
+   * yükleme yeteneği) ve sayfanın kendi `writePermission`'ı.
+   */
+  importEntity?: string;
   queryKey: string;
   service: CrudService<T>;
   columns: ColumnDef<T>[];
@@ -61,6 +69,7 @@ export function CrudPage<T extends { id: string }>({
   title,
   description,
   entityName,
+  importEntity,
   queryKey,
   service,
   columns,
@@ -81,6 +90,7 @@ export function CrudPage<T extends { id: string }>({
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [hardRemoving, setHardRemoving] = useState<T | null>(null);
   const [showInactive, setShowInactive] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const forceFilters = useMemo<Record<string, string>>(
     () => ({
@@ -177,7 +187,7 @@ export function CrudPage<T extends { id: string }>({
     [columns, writePermission, permanentDelete, restoreMutation.isPending],
   );
 
-  const { table, query, search, setSearch, pagination } = useDataTable<T>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<T>({
     queryKey,
     fetchFn: service.listCursor,
     forceFilters,
@@ -207,6 +217,13 @@ export function CrudPage<T extends { id: string }>({
   const headerActions = (
     <>
       {headerExtra}
+      {importEntity ? (
+        <PermissionGate allOf={["data:import", writePermission]}>
+          <Button size="sm" variant="outline" onClick={() => setImportOpen(true)}>
+            <Upload className="h-4 w-4" /> İçe Aktar
+          </Button>
+        </PermissionGate>
+      ) : null}
       <RefreshButton queryKey={queryKey} />
       <PermissionGate permission={writePermission}>
         <Button
@@ -236,6 +253,7 @@ export function CrudPage<T extends { id: string }>({
         placeholder={searchPlaceholder}
         table={table}
         exportName={title}
+        fetchAll={fetchAll}
         actions={
           <>
             {hideHeader && !actionsPortal && headerActions}
@@ -303,6 +321,17 @@ export function CrudPage<T extends { id: string }>({
           }}
         />
       )}
+
+      {importEntity ? (
+        <ImportDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          entity={importEntity}
+          // Yükleme bitince liste tazelenir — kullanıcı yazılan kayıtları
+          // görmek için sayfayı yenilemek zorunda kalmasın.
+          onDone={() => void query.refetch()}
+        />
+      ) : null}
     </PageShell>
   );
 }

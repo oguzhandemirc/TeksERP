@@ -114,6 +114,11 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "system/server-status", app: "desktop", title: "Sunucu Durumu", requires: ["admin:settings"], capabilities: [] },
   { key: "system/work-sessions", app: "desktop", title: "Çalışma Oturumları", requires: ["admin:settings"], capabilities: [] },
   { key: "system/backups", app: "desktop", title: "Yedekler", requires: ["admin:settings"], capabilities: [] },
+  // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
+  // VERİ yönetimidir ve ayrı atanır. Ekranın kendisi `data:import` ile açılır;
+  // hangi varlığa yazılabileceği ayrıca o varlığın write izniyle sınırlıdır
+  // (uç guard'ı iki katmanlıdır — `import.routes.ts`).
+  { key: "system/data-import", app: "desktop", title: "Veri Aktarımı", requires: ["data:import"], capabilities: [] },
   { key: "system/db-restore", app: "desktop", title: "Veritabanı Geri Yükleme", requires: ["admin:settings"], capabilities: [] },
   { key: "system/logs", app: "desktop", title: "Sistem Kayıtları", requires: ["admin:settings"], capabilities: [] },
   { key: "system/archive", app: "desktop", title: "Aktivite Arşivi", requires: ["admin:settings"], capabilities: [] },
@@ -197,14 +202,6 @@ export function screensUsing(code: string): ScreenEntry[] {
 export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: string }> = [
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
-  {
-    code: "data:import",
-    reason:
-      "Toplu içe aktarım API'si (import.routes) — Electron ekranı HENÜZ YOK, " +
-      "yetenek bugün yalnız uçtan kullanılıyor. ⚠️ GEÇİCİ: ekran eklendiği gün " +
-      "bu satır BAYAT MUAF olur ve bekçinin iki yönlü kontrolü kırmızı verip " +
-      "düşürülmesini zorlar — elle takip gerekmez.",
-  },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */

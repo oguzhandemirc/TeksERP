@@ -40,6 +40,7 @@ import RollArchivePage from "@/pages/System/RollArchivePage";
 import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
 import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
+import { DataImportPage } from "@/pages/System/DataImport/DataImportPage";
 import { BackupsPage } from "@/pages/System/Backups/BackupsPage";
 import { DbRestorePage } from "@/pages/System/DbRestore/DbRestorePage";
 import { LabelTemplatesPage } from "@/pages/LabelTemplates/LabelTemplatesPage";
@@ -387,6 +388,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <WorkSessionsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Veri Aktarımı — `data:import` yetkisi (admin:settings DEĞİL): toplu
+    // yükleme sistem yönetimi değil, veri yönetimi işidir ve ayrı atanır.
+    path: "system/data-import",
+    element: (
+      <ProtectedRoute requirePermission="data:import">
+        <DataImportPage />
       </ProtectedRoute>
     ),
   },

@@ -18,6 +18,7 @@ export function MachinesPage() {
       title="Makineler"
       description="İstasyonlardaki makine envanteri."
       entityName="Makine"
+      importEntity="machine"
       queryKey="machines"
       service={machineService}
       columns={machineColumns}

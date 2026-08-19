@@ -60,6 +60,7 @@ export function FabricPropertiesPage() {
       title="Kumaş Özellikleri"
       description="Yanmazlık, su geçirmezlik gibi kumaş kazanımları."
       entityName="Özellik"
+      importEntity="fabricProperty"
       queryKey="fabric-properties"
       service={fabricPropertyService}
       columns={fabricPropertyColumns}

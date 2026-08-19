@@ -41,6 +41,7 @@ export function ColorsPage() {
       title="Renkler"
       description="Boyahane renk kataloğu."
       entityName="Renk"
+      importEntity="color"
       queryKey="colors"
       service={colorService}
       columns={colorColumns}

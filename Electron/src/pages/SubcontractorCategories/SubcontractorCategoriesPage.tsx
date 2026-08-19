@@ -24,6 +24,7 @@ export function SubcontractorCategoriesPage() {
       title="Fason Kategorileri"
       description="Boyahane, Baskı, Yıkama, Şardon gibi fason hizmet türleri."
       entityName="Kategori"
+      importEntity="subcontractorCategory"
       queryKey="subcontractor-categories"
       service={subcontractorCategoryService}
       columns={subcontractorCategoryColumns}

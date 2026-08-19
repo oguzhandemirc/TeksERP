@@ -42,6 +42,7 @@ export function ProductRecipesPage() {
       title="İş Emri Şablonları"
       description="Kumaş + renk + özellik + en + rota — iş emri açılışını hızlandıran hazır şablonlar."
       entityName="İş Emri Şablonu"
+      importEntity="productRecipe"
       queryKey="product-recipes"
       service={productRecipeService}
       columns={recipeColumns}

@@ -101,7 +101,10 @@ export const commandSections: CommandSection[] = [
       description: tile.description,
       icon: tile.icon,
       to: tile.to,
-      permission: "admin:settings",
+      // Karo kendi iznini taşıyorsa O geçerli (ör. Veri Aktarımı → data:import);
+      // yoksa Sistem hub'ının varsayılan kapısı. Palet ile karo/route ayrışırsa
+      // kullanıcı paletten tıklayıp /forbidden'a düşer.
+      permission: tile.permission ?? "admin:settings",
     })),
   },
   {

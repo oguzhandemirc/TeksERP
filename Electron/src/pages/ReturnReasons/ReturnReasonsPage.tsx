@@ -40,6 +40,7 @@ export function ReturnReasonsPage() {
       title="İade Nedenleri"
       description="Müşteri iadesi neden kataloğu. İade ekranında seçenek olarak çıkar."
       entityName="İade Nedeni"
+      importEntity="returnReason"
       queryKey="return-reasons"
       service={returnReasonService}
       columns={returnReasonColumns}

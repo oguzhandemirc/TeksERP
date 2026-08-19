@@ -62,6 +62,7 @@ export function RoutesPage() {
       title="Üretim Rotaları"
       description="İş emri şablonları — sık kullanılan istasyon sıralarını burada tanımla."
       entityName="Rota"
+      importEntity="route"
       queryKey="routes"
       service={routeService}
       columns={routeColumns}
