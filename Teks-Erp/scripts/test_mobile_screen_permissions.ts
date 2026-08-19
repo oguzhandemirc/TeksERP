@@ -327,6 +327,50 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
     path: "PATCH /order-lines/:p",
     why: "Etikette müşteri ürün adı düzenleme — `label:edit` (etiket içeriği değiştiriyor, üretim kararı değil).",
   },
+  // ── "Sipariş Bağla" ailesi (2026-08-19) — Tambur üst şeridi ─────────────────
+  // Ekranın ana yetkisi `mobile:tambur` ama bu dört uç `workorder:write` ister
+  // ve bu BİLİNÇLİ: uyumsuz siparişi iş emrine bağlamak bir PLANLAMA kararıdır,
+  // okutma işi değil. Arayüz aynı kapıyı uyguluyor — düğme
+  // `canLinkOrders = hasPermission('workorder:write')` arkasında çizilir
+  // (`TamburScreen.tsx:438`), yani düz `mobile:tambur` operatörü düğmeyi HİÇ
+  // görmez ve ucu HİÇ çağırmaz. Kapı ekranda kapalıysa uçta 403 arıza değildir.
+  // ⚠️ Bu muafın geçerliliği o `canLinkOrders` satırına BAĞLI: düğme bir gün
+  // koşulsuz çizilirse muaf yalanlaşır ve saha 403 görür.
+  {
+    screen: "mobile:tambur",
+    path: "GET /:p",
+    why: "İş emri detayı — Sipariş Bağla sayfası açılırken okunur; düğme workorder:write arkasında.",
+  },
+  {
+    screen: "mobile:tambur",
+    path: "GET /:p/linkable-order-lines",
+    why: "Bağlanabilir sipariş kalemleri — yalnız Sipariş Bağla sheet'i çağırır (workorder:write).",
+  },
+  {
+    screen: "mobile:tambur",
+    path: "POST /:p/order-links",
+    why: "Sipariş bağlama — planlama kararı, workorder:write. Arayüzde aynı kapı.",
+  },
+  {
+    screen: "mobile:tambur",
+    path: "DELETE /:p/order-links/:p",
+    why: "Bağ sökme — bağlamanın tersi, aynı yetki (workorder:write).",
+  },
+  {
+    screen: "mobile:tambur",
+    path: "POST /:p/order-links/override",
+    why: "Uyumsuz bağlama onayı — SÜPERVİZÖR yetkisi; sheet içinde ayrıca roll:manual-adjust aranır (TamburOrderLinkSheet.tsx:72).",
+  },
+  {
+    screen: "mobile:tambur",
+    path: "POST /manual/send-to-dye",
+    why: "Topu boyaya geri gönderme — stok/iş emri düzeltmesi sayılır (`mobile:tambur-duzelt` ∨ `roll:manual-adjust`), `POST /manual/bring` ile aynı gerekçe.",
+  },
+  {
+    screen: "mobile:tambur",
+    path: "POST /manual/send-to-dye-preview",
+    why: "Yukarıdakinin YAN ETKİSİZ önizlemesi — aynı ekranda, aynı düğmenin arkasında, aynı yetkiyle çağrılır. Önizlemeyi ayrı (daha gevşek) bir kapıya koymak, kararı verecek bilgiyi yetkisiz kişiye açardı.",
+  },
 ];
 
 function main(): void {

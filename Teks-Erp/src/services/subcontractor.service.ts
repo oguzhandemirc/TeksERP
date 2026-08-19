@@ -2640,7 +2640,7 @@ export class SubcontractorService {
               // sevk hâlâ AÇIKTIR (ikinci teslimatın firma çözümü buradan geçer).
               items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
             },
-            select: { batchId: true, subcontractorId: true },
+            select: { id: true, batchId: true, subcontractorId: true },
           })
         : [];
     const firmByBatch = new Map(srcDispatches.map((d) => [d.batchId, d.subcontractorId]));
@@ -2721,18 +2721,25 @@ export class SubcontractorService {
       // dönüş aynası; farklı tarihte/kazanda çıkan mal ayrı boya lotudur).
       // İlk teslimat giden partiyi sürdürür — tek seferde tam dönüşte hiçbir
       // şey değişmez.
+      //
+      // ⚠️ KAPSAM SEVKTİR, PARTİ DEĞİL — ve bu ayrım load-bearing. Sorgu
+      // `batchId IN srcBatchIds` ile kurulsaydı (ilk yazımı öyleydi) parti
+      // BİRLEŞTİRMESİ sonrası yanlış cevap verirdi: K15 merge, aynı adımda
+      // DÖNMÜŞ bir sevkle AÇIK bir sevki tek partinin altında yan yana
+      // getirebiliyor (hemen yukarıdaki `srcDispatches` yorumunun anlattığı
+      // durumun aynısı). O zaman dönmüş sevkin makbuz satırları sayıma girer ve
+      // AÇIK sevkin İLK teslimatı "takip teslimatı" sanılır → doğan toplar
+      // gereksiz yere yeni bir partiye bölünür. Ölçüldü: `test_batch_k15_merge`
+      // g4 tam bunu yakaladı (born top P71 yerine P73'e doğuyordu).
+      // `srcDispatches` zaten outstanding-scope'lu, yani "şu an kabul ettiğimiz"
+      // sevkler — doğru kapsam odur.
+      const srcDispatchIds = srcDispatches.map((d) => d.id);
       const isFollowUpDelivery =
-        srcBatchIds.length > 0 &&
+        srcDispatchIds.length > 0 &&
         (await tx.subcontractorReceiptItem.count({
           where: {
             receipt: { cancelledAt: null },
-            sourceDispatchItem: {
-              dispatch: {
-                batchId: { in: srcBatchIds },
-                stepId: data.stepId,
-                cancelledAt: null,
-              },
-            },
+            sourceDispatchItem: { dispatchId: { in: srcDispatchIds } },
           },
         })) > 0;
 
