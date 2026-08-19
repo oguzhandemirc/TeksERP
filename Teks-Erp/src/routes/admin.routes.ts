@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Router, Request, Response, NextFunction } from "express";
+import { SCREEN_CATALOG, permissionsWithoutScreen } from "../constants/screen-catalog";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
@@ -60,6 +61,38 @@ router.get(
     } catch (error) {
       next(error);
     }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/screens:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Ekran manifestosu — hangi ekran hangi yetkiyi ister
+ *     description: |
+ *       Yetki mimarisinin 2. katmanı (docs/design/YETKI-MIMARISI.md). Atama
+ *       ekranındaki "Ekrana göre" görünümü ve "neden giremiyor" teşhisi bunu
+ *       kullanır. İKİ istemciye de buradan servis edilir — mobil/Electron aynası
+ *       AÇILMAZ.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Ekran listesi + ekranı olmayan izinler }
+ */
+router.get(
+  "/screens",
+  verifyToken,
+  requirePermission("admin:users"),
+  (_req: Request, res: Response): void => {
+    res.status(200).json({
+      success: true,
+      data: {
+        screens: SCREEN_CATALOG,
+        // Panelin "bu yetki hiçbir ekranda kullanılmıyor" bandı için — bugün boş,
+        // ama yeni izin eklenip ekrana bağlanmazsa BURADA görünür.
+        withoutScreen: permissionsWithoutScreen(),
+      },
+    });
   }
 );
 
