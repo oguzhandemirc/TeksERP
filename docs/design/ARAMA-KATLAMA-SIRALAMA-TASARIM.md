@@ -1,6 +1,6 @@
 # ARAMA · KATLAMA · SIRALAMA TASARIMI — Türkçe-duyarsız arama, tek katlama sözleşmesi, ölçekli performans
 
-> **Durum:** PLAN — uygulanmadı. Cumartesi (2026-08-22) veri sıfırlamasından ÖNCE karara bağlanacak;
+> **Durum:** PLAN — ONAYLANDI (2026-08-19, kullanıcı kararı; §0.1). Uygulama F1'den başlıyor. Cumartesi (2026-08-22) veri sıfırlaması;
 > uygulama sıfırlama penceresinde ya da hemen sonrasında (tablolar boşken index/generated kolon bedava).
 > **Kapsam:** Teks-Erp (backend + migration) · Electron · mobil. **Ön çalışma:** `b66829d5` (adlar BÜYÜK, istemci katlaması).
 > **Ölçüm tabanı:** dev DB (PG 18.6, ICU en-US) + 200 bin satırlık sentetik ölçüm; canlı = PG 16.9 Windows, **C locale**.
@@ -19,6 +19,14 @@
 | D6 | Terim çok kelimeliyse **kelime başına AND** (aynı yol içinde), yollar arası OR | ✅ Uygula | "şahin tekstil" ↔ "tekstil şahin" aynı sonucu versin; her kelime GIN'den beslenir, maliyet ihmal. |
 | D7 | Kod alanları (`orderNumber`, `shipmentNo`, `workOrderNumber`, `batchNumber`…) katlanmaz: `normalizeScanCode(term)` + düz `contains`, büyük 4 tabloda trigram GIN | ✅ Uygula | Kodlar ASCII BÜYÜK; `mode:"insensitive"` (ILIKE) index kullanmaz. |
 | D8 | `rolls` / `roll_movements` / `system_logs`'a **hiç** GIN konmaz | ✅ | Tarama doğruladı: bu tablolarda serbest metin araması YOK (barkod = eşitlik). Kaynak tüketimi kaygısı (madde 5) burada bitiyor. |
+
+### 0.1 Kullanıcı kararları (2026-08-19)
+| Soru | Karar |
+|---|---|
+| D3 mükerrer anahtarı ASCII katlamalı mı ("SAHIN" ≡ "ŞAHİN" → 409)? | **EVET** — `nameFold` üzerinde UNIQUE, mesaj mevcut kaydı gösterir |
+| D4 ad kolonlarına tr collation? | **EVET** — ICU/libc yoksa yalnız bu madde ertelenir |
+| `order_lines.customerItemName` + müşteri alias'ları BÜYÜK harfe normalize? | **EVET** — belgeye/etikete de BÜYÜK basılır; §2.2/§6.1 #3-#4 buna göre (`normalizeDisplayName` yazımda) |
+| F0 canlı ön koşul | Sahadan çekilen `tekserp_saha` (2026-08-09 yedeği) incelendi: canlıda **yalnız `plpgsql`** kurulu, `unaccent`/`pg_trgm` YOK — kurulabilirliği (contrib dosyaları + ICU) yedekten görülemez. Kullanıcı kararı: **bilerek ilerle**; migration `CREATE EXTENSION`'da yüksek sesle düşer, o gün contrib kopyalanır (EDB Windows derlemesi ikisini de ve ICU'yu taşır). |
 
 **Sektörde karşılığı (madde 2 sorusu):**
 - **SAP:** `KNA1-NAME1` girildiği gibi saklanır; **`MCOD1`** onun büyük harfli/normalize "matchcode" gölgesidir, arama ve F4 yardımı oradan koşar. Yani *görünen değer ≠ arama anahtarı*. Bizde D1 tam bunu kurar (`name` ↔ `nameFold`).
