@@ -17,6 +17,8 @@ interface RecordInfo {
   created: RecordActor | null;
   lastChange: RecordActor | null;
   auditEmpty: boolean;
+  /** Bilgi nereden geldi — kaynağı GİZLEMEK yerine söylüyoruz. */
+  source?: "column" | "audit" | "archive" | "none";
 }
 
 interface Props {
@@ -42,8 +44,14 @@ const fmt = (v?: string | null) => (v ? safeFormat(v, "dd.MM.yyyy HH:mm") : "—
  *   gelir (audit'te iki indeksli sorgu).
  * · `staleTime: 5 dk` — aynı kayda tekrar bakmak yeni istek doğurmaz.
  *
- * ⚠️ Audit 6 ayda bir arşivleniyor. Eski kayıtta "kim" bilinmez; bunu SESSİZCE
- * "—" diye geçmek veriyi kaybettiğimizi gizlerdi → açıkça yazılır.
+ * ⚠️ 2026-08-19 — ÖNCE KOLON, SONRA AUDIT. Künye artık kaydın kendi
+ * `createdById`/`updatedById` kolonlarında duruyor (Plan A) ve sunucu önce
+ * oradan okuyor. Kolonu olmayan tablolarda (iş emri, sevkiyat — 2. faz)
+ * audit'e düşülür; o yol artık ARŞİVİ DE tarar.
+ *
+ * Eskiden bilgi YALNIZ audit'ten geliyordu ve audit 6 ayda arşivlendiği için
+ * eski kayıtta bu düğme SESSİZCE boş dönüyordu. Kaynağı göstermek o sınıf
+ * hatayı görünür kılar: "kayıt yok" ile "arşivden bulundu" artık ayrı şeyler.
  */
 export function RecordInfoButton({ table, id, createdAt, updatedAt, className }: Props) {
   const [open, setOpen] = useState(false);
@@ -105,8 +113,17 @@ export function RecordInfoButton({ table, id, createdAt, updatedAt, className }:
           {q.isError && <div className="text-destructive">Bilgi alınamadı.</div>}
           {info?.auditEmpty && (
             <div className="rounded border border-dashed px-2 py-1 text-muted-foreground">
-              İşlem kaydı bulunamadı — 6 aydan eski kayıtlar arşivlenir.
+              İşlem kaydı bulunamadı — bu kayıt künye kolonları eklenmeden önce
+              oluşturulmuş ve işlem kaydı da arşivlenmiş olabilir.
             </div>
+          )}
+          {/* Kaynak rozeti — yalnız audit/arşivden geldiğinde. Kolondan gelen
+              bilgi "normal" durumdur, rozet göstermek gürültü olur. */}
+          {info?.source === "archive" && (
+            <div className="text-[10px] text-muted-foreground">arşivlenmiş işlem kaydından</div>
+          )}
+          {info?.source === "audit" && (
+            <div className="text-[10px] text-muted-foreground">işlem kaydından</div>
           )}
         </div>
       </PopoverContent>

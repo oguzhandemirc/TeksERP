@@ -34,6 +34,7 @@ import { buildItemPayload } from "./itemPayload.helper";
 import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 
+import { RecordInfoButton } from "@/components/RecordInfoButton";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -143,7 +144,20 @@ export function ItemFormDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "Kumaşı Düzenle" : "Yeni Kumaş"}</DialogTitle>
+          <div className="flex items-center gap-1.5">
+            <DialogTitle>{isEdit ? "Kumaşı Düzenle" : "Yeni Kumaş"}</DialogTitle>
+            {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
+                Kaynak: kaydın KENDİ künye kolonları (Plan A). Audit'ten
+                okunmuyor — audit 6 ayda arşivlenir, künye kaybolmamalı. */}
+            {isEdit && initial && (
+              <RecordInfoButton
+                table="ITEM"
+                id={initial.id}
+                createdAt={initial.createdAt}
+                updatedAt={initial.updatedAt}
+              />
+            )}
+            </div>
           <DialogDescription>
             Kumaş tanımı. Birim, seçilen tipe göre otomatik atanır.
           </DialogDescription>

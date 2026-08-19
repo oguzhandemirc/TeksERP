@@ -27,6 +27,7 @@ import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect";
 import type { Customer } from "./types";
 
+import { RecordInfoButton } from "@/components/RecordInfoButton";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -239,7 +240,20 @@ export function CustomerFormDialog({
       <Dialog open={open} onOpenChange={requestClose}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
+            <div className="flex items-center gap-1.5">
             <DialogTitle>{isEdit ? "Müşteriyi Düzenle" : "Yeni Müşteri"}</DialogTitle>
+            {/* ⓘ — kim oluşturdu / en son kim değiştirdi (2026-08-19).
+                Kaynak: kaydın KENDİ künye kolonları (Plan A). Audit'ten
+                okunmuyor — audit 6 ayda arşivlenir, künye kaybolmamalı. */}
+            {isEdit && initial && (
+              <RecordInfoButton
+                table="CUSTOMER"
+                id={initial.id}
+                createdAt={initial.createdAt}
+                updatedAt={initial.updatedAt}
+              />
+            )}
+            </div>
             <DialogDescription>
               {isEdit
                 ? "Müşteri bilgileri ve sevk noktası (şube) tanımları."

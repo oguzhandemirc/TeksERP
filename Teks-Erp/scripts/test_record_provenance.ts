@@ -91,7 +91,8 @@ async function main(): Promise<void> {
     const { ColorService } = await import("../src/services/color.service");
     const svc = new ColorService({
       model: prisma.color, modelName: "color", tableName: "COLOR",
-      searchFields: ["code", "name"], duplicateNameField: "name", entityLabel: "renk",
+      searchFields: ["name"],
+      codeSearchFields: ["code"], duplicateNameField: "name", entityLabel: "renk",
     } as never);
     const created = (await svc.create(
       { code: `TEST-PRV-${ts}`, name: `TEST KUNYE BEKCI ${ts}` }, u1!.id,
@@ -120,6 +121,58 @@ async function main(): Promise<void> {
     check("userId yokken künye EZİLMEZ", afterAnon?.createdById === u1!.id && afterAnon?.updatedById === u2!.id);
   } finally {
     if (colorId) await prisma.color.deleteMany({ where: { id: colorId } }).catch(() => {});
+  }
+
+  // ── 5) record-info: ÖNCE KOLON, kolonsuz tabloda AUDIT ─────────────────
+  // İlk yazımda bilgi yalnız audit'ten okunuyordu → 6 aydan eski kayıtta ⓘ
+  // sessizce boş dönüyordu. Bu bölüm iki yolun da canlıda çalıştığını ölçer.
+  const { recordInfoService } = await import("../src/services/record-info.service");
+
+  const withCol = await prisma.customer.findFirst({
+    where: { createdById: { not: null } }, select: { id: true },
+  });
+  if (withCol) {
+    const r = await recordInfoService.get("CUSTOMER", withCol.id);
+    check("künyeli kayıt KOLONDAN okunur", r.data.source === "column", r.data.source);
+    check("kolon yolunda oluşturan adı çözülür", Boolean(r.data.created?.userName));
+  } else {
+    check("künyeli kayıt KOLONDAN okunur", false, "fixture yok — backfill koşmamış olabilir");
+  }
+
+  const wo = await prisma.workOrder.findFirst({ select: { id: true } });
+  if (wo) {
+    const r = await recordInfoService.get("WORK_ORDER", wo.id);
+    // İş emrinin künye kolonu YOK (2. faz) → audit/arşiv yoluna düşmeli.
+    check("kolonsuz tablo AUDIT yoluna düşer", r.data.source !== "column", r.data.source);
+  }
+
+  // ⚠️ ARŞİV YOLU SERVİSİN KENDİSİYLE sınanır, elle yazılmış bir sorguyla DEĞİL.
+  // İlk yazımda burada kendi `findFirst`'ümü kuruyordum — o, Prisma'nın
+  // davranışını ölçer, BİZİM kodumuzu değil: servis bozulduğunda test yeşil
+  // kalıyordu (negatif sondayla görüldü, 2026-08-19).
+  //
+  // Sıcak audit'te HİÇ satırı olmayan bir kayıt seçilir → `fromAudit` zorunlu
+  // olarak arşiv sorgusunu koşar. `SystemLogArchive`'ın `user` ilişkisi YOKTUR;
+  // sıcak tablonun select'i oraya kopyalanırsa çalışma-zamanında patlar.
+  const orphan = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT c.id FROM customers c
+    WHERE c."createdById" IS NULL
+      AND NOT EXISTS (SELECT 1 FROM system_logs l
+                      WHERE l."tableName"='CUSTOMER' AND l."recordId"=c.id::text)
+    LIMIT 1`;
+  if (orphan.length > 0) {
+    let archiveOk = true;
+    let detail = "";
+    try {
+      const r = await recordInfoService.get("CUSTOMER", orphan[0]!.id);
+      detail = r.data.source;
+    } catch (e) {
+      archiveOk = false;
+      detail = (e as Error).message.slice(0, 90);
+    }
+    check("arşiv yolu servisten koşuyor (user ilişkisi YOK)", archiveOk, detail);
+  } else {
+    check("arşiv yolu servisten koşuyor (user ilişkisi YOK)", false, "fixture yok — auditsiz kayıt bulunamadı");
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
