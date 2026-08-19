@@ -62,7 +62,32 @@ Subcontractor`
 - **Pivot tabloları**: kimliği olmayan bağ satırları.
 - **`Roll`**: `createdById` zaten var — yalnız `updatedById` eklenir.
 
-Toplam ≈ **24 model**.
+Toplam **17 model** (1. faz, uygulandı — `d1b47c71` + `423af5d3`).
+
+### 2. FAZ — ölçülmüş aday listesi (2026-08-19)
+
+Şemadaki 86 modelin tamamı tarandı. Kalan 45 modelin ÇOĞU aday DEĞİL:
+alt satırlar (`OrderLine`, `RouteStep`, `SubcontractorDispatchItem`) ebeveynin
+künyesini taşır · pivotlar (`StationColor`, `ItemAllowedColor`) kimliksizdir ·
+olay tabloları (`RollMovement`, `RollOperation`, `SystemLog`) zaten olayın
+kendisidir · altyapı (`Session`, `EndpointLatencyDaily`, `UserPreference`)
+insan eliyle yaratılmaz.
+
+**Gerçekten eksik olanlar (~8), önem sırasıyla:**
+1. `User` — bu hesabı kim açtı (ISO 27001 açısından anlamlı)
+2. `PermissionTemplate` — bu rolü kim oluşturdu/değiştirdi
+3. `CustomerItemAlias` / `CustomerColorAlias` — "müşterideki bu adı kim koydu";
+   Tambur'a 2026-08-19'da verilen yetki tam bunu yazıyor, anlaşmazlıkta en çok
+   sorulacak yer burası
+4. `SubcontractorCategory`, `TravelerCardTemplate`, `DocumentProfile`,
+   `CustomerStandaloneLabel`, `RollError`
+
+**Olaya özel aktörü olanlar (16 model) AYRI bir karar ister** — `Shipment`
+(`dispatchedById`), `SubcontractorDispatch` (`dispatchedById`), `RollReturn`
+(`receivedById`), `Sack` (`weighedById`)… Bunlarda `createdById` eklemek "iki
+alan aynı soruyu cevaplıyor" belirsizliği yaratabilir; ama `Shipment` gibi
+PLANLANIP SONRA sevk edilen kayıtlarda planlayan ≠ sevk eden olduğu için
+gerçekten ayrı bilgidir. Model model bakılmalı, toptan karar verilmemeli.
 
 ## Uygulama
 
@@ -75,6 +100,18 @@ Her modele: `createdById String? @db.Uuid` + `updatedById String? @db.Uuid`
 "kim yaptı" audit FK'ları, sorgulanmadıkça indexlenmez (CLAUDE.md'deki
 `printedById`/`grantedById` emsali). "Bu kullanıcının oluşturduklarını listele"
 ihtiyacı doğarsa o zaman eklenir.
+
+### ⚠️ Bu kararın TAŞIYICI ŞARTI — kullanıcı hard delete EDİLMEZ
+
+İndekssiz FK'nın tek gerçek riski **ana kaydı silmektir**: bir `users` satırı
+silinirse PostgreSQL, referans veren 22 tabloyu **indekssiz taramak** zorunda
+kalır. Bugün risk yok çünkü kullanıcılar yalnız soft delete ediliyor
+(`deletedAt`; 2026-08-19'da kullanıcı tarafından da teyit edildi).
+
+Bu bir VARSAYIM ve sessizce bozulabilir → `test_record_provenance.ts` kaynak
+ağacını tarayıp `prisma.user.delete` / `deleteMany` arıyor; biri yazdığı gün
+test kırmızı verir ve karar yeniden değerlendirilir (index ekle YA DA silmeyi
+engelle). Negatif sondayla kırmızı verdiği doğrulandı.
 
 ### 2. Yazma — merkezî kaldıraç
 `BaseService.create(data, userId)` ve `update(id, data, userId)` **userId'yi
@@ -114,11 +151,17 @@ mevcut kolon setini bozmadan.
 - Kapsam DIŞI bırakılanların gerekçesi listede **yazılı mı** (iki yönlü muaf denetimi)
 - Körlük zemini: taranan model sayısı ≥ 20
 
-## Maliyet
+## Maliyet — ÖLÇÜLDÜ (2026-08-19)
 
-- Migration: 24 tabloya 2 nullable kolon → **anlık** (varsayılan değer yok, tablo
-  yeniden yazımı yok)
-- Yazma: kolon başına 16 bayt; ölçülebilir yük yok
+- Migration: 17 tabloya 34 nullable kolon → **anlık** (varsayılan değer yok,
+  tablo yeniden yazımı yok)
+- **Yazma: satır başına +0,021 ms** (200 satırlık insert: künyeli 33,6 ms ↔
+  künyesiz 29,5 ms). FK doğrulama tetikleniyor ama maliyet ölçüm gürültüsünde.
+- **Okuma: DAHA UCUZ.** ⓘ artık PK üzerinden tek sorgu (0,09 ms); eskiden
+  audit tablosunda iki `findFirst`'tü. Audit en hızlı büyüyen tablo olduğu için
+  kazanç ölçekle birlikte artar.
+- Disk: künyeli 22 tablonun TOPLAMI 9 MB; 34 kolonun payı birkaç yüz KB.
+- Listeler etkilenmez — kolonlar yalnız açıkça `select` edildiğinde okunur.
 - Kod: BaseService tek nokta + ~10 özel servis
 - ⚠️ **Cumartesi sıfırlamasıyla İLGİSİ YOK** — bu iş boş tablo gerektirmiyor,
   istenildiği zaman yapılabilir.

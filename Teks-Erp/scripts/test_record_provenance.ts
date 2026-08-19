@@ -175,6 +175,43 @@ async function main(): Promise<void> {
     check("arşiv yolu servisten koşuyor (user ilişkisi YOK)", false, "fixture yok — auditsiz kayıt bulunamadı");
   }
 
+  // ── 6) TAŞIYICI VARSAYIM: kullanıcı HARD DELETE edilmez ────────────────
+  // Künye FK'larına index KOYMADIK (CLAUDE.md perf #1 istisnası: "kim yaptı"
+  // audit FK'ları sorgulanmadıkça indexlenmez). Bu kararın tek gerçek riski
+  // ANA KAYDI SİLMEKTİR: bir `users` satırı silinirse PostgreSQL, referans veren
+  // 22 tabloyu İNDEKSSİZ taramak zorunda kalır.
+  //
+  // Bugün risk YOK çünkü kullanıcılar yalnız SOFT DELETE ediliyor (`deletedAt`;
+  // 2026-08-19'da kullanıcı tarafından da teyit edildi). Ama bu bir VARSAYIM ve
+  // sessizce bozulabilir — biri `prisma.user.delete` yazdığı gün bu kontrol
+  // kırmızı verir ve karar yeniden değerlendirilir (index ekle YA DA silmeyi
+  // engelle). Ölçüm: yazma maliyeti bugün satır başına +0,021 ms.
+  const srcDir = path.join(__dirname, "..", "src");
+  const files: string[] = [];
+  (function walk(d: string) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const fp = path.join(d, e.name);
+      if (e.isDirectory()) walk(fp);
+      else if (e.name.endsWith(".ts")) files.push(fp);
+    }
+  })(srcDir);
+  check("körlük zemini: kaynak tarandı", files.length >= 100, `${files.length} dosya`);
+
+  const hardDeletes: string[] = [];
+  for (const f of files) {
+    const t = fs.readFileSync(f, "utf8");
+    // `prisma.user.delete(` / `tx.user.deleteMany(` — userPermission/userPreference
+    // gibi ALT tablolar kapsam DIŞI (onların silinmesi künyeyi etkilemez).
+    for (const m of t.matchAll(/\b(?:prisma|tx)\.user\.(delete|deleteMany)\s*\(/g)) {
+      hardDeletes.push(`${path.relative(srcDir, f)} → user.${m[1]}`);
+    }
+  }
+  check(
+    "kullanıcı HARD DELETE edilmiyor (indekssiz FK kararının şartı)",
+    hardDeletes.length === 0,
+    hardDeletes.join(" · ") || "yalnız soft delete (deletedAt)",
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();
