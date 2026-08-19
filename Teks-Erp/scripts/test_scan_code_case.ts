@@ -144,8 +144,13 @@ async function testLookups(): Promise<void> {
   });
   cleanup.rollIds.push(outRoll.id);
 
-  const listUpper = await tambur.listRecentOutputRolls({ search: outRoll.barcode });
-  const listLower = await tambur.listRecentOutputRolls({ search: outRoll.barcode.toLowerCase() });
+  // `barcode` şemada nullable (barkodsuz açık kumaş olabilir) ama bu top
+  // hemen yukarıda BARKODLU yaratıldı; testin ölçtüğü şey zaten barkod
+  // aramasının harf duyarsızlığı — barkod yoksa sonda anlamsızdır.
+  if (!outRoll.barcode) throw new Error("Fixture hatası: çıkış topu barkodsuz doğdu");
+  const outBarcode: string = outRoll.barcode;
+  const listUpper = await tambur.listRecentOutputRolls({ search: outBarcode });
+  const listLower = await tambur.listRecentOutputRolls({ search: outBarcode.toLowerCase() });
   const hit = (r: { data?: unknown }): boolean =>
     Array.isArray(r.data) && (r.data as { id: string }[]).some((x) => x.id === outRoll.id);
   check("Tambur çıktı listesi: BÜYÜK harf bulur", hit(listUpper));
