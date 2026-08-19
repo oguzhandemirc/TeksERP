@@ -163,3 +163,39 @@ export async function downloadErrorReport(
   ]);
   return saveWorkbook(blob, `${spec.label} - hatalı satırlar`);
 }
+
+/**
+ * DÜZELTİLMİŞ DOSYA — uygulamada yapılan hücre düzeltmeleriyle birlikte.
+ *
+ * Neden gerekli: satır içi düzeltme KAYNAK Excel'i değiştirmez. Kullanıcı
+ * içe aktarımı tamamlar, ama aynı dosya yarın yeniden yüklenirse aynı hatalar
+ * geri gelir. Bu indirme, kaynağı da düzeltme imkânı verir.
+ */
+export async function downloadCorrectedFile(
+  spec: ImportTemplateSpec,
+  rows: Array<{ rowNo: number; cells: Record<string, string> }>,
+  editedRowNos: Set<number>,
+): Promise<boolean> {
+  const cols = spec.columns.filter((c) => !c.readOnly);
+  const blob = await buildWorkbook([
+    {
+      name: "Veri",
+      columns: [
+        { header: "Satır", key: "__rowNo", width: 8 },
+        { header: "Düzeltildi", key: "__edited", width: 12 },
+        ...cols.map((c) => ({ header: c.label, key: c.key, width: 20 })),
+      ],
+      rows: rows.map((r) => ({
+        __rowNo: r.rowNo,
+        // İşaret, "neyi elle değiştirdim" sorusunu kaynağı güncellerken cevaplar.
+        __edited: editedRowNos.has(r.rowNo) ? "Evet" : "",
+        ...Object.fromEntries(cols.map((c) => [c.key, r.cells[c.key] ?? ""])),
+      })),
+      notes: [
+        "Bu dosya, uygulamada yapılan hücre düzeltmelerini İÇERİR — kaynak dosyanız değişmedi.",
+        "İlk iki sütun (Satır / Düzeltildi) yeniden yüklerken yok sayılır, silmenize gerek yok.",
+      ],
+    },
+  ]);
+  return saveWorkbook(blob, `${spec.label} - düzeltilmiş`);
+}

@@ -41,10 +41,17 @@ import {
   type ColumnMapping,
   type ParsedFile,
 } from "@/lib/import/parse";
-import { downloadErrorReport, downloadTemplate } from "@/lib/import/template";
+import { downloadCorrectedFile, downloadErrorReport, downloadTemplate } from "@/lib/import/template";
 import { formatRowNos, groupIssues } from "@/lib/import/group-issues";
+import {
+  applyOverrides,
+  countOverrides,
+  setOverride,
+  type CellOverrides,
+} from "@/lib/import/overrides";
 import { ColumnMappingStep, isMappingValid } from "./ColumnMappingStep";
 import { ImportSpecPreview } from "./ImportSpecPreview";
+import { RowIssueCell } from "./RowIssueCell";
 
 // Sunucu tavanıyla hizalı (import-coerce.MAX_IMPORT_ROWS). Panelde de kontrol
 // edilir ki kullanıcı 40.000 satırlık bir dosyayı yükleyip 30 sn bekledikten
@@ -76,7 +83,11 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   // satırlar yeniden kurulur (dosyayı tekrar okumaya gerek yok).
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
   const [mapping, setMapping] = useState<ColumnMapping>([]);
-  const [rows, setRows] = useState<ImportRowInput[]>([]);
+  // Elle düzeltmeler AYRI katman: `rows` saf bir türetim olduğu için doğrudan
+  // ona yazmak, kullanıcı eşlemeyi değiştirdiği anda düzeltmeleri yok ederdi.
+  const [overrides, setOverrides] = useState<CellOverrides>({});
+  // Önizlemenin HANGİ satırlarla alındığı — bayatlık bununla anlaşılır.
+  const [previewedRows, setPreviewedRows] = useState<ImportRowInput[] | null>(null);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [preview, setPreview] = useState<ImportPreviewResult | null>(null);
@@ -93,6 +104,22 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   // Deneme başına bir kez üretilir (her tıkta yenilemek korumayı boşa düşürür).
   const attemptToken = useRef<string>(crypto.randomUUID());
 
+  // ⚠️ `rows` STATE DEĞİL TÜRETİMDİR: parsed → applyMapping → applyOverrides.
+  // Düzeltme yoksa `applyOverrides` GİRDİ DİZİSİNİ AYNEN döndürür (referans
+  // korunur) — bayatlık tespiti (`previewedRows !== rows`) buna dayanıyor.
+  const rows = useMemo<ImportRowInput[]>(
+    () => (parsed ? applyOverrides(applyMapping(parsed, mapping), overrides) : []),
+    [parsed, mapping, overrides],
+  );
+  const editedCount = useMemo(() => countOverrides(overrides), [overrides]);
+  // Satır numarasından GÜNCEL hücrelere erişim — düzenleme kutuları bunu okur.
+  const cellsByRow = useMemo(
+    () => new Map(rows.map((r) => [r.rowNo, r.cells])),
+    [rows],
+  );
+  // Önizleme alındıktan sonra satırlar değiştiyse ekrandaki sonuç ARTIK DOĞRU DEĞİL.
+  const previewStale = preview !== null && previewedRows !== null && previewedRows !== rows;
+
   const templateQuery = useQuery({
     queryKey: ["import-template", entity],
     queryFn: () => importService.template(entity),
@@ -108,7 +135,8 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setFile(null);
     setParsed(null);
     setMapping([]);
-    setRows([]);
+    setOverrides({});
+    setPreviewedRows(null);
     setParseWarnings([]);
     setParseErrors([]);
     setPreview(null);
@@ -116,7 +144,19 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setSkipErrors(false);
     setMode("upsert");
     attemptToken.current = crypto.randomUUID();
-  }, [open]);
+    // ⚠️ `entity` de bağımlılıkta: aynı diyalog başka varlıkla açılırsa
+    // `rowNo`+sütun anahtarına göre tutulan bir düzeltme, sessizce yanlış
+    // varlığın yüküne sızardı.
+  }, [open, entity]);
+
+  /** Kaynağı (dosya) tamamen unut — reddedilen dosya eskisini diriltmesin. */
+  const resetSource = (): void => {
+    setParsed(null);
+    setMapping([]);
+    setOverrides({});
+    setPreview(null);
+    setPreviewedRows(null);
+  };
 
   const onPickFile = async (picked: File | null) => {
     if (!picked || !spec) return;
@@ -128,20 +168,25 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
       const parsed = await parseSpreadsheet(picked);
       if (parsed.rows.length === 0) {
         setParseErrors(["Dosyada veri satırı bulunamadı (ilk satır başlık kabul edilir)."]);
-        setRows([]);
+        // ⚠️ `parsed` DA temizlenir: `rows` artık türetim olduğu için eski
+        // dosyanın satırları geri gelir ve yeni dosyanın hatası ekrandayken
+        // "Önizle" aktif kalırdı.
+        resetSource();
         return;
       }
       if (parsed.rows.length > MAX_ROWS) {
         setParseErrors([
           `Dosyada ${parsed.rows.length.toLocaleString("tr-TR")} satır var — tek seferde en fazla ${MAX_ROWS.toLocaleString("tr-TR")} satır aktarılabilir. Dosyayı bölerek yükleyin.`,
         ]);
-        setRows([]);
+        resetSource();
         return;
       }
       const auto = autoMapColumns(parsed, spec.columns);
       setParsed(parsed);
       setMapping(auto);
-      setRows(applyMapping(parsed, auto));
+      setOverrides({});
+      setPreview(null);
+      setPreviewedRows(null);
 
       const unmatched = unmatchedHeadersOf(parsed, auto);
       const missing = missingRequiredOf(spec.columns, auto);
@@ -160,23 +205,26 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
       setParseWarnings([]);
     } catch (e) {
       setParseErrors([e instanceof Error ? e.message : "Dosya okunamadı."]);
-      setRows([]);
+      resetSource();
     } finally {
       setBusy(null);
     }
   };
 
-  const onMappingChange = (next: ColumnMapping) => {
-    setMapping(next);
-    if (parsed) setRows(applyMapping(parsed, next));
-  };
+  // Eşleme değişince `rows` kendiliğinden yeniden türetilir; DÜZELTMELER KORUNUR.
+  const onMappingChange = (next: ColumnMapping) => setMapping(next);
 
   const resetMapping = () => {
     if (!parsed || !spec) return;
-    const auto = autoMapColumns(parsed, spec.columns);
-    setMapping(auto);
-    setRows(applyMapping(parsed, auto));
+    setMapping(autoMapColumns(parsed, spec.columns));
   };
+
+  /** Tek hücreyi düzelt (önizlemedeki satır içi input). */
+  const editCell = (rowNo: number, column: string, value: string): void => {
+    setOverrides((prev) => setOverride(prev, rowNo, column, value));
+  };
+
+  const clearOverrides = (): void => setOverrides({});
 
   const runPreview = async () => {
     if (rows.length === 0) return;
@@ -184,6 +232,8 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     try {
       const res = await importService.preview(entity, rows, { mode, fileName: file?.name });
       setPreview(res.data);
+      // Bu önizleme HANGİ satırlarla alındı — sonraki düzenlemeler bayatlatsın.
+      setPreviewedRows(rows);
       setStep("preview");
     } catch {
       toast.error("Önizleme alınamadı.");
@@ -281,14 +331,22 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
           <PreviewStep
             spec={spec}
             preview={preview}
+            cellsByRow={cellsByRow}
+            onEdit={editCell}
+            editedCount={editedCount}
+            onClearOverrides={clearOverrides}
+            stale={previewStale}
+            onRepreview={() => void runPreview()}
+            busy={busy}
             rows={visibleRows}
             onlyProblems={onlyProblems}
             setOnlyProblems={setOnlyProblems}
             skipErrors={skipErrors}
             setSkipErrors={setSkipErrors}
             hasErrors={hasErrors}
-            onDownloadErrors={() =>
-              void downloadErrorReport(spec, rows, preview?.rows ?? [])
+            onDownloadErrors={() => void downloadErrorReport(spec, rows, preview?.rows ?? [])}
+            onDownloadCorrected={() =>
+              void downloadCorrectedFile(spec, rows, new Set(Object.keys(overrides).map(Number)))
             }
           />
         ) : (
@@ -357,7 +415,16 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
             {step === "preview" && (
               <Button
                 onClick={() => void runApply()}
-                disabled={busy !== null || (hasErrors && !skipErrors) || (preview?.summary.create ?? 0) + (preview?.summary.update ?? 0) === 0}
+                // ⚠️ BAYATKEN PASİF: düzenlemeler her şeyi düzeltmiş olsa bile
+                // kırmızı görünen bir önizlemeye rağmen başarıyla uygulamak,
+                // kullanıcıya "önizlemeyi görmezden gel" diye öğretirdi.
+                disabled={
+                  busy !== null ||
+                  previewStale ||
+                  (hasErrors && !skipErrors) ||
+                  (preview?.summary.create ?? 0) + (preview?.summary.update ?? 0) === 0
+                }
+                title={previewStale ? "Önce 'Yeniden önizle' deyin" : undefined}
               >
                 {busy === "apply" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                 Uygula
@@ -513,6 +580,14 @@ const ACTION_CLASS: Record<ImportRowResult["action"], string> = {
 function PreviewStep({
   spec,
   preview,
+  cellsByRow,
+  onEdit,
+  editedCount,
+  onClearOverrides,
+  onDownloadCorrected,
+  stale,
+  onRepreview,
+  busy,
   rows,
   onlyProblems,
   setOnlyProblems,
@@ -523,6 +598,14 @@ function PreviewStep({
 }: {
   spec: ImportTemplateSpec;
   preview: ImportPreviewResult | null;
+  cellsByRow: Map<number, Record<string, string>>;
+  onEdit: (rowNo: number, column: string, value: string) => void;
+  editedCount: number;
+  onClearOverrides: () => void;
+  onDownloadCorrected: () => void;
+  stale: boolean;
+  onRepreview: () => void;
+  busy: string | null;
   rows: ImportRowResult[];
   onlyProblems: boolean;
   setOnlyProblems: (v: boolean) => void;
@@ -571,6 +654,39 @@ function PreviewStep({
         </div>
       )}
 
+      {stale && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning/10 p-2 text-sm">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-warning" />
+          <span className="flex-1">
+            Satırlar düzenlendi — aşağıdaki sonuç <strong>artık güncel değil</strong>.
+          </span>
+          <Button size="sm" onClick={onRepreview} disabled={busy !== null}>
+            {busy === "preview" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            Yeniden önizle
+          </Button>
+        </div>
+      )}
+
+      {editedCount > 0 && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>
+            <strong>{editedCount} hücre</strong> elle düzeltildi. Kaynak dosya DEĞİŞMEDİ.
+          </span>
+          <Button size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={onClearOverrides}>
+            Düzeltmeleri geri al
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            onClick={onDownloadCorrected}
+            title="Düzeltmelerle birlikte dosyayı indir — kaynağınızı da güncelleyebilirsiniz"
+          >
+            <Download className="h-3 w-3" /> Düzeltilmiş dosyayı indir
+          </Button>
+        </p>
+      )}
+
       <IssueSummary rows={preview.rows} />
 
       <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
@@ -613,16 +729,12 @@ function PreviewStep({
                     ) : null}
                   </td>
                   <td className="px-2 py-1.5">
-                    {r.errors.map((e, i) => (
-                      <div key={`e${i}`} className="text-destructive">
-                        {e.message}
-                      </div>
-                    ))}
-                    {r.warnings.map((w, i) => (
-                      <div key={`w${i}`} className="text-warning">
-                        {w.message}
-                      </div>
-                    ))}
+                    <RowIssueCell
+                      spec={spec}
+                      row={r}
+                      cells={cellsByRow.get(r.rowNo) ?? {}}
+                      onEdit={onEdit}
+                    />
                     {r.action === "UPDATE" && r.changes ? (
                       <div className="space-y-0.5 text-muted-foreground">
                         {Object.entries(r.changes).map(([k, ch]) => (
