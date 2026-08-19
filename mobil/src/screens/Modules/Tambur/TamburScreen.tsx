@@ -4732,7 +4732,7 @@ function OrdersDetailModal({
                 <View style={ordersModalStyles.orderHeaderRow}>
                   <View style={ordersModalStyles.avatar}>
                     <Text style={ordersModalStyles.avatarText}>
-                      {(o.customerName || '?').trim().charAt(0).toUpperCase()}
+                      {(o.customerName || '?').trim().charAt(0).toLocaleUpperCase('tr')}
                     </Text>
                   </View>
                   <Text style={ordersModalStyles.customerName} numberOfLines={1}>

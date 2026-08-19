@@ -26,6 +26,7 @@ import { customerService } from '../../../services/customer.service';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import type { MainStackParamList } from '../../../navigation/types';
+import { foldSearchText } from '../../../utils/searchFold';
 
 // =============================================================================
 // Sevkiyat Geçmişi — DISPATCHED sevkiyatlar. FlashList + cursor sonsuz kaydırma
@@ -80,7 +81,7 @@ export default function SevkiyatGecmisiScreen() {
 
   // Client filtreler (yüklenen sayfalar üzerinde): arama + dönem + şube.
   const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase('tr-TR');
+    const q = foldSearchText(search);
     const cutoff =
       period === 'today'
         ? dayjs().startOf('day').valueOf()
@@ -95,8 +96,8 @@ export default function SevkiyatGecmisiScreen() {
       }
       if (!q) return true;
       return (
-        s.shipmentNo.toLocaleLowerCase('tr-TR').includes(q) ||
-        s.customer.name.toLocaleLowerCase('tr-TR').includes(q)
+        foldSearchText(s.shipmentNo).includes(q) ||
+        foldSearchText(s.customer.name).includes(q)
       );
     });
   }, [all, search, period, branchFilter]);

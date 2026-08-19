@@ -16,6 +16,7 @@ import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
 import { useTabsStore } from "@/store/tabs";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
+import { foldSearchText } from "@/lib/search-fold";
 
 interface Props {
   open: boolean;
@@ -122,7 +123,21 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   ];
 
   return (
-    <CommandDialog open={open} onOpenChange={onOpenChange}>
+    // ⚠️ `filter` VERİLMEZSE cmdk kendi `command-score`'unu kullanır ve o yalnız
+    // ASCII katlar: "kursun" yazan operatör "Kurşun Sırası"nı BULAMAZDI (ölçüldü
+    // 2026-08-19). Katlama sunucudakiyle aynı `foldSearchText`.
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      filter={(value: string, search: string, keywords?: string[]) => {
+        const q = foldSearchText(search);
+        if (!q) return 1;
+        const hay = foldSearchText([value, ...(keywords ?? [])].join(" "));
+        // Kelime kelime AND — "sip listesi" ile "listesi sip" aynı sonucu versin
+        // (sunucu aramasıyla aynı sözleşme).
+        return q.split(" ").every((t) => hay.includes(t)) ? 1 : 0;
+      }}
+    >
       <CommandInput
         placeholder="Sayfa, rapor, ayar ara..."
         value={search}

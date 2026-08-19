@@ -45,6 +45,7 @@ import {
   FLAGS_KEY,
 } from '../../../hooks/useFeatureFlags';
 import type { MainStackParamList } from '../../../navigation/types';
+import { foldSearchText } from '../../../utils/searchFold';
 
 // =============================================================================
 // Paketleme — ÇUVAL DEPO akış (MÜŞTERİ-BAZLI). Param: { customerId, branchId? }.
@@ -377,10 +378,10 @@ export default function PaketlemeScreen() {
   const activeLabel = activeSack ? sackCode(activeSack) : null;
 
   // Saha #8: görünür çuval kümesi (arama + pencereleme).
-  const sackQ = sackSearch.trim().toLocaleLowerCase('tr');
+  const sackQ = foldSearchText(sackSearch);
   const isLargeSackList = sacks.length > SACK_WINDOW;
   const filteredSacks = sackQ
-    ? sacks.filter((s) => s.sackNo.toLocaleLowerCase('tr').includes(sackQ))
+    ? sacks.filter((s) => foldSearchText(s.sackNo).includes(sackQ))
     : sacks;
   const windowed = sackQ || showAllSacks || !isLargeSackList;
   const visibleSacks = windowed

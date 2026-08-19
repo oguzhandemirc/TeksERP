@@ -13,6 +13,7 @@ import { productBalanceService } from "./service";
 import { ProductBalanceRow } from "./ProductBalanceRow";
 import { ProductBalanceWoDialog } from "./ProductBalanceWoDialog";
 import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
+import { foldSearchText } from "@/lib/search-fold";
 
 const QUERY_KEY = "product-balance";
 
@@ -60,7 +61,7 @@ export function ProductBalancePage() {
 
   // Renk + durum + arama: küçük grup listesi üzerinde anlık (ağ isteği yok).
   const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase("tr");
+    const q = foldSearchText(search);
     return groups.filter((g) => {
       // Çoklu renk = VEYA. Boş seçim (hiç renk yok) filtre uygulamaz.
       if (colorIds.length > 0 && !(g.colorId && colorIds.includes(g.colorId))) return false;
@@ -69,17 +70,17 @@ export function ProductBalancePage() {
       if (status === "MATERIAL_SHORT" && !(g.malzemeAcigi > 0)) return false;
       if (!q) return true;
       return (
-        g.itemName.toLocaleLowerCase("tr").includes(q) ||
-        (g.colorName?.toLocaleLowerCase("tr").includes(q) ?? false) ||
+        foldSearchText(g.itemName).includes(q) ||
+        foldSearchText(g.colorName ?? "").includes(q) ||
         g.specs.some(
           (s) =>
             (s.width != null && String(s.width).includes(q)) ||
             s.lines.some(
               (l) =>
-                l.orderNumber.toLocaleLowerCase("tr").includes(q) ||
-                l.customerName.toLocaleLowerCase("tr").includes(q),
+                foldSearchText(l.orderNumber).includes(q) ||
+                foldSearchText(l.customerName).includes(q),
             ) ||
-            s.wos.some((w) => w.batchNumber.toLocaleLowerCase("tr").includes(q)),
+            s.wos.some((w) => foldSearchText(w.batchNumber).includes(q)),
         )
       );
     });

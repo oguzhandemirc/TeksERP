@@ -1,4 +1,6 @@
 /** Sevkiyat detay (tam sayfa + sheet) hızlı filtresi için ortak top eşleştirme. */
+import { foldSearchText } from "@/lib/search-fold";
+import { trCompare } from "@/lib/collate";
 
 type RollLike = {
   barcode: string | null;
@@ -6,9 +8,12 @@ type RollLike = {
   color: { code: string; name: string } | null;
 };
 
-/** Türkçe-duyarlı normalize — kullanıcı girişi bir kez normalize edilip geçilir. */
+/**
+ * Arama normalizasyonu — kullanıcı girişi bir kez katlanıp geçilir.
+ * Sunucu tarafıyla AYNI katlama (`tr_fold`): "canakkale" ≡ "ÇANAKKALE".
+ */
 export function normalizeSearch(s: string): string {
-  return s.trim().toLocaleLowerCase("tr");
+  return foldSearchText(s);
 }
 
 /**
@@ -17,17 +22,15 @@ export function normalizeSearch(s: string): string {
  */
 export function rollMatchesQuery(r: RollLike, q: string, extra?: string): boolean {
   if (!q) return true;
-  const hay = [
+  const hay: string[] = [
     r.barcode ?? "",
     r.item?.name ?? "",
     r.item?.code ?? "",
     r.color?.name ?? "",
     r.color?.code ?? "",
     extra ?? "",
-  ]
-    .join(" ")
-    .toLocaleLowerCase("tr");
-  return hay.includes(q);
+  ];
+  return foldSearchText(hay.join(" ")).includes(q);
 }
 
 /** "id1,id2" csv → temiz id dizisi (liste→detay matchItem/matchColor bağlamı). */
@@ -110,5 +113,5 @@ export function compareRolls(
   if (av == null) return 1; // null daima sona
   if (bv == null) return -1;
   if (typeof av === "number" && typeof bv === "number") return (av - bv) * s;
-  return String(av).localeCompare(String(bv), "tr") * s;
+  return trCompare(String(av), String(bv)) * s;
 }

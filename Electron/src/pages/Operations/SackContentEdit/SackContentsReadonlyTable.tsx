@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { DataTable } from "@/components/data-table/DataTable";
 import { sackContentsColumns } from "./sackContentsColumns";
 import type { SackContentRoll } from "./types";
+import { foldSearchText } from "@/lib/search-fold";
 
 const fmtQty = (n: number) =>
   `${n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 })} m`;
@@ -13,9 +14,9 @@ const fmtQty = (n: number) =>
 /** Arama eşleşmesi — barkod / kumaş / renk / en (Türkçe küçültme). */
 function matches(r: SackContentRoll, q: string): boolean {
   if (!q) return true;
-  const hay = [r.barcode ?? "", r.item.name, r.color?.name ?? "", r.width != null ? `${r.width}` : ""]
-    .join(" ")
-    .toLocaleLowerCase("tr");
+  const hay = foldSearchText(
+    [r.barcode ?? "", r.item.name, r.color?.name ?? "", r.width != null ? `${r.width}` : ""].join(" "),
+  );
   return hay.includes(q);
 }
 
@@ -37,7 +38,7 @@ interface Props {
  */
 export function SackContentsReadonlyTable({ rolls, isLoading, emptyText }: Props) {
   const [q, setQ] = useState("");
-  const needle = q.trim().toLocaleLowerCase("tr");
+  const needle = foldSearchText(q);
   const shown = useMemo(() => rolls.filter((r) => matches(r, needle)), [rolls, needle]);
   const shownQty = shown.reduce((a, r) => a + Number(r.currentQty), 0);
 

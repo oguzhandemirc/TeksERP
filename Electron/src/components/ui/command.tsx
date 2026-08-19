@@ -21,12 +21,20 @@ Command.displayName = CommandPrimitive.displayName;
 
 interface CommandDialogProps extends React.ComponentProps<typeof Dialog> {
   children: React.ReactNode;
+  /**
+   * cmdk eşleşme fonksiyonu — İÇERİDEKİ `Command`'a geçer, Radix `Dialog`'a DEĞİL.
+   *
+   * ⚠️ Verilmezse cmdk kendi `command-score`'unu kullanır ve o yalnız ASCII
+   * katlar: Türkçe başlıklar ASCII yazımla BULUNAMAZ ("kursun" → "Kurşun
+   * Sırası" eşleşmez). Bu yüzden komut paleti kendi katlamasını geçiriyor.
+   */
+  filter?: React.ComponentProps<typeof Command>["filter"];
 }
 
-const CommandDialog = ({ children, ...props }: CommandDialogProps) => (
+const CommandDialog = ({ children, filter, ...props }: CommandDialogProps) => (
   <Dialog {...props}>
     <DialogContent className="overflow-hidden p-0">
-      <Command className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+      <Command filter={filter} className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
         {children}
       </Command>
     </DialogContent>

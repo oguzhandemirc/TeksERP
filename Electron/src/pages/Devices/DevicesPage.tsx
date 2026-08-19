@@ -17,6 +17,7 @@ import {
   type DeviceKindFilter,
   type DeviceStatusFilter,
 } from "./DeviceFilterBar";
+import { foldSearchText } from "@/lib/search-fold";
 
 const QUERY_KEY = "admin-devices";
 
@@ -57,13 +58,13 @@ export function DevicesPage() {
   );
 
   const filtered = useMemo(() => {
-    const q = debouncedSearch.trim().toLocaleLowerCase("tr");
+    const q = foldSearchText(debouncedSearch);
     return devices.filter((d) => {
       if (statusFilter === "pending" && !(d.isActive && d.status === "PENDING")) return false;
       if (statusFilter === "approved" && !(d.isActive && d.status === "APPROVED")) return false;
       if (statusFilter === "inactive" && d.isActive) return false;
       if (kindFilter !== "all" && d.kind !== kindFilter) return false;
-      if (q && !`${d.name} ${d.deviceId}`.toLocaleLowerCase("tr").includes(q)) return false;
+      if (q && !foldSearchText(`${d.name} ${d.deviceId}`).includes(q)) return false;
       return true;
     });
   }, [devices, statusFilter, kindFilter, debouncedSearch]);

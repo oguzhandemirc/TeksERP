@@ -13,6 +13,8 @@ import type { ShipmentDetail, ShipmentDetailLine } from "../types";
 import { FacetSelect } from "./FacetSelect";
 import { SortableTh } from "./SortableTh";
 import { DateRangeFilter, inDateRange } from "./DateRangeFilter";
+import { foldSearchText } from "@/lib/search-fold";
+import { trCompare } from "@/lib/collate";
 
 const int = (v: number | null | undefined) => formatNumber(v, 0);
 const num = (v: number | null | undefined) => formatNumber(v, 1);
@@ -79,7 +81,7 @@ export function OrdersModal({
       if (l.color) colors.set(l.color.code, l.color.name);
       if (l.width != null) widths.add(l.width);
     }
-    const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, "tr");
+    const byLabel = (a: { label: string }, b: { label: string }) => trCompare(a.label, b.label);
     return {
       itemOpts: [...items].map(([value, label]) => ({ value, label })).sort(byLabel),
       colorOpts: [...colors].map(([value, label]) => ({ value, label })).sort(byLabel),
@@ -104,9 +106,9 @@ export function OrdersModal({
       if (widthSel.length && !(l.width != null && widthSel.includes(String(l.width)))) return false;
       if (!inDateRange(deadline, dateFrom, dateTo)) return false;
       if (!q) return true;
-      const hay = [orderNumber, l.item.name, l.item.code, l.color?.name ?? ""]
-        .join(" ")
-        .toLocaleLowerCase("tr");
+      const hay = foldSearchText(
+        [orderNumber, l.item.name, l.item.code, l.color?.name ?? ""].join(" "),
+      );
       return hay.includes(q);
     });
   }, [flat, q, itemSel, colorSel, widthSel, dateFrom, dateTo]);
@@ -133,7 +135,7 @@ export function OrdersModal({
       if (av == null) return 1;
       if (bv == null) return -1;
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-      return String(av).localeCompare(String(bv), "tr") * dir;
+      return trCompare(String(av), String(bv)) * dir;
     });
   }, [rows, sortField, sortDir]);
 

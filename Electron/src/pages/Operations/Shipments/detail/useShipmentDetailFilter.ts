@@ -8,6 +8,7 @@ import {
   type RollSortField,
 } from "../roll-search";
 import type { ShipmentDetail, ShipmentDetailRoll, ShipmentDetailSack } from "../types";
+import { trCompare } from "@/lib/collate";
 
 export interface RollSort {
   field: RollSortField;
@@ -31,7 +32,7 @@ export interface FilteredSack {
 
 const toggleIn = (list: string[], v: string) =>
   list.includes(v) ? list.filter((x) => x !== v) : [...list, v];
-const byName = (a: FacetOption, b: FacetOption) => a.name.localeCompare(b.name, "tr");
+const byName = (a: FacetOption, b: FacetOption) => trCompare(a.name, b.name);
 
 /**
  * Sevkiyat tam-sayfa detayının istemci-içi (load-all) süzgeç + facet + aç/kapa durumu.
@@ -80,7 +81,7 @@ export function useShipmentDetailFilter(d: ShipmentDetail) {
     return {
       itemOptions: [...items].map(([id, name]) => ({ id, name })).sort(byName),
       colorOptions: [...colors].map(([id, name]) => ({ id, name })).sort(byName),
-      qualityOptions: [...qualities].sort((a, b) => a.localeCompare(b, "tr")),
+      qualityOptions: [...qualities].sort(trCompare),
       // En: sayısal artan sırala; value=String(en) (facet eşleştirmesiyle birebir).
       widthOptions: [...widths].sort((a, b) => a - b).map((w) => ({ id: String(w), name: `${w} cm` })),
     };

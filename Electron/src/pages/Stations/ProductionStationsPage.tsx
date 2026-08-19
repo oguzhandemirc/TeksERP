@@ -31,6 +31,7 @@ import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types
 import { CapabilitiesEditSheet } from "@/pages/StationCapabilities/CapabilitiesEditSheet";
 import { peripheralService } from "@/pages/PeripheralDevices/service";
 import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
+import { foldSearchText } from "@/lib/search-fold";
 
 // Üretim akışındaki istasyon türleri — sevkiyat/diğer (OTHER) bu ekranda yok.
 const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBCONTRACTOR"] as StationKind[];
@@ -136,7 +137,7 @@ export function ProductionStationsPage() {
   // İstemci-tarafı filtre — tüm veri zaten yüklü (loadAllForPicker). AND (boyutlar
   // arası) + OR (Tür chip'leri içinde). showInactive filtre DEĞİL, makine yüklemesini sürer.
   const stations = useMemo(() => {
-    const q = debouncedSearch.trim().toLocaleLowerCase("tr");
+    const q = foldSearchText(debouncedSearch);
     return allStations.filter((s) => {
       if (stationId !== "__all__" && s.id !== stationId) return false;
 
@@ -146,9 +147,9 @@ export function ProductionStationsPage() {
       if (machinePresence === "active" && !sm.some((m) => m.isActive !== false)) return false;
 
       if (q) {
-        const hay = [s.name, s.code, s.department ?? "", ...sm.flatMap((m) => [m.name, m.code])]
-          .join(" ")
-          .toLocaleLowerCase("tr");
+        const hay = foldSearchText(
+          [s.name, s.code, s.department ?? "", ...sm.flatMap((m) => [m.name, m.code])].join(" "),
+        );
         if (!hay.includes(q)) return false;
       }
       return true;

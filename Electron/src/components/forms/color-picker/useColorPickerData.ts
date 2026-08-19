@@ -5,6 +5,7 @@ import {
   loadAssignedColorsForCustomer,
   loadPublicColorsForPicker,
 } from "@/pages/Colors/service";
+import { foldSearchText } from "@/lib/search-fold";
 
 export interface PickerColor {
   id: string;
@@ -42,7 +43,7 @@ export function useColorPickerData({
 }: Args) {
   const isRestricted = Boolean(allowedColorIds && allowedColorIds.length > 0);
   const allowedSet = useMemo(() => new Set(allowedColorIds ?? []), [allowedColorIds]);
-  const q = debouncedSearch.trim().toLocaleLowerCase("tr");
+  const q = foldSearchText(debouncedSearch);
 
   // --- Müşteriye ATANMIŞ renkler. `assignedTo` colors endpoint'inden (property:read)
   //     gelir — eski alias endpoint'i customer-alias:read gerektiriyordu, o izni
@@ -147,5 +148,5 @@ function toPickerColor(c: {
 
 function matchesSearch(c: PickerColor, q: string): boolean {
   if (!q) return true;
-  return c.name.toLocaleLowerCase("tr").includes(q) || c.code.toLocaleLowerCase("tr").includes(q);
+  return foldSearchText(c.name).includes(q) || foldSearchText(c.code).includes(q);
 }

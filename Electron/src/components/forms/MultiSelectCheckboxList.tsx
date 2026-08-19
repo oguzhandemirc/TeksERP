@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { foldSearchText } from "@/lib/search-fold";
 
 export interface MultiSelectItem {
   id: string;
@@ -50,11 +51,11 @@ export function MultiSelectCheckboxList({
   const grouped = useMemo(() => {
     const filtered = items.filter((i) => {
       if (!search) return true;
-      const q = search.toLocaleLowerCase("tr");
+      const q = foldSearchText(search);
       return (
-        i.label.toLocaleLowerCase("tr").includes(q) ||
-        (i.hint ?? "").toLocaleLowerCase("tr").includes(q) ||
-        (i.group ?? "").toLocaleLowerCase("tr").includes(q)
+        foldSearchText(i.label).includes(q) ||
+        foldSearchText(i.hint ?? "").includes(q) ||
+        foldSearchText(i.group ?? "").includes(q)
       );
     });
     const map = new Map<string, MultiSelectItem[]>();

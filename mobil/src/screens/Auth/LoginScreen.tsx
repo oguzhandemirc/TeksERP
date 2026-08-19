@@ -64,8 +64,9 @@ const NUMPAD_ROWS: Cell[][] = [
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 0) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  // toLocaleUpperCase('tr'): düz toUpperCase 'ışık' → 'IS' üretiyordu, doğrusu 'İŞ'.
+  if (parts.length === 1) return parts[0].slice(0, 2).toLocaleUpperCase('tr');
+  return (parts[0][0] + parts[parts.length - 1][0]).toLocaleUpperCase('tr');
 }
 
 /** Kilit modu bağlamı — LoginScreen `lock` prop'u ile kilit ekranı olarak da

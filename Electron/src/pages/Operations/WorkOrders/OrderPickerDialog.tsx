@@ -18,6 +18,7 @@ import { orderService } from "@/pages/Operations/Orders/service";
 import { customerService } from "@/pages/Customers/service";
 import type { Customer } from "@/pages/Customers/types";
 import type { Order, OrderLine } from "@/pages/Operations/Orders/types";
+import { trCompare } from "@/lib/collate";
 
 export interface PickedOrderLineProperty {
   id: string;
@@ -250,7 +251,7 @@ export function OrderPickerDialog({
   const sortedFetched = useMemo(() => {
     if (sortBy !== "customer") return fetchedOrders;
     return [...fetchedOrders].sort((a, b) =>
-      (a.customer?.name ?? "").localeCompare(b.customer?.name ?? "", "tr"),
+      trCompare(a.customer?.name, b.customer?.name),
     );
   }, [fetchedOrders, sortBy]);
 

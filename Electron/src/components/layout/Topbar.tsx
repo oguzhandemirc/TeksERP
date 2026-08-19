@@ -23,10 +23,13 @@ interface Props {
 function initials(name?: string): string {
   if (!name) return "?";
   const parts = name.split(/[.\s_-]+/).filter(Boolean);
+  // ⚠️ `toLocaleUpperCase("tr")`: düz `toUpperCase()` "ışık" → "IS" üretiyordu,
+  // doğrusu "İŞ". Baş harf kullanıcının adıdır; yanlış harf yanlış kişiyi
+  // gösteriyormuş gibi okunur.
   if (parts.length >= 2) {
-    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase();
+    return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toLocaleUpperCase("tr");
   }
-  return name.slice(0, 2).toUpperCase();
+  return name.slice(0, 2).toLocaleUpperCase("tr");
 }
 
 export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {

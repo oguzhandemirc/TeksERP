@@ -438,6 +438,37 @@ model User {
   createdBatchs            Batch[]            @relation("BatchCreatedBy")
   updatedBatchs            Batch[]            @relation("BatchUpdatedBy")
 
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("UserCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("UserUpdatedBy", fields: [updatedById], references: [id])
+
+  // Faz A2 künye ters ilişkileri (User KENDİ KENDİNE de referans verir:
+  // 'bu hesabı kim açtı' — self-relation, adlandırılmış olduğu için geçerli).
+  createdUsers                    User[]                    @relation("UserCreatedBy")
+  updatedUsers                    User[]                    @relation("UserUpdatedBy")
+  createdPermissionTemplates      PermissionTemplate[]      @relation("PermissionTemplateCreatedBy")
+  updatedPermissionTemplates      PermissionTemplate[]      @relation("PermissionTemplateUpdatedBy")
+  createdCustomerItemAliass       CustomerItemAlias[]       @relation("CustomerItemAliasCreatedBy")
+  updatedCustomerItemAliass       CustomerItemAlias[]       @relation("CustomerItemAliasUpdatedBy")
+  createdCustomerColorAliass      CustomerColorAlias[]      @relation("CustomerColorAliasCreatedBy")
+  updatedCustomerColorAliass      CustomerColorAlias[]      @relation("CustomerColorAliasUpdatedBy")
+  createdSubcontractorCategorys   SubcontractorCategory[]   @relation("SubcontractorCategoryCreatedBy")
+  updatedSubcontractorCategorys   SubcontractorCategory[]   @relation("SubcontractorCategoryUpdatedBy")
+  createdTravelerCardTemplates    TravelerCardTemplate[]    @relation("TravelerCardTemplateCreatedBy")
+  updatedTravelerCardTemplates    TravelerCardTemplate[]    @relation("TravelerCardTemplateUpdatedBy")
+  createdDocumentProfiles         DocumentProfile[]         @relation("DocumentProfileCreatedBy")
+  updatedDocumentProfiles         DocumentProfile[]         @relation("DocumentProfileUpdatedBy")
+  createdCustomerStandaloneLabels CustomerStandaloneLabel[] @relation("CustomerStandaloneLabelCreatedBy")
+  updatedCustomerStandaloneLabels CustomerStandaloneLabel[] @relation("CustomerStandaloneLabelUpdatedBy")
+  createdRollErrors               RollError[]               @relation("RollErrorCreatedBy")
+  updatedRollErrors               RollError[]               @relation("RollErrorUpdatedBy")
+  createdWorkOrders               WorkOrder[]               @relation("WorkOrderCreatedBy")
+  updatedWorkOrders               WorkOrder[]               @relation("WorkOrderUpdatedBy")
+  createdShipments                Shipment[]                @relation("ShipmentCreatedBy")
+  updatedShipments                Shipment[]                @relation("ShipmentUpdatedBy")
+
   @@map("users")
 }
 
@@ -566,6 +597,12 @@ model PermissionTemplate {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("PermissionTemplateCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("PermissionTemplateUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([nameFold])
   @@map("permission_templates")
@@ -2047,6 +2084,12 @@ model WorkOrder {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("WorkOrderCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("WorkOrderUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([routeTemplateId])
   @@index([targetItemId])
   @@index([targetColorId])
@@ -2536,6 +2579,12 @@ model RollError {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("RollErrorCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("RollErrorUpdatedBy", fields: [updatedById], references: [id])
 
   // Mükerrer-hata yarışı guard'ı: (rollId,startMeter,defectTypeId) tekil. Migration
   // 20260623100000 bu @@index'i PARTIAL UNIQUE'e (WHERE defectTypeId IS NOT NULL)
@@ -3169,6 +3218,12 @@ model SubcontractorCategory {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("SubcontractorCategoryCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("SubcontractorCategoryUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([nameFold])
   @@map("subcontractor_categories")
 }
@@ -3558,6 +3613,12 @@ model DocumentProfile {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("DocumentProfileCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("DocumentProfileUpdatedBy", fields: [updatedById], references: [id])
+
   @@map("document_profiles")
 }
 
@@ -3773,6 +3834,12 @@ model Shipment {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   carrierFold     String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ShipmentCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ShipmentUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([customerId, status])
   @@index([branchId])
@@ -4214,6 +4281,12 @@ model CustomerItemAlias {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerItemAliasCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerItemAliasUpdatedBy", fields: [updatedById], references: [id])
+
   @@unique([customerId, itemId])
   // D-6: @@index([customerId]) kaldırıldı — @@unique([customerId, itemId]) sol-prefix'i kapsar.
   @@index([itemId])
@@ -4242,6 +4315,12 @@ model CustomerColorAlias {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerColorAliasCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerColorAliasUpdatedBy", fields: [updatedById], references: [id])
 
   @@unique([customerId, colorId])
   // D-6: @@index([customerId]) kaldırıldı — @@unique([customerId, colorId]) sol-prefix'i kapsar.
@@ -4399,6 +4478,12 @@ model CustomerStandaloneLabel {
   template   LabelTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
   createdAt DateTime @default(now()) @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerStandaloneLabelCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerStandaloneLabelUpdatedBy", fields: [updatedById], references: [id])
 
   @@unique([customerId, templateId])
   @@index([templateId])
@@ -4673,6 +4758,12 @@ model TravelerCardTemplate {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ (Faz A2, 2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("TravelerCardTemplateCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("TravelerCardTemplateUpdatedBy", fields: [updatedById], references: [id])
 
   @@unique([name])
   @@unique([isDefault])

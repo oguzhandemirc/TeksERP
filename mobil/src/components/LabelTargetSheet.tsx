@@ -14,6 +14,7 @@ import AppModal from './AppModal';
 import { useQuery } from '@tanstack/react-query';
 import { orderService } from '../services/order.service';
 import { customerService } from '../services/customer.service';
+import { foldSearchText } from '../utils/searchFold';
 
 // =============================================================================
 // Etiket Kime? — bir topun etiketi BASKI ANINDA kime basılacak (gevşek model:
@@ -102,11 +103,11 @@ export default function LabelTargetSheet({
   });
   const customers = custQ.data?.data ?? [];
   const filteredCustomers = customers.filter((c) => {
-    const q = custSearch.trim().toLocaleLowerCase('tr-TR');
+    const q = foldSearchText(custSearch);
     if (!q) return true;
     return (
-      c.name.toLocaleLowerCase('tr-TR').includes(q) ||
-      (c.code ?? '').toLocaleLowerCase('tr-TR').includes(q)
+      foldSearchText(c.name).includes(q) ||
+      foldSearchText(c.code ?? '').includes(q)
     );
   });
 

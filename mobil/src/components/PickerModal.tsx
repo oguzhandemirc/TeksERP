@@ -26,6 +26,9 @@ import * as Haptics from 'expo-haptics';
 import Pager from './Pager';
 import { colors } from '../theme';
 
+/** Türkçe harmanlama — MODÜL SABİTİ (comparator içinde kurmak pahalıdır). */
+const TR_COLLATOR = new Intl.Collator('tr', { numeric: true });
+
 export interface PickerOption {
   value: string;
   label: string;
@@ -204,12 +207,21 @@ export default function PickerModal(props: Props) {
   }, [visible, paginated]);
 
   // Sort yalnızca options değişiminde — her tuş basışında yeniden sıralanmasın
-  // (localeCompare 'tr' büyük listelerde O(n log n) yüksek sabit faktörlü).
+  // (harmanlama büyük listelerde O(n log n) yüksek sabit faktörlü). Collator
+  // MODÜL SABİTİ: comparator içinde `localeCompare` çağırmak her karşılaştırmada
+  // yeni bir collator kurar.
+  //
+  // ⚠️ `sensitivity: 'base'` KALDIRILDI (2026-08-19). O ayar ç ile c'yi, ı ile
+  // i'yi EŞİT sayıyordu — yani "CAM" ile "ÇAM" karşılaştırması 0 dönüyor ve
+  // ikisi dizi sırasına göre iç içe geçiyordu. Aynı ekrandaki A-Z indeksi ise
+  // (aşağıda) C ve Ç için AYRI kova üretiyor: operatör Ç'ye basınca C'lerin
+  // ortasına düşebiliyordu. Türkçede ç ile c AYRI harflerdir; sıralama onları
+  // ayırmalı (arama tarafı tam tersini yapar — orada katlama doğrudur).
+  //
+  // ⚠️ `numeric: true`: "P2" < "P10" (sözlüksel sırada tersi olurdu).
   const sortedOptions = useMemo(() => {
     if (paginated || disableSort) return options;
-    return [...options].sort((a, b) =>
-      a.label.localeCompare(b.label, 'tr', { sensitivity: 'base' }),
-    );
+    return [...options].sort((a, b) => TR_COLLATOR.compare(a.label, b.label));
   }, [paginated, disableSort, options]);
 
   // Filter ayrı useMemo: arama değiştikçe yalnızca filtreyi tekrar uygula.

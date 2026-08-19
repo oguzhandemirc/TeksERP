@@ -55,6 +55,7 @@ import { STATION_MUT } from '../../../offline/mutations';
 import { colors, spacing, radius } from '../../../theme';
 import type { MainStackParamList } from '../../../navigation/types';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { foldSearchText } from '../../../utils/searchFold';
 
 // O12 fix: uzun kabul formu (per-top sayım + cm/kg ölçümleri) Android LMK
 // kill'inde sıfırlanıyordu — FasonKabul'daki draft deseni (debounce + savedAt
@@ -314,9 +315,9 @@ export default function KartelaKabulScreen() {
   }, [outstanding]);
 
   const filteredJobs = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase('tr');
+    const q = foldSearchText(search);
     if (q.length < 2) return jobs;
-    const hit = (s?: string | null) => !!s && s.toLocaleLowerCase('tr').includes(q);
+    const hit = (s?: string | null) => !!s && foldSearchText(s).includes(q);
     const hitAny = (arr: string[]) => arr.some((s) => hit(s));
     return jobs.filter(
       (j) =>

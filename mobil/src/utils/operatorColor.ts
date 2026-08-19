@@ -54,6 +54,7 @@ export function operatorInitials(name: string | null | undefined): string {
   const n = (name ?? '').trim();
   if (!n) return '?';
   const parts = n.split(/\s+/);
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  // toLocaleUpperCase('tr'): düz toUpperCase 'ışık' → 'IS' üretiyordu, doğrusu 'İŞ'.
+  if (parts.length === 1) return parts[0].slice(0, 2).toLocaleUpperCase('tr');
+  return (parts[0][0] + parts[parts.length - 1][0]).toLocaleUpperCase('tr');
 }

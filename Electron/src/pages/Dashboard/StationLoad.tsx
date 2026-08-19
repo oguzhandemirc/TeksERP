@@ -11,6 +11,8 @@ import {
   fetchStationLiveState,
   type StationLiveState,
 } from "./dashboardService";
+import { foldSearchText } from "@/lib/search-fold";
+import { trCompare } from "@/lib/collate";
 
 // Üretim akışına göre istasyon sırası — KK1 → Zımpara → Boyahane → KK2 → Tambur.
 // Listede olmayanlar sona düşer, kendi aralarında code'a göre sıralanır.
@@ -23,7 +25,10 @@ const FLOW_ORDER: Array<{ keywords: string[]; rank: number }> = [
 ];
 
 function flowRank(s: StationLiveState): number {
-  const text = `${s.code} ${s.name}`.toUpperCase();
+  // ⚠️ `toUpperCase()` YETMEZ: "Kurşun" → "KURŞUN" olur ve anahtar "KURSUN" ile
+  // eşleşmez; istasyon akış sırasında 99'a düşüp panonun en sonuna giderdi
+  // (2026-08-19 denetiminde bulundu). Katlama ç/ş/ğ'yi ASCII'ye indirir.
+  const text = foldSearchText(`${s.code} ${s.name}`).toUpperCase();
   for (const entry of FLOW_ORDER) {
     if (entry.keywords.some((kw) => text.includes(kw))) return entry.rank;
   }
@@ -35,7 +40,7 @@ function sortByFlow(list: StationLiveState[]): StationLiveState[] {
     const ra = flowRank(a);
     const rb = flowRank(b);
     if (ra !== rb) return ra - rb;
-    return a.code.localeCompare(b.code, "tr");
+    return trCompare(a.code, b.code);
   });
 }
 

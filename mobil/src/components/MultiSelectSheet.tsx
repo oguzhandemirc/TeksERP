@@ -4,6 +4,7 @@ import { Text, TouchableRipple, Icon, ActivityIndicator, TextInput } from 'react
 
 import AppModal from './AppModal';
 import { colors, spacing, radius } from '../theme';
+import { foldSearchText } from '../utils/searchFold';
 
 // =============================================================================
 // Çoklu seçim alt sayfası — `PickerModal` TEKİL seçer, bu ise onay kutulu liste.
@@ -52,12 +53,12 @@ export default function MultiSelectSheet({
   const [search, setSearch] = useState('');
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLocaleLowerCase('tr');
+    const q = foldSearchText(search);
     if (!q) return options;
     return options.filter(
       (o) =>
-        o.label.toLocaleLowerCase('tr').includes(q) ||
-        (o.sublabel ?? '').toLocaleLowerCase('tr').includes(q),
+        foldSearchText(o.label).includes(q) ||
+        foldSearchText(o.sublabel ?? '').includes(q),
     );
   }, [options, search]);
 

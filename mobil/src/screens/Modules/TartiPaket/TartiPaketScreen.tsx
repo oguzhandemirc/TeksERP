@@ -26,6 +26,7 @@ import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { useSessionStore } from '../../../store/sessionStore';
 import type { MainStackParamList } from '../../../navigation/types';
+import { foldSearchText } from '../../../utils/searchFold';
 
 // Koyu header'a uygun translucent etiketli aksiyon pill'i — KK1/Kurşun/Tambur
 // ile aynı stil. Telefonda header'ın 2. katında (secondRow) kullanılır.
@@ -179,13 +180,13 @@ export default function TartiPaketScreen() {
 
   const [orderSearch, setOrderSearch] = useState('');
   const filteredOrders = useMemo(() => {
-    const q = orderSearch.trim().toLocaleLowerCase('tr');
+    const q = foldSearchText(orderSearch);
     if (!q) return displayOrders;
     return displayOrders.filter(
       (o) =>
-        o.order.orderNumber.toLocaleLowerCase('tr').includes(q) ||
-        o.order.customer.name.toLocaleLowerCase('tr').includes(q) ||
-        (o.order.branch?.name ?? '').toLocaleLowerCase('tr').includes(q),
+        foldSearchText(o.order.orderNumber).includes(q) ||
+        foldSearchText(o.order.customer.name).includes(q) ||
+        foldSearchText(o.order.branch?.name ?? '').includes(q),
     );
   }, [displayOrders, orderSearch]);
 

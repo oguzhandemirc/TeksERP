@@ -104,6 +104,7 @@ import type {
   ReceiptCancelPreview,
 } from '../../../types/models';
 import type { MainStackParamList } from '../../../navigation/types';
+import { foldSearchText } from '../../../utils/searchFold';
 
 const RECEIPTS_PAGE_SIZE = 12;
 const DRAFT_KEY = 'fason_kabul_draft_v1';
@@ -1080,9 +1081,9 @@ export default function FasonKabulScreen() {
   }, [allGroups, highlightedWorkOrderId]);
 
   const filteredGroups = useMemo(() => {
-    const q = searchQ.trim().toLocaleLowerCase('tr');
+    const q = foldSearchText(searchQ);
     if (q.length < 2) return sortedGroups;
-    const hit = (s?: string | null) => !!s && s.toLocaleLowerCase('tr').includes(q);
+    const hit = (s?: string | null) => !!s && foldSearchText(s).includes(q);
     const hitAny = (arr?: string[]) => !!arr && arr.some((s) => hit(s));
     return sortedGroups.filter(
       (g) =>

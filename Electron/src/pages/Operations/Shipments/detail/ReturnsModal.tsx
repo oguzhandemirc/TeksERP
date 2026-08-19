@@ -14,6 +14,8 @@ import type { ShipmentDetail } from "../types";
 import { FacetSelect } from "./FacetSelect";
 import { SortableTh } from "./SortableTh";
 import { DateRangeFilter, inDateRange } from "./DateRangeFilter";
+import { foldSearchText } from "@/lib/search-fold";
+import { trCompare } from "@/lib/collate";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 const toggleIn = (list: string[], v: string) =>
@@ -71,9 +73,9 @@ export function ReturnsModal({
       if (r.color) colors.set(r.color.code, r.color.name);
       if (r.width != null) widths.add(r.width);
     }
-    const byLabel = (a: { label: string }, b: { label: string }) => a.label.localeCompare(b.label, "tr");
+    const byLabel = (a: { label: string }, b: { label: string }) => trCompare(a.label, b.label);
     return {
-      reasonOpts: [...reasons].sort((a, b) => a.localeCompare(b, "tr")).map((v) => ({ value: v, label: v })),
+      reasonOpts: [...reasons].sort(trCompare).map((v) => ({ value: v, label: v })),
       itemOpts: [...items].map(([value, label]) => ({ value, label })).sort(byLabel),
       colorOpts: [...colors].map(([value, label]) => ({ value, label })).sort(byLabel),
       // En: sayısal artan; value=String(en) (satır filtresiyle birebir).
@@ -107,10 +109,8 @@ export function ReturnsModal({
         r.color?.name ?? "",
         r.reasonName ?? "",
         sack ? `${sack.seq} ${sack.sackNo}` : "",
-      ]
-        .join(" ")
-        .toLocaleLowerCase("tr");
-      return hay.includes(q);
+      ];
+      return foldSearchText(hay.join(" ")).includes(q);
     });
   }, [d.returnedRolls, q, sackById, reasonSel, itemSel, colorSel, widthSel, dateFrom, dateTo]);
 
@@ -137,7 +137,7 @@ export function ReturnsModal({
       if (av == null) return 1;
       if (bv == null) return -1;
       if (typeof av === "number" && typeof bv === "number") return (av - bv) * dir;
-      return String(av).localeCompare(String(bv), "tr") * dir;
+      return trCompare(String(av), String(bv)) * dir;
     });
   }, [rows, sortField, sortDir, sackById]);
 
