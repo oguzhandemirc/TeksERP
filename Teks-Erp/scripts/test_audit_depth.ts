@@ -97,6 +97,34 @@ async function main(): Promise<void> {
   }
   check("audit satırını GÜNCELLEYEN kod yolu yok", mutations.length === 0, mutations.join(" · "));
 
+  // ── 4) ARŞİVLEME hâlâ çalışıyor mu (B1 regresyonu) ─────────────────────
+  // `updatedAt` düşürülünce arşivleyici KIRILDI (kolonu kopyalıyordu) ve bunu
+  // yalnız typecheck yakaladı — testler görmemişti çünkü arşiv 6 ayda bir
+  // koşuyor ve dev'de hiç tetiklenmemiş. Şeklini burada sabitliyoruz.
+  let archiveOk = true;
+  let archiveErr = "";
+  try {
+    // Kuru çalıştırma: 999 ay öncesini arşivle → eşleşen satır yok ama
+    // SORGU ŞEKLİ tam olarak koşar (createMany mapping'i dahil değil, o yüzden
+    // ayrıca alan varlığını da ölçüyoruz).
+    const { AuditService } = await import("../src/services/audit.service");
+    await AuditService.archiveOlderThan(999);
+  } catch (e) {
+    archiveOk = false;
+    archiveErr = (e as Error).message.slice(0, 80);
+  }
+  check("arşivleme yolu çalışıyor (updatedAt düşürüldükten sonra)", archiveOk, archiveErr);
+
+  // Arşiv satırının `updatedAt`i `createdAt`ten doldurulmalı — ikisi zaten her
+  // zaman aynıydı (düşürmeden önce `updatedAt > createdAt` olan 0 satır vardı).
+  const archSrc = (await import("fs")).readFileSync(
+    (await import("path")).join(__dirname, "..", "src", "services", "audit.service.ts"), "utf8",
+  );
+  check(
+    "arşiv updatedAt'i createdAt'ten doldurur",
+    /updatedAt:\s*log\.createdAt/.test(archSrc),
+  );
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

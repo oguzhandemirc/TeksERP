@@ -190,7 +190,12 @@ export class AuditService {
           oldData: log.oldData as Prisma.InputJsonValue,
           newData: log.newData as Prisma.InputJsonValue,
           createdAt: log.createdAt,
-          updatedAt: log.updatedAt,
+          // ⚠️ `system_logs.updatedAt` DÜŞÜRÜLDÜ (Faz B1): audit satırı yazıldıktan
+          // sonra hiç güncellenmez. Arşiv tablosunda kolon DURUYOR (taşınmış
+          // tarihsel veri, şeması değiştirilmez) → `createdAt` ile doldurulur.
+          // Bu bir kayıp DEĞİL: düşürmeden önce canlıda `updatedAt > createdAt`
+          // olan 0 satır vardı, yani ikisi zaten her zaman aynıydı.
+          updatedAt: log.createdAt,
         })),
         skipDuplicates: true,
       });
