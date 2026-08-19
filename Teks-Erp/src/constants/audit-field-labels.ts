@@ -84,6 +84,35 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   html: "Şablon içeriği",
   snapshot: "Belge içeriği",
   config: "Ayarlar",
+
+  // ── Değeri ADA ÇÖZÜLEN alanlar (audit-value-resolver ile eşleşir) ──────────
+  // Bu ikisi birlikte çalışır: harita UUID'yi ada çevirir, buradaki etiket alan
+  // adını Türkçeleştirir. Biri eksikse satır yarı okunur kalır
+  // ("workOrderId: İE1908260014") — bekçi ikisinin örtüşmesini denetler.
+  plannedColorId: "Planlanan renk",
+  customerBranchId: "Şube",
+  stationId: "İstasyon",
+  currentStationId: "Bulunduğu istasyon",
+  entryStationId: "Giriş istasyonu",
+  machineId: "Makine",
+  createdMachineId: "Oluşturan makine",
+  routeId: "Rota",
+  propertyId: "Özellik",
+  fabricPropertyId: "Özellik",
+  valueId: "Özellik değeri",
+  defectTypeId: "Hata tipi",
+  returnReasonId: "İade sebebi",
+  orderId: "Sipariş",
+  workOrderId: "İş emri",
+  batchId: "Parti",
+  rollId: "Top",
+  parentRollId: "Kaynak top",
+  sackId: "Çuval",
+  shipmentId: "Sevkiyat",
+  userId: "Kullanıcı",
+  operatorId: "Operatör",
+  assignedToId: "Atanan kişi",
+  printedById: "Basan kişi",
 };
 
 /**

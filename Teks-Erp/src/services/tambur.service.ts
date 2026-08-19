@@ -1426,7 +1426,7 @@ export class TamburService {
       where.OR = [
         { barcode: search },
         ...buildTextSearch<Prisma.RollWhereInput>(search, {
-          text: ["item.name", "color.name"],
+          text: ["item.name", "color.name", "item.customerAliases.some.alias"],
           code: ["item.code", "producedInStep.workOrder.workOrderNumber"],
         }),
       ];

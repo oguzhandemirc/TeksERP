@@ -623,7 +623,12 @@ export class OrderService extends BaseService {
     const search = params.search?.trim();
     if (search) {
       baseWhere.OR = buildTextSearch<Prisma.OrderWhereInput>(search, {
-        text: ["customer.name", "lines.some.item.name", "lines.some.customerItemName"],
+        text: [
+          "customer.name",
+          "lines.some.item.name",
+          "lines.some.customerItemName",
+          "lines.some.item.customerAliases.some.alias",
+        ],
         code: ["orderNumber"],
       });
     }
@@ -769,7 +774,12 @@ export class OrderService extends BaseService {
     const term = params.search?.trim();
     if (term) {
       baseWhere.OR = buildTextSearch<Prisma.OrderLineWhereInput>(term, {
-        text: ["order.customer.name", "item.name", "customerItemName"],
+        text: [
+          "order.customer.name",
+          "item.name",
+          "customerItemName",
+          "item.customerAliases.some.alias",
+        ],
         code: ["order.orderNumber"],
       });
     }

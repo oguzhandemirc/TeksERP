@@ -31,7 +31,12 @@ export const orderService = new OrderService({
   tableName: "ORDER",
   // Liste araması picker'la (findAvailableForWorkOrder) aynı kapsamda:
   // sipariş no + müşteri adı + kalem kumaş adı / müşteri kumaş adı.
-  searchFields: ["customer.name", "lines.some.item.name", "lines.some.customerItemName"],
+  searchFields: [
+    "customer.name",
+    "lines.some.item.name",
+    "lines.some.customerItemName",
+    "lines.some.item.customerAliases.some.alias",
+  ],
   // İŞ EMRİ NO ile sipariş arama (2026-08-17 saha talebi). `codeSearchFields`
   // çünkü yol derin (sipariş → kalem → pivot → iş emri) ve terim kod biçiminde
   // değilse (ör. müşteri adı) bu tarama BOŞUNA olurdu.

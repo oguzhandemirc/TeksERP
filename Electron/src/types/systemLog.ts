@@ -32,7 +32,7 @@ export interface SystemLogListItem {
    * ⚠️ YALNIZ kayıt-bazlı geçmişte (`recordId` filtresiyle) dolu — genel
    * listede backend bunları SEÇMEZ (perf kuralı: listede JSON çekme).
    */
-  changes?: Array<{ field: string; old: unknown; new: unknown }> | null;
+  changes?: AuditChange[] | null;
   deviceId?: string | null;
 }
 
@@ -65,4 +65,19 @@ export interface SystemLogStats {
 export interface SystemLogArchiveResult {
   archived: number;
   cutoff: string;
+}
+
+/**
+ * Alan-bazlı değişiklik satırı (Faz B2).
+ *
+ * `oldLabel`/`newLabel` SUNUCUDA çözülür (`audit-value-resolver`): UUID taşıyan
+ * alanlarda insana okunur karşılık. Çözülemeyen değerde alan hiç gelmez —
+ * istemci ham değere düşer.
+ */
+export interface AuditChange {
+  field: string;
+  old: unknown;
+  new: unknown;
+  oldLabel?: string;
+  newLabel?: string;
 }

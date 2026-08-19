@@ -14,7 +14,10 @@ import { requirePermission, requireAnyPermission } from "../middlewares/rbac.mid
 export const colorService = new ColorService({
   modelName: "color",
   tableName: "COLOR",
-  searchFields: ["name"],
+  // ⚠️ MÜŞTERİ ALIAS'I DA ARANIR (2026-08-19): müşterinin bizim ürüne verdiği ad
+  // etikete/irsaliyeye basılıyor ama aranamıyordu — "BELLE" diyen müşterinin
+  // kastettiği bizim "18152". Sonuç listesi her zaman BİZİM adımızı gösterir.
+  searchFields: ["name", "customerAliases.some.alias"],
   codeSearchFields: ["code"],
   defaultInclude: undefined,
   uniqueField: "code",

@@ -9,6 +9,7 @@ import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 
 import { currentOrigin } from "../lib/request-context";
+import { diffCommonFields } from "./helpers/audit-diff.helper";
 type JsonValue = Prisma.InputJsonValue | typeof Prisma.JsonNull;
 
 const ARCHIVE_BATCH_SIZE = 5000;
@@ -69,6 +70,16 @@ export class AuditService {
     changes?: Array<{ field: string; old: unknown; new: unknown }> | null;
   }): Promise<void> {
     const origin = currentOrigin();
+    // ── NE DEĞİŞTİ (Faz B2 — kapsam genişletmesi) ────────────────────────────
+    // Çağıran diff vermediyse BURADA hesaplanır. Gerekçe ölçümle: 213 çağrı
+    // noktasının yalnız 2'si `changes` gönderiyordu; geri kalanı elle yazılmış
+    // ham JSON'du ve ekranda "targetColorId: 91cd… → bb82…" diye okunuyordu.
+    // Diff'i çağrı noktalarına tek tek eklemek 211 dosya dokunuşu + her yeni
+    // çağrıda unutulabilecek bir adım demekti; tek kapıda hesaplamak aynı işi
+    // geriye dönük de yapar. Çağıranın verdiği diff DAİMA kazanır (o, alanın
+    // anlamını bilir).
+    const changes =
+      params.changes ?? diffCommonFields(params.oldData ?? null, params.newData ?? null);
     try {
       await prisma.systemLog.create({
         data: {
@@ -88,7 +99,7 @@ export class AuditService {
           // Faz B2 — alan-bazlı değişiklik. Boş dizi de `JsonNull` yazılır:
           // "değişiklik yok" ile "diff hesaplanmadı" ayrımı BURADA değil,
           // çağıranda yapılır (boş diffte satır hiç yazılmaz).
-          changes: (params.changes?.length ? params.changes : Prisma.JsonNull) as JsonValue,
+          changes: (changes?.length ? changes : Prisma.JsonNull) as JsonValue,
         },
       });
     } catch (error) {
@@ -205,6 +216,8 @@ export class AuditService {
           ipAddress: log.ipAddress,
           tableName: log.tableName,
           recordId: log.recordId,
+          deviceId: log.deviceId,
+          changes: log.changes as Prisma.InputJsonValue,
           oldData: log.oldData as Prisma.InputJsonValue,
           newData: log.newData as Prisma.InputJsonValue,
           createdAt: log.createdAt,

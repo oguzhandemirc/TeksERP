@@ -135,3 +135,88 @@ Audit satırı hiç güncellenmemeli; kolonun varlığı yanlış bir kapı öne
 - Hassas alanlar diff'te **maskeli** mi
 - `system_logs` satırı yazımdan sonra **değişmiyor** mu
 - Körlük zemini: taranan çağrı noktası ≥ 100
+
+---
+
+## Faz B2-b — OKUNABİLİRLİK (2026-08-19, saha bulgusundan)
+
+**Bulgu.** İş emrinin rengi değiştirildi; denetim ekranı şunu bastı:
+
+```
+ÖNCEKİ DEĞER   targetColorId  91cd4281-acfe-4da9-8298-fa5a196bab41
+YENİ DEĞER     event          TARGET_COLOR_CHANGED
+               targetColorId  bb826d50-acdd-489e-85a5-d73372a9bd34
+               warnings       []
+```
+
+Kullanıcının cümlesi: *"neymiş neye dönüşmüş anlayamadım."* Doğru teşhis: kayıt
+eksik değildi, **okunmuyordu**. İki ayrı sebep vardı ve ikisi de ayrı ayrı
+yeterliydi.
+
+### Sebep 1 — diff fiilen kapalıydı (ölçüm: 213 çağrının 2'si)
+
+`changes` alanı **çağrı noktası opt-in**'di. BaseService (tüm master-data) ve
+`workorder.service`'te tek bir yol onu dolduruyordu; kalan 211 çağrı elle
+yazılmış ham JSON'du. Yani B2 canlıya çıkmıştı ama fabrikanın günlük olarak
+gördüğü ekranların çoğunda hiç görünmüyordu.
+
+**Karar: diff'i `AuditService.log` İÇİNDE, çağıran vermediyse hesapla.** 211
+dosyaya dokunmak yerine tek kapı; ayrıca *yeni* çağrı noktası da onu unutamaz.
+Çağıranın verdiği diff daima kazanır (o, alanın anlamını bilir).
+
+⚠️ **`diffFields` bu iş için YANLIŞ fonksiyondur** — `after`ın tüm anahtarlarını
+gezer ve elle yazılmış yükte `event`/`reason`/`warnings` gibi ANLATI alanlarını
+sahte "değişiklik" satırlarına çevirir. Bunun için `diffCommonFields` var:
+yalnız `before`da DA bulunan alan karşılaştırılır. Çağıranın eski değerini
+yazdığı alan, kastettiği alandır.
+
+### Sebep 2 — değer ham UUID kalıyordu
+
+Alan adı Türkçeleşse bile `Hedef renk: 91cd… → bb82…` hiçbir şey anlatmaz.
+
+**Karar: çözümleme YAZMA anında değil OKUMA anında.** SAP `CDPOS` de ham anahtar
+saklar (`VALUE_OLD`/`VALUE_NEW`), metne çevirmeyi görüntüleme katmanı veri
+sözlüğündeki kontrol tablosundan yapar. Gerekçeler:
+
+- Adı log'a kopyalasaydık, renk sonradan yeniden adlandırıldığında geçmiş kayıt
+  **eski adı** gösterirdi. Bizim sorumuz "hangi KAYDA geçildi" olduğu için
+  kimlik doğru cevaptır.
+- Her audit satırını şişirirdi (3.013 kayıt/gün).
+- Yazma yolu sıcak; okuma yolu (tek satır / ≤100 satırlık geçmiş) değil.
+
+`audit-value-resolver.ts`: alan adı → tablo+etiket kolonu haritası (31 alan),
+**tablo başına tek sorgu**, satır başına lookup yok. **Fail-open**: kayıt
+silinmiş/çözülemiyorsa ham UUID kalır — denetim ekranını bir lookup hatası
+yüzünden düşürmek, biraz ham veri göstermekten kötüdür.
+
+### Ek: arşiv iki alanı KAYBEDİYORDU
+
+`system_log_archives` şemasında `changes` ve `deviceId` yoktu → arşivleyici
+onları kopyalayamıyordu. Sonuç: B2 ve B3'ün getirdiği her şey **6 ay sonra
+sessizce buharlaşıyordu**, üstelik geriye dönük denetim tam da o yaştaki
+kayıtlara bakar. `20260819140000` iki nullable kolon ekler (tablo yeniden
+yazılmaz, index yok) ve arşivleyici artık ikisini de taşır.
+
+### Ekran
+
+Ham `oldData`/`newData` blokları **kaldırılmadı, katlandı** ("Ham veri
+(teknik)"). Adli inceleme için gerekli, günlük okuma için gürültü. Birincil
+yüzey artık "Ne değişti" tablosu + `newData`dan çekilen **Gerekçe** satırı —
+diff "ne", gerekçe "neden" sorusunu cevaplar ve ikincisi ham JSON'un içinde
+kayboluyordu.
+
+Kayıt Geçmişi ile Aktivite Detayı **aynı bileşeni** kullanır
+(`AuditChangeList`): ayrı yazılsalardı biri UUID çözmeyi öğrenirken diğeri ham
+basmaya devam ederdi.
+
+### Bekçi (`test_audit_depth.ts` §9, 4 negatif sonda ile doğrulandı)
+
+- Anlatı alanları diff'e girmiyor · `before`da olmayan alan uydurulmuyor
+- UUID gerçekten ada çözülüyor (fixture kendi üretir) · çözülemeyende etiket
+  alanı **doğmuyor** (fail-open) · bilinmeyen alanda lookup denenmiyor
+- **Harita bayat değil**: her tablo+kolon `information_schema`'da var — tablo
+  yeniden adlandırılırsa lookup sessizce fail-open'a düşerdi
+- **İki harita örtüşür**: değeri çözülen her alanın Türkçe etiketi de var
+  (yoksa satır yarı okunur kalır: `workOrderId: İE1908260014`)
+- Arşiv iki kolonu taşıyor **ve** arşivleyici onları kopyalıyor
+- Körlük zemini: harita ≥ 25 alan

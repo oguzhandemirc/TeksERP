@@ -13,7 +13,10 @@ import "../types/express-augment";
 export const itemService = new ItemService({
   modelName: "item",
   tableName: "ITEM",
-  searchFields: ["name"],
+  // ⚠️ MÜŞTERİ ALIAS'I DA ARANIR (2026-08-19): müşterinin bizim ürüne verdiği ad
+  // etikete/irsaliyeye basılıyor ama aranamıyordu — "BELLE" diyen müşterinin
+  // kastettiği bizim "18152". Sonuç listesi her zaman BİZİM adımızı gösterir.
+  searchFields: ["name", "customerAliases.some.alias"],
   codeSearchFields: ["code"],
   defaultInclude: {
     allowedColors: { include: { color: true } },

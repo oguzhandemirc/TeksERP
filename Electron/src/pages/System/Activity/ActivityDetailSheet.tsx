@@ -5,7 +5,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { systemLogService } from "@/services/systemLogService";
+import type { AuditChange } from "@/types/systemLog";
 import { AuditDataBlock } from "@/components/AuditDataBlock";
+import { AuditChangeList } from "@/components/AuditChangeList";
 import { tableLabel, actionLabel, actionVariant } from "./labels";
 
 interface Props {
@@ -25,6 +27,13 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
     enabled: !!logId,
     staleTime: 60_000,
   });
+
+  // Elle yazılmış audit yükleri gerekçeyi `newData.reason`da taşır (renk
+  // değişikliği, iptal, manuel düzeltme…). Diff satırı "ne", gerekçe "neden"
+  // sorusunu cevaplar — ham JSON'ın içinde kaybolmamalı.
+  const log = query.data;
+  const changes = (log?.changes ?? []) as AuditChange[];
+  const reasonText = pickReason(log?.newData);
 
   return (
     <Sheet open={!!logId} onOpenChange={(o) => !o && onClose()}>
@@ -63,8 +72,39 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                 </Row>
               </div>
 
-              <AuditDataBlock title="Önceki Değer" data={query.data.oldData} />
-              <AuditDataBlock title="Yeni Değer" data={query.data.newData} />
+              {/* NE DEĞİŞTİ — birincil okuma yüzeyi. Ham JSON blokları altta ve
+                  KATLI durur: adli inceleme için gerekli, günlük okuma için
+                  gürültü. Eskiden yalnız ham bloklar vardı ve renk değişikliği
+                  ekranda "targetColorId: 91cd… → bb82…" diye görünüyordu. */}
+              {changes.length > 0 ? (
+                <div className="rounded-md border bg-card/40 p-3">
+                  <div className="mb-2 text-xs uppercase tracking-wider text-muted-foreground">
+                    Ne değişti
+                  </div>
+                  <AuditChangeList changes={changes} />
+                  {reasonText && (
+                    <div className="mt-2 border-t pt-2 text-sm">
+                      <span className="text-muted-foreground">Gerekçe: </span>
+                      {reasonText}
+                    </div>
+                  )}
+                </div>
+              ) : query.data.action === "UPDATE" ? (
+                <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                  Alan-bazlı ayrıntı kaydedilmemiş (19.08.2026 öncesi kayıt) — aşağıdaki
+                  ham veriye bak.
+                </div>
+              ) : null}
+
+              <details className="rounded-md border bg-card/20 p-2">
+                <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
+                  Ham veri (teknik)
+                </summary>
+                <div className="mt-2 space-y-3">
+                  <AuditDataBlock title="Önceki Değer" data={query.data.oldData} />
+                  <AuditDataBlock title="Yeni Değer" data={query.data.newData} />
+                </div>
+              </details>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">Kayıt bulunamadı.</p>
@@ -86,3 +126,14 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
+
+/** `newData` içindeki gerekçe alanını bulur — çağrı noktaları farklı ad kullanıyor. */
+function pickReason(data: unknown): string | null {
+  if (!data || typeof data !== "object") return null;
+  const d = data as Record<string, unknown>;
+  for (const k of ["reason", "sebep", "cancelReason", "reissueReason", "voidReason"]) {
+    const v = d[k];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return null;
+}

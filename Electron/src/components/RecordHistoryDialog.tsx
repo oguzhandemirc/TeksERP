@@ -10,7 +10,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { safeFormat } from "@/lib/format";
 import { systemLogService } from "@/services/systemLogService";
-import { auditFieldLabel, auditValueText } from "@/lib/audit-field-labels";
+import { AuditChangeList } from "@/components/AuditChangeList";
 
 // =============================================================================
 // TEK KAYDIN DEĞİŞİKLİK GEÇMİŞİ (Faz C, 2026-08-19)
@@ -106,20 +106,8 @@ export function RecordHistoryDialog({ open, onOpenChange, table, id, title }: Pr
 
               {/* Alan-bazlı değişiklikler (Faz B2). */}
               {r.changes && r.changes.length > 0 ? (
-                <div className="mt-1.5 space-y-0.5">
-                  {r.changes.map((c, i) => (
-                    <div key={`${c.field}-${i}`} className="flex flex-wrap items-baseline gap-1">
-                      {/* Etiket yoksa HAM AD basılır — fail-open, satır asla boş kalmaz. */}
-                      <span className="font-medium">{auditFieldLabel(c.field)}:</span>
-                      <span className="text-muted-foreground line-through" title={String(c.old ?? "")}>
-                        {auditValueText(c.old)}
-                      </span>
-                      <span className="text-muted-foreground">→</span>
-                      <span className="font-medium" title={String(c.new ?? "")}>
-                        {auditValueText(c.new)}
-                      </span>
-                    </div>
-                  ))}
+                <div className="mt-1.5 text-[11px]">
+                  <AuditChangeList changes={r.changes} />
                 </div>
               ) : r.action === "UPDATE" ? (
                 // Faz B2 ÖNCESİ kayıt: ayrıntı hiç yazılmamış. "Değişiklik yok"

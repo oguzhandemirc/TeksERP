@@ -124,3 +124,29 @@ export function diffFields(
 /** Gizli/opak alan listelerini dışarıya açar — bekçi bunları denetler. */
 export const AUDIT_DIFF_SECRET_FIELDS = SECRET_FIELDS;
 export const AUDIT_DIFF_OPAQUE_FIELDS = OPAQUE_FIELDS;
+
+/**
+ * `diffFields`in ORTAK-ANAHTAR varyantı — elle yazılmış audit yükleri için.
+ *
+ * Neden ayrı fonksiyon: `diffFields` `after`ın TÜM anahtarlarını gezer, çünkü
+ * onun çağıranı (BaseService) `before`a tam kaydı verir. Elle yazılmış yüklerde
+ * durum tersidir — `before` küçük bir seçkidir (`{targetColorId}`), `after` ise
+ * olay anlatısı taşır (`event`, `reason`, `warnings`, `colorName`). O yükte
+ * `diffFields` "event: yok → TARGET_COLOR_CHANGED" gibi sahte satırlar üretir
+ * ve gerçek değişikliği gürültüye gömer.
+ *
+ * Kural: **yalnız `before`da DA bulunan alan** karşılaştırılır. Çağıranın eski
+ * değerini yazdığı alan, kastettiği alandır; anlatı alanları ham `newData`
+ * bloğunda okunmaya devam eder.
+ */
+export function diffCommonFields(
+  before: Record<string, unknown> | null | undefined,
+  after: Record<string, unknown> | null | undefined,
+): FieldChange[] {
+  if (!before || !after) return [];
+  const common: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(after)) {
+    if (Object.prototype.hasOwnProperty.call(before, k)) common[k] = v;
+  }
+  return diffFields(before, common);
+}

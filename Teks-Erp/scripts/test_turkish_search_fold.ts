@@ -34,6 +34,7 @@ function check(label: string, cond: boolean, extra = ""): void {
 
 const TAG = `TSF${Date.now().toString().slice(-9)}`;
 const created: string[] = [];
+const createdItems: string[] = [];
 
 async function findCustomers(term: string): Promise<string[]> {
   const leaves = buildTextSearch<Prisma.CustomerWhereInput>(term, {
@@ -145,6 +146,54 @@ async function main(): Promise<void> {
       if (stray) created.push(stray.id);
     }
 
+    // ── 6b) MÜŞTERİ ALIAS'I ile ürün bulunuyor mu ──────────────────────────
+    // Müşterinin bizim ürüne verdiği ad etikete/irsaliyeye BASILIYOR ama
+    // 2026-08-19'a kadar hiçbir aramadan BULUNMUYORDU. Canlı veriden örnek:
+    // müşteri bizim "KREP"e "TRİPLİ VUAL", "18152"ye "BELLE" diyor.
+    console.log("\n── 6b) Müşteri alias'ı aranabiliyor ──");
+    const aliasItem = await prisma.item.create({
+      data: { code: `TSF-${TAG}-I`, name: `BİZİM ADIMIZ ${TAG}`, itemType: "FABRIC" },
+      select: { id: true },
+    });
+    createdItems.push(aliasItem.id);
+    await prisma.customerItemAlias.create({
+      data: { customerId: created[0]!, itemId: aliasItem.id, alias: `MÜŞTERİ ADI ${TAG}` },
+    });
+    const byAlias = await prisma.item.findMany({
+      where: {
+        AND: [
+          { code: { startsWith: "TSF" } },
+          {
+            OR: buildTextSearch<Prisma.ItemWhereInput>(`musteri adi ${TAG}`, {
+              text: ["name", "customerAliases.some.alias"],
+              code: ["code"],
+            }) as never,
+          },
+        ],
+      },
+      select: { name: true },
+    });
+    check(
+      "ASCII yazımla müşteri alias'ından ürün bulunuyor",
+      byAlias.some((r) => r.name.includes("BİZİM ADIMIZ")),
+      `${byAlias.length} sonuç`,
+    );
+    const byOwnName = await prisma.item.findMany({
+      where: {
+        AND: [
+          { code: { startsWith: "TSF" } },
+          {
+            OR: buildTextSearch<Prisma.ItemWhereInput>(`bizim adimiz ${TAG}`, {
+              text: ["name", "customerAliases.some.alias"],
+              code: ["code"],
+            }) as never,
+          },
+        ],
+      },
+      select: { name: true },
+    });
+    check("kendi adımızla da bulunuyor (alias eklemek daraltmadı)", byOwnName.length === 1);
+
     // ── 7) Gölge kolon gerçekten yazıldı mı ────────────────────────────────
     console.log("\n── 7) Gölge kolon (DB üretimi) ──");
     const row = await prisma.$queryRawUnsafe<Array<{ name: string; fold: string }>>(
@@ -157,6 +206,10 @@ async function main(): Promise<void> {
       row[0]?.fold ?? "YOK",
     );
   } finally {
+    await prisma.customerItemAlias
+      .deleteMany({ where: { itemId: { in: createdItems } } })
+      .catch(() => {});
+    await prisma.item.deleteMany({ where: { id: { in: createdItems } } }).catch(() => {});
     await prisma.customer.deleteMany({ where: { id: { in: created } } }).catch(() => {});
   }
 

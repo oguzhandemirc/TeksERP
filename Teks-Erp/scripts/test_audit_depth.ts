@@ -265,6 +265,79 @@ async function main(): Promise<void> {
     }
   }
 
+
+  // ── 9) OKUNABİLİRLİK — "ne değişti" insan diline çevriliyor mu? ─────────
+  // Saha bulgusu (19.08.2026): iş emrinin rengi değiştirildi, denetim ekranı
+  // "targetColorId: 91cd4281-… → bb826d50-…" bastı. İki ayrı eksik vardı:
+  // (a) diff 213 çağrı noktasının 2'sinde hesaplanıyordu, (b) hesaplansa bile
+  // değer ham UUID kalıyordu.
+  const { diffCommonFields } = await import("../src/services/helpers/audit-diff.helper");
+  const {
+    resolveChangeValues, attachLabels, AUDIT_FIELD_SOURCES,
+  } = await import("../src/services/helpers/audit-value-resolver");
+
+  // (a) Elle yazılmış yükte ANLATI alanları diff'e girmemeli. `diffFields`
+  // burada kullanılsaydı "event / colorName / reason / warnings" satırları
+  // gerçek değişikliği gömerdi — ayrı fonksiyonun VARLIK SEBEBİ bu.
+  const narrated = diffCommonFields(
+    { targetColorId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa" },
+    {
+      event: "TARGET_COLOR_CHANGED",
+      targetColorId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      colorName: "X", reason: "test", warnings: [],
+    },
+  );
+  check("diff(ortak): yalnız gerçek alan kalır, anlatı elenir",
+    narrated.length === 1 && narrated[0]!.field === "targetColorId",
+    JSON.stringify(narrated.map((c) => c.field)));
+  check("diff(ortak): before'da olmayan alan uydurulmaz",
+    diffCommonFields({}, { event: "X" }).length === 0);
+
+  // (b) Değer ada çözülüyor mu — GERÇEK kayıtla (fixture kendi üretir).
+  const twoColors = await prisma.color.findMany({ where: { isActive: true }, take: 2, select: { id: true, name: true } });
+  if (twoColors.length === 2) {
+    const ch = [{ field: "targetColorId", old: twoColors[0]!.id, new: twoColors[1]!.id }];
+    const labels = await resolveChangeValues([ch]);
+    const resolved = attachLabels(ch, labels)!;
+    check("değer: UUID renk ADINA çözülür",
+      resolved[0]!.oldLabel === twoColors[0]!.name && resolved[0]!.newLabel === twoColors[1]!.name,
+      `${resolved[0]!.oldLabel} → ${resolved[0]!.newLabel}`);
+  }
+  // FAIL-OPEN: çözülemeyen değerde alan HİÇ doğmaz, istemci ham değere düşer.
+  const ghost = [{ field: "targetColorId", old: "00000000-0000-4000-8000-000000000000", new: null }];
+  const ghostOut = attachLabels(ghost, await resolveChangeValues([ghost]))!;
+  check("değer: çözülemeyen UUID'de etiket alanı doğmaz",
+    ghostOut[0]!.oldLabel === undefined);
+  check("değer: bilinmeyen alan lookup denemez", (await resolveChangeValues([
+    [{ field: "zzzBilinmeyen", old: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", new: null }],
+  ])).size === 0);
+
+  // (c) HARİTA BAYAT MI — tablo/kolon gerçekten var mı? Yeniden adlandırılmış
+  // bir tablo lookup'ı sessizce fail-open'a düşürür: ekran ham UUID basmaya
+  // döner ve kimse fark etmez.
+  const cols = await prisma.$queryRaw<Array<{ table_name: string; column_name: string }>>`
+    SELECT table_name, column_name FROM information_schema.columns WHERE table_schema = 'public'`;
+  const known = new Set(cols.map((c) => `${c.table_name}.${c.column_name}`));
+  const stale = Object.entries(AUDIT_FIELD_SOURCES)
+    .filter(([, s]) => !known.has(`${s.table}.${s.label}`))
+    .map(([f, s]) => `${f}→${s.table}.${s.label}`);
+  check("çözümleme haritası bayat değil (tablo+kolon var)", stale.length === 0, stale.join(", "));
+  check("körlük zemini: çözümleme haritası dolu",
+    Object.keys(AUDIT_FIELD_SOURCES).length >= 25,
+    `${Object.keys(AUDIT_FIELD_SOURCES).length} alan`);
+
+  // (d) İKİ HARİTA ÖRTÜŞÜR: değeri çözülen alanın ADI da Türkçe olmalı, yoksa
+  // satır yarı okunur kalır ("workOrderId: İE1908260014").
+  const unlabeled = Object.keys(AUDIT_FIELD_SOURCES).filter((f) => auditFieldLabel(f) === f);
+  check("çözümlenen her alanın Türkçe etiketi var", unlabeled.length === 0, unlabeled.join(", "));
+
+  // (e) ARŞİV kaybetmiyor: `changes`/`deviceId` 6 ay sonra da duruyor mu?
+  const archCols = new Set(cols.filter((c) => c.table_name === "system_log_archives").map((c) => c.column_name));
+  check("arşiv `changes` kolonu taşıyor", archCols.has("changes"));
+  check("arşiv `deviceId` kolonu taşıyor", archCols.has("deviceId"));
+  const archiverSrc = archSrc; // yukarıda okundu — ikinci kez açmaya gerek yok
+  check("arşivleyici iki kolonu KOPYALIYOR",
+    /changes: log\.changes/.test(archiverSrc) && /deviceId: log\.deviceId/.test(archiverSrc));
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

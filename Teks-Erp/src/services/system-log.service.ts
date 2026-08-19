@@ -10,6 +10,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { resolveChangeValues, attachLabels } from "./helpers/audit-value-resolver";
 import { Prisma, SystemLogCategory } from "@prisma/client";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
 
@@ -109,9 +110,26 @@ export class SystemLogService {
     });
 
     const hasMore = items.length > limit;
-    const data = hasMore ? items.slice(0, limit) : items;
-    const last = data[data.length - 1];
+    const page = hasMore ? items.slice(0, limit) : items;
+    const last = page[page.length - 1];
     const nextCursor = hasMore && last ? buildNextCursor(last) : null;
+
+    // Kayıt geçmişinde UUID değerleri ada çevrilir — sayfanın TÜMÜ tek turda
+    // toplanır (tablo başına tek sorgu), satır başına lookup DEĞİL.
+    // ⚠️ `page`i dar bir tipe CAST ETME — spread o tipi taşır ve dönen satırdan
+    // `tableName`/`id` gibi alanlar sessizce düşer (ilk yazımda oldu, tip
+    // kontrolü yakaladı). Satır tipi olduğu gibi korunur, alan alan okunur.
+    const data = params.recordId
+      ? await (async () => {
+          const labels = await resolveChangeValues(
+            page.map((r) => (r as { changes?: unknown }).changes as never),
+          );
+          return page.map((r) => ({
+            ...r,
+            changes: attachLabels((r as { changes?: unknown }).changes, labels),
+          }));
+        })()
+      : page;
 
     return {
       success: true,
@@ -126,7 +144,8 @@ export class SystemLogService {
       include: { user: { select: { id: true, username: true, fullName: true } } },
     });
     if (!record) return { success: false, data: null, message: "Kayıt bulunamadı" };
-    return { success: true, data: record };
+    const labels = await resolveChangeValues([record.changes as never]);
+    return { success: true, data: { ...record, changes: attachLabels(record.changes, labels) } };
   }
 
   // ---------------------------------------------------------------------------
@@ -224,7 +243,11 @@ export class SystemLogService {
           select: { id: true, username: true, fullName: true },
         })
       : null;
-    return { success: true, data: { ...record, user } };
+    const labels = await resolveChangeValues([record.changes as never]);
+    return {
+      success: true,
+      data: { ...record, user, changes: attachLabels(record.changes, labels) },
+    };
   }
 
   /**

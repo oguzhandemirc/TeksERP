@@ -1049,7 +1049,9 @@ export class InventoryService {
       where.OR = [
         { barcode: search },
         ...buildTextSearch<Prisma.RollWhereInput>(search, {
-          text: ["item.name", "color.name"],
+          // Müşteri alias'ı: operatör müşterinin kullandığı adı duyar ("BELLE"),
+          // bizim adı ("18152") bilmek zorunda kalmasın.
+          text: ["item.name", "color.name", "item.customerAliases.some.alias"],
           code: ["item.code"],
         }),
       ];

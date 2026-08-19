@@ -4280,10 +4280,17 @@ model CustomerItemAlias {
   createdBy   User?   @relation("CustomerItemAliasCreatedBy", fields: [createdById], references: [id])
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("CustomerItemAliasUpdatedBy", fields: [updatedById], references: [id])
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("alias")) STORED`
+  /// (migration `20260819140000_alias_search`). Müşterinin bizim ürüne verdiği
+  /// ad da aranabilsin diye: "BELLE" yazan kişi bizim "18152"yi bulur.
+  aliasFold   String? @default(dbgenerated())
 
   @@unique([customerId, itemId])
   // D-6: @@index([customerId]) kaldırıldı — @@unique([customerId, itemId]) sol-prefix'i kapsar.
   @@index([itemId])
+  @@index([aliasFold])
+  @@index([aliasFold(ops: raw("gin_trgm_ops"))], map: "customer_item_aliases_aliasFold_trgm_idx", type: Gin)
   @@map("customer_item_aliases")
 }
 
@@ -4315,6 +4322,11 @@ model CustomerColorAlias {
   createdBy   User?   @relation("CustomerColorAliasCreatedBy", fields: [createdById], references: [id])
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("CustomerColorAliasUpdatedBy", fields: [updatedById], references: [id])
+  /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
+  /// `GENERATED ALWAYS AS (public.tr_fold("alias")) STORED`
+  /// (migration `20260819140000_alias_search`). Müşterinin bizim ürüne verdiği
+  /// ad da aranabilsin diye: "BELLE" yazan kişi bizim "18152"yi bulur.
+  aliasFold   String? @default(dbgenerated())
 
   @@unique([customerId, colorId])
   // D-6: @@index([customerId]) kaldırıldı — @@unique([customerId, colorId]) sol-prefix'i kapsar.
@@ -4322,6 +4334,8 @@ model CustomerColorAlias {
   // (none/some assigned) ve "bu renkler atanmış mı" (colorId IN + assigned).
   // (colorId, assigned) composite, colorId-prefix lookup'ları da karşılar.
   @@index([colorId, assigned])
+  @@index([aliasFold])
+  @@index([aliasFold(ops: raw("gin_trgm_ops"))], map: "customer_color_aliases_aliasFold_trgm_idx", type: Gin)
   @@map("customer_color_aliases")
 }
 
@@ -4704,6 +4718,12 @@ model SystemLogArchive {
   tableName  String
   recordId   String
   ipAddress  String?
+  /// Olayın cihazı (Faz B3) ve alan-bazlı değişikliği (Faz B2) — arşive de
+  /// TAŞINIR. Taşınmasaydı 6 ay sonra denetim "kim, neyi, hangi tabletten"
+  /// sorusunu cevaplayamazdı; oysa geriye dönük denetim tam da o yaştaki
+  /// kayıtlara bakar (canlı tablo zaten son 6 ayı tutuyor).
+  deviceId   String?           @db.Uuid
+  changes    Json?
   oldData    Json?
   newData    Json?
   archivedAt DateTime          @default(now()) @db.Timestamptz
@@ -4811,7 +4831,7 @@ model ImportRun {
   user   User?   @relation("ImportRunUser", fields: [userId], references: [id])
 
   /// Kullanıcının yüklediği dosyanın adı — "hangi dosyaydı" sorusunun tek cevabı.
-  fileName String? @db.VarChar(255)
+  fileName    String? @db.VarChar(255)
   /// İdempotency: aynı deneme (timeout-retry) ikinci kez YAZMAZ, bu koşumu döner.
   clientToken String? @unique @db.Uuid
 
@@ -4827,7 +4847,7 @@ model ImportRun {
   stoppedAtRowNo Int?
 
   /// { mode, onError } — koşumun hangi kurallarla yapıldığı.
-  options Json?
+  options     Json?
   /// Yalnız hatalı/uyarılı satır sonuçları.
   errorReport Json?
 
