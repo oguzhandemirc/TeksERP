@@ -1047,7 +1047,12 @@ export class InventoryService {
       // saha akışı değil. Ürün adı/kodu küçük master tabloda kaldığı için contains
       // olarak kalır → "patos" gibi fuzzy ürün araması bozulmadan çalışır.
       where.OR = [
-        { barcode: search },
+        // ⚠️ `normalizeScanCode` ZORUNLU (2026-08-19 denetimi): el tarayıcısı
+        // barkodu KÜÇÜK harfle gönderebiliyor (2026-08-17 saha vakası) ve burada
+        // TAM EŞİTLİK arandığı için küçük harfli girdi sessizce 0 sonuç veriyordu.
+        // Diğer bütün tam-barkod yolları (rolls/barcode ucu, tambur, çuval arama,
+        // batch-trace) bu kapıdan geçiyordu; liste araması tek istisnaydı.
+        { barcode: normalizeScanCode(search) },
         ...buildTextSearch<Prisma.RollWhereInput>(search, {
           // Müşteri alias'ı: operatör müşterinin kullandığı adı duyar ("BELLE"),
           // bizim adı ("18152") bilmek zorunda kalmasın.
