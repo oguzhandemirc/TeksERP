@@ -228,7 +228,7 @@ göstermeli; başka fark KIRMIZI'dır.
 
 ---
 
-## 7) ⏳ ELLE YAPILACAK — izin ataması (iki izin)
+## 7) ⏳ ELLE YAPILACAK — izin ataması (iki izin + bir rol yenileme)
 
 Boot uzlaştırması izni **DB'ye getirir ama KİMSEYE ATAMAZ** (*katalog koda, atama
 panele*). Provada ölçülen eksikler:
@@ -262,6 +262,24 @@ Boot log'unda beklenen satırlar (provada ölçüldü):
 
 **Şablonu güncellemek, o şablonla AÇILMIŞ kullanıcıları güncellemez** — şablon
 yalnız yeniden uygulandığında etki eder.
+
+### ⏳ Bunun somut sonucu: Tambur operatörüne rol YENİDEN uygulanmalı
+
+Boot uzlaştırması `customer-alias:write` + `label:edit`'i **şablona** ekler
+(yukarıdaki iki `MOBILE_*` satırı). Sahadaki Tambur operatörü o şablonla **daha
+önce** açıldığı için izinleri **almaz** — tablette müşteri-adı düzeltme kartı
+görünmez ve sebebi hiçbir yerde yazmaz.
+
+**Yapılacak:** Yetkilendirme → Kullanıcılar → *Tambur operatörü* → **Rol uygula**
+→ `Mobil — Tambur Operatörü` → kaydet → **kullanıcı yeniden giriş yapsın**.
+
+| İzin | Ne açar |
+|---|---|
+| `label:edit` | Bu top/sipariş için **tek seferlik** ad düzeltmesi (etikete basılan ad) |
+| `customer-alias:write` | **Kalıcı** müşteri-adı eşlemesi (bundan sonraki tüm siparişler) |
+
+İkisi ayrı bilinçli: tek seferlik düzeltme sistemdeki adı DEĞİŞTİRMEZ, kalıcı
+eşleme değiştirir. Operatöre yalnız birini vermek meşru bir karardır.
 
 Doğrulama:
 ```powershell
@@ -409,6 +427,7 @@ import_runs tablosu       : ☐
 system_logs changes/device: ☐
 Backfill'ler              : timestamps ☐  provenance ☐  entry_station ☐  label_customer ☐  fold_and_reason ☐
 İzin ataması              : data:import → ................  ·  mobile:kk1-yari-mamul → ................
+Tambur rolü yeniden      : ☐ (label:edit + customer-alias:write — kullanıcı: ................)
 find_fold_duplicates      : ...... grup / ...... fazla satır  → fabrikaya iletildi mi ☐
 Veri Aktarımı kabul testi : ☐ (§8'in 6 adımı)
 Electron sürümü           :
