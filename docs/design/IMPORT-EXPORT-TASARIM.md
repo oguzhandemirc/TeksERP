@@ -140,6 +140,7 @@ Panel: sonuç kartı + "Hata raporunu indir" (aynı satırlar + Hata sütunu, xl
 - Customer adaptörü: `code?, name*, taxNumber, taxOffice, phone, email, address, branchCode?, branchName?…` — bir dosyada müşteri + N şube satırı (aynı müşteri kodu tekrar → şube ekle); `assertTaxNumberAvailable` çağrılır.
 - Color adaptörü: `code?, name*, hex?, isActive` — `normalizeColorName` + `assertNameAvailable`.
 - Bekçiler: `scripts/test_import_framework.ts` (önizleme=uygulama tutarlılığı, dosya-içi dup, üçlü boş/NULL/değer sözleşmesi, ad-guard atlanmıyor, all-or-nothing gerçekten geri alıyor — negatif sondayla), `test_import_item.ts`, `test_import_customer.ts`, `test_import_color.ts`, `test_permission_catalog`/`test_role_template_catalog` yeşil.
+- ⚠️ **İzin hizası ölçülür, okunmaz** (`test_import_permissions.ts`): adaptörün `writePermission`'ı varlığın POST rotasındaki izinle aynı OLMALI. 2026-08-19'da iki adaptörde ayrışmıştı ve ikincisi ciddiydi — `data:import` + `quality:write` taşıyan biri panelden tek renk açamazken TOPLU renk yükleyebiliyordu (canlı sonda ölçtü: tekil 403, toplu **200**). Yeni adaptör eklerken izni rotadan kopyala, adaptör komşusundan değil.
 
 ### F2 — Kalan ana veri adaptörleri
 QualityGrade (targetStatus zorunlu), DefectType, ReturnReason, FabricProperty(+values; `stationIds` ZORUNLU — kod listesi), Subcontractor(+category kodları), SubcontractorCategory, Station, Machine (stationCode ile), CustomerItemAlias / CustomerColorAlias (upsert doğal), Route(+steps: stationCode|sequence|plannedColorCode|properties — D7), ProductRecipe(+properties), User (**yalnız oluşturma**: username, ad, rol şablonu kodu, geçici şifre zorunlu değiştirme; şifre/kart/PIN export'a ASLA girmez; `PROVENANCE`/oracle uyarısı `base.service.ts:344`).
@@ -228,8 +229,16 @@ olmayıp eklenen** noktalar var; plan metnini değil BURAYI güncel kabul edin.
 | Uçlar | `Teks-Erp/src/routes/import.routes.ts` (`/api/import/*`), `/api/config-bundle/*` |
 | Şema | `ImportRun` + `ImportRunStatus` (migration `20260819120000_import_runs`) |
 | Panel — dışa aktarım | `Electron/src/lib/{list-export,table-export,file-save}.ts`, `components/data-table/{ListExportMenu,ExportMenu,DataTableTools}.tsx`, `hooks/{useTableExportAll,useExportRange}.ts` |
-| Panel — içe aktarım | `Electron/src/lib/import/{parse,template}.ts`, `components/import/ImportDialog.tsx`, `services/{importService,configBundleService}.ts`, `pages/System/DataImport/*` |
-| Bekçiler | `Teks-Erp/scripts/test_import_framework.ts` (45), `test_config_bundle.ts` (27), `Electron/src/lib/list-export.test.ts` (8), `lib/import/parse.test.ts` (13) |
+| Panel — içe aktarım | `Electron/src/lib/import/{parse,template,overrides,lookup-create,group-issues}.ts`, `components/import/{ImportDialog,RowIssueCell,QuickCreateLookup,ColumnMappingStep,ImportSpecPreview,EntityPreviewDialog}.tsx`, `services/{importService,configBundleService}.ts`, `pages/System/DataImport/*` |
+| Bekçiler — backend | `test_import_framework.ts` (51) · `test_import_fix_hints.ts` (20) · `test_import_permissions.ts` (10, **canlı 403 sondası dahil**) · `test_config_bundle.ts` (27) |
+| Bekçiler — panel | `lib/import/{parse,overrides,group-issues,no-message-parsing}.test.ts` · `components/import/ImportDialog.test.tsx` (8 RTL) · `lib/list-export.test.ts` |
+
+**Bekçilerin böldüğü sorular** (aynı invariant'ı iki dosyaya yaymamak için):
+`test_import_permissions` iznin hem BEYAN edildiğini (adaptör ↔ rota kaynağı,
+statik) hem de UYGULANDIĞINI (gerçek app + gerçek token, iki yönlü) ölçer —
+ikisi ayrı sorudur, bu yüzden aynı dosyada durur. `no-message-parsing.test.ts`
+ise tek bir mimari kararı kilitler: değer yalnız sunucunun `issue.fix.value`
+alanından okunur, Türkçe hata cümlesinden ASLA.
 
 ### 7d. Desteklenen varlıklar (17)
 
