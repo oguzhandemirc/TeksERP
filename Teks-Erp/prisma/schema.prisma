@@ -4654,7 +4654,11 @@ model SystemLog {
   action    String // DOMAIN: CREATE/UPDATE/DELETE — AUTH: LOGIN_SUCCESS/LOGIN_FAILED — SYSTEM: STARTUP/ERROR
   tableName String // domain table OR event source (e.g. "AUTH", "SYSTEM")
   recordId  String // record id OR target identifier (username, error code, "-")
-  ipAddress String? // AUTH/SYSTEM event'leri için kaynak IP
+  ipAddress String? // Kaynak IP — Faz B3'ten sonra DOMAIN olaylarında da dolu
+  /// Olayın yapıldığı CİHAZ (x-device-id). ISO 27001 A.8.15 "nerede/nasıl"
+  /// bileşeni: sahada 10 tablet AYNI kullanıcıyla çalışıyor, "hangi tabletten"
+  /// sorusu yalnız bununla cevaplanır. Bağlam yoksa (job/script) null.
+  deviceId  String?
   oldData   Json?
   newData   Json?
   /// ALAN-BAZLI DEĞİŞİKLİK (Faz B2, 2026-08-19) — [{ field, old, new }]

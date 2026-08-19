@@ -8,6 +8,7 @@
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
 
+import { currentOrigin } from "../lib/request-context";
 type JsonValue = Prisma.InputJsonValue | typeof Prisma.JsonNull;
 
 const ARCHIVE_BATCH_SIZE = 5000;
@@ -67,6 +68,7 @@ export class AuditService {
     /** Alan-bazlı değişiklik (Faz B2) — [{ field, old, new }]. */
     changes?: Array<{ field: string; old: unknown; new: unknown }> | null;
   }): Promise<void> {
+    const origin = currentOrigin();
     try {
       await prisma.systemLog.create({
         data: {
@@ -75,6 +77,12 @@ export class AuditService {
           action: params.action,
           tableName: params.tableName,
           recordId: params.recordId,
+          // ── NEREDEN (Faz B3) ────────────────────────────────────────────
+          // İstek bağlamından OTOMATİK okunur — 251 çağrı noktasının hiçbiri
+          // değişmedi. Bağlam yoksa (job/script/test) null kalır ve kayıt yine
+          // yazılır: cihaz bilgisi eksik diye izi düşürmek daha kötüdür.
+          ipAddress: origin.ipAddress,
+          deviceId: origin.deviceId,
           oldData: (params.oldData ?? Prisma.JsonNull) as JsonValue,
           newData: (params.newData ?? Prisma.JsonNull) as JsonValue,
           // Faz B2 — alan-bazlı değişiklik. Boş dizi de `JsonNull` yazılır:
@@ -108,6 +116,7 @@ export class AuditService {
     }>
   ): Promise<void> {
     if (entries.length === 0) return;
+    const origin = currentOrigin();
     try {
       await prisma.systemLog.createMany({
         data: entries.map((e) => ({
@@ -116,6 +125,8 @@ export class AuditService {
           action: e.action,
           tableName: e.tableName,
           recordId: e.recordId,
+          ipAddress: origin.ipAddress,
+          deviceId: origin.deviceId,
           oldData: (e.oldData ?? Prisma.JsonNull) as JsonValue,
           newData: (e.newData ?? Prisma.JsonNull) as JsonValue,
         })),
@@ -144,6 +155,7 @@ export class AuditService {
     ipAddress?: string | null;
     payload?: Record<string, unknown> | null;
   }): Promise<void> {
+    const origin = currentOrigin();
     try {
       await prisma.systemLog.create({
         data: {

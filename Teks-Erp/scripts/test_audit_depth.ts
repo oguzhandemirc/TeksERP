@@ -186,6 +186,41 @@ async function main(): Promise<void> {
   check("körlük zemini: etiket haritası dolu", Object.keys(AUDIT_FIELD_LABELS).length >= 40,
     `${Object.keys(AUDIT_FIELD_LABELS).length} etiket`);
 
+  // ── 7) NEREDEN — cihaz/IP damgası (Faz B3) ──────────────────────────────
+  // ISO 27001 A.8.15 "nerede/nasıl" bileşeni. Ölçüldü: 96.026 DOMAIN kaydının
+  // hiçbirinde yoktu. 251 çağrı noktası DEĞİŞMEDEN, istek bağlamından okunur.
+  const { runWithRequestContext } = await import("../src/lib/request-context");
+  const { AuditService } = await import("../src/services/audit.service");
+  const actor = await prisma.user.findFirst({ select: { id: true } });
+  const rid = `bekci-b3-${Date.now()}`;
+
+  await new Promise<void>((resolve) => {
+    const fakeReq = {
+      ip: "10.9.9.9",
+      device: { id: "d", deviceId: "BEKCI-TABLET", name: "x", machineId: "m", kind: "TABLET" },
+      user: { userId: actor!.id },
+    } as never;
+    runWithRequestContext(fakeReq, () => {
+      void AuditService.log({
+        userId: actor!.id, action: "UPDATE", tableName: "BEKCI_B3", recordId: rid,
+      }).then(() => resolve());
+    });
+  });
+  const stamped = await prisma.systemLog.findFirst({
+    where: { recordId: rid }, select: { deviceId: true, ipAddress: true },
+  });
+  check("bağlam içinde CİHAZ damgası düşer", stamped?.deviceId === "BEKCI-TABLET", String(stamped?.deviceId));
+  check("bağlam içinde IP damgası düşer", stamped?.ipAddress === "10.9.9.9", String(stamped?.ipAddress));
+
+  // ⚠️ BAĞLAM YOKKEN (job/script/cron) kayıt YİNE YAZILMALI. Cihaz bilgisi
+  // eksik diye izi düşürmek, elimizdeki denetim kaydını kaybetmek olurdu.
+  const rid2 = `bekci-b3b-${Date.now()}`;
+  await AuditService.log({ userId: actor!.id, action: "UPDATE", tableName: "BEKCI_B3", recordId: rid2 });
+  const noCtx = await prisma.systemLog.findFirst({ where: { recordId: rid2 }, select: { deviceId: true } });
+  check("bağlam YOKKEN kayıt yine yazılır (job/script)", noCtx !== null && noCtx.deviceId === null);
+
+  await prisma.systemLog.deleteMany({ where: { tableName: "BEKCI_B3" } });
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

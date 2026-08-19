@@ -75,6 +75,7 @@ import { resolveDevice } from "./middlewares/device.middleware";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
 import { getPresence } from "./lib/presence";
 
+import { runWithRequestContext } from "./lib/request-context";
 const app: Express = express();
 
 
@@ -155,6 +156,12 @@ app.use(express.static(publicDir));
 // yoklama; kimlik+cihaz çözümü iş sorgusu başlamadan ~11 sorgu/sn ediyordu.
 // API route'ları AŞAĞIDA olduğu için `req.device`a bağlı hiçbir yol etkilenmez.
 app.use(resolveDevice);
+// ── İSTEK BAĞLAMI (Faz B3) ──────────────────────────────────────────────────
+// Audit'in "nereden" bilgisini okuyabilmesi için isteği AsyncLocalStorage
+// içinde çalıştırır. `req` NESNESİ saklanır, alanları kopyalanmaz: `req.user`
+// verifyToken ile SONRA doluyor — kopyalasaydık audit hep boş okurdu.
+// resolveDevice'tan SONRA mount edilir ki `req.device` çözülmüş olsun.
+app.use((req, _res, next) => runWithRequestContext(req, next));
 
 // Sürüm bilgisi (durum sayfasında gösterilir). pm2 derlenmiş server.js'i doğrudan
 // çalıştırır (npm script üzerinden değil) → `npm_package_version` env'i üretimde
