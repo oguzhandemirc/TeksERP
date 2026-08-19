@@ -38,7 +38,10 @@ export function TemplatesPage() {
   const filtered = useMemo(() => {
     const list = query.data?.data ?? [];
     if (!search) return list;
-    const q = search.toLowerCase();
+    // ⚠️ Terime ÖN İŞLEM UYGULAMA: `search.toLowerCase()` Türkçede BOZUKTUR
+    // ("ŞAHİN" → "şahi̇n", i + U+0307) ve katlamadan sonra da nokta kalır →
+    // büyük İ içeren her arama 0 satır dönerdi. Ham terimi ver.
+    const q = search;
     return list.filter(
       (t) =>
         foldedIncludes(t.name, q) || foldedIncludes(t.description, q),

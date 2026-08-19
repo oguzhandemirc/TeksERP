@@ -79,7 +79,10 @@ export function AccessUsersPage() {
     let list = query.data?.data ?? [];
     if (!showInactive) list = list.filter((u) => u.isActive);
     if (!search) return list;
-    const q = search.toLowerCase();
+    // ⚠️ Terime ÖN İŞLEM UYGULAMA: `search.toLowerCase()` Türkçede BOZUKTUR
+    // ("ŞAHİN" → "şahi̇n", i + U+0307) ve katlamadan sonra da nokta kalır →
+    // büyük İ içeren her arama 0 satır dönerdi. Ham terimi ver.
+    const q = search;
     return list.filter(
       (u) => foldedIncludes(u.username, q) || foldedIncludes(u.fullName, q),
     );

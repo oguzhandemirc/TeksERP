@@ -54,7 +54,10 @@ export function PermissionGrid({
 
   const matchesSearch = (p: Permission): boolean => {
     if (!search) return true;
-    const q = search.toLowerCase();
+    // ⚠️ Terime ÖN İŞLEM UYGULAMA: `search.toLowerCase()` Türkçede BOZUKTUR
+    // ("ŞAHİN" → "şahi̇n", i + U+0307) ve katlamadan sonra da nokta kalır →
+    // büyük İ içeren her arama 0 satır dönerdi. Ham terimi ver.
+    const q = search;
     return (
       foldedIncludes(p.code, q) ||
       foldedIncludes(p.description, q) ||
