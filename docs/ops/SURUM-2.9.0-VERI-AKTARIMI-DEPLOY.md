@@ -16,10 +16,11 @@
 
 ---
 
-## İLK 5 DAKİKA — bu deploy'un durabileceği TEK yer
+## İLK 5 DAKİKA — sahadaki PostgreSQL neye sahip
 
-Her şey provada geçti; geriye **tek** belirsizlik kaldı ve o da sahadaki
-PostgreSQL kurulumuna ait. Oturuma başlar başlamaz şunu koş — **salt-okunur**,
+Her şey provada geçti. **Bu deploy'u durduran bir senaryo KALMADI** — migration
+eksik uzantıda bile devam eder (bkz. "pg_trgm yoksa"). Yine de ne olacağını
+ÖNCEDEN bilmek için, oturuma başlar başlamaz şunu koş — **salt-okunur**,
 hiçbir şey değiştirmez:
 
 ```powershell
@@ -29,8 +30,8 @@ psql -U postgres -d tekserp -c "SELECT count(*) AS icu_collation FROM pg_collati
 
 | Çıktı | Anlamı | Ne yap |
 |---|---|---|
-| `pg_trgm` satırı VAR (`installed_version` boş olabilir) | Uzantı kurulabilir | ✅ Devam et |
-| `pg_trgm` satırı **YOK** | contrib dosyaları eksik | ⛔ **DUR** → aşağıdaki "pg_trgm yoksa" |
+| `pg_trgm` satırı VAR (`installed_version` boş olabilir) | Uzantı kurulabilir | ✅ Devam et — migration kendisi kuracak |
+| `pg_trgm` satırı **YOK** | contrib dosyaları eksik | ⚠️ **Deploy DURMAZ** ama BORÇ doğar → aşağıdaki "pg_trgm yoksa" |
 | `icu_collation` > 0 | Türkçe sıralama kurulacak | ✅ |
 | `icu_collation` = 0 | ICU yok | ⚠️ Deploy **DURMAZ** — migration libc `tr_TR.UTF-8`'e düşer, o da yoksa NOTICE basıp sıralamayı olduğu gibi bırakır. **Arama etkilenmez.** |
 
@@ -38,17 +39,59 @@ psql -U postgres -d tekserp -c "SELECT count(*) AS icu_collation FROM pg_collati
 `Teks-Erp/src/utils/search-fold.ts` başlığında). Kurulu görünse bile
 **hiçbir şey yapma**.
 
-### pg_trgm yoksa
+### pg_trgm yoksa — deploy DURMAZ, ama borç doğar
+
+**Migration önce kurmayı DENER** (`CREATE EXTENSION IF NOT EXISTS pg_trgm`).
+Başaramazsa **durmaz**: uyarı basar, 9 trigram index'ini atlar ve kalan her şeyi
+uygular. İki yol da fabrika verisinin kopyasında **prova edildi** (yol A: 9 index
+kuruldu · yol B: uyarı basıldı, çıkış kodu 0, migration tamamlandı).
+
+O sırada ne çalışır, ne çalışmaz:
+
+| | Durum |
+|---|---|
+| Türkçe-duyarsız arama | ✅ Çalışır (ölçüldü: `sahin`→ADNAN ŞAHİN ÜRETİM, `akkus`→AKKUŞ TEKSTİL) |
+| Mükerrer kontrolü, Türkçe sıralama | ✅ Çalışır (uzantıya bağlı değil) |
+| Aramanın HIZI | ⚠️ Index'siz — bugünkü hacimde fark edilmez, **veri büyüdükçe doğrusal yavaşlar** (200 bin satırda ölçüldü: 583 ms ↔ 6 ms) |
+| `test_db_invariants` / `test_schema_drift` | 🔴 **KIRMIZI kalır** — borç unutulmasın diye. İndexler eklenince ikisi de kendiliğinden yeşile döner (ölçüldü) |
+
+**Borcu kapatma (müsait bir gün, vardiya içinde bile olur):**
+
 Sahadaki PG **16.9**, `C:\Etkili-Yazilim\pgsql`. Uzantı contrib paketinin parçası,
 iki dosya ister: `share\extension\pg_trgm*` ve `lib\pg_trgm.dll`. Aynı sürümün
-(16.x) resmî zip'inden kopyalanır; sonra `CREATE EXTENSION pg_trgm;` çalışır —
-**PostgreSQL'i yeniden başlatmak gerekmez** (PG13+'ta `trusted` uzantı).
+(16.x) resmî zip'inden kopyalanır. Sonra:
 
-Dosyalar temin edilemiyorsa **deploy'u ERTELE**. Migration
-`20260819060000_search_fold` ilk komutunda düşer ve `migrate deploy` orada durur;
-ondan **önceki 16 migration uygulanmış olur** — bu güvenli bir ara durumdur, yarım
-kalan tek şey aramadır. Ama backend yeni kodla ayağa kalkarsa `nameFold` kolonunu
-arar → **P2022**. Yani bu senaryoda kodu da eski sürümde bırak.
+```powershell
+# 1) Uzantı — PostgreSQL'i yeniden başlatmak GEREKMEZ (PG13+ "trusted")
+psql -U postgres -d tekserp -c "CREATE EXTENSION pg_trgm;"
+
+# 2) 9 index — CONCURRENTLY: tablo yazmaya KAPANMAZ, operatörler çalışmaya devam eder
+# ⚠️ HER SATIR AYRI KOMUT. Hepsini tek -c "..." içine koyarsan
+#    "CREATE INDEX CONCURRENTLY cannot run inside a transaction block" alırsın
+#    ve HİÇBİRİ kurulmaz (ama "kuruldu" sanırsın). Bu tuzağa deneyde düşüldü.
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "customers_nameFold_trgm_idx" ON "customers" USING gin ("nameFold" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "items_nameFold_trgm_idx" ON "items" USING gin ("nameFold" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "colors_nameFold_trgm_idx" ON "colors" USING gin ("nameFold" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "order_lines_customerItemNameFold_trgm_idx" ON "order_lines" USING gin ("customerItemNameFold" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "orders_orderNumber_trgm_idx" ON "orders" USING gin ("orderNumber" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "work_orders_workOrderNumber_trgm_idx" ON "work_orders" USING gin ("workOrderNumber" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "shipments_shipmentNo_trgm_idx" ON "shipments" USING gin ("shipmentNo" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "batches_batchNumber_trgm_idx" ON "batches" USING gin ("batchNumber" gin_trgm_ops);'
+psql -U postgres -d tekserp -c 'CREATE INDEX CONCURRENTLY "sacks_sackNo_trgm_idx" ON "sacks" USING gin ("sackNo" gin_trgm_ops);'
+
+# 3) Doğrula — 9 olmalı ve GEÇERSİZ index 0 olmalı
+psql -U postgres -d tekserp -c "SELECT count(*) FROM pg_class c JOIN pg_am a ON a.oid=c.relam WHERE a.amname='gin' AND c.relname LIKE '%trgm%';"
+psql -U postgres -d tekserp -c "SELECT count(*) AS gecersiz FROM pg_index WHERE NOT indisvalid;"
+
+# 4) Bekçiler yeşile dönmeli
+npx tsx scripts/test_db_invariants.ts
+npx tsx scripts/test_schema_drift.ts
+```
+
+> `CONCURRENTLY` yarıda kalırsa PostgreSQL **geçersiz (invalid)** bir index
+> bırakır — 3. adımdaki ikinci sorgu bunu yakalar. Çıkarsa `DROP INDEX` ile at
+> ve tekrar kur. Sonradan kurulumun tamamı prova edildi: 9 index kuruldu,
+> geçersiz 0, iki bekçi de yeşile döndü.
 
 ---
 
@@ -424,6 +467,8 @@ Raporu fabrikaya ver, birleştirmeyi onlar söylesin. **Veriye kendi başına do
 5. Yalnız **aramayı** geri almak (nadiren gerekir): DB'ye dokunmadan önceki
    backend sürümüne dönmek yeterli — gölge kolonlar türetilmiştir, varlıkları
    eski kodu bozmaz.
+6. Trigram index'leri sorun çıkarırsa (beklenmiyor) tek tek `DROP INDEX
+   CONCURRENTLY` ile atılabilir; arama index'siz çalışmaya devam eder.
 
 ---
 

@@ -13,20 +13,58 @@
 -- değiştirmek isteyen, önce gölge kolonu DROP etmek zorunda.
 --
 -- ⚠️ `unaccent` KULLANILMIYOR ve gerekmiyor — gerekçe `src/utils/search-fold.ts`
--- başlığında. Yalnız `pg_trgm` gerekiyor (GIN operatör sınıfı için).
+-- başlığında. `pg_trgm` GEREKLİDİR ama ZORUNLU DEĞİLDİR: yoksa arama yine
+-- çalışır (katlanmış kolon + LIKE), yalnız index'siz kalır. Bkz. bölüm 1.
 --
 -- ⚠️ UNIQUE index BİLİNÇLİ OLARAK YOK — gerekçe aşağıda (bölüm 6).
+--
+-- ⚠️ BU DOSYA 2026-08-19'da UYGULANDIKTAN SONRA BİR KEZ DEĞİŞTİRİLDİ (uzantı
+-- bloğu fail-soft yapıldı). Normalde migration dosyaları IMMUTABLE'dır ve
+-- `npm run check:migrations` bunu haklı olarak uyarır. İstisnanın gerekçesi:
+--   (a) migration PRODUCTION'A HİÇ UYGULANMADI — kural deploy edilmiş
+--       migration'ları korur, checksum yalnız dev'de tutuluyordu;
+--   (b) düzeltme SONRAKİ bir migration'a YAZILAMAZDI — burada patlayan bir
+--       migration `migrate deploy`'u durdurur, sonraki dosya hiç koşmaz.
+-- Dev'in checksum'ı `migrate resolve --applied` ile yeniden üretildi.
+-- Bir daha DEĞİŞTİRME: production'a çıktıktan sonra bu dosya gerçekten dondu.
 -- =============================================================================
 
 -- Büyük tabloya index eklerken app DB'sinin statement_timeout=50s'i migration'ı
 -- yarıda keser (perf kuralı 14). Boş kurulumda etkisiz, dolu DB'de hayat kurtarır.
 SET statement_timeout = 0;
 
--- ── 1) Uzantı ───────────────────────────────────────────────────────────────
+-- ── 1) Uzantı — ÖNCE KURMAYI DENE, olmuyorsa deploy'u DURDURMA ─────────────
 -- pg_trgm PG13+'ta `trusted`: süper kullanıcı GEREKMEZ. Sahadaki kurulumda
--- (PG 16.9 Windows) henüz kurulu DEĞİL — 2026-08-14 yedeğinde doğrulandı.
--- Burada patlarsa contrib dosyaları eksiktir; sessizce devam ETMEZ.
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
+-- (PG 16.9 Windows) kurulu DEĞİL — 2026-08-14 yedeğinde doğrulandı; contrib
+-- dosyalarının orada olup olmadığı yedekten görülemiyor.
+--
+-- ⚠️ NEDEN EXCEPTION İLE SARILI (2026-08-19 kararı): çıplak `CREATE EXTENSION`
+-- contrib eksikse migration'ı DÜŞÜRÜR ve `migrate deploy` tam burada durur —
+-- yani bir PAKETLEME eksiği yüzünden 18 migration'lık bir sürüm yarıda kalır.
+-- Oysa uzantı bu tasarımda ZORUNLU DEĞİL: katlama `tr_fold` fonksiyonuna bağlı,
+-- arama `nameFold LIKE '%…%'` ile index'siz de DOĞRU çalışır (ölçüldü — gerçek
+-- fabrika verisinde "sahin"→ADNAN ŞAHİN ÜRETİM, "akkus"→AKKUŞ TEKSTİL).
+-- Kaybolan tek şey HIZDIR ve bugünkü hacimde fark edilmez.
+--
+-- ⚠️ AMA BU BİR BORÇTUR VE FAİZİ BÜYÜR: veri büyüdükçe index'siz `contains`
+-- araması doğrusal yavaşlar (200 bin satırda ölçüldü: 583 ms ↔ 6 ms). Borç
+-- SESSİZ kalmasın diye iki bekçi kırmızıya döner ve öyle kalır:
+--   • `scripts/test_db_invariants.ts` → "pg_trgm YOK"
+--   • `scripts/test_schema_drift.ts`  → 9 belgesiz index farkı
+-- Sonradan kurma reçetesi: `docs/ops/SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md`.
+DO $ext$
+BEGIN
+  CREATE EXTENSION IF NOT EXISTS pg_trgm;
+  RAISE NOTICE 'pg_trgm hazır — trigram index''leri kurulacak.';
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING '=======================================================';
+  RAISE WARNING 'pg_trgm KURULAMADI: %', SQLERRM;
+  RAISE WARNING 'Arama ÇALIŞACAK ama INDEX''SİZ olacak (yavaş, veri büyüdükçe daha yavaş).';
+  RAISE WARNING 'BORÇ: contrib dosyalarını kur, sonra deploy notundaki';
+  RAISE WARNING '"pg_trgm sonradan kurulumu" bloğunu koştur. Bekçiler kırmızı kalacak.';
+  RAISE WARNING '=======================================================';
+END
+$ext$;
 
 -- ── 2) tr_fold — katlama fonksiyonu ─────────────────────────────────────────
 -- JS ikizi `src/utils/search-fold.ts` ile BİREBİR aynı çıktıyı üretir; bekçi
@@ -206,15 +244,23 @@ CREATE INDEX "roll_returns_noteFold_idx" ON "roll_returns" ("noteFold");
 -- GIN trigram: YALNIZ büyüyen tablolarda. `contains` (%terim%) aramasını
 -- index'e bağlayan tek yol budur; küçük ana veri tablolarında (onlarca satır)
 -- planlayıcı zaten seq scan seçer, GIN sırf bakım maliyeti olurdu.
-CREATE INDEX "customers_nameFold_trgm_idx" ON "customers" USING gin ("nameFold" gin_trgm_ops);
-CREATE INDEX "items_nameFold_trgm_idx" ON "items" USING gin ("nameFold" gin_trgm_ops);
-CREATE INDEX "colors_nameFold_trgm_idx" ON "colors" USING gin ("nameFold" gin_trgm_ops);
-CREATE INDEX "order_lines_customerItemNameFold_trgm_idx" ON "order_lines" USING gin ("customerItemNameFold" gin_trgm_ops);
-
--- KOD kolonları KATLANMAZ (ASCII, BÜYÜK saklanır) ama `contains` ile aranıyor;
--- trigram index doğrudan kolonun kendisine konur.
-CREATE INDEX "orders_orderNumber_trgm_idx" ON "orders" USING gin ("orderNumber" gin_trgm_ops);
-CREATE INDEX "work_orders_workOrderNumber_trgm_idx" ON "work_orders" USING gin ("workOrderNumber" gin_trgm_ops);
-CREATE INDEX "shipments_shipmentNo_trgm_idx" ON "shipments" USING gin ("shipmentNo" gin_trgm_ops);
-CREATE INDEX "batches_batchNumber_trgm_idx" ON "batches" USING gin ("batchNumber" gin_trgm_ops);
-CREATE INDEX "sacks_sackNo_trgm_idx" ON "sacks" USING gin ("sackNo" gin_trgm_ops);
+DO $gin$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_trgm') THEN
+    RAISE WARNING 'pg_trgm yok — 9 trigram index ATLANDI. Arama index''siz çalışacak.';
+    RETURN;
+  END IF;
+  EXECUTE $sql$
+    CREATE INDEX "customers_nameFold_trgm_idx" ON "customers" USING gin ("nameFold" gin_trgm_ops);
+    CREATE INDEX "items_nameFold_trgm_idx" ON "items" USING gin ("nameFold" gin_trgm_ops);
+    CREATE INDEX "colors_nameFold_trgm_idx" ON "colors" USING gin ("nameFold" gin_trgm_ops);
+    CREATE INDEX "order_lines_customerItemNameFold_trgm_idx" ON "order_lines" USING gin ("customerItemNameFold" gin_trgm_ops);
+    CREATE INDEX "orders_orderNumber_trgm_idx" ON "orders" USING gin ("orderNumber" gin_trgm_ops);
+    CREATE INDEX "work_orders_workOrderNumber_trgm_idx" ON "work_orders" USING gin ("workOrderNumber" gin_trgm_ops);
+    CREATE INDEX "shipments_shipmentNo_trgm_idx" ON "shipments" USING gin ("shipmentNo" gin_trgm_ops);
+    CREATE INDEX "batches_batchNumber_trgm_idx" ON "batches" USING gin ("batchNumber" gin_trgm_ops);
+    CREATE INDEX "sacks_sackNo_trgm_idx" ON "sacks" USING gin ("sackNo" gin_trgm_ops);
+  $sql$;
+  RAISE NOTICE '9 trigram index kuruldu.';
+END
+$gin$;
