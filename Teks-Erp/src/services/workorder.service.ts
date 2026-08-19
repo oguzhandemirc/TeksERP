@@ -119,6 +119,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
 import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
+import { diffFields } from "./helpers/audit-diff.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -4658,13 +4659,22 @@ export class WorkOrderService {
     });
     const updated = await prisma.workOrder.findUnique({ where: { id } });
 
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: "WORK_ORDER",
-      recordId: id,
-      newData: data as Record<string, unknown>,
-    });
+    // ── ALAN-BAZLI DEĞİŞİKLİK (Faz B2) ────────────────────────────────────
+    // İş emri, "kim ne değiştirdi" sorusunun EN ÇOK sorulduğu kayıt. Eskiden
+    // yalnız `newData` yazılıyordu (eski değer YOK) → "500 metre demiştik"
+    // tartışmasında hangi değerin ne zaman değiştiği gösterilemiyordu.
+    const woChanges = diffFields(wo as Record<string, unknown> | null, data as Record<string, unknown>);
+    if (woChanges.length > 0) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: "WORK_ORDER",
+        recordId: id,
+        oldData: wo as Record<string, unknown> | null,
+        newData: data as Record<string, unknown>,
+        changes: woChanges,
+      });
+    }
 
     return { success: true, data: updated!, message: "İş emri güncellendi" };
   }

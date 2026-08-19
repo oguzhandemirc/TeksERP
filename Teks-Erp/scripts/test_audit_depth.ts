@@ -125,6 +125,67 @@ async function main(): Promise<void> {
     /updatedAt:\s*log\.createdAt/.test(archSrc),
   );
 
+  // ── 5) ALAN-BAZLI DİFF (Faz B2) ─────────────────────────────────────────
+  const { diffFields, AUDIT_DIFF_SECRET_FIELDS } = await import(
+    "../src/services/helpers/audit-diff.helper"
+  );
+
+  check(
+    "diff: değişen alanı bulur",
+    diffFields({ width: 150, name: "A" }, { width: 155 }).length === 1,
+  );
+  check(
+    "diff: AYNI değer fark sayılmaz",
+    diffFields({ width: 150 }, { width: 150 }).length === 0,
+  );
+  // Prisma Decimal/string/number aynı sayıyı farklı tiplerde döndürebilir; tip
+  // farkını "değişiklik" saymak hiç değişmemiş kaydı her update'te loglatırdı.
+  check(
+    "diff: 150 ↔ '150' fark DEĞİL (Decimal tuzağı)",
+    diffFields({ width: 150 }, { width: "150" }).length === 0,
+  );
+  check(
+    "diff: tarih aynı anı gösteriyorsa fark değil",
+    diffFields({ d: new Date("2026-01-01T00:00:00Z") }, { d: "2026-01-01T00:00:00.000Z" }).length === 0,
+  );
+  // Kısmi update (PATCH): gönderilmeyen alan DEĞİŞMEMİŞTİR, "silindi" sayılamaz.
+  check(
+    "diff: gönderilmeyen alan fark sayılmaz",
+    diffFields({ a: 1, b: 2 }, { a: 1 }).length === 0,
+  );
+  check(
+    "diff: undefined 'dokunma' demektir",
+    diffFields({ a: 1 }, { a: undefined }).length === 0,
+  );
+
+  // GİZLİ ALAN: audit denetim kaydıdır, sır deposu değil.
+  const secret = diffFields({ passwordHash: "eski" }, { passwordHash: "yeni" });
+  check("diff: gizli alan MASKELENİR", secret.length === 1 && secret[0]!.new === "***",
+    JSON.stringify(secret[0]));
+  check("gizli alan listesi dolu", AUDIT_DIFF_SECRET_FIELDS.size >= 5,
+    `${AUDIT_DIFF_SECRET_FIELDS.size} alan`);
+
+  // OPAK ALAN: devasa JSON'u audit'e gömmek satırı yüzlerce KB yapar.
+  const opaque = diffFields({ snapshot: { a: 1 } }, { snapshot: { a: 2 } });
+  check("diff: devasa JSON değeri YAZILMAZ, 'değişti' denir",
+    opaque.length === 1 && opaque[0]!.new === "<değişti>");
+
+  // Gürültü alanları: her update'te değişir, hiçbir şey anlatmaz.
+  check(
+    "diff: künye/zaman alanları gürültü sayılır",
+    diffFields({ updatedById: "a", updatedAt: new Date() }, { updatedById: "b", updatedAt: new Date() }).length === 0,
+  );
+
+  // ── 6) ETİKET HARİTASI — FAIL-OPEN ──────────────────────────────────────
+  const { auditFieldLabel, AUDIT_FIELD_LABELS } = await import(
+    "../src/constants/audit-field-labels"
+  );
+  check("etiket: bilinen alan Türkçeye çevrilir", auditFieldLabel("width") === "En");
+  // ⚠️ FAIL-OPEN: etiketi olmayan alan HAM ADIYLA döner. Ekran asla boş kalmaz.
+  check("etiket: bilinmeyen alan HAM ADIYLA döner", auditFieldLabel("zzzYok") === "zzzYok");
+  check("körlük zemini: etiket haritası dolu", Object.keys(AUDIT_FIELD_LABELS).length >= 40,
+    `${Object.keys(AUDIT_FIELD_LABELS).length} etiket`);
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   await pool.end();

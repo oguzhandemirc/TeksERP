@@ -64,6 +64,8 @@ export class AuditService {
     recordId: string;
     oldData?: Record<string, unknown> | null;
     newData?: Record<string, unknown> | null;
+    /** Alan-bazlı değişiklik (Faz B2) — [{ field, old, new }]. */
+    changes?: Array<{ field: string; old: unknown; new: unknown }> | null;
   }): Promise<void> {
     try {
       await prisma.systemLog.create({
@@ -75,6 +77,10 @@ export class AuditService {
           recordId: params.recordId,
           oldData: (params.oldData ?? Prisma.JsonNull) as JsonValue,
           newData: (params.newData ?? Prisma.JsonNull) as JsonValue,
+          // Faz B2 — alan-bazlı değişiklik. Boş dizi de `JsonNull` yazılır:
+          // "değişiklik yok" ile "diff hesaplanmadı" ayrımı BURADA değil,
+          // çağıranda yapılır (boş diffte satır hiç yazılmaz).
+          changes: (params.changes?.length ? params.changes : Prisma.JsonNull) as JsonValue,
         },
       });
     } catch (error) {

@@ -30,6 +30,7 @@ import { foldNameForCompare, normalizeDisplayName } from "./helpers/name-normali
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 
+import { diffFields } from "./helpers/audit-diff.helper";
 // =============================================================================
 // KAYIT KÜNYESİ — kim oluşturdu / kim son değiştirdi (2026-08-19)
 // =============================================================================
@@ -966,14 +967,26 @@ export class BaseService {
         : {}),
     });
 
-    await AuditService.log({
-      userId,
-      action: "UPDATE",
-      tableName: this.config.tableName,
-      recordId: id,
-      oldData: oldRecord as Record<string, unknown> | null,
-      newData: data,
-    });
+    // ── ALAN-BAZLI DEĞİŞİKLİK (Faz B2) ────────────────────────────────────
+    // Diff BURADA hesaplanır çünkü `oldRecord` zaten okunmuş durumda — 14
+    // master-data modeli tek noktadan kapsanır (künye kaldıracının aynısı).
+    const changes = diffFields(oldRecord as Record<string, unknown> | null, data);
+
+    // ⚠️ DEĞİŞİKLİK YOKSA AUDIT SATIRI YAZILMAZ. Ölçüldü (2026-08-19):
+    // `LABEL_TEMPLATE` 4.813 kayıtla en çok loglanan 4. tabloydu ve çoğu boş
+    // güncellemeydi; gürültü gerçek olayları gömüyordu. "Kaydet'e bastı ama
+    // hiçbir şey değiştirmedi" bir DENETİM OLAYI DEĞİLDİR.
+    if (changes.length > 0) {
+      await AuditService.log({
+        userId,
+        action: "UPDATE",
+        tableName: this.config.tableName,
+        recordId: id,
+        oldData: oldRecord as Record<string, unknown> | null,
+        newData: data,
+        changes,
+      });
+    }
 
     return { success: true, data: updated, message: "Kayıt güncellendi" };
   }
