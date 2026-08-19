@@ -106,10 +106,10 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 24 migration, sekiz iş
+## 0) Bu deploy'da ne var — 26 migration, on bir iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **24 bekleyen** gösteriyor.
-Sekizi ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **26 bekleyen** gösteriyor.
+On biri ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -127,6 +127,15 @@ Sekizi ayrı iş, hepsi aynı pull'da:
 | 22 | `20260819161000_audit_tamper_guard` | **Audit değiştirilemezliği** — UPDATE/DELETE/TRUNCATE engeli (2 trigger + 1 fonksiyon) |
 | 23 | `20260819170000_reason_presets` | **Hazır sebep katalogları** — yeni tablo + enum (mevcut tabloya DOKUNMAZ; satırlar boot'ta gelir) |
 | 24 | `20260819210000_master_data_merge_lineage` | **Mükerrer birleştirme soy bağı** — 4 tabloya 3 nullable kolon + FK + partial index (mevcut satırlara DOKUNMAZ, hepsi NULL doğar) |
+| 25 | `20260819190000_roll_plan_deviations` | **Plan-sapma defteri** — YENİ tablo (`roll_plan_deviations`) + 8 index + 5 FK. Mevcut tabloya DOKUNMAZ, boş doğar |
+| 26 | `20260819200000_fason_partial_receive` | **Fason kısmi kabul** — 3 tabloya 4 nullable kolon (`clientToken` + unique index, `receivedQty`, `isPartial` DEFAULT false, `remainderClosedAt`); mevcut satırlar etkilenmez |
+
+⚠️ **25 ve 26, envanterdeki 24'ten ÖNCEKİ damgayı taşır ama SONRA yazıldı** —
+Prisma dizin adına göre sıralar, yani gerçek uygulama sırası 19→20→21 olacak.
+Üçü de additive olduğu için sıra fark etmez (hiçbiri diğerinin kolonunu okumaz).
+
+Bu üç iş (25, 26 ve migration'sız Tambur paketleri) **14 Ağustos notundan sonra
+eklendi**; bölümleri §8c–§8e'de.
 
 > ⚠️ **20 ve 21 aynı damgayla başlıyor ama farklı işler** (`..._alias_search` ile
 > `..._systemlog_archive_changes_device`); Prisma dizin adına göre sıralar,
@@ -213,7 +222,13 @@ Sonra **panel (Electron)** aynı pencerede dağıtılır.
 |---|---|
 | **Backend** | Bu sürüm. Migration'sız **ÇALIŞMAZ** (`nameFold` yoksa P2022) — kod ile migration **atomik** gider. |
 | **Electron** | **Aynı pencerede zorunlu.** Veri Aktarımı ekranı + Türkçe arama/sıralama düzeltmeleri orada. |
-| **Mobil (APK)** | **Zorunlu değil** — sözleşme değişmedi, eski APK çalışır. Yeni APK katlama + picker sıralama düzeltmelerini ve `mobile:kk1-yari-mamul` ekranını getirir. |
+| **Mobil (APK)** | **2.9.1 / versionCode 48** — ~~zorunlu değil~~ **artık ÖNERİLİYOR**: fason kısmi kabul, Tambur "Boyahaneye Geri Gönder", kısa-kesim A1, Sipariş Bağla ve kamera yönü tercihi bu APK'da. Eski APK ÇALIŞMAYA DEVAM EDER (sözleşme geriye uyumlu) ama bu özellikleri göremez; ayrıca plan-sapma kapısına çarpınca onay gönderemez (409'u görür, akış kilitlenmez). |
+
+> ⚠️ **APK sürüm tutarlılığı 2026-08-19'da bir kez bozuldu ve düzeltildi**
+> (`app.json` 47 ↔ `build.gradle` 48). Derlemeden önce **her zaman**
+> `npm run build:apk:check` koş — `android/` git dışıdır, uyuşmazlıkta tablete
+> giden sürüm gradle'dakidir ve versionCode düşerse Android kurulumu REDDEDER
+> (operatör kaldır-kur yapar, offline kuyruktaki gerçek toplar silinir).
 
 ⚠️ **En tehlikeli senaryo:** sunucuda `git pull` yapıp `migrate deploy` KOŞMAMAK.
 Kod `adnansahin` branch'inde hazır duruyor ve `nameFold` kolonunu arıyor; pull
@@ -312,6 +327,19 @@ npx tsx scripts/test_master_data_merge_fk_coverage.ts   # saf statik analiz (şe
 
 `test_schema_drift` yalnız **iki bilinen** DEFERRABLE composite FK farkını
 göstermeli; başka fark KIRMIZI'dır.
+
+⚠️ **Yeni işlerin bekçileri canlıda KOŞULMAZ** — üçü de fixture yazar:
+`test_tambur_plan_gate` · `test_tambur_send_to_dye` · `test_plan_deviation_scorecard` ·
+`test_fason_partial_receive`. Dev'de koşuldular (sırasıyla 48 · 22 · 12 · 43
+kontrol, hepsi negatif sondalı). Canlıda karşılıkları §8c–§8e'deki **kabul
+testleridir** — onlar gerçek ekrandan, tek kayıt üzerinden yapılır.
+
+`roll_plan_deviations` tablosunun gerçekten kurulduğunu görmek için (salt-okunur):
+
+```powershell
+psql -U postgres -d tekserp -c "\d roll_plan_deviations"
+psql -U postgres -d tekserp -c "SELECT count(*) FROM roll_plan_deviations;"   # deploy günü 0 NORMALDİR
+```
 
 ---
 
@@ -532,9 +560,112 @@ listede çıktığını görmek.
 
 ---
 
+## 8c) Fason KISMİ KABUL — 5 dakikalık kabul testi
+
+**Ne değişti:** Fasona 100 m gitti, 51 m geldi → artık **51'i kabul edip 49'u
+açık bırakabiliyorsun** (SAP kısmi mal girişi karşılığı). Öncesinde kabul
+ya hep ya hiçti; saha yarım dönüşü ya bekletiyor ya da eksik metrajı tam kabul
+edip farkı kayıp yazıyordu.
+
+**Kural (davranışı anlamadan test etme):**
+- Kısmi kabulde top **TÜKETİLMEZ**: `AT_SUBCONTRACTOR` kalır, metrajı kalana iner.
+- Her teslimat **AYRI makbuz**. Kalem yalnız **TAM** satırla kapanır.
+- İkinci+ teslimatın topları **YENİ parti** alır (boya lotu ayrımı — bilinçli).
+- "Kalan gelmeyecek" → **`POST /subcontractor/close-remainder`**: fark FİRE olarak
+  sapma defterine yazılır (`source=SUBCONTRACTOR_REMAINDER`), kalem damgalanır.
+- Makbuz iptali **LIFO**; kısmi iptal metrajı geri koyar.
+
+**Test (kabul için):**
+1. Mobil → Fason Kabul → açık bir sevk seç. Satırda **"Gelen (m)"** alanı olmalı.
+2. Giden metrajdan AZ bir değer gir → kaydet. Satırda **YARIM rozeti** çıkmalı.
+3. İş emri detayında top hâlâ **fasonda** görünmeli, metrajı düşmüş olmalı.
+4. Kalanı kabul et → kalem kapanmalı, rozet gitmeli.
+5. (Ayrı sevkte) 🔥 **Kalan Kapama** → sebep seç → fire sapma defterine düşmeli
+   (Raporlar → Fire Karnesi'nde görünür).
+
+⚠️ **BACKEND ÖNCE.** Eski APK tam kabulle çalışmaya devam eder (kısmi alanı
+göndermez → backend tam kabul sayar). Ters sıra (yeni APK + eski backend) 400 verir.
+
+Bekçi: `test_fason_partial_receive.ts` (43 kontrol, 3 negatif sonda).
+
+---
+
+## 8d) TAMBUR — plan-sapma kapısı + Sipariş Bağla + kısa kesim A1 (izin ataması GEREKMEZ)
+
+Üç yüzey, hepsi **mevcut** yetkilere bağlı — atanacak yeni izin YOK. Ama
+**davranış değişikliği var**, operatöre önceden söylenmeli (§9).
+
+| Yüzey | Kim görür | Ne yapar |
+|---|---|---|
+| **Plan-sapma onayı** | Herkes (tambur operatörü) | Topun rengi/eni iş emri hedefinden saparsa bitirme/kesim **onay ister**; onay audit'e + kalıcı deftere düşer |
+| **"Boyahaneye Geri Gönder"** | `roll:manual-adjust` \|\| `mobile:tambur-duzelt` | Onay modalının 3. tuşu — topu rotadaki önceki boya adımına geri alır |
+| **"Sipariş Bağla"** | `workorder:write` | Tambur üst şeridinden iş emrine sipariş bağlama; uyumsuz seçim yalnız `roll:manual-adjust` taşıyanda |
+| **Kısa kesimde otomatik A1** | Ayar: `admin:settings` (panel) · cihaz override: süpervizör çifti | **VARSAYILAN KAPALI** — açılmadan hiçbir şey değişmez |
+
+**Kabul testi (3 dk):**
+1. Panel → Genel Ayarlar → Üretim → **Tambur** grubunda "Kısa kesimde kalite
+   otomatik A1" toggle'ı + altında **Eşik (metre)** alanı görünmeli.
+2. Tablette rengi iş emrinden farklı bir topu bitir → **sarı onay penceresi**
+   çıkmalı ("Plan ile top uyuşmuyor"), süpervizörde 3. tuş görünmeli.
+3. Onayla → Raporlar → **Plan-Sapma Karnesi**'nde satır belirmeli.
+
+⚠️ **Eşik girilmeden bayrağı açmak kuralı ÇALIŞTIRMAZ** (panel bunu amber
+uyarıyla söyler). Fabrika tek eşikte karar kılmalı; tablet override'ı yalnız
+istisna içindir ("bu tamburda metre makinesi yok" gibi).
+
+---
+
+## 8e) Plan-Sapma Karnesi — yeni rapor (izin ataması GEREKMEZ)
+
+Raporlar → **Kalite** → **Plan-Sapma Karnesi** (`report:quality` — mevcut izin).
+"Bu ay kaç kez plan dışına çıkıldı, ne kadar metraj, hangi kumaş/renkte, kim
+onayladı" sorusunu yanıtlar; ISO 9001 düzeltici-faaliyet girdisi olarak da kullanılır.
+
+⚠️ **İlk gün BOŞ görünecek** — defter deploy'dan sonra dolmaya başlar (geçmiş
+onaylar yalnız audit'te ve oraya geriye dönük yazılmadı; bilinçli). Bu bir hata
+DEĞİL. Rakam birkaç hafta sonra anlamlı olur.
+
+⚠️ **İki sayı, iki ad:** "onay" (imza) ile "olay" (alan) ayrı sayılır — renk VE
+en birlikte sapan top **BİR onaydır** ama iki olaydır; metraj bir kez sayılır.
+Ekranda ipuçları bunu yazar.
+
+---
+
 ## 9) OPERATÖRE ÖNCEDEN SÖYLENECEKLER
 
 Bunlar hata değil **karar**dır; söylenmezse destek çağrısı gelir.
+
+### 9-T1) TAMBUR: yanlış renkte/ende top artık SORU soruyor (yeni APK ile)
+Topun rengi ya da eni iş emrinin istediğinden farklıysa "Bitir"/"Kes" anında sarı
+bir pencere çıkar: *"Plan ile top uyuşmuyor — yine de bitir?"*.
+
+- **Bu bir ENGEL DEĞİL:** operatör onaylayınca iş normal şekilde tamamlanır ve mal
+  OLDUĞU GİBİ depoya iner. Onay yalnız **imza** bırakır (kim, ne zaman, neden).
+- **Top başına BİR KEZ sorulur** — aynı topu seri kesiyorsan her parçada sormaz.
+- **Onay topun kaydını DEĞİŞTİRMEZ.** Mal mavi ise mavi kalır; yanlış olan iş
+  emriyse onu süpervizör "Sipariş Bağla / Düzelt" ile düzeltir.
+- **Süpervizörde üçüncü tuş var:** "Boyahaneye Geri Gönder" — top rotadaki önceki
+  boya adımına döner. ⚠️ Top o anda Tambur listesinden DÜŞER; nereye gittiğini
+  ekrandaki yeşil bildirim yazar (istasyon adıyla). **Fasona giden mal ayrıca
+  Fason Sevk ekranından gönderilmeli** — taşıma tek başına sevk değildir.
+- **En farkında eşik ±10 cm:** küçük farklar (çekme payı) sormaz.
+
+### 9-T2) TAMBUR: kısa kesimde otomatik A1 (AYAR — varsayılan KAPALI)
+Panelden açılırsa: kesim uzunluğu girilen eşiğin altındaysa kalite kendiliğinden
+**A1** yazılır. Yalnız **1. Kalite seçiliyken** devreye girer — operatör A1 ya da
+Fire'ı kendi seçtiyse dokunmaz; otomatik yazılan A1 elle geri çevrilebilir ve
+uzunluk eşiğin üstüne çıkarsa kendiliğinden 1. Kaliteye döner.
+**Açılmadan hiçbir şey değişmez.**
+
+### 9-T3) FASON: yarım dönüş artık kabul edilebiliyor (yeni APK ile)
+100 m gitti, 51 m geldi → 51'i kabul et, 49 açık kalsın. Satırda **"Gelen (m)"**
+alanı ve yarım dönüşlerde **YARIM rozeti** var.
+
+- Kısmi kabulde top **fasonda kalır**, yalnız metrajı düşer.
+- Kalan geldiğinde ikinci kabul yapılır; **o toplar yeni parti numarası alır**
+  (farklı boya lotu oldukları için — bilinçli).
+- Kalan hiç gelmeyecekse 🔥 **Kalan Kapama** ile sebep seçilir; fark **fire**
+  olarak deftere yazılır ve Fire Karnesi'nde görünür.
 
 ### 9a-0) Ctrl+K artık KAYIT da buluyor (yeni)
 Komut paleti bugüne kadar yalnız SAYFA arıyordu. Artık aynı kutuya yazılan terim
@@ -755,7 +886,11 @@ audit_guard AÇILDI       : ☐  ALTER DATABASE + restart (§7b)
   DELETE reddedildi mi   : ☐  (0 satırlık DELETE bile hata vermeli)
 find_fold_duplicates      : ...... grup / ...... fazla satır  → fabrikaya iletildi mi ☐
 Veri Aktarımı kabul testi : ☐ (§8'in 6 adımı)
+roll_plan_deviations      : ☐ tablo var   (satır sayısı deploy günü 0 — NORMAL)
+Fason kısmi kabul testi   : ☐ (§8c'nin 5 adımı — YARIM rozeti göründü mü)
+Tambur plan-sapma testi   : ☐ (§8d — sarı onay penceresi + karnede satır)
+Kısa kesim A1 ayarı       : ☐ kapalı bırakıldı  /  ☐ açıldı → eşik: ...... m
 Electron sürümü           :
-APK sürümü                : (dağıtıldıysa)
+APK sürümü                : (dağıtıldıysa — bu pakette 2.9.1 / versionCode 48)
 Sorun / sapma             :
 ```
