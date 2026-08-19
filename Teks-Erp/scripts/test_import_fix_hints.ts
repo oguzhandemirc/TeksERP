@@ -21,6 +21,7 @@ import prisma from "../src/lib/prisma";
 import { ImportService } from "../src/services/import/import.service";
 import { listAdapters } from "../src/services/import/import-registry";
 import { LOOKUP_SOURCES } from "../src/services/import/import-lookup";
+import { colorService } from "../src/routes/color.routes";
 
 let pass = 0;
 let fail = 0;
@@ -179,6 +180,41 @@ async function main(): Promise<void> {
       allIssues(warnPrev.rows[0] ?? { errors: [], warnings: [] }).every(
         (i) => (i as { fix?: unknown }).fix === undefined || (i as { column?: string }).column === "itemCode",
       ),
+    );
+    // --- 7. TUZAK: yaratılan kayıt hücreye ADLA değil KODLA yazılmalı -------
+    // Servisler adı YAZARKEN normalize ediyor, lookup ise `nameFold` üzerinden
+    // çözüyor — ikisi aynı katlama DEĞİL. Tek kelimelik bir değerde ("MAVI")
+    // iki katlama çakışır ve ada yazan bir uygulama HER ELLE TESTİ GEÇER;
+    // ilk sayı içeren gerçek adda bozulur. Bu kontrol, panelin kod yazımının
+    // "sadeleştirilmesini" engeller.
+    const trap = `${uniq} 055 GRI`;
+    const madeRes = await colorService.create({ name: trap, isActive: true });
+    const made = madeRes.data as { id: string; code: string; name: string };
+    created.push(made.id);
+    check(
+      "servis adı NORMALİZE etti (kod yazımının gerekçesi)",
+      made.name !== trap,
+      `dosya="${trap}" kayıt="${made.name}"`,
+    );
+    const byName = await ImportService.preview(
+      "productRecipe",
+      [row(2, { name: `${uniq}-T1`, itemCode: "x", colorCode: trap })],
+      {},
+    );
+    check(
+      "ADLA yeniden önizleme HÂLÂ eşleşmiyor",
+      byName.rows[0]?.errors.some((e) => e.column === "colorCode") === true,
+      JSON.stringify(byName.rows[0]?.errors),
+    );
+    const byCode = await ImportService.preview(
+      "productRecipe",
+      [row(2, { name: `${uniq}-T2`, itemCode: "x", colorCode: made.code })],
+      {},
+    );
+    check(
+      "KODLA yeniden önizleme renk hatasını KAPATIYOR",
+      !byCode.rows[0]?.errors.some((e) => e.column === "colorCode"),
+      JSON.stringify(byCode.rows[0]?.errors),
     );
   } finally {
     if (created.length > 0) await prisma.color.deleteMany({ where: { id: { in: created } } });

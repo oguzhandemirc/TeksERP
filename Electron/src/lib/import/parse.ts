@@ -251,3 +251,28 @@ export function mapRows(parsed: ParsedFile, columns: ImportColumn[]): MappedRows
     missingRequired: missingRequiredOf(columns, mapping),
   };
 }
+
+/**
+ * BAŞLIKSIZ blok — yapıştırma için.
+ *
+ * `parseCsv` 1. satırı KOŞULSUZ başlık sayar ve veri satırlarını 2'den
+ * numaralar. Kullanıcı Excel'den başlık satırı OLMADAN kopyaladıysa ilk satır
+ * sessizce yenirdi — bu, buradaki en kötü arıza (bir kayıt kaybolur ve hiçbir
+ * şey söylemez). Bu dönüşüm o bloğu düzeltir:
+ *   • başlıklar `Sütun 1…N` olur (otomatik eşleme çalışamaz → eşleme adımı zorunlu)
+ *   • eski başlık satırı `rowNo: 1` ile VERİ olur
+ *   • diğer satırların numarası bir azalır
+ *
+ * ⚠️ Numaralar YAPIŞTIRILAN BLOĞA göredir; dosya yok, 1'den başlamak tek dürüst
+ * numaralandırma. Arayüz bunu açıkça yazar.
+ */
+export function withoutHeaderRow(p: ParsedFile): ParsedFile {
+  const width = Math.max(p.headers.length, ...p.rows.map((r) => r.cells.length), 0);
+  return {
+    headers: Array.from({ length: width }, (_, i) => `Sütun ${i + 1}`),
+    rows: [
+      { rowNo: 1, cells: p.headers },
+      ...p.rows.map((r) => ({ rowNo: r.rowNo - 1, cells: r.cells })),
+    ],
+  };
+}

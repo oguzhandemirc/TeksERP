@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapRows, parseCsv } from "./parse";
+import { mapRows, parseCsv, withoutHeaderRow } from "./parse";
 import type { ImportColumn } from "@/services/importService";
 
 // =============================================================================
@@ -92,5 +92,47 @@ describe("başlık eşleme", () => {
     const parsed = parseCsv("Renk Kodu;Renk Adı\n;A\n");
     const mapped = mapRows(parsed, COLUMNS);
     expect(mapped.rows[0]!.cells).toEqual({ code: "", name: "A" });
+  });
+});
+
+describe("yapıştırma — sekme ayracı ve başlıksız blok", () => {
+  it("Excel panosu (TSV) ayrıştırılır", () => {
+    const tsv = "Renk Kodu\tRenk Adı\nRNK1\tLACİVERT\nRNK2\tBEYAZ\n";
+    const out = parseCsv(tsv);
+    expect(out.headers).toEqual(["Renk Kodu", "Renk Adı"]);
+    expect(out.rows.map((r) => r.cells[1])).toEqual(["LACİVERT", "BEYAZ"]);
+  });
+
+  it("tırnak içi satır sonu TSV'de de korunur (Excel bunu üretir)", () => {
+    const out = parseCsv('Ad\tNot\nA\t"iki\nsatır"\n');
+    expect(out.rows).toHaveLength(1);
+    expect(out.rows[0]!.cells[1]).toBe("iki\nsatır");
+  });
+
+  it("BAŞLIKSIZ blokta HİÇBİR SATIR KAYBOLMAZ", () => {
+    const withHeader = parseCsv("RNK1\tLACİVERT\nRNK2\tBEYAZ\n");
+    // Başlıklı yorumda ilk satır YENİR: 2 satırlık blok 1 veri satırı görünür.
+    expect(withHeader.rows).toHaveLength(1);
+    expect(withHeader.rows[0]!.rowNo).toBe(2);
+
+    const headerless = withoutHeaderRow(withHeader);
+    expect(headerless.rows).toHaveLength(2);
+    expect(headerless.rows[0]).toEqual({ rowNo: 1, cells: ["RNK1", "LACİVERT"] });
+    expect(headerless.rows[1]!.rowNo).toBe(1 + 1 - 1);
+    expect(headerless.headers).toEqual(["Sütun 1", "Sütun 2"]);
+  });
+
+  it("başlıksız blokta otomatik eşleme çalışamaz — eşleme adımı zorunlu olur", () => {
+    const cols = [
+      { key: "code", label: "Renk Kodu", type: "text" as const },
+      { key: "name", label: "Renk Adı", type: "text" as const, required: true },
+    ];
+    const mapped = mapRows(withoutHeaderRow(parseCsv("RNK1\tLACİVERT\n")), cols);
+    expect(mapped.missingRequired.map((c) => c.key)).toEqual(["name"]);
+  });
+
+  it("ayraçsız yapıştırma tek sütuna düşer (çağıran bunu reddeder)", () => {
+    const out = parseCsv("sadece bir satır\nikinci\n");
+    expect(out.headers).toHaveLength(1);
   });
 });

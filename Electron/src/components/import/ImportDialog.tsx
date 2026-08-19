@@ -29,6 +29,7 @@ import {
   type ImportPreviewResult,
   type ImportOptions,
   type ImportRowInput,
+  type ImportRowIssue,
   type ImportRowResult,
   type ImportTemplateSpec,
 } from "@/services/importService";
@@ -36,8 +37,10 @@ import {
   applyMapping,
   autoMapColumns,
   missingRequiredOf,
+  parseCsv,
   parseSpreadsheet,
   unmatchedHeadersOf,
+  withoutHeaderRow,
   type ColumnMapping,
   type ParsedFile,
 } from "@/lib/import/parse";
@@ -52,6 +55,10 @@ import {
 import { ColumnMappingStep, isMappingValid } from "./ColumnMappingStep";
 import { ImportSpecPreview } from "./ImportSpecPreview";
 import { RowIssueCell } from "./RowIssueCell";
+import { QuickCreateLookup } from "./QuickCreateLookup";
+import { replaceCellValue } from "@/lib/import/overrides";
+import { foldSearchText } from "@/lib/search-fold";
+import type { CreatedLookup } from "@/lib/import/lookup-create";
 
 // Sunucu tavanıyla hizalı (import-coerce.MAX_IMPORT_ROWS). Panelde de kontrol
 // edilir ki kullanıcı 40.000 satırlık bir dosyayı yükleyip 30 sn bekledikten
@@ -79,6 +86,8 @@ interface Props {
 export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   const [step, setStep] = useState<Step>("file");
   const [file, setFile] = useState<File | null>(null);
+  // Kaynak adı geçmişte görünür: yapıştırma "—" kalırsa izlenebilirlik kaybolur.
+  const [sourceName, setSourceName] = useState<string | null>(null);
   // Ayrıştırılmış dosya BELLEKTE tutulur: kullanıcı eşlemeyi değiştirince
   // satırlar yeniden kurulur (dosyayı tekrar okumaya gerek yok).
   const [parsed, setParsed] = useState<ParsedFile | null>(null);
@@ -88,6 +97,10 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   const [overrides, setOverrides] = useState<CellOverrides>({});
   // Önizlemenin HANGİ satırlarla alındığı — bayatlık bununla anlaşılır.
   const [previewedRows, setPreviewedRows] = useState<ImportRowInput[] | null>(null);
+  // Bu oturumda yaratılan lookup'lar: "varlık|katlanmışDeğer" → kod.
+  // ⚠️ Olmazsa aynı değeri taşıyan DİĞER satırların düğmesi canlı kalır ve
+  // ikinci tık 409 verir — kullanıcı bunu hata sanar.
+  const [createdLookups, setCreatedLookups] = useState<Record<string, string>>({});
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
   const [preview, setPreview] = useState<ImportPreviewResult | null>(null);
@@ -133,6 +146,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     // Her açılışta temiz başla — yarım kalmış bir önizleme yeni dosyaya karışmasın.
     setStep("file");
     setFile(null);
+    setSourceName(null);
     setParsed(null);
     setMapping([]);
     setOverrides({});
@@ -158,6 +172,64 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setPreviewedRows(null);
   };
 
+  /**
+   * Ayrıştırılmış bloğu KABUL et — dosya ve yapıştırma aynı yoldan geçer.
+   * Boşluk/tavan kontrolü, otomatik eşleme ve "eşleme eksikse map adımı" kararı
+   * tek yerde; iki giriş noktası için iki kopya, zamanla ayrışan iki davranış
+   * demekti.
+   */
+  const acceptParsed = (parsed: ParsedFile, label: string): void => {
+    if (!spec) return;
+    setSourceName(label);
+    if (parsed.rows.length === 0) {
+      setParseErrors(["Veri satırı bulunamadı (ilk satır başlık kabul edilir)."]);
+      // ⚠️ `parsed` DA temizlenir: `rows` artık türetim olduğu için eski
+      // kaynağın satırları geri gelir ve yeni kaynağın hatası ekrandayken
+      // "Önizle" aktif kalırdı.
+      resetSource();
+      return;
+    }
+    if (parsed.headers.length <= 1) {
+      // Ayraç bulunamadı: her şey tek sütuna düştü. Bunu sessizce kabul edip
+      // "zorunlu sütun eşleşmedi" demek, kullanıcıyı yanlış yere bakmaya iter.
+      setParseErrors([
+        "Sütun ayracı bulunamadı — Excel'de HÜCRELERİ seçerek kopyalayın (tek sütuna düştü).",
+      ]);
+      resetSource();
+      return;
+    }
+    if (parsed.rows.length > MAX_ROWS) {
+      setParseErrors([
+        `${parsed.rows.length.toLocaleString("tr-TR")} satır var — tek seferde en fazla ${MAX_ROWS.toLocaleString("tr-TR")} satır aktarılabilir. Bölerek yükleyin.`,
+      ]);
+      resetSource();
+      return;
+    }
+    const auto = autoMapColumns(parsed, spec.columns);
+    setParsed(parsed);
+    setMapping(auto);
+    setOverrides({});
+    setPreview(null);
+    setPreviewedRows(null);
+    setCreatedLookups({});
+
+    const unmatched = unmatchedHeadersOf(parsed, auto);
+    const missing = missingRequiredOf(spec.columns, auto);
+      // Otomatik eşleme eksik kaldıysa kullanıcıyı EŞLEME adımına al — dosyayı
+      // elle düzenletmek yerine burada düzeltsin (sektör standardı). Kendi
+      // şablonumuzda bu dal hiç çalışmaz, fazladan tık olmaz.
+    if (missing.length > 0 || unmatched.length > 0) {
+      setParseWarnings(
+        missing.length > 0
+          ? [`Zorunlu sütun eşleşmedi: ${missing.map((c) => c.label).join(", ")}`]
+          : [`Şablonda karşılığı olmayan ${unmatched.length} sütun: ${unmatched.join(", ")}`],
+      );
+      setStep("map");
+      return;
+    }
+    setParseWarnings([]);
+  };
+
   const onPickFile = async (picked: File | null) => {
     if (!picked || !spec) return;
     setFile(picked);
@@ -165,50 +237,27 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     setParseWarnings([]);
     setParseErrors([]);
     try {
-      const parsed = await parseSpreadsheet(picked);
-      if (parsed.rows.length === 0) {
-        setParseErrors(["Dosyada veri satırı bulunamadı (ilk satır başlık kabul edilir)."]);
-        // ⚠️ `parsed` DA temizlenir: `rows` artık türetim olduğu için eski
-        // dosyanın satırları geri gelir ve yeni dosyanın hatası ekrandayken
-        // "Önizle" aktif kalırdı.
-        resetSource();
-        return;
-      }
-      if (parsed.rows.length > MAX_ROWS) {
-        setParseErrors([
-          `Dosyada ${parsed.rows.length.toLocaleString("tr-TR")} satır var — tek seferde en fazla ${MAX_ROWS.toLocaleString("tr-TR")} satır aktarılabilir. Dosyayı bölerek yükleyin.`,
-        ]);
-        resetSource();
-        return;
-      }
-      const auto = autoMapColumns(parsed, spec.columns);
-      setParsed(parsed);
-      setMapping(auto);
-      setOverrides({});
-      setPreview(null);
-      setPreviewedRows(null);
-
-      const unmatched = unmatchedHeadersOf(parsed, auto);
-      const missing = missingRequiredOf(spec.columns, auto);
-      // Otomatik eşleme eksik kaldıysa kullanıcıyı EŞLEME adımına al — dosyayı
-      // elle düzenletmek yerine burada düzeltsin (sektör standardı). Kendi
-      // şablonumuzda bu dal hiç çalışmaz, fazladan tık olmaz.
-      if (missing.length > 0 || unmatched.length > 0) {
-        setParseWarnings(
-          missing.length > 0
-            ? [`Zorunlu sütun eşleşmedi: ${missing.map((c) => c.label).join(", ")}`]
-            : [`Şablonda karşılığı olmayan ${unmatched.length} sütun: ${unmatched.join(", ")}`],
-        );
-        setStep("map");
-        return;
-      }
-      setParseWarnings([]);
+      acceptParsed(await parseSpreadsheet(picked), picked.name);
     } catch (e) {
       setParseErrors([e instanceof Error ? e.message : "Dosya okunamadı."]);
       resetSource();
     } finally {
       setBusy(null);
     }
+  };
+
+  /** Panodan yapıştırma — Excel kopyası sekmeyle ayrılmış metindir. */
+  const onPasteText = (text: string, firstRowIsHeader: boolean): void => {
+    if (!spec || !text.trim()) return;
+    setFile(null);
+    setParseWarnings([]);
+    setParseErrors([]);
+    const base = parseCsv(text);
+    const parsed = firstRowIsHeader ? base : withoutHeaderRow(base);
+    const count = parsed.rows.length;
+    acceptParsed(parsed, `Panodan yapıştırıldı (${count} satır)`);
+    // Başlıksız blokta otomatik eşleme YAPILAMAZ (`Sütun 1…N`), o yüzden
+    // eşleme adımı bir öneri değil TEK yoldur — acceptParsed zaten oraya taşır.
   };
 
   // Eşleme değişince `rows` kendiliğinden yeniden türetilir; DÜZELTMELER KORUNUR.
@@ -226,11 +275,59 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
 
   const clearOverrides = (): void => setOverrides({});
 
+  /**
+   * Eksik kayıt yaratıldıktan sonra hücreleri günceller.
+   *
+   * ⚠️ HÜCREYE **KOD** YAZILIR, AD DEĞİL. Servisler adı yazarken normalize
+   * ediyor (`normalizeColorName("beyaz 055") === "055 BEYAZ"`), lookup ise
+   * `nameFold` üzerinden çözüyor — yani adla yazsaydık yeniden önizleme YİNE
+   * eşleşmezdi. Sinsi olan: "MAVI" gibi tek kelimelik değerde iki katlama
+   * çakışır ve akış çalışır; yani ada yazan bir uygulama HER ELLE TESTİ GEÇER,
+   * ilk sayı içeren gerçek renk adında bozulur.
+   *
+   * ⚠️ Aynı değeri taşıyan TÜM satırlar yamanır, yalnız tıklanan değil: kayıt
+   * artık global olarak var; 11 satırı kırmızı bırakmak 11 tık daha ister ve
+   * ikinci tık 409 verir (bu bir hata gibi okunur).
+   */
+  const applyCreatedLookup = (entityKey: string, searched: string, created: CreatedLookup): void => {
+    const written = created.code ?? created.name;
+    const wanted = foldSearchText(searched);
+    const targetCols = (spec?.columns ?? []).filter((c) => c.lookup?.entity === entityKey);
+    let touched = 0;
+
+    setOverrides((prev) => {
+      let next = prev;
+      for (const r of rows) {
+        for (const col of targetCols) {
+          const cur = r.cells[col.key];
+          if (cur === undefined || cur === "") continue;
+          const multiple = Boolean(col.lookup?.multiple);
+          const parts = multiple
+            ? cur.split(/[;,\n]/).map((x) => x.trim()).filter(Boolean)
+            : [cur.trim()];
+          if (!parts.some((x) => foldSearchText(x) === wanted)) continue;
+          const updated = replaceCellValue(cur, searched, written, multiple, foldSearchText);
+          if (updated === cur) continue;
+          next = { ...next, [r.rowNo]: { ...(next[r.rowNo] ?? {}), [col.key]: updated } };
+          touched++;
+        }
+      }
+      return next;
+    });
+
+    setCreatedLookups((prev) => ({ ...prev, [`${entityKey}|${wanted}`]: written }));
+    // Makbuz: sayı olmadan toplu bir düzenleme GÖRÜNMEZ olur ve görünmeyen
+    // toplu düzenleme, özelliğe duyulan güveni bitirir.
+    toast.success(
+      `${written} oluşturuldu — ${touched} satırdaki '${searched}' değeri güncellendi.`,
+    );
+  };
+
   const runPreview = async () => {
     if (rows.length === 0) return;
     setBusy("preview");
     try {
-      const res = await importService.preview(entity, rows, { mode, fileName: file?.name });
+      const res = await importService.preview(entity, rows, { mode, fileName: sourceName ?? file?.name });
       setPreview(res.data);
       // Bu önizleme HANGİ satırlarla alındı — sonraki düzenlemeler bayatlatsın.
       setPreviewedRows(rows);
@@ -249,7 +346,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
         mode,
         onError: skipErrors ? "skip" : "abort",
         clientToken: attemptToken.current,
-        fileName: file?.name,
+        fileName: sourceName ?? file?.name,
       });
       setResult(res.data);
       setStep("result");
@@ -308,6 +405,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
         ) : step === "file" ? (
           <FileStep
             spec={spec}
+            onPaste={onPasteText}
             mode={mode}
             setMode={setMode}
             file={file}
@@ -345,6 +443,18 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
             setSkipErrors={setSkipErrors}
             hasErrors={hasErrors}
             onDownloadErrors={() => void downloadErrorReport(spec, rows, preview?.rows ?? [])}
+            renderFix={(issue) => {
+              const fix = issue.fix;
+              if (!fix || fix.kind !== "CREATE_LOOKUP") return null;
+              return (
+                <QuickCreateLookup
+                  entity={fix.entity}
+                  value={fix.value}
+                  alreadyCreatedCode={createdLookups[`${fix.entity}|${foldSearchText(fix.value)}`]}
+                  onCreated={(created) => applyCreatedLookup(fix.entity, fix.value, created)}
+                />
+              );
+            }}
             onDownloadCorrected={() =>
               void downloadCorrectedFile(spec, rows, new Set(Object.keys(overrides).map(Number)))
             }
@@ -442,6 +552,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
 
 function FileStep({
   spec,
+  onPaste,
   mode,
   setMode,
   file,
@@ -452,6 +563,7 @@ function FileStep({
   onPick,
 }: {
   spec: ImportTemplateSpec;
+  onPaste: (text: string, firstRowIsHeader: boolean) => void;
   mode: ImportOptions["mode"];
   setMode: (m: ImportOptions["mode"]) => void;
   file: File | null;
@@ -480,6 +592,8 @@ function FileStep({
         {busy === "parse" ? <Loader2 className="h-5 w-5 animate-spin" /> : <Upload className="h-5 w-5" />}
         {file ? `${file.name} — değiştirmek için tıklayın` : "Dosya seçin (.xlsx / .csv)"}
       </Button>
+
+      <PasteBlock onPaste={onPaste} />
 
       <div className="flex flex-wrap items-center gap-2">
         <label className="text-xs text-muted-foreground" htmlFor="import-mode">
@@ -537,6 +651,72 @@ function FileStep({
   );
 }
 
+/**
+ * EXCEL'DEN YAPIŞTIR — 15 satırlık bir liste için dosya kaydetmeye değmez.
+ * Excel'in pano biçimi sekmeyle ayrılmış metindir ve ayrıştırıcımız sekmeyi
+ * zaten tanıyor; yeni bir sihirbaz adımı gerekmez, çıktı yine bir `ParsedFile`.
+ *
+ * ⚠️ BAŞLIK SATIRI SEÇİMİ HER ZAMAN GÖRÜNÜR. `parseCsv` ilk satırı koşulsuz
+ * başlık sayar; kullanıcı başlıksız kopyaladıysa o satır SESSİZCE yenirdi —
+ * bir kayıt kaybolur ve hiçbir şey söylemez. Sezgi yalnız varsayılanı belirler,
+ * kararı kullanıcı görür.
+ */
+function PasteBlock({ onPaste }: { onPaste: (text: string, firstRowIsHeader: boolean) => void }) {
+  const [text, setText] = useState("");
+  const [firstRowIsHeader, setFirstRowIsHeader] = useState(true);
+  const lineCount = text.trim() ? text.trim().split(/\r?\n/).length : 0;
+
+  return (
+    <details className="rounded-md border p-2">
+      <summary className="cursor-pointer text-xs font-medium">
+        Excel'den yapıştır — dosya kaydetmeden
+      </summary>
+      <div className="mt-2 space-y-2">
+        <textarea
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={"Excel'de hücreleri seçip kopyalayın, buraya yapıştırın."}
+          rows={5}
+          className="w-full rounded-md border bg-background p-2 font-mono text-xs"
+        />
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              checked={firstRowIsHeader}
+              onChange={() => setFirstRowIsHeader(true)}
+            />
+            İlk satır başlık
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5">
+            <input
+              type="radio"
+              checked={!firstRowIsHeader}
+              onChange={() => setFirstRowIsHeader(false)}
+            />
+            İlk satır veri
+          </label>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            disabled={lineCount === 0}
+            onClick={() => onPaste(text, firstRowIsHeader)}
+          >
+            İşle{lineCount > 0 ? ` (${lineCount} satır)` : ""}
+          </Button>
+        </div>
+        {!firstRowIsHeader && (
+          <p className="text-[11px] text-muted-foreground">
+            Başlıksız blokta sütunları elle eşlemeniz gerekir. Satır numaraları
+            yapıştırdığınız bloğa göredir (dosya yok).
+          </p>
+        )}
+      </div>
+    </details>
+  );
+}
+
 // --- Adım 2: önizleme ---------------------------------------------------------
 
 /** Sütun anahtarı → şablondaki Türkçe etiket (yoksa null). */
@@ -584,6 +764,7 @@ function PreviewStep({
   onEdit,
   editedCount,
   onClearOverrides,
+  renderFix,
   onDownloadCorrected,
   stale,
   onRepreview,
@@ -602,6 +783,7 @@ function PreviewStep({
   onEdit: (rowNo: number, column: string, value: string) => void;
   editedCount: number;
   onClearOverrides: () => void;
+  renderFix: (issue: ImportRowIssue) => React.ReactNode;
   onDownloadCorrected: () => void;
   stale: boolean;
   onRepreview: () => void;
@@ -734,6 +916,7 @@ function PreviewStep({
                       row={r}
                       cells={cellsByRow.get(r.rowNo) ?? {}}
                       onEdit={onEdit}
+                      renderFix={renderFix}
                     />
                     {r.action === "UPDATE" && r.changes ? (
                       <div className="space-y-0.5 text-muted-foreground">
