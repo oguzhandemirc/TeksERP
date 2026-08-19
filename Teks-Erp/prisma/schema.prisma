@@ -4661,8 +4661,12 @@ model SystemLog {
   // Relations
   user User? @relation(fields: [userId], references: [id])
 
+  // ⚠️ `updatedAt` YOK ve OLMAMALI (Faz B1, 2026-08-19): audit satırı yazıldıktan
+  // sonra HİÇ güncellenmez (ISO 27001 A.8.15 — logların değiştirilmeye karşı
+  // korunması). Kolonun varlığı yanlış bir kapı öneriyordu; canlıda kullanan tek
+  // satır yoktu (`updatedAt > createdAt` olan 0 kayıt). Arşiv tablosunda kolon
+  // DURUYOR — orası taşınmış tarihsel veridir, şeması değiştirilmez.
   createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([tableName, recordId])
   // Audit tablosu en hızlı büyüyen tablodur — zaman aralığı sorguları için

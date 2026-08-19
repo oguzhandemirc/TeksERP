@@ -18,6 +18,13 @@ export interface SystemLogListParams {
   limit?: number;
   userId?: string;
   tableName?: string;
+  /**
+   * TEK KAYDIN geçmişi (Faz B1, 2026-08-19) — "bu iş emrini kim ne zaman
+   * değiştirmiş" sorusu bugüne kadar API'den SORULAMIYORDU; oysa DB'de
+   * `@@index([tableName, recordId])` zaten vardı. `tableName` ile BİRLİKTE
+   * verilmelidir, yoksa index'in ilk kolonu boş kalır ve sorgu seq scan'e döner.
+   */
+  recordId?: string;
   // "DOMAIN" — CUD audit (Activity Page). "AUTH" / "SYSTEM" — Sistem Kayıtları sayfası.
   // Birden fazla kategori için virgülle ayrılmış string kabul edilir.
   category?: string;
@@ -55,6 +62,7 @@ export class SystemLogService {
     const where: Prisma.SystemLogWhereInput = {};
     if (params.userId) where.userId = params.userId;
     if (params.tableName) where.tableName = params.tableName;
+    if (params.recordId) where.recordId = params.recordId;
     if (params.action) where.action = params.action;
     const cats = parseCategories(params.category);
     if (cats) where.category = cats.length === 1 ? cats[0] : { in: cats };
@@ -117,6 +125,7 @@ export class SystemLogService {
     const where: Prisma.SystemLogArchiveWhereInput = {};
     if (params.userId) where.userId = params.userId;
     if (params.tableName) where.tableName = params.tableName;
+    if (params.recordId) where.recordId = params.recordId;
     if (params.action) where.action = params.action;
     const cats = parseCategories(params.category);
     if (cats) where.category = cats.length === 1 ? cats[0] : { in: cats };

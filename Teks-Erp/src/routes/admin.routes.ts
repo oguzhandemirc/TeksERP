@@ -916,6 +916,9 @@ const systemLogListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional(),
   userId: z.string().uuid().optional(),
   tableName: z.string().min(1).max(100).optional(),
+  // TEK KAYDIN geçmişi (Faz B1). `tableName` ile birlikte verilir — index'in
+  // ilk kolonu odur; yalnız `recordId` göndermek seq scan üretir.
+  recordId: z.string().min(1).max(64).optional(),
   // category: tekil "DOMAIN" / "AUTH" / "SYSTEM" veya virgülle ayrılmış "AUTH,SYSTEM".
   category: z
     .string()
