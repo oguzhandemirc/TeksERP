@@ -107,7 +107,10 @@ export function QuickCreateLookup({
           setOpen(true);
         }}
       >
-        <Plus className="h-3 w-3" /> "{value}" {cfg.label}ini oluştur
+        {/* ⚠️ `${label}ini` YAZILMAZ: Türkçede ünsüz yumuşaması var ("renk" →
+            "rengini", "kumaş" → "kumaşını"). Ekli kalıp her etikette bozulurdu;
+            nötr kalıp beşinde de doğru. */}
+        <Plus className="h-3 w-3" /> "{value}" adıyla {cfg.label} oluştur
       </Button>
     );
   }
