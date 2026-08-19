@@ -402,6 +402,42 @@ model User {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  // Kayıt künyesi ters ilişkileri (2026-08-19) — createdBy/updatedBy
+  createdColors            Color[]            @relation("ColorCreatedBy")
+  updatedColors            Color[]            @relation("ColorUpdatedBy")
+  createdCustomers         Customer[]         @relation("CustomerCreatedBy")
+  updatedCustomers         Customer[]         @relation("CustomerUpdatedBy")
+  createdCustomerBranchs   CustomerBranch[]   @relation("CustomerBranchCreatedBy")
+  updatedCustomerBranchs   CustomerBranch[]   @relation("CustomerBranchUpdatedBy")
+  createdDefectTypes       DefectType[]       @relation("DefectTypeCreatedBy")
+  updatedDefectTypes       DefectType[]       @relation("DefectTypeUpdatedBy")
+  createdFabricPropertys   FabricProperty[]   @relation("FabricPropertyCreatedBy")
+  updatedFabricPropertys   FabricProperty[]   @relation("FabricPropertyUpdatedBy")
+  createdItems             Item[]             @relation("ItemCreatedBy")
+  updatedItems             Item[]             @relation("ItemUpdatedBy")
+  createdMachines          Machine[]          @relation("MachineCreatedBy")
+  updatedMachines          Machine[]          @relation("MachineUpdatedBy")
+  createdPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceCreatedBy")
+  updatedPeripheralDevices PeripheralDevice[] @relation("PeripheralDeviceUpdatedBy")
+  createdProductRecipes    ProductRecipe[]    @relation("ProductRecipeCreatedBy")
+  updatedProductRecipes    ProductRecipe[]    @relation("ProductRecipeUpdatedBy")
+  createdQualityGrades     QualityGrade[]     @relation("QualityGradeCreatedBy")
+  updatedQualityGrades     QualityGrade[]     @relation("QualityGradeUpdatedBy")
+  createdReturnReasons     ReturnReason[]     @relation("ReturnReasonCreatedBy")
+  updatedReturnReasons     ReturnReason[]     @relation("ReturnReasonUpdatedBy")
+  createdRoutes            Route[]            @relation("RouteCreatedBy")
+  updatedRoutes            Route[]            @relation("RouteUpdatedBy")
+  createdStations          Station[]          @relation("StationCreatedBy")
+  updatedStations          Station[]          @relation("StationUpdatedBy")
+  createdSubcontractors    Subcontractor[]    @relation("SubcontractorCreatedBy")
+  updatedSubcontractors    Subcontractor[]    @relation("SubcontractorUpdatedBy")
+  createdLabelTemplates    LabelTemplate[]    @relation("LabelTemplateCreatedBy")
+  updatedLabelTemplates    LabelTemplate[]    @relation("LabelTemplateUpdatedBy")
+  createdOrders            Order[]            @relation("OrderCreatedBy")
+  updatedOrders            Order[]            @relation("OrderUpdatedBy")
+  createdBatchs            Batch[]            @relation("BatchCreatedBy")
+  updatedBatchs            Batch[]            @relation("BatchUpdatedBy")
+
   @@map("users")
 }
 
@@ -622,6 +658,18 @@ model Station {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("StationCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("StationUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([type])
   @@index([kind])
   @@index([defaultCategoryId])
@@ -658,6 +706,18 @@ model Machine {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("MachineCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("MachineUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([stationId])
   @@index([nameFold])
@@ -789,6 +849,18 @@ model PeripheralDevice {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   addressFold String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("PeripheralDeviceCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("PeripheralDeviceUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([machineId])
   @@index([deviceId])
@@ -924,6 +996,18 @@ model Route {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("RouteCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("RouteUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([customerId])
   @@index([isFavorite])
   @@index([nameFold])
@@ -1038,6 +1122,18 @@ model ProductRecipe {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ProductRecipeCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ProductRecipeUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([itemId])
   @@index([colorId])
   @@index([routeId])
@@ -1107,6 +1203,18 @@ model Item {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ItemCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ItemUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([itemType])
   @@index([nameFold])
@@ -1625,6 +1733,18 @@ model Customer {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([type])
   @@index([documentProfileId])
   @@index([nameFold])
@@ -1676,6 +1796,18 @@ model CustomerBranch {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   cityFold  String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("CustomerBranchCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("CustomerBranchUpdatedBy", fields: [updatedById], references: [id])
+
   // UNIQUE (2026-07-31 denetimi): müşteri-içi şube kodu tekil — diğer master-data'nın
   // code @unique backstop'unun buradaki karşılığı. code NULL'ken serbest (PG'de
   // NULL'lar çakışmaz — partial gerekmez); ad-dup bilinçli app-level (kök CLAUDE.md).
@@ -1723,6 +1855,18 @@ model Order {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("OrderUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([customerId])
   @@index([branchId])
@@ -1954,6 +2098,18 @@ model Batch {
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("BatchCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("BatchUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([workOrderId])
   // Null-yoğun — parti_modeli migration'da partial'a çevrilir (IS NOT NULL, drift-free)
@@ -2213,6 +2369,18 @@ model QualityGrade {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   descriptionFold String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("QualityGradeCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("QualityGradeUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([isActive, sortOrder])
   @@index([nameFold])
   @@index([descriptionFold])
@@ -2252,6 +2420,18 @@ model ReturnReason {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   descriptionFold String?  @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ReturnReasonCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ReturnReasonUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([isActive, sortOrder])
   @@index([nameFold])
   @@index([descriptionFold])
@@ -2287,6 +2467,18 @@ model DefectType {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   descriptionFold String?     @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("DefectTypeCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("DefectTypeUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([isActive])
   @@index([nameFold])
@@ -3017,6 +3209,18 @@ model Subcontractor {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("SubcontractorCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("SubcontractorUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([documentProfileId])
   @@index([nameFold])
@@ -3799,6 +4003,18 @@ model Color {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold            String?                @default(dbgenerated())
 
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("ColorCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("ColorUpdatedBy", fields: [updatedById], references: [id])
+
   @@index([isActive, sortOrder])
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "colors_nameFold_trgm_idx", type: Gin)
@@ -3884,6 +4100,18 @@ model FabricProperty {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   categoryFold         String?                        @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("FabricPropertyCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("FabricPropertyUpdatedBy", fields: [updatedById], references: [id])
 
   @@index([isActive, sortOrder])
   @@index([category])
@@ -4088,6 +4316,18 @@ model LabelTemplate {
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   nameFold  String?  @default(dbgenerated())
+
+  // ── KAYIT KÜNYESİ (2026-08-19) — docs/design/KAYIT-KUNYESI-TASARIM.md ──
+  // Kaydın kimliğine ait KALICI gerçek: kim oluşturdu / kim son değiştirdi.
+  // Audit'ten OKUNMAZ — audit 6 ayda arşivlenir, künye kaybolmamalı.
+  // NULLABLE: geçmiş kayıtlarda değer yok; NOT NULL migration'ı canlıda tablo
+  // yeniden yazımı demektir. Backfill audit'ten yapılır, eşleşmeyen null kalır.
+  // FK index BİLİNÇLİ YOK — "kim yaptı" audit FK'sı, sorgulanmadıkça indexlenmez
+  // (printedById/grantedById emsali, CLAUDE.md perf kuralı 1 istisnası).
+  createdById String? @db.Uuid
+  createdBy   User?   @relation("LabelTemplateCreatedBy", fields: [createdById], references: [id])
+  updatedById String? @db.Uuid
+  updatedBy   User?   @relation("LabelTemplateUpdatedBy", fields: [updatedById], references: [id])
 
   @@unique([name])
   @@index([isActive])

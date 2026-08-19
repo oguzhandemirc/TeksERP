@@ -29,6 +29,46 @@ import { Request } from "express";
 import { foldNameForCompare, normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+
+// =============================================================================
+// KAYIT KÜNYESİ — kim oluşturdu / kim son değiştirdi (2026-08-19)
+// =============================================================================
+// Tasarım: docs/design/KAYIT-KUNYESI-TASARIM.md
+//
+// Kaydın kimliğine ait KALICI gerçek KOLONDA durur; audit'ten okunmaz çünkü
+// audit 6 ayda arşivlenir (CLAUDE.md kuralı; `record-info` ucu tam bu yüzden
+// 6 aydan eski kayıtta boş dönüyordu).
+//
+// ⚠️ `sanitizeWriteData`'nın İÇİNE KOYULMADI: o metot DMMF çözülemezse ham
+// veriyi ERKEN DÖNDÜRÜYOR — künye o kaçış yolunda sessizce atlanırdı. Aynı
+// gerekçe ad normalizasyonunda da tartışıldı ve orada da dışarıda bırakıldı.
+//
+// ⚠️ KAPSAM LİSTESİ ŞART, "hepsine yaz" DEĞİL: kolonu olmayan modele yazmak
+// Prisma'da çalışma-zamanı hatasıdır. Liste `scripts/test_record_provenance.ts`
+// tarafından ŞEMAYA karşı doğrulanır — model kolonu alırsa buraya da eklenmeli.
+// =============================================================================
+
+/** Künye kolonu TAŞIYAN Prisma modelleri (BaseService yolundan yazılanlar). */
+const PROVENANCE_MODELS = new Set([
+  "color", "customer", "customerBranch", "defectType", "fabricProperty", "item",
+  "machine", "order", "peripheralDevice", "productRecipe", "qualityGrade",
+  "returnReason", "route", "station",
+]);
+
+export function withActor(
+  data: Record<string, unknown>,
+  userId: string | undefined,
+  mode: "CREATE" | "UPDATE",
+  modelName: string,
+): Record<string, unknown> {
+  if (!userId || !PROVENANCE_MODELS.has(modelName)) return data;
+  // CREATE'te ikisi de yazılır: "hiç değiştirilmemiş kayıt" için de son
+  // değiştiren = oluşturan olmalı, yoksa arayüz boş alan gösterir.
+  if (mode === "CREATE") return { ...data, createdById: userId, updatedById: userId };
+  return { ...data, updatedById: userId };
+}
+
+
 import {
   decideCodeUniqueness,
   assertCodeAvailable,
@@ -42,20 +82,44 @@ import {
 // F45 NOT: allowlist modelin TÜM scalar/enum kolonları — indekssiz kolona (description/notes)
 // sort İZİN VERİLİR; gerçek indeks kısıtı için config'e sortableFields eklenmeli.
 // Model bulunamazsa null → guard'lamaz (geri uyum).
+//
+// ⚠️ DB-ÜRETİMLİ (GENERATED) KOLONLAR ÜÇ YÜZEYDEN DE DÜŞÜRÜLÜR (2026-08-19).
+// Arama katlaması `<kolon>Fold` gölgeleri getirdi (migration 20260819060000);
+// bunlar `GENERATED ALWAYS AS (tr_fold(...)) STORED` ve şemada sıradan bir
+// `String?` gibi görünüyor. Süzülmeselerdi üç ayrı arıza doğardı:
+//   1) YAZMA — istemci `{"nameFold":"x"}` gönderirse PostgreSQL isteği reddeder
+//      ("cannot insert a non-DEFAULT value into column"), yani 13 bare-CRUD
+//      route'unda basit bir alan adıyla 500 üretilebilirdi.
+//   2) SIRALAMA — `sortBy=nameFold` katlanmış anahtara göre sıralardı ve Türkçe
+//      sırayı bozardı ("Çanakkale" bütün C'lerin önüne düşer). Sıralama Türkçe
+//      collation'ın işi (`tr_sort`), katlamanın değil.
+//   3) FİLTRE — F30 oracle yüzeyini bir kolon daha genişletirdi.
+// TESPİT AD SÖZLEŞMESİYLE, çünkü başka yolu yok: Prisma 7'nin RUNTIME DMMF'i
+// minimaldir — alan başına yalnız `{name, kind, type}` taşır (ölçüldü 2026-08-19);
+// `default`/`isGenerated` orada YOKTUR, yani "bu kolonu DB üretiyor" bilgisi
+// çalışma anında okunamaz. Sözleşme bu yüzden DB tarafında İKİ YÖNLÜ kilitlendi
+// (`scripts/test_db_invariants.ts` §9): her GENERATED kolon `Fold` ile biter VE
+// `Fold` ile biten her kolon GENERATED'dır. İkisinden biri bozulursa test düşer;
+// yani buradaki basit ek, gevşek değil bağlıdır.
+const GENERATED_FIELD_SUFFIX = "Fold";
 const modelSortFieldCache = new Map<string, Set<string> | null>();
+type DmmfField = { name: string; kind: string };
+function isDbGenerated(field: DmmfField): boolean {
+  return field.name.endsWith(GENERATED_FIELD_SUFFIX);
+}
 function sortableFieldsFor(modelName: string): Set<string> | null {
   const key = modelName.toLowerCase();
   if (modelSortFieldCache.has(key)) return modelSortFieldCache.get(key) ?? null;
   const models = (
     Prisma as unknown as {
-      dmmf?: { datamodel?: { models?: Array<{ name: string; fields: Array<{ name: string; kind: string }> }> } };
+      dmmf?: { datamodel?: { models?: Array<{ name: string; fields: DmmfField[] }> } };
     }
   ).dmmf?.datamodel?.models;
   const model = models?.find((m) => m.name.toLowerCase() === key);
   const result = model
     ? new Set(
         model.fields
-          .filter((f) => f.kind === "scalar" || f.kind === "enum")
+          .filter((f) => (f.kind === "scalar" || f.kind === "enum") && !isDbGenerated(f))
           .map((f) => f.name)
       )
     : null;
@@ -698,7 +762,7 @@ export class BaseService {
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
     // Transform nested array fields to Prisma's { create: [...] } format
-    const prismaData = { ...data };
+    const prismaData = withActor({ ...data }, userId, "CREATE", this.config.modelName);
     if (this.config.nestedCreateFields) {
       for (const field of this.config.nestedCreateFields) {
         if (Array.isArray(prismaData[field])) {
@@ -879,7 +943,7 @@ export class BaseService {
 
     const updated = await this.delegate.update({
       where: { id },
-      data,
+      data: withActor(data, userId, "UPDATE", this.config.modelName),
       ...(this.config.defaultInclude
         ? { include: this.config.defaultInclude }
         : {}),

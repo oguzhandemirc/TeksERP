@@ -322,6 +322,9 @@ export class LabelTemplateService {
       }
       const row = await tx.labelTemplate.create({
         data: {
+          // Kayıt künyesi (2026-08-19)
+          createdById: userId ?? null,
+          updatedById: userId ?? null,
           name,
           kind,
           isDefault: input.isDefault ?? false,

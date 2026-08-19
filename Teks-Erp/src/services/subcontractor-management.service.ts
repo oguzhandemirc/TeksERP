@@ -512,7 +512,11 @@ export class SubcontractorManagementService {
         });
         createdId = existing.id;
       } else {
-        const c = await tx.subcontractor.create({ data: payload, select: { id: true } });
+        // Kayıt künyesi (2026-08-19) — BaseService dışı servis, elle yazılır.
+        const c = await tx.subcontractor.create({
+          data: { ...payload, createdById: userId ?? null, updatedById: userId ?? null },
+          select: { id: true },
+        });
         createdId = c.id;
       }
       // F88: kategori doğrulama (var + aktif + dedupe) createMany ÖNCESİ.
@@ -629,7 +633,7 @@ export class SubcontractorManagementService {
     }
 
     const sub = await prisma.$transaction(async (tx) => {
-      await tx.subcontractor.update({ where: { id }, data: rest });
+      await tx.subcontractor.update({ where: { id }, data: { ...rest, updatedById: userId ?? null } });
 
       if (categoryIds !== undefined) {
         await tx.subcontractorToCategory.deleteMany({ where: { subcontractorId: id } });
