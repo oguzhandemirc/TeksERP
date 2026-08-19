@@ -1,6 +1,8 @@
 # ARAMA · KATLAMA · SIRALAMA TASARIMI — Türkçe-duyarsız arama, tek katlama sözleşmesi, ölçekli performans
 
-> **Durum:** PLAN — ONAYLANDI (2026-08-19, kullanıcı kararı; §0.1). Uygulama F1'den başlıyor. Cumartesi (2026-08-22) veri sıfırlaması;
+> **Durum:** F1-F4 UYGULANDI ve commit edildi (2026-08-19) — bkz. §0.2 "Uygulamada değişenler".
+> F5 (canlı deploy) cumartesi (2026-08-22) veri sıfırlamasında; F6 ayrı iş.
+> Aşağıdaki plan metni ORİJİNALDİR; uygulama sırasında ölçümle değişen kararlar §0.2'de listelenir. Cumartesi (2026-08-22) veri sıfırlaması;
 > uygulama sıfırlama penceresinde ya da hemen sonrasında (tablolar boşken index/generated kolon bedava).
 > **Kapsam:** Teks-Erp (backend + migration) · Electron · mobil. **Ön çalışma:** `b66829d5` (adlar BÜYÜK, istemci katlaması).
 > **Ölçüm tabanı:** dev DB (PG 18.6, ICU en-US) + 200 bin satırlık sentetik ölçüm; canlı = PG 16.9 Windows, **C locale**.
@@ -27,6 +29,42 @@
 | D4 ad kolonlarına tr collation? | **EVET** — ICU/libc yoksa yalnız bu madde ertelenir |
 | `order_lines.customerItemName` + müşteri alias'ları BÜYÜK harfe normalize? | **EVET** — belgeye/etikete de BÜYÜK basılır; §2.2/§6.1 #3-#4 buna göre (`normalizeDisplayName` yazımda) |
 | F0 canlı ön koşul | Sahadan çekilen `tekserp_saha` (2026-08-09 yedeği) incelendi: canlıda **yalnız `plpgsql`** kurulu, `unaccent`/`pg_trgm` YOK — kurulabilirliği (contrib dosyaları + ICU) yedekten görülemez. Kullanıcı kararı: **bilerek ilerle**; migration `CREATE EXTENSION`'da yüksek sesle düşer, o gün contrib kopyalanır (EDB Windows derlemesi ikisini de ve ICU'yu taşır). |
+
+### 0.2 Uygulamada DEĞİŞEN kararlar (2026-08-19, ölçümle)
+
+Plan yazılırken bilinmeyen üç şey uygulama sırasında ölçüldü ve üç kararı değiştirdi.
+Bunlar planın "yanlış"ı değil, planın kendi ölçüm adımlarının çıktısıdır.
+
+| # | Plandaki karar | Uygulanan | Neden değişti (ölçüm) |
+|---|---|---|---|
+| D2 | `tr_fold = lower(unaccent(x))` | **`unaccent` TASARIMDAN ÇIKTI.** `tr_fold = NFD → birleştirici işaretleri at → 26 harflik istisna tablosu → YALNIZ ASCII küçültme (`COLLATE "C"`) → boşluk tekleme` | `unaccent`ın sözlüğü BMP'de **2407 karakterde** saf NFD'den ayrılıyor ve JS'te taklit EDİLEMİYOR (`©`→`(c)`, `¼`→` 1/4`, `Ø`→`o`, `ß`→`ss`, Kiril/Yunan çevriyazısı). Ayrışma tehlikeli yöndeydi: "Ø"lu adı arayan 0 sonuç alırdı. Üç kazanç: JS↔SQL eşitliği **yapısal** (63.485 karakterde ölçüldü, 0 sapma) · **`unaccent` uzantısı artık GEREKMİYOR** (sahada kurulu değil → F0 riskinin yarısı düştü) · sonuç **ortamdan bağımsız** (dev ICU ↔ saha C locale aynı cevabı veriyor). Ayrıca Unicode normalizasyon **kararlılık politikası** `unaccent.rules`'un vermediği bir garanti veriyor. |
+| D3 | `nameFold` üzerinde **partial UNIQUE** | **UNIQUE KONMADI**; davranış (409) uygulama katmanında, kolon indexli (O(N)→O(1)) | Canlı veride BUGÜN 12 grup / 15 fazla satır mükerrer var: `Moda Tekstil` + `MODA TEKSTİL` **ikisi de aktif**, `ACTIVO`+`ACTİVO`, … UNIQUE migration'ı **deploy anında** düşürürdü ve çözümü gerçek kayıtları birleştirmek olurdu — bu bir **iş kararı**, migration'ın işi değil. Görünürlük yüzeyi: `scripts/find_fold_duplicates.ts` (salt-okunur). Sıfırlamadan sonra tablolar boşken UNIQUE 5 satırlık risksiz bir migration. |
+| §2.3 | Gölge kolon tespiti `default.name === "dbgenerated"` | **Ad sözleşmesi** (`*Fold` son eki), DB'de **iki yönlü** kilitli | Prisma 7 runtime DMMF'i alan başına yalnız `{name, kind, type}` taşıyor — "bu kolonu DB üretiyor" bilgisi çalışma anında **okunamıyor** (ölçüldü). `test_db_invariants` §9 sözleşmeyi iki yönden kilitler: her GENERATED kolon `Fold` ile biter **VE** `Fold` ile biten her kolon GENERATED'dır. |
+
+**Ek olarak planda olmayan, uygulama sırasında ortaya çıkan iki şey:**
+
+- **`test_search_field_config.ts` (yeni bekçi).** METİN ↔ KOD kovaları birer *string dizisi*, yani TypeScript yanlış yerleştirmeyi göremiyor. İki arıza modu da bu turda fiilen yaşandı: kod alanı metin kovasında → `Unknown argument codeFold` (500); metin alanı kod kovasında → katlama sessizce atlanır, arama Türkçe-duyarlı kalır. Bekçi 296 dosyayı TS AST ile tarar, her yolu Prisma DMMF üzerinden ilişki ilişki çözer (45 metin + 42 kod yolu), körlük zemini var, iki yönde de negatif sondayla kırmızı verdiği doğrulandı.
+- **Migration'da SIRA load-bearing:** collation değişimi generated kolondan **ÖNCE** gelmek zorunda — `ERROR: cannot alter type of a column used by a generated column`. Aynı tuzak ileride de geçerli.
+
+### 0.3 Uygulama durumu (2026-08-19)
+
+| Faz | Commit | Durum |
+|---|---|---|
+| F1 — sözleşme | `ac210616` | ✅ üç projede bayt-bayt aynı modül + `test_fold_contract` (28 kontrol, 3 negatif sonda) + 5 ekranlık `toLowerCase()` regresyonu |
+| F2 — migration + şema | `ecf16c22` | ✅ `20260819060000_search_fold` (31 gölge kolon · 9 GIN · 18 collation) + `test_db_invariants` 68→79 |
+| F3 — backend | `22c1bb7f` | ✅ `buildTextSearch`, 39 çağrı + 14 route + 34 fixture, mükerrer indexli, 8 denetim kusuru, `test_search_field_config` |
+| F4 — istemci | `07ecb051` | ✅ 16 katlama yeri + CommandPalette + `lib/collate.ts` + PickerModal + baş harfler |
+| F5 — canlı deploy | — | ⏳ cumartesi. **İlk komut `CREATE EXTENSION pg_trgm`** — sahada kurulu değil; düşerse contrib dosyaları kopyalanır. |
+| F6 — picker ölçeği | — | ⏳ ayrı iş (§6.2 D) |
+
+**Ölçüm (200 bin satır, dev DB):** varyant-OR araması `Parallel Seq Scan` **583 ms** → katlanmış kolon `Bitmap Index Scan` **6,3 ms**.
+
+**Test durumu:** backend 318/319 · Electron 712/712 · mobil 541/541.
+Tek kırmızı `test_consistency` §18 ve bir **veri** bulgusudur (kod kusuru değil):
+canlıda `Moda Tekstil` + `MODA TEKSTİL` iki ayrı **aktif** müşteri. `name` kolonu
+Türkçe collation'a geçtiği için `lower('İ')` artık doğru çalışıyor ve kontrol
+daha önce **kör olduğu** mükerreri görüyor. Çözümü: iki kaydı birleştirmek
+(işletme kararı) ya da cumartesi sıfırlaması.
 
 **Sektörde karşılığı (madde 2 sorusu):**
 - **SAP:** `KNA1-NAME1` girildiği gibi saklanır; **`MCOD1`** onun büyük harfli/normalize "matchcode" gölgesidir, arama ve F4 yardımı oradan koşar. Yani *görünen değer ≠ arama anahtarı*. Bizde D1 tam bunu kurar (`name` ↔ `nameFold`).
