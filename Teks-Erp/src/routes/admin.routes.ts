@@ -919,6 +919,14 @@ const systemLogListQuerySchema = z.object({
   // TEK KAYDIN geçmişi (Faz B1). `tableName` ile birlikte verilir — index'in
   // ilk kolonu odur; yalnız `recordId` göndermek seq scan üretir.
   recordId: z.string().min(1).max(64).optional(),
+  // TEK İŞLEMİN tüm satırları (2026-08-19) — "aynı kaydetme tuşundan çıkanlar".
+  // ⚠️ BU SATIR OLMADAN FİLTRE SESSİZCE ÖLÜR: `z.object` bilinmeyen anahtarı
+  // ELER, yani servis imzasına alan eklemek YETMEZ — Zod şeması bir allowlist'tir
+  // ve buraya yazılmayan parametre uca hiç ulaşmaz (hata da vermez).
+  // `.uuid()` DEĞİL: geçersiz değeri 400 ile reddetmek yerine servise bırakıyoruz,
+  // orası eşleşmeyen sabite çevirip BOŞ sonuç döndürüyor — denetim ekranını bir
+  // yazım hatası yüzünden hataya düşürmemek için.
+  requestId: z.string().min(1).max(64).optional(),
   // category: tekil "DOMAIN" / "AUTH" / "SYSTEM" veya virgülle ayrılmış "AUTH,SYSTEM".
   category: z
     .string()

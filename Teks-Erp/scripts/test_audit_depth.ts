@@ -503,6 +503,20 @@ async function main(): Promise<void> {
     }).catch(() => {});
   }
 
+  // ⚠️ ROUTE ALLOWLIST — servis imzasına alan eklemek YETMEZ.
+  // `z.object` bilinmeyen anahtarı ELER: Zod şeması sessiz bir allowlist'tir.
+  // Yukarıdaki servis kontrolleri bu katmanı ATLADIĞI için yeşil kalırdı ve
+  // filtre sahada hiç çalışmazdı (hata da vermeden). Bu delik gerçekten açıldı.
+  const routeSrc = (await import("fs")).readFileSync(
+    (await import("path")).join(__dirname, "..", "src", "routes", "admin.routes.ts"), "utf8",
+  );
+  const listSchema = routeSrc.slice(
+    routeSrc.indexOf("const systemLogListQuerySchema"),
+    routeSrc.indexOf("const systemLogListQuerySchema") + 2000,
+  );
+  check("route Zod şeması requestId'yi kabul ediyor (allowlist)",
+    /requestId:\s*z\./.test(listSchema));
+
   // 10.7 — boot görünürlüğü: unutulabilir ops adımının iki yüzeyi de duruyor mu?
   const serverSrc = (await import("fs")).readFileSync(
     (await import("path")).join(__dirname, "..", "src", "server.ts"), "utf8",
