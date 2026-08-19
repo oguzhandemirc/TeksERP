@@ -71,8 +71,10 @@ export const productRecipeImportAdapter: ImportAdapter = {
   entity: "productRecipe",
   label: "İş Emri Şablonları",
   tableName: "PRODUCT_RECIPE",
-  writePermission: "item:write",
-  readPermission: "item:read",
+  // ⚠️ İZİN, VARLIĞIN GERÇEK CRUD İZNİDİR (bkz. color.adapter.ts notu).
+  // `POST /api/product-recipes` → `station:write`; burada `item:*` yazıyordu.
+  writePermission: "station:write",
+  readPermission: "station:read",
   keyColumns: ["code"],
   columns: COLUMNS,
   // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —
@@ -128,7 +130,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
         continue;
       }
       const out = await resolveReference(entity, String(raw), ctx);
-      if (out.error) row.result.errors.push({ column: key, message: out.error });
+      if (out.error) row.result.errors.push({ column: key, ...out.error });
       if (out.warning) row.result.warnings.push({ column: key, message: out.warning });
       row.values[`${key}__id`] = out.hit?.id ?? null;
     }
@@ -143,7 +145,7 @@ export const productRecipeImportAdapter: ImportAdapter = {
           splitList(String(props)),
           ctx,
         );
-        for (const m of errors) row.result.errors.push({ column: "propertyCodes", message: m });
+        for (const m of errors) row.result.errors.push({ column: "propertyCodes", ...m });
         for (const m of warnings) row.result.warnings.push({ column: "propertyCodes", message: m });
         row.values.propertyCodes__ids = ids;
       }

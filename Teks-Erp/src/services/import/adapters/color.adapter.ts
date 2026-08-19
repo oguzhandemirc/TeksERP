@@ -41,8 +41,13 @@ export const colorImportAdapter: ImportAdapter = {
   entity: "color",
   label: "Renkler",
   tableName: "COLOR",
-  writePermission: "quality:write",
-  readPermission: "quality:read",
+  // ⚠️ İZİN, VARLIĞIN GERÇEK CRUD İZNİDİR — "hangi menüde duruyor" DEĞİL.
+  // (2026-08-19 düzeltmesi: burada `quality:*` yazıyordu, oysa `POST /api/colors`
+  // `property:write` istiyor. Sonuç: `data:import` + `quality:write` taşıyan biri
+  // panelden tek renk açamazken TOPLU renk yükleyebiliyordu — yanlış izinle
+  // açılmış bir yazma kapısı. Bekçi: `scripts/test_import_permissions.ts`.)
+  writePermission: "property:write",
+  readPermission: "property:read",
   keyColumns: ["code"],
   columns: COLUMNS,
   // Ad çakışması ÖNİZLEMEDE yakalanır (servisteki guard'ın ikizi) —

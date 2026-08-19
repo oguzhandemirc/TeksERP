@@ -169,7 +169,7 @@ export const subcontractorImportAdapter: ImportAdapter = {
         splitList(String(raw)),
         ctx,
       );
-      for (const m of errors) row.result.errors.push({ column: "categoryCodes", message: m });
+      for (const m of errors) row.result.errors.push({ column: "categoryCodes", ...m });
       for (const m of warnings) row.result.warnings.push({ column: "categoryCodes", message: m });
       row.values.categoryCodes__ids = ids;
     }

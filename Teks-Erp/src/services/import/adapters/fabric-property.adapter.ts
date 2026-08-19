@@ -127,7 +127,7 @@ export const fabricPropertyImportAdapter: ImportAdapter = {
       });
     } else if (stations !== undefined) {
       const { ids, errors, warnings } = await resolveReferenceList("station", splitList(String(stations)), ctx);
-      for (const m of errors) row.result.errors.push({ column: "stationCodes", message: m });
+      for (const m of errors) row.result.errors.push({ column: "stationCodes", ...m });
       for (const m of warnings) row.result.warnings.push({ column: "stationCodes", message: m });
       if (ids.length === 0) {
         row.result.errors.push({ column: "stationCodes", message: "En az bir istasyon gerekli." });

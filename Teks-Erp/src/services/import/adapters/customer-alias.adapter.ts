@@ -192,12 +192,12 @@ async function validateAliasRow(
 
   // Referansları ŞİMDİ çöz (pasif kayıt da hata verir — servis zaten reddeder).
   const customer = await resolveReference("customer", parts.customerCode, ctx);
-  if (customer.error) row.result.errors.push({ column: "externalKey", message: customer.error });
+  if (customer.error) row.result.errors.push({ column: "externalKey", ...customer.error });
   if (customer.warning) row.result.warnings.push({ column: "externalKey", message: customer.warning });
   if (customer.hit) row.values.__customerId = customer.hit.id;
 
   const target = await resolveReference(targetEntity, parts.targetCode, ctx);
-  if (target.error) row.result.errors.push({ column: "externalKey", message: target.error });
+  if (target.error) row.result.errors.push({ column: "externalKey", ...target.error });
   if (target.warning) row.result.warnings.push({ column: "externalKey", message: target.warning });
   if (target.hit) row.values.__targetId = target.hit.id;
 }

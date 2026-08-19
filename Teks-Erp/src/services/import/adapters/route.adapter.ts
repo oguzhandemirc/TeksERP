@@ -16,7 +16,13 @@ import prisma from "../../../lib/prisma";
 import { routeService } from "../../../routes/route.routes";
 import { resolveReference, resolveReferenceList } from "../import-lookup";
 import { splitList } from "../import-coerce";
-import type { ImportAdapter, ImportColumn, ImportContext, PreparedRow } from "../import.types";
+import type {
+  ImportAdapter,
+  ImportColumn,
+  ImportContext,
+  ImportFixHint,
+  PreparedRow,
+} from "../import.types";
 
 const COLUMNS: ImportColumn[] = [
   // ── Başlık sütunları (grubun İLK satırından okunur) ────────────────────────
@@ -109,6 +115,24 @@ interface StepPayload {
   plannedPropertyIds: string[];
 }
 
+/**
+ * Gruplu şablonda çocuk satırın hatasını grubun sonucuna yazar.
+ * ⚠️ Mesajın önüne ÇOCUK satır numarası konur (kullanıcı dosyada onu arar) ve
+ * varsa düzeltme ipucuna da o numara işlenir — panel "hangi satırı düzelteyim"
+ * sorusunu grup başından değil GERÇEK satırdan cevaplasın.
+ */
+function childIssue(
+  column: string,
+  childRowNo: number,
+  issue: { message: string; fix?: ImportFixHint },
+): { column: string; message: string; fix?: ImportFixHint } {
+  return {
+    column,
+    message: `${childRowNo}. satır: ${issue.message}`,
+    ...(issue.fix ? { fix: { ...issue.fix, rowNo: childRowNo } } : {}),
+  };
+}
+
 export const routeImportAdapter: ImportAdapter = {
   entity: "route",
   label: "Üretim Rotaları",
@@ -183,7 +207,7 @@ export const routeImportAdapter: ImportAdapter = {
         row.values.customerCode__id = null;
       } else {
         const out = await resolveReference("customer", String(cust), ctx);
-        if (out.error) row.result.errors.push({ column: "customerCode", message: out.error });
+        if (out.error) row.result.errors.push({ column: "customerCode", ...out.error });
         if (out.warning) row.result.warnings.push({ column: "customerCode", message: out.warning });
         row.values.customerCode__id = out.hit?.id ?? null;
       }
@@ -226,7 +250,7 @@ export const routeImportAdapter: ImportAdapter = {
         }
         const out = await resolveReference(entity, String(raw), ctx);
         if (out.error) {
-          row.result.errors.push({ column: key, message: `${child.rowNo}. satır: ${out.error}` });
+          row.result.errors.push(childIssue(key, child.rowNo, out.error));
         }
         if (out.warning) {
           row.result.warnings.push({ column: key, message: `${child.rowNo}. satır: ${out.warning}` });
@@ -244,7 +268,7 @@ export const routeImportAdapter: ImportAdapter = {
           ctx,
         );
         for (const m of errors) {
-          row.result.errors.push({ column: "plannedPropertyCodes", message: `${child.rowNo}. satır: ${m}` });
+          row.result.errors.push(childIssue("plannedPropertyCodes", child.rowNo, m));
         }
         for (const m of warnings) {
           row.result.warnings.push({ column: "plannedPropertyCodes", message: `${child.rowNo}. satır: ${m}` });

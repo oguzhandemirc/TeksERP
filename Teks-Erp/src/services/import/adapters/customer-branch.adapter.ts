@@ -224,7 +224,7 @@ export const customerBranchImportAdapter: ImportAdapter = {
     } else {
       const out = await resolveReference("customer", parts.customerCode, ctx);
       if (out.error) {
-        row.result.errors.push({ column: "externalKey", message: out.error });
+        row.result.errors.push({ column: "externalKey", ...out.error });
         return;
       }
       if (out.warning) row.result.warnings.push({ column: "externalKey", message: out.warning });

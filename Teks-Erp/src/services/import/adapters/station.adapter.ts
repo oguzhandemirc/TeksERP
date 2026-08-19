@@ -158,7 +158,7 @@ export const stationImportAdapter: ImportAdapter = {
       row.values.defaultCategoryCode__id = null; // "temizle"
     } else if (typeof rawCat === "string" && rawCat.trim()) {
       const out = await resolveReference("subcontractorCategory", rawCat, ctx);
-      if (out.error) row.result.errors.push({ column: "defaultCategoryCode", message: out.error });
+      if (out.error) row.result.errors.push({ column: "defaultCategoryCode", ...out.error });
       if (out.warning) row.result.warnings.push({ column: "defaultCategoryCode", message: out.warning });
       if (out.hit) row.values.defaultCategoryCode__id = out.hit.id;
     }

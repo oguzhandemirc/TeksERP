@@ -134,7 +134,7 @@ export const itemImportAdapter: ImportAdapter = {
         continue;
       }
       const { ids, errors, warnings } = await resolveReferenceList(entity, splitList(String(raw)), ctx);
-      for (const m of errors) row.result.errors.push({ column: key, message: m });
+      for (const m of errors) row.result.errors.push({ column: key, ...m });
       for (const m of warnings) row.result.warnings.push({ column: key, message: m });
       row.values[`${key}__ids`] = ids;
     }

@@ -61,10 +61,36 @@ export interface ImportColumn {
 /** Bir satırın nihai kararı. */
 export type ImportRowAction = "CREATE" | "UPDATE" | "SKIP" | "ERROR";
 
+/**
+ * DÜZELTME İPUCU — panelin "eksik kaydı buradan yarat" düğmesini çizmesi için.
+ *
+ * ⚠️ NEDEN YAPISAL, neden mesaj ayrıştırılmıyor: aynı sütun DÖRT farklı hata
+ * üretebiliyor (bulunamadı · belirsiz ad · PASİF kayıt · bilinmeyen tür) ve
+ * yalnız BİRİNDE yaratma teklifi doğrudur. "Belirsiz ad"da yaratmak zaten iki
+ * olan kataloğa üçüncüyü ekler; "pasif kayıt"ta ise tam da `assertNameAvailable`
+ * guard'ının engellediği mükerreri üretir. Bu ayrımı Türkçe cümleden regex ile
+ * çıkarmak sessiz bir arıza yoludur — bu yüzden ipucu YALNIZ "bulunamadı"
+ * dalında doğar ve panel `fix` yoksa düğme ÇİZMEZ.
+ *
+ * `value` hücrenin tamamı DEĞİL, çözülemeyen ELEMANdır (çoklu sütunda
+ * "RNK1; MAVI" → "MAVI"); `rowNo` gruplu şablonlarda çocuk satırın numarasıdır.
+ */
+export interface ImportFixHint {
+  kind: "CREATE_LOOKUP";
+  /** `LOOKUP_SOURCES` anahtarı — panel yaratma defterini bununla bulur. */
+  entity: string;
+  /** Bulunamayan değer (trim'lenmiş, tek eleman). */
+  value: string;
+  /** Gruplu şablonda çocuk satırın dosya numarası. */
+  rowNo?: number;
+}
+
 export interface ImportRowIssue {
   /** Hangi sütun (yoksa satır geneli). */
   column?: string;
   message: string;
+  /** Varsa: bu hatayı kapatabilecek somut eylem (bkz. ImportFixHint). */
+  fix?: ImportFixHint;
 }
 
 export interface ImportRowInput {

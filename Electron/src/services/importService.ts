@@ -35,9 +35,28 @@ export interface ImportColumn {
 
 export type ImportRowAction = "CREATE" | "UPDATE" | "SKIP" | "ERROR";
 
+/**
+ * Düzeltme ipucu — panelin "eksik kaydı buradan yarat" düğmesini çizmesi için.
+ * ⚠️ YALNIZ "bulunamadı" hatasında doğar. Belirsiz ad ve PASİF kayıt hataları
+ * ipucu TAŞIMAZ, çünkü orada doğru eylem yaratmak değildir (biri üçüncü bir
+ * mükerrer üretir, diğeri aktifleştirilmesi gereken kaydın ikizini).
+ * Panel sözleşmesi: `fix` yoksa düğme YOK — mesaj ayrıştırmaya asla düşülmez.
+ * Backend aynası: `Teks-Erp/src/services/import/import.types.ts`.
+ */
+export interface ImportFixHint {
+  kind: "CREATE_LOOKUP";
+  /** Yaratma defterinin anahtarı (`lib/import/lookup-create.ts`). */
+  entity: string;
+  /** Bulunamayan DEĞER — hücrenin tamamı değil, çözülemeyen eleman. */
+  value: string;
+  /** Gruplu şablonda çocuk satırın dosya numarası. */
+  rowNo?: number;
+}
+
 export interface ImportRowIssue {
   column?: string;
   message: string;
+  fix?: ImportFixHint;
 }
 
 export interface ImportRowResult {

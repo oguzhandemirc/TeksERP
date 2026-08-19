@@ -99,7 +99,7 @@ export const machineImportAdapter: ImportAdapter = {
     const rawStation = row.values.stationCode;
     if (typeof rawStation === "string" && rawStation.trim()) {
       const out = await resolveReference("station", rawStation, ctx);
-      if (out.error) row.result.errors.push({ column: "stationCode", message: out.error });
+      if (out.error) row.result.errors.push({ column: "stationCode", ...out.error });
       if (out.warning) row.result.warnings.push({ column: "stationCode", message: out.warning });
       if (out.hit) row.values.stationCode__id = out.hit.id;
     }

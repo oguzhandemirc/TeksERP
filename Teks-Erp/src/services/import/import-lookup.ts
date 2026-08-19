@@ -13,7 +13,7 @@
 
 import prisma from "../../lib/prisma";
 import { foldNameForCompare } from "../helpers/name-normalize.helper";
-import type { ImportContext, LookupHit } from "./import.types";
+import type { ImportContext, ImportFixHint, LookupHit } from "./import.types";
 
 /** Desteklenen lookup varlıkları → Prisma delegate + alanlar. */
 interface LookupSource {
@@ -42,9 +42,20 @@ export const LOOKUP_SOURCES: Record<string, LookupSource> = {
   returnReason: { model: "returnReason", codeField: "code", nameField: "name", foldField: "nameFold", label: "iade sebebi" },
 };
 
+/**
+ * Çözümleme hatası — düz string DEĞİL, çünkü "bulunamadı" ile "belirsiz" ve
+ * "pasif" arasındaki fark panelde EYLEM farkı yaratıyor (bkz. ImportFixHint).
+ * Tipi değiştirmek bilinçli: `error: string` kalsaydı 18 çağrı noktasının 17'si
+ * sessizce eski yolda kalırdı; böyle derleyici hepsini işaretliyor.
+ */
+export interface ResolveIssue {
+  message: string;
+  fix?: ImportFixHint;
+}
+
 export interface ResolveOutcome {
   hit?: LookupHit;
-  error?: string;
+  error?: ResolveIssue;
   warning?: string;
 }
 
@@ -59,7 +70,7 @@ export async function resolveReference(
   by: "code" | "name" = "code",
 ): Promise<ResolveOutcome> {
   const src = LOOKUP_SOURCES[entity];
-  if (!src) return { error: `Bilinmeyen referans türü: ${entity}` };
+  if (!src) return { error: { message: `Bilinmeyen referans türü: ${entity}` } };
   const value = rawValue.trim();
   if (!value) return {};
 
@@ -97,13 +108,20 @@ export async function resolveReference(
   })) as Record<string, unknown>[];
 
   if (byName.length === 0) {
+    // TEK ipucu üreten dal burasıdır.
     return {
-      error: `'${value}' ile eşleşen ${src.label} bulunamadı (kod ya da tam ad yazın).`,
+      error: {
+        message: `'${value}' ile eşleşen ${src.label} bulunamadı (kod ya da tam ad yazın).`,
+        fix: { kind: "CREATE_LOOKUP", entity, value },
+      },
     };
   }
   if (byName.length > 1) {
+    // İPUCU YOK: yaratmak, zaten iki olan kataloğa üçüncüyü eklerdi.
     return {
-      error: `'${value}' adı birden fazla ${src.label} ile eşleşiyor — ayırt etmek için KOD yazın.`,
+      error: {
+        message: `'${value}' adı birden fazla ${src.label} ile eşleşiyor — ayırt etmek için KOD yazın.`,
+      },
     };
   }
   const hit = toHit(byName[0] as Record<string, unknown>, src);
@@ -121,7 +139,13 @@ export async function resolveReference(
 
 function activeOrError(hit: LookupHit, label: string, value: string): ResolveOutcome {
   if (!hit.isActive) {
-    return { error: `'${value}' ${label} kaydı PASİF — önce aktifleştirin ya da başka bir kayıt seçin.` };
+    // İPUCU YOK: doğru eylem YARATMAK değil AKTİFLEŞTİRMEK. Yaratma teklifi,
+    // `assertNameAvailable`'ın tam da engellediği mükerreri üretirdi.
+    return {
+      error: {
+        message: `'${value}' ${label} kaydı PASİF — önce aktifleştirin ya da başka bir kayıt seçin.`,
+      },
+    };
   }
   return { hit };
 }
@@ -155,9 +179,9 @@ export async function resolveReferenceList(
   entity: string,
   values: string[],
   ctx: ImportContext,
-): Promise<{ ids: string[]; errors: string[]; warnings: string[] }> {
+): Promise<{ ids: string[]; errors: ResolveIssue[]; warnings: string[] }> {
   const ids: string[] = [];
-  const errors: string[] = [];
+  const errors: ResolveIssue[] = [];
   const warnings: string[] = [];
   for (const v of values) {
     const out = await resolveReference(entity, v, ctx);
