@@ -197,6 +197,14 @@ export function screensUsing(code: string): ScreenEntry[] {
 export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: string }> = [
   { code: "admin:*", reason: "Wildcard — tek tek ekran beyanı anlamsız." },
   { code: "mobile:*", reason: "Wildcard — tüm mobil ekranları kapsar." },
+  {
+    code: "data:import",
+    reason:
+      "Toplu içe aktarım API'si (import.routes) — Electron ekranı HENÜZ YOK, " +
+      "yetenek bugün yalnız uçtan kullanılıyor. ⚠️ GEÇİCİ: ekran eklendiği gün " +
+      "bu satır BAYAT MUAF olur ve bekçinin iki yönlü kontrolü kırmızı verip " +
+      "düşürülmesini zorlar — elle takip gerekmez.",
+  },
 ];
 
 /** Katalogda adı geçmeyen izin var mı? (bekçi ve panel bandı kullanır) */
