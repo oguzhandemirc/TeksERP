@@ -106,10 +106,10 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 23 migration, yedi iş
+## 0) Bu deploy'da ne var — 24 migration, sekiz iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **23 bekleyen** gösteriyor.
-Yedisi ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **24 bekleyen** gösteriyor.
+Sekizi ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -126,6 +126,7 @@ Yedisi ayrı iş, hepsi aynı pull'da:
 | 21 | `20260819160000_audit_requestid_devicefix` | **İşlem gruplaması** (`requestId`) + arşiv `deviceId` UUID→TEXT **tip hatası düzeltmesi** |
 | 22 | `20260819161000_audit_tamper_guard` | **Audit değiştirilemezliği** — UPDATE/DELETE/TRUNCATE engeli (2 trigger + 1 fonksiyon) |
 | 23 | `20260819170000_reason_presets` | **Hazır sebep katalogları** — yeni tablo + enum (mevcut tabloya DOKUNMAZ; satırlar boot'ta gelir) |
+| 24 | `20260819210000_master_data_merge_lineage` | **Mükerrer birleştirme soy bağı** — 4 tabloya 3 nullable kolon + FK + partial index (mevcut satırlara DOKUNMAZ, hepsi NULL doğar) |
 
 > ⚠️ **20 ve 21 aynı damgayla başlıyor ama farklı işler** (`..._alias_search` ile
 > `..._systemlog_archive_changes_device`); Prisma dizin adına göre sıralar,
@@ -299,7 +300,7 @@ göstermeli; başka fark KIRMIZI'dır.
 
 ---
 
-## 7) ⏳ ELLE YAPILACAK — izin ataması (iki izin + bir rol yenileme)
+## 7) ⏳ ELLE YAPILACAK — izin ataması (ÜÇ izin + bir rol yenileme)
 
 Boot uzlaştırması izni **DB'ye getirir ama KİMSEYE ATAMAZ** (*katalog koda, atama
 panele*). Provada ölçülen eksikler:
@@ -308,6 +309,7 @@ panele*). Provada ölçülen eksikler:
 |---|---|---|
 | **`data:import`** | Sistem → **Veri Aktarımı** ekranı + tanım ekranlarındaki "İçe Aktar" düğmeleri | Kurulum/veri işini yapan kişi + planlama sorumlusu |
 | **`mobile:kk1-yari-mamul`** | KK1 — dışarıdan alınan yarı mamül kabulü (renkli giriş) | O işi yapan KK1 operatörleri (**yeni APK gerekir**) |
+| **`master-data:merge`** | Sistem → **Mükerrer Kayıtlar** + tanım listelerindeki "Mükerrerler" düğmesi | Ana veriyi TANIYAN kişi (satış / planlama) — §10'daki mükerrer listesini kim temizleyecekse |
 
 Atanmazsa ekran/düğme **hiç görünmez** ve sebebi hiçbir yerde yazmaz.
 **Yapılacak:** Yetkilendirme → Kullanıcılar → kişi → Yetkiler → işaretle →
@@ -320,6 +322,17 @@ Atanmazsa ekran/düğme **hiç görünmez** ve sebebi hiçbir yerde yazmaz.
 >
 > ⚠️ **`admin:*` bu izni VERMEZ** (`settings:workstation` emsali): tek tıkla
 > yüzlerce kaydı değiştirebilen bir yüzey wildcard'la sessizce dağıtılmamalı.
+>
+> ⚠️ **`master-data:merge` için de aynısı geçerli ve bir tuzağı daha var:**
+> ikinci kapı varlığın write iznidir ve **renkte o izin `property:write`tir**
+> (`color:write` diye bir kod YOKTUR). Yani "renk birleştirsin" isteniyorsa
+> `master-data:merge` + `property:write` işaretlenir.
+>
+> ⚠️ **Ekran Sistem hub'ının altında ama hub `admin:settings` istiyor.** Yalnız
+> `master-data:merge` taşıyan bir satış kullanıcısı hub'a giremez; ona
+> ulaşacağı iki kapı var ve ikisi de bu sürümde açıldı: **Ctrl+K → "Mükerrer"**
+> ve **Müşteri/Kumaş/Renk/Fason listelerindeki "Mükerrerler" düğmesi.**
+> Kullanıcıya bu ikisini söyleyin, "Sistem menüsüne bak" DEMEYİN.
 >
 > ⚠️ **İKİ VARLIKTA ARANAN İZİN DEĞİŞTİ — kapanan bir açık, migration DEĞİL.**
 > `renk` ve `ürün reçetesi` adaptörleri yanlış izin beyan ediyordu; toplu yol
@@ -605,9 +618,27 @@ olduğu çifti görüyor). **Otomatik birleştirme YOK ve olmamalı** — hangi 
 kalacağı, siparişlerin/topların hangisine bağlı olduğu **işletme kararıdır**.
 Raporu fabrikaya ver, birleştirmeyi onlar söylesin. **Veriye kendi başına dokunma.**
 
-> Bu yüzden `nameFold` üzerinde **DB UNIQUE kısıtı KONMADI** — konsaydı migration
-> tam bu satırlarda deploy anında düşerdi. Veri temizlendikten sonra UNIQUE
-> eklemek ayrı ve 5 satırlık bir migration olur.
+### 🆕 Bu sürümde BİRLEŞTİRME ARACI var (Sistem → Mükerrer Kayıtlar)
+
+Yukarıdaki kural DEĞİŞMEDİ — değişen, kararı verenin elinde artık bir araç
+olması. Fabrika "birleştirin" dediğinde SQL yazılmaz; ekran kullanılır:
+
+- **Nerede:** `Sistem → Mükerrer Kayıtlar`, ya da Müşteri/Kumaş/Renk/Fason
+  listelerindeki **"Mükerrerler"** düğmesi, ya da Ctrl+K → "Mükerrer".
+- **Yetki:** `master-data:merge` **+** varlığın kendi write izni (§7'ye bakın —
+  atanmadan ekran görünmez).
+- **Ne yapar:** kaynak kaydı SİLMEZ; `mergedIntoId` ile hedefe bağlar,
+  referansları (sipariş/sevkiyat/top/alias…) hedefe taşır, kaynağı pasifleştirir.
+- ⚠️ **GERİ ALINAMAZ.** Emniyet ağı gece yedeği + kopyaya geri yükleme
+  (`db-copy.service.ts`). Vardiya dışında yapın.
+- ⚠️ **Bu deploy'da HİÇBİR ŞEY otomatik birleşmez.** Araç yalnız operatörün
+  dört katmanlı onayıyla çalışır (hedef seçimi → önizleme → gerekçe → hedefin
+  KODUNU yazarak onay). Deploy sırasında sizin yapacağınız bir şey YOK.
+
+> `nameFold` üzerinde **DB UNIQUE kısıtı hâlâ KONMADI** — canlıda mükerrer
+> satırlar dururken migration tam o satırlarda düşerdi. Kısıt, fabrika listeyi
+> temizledikten SONRA ayrı ve 5 satırlık bir migration olur (`WHERE
+> "mergedIntoId" IS NULL` predicate'iyle — tombstone'lar kısıta girmez).
 
 ---
 
