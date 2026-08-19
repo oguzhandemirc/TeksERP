@@ -1,5 +1,11 @@
 # Sürüm 2026-08-19 — Deploy Reçetesi (arama katlaması + künye + 13 birikmiş migration)
 
+> 🔗 **BU SÜRÜMÜN ÜSTÜNE 2.9.0 GELDİ** (Veri Aktarımı — toplu içe/dışa aktarım).
+> Aynı `git pull` ikisini birden getirir. Bu notu bitirdikten sonra
+> [`SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md`](./SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md)
+> ile devam et: **+1 migration** (`20260819120000_import_runs` — yeni tablo,
+> risksiz) ve **elle bir izin ataması** (`data:import`) var.
+
 > **Bu notu sunucudaki oturum okuyacak.** Yazan oturum sahaya BAĞLANMADI; her şey
 > `~/Downloads/tekserp_20260814_020002.dump` (fabrikanın 02:00 yedeği) kopyasına
 > kurulan `tekserp_deploy_test` üzerinde **prova edildi**. Prova sonuçları aşağıda
