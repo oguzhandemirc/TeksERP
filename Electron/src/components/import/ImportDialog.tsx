@@ -31,15 +31,26 @@ import {
   type ImportRowResult,
   type ImportTemplateSpec,
 } from "@/services/importService";
-import { mapRows, parseSpreadsheet } from "@/lib/import/parse";
+import {
+  applyMapping,
+  autoMapColumns,
+  missingRequiredOf,
+  parseSpreadsheet,
+  unmatchedHeadersOf,
+  type ColumnMapping,
+  type ParsedFile,
+} from "@/lib/import/parse";
 import { downloadErrorReport, downloadTemplate } from "@/lib/import/template";
+import { formatRowNos, groupIssues } from "@/lib/import/group-issues";
+import { ColumnMappingStep, isMappingValid } from "./ColumnMappingStep";
+import { ImportSpecPreview } from "./ImportSpecPreview";
 
 // Sunucu tavanıyla hizalı (import-coerce.MAX_IMPORT_ROWS). Panelde de kontrol
 // edilir ki kullanıcı 40.000 satırlık bir dosyayı yükleyip 30 sn bekledikten
 // sonra hata almasın.
 const MAX_ROWS = 10000;
 
-type Step = "file" | "preview" | "result";
+type Step = "file" | "map" | "preview" | "result";
 
 interface Props {
   open: boolean;
@@ -60,6 +71,10 @@ interface Props {
 export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
   const [step, setStep] = useState<Step>("file");
   const [file, setFile] = useState<File | null>(null);
+  // Ayrıştırılmış dosya BELLEKTE tutulur: kullanıcı eşlemeyi değiştirince
+  // satırlar yeniden kurulur (dosyayı tekrar okumaya gerek yok).
+  const [parsed, setParsed] = useState<ParsedFile | null>(null);
+  const [mapping, setMapping] = useState<ColumnMapping>([]);
   const [rows, setRows] = useState<ImportRowInput[]>([]);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [parseErrors, setParseErrors] = useState<string[]>([]);
@@ -86,6 +101,8 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
     // Her açılışta temiz başla — yarım kalmış bir önizleme yeni dosyaya karışmasın.
     setStep("file");
     setFile(null);
+    setParsed(null);
+    setMapping([]);
     setRows([]);
     setParseWarnings([]);
     setParseErrors([]);
@@ -115,29 +132,44 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
         setRows([]);
         return;
       }
-      const mapped = mapRows(parsed, spec.columns);
-      const warns: string[] = [];
-      if (mapped.unmatchedHeaders.length > 0) {
-        warns.push(
-          `Şablonda karşılığı olmayan ${mapped.unmatchedHeaders.length} sütun yok sayılacak: ${mapped.unmatchedHeaders.join(", ")}`,
+      const auto = autoMapColumns(parsed, spec.columns);
+      setParsed(parsed);
+      setMapping(auto);
+      setRows(applyMapping(parsed, auto));
+
+      const unmatched = unmatchedHeadersOf(parsed, auto);
+      const missing = missingRequiredOf(spec.columns, auto);
+      // Otomatik eşleme eksik kaldıysa kullanıcıyı EŞLEME adımına al — dosyayı
+      // elle düzenletmek yerine burada düzeltsin (sektör standardı). Kendi
+      // şablonumuzda bu dal hiç çalışmaz, fazladan tık olmaz.
+      if (missing.length > 0 || unmatched.length > 0) {
+        setParseWarnings(
+          missing.length > 0
+            ? [`Zorunlu sütun eşleşmedi: ${missing.map((c) => c.label).join(", ")}`]
+            : [`Şablonda karşılığı olmayan ${unmatched.length} sütun: ${unmatched.join(", ")}`],
         );
-      }
-      if (mapped.missingRequired.length > 0) {
-        setParseErrors([
-          `Dosyada zorunlu sütun(lar) yok: ${mapped.missingRequired.map((c) => c.label).join(", ")}. Şablonu indirip başlıkları oradan kopyalayın.`,
-        ]);
-        setRows([]);
-        setParseWarnings(warns);
+        setStep("map");
         return;
       }
-      setRows(mapped.rows);
-      setParseWarnings(warns);
+      setParseWarnings([]);
     } catch (e) {
       setParseErrors([e instanceof Error ? e.message : "Dosya okunamadı."]);
       setRows([]);
     } finally {
       setBusy(null);
     }
+  };
+
+  const onMappingChange = (next: ColumnMapping) => {
+    setMapping(next);
+    if (parsed) setRows(applyMapping(parsed, next));
+  };
+
+  const resetMapping = () => {
+    if (!parsed || !spec) return;
+    const auto = autoMapColumns(parsed, spec.columns);
+    setMapping(auto);
+    setRows(applyMapping(parsed, auto));
   };
 
   const runPreview = async () => {
@@ -203,6 +235,7 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
           </DialogTitle>
           <DialogDescription>
             {step === "file" && "Şablonu indirin, doldurun, geri yükleyin. Önizleme adımında hiçbir şey kaydedilmez."}
+            {step === "map" && "Dosyandaki sütunları hangi alana yazacağımızı seç."}
             {step === "preview" && "Satır satır ne olacağını gösterir. 'Uygula' demeden hiçbir kayıt değişmez."}
             {step === "result" && "İşlem tamamlandı."}
           </DialogDescription>
@@ -225,6 +258,16 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
             busy={busy}
             onPick={() => fileInputRef.current?.click()}
           />
+        ) : step === "map" ? (
+          parsed ? (
+            <ColumnMappingStep
+              parsed={parsed}
+              columns={spec.columns}
+              mapping={mapping}
+              onChange={onMappingChange}
+              onReset={resetMapping}
+            />
+          ) : null
         ) : step === "preview" ? (
           <PreviewStep
             preview={preview}
@@ -264,13 +307,37 @@ export function ImportDialog({ open, onOpenChange, entity, onDone }: Props) {
                 <FileSpreadsheet className="h-4 w-4" /> Şablonu indir
               </Button>
             )}
-            {step === "preview" && (
+            {step === "map" && (
               <Button variant="ghost" onClick={() => setStep("file")} disabled={busy !== null}>
+                Geri
+              </Button>
+            )}
+            {step === "preview" && (
+              <Button
+                variant="ghost"
+                onClick={() => setStep(parsed ? "map" : "file")}
+                disabled={busy !== null}
+              >
                 Geri
               </Button>
             )}
           </div>
           <div className="flex items-center gap-2">
+            {/* Eşleme adımı otomatik açılmasa da her zaman elle açılabilir —
+                kullanıcı "bu sütun nereye gitti" sorusunu sorabilmeli. */}
+            {step === "file" && parsed && (
+              <Button variant="ghost" onClick={() => setStep("map")} disabled={busy !== null}>
+                Sütun eşlemesini düzenle
+              </Button>
+            )}
+            {step === "map" && spec && (
+              <Button
+                onClick={() => setStep("file")}
+                disabled={busy !== null || !isMappingValid(spec.columns, mapping)}
+              >
+                <ArrowRight className="h-4 w-4" /> Devam
+              </Button>
+            )}
             {step === "file" && (
               <Button onClick={() => void runPreview()} disabled={rows.length === 0 || busy !== null}>
                 {busy === "preview" ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
@@ -352,15 +419,15 @@ function FileStep({
         </p>
       ))}
 
-      <details className="rounded-md border p-2 text-xs text-muted-foreground">
-        <summary className="cursor-pointer font-medium">Kurallar</summary>
-        <ul className="mt-1 space-y-0.5 pl-4">
-          {spec.notes.map((n) => (
-            <li key={n} className="list-disc">
-              {n}
-            </li>
-          ))}
-        </ul>
+      {/* Şablonun İÇERİĞİ burada — indirip Excel'de açmadan "hangi sütunlar,
+          hangileri zorunlu, kabul edilen değerler ne" sorusu cevaplanır. */}
+      <details className="rounded-md border p-2">
+        <summary className="cursor-pointer text-xs font-medium">
+          Şablon içeriği — sütunlar, zorunlular, kabul edilen değerler
+        </summary>
+        <div className="mt-2">
+          <ImportSpecPreview spec={spec} />
+        </div>
       </details>
     </div>
   );
@@ -441,6 +508,8 @@ function PreviewStep({
         </div>
       )}
 
+      <IssueSummary rows={preview.rows} />
+
       <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
         <Checkbox checked={onlyProblems} onCheckedChange={(v) => setOnlyProblems(Boolean(v))} />
         Yalnız hatalı/uyarılı satırları göster
@@ -506,6 +575,46 @@ function PreviewStep({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/**
+ * SORUN ÖZETİ — "200 hatalı satır" yerine "3 farklı sorun".
+ *
+ * Satır satır liste doğru ama okunmaz: kullanıcı aynı cümleyi 200 kez okuyup
+ * TEK bir kök nedeni aramak zorunda kalıyor. Sınıfa göre toplamak, düzeltilecek
+ * ŞEYİ gösterir (ör. "12 satırda renk bulunamadı — MAVI, KIRMIZI").
+ */
+function IssueSummary({ rows }: { rows: ImportRowResult[] }) {
+  const groups = useMemo(() => groupIssues(rows), [rows]);
+  if (groups.length === 0) return null;
+  return (
+    <div className="space-y-1 rounded-md border p-2">
+      <p className="text-xs font-medium">
+        {groups.length} farklı sorun ({groups.filter((g) => g.kind === "error").length} hata ·{" "}
+        {groups.filter((g) => g.kind === "warning").length} uyarı)
+      </p>
+      <ul className="space-y-1">
+        {groups.map((g) => (
+          <li key={g.key} className="flex items-start gap-1.5 text-xs">
+            {g.kind === "error" ? (
+              <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-destructive" />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning" />
+            )}
+            <span>
+              <strong>{g.rowNos.length} satır</strong> — {g.sample}
+              {g.values.length > 1 && (
+                <span className="text-muted-foreground"> · Değerler: {g.values.slice(0, 6).join(", ")}
+                  {g.values.length > 6 ? ` (+${g.values.length - 6})` : ""}
+                </span>
+              )}
+              <span className="block text-muted-foreground">Satırlar: {formatRowNos(g.rowNos)}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

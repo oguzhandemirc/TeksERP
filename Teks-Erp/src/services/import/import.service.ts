@@ -616,19 +616,39 @@ export class ImportService {
     return run;
   }
 
-  /** Round-trip dışa aktarım: aynı sütunlarla mevcut kayıtlar. */
-  static async exportRows(entity: string): Promise<{
+  /**
+   * Round-trip dışa aktarım: aynı sütunlarla mevcut kayıtlar.
+   *
+   * `limit` ÖNİZLEME içindir ("indirmeden önce ilk N satıra bak"). Adaptörler
+   * kendi `exportRows()`unda tümünü üretir — kesme burada yapılır; `total`
+   * her zaman GERÇEK toplamı söyler, yoksa kullanıcı 10 kayıt var sanır.
+   * ⚠️ Bu bir sayfalama DEĞİL: indirme yolu limitsiz çağırır. Bugünkü hacimde
+   * (en büyük varlık 194 satır / 28 KB) tümünü üretip kesmek ölçülebilir bir
+   * maliyet değil; sipariş/top ölçeğinde bir varlık eklenirse adaptörün
+   * kendisi `take` almalı — o gün burası da imzayı geçirir.
+   */
+  static async exportRows(
+    entity: string,
+    opts?: { limit?: number },
+  ): Promise<{
     entity: string;
     label: string;
     columns: ImportColumn[];
     rows: Array<Record<string, string>>;
+    total: number;
+    truncated: boolean;
   }> {
     const adapter = getImportAdapter(entity);
+    const all = await adapter.exportRows();
+    const limit = opts?.limit;
+    const rows = limit && limit > 0 ? all.slice(0, limit) : all;
     return {
       entity: adapter.entity,
       label: adapter.label,
       columns: adapter.columns,
-      rows: await adapter.exportRows(),
+      rows,
+      total: all.length,
+      truncated: rows.length < all.length,
     };
   }
 }

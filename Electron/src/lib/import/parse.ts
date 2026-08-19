@@ -189,43 +189,65 @@ export async function parseSpreadsheet(file: File): Promise<ParsedFile> {
 }
 
 /**
- * Başlıkları şablon sütunlarına eşler (etikete göre, Türkçe-duyarsız; sütun
- * ANAHTARI da kabul edilir ki dışa aktarılan ham dosya da yüklenebilsin).
- * Karşılığı olmayan sütunlar DÜŞÜRÜLÜR ama kullanıcıya SÖYLENİR — sessizce
- * yok saymak "yükledim ama o alan boş kaldı" şikayetinin kaynağıdır.
+ * SÜTUN EŞLEMESİ — dosya başlığı → şablon sütunu.
+ *
+ * Dizinin i. elemanı, dosyanın i. sütununun hangi şablon sütununa gittiğini
+ * söyler (`null` = yok sayılacak). Ayrı bir tip olmasının sebebi kullanıcının
+ * bunu DÜZENLEYEBİLMESİ: dosya bizim şablonumuzsa otomatik eşleme yeter, ama
+ * müşterinin kendi Excel'inde başlık "Kumaş Kodu" değil "ÜRÜN" olur ve elle
+ * eşleme sektör standardıdır (Odoo / NetSuite / Salesforce / Dynamics hepsinde
+ * açık bir eşleme adımı vardır).
  */
-export function mapRows(parsed: ParsedFile, columns: ImportColumn[]): MappedRows {
+export type ColumnMapping = Array<string | null>;
+
+/**
+ * Başlıkları şablon sütunlarına OTOMATİK eşler (etikete göre, Türkçe-duyarsız;
+ * sütun ANAHTARI da kabul edilir ki dışa aktarılan ham dosya da yüklenebilsin).
+ */
+export function autoMapColumns(parsed: ParsedFile, columns: ImportColumn[]): ColumnMapping {
   const byLabel = new Map<string, ImportColumn>();
   for (const c of columns) {
     byLabel.set(headerKey(c.label), c);
     byLabel.set(headerKey(c.key), c);
   }
+  return parsed.headers.map((h) => (h ? (byLabel.get(headerKey(h))?.key ?? null) : null));
+}
 
-  const colOfIndex: Array<ImportColumn | null> = [];
-  const unmatched: string[] = [];
-  parsed.headers.forEach((h, i) => {
-    if (!h) {
-      colOfIndex[i] = null;
-      return;
-    }
-    const col = byLabel.get(headerKey(h)) ?? null;
-    colOfIndex[i] = col;
-    if (!col) unmatched.push(h);
-  });
-
-  const present = new Set(colOfIndex.filter(Boolean).map((c) => c!.key));
-  const missingRequired = columns.filter((c) => c.required && !c.readOnly && !present.has(c.key));
-
-  const rows: ImportRowInput[] = parsed.rows.map((r) => {
+/** Eşlemeye göre satırları kurar. Eşlenmemiş sütun DÜŞER. */
+export function applyMapping(parsed: ParsedFile, mapping: ColumnMapping): ImportRowInput[] {
+  return parsed.rows.map((r) => {
     const cells: Record<string, string> = {};
-    colOfIndex.forEach((col, i) => {
-      if (!col) return;
+    mapping.forEach((key, i) => {
+      if (!key) return;
       const raw = r.cells[i];
       if (raw === undefined) return;
-      cells[col.key] = String(raw);
+      cells[key] = String(raw);
     });
     return { rowNo: r.rowNo, cells };
   });
+}
 
-  return { rows, unmatchedHeaders: unmatched, missingRequired };
+/** Eşlenmemiş dosya başlıkları — sessizce düşmesinler diye raporlanır. */
+export function unmatchedHeadersOf(parsed: ParsedFile, mapping: ColumnMapping): string[] {
+  return parsed.headers.filter((h, i) => Boolean(h) && !mapping[i]);
+}
+
+/** Eşlemede karşılığı olmayan ZORUNLU şablon sütunları. */
+export function missingRequiredOf(columns: ImportColumn[], mapping: ColumnMapping): ImportColumn[] {
+  const present = new Set(mapping.filter(Boolean) as string[]);
+  return columns.filter((c) => c.required && !c.readOnly && !present.has(c.key));
+}
+
+/**
+ * Otomatik eşleme + satır kurulumu (tek adım).
+ * Karşılığı olmayan sütunlar DÜŞÜRÜLÜR ama kullanıcıya SÖYLENİR — sessizce
+ * yok saymak "yükledim ama o alan boş kaldı" şikayetinin kaynağıdır.
+ */
+export function mapRows(parsed: ParsedFile, columns: ImportColumn[]): MappedRows {
+  const mapping = autoMapColumns(parsed, columns);
+  return {
+    rows: applyMapping(parsed, mapping),
+    unmatchedHeaders: unmatchedHeadersOf(parsed, mapping),
+    missingRequired: missingRequiredOf(columns, mapping),
+  };
 }

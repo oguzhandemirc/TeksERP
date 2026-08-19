@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Upload, XCircle } from "lucide-react";
-import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -10,7 +9,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { ImportDialog } from "@/components/import/ImportDialog";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import { ConfigBundleCard } from "./ConfigBundleCard";
-import { downloadTemplate } from "@/lib/import/template";
+import { EntityPreviewDialog } from "@/components/import/EntityPreviewDialog";
 import { importService, type ImportEntityInfo, type ImportRunRow } from "@/services/importService";
 import { safeFormat } from "@/lib/format";
 import type { ExportColumn } from "@/lib/list-export";
@@ -28,7 +27,10 @@ import type { ExportColumn } from "@/lib/list-export";
  */
 export function DataImportPage() {
   const [importEntity, setImportEntity] = useState<string | null>(null);
-  const [busyEntity, setBusyEntity] = useState<string | null>(null);
+  // Şablon ve veri artık DOĞRUDAN inmiyor: önce ne indireceğini gösteren bir
+  // önizleme açılıyor, indirme düğmesi onun içinde. Bir tık ekliyor, yanlış
+  // dosyayı indirip Excel'de açma turunu kaldırıyor.
+  const [preview, setPreview] = useState<{ entity: string; mode: "template" | "data" } | null>(null);
 
   const entitiesQuery = useQuery({
     queryKey: ["import-entities"],
@@ -44,44 +46,6 @@ export function DataImportPage() {
 
   const entities = entitiesQuery.data?.data ?? [];
   const runs = runsQuery.data?.data ?? [];
-
-  const onTemplate = async (e: ImportEntityInfo) => {
-    setBusyEntity(e.entity);
-    try {
-      const spec = await importService.template(e.entity);
-      await downloadTemplate(spec.data);
-    } catch {
-      toast.error("Şablon indirilemedi.");
-    } finally {
-      setBusyEntity(null);
-    }
-  };
-
-  // Round-trip veri indirme: içe aktarım şablonuyla AYNI sütunlar → indir,
-  // düzenle, geri yükle. Liste ekranlarındaki "İndir"den farklıdır (o ekrandaki
-  // sütunları basar ve geri yüklenemez).
-  const onExportData = async (e: ImportEntityInfo) => {
-    setBusyEntity(e.entity);
-    try {
-      const res = await importService.exportData(e.entity);
-      const { columns, rows } = res.data;
-      if (rows.length === 0) {
-        toast.info("Aktarılacak kayıt yok.");
-        return;
-      }
-      const { exportRowsToXlsx } = await import("@/lib/list-export");
-      const cols: ExportColumn<Record<string, string>>[] = columns
-        .filter((c) => !c.readOnly)
-        .map((c) => ({ label: c.label, value: (r) => r[c.key] ?? "" }));
-      await exportRowsToXlsx(cols, rows, `${res.data.label} - veri`, [
-        "Bu dosya içe aktarım şablonuyla AYNI sütunları taşır — düzenleyip geri yükleyebilirsiniz.",
-      ]);
-    } catch {
-      toast.error("Veri indirilemedi.");
-    } finally {
-      setBusyEntity(null);
-    }
-  };
 
   return (
     <PageShell>
@@ -120,20 +84,20 @@ export function DataImportPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!e.canWrite || busyEntity !== null}
-                  title={e.canWrite ? undefined : "Bu veriye yazma yetkiniz yok"}
-                  onClick={() => void onTemplate(e)}
+                  disabled={!e.canWrite}
+                  title={e.canWrite ? "Şablonun sütunlarını ve kurallarını gör" : "Bu veriye yazma yetkiniz yok"}
+                  onClick={() => setPreview({ entity: e.entity, mode: "template" })}
                 >
                   <FileSpreadsheet className="h-3.5 w-3.5" /> Şablon
                 </Button>
                 <Button
                   size="sm"
                   variant="outline"
-                  disabled={!e.canRead || busyEntity !== null}
-                  title={e.canRead ? "Mevcut kayıtları şablon biçiminde indir" : "Okuma yetkiniz yok"}
-                  onClick={() => void onExportData(e)}
+                  disabled={!e.canRead}
+                  title={e.canRead ? "Mevcut kayıtları şablon biçiminde gör ve indir" : "Okuma yetkiniz yok"}
+                  onClick={() => setPreview({ entity: e.entity, mode: "data" })}
                 >
-                  <Download className="h-3.5 w-3.5" /> Veriyi indir
+                  <Download className="h-3.5 w-3.5" /> Veriyi gör
                 </Button>
                 <Button
                   size="sm"
@@ -205,6 +169,15 @@ export function DataImportPage() {
           </table>
         </div>
       )}
+
+      {preview ? (
+        <EntityPreviewDialog
+          open={Boolean(preview)}
+          onOpenChange={(o) => !o && setPreview(null)}
+          entity={preview.entity}
+          mode={preview.mode}
+        />
+      ) : null}
 
       {importEntity ? (
         <ImportDialog

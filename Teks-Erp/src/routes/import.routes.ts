@@ -285,7 +285,13 @@ router.get(
   requireEntityRead,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      res.json({ success: true, data: await ImportService.exportRows(String(req.params.entity)) });
+      // `?limit=N` → önizleme (ilk N satır + gerçek toplam). Limitsiz = indirme.
+      const rawLimit = Number(req.query.limit);
+      const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : undefined;
+      res.json({
+        success: true,
+        data: await ImportService.exportRows(String(req.params.entity), { limit }),
+      });
     } catch (e) {
       next(e);
     }

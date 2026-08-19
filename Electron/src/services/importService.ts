@@ -134,6 +134,10 @@ export interface ImportExportPayload {
   label: string;
   columns: ImportColumn[];
   rows: Array<Record<string, string>>;
+  /** Varlıktaki GERÇEK kayıt sayısı (limit uygulansa bile). */
+  total: number;
+  /** true → `rows` kırpıldı (önizleme). */
+  truncated: boolean;
 }
 
 const base = "/api/import";
@@ -169,7 +173,14 @@ export const importService = {
   run: (id: string): Promise<ApiResponse<ImportRunDetail>> =>
     apiClient.get<ApiResponse<ImportRunDetail>>(`${base}/runs/${id}`).then((r) => r.data),
 
-  /** Round-trip veri dışa aktarımı (içe aktarım şablonuyla aynı sütunlar). */
-  exportData: (entity: string): Promise<ApiResponse<ImportExportPayload>> =>
-    apiClient.get<ApiResponse<ImportExportPayload>>(`${base}/${entity}/export`).then((r) => r.data),
+  /**
+   * Round-trip veri dışa aktarımı (içe aktarım şablonuyla aynı sütunlar).
+   * `limit` verilirse ÖNİZLEME: ilk N satır döner, `total` yine gerçek toplamdır.
+   */
+  exportData: (entity: string, limit?: number): Promise<ApiResponse<ImportExportPayload>> =>
+    apiClient
+      .get<ApiResponse<ImportExportPayload>>(`${base}/${entity}/export`, {
+        params: limit ? { limit } : {},
+      })
+      .then((r) => r.data),
 };
