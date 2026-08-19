@@ -108,8 +108,8 @@ npx tsx scripts/test_schema_drift.ts
 
 ## 0) Bu deploy'da ne var — 18 migration, dört iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **18 bekleyen** gösteriyor
-(ölçüldü). Dördü ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **19 bekleyen** gösteriyor.
+Beşi ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -121,6 +121,7 @@ npx tsx scripts/test_schema_drift.ts
 | 14-16 | `20260819034413` · `20260819034951` · `20260819035418` | Audit derinleştirme: `system_logs.updatedAt` DROP, `changes`, `deviceId` |
 | 17 | `20260819060000_search_fold` | **Arama katlaması** — 31 gölge kolon, 9 trigram GIN, 18 kolona Türkçe collation |
 | 18 | `20260819120000_import_runs` | **Veri aktarımı** — yeni tablo + enum (mevcut tabloya dokunmaz) |
+| 19 | `20260819140000_alias_search` | **Müşteri alias'ı aranabilir** — iki alias tablosuna gölge kolon + index |
 
 Diğer notlar (arka plan; deploy adımı içermezler):
 `SURUM-2026-08-09-RAPORLAR-DEPLOY.md` · `SURUM-2026-08-10-KAT-KATALOGU-DEPLOY.md` ·
@@ -132,7 +133,7 @@ Diğer notlar (arka plan; deploy adımı içermezler):
 
 | Ölçüm | Sonuç |
 |---|---|
-| 18 migration | **Hatasız**, toplam **~1 sn** (tablolar küçük: 806 top · 4.449 log · 485 hareket · 190 sipariş) |
+| 19 migration | **Hatasız**, toplam **~1 sn** (tablolar küçük: 806 top · 4.449 log · 485 hareket · 190 sipariş) |
 | Backend 2.9.0 | **Kalktı**, `/health` → `db: UP` |
 | Arama (gerçek veri) | `sahin` → ADNAN ŞAHİN ÜRETİM · `akkus` → AKKUŞ TEKSTİL |
 | Eksik izin | **2 tane**: `data:import`, `mobile:kk1-yari-mamul` |
@@ -144,12 +145,12 @@ Diğer notlar (arka plan; deploy adımı içermezler):
 
 ```powershell
 cd C:\...\Teks-Erp
-npx prisma migrate status         # 18 bekleyen görmelisin
+npx prisma migrate status         # 19 bekleyen görmelisin
 git log --oneline -1              # beklenen commit sende mi
 pm2 list                          # süreç adını NOT AL (aşağıda gerekiyor)
 ```
 
-> `migrate status` **18'den fazla** gösteriyorsa bu not yazıldıktan sonra yeni
+> `migrate status` **19'dan fazla** gösteriyorsa bu not yazıldıktan sonra yeni
 > migration eklenmiş demektir; sapma değildir ama listeyi gözden geçir.
 
 ---
@@ -219,8 +220,8 @@ Beklenen (hepsi provada ölçüldü):
 |---|---|
 | `pg_extension` | `plpgsql`, `pg_trgm` |
 | `tr_fold` volatility | `i` (IMMUTABLE) |
-| `tr_sort` | var; `collprovider` `i` (ICU) **veya** `c` (libc) |
-| GENERATED kolon | **31** |
+| `tr_sort` | var; `collprovider` `i` (ICU) **veya** `c` (libc). ICU ise sayı-duyarlı |
+| GENERATED kolon | **33** (31 + 2 alias) |
 | `customers.nameFold` | `ADNAN ŞAHİN ÜRETİM` → `adnan sahin uretim` |
 | `import_runs` | 17 kolon + 5 index; enum `APPLIED, PARTIAL, FAILED` |
 | `system_logs` | `changes` ve `deviceId` VAR, `updatedAt` **YOK** |
@@ -362,8 +363,20 @@ doğrusu budur.
 firma üç yazımla giriliyordu. **Geçmiş kayıtlara dokunulmaz**, yalnız yeni yazımlar
 engellenir.
 
+### 9c-2) Müşterinin verdiği ad da aranabiliyor
+Müşteri "BELLE'den 200 metre" dediğinde artık o adı yazan kişi bizim `18152`
+kumaşını buluyor (canlı veride 19 alias var). Sonuç listesi her zaman BİZİM
+adımızı gösterir.
+
+### 9c-3) Yeni kayıt açarken "benzer kayıtlar" uyarısı çıkabilir
+Müşteri/Kumaş formunda ad yazarken benzer kayıtlar sarı bir kutuda listelenir.
+**Bu bir engel DEĞİLDİR** — operatör kaydetmeye devam edebilir. Amaç, aynı
+firmanın ikinci kez açılmasını yazarken fark ettirmek. Yalnız BİREBİR aynı ad
+kaydetmede 409 ile reddedilir (eskiden de öyleydi).
+
 ### 9c) Listeler artık Türkçe sıralanıyor
-ICU varsa: `Cebeci < Ceyhan < Çanakkale < Işık < İnci < Zonguldak`.
+ICU varsa: `Cebeci < Ceyhan < Çanakkale < Işık < İnci < Zonguldak` — ayrıca
+**sayı-duyarlı**: `P2 < P10` (sözlüksel sırada tersi görünürdü).
 **Öncesi (C locale):** `… Zonguldak < Çanakkale < İnci` — yani Ç/Ğ/İ/Ö/Ş/Ü ile
 başlayan **her ad listenin en sonundaydı**. Birçok "kayıt yok" şikayetinin sebebi
 buydu.
