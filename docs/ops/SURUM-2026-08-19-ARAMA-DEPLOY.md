@@ -64,6 +64,15 @@ migration uygulanmış olur — bu güvenlidir, yarım kalan tek şey aramadır)
 | 12-13 | `20260819023127`, `20260819032151` | **Künye** (kim oluşturdu/değiştirdi) — 27 modele kolon |
 | 14 | `20260819034413_systemlog_drop_updatedat` | `system_logs.updatedAt` DROP |
 | 15 | `20260819060000_search_fold` | **Arama katlaması** — bu notun ana konusu |
+| 16 | `20260819034951_systemlog_changes` | `system_logs.changes` — alan-bazlı değişiklik (audit Faz B2) |
+| 17 | `20260819035418_systemlog_device` | `system_logs.deviceId` — olayın cihazı (audit Faz B3) |
+
+> ℹ️ **16-17 bu not yazıldıktan SONRA eklendi** (audit derinleştirme B2/B3).
+> İkisi de tek nullable kolon; tablo yeniden yazımı yok, index eklemiyor,
+> prova sonucunu değiştirmez. `migrate status` provadaki 15 yerine **17**
+> bekleyen gösterecek — bu beklenen durumdur, sapma değil.
+>
+> Backend `package.json` sürümü bu turda **2.7.0 → 2.8.0** yükseltildi.
 
 > ⚠️ Yani bu **yalnız arama sürümü değil**. Fabrikaya "arama düzeldi" derken
 > künye, sapma defteri ve kat kataloğu da aynı anda canlıya çıkıyor. Onların
