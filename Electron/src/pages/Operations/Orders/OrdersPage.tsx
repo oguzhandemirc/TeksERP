@@ -32,6 +32,7 @@ import { useTabsStore } from "@/store/tabs";
 import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { type OrderFormValues } from "./schema";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 const FILTERS: FilterDef[] = [
   {
@@ -72,10 +73,7 @@ const FILTERS: FilterDef[] = [
     queryKey: "branch-lookup",
     placeholderNoParent: "Şube (önce müşteri)",
     fetchOptions: (customerId) =>
-      branchLookupService
-        .getAll({
-          page: 1,
-          pageSize: 200,
+      loadAllForPicker(branchLookupService, {
           sortBy: "name",
           sortOrder: "asc",
           filters: { isActive: "true", customerId },

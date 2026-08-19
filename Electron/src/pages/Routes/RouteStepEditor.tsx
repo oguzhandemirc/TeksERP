@@ -29,6 +29,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { Subcontractor } from "@/pages/Subcontractors/types";
 import { RouteStepTargets } from "./RouteStepTargets";
 import { newClientId, type RouteStepFormValues } from "./schema";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   value: RouteStepFormValues[];
@@ -42,13 +43,11 @@ async function fetchFavoriteFirms(qc: QueryClient): Promise<Subcontractor[]> {
     const res = await qc.fetchQuery({
       queryKey: ["subcontractors", "favorites"],
       queryFn: () =>
-        subcontractorService.getAll({
-          page: 1,
-          pageSize: 100,
+        loadAllForPicker(subcontractorService, {
           sortBy: "name",
           sortOrder: "asc",
           filters: { isFavorite: "true", isActive: "true" },
-        }),
+          }),
       staleTime: 60_000,
     });
     return res.data ?? [];

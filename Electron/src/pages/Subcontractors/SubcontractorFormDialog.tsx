@@ -13,6 +13,7 @@ import {
   type SubcontractorFormValues,
 } from "./schema";
 import type { Subcontractor } from "./types";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   open: boolean;
@@ -45,9 +46,7 @@ export function SubcontractorFormDialog({
   const categories = useQuery({
     queryKey: ["subcontractor-categories", "all-active"],
     queryFn: () =>
-      subcontractorCategoryService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(subcontractorCategoryService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },

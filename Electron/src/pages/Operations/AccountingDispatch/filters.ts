@@ -2,6 +2,7 @@ import type { FilterDef } from "@/components/data-table/FilterBar";
 import { customerService } from "@/pages/Customers/service";
 import { branchLookupService } from "@/pages/Operations/Shipments/service";
 import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 /**
  * Muhasebe listesi süzgeçleri. Sayfa 200 satır sınırında kalsın diye ayrı dosya.
@@ -23,10 +24,7 @@ export const ACCOUNTING_FILTERS: FilterDef[] = [
     queryKey: "branch-lookup",
     placeholderNoParent: "Şube (önce müşteri)",
     fetchOptions: (customerId) =>
-      branchLookupService
-        .getAll({
-          page: 1,
-          pageSize: 200,
+      loadAllForPicker(branchLookupService, {
           sortBy: "name",
           sortOrder: "asc",
           filters: { isActive: "true", customerId },

@@ -2,6 +2,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 /** `filter[x]=a,b` → ["a","b"]; boş/yok → []. */
 function idList(csv: string | null): string[] {
@@ -36,9 +37,7 @@ export function useFasonScopeLabel(active: boolean): string | null {
   const firmsQ = useQuery({
     queryKey: ["subcontractors", "filter-lookup-multi", undefined],
     queryFn: () =>
-      subcontractorService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(subcontractorService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },
@@ -49,9 +48,7 @@ export function useFasonScopeLabel(active: boolean): string | null {
   const catsQ = useQuery({
     queryKey: ["subcontractor-categories", "filter-lookup-multi", undefined],
     queryFn: () =>
-      subcontractorCategoryService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(subcontractorCategoryService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },

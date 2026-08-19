@@ -19,6 +19,7 @@ import { FabricPropertyFormDialog } from "@/pages/FabricProperties/FabricPropert
 import type { FabricPropertyFormValues } from "@/pages/FabricProperties/schema";
 import type { FabricProperty } from "@/pages/FabricProperties/types";
 import { nextSortOrder } from "@/lib/sort-order";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   open: boolean;
@@ -44,9 +45,7 @@ export function AllowedPropertiesDialog({
   const propsQ = useQuery({
     queryKey: PROPS_QUERY_KEY,
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" , valueType: "FLAG" },

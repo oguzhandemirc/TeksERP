@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { MultiSelectCheckboxList, type MultiSelectItem } from "@/components/forms/MultiSelectCheckboxList";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { stationCapabilityService } from "./service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import {
   STATION_PROPERTY_MODE_HINTS,
   STATION_PROPERTY_MODE_LABELS,
@@ -45,9 +46,7 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   const propsQuery = useQuery({
     queryKey: ["fabric-properties", "all-active"],
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" },

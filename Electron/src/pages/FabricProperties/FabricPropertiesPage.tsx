@@ -6,14 +6,13 @@ import { fabricPropertyService } from "./service";
 import { FabricPropertyFormDialog } from "./FabricPropertyFormDialog";
 import type { FabricProperty } from "./types";
 import type { FabricPropertyFormValues } from "./schema";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 export function FabricPropertiesPage() {
   const allQ = useQuery({
     queryKey: ["fabric-properties", "all-for-sort"],
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "desc",
         filters: {},

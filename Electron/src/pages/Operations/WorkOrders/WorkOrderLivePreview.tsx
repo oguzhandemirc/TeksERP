@@ -21,6 +21,7 @@ import type { WorkOrderFormValues } from "./schema";
 import type { DesignerStep } from "./RouteDesignerDialog";
 import { LastBatchBadge } from "./LastBatchBadge";
 import type { PickedOrderLine } from "./OrderPickerDialog";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   control: Control<WorkOrderFormValues>;
@@ -93,9 +94,7 @@ export function WorkOrderLivePreview({
   const propsQ = useQuery({
     queryKey: ["fabric-properties", "all"],
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" },

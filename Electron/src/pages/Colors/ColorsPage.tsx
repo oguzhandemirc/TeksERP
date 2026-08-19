@@ -7,14 +7,13 @@ import { ColorFormDialog } from "./ColorFormDialog";
 import { BulkColorAddDialog } from "./BulkColorAddDialog";
 import type { Color } from "./types";
 import type { ColorFormValues } from "./schema";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 export function ColorsPage() {
   const allQ = useQuery({
     queryKey: ["colors", "all-for-sort"],
     queryFn: () =>
-      colorService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(colorService, {
         sortBy: "sortOrder",
         sortOrder: "desc",
         filters: {},

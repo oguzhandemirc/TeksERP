@@ -16,6 +16,7 @@ import { FormField } from "@/components/forms/FormField";
 import { colorService } from "@/pages/Colors/service";
 import { workOrderService } from "./service";
 import type { RollAttributeTarget } from "./types";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 type Mode = "color" | "width";
 
@@ -71,9 +72,7 @@ export function ChangeTargetDialog({
   const colorsQ = useQuery({
     queryKey: ["colors", "all-active"],
     queryFn: () =>
-      colorService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(colorService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },

@@ -7,6 +7,7 @@ import { stationService } from "@/pages/Stations/service";
 import { routeService } from "@/pages/Routes/service";
 import { subcontractorService } from "@/pages/Subcontractors/service";
 import type { DesignerStep } from "./RouteDesignerDialog";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 let counter = 0;
 const newClientId = () => `ds-${Date.now()}-${++counter}`;
@@ -208,9 +209,7 @@ export function useDesignerSteps(initialSteps?: DesignerStep[]) {
       const res = await qc.fetchQuery({
         queryKey: ["subcontractors", "favorites"],
         queryFn: () =>
-          subcontractorService.getAll({
-            page: 1,
-            pageSize: 100,
+          loadAllForPicker(subcontractorService, {
             sortBy: "name",
             sortOrder: "asc",
             filters: { isFavorite: "true", isActive: "true" },

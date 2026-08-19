@@ -14,6 +14,7 @@ import {
 import { MultiSelectCheckboxList, type MultiSelectItem } from "@/components/forms/MultiSelectCheckboxList";
 import { useItemDetail } from "@/pages/Items/useItemDetail";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   /** Seçili Item ID — allowedProperties filter kaynağı. Boşsa popover disabled. */
@@ -43,9 +44,7 @@ export function LineRequiredPropertiesEditor({ itemId, value, onChange, extraAct
   const propsQ = useQuery({
     queryKey: ["fabric-properties", "targetable"], // SEÇİM tipliler süzülü — RouteEditor "all" anahtarını ham liste için kullanıyor, aynı anahtarı paylaşmak ona eksik liste servis ederdi
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" , valueType: "FLAG" },

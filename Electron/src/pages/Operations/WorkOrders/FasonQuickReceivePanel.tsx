@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { colorService } from "@/pages/Colors/service";
 import { workOrderService } from "./service";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 type Mode = "MERGE" | "ONE_TO_ONE";
 
@@ -55,9 +56,7 @@ export function FasonQuickReceivePanel({ workOrderId, onReceived }: Props) {
   const colorsQ = useQuery({
     queryKey: ["colors", "all-active"],
     queryFn: () =>
-      colorService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(colorService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },

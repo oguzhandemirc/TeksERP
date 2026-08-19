@@ -8,6 +8,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { itemService } from "@/pages/Items/service";
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { QuickAddProperty } from "./QuickAddProperty";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   /** Seçili Item ID — boşsa "önce kumaş seç" mesajı gösterilir. */
@@ -53,9 +54,7 @@ export function PropertyChipsField({
   const propsQ = useQuery({
     queryKey: ["fabric-properties", "targetable"], // SEÇİM tipliler süzülü — RouteEditor "all" anahtarını ham liste için kullanıyor, aynı anahtarı paylaşmak ona eksik liste servis ederdi
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" , valueType: "FLAG" },

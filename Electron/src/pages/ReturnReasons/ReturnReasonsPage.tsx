@@ -6,14 +6,13 @@ import { returnReasonService } from "./service";
 import { ReturnReasonFormDialog } from "./ReturnReasonFormDialog";
 import type { ReturnReason } from "./types";
 import type { ReturnReasonFormValues } from "./schema";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 export function ReturnReasonsPage() {
   const allQ = useQuery({
     queryKey: ["return-reasons", "all-for-sort"],
     queryFn: () =>
-      returnReasonService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(returnReasonService, {
         sortBy: "sortOrder",
         sortOrder: "desc",
         filters: {},

@@ -19,6 +19,7 @@ import { ColorFormDialog } from "@/pages/Colors/ColorFormDialog";
 import type { ColorFormValues } from "@/pages/Colors/schema";
 import type { Color } from "@/pages/Colors/types";
 import { nextSortOrder } from "@/lib/sort-order";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   open: boolean;
@@ -41,9 +42,7 @@ export function AllowedColorsDialog({
   const colorsQ = useQuery({
     queryKey: COLORS_QUERY_KEY,
     queryFn: () =>
-      colorService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(colorService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },

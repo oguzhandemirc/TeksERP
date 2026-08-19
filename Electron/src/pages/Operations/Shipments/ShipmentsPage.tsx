@@ -30,6 +30,7 @@ import { shipmentService, branchLookupService } from "./service";
 import { shipmentStatusLabels, type ShipmentListItem, type BranchLookupItem } from "./types";
 import { ShipmentDetailSheet } from "./ShipmentDetailSheet";
 import { DirectShipmentDetailSheet } from "./DirectShipmentDetailSheet";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 const QUERY_KEY = "shipments";
 
@@ -76,10 +77,7 @@ const FILTERS: FilterDef[] = [
     queryKey: "branch-lookup",
     placeholderNoParent: "Şube (önce müşteri)",
     fetchOptions: (customerId) =>
-      branchLookupService
-        .getAll({
-          page: 1,
-          pageSize: 200,
+      loadAllForPicker(branchLookupService, {
           sortBy: "name",
           sortOrder: "asc",
           filters: { isActive: "true", customerId },

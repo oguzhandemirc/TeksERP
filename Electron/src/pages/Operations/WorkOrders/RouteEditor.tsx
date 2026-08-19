@@ -46,6 +46,7 @@ import {
 import { RouteStepDetail, type RouteTargetBinding } from "./RouteStepDetail";
 import { deriveStepTargets, type RouteStepTargetPlan } from "./workOrderPrefill";
 import type { DesignerStep } from "./RouteDesignerDialog";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 interface Props {
   steps: DesignerStep[];
@@ -210,9 +211,7 @@ export function RouteEditor({
   const allPropsQ = useQuery({
     queryKey: ["fabric-properties", "all"],
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" },

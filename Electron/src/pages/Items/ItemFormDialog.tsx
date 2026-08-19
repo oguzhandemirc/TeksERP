@@ -36,6 +36,7 @@ import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
 import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
+import { loadAllForPicker } from "@/lib/picker-loader";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -98,9 +99,7 @@ export function ItemFormDialog({
   const colorsQ = useQuery({
     queryKey: ["colors", "all-active"],
     queryFn: () =>
-      colorService.getAll({
-        page: 1,
-        pageSize: 500,
+      loadAllForPicker(colorService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },
@@ -112,9 +111,7 @@ export function ItemFormDialog({
   const propsQ = useQuery({
     queryKey: ["fabric-properties", "all-active"],
     queryFn: () =>
-      fabricPropertyService.getAll({
-        page: 1,
-        pageSize: 200,
+      loadAllForPicker(fabricPropertyService, {
         sortBy: "sortOrder",
         sortOrder: "asc",
         filters: { isActive: "true" },
