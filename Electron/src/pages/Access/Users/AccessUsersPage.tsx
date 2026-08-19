@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { foldedIncludes } from "@/lib/search-fold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, UserCog, Trash2, Power, PowerOff, History } from "lucide-react";
 import { safeFormat } from "@/lib/format";
@@ -80,7 +81,7 @@ export function AccessUsersPage() {
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter(
-      (u) => u.username.toLowerCase().includes(q) || u.fullName.toLowerCase().includes(q),
+      (u) => foldedIncludes(u.username, q) || foldedIncludes(u.fullName, q),
     );
   }, [query.data, search, showInactive]);
 

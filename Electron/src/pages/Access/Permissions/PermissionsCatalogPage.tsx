@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
+import { foldedIncludes } from "@/lib/search-fold";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, Smartphone, Shield, Search, Info, Asterisk, UserX } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -34,9 +35,9 @@ export function PermissionsCatalogPage() {
       if (!search) return true;
       const q = search.toLowerCase();
       return (
-        p.code.toLowerCase().includes(q) ||
-        (p.description ?? "").toLowerCase().includes(q) ||
-        (moduleLabels[p.module] ?? p.module).toLowerCase().includes(q)
+        foldedIncludes(p.code, q) ||
+        foldedIncludes(p.description, q) ||
+        foldedIncludes(moduleLabels[p.module] ?? p.module, q)
       );
     });
 

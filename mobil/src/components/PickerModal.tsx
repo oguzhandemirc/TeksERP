@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { foldedIncludes } from '../utils/searchFold';
 import {
   View,
   StyleSheet,
@@ -214,12 +215,11 @@ export default function PickerModal(props: Props) {
   // Filter ayrı useMemo: arama değiştikçe yalnızca filtreyi tekrar uygula.
   const listData = useMemo(() => {
     if (paginated) return sortedOptions;
-    const q = clientSearch.trim().toLocaleLowerCase('tr');
+    const q = clientSearch.trim();
     if (!q) return sortedOptions;
     return sortedOptions.filter(
       (o) =>
-        o.label.toLocaleLowerCase('tr').includes(q) ||
-        (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false),
+        foldedIncludes(o.label, q) || foldedIncludes(o.sublabel, q),
     );
   }, [paginated, sortedOptions, clientSearch]);
 
@@ -289,12 +289,11 @@ export default function PickerModal(props: Props) {
   // Çerçeveli sabit grup — aramayla birlikte filtrelenir, alfabetik sıralanmaz.
   const filteredPinned = useMemo(() => {
     if (paginated || pinnedOptions.length === 0) return [] as PickerOption[];
-    const q = clientSearch.trim().toLocaleLowerCase('tr');
+    const q = clientSearch.trim();
     if (!q) return pinnedOptions;
     return pinnedOptions.filter(
       (o) =>
-        o.label.toLocaleLowerCase('tr').includes(q) ||
-        (o.sublabel?.toLocaleLowerCase('tr').includes(q) ?? false),
+        foldedIncludes(o.label, q) || foldedIncludes(o.sublabel, q),
     );
   }, [paginated, pinnedOptions, clientSearch]);
 

@@ -1,4 +1,5 @@
 import { Fragment, useMemo, useState } from "react";
+import { foldedIncludes } from "@/lib/search-fold";
 import { Search, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -55,9 +56,9 @@ export function PermissionGrid({
     if (!search) return true;
     const q = search.toLowerCase();
     return (
-      p.code.toLowerCase().includes(q) ||
-      (p.description ?? "").toLowerCase().includes(q) ||
-      (moduleLabels[p.module] ?? p.module).toLowerCase().includes(q)
+      foldedIncludes(p.code, q) ||
+      foldedIncludes(p.description, q) ||
+      foldedIncludes(moduleLabels[p.module] ?? p.module, q)
     );
   };
 

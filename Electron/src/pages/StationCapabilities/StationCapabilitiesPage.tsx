@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { foldedIncludes } from "@/lib/search-fold";
 import { useQuery } from "@tanstack/react-query";
 import { Sparkles, Settings2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -55,7 +56,7 @@ export function StationCapabilitiesPage() {
     if (!search) return list;
     const q = search.toLowerCase();
     return list.filter(
-      (s) => s.stationName.toLowerCase().includes(q) || s.stationCode.toLowerCase().includes(q),
+      (s) => foldedIncludes(s.stationName, q) || foldedIncludes(s.stationCode, q),
     );
   }, [query.data, search]);
 

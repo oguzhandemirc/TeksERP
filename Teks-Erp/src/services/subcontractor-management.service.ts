@@ -6,6 +6,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { Prisma } from "@prisma/client";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
@@ -454,13 +455,16 @@ export class SubcontractorManagementService {
       phone?: string | null;
       address?: string | null;
       isFavorite?: boolean;
-    } = { code: rest.code, name: rest.name };
+      // Ad BÜYÜK normalize edilir (2026-08-19) — mükerrer kontrolü aynı
+      // katlamayı kullanıyor; depolanan biçim ondan ayrışırsa kontrol kendi
+      // yazdığı kaydı bulamaz.
+    } = { code: rest.code, name: normalizeDisplayName(rest.name) };
 
     // Required + length kontrolleri (paylaşımlı validator)
     const code = validateCode(rest.code, { label: "Fason kodu", required: true });
     if (typeof code === "string") payload.code = code;
     const name = validateName(rest.name, { label: "Fason adı", required: true });
-    if (typeof name === "string") payload.name = name;
+    if (typeof name === "string") payload.name = normalizeDisplayName(name);
 
     // Format validasyonları — create'te tüm 3 alan optional, ama verilirse
     // format şartı uygulanır. Boş/null gelirse null'a normalize edilir.

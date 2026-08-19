@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { foldedIncludes } from "@/lib/search-fold";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Pencil, Trash2, RotateCcw, Lock } from "lucide-react";
 import { safeFormat } from "@/lib/format";
@@ -40,7 +41,7 @@ export function TemplatesPage() {
     const q = search.toLowerCase();
     return list.filter(
       (t) =>
-        t.name.toLowerCase().includes(q) || (t.description ?? "").toLowerCase().includes(q),
+        foldedIncludes(t.name, q) || foldedIncludes(t.description, q),
     );
   }, [query.data, search]);
 

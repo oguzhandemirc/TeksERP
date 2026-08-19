@@ -26,7 +26,7 @@ import {
 } from "../utils/cursor";
 import { PaginatedResponse, ApiResponse } from "../types/api.types";
 import { Request } from "express";
-import { foldNameForCompare } from "./helpers/name-normalize.helper";
+import { foldNameForCompare, normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import {
@@ -196,6 +196,22 @@ export interface BaseServiceConfig {
   duplicateNameWhere?: Record<string, unknown>;
   /** 409 mesajlarında görünen Türkçe varlık adı (örn. "istasyon"); yoksa "kayıt". */
   entityLabel?: string;
+  /**
+   * BÜYÜK harfe normalize edilecek EK metin alanları (2026-08-19 saha talebi).
+   *
+   * `duplicateNameField` OTOMATİK dahildir — ayrıca yazmaya gerek yok. Sebep:
+   * depolanan biçim ile mükerrer-karşılaştırma anahtarı ayrışırsa kontrol kendi
+   * yazdığı kaydı bulamaz. Bu alan yalnız ADA EK metin kolonları içindir
+   * (örn. ikinci bir unvan alanı).
+   */
+  upperCaseFields?: string[];
+  /**
+   * Normalizasyondan MUAF alanlar — `duplicateNameField` büyük harfe
+   * çevrilmemesi gereken bir kolonsa (örn. serbest metin/açıklama tekilliği).
+   * Bugün kullanan yok; kapı bilinçli açık bırakıldı, muaf yazan gerekçesini
+   * config'in yanına yazmalı.
+   */
+  preserveCaseFields?: string[];
   /**
    * İlişki / aggregate alanlarına göre sıralama eşlemesi: sanal `sortBy` anahtarı
    * → Prisma nested orderBy üreten fonksiyon.
@@ -516,6 +532,31 @@ export class BaseService {
   }
 
   /**
+   * AD ALANLARINI BÜYÜK HARFE ÇEVİR — depolamanın tek boğazı (2026-08-19).
+   *
+   * `create`/`update`'te `sanitizeWriteData`'dan HEMEN SONRA koşar, yani
+   * mükerrer kontrolü de kod üretimi de normalize edilmiş değeri görür.
+   * `sanitizeWriteData`'nın İÇİNE konmadı: o metot DMMF çözülemezse ham veriyi
+   * erken döndürüyor (`if (!allowed) return data`) — normalizasyon o kaçış
+   * yolunda sessizce atlanırdı.
+   *
+   * Yalnız string alanlara dokunur; null/undefined/sayı olduğu gibi geçer
+   * (alanı temizleme niyeti "" olarak gelir ve "" olarak kalır).
+   */
+  protected normalizeNameFields(data: Record<string, unknown>): Record<string, unknown> {
+    const exempt = new Set(this.config.preserveCaseFields ?? []);
+    const fields = new Set<string>();
+    if (this.config.duplicateNameField) fields.add(this.config.duplicateNameField);
+    for (const f of this.config.upperCaseFields ?? []) fields.add(f);
+    for (const f of fields) {
+      if (exempt.has(f)) continue;
+      const v = data[f];
+      if (typeof v === "string" && v.length > 0) data[f] = normalizeDisplayName(v);
+    }
+    return data;
+  }
+
+  /**
    * `duplicateNameField` kolonunda Türkçe-duyarsız ad eşi arar (bkz. config
    * yorumu). Master-data tabloları küçük olduğundan adaylar tek select ile
    * çekilip JS'te tr-TR katlamayla karşılaştırılır — PG lower() İ/ı harflerinde
@@ -686,7 +727,7 @@ export class BaseService {
     rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    const data = this.sanitizeWriteData(rawData);
+    const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
 
     // autoCode: backend-authoritative günlük kod. İstemci kodu DÜŞÜRÜLÜR; kod her
     // create'te taze üretildiğinden uniqueField reactivate yolu geçersiz — atlanır.
@@ -787,7 +828,7 @@ export class BaseService {
     rawData: Record<string, unknown>,
     userId?: string
   ): Promise<ApiResponse<unknown>> {
-    const data = this.sanitizeWriteData(rawData);
+    const data = this.normalizeNameFields(this.sanitizeWriteData(rawData));
     // Fetch old data for audit
     const oldRecord = await this.delegate.findUnique({ where: { id } });
 

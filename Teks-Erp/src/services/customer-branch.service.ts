@@ -6,6 +6,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -66,9 +67,14 @@ async function assertBranchCodeAvailable(
   }
 }
 
-/** Şube adı: trim + boş reddi (salt-boşluk ad kaydedilmesin — dedup trim'e bağlı). */
+/**
+ * Şube adı: boş reddi + BÜYÜK harf normalizasyonu (2026-08-19).
+ * Tek boğaz: create ve update ikisi de buradan geçer, yani panelden girilen
+ * "merkez şube" ile "MERKEZ ŞUBE" aynı kayda düşer ve mükerrer kontrolü
+ * (aynı katlamayı kullanır) kendi yazdığını bulur.
+ */
 function requireBranchName(raw: unknown): string {
-  const name = typeof raw === "string" ? raw.trim() : "";
+  const name = typeof raw === "string" ? normalizeDisplayName(raw) : "";
   if (name.length === 0) throw AppError.badRequest("Şube adı zorunlu");
   return name;
 }
