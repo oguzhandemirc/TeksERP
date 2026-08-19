@@ -13,6 +13,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { RouteService, ROUTE_SERVICE_CONFIG } from "../src/services/route.service";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 let pass = 0,
   fail = 0;
@@ -30,8 +31,15 @@ async function main() {
   const station = await prisma.station.findFirst({
     where: { type: "EXTERNAL", isActive: true },
   });
-  const firm = await prisma.subcontractor.findFirst({ where: { isActive: true } });
-  if (!station || !firm) throw new Error("Fixture yok (EXTERNAL istasyon + aktif fason firma gerekli)");
+  // ⚠️ FİRMA "herhangi bir aktif firma" DEĞİL, fixture'dan çözülür (CLAUDE.md
+  // test kuralı). Eski hâli `subcontractor.findFirst({isActive:true})` idi ve
+  // SIRA BAĞIMLIYDI: dönen firmanın kategorisi adımın `requiredCategoryId`'siyle
+  // uyuşmazsa `validateSteps` 400 atıyordu — test tek başına YEŞİL, paket içinde
+  // (başka testler firma satırlarını ekleyip sildikçe) ARADA BİR kırmızı.
+  // Belirsizlik açık kırmızıdan tehlikelidir: ters yönde, yanlış kategorideki
+  // firma testi yanlış şeyi doğrulayarak GEÇİRİRDİ.
+  const firm = await ensureTestDyeHouse();
+  if (!station) throw new Error("Fixture yok (EXTERNAL istasyon gerekli)");
   console.log(`Fixture: station=${station.name} firm=${firm.name}`);
 
   const service = new RouteService(ROUTE_SERVICE_CONFIG);
@@ -49,7 +57,10 @@ async function main() {
           stationId: station.id,
           sequence: 1,
           defaultNotes: "test not",
-          requiredCategoryId: station.defaultCategoryId ?? null,
+          // Kategori FİRMANIN kendi kategorisinden yazılır — istasyonun
+          // `defaultCategoryId`'sinden okumak, ikisinin ayrışabildiği her
+          // ortamda aynı sıra-bağımlı 400'ü geri getirir.
+          requiredCategoryId: firm.categoryId,
           plannedSubcontractorId: firm.id,
         },
       ],
