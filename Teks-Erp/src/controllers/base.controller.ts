@@ -29,6 +29,36 @@ export class BaseController {
     this.update = this.update.bind(this);
     this.remove = this.remove.bind(this);
     this.hardRemove = this.hardRemove.bind(this);
+    this.similarNames = this.similarNames.bind(this);
+  }
+
+  /**
+   * GET /similar-names?name=... — mükerreri ÖNLEMEK için benzer kayıt listesi.
+   *
+   * ⚠️ HİÇBİR ŞEYİ ENGELLEMEZ, karar vermez, yazmaz. Arayüz kullanıcı adı
+   * yazarken çağırır ve "şunlar zaten var" diye gösterir. Kaydetmeyi engelleyen
+   * tek şey `assertNameNotDuplicate`tir (birebir aynı ad → 409) ve o ayrı yerde.
+   *
+   * ⚠️ Yol `/:id`den ÖNCE tanımlanmalı, yoksa Express "similar-names"i id sanar
+   * ve `uuid-param` middleware'i 400 döndürür.
+   *
+   * `?excludeId=` düzenleme ekranı içindir: kaydın kendisi "benzer" diye
+   * gösterilmemeli. `?scope=` kapsamlı tekillikte (makine → istasyon,
+   * şube → müşteri) aramayı o kapsamla sınırlar.
+   */
+  async similarNames(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const name = typeof req.query.name === "string" ? req.query.name : "";
+      const excludeId = typeof req.query.excludeId === "string" ? req.query.excludeId : undefined;
+      const scope = typeof req.query.scope === "string" ? req.query.scope : undefined;
+      const data = await this.service.findSimilarNames(name, {
+        ...(excludeId ? { excludeId } : {}),
+        ...(scope ? { scopeValue: scope } : {}),
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error) {
+      next(error);
+    }
   }
 
   /**

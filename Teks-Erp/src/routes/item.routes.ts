@@ -111,6 +111,13 @@ router.get("/", verifyToken, requireAnyPermission("item:read", "mobile:kk1", "mo
  *       404:
  *         description: Kayıt bulunamadı
  */
+// BENZER KAYITLAR — mükerreri REDDETMEK yerine ÖNLEMEK için (2026-08-19).
+// ⚠️ `/:id`den ÖNCE tanımlı olmalı; sonra gelirse Express "similar-names"i id
+// sanar ve `uuid-param` middleware'i 400 döndürür.
+// ⚠️ İzin WRITE: bu uç var olan adları listeler ve yalnız KAYIT AÇAN kişiye
+// lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
+router.get("/similar-names", verifyToken, requirePermission("item:write"), controller.similarNames);
+
 router.get("/:id", verifyToken, requireAnyPermission("item:read", "mobile:kk1"), controller.findById);
 
 /**

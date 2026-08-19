@@ -129,6 +129,13 @@ router.get("/machines", verifyToken, requirePermission("station:read"), machineC
  *       200:
  *         description: İstasyon detayı
  */
+// BENZER KAYITLAR — mükerreri REDDETMEK yerine ÖNLEMEK için (2026-08-19).
+// ⚠️ `/:id`den ÖNCE tanımlı olmalı; sonra gelirse Express "similar-names"i id
+// sanar ve `uuid-param` middleware'i 400 döndürür.
+// ⚠️ İzin WRITE: bu uç var olan adları listeler ve yalnız KAYIT AÇAN kişiye
+// lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
+router.get("/similar-names", verifyToken, requirePermission("station:write"), stationController.similarNames);
+
 router.get("/:id", verifyToken, requirePermission("station:read"), stationController.findById);
 
 /**
@@ -222,6 +229,11 @@ router.delete("/:id/permanent", verifyToken, requirePermission("station:write"),
 // MACHINE ENDPOINTS (separate router for /api/machines)
 // =============================================================================
 const machineRouter = Router();
+
+// BENZER KAYITLAR (makine) — makine adı İSTASYON İÇİNDE tekildir; arayüz
+// `?scope=<stationId>` gönderir, yoksa başka istasyonun makinesi "benzer" diye
+// listelenir ve uyarı gürültüye döner.
+machineRouter.get("/similar-names", verifyToken, requirePermission("station:write"), machineController.similarNames);
 
 /**
  * @openapi

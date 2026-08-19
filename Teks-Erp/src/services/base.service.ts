@@ -103,6 +103,38 @@ import {
 // `Fold` ile biten her kolon GENERATED'dır. İkisinden biri bozulursa test düşer;
 // yani buradaki basit ek, gevşek değil bağlıdır.
 const GENERATED_FIELD_SUFFIX = "Fold";
+/**
+ * Model → gerçek tablo adı. Prisma 7 runtime DMMF'i alan ayrıntısını taşımıyor
+ * ama model düzeyinde `dbName` VAR (ölçüldü 2026-08-19). Ham SQL yazan tek yer
+ * `findSimilarNames`; tablo adı istemciden GELMEZ, konfigden çözülür.
+ */
+const modelTableCache = new Map<string, string | null>();
+function tableNameFor(modelName: string): string | null {
+  const key = modelName.toLowerCase();
+  if (modelTableCache.has(key)) return modelTableCache.get(key) ?? null;
+  const models = (
+    Prisma as unknown as { dmmf?: { datamodel?: { models?: Array<{ name: string; dbName?: string | null }> } } }
+  ).dmmf?.datamodel?.models;
+  const m = models?.find((x) => x.name.toLowerCase() === key);
+  const t = m?.dbName ?? null;
+  modelTableCache.set(key, t);
+  return t;
+}
+
+/**
+ * pg_trgm kurulu mu (bir kez sorulur). Sahadaki kurulumda OLMAYABİLİR — migration
+ * bilerek fail-soft (bkz. `20260819060000_search_fold`), bu yüzden benzerlik
+ * araması da uzantının varlığını VARSAYAMAZ.
+ */
+let trigramAvailable: boolean | null = null;
+async function hasTrigram(): Promise<boolean> {
+  if (trigramAvailable !== null) return trigramAvailable;
+  const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+    SELECT count(*)::bigint AS n FROM pg_extension WHERE extname = 'pg_trgm'`;
+  trigramAvailable = Number(rows[0]?.n ?? 0) > 0;
+  return trigramAvailable;
+}
+
 const modelSortFieldCache = new Map<string, Set<string> | null>();
 type DmmfField = { name: string; kind: string };
 function isDbGenerated(field: DmmfField): boolean {
@@ -259,6 +291,16 @@ export interface BaseServiceConfig {
    * tombstone aktifleştirilemediğinden adı süresiz bloke ederdi).
    */
   duplicateNameWhere?: Record<string, unknown>;
+
+  /**
+   * "Benzer kayıtlar" ucunun bakacağı ad kolonu. Varsayılan `duplicateNameField`.
+   *
+   * ⚠️ AYRI BİR ALAN, çünkü ikisi AYNI ŞEY DEĞİL: `duplicateNameField` genel
+   * mükerrer GUARD'ını da açar. Renk kendi ayraç-duyarsız kontrolünü kullanıyor
+   * (`ColorService.assertNameAvailable`); ona `duplicateNameField` vermek iki
+   * farklı semantiği üst üste bindirirdi. Bu alan yalnız OKUYAN ucu besler.
+   */
+  similarNameField?: string;
   /** 409 mesajlarında görünen Türkçe varlık adı (örn. "istasyon"); yoksa "kayıt". */
   entityLabel?: string;
   /**
@@ -724,6 +766,96 @@ export class BaseService {
    * aday sayılmaz. Sayılsaydı silinmiş cihazın kodu süresiz bloke olurdu (ad
    * tarafında aynı sorun aynı süzgeçle çözülmüştü).
    */
+  /**
+   * BENZER ADLAR — mükerreri REDDETMEK yerine ÖNLEMEK için (2026-08-19).
+   *
+   * `assertNameNotDuplicate` kaydet'e basıldıktan SONRA 409 ile çarpar ve yalnız
+   * katlanmış ad BİREBİR aynıysa yakalar. Sahadaki mükerrerlerin çoğu ise birebir
+   * aynı değil, YAKIN: "MODA TEKSTİL" ↔ "Moda Tekstil A.Ş." ↔ "MODA TEKSTIL SAN".
+   * Bu metot yazarken uyarmak içindir — sonuç bir ENGEL DEĞİL, bir listedir.
+   *
+   * ⚠️ HİÇBİR ŞEYİ ENGELLEMEZ. Çağıran arayüz uyarı gösterir, kullanıcı yine de
+   * kaydedebilir. Engelleyici yapmak, meşru benzer adları (aynı grubun iki
+   * şirketi) kaydedilemez hâle getirirdi.
+   *
+   * Sıralama trigram benzerliğiyle: `similarity()` 0..1 arası döner. Eşik
+   * ölçümle seçildi (bkz. `scripts/test_similar_names.ts`).
+   *
+   * ⚠️ pg_trgm YOKSA sessizce boş dönmez — tek kelimelik `contains` yedeğine
+   * düşer. Uzantı sahada kurulu olmayabilir (bkz. deploy notu) ve o durumda
+   * "benzer yok" demek, olan mükerreri YOK göstermek olurdu.
+   */
+  async findSimilarNames(
+    rawName: string,
+    opts: { excludeId?: string; scopeValue?: unknown; limit?: number } = {},
+  ): Promise<Array<{ id: string; name: string; code: string | null; isActive: boolean; score: number }>> {
+    const field = this.config.similarNameField ?? this.config.duplicateNameField;
+    if (!field) return [];
+    const target = foldNameForCompare(rawName);
+    if (target.length < 3) return []; // 1-2 harfte her şey "benzer" çıkar
+    const table = tableNameFor(this.config.modelName);
+    if (!table) return [];
+    const limit = Math.min(Math.max(opts.limit ?? 5, 1), 20);
+    const codeField = this.config.uniqueField;
+
+    const q = (id: string): string => `"${id.replace(/"/g, '""')}"`;
+    const cols =
+      `id, ${q(field)} AS name, ` +
+      (codeField ? `${q(codeField)}::text AS code, ` : `NULL::text AS code, `) +
+      `COALESCE("isActive", true) AS "isActive"`;
+
+    // Kapsamlı tekillik (Machine.stationId, CustomerBranch.customerId): kapsam
+    // verilmişse ARAMA DA o kapsamla sınırlanır, yoksa başka istasyonun makinesi
+    // "benzer" diye gösterilir ve uyarı gürültüye döner.
+    const scopeField = this.config.duplicateNameScopeField;
+    const where: string[] = [];
+    const params: unknown[] = [target];
+    if (scopeField && opts.scopeValue != null) {
+      params.push(opts.scopeValue);
+      where.push(`${q(scopeField)} = $${params.length}`);
+    }
+    if (opts.excludeId) {
+      params.push(opts.excludeId);
+      where.push(`id <> $${params.length}::uuid`);
+    }
+    const scopeSql = where.length ? ` AND ${where.join(" AND ")}` : "";
+
+    const hasTrgm = await hasTrigram();
+    const foldCol = q(`${field}Fold`);
+    // ⚠️ EŞİK UZUNLUĞA DUYARLI ve bu ölçümle seçildi (canlı veri, 2026-08-19):
+    //   • UZUN adlarda tek eşik gürültü üretiyor — "MODA TEKSTIL" araması
+    //     "Arda Tekstil"i 0.53 ile getiriyordu, çünkü "TEKSTİL" kelimesi burada
+    //     neredeyse her firmanın adında var. Gürültü, uyarının görmezden
+    //     gelinmesini öğretir; asıl zarar budur.
+    //   • KISA adlarda ise aynı eşik gerçek mükerreri KAÇIRIYOR: "AKTİVO" ile
+    //     "ACTIVO" (tek harf farkı, 6 harf) yalnız 0.4 benzerlik veriyor.
+    // Ölçülen ayrım noktaları: gerçek çift 0.76–1.0 · gürültü 0.41–0.53.
+    const threshold = target.length <= 8 ? 0.35 : 0.55;
+    params.push(threshold);
+    const thrIdx = params.length;
+    // ⚠️ `%` operatörü GIN index'ini kullanır, `similarity()` tek başına KULLANMAZ.
+    // İkisi birlikte: aday süzgeci index'ten, kesin eşik ve skor sıralamadan.
+    // Birebir katlanmış eşitlik eşikten BAĞIMSIZ olarak her zaman gösterilir —
+    // o zaten kesin mükerrerdir.
+    const sql = hasTrgm
+      ? `SELECT ${cols}, similarity(${foldCol}, $1) AS score
+         FROM ${q(table)}
+         WHERE (${foldCol} = $1
+                OR (${foldCol} % $1 AND similarity(${foldCol}, $1) >= $${thrIdx}))${scopeSql}
+         ORDER BY score DESC, ${q(field)} LIMIT ${limit}`
+      : `SELECT ${cols}, CASE WHEN ${foldCol} = $1 THEN 1.0 ELSE 0.5 END AS score
+         FROM ${q(table)}
+         WHERE (${foldCol} = $1 OR ${foldCol} LIKE $${params.length + 1})${scopeSql}
+         ORDER BY score DESC, ${q(field)} LIMIT ${limit}`;
+    if (!hasTrgm) params.push(`%${target.split(" ")[0]}%`);
+    // (yedek yolda eşik parametresi kullanılmaz ama sırayı bozmamak için durur)
+
+    const rows = await prisma.$queryRawUnsafe<
+      Array<{ id: string; name: string; code: string | null; isActive: boolean; score: number }>
+    >(sql, ...params);
+    return rows.map((r) => ({ ...r, score: Math.round(Number(r.score) * 100) / 100 }));
+  }
+
   private async loadCodeCandidates(
     key: string,
     excludeId?: string,

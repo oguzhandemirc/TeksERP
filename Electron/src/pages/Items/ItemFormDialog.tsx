@@ -35,6 +35,7 @@ import { AllowedColorsDialog } from "./AllowedColorsDialog";
 import { AllowedPropertiesDialog } from "./AllowedPropertiesDialog";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -183,6 +184,13 @@ export function ItemFormDialog({
           <div className="grid grid-cols-[1fr_180px_120px] gap-3">
             <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
               <Input id="name" placeholder="Patos" {...form.register("name")} />
+              {/* Canlı veride "ACTIVO" ve "ACTİVO" iki ayrı kumaş olarak duruyordu
+                  (i/İ tuzağı) — uyarı yazarken görünsün. */}
+              <SimilarNamesWarning
+                entity="items"
+                name={form.watch("name") ?? ""}
+                excludeId={initial?.id}
+              />
             </FormField>
             <FormField
               label="Tip"

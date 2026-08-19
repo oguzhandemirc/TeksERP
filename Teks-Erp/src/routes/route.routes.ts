@@ -60,6 +60,13 @@ router.get("/", verifyToken, requireAnyPermission("station:read", "mobile:hizli-
  *         description: Kayıt bulunamadı
  */
 // F213: liste ucuyla hizala — Hızlı İş Emri mobil kullanıcısı detayı da görebilsin.
+// BENZER KAYITLAR — mükerreri REDDETMEK yerine ÖNLEMEK için (2026-08-19).
+// ⚠️ `/:id`den ÖNCE tanımlı olmalı; sonra gelirse Express "similar-names"i id
+// sanar ve `uuid-param` middleware'i 400 döndürür.
+// ⚠️ İzin WRITE: bu uç var olan adları listeler ve yalnız KAYIT AÇAN kişiye
+// lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
+router.get("/similar-names", verifyToken, requirePermission("station:write"), controller.similarNames);
+
 router.get("/:id", verifyToken, requireAnyPermission("station:read", "mobile:hizli-is-emri"), controller.findById);
 
 /**

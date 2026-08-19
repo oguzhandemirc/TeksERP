@@ -23,6 +23,10 @@ export const colorService = new ColorService({
   uniqueField: "code",
   // Kod backend-authoritative: `RNK+GGAAYY+NNNN` günlük sıralı (istemci kodu yok sayılır).
   autoCode: { prefix: "RNK" },
+  // ⚠️ `duplicateNameField` DEĞİL: renk mükerreri ayraç-duyarsız ve rakam-önce
+  // katlamayla kontrol ediliyor (`ColorService.assertNameAvailable`). Bu alan
+  // yalnız "benzer kayıtlar" ucunu besler, genel guard'ı AÇMAZ.
+  similarNameField: "name",
 });
 
 const controller = new BaseController(colorService);
@@ -75,6 +79,13 @@ router.get("/", verifyToken, requireAnyPermission("property:read", "mobile:hizli
  *       200: { description: Renk detayı }
  *       404: { description: Bulunamadı }
  */
+// BENZER KAYITLAR — mükerreri REDDETMEK yerine ÖNLEMEK için (2026-08-19).
+// ⚠️ `/:id`den ÖNCE tanımlı olmalı; sonra gelirse Express "similar-names"i id
+// sanar ve `uuid-param` middleware'i 400 döndürür.
+// ⚠️ İzin WRITE: bu uç var olan adları listeler ve yalnız KAYIT AÇAN kişiye
+// lazımdır; okuma iznine bakmak görünürlüğü gereksiz genişletirdi.
+router.get("/similar-names", verifyToken, requirePermission("property:write"), controller.similarNames);
+
 router.get("/:id", verifyToken, requireAnyPermission("property:read", "mobile:hizli-is-emri"), controller.findById);
 
 /**

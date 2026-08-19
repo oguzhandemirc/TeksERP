@@ -28,6 +28,7 @@ import { DocumentProfileSelect } from "@/components/forms/DocumentProfileSelect"
 import type { Customer } from "./types";
 
 import { RecordInfoButton } from "@/components/RecordInfoButton";
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -117,6 +118,13 @@ export function CustomerFormDialog({
       <div className="grid grid-cols-2 gap-3">
         <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
           <Input id="name" autoFocus {...form.register("name")} />
+          {/* Mükerreri REDDETMEK yerine ÖNLEMEK: canlı veride "Moda Tekstil" ve
+              "MODA TEKSTİL" iki ayrı AKTİF müşteri olarak duruyordu. */}
+          <SimilarNamesWarning
+            entity="customers"
+            name={form.watch("name") ?? ""}
+            excludeId={initial?.id}
+          />
         </FormField>
         <FormField label="Tip" error={form.formState.errors.type} required>
           <Controller
