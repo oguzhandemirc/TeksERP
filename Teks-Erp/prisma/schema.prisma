@@ -389,6 +389,7 @@ model User {
   rollOperations             RollOperation[]
   rollVariances              RollVariance[]
   reversedRollVariances      RollVariance[]           @relation("RollVarianceReversedBy")
+  planDeviationsConfirmed    RollPlanDeviation[]      @relation("RollPlanDeviationConfirmedBy")
   detectedRollErrors         RollError[]              @relation("RollErrorDetectedBy")
   processedRollErrors        RollError[]              @relation("RollErrorProcessedBy")
   createdRolls               Roll[]                   @relation("RollCreatedBy")
@@ -1657,6 +1658,10 @@ model Roll {
   movements            RollMovement[]
   operations           RollOperation[]
   variances            RollVariance[]
+  /// Plan-sapma defteri: bu top KAPIYA GİREN taraf (parent).
+  planDeviations       RollPlanDeviation[]         @relation("RollPlanDeviationRoll")
+  /// Plan-sapma defteri: bu top o geçişte DOĞAN çocuk.
+  childPlanDeviations  RollPlanDeviation[]         @relation("RollPlanDeviationChild")
   parent               Roll?                       @relation("RollLineage", fields: [parentRollId], references: [id])
   children             Roll[]                      @relation("RollLineage")
   directShipment       DirectShipment?             @relation(fields: [directShipmentId], references: [id])
@@ -2120,6 +2125,7 @@ model WorkOrder {
   manifests        Manifest[]
   dispatches       SubcontractorDispatch[]
   receipts         SubcontractorReceipt[]
+  planDeviations   RollPlanDeviation[]
   targetItem       Item?                     @relation("WorkOrderTargetItem", fields: [targetItemId], references: [id])
   targetColor      Color?                    @relation("WorkOrderTargetColor", fields: [targetColorId], references: [id])
   targetProperties WorkOrderTargetProperty[]
@@ -2275,6 +2281,7 @@ model WorkOrderStep {
   receipts             SubcontractorReceipt[]
   operations           RollOperation[]
   variances            RollVariance[]
+  planDeviations       RollPlanDeviation[]
   currentRolls         Roll[]                   @relation("RollCurrentStep")
   producedRolls        Roll[]                   @relation("RollProducedInStep")
   detectedErrors       RollError[]              @relation("RollErrorDetectedAt")
@@ -2780,6 +2787,99 @@ model RollVariance {
   // "Kim ne kadar fire verdi" — operatör kırılımı.
   @@index([createdById, createdAt])
   @@map("roll_variances")
+}
+
+// =============================================================================
+// PLAN-GERÇEK SAPMA DEFTERİ (2026-08-19) — "onaylı plan-dışı" olayların KAYDI
+// =============================================================================
+// Tambur plan kapısı (`helpers/tambur-plan-gate.helper.ts`) topun rengi/eni iş
+// emri hedefinden saptığında operatöre sorar; operatör "yine de bitir" derse mal
+// OLDUĞU GİBİ depoya iner ve karar bir İMZADIR (SAP "usage decision" karşılığı).
+//
+// ⚠️ NEDEN AYRI TABLO — üç yol da elendi:
+//  1) `SystemLog` (bugünkü tek iz): 6 ayda `archive-scheduler` ile arşive taşınır
+//     ve RAPOR KATMANI ARŞİVİ HİÇ OKUMAZ → dönem karnesi altı ay sonra sessizce
+//     boşalır (aynı ders `Roll.entryReason` ve `preShipStatus` notlarında yazılı).
+//     Ayrıca `newData` JSON'u indekssizdir (perf kuralı 6) ve `recordId` PARENT
+//     topu gösterir — plan-dışı inen ÇOCUK topun kimliği hiç yoktur.
+//  2) `RollOperation.metadata`: `TAMBUR_PROCESSED` op'u kesim anında HENÜZ YOKTUR
+//     (yalnız finalize'da doğar) ve upsert'i `update: {}` — ikinci çağrı metadata'yı
+//     güncellemez. Üstelik `@@unique([rollId, workOrderStepId, operationType])`
+//     adım başına TEK satır demektir; aynı adımda çok kez sapma onaylanabilir.
+//  3) `RollOperationType` enum'unu genişletmek: emsalen reddedilmiş (bkz. bu
+//     dosyadaki WO-kapanış dispozisyonu notu) — aynı `@@unique` gerekçesi.
+//
+// ⚠️ `confirmationId` LOAD-BEARING: renk VE en birlikte sapan bir onay ALAN BAŞINA
+// satır üretir (2 satır) ama BİR imzadır. Karne "onay sayısı"nı
+// `COUNT(DISTINCT confirmationId)` ile, "plan-dışı metraj"ı confirmationId başına
+// TEK `qtyM` ile sayar — naif `SUM(qtyM)` o topun metrajını ÇİFT sayardı.
+//
+// GRANÜLERLİK (satır = onaylı kapı-geçişi × sapan alan):
+//   • `finalize` → geçiş başına, `childRollId` NULL, `qtyM` = topun TÜM metrajı.
+//     Çocuk başına satır yazmak "onay sayısı"nı kesim adedi kadar şişirirdi;
+//     sapan şey topun KİMLİĞİdir, kaç parçaya bölündüğü değil (çocuklar zaten
+//     `parentRollId` üzerinden türetilebilir).
+//   • `cut` (per-cut model) → kesim başına, `childRollId` = o kesimin çocuğu.
+//   • `finalize-open-fabric` → kalan kuyruk çocuğu + tx-içi TAZE kalan metraj.
+//
+// Append-only: satır SİLİNMEZ, GÜNCELLENMEZ (bu yüzden `updatedAt` yok).
+// =============================================================================
+model RollPlanDeviation {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// TEK onayın (kapı-geçişinin) satırlarını gruplar — bkz. üstteki uyarı.
+  confirmationId String @db.Uuid
+
+  /// Kapıya giren top (parent) — "hangi mal plan dışı kabul edildi".
+  rollId          String  @db.Uuid
+  /// Bu geçişte depoya inen ÇOCUK top; `finalize` yolunda NULL (bkz. granülerlik).
+  childRollId     String? @db.Uuid
+  workOrderId     String  @db.Uuid
+  /// Kapının koştuğu Tambur adımı. Nullable: ileride adımsız bir yol eklenirse
+  /// defter satırı kaybolmasın (bugün üç yolda da doludur).
+  workOrderStepId String? @db.Uuid
+
+  /// Sapan alan — "color" | "width". TEK KAYNAK `constants/tambur-plan-gate.ts`
+  /// `PlanMismatchItem.field`. ⚠️ pg enum DEĞİL: yazan tek yer kapı helper'ıdır ve
+  /// üçüncü bir alan (örn. kat) eklendiğinde `ALTER TYPE` + client churn'ü
+  /// istemiyoruz (`RollVariance.source` de aynı gerekçeyle string).
+  field     String  @db.VarChar(16)
+  /// İnsan-okur değerler ("MAVİ" / "330") — rapor etiketleri buradan basılır.
+  /// Ad sonradan değişse bile o günkü karar OLDUĞU GİBİ okunur (donmuş belge ilkesi).
+  rollValue String? @db.VarChar(120)
+  planValue String? @db.VarChar(120)
+
+  /// Bu kapı-geçişinde plan-dışı kimlikle depoya inen metraj. Aynı onayın
+  /// satırlarında AYNI değeri taşır (confirmationId ile tekilleştirilir).
+  qtyM Decimal @db.Decimal(12, 3)
+
+  /// Kapının `source` parametresi: "finalize" | "cut" | "finalize-open-fabric".
+  source String @db.VarChar(32)
+
+  /// İmzayı atan operatör. Nullable — dahili/testte userId olmayabilir.
+  confirmedById String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // Relations
+  roll        Roll           @relation("RollPlanDeviationRoll", fields: [rollId], references: [id])
+  childRoll   Roll?          @relation("RollPlanDeviationChild", fields: [childRollId], references: [id])
+  workOrder   WorkOrder      @relation(fields: [workOrderId], references: [id])
+  step        WorkOrderStep? @relation(fields: [workOrderStepId], references: [id])
+  confirmedBy User?          @relation("RollPlanDeviationConfirmedBy", fields: [confirmedById], references: [id])
+
+  @@index([rollId])
+  @@index([childRollId])
+  @@index([workOrderId])
+  @@index([workOrderStepId])
+  // Dönem karnesi: "bu ay hangi alanda kaç sapma" (eşitlik önce, range sonra).
+  @@index([field, createdAt])
+  // Operatör kırılımı: "kim kaç kez plan dışına çıktı".
+  @@index([confirmedById, createdAt])
+  // Dönem süzgeci + confirmationId gruplaması.
+  @@index([createdAt])
+  @@index([confirmationId])
+  @@map("roll_plan_deviations")
 }
 
 // =============================================================================
@@ -3293,7 +3393,7 @@ model SubcontractorReceiptItem {
   /// için isPartial=false (tam) bir aktif makbuz satırı gerekir — tüm outstanding
   /// filtreleri `none: { isPartial: false, receipt: { cancelledAt: null } }` okur.
   /// Eski satırlar default(false) = tam kabul → backfill GEREKMEZ.
-  isPartial Boolean @default(false)
+  isPartial   Boolean  @default(false)
 
   // Relations
   receipt            SubcontractorReceipt       @relation(fields: [receiptId], references: [id], onDelete: Cascade)

@@ -237,6 +237,10 @@ psql -U postgres -d tekserp -c "SELECT column_name FROM information_schema.colum
 # Hazır sebepler — RESTART'TAN SONRA koş (satırları migration değil, boot yazar)
 psql -U postgres -d tekserp -c "SELECT kind, count(*) FROM reason_presets GROUP BY kind ORDER BY kind;"
 psql -U postgres -d tekserp -c "SELECT code, label FROM reason_presets WHERE kind='ROLL_SCRAP' ORDER BY \"sortOrder\" LIMIT 3;"
+# Birleştirme soy bağı (24. migration) — kolon + FK + index PARTIAL mi
+psql -U postgres -d tekserp -c "SELECT table_name, count(*) FROM information_schema.columns WHERE column_name IN ('mergedIntoId','mergedAt','mergedById') AND table_name IN ('customers','items','colors','subcontractors') GROUP BY 1 ORDER BY 1;"
+psql -U postgres -d tekserp -c "SELECT indexname, indexdef LIKE '%WHERE%' AS partial_mi FROM pg_indexes WHERE tablename IN ('customers','items','colors','subcontractors') AND indexname LIKE '%mergedIntoId_idx' ORDER BY 1;"
+psql -U postgres -d tekserp -c "SELECT count(*) FROM pg_constraint WHERE conname ~ '^(customers|items|colors|subcontractors)_merged(IntoId|ById)_fkey';"
 ```
 
 Beklenen (hepsi provada ölçüldü):
@@ -253,6 +257,10 @@ Beklenen (hepsi provada ölçüldü):
 | `reason_presets` (restart sonrası) | 4 satır: `ROLL_SCRAP` **8** · `ROLL_RECORD_CORRECTION` **5** · `ROLL_MANUAL_ENTRY` **5** · `ROLL_CANCEL` **5** |
 | `ROLL_SCRAP` ilk satırı | **`TOP_BASI` — "Top başı"** (sahanın istediği sıra) |
 | Backend log'u | `[reason-presets] 23 yeni sistem sebebi eklendi: …` (ilk açılış) ya da `katalog güncel` |
+| Birleştirme kolonları | dört tablonun her birinde **3** (`mergedIntoId`/`mergedAt`/`mergedById`) |
+| `*_mergedIntoId_idx` | **4 satır, hepsi `partial_mi = t`** — `f` görürsen index TAM oluşmuş demektir (yanlış değil, sadece gereksiz büyük); `test_db_invariants` bunu KIRMIZI verir. ⚠️ Sorgudaki `tablename IN (...)` süzgeci gerekli: `batches_mergedIntoId_idx` (eski, 2026-07 parti birleştirmesi) da desene uyar ve süzgeç olmadan 5 satır döner |
+| Birleştirme FK'ları | **8** |
+| Backend log'u (2) | `[permission-catalog] 1 yeni izin eklendi: master-data:merge` (ilk açılış) |
 
 ---
 
@@ -293,7 +301,14 @@ serbest — birbirlerine bağımlı değiller.
 npx tsx scripts/test_db_invariants.ts        # 79 kontrol — şema-dışı DB nesneleri
 npx tsx scripts/test_schema_drift.ts         # repo datamodel ↔ canlı DB
 npx tsx scripts/find_fold_duplicates.ts      # mükerrer ad raporu (yazmaz)
+npx tsx scripts/test_master_data_merge_fk_coverage.ts   # saf statik analiz (şema metni + DMMF), DB'ye HİÇ dokunmaz
 ```
+
+> ⚠️ **`test_master_data_merge.ts` ve `test_master_data_merge_conflicts.ts`
+> CANLIDA KOŞULMAZ.** İkisi de gerçek kayıt yaratıp gerçekten birleştirir
+> (`TESTMRG-`/`TESTCNF-` önekli fixture'lar). Adları "merge" diye yukarıdakiyle
+> aynı aileye benziyor ama biri okur, diğerleri YAZAR — ayrımı ada bakarak değil
+> bu satıra bakarak yap.
 
 `test_schema_drift` yalnız **iki bilinen** DEFERRABLE composite FK farkını
 göstermeli; başka fark KIRMIZI'dır.
@@ -500,6 +515,15 @@ ile açılıyor. Yani §7'deki gibi elle atanacak bir şey yok; okuma herkese a�
 > kalır (ekran bunu uyarıyla söylüyor). Fire/kayıt düzeltmesinde böyle bir risk
 > yok — orada satıra kod yazılıyor.
 
+**Bu pakette ayrıca (adım gerektirmez) — CANLI BİR 500 KAPANDI:** "Sipariş Bağla"
+akışındaki **süpervizör override** ucu (`POST /work-orders/:id/order-links/override`)
+controller'da bind edilmemişti; yani uyumsuz sipariş bağlama onayı **her çağrıldığında
+500 veriyordu**. Fabrika bunu "bağlama çalışmıyor" diye bildirmiş olabilir —
+deploy sonrası çalıştığını Tambur → Sipariş Bağla → uyumsuz seçim → süpervizör
+onayı ile doğrulayın. (Aynı sınıf hata `print-event`te de yaşandı: servis
+testleri bunu GÖREMEZ, kırılan HTTP köprüsüdür; artık `test_controller_binds`
+mekanik yakalıyor.)
+
 **Bu pakette ayrıca (adım gerektirmez):** barkod araması küçük/BÜYÜK harf
 duyarsızlığı üçüncü tur — Tambur "Çıkanlar" listesi + kartela liste/istatistik
 aramaları normalize edilmiyordu ("top listede yok ama yan panelde açılıyor").
@@ -511,6 +535,17 @@ listede çıktığını görmek.
 ## 9) OPERATÖRE ÖNCEDEN SÖYLENECEKLER
 
 Bunlar hata değil **karar**dır; söylenmezse destek çağrısı gelir.
+
+### 9a-0) Ctrl+K artık KAYIT da buluyor (yeni)
+Komut paleti bugüne kadar yalnız SAYFA arıyordu. Artık aynı kutuya yazılan terim
+müşteri · kumaş · renk · sipariş · iş emri · sevkiyat · çuval · fason · parti
+içinde de aranıyor ve sonuçlar listenin **altında** "Kayıtlar" başlığıyla çıkıyor.
+
+- **Sonuçlar neden altta:** sunucudan ~150 ms sonra geliyorlar; üste eklenselerdi
+  ok tuşuyla gezen kullanıcının altından liste kayar ve yanlış satır seçilirdi.
+- **Tam barkod okutulursa** sonuç EN ÜSTE "Okutulan kod" olarak çıkar.
+- **Herkes her şeyi görmez:** kullanıcı yalnız yetkisi olan türleri görür — bir
+  kullanıcıda çıkan sonuç diğerinde çıkmıyorsa bu YETKİ farkıdır, arıza değil.
 
 ### 9a) Arama artık Türkçe harfe duyarsız
 `canakkale` ≡ `ÇANAKKALE`, `sahin` ≡ `ŞAHİN`, `isik`/`ışık`/`IŞIK` aynı sonucu
