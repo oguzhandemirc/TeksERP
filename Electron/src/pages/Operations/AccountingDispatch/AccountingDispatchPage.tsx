@@ -42,7 +42,7 @@ export function AccountingDispatchPage() {
   const [invoiceFor, setInvoiceFor] = useState<DispatchListItem | null>(null);
   const columns = useMemo(() => buildDispatchColumns(setReceiptFor, setInvoiceFor), []);
 
-  const { table, query, search, setSearch, pagination } = useDataTable<DispatchListItem>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<DispatchListItem>({
     queryKey: QUERY_KEY,
     fetchFn: accountingDispatchService.listCursor,
     columns,
@@ -95,6 +95,7 @@ export function AccountingDispatchPage() {
         }
       />
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         placeholder="Sevkiyat no, sipariş no, firma, plaka, sürücü ara..."

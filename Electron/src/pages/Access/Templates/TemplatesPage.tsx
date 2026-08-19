@@ -13,6 +13,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
 import {
   permissionTemplateService,
   type PermissionTemplate,
@@ -20,6 +22,18 @@ import {
 import { TemplateFormDialog } from "./TemplateFormDialog";
 
 const QUERY_KEY = "permission-templates";
+
+// Dışa aktarım sütunları — ekrandaki kolonların (Ad · Yetki Sayısı · Açıklama ·
+// Oluşturma) ve satır rozetlerinin (sistem / pasif) düz karşılığı.
+const TEMPLATE_EXPORT_COLUMNS: ExportColumn<PermissionTemplate>[] = [
+  { label: "Ad", value: (t) => t.name },
+  { label: "Kod", value: (t) => t.code ?? "" },
+  { label: "Sistem Rolü", value: (t) => (t.code ? "Evet" : "Hayır") },
+  { label: "Durum", value: (t) => (t.isActive ? "Aktif" : "Pasif") },
+  { label: "Yetki Sayısı", value: (t) => t.permissions.length, summable: true },
+  { label: "Açıklama", value: (t) => t.description ?? "" },
+  { label: "Oluşturma", value: (t) => safeFormat(t.createdAt, "dd.MM.yyyy HH:mm") },
+];
 
 export function TemplatesPage() {
   const qc = useQueryClient();
@@ -125,6 +139,18 @@ export function TemplatesPage() {
           placeholder="Şablon ara..."
           className="h-8 w-64 text-sm"
         />
+        <div className="ml-auto">
+          <ListExportMenu
+            name="Yetki Şablonları"
+            rows={filtered}
+            columns={TEMPLATE_EXPORT_COLUMNS}
+            notes={[
+              "Liste ekrandaki aramaya göredir.",
+              "Pasifleştirilmiş roller de dosyaya girer (Durum sütununda işaretli).",
+              "Yetki Sayısı = role bağlı yetki adedi; yetki kodları dosyaya yazılmaz.",
+            ]}
+          />
+        </div>
       </div>
 
       <PageBody>

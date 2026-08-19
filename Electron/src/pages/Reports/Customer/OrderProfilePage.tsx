@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DetailTable, MetricCard, ReportPageLayout } from "../_components";
+import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDate, fmtInt } from "../_components/formatters";
+import { buildOrderProfileExport } from "./orderProfileExport";
 import { customerReportsApi, type CustomerOrderProfileRow } from "./service";
 
 const columns: ColumnDef<CustomerOrderProfileRow>[] = [
@@ -32,12 +34,21 @@ export function OrderProfilePage() {
   const rows = data?.data ?? [];
   const totalOrders = rows.reduce((a, r) => a + r.orderCount, 0);
   const totalLines = rows.reduce((a, r) => a + r.lineCount, 0);
+  // Snapshot rapor: dönem yok, "ne zaman alındı" var. Dosya elden ele dolaşırken
+  // rakamın hangi ana ait olduğu tek okunur bilgi budur.
+  const asOfLabel = `Tüm zamanlar · ${fmtDate(new Date())} itibarıyla`;
 
   return (
     <ReportPageLayout
       title="Müşteri Sipariş Profili"
       description="Aktif müşterilerin sipariş özeti — favori kumaş, renk, en."
       showDateRange={false}
+      actions={
+        <ReportExportBar
+          disabled={!data}
+          buildSpec={() => (data ? buildOrderProfileExport({ rows, asOfLabel }) : null)}
+        />
+      }
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard label="Sipariş Vermiş Müşteri" value={fmtInt(rows.length)} isLoading={isLoading} />

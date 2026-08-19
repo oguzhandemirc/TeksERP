@@ -8,10 +8,12 @@ import {
   SimpleLineChart,
   SimplePieChart,
 } from "../_components";
-import { fmtDayShort, fmtInt } from "../_components/formatters";
+import { ReportExportBar } from "../_components/ReportExportBar";
+import { fmtDate, fmtDayShort, fmtInt } from "../_components/formatters";
 import { actionLabel, tableLabel } from "../_components/audit-labels";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { auditReportsApi } from "./service";
+import { buildSystemLogSummaryExport } from "./systemLogSummaryExport";
 
 interface TableRow { tableName: string; count: number }
 const tableColumns: ColumnDef<TableRow>[] = [
@@ -24,7 +26,7 @@ const tableColumns: ColumnDef<TableRow>[] = [
 ];
 
 export function SystemLogSummaryPage() {
-  const { params } = useReportDateRange(7);
+  const { params, dateFrom, dateTo } = useReportDateRange(7);
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "audit", "system-log-summary", params],
     queryFn: () => auditReportsApi.systemLogSummary(params),
@@ -33,6 +35,7 @@ export function SystemLogSummaryPage() {
   });
 
   const s = data?.data;
+  const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
   const pieData = (s?.byAction ?? []).map((a) => ({
     name: actionLabel(a.action),
     value: a.count,
@@ -43,6 +46,12 @@ export function SystemLogSummaryPage() {
       title="Denetim Kaydı Özeti"
       description="SystemLog tablosunda aralık içinde oluşan kayıtların kırılımı."
       defaultDays={7}
+      actions={
+        <ReportExportBar
+          disabled={!s}
+          buildSpec={() => (s ? buildSystemLogSummaryExport({ summary: s, periodLabel }) : null)}
+        />
+      }
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard label="Toplam Kayıt" value={fmtInt(s?.totalLogs ?? 0)} isLoading={isLoading} />

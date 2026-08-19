@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ChartCard, DetailTable, MetricCard, ReportPageLayout, SimpleBarChart } from "../_components";
-import { fmtInt } from "../_components/formatters";
+import { ReportExportBar } from "../_components/ReportExportBar";
+import { fmtDate, fmtInt } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { productionReportsApi, type OperatorPerformanceRow } from "./service";
+import { buildOperatorPerformanceExport } from "./operatorPerformanceExport";
 
 const columns: ColumnDef<OperatorPerformanceRow>[] = [
   { accessorKey: "fullName", header: "Operatör", cell: ({ row }) => row.original.fullName || row.original.username },
@@ -16,7 +18,7 @@ const columns: ColumnDef<OperatorPerformanceRow>[] = [
 ];
 
 export function OperatorPerformancePage() {
-  const { params } = useReportDateRange(30);
+  const { params, dateFrom, dateTo } = useReportDateRange(30);
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "production", "operator-performance", params],
     queryFn: () => productionReportsApi.operatorPerformance(params),
@@ -28,16 +30,28 @@ export function OperatorPerformancePage() {
   const totalOps = rows.reduce((acc, r) => acc + r.totalOps, 0);
   const activeCount = rows.length;
 
-  // En aktif 10 operatörü chart'ta göster
-  const chartData = rows.slice(0, 10).map((r) => ({
+  // En aktif 10 operatörü chart'ta göster. Dilim TEK yerde durur; dışa aktarım
+  // da aynı diziden beslenir, yoksa grafikte 10, Excel'de başka bir sayı olur.
+  const chartRows = rows.slice(0, 10);
+  const chartData = chartRows.map((r) => ({
     name: r.fullName || r.username,
     ops: r.totalOps,
   }));
+
+  const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
 
   return (
     <ReportPageLayout
       title="Operatör Performansı"
       description="Operatör başına toplam ve op-türü kırılımında işlem sayısı."
+      actions={
+        <ReportExportBar
+          disabled={!data}
+          buildSpec={() =>
+            data ? buildOperatorPerformanceExport({ rows, periodLabel, chartRows }) : null
+          }
+        />
+      }
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <MetricCard label="Aktif Operatör" value={fmtInt(activeCount)} isLoading={isLoading} />

@@ -95,7 +95,7 @@ export function WorkOrdersPage() {
     forceFilters,
   } = useListToggles({ scope: "work-orders", withCompleted: true });
 
-  const { table, query, search, setSearch, pagination } = useDataTable<WorkOrder>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<WorkOrder>({
     queryKey: QUERY_KEY,
     fetchFn: workOrderService.listCursor,
     columns: workOrderColumns,
@@ -133,6 +133,7 @@ export function WorkOrdersPage() {
         }
       />
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         placeholder="İş emri, parti, kumaş, müşteri veya sipariş no ara..."

@@ -13,6 +13,10 @@ interface Props<T> {
   /** Verilirse "Sütunlar & CSV" araç menüsü gösterilir. */
   table?: Table<T>;
   exportName?: string;
+  /** Verilirse indirme, ekrandaki yüklü satırları değil aktif filtreye uyan SUNUCUDAKİ
+   *  TÜM kayıtları çeker (`useDataTable.fetchAll`). Sektör standardı: dışa aktarma =
+   *  tüm liste; verilmezse kullanıcı EKSİK dosya indirdiğini fark etmez. */
+  fetchAll?: (onProgress?: (loaded: number, total?: number) => void) => Promise<T[]>;
   /** Arama kutusunu gizle — arama dışarıdan (ör. sayfa üstündeki birleşik input) sürülüyor. */
   hideSearch?: boolean;
   /** Sola dayalı ek içerik (araç menüsünden ÖNCE) — ör. tarih aralığı filtresi. */
@@ -26,6 +30,7 @@ export function DataTableToolbar<T>({
   actions,
   table,
   exportName,
+  fetchAll,
   hideSearch = false,
   leading,
 }: Props<T>) {
@@ -44,7 +49,9 @@ export function DataTableToolbar<T>({
       )}
       {leading}
       <div className="ml-auto flex items-center gap-2">
-        {table ? <DataTableTools table={table} exportName={exportName} /> : null}
+        {table ? (
+          <DataTableTools table={table} exportName={exportName} fetchAll={fetchAll} />
+        ) : null}
         <SavedViewsMenu />
         {actions}
       </div>

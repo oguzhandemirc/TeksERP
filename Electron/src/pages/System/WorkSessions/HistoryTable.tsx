@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/table";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { safeFormat } from "@/lib/format";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import { deviceService } from "@/pages/Devices/service";
 import { machineService } from "@/pages/Machines/service";
@@ -26,10 +28,34 @@ import {
   formatDurationMinutes,
   placeLabel,
   sessionDurationMinutes,
+  type WorkSessionItem,
 } from "./types";
 
 const PAGE_SIZE = 25;
 const SELECT_CLS = "h-9 rounded-md border border-input bg-background px-2 text-sm";
+
+// Dışa aktarım sütunları — ekrandaki "Yer" kolonu dosyada İSTASYON + MAKİNE olarak
+// ayrılır (süzülebilsin). Süre İKİ kolon: okunur metin ("3 sa 25 dk") + toplanabilir
+// dakika (TOPLAM satırı yalnız sayısal kolondan çıkar; "3 sa 25 dk" metni sayıya
+// çevrilseydi 325 okunurdu). AÇIK oturumlarda bitiş boş, süre indirme anına göredir.
+const SESSION_EXPORT_COLUMNS: ExportColumn<WorkSessionItem>[] = [
+  { label: "Kullanıcı", value: (s) => s.user.fullName },
+  { label: "İstasyon", value: (s) => s.station.name },
+  { label: "Makine", value: (s) => (s.machine ? `${s.machine.code} — ${s.machine.name}` : "") },
+  { label: "Cihaz", value: (s) => s.device.name },
+  { label: "Başlangıç", value: (s) => safeFormat(s.startedAt, "dd.MM.yyyy HH:mm") },
+  { label: "Bitiş", value: (s) => (s.endedAt ? safeFormat(s.endedAt, "dd.MM.yyyy HH:mm") : "Açık") },
+  {
+    label: "Süre",
+    value: (s) => formatDurationMinutes(sessionDurationMinutes(s.startedAt, s.endedAt)),
+  },
+  {
+    label: "Süre (dk)",
+    value: (s) => sessionDurationMinutes(s.startedAt, s.endedAt),
+    summable: true,
+  },
+  { label: "Kapanış", value: (s) => (s.endReason ? endReasonLabels[s.endReason] : "") },
+];
 
 /**
  * Oturum geçmişi (ayak izi) — kullanıcı/makine/istasyon/tarih filtreli, offset
@@ -159,6 +185,22 @@ export function HistoryTable() {
             resetPage();
           }}
         />
+        <div className="ml-auto">
+          <ListExportMenu
+            name="Çalışma Oturumları"
+            rows={rows}
+            columns={SESSION_EXPORT_COLUMNS}
+            notes={[
+              // ⚠️ Liste offset SAYFALI — dosyaya yalnız EKRANDAKİ sayfa iner. Bunu
+              // yazmazsak kullanıcı 25 satırlık dosyayı "tüm geçmiş" sanır.
+              pagination && pagination.totalPages > 1
+                ? `Yalnız görüntülenen sayfa: ${rows.length} oturum (sayfa ${pagination.page}/${pagination.totalPages}, filtreye uyan toplam ${pagination.total}). Diğer sayfalar dosyaya girmez.`
+                : `Filtreye uyan ${rows.length} oturum.`,
+              "Filtreler (kullanıcı / istasyon / makine / cihaz / tarih) dosyaya birebir yansır.",
+              "Açık oturumlarda bitiş boştur; süre indirme anına göre hesaplanır.",
+            ]}
+          />
+        </div>
       </div>
 
       {q.isLoading ? (

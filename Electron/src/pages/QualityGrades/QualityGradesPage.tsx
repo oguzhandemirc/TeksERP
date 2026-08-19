@@ -10,7 +10,7 @@ import { qualityGradeService } from "./service";
 import type { QualityGrade } from "./types";
 
 export function QualityGradesPage() {
-  const { table, query, search, setSearch, pagination } = useDataTable<QualityGrade>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<QualityGrade>({
     queryKey: "quality-grades",
     fetchFn: qualityGradeService.listCursor,
     columns: qualityGradeColumns,
@@ -32,6 +32,7 @@ export function QualityGradesPage() {
       </div>
 
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         placeholder="Kod veya ad ara..."

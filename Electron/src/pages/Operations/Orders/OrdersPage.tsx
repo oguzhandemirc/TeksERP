@@ -282,7 +282,7 @@ export function OrdersPage() {
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
-  const { table, query, search, setSearch, pagination } = useDataTable<Order>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<Order>({
     queryKey: QUERY_KEY,
     fetchFn: orderService.listCursor,
     columns,
@@ -347,6 +347,7 @@ export function OrdersPage() {
       />
 
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         placeholder="Sipariş no, iş emri no, firma veya kumaş ara..."

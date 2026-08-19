@@ -81,7 +81,7 @@ export function SacksListView({ onEditSack }: Props) {
   const [weighSack, setWeighSack] = useState<SackSearchRow | null>(null);
   const [labelSack, setLabelSack] = useState<SackSearchRow | null>(null);
 
-  const { table, query, search, setSearch, pagination } = useDataTable<SackSearchRow>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
     fetchFn: sackHubService.listSacks,
     columns: sacksColumns,
@@ -150,6 +150,7 @@ export function SacksListView({ onEditSack }: Props) {
     <div className="flex min-h-0 flex-1 flex-col">
       {/* TEK satır: birleşik ara/okut kutusu + filtreler + Sütunlar/Görünümler. */}
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         hideSearch

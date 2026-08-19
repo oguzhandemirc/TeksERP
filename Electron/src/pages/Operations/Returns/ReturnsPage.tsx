@@ -85,7 +85,7 @@ export function ReturnsPage() {
     setEntryOpen(true);
     setScanBarcode("");
   };
-  const { table, query, search, setSearch, pagination } = useDataTable<ReturnRow>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ReturnRow>({
     queryKey: "returns",
     fetchFn: returnsService.listCursor,
     columns: returnColumns,
@@ -125,6 +125,7 @@ export function ReturnsPage() {
         />
       </PermissionGate>
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         placeholder="Müşteri, sipariş, kumaş, barkod veya neden ara..."

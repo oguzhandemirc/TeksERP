@@ -15,7 +15,7 @@ import { useTabOrder } from "@/hooks/useTabOrder";
 import { useDataTable } from "@/hooks/useDataTable";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
-import { exportTableToPdf, exportTableToXlsx, exportListName } from "@/lib/table-export";
+import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { SavedViewsMenu } from "@/components/data-table/SavedViewsMenu";
 import { RollScanBar } from "./RollScanBar";
 import { RollsTableBody } from "./RollsTableBody";
@@ -57,7 +57,6 @@ export function RollsPage() {
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
   // "Tümünü İndir" ilerlemesi (sağ alt) — 30k'da "N / ~T" göstergesi için.
-  const [dlProgress, setDlProgress] = useState<{ loaded: number; total?: number } | null>(null);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
 
   // "Envanter Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
@@ -150,24 +149,12 @@ export function RollsPage() {
   });
 
   // Sağ alttaki "Tümünü İndir" — aktif sekmenin (filtreli) SUNUCUDAKİ TÜM kayıtlarını
-  // PDF/Excel indirir (ekrandaki 100 değil). İlerleme sağ altta "N / ~T" görünür.
-  const handleExportAll = async (kind: "pdf" | "excel") => {
-    setDlProgress(null);
-    try {
-      const rows = await dataTable.fetchAll((loaded, total) => setDlProgress({ loaded, total }));
-      if (rows.length === 0) {
-        toast.info("İndirilecek kayıt yok.");
-        return;
-      }
-      const name = exportListName("Envanter");
-      if (kind === "pdf") await exportTableToPdf(dataTable.table, rows, name);
-      else await exportTableToXlsx(dataTable.table, rows, name);
-    } catch {
-      toast.error("İndirme hazırlanamadı.");
-    } finally {
-      setDlProgress(null);
-    }
-  };
+  // PDF/Excel/CSV indirir (ekrandaki 100 değil). İlerleme sağ altta "N / ~T" görünür.
+  const exportAll = useTableExportAll({
+    table: dataTable.table,
+    fetchAll: dataTable.fetchAll,
+    name: "Envanter",
+  });
 
   // "Fire kaliteyi de göster" — URL filter[includeFire]; tablo + özet ikisi de okur.
   const includeFire = searchParams.get("filter[includeFire]") === "true";
@@ -299,15 +286,10 @@ export function RollsPage() {
             <>
               <ExportMenu
                 label="Tümünü İndir"
-                busyLabel={
-                  dlProgress
-                    ? `${dlProgress.loaded.toLocaleString("tr-TR")}${
-                        dlProgress.total ? ` / ~${dlProgress.total.toLocaleString("tr-TR")}` : ""
-                      } indiriliyor…`
-                    : undefined
-                }
-                onPdf={() => handleExportAll("pdf")}
-                onExcel={() => handleExportAll("excel")}
+                busyLabel={exportAll.busyLabel}
+                onPdf={exportAll.onPdf}
+                onExcel={exportAll.onExcel}
+                onCsv={exportAll.onCsv}
               />
               <Button
                 size="sm"

@@ -8,10 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
+import { safeFormat } from "@/lib/format";
 import { deviceService } from "./service";
 import type { DeviceListItem } from "./types";
 import { ApproveAssignDialog } from "./ApproveAssignDialog";
-import { DeviceRow } from "./DeviceRow";
+import { DeviceRow, deviceKindLabel } from "./DeviceRow";
 import {
   DeviceFilterBar,
   type DeviceKindFilter,
@@ -20,6 +23,23 @@ import {
 import { foldSearchText } from "@/lib/search-fold";
 
 const QUERY_KEY = "admin-devices";
+
+/** Satırdaki rozetle AYNI sıra: pasiflik onay durumunun önüne geçer. */
+const deviceStatusLabel = (d: DeviceListItem): string =>
+  !d.isActive ? "Pasif" : d.status === "APPROVED" ? "Onaylı" : "Onay bekliyor";
+
+// Dışa aktarım sütunları — ekrandaki kolonların (Cihaz · Tür · Durum · Son
+// aktivite · Kimlik) karşılığı; kimlik tabloda kısaltılır, dosyada TAM yazılır
+// (cihaz eşleştirmesi ancak tam kimlikle yapılabilir).
+const DEVICE_EXPORT_COLUMNS: ExportColumn<DeviceListItem>[] = [
+  { label: "Cihaz Adı", value: (d) => d.name },
+  { label: "Tür", value: (d) => deviceKindLabel(d.kind) },
+  { label: "Durum", value: deviceStatusLabel },
+  { label: "Makine", value: (d) => (d.machine ? `${d.machine.name} (${d.machine.code})` : "") },
+  { label: "İstasyon", value: (d) => d.machine?.station.name ?? "" },
+  { label: "Son Aktivite", value: (d) => (d.lastSeenAt ? safeFormat(d.lastSeenAt, "dd.MM.yyyy HH:mm") : "") },
+  { label: "Cihaz Kimliği", value: (d) => d.deviceId },
+];
 
 export function DevicesPage() {
   const qc = useQueryClient();
@@ -77,7 +97,22 @@ export function DevicesPage() {
     <PageShell>
       <PageHeader
         title="Cihazlar"
-        actions={<RefreshButton queryKey={QUERY_KEY} />}
+        actions={
+          <>
+            <RefreshButton queryKey={QUERY_KEY} />
+            <ListExportMenu
+              name="Cihazlar"
+              rows={filtered}
+              columns={DEVICE_EXPORT_COLUMNS}
+              notes={[
+                "Liste ekrandaki arama · durum · tür filtresine göredir.",
+                anyFilterActive
+                  ? `Filtre etkin: ${filtered.length} / ${devices.length} cihaz.`
+                  : "Filtre yok — tüm cihazlar (pasifler dahil).",
+              ]}
+            />
+          </>
+        }
       />
 
       <DeviceFilterBar

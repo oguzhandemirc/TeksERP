@@ -51,7 +51,7 @@ interface TabProps {
 }
 
 export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: TabProps) {
-  const { table, query, search, setSearch, pagination } = useDataTable<KartelaDispatchListItem>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<KartelaDispatchListItem>({
     queryKey: "kartela-dispatches",
     fetchFn: kartelaService.listDispatchesCursor,
     columns: kartelaDispatchColumns,
@@ -73,6 +73,7 @@ export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: T
   return (
     <>
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         hideSearch
@@ -105,7 +106,7 @@ export function DispatchesTab({ onSelect, onScanSwatch, swatchLookupPending }: T
 }
 
 export function ReceiptsTab({ onSelect, onScanSwatch, swatchLookupPending }: TabProps) {
-  const { table, query, search, setSearch, pagination } = useDataTable<KartelaReceiptListItem>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<KartelaReceiptListItem>({
     queryKey: "kartela-receipts",
     fetchFn: kartelaService.listReceiptsCursor,
     columns: kartelaReceiptColumns,
@@ -125,6 +126,7 @@ export function ReceiptsTab({ onSelect, onScanSwatch, swatchLookupPending }: Tab
   return (
     <>
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         hideSearch

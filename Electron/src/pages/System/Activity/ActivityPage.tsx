@@ -5,14 +5,38 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { AutoLoadMore } from "@/components/data-table/AutoLoadMore";
 import { useInfiniteScroll } from "@/hooks/useInfiniteScroll";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
+import { safeFormat } from "@/lib/format";
 import { systemLogService } from "@/services/systemLogService";
 import type { SystemLogListItem } from "@/types/systemLog";
 import { ActivityFilters, type ActivityFilterState } from "./ActivityFilters";
 import { ActivityFeed } from "./ActivityFeed";
 import { ActivityDetailSheet } from "./ActivityDetailSheet";
+import { actionLabel, tableLabel } from "./labels";
 
 const QUERY_KEY = "system-logs";
 const PAGE_SIZE = 50;
+
+/** Akıştaki kullanıcı adı — kayıt sistem tarafından yazıldıysa "Sistem" (satırla aynı). */
+const activityUser = (i: SystemLogListItem): string =>
+  i.user ? i.user.fullName || i.user.username : "Sistem";
+
+// Dışa aktarım sütunları — akış satırının düz tablo karşılığı. "Özet" satırda
+// okunan cümlenin AYNISI (kullanıcı → modül → fiil); ekranda başka bir açıklama
+// alanı yok (eski/yeni değerler yalnız detay panelinde).
+const ACTIVITY_EXPORT_COLUMNS: ExportColumn<SystemLogListItem>[] = [
+  { label: "Tarih / Saat", value: (i) => safeFormat(i.createdAt, "dd.MM.yyyy HH:mm:ss") },
+  { label: "Kullanıcı", value: activityUser },
+  { label: "İşlem", value: (i) => actionLabel(i.action) },
+  { label: "Modül", value: (i) => tableLabel(i.tableName) },
+  { label: "Tablo (teknik)", value: (i) => i.tableName },
+  { label: "Kayıt", value: (i) => i.recordId },
+  {
+    label: "Özet",
+    value: (i) => `${activityUser(i)} → ${tableLabel(i.tableName)} kaydını ${actionLabel(i.action)}`,
+  },
+];
 
 export function ActivityPage() {
   const [filters, setFilters] = useState<ActivityFilterState>({});
@@ -50,7 +74,23 @@ export function ActivityPage() {
     <PageShell>
       <PageHeader
         title="Aktivite Günlüğü"
-        actions={<RefreshButton queryKey={QUERY_KEY} />}
+        actions={
+          <>
+            <RefreshButton queryKey={QUERY_KEY} />
+            <ListExportMenu
+              name="Aktivite Günlüğü"
+              rows={items}
+              columns={ACTIVITY_EXPORT_COLUMNS}
+              notes={[
+                // ⚠️ Akış TEMBEL yüklenir (sonsuz kaydırma). Bunu yazmazsak indirilen
+                // dosya "hepsi buymuş" gibi okunur — sessiz kırpma en tehlikeli hatadır.
+                `Yalnız ekrana yüklenen ${items.length} kayıt — daha fazlası için "Daha fazla yükle" ile listeyi genişletin.`,
+                "Filtreler (kullanıcı / modül / işlem / tarih) dosyaya birebir yansır.",
+                "Eski/yeni değer dökümü dosyaya girmez — satırın detay panelinde görülür.",
+              ]}
+            />
+          </>
+        }
       />
       <ActivityFilters value={filters} onChange={setFilters} />
 

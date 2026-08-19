@@ -21,6 +21,8 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useTableExportAll } from "@/hooks/useTableExportAll";
+import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { rollColumns } from "@/pages/Operations/Rolls/columns";
 import { RollsTableBody } from "@/pages/Operations/Rolls/RollsTableBody";
 import {
@@ -51,6 +53,14 @@ export default function RollArchivePage() {
     },
   });
 
+  // Arşiv salt-okunur ama DIŞA AKTARILABİLİR olmalı: emekli toplar denetim/analiz
+  // sorularının asıl kaynağıdır (kesim geçmişi, fasonda tüketilen, kartelaya giden).
+  const exportAll = useTableExportAll({
+    table: dataTable.table,
+    fetchAll: dataTable.fetchAll,
+    name: "Top-Arsivi",
+  });
+
   return (
     <PageShell>
       <PageHeader
@@ -63,6 +73,15 @@ export default function RollArchivePage() {
         isLoading={dataTable.query.isLoading}
         pagination={dataTable.pagination}
         exportName="Top-Arsivi"
+        paginationActions={
+          <ExportMenu
+            label="Tümünü İndir"
+            busyLabel={exportAll.busyLabel}
+            onPdf={exportAll.onPdf}
+            onExcel={exportAll.onExcel}
+            onCsv={exportAll.onCsv}
+          />
+        }
       />
     </PageShell>
   );

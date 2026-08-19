@@ -1,9 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { DetailTable, MetricCard, ReportPageLayout } from "../_components";
-import { fmtDateTime, fmtInt } from "../_components/formatters";
+import { ReportExportBar } from "../_components/ReportExportBar";
+import { fmtDate, fmtDateTime, fmtInt } from "../_components/formatters";
 import { useReportDateRange } from "../_hooks/useReportDateRange";
 import { auditReportsApi, type UserActivityRow } from "./service";
+import { buildUserActivityExport } from "./userActivityExport";
 
 const columns: ColumnDef<UserActivityRow>[] = [
   {
@@ -31,7 +33,7 @@ const columns: ColumnDef<UserActivityRow>[] = [
 ];
 
 export function UserActivityPage() {
-  const { params } = useReportDateRange(7);
+  const { params, dateFrom, dateTo } = useReportDateRange(7);
   const { data, isLoading } = useQuery({
     queryKey: ["reports", "audit", "user-activity", params],
     queryFn: () => auditReportsApi.userActivity(params),
@@ -42,12 +44,19 @@ export function UserActivityPage() {
   const rows = data?.data ?? [];
   const totalActions = rows.reduce((a, r) => a + r.totalCount, 0);
   const totalDeletes = rows.reduce((a, r) => a + r.deleteCount, 0);
+  const periodLabel = `${fmtDate(dateFrom)} – ${fmtDate(dateTo)}`;
 
   return (
     <ReportPageLayout
       title="Kullanıcı Aktivitesi"
       description="Aralıkta her kullanıcının yaptığı CUD işlem sayısı ve son işlem zamanı."
       defaultDays={7}
+      actions={
+        <ReportExportBar
+          disabled={!data}
+          buildSpec={() => (data ? buildUserActivityExport({ rows, periodLabel }) : null)}
+        />
+      }
     >
       <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard label="Aktif Kullanıcı" value={fmtInt(rows.length)} isLoading={isLoading} />

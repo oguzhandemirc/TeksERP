@@ -9,11 +9,25 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
 import { permissionCatalogService } from "@/services/permissionCatalogService";
 import { categoryLabels, moduleLabels, isWildcard, type Permission } from "@/types/permissions";
 import { cn } from "@/lib/utils";
 
 const QUERY_KEY = "permission-catalog";
+
+// Dışa aktarım sütunları — ekrandaki gruplama (kategori › modül) düz sütuna açılır,
+// sayaçlar ekrandaki "Kullanıcı" / "Rol" kolonlarının aynısıdır.
+const PERMISSION_EXPORT_COLUMNS: ExportColumn<Permission>[] = [
+  { label: "Yetki Kodu", value: (p) => p.code },
+  { label: "Kategori", value: (p) => categoryLabels[p.category] ?? p.category },
+  { label: "Modül", value: (p) => moduleLabels[p.module] ?? p.module },
+  { label: "Açıklama", value: (p) => p.description ?? "" },
+  { label: "Tüm Yetkiler", value: (p) => (isWildcard(p.code) ? "Evet" : "") },
+  { label: "Kullanıcı Sayısı", value: (p) => p.userCount ?? 0, summable: true },
+  { label: "Rol Sayısı", value: (p) => p.templateCount ?? 0, summable: true },
+];
 
 const categoryIcons: Record<string, typeof Monitor> = {
   web: Monitor,
@@ -30,8 +44,10 @@ export function PermissionsCatalogPage() {
     staleTime: 0,
   });
 
-  const grouped = useMemo(() => {
-    const list = (query.data?.data ?? []).filter((p) => {
+  // Ekranda görünen (aramaya süzülmüş) DÜZ liste. Gruplama bunun üzerine kurulur;
+  // dışa aktarım da aynı diziyi alır → dosya ile ekran ayrışamaz.
+  const filtered = useMemo(() => {
+    return (query.data?.data ?? []).filter((p) => {
       if (!search) return true;
       // ⚠️ Terime ÖN İŞLEM UYGULAMA: `search.toLowerCase()` Türkçede BOZUKTUR
       // ("ŞAHİN" → "şahi̇n", i + U+0307) ve katlamadan sonra da nokta kalır →
@@ -43,9 +59,11 @@ export function PermissionsCatalogPage() {
         foldedIncludes(moduleLabels[p.module] ?? p.module, q)
       );
     });
+  }, [query.data, search]);
 
+  const grouped = useMemo(() => {
     const byCat = new Map<string, Map<string, Permission[]>>();
-    for (const p of list) {
+    for (const p of filtered) {
       const cat = byCat.get(p.category) ?? new Map<string, Permission[]>();
       const arr = cat.get(p.module) ?? [];
       arr.push(p);
@@ -53,7 +71,7 @@ export function PermissionsCatalogPage() {
       byCat.set(p.category, cat);
     }
     return byCat;
-  }, [query.data, search]);
+  }, [filtered]);
 
   // Hiçbir kullanıcıda olmayan yetkiler. Bu bandın sebebi ölçülmüş bir saha
   // hatasıdır: 2026-08-06'da canlıda YEDİ izin (belge tasarımı, iş istasyonu
@@ -84,12 +102,24 @@ export function PermissionsCatalogPage() {
             className="h-8 pl-8 text-sm"
           />
         </div>
-        <div className="ml-auto text-xs text-muted-foreground">
-          Toplam{" "}
-          <span className="text-foreground font-medium">
-            {query.data?.data.length ?? 0}
-          </span>{" "}
-          yetki
+        <div className="ml-auto flex items-center gap-3">
+          <div className="text-xs text-muted-foreground">
+            Toplam{" "}
+            <span className="text-foreground font-medium">
+              {query.data?.data.length ?? 0}
+            </span>{" "}
+            yetki
+          </div>
+          <ListExportMenu
+            name="Yetki Kataloğu"
+            rows={filtered}
+            columns={PERMISSION_EXPORT_COLUMNS}
+            notes={[
+              "Liste ekrandaki aramaya göredir.",
+              "Kategori › modül gruplaması dosyada ayrı sütunlara açılmıştır.",
+              "Kullanıcı Sayısı = yetkiyi taşıyan kullanıcı adedi (0 = kimsede yok); Rol Sayısı = yetkiyi içeren şablon adedi.",
+            ]}
+          />
         </div>
       </div>
 

@@ -7,6 +7,10 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Input } from "@/components/ui/input";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
+import { safeFormat } from "@/lib/format";
+import { workOrderStatusLabels, type WorkOrderStatus } from "@/types/enums";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { productBalanceService } from "./service";
@@ -16,6 +20,68 @@ import type { BalanceGroup, BalanceSpecRow, WoTarget } from "./types";
 import { foldSearchText } from "@/lib/search-fold";
 
 const QUERY_KEY = "product-balance";
+
+/**
+ * Dışa aktarım satırı — ekran (kumaş+renk) grubu + açılır EN kırılımı; dosya bunun
+ * DÜZLEŞTİRİLMİŞİ: bir satır = bir (kumaş, renk, en) alt-satırı, yani ekranın en
+ * ince kırılımı. Grup sütunları (Ham / Ham Açığı) tekrarlanır.
+ */
+interface BalanceExportRow {
+  group: BalanceGroup;
+  spec: BalanceSpecRow;
+}
+
+/**
+ * ⚠️ `summable` YALNIZ en (spec) düzeyinde eklenebilir miktarlara verilir.
+ * Ham ve Ham Açığı (kumaş+renk havuzu, en'lere BÖLÜNMEZ) her satırda tekrarlandığı
+ * için toplanabilir DEĞİL — TOPLAM satırı onları grup içindeki en sayısı kadar
+ * sayardı ve dosya, ekranın söylediğinden fazla ham stok gösterirdi.
+ */
+const BALANCE_EXPORT_COLUMNS: ExportColumn<BalanceExportRow>[] = [
+  { label: "Kumaş", value: (r) => r.spec.itemName },
+  { label: "Renk", value: (r) => r.spec.colorName ?? "—" },
+  { label: "En (cm)", value: (r) => r.spec.width ?? "" },
+  { label: "Talep (m)", value: (r) => r.spec.talep, summable: true },
+  { label: "Depo (m)", value: (r) => r.spec.depo, summable: true },
+  { label: "Üretimde (m)", value: (r) => r.spec.uretimde, summable: true },
+  { label: "Üretilecek (m)", value: (r) => r.spec.uretilecek, summable: true },
+  { label: "Durum", value: (r) => (r.spec.uretilecek > 0 ? "Üretilecek" : "Karşılanıyor") },
+  { label: "Ham (m, kumaş+renk)", value: (r) => r.group.ham },
+  { label: "Ham Açığı (m, kumaş+renk)", value: (r) => r.group.malzemeAcigi },
+  { label: "Sipariş Sayısı", value: (r) => r.spec.lines.length, summable: true },
+  // İstenen − Sevk = Talep (yukarıdaki sütun). Ayrı bir "Kalan" sütunu EKLENMEDİ:
+  // Talep'in birebir aynısı olurdu ve iki farklı isim aynı sayıyı gösterirdi.
+  { label: "İstenen (m)", value: (r) => sum(r.spec.lines, (l) => l.quantity), summable: true },
+  { label: "Sevk Edilen (m)", value: (r) => sum(r.spec.lines, (l) => l.shipped), summable: true },
+  { label: "Siparişler", value: (r) => uniq(r.spec.lines.map((l) => l.orderNumber)).join(", ") },
+  { label: "Müşteriler", value: (r) => uniq(r.spec.lines.map((l) => l.customerName)).join(", ") },
+  { label: "En Yakın Termin", value: (r) => earliestDeadline(r.spec) },
+  { label: "Canlı İş Emri Sayısı", value: (r) => r.spec.wos.length, summable: true },
+  {
+    label: "İş Emirleri",
+    value: (r) =>
+      r.spec.wos
+        .map(
+          (w) =>
+            `${w.batchNumber} (${workOrderStatusLabels[w.status as WorkOrderStatus] ?? w.status})`,
+        )
+        .join(", "),
+  },
+];
+
+const sum = <T,>(rows: T[], pick: (row: T) => number): number =>
+  rows.reduce((acc, row) => acc + pick(row), 0);
+
+const uniq = (values: string[]): string[] => Array.from(new Set(values.filter(Boolean)));
+
+/** En erken termin (ekrandaki drill-down sıralamasıyla aynı ölçüt). */
+function earliestDeadline(spec: BalanceSpecRow): string {
+  const stamps = spec.lines
+    .map((l) => l.deadline)
+    .filter((d): d is string => Boolean(d))
+    .sort();
+  return stamps.length > 0 ? safeFormat(stamps[0], "dd.MM.yyyy") : "";
+}
 
 // Kumaş → backend (sorguları daraltır). Renk/Durum → client-side (anlık).
 // Kumaş + renk ÇOKLU. Durum TEKİL kalır: Açık / Karşılanıyor birbirinin
@@ -86,6 +152,13 @@ export function ProductBalancePage() {
     });
   }, [groups, colorIds, status, search]);
 
+  // Dışa aktarım: EKRANDA GÖRÜNEN grupların EN kırılımı (ekranın en ince satırı).
+  // Filtreler (kumaş/renk/durum/arama) zaten `filtered`'a uygulanmış durumda.
+  const exportRows = useMemo<BalanceExportRow[]>(
+    () => filtered.flatMap((g) => g.specs.map((s) => ({ group: g, spec: s }))),
+    [filtered],
+  );
+
   // Perf: ProductBalanceRow React.memo'lu — aramaya yazarken filtre dışı kalmayan
   // satırlar re-render olmasın diye handler'lar kararlı referans (useCallback).
   const toggle = useCallback((key: string) => {
@@ -117,7 +190,32 @@ export function ProductBalancePage() {
     <PageShell>
       <PageHeader
         title="Kumaş Dengesi"
-        actions={<RefreshButton queryKey={QUERY_KEY} />}
+        actions={
+          <>
+            <ListExportMenu
+              name="Kumaş Dengesi"
+              rows={exportRows}
+              columns={BALANCE_EXPORT_COLUMNS}
+              disabled={isLoading}
+              // undefined → ListExportMenu kendi "İndirilecek kayıt yok" ipucunu verir.
+              title={
+                isLoading
+                  ? "Denge hesaplanıyor…"
+                  : exportRows.length > 0
+                    ? "Ekrandaki denge satırlarını indir"
+                    : undefined
+              }
+              notes={[
+                `Ekranda görünen ${filtered.length} kumaş+renk grubu (toplam ${groups.length}), ${exportRows.length} en satırı — kumaş / renk / durum filtresi ve arama uygulanmış hâliyle.`,
+                "Bir satır = bir (kumaş, renk, en) alt-satırı. Ekranın ana tablosu grubu özetler; dosya en kırılımını verir, grup sütunları tekrarlanır.",
+                "Üretilecek = Talep − Depo − Üretimde. Talep = İstenen − Sevk Edilen (açık siparişler).",
+                "Ham ve Ham Açığı kumaş+renk düzeyinde ORTAKTIR (en'lere bölünmez) — grubun her satırında aynı sayı yazılıdır ve bu yüzden TOPLAM satırına GİRMEZ.",
+                "Sipariş / iş emri sütunları o en alt-satırına bağlı kayıtlardır; iş emirleri yalnız CANLI (iptal edilmemiş) olanlardır.",
+              ]}
+            />
+            <RefreshButton queryKey={QUERY_KEY} />
+          </>
+        }
       />
 
       <div className="flex items-center gap-2 border-b px-3 py-2">

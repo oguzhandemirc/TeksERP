@@ -1,11 +1,20 @@
 import { useState } from "react";
-import { FileText, FileSpreadsheet, Loader2, Settings2 } from "lucide-react";
+import { FileText, FileSpreadsheet, FileType2, Loader2, Settings2 } from "lucide-react";
 import type { Table } from "@tanstack/react-table";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { columnLabel, exportTableToPdf, exportTableToXlsx, exportListName } from "@/lib/table-export";
+import {
+  columnLabel,
+  exportTableToPdf,
+  exportTableToXlsx,
+  exportTableToCsv,
+  exportListName,
+} from "@/lib/table-export";
+import { useExportRange } from "@/hooks/useExportRange";
+
+type ExportKind = "pdf" | "xlsx" | "csv";
 
 interface Props<T> {
   table: Table<T>;
@@ -21,12 +30,20 @@ interface Props<T> {
   hideExport?: boolean;
 }
 
+const LABELS: Record<ExportKind, string> = {
+  pdf: "PDF indir",
+  xlsx: "Excel indir",
+  csv: "CSV indir",
+};
+
 /**
  * Tablo araçları — sütun göster/gizle (kullanıcı tercihinde kalıcı) ve listeyi
  * PDF/Excel indirme (format seçilir). `fetchAll` verilirse tüm kayıtları indirir.
  */
 export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideExport }: Props<T>) {
-  const [busy, setBusy] = useState<null | "pdf" | "xlsx">(null);
+  const [busy, setBusy] = useState<null | ExportKind>(null);
+  // Dosya adındaki damga: filtrede tarih aralığı varsa VERİNİN dönemi, yoksa bugün.
+  const range = useExportRange();
   // Uzun "tümünü indir"de ilerleme (yüklenen / ~toplam) — 30k'da 30+ sn sürebilir,
   // belirsiz spinner "dondu mu?" paniği yaratır; sayaç güven verir.
   const [progress, setProgress] = useState<{ loaded: number; total?: number } | null>(null);
@@ -36,7 +53,7 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
 
   // Tümünü (fetchAll) ya da yalnız yüklü satırları indir. fetchAll varsa liste büyük
   // olabileceğinden butonu "hazırlanıyor" durumuna alır (çift-tık + erken toast önlenir).
-  const runExport = async (kind: "pdf" | "xlsx") => {
+  const runExport = async (kind: ExportKind) => {
     if (busy) return;
     setBusy(kind);
     setProgress(null);
@@ -48,8 +65,9 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
         toast.info("İndirilecek kayıt yok.");
         return;
       }
-      const name = exportListName(exportName);
+      const name = exportListName(exportName, { range });
       if (kind === "pdf") await exportTableToPdf(table, rows, name);
+      else if (kind === "csv") await exportTableToCsv(table, rows, name);
       else await exportTableToXlsx(table, rows, name);
     } catch {
       toast.error("İndirme hazırlanamadı.");
@@ -60,8 +78,8 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
   };
 
   // Buton etiketi: indirirken "N / ~T" (toplam biliniyorsa), yoksa "Hazırlanıyor…".
-  const busyLabel = (kind: "pdf" | "xlsx"): string => {
-    if (busy !== kind) return kind === "pdf" ? "PDF indir" : "Excel indir";
+  const busyLabel = (kind: ExportKind): string => {
+    if (busy !== kind) return LABELS[kind];
     if (progress) {
       const t = progress.total ? ` / ~${progress.total.toLocaleString("tr-TR")}` : "";
       return `${progress.loaded.toLocaleString("tr-TR")}${t} indiriliyor…`;
@@ -124,6 +142,21 @@ export function DataTableTools<T>({ table, exportName = "Liste", fetchAll, hideE
               <FileSpreadsheet className="h-3.5 w-3.5 text-success" />
             )}
             {busyLabel("xlsx")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full justify-start gap-2"
+            disabled={busy !== null}
+            onClick={() => void runExport("csv")}
+            title="Noktalı virgül ayraçlı, Türkçe Excel ile uyumlu düz metin"
+          >
+            {busy === "csv" ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <FileType2 className="h-3.5 w-3.5 text-muted-foreground" />
+            )}
+            {busyLabel("csv")}
           </Button>
         </div>
         )}

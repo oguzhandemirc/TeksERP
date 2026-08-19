@@ -11,7 +11,9 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { loadAllForPicker } from "@/lib/picker-loader";
-import type { StationKind } from "@/types/enums";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
+import { stationKindLabels, stationTypeLabels, type StationKind } from "@/types/enums";
 
 import { stationService } from "@/pages/Stations/service";
 import type { Station } from "@/pages/Stations/types";
@@ -30,7 +32,7 @@ import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types";
 import { CapabilitiesEditSheet } from "@/pages/StationCapabilities/CapabilitiesEditSheet";
 import { peripheralService } from "@/pages/PeripheralDevices/service";
-import type { PeripheralDevice } from "@/pages/PeripheralDevices/types";
+import { peripheralKindLabels, type PeripheralDevice } from "@/pages/PeripheralDevices/types";
 import { foldSearchText } from "@/lib/search-fold";
 
 // Üretim akışındaki istasyon türleri — sevkiyat/diğer (OTHER) bu ekranda yok.
@@ -39,6 +41,49 @@ const PRODUCTION_KINDS: StationKind[] = ["RAW_QC", "PROCESS_QC", "TAMBUR", "SUBC
 // Perf: makinesiz kartlar için sabit boş dizi referansı (her render'da yeni `[]`
 // StationCard'ın React.memo'sunu bozardı).
 const EMPTY_MACHINES: Machine[] = [];
+
+/**
+ * Dışa aktarım satırı — ekran KART, dosya DÜZ LİSTE. Bir satır = bir MAKİNE,
+ * istasyon sütunları tekrarlanır (klasik "denormalize" dışa aktarım; Excel'de
+ * filtrelenebilir/pivotlanabilir tek tablo).
+ *
+ * ⚠️ `machine: null` satırı bilinçlidir: makinesi olmayan istasyon aksi halde
+ * dosyadan SESSİZCE düşerdi ve "istasyon listesi" eksik çıkardı.
+ */
+interface StationMachineExportRow {
+  station: Station;
+  machine: Machine | null;
+  /** Bu makineye bağlı AKTİF cihazlar (metre/yazıcı/tartı). */
+  devices: PeripheralDevice[];
+  /** İstasyonun özellik yeteneği sayısı (istasyon düzeyi — satır başına TEKRARLANIR). */
+  propertyCount: number | null;
+}
+
+// İstasyon düzeyindeki sayılar (özellik yeteneği) satır başına tekrarlandığı için
+// `summable` DEĞİL — çok makineli istasyonda TOPLAM satırı onları kaç kez sayardı.
+// Cihaz sayısı makineye özgüdür (her satırda bir kez) → toplanabilir.
+const STATION_EXPORT_COLUMNS: ExportColumn<StationMachineExportRow>[] = [
+  { label: "İstasyon Kodu", value: (r) => r.station.code },
+  { label: "İstasyon", value: (r) => r.station.name },
+  { label: "Görev Türü", value: (r) => stationKindLabels[r.station.kind] },
+  { label: "Tip", value: (r) => stationTypeLabels[r.station.type] },
+  { label: "Departman", value: (r) => r.station.department ?? "" },
+  { label: "İstasyon Durumu", value: (r) => (r.station.isActive ? "Aktif" : "Pasif") },
+  { label: "Renk Uygular", value: (r) => (r.station.appliesColor ? "Evet" : "Hayır") },
+  { label: "Özellik Uygular", value: (r) => (r.station.appliesProperty ? "Evet" : "Hayır") },
+  { label: "İstasyon Özellik Sayısı", value: (r) => r.propertyCount ?? "" },
+  { label: "Makine Kodu", value: (r) => r.machine?.code ?? "" },
+  { label: "Makine", value: (r) => r.machine?.name ?? "" },
+  {
+    label: "Makine Durumu",
+    value: (r) => (r.machine ? (r.machine.isActive !== false ? "Aktif" : "Pasif") : "Makine yok"),
+  },
+  { label: "Cihaz Sayısı", value: (r) => (r.machine ? r.devices.length : ""), summable: true },
+  {
+    label: "Cihazlar",
+    value: (r) => r.devices.map((d) => `${d.name} (${peripheralKindLabels[d.kind]})`).join(", "),
+  },
+];
 
 const buildStationPayload = (v: StationFormValues, initial: Station | null): Partial<Station> => ({
   // Kod backend'de üretilir (IST+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
@@ -156,6 +201,25 @@ export function ProductionStationsPage() {
     });
   }, [allStations, stationId, machinePresence, debouncedSearch, machinesByStation]);
 
+  // Dışa aktarım satırları — EKRANDA GÖRÜNEN istasyon kümesinden (filtre sonrası)
+  // düzleştirilir. Makinesiz istasyon tek satırla temsil edilir; aksi halde dosyadan
+  // sessizce düşerdi.
+  const exportRows = useMemo<StationMachineExportRow[]>(
+    () =>
+      stations.flatMap((s): StationMachineExportRow[] => {
+        const propertyCount = capByStation.get(s.id)?.propertyCount ?? null;
+        const sm = machinesByStation.get(s.id) ?? EMPTY_MACHINES;
+        if (sm.length === 0) return [{ station: s, machine: null, devices: [], propertyCount }];
+        return sm.map((m) => ({
+          station: s,
+          machine: m,
+          devices: peripheralsByMachine.get(m.id) ?? [],
+          propertyCount,
+        }));
+      }),
+    [stations, machinesByStation, peripheralsByMachine, capByStation],
+  );
+
   const anyFilterActive =
     debouncedSearch.trim() !== "" || stationId !== "__all__" || machinePresence !== "all";
 
@@ -235,6 +299,23 @@ export function ProductionStationsPage() {
         title="Üretim İstasyonları"
         actions={
           <div className="flex gap-2">
+            <ListExportMenu
+              name="Üretim İstasyonları"
+              rows={exportRows}
+              columns={STATION_EXPORT_COLUMNS}
+              // undefined → ListExportMenu kendi "İndirilecek kayıt yok" ipucunu verir.
+              title={exportRows.length > 0 ? "Ekrandaki istasyon + makine listesini indir" : undefined}
+              notes={[
+                `Ekranda görünen ${stations.length} istasyon (toplam ${allStations.length}) — filtreler uygulanmış hâliyle.`,
+                "Satır başına bir MAKİNE; istasyon sütunları tekrarlanır. Makinesi olmayan istasyon tek satırla gelir (makine sütunları boş, durum \"Makine yok\").",
+                showInactive
+                  ? "Pasif makineler de listede."
+                  : "Yalnız AKTİF makineler — pasifler listede gizli (\"Pasifleri göster\" ile açılır).",
+                "Yalnız AKTİF üretim istasyonları: Ham Kalite Kontrol (KK1) · Kurşun + Kalite Kontrol 2 · Tambur · Fason / Dış İşlem.",
+                "\"İstasyon Özellik Sayısı\" istasyon düzeyindedir (her makine satırında tekrarlanır) — TOPLAM satırına girmez.",
+                "Cihaz sütunları yalnız AKTİF donanım kayıtlarını sayar.",
+              ]}
+            />
             <RefreshButton queryKey="stations" />
             {canWrite && (
               <Button size="sm" onClick={() => setStationDlg({ open: true, initial: null })}>

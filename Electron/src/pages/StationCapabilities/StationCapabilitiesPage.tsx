@@ -23,10 +23,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
 import { stationKindLabels } from "@/types/enums";
 import { stationCapabilityService } from "./service";
 import { CapabilitiesEditSheet } from "./CapabilitiesEditSheet";
-import type { StationCapabilitySummary } from "./types";
+import {
+  STATION_PROPERTY_MODE_LABELS,
+  type StationCapabilityDetail,
+  type StationCapabilitySummary,
+} from "./types";
 
 function disabledHint(cap: StationCapabilitySummary): string {
   // ⚠️ 2026-08-10: yetenek artık kategoriden TÜRETİLMİYOR, istasyonun kendi
@@ -39,6 +45,43 @@ function disabledHint(cap: StationCapabilitySummary): string {
 }
 
 const QUERY_KEY = "station-capabilities";
+
+/**
+ * Dışa aktarım satırı — ekran MATRİS, dosya UZUN BİÇİM: bir satır = AÇIK olan tek
+ * (istasyon × yetenek) eşleşmesi.
+ *
+ * ⚠️ Geniş matris (istasyon satır / yetenek sütun) Excel-CSV turunu atlatamaz:
+ * yeni bir yetenek tanımlanınca sütun sayısı değişir, eski dosya okunamaz hâle
+ * gelir ve hiçbir içe aktarıcı geri okuyamaz. Uzun biçim sektör normudur ve
+ * pivotlanabilir.
+ */
+interface CapabilityExportRow {
+  stationCode: string;
+  stationName: string;
+  stationKind: string;
+  /** "Renk" | "Özellik" */
+  capabilityType: string;
+  capabilityCode: string;
+  capabilityName: string;
+  /** Yalnız özellikte: Otomatik / Opsiyonel / Zorunlu. Renkte boş. */
+  mode: string;
+  /** Yalnız özellikte: Bayrak / Seçim. Renkte boş. */
+  valueType: string;
+  /** SEÇİM tipli özellikte izin verilen değerler. */
+  values: string;
+}
+
+const CAPABILITY_EXPORT_COLUMNS: ExportColumn<CapabilityExportRow>[] = [
+  { label: "İstasyon Kodu", value: (r) => r.stationCode },
+  { label: "İstasyon", value: (r) => r.stationName },
+  { label: "İstasyon Türü", value: (r) => r.stationKind },
+  { label: "Yetenek Türü", value: (r) => r.capabilityType },
+  { label: "Yetenek Kodu", value: (r) => r.capabilityCode },
+  { label: "Yetenek Adı", value: (r) => r.capabilityName },
+  { label: "Mod", value: (r) => r.mode },
+  { label: "Değer Tipi", value: (r) => r.valueType },
+  { label: "İzinli Değerler", value: (r) => r.values },
+];
 
 export function StationCapabilitiesPage() {
   const [search, setSearch] = useState("");
@@ -63,11 +106,94 @@ export function StationCapabilitiesPage() {
     );
   }, [query.data, search]);
 
+  // Uzun-biçim dışa aktarım için istasyon başına yetenek LİSTESİ gerekir; özet uç
+  // yalnız SAYI döner. Tek istekle hepsi (`?detailed=true`) — istasyon başına
+  // `getByStation` çağırmak N istek olurdu.
+  const detailedQuery = useQuery({
+    queryKey: [QUERY_KEY, "detailed"],
+    queryFn: stationCapabilityService.listDetailed,
+    staleTime: 60_000,
+  });
+
+  const detailByStation = useMemo(
+    () => new Map((detailedQuery.data?.data ?? []).map((d) => [d.stationId, d])),
+    [detailedQuery.data],
+  );
+
+  // EKRANDAKİ (aramayla süzülmüş) istasyon sırasını korur; yalnız AÇIK eşleşmeler.
+  const exportRows = useMemo<CapabilityExportRow[]>(() => {
+    const rows: CapabilityExportRow[] = [];
+    for (const cap of filtered) {
+      const detail: StationCapabilityDetail | undefined = detailByStation.get(cap.stationId);
+      if (!detail) continue;
+      const head = {
+        stationCode: cap.stationCode,
+        stationName: cap.stationName,
+        stationKind: stationKindLabels[cap.stationKind],
+      };
+      for (const c of detail.colors) {
+        rows.push({
+          ...head,
+          capabilityType: "Renk",
+          capabilityCode: c.code,
+          capabilityName: c.name,
+          mode: "",
+          valueType: "",
+          values: "",
+        });
+      }
+      for (const p of detail.properties) {
+        rows.push({
+          ...head,
+          capabilityType: "Özellik",
+          capabilityCode: p.code,
+          capabilityName: p.name,
+          mode: STATION_PROPERTY_MODE_LABELS[p.mode],
+          valueType: p.valueType === "CHOICE" ? "Seçim" : "Bayrak",
+          values: p.values.filter((v) => v.isActive).map((v) => v.name).join(", "),
+        });
+      }
+    }
+    return rows;
+  }, [filtered, detailByStation]);
+
+  // Yeteneği hiç olmayan istasyon uzun biçimde satır ÜRETMEZ — kaç tanesinin
+  // dosyada olmadığını notta açıkça söyle (sessiz eksik dosya olmasın).
+  const stationsWithRows = useMemo(
+    () => new Set(exportRows.map((r) => r.stationCode)).size,
+    [exportRows],
+  );
+
   return (
     <PageShell>
       <PageHeader
         title="İstasyon Yetenekleri"
-        actions={<RefreshButton queryKey={QUERY_KEY} />}
+        actions={
+          <>
+            <ListExportMenu
+              name="İstasyon Yetenekleri"
+              rows={exportRows}
+              columns={CAPABILITY_EXPORT_COLUMNS}
+              disabled={detailedQuery.isLoading}
+              // undefined → ListExportMenu kendi "İndirilecek kayıt yok" ipucunu verir.
+              title={
+                detailedQuery.isLoading
+                  ? "Yetenek listesi hazırlanıyor…"
+                  : exportRows.length > 0
+                    ? "İstasyon × yetenek eşleşmelerini indir"
+                    : undefined
+              }
+              notes={[
+                `Ekranda görünen ${filtered.length} istasyondan ${stationsWithRows} tanesinin yeteneği var; kalan ${filtered.length - stationsWithRows} istasyon dosyada YOKTUR (uzun biçim yalnız AÇIK eşleşmeleri taşır).`,
+                "Bir satır = bir (istasyon × yetenek) eşleşmesi. Matris değil uzun biçimdir: yeni yetenek eklendiğinde sütun düzeni değişmez, dosya pivotlanabilir.",
+                "Liste yalnız AKTİF istasyonları ve AKTİF yetenek tanımlarını içerir.",
+                "Mod yalnız ÖZELLİK satırlarında anlamlıdır: Otomatik (operatöre sorulmaz) · Opsiyonel (tabletde tuş) · Zorunlu (işaretlenmeden adım kapanmaz).",
+                "\"Renk\" satırları eski istasyon-renk kayıtlarıdır — renk 2026-08-02'den beri istasyon bazlı kısıt DEĞİLDİR (bilgi amaçlı; boyahane her rengi boyar).",
+              ]}
+            />
+            <RefreshButton queryKey={QUERY_KEY} />
+          </>
+        }
       />
 
       <div className="flex items-center gap-2 px-3 py-2 border-b">

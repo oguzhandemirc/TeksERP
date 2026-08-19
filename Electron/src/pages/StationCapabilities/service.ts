@@ -12,6 +12,17 @@ export const stationCapabilityService = {
       .get<ApiResponse<StationCapabilitySummary[]>>("/api/station-capabilities")
       .then((r) => r.data),
 
+  /**
+   * TÜM aktif istasyonların renk + özellik listesi — TEK istekte
+   * (`GET /api/station-capabilities?detailed=true` → `listAllDetailed`).
+   * Dışa aktarımın uzun-biçim (istasyon × yetenek) satırları buradan doğar;
+   * istasyon başına `getByStation` çağırmak N istek demek olurdu.
+   */
+  listDetailed: (): Promise<ApiResponse<StationCapabilityDetail[]>> =>
+    apiClient
+      .get<ApiResponse<StationCapabilityDetail[]>>("/api/station-capabilities?detailed=true")
+      .then((r) => r.data),
+
   getByStation: (stationId: string): Promise<ApiResponse<StationCapabilityDetail>> =>
     apiClient
       .get<ApiResponse<StationCapabilityDetail>>(`/api/station-capabilities/${stationId}`)

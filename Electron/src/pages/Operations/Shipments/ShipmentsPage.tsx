@@ -158,7 +158,7 @@ export function ShipmentsPage() {
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
-  const { table, query, search, setSearch, pagination } = useDataTable<ShipmentListItem>({
+  const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<ShipmentListItem>({
     queryKey: QUERY_KEY,
     fetchFn: shipmentService.listCursor,
     columns: shipmentColumns,
@@ -197,6 +197,7 @@ export function ShipmentsPage() {
         actions={<RefreshButton queryKey={QUERY_KEY} />}
       />
       <DataTableToolbar
+        fetchAll={fetchAll}
         search={search}
         onSearchChange={setSearch}
         placeholder="Sevkiyat no, firma, plaka, sürücü ara..."

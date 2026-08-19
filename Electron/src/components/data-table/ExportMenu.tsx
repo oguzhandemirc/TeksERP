@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Download, FileSpreadsheet, FileText, ChevronDown, Printer } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, FileType2, ChevronDown, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -19,6 +19,7 @@ export function ExportMenu({
   onPrint,
   onPdf,
   onExcel,
+  onCsv,
   disabled,
   size = "sm",
   variant = "outline",
@@ -33,6 +34,8 @@ export function ExportMenu({
   onPrint?: () => unknown;
   onPdf: () => unknown;
   onExcel: () => unknown;
+  /** Verilirse listeye "CSV" maddesi eklenir (; ayraçlı, Türkçe Excel uyumlu). */
+  onCsv?: () => unknown;
   disabled?: boolean;
   size?: "sm" | "default";
   variant?: "outline" | "default" | "secondary";
@@ -86,6 +89,11 @@ export function ExportMenu({
         <DropdownMenuItem onSelect={() => void run(onExcel)} className="gap-2">
           <FileSpreadsheet className="h-4 w-4 text-success" /> Excel{onPrint ? " indir" : ""}
         </DropdownMenuItem>
+        {onCsv && (
+          <DropdownMenuItem onSelect={() => void run(onCsv)} className="gap-2">
+            <FileType2 className="h-4 w-4 text-muted-foreground" /> CSV{onPrint ? " indir" : ""}
+          </DropdownMenuItem>
+        )}
         {footer && (
           <>
             <DropdownMenuSeparator />

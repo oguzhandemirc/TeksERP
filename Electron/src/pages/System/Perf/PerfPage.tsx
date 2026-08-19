@@ -6,10 +6,37 @@ import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
-import { usePerfSnapshot, usePerfReset } from "./perfService";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
+import { usePerfSnapshot, usePerfReset, type PerfRoute, type SlowRequest } from "./perfService";
 import { LiveTable } from "./LiveTable";
 import { SlowList } from "./SlowList";
 import { TrendChart } from "./TrendChart";
+
+const trStamp = (ms: number): string => new Date(ms).toLocaleString("tr-TR");
+
+// Uç bazında canlı istatistik. TOPLANABİLİR yalnız SAYAÇLAR (istek/hata adedi);
+// p50/p95/max birer YÜZDELİK — toplanmaları anlamsızdır (ölçüm ≠ miktar), o yüzden
+// summable DEĞİL: dosyanın TOPLAM satırında boş kalırlar.
+const PERF_ROUTE_EXPORT_COLUMNS: ExportColumn<PerfRoute>[] = [
+  { label: "Uç (endpoint)", value: (r) => r.route },
+  { label: "İstek", value: (r) => r.count, summable: true },
+  { label: "Hata (5xx)", value: (r) => r.errCount, summable: true },
+  { label: "p50 (ms)", value: (r) => r.p50Ms },
+  { label: "p95 (ms)", value: (r) => r.p95Ms },
+  { label: "En yavaş / max (ms)", value: (r) => r.maxMs },
+  { label: "Son görülme", value: (r) => trStamp(r.lastAt) },
+];
+
+// Yavaş istek defteri — tek tek istekler. Süre toplamı bilgi taşımadığı için
+// (50 ayrı isteğin ms toplamı bir "iş yükü" değildir) summable kolon YOK.
+const PERF_SLOW_EXPORT_COLUMNS: ExportColumn<SlowRequest>[] = [
+  { label: "Zaman", value: (s) => trStamp(s.at) },
+  { label: "Yöntem", value: (s) => s.method },
+  { label: "Uç (endpoint)", value: (s) => s.route },
+  { label: "Durum", value: (s) => (s.status === 499 ? "499 (istemci vazgeçti)" : s.status) },
+  { label: "Süre (ms)", value: (s) => s.ms },
+];
 
 /** Endpoint Performansı — Faz 2/3 gözlemlenebilirlik ekranı.
  *  Canlı tablo süreç belleğinden (restart'ta sıfırlanır); trend kalıcı günlük
@@ -80,10 +107,22 @@ export function PerfPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">
               Canlı İstatistik — p95'e göre (en şüpheli üstte)
             </CardTitle>
+            <ListExportMenu
+              name="Endpoint Performansı"
+              rows={snap?.routes ?? []}
+              columns={PERF_ROUTE_EXPORT_COLUMNS}
+              notes={[
+                snap
+                  ? `Canlı sayaçlar: ${trStamp(snap.sinceAt)} tarihinden beri ${snap.totalCount.toLocaleString("tr-TR")} istek (${(snap.routes ?? []).length} uç).`
+                  : "Canlı sayaçlar.",
+                "Ölçüm süreç belleğindedir — sunucu yeniden başlarsa veya sayaçlar sıfırlanırsa sıfırdan başlar; kalıcı günlük trend ayrıdır.",
+                "p50 / p95 / max birer gecikme ölçüsüdür — toplanmaz; TOPLAM satırı yalnız istek ve hata adedini toplar.",
+              ]}
+            />
           </CardHeader>
           <CardContent>
             <LiveTable routes={snap?.routes ?? []} />
@@ -91,8 +130,18 @@ export function PerfPage() {
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">Yavaş İstek Defteri (≥1 sn, son 50)</CardTitle>
+            <ListExportMenu
+              name="Yavaş İstek Defteri"
+              rows={snap?.slowRequests ?? []}
+              columns={PERF_SLOW_EXPORT_COLUMNS}
+              notes={[
+                "Yalnız ≥1 sn süren son 50 istek (en yenisi başta) — tüm istekler değil.",
+                "Defter süreç belleğindedir; sunucu yeniden başlarsa veya sayaçlar sıfırlanırsa boşalır.",
+                "Durum 499 = istemci yanıtı beklemekten vazgeçti (zaman aşımı / pencere kapandı).",
+              ]}
+            />
           </CardHeader>
           <CardContent>
             <SlowList items={snap?.slowRequests ?? []} />

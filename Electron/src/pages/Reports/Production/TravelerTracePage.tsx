@@ -8,24 +8,15 @@ import { ArrowDown, ArrowUp, ScanBarcode, Search, Wrench } from "lucide-react";
 import { productionReportsApi, type TravelerEvent } from "./service";
 import apiClient from "@/services/apiClient";
 import { ReportPageLayout } from "../_components";
+import { ReportExportBar } from "../_components/ReportExportBar";
 import { fmtDateTime, fmtMeters } from "../_components/formatters";
-
-const STATION_KIND_LABEL: Record<string, string> = {
-  RAW_QC: "KK1",
-  PROCESS_QC: "KK2/Kurşun",
-  TAMBUR: "Tambur",
-  SUBCONTRACTOR: "Fason",
-  OTHER: "Diğer",
-};
-
-const OP_TYPE_LABEL: Record<string, string> = {
-  KURSUN_APPLIED: "Kurşun Geçildi",
-  QC2_COMPLETED: "QC2 Tamamlandı",
-  TAMBUR_PROCESSED: "Tambur Karar",
-  PACKAGED: "Paketlendi",
-  SUBCONTRACTOR_SENT: "Fasona Sevk",
-  SUBCONTRACTOR_RETURNED: "Fasondan Dönüş",
-};
+// Etiket sözlükleri dışa aktarım spec'iyle ORTAK: ekranda "Kurşun Geçildi" yazıp
+// Excel'de ham enum basmak aynı olayı iki ad altında gösterirdi.
+import {
+  buildTravelerTraceExport,
+  OP_TYPE_LABEL,
+  STATION_KIND_LABEL,
+} from "./travelerTraceExport";
 
 interface RollLookupItem {
   id: string;
@@ -101,6 +92,12 @@ export function TravelerTracePage() {
       title="Refakat Kartı İzleme"
       description="Tek rulonun istasyon adımları, operatör ve süre geçmişi."
       filters={searchFilter}
+      actions={
+        <ReportExportBar
+          disabled={!data}
+          buildSpec={() => (data ? buildTravelerTraceExport(data.data) : null)}
+        />
+      }
     >
       {!rollId ? (
         <Card className="p-8 text-center text-sm text-muted-foreground">

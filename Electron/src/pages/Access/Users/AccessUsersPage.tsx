@@ -14,6 +14,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ListExportMenu } from "@/components/data-table/ListExportMenu";
+import type { ExportColumn } from "@/lib/list-export";
 import { useOpenTarget } from "@/components/layout/tabs/use-tab-target";
 import apiClient from "@/services/apiClient";
 import {
@@ -27,6 +29,16 @@ import { NewUserCredentialsDialog } from "./NewUserCredentialsDialog";
 import { useEnabledLoginMethods } from "@/hooks/usePricingEnabled";
 
 const QUERY_KEY = "admin-users";
+
+// Dışa aktarım sütunları. ⚠️ Kimlik bilgisi (şifre/PIN/kart jetonu) BURAYA ASLA
+// girmez — liste ucu zaten döndürmüyor, dosya ise elden ele dolaşır.
+const USER_EXPORT_COLUMNS: ExportColumn<AdminUserListItem>[] = [
+  { label: "Kullanıcı Adı", value: (u) => u.username },
+  { label: "Ad Soyad", value: (u) => u.fullName },
+  { label: "Durum", value: (u) => (u.isActive ? "Aktif" : "Pasif") },
+  { label: "Yetki Sayısı", value: (u) => u._count.permissions, summable: true },
+  { label: "Oluşturma", value: (u) => safeFormat(u.createdAt, "dd.MM.yyyy HH:mm") },
+];
 
 interface UserPayload {
   username?: string;
@@ -171,7 +183,20 @@ export function AccessUsersPage() {
           placeholder="Kullanıcı adı veya ad soyad ara..."
           className="h-8 w-64 text-sm"
         />
-        <label className="ml-auto flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
+        <div className="ml-auto">
+          <ListExportMenu
+            name="Kullanıcılar"
+            rows={filtered}
+            columns={USER_EXPORT_COLUMNS}
+            notes={[
+              showInactive
+                ? "Liste pasif kullanıcıları da içerir."
+                : "Yalnız AKTİF kullanıcılar — pasifler listede gizli.",
+              "Kimlik bilgileri (şifre / PIN / kart) dosyaya yazılmaz.",
+            ]}
+          />
+        </div>
+        <label className="flex h-8 cursor-pointer items-center gap-2 whitespace-nowrap rounded-md border bg-background px-3 text-xs">
           <Checkbox
             checked={showInactive}
             onCheckedChange={(c) => setShowInactive(Boolean(c))}
