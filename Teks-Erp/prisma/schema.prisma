@@ -4657,6 +4657,14 @@ model SystemLog {
   ipAddress String? // AUTH/SYSTEM event'leri için kaynak IP
   oldData   Json?
   newData   Json?
+  /// ALAN-BAZLI DEĞİŞİKLİK (Faz B2, 2026-08-19) — [{ field, old, new }]
+  /// "Tam olarak ne değişti" sorusunun TEK cevabı. Ölçüldü: UPDATE kayıtlarının
+  /// yalnız %39'unda eski değer vardı, `newData` ad-hoc'tu (iş emrinde 20 farklı
+  /// alan adı) → hangi alanın değiştiği sorgulanamıyordu.
+  /// ⚠️ SAP `CDPOS` alan başına AYRI SATIR yazar; biz tek satırda dizi tutuyoruz —
+  /// ayrı tablo yazma hacmini 2-3× artırır ve her okumaya join ekler, jsonb
+  /// bunu gerektirmez. Alan-bazlı sorgu gerekirse `jsonb_path_ops` GIN yeter.
+  changes   Json?
 
   // Relations
   user User? @relation(fields: [userId], references: [id])

@@ -27,6 +27,7 @@ Bu doküman backend'i (`Teks-Erp/`, Express 5 + Prisma 7 + PostgreSQL) bir
 >
 > | Sürüm | Ek adım |
 > |---|---|
+> | **`SURUM-2026-08-19-ARAMA-DEPLOY.md`** | ⚠️ **SIRADAKİ DEPLOY BUDUR — önce onu oku.** 15 birikmiş migration; ilk iş `pg_trgm` uzantısının VARLIĞINI doğrulamak (yoksa deploy durur), 5 backfill, 1 izin ataması, 3 operatör davranış değişikliği |
 > | `SURUM-2026-08-09-RAPORLAR-DEPLOY.md` | migration + **`backfill_roll_production_timestamps.ts --apply`** |
 > | `SURUM-2026-08-06-YETKI-DEPLOY.md` | rol şablonları — izin ATAMASI elle |
 > | `SURUM-2026-08-05-DEPLOY.md` · `SURUM-2026-08-03-DEPLOY.md` | kendi notlarına bak |
