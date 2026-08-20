@@ -1172,6 +1172,14 @@ export interface QualityGrade {
   sortOrder: number;
   isActive: boolean;
   targetStatus: RollStatus;
+  /** Bu kalitedeki top ÜRETİM ANINDA otomatik etiket ALMAZ (sahada FİRE).
+   *  Kural kalitede yaşar: etiket politikası dispozisyondan AYRI bir karardır
+   *  (tasarım anında ayrıca zorunluydu — FİRE o gün WAREHOUSE'a iniyordu; aynı
+   *  gün FIRE→SCRAP de düzeltildi). Fabrika ayarı
+   *  `scrapGradeLabelEnabled` AÇIKSA bu işaret yok sayılır (iki kapı).
+   *  ⚠️ Eski sunucuda alan YOK → optional; okurken `=== true` ile daralt
+   *  (undefined "etiket bas" demektir, bugünkü davranış korunur). */
+  skipLabel?: boolean;
 }
 
 // =============================================================================

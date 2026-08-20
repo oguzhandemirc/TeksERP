@@ -179,6 +179,8 @@ export const updateSchema = z.strictObject({
   mobileLockOnBackground: z.boolean().optional(),
   // label.mobileRasterEnabled — mobil (HC-06/BT) baskıda raster GW bitmap gönder (default false → komut yolu). Client (mobil) ENFORCE.
   mobileRasterEnabled: z.boolean().optional(),
+  // label.scrapGradeLabelEnabled — fire (QualityGrade.skipLabel) kalitede de OTOMATİK etiket bas (default false → fire topa kâğıt çıkmaz). Client (mobil) ENFORCE; elle baskı onayla mümkün.
+  scrapGradeLabelEnabled: z.boolean().optional(),
   // auth.absoluteSessionCapDays — mutlak oturum tavanı, gün (0=süresiz, 0–365). Backend ENFORCE (issueToken).
   absoluteSessionCapDays: z.number().int().min(0).max(365).optional(),
   // auth.pinLockoutEnabled — hızlı PIN/kart deneme kilidi (default true). Backend ENFORCE.

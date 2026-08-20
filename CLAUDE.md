@@ -22,7 +22,7 @@ Stok (Roll) → İş Emri → KK1 (RAW_QC) → [opsiyonel Fason] →
 
 Fabrika **çözgü/dokuma yapmaz** — kumaş hazır gelir, sadece process + QC + tambur yapılır.
 
-**Her rotanın SON adımı** topu final ürüne çeker — Tambur özel değil (2026-07-13). Kaliteden çözülen `RollStatus` (varsayılan `WAREHOUSE`; `QualityGrade.targetStatus` override, seed'de üç kalite de WAREHOUSE; kalite null → WAREHOUSE) + `form=ACIK` (Tambur çocukları `TOP`) + barkodsuz açık kumaşa barkod. `PRODUCED` limbosu **kaldırıldı** (enum'dan da düştü). Tambur = kesim/bölme + kalite kararı istasyonu; "final ürün kapısı" DEĞİL. Ham (renksiz) top kesiminde operatör parçayı `STOCK` (üretime devam) da seçebilir. Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür.
+**Her rotanın SON adımı** topu final ürüne çeker — Tambur özel değil (2026-07-13). Kaliteden çözülen `RollStatus` (varsayılan `WAREHOUSE`; `QualityGrade.targetStatus` override, seed: 1.Kalite ve A1 → WAREHOUSE (ikisi de SATILABİLİR), FİRE → SCRAP (2026-08-20: 'fire çöpe gider'); kalite null → WAREHOUSE) + `form=ACIK` (Tambur çocukları `TOP`) + barkodsuz açık kumaşa barkod. `PRODUCED` limbosu **kaldırıldı** (enum'dan da düştü). Tambur = kesim/bölme + kalite kararı istasyonu; "final ürün kapısı" DEĞİL. Ham (renksiz) top kesiminde operatör parçayı `STOCK` (üretime devam) da seçebilir. Depo bir istasyon değil, tartı/paket öncesi bekleme statüsüdür.
 
 ### Karar Notları Dizini
 

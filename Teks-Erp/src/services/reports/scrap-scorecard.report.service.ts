@@ -22,12 +22,21 @@
 // "kayıp" rakamı ancak kimse onu açıklayamıyorsa zararlıdır — modelde bunu
 // taşıyacak bir kesim-olayı kaydı doğana kadar bu metrik YAZILMAYACAK.
 //
-// ── FİRE ≠ "FİRE KALİTESİ" ─────────────────────────────────────────────────
+// ── FİRE ≠ "FİRE KALİTESİ" — ama 2026-08-20'den beri ÖRTÜŞÜYORLAR ──────────
 // Bu karne `RollStatus.SCRAP`'ı (mal fiziksel olarak elendi) ölçer. Katalogdaki
-// "Fire" ADLI kalite bambaşka bir şeydir ve fabrikanın kendi ayarına bağlıdır —
-// canlıda `targetStatus = WAREHOUSE`, yani "Fire" kalitesi verilmiş top DEPODA
-// durur, hurda değildir. Kalite dağılımı Kalite Karnesi'nin işidir; burada
-// karşılaştırma için yalnız toplam üretim metrajı ortaktır.
+// "Fire" ADLI kalite kavramsal olarak AYRI bir şeydir ve fabrikanın ayarına
+// (`QualityGrade.targetStatus`) bağlıdır.
+//
+// ⚠️ NOT GÜNCELLENDİ: burada eskiden "canlıda targetStatus = WAREHOUSE, yani
+// Fire kalitesi verilmiş top DEPODA durur, hurda değildir" yazıyordu. Bu ARTIK
+// GEÇERSİZ — `20260820030000_fire_grade_targets_scrap` ile FIRE → SCRAP oldu
+// (fabrika kuralı: "fire çöpe gider"). Sonuç: bu karne artık fire ÜRETİMİNİ de
+// görür; öncesinde yalnız elle hurdaya ayrılanları sayıyor, Tambur'da fire
+// kalitesiyle üretilen her topa KÖRDÜ.
+//
+// Ayrım yine de korunur: bir top SCRAP'e kalite kararı DIŞINDA da düşebilir
+// (dispozisyon, iade, WO kapanışı). Kalite dağılımı Kalite Karnesi'nin işidir;
+// burada karşılaştırma için yalnız toplam üretim metrajı ortaktır.
 // =============================================================================
 
 import prisma from "../../lib/prisma";

@@ -152,12 +152,24 @@ async function main() {
   // ===========================================================================
   await prisma.qualityGrade.createMany({
     data: [
-      // targetStatus = Tambur kesim hedefi (hep WAREHOUSE — proses-only fabrika).
+      // targetStatus = Tambur kesim hedefi. 1.Kalite/A1 → WAREHOUSE (ikisi de
+      // SATILABİLİR; A1 kalite rozetiyle ayrışır), FİRE → SCRAP.
+      //
+      // ⚠️ FİRE 2026-08-20'de WAREHOUSE'tan SCRAP'e alındı (fabrika kuralı:
+      // "fire çöpe gider, A1 satılabilir"). Öncesinde fire top satılabilir
+      // stokta duruyor ve çuvala okutulup SEVK EDİLEBİLİYORDU — çuval guard'ı
+      // kaliteye bilerek bakmaz, yalnız statüye bakar (SACK_ABSENT_STATUSES).
+      // Geri çevirmeden önce o zinciri hatırla.
+      //
       // returnTargetStatus = İADE rafı (returnGradingEnabled açıkken): FİRE→hurda,
       // A1→2.kalite stok, 1.Kalite→Hazır Depo. Tambur bu kolonu OKUMAZ.
-      { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, targetStatus: "WAREHOUSE", returnTargetStatus: "WAREHOUSE" },
-      { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, targetStatus: "WAREHOUSE", returnTargetStatus: "A1_STOCK" },
-      { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, targetStatus: "WAREHOUSE", returnTargetStatus: "SCRAP" },
+      // skipLabel = bu kalitede top ÜRETİM ANINDA otomatik etiket ALMAZ (2026-08-20).
+      // Kural kalitede yaşar çünkü targetStatus hep WAREHOUSE — "fire mi" sorusu
+      // statüden ÇÖZÜLEMEZ. Fabrika ayarı `label.scrapGradeLabelEnabled` açıksa
+      // bu işaret yok sayılır; elle baskı her hâlükârda onayla mümkündür.
+      { code: "1.KALITE", name: "1. Kalite",       color: "#10b981", sortOrder: 10, targetStatus: "WAREHOUSE", returnTargetStatus: "WAREHOUSE", skipLabel: false },
+      { code: "A1",       name: "A1 (Alt Kalite)", color: "#f59e0b", sortOrder: 20, targetStatus: "WAREHOUSE", returnTargetStatus: "A1_STOCK",  skipLabel: false },
+      { code: "FIRE",     name: "Fire",            color: "#ef4444", sortOrder: 30, targetStatus: "SCRAP",     returnTargetStatus: "SCRAP",     skipLabel: true },
     ],
   });
   console.log("✅ 3 kalite sınıfı (1.KALITE/A1/FIRE)");

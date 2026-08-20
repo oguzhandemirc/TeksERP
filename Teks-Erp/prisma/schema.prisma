@@ -2453,6 +2453,30 @@ model QualityGrade {
   /// WAREHOUSE, dokunulmaz); bu kolon YALNIZ iade akışınca okunur. null → WAREHOUSE.
   returnTargetStatus RollStatus?
 
+  /// Bu kalitedeki top üretim anında OTOMATİK fiziksel etiket ALMAZ (2026-08-20).
+  ///
+  /// NEDEN KALİTEDE, statüde değil — iki gerekçe, biri tarihsel biri kalıcı:
+  ///   (tarihsel) Tasarım anında FİRE kalitesi topu SCRAP'e DÜŞÜRMÜYORDU (üç
+  ///   kalitenin de `targetStatus`'ı WAREHOUSE'du) → statüye bağlı bir kural
+  ///   sahada HİÇ tetiklenmezdi. Bu AYNI GÜN düzeltildi (migration
+  ///   `20260820030000_fire_grade_targets_scrap`, FIRE → SCRAP), yani bugün
+  ///   statü de işe yarardı.
+  ///   (kalıcı) Ama etiket politikası ≠ dispozisyon. Yarın "2. Fire" gibi
+  ///   A1_STOCK'a inen ama etiket almaması gereken bir kademe eklenirse statü
+  ///   yine yanlış cevap verirdi. İşaret kalitenin KENDİ özelliğidir.
+  /// Kod gömmek (`code === "FIRE"`) reddedildi: katalog kodu fabrikaya açık bir
+  /// alan (envanter listesindeki eski `qualityGrade != "FIRE"` süzgeci tam da bu
+  /// kırılganlığı taşır).
+  ///
+  /// Sektör karşılığı: etiket bir SATILABİLİRLİK beyanıdır; uygunsuz malzemeye
+  /// bitmiş-ürün etiketi basmak onun akışa geri girmesini kolaylaştırır.
+  ///
+  /// ⚠️ İşaret TEK BAŞINA yeterli değil — fabrika ayarı `label.scrapGradeLabelEnabled`
+  /// AÇIKSA bu kaliteler de etiket alır (ayar varsayılan KAPALI). İki kapı birlikte
+  /// okunur; tek kaynak `resolveGradeLabelPolicy` (label.service).
+  /// Katalog Electron'da SALT-OKUNUR olduğu için bu kolon seed/migration ile yönetilir.
+  skipLabel Boolean @default(false)
+
   rolls       Roll[]
   rollReturns RollReturn[]
 

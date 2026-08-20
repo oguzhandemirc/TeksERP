@@ -347,6 +347,9 @@ export interface FeatureFlags {
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
    *  Electron raster'ından (PeripheralDevice.rasterMode) bağımsız; sahada yavaşsa kapatılır. */
   mobileRasterEnabled: boolean;
+  /** Fire ("etiketsiz" işaretli — QualityGrade.skipLabel) kalitede de OTOMATİK
+   *  etiket basılsın mı (default false). Elle baskı onayla mümkün. Mobil ENFORCE. */
+  scrapGradeLabelEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
    *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
   defaultLabelMedia: DefaultLabelMedia;

@@ -62,6 +62,7 @@ const PANEL_EXEMPT: Record<string, string> = {
   pinLockoutEnabled: "kind:'session' — Oturum section'ı yönetir",
   nativeSendEnabled: "kind:'label' — Etiket section'ı yönetir",
   mobileRasterEnabled: "kind:'label' — Etiket section'ı yönetir",
+  scrapGradeLabelEnabled: "kind:'label' — Etiket section'ı yönetir",
 };
 
 const ELECTRON_CONFIG = path.resolve(

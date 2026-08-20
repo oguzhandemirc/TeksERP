@@ -52,7 +52,11 @@ import { useManualRefresh, type ManualRefresh } from '../../../hooks/useManualRe
 import NumpadInput from '../../../components/NumpadInput';
 import { useLandscapeLock } from '../../../hooks/useLandscapeLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
-import { useTamburOverQuantityEnabled, useTamburShortCutA1 } from '../../../hooks/useFeatureFlags';
+import {
+  useTamburOverQuantityEnabled,
+  useTamburShortCutA1,
+  useScrapGradeLabelEnabled,
+} from '../../../hooks/useFeatureFlags';
 import { NumpadHost } from '../../../components/NumpadProvider';
 import { RightPanelDrawer } from '../../../components/RightPanelDrawer';
 import PickerModal, { type PickerOption } from '../../../components/PickerModal';
@@ -503,11 +507,44 @@ export default function TamburScreen() {
   // Global "manuel moddayken hep ROLL_FINISHED" YANLIŞ olurdu — mod açıkken
   // "Çıkanlar"dan yeniden basılan ESKİ bir ham top da bitmiş etiket alırdı.
   const [printKind, setPrintKind] = useState<'ROLL_RAW' | 'ROLL_FINISHED' | null>(null);
-  /** Tek giriş kapısı: baskı slotunu ve (varsa) tür sabitlemesini birlikte yazar. */
+  /** Fire kalitede ELLE baskı onayı bekleyen iş (bkz. startPrint fire kapısı). */
+  const [scrapPrintConfirm, setScrapPrintConfirm] = useState<{
+    roll: Roll;
+    kind: 'ROLL_RAW' | 'ROLL_FINISHED' | null;
+  } | null>(null);
+  /**
+   * Tek giriş kapısı: baskı slotunu ve (varsa) tür sabitlemesini birlikte yazar.
+   *
+   * FİRE KAPISI (2026-08-20) burada, çünkü baskıyı başlatan TEK huni burası —
+   * otomatik (kesim/manuel üretim) ve elle ("Etiket", "Tekrar Bas") yolların hepsi
+   * buradan geçer. Kapıyı çağrı yerlerine dağıtmak üç ayrı kural kopyası demekti.
+   *
+   * İki yol AYRI davranır ve bu ayrım kasıtlıdır:
+   *   • `auto` (üretim anı) → kâğıt HİÇ çıkmaz + operatöre NEDEN söylenir.
+   *     Sessiz atlamak en kötü seçenekti: operatör "yazıcı yine bozuk" diye okur
+   *     (bu oturumda tam olarak o hatayı kovaladık) ve üst üste basmaya başlar.
+   *   • elle → onay sorulur, onaylanırsa BASILIR. Fire topun fiziksel olarak
+   *     tanımlanması gerekebilir; baskı yolunu tamamen kapatmak sahayı çıkışsız
+   *     bırakır (CLAUDE.md'nin "baskıyı 400'e düşürme" dersi).
+   */
   const startPrint = (
     roll: Roll,
     kind: 'ROLL_RAW' | 'ROLL_FINISHED' | null = null,
+    opts?: { auto?: boolean },
   ) => {
+    if (isSkipLabelRoll(roll)) {
+      if (opts?.auto) {
+        Toast.show({
+          type: 'info',
+          text1: 'Fire kalite — etiket basılmadı',
+          text2: 'Gerekiyorsa "Etiket" ile elle basabilirsin.',
+          visibilityTime: 5000,
+        });
+        return;
+      }
+      setScrapPrintConfirm({ roll, kind });
+      return;
+    }
     setPrintKind(kind);
     setActivePrintRoll(roll);
   };
@@ -551,6 +588,8 @@ export default function TamburScreen() {
   // Açıkken aşımda onay diyaloğu çıkar (parmak hatası koruması) ve onaylanınca
   // backend kabul eder (parent tamamen tüketilir); admin kapatırsa aşan giriş engellenir.
   const overQuantityEnabled = useTamburOverQuantityEnabled();
+  // Fire kalitede otomatik etiket bas? Default KAPALI (fail-closed — bkz. hook).
+  const scrapGradeLabelEnabled = useScrapGradeLabelEnabled();
   // 2-kat / 4-kat metre cihazları — tabletin atandığı makineden backend çözer
   // (admin Cihaz Kaydı'nda tanımlar). foldType→role ile seçilir; cihazın `simulate`
   // bayrağı açıksa sahte, değilse HAL (BT/HC-06) ile gerçek okuma.
@@ -753,6 +792,29 @@ export default function TamburScreen() {
     staleTime: 10 * 60 * 1000,
   });
   const qualityGrades = qualityGradesQuery.data?.data ?? [];
+
+  /**
+   * FİRE KAPISI — bu topun kalitesi "etiketsiz" mi (ve kural açık mı)?
+   *
+   * İKİ KAPI birlikte okunur:
+   *   1. `QualityGrade.skipLabel` — HANGİ kalite etiketsiz (katalogdan, koda gömülü DEĞİL).
+   *      Statüye DEĞİL kaliteye bağlı: etiket politikası dispozisyondan ayrı bir
+   *      karardır (yarın A1_STOCK'a inen ama etiketsiz bir kademe eklenebilir).
+   *      Tasarım anında ayrıca zorunluydu — FİRE o gün WAREHOUSE'a iniyordu ve
+   *      statüye bağlı kural hiç tetiklenmezdi; FIRE→SCRAP aynı gün düzeltildi.
+   *   2. `scrapGradeLabelEnabled` — fabrika ayarı. AÇIKSA işaret yok sayılır
+   *      (herkese etiket basılır, 2026-08-20 öncesi davranış).
+   *
+   * Topun kalitesi `Roll.qualityGrade` (KOD snapshot'ı) ile eşlenir. Katalog
+   * yüklenmemişse / kalite bulunamazsa `false` döner → etiket BASILIR: bilinmeyen
+   * durumda kâğıt basmamak, operatörün sebebini göremeyeceği bir eksiklik üretirdi.
+   */
+  const isSkipLabelRoll = (roll: Roll): boolean => {
+    if (scrapGradeLabelEnabled) return false;
+    const code = roll.qualityGrade;
+    if (!code) return false;
+    return qualityGrades.find((q) => q.code === code)?.skipLabel === true;
+  };
 
   // Manuel Mod ürün/renk katalogları — picker açılmadan İSTENMEZ (yetki + ağ).
   const manualItemsQuery = useQuery({
@@ -1234,7 +1296,7 @@ export default function TamburScreen() {
 
         // döner → renkten çözülen eski davranış birebir korunur.
 
-        startPrint(data.childRoll, printKindForRoll(data.childRoll));
+        startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
       }
       // Uzunluk input'unu sıfırla. Kalite/sipariş varsayılan olarak KALIR
       // (seri kesim), ama Ayarlar → Çalışma Tercihleri'nden "her çıktıdan sonra
@@ -1517,7 +1579,7 @@ export default function TamburScreen() {
 
         // döner → renkten çözülen eski davranış birebir korunur.
 
-        startPrint(data.childRoll, printKindForRoll(data.childRoll));
+        startPrint(data.childRoll, printKindForRoll(data.childRoll), { auto: true });
       }
       // Parent metraj güncelle (sticky header anında yansır) — yalnız aynı top.
       if (isCurrent && data && typeof data.parentRemainingQty === 'number' && recutRollMeta) {
@@ -1676,6 +1738,7 @@ export default function TamburScreen() {
           markedForKartela: d.markedForKartela,
         },
         'ROLL_FINISHED',
+        { auto: true },
       );
       // Metraj sıfırlanır (sıradaki top), ürün/renk/sebep KALIR: aynı sebeple
       // arka arkaya birkaç top girmek tipik saha davranışı. Kalite ise cihaz
@@ -4655,6 +4718,58 @@ export default function TamburScreen() {
                 {overCutConfirm.kind === 'all'
                   ? `Evet, ${overCutConfirm.entered.toFixed(1)} m kes ve bitir`
                   : `Evet, ${overCutConfirm.entered.toFixed(1)} m`}
+              </Button>
+            </View>
+          </View>
+        )}
+      </AppModal>
+
+      {/* FİRE KALİTEDE ELLE ETİKET — otomatik baskı kapalı, ama operatör açıkça
+          istediyse basılır (bkz. startPrint fire kapısı). Engelleme DEĞİL,
+          onaylatma: fire topun da fiziksel tanımlanması gerekebilir. */}
+      <AppModal
+        visible={!!scrapPrintConfirm}
+        onDismiss={() => setScrapPrintConfirm(null)}
+        position="center"
+        swipeToDismiss={false}
+        contentStyle={overCutStyles.sheet}
+      >
+        {scrapPrintConfirm && (
+          <View>
+            <View style={overCutStyles.header}>
+              <Icon source="alert-outline" size={26} color="#b45309" />
+              <Text style={overCutStyles.title}>Fire kalite — etiket basılsın mı?</Text>
+            </View>
+            <Text style={overCutStyles.body}>
+              <Text style={overCutStyles.strong}>
+                {scrapPrintConfirm.roll.barcode ?? 'Bu top'}
+              </Text>
+              {' fire kalitede. Ayar gereği fire toplara otomatik etiket basılmıyor '}
+              {'— etiket bir satılabilirlik işaretidir ve fire malın akışa geri '}
+              {'girmesini kolaylaştırır. Yine de basmak istiyor musun?'}
+            </Text>
+            <View style={overCutStyles.actions}>
+              <Button
+                mode="outlined"
+                style={overCutStyles.btn}
+                onPress={() => setScrapPrintConfirm(null)}
+              >
+                Vazgeç
+              </Button>
+              <Button
+                mode="contained"
+                style={overCutStyles.btn}
+                buttonColor="#b45309"
+                onPress={() => {
+                  const job = scrapPrintConfirm;
+                  setScrapPrintConfirm(null);
+                  // Kapıyı ATLAYARAK bas — startPrint'i tekrar çağırmak sonsuz
+                  // döngü olurdu (aynı top yine kapıya takılır).
+                  setPrintKind(job.kind);
+                  setActivePrintRoll(job.roll);
+                }}
+              >
+                Evet, bas
               </Button>
             </View>
           </View>

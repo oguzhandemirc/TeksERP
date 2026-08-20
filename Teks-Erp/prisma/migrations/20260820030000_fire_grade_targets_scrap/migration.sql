@@ -1,0 +1,27 @@
+-- FIRE kalitesinin hedef statüsü: WAREHOUSE → SCRAP (2026-08-20, fabrika kararı)
+--
+-- FABRİKA KURALI (kullanıcıdan): "fire çöpe gider, A1 satılabilir."
+-- Sistem bunun TERSİNİ yapıyordu: fire kalitesi verilen top WAREHOUSE'a iniyor,
+-- yani satılabilir stokta duruyordu.
+--
+-- ⚠️ NEDEN ÖNEMLİ — koruma vardı ama fire ona hiç ULAŞMIYORDU:
+-- `SACK_ABSENT_STATUSES` (sack-invariants.helper) SCRAP'ı çuvala okutulamaz
+-- sayar; çuval guard'ı ise kaliteye BİLEREK bakmaz ("Kalite/bitmişlik GATE'i
+-- YOK — yalnız FİZİKSEL İMKÂNSIZ durumlar bloklu"). Fire top WAREHOUSE
+-- doğduğu için barkodu okutulduğunda çuvala giriyor ve müşteriye sevk
+-- edilebiliyordu. Bu satır zinciri kaynağında kırar.
+--
+-- RAPOR ETKİSİ (ölçüldü, kayıp YOK):
+--   · Kalite Karnesi statü kümesi zaten ["WAREHOUSE","A1_STOCK","SCRAP"] →
+--     fire kalite dağılımında görünmeye DEVAM eder.
+--   · Fire Karnesi `status='SCRAP'` ölçer → fire ÜRETİMİNİ artık GÖRÜR
+--     (bugüne kadar yalnız elle hurdaya ayrılanları sayıyordu, üretilen fireye
+--     kördü; scrap-scorecard.report.service dosya başlığındaki "FİRE ≠ FİRE
+--     KALİTESİ" notu bu migration ile geçersizleşir ve orada güncellendi).
+--
+-- KAPSAM: yalnız YENİ kesimler. Geçmişte WAREHOUSE'a inmiş fire toplar OLDUĞU
+-- GİBİ KALIR (canlı veriye dokunma kuralı) — düzeltilecekse ayrı, listeleyen ve
+-- onaylatan bir karar gerekir.
+--
+-- A1 BİLEREK DEĞİŞMEDİ: 2. kalite satılabilir, WAREHOUSE doğru yerdir.
+UPDATE "quality_grades" SET "targetStatus" = 'SCRAP' WHERE "code" = 'FIRE';

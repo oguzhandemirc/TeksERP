@@ -45,15 +45,18 @@ export function LabelSettingsSection() {
   const currentCopies = flagsQ.data?.data?.labelCopies ?? DEFAULT_COPIES;
   const currentNative = flagsQ.data?.data?.nativeSendEnabled ?? false;
   const currentMobileRaster = flagsQ.data?.data?.mobileRasterEnabled ?? false;
+  const currentScrapLabel = flagsQ.data?.data?.scrapGradeLabelEnabled ?? false;
   const currentMedia = flagsQ.data?.data?.defaultLabelMedia ?? FALLBACK_MEDIA;
 
   const [copies, setCopies] = useState(String(currentCopies));
   const [native, setNative] = useState(currentNative);
   const [mobileRaster, setMobileRaster] = useState(currentMobileRaster);
+  const [scrapLabel, setScrapLabel] = useState(currentScrapLabel);
   const [media, setMedia] = useState<Record<keyof DefaultLabelMedia, string>>(() => mediaToStr(currentMedia));
   useEffect(() => setCopies(String(currentCopies)), [currentCopies]);
   useEffect(() => setNative(currentNative), [currentNative]);
   useEffect(() => setMobileRaster(currentMobileRaster), [currentMobileRaster]);
+  useEffect(() => setScrapLabel(currentScrapLabel), [currentScrapLabel]);
   useEffect(() => {
     setMedia(mediaToStr(currentMedia));
     // currentMedia obje referansı her render değişebilir → alan-bazlı bağımlılık.
@@ -71,8 +74,9 @@ export function LabelSettingsSection() {
   const copiesDirty = copiesNum !== currentCopies;
   const nativeDirty = native !== currentNative;
   const mobileRasterDirty = mobileRaster !== currentMobileRaster;
+  const scrapLabelDirty = scrapLabel !== currentScrapLabel;
   const mediaDirty = MEDIA_FIELDS.some((f) => Number(media[f.key]) !== currentMedia[f.key]);
-  const dirty = copiesDirty || nativeDirty || mobileRasterDirty || mediaDirty;
+  const dirty = copiesDirty || nativeDirty || mobileRasterDirty || scrapLabelDirty || mediaDirty;
   useRegisterSettingsDirty(dirty);
 
   const mut = useMutation({
@@ -81,6 +85,7 @@ export function LabelSettingsSection() {
       if (copiesDirty) patch.labelCopies = copiesNum;
       if (nativeDirty) patch.nativeSendEnabled = native;
       if (mobileRasterDirty) patch.mobileRasterEnabled = mobileRaster;
+      if (scrapLabelDirty) patch.scrapGradeLabelEnabled = scrapLabel;
       if (mediaDirty) {
         patch.defaultLabelMedia = MEDIA_FIELDS.reduce(
           (acc, f) => ({ ...acc, [f.key]: f.int ? Math.floor(Number(media[f.key])) : Number(media[f.key]) }),
@@ -99,6 +104,7 @@ export function LabelSettingsSection() {
     setCopies(String(currentCopies));
     setNative(currentNative);
     setMobileRaster(currentMobileRaster);
+    setScrapLabel(currentScrapLabel);
     setMedia(mediaToStr(currentMedia));
   };
 
@@ -209,6 +215,29 @@ export function LabelSettingsSection() {
           checked={mobileRaster}
           disabled={mut.isPending}
           onChange={setMobileRaster}
+        />
+      </div>
+
+      {/* Fire kalitede etiket — 2026-08-20 saha isteği */}
+      <div className="border-t pt-4">
+        <FlagToggle
+          title="Fire kalitede etiket bas"
+          desc={
+            <>
+              <strong>Kapalıyken (varsayılan)</strong> fire kalitede üretilen topa{" "}
+              <strong>otomatik etiket basılmaz</strong> — kesimden sonra kâğıt çıkmaz ve
+              operatöre nedeni bildirilir. Gerekçe: etiket bir <em>satılabilirlik</em>{" "}
+              işaretidir; fire mala bitmiş-ürün etiketi basmak onun akışa geri girmesini
+              kolaylaştırır. Operatör yine de <em>Etiket</em> düğmesiyle onay vererek elle
+              basabilir. Açıkken fire toplar da diğerleri gibi otomatik etiket alır.
+              <br />
+              Hangi kalitenin “fire” sayıldığı kalite kataloğundan gelir (Tanımlar → Kalite
+              Sınıfları); bu ayar yalnız kuralı açıp kapar.
+            </>
+          }
+          checked={scrapLabel}
+          disabled={mut.isPending}
+          onChange={setScrapLabel}
         />
       </div>
 

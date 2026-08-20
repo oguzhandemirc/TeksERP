@@ -118,6 +118,17 @@ export function useMobileRasterEnabled(): boolean {
   return useFeatureFlags().data?.mobileRasterEnabled ?? false;
 }
 
+/**
+ * Fire ("etiketsiz" işaretli) kalitede de OTOMATİK etiket basılsın mı?
+ * Default FALSE — bayrak yüklenemese de kapalı kabul edilir, yani fire topa
+ * kâğıt çıkmaz. Bu fail-closed yön BİLİNÇLİ: fazladan basılan fire etiketi
+ * sahaya yanlış "satılabilir" sinyali bırakır, basılmayan etiket ise yalnız
+ * operatörün bir kez daha dokunmasını gerektirir (elle baskı hep açık).
+ */
+export function useScrapGradeLabelEnabled(): boolean {
+  return useFeatureFlags().data?.scrapGradeLabelEnabled ?? false;
+}
+
 /** Kurşun bypass düzeni (istasyona tablet konulmayan model) açık mı? Default FALSE
  *  (yüklenene kadar / hata halinde de false — fail-closed).
  *  ⚠️ 2026-08-05: "Kurşun Dağıtım" ekranının GÖRÜNÜRLÜĞÜNÜ artık HİÇ etkilemez —

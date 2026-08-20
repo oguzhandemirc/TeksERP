@@ -254,6 +254,20 @@ export const SETTING_KEYS = {
    *  ister → WYSIWYG ama ~40KB binary HC-06'dan gider (yavaş olabilir). Client (mobil) ENFORCE.
    *  Electron raster'ından (PeripheralDevice.rasterMode) BAĞIMSIZ — sahada yavaşsa kapatılır. */
   LABEL_MOBILE_RASTER_ENABLED: "label.mobileRasterEnabled",
+  /** "Etiketsiz" işaretli kalitelerde (`QualityGrade.skipLabel` — sahada FİRE) top
+   *  üretilirken OTOMATİK etiket basılsın mı. Default FALSE = fire topa kâğıt ÇIKMAZ.
+   *
+   *  ⚠️ İki kapı birlikte okunur: kalite işareti (hangi kalite) + bu ayar (kural açık
+   *  mı). Kural KALİTEDE tanımlı: etiket politikası dispozisyondan AYRI bir karardır.
+   *  (Tasarım anında ayrıca ZORUNLUYDU — FİRE o gün WAREHOUSE'a iniyordu ve statüye
+   *  bağlı bir kural sahada hiç tetiklenmezdi; FIRE→SCRAP aynı gün düzeltildi.)
+   *
+   *  Client (mobil) ENFORCE eder: otomatik baskı hiç tetiklenmez ve operatöre
+   *  "Fire top — etiket basılmadı" bilgisi verilir (sessiz atlama, "yazıcı bozuk"
+   *  diye okunur). ELLE "Etiket" baskısı kapatılmaz — onay sorulup basılır: fire
+   *  topun fiziksel tanımlanması gerekebilir ve baskı yolunu tamamen kapatmak
+   *  sahayı çıkışsız bırakır. */
+  LABEL_SCRAP_GRADE_ENABLED: "label.scrapGradeLabelEnabled",
   /** Aynı cihaz-tipinden (electron/mobil) ikinci giriş olunca ne yapılsın:
    *  'kick' (default — eskiyi düşür, yeni kazanır) | 'notify' (kullanıcıya sor,
    *  confirmKick ile ikisi de açık kalır) | 'off' (serbest, çoklu oturum). 1 Electron +
@@ -909,6 +923,10 @@ export interface FeatureFlags {
   /** Mobil (HC-06/BT) baskıda raster GW bitmap gönderilsin mi (default false → komut yolu).
    *  Electron raster'ından bağımsız; sahada yavaşsa kapatılır. Client (mobil) ENFORCE. */
   mobileRasterEnabled: boolean;
+  /** "Etiketsiz" işaretli kalitelerde (QualityGrade.skipLabel — sahada FİRE) de
+   *  OTOMATİK etiket basılsın mı. Default FALSE = fire topa kâğıt çıkmaz. Elle
+   *  baskı ayrıdır (onayla basılır). Client (mobil) ENFORCE. */
+  scrapGradeLabelEnabled: boolean;
   /** Cihazsız baskı/önizleme (Etiket Stüdyosu, kartela) için sistem varsayılan etiket
    *  medyası. Yazıcı cihazı seçiliyse onun medyası önceliklidir; bu yalnız fallback. */
   defaultLabelMedia: DefaultLabelMedia;
@@ -1158,6 +1176,7 @@ export class SystemSettingService {
       labelCopies: await readLabelCopies(cacheClient),
       nativeSendEnabled: await readLabelNativeSendEnabled(cacheClient),
       mobileRasterEnabled: await readMobileRasterEnabled(cacheClient),
+      scrapGradeLabelEnabled: await readScrapGradeLabelEnabled(cacheClient),
       defaultLabelMedia: await readDefaultLabelMedia(cacheClient),
     };
     // Yalnız okuma sürerken invalidate OLMADIYSA cache'le; olduysa bayat veriyi
@@ -1896,6 +1915,18 @@ export class SystemSettingService {
         SETTING_KEYS.LABEL_MOBILE_RASTER_ENABLED,
         input.mobileRasterEnabled,
         "Mobil (HC-06/BT) baskıda raster GW bitmap gönder (kapalıyken komut yolu — hızlı/güvenli)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "scrapGradeLabelEnabled")) {
+      if (typeof input.scrapGradeLabelEnabled !== "boolean") {
+        throw AppError.badRequest("scrapGradeLabelEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.LABEL_SCRAP_GRADE_ENABLED,
+        input.scrapGradeLabelEnabled,
+        "Fire (etiketsiz işaretli) kalitede de otomatik etiket bas (kapalıyken fire topa kâğıt çıkmaz)",
         userId
       );
     }
@@ -3217,6 +3248,27 @@ export async function readMobileRasterEnabled(
   const client = tx ?? prisma;
   const setting = await client.systemSetting.findUnique({
     where: { key: SETTING_KEYS.LABEL_MOBILE_RASTER_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * "Etiketsiz" işaretli kalitelerde (`QualityGrade.skipLabel` — sahada FİRE) de
+ * OTOMATİK etiket basılsın mı? Default FALSE (kayıt yoksa → fire topa kâğıt ÇIKMAZ).
+ *
+ * ⚠️ Bu ayar TEK BAŞINA bir şey söylemez — hangi kalitenin "etiketsiz" olduğunu
+ * kalite kataloğu (`skipLabel`) söyler. İkisi birlikte okunur; kural KALİTEDE
+ * yaşıyor: etiket politikası dispozisyondan AYRI bir karardır (yarın A1_STOCK'a
+ * inen ama etiketsiz bir kademe eklenebilir). Tasarım anında ayrıca ZORUNLUYDU —
+ * FİRE o gün WAREHOUSE'a iniyordu; FIRE→SCRAP aynı gün ayrıca düzeltildi.
+ */
+export async function readScrapGradeLabelEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.LABEL_SCRAP_GRADE_ENABLED },
     select: { value: true },
   });
   return asBoolean(setting?.value);
