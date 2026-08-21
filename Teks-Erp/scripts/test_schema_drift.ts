@@ -80,6 +80,28 @@ const EXPECTED_DRIFT: Array<{ sql: string; why: string }> = [
   },
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TOLERE EDİLEN (GEÇİCİ) DRIFT — "olabilir de olmayabilir de", KIRMIZI DEĞİL ⚠️
+// ─────────────────────────────────────────────────────────────────────────────
+// 28. migration (`20260821150000_name_fold_unique_live`) 2026-08-22'den beri
+// YUMUŞAK KAPIDIR: mükerrer taşıyan tabloda `<t>_nameFold_key` partial UNIQUE'i
+// ATLAR (NOTICE). Şema `@@unique([nameFold])` dediği için `migrate diff` o tabloda
+// "CREATE UNIQUE INDEX … (nameFold)" ister — prod'da (ve prod kopyalarında)
+// temizlik + enforce bitene dek BEKLENEN bir farktır; dev/CI'da (temiz) hiç
+// görünmez. EXPECTED_DRIFT'e koyamayız (orada "kaybolursa KIRMIZI" kuralı var ve
+// dev'de index kurulu olduğu için her zaman kaybolurdu). Bu yüzden üçüncü küme:
+// görünürse ⚠️ ile listelenir, sayılmaz. Enforce tamamlanınca liste SİLİNMELİ
+// (test_db_invariants §1 aynı index'leri "eksikse kırmızı" ile zaten izliyor —
+// yani sed kaybı sessiz kalmaz; bu tolerans yalnız drift kapısını susturur).
+const TOLERATED_DRIFT: Array<{ sql: string; why: string }> = [
+  "customers",
+  "items",
+  "subcontractors",
+].map((t) => ({
+  sql: `CREATE UNIQUE INDEX "${t}_nameFold_key" ON "${t}"("nameFold")`,
+  why: "yumuşak kapı (mükerrer varken atlandı) — temizlik + enforce bekliyor",
+}));
+
 /** Boşluk/satır sonu farklarına dayanıklı normalize (tek boşluk, sondaki ; yok). */
 function norm(sql: string): string {
   return sql.replace(/\s+/g, " ").replace(/;\s*$/, "").trim();
@@ -178,12 +200,17 @@ function main(): void {
     // Asıl kapı bu: buraya düşen her ifade, repo şemasında olup canlı DB'de
     // OLMAYAN (ya da tersi) gerçek bir yapıdır → eksik/commit edilmemiş migration.
     const expectedSet = new Set(EXPECTED_DRIFT.map((e) => norm(e.sql)));
-    const unexpected = statements.filter((s) => !expectedSet.has(s));
+    const toleratedMap = new Map(TOLERATED_DRIFT.map((e) => [norm(e.sql), e.why]));
+    const tolerated = statements.filter((s) => toleratedMap.has(s));
+    for (const s of tolerated) {
+      console.log(`⚠️  tolere edilen geçici drift: ${s.slice(0, 80)} — ${toleratedMap.get(s)}`);
+    }
+    const unexpected = statements.filter((s) => !expectedSet.has(s) && !toleratedMap.has(s));
     check(
       "allowlist dışı şema farkı yok",
       unexpected.length === 0,
       unexpected.length === 0
-        ? `${statements.length} ifadenin tamamı belgelenmiş kasıtlı drift`
+        ? `${statements.length} ifadenin tamamı belgelenmiş kasıtlı${tolerated.length ? ` (+${tolerated.length} tolere edilen geçici)` : ""} drift`
         : `${unexpected.length} BELGESİZ fark:\n` + unexpected.map((s) => `      ${s};`).join("\n")
     );
   } finally {

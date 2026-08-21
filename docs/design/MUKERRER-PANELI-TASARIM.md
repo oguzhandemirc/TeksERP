@@ -102,3 +102,27 @@ Depo/KK1 ekranına "mükerrer adayı" rozeti istenirse (opsiyonel).
 2. "Mükerrer değil" kararı **çift** bazlı mı **grup** bazlı mı? (Öneri: çift; grup = çiftlerin birleşimi.)
 3. Müşteri VKN çakışmasında kayıt anında **engel** mi **uyarı** mı? (Bugün ad: engel; VKN fason'da engel, müşteride ?)
 4. Top mükerrerinde "asıl" seçimi: en eski mi, etiketi basılı olan mı? (Öneri: etiketi basılan/hareket görenin asıl olması; hiçbiriyse en eski.)
+
+---
+
+## 5) Canlı veri ölçümü (2026-08-22 01:36 dump'ı, `tekserp_saha_0822`, 23 migration uygulandıktan sonra)
+
+**Deploy provası:** 165 → 188 migration **1,6 sn**; yumuşak kapı müşteride index'i **kurdu**
+(canlıda müşteri mükerreri kalmamış), kumaş + fasonda **atladı** (NOTICE).
+
+| Kural | Canlı sonuç | Tasarıma etkisi |
+|---|---|---|
+| Kesin ad (`nameFold`) | **kumaş 5 grup** (ACTIVO/ACTİVO ikisi pasif · BGR 150 ŞEFFAF ×2 **ikisi aktif** · KRİSTAL · OSLO · V-1430 ikisi pasif) · **renk 3** (1195-GRİ ×2 aktif · ALTIN-EKRU ×2 aktif · BEYAZ) · **fason 3** (Boyer · Kartelacı Emine · Şahin Zımpara — aktif+pasif çiftler) · müşteri 0 | P1 kuyruğu ilk gün bu 11 grupla açılır |
+| Kimlik — müşteri VKN / ihracat kodu, şube, makine, istasyon | 0 | kural kalır (önleme değeri), bugün boş |
+| Kimlik — **kumaş kod harf-ikizi** (`upper(strip(code))`) | **9 grup**: bayroflam/BAYROFLAM · bgr150/BGR150 (adlar FARKLI: BGR150 ↔ V-1430) · BGR150SEFFAF ×2 · activo/ACTIVO · oslo/OSLO · santuk/SANTUK (BORANCIK ↔ ŞANTUK) · sefa/SEFA (MİKRO CANVAS ↔ MIKROCANVAS) · **Mc155/MC155/mc155 = V-1431/V-1430/V-1429 (üç farklı ürün, aynı kod!)** | ⚠️ Bu kural iki sonuç üretir: **gerçek mükerrer → birleştir** · **kod çakışması, ürün farklı → "kodu düzelt" aksiyonu** (birleştirme değil; panelde ayrı eylem, kod tekilliği guard'ı zaten yeni kayıtta engelliyor — bunlar eski) |
+| Kimlik — renk `hex` | `#ffffff` **7 renk** (240-BEYAZ, OPTİK, BEYAZ ×2, 55-BEYAZ, V63, 01-BEYAZ) | hex **tek başına kimlik DEĞİL** (birçok beyaz meşru) → kural düşürüldü; yalnız "hex eşit **ve** ad benzer" destekleyici sinyal |
+| Bulanık ad (trigram ≥0.7, kopyada `pg_trgm` kurulabildi) | müşteri 0 (≥0.55) · fason 0 · **kumaş 26 çift — HEPSİ yanlış pozitif** (KRİSTAL V-01/V-02, ACTİVO BEYAZ-(KREM GÜMÜŞ)/-(BEYAZ GÜMÜŞ), MRT04 V-0x, QUALİTY 035/036) | ⚠️ Kumaş adları **varyant ailesi**: bulanık kural kumaşta **sayısal/varyant token'ları birebir eşit değilse** aday üretmez (V-01 ≠ V-02; "KREM" ≠ "BEYAZ" parantez içi token farkı); ağırlık firma adlarında (müşteri/fason) — orada bugün aday yok ama önleme için kalır. Eşik sabit 0.90 JW / 0.85 token-set, numerik token koruması ZORUNLU |
+| Hayalet top (`find_duplicate_rolls`, 365 gün) | **6 küme / 8 fazla top** — 3 GÜÇLÜ (6/6), 1 (5/6), 2 (4/6); hepsi STOCK, hareket 0 | P3c: küme → asıl seç → diğerleri `MUKERRER` ile iptal; etiket basılıysa `confirmLabelPrinted` + kâğıt toplama uyarısı |
+| `test_consistency` canlıda | §13 **2 top `currentQty > initialQty`** (492→698,9 · 500→520,5, IN_PRODUCTION) · §18 3 (mükerrer) · §20 **1 adım durumu** drifti (gerçek, fixture değil) | §13 muhtemelen fason FAZLA DÖNEN (OVERAGE) — kural 2026-08-21'den beri eski; doğrulanıp §13'e OVERAGE muafiyeti ya da "initialQty güncelle" kararı; §20 `recomputeStepStatus` ile onarım (ayrı küçük iş) |
+| Drift (`test_schema_drift`) | 2 fark = atlanan 2 index | artık **tolere edilen geçici drift** (⚠️, kırmızı değil); enforce sonrası liste silinir |
+
+**Çıkarımlar:** (1) Birleştirme kuyruğunun ilk yükü ~20 grup; panel "günlük iş" değil, bir
+temizlik kampanyası + sonra önleme. (2) Kumaşta asıl sorun **kod disiplini** (harf-ikizi kodlar,
+aynı kodda farklı ürün) — "kodu düzelt" eylemi ve kod-tekilliği seddi birleştirmeden ayrı bir
+yol. (3) Bulanık eşleştirme kumaşta kapalı/muhafazakâr, firma adlarında açık. (4) Hayalet top
+paneli küçük ama somut (8 top).

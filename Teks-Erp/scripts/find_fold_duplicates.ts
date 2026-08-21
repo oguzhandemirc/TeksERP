@@ -11,11 +11,12 @@
 //
 // 2026-08-21 — ÜÇ TABLODA DB SEDDİ VAR: `customers` · `items` · `subcontractors`
 // üzerinde partial UNIQUE (`<tablo>_nameFold_key`, `WHERE "mergedIntoId" IS NULL`;
-// migration `20260821150000_name_fold_unique_live`). O tablolarda bu rapor artık
-// "kısıt konulabilir mi" değil "kısıt neden düşer" sorusunun cevabıdır: sedli
-// tabloda bir grup görünüyorsa migration o DB'de DEPLOY ANINDA düşer — önce
-// Tanımlar → Mükerrerler ile birleştirin. Diğer tablolar uygulama bekçisiyle
-// korunur; oradaki grup yalnız gözlemdir.
+// migration `20260821150000_name_fold_unique_live`). 2026-08-22'den beri migration
+// YUMUŞAK KAPIDIR: sedli tabloda grup varsa index'i ATLAR (NOTICE), deploy geçer;
+// o tabloda sed, gruplar birleştirilip migration dosyası yeniden koşulana
+// (enforce) dek EKSİK kalır. Bu rapor o tabloda "enforce neden bekliyor"
+// sorusunun cevabıdır — önce Sistem → Mükerrer Kayıtlar ile birleştirin. Diğer
+// tablolar uygulama bekçisiyle korunur; oradaki grup yalnız gözlemdir.
 //
 // ⚠️ SOY BAĞLI tablolarda (customers/items/colors/subcontractors) tombstone'lar
 // (`mergedIntoId IS NOT NULL`) SAYILMAZ — birleşmiş kayıt aynı katlanmış adı
@@ -82,20 +83,21 @@ async function main(): Promise<void> {
     totalGroups += rows.length;
     totalExtra += extra;
     if (t.dbUnique) seddedGroups += rows.length;
-    const tag = t.dbUnique ? "  ⛔ DB SEDDİ VAR — migration bu DB'de DÜŞER" : "";
+    const tag = t.dbUnique ? "  ⛔ DB SEDLİ TABLO — index bu DB'de ATLANIR, enforce bekler" : "";
     console.log(`── ${t.label} (${t.table}) — ${rows.length} grup, ${extra} fazla satır${tag}`);
     for (const r of rows) console.log(`     ${r.detail}`);
     console.log("");
   }
   if (totalGroups === 0) {
-    console.log("Mükerrer YOK — sedli tablolarda migration güvenle uygulanır.\n");
+    console.log("Mükerrer YOK — sedli tablolarda index kurulu/kurulabilir (enforce güvenle koşar).\n");
   } else {
     console.log(
       `TOPLAM: ${totalGroups} grup / ${totalExtra} fazla satır` +
         (seddedGroups > 0 ? ` (${seddedGroups} grup DB SEDLİ tabloda).\n` : ".\n") +
         (seddedGroups > 0
           ? "⛔ Sedli tablodaki gruplar dururken `20260821150000_name_fold_unique_live`\n" +
-            "   migration'ı bu DB'de DÜŞER. Önce Tanımlar → Mükerrerler ile birleştirin.\n"
+            "   o tabloda index'i ATLAR (deploy geçer, sed EKSİK kalır). Önce Sistem → Mükerrer\n" +
+            "   Kayıtlar ile birleştirin, sonra migration dosyasını yeniden koşun (enforce).\n"
           : "Sedsiz tablolardaki gruplar gözlemdir — uygulama bekçisi yeni mükerreri engeller.\n") +
         "Birleştirme kararı işletmenindir; script yazmaz.\n",
     );
