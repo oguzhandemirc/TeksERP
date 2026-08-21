@@ -210,3 +210,43 @@ A–E çifti ayrıca ölçülüyor).
 - Bekçi: `scripts/test_merge_field_picks.ts` **54** kontrol (§0 DMMF + kapalı alanlar,
   §1 öneri kuralı, §2 uygulama + tombstone tarihçesi + audit, §3 üç guard + tx geri sarma,
   §4 seçim verilmezse survivor'a dokunulmaz).
+
+---
+
+## 9) P3 — KAPSAM: ölçüme göre önceliklendirildi (2026-08-22)
+
+Canlı kopyada (2026-08-22 dump) kapsam adaylarının GERÇEK mükerrer sayısı ölçüldü:
+
+| Aday | Canlıdaki mükerrer | Karar |
+|---|---|---|
+| **Toplar (hayalet KK1 kaydı)** | **6 küme / 8 fazla top** | ✅ **P3c UYGULANDI** |
+| Müşteri şubesi | 0 | ⏸️ ertelendi (motor hazır, ihtiyaç yok) |
+| İstasyon / makine / fason kategorisi | 0 (dev'deki 3 istasyon TEST artığı) | ⏸️ ertelendi |
+
+**Neden erteleme doğru karar:** şube/istasyon/makine birleştirmesi üretim-kritik FK'lara
+dokunur (route_steps, work_order_steps, work_sessions, kurşun bypass atamaları…) ve her biri
+`merge-map`e satır satır analiz ister. Sıfır ihtiyaç için bu riski almak, "yazılım hazır olsun"
+uğruna canlı üretim verisine yeni bir yazma yolu açmaktır. **Reçete hazır** (gerektiğinde):
+① modele `mergedIntoId/mergedAt/mergedById` + partial index (migration) ② `MERGE_ENTITIES`e
+ekle ③ `MERGE_MAP`e FK kuralları (bekçi `test_master_data_merge_fk_coverage` eksik FK'yı
+düşürür — kapsama mekanik) ④ `META.identityFields` (şube → `customerId`, makine → `stationId`)
+⑤ `IDENTITY_RULES` + `FUZZY_PROFILE` ⑥ `DuplicateReviewEntity` enum değeri.
+
+### 9c) Hayalet top paneli (P3c UYGULANDI)
+
+- **Tespit tek kaynakta:** `src/services/duplicate-rolls.service.ts`. `scripts/find_duplicate_rolls.ts`
+  artık yalnız bir YAZICI — script ile panel aynı servisten beslenir (ayrışma yapısal olarak imkânsız).
+- **Fiil BİRLEŞTİRME DEĞİL İPTAL:** top bir işlem kaydıdır; iki kaydı birleştirmek metrajı
+  toplamak olurdu, oysa fiziksel olarak tek top vardı. Fazlalık `MUKERRER` sebep koduyla iptal.
+- **İptal, topun KENDİ ucundan** (`DELETE /api/rolls/:id`) — toplu iptal ucu BİLİNÇLİ YOK ki
+  o ucun etiket/çuval/sevkiyat guard'ları atlanmasın. Panel top top çağırır, kısmi başarıyı
+  dürüstçe raporlar.
+- **"Asıl" önerisi (kullanıcı kararı):** etiketi BASILAN top asıldır (sahadaki kâğıt onu
+  gösteriyor; birden fazlaysa en eskisi), hiçbirinde etiket yoksa en eski kayıt. Hareket görmüş
+  top listeye zaten hiç girmez (sert eleme).
+- **Engel:** çuvaldaki / sevkiyata bağlı top `blockedReason` taşır — listede KALIR (operatör
+  görsün) ama iptal edilemez, "asıl" da seçilemez.
+- Uç: `GET /api/rolls/duplicates?days=&window=` (`roll:manual-adjust` — listeyi iptali yapabilen
+  görür). Bekçi: `scripts/test_duplicate_rolls.ts` **16** kontrol.
+- **Canlı kopyada:** 948 giriş topu tarandı → 730'u hareket gördüğü için elendi → 6 küme / 8 fazla
+  (3'ü 6/6 güçlü şüphe; iki toplu kümelerde ikisinin de etiketi basılı → kâğıt toplama uyarısı şart).

@@ -8,6 +8,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { InventoryService } from "../services/inventory.service";
+import { DuplicateRollsService } from "../services/duplicate-rolls.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { foldTypeSchema } from "../services/helpers/fold-type";
 import { matchesPermission } from "../middlewares/rbac.middleware";
@@ -369,6 +370,27 @@ export class InventoryController {
   async listEntryStations(_req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       res.status(200).json(await this.service.listEntryStations());
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * GET /api/rolls/duplicates — hayalet top (mükerrer ham giriş) taraması.
+   * SALT OKUNUR; temizlik `DELETE /api/rolls/:id` ile top top yapılır (o ucun
+   * etiket/çuval/sevk guard'ları olduğu gibi kalsın diye toplu iptal ucu YOK).
+   */
+  async listDuplicateRolls(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const num = (v: unknown): number | undefined => {
+        const n = typeof v === "string" ? Number(v) : NaN;
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+      };
+      const data = await DuplicateRollsService.scan({
+        days: num(req.query.days),
+        windowSec: num(req.query.window),
+      });
+      res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);
     }

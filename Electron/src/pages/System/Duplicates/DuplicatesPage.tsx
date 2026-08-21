@@ -20,6 +20,7 @@ import {
 import { matchesConfirmation } from "@/components/forms/TypeToConfirm";
 import { downloadBlob } from "@/lib/file-save";
 import { MergeConfirmGate } from "./MergeConfirmGate";
+import { RollDuplicatesTab } from "./RollDuplicatesTab";
 import {
   DUPLICATE_RULE_LABEL,
   MERGE_ENTITIES,
@@ -54,7 +55,11 @@ export function DuplicatesPage() {
   )
     ? (searchParams.get("entity") as MergeEntity)
     : "customer";
-  const [entity, setEntity] = useState<MergeEntity>(initialEntity);
+  // "roll" bir MergeEntity DEĞİL — ayrı bir sekme ve ayrı bir FİİL (birleştirme
+  // değil iptal). Tip birliği kurmak yerine sekme durumu ayrı tutuluyor.
+  const [tab, setTab] = useState<MergeEntity | "roll">(initialEntity);
+  const entity: MergeEntity = tab === "roll" ? initialEntity : tab;
+  const setEntity = (e: MergeEntity) => setTab(e);
   const [showNotDuplicate, setShowNotDuplicate] = useState(false);
 
   // Birleştirme diyaloğu (mevcut akış)
@@ -79,6 +84,7 @@ export function DuplicatesPage() {
     queryKey: ["duplicate-candidates", entity, showNotDuplicate],
     queryFn: () => mergeService.candidates(entity, showNotDuplicate),
     refetchOnMount: "always",
+    enabled: tab !== "roll",
   });
   const scan = scanQuery.data?.data;
 
@@ -193,21 +199,23 @@ export function DuplicatesPage() {
         title="Mükerrer Kayıtlar"
         description="Aynı kaydın iki kez açılmış hâllerini bul, incele, tek kayda birleştir"
         actions={
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => csvMutation.mutate()}
-              disabled={csvMutation.isPending || !scan}
-            >
-              <Download className="mr-2 h-4 w-4" />
-              CSV indir
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => void scanQuery.refetch()}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Yeniden tara
-            </Button>
-          </div>
+          tab === "roll" ? null : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => csvMutation.mutate()}
+                disabled={csvMutation.isPending || !scan}
+              >
+                <Download className="mr-2 h-4 w-4" />
+                CSV indir
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => void scanQuery.refetch()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Yeniden tara
+              </Button>
+            </div>
+          )
         }
       />
 
@@ -216,23 +224,35 @@ export function DuplicatesPage() {
           <Button
             key={e}
             size="sm"
-            variant={e === entity ? "default" : "outline"}
+            variant={e === tab ? "default" : "outline"}
             onClick={() => setEntity(e)}
           >
             {MERGE_ENTITY_LABEL[e]}
           </Button>
         ))}
-        <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={showNotDuplicate}
-            onChange={(e) => setShowNotDuplicate(e.target.checked)}
-          />
-          "Mükerrer değil" denilenleri de göster
-        </label>
+        {/* Toplar AYRI bir fiil: birleştirme değil, fazlalığın iptali. */}
+        <Button
+          size="sm"
+          variant={tab === "roll" ? "default" : "outline"}
+          onClick={() => setTab("roll")}
+        >
+          Toplar (hayalet kayıt)
+        </Button>
+        {tab !== "roll" && (
+          <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={showNotDuplicate}
+              onChange={(e) => setShowNotDuplicate(e.target.checked)}
+            />
+            "Mükerrer değil" denilenleri de göster
+          </label>
+        )}
       </div>
 
-      {scan && (
+      {tab === "roll" && <RollDuplicatesTab />}
+
+      {tab !== "roll" && scan && (
         <div className="text-xs text-muted-foreground">
           {scan.totals.records} kayıt tarandı · {scan.totals.groups} grup / {scan.totals.pairs} çift
           {scan.totals.hiddenNotDuplicate > 0 && !showNotDuplicate
@@ -245,7 +265,7 @@ export function DuplicatesPage() {
         </div>
       )}
 
-      {scanQuery.isLoading ? (
+      {tab === "roll" ? null : scanQuery.isLoading ? (
         <Skeleton className="h-40 w-full" />
       ) : scanQuery.isError ? (
         <Callout tone="danger" title="Tarama yapılamadı">

@@ -276,6 +276,28 @@ router.get("/stats", verifyToken, requireAnyPermission("roll:read", ...MOBILE_RO
 
 /**
  * @openapi
+ * /api/rolls/duplicates:
+ *   get:
+ *     tags: [Inventory]
+ *     summary: "Hayalet top taraması — mükerrer ham giriş şüphesi (SALT OKUNUR)"
+ *     description: |
+ *       Aynı ürün+renk+metraj+en+operatör+makine, saniyeler arayla, HİÇ HAREKET GÖRMEMİŞ
+ *       toplar. Şüphe listesidir, kanıt değil (KK1 seri girişi meşru olarak aynı deseni
+ *       üretir). Hiçbir kayda dokunmaz; temizlik `DELETE /api/rolls/:id` ile top top yapılır.
+ *       Yetki: iptali kim yapabiliyorsa listeyi de o görür (`roll:manual-adjust`).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Küme listesi }
+ */
+router.get(
+  "/duplicates",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.listDuplicateRolls,
+);
+
+/**
+ * @openapi
  * /api/rolls/entry-users:
  *   get:
  *     tags: [Inventory]

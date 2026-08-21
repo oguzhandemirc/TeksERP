@@ -164,6 +164,66 @@ export interface DuplicateReviewDto {
   decidedBy: { id: string; username: string; fullName: string | null } | null;
 }
 
+// ── HAYALET TOP (mükerrer ham giriş) — panel v2 P3c ──────────────────────────
+// ⚠️ Top bir İŞLEM KAYDIDIR: "birleştirme" diye bir şey yok (metraj toplanmaz —
+// fiziksel olarak tek top vardı). Fazlalık `MUKERRER` sebep koduyla İPTAL edilir
+// ve iptal, topun kendi ucundan (`DELETE /api/rolls/:id`) geçer — o ucun etiket /
+// çuval / sevkiyat guard'ları olduğu gibi kalsın diye toplu iptal ucu YOK.
+
+export interface DuplicateRollRow {
+  id: string;
+  barcode: string | null;
+  createdAt: string;
+  status: string;
+  clientToken: string | null;
+  labelPrinted: boolean;
+  /** Doluysa bu top iptal EDİLEMEZ (çuvalda / sevkiyata bağlı). */
+  blockedReason: string | null;
+}
+
+export interface DuplicateRollCluster {
+  key: string;
+  score: number;
+  level: "STRONG" | "SUSPECT" | "WEAK";
+  reasons: string[];
+  itemId: string;
+  itemName: string | null;
+  colorName: string | null;
+  initialQty: number;
+  width: number | null;
+  operatorName: string | null;
+  rolls: DuplicateRollRow[];
+  /** Önerilen "asıl": etiketi basılan (en eskisi), yoksa en eski kayıt. */
+  suggestedKeepId: string;
+}
+
+export interface DuplicateRollScan {
+  scannedAt: string;
+  days: number;
+  windowSec: number;
+  totals: { scanned: number; touched: number; evaluated: number; clusters: number; extras: number };
+  clusters: DuplicateRollCluster[];
+}
+
+export const duplicateRollsService = {
+  scan: (days: number) =>
+    apiClient
+      .get<ApiResponse<DuplicateRollScan>>(`/api/rolls/duplicates?days=${days}`)
+      .then((r) => r.data),
+
+  /**
+   * Tek topu `MUKERRER` sebebiyle iptal eder. Sebep METNİNİ sunucu katalogdan
+   * doldurur (`reasonCode`); `confirmActive`/`confirmLabelPrinted` bilinçli onay
+   * beyanlarıdır — panel bunları ancak operatör uyarıyı gördükten sonra gönderir.
+   */
+  cancel: (rollId: string) =>
+    apiClient
+      .delete<ApiResponse<unknown>>(
+        `/api/rolls/${rollId}?confirmActive=true&confirmLabelPrinted=true&reasonCode=MUKERRER`,
+      )
+      .then((r) => r.data),
+};
+
 export const mergeService = {
   duplicates: (entity: MergeEntity) =>
     apiClient
