@@ -31,6 +31,9 @@ interface Props {
    *  stock → explicit "Stok/müşterisiz" (backend müşteriyi zorla null bırakır,
    *  snapshot/WO tahminini atlar); hiçbiri yoksa doğal etiket (snapshot/WO). */
   labelContext?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean };
+  /** FİRE KAPISI açık geçişi — operatör "fire ama yine de bas" onayını verdi.
+   *  Sunucu onaysız fire baskısını 409 SCRAP_LABEL_BLOCKED ile reddeder. */
+  confirmScrap?: boolean;
   /** Print akışı bittiğinde (başarılı / hatalı) parent state'ini temizler.
    *  `printed` = biten işin topu — parent yalnız HÂLÂ güncel olan slotu
    *  temizlemeli (`cur?.id === printed.id`); baskı uçuştayken slot yeni topa
@@ -56,7 +59,7 @@ interface Props {
  * "Mobil ile Electron'daki etiket farklı" sorunu yapısal olarak çözülür —
  * Electron LabelPreview de iframe ile aynı HTML'i tüketir.
  */
-export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Props) {
+export function LabelPrinter({ roll, kind, labelContext, confirmScrap, onDone, onResult }: Props) {
   // SERİ BASKI KUYRUĞU (2026-07-27): eski tek-slot `firedRef` modeli, baskı
   // uçuştayken parent `roll`u A→B değiştirirse B'yi SESSİZCE atlıyordu (bayrak
   // yalnız roll===null'da sıfırlanıyordu) — seri kesim + BT yazıcı akışında
@@ -109,7 +112,13 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
     lastJobIdRef.current = roll.id;
     // İş, TETİKLENDİĞİ ANIN roll/kind/context değerlerini taşır — zincir sırası
     // gelince parent state'i değişmiş olsa da doğru etiket basılır.
-    const job = { roll, kind, labelContext };
+    // Onay bayrağı bağlamla BİRLİKTE dondurulur — zincir sırası gelince parent
+    // state'i temizlenmiş olsa da bu iş onaylı gitmelidir.
+    const job = {
+      roll,
+      kind,
+      labelContext: confirmScrap ? { ...(labelContext ?? {}), confirmScrap: true } : labelContext,
+    };
     chainRef.current = chainRef.current.then(async () => {
       const { roll: jobRoll, kind: jobKind, labelContext: jobContext } = job;
       if (!jobRoll.barcode) {
@@ -273,7 +282,7 @@ export function LabelPrinter({ roll, kind, labelContext, onDone, onResult }: Pro
         onDoneRef.current(jobRoll); // unmount'ta da — aktif iş kilidi çözülsün
       }
     });
-  }, [roll, kind, labelContext]);
+  }, [roll, kind, labelContext, confirmScrap]);
 
   return null;
 }

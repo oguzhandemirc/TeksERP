@@ -20,6 +20,8 @@ const seedBulkSchema = z.object({
   orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").nullish(),
   customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
   stock: z.boolean().optional(),
+  /** FİRE KAPISI açık geçişi — operatör "fire ama yine de bas" onayını verdi. */
+  confirmScrap: z.boolean().optional(),
 });
 
 /**
@@ -87,6 +89,8 @@ const printEventSchema = z.object({
   orderLineId: z.string().uuid("Geçersiz sipariş kalemi ID").nullish(),
   customerId: z.string().uuid("Geçersiz müşteri ID").nullish(),
   stock: z.boolean().optional(),
+  /** FİRE KAPISI açık geçişi — operatör "fire ama yine de bas" onayını verdi. */
+  confirmScrap: z.boolean().optional(),
   peripheralId: z.string().uuid("Geçersiz cihaz ID").nullish(),
 });
 
@@ -186,6 +190,7 @@ export class LabelController {
           orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
           customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
           stock: req.query.stock === "1" || req.query.stock === "true",
+          confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
           // Saha #6: ?copies= override — verilmezse label.copies ayarı (default 2).
           copies:
             typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
@@ -215,6 +220,7 @@ export class LabelController {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
+        confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         copies:
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
@@ -243,6 +249,7 @@ export class LabelController {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
+        confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         copies:
           typeof req.query.copies === "string" && /^\d+$/.test(req.query.copies)
             ? parseInt(req.query.copies, 10)
@@ -289,6 +296,7 @@ export class LabelController {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
+        confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         ...(await resolveFormatOpts(req)),
       });
       res.status(200).json(result);
@@ -305,6 +313,7 @@ export class LabelController {
         orderLineId: typeof req.query.orderLineId === "string" ? req.query.orderLineId : undefined,
         customerId: typeof req.query.customerId === "string" ? req.query.customerId : undefined,
         stock: req.query.stock === "1" || req.query.stock === "true",
+        confirmScrap: req.query.confirmScrap === "1" || req.query.confirmScrap === "true",
         ...(await resolveFormatOpts(req)),
       });
       res.status(200).json(result);

@@ -51,6 +51,10 @@ export interface LabelCustomerContext {
   /** Müşterisiz (stok) baskı — backend müşteriyi ZORLA null bırakır (snapshot/WO
    *  bağlamı ATLANIR, müşterisiz spec-only etiket çıkar). */
   stock?: boolean;
+  /** FİRE KAPISI açık geçişi — operatör "fire ama yine de bas" onayını verdi.
+   *  Onaysız fire baskısını backend 409 SCRAP_LABEL_BLOCKED ile reddeder
+   *  (label.service.assertScrapLabelAllowed). Önizleme de kapı ARKASINDADIR. */
+  confirmScrap?: boolean;
 }
 
 function customerContextQuery(opts?: LabelCustomerContext): Record<string, string> {
@@ -58,6 +62,7 @@ function customerContextQuery(opts?: LabelCustomerContext): Record<string, strin
   if (opts?.customerId) params.customerId = opts.customerId;
   if (opts?.orderLineId) params.orderLineId = opts.orderLineId;
   if (opts?.stock) params.stock = "1";
+  if (opts?.confirmScrap) params.confirmScrap = "1";
   return params;
 }
 

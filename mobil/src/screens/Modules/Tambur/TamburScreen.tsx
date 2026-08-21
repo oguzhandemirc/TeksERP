@@ -512,6 +512,9 @@ export default function TamburScreen() {
     roll: Roll;
     kind: 'ROLL_RAW' | 'ROLL_FINISHED' | null;
   } | null>(null);
+  /** Aktif baskı işi fire onayı taşıyor mu — sunucu kapısının açık geçişi.
+   *  Onaysız gönderilirse backend 409 SCRAP_LABEL_BLOCKED döner (ikinci hat). */
+  const [printConfirmScrap, setPrintConfirmScrap] = useState(false);
   /**
    * Tek giriş kapısı: baskı slotunu ve (varsa) tür sabitlemesini birlikte yazar.
    *
@@ -4764,7 +4767,10 @@ export default function TamburScreen() {
                   const job = scrapPrintConfirm;
                   setScrapPrintConfirm(null);
                   // Kapıyı ATLAYARAK bas — startPrint'i tekrar çağırmak sonsuz
-                  // döngü olurdu (aynı top yine kapıya takılır).
+                  // döngü olurdu (aynı top yine kapıya takılır). Onay bayrağı
+                  // SUNUCUYA da gider: backend aynı kuralı bağımsız uygular ve
+                  // onaysız fire baskısını 409 ile reddeder.
+                  setPrintConfirmScrap(true);
                   setPrintKind(job.kind);
                   setActivePrintRoll(job.roll);
                 }}
@@ -4846,6 +4852,7 @@ export default function TamburScreen() {
           printKind ?? (activePrintRoll?.colorId == null ? 'ROLL_RAW' : 'ROLL_FINISHED')
         }
         labelContext={labelContext}
+        confirmScrap={printConfirmScrap}
         onDone={(printed) => {
           // Yalnız HÂLÂ güncel slotu temizle: baskı uçuştayken slota yeni top
           // (B) atandıysa onun işi kuyruktadır — A'nın bitişi B'yi ezmesin.
@@ -4853,6 +4860,7 @@ export default function TamburScreen() {
             setActivePrintRoll(null);
             setPrintKind(null);
             setLabelContext(undefined);
+            setPrintConfirmScrap(false);
           }
         }}
       />

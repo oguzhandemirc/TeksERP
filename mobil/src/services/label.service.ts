@@ -44,7 +44,7 @@ export const labelService = {
   getRollNative: (
     rollId: string,
     kind: 'ROLL_RAW' | 'ROLL_FINISHED',
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean },
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean },
     rasterCapable?: boolean,
   ): Promise<{ content: string; encoding: 'text' | 'base64'; language: string }> => {
     const params = {
@@ -52,6 +52,7 @@ export const labelService = {
       ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
       ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
       ...(ctx?.stock ? { stock: '1' } : {}),
+      ...(ctx?.confirmScrap ? { confirmScrap: '1' } : {}),
     };
     // rasterCapable (mobileRasterEnabled) → encoding=b64: backend cihazın rasterMode'unu
     // ONURLANDIRIR → raster GW bitmap (ya da komut), ikisi de base64 byte olarak JSON döner.
@@ -160,13 +161,14 @@ export const labelService = {
 
   recordPrintEvent: (
     rollId: string,
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean }
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/print`, {
         ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
         ...(ctx?.stock ? { stock: true } : {}),
+        ...(ctx?.confirmScrap ? { confirmScrap: true } : {}),
       })
       .then((r) => r.data),
 
@@ -178,13 +180,14 @@ export const labelService = {
    */
   seedSnapshot: (
     rollId: string,
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean }
   ): Promise<ApiResponse<unknown>> =>
     apiClient
       .post<ApiResponse<unknown>>(`/labels/rolls/${rollId}/seed-snapshot`, {
         ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
         ...(ctx?.stock ? { stock: true } : {}),
+        ...(ctx?.confirmScrap ? { confirmScrap: true } : {}),
       })
       .then((r) => r.data),
 
@@ -198,7 +201,7 @@ export const labelService = {
    */
   seedSnapshotBulk: (
     rollIds: string[],
-    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean }
+    ctx?: { orderLineId?: string | null; customerId?: string | null; stock?: boolean; confirmScrap?: boolean }
   ): Promise<
     ApiResponse<{
       seeded: string[];
@@ -216,6 +219,7 @@ export const labelService = {
         ...(ctx?.orderLineId ? { orderLineId: ctx.orderLineId } : {}),
         ...(ctx?.customerId ? { customerId: ctx.customerId } : {}),
         ...(ctx?.stock ? { stock: true } : {}),
+        ...(ctx?.confirmScrap ? { confirmScrap: true } : {}),
       })
       .then((r) => r.data),
 

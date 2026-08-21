@@ -18,7 +18,11 @@
 // =============================================================================
 
 import bwipjs from "bwip-js";
-import { readLabelCopies, readLabelNativeSendEnabled } from "./system-setting.service";
+import {
+  readLabelCopies,
+  readLabelNativeSendEnabled,
+  readScrapGradeLabelEnabled,
+} from "./system-setting.service";
 import { LabelKind, PrinterLanguage, Prisma, RollStatus, type LabelTemplate, type LabelTemplateVariant } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
@@ -106,6 +110,11 @@ export interface RollLabelRenderOpts {
   deviceId?: string | null;
   /** Şablon explicit override (cihaz yönlendirmesini ezer). */
   templateId?: string | null;
+  /** FİRE KAPISI AÇIK GEÇİŞİ — istemci "bu fire, yine de bas" onayını ALDI.
+   *  Yokken fire kalitede etiket üretimi 409 `SCRAP_LABEL_BLOCKED` ile reddedilir
+   *  (bkz. assertScrapLabelAllowed). Sunucu bu bayrağı SORGULAMAZ: niyeti taşıyan
+   *  tek şey operatörün onayıdır, ve o onay istemcide alınır. */
+  confirmScrap?: boolean;
   /** İstemci raster (binary/base64) baytları KABUL EDİYOR mu (encoding=b64 gönderdi).
    *  false/yok → eski istemci: raster cihazda bile komut üretilir (bozulmaz). */
   rasterCapable?: boolean;
@@ -200,6 +209,45 @@ interface BulkLabelContext {
   copies: number;
   /** Cihaz raster modu (finishedRouting'den) — bulk raster; false → bugünkü komut. */
   rasterMode: boolean;
+}
+
+/**
+ * FİRE KAPISI — bu topun kalitesi "etiketsiz" işaretliyse KÂĞIT ÜRETİMİNİ durdurur.
+ *
+ * NEDEN SUNUCUDA: kural 2026-08-20'de yalnız mobil `startPrint` hunisindeydi, yani
+ * eski APK'lı bir tablet ya da Electron kuralı hiç bilmiyordu. Bu ikinci hat, kuralı
+ * "sahadaki en eski istemci kadar geçerli" olmaktan çıkarır.
+ *
+ * AÇIK GEÇİŞLİ (fail-closed ama çıkışsız değil): operatör onay verirse istemci
+ * `confirmScrap=true` gönderir ve kapı açılır. Fire topun fiziksel tanımlanması
+ * gerekebilir; baskı yolunu tamamen kapatmak sahayı kâğıtsız bırakırdı.
+ *
+ * İKİ KAPI: hangi kalite etiketsiz → `QualityGrade.skipLabel` (katalog);
+ * kural açık mı → `label.scrapGradeLabelEnabled` (fabrika ayarı, varsayılan KAPALI).
+ *
+ * ⚠️ TEK ÇAĞRI NOKTASI `buildRollRenderInput` — html/ppla/native/preview/print-native
+ * ve toplu baskı hepsi oradan geçer. Yeni bir kâğıt yüzeyi eklerken kapıyı elle
+ * çağırma; o boğazdan geçir. Payload ucu (`getRollLabel`) BİLEREK kapı dışıdır:
+ * veri döner, kâğıt üretmez — listeler/ekranlar bozulmasın.
+ */
+async function assertScrapLabelAllowed(
+  qualityGradeCode: string | null | undefined,
+  confirmScrap: boolean | undefined,
+): Promise<void> {
+  if (confirmScrap) return;
+  const code = (qualityGradeCode ?? "").trim();
+  if (!code) return; // kalitesiz top → kural yok (fail-open: kapıyı kalite açar)
+  if (await readScrapGradeLabelEnabled()) return; // ayar AÇIK → herkes etiket alır
+  const grade = await prisma.qualityGrade.findFirst({
+    where: { code, skipLabel: true },
+    select: { name: true },
+  });
+  if (!grade) return;
+  throw AppError.conflict(
+    `Bu top ${grade.name} kalitesinde — fire mala etiket basılmaz. ` +
+      `Yine de gerekiyorsa onaylayarak basabilirsiniz.`,
+    { code: "SCRAP_LABEL_BLOCKED", qualityGrade: code },
+  );
 }
 
 export class LabelService {
@@ -700,6 +748,9 @@ export class LabelService {
   }> {
     const payloadResp = await this.getRollLabel(rollId, opts, preloaded);
     const payload = payloadResp.data;
+
+    // FİRE KAPISI — kâğıt üreten HER yol buradan geçer (bkz. assertScrapLabelAllowed).
+    await assertScrapLabelAllowed(payload.qualityGrade, opts?.confirmScrap);
 
     // colorId: preloaded'da Aşama-A roll'unda zaten var → ikinci sorgu YOK.
     // (preloaded'da roll eksikse — beklenmez — güvenli tarafta sorguya düş.)

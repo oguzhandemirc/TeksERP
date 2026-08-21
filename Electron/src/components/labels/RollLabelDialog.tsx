@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Printer, Pencil, X } from "lucide-react";
+import { Printer, Pencil, X, AlertTriangle } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,6 +17,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { labelService } from "@/services/labelService";
 import { useLabelPrinter } from "@/hooks/useLabelPrinter";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { relabelService } from "@/pages/Operations/RelabelStation/service";
 import { RelabelPrintForCustomer as PrintForCustomerCard } from "./PrintForCustomerCard";
 
@@ -38,6 +40,36 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
     enabled: open,
   });
 
+  // ── FİRE KAPISI (2026-08-20) ────────────────────────────────────────────
+  // Fire kalitede top OTOMATİK etiket almaz; masaüstünden elle basmak MÜMKÜN
+  // ama onay ister — mobildeki `startPrint` kapısının birebir ikizi. İki
+  // istemcinin AYNI kuralı söylemesi şart: ayrışırsa aynı iş iki yerde iki
+  // türlü davranır ve kural "hangi ekrandan bastığına" bağlı hale gelir.
+  //
+  // ⚠️ ÖNİZLEME DE KAPI ARKASINDA: backend `buildRollRenderInput` boğazında
+  // durduğu için onaysız önizleme 409 döner. Bu yüzden onay, önizleme
+  // yüklenmeden ÖNCE sorulur — yoksa kullanıcı "Etiket alınamadı" hatası görür.
+  const [scrapConfirmed, setScrapConfirmed] = useState(false);
+  const flagsQ = useFeatureFlags();
+  const scrapLabelEnabled = flagsQ.data?.data?.scrapGradeLabelEnabled ?? false;
+  const gradesQ = useQuery({
+    queryKey: ["quality-grades", "skip-label"],
+    queryFn: () => qualityGradeService.listCursor({ limit: 100, filters: { isActive: "true" } }),
+    enabled: open,
+    staleTime: 10 * 60 * 1000,
+  });
+  const payloadForGate = payloadQuery.data?.data;
+  // Kalite KODU ile katalog satırı eşlenir (Roll.qualityGrade snapshot'ı).
+  // Katalog yüklenmediyse/eşleşmediyse kapı KAPALI DEĞİL (fail-open): sunucu
+  // ikinci hat olarak zaten reddeder, burada gereksiz sürtünme üretme.
+  const isScrapGrade =
+    !scrapLabelEnabled &&
+    Boolean(payloadForGate?.qualityGrade) &&
+    (gradesQ.data?.data ?? []).some(
+      (g) => g.code === payloadForGate?.qualityGrade && g.skipLabel === true,
+    );
+  const scrapGateOpen = !isScrapGrade || scrapConfirmed;
+
   // Bu PC'ye yapılandırılmış seri/COM Argox varsa diyalogsuz baskı; yoksa iframe.print().
   const { directEnabled, printRoll, peripheralId } = useLabelPrinter();
 
@@ -45,9 +77,16 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
   // Baskı yolu (native printRoll / iframe.print) ayrı; önizleme artık gerçek çıktı.
   // peripheralId: önizleme bu PC'ye seçili yazıcının dilinde çözülür (baskıyla aynı).
   const previewQuery = useQuery({
-    queryKey: ["label-roll-preview", rollId, peripheralId],
-    queryFn: () => labelService.getRollPreview(rollId!, undefined, peripheralId),
-    enabled: open,
+    queryKey: ["label-roll-preview", rollId, peripheralId, scrapGateOpen],
+    queryFn: () =>
+      labelService.getRollPreview(
+        rollId!,
+        scrapConfirmed ? { confirmScrap: true } : undefined,
+        peripheralId,
+      ),
+    // Kapı kapalıyken İSTEK ATILMAZ — 409'u görüp "hata" diye göstermek yerine
+    // onay panelini çiziyoruz (kullanıcıya sebebi ve çıkış yolunu söyler).
+    enabled: open && scrapGateOpen,
     staleTime: 0,
   });
   const preview = previewQuery.data;
@@ -80,7 +119,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
       setSending(true);
       try {
         // Diyalogsuz: native PPLA → seri/COM. Hata olursa diyaloğa DÜŞME (görünür hata).
-        const r = await printRoll(rollId!);
+        const r = await printRoll(rollId!, scrapConfirmed ? { confirmScrap: true } : undefined);
         if (r.ok) {
           printMut.mutate(); // audit + "Etiket basıldı" toast'ı printMut.onSuccess'ten.
         } else {
@@ -127,6 +166,31 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
             )}
             {previewQuery.isLoading ? (
               <Skeleton className="h-[640px] w-full" />
+            ) : !scrapGateOpen ? (
+              /* FİRE ONAY PANELİ — önizleme yerine. Engelleme DEĞİL, onaylatma:
+                 fire topun fiziksel tanımlanması gerekebilir ve baskı yolunu
+                 tamamen kapatmak sahayı çıkışsız bırakır. */
+              <div className="flex h-[640px] flex-col items-center justify-center gap-4 rounded-md border border-dashed border-amber-500/60 bg-amber-50/50 p-8 text-center dark:bg-amber-950/20">
+                <AlertTriangle className="h-10 w-10 text-amber-600" />
+                <div className="space-y-2">
+                  <p className="text-base font-semibold">Bu top fire kalitede</p>
+                  <p className="mx-auto max-w-md text-sm text-muted-foreground">
+                    Fire mala otomatik etiket basılmaz — etiket bir{" "}
+                    <em>satılabilirlik</em> işaretidir ve fire malın akışa geri
+                    girmesini kolaylaştırır. Yine de gerekiyorsa etiketi görüp
+                    basabilirsiniz.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 border-amber-600 text-amber-700 hover:bg-amber-100 dark:text-amber-400"
+                  onClick={() => setScrapConfirmed(true)}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" /> Yine de göster ve bas
+                </Button>
+              </div>
             ) : previewQuery.isError ? (
               <div className="rounded-md border border-dashed p-6 text-center text-sm text-destructive">
                 Etiket alınamadı: {(previewQuery.error as Error).message}
@@ -168,7 +232,7 @@ export function RollLabelDialog({ rollId, onOpenChange }: Props) {
                   <Button
                     type="button"
                     size="sm"
-                    disabled={!hasBarcode || previewQuery.isLoading || printMut.isPending || sending}
+                    disabled={!hasBarcode || !scrapGateOpen || previewQuery.isLoading || printMut.isPending || sending}
                     onClick={handlePrint}
                     className="gap-1"
                   >

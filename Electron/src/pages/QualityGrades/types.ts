@@ -16,6 +16,10 @@ export interface QualityGrade {
   sortOrder: number;
   isActive: boolean;
   targetStatus: QualityTargetStatus;
+  /** Bu kalitedeki top OTOMATİK etiket ALMAZ (sahada FİRE). Katalogdan gelir;
+   *  `scrapGradeLabelEnabled` ayarı AÇIKSA yok sayılır (iki kapı).
+   *  Eski sunucuda alan YOK → optional; okurken `=== true` ile daralt. */
+  skipLabel?: boolean;
   createdAt: string;
   updatedAt: string;
 }

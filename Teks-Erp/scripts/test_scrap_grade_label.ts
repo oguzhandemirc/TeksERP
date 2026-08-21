@@ -163,23 +163,45 @@ async function main(): Promise<void> {
   // doğruluyoruz. Şablon verisi değiştiği için bu, kod testi değil ÇIKTI testidir.
   const svc = new LabelService();
   const machine = await prisma.machine.findFirst({ select: { id: true } });
+  /** renderFor içindeki son hata — null dönüşünün SEBEBİ (top yok mu, kapı mı). */
+  let renderError: string | null = null;
   async function renderFor(where: Prisma.RollWhereInput): Promise<string | null> {
     const roll = await prisma.roll.findFirst({
       where: { ...where, barcode: { not: null } },
       select: { id: true },
     });
     if (!roll) return null;
-    const out = await svc.getRollLabelNative(roll.id, LabelKind.ROLL_FINISHED, {
-      machineId: machine?.id ?? null,
-    });
-    return out.data.content;
+    // confirmScrap: bu bölüm etiketin İÇERİĞİNİ ölçer, kapıyı DEĞİL (kapı §6).
+    // Onay bayrağı olmadan sunucu 409 döner ve içerik hiç üretilmez.
+    //
+    // ⚠️ try/catch load-bearing: açık geçiş bozulursa (kapı çıkışsız hale
+    // gelirse) burası fırlatır ve test ÇÖKEREK kırmızı verirdi — exit kodu doğru
+    // ama çıktı "neden öldü" sorusunu cevaplamaz. Hatayı yakalayıp okunabilir
+    // bir ❌ satırına çeviriyoruz (sonda yazarken ölçüldü).
+    try {
+      const out = await svc.getRollLabelNative(roll.id, LabelKind.ROLL_FINISHED, {
+        machineId: machine?.id ?? null,
+        confirmScrap: true,
+      });
+      return out.data.content;
+    } catch (e) {
+      const err = e as { statusCode?: number; details?: { code?: string } };
+      renderError = `${err.statusCode ?? "?"}:${err.details?.code ?? String(e).slice(0, 60)}`;
+      return null;
+    }
   }
 
   const fireLabel = await renderFor({ qualityGradeRef: { skipLabel: true } });
   const goodLabel = await renderFor({ qualityGradeRef: { skipLabel: false } });
 
   if (fireLabel == null) {
-    check("§5 fire etiketi render edilebildi", false, "skipLabel'lı barkodlu top yok — atlandı");
+    check(
+      "§5 fire etiketi render edilebildi",
+      false,
+      renderError
+        ? `render REDDEDİLDİ (${renderError}) — açık geçiş (confirmScrap) çalışmıyor olabilir`
+        : "skipLabel'lı barkodlu top yok — atlandı",
+    );
   } else {
     check("§5 fire etiketinde uyarı metni VAR", fireLabel.includes("SATILAMAZ"), fireLabel.slice(0, 200));
     check(
@@ -193,6 +215,79 @@ async function main(): Promise<void> {
   } else {
     // EN ÖNEMLİ KONTROL: koşullu eleman sızarsa HER etikete "SATILAMAZ" basılır.
     check("§5c normal etikete fire işareti SIZMIYOR", !goodLabel.includes("SATILAMAZ"));
+  }
+
+  // ── §6 SUNUCU KAPISI — kural istemciye BAĞLI DEĞİL ────────────────────────
+  // 2026-08-20 ikinci hat: kural önce yalnız mobil `startPrint` hunisindeydi,
+  // yani eski APK'lı tablet ya da Electron onu hiç bilmiyordu. Artık kâğıt üreten
+  // HER yol `buildRollRenderInput` boğazındaki `assertScrapLabelAllowed`'dan
+  // geçer. AÇIK GEÇİŞLİ: `confirmScrap` ile operatör onayı kapıyı açar.
+  const gateRoll = await prisma.roll.findFirst({
+    where: { qualityGradeRef: { skipLabel: true }, barcode: { not: null } },
+    select: { id: true },
+  });
+  if (!gateRoll) {
+    check("§6 sunucu kapısı ölçülebildi", false, "skipLabel'lı barkodlu top yok — atlandı");
+  } else {
+    const mid = machine?.id ?? null;
+    const blocked = async (fn: () => Promise<unknown>): Promise<string> => {
+      try {
+        await fn();
+        return "GEÇTİ";
+      } catch (e) {
+        const err = e as { statusCode?: number; details?: { code?: string } };
+        return `${err.statusCode ?? "?"}:${err.details?.code ?? "?"}`;
+      }
+    };
+    // Dört kâğıt yüzeyi de kapalı olmalı — biri açık kalırsa kural o yoldan sızar.
+    const html = await blocked(() =>
+      svc.getRollLabelHtml(gateRoll.id, LabelKind.ROLL_FINISHED, { machineId: mid }),
+    );
+    const native = await blocked(() =>
+      svc.getRollLabelNative(gateRoll.id, LabelKind.ROLL_FINISHED, { machineId: mid }),
+    );
+    const ppla = await blocked(() =>
+      svc.getRollLabelPpla(gateRoll.id, LabelKind.ROLL_FINISHED, { machineId: mid }),
+    );
+    // ÖNİZLEME de kapı arkasında: Electron diyaloğu onayı önizlemeden ÖNCE sorar.
+    const preview = await blocked(() =>
+      svc.getRollPreview(gateRoll.id, LabelKind.ROLL_FINISHED, { machineId: mid }),
+    );
+    const want = "409:SCRAP_LABEL_BLOCKED";
+    check("§6 html onaysız 409 SCRAP_LABEL_BLOCKED", html === want, html);
+    check("§6b native onaysız 409", native === want, native);
+    check("§6c ppla onaysız 409", ppla === want, ppla);
+    check("§6d önizleme onaysız 409 (Electron onayı önizlemeden ÖNCE sorar)", preview === want, preview);
+
+    // AÇIK GEÇİŞ: onay verilince basılabilmeli — kapı çıkışsız DEĞİL.
+    const withConfirm = await blocked(() =>
+      svc.getRollLabelHtml(gateRoll.id, LabelKind.ROLL_FINISHED, {
+        machineId: mid,
+        confirmScrap: true,
+      }),
+    );
+    check("§6e onay verilince BASILIYOR (fail-closed ama çıkışsız değil)", withConfirm === "GEÇTİ", withConfirm);
+
+    // Veri ucu BİLEREK kapı dışında — listeler/ekranlar bozulmasın.
+    const payloadOk = await blocked(() => svc.getRollLabel(gateRoll.id));
+    check("§6f payload ucu kapı DIŞINDA (veri döner, kâğıt üretmez)", payloadOk === "GEÇTİ", payloadOk);
+  }
+
+  // Normal top hiçbir yoldan engellenmemeli.
+  const normalRoll = await prisma.roll.findFirst({
+    where: { qualityGradeRef: { skipLabel: false }, barcode: { not: null } },
+    select: { id: true },
+  });
+  if (normalRoll) {
+    let ok = true;
+    try {
+      await svc.getRollLabelHtml(normalRoll.id, LabelKind.ROLL_FINISHED, {
+        machineId: machine?.id ?? null,
+      });
+    } catch {
+      ok = false;
+    }
+    check("§6g normal top kapıdan ETKİLENMİYOR", ok);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
