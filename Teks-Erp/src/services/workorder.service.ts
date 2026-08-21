@@ -615,7 +615,7 @@ export class WorkOrderService {
     // kullanımlar (yazım + kilit karşılaştırmaları) aynı değeri görür.
     await applyFoldTypeForWriteInPlace(data as Record<string, unknown>);
 
-    const type = (data.type as WorkOrder["type"]) ?? "ORDER_PRODUCTION";
+    let type = (data.type as WorkOrder["type"]) ?? "ORDER_PRODUCTION";
 
     // ── Rota adımlarını hazırla (şablondan veya raw'dan) ────────────────────
     let finalSteps: {
@@ -693,6 +693,15 @@ export class WorkOrderService {
     } else if (data.orderLineIds && data.orderLineIds.length > 0) {
       // Geriye uyumluluk
       allocations = data.orderLineIds.map((id) => ({ orderLineId: id, allocatedQty: 0 }));
+    }
+
+    // TİP = BAĞIN AYNASI (2026-08-21): sipariş satırı geldiyse tip STOK OLAMAZ —
+    // sunucu çevirir. Aksi hâlde "STOK + satır" gövdesi bağı yazar, tipi STOK
+    // bırakır ve aşağıdaki sipariş-satırı doğrulamalarını (kumaş/renk/iptal) da
+    // atlardı. Panel formu tipi satırdan türettiği için bugün bu yolu kullanmıyor;
+    // kural istemci disiplinine değil sunucuya ait (workorder-link.service ile aynı).
+    if (allocations.length > 0 && type === "STOCK_PRODUCTION") {
+      type = "ORDER_PRODUCTION";
     }
 
     if (type === "ORDER_PRODUCTION" && allocations.length === 0) {
@@ -4781,7 +4790,7 @@ export class WorkOrderService {
       }
     }
 
-    const type = (data.type as WorkOrder["type"]) ?? existing.type;
+    let type = (data.type as WorkOrder["type"]) ?? existing.type;
 
     // ── Rota adımlarını hazırla (şablondan veya raw'dan) — create() ile aynı.
     // `id?` smart-merge için propagasyonla taşınır; routeTemplate'tan gelenler id'siz.
@@ -4863,6 +4872,12 @@ export class WorkOrderService {
       }));
     } else if (data.orderLineIds && data.orderLineIds.length > 0) {
       allocations = data.orderLineIds.map((lid) => ({ orderLineId: lid, allocatedQty: 0 }));
+    }
+
+    // TİP = BAĞIN AYNASI (2026-08-21) — create() ile aynı kural: satır geldiyse
+    // tip STOK olamaz, sunucu çevirir (istemci `type`'ı atlasa da).
+    if (allocations.length > 0 && type === "STOCK_PRODUCTION") {
+      type = "ORDER_PRODUCTION";
     }
 
     if (type === "ORDER_PRODUCTION" && allocations.length === 0) {

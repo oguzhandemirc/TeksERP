@@ -17,6 +17,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { workOrderLinkService } from "../src/services/workorder-link.service";
+import { WorkOrderService } from "../src/services/workorder.service";
 
 let pass = 0;
 let fail = 0;
@@ -48,6 +49,7 @@ async function main(): Promise<void> {
   const createdRolls: string[] = [];
   const createdBatches: string[] = [];
   const createdProps: string[] = [];
+  const createdStations: string[] = [];
 
   try {
     const customer = await prisma.customer.create({
@@ -135,19 +137,101 @@ async function main(): Promise<void> {
       where: { id: wo.id },
       select: { targetItemId: true, targetColorId: true, width: true },
     });
-    await workOrderLinkService.linkOrderLines(wo.id, [lineOk.id]);
+    const firstLink = await workOrderLinkService.linkOrderLines(wo.id, [lineOk.id]);
     const afterLink = await prisma.workOrder.findUnique({
       where: { id: wo.id },
-      select: { targetItemId: true, targetColorId: true, width: true },
+      select: { targetItemId: true, targetColorId: true, width: true, type: true },
     });
     check("bağ kuruldu", (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } })) === 1);
     check("hedef renk DEĞİŞMEDİ", afterLink?.targetColorId === before?.targetColorId);
     check("hedef kumaş DEĞİŞMEDİ", afterLink?.targetItemId === before?.targetItemId);
     check("en DEĞİŞMEDİ", Number(afterLink?.width) === Number(before?.width));
 
-    // Aynı satırı tekrar bağlamak idempotent (çift satır doğurmaz).
+    // ── 2b) TİP BAĞI İZLER (2026-08-21 saha hatası): STOK iş emrine ilk bağ
+    // eklenince tip SİPARİŞE ÖZEL olur — liste/künye/kart "Stok" basmasın.
+    check("ilk bağda tip STOK → SİPARİŞE ÖZEL", afterLink?.type === "ORDER_PRODUCTION", String(afterLink?.type));
+    check("yanıt typeChanged=true", firstLink.data.typeChanged === true);
+    check("mesaj tip değişimini söylüyor", (firstLink.message ?? "").includes("Siparişe Özel"));
+    const linkAudit = await prisma.systemLog.findFirst({
+      where: { tableName: "WORK_ORDER", recordId: wo.id, action: "UPDATE" },
+      orderBy: { createdAt: "desc" },
+      select: { newData: true },
+    });
+    const linkAuditData = linkAudit?.newData as Record<string, unknown> | null;
+    check(
+      "audit: ORDER_LINK_ADDED + typeChanged",
+      linkAuditData?.event === "ORDER_LINK_ADDED" && linkAuditData?.typeChanged === true,
+      JSON.stringify(linkAuditData),
+    );
+
+    // Aynı satırı tekrar bağlamak idempotent (çift satır doğurmaz, tip yeniden yazılmaz).
     const again = await workOrderLinkService.linkOrderLines(wo.id, [lineOk.id]);
     check("tekrar bağlama idempotent", again.data.linked === 0 && again.data.alreadyLinked === 1);
+    check("tekrar bağlamada typeChanged=false", again.data.typeChanged === false);
+
+    // ── 2c) create()/replace() de AYNI kuralı uygular ───────────────────────
+    // "STOK + sipariş satırı" gövdesi sunucuda SİPARİŞE ÖZEL'e çevrilir. Panel
+    // formu tipi satırdan türettiği için bu yolu bugün kullanmıyor; kural yine de
+    // istemci disiplinine değil sunucuya ait (mutationFn'i elle kuran her katman
+    // sessiz bir allowlist'tir — 2026-08-13 dersi).
+    const station = await prisma.station.create({
+      data: {
+        code: `TEST-WOTYPE-ST-${ts}`,
+        name: `TEST WOTYPE ST ${ts}`,
+        type: "INTERNAL",
+        kind: "OTHER",
+        // Hedef renk verilen iş emri "renk veren adım" ister (iç boyahane deseni).
+        appliesColor: true,
+      },
+      select: { id: true },
+    });
+    createdStations.push(station.id);
+    const woService = new WorkOrderService();
+
+    const viaCreate = await woService.create({
+      type: "STOCK_PRODUCTION",
+      targetItemId: itemA.id,
+      targetColorId: mavi.id,
+      width: 300,
+      steps: [{ stationId: station.id }],
+      orderLineIds: [lineOk.id],
+    });
+    created.wos.push(viaCreate.data!.id);
+    const createdWo = await prisma.workOrder.findUnique({
+      where: { id: viaCreate.data!.id },
+      select: { type: true, _count: { select: { orderLinks: true } } },
+    });
+    check(
+      "create(): STOK + sipariş satırı → tip SİPARİŞE ÖZEL (bağ 1)",
+      createdWo?.type === "ORDER_PRODUCTION" && createdWo._count.orderLinks === 1,
+      `${createdWo?.type} / ${createdWo?._count.orderLinks}`,
+    );
+
+    const viaStock = await woService.create({
+      type: "STOCK_PRODUCTION",
+      targetItemId: itemA.id,
+      targetColorId: mavi.id,
+      width: 300,
+      steps: [{ stationId: station.id }],
+    });
+    created.wos.push(viaStock.data!.id);
+    await woService.replace(viaStock.data!.id, {
+      // `type` BİLEREK YOK — istemci atlasa da sunucu satırdan çözmeli.
+      targetItemId: itemA.id,
+      targetColorId: mavi.id,
+      width: 300,
+      steps: [{ stationId: station.id }],
+      orderLineIds: [lineOk.id],
+    });
+    const replacedWo = await prisma.workOrder.findUnique({
+      where: { id: viaStock.data!.id },
+      select: { type: true, _count: { select: { orderLinks: true } } },
+    });
+    check(
+      "replace(): type'sız gövde + sipariş satırı → tip SİPARİŞE ÖZEL (bağ 1)",
+      replacedWo?.type === "ORDER_PRODUCTION" && replacedWo._count.orderLinks === 1,
+      `${replacedWo?.type} / ${replacedWo?._count.orderLinks}`,
+    );
 
     // ── 3) Uyuşmazlık REDDEDİLİR, sessizce çözülmez ─────────────────────────
     const colorErr = await expectError(() =>
@@ -176,6 +260,7 @@ async function main(): Promise<void> {
     const widthLink = await workOrderLinkService.linkOrderLines(wo.id, [lineWidthDiff.id]);
     check("en farklı satır bağlandı", widthLink.data.linked === 1);
     check("en farkı uyarı olarak döndü", widthLink.data.warnings.length > 0);
+    check("zaten siparişe özel WO'da ikinci bağ tipi yeniden yazmaz", widthLink.data.typeChanged === false);
 
     // ── 5) Bağ kaldırma ─────────────────────────────────────────────────────
     await workOrderLinkService.unlinkOrderLine(wo.id, lineWidthDiff.id);
@@ -184,10 +269,13 @@ async function main(): Promise<void> {
       (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } })) === 1,
     );
 
-    // Siparişe özel iş emrinin SON bağı korunur.
-    await prisma.workOrder.update({ where: { id: wo.id }, data: { type: "ORDER_PRODUCTION" } });
+    // Siparişe özel iş emrinin SON bağı korunur. (Tip 2b'de bağla birlikte
+    // zaten ORDER_PRODUCTION oldu — burada elle yazmaya gerek yok; ölçüyoruz.)
+    const typeBeforeUnlink = await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { type: true } });
+    check("son bağdan önce tip hâlâ SİPARİŞE ÖZEL", typeBeforeUnlink?.type === "ORDER_PRODUCTION");
     const lastLinkErr = await expectError(() => workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id));
     check("siparişe özel WO'nun son bağı kaldırılamaz", lastLinkErr !== null, lastLinkErr ?? "");
+    // Sonraki bölümler tipten bağımsız; STOK'a çevirip devam ediyoruz (eski akış).
     await prisma.workOrder.update({ where: { id: wo.id }, data: { type: "STOCK_PRODUCTION" } });
 
     // ── 6) Rengi Değiştir — sebep zorunlu, iz bırakır ───────────────────────
@@ -370,7 +458,12 @@ async function main(): Promise<void> {
     await prisma.fabricProperty.deleteMany({ where: { id: { in: createdProps } } }).catch(() => {});
     await prisma.batch.deleteMany({ where: { id: { in: createdBatches } } });
     await prisma.workOrderToOrderLine.deleteMany({ where: { workOrderId: { in: created.wos } } });
+    // 2c servis üzerinden açtı → kart + adım + hedef özellik de doğdu.
+    await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: created.wos } } });
+    await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: created.wos } } });
+    await prisma.workOrderTargetProperty.deleteMany({ where: { workOrderId: { in: created.wos } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: created.wos } } });
+    await prisma.station.deleteMany({ where: { id: { in: createdStations } } });
     await prisma.orderLine.deleteMany({ where: { orderId: { in: created.orders } } });
     await prisma.order.deleteMany({ where: { id: { in: created.orders } } });
     await prisma.color.deleteMany({ where: { id: { in: created.colors } } });

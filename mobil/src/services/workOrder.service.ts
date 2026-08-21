@@ -286,9 +286,9 @@ export const workOrderService = {
   linkOrderLines: (
     id: string,
     orderLineIds: string[],
-  ): Promise<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>> =>
+  ): Promise<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[]; typeChanged?: boolean }>> =>
     apiClient
-      .post<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>>(
+      .post<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[]; typeChanged?: boolean }>>(
         `/work-orders/${id}/order-links`,
         { orderLineIds },
       )

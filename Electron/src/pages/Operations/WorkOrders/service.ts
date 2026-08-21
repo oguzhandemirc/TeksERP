@@ -146,7 +146,7 @@ export const workOrderService = {
   /** Sipariş satırlarını bağla — uyuşmazlıkta backend 400 döner. */
   linkOrderLines: (id: string, orderLineIds: string[]) =>
     apiClient
-      .post<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>>(
+      .post<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[]; typeChanged?: boolean }>>(
         `/api/work-orders/${id}/order-links`,
         { orderLineIds },
       )

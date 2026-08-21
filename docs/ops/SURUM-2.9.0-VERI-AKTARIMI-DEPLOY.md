@@ -308,6 +308,25 @@ serbest — birbirlerine bağımlı değiller.
 
 ---
 
+### 5b) İş emri TİPİ düzeltmesi — 2026-08-21 saha hatası (DRY-RUN varsayılan)
+
+Saha bildirimi: iş emri siparişe bağlı olduğu hâlde **listede "Stok"** yazıyor,
+detay paneli/yan panel siparişi gösteriyor. Kök neden: "Sipariş Bağla"
+(`POST /work-orders/:id/order-links`) pivot satırını yazıp `WorkOrder.type`'a
+dokunmuyordu. Servis artık ilk bağda tipi aynı tx'te SİPARİŞE ÖZEL yapar
+(backend tek başına yeter, istemci değişikliği YOK); geçmişte oluşmuş tutarsız
+kayıtlar bu script ile onarılır (2026-08-21 10:33 yedeğinde **13 iş emri**,
+hepsi IN_PROGRESS, hepsi "önce stok aç → sonra Sipariş Bağla" sırasıyla):
+
+```powershell
+npx tsx scripts/fix_workorder_type_from_links.ts            # önizleme — her iş emrini açılış/ilk bağ/siparişleriyle listeler (provada 13)
+npx tsx scripts/fix_workorder_type_from_links.ts --apply    # STOCK_PRODUCTION → ORDER_PRODUCTION; audit TYPE_DERIVED_FROM_LINKS
+```
+
+İdempotent (ikinci koşumda 0). CANCELLED/SUPERSEDED dışarıda. Vardiya içinde
+koşulabilir (13 satırlık UPDATE). Aynı kural `create()`/`replace()` için de sunucuya alındı (STOK + satır gövdesi → ORDER). Tersini (ORDER ama bağsız) **yapmaz** — o
+ayrı bir karardır.
+
 ## 6) Canlıda koşulması GÜVENLİ bekçiler
 
 `npm test` **koşma** (fixture yazar). Bunlar salt-okunur:
@@ -878,6 +897,7 @@ GENERATED kolon sayısı    :        (31 bekleniyor)
 import_runs tablosu       : ☐
 system_logs changes/device: ☐
 Backfill'ler              : timestamps ☐  provenance ☐  entry_station ☐  label_customer ☐  fold_and_reason ☐
+İş emri tipi düzeltmesi   : ☐ fix_workorder_type_from_links --apply (§5b — önizlemede ...... iş emri, provada 13)
 İzin ataması              : data:import → ................  ·  mobile:kk1-yari-mamul → ................
 Tambur rolü yeniden      : ☐ (label:edit + customer-alias:write — kullanıcı: ................)
 audit_guard AÇILDI       : ☐  ALTER DATABASE + restart (§7b)

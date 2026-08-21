@@ -21,6 +21,11 @@
 // da farklı renk üreten bir iş emri o siparişi KARŞILAYAMAZ; en farkı ise
 // üretim sırasında meşruen değişir (çekmez payı, kenar kesimi) ve zaten
 // `changeWidth` ile düzeltilir.
+//
+// TİP = BAĞIN AYNASI (2026-08-21): `WorkOrder.type` bağ eklenince STOK →
+// SİPARİŞE ÖZEL olur (aynı tx, atomik). Aksi hâlde detay paneli siparişi
+// gösterirken liste/künye/kart "Stok" basıyordu. Geçmiş kayıtlar için
+// `scripts/fix_workorder_type_from_links.ts` (dry-run varsayılan).
 // =============================================================================
 
 import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
@@ -254,7 +259,9 @@ export class WorkOrderLinkService {
     workOrderId: string,
     orderLineIds: string[],
     userId?: string,
-  ): Promise<ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[] }>> {
+  ): Promise<
+    ApiResponse<{ linked: number; alreadyLinked: number; warnings: string[]; typeChanged: boolean }>
+  > {
     const ids = [...new Set(orderLineIds)].filter(Boolean);
     if (ids.length === 0) throw AppError.badRequest("En az bir sipariş satırı seçmelisiniz.");
 
@@ -332,13 +339,31 @@ export class WorkOrderLinkService {
     const existingSet = new Set(existing.map((e) => e.orderLineId));
     const toCreate = ids.filter((id) => !existingSet.has(id));
 
+    // ── TİP BAĞI İZLER: STOK → SİPARİŞE ÖZEL (2026-08-21 saha hatası) ───────
+    // `WorkOrder.type` bir beyan DEĞİL, bağın aynasıdır: panel formu (`buildPayload`)
+    // ve Hızlı İş Emri (`createFromRolls`) tipi zaten "sipariş satırı var mı"dan
+    // türetir. Bu uç pivot satırını yazıp tipe DOKUNMUYORDU; sahada iş emri önce
+    // stok için açılıp sonra buradan siparişe bağlanınca detay paneli siparişi
+    // gösteriyor, liste/künye/refakat kartı ise hâlâ "Stok" basıyordu (yedekte
+    // 13 iş emri, hepsi bu sırayla). Aynı tx'te ve ATOMİK (`updateMany WHERE
+    // type=STOCK` — yarışta iki çağrı da güvenle geçer); sessiz değil, audit'e
+    // `typeChanged` yazılır ve mesajda söylenir. Tersi (son bağ kalkınca STOK'a
+    // dönüş) BİLİNÇLİ OLARAK YOK — `unlinkOrderLine` son bağı zaten reddeder.
+    let typeChanged = false;
     if (toCreate.length > 0) {
       await prisma.$transaction(async (tx) => {
         await tx.workOrderToOrderLine.createMany({
           data: toCreate.map((orderLineId) => ({ workOrderId, orderLineId, allocatedQty: 0 })),
           skipDuplicates: true,
         });
-        // Refakat kartında sipariş bloğu basılı → kâğıt bayatladı.
+        if (wo.type === WorkOrderType.STOCK_PRODUCTION) {
+          const flipped = await tx.workOrder.updateMany({
+            where: { id: workOrderId, type: WorkOrderType.STOCK_PRODUCTION },
+            data: { type: WorkOrderType.ORDER_PRODUCTION },
+          });
+          typeChanged = flipped.count > 0;
+        }
+        // Refakat kartında sipariş bloğu + tip basılı → kâğıt bayatladı.
         await markTravelerCardDirtyTx(tx, workOrderId);
       });
     }
@@ -348,20 +373,26 @@ export class WorkOrderLinkService {
       action: "UPDATE",
       tableName: "WORK_ORDER",
       recordId: workOrderId,
+      // `type` iki tarafta da varsa künye "Ne değişti" satırı üretir (diffCommonFields);
+      // anlatı alanları (event/orderLineIds/...) ham blokta kalır.
+      oldData: typeChanged ? { type: WorkOrderType.STOCK_PRODUCTION } : undefined,
       newData: {
         event: "ORDER_LINK_ADDED",
         orderLineIds: toCreate,
         alreadyLinked: [...existingSet],
         warnings,
+        typeChanged,
+        ...(typeChanged ? { type: WorkOrderType.ORDER_PRODUCTION } : {}),
       },
     });
 
     return {
       success: true,
-      data: { linked: toCreate.length, alreadyLinked: existingSet.size, warnings },
+      data: { linked: toCreate.length, alreadyLinked: existingSet.size, warnings, typeChanged },
       message:
         toCreate.length > 0
-          ? `${toCreate.length} sipariş satırı bağlandı.`
+          ? `${toCreate.length} sipariş satırı bağlandı.` +
+            (typeChanged ? " İş emri artık Siparişe Özel." : "")
           : "Seçilen satırlar zaten bağlıydı.",
     };
   }
