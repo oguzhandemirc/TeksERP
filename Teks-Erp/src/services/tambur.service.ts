@@ -2071,7 +2071,7 @@ export class TamburService {
     // ÇUVAL ÖNCE (2026-07-30): DEPO çuvalındaki topun `shipmentId`'si NULL'dır, o
     // yüzden aşağıdaki kontrol onu KAÇIRIYORDU. Kesilirse üç şey bozulur:
     //   (1) parent'ın metrajı çuvalın İÇİNDE sessizce eksilir (aşağıda decrement),
-    //   (2) burada `resetSackWeightsTx` ÇAĞRILMADIĞI için çuvalın brüt kg'si bayatlar,
+    //   (2) burada `markSackContentChangedTx` ÇAĞRILMADIĞI için çuvalın brüt kg'si bayatlar,
     //   (3) çocuk top çuval DIŞINDA doğar → çuval içeriği ile fiziksel gerçek ayrışır.
     if (parent.sackId) {
       throw AppError.badRequest(

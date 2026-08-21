@@ -93,6 +93,7 @@ import {
   VARIANCE_SOURCES,
   validateVarianceReason,
 } from "../constants/variance-reasons";
+import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -286,12 +287,7 @@ async function attachOpenDispatchInfo<T extends { id: string }>(
     return rolls.map((r) => ({ ...r, dispatchedQty: null, dispatchedAt: null }));
   }
   const items = await prisma.subcontractorDispatchItem.findMany({
-    where: {
-      rollId: { in: rolls.map((r) => r.id) },
-      remainderClosedAt: null,
-      dispatch: { cancelledAt: null, directShippedAt: null },
-      receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
-    },
+    where: { rollId: { in: rolls.map((r) => r.id) }, ...outstandingItemOfOpenDispatch() },
     select: {
       rollId: true,
       dispatchedQty: true,
@@ -743,12 +739,8 @@ export class SubcontractorService {
     // toplar = meşru yeni parti → guard geçer, yeni sevk açılır.
     const incomingRollIds = new Set(data.rollIds);
     const openDispatches = await prisma.subcontractorDispatch.findMany({
-      where: {
-        stepId: data.stepId,
-        cancelledAt: null,
-        directShippedAt: null, // doğrudan-sevk edilmiş sevk "açık" sayılmaz
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-      },
+      // Açık+outstanding tanımı TEK KAYNAKTAN (doğrudan-sevk edilmiş sevk "açık" sayılmaz).
+      where: { stepId: data.stepId, ...OPEN_OUTSTANDING },
       select: {
         id: true,
         dispatchNo: true,
@@ -1687,13 +1679,7 @@ export class SubcontractorService {
     // outstanding koşulu olmadan Map last-wins belirsizliği dönmüş sevkin firmasını
     // tutup aktarımı yanlış firmaya (ya da yanlış redde) götürürdü.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: {
-        batchId: { in: batchIds },
-        stepId: data.stepId,
-        cancelledAt: null,
-        directShippedAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-      },
+      where: { batchId: { in: batchIds }, stepId: data.stepId, ...OPEN_OUTSTANDING },
       select: { batchId: true, subcontractorId: true },
     });
     const firmByBatch = new Map(dispatches.map((d) => [d.batchId, d.subcontractorId]));
@@ -2111,15 +2097,13 @@ export class SubcontractorService {
       //    sevk ya da DB müdahalesiydi).
       if (dispatch.step.status === StepStatus.ACTIVE) {
         // Hâlâ AÇIK sevk (kabul görmemiş kalemi olan) veya bekleyen top var mı?
+        // ⚠️ TEK KAYNAK (`OPEN_OUTSTANDING`) DAVRANIŞ DEĞİŞTİRİR: eski elle yazım
+        //    `directShippedAt` süzgecini TAŞIMIYORDU, yani tamamen doğrudan-sevk
+        //    edilmiş (mal fasondan müşteriye çıkmış, dönmeyecek) bir kardeş sevk
+        //    adımı sonsuza dek ACTIVE tutuyordu. Artık o sevk "açık" sayılmaz →
+        //    adım COMPLETED'a dönebilir. Fiziksel gerçekle uyumlu.
         const openDispatchCount = await tx.subcontractorDispatch.count({
-          where: {
-            stepId: dispatch.stepId,
-            cancelledAt: null,
-            id: { not: dispatchId },
-            items: {
-              some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } },
-            },
-          },
+          where: { stepId: dispatch.stepId, id: { not: dispatchId }, ...OPEN_OUTSTANDING },
         });
         const remainingAtSub = await tx.roll.count({
           where: { currentStepId: dispatch.stepId, status: RollStatus.AT_SUBCONTRACTOR },
@@ -2651,15 +2635,10 @@ export class SubcontractorService {
     const srcDispatches =
       srcBatchIds.length > 0
         ? await prisma.subcontractorDispatch.findMany({
-            where: {
-              batchId: { in: srcBatchIds },
-              stepId: data.stepId,
-              cancelledAt: null,
-              directShippedAt: null,
-              // isPartial:false — kısmi makbuz kalemi kapatmaz; kısmen dönmüş
-              // sevk hâlâ AÇIKTIR (ikinci teslimatın firma çözümü buradan geçer).
-              items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-            },
+            // isPartial:false — kısmi makbuz kalemi kapatmaz; kısmen dönmüş sevk
+            // hâlâ AÇIKTIR (ikinci teslimatın firma çözümü buradan geçer). Tanım
+            // TEK KAYNAKTAN (`OPEN_OUTSTANDING`).
+            where: { batchId: { in: srcBatchIds }, stepId: data.stepId, ...OPEN_OUTSTANDING },
             select: { id: true, batchId: true, subcontractorId: true },
           })
         : [];
@@ -2917,18 +2896,15 @@ export class SubcontractorService {
       //    olmadan open-dispatch guard'ı ve fason raporu sevki sonsuza dek
       //    "açık" görür (dönen/turnaround metrikleri de bozulur). Her dönen
       //    top, bu adımdaki açık (kabul görmemiş) sevk kalemiyle eşleşir.
+      // Sadece İPTAL EDİLMEMİŞ bir TAM receipt item'ı olan kalem "dolu" sayılır
+      // (`none: {}` eski hali iptal edilmiş makbuzu da dolu sayıyor, top iptal →
+      // yeniden kabulde kalem bağlanamıyordu); kısmi makbuz kalemi DOLDURMAZ —
+      // ikinci teslimatın kalemi de AYNI sevk kalemine bağlanır. Tanım TEK
+      // KAYNAKTAN; `stepId` scope'u korunur (kalem bu adımın sevkinde olmalı).
       const openDispatchItems = await tx.subcontractorDispatchItem.findMany({
         where: {
           rollId: { in: returnRollIds },
-          dispatch: { stepId: data.stepId, cancelledAt: null },
-          // Sadece İPTAL EDİLMEMİŞ bir receipt item'ı olan kalem "dolu" sayılır.
-          // `none: {}` (eski hal) iptal edilmiş receipt item'ı da dolu sayıyordu:
-          // top iptal → tekrar fason kabul edilince kalem yeniden bağlanamıyor,
-          // sevk sonsuza dek "açık" görünüyordu (dal hep OPEN). İptal edilmişi atla.
-          // isPartial:false — kısmi makbuz kalemi DOLDURMAZ: ikinci teslimatın
-          // kalemi de AYNI sevk kalemine bağlanmalı (defter oradan toplanır).
-          remainderClosedAt: null,
-          receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
+          ...outstandingItemOfOpenDispatch({ stepId: data.stepId }),
         },
         select: { id: true, rollId: true },
       });
@@ -3751,12 +3727,7 @@ export class SubcontractorService {
         // outstanding-scope ŞART (K15 retarget dönmüş sevkleri aynı adıma taşıyabilir):
         // buildPendingParties batchId→dispatch Map'i last-wins — dönmüş sevk açık
         // sevki ezip mobil kabul gruplamasında yanlış firma/sevk gösterirdi.
-        where: {
-          stepId: { in: stepIds },
-          cancelledAt: null,
-          directShippedAt: null,
-          items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-        },
+        where: { stepId: { in: stepIds }, ...OPEN_OUTSTANDING },
         select: {
           id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
           driverName: true, stepId: true, subcontractorId: true,
@@ -3902,12 +3873,7 @@ export class SubcontractorService {
       // outstanding-scope ŞART (WO'ya-özel kardeş sorguyla aynı — K15 retarget
       // dönmüş sevkleri aynı adıma taşıyabilir): lastDispatch en güncel AÇIK sevk
       // olmalı; dönmüş tarihçe sevki listede yanlış firma/sevk gösterirdi.
-      where: {
-        stepId: { in: stepIds },
-        cancelledAt: null,
-        directShippedAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-      },
+      where: { stepId: { in: stepIds }, ...OPEN_OUTSTANDING },
       select: {
         id: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,
@@ -4018,12 +3984,7 @@ export class SubcontractorService {
     // buildPendingParties batchId→dispatch Map'i last-wins — dönmüş sevk açık
     // sevki ezip mobil kabul gruplamasında yanlış firma/sevk gösterirdi.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: {
-        stepId,
-        cancelledAt: null,
-        directShippedAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-      },
+      where: { stepId, ...OPEN_OUTSTANDING },
       select: {
         id: true, batchId: true, dispatchNo: true, dispatchedAt: true, plateNumber: true,
         driverName: true, stepId: true, subcontractorId: true,

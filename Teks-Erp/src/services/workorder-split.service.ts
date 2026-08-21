@@ -31,7 +31,9 @@ import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-s
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
+import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { ApiResponse } from "../types/api.types";
+import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 
 export type SplitMode = "REDYE_SAME_COLOR" | "NEW_COLOR" | "UNDYED_MOVE";
 
@@ -290,6 +292,13 @@ export class WorkOrderSplitService {
       TravelerCardStatus.VOIDED,
       { voidReason: "Tüm partiler yeni iş emrine ayrıldı" },
     );
+    // Kart VOID ile aynı gerekçe: WO terminal (SUPERSEDED) — okutulacak kart artık
+    // yok, açık kurşun dağıtımı kapanamaz hâle geldi. `force` ŞART: adım
+    // ACTIVE/PENDING kalmış olabilir (boş WO'da adım durumu anlamını yitirdi),
+    // non-force kapsam onları atlar ve atama sonsuza dek "bekliyor" görünürdü.
+    await voidStalePendingBypassAssignmentsTx(tx, workOrderId, "WO_SUPERSEDED", {
+      force: true,
+    });
     return true;
   }
 
@@ -509,6 +518,15 @@ export class WorkOrderSplitService {
         for (const sid of sourceStepIds) await recomputeStepStatus(tx, sid);
         await recomputeStepStatus(tx, newReEntryStepId);
 
+        // 7b) Kurşun bypass: kaynak WO'da BAYAT kalan dağıtım atamalarını iptal et.
+        //     `force` YOK — kapsamı adımın TAZE durumu belirlesin (bu yüzden
+        //     recompute'lerden SONRA): adım COMPLETED/SKIPPED'a düştüyse (mal
+        //     kurşundan tamamen çekildi) atama anlamsız; ACTIVE kaldıysa (kısmi
+        //     ayırma) atama YAŞAR, kalan toplarla bypass devam eder.
+        //     Atama HEDEF WO'ya TAŞINMAZ: toplar boyahaneye geri sarılıyor, kurşunu
+        //     yeniden görecekler — dağıtımı planlamacı yeni WO'da baştan yapar.
+        await voidStalePendingBypassAssignmentsTx(tx, ctx.workOrderId, "SPLIT_SOURCE");
+
         // 8) Kaynak parti boşaldıysa (izsiz) sil.
         const sourceDeleted = await deleteIfEmptyAndTraceless(tx, ctx.batchId);
 
@@ -606,13 +624,7 @@ export class WorkOrderSplitService {
         // seçmesin): taşınacak sevk, TAM bu fason adımının hâlâ dönmemiş kalemi
         // olan açık sevkidir; en güncel açık sevk seçilir (dispatchedAt desc).
         const openDispatch = await tx.subcontractorDispatch.findFirst({
-          where: {
-            batchId: ctx.batchId,
-            stepId: atSubStep.id,
-            cancelledAt: null,
-            directShippedAt: null,
-            items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-          },
+          where: { batchId: ctx.batchId, stepId: atSubStep.id, ...OPEN_OUTSTANDING },
           select: { id: true, dispatchNo: true },
           orderBy: { dispatchedAt: "desc" },
         });
@@ -660,6 +672,12 @@ export class WorkOrderSplitService {
         // 5) Kaynak WO'da boşalan fason adımı + yeni reEntry recompute.
         await recomputeStepStatus(tx, atSubStep.id);
         await recomputeStepStatus(tx, newReEntryStepId);
+
+        // 5b) Kurşun bypass: kaynak WO'da BAYAT kalan dağıtım atamalarını iptal et
+        //     (newColorRedye ile aynı gerekçe + aynı sıra kuralı — recompute'ten
+        //     SONRA, `force` YOK). Atama hedef WO'ya taşınmaz: mal hâlâ fasonda,
+        //     kurşuna yeni iş emrinde gelecek.
+        await voidStalePendingBypassAssignmentsTx(tx, ctx.workOrderId, "SPLIT_SOURCE");
 
         // 6) Kaynak WO tümüyle boşaldıysa (tüm parti taşındı) iptal et (B1 — zombi WO).
         const sourceWorkOrderCancelled = await this.supersedeEmptiedSourceWorkOrderTx(tx, ctx.workOrderId);

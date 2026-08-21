@@ -1,4 +1,5 @@
 import { WorkOrderType } from "@/types/enums";
+import { lineOpen } from "./order-fulfillment";
 import { buildPicked, type PickedOrderLine } from "./OrderPickerDialog";
 import type { CustomRouteStep, DesignerStep } from "./RouteDesignerDialog";
 import type { FasonStepPlan } from "./FasonPlanningDialog";
@@ -98,7 +99,9 @@ export function pickedLinesFromOrderLine(
         (l.colorId ?? null) === (anchor.colorId ?? null) &&
         (l.width ?? null) === (anchor.width ?? null),
     )
-    .map((l) => ({ l, rem: Number(l.quantity) - Number(l.shippedQty ?? 0) }))
+    // Açık metraj TEK formülden (`order-fulfillment.lineOpen`) — burada elle
+    // yazılmış clamp'siz bir kopyası vardı; `> 0` süzgeci sayesinde sonuç aynı.
+    .map((l) => ({ l, rem: lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0)) }))
     .filter((x) => x.rem > 0)
     .map((x) => buildPicked(order, { ...x.l, openQty: x.rem }));
 }

@@ -363,7 +363,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     }
 
     // Sevk anına geri getir (yukarıdaki BRÜT GERİ-EKLEME notu). Çuval kg'ı iade ile
-    // DEĞİŞMEZ (`RollReturn` sack.weightKg'a dokunmaz, `resetSackWeightsTx` çağrılmaz)
+    // DEĞİŞMEZ (`RollReturn` sack.weightKg'a dokunmaz, `markSackContentChangedTx` çağrılmaz)
     // → yalnız metraj/top adedi geri eklenir. Çuval adedi de değişmez: içeriği tamamen
     // iade edilmiş çuval sevkiyatta kalır.
     for (const rb of backfillByShipment.get(sh.id) ?? []) {

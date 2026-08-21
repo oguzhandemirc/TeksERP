@@ -262,9 +262,10 @@ export class KartelaService {
       // çuvalındaki topun `shipmentId`'si NULL olduğu için serbest sanılıyordu →
       // top AT_KARTELA olup çuvalda kalıyor, çuval etiketi onu saymıyor ama irsaliye
       // sayıyor, sevkte statü SHIPPED'e eziliyor (çift tüketim + şişmiş donmuş belge).
-      // OTOMATİK ÇIKARMIYORUZ: çıkarmak `resetSackWeightsTx` ile çuvalın brüt kg'sini
-      // de siler (operatörün kantar ölçümü) → yıkıcı, açık onay ister ve bu ekran onu
-      // soramaz. Emsal: `workorder.service.attachRolls` (F5) reddeder, çıkarmaz.
+      // OTOMATİK ÇIKARMIYORUZ: çıkarmak `markSackContentChangedTx` ile çuvalın brüt
+      // kg'sini siler (operatörün kantar ölçümü) + çuval etiketini bayat işaretler →
+      // yıkıcı, açık onay ister ve bu ekran onu soramaz.
+      // Emsal: `workorder.service.attachRolls` (F5) reddeder, çıkarmaz.
       if (r.sackId) {
         throw AppError.badRequest(
           sackBlockMessage(r.barcode ?? r.id, r.sack?.sackNo ?? null, "kartelaya gönderilemez")
@@ -1192,11 +1193,19 @@ export class KartelaService {
   ): Promise<ApiResponse<unknown>> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
-      select: { id: true, barcode: true, markedForKartela: true },
+      select: { id: true, barcode: true, markedForKartela: true, labelDirty: true },
     });
     if (!roll) throw AppError.notFound("Top bulunamadı");
 
-    if (roll.markedForKartela === value) {
+    // ATOMİK CLAIM (check-then-act DEĞİL): "zaten bu değerde mi" sorusu yazmanın
+    // WHERE'ine konur. Eski `findUnique → if → update` dizisinde iki paralel toggle
+    // ikisi de "değiştirdim" der, iki audit satırı ve (aşağıdaki) iki bayat işareti
+    // doğardı. count===0 → değer bu sırada zaten hedefe geçmiş: no-op cevabı.
+    const claim = await prisma.roll.updateMany({
+      where: { id: rollId, markedForKartela: !value },
+      data: { markedForKartela: value },
+    });
+    if (claim.count === 0) {
       return {
         success: true,
         data: { id: rollId, markedForKartela: value },
@@ -1204,17 +1213,30 @@ export class KartelaService {
       };
     }
 
-    await prisma.roll.update({
-      where: { id: rollId },
-      data: { markedForKartela: value },
+    // ETİKET BAYAT (2026-08-21): kartelalık damgası KÂĞIDA basılıyor
+    // (`config/label-fields.ts` → `kartelaMark`; `label-field-values` onu
+    // `present: markedForKartela === true` ile çözer) → işaret değişince eldeki
+    // etiket gerçeği anlatmıyor. HER İKİ YÖN bayatlatır: işaretlemek damgayı
+    // EKLER, kaldırmak SİLER — ikisi de basılı kâğıdı yalanlar (emsal:
+    // `inventory.service.applyManualProperties` renk/en/metraj bloğu).
+    // ⚠️ `labelPrintedAt: { not: null }` — etiket HİÇ basılmadıysa bayatlatma:
+    // sahte "yeniden bas" uyarısı operatörü körleştirir (hiç kâğıt yokken rozet
+    // gösteren liste, gerçek rozeti de göz ardı ettirir). `labelDirty: false`
+    // koşulu ise gereksiz yazmayı eler (Sack/TravelerCard emsali).
+    const dirty = await prisma.roll.updateMany({
+      where: { id: rollId, labelPrintedAt: { not: null }, labelDirty: false },
+      data: { labelDirty: true },
     });
+    // Audit'e "kâğıt artık bayat mı" bilgisi: bu işlemde işaretlendi ya da zaten
+    // işaretliydi. Hiç basılmamış etikette false kalır (bilinçli).
+    const labelDirty = dirty.count > 0 || roll.labelDirty;
 
     await AuditService.log({
       userId,
       action: "UPDATE",
       tableName: "ROLL",
       recordId: rollId,
-      newData: { markedForKartela: value },
+      newData: { markedForKartela: value, labelDirty },
     });
 
     return {

@@ -139,6 +139,7 @@ import {
 import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
+import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
 
 export interface RollStats {
   totalCount: number;
@@ -473,11 +474,7 @@ const ROLL_LIST_INCLUDE = {
   // take:1 → Prisma sayfa başına tek LATERAL sorgu (N+1 yok); rollId +
   // sourceDispatchItemId indeksli, anti-join ucuz.
   dispatchItems: {
-    where: {
-      dispatch: { cancelledAt: null, directShippedAt: null },
-      remainderClosedAt: null,
-      receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
-    },
+    where: outstandingItemOfOpenDispatch(),
     // "En güncel açık kalem" — özet ucu (getRollSubcontractorSummary open_items)
     // ile hizalı: dispatch.dispatchedAt DESC. Bir topun iki açık kalemi zorunlu
     // olarak iki AYRI dispatch'te (farklı dispatchedAt) olur (@@unique dispatchId,
@@ -1404,31 +1401,27 @@ export class InventoryService {
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
         {
           dispatchItems: {
-            some: {
-              dispatch: {
-                cancelledAt: null,
-                directShippedAt: null,
-                ...(subcontractorId ? { subcontractorId } : {}),
-                // Kategori: adımın requiredCategory'si eşleşir VEYA adım boşsa
-                // firmanın kategorisi eşleşir (özet COALESCE tanımıyla hizalı —
-                // firma tek kategoriliyse birebir, çok kategoride hafif geniş).
-                ...(subcontractorCategoryId
-                  ? {
-                      OR: [
-                        { step: { requiredCategoryId: subcontractorCategoryId } },
-                        {
-                          step: { requiredCategoryId: null },
-                          subcontractor: {
-                            categories: { some: { categoryId: subcontractorCategoryId } },
-                          },
+            // Açık+outstanding tanımı TEK KAYNAKTAN; buradaki `extra` yalnız
+            // firma/kategori daraltmasıdır.
+            some: outstandingItemOfOpenDispatch({
+              ...(subcontractorId ? { subcontractorId } : {}),
+              // Kategori: adımın requiredCategory'si eşleşir VEYA adım boşsa
+              // firmanın kategorisi eşleşir (özet COALESCE tanımıyla hizalı —
+              // firma tek kategoriliyse birebir, çok kategoride hafif geniş).
+              ...(subcontractorCategoryId
+                ? {
+                    OR: [
+                      { step: { requiredCategoryId: subcontractorCategoryId } },
+                      {
+                        step: { requiredCategoryId: null },
+                        subcontractor: {
+                          categories: { some: { categoryId: subcontractorCategoryId } },
                         },
-                      ],
-                    }
-                  : {}),
-              },
-              remainderClosedAt: null,
-              receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
-            },
+                      },
+                    ],
+                  }
+                : {}),
+            }),
           },
         },
       ];
@@ -2170,11 +2163,7 @@ export class InventoryService {
         // sevk tarihi + işlem. ROLL_LIST_INCLUDE.dispatchItems ile AYNI tanım (F85)
         // + AYNI sıralama (dispatch.dispatchedAt DESC, özetle hizalı).
         dispatchItems: {
-          where: {
-            dispatch: { cancelledAt: null, directShippedAt: null },
-            remainderClosedAt: null,
-            receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } },
-          },
+          where: outstandingItemOfOpenDispatch(),
           orderBy: { dispatch: { dispatchedAt: "desc" } },
           take: 1,
           select: {

@@ -36,13 +36,6 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   // Izin yoksa bolum HIC CIZILMEZ — bos bir kutu gostermek "bu topun gecmisi
   // yok" yalani olurdu; oysa gecmis var, kullanicinin gorme yetkisi yok.
   const canSeeHistory = hasPermission("roll:history");
-  // "Düzelt": hurda/iptal dışı her top. Yetki/sebep kararı diyaloğun içinde —
-  // serbest depoda roll:write|label:edit yeter, üretimdeki topta roll:manual-adjust
-  // aranır (backend de aynı guard'ı uygular).
-  const canEditAttributes =
-    !!roll && roll.status !== "SCRAP" && roll.status !== "CANCELLED";
-  // "İstasyondan Kurtar" yalnız makinede/istasyonda takılı (IN_PRODUCTION) top için.
-  const canRescue = !!roll && roll.status === "IN_PRODUCTION";
 
   // Liste cevabı `operations` taşımıyor — detay endpoint'i (`/api/rolls/:id`)
   // operation log'unu select ile döndürüyor. Sheet açıldığında lazy fetch.
@@ -64,6 +57,31 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
   // Detay endpoint'i liste cevabında olmayan alanları (operation log, iade, kartela,
   // sevk/çuval) taşır; sheet açıldığında lazy fetch edilir.
   const detail = detailQuery.data?.data;
+  /**
+   * GÖSTERİM KAYNAĞI — TEK: taze detay varsa O, yoksa liste satırı (`roll`).
+   *
+   * Eskiden üst blok (barkod/durum/metraj/en/kalite/renk/kat/ağırlık/paket)
+   * doğrudan `roll` prop'undan çiziliyordu; o prop LİSTE satırının anlık
+   * kopyasıdır ve panel açıkken TAZELENMEZ. Sonuç: sheet içinden yapılan
+   * iptal / kalite-metraj düzeltmesi `["roll-detail", id]`'yi tazeliyor,
+   * alt bölümler doğru görünüyor ama ÜST ROZET eski değeri göstermeye devam
+   * ediyordu (aynı ekranda iki farklı gerçek). Detay ucu (`findRollById`)
+   * top-level `include:` kullanır → tüm skaler kolonları döner, yani liste
+   * satırının ÜST KÜMESİDİR; alan alan birleştirmeye gerek yok.
+   *
+   * Fallback yönü önemli: `detail` gelene kadar `roll` çizilir → panel
+   * açılışında boş/iskelet üst blok görünmez (mevcut davranış korunur).
+   * `roll` null iken (sheet kapalı) bilerek null döner — aksi hâlde önceki
+   * topun bayat detayı çizilirdi.
+   */
+  const r = roll ? (detail ?? roll) : null;
+  // "Düzelt": hurda/iptal dışı her top. Yetki/sebep kararı diyaloğun içinde —
+  // serbest depoda roll:write|label:edit yeter, üretimdeki topta roll:manual-adjust
+  // aranır (backend de aynı guard'ı uygular). Karar TAZE statüden verilir: sheet
+  // içinden iptal edilen topta buton anında kaybolur (backend zaten reddederdi).
+  const canEditAttributes = !!r && r.status !== "SCRAP" && r.status !== "CANCELLED";
+  // "İstasyondan Kurtar" yalnız makinede/istasyonda takılı (IN_PRODUCTION) top için.
+  const canRescue = !!r && r.status === "IN_PRODUCTION";
   // En güncel iade kaydı (varsa) — müşteriden dönen top notu/nedeni; Tambur kesimden önce görülür.
   const latestReturn = detail?.returns?.[0] ?? null;
   // AT_KARTELA top: hangi kartela firmasında olduğunu detay panelinde göster.
@@ -142,13 +160,13 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
           onRescued={() => void detailQuery.refetch()}
         />
 
-        {roll && (
+        {r && (
           <div className="mt-4 space-y-4">
-            {roll.barcode ? (
+            {r.barcode ? (
               <Card>
                 <CardContent className="flex items-center gap-4 p-3">
                   <div className="rounded bg-white p-2">
-                    <QRCodeSVG value={roll.barcode} size={112} level="M" />
+                    <QRCodeSVG value={r.barcode} size={112} level="M" />
                   </div>
                   <div className="min-w-0 flex-1 space-y-2">
                     <div>
@@ -156,17 +174,17 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                         Top Barkodu
                       </div>
                       <div className="mt-1 break-all font-mono text-sm font-semibold">
-                        {roll.barcode}
+                        {r.barcode}
                       </div>
                     </div>
                     <div className="flex flex-wrap items-start gap-1">
-                      <StatusBadge status={roll.status} labels={rollStatusLabels} tones={rollStatusTones} />
-                      {roll.markedForKartela && (
+                      <StatusBadge status={r.status} labels={rollStatusLabels} tones={rollStatusTones} />
+                      {r.markedForKartela && (
                         <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
                           Kartelalık
                         </Badge>
                       )}
-                      {roll.labelDirty && (
+                      {r.labelDirty && (
                         <Badge
                           className="gap-1 bg-amber-100 text-amber-800 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300"
                           title="Veri/metraj düzeltildi; topun üstündeki fiziksel etiket eski — yeniden basılmalı."
@@ -182,8 +200,8 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               <Card>
                 <CardContent className="space-y-2 p-3 text-xs text-muted-foreground">
                   <div className="flex flex-col items-start gap-1">
-                    <StatusBadge status={roll.status} labels={rollStatusLabels} tones={rollStatusTones} />
-                    {roll.markedForKartela && (
+                    <StatusBadge status={r.status} labels={rollStatusLabels} tones={rollStatusTones} />
+                    {r.markedForKartela && (
                       <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 dark:bg-purple-950/40 dark:text-purple-300">
                         Kartelalık
                       </Badge>
@@ -211,18 +229,18 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   <div className="text-xs text-muted-foreground">Metre</div>
                   <div className="mt-0.5">
                     <span className="text-2xl font-semibold tabular-nums">
-                      {roll.currentQty.toLocaleString("tr-TR", { useGrouping: false })}
+                      {r.currentQty.toLocaleString("tr-TR", { useGrouping: false })}
                     </span>
                     <span className="ml-1 text-xs text-muted-foreground">m</span>
                   </div>
-                  {roll.currentQty !== roll.initialQty && (
+                  {r.currentQty !== r.initialQty && (
                     <div className="mt-1 text-[11px] text-muted-foreground">
-                      Başlangıç: {roll.initialQty.toLocaleString("tr-TR", { useGrouping: false })} m
+                      Başlangıç: {r.initialQty.toLocaleString("tr-TR", { useGrouping: false })} m
                     </div>
                   )}
-                  {roll.initialQty > 0 && (
+                  {r.initialQty > 0 && (
                     <AnimatedProgress
-                      value={(roll.currentQty / roll.initialQty) * 100}
+                      value={(r.currentQty / r.initialQty) * 100}
                       className="mt-2 h-1"
                     />
                   )}
@@ -232,7 +250,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">En</div>
                   <div className="mt-0.5 font-medium tabular-nums">
-                    {roll.width != null ? `${roll.width} cm` : "—"}
+                    {r.width != null ? `${r.width} cm` : "—"}
                   </div>
                 </CardContent>
               </Card>
@@ -240,7 +258,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                 <CardContent className="p-3">
                   <div className="text-xs text-muted-foreground">Kalite</div>
                   <div className="mt-0.5 font-medium">
-                    {roll.qualityGrade ?? (
+                    {r.qualityGrade ?? (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </div>
@@ -252,17 +270,17 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               <CardContent className="space-y-2 p-3 text-sm">
                 <div className="grid grid-cols-2 gap-x-4 gap-y-1">
                   <div className="text-xs text-muted-foreground">Kumaş</div>
-                  <div>{roll.item?.name}</div>
+                  <div>{r.item?.name}</div>
                   <div className="text-xs text-muted-foreground">Biçim</div>
                   <div>
                     <Badge variant="muted" className="text-[10px]">
-                      {roll.form === "ACIK" ? "Açık Kumaş" : "Top"}
+                      {r.form === "ACIK" ? "Açık Kumaş" : "Top"}
                     </Badge>
                   </div>
-                  {roll.foldType && (
+                  {r.foldType && (
                     <>
                       <div className="text-xs text-muted-foreground">Kat</div>
-                      <div className="text-xs">{roll.foldType}</div>
+                      <div className="text-xs">{r.foldType}</div>
                     </>
                   )}
                   {/* BULUNDUĞU İSTASYON — yalnız bir adımda duran topta anlamlı.
@@ -278,31 +296,31 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                       </div>
                     </>
                   )}
-                  {roll.weightKg != null && (
+                  {r.weightKg != null && (
                     <>
                       <div className="text-xs text-muted-foreground">Ağırlık</div>
-                      <div>{roll.weightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
+                      <div>{r.weightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
                     </>
                   )}
-                  {roll.color && (
+                  {r.color && (
                     <>
                       <div className="text-xs text-muted-foreground">Renk</div>
                       <div className="flex items-center gap-1.5 text-xs">
-                        {roll.color.hex && (
+                        {r.color.hex && (
                           <span
                             className="h-3 w-3 rounded-full"
-                            style={{ backgroundColor: roll.color.hex }}
+                            style={{ backgroundColor: r.color.hex }}
                           />
                         )}
-                        {roll.color.name}
+                        {r.color.name}
                       </div>
                     </>
                   )}
-                  {roll.properties && roll.properties.length > 0 && (
+                  {r.properties && r.properties.length > 0 && (
                     <>
                       <div className="text-xs text-muted-foreground">Özellikler</div>
                       <div className="flex flex-wrap gap-1">
-                        {roll.properties.map((p) => (
+                        {r.properties.map((p) => (
                           <Badge key={p.propertyId} variant="muted" className="text-[10px]">
                             {/* SEÇİM tipli özellikte DEĞER de basılır ("Gramaj: 50 gr").
                                 Yalnız adı basmak, operatörün tablette yaptığı seçimi
@@ -339,8 +357,8 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   <div>
                     <Badge variant="muted" className="text-[10px]">
                       {rollEntrySourceLabels[
-                        roll.entrySource as keyof typeof rollEntrySourceLabels
-                      ] ?? roll.entrySource}
+                        r.entrySource as keyof typeof rollEntrySourceLabels
+                      ] ?? r.entrySource}
                     </Badge>
                   </div>
 
@@ -369,7 +387,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
                   </div>
 
                   <div className="text-xs text-muted-foreground">Giriş Tarihi</div>
-                  <div className="text-xs">{safeFormat(roll.createdAt, "dd.MM.yyyy HH:mm")}</div>
+                  <div className="text-xs">{safeFormat(r.createdAt, "dd.MM.yyyy HH:mm")}</div>
 
                   {/* Sebep YALNIZ elle eklenen topta dolu — diğerlerinde satır
                       hiç çizilmez (boş "Ekleme Nedeni: —" gürültüdür). */}
@@ -421,7 +439,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
             )}
 
             {/* Fason bilgisi — top fason firmasında işlemde (AT_SUBCONTRACTOR). */}
-            {roll.status === "AT_SUBCONTRACTOR" && (
+            {r.status === "AT_SUBCONTRACTOR" && (
               <Card>
                 <CardContent className="space-y-2 p-3 text-sm">
                   <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -463,7 +481,7 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
             )}
 
             {/* Kartela fasonu — top kartela firmasında işlemde (AT_KARTELA). */}
-            {roll.status === "AT_KARTELA" && (
+            {r.status === "AT_KARTELA" && (
               <Card>
                 <CardContent className="space-y-2 p-3 text-sm">
                   <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -552,35 +570,35 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
               </Card>
             )}
 
-            {(roll.packageId || roll.netWeightKg != null) && (
+            {(r.packageId || r.netWeightKg != null) && (
               <Card>
                 <CardContent className="space-y-1 p-3 text-sm">
                   <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Paketleme
                   </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-                    {roll.packageId && (
+                    {r.packageId && (
                       <>
                         <div className="text-xs text-muted-foreground">Paket ID</div>
-                        <div className="font-mono text-xs">{roll.packageId}</div>
+                        <div className="font-mono text-xs">{r.packageId}</div>
                       </>
                     )}
-                    {roll.grossWeightKg != null && (
+                    {r.grossWeightKg != null && (
                       <>
                         <div className="text-xs text-muted-foreground">Brüt Ağırlık</div>
-                        <div>{roll.grossWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
+                        <div>{r.grossWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
                       </>
                     )}
-                    {roll.netWeightKg != null && (
+                    {r.netWeightKg != null && (
                       <>
                         <div className="text-xs text-muted-foreground">Net Ağırlık</div>
-                        <div>{roll.netWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
+                        <div>{r.netWeightKg.toLocaleString("tr-TR", { useGrouping: false })} kg</div>
                       </>
                     )}
-                    {roll.packagingDate && (
+                    {r.packagingDate && (
                       <>
                         <div className="text-xs text-muted-foreground">Paketleme Tarihi</div>
-                        <div>{safeFormat(roll.packagingDate, "dd.MM.yyyy HH:mm")}</div>
+                        <div>{safeFormat(r.packagingDate, "dd.MM.yyyy HH:mm")}</div>
                       </>
                     )}
                   </div>
@@ -663,8 +681,8 @@ export function RollDetailSheet({ roll, open, onOpenChange }: Props) {
             )}
 
             <div className="text-[11px] text-muted-foreground">
-              Oluşturma: {safeFormat(roll.createdAt, "dd.MM.yyyy HH:mm")} ·
-              Son güncelleme: {safeFormat(roll.updatedAt, "dd.MM.yyyy HH:mm")}
+              Oluşturma: {safeFormat(r.createdAt, "dd.MM.yyyy HH:mm")} ·
+              Son güncelleme: {safeFormat(r.updatedAt, "dd.MM.yyyy HH:mm")}
             </div>
           </div>
         )}

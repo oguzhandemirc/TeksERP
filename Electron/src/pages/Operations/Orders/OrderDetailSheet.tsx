@@ -27,6 +27,7 @@ import { StatusBadge, orderStatusTones } from "@/components/operations/StatusBad
 import { DeadlineBadge } from "@/components/operations/DeadlineBadge";
 import { orderStatusLabels } from "@/types/enums";
 import { CoveragePanel } from "@/pages/Operations/WorkOrders/CoveragePanel";
+import { lineOpen } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
 import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
@@ -40,9 +41,15 @@ import type { Order, OrderLine } from "./types";
 
 /** Tek iş emri = tek kumaş+renk+en. Kalem imzası bu üçlüden türer. */
 const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
-/** Açık (sevk edilmemiş) metre — 0 ise kalem iş emrine alınamaz. */
-const lineRem = (l: OrderLine) =>
-  Number(l.quantity) - Number(l.shippedQty ?? 0);
+/**
+ * Açık (sevk edilmemiş) metre — 0 ise kalem iş emrine alınamaz.
+ *
+ * Formül TEK YERDE: `order-fulfillment.lineOpen` (kanonik). Buradaki yerel kopya
+ * clamp'siz olduğu için aşırı sevkte NEGATİF dönüyordu; iki çağrı yeri de sonucu
+ * ya `> 0` ile karşılaştırdığı ya da yalnız açık kalemde kullandığı için görünür
+ * bir fark yok — ama kopya kalsaydı üçüncü çağrı yerinde "−12 m açık" basardı.
+ */
+const lineRem = (l: OrderLine) => lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0));
 /** Çapaya göre hangi nitelikler farklı — overlay'de "neden seçilemez" metni için. */
 const diffLabel = (anchor: OrderLine, line: OrderLine) => {
   const parts: string[] = [];

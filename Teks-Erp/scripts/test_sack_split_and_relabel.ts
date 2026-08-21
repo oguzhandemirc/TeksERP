@@ -136,6 +136,10 @@ async function main(): Promise<void> {
     const c2 = await makeRoll(20, false); // renksiz → ROLL_RAW
     for (const r of [c1, c2]) await ship.scanIntoSack({ sackId: relabelSackId, barcode: r.barcode });
     await prisma.roll.updateMany({ where: { id: { in: [c1.id, c2.id] } }, data: { labelDirty: false } });
+    // 2026-08-21 (D2): çuvala top okutmak artık ÇUVALIN etiketini de bayatlatır
+    // (`markSackContentChangedTx`) — B bölümü yalnız müşteri-rotası etkisini ölçer,
+    // bu yüzden kurulumda çuval bayrağı da sıfırlanır.
+    await prisma.sack.update({ where: { id: relabelSackId }, data: { labelDirty: false } });
 
     // B1) İki müşteri de rotasız → hiçbir şey işaretlenmez.
     const noRoute = await ship.reassignSackCustomer(relabelSackId, { customerId: custB.id });

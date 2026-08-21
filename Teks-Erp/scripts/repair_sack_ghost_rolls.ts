@@ -263,11 +263,18 @@ async function main() {
         }
 
         // Bayat brüt kg — removeRollFromSack ile aynı davranış.
-        // `resetSackWeightsTx`'in ELLE kopyası — orada bir alan eklenirse BURAYA DA
-        // eklenmeli (aksi halde onarım sonrası "kg yok ama kaynağı dolu" kalır).
+        // `markSackContentChangedTx`'in (eski adı resetSackWeightsTx) ELLE kopyası —
+        // orada bir alan eklenirse BURAYA DA eklenmeli (aksi halde onarım sonrası
+        // "kg yok ama kaynağı dolu" kalır).
         await tx.sack.updateMany({
           where: { id: sackId, weightKg: { not: null } },
           data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null },
+        });
+        // 2026-08-21 (D2): içerik değişti → çuval etiketi bayat (top adedi/metraj basılıyor).
+        // Ayrı ifade — kg koşuluna bağlanırsa tartılmamış çuvalda hiç yazılmaz.
+        await tx.sack.updateMany({
+          where: { id: sackId, labelDirty: false },
+          data: { labelDirty: true },
         });
       });
     } catch (e) {

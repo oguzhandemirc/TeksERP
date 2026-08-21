@@ -51,6 +51,7 @@ import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { CURRENCIES } from "../config/currencies";
 import { recomputeOrderStatus } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
 import { assertColorsAssignableToCustomer } from "./helpers/color-assignment.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
@@ -2365,22 +2366,54 @@ export class OrderService extends BaseService {
           `Bu siparişe bağlı aktif/tamamlanmış iş emirleri var: ${workOrderNumbers}. Önce onları iptal edin.`,
         );
       }
-      // Yalnız BU siparişin PLANNED WO link çiftlerini kopar.
-      const plannedPairs = myLinks.filter(
-        (l) => woById.get(l.workOrderId)?.status === "PLANNED",
-      );
-      if (plannedPairs.length > 0) {
+      // BU siparişin bağlarını TERMİNAL OLMAYAN her iş emrinden kopar (2026-08-21).
+      // Eskiden yalnız `status === "PLANNED"` çiftleri koparılıyordu; kardeş yol
+      // `cancelWithActions` ise UNLINK/CONVERT/CANCEL üçünde de bağı siliyor. İki
+      // yolun aynı cümleyi kurması gerekir: **iptal edilmiş siparişin bağı hiçbir
+      // canlı/bitmiş iş emrinde kalmasın.** CANCELLED/SUPERSEDED iş emirleri kapsam
+      // DIŞI — onlar tarihçedir, bağları da tarihsel izdir (silmek geçmişi bozar).
+      // ⚠️ Bugün küme fiilen PLANNED'a eşittir: yukarıdaki `blocking` guard'ı
+      // IN_PROGRESS/COMPLETED bağlı siparişi zaten 409 ile reddediyor. Kural yine de
+      // kanonik yazıldı — guard gevşerse davranış sessizce eskiye dönmesin.
+      const livePairs = myLinks.filter((l) => {
+        const st = woById.get(l.workOrderId)?.status;
+        return st !== undefined && st !== WorkOrderStatus.CANCELLED && st !== WorkOrderStatus.SUPERSEDED;
+      });
+      const typeChangedWorkOrderIds: string[] = [];
+      if (livePairs.length > 0) {
         await tx.workOrderToOrderLine.deleteMany({
           where: {
-            OR: plannedPairs.map((k) => ({
+            OR: livePairs.map((k) => ({
               workOrderId: k.workOrderId,
               orderLineId: k.orderLineId,
             })),
           },
         });
+        // Bağı kopan HER iş emri için (döngü — Promise.all(tx.*) YASAK):
+        //   ① refakat kartı bayat — kartta sipariş bloğu + tip basılı,
+        //   ② son bağı kalktıysa tip STOK'a döner (TİP = BAĞIN AYNASI;
+        //      `cancelWithActions` UNLINK_ONLY dalı + `unlinkOrderLine` emsali).
+        for (const wid of [...new Set(livePairs.map((l) => l.workOrderId))].sort()) {
+          await markTravelerCardDirtyTx(tx, wid);
+          const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId: wid } });
+          if (remaining > 0) continue;
+          // Atomik: `updateMany WHERE type=ORDER_PRODUCTION` — zaten STOK'sa dokunmaz,
+          // iptal/devredilmiş atlanır. `targetItemId: { not: null }` STOK'un değişmezi:
+          // hedef kumaşı olmayan iş emri çevrilemez (sessizce ORDER kalır, count=0).
+          const flipped = await tx.workOrder.updateMany({
+            where: {
+              id: wid,
+              type: "ORDER_PRODUCTION",
+              status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
+              targetItemId: { not: null },
+            },
+            data: { type: "STOCK_PRODUCTION" },
+          });
+          if (flipped.count > 0) typeChangedWorkOrderIds.push(wid);
+        }
       }
       const order = await tx.order.findUnique({ where: { id } });
-      return { order: order!, unlinkedCount: plannedPairs.length };
+      return { order: order!, unlinkedCount: livePairs.length, typeChangedWorkOrderIds };
     });
 
     await AuditService.log({
@@ -2392,6 +2425,7 @@ export class OrderService extends BaseService {
       newData: {
         status: "CANCELLED",
         unlinkedWorkOrderCount: updated.unlinkedCount,
+        typeChangedWorkOrderIds: updated.typeChangedWorkOrderIds,
       },
     });
 
@@ -2400,7 +2434,10 @@ export class OrderService extends BaseService {
       data: updated.order,
       message:
         updated.unlinkedCount > 0
-          ? `Sipariş iptal edildi. ${updated.unlinkedCount} planlı iş emri bağlantısı koparıldı.`
+          ? `Sipariş iptal edildi. ${updated.unlinkedCount} iş emri bağlantısı koparıldı.` +
+            (updated.typeChangedWorkOrderIds.length > 0
+              ? ` ${updated.typeChangedWorkOrderIds.length} iş emri stok üretimine döndü.`
+              : "")
           : "Sipariş iptal edildi",
     };
   }
@@ -2737,6 +2774,13 @@ export class OrderService extends BaseService {
             orderLine: { orderId },
           },
         });
+        // REFAKAT KARTI BAYAT (2026-08-21): kartta SİPARİŞ bloğu + iş emri TİPİ
+        // basılıdır (`buildPlan` → orderLinks). Sipariş iptali o bloğu değiştirir →
+        // sahadaki kâğıt artık olmayan bir siparişi gösterir. Emsal + simetri:
+        // `workorder-link.service` bağ EKLERKEN de, KALDIRIRKEN de işaretliyor.
+        // CANCEL_WO dalında kart zaten VOIDED (softDelete kaskatı) → helper ACTIVE
+        // olmayan kartı atlar, yani bu çağrı orada güvenli bir no-op'tur.
+        await markTravelerCardDirtyTx(tx, wo.id); // döngü — Promise.all(tx.*) YASAK
         // TİP = BAĞIN AYNASI (2026-08-21): UNLINK_ONLY tek-siparişli iş emrinde
         // son bağı da siler → iş emri hiçbir siparişe bağlı kalmaz → STOK'a
         // döner (CONVERT_TO_STOCK ile aynı sonuç; fark yalnız operatörün niyet

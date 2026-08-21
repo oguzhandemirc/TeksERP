@@ -17,6 +17,7 @@ import {
   buildPicked,
   type PickedOrderLine,
 } from "@/pages/Operations/WorkOrders/OrderPickerDialog";
+import { lineOpen } from "@/pages/Operations/WorkOrders/order-fulfillment";
 import type { Order, OrderLine } from "./types";
 
 /**
@@ -27,9 +28,17 @@ function lineSignature(l: OrderLine): string {
   return `${l.itemId}::${l.colorId ?? ""}::${l.width ?? ""}`;
 }
 
-/** Kalan (sevk edilmemiş) miktar — yeni iş emrine bu kadar alınır. */
+/**
+ * Kalan (sevk edilmemiş) miktar — yeni iş emrine bu kadar alınır.
+ *
+ * Formül TEK YERDE: `order-fulfillment.lineOpen` (kanonik, negatif clamp'li).
+ * Buradaki eski kopya clamp'sizdi; davranış farkı YOK çünkü `groupEligible`
+ * yalnız `isLineOpen` süzgecinden geçmiş (rem > 0) kalemleri görür — yani
+ * clamp hiç tetiklenmez. Aşırı sevkte artık `openQty`/`openTotal` negatif
+ * yerine 0 olur ki iş emrine "eksi metraj" seed etmekten iyidir.
+ */
 function lineRemaining(l: OrderLine): number {
-  return Number(l.quantity) - Number(l.shippedQty ?? 0);
+  return lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0));
 }
 
 /** Sevki tamamlanmamış kalem yeni iş emrine alınabilir. */

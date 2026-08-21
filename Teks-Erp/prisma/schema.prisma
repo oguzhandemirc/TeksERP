@@ -4032,11 +4032,18 @@ model Sack {
   /// `resetSackWeightsTx` kg'yi sıfırlarken bunu da NULL'lar (bayat kaynak kalmasın).
   weightSource SackWeightSource?
   /// Çuvalın ÜSTÜNDEKİ fiziksel etiket geçersiz mi. `Roll.labelDirty` ile aynı
-  /// mekanizma: müşteri değişince MÜŞTERİYE ÖZEL çuval şablonu (`CustomerTemplateRoute`
-  /// kind=SACK) farklıysa basılı etiket yanlış şablonu taşır. Tetikleyici "müşteri
-  /// değişti" DEĞİL — eski ve yeni müşteri AYNI şablona çözülüyorsa (ikisi de rotasız
-  /// → bağlam varsayılanı) etiket geçerli kalır ve işaretlenmez; gereksiz "yeniden bas"
-  /// uyarısı operatörü körleştirir. Baskıda temizlenir (`recordSackPrintEvent`).
+  /// mekanizma. ÜÇ yazma noktası (2026-08-21'den beri):
+  ///   1. müşteri değişince MÜŞTERİYE ÖZEL çuval şablonu (`CustomerTemplateRoute`
+  ///      kind=SACK) farklıysa (`markSackLabelsStaleOnCustomerChange`) — tetikleyici
+  ///      "müşteri değişti" DEĞİL, şablon değişti; aynı şablona çözülüyorsa işaretlenmez;
+  ///   2. ÇUVAL İÇERİĞİ değişince (`markSackContentChangedTx` — top okut/çıkar, kartela
+  ///      ekle/çıkar, taşı; eski adı resetSackWeightsTx): etikette top adedi / metraj /
+  ///      kg basılır, içerik değişince basılı rakam yalan olur (kullanıcı kararı);
+  ///   3. çuval NOTU değişince, YALNIZ etkin şablon `sackNote` alanını basıyorsa
+  ///      (`setSackNotes` → `sackNoteAppearsOnLabel`) — alan opt-in olduğu için koşulsuz
+  ///      bayrak sahte "yeniden bas" uyarısı üretirdi; gereksiz uyarı operatörü körleştirir.
+  /// Baskıda temizlenir (`recordSackPrintEvent`). `Sack.labelPrintedAt` YOK — "hiç
+  /// basılmamış çuval" ayırt edilemez, fazladan uyarı kabul edilir (fazla işaretlemek güvenli).
   labelDirty   Boolean           @default(false)
   // Çuval yorumu — İÇ serbest not ("kendimiz için"): "ölçü şüpheli", "çuval yırtık,
   // aktarılacak" gibi. Ne ölçüm ne içerik → iki bilinçli sonuç:

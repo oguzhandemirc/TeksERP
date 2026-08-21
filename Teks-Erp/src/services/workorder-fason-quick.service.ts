@@ -23,6 +23,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { SubcontractorService } from "./subcontractor.service";
+import { OPEN_OUTSTANDING, OUTSTANDING_ITEM } from "./helpers/fason-open-dispatch.helper";
 
 /** Kabul edilecek bir sevk grubu — adım + firma + o sevkteki toplar. */
 export interface FasonQuickGroup {
@@ -87,12 +88,12 @@ export class WorkOrderFasonQuickService {
       wo.steps.map((s) => [s.id, Boolean(s.requiredCategory?.appliesColor)]),
     );
 
+    // AÇIK + OUTSTANDING sevk koşulu TEK KAYNAKTAN. Eski elle yazım
+    // `directShippedAt`/`receipt.cancelledAt` taşımıyordu → tamamen doğrudan-sevk
+    // edilmiş sevk hayalet grup olarak listeleniyor, kabul iptali (LIFO) sonrası
+    // yeniden açılan sevkin grubu ise hiç gösterilmiyordu.
     const dispatches = await prisma.subcontractorDispatch.findMany({
-      where: {
-        workOrderId,
-        cancelledAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
-      },
+      where: { workOrderId, ...OPEN_OUTSTANDING },
       select: {
         id: true,
         dispatchNo: true,
@@ -101,7 +102,7 @@ export class WorkOrderFasonQuickService {
         subcontractor: { select: { name: true } },
         step: { select: { station: { select: { name: true } } } },
         items: {
-          where: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } },
+          where: OUTSTANDING_ITEM,
           select: {
             roll: { select: { id: true, barcode: true, currentQty: true, status: true } },
           },

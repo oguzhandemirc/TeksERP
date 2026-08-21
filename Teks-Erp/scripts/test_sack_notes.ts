@@ -10,7 +10,7 @@
 //   5. 600 karakter → 500'e kırpılır (DB VarChar(500) → P2000 YOK)
 //   6. Olmayan çuval → 404 (hem yazma hem okuma)
 //   7. ⭐ REGRESYON: içerik değişince (top okut/çıkar) yorum KORUNUR —
-//      resetSackWeightsTx yalnız kg/tartı izini sıfırlar, yoruma dokunmaz
+//      markSackContentChangedTx yalnız kg/tartı izini sıfırlar, yoruma dokunmaz
 //   8. ⭐ T2: PLANNED sevkiyata atanmış çuvala yorum YAZILABİLİR (409 DEĞİL)
 //   9. ⭐ T2: DISPATCHED (sevk edilmiş) çuvala da yorum YAZILABİLİR
 //  10. Audit satırı düşer (SACK / UPDATE / kind=SACK_NOTES)
@@ -108,7 +108,7 @@ async function main(): Promise<void> {
     await expectErr("6a) olmayan çuvala yazma → 404", () => ship.setSackNotes(ghost, "x", undefined), 404);
     await expectErr("6b) olmayan çuvalı okuma → 404", () => ship.getSackNotes(ghost), 404);
 
-    // 7) ⭐ REGRESYON: içerik değişince yorum korunur (resetSackWeightsTx yoruma dokunmaz)
+    // 7) ⭐ REGRESYON: içerik değişince yorum korunur (markSackContentChangedTx yoruma dokunmaz)
     await ship.setSackNotes(sackId, "İçerik değişse de kalmalı", undefined);
     await ship.weighSack({ sackId, weightKg: 42.5 }, undefined);
     const bc = await makeRoll(100, 141);

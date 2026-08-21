@@ -61,6 +61,7 @@ import {
   ScanType,
   WorkOrderStatus,
 } from "@prisma/client";
+import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 
 // Refakat kartı listesinde sıralanabilir kolonlar. createdAt BİLEREK yok →
 // varsayılan/createdAt isteği printedAt'e düşer (yeni basılan kart ilk gelsin).
@@ -754,12 +755,12 @@ export class TravelerCardService {
 
     // Fason Sevk akışı: bu WO için açık (cancelledAt=null + mal kabul tam değil) sevk
     // varsa mobil UI erken uyarı verir (backend dispatch de ayrıca 409 atabilir).
+    // Koşul TEK KAYNAKTAN (`OPEN_OUTSTANDING`) — eski elle yazım `directShippedAt`
+    // ve `receipt.cancelledAt` süzgeçlerini taşımıyordu: tamamen doğrudan-sevk
+    // edilmiş WO'da hayalet "açık sevk" uyarısı çıkıyor, kabul iptali (LIFO)
+    // sonrası yeniden açılan sevkte ise uyarı HİÇ çıkmıyordu.
     const openDispatchCount = await prisma.subcontractorDispatch.count({
-      where: {
-        workOrderId: card.workOrderId,
-        cancelledAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
-      },
+      where: { workOrderId: card.workOrderId, ...OPEN_OUTSTANDING },
     });
 
     const data = { ...card, hasOpenDispatch: openDispatchCount > 0 };

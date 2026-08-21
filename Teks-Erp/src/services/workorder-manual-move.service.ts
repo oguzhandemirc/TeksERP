@@ -29,6 +29,7 @@ import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
+import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 
 /**
  * Taşınabilir statüler — fasondaki/tüketilmiş/iptal/sevkli hariç (çuval/sevk ayrıca guard'lı).
@@ -448,15 +449,7 @@ export class WorkOrderManualMoveService {
         id: true,
         batchNumber: true,
         rolls: { where: { status: RollStatus.AT_SUBCONTRACTOR }, select: { id: true }, take: 1 },
-        dispatches: {
-          where: {
-            cancelledAt: null,
-            directShippedAt: null,
-            items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-          },
-          select: { id: true },
-          take: 1,
-        },
+        dispatches: { where: OPEN_OUTSTANDING, select: { id: true }, take: 1 },
       },
       orderBy: { createdAt: "asc" },
     });

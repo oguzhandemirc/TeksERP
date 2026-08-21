@@ -7,10 +7,13 @@
 // limbosu yok. Tambur kendi çocuk-üretim akışını korur; bu helper yalnız MEVCUT
 // topları son adımda finalize eder.
 // =============================================================================
-import { Prisma, RollStatus, RollForm } from "@prisma/client";
+import { Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
 import { reserveRollBarcodesInOrder, type RollBarcodeType } from "./roll-barcode.helper";
 
 export type TxClient = Prisma.TransactionClient;
+
+/** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
+type ReadDb = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Kalite kodları → katalog `targetStatus` + `id` haritaları (Tambur :637-652 ile aynı
@@ -30,6 +33,75 @@ export async function loadQualityTargetMaps(
   return {
     statusByCode: new Map(rows.map((q) => [q.code, q.targetStatus])),
     idByCode: new Map(rows.map((q) => [q.code, q.id])),
+  };
+}
+
+/**
+ * ÜRETİLEN METRAJ KOVALARI — kalite kodu → kova, KATALOGDAN çözülür.
+ *
+ * NEDEN KATALOGDAN: `qualityGrade` kolonu katalog `code`'unun snapshot'ıdır ve
+ * kod fabrikaya AÇIK bir alandır (admin `KAL-YYMM-XXXX` üretebilir, mevcut
+ * kodu yeniden adlandırabilir). `qualityGrade === "FIRE"` gibi gömülü kod, tam
+ * da `schema.prisma`'daki QualityGrade notunun yasakladığı kırılganlıktır:
+ * fabrika "2. Fire" adında ikinci bir SCRAP kademesi tanımlarsa gömülü liste
+ * onu sessizce SAĞLAM ÜRETİM sayar.
+ *
+ * Kova eşlemesi `targetStatus` üzerinden:
+ *   • `SCRAP`     → `fire`      (mal çöpe gitti — üretim SAYILMAZ)
+ *   • `A1_STOCK`  → `a1`        (2. kalite, SATILABİLİR — üretim SAYILIR)
+ *   • diğer/null  → `warehouse` (1. kalite / kaliteye bakılmadı — üretim SAYILIR)
+ *
+ * ⚠️ `isActive` SÜZGECİ YOK: pasife alınmış eski bir kalite kodu hâlâ geçmiş
+ * topların üstünde durur; süzülürse o toplar "bilinmeyen kod" → warehouse'a
+ * düşer ve fire metrajı sessizce üretime karışır.
+ *
+ * `unknownCodes` = topta duran ama katalogda HİÇ olmayan kodlar (elle DB
+ * düzenlemesi / silinmiş katalog satırı). Sessizce warehouse sayılır (üretimi
+ * durdurmak yanlış cevap) ama çağıran isterse raporlayabilir.
+ */
+export type ProducedBucket = "warehouse" | "a1" | "fire";
+
+export interface ProducedBuckets {
+  /** Kalite kodunun kovası — null/boş kod ve bilinmeyen kod `warehouse`. */
+  bucketOf(code: string | null | undefined): ProducedBucket;
+  /** `targetStatus = SCRAP` olan katalog kodları (liste süzgecinin dışlama kümesi). */
+  fireCodes: string[];
+  /** `targetStatus = A1_STOCK` olan katalog kodları (2. kalite — üretim SAYILIR). */
+  a1Codes: string[];
+  /** `bucketOf` çağrılarında katalogda bulunamayan kodlar (teşhis için). */
+  unknownCodes: Set<string>;
+}
+
+export async function loadProducedBuckets(db: ReadDb): Promise<ProducedBuckets> {
+  const rows = await db.qualityGrade.findMany({
+    select: { code: true, targetStatus: true },
+  });
+  const byCode = new Map<string, ProducedBucket>();
+  const fireCodes: string[] = [];
+  const a1Codes: string[] = [];
+  for (const q of rows) {
+    const bucket: ProducedBucket =
+      q.targetStatus === RollStatus.SCRAP
+        ? "fire"
+        : q.targetStatus === RollStatus.A1_STOCK
+          ? "a1"
+          : "warehouse";
+    byCode.set(q.code, bucket);
+    if (bucket === "fire") fireCodes.push(q.code);
+    else if (bucket === "a1") a1Codes.push(q.code);
+  }
+  const unknownCodes = new Set<string>();
+  return {
+    bucketOf(code) {
+      if (!code) return "warehouse";
+      const hit = byCode.get(code);
+      if (hit) return hit;
+      unknownCodes.add(code);
+      return "warehouse";
+    },
+    fireCodes,
+    a1Codes,
+    unknownCodes,
   };
 }
 

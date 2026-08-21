@@ -218,7 +218,7 @@ async function run(): Promise<void> {
   check("gerçek kantar tartısında kolon = SCALE", (await srcOfSack(s5)) === "SCALE", `${await srcOfSack(s5)}`);
   check("beyansız (legacy istemci) tartıda kolon = MANUAL", (await srcOfSack(s3)) === "MANUAL");
   // İçerik değişince kg sıfırlanır → kaynak da NULL olmalı ("kg yok ama kaynak dolu"
-  // tutarsız çifti kalmasın). resetSackWeightsTx'i removeRollFromSack tetikler.
+  // tutarsız çifti kalmasın). markSackContentChangedTx'i removeRollFromSack tetikler.
   const rollInS5 = await prisma.roll.findFirst({ where: { sackId: s5 }, select: { id: true } });
   if (rollInS5) await shippingService.removeRollFromSack({ rollId: rollInS5.id }, ADMIN);
   check("içerik değişti → kg NULL", (await kgOf(s5)) === null);

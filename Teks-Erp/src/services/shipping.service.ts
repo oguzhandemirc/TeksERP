@@ -67,6 +67,7 @@ import {
 } from "./helpers/allocation.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
+import { collectBoundKeys } from "./helpers/label-context-fit";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
@@ -517,7 +518,7 @@ export class ShippingService {
             data: { sackId: data.sackId },
           });
           if (moved.count !== 1) throw AppError.conflict("Top bu sırada taşınmış/çıkarılmış — tekrar deneyin");
-          await this.resetSackWeightsTx(tx, [fromSackId, data.sackId]);
+          await this.markSackContentChangedTx(tx, [fromSackId, data.sackId]);
         });
         await AuditService.log({ userId, action: "UPDATE", tableName: "ROLL", recordId: roll.id, newData: { kind: "SACK_MOVE", sackId: data.sackId, fromSackId, barcode: roll.barcode } });
         return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, currentQty: roll.currentQty }, message: "Top bu çuvala taşındı" };
@@ -536,7 +537,7 @@ export class ShippingService {
           data: { sackId: data.sackId },
         });
         if (claimed.count === 0) throw AppError.conflict("Top az önce başka bir akışa girdi — tekrar deneyin.");
-        await this.resetSackWeightsTx(tx, [data.sackId]);
+        await this.markSackContentChangedTx(tx, [data.sackId]);
       });
       await AuditService.log({ userId, action: "UPDATE", tableName: "ROLL", recordId: roll.id, newData: { kind: "SACK_SCAN", sackId: data.sackId, barcode: roll.barcode } });
       return { success: true, data: { kind: "ROLL", rollId: roll.id, sackId: data.sackId, currentQty: roll.currentQty }, message: "Top çuvala eklendi" };
@@ -562,7 +563,7 @@ export class ShippingService {
         await touchWarehouseSackTx(tx, data.sackId);
         const moved = await tx.swatch.updateMany({ where: { id: swatch.id, sackId: fromSackId, shipmentId: null }, data: { sackId: data.sackId } });
         if (moved.count !== 1) throw AppError.conflict("Kartela bu sırada taşınmış/çıkarılmış — tekrar deneyin");
-        await this.resetSackWeightsTx(tx, [fromSackId, data.sackId]);
+        await this.markSackContentChangedTx(tx, [fromSackId, data.sackId]);
       });
       await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: swatch.id, newData: { kind: "SACK_MOVE", sackId: data.sackId, fromSackId, barcode: swatch.barcode } });
       return { success: true, data: { kind: "SWATCH", swatchId: swatch.id, sackId: data.sackId }, message: "Kartela bu çuvala taşındı" };
@@ -572,7 +573,7 @@ export class ShippingService {
       await touchWarehouseSackTx(tx, data.sackId);
       const claimed = await tx.swatch.updateMany({ where: { id: swatch.id, shipmentId: null, sackId: null, cancelledAt: null }, data: { sackId: data.sackId } });
       if (claimed.count === 0) throw AppError.conflict("Kartela az önce başka bir akışa girdi — tekrar deneyin.");
-      await this.resetSackWeightsTx(tx, [data.sackId]);
+      await this.markSackContentChangedTx(tx, [data.sackId]);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: swatch.id, newData: { kind: "SACK_SCAN", sackId: data.sackId, barcode: swatch.barcode } });
     return { success: true, data: { kind: "SWATCH", swatchId: swatch.id, sackId: data.sackId }, message: "Kartela çuvala eklendi" };
@@ -607,7 +608,7 @@ export class ShippingService {
       const claimIds = candidates.map((c) => c.id);
       const claimed = await tx.swatch.updateMany({ where: { id: { in: claimIds }, shipmentId: null, sackId: null, cancelledAt: null }, data: { sackId: data.sackId } });
       if (claimed.count !== data.count) throw AppError.conflict("Kartelalardan biri az önce başka bir akışa girdi — tekrar deneyin.");
-      await this.resetSackWeightsTx(tx, [data.sackId]);
+      await this.markSackContentChangedTx(tx, [data.sackId]);
       return claimIds;
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: ids[0], newData: { kind: "KARTELA_SELECT_ADD", sackId: data.sackId, itemId: data.itemId, colorId: data.colorId, count: data.count } });
@@ -633,7 +634,7 @@ export class ShippingService {
       await touchWarehouseSackTx(tx, sackId);
       const removed = await tx.roll.updateMany({ where: { id: data.rollId, sackId, shipmentId: null }, data: { sackId: null } });
       if (removed.count !== 1) throw AppError.conflict("Top bu sırada çıkarılmış/taşınmış — tekrar deneyin");
-      await this.resetSackWeightsTx(tx, [sackId]);
+      await this.markSackContentChangedTx(tx, [sackId]);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "ROLL", recordId: data.rollId, newData: { kind: "SACK_UNSCAN", sackId: null } });
     return { success: true, data: {}, message: "Top çuvaldan çıkarıldı (depoya döndü)" };
@@ -658,7 +659,7 @@ export class ShippingService {
       await touchWarehouseSackTx(tx, sackId);
       const removed = await tx.swatch.updateMany({ where: { id: data.swatchId, sackId, shipmentId: null }, data: { sackId: null } });
       if (removed.count !== 1) throw AppError.conflict("Kartela bu sırada çıkarılmış/taşınmış — tekrar deneyin");
-      await this.resetSackWeightsTx(tx, [sackId]);
+      await this.markSackContentChangedTx(tx, [sackId]);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SWATCH", recordId: data.swatchId, newData: { kind: "SACK_UNSCAN", sackId: null } });
     return { success: true, data: {}, message: "Kartela çuvaldan çıkarıldı" };
@@ -690,7 +691,7 @@ export class ShippingService {
       await touchWarehouseSackTx(tx, data.sackId);
       const moved = await tx.roll.updateMany({ where: { id: roll.id, sackId: fromSackId, shipmentId: null }, data: { sackId: data.sackId } });
       if (moved.count !== 1) throw AppError.conflict("Top bu sırada taşınmış/çıkarılmış — tekrar deneyin");
-      await this.resetSackWeightsTx(tx, [fromSackId, data.sackId]);
+      await this.markSackContentChangedTx(tx, [fromSackId, data.sackId]);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "ROLL", recordId: roll.id, newData: { kind: "SACK_MOVE", sackId: data.sackId, fromSackId, barcode: roll.barcode } });
     return { success: true, data: { rollId: roll.id, sackId: data.sackId }, message: "Top taşındı" };
@@ -735,7 +736,7 @@ export class ShippingService {
           : { id: { in: swatchSel! }, sackId: data.sackId, shipmentId: null };
         removedSwatches = (await tx.swatch.updateMany({ where: swatchWhere, data: { sackId: null } })).count;
       }
-      await this.resetSackWeightsTx(tx, [data.sackId]);
+      await this.markSackContentChangedTx(tx, [data.sackId]);
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId,
@@ -771,7 +772,7 @@ export class ShippingService {
         where: { id: { in: data.rollIds }, sackId: data.sackId, shipmentId: null },
         data: { sackId: data.targetSackId },
       })).count;
-      await this.resetSackWeightsTx(tx, [data.sackId, data.targetSackId]);
+      await this.markSackContentChangedTx(tx, [data.sackId, data.targetSackId]);
     });
     await AuditService.log({
       userId, action: "UPDATE", tableName: "SACK", recordId: data.sackId,
@@ -853,8 +854,9 @@ export class ShippingService {
               data: { sackId: created.id },
             })
           ).count;
-        // İçerik değişti → iki çuvalın da bayat kg'si düşer (irsaliyeye gitmesin).
-        await this.resetSackWeightsTx(tx, [data.sackId, created.id]);
+        // İçerik değişti → iki çuvalın da bayat kg'si düşer (irsaliyeye gitmesin)
+        // + etiketleri "bayat" işaretlenir (kâğıttaki top adedi/metraj değişti).
+        await this.markSackContentChangedTx(tx, [data.sackId, created.id]);
       });
     });
 
@@ -1025,10 +1027,32 @@ export class ShippingService {
   }
 
   /**
-   * İçeriği değişen çuvalların brüt tartısını sıfırla — tartıdan sonra içerik değişirse
-   * eski kg bayatlar (yeniden tartı istenir).
+   * ÇUVAL İÇERİĞİ DEĞİŞTİ — bayatlayan İKİ izi birden düşür (2026-08-21).
+   *
+   * Eski adı `resetSackWeightsTx`'ti ve yalnız tartıyı sıfırlıyordu; ad artık
+   * YALAN SÖYLEMESİN diye değiştirildi — çünkü içerik değişimi kg'den fazlasını
+   * bayatlatır:
+   *   1. **Brüt tartı** — tartıdan sonra içerik değişirse eski kg yanlıştır
+   *      (yeniden tartı istenir).
+   *   2. **Çuvalın ÜSTÜNDEKİ etiket** — çuval etiketi bir TOPLAM belgesidir:
+   *      `rollCount` / `lengthMeters` / `weightKg` basılır
+   *      (`config/label-fields.ts` → `SACK_FIELDS`). İçerik değişince basılı
+   *      kâğıttaki "12 top / 1.240 m" sayıları gerçeği anlatmaz → `labelDirty`.
+   *
+   * ⚠️ İKİ AYRI `updateMany` — birleştirilemez: tartı sıfırlama `weightKg: { not: null }`
+   * ile SINIRLI (hiç tartılmamış çuvala boşuna yazma), etiket bayatlığı ise
+   * tartıdan BAĞIMSIZDIR (tartısız çuvalın da basılı etiketi olur; top adedi/metraj
+   * yine kâğıtta yazar). Tek ifadeye indirmenin bedeli ÖLÇÜLDÜ: koşul
+   * birleştirildiğinde bayrak HİÇ yazılmaz — birinci ifade kg'yi zaten NULL'ladığı
+   * için aynı WHERE ikinci kez eşleşmez (sessiz kayıp).
+   *
+   * `labelDirty: false` koşulu gereksiz yazmayı eler (`markSackLabelsStaleOnCustomerChange`
+   * ve `Roll.labelDirty` emsali); baskıda temizlenir (`label.service.recordSackPrintEvent`).
+   *
+   * NOT: `Sack.notes` (çuval yorumu) bu fonksiyonun kapsamı DIŞINDADIR — not ne
+   * ölçüm ne içeriktir (annotation); `setSackNotes` kendi kuralını uygular.
    */
-  private async resetSackWeightsTx(
+  private async markSackContentChangedTx(
     tx: Prisma.TransactionClient,
     sackIds: (string | null | undefined)[]
   ): Promise<void> {
@@ -1039,6 +1063,10 @@ export class ShippingService {
       // `weightSource` de NULL'lanır: kg gidince kaynak bilgisi bayatlar ve
       // "kg yok ama kaynağı SCALE" gibi tutarsız bir çift kalırdı.
       data: { weightKg: null, weightSource: null, weighedById: null, weighedAt: null },
+    });
+    await tx.sack.updateMany({
+      where: { id: { in: ids }, labelDirty: false },
+      data: { labelDirty: true },
     });
   }
 
@@ -1668,13 +1696,97 @@ export class ShippingService {
    * (sevkiyata atanmış çuvalın kg'si/içeriği değişmesin), yorum ise ne ölçüm ne içerik —
    * sevk edilmiş çuvala da "müşteri şikayet etti" yazılabilmeli (dispatchNote ile aynı
    * gerekçe). Guard'ı "eksik" sanıp eklemeyin. Boş/whitespace → temizlenir (NULL).
+   *
+   * ETİKET BAYATLIĞI KOŞULLUDUR (2026-08-21) — bkz. `sackNoteAppearsOnLabel`.
    */
   async setSackNotes(sackId: string, notes: string | null, userId?: string): Promise<ApiResponse<unknown>> {
     const value = notes?.trim().slice(0, 500) || null;
+    // Not GERÇEKTEN değişti mi + hangi müşterinin şablonuna bakılacak: yazmadan önce oku.
+    const before = await prisma.sack.findUnique({
+      where: { id: sackId },
+      select: { notes: true, customerId: true },
+    });
+    if (!before) throw AppError.notFound("Çuval bulunamadı");
     const updated = await prisma.sack.updateMany({ where: { id: sackId }, data: { notes: value } });
     if (updated.count === 0) throw AppError.notFound("Çuval bulunamadı");
-    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: sackId, newData: { kind: "SACK_NOTES", notes: value } });
-    return { success: true, data: { sackId, notes: value }, message: value ? "Çuval notu kaydedildi" : "Çuval notu temizlendi" };
+
+    // KOŞULLU BAYAT: `sackNote` şablona sürüklenmişse basılı etiket artık yalan.
+    // Koşulsuz yazsaydık, notu HİÇ basmayan kurulumlarda (varsayılan) her not
+    // düzenlemesi sahte "yeniden bas" uyarısı üretir, rozet enflasyonu da gerçek
+    // uyarıyı öldürürdü. Değer değişmediyse (aynı metin yeniden kaydedildi) hiç sorma.
+    let labelDirty = false;
+    if (value !== before.notes) {
+      labelDirty = await this.sackNoteAppearsOnLabel(before.customerId);
+      if (labelDirty) {
+        await prisma.sack.updateMany({ where: { id: sackId, labelDirty: false }, data: { labelDirty: true } });
+      }
+    }
+
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SACK", recordId: sackId, newData: { kind: "SACK_NOTES", notes: value, labelDirty } });
+    return { success: true, data: { sackId, notes: value, labelDirty }, message: value ? "Çuval notu kaydedildi" : "Çuval notu temizlendi" };
+  }
+
+  /**
+   * Bu çuvalın ETKİN etiket şablonu `sackNote` alanını basıyor mu?
+   *
+   * Çuval notu, katalogda OPT-IN bir alandır (`config/label-fields.ts` → SACK_FIELDS:
+   * "şablona SÜRÜKLENMEZSE basılmaz") — yani çoğu kurulumda not kâğıda hiç çıkmaz.
+   * Bu yüzden not düzenlemesi etiketi ancak alan şablonda VARSA bayatlatır.
+   *
+   * Şablon zinciri `markSackLabelsStaleOnCustomerChange` ile AYNI:
+   * `CustomerTemplateRoute(müşteri, SACK)` ?? bağlam varsayılanı
+   * (`LabelContextDefault`). Cihaz (peripheral) rotası BİLEREK dışarıda — not
+   * düzenlenirken hangi yazıcıya basılacağı bilinmez; tahmin etmek yanlış şablona
+   * bakıp sessizce yanlış cevap vermek olurdu.
+   *
+   * FAIL-OPEN'IN TERSİ: şablon çözülemezse (atama yok / pasif / silinmiş) `false`
+   * döner — basılacak bir düzen yoksa bayatlayacak kâğıt da yoktur. Bu, çuval
+   * etiketi BASKISININ fail-closed davranışıyla (şablon yoksa 400) çelişmez:
+   * orada soru "basayım mı", burada "basılmışı yalanladım mı".
+   *
+   * Koşullu (`showIf`) eleman SAYILMAZ — `collectBoundKeys` sözleşmesi: o küme
+   * "her baskıda çıkan alanlar"dır (zaten SACK payload'unda `qualityGrade` yok,
+   * koşul fail-closed ile basılmaz).
+   */
+  private async sackNoteAppearsOnLabel(customerId: string | null): Promise<boolean> {
+    const select = {
+      name: true,
+      rawCode: true,
+      isActive: true,
+      deletedAt: true,
+      variants: { select: { elements: true } },
+    } as const;
+    type Tpl = { name: string; rawCode: Prisma.JsonValue | null; isActive: boolean; deletedAt: Date | null; variants: { elements: Prisma.JsonValue }[] };
+    const usable = (t: Tpl | null | undefined): Tpl | null =>
+      t && t.isActive && t.deletedAt == null ? t : null;
+
+    let tpl: Tpl | null = null;
+    if (customerId) {
+      const route = await prisma.customerTemplateRoute.findUnique({
+        where: { customerId_kind: { customerId, kind: LabelKind.SACK } },
+        select: { template: { select } },
+      });
+      tpl = usable(route?.template);
+    }
+    if (!tpl) {
+      const def = await prisma.labelContextDefault.findUnique({
+        where: { kind: LabelKind.SACK },
+        select: { template: { select } },
+      });
+      tpl = usable(def?.template);
+    }
+    if (!tpl) return false;
+
+    if (collectBoundKeys({ name: tpl.name, variants: tpl.variants }).has("sackNote")) return true;
+    // Uzman raw-code override: kanvas hiç çizilmez, `{{sackNote}}` yer tutucusu
+    // doldurulur (`label-rawcode`). Dil bilinmediği için TÜM diller taranır.
+    const raw = tpl.rawCode;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const v of Object.values(raw)) {
+        if (typeof v === "string" && v.includes("sackNote")) return true;
+      }
+    }
+    return false;
   }
 
   /** Çuval yorumunu oku — yorum sheet'i içerik listesi çekmeden notu alsın. */

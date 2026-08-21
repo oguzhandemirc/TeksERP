@@ -113,9 +113,18 @@ export function TravelerCardPrintDialog({ workOrder, open, onOpenChange }: Props
     try {
       await workOrderService.recordTravelerCardPrint(activeCard.id);
       // Rozet üç yerde okunuyor (WO detay başlığı, kart geçmişi, bu diyalog).
+      //
+      // ⚠️ Anahtarlar EKRANLARIN kullandığıyla BİREBİR olmalı (2026-08-17 dersi,
+      // `LinkOrderDialog.tsx`'te yazılı — bu ONUN İKİNCİ VAKASI): burada da
+      // `["work-order", id]` invalidate ediliyordu ve repoda böyle bir sorgu YOK.
+      // Detay yüzeyleri `["work-order-detail", id]` (WorkOrderDetailSheet:67 +
+      // WorkOrderDetailPage:41), parti şeridi `["work-order-branches", id]`.
+      // Ölü anahtar hata vermez — sessizce hiçbir şeyi tazelemez; baskı sonrası
+      // detay başlığındaki kart rozeti/versiyonu eski kalıyordu.
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["traveler-cards", workOrder?.id] }),
-        queryClient.invalidateQueries({ queryKey: ["work-order", workOrder?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["work-order-detail", workOrder?.id] }),
+        queryClient.invalidateQueries({ queryKey: ["work-order-branches", workOrder?.id] }),
         // Baskı yeni bir sürüm doğurmuş olabilir (içerik değiştiyse) — geçmiş
         // listesi bayat kalırsa kullanıcı az önce bastığı sürümü göremez.
         queryClient.invalidateQueries({

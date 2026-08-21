@@ -164,6 +164,10 @@ export function BranchLanes({
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
+      // Liste de tazelenir (transferMut ile simetri): birleştirme parti sayısını
+      // düşürür ve WO satırındaki türetilmiş alanları oynatır. onSettled'da
+      // kalması bilinçli — 409'da da liste tazelenir.
+      void qc.invalidateQueries({ queryKey: ["work-orders"] });
     },
   });
 

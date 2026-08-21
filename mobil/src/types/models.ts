@@ -429,6 +429,11 @@ export interface PendingReturnGroup {
   };
   workOrder: {
     id: string;
+    /** ⚠️ ADI YANILTIYOR — bu alan aslında İŞ EMRİ NO'dur (backend
+     *  `subcontractor.service.ts` buraya `workOrder.workOrderNumber` koyar; ad
+     *  eski modelden kalma). GERÇEK parti numarası `Batch.batchNumber`'dır ve bu
+     *  yanıtta YOKTUR; fason belgesinin numarası ise `lastDispatch.dispatchNo`.
+     *  Ekranda "Parti" diye göstermeyin. */
     batchNumber: string;
     status: WorkOrderStatus;
     targetColor?: Color | null;

@@ -120,6 +120,60 @@ export async function hasBypassClosureOnProcessQcTx(
 }
 
 /**
+ * DEVİR (TRANSFER): kaynak WO'nun AÇIK bypass atamalarını yeni (devam) iş emrine
+ * ve onun klon adımına TAŞIR. Döner: taşınan satır adedi.
+ *
+ * NEDEN GEREKLİ: `repointRollsTx` topun tüm ayak izini (Roll konumu, movement,
+ * operation, error) klon adımlara taşır ama `KursunBypassAssignment` ORADA YOKTU.
+ * Sonuç: kurşun makinesine dağıtılmış bir iş devredildiğinde atama kaynak WO'nun
+ * ÖLÜ adımında kalıyor, hemen ardından `voidStalePendingBypassAssignmentsTx(...,
+ * { force: true })` onu iptal ediyordu → fiziksel olarak makinede duran mal
+ * dijital olarak "dağıtılmamış" oluyor, dağıtım ekranından kayboluyor ve Tambur
+ * okutması onu kapatacak bir atama bulamıyordu.
+ *
+ * ⚠️ ÇAĞRI SIRASI LOAD-BEARING: `repointRollsTx`'ten HEMEN SONRA, aynı tx'in
+ * sonundaki force-void'den ÖNCE çağrılır. Taşınan satır artık HEDEF `workOrderId`
+ * taşıdığı için kaynak WO id'siyle koşan force-void onu GÖRMEZ; ters sırada
+ * çağrılırsa atama önce iptal edilir, sonra taşınacak satır kalmaz.
+ *
+ * `workOrderId` bu tabloda DENORMALİZE bir kolondur (adımdan da türetilebilirdi)
+ * — ikisi BİRLİKTE güncellenir, yoksa satır iki WO'ya birden ait görünür.
+ *
+ * Partial unique (`kursun_bypass_one_pending_per_step_uq`, adım başına ≤1 pending)
+ * korunur: hedef adımlar YENİ doğmuş klon adımlardır, üzerlerinde hiç atama yoktur.
+ *
+ * @param stepMap Kaynak adım id → hedef (klon) adım id. YALNIZ taşınan topların
+ *   bulunduğu adımlar geçilmelidir — `oldToNew`'in tamamı geçilirse, topu
+ *   taşınmamış bir adımın ataması da yeni WO'ya kaçar.
+ */
+export async function repointPendingBypassAssignmentsTx(
+  tx: TxClient,
+  params: {
+    sourceWorkOrderId: string;
+    targetWorkOrderId: string;
+    stepMap: ReadonlyMap<string, string>;
+  },
+): Promise<number> {
+  let moved = 0;
+  for (const [oldStepId, newStepId] of params.stepMap) {
+    const res = await tx.kursunBypassAssignment.updateMany({
+      where: {
+        workOrderId: params.sourceWorkOrderId,
+        workOrderStepId: oldStepId,
+        completedAt: null,
+        cancelledAt: null,
+      },
+      data: {
+        workOrderId: params.targetWorkOrderId,
+        workOrderStepId: newStepId,
+      },
+    });
+    moved += res.count;
+  }
+  return moved;
+}
+
+/**
  * Bir iş emrinin BAYAT kalmış açık bypass atamalarını iptal eder (soft-cancel).
  * Döndürdüğü sayı iptal edilen satır adedidir.
  *

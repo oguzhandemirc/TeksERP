@@ -139,6 +139,9 @@ async function main(): Promise<void> {
     sackIds.push(sackA);
 
     const scanRoll = await makeRoll({ printed: true, qty: 250 });
+    // Çuval TARTILI: 1-2 numaralı kontroller "tartısı olan çuval" dalını ölçer,
+    // 3 numaralı kontrol tartısız dalı — ikisi ayrı ifadeye dayanır.
+    await ship.weighSack({ sackId: sackA, weightKg: 12.5 }, undefined);
     await clearSack(sackA);
     await ship.scanIntoSack({ sackId: sackA, barcode: scanRoll.barcode }, undefined);
     check("D2-1) ⭐ çuvala top okutmak çuval etiketini bayatlattı", (await sackDirty(sackA)) === true);

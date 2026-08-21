@@ -46,6 +46,7 @@ import {
   markTravelerCardDirtyTx,
   markTravelerCardsDirtyTx,
 } from "./helpers/traveler-card-dirty.helper";
+import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 
 // K18: üyelik değişiminde etiketi bayatlamayan (labelDirty atlanacak) TARİHÇE
 // statüleri — tüketilmiş/iptal top fiziksel etikete çıkmaz, bayraklanmaz.
@@ -278,12 +279,7 @@ export async function isBatchLockedTx(
   if (atSubcontractor > 0) return true;
   // Outstanding = en az bir kalemi iptal-olmamış bir makbuzla dönmemiş açık sevk.
   const outstandingDispatch = await tx.subcontractorDispatch.count({
-    where: {
-      batchId,
-      cancelledAt: null,
-      directShippedAt: null,
-      items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-    },
+    where: { batchId, ...OPEN_OUTSTANDING },
   });
   return outstandingDispatch > 0;
 }
@@ -634,12 +630,7 @@ export async function mergeBatches(
     // 2+ FARKLI firma varsa 409 — fiziksel gerçek: mal iki ayrı firmada, firma
     // çözümü (F74) bozulur. Farklı adımlardaki sevkler serbest (çözüm stepId-scope'lu).
     const openOutstanding = await tx.subcontractorDispatch.findMany({
-      where: {
-        batchId: { in: allBatchIds },
-        cancelledAt: null,
-        directShippedAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-      },
+      where: { batchId: { in: allBatchIds }, ...OPEN_OUTSTANDING },
       select: {
         id: true,
         dispatchNo: true,

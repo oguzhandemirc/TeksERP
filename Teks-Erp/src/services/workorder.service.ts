@@ -58,6 +58,7 @@ import { Request } from "express";
 import {
   WorkOrder,
   WorkOrderStatus,
+  WorkOrderType,
   RollStatus,
   RollEntrySource,
   StepStatus,
@@ -83,7 +84,10 @@ import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 // Kurşun bypass (kurşun istasyonunda tablet YOK): WO yaşam döngüsü olayları açık
 // dağıtım atamalarını bayat bırakmasın. Guard helper hiçbir servise bağlı değil —
 // `kursun-bypass.service`'i import etmek burada döngü yaratırdı.
-import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
+import {
+  voidStalePendingBypassAssignmentsTx,
+  repointPendingBypassAssignmentsTx,
+} from "./helpers/kursun-bypass-guard.helper";
 import { computeWoInput } from "./helpers/coverage.helper";
 import {
   buildHiddenStatusWhere,
@@ -100,7 +104,7 @@ import {
 import { WorkOrderSplitService } from "./workorder-split.service";
 import { WorkOrderManualMoveService, type PartyMode } from "./workorder-manual-move.service";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
-import { loadQualityTargetMaps, resolveFinalStatus } from "./helpers/roll-finalize.helper";
+import { loadQualityTargetMaps, resolveFinalStatus, loadProducedBuckets } from "./helpers/roll-finalize.helper";
 import {
   applyRollDispositionsTx,
   DISPOSITION_MAX_ROLLS,
@@ -123,6 +127,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from
 import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
 import { diffFields } from "./helpers/audit-diff.helper";
+import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -1426,16 +1431,14 @@ export class WorkOrderService {
     if (req.query.withArchived !== "true") {
       (where as Record<string, unknown>).isActive = true;
     }
-    // Fason Sevk akışında: zaten açık (cancelledAt=null, item'ı henüz kabul
-    // edilmemiş) bir sevki olan WO'ları listeden gizle. Operatör müdahale
-    // etmeden önce eski sevki iptal etmek veya mal kabul yapmak zorunda.
+    // Fason Sevk akışında: zaten AÇIK + OUTSTANDING sevki olan WO'ları listeden
+    // gizle. Operatör müdahale etmeden önce eski sevki iptal etmek veya mal kabul
+    // yapmak zorunda. Koşul TEK KAYNAKTAN (`OPEN_OUTSTANDING`) gelir — elle
+    // yazılmış eski kopya `directShippedAt` ve `receipt.cancelledAt` süzgeçlerini
+    // TAŞIMIYORDU: tamamen doğrudan-sevk edilmiş WO listede sonsuza dek gizli
+    // kalıyor, kabul iptali (LIFO) sonrası yeniden açılan sevk ise gizlenmiyordu.
     if (req.query.excludeWithOpenDispatch === "true") {
-      (where as Record<string, unknown>).dispatches = {
-        none: {
-          cancelledAt: null,
-          items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
-        },
-      };
+      (where as Record<string, unknown>).dispatches = { none: OPEN_OUTSTANDING };
     }
     // Fason Sevk picker: yalnız fason (EXTERNAL) adımı SEVKE AÇIK olan WO'lar.
     // SKIPPED adım sevke kapalı; COMPLETED EXTERNAL adım uygundur (ek parti için
@@ -1630,11 +1633,12 @@ export class WorkOrderService {
   }
 
   /**
-   * Liste WO'larına ÜRETİLEN DEPO METRAJINI ekler (ilerleme kolonu için). Detay
-   * sayfasının `producedRolls.warehouse.totalMeters` tanımıyla aynı küme
-   * (`producedOutputWhere`); FIRE/A1 olmayan rulolar; initialQty toplamı. Tek
-   * groupBy ile sayfa başına 1 sorgu. Ayrıca üretime GİREN ham metrajı ve bağlı
-   * SİPARİŞ TOPLAMINI (talep) ekler.
+   * Liste WO'larına ÜRETİLEN METRAJI ekler (ilerleme kolonu için). Detay
+   * sayfasının `producedRolls.totalMeters` tanımıyla aynı küme
+   * (`producedOutputWhere`); YALNIZ fire (katalogda `targetStatus=SCRAP`) olan
+   * rulolar dışlanır — A1 (2. kalite) SATILABİLİR olduğu için SAYILIR; initialQty
+   * toplamı. Tek groupBy ile sayfa başına 1 sorgu. Ayrıca üretime GİREN ham
+   * metrajı ve bağlı SİPARİŞ TOPLAMINI (talep) ekler.
    */
   private async withProductionMeters<
     T extends { id: string; steps: { id: string; stepSequence: number }[] },
@@ -1738,21 +1742,38 @@ export class WorkOrderService {
       m.set(name, (m.get(name) ?? false) || isCurrent);
     }
 
-    // ÇIKAN — üretim çıktısı; detay producedRolls.warehouse ile AYNI küme
-    // (producedOutputWhere) + FIRE/A1 hariç (sağlam üretim).
+    // ÇIKAN — üretim çıktısı; detay `producedRolls.totalMeters` ile AYNI küme
+    // (producedOutputWhere) + YALNIZ FİRE hariç.
+    //
+    // ⚠️ İKİ DEĞİŞİKLİK (2026-08-21):
+    //   ① A1 (2. kalite) ARTIK SAYILIR. Kullanıcı kararı: A1 SATILABİLİR maldır,
+    //      üretim çıktısıdır. Eskiden liste onu dışlıyor, detay ise `totalMeters`
+    //      içinde sayıyordu — aynı iş emri iki ekranda iki farklı "çıkan" metraj
+    //      gösteriyordu. Liste artık detaya hizalı.
+    //   ② Kalite kovası KATALOGDAN çözülür (`loadProducedBuckets`), kod GÖMÜLÜ
+    //      DEĞİL. `qualityGrade` fabrikaya açık bir katalog kodudur; gömülü
+    //      `["FIRE","A1"]` listesi yeni bir SCRAP kademesini (ör. "2. Fire")
+    //      sessizce sağlam üretim sayardı (schema.prisma QualityGrade notu).
+    const buckets = await loadProducedBuckets(prisma);
+    const excludedGradeCodes = buckets.fireCodes;
     const producedRows = await prisma.roll.groupBy({
       by: ["producedInStepId"],
       where: {
         AND: [
           this.producedOutputWhere(stepIds),
-          {
-            // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
-            // üretim sayılmalı; düz notIn onu dışlardı. null VEYA (FIRE/A1 değil).
-            OR: [
-              { qualityGrade: null },
-              { qualityGrade: { notIn: ["FIRE", "A1"] } },
-            ],
-          },
+          // Postgres `NOT IN` NULL-hostile: null kalite (kaliteye bakılmadı) sağlam
+          // üretim sayılmalı; düz notIn onu dışlardı → null VEYA (fire değil).
+          // Katalogda hiç fire kodu yoksa süzgeç HİÇ yazılmaz (`notIn: []` üretme).
+          ...(excludedGradeCodes.length
+            ? [
+                {
+                  OR: [
+                    { qualityGrade: null },
+                    { qualityGrade: { notIn: excludedGradeCodes } },
+                  ],
+                },
+              ]
+            : []),
         ],
       },
       _sum: { initialQty: true },
@@ -2097,13 +2118,12 @@ export class WorkOrderService {
         },
         orderBy: { createdAt: "asc" },
       });
+      // Kova KATALOGDAN (`targetStatus`) çözülür — gömülü kod YOK (liste metriğiyle
+      // AYNI kaynak). `totalMeters` = warehouse + a1: A1 satılabilir 2. kalitedir,
+      // üretim çıktısı sayılır; yalnız FİRE (SCRAP hedefli kalite) dışarıda kalır.
+      const detailBuckets = await loadProducedBuckets(prisma);
       for (const r of producedRollRows) {
-        const bucket =
-          r.qualityGrade === "FIRE"
-            ? producedRolls.fire
-            : r.qualityGrade === "A1"
-              ? producedRolls.a1
-              : producedRolls.warehouse;
+        const bucket = producedRolls[detailBuckets.bucketOf(r.qualityGrade)];
         bucket.count += 1;
         bucket.totalMeters = bucket.totalMeters.plus(r.initialQty);
       }
@@ -3135,11 +3155,11 @@ export class WorkOrderService {
     // gerekli: iptal edilmiş bir iş emrine bağlı AÇIK sevk bırakmak, fason
     // ekranlarında sahipsiz bir satır üretirdi.
     const openDispatches = await prisma.subcontractorDispatch.findMany({
-      where: {
-        workOrderId,
-        cancelledAt: null,
-        items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false } } } },
-      },
+      // Koşul TEK KAYNAKTAN: eski elle yazım `directShippedAt`/`receipt.cancelledAt`
+      // taşımıyordu → tamamen doğrudan-sevk edilmiş (mal müşteriye çıkmış) sevk
+      // boşuna `cancelBulk`'a veriliyor, kabul iptali sonrası yeniden açılan sevk
+      // ise iptal edilmeden kalıyordu.
+      where: { workOrderId, ...OPEN_OUTSTANDING },
       select: { id: true },
     });
     if (openDispatches.length > 0) {
@@ -3529,7 +3549,6 @@ export class WorkOrderService {
           include: { station: { select: { name: true } } },
           orderBy: { stepSequence: "asc" },
         },
-        _count: { select: { orderLinks: true } },
       },
     });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
@@ -3662,8 +3681,15 @@ export class WorkOrderService {
         blockReason,
         /** true ise kapatma isteği her dispozisyon topu için karar taşımak ZORUNDA. */
         requiresDisposition: dispositionRolls.length > 0,
-        /** Devirde yeni WO'nun sipariş bağı default'u için (bağ varsa "keep"). */
-        orderLinked: wo._count.orderLinks > 0,
+        /**
+         * Devirde yeni WO'nun sipariş bağı default'u için ("keep" mi "stock" mu).
+         *
+         * Kaynak: `WorkOrder.type` — bağın AYNASI. Eskiden `_count.orderLinks > 0`
+         * okunuyordu ve bu, siparişe özel açılmış ama bağı sonradan çözülmüş
+         * (ya da henüz kurulmamış) bir WO'yu "stoka üretim" gibi devrederdi;
+         * tip ise iş emrinin NİYETİDİR ve devir klonuna taşınması gereken de odur.
+         */
+        orderLinked: wo.type === WorkOrderType.ORDER_PRODUCTION,
         remainingSteps,
         inFlight: {
           count: inFlightCount,
@@ -3747,7 +3773,7 @@ export class WorkOrderService {
       throw AppError.badRequest("İş emrinin adımı yok — dispozisyon verilebilecek top da yok");
     }
 
-    const { updated, applied, transferredWorkOrderNumber } = await withBarcodeRetry(() =>
+    const { updated, applied, transferredWorkOrderNumber, bypassRepointed } = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
         // ATOMİK CLAIM ÖNCE: WO satırını IN_PROGRESS→COMPLETED koşullu kilitle.
         // Eşzamanlı son-top finalize (tambur/kursun) ya da iptal WO'yu başka duruma
@@ -3767,6 +3793,8 @@ export class WorkOrderService {
 
         const appliedRows: AppliedDisposition[] = [];
         let transferredWoNumber: string | null = null;
+        /** Devirde yeni WO'ya taşınan AÇIK kurşun bypass ataması adedi (audit izi). */
+        let transferredBypassRepointed = 0;
 
         if (stepIds.length > 0) {
           // Guard'lar claim'den SONRA (cancel deseni): tripleyince tüm tx (claim dahil)
@@ -3861,13 +3889,15 @@ export class WorkOrderService {
             .filter((d) => d.action === "TRANSFER")
             .map((d) => byId.get(d.rollId)!);
           if (transferRolls.length > 0) {
-            transferredWoNumber = await this.transferRollsToNewWorkOrderTx(tx, {
+            const transferRes = await this.transferRollsToNewWorkOrderTx(tx, {
               sourceWorkOrderId: id,
               rolls: transferRolls,
               stepSeqById,
               orderMode: data.transferOrderMode ?? "stock",
               userId,
             });
+            transferredWoNumber = transferRes.workOrderNumber;
+            transferredBypassRepointed = transferRes.bypassRepointed;
             for (const r of transferRolls) {
               appliedRows.push({
                 rollId: r.id,
@@ -3960,6 +3990,7 @@ export class WorkOrderService {
           updated: done!,
           applied: appliedRows,
           transferredWorkOrderNumber: transferredWoNumber,
+          bypassRepointed: transferredBypassRepointed,
         };
       }),
     );
@@ -3978,6 +4009,9 @@ export class WorkOrderService {
         manualComplete: true,
         ...(applied.length > 0 ? { dispositionCount: applied.length, reason } : {}),
         ...(transferredWorkOrderNumber ? { transferredTo: transferredWorkOrderNumber } : {}),
+        // Devirde MALLA BİRLİKTE taşınan açık kurşun bypass ataması adedi. 0 ise
+        // yazılmaz (gürültü); >0 ise "dağıtım kayboldu mu" sorusunun cevabı burada.
+        ...(bypassRepointed > 0 ? { bypassRepointed } : {}),
       },
     });
     for (const a of applied) {
@@ -4027,7 +4061,7 @@ export class WorkOrderService {
    * çağrıda COMPLETED'a claim edildi; SUPERSEDED'e çekmek claim'i bozar ve "malzemesi
    * devredildi" yanlış anlamını verir (burada malzemenin bir kısmı devrediliyor).
    *
-   * Döner: yeni iş emri numarası.
+   * Döner: yeni iş emri numarası + taşınan açık kurşun bypass ataması adedi.
    */
   private async transferRollsToNewWorkOrderTx(
     tx: Prisma.TransactionClient,
@@ -4043,7 +4077,7 @@ export class WorkOrderService {
       orderMode: "stock" | "keep";
       userId?: string;
     },
-  ): Promise<string> {
+  ): Promise<{ workOrderNumber: string; bypassRepointed: number }> {
     const { sourceWorkOrderId, rolls, stepSeqById, orderMode, userId } = params;
     const rollIds = rolls.map((r) => r.id);
 
@@ -4093,6 +4127,25 @@ export class WorkOrderService {
     // kaynak WO'nun adımları "hâlâ bekleyen top var" sanır.
     await repointRollsTx(tx, rollIds, oldToNew);
 
+    // Kurşun bypass ataması da MALLA BİRLİKTE taşınır: mal fiziksel olarak hâlâ
+    // aynı kurşun makinesinde, yalnız iş emri değişti. `stepMap` TAŞINAN topların
+    // adımlarıyla SÜZÜLÜR — `oldToNew`'in tamamı verilseydi, topu devredilmemiş
+    // bir adımın ataması da yeni WO'ya kaçardı (kaynakta o iş sürüyor olabilir).
+    // ⚠️ Bu çağrı, kapanış akışının sonundaki force-void'den ÖNCE koşmak ZORUNDA:
+    // taşınan satır artık hedef WO id'si taşır, force-void (kaynak WO id'siyle)
+    // onu görmez; ters sırada atama önce iptal edilir ve taşınacak satır kalmaz.
+    const movedStepIds = new Set(
+      rolls.map((r) => r.currentStepId).filter((x): x is string => !!x),
+    );
+    const transferStepMap = new Map(
+      [...oldToNew].filter(([oldStepId]) => movedStepIds.has(oldStepId)),
+    );
+    const bypassRepointed = await repointPendingBypassAssignmentsTx(tx, {
+      sourceWorkOrderId,
+      targetWorkOrderId: newWo.id,
+      stepMap: transferStepMap,
+    });
+
     // Kısmi seçim olduğu için parti TAŞINMAZ: yeni WO'da yeni parti doğar, kaynak
     // parti izsiz boşaldıysa silinir (manual-move'un kısmi taşıma yolu ile aynı).
     const sourceBatchIds = Array.from(
@@ -4110,7 +4163,7 @@ export class WorkOrderService {
 
     await recomputeStepStatus(tx, newReEntryStepId);
 
-    return newWo.workOrderNumber;
+    return { workOrderNumber: newWo.workOrderNumber, bypassRepointed };
   }
 
   /**

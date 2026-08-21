@@ -53,9 +53,10 @@
 -- biri güncellenip diğeri unutulabilirdi.
 --   • STOK ama bağlı  → "önce stok için aç, sonra Sipariş Bağla" sırası (74d92085
 --     öncesi `linkOrderLines` tipe dokunmuyordu). Onarım: scripts/fix_workorder_type_from_links.ts
---   • SİPARİŞE ÖZEL ama bağsız → bağ SÖKÜLMÜŞ ama tip geri alınmamış. Ters yön
---     bilinçli olarak otomatik DEĞİL (sipariş iptalinde ayrı bir CONVERT_TO_STOCK
---     kararı var), bu yüzden burada GÖZLEMLENİR: satır çıkarsa karar verilmelidir.
+--   • SİPARİŞE ÖZEL ama bağsız → bağ SÖKÜLMÜŞ ama tip geri alınmamış. `unlinkOrderLine`
+--     son bağ kalkınca STOK'a döner (simetrik), ama bu yol tek kapı DEĞİLDİR: sipariş
+--     satırı silinince pivot `onDelete: Cascade` ile SESSİZCE düşer ve o yolda tipe
+--     dokunan kimse yoktur. Yani ters yön gerçek bir açıktır ve burada yakalanır.
 -- CANCELLED/SUPERSEDED dışarıda: onlar tarihsel kayıttır, plan düzenlemesine kapalıdır
 -- (`assertPlanEditable`) ve geriye dönük "düzeltmek" donmuş belgeyi değiştirmek olurdu.
 SELECT wo.id AS work_order_id,

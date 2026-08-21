@@ -37,6 +37,7 @@ import { Prisma, PrintedDocType } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../../utils/code-format";
 import { printedDocumentService } from "../printed-document.service";
+import { OPEN_OUTSTANDING } from "./fason-open-dispatch.helper";
 
 export interface DispatchSurgeryResult {
   /** Bu operasyonda sevk cerrahisi gören kaynak parti id'leri (boşalma → K17 izi kararı için). */
@@ -60,13 +61,6 @@ function emptyResult(): DispatchSurgeryResult {
     closedDispatchNos: [],
   };
 }
-
-/** Açık+outstanding sevk where-parçası (isBatchLockedTx (b) koşuluyla aynı tanım). */
-const OPEN_OUTSTANDING = {
-  cancelledAt: null,
-  directShippedAt: null,
-  items: { some: { remainderClosedAt: null, receiptItems: { none: { isPartial: false, receipt: { cancelledAt: null } } } } },
-} as const;
 
 /**
  * FS sevk no üretici — tx İÇİNDE, mevcut üreteç kalıbı (PREFIX+GGAAYY+NNNN,

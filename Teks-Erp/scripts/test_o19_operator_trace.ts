@@ -5,7 +5,7 @@
 //   2. openSack açılışta tartıyla → weighedById set (weighSack ile parite).
 //   3. Yeniden tartı (weighSack) → en son tartan kazanır.
 //   5. dispatchShipment → Shipment.dispatchedById set (sevk eden izi).
-//   6. İçerik değişince (roll çıkar → resetSackWeightsTx) → weighedById/weighedAt/weightKg temizlenir.
+//   6. İçerik değişince (roll çıkar → markSackContentChangedTx) → weighedById/weighedAt/weightKg temizlenir.
 // Not: mühür (sealSack/Sack.sealedAt/sealedById) + markReady/Shipment.readyById KALDIRILDI —
 //      çuval depoda düzenlenebilir; sevk izi Shipment.dispatchedById'de tutulur.
 // =============================================================================
