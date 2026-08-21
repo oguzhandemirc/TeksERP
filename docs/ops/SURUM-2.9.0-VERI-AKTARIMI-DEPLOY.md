@@ -132,6 +132,7 @@ On ikisi ayrı iş, hepsi aynı pull'da:
 | 27 | `20260821120000_roll_variance_source_ref` | **Fason çekmesi defteri** — `roll_variances`'e 1 nullable UUID (`sourceRefId`) + 1 index. Mevcut satırlar NULL kalır, hiçbir yol onları okumaz; `roll_variances` küçük tablo → vardiya içinde uygulanabilir |
 | 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). ⚠️ **MÜKERRER VARKEN DÜŞER — BİLİNÇLİ** (ön kontrol DO bloğu okunur hata verir ve sonraki migration'lar koşmaz). 2026-08-22 SIFIRLAMA sonrası boş DB'de risksiz; sıfırlama ERTELENİRSE önce Sistem → Mükerrer Kayıtlar ile §10'daki grupları birleştir, sonra `migrate deploy`. Dolu bir kopyaya (`tekserp_saha`) UYGULAMA |
 | 29 | `20260821150100_roll_reason_codes` | **Sebep KODU topun satırında** — `rolls`'a 2 nullable VARCHAR(64) (`entryReasonCode`, `cancelReasonCode`); metadata-only, index yok, vardiya içinde uygulanabilir. Kodu sunucu metinden türetir → APK değişmeden dolar; eski satırlar NULL (geriye doldurulmaz; sıfırlama sonrası zaten yok) |
+| 30 | `20260821220000_reason_preset_legacy_texts` | **Hazır sebep ESKİ ADLARI** — `reason_presets.legacyTexts TEXT[]` (DEFAULT boş dizi, additive). Etiket/metin düzenlenince eskisi listeye düşer; bayat listeli tablet eski metni gönderince kod yine çözülür (anomali taramasında ölçüldü). Onlarca satırlık tablo, vardiya içinde uygulanabilir |
 
 ⚠️ **25 ve 26, envanterdeki 24'ten ÖNCEKİ damgayı taşır ama SONRA yazıldı** —
 Prisma dizin adına göre sıralar, yani gerçek uygulama sırası 19→20→21 olacak.
@@ -285,6 +286,7 @@ Beklenen (hepsi provada ölçüldü):
 | Backend log'u (2) | `[permission-catalog] 1 yeni izin eklendi: master-data:merge` (ilk açılış) |
 | `*_nameFold_key` (28) | **3 satır, `uniq = t` VE `partial = t`** — satır eksikse migration düşmüş demektir (muhtemelen mükerrer varken koşuldu: `migrate status` + hata metnindeki grup listesi); `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
 | `rolls` sebep kodları (29) | **2 satır**, `character varying(64)`, `YES` |
+| `reason_presets.legacyTexts` (30) | `psql … -c "SELECT data_type, column_default FROM information_schema.columns WHERE table_name='reason_presets' AND column_name='legacyTexts';"` → `ARRAY` / `ARRAY[]::text[]` |
 
 ---
 

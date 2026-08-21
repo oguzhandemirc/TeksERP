@@ -2995,6 +2995,18 @@ model ReasonPreset {
   isActive     Boolean          @default(true)
   /// Kod kataloğundan doğdu → silinemez, boot'ta yeniden uzlaştırılır.
   isSystem     Boolean          @default(false)
+  /// ESKİ ADLAR (alias listesi, 2026-08-21) — `label`/`fullText` her düzenlendiğinde
+  /// önceki değer buraya düşer (`ReasonPresetService.update` TEK yazar; API'den
+  /// düzenlenmez). NEDEN: kod sabit, metin sunumdur — ama bugünkü mobil istemci
+  /// sunucuya METİN gönderiyor (`fullText ?? label`) ve bayat listeli tablet /
+  /// çevrimdışı zemin ESKİ metni göndermeye devam eder. `resolveReasonCode` güncel
+  /// metinden sonra burayı da eşler → etiket düzenlemesi `Roll.*ReasonCode`'u
+  /// düşürmez (ölçüldü: 2026-08-21 taze-DB sondasında eski fullText → NULL'a
+  /// düşüyordu). Sektör kalıbı: stabil anahtar + eşanlamlı/eski-ad sözlüğü.
+  /// Sınır 20 (en eskisi düşer); aynı katlanmış metin iki kez yazılmaz; güncel
+  /// label/fullText'e eşit olan temizlenir. Belirsizlik (iki satır aynı eski adı
+  /// taşıyor) → çözücü kod UYDURMAZ, NULL döner.
+  legacyTexts  String[]         @default([])
 
   createdById String? @db.Uuid
   updatedById String? @db.Uuid

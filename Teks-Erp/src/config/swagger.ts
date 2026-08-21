@@ -10,7 +10,11 @@ import path from 'path';
 // ürettiği '\' forward-slash'a normalize edilir (yoksa prod'da 0 dosya eşlenir).
 const apiGlob = (rel: string): string => path.join(__dirname, rel).replace(/\\/g, '/');
 
-const options: swaggerJSDoc.Options = {
+// Bekçi (`scripts/test_swagger_spec.ts`) aynı seçenekleri `failOnErrors: true` ile
+// koşar: bozuk bir @openapi YAML bloğu burada yalnız konsola düşer ve uç Swagger'dan
+// sessizce kaybolur (2026-08-21'de `roll-attribute-targets` böyle kayboldu) — bekçi
+// onu geliştirme anında kırmızıya çevirir.
+export const swaggerOptions: swaggerJSDoc.Options = {
     definition: {
         openapi: '3.0.0',
         info: {
@@ -47,6 +51,7 @@ const options: swaggerJSDoc.Options = {
     ], // Generate documentation from routes and controllers (recursive; dev .ts + prod .js)
 };
 
+const options = swaggerOptions;
 const swaggerSpec = swaggerJSDoc(options);
 
 // F11: sessiz bozulmayı görünür kıl — glob CWD/uzantı uyuşmazlığında spec boş kalır.

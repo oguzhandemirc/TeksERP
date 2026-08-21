@@ -25,6 +25,24 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL, options: PG_
 const adapter = new PrismaPg(pool);
 const prisma = new PrismaClient({ adapter });
 
+/**
+ * Birleştirilmiş (tombstone, `mergedIntoId` dolu) ana veriyi DİRİLTME (2026-08-21).
+ * `upsert` kodla bulduğu satıra `isActive: true` yazıyordu — dev DB'de MUS-002
+ * "Moda Tekstil" birleştirilip pasife alınmıştı, fixture onu yeniden aktif yapıyor
+ * ve DB seddinin (nameFold UNIQUE, tombstone hariç) dışında tuttuğu kaydı canlı
+ * sanıyordu. Tombstone varsa ATLA ve söyle; yoksa eski upsert. Taze/CI DB'de
+ * tombstone yoktur — davranış değişmez.
+ */
+type MergeAware = { findUnique(args: { where: { code: string }; select: { id: true; mergedIntoId: true } }): Promise<{ id: string; mergedIntoId: string | null } | null> };
+async function isMergedTombstone(delegate: MergeAware, code: string, label: string): Promise<boolean> {
+  const row = await delegate.findUnique({ where: { code }, select: { id: true, mergedIntoId: true } });
+  if (row?.mergedIntoId) {
+    console.log(`⏭️  ${label} ${code}: birleştirilmiş (tombstone) — fixture DİRİLTMEZ, atlandı`);
+    return true;
+  }
+  return false;
+}
+
 async function main() {
   console.log("🌱 TeksERP — dev/test iş fixture seed'i...\n");
 
@@ -39,6 +57,7 @@ async function main() {
     { code: "KRINKLE", name: "KRINKLE" },
   ];
   for (const it of items) {
+    if (await isMergedTombstone(prisma.item, it.code, "ürün")) continue;
     await prisma.item.upsert({
       where: { code: it.code },
       update: { name: it.name, itemType: "FABRIC", unit: "MT", isActive: true },
@@ -64,6 +83,7 @@ async function main() {
     { code: "LACIVERT", name: "Fixture Lacivert", hex: "#1e3a8a", sortOrder: 40 },
   ];
   for (const c of colors) {
+    if (await isMergedTombstone(prisma.color, c.code, "renk")) continue;
     await prisma.color.upsert({
       where: { code: c.code },
       update: { name: c.name, hex: c.hex, sortOrder: c.sortOrder, isActive: true },
@@ -109,6 +129,7 @@ async function main() {
   ];
   let branchCount = 0;
   for (const cu of customers) {
+    if (await isMergedTombstone(prisma.customer, cu.code, "müşteri")) continue;
     const customer = await prisma.customer.upsert({
       where: { code: cu.code },
       update: { name: cu.name, isActive: true },

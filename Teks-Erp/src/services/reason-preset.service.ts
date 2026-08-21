@@ -46,6 +46,8 @@ export type ReasonPresetDto = {
   sortOrder: number;
   isActive: boolean;
   isSystem: boolean;
+  /** Eski adlar (salt-okunur; `update()` yazar) — çözücünün ikinci sözlüğü. */
+  legacyTexts: string[];
 };
 
 const SELECT = {
@@ -58,7 +60,36 @@ const SELECT = {
   sortOrder: true,
   isActive: true,
   isSystem: true,
+  legacyTexts: true,
 } satisfies Prisma.ReasonPresetSelect;
+
+/** Eski-ad listesinin üst sınırı — en eskisi düşer (sınırsız dizi = sınırsız satır). */
+const LEGACY_TEXTS_MAX = 20;
+
+/**
+ * Etiket/metin değişiminde eski-ad listesini türetir: önceki değerler EKLENİR,
+ * güncel label/fullText'e katlanmış-eşit olanlar ve tekrarlar TEMİZLENİR, en yeni
+ * `LEGACY_TEXTS_MAX` kalır. Saf fonksiyon — bekçi doğrudan ölçer.
+ */
+export function nextLegacyTexts(
+  current: { label: string; fullText: string | null; legacyTexts: string[] },
+  next: { label: string; fullText: string | null },
+): string[] {
+  const currentFolds = new Set([foldNameForCompare(next.label), ...(next.fullText ? [foldNameForCompare(next.fullText)] : [])]);
+  const candidates = [...current.legacyTexts, current.label, ...(current.fullText ? [current.fullText] : [])];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  // Sondan başa: en YENİ eski ad korunur, tekrar edenin eskisi düşer.
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const t = candidates[i].trim();
+    if (!t) continue;
+    const f = foldNameForCompare(t);
+    if (!f || currentFolds.has(f) || seen.has(f)) continue;
+    seen.add(f);
+    out.unshift(t);
+  }
+  return out.slice(-LEGACY_TEXTS_MAX);
+}
 
 // ── ÖNBELLEK ────────────────────────────────────────────────────────────────
 /** Kind → TÜM satırlar (gizliler DAHİL — doğrulama onları da tanımalı). */
@@ -121,7 +152,7 @@ function cachedRows(kind: ReasonPresetKind): ReasonPresetDto[] | null {
 /** Yalnız metin saklayan iki kind — diğerleri `validateVarianceReason`'dan geçer. */
 export type TextReasonKind = Extract<ReasonPresetKind, "ROLL_MANUAL_ENTRY" | "ROLL_CANCEL">;
 
-type ReasonRow = { code: string; label: string; fullText: string | null };
+type ReasonRow = { code: string; label: string; fullText: string | null; legacyTexts: string[] };
 
 /** Kind'ın satırları: taze önbellek → DB tazeleme → (DB boşsa) kod kataloğu. */
 async function rowsForTextKind(kind: TextReasonKind): Promise<ReasonRow[]> {
@@ -133,12 +164,17 @@ async function rowsForTextKind(kind: TextReasonKind): Promise<ReasonRow[]> {
     code: s.code,
     label: s.label,
     fullText: s.fullText ?? null,
+    legacyTexts: [],
   }));
 }
 
 /**
- * Metin → kod. Satırın `fullText` VEYA `label`'ı ile katlanmış eşitlik; yoksa null.
- * Gizli satır da eşleşir (kod geçerliliği görünürlükten bağımsız).
+ * Metin → kod. SIRA: ① güncel `fullText`/`label` katlanmış eşitlik → ② ESKİ ADLAR
+ * (`legacyTexts` — etiket düzenlenmiş, bayat listeli tablet eski metni gönderiyor)
+ * → ③ null. Gizli satır da eşleşir (kod geçerliliği görünürlükten bağımsız).
+ * ⚠️ Eski adda BELİRSİZLİK (iki satır aynı eski adı taşıyor) → kod UYDURULMAZ, null.
+ * Güncel ad her zaman eski addan ÖNCE gelir: B'nin bugünkü adı A'nın dünkü adıysa
+ * operatörün gördüğü B'dir.
  */
 export async function resolveReasonCodeFromText(
   kind: TextReasonKind,
@@ -151,7 +187,9 @@ export async function resolveReasonCodeFromText(
     (r) =>
       foldNameForCompare(r.fullText ?? r.label) === folded || foldNameForCompare(r.label) === folded,
   );
-  return hit ? hit.code : null;
+  if (hit) return hit.code;
+  const legacyHits = rows.filter((r) => r.legacyTexts.some((t) => foldNameForCompare(t) === folded));
+  return legacyHits.length === 1 ? legacyHits[0].code : null;
 }
 
 /** Açık kod: katalogda yoksa 400. Dönüşte satırın metni de var (metin boş gelirse dolsun). */
@@ -299,13 +337,24 @@ export const ReasonPresetService = {
     const label = input.label?.trim();
     if (input.label !== undefined && !label) throw new AppError("Etiket boş olamaz", 400);
 
+    // Etiket/metin değişiyorsa önceki değerler ESKİ ADLAR listesine düşer — bayat
+    // listeli tablet eski metni göndermeye devam eder, kod düşmesin (şema notu).
+    const nextLabel = label ?? current.label;
+    const nextFullText =
+      input.fullText !== undefined || label
+        ? resolveFullText(current.kind, input.fullText, nextLabel)
+        : current.fullText;
+    const textChanged = nextLabel !== current.label || (nextFullText ?? null) !== (current.fullText ?? null);
+    const legacyTexts = textChanged
+      ? nextLegacyTexts(current, { label: nextLabel, fullText: nextFullText ?? null })
+      : current.legacyTexts;
+
     const row = await prisma.reasonPreset.update({
       where: { id },
       data: {
         ...(label ? { label } : {}),
-        ...(input.fullText !== undefined || label
-          ? { fullText: resolveFullText(current.kind, input.fullText, label ?? current.label) }
-          : {}),
+        ...(input.fullText !== undefined || label ? { fullText: nextFullText } : {}),
+        ...(textChanged ? { legacyTexts } : {}),
         ...(input.requiresText !== undefined ? { requiresText: input.requiresText } : {}),
         ...(input.isActive !== undefined ? { isActive: input.isActive } : {}),
         updatedById: userId ?? null,

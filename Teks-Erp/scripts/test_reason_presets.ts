@@ -19,6 +19,11 @@
 //      eşleşir, serbest metne kod UYDURULMAZ (null), açık kod katalogda
 //      doğrulanır (uydurma → REASON_CODE_INVALID), açık kod + boş metin →
 //      metin preset'ten dolar, açık kod + metin → metin EZİLMEZ.
+//   §6 ESKİ ADLAR (`legacyTexts`): etiket/metin düzenlenince eskisi listeye
+//      düşer; bayat tablet eski metni gönderince kod YİNE çözülür; güncel ad
+//      eski ada karşı önceliklidir; iki satırda aynı eski ad → belirsiz → null;
+//      sınır 20; metin dışı düzenleme listeye dokunmaz; eski ada geri dönüş
+//      listeyi temizler. Sistem satırı için çevrimdışı zemin (seed metni) senaryosu.
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -284,6 +289,75 @@ async function main(): Promise<void> {
     derivedOnly.code === "ETIKET_KOPMUS" && derivedOnly.text === "Etiketi kopmuş / okunmuyor",
     `${derivedOnly.code} / ${derivedOnly.text}`,
   );
+
+  // ── §6 ESKİ ADLAR (legacyTexts): etiket düzenlenince eski metin kodu DÜŞÜRMEZ ──
+  console.log("\n── §6 Eski adlar — etiket düzenlemesi sonrası bayat metin ──");
+  const aliasA = await ReasonPresetService.create({ kind: CANCEL, label: TEST_LABEL + " ALIAS BIR" });
+  created.push(aliasA.id);
+  check("yeni satır eski ad listesi BOŞ doğar", aliasA.legacyTexts.length === 0);
+  const renamed1 = await ReasonPresetService.update(aliasA.id, { label: TEST_LABEL + " ALIAS IKI" });
+  check(
+    "etiket değişince eski etiket + eski fullText listeye düşer (katlanmış tekil)",
+    renamed1.legacyTexts.length === 1 && renamed1.legacyTexts[0] === TEST_LABEL + " ALIAS BIR",
+    JSON.stringify(renamed1.legacyTexts),
+  );
+  check(
+    "bayat tablet ESKİ etiketi gönderir → kod YİNE çözülür",
+    (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " ALIAS BIR")) === aliasA.code,
+  );
+  check("güncel etiket de çözülür", (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " ALIAS IKI")) === aliasA.code);
+  const renamed2 = await ReasonPresetService.update(aliasA.id, { fullText: TEST_LABEL + " ALIAS IKI tam metin" });
+  check(
+    "fullText değişince eski fullText de listeye düşer (etiketle aynıysa tekrar YAZILMAZ)",
+    renamed2.legacyTexts.length === 1 && renamed2.legacyTexts[0] === TEST_LABEL + " ALIAS BIR",
+    JSON.stringify(renamed2.legacyTexts),
+  );
+  const renamed3 = await ReasonPresetService.update(aliasA.id, { label: TEST_LABEL + " ALIAS UC" });
+  check(
+    "ikinci yeniden adlandırma: iki eski ad + eski fullText birikti, sıra eski→yeni",
+    JSON.stringify(renamed3.legacyTexts) ===
+      JSON.stringify([TEST_LABEL + " ALIAS BIR", TEST_LABEL + " ALIAS IKI", TEST_LABEL + " ALIAS IKI tam metin"]),
+    JSON.stringify(renamed3.legacyTexts),
+  );
+  check("en eski ad hâlâ çözülür", (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " ALIAS BIR")) === aliasA.code);
+  // requiresText/isActive düzenlemesi METİN değiştirmez → liste dokunulmaz
+  const untouched = await ReasonPresetService.update(aliasA.id, { requiresText: true });
+  check("metin dışı düzenleme eski ad listesine DOKUNMAZ", JSON.stringify(untouched.legacyTexts) === JSON.stringify(renamed3.legacyTexts));
+  // Eski ada geri dönüş: eski ad güncel olur, listeden TEMİZLENİR (çift kaynak olmasın)
+  const back = await ReasonPresetService.update(aliasA.id, { label: TEST_LABEL + " ALIAS BIR" });
+  check(
+    "eski ada geri dönünce o ad listeden temizlenir, öncekisi (ALIAS UC) listeye girer",
+    !back.legacyTexts.some((t) => t === TEST_LABEL + " ALIAS BIR") && back.legacyTexts.includes(TEST_LABEL + " ALIAS UC"),
+    JSON.stringify(back.legacyTexts),
+  );
+  // Öncelik: B'nin GÜNCEL adı A'nın ESKİ adıysa → B kazanır (operatörün gördüğü B)
+  const aliasB = await ReasonPresetService.create({ kind: CANCEL, label: TEST_LABEL + " ALIAS UC" });
+  created.push(aliasB.id);
+  check("güncel ad eski ada karşı ÖNCELİKLİ (B kazanır)", (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " ALIAS UC")) === aliasB.code);
+  // Belirsizlik: B de yeniden adlandırılınca aynı eski ad iki satırda → kod UYDURULMAZ
+  await ReasonPresetService.update(aliasB.id, { label: TEST_LABEL + " ALIAS DORT" });
+  check("aynı eski ad iki satırda → belirsiz → null (uydurulmaz)", (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " ALIAS UC")) === null);
+  // Sınır: 25 yeniden adlandırma → en fazla 20 eski ad, en eskisi düşer
+  for (let i = 1; i <= 25; i++) await ReasonPresetService.update(aliasB.id, { label: `${TEST_LABEL} ALIAS N${i}` });
+  const capped = await prisma.reasonPreset.findUniqueOrThrow({ where: { id: aliasB.id }, select: { legacyTexts: true } });
+  check("eski ad listesi 20 ile sınırlı (en eskisi düşer)", capped.legacyTexts.length === 20 && capped.legacyTexts[19] === `${TEST_LABEL} ALIAS N24`, `${capped.legacyTexts.length} / son=${capped.legacyTexts[19]}`);
+  check("sınırı aşan en eski ad artık çözülmez (bilinçli)", (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " ALIAS DORT")) === null);
+  // Sistem satırı (BUILTIN çevrimdışı zemin senaryosu): label+fullText değişir, tablet seed metnini gönderir
+  const ym = await prisma.reasonPreset.findFirstOrThrow({
+    where: { kind: CANCEL, code: "YANLIS_METRAJ" },
+    select: { id: true, label: true, fullText: true, legacyTexts: true },
+  });
+  try {
+    await ReasonPresetService.update(ym.id, { label: "Metraj hatalı", fullText: "Metraj hatalı girildi (yeni)" });
+    check("SİSTEM satırı düzenlendi: çevrimdışı zemin (seed fullText) yine koda çözülür", (await resolveReasonCodeFromText(CANCEL, "Yanlış metraj girildi")) === "YANLIS_METRAJ");
+    check("SİSTEM satırı: eski label da çözülür", (await resolveReasonCodeFromText(CANCEL, "yanlış metraj")) === "YANLIS_METRAJ");
+    check("SİSTEM satırı: yeni metin çözülür", (await resolveReasonCodeFromText(CANCEL, "Metraj hatalı girildi (yeni)")) === "YANLIS_METRAJ");
+  } finally {
+    // Sistem satırı birebir geri: metinler servisle, eski-ad listesi ham (test izi bırakmasın).
+    await ReasonPresetService.update(ym.id, { label: ym.label, fullText: ym.fullText });
+    await prisma.reasonPreset.update({ where: { id: ym.id }, data: { legacyTexts: ym.legacyTexts } });
+    await refreshReasonPresetCache();
+  }
 }
 
 main()

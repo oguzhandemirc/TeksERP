@@ -671,7 +671,7 @@ router.patch(
  * /api/work-orders/{id}/roll-attribute-targets:
  *   get:
  *     tags: [WorkOrders]
- *     summary: "Toplara da uygula" için aday toplar (partiye göre gruplu)
+ *     summary: '"Toplara da uygula" için aday toplar (partiye göre gruplu)'
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Parti → top listesi (engellenenler sebebiyle işaretli) }

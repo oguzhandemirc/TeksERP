@@ -24,6 +24,8 @@ export interface ReasonPreset {
   sortOrder: number;
   isActive: boolean;
   isSystem: boolean;
+  /** Eski adlar (salt-okunur, 2026-08-21) — etiket düzenlenince sunucu eski metni de koda çözsün diye tutulur. */
+  legacyTexts?: string[];
 }
 
 /**

@@ -1,0 +1,16 @@
+-- =============================================================================
+-- HAZIR SEBEP ESKİ ADLARI — reason_presets.legacyTexts · 2026-08-21
+-- =============================================================================
+-- NEDEN: `Roll.entryReasonCode/cancelReasonCode` (20260821150100) sunucuda
+-- METİNDEN türetiliyor — mobil istemci bugün kod değil `fullText ?? label`
+-- gönderiyor. Fabrika bir sebebin etiketini/metnini düzenlediğinde bayat
+-- listeli tablet ve çevrimdışı zemin (`BUILTIN_*`) ESKİ metni göndermeye devam
+-- eder; eski metin artık hiçbir satırla eşleşmediği için kod NULL'a düşüyordu
+-- (taze-DB sondasında ölçüldü). Çözüm sektör kalıbı: stabil anahtar (`code`) +
+-- ESKİ-AD sözlüğü. `update()` her etiket/metin değişiminde önceki değeri bu
+-- diziye düşürür; çözücü güncel metinden sonra burayı da eşler.
+--
+-- Additive, DEFAULT'lu TEXT[] (boş dizi) — metadata-only; `statement_timeout`
+-- gerekmez (tablo onlarca satır). Prisma şeması: `legacyTexts String[] @default([])`.
+-- =============================================================================
+ALTER TABLE "reason_presets" ADD COLUMN IF NOT EXISTS "legacyTexts" TEXT[] DEFAULT ARRAY[]::TEXT[];
