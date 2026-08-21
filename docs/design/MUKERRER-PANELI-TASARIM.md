@@ -149,3 +149,37 @@ paneli küçük ama somut (8 top).
 - **P2+ için açık:** `fieldPicks` (alan-bazlı survivorship) · şube/istasyon/makine/kategori
   (merge-map + `mergedIntoId` migration) · hayalet top paneli · `apply_merge_decisions.ts` CSV köprüsü ·
   kumaş "kodu düzelt" eylemi (kod harf-ikizi, ürün farklı).
+
+---
+
+## 7) Bulanık kural 4. tur — KARŞILAŞTIRMA BİRİMİ KELİME (2026-08-22, saha kararı)
+
+**Tetik:** canlı kopyada müşteri tarafında tek bulanık aday `BOYER EMRE | BOYER` çıktı;
+kullanıcı **"farklı firma"** dedi. Ölçüm: Jaro-Winkler **0.900** (tam eşikte), token-sort
+**0.500**. Yani skoru eşiğe taşıyan şey JW'nin **ortak ön ek bonusu**ydu — adın sonuna
+eklenen ANLAMLI bir kelimeyi ("EMRE") görmezden geliyor. Aynı mekanizma "MODA" ↔
+"MODA ANKARA"yı da aday yapardı.
+
+**Karar:** karakter bazlı Jaro-Winkler **kaldırıldı**; skor artık **sıralı kelime
+hizalaması** — kelimeler sıralanıp karşılıklı eşlenir, eşi olmayan kelime 0 alır:
+- **FIRM** (müşteri/fason): gürültü kelimeleri düşer, skor = çiftlerin **ortalaması**.
+  `BOYER EMRE ↔ BOYER = 0.50` · `X A.Ş. ↔ X LTD ŞTİ = 1.00` · `ŞAHİN ↔ SAHİM = 0.80`.
+- **PRODUCT** (kumaş/renk): değişmedi — kelime sayısı farkı 0, skor = **en düşük** çift.
+- Her ikisinde sıkıştırılmış metin eşitse (yalnız boşluk/ayraç farkı) → 1.
+
+**Kazanç — eşik artık okunabilir bir ölçek:** %100 yalnız yazım/boşluk farkı · %90
+neredeyse aynı · %80 tek kelimede bir harf hatası. "Fazladan anlamlı kelime" sınıfı
+**hiçbir eşikte** gelmez (0.50'de kalır) — eskiden %90'da geliyor, %80'e inince de
+gelmeye devam ediyordu.
+
+**Canlı kopyada son durum (eşik %90 ve %80 için AYNI):**
+
+| Varlık | Grup / çift | Bulanık adaylar |
+|---|---|---|
+| Müşteri | **0 / 0** | — (`BOYER EMRE\|BOYER` düştü) |
+| Kumaş | 8 / 12 | `MIKROCANVAS \| MİKRO CANVAS` %100 (yazım) |
+| Renk | 5 / 5 | `292-7791-GRİ \| GRİ-(292-7791)` · `GÜMÜŞ-BEYAZ \| BEYAZ-GÜMÜŞ` (kelime sırası) |
+| Fason | 3 / 3 | — (hepsi kesin ad) |
+
+Bekçi: `test_duplicate_detection` **60** kontrol (§1'de `BOYER EMRE` sınıfı ve fixture'da
+A–E çifti ayrıca ölçülüyor).

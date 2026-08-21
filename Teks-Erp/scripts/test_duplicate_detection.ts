@@ -23,14 +23,15 @@ import { DuplicateDetectionService } from "../src/services/duplicate-detection.s
 import { DuplicateReviewService, pairKeyOf } from "../src/services/duplicate-review.service";
 import { MasterDataMergeService } from "../src/services/master-data-merge.service";
 import {
-  jaroWinkler,
-  tokenSortRatio,
+  editRatio,
+  alignedTokenScore,
   numericTokensEqual,
   stripNoiseWords,
-  firmNameSimilarity as nameSimilarity,
+  compactKey,
+  firmNameSimilarity,
   productNameSimilarity,
 } from "../src/utils/string-similarity";
-import { FUZZY_NOISE_WORDS } from "../src/constants/duplicate-rules";
+import { FUZZY_NOISE_WORDS, DUPLICATES_FUZZY_MIN_PCT } from "../src/constants/duplicate-rules";
 
 let pass = 0;
 let fail = 0;
@@ -59,20 +60,28 @@ async function main(): Promise<void> {
 
   // ── §1 Benzerlik yardımcıları ─────────────────────────────────────────────
   console.log("\n── §1 Benzerlik yardımcıları (saf) ──");
-  check("JW: yazım varyantı yüksek", jaroWinkler("sahin tekstil", "sahin tekstıl") > 0.95);
-  check("JW: alakasız düşük", jaroWinkler("sahin tekstil", "moda boya") < 0.6);
-  check("token-sort: kelime sırası cezalandırılmaz", tokenSortRatio("sahin tekstil", "tekstil sahin") >= 0.99);
-  check("token-sort: ALT KÜME %100 DEĞİL ('moda' vs 'moda ankara' — token-set tuzağı)", tokenSortRatio("moda", "moda ankara") < 0.6);
+  check("editRatio: tek harf hatası ~0.8 (5 harfli kelime)", Math.abs(editRatio("sahin", "sahim") - 0.8) < 0.001, editRatio("sahin", "sahim").toFixed(2));
+  check("hizalama: kelime SIRASI önemsiz", alignedTokenScore("sahin tekstil", "tekstil sahin", "avg") === 1);
+  check("hizalama(avg): fazladan anlamlı kelime skoru böler ('boyer emre' ↔ 'boyer')", Math.abs(alignedTokenScore("boyer emre", "boyer", "avg") - 0.5) < 0.001);
+  check("hizalama(min): tek kelime farkı skoru çeker", alignedTokenScore("kristal gumus ekru", "kristal gumus gri", "min") < 0.4);
+  check("compactKey: yalnız boşluk/ayraç farkı aynı anahtar", compactKey("mikro canvas") === compactKey("mikrocanvas"));
   check("numerik koruma: V-01 ≠ V-02", !numericTokensEqual("kristal v-01", "kristal v-02"));
   check("numerik koruma: 035 ≠ 036", !numericTokensEqual("quality 035", "quality 036"));
   check("numerik koruma: ikisi de sayısız → eşit", numericTokensEqual("sahin tekstil", "sahin tekstil as"));
   check("numerik koruma: aynı sayı, farklı ayraç → eşit", numericTokensEqual("mrt04 v-04", "mrt04 v 04"));
   check("gürültü: 'sahin tekstil ltd sti' → 'sahin'", stripNoiseWords("sahin tekstil ltd sti", FUZZY_NOISE_WORDS) === "sahin");
   check("gürültü: hepsi gürültüyse orijinal korunur", stripNoiseWords("tekstil as", FUZZY_NOISE_WORDS) === "tekstil as");
-  const sim = nameSimilarity("sahin tekstil as", "sahin tekstil ltd sti", FUZZY_NOISE_WORDS);
-  check("birleşik benzerlik: firma eklentileri düşünce ≈1", sim >= 0.99, sim.toFixed(2));
-  const simSubset = nameSimilarity("moda tekstil", "moda ankara tekstil", FUZZY_NOISE_WORDS);
-  check("birleşik benzerlik: alt-küme ad eşik altı (%90) — farklı firma olabilir", simSubset < 0.9, simSubset.toFixed(2));
+  const sim = firmNameSimilarity("sahin tekstil as", "sahin tekstil ltd sti", FUZZY_NOISE_WORDS);
+  check("FİRMA: eklenti farkı (A.Ş. ↔ LTD ŞTİ) → 1", sim === 1, sim.toFixed(2));
+  // ⭐ SAHA KARARI 2026-08-22: "BOYER EMRE" ile "BOYER" FARKLI FİRMA. İlk sürümde
+  // Jaro-Winkler ön ek bonusu bunu tam 0.900 ile aday yapıyordu (canlı kopyada çıktı).
+  const simExtra = firmNameSimilarity("boyer emre", "boyer", FUZZY_NOISE_WORDS);
+  check("FİRMA: fazladan ANLAMLI kelime → 0.50 (BOYER EMRE ≠ BOYER, saha kararı)", Math.abs(simExtra - 0.5) < 0.001, simExtra.toFixed(2));
+  check("FİRMA: en düşük eşikte (%50) bile 'BOYER EMRE' aday DEĞİL (0.50 < 0.50+)", simExtra < DUPLICATES_FUZZY_MIN_PCT / 100 + 0.001 && simExtra <= 0.5);
+  const simSubset = firmNameSimilarity("moda tekstil", "moda ankara tekstil", FUZZY_NOISE_WORDS);
+  check("FİRMA: alt-küme ad eşik altı (%90)", simSubset < 0.9, simSubset.toFixed(2));
+  const simTypo = firmNameSimilarity("sahin tekstil", "sahim tekstil", FUZZY_NOISE_WORDS);
+  check("FİRMA: tek harf hatası %80 bandında (eşik düşürülünce gelir)", simTypo >= 0.79 && simTypo < 0.9, simTypo.toFixed(2));
   // ÜRÜN profili — canlı ölçümdeki yanlış pozitif aileleri (hepsi 0 ya da eşik altı olmalı)
   check("ÜRÜN: 'kristal gumus ekru' ↔ 'kristal gumus gri' varyant → eşik altı", productNameSimilarity("kristal gumus ekru", "kristal gumus gri") < 0.9);
   check("ÜRÜN: 'kristal' ↔ 'kristal altin' token sayısı farklı → 0", productNameSimilarity("kristal", "kristal altin") === 0);
@@ -84,13 +93,16 @@ async function main(): Promise<void> {
   // ── §2 Fixture + tarama ───────────────────────────────────────────────────
   console.log("\n── §2 Tarama: kesin ad · kimlik · bulanık ad ──");
   const custA = await prisma.customer.create({ data: { code: `${TAG}-CA`, name: `${TAG} Şahin Tekstil A.Ş.`, taxNumber: "123 456 78 90" }, select: { id: true } });
-  // B: çekirdekte küçük bir yazım farkı ("TEKSTILL" gürültü DEĞİL) → benzerlik %90-%99
-  // bandında kalsın ki §4 eşik testi gerçekten bir şey ölçsün (çekirdekler birebir
-  // aynıysa eşik ne olursa olsun 1.0 çıkar — ilk kurguda tam bu yüzden kördü).
-  const custB = await prisma.customer.create({ data: { code: `${TAG}-CB`, name: `${TAG} SAHIN TEKSTILL LTD. ŞTİ.`, taxNumber: "1234567890" }, select: { id: true } });
+  // B: çekirdek kelimede TEK HARF farkı (SAHİM) → skor tam %90 bandında kalsın ki §4
+  // eşik testi gerçekten bir şey ölçsün (çekirdekler birebir aynıysa eşik ne olursa
+  // olsun 1.0 çıkar — ilk kurguda tam bu yüzden kördü).
+  const custB = await prisma.customer.create({ data: { code: `${TAG}-CB`, name: `${TAG} SAHİM TEKSTİL LTD. ŞTİ.`, taxNumber: "1234567890" }, select: { id: true } });
   const custC = await prisma.customer.create({ data: { code: `${TAG}-CC`, name: `${TAG} Şahin Tekstil 2`, taxNumber: "9876543210" }, select: { id: true } });
   const custD = await prisma.customer.create({ data: { code: `${TAG}-CD`, name: `${TAG} Bambaşka Firma` }, select: { id: true } });
-  created.customers.push(custA.id, custB.id, custC.id, custD.id);
+  // E: A'nın adına ANLAMLI bir kelime eklenmiş hâli — saha kararı gereği aday OLMAMALI
+  // ("BOYER EMRE" ≠ "BOYER"). VKN'si YOK ki kimlik kuralı devreye girip testi körleştirmesin.
+  const custE = await prisma.customer.create({ data: { code: `${TAG}-CE`, name: `${TAG} Şahin Tekstil Emre` }, select: { id: true } });
+  created.customers.push(custA.id, custB.id, custC.id, custD.id, custE.id);
   const colA = await prisma.color.create({ data: { code: `${TAG}-R1`, name: `${TAG} BEYAZ 055`, hex: "#ffffff" }, select: { id: true } });
   // Renk katlaması: sayı token'ları başa, kalanlar kendi sırasıyla — "BEYAZ 055" ≡ "055-BEYAZ".
   const colB = await prisma.color.create({ data: { code: `${TAG}-R2`, name: `${TAG} 055-BEYAZ`, hex: "#fffffe" }, select: { id: true } });
@@ -120,6 +132,8 @@ async function main(): Promise<void> {
   check("A–C aday DEĞİL (numerik koruma: '2')", !pairAC);
   const pairAD = scanC.groups.flatMap((g) => g.pairs).find((p) => p.pairKey === pk(custA.id, custD.id));
   check("A–D aday DEĞİL (alakasız ad)", !pairAD);
+  const pairAE = scanC.groups.flatMap((g) => g.pairs).find((p) => p.pairKey === pk(custA.id, custE.id));
+  check("⭐ A–E aday DEĞİL (fazladan anlamlı kelime: 'Şahin Tekstil' ↔ '… Emre' — BOYER EMRE saha kararı)", !pairAE);
   const grpAB = scanC.groups.find((g) => g.records.some((r) => r.id === custA.id));
   check("grup A+B (C/D dışarıda) ve referans sayısı ölçüldü", Boolean(grpAB) && grpAB!.records.length === 2 && grpAB!.records.every((r) => r.refCount !== null), `${grpAB?.records.length} kayıt`);
   check("grup rozetleri IDENTITY+FUZZY, skor ≥0.9", Boolean(grpAB?.rules.includes("IDENTITY") && grpAB?.rules.includes("FUZZY_NAME") && (grpAB?.maxScore ?? 0) >= 0.9));
