@@ -67,6 +67,11 @@ const mergeSchema = previewSchema.extend({
   // Önizlemede GÖRÜLEN çakışma sayısı. Uyuşmazlık → 409: per-satır onay yükü
   // olmadan "operatör gerçekten gördü" garantisi veren tek mekanizma.
   acknowledgedConflicts: z.number().int().min(0),
+  // ALAN SEÇİMİ (P2): `{ alan: kayıtId }` — hangi alanın değeri HANGİ KAYITTAN
+  // alınacak. Değer DEĞİL kayıt taşınır: uç serbest bir alan düzenleme API'sine
+  // dönüşmesin (gerekçe `constants/merge-fields.ts` başlığında). Alan adı ve
+  // kayıt üyeliği serviste ayrıca doğrulanır (Zod yalnız biçimi bilir).
+  fieldPicks: z.record(z.string().min(1).max(64), z.uuid()).optional(),
 });
 
 /**
@@ -123,12 +128,17 @@ router.post(
         sourceIds: body.sourceIds,
         reason: body.reason,
         acknowledgedConflicts: body.acknowledgedConflicts,
+        fieldPicks: body.fieldPicks,
         userId: req.user?.userId,
       });
       res.json({
         success: true,
         data,
-        message: `${data.mergedCount} kayıt birleştirildi.`,
+        message:
+          `${data.mergedCount} kayıt birleştirildi.` +
+          (data.fieldsApplied.length > 0
+            ? ` ${data.fieldsApplied.length} alan kaynak kayıttan alındı.`
+            : ""),
       });
     } catch (e) {
       next(e);

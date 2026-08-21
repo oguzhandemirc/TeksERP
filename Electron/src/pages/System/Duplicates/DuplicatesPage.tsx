@@ -63,6 +63,9 @@ export function DuplicatesPage() {
   const [typed, setTyped] = useState("");
   const [reason, setReason] = useState("");
   const [seenConflicts, setSeenConflicts] = useState(false);
+  // Alan seçimi (P2): yalnız operatörün DEĞİŞTİRDİĞİ alanlar tutulur; gönderilmeyen
+  // alanda sunucunun önerisi geçerli olur (ikisi de aynı kuralı uygular).
+  const [fieldPicks, setFieldPicks] = useState<Record<string, string>>({});
 
   // Karar diyaloğu
   const [decideFor, setDecideFor] = useState<{
@@ -101,9 +104,17 @@ export function DuplicatesPage() {
         sourceIds,
         reason: reason.trim(),
         acknowledgedConflicts: preview?.conflicts.length ?? 0,
+        // Sunucu önerisiyle AYNI olan seçimleri göndermeye gerek yok; farklı olanları
+        // açıkça yaz (öneri kuralı iki tarafta da aynı).
+        fieldPicks: Object.fromEntries(
+          Object.entries(fieldPicks).filter(([field, recordId]) => {
+            const choice = preview?.fieldChoices.find((f) => f.field === field);
+            return choice ? choice.suggestedFromId !== recordId : false;
+          }),
+        ),
       }),
     onSuccess: (res) => {
-      toast.success(`${res.data.mergedCount} kayıt birleştirildi.`);
+      toast.success(res.message ?? `${res.data.mergedCount} kayıt birleştirildi.`);
       closeMerge();
       invalidate();
     },
@@ -153,6 +164,7 @@ export function DuplicatesPage() {
     setTyped("");
     setReason("");
     setSeenConflicts(false);
+    setFieldPicks({});
   }
 
   const groups = useMemo(() => scan?.groups ?? [], [scan]);
@@ -440,6 +452,9 @@ export function DuplicatesPage() {
                         onChange={() => {
                           setSurvivorId(r.id);
                           setTyped("");
+                          // Hedef değişince alan seçimleri anlamını yitirir (öneriler
+                          // yeni hedefe göre baştan hesaplanır) — sıfırla.
+                          setFieldPicks({});
                         }}
                       />
                       <code className="text-xs text-muted-foreground">{r.code ?? "—"}</code>
@@ -462,6 +477,10 @@ export function DuplicatesPage() {
                   onReasonChange={setReason}
                   seenConflicts={seenConflicts}
                   onSeenConflictsChange={setSeenConflicts}
+                  fieldPicks={fieldPicks}
+                  onFieldPickChange={(field, recordId) =>
+                    setFieldPicks((prev) => ({ ...prev, [field]: recordId }))
+                  }
                 />
               )}
             </div>

@@ -26,8 +26,13 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { markTravelerCardsDirtyTx } from "./helpers/traveler-card-dirty.helper";
-import { foldColorNameForCompare } from "./helpers/name-normalize.helper";
+import { foldColorNameForCompare, foldNameForCompare } from "./helpers/name-normalize.helper";
 import { DuplicateReviewService } from "./duplicate-review.service";
+import {
+  MERGEABLE_FIELDS,
+  MERGE_NAME_FIELD,
+  isMergeableField,
+} from "../constants/merge-fields";
 import {
   MERGE_ENTITIES,
   MERGE_MAP,
@@ -84,6 +89,23 @@ export interface MergeConflictRow {
   truncated: boolean;
 }
 
+/**
+ * ALAN SEÇİMİ (survivorship, P2 2026-08-22) — panelde alan başına bir satır.
+ * `values` gruptaki HER kaydın o alandaki değeri; `suggestedFromId` sunucunun
+ * önerisi (kural: survivor'ın değeri DOLUYSA o; değilse en çok referanslı kaynağın
+ * dolu değeri; hiçbiri dolu değilse survivor). Öneri BAĞLAYICI DEĞİL — seçim
+ * operatörün; ama boş bırakılırsa uygulanan da budur.
+ */
+export interface MergeFieldChoice {
+  field: string;
+  label: string;
+  kind: "text" | "ref" | "number";
+  values: Array<{ recordId: string; value: string | null }>;
+  suggestedFromId: string;
+  /** Kayıtlar arasında gerçekten FARK var mı — panel yalnız farklıları öne çıkarır. */
+  differs: boolean;
+}
+
 export interface MergePreview {
   entity: MergeEntity;
   survivor: { id: string; code: string | null; name: string } | null;
@@ -94,6 +116,8 @@ export interface MergePreview {
   warnings: string[];
   moves: MergeMoveRow[];
   conflicts: MergeConflictRow[];
+  /** Alan alan hangi değer kalsın (P2). Boş dizi = bu varlıkta seçilebilir alan yok. */
+  fieldChoices: MergeFieldChoice[];
   sideEffects: string[];
   totalRowsToMove: number;
   /** Tüm sayımlar gerçekten ölçülebildi mi (biri bile `null` ise false). */
@@ -157,6 +181,20 @@ interface Record4 {
   isActive: boolean;
   mergedIntoId: string | null;
   [k: string]: unknown;
+}
+
+/**
+ * Alan değerini panel/karşılaştırma için METNE indirger; boş/anlamsız değer `null`.
+ * ⚠️ `null` ile `""` AYNI kovaya düşer (ikisi de "boş") — yoksa öneri kuralı boş
+ * string'i "dolu" sayıp gerçekten dolu bir kaynağı elemiş olurdu.
+ */
+function fieldValueOf(row: Record4, field: string): string | null {
+  const raw = row[field];
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "number") return String(raw);
+  if (typeof raw === "boolean") return raw ? "true" : "false";
+  const s = String(raw).trim();
+  return s.length > 0 ? s : null;
 }
 
 async function loadRecords(entity: MergeEntity, ids: string[]): Promise<Record4[]> {
@@ -310,6 +348,36 @@ export class MasterDataMergeService {
       );
     }
 
+    // ── ALAN SEÇENEKLERİ (P2) ────────────────────────────────────────────────
+    // Öneri kuralı MDM standardıdır (completeness → trust → recency): DOLU olan
+    // kazanır; ikisi de doluysa survivor'ınki (operatör onu "kalacak kayıt" seçti);
+    // survivor boşsa EN ÇOK REFERANSLI kaynağın dolu değeri (en çok kullanılan kayıt
+    // en güvenilir veriyi taşır varsayımı), eşitlikte ilk kaynak.
+    const fieldChoices: MergeFieldChoice[] = [];
+    if (survivor) {
+      const ordered = [survivor, ...sources];
+      const refCounts = new Map<string, number>();
+      for (const r of sources) refCounts.set(r.id, (await countReferences(entity, r.id)) ?? 0);
+      const sourcesByRef = [...sources].sort(
+        (a, b) => (refCounts.get(b.id) ?? 0) - (refCounts.get(a.id) ?? 0),
+      );
+      for (const f of MERGEABLE_FIELDS[entity]) {
+        const values = ordered.map((r) => ({ recordId: r.id, value: fieldValueOf(r, f.field) }));
+        const survivorValue = fieldValueOf(survivor, f.field);
+        const donor = sourcesByRef.find((s) => fieldValueOf(s, f.field) !== null);
+        const suggestedFromId = survivorValue !== null ? survivor.id : (donor?.id ?? survivor.id);
+        const distinct = new Set(values.map((v) => v.value ?? ""));
+        fieldChoices.push({
+          field: f.field,
+          label: f.label,
+          kind: f.kind ?? "text",
+          values,
+          suggestedFromId,
+          differs: distinct.size > 1,
+        });
+      }
+    }
+
     const sideEffects: string[] = [];
     if (entity === "customer") {
       sideEffects.push("İlgili topların ve çuvalların etiketleri 'yeniden bas' olarak işaretlenir.");
@@ -338,6 +406,7 @@ export class MasterDataMergeService {
       warnings,
       moves,
       conflicts,
+      fieldChoices,
       sideEffects,
       totalRowsToMove,
       measuredAll,
@@ -441,12 +510,21 @@ export class MasterDataMergeService {
       reason: string;
       acknowledgedConflicts: number;
       userId?: string;
+      /**
+       * ALAN SEÇİMİ (P2): `{ alan: kayıtId }` — o alanın değeri HANGİ KAYITTAN
+       * alınacak. Değer değil KAYIT seçilir (bkz. `constants/merge-fields.ts`):
+       * uç böylece serbest bir alan düzenleme API'sine dönüşmez. Verilmeyen alan
+       * survivor'da neyse öyle kalır (önizlemedeki öneri de budur).
+       */
+      fieldPicks?: Record<string, string>;
     },
   ): Promise<{
     survivorId: string;
     mergedCount: number;
     movedRows: Array<{ table: string; column: string; count: number }>;
     conflictsResolved: number;
+    /** Survivor'a yazılan alanlar (audit + panel özeti). */
+    fieldsApplied: Array<{ field: string; from: string; value: string | null }>;
   }> {
     const entity = assertEntity(rawEntity);
     const meta = META[entity];
@@ -573,7 +651,62 @@ export class MasterDataMergeService {
           );
         }
 
-        return { movedRows, conflictsResolved, survivorName: survivor.name, sources };
+        // 8) ALAN SEÇİMİ (P2) — survivor'a kaynaktan seçilen değerleri yaz.
+        // ⚠️ SIRA LOAD-BEARING: claim'den SONRA. Kaynaklar artık tombstone
+        // (`mergedIntoId` dolu) olduğu için ad seçimi `<tablo>_nameFold_key` partial
+        // UNIQUE'iyle kavga etmez (kısıt tombstone'u dışlar). Claim'den ÖNCE yazsaydık
+        // "kaynağın adını survivor'a taşı" en sık senaryoda P2002 verirdi.
+        const fieldsApplied: Array<{ field: string; from: string; value: string | null }> = [];
+        const data: Record<string, unknown> = {};
+        for (const [field, fromId] of Object.entries(params.fieldPicks ?? {})) {
+          if (!isMergeableField(entity, field)) {
+            throw AppError.badRequest(`'${field}' alanı birleştirmede seçilemez.`);
+          }
+          const donor = fromId === survivor.id ? survivor : sources.find((s) => s.id === fromId);
+          if (!donor) {
+            throw AppError.badRequest(
+              "Alan için seçilen kayıt bu birleştirme grubunda değil (listeyi yenileyin).",
+            );
+          }
+          if (fromId === survivor.id) continue; // Survivor'ın kendi değeri — yazmaya gerek yok.
+          const raw = donor[field] ?? null;
+          data[field] = raw;
+          fieldsApplied.push({ field, from: donor.code ?? donor.id, value: fieldValueOf(donor, field) });
+        }
+        if (Object.keys(data).length > 0) {
+          // Ad seçildiyse: gruptaki kayıtlar DIŞINDA canlı bir eş var mı? DB seddi
+          // (yalnız 3 tabloda ve yalnız enforce edilmişse) tek başına yetmez —
+          // `assertNameNotDuplicate`in tx içi ikizi. Renk kendi katlamasını kullanır.
+          if (Object.prototype.hasOwnProperty.call(data, MERGE_NAME_FIELD)) {
+            const newName = String(data[MERGE_NAME_FIELD] ?? "").trim();
+            if (!newName) throw AppError.badRequest("Ad boş olamaz.");
+            const fold = (v: string): string =>
+              entity === "color" ? foldColorNameForCompare(v) : foldNameForCompare(v);
+            const target = fold(newName);
+            const others = await del.findMany({
+              where: { mergedIntoId: null, id: { notIn: [survivor.id, ...sourceIds] } },
+              select: { id: true, code: true, name: true },
+            });
+            const clash = others.find((o) => fold(String(o.name)) === target);
+            if (clash) {
+              throw AppError.conflict(
+                `'${newName}' adı başka bir kayıtta kullanılıyor (kod: ${String(clash.code ?? "—")}). ` +
+                  "Ad seçimini değiştirin ya da önce o kaydı da birleştirin.",
+              );
+            }
+          }
+          await del.updateMany({ where: { id: survivor.id }, data });
+        }
+
+        return {
+          movedRows,
+          conflictsResolved,
+          survivorName: survivor.name,
+          sources,
+          fieldsApplied,
+          // Audit'in "önce" tarafı — tx içindeki TAZE hâl (pre-tx okuma bayat olabilir).
+          survivorBefore: { ...survivor },
+        };
       },
       { timeout: MERGE_TX_TIMEOUT_MS, maxWait: 10_000 },
     );
@@ -597,6 +730,27 @@ export class MasterDataMergeService {
       });
     }
 
+    // Survivor'a yazılan alanlar AYRI bir audit satırıdır: kaynağın "birleşti" izi
+    // ile hedefin "alanı değişti" izi farklı sorulardır ("bu kaydın adı neden değişti?"
+    // sorusunun cevabı survivor'ın kaydında aranır).
+    if (result.fieldsApplied.length > 0) {
+      await AuditService.log({
+        userId: params.userId,
+        action: "UPDATE",
+        tableName: meta.table,
+        recordId: params.survivorId,
+        oldData: Object.fromEntries(
+          result.fieldsApplied.map((f) => [f.field, fieldValueOf(result.survivorBefore, f.field)]),
+        ),
+        newData: {
+          event: "MASTER_DATA_MERGE_FIELDS",
+          reason: params.reason.trim(),
+          ...Object.fromEntries(result.fieldsApplied.map((f) => [f.field, f.value])),
+          fieldsFrom: Object.fromEntries(result.fieldsApplied.map((f) => [f.field, f.from])),
+        },
+      });
+    }
+
     // Mükerrer inceleme kuyruğuna KARAR izi (2026-08-22): survivor × her kaynak çifti
     // MERGED. Best-effort ve tx DIŞINDA — kuyruk kaydı birleştirmeyi geri sarmaz.
     await DuplicateReviewService.markMerged(
@@ -612,6 +766,7 @@ export class MasterDataMergeService {
       mergedCount: result.sources.length,
       movedRows: result.movedRows,
       conflictsResolved: result.conflictsResolved,
+      fieldsApplied: result.fieldsApplied,
     };
   }
 }

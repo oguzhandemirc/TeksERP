@@ -43,6 +43,20 @@ export interface MergeConflictRow {
   truncated: boolean;
 }
 
+/**
+ * ALAN SEÇİMİ (survivorship, P2). `values` gruptaki her kaydın değeri,
+ * `suggestedFromId` sunucunun önerisi (survivor doluysa o, değilse en çok
+ * referanslı kaynağın dolu değeri). Seçim DEĞER değil KAYIT üzerinden yapılır.
+ */
+export interface MergeFieldChoice {
+  field: string;
+  label: string;
+  kind: "text" | "ref" | "number";
+  values: Array<{ recordId: string; value: string | null }>;
+  suggestedFromId: string;
+  differs: boolean;
+}
+
 export interface MergePreview {
   entity: MergeEntity;
   survivor: { id: string; code: string | null; name: string } | null;
@@ -52,6 +66,7 @@ export interface MergePreview {
   warnings: string[];
   moves: MergeMoveRow[];
   conflicts: MergeConflictRow[];
+  fieldChoices: MergeFieldChoice[];
   sideEffects: string[];
   totalRowsToMove: number;
   measuredAll: boolean;
@@ -74,6 +89,8 @@ export interface MergeResult {
   mergedCount: number;
   movedRows: Array<{ table: string; column: string; count: number }>;
   conflictsResolved: number;
+  /** Survivor'a kaynaktan yazılan alanlar (P2). */
+  fieldsApplied: Array<{ field: string; from: string; value: string | null }>;
 }
 
 // ── Mükerrer paneli v2 (P1) — tespit + kararlar ───────────────────────────────
@@ -168,6 +185,8 @@ export const mergeService = {
       sourceIds: string[];
       reason: string;
       acknowledgedConflicts: number;
+      /** `{ alan: kayıtId }` — hangi alanın değeri hangi kayıttan alınsın (P2). */
+      fieldPicks?: Record<string, string>;
     },
   ) =>
     apiClient

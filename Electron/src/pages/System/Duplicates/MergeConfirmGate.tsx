@@ -26,6 +26,8 @@ export function MergeConfirmGate({
   onReasonChange,
   seenConflicts,
   onSeenConflictsChange,
+  fieldPicks,
+  onFieldPickChange,
 }: {
   preview: MergePreview;
   typed: string;
@@ -34,9 +36,19 @@ export function MergeConfirmGate({
   onReasonChange: (v: string) => void;
   seenConflicts: boolean;
   onSeenConflictsChange: (v: boolean) => void;
+  /** `{ alan: kayıtId }` — boş bırakılan alan için sunucu önerisi geçerlidir. */
+  fieldPicks: Record<string, string>;
+  onFieldPickChange: (field: string, recordId: string) => void;
 }) {
   const moves = preview.moves.filter((m) => m.count === null || m.count > 0);
   const survivorCode = preview.survivor?.code ?? preview.survivor?.name ?? "";
+  // Yalnız GERÇEKTEN FARKLI alanlar sorulur: 12 satırlık bir tablo her birleştirmede
+  // aynı değeri iki kez gösterirse operatör tabloyu okumayı bırakır (onay yorgunluğu).
+  const decisions = preview.fieldChoices.filter((f) => f.differs);
+  const codeOf = (recordId: string): string =>
+    recordId === preview.survivor?.id
+      ? (preview.survivor?.code ?? "hedef")
+      : (preview.sources.find((s) => s.id === recordId)?.code ?? "kaynak");
 
   if (!preview.canMerge) {
     return (
@@ -107,6 +119,53 @@ export function MergeConfirmGate({
             />
             <span>Çakışma listesini okudum ve yukarıdaki çözümleri kabul ediyorum.</span>
           </label>
+        </div>
+      )}
+
+      {decisions.length > 0 && (
+        <div>
+          <h4 className="mb-1 text-sm font-medium">Hangi bilgi kalsın?</h4>
+          <p className="mb-2 text-xs text-muted-foreground">
+            Yalnız kayıtlar arasında FARKLI olan alanlar listelenir. Dokunmazsanız işaretli
+            (önerilen) değer kalır: hedefte dolu olan, hedef boşsa en çok kullanılan kaydın değeri.
+            Birleşen kayıtlar kendi değerlerini tarihçe olarak korur.
+          </p>
+          <div className="space-y-2">
+            {decisions.map((f) => {
+              const selected = fieldPicks[f.field] ?? f.suggestedFromId;
+              return (
+                <div key={f.field} className="rounded border p-2 text-sm">
+                  <div className="mb-1 font-medium">{f.label}</div>
+                  <div className="space-y-1">
+                    {f.values.map((v) => (
+                      <label key={v.recordId} className="flex items-start gap-2">
+                        <input
+                          type="radio"
+                          className="mt-1"
+                          name={`field-${f.field}`}
+                          checked={selected === v.recordId}
+                          onChange={() => onFieldPickChange(f.field, v.recordId)}
+                        />
+                        <span className="min-w-0">
+                          {v.value === null ? (
+                            <span className="text-muted-foreground">(boş)</span>
+                          ) : f.kind === "ref" ? (
+                            <span>atanmış</span>
+                          ) : (
+                            <span className="break-words">{v.value}</span>
+                          )}
+                          <code className="ml-2 text-xs text-muted-foreground">
+                            {codeOf(v.recordId)}
+                            {v.recordId === preview.survivor?.id ? " · hedef" : ""}
+                          </code>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

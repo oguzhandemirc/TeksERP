@@ -183,3 +183,30 @@ gelmeye devam ediyordu.
 
 Bekçi: `test_duplicate_detection` **60** kontrol (§1'de `BOYER EMRE` sınıfı ve fixture'da
 A–E çifti ayrıca ölçülüyor).
+
+---
+
+## 8) P2 UYGULANDI (2026-08-22) — alan-bazlı survivorship
+
+- **Katalog** `src/constants/merge-fields.ts`: müşteri 12 · fason 5 · renk 3 · kumaş 1 alan.
+  ⚠️ `code` HİÇBİR varlıkta seçilebilir DEĞİL (belgeye basılır + `@unique`; kaynağın kodunu
+  survivor'a taşımak kısıt kavgası ve tombstone'un kimliğini bozar). Kimlik alanları
+  (`customer.type`, `item.unit`) listede yok — onlar zaten birleştirmeyi engelliyor.
+- **Seçim DEĞER değil KAYIT üzerinden** (`fieldPicks[alan] = kayıtId`). Serbest metin
+  alınsaydı uç, "birleştirme" kılığında sınırsız bir alan düzenleme API'si olurdu.
+- **Öneri kuralı** (MDM: completeness → trust → recency): survivor DOLUYSA o; değilse
+  EN ÇOK REFERANSLI kaynağın dolu değeri. Panel yalnız `differs` olan alanları sorar
+  (onay yorgunluğu); dokunulmayan alanda öneri uygulanır — kural iki tarafta da aynı.
+- **⚠️ SIRA LOAD-BEARING:** survivor alan yazımı ATOMİK CLAIM'DEN SONRA. Kaynaklar
+  tombstone olduktan sonra `<tablo>_nameFold_key` partial UNIQUE onları dışlar; claim'den
+  önce yazsaydık "kaynağın adını hedefe taşı" (en sık senaryo) P2002 verirdi.
+- **Ad seçiminde ek guard:** grup DIŞINDA canlı bir eş varsa 409 (tx geri sarar).
+  Bekçide bu RENK üzerinden ölçülür ve bilinçli: müşteri/kumaş/fasonda DB seddi bu durumun
+  oluşmasını zaten engelliyor (testin ilk hâli oraya takıldı — seddin çalıştığının kanıtı),
+  renkte sed yok ve renk katlaması `tr_fold`'dan geniş ("055-BORDO" ≡ "BORDO 055").
+- **Audit iki satır:** kaynakta `MASTER_DATA_MERGE` (birleşti), survivor'da
+  `MASTER_DATA_MERGE_FIELDS` (alanı değişti + hangi koddan geldiği) — "bu kaydın adı neden
+  değişti?" sorusunun cevabı kendi kaydında aranır.
+- Bekçi: `scripts/test_merge_field_picks.ts` **54** kontrol (§0 DMMF + kapalı alanlar,
+  §1 öneri kuralı, §2 uygulama + tombstone tarihçesi + audit, §3 üç guard + tx geri sarma,
+  §4 seçim verilmezse survivor'a dokunulmaz).
