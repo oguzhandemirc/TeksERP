@@ -289,6 +289,7 @@ Beklenen (hepsi provada ölçüldü):
 | `rolls` sebep kodları (29) | **2 satır**, `character varying(64)`, `YES` |
 | `reason_presets.legacyTexts` (30) | `psql … -c "SELECT data_type, column_default FROM information_schema.columns WHERE table_name='reason_presets' AND column_name='legacyTexts';"` → `ARRAY` / `ARRAY[]::text[]` |
 | `duplicate_reviews` (31) | `psql … -c "\d duplicate_reviews"` → 12 kolon, `duplicate_reviews_entity_pairKey_key` UNIQUE, `decidedById` FK → users; panel: Sistem → Mükerrer Kayıtlar ("Yeniden tara" gerekçeli adayları getirir; canlı kopyada ölçüm: kumaş 5+9 · renk 3 · fason 3 · müşteri 0 kesin/kimlik grubu) |
+| Mükerrer paneli uçları | `curl -s -H "Authorization: Bearer <token>" "$API/api/master-data/duplicates/candidates?entity=customer"` → `{success:true,data:{totals,groups}}`; `$API/api/rolls/duplicates?days=90` → hayalet top kümeleri. **Yeni izin YOK** — ana veri uçları `master-data:merge`, top ucu `roll:manual-adjust` (ikisi de mevcut). Panel: Sistem → Mükerrer Kayıtlar (4 varlık sekmesi + "Toplar (hayalet kayıt)") |
 
 ---
 

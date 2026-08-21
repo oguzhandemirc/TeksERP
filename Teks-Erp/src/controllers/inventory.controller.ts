@@ -192,6 +192,7 @@ export class InventoryController {
     this.manualAttributes = this.manualAttributes.bind(this);
     this.rescuePreview = this.rescuePreview.bind(this);
     this.rescueStuck = this.rescueStuck.bind(this);
+    this.listDuplicateRolls = this.listDuplicateRolls.bind(this);
   }
 
   /**
