@@ -126,3 +126,26 @@ temizlik kampanyası + sonra önleme. (2) Kumaşta asıl sorun **kod disiplini**
 aynı kodda farklı ürün) — "kodu düzelt" eylemi ve kod-tekilliği seddi birleştirmeden ayrı bir
 yol. (3) Bulanık eşleştirme kumaşta kapalı/muhafazakâr, firma adlarında açık. (4) Hayalet top
 paneli küçük ama somut (8 top).
+
+---
+
+## 6) P1 UYGULANDI (2026-08-22) — uygulama notları
+
+- **Kod:** `src/constants/duplicate-rules.ts` (kurallar, gürültü kelimeleri, eşik sabitleri) ·
+  `src/utils/string-similarity.ts` (Jaro-Winkler, **token-SORT**, numerik token koruması) ·
+  `src/services/duplicate-detection.service.ts` (tarama + gruplama + CSV) ·
+  `src/services/duplicate-review.service.ts` (kararlar, MERGED hook) · uçlar
+  `GET /api/master-data/duplicates/candidates[.csv]`, `GET/POST /duplicates/reviews`,
+  `DELETE /duplicates/reviews/:id` (hepsi `master-data:merge`) · Electron `DuplicatesPage`
+  (gerekçeli gruplar, çift başına **Ertele / Mükerrer değil / Geri aç**, CSV indir, eşik bilgisi) ·
+  ayar `duplicatesFuzzyEnabled` + `duplicatesFuzzyThresholdPct` (dört kapı; panel Ayarlar →
+  Müşteriler → "Mükerrer kayıtlar") · bekçi `scripts/test_duplicate_detection.ts` (47).
+- **Tasarımdan sapmalar (ölçülerek):** ① `token_set_ratio` **KULLANILMADI** — alt-küme adları
+  %100 sayıyor ("MODA" ⊂ "MODA ANKARA"); `token_sort_ratio` + gürültü kelimeleri yeterli (bekçi §1).
+  ①b ÜRÜN profili (kumaş/renk): gürültü kelimesi yok, token sayısı + numerik token eşit şartı, skor = sıralı token çiftlerinin EN DÜŞÜK oranı (birleşik token-sort oranı uzun ortak token'larla tek farklı kelimeyi sulandırıp "KRİSTAL GÜMÜŞ EKRU"↔"GRİ"yi %90'a çıkarıyordu — canlı kopyada ölçüldü, düzeltildi); yalnız yazım/boşluk farkı %100. Canlı kopya: kumaş bulanık 9 yanlış pozitif grup → 1 gerçek (MIKROCANVAS/MİKRO CANVAS), renk 9 → 2 (kelime sırası, insan incelesin). ② Bulanık eşik TEK sayı (max(JW, token-sort) üzerinde, yüzde) + bayrak — iki ayrı eşik panel
+  kalıbına (`numberField` tek alan) sığmıyordu ve ayrımın kullanıcıya anlamı yoktu. ③ Tarama
+  sonucu SAKLANMIYOR (`duplicate_scan_runs` yok — YAGNI; her tarama ms mertebesi).
+- **Canlı kopyada (2226 top ölçeği) tarama süresi:** ms mertebesi; bkz. deploy notu §4 satır 31.
+- **P2+ için açık:** `fieldPicks` (alan-bazlı survivorship) · şube/istasyon/makine/kategori
+  (merge-map + `mergedIntoId` migration) · hayalet top paneli · `apply_merge_decisions.ts` CSV köprüsü ·
+  kumaş "kodu düzelt" eylemi (kod harf-ikizi, ürün farklı).

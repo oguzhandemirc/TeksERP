@@ -147,6 +147,10 @@ export const updateSchema = z.strictObject({
   // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.
   fasonShrinkWarnEnabled: z.boolean().optional(),
   fasonShrinkTolerancePct: z.number().min(0).max(100).nullable().optional(),
+  // Mükerrer paneli (2026-08-22): bulanık ad eşleştirme bayrağı + eşik (yüzde).
+  // `null` = eşiği temizle → fabrika varsayılanı (90). Alt sınır 50 (gürültü).
+  duplicatesFuzzyEnabled: z.boolean().optional(),
+  duplicatesFuzzyThresholdPct: z.number().min(50).max(100).nullable().optional(),
   // ⚠️ Bu satır UNUTULURSA bayrak panelden AÇILAMAZ **ve daha kötüsü
   // KAPATILAMAZ** (`z.strictObject` → PATCH 400). 2026-08-05'te
   // `kk1DuplicateGuardEnabled` tam bu boşluktan geçti; bekçi:

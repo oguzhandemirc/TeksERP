@@ -487,6 +487,7 @@ model User {
   /// Birleştirme künyesi ters ilişkileri (kim birleştirdi).
   mergedCustomers                 Customer[]                @relation("CustomerMergedBy")
   mergedItems                     Item[]                    @relation("ItemMergedBy")
+  duplicateReviewsDecided         DuplicateReview[]         @relation("DuplicateReviewDecidedBy")
   mergedColors                    Color[]                   @relation("ColorMergedBy")
   mergedSubcontractors            Subcontractor[]           @relation("SubcontractorMergedBy")
 
@@ -3021,6 +3022,57 @@ model ReasonPreset {
   // Ekran sorgusu: "şu listenin aktif satırları, sırasıyla" (eşitlik önce).
   @@index([kind, isActive, sortOrder])
   @@map("reason_presets")
+}
+
+// =============================================================================
+// MÜKERRER İNCELEME KUYRUĞU — `DuplicateReview` (2026-08-22, mükerrer paneli v2 P1)
+// =============================================================================
+// Tespit motoru (`duplicate-detection.service`) aday ÇİFTLERİ her taramada yeniden
+// hesaplar (kesin ad · kimlik · bulanık ad) — saklanan şey aday değil KARARDIR:
+// operatör "mükerrer değil" dediyse o çift bir daha kuyruğa düşmez (Salesforce
+// "duplicate record set" / SAP "cleansing case" kalıbı). Karar ÇİFT bazlıdır
+// (kullanıcı kararı 2026-08-22): üçüncü kayıt gelince yeni çiftler yine sorulur.
+// `MERGED` satırını birleştirme motoru yazar (survivor×kaynak çiftleri) — `mergedIntoId`
+// zaten iz ama bu satır KARARIN izi (kim, ne zaman, hangi gerekçeyle birleştirdi).
+// `pairKey` = küçük id + ':' + büyük id → aynı çift hangi sırayla seçilirse seçilsin tek satır.
+// =============================================================================
+enum DuplicateReviewEntity {
+  CUSTOMER
+  ITEM
+  COLOR
+  SUBCONTRACTOR
+}
+
+enum DuplicateReviewDecision {
+  /// Operatör inceledi: bunlar AYNI kayıt değil — kuyruktan kalıcı düşer.
+  NOT_DUPLICATE
+  /// Birleştirildi (motor yazar).
+  MERGED
+  /// Sonra bakılacak — kuyrukta kalır, işaretli.
+  DEFERRED
+}
+
+model DuplicateReview {
+  id        String                  @id @default(uuid()) @db.Uuid
+  entity    DuplicateReviewEntity
+  /// `min(aId,bId):max(aId,bId)` — çiftin sıradan bağımsız anahtarı.
+  pairKey   String                  @db.VarChar(80)
+  aId       String                  @db.Uuid
+  bId       String                  @db.Uuid
+  decision  DuplicateReviewDecision
+  /// Karar anındaki tespit gerekçeleri (kural/skor/ayrıntı) — snapshot, sorgulanmaz.
+  evidence  Json?
+  note      String?                 @db.VarChar(500)
+  decidedById String?               @db.Uuid
+  decidedBy   User?                 @relation("DuplicateReviewDecidedBy", fields: [decidedById], references: [id])
+  decidedAt DateTime                @default(now()) @db.Timestamptz
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([entity, pairKey])
+  @@index([entity, decision])
+  @@map("duplicate_reviews")
 }
 
 // =============================================================================

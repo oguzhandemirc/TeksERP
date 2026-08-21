@@ -134,13 +134,27 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     icon: UsersRound,
     description: "Müşteri kartı ve şube (sevk noktası) davranışı.",
     keywords:
-      "müşteri şube sevk noktası branch ihracat kodu kart firma tedarikçi sevk yeri gizle",
+      "müşteri şube sevk noktası branch ihracat kodu kart firma tedarikçi sevk yeri gizle mükerrer birleştirme benzer ad bulanık eşik duplicate",
     kind: "flags",
     flags: [
       {
         key: "customerBranchesEnabled",
         title: "Müşteri şubeleri (sevk noktaları) özelliğini göster",
         desc: "Açıkken (varsayılan) müşteri kartında Şubeler sekmesi, yeni müşteri formunda şube taslağı ve sipariş formunda şube seçimi görünür. 'Her şube = ayrı müşteri' düzeninde çalışan firma kapatır — şube ekranları gizlenir; mevcut kayıtlardaki şube verisi ve sipariş bağları KORUNUR, sadece görünmez olur.",
+      },
+      {
+        key: "duplicatesFuzzyEnabled",
+        group: "Mükerrer kayıtlar",
+        title: "Mükerrer taramasında BENZER adları da aday göster (bulanık eşleştirme)",
+        desc: "Sistem → Mükerrer Kayıtlar ekranı müşteri/kumaş/renk/fason kayıtlarını üç kuralla tarar: aynı ad (büyük/küçük harf ve Türkçe karakter farkı sayılmaz), kimlik çakışması (vergi no, ihracat kodu, e-posta, telefon, kumaş kodu harf-ikizi) ve — bu ayar açıkken (varsayılan) — BENZER ad ('ŞAHİN TEKSTİL A.Ş.' ~ 'Sahin Tekstil Ltd.'). Benzerlik aşağıdaki eşiğin üstündeyse aday olur; sayı/varyant taşıyan adlar (KRİSTAL V-01 / V-02) birebir aynı sayıyı taşımıyorsa hiçbir zaman aday yapılmaz. Aday yalnız GÖSTERİR, hiçbir şey birleştirmez; 'Mükerrer değil' dediğin çift bir daha çıkmaz.",
+        numberField: {
+          numberKey: "duplicatesFuzzyThresholdPct",
+          label: "Benzerlik eşiği",
+          unit: "%",
+          min: 50,
+          max: 100,
+          emptyWarning: "Boş bırakılırsa fabrika varsayılanı (%90) kullanılır. 90 = neredeyse aynı; 70'in altı gürültü üretir.",
+        },
       },
     ],
   },
@@ -304,7 +318,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       {
         key: "shipmentConfirmationEnabled",
         title: "Sevk onayı adımı",
-        desc: "Kapalı (varsayılan): depo çuvallarını seç → doğrudan sevk edilir (stok o an düşer). Açık: önce PLANNED (planlı) sevkiyat kurulur; fiili çıkış ayrıca 'Sevk Kapısı' ekranından onaylanır. Stok her iki modda da yalnız çıkışta düşer.",
+        desc: "Kapalı (varsayılan): depo çuvallarını seç → doğrudan sevk edilir (stok o an düşer). Açık: önce PLANNED (planlı) sevkiyat kurulur; fiili çıkış ayrıca 'Sevk Kapısı' ekranından onaylanır. Stok her iki modda da yalnız çıkışta düşer. 'Sevk Kapısı' ekranı yalnız bu ayar AÇIKKEN menüde görünür; sevki geri alınan (storno) bir sevkiyat kapalı modda varsayılan olarak kapatılır (çuvallar depoya döner), beklemesi istenirse Sevkiyatlar ekranından 'Sevk Et' ile yeniden çıkarılır.",
       },
       {
         key: "shipmentUndoSameDayOnly",

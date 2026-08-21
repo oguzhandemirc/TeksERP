@@ -27,6 +27,8 @@ import {
   MAX_MERGE_SOURCES,
 } from "../services/master-data-merge.service";
 import { MERGE_ENTITIES } from "../constants/merge-map";
+import { DuplicateDetectionService } from "../services/duplicate-detection.service";
+import { DuplicateReviewService } from "../services/duplicate-review.service";
 
 const router = Router();
 
@@ -153,6 +155,174 @@ router.get(
       const entity = z.enum(MERGE_ENTITIES).parse(req.query.entity);
       const data = await MasterDataMergeService.findDuplicates(entity);
       res.json({ success: true, data });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MÜKERRER PANELİ v2 (P1, 2026-08-22) — aday tarama + inceleme kuyruğu
+// ─────────────────────────────────────────────────────────────────────────────
+const candidatesQuerySchema = z.object({
+  entity: z.enum(MERGE_ENTITIES),
+  includeNotDuplicate: z.enum(["true", "false"]).optional(),
+});
+
+/**
+ * @openapi
+ * /api/master-data/duplicates/candidates:
+ *   get:
+ *     tags: [MasterData]
+ *     summary: "Mükerrer aday taraması (kesin ad + kimlik + bulanık ad), gerekçeli çiftler ve gruplar"
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Tarama sonucu }
+ */
+router.get(
+  "/duplicates/candidates",
+  verifyToken,
+  requirePermission("master-data:merge"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = candidatesQuerySchema.parse(req.query);
+      const data = await DuplicateDetectionService.scan(q.entity, {
+        includeNotDuplicate: q.includeNotDuplicate === "true",
+      });
+      res.json({ success: true, data });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/master-data/duplicates/candidates.csv:
+ *   get:
+ *     tags: [MasterData]
+ *     summary: "Aday raporu CSV (noktalı virgül + BOM, tr-TR Excel)"
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: CSV dosyası }
+ */
+router.get(
+  "/duplicates/candidates.csv",
+  verifyToken,
+  requirePermission("master-data:merge"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = candidatesQuerySchema.parse(req.query);
+      const result = await DuplicateDetectionService.scan(q.entity, {
+        includeNotDuplicate: q.includeNotDuplicate === "true",
+      });
+      const csv = DuplicateDetectionService.toCsv(result);
+      const stamp = result.scannedAt.slice(0, 10);
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename="mukerrer-adaylar-${q.entity}-${stamp}.csv"`,
+      );
+      res.status(200).send(csv);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+const reviewsQuerySchema = z.object({
+  entity: z.enum(MERGE_ENTITIES),
+  decision: z.enum(["NOT_DUPLICATE", "MERGED", "DEFERRED"]).optional(),
+});
+
+/**
+ * @openapi
+ * /api/master-data/duplicates/reviews:
+ *   get:
+ *     tags: [MasterData]
+ *     summary: "İnceleme kararları (mükerrer değil / ertelendi / birleştirildi)"
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Karar listesi }
+ *   post:
+ *     tags: [MasterData]
+ *     summary: "Çift için karar ver (NOT_DUPLICATE | DEFERRED) — aynı çift tek satır"
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Karar }
+ */
+router.get(
+  "/duplicates/reviews",
+  verifyToken,
+  requirePermission("master-data:merge"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const q = reviewsQuerySchema.parse(req.query);
+      const data = await DuplicateReviewService.list(q.entity, q.decision);
+      res.json({ success: true, data });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+const decideSchema = z.object({
+  entity: z.enum(MERGE_ENTITIES),
+  aId: z.uuid(),
+  bId: z.uuid(),
+  decision: z.enum(["NOT_DUPLICATE", "DEFERRED"]),
+  note: z.string().trim().max(500).optional().nullable(),
+  // Karar anındaki gerekçe snapshot'ı (panel tarama sonucundan geçirir) — sorgulanmaz.
+  evidence: z.array(z.record(z.string(), z.unknown())).max(20).optional(),
+});
+
+router.post(
+  "/duplicates/reviews",
+  verifyToken,
+  requirePermission("master-data:merge"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const body = decideSchema.parse(req.body);
+      const data = await DuplicateReviewService.decide({
+        entity: body.entity,
+        aId: body.aId,
+        bId: body.bId,
+        decision: body.decision,
+        note: body.note ?? null,
+        evidence: body.evidence,
+        userId: req.user?.userId,
+      });
+      res.json({
+        success: true,
+        data,
+        message: body.decision === "NOT_DUPLICATE" ? "Çift 'mükerrer değil' olarak işaretlendi." : "Çift ertelendi.",
+      });
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/master-data/duplicates/reviews/{id}:
+ *   delete:
+ *     tags: [MasterData]
+ *     summary: "Kararı geri aç (çift bir sonraki taramada yine kuyruğa düşer); MERGED geri açılamaz"
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Geri açıldı }
+ *       409: { description: Birleştirilmiş çift geri açılamaz }
+ */
+router.delete(
+  "/duplicates/reviews/:id",
+  verifyToken,
+  requirePermission("master-data:merge"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const id = z.uuid().parse(req.params.id);
+      await DuplicateReviewService.reopen(id, req.user?.userId);
+      res.json({ success: true, message: "Karar geri açıldı." });
     } catch (e) {
       next(e);
     }

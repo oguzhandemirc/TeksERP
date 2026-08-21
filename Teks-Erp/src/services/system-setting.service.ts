@@ -11,6 +11,10 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import {
+  DEFAULT_DUPLICATES_FUZZY_THRESHOLD_PCT,
+  DUPLICATES_FUZZY_MIN_PCT,
+} from "../constants/duplicate-rules";
+import {
   sanitizeBlankGrid,
   sanitizeDocFields,
   sanitizeDocStyleConfig,
@@ -191,6 +195,10 @@ export const SETTING_KEYS = {
    * o kalıp burada "temizlendi" ile "sıfır tolerans"ı aynı yere düşürürdü.
    */
   FASON_SHRINK_TOLERANCE_PCT: "fason.shrinkTolerancePct",
+  /** Mükerrer paneli — bulanık ad eşleştirme açık mı (default TRUE). */
+  DUPLICATES_FUZZY_ENABLED: "duplicates.fuzzyEnabled",
+  /** Mükerrer paneli — bulanık ad benzerlik eşiği, YÜZDE (default 90, aralık 50-100). */
+  DUPLICATES_FUZZY_THRESHOLD_PCT: "duplicates.fuzzyThresholdPct",
   /** Tambur "TÜMDEN geri al" yalnız AYNI FABRİKA GÜNÜ içinde yapılabilsin mi.
    *  Default FALSE (sınır yok) — bilinçli. Asıl koruma parçaların kendisindedir
    *  (çuvala okutulmuş / sevke girmiş / yeniden kesilmiş parça zaten reddedilir);
@@ -889,6 +897,10 @@ export interface FeatureFlags {
   fasonShrinkWarnEnabled: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
   fasonShrinkTolerancePct: number;
+  /** Mükerrer paneli: bulanık ad eşleştirme (default TRUE). Kapalıyken yalnız kesin ad + kimlik. */
+  duplicatesFuzzyEnabled: boolean;
+  /** Mükerrer paneli: bulanık benzerlik eşiği — YÜZDE (default 90, 50-100). */
+  duplicatesFuzzyThresholdPct: number;
   /** Kurşun bypass düzeni açık mı (default FALSE/kapalı). ENFORCE edilir ama YALNIZ
    *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
    *  rejiminde biter (rejim atama satırında kalıcıdır). */
@@ -1177,6 +1189,8 @@ export class SystemSettingService {
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
+      duplicatesFuzzyEnabled: await readDuplicatesFuzzyEnabled(cacheClient),
+      duplicatesFuzzyThresholdPct: await readDuplicatesFuzzyThresholdPct(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
@@ -1220,8 +1234,9 @@ export class SystemSettingService {
     // demektir ve panel bunu gönderir, ama okuma tarafı hiçbir zaman null
     // döndürmez (varsayılana çözülür). İkisini tek tiple anlatmak, ya paneli
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
-    input: Omit<Partial<FeatureFlags>, "fasonShrinkTolerancePct"> & {
+    input: Omit<Partial<FeatureFlags>, "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct"> & {
       fasonShrinkTolerancePct?: number | null;
+      duplicatesFuzzyThresholdPct?: number | null;
     },
     userId: string | undefined
   ): Promise<ApiResponse<FeatureFlags>> {
@@ -1592,6 +1607,36 @@ export class SystemSettingService {
         SETTING_KEYS.FASON_SHRINK_TOLERANCE_PCT,
         v === null ? DEFAULT_FASON_SHRINK_TOLERANCE_PCT : v,
         "Fason kabulünde çekme toleransı (yüzde) — altındaki fark uyarı üretmez",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "duplicatesFuzzyEnabled")) {
+      if (typeof input.duplicatesFuzzyEnabled !== "boolean") {
+        throw AppError.badRequest("duplicatesFuzzyEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DUPLICATES_FUZZY_ENABLED,
+        input.duplicatesFuzzyEnabled,
+        "Mükerrer paneli — bulanık ad eşleştirme açık mı",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "duplicatesFuzzyThresholdPct")) {
+      const v = input.duplicatesFuzzyThresholdPct;
+      // `null` = "alanı temizledim" → fabrika varsayılanına (90) döner; çekme
+      // toleransıyla aynı kalıp. Alt sınır 50: canlı ölçümde 70 bile kumaşta 26
+      // yanlış pozitif üretti — daha düşüğü gürültüdür.
+      if (v !== null) {
+        if (typeof v !== "number" || !Number.isFinite(v) || v < DUPLICATES_FUZZY_MIN_PCT || v > 100) {
+          throw AppError.badRequest(
+            `Bulanık benzerlik eşiği ${DUPLICATES_FUZZY_MIN_PCT} ile 100 arasında olmalı (yüzde)`,
+          );
+        }
+      }
+      await this.set(
+        SETTING_KEYS.DUPLICATES_FUZZY_THRESHOLD_PCT,
+        v === null ? DEFAULT_DUPLICATES_FUZZY_THRESHOLD_PCT : v,
+        "Mükerrer paneli — bulanık ad benzerlik eşiği (yüzde)",
         userId
       );
     }
@@ -2502,6 +2547,44 @@ export async function readFasonShrinkTolerancePct(
   const parsed = asNumber(setting.value);
   if (parsed === null || !Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
     return DEFAULT_FASON_SHRINK_TOLERANCE_PCT;
+  }
+  return parsed;
+}
+
+/** Mükerrer paneli — bulanık ad eşleştirme (default TRUE; kayıt yoksa açık). */
+export async function readDuplicatesFuzzyEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DUPLICATES_FUZZY_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
+/**
+ * Mükerrer paneli — bulanık benzerlik eşiği (yüzde). Kayıt yoksa ya da aralık
+ * dışıysa varsayılan (90). Alt sınır `DUPLICATES_FUZZY_MIN_PCT` (50).
+ */
+export async function readDuplicatesFuzzyThresholdPct(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DUPLICATES_FUZZY_THRESHOLD_PCT },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_DUPLICATES_FUZZY_THRESHOLD_PCT;
+  const parsed = asNumber(setting.value);
+  if (
+    parsed === null ||
+    !Number.isFinite(parsed) ||
+    parsed < DUPLICATES_FUZZY_MIN_PCT ||
+    parsed > 100
+  ) {
+    return DEFAULT_DUPLICATES_FUZZY_THRESHOLD_PCT;
   }
   return parsed;
 }

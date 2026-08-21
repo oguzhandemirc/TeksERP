@@ -133,6 +133,7 @@ On ikisi ayrı iş, hepsi aynı pull'da:
 | 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ — YUMUŞAK KAPI** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). Tablo tablo bakar: **mükerrer yoksa index'i kurar, varsa `NOTICE` ile ATLAR** (deploy GEÇER; ilk sürüm "düşer" idi — 2026-08-22'de sıfırlama rafa kalkınca yumuşatıldı). Prod'da bugün 9 grup var → üç tabloda da ATLANIR; temizlik Sistem → Mükerrer Kayıtlar ile yapılınca **aynı dosya yeniden koşulur** (`npx prisma db execute --file …/20260821150000_name_fold_unique_live/migration.sql`, idempotent) → index kurulur. O güne kadar `test_db_invariants` §1 prod'da bu üç satırı KIRMIZI verir (bilerek: "enforce bekliyor") |
 | 29 | `20260821150100_roll_reason_codes` | **Sebep KODU topun satırında** — `rolls`'a 2 nullable VARCHAR(64) (`entryReasonCode`, `cancelReasonCode`); metadata-only, index yok, vardiya içinde uygulanabilir. Kodu sunucu metinden türetir → APK değişmeden dolar; eski satırlar NULL (geriye doldurulmaz; sıfırlama sonrası zaten yok) |
 | 30 | `20260821220000_reason_preset_legacy_texts` | **Hazır sebep ESKİ ADLARI** — `reason_presets.legacyTexts TEXT[]` (DEFAULT boş dizi, additive). Etiket/metin düzenlenince eskisi listeye düşer; bayat listeli tablet eski metni gönderince kod yine çözülür (anomali taramasında ölçüldü). Onlarca satırlık tablo, vardiya içinde uygulanabilir |
+| 31 | `20260822120000_duplicate_reviews` | **Mükerrer inceleme kuyruğu (panel v2 P1)** — YENİ tablo `duplicate_reviews` + 2 enum (`DuplicateReviewEntity`, `DuplicateReviewDecision`); mevcut tablolara DOKUNMAZ, boş doğar. Tespit motoru adayları her taramada yeniden hesaplar, burada yalnız KARAR saklanır ("mükerrer değil" / "ertelendi" / "birleştirildi"). Yeni ayar anahtarları boot'ta gerekmez (okuma varsayılana düşer: bulanık açık, eşik %90) |
 
 ⚠️ **25 ve 26, envanterdeki 24'ten ÖNCEKİ damgayı taşır ama SONRA yazıldı** —
 Prisma dizin adına göre sıralar, yani gerçek uygulama sırası 19→20→21 olacak.
@@ -287,6 +288,7 @@ Beklenen (hepsi provada ölçüldü):
 | `*_nameFold_key` (28) | Temiz tabloda `uniq = t` VE `partial = t`. **Prod'da bugün 0 satır BEKLENİR** (üç tabloda da mükerrer var → migration NOTICE ile atladı; `migrate status` "applied" der, log'da `[name_fold_unique] customers ATLANDI — N mükerrer grup` satırları görünür). Temizlik → aynı dosyayı yeniden koş → 3 satır. `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
 | `rolls` sebep kodları (29) | **2 satır**, `character varying(64)`, `YES` |
 | `reason_presets.legacyTexts` (30) | `psql … -c "SELECT data_type, column_default FROM information_schema.columns WHERE table_name='reason_presets' AND column_name='legacyTexts';"` → `ARRAY` / `ARRAY[]::text[]` |
+| `duplicate_reviews` (31) | `psql … -c "\d duplicate_reviews"` → 12 kolon, `duplicate_reviews_entity_pairKey_key` UNIQUE, `decidedById` FK → users; panel: Sistem → Mükerrer Kayıtlar ("Yeniden tara" gerekçeli adayları getirir; canlı kopyada ölçüm: kumaş 5+9 · renk 3 · fason 3 · müşteri 0 kesin/kimlik grubu) |
 
 ---
 

@@ -282,6 +282,12 @@ export interface FeatureFlags {
   /** Çekme toleransı — YÜZDE (default 10). Altındaki fark uyarı üretmez.
    *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */
   fasonShrinkTolerancePct: number;
+  /** Mükerrer paneli — bulanık ad eşleştirme açık mı (true=default). Kapalıyken
+   *  yalnız kesin ad + kimlik çakışması aday üretir. */
+  duplicatesFuzzyEnabled: boolean;
+  /** Mükerrer paneli — bulanık benzerlik eşiği, YÜZDE (default 90, 50-100).
+   *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */
+  duplicatesFuzzyThresholdPct: number;
   /** Kurşun bypass düzeni açık mı (false=default). Kurşun makinelerinde tablet YOK:
    *  iş fiziksel olarak yapılır ama dijital izlenmez; yetkili "Kurşun Dağıtım"
    *  ekranından işi fiziksel bir kurşun MAKİNESİNE atar (istasyon değil — PROCESS_QC

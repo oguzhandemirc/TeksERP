@@ -27,6 +27,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { markTravelerCardsDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { foldColorNameForCompare } from "./helpers/name-normalize.helper";
+import { DuplicateReviewService } from "./duplicate-review.service";
 import {
   MERGE_ENTITIES,
   MERGE_MAP,
@@ -596,6 +597,16 @@ export class MasterDataMergeService {
       });
     }
 
+    // Mükerrer inceleme kuyruğuna KARAR izi (2026-08-22): survivor × her kaynak çifti
+    // MERGED. Best-effort ve tx DIŞINDA — kuyruk kaydı birleştirmeyi geri sarmaz.
+    await DuplicateReviewService.markMerged(
+      entity,
+      params.survivorId,
+      result.sources.map((s) => s.id),
+      params.userId,
+      params.reason.trim(),
+    );
+
     return {
       survivorId: params.survivorId,
       mergedCount: result.sources.length,
@@ -791,7 +802,8 @@ async function markSideEffectsTx(
  * ("belgelerde hangi kod yazıyor?" sorusunun sayısal ipucu). Ölçülemezse `null`;
  * 0 DEĞİL (`backup-impact` disiplini — "sayamadım" ile "hiç yok" farklı cümleler).
  */
-async function countReferences(entity: MergeEntity, id: string): Promise<number | null> {
+/** Bir kaydın merge-map'teki tüm referans sayısı (ölçülemezse `null`). Tespit servisi de kullanır. */
+export async function countReferences(entity: MergeEntity, id: string): Promise<number | null> {
   let total = 0;
   for (const rule of MERGE_MAP[entity]) {
     if (rule.kind === "EXEMPT") continue;
