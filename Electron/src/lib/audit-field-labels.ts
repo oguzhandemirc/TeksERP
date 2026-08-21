@@ -12,6 +12,7 @@ const LABELS: Readonly<Record<string, string>> = {
   width: "En", currentQty: "Metraj", initialQty: "Giriş metrajı", weightKg: "Ağırlık (kg)",
   status: "Durum", qualityGrade: "Kalite", qualityGradeId: "Kalite", foldType: "Kat",
   barcode: "Barkod", colorId: "Renk", itemId: "Kumaş", entryReason: "Ekleme nedeni",
+  entryReasonCode: "Ekleme nedeni (kod)", cancelReasonCode: "İptal sebebi (kod)",
   workOrderNumber: "İş emri no", targetQuantity: "Hedef metraj", targetWeight: "Hedef ağırlık",
   targetItemId: "Hedef kumaş", targetColorId: "Hedef renk", routeTemplateId: "Rota şablonu",
   plannedStartDate: "Planlanan başlangıç", plannedEndDate: "Planlanan bitiş", type: "Tür",

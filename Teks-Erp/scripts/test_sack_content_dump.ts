@@ -66,11 +66,11 @@ async function main(): Promise<void> {
   const color = await prisma.color.findFirst({ where: { isActive: true }, select: { id: true, name: true }, orderBy: { code: "asc" } });
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-CDUMP-${ts}`, name: "DÖKÜM TEST MÜŞTERİ" },
+    data: { code: `TST-CDUMP-${ts}`, name: `DÖKÜM TEST MÜŞTERİ ${ts}` },
     select: { id: true, name: true },
   });
   const otherCustomer = await prisma.customer.create({
-    data: { code: `TST-CDUMP2-${ts}`, name: "DÖKÜM TEST MÜŞTERİ 2" },
+    data: { code: `TST-CDUMP2-${ts}`, name: `DÖKÜM TEST MÜŞTERİ 2 ${ts}` },
     select: { id: true, name: true },
   });
   const branch = await prisma.customerBranch.create({

@@ -52,9 +52,9 @@ const createdSwatchIds: string[] = [];
 let ITEM = "", ITEM2 = "", ADMIN = "", CUSTOMER = "", STATION = "";
 
 async function main(): Promise<void> {
-  const item = await prisma.item.create({ data: { code: `TST-CT-I-${ts}`, name: "CT KUMAŞ", itemType: "FABRIC", unit: "MT" }, select: { id: true } });
-  const item2 = await prisma.item.create({ data: { code: `TST-CT-I2-${ts}`, name: "CT KUMAŞ 2", itemType: "FABRIC", unit: "MT" }, select: { id: true } });
-  const customer = await prisma.customer.create({ data: { code: `TST-CT-C-${ts}`, name: "CT MÜŞTERİ" }, select: { id: true } });
+  const item = await prisma.item.create({ data: { code: `TST-CT-I-${ts}`, name: `CT KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  const item2 = await prisma.item.create({ data: { code: `TST-CT-I2-${ts}`, name: `CT KUMAŞ 2 ${ts}`, itemType: "FABRIC", unit: "MT" }, select: { id: true } });
+  const customer = await prisma.customer.create({ data: { code: `TST-CT-C-${ts}`, name: `CT MÜŞTERİ ${ts}` }, select: { id: true } });
   const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
   // NEDEN `type` (kind DEĞİL): aşağıdaki hata mesajının da dediği gibi burada istenen
   // INTERNAL bir istasyon; "fason mu" ayrımının kanonik kaynağı `Station.type`'tır

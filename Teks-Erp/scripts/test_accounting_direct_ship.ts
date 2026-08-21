@@ -62,7 +62,7 @@ async function main(): Promise<void> {
 
   // Taze müşteri + renk → export scope'u yalnız bizim doğrudan sevke inhisar etsin.
   const customer = await prisma.customer.create({
-    data: { code: `TST-ADS-${ts}`, name: "TEST DIRECT MUHASEBE", taxNumber: "9998887776" },
+    data: { code: `TST-ADS-${ts}`, name: `TEST DIRECT MUHASEBE ${ts}`, taxNumber: "9998887776" },
     select: { id: true },
   });
   const color = await prisma.color.create({ data: { code: `TST-ADS-C-${ts}`, name: "LACIVERT-TEST" }, select: { id: true } });

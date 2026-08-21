@@ -45,7 +45,7 @@ async function main() {
     select: { id: true },
   });
   const firm = await prisma.subcontractor.create({
-    data: { code: `TST-K14-F-${ts}`, name: "TEST K14 Firma" },
+    data: { code: `TST-K14-F-${ts}`, name: `TEST K14 Firma ${ts}` },
     select: { id: true },
   });
   const wo = await prisma.workOrder.create({

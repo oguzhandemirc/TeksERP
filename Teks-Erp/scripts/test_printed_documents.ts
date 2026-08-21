@@ -50,11 +50,13 @@ async function main(): Promise<void> {
   let prevConf: { value: unknown } | null | undefined;
   try {
   // --- Ortak master data ---
+  // Adlar da benzersiz: customers/items/subcontractors'ta nameFold DB seddi var
+  // (2026-08-21) — yarıda kesilen bir koşumun artığı sabit adla ikinci koşumu P2002'ye düşürürdü.
   item = await prisma.item.create({
-    data: { code: u("ITM"), name: "Test Kumaş", itemType: "FABRIC" },
+    data: { code: u("ITM"), name: `Test Kumaş ${u("N")}`, itemType: "FABRIC" },
   });
-  color = await prisma.color.create({ data: { code: u("CLR"), name: "Test Renk", hex: "#abcdef" } });
-  sub = await prisma.subcontractor.create({ data: { code: u("SUB"), name: "Test Kartela Fason" } });
+  color = await prisma.color.create({ data: { code: u("CLR"), name: `Test Renk ${u("N")}`, hex: "#abcdef" } });
+  sub = await prisma.subcontractor.create({ data: { code: u("SUB"), name: `Test Kartela Fason ${u("N")}` } });
 
   const mkRoll = async (qty: number): Promise<string> => {
     const r = await prisma.roll.create({
@@ -156,7 +158,7 @@ async function main(): Promise<void> {
   console.log("\n[SHIPMENT] TASLAK → DISPATCHED freeze + satır metrajı doğruluğu");
   // =========================================================================
   customer = await prisma.customer.create({
-    data: { code: u("CST"), name: "Test Müşteri", type: "CUSTOMER" },
+    data: { code: u("CST"), name: `Test Müşteri ${u("N")}`, type: "CUSTOMER" },
   });
   order = await prisma.order.create({
     data: {

@@ -49,11 +49,11 @@ async function main() {
   });
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-RAW-${ts}`, name: "TEST HAM SATIŞ" },
+    data: { code: `TST-RAW-${ts}`, name: `TEST HAM SATIŞ ${ts}` },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-RAW-I-${ts}`, name: "HAM KUMAŞ", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-RAW-I-${ts}`, name: `HAM KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
 

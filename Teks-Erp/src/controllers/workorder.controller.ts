@@ -142,6 +142,9 @@ const manualMoveSchema = z
 // gelirse reddeder. `reason` dispozisyon varsa zorunlu (servis doğrular).
 const cancelSchema = z.object({
   reason: z.string().trim().min(3, "İptal nedeni en az 3 karakter olmalı").max(500),
+  // Sebebin KATALOG KODU (ReasonPreset ROLL_CANCEL, 2026-08-21) — opsiyonel; CANCELLED
+  // topların `cancelReasonCode`'una yazılır. Verilmezse sunucu metinden türetir.
+  reasonCode: z.string().trim().max(64).optional().nullable(),
   /**
    * İşlemdeki topların ALT KÜMESİ — gönderilmeyen top varsayılan `STOCK`'a döner.
    * Kapatmadaki altı aksiyondan farklı olarak üç seçenek: iptal "üretildi" demez.
@@ -168,6 +171,8 @@ const cancelSchema = z.object({
 /** Parti düşürme — iptalle AYNI üç aksiyon (kapsam farklı, karar dili aynı). */
 const batchDropSchema = z.object({
   reason: z.string().trim().min(3, "Düşürme nedeni en az 3 karakter olmalı").max(500),
+  // Sebebin KATALOG KODU — `cancelSchema` ile aynı sözleşme.
+  reasonCode: z.string().trim().max(64).optional().nullable(),
   /**
    * Fasondaki toplar için TEK karar (2026-08-17). Yokken iptal sert
    * engelleniyordu; artık kullanıcı iki seçenekten birini söyler.
@@ -186,6 +191,8 @@ const batchDropSchema = z.object({
 
 const completeSchema = z.object({
   reason: z.string().max(500).optional(),
+  // Sebebin KATALOG KODU — yalnız CANCELLED dispozisyonunda anlamlı (`cancelSchema` sözleşmesi).
+  reasonCode: z.string().trim().max(64).optional().nullable(),
   dispositions: z
     .array(
       z.object({

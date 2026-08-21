@@ -26,6 +26,7 @@
 
 import prisma from "../../lib/prisma";
 import { foldColorNameForCompare, foldNameForCompare } from "../helpers/name-normalize.helper";
+import { modelHasMergeLineage } from "../base.service";
 import type { NameGuardSpec, PreparedRow } from "./import.types";
 
 type AnyDelegate = {
@@ -87,6 +88,12 @@ export async function applyNameGuard(
   if (spec.useFoldColumn !== false) {
     where[`${spec.field}Fold`] = { in: [...new Set(candidates.map((c) => c.folded))] };
   }
+  // BİRLEŞTİRİLMİŞ (tombstone) kayıt ADAY DEĞİL — servis guard'ı
+  // (`BaseService.assertNameNotDuplicate`) ve DB seddi (`<tablo>_nameFold_key`,
+  // `WHERE "mergedIntoId" IS NULL`, 2026-08-21) ikisi de tombstone'u dışarıda
+  // bırakır; önizleme aynı şeyi söylemeli, yoksa "Mevcut" deyip yazmada geçen
+  // satırı boş yere durdurur (önizleme ↔ uygulama ayrışması — dosya başlığı).
+  if (modelHasMergeLineage(spec.model)) where.mergedIntoId = null;
 
   const select: Record<string, boolean> = { id: true, isActive: true, [spec.field]: true };
   if (spec.scope) select[spec.scope.column] = true;

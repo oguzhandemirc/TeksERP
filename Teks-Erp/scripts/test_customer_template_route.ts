@@ -43,11 +43,11 @@ async function main() {
   // deterministik hem paylaşılan veriye dokunmuyor.
   const ts = Date.now();
   const customer = await prisma.customer.create({
-    data: { code: `TST-CTR-${ts}`, name: "TEST ŞABLON MÜŞTERİSİ" },
+    data: { code: `TST-CTR-${ts}`, name: `TEST ŞABLON MÜŞTERİSİ ${ts}` },
     select: { id: true, name: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-CTR-I-${ts}`, name: "TEST ŞABLON ÜRÜN", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-CTR-I-${ts}`, name: `TEST ŞABLON ÜRÜN ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const color = await prisma.color.create({

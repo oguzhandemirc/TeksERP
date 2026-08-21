@@ -134,13 +134,20 @@ async function main(): Promise<void> {
     });
     const done = await prisma.roll.findUnique({
       where: { id: r.id },
-      select: { status: true, cancelReason: true },
+      select: { status: true, cancelReason: true, cancelReasonCode: true },
     });
     check("onay + sebep ile iptal edildi", done?.status === RollStatus.CANCELLED);
     check(
       "sebep topun KENDİ satırında (audit'te değil — 6 ayda arşivlenir)",
       done?.cancelReason === "yanlış metraj girildi",
       String(done?.cancelReason),
+    );
+    // 2026-08-21: sebep KODU da satırda — metin kataloğun fullText'iyle KATLANMIŞ
+    // eşleşti ("yanlış metraj girildi" ≡ "Yanlış metraj girildi") → YANLIS_METRAJ.
+    check(
+      "sebep KODU sunucuda türetildi (katlanmış eşleşme) → YANLIS_METRAJ",
+      done?.cancelReasonCode === "YANLIS_METRAJ",
+      String(done?.cancelReasonCode),
     );
   }
 
@@ -183,7 +190,7 @@ async function main(): Promise<void> {
       .catch((e: Error) => check("doldurma sebep iptali fırlatmadı", false, e.message.slice(0, 60)));
     const done2 = await prisma.roll.findUnique({
       where: { id: r2.id },
-      select: { status: true, cancelReason: true },
+      select: { status: true, cancelReason: true, cancelReasonCode: true },
     });
     check("3 karakterden kısa sebep iptali DÜŞÜRMEZ", done2?.status === RollStatus.CANCELLED);
     check(
@@ -191,6 +198,7 @@ async function main(): Promise<void> {
       done2?.cancelReason === null,
       String(done2?.cancelReason),
     );
+    check("kısa doldurmada sebep KODU da null", done2?.cancelReasonCode === null, String(done2?.cancelReasonCode));
 
     // Onay hâlâ zorunlu — bu dal düşerse etiketli top sessizce iptal edilirdi.
     const r3 = await makeRoll({ labelPrinted: true });
@@ -215,7 +223,7 @@ async function main(): Promise<void> {
     check("geri alma başarılı", res.success === true);
     const after = await prisma.roll.findUnique({
       where: { id: r.id },
-      select: { status: true, cancelledAt: true, cancelReason: true, preCancelStatus: true },
+      select: { status: true, cancelledAt: true, cancelReason: true, cancelReasonCode: true, preCancelStatus: true },
     });
     // ⚠️ EN KRİTİK KONTROL: körlemesine STOCK'a dönmek 2. kalite topu 1. kalite
     // rafına yazardı (`preShipStatus` vakasının birebir aynısı).
@@ -226,6 +234,7 @@ async function main(): Promise<void> {
     );
     check("cancelledAt temizlendi", after?.cancelledAt === null);
     check("cancelReason temizlendi", after?.cancelReason === null);
+    check("cancelReasonCode temizlendi", after?.cancelReasonCode === null);
     check("preCancelStatus temizlendi", after?.preCancelStatus === null);
 
     // İkinci kez geri alma → anlamlı red (idempotent sessizlik DEĞİL).
@@ -314,11 +323,14 @@ async function main(): Promise<void> {
     const d = look.data as unknown as {
       status: RollStatus;
       cancelReason: string | null;
+      cancelReasonCode?: string | null;
       cancelledAt: Date | null;
       canRestore?: boolean;
       restoreBlockReason?: string | null;
     };
     check("okutma iptal sebebini taşıyor", d.cancelReason === "mükerrer giriş");
+    // "mükerrer giriş" ne label ("Mükerrer") ne fullText ile eşleşir → serbest metin, kod NULL.
+    check("serbest metinde sebep KODU null (okutma yanıtı taşır)", d.cancelReasonCode === null, String(d.cancelReasonCode));
     check("okutma iptal tarihini taşıyor", d.cancelledAt != null);
     // Ekran ile uç AYNI yüklemi kullanmalı — ayrışırsa "Geri Al" butonu 409 üretir.
     check("okutma canRestore taşıyor", d.canRestore === true, String(d.canRestore));

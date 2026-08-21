@@ -31,8 +31,8 @@ const cid = (r: { data: unknown }) => (r.data as { customerId: string | null; br
 
 async function main(): Promise<void> {
   const ts = Date.now();
-  const custA = await prisma.customer.create({ data: { code: `TST-RSA-A-${ts}`, name: "MÜŞTERİ A" }, select: { id: true } });
-  const custB = await prisma.customer.create({ data: { code: `TST-RSA-B-${ts}`, name: "MÜŞTERİ B" }, select: { id: true } });
+  const custA = await prisma.customer.create({ data: { code: `TST-RSA-A-${ts}`, name: `MÜŞTERİ A ${ts}` }, select: { id: true } });
+  const custB = await prisma.customer.create({ data: { code: `TST-RSA-B-${ts}`, name: `MÜŞTERİ B ${ts}` }, select: { id: true } });
   const brA1 = await prisma.customerBranch.create({ data: { customerId: custA.id, code: "A1", name: "A Şube 1" }, select: { id: true } });
   const brB1 = await prisma.customerBranch.create({ data: { customerId: custB.id, code: "B1", name: "B Şube 1" }, select: { id: true } });
 
@@ -45,7 +45,7 @@ async function main(): Promise<void> {
     // 0) openSack yanıtı müşteri+şube ad/kodunu döner (Yeni Çuval dialog'u buna dayanır).
     const opened2 = await shipping.openSack({ customerId: custA.id, branchId: brA1.id }, undefined);
     const o2 = opened2.data as { id: string; customerName: string | null; branchName: string | null; branchCode: string | null };
-    check("0) openSack: yanıt müşteri+şube ad/kod içerir", o2.customerName === "MÜŞTERİ A" && o2.branchName === "A Şube 1" && o2.branchCode === "A1", `${o2.customerName}/${o2.branchName}/${o2.branchCode}`);
+    check("0) openSack: yanıt müşteri+şube ad/kod içerir", o2.customerName === `MÜŞTERİ A ${ts}` && o2.branchName === "A Şube 1" && o2.branchCode === "A1", `${o2.customerName}/${o2.branchName}/${o2.branchCode}`);
     await prisma.sack.deleteMany({ where: { id: o2.id } });
 
     // 1) müşteri A ata

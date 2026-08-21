@@ -55,11 +55,11 @@ async function main() {
   if (!user) throw new Error("Seed kullanıcısı 'admin' yok — önce `npm run seed`.");
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-INV-${ts}`, name: "TEST INV MÜŞTERİ", taxNumber: "5556667778" },
+    data: { code: `TST-INV-${ts}`, name: `TEST INV MÜŞTERİ ${ts}`, taxNumber: "5556667778" },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-INV-I-${ts}`, name: "INV KUMAŞ", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-INV-I-${ts}`, name: `INV KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const mkShipment = (suffix: string, status: "DISPATCHED" | "PLANNED") =>
@@ -111,7 +111,7 @@ async function main() {
     select: { id: true },
   });
   const sub = await prisma.subcontractor.create({
-    data: { code: `TST-INV-SUB-${ts}`, name: "INV Fason" },
+    data: { code: `TST-INV-SUB-${ts}`, name: `INV Fason ${ts}` },
     select: { id: true },
   });
   const dispatch = await prisma.subcontractorDispatch.create({

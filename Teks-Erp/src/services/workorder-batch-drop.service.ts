@@ -16,8 +16,9 @@
 // ÜRETTİK" demektir ve olan bunun tam tersidir. Yanıttaki `noLiveRollsRemain`
 // bayrağı ile arayüz "iş emrini de iptal et" teklif eder; karar kullanıcınındır.
 // =============================================================================
-import { RollStatus, WorkOrderStatus } from "@prisma/client";
+import { ReasonPresetKind, RollStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../lib/prisma";
+import { resolveReasonCode } from "./reason-preset.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
@@ -48,6 +49,12 @@ import type { CancelDisposition } from "./workorder.service";
 export interface BatchDropInput {
   /** ZORUNLU (min 3) — audit'e ve hareket notuna yazılır. */
   reason: string;
+  /**
+   * Sebebin KATALOG KODU (ReasonPreset ROLL_CANCEL, 2026-08-21) — opsiyonel;
+   * CANCELLED kararındaki topların `cancelReasonCode`'una yazılır. Verilmezse
+   * sunucu `reason` metninden türetir (`resolveReasonCode`, tx DIŞINDA).
+   */
+  reasonCode?: string | null;
   /**
    * Partideki canlı topların ALT KÜMESİ. Gönderilmeyen her top varsayılan
    * `STOCK`'a döner (renge duyarlı — aşağıya bak).
@@ -239,6 +246,12 @@ class WorkOrderBatchDropService {
     if (reason.length < 3) {
       throw AppError.badRequest("Düşürme nedeni (en az 3 karakter) zorunludur");
     }
+    // Sebep KODU — tx DIŞINDA çözülür (açık kod doğrulanır, yoksa metinden türetilir;
+    // serbest metin → NULL). Motor (`applyRollDispositionsTx`) tx içinde katalog okumaz.
+    const { code: cancelReasonCode } = await resolveReasonCode(ReasonPresetKind.ROLL_CANCEL, {
+      reasonCode: input.reasonCode,
+      reasonText: reason,
+    });
 
     // ⚠️ STOCK MOTORA VERİLMEZ — iptaldeki ile aynı gerekçe: varsayılan yolun
     // (renge duyarlı geri çekme) sonucu ile motorun yazacağı satır farklıdır ve
@@ -347,6 +360,7 @@ class WorkOrderBatchDropService {
           ? await applyRollDispositionsTx(tx, {
               origin: "BATCH_DROP",
               reason,
+              reasonCode: cancelReasonCode,
               userId,
               rolls: live,
               dispositions: decided,

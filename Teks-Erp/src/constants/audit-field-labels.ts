@@ -34,6 +34,8 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   colorId: "Renk",
   itemId: "Kumaş",
   entryReason: "Ekleme nedeni",
+  entryReasonCode: "Ekleme nedeni (kod)",
+  cancelReasonCode: "İptal sebebi (kod)",
 
   // ── İş emri ──
   workOrderNumber: "İş emri no",

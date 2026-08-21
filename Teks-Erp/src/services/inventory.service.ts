@@ -111,7 +111,9 @@ import {
   StepStatus,
   WorkOrderStatus,
   ShipmentStatus,
+  ReasonPresetKind,
 } from "@prisma/client";
+import { resolveReasonCode } from "./reason-preset.service";
 import {
   ensureWorkOrderInProgress,
   openMovementForNextStep,
@@ -628,6 +630,13 @@ export class InventoryService {
        */
       entryReason?: string | null;
       /**
+       * Ekleme sebebinin KATALOG KODU (`Roll.entryReasonCode`, 2026-08-21) — rapor
+       * anahtarı. Çağıran `resolveReasonCode(ROLL_MANUAL_ENTRY, …)` ile tx DIŞINDA
+       * çözer (açık kod doğrulanır, yoksa metinden türetilir); burada TÜRETİLMEZ —
+       * bu metot tx açar ve katalog okuması tx'e girmemeli. NULL = serbest metin.
+       */
+      entryReasonCode?: string | null;
+      /**
        * Kaç kat sarıldığı ("2-KAT" | "4-KAT"). MİRAS ALINMAZ: çağıran o an
        * geçerli olan değeri AÇIKÇA verir; verilmezse NULL ("bilinmiyor").
        */
@@ -918,6 +927,7 @@ export class InventoryService {
             // girişi de fiziksel olarak bir TOP'tur (açık kumaş yalnız istasyon
             // çıktısı olarak doğar — `roll-finalize.helper` ACIK yazan tek yer).
             ...(opts?.entryReason ? { entryReason: opts.entryReason.slice(0, 500) } : {}),
+            ...(opts?.entryReasonCode ? { entryReasonCode: opts.entryReasonCode.slice(0, 64) } : {}),
             ...(opts?.foldType ? { foldType: opts.foldType } : {}),
             ...(opts?.markedForKartela && initialStatus === RollStatus.WAREHOUSE
               ? { markedForKartela: true }
@@ -2445,6 +2455,9 @@ export class InventoryService {
         qualityGrade: true,
         parentRollId: true,
         createdAt: true,
+        // Ekleme sebebinin katalog KODU (2026-08-21) — metin `readManualEntryReason`
+        // ile (kolon → audit fallback) çözülür, kod yalnız kolondadır.
+        entryReasonCode: true,
         item: { select: { id: true, code: true, name: true, itemType: true } },
         color: { select: { id: true, code: true, name: true, hex: true } },
         // Topu sisteme kim açtı — KK1, fason kabul, Tambur split (parent oluşturucu)
@@ -2588,6 +2601,7 @@ export class InventoryService {
         entrySource: roll.entrySource,
         qualityGrade: roll.qualityGrade,
         ...(manualEntryReason ? { manualReason: manualEntryReason } : {}),
+        ...(roll.entryReasonCode ? { manualReasonCode: roll.entryReasonCode } : {}),
         ...(parentInfo ? { parent: parentInfo } : {}),
       },
       operatorName: roll.createdBy?.fullName ?? roll.createdBy?.username ?? null,
@@ -2890,6 +2904,13 @@ export class InventoryService {
        * cevap varmış gibi görünür, hiçbir şey söylemez).
        */
       reason?: string;
+      /**
+       * Sebebin KATALOG KODU (`ReasonPreset.code`, kind ROLL_CANCEL) — OPSİYONEL.
+       * Verilirse katalogda doğrulanır (bilinmeyen → 400 `REASON_CODE_INVALID`);
+       * verilmezse sunucu `reason` metnini kataloğun label/fullText'iyle eşleyip
+       * kodu kendisi türetir (mobil bugün yalnız metin gönderiyor). Serbest metin → NULL.
+       */
+      reasonCode?: string;
     },
   ): Promise<ApiResponse<Roll>> {
     const existing = await prisma.roll.findUnique({ where: { id } });
@@ -3006,6 +3027,17 @@ export class InventoryService {
     // saklanmaz, sebepsiz iptal olarak kaydedilir.
     const trimmedReason = opts?.reason?.trim() || "";
     const reason = trimmedReason.length >= 3 ? trimmedReason : null;
+    // Sebep KODU (2026-08-21, `Roll.cancelReasonCode`): açık kod katalogda doğrulanır,
+    // yoksa metinden türetilir — tx DIŞINDA (katalog okuması tx'e girmez). Kısa
+    // doldurma metni sildiği gibi kodu da düşürür; açık kod + boş metin → metin
+    // preset'ten dolar (kod dolu, görünen kayıt NULL olmasın). Metin 500'e kırpılır
+    // (`roll-disposition.helper` ile aynı sınır — buradaki query-param yolu kırpmıyordu).
+    const resolvedReason = await resolveReasonCode(ReasonPresetKind.ROLL_CANCEL, {
+      reasonCode: opts?.reasonCode,
+      reasonText: reason,
+    });
+    const cancelReasonCode = resolvedReason.code;
+    const cancelReasonText = resolvedReason.text ? resolvedReason.text.slice(0, 500) : null;
     if (existing.labelPrintedAt && !opts?.confirmLabelPrinted) {
       throw AppError.conflict(
         `Bu topun etiketi basıldı (${formatFactoryDateTime(existing.labelPrintedAt)}) ve ` +
@@ -3092,7 +3124,8 @@ export class InventoryService {
           // körlemesine STOCK'a dönmek A1_STOCK/WAREHOUSE topunu yanlış rafa yazardı.
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
-          cancelReason: reason,
+          cancelReason: cancelReasonText,
+          cancelReasonCode,
           preCancelStatus: existing.status,
         },
       });
@@ -3160,7 +3193,8 @@ export class InventoryService {
       newData: {
         status: RollStatus.CANCELLED,
         cancelled: true,
-        reason,
+        reason: cancelReasonText,
+        reasonCode: cancelReasonCode,
         labelPrinted: existing.labelPrintedAt != null,
         // Adım durumu türetilen bir değerdir; iptalin onu nasıl kaydırdığı
         // başka hiçbir yerde yazmıyor. `previousCompletedAt` özellikle önemli:
@@ -3228,6 +3262,7 @@ export class InventoryService {
         shipmentId: true,
         currentStepId: true,
         cancelReason: true,
+        cancelReasonCode: true,
       },
     });
     if (!existing) throw AppError.notFound("Top bulunamadı");
@@ -3273,6 +3308,7 @@ export class InventoryService {
         cancelledAt: null,
         cancelledById: null,
         cancelReason: null,
+        cancelReasonCode: null,
         preCancelStatus: null,
       },
     });
@@ -3292,6 +3328,7 @@ export class InventoryService {
       oldData: {
         status: RollStatus.CANCELLED,
         cancelReason: existing.cancelReason,
+        cancelReasonCode: existing.cancelReasonCode,
       },
       newData: {
         status: target,

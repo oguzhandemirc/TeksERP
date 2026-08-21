@@ -54,8 +54,8 @@ async function main(): Promise<void> {
   const color = await prisma.color.findFirst({ where: { isActive: true }, select: { id: true }, orderBy: { code: "asc" } });
   if (!color) throw new Error("Seed Color bulunamadı");
 
-  const custA = await prisma.customer.create({ data: { code: `TST-SPL-A-${ts}`, name: "SPLIT A" }, select: { id: true } });
-  const custB = await prisma.customer.create({ data: { code: `TST-SPL-B-${ts}`, name: "SPLIT B" }, select: { id: true } });
+  const custA = await prisma.customer.create({ data: { code: `TST-SPL-A-${ts}`, name: `SPLIT A ${ts}` }, select: { id: true } });
+  const custB = await prisma.customer.create({ data: { code: `TST-SPL-B-${ts}`, name: `SPLIT B ${ts}` }, select: { id: true } });
   const brA = await prisma.customerBranch.create({ data: { customerId: custA.id, code: "SA1", name: "A Şube" }, select: { id: true } });
 
   const rollIds: string[] = [];

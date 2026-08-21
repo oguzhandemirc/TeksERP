@@ -706,8 +706,13 @@ export class BaseService {
    * yazdığı kaydı bulamaz" sınıfı hata artık YAPISAL OLARAK imkânsız.
    *
    * ⚠️ Kapsam genişledi: "ŞAHİN" ile "SAHIN" artık AYNI ad sayılır (kullanıcı
-   * kararı D3). DB'de UNIQUE kısıt YOK — gerekçe migration
-   * `20260819060000_search_fold` §6'da; bu metot tek uygulama noktasıdır.
+   * kararı D3). DB seddi (2026-08-21, `20260821150000_name_fold_unique_live`):
+   * `customers/items/subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key`
+   * (`WHERE "mergedIntoId" IS NULL`). Bu metot KALDIRILMAZ — kullanıcıya Türkçe,
+   * kod bilgili 409'u ("zaten var" ↔ "PASİF, aktifleştirin") o verir; DB kısıtı
+   * bu check-then-act'in kapatamadığı yarış/atlama yollarına karşı sessiz son
+   * hattır (P2002 → error.middleware `nameFold`→"ad"). Diğer `nameFold` tabloları
+   * (istasyon, rota, kalite…) yalnız bu metotla korunur; renk bespoke (`ColorService`).
    *
    * Custom create/update yazan alt sınıflar (super.* çağırmayan yollar) bu metodu
    * kendileri çağırır.
@@ -743,8 +748,8 @@ export class BaseService {
     // tarafında iki yönlü kilitli (`test_db_invariants` §9) ve `sanitizeWriteData`
     // de aynı son eke bakıyor — üçü birlikte değişir.
     // ⚠️ BİRLEŞTİRİLMİŞ (tombstone) kayıtlar ADAY DEĞİLDİR. İki sebep:
-    //   1) Birleşmiş adın yeniden kullanılması MEŞRUDUR — B6'da gelecek partial
-    //      UNIQUE de `WHERE "mergedIntoId" IS NULL` ile tam bunu söyleyecek.
+    //   1) Birleşmiş adın yeniden kullanılması MEŞRUDUR — B6 partial UNIQUE'i
+    //      (2026-08-21) `WHERE "mergedIntoId" IS NULL` ile tam bunu söylüyor.
     //   2) Aksi hâlde guard, az önce temizlenen mükerrer için *"PASİF kayıt var,
     //      aktifleştirin"* der ve operatörü tombstone'u DİRİLTMEYE davet eder.
     // Sessiz izin de doğru değil: aynı adı geri yaratmak mükerreri diriltir —

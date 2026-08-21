@@ -62,11 +62,11 @@ async function main(): Promise<void> {
 
   const ts = Date.now();
   const customer = await prisma.customer.create({
-    data: { code: `TST-WOS-CUS-${ts}`, name: "Test WoState Müşteri" },
+    data: { code: `TST-WOS-CUS-${ts}`, name: `Test WoState Müşteri ${ts}` },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-WOS-ITM-${ts}`, name: "Test WoState Ürün", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-WOS-ITM-${ts}`, name: `Test WoState Ürün ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
 

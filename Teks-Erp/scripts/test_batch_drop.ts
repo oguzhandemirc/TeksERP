@@ -205,7 +205,7 @@ async function main(): Promise<void> {
       });
       const r2 = await prisma.roll.findUnique({
         where: { id: w1.rollIds[2] },
-        select: { status: true, batchId: true, cancelReason: true, preCancelStatus: true },
+        select: { status: true, batchId: true, cancelReason: true, cancelReasonCode: true, preCancelStatus: true },
       });
 
       check("karar verilmeyen top STOCK", r0?.status === RollStatus.STOCK, String(r0?.status));
@@ -216,6 +216,8 @@ async function main(): Promise<void> {
       check("hatalı kayıt CANCELLED", r2?.status === RollStatus.CANCELLED, String(r2?.status));
       check("⚠️ CANCELLED topu partide KALDI (K18-gizli tarihçe)", r2?.batchId === w1.batchId);
       check("CANCELLED iptal izi taşıyor", r2?.cancelReason === "Müşteri bu kalemden vazgeçti");
+      // Serbest metin (katalogda yok) → sebep KODU uydurulmaz, NULL (2026-08-21).
+      check("CANCELLED serbest metinde cancelReasonCode null", r2?.cancelReasonCode === null, String(r2?.cancelReasonCode));
       check("CANCELLED preCancelStatus", r2?.preCancelStatus === RollStatus.IN_PRODUCTION);
 
       check("parti SİLİNMEDİ (CANCELLED top içinde)", res.batchDeleted === false);

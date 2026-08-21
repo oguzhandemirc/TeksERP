@@ -174,7 +174,9 @@ async function main(): Promise<void> {
     const cust = await prisma.customer.create({
       data: {
         code: `TEST-DP-${Date.now().toString(36)}`,
-        name: "TEST Belge Profili Müşterisi",
+        // Ad da benzersiz — customers.nameFold DB seddi (2026-08-21); artık kalan
+        // sabit ad ikinci koşumu P2002'ye düşürürdü.
+        name: `TEST Belge Profili Müşterisi ${Date.now().toString(36)}`,
         documentProfileId: prof.id,
       },
       select: { id: true, documentProfileId: true },

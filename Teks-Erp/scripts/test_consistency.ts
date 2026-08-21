@@ -383,6 +383,10 @@ WHERE re."isProcessed" = false
   },
   {
     id: "18",
+    // 2026-08-21: customers/items/subcontractors'ta DB partial UNIQUE VAR
+    // (`<tablo>_nameFold_key`, WHERE "mergedIntoId" IS NULL) — orada bu bölüm
+    // kısıttan GEVŞEK bir aynadır (lower(trim) ≠ tr_fold, tombstone'u süzmez);
+    // colors/routes için hâlâ tek gözlem. Mantık SQL dosyasıyla aynı tutulur.
     title: "Master-data ad mükerrer (aktif, case/boşluk-duyarsız)",
     sql: `
 SELECT 'items' AS tablo, lower(trim(name)) AS ad, COUNT(*) AS adet, array_agg(id) AS kayitlar
@@ -392,7 +396,7 @@ SELECT 'colors', lower(trim(name)), COUNT(*), array_agg(id)
 FROM colors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
 UNION ALL
 SELECT 'customers', lower(trim(name)), COUNT(*), array_agg(id)
-FROM customers GROUP BY 2 HAVING COUNT(*) > 1
+FROM customers WHERE "mergedIntoId" IS NULL GROUP BY 2 HAVING COUNT(*) > 1
 UNION ALL
 SELECT 'subcontractors', lower(trim(name)), COUNT(*), array_agg(id)
 FROM subcontractors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1

@@ -54,7 +54,7 @@ async function setup(): Promise<string[]> {
 
   // İzole test müşterisi + alias'ları (alias batching dalını kapsamak için).
   const cust = await prisma.customer.create({
-    data: { code: `TST-BLK-C-${stamp}`, name: "Bulk Test Müşteri" },
+    data: { code: `TST-BLK-C-${stamp}`, name: `Bulk Test Müşteri ${stamp}` },
   });
   testCustomerId = cust.id;
   await prisma.customerItemAlias.create({ data: { customerId: cust.id, itemId: ITEM, alias: "BLK-ITEM-ALIAS" } });

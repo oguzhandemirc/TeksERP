@@ -61,11 +61,11 @@ async function main(): Promise<void> {
 
     const [itemA, itemB] = await Promise.all([
       prisma.item.create({
-        data: { code: `TEST-WOLINK-ITMA-${ts}`, name: "TEST WOLINK KUMAS A", itemType: "FABRIC", unit: "MT" },
+        data: { code: `TEST-WOLINK-ITMA-${ts}`, name: `TEST WOLINK KUMAS A ${ts}`, itemType: "FABRIC", unit: "MT" },
         select: { id: true },
       }),
       prisma.item.create({
-        data: { code: `TEST-WOLINK-ITMB-${ts}`, name: "TEST WOLINK KUMAS B", itemType: "FABRIC", unit: "MT" },
+        data: { code: `TEST-WOLINK-ITMB-${ts}`, name: `TEST WOLINK KUMAS B ${ts}`, itemType: "FABRIC", unit: "MT" },
         select: { id: true },
       }),
     ]);

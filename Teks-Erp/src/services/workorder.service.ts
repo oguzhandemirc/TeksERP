@@ -63,7 +63,9 @@ import {
   StepStatus,
   OrderStatus,
   Prisma,
+  ReasonPresetKind,
 } from "@prisma/client";
+import { resolveReasonCode } from "./reason-preset.service";
 import {
   ensureWorkOrderInProgress,
   recomputeStepStatus,
@@ -274,6 +276,12 @@ export interface CancelWorkOrderInput {
   /** Yeni uçta ZORUNLU (min 3). Eski gövdesiz `DELETE /:id` bunu taşımaz. */
   reason?: string;
   /**
+   * Sebebin KATALOG KODU (ReasonPreset ROLL_CANCEL, 2026-08-21) — opsiyonel;
+   * CANCELLED kararındaki topların `cancelReasonCode`'una yazılır. Verilmezse
+   * sunucu `reason` metninden türetir (`resolveReasonCode`, tx DIŞINDA).
+   */
+  reasonCode?: string | null;
+  /**
    * İşlemdeki topların ALT KÜMESİ. Gönderilmeyen her top varsayılan `STOCK`'a
    * döner — "eksik gönderdin" hatası bilinçli olarak YOKTUR.
    */
@@ -303,6 +311,8 @@ export interface CancelWorkOrderInput {
 export interface CompleteWorkOrderInput {
   /** Dispozisyon varsa zorunlu (min 3 karakter) — audit'e yazılır. */
   reason?: string;
+  /** Sebebin KATALOG KODU — yalnız CANCELLED dispozisyonunda anlamlı (`CancelWorkOrderInput`). */
+  reasonCode?: string | null;
   dispositions?: CloseDispositionInput[];
   /** TRANSFER varsa: yeni iş emri siparişe bağlı kalsın mı ("keep") yoksa stok mu. */
   transferOrderMode?: "stock" | "keep";
@@ -3213,6 +3223,12 @@ export class WorkOrderService {
     // iki farklı not/metraj üretirdi (sessiz, kalıcı, raporlanamaz).
     const decided = (input.dispositions ?? []).filter((d) => d.action !== "STOCK");
     const reason = (input.reason ?? "").trim();
+    // Sebep KODU (CANCELLED topların `cancelReasonCode`'u) — tx DIŞINDA çözülür; açık
+    // kod doğrulanır, yoksa metinden türetilir (serbest metin → NULL).
+    const { code: cancelReasonCode } = await resolveReasonCode(ReasonPresetKind.ROLL_CANCEL, {
+      reasonCode: input.reasonCode,
+      reasonText: reason,
+    });
 
     if (decided.length > 0) {
       if (reason.length < 3) {
@@ -3370,6 +3386,7 @@ export class WorkOrderService {
           ...(await applyRollDispositionsTx(tx, {
             origin: "WO_CANCEL",
             reason,
+            reasonCode: cancelReasonCode,
             userId,
             rolls: inFlight,
             dispositions: decidedWithFason,
@@ -3695,6 +3712,11 @@ export class WorkOrderService {
 
     const dispositions = data.dispositions ?? [];
     const reason = (data.reason ?? "").trim();
+    // Sebep KODU — yalnız CANCELLED dispozisyonunda anlamlı; tx DIŞINDA çözülür.
+    const { code: cancelReasonCode } = await resolveReasonCode(ReasonPresetKind.ROLL_CANCEL, {
+      reasonCode: data.reasonCode,
+      reasonText: reason,
+    });
     if (dispositions.length > 0 && reason.length < 3) {
       throw AppError.badRequest(
         "Kapanış dispozisyonu için işlem nedeni (en az 3 karakter) zorunludur",
@@ -3882,6 +3904,7 @@ export class WorkOrderService {
               ...(await applyRollDispositionsTx(tx, {
                 origin: "WO_CLOSE",
                 reason,
+                reasonCode: cancelReasonCode,
                 userId,
                 rolls: statusDispositions.map((d) => byId.get(d.rollId)!),
                 dispositions: statusDispositions.map((d) => ({

@@ -117,9 +117,10 @@ export function ReasonPresetDialog({
                 maxLength={500}
                 placeholder={label.trim() || "Boş bırakılırsa görünen ad kullanılır"}
               />
-              <Callout tone="warning">
-                Bu listede kayda metnin <b>kendisi</b> yazılır. Metni değiştirirsen eski kayıtlar eski
-                metinle kalır ve raporda ayrı satır olarak görünür.
+              <Callout tone="info">
+                Bu metin kayda <b>görünen sebep</b> olarak yazılır; satırın kodu da yanında saklanır
+                ve raporlar koda göre gruplanır. Metni değiştirirsen eski kayıtlar eski metinle kalır,
+                kod aynı olduğu için rapor bölünmez.
               </Callout>
             </div>
           )}

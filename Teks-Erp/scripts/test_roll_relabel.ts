@@ -34,11 +34,11 @@ async function main() {
   const ship = new ShippingService();
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-RLB-${ts}`, name: "TEST RELABEL" },
+    data: { code: `TST-RLB-${ts}`, name: `TEST RELABEL ${ts}` },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-RLB-I-${ts}`, name: "TEST RLB ÜRÜN", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-RLB-I-${ts}`, name: `TEST RLB ÜRÜN ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const colorA = await prisma.color.create({ data: { code: `RLB-A-${ts}`, name: "RLB MAVİ" }, select: { id: true } });

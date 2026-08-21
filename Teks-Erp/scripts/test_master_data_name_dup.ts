@@ -11,6 +11,9 @@
 //   7. Müşteri şubesi: aynı müşteride aynı ad 409; farklı müşteride serbest;
 //      inline branches[] dizi-içi mükerrer 400
 //   8. Tarihsel mükerrer: ad DEĞİŞMEYEN update engellenmez
+//   9. DB SEDDİ (2026-08-21): customers/items/subcontractors'ta servisi ATLAYAN
+//      doğrudan yazım da P2002 (`<tablo>_nameFold_key` partial UNIQUE); tombstone
+//      (mergedIntoId dolu) aynı adı taşırken yeni kayıt SERBEST (predicate kanıtı)
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { BaseService } from "../src/services/base.service";
@@ -32,6 +35,23 @@ function check(label: string, ok: boolean, extra = "") {
   } else {
     fail++;
     console.log(`❌ ${label}${extra ? " — " + extra : ""}`);
+  }
+}
+
+/**
+ * DB seddi beklentisi: servis ATLANARAK yapılan yazım P2002 ile düşmeli ve hata
+ * `nameFold` seddini (kısıt adı ya da kolon) işaret etmeli. "Kayıt yazıldı" = sed yok.
+ */
+async function expectP2002(label: string, fn: () => Promise<unknown>, constraint: string): Promise<void> {
+  try {
+    await fn();
+    check(label, false, "P2002 beklenirken kayıt YAZILDI — DB seddi yok");
+  } catch (e) {
+    const code = (e as { code?: string }).code;
+    const msg = e instanceof Error ? e.message : String(e);
+    const meta = JSON.stringify((e as { meta?: unknown }).meta ?? {});
+    const mentions = [msg, meta].some((s) => s.includes(constraint) || s.includes("nameFold"));
+    check(label, code === "P2002" && mentions, `${code ?? "?"} ${msg.replace(/\s+/g, " ").slice(0, 140)}`);
   }
 }
 
@@ -278,6 +298,81 @@ async function main() {
       "Update: ad BAŞKA kayıtla çakışırsa 409",
       () => stationSvc.update(legacyA.id, { name: `Test Dup İstasyon B ${suffix}` }, undefined),
       "zaten var",
+    );
+
+    // --- 9) DB SEDDİ — servisi ATLAYAN yazım da reddedilir (2026-08-21) ---
+    // customers/items/subcontractors'ta partial UNIQUE `<tablo>_nameFold_key`
+    // (`WHERE "mergedIntoId" IS NULL`, migration 20260821150000_name_fold_unique_live).
+    // Uygulama bekçisi check-then-act'tir: yarış, `duplicateNameField` unutması, içe
+    // aktarım adaptörünün guard beyan etmemesi, elle SQL — bu yolları yalnız DB kapatır.
+    // Yukarıdaki 8 bölüm bekçinin 409'unu ölçer; bu bölüm bekçi HİÇ koşmadan yazar.
+    const sedName = `Test Sed Müşteri ${suffix}`;
+    const sedA = await prisma.customer.create({
+      data: { code: `TEST-SED-A-${suffix}`, name: sedName },
+      select: { id: true },
+    });
+    created.customerIds.push(sedA.id);
+    await expectP2002(
+      "DB seddi: doğrudan create ile fold-eş müşteri (BÜYÜK harf) → P2002 customers_nameFold_key",
+      () =>
+        prisma.customer
+          .create({ data: { code: `TEST-SED-B-${suffix}`, name: sedName.toLocaleUpperCase("tr") }, select: { id: true } })
+          .then((r) => created.customerIds.push(r.id)),
+      "customers_nameFold_key",
+    );
+    // Predicate kanıtı: A birleşmiş (tombstone) sayılınca aynı ad yeniden SERBEST —
+    // birleşmiş adın yeniden kullanımı meşrudur (base.service.ts §assertNameNotDuplicate).
+    const sedAnchor = await prisma.customer.create({
+      data: { code: `TEST-SED-ANC-${suffix}`, name: `Test Sed Anchor ${suffix}` },
+      select: { id: true },
+    });
+    created.customerIds.push(sedAnchor.id);
+    await prisma.customer.update({
+      where: { id: sedA.id },
+      data: { mergedIntoId: sedAnchor.id, mergedAt: new Date(), isActive: false },
+    });
+    const sedC = await prisma.customer.create({
+      data: { code: `TEST-SED-C-${suffix}`, name: sedName },
+      select: { id: true },
+    });
+    created.customerIds.push(sedC.id);
+    check("DB seddi: tombstone (mergedIntoId dolu) aynı adı taşırken yeni kayıt SERBEST (predicate)", Boolean(sedC.id));
+    // Tombstone dururken ÜÇÜNCÜ canlı kopya yine reddedilir (predicate yalnız tombstone'u muaf tutar).
+    await expectP2002(
+      "DB seddi: tombstone + canlı kopya varken ikinci canlı kopya yine P2002",
+      () =>
+        prisma.customer
+          .create({ data: { code: `TEST-SED-D-${suffix}`, name: sedName }, select: { id: true } })
+          .then((r) => created.customerIds.push(r.id)),
+      "customers_nameFold_key",
+    );
+
+    const sedItem = await prisma.item.create({
+      data: { code: `TEST-SED-I-${suffix}`, name: `Test Sed Ürün ${suffix}`, itemType: "FABRIC" },
+      select: { id: true },
+    });
+    created.itemIds.push(sedItem.id);
+    await expectP2002(
+      "DB seddi: items — fold-eş (ÜRÜN/urun, İ/ı) doğrudan create → P2002 items_nameFold_key",
+      () =>
+        prisma.item
+          .create({ data: { code: `TEST-SED-I2-${suffix}`, name: `TEST SED ÜRÜN ${suffix}`, itemType: "FABRIC" }, select: { id: true } })
+          .then((r) => created.itemIds.push(r.id)),
+      "items_nameFold_key",
+    );
+
+    const sedSub = await prisma.subcontractor.create({
+      data: { code: `TEST-SED-S-${suffix}`, name: `Test Sed Fason ${suffix}` },
+      select: { id: true },
+    });
+    created.subIds.push(sedSub.id);
+    await expectP2002(
+      "DB seddi: subcontractors — fold-eş doğrudan create → P2002 subcontractors_nameFold_key",
+      () =>
+        prisma.subcontractor
+          .create({ data: { code: `TEST-SED-S2-${suffix}`, name: `TEST SED FASON ${suffix}` }, select: { id: true } })
+          .then((r) => created.subIds.push(r.id)),
+      "subcontractors_nameFold_key",
     );
   } finally {
     // Cleanup — test kendi yarattığını siler (FK sırasına dikkat).

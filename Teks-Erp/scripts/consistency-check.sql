@@ -237,7 +237,8 @@ WHERE re."isProcessed" = false
 
 \echo ''
 \echo '== 18) Master-data ad mükerrer (aktif, case/boşluk-duyarsız) =='
-\echo '   (DB unique bilinçli yok — app-level guard; bu yalnız GÖZLEM satırıdır,'
+\echo '   (customers/items/subcontractors: DB partial UNIQUE VAR — nameFold, mergedIntoId IS NULL,'
+\echo '    2026-08-21; bu satır orada GEVŞEK ayna. colors/routes: app-level guard, yalnız GÖZLEM;'
 \echo '    otomatik birleştirme/silme ÖNERİLMEZ)'
 SELECT 'items' AS tablo, lower(trim(name)) AS ad, COUNT(*) AS adet, array_agg(id) AS kayitlar
 FROM items WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
@@ -246,13 +247,16 @@ SELECT 'colors', lower(trim(name)), COUNT(*), array_agg(id)
 FROM colors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
 UNION ALL
 SELECT 'customers', lower(trim(name)), COUNT(*), array_agg(id)
-FROM customers GROUP BY 2 HAVING COUNT(*) > 1
+FROM customers WHERE "mergedIntoId" IS NULL GROUP BY 2 HAVING COUNT(*) > 1
 UNION ALL
 SELECT 'subcontractors', lower(trim(name)), COUNT(*), array_agg(id)
 FROM subcontractors WHERE "isActive" = true GROUP BY 2 HAVING COUNT(*) > 1
 UNION ALL
 SELECT 'routes', lower(trim(name)), COUNT(*), array_agg(id)
 FROM routes GROUP BY 2 HAVING COUNT(*) > 1;
+-- customers: birleştirme TOMBSTONE'u (mergedIntoId dolu) aynı adı meşru taşır ve
+-- isActive süzgeci yok → tombstone süzülmezse her müşteri birleştirmesi §18'i kırmızı
+-- yapar (2026-08-21'de ölçüldü). items/colors/subcontractors'ta isActive=true zaten dışlar.
 
 \echo ''
 \echo '== 19) Fason sevk / doğrudan-sevk snapshot toplamı vs kalem toplamı =='

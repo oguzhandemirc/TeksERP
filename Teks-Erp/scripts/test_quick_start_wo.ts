@@ -275,7 +275,7 @@ async function main() {
   // amaç: quickStart'ın orderLineIds'i ORDER_PRODUCTION olarak bağladığını görmek.
   const uniq = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
   const customer = await prisma.customer.create({
-    data: { code: `TST-${uniq}`.slice(0, 32), name: "QuickStart Test Müşteri" },
+    data: { code: `TST-${uniq}`.slice(0, 32), name: `QuickStart Test Müşteri ${uniq}` },
     select: { id: true },
   });
   createdCustomerIds.push(customer.id);

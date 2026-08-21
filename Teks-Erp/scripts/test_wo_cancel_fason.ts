@@ -52,7 +52,7 @@ async function main(): Promise<void> {
 
   try {
     const item = await prisma.item.create({
-      data: { code: `TEST-CANFAS-${ts}`, name: "TEST CANCEL FASON", itemType: "FABRIC", unit: "MT" },
+      data: { code: `TEST-CANFAS-${ts}`, name: `TEST CANCEL FASON ${ts}`, itemType: "FABRIC", unit: "MT" },
       select: { id: true },
     });
     itemId = item.id;

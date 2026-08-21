@@ -160,7 +160,7 @@ async function main(): Promise<void> {
   });
   batchIds.push(batch.id);
   const sub = await prisma.subcontractor.create({
-    data: { code: `${TAG}-SUB`, name: "İade testi fason" },
+    data: { code: `${TAG}-SUB`, name: `İade testi fason ${TAG}` },
     select: { id: true },
   });
   subIds.push(sub.id);

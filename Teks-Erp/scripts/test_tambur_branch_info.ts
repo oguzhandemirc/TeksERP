@@ -148,7 +148,7 @@ async function main() {
 
   // ── Fason firma + parti A'nın sevkleri ──
   const sub = await prisma.subcontractor.create({
-    data: { code: `TEST-BI-SUB-${rnd()}`, name: "Test Fason (branch-info)" },
+    data: { code: `TEST-BI-SUB-${rnd()}`, name: `Test Fason (branch-info) ${rnd()}` },
     select: { id: true },
   });
   createdSubcontractorId = sub.id;

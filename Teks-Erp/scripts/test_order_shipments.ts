@@ -53,10 +53,10 @@ async function main(): Promise<void> {
 
   // Master + sipariş
   const customer = track("customer", await prisma.customer.create({
-    data: { code: `TST-OSH-CUS-${ts}`, name: "Test OSH Müşteri" }, select: { id: true },
+    data: { code: `TST-OSH-CUS-${ts}`, name: `Test OSH Müşteri ${ts}` }, select: { id: true },
   }));
   const item = track("item", await prisma.item.create({
-    data: { code: `TST-OSH-ITM-${ts}`, name: "Test OSH Ürün", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-OSH-ITM-${ts}`, name: `Test OSH Ürün ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   }));
   const order = await prisma.order.create({
@@ -117,7 +117,7 @@ async function main(): Promise<void> {
     data: { batchNumber: `TST-OSH-BATCH-${ts}`, workOrderId: wo.id }, select: { id: true },
   }));
   const sub = track("subcontractor", await prisma.subcontractor.create({
-    data: { code: `TST-OSH-SUB-${ts}`, name: "OSH Fason" }, select: { id: true },
+    data: { code: `TST-OSH-SUB-${ts}`, name: `OSH Fason ${ts}` }, select: { id: true },
   }));
   const dispatch = track("subcontractorDispatch", await prisma.subcontractorDispatch.create({
     data: {

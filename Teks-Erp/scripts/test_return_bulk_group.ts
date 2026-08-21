@@ -83,11 +83,11 @@ async function main() {
   const admin = await ensureTestAdmin();
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-BRT-${ts}`, name: "TEST TOPLU İADE MÜŞTERİ", taxNumber: "9998887772" },
+    data: { code: `TST-BRT-${ts}`, name: `TEST TOPLU İADE MÜŞTERİ ${ts}`, taxNumber: "9998887772" },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-BRT-I-${ts}`, name: "TOPLU İADE KUMAŞ", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-BRT-I-${ts}`, name: `TOPLU İADE KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const color = await prisma.color.create({

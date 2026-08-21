@@ -34,11 +34,11 @@ async function main() {
   });
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-ONO-${ts}`, name: "Test Müşteri ONO" },
+    data: { code: `TST-ONO-${ts}`, name: `Test Müşteri ONO ${ts}` },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-ONO-ITM-${ts}`, name: "TEST ONO ÜRÜN", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-ONO-ITM-${ts}`, name: `TEST ONO ÜRÜN ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const orderIds: string[] = [];

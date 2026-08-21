@@ -33,15 +33,15 @@ async function main() {
   const svc = new SackSearchService();
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-SRC-${ts}`, name: "TEST ARAMA MÜŞTERİSİ" },
+    data: { code: `TST-SRC-${ts}`, name: `TEST ARAMA MÜŞTERİSİ ${ts}` },
     select: { id: true },
   });
   const itemA = await prisma.item.create({
-    data: { code: `TST-SRC-A-${ts}`, name: "TEST ARAMA ÜRÜN A", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-SRC-A-${ts}`, name: `TEST ARAMA ÜRÜN A ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const itemB = await prisma.item.create({
-    data: { code: `TST-SRC-B-${ts}`, name: "TEST ARAMA ÜRÜN B", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-SRC-B-${ts}`, name: `TEST ARAMA ÜRÜN B ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const shipment = await prisma.shipment.create({

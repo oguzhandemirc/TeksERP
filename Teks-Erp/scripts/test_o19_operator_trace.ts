@@ -47,7 +47,7 @@ async function main() {
     const uid2 = admin2?.id ?? admin!.id;
 
     const item = await prisma.item.findFirst({ where: { itemType: "FABRIC", isActive: true }, select: { id: true } });
-    const cust = await prisma.customer.create({ data: { code: `TEST-O19-${ts}`, name: "TEST O19" }, select: { id: true } });
+    const cust = await prisma.customer.create({ data: { code: `TEST-O19-${ts}`, name: `TEST O19 ${ts}` }, select: { id: true } });
     custIds.push(cust.id);
     const customerId = cust.id;
 

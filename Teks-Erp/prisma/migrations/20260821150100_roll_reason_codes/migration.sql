@@ -1,0 +1,23 @@
+-- =============================================================================
+-- SEBEP KODU TOPUN SATIRINDA — rolls.entryReasonCode / cancelReasonCode · 2026-08-21
+-- =============================================================================
+-- NEDEN: Hazır sebep kataloğunun (`reason_presets`) iki kind'ı — ROLL_MANUAL_ENTRY
+-- ve ROLL_CANCEL — topa yalnız METİN yazıyordu (`entryReason` / `cancelReason`).
+-- Fabrika bir etiketi düzenleyince geçmiş kayıtlar eski metinle kalıyor, rapor
+-- gruplaması ikiye bölünüyordu; fire/kayıt düzeltmesi defteri (`roll_variances.
+-- reasonCode`) bu tuzağa düşmüyordu çünkü KOD taşıyor. Şema notunda "kodu satıra
+-- da yazmak iki kolon + backfill demekti, bilinçli ertelendi" yazıyordu —
+-- 2026-08-22 DB sıfırlamasıyla backfill gerekçesi düştü: ilk günden dolar.
+--
+-- NE: iki nullable VARCHAR(64) (ReasonPreset.code ile aynı genişlik). Kodu SUNUCU
+-- yazar — istemci açıkça gönderdiyse katalogda doğrulanır, yoksa gelen metin
+-- kataloğun label/fullText'iyle katlanmış eşlenir (`resolveReasonCode`). Mobil
+-- bugün yalnız metin gönderiyor → APK değişmeden dolar. NULL = serbest metin /
+-- katalog dışı / eski kayıt.
+--
+-- Additive, nullable, DEFAULT'suz → PG11+'da metadata-only (`20260804210000` —
+-- entryReason — emsali, ölçüm 6 ms). Index YOK (hiçbir sorgu kodla süzmüyor;
+-- `rolls` zaten en çok indeksli tablo). `statement_timeout` GEREKMEZ.
+-- =============================================================================
+ALTER TABLE "rolls" ADD COLUMN IF NOT EXISTS "entryReasonCode"  VARCHAR(64);
+ALTER TABLE "rolls" ADD COLUMN IF NOT EXISTS "cancelReasonCode" VARCHAR(64);

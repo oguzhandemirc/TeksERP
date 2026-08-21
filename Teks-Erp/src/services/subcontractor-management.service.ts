@@ -38,6 +38,11 @@ import { Request } from "express";
  * 2026-08-19: tam tablo taraması + JS katlaması yerine `nameFold` gölge kolonu
  * (indexli `findFirst`). Katlama artık ASCII'ye de iner, yani "ŞAHİN ZIMPARA"
  * ile "SAHIN ZIMPARA" aynı firma sayılır (kullanıcı kararı D3).
+ *
+ * 2026-08-21: FİRMADA DB seddi var — `subcontractors_nameFold_key` partial UNIQUE
+ * (`WHERE "mergedIntoId" IS NULL`, migration `20260821150000_name_fold_unique_live`).
+ * KATEGORİDE YOK (soy bağı yok, bu guard tek hat). Guard firma için de KALIR:
+ * mesajı o verir, kısıt yarış/atlama yollarına karşı sessiz son hat.
  */
 async function assertSubNameAvailable(
   model: "subcontractor" | "subcontractorCategory",

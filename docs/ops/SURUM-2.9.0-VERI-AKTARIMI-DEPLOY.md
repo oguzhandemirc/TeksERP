@@ -130,6 +130,8 @@ On ikisi ayrı iş, hepsi aynı pull'da:
 | 25 | `20260819190000_roll_plan_deviations` | **Plan-sapma defteri** — YENİ tablo (`roll_plan_deviations`) + 8 index + 5 FK. Mevcut tabloya DOKUNMAZ, boş doğar |
 | 26 | `20260819200000_fason_partial_receive` | **Fason kısmi kabul** — 3 tabloya 4 nullable kolon (`clientToken` + unique index, `receivedQty`, `isPartial` DEFAULT false, `remainderClosedAt`); mevcut satırlar etkilenmez |
 | 27 | `20260821120000_roll_variance_source_ref` | **Fason çekmesi defteri** — `roll_variances`'e 1 nullable UUID (`sourceRefId`) + 1 index. Mevcut satırlar NULL kalır, hiçbir yol onları okumaz; `roll_variances` küçük tablo → vardiya içinde uygulanabilir |
+| 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). ⚠️ **MÜKERRER VARKEN DÜŞER — BİLİNÇLİ** (ön kontrol DO bloğu okunur hata verir ve sonraki migration'lar koşmaz). 2026-08-22 SIFIRLAMA sonrası boş DB'de risksiz; sıfırlama ERTELENİRSE önce Sistem → Mükerrer Kayıtlar ile §10'daki grupları birleştir, sonra `migrate deploy`. Dolu bir kopyaya (`tekserp_saha`) UYGULAMA |
+| 29 | `20260821150100_roll_reason_codes` | **Sebep KODU topun satırında** — `rolls`'a 2 nullable VARCHAR(64) (`entryReasonCode`, `cancelReasonCode`); metadata-only, index yok, vardiya içinde uygulanabilir. Kodu sunucu metinden türetir → APK değişmeden dolar; eski satırlar NULL (geriye doldurulmaz; sıfırlama sonrası zaten yok) |
 
 ⚠️ **25 ve 26, envanterdeki 24'ten ÖNCEKİ damgayı taşır ama SONRA yazıldı** —
 Prisma dizin adına göre sıralar, yani gerçek uygulama sırası 19→20→21 olacak.
@@ -257,6 +259,10 @@ psql -U postgres -d tekserp -c "SELECT code, label FROM reason_presets WHERE kin
 psql -U postgres -d tekserp -c "SELECT table_name, count(*) FROM information_schema.columns WHERE column_name IN ('mergedIntoId','mergedAt','mergedById') AND table_name IN ('customers','items','colors','subcontractors') GROUP BY 1 ORDER BY 1;"
 psql -U postgres -d tekserp -c "SELECT indexname, indexdef LIKE '%WHERE%' AS partial_mi FROM pg_indexes WHERE tablename IN ('customers','items','colors','subcontractors') AND indexname LIKE '%mergedIntoId_idx' ORDER BY 1;"
 psql -U postgres -d tekserp -c "SELECT count(*) FROM pg_constraint WHERE conname ~ '^(customers|items|colors|subcontractors)_merged(IntoId|ById)_fkey';"
+# Ad mükerreri DB seddi (28. migration) — üç index PARTIAL + UNIQUE mi
+psql -U postgres -d tekserp -c "SELECT indexname, indexdef LIKE 'CREATE UNIQUE%' AS uniq, indexdef LIKE '%WHERE%' AS partial FROM pg_indexes WHERE indexname IN ('customers_nameFold_key','items_nameFold_key','subcontractors_nameFold_key') ORDER BY 1;"
+# Sebep kodu kolonları (29. migration)
+psql -U postgres -d tekserp -c "SELECT column_name, character_maximum_length, is_nullable FROM information_schema.columns WHERE table_name='rolls' AND column_name IN ('entryReasonCode','cancelReasonCode') ORDER BY 1;"
 ```
 
 Beklenen (hepsi provada ölçüldü):
@@ -277,6 +283,8 @@ Beklenen (hepsi provada ölçüldü):
 | `*_mergedIntoId_idx` | **4 satır, hepsi `partial_mi = t`** — `f` görürsen index TAM oluşmuş demektir (yanlış değil, sadece gereksiz büyük); `test_db_invariants` bunu KIRMIZI verir. ⚠️ Sorgudaki `tablename IN (...)` süzgeci gerekli: `batches_mergedIntoId_idx` (eski, 2026-07 parti birleştirmesi) da desene uyar ve süzgeç olmadan 5 satır döner |
 | Birleştirme FK'ları | **8** |
 | Backend log'u (2) | `[permission-catalog] 1 yeni izin eklendi: master-data:merge` (ilk açılış) |
+| `*_nameFold_key` (28) | **3 satır, `uniq = t` VE `partial = t`** — satır eksikse migration düşmüş demektir (muhtemelen mükerrer varken koşuldu: `migrate status` + hata metnindeki grup listesi); `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
+| `rolls` sebep kodları (29) | **2 satır**, `character varying(64)`, `YES` |
 
 ---
 
@@ -760,10 +768,19 @@ Satırlar silinmiyor, **gizleniyor** (eski kayıtların sebebi okunur kalsın di
 
 ---
 
-## 10) BEKLENEN "KIRMIZI" — mükerrer müşteri (kod kusuru DEĞİL)
+## 10) Mükerrer müşteri/kumaş/fason — SIFIRLAMA SONRASI SIFIR; ertelenirse ÖN KOŞUL
 
-Deploy sonrası `find_fold_duplicates.ts` (ve `test_consistency` §18) mükerrer
-gösterecek. Geliştirme kopyasında ölçülen: **12 grup / 15 fazla satır**:
+> **2026-08-21 güncellemesi:** 28. migration (`name_fold_unique_live`) bu üç tabloya DB
+> seddi koyar ve **mükerrer varken DÜŞER** (bilinçli — ön kontrol okunur hata basar,
+> sonraki migration'lar koşmaz). 2026-08-22 sıfırlamasıyla DB boş doğacağı için bu
+> bölüm artık "beklenen kırmızı" değil, **sıfırlama ertelenirse** izlenecek reçetedir:
+> aşağıdaki grupları Sistem → Mükerrer Kayıtlar ile birleştir → `npx tsx
+> scripts/find_fold_duplicates.ts` sedli tablolarda boş dönsün → `migrate deploy`.
+> Geliştirme kopyasında aynı 8 grup birleştirme aracıyla temizlendi (2026-08-21) ve
+> migration orada uygulandı; `colors` (1 grup) ve test artığı istasyonlar sed dışı.
+
+Eski sürümlerde deploy sonrası `find_fold_duplicates.ts` (ve `test_consistency` §18)
+mükerrer gösteriyordu. Geliştirme kopyasında ölçülen: **12 grup / 15 fazla satır**:
 
 ```
 Müşteri: Moda Tekstil [aktif]   |  MODA TEKSTİL [aktif]      ← ikisi de AKTİF

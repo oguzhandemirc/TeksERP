@@ -27,8 +27,10 @@ export interface ReasonPreset {
 }
 
 /**
- * ⚠️ true olan listelerde kayda KOD değil METİN yazılır (`Roll.entryReason` /
- * `Roll.cancelReason`) → metni düzenlemek GEÇMİŞ kayıtları eski metinle bırakır.
+ * true olan listelerde kayda METİN de yazılır (`Roll.entryReason` / `Roll.cancelReason`
+ * — görünen kayıt); 2026-08-21'den beri KOD da yazılır (`entryReasonCode` /
+ * `cancelReasonCode` — rapor anahtarı, sunucu metinden türetir). Metni düzenlemek
+ * geçmişi BÖLMEZ (kod sabit); eski kayıt eski metni taşımaya devam eder.
  * Sunucudaki `KIND_STORES_TEXT` ile birebir aynı tablo.
  */
 export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {

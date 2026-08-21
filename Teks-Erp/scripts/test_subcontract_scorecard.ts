@@ -61,8 +61,8 @@ async function main(): Promise<void> {
     data: { batchNumber: `${TAG}-B`, workOrderId: wo.id }, select: { id: true },
   });
   ids.batches.push(batch.id);
-  const subA = await prisma.subcontractor.create({ data: { code: `${TAG}-A`, name: "Boyahane A" }, select: { id: true } });
-  const subB = await prisma.subcontractor.create({ data: { code: `${TAG}-B`, name: "Boyahane B" }, select: { id: true } });
+  const subA = await prisma.subcontractor.create({ data: { code: `${TAG}-A`, name: `Boyahane A ${TAG}` }, select: { id: true } });
+  const subB = await prisma.subcontractor.create({ data: { code: `${TAG}-B`, name: `Boyahane B ${TAG}` }, select: { id: true } });
   ids.subs.push(subA.id, subB.id);
 
   const mkRoll = async (qty: number): Promise<string> => {
@@ -180,12 +180,12 @@ async function main(): Promise<void> {
 
   // ── 5) AÇIK SEVK LİSTESİ ──────────────────────────────────────────────────
   console.log("\n── 5) Açık sevk takip listesi ──");
-  const openRow = sc.oldestOpen.find((r) => r.subcontractorName === "Boyahane A");
+  const openRow = sc.oldestOpen.find((r) => r.subcontractorName === `Boyahane A ${TAG}`);
   check("açık sevk listede", openRow !== undefined && openRow.openQty === 200,
     `gelen: ${openRow?.openQty}`);
   check(
     "iptal/doğrudan sevkler açık listesine girmez",
-    !sc.oldestOpen.some((r) => r.subcontractorName === "Boyahane B"),
+    !sc.oldestOpen.some((r) => r.subcontractorName === `Boyahane B ${TAG}`),
   );
 
   // ── 6) KARŞILAŞTIRMA ──────────────────────────────────────────────────────

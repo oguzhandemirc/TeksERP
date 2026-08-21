@@ -14,6 +14,11 @@
 //      reddedilir (fail-closed).
 //   §4 Mobil zemin aynası: APK'ya gömülü liste ile sunucu sistem kataloğu
 //      birebir — ayrışırsa çevrimdışı tablet başka bir liste gösterir.
+//   §5 Sebep KODU çözücü (2026-08-21, metin saklayan iki kind): gelen metin
+//      label/fullText ile KATLANMIŞ eşlenir (İ/ı, büyük/küçük), gizli satır da
+//      eşleşir, serbest metne kod UYDURULMAZ (null), açık kod katalogda
+//      doğrulanır (uydurma → REASON_CODE_INVALID), açık kod + boş metin →
+//      metin preset'ten dolar, açık kod + metin → metin EZİLMEZ.
 // =============================================================================
 
 import { readFileSync } from "fs";
@@ -25,6 +30,9 @@ import { reconcileReasonPresets } from "../src/jobs/reason-preset-catalog.job";
 import {
   ReasonPresetService,
   refreshReasonPresetCache,
+  resolveReasonCode,
+  resolveReasonCodeFromText,
+  assertKnownReasonCode,
 } from "../src/services/reason-preset.service";
 import {
   REASON_PRESET_CATALOG,
@@ -199,6 +207,82 @@ async function main(): Promise<void> {
     "her ReasonPresetKind'ın sistem satırı var",
     REASON_PRESET_KINDS.every((k) => REASON_PRESET_CATALOG[k].length > 0),
     REASON_PRESET_KINDS.join(","),
+  );
+
+  // ── §5 Sebep KODU çözücü (metin saklayan iki kind) ──────────────────────────
+  console.log("\n── §5 Sebep kodu çözücü (Roll.entryReasonCode / cancelReasonCode) ──");
+  const CANCEL = ReasonPresetKind.ROLL_CANCEL;
+  const MANUAL = ReasonPresetKind.ROLL_MANUAL_ENTRY;
+  check(
+    "label eşleşir: 'Mükerrer' → MUKERRER",
+    (await resolveReasonCodeFromText(CANCEL, "Mükerrer")) === "MUKERRER",
+  );
+  check(
+    "fullText eşleşir: 'Yanlış metraj girildi' → YANLIS_METRAJ",
+    (await resolveReasonCodeFromText(CANCEL, "Yanlış metraj girildi")) === "YANLIS_METRAJ",
+  );
+  check(
+    "KATLANMIŞ eşleşir (küçük harf): 'yanlış metraj girildi' → YANLIS_METRAJ",
+    (await resolveReasonCodeFromText(CANCEL, "yanlış metraj girildi")) === "YANLIS_METRAJ",
+  );
+  check(
+    "KATLANMIŞ eşleşir (İ/ı + ASCII + boşluk): '  YANLIS  METRAJ GİRİLDİ ' → YANLIS_METRAJ",
+    (await resolveReasonCodeFromText(CANCEL, "  YANLIS  METRAJ GİRİLDİ ")) === "YANLIS_METRAJ",
+  );
+  check(
+    "elle ekleme: 'Sayım farkı — fiziksel mal var' → SAYIM_FARKI",
+    (await resolveReasonCodeFromText(MANUAL, "Sayım farkı — fiziksel mal var")) === "SAYIM_FARKI",
+  );
+  check(
+    "kind'lar KARIŞMAZ: iptal metni elle-ekleme kataloğunda eşleşmez → null",
+    (await resolveReasonCodeFromText(MANUAL, "Yanlış metraj girildi")) === null,
+  );
+  check(
+    "serbest metne kod UYDURULMAZ → null",
+    (await resolveReasonCodeFromText(CANCEL, "operatör yanlışlıkla iki kez bastı")) === null,
+  );
+  check("boş metin → null", (await resolveReasonCodeFromText(CANCEL, "   ")) === null);
+
+  // Fabrikanın eklediği ve sonra GİZLEDİĞİ satır da eşleşir (bayat listeli tablet
+  // gizlenmiş sebebi metniyle göndermeye devam edebilir — kodu düşmemeli).
+  const hiddenCancel = await ReasonPresetService.create({
+    kind: CANCEL,
+    label: TEST_LABEL + " İPTAL",
+  });
+  created.push(hiddenCancel.id);
+  await ReasonPresetService.update(hiddenCancel.id, { isActive: false });
+  check(
+    "fabrika satırı (GİZLİ) metinle eşleşir → kendi kodu",
+    (await resolveReasonCodeFromText(CANCEL, TEST_LABEL + " İPTAL")) === hiddenCancel.code,
+    hiddenCancel.code,
+  );
+
+  let badCode = false;
+  try {
+    await assertKnownReasonCode(CANCEL, "YOK_BOYLE_KOD");
+  } catch (e) {
+    const code = (e as { code?: string; details?: { code?: string } }).code ?? (e as { details?: { code?: string } }).details?.code;
+    badCode = code === "REASON_CODE_INVALID" || String((e as Error).message).includes("Geçersiz sebep kodu");
+  }
+  check("uydurma AÇIK kod reddedilir (REASON_CODE_INVALID)", badCode);
+
+  const explicitOnly = await resolveReasonCode(CANCEL, { reasonCode: "TOP_YOK" });
+  check(
+    "açık kod + boş metin → metin preset'ten dolar",
+    explicitOnly.code === "TOP_YOK" && explicitOnly.text === "Top fiziksel olarak yok (hatalı kayıt)",
+    `${explicitOnly.code} / ${explicitOnly.text}`,
+  );
+  const explicitWithText = await resolveReasonCode(CANCEL, { reasonCode: "TOP_YOK", reasonText: "elimde yok" });
+  check(
+    "açık kod + metin → metin EZİLMEZ",
+    explicitWithText.code === "TOP_YOK" && explicitWithText.text === "elimde yok",
+    `${explicitWithText.code} / ${explicitWithText.text}`,
+  );
+  const derivedOnly = await resolveReasonCode(MANUAL, { reasonText: "Etiketi kopmuş / okunmuyor" });
+  check(
+    "yalnız metin → kod türetilir, metin aynen kalır",
+    derivedOnly.code === "ETIKET_KOPMUS" && derivedOnly.text === "Etiketi kopmuş / okunmuyor",
+    `${derivedOnly.code} / ${derivedOnly.text}`,
   );
 }
 

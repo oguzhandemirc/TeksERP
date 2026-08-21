@@ -46,7 +46,7 @@ async function main(): Promise<void> {
   if (!item) throw new Error("Seed Item bulunamadı — önce `npm run seed`");
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-SNOTE-${ts}`, name: "YORUM TEST MÜŞTERİ" },
+    data: { code: `TST-SNOTE-${ts}`, name: `YORUM TEST MÜŞTERİ ${ts}` },
     select: { id: true },
   });
 

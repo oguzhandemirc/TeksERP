@@ -120,7 +120,7 @@ async function main(): Promise<void> {
   });
   ids.steps.push(step.id);
   const sub = await prisma.subcontractor.create({
-    data: { code: `${TAG}-SUB`, name: "Parti izleme fason" }, select: { id: true, name: true },
+    data: { code: `${TAG}-SUB`, name: `Parti izleme fason ${TAG}` }, select: { id: true, name: true },
   });
   ids.subs.push(sub.id);
   const disp = await prisma.subcontractorDispatch.create({

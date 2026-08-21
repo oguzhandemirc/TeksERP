@@ -124,11 +124,11 @@ async function part2Db() {
   console.log("\n[2] getHtml ?draft — PLANNED sevkiyat (DB)");
   const ts = Date.now();
   const customer = await prisma.customer.create({
-    data: { code: `TST-SDD-${ts}`, name: "TEST SDD MÜŞTERİ", taxNumber: "1112223334" },
+    data: { code: `TST-SDD-${ts}`, name: `TEST SDD MÜŞTERİ ${ts}`, taxNumber: "1112223334" },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-SDD-I-${ts}`, name: "SDD KUMAŞ", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-SDD-I-${ts}`, name: `SDD KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const color = await prisma.color.create({

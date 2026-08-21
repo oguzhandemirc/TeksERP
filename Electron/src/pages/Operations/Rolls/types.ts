@@ -96,6 +96,8 @@ export interface Roll {
   /** İptal izi — topun kendi satırından (audit'ten değil; 6 ayda arşivlenir). */
   cancelledAt?: string | null;
   cancelReason?: string | null;
+  /** İptal sebebinin KATALOG KODU (ReasonPreset, 2026-08-21) — rapor anahtarı; NULL = serbest metin. */
+  cancelReasonCode?: string | null;
   cancelledBy?: { id: string; username: string; fullName: string } | null;
   /**
    * İptal geri alınabilir mi — BACKEND'in yüklemi (`roll-cancel-restore.helper`).
@@ -119,6 +121,8 @@ export interface Roll {
    * Okuyacak yer `detail`'dir.
    */
   manualReason?: string | null;
+  /** Ekleme sebebinin KATALOG KODU (`Roll.entryReasonCode`, 2026-08-21) — liste+detayda döner. */
+  entryReasonCode?: string | null;
   /** Topu sisteme giren kullanıcı — liste VE detay ucunda döner (ROLL_LIST_INCLUDE). */
   createdBy?: { id: string; fullName?: string | null; username?: string | null } | null;
   /** Girişin yapıldığı makine (varsa) — liste VE detay ucunda döner. */

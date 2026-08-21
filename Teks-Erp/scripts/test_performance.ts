@@ -78,7 +78,7 @@ async function main(): Promise<void> {
   // yeşil). Teste özel boş ürün = tam izolasyon; lokal + CI deterministik.
   const stamp = Date.now();
   const item = await prisma.item.create({
-    data: { code: `TEST-PERF-ITEM-${stamp}`, name: "TEST PERF ÜRÜN", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TEST-PERF-ITEM-${stamp}`, name: `TEST PERF ÜRÜN ${stamp}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const grade = await prisma.qualityGrade.findUnique({

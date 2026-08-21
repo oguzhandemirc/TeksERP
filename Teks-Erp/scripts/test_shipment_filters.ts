@@ -64,19 +64,19 @@ async function main() {
 
   // ---- Fixture master data --------------------------------------------------
   const customer = await prisma.customer.create({
-    data: { code: `TEST-SFL-${ts}`, name: "TEST SEVK FİLTRE MÜŞTERİSİ" },
+    data: { code: `TEST-SFL-${ts}`, name: `TEST SEVK FİLTRE MÜŞTERİSİ ${ts}` },
     select: { id: true },
   });
   const otherCustomer = await prisma.customer.create({
-    data: { code: `TEST-SFL-X-${ts}`, name: "TEST SEVK FİLTRE YABANCI" },
+    data: { code: `TEST-SFL-X-${ts}`, name: `TEST SEVK FİLTRE YABANCI ${ts}` },
     select: { id: true },
   });
   const itemA = await prisma.item.create({
-    data: { code: `TST-SFL-A-${ts}`, name: "TEST PATOS", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-SFL-A-${ts}`, name: `TEST PATOS ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const itemB = await prisma.item.create({
-    data: { code: `TST-SFL-B-${ts}`, name: "TEST ÜRÜN B", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-SFL-B-${ts}`, name: `TEST ÜRÜN B ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const colorX = await prisma.color.create({

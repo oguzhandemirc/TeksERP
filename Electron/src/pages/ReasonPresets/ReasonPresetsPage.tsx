@@ -123,10 +123,11 @@ export function ReasonPresetsPage() {
               <Callout tone="info">{t.hint}</Callout>
 
               {KIND_STORES_TEXT[t.kind] && (
-                <Callout tone="warning" title="Bu listede kayda metnin kendisi yazılır">
-                  Adı değiştirmek yalnız BUNDAN SONRAKİ kayıtları etkiler; eski kayıtlar eski
-                  metinle kalır ve raporda ayrı satır olarak görünür. Fire ve kayıt düzeltmesi
-                  listelerinde böyle bir risk yoktur — orada satıra kod yazılır.
+                <Callout tone="info" title="Bu listede kayda metin ve kod birlikte yazılır">
+                  Kayıt hem görünen metni hem de satırın kodunu taşır; raporlar koda göre
+                  gruplanır. Metni değiştirmek yalnız BUNDAN SONRAKİ kayıtların görünen metnini
+                  değiştirir — eski kayıtlar eski metinle kalır ama kod aynı olduğu için rapor
+                  bölünmez.
                 </Callout>
               )}
 

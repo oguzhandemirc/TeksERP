@@ -147,7 +147,7 @@ async function main(): Promise<void> {
   const ts = Date.now();
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true }, orderBy: { code: "asc" } });
   if (!item) throw new Error("Seed Item bulunamadı — önce `npm run seed`");
-  const customer = await prisma.customer.create({ data: { code: `TST-SND-${ts}`, name: "BELGE YORUM TEST" }, select: { id: true } });
+  const customer = await prisma.customer.create({ data: { code: `TST-SND-${ts}`, name: `BELGE YORUM TEST ${ts}` }, select: { id: true } });
   const rollIds: string[] = [];
   const sackIds: string[] = [];
   let shipmentId: string | null = null;

@@ -444,6 +444,53 @@ async function main(): Promise<void> {
       `colorSource=${String(createdData.colorSource)} colorId=${String(createdData.colorId)}`,
     );
 
+    // ── SEBEP KODU (2026-08-21) ─────────────────────────────────────────────
+    // Serbest metin → kod UYDURULMAZ (null); preset metni → sunucu kodu türetir;
+    // uydurma AÇIK kod → 400. Mobil bugün yalnız metin gönderiyor.
+    if (typeof manualRollId === "string") {
+      const manualRow = await prisma.roll.findUniqueOrThrow({
+        where: { id: manualRollId },
+        select: { entryReasonCode: true },
+      });
+      check("serbest metin sebep → entryReasonCode NULL", manualRow.entryReasonCode === null, String(manualRow.entryReasonCode));
+    }
+    const presetCreated = await call("POST", "/api/tambur/manual/roll", {
+      token: fieldToken,
+      body: {
+        targetStepId: tamburStepId,
+        initialQty: 21,
+        reason: "Sayım farkı — fiziksel mal var",
+        clientToken: randomUUID(),
+        batchId: fx.batchId,
+      },
+    });
+    check("preset metniyle manuel top → 201", presetCreated.status === 201, `status=${presetCreated.status}`);
+    const presetRollId = dataOf(presetCreated).rollId as string | undefined;
+    if (typeof presetRollId === "string") {
+      createdRollIds.push(presetRollId);
+      const pr = await prisma.roll.findUniqueOrThrow({
+        where: { id: presetRollId },
+        select: { entryReasonCode: true, entryReason: true },
+      });
+      check("sebep KODU sunucuda türetildi → SAYIM_FARKI", pr.entryReasonCode === "SAYIM_FARKI", String(pr.entryReasonCode));
+    }
+    const badCode = await call("POST", "/api/tambur/manual/roll", {
+      token: fieldToken,
+      body: {
+        targetStepId: tamburStepId,
+        initialQty: 21,
+        reason: "deneme sebebi",
+        reasonCode: "YOK_BOYLE_KOD",
+        clientToken: randomUUID(),
+        batchId: fx.batchId,
+      },
+    });
+    check(
+      "uydurma AÇIK sebep kodu → 400 REASON_CODE_INVALID",
+      badCode.status === 400 && codeOf(badCode) === "REASON_CODE_INVALID",
+      `${badCode.status}/${String(codeOf(badCode))}`,
+    );
+
     // ── ÜRÜN/RENK KİLİDİ (2026-08-04) — sapma denemeleri REDDEDİLİR ──────────
     // Mobil form bu alanları hiç sormuyor; buradaki guard eski APK'lı tablete ve
     // doğrudan API çağrısına karşı ikinci savunma hattıdır. Sapma serbest

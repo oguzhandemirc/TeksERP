@@ -161,10 +161,11 @@ async function main(): Promise<void> {
     console.log("\n[4] Kolonlar şemada ve yazılabilir");
     const row = await prisma.roll.findUniqueOrThrow({
       where: { id: r4 },
-      select: { foldType: true, entryReason: true },
+      select: { foldType: true, entryReason: true, entryReasonCode: true },
     });
     check("foldType kolonu okunuyor", row.foldType === "4-KAT", String(row.foldType));
     check("entryReason kolonu ayrı (bu topta null)", row.entryReason === null);
+    check("entryReasonCode kolonu şemada (bu topta null)", row.entryReasonCode === null);
   } finally {
     await prisma.roll.deleteMany({ where: { id: { in: created } } });
     await prisma.item.delete({ where: { id: item.id } }).catch(() => {});

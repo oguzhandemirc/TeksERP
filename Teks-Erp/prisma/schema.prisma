@@ -1278,10 +1278,10 @@ model Item {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
-  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
-  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
-  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının predicate'idir (Faz B6 GELDİ,
+  /// 2026-08-21 — `20260821150000_name_fold_unique_live`): `items_nameFold_key`
+  /// `WHERE "mergedIntoId" IS NULL` — tombstone aynı katlanmış adı taşımaya
+  /// devam eder, kısıt onu dışarıda bırakır (birleşmiş adın yeniden kullanımı MEŞRU).
   mergedIntoId   String?   @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
@@ -1295,6 +1295,13 @@ model Item {
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "items_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
+  // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
+  // DB seddi (D3/B6, 2026-08-21). Prisma 7 partial predicate'i drift saymaz; ama uniqueness
+  // FARKI (index↔unique) drift SAYAR → bu yüzden @@unique olmalı (aksi halde migrate dev
+  // sonsuz CREATE üretir). Ad Prisma varsayılanı (`items_nameFold_key`) — error.middleware
+  // `_<kolon>_key` regex'i kolonu doğru çıkarsın. Uygulama bekçisi (`assertNameNotDuplicate`)
+  // KALIR: kullanıcıya mesajı o verir, bu kısıt yarış/atlama yollarına karşı sessiz son hat.
+  @@unique([nameFold])
   @@map("items")
 }
 
@@ -1380,6 +1387,18 @@ model Roll {
   /// Audit kaydı KALDIRILMADI — orada operatör/makine/istasyon/iş emri bağlamıyla
   /// birlikte durmaya devam eder; bu kolon GÖRÜNEN ve RAPORLANAN kaynaktır.
   entryReason String? @db.VarChar(500)
+
+  /// Ekleme sebebinin KATALOG KODU (2026-08-21, `ReasonPreset.code`, kind
+  /// ROLL_MANUAL_ENTRY). `entryReason` GÖRÜNEN metin, bu kolon RAPOR ANAHTARI —
+  /// kod doğuşta yazılır ve fabrika etiketi düzenlese de değişmez (fire/kayıt
+  /// düzeltmesi defterindeki `RollVariance.reasonCode` ile aynı sözleşme).
+  /// Kaynağı: istemci açıkça gönderdiyse o (katalogda doğrulanır); yoksa SUNUCU
+  /// metni kataloğun label/fullText'iyle katlanmış eşleyip kendisi türetir
+  /// (`reason-preset.service.resolveReasonCode`) — mobil bugün yalnız metin
+  /// gönderiyor, APK değişmeden ilk günden dolar. NULL = serbest metin / katalog
+  /// dışı / 2026-08-21 öncesi kayıt (geriye doldurulmaz — entryStationId emsali).
+  /// Index YOK: hiçbir sorgu kodla süzmüyor; rapor topu başka kolondan bulup kodu OKUR.
+  entryReasonCode String? @db.VarChar(64)
 
   /// Kaç KAT sarıldığı — değer KATALOGDAN doğrulanır (2026-08-10): `KAT` kodlu
   /// SEÇİM (CHOICE) tipli FabricProperty'nin değer listesi (`FabricPropertyValue`,
@@ -1541,6 +1560,11 @@ model Roll {
   cancelledAt   DateTime? @db.Timestamptz
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(500)
+  /// İptal sebebinin KATALOG KODU (2026-08-21, kind ROLL_CANCEL) — `entryReasonCode`
+  /// ile aynı sözleşme: metin görünen kayıt, kod rapor anahtarı; sunucu metinden
+  /// türetir, açık kod katalogda doğrulanır; NULL = serbest metin / sebepsiz iptal.
+  /// `restoreCancelledRoll` metinle birlikte bunu da NULL'lar.
+  cancelReasonCode String? @db.VarChar(64)
 
   /// İptalden ÖNCEKİ statü — geri alma (`restoreCancelledRoll`) buraya döner.
   /// `preShipStatus` emsalinin birebir aynısı ve aynı sebeple: körlemesine `STOCK`'a
@@ -1829,10 +1853,10 @@ model Customer {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
-  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
-  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
-  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının predicate'idir (Faz B6 GELDİ,
+  /// 2026-08-21 — `20260821150000_name_fold_unique_live`): `customers_nameFold_key`
+  /// `WHERE "mergedIntoId" IS NULL` — tombstone aynı katlanmış adı taşımaya
+  /// devam eder, kısıt onu dışarıda bırakır (birleşmiş adın yeniden kullanımı MEŞRU).
   mergedIntoId   String?    @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
@@ -1847,6 +1871,9 @@ model Customer {
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "customers_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
+  // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
+  // DB seddi (D3/B6, 2026-08-21). Gerekçe ve ad kuralı: Item modelindeki aynı not.
+  @@unique([nameFold])
   @@map("customers")
 }
 
@@ -2933,12 +2960,15 @@ model RollPlanDeviation {
 // Kodun düzenlenebilir olduğu bir tasarımda "Top başı" adını düzelten operatör
 // altı aylık fire raporunu ikiye bölerdi.
 //
-// ⚠️ METİN SAKLAYAN İKİ KİND (ROLL_MANUAL_ENTRY / ROLL_CANCEL) İSTİSNADIR:
-// `Roll.entryReason` ve `Roll.cancelReason` serbest METİN kolonlarıdır, kod
-// taşımazlar. Orada gruplama metnin kendisine dayanır → `fullText` düzenlenirse
-// GEÇMİŞ kayıtlar eski metinle kalır ve raporda iki satır olur. Bu yüzden
-// düzenleme yüzeyi o iki listede operatörü açıkça uyarır. (Kodu satıra da
-// yazmak `Roll`a iki yeni kolon + backfill demekti; bilinçli olarak ertelendi.)
+// METİN SAKLAYAN İKİ KİND (ROLL_MANUAL_ENTRY / ROLL_CANCEL) — 2026-08-21'den
+// beri KOD DA TAŞIR: `Roll.entryReason`/`cancelReason` GÖRÜNEN metin,
+// `Roll.entryReasonCode`/`cancelReasonCode` RAPOR ANAHTARI. Kodu sunucu yazar
+// (istemci açıkça gönderirse katalogda doğrulanır; yoksa metin kataloğun
+// label/fullText'iyle katlanmış eşlenir — `resolveReasonCode`). Böylece `label`/
+// `fullText` düzenlemesi geçmişi BÖLMEZ (kod sabit); yalnız GÖRÜNEN metin
+// değişir (eski kayıt eski metni, yeni kayıt yenisini taşır — kod aynı). Erteleme
+// gerekçesi ("iki kolon + backfill") 2026-08-22 DB sıfırlamasıyla düştü: backfill
+// sıfır. `KIND_STORES_TEXT` bayrağı KALIR — `fullText` saklama kararını o okur.
 //
 // ⚠️ SİSTEM SATIRI (`isSystem`) SİLİNMEZ, GİZLENİR. Kod kataloğundan doğar ve
 // her boot'ta uzlaştırılır (`jobs/reason-preset-catalog.job.ts`) — sert silme
@@ -3552,10 +3582,11 @@ model Subcontractor {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
-  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
-  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
-  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
+  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının predicate'idir (Faz B6 GELDİ,
+  /// 2026-08-21 — `20260821150000_name_fold_unique_live`): `subcontractors_nameFold_key`
+  /// `WHERE "mergedIntoId" IS NULL` — tombstone aynı katlanmış adı taşımaya
+  /// devam eder, kısıt onu dışarıda bırakır (birleşmiş adın yeniden kullanımı MEŞRU).
+  /// Kategori (`SubcontractorCategory`) bu sedde DAHİL DEĞİL — soy bağı yok, uygulama bekçisi.
   mergedIntoId   String?         @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
@@ -3568,6 +3599,9 @@ model Subcontractor {
   @@index([documentProfileId])
   @@index([nameFold])
   @@index([mergedIntoId])
+  // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
+  // DB seddi (D3/B6, 2026-08-21). Gerekçe ve ad kuralı: Item modelindeki aynı not.
+  @@unique([nameFold])
   @@map("subcontractors")
 }
 
@@ -4375,10 +4409,11 @@ model Color {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ Bu kolon `nameFold` UNIQUE kısıtının önünü AÇAR ama kısıt HENÜZ YOK
-  /// (Faz B6): canlıda mükerrer kayıtlar dururken konulamıyor. Konulduğunda
-  /// predicate `WHERE "mergedIntoId" IS NULL` olacak — tombstone aynı katlanmış
-  /// adı taşımaya devam eder, kısıt onu dışarıda bırakır.
+  /// ⚠️ RENKTE `nameFold` UNIQUE kısıtı BİLİNÇLİ OLARAK YOK (2026-08-21, Item/Customer/
+  /// Subcontractor'a kondu): renk mükerreri ayraç + token-sırası bağımsızdır
+  /// (`foldColorNameForCompare`, "055-BEYAZ" ≡ "BEYAZ 055"); düz `nameFold` üzerine kısıt
+  /// uygulama kuralından ZAYIF olur ve yanlış güven verir. Tek bekçi `ColorService.assertNameAvailable`
+  /// (JS, color.service.ts notu). `mergedIntoId` yine tombstone izidir.
   mergedIntoId   String?   @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).

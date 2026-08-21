@@ -67,11 +67,11 @@ async function main() {
   if (!user) throw new Error("Seed kullanıcısı 'admin' yok — önce `npm run seed`.");
 
   const customer = await prisma.customer.create({
-    data: { code: `TST-DRG-${ts}`, name: "TEST DRG MÜŞTERİ", taxNumber: "1112223334" },
+    data: { code: `TST-DRG-${ts}`, name: `TEST DRG MÜŞTERİ ${ts}`, taxNumber: "1112223334" },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-DRG-I-${ts}`, name: "DRG KUMAŞ", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-DRG-I-${ts}`, name: `DRG KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true, name: true },
   });
   const color = await prisma.color.create({

@@ -20,7 +20,7 @@ async function main() {
   const ts = Date.now();
   const svc = new LabelService();
   const item = await prisma.item.create({
-    data: { code: `TST-BLK-${ts}`, name: "BULK ÜRÜN", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-BLK-${ts}`, name: `BULK ÜRÜN ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const mkRoll = (n: number) =>

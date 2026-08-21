@@ -29,18 +29,24 @@ export type ReasonPresetSeed = {
   readonly label: string;
   /**
    * Sunucuya GİDEN tam metin. Yalnız METİN SAKLAYAN kind'larda dolar
-   * (ROLL_MANUAL_ENTRY / ROLL_CANCEL): oralarda satıra kod değil metin yazılır
-   * (`Roll.entryReason` / `Roll.cancelReason` serbest metin kolonlarıdır).
+   * (ROLL_MANUAL_ENTRY / ROLL_CANCEL): oralarda satıra GÖRÜNEN metin yazılır
+   * (`Roll.entryReason` / `Roll.cancelReason`) — 2026-08-21'den beri KOD da
+   * (`entryReasonCode` / `cancelReasonCode`): sunucu gelen metni bu `fullText` ya
+   * da `label` ile katlanmış eşleyip kodu kendisi türetir (`resolveReasonCode`).
    */
   readonly fullText?: string;
   readonly requiresText?: boolean;
 };
 
 /**
- * ⚠️ SÖZLEŞME FARKI, tek yerde yazılı: bu bayrak true ise listenin seçimi
- * sunucuya METİN olarak gider ve rapor gruplaması METNE dayanır → etiketi
- * düzenlemek GEÇMİŞ kayıtları eski metinle bırakır (iki satır olur). false ise
- * satıra KOD yazılır ve etiket düzenlemesi tamamen güvenlidir.
+ * SÖZLEŞME FARKI, tek yerde yazılı: bu bayrak true ise listenin seçimi sunucuya
+ * METİN olarak gider ve satıra görünen metin yazılır (`resolveFullText` bunu
+ * okur); false ise yalnız KOD yazılır (`RollVariance.reasonCode`).
+ * ⚠️ 2026-08-21'den beri true olan kind'larda satır KODU DA taşır
+ * (`Roll.entryReasonCode` / `cancelReasonCode` — sunucu metinden türetir), yani
+ * etiket/metin düzenlemesi geçmişi BÖLMEZ: eski kayıt eski metni, yeni kayıt
+ * yenisini taşır, rapor anahtarı (kod) aynı kalır. Bayrağın "metin saklanır"
+ * anlamı duruyor; "kod saklanmaz" anlamı DÜŞTÜ.
  */
 export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   ROLL_SCRAP: false,

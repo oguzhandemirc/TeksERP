@@ -26,7 +26,7 @@ const customerService = new CustomerService({
 async function main() {
   const ts = Date.now();
   const customer = await prisma.customer.create({
-    data: { code: `TST-CSG-${ts}`, name: "TEST Çuval Guard Müşterisi" },
+    data: { code: `TST-CSG-${ts}`, name: `TEST Çuval Guard Müşterisi ${ts}` },
     select: { id: true },
   });
 

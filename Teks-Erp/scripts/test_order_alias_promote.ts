@@ -51,7 +51,7 @@ async function mkOrder(lines: Record<string, unknown>[]): Promise<void> {
 async function main(): Promise<void> {
   ITEM = need(await prisma.item.findFirst({ where: { code: "PATOS" }, select: { id: true } }), "PATOS").id;
   ADMIN = need(await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }), "admin").id;
-  const cust = await prisma.customer.create({ data: { code: `TST-ALIAS-C-${stamp}`, name: "Alias Test Müşteri" } });
+  const cust = await prisma.customer.create({ data: { code: `TST-ALIAS-C-${stamp}`, name: `Alias Test Müşteri ${stamp}` } });
   CUST = cust.id;
 
   try {

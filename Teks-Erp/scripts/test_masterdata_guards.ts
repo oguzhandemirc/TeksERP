@@ -47,7 +47,9 @@ async function main(): Promise<void> {
   const item = await prisma.item.create({
     data: {
       code: `TST-MDG-I-${stamp}`,
-      name: "MDG TEST ÜRÜN",
+      // Ad da damgalı — items.nameFold DB seddi (2026-08-21); artık kalan sabit ad
+      // ikinci koşumu P2002'ye düşürürdü.
+      name: `MDG TEST ÜRÜN ${stamp}`,
       itemType: "FABRIC",
       unit: "MT",
       allowedProperties: { create: [{ propertyId: PROP_A }] },

@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TEST-WOSRCH-ITM-${ts}`, name: "TEST WOSRCH KUMAS", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TEST-WOSRCH-ITM-${ts}`, name: `TEST WOSRCH KUMAS ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const order = await prisma.order.create({

@@ -306,6 +306,46 @@ async function main(): Promise<void> {
     );
 
     // =========================================================================
+    // SEBEP KODU (2026-08-21): preset metni → kod sunucuda türetilir; serbest
+    // metin → null (uydurulmaz); uydurma AÇIK kod → 400 REASON_CODE_INVALID.
+    // Mobil bugün yalnız metin gönderiyor — kod APK değişmeden dolmalı.
+    // =========================================================================
+    const presetRes = await produce(
+      { itemId, initialQty: 12, reason: "Sayım farkı — fiziksel mal var", clientToken: randomUUID() },
+      fieldToken,
+    );
+    check("preset metniyle üretim → 201", presetRes.status === 201, `status=${presetRes.status}`);
+    const presetRollId = dataOf(presetRes).rollId as string | undefined;
+    if (typeof presetRollId === "string") {
+      const pr = await prisma.roll.findUniqueOrThrow({
+        where: { id: presetRollId },
+        select: { entryReason: true, entryReasonCode: true },
+      });
+      check("sebep KODU sunucuda türetildi → SAYIM_FARKI", pr.entryReasonCode === "SAYIM_FARKI", String(pr.entryReasonCode));
+      check("görünen metin aynen duruyor", pr.entryReason === "Sayım farkı — fiziksel mal var", String(pr.entryReason));
+    }
+    const freeRes = await produce(
+      { itemId, initialQty: 12, reason: "manuel mod serbest açıklama", clientToken: randomUUID() },
+      fieldToken,
+    );
+    const freeRollId = dataOf(freeRes).rollId as string | undefined;
+    if (typeof freeRollId === "string") {
+      const fr = await prisma.roll.findUniqueOrThrow({ where: { id: freeRollId }, select: { entryReasonCode: true } });
+      check("serbest metinde sebep KODU null (uydurulmaz)", fr.entryReasonCode === null, String(fr.entryReasonCode));
+    } else {
+      check("serbest metinli üretim → 201", false, `status=${freeRes.status}`);
+    }
+    const badCodeRes = await produce(
+      { itemId, initialQty: 12, reason: "deneme sebebi", reasonCode: "YOK_BOYLE_KOD", clientToken: randomUUID() },
+      fieldToken,
+    );
+    check(
+      "uydurma AÇIK sebep kodu → 400 REASON_CODE_INVALID",
+      badCodeRes.status === 400 && codeOf(badCodeRes) === "REASON_CODE_INVALID",
+      `${badCodeRes.status}/${String(codeOf(badCodeRes))}`,
+    );
+
+    // =========================================================================
     // C+D+E) ⭐ ASIL İDDİA — RENKSİZ bitmiş top BİTMİŞ DEPO'ya yazılır
     // =========================================================================
     const coreReason = "manuel mod: top tamburda takıldı, bitmiş mal elle alındı";

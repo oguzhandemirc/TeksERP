@@ -69,6 +69,7 @@ import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
 import {
   Prisma,
+  ReasonPresetKind,
   RollEntrySource,
   RollStatus,
   StationKind,
@@ -76,6 +77,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import { AppError } from "../utils/app-error";
+import { resolveReasonCode } from "./reason-preset.service";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { K18_DEAD_STATUSES } from "./batch.service";
@@ -878,6 +880,12 @@ export class TamburManualService {
       targetStepId: string;
       initialQty: number;
       reason: string;
+      /**
+       * Sebebin KATALOG KODU (ReasonPreset ROLL_MANUAL_ENTRY) — OPSİYONEL. Verilirse
+       * katalogda doğrulanır; verilmezse sunucu `reason` metninden türetir
+       * (`resolveReasonCode`). Satıra `Roll.entryReasonCode` olarak yazılır.
+       */
+      reasonCode?: string | null;
       clientToken: string;
       itemId?: string;
       colorId?: string | null;
@@ -911,6 +919,12 @@ export class TamburManualService {
         code: "REASON_REQUIRED",
       });
     }
+    // Sebep KODU (2026-08-21) — tx DIŞINDA çözülür: açık kod doğrulanır, yoksa
+    // metin kataloğun label/fullText'iyle eşlenir; serbest metin → NULL.
+    const { code: reasonCode } = await resolveReasonCode(ReasonPresetKind.ROLL_MANUAL_ENTRY, {
+      reasonCode: input.reasonCode,
+      reasonText: reason,
+    });
     if (!(input.initialQty > 0)) {
       throw AppError.badRequest("Metraj pozitif olmalı", { code: "QTY_REQUIRED" });
     }
@@ -1081,6 +1095,8 @@ export class TamburManualService {
         // Sebep artık TOPUN ÜZERİNDE kalıcı kolonda (audit'e ek olarak): audit
         // 6 ayda bir arşivleniyor, oradan okumak sebebi zamanla kaybettiriyordu.
         entryReason: reason,
+        // Katalog KODU — rapor anahtarı (metin görünen kayıt). Yukarıda çözüldü.
+        entryReasonCode: reasonCode,
         // KAT — operatörün o an seçtiği değer (miras DEĞİL).
         foldType: foldType ?? null,
         // GİRİŞ İSTASYONU — adım kazanır. Oturum da elde ama ikisinin eşit
@@ -1199,6 +1215,7 @@ export class TamburManualService {
       newData: {
         event: TAMBUR_MANUAL_ROLL_MARKER,
         reason,
+        reasonCode,
         barcode: roll.barcode,
         itemId,
         colorId,
@@ -1312,6 +1329,8 @@ export class TamburManualService {
       targetCustomerId?: string | null;
       markedForKartela?: boolean;
       reason: string;
+      /** Sebebin KATALOG KODU — opsiyonel; `createManualRoll` ile aynı sözleşme. */
+      reasonCode?: string | null;
       clientToken: string;
       /**
        * KAT (2-KAT / 4-KAT / TÜP…) — topun KALICI özelliği (Roll.foldType).
@@ -1327,6 +1346,11 @@ export class TamburManualService {
         code: "REASON_REQUIRED",
       });
     }
+    // Sebep KODU (2026-08-21) — tx DIŞINDA; `createManualRoll` ile aynı kapı.
+    const { code: reasonCode } = await resolveReasonCode(ReasonPresetKind.ROLL_MANUAL_ENTRY, {
+      reasonCode: input.reasonCode,
+      reasonText: reason,
+    });
     if (!(input.initialQty > 0)) {
       throw AppError.badRequest("Metraj pozitif olmalı", { code: "QTY_REQUIRED" });
     }
@@ -1406,6 +1430,7 @@ export class TamburManualService {
           forcedEntrySource: RollEntrySource.TAMBUR_MANUAL,
           // Sebep kalıcı kolonda (audit'e EK olarak — audit arşivleniyor).
           entryReason: reason,
+          entryReasonCode: reasonCode,
           // KAT — Manuel Mod bunu operatöre ZORUNLU soruyor; Zod eksikken
           // veri buraya hiç ulaşmıyordu.
           foldType: foldType ?? null,
@@ -1440,6 +1465,7 @@ export class TamburManualService {
       newData: {
         event: TAMBUR_MANUAL_PRODUCE_EVENT,
         reason,
+        reasonCode,
         barcode: roll.barcode,
         itemId,
         colorId: roll.colorId,

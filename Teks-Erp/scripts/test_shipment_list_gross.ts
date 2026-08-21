@@ -61,11 +61,11 @@ async function main() {
 
   // Fixture'ı test kendi yaratır (dev DB verisine BAĞIMLI OLMA kuralı).
   const customer = await prisma.customer.create({
-    data: { code: `TST-SLG-${ts}`, name: "TEST SLG MÜŞTERİ", taxNumber: "9998887776" },
+    data: { code: `TST-SLG-${ts}`, name: `TEST SLG MÜŞTERİ ${ts}`, taxNumber: "9998887776" },
     select: { id: true },
   });
   const item = await prisma.item.create({
-    data: { code: `TST-SLG-I-${ts}`, name: "SLG KUMAŞ", itemType: "FABRIC", unit: "MT" },
+    data: { code: `TST-SLG-I-${ts}`, name: `SLG KUMAŞ ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
   const color = await prisma.color.create({

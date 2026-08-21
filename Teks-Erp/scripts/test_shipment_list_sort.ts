@@ -50,7 +50,7 @@ const DAY = 86_400_000;
 async function main() {
   const ts = Date.now();
   const customer = await prisma.customer.create({
-    data: { code: `TST-SRT-${ts}`, name: "TEST SRT MÜŞTERİ", taxNumber: "4443332221" },
+    data: { code: `TST-SRT-${ts}`, name: `TEST SRT MÜŞTERİ ${ts}`, taxNumber: "4443332221" },
     select: { id: true },
   });
 
@@ -98,7 +98,7 @@ async function main() {
     select: { id: true },
   });
   const sub = await prisma.subcontractor.create({
-    data: { code: `TST-SRT-SUB-${ts}`, name: "SRT Fason" },
+    data: { code: `TST-SRT-SUB-${ts}`, name: `SRT Fason ${ts}` },
     select: { id: true },
   });
   const dispatch = await prisma.subcontractorDispatch.create({

@@ -56,6 +56,20 @@ function extractFkColumn(meta: Record<string, unknown> | undefined): string | nu
 }
 
 /**
+ * P2002 mesajındaki kolon → kullanıcı etiketi. Yalnız ham kolon adının operatöre
+ * anlamsız olduğu yerler; haritada olmayan kolon ham adıyla basılır (eski davranış).
+ *
+ * `nameFold` (2026-08-21): `customers/items/subcontractors` üzerindeki partial
+ * UNIQUE (`<tablo>_nameFold_key`) ad mükerrerinin DB seddidir. Normal yolda
+ * `assertNameNotDuplicate` ÖNCE ateşler ve Türkçe, kod bilgili 409'u o verir; bu
+ * dal yalnız YARIŞ durumunda (iki istemci aynı anda aynı ad) ya da servisi atlayan
+ * yazımda görünür — o zaman bile operatör "nameFold" değil "ad" okumalı.
+ */
+const UNIQUE_COLUMN_LABELS: Readonly<Record<string, string>> = {
+  nameFold: "ad",
+};
+
+/**
  * Prisma P2002 unique constraint kolon adını çıkarır.
  *   v6 engine:        meta.target = ["code"] veya "code"
  *   v7 + pg adapter:  meta.target boş; meta.driverAdapterError.cause
@@ -376,7 +390,11 @@ export const errorHandler = (
       const label = col ?? "field";
       res.status(409).json({
         success: false,
-        message: `Bu '${label}' değeri zaten mevcut (unique constraint).`,
+        message:
+          col === "nameFold"
+            ? // Katlanmış ad seddi: "MODA TEKSTİL" ≡ "Moda Tekstil" ≡ "moda tekstil".
+              "Bu ad zaten kayıtlı (büyük/küçük harf ve Türkçe karakter farkı sayılmaz)."
+            : `Bu '${UNIQUE_COLUMN_LABELS[label] ?? label}' değeri zaten mevcut (unique constraint).`,
       });
       return;
     }

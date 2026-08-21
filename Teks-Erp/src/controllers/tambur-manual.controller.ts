@@ -77,6 +77,10 @@ const manualRollSchema = z.object({
     .trim()
     .min(3, "İşlem nedeni en az 3 karakter olmalı")
     .max(500, "İşlem nedeni çok uzun"),
+  // Sebebin KATALOG KODU (2026-08-21) — opsiyonel; verilmezse sunucu metinden türetir.
+  // ⚠️ Zod `z.object` bilinmeyen anahtarı SESSİZCE siler (foldType dersi) — istemci
+  // kod göndermeye başladığında bu satır yoksa veri hiç ulaşmaz.
+  reasonCode: z.string().trim().max(64, "Sebep kodu çok uzun").optional().nullable(),
   clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
   itemId: z.string().uuid("Geçersiz ürün ID").optional(),
   colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
@@ -136,6 +140,8 @@ const produceSchema = z.object({
     .trim()
     .min(3, "İşlem nedeni en az 3 karakter olmalı")
     .max(500, "İşlem nedeni çok uzun"),
+  // Sebebin KATALOG KODU — `manualRollSchema` ile aynı sözleşme (Zod strip tuzağı).
+  reasonCode: z.string().trim().max(64, "Sebep kodu çok uzun").optional().nullable(),
   clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
 });
 

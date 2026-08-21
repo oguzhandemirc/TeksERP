@@ -81,7 +81,7 @@ async function main(): Promise<void> {
   // ── Fixture ───────────────────────────────────────────────────────────────
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true }, orderBy: { code: "asc" } });
   if (!item) throw new Error("Seed Item bulunamadı — önce `npm run seed`");
-  const customer = await prisma.customer.create({ data: { code: `TST-SLBL-${ts}`, name: "ETİKET TEST MÜŞTERİ" }, select: { id: true } });
+  const customer = await prisma.customer.create({ data: { code: `TST-SLBL-${ts}`, name: `ETİKET TEST MÜŞTERİ ${ts}` }, select: { id: true } });
 
   const rollIds: string[] = [];
   const sackIds: string[] = [];
@@ -119,7 +119,7 @@ async function main(): Promise<void> {
     const p = (await labels.getSackLabel(sackId)).data;
     check("3) ⭐ barcode === sackNo === Sack.sackNo (tek kod)", p.barcode === sackNo && p.sackNo === sackNo, `${p.barcode}`);
     check("3b) metraj + kg doğru", p.lengthMeters === 150 && p.weightKg === 42.5, `${p.lengthMeters}m / ${p.weightKg}kg`);
-    check("3c) müşteri adı geldi", p.customerName === "ETİKET TEST MÜŞTERİ");
+    check("3c) müşteri adı geldi", p.customerName === `ETİKET TEST MÜŞTERİ ${ts}`);
     check("3d) ürün/renk BOŞ (karışık içerik)", p.itemName === "" && p.colorName === null);
 
     // ── 5) Yorum düzleştirme ────────────────────────────────────────────────

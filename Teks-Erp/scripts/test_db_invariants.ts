@@ -88,7 +88,7 @@ function norm(s: string): string {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1) PARTIAL INDEXLER (30) — ad + predicate + uniqueness
+// 1) PARTIAL INDEXLER (38) — ad + predicate + uniqueness
 //    uniq alanı KRİTİK: `schema.prisma:1603-1605` predicate farkını drift
 //    saymaz ama index↔unique farkını SAYAR ("aksi halde migrate dev sonsuz
 //    CREATE üretir"). Bu yüzden ikisi ayrı ayrı doğrulanır.
@@ -166,6 +166,14 @@ const PARTIAL_INDEXES: Array<{
   { table: "items", index: "items_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
   { table: "colors", index: "colors_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
   { table: "subcontractors", index: "subcontractors_mergedIntoId_idx", uniq: false, predicate: `("mergedIntoId" IS NOT NULL)`, why: "null-yoğun FK (birleştirme tombstone'u seyrek)" },
+  // AD MÜKERRERİ DB SEDDİ (D3/B6, 2026-08-21 — migration 20260821150000_name_fold_unique_live):
+  // şemada `@@unique([nameFold])` (index↔unique farkı drift sayılır), DB'de PARTIAL —
+  // tombstone (mergedIntoId IS NOT NULL) aynı katlanmış adı meşru olarak taşır, predicate onu
+  // dışarıda bırakır. RENK BİLİNÇLİ YOK (foldColorNameForCompare, JS guard). `uniq` düşerse
+  // "SED KAYBOLDU" — uygulama bekçisi (check-then-act) yarış/atlama yollarını kapatmaz.
+  { table: "customers", index: "customers_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç" },
+  { table: "items", index: "items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç" },
+  { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç" },
   // label_templates / variants — şema-DIŞI unique'ler
   { table: "label_templates", index: "label_templates_one_default_per_kind", uniq: true, predicate: `("isDefault" = true)`, why: "kind başına TEK varsayılan şablon" },
   { table: "label_template_variants", index: "label_template_variants_one_primary", uniq: true, predicate: `("isPrimary" = true)`, why: "şablon başına TEK primary varyant" },

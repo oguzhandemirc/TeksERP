@@ -89,12 +89,12 @@ async function main(): Promise<void> {
   // Sonda (finally) temizlenir.
   const tsB = Date.now();
   const customer = await prisma.customer.create({
-    data: { code: `TST-CUS-${tsB}`, name: "Test Müşteri" },
+    data: { code: `TST-CUS-${tsB}`, name: `Test Müşteri ${tsB}` },
     select: { id: true },
   });
   const items = await Promise.all([
-    prisma.item.create({ data: { code: `TST-ITMA-${tsB}`, name: "Test Ürün A", itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
-    prisma.item.create({ data: { code: `TST-ITMB-${tsB}`, name: "Test Ürün B", itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
+    prisma.item.create({ data: { code: `TST-ITMA-${tsB}`, name: `Test Ürün A ${tsB}`, itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
+    prisma.item.create({ data: { code: `TST-ITMB-${tsB}`, name: `Test Ürün B ${tsB}`, itemType: "FABRIC", unit: "MT" }, select: { id: true } }),
   ]);
   const colors = await Promise.all([
     prisma.color.create({ data: { code: `TST-CLRA-${tsB}`, name: "Test Renk A" }, select: { id: true } }),

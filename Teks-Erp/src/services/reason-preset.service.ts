@@ -34,6 +34,7 @@ import {
 import { registerReasonCatalogSource } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
+import { foldNameForCompare } from "./helpers/name-normalize.helper";
 
 export type ReasonPresetDto = {
   id: string;
@@ -99,6 +100,94 @@ function cachedRows(kind: ReasonPresetKind): ReasonPresetDto[] | null {
   // her satırı gizlemiş olabilir. Yine de boş katalog doğrulamayı kilitlerdi,
   // bu yüzden boş → kod kataloğuna düş.
   return rows && rows.length > 0 ? rows : null;
+}
+
+// ── SEBEP KODU ÇÖZÜCÜ — METİN SAKLAYAN İKİ KIND (2026-08-21) ────────────────
+// ROLL_MANUAL_ENTRY / ROLL_CANCEL'da istemci bugün yalnız METİN gönderiyor
+// (`fullText ?? label`); satır 2026-08-21'den beri KOD da taşıyor
+// (`Roll.entryReasonCode` / `cancelReasonCode`, rapor anahtarı). Kodu SUNUCU çözer:
+//   • açık `reasonCode` geldiyse katalogda doğrulanır (GİZLİ satır da kabul —
+//     dosya başlığındaki gerekçe), bilinmiyorsa 400 `REASON_CODE_INVALID`;
+//   • yoksa metin, kataloğun label VEYA fullText'iyle KATLANMIŞ eşlenir
+//     (`foldNameForCompare`: "yanlış metraj girildi" ≡ "Yanlış metraj girildi");
+//   • eşleşmezse NULL — serbest metne kod UYDURULMAZ.
+// Bu sayede APK değişmeden ilk günden kod dolar; istemci ileride kodu açıkça
+// gönderince de aynı kapıdan geçer (⚠️ çevrimdışı zemin kodları `BUILTIN_*`
+// gerçek kod DEĞİL — istemci onları göndermemeli, sunucu türetir).
+//
+// ASYNC'tir ve tx DIŞINDA çağrılır: önbellek bayatsa DB'ye gider. Variance yolunun
+// senkron kapısına (`validateVarianceReason`) DOKUNMAZ — o kendi semantiğiyle kalır.
+
+/** Yalnız metin saklayan iki kind — diğerleri `validateVarianceReason`'dan geçer. */
+export type TextReasonKind = Extract<ReasonPresetKind, "ROLL_MANUAL_ENTRY" | "ROLL_CANCEL">;
+
+type ReasonRow = { code: string; label: string; fullText: string | null };
+
+/** Kind'ın satırları: taze önbellek → DB tazeleme → (DB boşsa) kod kataloğu. */
+async function rowsForTextKind(kind: TextReasonKind): Promise<ReasonRow[]> {
+  if (!cacheIsFresh()) await refreshReasonPresetCache();
+  const rows = cache?.get(kind);
+  if (rows && rows.length > 0) return rows;
+  // Uzlaştırma henüz koşmamış (boş DB) → kod kataloğu; doğrulama operatörü kilitlemez.
+  return REASON_PRESET_CATALOG[kind].map((s) => ({
+    code: s.code,
+    label: s.label,
+    fullText: s.fullText ?? null,
+  }));
+}
+
+/**
+ * Metin → kod. Satırın `fullText` VEYA `label`'ı ile katlanmış eşitlik; yoksa null.
+ * Gizli satır da eşleşir (kod geçerliliği görünürlükten bağımsız).
+ */
+export async function resolveReasonCodeFromText(
+  kind: TextReasonKind,
+  text: string | null | undefined,
+): Promise<string | null> {
+  const folded = text ? foldNameForCompare(text) : "";
+  if (!folded) return null;
+  const rows = await rowsForTextKind(kind);
+  const hit = rows.find(
+    (r) =>
+      foldNameForCompare(r.fullText ?? r.label) === folded || foldNameForCompare(r.label) === folded,
+  );
+  return hit ? hit.code : null;
+}
+
+/** Açık kod: katalogda yoksa 400. Dönüşte satırın metni de var (metin boş gelirse dolsun). */
+export async function assertKnownReasonCode(
+  kind: TextReasonKind,
+  code: string,
+): Promise<{ code: string; text: string }> {
+  const trimmed = code.trim();
+  const rows = await rowsForTextKind(kind);
+  const hit = rows.find((r) => r.code === trimmed);
+  if (!hit) {
+    throw AppError.badRequest(
+      `Geçersiz sebep kodu: ${trimmed} (geçerli: ${rows.map((r) => r.code).join(", ")})`,
+      { code: "REASON_CODE_INVALID" },
+    );
+  }
+  return { code: hit.code, text: hit.fullText ?? hit.label };
+}
+
+/**
+ * Birleşik çözüm: `{ reasonCode?, reasonText? }` → `{ code, text }`.
+ * Kod varsa doğrulanır ve metin boşsa satırın metniyle doldurulur (görünen
+ * kayıt NULL kalıp kod dolu olmasın); kod yoksa metinden türetilir.
+ * ⚠️ `text` çağıranın metnidir, kesilmez — uzunluk kuralı yazma noktasının işi.
+ */
+export async function resolveReasonCode(
+  kind: TextReasonKind,
+  input: { reasonCode?: string | null; reasonText?: string | null },
+): Promise<{ code: string | null; text: string | null }> {
+  const text = input.reasonText?.trim() || null;
+  const explicit = input.reasonCode?.trim() || null;
+  if (explicit) {
+    const known = await assertKnownReasonCode(kind, explicit);
+    return { code: known.code, text: text ?? known.text };
+  }
+  return { code: await resolveReasonCodeFromText(kind, text), text };
 }
 
 // Doğrulama kapısını (constants/variance-reasons) DB'ye bağlar. Bağımlılık yönü

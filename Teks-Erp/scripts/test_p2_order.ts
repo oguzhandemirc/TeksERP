@@ -90,7 +90,7 @@ async function main(): Promise<void> {
     // --- F143 (adversarial review fix): claim-first, create() DOĞRULAMASI fırlarsa
     //     toplar WAREHOUSE'da yetim KALMAMALI (validation claim'den ÖNCE koşar) ---
     const f143Item = await prisma.item.create({
-      data: { code: `TEST-F143ITM-${stamp}`, name: "F143 Kumaş", itemType: "FABRIC" },
+      data: { code: `TEST-F143ITM-${stamp}`, name: `F143 Kumaş ${stamp}`, itemType: "FABRIC" },
       select: { id: true },
     });
     f143ItemId = f143Item.id;

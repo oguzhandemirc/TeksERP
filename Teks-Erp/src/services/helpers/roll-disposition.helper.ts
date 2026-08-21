@@ -107,6 +107,13 @@ export interface ApplyRollDispositionsArgs {
   origin: DispositionOrigin;
   /** ≥3 karakter (çağıran doğrular). CANCELLED'da `Roll.cancelReason`'a YAZILIR. */
   reason: string;
+  /**
+   * Sebebin KATALOG KODU (ReasonPreset ROLL_CANCEL) — CANCELLED'da
+   * `Roll.cancelReasonCode`'a yazılır. ÇAĞIRAN tx DIŞINDA çözer
+   * (`resolveReasonCode`); bu motor tx İÇİNDE koşar ve katalog okumaz.
+   * Verilmezse NULL (serbest metin).
+   */
+  reasonCode?: string | null;
   userId?: string;
   /** tx içinde taze okunmuş toplar (karar verilen her top burada olmalı). */
   rolls: DispositionRollSnapshot[];
@@ -226,6 +233,7 @@ export async function applyRollDispositionsTx(
             cancelledAt: new Date(),
             cancelledById: userId ?? null,
             cancelReason: reason.slice(0, 500),
+            cancelReasonCode: args.reasonCode ?? null,
           }
         : {};
     const claim = await tx.roll.updateMany({

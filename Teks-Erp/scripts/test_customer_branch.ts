@@ -17,7 +17,7 @@ const stamp = Date.now().toString(36);
 const hasStatus = (e: unknown, s: number) => e instanceof AppError && e.statusCode === s;
 
 async function main(): Promise<void> {
-  const customer = await prisma.customer.create({ data: { code: `TEST-CB-${stamp}`, name: "CB Test Müşteri", type: "CUSTOMER" } });
+  const customer = await prisma.customer.create({ data: { code: `TEST-CB-${stamp}`, name: `CB Test Müşteri ${stamp}`, type: "CUSTOMER" } });
   let branchId = "";
   try {
     // 1) create başarılı

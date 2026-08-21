@@ -535,10 +535,16 @@ export class InventoryController {
       // "uyarısız iptal"i durdurmak.
       const confirmLabelPrinted = req.query.confirmLabelPrinted === "true";
       const reason = typeof req.query.reason === "string" ? req.query.reason : undefined;
+      // Sebebin KATALOG KODU (2026-08-21) — opsiyonel, aynı sebeple query'de. Verilmezse
+      // servis metinden türetir; verilirse katalogda doğrulanır (bilinmeyen → 400).
+      const reasonCode =
+        typeof req.query.reasonCode === "string" && req.query.reasonCode.trim()
+          ? req.query.reasonCode.trim().slice(0, 64)
+          : undefined;
       const result = await this.service.softDelete(
         req.params.id as string,
         req.user?.userId,
-        { confirmActive, confirmLabelPrinted, reason }
+        { confirmActive, confirmLabelPrinted, reason, reasonCode }
       );
       res.status(200).json(result);
     } catch (error) {
