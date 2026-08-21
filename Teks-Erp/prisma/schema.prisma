@@ -1301,6 +1301,9 @@ model Item {
   // sonsuz CREATE üretir). Ad Prisma varsayılanı (`items_nameFold_key`) — error.middleware
   // `_<kolon>_key` regex'i kolonu doğru çıkarsın. Uygulama bekçisi (`assertNameNotDuplicate`)
   // KALIR: kullanıcıya mesajı o verir, bu kısıt yarış/atlama yollarına karşı sessiz son hat.
+  // ⚠️ YUMUŞAK KAPI (2026-08-22): migration mükerrer varken index'i ATLAR (NOTICE) —
+  // prod'da temizlik (Mükerrer Kayıtlar paneli) bitene dek index EKSİK olabilir;
+  // `test_db_invariants` orada kırmızı = "enforce bekliyor" (migration dosyasını yeniden koş).
   @@unique([nameFold])
   @@map("items")
 }
@@ -1872,7 +1875,7 @@ model Customer {
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "customers_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
-  // DB seddi (D3/B6, 2026-08-21). Gerekçe ve ad kuralı: Item modelindeki aynı not.
+  // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
   @@unique([nameFold])
   @@map("customers")
 }
@@ -3612,7 +3615,7 @@ model Subcontractor {
   @@index([nameFold])
   @@index([mergedIntoId])
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
-  // DB seddi (D3/B6, 2026-08-21). Gerekçe ve ad kuralı: Item modelindeki aynı not.
+  // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
   @@unique([nameFold])
   @@map("subcontractors")
 }

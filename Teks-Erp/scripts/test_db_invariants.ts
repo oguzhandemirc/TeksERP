@@ -171,9 +171,12 @@ const PARTIAL_INDEXES: Array<{
   // tombstone (mergedIntoId IS NOT NULL) aynı katlanmış adı meşru olarak taşır, predicate onu
   // dışarıda bırakır. RENK BİLİNÇLİ YOK (foldColorNameForCompare, JS guard). `uniq` düşerse
   // "SED KAYBOLDU" — uygulama bekçisi (check-then-act) yarış/atlama yollarını kapatmaz.
-  { table: "customers", index: "customers_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç" },
-  { table: "items", index: "items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç" },
-  { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç" },
+  // ⚠️ YUMUŞAK KAPI (2026-08-22): migration mükerrer varken bu index'leri ATLAR. PROD'da
+  // temizlik bitene dek bu üç satır KIRMIZI olabilir ve bu BİLEREK böyle — "enforce bekliyor"
+  // sinyali (çözüm: mükerrerleri birleştir → migration dosyasını yeniden koş). Dev/CI temiz.
+  { table: "customers", index: "customers_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
+  { table: "items", index: "items_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
+  { table: "subcontractors", index: "subcontractors_nameFold_key", uniq: true, predicate: `("mergedIntoId" IS NULL)`, why: "ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)" },
   // label_templates / variants — şema-DIŞI unique'ler
   { table: "label_templates", index: "label_templates_one_default_per_kind", uniq: true, predicate: `("isDefault" = true)`, why: "kind başına TEK varsayılan şablon" },
   { table: "label_template_variants", index: "label_template_variants_one_primary", uniq: true, predicate: `("isPrimary" = true)`, why: "şablon başına TEK primary varyant" },

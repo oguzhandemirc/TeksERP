@@ -130,7 +130,7 @@ On ikisi ayrı iş, hepsi aynı pull'da:
 | 25 | `20260819190000_roll_plan_deviations` | **Plan-sapma defteri** — YENİ tablo (`roll_plan_deviations`) + 8 index + 5 FK. Mevcut tabloya DOKUNMAZ, boş doğar |
 | 26 | `20260819200000_fason_partial_receive` | **Fason kısmi kabul** — 3 tabloya 4 nullable kolon (`clientToken` + unique index, `receivedQty`, `isPartial` DEFAULT false, `remainderClosedAt`); mevcut satırlar etkilenmez |
 | 27 | `20260821120000_roll_variance_source_ref` | **Fason çekmesi defteri** — `roll_variances`'e 1 nullable UUID (`sourceRefId`) + 1 index. Mevcut satırlar NULL kalır, hiçbir yol onları okumaz; `roll_variances` küçük tablo → vardiya içinde uygulanabilir |
-| 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). ⚠️ **MÜKERRER VARKEN DÜŞER — BİLİNÇLİ** (ön kontrol DO bloğu okunur hata verir ve sonraki migration'lar koşmaz). 2026-08-22 SIFIRLAMA sonrası boş DB'de risksiz; sıfırlama ERTELENİRSE önce Sistem → Mükerrer Kayıtlar ile §10'daki grupları birleştir, sonra `migrate deploy`. Dolu bir kopyaya (`tekserp_saha`) UYGULAMA |
+| 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ — YUMUŞAK KAPI** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). Tablo tablo bakar: **mükerrer yoksa index'i kurar, varsa `NOTICE` ile ATLAR** (deploy GEÇER; ilk sürüm "düşer" idi — 2026-08-22'de sıfırlama rafa kalkınca yumuşatıldı). Prod'da bugün 9 grup var → üç tabloda da ATLANIR; temizlik Sistem → Mükerrer Kayıtlar ile yapılınca **aynı dosya yeniden koşulur** (`npx prisma db execute --file …/20260821150000_name_fold_unique_live/migration.sql`, idempotent) → index kurulur. O güne kadar `test_db_invariants` §1 prod'da bu üç satırı KIRMIZI verir (bilerek: "enforce bekliyor") |
 | 29 | `20260821150100_roll_reason_codes` | **Sebep KODU topun satırında** — `rolls`'a 2 nullable VARCHAR(64) (`entryReasonCode`, `cancelReasonCode`); metadata-only, index yok, vardiya içinde uygulanabilir. Kodu sunucu metinden türetir → APK değişmeden dolar; eski satırlar NULL (geriye doldurulmaz; sıfırlama sonrası zaten yok) |
 | 30 | `20260821220000_reason_preset_legacy_texts` | **Hazır sebep ESKİ ADLARI** — `reason_presets.legacyTexts TEXT[]` (DEFAULT boş dizi, additive). Etiket/metin düzenlenince eskisi listeye düşer; bayat listeli tablet eski metni gönderince kod yine çözülür (anomali taramasında ölçüldü). Onlarca satırlık tablo, vardiya içinde uygulanabilir |
 
@@ -284,7 +284,7 @@ Beklenen (hepsi provada ölçüldü):
 | `*_mergedIntoId_idx` | **4 satır, hepsi `partial_mi = t`** — `f` görürsen index TAM oluşmuş demektir (yanlış değil, sadece gereksiz büyük); `test_db_invariants` bunu KIRMIZI verir. ⚠️ Sorgudaki `tablename IN (...)` süzgeci gerekli: `batches_mergedIntoId_idx` (eski, 2026-07 parti birleştirmesi) da desene uyar ve süzgeç olmadan 5 satır döner |
 | Birleştirme FK'ları | **8** |
 | Backend log'u (2) | `[permission-catalog] 1 yeni izin eklendi: master-data:merge` (ilk açılış) |
-| `*_nameFold_key` (28) | **3 satır, `uniq = t` VE `partial = t`** — satır eksikse migration düşmüş demektir (muhtemelen mükerrer varken koşuldu: `migrate status` + hata metnindeki grup listesi); `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
+| `*_nameFold_key` (28) | Temiz tabloda `uniq = t` VE `partial = t`. **Prod'da bugün 0 satır BEKLENİR** (üç tabloda da mükerrer var → migration NOTICE ile atladı; `migrate status` "applied" der, log'da `[name_fold_unique] customers ATLANDI — N mükerrer grup` satırları görünür). Temizlik → aynı dosyayı yeniden koş → 3 satır. `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
 | `rolls` sebep kodları (29) | **2 satır**, `character varying(64)`, `YES` |
 | `reason_presets.legacyTexts` (30) | `psql … -c "SELECT data_type, column_default FROM information_schema.columns WHERE table_name='reason_presets' AND column_name='legacyTexts';"` → `ARRAY` / `ARRAY[]::text[]` |
 
@@ -770,16 +770,18 @@ Satırlar silinmiyor, **gizleniyor** (eski kayıtların sebebi okunur kalsın di
 
 ---
 
-## 10) Mükerrer müşteri/kumaş/fason — SIFIRLAMA SONRASI SIFIR; ertelenirse ÖN KOŞUL
+## 10) Mükerrer müşteri/kumaş/fason — temizlik SONRA, sed temizlikten SONRA ("expand → backfill → contract")
 
-> **2026-08-21 güncellemesi:** 28. migration (`name_fold_unique_live`) bu üç tabloya DB
-> seddi koyar ve **mükerrer varken DÜŞER** (bilinçli — ön kontrol okunur hata basar,
-> sonraki migration'lar koşmaz). 2026-08-22 sıfırlamasıyla DB boş doğacağı için bu
-> bölüm artık "beklenen kırmızı" değil, **sıfırlama ertelenirse** izlenecek reçetedir:
-> aşağıdaki grupları Sistem → Mükerrer Kayıtlar ile birleştir → `npx tsx
-> scripts/find_fold_duplicates.ts` sedli tablolarda boş dönsün → `migrate deploy`.
-> Geliştirme kopyasında aynı 8 grup birleştirme aracıyla temizlendi (2026-08-21) ve
-> migration orada uygulandı; `colors` (1 grup) ve test artığı istasyonlar sed dışı.
+> **2026-08-22 güncellemesi (sıfırlama RAFA KALKTI):** 28. migration (`name_fold_unique_live`)
+> artık **yumuşak kapıdır** — mükerrer olan tabloda index'i ATLAR ve `NOTICE` basar, deploy
+> geçer (ilk sürümün "düşer" davranışı sıfırlama varsayımına dayanıyordu). Sıra:
+> ① deploy (28 atlanır, 29/30 uygulanır) → ② mükerrerleri **Sistem → Mükerrer Kayıtlar**
+> paneliyle birleştir (iş kararı; yeni panel tasarımı `docs/design/MUKERRER-PANELI-TASARIM.md`)
+> → ③ `npx tsx scripts/find_fold_duplicates.ts` sedli tablolarda boş dönsün → ④ **enforce**:
+> `npx prisma db execute --file prisma/migrations/20260821150000_name_fold_unique_live/migration.sql`
+> (idempotent; eksik index'i kurar) → ⑤ `test_db_invariants` §1 yeşil.
+> Geliştirme kopyasında aynı 8 grup birleştirme aracıyla temizlendi (2026-08-21) ve index
+> orada kurulu; `colors` (1 grup) ve test artığı istasyonlar sed dışı.
 
 Eski sürümlerde deploy sonrası `find_fold_duplicates.ts` (ve `test_consistency` §18)
 mükerrer gösteriyordu. Geliştirme kopyasında ölçülen: **12 grup / 15 fazla satır**:
