@@ -89,7 +89,14 @@ async function main(): Promise<void> {
     console.log("");
   }
   if (totalGroups === 0) {
-    console.log("Mükerrer YOK — sedli tablolarda index kurulu/kurulabilir (enforce güvenle koşar).\n");
+    console.log(
+      "Mükerrer YOK — sedli tablolarda index kurulu/kurulabilir.\n\n" +
+        "ENFORCE (eksik index varsa kurar, idempotenttir):\n" +
+        "  npx prisma db execute --file prisma/migrations/20260821150000_name_fold_unique_live/migration.sql\n" +
+        "Doğrulama:\n" +
+        "  psql \"$DATABASE_URL\" -c \"SELECT indexname FROM pg_indexes WHERE indexname LIKE '%_nameFold_key';\"\n" +
+        "  npx tsx scripts/test_db_invariants.ts   (§1 yeşile döner)\n",
+    );
   } else {
     console.log(
       `TOPLAM: ${totalGroups} grup / ${totalExtra} fazla satır` +

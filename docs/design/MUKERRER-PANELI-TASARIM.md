@@ -250,3 +250,51 @@ düşürür — kapsama mekanik) ④ `META.identityFields` (şube → `customerI
   görür). Bekçi: `scripts/test_duplicate_rolls.ts` **16** kontrol.
 - **Canlı kopyada:** 948 giriş topu tarandı → 730'u hareket gördüğü için elendi → 6 küme / 8 fazla
   (3'ü 6/6 güçlü şüphe; iki toplu kümelerde ikisinin de etiketi basılı → kâğıt toplama uyarısı şart).
+
+---
+
+## 10) P4 UYGULANDI — CSV karar köprüsü (SQL'le çalışma biçimi)
+
+`scripts/apply_merge_decisions.ts` — **dry-run varsayılan**, `--apply` ile uygular.
+
+```
+npx tsx scripts/apply_merge_decisions.ts --file=kararlar.csv          # DRY-RUN
+npx tsx scripts/apply_merge_decisions.ts --file=kararlar.csv --apply  # UYGULA
+```
+
+**Dosya biçimi** (tr-TR Excel: `;` ayraç, BOM kabul):
+`varlik;hedefKod;kaynakKodlar;karar;gerekce;alanSecimleri`
+- `karar`: `BIRLESTIR` · `MUKERRER_DEGIL` · `ERTELE` · `ATLA`
+- `alanSecimleri` (opsiyonel): `name=MUS-002,taxNumber=MUS-002` — P2 alan seçimi, KOD ile.
+
+**⚠️ İNCELEME SQL'DE, UYGULAMA MOTORDA.** Ham `UPDATE … SET customerId = …` ile birleştirme
+42 kurallık FK haritasını, çakışma politikalarını, etiket/refakat kartı bayatlatmasını,
+advisory kilidi ve audit'i atlar. Script kararları `MasterDataMergeService`ten geçirir —
+panelden yapılmışla birebir aynı sonuç.
+
+**Doğrulama sırası (tasarım gereği):** ① dosya biçimi/gerekçe/kod hataları TOPLU raporlanır ve
+**hiçbir şey uygulanmaz** ② her satır için önizleme koşar (yan etkisiz), dry-run'da taşınacak
+satır sayısı + çakışma politikası tek tek basılır ③ `--apply`da satır satır uygulanır, düşen
+satır diğerlerini durdurmaz ve dürüstçe raporlanır.
+
+**Canlı kopyada uçtan uca denendi** (`tekserp_saha_0822`): fason birleştirme (alan seçimiyle) +
+renk "mükerrer değil" kararı uygulandı → survivor aktif, kaynak tombstone, `duplicate_reviews`
+satırları (MERGED + NOT_DUPLICATE) yazıldı, sonraki tarama fasonu 3→2 gruba düşürdü ve
+renk çiftini gizledi.
+
+---
+
+## 11) P5 — ENFORCE ve kimlik seddi kararı
+
+**Enforce (nameFold UNIQUE):** temizlik bitince aynı migration dosyası yeniden koşulur —
+`find_fold_duplicates.ts` temiz çıktı verdiğinde komutu **kendisi yazdırır**. Adımlar:
+mükerrerleri panelden birleştir → rapor boş → `prisma db execute --file …20260821150000…` →
+`test_db_invariants` §1 yeşil → `test_schema_drift`teki `TOLERATED_DRIFT` listesi SİLİNİR.
+
+**Kimlik alanlarına (VKN) DB seddi — BİLİNÇLİ OLARAK KOYULMADI.** Ölçüm: canlı kopyada
+müşteri/fason VKN çakışması **0**. Gerekçe ise ölçümden bağımsız ve kalıcı: aynı tüzel kişi
+için ikinci bir cari kart açmak **meşru bir iş kararı olabilir** (farklı ödeme koşulu, farklı
+şube muhasebesi) — ada koyduğumuz sert kısıt orada doğruydu ("aynı ad = aynı kayıt"), VKN'de
+değil. Bu yüzden VKN çakışması **kuyruğa aday olarak düşer** (IDENTITY kuralı, gerekçesiyle)
+ama yazmayı ENGELLEMEZ. Sektörde de standart budur: kimlik alanı *eşleştirme sinyalidir*,
+tekillik kısıtı değil.
