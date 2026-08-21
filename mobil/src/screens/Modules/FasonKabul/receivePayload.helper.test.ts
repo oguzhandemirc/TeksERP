@@ -3,6 +3,10 @@ import {
   parseNewRolls,
   buildReceivePayload,
   parseAppliedWidth,
+  consumedTotalOf,
+  resolveReturns,
+  shrinkExceedsTolerance,
+  shrinkInfo,
   type BuildReceivePayloadArgs,
   type PayloadRollRow,
 } from './receivePayload.helper';
@@ -325,5 +329,140 @@ describe('buildReceivePayload — kısmi kabul + clientToken', () => {
     // Her mantıksal deneme YENİ token — aynı token'ı yalnız replay taşır
     // (offline kuyruk vars'ı olduğu gibi yeniden gönderir).
     expect(p1?.clientToken).not.toBe(p2?.clientToken);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SAHA SENARYOSU (2026-08-21) — 5 parça (30/40/50/60/70 m) gitti, 220 m döndü
+// ═════════════════════════════════════════════════════════════════════════════
+// Boyahane parçaları dikip tek parça boyar; dönen metraj çeker. Operatörün
+// yapması gereken TEK şey gelen toplamı yazmaktır. Eski ekran bunu "giden/gelen
+// uyuşmuyor" alarmıyla karşılayıp operatörü 5 alanı kafadan bölüştürmeye
+// itiyordu — aşağıdaki kontroller o yolun bir daha açılmamasını kilitler.
+const SAHA = [30, 40, 50, 60, 70];
+const sahaRows = () =>
+  SAHA.map((q, i) => ({
+    rollId: `r${i + 1}`,
+    checked: true,
+    notes: '',
+    remainingQty: q,
+  }));
+
+describe('resolveReturns — kalan dağıtımı', () => {
+  it('kalan yok: 5 topun 5i de TAM kabul (receivedQty gönderilmez)', () => {
+    const out = resolveReturns(sahaRows(), null);
+    expect(out).toHaveLength(5);
+    expect(out.every((r) => r.receivedQty === null)).toBe(true);
+    expect(out.every((r) => !r.dropped)).toBe(true);
+    expect(consumedTotalOf(out)).toBe(250);
+  });
+
+  it('30 m kalan: yalnız EN BÜYÜK top kısmi olur (tek yarım top, beş değil)', () => {
+    const out = resolveReturns(sahaRows(), 30);
+    const partial = out.filter((r) => r.leftQty > 0.01);
+    expect(partial).toHaveLength(1);
+    expect(partial[0].rollId).toBe('r5'); // 70 m'lik top
+    expect(partial[0].receivedQty).toBe(40);
+    expect(consumedTotalOf(out)).toBe(220);
+  });
+
+  it('70 m kalan: en büyük top HİÇ gelmedi (dropped) — dönüş listesine girmez', () => {
+    const out = resolveReturns(sahaRows(), 70);
+    const dropped = out.filter((r) => r.dropped);
+    expect(dropped.map((r) => r.rollId)).toEqual(['r5']);
+    expect(consumedTotalOf(out)).toBe(180);
+  });
+
+  it('100 m kalan: büyükten küçüğe yığılır (70 tamamı + 60ın 30u)', () => {
+    const out = resolveReturns(sahaRows(), 100);
+    const byId = Object.fromEntries(out.map((r) => [r.rollId, r]));
+    expect(byId.r5.dropped).toBe(true);
+    expect(byId.r4.receivedQty).toBe(30); // 60 - 30
+    expect(byId.r3.receivedQty).toBe(null); // 50 tamamı geldi
+    expect(consumedTotalOf(out)).toBe(150);
+  });
+
+  it('DETERMİNİSTİK: eşit metrajlı toplarda sıra rollId ile kırılır', () => {
+    const rows = [
+      { rollId: 'b', checked: true, notes: '', remainingQty: 50 },
+      { rollId: 'a', checked: true, notes: '', remainingQty: 50 },
+    ];
+    // Aynı girdi → aynı payload. Değişirse offline replay aynı token'la FARKLI
+    // içerik gönderir ve idempotency kimliği yalan söyler.
+    expect(resolveReturns(rows, 20).find((r) => r.leftQty > 0)!.rollId).toBe('a');
+    expect(resolveReturns([...rows].reverse(), 20).find((r) => r.leftQty > 0)!.rollId).toBe('a');
+  });
+
+  it('işaretsiz toplar dağıtıma HİÇ girmez', () => {
+    const rows = sahaRows().map((r, i) => ({ ...r, checked: i < 2 }));
+    const out = resolveReturns(rows, 10);
+    expect(out).toHaveLength(2);
+    expect(consumedTotalOf(out)).toBe(60); // 30 + 40 - 10
+  });
+});
+
+describe('shrinkInfo / shrinkExceedsTolerance — çekme', () => {
+  it('250 giden 220 gelen → 30 m çekme, %12', () => {
+    const s = shrinkInfo(250, 220);
+    expect(s.diff).toBe(-30);
+    expect(s.shrink).toBe(true);
+    expect(s.pct).toBe(12);
+    expect(s.significant).toBe(true);
+  });
+
+  it('yüzer-nokta gürültüsü fark SAYILMAZ', () => {
+    expect(shrinkInfo(0.1 + 0.2, 0.3).significant).toBe(false);
+  });
+
+  it('%12 çekme %10 toleransta UYARIR, %15te SUSAR', () => {
+    const s = shrinkInfo(250, 220);
+    expect(shrinkExceedsTolerance(s, { enabled: true, tolerancePct: 10 })).toBe(true);
+    expect(shrinkExceedsTolerance(s, { enabled: true, tolerancePct: 15 })).toBe(false);
+  });
+
+  it('bayrak kapalıysa uyarı ASLA çıkmaz', () => {
+    const s = shrinkInfo(250, 100); // %60 — devasa fark
+    expect(shrinkExceedsTolerance(s, { enabled: false, tolerancePct: 0 })).toBe(false);
+  });
+
+  it('FAZLA DÖNEN de aynı toleransa tabidir (yön değil büyüklük)', () => {
+    const s = shrinkInfo(250, 300);
+    expect(s.shrink).toBe(false);
+    expect(shrinkExceedsTolerance(s, { enabled: true, tolerancePct: 10 })).toBe(true);
+  });
+});
+
+describe('buildReceivePayload — kalan beyanı', () => {
+  it('30 m kalan: 5 topun 4ü tam, 1i kısmi; hiçbiri düşmez', () => {
+    const p = buildReceivePayload(
+      baseArgs({
+        rows: sahaRows(),
+        newRolls: [makeNewRollRow('220', false)],
+        remainderQty: 30,
+      }),
+    );
+    expect(p?.returns).toHaveLength(5);
+    expect(p?.returns.filter((r) => 'receivedQty' in r)).toHaveLength(1);
+    expect(p?.newRolls).toEqual([{ qty: 220, notes: null }]);
+  });
+
+  it('tamamı kalan top dönüş listesine GİRMEZ (0 metre kabul kaydı yoktur)', () => {
+    const p = buildReceivePayload(
+      baseArgs({
+        rows: sahaRows(),
+        newRolls: [makeNewRollRow('160', false)],
+        remainderQty: 70,
+      }),
+    );
+    expect(p?.returns.map((r) => r.rollId)).toEqual(['r1', 'r2', 'r3', 'r4']);
+  });
+
+  it('kalan beyanı satırdaki "Gelen (m)" değerini EZER (tek dil okunur)', () => {
+    const rows = sahaRows().map((r) => ({ ...r, receivedQtyStr: '1' }));
+    const p = buildReceivePayload(
+      baseArgs({ rows, newRolls: [makeNewRollRow('220', false)], remainderQty: 30 }),
+    );
+    // Satır beyanları okunsaydı 5 kısmi satır doğardı; kalan dağıtımı tektir.
+    expect(p?.returns.filter((r) => 'receivedQty' in r)).toHaveLength(1);
   });
 });

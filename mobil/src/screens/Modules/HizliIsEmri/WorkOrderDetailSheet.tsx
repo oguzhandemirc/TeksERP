@@ -83,9 +83,14 @@ export default function WorkOrderDetailSheet({ workOrderId, onClose, onChanged }
         targetWeight: vals.targetWeight ? Number(vals.targetWeight) : null,
         foldType: vals.foldType,
       }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       Toast.show({ type: 'success', text1: 'Güncellendi' });
+      // Engel olmayan notlar (örn. "rotada renk veren adım yok — toplar bu rengi
+      // almayacak"): kayıt yazıldı ama operatör görsün (2026-08-21, uyar-reddetme).
+      for (const w of (res as { warnings?: string[] } | undefined)?.warnings ?? []) {
+        Toast.show({ type: 'info', text1: 'Dikkat', text2: w, visibilityTime: 6000 });
+      }
       qc.invalidateQueries({ queryKey: ['work-order', workOrderId] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
       onChanged();

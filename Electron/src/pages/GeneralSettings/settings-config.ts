@@ -239,6 +239,20 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Açıkken basılan her top etiketi için tablet 'çıkan kâğıdı OKUT' ister ve okutulmadan yeni top girilemez — 'etiket çıktı mı' sorusunu yazılım değil tarayıcı cevaplar (yazıcı baskı onayı döndürmez; yazılımın 'bastım' demesi kâğıdın çıktığını kanıtlamaz). Etiket okunmuyorsa 'Tekrar Bas' ile yeni kâğıt basılır. Kapalıyken (varsayılan) ekranda bu akışa dair hiçbir öğe görünmez. ⚠️ Seri girişe her topta bir okutma adımı ekler; kamera arızasında akışı tıkayabilir — geri dönüş yolu bu anahtarı kapatmaktır. Açmadan önce tabletlerin güncel APK'da olduğundan emin olun.",
       },
       {
+        key: "fasonShrinkWarnEnabled",
+        group: "Fason",
+        title: "Fason kabulünde çekme (metraj farkı) uyarısı göster",
+        desc: "Boyahanede kumaş ÇEKER: 250 metre giden mal 220 metre döner ve bu normal bir üretim gerçeğidir. Açıkken (varsayılan) kabul ekranı bu farkı gösterir ve yalnız aşağıdaki toleransın ÜSTÜNDEysa uyarı + onay ister. Kapatırsan fark yine yazılır ama hiçbir uyarı/onay çıkmaz. Bu ayar SUNUMU belirler: fark her hâlükârda sapma defterine (fason firesi) kaydedilir ve Fason Karnesi'ndeki fire oranını besler — yani ayarı kapatmak fireyi gizlemez, yalnız operatörü durdurmaz.",
+        numberField: {
+          numberKey: "fasonShrinkTolerancePct",
+          label: "Tolerans",
+          unit: "%",
+          min: 1,
+          max: 100,
+          emptyWarning: "Boş bırakılırsa fabrika varsayılanı (%10) kullanılır.",
+        },
+      },
+      {
         key: "fasonNoteMobileEntry",
         group: "Fason",
         title: "Fason Sevk'te fason talimatını sahadaki operatör telefondan girebilsin",

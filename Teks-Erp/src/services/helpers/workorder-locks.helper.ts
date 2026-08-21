@@ -168,7 +168,11 @@ export async function computeWorkOrderLocks(
       // Tüm renk uygulayan adımlar bittiyse: artık değiştirilemez. (Birden fazla
       // varsa son tamamlanan da kâr getirmediği için "tüm" şartı.)
       targetColor = true;
-      reasons.targetColor = "Boya adımı tamamlandı, renk artık değiştirilemez";
+      // ⚠️ Bu kilit yalnız DÜZENLE FORMUNUN alanını pasifleştirir. Gerçek kural
+      // 2026-08-21'den beri MALA bakar (`workorder-target-color.helper`): boyanmış
+      // toplarla birlikte düzeltme ("Rengi Değiştir" + toplara uygula) serbesttir.
+      reasons.targetColor =
+        "Boya adımı tamamlandı — plan rengi yalnız 'Rengi Değiştir' ile (gerekirse toplarla birlikte) düzeltilir";
     } else if (
       dyedSteps.length > 0 &&
       dyedSteps.some((s) => s.status === "COMPLETED") &&

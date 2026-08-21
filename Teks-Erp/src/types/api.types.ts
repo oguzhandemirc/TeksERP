@@ -7,6 +7,12 @@ export interface ApiResponse<T> {
   success: boolean;
   data: T;
   message?: string;
+  /**
+   * Engel OLMAYAN notlar — istek başarıyla yazıldı ama kullanıcının görmesi
+   * gereken bir durum var (örn. "rotada renk veren adım yok"). İstemci toast
+   * basar; eski istemciler alanı tanımıyorsa sessizce yok sayar.
+   */
+  warnings?: string[];
 }
 
 /** Paginated list response */

@@ -52,6 +52,25 @@ export const VARIANCE_SOURCES = {
    * (ReasonPresetKind.ROLL_SCRAP — fabrika panelden düzenler).
    */
   SUBCONTRACTOR_REMAINDER: "SUBCONTRACTOR_REMAINDER",
+  /**
+   * FASON KABULÜNDE GİDEN ↔ DÖNEN METRAJ FARKI (2026-08-21) — boyahane çekmesi.
+   *
+   * Kabulde iki bağımsız sayı vardır: fasonun hesabından DÜŞÜLEN metraj
+   * (`SubcontractorReceiptItem.receivedQty` toplamı) ve fiziksel olarak GELEN
+   * metraj (doğan açık-kumaş parçalarının toplamı). Boyahanede kumaş çeker —
+   * 250 m giden mal 220 m döner ve bu 30 m HİÇBİR YERE yazılmıyordu: makbuz
+   * kalemi "kalanın tamamı kabul edildi" diyor, doğan toplar 220 m taşıyor,
+   * aradaki fark yalnız iki tabloyu yan yana koyan birinin görebileceği bir
+   * çıkarma işlemi olarak kalıyordu. Fason karnesi de bu yüzden her firmaya
+   * **%0 fire** basıyordu (kanıt: `subcontract-scorecard` `returnedQty`
+   * defterden okur, defter TAM kabulde kalanın kendisidir → fark hep sıfır).
+   *
+   * Satırı SİSTEM yazar, operatör beyan etmez: sebep kodu sabittir
+   * (`SHRINK_REASON_CODE`), eksi yön SCRAP (mal vardı, metre gitti), artı yön
+   * OVERAGE (fazla dönen). `sourceRefId` = makbuz id'si — makbuz iptal edilince
+   * TAM O satırlar terslenir.
+   */
+  SUBCONTRACTOR_RETURN: "SUBCONTRACTOR_RETURN",
 } as const;
 
 export type VarianceSource = (typeof VARIANCE_SOURCES)[keyof typeof VARIANCE_SOURCES];
@@ -117,6 +136,19 @@ export const VARIANCE_MIN_REASON_TEXT = 3;
  * Düşmüyorsa yeni istemci sebebi göndermiyordur — katalog değil KABLOLAMA hatası.
  */
 export const LEGACY_REASON_CODE = "BELIRTILMEDI";
+
+/**
+ * SİSTEM SEBEBİ — seçilebilir bir sebep DEĞİLDİR (`LEGACY_REASON_CODE` emsali).
+ *
+ * Fason kabulünde giden ↔ dönen metraj farkını SİSTEM tespit eder; operatör
+ * "neden" sorusuna cevap vermez, çünkü cevap zaten bellidir: kumaş boyada
+ * çekti. Kodu `SCRAP_REASONS`'a EKLEMEDİK — o liste operatörün Tambur fire
+ * ekranında gördüğü listedir ve oraya "Fason çekmesi" koymak, tamburda kesilen
+ * bir topun firesini yanlış kovaya yazmanın yolunu açardı. `reasonsForKind`
+ * bu kodu DÖNDÜRMEZ (hiçbir seçicide çıkmaz), `validateVarianceReason` KABUL
+ * eder — LEGACY ile birebir aynı desen.
+ */
+export const SHRINK_REASON_CODE = "FASON_CEKME";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DİNAMİK KATALOG BAĞI (2026-08-19) — fabrika sebepleri panelden düzenleyebilir.
@@ -208,6 +240,8 @@ export function validateVarianceReason(
   // sahadaki her tablette "Bitir"i kırardı.
   if (!code) return { reasonCode: LEGACY_REASON_CODE, reasonText: text };
   if (code === LEGACY_REASON_CODE) return { reasonCode: code, reasonText: text };
+  // Sistem sebebi — katalogda ARANMAZ (bilerek listede değil, bkz. üstteki not).
+  if (code === SHRINK_REASON_CODE) return { reasonCode: code, reasonText: text };
 
   const hit = findReason(kind, code);
   if (!hit) {

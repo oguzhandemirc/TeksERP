@@ -5,6 +5,8 @@ import {
   meterDiff,
   piecesTotal,
   round2,
+  shrinkExceedsTolerance,
+  shrinkInfo,
 } from "./fasonReceive.helper";
 
 describe("defaultPieces — SINGLE (varsayılan: dikili tek parça)", () => {
@@ -63,5 +65,43 @@ describe("piecesTotal / meterDiff / hasMeterDiff", () => {
   it("round2 iki haneye yuvarlar", () => {
     expect(round2(10.005)).toBe(10.01);
     expect(round2(0.30000000000000004)).toBe(0.3);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ÇEKME (2026-08-21) — mobil `receivePayload.helper` ile AYNI sayıları vermeli
+// ─────────────────────────────────────────────────────────────────────────────
+// İki yüzey aynı eşiği uygulamazsa aynı kabul masaüstünde uyarı verir, tablette
+// vermez. Mobil bu projeyi import edemediği için kural iki yerde YAZILI; aşağıdaki
+// beklentiler mobil testindekilerle BİREBİR aynı (250→220 = 30 m / %12).
+describe("shrinkInfo / shrinkExceedsTolerance — mobil ile parite", () => {
+  it("250 giden 220 gelen → 30 m çekme, %12", () => {
+    const s = shrinkInfo(250, 220);
+    expect(s.diff).toBe(-30);
+    expect(s.shrink).toBe(true);
+    expect(s.pct).toBe(12);
+    expect(s.significant).toBe(true);
+  });
+
+  it("yüzer-nokta gürültüsü fark SAYILMAZ", () => {
+    expect(shrinkInfo(0.1 + 0.2, 0.3).significant).toBe(false);
+  });
+
+  it("%12 çekme %10 toleransta UYARIR, %15te SUSAR", () => {
+    const s = shrinkInfo(250, 220);
+    expect(shrinkExceedsTolerance(s, { enabled: true, tolerancePct: 10 })).toBe(true);
+    expect(shrinkExceedsTolerance(s, { enabled: true, tolerancePct: 15 })).toBe(false);
+  });
+
+  it("bayrak kapalıysa uyarı ASLA çıkmaz", () => {
+    expect(
+      shrinkExceedsTolerance(shrinkInfo(250, 100), { enabled: false, tolerancePct: 0 }),
+    ).toBe(false);
+  });
+
+  it("FAZLA DÖNEN de aynı toleransa tabidir (yön değil büyüklük)", () => {
+    const s = shrinkInfo(250, 300);
+    expect(s.shrink).toBe(false);
+    expect(shrinkExceedsTolerance(s, { enabled: true, tolerancePct: 10 })).toBe(true);
   });
 });

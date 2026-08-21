@@ -155,7 +155,12 @@ async function main() {
     await prisma.subcontractorReceipt.deleteMany({ where: { workOrderId: wo.id } }).catch(() => {});
     await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatch: { workOrderId: wo.id } } }).catch(() => {});
     await prisma.subcontractorDispatch.deleteMany({ where: { workOrderId: wo.id } }).catch(() => {});
+    // ⚠️ RESTRICT FK — sapma defteri satırı duran top SİLİNEMEZ (2026-08-21'den beri
+    // fason kabulünde giden↔dönen metraj farkı da deftere yazılıyor). Silinmezse
+    // temizlik 23001 ile yarıda kalır ve arkasında hayalet kayıt bırakır.
+    await prisma.rollVariance.deleteMany({ where: { roll: { parentReceiptId: { not: null }, batchId: { in: cleanupBatchIds } } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { parentReceiptId: { not: null }, batchId: { in: cleanupBatchIds } } }).catch(() => {});
+    await prisma.rollVariance.deleteMany({ where: { roll: { id: { in: cleanupRollIds } } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: cleanupRollIds } } }).catch(() => {});
     await prisma.batch.deleteMany({ where: { id: { in: cleanupBatchIds } } }).catch(() => {});
     await prisma.travelerCardScan.deleteMany({ where: { card: { workOrderId: wo.id } } }).catch(() => {});

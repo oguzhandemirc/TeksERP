@@ -72,6 +72,10 @@ async function cleanupFason(woId: string): Promise<void> {
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: bornIds } } });
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: bornIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: bornIds } } });
+    // ⚠️ RESTRICT FK — sapma defteri satırı duran top SİLİNEMEZ (2026-08-21'den beri
+    // fason kabulünde giden↔dönen metraj farkı da deftere yazılıyor). Silinmezse
+    // temizlik 23001 ile yarıda kalır ve arkasında hayalet kayıt bırakır.
+    await prisma.rollVariance.deleteMany({ where: { roll: { id: { in: bornIds } } } });
     await prisma.roll.deleteMany({ where: { id: { in: bornIds } } });
   }
   await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatch: { workOrderId: woId } } });

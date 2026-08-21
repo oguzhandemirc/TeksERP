@@ -29,6 +29,7 @@ import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
 import {
+  FASON_RECEIPT_DEVIATION_SOURCE,
   PLAN_MISMATCH_CODE,
   TAMBUR_PLAN_WIDTH_TOLERANCE_CM,
   type PlanMismatchItem,
@@ -79,14 +80,30 @@ export async function assertRollMatchesPlan(
     ]);
     const rollName = roll.colorId ? (rollColor?.name ?? "bilinmeyen renk") : null;
     const planName = planColor?.name ?? "bilinmeyen renk";
-    mismatches.push({
-      field: "color",
-      message: roll.colorId
-        ? `Top ${rollName}, iş emri ${planName} istiyor`
-        : `Top RENKSİZ, iş emri ${planName} istiyor`,
-      rollValue: rollName,
-      planValue: planName,
+    // KABULDE ONAYLANMIŞ SAPMA (2026-08-21): operatör fason kabulde "plandan
+    // farklı renk — sadece bu toplar" dediyse defterde bu topun satırı vardır ve
+    // aynı soru Tambur'da TEKRAR SORULMAZ ("sapma bir kez onaylanır"). Değerler
+    // de eşleşmeli: plan sonradan değiştiyse o onay bu duruma ait değildir.
+    const confirmedAtReceipt = await prisma.rollPlanDeviation.findFirst({
+      where: {
+        rollId: roll.id,
+        field: "color",
+        source: FASON_RECEIPT_DEVIATION_SOURCE,
+        rollValue: rollName,
+        planValue: planName,
+      },
+      select: { id: true },
     });
+    if (!confirmedAtReceipt) {
+      mismatches.push({
+        field: "color",
+        message: roll.colorId
+          ? `Top ${rollName}, iş emri ${planName} istiyor`
+          : `Top RENKSİZ, iş emri ${planName} istiyor`,
+        rollValue: rollName,
+        planValue: planName,
+      });
+    }
   }
   const rollWidth = roll.width == null ? null : Number(roll.width);
   const planWidth = plan.width == null ? null : Number(plan.width);

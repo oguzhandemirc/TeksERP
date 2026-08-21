@@ -700,7 +700,11 @@ router.get(
 router.post(
   "/:id/apply-attribute-to-rolls",
   verifyToken,
-  requirePermission("roll:manual-adjust"),
+  // PLANLAMACI DA GEÇER (2026-08-21, kullanıcı kararı): iş emri kapsamlı toplu
+  // renk/en düzeltmesi bir PLANLAMA düzeltmesidir (sebep + audit). Süpervizör
+  // kapsam kuralı tekil motorda; planlamacı için servis motora izin listesi
+  // vermez (bkz. workorder-link.service.applyAttributeToRolls).
+  requireAnyPermission("roll:manual-adjust", "workorder:write"),
   controller.applyAttributeToRolls,
 );
 

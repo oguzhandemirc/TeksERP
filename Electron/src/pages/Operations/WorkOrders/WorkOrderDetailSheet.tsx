@@ -96,6 +96,12 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
     wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED",
   );
   const canComplete = Boolean(wo && wo.status === "IN_PROGRESS");
+  // Plan değişikliği (renk/en) bitmiş/iptal/devredilmiş iş emrinde KAPALI
+  // (2026-08-21 kullanıcı kararı); uyumlu "Sipariş Bağla" açık kalır (stoktan
+  // siparişe). Backend aynı kuralı 409 ile uygular — buton yalnız aynayı gösterir.
+  const canChangePlan = Boolean(
+    wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED",
+  );
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -172,12 +178,16 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
                       <button type="button" className="btn" onClick={() => setLinkOrderOpen(true)}>
                         <Link2 className="h-3.5 w-3.5" /> Sipariş Bağla
                       </button>
-                      <button type="button" className="btn" onClick={() => setChangeMode("color")}>
-                        <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
-                      </button>
-                      <button type="button" className="btn" onClick={() => setChangeMode("width")}>
-                        <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
-                      </button>
+                      {canChangePlan && (
+                        <>
+                          <button type="button" className="btn" onClick={() => setChangeMode("color")}>
+                            <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
+                          </button>
+                          <button type="button" className="btn" onClick={() => setChangeMode("width")}>
+                            <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
+                          </button>
+                        </>
+                      )}
                       <button type="button" className="btn" onClick={() => setFasonReceiveOpen(true)}>
                         <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
                       </button>
@@ -287,6 +297,7 @@ export function WorkOrderDetailSheet({ workOrder, open, onOpenChange, onEdit }: 
               currentColorId={wo.targetColorId}
               currentColorName={wo.targetColor?.name ?? null}
               currentWidth={wo.width}
+              orderLinks={wo.orderLinks}
             />
           </>
         )}

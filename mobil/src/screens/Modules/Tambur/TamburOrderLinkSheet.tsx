@@ -225,7 +225,12 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         .filter((l): l is NonNullable<typeof l> => Boolean(l)),
     [wo?.orderLinks],
   );
-  const unlinkVerdict = canUnlinkOrderLine(wo?.type, linkedRows.length);
+  const unlinkVerdict = canUnlinkOrderLine(
+    wo?.type,
+    linkedRows.length,
+    // Hedef kumaş bilinmiyorsa (wo yüklenmedi) engelleme — son sözü backend söyler.
+    wo ? wo.targetItemId != null : true,
+  );
 
   /** Uyumsuz satır için süpervizör onay soruları — "elindeki GERÇEKTEN bu mu?" */
   const buildQuestions = useCallback(
@@ -366,6 +371,11 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
               <Text style={styles.lastLinkNote} numberOfLines={2}>
                 {unlinkVerdict.reason}
               </Text>
+            ) : unlinkVerdict.becomesStock ? (
+              // Son bağ: engel değil, SONUÇ — operatör tipin değişeceğini önden görsün.
+              <Text style={styles.lastLinkNote} numberOfLines={2}>
+                Son bağ — kaldırılırsa iş emri Stok üretimine döner.
+              </Text>
             ) : null}
           </View>
           <IconButton
@@ -384,7 +394,7 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         </View>
       </View>
     ),
-    [unlinkVerdict.allowed, unlinkVerdict.reason, unlinkMut.isPending],
+    [unlinkVerdict.allowed, unlinkVerdict.reason, unlinkVerdict.becomesStock, unlinkMut.isPending],
   );
 
   const renderAllRow = useCallback(
@@ -631,7 +641,10 @@ export default function TamburOrderLinkSheet({ visible, onDismiss, workOrderId, 
         visible={!!confirmUnlink}
         onDismiss={() => setConfirmUnlink(null)}
         title="Sipariş bağını kaldır"
-        description={`«${confirmUnlink?.label ?? ''}» bağı kaldırılacak. Bu iş emrinin karşılanma tablosu ve refakat kartındaki sipariş bilgisi etkilenir.`}
+        description={
+          `«${confirmUnlink?.label ?? ''}» bağı kaldırılacak. Bu iş emrinin karşılanma tablosu ve refakat kartındaki sipariş bilgisi etkilenir.` +
+          (unlinkVerdict.becomesStock ? ' Bu son bağ: iş emri Stok üretimine dönecek.' : '')
+        }
         confirmLabel="Kaldır"
         confirming={unlinkMut.isPending}
         onConfirm={() => {

@@ -25,6 +25,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { createBatchTx, deleteIfEmptyAndTraceless, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
+import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
@@ -164,7 +165,7 @@ export class WorkOrderManualMoveService {
           select: {
             id: true,
             stepSequence: true,
-            station: { select: { name: true, type: true } },
+            station: { select: { name: true, type: true, appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
           },
         },
@@ -177,7 +178,10 @@ export class WorkOrderManualMoveService {
       stepSequence: s.stepSequence,
       name: s.station?.name ?? null,
       type: s.station?.type ?? null,
-      appliesColor: Boolean(s.requiredCategory?.appliesColor),
+      // TEK YÜKLEM (2026-08-21): istasyon bayrağı VEYA fason hizmeti — kilit
+      // helper'ı ve Tambur "Boyahaneye Geri Gönder" ile aynı soru aynı cevap.
+      // Eskiden yalnız kategoriye bakıyordu; iç boyahane tanımlansa sentez kaçardı.
+      appliesColor: stepCanApplyColor(s.station, s.requiredCategory),
     }));
     const targetStep = steps.find((s) => s.id === input.targetStepId);
     if (!targetStep) throw AppError.badRequest("Hedef adım bu iş emrinin rotasında değil");

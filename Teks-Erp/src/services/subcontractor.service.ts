@@ -85,7 +85,14 @@ import { allocate, specMatch, type RollSpec, type LineForAlloc } from "./helpers
 // Kabulde ölçülen eni iş emrine yansıtmak için (2026-08-17, madde 12).
 import { workOrderLinkService } from "./workorder-link.service";
 import { recordVarianceTx } from "./helpers/roll-variance.helper";
-import { VARIANCE_SOURCES, validateVarianceReason } from "../constants/variance-reasons";
+import { recordPlanDeviationTx } from "./helpers/tambur-plan-gate.helper";
+import { FASON_RECEIPT_DEVIATION_SOURCE } from "../constants/tambur-plan-gate";
+import { allocateShrink } from "./helpers/subcontractor-shrink.helper";
+import {
+  SHRINK_REASON_CODE,
+  VARIANCE_SOURCES,
+  validateVarianceReason,
+} from "../constants/variance-reasons";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -2310,6 +2317,16 @@ export class SubcontractorService {
       /// Override — fason kategorisi appliesColor=true ise WO.targetColorId
       /// otomatik kullanılır; UI farklı renk seçtiyse buradan gönderilir.
       appliedColorId?: string | null;
+      /// Tabletin kabul ekranını açarken gördüğü iş emri hedef rengi (null =
+      /// hedefsiz). Kilit altında taze hedefle karşılaştırılır; farklıysa 409
+      /// `TARGET_COLOR_CHANGED`. `undefined` = kontrol yok (eski APK).
+      expectedTargetColorId?: string | null;
+      /// Plandan FARKLI renk kabul edilirken operatörün kararı (2026-08-21):
+      /// APPLY_TO_PLAN → kabul sonrası iş emri hedef rengi de bu renge çekilir
+      /// (tx DIŞI, best-effort; tek bekçi reddederse yanıt `warnings`);
+      /// ROLLS_ONLY → sapma KABULDE deftere düşer, Tambur aynı topa tekrar sormaz.
+      /// undefined = eski davranış.
+      planColorAction?: "APPLY_TO_PLAN" | "ROLLS_ONLY";
       /// Override — fason kategorisi appliesProperty=true ise WO.targetProperties
       /// otomatik kullanılır; UI farklı liste verirse buradan gönderilir (replace).
       appliedPropertyIds?: string[];
@@ -2511,7 +2528,10 @@ export class SubcontractorService {
     //   - Yoksa: appliesColor=true ise WO.targetColorId'den otomatik; değilse null
     //   - Property için ayrı bayrak: appliesProperty=true ise WO.targetProperties;
     //     boş targetProperties bilinçli olabilir → sessizce boş liste
-    const resolvedAppliedColorId =
+    // `let`: override yoksa nihai değer tx İÇİNDE, WO kilidi altında TAZE hedeften
+    // yeniden çözülür (2026-08-21 — aşağıdaki "HEDEF RENK — kilit ALTINDA" bloğu).
+    // Buradaki değer yalnız pre-tx doğrulamalar + varsayılan içindir.
+    let resolvedAppliedColorId: string | null =
       data.appliedColorId !== undefined
         ? data.appliedColorId
         : appliesColor
@@ -2671,12 +2691,49 @@ export class SubcontractorService {
     // Takip teslimatında doğan yeni parti numarası — mesaj/audit için (retry'da
     // tx başında sıfırlanır, bayat değer taşımaz).
     let followUpBatchNumber: string | null = null;
+    // Kilit altında okunan TAZE hedef renk — tx dışındaki "iş emri de bu renge
+    // dönsün" kararı (planColorAction=APPLY_TO_PLAN) bu değere göre verilir.
+    let targetColorAtReceipt: string | null = wo.targetColorId ?? null;
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
       // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
       // sayımı eşzamanlı dispatch'in commit'li toplarını görsün.
       await touchWorkOrderTx(tx, data.workOrderId);
       followUpBatchNumber = null;
+
+      // ── HEDEF RENK — kilit ALTINDA taze (2026-08-21) ──────────────────────
+      // Pre-tx okunan `wo.targetColorId` bayat olabilir: planlamacı kabul
+      // sürerken "Rengi Değiştir" ile rengi çevirmiş olabilir. İki koruma:
+      //   (a) override yoksa uygulanacak renk TAZE hedeften çözülür;
+      //   (b) tablet ekranı açarken gördüğü hedefi gönderdiyse
+      //       (`expectedTargetColorId`) ve taze hedef farklıysa 409 — operatör
+      //       yenilesin, eski renk sessizce yazılmasın. Tablet `appliedColorId`yi
+      //       DAİMA gönderir (override yolu), bu yüzden (a) tek başına tableti
+      //       korumazdı; (b) şart. Alan gönderilmediyse kontrol yok (eski APK).
+      const freshWo = await tx.workOrder.findUnique({
+        where: { id: data.workOrderId },
+        select: { targetColorId: true, targetColor: { select: { name: true } } },
+      });
+      const freshTargetColorId = freshWo?.targetColorId ?? null;
+      targetColorAtReceipt = freshTargetColorId;
+      if (
+        data.expectedTargetColorId !== undefined &&
+        (data.expectedTargetColorId ?? null) !== freshTargetColorId
+      ) {
+        throw AppError.conflict(
+          `İş emrinin hedef rengi bu arada değişti — artık "${freshWo?.targetColor?.name ?? "renksiz"}". ` +
+            "Ekranı yenileyip rengi kontrol ederek tekrar kaydedin.",
+          {
+            code: "TARGET_COLOR_CHANGED",
+            expectedColorId: data.expectedTargetColorId ?? null,
+            currentColorId: freshTargetColorId,
+            currentColorName: freshWo?.targetColor?.name ?? null,
+          },
+        );
+      }
+      if (data.appliedColorId === undefined && appliesColor) {
+        resolvedAppliedColorId = freshTargetColorId;
+      }
 
       // ── KISMİ/TAM SINIFLANDIRMA — kilit ALTINDA TAZE metrajla ─────────────
       // Pre-tx okunan currentQty bayat olabilir (eşzamanlı kısmi kabul kalanı
@@ -3064,6 +3121,47 @@ export class SubcontractorService {
           });
         }
 
+        // ── PLAN DIŞI RENK KABULÜ → SAPMA DEFTERİ (2026-08-21) ──────────────
+        // Operatör plandan farklı renk seçti ve "sadece bu toplar" dedi
+        // (planColorAction=ROLLS_ONLY): sapma KABULDE onaylanmış sayılır ve doğan
+        // her top için deftere düşer; Tambur kapısı aynı topa aynı soruyu BİR
+        // DAHA SORMAZ ("sapma bir kez onaylanır" kuralı kabul anına uzandı).
+        // APPLY_TO_PLAN tx DIŞINDA planı çeker (aşağıda). Hedefsiz iş emri kapsam
+        // dışı (kapı da öyle: hedef renksizse boyalı top sapma değildir).
+        if (
+          data.planColorAction === "ROLLS_ONLY" &&
+          appliesColor &&
+          freshTargetColorId != null &&
+          resolvedAppliedColorId !== freshTargetColorId
+        ) {
+          const applied = resolvedAppliedColorId
+            ? await tx.color.findUnique({ where: { id: resolvedAppliedColorId }, select: { name: true } })
+            : null;
+          const rollName = resolvedAppliedColorId ? (applied?.name ?? "bilinmeyen renk") : null;
+          const planName = freshWo?.targetColor?.name ?? "bilinmeyen renk";
+          for (const { id, nr } of bornRollInputs) {
+            await recordPlanDeviationTx(tx, {
+              mismatches: [
+                {
+                  field: "color",
+                  message: rollName
+                    ? `Top ${rollName}, iş emri ${planName} istiyor`
+                    : `Top RENKSİZ, iş emri ${planName} istiyor`,
+                  rollValue: rollName,
+                  planValue: planName,
+                },
+              ],
+              rollId: id,
+              childRollId: null,
+              workOrderId: data.workOrderId,
+              workOrderStepId: data.stepId,
+              qtyM: nr.qty,
+              source: FASON_RECEIPT_DEVIATION_SOURCE,
+              confirmedById: userId,
+            });
+          }
+        }
+
         // Sonraki step varsa açılış RollMovement'leri (per-roll qty/weight in) + status.
         if (nextStep) {
           await tx.rollMovement.createMany({
@@ -3077,6 +3175,58 @@ export class SubcontractorService {
             })),
           });
           await recomputeStepStatus(tx, nextStep.id);
+        }
+
+        // ── ÇEKME / FAZLA DÖNEN → SAPMA DEFTERİ (2026-08-21) ────────────────
+        // Buraya kadar iki sayı kesinleşti: fasonun hesabından DÜŞÜLEN metraj
+        // (`plans[].receivedQty` — TAM kabulde kalanın kendisi) ve fiziksel
+        // olarak GELEN metraj (doğan parçalar). Boyahanede kumaş çeker; aradaki
+        // fark bugüne dek HİÇBİR YERE yazılmıyordu ve fason karnesi bu yüzden
+        // her firmaya %0 fire basıyordu (`subcontract-scorecard` dönen metrajı
+        // defterden okur, defter TAM kabulde kalanın kendisidir → fark hep 0).
+        //
+        // ⚠️ Kısmi kabulde de yazılır ve bu DOĞRUDUR: o teslimatta 51 m düşülüp
+        // 48 m geldiyse 3 m çekmiştir; fasonda bekleyen kalan hesabın DIŞINDADIR
+        // (düşülmedi). "Kalan gelmeyecek" kararının firesi ayrı bir kaynaktır
+        // (SUBCONTRACTOR_REMAINDER) — çift sayım yok.
+        //
+        // ⚠️ Eşik 0.01 m: `fmtMeters` / istemci FARK bantlarıyla AYNI hassasiyet.
+        // Yüzer-nokta gürültüsü (0.1+0.2) defteri sıfıra yakın satırlarla doldurmasın.
+        const consumedTotal = plans.reduce(
+          (s, p) => s.plus(p.receivedQty),
+          new Prisma.Decimal(0),
+        );
+        const bornTotal = data.newRolls.reduce(
+          (s, nr) => s.plus(new Prisma.Decimal(nr.qty)),
+          new Prisma.Decimal(0),
+        );
+        const bornDiff = bornTotal.minus(consumedTotal);
+        if (bornDiff.abs().greaterThan(new Prisma.Decimal("0.01"))) {
+          const shrink = bornDiff.isNegative();
+          const shares = allocateShrink(
+            plans.map((p) => ({ rollId: p.rollId, receivedQty: p.receivedQty })),
+            bornDiff.abs(),
+          );
+          const explain =
+            `Fason kabul ${receiptNo}: ${consumedTotal.toFixed(1)} m düşüldü, ` +
+            `${bornTotal.toFixed(1)} m döndü`;
+          for (const s of shares) {
+            await recordVarianceTx(tx, {
+              rollId: s.rollId,
+              workOrderStepId: data.stepId,
+              // Eksi yön FİRE'dir: mal vardı, metre gitti (kayıt düzeltmesi
+              // DEĞİL — sistemdeki sayı yanlış değildi, kumaş gerçekten çekti).
+              kind: shrink ? RollVarianceKind.SCRAP : RollVarianceKind.OVERAGE,
+              qty: s.qty,
+              source: VARIANCE_SOURCES.SUBCONTRACTOR_RETURN,
+              // Terslemenin adresi — makbuz iptalinde TAM bu satırlar kalkar.
+              sourceRefId: receipt.id,
+              // OVERAGE sebep İSTEMEZ (sistem tespiti); SCRAP'te sistem kodu.
+              reasonCode: shrink ? SHRINK_REASON_CODE : null,
+              reasonText: explain,
+              userId,
+            });
+          }
         }
       }
       // newRolls boş senaryosu artık geçersiz (controller min(1) ile reddediyor).
@@ -3155,6 +3305,33 @@ export class SubcontractorService {
       }
     }
 
+    // ── Plandan farklı renk + "iş emri de bu renge dönsün" (2026-08-21) ─────
+    // Tx DIŞINDA, best-effort (en ile aynı gerekçe): kabul tamamlandı, mal
+    // içeride. TEK BEKÇİDEN geçer — önceki kabuller başka renkte döndüyse ve
+    // boyanacak top kalmadıysa COLOR_DYED_BLOCKED → plan değişmez, `warnings`
+    // ile söylenir (kabul yine geçerlidir; yol Tebdil / toplara uygula).
+    const postWarnings: string[] = [];
+    if (
+      data.planColorAction === "APPLY_TO_PLAN" &&
+      appliesColor &&
+      resolvedAppliedColorId !== targetColorAtReceipt
+    ) {
+      try {
+        const res = await workOrderLinkService.changeTargetColor(
+          data.workOrderId,
+          resolvedAppliedColorId,
+          `Fason kabulünde uygulandı (${result!.receiptNo})`,
+          userId,
+          { confirmPartial: true },
+        );
+        postWarnings.push(...res.data.warnings);
+      } catch (err) {
+        postWarnings.push(
+          `İş emrinin rengi değiştirilemedi: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
     // isPartial kararı tx içinde TAZE metraja göre verildi — mesaj sayımı da
     // oradan (result.items) okur; payload'daki receivedQty kalana eşitse top
     // aslında TAM kabul edilmiştir ve "kısmi" yazmamalıdır.
@@ -3171,6 +3348,7 @@ export class SubcontractorService {
       success: true,
       data: result,
       message: `Fason kabul tamamlandı: ${result!.receiptNo} (${data.returns.length} dönüş kaydı)${partialMsg}. Yeni Roll'lar Kurşun/KK2'de açılacak.`,
+      ...(postWarnings.length > 0 ? { warnings: postWarnings } : {}),
     };
   }
 
@@ -4834,6 +5012,24 @@ export class SubcontractorService {
       // 5) Receipt'in property listesini sil (cancel ⇒ uygulanan kimlik geri alınır)
       await tx.subcontractorReceiptProperty.deleteMany({
         where: { receiptId },
+      });
+
+      // 5b) ÇEKME SAPMASINI TERSLE (2026-08-21) — satır SİLİNMEZ, işaretlenir
+      //     (append-only defter kuralı). İptal edilen kabulün firesi raporda
+      //     kalsaydı defterde HAYALET fire olurdu; bu, defterin engellemek için
+      //     var olduğu şeyin ta kendisi.
+      //
+      // ⚠️ Adres `sourceRefId`'dir, `rollId` DEĞİL: kısmi teslimatta aynı top
+      // aynı adımda birden çok makbuzda sapma üretir ve iptal LIFO yalnız
+      // SONUNCUSUNU kaldırır — rollId ile silmek önceki teslimatın meşru
+      // sapmasını da süpürürdü.
+      await tx.rollVariance.updateMany({
+        where: {
+          source: VARIANCE_SOURCES.SUBCONTRACTOR_RETURN,
+          sourceRefId: receiptId,
+          reversedAt: null,
+        },
+        data: { reversedAt: new Date(), reversedById: userId ?? null },
       });
 
       // 6) Step status recompute (genelde COMPLETED → ACTIVE'e döner)

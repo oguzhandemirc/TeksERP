@@ -175,6 +175,11 @@ async function cleanup(): Promise<void> {
     select: { id: true },
   });
   const rollIds = rolls.map((r) => r.id);
+  // ⚠️ RESTRICT FK — sapma defteri satırı duran top SİLİNEMEZ. Bu test fason
+  // kabulü yapıyor ve 2026-08-21'den beri giden↔dönen metraj farkı da deftere
+  // yazılıyor (SUBCONTRACTOR_RETURN); satır silinmeden `roll.deleteMany` 23001
+  // ile düşer ve temizlik yarıda kalır (arkasında hayalet movement bırakır).
+  await prisma.rollVariance.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIdSet } }] } });
   await prisma.rollOperation.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIdSet } }] } });
   await prisma.rollMovement.deleteMany({ where: { OR: [{ rollId: { in: rollIds } }, { workOrderStepId: { in: stepIdSet } }] } });
   await prisma.subcontractorReceiptItem.deleteMany({ where: { OR: [{ receiptId: { in: receiptIds } }, { newRollId: { in: rollIds } }] } });

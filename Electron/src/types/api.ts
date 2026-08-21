@@ -2,6 +2,8 @@ export interface ApiResponse<T> {
   success: boolean;
   data: T;
   message?: string;
+  /** Engel olmayan notlar (örn. "rotada renk veren adım yok") — toast basılır. */
+  warnings?: string[];
 }
 
 export interface PaginatedResponse<T> {

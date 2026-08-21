@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Palette, Ruler } from "lucide-react";
 import { toast } from "sonner";
@@ -14,11 +14,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { FormField } from "@/components/forms/FormField";
 import { colorService } from "@/pages/Colors/service";
+import { orderService } from "@/pages/Operations/Orders/service";
+import { useTabsStore } from "@/store/tabs";
 import { workOrderService } from "./service";
-import type { RollAttributeTarget } from "./types";
+import { TebdilWizard } from "./tebdil/TebdilWizard";
+import type { RollAttributeTarget, WorkOrder } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
 
 type Mode = "color" | "width";
+/** Renkle uyuşmayan bağlı sipariş için karar: uyar (bağ kalır) · bağı kopar · siparişi de düzelt. */
+type OrderAction = "warn" | "unlink" | "update";
 
 interface Props {
   open: boolean;
@@ -29,6 +34,24 @@ interface Props {
   currentColorId: string | null;
   currentColorName: string | null;
   currentWidth: number | null;
+  /** Bağlı siparişler — renk uyumsuzluğu ÖNCEDEN gösterilir ve karar burada verilir. */
+  orderLinks?: WorkOrder["orderLinks"];
+}
+
+const PARTIAL_CODE = "COLOR_PARTIAL_CONFIRM";
+const DYED_BLOCKED_CODE = "COLOR_DYED_BLOCKED";
+const NEW_WO_PATH = "/operations/work-orders/new";
+
+/** Axios hatasından backend `message` + `details.code` (varsa) okur. */
+function readApiError(err: unknown): { code: string | null; message: string } {
+  const e = err as {
+    response?: { data?: { message?: string; details?: { code?: string } } };
+    message?: string;
+  };
+  return {
+    code: e?.response?.data?.details?.code ?? null,
+    message: e?.response?.data?.message ?? e?.message ?? "İşlem başarısız",
+  };
 }
 
 /**
@@ -36,12 +59,25 @@ interface Props {
  * dar kapı (2026-08-17, madde 10 ve 12).
  *
  * Gerçek hayattaki karşılığı: iş emri boyahanedeyken müşteri telefon eder,
- * "maviyi değil ekruyu istiyoruz" der; ya da fasondan gelen mal 300 değil 295
- * cm ölçülür. İkisi de bugüne kadar "Düzenle" ekranından yapılıyordu — yani
- * sebebi de izi de tutulmuyordu ve aynı ekranda rota da bozulabiliyordu.
+ * "maviyi değil ekruyu istiyoruz" der. Plan değişir; boyahaneden DÖNECEK toplar
+ * kabulde yeni rengi kendiliğinden alır. ZATEN boyanmış mal için bu bir mal
+ * kararıdır: ya kayıt yanlıştı (toplara uygula) ya yeniden boyanır (Tebdil).
  *
- * SEBEP ZORUNLU: bu diyaloğun varlık sebebi izlenebilirlik. Sebepsiz
- * değiştirmek zaten mümkündü.
+ * 2026-08-21 (kullanıcı kararı, "sade/özet olsun"):
+ *   • Bant DURUMA GÖRE konuşur: fasondaki renksiz toplar → "kabulde yeni rengi
+ *     alır"; boyanmış toplar → "seç → kaydı düzelt / Tebdil". Tek genel cümle yok.
+ *   • PLANLAMACI TOPLU DÜZELTME: "beyaz diye kaydedilmiş mal aslında ekru" →
+ *     Tümünü seç + yeni renk + sebep → plan + tüm açık kumaşlar tek hamlede
+ *     düzelir; Tambur renkle uğraşmaz. Bekçi seçili topları yeni renkte sayar
+ *     (`recolorRollIds`), bu yüzden boya bitmiş olsa da kayıt düzeltmesi geçer.
+ *   • Sipariş uyumsuzluğu ÖNCEDEN listelenir; satır başına karar: uyar · bağı
+ *     kopar · siparişi de düzelt (dar uç, sebep+audit).
+ *   • Backend tek bekçi: bitmiş iş emri / izinli renk dışı → hata metni aynen;
+ *     bir kısım top eski renkte + boyanacak top var → 409 onay ("Yine de
+ *     değiştir"); mal zaten boyandı, boyanacak yok, yeni renkle uyuşmuyor → 409
+ *     KAPALI: Tebdil (yeniden boya) / Yeni iş emri / Tümünü seç düğmeleri.
+ *
+ * SEBEP ZORUNLU: bu diyaloğun varlık sebebi izlenebilirlik.
  */
 export function ChangeTargetDialog({
   open,
@@ -52,13 +88,23 @@ export function ChangeTargetDialog({
   currentColorId,
   currentColorName,
   currentWidth,
+  orderLinks,
 }: Props) {
   const qc = useQueryClient();
+  const navigateActive = useTabsStore((s) => s.navigateActive);
   const [colorId, setColorId] = useState<string | null>(currentColorId);
   const [width, setWidth] = useState<string>(currentWidth != null ? String(currentWidth) : "");
   const [reason, setReason] = useState("");
   /** Seçili top id'leri — "bu değişiklik toplara da yansısın mı?" (madde 12). */
   const [selectedRolls, setSelectedRolls] = useState<Set<string>>(new Set());
+  /** Backend'in "N top zaten X boyandı, kalan Y gelecek" onayı — metni sunucu yazar. */
+  const [partialConfirm, setPartialConfirm] = useState<string | null>(null);
+  /** Backend'in "mal zaten boyandı, boyanacak yok" kapısı — Tebdil / yeni iş emri. */
+  const [dyedBlocked, setDyedBlocked] = useState<string | null>(null);
+  /** Uyumsuz sipariş satırı → karar (varsayılan: uyar, bağ kalır). */
+  const [orderActions, setOrderActions] = useState<Record<string, OrderAction>>({});
+  /** Tebdil sihirbazı (kapalı durumdan açılır) — hangi parti. */
+  const [tebdilBatch, setTebdilBatch] = useState<{ id: string; number: string } | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -66,6 +112,10 @@ export function ChangeTargetDialog({
       setWidth(currentWidth != null ? String(currentWidth) : "");
       setReason("");
       setSelectedRolls(new Set());
+      setPartialConfirm(null);
+      setDyedBlocked(null);
+      setOrderActions({});
+      setTebdilBatch(null);
     }
   }, [open, currentColorId, currentWidth]);
 
@@ -93,28 +143,53 @@ export function ChangeTargetDialog({
   });
   const batches = targetsQ.data?.data ?? [];
   const editableOf = (b: RollAttributeTarget) => b.rolls.filter((r) => !r.blocked);
+  const allEditableIds = useMemo(
+    () => batches.flatMap((b) => editableOf(b).map((r) => r.id)),
+    [batches],
+  );
+  const allSelected = allEditableIds.length > 0 && allEditableIds.every((id) => selectedRolls.has(id));
 
-  // ── MEVCUT DAĞILIM BANDI (2026-08-19, kullanıcı kararı) ────────────────────
-  // Saha senaryosu: iş emri MAVİ açıldı, mal boyandı, müşteri "gri olacaktı"
-  // dedi. Planlamacı hedefi GRİ'ye çevirirken elinde ZATEN 12 MAVİ top olduğunu
-  // görmüyordu — renk değişikliği ona kâğıt işi gibi geliyordu, oysa boyanmış
-  // mal için bu bir MAL kararıdır (redye / "mavi stok kalsın" dallanır).
-  // Veri zaten roll-attribute-targets'tan geliyor; bant yalnız onu özetler.
+  const isColor = mode === "color";
+  const changed = isColor
+    ? colorId !== currentColorId
+    : (width === "" ? null : Number(width)) !== currentWidth;
+  const newColorName = useMemo(
+    () => (colorId ? (colorsQ.data?.data ?? []).find((c) => c.id === colorId)?.name ?? null : null),
+    [colorId, colorsQ.data],
+  );
+
+  // ── DURUM BANDI (2026-08-21): üç kova, yalnız dolu olanlar yazılır ──────────
   const allRolls = batches.flatMap((b) => b.rolls);
-  const distribution = (() => {
+  const atSubCount = allRolls.filter((r) => r.status === "AT_SUBCONTRACTOR").length;
+  const dyedEditable = allRolls.filter((r) => !r.blocked && r.colorName != null);
+  const dyedByColor = (() => {
     const counts = new Map<string, number>();
-    for (const r of allRolls) {
-      const key =
-        mode === "color"
-          ? (r.colorName ?? "renksiz")
-          : r.width != null
-            ? `${r.width} cm`
-            : "en girilmemiş";
-      counts.set(key, (counts.get(key) ?? 0) + 1);
-    }
-    // Çoktan aza — planlamacının gözü ilk kalemde ne çoğunluktaysa onu görsün.
+    for (const r of dyedEditable) counts.set(r.colorName!, (counts.get(r.colorName!) ?? 0) + 1);
     return [...counts.entries()].sort((a, b) => b[1] - a[1]);
   })();
+  const otherBlockedCount = allRolls.filter((r) => r.blocked && r.status !== "AT_SUBCONTRACTOR").length;
+  const widthDistribution = (() => {
+    const counts = new Map<string, number>();
+    for (const r of allRolls) {
+      const key = r.width != null ? `${r.width} cm` : "en girilmemiş";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  })();
+  /** Boyanmış top içeren ilk parti — Tebdil düğmesinin hedefi. */
+  const tebdilCandidate = useMemo(() => {
+    const b = batches.find((x) => x.batchId && x.rolls.some((r) => !r.blocked && r.colorName != null));
+    return b?.batchId ? { id: b.batchId, number: b.batchNumber ?? "Parti" } : null;
+  }, [batches]);
+
+  // ── SİPARİŞ UYUMSUZLUĞU — önceden, satır başına karar ─────────────────────
+  const mismatchedLinks = useMemo(() => {
+    if (!isColor || !changed) return [];
+    return (orderLinks ?? []).filter(
+      (l) => l.orderLine && (l.orderLine.colorId ?? null) !== colorId,
+    );
+  }, [isColor, changed, orderLinks, colorId]);
+
   const toggleBatch = (b: RollAttributeTarget) => {
     const ids = editableOf(b).map((r) => r.id);
     const allOn = ids.length > 0 && ids.every((id) => selectedRolls.has(id));
@@ -126,65 +201,103 @@ export function ChangeTargetDialog({
       }
       return next;
     });
+    setDyedBlocked(null);
+  };
+  const toggleAll = () => {
+    setSelectedRolls(allSelected ? new Set() : new Set(allEditableIds));
+    setDyedBlocked(null);
   };
 
-  // Dönüş şekilleri farklı (`warnings` ↔ `previousWidth`) — ortak dar bir tipe
-  // indiriyoruz; ekranın ihtiyacı yalnız mesaj ve varsa uyarılar.
-  const mutation = useMutation<{ message?: string; data: { warnings?: string[] } }>({
-    mutationFn: async () => {
-      // İş emri ZATEN doğru değerdeyse plan yazımı atlanır ve yalnız toplar
-      // düzeltilir. Bu, diyaloğu ikinci kez açan operatörün tek çıkış yolu:
-      // aksi halde "değer değişmedi" diye kapıya takılır ve yanlış kaydedilmiş
-      // topları hiçbir yerden düzeltemezdi.
-      const res = !changed
-        ? { message: undefined, data: {} as { warnings?: string[] } }
-        : mode === "color"
-          ? await workOrderService.changeTargetColor(workOrderId, colorId, reason)
-          : await workOrderService.changeWidth(workOrderId, width === "" ? null : Number(width), reason);
-      // Sıra ÖNEMLİ: önce plan, sonra toplar. Tersi olsaydı plan yazımı
-      // düşünce toplar iş emriyle çelişen bir değere çekilmiş olurdu.
+  const mutation = useMutation<{ done: boolean; message?: string; warnings: string[] }, unknown, { confirmPartial: boolean }>({
+    mutationFn: async ({ confirmPartial }) => {
+      const warnings: string[] = [];
+      // ① Plan. İş emri ZATEN doğru değerdeyse plan yazımı atlanır ve yalnız
+      // toplar düzeltilir (diyaloğu ikinci kez açan operatörün tek çıkış yolu).
+      let message: string | undefined;
+      if (changed) {
+        try {
+          if (isColor) {
+            const res = await workOrderService.changeTargetColor(workOrderId, colorId, reason, {
+              confirmPartial,
+              // Seçili toplar yeni renkte sayılır — "hepsini düzelt" kayıt düzeltmesi olarak geçer.
+              recolorRollIds: [...selectedRolls],
+            });
+            message = res.message;
+            warnings.push(...(res.data.warnings ?? []));
+          } else {
+            const res = await workOrderService.changeWidth(workOrderId, width === "" ? null : Number(width), reason);
+            message = res.message;
+          }
+        } catch (err) {
+          const { code, message: msg } = readApiError(err);
+          if (code === PARTIAL_CODE && !confirmPartial) {
+            setPartialConfirm(msg); // sunucu onay istiyor — "Yine de değiştir"
+            return { done: false, warnings: [] };
+          }
+          if (code === DYED_BLOCKED_CODE) {
+            setDyedBlocked(msg); // kapalı — Tebdil / yeni iş emri / tümünü seç
+            return { done: false, warnings: [] };
+          }
+          throw err;
+        }
+      }
+      // ② Toplar — sıra ÖNEMLİ: önce plan, sonra toplar. Tersi olsaydı plan
+      // yazımı düşünce toplar iş emriyle çelişen bir değere çekilmiş olurdu.
       if (selectedRolls.size > 0) {
         const applied = await workOrderService.applyAttributeToRolls(workOrderId, {
           rollIds: [...selectedRolls],
-          ...(mode === "color" ? { colorId } : { width: width === "" ? null : Number(width) }),
+          ...(isColor ? { colorId } : { width: width === "" ? null : Number(width) }),
           reason,
         });
         if (applied.data.updated > 0) toast.success(`${applied.data.updated} top güncellendi`);
-        for (const f of applied.data.failed) {
-          toast.warning(`${f.barcode ?? "barkodsuz"}: ${f.message}`);
+        for (const f of applied.data.failed) toast.warning(`${f.barcode ?? "barkodsuz"}: ${f.message}`);
+      }
+      // ③ Sipariş kararları (yalnız renk). Her biri kendi başına meşru; biri
+      // düşerse diğerleri yapılır, düşen uyarıyla söylenir.
+      for (const l of mismatchedLinks) {
+        const action = orderActions[l.orderLineId] ?? "warn";
+        const orderNo = l.orderLine?.order?.orderNumber ?? "sipariş";
+        try {
+          if (action === "unlink") {
+            await workOrderService.unlinkOrderLine(workOrderId, l.orderLineId);
+            toast.success(`${orderNo} bağı kaldırıldı`);
+          } else if (action === "update" && l.orderLine?.order?.id) {
+            await orderService.changeLineColor(l.orderLine.order.id, l.orderLineId, colorId, reason);
+            toast.success(`${orderNo} kalemi de ${newColorName ?? "renksiz"} yapıldı`);
+          }
+        } catch (err) {
+          toast.warning(`${orderNo}: ${readApiError(err).message}`);
         }
       }
-      return {
-        message: res.message ?? (selectedRolls.size > 0 ? "Toplar güncellendi" : "Güncellendi"),
-        data: res.data as { warnings?: string[] },
-      };
+      // Sipariş uyumsuzluğu burada karara bağlandı — sunucunun aynı konudaki
+      // metin uyarısı tekrar basılmaz; geri kalan (rota kapsaması vb.) gösterilir.
+      const rest = warnings.filter((w) => !/siparişi .* istiyor\.$/.test(w));
+      return { done: true, message, warnings: rest };
     },
     onSuccess: (res) => {
-      toast.success(res.message ?? "Güncellendi");
-      // Bağlı siparişlerle çelişki ENGEL DEĞİL, uyarıdır: kararı müşteri verdi.
-      // Ama planlamacı sipariş satırını da düzeltmek isteyebilir → görünür kalsın.
-      const warnings = (res.data as { warnings?: string[] }).warnings ?? [];
-      for (const w of warnings) toast.warning(w);
-      // ⚠️ Anahtarlar EKRANLARIN kullandığıyla birebir olmalı. İlk yazımda
-      // `["work-order", id]` invalidate ediliyordu — böyle bir sorgu YOK:
-      // liste tazeleniyor, yan panel ve detay sayfası ESKİ rengi göstermeye
-      // devam ediyordu (2026-08-17 saha bildirimi, ekran görüntülü).
+      if (!res.done) return; // onay / kapalı — diyalog açık kalır
+      toast.success(res.message ?? (selectedRolls.size > 0 ? "Toplar güncellendi" : "Güncellendi"));
+      for (const w of res.warnings) toast.warning(w);
+      // ⚠️ Anahtarlar EKRANLARIN kullandığıyla birebir olmalı (2026-08-17 dersi).
       void qc.invalidateQueries({ queryKey: ["work-orders"] });
       void qc.invalidateQueries({ queryKey: ["work-order-detail", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["work-order-branches", workOrderId] });
+      void qc.invalidateQueries({ queryKey: ["work-order-roll-targets", workOrderId] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
+      void qc.invalidateQueries({ queryKey: ["orders"] });
       onOpenChange(false);
+    },
+    onError: (err) => {
+      toast.error(readApiError(err).message);
     },
   });
 
-  const isColor = mode === "color";
-  const changed = isColor
-    ? colorId !== currentColorId
-    : (width === "" ? null : Number(width)) !== currentWidth;
   // Gönderilebilir: ya iş emri değeri değişiyor, ya da (değişmese bile) toplara
   // uygulanacak bir seçim var. İkisi de yoksa yapılacak bir şey yok.
   const canSubmit =
     (changed || selectedRolls.size > 0) && reason.trim().length >= 3 && !mutation.isPending;
+
+  const newLabel = isColor ? (newColorName ?? "renksiz") : width ? `${width} cm` : "—";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -196,8 +309,8 @@ export function ChangeTargetDialog({
           </DialogTitle>
           <DialogDescription>
             {isColor
-              ? "Bu iş emrinin ÜRETİM rengi değişir. Bağlı siparişlerin rengi değişmez."
-              : "Bu iş emrinin eni değişir; fason çekisinde basılan EN değeri buradan gelir."}
+              ? "İş emrinin üretim rengi değişir. Boyahaneden dönecek toplar kabulde yeni rengi alır."
+              : "İş emrinin eni değişir; fason çekisinde basılan EN değeri buradan gelir."}
           </DialogDescription>
         </DialogHeader>
 
@@ -209,21 +322,36 @@ export function ChangeTargetDialog({
             </strong>
           </div>
 
-          {allRolls.length > 0 && (
+          {/* Durum bandı — yalnız dolu kovalar, kısa cümleler */}
+          {isColor && allRolls.length > 0 && (
+            <ul className="space-y-0.5 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs dark:border-amber-700/60 dark:bg-amber-950/40">
+              {atSubCount > 0 && (
+                <li>
+                  <strong>{atSubCount} top</strong> boyahanede — kabulde yeni rengi alır.
+                </li>
+              )}
+              {dyedByColor.map(([name, count]) => (
+                <li key={name}>
+                  <strong>{count} top</strong> zaten <strong>{name}</strong> boyanmış — kayıt yanlışsa aşağıdan
+                  seç (Tümünü seç); yeniden boyanacaksa <strong>Tebdil</strong>.
+                </li>
+              ))}
+              {otherBlockedCount > 0 && (
+                <li className="text-muted-foreground">
+                  {otherBlockedCount} top değişmez (sevk edildi / kesildi / iptal).
+                </li>
+              )}
+            </ul>
+          )}
+          {!isColor && allRolls.length > 0 && (
             <div className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs dark:border-amber-700/60 dark:bg-amber-950/40">
               <span className="font-medium">Bu iş emrinde şu an: </span>
-              {distribution.map(([label, count], i) => (
+              {widthDistribution.map(([label, count], i) => (
                 <span key={label}>
                   {i > 0 && " · "}
                   <strong>{count} top</strong> {label}
                 </span>
               ))}
-              {isColor && (
-                <div className="mt-1 text-muted-foreground">
-                  Boyanmış mal için renk değişikliği kâğıt işi değildir — mal ya
-                  boyahaneye döner (redye) ya da mevcut rengiyle stok kalır.
-                </div>
-              )}
             </div>
           )}
 
@@ -233,7 +361,11 @@ export function ChangeTargetDialog({
                 id="new-color"
                 className="h-9 w-full rounded-md border bg-background px-3 text-sm"
                 value={colorId ?? ""}
-                onChange={(e) => setColorId(e.target.value || null)}
+                onChange={(e) => {
+                  setColorId(e.target.value || null);
+                  setPartialConfirm(null);
+                  setDyedBlocked(null);
+                }}
               >
                 <option value="">— renksiz —</option>
                 {(colorsQ.data?.data ?? []).map((c) => (
@@ -271,12 +403,55 @@ export function ChangeTargetDialog({
             />
           </FormField>
 
+          {/* Sipariş uyumsuzluğu — önceden, satır başına karar */}
+          {mismatchedLinks.length > 0 && (
+            <div className="rounded-md border">
+              <div className="border-b px-3 py-1.5 text-xs font-medium">
+                Bağlı sipariş farklı renk istiyor
+              </div>
+              <div className="divide-y">
+                {mismatchedLinks.map((l) => {
+                  const orderNo = l.orderLine?.order?.orderNumber ?? "—";
+                  const wants = l.orderLine?.color?.name ?? "renksiz";
+                  const action = orderActions[l.orderLineId] ?? "warn";
+                  return (
+                    <div key={l.orderLineId} className="flex items-center gap-2 px-3 py-1.5 text-xs">
+                      <span className="font-mono">{orderNo}</span>
+                      <span className="text-muted-foreground">{wants} istiyor</span>
+                      <select
+                        className="ml-auto h-7 rounded-md border bg-background px-2 text-xs"
+                        value={action}
+                        onChange={(e) =>
+                          setOrderActions((prev) => ({ ...prev, [l.orderLineId]: e.target.value as OrderAction }))
+                        }
+                        aria-label={`${orderNo} için karar`}
+                      >
+                        <option value="warn">Bağ kalsın (uyarı)</option>
+                        <option value="unlink">Bağı kopar</option>
+                        <option value="update">Siparişi de {newLabel} yap</option>
+                      </select>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {batches.length > 0 && (
             <div className="rounded-md border">
               <div className="flex items-center justify-between border-b px-3 py-1.5 text-xs">
                 <span className="font-medium">Toplara da uygula</span>
-                <span className="text-muted-foreground">
+                <span className="flex items-center gap-2 text-muted-foreground">
                   {selectedRolls.size > 0 ? `${selectedRolls.size} top seçili` : "seçili değil"}
+                  {allEditableIds.length > 0 && (
+                    <button
+                      type="button"
+                      className="rounded border px-2 py-0.5 text-[11px] hover:bg-accent"
+                      onClick={toggleAll}
+                    >
+                      {allSelected ? "Temizle" : "Tümünü seç"}
+                    </button>
+                  )}
                 </span>
               </div>
               <div className="max-h-40 overflow-auto">
@@ -308,17 +483,83 @@ export function ChangeTargetDialog({
               </div>
             </div>
           )}
+
+          {/* Backend onayı: bir kısım top zaten eski renkte, boyanacak top var */}
+          {partialConfirm && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs">
+              <div className="font-medium">Onay gerekiyor</div>
+              <div className="mt-0.5">{partialConfirm}</div>
+            </div>
+          )}
+
+          {/* Backend kapısı: mal zaten boyandı, boyanacak top yok */}
+          {dyedBlocked && (
+            <div className="space-y-2 rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-xs">
+              <div className="font-medium">Bu iş emrinde mal zaten boyandı</div>
+              <div>{dyedBlocked}</div>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {tebdilCandidate && (
+                  <Button type="button" size="sm" variant="outline" onClick={() => setTebdilBatch(tebdilCandidate)}>
+                    Tebdil — yeniden boya
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    onOpenChange(false);
+                    navigateActive(NEW_WO_PATH);
+                  }}
+                >
+                  Yeni iş emri aç
+                </Button>
+                {allEditableIds.length > 0 && !allSelected && (
+                  <Button type="button" size="sm" variant="outline" onClick={toggleAll}>
+                    Kayıt yanlış — tüm topları {newLabel} yap
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="pt-2">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             İptal
           </Button>
-          <Button type="button" disabled={!canSubmit} onClick={() => mutation.mutate()}>
-            {mutation.isPending ? "Kaydediliyor…" : "Değiştir"}
-          </Button>
+          {partialConfirm ? (
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={!canSubmit}
+              onClick={() => mutation.mutate({ confirmPartial: true })}
+            >
+              {mutation.isPending ? "Kaydediliyor…" : "Yine de değiştir"}
+            </Button>
+          ) : (
+            <Button type="button" disabled={!canSubmit} onClick={() => mutation.mutate({ confirmPartial: false })}>
+              {mutation.isPending ? "Kaydediliyor…" : "Değiştir"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
+
+      {/* Kapalı durumdan Tebdil (yeniden boya / yeni iş emrine ayır) — parti şeridindeki sihirbazın aynısı. */}
+      {tebdilBatch && (
+        <TebdilWizard
+          open={Boolean(tebdilBatch)}
+          onOpenChange={(o) => {
+            if (!o) {
+              setTebdilBatch(null);
+              onOpenChange(false);
+            }
+          }}
+          workOrderId={workOrderId}
+          batchId={tebdilBatch.id}
+          batchNumber={tebdilBatch.number}
+        />
+      )}
     </Dialog>
   );
 }

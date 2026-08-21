@@ -54,15 +54,60 @@ export function rebuildPrefilledNewRolls(
   mode: ReceiveMode,
 ): NewRollRow[] {
   const manual = current.filter((r) => !r.prefilled);
-  let prefilled: NewRollRow[];
   if (mode === 'SINGLE') {
+    // TEK PARÇA MODUNDA SATIR SAYISI HER ZAMAN 1'DİR (2026-08-21).
+    //
+    // Eski hâli ön-dolu satırı manuel satırın YANINA ekliyordu ve şu sırada
+    // sessizce ikiye katlıyordu: operatör 250 → 220 yazar (satır "manuel" olur),
+    // sonra gelmeyen bir topu işaretten çıkarır → rebuild yeni bir ön-dolu satır
+    // üretir ve dönen metraj 220 + 180 = 400 olur. Bant farkı bağırır ama
+    // sebebini söylemez; "tek parça" diyen bir modda iki parça satırı zaten
+    // kendi içinde çelişkidir.
+    //
+    // Operatör bir kez sayıyı yazdıysa TOPLAM ONUNDUR: işaret değişse de
+    // dokunulmaz (ölçtüğü metre, hangi topların geldiğine göre değişmez).
+    if (manual.length > 0) return [manual[0]!];
     const total = round2(checkedQtys.reduce((s, q) => s + (q > 0 ? q : 0), 0));
-    prefilled =
-      checkedQtys.length > 0
-        ? [makeNewRollRow(total > 0 ? String(total) : '', true)]
-        : [];
-  } else {
-    prefilled = checkedQtys.map((q) => makeNewRollRow(q > 0 ? String(q) : '', true));
+    return checkedQtys.length > 0
+      ? [makeNewRollRow(total > 0 ? String(total) : '', true)]
+      : [];
   }
+  const prefilled = checkedQtys.map((q) => makeNewRollRow(q > 0 ? String(q) : '', true));
   return [...prefilled, ...manual];
+}
+
+/**
+ * MOD GEÇİŞİ — parça listesini hedef moda taşır, operatörün yazdığını KORUYARAK.
+ *
+ * • PER_ROLL → SINGLE: satırlar tek toplama iner (100 + 120 → 220). Elle yazılmış
+ *   bir satır varsa sonuç "manuel" sayılır, yani `rebuildPrefilledNewRolls` bir
+ *   daha üzerine yazmaz.
+ * • SINGLE → PER_ROLL: operatör henüz sayıya DOKUNMADIYSA (tek ön-dolu satır)
+ *   top başına ön-dolu satırlara açılır — "adet adet geldi"yi seçmenin bütün
+ *   amacı budur. Dokunduysa yazdığı toplam korunur ve parçalamayı kendisi yapar;
+ *   ön-dolu satır EKLENMEZ (eklenirse toplam ikiye katlanırdı).
+ */
+export function switchReceiveMode(
+  current: NewRollRow[],
+  checkedQtys: number[],
+  next: ReceiveMode,
+): NewRollRow[] {
+  const manual = current.filter((r) => !r.prefilled);
+  if (next === 'SINGLE') {
+    if (manual.length === 0) return rebuildPrefilledNewRolls([], checkedQtys, 'SINGLE');
+    const merged = round2(
+      current.reduce((s, r) => {
+        const n = parseFloat(r.qty.replace(',', '.'));
+        return s + (Number.isFinite(n) && n > 0 ? n : 0);
+      }, 0),
+    );
+    const notes = current
+      .map((r) => r.notes.trim())
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 200);
+    return [{ ...manual[0]!, qty: merged > 0 ? String(merged) : '', notes, noteOpen: false, prefilled: false }];
+  }
+  if (manual.length > 0) return manual;
+  return rebuildPrefilledNewRolls([], checkedQtys, 'PER_ROLL');
 }

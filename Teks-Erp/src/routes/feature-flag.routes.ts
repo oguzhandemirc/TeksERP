@@ -142,6 +142,11 @@ export const updateSchema = z.strictObject({
   tamburShortCutA1Enabled: z.boolean().optional(),
   // `null` = eşiği temizle (kural inert kalır) — bilinçli olarak geçerli değer.
   tamburShortCutA1ThresholdM: z.number().positive().max(10_000).nullable().optional(),
+  // Fason kabulünde çekme uyarısı (2026-08-21). Bayrak = uyarı görünürlüğü,
+  // yüzde = eşik. ⚠️ `min(0)` — 0 GEÇERLİ ("tolerans yok, her fark uyarır");
+  // `positive()` yazılsaydı panelden sıfır tolerans seçilemezdi.
+  fasonShrinkWarnEnabled: z.boolean().optional(),
+  fasonShrinkTolerancePct: z.number().min(0).max(100).nullable().optional(),
   // ⚠️ Bu satır UNUTULURSA bayrak panelden AÇILAMAZ **ve daha kötüsü
   // KAPATILAMAZ** (`z.strictObject` → PATCH 400). 2026-08-05'te
   // `kk1DuplicateGuardEnabled` tam bu boşluktan geçti; bekçi:

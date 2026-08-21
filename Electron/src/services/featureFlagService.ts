@@ -274,6 +274,14 @@ export interface FeatureFlags {
   /** Kısa kesim eşiği (metre). null = girilmemiş → bayrak açık olsa da kural
    *  ateşlemez (panel bunu uyarı satırıyla söyler). */
   tamburShortCutA1ThresholdM: number | null;
+  /** Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı çıksın mı (true=default).
+   *  Boyahanede kumaş çeker — 250 m giden mal 220 m döner. Kapalıyken ekran farkı
+   *  yalnız bilgi olarak yazar, uyarı/onay çıkarmaz. Sapma defterine yazım bu
+   *  ayardan BAĞIMSIZDIR (fark her hâlükârda kaydedilir). */
+  fasonShrinkWarnEnabled: boolean;
+  /** Çekme toleransı — YÜZDE (default 10). Altındaki fark uyarı üretmez.
+   *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */
+  fasonShrinkTolerancePct: number;
   /** Kurşun bypass düzeni açık mı (false=default). Kurşun makinelerinde tablet YOK:
    *  iş fiziksel olarak yapılır ama dijital izlenmez; yetkili "Kurşun Dağıtım"
    *  ekranından işi fiziksel bir kurşun MAKİNESİNE atar (istasyon değil — PROCESS_QC

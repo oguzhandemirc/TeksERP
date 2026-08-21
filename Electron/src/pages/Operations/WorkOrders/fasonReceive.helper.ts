@@ -30,3 +30,36 @@ export function meterDiff(sentQtys: number[], pieces: number[]): number {
 export function hasMeterDiff(sentQtys: number[], pieces: number[]): boolean {
   return Math.abs(meterDiff(sentQtys, pieces)) > 0.01;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ÇEKME (2026-08-21) — mobil `receivePayload.helper` ile AYNI kural
+// ─────────────────────────────────────────────────────────────────────────────
+// Fark bir hata değil, üretim gerçeğidir (boyahanede kumaş çeker). İki yüzey de
+// aynı eşiği uygulamalı; eşiğin tek kaynağı sunucu ayarıdır. Mobil bu dosyayı
+// import EDEMEZ (ayrı proje) — bu yüzden kural iki yerde YAZILI ama tek yerden
+// BESLENİR. Ayrışırsa aynı kabul, masaüstünde uyarı verip tablette vermez.
+
+export interface ShrinkInfo {
+  /** dönen − düşülen. Eksi = çekme, artı = fazla dönen. */
+  diff: number;
+  significant: boolean;
+  shrink: boolean;
+  /** Düşülen metrajın yüzdesi olarak |diff|. */
+  pct: number;
+}
+
+export function shrinkInfo(consumedTotal: number, returnedTotal: number): ShrinkInfo {
+  const diff = round2(returnedTotal - consumedTotal);
+  const significant = Math.abs(diff) > 0.01;
+  const pct =
+    consumedTotal > 0.01 ? Math.round((Math.abs(diff) / consumedTotal) * 1000) / 10 : 0;
+  return { diff, significant, shrink: diff < 0, pct };
+}
+
+export function shrinkExceedsTolerance(
+  info: ShrinkInfo,
+  opts: { enabled: boolean; tolerancePct: number },
+): boolean {
+  if (!opts.enabled || !info.significant) return false;
+  return info.pct > opts.tolerancePct;
+}

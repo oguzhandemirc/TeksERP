@@ -223,6 +223,13 @@ const linkOrderLineOverrideSchema = z.object({
 const changeTargetColorSchema = z.object({
   colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
   reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
+  // Kısmi-boya onayı: ilk istek 409 `COLOR_PARTIAL_CONFIRM` dönerse istemci aynı
+  // isteği bu bayrakla tekrarlar (Tambur plan kapısındaki `confirmMismatch` deseni).
+  confirmPartial: z.boolean().optional(),
+  // "Toplara da uygula" seçimi — bekçi bu topları yeni renkte sayar (hepsi
+  // düzeltiliyorsa kayıt düzeltmesi serbest geçer). Uygulamayı istemci ayrıca
+  // `apply-attribute-to-rolls` ile yapar; burada yalnız UYUM HESABI için.
+  recolorRollIds: z.array(z.string().uuid()).max(5000).optional(),
 });
 // `colorId`/`width` OPSİYONEL ama en az biri gelmeli — servis de doğruluyor.
 // `.optional()` ile `null` FARKLI anlamlar taşır: alan yoksa dokunma, null ise temizle.
@@ -262,6 +269,8 @@ const updateWorkOrderSchema = z.object({
   targetItemId: z.string().uuid().nullable().optional(),
   targetColorId: z.string().uuid().nullable().optional(),
   foldType: foldTypeSchema,
+  // Renk değişikliğinde kısmi-boya onayı (409 `COLOR_PARTIAL_CONFIRM` sonrası tekrar).
+  confirmPartial: z.boolean().optional(),
 });
 
 /**
@@ -556,11 +565,12 @@ export class WorkOrderController {
    */
   async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const body = updateWorkOrderSchema.parse(req.body);
+      const { confirmPartial, ...body } = updateWorkOrderSchema.parse(req.body);
       const result = await this.service.update(
         req.params.id as string,
         body,
-        req.user?.userId
+        req.user?.userId,
+        { confirmPartial },
       );
       res.status(200).json(result);
     } catch (error) {
@@ -725,6 +735,7 @@ export class WorkOrderController {
         body.colorId ?? null,
         body.reason,
         req.user?.userId,
+        { confirmPartial: body.confirmPartial, recolorRollIds: body.recolorRollIds },
       );
       res.status(200).json(result);
     } catch (error) {

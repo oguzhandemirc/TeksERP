@@ -173,6 +173,24 @@ export const SETTING_KEYS = {
   TAMBUR_SHORT_CUT_A1_ENABLED: "tambur.shortCutA1Enabled",
   /** Eşik (metre). NULL/0 = eşik girilmemiş → bayrak açık olsa da kural ateşlemez. */
   TAMBUR_SHORT_CUT_A1_THRESHOLD_M: "tambur.shortCutA1ThresholdM",
+  /**
+   * FASON KABULÜ — ÇEKME UYARISI (2026-08-21).
+   * Boyahanede kumaş çeker: 250 m giden mal 220 m döner. Eski ekran bu farkı
+   * "EKSİK DÖNEN / giden-gelen uyuşmuyor" diye KIRMIZI bir onay modalıyla
+   * karşılıyordu ve operatör normal bir üretim gerçeğini hata sanıp metrajı
+   * top top kurcalayarak kısmi kabule düşüyordu (saha vakası). Bayrak AÇIKKEN
+   * uyarı yalnız EŞİĞİN ÜSTÜNDEKİ farkta çıkar; kapalıyken hiç çıkmaz.
+   * Backend ENFORCE ETMEZ — kural sunum katmanındadır (eşiğin altındaki fark da
+   * deftere aynen yazılır); ikinci bir kural kurmak çift kaynak olurdu.
+   */
+  FASON_SHRINK_WARN_ENABLED: "fason.shrinkWarnEnabled",
+  /**
+   * Tolerans — YÜZDE (giden metrajın yüzdesi). Kayıt yoksa varsayılan %10.
+   * `0` GEÇERLİ bir değerdir ve "tolerans yok, her fark uyarır" demektir
+   * (eski davranış); bu yüzden okuma tarafı `<= 0 → null` kalıbını KULLANMAZ —
+   * o kalıp burada "temizlendi" ile "sıfır tolerans"ı aynı yere düşürürdü.
+   */
+  FASON_SHRINK_TOLERANCE_PCT: "fason.shrinkTolerancePct",
   /** Tambur "TÜMDEN geri al" yalnız AYNI FABRİKA GÜNÜ içinde yapılabilsin mi.
    *  Default FALSE (sınır yok) — bilinçli. Asıl koruma parçaların kendisindedir
    *  (çuvala okutulmuş / sevke girmiş / yeniden kesilmiş parça zaten reddedilir);
@@ -867,6 +885,10 @@ export interface FeatureFlags {
   tamburShortCutA1Enabled: boolean;
   /** Kısa kesim eşiği (metre); NULL = girilmemiş → kural ateşlemez. */
   tamburShortCutA1ThresholdM: number | null;
+  /** Fason kabulünde çekme (giden↔dönen farkı) uyarısı çıksın mı (default TRUE). */
+  fasonShrinkWarnEnabled: boolean;
+  /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
+  fasonShrinkTolerancePct: number;
   /** Kurşun bypass düzeni açık mı (default FALSE/kapalı). ENFORCE edilir ama YALNIZ
    *  yeni atama oluşturmayı kapılar; dağıtılmış iş emirleri bayrak kapansa da bypass
    *  rejiminde biter (rejim atama satırında kalıcıdır). */
@@ -1153,6 +1175,8 @@ export class SystemSettingService {
       tamburUndoFullSameDayOnly: await readTamburUndoFullSameDayOnly(cacheClient),
       tamburShortCutA1Enabled: await readTamburShortCutA1Enabled(cacheClient),
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
+      fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
+      fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
@@ -1192,7 +1216,13 @@ export class SystemSettingService {
    * Verilmeyen alanlar dokunulmaz.
    */
   async setFeatureFlags(
-    input: Partial<FeatureFlags>,
+    // ⚠️ GİRDİ ÇIKTIDAN DAHA GENİŞ: bazı sayısal ayarlarda `null` "alanı temizle"
+    // demektir ve panel bunu gönderir, ama okuma tarafı hiçbir zaman null
+    // döndürmez (varsayılana çözülür). İkisini tek tiple anlatmak, ya paneli
+    // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
+    input: Omit<Partial<FeatureFlags>, "fasonShrinkTolerancePct"> & {
+      fasonShrinkTolerancePct?: number | null;
+    },
     userId: string | undefined
   ): Promise<ApiResponse<FeatureFlags>> {
     if (!userId) throw AppError.unauthorized();
@@ -1531,6 +1561,37 @@ export class SystemSettingService {
         // olur ve `asNumber`ın null dalıyla aynı sonucu verir.
         v === null ? 0 : v,
         "Tambur kısa kesim eşiği (metre) — altındaki kesimler A1 yazılır",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "fasonShrinkWarnEnabled")) {
+      if (typeof input.fasonShrinkWarnEnabled !== "boolean") {
+        throw AppError.badRequest("fasonShrinkWarnEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FASON_SHRINK_WARN_ENABLED,
+        input.fasonShrinkWarnEnabled,
+        "Fason kabulünde çekme (giden↔dönen metraj farkı) uyarısı göster",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "fasonShrinkTolerancePct")) {
+      const v = input.fasonShrinkTolerancePct;
+      // ⚠️ `null` = "alanı temizledim" → FABRİKA VARSAYILANINA döner (0 DEĞİL).
+      // Kısa-kesim eşiğinin `null → 0 → kural inert` kalıbı burada YANLIŞ olurdu:
+      // orada boş bırakmak kuralı susturur, burada susturan şey BAYRAKtır ve boş
+      // bırakılan bir eşiği "sıfır tolerans"a çevirmek, sessizlik bekleyen
+      // kullanıcıya HER kabulde uyarı bastırırdı — tam tersi.
+      // `0` API'den GEÇERLİDİR ("tolerans yok"); panel 1-100 aralığı sunar.
+      if (v !== null) {
+        if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > 100) {
+          throw AppError.badRequest("Çekme toleransı 0 ile 100 arasında olmalı (yüzde)");
+        }
+      }
+      await this.set(
+        SETTING_KEYS.FASON_SHRINK_TOLERANCE_PCT,
+        v === null ? DEFAULT_FASON_SHRINK_TOLERANCE_PCT : v,
+        "Fason kabulünde çekme toleransı (yüzde) — altındaki fark uyarı üretmez",
         userId
       );
     }
@@ -2393,6 +2454,55 @@ export async function readTamburShortCutA1ThresholdM(
   if (!setting) return null;
   const parsed = asNumber(setting.value);
   if (parsed === null || !Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+/**
+ * Fason kabulünde çekme uyarısı — default **TRUE (açık)**.
+ *
+ * Yön gerekçesi `readTamburShortCutA1Enabled`'ın TERSİ ve bilinçli: bu bayrak
+ * operatörün kararını DEĞİŞTİRMEZ, yalnız görünür bir gerçeği (giden ↔ dönen
+ * farkı) gösterir. Görünürlük varsayılan olarak açık doğar; sessizlik bilerek
+ * seçilir. Kapatmak "farkı hiç gösterme" demektir — defter yine yazılır.
+ */
+export async function readFasonShrinkWarnEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FASON_SHRINK_WARN_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return true;
+  return asBoolean(setting.value);
+}
+
+/** Fabrika varsayılanı — boyahane çekmesi tipik olarak %8-12 bandındadır. */
+export const DEFAULT_FASON_SHRINK_TOLERANCE_PCT = 10;
+
+/**
+ * Çekme toleransı (yüzde). Kayıt YOKSA varsayılan (%10); kayıt VARSA `0` dahil
+ * ne yazıldıysa o.
+ *
+ * ⚠️ `readTamburShortCutA1ThresholdM`'in `<= 0 → null` kalıbı BURADA YANLIŞ
+ * OLURDU: orada 0 "eşik girilmemiş" demek, burada 0 "hiç tolerans yok" demek
+ * ve ikisi zıt davranışlar üretir (kural inert ↔ kural her farkta ateşler).
+ * Bozuk/negatif değer varsayılana düşer (fail-safe: uyarı susmasın diye değil,
+ * bilinmeyen bir sayıyla operatörü şaşırtmamak için).
+ */
+export async function readFasonShrinkTolerancePct(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FASON_SHRINK_TOLERANCE_PCT },
+    select: { value: true },
+  });
+  if (!setting) return DEFAULT_FASON_SHRINK_TOLERANCE_PCT;
+  const parsed = asNumber(setting.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+    return DEFAULT_FASON_SHRINK_TOLERANCE_PCT;
+  }
   return parsed;
 }
 

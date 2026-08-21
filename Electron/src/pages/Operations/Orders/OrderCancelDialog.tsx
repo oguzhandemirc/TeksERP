@@ -38,7 +38,7 @@ const ACTION_LABELS: Record<OrderCancelAction, string> = {
 
 const ACTION_DESCRIPTIONS: Record<OrderCancelAction, string> = {
   UNLINK_ONLY:
-    "İş emri ayakta kalır, sadece bu siparişle bağı kesilir. Diğer bağlı siparişler varsa onlar etkilenmez.",
+    "İş emri ayakta kalır, sadece bu siparişle bağı kesilir. Diğer bağlı siparişler varsa onlar etkilenmez; bu iş emrinin TEK siparişi buysa bağ kalkınca iş emri Stok üretimine döner.",
   CONVERT_TO_STOCK:
     "İş emri 'Stoğa Üretim' tipine çevrilir; üretilen/üretilecek rulolar stoğa düşer ve başka müşteriye sevk edilebilir.",
   CANCEL_WO:
@@ -255,6 +255,19 @@ function WOActionRow({
         {!wo.isSoleOrder && (
           <Badge variant="outline" className="text-[10px]">
             +{wo.otherOrdersCount} başka sipariş bağlı
+          </Badge>
+        )}
+        {/* Tip = bağın aynası (2026-08-21): tek siparişli iş emrinde iptal etmeyen
+            her aksiyon son bağı da siler → iş emri Stok üretimine döner. Operatör
+            bunu seçimden ÖNCE görsün; "Stoğa çevir" ile "bağı kopar" burada aynı
+            sonucu verir, fark yalnız niyet etiketi. */}
+        {wo.isSoleOrder && selected !== "CANCEL_WO" && (
+          <Badge
+            variant="outline"
+            className="border-amber-500/40 text-[10px] text-amber-700 dark:text-amber-400"
+            title="Bu iş emrinin tek siparişi bu — bağ kalkınca iş emri Stok üretimine döner"
+          >
+            Stok üretimine döner
           </Badge>
         )}
       </div>

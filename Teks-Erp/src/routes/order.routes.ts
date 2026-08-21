@@ -678,6 +678,58 @@ router.patch("/:id", verifyToken, requirePermission("order:write"), controller.u
 
 /**
  * @openapi
+ * /api/orders/{id}/lines/{lineId}/color:
+ *   patch:
+ *     tags: [Orders]
+ *     summary: Sipariş kaleminin rengini değiştir (sebep zorunlu, iş emri bağlıyken de)
+ *     description: >
+ *       "Rengi Değiştir → siparişi de düzelt" dar kapısı (2026-08-21). Genel PATCH
+ *       iş emri bağlı siparişin kalemlerini kilitler; bu uç yalnız RENK alanını
+ *       sebep + audit iziyle değiştirir. Kumaş/metraj/en değişmez. İptal/tamamlanmış
+ *       siparişte 409.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [colorId, reason]
+ *             properties:
+ *               colorId: { type: string, format: uuid, nullable: true }
+ *               reason:  { type: string, minLength: 3 }
+ *     responses:
+ *       200: { description: "{ lineId, previousColorId, colorId }" }
+ *       400: { description: Sebep eksik / renk pasif / müşteriye atanamaz / izinli listede değil }
+ *       409: { description: Sipariş iptal/tamamlanmış ya da kalem bu sırada değişti }
+ */
+router.patch(
+  "/:id/lines/:lineId/color",
+  verifyToken,
+  requirePermission("order:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        colorId: z.string().uuid("Geçersiz renk ID").nullable(),
+        reason: z.string().trim().min(3, "Sebep yazmalısınız").max(500),
+      });
+      const body = schema.parse(req.body);
+      const result = await orderService.changeLineColor(
+        req.params.id as string,
+        req.params.lineId as string,
+        body.colorId,
+        body.reason,
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
  * /api/orders/{id}:
  *   delete:
  *     tags: [Orders]

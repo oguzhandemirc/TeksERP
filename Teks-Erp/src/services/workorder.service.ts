@@ -69,6 +69,7 @@ import {
   recomputeStepStatus,
 } from "./helpers/roll-step.helper";
 import { computeWorkOrderLocks, touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { assertTargetColorChange } from "./helpers/workorder-target-color.helper";
 import { applyFoldTypeForWriteInPlace } from "./helpers/fold-type";
 import {
   STEP_CAPABILITY_SELECT,
@@ -4479,7 +4480,9 @@ export class WorkOrderService {
       targetColorId?: string | null;
       foldType?: string | null;
     },
-    userId?: string
+    userId?: string,
+    /** Renk değişikliğinde kısmi-boya onayı (409 `COLOR_PARTIAL_CONFIRM` sonrası tekrar). */
+    opts: { confirmPartial?: boolean } = {},
   ): Promise<ApiResponse<unknown>> {
     const wo = await prisma.workOrder.findUnique({ where: { id } });
     if (!wo) throw AppError.notFound("İş emri bulunamadı");
@@ -4492,6 +4495,12 @@ export class WorkOrderService {
         "Tamamlanmış veya iptal edilmiş iş emri düzenlenemez.",
       );
     }
+    // Renk gerçekten değişiyor mu — TEK BEKÇİ yalnız gerçek değişiklikte koşar
+    // (PATCH kısmi semantiği: aynı değeri yeniden göndermek serbesttir).
+    const colorChanging =
+      data.targetColorId !== undefined &&
+      (wo.targetColorId ?? null) !== (data.targetColorId ?? null);
+    const colorWarnings: string[] = [];
 
     // Kat katalog doğrulaması — kilit karşılaştırmalarından ÖNCE kanonikleştir.
     // Sonra yapılsaydı "tüp" gönderen istemci, WO'da "TÜP" dururken alanı
@@ -4519,12 +4528,15 @@ export class WorkOrderService {
     ) {
       throw AppError.conflict(locks.reasons.targetItem ?? "Hedef ürün kilitli.");
     }
-    if (
-      data.targetColorId !== undefined &&
-      (wo.targetColorId ?? null) !== (data.targetColorId ?? null) &&
-      locks.targetColor
-    ) {
-      throw AppError.conflict(locks.reasons.targetColor ?? "Hedef renk kilitli.");
+    // Renk: TEK BEKÇİ (2026-08-21, `workorder-target-color.helper`) — terminal
+    // statü + renk aktif + izinli renk listesi + boya-bitti kilidi + kısmi-boya
+    // onayı + rota kapsaması uyarısı. "Rengi Değiştir" ucu da aynı bekçiden geçer;
+    // eskiden kilit yalnız buradaydı ve öbür kapı onu atlıyordu.
+    if (colorChanging) {
+      const gate = await assertTargetColorChange(prisma, wo, data.targetColorId ?? null, {
+        confirmPartial: opts.confirmPartial,
+      });
+      colorWarnings.push(...gate.warnings);
     }
     if (
       data.foldType !== undefined &&
@@ -4615,12 +4627,12 @@ export class WorkOrderService {
       ) {
         throw AppError.conflict(freshLocks.reasons.targetItem ?? "Hedef ürün kilitli.");
       }
-      if (
-        data.targetColorId !== undefined &&
-        (wo.targetColorId ?? null) !== (data.targetColorId ?? null) &&
-        freshLocks.targetColor
-      ) {
-        throw AppError.conflict(freshLocks.reasons.targetColor ?? "Hedef renk kilitli.");
+      if (colorChanging) {
+        // Kilit ALTINDA taze bekçi: arada fason kabul / adım bitişi olduysa kilit ya da
+        // kısmi-boya kararı değişmiş olabilir (F58 deseni). Onay pre-tx ile aynı.
+        await assertTargetColorChange(tx, wo, data.targetColorId ?? null, {
+          confirmPartial: opts.confirmPartial,
+        });
       }
       if (
         data.foldType !== undefined &&
@@ -4685,7 +4697,13 @@ export class WorkOrderService {
       });
     }
 
-    return { success: true, data: updated!, message: "İş emri güncellendi" };
+    return {
+      success: true,
+      data: updated!,
+      message: "İş emri güncellendi",
+      // Engel olmayan notlar (örn. "rotada renk veren adım yok") — istemci toast basar.
+      ...(colorWarnings.length > 0 ? { warnings: colorWarnings } : {}),
+    };
   }
 
   /**

@@ -17,6 +17,8 @@ import { reasonPresetService, type ReasonPreset } from "@/pages/ReasonPresets/se
 import { workOrderService } from "./service";
 import type { FasonQuickPreview } from "./types";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { shrinkExceedsTolerance, shrinkInfo } from "./fasonReceive.helper";
+import { useFasonShrinkWarn } from "@/hooks/usePricingEnabled";
 
 type Group = FasonQuickPreview["groups"][number];
 
@@ -162,7 +164,11 @@ function GroupCard({
   const effectivePieces: string[] = pieces ?? (checkedRolls.length > 0 ? [String(Math.round(gelenTotal * 100) / 100)] : []);
   const parsedPieces = effectivePieces.map(parseQty).filter((n): n is number => n != null);
   const piecesTotal = parsedPieces.reduce((s, n) => s + n, 0);
-  const pieceMismatch = Math.abs(piecesTotal - gelenTotal) > 0.01;
+  // ÇEKME (2026-08-21): fark HATA DEĞİL, boyahanede kumaş çeker. Uyarı yalnız
+  // fabrikanın belirlediği toleransın üstünde; altındaysa bilgi satırı.
+  const shrink = shrinkInfo(gelenTotal, piecesTotal);
+  const shrinkCfg = useFasonShrinkWarn();
+  const shrinkWarn = shrinkExceedsTolerance(shrink, shrinkCfg);
 
   const canSubmit =
     checkedRolls.length > 0 && parsedPieces.length > 0 && (!g.colorRequired || Boolean(colorId));
@@ -323,10 +329,23 @@ function GroupCard({
             )}
           </div>
         ))}
-        {pieceMismatch && (
-          <div className="text-[11px] font-medium text-amber-700">
-            Parça toplamı ({fmt(piecesTotal)} m) beyan edilen gelenle ({fmt(gelenTotal)} m)
-            uyuşmuyor — bilinçliyse devam edilebilir (ölçüm farkı).
+        {shrink.significant && (
+          <div
+            className={
+              shrinkWarn
+                ? "text-[11px] font-medium text-amber-700"
+                : "text-[11px] font-medium text-blue-700"
+            }
+          >
+            {shrink.shrink
+              ? `ÇEKME ${fmt(Math.abs(shrink.diff))} m (%${shrink.pct})`
+              : `FAZLA DÖNEN +${fmt(shrink.diff)} m (%${shrink.pct})`}
+            {` — giden ${fmt(gelenTotal)} m, gelen ${fmt(piecesTotal)} m.`}
+            {shrinkWarn
+              ? ` Beklenenin (%${shrinkCfg.tolerancePct}) ÜSTÜNDE — metrajı bir daha kontrol edin.`
+              : shrinkCfg.enabled
+                ? ` Normal aralıkta (%${shrinkCfg.tolerancePct} tolerans).`
+                : ""}
           </div>
         )}
       </div>

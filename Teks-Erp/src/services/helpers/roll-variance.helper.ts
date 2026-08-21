@@ -29,6 +29,12 @@ export interface RecordVarianceInput extends VarianceReasonInput {
   /** POZİTİF metraj. Sıfır/negatif → satır YAZILMAZ (aşağıdaki nota bak). */
   qty: Prisma.Decimal | number;
   source: VarianceSource;
+  /**
+   * Sapmayı doğuran kaydın id'si — TERSLEMENİN ADRESİ (bugün: fason makbuzu).
+   * Kaynak iptal edilebiliyorsa VER; yoksa satır sonsuza dek defterde kalır ya
+   * da tersleme komşu satırları da süpürür (bkz. şema notu).
+   */
+  sourceRefId?: string | null;
   userId?: string | null;
 }
 
@@ -63,6 +69,7 @@ export async function recordVarianceTx(
       reasonCode,
       reasonText,
       source: input.source,
+      sourceRefId: input.sourceRefId ?? null,
       createdById: input.userId ?? null,
     },
     select: { id: true },

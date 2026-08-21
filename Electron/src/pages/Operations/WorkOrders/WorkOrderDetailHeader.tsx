@@ -72,6 +72,12 @@ export function WorkOrderDetailHeader({
     wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED";
   // Manuel kapatma yalnız üretimdeki (IN_PROGRESS) WO'ya sunulur.
   const canComplete = wo && wo.status === "IN_PROGRESS";
+  // Plan değişikliği (renk/en) bitmiş/iptal/devredilmiş iş emrinde KAPALI
+  // (2026-08-21 kullanıcı kararı); uyumlu "Sipariş Bağla" açık kalır. Backend
+  // aynı kuralı 409 ile uygular — buton yalnız aynayı gösterir. Yan panelle AYNI.
+  const canChangePlan = Boolean(
+    wo && wo.status !== "COMPLETED" && wo.status !== "CANCELLED" && wo.status !== "SUPERSEDED",
+  );
 
   return (
     <>
@@ -130,12 +136,16 @@ export function WorkOrderDetailHeader({
                 <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setLinkOrderOpen(true)}>
                   <Link2 className="h-3.5 w-3.5" /> Sipariş Bağla
                 </Button>
-                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("color")}>
-                  <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
-                </Button>
-                <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("width")}>
-                  <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
-                </Button>
+                {canChangePlan && (
+                  <>
+                    <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("color")}>
+                      <Palette className="h-3.5 w-3.5" /> Rengi Değiştir
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setChangeMode("width")}>
+                      <Ruler className="h-3.5 w-3.5" /> Eni Değiştir
+                    </Button>
+                  </>
+                )}
                 <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setFasonReceiveOpen(true)}>
                   <PackageCheck className="h-3.5 w-3.5" /> Fason Kabul
                 </Button>
@@ -218,6 +228,7 @@ export function WorkOrderDetailHeader({
             currentColorId={wo.targetColorId}
             currentColorName={wo.targetColor?.name ?? null}
             currentWidth={wo.width}
+            orderLinks={wo.orderLinks}
           />
         </>
       )}

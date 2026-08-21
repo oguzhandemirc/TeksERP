@@ -561,6 +561,18 @@ export interface ReceiveRequest {
   notes?: string;
   /** Receipt seviyesinde uygulanan renk (override; appliesColor=true kategoride boş bırakılabilir → WO.targetColor). */
   appliedColorId?: string | null;
+  /**
+   * Ekranı açarken görülen iş emri hedef rengi (null = hedefsiz). Sunucu kilit
+   * altında taze hedefle karşılaştırır; planlamacı arada rengi değiştirdiyse
+   * 409 `TARGET_COLOR_CHANGED` döner ve eski renk sessizce yazılmaz (2026-08-21).
+   */
+  expectedTargetColorId?: string | null;
+  /**
+   * Plandan FARKLI renk kabul edilirken operatörün kararı (2026-08-21):
+   * APPLY_TO_PLAN → iş emrinin rengi de bu renge çekilir; ROLLS_ONLY → yalnız
+   * bu toplar, sapma kabulde deftere düşer (Tambur tekrar sormaz).
+   */
+  planColorAction?: 'APPLY_TO_PLAN' | 'ROLLS_ONLY';
   /** Receipt seviyesinde uygulanan özellikler (override; appliesColor=true kategoride boş bırakılabilir → WO.targetProperties). */
   appliedPropertyIds?: string[];
   /**

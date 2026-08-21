@@ -128,6 +128,7 @@ import {
   copyStationCapabilitiesToRoll,
   loadStationPropertyCaps,
 } from "./helpers/station-capability-transfer.helper";
+import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import {
   assertTargetablePropertyIds,
@@ -4326,7 +4327,10 @@ export class InventoryService {
       include: {
         currentStep: {
           include: {
-            station: { select: { kind: true } },
+            // `appliesColor` + `requiredCategory`: adım renk verebiliyor mu (tek yüklem
+            // stepCanApplyColor) — bitişte renksiz topa WO hedef rengi yazılır (3c).
+            station: { select: { kind: true, appliesColor: true } },
+            requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               include: {
                 steps: {
@@ -4443,6 +4447,10 @@ export class InventoryService {
     const stepId = roll.currentStep.id;
     const stationId = roll.currentStep.stationId;
     const woId = roll.currentStep.workOrderId;
+    // 3c için: adım renk verebiliyor mu + WO hedef rengi (tx closure'ında narrowing
+    // kaybolduğu için burada, null-guard SONRASI çözülür).
+    const stepAppliesColor = stepCanApplyColor(roll.currentStep.station, roll.currentStep.requiredCategory);
+    const woTargetColorId = roll.currentStep.workOrder.targetColorId;
 
     // Kurşun yeteneği per-station + MOD (2026-08-10): KURSUN_APPLIED log'u ile
     // RollProperty(KURSUN) yazımı AYNI karardan beslenir — AUTO ise her zaman,
@@ -4536,6 +4544,19 @@ export class InventoryService {
         selections: data.properties,
         caps: stationCaps,
       });
+
+      // 3c) RENK (2026-08-21): adım renk verebiliyorsa (istasyon bayrağı / fason
+      //     hizmeti — tek yüklem `stepCanApplyColor`, kilit helper'ı ile aynı) ve
+      //     top renksizse iş emrinin hedef rengi yazılır. Fason kabulün iç istasyon
+      //     aynası: kilit "bu adım renk verir" sayıyorsa bitişi de rengi vermeli —
+      //     yoksa top renksiz kalır ve Tambur kapısı her topu durdurur. Bugün
+      //     prod'da iç boyahane yok; tanımlandığı gün kendiliğinden çalışır.
+      if (roll.colorId == null && woTargetColorId && stepAppliesColor) {
+        await tx.roll.update({
+          where: { id: rollId },
+          data: { colorId: woTargetColorId },
+        });
+      }
 
       // 4) Kurşun/KK2 movement'ı kapat (qtyOut = ölçülen toplam metre)
       //    ATOMİK CLAIM (BL-3 kardeşi): idempotency guard'ı tx DIŞINDA — iki

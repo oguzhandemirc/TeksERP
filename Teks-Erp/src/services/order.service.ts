@@ -2198,6 +2198,96 @@ export class OrderService extends BaseService {
    * çağrısı guard'lı iptale yönlendirilir (WorkOrderService.hardDelete'in
    * arşive çevrilmesiyle aynı desen).
    */
+  /**
+   * SİPARİŞ KALEMİ RENGİNİ DEĞİŞTİR (2026-08-21 — "Rengi Değiştir → siparişi de
+   * düzelt" seçeneği). Genel `update` iş emri bağlı siparişin kalemlerine
+   * KAPALIDIR ("önce iş emrini iptal edin") ve o kural korunur; bu uç yalnız
+   * RENK alanını, SEBEPLE ve audit iziyle gevşetir: müşteri telefonla rengi
+   * değiştirdiğinde plan (iş emri) + sözleşme (sipariş kalemi) aynı anda
+   * düzeltilebilsin, sipariş iptal edilip yeniden açılmasın.
+   *
+   * Kapsam BİLİNÇLİ DAR: kumaş / metraj / en DEĞİŞMEZ (metraj tahsis ve sevk
+   * defterine bağlı, kumaş kimliktir). İptal edilmiş / tamamlanmış siparişte
+   * çalışmaz. Kural seti WO hedef rengiyle aynı: renk aktif + müşteriye
+   * atanabilir + kumaşın izinli renk listesi.
+   */
+  async changeLineColor(
+    orderId: string,
+    lineId: string,
+    colorId: string | null,
+    reason: string,
+    userId?: string,
+  ): Promise<ApiResponse<{ lineId: string; previousColorId: string | null; colorId: string | null }>> {
+    const trimmed = (reason ?? "").trim();
+    if (trimmed.length < 3) {
+      throw AppError.badRequest("Renk değişikliği için sebep yazmalısınız.");
+    }
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        customerId: true,
+        lines: { where: { id: lineId }, select: { id: true, colorId: true, itemId: true } },
+      },
+    });
+    if (!order) throw AppError.notFound("Sipariş bulunamadı");
+    if (order.status === "CANCELLED" || order.status === "COMPLETED") {
+      throw AppError.conflict(
+        `${order.orderNumber} ${order.status === "CANCELLED" ? "iptal edilmiş" : "tamamlanmış"} — kalem rengi değiştirilemez.`,
+      );
+    }
+    const line = order.lines[0];
+    if (!line) throw AppError.notFound("Sipariş kalemi bulunamadı");
+    if ((line.colorId ?? null) === colorId) {
+      throw AppError.badRequest("Sipariş kalemi zaten bu renkte.");
+    }
+
+    let colorName: string | null = null;
+    if (colorId) {
+      const color = await prisma.color.findUnique({
+        where: { id: colorId },
+        select: { name: true, isActive: true },
+      });
+      if (!color || !color.isActive) throw AppError.badRequest("Renk bulunamadı veya pasif.");
+      colorName = color.name;
+      await assertColorsAssignableToCustomer([colorId], order.customerId);
+      const item = await prisma.item.findUnique({
+        where: { id: line.itemId },
+        select: { allowedColors: { select: { colorId: true } } },
+      });
+      const allowed = new Set((item?.allowedColors ?? []).map((c) => c.colorId));
+      if (allowed.size > 0 && !allowed.has(colorId)) {
+        throw AppError.badRequest("Renk bu kumaşın izinli renk listesinde değil.");
+      }
+    }
+
+    // Atomik: eşzamanlı başka bir düzeltme kalemi değiştirdiyse sessizce ezme.
+    const claim = await prisma.orderLine.updateMany({
+      where: { id: lineId, orderId, colorId: line.colorId },
+      data: { colorId },
+    });
+    if (claim.count === 0) {
+      throw AppError.conflict("Sipariş kalemi bu sırada değişti — yenileyip tekrar deneyin.");
+    }
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ORDER",
+      recordId: orderId,
+      oldData: { lineId, colorId: line.colorId },
+      newData: { event: "ORDER_LINE_COLOR_CHANGED", lineId, colorId, colorName, reason: trimmed },
+    });
+
+    return {
+      success: true,
+      data: { lineId, previousColorId: line.colorId, colorId },
+      message: `Sipariş kalemi rengi "${colorName ?? "renksiz"}" olarak güncellendi.`,
+    };
+  }
+
   async hardDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
     return this.softDelete(id, userId);
   }
@@ -2647,6 +2737,28 @@ export class OrderService extends BaseService {
             orderLine: { orderId },
           },
         });
+        // TİP = BAĞIN AYNASI (2026-08-21): UNLINK_ONLY tek-siparişli iş emrinde
+        // son bağı da siler → iş emri hiçbir siparişe bağlı kalmaz → STOK'a
+        // döner (CONVERT_TO_STOCK ile aynı sonuç; fark yalnız operatörün niyet
+        // etiketi). Eskiden ORDER tipli ama bağsız "Siparişe Özel" iş emri
+        // kalıyordu (PLANNED'da tek izinli aksiyon buydu). Taze sayım tx içinde,
+        // kilit altında; `updateMany WHERE type=ORDER` — zaten STOK'sa dokunmaz,
+        // iptal/devredilmiş iş emri de (assertPlanEditable aynası) atlanır.
+        if (action === "UNLINK_ONLY") {
+          const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId: wo.id } });
+          if (remaining === 0) {
+            await tx.workOrder.updateMany({
+              where: {
+                id: wo.id,
+                type: "ORDER_PRODUCTION",
+                status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
+                // STOK'un değişmezi: hedef kumaş dolu (unlinkOrderLine aynası).
+                targetItemId: { not: null },
+              },
+              data: { type: "STOCK_PRODUCTION" },
+            });
+          }
+        }
       }
     });
 

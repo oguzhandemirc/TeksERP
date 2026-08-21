@@ -296,16 +296,17 @@ export const workOrderService = {
 
   /**
    * Sipariş bağını KALDIR. Backend kuralları: iptal/devredilmiş iş emrinde 409;
-   * **siparişe özel (ORDER_PRODUCTION) iş emrinin SON bağı 400** ("önce başka
-   * sipariş bağlayın") — istemci bunu önden gösterir (`canUnlinkOrderLine`),
+   * **siparişe özel iş emrinin SON bağı kalkınca iş emri STOK üretimine döner**
+   * (2026-08-21, tip = bağın aynası; yanıt `typeChanged`) — tek 400: hedef kumaşı
+   * olmayan iş emri (STOK olamaz). İstemci bunu önden gösterir (`canUnlinkOrderLine`),
    * yarışta backend son sözü söyler.
    */
   unlinkOrderLine: (
     id: string,
     orderLineId: string,
-  ): Promise<ApiResponse<{ removed: boolean }>> =>
+  ): Promise<ApiResponse<{ removed: boolean; typeChanged?: boolean }>> =>
     apiClient
-      .delete<ApiResponse<{ removed: boolean }>>(`/work-orders/${id}/order-links/${orderLineId}`)
+      .delete<ApiResponse<{ removed: boolean; typeChanged?: boolean }>>(`/work-orders/${id}/order-links/${orderLineId}`)
       .then((r) => r.data),
 
   /**

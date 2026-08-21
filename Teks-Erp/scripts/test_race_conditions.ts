@@ -256,6 +256,10 @@ async function cleanup(): Promise<void> {
   const cardIds = cardRows.map((c) => c.id);
   await prisma.travelerCardScan.deleteMany({ where: { cardId: { in: cardIds } } });
   await prisma.travelerCard.deleteMany({ where: { id: { in: cardIds } } });
+  // ⚠️ RESTRICT FK — sapma defteri satırı duran top SİLİNEMEZ (2026-08-21'den beri
+  // fason kabulünde giden↔dönen metraj farkı da deftere yazılıyor). Silinmezse
+  // temizlik 23001 ile yarıda kalır ve arkasında hayalet kayıt bırakır.
+  await prisma.rollVariance.deleteMany({ where: { roll: { id: { in: rollIds } } } });
   await prisma.roll.deleteMany({ where: { id: { in: rollIds } } });
   await prisma.workOrderStep.deleteMany({ where: { id: { in: stepIdSet } } });
   await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } });

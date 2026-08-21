@@ -28,6 +28,7 @@ import {
 } from "./batch.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
+import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
 import { ApiResponse } from "../types/api.types";
@@ -86,6 +87,7 @@ export class WorkOrderSplitService {
           select: {
             id: true,
             stepSequence: true,
+            station: { select: { appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
           },
         },
@@ -102,7 +104,8 @@ export class WorkOrderSplitService {
     }
 
     // Renk veren (boyahane) adım — redye/yeni-renk'te geri sarılacak hedef.
-    const colorStep = wo.steps.find((s) => s.requiredCategory?.appliesColor) ?? null;
+    // TEK YÜKLEM (2026-08-21): istasyon bayrağı VEYA fason hizmeti (kilit helper'ı ile aynı).
+    const colorStep = wo.steps.find((s) => stepCanApplyColor(s.station, s.requiredCategory)) ?? null;
     const stepSeqById = new Map(wo.steps.map((s) => [s.id, s.stepSequence] as const));
 
     const rolls = await prisma.roll.findMany({

@@ -1,4 +1,8 @@
-import { makeNewRollRow, rebuildPrefilledNewRolls } from './newRolls.helper';
+import {
+  makeNewRollRow,
+  rebuildPrefilledNewRolls,
+  switchReceiveMode,
+} from './newRolls.helper';
 
 // NOT: PER_ROLL, mod kavramı gelmeden önceki tek davranıştı (top başına satır).
 // Kısmi-kabul fazladan-doğum regresyon testleri o moddaki sözleşmeyi kilitler;
@@ -130,14 +134,23 @@ describe('rebuildPrefilledNewRolls — SINGLE: varsayılan "dikili tek parça = 
     expect(afterUncheck[0].qty).toBe('100');
   });
 
-  it('elle eklenen satırları korur, ön-dolu toplam satırı başa koyar', () => {
-    const manual = { ...makeNewRollRow('42', false), key: 'manual-1' };
-    const out = rebuildPrefilledNewRolls([manual], [50, 50], 'SINGLE');
-    expect(out).toHaveLength(2);
-    expect(out[0].prefilled).toBe(true);
-    expect(out[0].qty).toBe('100');
-    expect(out[1].key).toBe('manual-1');
-    expect(out[1].qty).toBe('42');
+  it('REGRESYON (2026-08-21): operatör toplamı yazdıysa ön-dolu satır EKLENMEZ', () => {
+    // Saha tuzağı: operatör 250 → 220 yazar (satır "manuel" olur), sonra
+    // gelmeyen bir topu işaretten çıkarır. Eski kod ön-dolu satırı manuelin
+    // YANINA ekliyor ve dönen metraj 220 + 180 = 400 oluyordu — hem "tek parça"
+    // modunda iki satır, hem de sessizce ikiye katlanmış metraj.
+    const manual = { ...makeNewRollRow('220', false), key: 'manual-1' };
+    const out = rebuildPrefilledNewRolls([manual], [100, 80], 'SINGLE');
+    expect(out).toHaveLength(1);
+    expect(out[0].key).toBe('manual-1');
+    expect(out[0].qty).toBe('220');
+    expect(out[0].prefilled).toBe(false);
+  });
+
+  it('TEK PARÇA modunda satır sayısı HER ZAMAN 1', () => {
+    expect(rebuildPrefilledNewRolls([], [30, 40, 50, 60, 70], 'SINGLE')).toHaveLength(1);
+    const manual = { ...makeNewRollRow('220', false), key: 'm' };
+    expect(rebuildPrefilledNewRolls([manual], [30, 40], 'SINGLE')).toHaveLength(1);
   });
 });
 
@@ -161,5 +174,55 @@ describe('mod geçişleri (SINGLE ↔ PER_ROLL, iki yönlü buton)', () => {
     const out = rebuildPrefilledNewRolls(single, [40, 60], 'PER_ROLL');
     expect(out.filter((r) => !r.prefilled)).toHaveLength(1);
     expect(out.find((r) => !r.prefilled)?.qty).toBe('12,5');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// switchReceiveMode (2026-08-21) — mod geçişi operatörün yazdığını KAYBETMEZ
+// ─────────────────────────────────────────────────────────────────────────────
+// Naif çözüm ("mod değişince listeyi sıfırla") vardiya ortasında girilmiş 5
+// parça metrajını siler; diğer naif çözüm (rebuild'i olduğu gibi çağırmak)
+// ön-dolu satırları manuelin yanına ekleyip metrajı ikiye katlar. İkisinin de
+// sınırı burada kilitli.
+describe('switchReceiveMode', () => {
+  it('PER_ROLL → SINGLE: elle girilen parçalar TEK toplama iner', () => {
+    const perRoll = [
+      { ...makeNewRollRow('100', false), key: 'a' },
+      { ...makeNewRollRow('120', false), key: 'b' },
+    ];
+    const out = switchReceiveMode(perRoll, [110, 110], 'SINGLE');
+    expect(out).toHaveLength(1);
+    expect(out[0].qty).toBe('220');
+    expect(out[0].prefilled).toBe(false); // toplam operatörün, üzerine yazılmaz
+  });
+
+  it('PER_ROLL → SINGLE: hiç dokunulmamışsa beklenen toplamdan doğar', () => {
+    const perRoll = rebuildPrefilledNewRolls([], [40, 60], 'PER_ROLL');
+    const out = switchReceiveMode(perRoll, [40, 60], 'SINGLE');
+    expect(out).toHaveLength(1);
+    expect(out[0].qty).toBe('100');
+    expect(out[0].prefilled).toBe(true);
+  });
+
+  it('SINGLE → PER_ROLL: dokunulmamış toplam, top başına satırlara AÇILIR', () => {
+    const single = rebuildPrefilledNewRolls([], [40, 60], 'SINGLE');
+    const out = switchReceiveMode(single, [40, 60], 'PER_ROLL');
+    expect(out.map((r) => r.qty)).toEqual(['40', '60']);
+  });
+
+  it('SINGLE → PER_ROLL: operatör toplamı yazdıysa KORUNUR, ön-dolu eklenmez', () => {
+    const manual = { ...makeNewRollRow('220', false), key: 'm' };
+    const out = switchReceiveMode([manual], [100, 120], 'PER_ROLL');
+    expect(out).toHaveLength(1);
+    expect(out[0].qty).toBe('220');
+  });
+
+  it('PER_ROLL → SINGLE: parça notları birleşir (veri kaybı yok)', () => {
+    const perRoll = [
+      { ...makeNewRollRow('100', false), key: 'a', notes: 'leke var' },
+      { ...makeNewRollRow('120', false), key: 'b', notes: 'kenar hatası' },
+    ];
+    const out = switchReceiveMode(perRoll, [110, 110], 'SINGLE');
+    expect(out[0].notes).toBe('leke var · kenar hatası');
   });
 });

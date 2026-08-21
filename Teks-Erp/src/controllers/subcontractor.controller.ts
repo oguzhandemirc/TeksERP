@@ -128,6 +128,18 @@ const receiveSchema = z.object({
   // fason için). Renk: appliesColor=true kategoride WO.targetColor otomatik;
   // özellik: appliesProperty=true kategoride WO.targetProperties otomatik.
   appliedColorId: z.string().uuid().nullish(),
+  // Tabletin KABUL EKRANINI AÇARKEN gördüğü iş emri hedef rengi (null = hedefsiz).
+  // Sunucu kilit altında taze hedefle karşılaştırır; farklıysa 409
+  // `TARGET_COLOR_CHANGED` (planlamacı arada rengi değiştirdi → operatör yenilesin).
+  // Gönderilmezse kontrol YOK — eski APK bozulmaz (fail-open, bilinçli).
+  expectedTargetColorId: z.string().uuid().nullable().optional(),
+  // Plandan FARKLI renk kabul edilirken operatörün kararı (2026-08-21):
+  //   APPLY_TO_PLAN → kabulden sonra iş emrinin hedef rengi de bu renge çekilir
+  //                   (en gibi; tek bekçiden geçer, olmazsa yanıt `warnings`)
+  //   ROLLS_ONLY    → yalnız doğan toplar bu renkte; sapma KABULDE deftere düşer,
+  //                   Tambur aynı topa tekrar sormaz.
+  // Gönderilmezse eski davranış (karar yok, Tambur yakalar).
+  planColorAction: z.enum(["APPLY_TO_PLAN", "ROLLS_ONLY"]).optional(),
   appliedPropertyIds: z.array(z.string().uuid()).optional(),
   // Bu kabulde ÖLÇÜLEN en (cm) — doğan tüm parçalara uygulanır ve makbuza yazılır.
   // Renkten farkı: renk yalnız "renk veren" kategoride sorulur, en HER fason
@@ -288,6 +300,8 @@ export class SubcontractorController {
             receivedQty: r.receivedQty ?? null,
           })),
           appliedColorId: body.appliedColorId,
+          expectedTargetColorId: body.expectedTargetColorId,
+          planColorAction: body.planColorAction,
           appliedPropertyIds: body.appliedPropertyIds,
           appliedWidth: body.appliedWidth,
           newRolls: body.newRolls?.map((nr) => ({

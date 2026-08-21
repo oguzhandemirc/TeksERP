@@ -37,6 +37,15 @@ export const PLAN_MISMATCH_CODE = "PLAN_MISMATCH" as const;
  */
 export const TAMBUR_PLAN_WIDTH_TOLERANCE_CM = 10;
 
+/**
+ * `RollPlanDeviation.source` değeri — sapma FASON KABULDE onaylandı (2026-08-21):
+ * operatör plandan farklı renk kabul edip "sadece bu toplar" dedi. Tambur kapısı
+ * bu kaynaklı, aynı değerli satırı gören topa renk sorusunu TEKRAR SORMAZ
+ * ("sapma bir kez onaylanır"). Kapının kendi kaynakları: finalize | cut |
+ * finalize-open-fabric.
+ */
+export const FASON_RECEIPT_DEVIATION_SOURCE = "fason-receipt" as const;
+
 /** Tek bir sapma satırı — 409 payload'ında ve audit'te aynı biçim. */
 export interface PlanMismatchItem {
   field: "color" | "width";

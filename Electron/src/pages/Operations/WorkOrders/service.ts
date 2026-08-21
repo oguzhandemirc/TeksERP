@@ -154,16 +154,32 @@ export const workOrderService = {
 
   unlinkOrderLine: (id: string, orderLineId: string) =>
     apiClient
-      .delete<ApiResponse<{ removed: boolean }>>(`/api/work-orders/${id}/order-links/${orderLineId}`)
+      .delete<ApiResponse<{ removed: boolean; typeChanged?: boolean }>>(`/api/work-orders/${id}/order-links/${orderLineId}`)
       .then((r) => r.data),
 
-  /** Üretim rengini değiştir — sebep ZORUNLU, iz bırakır. */
-  changeTargetColor: (id: string, colorId: string | null, reason: string) =>
+  /**
+   * Üretim rengini değiştir — sebep ZORUNLU, iz bırakır. "Düzenle" ile AYNI
+   * bekçiden geçer (2026-08-21): bitmiş iş emri / boya bitti / izinli renk listesi
+   * → 4xx; bir kısım top zaten boyanmışsa 409 `COLOR_PARTIAL_CONFIRM` → aynı
+   * istek `confirmPartial: true` ile tekrarlanır.
+   */
+  changeTargetColor: (
+    id: string,
+    colorId: string | null,
+    reason: string,
+    opts: { confirmPartial?: boolean; recolorRollIds?: string[] } = {},
+  ) =>
     apiClient
-      .patch<ApiResponse<{ warnings: string[] }>>(`/api/work-orders/${id}/target-color`, {
-        colorId,
-        reason,
-      })
+      .patch<ApiResponse<{ warnings: string[]; partial: { dyedCount: number; pendingCount: number } | null }>>(
+        `/api/work-orders/${id}/target-color`,
+        {
+          colorId,
+          reason,
+          ...(opts.confirmPartial ? { confirmPartial: true } : {}),
+          // "Toplara da uygula" seçimi — bekçi bu topları yeni renkte sayar.
+          ...(opts.recolorRollIds && opts.recolorRollIds.length > 0 ? { recolorRollIds: opts.recolorRollIds } : {}),
+        },
+      )
       .then((r) => r.data),
 
   /** "Toplara da uygula" adayları — partiye göre gruplu (engelliler işaretli). */

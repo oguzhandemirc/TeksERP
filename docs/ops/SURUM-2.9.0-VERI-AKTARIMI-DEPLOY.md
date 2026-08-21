@@ -106,10 +106,10 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 26 migration, on bir iş
+## 0) Bu deploy'da ne var — 27 migration, on iki iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **26 bekleyen** gösteriyor.
-On biri ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **27 bekleyen** gösteriyor.
+On ikisi ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -129,6 +129,7 @@ On biri ayrı iş, hepsi aynı pull'da:
 | 24 | `20260819210000_master_data_merge_lineage` | **Mükerrer birleştirme soy bağı** — 4 tabloya 3 nullable kolon + FK + partial index (mevcut satırlara DOKUNMAZ, hepsi NULL doğar) |
 | 25 | `20260819190000_roll_plan_deviations` | **Plan-sapma defteri** — YENİ tablo (`roll_plan_deviations`) + 8 index + 5 FK. Mevcut tabloya DOKUNMAZ, boş doğar |
 | 26 | `20260819200000_fason_partial_receive` | **Fason kısmi kabul** — 3 tabloya 4 nullable kolon (`clientToken` + unique index, `receivedQty`, `isPartial` DEFAULT false, `remainderClosedAt`); mevcut satırlar etkilenmez |
+| 27 | `20260821120000_roll_variance_source_ref` | **Fason çekmesi defteri** — `roll_variances`'e 1 nullable UUID (`sourceRefId`) + 1 index. Mevcut satırlar NULL kalır, hiçbir yol onları okumaz; `roll_variances` küçük tablo → vardiya içinde uygulanabilir |
 
 ⚠️ **25 ve 26, envanterdeki 24'ten ÖNCEKİ damgayı taşır ama SONRA yazıldı** —
 Prisma dizin adına göre sıralar, yani gerçek uygulama sırası 19→20→21 olacak.
@@ -324,8 +325,7 @@ npx tsx scripts/fix_workorder_type_from_links.ts --apply    # STOCK_PRODUCTION �
 ```
 
 İdempotent (ikinci koşumda 0). CANCELLED/SUPERSEDED dışarıda. Vardiya içinde
-koşulabilir (13 satırlık UPDATE). Aynı kural `create()`/`replace()` için de sunucuya alındı (STOK + satır gövdesi → ORDER). Tersini (ORDER ama bağsız) **yapmaz** — o
-ayrı bir karardır.
+koşulabilir (13 satırlık UPDATE). Aynı kural `create()`/`replace()` için de sunucuya alındı (STOK + satır gövdesi → ORDER). Ters yön de kapandı: `unlinkOrderLine` son bağda ve sipariş iptali `UNLINK_ONLY` tek-siparişli iş emrinde tipi STOK'a döndürür; tabletteki "son bağ kaldırılamaz" aynası yeni APK ile açılır (eski APK yalnız fazladan engeller — backend önce güvenli). Script tersini (ORDER ama bağsız) **yapmaz** — yedekte 0 kayıt.
 
 ## 6) Canlıda koşulması GÜVENLİ bekçiler
 

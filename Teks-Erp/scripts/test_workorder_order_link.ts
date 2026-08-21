@@ -18,6 +18,7 @@
 import prisma from "../src/lib/prisma";
 import { workOrderLinkService } from "../src/services/workorder-link.service";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { OrderService } from "../src/services/order.service";
 
 let pass = 0;
 let fail = 0;
@@ -269,14 +270,46 @@ async function main(): Promise<void> {
       (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } })) === 1,
     );
 
-    // Siparişe özel iş emrinin SON bağı korunur. (Tip 2b'de bağla birlikte
-    // zaten ORDER_PRODUCTION oldu — burada elle yazmaya gerek yok; ölçüyoruz.)
+    // ── 5b) SİMETRİ (2026-08-21): son bağ kalkınca STOK'a döner (red DEĞİL) ──
+    // Tip 2b'de bağla birlikte ORDER_PRODUCTION olmuştu; son bağ kalkınca
+    // "Siparişe Özel ama siparişsiz" yalanı yerine STOK'a döner, audit izli.
     const typeBeforeUnlink = await prisma.workOrder.findUnique({ where: { id: wo.id }, select: { type: true } });
     check("son bağdan önce tip hâlâ SİPARİŞE ÖZEL", typeBeforeUnlink?.type === "ORDER_PRODUCTION");
-    const lastLinkErr = await expectError(() => workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id));
-    check("siparişe özel WO'nun son bağı kaldırılamaz", lastLinkErr !== null, lastLinkErr ?? "");
-    // Sonraki bölümler tipten bağımsız; STOK'a çevirip devam ediyoruz (eski akış).
-    await prisma.workOrder.update({ where: { id: wo.id }, data: { type: "STOCK_PRODUCTION" } });
+    const lastUnlink = await workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id);
+    const afterLastUnlink = await prisma.workOrder.findUnique({
+      where: { id: wo.id },
+      select: { type: true, _count: { select: { orderLinks: true } } },
+    });
+    check("son bağ KALDIRILDI (red yok)", lastUnlink.data.removed === true && afterLastUnlink?._count.orderLinks === 0);
+    check("son bağ kalkınca tip SİPARİŞE ÖZEL → STOK", afterLastUnlink?.type === "STOCK_PRODUCTION", String(afterLastUnlink?.type));
+    check("unlink yanıtı typeChanged=true + mesaj", lastUnlink.data.typeChanged === true && (lastUnlink.message ?? "").includes("Stok"));
+    const unlinkAudit = await prisma.systemLog.findFirst({
+      where: { tableName: "WORK_ORDER", recordId: wo.id, action: "UPDATE" },
+      orderBy: { createdAt: "desc" },
+      select: { newData: true, oldData: true },
+    });
+    const unlinkAuditData = unlinkAudit?.newData as Record<string, unknown> | null;
+    check(
+      "audit: ORDER_LINK_REMOVED + typeChanged + eski tip",
+      unlinkAuditData?.event === "ORDER_LINK_REMOVED" &&
+        unlinkAuditData?.typeChanged === true &&
+        (unlinkAudit?.oldData as Record<string, unknown> | null)?.type === "ORDER_PRODUCTION",
+      JSON.stringify(unlinkAuditData),
+    );
+    // Hedef kumaşı OLMAYAN siparişe özel iş emrinde son bağ kalkamaz (STOK olamaz).
+    await prisma.workOrderToOrderLine.create({ data: { workOrderId: wo.id, orderLineId: lineOk.id, allocatedQty: 0 } });
+    await prisma.workOrder.update({ where: { id: wo.id }, data: { type: "ORDER_PRODUCTION", targetItemId: null } });
+    const noItemErr = await expectError(() => workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id));
+    check("hedef kumaşsız siparişe özel WO'da son bağ kalkmaz (STOK olamaz)", noItemErr !== null && noItemErr.includes("hedef kumaş"), noItemErr ?? "");
+    check(
+      "red edilen unlink bağı SİLMEDİ",
+      (await prisma.workOrderToOrderLine.count({ where: { workOrderId: wo.id } })) === 1,
+    );
+    await prisma.workOrder.update({ where: { id: wo.id }, data: { targetItemId: itemA.id } });
+    // Gidiş-dönüş: bağ yeniden kurulunca tip yine ORDER (sonraki bölümler bağlı sipariş bekler).
+    await workOrderLinkService.unlinkOrderLine(wo.id, lineOk.id);
+    const relink = await workOrderLinkService.linkOrderLines(wo.id, [lineOk.id]);
+    check("gidiş-dönüş: STOK'a dönen WO yeniden bağlanınca tekrar SİPARİŞE ÖZEL", relink.data.typeChanged === true);
 
     // ── 6) Rengi Değiştir — sebep zorunlu, iz bırakır ───────────────────────
     const noReason = await expectError(() => workOrderLinkService.changeTargetColor(wo.id, ekru.id, "  "));
@@ -446,6 +479,53 @@ async function main(): Promise<void> {
     check("iptal WO'ya sipariş bağlanamaz", cancelledLink !== null);
     check("iptal WO'da renk değişmez", cancelledColor !== null);
     check("iptal WO'da en değişmez", cancelledWidth !== null);
+
+    // ── 9) Sipariş iptali — UNLINK_ONLY tek-siparişli iş emrini STOK'a döndürür ─
+    // PLANNED iş emrinde tek izinli aksiyon UNLINK_ONLY; eskiden bağ silinip tip
+    // ORDER kalıyordu ("Siparişe Özel ama siparişsiz"). Tip bağın aynası olduğu
+    // için iptal akışı da aynı kuralı uygular.
+    const order2 = await prisma.order.create({
+      data: {
+        orderNumber: `TEST-WOLINK-ORD2-${ts}`,
+        customerId: customer.id,
+        lines: { create: [{ itemId: itemA.id, colorId: mavi.id, width: 300, quantity: 100 }] },
+      },
+      select: { id: true, lines: { select: { id: true } } },
+    });
+    created.orders.push(order2.id);
+    const wo2 = await prisma.workOrder.create({
+      data: {
+        workOrderNumber: `TEST-WOLINK-IE2-${ts}`,
+        status: "PLANNED",
+        type: "ORDER_PRODUCTION",
+        targetItemId: itemA.id,
+        targetColorId: mavi.id,
+        width: 300,
+        orderLinks: { create: [{ orderLineId: order2.lines[0]!.id, allocatedQty: 0 }] },
+      },
+      select: { id: true },
+    });
+    created.wos.push(wo2.id);
+    const orderService = new OrderService({
+      modelName: "order",
+      tableName: "ORDER",
+      searchFields: [],
+      codeSearchFields: ["orderNumber"],
+      dateFields: ["createdAt", "deadline"],
+      nestedCreateFields: ["lines"],
+    });
+    const preview2 = (await orderService.getCancelPreview(order2.id)).data as {
+      affectedWorkOrders: { id: string; isSoleOrder: boolean; allowedActions: string[] }[];
+    };
+    const p2wo = preview2.affectedWorkOrders.find((w) => w.id === wo2.id);
+    check("iptal önizlemesi: WO2 tek-siparişli, PLANNED → yalnız UNLINK_ONLY", p2wo?.isSoleOrder === true && p2wo.allowedActions.join() === "UNLINK_ONLY");
+    await orderService.cancelWithActions(order2.id, [{ workOrderId: wo2.id, action: "UNLINK_ONLY" }]);
+    const wo2After = await prisma.workOrder.findUnique({
+      where: { id: wo2.id },
+      select: { type: true, status: true, _count: { select: { orderLinks: true } } },
+    });
+    check("iptal sonrası WO2 bağı 0, iş emri ayakta (PLANNED)", wo2After?._count.orderLinks === 0 && wo2After.status === "PLANNED");
+    check("iptal sonrası WO2 tipi SİPARİŞE ÖZEL → STOK (UNLINK_ONLY, tek sipariş)", wo2After?.type === "STOCK_PRODUCTION", String(wo2After?.type));
   } finally {
     // Temizlik — bağımlılık sırasına göre.
     await prisma.systemLog.deleteMany({ where: { recordId: { in: [...created.wos, ...createdRolls] } } }).catch(() => {});

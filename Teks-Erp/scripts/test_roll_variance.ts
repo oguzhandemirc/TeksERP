@@ -30,7 +30,9 @@ import {
   SCRAP_REASONS,
   RECORD_CORRECTION_REASONS,
   LEGACY_REASON_CODE,
+  SHRINK_REASON_CODE,
   VARIANCE_SOURCES,
+  reasonsForKind,
   varianceKindForRemainingAction,
 } from "../src/constants/variance-reasons";
 import { overageOf, recordVarianceTx } from "../src/services/helpers/roll-variance.helper";
@@ -142,6 +144,25 @@ async function main(): Promise<void> {
       "BELIRTILMEDI hiçbir seçicide ÇIKMAZ (katalogda yok)",
       !SCRAP_REASONS.some((r) => r.code === LEGACY_REASON_CODE) &&
         !RECORD_CORRECTION_REASONS.some((r) => r.code === LEGACY_REASON_CODE),
+    );
+
+    // FASON_CEKME — sistem sebebi (2026-08-21). Fason kabulünde giden↔dönen
+    // farkını sistem yazar; kod doğrulamadan GEÇMELİ ama operatörün gördüğü
+    // hiçbir listede DURMAMALI. Katalogda dursaydı tamburda kesilen bir topun
+    // firesi "fason çekmesi" olarak işaretlenebilir ve raporu kirletirdi.
+    const shrinkOk = validateVarianceReason(RollVarianceKind.SCRAP, {
+      reasonCode: SHRINK_REASON_CODE,
+      reasonText: "Fason kabul FK-2608-000001",
+    });
+    check(
+      "FASON_CEKME doğrulamadan geçer (sistem yazar)",
+      shrinkOk.reasonCode === SHRINK_REASON_CODE,
+    );
+    check(
+      "FASON_CEKME hiçbir seçicide ÇIKMAZ (katalogda yok)",
+      !SCRAP_REASONS.some((r) => r.code === SHRINK_REASON_CODE) &&
+        !RECORD_CORRECTION_REASONS.some((r) => r.code === SHRINK_REASON_CODE) &&
+        !reasonsForKind(RollVarianceKind.SCRAP).some((r) => r.code === SHRINK_REASON_CODE),
     );
 
     // ── §3 overageOf + qty<=0 ───────────────────────────────────────────────

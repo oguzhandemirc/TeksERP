@@ -111,6 +111,7 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
       subName: string;
       dispatchedQty: number;
       returnedQty: number | null;
+      returnAdjQty: number | null;
       firstReceivedAt: Date | null;
       hasFull: boolean | null;
       remainderClosed: boolean;
@@ -122,6 +123,7 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
       sub.name AS "subName",
       sdi."dispatchedQty"::float AS "dispatchedQty",
       ret.qty                    AS "returnedQty",
+      adj."netQty"               AS "returnAdjQty",
       ret."firstReceivedAt"      AS "firstReceivedAt",
       ret."hasFull"              AS "hasFull",
       (sdi."remainderClosedAt" IS NOT NULL) AS "remainderClosed",
@@ -147,6 +149,22 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
       WHERE sri."sourceDispatchItemId" = sdi.id
         AND sr."cancelledAt" IS NULL
     ) ret ON true
+    LEFT JOIN LATERAL (
+      -- ÇEKME DÜZELTMESİ (2026-08-21). ret.qty fasonun hesabından DÜŞÜLEN
+      -- metrajdır; fiziksel olarak GELEN metraj değildir. TAM kabulde defter
+      -- satırı kalanın kendisidir, yani ret.qty = giden ve fark HEP 0 çıkıyordu
+      -- (canlı kopyada doğrulandı: her firmada fire %0). Gerçek dönen metraj
+      -- defter + sapma defterindeki çekme/fazla satırlarıdır.
+      --
+      -- İşaret: SCRAP eksi (metre gitti), OVERAGE artı (fazla döndü).
+      -- reversedAt IS NULL — iptal edilmiş makbuzun sapması hayalet fire olur.
+      SELECT SUM(CASE WHEN rv.kind = 'SCRAP' THEN -rv.qty ELSE rv.qty END)::float AS "netQty"
+      FROM roll_variances rv
+      WHERE rv."rollId" = sdi."rollId"
+        AND rv.source = 'SUBCONTRACTOR_RETURN'
+        AND rv."workOrderStepId" = sd."stepId"
+        AND rv."reversedAt" IS NULL
+    ) adj ON true
     WHERE sd."dispatchedAt" >= ${range.from}
       AND sd."dispatchedAt" <= ${range.to}
       AND sd."cancelledAt" IS NULL
@@ -177,7 +195,8 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
     if (r.hasFull === true || r.remainderClosed) {
       cell.closedItems += 1;
       cell.closedDispatchedQty += disp;
-      cell.returnedQty += Number(r.returnedQty ?? 0);
+      // Dönen metraj = defter (düşülen) + çekme düzeltmesi (fiziksel fark).
+      cell.returnedQty += Number(r.returnedQty ?? 0) + Number(r.returnAdjQty ?? 0);
       // Süre = ilk dönüş anı; yalnız kalan-kapamayla kapanan (hiç dönüşsüz)
       // kalemin süresi ölçülmez (dönüş yok — kapama tarihi teslim süresi değildir).
       if (r.firstReceivedAt !== null) {
@@ -187,6 +206,9 @@ async function collectDispatchItems(range: DateRange): Promise<SubCell[]> {
     } else {
       cell.openItems += 1;
       // Açık bakiye = giden − kısmen dönen (kalan fasonda bekleyen gerçek metraj).
+      // ⚠️ Çekme düzeltmesi BURAYA GİRMEZ ve bu bilinçli: fasonda bekleyen bakiye,
+      // onun hesabından DÜŞÜLMEMİŞ metrajdır. Çekme düşülen kısımda yaşandı —
+      // bakiyeden de indirmek, gelmemiş malı gelmiş saymak olurdu.
       cell.openQty += Math.max(0, disp - Number(r.returnedQty ?? 0));
     }
   }

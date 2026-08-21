@@ -93,6 +93,21 @@ export function useTamburShortCutA1(): { enabled: boolean; thresholdM: number | 
   };
 }
 
+/**
+ * FASON KABULÜ — çekme uyarısı ayarı (bayrak + tolerans birlikte).
+ *
+ * `useTamburShortCutA1` ile aynı gerekçe: ikisi ayrı okunursa bir render'da
+ * bayrak yeni, tolerans eski olabilir ve ekran "uyarı var/yok" kararını iki
+ * farklı nesille verir.
+ */
+export function useFasonShrinkWarn(): { enabled: boolean; tolerancePct: number } {
+  const d = useFeatureFlags().data;
+  return {
+    enabled: d?.fasonShrinkWarnEnabled ?? true,
+    tolerancePct: d?.fasonShrinkTolerancePct ?? 10,
+  };
+}
+
 /** Token süresi dolunca otomatik logout açık mı? Default TRUE (yüklenene kadar da açık). */
 export function useAutoLogoutOnExpiry(): boolean {
   return useFeatureFlags().data?.autoLogoutOnExpiry ?? true;

@@ -69,6 +69,23 @@ export interface OrderCancelPreview {
 
 export const orderService = {
   ...base,
+  /**
+   * Sipariş kaleminin rengini değiştir — iş emri bağlıyken de çalışan DAR kapı
+   * ("Rengi Değiştir → siparişi de düzelt", 2026-08-21). Sebep zorunlu.
+   */
+  changeLineColor: (
+    orderId: string,
+    lineId: string,
+    colorId: string | null,
+    reason: string,
+  ): Promise<ApiResponse<{ lineId: string; previousColorId: string | null; colorId: string | null }>> =>
+    apiClient
+      .patch<ApiResponse<{ lineId: string; previousColorId: string | null; colorId: string | null }>>(
+        `/api/orders/${orderId}/lines/${lineId}/color`,
+        { colorId, reason },
+      )
+      .then((r) => r.data),
+
   manualClose: (id: string, reason: string): Promise<ApiResponse<Order>> =>
     apiClient
       .post<ApiResponse<Order>>(`/api/orders/${id}/manual-close`, { reason })

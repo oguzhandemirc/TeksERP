@@ -272,13 +272,95 @@ async function main(): Promise<void> {
     check("P9: test firması karnede", !!row);
     if (row) {
       // Kapanmışlar: P15 (iptal edildi → makbuz cancelledAt → kalem yeniden AÇIK, kapsam dışı olabilir),
-      // P6 (100 gitti, 60 döndü, 40 kalan-kapama → fire 40), P7 (100 gitti, 100 döndü → fire 0).
-      // → kapanan giden 200, dönen 160, fire 40.
-      check("P9: fire 40 (P6'nın kalanı) — eski kod hep 0 basardı", Math.abs(row.fireQty - 40) < 0.01, `fireQty ${row.fireQty}`);
-      check("P9: dönen 160 (defterden: 60+100)", Math.abs(row.returnedQty - 160) < 0.01, `returned ${row.returnedQty}`);
+      // P6 (100 gitti, 60 döndü, 40 kalan-kapama → fire 40), P7 (100 gitti, 104 m born → fazla dönen +4).
+      // → kapanan giden 200, dönen 160 (defter) + 4 (P7 fazla dönen) = 164, fire 36.
+      //
+      // ⚠️ 2026-08-21'DE DEĞİŞTİ: defter satırı TAM kabulde kalanın kendisidir
+      // (P7'de 104 istendi, 100'e clamp'lendi) — fazla dönen 4 m yalnız born
+      // toplarda yaşıyordu ve karneye HİÇ girmiyordu. Artık sapma defterinde
+      // OVERAGE olarak duruyor ve dönen metrajı düzeltiyor. Eski beklenti
+      // (160/40) "defter = fiziksel dönen" varsayımını kodluyordu; o varsayım
+      // tam da fire'ı yapısal olarak 0'a çiviteyen şeydi.
+      check("P9: fire 36 (P6 kalanı 40 − P7 fazla döneni 4)", Math.abs(row.fireQty - 36) < 0.01, `fireQty ${row.fireQty}`);
+      check("P9: dönen 164 (defter 160 + fazla dönen 4)", Math.abs(row.returnedQty - 164) < 0.01, `returned ${row.returnedQty}`);
       // P15 iptalle yeniden açıldı: açık bakiye = 100 (kısmi satırlar iptal edildi).
       check("P9: açık bakiye P15'in 100'ü", Math.abs(row.openQty - 100) < 0.01, `openQty ${row.openQty}`);
     }
+  }
+
+  // ═══ P10: ÇEKME DEFTERİ (2026-08-21) — giden ↔ dönen farkı kayda geçer ═══
+  // SAHA VAKASI: 5 parça (30/40/50/60/70) boyahaneye gitti, 220 m döndü. O 30 m
+  // hiçbir yere yazılmıyordu: makbuz "kalanın tamamı kabul edildi" diyor, born
+  // toplar 220 m taşıyor, fark yalnız iki tabloyu yan yana koyan birinin
+  // görebileceği bir çıkarma işlemi olarak kalıyordu.
+  console.log("\n=== P10: çekme sapma defterine yazılıyor ===");
+  {
+    const s = await setup("P10a", 100);
+    await sub.dispatch({ workOrderId: s.woId, stepId: s.boyaStep, subcontractorId: SUB_BOYER, rollIds: [s.rollId] }, ADMIN);
+    const res = await sub.receive({
+      workOrderId: s.woId, stepId: s.boyaStep, subcontractorId: SUB_BOYER,
+      returns: [{ rollId: s.rollId }],   // TAM kabul (receivedQty yok)
+      newRolls: [{ qty: 88 }],           // 100 gitti, 88 döndü → 12 m çekme
+    }, ADMIN);
+    const receiptId = (res.data as { id: string }).id;
+    const v = await prisma.rollVariance.findFirst({
+      where: { rollId: s.rollId, source: VARIANCE_SOURCES.SUBCONTRACTOR_RETURN },
+      select: { kind: true, qty: true, reasonCode: true, sourceRefId: true, workOrderStepId: true, reversedAt: true },
+    });
+    check("P10: çekme satırı yazıldı — SCRAP 12 m", v?.kind === RollVarianceKind.SCRAP && Math.abs(Number(v?.qty) - 12) < 0.01, `qty ${v?.qty}`);
+    check("P10: sistem sebebi FASON_CEKME (operatör listesinde YOK)", v?.reasonCode === "FASON_CEKME");
+    check("P10: sourceRefId = makbuz (terslemenin adresi)", v?.sourceRefId === receiptId);
+    check("P10: adım damgası yazıldı", v?.workOrderStepId === s.boyaStep);
+
+    // KARNE: dönen 88, fire 12 — eski kod bu kalemde fire 0 basardı.
+    const score = await getSubcontractScorecard({ from: testStart, to: new Date() });
+    const row = score.bySubcontractor.find((x) => x.key === SUB_BOYER);
+    const before = { fire: row?.fireQty ?? 0, returned: row?.returnedQty ?? 0 };
+    check("P10: karne bu kalemi 88 dönen sayıyor (fire 12 eklendi)", before.returned > 0);
+
+    // İPTAL → satır SİLİNMEZ, TERSLENİR (append-only defter).
+    // İptal, doğan açık kumaşların da onaylanmasını ister (cascade sözleşmesi).
+    const born = await bornLive(s.woId);
+    await sub.cancelReceipt(receiptId, "P10 çekme terslemesi testi", ADMIN, born.map((x) => x.id));
+    const v2 = await prisma.rollVariance.findFirst({
+      where: { rollId: s.rollId, source: VARIANCE_SOURCES.SUBCONTRACTOR_RETURN },
+      select: { reversedAt: true, reversedById: true },
+    });
+    check("P10: makbuz iptalinde çekme satırı TERSLENDİ (silinmedi)", v2 != null && v2.reversedAt != null);
+    check("P10: tersleyen kullanıcı yazıldı", v2?.reversedById === ADMIN);
+    const score2 = await getSubcontractScorecard({ from: testStart, to: new Date() });
+    const row2 = score2.bySubcontractor.find((x) => x.key === SUB_BOYER);
+    check(
+      "P10: terslenmiş sapma karneye GİRMEZ (hayalet fire yok)",
+      (row2?.returnedQty ?? 0) < before.returned,
+      `önce ${before.returned} → sonra ${row2?.returnedQty}`,
+    );
+  }
+
+  // ═══ P11: ÇOK TOPLU KABULDE DAĞITIM — toplam korunur ═══
+  // Boyahane 2 topu dikip tek parça döndürdüğünde "hangi toptan kaç metre
+  // çekti" sorusunun fiziksel cevabı yoktur; defter TOP bazlı olduğu için fark
+  // tüketilen metrajla orantılı dağıtılır ve TOPLAM korunur.
+  console.log("\n=== P11: çok toplu kabulde çekme dağıtımı ===");
+  {
+    const a = await setup("P11a", 100);
+    const b = await prisma.roll.create({
+      data: { barcode: barcode(), itemId: ITEM, initialQty: 100, currentQty: 100, status: RollStatus.STOCK, width: 250, createdById: ADMIN },
+      select: { id: true },
+    });
+    await sub.dispatch({ workOrderId: a.woId, stepId: a.boyaStep, subcontractorId: SUB_BOYER, rollIds: [a.rollId, b.id] }, ADMIN);
+    await sub.receive({
+      workOrderId: a.woId, stepId: a.boyaStep, subcontractorId: SUB_BOYER,
+      returns: [{ rollId: a.rollId }, { rollId: b.id }],
+      newRolls: [{ qty: 180 }],  // 200 gitti, 180 döndü → 20 m çekme
+    }, ADMIN);
+    const vs = await prisma.rollVariance.findMany({
+      where: { rollId: { in: [a.rollId, b.id] }, source: VARIANCE_SOURCES.SUBCONTRACTOR_RETURN, reversedAt: null },
+      select: { rollId: true, qty: true },
+    });
+    const total = vs.reduce((s2, x) => s2 + Number(x.qty), 0);
+    check("P11: iki topa da satır yazıldı", vs.length === 2, `satır ${vs.length}`);
+    check("P11: TOPLAM korunur (10 + 10 = 20)", Math.abs(total - 20) < 0.001, `toplam ${total}`);
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

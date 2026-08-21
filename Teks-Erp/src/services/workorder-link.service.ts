@@ -23,9 +23,10 @@
 // `changeWidth` ile düzeltilir.
 //
 // TİP = BAĞIN AYNASI (2026-08-21): `WorkOrder.type` bağ eklenince STOK →
-// SİPARİŞE ÖZEL olur (aynı tx, atomik). Aksi hâlde detay paneli siparişi
-// gösterirken liste/künye/kart "Stok" basıyordu. Geçmiş kayıtlar için
-// `scripts/fix_workorder_type_from_links.ts` (dry-run varsayılan).
+// SİPARİŞE ÖZEL, son bağ kalkınca SİPARİŞE ÖZEL → STOK olur (aynı tx, atomik,
+// her iki yön). Aksi hâlde detay paneli siparişi gösterirken liste/künye/kart
+// "Stok" basıyordu. Geçmiş kayıtlar için `scripts/fix_workorder_type_from_links.ts`
+// (dry-run varsayılan). Sipariş iptali de aynı kuralı uygular (order.service).
 // =============================================================================
 
 import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
@@ -35,6 +36,13 @@ import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { InventoryService } from "./inventory.service";
+import { matchesPermission } from "../middlewares/rbac.middleware";
+import { whereRollsOfWorkOrder } from "./helpers/workorder-rolls.helper";
+import {
+  PLAN_CHANGE_FROZEN_STATUSES,
+  assertPlanChangeAllowed,
+  assertTargetColorChange,
+} from "./helpers/workorder-target-color.helper";
 
 /** Toplu uygulama TEKİL motoru çağırır — kural kopyalanmaz (bkz. applyAttributeToRolls). */
 const inventoryService = new InventoryService();
@@ -42,7 +50,15 @@ const inventoryService = new InventoryService();
 /** Değişiklik sebebi için asgari uzunluk — "x" gibi geçiştirme izleri işe yaramaz. */
 const MIN_REASON_LENGTH = 3;
 
-/** İş emrinin planı üzerinde değişikliğe KAPALI durumları. */
+/**
+ * BAĞ işlemlerine (bağla / bağı kaldır / toplara uygula) KAPALI durumlar.
+ *
+ * ⚠️ COMPLETED BİLEREK YOK: bitmiş iş emrine uyumlu sipariş bağlanabilir (stok
+ * için üretildi, sonra sipariş geldi) ve topları düzeltilebilir. PLAN
+ * değişiklikleri (renk / en / uyumsuz-bağ override) ise COMPLETED'da da
+ * kapalıdır — o küme `PLAN_CHANGE_FROZEN_STATUSES` (workorder-target-color
+ * helper, 2026-08-21 kullanıcı kararı).
+ */
 const FROZEN_STATUSES: WorkOrderStatus[] = [
   WorkOrderStatus.CANCELLED,
   WorkOrderStatus.SUPERSEDED,
@@ -137,19 +153,10 @@ const BLOCK_LABEL: Partial<Record<RollStatus, string>> = {
   CANCELLED: "iptal",
 };
 
-/**
- * "Bu iş emrinin topları" — üç bağdan herhangi biri yeter (kolon yok, ilişki var).
- * `batch` dahil çünkü finalize olup adımdan düşmüş toplar da düzeltilebilmeli.
- */
-function whereRollsOfWorkOrder(workOrderId: string): Prisma.RollWhereInput {
-  return {
-    OR: [
-      { producedInStep: { workOrderId } },
-      { currentStep: { workOrderId } },
-      { batch: { workOrderId } },
-    ],
-  };
-}
+// "Bu iş emrinin topları" — tanım `helpers/workorder-rolls.helper.ts`'e taşındı
+// (renk bekçisi de aynı kümeyi sayıyor; iki tanım ayrışmasın). Dışarıya aynı
+// adla açık kalır.
+export { whereRollsOfWorkOrder };
 
 export interface RollAttributeTarget {
   batchId: string | null;
@@ -347,8 +354,8 @@ export class WorkOrderLinkService {
     // gösteriyor, liste/künye/refakat kartı ise hâlâ "Stok" basıyordu (yedekte
     // 13 iş emri, hepsi bu sırayla). Aynı tx'te ve ATOMİK (`updateMany WHERE
     // type=STOCK` — yarışta iki çağrı da güvenle geçer); sessiz değil, audit'e
-    // `typeChanged` yazılır ve mesajda söylenir. Tersi (son bağ kalkınca STOK'a
-    // dönüş) BİLİNÇLİ OLARAK YOK — `unlinkOrderLine` son bağı zaten reddeder.
+    // `typeChanged` yazılır ve mesajda söylenir. Tersi `unlinkOrderLine`'da:
+    // son bağ kalkınca STOK'a döner (simetrik — tip her iki yönde bağı izler).
     let typeChanged = false;
     if (toCreate.length > 0) {
       await prisma.$transaction(async (tx) => {
@@ -397,12 +404,19 @@ export class WorkOrderLinkService {
     };
   }
 
-  /** Bağı kaldırır. Siparişe özel iş emrinin SON bağı korunur (tipini yalanlar). */
+  /**
+   * Bağı kaldırır. TİP = BAĞIN AYNASI (2026-08-21, simetrik tur): siparişe özel
+   * iş emrinin SON bağı kalkınca iş emri STOK üretimine döner — eskiden son bağ
+   * "tipini yalanlar" diye REDDEDİLİYORDU; tip artık bağı izlediği için yalan
+   * kalmadı, red de kalktı. Tek ön koşul STOK'un kendi değişmezi: hedef kumaş
+   * dolu olmalı (`create` ORDER iş emrinde kumaşı siparişten türettiği için
+   * pratikte hep doludur; yedekte 0 boş).
+   */
   async unlinkOrderLine(
     workOrderId: string,
     orderLineId: string,
     userId?: string,
-  ): Promise<ApiResponse<{ removed: boolean }>> {
+  ): Promise<ApiResponse<{ removed: boolean; typeChanged: boolean }>> {
     const wo = await loadWo(workOrderId);
     assertPlanEditable(wo);
 
@@ -413,17 +427,32 @@ export class WorkOrderLinkService {
     if (!links.some((l) => l.orderLineId === orderLineId)) {
       throw AppError.notFound("Bu sipariş satırı bu iş emrine bağlı değil.");
     }
-    if (wo.type === WorkOrderType.ORDER_PRODUCTION && links.length === 1) {
+    const lastLinkOfOrderWo = wo.type === WorkOrderType.ORDER_PRODUCTION && links.length === 1;
+    if (lastLinkOfOrderWo && !wo.targetItemId) {
       throw AppError.badRequest(
-        "Siparişe özel üretim iş emrinin son sipariş bağı kaldırılamaz — " +
-          "önce başka bir sipariş bağlayın.",
+        "Son sipariş bağı kaldırılınca iş emri stok üretimine döner; bunun için hedef kumaş " +
+          "tanımlı olmalı — önce 'Düzenle'den hedef kumaşı seçin.",
       );
     }
 
+    let typeChanged = false;
     await prisma.$transaction(async (tx) => {
       await tx.workOrderToOrderLine.delete({
         where: { workOrderId_orderLineId: { workOrderId, orderLineId } },
       });
+      if (lastLinkOfOrderWo) {
+        // Atomik: yarışta bu arada yeni bağ eklendiyse tip ORDER kalmalı →
+        // taze bağ sayımıyla karar; `updateMany WHERE type=ORDER` çiftini
+        // tek yazmaya indirir.
+        const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId } });
+        if (remaining === 0) {
+          const flipped = await tx.workOrder.updateMany({
+            where: { id: workOrderId, type: WorkOrderType.ORDER_PRODUCTION },
+            data: { type: WorkOrderType.STOCK_PRODUCTION },
+          });
+          typeChanged = flipped.count > 0;
+        }
+      }
       await markTravelerCardDirtyTx(tx, workOrderId);
     });
 
@@ -432,10 +461,20 @@ export class WorkOrderLinkService {
       action: "UPDATE",
       tableName: "WORK_ORDER",
       recordId: workOrderId,
-      newData: { event: "ORDER_LINK_REMOVED", orderLineId },
+      oldData: typeChanged ? { type: WorkOrderType.ORDER_PRODUCTION } : undefined,
+      newData: {
+        event: "ORDER_LINK_REMOVED",
+        orderLineId,
+        typeChanged,
+        ...(typeChanged ? { type: WorkOrderType.STOCK_PRODUCTION } : {}),
+      },
     });
 
-    return { success: true, data: { removed: true }, message: "Sipariş bağı kaldırıldı." };
+    return {
+      success: true,
+      data: { removed: true, typeChanged },
+      message: "Sipariş bağı kaldırıldı." + (typeChanged ? " İş emri artık Stok üretimi." : ""),
+    };
   }
 
   /**
@@ -455,26 +494,32 @@ export class WorkOrderLinkService {
     colorId: string | null,
     reason: string,
     userId?: string,
-  ): Promise<ApiResponse<{ warnings: string[] }>> {
+    opts: { confirmPartial?: boolean; recolorRollIds?: readonly string[] } = {},
+  ): Promise<ApiResponse<{ warnings: string[]; partial: { dyedCount: number; pendingCount: number } | null }>> {
     const trimmed = (reason ?? "").trim();
     if (trimmed.length < MIN_REASON_LENGTH) {
       throw AppError.badRequest("Renk değişikliği için sebep yazmalısınız.");
     }
     const wo = await loadWo(workOrderId);
-    assertPlanEditable(wo);
     if (wo.targetColorId === colorId) {
       throw AppError.badRequest("İş emri zaten bu renkte.");
     }
+
+    // TEK BEKÇİ (2026-08-21): terminal statü + renk aktif + izinli renk listesi +
+    // MAL–PLAN uyumu (boyanmış top ↔ yeni renk; düzeltilecekler hariç) + rota
+    // kapsaması uyarısı — "Düzenle" ile birebir aynı kurallar (helper başlığı).
+    const gate = await assertTargetColorChange(prisma, wo, colorId, {
+      confirmPartial: opts.confirmPartial,
+      recolorRollIds: opts.recolorRollIds,
+    });
 
     let newColorName: string | null = null;
     if (colorId) {
       const color = await prisma.color.findUnique({
         where: { id: colorId },
-        select: { name: true, isActive: true },
+        select: { name: true },
       });
-      if (!color) throw AppError.badRequest("Renk bulunamadı.");
-      if (!color.isActive) throw AppError.badRequest("Pasif bir renk seçilemez.");
-      newColorName = color.name;
+      newColorName = color?.name ?? null;
     }
 
     const links = await prisma.workOrderToOrderLine.findMany({
@@ -489,20 +534,31 @@ export class WorkOrderLinkService {
         },
       },
     });
-    const warnings = links
-      .filter((l) => l.orderLine.colorId !== colorId)
-      .map(
-        (l) =>
-          `${l.orderLine.order.orderNumber} siparişi "${l.orderLine.color?.name ?? "renksiz"}" istiyor.`,
-      );
+    const warnings = [
+      ...gate.warnings,
+      ...links
+        .filter((l) => l.orderLine.colorId !== colorId)
+        .map(
+          (l) =>
+            `${l.orderLine.order.orderNumber} siparişi "${l.orderLine.color?.name ?? "renksiz"}" istiyor.`,
+        ),
+    ];
 
-    // Atomik claim: eşzamanlı iptal/devir sırasında yazma sızmasın.
+    // Atomik claim: eşzamanlı tamamlanma/iptal/devir sırasında yazma sızmasın;
+    // `targetColorId` koşulu bekçinin baktığı değerin hâlâ geçerli olduğunu iddia
+    // eder (arada başka biri değiştirdiyse kısmi-boya/kilit kararı bayatlamıştır).
     const claim = await prisma.workOrder.updateMany({
-      where: { id: workOrderId, status: { notIn: FROZEN_STATUSES } },
+      where: {
+        id: workOrderId,
+        status: { notIn: PLAN_CHANGE_FROZEN_STATUSES },
+        targetColorId: wo.targetColorId,
+      },
       data: { targetColorId: colorId },
     });
     if (claim.count === 0) {
-      throw AppError.conflict("İş emri bu sırada iptal edildi — renk değiştirilemedi.");
+      throw AppError.conflict(
+        "İş emri bu sırada değişti (tamamlandı, iptal edildi ya da rengi başka biri değiştirdi) — yenileyip tekrar deneyin.",
+      );
     }
     await markTravelerCardDirtyTx(prisma, workOrderId);
 
@@ -518,12 +574,14 @@ export class WorkOrderLinkService {
         colorName: newColorName,
         reason: trimmed,
         warnings,
+        // Kısmi boyada onaylı geçildiyse iz: kaç top eski renkte kaldı.
+        ...(gate.partial ? { partialConfirmed: gate.partial } : {}),
       },
     });
 
     return {
       success: true,
-      data: { warnings },
+      data: { warnings, partial: gate.partial },
       message: `Üretim rengi "${newColorName ?? "renksiz"}" olarak güncellendi.`,
     };
   }
@@ -551,13 +609,14 @@ export class WorkOrderLinkService {
       throw AppError.badRequest("En 0 ile 1000 cm arasında olmalı.");
     }
     const wo = await loadWo(workOrderId);
-    assertPlanEditable(wo);
+    // Plan değişikliği: COMPLETED da kapalı (2026-08-21; renkle aynı küme).
+    assertPlanChangeAllowed(wo);
 
     const previousWidth = num(wo.width);
     if (previousWidth === width) throw AppError.badRequest("İş emrinin eni zaten bu değerde.");
 
     const claim = await prisma.workOrder.updateMany({
-      where: { id: workOrderId, status: { notIn: FROZEN_STATUSES } },
+      where: { id: workOrderId, status: { notIn: PLAN_CHANGE_FROZEN_STATUSES } },
       data: { width: width == null ? null : new Prisma.Decimal(width) },
     });
     if (claim.count === 0) {
@@ -691,6 +750,21 @@ export class WorkOrderLinkService {
       throw AppError.badRequest("Seçilen toplardan bazıları bu iş emrine ait değil.");
     }
 
+    // PLANLAMACI YETKİSİ (2026-08-21, kullanıcı kararı): "bu iş emrinin TÜM açık
+    // kumaşlarının rengini düzelt" bir PLANLAMA düzeltmesidir — iş emri kapsamlı,
+    // sebepli, audit'li. Tekil motor üretimdeki top için `roll:manual-adjust`
+    // (süpervizör) ister; burada `workorder:write` taşıyan planlamacı da geçer:
+    // motora izin listesi VERİLMEZ (= güvenilen dahili çağrı, F221) — ALWAYS_BLOCKED
+    // (fasonda/sevk/kesim/iptal) ve sebep kuralı yine motorda koşar. Tekil Düzelt
+    // ve Tambur "Düzelt" eski kuralla kalır (tamburun kendi hataları için).
+    const engineOpts =
+      permissions === undefined
+        ? undefined
+        : matchesPermission(permissions, "roll:manual-adjust") ||
+            !matchesPermission(permissions, "workorder:write")
+          ? { permissions }
+          : undefined;
+
     const failed: { rollId: string; barcode: string | null; message: string }[] = [];
     let updated = 0;
     for (const roll of rolls) {
@@ -707,7 +781,7 @@ export class WorkOrderLinkService {
             reason,
           },
           userId,
-          permissions !== undefined ? { permissions } : undefined,
+          engineOpts,
         );
         updated++;
       } catch (err) {
@@ -793,7 +867,8 @@ export class WorkOrderLinkService {
       throw AppError.badRequest("Bu işlem için sebep yazmalısınız.");
     }
     const wo = await loadWo(workOrderId);
-    assertPlanEditable(wo);
+    // Plan değişikliği zinciri — COMPLETED da kapalı (uyumlu normal bağ açık kalır).
+    assertPlanChangeAllowed(wo);
 
     const line = await prisma.orderLine.findUnique({
       where: { id: orderLineId },
@@ -829,23 +904,34 @@ export class WorkOrderLinkService {
       );
     }
 
+    // Düzeltilebilir toplar PLAN yazımından ÖNCE çözülür: bekçi "bu istekle
+    // düzeltilecek toplar yeni renkte sayılır" (recolorRollIds) — yoksa boya
+    // bitmiş bir iş emrinde zincir COLOR_DYED_BLOCKED'a çarpardı, oysa ② adımı
+    // tam da o topları düzeltiyor. Adaylar tekil motorla aynı engel kümesinden.
+    const targets = await this.getRollAttributeTargets(workOrderId);
+    const editableIds = targets.data
+      .flatMap((b) => b.rolls)
+      .filter((r) => r.blocked === null)
+      .map((r) => r.id);
+
     // ① Plan düzeltmesi (her biri kendi sebep+audit iziyle).
     const warnings: string[] = [];
     if (colorDiff) {
-      const res = await this.changeTargetColor(workOrderId, line.colorId ?? null, trimmed, userId);
+      // `confirmPartial: true` BİLİNÇLİ: bu zincirin öncülü "elimdeki mal ASLINDA
+      // siparişin renginde" beyanıdır (süpervizör + sebep) ve ② adımı boyanmış
+      // topları zaten yeni renge eşitler — "N top eski renkte kaldı" onayı burada
+      // sorulsaydı cevabı önceden verilmiş bir soruyu tekrar sorardı.
+      const res = await this.changeTargetColor(workOrderId, line.colorId ?? null, trimmed, userId, {
+        confirmPartial: true,
+        recolorRollIds: editableIds,
+      });
       warnings.push(...res.data.warnings);
     }
     if (widthDiff) {
       await this.changeWidth(workOrderId, lineWidth, trimmed, userId, "MANUAL");
     }
 
-    // ② Düzeltilebilir topları eşitle. Adaylar tekil motorla aynı engel
-    // kümesinden süzülür; kısmi başarı normaldir (failed[] rapora düşer).
-    const targets = await this.getRollAttributeTargets(workOrderId);
-    const editableIds = targets.data
-      .flatMap((b) => b.rolls)
-      .filter((r) => r.blocked === null)
-      .map((r) => r.id);
+    // ② Düzeltilebilir topları eşitle; kısmi başarı normaldir (failed[] rapora düşer).
     let rollsUpdated = 0;
     let rollsFailed: { rollId: string; barcode: string | null; message: string }[] = [];
     if (editableIds.length > 0) {

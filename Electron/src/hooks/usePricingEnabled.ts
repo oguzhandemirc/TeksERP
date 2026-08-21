@@ -47,6 +47,22 @@ export function useKk1WeightEntryEnabled(): boolean {
   return q.data?.data?.kk1WeightEntryEnabled ?? false;
 }
 
+/**
+ * FASON KABULÜ — çekme uyarısı (bayrak + tolerans birlikte).
+ *
+ * Boyahanede kumaş çeker: giden ile dönen metrajın farklı olması normaldir.
+ * Uyarı yalnız toleransın ÜSTÜNDE çıkar. Mobil ikizi `useFasonShrinkWarn`
+ * (mobil bu projeyi import edemez — iki yüzeyin aynı kuralı uygulaması için
+ * eşiğin TEK kaynağı sunucudur).
+ */
+export function useFasonShrinkWarn(): { enabled: boolean; tolerancePct: number } {
+  const q = useFeatureFlags();
+  return {
+    enabled: q.data?.data?.fasonShrinkWarnEnabled ?? true,
+    tolerancePct: q.data?.data?.fasonShrinkTolerancePct ?? 10,
+  };
+}
+
 export function useReturnGradingEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.returnGradingEnabled ?? false;
