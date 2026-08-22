@@ -975,6 +975,42 @@ export async function countReferences(entity: MergeEntity, id: string): Promise<
   return total;
 }
 
+/**
+ * TOPLU referans sayımı — `countReferences`in liste hâli (2026-08-22).
+ *
+ * `countReferences` kayıt BAŞINA bir sorgu koşar; müşteride 12 kural var, yani
+ * 50 satırlık bir listede 600 sorgu eder. Bu sürüm kural BAŞINA tek sorgu koşar
+ * (`GROUP BY`), yani satır sayısından bağımsız olarak 12'de kalır.
+ *
+ * ⚠️ Dönen haritada bir id YOKSA bu "0" demektir, "ölçülemedi" değil. Ölçüm
+ * düşerse (tablo/kolon yok) fonksiyon `null` döner — kısmi sonuç DÖNMEZ, çünkü
+ * eksik sayım operatöre "bu kayda dokunulmayacak" diye okunur (`countRows`
+ * yorumundaki aynı gerekçe).
+ */
+export async function countReferencesBatch(
+  entity: MergeEntity,
+  ids: string[],
+): Promise<Map<string, number> | null> {
+  const out = new Map<string, number>();
+  if (ids.length === 0) return out;
+  for (const rule of MERGE_MAP[entity]) {
+    if (rule.kind === "EXEMPT") continue;
+    try {
+      const rows = await prisma.$queryRawUnsafe<Array<{ k: string; n: bigint }>>(
+        `SELECT "${rule.column}"::text AS k, count(*)::bigint AS n
+           FROM "${rule.table}" WHERE "${rule.column}" = ANY($1::uuid[])
+          GROUP BY 1`,
+        ids,
+      );
+      for (const r of rows) out.set(r.k, (out.get(r.k) ?? 0) + Number(r.n));
+    } catch {
+      return null;
+    }
+  }
+  for (const id of ids) if (!out.has(id)) out.set(id, 0);
+  return out;
+}
+
 /** `updateMany` hedefi olacak satır sayısı — ölçülemezse `null`. */
 async function countRows(rule: MoveRule, sourceIds: string[]): Promise<number | null> {
   if (rule.kind === "EXEMPT") return null;

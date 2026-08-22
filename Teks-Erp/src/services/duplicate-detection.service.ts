@@ -30,7 +30,7 @@ import {
   productNameSimilarity,
   numericTokensEqual,
 } from "../utils/string-similarity";
-import { countReferences } from "./master-data-merge.service";
+import { countReferences, countReferencesBatch } from "./master-data-merge.service";
 import {
   DuplicateReviewService,
   pairKeyOf,
@@ -171,14 +171,153 @@ class UnionFind {
   }
 }
 
+/**
+ * LİSTE SATIRI (2026-08-22) — panelin ana ekranı artık "öneri listesi" değil,
+ * varlığın TAM listesidir; şüpheliler onun üzerinde bir SÜZGEÇTİR.
+ *
+ * Gerekçe (kullanıcı geri bildirimi): motor bir çifti bulamazsa kullanıcı
+ * bildiği hâlde birleştiremiyordu — panelin tek girişi öneriydi. Karar:
+ * "tüm cari listesini göreyim, arasından kendim seçeyim".
+ */
+export interface DuplicateRecordRow {
+  id: string;
+  code: string | null;
+  name: string;
+  isActive: boolean;
+  /** `null` = ölçülemedi (panel "?" basar), `0` = gerçekten referans yok. */
+  refCount: number | null;
+  /** Sistem bu kaydı bir çiftte gördüyse dolu; aksi hâlde `null`. */
+  suspect: {
+    /** Aynı gruptaki diğer kayıtların id'leri (tabloda yan yana gelirler). */
+    partnerIds: string[];
+    rules: DuplicateRuleKind[];
+    maxScore: number | null;
+    /** İnsan okunur gerekçeler ("Vergi no aynı: …"). */
+    details: string[];
+    /** Grup anahtarı — sıralamada üyeleri bitişik tutar. */
+    groupKey: string;
+  } | null;
+}
+
+export interface DuplicateRecordListResult {
+  entity: MergeEntity;
+  rows: DuplicateRecordRow[];
+  /** Süzgeçten geçen toplam (sayfalama öncesi). */
+  total: number;
+  /** Süzgeçten bağımsız: varlıkta kaç kayıt şüpheli. */
+  suspectTotal: number;
+  page: number;
+  limit: number;
+  fuzzyEnabled: boolean;
+  thresholdPct: number;
+}
+
 export const DuplicateDetectionService = {
+  /**
+   * TAM LİSTE + şüpheli süzgeci (2026-08-22). Panelin ana ekranı bunu okur.
+   *
+   * ⚠️ Şüpheli kümesi `scan` ile AYNI motordan gelir — ikinci bir "benzer mi"
+   * kuralı yazmak, panelin iki yerde iki farklı cevap vermesi demektir.
+   * `skipRefCounts` ile taramanın pahalı kısmı atlanır; sayım yalnız GÖRÜNEN
+   * sayfa için ve toplu koşar.
+   */
+  async listRecords(
+    rawEntity: string,
+    opts: {
+      search?: string;
+      onlySuspect?: boolean;
+      includeInactive?: boolean;
+      includeNotDuplicate?: boolean;
+      page?: number;
+      limit?: number;
+    } = {},
+  ): Promise<DuplicateRecordListResult> {
+    if (!(MERGE_ENTITIES as readonly string[]).includes(rawEntity)) {
+      throw AppError.badRequest(`Mükerrer taraması desteklenmiyor: '${rawEntity}'.`);
+    }
+    const entity = rawEntity as MergeEntity;
+    const page = Math.max(1, Math.floor(opts.page ?? 1));
+    const limit = Math.min(200, Math.max(1, Math.floor(opts.limit ?? 50)));
+
+    const [rows, scanRes] = await Promise.all([
+      loadRows(entity),
+      this.scan(entity, {
+        includeNotDuplicate: opts.includeNotDuplicate,
+        skipRefCounts: true,
+      }),
+    ]);
+
+    // Şüpheli haritası — kayıt id → grup bilgisi.
+    const suspect = new Map<string, DuplicateRecordRow["suspect"]>();
+    for (const g of scanRes.groups) {
+      for (const r of g.records) {
+        suspect.set(r.id, {
+          partnerIds: g.records.filter((x) => x.id !== r.id).map((x) => x.id),
+          rules: g.rules,
+          maxScore: g.maxScore,
+          details: [
+            ...new Set(
+              g.pairs
+                .filter((p) => p.aId === r.id || p.bId === r.id)
+                .flatMap((p) => p.evidence.map((e) => e.detail)),
+            ),
+          ],
+          groupKey: g.key,
+        });
+      }
+    }
+
+    // Süzgeçler. Arama KATLANMIŞ metinde koşar (büyük/küçük + Türkçe karakter
+    // farkı sayılmaz) — liste araması ile panelin "aynı ad" tanımı ayrışmasın.
+    const q = (opts.search ?? "").trim();
+    const qFold = q ? foldNameForCompare(q) : "";
+    let filtered = rows.filter((r) => {
+      if (!opts.includeInactive && !r.isActive) return false;
+      if (opts.onlySuspect && !suspect.has(r.id)) return false;
+      if (!qFold) return true;
+      const nameFold = foldKey(entity, r);
+      return nameFold.includes(qFold) || (r.code ?? "").toLowerCase().includes(q.toLowerCase());
+    });
+
+    // Sıralama: şüpheli grup üyeleri BİTİŞİK kalmalı (operatör iki kaydı yan yana
+    // görmeden karar veremez), sonra ada göre. Türkçe sıralama `localeCompare`.
+    filtered = filtered.sort((a, b) => {
+      const ga = suspect.get(a.id)?.groupKey ?? "\uffff";
+      const gb = suspect.get(b.id)?.groupKey ?? "\uffff";
+      if (ga !== gb) return ga < gb ? -1 : 1;
+      return a.name.localeCompare(b.name, "tr");
+    });
+
+    const total = filtered.length;
+    const pageRows = filtered.slice((page - 1) * limit, page * limit);
+    const counts = await countReferencesBatch(entity, pageRows.map((r) => r.id));
+
+    return {
+      entity,
+      rows: pageRows.map((r) => ({
+        id: r.id,
+        code: r.code,
+        name: r.name,
+        isActive: r.isActive,
+        refCount: counts ? (counts.get(r.id) ?? 0) : null,
+        suspect: suspect.get(r.id) ?? null,
+      })),
+      total,
+      suspectTotal: suspect.size,
+      page,
+      limit,
+      fuzzyEnabled: scanRes.fuzzyEnabled,
+      thresholdPct: scanRes.thresholdPct,
+    };
+  },
+
   /**
    * Varlık için aday tarama. `includeNotDuplicate: true` → operatörün "mükerrer değil"
    * dediği çiftler de döner (panel filtresi; varsayılan gizli).
    */
   async scan(
     rawEntity: string,
-    opts: { includeNotDuplicate?: boolean } = {},
+    opts: { includeNotDuplicate?: boolean; skipRefCounts?: boolean } = {},
   ): Promise<DuplicateScanResult> {
     if (!(MERGE_ENTITIES as readonly string[]).includes(rawEntity)) {
       throw AppError.badRequest(`Mükerrer taraması desteklenmiyor: '${rawEntity}'.`);
@@ -333,7 +472,10 @@ export const DuplicateDetectionService = {
           name: r.name,
           isActive: r.isActive,
           identity: r.identity,
-          refCount: await countReferences(entity, r.id),
+          // `skipRefCounts`: liste ucu sayımı SAYFA için toplu yapar
+          // (`countReferencesBatch`); burada kayıt başına 12 sorgu koşmak
+          // aynı işi iki kez ve yavaş yapmak olurdu.
+          refCount: opts.skipRefCounts ? null : await countReferences(entity, r.id),
         });
       }
       const rules = [...new Set(groupPairs.flatMap((p) => p.evidence.map((e) => e.rule)))];
