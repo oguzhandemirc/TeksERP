@@ -24,6 +24,14 @@ export interface SimilarName {
   code: string | null;
   isActive: boolean;
   score: number;
+  /**
+   * Dolu ise bu satır bir TOMBSTONE: "→ <ad> altına birleşti". Sunucu bunu
+   * BİLEREK döndürür (bkz. `BaseService.findSimilarNames`) — az önce
+   * birleştirilmiş bir adı yeniden yazmak, temizlenen mükerreri DİRİLTİR.
+   * ⚠️ Gösterilmezse satır canlı bir kayıt gibi okunur; 2026-08-22'ye kadar
+   * alan istemcide düşürülüyordu, yani uyarının en değerli hâli görünmüyordu.
+   */
+  mergedIntoName?: string | null;
 }
 
 interface Props {
@@ -73,29 +81,79 @@ export function SimilarNamesWarning({ entity, name, excludeId, scope }: Props) {
     };
   }, [entity, trimmed, excludeId, scope]);
 
-  // Birebir aynı ad ayrı vurgulanır: o "benzer" değil, KESİN mükerrerdir ve
-  // kaydet'e basılırsa sunucu zaten 409 döndürecek.
+  // Birebir aynı ad ayrı vurgulanır: o "benzer" DEĞİL, KESİN mükerrerdir ve
+  // kaydet'e basılırsa sunucu 409 döndürür. Bu yüzden rengi de ayrı: sarı
+  // "dikkat et", kırmızı "bu hâliyle kaydedilemez" demek.
   const exact = useMemo(() => rows.filter((r) => r.score >= 0.999), [rows]);
+  const blocked = exact.length > 0;
+
+  // Birebir olanlar önce — operatörün ilk gördüğü satır en sert olanı olmalı.
+  const ordered = useMemo(
+    () => [...rows].sort((a, b) => b.score - a.score),
+    [rows],
+  );
 
   if (rows.length === 0) return null;
 
+  const tone = blocked
+    ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/50"
+    : "border-amber-400 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/50";
+  const headText = blocked
+    ? "text-red-900 dark:text-red-100"
+    : "text-amber-900 dark:text-amber-100";
+  const bodyText = blocked
+    ? "text-red-900/90 dark:text-red-100/90"
+    : "text-amber-900/90 dark:text-amber-100/90";
+
   return (
-    <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs dark:border-amber-800 dark:bg-amber-950/40">
-      <div className="flex items-center gap-1.5 font-medium text-amber-900 dark:text-amber-200">
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-        {exact.length > 0 ? "Bu ad zaten kayıtlı" : "Benzer kayıtlar var"}
+    // `border-l-4` + `text-sm`: eski hâli `text-xs` idi ve formun içinde
+    // kayboluyordu (kullanıcı: "daha net ve göz önünde olsun"). Uyarı
+    // görülmüyorsa yok demektir.
+    <div
+      role="status"
+      aria-live="polite"
+      className={`rounded-md border border-l-4 p-3 text-sm ${tone}`}
+    >
+      <div className={`flex items-center gap-2 font-semibold ${headText}`}>
+        <AlertTriangle className="h-4 w-4 shrink-0" />
+        <span>
+          {blocked
+            ? "Bu ad zaten kayıtlı — bu hâliyle kaydedilemez"
+            : `Benzer kayıtlar var (${rows.length})`}
+        </span>
       </div>
-      <ul className="mt-1 space-y-0.5 text-amber-900/90 dark:text-amber-200/90">
-        {rows.map((r) => (
-          <li key={r.id} className="flex items-center gap-1.5">
-            <span className="font-medium">{r.name}</span>
-            {r.code && <span className="font-mono text-[11px] opacity-70">{r.code}</span>}
-            {!r.isActive && <span className="opacity-70">(pasif)</span>}
-            {r.score >= 0.999 && <span className="font-medium">— aynı ad</span>}
-          </li>
-        ))}
+
+      <ul className={`mt-2 space-y-1.5 ${bodyText}`}>
+        {ordered.map((r) => {
+          const isExact = r.score >= 0.999;
+          return (
+            <li key={r.id} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className="font-medium">{r.name}</span>
+              {r.code && <span className="font-mono text-xs opacity-70">{r.code}</span>}
+              {!r.isActive && !r.mergedIntoName && (
+                <span className="text-xs opacity-70">(pasif)</span>
+              )}
+              {/* Tombstone: bu ad ARTIK BAŞKA BİR KAYIT. Yeniden yazmak,
+                  temizlenen mükerreri geri getirir — en değerli satır budur. */}
+              {r.mergedIntoName ? (
+                <span className="text-xs font-medium opacity-90">
+                  → “{r.mergedIntoName}” altına birleştirilmiş
+                </span>
+              ) : (
+                <span className="ml-auto shrink-0 text-xs font-medium">
+                  {isExact ? "aynı ad" : `%${Math.round(r.score * 100)} benzer`}
+                </span>
+              )}
+            </li>
+          );
+        })}
       </ul>
-      <div className="mt-1 opacity-80">Aynı kaydı ikinci kez açmıyorsanız devam edebilirsiniz.</div>
+
+      <div className={`mt-2 text-xs ${bodyText}`}>
+        {blocked
+          ? "Aynı ad ikinci kez açılamaz. Farklı bir ad yazın ya da mevcut kaydı düzenleyin."
+          : "Aynı kaydı ikinci kez açmıyorsanız devam edebilirsiniz."}
+      </div>
     </div>
   );
 }

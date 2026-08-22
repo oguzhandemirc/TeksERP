@@ -70,6 +70,40 @@ describe("benzer kayıt uyarısı", () => {
     expect(container.textContent).toBe("");
   });
 
+  it("⭐ BİRLEŞTİRİLMİŞ ad 'şunun altına birleşti' diye işaretlenir", async () => {
+    // En değerli satır bu: az önce temizlenen mükerreri yeniden yazmak onu
+    // DİRİLTİR. Etiket olmadan satır canlı bir kayıt gibi okunur — canlı veride
+    // "OSLO" araması hem canlı kaydı hem tombstone'u AYNI görünümde döndürüyordu.
+    get.mockResolvedValue({
+      data: { data: [row({ name: "OSLO", isActive: false, mergedIntoName: "OSLO ANA" })] },
+    });
+    render(<SimilarNamesWarning entity="items" name="oslo" />);
+    vi.advanceTimersByTime(400);
+    await vi.waitFor(() => expect(screen.getByText(/altına birleştirilmiş/)).toBeTruthy());
+    expect(screen.getByText(/OSLO ANA/)).toBeTruthy();
+    // Tombstone satırında "(pasif)" YAZILMAZ — iki ayrı şey söylemek gürültüdür.
+    expect(screen.queryByText("(pasif)")).toBeNull();
+  });
+
+  it("başlık KAÇ benzer kayıt olduğunu söyler", async () => {
+    get.mockResolvedValue({
+      data: { data: [row(), row({ id: "2", name: "Moda Tekstil", score: 0.8 })] },
+    });
+    render(<SimilarNamesWarning entity="customers" name="moda" />);
+    vi.advanceTimersByTime(400);
+    await vi.waitFor(() => expect(screen.getByText(/Benzer kayıtlar var \(2\)/)).toBeTruthy());
+  });
+
+  it("⭐ birebir eşleşmede 'kaydedilemez' DENİR (sunucu 409 verecek)", async () => {
+    // Sarı "dikkat et", kırmızı "bu hâliyle kaydedilemez" demek. Birebir adda
+    // yumuşak dil kullanmak, kullanıcıyı boş yere forma devam ettirir.
+    get.mockResolvedValue({ data: { data: [row({ score: 1 })] } });
+    render(<SimilarNamesWarning entity="customers" name="moda tekstil" />);
+    vi.advanceTimersByTime(400);
+    await vi.waitFor(() => expect(screen.getByText(/kaydedilemez/)).toBeTruthy());
+    expect(screen.getByText(/Farklı bir ad yazın/)).toBeTruthy();
+  });
+
   it("düzenlemede kaydın kendisi elenir (excludeId gider)", async () => {
     render(<SimilarNamesWarning entity="customers" name="moda tekstil" excludeId="abc" />);
     vi.advanceTimersByTime(400);
