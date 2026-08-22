@@ -212,7 +212,7 @@ export function useOffsiteStatus() {
   return useQuery({
     queryKey: OFFSITE_QUERY_KEY,
     queryFn: async (): Promise<OffsiteStatus> => {
-      const { data } = await apiClient.get("/admin/backups/offsite");
+      const { data } = await apiClient.get("/api/admin/backups/offsite");
       return data.data as OffsiteStatus;
     },
     // Süpürme saatte bir koşuyor; bu ekran açıkken dakikada bir tazelemek yeter.
@@ -224,17 +224,17 @@ export async function updateOffsiteConfig(body: {
   remote?: string;
   localDir?: string;
 }): Promise<{ remote: string; localDir: string }> {
-  const { data } = await apiClient.patch("/admin/backups/offsite", body);
+  const { data } = await apiClient.patch("/api/admin/backups/offsite", body);
   return data.data;
 }
 
 export async function testOffsiteConnection(): Promise<{ ok: boolean; message: string }> {
-  const { data } = await apiClient.post("/admin/backups/offsite/test");
+  const { data } = await apiClient.post("/api/admin/backups/offsite/test");
   return data.data;
 }
 
 export async function sweepOffsiteNow(): Promise<OffsiteStatus["offsite"]> {
-  const { data } = await apiClient.post("/admin/backups/offsite/sweep");
+  const { data } = await apiClient.post("/api/admin/backups/offsite/sweep");
   return data.data.offsite;
 }
 
@@ -249,6 +249,6 @@ export async function authorizeOffsiteDrive(body: {
   name: string;
   token: string;
 }): Promise<{ message: string }> {
-  const { data } = await apiClient.post("/admin/backups/offsite/authorize", body);
+  const { data } = await apiClient.post("/api/admin/backups/offsite/authorize", body);
   return data.data;
 }
