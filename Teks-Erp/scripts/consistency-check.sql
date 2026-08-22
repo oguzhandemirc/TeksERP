@@ -190,6 +190,9 @@ ORDER BY rm."exitedAt" DESC;
 
 \echo ''
 \echo '== 13) currentQty > initialQty (top yalnız kesimle azalır, artamaz) =='
+\echo '   KÖK NEDEN 2026-08-22de kapandı (tambur-undo applySingle canlı dalında aşım'
+\echo '   koruması yoktu). Canlıdaki 2 eski satır BİLEREK düzeltilmedi — toplu UPDATE'
+\echo '   kök nedeni gizler; bu bölüm onları görünür tutar.'
 SELECT id, barcode, "initialQty", "currentQty", status
 FROM rolls
 WHERE "currentQty" > "initialQty";

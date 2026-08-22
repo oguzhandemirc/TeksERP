@@ -5,7 +5,10 @@
 // SAHA VAKASI (IE0808260001, 2026-08-08): operatör BİR topa "Geri Al" dedi,
 // **14 top birden iptal oldu**, 520,5 m kaynağa geri yazıldı, tamamlanmış iş
 // emri diriltildi. Kaynak top o günden beri `initialQty=500` iken
-// `currentQty=520,5` taşıyor (DB'deki TEK böyle satır).
+// `currentQty=520,5` taşıyor. (2026-08-22 düzeltmesi: canlıda BÖYLE İKİ satır var
+// — 2026-08-08 ve 08-11; ikisi de sapma defteri gelmeden önce, §11'de tarif edilen
+// yoldan doğdu. Eski satırlar bilerek düzeltilmedi, `test_consistency §13` görünür
+// tutar; kod tarafı §11 ile kapandı.)
 //
 // Bu bekçi dört kök nedeni de kilitler:
 //   §1 MOD SORULUYOR — `options[]` iki seçeneği de döner, `defaultMode` EN DAR
@@ -17,10 +20,19 @@
 //      (saha vakasının BİREBİR yeniden üretimi)
 //   §6 DEPO KESİMİ ÇIKMAZI kapandı (9 kaynağın 6'sı bu durumdaydı)
 //   §7 Sapma defteri TERSLENİR (hayalet fire kalmaz)
+//   §11 ÜRETİM AKIŞINDA tekil geri alma da AŞIMI KORUR (canlı ↔ arşiv aynası)
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL), finally'de siler.
 // =============================================================================
-import { Prisma, RollStatus, RollVarianceKind } from "@prisma/client";
+import {
+  Prisma,
+  RollEntrySource,
+  RollStatus,
+  RollVarianceKind,
+  StationKind,
+  StationType,
+  StepStatus,
+} from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { TamburService } from "../src/services/tambur.service";
 import { TamburUndoService, UNDO_FULL_PERMISSION } from "../src/services/tambur-undo.service";
@@ -39,6 +51,11 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const tambur = new TamburService();
 const undo = new TamburUndoService();
+
+/** §11 fixture'ı (üretim akışı) — finally'de temizlenir. */
+let s11StepId = "";
+let s11WoId = "";
+let s11StationId = "";
 
 interface Preview {
   mode: string;
@@ -644,6 +661,111 @@ async function main(): Promise<void> {
       "satırlar SİLİNMEDİ (append-only defter)",
       s10ChildVars.length === 2,
     );
+
+    // ── §11 ÜRETİM AKIŞINDA tekil geri alma da AŞIMI KORUR ──────────────────
+    // 2026-08-22, ÖLÇÜLDÜ. §5 aşım invariantını yalnız FULL + DEPO kesiminde
+    // (`cutWarehouseRoll`) ölçüyordu. ÜRETİM akışında (`cutOpenFabric`) tekil
+    // geri almanın kendi dalı vardı ve orada koruma YOKTU: 100 m'lik topa
+    // 40+40+40 kesilir (aşım bayrağı varsayılan AÇIK), `currentQty` 0'a tıkanır;
+    // parçalar tek tek geri alınınca ÜÇÜNCÜSÜNDE `currentQty (120) > initialQty
+    // (100)` oluşuyor ve deftere HİÇ satır düşmüyordu. Canlıda tam bu şekilde
+    // doğmuş 2 satır var (2026-08-08 / 08-11). Arşiv ikizindeki yorum iki yolun
+    // "birebir ayna" olduğunu söylüyordu; ayna burada kırıktı.
+    console.log("\n── §11 ⭐ Üretim akışında tekil geri alma aşımı korur ──");
+    let station = await prisma.station.findFirst({
+      where: { kind: StationKind.TAMBUR, isActive: true },
+      select: { id: true },
+    });
+    if (!station) {
+      station = await prisma.station.create({
+        data: {
+          code: `TEST-UNDO-T-${ts}`,
+          name: "TEST Tambur",
+          type: StationType.INTERNAL,
+          kind: StationKind.TAMBUR,
+        },
+        select: { id: true },
+      });
+      s11StationId = station.id;
+    }
+    const s11Wo = await prisma.workOrder.create({
+      data: { workOrderNumber: `TEST-UNDO-WO-${ts}`, status: "IN_PROGRESS" },
+      select: { id: true },
+    });
+    s11WoId = s11Wo.id;
+    const s11Step = await prisma.workOrderStep.create({
+      data: {
+        workOrderId: s11Wo.id,
+        stationId: station.id,
+        stepSequence: 1,
+        status: StepStatus.ACTIVE,
+      },
+      select: { id: true },
+    });
+    s11StepId = s11Step.id;
+    const s11Parent = await prisma.roll.create({
+      data: {
+        barcode: null, // açık kumaş
+        itemId,
+        width: 150,
+        initialQty: 100,
+        currentQty: 100,
+        status: RollStatus.IN_PRODUCTION,
+        qualityGrade: "1.KALITE",
+        entrySource: RollEntrySource.SUBCONTRACTOR_RETURN,
+        currentStepId: s11Step.id,
+      },
+      select: { id: true },
+    });
+    rollIds.push(s11Parent.id);
+    const s11Kids: string[] = [];
+    for (const len of [40, 40, 40]) {
+      const r = await tambur.cutOpenFabric(s11Parent.id, {
+        lengthMeters: len,
+        status: "WAREHOUSE",
+      });
+      const kid = (r.data as { childRoll: { id: string } }).childRoll.id;
+      s11Kids.push(kid);
+      rollIds.push(kid);
+    }
+    const s11Cut = await prisma.roll.findUnique({
+      where: { id: s11Parent.id },
+      select: { initialQty: true, currentQty: true },
+    });
+    check(
+      "aşımlı üretim kesimi kaynağı tamamen tüketti (100 m'den 120 m çıktı)",
+      Number(s11Cut?.currentQty) === 0 && Number(s11Cut?.initialQty) === 100,
+      `cur=${s11Cut?.currentQty} init=${s11Cut?.initialQty}`,
+    );
+    for (const kid of s11Kids) {
+      await undo.applyUndo(kid, undefined, { mode: "SINGLE", permissions: ADMIN });
+    }
+    const s11After = await prisma.roll.findUnique({
+      where: { id: s11Parent.id },
+      select: { initialQty: true, currentQty: true },
+    });
+    check(
+      "⭐ currentQty > initialQty OLUŞMADI (canlı dalın aşım koruması)",
+      Number(s11After?.currentQty) <= Number(s11After?.initialQty),
+      `cur=${s11After?.currentQty} init=${s11After?.initialQty}`,
+    );
+    check(
+      "initialQty geri konan gerçeğe çekildi (100 → 120)",
+      Number(s11After?.initialQty) === 120,
+      `init=${s11After?.initialQty}`,
+    );
+    // Sessiz düzeltme YASAK: metraj yukarı çekildiyse defterde adresi olmalı.
+    const s11Restore = await prisma.rollVariance.findMany({
+      where: { rollId: s11Parent.id, source: "TAMBUR_UNDO_RESTORE" },
+      select: { qty: true, kind: true },
+    });
+    check(
+      "⭐ yukarı çekilen metraj SAPMA DEFTERİNE yazıldı (TAMBUR_UNDO_RESTORE)",
+      s11Restore.length === 1 &&
+        s11Restore[0]?.kind === RollVarianceKind.OVERAGE &&
+        Number(s11Restore[0]?.qty) === 20,
+      s11Restore.map((v) => `${v.kind}:${v.qty}`).join(",") || "satır yok",
+    );
   } finally {
     if (rollIds.length) {
       const all = await prisma.roll.findMany({
@@ -657,6 +779,12 @@ async function main(): Promise<void> {
       await prisma.roll.deleteMany({ where: { parentRollId: { in: ids } } });
       await prisma.roll.deleteMany({ where: { id: { in: ids } } });
     }
+    if (s11StepId) await prisma.workOrderStep.deleteMany({ where: { id: s11StepId } });
+    if (s11WoId) {
+      await prisma.travelerCard.deleteMany({ where: { workOrderId: s11WoId } });
+      await prisma.workOrder.deleteMany({ where: { id: s11WoId } });
+    }
+    if (s11StationId) await prisma.station.deleteMany({ where: { id: s11StationId } });
     if (itemId) await prisma.item.deleteMany({ where: { id: itemId } });
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();

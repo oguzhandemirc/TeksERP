@@ -1108,10 +1108,44 @@ export class TamburUndoService {
         });
         restoredTo = "VARIANCE";
       } else if (child.producedInStepId != null) {
-        // cutOpenFabric: parent Tambur adımında IN_PRODUCTION olmalı; yalnız currentQty geri.
+        // cutOpenFabric: parent Tambur adımında IN_PRODUCTION olmalı; yalnız currentQty geri
+        // (kesim yalnız onu düşmüştü; `initialQty` orijinal girişte durur).
+        //
+        // ⚠️ AŞIM KORUMASI — `applySingleFromArchive`/`applyFull` ikizlerinin AYNISI
+        // (2026-08-22). Aşımlı kesimde (`tambur.overQuantityEnabled`, varsayılan AÇIK)
+        // çıkan toplam kayıtlı girişi aşabilir: 100 m'lik topa 40+40+40 kesilir,
+        // `currentQty` 0'a tıkanır ve aşım kesim anında deftere yazılır. Parçalar
+        // tek tek geri alınırken metraj geri konur ve ÜÇÜNCÜSÜNDE `currentQty (120)`
+        // kayıtlı girişi (100) AŞAR. Koruma olmadan bu, §13 invariantını kıran
+        // ("top yalnız kesimle azalır, artamaz") ve deftere HİÇ satır bırakmayan
+        // sessiz bir sapma üretiyordu — ölçüldü, canlıda 2 satır bu şekilde doğdu
+        // (2026-08-08 / 08-11, sapma defteri gelmeden önce). Arşiv dalındaki yorum
+        // iki yolun "birebir ayna" olduğunu söylüyordu; ayna BURADA kırıktı.
+        const parentRow = await tx.roll.findUnique({
+          where: { id: parentId },
+          select: { initialQty: true, currentQty: true },
+        });
+        const parentInitial = parentRow?.initialQty ?? new Prisma.Decimal(0);
+        const newCurrent = (parentRow?.currentQty ?? new Prisma.Decimal(0)).plus(len);
+        const initialBump = newCurrent.greaterThan(parentInitial)
+          ? newCurrent.minus(parentInitial)
+          : new Prisma.Decimal(0);
+        if (initialBump.greaterThan(0)) {
+          await recordVarianceTx(tx, {
+            rollId: parentId,
+            workOrderStepId: child.producedInStepId,
+            kind: RollVarianceKind.OVERAGE,
+            qty: initialBump,
+            source: VARIANCE_SOURCES.TAMBUR_UNDO_RESTORE,
+            userId,
+          });
+        }
         const claimed = await tx.roll.updateMany({
           where: { id: parentId, status: RollStatus.IN_PRODUCTION, currentStepId: child.producedInStepId },
-          data: { currentQty: { increment: len } },
+          data: {
+            currentQty: { increment: len },
+            ...(initialBump.greaterThan(0) ? { initialQty: { increment: initialBump } } : {}),
+          },
         });
         if (claimed.count !== 1) {
           throw AppError.conflict("Kaynak top artık Tambur adımında değil — tek parça iptali yapılamadı");

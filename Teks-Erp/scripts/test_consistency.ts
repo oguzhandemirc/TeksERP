@@ -314,6 +314,17 @@ WHERE rm."exitedAt" IS NOT NULL
   },
   {
     id: "13",
+    // KÖK NEDEN BULUNDU (2026-08-22) ve KOD TARAFI KAPANDI — bkz.
+    // `tambur-undo.service.applySingle` canlı dalı + `test_tambur_undo §11`.
+    // Aşımlı kesimden sonra parçalar TEK TEK geri alınırken canlı dalda aşım
+    // koruması yoktu (arşiv ikizinde ve FULL'de vardı): 100 m'lik topa 40+40+40
+    // kesilir, üçüncü geri almada `currentQty(120) > initialQty(100)` oluşur ve
+    // deftere satır DÜŞMEZDİ. Artık `initialQty` yukarı çekilir + OVERAGE yazılır.
+    //
+    // ⚠️ CANLIDAKİ 2 SATIR BİLEREK DÜZELTİLMEDİ (2026-08-08 / 08-11 tarihli, sapma
+    // defteri gelmeden önce doğdular). Toplu UPDATE ile "düzeltmek" bu bölümün
+    // kendi uyarısının ihlali olurdu; kapı onları görünür tutar. İş kararı verilip
+    // düzeltilirse bölüm kendiliğinden yeşile döner — bölümü DARALTMA.
     title: "currentQty > initialQty (top yalnız kesimle azalır, artamaz)",
     sql: `
 SELECT id, barcode, "initialQty", "currentQty", status
