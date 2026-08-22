@@ -45,10 +45,13 @@ export function MergeConfirmGate({
   // Yalnız GERÇEKTEN FARKLI alanlar sorulur: 12 satırlık bir tablo her birleştirmede
   // aynı değeri iki kez gösterirse operatör tabloyu okumayı bırakır (onay yorgunluğu).
   const decisions = preview.fieldChoices.filter((f) => f.differs);
-  const codeOf = (recordId: string): string =>
-    recordId === preview.survivor?.id
-      ? (preview.survivor?.code ?? "hedef")
-      : (preview.sources.find((s) => s.id === recordId)?.code ?? "kaynak");
+  /** Karşılaştırma sütunları: KALACAK önce, sonra birleşecekler. */
+  const columns = [
+    ...(preview.survivor
+      ? [{ id: preview.survivor.id, code: preview.survivor.code, name: preview.survivor.name, isSurvivor: true }]
+      : []),
+    ...preview.sources.map((x) => ({ id: x.id, code: x.code, name: x.name, isSurvivor: false })),
+  ];
 
   if (!preview.canMerge) {
     return (
@@ -122,6 +125,11 @@ export function MergeConfirmGate({
         </div>
       )}
 
+      {/* YAN YANA KARŞILAŞTIRMA (2026-08-22) — kullanıcı geri bildirimi: iki
+          kaydı alt alta madde madde okumak karşılaştırma değildir. Sütun =
+          kayıt, satır = alan; yalnız FARKLI alanlar gelir, seçim radyo ile.
+          ⚠️ Yatay kaydırma sarmalayıcısı load-bearing: 20 kaynağa kadar
+          birleştirme mümkün, sayfa gövdesi yana kaymamalı. */}
       {decisions.length > 0 && (
         <div>
           <h4 className="mb-1 text-sm font-medium">Hangi bilgi kalsın?</h4>
@@ -130,41 +138,72 @@ export function MergeConfirmGate({
             (önerilen) değer kalır: hedefte dolu olan, hedef boşsa en çok kullanılan kaydın değeri.
             Birleşen kayıtlar kendi değerlerini tarihçe olarak korur.
           </p>
-          <div className="space-y-2">
-            {decisions.map((f) => {
-              const selected = fieldPicks[f.field] ?? f.suggestedFromId;
-              return (
-                <div key={f.field} className="rounded border p-2 text-sm">
-                  <div className="mb-1 font-medium">{f.label}</div>
-                  <div className="space-y-1">
-                    {f.values.map((v) => (
-                      <label key={v.recordId} className="flex items-start gap-2">
-                        <input
-                          type="radio"
-                          className="mt-1"
-                          name={`field-${f.field}`}
-                          checked={selected === v.recordId}
-                          onChange={() => onFieldPickChange(f.field, v.recordId)}
-                        />
-                        <span className="min-w-0">
-                          {v.value === null ? (
-                            <span className="text-muted-foreground">(boş)</span>
-                          ) : f.kind === "ref" ? (
-                            <span>atanmış</span>
-                          ) : (
-                            <span className="break-words">{v.value}</span>
-                          )}
-                          <code className="ml-2 text-xs text-muted-foreground">
-                            {codeOf(v.recordId)}
-                            {v.recordId === preview.survivor?.id ? " · hedef" : ""}
-                          </code>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+          <div className="overflow-x-auto rounded border">
+            <table className="w-full min-w-[32rem] border-collapse text-sm">
+              <thead>
+                <tr className="border-b bg-muted/40">
+                  <th className="w-32 p-2 text-left text-xs font-medium text-muted-foreground">
+                    Alan
+                  </th>
+                  {columns.map((c) => (
+                    <th key={c.id} className="min-w-[10rem] p-2 text-left align-top">
+                      <span
+                        className={
+                          c.isSurvivor
+                            ? "text-xs font-semibold text-emerald-700 dark:text-emerald-400"
+                            : "text-xs font-semibold text-muted-foreground"
+                        }
+                      >
+                        {c.isSurvivor ? "KALACAK" : "BİRLEŞECEK"}
+                      </span>
+                      <div className="truncate font-medium" title={c.name}>
+                        {c.name}
+                      </div>
+                      <code className="text-xs text-muted-foreground">{c.code ?? "—"}</code>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {decisions.map((f) => {
+                  const selected = fieldPicks[f.field] ?? f.suggestedFromId;
+                  return (
+                    <tr key={f.field} className="border-b last:border-0">
+                      <td className="p-2 align-top text-xs text-muted-foreground">{f.label}</td>
+                      {columns.map((c) => {
+                        const v = f.values.find((x) => x.recordId === c.id);
+                        const checked = selected === c.id;
+                        return (
+                          <td
+                            key={c.id}
+                            className={`p-2 align-top ${checked ? "bg-emerald-50 dark:bg-emerald-950/30" : ""}`}
+                          >
+                            <label className="flex cursor-pointer items-start gap-2">
+                              <input
+                                type="radio"
+                                className="mt-1 shrink-0"
+                                name={`field-${f.field}`}
+                                checked={checked}
+                                onChange={() => onFieldPickChange(f.field, c.id)}
+                              />
+                              <span className="min-w-0 break-words">
+                                {!v || v.value === null ? (
+                                  <span className="text-muted-foreground">(boş)</span>
+                                ) : f.kind === "ref" ? (
+                                  <span>atanmış</span>
+                                ) : (
+                                  v.value
+                                )}
+                              </span>
+                            </label>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

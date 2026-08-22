@@ -224,7 +224,71 @@ export const duplicateRollsService = {
       .then((r) => r.data),
 };
 
+/**
+ * LİSTE SATIRI (2026-08-22) — panelin ana ekranı artık "öneri listesi" değil
+ * varlığın TAM listesidir; şüpheliler onun üzerinde bir SÜZGEÇTİR.
+ * Gerekçe (kullanıcı): "tüm cari listesini göreyim, arasından kendim seçeyim".
+ */
+export interface DuplicateRecordRow {
+  id: string;
+  code: string | null;
+  name: string;
+  isActive: boolean;
+  /** `null` = ölçülemedi (panel "?" basar), `0` = gerçekten referans yok. */
+  refCount: number | null;
+  suspect: {
+    partnerIds: string[];
+    rules: DuplicateRuleKind[];
+    maxScore: number | null;
+    details: string[];
+    groupKey: string;
+    /** Bu kaydın çiftlerinde verilmiş kararlar — rozet + "Geri aç" için. */
+    reviews: Array<{
+      id: string;
+      partnerId: string;
+      decision: DuplicateReviewDecision;
+      note: string | null;
+      decidedBy: string | null;
+    }>;
+  } | null;
+}
+
+export interface DuplicateRecordList {
+  entity: MergeEntity;
+  rows: DuplicateRecordRow[];
+  total: number;
+  suspectTotal: number;
+  page: number;
+  limit: number;
+  fuzzyEnabled: boolean;
+  thresholdPct: number;
+}
+
 export const mergeService = {
+  /** Varlığın TAM listesi + şüpheli süzgeci — panelin ana ekranı. */
+  records: (
+    entity: MergeEntity,
+    opts: {
+      search?: string;
+      onlySuspect?: boolean;
+      includeInactive?: boolean;
+      includeNotDuplicate?: boolean;
+      page?: number;
+      limit?: number;
+    } = {},
+  ) => {
+    const q = new URLSearchParams({ entity });
+    if (opts.search) q.set("search", opts.search);
+    if (opts.onlySuspect) q.set("onlySuspect", "true");
+    if (opts.includeInactive) q.set("includeInactive", "true");
+    if (opts.includeNotDuplicate) q.set("includeNotDuplicate", "true");
+    if (opts.page) q.set("page", String(opts.page));
+    if (opts.limit) q.set("limit", String(opts.limit));
+    return apiClient
+      .get<ApiResponse<DuplicateRecordList>>(`/api/master-data/duplicates/records?${q}`)
+      .then((r) => r.data);
+  },
+
   duplicates: (entity: MergeEntity) =>
     apiClient
       .get<ApiResponse<DuplicateGroup[]>>(`/api/master-data/duplicates?entity=${entity}`)

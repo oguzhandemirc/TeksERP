@@ -196,6 +196,18 @@ export interface DuplicateRecordRow {
     details: string[];
     /** Grup anahtarı — sıralamada üyeleri bitişik tutar. */
     groupKey: string;
+    /**
+     * Bu kaydın çiftlerinde VERİLMİŞ kararlar. Panel bunu rozet olarak basar ve
+     * "Geri aç" düğmesini buradan çizer — kararı görünür kılmayan bir liste
+     * "mükerrer değil"i TEK YÖNLÜ kapıya çevirirdi (v2'de geri açma vardı).
+     */
+    reviews: Array<{
+      id: string;
+      partnerId: string;
+      decision: string;
+      note: string | null;
+      decidedBy: string | null;
+    }>;
   } | null;
 }
 
@@ -263,6 +275,15 @@ export const DuplicateDetectionService = {
             ),
           ],
           groupKey: g.key,
+          reviews: g.pairs
+            .filter((p) => (p.aId === r.id || p.bId === r.id) && p.review)
+            .map((p) => ({
+              id: p.review!.id,
+              partnerId: p.aId === r.id ? p.bId : p.aId,
+              decision: p.review!.decision,
+              note: p.review!.note,
+              decidedBy: p.review!.decidedBy,
+            })),
         });
       }
     }

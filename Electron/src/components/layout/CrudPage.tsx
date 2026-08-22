@@ -12,6 +12,7 @@ import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { RefreshButton } from "@/components/RefreshButton";
 import { useDataTable } from "@/hooks/useDataTable";
+import { MergeDialog } from "@/components/merge/MergeDialog";
 import { useCrudMutations } from "@/hooks/useCrudMutations";
 import { PermissionGate } from "@/components/PermissionGate";
 import { ImportDialog } from "@/components/import/ImportDialog";
@@ -226,6 +227,13 @@ export function CrudPage<T extends { id: string }>({
   const navigate = useNavigate();
   const isEmpty = glowWhenEmpty && query.isSuccess && !search && !showInactive && pagination.total === 0;
 
+  // BİRLEŞTİRME — listeden doğrudan (2026-08-22, kullanıcı kararı: "cari
+  // listesinde iki satırı işaretleyip oradan birleştireyim"). Diyalog ORTAK
+  // bileşendir; buraya ikinci bir onay kapısı yazmak, korumaların ayrışması
+  // demekti. Seçim `useDataTable`in mevcut satır seçiminden okunur.
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const selectedIds = table.getSelectedRowModel().rows.map((r) => r.original.id);
+
   const headerActions = (
     <>
       {headerExtra}
@@ -233,13 +241,23 @@ export function CrudPage<T extends { id: string }>({
         // Çift kapı — birleştirme ucununkiyle BİREBİR aynı: `master-data:merge`
         // (yetenek) + varlığın write izni (bu veriye dokunabilme).
         <PermissionGate allOf={["master-data:merge", writePermission]}>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => navigate(`/system/duplicates?entity=${mergeEntity}`)}
-          >
-            <Merge className="h-4 w-4" /> Mükerrerler
-          </Button>
+          {selectedIds.length >= 2 ? (
+            // Seçim varsa fiil DEĞİŞİR: panele gitmek yerine seçilenleri
+            // burada birleştirir. Sayı butonda yazılı — "hangi 2 kayıt?"
+            // sorusu tıklamadan önce cevaplanmalı.
+            <Button size="sm" onClick={() => setMergeOpen(true)}>
+              <Merge className="h-4 w-4" /> Seçilenleri Birleştir ({selectedIds.length})
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => navigate(`/system/duplicates?entity=${mergeEntity}`)}
+              title="Sistemin şüpheli bulduklarını incele — ya da listeden iki satır işaretleyip burada birleştir"
+            >
+              <Merge className="h-4 w-4" /> Mükerrerler
+            </Button>
+          )}
         </PermissionGate>
       ) : null}
       {importEntity ? (
@@ -355,6 +373,21 @@ export function CrudPage<T extends { id: string }>({
           // Yükleme bitince liste tazelenir — kullanıcı yazılan kayıtları
           // görmek için sayfayı yenilemek zorunda kalmasın.
           onDone={() => void query.refetch()}
+        />
+      ) : null}
+
+      {mergeEntity ? (
+        <MergeDialog
+          open={mergeOpen}
+          onOpenChange={setMergeOpen}
+          entity={mergeEntity}
+          ids={selectedIds}
+          onMerged={() => {
+            // Birleşen kayıtlar listeden düşer; seçim de temizlenmeli yoksa
+            // artık var olmayan id'ler bir sonraki birleştirmeye taşınır.
+            table.resetRowSelection();
+            void query.refetch();
+          }}
         />
       ) : null}
     </PageShell>
