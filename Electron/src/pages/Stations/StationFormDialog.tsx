@@ -10,6 +10,7 @@ import type { SubcontractorCategory } from "@/pages/SubcontractorCategories/type
 import { stationFormDefaults, stationFormSchema, type StationFormValues } from "./schema";
 import type { Station } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,6 +52,12 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
           )}
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="stations"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Tip" error={form.formState.errors.type} required>

@@ -8,6 +8,7 @@ import type { Station } from "@/pages/Stations/types";
 import { machineFormDefaults, machineFormSchema, type MachineFormValues } from "./schema";
 import type { Machine } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -61,6 +62,13 @@ export function MachineFormDialog({ open, onOpenChange, initial, onSubmit, isSub
           </FormField>
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="machines"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+              scope={form.watch("stationId")}
+            />
           </FormField>
         </>
       )}

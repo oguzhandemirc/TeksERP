@@ -10,6 +10,7 @@ import {
 } from "./schema";
 import type { ReturnReason } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -47,6 +48,12 @@ export function ReturnReasonFormDialog({ open, onOpenChange, initial, onSubmit, 
           )}
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus placeholder="Hasarlı, Yanlış Ürün..." {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="return-reasons"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
           <FormField label="Açıklama" htmlFor="description" error={form.formState.errors.description}>
             <Input id="description" placeholder="Opsiyonel açıklama" {...form.register("description")} />

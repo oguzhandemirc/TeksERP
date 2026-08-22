@@ -32,6 +32,7 @@ import {
 } from "./schema";
 import type { ProductRecipe } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -191,6 +192,12 @@ export function ProductRecipeFormDialog({
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
               <Input id="name" autoFocus placeholder="Patos Gri 038" {...form.register("name")} />
+              {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+              <SimilarNamesWarning
+                entity="product-recipes"
+                name={form.watch("name") ?? ""}
+                excludeId={initial?.id}
+              />
             </FormField>
             <FormField label="Hedef Kumaş" required error={form.formState.errors.targetItemId}>
               <TargetItemPicker

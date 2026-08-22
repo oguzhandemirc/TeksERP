@@ -13,6 +13,7 @@ import {
 } from "./schema";
 import type { FabricProperty } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -68,6 +69,12 @@ export function FabricPropertyFormDialog({
           )}
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus placeholder="Yanmazlık, Su Geçirmezlik..." {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="fabric-properties"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
           <FormField
             label="Kategori"

@@ -15,6 +15,7 @@ import { colorService } from "./service";
 import { colorFormDefaults, colorFormSchema, type ColorFormValues } from "./schema";
 import type { Color } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -69,6 +70,12 @@ export function ColorFormDialog({ open, onOpenChange, initial, onSubmit, isSubmi
           )}
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus placeholder="Mavi, Kırmızı..." {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="colors"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
           <FormField
             label="Renk"

@@ -21,6 +21,7 @@ import {
 } from "./schema";
 import type { ProductionRoute } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -172,6 +173,12 @@ export function RouteFormDialog({
 
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus placeholder="Boyahane + Kurşun + Tambur" {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="routes"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
 
           <FormField label="Açıklama" htmlFor="description" error={form.formState.errors.description}>

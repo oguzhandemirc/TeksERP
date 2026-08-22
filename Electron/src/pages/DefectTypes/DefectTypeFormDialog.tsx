@@ -7,6 +7,7 @@ import { defectSeverityLabels } from "@/types/enums";
 import { defectTypeFormDefaults, defectTypeFormSchema, type DefectTypeFormValues } from "./schema";
 import type { DefectType } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -44,6 +45,12 @@ export function DefectTypeFormDialog({ open, onOpenChange, initial, onSubmit, is
           )}
           <FormField label="Ad" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+            <SimilarNamesWarning
+              entity="defect-types"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
           <FormField label="Şiddet" error={form.formState.errors.severity}>
             <Controller

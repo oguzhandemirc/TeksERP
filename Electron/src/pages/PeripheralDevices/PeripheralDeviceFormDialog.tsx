@@ -20,6 +20,7 @@ import {
 } from "./schema";
 import { connectionTypeLabels, peripheralKindLabels, peripheralReadModeLabels, type PeripheralDevice, type RouteLabelKind } from "./types";
 
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -149,6 +150,12 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
               </FormField>
               <FormField label="Ad" error={form.formState.errors.name} required>
                 <Input {...form.register("name")} placeholder="Tambur Argox" />
+                {/* Mükerreri REDDETMEK yerine ÖNLEMEK — yazarken benzerleri gösterir. */}
+                <SimilarNamesWarning
+                  entity="peripherals"
+                  name={form.watch("name") ?? ""}
+                  excludeId={initial?.id}
+                />
               </FormField>
             </div>
 
