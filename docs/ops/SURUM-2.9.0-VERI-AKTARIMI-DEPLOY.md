@@ -106,10 +106,10 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 27 migration, on iki iş
+## 0) Bu deploy'da ne var — 31 migration, on altı iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **27 bekleyen** gösteriyor.
-On ikisi ayrı iş, hepsi aynı pull'da:
+`migrate status` fabrikanın 14 Ağustos hâline göre **31 bekleyen** gösteriyor.
+On altısı ayrı iş, hepsi aynı pull'da:
 
 | # | Migration | İş |
 |---|---|---|
@@ -130,7 +130,7 @@ On ikisi ayrı iş, hepsi aynı pull'da:
 | 25 | `20260819190000_roll_plan_deviations` | **Plan-sapma defteri** — YENİ tablo (`roll_plan_deviations`) + 8 index + 5 FK. Mevcut tabloya DOKUNMAZ, boş doğar |
 | 26 | `20260819200000_fason_partial_receive` | **Fason kısmi kabul** — 3 tabloya 4 nullable kolon (`clientToken` + unique index, `receivedQty`, `isPartial` DEFAULT false, `remainderClosedAt`); mevcut satırlar etkilenmez |
 | 27 | `20260821120000_roll_variance_source_ref` | **Fason çekmesi defteri** — `roll_variances`'e 1 nullable UUID (`sourceRefId`) + 1 index. Mevcut satırlar NULL kalır, hiçbir yol onları okumaz; `roll_variances` küçük tablo → vardiya içinde uygulanabilir |
-| 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ — YUMUŞAK KAPI** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). Tablo tablo bakar: **mükerrer yoksa index'i kurar, varsa `NOTICE` ile ATLAR** (deploy GEÇER; ilk sürüm "düşer" idi — 2026-08-22'de sıfırlama rafa kalkınca yumuşatıldı). Prod'da bugün 9 grup var → üç tabloda da ATLANIR; temizlik Sistem → Mükerrer Kayıtlar ile yapılınca **aynı dosya yeniden koşulur** (`npx prisma db execute --file …/20260821150000_name_fold_unique_live/migration.sql`, idempotent) → index kurulur. O güne kadar `test_db_invariants` §1 prod'da bu üç satırı KIRMIZI verir (bilerek: "enforce bekliyor") |
+| 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ — YUMUŞAK KAPI** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). Tablo tablo bakar: **mükerrer yoksa index'i kurar, varsa `NOTICE` ile ATLAR** (deploy GEÇER; ilk sürüm "düşer" idi — 2026-08-22'de sıfırlama rafa kalkınca yumuşatıldı). **Prod kopyasında ölçüldü (2026-08-22):** `customers` TEMİZ → index KURULUR; `items` 5 grup ve `subcontractors` 2 grup → o ikisi ATLANIR (NOTICE grupları adıyla yazar), `psql` çıkış kodu **0**. Temizlik Sistem → Mükerrer Kayıtlar ile yapılınca **aynı dosya yeniden koşulur** (`npx prisma db execute --file …/20260821150000_name_fold_unique_live/migration.sql`, idempotent) → index kurulur. O güne kadar `test_db_invariants` prod'da **yalnız kurulmayan** satırları KIRMIZI verir (ölçüldü: 86 geçti / 2 başarısız — `items_nameFold_key` + `subcontractors_nameFold_key`; bilerek: "enforce bekliyor") |
 | 29 | `20260821150100_roll_reason_codes` | **Sebep KODU topun satırında** — `rolls`'a 2 nullable VARCHAR(64) (`entryReasonCode`, `cancelReasonCode`); metadata-only, index yok, vardiya içinde uygulanabilir. Kodu sunucu metinden türetir → APK değişmeden dolar; eski satırlar NULL (geriye doldurulmaz; sıfırlama sonrası zaten yok) |
 | 30 | `20260821220000_reason_preset_legacy_texts` | **Hazır sebep ESKİ ADLARI** — `reason_presets.legacyTexts TEXT[]` (DEFAULT boş dizi, additive). Etiket/metin düzenlenince eskisi listeye düşer; bayat listeli tablet eski metni gönderince kod yine çözülür (anomali taramasında ölçüldü). Onlarca satırlık tablo, vardiya içinde uygulanabilir |
 | 31 | `20260822120000_duplicate_reviews` | **Mükerrer inceleme kuyruğu (panel v2 P1)** — YENİ tablo `duplicate_reviews` + 2 enum (`DuplicateReviewEntity`, `DuplicateReviewDecision`); mevcut tablolara DOKUNMAZ, boş doğar. Tespit motoru adayları her taramada yeniden hesaplar, burada yalnız KARAR saklanır ("mükerrer değil" / "ertelendi" / "birleştirildi"). Yeni ayar anahtarları boot'ta gerekmez (okuma varsayılana düşer: bulanık açık, eşik %90) |
@@ -349,7 +349,19 @@ npx tsx scripts/test_db_invariants.ts        # 79 kontrol — şema-dışı DB n
 npx tsx scripts/test_schema_drift.ts         # repo datamodel ↔ canlı DB
 npx tsx scripts/find_fold_duplicates.ts      # mükerrer ad raporu (yazmaz)
 npx tsx scripts/test_master_data_merge_fk_coverage.ts   # saf statik analiz (şema metni + DMMF), DB'ye HİÇ dokunmaz
+npx tsx scripts/test_consistency.ts          # 22 bölüm veri mutabakatı (salt-okunur — asıl değeri BURADA)
 ```
+
+> **`test_consistency` canlıda koşmak İÇİN yazıldı** ve prod kopyasında ölçüldü
+> (2026-08-22): **19/22 temiz**. Kalan üçü üç FARKLI şey demek — ayırmadan
+> "drift düzelt" deme:
+>
+> | Bölüm | Ne çıkıyor | Anlamı |
+> |---|---|---|
+> | **§13** `currentQty > initialQty` | 2 satır (2026-08-08 / 08-11) | **KOD HATASIYDI, bu sürümde kapandı** (`tambur-undo` üretim dalında aşım koruması yoktu). Eski 2 satır **bilerek düzeltilmedi** — toplu UPDATE kök nedeni gizler; düzeltmek iş kararıdır. Yeni satır ÇIKMAMALI. |
+> | **§18** ad mükerreri | 3 satır | **İŞ KARARI** — Sistem → Mükerrer Kayıtlar ile birleştirilir. Katlanmış ada göre: kumaş 5 · renk 3 · fason 2 grup. |
+> | **§20** adım durumu | 1 satır (`IE0608260004`) | **SORGUNUN KÖR NOKTASI** — adımın tek topu sonradan iptal edildi; adım durumu tarihsel olgudur, veri bozuk değil. Aksiyon YOK. |
+
 
 > ⚠️ **`test_master_data_merge.ts` ve `test_master_data_merge_conflicts.ts`
 > CANLIDA KOŞULMAZ.** İkisi de gerçek kayıt yaratıp gerçekten birleştirir
