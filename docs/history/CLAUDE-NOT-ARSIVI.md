@@ -399,3 +399,66 @@
 > **NOT (2026-08-22 — MÜKERRER PANELİ v2 P1 UYGULANDI):** Kullanıcı kararları: kapsam ana veri 4'lü + şube + toplar + istasyon/makine/kategori (P1'de yalnız 4'lü — motor desteği olmayan varlık kuyruğa girmez) · tespit kesin ad + kimlik + bulanık · eşik panelden · karar çift bazlı · hayalet topta asıl = etiketi basılan/hareket gören. **Kod:** `constants/duplicate-rules.ts` (kimlik kuralları: müşteri VKN/ihracat kodu/e-posta/telefon, fason VKN/telefon, kumaş kod harf-ikizi; renk hex BİLİNÇLİ YOK — canlıda `#ffffff` 7 meşru beyaz; gürültü kelimeleri; `FUZZY_PROFILE` FIRM/PRODUCT) · `utils/string-similarity.ts` (Jaro-Winkler, token-SORT, numerik token koruması, `compactKey`, `firmNameSimilarity`/`productNameSimilarity`) · `duplicate-detection.service` (tarama, union-find gruplama, referans sayısı, CSV) · `duplicate-review.service` (+ `DuplicateReview` tablosu, migration `20260822120000`) · merge hook MERGED · uçlar `/api/master-data/duplicates/candidates[.csv] | /reviews` · Electron `DuplicatesPage` (gerekçeli gruplar, çift başına Ertele/Mükerrer değil/Geri aç, CSV) · ayar dört kapı · bekçi `test_duplicate_detection` (55). **Canlı kopyada (2026-08-22 dump) üç tur ölçüm, her tur kuralı düzeltti:** ① `token_set_ratio` alt-küme adları %100 sayıyordu ("MODA" ⊂ "MODA ANKARA") → token-sort; ② kumaş/renkte gürültü listesi tek harfli ön ekleri ("A.GRİ", "S.BEYAZ") siliyor, Jaro-Winkler ön ek bonusu varyant ailelerini ("KRİSTAL GÜMÜŞ-EKRU/-GRİ", "ACTİVO SİYAH-(KREM/BEYAZ …)") %93-95'e çıkarıyordu → PRODUCT profili (gürültü yok, token sayısı eşit, JW yok); ③ birleşik token-sort oranı uzun ortak token'larla tek farklı kelimeyi sulandırıyordu (tag'li fixture'da "ekru"↔"gri" %90) → sıralı token çiftlerinin EN DÜŞÜK oranı. Sonuç: kumaş bulanık 9 yanlış pozitif grup → 1 gerçek (MIKROCANVAS/MİKRO CANVAS), renk 9 → 2 (kelime sırası; insan incelesin), müşteri 1 (BOYER EMRE/BOYER %90). Ders: bulanık kural **kayıt ailesinin yapısına** göre profillenmeli; tek genel skor ya gürültü ya da körlük üretir.
 > • **4. TUR — KARŞILAŞTIRMA BİRİMİ KARAKTER DEĞİL KELİME (aynı gün, saha kararı):** Canlı kopyada müşteri tarafındaki tek bulanık aday `BOYER EMRE | BOYER` idi; kullanıcı **"farklı firma"** dedi. Ölçüldü: Jaro-Winkler **0.900** (tam eşikte), token-sort **0.500** — skoru eşiğe taşıyan şey JW'nin ORTAK ÖN EK BONUSU, yani adın sonuna eklenen ANLAMLI kelimeyi ("EMRE") yok sayması ("MODA" ↔ "MODA ANKARA" da aynı yoldan gelirdi). **JW kaldırıldı**; skor artık SIRALI KELİME HİZALAMASI (kelimeler sıralanır, karşılıklı eşlenir, eşi olmayan 0 alır): FIRM = çiftlerin ortalaması (gürültü kelimeleri düşülmüş), PRODUCT = en düşük çift + kelime sayısı eşitliği; iki profilde de sıkıştırılmış metin eşitse 1. Yan kazanç: eşik OKUNABİLİR bir ölçek oldu (%100 yazım/boşluk · %90 neredeyse aynı · %80 tek harf hatası) ve "fazladan anlamlı kelime" sınıfı HİÇBİR eşikte gelmiyor (0.50) — eskiden %80'e inince de geliyordu. Canlı kopyada eşik %90 ve %80 AYNI sonucu veriyor: müşteri 0 · kumaş 8 grup (1 bulanık: MIKROCANVAS/MİKRO CANVAS %100) · renk 5 (2 bulanık: kelime sırası) · fason 3. Bekçi 60 kontrol. **Ders:** bulanık eşleştirmede karakter benzerliği (JW/trigram) İSİM ALANLARINDA yanıltıcıdır — insan "kelime ekledi mi" diye bakar, algoritma da öyle bakmalı.
 > • **P2–P5 UYGULANDI (2026-08-22 gecesi, kullanıcı "planı bitir" dedi):** ① **P2 alan-bazlı survivorship** — `merge-fields.ts` kataloğu (müşteri 12 · fason 5 · renk 3 · kumaş 1); `code` HİÇBİR varlıkta seçilemez (belgeye basılır + `@unique`; kaynağın kodunu taşımak tombstone'un kimliğini bozar), kimlik alanları zaten blocker. Seçim **DEĞER değil KAYIT** üzerinden (`fieldPicks[alan]=kayıtId`) — serbest metin alınsaydı uç, birleştirme kılığında sınırsız bir alan düzenleme API'si olurdu. Öneri kuralı MDM standardı (completeness → trust → recency). **⚠️ SIRA LOAD-BEARING:** survivor alan yazımı ATOMİK CLAIM'DEN SONRA — kaynaklar tombstone olduktan sonra partial UNIQUE onları dışlar; önce yazsaydık en sık senaryo ("kaynağın adını hedefe taşı") P2002 verirdi. Ad seçiminde grup dışı canlı eş → 409. İki ayrı audit satırı (kaynakta MERGE, survivor'da MERGE_FIELDS). Bekçi 54. ② **P3 kapsamı ÖLÇÜMLE önceliklendirildi:** canlıda şube 0 · istasyon/makine/kategori 0 · **top 6 küme / 8 fazla** → yalnız **P3c** yapıldı, diğerleri reçetesiyle ertelendi (sıfır ihtiyaç için üretim-kritik FK'lara yeni yazma yolu açmak yanlış). P3c'de fiil BİRLEŞTİRME DEĞİL İPTAL (top işlem kaydıdır; iki kaydı birleştirmek metrajı toplamak olurdu) — `MUKERRER` koduyla, topun KENDİ ucundan (`DELETE /api/rolls/:id`), toplu iptal ucu BİLİNÇLİ YOK ki etiket/çuval/sevk guard'ları atlanmasın; "asıl" = etiketi BASILAN top (sahadaki kâğıt onu gösteriyor); tespit `duplicate-rolls.service`e taşındı ve `find_duplicate_rolls.ts` artık yalnız YAZICI (script↔panel ayrışması yapısal olarak imkânsız). Bekçi 16. ③ **P4 CSV köprüsü** `apply_merge_decisions.ts` (dry-run varsayılan): dosya hataları TOPLU raporlanır ve hiçbir şey uygulanmaz, her satır önizlemeden geçer, `--apply`da düşen satır diğerlerini durdurmaz. **İnceleme SQL'de, uygulama MOTORDA** — ham UPDATE 42 kurallık FK haritasını, çakışma politikalarını, etiket/kart bayatlatmasını, advisory kilidi ve audit'i atlar. Canlı kopyada uçtan uca denendi (fason birleştirme + renk "mükerrer değil" → tarama 3→2 grup, çift gizlendi). ④ **P5:** enforce komutunu `find_fold_duplicates` temiz çıktıda kendisi yazdırıyor; kimlik alanına (VKN) DB seddi **bilinçli konulmadı** — aynı tüzel kişiye ikinci cari kart meşru bir iş kararı olabilir; kimlik alanı sektörde *eşleştirme sinyalidir*, tekillik kısıtı değil.
+
+### 2026-08-22 — §13 kök nedeni: tekil geri almada AŞIM KORUMASI canlı dalda yoktu (ayna kırıktı)
+
+Mükerrer paneli bitince, kullanıcının kararını bekleyen iki canlı-veri bulgusu (`§13`, `§20`)
+**prod kopyasına karşı** ölçüldü (`tekserp_saha_0822`; `test_consistency` salt-okunurdur ve canlı
+DB'ye karşı koşulabilecek şekilde yazılmıştır — asıl değeri orada). Sonuç: 22 bölümün **19'u
+temiz**, üç sapma var ve üçünün de niteliği farklı.
+
+**§13 (`currentQty > initialQty`) — 2 satır, KÖK NEDEN BULUNDU ve KOD TARAFI KAPANDI.**
+İki topun ikisi de `SUBCONTRACTOR_RETURN`, ikisinde de `TAMBUR_UNDO_REOPEN` hareketi var, ikisinin
+de TÜM çocukları `CANCELLED` ve birinde `currentQty` çocukların toplamına **birebir eşit** (698,9).
+Yani metraj bir geri almayla geri konmuş. `tambur-undo.applySingle` üç dala ayrılıyor:
+
+| Dal | Ne yapar | Aşım koruması |
+|---|---|---|
+| `parentArchived` | metraj geri DÖNMEZ, `RECORD_CORRECTION` yazılır | — (konu dışı) |
+| `producedInStepId != null` → **`cutOpenFabric` (ÜRETİM)** | yalnız `currentQty` geri | **YOKTU** |
+| else → `cutWarehouseRoll` (DEPO) | `currentQty` **ve** `initialQty` geri | yapısal olarak gereksiz |
+
+Arşiv ikizi (`applySingleFromArchive`) ve `applyFull` ise `initialBump` hesaplayıp `initialQty`'yi
+yukarı çekiyor **ve** deftere `OVERAGE`/`TAMBUR_UNDO_RESTORE` yazıyor. Üstelik arşiv dalının kendi
+yorumu iki yolun *"birebir aynası"* olduğunu ve *"ayna bozulursa aynı kesimin canlı/arşiv geri alması
+farklı muhasebe üretir"* dediğini söylüyordu — **ayna tam burada kırıktı.**
+
+**Erişilebilirlik doğrulandı, varsayılmadı:** `tambur.overQuantityEnabled` **varsayılan AÇIK** ve canlı
+DB'de bu anahtarın satırı **hiç yok** → üretimde açık. Senaryo sonda ile üretildi: 100 m kayıtlı topa
+40+40+40 kesilir (aşım kesim anında deftere yazılır, `currentQty` 0'a tıkanır), parçalar tek tek geri
+alınır → **üçüncüsünde** `currentQty(120) > initialQty(100)` ve deftere **hiç** satır düşmez.
+
+    öncesi:  init=100 cur=120 · OVERAGE=1  ⛔
+    sonrası: init=120 cur=120 · OVERAGE=2  ✅
+
+Düzeltme arşiv ikizinin kalıbının **birebir aynısı** — yeni semantik yok: `TAMBUR_UNDO_RESTORE`
+kaynağı 5b terslemesinin zaten kapsamı dışında (tersleme süzgeci bilerek dar: yalnız
+`TAMBUR_FINALIZE`/`TAMBUR_WAREHOUSE_FINALIZE`; kesim anı aşımı da kapsam dışı, çünkü *kesimler
+gerçekten yapıldı*).
+
+- **Bekçi `test_tambur_undo §11`** (4 kontrol). §5 bu invariantı yalnız **FULL + DEPO kesiminde**
+  ölçüyordu; üretim akışının kendi dalı **ölçüsüzdü** — bekçinin kör noktası, hatanın kendisiyle
+  aynı yerdeydi. Negatif sondayla kırmızı verdiği kanıtlandı (koruma devre dışı → 3 kontrol düştü),
+  dosya `md5` ile birebir geri yüklendi.
+- ⚠️ **Canlıdaki 2 satır BİLEREK düzeltilmedi.** İkisi de 2026-08-08 / 08-11 tarihli, yani sapma
+  defteri (`RollVariance`, 2026-08-19) gelmeden önce doğdular. Toplu `UPDATE` §13'ün kendi uyarısının
+  ihlali olurdu ("geçmiş satırları toplu UPDATE ile düzeltmek kök nedeni gizler"); kapı onları
+  görünür tutar ve düzeltmek bir **iş kararıdır**. Bölümü DARALTMA — düzeltilirse kendiliğinden
+  yeşile döner.
+
+**§18 (ad mükerreri) — 3 satır, doğrudan yeni panelin işi.** `items: BGR 150 ŞEFFAF` ·
+`colors: 1195-GRİ` · `colors: ALTIN-EKRU`. Katlanmış ada göre bakınca (`find_fold_duplicates`,
+prod kopyası): **kumaş 5 grup · renk 3 · fason 2**. Kumaş ve fason **sedli tablolar** → yumuşak kapı
+o iki tabloda index'i ATLIYOR; birleştirilince migration yeniden koşulup enforce edilir. Renk sedsiz
+(gözlem). Yani "sed neden eksik" sorusunun cevabı artık **panelin ekranında**.
+
+**§20 (`WorkOrderStep.status`) — 1 satır, ZARARSIZ ve yapısal.** `IE0608260004` / Kurşun+KK2 adımı
+`COMPLETED`, ama adımın tek topu (`T080826F0001`) sonradan iptal edildi → türetilen değer
+`PENDING`'e çöküyor. Adım durumu **tarihsel bir olgudur** (2026-08-06'da gerçekten tamamlandı);
+`recomputeStepStatus` ölü topları saymadığı için mutabakat onu sapma sanıyor. Veri bozuk DEĞİL,
+mutabakat sorgusunun kör noktası — düzeltme gerekirse §20'ye "adımın tüm topları ölü statüdeyse
+`COMPLETED` meşrudur" süzgeci eklenir, veriye dokunulmaz.
+
+**Ders:** bir mutabakat kapısının kırmızısı üç ayrı şey demek olabilir — *kod hatası* (§13),
+*iş kararı bekleyen veri* (§18), *sorgunun kör noktası* (§20). Üçünü ayırmadan "drift düzelt"
+demek, ikisini yanlış yerden onarır.
