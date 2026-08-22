@@ -29,7 +29,6 @@ import {
 import { MERGE_ENTITIES } from "../constants/merge-map";
 import { DuplicateDetectionService } from "../services/duplicate-detection.service";
 import { DuplicateReviewService } from "../services/duplicate-review.service";
-import { findSimilarNames } from "../services/similar-name.service";
 
 const router = Router();
 
@@ -50,34 +49,6 @@ function requireEntityWrite(req: Request, _res: Response, next: NextFunction): v
     return next(
       AppError.forbidden(
         `'${adapter.label}' kayıtlarını birleştirmek için '${adapter.writePermission}' yetkisi de gerekli.`,
-      ),
-    );
-  }
-  next();
-}
-
-/**
- * Varlığın OKUMA kapısı — benzer-ad ucu için (2026-08-22).
- * Yazabilen okuyabilir: kayıt OLUŞTURAN kişinin elinde write izni vardır ama
- * read ayrı satır olduğu için atanmamış olabilir; uyarıyı bu yüzden susturmak,
- * tam da önlenmek istenen mükerrer kaydı doğurur.
- */
-function requireEntityRead(req: Request, _res: Response, next: NextFunction): void {
-  if (!req.user) return next(AppError.unauthorized("Kimlik doğrulama gerekli."));
-  let adapter;
-  try {
-    adapter = getImportAdapter(String(req.query.entity ?? ""));
-  } catch (e) {
-    return next(e);
-  }
-  const perms = req.user.permissions;
-  if (
-    !matchesPermission(perms, adapter.readPermission) &&
-    !matchesPermission(perms, adapter.writePermission)
-  ) {
-    return next(
-      AppError.forbidden(
-        `'${adapter.label}' kayıtlarını görmek için '${adapter.readPermission}' yetkisi gerekli.`,
       ),
     );
   }
@@ -268,48 +239,6 @@ router.get(
         includeInactive: q.includeInactive === "true",
         includeNotDuplicate: q.includeNotDuplicate === "true",
         page: q.page,
-        limit: q.limit,
-      });
-      res.json({ success: true, data });
-    } catch (e) {
-      next(e);
-    }
-  },
-);
-
-const similarQuerySchema = z.object({
-  entity: z.string().trim().min(1).max(64),
-  name: z.string().max(300),
-  scopeId: z.uuid().optional(),
-  excludeId: z.uuid().optional(),
-  limit: z.coerce.number().int().min(1).max(25).optional(),
-});
-
-/**
- * @openapi
- * /api/master-data/similar-names:
- *   get:
- *     tags: [MasterData]
- *     summary: "Yazılan ada benzer mevcut kayıtlar (mükerrer kaydı OLUŞMADAN önce göster)"
- *     description: >
- *       Tanım formları yazarken çağırır. Kural `ImportAdapter.nameGuard`ten okunur,
- *       yani uyarı YAZMA yolundaki bekçinin reddedeceği şeyi gösterir.
- *       `master-data:merge` GEREKMEZ — bu bir kayıt OLUŞTURMA yardımıdır.
- *     security: [{ bearerAuth: [] }]
- *     responses:
- *       200: { description: Benzer kayıtlar }
- *       400: { description: Varlık bilinmiyor ya da ad kontrolü tanımlı değil }
- */
-router.get(
-  "/similar-names",
-  verifyToken,
-  requireEntityRead,
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const q = similarQuerySchema.parse(req.query);
-      const data = await findSimilarNames(q.entity, q.name, {
-        scopeId: q.scopeId ?? null,
-        excludeId: q.excludeId ?? null,
         limit: q.limit,
       });
       res.json({ success: true, data });
