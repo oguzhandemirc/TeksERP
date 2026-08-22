@@ -340,6 +340,48 @@ npx tsx scripts/fix_workorder_type_from_links.ts --apply    # STOCK_PRODUCTION �
 İdempotent (ikinci koşumda 0). CANCELLED/SUPERSEDED dışarıda. Vardiya içinde
 koşulabilir (13 satırlık UPDATE). Aynı kural `create()`/`replace()` için de sunucuya alındı (STOK + satır gövdesi → ORDER). Ters yön de kapandı: `unlinkOrderLine` son bağda ve sipariş iptali `UNLINK_ONLY` tek-siparişli iş emrinde tipi STOK'a döndürür; tabletteki "son bağ kaldırılamaz" aynası yeni APK ile açılır (eski APK yalnız fazladan engeller — backend önce güvenli). Script tersini (ORDER ama bağsız) **yapmaz** — yedekte 0 kayıt.
 
+## 5c) Mükerrer ad temizliği — 9 grup, karar dosyası HAZIR (2026-08-22)
+
+Prod kopyasında (22 Ağustos dump'ı) **10 mükerrer ad grubu** ölçüldü; dokuzunda hangi kaydın
+kalacağı belliydi (bir taraf tamamen boş) ve kararlar kullanıcıyla alındı. Karar dosyası
+depoda: **`docs/ops/mukerrer-kararlari-2026-08-22.csv`**.
+
+```powershell
+# 1) KURU KOŞUM (hiçbir şey yazmaz) — her satır tek tek listelenir
+npx tsx scripts/apply_merge_decisions.ts --file=docs/ops/mukerrer-kararlari-2026-08-22.csv
+# 2) Çıktı beklendiği gibiyse UYGULA
+npx tsx scripts/apply_merge_decisions.ts --file=docs/ops/mukerrer-kararlari-2026-08-22.csv --apply
+```
+
+| Ne kalıyor | Ne birleşiyor | Neden |
+|---|---|---|
+| kumaş `ACTIVO` | `activo` | 3 top + 2 iş emri kalanda, kaynak boş |
+| kumaş `BGR150SEFFAF` | `bgr150seffaf` | sipariş satırı kalanda, kaynak boş |
+| kumaş `kristal` | `kristal0` | 6 top kalanda, kaynak boş+pasif |
+| kumaş `OSLO` | `oslo` | sipariş satırı kalanda, kaynak boş+pasif |
+| renk `RNK-260722-1862` (BEYAZ) | `RNK-260716-1550` | 44+16 kalanda; kaynaktaki 6 top TAŞINIR |
+| renk `RNK-260717-8123` (1195-GRİ) | `RNK-260722-9804` | ikisi de boş → önce açılan korunur |
+| renk `RNK-260717-3977` (ALTIN-EKRU) | `RNK-260723-3608` | ikisi de boş → önce açılan korunur |
+| fason `FSN-260716-2602` (Kartelacı Emine) | `KARTELAAS` | eski kurulum kodu pasif + hiç kullanılmamış |
+| fason `FSN-260716-1259` (Şahin Zımpara) | `KESTEL` | eski kurulum kodu pasif + hiç kullanılmamış |
+
+⚠️ **`V-1430` BİLEREK DIŞARIDA.** İki kayıt da boş ve pasif ama **kodları farklı** (`BGR150` /
+`MC155`) — muhtemelen iki ayrı kumaşa yanlışlıkla aynı ad verilmiş. Birleştirmek birini
+kaybettirir; karar işletmenindir. Bu yüzden **`items` seddi enforce edilemez**, `customers`
+ve `subcontractors` edilir.
+
+**Kopyada ölçülen sonuç (uygulandıktan sonra):**
+- `find_fold_duplicates` → 10 grup **→ 1** (yalnız V-1430).
+- Sed migration'ı yeniden koşuldu → `customers` + **`subcontractors` kuruldu**, `items` atlandı.
+- `test_db_invariants` 86/2 **→ 87/1** · `test_consistency` 19/22 **→ 20/22** (§18 YEŞİL).
+- Veri kaybı yok: BEYAZ rengi 44+6 = **50** topla tek kayda indi; birleşen kayıtlar silinmedi,
+  izleri duruyor ve karar defterine `MERGED` yazıldı (panel bir daha aday olarak sormaz).
+
+> ⚠️ Canlıda kodlar dump'tan sonra değişmiş olabilir. Script **kuru koşum varsayılan**dır ve
+> bulamadığı kodu satır satır hata olarak basar — önce (1)'i koş, çıktıyı oku, sonra (2).
+> Seed/demo script'lerinde `KESTEL`/`KARTELAAS` adı geçiyor ama **`src/` içinde atıf YOK**;
+> ikisi de canlıda hiç koşmaz.
+
 ## 6) Canlıda koşulması GÜVENLİ bekçiler
 
 `npm test` **koşma** (fixture yazar). Bunlar salt-okunur:

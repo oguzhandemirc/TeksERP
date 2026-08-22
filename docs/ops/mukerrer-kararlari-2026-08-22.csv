@@ -1,0 +1,10 @@
+varlik;hedefKod;kaynakKodlar;karar;gerekce;alanSecimleri
+item;ACTIVO;activo;BIRLESTIR;3 top ve 2 is emri ACTIVO kaydinda, digeri tamamen bos;
+item;BGR150SEFFAF;bgr150seffaf;BIRLESTIR;siparis satiri BGR150SEFFAF kaydinda, digeri tamamen bos;
+item;kristal;kristal0;BIRLESTIR;6 top kristal kaydinda, digeri bos ve pasif;
+item;OSLO;oslo;BIRLESTIR;siparis satiri OSLO kaydinda, digeri bos ve pasif;
+color;RNK-260722-1862;RNK-260716-1550;BIRLESTIR;44 top ve 16 siparis aktif kayitta, pasif kayitta 6 top var;
+color;RNK-260717-8123;RNK-260722-9804;BIRLESTIR;ikisi de bos, once acilan kayit korunur;
+color;RNK-260717-3977;RNK-260723-3608;BIRLESTIR;ikisi de bos, once acilan kayit korunur;
+subcontractor;FSN-260716-2602;KARTELAAS;BIRLESTIR;eski kurulum kodu pasif ve kullanilmamis, fabrikanin karti aktif;
+subcontractor;FSN-260716-1259;KESTEL;BIRLESTIR;eski kurulum kodu pasif ve kullanilmamis, fabrikanin karti aktif;
