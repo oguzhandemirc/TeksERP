@@ -3,6 +3,13 @@
 > **Commit:** `32d71191` (dal `adnansahin`) · **APK:** 2.9.6 / vc53
 > **Migration:** 2 bekliyor · **Yeni izin:** YOK · **Seed:** YOK
 > **Sıra pazarlık dışı: BACKEND → ELECTRON → APK**
+>
+> ✅ **1) BACKEND SAHADA KURULDU — 2026-08-25 15:02, paket `dee217f`** (`32d71191` +
+> yalnız `docs/`+`deploy/` commit'leri; backend kodu aynı), kesinti **18 sn**, 2 migration
+> uygulandı, renk seddi kuruldu (0 mükerrer), boot uzlaştırması 6 sebep yazdı. Canlı DB'de
+> bekçiler: `test_db_invariants` 91/91 · `test_schema_drift` 4/4 · `test_fold_contract` 40/40
+> (kanıt: `docs/history/dev-gonderi-2026-08-25/kanit/`). Paket `D:\tekserp-build\tekserp`'ten
+> üretildi — §0/§1 buna göre düzeltildi. **2) Electron ve 3) APK bekliyor.**
 
 Sunucudaki oturum bu reçeteden başka bir şey görmez. Genel anlatım
 `DEPLOY-RUNBOOK.md §3`; burada YALNIZ bu sürüme özgü olanlar var.
@@ -16,25 +23,26 @@ kurulumu YEDEKSİZ siliyordu** (`app\`'a bakan açık bir Explorer/terminal yete
 Sunucudaki kopya güncel değilse ÖNCE onu güncelle:
 
 ```powershell
-cd C:\Etkili-Yazilim\tekserp
-git sparse-checkout add deploy      # ilk seferde
+cd D:\tekserp-build\tekserp         # BUILD klonu (tam). C:\Etkili-Yazilim\tekserp sparse + dar refspec — kullanma
 git pull
 Get-FileHash .\deploy\kur.ps1, C:\Etkili-Yazilim\kur.ps1 | Format-Table Path,Hash
 # Hash'ler FARKLIYSA:
 Copy-Item .\deploy\kur.ps1 C:\Etkili-Yazilim\kur.ps1 -Force
 ```
 
-Ayrıntı: `deploy/README.md`.
+Ayrıntı: `deploy/README.md`. ⚠️ `kur.ps1` 2026-08-25'te bir kez daha değişti ("Son yedek:"
+satırı `/health`'ten değil `backups\` klasöründen okur) → 15:02 kurulumundan sonra hash
+**yine farklı** çıkar; kopyayı tekrarla. Bu adım her deploy'da koşar, atlanmaz.
 
 ---
 
 ## 1) BACKEND (yönetici PowerShell — pm2 daemon SYSTEM)
 
 ```powershell
-cd C:\Etkili-Yazilim\tekserp
-git pull                                    # 32d71191 gelmeli
-.\paketle.ps1 -Cikti C:\Etkili-Yazilim
-C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-32d7119.zip -Zorla
+cd D:\tekserp-build\tekserp                 # BUILD klonu; ağaç TEMİZ olsun (kirliyse paketle Read-Host'ta asılır)
+git pull                                    # dalın ucu (15:02'de dee217f idi)
+.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim
+C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-<commit>.zip -Zorla
 ```
 
 `kur.ps1` dokuz adımı yapar; **adım 3'te `premigrate_<damga>.dump` alır** (rotasyon
@@ -116,8 +124,8 @@ toplar silinir. versionCode 53 > 52 olduğu için üzerine kurulum sorunsuz.
 
 ## UYGULANDI
 
-- [ ] 0) kur.ps1 güncel
-- [ ] 1) Backend + 2 migration + kontroller (a)(b)(c)
+- [x] 0) kur.ps1 güncel — 2026-08-25, sunucu Claude oturumu (SAHINSRV): hash eşit doğrulandı, Windows harness 12/12 ↔ orijinal 8/12. ⚠️ Aynı gün `kur.ps1` bir kez daha değişti (A maddesi) → sıradaki deploy'da §0 tekrar kopyalar.
+- [x] 1) Backend + 2 migration + kontroller (a)(b)(c) — 2026-08-25 15:02, paket `dee217f`, kesinti 18 sn; geri dönüş `app.eski-20260825_145930` + `premigrate_20260825_145930.dump` (+ `D:\tekserp-build\app-guvenlik-kopyasi-20260825_145601`)
 - [ ] 2) Electron dağıtıldı
 - [ ] 3) APK kuruldu
-- Tarih / kim:
+- Tarih / kim: 0–1: 2026-08-25 15:02 — sunucu Claude Code oturumu (SAHINSRV\Administrator); 2–3: …

@@ -1,0 +1,41 @@
+﻿kur.ps1 geri-alma harness'i - Windows kosumu (PowerShell 5.1, SAHINSRV, 2026-08-25)
+Kosucu: run-harness-win.ps1 = repo'daki deploy/test/run-harness.sh'in Windows karsiligi
+Ayni 3 senaryo, ayni 12 kontrol. Test edilen mantik repo'nun kur.ps1'inden AST ile yukleniyor.
+
+########## 1) ONARILMIS SURUM (repo deploy/kur.ps1 = simdi sunucuda kurulu olan) ##########
+
+=== D:\tekserp-build\tekserp\deploy\kur.ps1 ===
+  [OK]   S1 cikis kodu 1 (rc=1)
+  [OK]   S1 app\ YERINDE (MARKER-CALISAN duruyor)
+  [OK]   S1 pm2 start + save cagrildi
+  [OK]   S1 mesaj: DOKUNULMADI
+  [OK]   S2 cikis kodu 1 (rc=1)
+  [OK]   S2 app\ = eski kurulum (MARKER-ESKI var, YENI-BOZUK yok)
+  [OK]   S2 app.eski-TEST tasindi (artik yok)
+  [OK]   S2 ic ice klasor OLUSMADI (app\app.eski-TEST yok)
+  [OK]   S2 pm2 start + save cagrildi
+  [OK]   S3 cikis kodu 1 (rc=1)
+  [OK]   S3 app\ geri kondu (MARKER-ESKI)
+  [OK]   S3 pm2 HIC cagrilmadi (ecosystem yok)
+
+=== Sonuc: 12 gecti, 0 basarisiz ===
+(ciktilar: C:\Users\Administrator.SAHINSRV\AppData\Local\Temp\claude\C--Etkili-Yazilim\9245a014-36b3-4229-9b1b-f565a31a8198\scratchpad\harness-run)
+
+########## 2) ORIJINAL (docs/history/kur.ps1.2026-08-24.orig) ##########
+
+=== D:\tekserp-build\tekserp\docs\history\kur.ps1.2026-08-24.orig ===
+  [OK]   S1 cikis kodu 1 (rc=1)
+  [HATA] S1 app\ YERINDE (MARKER-CALISAN duruyor)
+  [HATA] S1 pm2 start + save cagrildi
+  [HATA] S1 mesaj: DOKUNULMADI
+  [OK]   S2 cikis kodu 1 (rc=1)
+  [OK]   S2 app\ = eski kurulum (MARKER-ESKI var, YENI-BOZUK yok)
+  [OK]   S2 app.eski-TEST tasindi (artik yok)
+  [OK]   S2 ic ice klasor OLUSMADI (app\app.eski-TEST yok)
+  [OK]   S2 pm2 start + save cagrildi
+  [OK]   S3 cikis kodu 1 (rc=1)
+  [OK]   S3 app\ geri kondu (MARKER-ESKI)
+  [HATA] S3 pm2 HIC cagrilmadi (ecosystem yok)
+
+=== Sonuc: 8 gecti, 4 basarisiz ===
+(ciktilar: C:\Users\Administrator.SAHINSRV\AppData\Local\Temp\claude\C--Etkili-Yazilim\9245a014-36b3-4229-9b1b-f565a31a8198\scratchpad\harness-run)

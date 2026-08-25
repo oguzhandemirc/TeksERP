@@ -1,0 +1,222 @@
+Hedef DB: DATABASE_URL="postgresql://***@localhost:5432/tekserp?schema=public"
+
+==================== test_db_invariants ====================
+◇ injected env (5) from .env // tip: ⌘ multiple files { path: ['.env.local', '.env'] }
+
+=== Şema-dışı DB invariant guard'ı ===
+Beklenen: 37 partial index · 26 CHECK · 2 DEFERRABLE FK · 1 statistics
+
+── 1) Partial indexler (predicate + uniqueness) ──
+✅ rolls_sackId_idx — null-yoğun FK
+✅ rolls_shipmentId_idx — null-yoğun FK
+✅ rolls_parentReceiptId_idx — null-yoğun FK
+✅ rolls_batchId_idx — null-yoğun FK (parti modeli)
+✅ rolls_markedForKartela_idx — kartela adayı seyrek
+✅ rolls_clientToken_key — idempotency: NULL'lar unique'e girmez
+✅ rolls_labelCustomerId_idx — null-yoğun FK (stok etiketi yaygın); sorgu yolu hep 'şu müşterinin topları'
+✅ rolls_finalizedAt_idx — kalite/fire/fason karnelerinin dönem taraması; yalnız üretimi bitmiş toplar damgalı (migration 20260809090000)
+✅ swatches_createdAt_idx — iptal edilmemiş kartela listesi
+✅ swatches_parentReceiptId_idx — null-yoğun FK
+✅ swatches_shipmentId_idx — null-yoğun FK
+✅ swatches_sackId_idx — null-yoğun FK
+✅ work_orders_splitFromId_idx — null-yoğun FK
+✅ work_orders_clientToken_key — idempotency
+✅ work_order_steps_stationId_status_isUrgent_priority_started_idx — açık-kart kuyruğu; COMPLETED yığını indekslenmez
+✅ kursun_bypass_one_pending_per_step_uq — adım başına TEK AÇIK bypass ataması — düz @unique DEĞİL, çünkü fason çok-partide aynı adıma yeni atama gerekir
+✅ roll_movements_exitedAt_idx — kapanmış movement raporu
+✅ roll_movements_one_open_per_roll_step_uq — TEK açık movement seddi — eşzamanlı çift ilerletmeyi DB'de bloklar
+✅ roll_errors_isProcessed_idx — açık hata kuyruğu
+✅ roll_errors_roll_meter_defect_uq — aynı metrede mükerrer hata seddi
+✅ roll_returns_returnGroupId_idx — null-yoğun: tekil iadelerde NULL
+✅ orders_clientToken_key — idempotency
+✅ swatch_stock_reductions_clientToken_key — kartela stok-düşüm idempotency
+✅ batches_splitFromId_idx — null-yoğun FK
+✅ batches_mergedIntoId_idx — null-yoğun FK
+✅ customers_mergedIntoId_idx — null-yoğun FK (birleştirme tombstone'u seyrek)
+✅ items_mergedIntoId_idx — null-yoğun FK (birleştirme tombstone'u seyrek)
+✅ colors_mergedIntoId_idx — null-yoğun FK (birleştirme tombstone'u seyrek)
+✅ subcontractors_mergedIntoId_idx — null-yoğun FK (birleştirme tombstone'u seyrek)
+✅ customers_nameFold_key — ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)
+✅ items_nameFold_key — ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)
+✅ subcontractors_nameFold_key — ad mükerreri DB seddi — tombstone hariç (prod'da eksikse: temizlik + enforce bekliyor)
+✅ label_templates_one_default_per_kind — kind başına TEK varsayılan şablon
+✅ label_template_variants_one_primary — şablon başına TEK primary varyant
+✅ traveler_card_templates_isDefault_key — sistemde TEK varsayılan refakat kartı şablonu
+✅ work_sessions_active_machine_uq — makine başına TEK aktif oturum
+✅ work_sessions_active_device_uq — cihaz başına TEK aktif oturum
+✅ 1) Partial indexler: envanter-dışı nesne yok — 38 canlı nesnenin tamamı beklenen listede
+
+── 2) CHECK constraintler (var + validated) ──
+✅ rolls_currentQty_nonneg — CHECK (("currentQty" >= (0)::numeric))
+✅ rolls_initialQty_nonneg — CHECK (("initialQty" >= (0)::numeric))
+✅ rolls_weightKg_nonneg — CHECK ((("weightKg" IS NULL) OR ("weightKg" >= (0)::numeric)))
+✅ order_lines_quantity_pos — CHECK ((quantity > (0)::numeric))
+✅ order_lines_shippedQty_nonneg — CHECK (("shippedQty" >= (0)::numeric))
+✅ sacks_weightKg_nonneg — CHECK ((("weightKg" IS NULL) OR ("weightKg" >= (0)::numeric)))
+✅ work_order_steps_time_order — CHECK ((("completedAt" IS NULL) OR ("startedAt" IS NULL) OR ("
+✅ roll_movements_qtyIn_nonneg — CHECK (("qtyIn" >= (0)::numeric))
+✅ roll_movements_qtyOut_nonneg — CHECK ((("qtyOut" IS NULL) OR ("qtyOut" >= (0)::numeric)))
+✅ roll_movements_weightIn_nonneg — CHECK ((("weightIn" IS NULL) OR ("weightIn" >= (0)::numeric)))
+✅ roll_movements_weightOut_nonneg — CHECK ((("weightOut" IS NULL) OR ("weightOut" >= (0)::numeric)
+✅ roll_errors_startMeter_nonneg — CHECK (("startMeter" >= (0)::numeric))
+✅ sack_allocations_qty_pos — CHECK ((qty > (0)::numeric))
+✅ subcontractor_direct_ship_allocations_qty_pos — CHECK ((qty > (0)::numeric))
+✅ work_order_to_order_lines_allocatedQty_nonneg — CHECK (("allocatedQty" >= (0)::numeric))
+✅ subcontractor_dispatch_items_dispatchedQty_pos — CHECK (("dispatchedQty" > (0)::numeric))
+✅ subcontractor_dispatch_items_dispatchedWeight_nonneg — CHECK ((("dispatchedWeight" IS NULL) OR ("dispatchedWeight" >=
+✅ kartela_dispatch_items_dispatchedQty_pos — CHECK (("dispatchedQty" > (0)::numeric))
+✅ kartela_dispatch_items_dispatchedWeight_nonneg — CHECK ((("dispatchedWeight" IS NULL) OR ("dispatchedWeight" >=
+✅ kartela_receipt_items_kartelaCount_pos — CHECK (("kartelaCount" > 0))
+✅ swatch_stock_reductions_count_pos — CHECK ((count > 0))
+✅ direct_shipments_totalQty_pos — CHECK (("totalQty" > (0)::numeric))
+✅ direct_shipments_rollCount_pos — CHECK (("rollCount" > 0))
+✅ roll_returns_qty_pos — CHECK ((qty > (0)::numeric))
+✅ work_orders_stockprod_targetItem — CHECK (((type <> 'STOCK_PRODUCTION'::"WorkOrderType") OR ("tar
+✅ roll_variances_qty_positive — CHECK ((qty > (0)::numeric))
+✅ 2) CHECK constraintler: envanter-dışı nesne yok — 26 canlı nesnenin tamamı beklenen listede
+
+── 3) DEFERRABLE composite FK'lar ──
+✅ rolls_sackId_shipmentId_consistency_fkey — DEFERRABLE INITIALLY DEFERRED
+✅ swatches_sackId_shipmentId_consistency_fkey — DEFERRABLE INITIALLY DEFERRED
+✅ 3) DEFERRABLE FK'lar: envanter-dışı nesne yok — 2 canlı nesnenin tamamı beklenen listede
+
+── 4) Extended statistics ──
+✅ sl_day_exact — system_logs — DATE_TRUNC('day') planner tahmini
+✅ 4) Extended statistics: envanter-dışı nesne yok — 1 canlı nesnenin tamamı beklenen listede
+
+── 5) Expression unique'ler (var + UNIQUE + ifade + predicate) ──
+✅ users_username_lower_uq — lower(username)
+✅ permission_templates_name_lower_uq — lower(name)
+✅ colors_nameFoldColor_key — tr_fold_color(name) WHERE ("mergedIntoId" IS NULL)
+✅ 5) Expression index'ler: envanter-dışı nesne yok — 3 canlı nesnenin tamamı beklenen listede
+
+── 6) Trigger'lar (var + zamanlama + olay) ──
+✅ rolls_stamp_production_timestamps — rolls · BEFORE INSERT OR UPDATE FOR EACH ROW
+✅ system_logs_block_tamper — system_logs · BEFORE DELETE OR UPDATE OR TRUNCATE FOR EACH STATEMENT
+✅ system_log_archives_block_tamper — system_log_archives · BEFORE DELETE OR UPDATE OR TRUNCATE FOR EACH STATEMENT
+✅ 6) Trigger'lar: envanter-dışı nesne yok — 3 canlı nesnenin tamamı beklenen listede
+
+── 7) Uzantılar ──
+✅ plpgsql — PostgreSQL varsayılanı — trigger fonksiyonları
+✅ pg_trgm — gin_trgm_ops — `contains` aramasını index'e bağlayan tek yol
+✅ 7) Uzantılar: envanter-dışı nesne yok — 2 canlı nesnenin tamamı beklenen listede
+
+── 8) Katlama fonksiyonu + sıralama collation'ı ──
+✅ tr_fold IMMUTABLE — volatility=i (beklenen i)
+✅ tr_fold gövde parmak izi — arama katlaması — JS `foldSearchText` ile birebir aynı çıktı
+✅ tr_fold_color IMMUTABLE — volatility=i (beklenen i)
+✅ tr_fold_color gövde parmak izi — renk ad seddi — JS `foldColorNameForCompare` ile birebir aynı çıktı
+✅ tr_sort — Türkçe SIRALAMA (arama katlamasının tersi: ç≠c)
+✅ 8) Collation'lar: envanter-dışı nesne yok — 1 canlı nesnenin tamamı beklenen listede
+
+── 9) Katlanmış gölge kolonlar (GENERATED STORED) ──
+✅ körlük zemini: ≥31 gölge kolon bulundu — 33 kolon
+✅ her gölge kolon tr_fold() ile üretiliyor — 33 kolonun tamamı
+✅ adlandırma sözleşmesi (ileri): her GENERATED kolon `<kolon>Fold` — sapma yok
+✅ adlandırma sözleşmesi (geri): `Fold` ile biten sıradan kolon YOK — sapma yok — süzgeç yalnız DB-üretimli kolonları düşürüyor
+
+=== Sonuç: 91 geçti, 0 başarısız ===
+---- test_db_invariants cikis kodu: 0 ----
+
+==================== test_schema_drift ====================
+
+=== Şema drift kapısı (repo schema.prisma ↔ canlı DB) ===
+✅ prisma migrate diff çalıştı — çıkış kodu 2 (fark var)
+✅ beklenen drift duruyor: ALTER TABLE "rolls" DROP CONSTRAINT "rolls_sackId_shipmentId_consistency — top ↔ çuval ↔ sevkiyat DEFERRABLE composite FK — datamodel'de temsil edilemez
+✅ beklenen drift duruyor: ALTER TABLE "swatches" DROP CONSTRAINT "swatches_sackId_shipmentId_consi — kartela ↔ çuval ↔ sevkiyat DEFERRABLE composite FK — datamodel'de temsil edilemez
+✅ allowlist dışı şema farkı yok — 2 ifadenin tamamı belgelenmiş kasıtlı drift
+
+=== Sonuç: 4 geçti, 0 başarısız ===
+---- test_schema_drift cikis kodu: 0 ----
+
+==================== test_fold_contract ====================
+◇ injected env (5) from .env // tip: ⌘ override existing { override: true }
+
+── 1) Üç kopya bayt-bayt aynı ──
+  ✓ bulundu: Teks-Erp/src/utils/search-fold.ts
+  ✓ bulundu: Electron/src/lib/search-fold.ts
+  ✓ bulundu: mobil/src/utils/searchFold.ts
+  ✓ üç kopyanın md5'i eşit — search-fold.ts=c589a60e search-fold.ts=c589a60e searchFold.ts=c589a60e
+
+── 2) JS ≡ SQL (public.tr_fold) ──
+  ✓ public.tr_fold(text) var ve IMMUTABLE
+  ✓ körlük zemini: ≥60000 örnek taranıyor — 63495
+  ✓ BMP + korpus: JS ile SQL BİREBİR
+
+── 2b) Türev: tr_fold_color ≡ foldColorNameForCompare ──
+  ✓ public.tr_fold_color(text) var ve IMMUTABLE
+  ✓ körlük zemini (renk): ≥60000 örnek taranıyor — 63529
+  ✓ renk: BMP + korpus JS ile SQL BİREBİR
+  ✓ renk: "055-BEYAZ" ≡ "BEYAZ 055" (ayraç + sıra bağımsız)
+  ✓ renk: "12 lacivert 7" → sayılar önde, kendi sırasında
+  ✓ renk: parantez token'a YAPIŞIK kalır ("GRİ-(292-7791)" ≠ "292-7791-GRİ") — bilinçli
+  ✓ renk: NBSP ayraçtır ("BEYAZ\u00a0055" ≡ "055 BEYAZ")
+
+── 3) Katlamanın iş kuralları ──
+  ✓ i-ailesinin DÖRDÜ de 'isik'
+  ✓ "canakkale" ≡ "ÇANAKKALE"
+  ✓ "cisem" ≡ "ÇİSEM" ≡ "Çişem"
+  ✓ "gumusoglu" ≡ "GÜMÜŞOĞLU"
+  ✓ boşluk teklenir + kırpılır
+  ✓ sekme/satır sonu da boşluktur
+  ✓ "ŞAHİN".toLowerCase() (i+U+0307) yine "sahin"
+  ✓ U+0307 gerçekten oradaydı
+  ✓ ß → ss (Almanca müşteri adı)
+  ✓ Ø → o (Nordic)
+  ✓ Æ/œ çok karakterli
+  ✓ LIKE jokerleri terimden DÜŞER
+  ✓ foldSearchText joker DÜŞÜRMEZ (kolon tarafı)
+  ✓ token ayrıştırma
+  ✓ boş terim → boş token dizisi
+  ✓ foldedIncludes boş aramada TÜMÜNÜ eşler
+  ✓ foldedIncludes null haystack'te patlamaz
+  ✓ foldedIncludes Türkçe eşleşme
+
+── 4) Katlama ≠ sıralama ──
+  ✓ katlamayla sıralama Ç'yi C'lerin ÖNÜNE atar (YANLIŞ) — Çanakkale,Cebeci,Ceyhan
+  ✓ Türkçe harmanlama Ç'yi C'lerden SONRA koyar (DOĞRU) — Cebeci,Ceyhan,Çanakkale
+  ✓ ikisi FARKLI sonuç veriyor (araçlar ayrı)
+
+── 5) Sıralama: DB collation ≡ Intl.Collator('tr') ──
+  ✓ DB sırası ile istemci sırası BİREBİR — 01-BEYAZ < 9 YEŞİL < 029-TAŞ < 1000 MAVİ < Cebeci < Ceyhan < Çanakkale < Işık < İnci < Ozan < Öz Şahin < P1 < P2 < P10 < Sahin < Şahin < Ulus < Ünal < Zonguldak
+  ✓ Ç bütün C'lerden SONRA
+  ✓ I (ışık) İ'den ÖNCE
+  ✓ sayı-duyarlı: P2 < P10
+  ✓ sayı-duyarlı: 9 < 1000
+
+=== Sonuç: 40 geçti, 0 başarısız ===
+---- test_fold_contract cikis kodu: 0 ----
+
+==================== find_fold_duplicates ====================
+◇ injected env (5) from .env // tip: ⌘ suppress logs { quiet: true }
+
+=== KATLANMIŞ ADA GÖRE MÜKERRER ANA VERİ (salt-okunur) ===
+
+Mükerrer YOK — sedli tablolarda index kurulu/kurulabilir.
+
+ENFORCE (eksik index varsa kurar, idempotenttir):
+  npx prisma db execute --file prisma/migrations/20260821150000_name_fold_unique_live/migration.sql
+  npx prisma db execute --file prisma/migrations/20260825120000_color_name_unique_live/migration.sql
+Doğrulama:
+  psql "$DATABASE_URL" -c "SELECT indexname FROM pg_indexes WHERE indexname LIKE '%_nameFold%_key';"
+  npx tsx scripts/test_db_invariants.ts   (§1 + §5 yeşile döner)
+
+
+=== KESKİN TARAMALAR (aday; sed bunlara BAKMAZ, karar işletmenin) ===
+
+Keskin taramalarda aday yok.
+
+---- find_fold_duplicates cikis kodu: 0 ----
+
+==================== OZET ====================
+
+Script               CikisKodu
+------               ---------
+test_db_invariants           0
+test_schema_drift            0
+test_fold_contract           0
+find_fold_duplicates         0
+
+
+
+.env GERI ALINDI -> DATABASE_URL="postgresql://***@localhost:5432/adnansahin_db?schema=public"

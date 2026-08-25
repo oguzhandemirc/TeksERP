@@ -1,0 +1,16 @@
+﻿{
+    "ad":  "tekserp-backend-20260825_145620-dee217f",
+    "commit":  "dee217f",
+    "dal":  "adnansahin",
+    "calismaAgaciTemiz":  true,
+    "uretimZamani":  "2026-08-25T14:57:18",
+    "ureten":  "SAHINSRV\\Administrator",
+    "nodeSurumu":  "v24.18.0",
+    "npmSurumu":  "11.16.0",
+    "uygulamaSurumu":  "2.9.0",
+    "migrationSayisi":  191,
+    "nodeModulesDahil":  true,
+    "dosyaSayisi":  13438,
+    "toplamBayt":  409367404,
+    "serverJsSha256":  "086A186E9BE23570ED46EF3C67005678BE7339EE354419C684547FEFDCDE2652"
+}

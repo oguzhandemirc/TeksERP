@@ -225,13 +225,14 @@ geri dönüş yolu yedektir.
 
 > ⚠️ **Bu bölümün ilk sürümü `git pull → npm ci → build → pm2 start` anlatıyordu.
 > Fabrika BÖYLE deploy EDİLMİYOR** (2026-08-24 deploy'unda düzeltildi). Çalışan kurulum
-> `C:\Etkili-Yazilim\app\` bir git klonu değil, hazır pakettir; klon
-> (`C:\Etkili-Yazilim\tekserp`, sparse) yalnız paket üretmek içindir. Genel akış
-> `DEPLOY-RUNBOOK.md §3`'te; script kaynağı `deploy/kur.ps1`.
+> `C:\Etkili-Yazilim\app\` bir git klonu değil, hazır pakettir; build klonu
+> (`D:\tekserp-build\tekserp`, tam) yalnız paket üretmek içindir — `C:\Etkili-Yazilim\tekserp`
+> sparse + dar refspec, paket için KULLANMA. Genel akış `DEPLOY-RUNBOOK.md §3`'te; script
+> kaynağı `deploy/kur.ps1`.
 
 ```powershell
-# 1) Paketi üret — klon kökünde (derleme + node_modules pakete girer)
-cd C:\Etkili-Yazilim\tekserp
+# 1) Paketi üret — build klonunun kökünde (derleme + node_modules pakete girer)
+cd D:\tekserp-build\tekserp
 git pull
 .\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim   # → tekserp-backend-<damga>-<commit>.zip (2026-08-24'te kökteki kopyayla üretildi; aynı dosya)
 

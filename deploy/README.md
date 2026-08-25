@@ -6,13 +6,23 @@ kaynağı. Akış ve gerekçe: [`docs/ops/DEPLOY-RUNBOOK.md §3`](../docs/ops/DE
 | Dosya | Sunucudaki yeri | Ne yapar |
 |---|---|---|
 | `kur.ps1` | `C:\Etkili-Yazilim\kur.ps1` | Paketi doğrular → `premigrate_` yedeği (pg_restore ile doğrulanır) → pm2 delete → çalışanı `app.eski-<damga>` olarak kenara alır → yeni sürümü `app\`'a yerleştirir → `migrate deploy` → pm2 start + save → `/health`. `-GeriAl` ile son kuruluma döner. |
-| `paketle.ps1` | klon kökünden koşulur: `C:\Etkili-Yazilim\tekserp` → `.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim` | Repo kökünde (`Teks-Erp`'nin üstünde) koşar: `npm ci` → `prisma generate` → `tsc --removeComments` → dist (`.js.map`siz) + `prisma/{schema,migrations}` (seed YOK) + `public` + `assets` + `package*.json` + `ecosystem.config.js` + `Teks-Erp/deploy/prisma.config.prod.js` → `prisma.config.js` + (varsayılan) üretim `node_modules` + `PAKET.json` → `tekserp-backend-<damga>-<commit>.zip`. Sunucudaki kopyayla **bayt-bayt aynı** (md5 `7a48a8cb…`, 2026-08-25). |
+| `paketle.ps1` | build klonunun kökünden koşulur: `D:\tekserp-build\tekserp` → `.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim` | Repo kökünde (`Teks-Erp`'nin üstünde) koşar: `npm ci` → `prisma generate` → `tsc --removeComments` → dist (`.js.map`siz) + `prisma/{schema,migrations}` (seed YOK) + `public` + `assets` + `package*.json` + `ecosystem.config.js` + `Teks-Erp/deploy/prisma.config.prod.js` → `prisma.config.js` + (varsayılan) üretim `node_modules` + `PAKET.json` → `tekserp-backend-<damga>-<commit>.zip`. Sunucudaki kopyayla **bayt-bayt aynı** (md5 `7a48a8cb…`, 2026-08-25). |
 
-> **`paketle.ps1` sunucuda klon KÖKÜNDE untracked duruyordu** (`C:\Etkili-Yazilim\tekserp\paketle.ps1`).
-> Repoya `deploy/` altına alındı — kökte olsaydı `git pull` untracked dosyanın üstüne yazmayı
-> reddederdi. Kök kopyası istenirse silinir; iki kopya aynı olduğu sürece hangisi koşarsa koşsun
-> fark etmez. Script çalışma dizinini `(Get-Location)` ile alır → **her zaman klon kökünden**
-> `.\deploy\paketle.ps1` diye çağrılır, kendi klasöründen değil.
+> **`paketle.ps1` sunucuda klon KÖKÜNDE untracked duruyordu.** Repoya `deploy/` altına alındı —
+> kökte olsaydı `git pull` untracked dosyanın üstüne yazmayı reddederdi. Kök kopyası istenirse
+> silinir; iki kopya aynı olduğu sürece hangisi koşarsa koşsun fark etmez. Script çalışma
+> dizinini `(Get-Location)` ile alır → **her zaman klon kökünden** `.\deploy\paketle.ps1` diye
+> çağrılır, kendi klasöründen değil.
+
+### ⚠️ Sunucuda İKİ klon var — paket `D:`'den üretilir (2026-08-25 sunucu ölçümü)
+
+| | `D:\tekserp-build\tekserp` | `C:\Etkili-Yazilim\tekserp` |
+|---|---|---|
+| checkout | **tam**, `adnansahin` dalının ucu | sparse — yalnız `Teks-Erp/`, **`deploy/` diskte YOK** |
+| refspec | `+refs/heads/*` | `+refs/heads/main` — **`adnansahin`'i fetch'te GÖRMEZ** (`git pull` bayat kalır, HEAD 7 commit geride kaldı) |
+| kullanım | **paket üretimi + `kur.ps1` kopyası** | kullanma; kullanılacaksa önce `git sparse-checkout add deploy` + `git fetch origin adnansahin:refs/remotes/origin/adnansahin` |
+
+2026-08-25 deploy'u `D:`'den yapıldı; dokümanlar o güne dek `C:`'yi anlatıyordu (yanlıştı).
 
 ### `kur.ps1` ↔ `paketle.ps1` sözleşmesi (2026-08-25'te doğrulandı)
 
@@ -36,19 +46,19 @@ yaşar. Bu dosyayı pakete koymak onu **`app\kur.ps1`** olarak indirir ve çalı
 dokunmaz. Repodaki sürüm değiştiğinde:
 
 ```powershell
-# SUNUCUDA (Claude Code oturumu yapabilir) — yönetici PowerShell
-cd C:\Etkili-Yazilim\tekserp
-git sparse-checkout list                       # 'deploy' yoksa:  git sparse-checkout add deploy
+# SUNUCUDA (Claude Code oturumu yapabilir) — yönetici PowerShell, BUILD klonu (D:)
+cd D:\tekserp-build\tekserp
 git pull
+Get-FileHash .\deploy\kur.ps1, C:\Etkili-Yazilim\kur.ps1 | Format-Table Path,Hash
+# Hash'ler FARKLIYSA:
 Copy-Item .\deploy\kur.ps1 C:\Etkili-Yazilim\kur.ps1 -Force
-(Get-FileHash .\deploy\kur.ps1).Hash -eq (Get-FileHash C:\Etkili-Yazilim\kur.ps1).Hash   # True olmalı
 ```
 
-> Klon sparse-checkout ile dar tutuluyor; `deploy/` sparse kümesinde değilse `git pull`
-> dosyayı **indirmez** ve `Copy-Item` "bulunamadı" der — önce `git sparse-checkout add deploy`.
-> Kopya, sıradaki `kur.ps1 -Paket …` koşumundan **önce** yapılmalı ki deploy'u onarılmış
-> sürüm yürütsün. Bir kez kopyalandıktan sonra script her deploy'da aynı kalır; yeni bir
-> onarım gelirse aynı üç satır tekrarlanır.
+> Hash karşılaştırması `.gitattributes` (`*.ps1 eol=crlf`) sayesinde `core.autocrlf`
+> ayarından bağımsızdır — iki dosya da CRLF checkout edilir. Kopya, sıradaki
+> `kur.ps1 -Paket …` koşumundan **önce** yapılmalı ki deploy'u güncel sürüm yürütsün.
+> `kur.ps1` repoda her değiştiğinde (son: 2026-08-25 "Son gece yedegi" satırı) hash yeniden
+> farklı çıkar ve aynı üç satır tekrarlanır.
 
 ## 2026-08-25 onarımı — otomatik geri alma açığı
 
@@ -75,15 +85,25 @@ doğrulama + düzeltmeler oradaki başlık bloğunda). Özet:
 
 ### Doğrulama
 
-macOS'ta `pwsh` ile: dosya sözdizimi + `GeriAlOtomatik` üç senaryoda sahte klasörlerle
-(`app.eski` yok → `app\` dokunulmadı ve pm2 start çağrıldı · var → geri kondu · var ama
-`ecosystem.config.js` yok → geri kondu, pm2 çağrılmadı) + eski script'e karşı negatif kanıt
-(aynı senaryoda `app\` siliniyor). Ölçüldü 2026-08-25: yeni **12/12**, orijinal **8/4**.
+Tek harness (`kur-gerialma.harness.ps1`, pwsh 7 ve Windows PowerShell 5.1) + iki koşucu:
+dosya sözdizimi + `GeriAlOtomatik` üç senaryoda sahte klasörlerle (`app.eski` yok → `app\`
+dokunulmadı ve pm2 start çağrıldı · var → geri kondu · var ama `ecosystem.config.js` yok →
+geri kondu, pm2 çağrılmadı) + eski script'e karşı negatif kanıt (aynı senaryoda `app\` siliniyor).
+Ölçüldü 2026-08-25: **macOS** (pwsh 7.6) yeni **12/12**, orijinal **8/4**; **fabrika sunucusu**
+(Windows PowerShell 5.1) **birebir aynı** 12/12 ↔ 8/4 (kanıt:
+`docs/history/dev-gonderi-2026-08-25/kanit/harness-onarilmis-vs-orijinal.txt`).
 
 ```bash
+# macOS/Linux (bash + pwsh)
 deploy/test/run-harness.sh deploy/kur.ps1                              # onarılmış sürüm → 12/12 beklenir
 deploy/test/run-harness.sh docs/history/kur.ps1.2026-08-24.orig        # orijinal → S1'de app\ silinir (4 kırmızı)
 PWSH=/yol/pwsh deploy/test/run-harness.sh deploy/kur.ps1               # pwsh PATH'te değilse
+```
+
+```powershell
+# Windows (yalnız PowerShell — bash/pwsh gerekmez), repo kökünden
+powershell -ExecutionPolicy Bypass -File deploy\test\run-harness.ps1 -Script deploy\kur.ps1
+powershell -ExecutionPolicy Bypass -File deploy\test\run-harness.ps1 -Script docs\history\kur.ps1.2026-08-24.orig
 ```
 
 > pwsh bu Mac'te sistemde kurulu değil: `brew install --cask powershell@preview` pkg için

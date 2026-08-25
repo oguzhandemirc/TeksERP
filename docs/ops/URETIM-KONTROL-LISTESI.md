@@ -89,8 +89,12 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
       `ecosystem.config.js` → `out_file`/`error_file`) ve hata yığını yok.
 - [ ] **`pm2-logrotate` kurulu** — pm2 log rotasyonu yapmaz, kurulmazsa dosya
       sınırsız büyür (NSSM 10MB'da döndürüyordu).
-- [ ] **Yedekleme canlı:** `/health` → `lastBackup` **null DEĞİL**; backend
-      log'unda `[backup] BACKUP_DIR tanımsız` satırı YOK; Panel → Sistem →
+- [ ] **Yedekleme canlı:** `GET /api/admin/health` (token + `admin:settings`) →
+      `lastBackup` **null DEĞİL** — ⚠️ `/health`'te bu alan YOK (2026-08-09'da beş
+      alana donduruldu; `lastBackup` yetkili uca taşındı, eski madde mekanik olarak hep
+      kırmızıydı). Token'sız alternatif: `C:\Etkili-Yazilim\backups` içinde bugünün
+      `tekserp_*.dump`'ı var mı (`kur.ps1` sonunda "Son gece yedegi:" satırı da bunu basar);
+      backend log'unda `[backup] BACKUP_DIR tanımsız` satırı YOK; Panel → Sistem →
       Yedekler'de kırmızı "Yedekleme kapalı" kutusu YOK.
 
 ## F) Geri dönüş hazırlığı
