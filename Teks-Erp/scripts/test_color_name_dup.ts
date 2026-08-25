@@ -90,6 +90,25 @@ async function main() {
       () => service.create({ code: `TEST-CLR-E-${ts}`, name: NAME }, undefined),
       "aktifleştirin",
     );
+
+    // 7) BİRLEŞTİRİLMİŞ (tombstone) kayıt ADAY DEĞİLDİR (2026-08-25, base.service ile
+    //    hizalandı): birleşmiş adın yeniden kullanımı meşru — DB seddinin predicate'i
+    //    (`mergedIntoId IS NULL`) de aynı şeyi söyler. Eskiden guard tombstone'u
+    //    "PASİF renk var, aktifleştirin" diye gösterip mükerreri diriltmeye çağırıyordu.
+    await prisma.color.update({
+      where: { id: firstRec!.id },
+      data: { mergedIntoId: otherRec!.id, mergedAt: new Date() },
+    });
+    const reborn = await service.create({ code: `TEST-CLR-F-${ts}`, name: NAME }, undefined);
+    const rebornRec = reborn.data as { id: string } | null;
+    if (rebornRec?.id) createdIds.push(rebornRec.id);
+    check("tombstone (mergedIntoId dolu) aynı adı taşırken yeni renk SERBEST", reborn.success === true && Boolean(rebornRec?.id));
+    // Tombstone dururken canlı kopya varken ÜÇÜNCÜSÜ yine 409 (predicate yalnız tombstone'u muaf tutar).
+    await expectConflict(
+      "tombstone + canlı kopya varken ikinci canlı kopya → 409",
+      () => service.create({ code: `TEST-CLR-G-${ts}`, name: NAME }, undefined),
+      "zaten var",
+    );
   } finally {
     for (const id of createdIds) {
       await prisma.color.delete({ where: { id } }).catch(() => {});

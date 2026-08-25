@@ -54,10 +54,20 @@ export class ColorService extends BaseService {
     // ana veri guard'ları 2026-08-19'da bağlandı): bu katlama ayraçtan VE token
     // sırasından bağımsızdır, `tr_fold` ise değildir. Tarama JS'te kalır — renk
     // kataloğu onlarca satırdır. Taban katlama yine ortak, yani "ŞAHİN"≡"SAHIN"
-    // kuralı burada da geçerli.
+    // kuralı burada da geçerli. DB'deki son hat bu kuralın SQL ikizi üzerindeki
+    // `colors_nameFoldColor_key` (2026-08-25) — yarış/elle SQL yollarını o kapatır.
+    //
+    // ⚠️ BİRLEŞTİRİLMİŞ (tombstone, `mergedIntoId` dolu) kayıtlar ADAY DEĞİLDİR —
+    // base.service `assertNameNotDuplicate` ile aynı gerekçe: birleşmiş adın yeniden
+    // kullanımı MEŞRUDUR (DB seddinin predicate'i de öyle der) ve tombstone sayılsaydı
+    // bu guard "PASİF renk var, aktifleştirin" deyip operatörü az önce temizlenen
+    // mükerreri DİRİLTMEYE davet ederdi.
     const target = foldColorNameForCompare(name);
     const candidates = await prisma.color.findMany({
-      where: excludeId ? { id: { not: excludeId } } : {},
+      where: {
+        mergedIntoId: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
       select: { name: true, code: true, isActive: true },
     });
     const existing = candidates.find(

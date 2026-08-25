@@ -250,13 +250,25 @@ const DEFERRABLE_FKS: Array<{ table: string; name: string }> = [
 const EXT_STATS: Array<{ name: string; table: string }> = [{ name: "sl_day_exact", table: "system_logs" }];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 5) EXPRESSION UNIQUE'ler (2) — migration 20260731160000_lowprio_unique_hardening
+// 5) EXPRESSION UNIQUE'ler (3) — 20260731160000_lowprio_unique_hardening (2) +
+//    20260825120000_color_name_unique_live (1).
 //    Prisma expression index modelleyemez → şema-dışı. App-level case-insensitive
 //    ad kontrolünün (mode:'insensitive') YARIŞ penceresini kapatan DB seddi (A7).
+//    `predicate` verilirse index hem ifade hem PARTIAL'dır: sahibi BU bölümdür
+//    (§1 karşı-envanter muafiyetiyle kabul eder), predicate de burada doğrulanır.
+//    ⚠️ Renk seddi YUMUŞAK KAPI ile gelir: mükerrer taşıyan DB'de index ATLANIR ve
+//    bu satır KIRMIZI kalır — bilerek ("enforce bekliyor" sinyali; §1 nameFold emsali).
 // ─────────────────────────────────────────────────────────────────────────────
-const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string }> = [
+const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; predicate?: string; why?: string }> = [
   { table: "users", index: "users_username_lower_uq", expr: "lower(username)" },
   { table: "permission_templates", index: "permission_templates_name_lower_uq", expr: "lower(name)" },
+  {
+    table: "colors",
+    index: "colors_nameFoldColor_key",
+    expr: "tr_fold_color(name)",
+    predicate: `("mergedIntoId" IS NULL)`,
+    why: "renk ad seddi — ayraç + sayı-sırası bağımsız SQL ikizi; tombstone hariç (eksikse: temizlik + enforce bekliyor)",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -327,6 +339,16 @@ const EXPECTED_FUNCTIONS: Array<{ name: string; volatility: string; bodyFragment
     // "fonksiyon sessizce değiştirildi" senaryosunu envanter tarafında yakalar.
     bodyFragments: ["normalize", "NFD", 'COLLATE "C"', "translate"],
     why: "arama katlaması — JS `foldSearchText` ile birebir aynı çıktı",
+  },
+  {
+    // 20260825120000_color_name_unique_live — renk ad seddinin ifadesi. Parmak izi:
+    // taban katlama (`tr_fold(`) + token sırası (`WITH ORDINALITY`) + sayısal-önce
+    // sıralama ('^[0-9]+$') + birleştirme (`string_agg`). JS ikizi
+    // `foldColorNameForCompare`; birebirlik `test_fold_contract.ts` §2b'de (tüm BMP).
+    name: "tr_fold_color",
+    volatility: "i",
+    bodyFragments: ["tr_fold(", "WITH ORDINALITY", "^[0-9]+$", "string_agg"],
+    why: "renk ad seddi — JS `foldColorNameForCompare` ile birebir aynı çıktı",
   },
 ];
 
@@ -532,39 +554,51 @@ async function main(): Promise<void> {
   );
 
   // ── 5) Expression unique'ler ──
-  console.log("\n── 5) Expression unique'ler (var + UNIQUE + ifade) ──");
+  console.log("\n── 5) Expression unique'ler (var + UNIQUE + ifade + predicate) ──");
   const liveExpr = await prisma.$queryRaw<
-    Array<{ table_name: string; index_name: string; is_unique: boolean; expr: string | null }>
+    Array<{ table_name: string; index_name: string; is_unique: boolean; expr: string | null; predicate: string | null }>
   >`
     SELECT t.relname AS table_name,
            c.relname AS index_name,
            i.indisunique AS is_unique,
-           pg_get_expr(i.indexprs, i.indrelid) AS expr
+           pg_get_expr(i.indexprs, i.indrelid) AS expr,
+           pg_get_expr(i.indpred, i.indrelid) AS predicate
     FROM pg_index i
     JOIN pg_class c ON c.oid = i.indexrelid
     JOIN pg_class t ON t.oid = i.indrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public' AND i.indexprs IS NOT NULL
   `;
-  // pg_get_expr "lower((username)::text)" döner — cast/paren/boşluk fold'la karşılaştır.
-  const foldExpr = (s: string) => s.toLowerCase().replace(/::text/g, "").replace(/[()\s]/g, "");
+  // pg_get_expr "lower((username)::text)" döner — cast/paren/boşluk/şema fold'la karşılaştır.
+  const foldExpr = (s: string) =>
+    s.toLowerCase().replace(/public\./g, "").replace(/::text/g, "").replace(/[()\s]/g, "");
   const exprByName = new Map(liveExpr.map((r) => [r.index_name, r]));
   for (const exp of EXPRESSION_UNIQUES) {
     const live = exprByName.get(exp.index);
     if (!live) {
-      check(exp.index, false, `expression index YOK (${exp.table}) — case yarışı seddi kayıp`);
+      check(
+        exp.index,
+        false,
+        exp.predicate
+          ? `expression index YOK (${exp.table}) — ${exp.why ?? "sed kayıp"}`
+          : `expression index YOK (${exp.table}) — case yarışı seddi kayıp`,
+      );
       continue;
     }
     const exprOk = live.expr != null && foldExpr(live.expr) === foldExpr(exp.expr);
     const uniqOk = live.is_unique;
-    if (exprOk && uniqOk) {
-      check(exp.index, true, exp.expr);
+    // Predicate yalnız beklenen partial ise ölçülür; beklenmeyen bir predicate de
+    // sapmadır (sed daralmış demektir) — iki yön de kırmızı.
+    const predOk = exp.predicate ? live.predicate != null && norm(live.predicate) === norm(exp.predicate) : live.predicate == null;
+    if (exprOk && uniqOk && predOk) {
+      check(exp.index, true, exp.predicate ? `${exp.expr} WHERE ${exp.predicate}` : exp.expr);
     } else {
       check(
         exp.index,
         false,
         (!uniqOk ? "UNIQUE düşmüş — sed kayboldu. " : "") +
-          (!exprOk ? `ifade DEĞİŞMİŞ: beklenen ${exp.expr}, canlı ${live.expr ?? "?"}` : ""),
+          (!exprOk ? `ifade DEĞİŞMİŞ: beklenen ${exp.expr}, canlı ${live.expr ?? "?"}. ` : "") +
+          (!predOk ? `predicate DEĞİŞMİŞ: beklenen ${exp.predicate ?? "(yok)"}, canlı ${live.predicate ?? "(yok)"}` : ""),
       );
     }
   }
@@ -643,7 +677,7 @@ async function main(): Promise<void> {
   const liveFns = await prisma.$queryRaw<Array<{ proname: string; vol: string; body: string }>>`
     SELECT p.proname, p.provolatile::text AS vol, pg_get_functiondef(p.oid) AS body
     FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE n.nspname = 'public' AND p.prokind = 'f' AND p.proname = ANY(ARRAY['tr_fold'])
+    WHERE n.nspname = 'public' AND p.prokind = 'f' AND p.proname = ANY(ARRAY['tr_fold', 'tr_fold_color'])
   `;
   const fnByName = new Map(liveFns.map((f) => [f.proname, f]));
   for (const exp of EXPECTED_FUNCTIONS) {

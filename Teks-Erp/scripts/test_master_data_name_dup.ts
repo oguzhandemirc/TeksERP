@@ -374,6 +374,33 @@ async function main() {
           .then((r) => created.subIds.push(r.id)),
       "subcontractors_nameFold_key",
     );
+
+    // RENK (2026-08-25): sed düz nameFold'da DEĞİL, `tr_fold_color(name)` ifadesinde —
+    // ayraç + sayı-sırası bağımsız. "Test Sed Renk X 055" ≡ "055-TEST SED RENK X".
+    // Servis atlanır (normalizeColorName koşmaz); katlama farkı DB'de kapanmalı.
+    // ⚠️ `suffix` salt rakamdır ve kuralda RAKAM BLOKLARI KENDİ SIRASINI KORUR
+    // ("… 534 055" ≠ "055 … 534") — bu yüzden suffix harfle birleşik (`X534…`), yoksa
+    // sonda kendi kendini çürütür (ilk yazımda tam bu oldu).
+    const sedColor = await prisma.color.create({
+      data: { code: `TEST-SED-R-${suffix}`, name: `Test Sed Renk X${suffix} 055` },
+      select: { id: true },
+    });
+    created.colorIds.push(sedColor.id);
+    await expectP2002(
+      "DB seddi: colors — ayraç/sıra farklı ama renk-eş ad (055-… ≡ … 055) doğrudan create → P2002 colors_nameFoldColor_key",
+      () =>
+        prisma.color
+          .create({ data: { code: `TEST-SED-R2-${suffix}`, name: `055-TEST SED RENK X${suffix}` }, select: { id: true } })
+          .then((r) => created.colorIds.push(r.id)),
+      "colors_nameFoldColor_key",
+    );
+    // Aynı sözcükler, FARKLI rakam sırası → farklı renk (kural bilinçli): yazılabilmeli.
+    const sedColorOther = await prisma.color.create({
+      data: { code: `TEST-SED-R3-${suffix}`, name: `055 Test Sed Renk X${suffix} 7` },
+      select: { id: true },
+    });
+    created.colorIds.push(sedColorOther.id);
+    check("DB seddi: colors — ek rakam bloğu (… 055 … 7) FARKLI renk sayılır, yazılır", Boolean(sedColorOther.id));
   } finally {
     // Cleanup — test kendi yarattığını siler (FK sırasına dikkat).
     await prisma.machine.deleteMany({ where: { id: { in: created.machineIds } } }).catch(() => {});

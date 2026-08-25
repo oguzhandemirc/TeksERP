@@ -4483,11 +4483,17 @@ model Color {
   /// işaret eder. Kaynak SİLİNMEZ; "→ X altına birleşti" tarihçe satırı olarak
   /// yaşar (Batch.mergedIntoId emsali). NULL = birleşmemiş (canlı) kayıt.
   ///
-  /// ⚠️ RENKTE `nameFold` UNIQUE kısıtı BİLİNÇLİ OLARAK YOK (2026-08-21, Item/Customer/
-  /// Subcontractor'a kondu): renk mükerreri ayraç + token-sırası bağımsızdır
-  /// (`foldColorNameForCompare`, "055-BEYAZ" ≡ "BEYAZ 055"); düz `nameFold` üzerine kısıt
-  /// uygulama kuralından ZAYIF olur ve yanlış güven verir. Tek bekçi `ColorService.assertNameAvailable`
-  /// (JS, color.service.ts notu). `mergedIntoId` yine tombstone izidir.
+  /// ⚠️ RENKTE düz `nameFold` UNIQUE kısıtı YOK ve OLMAYACAK: renk mükerreri ayraç +
+  /// token-sırası bağımsızdır (`foldColorNameForCompare`, "055-BEYAZ" ≡ "BEYAZ 055");
+  /// düz kolon üzerine kısıt uygulama kuralından ZAYIF olur ve yanlış güven verir.
+  /// Sed bunun yerine `public.tr_fold_color("name")` İFADESİ üzerindedir (2026-08-25,
+  /// `20260825120000_color_name_unique_live`): `colors_nameFoldColor_key`, predicate
+  /// `"mergedIntoId" IS NULL`, yumuşak kapı (mükerrer varken atlanır). Prisma ifade
+  /// index'ini datamodel'de temsil edemez ama `migrate diff` onu DROP etmeye de
+  /// KALKMAZ (`users_username_lower_uq` emsali — ölçüldü, drift allowlist'i gerekmez).
+  /// Envanter: `test_db_invariants` §5 (EXPRESSION_UNIQUES) + §8 (`tr_fold_color`);
+  /// JS≡SQL paritesi `test_fold_contract` §2b. Uygulama bekçisi KALIR
+  /// (`ColorService.assertNameAvailable` — mesajı o verir; tombstone'u DIŞLAR).
   mergedIntoId   String?   @db.Uuid
   /// Birleştirme KÜNYESİ. ⚠️ Audit 6 ayda arşivleniyor — "bu kayıt neden pasif?"
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).

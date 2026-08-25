@@ -64,10 +64,17 @@ function extractFkColumn(meta: Record<string, unknown> | undefined): string | nu
  * `assertNameNotDuplicate` ÖNCE ateşler ve Türkçe, kod bilgili 409'u o verir; bu
  * dal yalnız YARIŞ durumunda (iki istemci aynı anda aynı ad) ya da servisi atlayan
  * yazımda görünür — o zaman bile operatör "nameFold" değil "ad" okumalı.
+ *
+ * `nameFoldColor` (2026-08-25): renk seddi bir KOLON değil İFADE index'idir
+ * (`colors_nameFoldColor_key` ON `tr_fold_color("name")`); constraint adından
+ * çıkan "kolon" bu yüzden `nameFoldColor`dur — yine "ad" okunmalı.
  */
 const UNIQUE_COLUMN_LABELS: Readonly<Record<string, string>> = {
   nameFold: "ad",
+  nameFoldColor: "ad",
 };
+/** Katlanmış-ad seddi kolonları — P2002'de Türkçe "ad zaten kayıtlı" mesajı alır. */
+const NAME_FOLD_COLUMNS: ReadonlySet<string> = new Set(["nameFold", "nameFoldColor"]);
 
 /**
  * Prisma P2002 unique constraint kolon adını çıkarır.
@@ -391,8 +398,9 @@ export const errorHandler = (
       res.status(409).json({
         success: false,
         message:
-          col === "nameFold"
-            ? // Katlanmış ad seddi: "MODA TEKSTİL" ≡ "Moda Tekstil" ≡ "moda tekstil".
+          col != null && NAME_FOLD_COLUMNS.has(col)
+            ? // Katlanmış ad seddi: "MODA TEKSTİL" ≡ "Moda Tekstil" ≡ "moda tekstil";
+              // renkte ayrıca "055-BEYAZ" ≡ "BEYAZ 055".
               "Bu ad zaten kayıtlı (büyük/küçük harf ve Türkçe karakter farkı sayılmaz)."
             : `Bu '${UNIQUE_COLUMN_LABELS[label] ?? label}' değeri zaten mevcut (unique constraint).`,
       });

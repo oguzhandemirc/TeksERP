@@ -10,9 +10,12 @@
 // ayrışır, biri meşru sebeple kırmızıya döner ve ekip kırmızıyı görmezden
 // gelmeyi öğrenir — timestamptz bekçisinin dersi).
 //
-// DÖRT CEPHE:
+// DÖRT CEPHE (+ bir türev):
 //   1. Üç kopya BAYT-BAYT aynı mı (backend + Electron + mobil).
 //   2. JS ≡ SQL — TÜM BMP (63k karakter) + gerçek dünya korpusu.
+//  2b. TÜREV: `tr_fold_color` ≡ `foldColorNameForCompare` (renk ad seddinin
+//      ifadesi — 2026-08-25). Aynı dosyada, çünkü "tek bekçi" kuralı türev
+//      için de geçerli: ayrı dosya = ayrı muaf listesi = sessiz ayrışma.
 //   3. Katlamanın İŞ KURALLARI (i-ailesi, Türkçe harfler, joker temizliği,
 //      boşluk tekleme) — eşitlik sağlansa bile YANLIŞ olabilirler.
 //   4. Sıralama katlamayla YAPILMAZ — negatif sözleşme.
@@ -25,6 +28,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import prisma, { pool } from "../src/lib/prisma";
+import { foldColorNameForCompare } from "../src/services/helpers/name-normalize.helper";
 import {
   foldSearchText,
   foldSearchTerm,
@@ -118,6 +122,63 @@ async function main(): Promise<void> {
     }
   }
   check("BMP + korpus: JS ile SQL BİREBİR", haveFn && mismatch === 0, firstBad.join(" | "));
+
+  // ── 2b) TÜREV: tr_fold_color ≡ foldColorNameForCompare ────────────────────
+  // Renk ad seddi (`colors_nameFoldColor_key`, 20260825120000_color_name_unique_live)
+  // düz nameFold üzerinde DEĞİL, `tr_fold_color(name)` ifadesi üzerindedir: ayraç
+  // (boşluk/tire) eşdeğer + salt-rakam token'lar başa. JS kuralı
+  // `foldColorNameForCompare`; ikisi ayrışırsa sed uygulamadan FARKLI davranır —
+  // biri "aynı ad" derken diğeri geçirir ve bunu hiçbir hata söylemez.
+  // ⚠️ JS ayracı `\s` (NBSP/U+2028… dahil); SQL tarafı bu kümeyi AÇIK yazar çünkü
+  // PostgreSQL `\s`'nin ASCII-dışı davranışı ctype'a bağlıdır (saha C locale).
+  // Tüm BMP taraması tam da bu sınıfı ölçer — tek karakterlik örnekler ayracın
+  // her üyesini ayrı ayrı geçirir.
+  console.log("\n── 2b) Türev: tr_fold_color ≡ foldColorNameForCompare ──");
+  const colorFnExists = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    `SELECT count(*)::bigint AS n FROM pg_proc p JOIN pg_namespace ns ON ns.oid = p.pronamespace
+     WHERE ns.nspname = 'public' AND p.proname = 'tr_fold_color' AND p.provolatile = 'i'`,
+  );
+  const haveColorFn = Number(colorFnExists[0]?.n ?? 0) === 1;
+  check("public.tr_fold_color(text) var ve IMMUTABLE", haveColorFn);
+  const COLOR_CORPUS = [
+    "055-BEYAZ", "BEYAZ 055", "beyaz 055", "055 BEYAZ", "  055 -  BEYAZ ",
+    "330-BEYAZ", "BEYAZ-330", "KREM-GÜMÜŞ", "krem gümüş", "12 lacivert 7", "7 12 LACİVERT",
+    "292-7791-GRİ", "GRİ-(292-7791)", "V-1462", "V15", "1263", "46150", "078-BYR-K.KAHVE",
+    "BEYAZ\u00a0055", "055\u2003BEYAZ", "055\u3000BEYAZ", "\ufeff055 BEYAZ", "055\u2028BEYAZ",
+    "-055-", "--", "-", "", " ", "\t", "０５５ BEYAZ", "٠٥٥ BEYAZ", "Ø-1", "ışık 3", "IŞIK-3",
+  ];
+  const colorSamples = [...samples, ...COLOR_CORPUS];
+  check("körlük zemini (renk): ≥60000 örnek taranıyor", colorSamples.length >= 60000, `${colorSamples.length}`);
+  let colorMismatch = 0;
+  const colorFirstBad: string[] = [];
+  if (haveColorFn) {
+    const BATCH = 4000;
+    for (let i = 0; i < colorSamples.length; i += BATCH) {
+      const slice = colorSamples.slice(i, i + BATCH);
+      const rows = await prisma.$queryRawUnsafe<{ c: string; f: string }[]>(
+        `SELECT c, public.tr_fold_color(c) AS f FROM unnest($1::text[]) AS c`,
+        slice,
+      );
+      for (const r of rows) {
+        const js = foldColorNameForCompare(r.c);
+        if (js !== r.f) {
+          colorMismatch++;
+          if (colorFirstBad.length < 5) {
+            const cp = [...r.c]
+              .map((x) => "U+" + x.codePointAt(0)!.toString(16).toUpperCase().padStart(4, "0"))
+              .join(" ");
+            colorFirstBad.push(`${cp} sql=${JSON.stringify(r.f)} js=${JSON.stringify(js)}`);
+          }
+        }
+      }
+    }
+  }
+  check("renk: BMP + korpus JS ile SQL BİREBİR", haveColorFn && colorMismatch === 0, colorFirstBad.join(" | "));
+  // İş kuralının kendisi (eşitlik sağlansa bile YANLIŞ olabilir):
+  check('renk: "055-BEYAZ" ≡ "BEYAZ 055" (ayraç + sıra bağımsız)', foldColorNameForCompare("055-BEYAZ") === foldColorNameForCompare("BEYAZ 055"));
+  check('renk: "12 lacivert 7" → sayılar önde, kendi sırasında', foldColorNameForCompare("12 lacivert 7") === "12 7 lacivert");
+  check('renk: parantez token\'a YAPIŞIK kalır ("GRİ-(292-7791)" ≠ "292-7791-GRİ") — bilinçli', foldColorNameForCompare("GRİ-(292-7791)") !== foldColorNameForCompare("292-7791-GRİ"));
+  check('renk: NBSP ayraçtır ("BEYAZ\\u00a0055" ≡ "055 BEYAZ")', foldColorNameForCompare("BEYAZ\u00a0055") === foldColorNameForCompare("055 BEYAZ"));
 
   // ── 3) İş kuralları ───────────────────────────────────────────────────────
   console.log("\n── 3) Katlamanın iş kuralları ──");
