@@ -1,0 +1,8 @@
+# Satır sonu sözleşmesi (2026-08-25). Sunucu klonlarında core.autocrlf=true, dev macOS.
+# PowerShell script'leri Windows'ta CRLF, bash script'leri HER YERDE LF checkout edilir;
+# blob'lar LF kalır → Get-FileHash karşılaştırması autocrlf'ten bağımsız, Git Bash'te
+# run-harness.sh "\r: command not found" ile düşmez. (Fabrika sunucusu ölçümü: kur.ps1
+# working copy 17383 bayt CRLF ↔ blob 17042 LF — aynı dosya, farklı hash görünüyordu.)
+# Eklenirken ölçüldü: izlenen 11 script'in hepsi index'te zaten LF → renormalize sıfır fark.
+*.ps1 text eol=crlf
+*.sh  text eol=lf
