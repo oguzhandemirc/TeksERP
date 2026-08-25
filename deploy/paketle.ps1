@@ -95,7 +95,10 @@ if (Test-Path "$proj\dist") { Remove-Item "$proj\dist" -Recurse -Force }  # olu 
 npx tsc --removeComments
 if ($LASTEXITCODE -ne 0) { Fail "DERLEME BASARISIZ - paket uretilmedi." }
 if (-not (Test-Path "$proj\dist\server.js")) { Fail "dist\server.js yok. tsconfig rootDir/outDir bozulmus olabilir." }
-$kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//' -ErrorAction SilentlyContinue | Measure-Object).Count
+# `//# sourceMappingURL=` pragmasi yorum DEGILDIR (--removeComments onu birakir, .map dosyalari
+# asagida ayrica cikarilir) - eski desen onu da sayiyordu ve her deploy'da "67 (0 olmali)"
+# basip gercek bir yorum sizintisini gorunmez kiliyordu (2026-08-25 saha olcumu: 67/67 pragma).
+$kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//(?!#\s*sourceMappingURL)' -ErrorAction SilentlyContinue | Measure-Object).Count
 Write-Host "  yorum temizligi: dist\services icinde kalan // satiri = $kalanYorum (0 olmali)"
 
 # --- [3/6] Calisma zamani dosyalari -----------------------------------------
