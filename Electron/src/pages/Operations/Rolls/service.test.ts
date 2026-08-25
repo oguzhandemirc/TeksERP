@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import apiClient from "@/services/apiClient";
-import { rollService } from "./service";
+import { rollService, ROLL_STATUS_TABS } from "./service";
 
 // apiClient'i mock'la — fason özet ucunun URL sözleşmesini doğrula.
 vi.mock("@/services/apiClient", () => ({
@@ -69,5 +69,40 @@ describe("rollService — fasonda özet", () => {
     expect(firm?.subcontractorId).toBeNull();
     expect(firm?.oldestDays).toBeNull();
     expect(cat?.categoryId).toBeNull();
+  });
+});
+
+describe("ARŞİV statü kümesi — 'iptal ettim, nerede?' regresyon kilidi", () => {
+  /**
+   * 2026-08-25 saha bulgusu: iptal edilen top HİÇBİR yüzeyde görünmüyordu.
+   * Envanter sekmeleri ölü statüleri listelemez ve arşiv yalnız dört
+   * "tüketilmiş" statüyü taşıyordu → "soft delete, kayıt korunur" sözü veri
+   * düzeyinde tutuluyor ama kayda ULAŞMANIN YOLU YOKTU. Barkodla aramak da çare
+   * değil: iptal edilen topların bir kısmı barkodsuz açık kumaştır.
+   */
+  const archive = ROLL_STATUS_TABS.ARCHIVE.split(",");
+
+  it("iptal ve fire ARŞİVDE görünür", () => {
+    expect(archive).toContain("CANCELLED");
+    expect(archive).toContain("SCRAP");
+  });
+
+  it("dört tüketilmiş statü korunuyor (ekleme, değiştirme değildi)", () => {
+    for (const s of [
+      "RETURNED_FROM_SUBCONTRACTOR",
+      "TAMBUR_CONSUMED",
+      "SUBCONTRACTOR_CONSUMED",
+      "KARTELA_CONSUMED",
+    ]) {
+      expect(archive).toContain(s);
+    }
+  });
+
+  it("arşiv CANLI statü taşımaz (STOCK/WAREHOUSE arşiv değildir)", () => {
+    // Arşiv sayfası salt-okunur; canlı bir statü sızarsa operatör oradan
+    // düzenlenemeyen bir topa bakar ve "sistem bozuk" der.
+    for (const s of ["STOCK", "WAREHOUSE", "A1_STOCK", "IN_PRODUCTION", "SHIPPED"]) {
+      expect(archive).not.toContain(s);
+    }
   });
 });

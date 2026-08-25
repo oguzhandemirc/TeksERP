@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Ban, Check, FileText, Maximize2, Search, Undo2 } from "lucide-react";
+import { Ban, Check, FileText, Maximize2, Search, Truck, Undo2 } from "lucide-react";
 import { PermissionGate } from "@/components/PermissionGate";
 import { CancelShipmentDialog } from "./CancelShipmentDialog";
 import { UndoDispatchDialog } from "./UndoDispatchDialog";
+import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [undoOpen, setUndoOpen] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const [filter, setFilter] = useState("");
   const [onlyMatched, setOnlyMatched] = useState(false);
   const openTarget = useOpenTarget();
@@ -115,6 +117,25 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
               <Button type="button" size="sm" variant="default" className="gap-1" onClick={() => setNoteOpen(true)}>
                 <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
               </Button>
+              {/* Sevk Et: PLANNED sevkiyat BURADAN da çıkarılır (2026-08-22) — Sevk
+                  Kapısı ekranı yalnız sevk onayı bayrağı açıkken menüde; bayrak
+                  kapalıyken storno ile PLANNED'a dönmüş (ya da bayrak açıkken
+                  kurulup sonra bayrağı kapatılmış) sevkiyatın çıkış yolu bu düğme.
+                  Aynı ORTAK onay dialog'u (çuvallar canlı listelenir, irsaliye
+                  başarı panelinden basılır). */}
+              {d.status === "PLANNED" && (
+                <PermissionGate permission="shipping:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    className="gap-1"
+                    onClick={() => setDispatchOpen(true)}
+                  >
+                    <Truck className="h-3.5 w-3.5" /> Sevk Et
+                  </Button>
+                </PermissionGate>
+              )}
               {/* İptal: DISPATCHED/CANCELLED dışında — cancel-preview'lı yıkıcı onay. */}
               {d.status !== "DISPATCHED" && d.status !== "CANCELLED" && (
                 <PermissionGate permission="shipping:write">
@@ -206,6 +227,14 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
         />
         <CancelShipmentDialog shipmentId={cancelOpen ? shipmentId : null} onOpenChange={(o) => setCancelOpen(o)} />
         <UndoDispatchDialog shipmentId={undoOpen ? shipmentId : null} onOpenChange={(o) => setUndoOpen(o)} />
+        <DispatchConfirmDialog
+          shipment={
+            dispatchOpen && d
+              ? { id: d.id, shipmentNo: d.shipmentNo, customerName: d.customer.name, branchName: d.branch?.name ?? null }
+              : null
+          }
+          onOpenChange={(o) => setDispatchOpen(o)}
+        />
       </SheetContent>
     </Sheet>
   );

@@ -26,7 +26,6 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: () => ({
     shipmentConfirmationEnabled: false,
-    pendingPlannedShipments: 0,
   }),
 }));
 vi.mock("@/hooks/useFavorites", () => ({

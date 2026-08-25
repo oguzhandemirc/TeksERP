@@ -4,6 +4,7 @@ import { resolveTabMeta, tabPathname } from "@/components/layout/tabs/tab-meta";
 import {
   getTabRouter,
   navigateTabRouter,
+  goBackTabRouter,
   disposeTabRouter,
 } from "@/components/layout/tabs/tab-routers";
 import { recallRoute } from "@/components/layout/tabs/route-memory";
@@ -32,6 +33,14 @@ interface TabsState {
   openTab: (path: string, opts?: OpenOpts) => void;
   /** Aktif sekmeyi yerinde başka sayfaya taşı (varsayılan tık davranışı). */
   navigateActive: (path: string, opts?: { state?: unknown }) => void;
+  /** Aktif sekmede bir adım geri (sekmenin kendi geçmişi) — Alt+← / fare geri tuşu. */
+  backActive: () => void;
+  /**
+   * Sekmenin router'ı KENDİ İÇİNDE gezindiyse (geri oku, breadcrumb, sayfa içi
+   * `navigate()`) defteri eşitle. Store'dan geçmeyen gezinmeler eskiden sekme
+   * başlığını ve kenar menüsü eşleşmesini BAYAT bırakıyordu.
+   */
+  syncTabLocation: (id: string, pathname: string) => void;
   closeTab: (id: string) => void;
   setActive: (id: string) => void;
   /** Aktif sekmeden delta kadar ileri/geri (sarmalı) geç. */
@@ -116,6 +125,22 @@ export const useTabsStore = create<TabsState>()(
         set({
           tabs: tabs.map((t) => (t.id === active.id ? { ...t, path: pathname, title } : t)),
         });
+      },
+
+      backActive: () => {
+        const { activeId } = get();
+        if (activeId) goBackTabRouter(activeId);
+      },
+
+      syncTabLocation: (id, rawPathname) => {
+        const pathname = tabPathname(rawPathname);
+        const { tabs } = get();
+        const tab = tabs.find((t) => t.id === id);
+        // Yol değişmediyse dokunma: sayfaların `updateTabTitle` ile yazdığı özel
+        // başlık (ör. "Sevkiyat · SVK…") her router olayında silinmesin.
+        if (!tab || tab.path === pathname) return;
+        const { title } = resolveTabMeta(pathname);
+        set({ tabs: tabs.map((t) => (t.id === id ? { ...t, path: pathname, title } : t)) });
       },
 
       closeTab: (id) => {

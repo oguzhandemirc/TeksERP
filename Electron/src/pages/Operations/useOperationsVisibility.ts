@@ -1,7 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
-import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { sackStoreService } from "./SackStore/service";
 import type { OperationsVisibilityContext } from "./tile-config";
 
 /**
@@ -15,24 +12,11 @@ import type { OperationsVisibilityContext } from "./tile-config";
  *
  * Dönüş tipi AÇIK yazılır: bağlama alan eklenip burası güncellenmezse derleme
  * düşer (alan sessizce `undefined` gelip yüklemi yanlış karara sürükleyemez).
+ *
+ * 2026-08-22: çıkış bekleyen sevkiyat SONDASI (`sack-store/board?limit=1`) kalktı —
+ * Sevk Kapısı karosu artık yalnız bayrağa bakıyor (gerekçe `tile-config.ts`'te).
  */
 export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
-  const { hasPermission } = useRoleAccess();
-
-  // Çıkış bekleyen sevkiyat SONDASI — yalnız karar bunu gerektiriyorsa koşar:
-  // bayrak açıksa karo zaten görünür (sorgu gereksiz), izin yoksa uç 403 verir.
-  // `limit: 1` yeter — sayı değil VARLIK soruluyor.
-  const probeEnabled = !shipmentConfirmationEnabled && hasPermission("shipping:read");
-  const pending = useQuery({
-    queryKey: ["ops-visibility", "planned-shipments"],
-    queryFn: () => sackStoreService.list({ limit: 1 }),
-    enabled: probeEnabled,
-    staleTime: 60 * 1000,
-  });
-
-  return {
-    shipmentConfirmationEnabled,
-    pendingPlannedShipments: pending.data?.data?.length ?? 0,
-  };
+  return { shipmentConfirmationEnabled };
 }

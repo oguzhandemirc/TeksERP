@@ -71,3 +71,37 @@ export function useTabTarget(path: string) {
     },
   };
 }
+
+/**
+ * HUB KARTI hedefi — "yerinde in, sağ tıkla yeni sekmede aç" (2026-08-22 kullanıcı
+ * kararı).
+ *
+ * `useTabTarget` ile FARKI ve neden ikisi bir arada duruyor: kenar menüsü bir
+ * BAŞKA İŞE geçiştir (2026-08-17 kararı — menüden Siparişler'e geçmek açık iş
+ * emri listesini o sekmeden düşürmemeli), hub kartı ise AYNI İŞİN bir adımıdır:
+ * Operasyon hub'ından Envanter'e inmek, listeden detaya inmekle aynı zincirdir.
+ * Kart da sekme açınca iki şey birden bozuluyordu: (1) her tık yeni sekme →
+ * şerit doluyor, (2) yeni sekmenin geçmişi TEK girişlik olduğu için geri oku
+ * sekme geçmişi yerine breadcrumb yedeğine düşüyordu — kullanıcı bunu "geri
+ * gitmiyor" diye görüyordu (yalnız hub'lı ekranlarda).
+ *
+ * Sözleşme: sol tık → AKTİF sekmede yerinde · shift/ctrl/cmd + sol tık ve orta
+ * tık → yeni sekme (öne/arkaya, `useOpenTarget` kuralı) · SAĞ TIK → arka planda
+ * yeni sekme (peş peşe birkaç kart açmak için; kullanıcı hub'da kalır).
+ */
+export function useDrillTarget(path: string) {
+  const open = useOpenTarget();
+  return {
+    onClick: (e: MouseEvent) => open(path, e),
+    onAuxClick: (e: MouseEvent) => {
+      if (e.button === 1) {
+        e.preventDefault();
+        open(path, e);
+      }
+    },
+    onContextMenu: (e: MouseEvent) => {
+      e.preventDefault();
+      open(path, { button: 2 });
+    },
+  };
+}

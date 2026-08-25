@@ -16,3 +16,17 @@ export const TabActiveProvider = TabActiveContext.Provider;
 export function useIsTabActive(): boolean {
   return useContext(TabActiveContext);
 }
+
+/**
+ * İçeriğin bulunduğu sekmenin kimliği — sekme sistemi dışında (test, gömülü
+ * kullanım) `null`. Geri tuşu bununla "bu sekmede geri gidilecek adım var mı?"
+ * diye sorar (`history-depth.ts`); sekme kimliğini aktif sekmeden okumak yanlış
+ * olurdu — pasif sekmeler de mount kalır ve kendi başlıklarını çizer.
+ */
+const TabIdContext = createContext<string | null>(null);
+
+export const TabIdProvider = TabIdContext.Provider;
+
+export function useTabId(): string | null {
+  return useContext(TabIdContext);
+}

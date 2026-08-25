@@ -1949,6 +1949,38 @@ export class ShippingService {
   }
 
   /**
+   * PLANNED sevkiyatı İPTAL eden tx gövdesi — TEK KAYNAK (2026-08-22). İki çağıran:
+   * `cancelShipment` (kullanıcı "İptal Et") ve `undoDispatch` `releaseSacks` ile
+   * (storno + kapanış AYNI tx'te). Claim `expectedStatus` üzerinden atomik; çuvallar
+   * ve içerik havuza döner (shipmentId null), tahsisler silinir, sipariş defteri
+   * yeniden hesaplanır. İkinci bir kopya yazma — iki yol ayrıştığında "İptal Et"
+   * çuvalı serbest bırakırken storno kapanışı çuvalı üstünde unutur.
+   */
+  private async cancelPlannedShipmentTx(
+    tx: Prisma.TransactionClient,
+    shipmentId: string,
+    expectedStatus: ShipmentStatus,
+  ): Promise<void> {
+    const claim = await tx.shipment.updateMany({ where: { id: shipmentId, status: expectedStatus }, data: { status: ShipmentStatus.CANCELLED } });
+    if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
+    // Tahsisleri sil (çuval.shipmentId null'lanmadan ÖNCE — yoksa where eşleşmez) + sipariş defteri.
+    const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+    // Lost-update kilidi (performDispatchTx ile simetrik): defter mutasyonu
+    // (deleteMany) + recompute, etkilenen siparişlerin TAM satır kümesi kilitliyken
+    // koşar — eşzamanlı dispatch/iptal shippedQty'yi eksik yazamaz.
+    const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
+    const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+    await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
+    await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
+    await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
+    // Çuvallar depoya döner; içerik shipmentId null.
+    await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
+    await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
+    await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
+    await recomputeOrderStatusForOrders(tx, orderIds);
+  }
+
+  /**
    * Sevkiyatı iptal et (soft → CANCELLED). PLANNED iptal edilebilir: çuvallar depoya
    * döner, tahsisler silinir (sipariş bağı kalkar). DISPATCHED iptal edilemez.
    */
@@ -1959,23 +1991,7 @@ export class ShippingService {
     if (shipment.status === ShipmentStatus.DISPATCHED) throw AppError.conflict("Sevk edilmiş sevkiyat iptal edilemez");
 
     await prisma.$transaction(async (tx) => {
-      const claim = await tx.shipment.updateMany({ where: { id: shipmentId, status: shipment.status }, data: { status: ShipmentStatus.CANCELLED } });
-      if (claim.count === 0) throw AppError.conflict("Sevkiyat durumu değişti — yenileyip tekrar deneyin");
-      // Tahsisleri sil (çuval.shipmentId null'lanmadan ÖNCE — yoksa where eşleşmez) + sipariş defteri.
-      const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
-      // Lost-update kilidi (performDispatchTx ile simetrik): defter mutasyonu
-      // (deleteMany) + recompute, etkilenen siparişlerin TAM satır kümesi kilitliyken
-      // koşar — eşzamanlı dispatch/iptal shippedQty'yi eksik yazamaz.
-      const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
-      const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
-      await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
-      await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
-      await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
-      // Çuvallar depoya döner; içerik shipmentId null.
-      await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
-      await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
-      await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
-      await recomputeOrderStatusForOrders(tx, orderIds);
+      await this.cancelPlannedShipmentTx(tx, shipmentId, shipment.status);
     });
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "CANCEL", freedSacks: shipment._count.sacks } });
     return { success: true, data: { shipmentId, freedSacks: shipment._count.sacks }, message: "Sevkiyat iptal edildi — çuvallar depoya döndü" };
@@ -2047,9 +2063,14 @@ export class ShippingService {
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
 
-    const [activeReturnCount, sameDayOnly] = await Promise.all([
+    const [activeReturnCount, sameDayOnly, confirmationEnabled] = await Promise.all([
       prisma.rollReturn.count({ where: { fromShipmentId: shipmentId, cancelledAt: null } }),
       readShipmentUndoSameDayOnly(),
+      // İstemci "sevkiyatı da kapat" seçeneğinin VARSAYILANINI bundan kurar:
+      // sevk onayı KAPALI rejimde geri alınan sevkiyatın PLANNED beklemesinin
+      // karşılığı yok (çıkış onayı ekranı bayrak kapalıyken görünmez) → varsayılan
+      // kapat; AÇIK rejimde PLANNED doğal durum → varsayılan beklet.
+      readShipmentConfirmationEnabled(),
     ]);
     const blockReason = this.resolveUndoBlockReason({
       status: shipment.status,
@@ -2086,6 +2107,7 @@ export class ShippingService {
         affectedOrders: [...new Set(shipment.orders.map((o) => o.order.orderNumber))],
         // Sevk irsaliyesi İPTAL (VOIDED) olacak — kullanıcı bunu onaydan ÖNCE bilmeli.
         voidsDispatchNote: true,
+        confirmationEnabled,
         returnTargets: shelves.map((g) => ({
           status: g.preShipStatus ?? RollStatus.WAREHOUSE,
           rollCount: g._count._all,
@@ -2101,11 +2123,29 @@ export class ShippingService {
    *
    * Plaka/şoför/nakliyeci BİLİNÇLİ olarak KORUNUR: aynı araca yeniden yüklenecek
    * olması olağan; yeniden sevkte zaten üzerine yazılır.
+   *
+   * `opts.releaseSacks` (2026-08-22) — storno + KAPANIŞ aynı tx'te: geri alınan
+   * sevkiyat PLANNED'da BEKLEMEZ, `cancelPlannedShipmentTx` ile CANCELLED'a çekilir
+   * (çuvallar + toplar havuza döner, tahsis silinir, sipariş bağı kalkar). Neden:
+   * sevk onayı KAPALI rejimde sevkiyat "oluştur + çık" tek adımdır; geri alınanın
+   * çuvalları üstünde kilitli PLANNED beklemesinin o rejimde karşılığı yoktur ve
+   * çıkış onayı ekranı (Sevk Kapısı) bayrak kapalıyken görünmez (saha vakası
+   * SVK2008260008: "bu sipariş yok" diye geri alındı, çuval bir gün kilitli kaldı).
+   * Yeniden çıkış = Paketleme'den YENİ sevkiyat (yeni sevk no); eski irsaliye zaten
+   * VOIDED. Karar İSTEMCİDE (önizlemedeki `confirmationEnabled` varsayılanı kurar) —
+   * açık rejimde de "kapat" seçilebilir. Storno yetkisi (`shipping:undo-dispatch`)
+   * kapanışı da kapsar: aynı kararın parçası, ayrıca `shipping:write` aranmaz.
    */
-  async undoDispatch(shipmentId: string, reason: string, userId?: string): Promise<ApiResponse<unknown>> {
+  async undoDispatch(
+    shipmentId: string,
+    reason: string,
+    userId?: string,
+    opts: { releaseSacks?: boolean } = {},
+  ): Promise<ApiResponse<unknown>> {
     const trimmed = reason?.trim() ?? "";
     if (trimmed.length < 3) throw AppError.badRequest("Geri alma gerekçesi zorunlu (en az 3 karakter)");
     const sameDayOnly = await readShipmentUndoSameDayOnly();
+    const releaseSacks = opts.releaseSacks === true;
 
     const result = await prisma.$transaction(async (tx) => {
       // ⚠️ TX'İN İLK İFADESİ — sevkiyat kapsamlı advisory lock (F-SEV-ESZ-001).
@@ -2175,7 +2215,16 @@ export class ShippingService {
         shipmentId,
         `Sevk geri alındı: ${trimmed}`,
       );
-      return { restored, voidedDocs, orderIds };
+      // KAPANIŞ (opsiyonel) — storno ile AYNI tx: yukarıdaki PLANNED claim'i
+      // başarılıysa sevkiyat şimdi PLANNED'dır, `cancelPlannedShipmentTx` onu
+      // CANCELLED'a çeker ve çuval/top/kartela shipmentId'sini boşaltır. Toplar
+      // ÇUVALDA KALIR (sackId'ye dokunulmaz) — depoya dönen şey çuvaldır.
+      let freedSacks = 0;
+      if (releaseSacks) {
+        freedSacks = await tx.sack.count({ where: { shipmentId } });
+        await this.cancelPlannedShipmentTx(tx, shipmentId, ShipmentStatus.PLANNED);
+      }
+      return { restored, voidedDocs, orderIds, freedSacks };
     });
 
     await AuditService.log({
@@ -2189,12 +2238,22 @@ export class ShippingService {
         restoredRolls: result.restored,
         voidedDocs: result.voidedDocs,
         affectedOrders: result.orderIds.length,
+        released: releaseSacks,
+        freedSacks: result.freedSacks,
       },
     });
     return {
       success: true,
-      data: { shipmentId, restoredRolls: result.restored, voidedDocs: result.voidedDocs },
-      message: `Sevk geri alındı — ${result.restored} top depoya döndü, irsaliye iptal edildi`,
+      data: {
+        shipmentId,
+        restoredRolls: result.restored,
+        voidedDocs: result.voidedDocs,
+        released: releaseSacks,
+        freedSacks: result.freedSacks,
+      },
+      message: releaseSacks
+        ? `Sevk geri alındı ve sevkiyat kapatıldı — ${result.restored} top, ${result.freedSacks} çuval depoya döndü; irsaliye iptal edildi`
+        : `Sevk geri alındı — ${result.restored} top depoya döndü, irsaliye iptal edildi`,
     };
   }
 

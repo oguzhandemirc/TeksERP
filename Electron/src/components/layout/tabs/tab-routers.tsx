@@ -3,6 +3,7 @@ import { contentRoutes } from "@/routes/content-routes";
 import { TabRootLayout } from "./TabRootLayout";
 import { RouteErrorFallback } from "@/components/RouteErrorFallback";
 import { rememberRoute } from "./route-memory";
+import { canGoBackTab, forgetTab, trackTabLocation } from "./history-depth";
 
 type TabRouter = ReturnType<typeof createMemoryRouter>;
 
@@ -16,16 +17,19 @@ function toEntry(path: string, state?: unknown) {
   return search ? `${pathname}${search}` : pathname || "/";
 }
 
-function build(path: string, state?: unknown): TabRouter {
+function build(id: string, path: string, state?: unknown): TabRouter {
   const router = createMemoryRouter(
     [{ path: "/", element: <TabRootLayout />, errorElement: <RouteErrorFallback />, children: contentRoutes }],
     { initialEntries: [toEntry(path, state)], initialIndex: 0 },
   );
-  // Sekmenin her konum değişimini rota hafızasına yaz — aynı sayfaya sonradan
-  // dönüldüğünde filtre/sıralama son hâlinden açılsın. Abonelik router'ın
-  // ömrüne bağlı; `dispose()` onu da kapatır.
+  // Sekmenin her konum değişimini (a) rota hafızasına yaz — aynı sayfaya sonradan
+  // dönüldüğünde filtre/sıralama son hâlinden açılsın — ve (b) geçmiş derinliği
+  // defterine işle (geri tuşunun TEK doğru kaynağı; bkz. `history-depth.ts`).
+  // Abonelik router'ın ömrüne bağlı; `dispose()` onu da kapatır.
+  trackTabLocation(id, router.state.location.key, router.state.historyAction);
   router.subscribe((state) => {
     rememberRoute(state.location.pathname, state.location.search);
+    trackTabLocation(id, state.location.key, state.historyAction);
   });
   return router;
 }
@@ -38,7 +42,7 @@ const registry = new Map<string, TabRouter>();
 export function getTabRouter(id: string, path: string, state?: unknown): TabRouter {
   let router = registry.get(id);
   if (!router) {
-    router = build(path, state);
+    router = build(id, path, state);
     registry.set(id, router);
   }
   return router;
@@ -52,8 +56,22 @@ export function navigateTabRouter(id: string, path: string, state?: unknown): bo
   return true;
 }
 
+/**
+ * Sekmenin KENDİ geçmişinde bir adım geri. Geri gidilecek adım yoksa hiçbir şey
+ * yapmaz ve `false` döner — çağıran "geri gidilecek yer yok"u bilir ve sessiz bir
+ * tık yerine kendi yedeğine (breadcrumb üstü) düşebilir. Uygunluk `location.key`
+ * ile DEĞİL derinlik defteriyle çözülür (REPLACE tuzağı — `history-depth.ts`).
+ */
+export function goBackTabRouter(id: string): boolean {
+  const router = registry.get(id);
+  if (!router || !canGoBackTab(id)) return false;
+  void router.navigate(-1);
+  return true;
+}
+
 /** Sekme kapanınca router'ı serbest bırakır (listener/abort temizliği). */
 export function disposeTabRouter(id: string): void {
   registry.get(id)?.dispose();
   registry.delete(id);
+  forgetTab(id);
 }

@@ -110,6 +110,18 @@ const restoreCancelSchema = z.object({
   reason: z.string().trim().min(3).max(500).optional(),
 });
 
+/**
+ * "Mal vardı, fire" gövdesi. Sebep OPSİYONEL (iptalle aynı kural, 2026-08-06:
+ * eldivenli operatörü rastgele kategori seçmeye itmek, cevapsızlıktan kötüdür).
+ * `reasonCode` verilirse fire kataloğunda (`RollVarianceKind.SCRAP`) doğrulanır.
+ */
+const scrapRollSchema = z.object({
+  reason: z.string().trim().min(3).max(500).optional(),
+  reasonCode: z.string().trim().max(64).optional(),
+  /** İstasyonda/iş emrinde aktif top için bilinçli onay (iptaldeki ile aynı eksen). */
+  confirmActive: z.boolean().optional(),
+});
+
 // Saha #4: top etiketi değiştir (renk/özellik/en/kalite). Tümü opsiyonel; renk
 // null=renksiz. propertyIds verilirse TAM liste (replace).
 const relabelSchema = z.object({
@@ -183,6 +195,7 @@ export class InventoryController {
     this.getRollHistory = this.getRollHistory.bind(this);
     this.cancelPreview = this.cancelPreview.bind(this);
     this.softDelete = this.softDelete.bind(this);
+    this.scrap = this.scrap.bind(this);
     this.restoreCancelled = this.restoreCancelled.bind(this);
     this.hardDelete = this.hardDelete.bind(this);
     this.createOpenFabric = this.createOpenFabric.bind(this);
@@ -550,12 +563,10 @@ export class InventoryController {
     try {
       // İstasyonda aktif top için bilinçli onay: ?confirmActive=true.
       const confirmActive = req.query.confirmActive === "true";
-      // Etiketi basılmış top için AYRI onay + sebep (ölü etiket guard'ı).
-      // Query'de taşınıyor çünkü uç `DELETE` — gövdeli DELETE bazı ara katmanlarda
-      // (proxy/fetch varyantları) sessizce düşer; iki alan da kısa ve URL-güvenli.
-      // ⚠️ Eski istemci ikisini de göndermez → etiketi basılmış topta 409 alır ve
-      // bu İSTENEN davranıştır (fail-closed): guard'ın var olma sebebi tam olarak
-      // "uyarısız iptal"i durdurmak.
+      // ⚠️ `confirmLabelPrinted` ARTIK BİR KAPI DEĞİL (2026-08-25 kullanıcı kararı):
+      // ölü etiket guard'ı kaldırıldı. Parametre okunmaya devam ediyor çünkü
+      // sahadaki APK'lar gönderiyor ve sözleşmeyi kırmanın karşılığı yok; servis
+      // onu görmezden gelir. Gerekçe: inventory.service.softDelete içindeki not.
       const confirmLabelPrinted = req.query.confirmLabelPrinted === "true";
       const reason = typeof req.query.reason === "string" ? req.query.reason : undefined;
       // Sebebin KATALOG KODU (2026-08-21) — opsiyonel, aynı sebeple query'de. Verilmezse
@@ -568,6 +579,36 @@ export class InventoryController {
         req.params.id as string,
         req.user?.userId,
         { confirmActive, confirmLabelPrinted, reason, reasonCode }
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/rolls/:id/scrap — "MAL VARDI, FİRE".
+   *
+   * `softDelete`in kardeşi ve BİLİNÇLİ OLARAK AYRI bir uç: iptal ("bu kayıt hiç
+   * olmamalıydı") ile fire ("mal vardı, artık yok") aynı tuşun arkasına konursa
+   * fabrikanın fire oranı veri düzeltmeleriyle kirlenir. Ölçüm (2026-08-25, canlı
+   * kopya): 230 iptale karşı 1 fire ve sebep yazılmış 24 iptalin hepsi kayıt hatası.
+   *
+   * Sebep OPSİYONEL; `reasonCode` verilirse fire kataloğunda doğrulanır.
+   * Gövdeli POST — DELETE'in query kısıtı burada yok.
+   */
+  async scrap(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = scrapRollSchema.parse(req.body ?? {});
+      const result = await this.service.softDelete(
+        req.params.id as string,
+        req.user?.userId,
+        {
+          mode: "SCRAP",
+          confirmActive: body.confirmActive ?? false,
+          reason: body.reason,
+          reasonCode: body.reasonCode,
+        },
       );
       res.status(200).json(result);
     } catch (error) {

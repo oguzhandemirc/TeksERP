@@ -463,6 +463,260 @@ mutabakat sorgusunun kör noktası — düzeltme gerekirse §20'ye "adımın tü
 *iş kararı bekleyen veri* (§18), *sorgunun kör noktası* (§20). Üçünü ayırmadan "drift düzelt"
 demek, ikisini yanlış yerden onarır.
 
+---
+
+## 2026-08-25 — Saha deploy sonrası üç arıza: "kutu var, uç yok" · "soru var, süreç yok" · "ölçek var, sınır yok"
+
+Fabrikaya backend+Electron+APK deploy edildikten sonra üç şikâyet geldi. Üçü de farklı sınıf
+ve üçü de **yeni kodun ilk kez sahaya inmesiyle** görünür oldu. Teşhis, sunucunun 25.08 02:00
+yedeği (`tekserp_saha_0825`, 2431 top / 209 iş emri) üzerinde yapıldı — 189 migration'ın hepsi
+uygulanmıştı, yani hiçbiri veri/deploy arızası değildi.
+
+### ① "Fasona renksiz gitsin" — YEDİ katmanda sessiz düşüş
+
+`WorkOrderStep.dispatchWithoutColor` (2026-08-17 "ekru" kuralı) panelde işaretlenebiliyor,
+kaydediliyor, çekide renk **yine basılıyordu**. Ölçüm: canlıda **623 iş emri adımının hiçbirinde**
+işaretli değil; `route_steps`'te de sıfır. Yani özellik 8 gündür vardı ve **bir kez bile** üretime
+yansımamıştı.
+
+Sebep tek bir hata değil, aynı alanın yedi ayrı yerde düşmesiydi:
+
+| # | Katman | Etki |
+|---|---|---|
+| 1-4 | `workorder.controller` Zod şemaları (`create.steps` · `create.stepPlanning` · `replace.steps` · `replace.stepPlanning`) | Zod bilinmeyen anahtarı **sessizce siler** — istek 200 döner, alan yoktur |
+| 5-7 | `workorder.service`'in üç Prisma adım-yazımı (create nested `steps.create` · replace `update` · replace `create`) | `finalSteps` alanı taşıyordu ama DB'ye hiç ulaşmıyordu |
+| + | `RouteService.ALLOWED_STEP_KEYS` | Şablona kaydetmek 400 verirdi → "şablondan miras" yolu da hiç kurulamadı |
+
+⚠️ **Servis katmanı BAŞTAN DOĞRUYDU** (`overlay?.dispatchWithoutColor ?? s.dispatchWithoutColor ?? false`
+üç yerde de duruyordu). Bu yüzden servisi doğrudan çağıran bir test **yeşil kalırdı** — bekçinin §1'i
+bilerek METİN üzerinden koşar ve dört Zod bloğunu + üç yazım noktasını + allowlist'i ayrı ayrı arar.
+
+Electron'un ana iş emri formu alanı **zaten gönderiyordu** (`stepsToCustom` taşıyor, F0813 "kesimde
+kat düşüyordu" dersinin uygulanmış hâli); düşüş tamamen backend'deydi. Şablon yolları (
+`buildFasonPlans` · `routeStepsToCreatePayload` · `workOrderPayload.stepPlanning`) taşımıyordu →
+onlar da eklendi. ⚠️ `stepPlanning` süzgecine `dispatchWithoutColor` DA girer: yalnız o kutuyu
+işaretleyip firma/kategori/not girmeyen adım aksi halde tamamen düşerdi.
+
+Mobil Hızlı İş Emri'ne kutu eklendi (rota adımları ekranı, fason adımlarında). Değer **her fason adımı
+için AÇIKÇA gönderilir (true de false da)**: yalnız true'yu göndermek, şablonda işaretli bir adımı
+operatörün kapatma niyetini sessizce yutardı.
+
+Bekçi: `scripts/test_dispatch_without_color.ts` (18 kontrol). İki negatif sondayla kırmızı verdiği
+doğrulandı (Zod alanı silinince 1, create yazımı silinince 4 kontrol düştü); dosyalar `md5` ile
+birebir geri yüklendi.
+
+### ② Ölü etiket onayı KALDIRILDI — ve "stoktan kaldır" ikiye ayrıldı
+
+Masaüstünde etiketi basılmış hiçbir top iptal edilemiyordu: `BulkCancelRollsDialog` düz
+`DELETE /api/rolls/:id` çağırıyor, `confirmLabelPrinted`'i **hiç göndermiyordu** → 409 `LABEL_PRINTED`.
+Üstelik hata `catch {}` ile yutulup yalnız "0 başarılı, 1 başarısız" yazılıyordu, yani operatör sebebi
+hiçbir yerden öğrenemiyordu. (Aynı guard mobilde bağlıydı ve çalışıyordu — yüzeyler ayrışmıştı.)
+
+**Kullanıcı kararı: guard kalksın.** Gerekçe kabul edildi çünkü doğrudur: onay bir sektör standardı
+DEĞİLDİ — 2026-08-05'teki tek bir olaydan sonra eklenmiş yerel bir korumaydı ve karşılığında bir
+"ölü etiket toplama" süreci hiçbir zaman kurulmadı. Kimsenin kullanmadığı bir liste uğruna operatörü
+durduran onay, sıfır kazanç karşılığında yol kesiyordu. ⚠️ **KOLON DURUYOR**: `labelPrintedAt` baskı
+anında otomatik yazılır, kimseye iş çıkarmaz ve soru bir gün sorulursa cevabı orada. Kaldırılan şey
+veri değil, **soru**. `confirmLabelPrinted` sözleşme uyumu için kabul edilmeye devam eder (sahadaki
+APK'lar gönderiyor) ama hiçbir kapı açmaz — geri koyarken bunu da hatırla, yalnız 409'u geri koymak
+bayrağı göndermeyen istemcileri sessizce kilitler.
+
+**Asıl kazanım ayrımın kendisi.** Kullanıcı "silme sektör standardına aykırıysa doğrusu ne" diye
+sordu; cevap: fiziksel silme hiçbir ERP'de yok (geçmiş rapor bugün değişir, basılmış belgeler
+sahipsiz kalır) ama **iki ayrı eylem** standarttır ve sistemde zaten ikisi de vardı:
+
+| | Anlam | Stok | Fire raporu | SAP karşılığı |
+|---|---|---|---|---|
+| **İptal** (`CANCELLED`) | "Bu kayıt hiç olmamalıydı" | Düşmez (mal zaten yoktu) | Girmez | ters kayıt / MBST |
+| **Fire** (`SCRAP`) | "Mal vardı, artık yok" | Gerçekten düşer | Girer | fire mal çıkışı / 551 |
+
+Canlı veri kararı doğruladı: **230 iptal / 1 fire**, ve sebep yazılmış 24 iptalin tamamı
+("Yanlış ürün/renk", "Mükerrer giriş", "Yanlış metraj", "Top fiziksel olarak yok") gerçekten kayıt
+hatası. Yani saha zaten doğru kutuyu kullanıyor; eksik olan fire kutusunun masaüstünde hiç olmamasıydı.
+
+Uygulama: `softDelete`'e `mode: "CANCEL" | "SCRAP"` eklendi + yeni uç
+`POST /api/rolls/:id/scrap` (izin **`roll:manual-adjust`** — `roll:write` yetmez, fire gerçek bir
+stok değeri kararıdır; iş emri kapanış dispozisyonlarıyla aynı çizgi). Farklar:
+
+- **Hareket kapanışı:** iptal `qtyOut = 0` (storno — mal o istasyondan hiç geçmedi), fire
+  `qtyOut = qtyIn` (mal geçti, sonra fire oldu). 0 yazmak istasyonun iş hacminden metrajı geriye
+  dönük siler ve üretim raporunda hayalet kayıp yaratır.
+- **Sebep kataloğu AYRI ve iki FARKLI kapıdan geçer** (`KIND_STORES_TEXT` ayrımı): `ROLL_CANCEL`
+  metin saklar → `resolveReasonCode` (async); `ROLL_SCRAP` saklamaz → `validateVarianceReason`
+  (senkron). ⚠️ `resolveReasonCode` bunu **tip düzeyinde** reddeder (`TextReasonKind`) — zorlama.
+  Kodsuz fire'da kod **uydurulmaz**: `validateVarianceReason`'un `LEGACY_*` kovası sapma defterine
+  aittir, topun satırına değil.
+- **Çıkış izi kolonları PAYLAŞILIR** (`cancelledAt/ById/Reason/ReasonCode/preCancelStatus`). Adları
+  "cancel" olsa da anlamları "defterden düşme izi"dir; hangi mod olduğu `status` ile okunur ve ayrım
+  tek+kesin. Ayrı `scrapReason*` kolonları **açılmadı**: canlı DB'ye migration eklemenin karşılığı
+  yalnız kolon adının hoşluğu olurdu. Geri alma yalnız `CANCELLED`'ta çalışır
+  (`resolveRollRestoreBlockReason` ilk ifadesi statüye bakar) → fire geri alınamaz, doğrusu da bu.
+
+Masaüstü penceresi yeniden yazıldı: her top için `cancel-preview` (uç 2026-08-05'ten beri vardı,
+masaüstünden **hiç çağrılmıyordu**), engelli toplar denenmez ve backend'in KENDİ cümlesiyle listelenir,
+başarısızların sebebi artık yutulmaz, etiket bilgisi satırda **bilgi** olarak durur, fire şıkkı
+izinsiz kullanıcıya **çizilmez** (tıklayıp 403 almasın — kart↔route hizası kuralının aynısı).
+
+Bekçiler: `test_roll_cancel_undo` §2/§2b **tersine çevrildi** (46→53 kontrol; §7 fire ayrımı eklendi)
++ `BulkCancelRollsDialog.test.tsx` (5 kontrol — iki modun ayrı uçlara gitmesi, engelli topun
+denenmemesi, etiketin engel OLMAMASI).
+
+#### ②b "İptal ettim, top arşivinde göremedim" — kayıt korunuyordu ama ULAŞILAMIYORDU
+
+İlk iptal denemesinin hemen ardından çıktı ve ② ile aynı sınıf: **söz veri düzeyinde
+tutuluyor, yüzeyde tutulmuyor.** `STATUS_GROUPS.ARCHIVE` yalnız dört "tüketilmiş" statüyü
+taşıyordu (`RETURNED_FROM_SUBCONTRACTOR` · `TAMBUR_CONSUMED` · `SUBCONTRACTOR_CONSUMED` ·
+`KARTELA_CONSUMED`); envanter sekmelerinin hiçbiri ölü statü listelemez. Sonuç: iptal edilen
+ya da fire edilen bir top **hiçbir Electron yüzeyinde görünmüyordu**. Barkodla aramak da çare
+değildi — iptal edilenlerin bir kısmı barkodsuz açık kumaştır. Canlı kopyada **231 CANCELLED
++ 1 SCRAP** kayıt böyle görünmezdi.
+
+Düzeltme üç parça: ① `ARCHIVE` kümesine `CANCELLED,SCRAP` eklendi; ② sayfaya **arama kutusu**
+kondu (200+ satırlık arşivde barkodu bilinen kaydı gözle taramak gerçek kullanım değil —
+backend zaten barkodu TAM eşleştiriyor, kumaş/renk/alias `contains`); ③ **"Kayıt Türü"**
+daraltma filtresi eklendi. ⚠️ Filtre anahtarı bilerek `statusIn`, `status` DEĞİL: backend
+önceliği `statusIn[] > status > varsayılan` olduğu için sayfanın zorunlu kümesini EZER ve
+seçenekler arşiv kümesinin alt kümesi olduğundan ezmek zararsızdır; `status` kullanılsaydı
+aynı alana iki değer yazılır ve hangisinin kazandığı belirsiz kalırdı.
+
+Ölçüldü (canlı kopya, gerçek liste yolundan): eski kümeyle barkod araması **0 satır**, yeni
+kümeyle `T240826F0035/CANCELLED`. İptal penceresinin başarı bildirimi artık nereye gittiğini
+de söylüyor ("Sistem → Top Arşivi'nde barkodla aranabilir") — arşiv 2026-08-05'te bilinçli
+olarak "zor bulunsun" diye Sistem hub'ına taşınmıştı, o karar duruyor ama artık çıkmaz değil.
+⚠️ Yan etki DEVAM EDİYOR: arşiv `admin:settings` arkasında, yani depo/üretim personeli iptal
+edilen topu göremez. Bekçi: `Rolls/service.test.ts` — arşiv kümesi iptal+fire içerir, dört
+tüketilmiş statüyü korur ve CANLI statü sızdırmaz.
+
+#### ②c "Partiye kayıtlı" engeli KALDIRILDI — kullanıcı kararı: "SAP'taki gibi yap"
+
+İptali geri alma yüklemi (`resolveRollRestoreBlockReason`) `batchId` dolu olan her topu
+reddediyordu. Sektör karşılaştırması yapıldı ve karar buna dayandı:
+
+**Standarda UYAN taraf.** "İptalin iptali" gerçek bir ERP kavramıdır (SAP: ters kaydın ters
+kaydı) ve kapsamı somut ölçütlerle daraltmak da standarttır — SAP bir mal hareketinin iptalini
+*sonrasında hareket olduysa · mal tüketildiyse · sevk edildiyse · dönem kapandıysa* reddeder.
+Bizim kuralların dördü bunun birebir karşılığı (`movementCount` · `childCount` ·
+`sackId/shipmentId` · `dispatchItemCount/kartelaItemCount`), beşincisi (`currentStepId`) de
+"süreç emrine bağlı" karşılığı. Ters kaydın İZLİ olması da standarttır ve bizde var
+(`CANCEL_RESTORED` audit'i, kim/ne zaman/neden).
+
+**Standarda UYMAYAN taraf.** SAP'ta parti (Charge/Batch) bir ANA VERİ nesnesidir; bir belgenin
+partili olması ters kaydı engellemez — engelleyen şey partinin sonradan hareket etmesi ya da
+tüketilmesidir, ki onu ayrı kural zaten yakalıyor. Ölçüm (canlı kopya): 231 iptalin **86'sı
+YALNIZ bu kural yüzünden** kilitliydi ve **85'i Tambur çıktısıydı** — sıfır hareket, sıfır
+istasyon işlemi, sıfır çocuk. Parti kaydı onların üretimden geçtiğini değil, hangi grupta
+DOĞDUKLARINI söylüyordu.
+
+⚠️ Kuralın gerekçesi olarak gösterilen "adım durumu geri sarılmalı" riski burada YOK:
+`recomputeStepStatus` partiye **hiç bakmaz** (üç sayacı da hareket üzerinden çalışır), yani
+hareketsiz bir topu diriltmek hiçbir adım sayacını değiştiremez. O riski taşıyan tek kural
+`movementCount > 0` ve o BUNDAN ÖNCE kontrol ediliyor. Geri koymadan önce bu paragrafı çürüt.
+
+Sonuç (ölçüldü, canlı kopyada gerçek yüklem yolundan): geri alınabilir iptal **130 → 216/231**.
+Kalan 15'in 11'i hareket görmüş, 4'ü istasyon işlemi almış — SAP'ın da reddedeceği durumlar.
+
+⚠️ **AÇIK KALAN İKİ NOKTA (bilinçli, iş kararı bekliyor).**
+① *Eski kayıtların rafı:* geri alma topu `preCancelStatus`'a döndürür; 05.08 öncesi 84 iptalde
+o kolon NULL ve fallback `STOCK`'tur → bitmiş depo malı Ham Stok'a döner. Blokla çözmek
+REGRESYON olurdu: bugün geri alınabilen 42 topun rafı da bilinmiyor. Doğru çözüm rafı topun
+kendi verisinden (kalite `targetStatus`) türetmek, ama bu yeni bir yüklem demek — ölçülüp ayrı
+karar verilmeli.
+② *İz temizliği:* `restoreCancelledRoll` `cancelledAt/Reason/Code/preCancelStatus` kolonlarını
+TEMİZLER, geçmiş yalnız audit'te kalır. SAP'ta orijinal belge durur. Kolonda kalıcı iz tutmak
+migration ister; geri alma artık çok daha sık kullanılabilir olduğu için bu tercih yeniden
+değerlendirilebilir (kök CLAUDE.md kuralı: "sebep audit'ten değil KOLONDAN okunur").
+
+### ③ Fason Kabul'de "devasa dikey boşluk" — SegmentedButtons satırın tamamını alıyor, başlık SIFIR genişlikte
+
+⚠️ **İlk teşhis YANLIŞTI ve düzeltildi.** İlk turda sebep "cihazın yazı ölçeği + sınırsız sarma +
+dikey ortalama" sanıldı; `numberOfLines` ve `flex-start` yamasıyla APK 2.9.4 çıktı. Sahada boşluk
+**sürdü** (bu kez düğmelerin ALTINDA). Bu kez tahmin yerine **tabletteki gerçek yerleşim ölçüldü**
+(`adb exec-out screencap` + `uiautomator dump` → her kutunun piksel sınırları):
+
+- Hayır/Evet düğmeleri satırın **tamamını** kaplıyor (x 55–1095 = 1040 px).
+- "Fasonda kalan var mı?" başlığı ve açıklaması **hiç çizilmiyor** (görünüm ağacında yok).
+- Düğmelerin altında ~380 px boşluk.
+
+**Mekanizma:** RN Paper `SegmentedButtons`'ın her düğmesi `flex: 1`dir. Yoga, flex-grow çocuğu olan
+bir kabı "at-most" ölçümünde **mevcut genişliğin tamamına** açar (non-legacy stretch:
+`totalFlexGrowFactors ≠ 0` → `availableInnerMainDim` daraltılmaz) → SegmentedButtons = satır
+genişliği → yanındaki `flex: 1` başlık kutusu **sıfır genişlik** alır → sıfır genişlikte metin
+**karakter karakter alt alta sarılır**: başlık 21 karakter × ~18 px ≈ **380 px görünmez yükseklik**.
+İlk sürümde açıklama (~100 karakter, `numberOfLines`sız) da aynı şekilde sarılıyordu → asıl
+"devasa" boşluk; `alignItems: center` düğmeleri o bandın ortasına park ediyordu (operatörün tarifi
+birebir: "uzun boşluk, ortasında evet/hayır, altında yine boşluk"). `numberOfLines={3}` açıklamayı
+kısalttı ama başlık serbest kaldı → 2.9.4'teki ~380 px.
+
+Bu aynı zamanda **"neyin evet/hayır'ı belli değil"** şikâyetinin cevabı: soru ekrana hiç çıkmıyordu.
+
+**Düzeltme (2.9.5):** kart DİKEY — soru, cevap, detay alt alta; SegmentedButtons kendi satırında tam
+genişlik; seçenekler kendini anlatır (**"Hepsi geldi" / "Bir kısmı fasonda kaldı"**, ikonlu —
+başlık okunmasa da karar düğmeden belli). Top-bazlı giriş açıkken soru gizlenir ("iki dil aynı anda
+okunmaz" kuralı). `newRollHeader`'daki `flex-start` yaması geri alındı (orada sorun yoktu — RN Paper
+Button içerik genişliğinde kalır, flex:1 çocuğu yok).
+
+**Genel kural:** `SegmentedButtons` bir `flexDirection:'row'` kabının doğrudan çocuğu OLAMAZ; yanına
+bir şey konacaksa ona AÇIK `width` verilir (`minWidth` YETMEZ — 2.9.4'te `minWidth: 150` vardı ve
+işe yaramadı). Bekçi: `mobil/src/test/segmented-buttons-row.guard.test.ts` (TS AST; sarmalayan
+elemanın `style`ını `StyleSheet.create` anahtarından/satır içinden çözer; körlük zemini ≥3 kullanım;
+negatif sondayla kırmızı verdiği doğrulandı — satıra sarılınca `FasonKabulScreen.tsx:1915`).
+
+**Ders:** yerleşim hatasında tahmin değil ÖLÇÜM — tablet USB'deyken `uiautomator dump` her kutunun
+sınırını verir; "hangi kutu 380 px" sorusu 30 saniyede cevaplanır. İlk turda ekran görüntüsü
+istemeden koddan teşhis koymak tam olarak yanlış yere yama yazdırdı.
+
+---
+
+## 2026-08-25 — "Bitmiş kumaş tekrar iş emrine bağlanabiliyor mu?" — evet, ama HİÇBİR istemciden yapılamıyordu
+
+Saha sorusu: bitmiş, final stoğa girmiş bir ürün tekrar boyahaneye gönderilebilir mi?
+
+**Backend 2026'dan beri destekliyordu.** `attachRolls` ve `quickStart` kabul listesi
+`STOCK / WAREHOUSE / A1_STOCK` — "her işlem final üretir" modelinin doğrudan sonucu: bir depo
+topu yeni bir iş emrine sokulur, bitince finalize onu depoya geri indirir (`test_wo_warehouse_attach`
+bunu 2026'dan beri doğruluyordu).
+
+**Ama hiçbir istemci kullanamıyordu — İKİ ayrı kopukluk:**
+1. **Masaüstünde ekran yoktu.** `PATCH /:id/attach-rolls` 2026-06-12'de kaldırılmıştı (hiçbir
+   istemci çağırmıyordu) ve `quick-start`'ın Electron istemcisi hiç yazılmamıştı.
+2. **Tablet okutmada eliyordu:** `useQuickWorkOrder.addRolls` içinde
+   `if (roll.status !== 'STOCK') → "Stokta değil"`. Yani Hızlı İş Emri bitmiş topu kabul etmiyordu.
+
+Ölçüm bunu doğruluyor: canlıda 980 topun **4'ü** iki iş emrinden geçmiş ve dördü de HAM
+top (fasonda tüketilen normal akış). Bitmiş malı geri üretime alma yolu sahada **hiç
+kullanılmamış** — çünkü kullanılamıyordu.
+
+**Yapılan:** Envanter → Bitmiş Depo'da satır seçince çıkan **"Yeniden Üretime Al"**
+(`ReworkRollsDialog`) → mevcut `POST /api/work-orders/quick-start`. Yeni uç YOK, migration YOK,
+yeni izin YOK (`workorder:write` zaten kabul ediliyor). Ham Stok'ta GÖSTERİLMEZ: oradaki top
+zaten üretime girmemiş, "yeniden" diye bir şey yok.
+
+⚠️ **FASON FİRMA SEÇİCİSİ LOAD-BEARING.** İlk hâlinde yoktu ve "Fasona gönder" anahtarı
+**sessiz bir no-op**tu: backend sevki ancak adımın firması çözülebiliyorsa yapar ve sahadaki iki
+rotanın da adımlarında planlı firma YOK (ölçüldü) → anahtar açık kalır, çeki listesi hiç doğmazdı.
+Firma `stepPlanning` overlay'iyle gider (mobil Hızlı İş Emri'yle aynı yol). Bekçi ayrıca buton
+metninin de aynı yüklemden (`willDispatch`) beslendiğini kilitler — ayrıştığında buton olmayacak
+bir sevki vaat ediyordu.
+
+⚠️ **ÖLÜ ETİKET UYARISI — burada KESİN, o yüzden var.** Fason kabulünde orijinal top TERMINAL'e
+çekilir (`SUBCONTRACTOR_CONSUMED`) ve makbuzdan YENİ kayıt doğar; koddaki gerekçe aynen: *"Top
+fasona gittiyse mutlaka açıldı — boyahane/zımpara fark etmez, KİMLİĞİNİ KAYBEDER."* Yani bitmiş,
+etiketi basılı bir topun barkodu bu yolculukta kesin olarak geçersizleşir ve mal YENİ barkodla
+döner. Bu, aynı gün KALDIRILAN genel iptal onayından farklıdır: orada geçersizleşme bir
+OLASILIKTI (kâğıt henüz yapıştırılmamış olabilir), burada KESİN. Yine de **engel değil bilgi**.
+Koşul dar tutuldu (etiketli top **ve** ilk adım fason) — geniş tutmak uyarıyı gürültüye çevirirdi.
+
+**Uçtan uca ölçüm (canlı kopya, gerçek servis yolundan):**
+`T240826F0034` WAREHOUSE → iş emri `IE2508260002` · parti `P90` · fason çekisi `FS2508260001` →
+top `AT_SUBCONTRACTOR`. Firma seçilmeyen ikinci denemede sevk beklendiği gibi atlandı
+(iş emri açıldı, top `IN_PRODUCTION`).
+
+**AÇIK:** tablet hâlâ bitmiş topu okutamıyor (`status !== 'STOCK'` elemesi duruyor). Masaüstü
+yolu açıldığı için akış artık mümkün; tabletin de açılması AYRI bir karar (APK gerektirir).
+
+Bekçi: `ReworkRollsDialog.test.tsx` (7 kontrol — sözleşme gövdesi · dar uyarı koşulu · farklı
+kumaş/çuval ön-engeli · firmasız sevk vaadi yasağı).
+
 ## 2026-08-25 — Prod oturumunun üç "dev'de yapılacaklar" notu teyit edildi ve uygulandı (kur.ps1 · renk seddi · deploy notu)
 
 Fabrika sunucusundaki Claude oturumu 24-25 Ağustos'ta üç not yazdı (`docs/history/*-DEV-YAPILACAKLAR.md`, her birinin başında "uygulandı — şu düzeltmelerle" damgası). Üçü de **teşhiste doğru, teslimatta/bekçide hatalıydı** — sınıf olarak: prod tarafı kodu göremez, "repoda böyle" varsayımlarını ölçemez. Her iddia repo + `tekserp_saha_0825` (prod'un temizlik-öncesi kopyası) ile ölçüldü.
@@ -488,3 +742,55 @@ Fabrika sunucusundaki Claude oturumu 24-25 Ağustos'ta üç not yazdı (`docs/hi
 - **Dev DB prod'a eşitlendi:** 13 karar dev'de uygulandı (`--apply`), iki migration dosyası yeniden koşuldu → `colors` + `customers` + `subcontractors` sedleri dev'de kurulu; `items` V-1430 yüzünden atlanıyor (dev'in tek kırmızısı: `test_db_invariants` 90/1). Drift 4/0.
 
 **Genel ders — prod'dan gelen "yapılacaklar" notu:** teşhis ölçümle gelir ve tutar; "repoda şu var / şuraya yaz / şu bekçi yeter" cümleleri ise **varsayımdır** — uygulamadan önce her biri ölçülür (bu turda 6 böyle cümle çıktı, 6'sı da düzeltildi). Notlar `docs/history`'de damgalı: nerede yanıldıkları da yazılı kalsın ki aynı sınıf bir daha tanınsın.
+
+---
+
+## 2026-08-25 (akşam) — Mobil "Yeniden Üretime Al" + Fason Kabul boşluğunun GERÇEK sebebi
+
+### A. Fason Kabul "devasa boşluk" — ikinci tur, bu kez ölçülerek
+
+İlk tur yanlış teşhis koydu (yazı ölçeği) ve APK 2.9.4 boşuna çıktı. Tablet USB'deyken
+`uiautomator dump` gerçek sebebi 30 saniyede verdi — ayrıntı ③ bölümünde. Ders kalıcı:
+**mobil yerleşim şikâyetinde koddan tahmin yok, cihazdan ölçüm var.**
+
+### B. Mobil Hızlı İş Emri artık BİTMİŞ topu da alıyor
+
+Backend 2026'dan beri `STOCK / WAREHOUSE / A1_STOCK` kabul ediyordu ama iki istemci de
+kapalıydı: masaüstünde ekran yoktu (aynı gün `ReworkRollsDialog` ile açıldı), tablette ise
+okutma `if (roll.status !== 'STOCK') reject` ile eliyordu. Yani "bitmiş kumaşı tekrar
+boyahaneye gönder" **hiçbir yerden yapılamıyordu** — 980 topun 4'ü iki WO'dan geçmiş, dördü de
+ham top.
+
+**Kullanıcı kararları:** ham+bitmiş aynı WO'da serbest (rozetle) · hedef renk boş gelir ·
+sebep isteğe bağlı (hazır metinler + serbest kutu) · 2. kalite dahil.
+
+**Uygulama:**
+- `scanClassify.ts` — okutma kararı SAF yükleme alındı (satır içi `if` zinciri kaldırıldı).
+  ⚠️ Sıra load-bearing: statü kontrolü çuval kontrolünden ÖNCE. `SHIPPED` bir topa "çuvaldan
+  çıkarın" demek malın müşteride olduğunu gizler; bekçide ayrı kontrol var.
+- `RollPickerModal.scopeTabs` — "Ham Stok / Bitmiş Depo" sekmesi. Sekme anahtarı sorgu
+  anahtarına `effectiveFilters` üzerinden girer; girmezse sekme değişince liste tazelenmez.
+  Prop verilmeyen beş çağıran (Kartela/Paket/Fason/İade) etkilenmez.
+- `reworkPayload.ts` — sebep İKİ hedefe: metin → 1. adım notu → **fason çekisine talimat**;
+  kod+metin → `WorkOrder.parameters.rework` (rapor anahtarı). Migration YOK: `parameters`
+  zaten JSON kolon ve `quick-start` Zod şeması onu kabul ediyor.
+  ⚠️ Kod UYDURULMAZ — bu kind metin saklamaz, sunucu koddan türetmez; katalogda olmayan kod
+  bile rapora GİDER (bayat listeli tablet), ama kâğıda kod BASILMAZ.
+- Yeni `ReasonPresetKind.WORK_ORDER_REWORK` (migration `20260825140000`) + 6 sistem satırı.
+  **Beş kapı birlikte:** şema · backend katalog · Electron `KIND_TABS` · mobil union ·
+  mobil çevrimdışı zemin. Mobil zemin GERÇEK kodları taşır (`BUILTIN_*` DEĞİL) — diğer iki
+  metin-saklayan listeden farkı bu; uydurma kod rapor anahtarını çöpe çevirirdi.
+- `ReasonPresetPicker` — serbest metin ÜSTTE + chip'ler altında deseni (2026-08-19 fire
+  ekranından) üç kopyadan TEK bileşene alındı.
+- Ölü etiket uyarısı onay adımında, koşul DAR (etiketli **ve** ilk adım fason). Burada
+  geçersizleşme KESİN (fason kabulünde top `SUBCONTRACTOR_CONSUMED` olur, mal yeni barkodla
+  döner) — aynı gün kaldırılan genel iptal onayından farkı budur.
+
+**Bekçiler:** `scanClassify.test.ts` (12) · `reworkPayload.test.ts` (8) ·
+`ReasonPresetPicker.test.tsx` (6) · `segmented-buttons-row.guard.test.ts` (2). Dördü de
+negatif sondayla kırmızı verdi (eleme geri konunca 4 kontrol, çeki talimatı susunca 4 kontrol),
+dosyalar `shasum` ile birebir geri yüklendi.
+
+**AÇIK:** mevcut bir iş emrine sonradan top EKLEME hâlâ yok (`attach-rolls` ucu 2026-06-12'de
+kaldırıldı) — her iki istemci de YENİ iş emri açar. SAP'ta da rework ayrı emirdir; kapatılan
+boşluk bu değil.

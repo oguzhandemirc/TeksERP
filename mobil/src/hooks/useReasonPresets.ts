@@ -9,6 +9,7 @@ import {
 import { SCRAP_REASONS, RECORD_CORRECTION_REASONS } from '../constants/varianceReasons';
 import { MANUAL_REASON_PRESETS } from '../constants/manualReasons';
 import { CANCEL_REASON_PRESETS } from '../constants/cancelReasons';
+import { REWORK_REASON_PRESETS } from '../constants/reworkReasons';
 import { storage } from '../utils/storage';
 
 // =============================================================================
@@ -68,6 +69,12 @@ function builtin(kind: ReasonPresetKind): ReasonPreset[] {
       return CANCEL_REASON_PRESETS.map((p, i) =>
         mk(`BUILTIN_${i}`, p.short, { fullText: p.full }),
       );
+    case 'WORK_ORDER_REWORK':
+      // ⚠️ Kodlar GERÇEK katalog kodları (`BUILTIN_*` DEĞİL): bu kind metin
+      // saklamaz, sunucu metinden kod TÜRETMEZ — kodu istemci gönderir. Zemin
+      // uydurma kod gönderirse rapor anahtarı çöp olur. Sunucu kataloğuyla
+      // (`constants/reason-presets.ts` REWORK_REASONS) birebir aynı sıra.
+      return REWORK_REASON_PRESETS.map((r) => mk(r.code, r.label, { requiresText: !!r.requiresText }));
   }
 }
 
@@ -76,6 +83,7 @@ const BUILTIN: Record<ReasonPresetKind, ReasonPreset[]> = {
   ROLL_RECORD_CORRECTION: builtin('ROLL_RECORD_CORRECTION'),
   ROLL_MANUAL_ENTRY: builtin('ROLL_MANUAL_ENTRY'),
   ROLL_CANCEL: builtin('ROLL_CANCEL'),
+  WORK_ORDER_REWORK: builtin('WORK_ORDER_REWORK'),
 };
 
 /** Gömülü satır düzenlenemez — henüz sunucudan okunmamış bir zemindir. */

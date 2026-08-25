@@ -222,10 +222,13 @@ export function registerStationMutationDefaults(): void {
         id: string;
         confirmActive: boolean;
         /**
-         * "Etiketi toptan söktüm" beyanı. ⚠️ AÇIKÇA taşınır (2026-08-06): sebep
-         * opsiyonelleşince eski `vars.reason ? …` çıkarımı çöktü — sebepsiz
-         * onaylanan etiketli iptal, onay bayrağını kaybedip 409 `LABEL_PRINTED`
-         * alırdı ve operatör modalda onayladığı hâlde reddedilirdi.
+         * "Etiketi toptan söktüm" beyanı.
+         *
+         * ⚠️ 2026-08-25'ten beri ÖLÜ BİR ALAN: backend ölü etiket guard'ını
+         * kaldırdı (kullanıcı kararı — onay bir sektör standardı değildi ve
+         * karşılığında bir etiket-toplama süreci hiç kurulmadı). Gönderilmeye
+         * devam ediyor çünkü kuyrukta eski kayıtlar olabilir ve zararsız.
+         * Kaldırmak istersen ÖNCE kuyruğun boşaldığından emin ol.
          */
         confirmLabelPrinted?: boolean;
         reason?: string;

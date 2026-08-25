@@ -45,8 +45,15 @@ const STATUS_GROUPS = {
   // Sanal anahtar — tepe-sekme DEĞİL; Kartela sayfasının "Kartelada Toplar"
   // sekmesi bunu kullanır (status=AT_KARTELA). SUBCONTRACTOR ile aynı mekanizma.
   KARTELA_SENT: "AT_KARTELA",
+  // ⚠️ `CANCELLED` + `SCRAP` 2026-08-25'te EKLENDİ. Öncesinde iptal edilen ya da
+  // fire edilen bir top HİÇBİR yüzeyde görünmüyordu: envanter sekmelerinin hiçbiri
+  // ölü statüleri listelemez ve arşiv de yalnız dört "tüketilmiş" statüyü
+  // taşıyordu. Yani "soft delete — kayıt denetim için korunur" sözü tutuluyordu
+  // ama korunan kayda ULAŞMANIN YOLU YOKTU (saha bulgusu: "iptal ettim, arşivde
+  // göremiyorum"). Barkodla aramak da çare değildi — iptal edilen topların bir
+  // kısmı barkodsuz açık kumaştır.
   ARCHIVE:
-    "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED,KARTELA_CONSUMED",
+    "RETURNED_FROM_SUBCONTRACTOR,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED,KARTELA_CONSUMED,CANCELLED,SCRAP",
 } as const;
 
 const base = createCrudService<Roll>("/api/rolls");
@@ -235,7 +242,84 @@ export const rollService = {
     apiClient
       .post<ApiResponse<Roll>>(`/api/rolls/${id}/restore-cancel`, reason ? { reason } : {})
       .then((r) => r.data),
+
+  /**
+   * İPTAL ÖNİZLEMESİ — "bu topu gerçekten kaldırabilir miyim, kaldırırsam ne olur".
+   *
+   * Yıkıcı-işlem kuralının (CLAUDE.md) istemci ayağı: pencere "3 kayıt etkilenecek"
+   * demez, her topu tek tek sorup ENGELLİ olanları sebebiyle gösterir. Uç
+   * 2026-08-05'ten beri vardı ama masaüstünden HİÇ çağrılmıyordu; toplu iptal
+   * körlemesine deniyor, backend 409 veriyor ve pencere yalnız "1 başarısız"
+   * yazıyordu (sebep `catch {}` içinde yutuluyordu).
+   */
+  cancelPreview: (id: string): Promise<ApiResponse<RollCancelPreview>> =>
+    apiClient
+      .get<ApiResponse<RollCancelPreview>>(`/api/rolls/${id}/cancel-preview`)
+      .then((r) => r.data),
+
+  /**
+   * İPTAL — "bu kayıt hiç olmamalıydı". Stok DÜŞMEZ (mal zaten yoktu), fire
+   * raporuna girmez. Parametreler query'de: uç `DELETE` ve gövdeli DELETE bazı
+   * ara katmanlarda sessizce düşer.
+   */
+  cancel: (
+    id: string,
+    opts?: { reason?: string; reasonCode?: string },
+  ): Promise<ApiResponse<Roll>> => {
+    const qs = new URLSearchParams();
+    // İstasyonda aktif top için bilinçli onay — pencere bunu ZATEN önizlemede
+    // gösterip operatöre onaylattığı için burada açık gönderilir.
+    qs.set("confirmActive", "true");
+    if (opts?.reason) qs.set("reason", opts.reason);
+    if (opts?.reasonCode) qs.set("reasonCode", opts.reasonCode);
+    return apiClient
+      .delete<ApiResponse<Roll>>(`/api/rolls/${id}?${qs.toString()}`)
+      .then((r) => r.data);
+  },
+
+  /**
+   * FİRE — "mal vardı, artık yok". Stok GERÇEKTEN düşer, fire raporuna girer.
+   * İptalden ayrı uç ve ayrı izin (`roll:manual-adjust`): ikisini tek tuşa
+   * indirmek fabrikanın fire oranını veri düzeltmeleriyle kirletir.
+   */
+  scrap: (
+    id: string,
+    body?: { reason?: string; reasonCode?: string },
+  ): Promise<ApiResponse<Roll>> =>
+    apiClient
+      .post<ApiResponse<Roll>>(`/api/rolls/${id}/scrap`, {
+        ...body,
+        confirmActive: true,
+      })
+      .then((r) => r.data),
 };
+
+/** `GET /api/rolls/:id/cancel-preview` yanıtı — backend `RollCancelPreview` aynası. */
+export interface RollCancelPreview {
+  rollId: string;
+  barcode: string | null;
+  status: string;
+  itemName: string | null;
+  colorName: string | null;
+  initialQty: number;
+  width: number | null;
+  /** Hard-block yoksa true. false ise `blockReason` DOLU ve top denenmez. */
+  canCancel: boolean;
+  blockReason: string | null;
+  /** İstasyonda/iş emrinde aktif — pencere bunu ayrıca gösterir. */
+  requiresConfirm: boolean;
+  activeAt: {
+    stepId: string;
+    stationName: string | null;
+    stationKind: string | null;
+    workOrderId: string;
+    batchNumber: string | null;
+  } | null;
+  openMovementCount: number;
+  /** BİLGİ — kapı DEĞİL (2026-08-25'te ölü etiket onayı kaldırıldı). */
+  labelPrinted: boolean;
+  labelPrintedAt: string | null;
+}
 
 export const ROLL_STATUS_TABS = STATUS_GROUPS;
 export type RollStatusTabKey = keyof typeof ROLL_STATUS_TABS;

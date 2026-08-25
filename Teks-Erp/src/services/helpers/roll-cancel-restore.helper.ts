@@ -80,12 +80,24 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
   if (s.childCount > 0) {
     return "Bu top kesilmiş (alt topları var) — iptali buradan geri alınamaz. Süpervizöre başvurun.";
   }
-  if (s.batchId) {
-    return (
-      "Bu top bir partiye kayıtlı — iptali buradan geri alınamaz. " +
-      "Önce partiden/iş emrinden çıkarılması gerekir."
-    );
-  }
+  // ⚠️ `batchId` ENGELİ 2026-08-25'te KALDIRILDI (kullanıcı kararı: "SAP'taki gibi yap").
+  //
+  // Sektör ölçütü şudur: bir mal hareketinin iptali, o maldan SONRA hareket
+  // olduysa / mal tüketildiyse / sevk edildiyse reddedilir. SAP'ta parti
+  // (Charge/Batch) bir ANA VERİ nesnesidir — bir belgenin partili olması ters
+  // kaydı engellemez; engelleyen şey partinin sonradan hareket etmesi ya da
+  // tüketilmesidir ve onu yukarıdaki kurallar zaten yakalıyor.
+  //
+  // Ölçüm (canlı kopya, 2026-08-25): 231 iptalin 86'sı YALNIZ bu kural yüzünden
+  // kilitliydi ve **85'i Tambur çıktısıydı** — sıfır hareket, sıfır istasyon
+  // işlemi, sıfır çocuk. Parti kaydı onların üretimden geçtiğini değil, hangi
+  // grupta DOĞDUKLARINI söylüyordu.
+  //
+  // Kuralın gerekçesi olarak gösterilen adım-durumu riski de burada yok:
+  // `recomputeStepStatus` partiye HİÇ BAKMAZ (üç sayacı da hareket üzerinden
+  // çalışır) → hareketsiz bir topu diriltmek hiçbir adım sayacını değiştiremez.
+  // O riski taşıyan tek kural `movementCount > 0` ve o BUNDAN ÖNCE kontrol
+  // ediliyor. Geri koymadan önce bu paragrafı çürüt.
   if (s.currentStepId) {
     return "Bu top bir iş emri adımına bağlı — iptali buradan geri alınamaz.";
   }

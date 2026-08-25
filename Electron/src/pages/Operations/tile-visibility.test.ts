@@ -21,7 +21,7 @@ import { commandSections } from "@/components/layout/command-entries";
 function ctx(
   over: Partial<OperationsVisibilityContext> = {},
 ): OperationsVisibilityContext {
-  return { shipmentConfirmationEnabled: false, pendingPlannedShipments: 0, ...over };
+  return { shipmentConfirmationEnabled: false, ...over };
 }
 
 describe("karo bağlantıları", () => {
@@ -40,14 +40,16 @@ describe("karo bağlantıları", () => {
     expect(kursun?.permission).toBeUndefined();
   });
 
-  it("Sevk Kapısı: bayrak açık VEYA çıkış bekleyen sevkiyat varsa görünür", () => {
+  it("Sevk Kapısı: YALNIZ sevk onayı bayrağı açıkken görünür (2026-08-22)", () => {
     const predicate = tile("sack-store")?.visibleWhen;
     expect(predicate?.(ctx({ shipmentConfirmationEnabled: true }))).toBe(true);
+    // Bayrak KAPALI → gizli. Eski "VEYA çıkış bekleyen PLANNED sevkiyat varsa"
+    // kuralı kalktı: storno artık kapalı rejimde sevkiyatı kapatır (çuvallar
+    // depoya) ve bekleyen PLANNED sevkiyat Sevkiyatlar detayından "Sevk Et" /
+    // "İptal Et" ile çözülür — bu ekrana ihtiyaç yok. Bağlama sayaç geri
+    // eklenirse bu test derlenmez (ctx tipi tek alan) — bilinçli.
     expect(predicate?.(ctx())).toBe(false);
-    // Bayrak KAPALI ama onay açıkken kurulmuş PLANNED sevkiyat kaldıysa: çıkış
-    // onayı yalnız bu ekrandan yapılır → karo gizlenirse mal kapıda kalır.
-    expect(predicate?.(ctx({ pendingPlannedShipments: 1 }))).toBe(true);
-    expect(predicate?.(ctx({ shipmentConfirmationEnabled: true, pendingPlannedShipments: 3 }))).toBe(true);
+    expect(Object.keys(ctx())).toEqual(["shipmentConfirmationEnabled"]);
   });
 
   it("koşullu karo YALNIZ Sevk Kapısı (kurşun karoları koşulsuzlaştı)", () => {

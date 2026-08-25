@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 import { useTabsStore, type TabItem } from "@/store/tabs";
 import { TabStrip } from "./TabStrip";
 import { TabRouter } from "./TabRouter";
-import { TabActiveProvider } from "./tab-active";
+import { TabActiveProvider, TabIdProvider } from "./tab-active";
 import { TabPortalProvider } from "./tab-portal";
 
 /**
@@ -68,9 +68,11 @@ const TabPane = memo(function TabPane({ tab, active }: { tab: TabItem; active: b
     >
       <div className="absolute inset-0 overflow-auto">
         <TabActiveProvider value={active}>
-          <TabPortalProvider value={container}>
-            <TabRouter id={tab.id} path={tab.path} />
-          </TabPortalProvider>
+          <TabIdProvider value={tab.id}>
+            <TabPortalProvider value={container}>
+              <TabRouter id={tab.id} path={tab.path} />
+            </TabPortalProvider>
+          </TabIdProvider>
         </TabActiveProvider>
       </div>
     </div>

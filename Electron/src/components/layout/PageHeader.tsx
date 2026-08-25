@@ -5,6 +5,8 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useFavorites } from "@/hooks/useFavorites";
 import { findBreadcrumbParent, findCommandEntry } from "./command-entries";
+import { useTabId } from "./tabs/tab-active";
+import { canGoBackTab } from "./tabs/history-depth";
 
 interface Props {
   title: string;
@@ -13,8 +15,8 @@ interface Props {
   description?: string;
   actions?: ReactNode;
   className?: string;
-  /** Sol geri-oku ikonu için açık hedef (breadcrumb parent yoksa da göster; ör. detay
-   *  sayfaları). Verilmezse otomatik breadcrumb-parent (varsa navigate(-1)) kullanılır. */
+  /** Sol geri-oku ikonu için AÇIK hedef (breadcrumb parent yoksa da göster; ör. detay
+   *  sayfaları). Verilmezse sırayla: sekme geçmişinde bir adım geri → breadcrumb üstü. */
   onBack?: () => void;
   /** Breadcrumb üst bağlantısı — verilmezse route'tan otomatik çözülür. Kayıtlı command
    *  entry'si olmayan alt sayfalar (ör. iş emri oluştur/düzenle) için elle geçilir. */
@@ -22,13 +24,41 @@ interface Props {
 }
 
 export function PageHeader({ title, titleExtra, description, actions, className, onBack, parent: parentProp }: Props) {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const navigate = useNavigate();
   const entry = findCommandEntry(pathname);
   const parent = parentProp ?? findBreadcrumbParent(pathname);
   const { isFavorite, toggleFavorite } = useFavorites();
   const fav = isFavorite(pathname);
-  const showBack = Boolean(onBack || parent);
+
+  /**
+   * Sekmenin KENDİ geçmişinde geri gidilecek bir adım var mı?
+   *
+   * ⚠️ 2026-08-22 saha şikâyeti "geri tuşu çalışmıyor" TAM OLARAK buydu: her sekme
+   * izole bir memory router'dır (`tabs/tab-routers.tsx`) ve menüden / hub'dan /
+   * yeni sekmeden / oturum geri yüklemesinden açılan sekme DOĞRUDAN o sayfada
+   * başlar → geçmiş TEK girişliktir ve `navigate(-1)` sessizce hiçbir şey yapmaz.
+   * Düğme görünür, tıklanır, ekran durur.
+   *
+   * Uygunluk `location.key`'e BAKILARAK çözülemez: liste sayfaları açılışta
+   * `setSearchParams(…, { replace: true })` ile varsayılan sekmeyi URL'e yazar,
+   * bu yeni bir anahtar üretir ama geçmişe adım eklemez ("Tanımlar/Operasyon'da
+   * çalışmıyor, Raporlar/Sistem'de çalışıyor" ayrımının sebebi buydu). Doğru
+   * kaynak sekme başına tutulan derinlik defteridir. Sekme sistemi dışında
+   * (gömülü kullanım/test) kimlik yoktur → anahtar sezgisine düşülür.
+   */
+  const tabId = useTabId();
+  const canGoBack = tabId ? canGoBackTab(tabId) : location.key !== "default";
+
+  /** Tek karar noktası: açık hedef > sekme geçmişi > mantıksal üst sayfa. */
+  const goBack = () => {
+    if (onBack) return onBack();
+    if (canGoBack) return navigate(-1);
+    if (parent) return navigate(parent.to);
+  };
+  // Üçünden biri varsa göster — yani çizilen ok HER ZAMAN bir şey yapar.
+  const showBack = Boolean(onBack || parent || canGoBack);
 
   return (
     <div
@@ -42,7 +72,7 @@ export function PageHeader({ title, titleExtra, description, actions, className,
           <Button
             variant="ghost"
             size="icon"
-            onClick={() => (onBack ? onBack() : navigate(-1))}
+            onClick={goBack}
             aria-label="Geri"
             title="Geri"
             className="h-8 w-8 shrink-0 self-center rounded-full text-muted-foreground hover:text-foreground"

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, FileText, Globe, Undo2 } from "lucide-react";
+import { Ban, FileText, Globe, Truck, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,11 +9,14 @@ import { shipmentStatusLabels, shipmentStatusTones, type ShipmentDetail } from "
 import { ShipmentDispatchNote } from "../ShipmentDispatchNote";
 import { CancelShipmentDialog } from "../CancelShipmentDialog";
 import { UndoDispatchDialog } from "../UndoDispatchDialog";
+import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
 
 /**
  * Tam-sayfa sevkiyat detayının sabit başlığı — kimlik (sevkiyat no + statü + ihracat
- * rozeti) + aksiyonlar (Sevk İrsaliyesi, PLANNED ise İptal Et). Dialoglar mevcut
- * (Sheet ile paylaşılan) bileşenlerin yeniden kullanımı.
+ * rozeti) + aksiyonlar (Sevk İrsaliyesi; PLANNED ise Sevk Et + İptal Et; DISPATCHED
+ * ise Sevki Geri Al). Dialoglar mevcut (Sheet ile paylaşılan) bileşenlerin yeniden
+ * kullanımı — "Sevk Et" Sevk Kapısı'nın ORTAK onay dialog'udur (2026-08-22: planlı
+ * sevkiyat o ekrana muhtaç olmasın; ekran yalnız sevk onayı bayrağı açıkken menüde).
  */
 export function ShipmentDetailHeader({
   shipmentId,
@@ -27,7 +30,9 @@ export function ShipmentDetailHeader({
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [undoOpen, setUndoOpen] = useState(false);
+  const [dispatchOpen, setDispatchOpen] = useState(false);
   const canCancel = d != null && d.status !== "DISPATCHED" && d.status !== "CANCELLED";
+  const canDispatch = d != null && d.status === "PLANNED";
   // Storno yalnız SEVK EDİLMİŞ sevkiyatta anlamlı. Uygunluğun geri kalanı
   // (fatura/iade/aynı gün) backend'in tek kaynağından gelir ve dialog içinde
   // `blockReason` ile söylenir — burada kopyalanmaz.
@@ -62,6 +67,19 @@ export function ShipmentDetailHeader({
               <Button type="button" size="sm" variant="outline" className="gap-1" onClick={() => setNoteOpen(true)}>
                 <FileText className="h-3.5 w-3.5" /> Sevk İrsaliyesi
               </Button>
+              {canDispatch && (
+                <PermissionGate permission="shipping:write">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    className="gap-1"
+                    onClick={() => setDispatchOpen(true)}
+                  >
+                    <Truck className="h-3.5 w-3.5" /> Sevk Et
+                  </Button>
+                </PermissionGate>
+              )}
               {canCancel && (
                 <PermissionGate permission="shipping:write">
                   <Button
@@ -106,6 +124,14 @@ export function ShipmentDetailHeader({
       <UndoDispatchDialog
         shipmentId={undoOpen ? shipmentId : null}
         onOpenChange={(o) => setUndoOpen(o)}
+      />
+      <DispatchConfirmDialog
+        shipment={
+          dispatchOpen && d
+            ? { id: d.id, shipmentNo: d.shipmentNo, customerName: d.customer.name, branchName: d.branch?.name ?? null }
+            : null
+        }
+        onOpenChange={(o) => setDispatchOpen(o)}
       />
     </>
   );

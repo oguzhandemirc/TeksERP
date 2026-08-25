@@ -11,6 +11,14 @@
 // bir kısmı barkodsuz (fason dönüşü açık kumaş) olduğu için onlara o yoldan da
 // ulaşılamazdı. "Zor bulunsun" ile "erişilemesin" farklı şeyler.
 //
+// ⚠️ 2026-08-25 — İPTAL + FİRE DE BURADA. `STATUS_GROUPS.ARCHIVE`e `CANCELLED`
+// ve `SCRAP` eklendi. Öncesinde iptal edilen top HİÇBİR yüzeyde görünmüyordu:
+// envanter sekmeleri ölü statüleri listelemez, arşiv de yalnız dört "tüketilmiş"
+// statüyü taşıyordu. "Soft delete — kayıt denetim için korunur" sözü veri
+// düzeyinde tutuluyordu ama kayda ULAŞMANIN YOLU YOKTU. Sayfaya ARAMA kutusu
+// da bu yüzden eklendi: 200+ satırlık bir arşivde barkodu bilinen tek bir kaydı
+// gözle taramak gerçek bir kullanım değil.
+//
 // KONUM SEÇİMİ: Sistem hub'ı, sidebar'da yalnız admin'e görünen tek daldır ve
 // alt sayfaları zaten `admin:settings` ile kilitli — yani yeni bir izin kodu
 // açmadan hedefe ulaşıldı (kök CLAUDE.md: "yeni izin = sahada atanması
@@ -23,6 +31,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
+import { DataTableToolbar } from "@/components/data-table/DataTableToolbar";
 import { rollColumns } from "@/pages/Operations/Rolls/columns";
 import { RollsTableBody } from "@/pages/Operations/Rolls/RollsTableBody";
 import {
@@ -65,7 +74,15 @@ export default function RollArchivePage() {
     <PageShell>
       <PageHeader
         title="Top Arşivi"
-        description="Emekli toplar — kesilmiş, fasonda tüketilmiş, kartelaya dönüşmüş ve fason dönüşü kayıtları. Salt okunur."
+        description="Emekli toplar — iptal edilmiş, fire edilmiş, kesilmiş, fasonda tüketilmiş, kartelaya dönüşmüş ve fason dönüşü kayıtları. Salt okunur."
+      />
+      {/* Arama: barkod TAM eşleşir (unique index seek), kumaş/renk adı ve müşteri
+          alias'ı `contains`. "Kayıt Türü" filtresiyle birlikte kullanılır. */}
+      <DataTableToolbar
+        search={dataTable.search}
+        onSearchChange={dataTable.setSearch}
+        placeholder="Barkod, kumaş veya renk ara..."
+        hideSearch={false}
       />
       <RollsTableBody
         tab="ARCHIVE"

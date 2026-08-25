@@ -68,6 +68,17 @@ export default function StepRolls({
             <Text style={styles.lastScan} numberOfLines={1}>
               son: {wo.scanned[wo.scanned.length - 1].barcode}
             </Text>
+            {/* YENİDEN ÜRETİM — ham + bitmiş aynı iş emrinde SERBEST (2026-08-25
+                kullanıcı kararı), ayrım yalnız görünürlük. Operatör depodan mal
+                çektiğini fark etmeden devam etmesin. */}
+            {wo.reworkRolls.length > 0 ? (
+              <View style={styles.reworkNote}>
+                <Icon source="recycle" size={15} color={colors.warningDark} />
+                <Text style={styles.reworkNoteText} numberOfLines={2}>
+                  {`${wo.reworkRolls.length} top bitmiş depodan alınıyor — yeniden üretim`}
+                </Text>
+              </View>
+            ) : null}
             <TouchableRipple onPress={onOpenScannedList} style={styles.seeAll} borderless>
               <View style={styles.seeAllInner}>
                 <Text style={styles.seeAllText}>Tümünü gör</Text>
@@ -219,6 +230,17 @@ const styles = StyleSheet.create({
     maxWidth: '100%',
   },
   itemLockText: { color: colors.brand, fontWeight: '700', fontSize: 13, flexShrink: 1 },
+  reworkNote: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: colors.warningContainer,
+  },
+  reworkNoteText: { fontSize: 12, fontWeight: '700', color: colors.warningDark, flexShrink: 1 },
   lastScan: { marginTop: spacing.xs, fontSize: 12, color: colors.textMuted, fontFamily: 'monospace' },
   seeAll: { marginTop: spacing.sm, borderRadius: radius.sm },
   seeAllInner: { flexDirection: 'row', alignItems: 'center', gap: 2, paddingVertical: 8, paddingHorizontal: spacing.md },

@@ -171,13 +171,21 @@ export const rollService = {
    * için backend `confirmActive=true` ŞART — önce getCancelPreview ile operatöre
    * gösterilir, onaylanırsa confirmActive geçilir.
    */
+  /**
+   * ⚠️ ADI `scrap` AMA YAPTIĞI İŞ İPTAL (`DELETE /rolls/:id` → CANCELLED).
+   * 2026-08-25'te GERÇEK bir fire ucu doğdu (`POST /rolls/:id/scrap` → SCRAP,
+   * "mal vardı, artık yok") ve bu ad artık aktif olarak yanıltıcı. Ad korunuyor
+   * çünkü çevrimdışı KUYRUKTA bu anahtarla bekleyen kayıtlar olabilir; yeni
+   * çağrı yazarken `cancel` takma adını kullan.
+   */
   scrap: (
     id: string,
     confirmActive = false,
     /**
-     * Etiketi basılmış topun iptali için AYRI onay + sebep. Backend bunlar
-     * olmadan 409 `LABEL_PRINTED` / 400 `CANCEL_REASON_REQUIRED` döner —
-     * fail-closed, çünkü guard'ın var olma sebebi uyarısız iptali durdurmak.
+     * ⚠️ `confirmLabelPrinted` ARTIK BİR KAPI DEĞİL (2026-08-25): ölü etiket
+     * guard'ı backend'den kaldırıldı. Gönderilmeye devam ediyor (zararsız,
+     * sözleşme uyumu) ama artık hiçbir şeyi açmıyor — "göndermezsem reddedilir"
+     * varsayımıyla yeni kod YAZMA.
      */
     labelOpts?: { confirmLabelPrinted?: boolean; reason?: string },
   ): Promise<ApiResponse<Roll>> => {

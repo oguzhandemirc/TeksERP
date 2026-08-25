@@ -38,6 +38,8 @@ export interface WorkOrderPayload {
     notes?: string | null;
     requiredCategoryId?: string | null;
     plannedSubcontractorId?: string | null;
+    /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — çekideki renk satırı susar. */
+    dispatchWithoutColor?: boolean;
   }[];
   orderLineIds?: string[];
   targetPropertyIds?: string[];

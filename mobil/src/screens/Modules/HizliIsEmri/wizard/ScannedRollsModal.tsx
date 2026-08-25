@@ -55,9 +55,29 @@ export default function ScannedRollsModal({
           rolls.map((s, i) => (
             <View key={s.barcode} style={styles.row}>
               <Text style={styles.idx}>{i + 1}</Text>
-              <Text style={styles.barcode} numberOfLines={1}>
-                {s.barcode}
-              </Text>
+              <View style={styles.main}>
+                <Text style={styles.barcode} numberOfLines={1}>
+                  {s.barcode}
+                </Text>
+                {/* Bitmiş depodan gelen top ROZETLİ — ham topla karışmasın
+                    (2026-08-25: ham + bitmiş aynı iş emrinde serbest, ayrım
+                    yalnız görünürlük). Renk de yazılır: hedef renk AYRI alandır,
+                    operatör "neyi neye boyuyorum" görebilsin. */}
+                {s.status !== 'STOCK' ? (
+                  <View style={styles.reworkRow}>
+                    <View style={styles.reworkBadge}>
+                      <Text style={styles.reworkBadgeText}>
+                        {s.status === 'A1_STOCK' ? '2. KALİTE' : 'BİTMİŞ DEPO'}
+                      </Text>
+                    </View>
+                    {s.colorName ? (
+                      <Text style={styles.reworkColor} numberOfLines={1}>
+                        {s.colorName}
+                      </Text>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
               <Text style={styles.qty}>{Math.round(s.qty)} m</Text>
               <TouchableRipple onPress={() => onRemove(s.barcode)} borderless style={styles.remove}>
                 <Icon source="close" size={22} color={colors.danger} />
@@ -106,7 +126,17 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   idx: { width: 26, textAlign: 'center', color: colors.textMuted, fontWeight: '700', fontSize: 13 },
-  barcode: { flex: 1, fontFamily: 'monospace', fontSize: 14, color: colors.text },
+  main: { flex: 1, gap: 3 },
+  barcode: { fontFamily: 'monospace', fontSize: 14, color: colors.text },
+  reworkRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  reworkBadge: {
+    backgroundColor: colors.warningContainer,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  reworkBadgeText: { fontSize: 10, fontWeight: '800', color: colors.warningDark },
+  reworkColor: { fontSize: 11, color: colors.textMuted, flexShrink: 1 },
   qty: { fontWeight: '700', color: colors.textSecondary, fontSize: 14 },
   remove: { padding: 10, borderRadius: radius.full },
 });

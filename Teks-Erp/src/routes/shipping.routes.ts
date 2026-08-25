@@ -336,6 +336,11 @@ router.get("/shipments/:id/undo-dispatch-preview", verifyToken, UNDO_DISPATCH, c
  *       DISPATCHED → PLANNED, toplar sevk ÖNCESİ rafına döner, sipariş karşılanması
  *       geri hesaplanır, sevk irsaliyesi VOIDED'e çekilir (silinmez). İade defterine
  *       KAYIT GİRMEZ — mal müşteriye ulaşıp dönmedi.
+ *       `releaseSacks: true` → storno + KAPANIŞ aynı tx'te: sevkiyat PLANNED'da
+ *       beklemez, CANCELLED olur, çuvallar + toplar depoya (havuza) döner, tahsis
+ *       silinir. Sevk onayı KAPALI rejimin olağan yolu (Sevk Kapısı ekranı o rejimde
+ *       görünmez); yeniden çıkış Paketleme'den yeni sevkiyatla yapılır. Storno izni
+ *       kapanışı da kapsar.
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
@@ -346,8 +351,11 @@ router.get("/shipments/:id/undo-dispatch-preview", verifyToken, UNDO_DISPATCH, c
  *             required: [reason]
  *             properties:
  *               reason: { type: string, minLength: 3 }
+ *               releaseSacks:
+ *                 type: boolean
+ *                 description: "true → sevkiyat da iptal edilir, çuvallar depoya döner (varsayılan false: PLANNED bekler)"
  *     responses:
- *       200: { description: Sevk geri alındı }
+ *       200: { description: Sevk geri alındı (releaseSacks ile sevkiyat kapatıldı) }
  *       400: { description: Gerekçe eksik }
  *       409: { description: Faturalanmış / iade alınmış / aynı gün değil / durum değişti }
  */

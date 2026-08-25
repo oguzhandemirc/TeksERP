@@ -639,6 +639,7 @@ export class WorkOrderService {
       notes: string | null;
       requiredCategoryId?: string | null;
       plannedSubcontractorId?: string | null;
+      dispatchWithoutColor?: boolean;
     }[] = [];
 
     if (data.routeTemplateId) {
@@ -968,6 +969,10 @@ export class WorkOrderService {
               notes:                  step.notes,
               requiredCategoryId:     step.requiredCategoryId ?? null,
               plannedSubcontractorId: step.plannedSubcontractorId ?? null,
+              // "Fasona renksiz git" (2026-08-17 ekru kuralı). Bu satır 2026-08-25'e
+              // kadar YOKTU: finalSteps alanı taşıyordu ama yazıma girmiyordu, yani
+              // şablondan miras da form overlay'i de sessizce düşüyordu.
+              dispatchWithoutColor:   step.dispatchWithoutColor ?? false,
             })),
           },
           ...(allocations.length > 0
@@ -4894,6 +4899,7 @@ export class WorkOrderService {
       notes: string | null;
       requiredCategoryId?: string | null;
       plannedSubcontractorId?: string | null;
+      dispatchWithoutColor?: boolean;
     }[] = [];
 
     if (data.routeTemplateId) {
@@ -5369,6 +5375,7 @@ export class WorkOrderService {
               notes: incoming.notes,
               requiredCategoryId: incoming.requiredCategoryId ?? null,
               plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
+              dispatchWithoutColor: incoming.dispatchWithoutColor ?? false,
             },
           });
         } else {
@@ -5380,6 +5387,7 @@ export class WorkOrderService {
               notes: incoming.notes,
               requiredCategoryId: incoming.requiredCategoryId ?? null,
               plannedSubcontractorId: incoming.plannedSubcontractorId ?? null,
+              dispatchWithoutColor: incoming.dispatchWithoutColor ?? false,
             },
           });
         }

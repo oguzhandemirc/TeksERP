@@ -126,6 +126,9 @@ export function RouteDesignerDialog({
           // burada düşürülüyordu, şablon tekrar kullanılınca firma boş geliyordu.
           requiredCategoryId: s.requiredCategoryId,
           plannedSubcontractorId: s.plannedSubcontractorId,
+          // "Fasona renksiz git" şablona da yazılır — yoksa şablondan açılan her
+          // iş emrinde kutu yeniden işaretlenmek zorunda kalır.
+          dispatchWithoutColor: s.dispatchWithoutColor ?? false,
         })),
       };
       return routeService.create(payload as unknown as Partial<ProductionRoute>);
@@ -145,6 +148,7 @@ export function RouteDesignerDialog({
         requiredCategoryId: s.requiredCategoryId,
         plannedSubcontractorId: s.plannedSubcontractorId,
         notes: s.notes,
+        dispatchWithoutColor: s.dispatchWithoutColor ?? false,
         type: s.stationType,
       }))
       .filter((p) => p.type === "EXTERNAL")

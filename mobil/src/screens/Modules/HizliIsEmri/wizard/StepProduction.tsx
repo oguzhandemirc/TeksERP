@@ -259,6 +259,10 @@ export default function StepProduction({ wo }: Props) {
         onChangeSubcontractor={(seq, firmId) =>
           wo.setStepSubcontractors((prev) => ({ ...prev, [seq]: firmId }))
         }
+        noColorBySeq={wo.noColorBySeq}
+        onToggleNoColor={(seq, next) =>
+          wo.setStepNoColor((prev) => ({ ...prev, [seq]: next }))
+        }
       />
     </View>
   );

@@ -175,6 +175,46 @@ Tam-ekran editörler (İş Emri formu, Genel Ayarlar) kökte `PageShell`, altta
 `PageFooter` kullanır; çok-panelli iç flex düzenini bozmadan orta panel kendi
 `overflow-auto`'suyla kayar.
 
+## Gezinme: her sekme AYRI bir tarayıcıdır (2026-08-22)
+
+`TabHost` her sekmeyi kendi **memory router**'ında yaşatır (`tabs/tab-routers.tsx`)
+ve uygulama kabuğu bilerek bir data-router DIŞINDA render edilir (`App.tsx`).
+Bunun iki sonucu var ve ikisi de saha hatası üretti:
+
+- **`navigate(-1)` GARANTİ DEĞİLDİR.** Menüden/hub'dan/yeni sekmeden/oturum geri
+  yüklemesinden açılan sekme DOĞRUDAN o sayfada başlar → geçmiş tek girişliktir,
+  geri çağrısı **sessizce hiçbir şey yapmaz** ("geri tuşu çalışmıyor" şikâyeti).
+  Kural: geri hareketi **her zaman bir yedeğe düşmeli**. `PageHeader` bunu tek
+  yerde çözer — `onBack` > sekme geçmişi > breadcrumb üstü — ve ok yalnız
+  üçünden biri varsa çizilir. Yeni bir "geri" yüzeyi yazarken bu sırayı
+  kopyalama, `PageHeader`'ı kullan.
+- **⚠️ "Geri gidilebilir mi?" `location.key` ile ÇÖZÜLMEZ.** Memory router geçmiş
+  indeksini vermez ve `key !== "default"` sezgisi YANILTIR: liste sayfaları
+  açılışta `setSearchParams(…, { replace: true })` ile varsayılan sekmeyi/filtreyi
+  URL'e yazar → anahtar değişir ama geçmiş BÜYÜMEZ. Saha tarifi buydu: geri tuşu
+  Raporlar/Yetkilendirme/Sistem'de çalışıyor, Tanımlar/Operasyon'da (URL yazan
+  listeler) çalışmıyor. Tek doğru kaynak sekme başına derinlik defteri:
+  `tabs/history-depth.ts` (PUSH +1 · POP −1 · **REPLACE değişmez**), sekme kimliği
+  `useTabId()` ile gelir. Bekçiler: `tabs/history-depth.test.ts`,
+  `components/layout/PageHeader.test.tsx`.
+- **Router'dan geçen gezinme sekme defterini GÜNCELLEMEZ.** `useNavigate()` ile
+  yapılan her hareket (geri oku, breadcrumb, sayfa içi `navigate()`) store'u
+  atlar; şerit başlığı ve sidebar eşleşmesi bayat kalırdı. `TabRouter` artık
+  router'a abone olup `syncTabLocation` ile defteri eşitler (yol DEĞİŞTİYSE —
+  sayfaların `updateTabTitle` ile yazdığı özel başlık korunsun diye). Bekçi:
+  `store/tabs.back.test.ts`.
+- **Tık hedefi İKİ sözleşme, karıştırma** (`tabs/use-tab-target.ts`): kenar menüsü
+  `useTabTarget` (sol tık → sekme aç/odakla; menü BAŞKA bir işe geçiştir, açık
+  işi düşürmez — 2026-08-17), hub kartı `useDrillTarget` (sol tık → AYNI sekmede
+  yerinde in; kart aynı işin bir adımıdır). Kart da sekme açtığı sürece şerit
+  doluyordu ve yeni sekmenin geçmişi tek girişlik olduğu için geri oku gerçek
+  geçmişe basamıyordu. İkisinde de sağ/orta tık → arka planda yeni sekme.
+  Bekçi: `components/hub/HubCard.test.tsx`.
+- **Klavye/fare geri hareketlerinde `preventDefault()` ŞART.** Tarayıcının kendi
+  geçmişi memory router'ları tanımaz; varsayılan davranış webContents geçmişini
+  sarar ve kullanıcıyı oturum-dışı router'a (login) düşürebilir. `Alt+←` ve fare
+  yan tuşları `useGlobalShortcuts` içinde tek kapıdan `backActive()`e bağlanır.
+
 ## Sidebar Kuralı (KRİTİK)
 
 Sidebar'da **her tanım ayrı satır YOK.** Tek "Tanımlar" girişi var; tıklayınca `/definitions` hub sayfası açılır, kart grid'i her tanım modülüne gönderir. Yeni master data eklerken `pages/Definitions/tile-config.ts` → kart ekle, `router.tsx` → route ekle. Sidebar'a ekleme.

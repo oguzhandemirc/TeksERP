@@ -80,6 +80,8 @@ interface IncomingStep {
   plannedSubcontractorId?: string | null;
   sequence?: number;
   defaultNotes?: string | null;
+  /** "Fasona renksiz git" — iş emri açılışında WorkOrderStep'e klonlanır. */
+  dispatchWithoutColor?: boolean;
   /** 2026-08-06: adımın şablon hedefi. `plannedPropertyIds` DÜZ ID DİZİSİDİR — */
   plannedColorId?: string | null;
   /** serviste `{ create: [{ propertyId }] }` nested write'ına ÇEVRİLİR (aşağı). */
@@ -104,6 +106,10 @@ export class RouteService extends BaseService {
     "plannedSubcontractorId",
     "plannedColorId",
     "plannedPropertyIds",
+    // "Fasona renksiz git" (2026-08-17 ekru kuralı) — şablon adımında da yaşar,
+    // iş emri açılışında WorkOrderStep'e klonlanır. 2026-08-25'e kadar allowlist'te
+    // YOKTU: şablona kaydetmek 400 verirdi, dolayısıyla miras yolu da hiç kurulamadı.
+    "dispatchWithoutColor",
   ]);
 
   /** Dizi-form VE nested-write ({create:[...]}) formundan step nesnelerini çıkarır. */

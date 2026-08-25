@@ -565,7 +565,61 @@ export const workOrderService = {
         params: { workOrderId, stepId },
       })
       .then((r) => r.data),
+
+  /**
+   * HIZLI İŞ EMRİ — "topları okut, iş emrini aç, (istersen) fasona gönder".
+   *
+   * Uç 2026'dan beri var ve TABLETİN kullandığı yol; masaüstünde istemcisi YOKTU.
+   * Bu yüzden "bitmiş bir topu yeniden üretime al / tekrar boyahaneye gönder"
+   * masaüstünden yapılamıyordu (2026-08-25 saha sorusu).
+   *
+   * ⚠️ Mevcut bir iş emrine top EKLEME ucu YOK: `PATCH /:id/attach-rolls`
+   * 2026-06-12'de kaldırıldı (hiçbir istemci çağırmıyordu). Bugün tek yol YENİ
+   * iş emri açmaktır — bu uç tam olarak onu yapar.
+   *
+   * Backend kuralları (istemci onları TEKRARLAMAZ, yalnız önceden gösterir):
+   * yalnız STOCK/WAREHOUSE/A1_STOCK · çuvalda/sevkiyatta olmayan · TEK kumaş.
+   */
+  quickStart: (payload: QuickStartPayload): Promise<ApiResponse<QuickStartResult>> =>
+    apiClient
+      .post<ApiResponse<QuickStartResult>>("/api/work-orders/quick-start", payload)
+      .then((r) => r.data),
 };
+
+/** `POST /api/work-orders/quick-start` gövdesi — backend sözleşmesinin aynası. */
+export interface QuickStartPayload {
+  /** İdempotency: timeout sonrası tekrar gönderimde aynı token cached WO döner. */
+  clientToken: string;
+  rollBarcodes: string[];
+  routeTemplateId: string;
+  targetColorId?: string | null;
+  targetItemId?: string | null;
+  width?: number | null;
+  foldType?: string | null;
+  /**
+   * Şablon adımlarının fason planlamasını sequence ile EZER. "Fasona gönder"
+   * ancak adımın firması çözülebiliyorsa çalışır — rota şablonunda planlı firma
+   * yoksa firmayı buradan geçirmek ZORUNLU, yoksa sevk sessizce atlanır.
+   */
+  stepPlanning?: {
+    sequence: number;
+    requiredCategoryId?: string | null;
+    plannedSubcontractorId?: string | null;
+    notes?: string | null;
+    dispatchWithoutColor?: boolean;
+  }[];
+  /** İlk adım fason + firma çözülüyse: WO ile birlikte sevki de yap (çeki listesi). */
+  dispatchFirstStep?: boolean;
+}
+
+export interface QuickStartResult {
+  workOrder: WorkOrder;
+  attached: number;
+  errors: string[];
+  dispatch: { id: string; dispatchNo: string } | null;
+  /** Topların bağlandığı PARTİ — İş Emri No ile AYRI kavram. */
+  batch: { id: string; batchNumber: string } | null;
+}
 
 /** Fasondan doğrudan sevk önizleme verisi (backend previewDirectShip). */
 export interface DirectShipPreview {

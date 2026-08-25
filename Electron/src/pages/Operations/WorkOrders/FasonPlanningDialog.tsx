@@ -26,6 +26,10 @@ export interface FasonStepPlan {
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
   notes: string;
+  /** Fasona renksiz git (2026-08-17 "ekru" kuralı) — çekide "boyanacak renk"
+   *  satırı basılmaz; iş emrinin rengi DEĞİŞMEZ. Şablon rotası yolunda bu alan
+   *  taşınmazsa kutu işaretlenir ama sunucuya hiç gitmez. */
+  dispatchWithoutColor: boolean;
 }
 
 interface Props {
@@ -52,6 +56,7 @@ export function buildFasonPlans(
       requiredCategoryId: step.station?.defaultCategoryId ?? null,
       plannedSubcontractorId: null,
       notes: step.defaultNotes ?? "",
+      dispatchWithoutColor: step.dispatchWithoutColor ?? false,
     };
   });
 }

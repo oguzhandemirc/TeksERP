@@ -38,18 +38,89 @@ export function AuditDataBlock({ title, data }: { title: string; data: unknown }
 }
 
 function AuditValue({ value }: { value: unknown }) {
-  // İç içe nesne/dizi → kompakt JSON (alan adı yine Türkçe üstte).
   if (value !== null && typeof value === "object") {
     return (
-      <pre className="min-w-0 flex-1 overflow-x-auto whitespace-pre-wrap break-words font-mono">
-        {JSON.stringify(value, null, 2)}
-      </pre>
+      <div className="min-w-0 flex-1">
+        <NestedValue value={value} depth={0} />
+      </div>
     );
   }
   return (
     <span className="min-w-0 flex-1 break-words font-mono">
       {formatAuditValue(value)}
     </span>
+  );
+}
+
+// İç içe değerlerde de alan adları ÇEVRİLİR. Eskiden burası `JSON.stringify`
+// idi ve blok Türkçe başlıklı olsa da içi ham İngilizce kalıyordu (ölçüm
+// 2026-08-25: 10.172 kaydın 2.676'sında en az bir iç içe nesne/dizi var).
+//
+// ⚠️ DERİNLİK SINIRI load-bearing: audit yükünde tek bir alan (`snapshot`,
+// `config`) koca bir belgeyi taşıyabilir. Belirli bir derinlikten sonra ham
+// JSON'a düşülür — çeviri denemesi orada okunurluk kazandırmaz, satır sayısını
+// patlatır. Ham JSON hâlâ adli inceleme için doğru cevaptır.
+const MAX_DEPTH = 2;
+/** Uzun dizilerde ilk N eleman gösterilir; gerisi "+N" olarak özetlenir. */
+const MAX_ITEMS = 12;
+
+function NestedValue({ value, depth }: { value: unknown; depth: number }) {
+  if (value === null || value === undefined) {
+    return <span className="font-mono">—</span>;
+  }
+  if (typeof value !== "object") {
+    return <span className="break-words font-mono">{formatAuditValue(value)}</span>;
+  }
+  if (depth >= MAX_DEPTH) return <InlineJson data={value} />;
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="font-mono text-muted-foreground">(boş)</span>;
+    // Skaler dizi (id listesi, kod listesi) tek satırda okunur — her elemanı
+    // ayrı satıra açmak 200 toplu bir işlemde çekmeceyi kullanılmaz yapar.
+    if (value.every((v) => v === null || typeof v !== "object")) {
+      const shown = value.slice(0, MAX_ITEMS).map((v) => formatAuditValue(v)).join(", ");
+      const rest = value.length - MAX_ITEMS;
+      return (
+        <span className="break-words font-mono" title={`${value.length} kayıt`}>
+          {shown}
+          {rest > 0 ? ` … +${rest}` : ""}
+        </span>
+      );
+    }
+    return (
+      <div className="space-y-1">
+        {value.slice(0, MAX_ITEMS).map((item, i) => (
+          <div key={i} className="border-l pl-2">
+            <div className="text-[10px] text-muted-foreground">{i + 1}.</div>
+            <NestedValue value={item} depth={depth + 1} />
+          </div>
+        ))}
+        {value.length > MAX_ITEMS && (
+          <div className="text-[10px] text-muted-foreground">… +{value.length - MAX_ITEMS} kayıt daha</div>
+        )}
+      </div>
+    );
+  }
+
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return <span className="font-mono text-muted-foreground">(boş)</span>;
+  return (
+    <div className="space-y-0.5">
+      {entries.map(([k, v]) => (
+        <div key={k} className="flex gap-2">
+          <span className="shrink-0 text-muted-foreground">{fieldLabel(k)}</span>
+          <NestedValue value={v} depth={depth + 1} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function InlineJson({ data }: { data: unknown }) {
+  return (
+    <pre className="min-w-0 overflow-x-auto whitespace-pre-wrap break-words font-mono">
+      {JSON.stringify(data)}
+    </pre>
   );
 }
 

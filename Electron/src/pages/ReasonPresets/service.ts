@@ -12,7 +12,8 @@ export type ReasonPresetKind =
   | "ROLL_SCRAP"
   | "ROLL_RECORD_CORRECTION"
   | "ROLL_MANUAL_ENTRY"
-  | "ROLL_CANCEL";
+  | "ROLL_CANCEL"
+  | "WORK_ORDER_REWORK";
 
 export interface ReasonPreset {
   id: string;
@@ -40,6 +41,10 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   ROLL_RECORD_CORRECTION: false,
   ROLL_MANUAL_ENTRY: true,
   ROLL_CANCEL: true,
+  // Yeniden üretimde satır YOK: kod + metin iş emrinin `parameters.rework`una
+  // yazılır, metin ayrıca fason çekisine talimat olur. Sunucudaki
+  // `KIND_STORES_TEXT` ile birebir aynı tablo.
+  WORK_ORDER_REWORK: false,
 };
 
 export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string }[] = [
@@ -62,6 +67,11 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string }[
     kind: "ROLL_CANCEL",
     title: "Top İptali",
     hint: "KK1 / Depo / Tambur iptal ekranındaki hazır sebepler.",
+  },
+  {
+    kind: "WORK_ORDER_REWORK",
+    title: "Yeniden Üretim",
+    hint: "Depodaki bitmiş topu tekrar üretime/boyahaneye alma sebebi. Seçilen metin fason çeki listesine talimat olarak basılır.",
   },
 ];
 

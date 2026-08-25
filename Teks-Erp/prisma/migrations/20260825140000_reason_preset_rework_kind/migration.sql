@@ -1,0 +1,15 @@
+-- YENİDEN ÜRETİM SEBEPLERİ (2026-08-25)
+--
+-- Depodaki BİTMİŞ bir topu yeniden üretime alırken ("tekrar boyahaneye gönder")
+-- operatör sebebini seçer: ton tutmadı / leke / müşteri iadesi… Sebep İSTEĞE
+-- BAĞLIDIR (kullanıcı kararı) ama seçilirse iki yere gider:
+--   1) 1. rota adımının notuna → fason çeki listesine TALİMAT olarak basılır,
+--   2) `WorkOrder.parameters.rework` içine (kod + metin) → rapor anahtarı.
+--
+-- Liste neden DB'de: 2026-08-19 kararı — "hazır sebepler koddan DB'ye, fabrika
+-- kendi diliyle düzenler". Satırlar boot uzlaştırmasıyla gelir
+-- (`jobs/reason-preset-catalog.job.ts`), bu migration YALNIZ enum değerini açar.
+--
+-- ⚠️ ALTER TYPE ... ADD VALUE, değeri KULLANAN bir statement ile aynı tx'te
+-- olamaz (PG 55P04). Bu dosya bilerek TEK ifadedir — satır INSERT'i yok.
+ALTER TYPE "ReasonPresetKind" ADD VALUE IF NOT EXISTS 'WORK_ORDER_REWORK';

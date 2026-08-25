@@ -22,6 +22,10 @@ interface StepPlanPayload {
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
   notes: string | null;
+  /** Fasona renksiz git (2026-08-17 "ekru" kuralı). Bu dosya ELLE kurulan bir
+   *  payload olduğu için sessiz bir allowlist'tir — alan buraya yazılmazsa
+   *  panelde işaretlenir ve sunucuya HİÇ gitmez. */
+  dispatchWithoutColor: boolean;
 }
 
 export interface CreatePayload {
@@ -66,12 +70,21 @@ export function buildPayload(
     ? { steps: meta.customSteps }
     : (() => {
         const stepPlanning: StepPlanPayload[] = meta.fasonPlans
-          .filter((p) => p.requiredCategoryId || p.plannedSubcontractorId || p.notes.trim())
+          // ⚠️ `dispatchWithoutColor` süzgece DE girer: yalnız o kutuyu işaretleyip
+          //    firma/kategori/not girmeyen adım aksi halde tamamen düşerdi.
+          .filter(
+            (p) =>
+              p.requiredCategoryId ||
+              p.plannedSubcontractorId ||
+              p.notes.trim() ||
+              p.dispatchWithoutColor,
+          )
           .map((p) => ({
             sequence: p.sequence,
             requiredCategoryId: p.requiredCategoryId,
             plannedSubcontractorId: p.plannedSubcontractorId,
             notes: p.notes.trim() === "" ? null : p.notes.trim(),
+            dispatchWithoutColor: p.dispatchWithoutColor,
           }));
         return {
           routeTemplateId: v.routeTemplateId,

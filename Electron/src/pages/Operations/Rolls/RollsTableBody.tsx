@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { PanelRight, Trash2 } from "lucide-react";
+import { PanelRight, Recycle, Trash2 } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -15,6 +15,7 @@ import { subcontractorService } from "@/pages/Subcontractors/service";
 import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/service";
 import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
+import { ReworkRollsDialog } from "./ReworkRollsDialog";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
 import { entryStationLookupService, entryUserLookupService } from "./entryLookupServices";
@@ -126,6 +127,30 @@ const CURRENT_STATION_FILTER: FilterDef = {
 
 export const DATE_FILTER = { kind: "dateRange", label: "Tarih", defaultField: "createdAt" } as const;
 
+/**
+ * ARŞİV — "hangi tür emeklilik" daraltması.
+ *
+ * ⚠️ Anahtar bilerek `statusIn`, `status` DEĞİL: backend'de öncelik
+ * `statusIn[] > status > varsayılan` şeklindedir, yani bu filtre sayfanın
+ * zorunlu `status` kümesini EZER. Seçenekler arşiv kümesinin ALT KÜMESİ olduğu
+ * için ezmek zararsız — kullanıcı arşivin dışına çıkamaz. `status` anahtarını
+ * kullansaydık iki değer aynı alana yazılır ve hangisinin kazandığı belirsiz
+ * kalırdı.
+ */
+const ARCHIVE_STATUS_FILTER: FilterDef = {
+  kind: "multi-select",
+  key: "statusIn",
+  label: "Kayıt Türü",
+  options: [
+    { value: "CANCELLED", label: "İptal edilmiş (kayıt hatası)" },
+    { value: "SCRAP", label: "Fire (mal vardı, gitti)" },
+    { value: "TAMBUR_CONSUMED", label: "Tambur'da kesilmiş" },
+    { value: "SUBCONTRACTOR_CONSUMED", label: "Fasonda tüketilmiş" },
+    { value: "KARTELA_CONSUMED", label: "Kartelaya dönüşmüş" },
+    { value: "RETURNED_FROM_SUBCONTRACTOR", label: "Fason dönüşü" },
+  ],
+};
+
 // GİRİŞ TÜRÜ — yalnız Ham Stok (2026-08-17, madde 9). Dışarıdan alınan yarı
 // mamül ham stoğa düşer ve orada "içeride ürettiğimiz ham" ile yan yana durur;
 // ayrı bir DEPO açmak yerine (fabrikada fiziksel karşılığı yok) ayrım bu
@@ -194,6 +219,7 @@ export function buildRollFilterDefs(
   if (tab === "RAW_STOCK") return [...base, ENTRY_SOURCE_FILTER];
   if (tab === "FINISHED_STOCK") return [...base, SHIPMENT_SCOPE_FILTER];
   if (tab === "SUBCONTRACTOR") return [...base, ...FASON_FILTERS];
+  if (tab === "ARCHIVE") return [...base, ENTRY_SOURCE_FILTER, ARCHIVE_STATUS_FILTER];
   // İSTASYON (currentStationId) YALNIZ topun gerçekten bir istasyonda DURDUĞU
   // sekmelerde: "şu an nerede" filtresi Ham Stok / Bitmiş Depo'da her zaman boş
   // döner (o toplarda currentStep yok) ve saha bunu "filtre bozuk" diye okudu
@@ -229,13 +255,26 @@ interface Props {
  * sekme şeridi vb.) yerleştirir; `hideFilterBar` ile bu gövdenin kendi filtre
  * satırı bastırılabilir.
  */
-export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBar = false, exportName, paginationActions }: Props) {
+export function RollsTableBody({
+  tab,
+  table,
+  isLoading,
+  pagination,
+  hideFilterBar = false,
+  exportName,
+  paginationActions,
+}: Props) {
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
+  const [reworkOpen, setReworkOpen] = useState(false);
 
   const { values: foldValues } = useFoldValues();
   const filters = useMemo(
-    () => buildRollFilterDefs(tab, foldValues.map((v) => ({ value: v.code, label: v.name }))),
+    () =>
+      buildRollFilterDefs(
+        tab,
+        foldValues.map((v) => ({ value: v.code, label: v.name })),
+      ),
     [tab, foldValues],
   );
 
@@ -244,6 +283,11 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
   // topsa çuval/sevkiyattan da çıkarır. Seçili satırlar TanStack table state'inden okunur.
   const selectedRolls = table.getSelectedRowModel().rows.map((r) => r.original);
   const bulkCancelable = tab === "RAW_STOCK" || tab === "FINISHED_STOCK";
+  // YENİDEN ÜRETİME AL — depodaki bitmiş/2.kalite topu yeni bir iş emrine sokar
+  // ("her işlem final üretir"; backend `quick-start` STOCK/WAREHOUSE/A1_STOCK
+  // kabul eder). Ham Stok'ta GÖSTERİLMEZ: oradaki top zaten üretime girmemiş,
+  // "yeniden" diye bir şey yok — normal iş emri açma yolu kullanılır.
+  const reworkable = tab === "FINISHED_STOCK";
 
   return (
     <>
@@ -265,19 +309,37 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
         // Ham Stok'ta seçim çubuğuna "Stoktan Kaldır" (iptal) — DataTable bunu
         // alt şeride (Seçimi temizle'nin yanına) koyar; ayrı üst şerit yok.
         bulkActions={
-          bulkCancelable
+          bulkCancelable || reworkable
             ? (rows) =>
                 rows.length > 0 ? (
-                  <PermissionGate permission="roll:write">
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="gap-1.5"
-                      onClick={() => setBulkCancelOpen(true)}
-                    >
-                      <Trash2 className="h-4 w-4" /> Stoktan Kaldır
-                    </Button>
-                  </PermissionGate>
+                  <>
+                    {reworkable && (
+                      // İzin `workorder:write` — uç zaten onu kabul ediyor
+                      // (`quick-start`). Yeni izin kodu AÇILMADI.
+                      <PermissionGate permission="workorder:write">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5"
+                          onClick={() => setReworkOpen(true)}
+                        >
+                          <Recycle className="h-4 w-4" /> Yeniden Üretime Al
+                        </Button>
+                      </PermissionGate>
+                    )}
+                    {bulkCancelable && (
+                      <PermissionGate permission="roll:write">
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="gap-1.5"
+                          onClick={() => setBulkCancelOpen(true)}
+                        >
+                          <Trash2 className="h-4 w-4" /> Stoktan Kaldır
+                        </Button>
+                      </PermissionGate>
+                    )}
+                  </>
                 ) : null
             : undefined
         }
@@ -303,6 +365,12 @@ export function RollsTableBody({ tab, table, isLoading, pagination, hideFilterBa
       <BulkCancelRollsDialog
         open={bulkCancelOpen}
         onOpenChange={setBulkCancelOpen}
+        rolls={selectedRolls}
+        onDone={() => table.resetRowSelection()}
+      />
+      <ReworkRollsDialog
+        open={reworkOpen}
+        onOpenChange={setReworkOpen}
         rolls={selectedRolls}
         onDone={() => table.resetRowSelection()}
       />

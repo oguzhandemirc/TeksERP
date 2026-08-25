@@ -366,10 +366,35 @@ export default function NewWorkOrderView({
           rollKind: 'WOUND_ROLL',
           ...(wo.lockedItemId ? { itemId: wo.lockedItemId } : {}),
         }}
+        /* İKİ KAPSAM (2026-08-25): ham stok + bitmiş depo. Bitmiş depo topu
+           yeniden üretime alınabilir (backend `quick-start` WAREHOUSE/A1_STOCK
+           kabul eder); `shipmentScope: 'free'` çuvala/sevkiyata bağlı olanları
+           eler — okutma yolundaki `scanClassify` ile aynı kural. */
+        scopeTabs={[
+          {
+            key: 'raw',
+            label: 'Ham Stok',
+            filters: {
+              rollScope: 'RAW_STOCK',
+              rollKind: 'WOUND_ROLL',
+              ...(wo.lockedItemId ? { itemId: wo.lockedItemId } : {}),
+            },
+          },
+          {
+            key: 'finished',
+            label: 'Bitmiş Depo',
+            filters: {
+              status: 'WAREHOUSE,A1_STOCK',
+              shipmentScope: 'free',
+              rollKind: 'WOUND_ROLL',
+              ...(wo.lockedItemId ? { itemId: wo.lockedItemId } : {}),
+            },
+          },
+        ]}
         excludeIds={wo.scanned.map((s) => s.id)}
-        title="Stok Topu Seç"
-        subtitle={wo.lockedItemName ? `${wo.lockedItemName} — serbest stok` : 'Serbest stok topları'}
-        emptyText="Uygun serbest stok topu yok"
+        title="Top Seç"
+        subtitle={wo.lockedItemName ? `${wo.lockedItemName}` : 'Ham stok veya bitmiş depo'}
+        emptyText="Bu kapsamda uygun top yok"
       />
 
       {/* Okutulan barkod İPTAL EDİLMİŞ — sebebi göster, kapsam uygunsa geri aldır.

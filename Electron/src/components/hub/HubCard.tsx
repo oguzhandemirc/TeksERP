@@ -4,7 +4,7 @@ import { ArrowRight, type LucideIcon } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
-import { useTabTarget } from "@/components/layout/tabs/use-tab-target";
+import { useDrillTarget } from "@/components/layout/tabs/use-tab-target";
 
 // Hub kartları için renkli ama tutarlı ton paleti. Her kart kendi tonunu
 // (ikon chip + dev watermark + ok rengi) bu listeden index'e göre alır;
@@ -57,7 +57,9 @@ interface HubCardProps {
  *  Açıklama (subtitle) bilinçli olarak BASILMAZ — başlık zaten kendini anlatıyor. */
 export function HubCard({ to, title, icon: Icon, tone, index = 0, dragHandle }: HubCardProps) {
   const toneClass = tone ?? hubTone(index);
-  const target = useTabTarget(to);
+  // Sol tık YERİNDE iner (hub → sayfa aynı sekmede; geri oku gerçek geçmişe basar),
+  // sağ/orta tık yeni sekmede açar. Bkz. `useDrillTarget` notu.
+  const target = useDrillTarget(to);
   return (
     <motion.div
       variants={staggerItem}

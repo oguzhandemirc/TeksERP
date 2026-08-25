@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, StyleSheet, useWindowDimensions } from 'react-native';
 import {
   Text,
@@ -9,6 +9,7 @@ import {
   Icon,
   ActivityIndicator,
   Button,
+  SegmentedButtons,
 } from 'react-native-paper';
 import { FlashList } from '@shopify/flash-list';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -63,6 +64,20 @@ interface Props {
   onConfirm?: (rolls: Roll[]) => void;
   /** Çoklu seçim onay butonu etiketi (default "Ekle"). */
   confirmLabel?: string;
+  /**
+   * KAPSAM SEKMELERİ (2026-08-25) — başlığın altında, TAM GENİŞLİK.
+   * Verilmezse hiç çizilmez ve `filters` aynen kullanılır: mevcut beş çağıran
+   * (Kartela / Paket / Fason / İade / Hızlı İş Emri) etkilenmez.
+   *
+   * Hızlı İş Emri iki kapsam verir: "Ham Stok" ve "Bitmiş Depo" — depodaki
+   * bitmiş top yeniden üretime alınabilsin diye (backend `quick-start` zaten
+   * WAREHOUSE/A1_STOCK kabul ediyor).
+   *
+   * ⚠️ Sekme şeridi KENDİ SATIRINDA durur; `SegmentedButtons` bir satırın içine
+   * konmaz (`segmented-buttons-row.guard.test.ts` — yanındaki kutuyu sıfır
+   * genişliğe iter, 2026-08-25 Fason Kabul vakası).
+   */
+  scopeTabs?: { key: string; label: string; filters: Record<string, string | string[]> }[];
 }
 
 export default function RollPickerModal({
@@ -78,6 +93,7 @@ export default function RollPickerModal({
   accent = '#4f46e5',
   multiSelect = false,
   onConfirm,
+  scopeTabs,
   confirmLabel = 'Ekle',
 }: Props) {
   const { width: winW, height: winH } = useWindowDimensions();
@@ -93,14 +109,27 @@ export default function RollPickerModal({
     return () => clearTimeout(t);
   }, [search]);
 
+  // Etkin kapsam: sekme verilmişse seçili sekmenin filtresi, yoksa `filters`.
+  // ⚠️ Sekme anahtarı sorgu anahtarına GİRER (`effectiveFilters` üzerinden):
+  // girmezse sekme değişince liste tazelenmez ve operatör eski kapsamı görür.
+  const [scopeKey, setScopeKey] = useState<string>(scopeTabs?.[0]?.key ?? '');
+  useEffect(() => {
+    // Modal her açılışta ilk kapsamda başlar — önceki seçim yapışmasın.
+    if (visible && scopeTabs?.length) setScopeKey(scopeTabs[0]!.key);
+  }, [visible, scopeTabs]);
+  const effectiveFilters = useMemo(() => {
+    if (!scopeTabs?.length) return filters;
+    return (scopeTabs.find((t) => t.key === scopeKey) ?? scopeTabs[0]!).filters;
+  }, [scopeTabs, scopeKey, filters]);
+
   const rollsQuery = useInfiniteQuery({
-    queryKey: ['rolls', 'picker', filters, debouncedSearch],
+    queryKey: ['rolls', 'picker', effectiveFilters, debouncedSearch],
     queryFn: ({ pageParam }) =>
       rollService.getAllCursor({
         limit: PAGE_SIZE,
         cursor: pageParam,
         search: debouncedSearch.trim() || undefined,
-        filters,
+        filters: effectiveFilters,
       }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) =>
@@ -179,6 +208,16 @@ export default function RollPickerModal({
             style={{ margin: 0 }}
           />
         </View>
+
+        {scopeTabs && scopeTabs.length > 1 ? (
+          <View style={styles.scopeRow}>
+            <SegmentedButtons
+              value={scopeKey}
+              onValueChange={setScopeKey}
+              buttons={scopeTabs.map((t) => ({ value: t.key, label: t.label }))}
+            />
+          </View>
+        ) : null}
 
         <TextInput
           mode="outlined"
@@ -354,6 +393,8 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   sheetPhone: { paddingHorizontal: 6, paddingTop: 4, paddingBottom: 4, borderRadius: 12 },
+  // Kapsam sekmesi KENDİ SATIRINDA, tam genişlik (bkz. Props.scopeTabs notu).
+  scopeRow: { paddingHorizontal: 16, paddingBottom: 8 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

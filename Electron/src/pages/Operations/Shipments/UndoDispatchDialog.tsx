@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { FormField } from "@/components/forms/FormField";
@@ -38,11 +39,20 @@ const shelfLabel = (s: string) => rollStatusLabels[s as RollStatus] ?? s;
  * Yıkıcı onay kuralı: etkilenen kayıtlar SOMUT listelenir (çuval/top/sipariş +
  * hangi rafa döneceği) ve gerekçe zorunludur. Engel sebebi backend'in TEK
  * kaynağından (`blockReason`) gelir — istemci kendi kuralını kurmaz.
+ *
+ * "Sevkiyatı da kapat" (2026-08-22, `releaseSacks`): geri alınan sevkiyat PLANNED'da
+ * beklemek yerine aynı işlemde iptal edilir, çuvallar depoya döner. Varsayılan
+ * REJİME bağlı ve backend önizlemesinden gelir (`confirmationEnabled`): sevk onayı
+ * KAPALI fabrikada PLANNED beklemenin karşılığı yok (Sevk Kapısı ekranı görünmez,
+ * çuval kilitli kalır) → işaretli; AÇIK fabrikada PLANNED doğal durum → işaretsiz.
+ * Kullanıcı her iki rejimde de değiştirebilir. Yetki: storno izni kapanışı da kapsar.
  */
 export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
   const qc = useQueryClient();
   const open = !!shipmentId;
   const [reason, setReason] = useState("");
+  // null = kullanıcı dokunmadı → varsayılan önizlemeden (rejim) çözülür.
+  const [releaseChoice, setReleaseChoice] = useState<boolean | null>(null);
 
   const previewQ = useQuery({
     queryKey: ["shipment-undo-preview", shipmentId],
@@ -51,9 +61,10 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
     gcTime: 0, // her açılışta taze — bayat dökümle geri alma onaylanmasın
   });
   const p = previewQ.data?.data;
+  const release = releaseChoice ?? (p ? !p.confirmationEnabled : false);
 
   const undoMut = useMutation({
-    mutationFn: () => shipmentService.undoDispatch(shipmentId!, reason.trim()),
+    mutationFn: () => shipmentService.undoDispatch(shipmentId!, reason.trim(), release),
     onSuccess: (r) => {
       toast.success(r.message ?? `Sevk geri alındı: ${p?.shipmentNo ?? ""}`);
       // Stok + karşılanma + belge durumu değişti — dokunan tüm cache'ler tazelensin.
@@ -64,8 +75,8 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
       void qc.invalidateQueries({ queryKey: ["packing"] });
       void qc.invalidateQueries({ queryKey: ["orders"] });
       void qc.invalidateQueries({ queryKey: ["rolls"] });
-      void qc.invalidateQueries({ queryKey: ["ops-visibility"] });
       setReason("");
+      setReleaseChoice(null);
       onOpenChange(false);
     },
   });
@@ -77,7 +88,10 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
       open={open}
       onOpenChange={(o) => {
         if (undoMut.isPending) return; // çift-tık/kaza kapanma kilidi
-        if (!o) setReason("");
+        if (!o) {
+          setReason("");
+          setReleaseChoice(null);
+        }
         onOpenChange(o);
       }}
     >
@@ -108,7 +122,7 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
         ) : (
           <div className="space-y-3 text-sm">
             <div className="rounded-md border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-              Depoya dönecek:{" "}
+              {release ? "Depoya dönecek:" : "Geri alınacak:"}{" "}
               <span className="font-semibold tabular-nums text-foreground">{p.sackCount}</span> çuval ·{" "}
               <span className="font-semibold tabular-nums text-foreground">{p.rollCount}</span> top
               {p.swatchCount > 0 && (
@@ -150,13 +164,45 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
               </div>
             )}
 
+            {/* Sonrası ne olacak — kullanıcı onaydan ÖNCE seçer. Varsayılan rejime
+                bağlı (bkz. bileşen notu); metin seçime göre değişir ki "planlı
+                durumda bekliyor, nereden devam edeceğim" sorusu doğmasın. */}
+            <label
+              htmlFor="undo-release-sacks"
+              className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2"
+            >
+              <Checkbox
+                id="undo-release-sacks"
+                className="mt-0.5"
+                checked={release}
+                onCheckedChange={(c) => setReleaseChoice(Boolean(c))}
+              />
+              <span className="text-xs">
+                <span className="font-medium text-foreground">Sevkiyatı da kapat — çuvallar depoya dönsün</span>
+                <br />
+                <span className="text-muted-foreground">
+                  {release
+                    ? "Sevkiyat iptal olur; çuvallar ve toplar depoda serbest kalır, sipariş bağı kalkar. Yeniden göndermek için Paketleme'den yeni sevkiyat kurulur (yeni sevk no)."
+                    : p.confirmationEnabled
+                      ? "Sevkiyat planlı durumda bekler (çuvallar üstünde kilitli kalır); Sevk Kapısı'ndan ya da Sevkiyatlar'dan \"Sevk Et\" ile aynı numarayla yeniden çıkarılır."
+                      : "Sevkiyat planlı durumda bekler (çuvallar üstünde kilitli kalır); Sevkiyatlar'dan \"Sevk Et\" ile aynı numarayla yeniden çıkarılır."}
+                </span>
+              </span>
+            </label>
+
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               Sevk irsaliyesi <strong>İPTAL</strong> edilecek (silinmez — İPTAL filigranıyla basılabilir
-              kalır). Yeniden sevk edildiğinde yeni bir versiyon üretilir.
-              {(p.plateNumber || p.driverName) && (
+              kalır).
+              {!release && (
                 <>
                   {" "}
-                  Araç/şoför bilgisi ({[p.plateNumber, p.driverName].filter(Boolean).join(" · ")}) korunur.
+                  Yeniden sevk edildiğinde yeni bir versiyon üretilir.
+                  {(p.plateNumber || p.driverName) && (
+                    <>
+                      {" "}
+                      Araç/şoför bilgisi ({[p.plateNumber, p.driverName].filter(Boolean).join(" · ")}) korunur.
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -187,7 +233,7 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
             ) : (
               <Undo2 className="mr-1 h-4 w-4" />
             )}
-            Sevki Geri Al
+            {release ? "Geri Al ve Kapat" : "Sevki Geri Al"}
           </Button>
         </DialogFooter>
       </DialogContent>

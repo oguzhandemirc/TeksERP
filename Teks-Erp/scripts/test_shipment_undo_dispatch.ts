@@ -30,6 +30,13 @@
 //   [8] Önizleme ile mutasyon AYNI kaynaktan konuşur (`resolveUndoBlockReason`):
 //       ekranda "yapılabilir" derken uçta 409 alınmaz.
 //   [9] Gerekçe ZORUNLU (min 3) — resmi belge iptal ediliyor.
+//  [10] `releaseSacks` (2026-08-22): storno + KAPANIŞ aynı tx — sevkiyat PLANNED'da
+//       BEKLEMEZ (CANCELLED), çuval havuza döner (shipmentId/seq null), toplar
+//       kendi rafına döner ve ÇUVALDA KALIR, tahsis silinir, tüm irsaliye
+//       sürümleri VOIDED; sonrasında ne storno ne iptal tekrar koşar. Sevk onayı
+//       KAPALI rejimin yolu (Sevk Kapısı ekranı o rejimde görünmez); önizleme
+//       `confirmationEnabled` döner ki istemci varsayılanı kursun. Varsayılan
+//       (bayraksız) çağrı [4]'teki gibi PLANNED bırakır — geriye dönük uyumlu.
 //
 // Fixture: elle kurulan PLANNED sevkiyat + gerçek `dispatchShipment` çağrısı
 // (freeze/preShipStatus yollarının ikisi de ürün kodundan geçsin). Cleanup
@@ -63,6 +70,7 @@ interface UndoPreview {
   affectedOrders: string[];
   returnTargets: { status: string; rollCount: number }[];
   voidsDispatchNote: boolean;
+  confirmationEnabled: boolean;
 }
 
 const N = (v: unknown) => Number(v);
@@ -298,6 +306,55 @@ async function main() {
     await shippingService.undoDispatch(shipment.id, "TEST — kapanış stornosu", admin.id);
     const twice = await err(() => shippingService.undoDispatch(shipment.id, "TEST — ikinci deneme", admin.id));
     check("PLANNED'da tekrar geri alma reddedildi", twice !== null && /sevk edilmiş/i.test(twice), String(twice));
+
+    // ---------------------------------------------------------------------
+    console.log("\n[10] STORNO + KAPANIŞ (releaseSacks) — sevk onayı KAPALI rejimin yolu");
+    const p10 = await preview();
+    check("önizleme sevk onayı bayrağını söylüyor (istemci varsayılanı bundan kurar)", typeof p10.confirmationEnabled === "boolean");
+    await shippingService.dispatchShipment(shipment.id, {}, admin.id);
+    const rel = (await shippingService.undoDispatch(
+      shipment.id,
+      "TEST — bu müşteride böyle sipariş yok, sevkiyat kapansın",
+      admin.id,
+      { releaseSacks: true },
+    )) as { data: { restoredRolls: number; freedSacks: number; released: boolean }; message?: string };
+    check("released=true + 1 çuval serbest", rel.data.released === true && rel.data.freedSacks === 1, JSON.stringify(rel.data));
+    check("2 top geri alındı", rel.data.restoredRolls === 2, String(rel.data.restoredRolls));
+    check("mesaj kapanışı söylüyor", /kapatıldı/i.test(rel.message ?? ""), String(rel.message));
+    const shRel = await prisma.shipment.findUnique({ where: { id: shipment.id }, select: { status: true, dispatchedAt: true } });
+    check("sevkiyat CANCELLED (PLANNED'da BEKLEMİYOR)", shRel?.status === "CANCELLED" && shRel?.dispatchedAt === null, String(shRel?.status));
+    const sackRel = await prisma.sack.findUnique({ where: { id: sack.id }, select: { shipmentId: true, seq: true } });
+    check("çuval havuza döndü (shipmentId + seq null)", sackRel?.shipmentId === null && sackRel?.seq === null, JSON.stringify(sackRel));
+    const rollsRel = await prisma.roll.findMany({
+      where: { itemId: item.id },
+      select: { status: true, shipmentId: true, sackId: true, preShipStatus: true },
+      orderBy: { barcode: "asc" },
+    });
+    check(
+      "toplar KENDİ rafına döndü + shipmentId null + ÇUVALDA KALDI",
+      rollsRel.length === 2 &&
+        rollsRel.every((r) => r.shipmentId === null && r.sackId === sack.id && r.preShipStatus === null) &&
+        rollsRel.some((r) => r.status === "WAREHOUSE") &&
+        rollsRel.some((r) => r.status === "A1_STOCK"),
+      JSON.stringify(rollsRel),
+    );
+    const allocRel = await prisma.sackAllocation.count({ where: { sackId: sack.id } });
+    check("tahsis silindi (sipariş bağı kalktı)", allocRel === 0, String(allocRel));
+    const soRel = await prisma.shipmentOrder.findFirst({ where: { shipmentId: shipment.id }, select: { isActive: true } });
+    check("ShipmentOrder.isActive false", soRel?.isActive === false, String(soRel?.isActive));
+    const lineRel = await prisma.orderLine.findUnique({ where: { id: line.id }, select: { shippedQty: true } });
+    check("shippedQty 0", N(lineRel?.shippedQty) === 0, String(lineRel?.shippedQty));
+    const docsRel = await prisma.printedDocument.findMany({
+      where: { docType: "SHIPMENT_DISPATCH", sourceId: shipment.id },
+      select: { status: true, version: true },
+    });
+    check("TÜM irsaliye sürümleri VOIDED (silinmedi)", docsRel.length >= 3 && docsRel.every((d) => d.status === "VOIDED"), JSON.stringify(docsRel));
+    const returnRowsRel = await prisma.rollReturn.count({ where: { fromShipmentId: shipment.id, cancelledAt: null } });
+    check("kapanış da iade defterine YAZMADI", returnRowsRel === 0, String(returnRowsRel));
+    const againErr = await err(() => shippingService.undoDispatch(shipment.id, "TEST — iptal sonrası", admin.id));
+    check("iptal edilmiş sevkiyat tekrar geri alınamaz", againErr !== null && /[İi]ptal edilmiş/.test(againErr), String(againErr));
+    const cancelAgain = (await shippingService.cancelShipment(shipment.id, admin.id)) as { message?: string };
+    check("'İptal Et' idempotent (zaten iptal)", /zaten iptal/i.test(cancelAgain.message ?? ""), String(cancelAgain.message));
   } finally {
     // Cleanup — bağımlılık sırasıyla.
     await prisma.rollReturn.deleteMany({ where: { customerId: customer.id } });

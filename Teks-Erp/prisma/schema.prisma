@@ -133,6 +133,11 @@ enum ReasonPresetKind {
   ROLL_MANUAL_ENTRY
   /// KK1 / Depo / Tambur — top iptal sebebi.
   ROLL_CANCEL
+  /// Hızlı İş Emri — depodaki BİTMİŞ topu yeniden üretime alma sebebi
+  /// ("ton tutmadı", "leke"…). Metin SAKLAMAZ: kod + serbest metin iş emrinin
+  /// `parameters.rework` alanına yazılır, metin ayrıca 1. adımın notuna geçip
+  /// fason çekisine talimat olarak basılır.
+  WORK_ORDER_REWORK
 }
 
 /// Çuval brüt tartısının kaynağı (`Sack.weightSource`). İÇ izdir — belgeye basılmaz.

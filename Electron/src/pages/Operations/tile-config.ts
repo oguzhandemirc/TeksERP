@@ -25,16 +25,16 @@ import type { OperationGroupKey } from "./groups-config";
  * ekranın İÇİNDEKİ dağıtım kontrollerini açıp kapatıyor. Görünürlük kararı da
  * saf izin kontrolüne indi; sayaçları menü için çeken uç (`/kursun-bypass/
  * visibility`) Electron'da artık tüketilmiyor.
+ *
+ * 2026-08-22'de bir daha KÜÇÜLDÜ: `pendingPlannedShipments` (çıkış bekleyen
+ * PLANNED sevkiyat sondası) kalktı — bkz. Sevk Kapısı karosundaki not. Bağlam
+ * artık tek bayrak taşır; yeni bir sayaç eklemeden önce sorulacak soru "bu
+ * ekranın işi başka bir ekrandan da yapılabiliyor mu?" (yapılabiliyorsa sayaç
+ * değil, o ekrana aksiyon eklenir).
  */
 export interface OperationsVisibilityContext {
   /** `shipping.confirmationEnabled` — sevk onayı ara adımı. */
   shipmentConfirmationEnabled: boolean;
-  /**
-   * Çıkış bekleyen (PLANNED) sevkiyat sayısı — bayrak KAPALIYKEN bile Sevk
-   * Kapısı'nı görünür tutan "işi kaldıysa dur" koşulunun girdisi. Bilinmiyorsa
-   * (izin yok / henüz yüklenmedi) 0 — karo yalnız bayrağa göre karar verir.
-   */
-  pendingPlannedShipments: number;
 }
 
 export interface OperationsTile {
@@ -123,14 +123,21 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/sack-store",
     group: "shipping",
     permission: "shipping:read",
-    // Sevk onayı adımı KAPALIYKEN (varsayılan) sevkler doğrudan çıkar → bu ekranın
-    // yapacağı iş yok. AMA bayrak kapatıldığı anda ZATEN KURULMUŞ PLANNED
-    // sevkiyatlar olabilir ve çıkış onayı YALNIZ bu ekrandan yapılıyor → karo
-    // gizlenirse o sevkiyatlar erişilemez kalır (mal kapıda, ekran yok). 2026-08-05'e
-    // kadar bu boşluk bilinçli bırakılmıştı; sevk geri alma (storno) işi bayrağı
-    // aç-kapa edilebilir hale getirdiği için kapatıldı. Kurşun karolarındaki
-    // "işi kaldıysa durur" VEYA kalıbının aynısı.
-    visibleWhen: (ctx) => ctx.shipmentConfirmationEnabled || ctx.pendingPlannedShipments > 0,
+    // Sevk Kapısı = "sevk onayı adımı" bayrağının EKRANI. Bayrak KAPALIYKEN
+    // (varsayılan) sevkler doğrudan çıkar → board'un işi yok → karo gizli.
+    //
+    // 2026-08-05 → 08-22 arasında kural "bayrak açık VEYA çıkış bekleyen PLANNED
+    // sevkiyat varsa" idi: storno (sevki geri al) sevkiyatı PLANNED'a düşürüyordu
+    // ve çıkış onayı YALNIZ bu ekrandaydı → karo gizlenirse mal kapıda, ekran yok.
+    // Saha vakası (SVK2008260008, 2026-08-21): bayrak kapalı fabrikada geri alınan
+    // bir sevkiyat yüzünden karo beklenmedik şekilde belirdi ve çuval bir gün
+    // kilitli kaldı. 2026-08-22 kararı: PLANNED sevkiyatın bu ekrana ihtiyacı
+    // KALMADI — storno kapalı rejimde varsayılan olarak sevkiyatı KAPATIR
+    // (`releaseSacks`, çuvallar depoya) ve Sevkiyatlar detayı PLANNED sevkiyata
+    // "Sevk Et" verir. Kural saf bayrağa indi; sonda sorgusu da kalktı.
+    // Route (`/operations/sack-store`) bayrağa bakmaz — eski sekme/okutma hedefi
+    // yine açılır, yalnız menüde çizilmez.
+    visibleWhen: (ctx) => ctx.shipmentConfirmationEnabled,
   },
   {
     key: "sack-content-edit",

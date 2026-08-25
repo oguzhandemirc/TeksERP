@@ -620,6 +620,55 @@ router.post(
 
 /**
  * @openapi
+ * /api/rolls/{id}/scrap:
+ *   post:
+ *     tags: [Inventory]
+ *     summary: Topu FİRE et (mal vardı, artık yok → SCRAP)
+ *     description: |
+ *       `DELETE /api/rolls/{id}` (iptal) ile AYRI bir karardır ve ayrı kalmalıdır:
+ *       iptal "bu kayıt hiç olmamalıydı" (stok düşmez, fire raporuna girmez),
+ *       fire "mal vardı, artık yok" (stok gerçekten düşer, fire raporuna girer).
+ *       İkisini tek tuşa indirmek fabrikanın fire oranını veri düzeltmeleriyle
+ *       kirletir.
+ *
+ *       Engeller iptalle AYNI: fasondaki / sevk edilmiş / tüketilmiş / kartelaya
+ *       gitmiş top fire edilemez; planlı sevkiyattaki veya sevkiyat çuvalındaki
+ *       top önce oradan çıkarılmalıdır. İstasyonda aktif top `confirmActive`
+ *       ister. Sebep opsiyoneldir; `reasonCode` verilirse fire kataloğunda
+ *       doğrulanır (bilinmeyen → 400 `REASON_CODE_INVALID`).
+ *
+ *       İzin `roll:manual-adjust` — `roll:write` YETMEZ: fire gerçek bir stok
+ *       değeri kararıdır (iş emri kapanış dispozisyonlarıyla aynı çizgi).
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:        { type: string, minLength: 3, maxLength: 500 }
+ *               reasonCode:    { type: string, maxLength: 64 }
+ *               confirmActive: { type: boolean }
+ *     responses:
+ *       200:
+ *         description: Top fire edildi (SCRAP)
+ *       400:
+ *         description: Bu durumdaki top fire edilemez / geçersiz sebep kodu
+ *       409:
+ *         description: İstasyonda aktif — onay gerekli
+ *       404:
+ *         description: Top bulunamadı
+ */
+router.post("/:id/scrap", verifyToken, requirePermission("roll:manual-adjust"), controller.scrap);
+
+/**
+ * @openapi
  * /api/rolls/{id}/permanent:
  *   delete:
  *     tags: [Inventory]

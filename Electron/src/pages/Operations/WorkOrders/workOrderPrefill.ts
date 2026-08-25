@@ -129,6 +129,7 @@ export function routeStateFromWorkOrder(wo: WorkOrder): RoutePrefillState {
         requiredCategoryId: s.requiredCategoryId ?? null,
         plannedSubcontractorId: s.plannedSubcontractorId ?? null,
         notes: s.notes ?? "",
+        dispatchWithoutColor: s.dispatchWithoutColor ?? false,
       }));
     return { customSteps: [], fasonPlans, designerSnapshot: [] };
   }
@@ -264,6 +265,7 @@ export function routeStepsToCreatePayload(
   defaultNotes: string | null;
   requiredCategoryId: string | null;
   plannedSubcontractorId: string | null;
+  dispatchWithoutColor: boolean;
   plannedColorId?: string | null;
   plannedPropertyIds?: string[];
 }[] {
@@ -275,6 +277,7 @@ export function routeStepsToCreatePayload(
       defaultNotes: s.notes.trim() || null,
       requiredCategoryId: s.requiredCategoryId,
       plannedSubcontractorId: s.plannedSubcontractorId,
+      dispatchWithoutColor: s.dispatchWithoutColor ?? false,
       ...(plan
         ? {
             plannedColorId: plan.plannedColorId,

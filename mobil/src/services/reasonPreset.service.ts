@@ -16,7 +16,9 @@ export type ReasonPresetKind =
   | 'ROLL_SCRAP'
   | 'ROLL_RECORD_CORRECTION'
   | 'ROLL_MANUAL_ENTRY'
-  | 'ROLL_CANCEL';
+  | 'ROLL_CANCEL'
+  /** Hızlı İş Emri — depodaki BİTMİŞ topu yeniden üretime alma sebebi (2026-08-25). */
+  | 'WORK_ORDER_REWORK';
 
 export interface ReasonPreset {
   id: string;
@@ -42,6 +44,9 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   ROLL_RECORD_CORRECTION: false,
   ROLL_MANUAL_ENTRY: true,
   ROLL_CANCEL: true,
+  // Yeniden üretimde satır YOK: kod + metin iş emrinin `parameters.rework`una
+  // yazılır; metin ayrıca fason çekisine talimat olur. Kod rapor anahtarıdır.
+  WORK_ORDER_REWORK: false,
 };
 
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -49,6 +54,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ROLL_RECORD_CORRECTION: 'Kayıt düzeltmesi sebepleri',
   ROLL_MANUAL_ENTRY: 'Elle top ekleme sebepleri',
   ROLL_CANCEL: 'Top iptal sebepleri',
+  WORK_ORDER_REWORK: 'Yeniden üretim sebepleri',
 };
 
 export const reasonPresetService = {

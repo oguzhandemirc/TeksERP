@@ -106,37 +106,45 @@ async function main(): Promise<void> {
     );
   }
 
-  // ── §2 Etiketi BASILMIŞ top: onaysız iptal REDDEDİLİR ─────────────────────
-  console.log("\n§2 Etiketli top — fail-loud iptal");
+  // ── §2 Etiketi BASILMIŞ top: GUARD KALDIRILDI (2026-08-25) ────────────────
+  //
+  // ⚠️ BU BÖLÜM 2026-08-25'te TERSİNE ÇEVRİLDİ ve bu bilinçlidir. Eskiden burada
+  // "onaysız iptal 409 LABEL_PRINTED ile reddedilir" ölçülüyordu. Kullanıcı kararı:
+  // ölü etiket onayı bir sektör standardı değildi (2026-08-05'teki tek olaydan
+  // sonra eklenmiş yerel bir korumaydı), karşılığında bir "etiket toplama" süreci
+  // hiç kurulmadı ve masaüstünde hiç bağlanmadığı için orada etiketli top HİÇ
+  // iptal edilemiyordu. Guard kalktı; VERİ (labelPrintedAt) duruyor.
+  //
+  // Geri koymak istersen: `inventory.service.softDelete`teki gerekçeyi ÖNCE çürüt,
+  // sonra bu bölümü ve `test_roll_cancel_undo` §2b'yi birlikte geri al.
+  console.log("\n§2 Etiketli top — onay SORULMAZ, veri korunur");
   {
     const r = await makeRoll({ labelPrinted: true });
-    let code = "";
-    try {
-      await service.softDelete(r.id, undefined, {});
-      check("onaysız iptal reddedildi", false, "GEÇTİ — guard yok!");
-    } catch (e) {
-      code = (e as { details?: { code?: string } }).details?.code ?? "";
-      check("onaysız iptal 409 ile reddedildi", true);
-      check("hata kodu LABEL_PRINTED", code === "LABEL_PRINTED", code);
-      check(
-        "mesaj operatöre NE YAPACAĞINI söylüyor (etiketi sök)",
-        /etiketi\s+topt?an\s+sök/i.test((e as Error).message),
-        (e as Error).message.slice(0, 80),
-      );
-    }
-    const still = await prisma.roll.findUnique({ where: { id: r.id }, select: { status: true } });
-    check("top hâlâ iptal EDİLMEMİŞ", still?.status === RollStatus.STOCK, String(still?.status));
+    // Onaysız, sebepsiz: tek hamlede geçmeli.
+    await service.softDelete(r.id, undefined, {});
+    const first = await prisma.roll.findUnique({
+      where: { id: r.id },
+      select: { status: true, labelPrintedAt: true },
+    });
+    check(
+      "etiketli top onay SORULMADAN iptal edildi",
+      first?.status === RollStatus.CANCELLED,
+      String(first?.status),
+    );
+    // Kaldırılan şey SORU; veri duruyor — "sahada hangi ölü etiket var" sorusu
+    // bir gün sorulursa cevabı hâlâ bu kolonda.
+    check("labelPrintedAt SİLİNMEDİ (soru kalktı, veri kalmadı değil)", first?.labelPrintedAt != null);
 
-    // Onay + sebep → geçer ve sebep TOPUN SATIRINA yazılır (audit'e değil).
-    await service.softDelete(r.id, undefined, {
-      confirmLabelPrinted: true,
+    // Sebep verilen ikinci top: sebep TOPUN SATIRINA yazılır (audit'e değil).
+    const r2 = await makeRoll({ labelPrinted: true });
+    await service.softDelete(r2.id, undefined, {
       reason: "yanlış metraj girildi",
     });
     const done = await prisma.roll.findUnique({
-      where: { id: r.id },
+      where: { id: r2.id },
       select: { status: true, cancelReason: true, cancelReasonCode: true },
     });
-    check("onay + sebep ile iptal edildi", done?.status === RollStatus.CANCELLED);
+    check("sebeple iptal edildi", done?.status === RollStatus.CANCELLED);
     check(
       "sebep topun KENDİ satırında (audit'te değil — 6 ayda arşivlenir)",
       done?.cancelReason === "yanlış metraj girildi",
@@ -200,15 +208,20 @@ async function main(): Promise<void> {
     );
     check("kısa doldurmada sebep KODU da null", done2?.cancelReasonCode === null, String(done2?.cancelReasonCode));
 
-    // Onay hâlâ zorunlu — bu dal düşerse etiketli top sessizce iptal edilirdi.
+    // ⚠️ Eski istemci uyumu (2026-08-25): `confirmLabelPrinted` artık hiçbir kapı
+    // açmıyor ama sahadaki APK'lar hâlâ gönderiyor. Gönderilmesi de gönderilmemesi
+    // de AYNI sonucu vermeli — biri 409'a düşerse deploy penceresinde tabletler
+    // ya da masaüstü sessizce kilitlenir.
     const r3 = await makeRoll({ labelPrinted: true });
-    try {
-      await service.softDelete(r3.id, undefined, { reason: "yanlış ürün seçildi" });
-      check("sebep var ama ONAY yok → reddedilir", false, "GEÇTİ — onay guard'ı düştü!");
-    } catch (e) {
-      const c = (e as { details?: { code?: string } }).details?.code ?? "";
-      check("sebep var ama ONAY yok → 409 LABEL_PRINTED", c === "LABEL_PRINTED", c);
-    }
+    await service.softDelete(r3.id, undefined, {
+      confirmLabelPrinted: true,
+      reason: "yanlış ürün seçildi",
+    });
+    const done3 = await prisma.roll.findUnique({
+      where: { id: r3.id },
+      select: { status: true },
+    });
+    check("eski istemcinin confirmLabelPrinted'i zararsız", done3?.status === RollStatus.CANCELLED);
   }
 
   // ── §3 Geri alma: temiz kayıt geri döner, RAFI KORUNUR ────────────────────
@@ -272,9 +285,31 @@ async function main(): Promise<void> {
       "hareketli top engelli",
       /hareket kaydı var/i.test(resolveRollRestoreBlockReason({ ...base, movementCount: 1 }) ?? ""),
     );
+    // ⚠️ TERSİNE ÇEVRİLDİ (2026-08-25, "SAP'taki gibi yap"): parti üyeliği tek
+    // başına ENGEL DEĞİL. SAP'ta parti ana veridir; ters kaydı engelleyen şey
+    // sonraki hareket / tüketim / sevktir — hepsi ayrı kural. Ölçüm: bu kural
+    // 86 topu kilitliyordu, 85'i sıfır hareketli Tambur çıktısıydı.
     check(
-      "partili top engelli",
-      /partiye kayıtlı/i.test(resolveRollRestoreBlockReason({ ...base, batchId: "x" }) ?? ""),
+      "partili ama HAREKETSİZ top: engel YOK (parti ana veridir, hareket değil)",
+      resolveRollRestoreBlockReason({ ...base, batchId: "x" }) === null,
+    );
+    check(
+      "partili VE hareketli top: yine engelli (asıl koruma bu)",
+      /hareket kaydı var/i.test(
+        resolveRollRestoreBlockReason({ ...base, batchId: "x", movementCount: 1 }) ?? "",
+      ),
+    );
+    check(
+      "partili VE kesilmiş top: yine engelli",
+      /kesilmiş/i.test(
+        resolveRollRestoreBlockReason({ ...base, batchId: "x", childCount: 1 }) ?? "",
+      ),
+    );
+    check(
+      "partili VE çuvaldaki top: yine engelli",
+      /çuvala\/sevkiyata/i.test(
+        resolveRollRestoreBlockReason({ ...base, batchId: "x", sackId: "s" }) ?? "",
+      ),
     );
     check(
       "kesilmiş top engelli",
@@ -293,7 +328,7 @@ async function main(): Promise<void> {
     // Her engel mesajı SEBEBİ söylemeli — sessiz 409 yasak.
     const reasons = [
       resolveRollRestoreBlockReason({ ...base, movementCount: 1 }),
-      resolveRollRestoreBlockReason({ ...base, batchId: "x" }),
+      resolveRollRestoreBlockReason({ ...base, operationCount: 1 }),
       resolveRollRestoreBlockReason({ ...base, childCount: 1 }),
     ];
     check(
@@ -356,6 +391,65 @@ async function main(): Promise<void> {
     check("etiketsiz topta labelPrinted=false", p2.labelPrinted === false);
     // İki eksen AYRI: "istasyonda aktif mi" ile "sahada ölü kâğıt bırakır mı".
     check("labelPrinted, requiresConfirm'den ayrı eksen", p1.requiresConfirm === false);
+  }
+
+  // ── §7 FİRE ("mal vardı, artık yok") — iptalden AYRI karar ────────────────
+  //
+  // 2026-08-25 kullanıcı kararı. İki eylem AYRI kalmak ZORUNDA:
+  //   • İptal → "bu kayıt hiç olmamalıydı": stok düşmez (mal hiç girmemişti),
+  //     hareket kapanışı STORNO (`qtyOut = 0`), fire raporuna GİRMEZ.
+  //   • Fire  → "mal vardı, artık yok": stok gerçekten düşer, hareket kapanışı
+  //     `qtyOut = qtyIn` (mal o istasyondan geçti), fire raporuna GİRER.
+  // Birleştirilirse fabrikanın fire oranı veri düzeltmeleriyle kirlenir. Ölçüm
+  // (canlı kopya, 2026-08-25): 230 iptal / 1 fire; sebep yazılmış 24 iptalin
+  // HEPSİ kayıt hatası — yani ayrım sahada zaten doğru kullanılıyor.
+  console.log("\n§7 Fire — iptalden ayrı karar");
+  {
+    const r = await makeRoll({ labelPrinted: true });
+    await service.softDelete(r.id, undefined, { mode: "SCRAP", reason: "Kirlendi" });
+    const done = await prisma.roll.findUnique({
+      where: { id: r.id },
+      select: { status: true, cancelReason: true, preCancelStatus: true, cancelledAt: true },
+    });
+    check("fire → SCRAP (CANCELLED DEĞİL)", done?.status === RollStatus.SCRAP, String(done?.status));
+    check("fire sebebi topun SATIRINDA", done?.cancelReason === "Kirlendi", String(done?.cancelReason));
+    check("çıkış izi fire'da da damgalanır", done?.cancelledAt != null);
+    check("geldiği raf kaydedildi", done?.preCancelStatus === RollStatus.STOCK, String(done?.preCancelStatus));
+
+    // Fire GERİ ALINAMAZ — yüklem statüye bakar, "cancel kolonları dolu" diye
+    // fire'ı diriltmemeli (kolonlar bilerek paylaşılıyor).
+    const block = resolveRollRestoreBlockReason({
+      status: done!.status,
+      preCancelStatus: done!.preCancelStatus,
+      batchId: null,
+      sackId: null,
+      shipmentId: null,
+      currentStepId: null,
+      movementCount: 0,
+      operationCount: 0,
+      childCount: 0,
+      dispatchItemCount: 0,
+      kartelaItemCount: 0,
+    });
+    check("fire geri alınamaz (kolonlar paylaşılsa da)", block !== null, String(block));
+
+    // Geçersiz fire sebep kodu → 400 (fire kataloğu iptal kataloğundan AYRI).
+    const r2 = await makeRoll({ labelPrinted: false });
+    try {
+      await service.softDelete(r2.id, undefined, { mode: "SCRAP", reasonCode: "MUKERRER_GIRIS" });
+      check("iptal kataloğunun kodu fire'da reddedilir", false, "GEÇTİ — katalog ayrımı yok!");
+    } catch (e) {
+      check("iptal kataloğunun kodu fire'da reddedilir", true, (e as Error).message.slice(0, 50));
+    }
+
+    // Aynı engeller: fasondaki top fire EDİLEMEZ.
+    const r3 = await makeRoll({ labelPrinted: false, status: RollStatus.AT_SUBCONTRACTOR });
+    try {
+      await service.softDelete(r3.id, undefined, { mode: "SCRAP" });
+      check("fasondaki top fire edilemez", false, "GEÇTİ — engel yok!");
+    } catch (e) {
+      check("fasondaki top fire edilemez", /fason/i.test((e as Error).message));
+    }
   }
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

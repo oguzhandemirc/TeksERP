@@ -26,8 +26,27 @@ describe("routeStepsToCreatePayload (rota şablonu kaydetme payload'ı)", () => 
       step({ stationType: "EXTERNAL", requiredCategoryId: "cat-boya", plannedSubcontractorId: "firm-boyer" }),
     ]);
     expect(out).toEqual([
-      { stationId: "st-1", sequence: 1, defaultNotes: null, requiredCategoryId: "cat-boya", plannedSubcontractorId: "firm-boyer" },
+      {
+        stationId: "st-1",
+        sequence: 1,
+        defaultNotes: null,
+        requiredCategoryId: "cat-boya",
+        plannedSubcontractorId: "firm-boyer",
+        dispatchWithoutColor: false,
+      },
     ]);
+  });
+
+  it('"fasona renksiz git" işaretini ŞABLONA taşır', () => {
+    // 2026-08-25 regresyon kilidi: bu alan payload'da yokken kutu panelde
+    // işaretleniyor, şablona hiç yazılmıyordu → şablondan açılan her iş emrinde
+    // yeniden işaretlenmesi gerekirdi (ve o yol da kırıktı). Bkz. backend
+    // bekçisi scripts/test_dispatch_without_color.ts.
+    const out = routeStepsToCreatePayload([
+      step({ stationType: "EXTERNAL", requiredCategoryId: "cat-boya", dispatchWithoutColor: true }),
+      step({ stationId: "st-2", stationType: "INTERNAL" }),
+    ]);
+    expect(out.map((s) => s.dispatchWithoutColor)).toEqual([true, false]);
   });
 
   it("sequence 1-tabanlı + sıralı, defaultNotes trim'li (boş → null)", () => {

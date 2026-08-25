@@ -38,6 +38,10 @@ const workOrderCoreShape = {
       notes:                  z.string().max(500).optional().nullable(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
+      // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
+      //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
+      dispatchWithoutColor:   z.boolean().optional(),
     }))
     .optional(),
   /**
@@ -51,6 +55,10 @@ const workOrderCoreShape = {
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
       notes:                  z.string().max(500).optional().nullable(),
+      // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
+      // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
+      //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
+      dispatchWithoutColor:   z.boolean().optional(),
     }))
     .optional(),
   orderLineAllocations: z
@@ -306,6 +314,10 @@ const replaceWorkOrderSchema = z.object({
       notes:                  z.string().max(500).optional().nullable(),
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
+      // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
+      // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
+      //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
+      dispatchWithoutColor:   z.boolean().optional(),
     }))
     .optional(),
   stepPlanning: z
@@ -314,6 +326,10 @@ const replaceWorkOrderSchema = z.object({
       requiredCategoryId:     z.string().uuid().optional().nullable(),
       plannedSubcontractorId: z.string().uuid().optional().nullable(),
       notes:                  z.string().max(500).optional().nullable(),
+      // 2026-08-17 "ekru" kuralı — adım fasona renksiz gitsin (bkz. schema.prisma).
+      // ⚠️ Şema bu alanı TANIMAZSA Zod onu sessizce siler: kutu işaretlenir, kaydedilir,
+      //    çekide renk yine basılır (2026-08-25 saha bulgusu — 623 adımda 0 işaret).
+      dispatchWithoutColor:   z.boolean().optional(),
     }))
     .optional(),
   orderLineAllocations: z

@@ -1878,32 +1878,60 @@ export default function FasonKabulScreen() {
                     bilgiyi satır satır "Gelen (m)" alanlarını düşürerek anlatmak
                     zorundaydı ve her düşürdüğü satır ayrı bir yarım top
                     doğuruyordu; boyahane topları dikip tek parça döndürdüğü için
-                    o metrajların topa göre dağılımı zaten uydurmaydı. */}
+                    o metrajların topa göre dağılımı zaten uydurmaydı.
+
+                    ⚠️ YERLEŞİM DİKEY — SORU, CEVAP, DETAY ALT ALTA. 2026-08-25'e kadar
+                    başlık ile SegmentedButtons AYNI SATIRDAYDI ve sahada "devasa
+                    boşluk, ortasında evet/hayır" olarak görüldü. Mekanizma (tablette
+                    uiautomator ile ölçüldü): RN Paper SegmentedButtons'ın her düğmesi
+                    `flex: 1`dir; Yoga, flex-grow çocuğu olan bir kabı "at-most"
+                    ölçümünde MEVCUT GENİŞLİĞİN TAMAMINA açar → yanındaki `flex: 1`
+                    başlık kutusu SIFIR genişlik alır → sıfır genişlikte metin
+                    karakter karakter alt alta sarılır ("Fasonda kalan var mı?" 21
+                    karakter × ~18 px ≈ 380 px GÖRÜNMEZ yükseklik; açıklama ~100
+                    karakter → asıl "devasa" boşluk). Soru hiç ekrana çıkmıyordu; bu
+                    yüzden operatör "neyin evet/hayır'ı" diye sordu. Bekçi:
+                    `segmented-buttons-row.guard.test.ts`. */}
                 <Surface style={styles.remainderCard} elevation={0}>
-                  <View style={styles.remainderHeader}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.remainderTitle}>Fasonda kalan var mı?</Text>
-                      <Text style={styles.remainderHint}>
-                        Malın bir kısmı fasonda kaldıysa toplam metresini yaz — hangi
-                        toptan düşüleceğini sistem hesaplar.
-                      </Text>
-                    </View>
-                    <SegmentedButtons
-                      value={remainderOpen ? 'yes' : 'no'}
-                      onValueChange={(v) => {
-                        const on = v === 'yes';
-                        setRemainderOpen(on);
-                        if (!on) setRemainderStr('');
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-                      }}
-                      density="small"
-                      style={styles.remainderSwitch}
-                      buttons={[
-                        { value: 'no', label: 'Hayır' },
-                        { value: 'yes', label: 'Evet' },
-                      ]}
-                    />
+                  <View style={styles.remainderTitleRow}>
+                    <Icon source="help-circle-outline" size={18} color="#0f172a" />
+                    <Text style={styles.remainderTitle}>Fasonda kalan var mı?</Text>
                   </View>
+                  {perRollQtyOpen ? (
+                    /* İki dil aynı anda okunmaz: top bazlı girişte kalan her satırda
+                       ayrı yazılır, tek soru gizlenir. */
+                    <Text style={styles.remainderHint}>
+                      Top bazlı giriş açık — her topun geleni satırında yazılır, kalan
+                      oradan hesaplanır.
+                    </Text>
+                  ) : (
+                    <>
+                      <Text style={styles.remainderHint}>
+                        Boyahane malın bir kısmını sonra gönderecekse toplam metresini
+                        yaz — hangi toptan düşüleceğini sistem hesaplar.
+                      </Text>
+                      {/* Seçenek metinleri KENDİNİ ANLATIR ("Evet/Hayır" DEĞİL): başlık
+                          okunmasa da hangi kararın verildiği düğmeden belli olsun. */}
+                      <SegmentedButtons
+                        value={remainderOpen ? 'partial' : 'all'}
+                        onValueChange={(v) => {
+                          const on = v === 'partial';
+                          setRemainderOpen(on);
+                          if (!on) setRemainderStr('');
+                          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        }}
+                        style={styles.remainderSwitch}
+                        buttons={[
+                          { value: 'all', label: 'Hepsi geldi', icon: 'check-all' },
+                          {
+                            value: 'partial',
+                            label: 'Bir kısmı fasonda kaldı',
+                            icon: 'clock-alert-outline',
+                          },
+                        ]}
+                      />
+                    </>
+                  )}
                   {remainderOpen && !perRollQtyOpen && (
                     <View style={styles.remainderBody}>
                       <TextInput
@@ -1958,7 +1986,7 @@ export default function FasonKabulScreen() {
                   <View style={styles.newRollHeader}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.newRollTitle}>Dönen Açık Kumaş</Text>
-                      <Text style={styles.newRollHint}>
+                      <Text style={styles.newRollHint} numberOfLines={3}>
                         {receiveMode === 'SINGLE'
                           ? 'Toplar dikili TEK parça döndü — GELEN TOPLAM METREYİ yaz. Parça parça geldiyse "Adet Adet Geldi"yi seç.'
                           : 'İrsaliyede yazılı her parça için metraj gir. KK2/Kurşun ekranı ve stok bu kayıtlardan beslenir.'}
@@ -4229,10 +4257,12 @@ const styles = StyleSheet.create({
     marginTop: 4,
     marginBottom: 12,
   },
-  remainderHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  remainderTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a' },
-  remainderHint: { fontSize: 11, color: '#475569', marginTop: 2 },
-  remainderSwitch: { minWidth: 150 },
+  // ⚠️ SegmentedButtons bir SATIRIN (flexDirection:'row') içine KONMAZ — yanındaki
+  // kutuyu sıfır genişliğe iter (gerekçe JSX'teki notta). Burada her şey alt alta.
+  remainderTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  remainderTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', flexShrink: 1 },
+  remainderHint: { fontSize: 12, color: '#475569', marginTop: 3, lineHeight: 17 },
+  remainderSwitch: { marginTop: 10 },
   remainderBody: { marginTop: 10, gap: 6 },
   remainderInput: { backgroundColor: '#fff', height: 46 },
   remainderError: { fontSize: 12, fontWeight: '700', color: '#b91c1c' },

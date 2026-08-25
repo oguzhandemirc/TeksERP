@@ -19,6 +19,13 @@ import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
 import { ROLL_STATUS_LABEL, trLabel } from '../../../utils/labels';
 import type { Roll } from '../../../types/models';
 import { colors } from '../../../theme';
+import { useReasonPresets } from '../../../hooks/useReasonPresets';
+import {
+  classifyScannedRoll,
+  isReworkStatus,
+  type AttachableStatus,
+} from './scanClassify';
+import { buildReworkPlan } from './reworkPayload';
 
 export interface ScannedRoll {
   id: string;
@@ -28,6 +35,20 @@ export interface ScannedRoll {
   qty: number;
   /** Topun eni — parti homojenliği uyarısı için (bkz. `widthWarning`). */
   width: number | null;
+  /**
+   * Okutulduğu ANDAKİ statü. `STOCK` dışındaki (WAREHOUSE/A1_STOCK) toplar
+   * YENİDEN ÜRETİME alınıyor demektir: satırda rozet çıkar, onay adımında sebep
+   * sorulur ve fasona gidiyorsa ölü etiket uyarısı basılır.
+   */
+  status: AttachableStatus;
+  /** Bitmiş topun mevcut rengi — rozetin yanında görünür (hedef renk AYRI). */
+  colorName: string | null;
+  /**
+   * Etiket basılmış mı. Fason kabulünde top kimliğini KAYBEDER (orijinal
+   * `SUBCONTRACTOR_CONSUMED` olur, mal yeni barkodla döner) → basılı etiket
+   * kesin olarak geçersizleşir. Onay adımındaki uyarı bunu okur.
+   */
+  labelPrintedAt: string | null;
 }
 
 /** Okutma geri bildirimi ortak hook'ta (`hooks/useScanFeedback`) — Fason Sevk de
@@ -182,6 +203,32 @@ export function useQuickWorkOrder() {
   const [stepNotes, setStepNotes] = useState<Record<number, string>>({});
   // Rota fason adımlarında operatör firma override'ı (sequence → firma id).
   const [stepSubcontractors, setStepSubcontractors] = useState<Record<number, string>>({});
+  /**
+   * "Fasona renksiz git" override'ı (sequence → bool). 2026-08-17 "ekru" kuralı:
+   * sipariş EKRU der, iş emrinin hedefi de EKRU'dur, ama boyahane o rengi
+   * BOYAMAZ — kimyasal işlemden çıkan ton "ekru" diye satılır. Çekiye "EKRU"
+   * yazmak boyacıya YANLIŞ TALİMAT verir.
+   *
+   * `undefined` = "operatör dokunmadı" → rota şablonundaki değer geçerli.
+   * Kutu ilk kez açılıp kapatıldığında `false` yazılır ve şablonu EZER; bu
+   * yüzden `??` zinciri (override ?? şablon) tek yerde kurulur.
+   */
+  const [stepNoColor, setStepNoColor] = useState<Record<number, boolean>>({});
+  /**
+   * YENİDEN ÜRETİM SEBEBİ — İSTEĞE BAĞLI (2026-08-25 kullanıcı kararı).
+   * Yalnız bitmiş top okutulduğunda sorulur. Seçilirse İKİ yere gider:
+   *   • metin → 1. rota adımının notuna → fason ÇEKİ LİSTESİNE talimat,
+   *   • kod + metin → `WorkOrder.parameters.rework` → rapor anahtarı.
+   * Kod UYDURULMAZ: serbest metinde katalogun `requiresText` satırının kodu
+   * gider (yoksa null) — bu kind metin saklamaz, sunucu koddan türetmez.
+   */
+  const [reworkReason, setReworkReason] = useState<{ code: string | null; text: string }>({
+    code: null,
+    text: '',
+  });
+  // Kod → etiket çözümü: chip seçilip metin yazılmadıysa çekiye basılacak cümle
+  // katalogun ETİKETİdir. Seçici zaten bu listeyi çiziyor; burada yalnız okunur.
+  const { presets: reworkPresets } = useReasonPresets('WORK_ORDER_REWORK');
   // "Fasona Gönder" — ilk rota adımı fason ise WO ile birlikte sevki de yap (default açık).
   const [dispatchFirstStep, setDispatchFirstStep] = useState(true);
 
@@ -355,6 +402,19 @@ export function useQuickWorkOrder() {
   }, [subcontractorsQuery.data]);
 
   // Her fason adımı için etkin firma: operatör override'ı ?? rota kaydı ?? favori.
+  /**
+   * Adımın etkin "fasona renksiz git" değeri: operatör override'ı varsa o, yoksa
+   * rota şablonunda kayıtlı olan. Tek kaynak — hem kutunun görünümü hem payload
+   * buradan okur, yoksa ekran bir şey gösterip başka bir şey gönderir.
+   */
+  const noColorBySeq = useMemo(() => {
+    const out: Record<number, boolean> = {};
+    for (const st of selectedRoute?.steps ?? []) {
+      out[st.sequence] = stepNoColor[st.sequence] ?? st.dispatchWithoutColor ?? false;
+    }
+    return out;
+  }, [selectedRoute, stepNoColor]);
+
   const selectedFirmBySeq = useMemo(() => {
     const out: Record<number, string | null> = {};
     for (const s of selectedRoute?.steps ?? []) {
@@ -412,6 +472,7 @@ export function useQuickWorkOrder() {
       setRouteTemplateId(id);
       setStepNotes({}); // rota değişti → eski sequence notları geçersiz
       setStepSubcontractors({}); // rota değişti → eski firma override'ları geçersiz
+      setStepNoColor({}); // aynı gerekçe: sequence'ler yeni rotada başka adımlara denk gelir
       setSubmitError(null);
 
       const route = (routesQuery.data?.data ?? []).find((r) => r.id === id) ?? null;
@@ -448,6 +509,23 @@ export function useQuickWorkOrder() {
   // siparişten TÜRETİLEN özellikleri istemci göremez — o durumu backend reddeder
   // ve mesajı olduğu gibi gösteririz.)
   const applyMissing = targetColorId && !canApplyColor ? 'renk veren (boyahane)' : null;
+
+  // ── YENİDEN ÜRETİM (2026-08-25) ───────────────────────────────────────────
+  // Ham + bitmiş AYNI iş emrinde serbest (kullanıcı kararı) — ayrım yalnız
+  // GÖRÜNÜRLÜK: rozet + bilgi satırı + sebep sorusu.
+  const reworkRolls = useMemo(() => scanned.filter((s) => isReworkStatus(s.status)), [scanned]);
+  /**
+   * Etiketi geçersizleşecek toplar. Koşul DAR ve bilinçli: yalnız BİTMİŞ top +
+   * etiketi basılı + rotanın ilk adımı FASON. Fasona giden top orada açılıp
+   * birleştirildiği için kabulde kimliğini kaybeder (`SUBCONTRACTOR_CONSUMED`)
+   * ve mal YENİ barkodla döner — yani geçersizleşme burada OLASILIK değil KESİN.
+   * (2026-08-25'te kaldırılan genel iptal onayından farkı budur.) Geniş tutmak
+   * uyarıyı gürültüye çevirir ve okunmaz hâle getirir.
+   */
+  const labelAtRisk = useMemo(
+    () => (firstStepDispatch.isFason ? reworkRolls.filter((s) => s.labelPrintedAt) : []),
+    [firstStepDispatch.isFason, reworkRolls],
+  );
 
   // ── Okuma geri bildirimi (kabul / mükerrer / ret) ─────────────────────────
   // Üç sonucun da AYRI sinyali var (services/scanFeedback). Mükerrer eskiden
@@ -489,19 +567,15 @@ export function useQuickWorkOrder() {
         // sahada tam olarak öyle oldu: ikinci kayıt açıldı, ikinci etiket basıldı,
         // topun üstünde iki kimlik kaldı. Teşhis panelini aç: neden iptal edildiğini
         // gösterir ve kapsam uygunsa tek dokunuşla geri aldırır.
-        if (roll.status === 'CANCELLED') {
+        // Karar TEK YÜKLEMDE (`scanClassify`) — eskiden burada satır içiydi ve
+        // `status !== 'STOCK'` elemesi bitmiş topu okutmayı imkânsız kılıyordu.
+        const decision = classifyScannedRoll(roll, lock);
+        if (decision.kind === 'cancelled') {
           setCancelledScan(roll);
           continue;
         }
-        if (roll.status !== 'STOCK') {
-          rejected.push({
-            barcode: roll.barcode,
-            reason: `Stokta değil (${trLabel(ROLL_STATUS_LABEL, roll.status)})`,
-          });
-          continue;
-        }
-        if (lock && roll.itemId !== lock) {
-          rejected.push({ barcode: roll.barcode, reason: 'Farklı ürün' });
+        if (decision.kind === 'reject') {
+          rejected.push({ barcode: roll.barcode, reason: decision.reason });
           continue;
         }
         if (!lock) lock = roll.itemId;
@@ -513,6 +587,9 @@ export function useQuickWorkOrder() {
           itemName: roll.item?.name ?? 'Ürün',
           qty: Number(roll.currentQty) || 0,
           width: roll.width != null ? Number(roll.width) : null,
+          status: decision.status,
+          colorName: roll.color?.name ?? null,
+          labelPrintedAt: roll.labelPrintedAt ?? null,
         });
       }
 
@@ -736,7 +813,12 @@ export function useQuickWorkOrder() {
     // kategori & planlanan firması. Backend create() bunları rota adımına sequence ile uygular.
     const planBySeq = new Map<
       number,
-      { notes?: string; requiredCategoryId?: string; plannedSubcontractorId?: string }
+      {
+        notes?: string;
+        requiredCategoryId?: string;
+        plannedSubcontractorId?: string;
+        dispatchWithoutColor?: boolean;
+      }
     >();
     for (const [seq, v] of Object.entries(stepNotes)) {
       const t = v.trim();
@@ -752,8 +834,26 @@ export function useQuickWorkOrder() {
         ...(planBySeq.get(s.sequence) ?? {}),
         requiredCategoryId: cat.id,
         ...(firm ? { plannedSubcontractorId: firm } : {}),
+        // Her fason adımı için AÇIKÇA gönderilir (true de false da): şablonda
+        // işaretli bir adımı operatör kapatabilsin. Yalnız true'yu göndermek,
+        // kapatma niyetini sessizce yutardı.
+        dispatchWithoutColor: noColorBySeq[s.sequence] ?? false,
       });
     }
+    // YENİDEN ÜRETİM SEBEBİ — mantık saf fonksiyonda (`buildReworkPlan`), iki
+    // hedefi de o kurar: adım notu (→ fason çekisine talimat) + parameters.rework
+    // (→ rapor anahtarı).
+    const firstSeq = selectedRoute?.steps?.[0]?.sequence;
+    const reworkPlan = buildReworkPlan({
+      reworkRolls: reworkRolls.map((r) => ({ barcode: r.barcode, status: r.status })),
+      reason: reworkReason,
+      presets: reworkPresets,
+      existingNote: firstSeq != null ? (planBySeq.get(firstSeq)?.notes ?? null) : null,
+    });
+    if (firstSeq != null && reworkPlan.stepNote) {
+      planBySeq.set(firstSeq, { ...(planBySeq.get(firstSeq) ?? {}), notes: reworkPlan.stepNote });
+    }
+
     const stepPlanning = [...planBySeq.entries()].map(([sequence, v]) => ({ sequence, ...v }));
 
     const payload: QuickStartRequest = {
@@ -774,6 +874,11 @@ export function useQuickWorkOrder() {
       // de yap (çeki listesi dahil). Aksi halde gönderilmez (eski "planla" davranışı).
       dispatchFirstStep:
         dispatchFirstStep && firstStepDispatch.isFason && !!firstStepDispatch.firmId,
+      // ⚠️ RAPOR ANAHTARI `parameters.rework`. Adım notu operatörün okuduğu
+      // METİNdir ve fabrika sebep etiketini yarın değiştirebilir; kod sabittir.
+      // Migration GEREKMEZ: `parameters` zaten JSON kolon ve `quick-start` Zod
+      // şeması onu kabul ediyor (`workOrderCoreShape`, doğrulandı).
+      ...(reworkPlan.parameters ? { parameters: reworkPlan.parameters } : {}),
     };
     mutation.mutate(payload);
   }, [
@@ -791,6 +896,10 @@ export function useQuickWorkOrder() {
     stepNotes,
     selectedRoute,
     selectedFirmBySeq,
+    noColorBySeq,
+    reworkRolls,
+    reworkReason,
+    reworkPresets,
     lockedItemId,
     dispatchFirstStep,
     firstStepDispatch,
@@ -815,6 +924,8 @@ export function useQuickWorkOrder() {
     setOrderDerivedItemId(null);
     setStepNotes({});
     setStepSubcontractors({});
+    setStepNoColor({});
+    setReworkReason({ code: null, text: '' });
     setOrderColorName(null);
     setColorLabel(null);
     setSubmitError(null);
@@ -888,6 +999,13 @@ export function useQuickWorkOrder() {
     firmOptionsByCategory,
     firmNameById,
     setStepSubcontractors,
+    noColorBySeq,
+    setStepNoColor,
+    // yeniden üretim
+    reworkRolls,
+    labelAtRisk,
+    reworkReason,
+    setReworkReason,
     firstStepDispatch,
     dispatchFirstStep,
     setDispatchFirstStep,

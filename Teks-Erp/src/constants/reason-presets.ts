@@ -53,6 +53,11 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   ROLL_RECORD_CORRECTION: false,
   ROLL_MANUAL_ENTRY: true,
   ROLL_CANCEL: true,
+  // Yeniden üretimde ortada bir "satır" yok: sebep iş emrinin `parameters.rework`
+  // alanına KOD + metin olarak yazılır (kod rapor anahtarı). Metin ayrıca 1. rota
+  // adımının notuna geçip fason çekisine TALİMAT olarak basılır — ama bu, satıra
+  // görünen metin yazmakla aynı şey değil; bayrak bu yüzden false.
+  WORK_ORDER_REWORK: false,
 };
 
 /** Panelde/tablette listenin başlığı. */
@@ -61,6 +66,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ROLL_RECORD_CORRECTION: "Kayıt düzeltmesi sebepleri",
   ROLL_MANUAL_ENTRY: "Elle top ekleme sebepleri",
   ROLL_CANCEL: "Top iptal sebepleri",
+  WORK_ORDER_REWORK: "Yeniden üretim sebepleri",
 };
 
 /**
@@ -91,12 +97,38 @@ export const CANCEL_REASONS: readonly ReasonPresetSeed[] = [
   { code: "DENEME", label: "Deneme", fullText: "Deneme / eğitim kaydı" },
 ] as const;
 
+/**
+ * YENİDEN ÜRETİM — depodaki BİTMİŞ topu tekrar üretime/boyahaneye alma sebebi.
+ *
+ * Sebep İSTEĞE BAĞLIDIR (2026-08-25 kullanıcı kararı): operatör hiçbirini
+ * seçmeden de iş emrini başlatabilir. Seçerse metin fason çekisine talimat
+ * olarak basılır ("ton tutmadı — yeniden boya"), kod ise iş emrinin
+ * `parameters.rework`una yazılır ve ileride "neden N top tekrar boyandı"
+ * raporunun anahtarı olur.
+ *
+ * `label` chip üstünde yazan kısa metindir; `fullText` YOK — çekiye basılacak
+ * cümle chip'in kendisidir, ikinci bir uzun metin operatöre iki farklı şey
+ * okutmaktan başka işe yaramazdı (iptal listesindeki label/fullText ayrımının
+ * gerekçesi orada geçerli: orada metin ALTI AY SONRA raporda okunuyor).
+ */
+export const REWORK_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "TON_TUTMADI", label: "Ton tutmadı" },
+  { code: "LEKE", label: "Leke / kir" },
+  { code: "MUSTERI_IADESI", label: "Müşteri iadesi" },
+  { code: "RENK_DEGISIKLIGI", label: "Renk değişikliği" },
+  { code: "KALITE_DUSUK", label: "Kalite düşük" },
+  // Serbest metin kutusunun kataloğa bakan yüzü: operatör yazmaya başlayınca
+  // istemci bu kodu kendiliğinden seçer (Fire ekranıyla aynı desen).
+  { code: "DIGER", label: "Diğer", requiresText: true },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
   ROLL_RECORD_CORRECTION: RECORD_CORRECTION_REASONS,
   ROLL_MANUAL_ENTRY: MANUAL_ENTRY_REASONS,
   ROLL_CANCEL: CANCEL_REASONS,
+  WORK_ORDER_REWORK: REWORK_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

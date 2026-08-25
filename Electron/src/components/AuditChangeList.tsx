@@ -1,4 +1,4 @@
-import { auditFieldLabel, auditValueText } from "@/lib/audit-field-labels";
+import { auditFieldLabel, auditValueText } from "@/lib/audit-labels";
 import type { AuditChange } from "@/types/systemLog";
 
 // =============================================================================

@@ -112,8 +112,11 @@ import {
   WorkOrderStatus,
   ShipmentStatus,
   ReasonPresetKind,
+  RollVarianceKind,
 } from "@prisma/client";
 import { resolveReasonCode } from "./reason-preset.service";
+// Fire sebebi metin SAKLAMAYAN bir kind'tır → sapma kataloğunun senkron kapısı.
+import { validateVarianceReason } from "../constants/variance-reasons";
 import {
   ensureWorkOrderInProgress,
   openMovementForNextStep,
@@ -333,12 +336,12 @@ export interface RollCancelPreview {
   /** Kapanmamış (açık) hareket sayısı. */
   openMovementCount: number;
   /**
-   * Topun ÜSTÜNDE fiziksel etiket var mı (`labelPrintedAt != null`). true ise
-   * iptal `confirmLabelPrinted` ONAYI ister (sebep 2026-08-06'dan beri opsiyonel;
-   * bkz. `softDelete` guard'ı): kayıt ölür ama kâğıt topun üstünde
-   * kalır → sonraki okutma "stokta değil" der ve kimse sebebini bilmez.
-   * `requiresConfirm`'den AYRI bir eksen: o "mal bir istasyonda mı", bu "sahada
-   * ölü etiket bırakıyor muyum". Bir top ikisini birden tetikleyebilir.
+   * Topun ÜSTÜNDE fiziksel etiket var mı (`labelPrintedAt != null`).
+   *
+   * ⚠️ 2026-08-25'ten beri BİLGİDİR, KAPI DEĞİL: ölü etiket onayı kaldırıldı
+   * (gerekçe `softDelete` içinde). Alan duruyor çünkü "hangi topların kâğıdı
+   * sahada kaldı" sorusu bir gün sorulabilir ve cevabı ücretsiz. İstemci bunu
+   * gösterebilir ama üzerine bir onay kutusu KURMAMALI.
    */
   labelPrinted: boolean;
   /** Etiketin basıldığı an (varsa) — operatöre "10:48'de bastınız" diyebilmek için. */
@@ -2900,8 +2903,26 @@ export class InventoryService {
        * kodu kendisi türetir (mobil bugün yalnız metin gönderiyor). Serbest metin → NULL.
        */
       reasonCode?: string;
+      /**
+       * STOKTAN ÇIKARMANIN İKİ ANLAMI (2026-08-25 kullanıcı kararı):
+       *   • `CANCEL` (varsayılan) — "bu kayıt hiç olmamalıydı": yanlış/mükerrer
+       *     giriş, yanlış metraj. Mal FİZİKSEL OLARAK YOKTU → stok düşmez
+       *     (hiç girmemişti), hareket kapanışı storno (`qtyOut = 0`), fire
+       *     raporuna GİRMEZ.
+       *   • `SCRAP` — "mal vardı, artık yok": yandı, kirlendi, numune gitti.
+       *     Stok gerçekten düşer, hareket kapanışı `qtyOut = qtyIn` (istasyon iş
+       *     hacmi korunur — mal oradan geçti), fire raporuna GİRER.
+       *
+       * ⚠️ İKİSİNİ BİRLEŞTİRME. Sahada ölçüldü (2026-08-25): 230 iptale karşı
+       * 1 fire, ve sebep yazılmış 24 iptalin HEPSİ kayıt hatası. Veri düzeltmesini
+       * fireye yazmak fabrikanın fire oranını doğrudan yalanlar.
+       */
+      mode?: "CANCEL" | "SCRAP";
     },
   ): Promise<ApiResponse<Roll>> {
+    const isScrap = opts?.mode === "SCRAP";
+    const targetStatus = isScrap ? RollStatus.SCRAP : RollStatus.CANCELLED;
+    const actionLabel = isScrap ? "fire edildi" : "iptal edildi";
     const existing = await prisma.roll.findUnique({ where: { id } });
     if (!existing) {
       throw AppError.notFound("Top bulunamadı");
@@ -2919,7 +2940,7 @@ export class InventoryService {
     }
     if (existing.status === RollStatus.AT_SUBCONTRACTOR) {
       throw AppError.conflict(
-        "Fasondaki top iptal edilemez — önce fason mal kabul yapın",
+        `Fasondaki top ${isScrap ? "fire edilemez" : "iptal edilemez"} — önce fason mal kabul yapın`,
       );
     }
 
@@ -3021,21 +3042,61 @@ export class InventoryService {
     // doldurma metni sildiği gibi kodu da düşürür; açık kod + boş metin → metin
     // preset'ten dolar (kod dolu, görünen kayıt NULL olmasın). Metin 500'e kırpılır
     // (`roll-disposition.helper` ile aynı sınır — buradaki query-param yolu kırpmıyordu).
-    const resolvedReason = await resolveReasonCode(ReasonPresetKind.ROLL_CANCEL, {
-      reasonCode: opts?.reasonCode,
-      reasonText: reason,
-    });
-    const cancelReasonCode = resolvedReason.code;
-    const cancelReasonText = resolvedReason.text ? resolvedReason.text.slice(0, 500) : null;
-    if (existing.labelPrintedAt && !opts?.confirmLabelPrinted) {
-      throw AppError.conflict(
-        `Bu topun etiketi basıldı (${formatFactoryDateTime(existing.labelPrintedAt)}) ve ` +
-          "büyük ihtimalle topun üstünde. İptal edersen sahada ÖLÜ ETİKET kalır: " +
-          "kayıt ölür, kâğıt durur, sonraki okutma sebebini söyleyemez. " +
-          "Önce etiketi toptan sök, sonra onaylayarak iptal et.",
-        { code: "LABEL_PRINTED", labelPrintedAt: existing.labelPrintedAt },
-      );
+    // Fire ve iptal AYRI kataloglardan beslenir — "Mükerrer giriş" bir fire sebebi
+    // değildir, "Kirlendi" bir kayıt hatası değildir. İki kind İKİ FARKLI kapıdan
+    // geçer ve bu ayrım `KIND_STORES_TEXT`ten gelir:
+    //   • ROLL_CANCEL METİN SAKLAR → `resolveReasonCode` (async, katalogdan türetir)
+    //   • ROLL_SCRAP saklamaz → sapma kataloğunun SENKRON kapısı
+    //     (`validateVarianceReason`). `resolveReasonCode` bunu tip düzeyinde
+    //     reddeder (`TextReasonKind`) — zorlamaya çalışma.
+    let cancelReasonCode: string | null;
+    let cancelReasonText: string | null;
+    if (isScrap) {
+      if (opts?.reasonCode) {
+        try {
+          const v = validateVarianceReason(RollVarianceKind.SCRAP, {
+            reasonCode: opts.reasonCode,
+            reasonText: reason,
+          });
+          cancelReasonCode = v.reasonCode;
+          cancelReasonText = v.reasonText ? v.reasonText.slice(0, 500) : null;
+        } catch (e) {
+          throw AppError.badRequest(e instanceof Error ? e.message : "Geçersiz fire sebebi", {
+            code: "REASON_CODE_INVALID",
+          });
+        }
+      } else {
+        // Kod UYDURULMAZ. `validateVarianceReason` kodsuz çağrıda `LEGACY_*`
+        // kovasına yazar — o kova SAPMA DEFTERİNE aittir, topun satırına değil:
+        // burada "sebep girilmedi" ile "eski istemci" aynı şey değil.
+        cancelReasonCode = null;
+        cancelReasonText = reason ? reason.slice(0, 500) : null;
+      }
+    } else {
+      const resolvedReason = await resolveReasonCode(ReasonPresetKind.ROLL_CANCEL, {
+        reasonCode: opts?.reasonCode,
+        reasonText: reason,
+      });
+      cancelReasonCode = resolvedReason.code;
+      cancelReasonText = resolvedReason.text ? resolvedReason.text.slice(0, 500) : null;
     }
+    // ── ÖLÜ ETİKET GUARD'I KALDIRILDI (2026-08-25, kullanıcı kararı) ─────────
+    // Buradaki 409 `LABEL_PRINTED` bir sektör standardı DEĞİLDİ: 2026-08-05'teki
+    // tek bir olaydan sonra eklenmiş yerel bir korumaydı ve karşılığında bir "ölü
+    // etiket toplama" süreci hiçbir zaman kurulmadı. Kimsenin kullanmadığı bir
+    // liste uğruna operatörü durduran onay, sıfır kazanç karşılığında yol kesiyordu
+    // (masaüstünde ise hiç bağlanmamıştı → etiketli top oradan HİÇ iptal edilemiyordu).
+    //
+    // ⚠️ KOLON DURUYOR: `labelPrintedAt` baskı anında OTOMATİK yazılır
+    // (`label.service.recordPrintEvent`) — kimseye iş çıkarmaz ve "sahada hangi ölü
+    // etiketler dolaşıyor" sorusu bir gün sorulursa cevabı hâlâ orada. Kaldırılan
+    // şey veri değil, SORU.
+    //
+    // ⚠️ `opts.confirmLabelPrinted` sözleşme uyumu için KABUL EDİLMEYE DEVAM EDER
+    // (sahadaki APK'lar gönderiyor) ama artık hiçbir kapı açmaz. Guard'ı geri
+    // koyarsan bunu da hatırla: yalnız 409'u geri koymak, bayrağı göndermeyen
+    // istemcileri sessizce kilitler.
+    void opts?.confirmLabelPrinted;
 
     const updated = await prisma.$transaction(async (tx) => {
       // ── ETKİ ALANI (2026-08-15 düzeltmesi) ───────────────────────────────
@@ -3068,7 +3129,13 @@ export class InventoryService {
       // Açık RollMovement'ları topla — kapatmak için (kapsam yukarıda çözüldü).
       const openMovements = await tx.rollMovement.findMany({
         where: { rollId: id, exitedAt: null },
-        select: { id: true, workOrderStepId: true, notes: true },
+        select: {
+          id: true,
+          workOrderStepId: true,
+          notes: true,
+          qtyIn: true,
+          weightIn: true,
+        },
       });
 
       // Açık movement'ları kapat.
@@ -3083,14 +3150,22 @@ export class InventoryService {
       // hareket geçmişi "neden vardı" sorusunu cevaplayamaz hâle geliyordu —
       // tam da iptal edilen bir kaydı sonradan incelerken en çok gereken bilgi.
       // Artık eski not parantez içinde korunur.
+      //
+      // ⚠️ FİRE'DE STORNO YOK: `qtyOut = qtyIn` — mal o istasyondan GERÇEKTEN
+      // geçti, sonra fire oldu. 0 yazmak istasyonun iş hacminden metrajı geriye
+      // dönük siler ve üretim raporunda hayalet kayıp yaratır. Dispozisyon
+      // motorunun SCRAP dalıyla birebir aynı sözleşme (`applyRollDispositionsTx`).
+      const closeNote = isScrap ? "SCRAPPED" : "CANCELLED";
       for (const m of openMovements) {
         await tx.rollMovement.update({
           where: { id: m.id },
           data: {
             exitedAt: new Date(),
-            qtyOut: 0,
-            weightOut: 0,
-            notes: m.notes?.trim() ? `CANCELLED (${m.notes.trim()})`.slice(0, 500) : "CANCELLED",
+            qtyOut: isScrap ? m.qtyIn ?? existing.currentQty : 0,
+            weightOut: isScrap ? m.weightIn ?? existing.weightKg : 0,
+            notes: m.notes?.trim()
+              ? `${closeNote} (${m.notes.trim()})`.slice(0, 500)
+              : closeNote,
           },
         });
       }
@@ -3104,13 +3179,23 @@ export class InventoryService {
       const cancelClaim = await tx.roll.updateMany({
         where: { id, status: existing.status, shipmentId: existing.shipmentId },
         data: {
-          status: RollStatus.CANCELLED,
+          // Hedef statü MODA göre: CANCELLED ("hiç yoktu") · SCRAP ("vardı, gitti").
+          status: targetStatus,
           currentStepId: null,
           shipmentId: null,
           sackId: null,
-          // İptal izi topun KENDİ satırında (audit'te değil — 6 ayda arşivlenir).
+          // ÇIKIŞ İZİ topun KENDİ satırında (audit'te DEĞİL — audit 6 ayda
+          // arşivlenir ve "neden düştü" sorusu cevapsız kalırdı).
+          //
+          // ⚠️ Bu beş kolon HER İKİ MODU da taşır (2026-08-25). Adları "cancel"
+          // olsa da anlamları "defterden düşme izi"dir; hangi mod olduğu `status`
+          // (CANCELLED vs SCRAP) ile okunur — ayrım tek ve kesin. Ayrı
+          // `scrapReason*` kolonları AÇILMADI: canlı DB'ye migration eklemenin
+          // karşılığı yalnız kolon adının hoşluğu olurdu.
           // `preCancelStatus` = geri almanın döneceği raf; `preShipStatus` emsali,
           // körlemesine STOCK'a dönmek A1_STOCK/WAREHOUSE topunu yanlış rafa yazardı.
+          // Geri alma YALNIZ CANCELLED'ta çalışır (`resolveRollRestoreBlockReason`
+          // ilk ifadesi statüyü kontrol eder) → fire geri alınamaz, doğrusu da bu.
           cancelledAt: new Date(),
           cancelledById: userId ?? null,
           cancelReason: cancelReasonText,
@@ -3180,7 +3265,8 @@ export class InventoryService {
         currentStepId: existing.currentStepId,
       },
       newData: {
-        status: RollStatus.CANCELLED,
+        status: targetStatus,
+        mode: isScrap ? "SCRAP" : "CANCEL",
         cancelled: true,
         reason: cancelReasonText,
         reasonCode: cancelReasonCode,
@@ -3196,7 +3282,7 @@ export class InventoryService {
     return {
       success: true,
       data: updated.roll,
-      message: `Top iptal edildi: ${existing.barcode}`,
+      message: `Top ${actionLabel}: ${existing.barcode}`,
     };
   }
 

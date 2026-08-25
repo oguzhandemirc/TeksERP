@@ -105,6 +105,9 @@ const dispatchSchema = z.object({
 // "neden" audit'te ve belgenin voidReason'ında yazılı kalmalı.
 const undoDispatchSchema = z.object({
   reason: z.string().trim().min(3, "Geri alma gerekçesi zorunlu (en az 3 karakter)").max(500),
+  // Storno + kapanış aynı tx'te (sevkiyat PLANNED'da beklemez, çuvallar depoya döner).
+  // Sevk onayı KAPALI rejimin olağan yolu; varsayılanı istemci önizlemeden kurar.
+  releaseSacks: z.boolean().optional(),
 });
 
 export class ShippingController {
@@ -381,7 +384,9 @@ export class ShippingController {
   undoDispatch = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = undoDispatchSchema.parse(req.body);
-      const result = await this.service.undoDispatch(req.params.id as string, body.reason, req.user?.userId);
+      const result = await this.service.undoDispatch(req.params.id as string, body.reason, req.user?.userId, {
+        releaseSacks: body.releaseSacks,
+      });
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

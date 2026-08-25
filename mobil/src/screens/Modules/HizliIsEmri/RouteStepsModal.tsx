@@ -31,6 +31,9 @@ interface Props {
   /** Firma id → ad (salt-görüntüleme). */
   firmNameById?: Record<string, string>;
   onChangeSubcontractor?: (sequence: number, firmId: string) => void;
+  /** sequence → "fasona renksiz git" etkin değeri (şablon ?? operatör override'ı). */
+  noColorBySeq?: Record<number, boolean>;
+  onToggleNoColor?: (sequence: number, next: boolean) => void;
 }
 
 // Rota şablonunun adımlarını gösterir. Gelişmiş modda her istasyona not + fason firma
@@ -46,6 +49,8 @@ export default function RouteStepsModal({
   firmOptionsByCategory = {},
   firmNameById = {},
   onChangeSubcontractor,
+  noColorBySeq = {},
+  onToggleNoColor,
 }: Props) {
   const steps = route?.steps ?? [];
 
@@ -161,6 +166,50 @@ export default function RouteStepsModal({
                         <Text style={styles.firmEmpty}>Bu kategoride kayıtlı firma yok.</Text>
                       )
                     ) : null}
+
+                    {/* "Fasona renksiz git" — 2026-08-17 "ekru" kuralı.
+                        Sipariş EKRU der ve iş emrinin hedefi de EKRU'dur; ama
+                        boyahane o rengi BOYAMAZ — kumaş kimyasal işlemden geçer,
+                        çıkan ton "ekru" diye satılır. Çekiye "EKRU" yazmak
+                        boyacıya yanlış talimattır. Kutu YALNIZ çekideki
+                        "boyanacak renk" satırını susturur; iş emrinin rengine
+                        DOKUNMAZ. Gerçek renk kabulde beyan edilir. */}
+                    {editable ? (
+                      <TouchableRipple
+                        onPress={() => onToggleNoColor?.(s.sequence, !noColorBySeq[s.sequence])}
+                        style={styles.noColorRow}
+                        borderless
+                        rippleColor="rgba(79,70,229,0.12)"
+                        accessibilityRole="checkbox"
+                        accessibilityState={{ checked: !!noColorBySeq[s.sequence] }}
+                      >
+                        <View style={styles.noColorInner}>
+                          <Icon
+                            source={
+                              noColorBySeq[s.sequence]
+                                ? 'checkbox-marked'
+                                : 'checkbox-blank-outline'
+                            }
+                            size={20}
+                            color={noColorBySeq[s.sequence] ? colors.brand : colors.textMuted}
+                          />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.noColorTitle}>Fasona renksiz gitsin</Text>
+                            <Text style={styles.noColorHint}>
+                              Çekide "boyanacak renk" satırı basılmaz. İş emrinin rengi
+                              değişmez.
+                            </Text>
+                          </View>
+                        </View>
+                      </TouchableRipple>
+                    ) : noColorBySeq[s.sequence] ? (
+                      <View style={styles.noColorInner}>
+                        <Icon source="water-off" size={15} color={colors.textMuted} />
+                        <Text style={styles.noColorHint}>
+                          Çekiye renk basılmaz (fasona renksiz gidiyor)
+                        </Text>
+                      </View>
+                    ) : null}
                   </View>
                 ) : null}
               </View>
@@ -180,6 +229,15 @@ export default function RouteStepsModal({
 }
 
 const styles = StyleSheet.create({
+  noColorRow: { borderRadius: radius.sm, marginTop: spacing.sm },
+  noColorInner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+  },
+  noColorTitle: { fontSize: 13, fontWeight: '700', color: colors.text },
+  noColorHint: { fontSize: 11, color: colors.textMuted, marginTop: 1, flexShrink: 1 },
   sheet: {
     backgroundColor: colors.appBg,
     borderTopLeftRadius: radius.lg,

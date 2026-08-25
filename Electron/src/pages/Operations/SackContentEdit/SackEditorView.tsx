@@ -238,8 +238,9 @@ export function SackEditorView({
       {locked ? (
         <div className="px-6 py-3">
           <Callout tone="warning" icon={Lock} title="Bu çuval bir sevkiyata atanmış">
-            İçeriği kilitli. Düzenlemek için önce Sevk Kapısı'nda çuvalı sevkiyattan çıkarın.
-            (Yorum yine düzenlenebilir.)
+            İçeriği kilitli. Düzenlemek için önce çuvalı sevkiyattan ayırın: Sevkiyatlar'dan
+            sevkiyatı iptal edin (çuvallar depoya döner) ya da — sevk onayı açıksa — Sevk
+            Kapısı'nda çuvalı çıkarın. (Yorum yine düzenlenebilir.)
           </Callout>
         </div>
       ) : (

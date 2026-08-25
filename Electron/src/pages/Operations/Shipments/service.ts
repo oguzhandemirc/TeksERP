@@ -55,10 +55,14 @@ export const shipmentService = {
       .get<ApiResponse<UndoDispatchPreview>>(`/api/shipping/shipments/${id}/undo-dispatch-preview`)
       .then((r) => r.data),
 
-  /** Sevki geri al (DISPATCHED → PLANNED) — gerekçe zorunlu, irsaliye İPTAL edilir. */
-  undoDispatch: (id: string, reason: string): Promise<ApiResponse<unknown>> =>
+  /**
+   * Sevki geri al (DISPATCHED → PLANNED) — gerekçe zorunlu, irsaliye İPTAL edilir.
+   * `releaseSacks` → storno + kapanış aynı tx: sevkiyat PLANNED'da beklemez
+   * (CANCELLED), çuvallar depoya döner. Sevk onayı KAPALI rejimin olağan yolu.
+   */
+  undoDispatch: (id: string, reason: string, releaseSacks = false): Promise<ApiResponse<unknown>> =>
     apiClient
-      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/undo-dispatch`, { reason })
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/undo-dispatch`, { reason, releaseSacks })
       .then((r) => r.data),
 };
 
@@ -100,6 +104,12 @@ export interface UndoDispatchPreview {
   sacks: { id: string; sackNo: string; rollCount: number }[];
   affectedOrders: string[];
   voidsDispatchNote: boolean;
+  /**
+   * `shipping.confirmationEnabled` — "sevkiyatı da kapat" seçeneğinin VARSAYILANI
+   * bundan kurulur: kapalı rejimde PLANNED beklemenin karşılığı yok → varsayılan
+   * kapat; açık rejimde PLANNED doğal → varsayılan beklet.
+   */
+  confirmationEnabled: boolean;
   /** Topların döneceği raflar (WAREHOUSE / A1_STOCK …) — 2. kalite ayrımı görünür kalsın. */
   returnTargets: { status: string; rollCount: number }[];
 }

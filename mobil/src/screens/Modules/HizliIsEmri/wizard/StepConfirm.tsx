@@ -4,6 +4,7 @@ import { Text, TouchableRipple, Icon, Surface } from 'react-native-paper';
 
 import type { useQuickWorkOrder } from '../useQuickWorkOrder';
 import { colors, spacing, radius } from '../../../../theme';
+import ReasonPresetPicker from '../../../../components/reasonPresets/ReasonPresetPicker';
 
 interface Props {
   wo: ReturnType<typeof useQuickWorkOrder>;
@@ -50,7 +51,11 @@ export default function StepConfirm({ wo, onGoTo }: Props) {
       <Surface style={styles.card} elevation={1}>
         <Row
           label="Toplar"
-          value={`${wo.scanned.length} top · ${Math.round(wo.totalQty)} m`}
+          value={
+            wo.reworkRolls.length > 0
+              ? `${wo.scanned.length} top · ${Math.round(wo.totalQty)} m  (${wo.reworkRolls.length}'i bitmiş depodan)`
+              : `${wo.scanned.length} top · ${Math.round(wo.totalQty)} m`
+          }
           onPress={() => onGoTo(0)}
         />
         <Row
@@ -111,6 +116,49 @@ export default function StepConfirm({ wo, onGoTo }: Props) {
         ) : null}
       </Surface>
 
+      {/* ── ÖLÜ ETİKET (2026-08-25) ────────────────────────────────────────
+          Burada geçersizleşme OLASILIK DEĞİL KESİN: fason kabulünde orijinal top
+          `SUBCONTRACTOR_CONSUMED` olur ve mal YENİ barkodla döner ("top fasona
+          gittiyse mutlaka açıldı — kimliğini kaybeder"). Aynı gün KALDIRILAN
+          genel iptal onayından farkı budur; yine de ENGEL DEĞİL, bilgi. */}
+      {wo.labelAtRisk.length > 0 ? (
+        <View style={styles.labelWarn}>
+          <View style={styles.labelWarnHead}>
+            <Icon source="tag-off-outline" size={18} color={colors.warningDark} />
+            <Text style={styles.labelWarnTitle}>
+              {`${wo.labelAtRisk.length} topun etiketi geçersizleşecek`}
+            </Text>
+          </View>
+          <Text style={styles.labelWarnBody}>
+            Fasona giden top orada açılıp birleştirilir — kabulde bu kayıtlar kapanır ve mal
+            YENİ barkodla döner. Eski etiketleri toptan sökün.
+          </Text>
+          <Text style={styles.labelWarnCodes}>
+            {wo.labelAtRisk.map((r) => r.barcode).join(' · ')}
+          </Text>
+        </View>
+      ) : null}
+
+      {/* Sebep — yalnız bitmiş top varsa ve İSTEĞE BAĞLI (kullanıcı kararı). */}
+      {wo.reworkRolls.length > 0 ? (
+        <Surface style={styles.reworkCard} elevation={0}>
+          <View style={styles.reworkHead}>
+            <Icon source="recycle" size={18} color={colors.text} />
+            <Text style={styles.reworkTitle}>Neden yeniden üretime alınıyor?</Text>
+          </View>
+          <Text style={styles.reworkHint}>
+            İsteğe bağlı. Yazarsan boyahane çeki listesine talimat olarak basılır.
+          </Text>
+          <ReasonPresetPicker
+            kind="WORK_ORDER_REWORK"
+            value={wo.reworkReason}
+            onChange={wo.setReworkReason}
+            optional
+            placeholder="Kendin yaz — ya da aşağıdan seç"
+          />
+        </Surface>
+      ) : null}
+
       {willDispatch ? (
         <View style={styles.dispatchNote}>
           <Icon source="truck-fast-outline" size={18} color={colors.brand} />
@@ -126,6 +174,25 @@ export default function StepConfirm({ wo, onGoTo }: Props) {
 
 const styles = StyleSheet.create({
   root: { padding: spacing.md, gap: spacing.md },
+  labelWarn: {
+    backgroundColor: colors.warningContainer,
+    borderRadius: radius.md,
+    padding: spacing.md,
+    gap: 4,
+  },
+  labelWarnHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  labelWarnTitle: { fontSize: 14, fontWeight: '800', color: colors.warningDark, flexShrink: 1 },
+  labelWarnBody: { fontSize: 12, color: colors.warningDark, lineHeight: 17 },
+  labelWarnCodes: { fontFamily: 'monospace', fontSize: 11, color: colors.warningDark },
+  reworkCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  reworkHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  reworkTitle: { fontSize: 15, fontWeight: '800', color: colors.text, flexShrink: 1 },
+  reworkHint: { fontSize: 12, color: colors.textMuted, lineHeight: 16 },
   card: { backgroundColor: colors.surface, borderRadius: radius.lg, paddingHorizontal: spacing.lg, paddingVertical: spacing.xs },
   row: { borderRadius: radius.sm },
   rowInner: {

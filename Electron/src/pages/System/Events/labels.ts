@@ -1,3 +1,4 @@
+import { EVENT_ACTION_LABELS } from "@/lib/audit-labels";
 import type { SystemLogCategory } from "@/types/systemLog";
 
 export const categoryLabels: Record<SystemLogCategory, string> = {
@@ -15,33 +16,22 @@ export const categoryVariants: Record<
   SYSTEM: "default",
 };
 
-// AUTH ve SYSTEM altındaki action'lar — Sistem Kayıtları sayfasının filter
-// dropdown'ı bunları kullanır. Backend hardcoded, frontend de hardcoded.
-export const eventActionLabels: Record<string, string> = {
-  // AUTH
-  LOGIN_SUCCESS: "Başarılı giriş",
-  LOGIN_FAILED: "Başarısız giriş",
-  LOGOUT: "Çıkış yapıldı",
-  // SYSTEM
-  STARTUP: "Sunucu başlatıldı",
-  ERROR: "Beklenmeyen hata",
-  UNHANDLED_REJECTION: "Yakalanmayan hata (async)",
-  UNCAUGHT_EXCEPTION: "Yakalanmayan istisna",
-  AUDIT_ARCHIVE: "Log arşivlendi",
-  BACKUP_TRIGGER: "Yedekleme başlatıldı",
-  BACKUP_DOWNLOAD: "Yedek indirildi",
-  PERIPHERAL_TEST: "Cihaz testi",
-};
+// AUTH ve SYSTEM olay adları — TEK KAYNAK `@/lib/audit-labels`.
+// (Denetim Raporları ekranı da aynı haritadan besleniyor; ayrı yazıldıklarında
+// biri 11, diğeri 8 olay biliyordu ve backend 27 olay basıyordu.)
+export { EVENT_ACTION_LABELS as eventActionLabels, eventActionLabel } from "@/lib/audit-labels";
 
-export function eventActionLabel(action: string): string {
-  return eventActionLabels[action] ?? action;
-}
-
+// Kırmızı rozet alan olaylar. ⚠️ Sözlüğe yeni bir `*_FAILED` eklenirse buraya
+// da yaz — aksi halde başarısızlık başarıyla aynı renkte görünür.
 const ERROR_ACTIONS = new Set([
   "LOGIN_FAILED",
+  "LOGIN_CONFLICT",
   "ERROR",
   "UNHANDLED_REJECTION",
   "UNCAUGHT_EXCEPTION",
+  "BACKUP_FAILED",
+  "DB_COPY_FAILED",
+  "PERMISSION_CATALOG_RECONCILE_FAILED",
 ]);
 
 export function eventActionVariant(
@@ -53,18 +43,13 @@ export function eventActionVariant(
   return "outline";
 }
 
-// Filter'da hangi action'lar hangi kategori altında görünecek — backend'in
-// bastığı tüm AUTH/SYSTEM action'larıyla senkron (eksikse ekranda ham İngilizce çıkar).
+// Filtre açılırında hangi olay hangi kategori altında görünecek.
+// ⚠️ Liste ELLE TUTULMAZ: sözlükten türer, yani sözlüğe eklenen her yeni olay
+// filtrede de kendiliğinden belirir. Eski hâli elle yazılmıştı ve backend 27
+// olay basarken filtre 11'ini gösteriyordu.
+const AUTH_ACTIONS = new Set(["LOGIN_SUCCESS", "LOGIN_FAILED", "LOGIN_CONFLICT", "LOGOUT"]);
+
 export const ACTIONS_BY_CATEGORY: Record<"AUTH" | "SYSTEM", string[]> = {
-  AUTH: ["LOGIN_SUCCESS", "LOGIN_FAILED", "LOGOUT"],
-  SYSTEM: [
-    "STARTUP",
-    "ERROR",
-    "UNHANDLED_REJECTION",
-    "UNCAUGHT_EXCEPTION",
-    "AUDIT_ARCHIVE",
-    "BACKUP_TRIGGER",
-    "BACKUP_DOWNLOAD",
-    "PERIPHERAL_TEST",
-  ],
+  AUTH: Object.keys(EVENT_ACTION_LABELS).filter((a) => AUTH_ACTIONS.has(a)),
+  SYSTEM: Object.keys(EVENT_ACTION_LABELS).filter((a) => !AUTH_ACTIONS.has(a)),
 };
