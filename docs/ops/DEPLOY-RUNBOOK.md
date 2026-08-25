@@ -46,7 +46,7 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | Veritabanı / kullanıcı | **`tekserp`** / `tekserp` · superuser `postgres` |
 | Backend (ÇALIŞAN) | **`C:\Etkili-Yazilim\app`** — `kur.ps1` ile kurulan PAKET (git klonu DEĞİL) · pm2 adı **`tekserp-backend`** · önceki sürüm `app.eski-<damga>` |
 | Klon (yalnız paket üretmek için) | `C:\Etkili-Yazilim\tekserp` (sparse, dar refspec) · ikinci tam klon `D:\tekserp-build\tekserp`. Çalışan kod klondan KOŞMAZ |
-| Deploy script'leri | `C:\Etkili-Yazilim\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**) · `C:\Etkili-Yazilim\tekserp\paketle.ps1` (henüz repoda değil) |
+| Deploy script'leri | `C:\Etkili-Yazilim\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**) · `deploy/paketle.ps1` (klon kökünden `.\deploy\paketle.ps1`; kökteki eski untracked kopya aynı dosya) |
 | pm2 daemon | **SYSTEM** hesabı → **pm2 komutları YÖNETİCİ shell ister** (`EPERM \\.\pipe\rpc.sock` alıyorsanız sebebi budur) |
 | Boot | Görev **`TeksERP-Backend-Boot`** → `pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
 | Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\Etkili-Yazilim\backups`, **30 gün** |
@@ -221,10 +221,10 @@ Veriler korunur; sadece kod + bekleyen migration uygulanır. **Yönetici PowerSh
 (pm2 daemon SYSTEM'dir).
 
 ```powershell
-# 1) Paketi üret — klon kökünde (derleme + node_modules pakete girer)
+# 1) Paketi üret — klon kökünde (derleme + node_modules pakete girer); ağaç TEMİZ olsun (kirliyse Read-Host'ta asılır)
 cd C:\Etkili-Yazilim\tekserp
 git pull
-.\paketle.ps1 -Cikti C:\Etkili-Yazilim            # → tekserp-backend-<damga>-<commit>.zip
+.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim     # → tekserp-backend-<damga>-<commit>.zip
 
 # 2) Kur — sırayı script yapar (aşağıda)
 C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-<commit>.zip -Zorla

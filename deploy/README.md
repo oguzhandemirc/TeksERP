@@ -6,7 +6,28 @@ kaynağı. Akış ve gerekçe: [`docs/ops/DEPLOY-RUNBOOK.md §3`](../docs/ops/DE
 | Dosya | Sunucudaki yeri | Ne yapar |
 |---|---|---|
 | `kur.ps1` | `C:\Etkili-Yazilim\kur.ps1` | Paketi doğrular → `premigrate_` yedeği (pg_restore ile doğrulanır) → pm2 delete → çalışanı `app.eski-<damga>` olarak kenara alır → yeni sürümü `app\`'a yerleştirir → `migrate deploy` → pm2 start + save → `/health`. `-GeriAl` ile son kuruluma döner. |
-| `paketle.ps1` | `C:\Etkili-Yazilim\tekserp\paketle.ps1` (klon kökü) | **HENÜZ REPODA DEĞİL** — sunucudaki kopya tek kaynak. İlk fırsatta buraya alınmalı. |
+| `paketle.ps1` | klon kökünden koşulur: `C:\Etkili-Yazilim\tekserp` → `.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim` | Repo kökünde (`Teks-Erp`'nin üstünde) koşar: `npm ci` → `prisma generate` → `tsc --removeComments` → dist (`.js.map`siz) + `prisma/{schema,migrations}` (seed YOK) + `public` + `assets` + `package*.json` + `ecosystem.config.js` + `Teks-Erp/deploy/prisma.config.prod.js` → `prisma.config.js` + (varsayılan) üretim `node_modules` + `PAKET.json` → `tekserp-backend-<damga>-<commit>.zip`. Sunucudaki kopyayla **bayt-bayt aynı** (md5 `7a48a8cb…`, 2026-08-25). |
+
+> **`paketle.ps1` sunucuda klon KÖKÜNDE untracked duruyordu** (`C:\Etkili-Yazilim\tekserp\paketle.ps1`).
+> Repoya `deploy/` altına alındı — kökte olsaydı `git pull` untracked dosyanın üstüne yazmayı
+> reddederdi. Kök kopyası istenirse silinir; iki kopya aynı olduğu sürece hangisi koşarsa koşsun
+> fark etmez. Script çalışma dizinini `(Get-Location)` ile alır → **her zaman klon kökünden**
+> `.\deploy\paketle.ps1` diye çağrılır, kendi klasöründen değil.
+
+### `kur.ps1` ↔ `paketle.ps1` sözleşmesi (2026-08-25'te doğrulandı)
+
+| `kur.ps1` bekler | `paketle.ps1` üretir |
+|---|---|
+| `dist\server.js`, `package.json`, `package-lock.json`, `ecosystem.config.js`, `prisma.config.js`, `prisma\schema.prisma`, `prisma\migrations`, `public`, `assets\fonts` | hepsi ✅ (`assets` tümüyle kopyalanır) |
+| `prisma.config.ts` OLMAMALI (ikisi birden → 400) · `src\` varsa "eski paketle" uyarısı | `.ts` kopyalanmaz, `src` kopyalanmaz ✅ |
+| `PAKET.json`: `commit` `dal` `uygulamaSurumu` `uretimZamani` `ureten` `migrationSayisi` `nodeModulesDahil` `calismaAgaciTemiz` | manifestte var (+ `nodeSurumu`, `npmSurumu`, `dosyaSayisi`, `toplamBayt`, `serverJsSha256` — `kur.ps1` bunları okumaz) ✅ |
+| `node_modules` varsa `npm ci` atlanır | varsayılan DAHİL; `-NodeModulesHaric` ile ince paket |
+
+**Bilinen davranışlar (değiştirilmedi):** kirli çalışma ağacında `Read-Host` ile sorar — `-Zorla`
+eşdeğeri YOK, Claude oturumunda asılı kalır → paketi **temiz** klondan üret. `--removeComments`
+yüzünden sunucu boot'unda `[swagger] OpenAPI spec BOŞ` uyarısı çıkar (zararsız, Swagger üretimde
+mount edilmiyor). Başlık yorumu "sunucuda çalışmaz, kaynak kod yoktur" der — bayat: 2026-08-24'ten
+beri sunucudaki sparse klondan koşuyor. `Fail` yollarında cwd `Teks-Erp\` içinde kalır (zararsız).
 
 ## ⚠️ `kur.ps1` KENDİNİ GÜNCELLEYEMEZ — elle kopyalanır
 

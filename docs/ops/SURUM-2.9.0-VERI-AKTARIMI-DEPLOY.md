@@ -233,7 +233,7 @@ geri dönüş yolu yedektir.
 # 1) Paketi üret — klon kökünde (derleme + node_modules pakete girer)
 cd C:\Etkili-Yazilim\tekserp
 git pull
-.\paketle.ps1 -Cikti C:\Etkili-Yazilim          # → tekserp-backend-<damga>-<commit>.zip
+.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim   # → tekserp-backend-<damga>-<commit>.zip (2026-08-24'te kökteki kopyayla üretildi; aynı dosya)
 
 # 2) Kur — sırayı script yapar
 C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-<commit>.zip -Zorla
