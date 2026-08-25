@@ -1,5 +1,11 @@
 # Yedekleme & Geri Yükleme — Sunucu Deploy ve Denetim Notu
 
+> ⚠️ **TARİHSEL — deploy yolu 2026-08-24'te değişti.** Aşağıdaki `git pull → build →
+> migrate` akışı fabrikada **artık uygulanmıyor**: çalışan kurulum `C:\Etkili-Yazilim\app\`
+> altındaki hazır pakettir ve `kur.ps1` ile kurulur (yedek + migrate + pm2 sırasını script
+> yapar). Güncel akış **`docs/ops/DEPLOY-RUNBOOK.md §3`** + `deploy/README.md`. Bu dosyanın
+> geri kalanı (gerekçeler, sıra teyidi, kontrol maddeleri) bilgi olarak duruyor.
+
 **Son güncelleme:** 2026-07-31 · **Hedef sunucu:** SAHINSRV (192.168.1.250)
 **Durum:** kod tarafı bitti ve geliştirme makinesinde test edildi; **sunucuda henüz deploy edilmedi**
 

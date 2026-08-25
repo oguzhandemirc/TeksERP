@@ -27,7 +27,7 @@ Bu doküman backend'i (`Teks-Erp/`, Express 5 + Prisma 7 + PostgreSQL) bir
 >
 > | Sürüm | Ek adım |
 > |---|---|
-> | **`SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md`** | ⚠️ **SIRADAKİ DEPLOY BUDUR ve TEK reçetedir** (arama · künye · audit · veri aktarımı birleşik). 18 birikmiş migration; ilk iş `pg_trgm` uzantısının VARLIĞINI doğrulamak (yoksa deploy durur), 5 backfill, 2 izin ataması, 4 operatör davranış değişikliği. Eski `SURUM-2026-08-19-ARAMA-DEPLOY.md` bu dosyaya TAŞINDI. |
+> | **`SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md`** | ✅ **SAHADA UYGULANDI 2026-08-24** (commit `935f180`, 24 migration) — artık geçmiş kaydı; rakamları canlı ölçümle güncellendi. Sonraki sürümün reçetesi ayrı dosyada açılır. |
 > | `SURUM-2026-08-09-RAPORLAR-DEPLOY.md` | migration + **`backfill_roll_production_timestamps.ts --apply`** |
 > | `SURUM-2026-08-06-YETKI-DEPLOY.md` | rol şablonları — izin ATAMASI elle |
 > | `SURUM-2026-08-05-DEPLOY.md` · `SURUM-2026-08-03-DEPLOY.md` | kendi notlarına bak |
@@ -44,7 +44,9 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | PostgreSQL | **16.9**, servis `postgresql-tekserp`, port **5432**, initdb UTF8 / **C locale** |
 | PG yolları | `C:\Etkili-Yazilim\pgsql\bin` · veri `C:\Etkili-Yazilim\pgdata` |
 | Veritabanı / kullanıcı | **`tekserp`** / `tekserp` · superuser `postgres` |
-| Backend | `C:\Etkili-Yazilim\tekserp\Teks-Erp` · pm2 adı **`tekserp-backend`** |
+| Backend (ÇALIŞAN) | **`C:\Etkili-Yazilim\app`** — `kur.ps1` ile kurulan PAKET (git klonu DEĞİL) · pm2 adı **`tekserp-backend`** · önceki sürüm `app.eski-<damga>` |
+| Klon (yalnız paket üretmek için) | `C:\Etkili-Yazilim\tekserp` (sparse, dar refspec) · ikinci tam klon `D:\tekserp-build\tekserp`. Çalışan kod klondan KOŞMAZ |
+| Deploy script'leri | `C:\Etkili-Yazilim\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**) · `C:\Etkili-Yazilim\tekserp\paketle.ps1` (henüz repoda değil) |
 | pm2 daemon | **SYSTEM** hesabı → **pm2 komutları YÖNETİCİ shell ister** (`EPERM \\.\pipe\rpc.sock` alıyorsanız sebebi budur) |
 | Boot | Görev **`TeksERP-Backend-Boot`** → `pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
 | Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\Etkili-Yazilim\backups`, **30 gün** |
@@ -54,7 +56,8 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 > kapalıyken bile** yedek alır — backend'e bağlı bir zamanlayıcının veremeyeceği
 > garanti. İkisi birden açık kalırsa her gece iki dump alınır.
 
-Deploy talimatı ve doğrulama listesi: **`docs/ops/PM2-GECIS-DEVIR-NOTU.md`**.
+Deploy akışı: **§3 (paket tabanlı)** + `deploy/README.md`. Yedek/geri yükleme denetimi:
+`docs/ops/PM2-GECIS-DEVIR-NOTU.md` (deploy adımları orada tarihseldir).
 
 ---
 
@@ -205,42 +208,62 @@ Erişim: `http://localhost:4000` / `http://<ip>:4000`, giriş `admin / 123123`.
 
 ---
 
-## 3) GÜNCELLEME (yeni sürüm — seed YOK)
+## 3) GÜNCELLEME (yeni sürüm — seed YOK) — PAKET TABANLI
 
-Veriler korunur; sadece kod + bekleyen migration uygulanır.
+> **2026-08-24'ten beri fabrika böyle güncelleniyor.** Çalışan kurulum
+> `C:\Etkili-Yazilim\app\` bir git klonu değil, `kur.ps1`'in yerleştirdiği hazır
+> pakettir; klon yalnız paketi üretmek içindir. Bu bölümün eski hâli (`git pull →
+> build → migrate → restart`) **sunucuda uygulanamaz** — o akış `MIGRATION-DEPLOY.md`,
+> `URETIM-KONTROL-LISTESI.md` ve `PM2-GECIS-DEVIR-NOTU.md`'de tarihseldir. Script
+> kaynağı ve onarım geçmişi: **`deploy/README.md`**.
+
+Veriler korunur; sadece kod + bekleyen migration uygulanır. **Yönetici PowerShell**
+(pm2 daemon SYSTEM'dir).
 
 ```powershell
-cd C:\...\Teks-Erp
-# 1) Migration ÖNCESİ yedek al — geri dönüş noktası (§8 rollback bunu ister).
-#    Panelden "Şimdi yedek al" ya da: pm2 çalışırken POST /api/admin/backup
-git pull                        # yeni migration dosyaları gelir
-npm install                     # package.json değiştiyse
-npm run prisma:generate         # client yenilensin (her güncellemede)
-npm run build                   # tsc derle (dist\ güncellensin)
-npm run prisma:migrate          # = prisma migrate deploy — yalnız pending'leri uygular
-pm2 restart tekserp-backend
-# seed YOK
+# 1) Paketi üret — klon kökünde (derleme + node_modules pakete girer)
+cd C:\Etkili-Yazilim\tekserp
+git pull
+.\paketle.ps1 -Cikti C:\Etkili-Yazilim            # → tekserp-backend-<damga>-<commit>.zip
+
+# 2) Kur — sırayı script yapar (aşağıda)
+C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-<commit>.zip -Zorla
+
+# 3) Sürüme özel notta yazan tek seferlik adımlar (backfill, izin, ayar) — SURUM-*-DEPLOY.md
 ```
+
+`kur.ps1` dokuz adımı sırayla yürütür ve **migration öncesi her hatada otomatik geri
+alır**; migration sonrası hatada durur, komutları yazar, karar insanındır:
+
+| Adım | Ne | Hata olursa |
+|---|---|---|
+| 1 | Paketi aç, zorunlu dosyaları ve `PAKET.json`'ı doğrula | durur, hiçbir şey değişmemiştir |
+| 2 | Mevcut kurulumu ve `.env`'i bul, `.env`'i kenara al | durur |
+| 3 | **`premigrate_<damga>.dump`** yedeği + `pg_restore --list` doğrulaması (rotasyon dışı) | durur — yedeksiz devam etmez |
+| 4 | `pm2 delete tekserp-backend` | — |
+| 5 | Çalışanı `app.eski-<damga>` olarak kenara al, paketi `app\`'a yerleştir, `.env`'i geri koy | **otomatik geri alma** (aşağıdaki not) |
+| 6 | `npm ci --omit=dev` + `prisma generate` (paket `node_modules` taşımıyorsa) | otomatik geri alma |
+| 7 | `prisma migrate deploy` — **GERİ ALINAMAZ EŞİK** | durur; kod `-GeriAl`, DB `premigrate_` dump |
+| 8 | `pm2 start` + **`pm2 save`** (reboot'ta doğru klasör kalksın) | `-GeriAl` |
+| 9 | `/health` 120 sn | `-GeriAl` |
+
+> **Otomatik geri alma yalnız `app.eski-<damga>` gerçekten oluşmuşsa dokunur.** İlk
+> taşıma takıldıysa (`app\`'a bakan açık Explorer/terminal/editor) hiçbir şey silinmez,
+> mevcut kurulum pm2 ile yeniden başlatılır. 2026-08-25'ten önceki `kur.ps1` bu durumda
+> çalışan kurulumu **yedeksiz siliyordu** — onarılmış sürüm `deploy/kur.ps1`, sunucuya
+> **elle** kopyalanır (script kendini güncelleyemez). Üç saha kuralı: `-Zorla` şart
+> (onay sorusu oturumda asılı kalır) · çalışma dizini `app\` içinde OLMASIN · `npm ci`
+> internet ister (paket `node_modules` taşıyorsa atlanır).
 
 `migrate deploy` idempotent — yalnız `_prisma_migrations`'da olmayanları, dosya
 sırasıyla uygular; tekrar çalıştırmak güvenli.
 
-> **Migration öncesi otomatik yedek artık YOK.** Installer bunu kendiliğinden
-> alıyordu (`premigrate_<eskiSürüm>_<zaman>.dump`). pm2 yolunda **elle almanız şart**
-> — §9 rollback buna dayanır.
->
-> **⚠ Panelden aldığınız yedek `tekserp_*` adıyla kaydedilir ve saklama rotasyonuna
-> DAHİLDİR** — saklama süresi dolunca silinir. Rollback noktasının kalıcı olmasını
-> istiyorsanız yedek bittikten sonra dosyayı **yeniden adlandırın**:
->
-> ```powershell
-> Rename-Item C:\Etkili-Yazilim\backups\tekserp_20260730_143000.dump `
->             premigrate_2.0.0_20260730_143000.dump
-> ```
->
-> `premigrate_*` ön ekli dosyalar rotasyon dışıdır (`backup.service.ts`) — otomatik
-> silinmezler. Panelin "Şimdi yedek al" düğmesi bu adlandırmayı **kendiliğinden
-> yapmaz**.
+> **Migration öncesi yedeği `kur.ps1` kendisi alır** (adım 3, `premigrate_<damga>.dump`,
+> `pg_restore --list` ile doğrulanır, rotasyon dışı). Bu runbook'un önceki sürümündeki
+> "otomatik yedek artık YOK, elle alın" notu paket yoluyla **geçersizleşti**. Panelden
+> ayrıca alınan yedek `tekserp_*` adıyla kaydedilir ve **rotasyona dahildir**; kalıcı
+> olması isteniyorsa `premigrate_*` olarak yeniden adlandırılır (`backup.service.ts`
+> yalnız `tekserp_` ön ekini rotasyona sokar).
 
 > **Graceful restart:** `pm2 restart` Windows'ta gerçek SIGTERM göndermez; bunun
 > yerine `shutdown_with_message: true` ile IPC mesajı yollar ve `server.ts` bunu
@@ -531,13 +554,18 @@ süreç listesini geri yükler.
 > **`prisma migrate deploy` GERİ ALINMAZ.** Prisma down-migration üretmez.
 > Tek güvenli geri dönüş = **migration öncesi yedeğinden restore**.
 
-1. `pm2 stop tekserp-backend`
-2. Migration öncesi yedeği geri yükle (§3'te **elle** almış olmanız gerekir —
-   otomatik `premigrate_*` artık üretilmiyor).
-3. Şema değişen bir sürümden dönüyorsan **kodu da eski sürüme al** (eski commit'e
-   `git checkout` + `npm ci` + `npm run build`), SONRA restore et — yeni kod eski
-   şemayla, eski kod yeni şemayla uyumsuz olabilir.
-4. `pm2 start tekserp-backend`, `/health` ile `db: "UP"` + 200 teyit et.
+**Kod:** `C:\Etkili-Yazilim\kur.ps1 -GeriAl` — en yeni `app.eski-<damga>`'yı `app\`'a
+geri koyar (mevcut `app\` → `app.basarisiz-<damga>`), pm2'yi başlatır, `/health`'i bekler.
+Taşıma takılırsa (açık kilit) mevcut kurulumu yeniden başlatıp durur. **DB'ye dokunmaz**
+ve bunu ekrana yazar: eski kod yeni şemayla koşuyor olur.
+
+**Veri:** `kur.ps1`'in adım 3'te aldığı `backups\premigrate_<damga>.dump` (rotasyon
+dışı). Şema değişen bir sürümden dönüyorsan kodu geri aldıktan SONRA restore et — yeni
+kod eski şemayla, eski kod yeni şemayla uyumsuz olabilir. Restore yolu §5 ("Kopyaya geri
+yükleme" ÖNERİLİR — geri alınabilir).
+
+Birkaç gün sorunsuz çalışınca `app.eski-*` silinebilir; `premigrate_*` dosyaları
+rotasyona girmez, elle temizlenir.
 
 ---
 

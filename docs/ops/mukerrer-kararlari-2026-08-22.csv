@@ -8,3 +8,7 @@ color;RNK-260717-8123;RNK-260722-9804;BIRLESTIR;ikisi de bos, once acilan kayit 
 color;RNK-260717-3977;RNK-260723-3608;BIRLESTIR;ikisi de bos, once acilan kayit korunur;
 subcontractor;FSN-260716-2602;KARTELAAS;BIRLESTIR;eski kurulum kodu pasif ve kullanilmamis, fabrikanin karti aktif;
 subcontractor;FSN-260716-1259;KESTEL;BIRLESTIR;eski kurulum kodu pasif ve kullanilmamis, fabrikanin karti aktif;
+subcontractor;FSN-260716-6733;BOYER;BIRLESTIR;22 Agustos dump'inda yoktu - canlida 24 Agustos'ta birlestirildi: eski kurulum kodu (BOYER) pasif ve bos, fabrikanin karti aktif;
+item;BAYROFLAM;bayroflam;BIRLESTIR;adlar farkli (BAYRO FLAM / FLAM) ama kodlar harf farkiyla ayni - 209 top, 15 siparis, 14 is emri BAYROFLAM kaydinda, digeri bos ve pasif;
+item;sefa;SEFA;BIRLESTIR;tek fark bosluk (MIKRO CANVAS / MIKROCANVAS) - katlanmis ad taramasi kacirir - aktif kayit kalir, pasif kayittaki 78 top ve 4 is emri TASINIR;
+color;RNK-260722-1599;RNK-260722-6653;BIRLESTIR;parantezli yazim (GRI-(292-7791)) bos ve pasif - uygulama kurali da kaciriyordu - 2 siparis ve 2 is emri aktif kayitta kalir;

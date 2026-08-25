@@ -1,5 +1,11 @@
 # Production Migration Deploy Notu
 
+> ⚠️ **TARİHSEL — deploy yolu 2026-08-24'te değişti.** Aşağıdaki `git pull → build →
+> migrate` akışı fabrikada **artık uygulanmıyor**: çalışan kurulum `C:\Etkili-Yazilim\app\`
+> altındaki hazır pakettir ve `kur.ps1` ile kurulur (yedek + migrate + pm2 sırasını script
+> yapar). Güncel akış **`docs/ops/DEPLOY-RUNBOOK.md §3`** + `deploy/README.md`. Bu dosyanın
+> geri kalanı (gerekçeler, sıra teyidi, kontrol maddeleri) bilgi olarak duruyor.
+
 Geliştirme (dev) DB'sine uygulanan migration'lar production'a (üretim DB'si
 `TeksErpDb`, ya da hangi ortamsa) **`prisma migrate deploy` ile** taşınır.
 `migrate dev` PRODUCTION'da ASLA çalıştırılmaz (reset riski).

@@ -1,10 +1,23 @@
 # Sürüm 2.9.0 — Deploy Reçetesi (TEK DEPLOY: arama · künye · audit · veri aktarımı)
 
+> ✅ **SAHADA UYGULANDI — 2026-08-24 18:18, commit `935f180`, paket 114.5 MB.**
+> 24 migration uygulandı (toplam 189), kesinti ~3 dk, geri dönüş noktaları:
+> `app.eski-20260824_181800` + `backups/premigrate_20260824_181800.dump`.
+> Aşağıdaki rakamlar CANLIDA ölçülenlerle güncellendi (2026-08-25); prova (kopya)
+> rakamları nerede farklıysa ayrıca belirtildi. **Bu dosya artık geçmiş kaydıdır** —
+> gelecekte "ne yaptık" diye bakılacak yer; sonraki sürümün reçetesi ayrı dosyada açılır.
+> Düzeltmelerin kaynağı: `docs/history/DEPLOY-NOTU-DUZELTMELERI-DEV-YAPILACAKLAR.md`
+> (prod oturumunun tespitleri) + burada ölçülerek doğrulananlar.
+>
+> ⚠️ **§3 ilk sürümde YANLIŞ deploy yöntemi anlatıyordu** (`git pull → build`); fabrika
+> paket tabanlı (`kur.ps1`) kuruluyor — düzeltildi. §7b'deki `/health | findstr auditGuard`
+> kontrolü **hiç geçemezdi** (alan `/api/admin/health`'te) — düzeltildi.
+
 > **Bu notu sunucudaki oturum okuyacak. Deploy'un TEK reçetesi budur.**
 >
 > Sahaya en son çıkan sürümden bu yana **üç ayrı iş** birikti (arama katlaması,
-> kayıt künyesi + audit derinleştirme, veri aktarımı) ve hepsi **aynı `git pull`**
-> ile geliyor. Bu yüzden ayrı notlar birleştirildi: sırayla okunacak ikinci bir
+> kayıt künyesi + audit derinleştirme, veri aktarımı) ve hepsi **aynı paketle**
+> geliyor. Bu yüzden ayrı notlar birleştirildi: sırayla okunacak ikinci bir
 > dosya YOK. Eski `SURUM-2026-08-19-ARAMA-DEPLOY.md` bu dosyaya taşındı.
 >
 > Genel prosedür: [`DEPLOY-RUNBOOK.md`](./DEPLOY-RUNBOOK.md). Bu dosya runbook'un
@@ -33,7 +46,13 @@ psql -U postgres -d tekserp -c "SELECT count(*) AS icu_collation FROM pg_collati
 | `pg_trgm` satırı VAR (`installed_version` boş olabilir) | Uzantı kurulabilir | ✅ Devam et — migration kendisi kuracak |
 | `pg_trgm` satırı **YOK** | contrib dosyaları eksik | ⚠️ **Deploy DURMAZ** ama BORÇ doğar → aşağıdaki "pg_trgm yoksa" |
 | `icu_collation` > 0 | Türkçe sıralama kurulacak | ✅ |
-| `icu_collation` = 0 | ICU yok | ⚠️ Deploy **DURMAZ** — migration libc `tr_TR.UTF-8`'e düşer, o da yoksa NOTICE basıp sıralamayı olduğu gibi bırakır. **Arama etkilenmez.** |
+| `icu_collation` = 0 | ICU yok | ⚠️ Deploy **DURMAZ** — migration libc `tr_TR.UTF-8`'e düşer, o da yoksa NOTICE basıp sıralamayı olduğu gibi bırakır. **Arama etkilenmez.** — **Ölçüldü (2026-08-24): fabrikada 784 ICU collation var, `tr_sort` provider `i`; uyarı gereksizdi, sorun çıkmadı.** |
+
+> **Canlıda çıktı (2026-08-24):** `pg_trgm` kuruluydu, 9 trigram index sorunsuz — "pg_trgm yoksa"
+> bölümü gerekmedi; **silinmedi**, ileride başka sunucuda lazım. Boot'ta iki zararsız uyarı
+> görüldü: `[swagger] OpenAPI spec BOŞ` (üretim paketinde beklenir, zararsız) ve saatte bir
+> `[offsite] BACKUP_RCLONE_REMOTE boş` — bu ikincisi deploy'la ilgisiz ama **kapatılmamış
+> borç**: tüm yedekler DB ile aynı diskte (`DEPLOY-RUNBOOK.md §1` `BACKUP_OFFSITE_DIR`).
 
 **`unaccent`a İHTİYAÇ YOK.** Tasarım bilerek ondan vazgeçti (gerekçe
 `Teks-Erp/src/utils/search-fold.ts` başlığında). Kurulu görünse bile
@@ -106,10 +125,12 @@ npx tsx scripts/test_schema_drift.ts
 
 ---
 
-## 0) Bu deploy'da ne var — 31 migration, on altı iş
+## 0) Bu deploy'da ne var — canlıda 24 bekleyen migration (toplam 189), on yedi iş
 
-`migrate status` fabrikanın 14 Ağustos hâline göre **31 bekleyen** gösteriyor.
-On altısı ayrı iş, hepsi aynı pull'da:
+`migrate status` **canlıda 24 bekleyen** gösterdi (2026-08-24: 165 uygulanmıştı, 189 oldu).
+Bu not yazılırken prova kopyası 14 Ağustos hâline göre 31 gösteriyordu — fabrikada 17
+Ağustos migration'ları da uygulanmıştı, referans bayattı. **Sabit sayı yerine §1'deki
+komutla ölç.** On yedisi ayrı iş, hepsi aynı pakette:
 
 | # | Migration | İş |
 |---|---|---|
@@ -129,6 +150,7 @@ On altısı ayrı iş, hepsi aynı pull'da:
 | 24 | `20260819210000_master_data_merge_lineage` | **Mükerrer birleştirme soy bağı** — 4 tabloya 3 nullable kolon + FK + partial index (mevcut satırlara DOKUNMAZ, hepsi NULL doğar) |
 | 25 | `20260819190000_roll_plan_deviations` | **Plan-sapma defteri** — YENİ tablo (`roll_plan_deviations`) + 8 index + 5 FK. Mevcut tabloya DOKUNMAZ, boş doğar |
 | 26 | `20260819200000_fason_partial_receive` | **Fason kısmi kabul** — 3 tabloya 4 nullable kolon (`clientToken` + unique index, `receivedQty`, `isPartial` DEFAULT false, `remainderClosedAt`); mevcut satırlar etkilenmez |
+| 26b | `20260820020000_quality_grade_skip_label` · `20260820030000_fire_grade_targets_scrap` · `20260820040000_fire_label_marking` · `20260820050000_fire_label_dedup` | **Fire çöpe gider** (2026-08-20) — `QualityGrade.skipLabel` + FİRE kalitesinin hedef statüsü `SCRAP` (eskiden fire sevk edilebiliyordu) + fire etiketi işareti/dedup. ⚠️ Bu dört satır notun ilk sürümünde tabloda YOKTU, canlıda uygulandı (2026-08-24 tespiti) |
 | 27 | `20260821120000_roll_variance_source_ref` | **Fason çekmesi defteri** — `roll_variances`'e 1 nullable UUID (`sourceRefId`) + 1 index. Mevcut satırlar NULL kalır, hiçbir yol onları okumaz; `roll_variances` küçük tablo → vardiya içinde uygulanabilir |
 | 28 | `20260821150000_name_fold_unique_live` | **Ad mükerreri DB SEDDİ — YUMUŞAK KAPI** — `customers` · `items` · `subcontractors` üzerinde partial UNIQUE `<tablo>_nameFold_key` (`WHERE "mergedIntoId" IS NULL`; renk BİLİNÇLİ hariç). Tablo tablo bakar: **mükerrer yoksa index'i kurar, varsa `NOTICE` ile ATLAR** (deploy GEÇER; ilk sürüm "düşer" idi — 2026-08-22'de sıfırlama rafa kalkınca yumuşatıldı). **Prod kopyasında ölçüldü (2026-08-22):** `customers` TEMİZ → index KURULUR; `items` 5 grup ve `subcontractors` 2 grup → o ikisi ATLANIR (NOTICE grupları adıyla yazar), `psql` çıkış kodu **0**. Temizlik Sistem → Mükerrer Kayıtlar ile yapılınca **aynı dosya yeniden koşulur** (`npx prisma db execute --file …/20260821150000_name_fold_unique_live/migration.sql`, idempotent) → index kurulur. O güne kadar `test_db_invariants` prod'da **yalnız kurulmayan** satırları KIRMIZI verir (ölçüldü: 86 geçti / 2 başarısız — `items_nameFold_key` + `subcontractors_nameFold_key`; bilerek: "enforce bekliyor") |
 | 29 | `20260821150100_roll_reason_codes` | **Sebep KODU topun satırında** — `rolls`'a 2 nullable VARCHAR(64) (`entryReasonCode`, `cancelReasonCode`); metadata-only, index yok, vardiya içinde uygulanabilir. Kodu sunucu metinden türetir → APK değişmeden dolar; eski satırlar NULL (geriye doldurulmaz; sıfırlama sonrası zaten yok) |
@@ -165,29 +187,29 @@ Diğer notlar (arka plan; deploy adımı içermezler):
 [`ARAMA-KATLAMA-SIRALAMA-TASARIM.md`](../design/ARAMA-KATLAMA-SIRALAMA-TASARIM.md) ·
 [`IMPORT-EXPORT-TASARIM.md`](../design/IMPORT-EXPORT-TASARIM.md).
 
-### Provada ölçülenler (fabrika verisinin kopyası, `statement_timeout=50s` açık)
+### Provada ve canlıda ölçülenler (`statement_timeout=50s` açık)
 
-| Ölçüm | Sonuç |
-|---|---|
-| 19 migration | **Hatasız**, toplam **~1 sn** (tablolar küçük: 806 top · 4.449 log · 485 hareket · 190 sipariş) |
-| Backend 2.9.0 | **Kalktı**, `/health` → `db: UP` |
-| Arama (gerçek veri) | `sahin` → ADNAN ŞAHİN ÜRETİM · `akkus` → AKKUŞ TEKSTİL |
-| Eksik izin | **2 tane**: `data:import`, `mobile:kk1-yari-mamul` |
-| Backfill'ler | 5'i de DRY-RUN koştu, rakamlar §5'te |
+| Ölçüm | Prova (kopya, 2026-08-22) | Canlı (2026-08-24) |
+|---|---|---|
+| Migration | 19 migration **hatasız**, ~1 sn (806 top · 4.449 log · 485 hareket · 190 sipariş) | **24 migration hatasız**; kesinti ~3 dk (paket 114.5 MB) |
+| Backend 2.9.0 | **Kalktı**, `/health` → `db: UP` | aynı |
+| Arama (gerçek veri) | `sahin` → ADNAN ŞAHİN ÜRETİM · `akkus` → AKKUŞ TEKSTİL | aynı |
+| Eksik izin | 2: `data:import`, `mobile:kk1-yari-mamul` | **2: `data:import`, `master-data:merge`** — `mobile:kk1-yari-mamul` fabrikada ZATEN VARDI (17 Ağustos deploy'uyla gelmiş) |
+| Backfill'ler | 5'i de DRY-RUN koştu | rakamlar §5'te, prova/canlı iki sütun |
 
 ---
 
 ## 1) Deploy ÖNCESİ ön-tarama — salt-okunur
 
 ```powershell
-cd C:\...\Teks-Erp
-npx prisma migrate status         # 19 bekleyen görmelisin
-git log --oneline -1              # beklenen commit sende mi
-pm2 list                          # süreç adını NOT AL (aşağıda gerekiyor)
+cd C:\Etkili-Yazilim\app          # ÇALIŞAN kurulum (paket) — klon değil
+npx prisma migrate status         # bekleyen sayısını NOT AL; §0 tablosundaki iş sayısıyla karşılaştır (canlıda 24 çıktı)
+pm2 list                          # süreç adı: tekserp-backend
 ```
 
-> `migrate status` **19'dan fazla** gösteriyorsa bu not yazıldıktan sonra yeni
-> migration eklenmiş demektir; sapma değildir ama listeyi gözden geçir.
+> Bekleyen sayısı §0'daki tablodan **fazlaysa** bu not yazıldıktan sonra yeni migration
+> eklenmiş demektir; sapma değildir ama listeyi gözden geçir. **Azsa** bir kısmı daha
+> önce uygulanmış demektir (2026-08-24'te tam bu oldu: 31 beklenirken 24 çıktı).
 
 ---
 
@@ -199,22 +221,39 @@ geri dönüş yolu yedektir.
 
 ---
 
-## 3) Deploy (vardiya dışı)
+## 3) Deploy (vardiya dışı) — PAKET TABANLI
 
-`Teks-Erp/` **içinden** koşulur (Prisma komutları çalışma dizinine duyarlı).
+> ⚠️ **Bu bölümün ilk sürümü `git pull → npm ci → build → pm2 start` anlatıyordu.
+> Fabrika BÖYLE deploy EDİLMİYOR** (2026-08-24 deploy'unda düzeltildi). Çalışan kurulum
+> `C:\Etkili-Yazilim\app\` bir git klonu değil, hazır pakettir; klon
+> (`C:\Etkili-Yazilim\tekserp`, sparse) yalnız paket üretmek içindir. Genel akış
+> `DEPLOY-RUNBOOK.md §3`'te; script kaynağı `deploy/kur.ps1`.
 
 ```powershell
-pm2 stop <süreç-adı>          # pm2 list ile teyit ettiğin ad
+# 1) Paketi üret — klon kökünde (derleme + node_modules pakete girer)
+cd C:\Etkili-Yazilim\tekserp
 git pull
-npm ci                        # package.json değiştiyse; değişmediyse npm install
-npm run prisma:generate
-npm run prisma:migrate        # = migrate deploy
-npm run build
-pm2 start <süreç-adı>
+.\paketle.ps1 -Cikti C:\Etkili-Yazilim          # → tekserp-backend-<damga>-<commit>.zip
+
+# 2) Kur — sırayı script yapar
+C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-<commit>.zip -Zorla
 ```
 
-**Sıra pazarlık dışı:** `prisma:generate` → `migrate` → `build`. `build` önce
-koşarsa eski client ile derlenir ve yeni kolonlar tipte görünmez.
+`kur.ps1` sırayı kendisi yürütür: paket doğrulama → **`premigrate_<damga>.dump` yedeği
+(pg_restore ile doğrulanır, rotasyon dışı)** → `pm2 delete` → çalışanı `app.eski-<damga>`
+olarak kenara alma → yeni sürümü yerleştirme + `.env` taşıma → `migrate deploy` →
+`pm2 start` + `pm2 save` → `/health`. `prisma generate` paket üretilirken koşar.
+
+**Üç saha tuzağı:**
+
+- **`-Zorla` şart** — script `Read-Host` ile onay sorar; Claude oturumu / otomasyon
+  içinde asılı kalır.
+- **Çalışma dizini `app\` İÇİNDE OLMAMALI**, `app\`'a bakan Explorer/terminal/editor
+  açık olmamalı. İlk `Move-Item` takılırsa script geri alma yoluna düşer; 2026-08-25'ten
+  önceki `kur.ps1` bu yolda çalışan kurulumu **yedeksiz siliyordu** (`deploy/README.md`).
+  Onarılmış sürüm sunucuya elle kopyalanmalı (script kendini güncelleyemez).
+- **`npm ci` internet ister** — paket `node_modules` ile geliyorsa atlanır (`PAKET.json`
+  `nodeModulesDahil`), gelmiyorsa değil.
 
 Sonra **panel (Electron)** aynı pencerede dağıtılır.
 
@@ -235,9 +274,10 @@ Sonra **panel (Electron)** aynı pencerede dağıtılır.
 > giden sürüm gradle'dakidir ve versionCode düşerse Android kurulumu REDDEDER
 > (operatör kaldır-kur yapar, offline kuyruktaki gerçek toplar silinir).
 
-⚠️ **En tehlikeli senaryo:** sunucuda `git pull` yapıp `migrate deploy` KOŞMAMAK.
-Kod `adnansahin` branch'inde hazır duruyor ve `nameFold` kolonunu arıyor; pull
-edip restart edersen liste ekranları **500** verir. Pull ile migrate **birlikte**.
+⚠️ **En tehlikeli senaryo:** klondaki kodu doğrudan koşmak ya da paketi `kur.ps1`
+dışında elle `app\`'a kopyalamak — `migrate deploy` atlanır, kod `nameFold` kolonunu
+arar, liste ekranları **500** verir. Paket **yalnız `kur.ps1` ile** kurulur; migrate
+adımı onun içinde.
 
 ---
 
@@ -276,7 +316,7 @@ Beklenen (hepsi provada ölçüldü):
 | `tr_sort` | var; `collprovider` `i` (ICU) **veya** `c` (libc). ICU ise sayı-duyarlı |
 | GENERATED kolon | **33** (31 + 2 alias) |
 | `customers.nameFold` | `ADNAN ŞAHİN ÜRETİM` → `adnan sahin uretim` |
-| `import_runs` | 17 kolon + 5 index; enum `APPLIED, PARTIAL, FAILED` |
+| `import_runs` | **16** kolon + 5 index; enum `APPLIED, PARTIAL, FAILED` (ilk sürüm "17" diyordu — migration 16 tanımlar, canlıda 16 var) |
 | `system_logs` | `changes` ve `deviceId` VAR, `updatedAt` **YOK** |
 | `reason_presets` (restart sonrası) | 4 satır: `ROLL_SCRAP` **8** · `ROLL_RECORD_CORRECTION` **5** · `ROLL_MANUAL_ENTRY` **5** · `ROLL_CANCEL` **5** |
 | `ROLL_SCRAP` ilk satırı | **`TOP_BASI` — "Top başı"** (sahanın istediği sıra) |
@@ -284,8 +324,8 @@ Beklenen (hepsi provada ölçüldü):
 | Birleştirme kolonları | dört tablonun her birinde **3** (`mergedIntoId`/`mergedAt`/`mergedById`) |
 | `*_mergedIntoId_idx` | **4 satır, hepsi `partial_mi = t`** — `f` görürsen index TAM oluşmuş demektir (yanlış değil, sadece gereksiz büyük); `test_db_invariants` bunu KIRMIZI verir. ⚠️ Sorgudaki `tablename IN (...)` süzgeci gerekli: `batches_mergedIntoId_idx` (eski, 2026-07 parti birleştirmesi) da desene uyar ve süzgeç olmadan 5 satır döner |
 | Birleştirme FK'ları | **8** |
-| Backend log'u (2) | `[permission-catalog] 1 yeni izin eklendi: master-data:merge` (ilk açılış) |
-| `*_nameFold_key` (28) | Temiz tabloda `uniq = t` VE `partial = t`. **Prod'da bugün 0 satır BEKLENİR** (üç tabloda da mükerrer var → migration NOTICE ile atladı; `migrate status` "applied" der, log'da `[name_fold_unique] customers ATLANDI — N mükerrer grup` satırları görünür). Temizlik → aynı dosyayı yeniden koş → 3 satır. `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
+| Backend log'u (2) | `[permission-catalog] 2 EKSİK izin DB'ye yazıldı: data:import, master-data:merge` (ilk açılış; tam blok §7'de) |
+| `*_nameFold_key` (28) | Temiz tabloda `uniq = t` VE `partial = t`. **Canlıda ölçülen (2026-08-24): 1 satır** — `customers` kuruldu; `items` ve `subcontractors` NOTICE ile atlandı (`migrate status` "applied" der, log'da `[name_fold_unique] items ATLANDI — N mükerrer grup`). §5c temizliği sonrası aynı dosya yeniden koşuldu → **3 satır**. (İlk sürüm "0 satır beklenir" ile §5c'nin "customers TEMİZ → kurulur" cümlesi çelişiyordu; doğrusu bu.) `partial = f` görürsen kısıt tombstone'u da kapsıyor, `test_db_invariants` KIRMIZI verir |
 | `rolls` sebep kodları (29) | **2 satır**, `character varying(64)`, `YES` |
 | `reason_presets.legacyTexts` (30) | `psql … -c "SELECT data_type, column_default FROM information_schema.columns WHERE table_name='reason_presets' AND column_name='legacyTexts';"` → `ARRAY` / `ARRAY[]::text[]` |
 | `duplicate_reviews` (31) | `psql … -c "\d duplicate_reviews"` → 12 kolon, `duplicate_reviews_entity_pairKey_key` UNIQUE, `decidedById` FK → users; panel: Sistem → Mükerrer Kayıtlar ("Yeniden tara" gerekçeli adayları getirir; canlı kopyada ölçüm: kumaş 5+9 · renk 3 · fason 3 · müşteri 0 kesin/kimlik grubu) |
@@ -296,22 +336,30 @@ Beklenen (hepsi provada ölçüldü):
 ## 5) BACKFILL'ler — beşi de DRY-RUN varsayılan
 
 Migration'lar kolonu **ekler**, geçmiş satırları doldurmaz. Beşi de fabrika
-verisinin kopyasında prova edildi; parantezdeki sayılar **provada çıkanlar**
-(canlıda bir miktar farklı olur, mertebesi aynı):
+verisinin kopyasında prova edildi, sonra canlıda koşuldu. **Prova sayıları silinmedi** —
+mertebe farkını görmek işe yarıyor:
 
 ```powershell
-npx tsx scripts/backfill_roll_production_timestamps.ts            # önizleme (finalizedAt 53 · statusChangedAt 752)
+npx tsx scripts/backfill_roll_production_timestamps.ts            # önizleme
 npx tsx scripts/backfill_roll_production_timestamps.ts --apply
 
-npx tsx scripts/backfill-record-provenance.ts                     # önizleme (oluşturan 781 · son değiştiren 797)
+npx tsx scripts/backfill-record-provenance.ts                     # önizleme
 npx tsx scripts/backfill-record-provenance.ts --apply
 
-npx tsx scripts/backfill_roll_entry_station.ts                    # önizleme (SESSION 113 · RECEIPT 3 · PRODUCED_STEP 10)
+npx tsx scripts/backfill_roll_entry_station.ts                    # önizleme
 npx tsx scripts/backfill_roll_entry_station.ts --apply
 
 npx tsx scripts/backfill_roll_label_customer.ts                   # önizleme
-npx tsx scripts/backfill_roll_fold_and_reason.ts                  # önizleme (8 topun sebebi audit'te YOK → NULL kalır; doğrusu bu)
+npx tsx scripts/backfill_roll_fold_and_reason.ts                  # önizleme
 ```
+
+| Script | Prova (kopya, 2026-08-22) | Canlı (2026-08-24) |
+|---|---|---|
+| `backfill_roll_production_timestamps` | finalizedAt 53 · statusChangedAt 752 | **0 · 0** (+4 kapsam dışı) → uygulanacak bir şey yoktu; trigger 17 Ağustos'tan beri canlıda damgalıyordu |
+| `backfill-record-provenance` | oluşturan 781 · değiştiren 797 | **1208 · 1208** |
+| `backfill_roll_entry_station` | SESSION 113 · RECEIPT 3 · PRODUCED_STEP 10 | **birebir aynı**, 126 kayıt yazıldı |
+| `backfill_roll_label_customer` | (sayı yok) | **46 kayıt** |
+| `backfill_roll_fold_and_reason` | 8 topun sebebi audit'te YOK → NULL kalır (doğrusu bu) | **0 yazıldı**, 12 top kapsam dışı |
 
 **Her birini önce `--apply` OLMADAN koş, çıktıyı OKU, sonra uygula.** Sıra
 serbest — birbirlerine bağımlı değiller.
@@ -329,22 +377,27 @@ detay paneli/yan panel siparişi gösteriyor. Kök neden: "Sipariş Bağla"
 (`POST /work-orders/:id/order-links`) pivot satırını yazıp `WorkOrder.type`'a
 dokunmuyordu. Servis artık ilk bağda tipi aynı tx'te SİPARİŞE ÖZEL yapar
 (backend tek başına yeter, istemci değişikliği YOK); geçmişte oluşmuş tutarsız
-kayıtlar bu script ile onarılır (2026-08-21 10:33 yedeğinde **13 iş emri**,
-hepsi IN_PROGRESS, hepsi "önce stok aç → sonra Sipariş Bağla" sırasıyla):
+kayıtlar bu script ile onarılır (2026-08-21 10:33 yedeğinde **13 iş emri** ölçüldü;
+**canlıda 35 çıktı** — kök neden bu sürümde kapandığı için sayı deploy gününe kadar
+artmaya devam eder, 24 Ağustos'ta açılanlar dahil; hepsi IN_PROGRESS, hepsi "önce stok
+aç → sonra Sipariş Bağla" sırasıyla):
 
 ```powershell
-npx tsx scripts/fix_workorder_type_from_links.ts            # önizleme — her iş emrini açılış/ilk bağ/siparişleriyle listeler (provada 13)
+npx tsx scripts/fix_workorder_type_from_links.ts            # önizleme — her iş emrini açılış/ilk bağ/siparişleriyle listeler (yedekte 13, canlıda 35)
 npx tsx scripts/fix_workorder_type_from_links.ts --apply    # STOCK_PRODUCTION → ORDER_PRODUCTION; audit TYPE_DERIVED_FROM_LINKS
 ```
 
-İdempotent (ikinci koşumda 0). CANCELLED/SUPERSEDED dışarıda. Vardiya içinde
-koşulabilir (13 satırlık UPDATE). Aynı kural `create()`/`replace()` için de sunucuya alındı (STOK + satır gövdesi → ORDER). Ters yön de kapandı: `unlinkOrderLine` son bağda ve sipariş iptali `UNLINK_ONLY` tek-siparişli iş emrinde tipi STOK'a döndürür; tabletteki "son bağ kaldırılamaz" aynası yeni APK ile açılır (eski APK yalnız fazladan engeller — backend önce güvenli). Script tersini (ORDER ama bağsız) **yapmaz** — yedekte 0 kayıt.
+İdempotent (canlıda ikinci koşum `Tutarsız iş emri yok` dedi). CANCELLED/SUPERSEDED
+dışarıda. Vardiya içinde koşulabilir (onlarca satırlık UPDATE). Aynı kural `create()`/`replace()` için de sunucuya alındı (STOK + satır gövdesi → ORDER). Ters yön de kapandı: `unlinkOrderLine` son bağda ve sipariş iptali `UNLINK_ONLY` tek-siparişli iş emrinde tipi STOK'a döndürür; tabletteki "son bağ kaldırılamaz" aynası yeni APK ile açılır (eski APK yalnız fazladan engeller — backend önce güvenli). Script tersini (ORDER ama bağsız) **yapmaz** — yedekte 0 kayıt.
 
-## 5c) Mükerrer ad temizliği — 9 grup, karar dosyası HAZIR (2026-08-22)
+## 5c) Mükerrer ad temizliği — 13 karar (9 + canlıda bulunan 4), UYGULANDI
 
 Prod kopyasında (22 Ağustos dump'ı) **10 mükerrer ad grubu** ölçüldü; dokuzunda hangi kaydın
 kalacağı belliydi (bir taraf tamamen boş) ve kararlar kullanıcıyla alındı. Karar dosyası
-depoda: **`docs/ops/mukerrer-kararlari-2026-08-22.csv`**.
+depoda: **`docs/ops/mukerrer-kararlari-2026-08-22.csv`** — canlıda 24 Ağustos'ta uygulandı;
+**canlıda bulunan 4 ek grup** (aşağıda) dosyaya 2026-08-25'te eklendi ve aynı dosya dev
+kopyasında da koşuldu (13/13). Dosya artık **geçmiş kaydıdır**; yeniden koşmak zararsız
+(bulamadığı kodu satır satır hata basar, hiçbir şey yazmaz).
 
 ```powershell
 # 1) KURU KOŞUM (hiçbir şey yazmaz) — her satır tek tek listelenir
@@ -365,17 +418,39 @@ npx tsx scripts/apply_merge_decisions.ts --file=docs/ops/mukerrer-kararlari-2026
 | fason `FSN-260716-2602` (Kartelacı Emine) | `KARTELAAS` | eski kurulum kodu pasif + hiç kullanılmamış |
 | fason `FSN-260716-1259` (Şahin Zımpara) | `KESTEL` | eski kurulum kodu pasif + hiç kullanılmamış |
 
-⚠️ **`V-1430` BİLEREK DIŞARIDA.** İki kayıt da boş ve pasif ama **kodları farklı** (`BGR150` /
-`MC155`) — muhtemelen iki ayrı kumaşa yanlışlıkla aynı ad verilmiş. Birleştirmek birini
-kaybettirir; karar işletmenindir. Bu yüzden **`items` seddi enforce edilemez**, `customers`
-ve `subcontractors` edilir.
+**Canlıda bulunan 4 ek grup (2026-08-24)** — katlanmış ada göre **11** grup vardı (dump'ta 10),
+daha keskin taramalarla 4 daha çıktı; toplam **15 birleştirme** uygulandı:
 
-**Kopyada ölçülen sonuç (uygulandıktan sonra):**
-- `find_fold_duplicates` → 10 grup **→ 1** (yalnız V-1430).
-- Sed migration'ı yeniden koşuldu → `customers` + **`subcontractors` kuruldu**, `items` atlandı.
-- `test_db_invariants` 86/2 **→ 87/1** · `test_consistency` 19/22 **→ 20/22** (§18 YEŞİL).
-- Veri kaybı yok: BEYAZ rengi 44+6 = **50** topla tek kayda indi; birleşen kayıtlar silinmedi,
-  izleri duruyor ve karar defterine `MERGED` yazıldı (panel bir daha aday olarak sormaz).
+| Varlık | Kalan | Eriyen | Neden dosyada yoktu |
+|---|---|---|---|
+| fason | `Boyer Tekstil` [FSN-260716-6733] | [BOYER] | 22 Ağustos dump'ında yoktu |
+| kumaş | `BAYRO FLAM` [BAYROFLAM] | `FLAM` [bayroflam] | adlar farklı, **kodlar harf farkıyla aynı** (`code` UNIQUE'i harf DUYARLI) |
+| kumaş | `MİKRO CANVAS` [sefa] | `MIKROCANVAS` [SEFA] | **tek fark boşluk** — katlanmış ad taraması KAÇIRIR (78 top taşındı) |
+| renk | `292-7791-GRİ` | `GRİ-(292-7791)` | parantez; uygulama kuralı da kaçırıyordu |
+
+> **En değerli ders:** `find_fold_duplicates.ts` yalnız **birebir katlanmış ada** bakıyordu.
+> 2026-08-25'ten beri script iki **keskin tarama** da basar (gözlem, sed bunlara bakmaz):
+> (a) noktalama/boşluk atılınca aynı olan adlar, (b) harf-duyarsız kod çakışması — (b)
+> fabrikada 8 çakışma buldu (`MC155`/`mc155`/`Mc155` gibi üçlüler dahil). Renk grupları
+> da artık renk kuralıyla (ayraç + sayı-sırası bağımsız) kurulur.
+
+⚠️ **`V-1430` ilk sürümde BİLEREK DIŞARIDAYDI** — iki kayıt da boş ve pasif ama **kodları
+farklı** (`BGR150` / `MC155`), muhtemelen iki ayrı kumaşa yanlışlıkla aynı ad verilmiş.
+**Canlıda fabrika birleştirdi** (karar işletmenindi) → `items` seddi de kuruldu. Karar
+dosyasında YOK (hangisinin kaldığı kaydedilmedi); dev kopyasında bu çift duruyor ve orada
+`items` seddi hâlâ atlanıyor — dev'de tek kırmızı bu.
+
+**Ölçülen sonuç:**
+
+| | Kopya (2026-08-22, 9 karar) | Canlı (2026-08-24, 15 birleştirme) |
+|---|---|---|
+| `find_fold_duplicates` | 10 grup → **1** (yalnız V-1430) | 11+ grup → **0** |
+| Sed migration'ı yeniden | `customers` + `subcontractors` kuruldu, `items` atlandı | **üç tabloda da kurulu** |
+| `test_db_invariants` | 86/2 → 87/1 | 86/2 → **88/0** |
+| `test_consistency` | 19/22 → 20/22 (§18 YEŞİL) | 19/22 → **20/22** |
+
+Veri kaybı yok: BEYAZ rengi 44+6 = **50** topla tek kayda indi; birleşen kayıtlar silinmedi,
+izleri duruyor ve karar defterine `MERGED` yazıldı (panel bir daha aday olarak sormaz).
 
 > ⚠️ Canlıda kodlar dump'tan sonra değişmiş olabilir. Script **kuru koşum varsayılan**dır ve
 > bulamadığı kodu satır satır hata olarak basar — önce (1)'i koş, çıktıyı oku, sonra (2).
@@ -387,12 +462,20 @@ ve `subcontractors` edilir.
 `npm test` **koşma** (fixture yazar). Bunlar salt-okunur:
 
 ```powershell
-npx tsx scripts/test_db_invariants.ts        # 79 kontrol — şema-dışı DB nesneleri
+npx tsx scripts/test_db_invariants.ts        # şema-dışı DB nesneleri (2.9.0'da 88 kontrol; renk seddiyle 91)
 npx tsx scripts/test_schema_drift.ts         # repo datamodel ↔ canlı DB
-npx tsx scripts/find_fold_duplicates.ts      # mükerrer ad raporu (yazmaz)
+npx tsx scripts/find_fold_duplicates.ts      # mükerrer ad raporu + keskin taramalar (yazmaz)
 npx tsx scripts/test_master_data_merge_fk_coverage.ts   # saf statik analiz (şema metni + DMMF), DB'ye HİÇ dokunmaz
 npx tsx scripts/test_consistency.ts          # 22 bölüm veri mutabakatı (salt-okunur — asıl değeri BURADA)
 ```
+
+**Canlıda ölçülen (2026-08-24):**
+
+| Bekçi | Notta beklenen | Deploy anında | Temizlik (§5c) sonrası |
+|---|---|---|---|
+| `test_db_invariants` | 86/2 → 87/1 | **86/2** ✓ | **88/0** (V-1430 da birleşince üç sed kuruldu) |
+| `test_consistency` | 19/22 → 20/22 | **19/22** ✓ | **20/22** ✓ |
+| `test_schema_drift` | 2 bilinen fark | **4 ifade** (2 kalıcı + 2 tolere) ✓ | 2 kalıcı |
 
 > **`test_consistency` canlıda koşmak İÇİN yazıldı** ve prod kopyasında ölçüldü
 > (2026-08-22): **19/22 temiz**. Kalan üçü üç FARKLI şey demek — ayırmadan
@@ -493,15 +576,24 @@ Atanmazsa ekran/düğme **hiç görünmez** ve sebebi hiçbir yerde yazmaz.
 > canlıda koşulsun: dev kopyası 2026-08-02 tarihli, sonrasında yetki
 > düzenlenmiş olabilir.
 
-Boot log'unda beklenen satırlar (provada ölçüldü):
+Boot log'unda **canlıda basılan** satırlar (2026-08-24):
 
 ```
-[permission-catalog] 2 EKSİK izin DB'ye yazıldı: data:import, mobile:kk1-yari-mamul
-[role-templates] 'ADMIN_FULL' şablonuna 2 eksik izin eklendi: data:import, mobile:kk1-yari-mamul
+[permission-catalog] 2 EKSİK izin DB'ye yazıldı: data:import, master-data:merge
+[role-templates] 'ADMIN_FULL' şablonuna 2 eksik izin eklendi: data:import, master-data:merge
+[role-templates] 'WEB_SALES' şablonuna 1 eksik izin eklendi: master-data:merge
 [role-templates] 'WEB_SYSTEM_ADMIN' şablonuna 1 eksik izin eklendi: data:import
 [role-templates] 'MOBILE_PRODUCTION_OPERATOR' şablonuna 2 eksik izin eklendi: customer-alias:write, label:edit
 [role-templates] 'MOBILE_TAMBUR' şablonuna 2 eksik izin eklendi: customer-alias:write, label:edit
 ```
+
+> Provada `mobile:kk1-yari-mamul` bekleniyordu; fabrikada **zaten vardı** (17 Ağustos
+> deploy'u getirmişti), eksik olan `master-data:merge`'dü — ve provanın hiç görmediği
+> bir `WEB_SALES` satırı çıktı. Doğrulama SQL'i üç izni de sormalı:
+>
+> ```sql
+> SELECT code FROM permissions WHERE code IN ('data:import','master-data:merge','mobile:kk1-yari-mamul');
+> ```
 
 **Şablonu güncellemek, o şablonla AÇILMIŞ kullanıcıları güncellemez** — şablon
 yalnız yeniden uygulandığında etki eder.
@@ -554,14 +646,20 @@ psql -U postgres -d tekserp -c "SHOW teks.audit_guard;"
 psql -U postgres -d tekserp -c "BEGIN; DELETE FROM system_logs WHERE false; ROLLBACK;"
 #    Beklenen: ERROR: Audit kaydı değiştirilemez veya silinemez ...
 
-# 3) Backend ne diyor
-curl -s http://localhost:4000/health | findstr auditGuard
+# 3) Backend ne diyor — alan /health'te DEĞİL, yetkili uçta (admin:settings)
+curl -s -H "Authorization: Bearer <token>" http://localhost:4000/api/admin/health | findstr auditGuard
 #    Beklenen: "auditGuard":"on"
 ```
+
+> ⚠️ İlk sürüm `curl /health | findstr auditGuard` diyordu — **o kontrol hiç geçemez**:
+> `/health` yalnız `status/api/db/version/time` döner; `auditGuard` `buildRichHealth()`
+> içindedir ve `GET /api/admin/health` (`verifyToken` + `admin:settings`) ile servis edilir.
+> Token'sız kalınacaksa üçüncü yüzey **backend log'u**dur (2026-08-24 kurulumunda çalıştı).
 
 Açılış log'unda da görünür: `[audit-guard] koruma AÇIK — audit kayıtları
 salt-yazılır.` Kapalıysa aynı yerde ⚠️ uyarısı basar (adım unutulduğunda sessiz
 kalmasın diye — 2026-08-01'de bir ops adımı tam da böyle unutulmuştu).
+İlk iki doğrulama (`SHOW` + 0 satırlık `DELETE`'in reddi) canlıda **olduğu gibi çalıştı**.
 
 > **Ne yapar:** `system_logs` ve `system_log_archives` üzerinde UPDATE / DELETE /
 > TRUNCATE'i reddeder (ISO 27001 A.8.15 — denetim kaydı sonradan oynanamaz).
@@ -976,11 +1074,11 @@ import_runs tablosu       : ☐
 system_logs changes/device: ☐
 Backfill'ler              : timestamps ☐  provenance ☐  entry_station ☐  label_customer ☐  fold_and_reason ☐
 İş emri tipi düzeltmesi   : ☐ fix_workorder_type_from_links --apply (§5b — önizlemede ...... iş emri, provada 13)
-İzin ataması              : data:import → ................  ·  mobile:kk1-yari-mamul → ................
+İzin ataması              : data:import → ................  ·  master-data:merge → ................  ·  mobile:kk1-yari-mamul → ................
 Tambur rolü yeniden      : ☐ (label:edit + customer-alias:write — kullanıcı: ................)
 audit_guard AÇILDI       : ☐  ALTER DATABASE + restart (§7b)
   SHOW teks.audit_guard  : ......      (beklenen: on)
-  /health auditGuard     : ......      (beklenen: on)
+  /api/admin/health auditGuard : ...... (beklenen: on — /health'te YOK; token gerekir, ya da boot log'u)
   DELETE reddedildi mi   : ☐  (0 satırlık DELETE bile hata vermeli)
 find_fold_duplicates      : ...... grup / ...... fazla satır  → fabrikaya iletildi mi ☐
 Veri Aktarımı kabul testi : ☐ (§8'in 6 adımı)
