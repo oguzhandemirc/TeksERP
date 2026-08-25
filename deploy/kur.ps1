@@ -7,9 +7,11 @@
 #
 # NEDEN guncelle.ps1'IN YERINI ALDI:
 #   CALISAN kurulum (app\) bir git klonu DEGIL, hazir pakettir; "pull et + derle"
-#   orada yapilamaz. Sunucudaki klon (C:\Etkili-Yazilim\tekserp - sparse) yalniz
-#   paketi URETMEK icindir (repo kokunde .\paketle.ps1 -Cikti C:\Etkili-Yazilim);
-#   calisan kod hicbir zaman klondan kosmaz. (2026-08-24 deploy'unda olculdu.)
+#   orada yapilamaz. Paket sunucudaki BUILD klonundan uretilir
+#   (D:\tekserp-build\tekserp - tam klon, dalin ucu; klon kokunde
+#   .\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim). C:\Etkili-Yazilim\tekserp
+#   klonu sparse + dar refspec'tir, adnansahin dalini gormez - paket icin KULLANMA
+#   (bkz. deploy/README.md). Calisan kod hicbir zaman klondan kosmaz.
 #
 # BU DOSYANIN REPODAKI KOPYASI: <repo>/deploy/kur.ps1 - kaynak orasidir. Script
 #   KENDINI GUNCELLEYEMEZ (paket app\ altina iner, bu dosya bir ust dizindedir):
@@ -322,7 +324,14 @@ Write-Host "================================================================" -F
 Write-Host "  KURULUM TAMAM" -ForegroundColor Green
 Write-Host "================================================================"
 Write-Host "  API      : $($h.status)   DB: $($h.db)   surum: $($h.version)"
-Write-Host "  Son yedek: $($h.lastBackup.name)"
+# /health'te `lastBackup` YOK (2026-08-09 denetimi F-CORE-GUV-002: alan yetkili
+# /api/admin/health'e tasindi) - eski satir her deploy'da BOS basiyor ve operatore
+# "yedek yok" diye okunuyordu. Gece yedegi (tekserp_*.dump, rotasyona giren) klasorden okunur;
+# bu kurulumun premigrate_ dump'i ayrica asagida "veri:" satirinda.
+$geceYedegi = Get-ChildItem $backupDir -Filter "tekserp_*.dump" -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+if ($geceYedegi) { Write-Host "  Son gece yedegi: $($geceYedegi.Name)  ($($geceYedegi.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))" }
+else             { Write-Host "  Son gece yedegi: YOK - $backupDir icinde tekserp_*.dump bulunamadi (Gorev Zamanlayici TeksERP-DB-Backup'a bak)" -ForegroundColor Yellow }
 Write-Host "  Kurulum  : $appDir"
 Write-Host "  Geri donus noktalari:"
 Write-Host "     kod : $eskiAd        ->  kur.ps1 -GeriAl"
