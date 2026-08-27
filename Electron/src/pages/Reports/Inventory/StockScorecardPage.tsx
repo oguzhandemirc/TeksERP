@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
-import { AlertTriangle, Boxes, PackageSearch, Warehouse } from "lucide-react";
+import { AlertTriangle, Boxes, Layers, PackageSearch, Warehouse } from "lucide-react";
 import { ChartCard, DetailTable, MetricCard, ReportExportBar, ReportPageLayout, SimpleBarChart } from "../_components";
 import { fmtInt, fmtNum, fmtPercent } from "../_components/formatters";
 import { buildStockExport, stockScorecardApi, type StockScorecard } from "./stockScorecard";
@@ -109,7 +109,7 @@ export function StockScorecardPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard
           label="Ölü stok"
           value={`${fmtNum(sc?.summary.deadQty)} m`}
@@ -130,6 +130,16 @@ export function StockScorecardPage() {
           value={`${fmtNum(sc?.summary.rawQty)} m`}
           hint={sc ? `${fmtInt(sc.summary.rawCount)} top — işlenmeyi bekliyor` : undefined}
           icon={Boxes}
+          isLoading={query.isLoading}
+        />
+        {/* Yarı mamul AYRI kart: aynı statüyü (STOCK) paylaşır ama farklı stok
+            türüdür ve Envanter'de de ayrı sekmede durur. Tek rakamda toplamak
+            "ekran 800 diyor, rapor 950 diyor" çelişkisini üretirdi. */}
+        <MetricCard
+          label="Yarı mamul"
+          value={`${fmtNum(sc?.summary.semiQty)} m`}
+          hint={sc ? `${fmtInt(sc.summary.semiCount)} top — dışarıdan boyalı geldi` : undefined}
+          icon={Layers}
           isLoading={query.isLoading}
         />
         <MetricCard

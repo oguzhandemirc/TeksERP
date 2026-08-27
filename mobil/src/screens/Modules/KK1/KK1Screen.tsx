@@ -149,7 +149,7 @@ interface FormState {
   /** EN (cm) — kaydetler ARASI korunur (aynı en toptan onlarca seri giriş). */
   width: string;
   qualityGrade: string;
-  /** YARI MAMÜL modunda ZORUNLU renk (ham girişte kullanılmaz). */
+  /** YARI MAMUL modunda ZORUNLU renk (ham girişte kullanılmaz). */
   colorId: string;
   colorLabel: string;
 }
@@ -409,7 +409,7 @@ export default function KK1Screen() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [pickerOpen, setPickerOpen] = useState<'item' | 'color' | null>(null);
   /**
-   * YARI MAMÜL MODU (2026-08-17) — dışarıdan alınan, boyalı ama BİTMEMİŞ kumaş.
+   * YARI MAMUL MODU (2026-08-17) — dışarıdan alınan, boyalı ama BİTMEMİŞ kumaş.
    * Ekranın kendisi değişmez; yalnız renk alanı açılır ve payload'a bayrak
    * eklenir. Mod SEÇİLİ KALIR: saha bir kamyon malı arka arkaya girer.
    * Yetkisi olmayanda anahtar hiç çizilmez → ekran bugünküyle birebir aynı.
@@ -420,13 +420,13 @@ export default function KK1Screen() {
    * EN alanı bu modda açık mı? İKİ REJİM AYRI:
    *   · HAM giriş  → `kk1.rawWidthEnabled` bayrağı (varsayılan KAPALI;
    *     "ham kumaşın eni önemsiz" kararı). Kapalıysa en GİRİLEMEZ.
-   *   · YARI MAMÜL → HER ZAMAN açık. Mal işlenmiş geliyor; eni bilinen ve
+   *   · YARI MAMUL → HER ZAMAN açık. Mal işlenmiş geliyor; eni bilinen ve
    *     kâğıda basılan bir değer. Tek bayrağa bağlasaydık, ham girişi açmadan
-   *     yarı mamülde en girmek imkânsız olurdu (2026-08-17 saha geri bildirimi).
+   *     yarı mamulde en girmek imkânsız olurdu (2026-08-17 saha geri bildirimi).
    * Tek kaynak: alanın kendisi, numpad görünürlüğü ve otomatik odak bunu okur.
    */
   const widthFieldEnabled = rawWidthEnabled || semiMode;
-  // Renk kataloğu yalnız yarı mamül modunda çekilir — ham girişte gereksiz istek.
+  // Renk kataloğu yalnız yarı mamul modunda çekilir — ham girişte gereksiz istek.
   const colorsQuery = useQuery({
     queryKey: ['colors', 'kk1-semi'],
     queryFn: () => colorService.listPublicForPicker({ pageSize: 500, sortBy: 'name', sortOrder: 'asc' }),
@@ -658,7 +658,7 @@ export default function KK1Screen() {
   // Operatör mt/kg'den çıkınca tuşlar yine En'i değiştirir. En girişi flag ile
   // kapalıysa odaklanacak alan yok → atla (numpad zaten render edilmez).
   useEffect(() => {
-    // Yarı mamülde en alanı bayraktan bağımsız açık → odak da öyle olmalı.
+    // Yarı mamulde en alanı bayraktan bağımsız açık → odak da öyle olmalı.
     if (!compact && !manualMode && widthFieldEnabled) {
       requestAnimationFrame(() => widthRef.current?.focus());
     }
@@ -763,7 +763,10 @@ export default function KK1Screen() {
         sortBy: 'createdAt',
         sortOrder: 'desc',
         filters: {
-          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY',
+          // ⚠️ SEMI_FINISHED bu listede OLMAK ZORUNDA: KK1'in kendi yarı mamul
+          // modu bu kaynakla top yazıyor. Listede olmadığı sürece operatör az
+          // önce girdiği topu "Son Kayıtlar"da göremiyordu (2026-08-26).
+          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY,SEMI_FINISHED',
           // Kimlik henüz yüklenmediyse (teorik açılış yarışı) filtre GÖNDERME —
           // boş string tüm listeyi sessizce boşaltırdı.
           ...(authUserId ? { createdById: authUserId } : {}),
@@ -1327,10 +1330,10 @@ export default function KK1Screen() {
     }
     // Kalite OPSİYONEL — boş bırakılabilir (Belirsiz); "kalite seçilmedi" guard'ı YOK.
 
-    // Yarı mamül RENKLİ gelir — renksiz kayıt onu ham maldan ayırt edilemez
+    // Yarı mamul RENKLİ gelir — renksiz kayıt onu ham maldan ayırt edilemez
     // kılar ve backend de reddeder. Erken dur, net söyle.
     if (semiMode && !form.colorId) {
-      Toast.show({ type: 'error', text1: 'Yarı mamülde renk zorunlu' });
+      Toast.show({ type: 'error', text1: 'Yarı mamulde renk zorunlu' });
       return;
     }
 
@@ -1377,7 +1380,7 @@ export default function KK1Screen() {
     // ⚠️ DAMGA TAZELENMEZ. `clientEnteredAt` operatörün BASTIĞI andır; retry ya da
     // uçuş tekrarı onu yenilerse backend'in 90 sn'lik mükerrer penceresi kayar ve
     // koruma tam da en çok gerektiği anda kapanır (bkz. entryAttempt sözleşmesi).
-    // ⚠️ Renk parmak izine GİRMEK ZORUNDA: iki yarı mamül girişi yalnız renkte
+    // ⚠️ Renk parmak izine GİRMEK ZORUNDA: iki yarı mamul girişi yalnız renkte
     // ayrılıyorsa ve renk dışarıda kalsaydı, uçuştaki deneme "aynı yük" sayılıp
     // ikinci top sessizce YUTULURDU.
     const fingerprint = entryFingerprint({
@@ -1402,7 +1405,7 @@ export default function KK1Screen() {
       width,
       weightKg,
       qualityGrade: form.qualityGrade || undefined,
-      // Yarı mamülde renk ZORUNLU (yukarıda doğrulandı) ve bayrak backend'de
+      // Yarı mamulde renk ZORUNLU (yukarıda doğrulandı) ve bayrak backend'de
       // statü sezgisini bypass eder — bayraksız gönderilse renkli top doğrudan
       // BİTMİŞ DEPO'ya düşerdi.
       ...(semiMode ? { colorId: form.colorId, semiFinished: true } : {}),
@@ -1569,18 +1572,18 @@ export default function KK1Screen() {
       hidePlaceChip={compact}
       // MOD TUŞU makine adının YANINDA (2026-08-17 saha geri bildirimi):
       // "neredeyim + ne giriyorum" tek bakışta okunmalı. Tuş HEDEF modu yazar
-      // (yarı mamüldeyken "Ham Giriş"), yani bir sonraki durumu — iki durumlu
+      // (yarı mamuldeyken "Ham Giriş"), yani bir sonraki durumu — iki durumlu
       // bir anahtarda "şu ankini yazan" etiket, hangisinin seçili olduğunu
       // belirsizleştirir.
       titleRowExtras={
         canSemiFinished ? (
           <HeaderChip
             icon="swap-horizontal"
-            label={semiMode ? 'Ham Giriş' : 'Yarı Mamül'}
+            label={semiMode ? 'Ham Giriş' : 'Yarı Mamul'}
             onPress={() => {
               blurAll();
               setSemiMode((v) => !v);
-              // Ham girişe dönerken rengi TEMİZLE — yarı mamülden kalan renk
+              // Ham girişe dönerken rengi TEMİZLE — yarı mamulden kalan renk
               // sonraki ham topa sessizce yazılırdı.
               if (semiMode) setForm((f) => ({ ...f, colorId: '', colorLabel: '' }));
             }}
@@ -1877,7 +1880,7 @@ export default function KK1Screen() {
               </View>
             )}
 
-            {/* RENK — yalnız yarı mamülde (ham kumaş renksizdir). Kalıp "Desen
+            {/* RENK — yalnız yarı mamulde (ham kumaş renksizdir). Kalıp "Desen
                 Seç" ile BİREBİR aynı: aynı ekranda iki farklı seçim geometrisi
                 operatörü yavaşlatır. */}
             {semiMode &&
@@ -1968,10 +1971,10 @@ export default function KK1Screen() {
 
             {/* EN — iki rejim AYRI bayrakla yönetilir. `kk1.rawWidthEnabled`
                 HAM giriş içindir ve varsayılan KAPALI ("ham kumaşın eni
-                önemsiz"). Yarı mamül tam tersi: mal işlenmiş geliyor ve eni
+                önemsiz"). Yarı mamul tam tersi: mal işlenmiş geliyor ve eni
                 bilinen, kâğıda basılan bir değer → o modda alan HER ZAMAN
                 açıktır. İkisini tek bayrağa bağlamak, ham girişi açmadan yarı
-                mamülde en girmeyi imkânsız kılardı. */}
+                mamulde en girmeyi imkânsız kılardı. */}
             {widthFieldEnabled && !manualMode && (
               <>
                 <Text style={[styles.label, styles.labelSpaced]}>En (cm)</Text>
@@ -2722,7 +2725,7 @@ function RollHistoryModal({
         // Zorunlu kapsam EN SONA yazılır: bayrak kapalıyken çipten sızabilecek
         // herhangi bir createdById'yi de ezer (savunma hattı — çip zaten yok).
         filters: {
-          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY',
+          entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY,SEMI_FINISHED',
           ...fp.filters,
           ...forcedCreatorFilter(allEntries, authUserId),
         },

@@ -39,6 +39,7 @@
 // =============================================================================
 
 import prisma from "../../lib/prisma";
+import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
 import { OrderStatus, Prisma } from "@prisma/client";
 import { pctOf, round1 } from "./_breakdown";
 
@@ -76,9 +77,18 @@ export interface StockScorecard {
     /** Bitmiş depo (WAREHOUSE + A1_STOCK). */
     finishedQty: number;
     finishedCount: number;
-    /** Ham stok (STOCK) — işlenmeyi bekleyen kumaş. */
+    /**
+     * Ham stok (STOCK) — işlenmeyi bekleyen HAM kumaş.
+     *
+     * ⚠️ Dışarıdan alınan yarı mamulü **İÇERMEZ** (2026-08-26). İkisi aynı statüyü
+     * paylaşır ama farklı stok TÜRÜdür ve envanterde de ayrı sekmelerde durur;
+     * burada birleşik saymak "ekran 800 diyor, rapor 950 diyor" çelişkisini üretirdi.
+     */
     rawQty: number;
     rawCount: number;
+    /** Dışarıdan alınan yarı mamul (STOCK + entrySource=SEMI_FINISHED). */
+    semiQty: number;
+    semiCount: number;
     /** Eşikten eski bitmiş stok. */
     agedQty: number;
     /** Eşikten eski VE siparişsiz — asıl "ölü stok". */
@@ -109,12 +119,15 @@ interface StockCell {
   colorName: string | null;
   width: number | null;
   status: string;
+  entrySource: string;
   qty: number;
   days: number | null;
 }
 
 const FINISHED = ["WAREHOUSE", "A1_STOCK"];
 const RAW = ["STOCK"];
+/** Ham ↔ yarı mamul ayrımı: statü aynı (STOCK), ayıran şey giriş kaynağı. */
+const SEMI = "SEMI_FINISHED";
 
 function specKey(itemId: string, colorId: string | null, width: number | null): string {
   return `${itemId}|${colorId ?? ""}|${width ?? ""}`;
@@ -126,7 +139,7 @@ export async function getStockScorecard(): Promise<StockScorecard> {
       Array<{
         rollId: string; itemId: string; itemName: string;
         colorId: string | null; colorName: string | null; width: number | null;
-        status: string; qty: number; days: number | null; barcode: string | null;
+        status: string; entrySource: string; qty: number; days: number | null; barcode: string | null;
       }>
     >(Prisma.sql`
       SELECT
@@ -135,6 +148,7 @@ export async function getStockScorecard(): Promise<StockScorecard> {
         r."colorId" AS "colorId", c.name AS "colorName",
         r.width::float AS "width",
         r.status::text AS "status",
+        r."entrySource"::text AS "entrySource",
         r."currentQty"::float AS "qty",
         -- tz-ok: raftaki bekleme YAŞI iki an arası mutlak farktır, takvim günü değil.
         CASE WHEN r."statusChangedAt" IS NULL THEN NULL
@@ -151,7 +165,12 @@ export async function getStockScorecard(): Promise<StockScorecard> {
     `),
     // Açık talep — tanım `production-balance.service` ile BİREBİR.
     prisma.orderLine.findMany({
-      where: { order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } } },
+      // İptal edilmiş kalem talep sayılmaz → o spec "siparişsiz" (ölü stok
+      // adayı) olarak görünmeli. Süzgeç düşerse ölü stok OLDUĞUNDAN AZ çıkar.
+      where: {
+        order: { status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
+        ...ACTIVE_LINE,
+      },
       select: { itemId: true, colorId: true, width: true, quantity: true, shippedQty: true },
     }),
   ]);
@@ -164,6 +183,7 @@ export async function getStockScorecard(): Promise<StockScorecard> {
     colorName: r.colorName,
     width: r.width,
     status: r.status,
+    entrySource: r.entrySource,
     qty: Number(r.qty),
     days: r.days === null ? null : Number(r.days),
   }));
@@ -179,7 +199,11 @@ export async function getStockScorecard(): Promise<StockScorecard> {
   }
 
   const finished = cells.filter((c) => FINISHED.includes(c.status));
-  const raw = cells.filter((c) => RAW.includes(c.status));
+  // Ham ↔ yarı mamul: aynı statü, farklı stok türü. Envanterdeki iki sekmeyle
+  // BİREBİR aynı ayrım (`rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED`) — ikisi
+  // ayrışırsa aynı soruya iki rakam veren iki yüzey doğar.
+  const raw = cells.filter((c) => RAW.includes(c.status) && c.entrySource !== SEMI);
+  const semi = cells.filter((c) => RAW.includes(c.status) && c.entrySource === SEMI);
 
   // ── Siparişsiz metraj — SPEC bazında, top bazında değil (başlık notu) ──────
   const stockBySpec = new Map<string, number>();
@@ -281,6 +305,8 @@ export async function getStockScorecard(): Promise<StockScorecard> {
       finishedCount: finished.length,
       rawQty: round1(raw.reduce((a, c) => a + c.qty, 0)),
       rawCount: raw.length,
+      semiQty: round1(semi.reduce((a, c) => a + c.qty, 0)),
+      semiCount: semi.length,
       agedQty: round1(agedQty),
       deadQty: round1(deadQty),
       deadStockDays: DEAD_STOCK_DAYS,

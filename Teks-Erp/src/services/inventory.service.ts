@@ -1265,10 +1265,40 @@ export class InventoryService {
     const rollScope = f["rollScope"] as string | undefined;
     delete where.rollScope;
     if (rollScope === "RAW_STOCK") {
+      // ⚠️ BU KAPSAM YARI MAMULÜ **İÇERİR** — daraltma.
+      //
+      // "Üretime girmemiş, serbest STOCK topu" demektir; ham kumaş da dışarıdan
+      // alınan yarı mamul de buraya girer. Mobil Hızlı İş Emri'nin top seçicisi
+      // (`NewWorkOrderView` "Ham Stok" sekmesi) bunu kullanıyor ve tablette
+      // üçüncü bir sekme YOK → buradan yarı mamulü düşürmek, o topların üretime
+      // alınmasının sahadaki TEK yolunu kapatır.
+      //
+      // Envanterin ayrı sekmeleri (2026-08-26) aşağıdaki iki DAR kapsamı kullanır;
+      // bu kapsam ikisinin BİRLEŞİMİdir ve öyle kalmalı.
       where.AND = [
         ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
         { currentStepId: null },
         { status: RollStatus.STOCK },
+      ];
+    } else if (rollScope === "RAW_STOCK_PURE") {
+      // Envanter → "Ham Stok" sekmesi: yalnız gerçekten HAM olan mal.
+      // Negasyon istemciden söylenemez (`buildWhereClause` yalnız eşitlik/CSV-in
+      // üretir), o yüzden ayrı bir kapsam olarak burada yaşar.
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        { currentStepId: null },
+        { status: RollStatus.STOCK },
+        { entrySource: { not: RollEntrySource.SEMI_FINISHED } },
+      ];
+    } else if (rollScope === "SEMI_FINISHED") {
+      // Envanter → "Yarı Mamul" sekmesi: dışarıdan alınan boyalı/işlenmiş kumaş.
+      // Ayrı DEPO değil ayrı GÖRÜNÜM (fabrikada fiziksel karşılığı yok) — statü
+      // ve stok mekaniği ham stokla aynı.
+      where.AND = [
+        ...(Array.isArray(where.AND) ? (where.AND as Record<string, unknown>[]) : []),
+        { currentStepId: null },
+        { status: RollStatus.STOCK },
+        { entrySource: RollEntrySource.SEMI_FINISHED },
       ];
     } else if (rollScope === "PRODUCTION_ACTIVE") {
       where.AND = [
@@ -1305,6 +1335,17 @@ export class InventoryService {
           },
         },
       ];
+    } else if (rollScope) {
+      // TANINMAYAN KAPSAM — sessiz kalmak en kötü seçenek.
+      //
+      // Yukarıdaki `delete where.rollScope` koşulsuz çalıştığı için eşleşmeyen bir
+      // değer hiçbir daralma YAPMAZ; istemci `status: "ALL"` de gönderdiğinden
+      // varsayılan STOCK süzgeci de kalkar ve liste CANCELLED/SHIPPED/SCRAP dahil
+      // TÜM tabloyu döndürür — hata yok, log yok. `rollScope` hiçbir kullanıcı
+      // girdisinden gelmiyor (istemcilerde sabit değerler), o yüzden burada
+      // patlamak güvenli: yeni bir sekme eklenip kapsam dalı yazılmayı unutulursa
+      // geliştirme anında görünür olur.
+      throw AppError.badRequest(`Bilinmeyen liste kapsamı: ${rollScope}`);
     }
 
     // --- Fason sevk uygunluğu (belirli adım) ---
@@ -2524,8 +2565,12 @@ export class InventoryService {
     const events: RollHistoryEvent[] = [];
 
     // Top'un sisteme nasıl girdiğine göre başlık — itemType'tan değil entrySource'tan türer.
-    // NOT: eskiden SUBCONTRACTOR_RETURN da `default`'a düşüp yanlışlıkla "Ham Giriş"
-    // gösteriyordu — beş değer de artık AÇIK case'le eşleniyor.
+    //
+    // ⚠️ Bu switch'in `default` dalı SESSİZ BİR YALAN üretir: eşleşmeyen her kaynak
+    // "Ham Giriş" olarak görünür. İki kez ısırdı — önce SUBCONTRACTOR_RETURN, sonra
+    // SEMI_FINISHED (2026-08-17'de enum'a eklendi, buraya eklenmedi; dışarıdan alınan
+    // yarı mamul topun geçmişinde aylarca "Ham Giriş" yazdı). `RollEntrySource`'a yeni
+    // bir değer eklerken buraya da case ekle; `default` yalnız son çare olsun.
     const entryTitle = ((): string => {
       switch (roll.entrySource) {
         case RollEntrySource.TAMBUR_SPLIT:
@@ -2536,6 +2581,8 @@ export class InventoryService {
           return "Manuel Giriş";
         case RollEntrySource.TAMBUR_MANUAL:
           return "Tambur (Manuel)";
+        case RollEntrySource.SEMI_FINISHED:
+          return "Yarı Mamul Girişi (Dış Alım)";
         case RollEntrySource.SUPPLIER_RECEIPT:
         default:
           return "Ham Giriş";

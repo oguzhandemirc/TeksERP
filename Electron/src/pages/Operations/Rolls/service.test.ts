@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import apiClient from "@/services/apiClient";
-import { rollService, ROLL_STATUS_TABS } from "./service";
+import {
+  rollService,
+  ROLL_STATUS_TABS,
+  buildRollForceFilters,
+  rollTabDefaultSortBy,
+  type RollStatusTabKey,
+} from "./service";
+import { ROLL_TABS } from "./tabs-config";
 
 // apiClient'i mock'la — fason özet ucunun URL sözleşmesini doğrula.
 vi.mock("@/services/apiClient", () => ({
@@ -104,5 +111,53 @@ describe("ARŞİV statü kümesi — 'iptal ettim, nerede?' regresyon kilidi", (
     for (const s of ["STOCK", "WAREHOUSE", "A1_STOCK", "IN_PRODUCTION", "SHIPPED"]) {
       expect(archive).not.toContain(s);
     }
+  });
+});
+
+/**
+ * SEKME ↔ KAPSAM HİZASI (2026-08-26) — bu bekçi daha önce YOKTU ve gerçek bir açıktı.
+ *
+ * `ROLL_TABS`'a yeni bir sekme eklenip `buildRollForceFilters`'a dal yazılmayı
+ * unutulursa TypeScript SUSAR: fonksiyon fallback'e düşer, `STATUS_GROUPS.<key>`
+ * null olduğu için boş filtre döner ve sekme kapsamsız bir liste gösterir.
+ * Yani en tehlikeli hatayı derleyici görmüyordu.
+ */
+describe("sekme → kapsam hizası", () => {
+  const tabs = ROLL_TABS.filter((t) => t.key !== "KANBAN");
+
+  it("her sekme (KANBAN hariç) daraltıcı bir kapsam gönderir", () => {
+    for (const t of tabs) {
+      const f = buildRollForceFilters(t.key as RollStatusTabKey);
+      const narrows =
+        "rollScope" in f || "currentStepKind" in f || typeof f.status === "string";
+      expect(narrows, `${t.key} sekmesi kapsamsız — filtresiz liste döner`).toBe(true);
+    }
+  });
+
+  it("körlük zemini: sekme listesi boşalırsa test kendini yeşil sanmasın", () => {
+    expect(tabs.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it("Ham Stok ile Yarı Mamul AYRI kapsam kullanır", () => {
+    // Aynı kapsamı paylaşsalardı iki sekme aynı listeyi gösterir ve ayırmanın
+    // tamamı sessizce boşa düşerdi (metraj toplamları da ayrışmazdı).
+    const raw = buildRollForceFilters("RAW_STOCK");
+    const semi = buildRollForceFilters("SEMI_FINISHED");
+    expect(raw.rollScope).toBe("RAW_STOCK_PURE");
+    expect(semi.rollScope).toBe("SEMI_FINISHED");
+    expect(raw.rollScope).not.toBe(semi.rollScope);
+  });
+
+  it("Ham Stok BİRLEŞİK kapsamı (RAW_STOCK) KULLANMAZ", () => {
+    // `RAW_STOCK` ham + yarı mamulün birleşimidir ve mobil Hızlı İş Emri top
+    // seçicisi onu kullanır. Masaüstü Ham Stok sekmesi ona dönerse yarı mamul
+    // yeniden ham kumaşın arasına karışır — bu paketin geri alınması demektir.
+    expect(buildRollForceFilters("RAW_STOCK").rollScope).not.toBe("RAW_STOCK");
+  });
+
+  it("giriş sekmeleri createdAt, diğerleri updatedAt ile sıralanır", () => {
+    expect(rollTabDefaultSortBy("RAW_STOCK")).toBe("createdAt");
+    expect(rollTabDefaultSortBy("SEMI_FINISHED")).toBe("createdAt");
+    expect(rollTabDefaultSortBy("FINISHED_STOCK")).toBe("updatedAt");
   });
 });

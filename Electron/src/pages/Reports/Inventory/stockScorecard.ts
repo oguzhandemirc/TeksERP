@@ -8,8 +8,12 @@ export interface StockScorecard {
   summary: {
     finishedQty: number;
     finishedCount: number;
+    /** Ham stok — dışarıdan alınan yarı mamulü İÇERMEZ (2026-08-26). */
     rawQty: number;
     rawCount: number;
+    /** Dışarıdan alınan yarı mamul (boyalı geldi, kurşun/tambur görecek). */
+    semiQty: number;
+    semiCount: number;
     agedQty: number;
     /** Eşikten eski VE siparişsiz — asıl "ölü stok". */
     deadQty: number;
@@ -46,6 +50,7 @@ export function buildStockExport(sc: StockScorecard): ReportExportSpec {
       "Yaş, topun bulunduğu rafa GİRDİĞİ ana göre ölçülür (statü değişimi), kayıt güncellemesine göre değil.",
       "Siparişsizlik SPEC bazındadır (kumaş+renk+en): hangi FİZİKSEL topun karşılıksız olduğu iddia edilmez.",
       "Sevkiyata okutulmuş / çuvala girmiş toplar raf sayılmaz.",
+      "HAM rakamı yalnız ham kumaştır; dışarıdan alınan yarı mamul ayrı sayılır (Envanter'deki iki sekmeyle aynı ayrım).",
       sc.summary.unagedCount > 0
         ? `${sc.summary.unagedCount} topun (${sc.summary.unagedQty} m) yaşı bilinmiyor — yaş kovalarına dahil değil, toplam metraja dahil.`
         : "Tüm topların yaş çıpası mevcut.",

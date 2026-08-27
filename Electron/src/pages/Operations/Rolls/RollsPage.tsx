@@ -50,8 +50,11 @@ export function RollsPage() {
     isRollTabKey(urlTab) ? urlTab : "RAW_STOCK",
   );
   const [manualOpen, setManualOpen] = useState(false);
-  // Manuel giriş hangi sekmeden açıldı — Bitmiş Depo'da renk zorunlu + WAREHOUSE doğar.
-  const [manualTarget, setManualTarget] = useState<"RAW_STOCK" | "FINISHED_STOCK">("RAW_STOCK");
+  // Manuel giriş hangi sekmeden açıldı — hedef statüyü ve ön ayarları belirler:
+  // Bitmiş Depo'da renk zorunlu + WAREHOUSE doğar; Yarı Mamul'de yarı mamul kutusu
+  // ön-işaretli gelir (renk zorunlu, top ham stokta kalır).
+  const [manualTarget, setManualTarget] =
+    useState<"RAW_STOCK" | "SEMI_FINISHED" | "FINISHED_STOCK">("RAW_STOCK");
   // "Ekle ve Etiket Bas": yeni topun etiket diyalogu (önizleme + Bas). ctx = etiket müşterisi.
   const [labelRoll, setLabelRoll] = useState<{ id: string; ctx?: LabelCustomerContext } | null>(null);
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
@@ -110,6 +113,10 @@ export function RollsPage() {
   // gerekiyor). KANBAN'da tablo gösterilmez → fetch kapalı. RollsTableBody tabloyu
   // prop olarak alır (sadece gövdeyi çizer).
   const isTableTab = tab !== "KANBAN";
+  // GİRİŞ SEKMELERİ — malın sisteme YAZILDIĞI yerler. Yalnız burada "oluşturma =
+  // buraya geliş" olduğu için tarih kolonu "Giriş" (createdAt); diğer sekmelerde
+  // top oraya sonradan gelir ve "Son İşlem" (updatedAt) gösterilir (2026-07-30).
+  const isEntryTab = tab === "RAW_STOCK" || tab === "SEMI_FINISHED";
   const dataTable = useDataTable<Roll>({
     queryKey: `rolls:${tab}`,
     queryKeyParts: ["rolls", tab],
@@ -134,8 +141,8 @@ export function RollsPage() {
       // TEK tarih kolonu görünür: sıralanan kolonun aynısı. Ham Stok'ta giriş =
       // oluşturma olduğu için orada "Giriş", diğerlerinde "Son İşlem" gösterilir —
       // iki tarih birlikte gösterilmez (operatörü karıştırıyor).
-      updatedAt: tab !== "RAW_STOCK",
-      createdAt: tab === "RAW_STOCK",
+      updatedAt: !isEntryTab,
+      createdAt: isEntryTab,
       // İZLENEBİLİRLİK sütunları varsayılan GİZLİ (2026-08-05 kullanıcı kararı).
       // Gerekçe envanter listesi standardı: liste yüzeyi operatörün ANLIK
       // kararı için sade kalır, izlenebilirlik verisi ihtiyaç duyanın açtığı
@@ -169,6 +176,16 @@ export function RollsPage() {
   // ayrılırken URL'den temizle (başka sekmede dispatch-bazlı filtre listeyi
   // sessizce yanlış daraltırdı).
   const selectTab = (next: RollTabKey) => {
+    // Ham Stok ↔ Yarı Mamul: iki sekme aynı `entrySource` alanını force filtre ile
+    // zaten daraltıyor. Kullanıcının seçtiği chip yapışık kalırsa force filtreyle
+    // çelişir ve liste sessizce boşalır — Fasonda emsali, aynı temizlik.
+    if (isEntryTab && (next === "RAW_STOCK" || next === "SEMI_FINISHED") && next !== tab) {
+      const sp = new URLSearchParams(searchParams);
+      if (sp.has("filter[entrySource]")) {
+        sp.delete("filter[entrySource]");
+        setSearchParams(sp, { replace: true });
+      }
+    }
     if (tab === "SUBCONTRACTOR" && next !== "SUBCONTRACTOR") {
       const sp = new URLSearchParams(searchParams);
       if (sp.has("filter[subcontractorId]") || sp.has("filter[subcontractorCategoryId]")) {
@@ -202,12 +219,15 @@ export function RollsPage() {
             <RefreshButton
               queryKey={tab === "KANBAN" ? ["rolls"] : ["rolls", tab]}
             />
-            {(tab === "RAW_STOCK" || tab === "FINISHED_STOCK") && (
+            {(tab === "RAW_STOCK" || tab === "SEMI_FINISHED" || tab === "FINISHED_STOCK") && (
               <PermissionGate permission="roll:write">
                 <Button
                   size="sm"
                   onClick={() => {
-                    setManualTarget(tab === "FINISHED_STOCK" ? "FINISHED_STOCK" : "RAW_STOCK");
+                    // Sekme = hedef. Yarı Mamul'den açılınca kutu ön-işaretli gelir;
+                    // operatörün "renk girdim ama kutuyu unuttum" tuzağına düşmesi
+                    // gereken sekmede imkânsızlaşır.
+                    setManualTarget(tab);
                     setManualOpen(true);
                   }}
                 >

@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { PanelRight, Recycle, Trash2 } from "lucide-react";
+import { Factory, PanelRight, Recycle, Trash2 } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -76,11 +76,18 @@ const FILTERS: FilterDef[] = [
   {
     // ÇOKLU: "elle eklenen toplar" iki kaynağa birden dağılıyor (Tambur manuel +
     // Electron manuel) — tek seçimle sayılamıyordu.
+    //
+    // ⚠️ `entrySource` anahtarına yazan TEK filtre budur. 2026-08-17'de Ham Stok'a
+    // ikinci bir "Giriş Türü" filtresi eklenmişti (aynı anahtar, farklı seçenekler)
+    // — ikisi aynı URL parametresine yazıp birbirini eziyordu. Yarı mamul kendi
+    // sekmesine taşınınca o filtrenin varlık sebebi de kalktı, silindi (2026-08-26).
+    // İkinci bir entrySource filtresi EKLEME; seçenek gerekiyorsa buraya ekle.
     kind: "multi-select",
     key: "entrySource",
     label: "Giriş Kaynağı",
     options: [
       { value: "SUPPLIER_RECEIPT", label: "Ham Giriş" },
+      { value: "SEMI_FINISHED", label: "Yarı Mamul (Dış Alım)" },
       { value: "TAMBUR_SPLIT", label: "Tambur Kesim" },
       { value: "SUBCONTRACTOR_RETURN", label: "Fason Dönüşü" },
       { value: "TAMBUR_MANUAL", label: "Tambur (Manuel)" },
@@ -151,21 +158,25 @@ const ARCHIVE_STATUS_FILTER: FilterDef = {
   ],
 };
 
-// GİRİŞ TÜRÜ — yalnız Ham Stok (2026-08-17, madde 9). Dışarıdan alınan yarı
-// mamül ham stoğa düşer ve orada "içeride ürettiğimiz ham" ile yan yana durur;
-// ayrı bir DEPO açmak yerine (fabrikada fiziksel karşılığı yok) ayrım bu
-// filtreyle yapılır. Diğer sekmelerde eklenmez: Tambur kesimi / fason dönüşü
-// gibi değerler oralarda tek seçenek olur ve filtre "bozuk" görünür.
-const ENTRY_SOURCE_FILTER: FilterDef = {
-  kind: "multi-select",
-  key: "entrySource",
-  label: "Giriş Türü",
-  options: [
-    { value: "SUPPLIER_RECEIPT", label: "Ham Giriş" },
-    { value: "SEMI_FINISHED", label: "Yarı Mamül (Dış Alım)" },
-    { value: "MANUAL_ENTRY", label: "Manuel Giriş" },
-  ],
-};
+/**
+ * Sekmenin KAPSAMI dışında kalan giriş kaynağı seçeneklerini eler.
+ *
+ * Force filtre bir kaynağı zaten dışladıysa onu listede bırakmak, seçilince
+ * **daima 0 satır** döndüren ölü bir kontrol vaat eder (kat filtresi ve
+ * "İstasyon" filtresiyle aynı ders). Sekmede tek seçenek kalıyorsa filtre hiç
+ * çizilmez — seçeneksiz kutu da aynı yalanı söyler.
+ */
+function narrowEntrySource(tab: RollStatusTabKey, defs: FilterDef[]): FilterDef[] {
+  // Yarı Mamul sekmesinde her satır zaten SEMI_FINISHED — filtre anlamsız.
+  const drop: string | null =
+    tab === "SEMI_FINISHED" ? "*" : tab === "RAW_STOCK" ? "SEMI_FINISHED" : null;
+  if (drop === null) return defs;
+  return defs.flatMap<FilterDef>((f) => {
+    if (f.kind !== "multi-select" || f.key !== "entrySource") return [f];
+    if (drop === "*") return [];
+    return [{ ...f, options: f.options.filter((o) => o.value !== drop) }];
+  });
+}
 
 // Sadece "Bitmiş Depo" sekmesinde anlamlı: WAREHOUSE topu serbest mi yoksa bir
 // çuvala/sevkiyata rezerve mi? (backend filter[shipmentScope]=free|committed)
@@ -212,14 +223,16 @@ export function buildRollFilterDefs(
 ): FilterDef[] {
   // `kind` ile daralt: FilterDef bir union ve `dateRange` varyantında `key` YOK
   // (düz `f.key` derlenmez).
-  const base = FILTERS.flatMap<FilterDef>((f) => {
-    if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
-    return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
-  });
-  if (tab === "RAW_STOCK") return [...base, ENTRY_SOURCE_FILTER];
+  const base = narrowEntrySource(
+    tab,
+    FILTERS.flatMap<FilterDef>((f) => {
+      if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
+      return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
+    }),
+  );
   if (tab === "FINISHED_STOCK") return [...base, SHIPMENT_SCOPE_FILTER];
   if (tab === "SUBCONTRACTOR") return [...base, ...FASON_FILTERS];
-  if (tab === "ARCHIVE") return [...base, ENTRY_SOURCE_FILTER, ARCHIVE_STATUS_FILTER];
+  if (tab === "ARCHIVE") return [...base, ARCHIVE_STATUS_FILTER];
   // İSTASYON (currentStationId) YALNIZ topun gerçekten bir istasyonda DURDUĞU
   // sekmelerde: "şu an nerede" filtresi Ham Stok / Bitmiş Depo'da her zaman boş
   // döner (o toplarda currentStep yok) ve saha bunu "filtre bozuk" diye okudu
@@ -282,12 +295,29 @@ export function RollsTableBody({
   // yanlış giriş düzeltmesi). Backend softDelete WAREHOUSE'a izin verir; rezerve
   // topsa çuval/sevkiyattan da çıkarır. Seçili satırlar TanStack table state'inden okunur.
   const selectedRolls = table.getSelectedRowModel().rows.map((r) => r.original);
-  const bulkCancelable = tab === "RAW_STOCK" || tab === "FINISHED_STOCK";
-  // YENİDEN ÜRETİME AL — depodaki bitmiş/2.kalite topu yeni bir iş emrine sokar
-  // ("her işlem final üretir"; backend `quick-start` STOCK/WAREHOUSE/A1_STOCK
-  // kabul eder). Ham Stok'ta GÖSTERİLMEZ: oradaki top zaten üretime girmemiş,
-  // "yeniden" diye bir şey yok — normal iş emri açma yolu kullanılır.
-  const reworkable = tab === "FINISHED_STOCK";
+  // ⚠️ Sekme listeleri AÇIK yazılır, "X değilse" diye NEGATİF kurulmaz: bu gövdeyi
+  // Kartela ("Kartelada Toplar") ve Top Arşivi sayfaları da kullanıyor — negatif
+  // koşul oralara toplu iptal/üretim butonu sızdırır.
+  const bulkCancelable =
+    tab === "RAW_STOCK" || tab === "SEMI_FINISHED" || tab === "FINISHED_STOCK";
+  /**
+   * ÜRETİME AL — seçili topları yeni bir iş emrine sokar (`quick-start`).
+   *
+   * ⚠️ 2026-08-26'da KARAR DÖNDÜ. Buton eskiden yalnız Bitmiş Depo'daydı ve
+   * gerekçesi şuydu: *"Ham Stok'ta gösterilmez, oradaki top zaten üretime
+   * girmemiş — normal iş emri açma yolu kullanılır."* O yol masaüstünde YOK:
+   * Yeni İş Emri formu top almıyor ve mevcut iş emrine top ekleme ucu
+   * 2026-06-12'de kaldırıldı. Yani gizlenen buton, olmayan bir kuralı taklit
+   * ediyordu ve ham stoktaki top (özellikle dışarıdan alınan yarı mamul)
+   * masaüstünden hiçbir iş emrine bağlanamıyordu.
+   *
+   * Backend baştan beri üçünü de kabul ediyor: STOCK / WAREHOUSE / A1_STOCK.
+   */
+  const reworkable =
+    tab === "RAW_STOCK" || tab === "SEMI_FINISHED" || tab === "FINISHED_STOCK";
+  // Bitmiş depo topu "yeniden" üretime alınır (bir tur görmüş); ham stok ve yarı
+  // mamul ilk kez girer. Fark yalnız başlık/ikon/toast metnindedir.
+  const reworkMode = tab === "FINISHED_STOCK" ? "rework" : "start";
 
   return (
     <>
@@ -323,7 +353,15 @@ export function RollsTableBody({
                           className="gap-1.5"
                           onClick={() => setReworkOpen(true)}
                         >
-                          <Recycle className="h-4 w-4" /> Yeniden Üretime Al
+                          {reworkMode === "rework" ? (
+                            <>
+                              <Recycle className="h-4 w-4" /> Yeniden Üretime Al
+                            </>
+                          ) : (
+                            <>
+                              <Factory className="h-4 w-4" /> Üretime Al
+                            </>
+                          )}
                         </Button>
                       </PermissionGate>
                     )}
@@ -371,6 +409,7 @@ export function RollsTableBody({
       <ReworkRollsDialog
         open={reworkOpen}
         onOpenChange={setReworkOpen}
+        mode={reworkMode}
         rolls={selectedRolls}
         onDone={() => table.resetRowSelection()}
       />

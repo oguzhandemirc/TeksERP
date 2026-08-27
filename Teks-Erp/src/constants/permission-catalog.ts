@@ -180,11 +180,11 @@ export const PERMISSION_CATALOG = [
   // yaratma) → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.
   // Bu yüzden hiçbir PermissionTemplate'e de eklenmedi (katalog koda, atama panele).
   { code: "mobile:tambur-duzelt", module: "MOBILE", category: "mobile", description: "Tambur — saha düzeltmesi (mevcut topu Tambur'a al + manuel top ekle)" },
-  // Ekran değil, KK1 içi yetenek (2026-08-17): dışarıdan alınan YARI MAMÜL
+  // Ekran değil, KK1 içi yetenek (2026-08-17): dışarıdan alınan YARI MAMUL
   // kabulü. Yetkisi olmayan operatörde KK1 bugünkü gibi kalır — "Ham / Yarı
-  // mamül" seçimi hiç çizilmez ve renk seçilemez. Ayrı tutulmasının sebebi
-  // kullanıcı kararı: yarı mamül girişi RENKLİ mal kabulüdür ve yanlışlıkla
+  // mamul" seçimi hiç çizilmez ve renk seçilemez. Ayrı tutulmasının sebebi
+  // kullanıcı kararı: yarı mamul girişi RENKLİ mal kabulüdür ve yanlışlıkla
   // yapılırsa top ham stoğa "boyalı" olarak düşer.
-  { code: "mobile:kk1-yari-mamul", module: "MOBILE", category: "mobile", description: "KK1 — dışarıdan alınan yarı mamül kabulü (renkli giriş)" },
+  { code: "mobile:kk1-yari-mamul", module: "MOBILE", category: "mobile", description: "KK1 — dışarıdan alınan yarı mamul kabulü (renkli giriş)" },
   { code: "mobile:*", module: "MOBILE", category: "mobile", description: "Tüm mobil ekranlar (wildcard)" },
 ] as const satisfies readonly PermissionCatalogEntry[];

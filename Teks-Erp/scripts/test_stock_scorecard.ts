@@ -64,11 +64,13 @@ async function main(): Promise<void> {
   const mkRoll = async (o: {
     itemId: string; qty: number; changedAt: Date | null;
     status?: "WAREHOUSE" | "STOCK"; shipmentId?: string | null;
+    /** Ham ↔ yarı mamul ayrımı STATÜDEN değil giriş kaynağından çıkar. */
+    entrySource?: "SUPPLIER_RECEIPT" | "SEMI_FINISHED";
   }) => {
     const r = await prisma.roll.create({
       data: {
         itemId: o.itemId, initialQty: o.qty, currentQty: o.qty,
-        status: o.status ?? "WAREHOUSE", entrySource: "SUPPLIER_RECEIPT",
+        status: o.status ?? "WAREHOUSE", entrySource: o.entrySource ?? "SUPPLIER_RECEIPT",
         barcode: `${TAG}-R${ids.rolls.length}`, shipmentId: o.shipmentId ?? null,
       },
       select: { id: true },
@@ -111,6 +113,11 @@ async function main(): Promise<void> {
   ids.shipments.push(ship.id);
   await mkRoll({ itemId: itmShipped.id, qty: 999, changedAt: OLD, shipmentId: ship.id });
   await mkRoll({ itemId: itmDead.id, qty: 40, changedAt: NEW, status: "STOCK" }); // HAM stok
+  // Aynı statüde ama DIŞARIDAN ALINAN yarı mamul — "Ham" rakamına GİRMEMELİ.
+  await mkRoll({
+    itemId: itmDead.id, qty: 55, changedAt: NEW, status: "STOCK",
+    entrySource: "SEMI_FINISHED",
+  });
 
   const sc = await getStockScorecard();
   const row = (id: string) => sc.byItem.find((r) => r.key === id);
@@ -154,6 +161,39 @@ async function main(): Promise<void> {
   check("ham stok (40 m) bitmiş depoya karışmadı",
     row(itmDead.id)?.qty === 300, `gelen: ${row(itmDead.id)?.qty}`);
   check("ham stok ayrı sayaçta", sc.summary.rawQty >= 40, `gelen: ${sc.summary.rawQty}`);
+  // ── Ham ↔ yarı mamul ayrımı (2026-08-26) ────────────────────────────────────
+  // Envanter ekranı ikisini ayrı sekmelerde gösteriyor; rapor birleşik saysaydı
+  // aynı soruya iki farklı rakam veren iki yüzey doğardı.
+  check("yarı mamul ayrı sayaçta", sc.summary.semiQty >= 55, `gelen: ${sc.summary.semiQty}`);
+  // ⚠️ Mutlak eşik KULLANILMAZ: bu test paylaşımlı/dolu bir DB'ye karşı koşuyor
+  // ve `rawQty` fabrikanın gerçek stoğunu da içeriyor. Ölçülen şey rakamın
+  // BÜYÜKLÜĞÜ değil, iki kovanın DB'deki gerçek ayrımla birebir tutması.
+  const sumStock = async (semi: boolean) => {
+    const agg = await prisma.roll.aggregate({
+      where: {
+        status: "STOCK",
+        shipmentId: null,
+        sackId: null,
+        entrySource: semi ? "SEMI_FINISHED" : { not: "SEMI_FINISHED" },
+      },
+      _sum: { currentQty: true },
+      _count: true,
+    });
+    return { qty: Number(agg._sum.currentQty ?? 0), count: agg._count };
+  };
+  const dbRaw = await sumStock(false);
+  const dbSemi = await sumStock(true);
+  check(
+    "HAM rakamı = DB'deki ham stok (yarı mamul sızmıyor)",
+    Math.abs(sc.summary.rawQty - dbRaw.qty) < 0.5 && sc.summary.rawCount === dbRaw.count,
+    `rapor=${sc.summary.rawQty}/${sc.summary.rawCount} db=${dbRaw.qty}/${dbRaw.count}`,
+  );
+  check(
+    "YARI MAMUL rakamı = DB'deki yarı mamul stoğu",
+    Math.abs(sc.summary.semiQty - dbSemi.qty) < 0.5 && sc.summary.semiCount === dbSemi.count,
+    `rapor=${sc.summary.semiQty}/${sc.summary.semiCount} db=${dbSemi.qty}/${dbSemi.count}`,
+  );
+  check("yarı mamul top sayısı ayrı", sc.summary.semiCount >= 1, `gelen: ${sc.summary.semiCount}`);
 
   // ── 5) TALEP TANIMI ───────────────────────────────────────────────────────
   console.log("\n── 5) Talep = quantity − shippedQty ──");

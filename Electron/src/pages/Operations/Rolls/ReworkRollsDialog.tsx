@@ -26,7 +26,12 @@ import type { Roll } from "./types";
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
 /**
- * YENİDEN ÜRETİME AL — depodaki bitmiş topu yeni bir iş emrine sokar.
+ * ÜRETİME AL — seçili topları YENİ bir iş emrine sokar.
+ *
+ * İki mod, tek motor: `rework` (Bitmiş Depo — top bir tur görmüş, "yeniden") ve
+ * `start` (Ham Stok / Yarı Mamul — ilk kez giriyor). Fark yalnız başlık, ikon ve
+ * toast metnidir; payload, engel kuralları, fason firma seçimi ve ölü etiket
+ * uyarısı üçünde de aynıdır — ayrı bir diyalog açmak o kuralları ikizlerdi.
  *
  * NEDEN VAR (2026-08-25 saha sorusu: "bitmiş bir kumaş tekrar iş emrine
  * bağlanabiliyor mu, tekrar boyahaneye gönderilebilir mi?"). Cevap evet'ti ve
@@ -42,11 +47,14 @@ const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFraction
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** `rework` = bitmiş depo (bir tur görmüş) · `start` = ham stok / yarı mamul. */
+  mode?: "rework" | "start";
   rolls: Roll[];
   onDone?: () => void;
 }
 
-export function ReworkRollsDialog({ open, onOpenChange, rolls, onDone }: Props) {
+export function ReworkRollsDialog({ open, onOpenChange, mode = "rework", rolls, onDone }: Props) {
+  const isRework = mode === "rework";
   const qc = useQueryClient();
   const [routeId, setRouteId] = useState<string | null>(null);
   const [colorId, setColorId] = useState<string | null>(null);
@@ -147,8 +155,16 @@ export function ReworkRollsDialog({ open, onOpenChange, rolls, onDone }: Props) 
    */
   const labelAtRisk = firstStepIsFason ? rolls.filter((r) => r.labelPrintedAt) : [];
 
+  // Bu yol BARKODLA çalışır (`quick-start` gövdesi `rollBarcodes`). Seçimin
+  // tamamı barkodsuzsa buton aktif kalır ama istek 0 top bağlar — sessiz
+  // başarısızlık. Bugün ham stoktaki topların hepsi barkodlu (ölçüldü), ama
+  // barkodsuz açık kumaş bu sekmelere de düşebilir.
+  const allBarcodeless = rolls.length > 0 && rolls.every((r) => !r.barcode);
+
   const blocking = multiItem
     ? "Seçili toplar farklı kumaşlara ait — tek iş emri tek kumaş içindir."
+    : allBarcodeless
+    ? "Seçili topların hiçbirinde barkod yok — bu yol barkodla çalışır."
     : committed.length > 0
       ? `Çuvalda/sevkiyatta olan top üretime bağlanamaz: ${committed.map((r) => r.barcode ?? "—").join(", ")}`
       : !routeId
@@ -187,7 +203,7 @@ export function ReworkRollsDialog({ open, onOpenChange, rolls, onDone }: Props) 
       const parts = [`İş emri ${d.workOrder.workOrderNumber}`];
       if (d.batch) parts.push(`parti ${d.batch.batchNumber}`);
       if (d.dispatch) parts.push(`sevk ${d.dispatch.dispatchNo}`);
-      toast.success(`${d.attached} top yeniden üretime alındı`, {
+      toast.success(`${d.attached} top ${isRework ? "yeniden üretime" : "üretime"} alındı`, {
         description: parts.join(" · "),
         duration: 10_000,
       });
@@ -214,8 +230,12 @@ export function ReworkRollsDialog({ open, onOpenChange, rolls, onDone }: Props) 
       <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Recycle className="h-5 w-5 text-primary" />
-            Yeniden Üretime Al — {rolls.length} top
+            {isRework ? (
+              <Recycle className="h-5 w-5 text-primary" />
+            ) : (
+              <Factory className="h-5 w-5 text-primary" />
+            )}
+            {isRework ? "Yeniden Üretime Al" : "Üretime Al"} — {rolls.length} top
           </DialogTitle>
           <DialogDescription>
             Seçili toplar için <strong>yeni bir iş emri</strong> açılır ve toplar ona bağlanır. Mevcut bir iş

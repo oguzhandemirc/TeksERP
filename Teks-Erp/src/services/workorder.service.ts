@@ -625,7 +625,16 @@ export class WorkOrderService {
    */
   async create(
     data: WorkOrderCreateInput,
-    userId?: string
+    userId?: string,
+    /**
+     * ELDEKİ MAL — iş emrine bağlanacak topların HÂLİHAZIRDA taşıdığı nitelikler.
+     *
+     * Yalnız `quickStart` doldurur (tek yol: top okutarak açılan iş emri). Rota
+     * kapsaması kontrolünü DARALTMAK için kullanılır — bkz. `assertRouteCoversTargets`
+     * çağrısındaki gerekçe. Verilmezse davranış eskisiyle birebir aynı (F221 deseni:
+     * alan yoksa muafiyet yok).
+     */
+    goods?: { colorIds: (string | null)[]; propertyIdSets: string[][] },
   ): Promise<ApiResponse<WorkOrder> & { idempotentReplay?: boolean }> {
     // Kat katalog doğrulaması — YERİNDE kanonikleştirir, böylece aşağıdaki tüm
     // kullanımlar (yazım + kilit karşılaştırmaları) aynı değeri görür.
@@ -872,10 +881,37 @@ export class WorkOrderService {
       }
 
       // "Renk veren" / "Özellik veren" adım var mı? (rota uygunluk kontrolü)
+      //
+      // ⚠️ MAL ZATEN ÖYLE GELİYORSA KAPI AÇILIR (2026-08-27, saha bulgusu).
+      //
+      // Kuralın gerekçesi "hedef asla uygulanmaz → planlama hatası"dır. Ama sipariş
+      // bağlanınca hedef renk/özellik SİPARİŞTEN TÜRETİLİR (yukarıda, `resolvedTargetColorId`)
+      // — yani planlamacının bir beyanı değil, müşterinin ne istediğidir. Dışarıdan
+      // boyalı gelen kumaşa yalnız kurşun+tambur yapılacaksa rotada boyahane OLMAMASI
+      // doğrudur ve eldeki mal zaten o renktedir; uygulanacak bir şey yoktur.
+      // Sahada bu, "sipariş bağlarsam hata veriyor, siparişsiz açınca geçiyor" olarak
+      // görünüyordu.
+      //
+      // Muafiyet BİLEREK DAR: nitelik topların **HEPSİNDE** olmalı. Bir kısmında
+      // eksikse o toplar niteliği hiç kazanamaz — kural orada hâlâ gerçek bir
+      // planlama hatasını yakalıyor. Mal bilgisi yoksa (masaüstü formu top almaz)
+      // muafiyet de yok, davranış eskisi gibi.
+      const rollCount = goods?.colorIds.length ?? 0;
+      const colorAlreadyOnGoods =
+        rollCount > 0 &&
+        !!resolvedTargetColorId &&
+        goods!.colorIds.every((c) => c === resolvedTargetColorId);
+      const propsAlreadyOnGoods = new Set(
+        rollCount > 0
+          ? targetPropertyIds.filter((pid) => goods!.propertyIdSets.every((set) => set.includes(pid)))
+          : [],
+      );
+      const uncoveredProps = targetPropertyIds.filter((pid) => !propsAlreadyOnGoods.has(pid));
+
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
         await assertRouteCoversTargets(finalSteps, {
-          color: !!resolvedTargetColorId,
-          property: targetPropertyIds.length > 0,
+          color: !!resolvedTargetColorId && !colorAlreadyOnGoods,
+          property: uncoveredProps.length > 0,
         });
       }
 
@@ -1196,7 +1232,14 @@ export class WorkOrderService {
     // ── 1) Ön-doğrulama: var + STOCK + aynı ürün ────────────────────────────
     const rolls = await prisma.roll.findMany({
       where: { barcode: { in: barcodes } },
-      select: { id: true, barcode: true, status: true, itemId: true, sackId: true, shipmentId: true },
+      select: {
+        id: true, barcode: true, status: true, itemId: true, sackId: true, shipmentId: true,
+        // Rota kapsaması muafiyeti için (bkz. create → assertRouteCoversTargets):
+        // "mal zaten hedef renkte/özellikte mi". Okunmazsa muafiyet hiç doğmaz ve
+        // sipariş bağlı + boyahanesiz rota yine 400 verir.
+        colorId: true,
+        properties: { select: { propertyId: true } },
+      },
     });
     const byBarcode = new Map(rolls.map((r) => [r.barcode, r]));
 
@@ -1249,7 +1292,10 @@ export class WorkOrderService {
     }
 
     // ── 2) WO oluştur ───────────────────────────────────────────────────────
-    const createRes = await this.create({ ...woInput, type, targetItemId }, userId);
+    const createRes = await this.create({ ...woInput, type, targetItemId }, userId, {
+      colorIds: rolls.map((r) => r.colorId),
+      propertyIdSets: rolls.map((r) => r.properties.map((p) => p.propertyId)),
+    });
     if (!createRes.success || !createRes.data) {
       throw AppError.badRequest(createRes.message ?? "İş emri oluşturulamadı.");
     }

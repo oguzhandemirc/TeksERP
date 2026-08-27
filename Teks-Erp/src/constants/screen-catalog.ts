@@ -163,7 +163,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
 ];
 
 const mobile: ScreenEntry[] = [
-  { key: "KK1", app: "mobile", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamül kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
+  { key: "KK1", app: "mobile", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamul kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
   { key: "KursunQc", app: "mobile", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [] },
   { key: "Tambur", app: "mobile", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
   { key: "Depo", app: "mobile", title: "Depo", requires: ["mobile:depo"], capabilities: [] },

@@ -213,8 +213,8 @@ export const rollEntrySourceLabels: Record<RollEntrySource, string> = {
   TAMBUR_SPLIT: "Tambur Kesim",
   SUBCONTRACTOR_RETURN: "Fason Dönüşü",
   TAMBUR_MANUAL: "Tambur (Manuel)",
-  // 2026-08-17: dışarıdan alınan yarı mamül — ham girişten AYRI tutulur ki
-  // "içeride ürettiğimiz ham" ile "dışarıdan aldığımız yarı mamül" karışmasın.
-  SEMI_FINISHED: "Yarı Mamül (Dış Alım)",
+  // 2026-08-17: dışarıdan alınan yarı mamul — ham girişten AYRI tutulur ki
+  // "içeride ürettiğimiz ham" ile "dışarıdan aldığımız yarı mamul" karışmasın.
+  SEMI_FINISHED: "Yarı Mamul (Dış Alım)",
 };
 

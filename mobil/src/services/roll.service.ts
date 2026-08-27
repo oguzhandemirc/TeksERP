@@ -129,9 +129,9 @@ export interface InitialEntryRequest {
    */
   confirmDuplicate?: boolean;
   /**
-   * DIŞARIDAN ALINAN YARI MAMÜL (2026-08-17). Backend `entrySource=SEMI_FINISHED`
+   * DIŞARIDAN ALINAN YARI MAMUL (2026-08-17). Backend `entrySource=SEMI_FINISHED`
    * yazar VE statü sezgisini bypass eder (renkli top normalde BİTMİŞ DEPO'ya
-   * düşerdi; yarı mamül ham stokta kalıp kurşun/tambur görecek). `mobile:kk1-yari-mamul`
+   * düşerdi; yarı mamul ham stokta kalıp kurşun/tambur görecek). `mobile:kk1-yari-mamul`
    * yetkisi ister; renk ZORUNLU.
    */
   semiFinished?: boolean;

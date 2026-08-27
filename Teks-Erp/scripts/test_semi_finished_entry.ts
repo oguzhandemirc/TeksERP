@@ -1,12 +1,12 @@
 // =============================================================================
-// Test: Dışarıdan alınan YARI MAMÜL girişi (2026-08-17, madde 9)
+// Test: Dışarıdan alınan YARI MAMUL girişi (2026-08-17, madde 9)
 // Çalıştır: npx tsx scripts/test_semi_finished_entry.ts
 // =============================================================================
-// Korunan invariant: yarı mamül RENKLİ gelir ama BİTMİŞ DEĞİLDİR.
+// Korunan invariant: yarı mamul RENKLİ gelir ama BİTMİŞ DEĞİLDİR.
 //
 // KK1 yolunda statü renkten çıkarılıyor:
 //     colorId != null ? WAREHOUSE : STOCK
-// Yarı mamül tanımı gereği renkli olduğu için bu sezgi onu doğrudan BİTMİŞ
+// Yarı mamul tanımı gereği renkli olduğu için bu sezgi onu doğrudan BİTMİŞ
 // DEPO'ya düşürür — mal üretime hiç girmez, operatör onu ham stokta arar ve
 // bulamaz. Bu yüzden çağrı statüyü AÇIKÇA zorlar (`forcedStatus: STOCK`) ve
 // kaynağı ayrı işaretler (`entrySource: SEMI_FINISHED`).
@@ -48,7 +48,7 @@ async function main(): Promise<void> {
     });
     colorId = color.id;
 
-    // ── 1) Yarı mamül: RENKLİ ama HAM STOKTA ────────────────────────────────
+    // ── 1) Yarı mamul: RENKLİ ama HAM STOKTA ────────────────────────────────
     const semi = await svc.createInitialEntry(
       { itemId, colorId, initialQty: 1200 },
       undefined,
@@ -61,7 +61,7 @@ async function main(): Promise<void> {
     );
     const semiRoll = semi.data as { id: string; status: string; entrySource: string; colorId: string | null };
     rollIds.push(semiRoll.id);
-    check("yarı mamül topu oluştu", Boolean(semiRoll.id));
+    check("yarı mamul topu oluştu", Boolean(semiRoll.id));
     check("rengi var (boyalı geldi)", semiRoll.colorId === colorId);
     check(
       "HAM STOK'a düştü (bitmiş depoya DEĞİL)",
@@ -98,11 +98,81 @@ async function main(): Promise<void> {
     });
     check("giriş türüne göre süzülüyor", filtered.length === 1 && filtered[0].id === semiRoll.id);
 
-    // ── 4) Ham stok sayımına GİRİYOR (üretime aday) ─────────────────────────
+    // ── 4) Statüsü STOCK — yani üretime aday ────────────────────────────────
+    // ⚠️ Bu kontrol 2026-08-26'da ANLAM DEĞİŞTİRDİ. Eskiden "ham stok listesinde
+    // görünür" diyordu; artık yarı mamul Envanter'de KENDİ sekmesinde duruyor ve
+    // Ham Stok listesinde GÖRÜNMÜYOR (§5). Ölçtüğü invariant yine de geçerli ve
+    // gerekli: top hâlâ STOCK statüsünde, yani iş emrine bağlanabilir.
     const inStock = await prisma.roll.count({
       where: { id: semiRoll.id, status: RollStatus.STOCK },
     });
-    check("ham stok listesinde görünür (iş emrine bağlanabilir)", inStock === 1);
+    check("STOCK statüsünde (iş emrine bağlanabilir)", inStock === 1);
+
+    // ── 5) ENVANTER KAPSAMLARI: ham ↔ yarı mamul ayrımı ─────────────────────
+    // Ayrım üç kapsamla kuruluyor ve üçünün İLİŞKİSİ load-bearing:
+    //   RAW_STOCK       = birleşim  → mobil Hızlı İş Emri top seçicisi kullanır
+    //   RAW_STOCK_PURE  = yalnız ham → masaüstü "Ham Stok" sekmesi
+    //   SEMI_FINISHED   = yalnız yarı mamul → masaüstü "Yarı Mamul" sekmesi
+    // Birleşim daraltılırsa yarı mamul TABLETTEN görünmez olur; dar kapsamlar
+    // gevşerse envanterdeki ayrım sessizce geri alınır.
+    const scopeIds = async (scope: string): Promise<string[]> => {
+      const where = (
+        svc as unknown as {
+          buildRollWhere: (p: { filters: Record<string, string> }) => Record<string, unknown>;
+        }
+      ).buildRollWhere({ filters: { rollScope: scope, status: "ALL" } });
+      const rows = await prisma.roll.findMany({
+        where: { AND: [where as never, { id: { in: rollIds } }] },
+        select: { id: true },
+      });
+      return rows.map((r) => r.id);
+    };
+
+    // Karşılaştırma için ikinci bir HAM top (renksiz → STOCK, SUPPLIER_RECEIPT).
+    const rawEntry = await svc.createInitialEntry({ itemId, initialQty: 700 });
+    const rawRoll = rawEntry.data as { id: string; status: string };
+    rollIds.push(rawRoll.id);
+    check("karşılaştırma topu ham stokta", rawRoll.status === RollStatus.STOCK, `status=${rawRoll.status}`);
+
+    const pure = await scopeIds("RAW_STOCK_PURE");
+    const semiScope = await scopeIds("SEMI_FINISHED");
+    const union = await scopeIds("RAW_STOCK");
+
+    check("RAW_STOCK_PURE yarı mamulü GÖRMEZ", !pure.includes(semiRoll.id));
+    check("RAW_STOCK_PURE ham topu görür", pure.includes(rawRoll.id));
+    check("SEMI_FINISHED yalnız yarı mamulü görür", semiScope.length === 1 && semiScope[0] === semiRoll.id);
+    check(
+      "RAW_STOCK İKİSİNİ BİRDEN görür (tablet sözleşmesi — DARALTMA)",
+      union.includes(semiRoll.id) && union.includes(rawRoll.id),
+    );
+    check(
+      "birleşim = dar kapsamların toplamı",
+      union.length === pure.length + semiScope.length,
+      `union=${union.length} pure=${pure.length} semi=${semiScope.length}`,
+    );
+
+    // ── 6) Bilinmeyen kapsam SESSİZ KALMAZ ──────────────────────────────────
+    // Eskiden eşleşmeyen bir değer hiçbir daralma yapmıyordu ve liste
+    // CANCELLED/SHIPPED dahil TÜM tabloyu döndürüyordu — hata yok, log yok.
+    let unknownThrew = false;
+    try {
+      await scopeIds("YOK_BOYLE_BIR_KAPSAM");
+    } catch {
+      unknownThrew = true;
+    }
+    check("bilinmeyen rollScope reddediliyor", unknownThrew);
+
+    // ── 7) Top geçmişinde "Ham Giriş" YAZMAZ ────────────────────────────────
+    // `entryTitle` switch'inin default dalı sessiz bir yalan üretiyordu: enum'a
+    // 2026-08-17'de eklenen SEMI_FINISHED case'i yazılmamıştı.
+    const hist = await svc.getRollHistory(semiRoll.id);
+    const events = (hist.data as { events?: Array<{ title?: string }> } | null)?.events ?? [];
+    const entryEvent = events[0];
+    check(
+      "geçmişte 'Ham Giriş' değil yarı mamul yazıyor",
+      Boolean(entryEvent?.title && !entryEvent.title.includes("Ham Giriş")),
+      `title=${entryEvent?.title}`,
+    );
   } finally {
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});

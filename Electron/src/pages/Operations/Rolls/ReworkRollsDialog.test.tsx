@@ -82,11 +82,11 @@ const roll = (over: Record<string, unknown> = {}) =>
     ...over,
   }) as never;
 
-function renderDialog(rolls: unknown[]) {
+function renderDialog(rolls: unknown[], mode?: "rework" | "start") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <ReworkRollsDialog open onOpenChange={() => {}} rolls={rolls as never} />
+      <ReworkRollsDialog open onOpenChange={() => {}} mode={mode} rolls={rolls as never} />
     </QueryClientProvider>,
   );
 }
@@ -198,5 +198,65 @@ describe("ReworkRollsDialog", () => {
     // İdempotency anahtarı ZORUNLU: zaman aşımı sonrası tekrar basış mükerrer
     // iş emri + refakat kartı doğurmasın.
     expect(typeof body.clientToken).toBe("string");
+  });
+});
+
+/**
+ * İKİ MOD, TEK MOTOR (2026-08-26).
+ *
+ * Diyalog artık üç sekmeden açılıyor: Bitmiş Depo ("yeniden" — top bir tur
+ * görmüş) ile Ham Stok / Yarı Mamul ("ilk kez giriyor"). Ayrı bir diyalog
+ * açmak payload'ı, engel kurallarını, fason firma seçimini ve ölü etiket
+ * uyarısını İKİZLERDİ; onun yerine yalnız başlık/ikon/toast metni moda bağlı.
+ *
+ * Bu bekçinin işi tam olarak bu ayrımı korumak: metin ayrışsın, DAVRANIŞ
+ * ayrışmasın. Metin sızarsa ham stoktaki operatör "yeniden" kelimesini görüp
+ * yanlış topu seçtiğini sanır.
+ */
+describe("ReworkRollsDialog — mod (yeniden ↔ ilk kez)", () => {
+  it("varsayılan mod 'yeniden' der (Bitmiş Depo davranışı korunuyor)", async () => {
+    renderDialog([roll()]);
+    expect(await screen.findByText(/Yeniden Üretime Al/)).toBeTruthy();
+  });
+
+  it("start modunda 'yeniden' kelimesi HİÇ geçmez", async () => {
+    renderDialog([roll()], "start");
+    expect(await screen.findByText(/Üretime Al — 1 top/)).toBeTruthy();
+    expect(screen.queryByText(/Yeniden Üretime Al/)).toBeNull();
+  });
+
+  it("mod PAYLOAD'ı değiştirmez — iki modda da aynı gövde gider", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    for (const mode of ["rework", "start"] as const) {
+      quickStart.mockClear();
+      const { unmount } = renderDialog([roll({ labelPrintedAt: null })], mode);
+      await selectRoute();
+      fireEvent.click(screen.getByRole("button", { name: /İş emri aç/ }));
+      await waitFor(() => expect(quickStart).toHaveBeenCalledTimes(1));
+      const b = { ...(quickStart.mock.calls[0]![0] as Record<string, unknown>) };
+      // clientToken oturum başına üretilir — modun işi değil, karşılaştırmadan çıkar.
+      delete b.clientToken;
+      bodies.push(b);
+      unmount();
+    }
+    expect(bodies[0]).toEqual(bodies[1]);
+  });
+
+  it("start modunda da ÖLÜ ETİKET uyarısı çıkar (koşul moda değil rotaya bağlı)", async () => {
+    // Ham stoktaki etiketli top da fasona giderse kimliğini kaybeder — uyarının
+    // gerekçesi "bitmiş olmak" değil, "fasona gitmek".
+    renderDialog([roll()], "start");
+    await selectRoute();
+    expect(await screen.findByText(/ölü etiket|kimliğini kaybeder/i)).toBeTruthy();
+  });
+
+  it("barkodsuz seçim istek ATILMADAN engellenir", async () => {
+    // `quick-start` gövdesi barkod taşır; hepsi barkodsuzsa istek 0 top bağlar
+    // ve hiçbir şey söylemez. Ham stokta açık kumaş bu sekmeye düşebilir.
+    renderDialog([roll({ barcode: null, labelPrintedAt: null })], "start");
+    await selectRoute();
+    expect(await screen.findByText(/hiçbirinde barkod yok/i)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /İş emri aç/ }));
+    await waitFor(() => expect(quickStart).not.toHaveBeenCalled());
   });
 });

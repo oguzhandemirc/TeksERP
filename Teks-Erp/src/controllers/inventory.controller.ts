@@ -36,14 +36,14 @@ const initialEntrySchema = z.object({
    *  anı DEĞİLDİR. Sunucu doğrular (makul aralık) ve güvenilmezse yok sayar. */
   clientEnteredAt: z.coerce.date().optional(),
   /**
-   * DIŞARIDAN ALINAN YARI MAMÜL (2026-08-17, madde 9). Kumaş boyalı/işlenmiş
+   * DIŞARIDAN ALINAN YARI MAMUL (2026-08-17, madde 9). Kumaş boyalı/işlenmiş
    * gelir ama bitmiş DEĞİLDİR — fabrikada kurşun + tambur görecek.
    *
    * İki şeyi birden değiştirir ve İKİSİ DE gerekli:
    *   · `entrySource = SEMI_FINISHED` → envanterde ham girişten ayrılır.
    *   · `forcedStatus = STOCK` → **statü sezgisi BYPASS edilir.** KK1 yolunda
    *     statü renkten çıkarılıyor (`colorId != null ? WAREHOUSE : STOCK`) ve
-   *     yarı mamül tanımı gereği RENKLİ. Zorlanmasaydı mal doğrudan Bitmiş
+   *     yarı mamul tanımı gereği RENKLİ. Zorlanmasaydı mal doğrudan Bitmiş
    *     Depo'ya düşer, üretime hiç girmez ve operatör onu ham stokta arardı.
    */
   semiFinished: z.boolean().optional(),
@@ -268,7 +268,7 @@ export class InventoryController {
   async createInitialEntry(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { confirmDuplicate, semiFinished, ...body } = initialEntrySchema.parse(req.body);
-      // Yarı mamül kabulü AYRI bir yetenek yetkisi ister (2026-08-17 kullanıcı
+      // Yarı mamul kabulü AYRI bir yetenek yetkisi ister (2026-08-17 kullanıcı
       // kararı): yetkisi olmayan operatörde ekran bugünkü gibi kalır ve renk
       // seçemez. Kapı BURADA — istemcinin kutuyu gizlemesine güvenilmez.
       if (semiFinished) {
@@ -281,12 +281,12 @@ export class InventoryController {
           matchesPermission(perms, "roll:write");
         if (!allowed) {
           throw AppError.forbidden(
-            "Yarı mamül kabulü için 'mobile:kk1-yari-mamul' yetkisi gerekli.",
+            "Yarı mamul kabulü için 'mobile:kk1-yari-mamul' yetkisi gerekli.",
           );
         }
         if (!body.colorId) {
           throw AppError.badRequest(
-            "Yarı mamül girişinde renk zorunludur — mal boyalı/işlenmiş geliyor.",
+            "Yarı mamul girişinde renk zorunludur — mal boyalı/işlenmiş geliyor.",
           );
         }
       }
@@ -311,7 +311,7 @@ export class InventoryController {
           // girilmiş görünür — kolonun var olma sebebi tam da bu. Oturum yoksa
           // damga NULL kalır ve bu dürüst cevaptır.
           entryStationId: stamp?.stationId ?? null,
-          // Yarı mamülde İKİSİ BİRDEN — gerekçe şema notunda.
+          // Yarı mamulde İKİSİ BİRDEN — gerekçe şema notunda.
           ...(semiFinished
             ? {
                 forcedEntrySource: RollEntrySource.SEMI_FINISHED,

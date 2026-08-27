@@ -7,6 +7,7 @@ import {
   Warehouse,
   Columns3,
   ShoppingBag,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 import type { RollStatusTabKey } from "./service";
@@ -31,6 +32,12 @@ export interface RollTabDef {
  */
 export const ROLL_TABS: RollTabDef[] = [
   { key: "RAW_STOCK",      label: "Ham Stok",        Icon: Package },
+  // YARI MAMUL (2026-08-26) — dışarıdan alınan boyalı/işlenmiş kumaş. Ayrı DEPO
+  // değil ayrı GÖRÜNÜM: statü (STOCK) ve stok mekaniği ham stokla aynı, ayıran
+  // şey `entrySource=SEMI_FINISHED`. Eskiden Ham Stok'ta bir FİLTRE arkasındaydı
+  // (2026-08-17 kararı) ve fiilen görünmüyordu: sayım ve metraj toplamı ham
+  // kumaşla tek rakamda birleşiyordu.
+  { key: "SEMI_FINISHED",  label: "Yarı Mamul",      Icon: Layers },
   { key: "FINISHED_STOCK", label: "Bitmiş Depo",     Icon: Warehouse },
   { key: "IN_SACK",        label: "Çuvalda",         Icon: ShoppingBag },
   { key: "PRODUCTION",     label: "Üretimde",        Icon: Cog },

@@ -291,7 +291,7 @@ const EXEMPT: { screen: string; path: string; why: string }[] = [
   {
     screen: "mobile:kk1",
     path: "GET /",
-    why: "Renk listesi YALNIZ yarı mamül modunda çağrılır; o mod ayrı bir yetenek yetkisine bağlı (`mobile:kk1-yari-mamul`). Yetkisiz operatörde renk seçici hiç çizilmez, uç de çağrılmaz.",
+    why: "Renk listesi YALNIZ yarı mamul modunda çağrılır; o mod ayrı bir yetenek yetkisine bağlı (`mobile:kk1-yari-mamul`). Yetkisiz operatörde renk seçici hiç çizilmez, uç de çağrılmaz.",
   },
   {
     screen: "mobile:kk1",

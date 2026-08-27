@@ -35,6 +35,8 @@ import type { Roll } from "./types";
  */
 const STATUS_GROUPS = {
   RAW_STOCK: null,
+  // Yarı Mamul (2026-08-26): rollScope=SEMI_FINISHED ile çalışır, statü göndermez.
+  SEMI_FINISHED: null,
   PRODUCTION: null,
   SUBCONTRACTOR: "AT_SUBCONTRACTOR",
   KURSUN_PENDING: null,
@@ -73,7 +75,7 @@ export interface InitialEntryPayload {
    *  açık onayı ("evet, bu gerçekten ayrı bir top"). Tuzak `kk1.duplicateGuardEnabled`
    *  ile açılır (varsayılan kapalı). */
   confirmDuplicate?: boolean;
-  /** Dışarıdan alınan YARI MAMÜL (2026-08-17): backend `entrySource=SEMI_FINISHED`
+  /** Dışarıdan alınan YARI MAMUL (2026-08-17): backend `entrySource=SEMI_FINISHED`
    *  yazar VE statü sezgisini bypass edip topu Ham Stok'a düşürür (renkli olduğu
    *  için aksi halde Bitmiş Depo'ya giderdi). */
   semiFinished?: boolean;
@@ -343,14 +345,20 @@ export type RollStatusTabKey = keyof typeof ROLL_STATUS_TABS;
  * aradığı şeye kıyasla dramatik biçimde daha yakın.
  */
 export function rollTabDefaultSortBy(tab: RollStatusTabKey): string {
-  return tab === "RAW_STOCK" ? "createdAt" : "updatedAt";
+  // Yarı Mamul de giriş sekmesidir (mal dışarıdan alınıp doğrudan buraya yazılır),
+  // yani orada da "oluşturma = buraya geliş" — Ham Stok ile aynı kural.
+  return tab === "RAW_STOCK" || tab === "SEMI_FINISHED" ? "createdAt" : "updatedAt";
 }
 
 export function buildRollForceFilters(
   tab: RollStatusTabKey,
 ): Record<string, string | string[]> {
-  // KK1 ham kumaş: renksiz + henüz hiçbir adıma girmemiş.
-  if (tab === "RAW_STOCK") return { rollScope: "RAW_STOCK", status: "ALL" };
+  // KK1 ham kumaş: henüz hiçbir adıma girmemiş STOCK topu — yarı mamul HARİÇ.
+  // ⚠️ `RAW_STOCK_PURE`, `RAW_STOCK`'un daraltılmış ikizidir; `RAW_STOCK` ikisinin
+  // birleşimidir ve mobil top seçicisi onu kullanır (bkz. inventory.service).
+  if (tab === "RAW_STOCK") return { rollScope: "RAW_STOCK_PURE", status: "ALL" };
+  // Dışarıdan alınan yarı mamul — aynı statü, farklı stok türü.
+  if (tab === "SEMI_FINISHED") return { rollScope: "SEMI_FINISHED", status: "ALL" };
   // Super-set: WO akışındaki tüm toplar (Fasonda + Kurşun/Tambur bekleyen + IN_PRODUCTION).
   if (tab === "PRODUCTION") return { rollScope: "PRODUCTION_ACTIVE", status: "ALL" };
   // Tambur sonrası depoya alınmış, sevke hazır.
