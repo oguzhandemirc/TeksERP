@@ -16,13 +16,64 @@ npx tsc --noEmit                # Type check
 > **Önemli:** BLE (`react-native-ble-plx`) Expo Go'da çalışmaz.
 > Development build zorunlu: `npx expo run:android`
 
+## Güncelleme dağıtma — ÖNCE BU BÖLÜM
+
+> **"Sahaya değişiklik göndereceğim" dendiğinde ilk soru: APK mı, uzaktan güncelleme mi?**
+> Cevabı **tahmin etme** — script söyler. Reçetenin tamamı:
+> [`docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`](../docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md)
+
+Tabletler güncellemeyi **internetten** alır (`guncelleme.etkiliyazilim.com/<musteri>/mobil/`,
+Electron paneliyle aynı sunucu). ERP bağlantısı ayrıdır ve fabrika ağında kalır.
+
+| Değişiklik | Ne gerekir | Komut |
+|---|---|---|
+| Ekran, iş kuralı, hata düzeltmesi (**~%90**) | Kurulum YOK, kimse tablet dolaşmaz | `npm run yayinla -- --musteri=<kod>` |
+| Yeni native modül · yeni izin · Expo yükseltmesi | `runtimeVersion` artır + **yeni APK** + elle tur | `npm run build:apk -- --musteri=<kod>` |
+
+```bash
+# 1) Hangisi gerekli? Saniyeler sürer, hiçbir şey üretmez:
+npm run yayinla:check -- --musteri=adnansahin
+#    → "parmak izi tutarlı"        = OTA yeterli
+#    → "NATIVE DEĞİŞTİ"            = runtimeVersion artır + APK derle
+
+# 2) Uzaktan güncelleme (olağan yol):
+EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run yayinla -- --musteri=adnansahin
+node ../deploy/mobil-yayinla.mjs --musteri=adnansahin --paket=ota-cikti/adnansahin/<rv>/<damga>
+
+# 3) Yayını denetle (yükleme yok):
+node ../deploy/mobil-yayinla.mjs --dogrula=<url> --boyut=<bayt>
+```
+
+**⚠️ `--musteri` HER KOMUTTA ZORUNLU.** Formalite değil: adres pakete derleme anında gömülür
+ve yanlış müşteri kodu, o fabrikanın tabletlerine **başka bir fabrikanın** güncellemesini
+çektirir. Kod `musteri.json`da tek kaynaktır; kapılar beklenen değeri **komut
+argümanından** alır — dosyadan alsalardı, dosya yanlışken beklenen ve gerçek aynı yanlışı
+gösterir ve kapı geçerdi (*beklenen değeri gerçek değerle aynı kaynaktan alan bir kapı, o
+kaynağın yanlış olmasını yakalayamaz*).
+
+**⚠️ `runtimeVersion` (app.json) native sürüm kimliğidir.** Yeni native modül/izin geldiğinde
+ELLE artırılır. Artırılmazsa yeni JS eski native'i çağırır ve **sahadaki tüm tabletler
+açılışta çöker** — sistemin tek "hepsini birden öldüren" senaryosu. Yayın script'i native
+parmak izini karşılaştırıp durur, ama kararı kaydeden sensin.
+
+**⚠️ İki anahtar `keystore/` altında ve GİT DIŞINDA** — mühür (APK imzası) + kod imzalama
+(paket imzası). Tek kopya diskte; kaybı her tablette sil+yeniden kur demek.
+
+**Sıra:** yükleme script'i paket dosyalarını **önce**, manifesti **en son** yükler ve
+sonunda dışarıdan HTTPS ile doğrular. Elle `scp` yapma — ters sırada, henüz yüklenmemiş
+dosyaları gösteren bir yayın ortaya çıkar.
+
 ## APK derleme (sahaya kurulacak paket) — TEK KOMUT
 
 ```bash
-EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run build:apk
-npm run build:apk:check     # yalnız adresi çöz + doğrula (derleme YOK, saniyeler)
-npm run build:apk:verify    # mevcut APK'nın gömülü adresini denetle
+EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run build:apk -- --musteri=adnansahin
+npm run build:apk:check -- --musteri=adnansahin   # adres+sürüm+müşteri doğrula (derleme YOK)
+npm run build:apk:verify                          # mevcut APK'nın gömülü adresini denetle
 ```
+
+> ⚠️ **APK yılda birkaç kez gerekir.** Olağan yol uzaktan güncellemedir — yukarıdaki
+> "Güncelleme dağıtma" bölümüne bak. Derlemeden önce `npm run yayinla:check` ile
+> gerçekten APK gerekip gerekmediğini ölç.
 
 **`cd android && ./gradlew assembleRelease` ELLE ÇAĞIRMA.** Script
 (`scripts/build-apk.mjs`) sırasıyla: adresi çözer → doğrular → bundle
@@ -73,6 +124,42 @@ içindir) sahaya giden paketi sessizce ele geçiremez.
 > sonucuna varmak yanlış alarmdır. Ayrıca dizeler **uç uca paketlenir**
 > (sonlandırıcı bayt yok), bu yüzden "aradığım dizeden sonra harf gelmesin"
 > gibi bir sondaj gerçek eşleşmeyi de eler.
+
+## Uzaktan güncelleme (OTA + APK) — sahaya nasıl çıkar
+
+Tabletler güncellemeyi **internetten** alır
+(`guncelleme.etkiliyazilim.com/<müşteri>/mobil/`). Reçete:
+[`docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`](../docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md)
+
+```bash
+npm run yayinla -- --musteri=<müşteri>     # JS-only → OTA, tablet kendini tazeler
+npm run build:apk                          # native değişti → yeni APK (elle kurulur)
+node ../deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
+```
+
+**Kanalı değişikliğin CİNSİ belirler.** JS/ekran/mantık → OTA. Yeni native modül,
+izin, ikon, SDK → APK. Karar sende ama `npm run yayinla` yayından önce **native
+parmak izi** hesaplayıp bir öncekiyle karşılaştırır; native etkisi olan bir şey
+değişip `runtimeVersion` aynı kaldıysa **durdurur**. Bilinçliyse
+`-- --parmak-izini-kabul-et`.
+
+⚠️ Bu kapının varlık sebebi: yeni JS eski native'i çağırırsa **sahadaki tüm
+tabletler açılışta çöker**. Şüphedeysen `runtimeVersion`ı artır — en kötü
+ihtimalle tabletler o OTA'yı almaz, çökmez.
+
+⚠️ **`runtimeVersion` backend sözleşmesini KAPSAMAZ** (JS↔native uyumudur).
+Sunucu uyumu ayrı eksende: `client-version-policy.ts` → `mobil` satırı, İKİ
+eksenli (`minVersion` + `minPaketTarihi`) çünkü APK sürümü ile OTA paketi ayrı
+ilerler — JS-only düzeltme `versionName`i değiştirmeden sahaya gider.
+
+⚠️ **Müşteri kodu tek kaynak `mobil/musteri.json`**; yayın komutu `--musteri`
+argümanını AYRICA ister ve derlemeden sonra APK'nın gömülü adresiyle kıyaslar.
+Argüman bilerek ayrı: beklenen değeri de `musteri.json`dan alsaydı kapı
+**dairesel** olur, yanlış müşteri kodunu asla yakalayamazdı.
+
+⚠️ **`mobil/keystore/` .gitignore'da** — imza mührü ve kod imzalama anahtarı
+repoda YOK, yalnız geliştirme makinesinde. Kaybı telafi edilemez (mühür
+değişirse her tablette uygulama SİLİNİP yeniden kurulur).
 
 ## Klasör Yapısı
 

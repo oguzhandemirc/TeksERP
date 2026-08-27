@@ -144,6 +144,50 @@ Fabrika **çözgü/dokuma yapmaz** — kumaş hazır gelir, sadece process + QC 
 - **Roll split:** Sadece Tambur'da (`CUT` kararı) olur — `parentRollId` + yeni barkod ile çocuk roll yaratılır. Çocuklar **işlemin yapıldığı Tambur adımını** damgalar (`producedInStepId` = Tambur step; 2026-07-27 — parent kalıtımı değil, `cutOpenFabric` ile aynı).
 - **Tambur finalize WO disiplini (2026-07-27):** Finalize WO'yu topun **`currentStep`'inden** çözer (köken `producedInStep`'ten DEĞİL — Top Kesme çocuğu `producedInStepId=null` doğar). WO kapaması yalnız terminal-guard'lı `completeWorkOrderIfStepsDone` helper'ıyla yapılır (CANCELLED/SUPERSEDED asla COMPLETED'a dirilmez); iptal/devredilmiş WO'nun adımındaki top finalize/kesim **reddedilir** (pre-tx + kilit-altı taze guard). Ölü top kümesi tek kaynak: `K18_DEAD_STATUSES` (KARTELA_CONSUMED dahil) — liste/lane filtrelerinde elle statü listesi kopyalama. Movement kapanışında `qtyOut = qtyIn` (istasyona giren işlenmiş metraj; finalize öncesi kesimler hacimden düşmez). WO **üretim çıktısı** kümesi tek kaynak: `workorder.service.producedOutputWhere` (Tambur birinci-nesil çocukları + Tambur'suz finalize çıktıları) — liste ÇIKAN metriği ve detay `producedRolls` aynı kümeyi kullanır, elle kopyalama.
 
+## Sürüm Yayınlama (sahaya güncelleme çıkarma)
+
+Panel ve tabletler güncellemeyi **internetten** (`guncelleme.etkiliyazilim.com`)
+kendileri indirir. Elden setup/APK taşıma YOK — reçeteler:
+[`docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`](docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md) ·
+[`docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`](docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md)
+
+```bash
+# MASAÜSTÜ PANEL — sürümü ARTIR, müşteriyi BELİRT
+./deploy/electron-paketle.sh <müşteri> [sürüm]   # derler + gömülü adresi doğrular
+./deploy/electron-yayinla.sh                     # hedefi paketin kimliğinden çözer
+./deploy/electron-yayinla.sh --dogrula           # yükleme YOK, yayını denetle
+
+# TABLET — değişikliğin cinsi kanalı belirler
+cd mobil && npm run yayinla -- --musteri=<müşteri>   # JS-only → OTA (tablet kendi tazeler)
+cd mobil && npm run build:apk                        # native değişti → yeni APK (elle kurulur)
+node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
+```
+
+**Dört kural — hepsinin bedeli ölçüldü:**
+
+1. **Sürüm numarası ARTIRILMAZSA hiçbir şey güncellenmez.** Panelde
+   `Electron/package.json > version`, tablette `versionCode`. Dosyayı yüklesen
+   bile istemci "en güncelim" der.
+2. **Ham `npm run build:win` KULLANMA** — bir önceki müşterinin adresiyle
+   derler. Yayın adresi pakete **derleme anında** gömülür; yanlış müşteri kodu
+   taşıyan paket **başka bir fabrikanın güncellemesini indirip kurar** ve hata
+   SESSİZDİR (dosyalar kendi aralarında tutarlı kalır). Paketleme script'i
+   derlemeden SONRA paketin içindeki adresi argümanla kıyaslar — kapı orada.
+3. **Manifest EN SON yüklenir** (`latest.yml` / OTA manifest). Ters sırada,
+   henüz yüklenmemiş dosyayı işaret eden bir manifest yayında kalır.
+4. **Cloudflare proxy'si (turuncu bulut) AÇIK kalmalı** — sertifika Origin CA,
+   ona yalnız CF Edge güvenir; DNS-only'ye çevrilirse güncelleme sessizce durur.
+
+⚠️ **Yeni müşteri:** sunucuda `mkdir <müşteri>/electron` + paketle + yayınla.
+DNS, sertifika, servis GEREKMEZ. Müşteri kodu tek kaynakta
+(`Electron/shared/musteri.json`, `mobil/musteri.json`).
+
+⚠️ **Sürüm politikası ayrı eksendir:** backend "en az şu sürümü bekliyorum" der
+(`Teks-Erp/src/config/client-version-policy.ts`, uç `/api/client-policy/:istemci`).
+`minVersion`ı YALNIZ gerçek bir sözleşme kırılmasında yükselt ve **sahadaki
+sürümden büyük yapma** — o durumda en güncel istemci bile kapıda kalır ve
+indirecek bir şey olmadığı için çıkamaz. Bekçi: `scripts/test_client_policy.ts`.
+
 ## Ortak Konvansiyonlar
 
 - UUID primary key, tüm modellerde `createdAt`/`updatedAt` (M:N pivot ve append-only log tabloları hariç — bunlarda sadece `createdAt`).

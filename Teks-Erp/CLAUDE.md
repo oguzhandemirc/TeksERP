@@ -4,6 +4,32 @@ Express 5 + Prisma 7 + PostgreSQL. See root `CLAUDE.md` for domain facts.
 
 > **Deep reference:** [`ARCHITECTURE.md`](./ARCHITECTURE.md) — full schema (~78 models, ~35 enums), API endpoint map, pattern examples, business rules, performance playbook. Read it when starting non-trivial work. (Not: §4-§6 envanter tabloları/sayıları nokta-anı snapshot'tır ve bayatlar — kanonik kaynak her zaman `schema.prisma`; ARCHITECTURE'ın değeri §7-§10 pattern/gerekçe içeriğindedir.)
 
+## İstemci sürüm politikası (panel/tablet uyumu)
+
+Bu projede deploy sırası **backend ÖNCE**. Yani yeni bir sözleşme çıktığında
+sahada bir süre ESKİ istemciler koşar — ve bazı değişiklikler onlarda GÖRÜNÜR
+hata üretmez: alan sessizce düşer. Politika o aralığı kapatır.
+
+`src/config/client-version-policy.ts` → `CLIENT_VERSION_POLICIES`
+Uç: `GET /api/client-policy/:istemci` (**PUBLIC** — istemci politikayı giriş
+ekranından ÖNCE sorar; kimlik aransaydı, sözleşmesi bozulduğu için giriş
+yapamayan istemciye "güncelle" diyebilme yolu kapanırdı).
+
+| Kural | Neden |
+|---|---|
+| Değer **KODDA sabit**, panelde ayar DEĞİL | Yanlış girilen bir sayı sahadaki TÜM istemcileri kilitler; kod yolu review + deploy'dan geçer |
+| İstemci **FAIL-OPEN** | Uç okunamaz/bozuk/404 ise istemci KİLİTLENMEZ. Projenin fail-closed eğiliminin bilinçli istisnası: "kapalı" tarafın bedeli tek bozuk yanıtla fabrikanın durmasıdır |
+| Tanımsız istemci **404** (boş politika değil) | "Kural yok" ile "kural okunamadı" farkı korunur |
+| Yeni istemci → route'a değil **kayıt defterine** satır | Uç parametreli |
+
+⚠️ **`minVersion` sahadaki sürümden BÜYÜK OLAMAZ** — olsaydı en güncel istemci
+bile kapıda kalır ve indirecek bir şey olmadığı için ÇIKAMAZDI (kendi kendini
+kurtaramayan tek arıza biçimi). ⚠️ Yalnız GERÇEK bir kırılmada yükselt; her
+sürümde artırmak, güncellemeyi indirememiş her makineyi üretim dışı bırakır.
+
+Bekçi: `scripts/test_client_policy.ts` (kayıt defterindeki HER girdiyi kapsar).
+Sahaya çıkarma reçetesi: kök `CLAUDE.md` → "Sürüm Yayınlama".
+
 ## Commands
 
 ```bash
@@ -256,6 +282,30 @@ Detay: ARCHITECTURE.md §6.
 - [ ] Decimal kolonda JS float aritmetiği yok — DB-side `increment`/`decrement` veya `Prisma.Decimal` (`.plus()/.minus()`)
 - [ ] Depo çuvalı içeriğine dokunuyorsa önce `touchWarehouseSackTx` (WHERE shipmentId IS NULL — sevkiyata atanmış çuvalı reddeder); PLANNED sevkiyatın çuval kümesini değiştiriyorsan `touchShipmentPlannedTx`; çuval içeriği değişiyorsa `resetSackWeightsTx` (bayat kg irsaliyeye gitmesin)
       - **BİLİNÇLİ İSTİSNA — `Sack.notes` (çuval notu):** `setSackNotes` bu guard'ı **KULLANMAZ** ve `resetSackWeightsTx` de nota **DOKUNMAZ**. Not ne ölçüm ne içeriktir (annotation, `Shipment.dispatchNote` ile aynı gerekçe) → sevkiyata atanmış / sevk EDİLMİŞ çuvala da yazılabilir ("müşteri şikayet etti"). Guard'ı "eksik" sanıp **EKLEME** — eklersen özellik sessizce 409'a düşer. Regresyon testi: `scripts/test_sack_notes.ts` (8b/9).
+
+## Mobil güncelleme + istemci sürüm politikası
+
+İki şey backend'de yaşıyor ama **sahibi mobil taraftır**; buraya dokunmadan önce
+[`docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`](../docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md) oku.
+
+**① `/api/mobile/updates/*` — LAN ikizi.** Tabletler güncellemeyi normalde İNTERNETTEN
+(VPS) alır; bu uçlar internetsiz bir kurulum için aynı depoyu LAN'dan servis eder.
+⚠️ **Sunucu manifest ÜRETMEZ, donmuş baytları servis eder** — kod imzalama gövdenin HAM
+baytları üzerinden doğrulandığı için manifest yayın anında dondurulur (üreten tek yer
+`mobil/scripts/lib/manifest.mjs`). Buraya "render eden" bir kod eklemek imzayı geçersiz
+kılar ve tabletler paketi sessizce REDDEDER. Uçlar bilerek **PUBLIC** (tablet güncellemeyi
+giriş ekranından ÖNCE sorar; koruma kimlik değil kod imzalamadır) ve
+`test_route_auth_coverage` muaf listesinde gerekçeleriyle kayıtlı.
+Bekçi: `scripts/test_mobile_update.ts` (37 kontrol; backend ↔ mobil ↔ nginx sınırlayıcı
+tutarlılığını da ölçer).
+
+**② `src/config/client-version-policy.ts` — "bu backend hangi istemciyi bekliyor".**
+Deploy sırası backend ÖNCE olduğu için sahada bir süre eski istemciler çalışır; politika o
+boşluğu kapatır. Yeni istemci = kayıt defterine bir satır (route'a dokunma).
+⚠️ **Mobilde İKİ sürüm ekseni var:** `minVersion` (APK) + `minPaketTarihi` (uzak paket) —
+JS düzeltmesi `versionName`i değiştirmeden sahaya gider, tek eksen bunu ifade edemez.
+⚠️ `minVersion`/`minPaketTarihi` yükseltmeden ÖNCE onu karşılayan paketi yayınla; tersi
+tabletleri indirecek bir şey olmadan kilitler. Bekçi: `scripts/test_client_policy.ts`.
 
 ## Test Scriptleri
 
