@@ -1,4 +1,4 @@
-import { PackageX, Truck } from "lucide-react";
+import { Ban, ClipboardList, PackageSearch, PackageX, Target, Timer, Truck } from "lucide-react";
 import type { HubTile } from "../_components/ReportHubGrid";
 
 /**
@@ -11,6 +11,41 @@ import type { HubTile } from "../_components/ReportHubGrid";
  *     sorusu cevapsızdı. Yeni karne hem trendi hem anlık geciken listesini verir.
  */
 export const salesReportTiles: HubTile[] = [
+  {
+    key: "order-cancellation",
+    title: "Sipariş İptal Karnesi",
+    description: "Müşteriler neden ve ne kadar geç vazgeçiyor — sebep dağılımı ve maliyet sınıfı",
+    icon: Ban,
+    to: "/reports/sales/order-cancellation",
+  },
+  {
+    key: "order-leadtime",
+    title: "Sipariş → Teslim Süresi",
+    description: "Sipariş alındıktan kaç gün sonra mal çıkıyor — termin sözünün dayanağı",
+    icon: Timer,
+    to: "/reports/sales/order-leadtime",
+  },
+  {
+    key: "demand-analysis",
+    title: "Talep Analizi",
+    description: "En çok istenen kumaş-renk-en üçlüleri ve aylık mevsimsellik",
+    icon: Target,
+    to: "/reports/sales/demand-analysis",
+  },
+  {
+    key: "order-intake",
+    title: "Sipariş Karnesi",
+    description: "Dönemde alınan sipariş adedi, metrajı, ortalama büyüklüğü ve iptal oranı",
+    icon: ClipboardList,
+    to: "/reports/sales/order-intake",
+  },
+  {
+    key: "open-order-coverage",
+    title: "Açık Sipariş Karşılanma",
+    description: "Açık siparişin ne kadarı bugün sevk edilebilir, ne kadarı üretim istiyor",
+    icon: PackageSearch,
+    to: "/reports/sales/open-order-coverage",
+  },
   {
     key: "shipment-scorecard",
     title: "Sevk & Termin Karnesi",

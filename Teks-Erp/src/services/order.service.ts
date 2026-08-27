@@ -17,8 +17,18 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { AppError } from "../utils/app-error";
-import { OrderStatus, Prisma, RollStatus, ShipmentStatus, WorkOrderStatus } from "@prisma/client";
+import {
+  OrderStatus,
+  Prisma,
+  ReasonPresetKind,
+  RollStatus,
+  ShipmentStatus,
+  WorkOrderStatus,
+  WorkOrderType,
+} from "@prisma/client";
 import { withBarcodeRetry } from "../utils/barcode-retry";
+import { resolveReasonCode } from "./reason-preset.service";
+import { openLineWhere, someOpenLine } from "./helpers/order-line-scope.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { validate as isUuidString } from "uuid";
 import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
@@ -49,7 +59,7 @@ const ORDER_LINE_WRITABLE = new Set([
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { CURRENCIES } from "../config/currencies";
-import { recomputeOrderStatus } from "./helpers/order-status.helper";
+import { recomputeOrderStatus, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
@@ -194,6 +204,32 @@ function buildWoStateWhere(
   return conds.length === 1 ? conds[0] : { OR: conds };
 }
 
+/**
+ * Sipariş listesi özet şeridinin verisi (`getOrderStats`).
+ * Kapsam ayrımı için o metodun başlığına bak: ADET listenin aynası, METRAJ
+ * iptalleri her zaman dışlar.
+ */
+export interface OrderStats {
+  /** Filtreye uyan sipariş adedi — listenin satır sayısıyla BİREBİR. */
+  totalCount: number;
+  /** `OrderStatus` → adet. Yalnız kümede geçen durumlar anahtar taşır. */
+  byStatus: Record<string, number>;
+  /** Kalemlerden toplanan istenen metraj (m). İptaller hariç. */
+  totalOrderedQty: number;
+  /** Sevk edilen metraj (m) — `OrderLine.shippedQty` defter denormu. İptaller hariç. */
+  totalShippedQty: number;
+  /** Açık metraj (m) = istenen − sevk (0'da kırpılı). */
+  totalOpenQty: number;
+  /** Termini geçmiş ve hâlâ açık sipariş adedi. */
+  overdueCount: number;
+  /** Önümüzdeki 7 gün içinde termini dolan açık sipariş adedi. */
+  dueThisWeekCount: number;
+  /** Hiçbir kalemi aktif iş emrine bağlı olmayan sipariş adedi (`woState=NONE`). */
+  noWorkOrderCount: number;
+  /** Para birimi → toplam tutar. Fiyat girilmemişse boş obje. */
+  amountByCurrency: Record<string, number>;
+}
+
 // ── Sipariş → sevkiyat drill-down (getOrderShipments) ────────────────────────
 /** İç toplama kovası — çuval sevki ve fason direkt sevk aynı şekle indirgenir. */
 interface ShipmentAgg {
@@ -270,6 +306,334 @@ export class OrderService extends BaseService {
 
     if (conds.length === 0) return undefined;
     return conds.length === 1 ? conds[0] : { AND: conds };
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // SİPARİŞ KALEMİ İPTALİ (2026-08-27)
+  // ═══════════════════════════════════════════════════════════════════════
+  // 10 kalemlik siparişin 3 kalemini iptal edip kalan 7'siyle devam etmek.
+  // Bugüne dek imkânsızdı: kalem çıkarmanın tek yolu hard-delete idi ve aktif
+  // iş emri bağı varsa TAMAMEN reddediliyordu.
+  //
+  // Kararlar (kullanıcı, 2026-08-26):
+  //   • İptal SOFT — kalem listede kalır, "iptal" işaretli ve salt-okunur.
+  //   • İş emri bağı OTOMATİK kopar; kullanıcı yalnız UYARILIR (engellenmez).
+  //   • Kısmi sevk görmüş kalem iptal EDİLEBİLİR ("kalanı iptal"): sevk edilen
+  //     geçerli sayılır, kalan düşer.
+  //   • Son aktif kalem iptal edilirse sipariş: sevk varsa COMPLETED, yoksa
+  //     CANCELLED (kural `recomputeOrderStatus`'ta — tek yazma noktası).
+
+  /** Kalem iptalinde etkilenecek iş emri. */
+  private async loadLineForCancel(orderId: string, lineId: string) {
+    const line = await prisma.orderLine.findUnique({
+      where: { id: lineId },
+      select: {
+        id: true,
+        orderId: true,
+        quantity: true,
+        shippedQty: true,
+        cancelledAt: true,
+        width: true,
+        item: { select: { name: true } },
+        color: { select: { name: true } },
+        order: { select: { id: true, orderNumber: true, status: true } },
+        workOrderLinks: {
+          select: {
+            workOrder: {
+              select: {
+                id: true,
+                workOrderNumber: true,
+                status: true,
+                type: true,
+                targetItemId: true,
+                _count: { select: { orderLinks: true } },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!line || line.orderId !== orderId) {
+      throw AppError.notFound("Sipariş kalemi bulunamadı.");
+    }
+    return line;
+  }
+
+  /**
+   * İPTAL ÖNİZLEMESİ — "onayladığında ne olacak" somut listesi.
+   * CLAUDE.md kuralı: yıkıcı işlemde etkilenen HER kayıt tek tek gösterilir;
+   * "3 kayıt etkilenecek" gibi soyut sayı yetmez.
+   */
+  async getLineCancelPreview(orderId: string, lineId: string): Promise<ApiResponse<unknown>> {
+    const line = await this.loadLineForCancel(orderId, lineId);
+    const requested = new Prisma.Decimal(line.quantity);
+    const shipped = new Prisma.Decimal(line.shippedQty);
+    const remaining = Prisma.Decimal.max(0, requested.minus(shipped));
+
+    const blockers: string[] = [];
+    if (line.cancelledAt !== null) blockers.push("Bu kalem zaten iptal edilmiş.");
+    if (line.order.status === OrderStatus.CANCELLED) {
+      blockers.push("Siparişin tamamı zaten iptal edilmiş.");
+    }
+    if (remaining.lessThanOrEqualTo(0)) {
+      blockers.push(
+        "Kalemin tamamı sevk edilmiş — iptal edilecek bir şey kalmadı. " +
+          "Mal geri geldiyse iade yolunu kullanın.",
+      );
+    }
+
+    // Aktif WO bağları — CANCELLED/SUPERSEDED sayılmaz (zaten ölü).
+    const affectedWorkOrders = line.workOrderLinks
+      .map((l) => l.workOrder)
+      .filter((w) => w.status !== WorkOrderStatus.CANCELLED && w.status !== "SUPERSEDED")
+      .map((w) => {
+        // Bu kalem WO'nun SON bağıysa iş emri stok üretimine döner
+        // ("tip = bağın aynası" kuralı, 2026-08-21).
+        const willBecomeStock = w.type === WorkOrderType.ORDER_PRODUCTION && w._count.orderLinks === 1;
+        // TEK SERT ENGEL: hedef kumaşı olmayan WO stok üretimine DÖNEMEZ.
+        // Sessizce bağlı bırakmak "tip = bağın aynası" invariantını bozardı.
+        const blockedNoTargetItem = willBecomeStock && !w.targetItemId;
+        if (blockedNoTargetItem) {
+          blockers.push(
+            `${w.workOrderNumber} bu kalemin son bağı ve hedef kumaşı tanımlı değil — ` +
+              "stok üretimine dönemez. Önce iş emrinde hedef kumaşı seçin.",
+          );
+        }
+        return {
+          id: w.id,
+          workOrderNumber: w.workOrderNumber,
+          status: w.status,
+          willBecomeStock,
+          blockedNoTargetItem,
+        };
+      });
+
+    // Bu kalem iptal edilince siparişte aktif kalem kalıyor mu?
+    const otherActive = await prisma.orderLine.count({
+      where: { orderId, cancelledAt: null, id: { not: lineId } },
+    });
+    const isLastActiveLine = otherActive === 0 && line.cancelledAt === null;
+    const orderShipped = new Prisma.Decimal(
+      (await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { shippedQty: true } }))
+        .shippedQty,
+    );
+
+    return {
+      success: true,
+      data: {
+        lineId: line.id,
+        orderNumber: line.order.orderNumber,
+        itemName: line.item.name,
+        colorName: line.color?.name ?? null,
+        width: line.width == null ? null : Number(line.width),
+        requestedQty: Number(requested),
+        shippedQty: Number(shipped),
+        /** İptal edilecek metraj — sevk edilen DÜŞMEZ, "kalanı iptal". */
+        remainingQty: Number(remaining),
+        affectedWorkOrders,
+        isLastActiveLine,
+        /** Son kalemse siparişin düşeceği statü (kullanıcı kuralı). */
+        resultingOrderStatus: isLastActiveLine
+          ? orderShipped.greaterThan(0)
+            ? OrderStatus.COMPLETED
+            : OrderStatus.CANCELLED
+          : null,
+        blockers,
+        canCancel: blockers.length === 0,
+      },
+    };
+  }
+
+  /**
+   * KALEMİ İPTAL ET. Sebep İSTEĞE BAĞLI (sipariş iptaliyle aynı gerekçe:
+   * zorunlu tutmak operatörü rastgele kategori seçmeye iter).
+   */
+  async cancelOrderLine(
+    orderId: string,
+    lineId: string,
+    userId?: string,
+    reason?: { reasonCode?: string | null; reasonText?: string | null },
+  ): Promise<ApiResponse<unknown>> {
+    const preview = (await this.getLineCancelPreview(orderId, lineId)).data as {
+      canCancel: boolean;
+      blockers: string[];
+      affectedWorkOrders: Array<{ id: string; willBecomeStock: boolean }>;
+    };
+    if (!preview.canCancel) {
+      throw AppError.badRequest(preview.blockers.join(" "));
+    }
+
+    // Sebep çözümü TX DIŞINDA (top/sipariş iptalindeki kural): önbellek okuması
+    // + olası tazeleme kilidi uzatmasın; geçersiz kod iptali hiç başlatmadan durdurur.
+    const { code: cancelReasonCode, text: cancelReasonText } = reason
+      ? await resolveReasonCode(ReasonPresetKind.ORDER_CANCEL, reason)
+      : { code: null, text: null };
+
+    const affectedWoIds = preview.affectedWorkOrders.map((w) => w.id);
+
+    await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM: iki paralel iptal isteğinde ikincisi 409 almalı
+      // (check-then-act YASAK — CLAUDE.md durum geçişi kuralı).
+      const claim = await tx.orderLine.updateMany({
+        where: { id: lineId, cancelledAt: null },
+        data: {
+          cancelledAt: new Date(),
+          cancelReason: cancelReasonText,
+          cancelReasonCode,
+          cancelledById: userId ?? null,
+        },
+      });
+      if (claim.count === 0) {
+        throw AppError.conflict("Bu kalem bu sırada iptal edildi. Sayfayı yenileyin.");
+      }
+
+      // Bağları kopar + gerekiyorsa WO'yu stok üretimine çevir.
+      for (const woId of affectedWoIds) {
+        await tx.workOrderToOrderLine.deleteMany({
+          where: { workOrderId: woId, orderLineId: lineId },
+        });
+        // Taze sayım: yarışta araya yeni bağ girdiyse tip ORDER kalmalı
+        // (`unlinkOrderLine` ile aynı atomik desen).
+        const remaining = await tx.workOrderToOrderLine.count({ where: { workOrderId: woId } });
+        if (remaining === 0) {
+          await tx.workOrder.updateMany({
+            where: { id: woId, type: WorkOrderType.ORDER_PRODUCTION },
+            data: { type: WorkOrderType.STOCK_PRODUCTION },
+          });
+        }
+        await markTravelerCardDirtyTx(tx, woId);
+      }
+
+      // Karşılanma + statü tek yazma noktasından (son-kalem kuralı orada).
+      const lineIds = (
+        await tx.orderLine.findMany({ where: { orderId }, select: { id: true } })
+      ).map((l) => l.id);
+      await touchOrderLinesTx(tx, lineIds);
+      await recomputeOrderStatus(tx, orderId);
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ORDER_LINE",
+      recordId: lineId,
+      newData: {
+        cancelled: true,
+        orderId,
+        cancelReasonCode,
+        cancelReason: cancelReasonText,
+        unlinkedWorkOrderIds: affectedWoIds,
+      },
+    }).catch(() => undefined);
+
+    const fresh = await this.findById(orderId);
+    return {
+      success: true,
+      data: fresh.data,
+      message:
+        affectedWoIds.length > 0
+          ? `Kalem iptal edildi. ${affectedWoIds.length} iş emri bağı koparıldı.`
+          : "Kalem iptal edildi.",
+    };
+  }
+
+  /**
+   * SİPARİŞ ÖZET ŞERİDİ — listedeki filtreye uyan kümenin sayıları.
+   *
+   * Where `buildListWhere` ile kurulur (BaseService) — yani `findAll`ın offset ve
+   * cursor yollarıyla AYNI ifade. Envanterdeki `buildRollWhere` emsali: özet ile
+   * liste ayrı where kurarsa üst satırdaki sayı alttaki tabloyla çelişir ve
+   * operatör hangisine güveneceğini bilemez.
+   *
+   * ⚠️ İKİ FARKLI KAPSAM, BİLİNÇLİ:
+   *   • ADET (`totalCount` / `byStatus`) listenin BİREBİR aynasıdır. Panel iptalleri
+   *     varsayılan gizler (`hideCancelled` → `extraWhere`), o yüzden İPTAL kovası
+   *     yalnız kullanıcı "İptalleri göster" dediğinde dolar. Burada ikinci bir
+   *     iptal sorgusu KOŞULMAZ — koşsaydı şeridin toplamı listenin satır sayısını
+   *     tutmazdı ki bu ekranın tek vaadi o eşitliktir.
+   *   • METRAJ (`totalOrderedQty` / `totalShippedQty` / `totalOpenQty`) iptalleri
+   *     HER ZAMAN dışlar: iptal edilmiş siparişin açık metrajı yoktur. Kullanıcı
+   *     iptalleri görünür yapsa bile metraj değişmez.
+   *
+   * `totalOpenQty` düz çıkarmadır (istenen − sevk). Satır bazında kırpma
+   * (`GREATEST(...,0)`) gerekmiyor: tahsis kapasitesi kilit altında taze okunur
+   * (`order-status.helper` kilit protokolü) ve canlı kopyada aşırı sevkli kalem
+   * ÖLÇÜLDÜ = 0. Yine de toplam 0'da kırpılır — invariant kırılırsa şerit negatif
+   * metraj basmasın (gösterim koruması; muhasebe defteri değil).
+   */
+  async getOrderStats(req: Request): Promise<ApiResponse<OrderStats>> {
+    const params = parseQueryParams(req);
+    const where = this.buildListWhere(params, req) as Prisma.OrderWhereInput;
+
+    /** Liste where'i + ek koşul. */
+    const and = (extra: Prisma.OrderWhereInput): Prisma.OrderWhereInput => ({
+      AND: [where, extra],
+    });
+    /** Terminal olmayan (hâlâ çıkış bekleyen) siparişler. */
+    const openStatuses: Prisma.OrderWhereInput = {
+      status: { notIn: [OrderStatus.COMPLETED, OrderStatus.CANCELLED] },
+    };
+    const now = new Date();
+    // tz-ok: "termini geçti mi" / "7 gün içinde mi" iki AN arasındaki farktır,
+    // takvim günü sorusu değil → fabrika saat diliminden bağımsız.
+    const weekAhead = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+
+    const [grouped, lineAgg, overdueCount, dueThisWeekCount, noWorkOrderCount, amountGroups] =
+      await Promise.all([
+        prisma.order.groupBy({ where, by: ["status"], _count: { _all: true } }),
+        prisma.orderLine.aggregate({
+          where: { order: and({ status: { not: OrderStatus.CANCELLED } }) },
+          _sum: { quantity: true, shippedQty: true },
+        }),
+        prisma.order.count({ where: and({ AND: [openStatuses, { deadline: { lt: now } }] }) }),
+        prisma.order.count({
+          where: and({ AND: [openStatuses, { deadline: { gte: now, lte: weekAhead } }] }),
+        }),
+        // En ağır sorgu (NOT EXISTS → order_lines ⋈ work_order_to_order_lines ⋈
+        // work_orders). `woState=NONE` filtresiyle AYNI ifade — rozet ne sayıyorsa
+        // filtre onu bulmalı.
+        prisma.order.count({ where: and(WO_STATE_WHERE.NONE as Prisma.OrderWhereInput) }),
+        prisma.order.groupBy({
+          where: and({ totalAmount: { not: null } }),
+          by: ["currency"],
+          _sum: { totalAmount: true },
+        }),
+      ]);
+
+    let totalCount = 0;
+    const byStatus: Record<string, number> = {};
+    for (const row of grouped) {
+      totalCount += row._count._all;
+      byStatus[row.status] = row._count._all;
+    }
+
+    // Decimal ile biriktir — ondalık metrajda JS float drift yapar.
+    const ordered = new Prisma.Decimal(lineAgg._sum.quantity ?? 0);
+    const shipped = new Prisma.Decimal(lineAgg._sum.shippedQty ?? 0);
+    const open = ordered.minus(shipped);
+
+    const amountByCurrency: Record<string, number> = {};
+    for (const row of amountGroups) {
+      const sum = row._sum.totalAmount;
+      // Para birimi KARIŞIK olabilir (Order.currency satır bazlı) → tek toplam
+      // basmak yanlış olurdu; kırılım aynen döner, gösterimi istemci seçer.
+      if (sum != null) amountByCurrency[row.currency] = Number(sum);
+    }
+
+    return {
+      success: true,
+      data: {
+        totalCount,
+        byStatus,
+        totalOrderedQty: Number(ordered),
+        totalShippedQty: Number(shipped),
+        totalOpenQty: open.isNegative() ? 0 : Number(open),
+        overdueCount,
+        dueThisWeekCount,
+        noWorkOrderCount,
+        amountByCurrency,
+      },
+    };
   }
 
   /**
@@ -646,7 +1010,8 @@ export class OrderService extends BaseService {
     const where: Prisma.OrderWhereInput = {
       ...restBase,
       status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
-      lines: { some: { quantity: { gt: prisma.orderLine.fields.shippedQty } } },
+      // Aktif + açık kalem — tek kaynak (iptal edilmiş kalem talep sayılmaz).
+      ...someOpenLine(prisma.orderLine.fields),
       ...(filterStatus !== undefined
         ? { AND: [{ status: filterStatus as Prisma.OrderWhereInput["status"] }] }
         : {}),
@@ -792,7 +1157,7 @@ export class OrderService extends BaseService {
       const limit = Math.min(Math.max(1, params.limit), 50);
       const whereOpen: Prisma.OrderLineWhereInput = {
         ...baseWhere,
-        quantity: { gt: prisma.orderLine.fields.shippedQty },
+        ...openLineWhere(prisma.orderLine.fields),
       };
       // EN YENİ SİPARİŞ ÖNCE (desc). Saha gerekçesi: picker'ı açan kişi genelde
       // az önce girilen siparişi arıyor; artan sırada o kalem sayfalar sonundaydı.
@@ -910,7 +1275,7 @@ export class OrderService extends BaseService {
     const lines = await prisma.orderLine.findMany({
       // F146: legacy mod da cursor moddaki açık-satır süzgecini uygular (200-tavanı
       // açık satırlara harcanır). Bellek süzgeci (openQty>0) defansif kalır — özdeş.
-      where: { ...baseWhere, quantity: { gt: prisma.orderLine.fields.shippedQty } },
+      where: { ...baseWhere, ...openLineWhere(prisma.orderLine.fields) },
       take: 200,
       orderBy: { createdAt: "asc" },
       select: {
@@ -1824,6 +2189,10 @@ export class OrderService extends BaseService {
         lines: {
           select: {
             id: true,
+            // ⚠️ LOAD-BEARING: aşağıdaki `cancelledAt !== null` süzgeci bu alan
+            // seçilmezse `undefined !== null` ile TÜM kalemleri iptal sayar ve
+            // hiçbir kalem güncellenemez olurdu (sessiz felç).
+            cancelledAt: true,
             requiredProperties: { select: { propertyId: true } },
             workOrderLinks: {
               select: {
@@ -1995,6 +2364,19 @@ export class OrderService extends BaseService {
             "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
           );
         }
+        // ── İPTAL EDİLMİŞ KALEM DOKUNULMAZ (2026-08-27) ──────────────────
+        // İki ayrı tehlike var ve ikisi de SESSİZ:
+        //   ① payload'da yoksa diff onu SİLER → iptal olgusu ve sevk edilmiş
+        //      metrajı kayıtlardan kaybolur (sevkiyat mutabakatı bozulur),
+        //   ② payload'da varsa metrajı/rengi DEĞİŞTİRİLEBİLİR → kapanmış bir
+        //      kararın geçmişi sonradan yeniden yazılır.
+        // İkisini de sunucuda kapatıyoruz; istemci disiplinine bırakılmaz.
+        const cancelledLineIds = new Set(
+          // Gevşek `!= null` (order-status.helper ile aynı gerekçe): alan
+          // seçilmezse KATI karşılaştırma tüm kalemleri iptal sayar ve hiçbir
+          // kalem güncellenemez olurdu.
+          current.lines.filter((l) => l.cancelledAt != null).map((l) => l.id),
+        );
         const existingById = new Map(current.lines.map((l) => [l.id, l]));
         const incomingIds = new Set(
           incomingLines
@@ -2003,7 +2385,11 @@ export class OrderService extends BaseService {
         );
 
         // Delete: existing - incoming. Cascade ile requiredProperties otomatik siler.
-        const toDelete = [...existingById.keys()].filter((eid) => !incomingIds.has(eid));
+        // İPTAL EDİLMİŞ kalemler silme kümesinden ÇIKARILIR (payload'da olmasalar
+        // da korunurlar) — form onları göstermese bile satır yaşamaya devam eder.
+        const toDelete = [...existingById.keys()].filter(
+          (eid) => !incomingIds.has(eid) && !cancelledLineIds.has(eid),
+        );
         if (toDelete.length > 0) {
           // O-6: silinecek satırları FOR UPDATE ile kilitle — in-flight WO orderLine
           // INSERT'i (FK → FOR KEY SHARE) yalnız FOR UPDATE bloklar (FOR NO KEY UPDATE
@@ -2044,6 +2430,10 @@ export class OrderService extends BaseService {
 
           if (existingLine) {
             const lineId = existingLine.id;
+            // İptal edilmiş kalem SALT-OKUNUR: bayat bir formdan gelen değişiklik
+            // sessizce yutulur (400 atmak, kullanıcının dokunmadığı bir satır
+            // yüzünden tüm kaydı düşürürdü — form kalemleri toptan gönderir).
+            if (cancelledLineIds.has(lineId)) continue;
             await tx.orderLine.update({ where: { id: lineId }, data: lineData });
 
             const currentPropIds = new Set(
@@ -2333,7 +2723,11 @@ export class OrderService extends BaseService {
       // (manualComplete/recompute) koşulsuz CANCELLED ezmesini kapat.
       const cancelClaim = await tx.order.updateMany({
         where: { id, status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] } },
-        data: { status: OrderStatus.CANCELLED },
+        // `cancelledAt` HER iptal yolunda damgalanır (bu generic yol dahil):
+        // "dönemde kaç iptal" sorusu `orderDate`e sorulamaz ve damgasız satır
+        // rapordan sessizce düşerdi. SEBEP yalnız operatörün seçtiği yolda
+        // (`cancelWithActions`) dolar — burada uydurulmaz.
+        data: { status: OrderStatus.CANCELLED, cancelledAt: new Date() },
       });
       if (cancelClaim.count === 0) {
         const fresh = await tx.order.findUnique({ where: { id }, select: { status: true } });
@@ -2645,9 +3039,22 @@ export class OrderService extends BaseService {
   async cancelWithActions(
     orderId: string,
     workOrderActions: Array<{ workOrderId: string; action: CancelAction }>,
-    userId?: string
+    userId?: string,
+    reason?: { reasonCode?: string | null; reasonText?: string | null }
   ): Promise<ApiResponse<unknown>> {
     this.assertNoActiveShipments(await this.getActiveShipmentLinks(orderId), "İptal");
+
+    // SEBEP ÇÖZÜMÜ TX DIŞINDA (top iptalindeki kural): `resolveReasonCode`
+    // katalog önbelleğini okur ve gerekirse tazeler — tx içinde çağrılırsa
+    // kilidi ağ/DB turu kadar uzatır. Geçersiz açık kod burada 400 verir, yani
+    // iptal hiç başlamadan durur.
+    //
+    // Metin GÖRÜNEN kayıt, kod RAPOR ANAHTARI. Serbest metin yazıldıysa kod
+    // NULL kalır ve UYDURULMAZ — rapor "Diğer" kovasında değil "kodsuz"
+    // kovasında gösterir.
+    const { code: cancelReasonCode, text: cancelReasonText } = reason
+      ? await resolveReasonCode(ReasonPresetKind.ORDER_CANCEL, reason)
+      : { code: null, text: null };
     const previewRes = await this.getCancelPreview(orderId);
     const preview = previewRes.data as {
       orderId: string;
@@ -2703,7 +3110,12 @@ export class OrderService extends BaseService {
           id: orderId,
           status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
         },
-        data: { status: OrderStatus.CANCELLED },
+        data: {
+          status: OrderStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelReason: cancelReasonText,
+          cancelReasonCode,
+        },
       });
       if (cancelClaim.count === 0) {
         const fresh = await tx.order.findUnique({

@@ -14,6 +14,11 @@ import {
 } from "../../services/reports/_shared";
 import { getReturnScorecard } from "../../services/reports/return-scorecard.report.service";
 import { getShipmentScorecard } from "../../services/reports/shipment-scorecard.report.service";
+import { getOpenOrderCoverage } from "../../services/reports/open-order-coverage.report.service";
+import { getOrderIntake } from "../../services/reports/order-intake.report.service";
+import { getDemandAnalysis } from "../../services/reports/demand-analysis.report.service";
+import { getOrderLeadTime } from "../../services/reports/order-leadtime.report.service";
+import { getOrderCancellationScorecard } from "../../services/reports/order-cancellation.report.service";
 
 const router = Router();
 const guard = [verifyToken, requirePermission("report:sales")];
@@ -43,6 +48,205 @@ router.get("/return-scorecard", ...guard, async (req: Request, res: Response, ne
     const compareRange = resolveCompareRange(input, range);
     const data = await getReturnScorecard(range, compareRange);
     res.status(200).json(reportEnvelope(data, range, compareRange));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/open-order-coverage:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Açık sipariş karşılanma (anlık)
+ *     description: |
+ *       Açık sipariş metrajının ne kadarı elde duran bitmiş maldan karşılanır,
+ *       ne kadarı zaten üretimdeki mala düşer, ne kadarı için yeni iş emri
+ *       gerekir.
+ *
+ *       ANLIK fotoğraftır — tarih aralığı ALMAZ. "Bugün neyi sevk edebilirim"
+ *       sorusunun dönemle işi yoktur (Stok Karnesi ile aynı gerekçe). Zarf yine
+ *       de standart `range` alanını taşır ki istemci sözleşmesi tek tip kalsın.
+ *
+ *       Hesap motoru Üretim Dengesi ekranıyla AYNIDIR
+ *       (`production-balance.service`) — iki yüzey aynı rakamı söyler.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Karşılanma özeti + müşteri/kumaş kırılımı + kalem listesi
+ */
+router.get("/open-order-coverage", ...guard, async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const data = await getOpenOrderCoverage();
+    res.status(200).json(reportEnvelope(data, resolveDateRange({})));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/order-intake:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Sipariş Karnesi — dönemde alınan iş
+ *     description: |
+ *       Sipariş GİRİŞİNİ ölçer: kaç sipariş alındı, kaç metre istendi, ortalama
+ *       sipariş büyüklüğü, iptal oranı, müşteri/kumaş kırılımı ve günlük seri.
+ *
+ *       Çıpa `Order.orderDate` (kaydın yazıldığı an değil, işin alındığı tarih).
+ *
+ *       İki payda bilinçli olarak farklıdır: ADET dönemde açılan tüm siparişleri
+ *       sayar (sonradan iptal edilenler dahil), METRAJ iptalleri dışlar.
+ *       Ortalama sipariş büyüklüğünün paydası iptalsiz sipariş adedidir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: compare
+ *         schema: { type: string, enum: [none, prev, prevYear, custom] }
+ *     responses:
+ *       200:
+ *         description: Sipariş giriş karnesi
+ */
+router.get("/order-intake", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = compareRangeSchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const compareRange = resolveCompareRange(input, range);
+    const data = await getOrderIntake(range, compareRange);
+    res.status(200).json(reportEnvelope(data, range, compareRange));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/demand-analysis:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Talep Analizi — hangi kumaş-renk-en isteniyor
+ *     description: |
+ *       Talebi ÜÇLÜ SPEC düzeyinde (kumaş + renk + en) sıralar. Depodaki mal
+ *       ancak birebir aynı spec'i karşıladığı için kumaş düzeyinde sıralamak
+ *       yanlış rengi üretmeye yol açardı.
+ *
+ *       İKİ ZAMAN KAPSAMI: sıralama ve kırılımlar seçili tarih aralığına aittir;
+ *       aylık mevsimsellik serisi ise SON 24 AYI okur (30 günlük pencerede
+ *       mevsim yoktur).
+ *
+ *       "Müşteri Sipariş Profili" ile karıştırma: o tek müşterinin favorilerini,
+ *       bu fabrika geneli talebi gösterir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: compare
+ *         schema: { type: string, enum: [none, prev, prevYear, custom] }
+ *     responses:
+ *       200:
+ *         description: Talep analizi
+ */
+router.get("/demand-analysis", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = compareRangeSchema.parse(req.query);
+    const range = resolveDateRange({ dateFrom: input.dateFrom, dateTo: input.dateTo });
+    const compareRange = resolveCompareRange(input, range);
+    const data = await getDemandAnalysis(range, compareRange);
+    res.status(200).json(reportEnvelope(data, range, compareRange));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/order-leadtime:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Sipariş → Teslim Süresi
+ *     description: |
+ *       "Kaç gün termin sözü verebilirim" sorusunu ölçer. Sevk & Termin Karnesi
+ *       sözün TUTULUP tutulmadığını ölçer; bu rapor sözün NE OLMASI gerektiğini.
+ *
+ *       İki ayrı süre döner: ilk sevke kadar ("mal ne zaman çıkmaya başlar") ve
+ *       tam kapanışa kadar ("ne zaman biter"). Kısmi sevkli siparişlerde ikisi
+ *       çok farklıdır ve tek sayıya indirmek termini yanlışlar.
+ *
+ *       Ana rakam MEDYANDIR; ortalama tek bir felaket siparişle yukarı çekilir.
+ *       P90 da döner (taahhüt için). Her seviyede `sampleSize` vardır ve
+ *       `minSample` altında istemci sayı yerine uyarı basar — az örnekle
+ *       hesaplanan medyan istatistik değil tesadüftür.
+ *
+ *       Çıpa `orderDate` (işin alındığı an), `createdAt` değil.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: Teslim süresi istatistikleri
+ */
+router.get("/order-leadtime", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = dateRangeSchema.parse(req.query);
+    const range = resolveDateRange(input);
+    const data = await getOrderLeadTime(range);
+    res.status(200).json(reportEnvelope(data, range));
+  } catch (e) {
+    next(e);
+  }
+});
+
+/**
+ * @openapi
+ * /api/reports/sales/order-cancellation:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Sipariş İptal Karnesi — müşteriler neden vazgeçiyor
+ *     description: |
+ *       Çıpa `cancelledAt` (iptalin OLDUĞU an). Sipariş Karnesi'ndeki iptal
+ *       oranı FARKLI bir soruyu cevaplar ("bu ay ALINAN siparişlerin kaçı
+ *       sonradan iptal oldu"); iki rakam birbirini tutmak zorunda değildir.
+ *
+ *       Sebep kodu rapor anahtarıdır; sebebi girilmemiş ve serbest metinle
+ *       girilmiş iptaller AYRI ve adlandırılmış kovalarda görünür (gizlenmez).
+ *
+ *       `cancelledAt` 2026-08-26'da eklendi — öncesindeki iptallerde NULL'dur ve
+ *       dönem raporuna girmez; sayıları `undatedCancelCount` ile ayrıca döner.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: dateFrom
+ *         schema: { type: string, format: date-time }
+ *       - in: query
+ *         name: dateTo
+ *         schema: { type: string, format: date-time }
+ *     responses:
+ *       200:
+ *         description: İptal karnesi
+ */
+router.get("/order-cancellation", ...guard, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const input = dateRangeSchema.parse(req.query);
+    const range = resolveDateRange(input);
+    const data = await getOrderCancellationScorecard(range);
+    res.status(200).json(reportEnvelope(data, range));
   } catch (e) {
     next(e);
   }

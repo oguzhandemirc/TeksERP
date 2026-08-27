@@ -72,6 +72,25 @@ export function factoryDaySql(columnExpr: string, timeZone: string = FACTORY_TIM
 }
 
 /**
+ * FABRİKA AYI — aylık gruplama (mevsimsellik serileri).
+ *
+ * `factoryDaySql`in ay ikizidir ve aynı sebeple var: ayın ilk gecesi
+ * (yerel 00:00–03:00) UTC'de HÂLÂ ÖNCEKİ AYDIR. Oturum bilinçli olarak UTC
+ * (adapter varsayımı) → çıplak `DATE_TRUNC('month', tstz)` her ayın ilk
+ * gecesindeki siparişleri bir önceki aya yazar ve mevsimsellik serisi sessizce
+ * kayar.
+ *
+ * ⚠️ `'Europe/Istanbul'` literalini çağıran tarafa KOPYALAMA — bu dosya
+ * `test_report_day_boundary.ts` taramasının tek meşru muafıdır; başka bir
+ * dosyada yazılan `DATE_TRUNC('month'…)` bekçiyi KIRMIZI yapar (ve haklıdır).
+ *
+ * @param columnExpr Tırnaklanmış kolon ifadesi, örn. `o."orderDate"`.
+ */
+export function factoryMonthSql(columnExpr: string, timeZone: string = FACTORY_TIMEZONE): Prisma.Sql {
+  return Prisma.raw(`DATE_TRUNC('month', ${columnExpr} AT TIME ZONE '${timeZone}')::date`);
+}
+
+/**
  * Verilen anın FABRİKA saat dilimindeki duvar-saati parçaları.
  * `Intl` kullanılır (izinli paket listesinde date kütüphanesi yok) — süreç
  * saat diliminden (`TZ` env) BAĞIMSIZ çalışır. `new Date().setHours(0,0,0,0)`

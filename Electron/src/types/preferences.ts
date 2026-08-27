@@ -64,6 +64,17 @@ export interface AppPreferences {
      *  yalnız listeyi süzer; detay "Aç" butonu veya satıra tıklayarak açılır. */
     openDetailOnScan?: boolean;
   };
+  /** Siparişler ekranı tercihleri. */
+  orders?: {
+    /**
+     * Özet şeridinin görünüm modu. Tema/renk gibi kullanıcıyı takip eder:
+     * aynı kişi başka bilgisayara girince kendi düzenini bulur.
+     *   sade     — adet + durum rozetleri
+     *   onerilen — + istenen/sevk/açık metraj + geciken (varsayılan)
+     *   genis    — + iş emri yok, bu hafta terminli, tutar
+     */
+    statsView?: "sade" | "onerilen" | "genis";
+  };
   /** Dashboard widget düzeni — gizli widget'lar + grup/öğe sırası. */
   dashboard?: {
     hidden?: string[];

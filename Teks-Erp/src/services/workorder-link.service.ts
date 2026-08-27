@@ -32,6 +32,7 @@
 import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
@@ -203,6 +204,8 @@ export class WorkOrderLinkService {
           // tablosunu geriye dönük bozar.
           status: { notIn: [OrderStatus.CANCELLED, OrderStatus.COMPLETED] },
         },
+        // Siparişin KENDİSİ ayakta olsa bile iptal edilmiş KALEM aday değildir.
+        ...ACTIVE_LINE,
       },
       select: {
         id: true,
@@ -284,11 +287,22 @@ export class WorkOrderLinkService {
         width: true,
         item: { select: { name: true } },
         color: { select: { name: true } },
+        cancelledAt: true,
         order: { select: { status: true, orderNumber: true } },
       },
     });
     if (lines.length !== ids.length) {
       throw AppError.badRequest("Bazı sipariş satırları bulunamadı.");
+    }
+    // İptal edilmiş KALEM: sessizce süzmek YANLIŞ olurdu — planlamacı seçtiği
+    // kalemin listeye girmediğini göremez ve iş emrini eksik açar. Sipariş
+    // iptalindeki gibi AÇIK RED (bayat ekranla gelen istek de burada durur).
+    const cancelledLines = lines.filter((l) => l.cancelledAt !== null);
+    if (cancelledLines.length > 0) {
+      throw AppError.badRequest(
+        `İptal edilmiş sipariş kalemine iş emri bağlanamaz (${cancelledLines.length} kalem). ` +
+          "Ekranı yenileyip tekrar deneyin.",
+      );
     }
     const cancelled = [
       ...new Set(

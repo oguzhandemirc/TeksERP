@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { workOrderStatusLabels } from "@/types/enums";
 import { orderService } from "./service";
+import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import type {
   OrderCancelAction,
   OrderCancelPreviewWO,
@@ -54,6 +55,8 @@ export function OrderCancelDialog({
 }: Props) {
   const qc = useQueryClient();
   const [actionByWO, setActionByWO] = useState<Record<string, OrderCancelAction>>({});
+  const [reasonCode, setReasonCode] = useState<string>("");
+  const [reasonText, setReasonText] = useState<string>("");
 
   const previewQuery = useQuery({
     queryKey: ["order-cancel-preview", orderId],
@@ -88,6 +91,28 @@ export function OrderCancelDialog({
     }
   }, [open, orderId]);
 
+  // ── İPTAL SEBEBİ (2026-08-26) ────────────────────────────────────────────
+  // Ölçüm: sebep bugüne dek HİÇBİR yerde tutulmuyordu (kolon yok, uç almıyor,
+  // audit bile yalnız statü yazıyordu) — "müşteriler neden vazgeçiyor" sorusu
+  // sorulamıyordu. Liste fabrikanın panelden düzenlediği katalogdan gelir.
+  const presets = useQuery({
+    queryKey: ["reason-presets", "order-cancel"],
+    queryFn: () => reasonPresetService.list(false),
+    enabled: open,
+    staleTime: 5 * 60_000,
+  });
+  const reasonOptions = useMemo(
+    () =>
+      (presets.data ?? [])
+        .filter((p) => p.kind === "ORDER_CANCEL")
+        .sort((a, b) => a.sortOrder - b.sortOrder),
+    [presets.data],
+  );
+  const chosenReason = reasonOptions.find((p) => p.code === reasonCode);
+  // "Diğer" gibi satırlar metin İSTER — kod tek başına hiçbir şey anlatmaz.
+  const needsFreeText = chosenReason?.requiresText === true;
+  const reasonIncomplete = needsFreeText && reasonText.trim().length === 0;
+
   const cancelMut = useMutation({
     mutationFn: () => {
       if (!orderId) throw new Error("orderId missing");
@@ -95,7 +120,15 @@ export function OrderCancelDialog({
         workOrderId: wo.id,
         action: actionByWO[wo.id] ?? wo.defaultAction,
       }));
-      return orderService.cancelWithActions(orderId, actions);
+      // Serbest metin yazıldıysa KOD GÖNDERİLMEZ: sunucu metinden türetemezse
+      // NULL bırakır ve rapor onu "kodsuz" kovasında gösterir. Uydurulmuş bir
+      // kod, raporun en çok güvendiği alanı sessizce kirletirdi.
+      const reason = chosenReason
+        ? needsFreeText
+          ? { reasonText: reasonText.trim() }
+          : { reasonCode: chosenReason.code, reasonText: chosenReason.fullText ?? chosenReason.label }
+        : undefined;
+      return orderService.cancelWithActions(orderId, actions, reason);
     },
     onSuccess: (res) => {
       toast.success(res.message ?? "Sipariş iptal edildi.");
@@ -200,6 +233,40 @@ export function OrderCancelDialog({
           </div>
         )}
 
+        {/* Sebep İSTEĞE BAĞLI: zorunlu tutmak operatörü rastgele kategori
+            seçmeye iter ve rapor kalitesini DÜŞÜRÜR (top iptalindeki aynı
+            karar). Ama seçilen satır metin istiyorsa o metin zorunludur —
+            "Diğer" tek başına hiçbir şey anlatmaz. */}
+        <div className="grid gap-1 border-t pt-3">
+          <label className="text-xs text-muted-foreground">İptal sebebi (isteğe bağlı)</label>
+          <select
+            className="h-8 rounded-md border bg-background px-2 text-sm"
+            value={reasonCode}
+            disabled={cancelMut.isPending}
+            onChange={(e) => {
+              setReasonCode(e.target.value);
+              setReasonText("");
+            }}
+          >
+            <option value="">— Seçilmedi</option>
+            {reasonOptions.map((p) => (
+              <option key={p.code} value={p.code}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+          {needsFreeText && (
+            <input
+              autoFocus
+              className="h-8 rounded-md border bg-background px-2 text-sm"
+              placeholder="Sebebi yazın"
+              value={reasonText}
+              disabled={cancelMut.isPending}
+              onChange={(e) => setReasonText(e.target.value)}
+            />
+          )}
+        </div>
+
         <DialogFooter>
           <Button
             type="button"
@@ -213,7 +280,15 @@ export function OrderCancelDialog({
             type="button"
             variant="destructive"
             onClick={() => cancelMut.mutate()}
-            disabled={isLoading || hasError || cancelMut.isPending || preview?.canCancel === false}
+            disabled={
+              isLoading ||
+              hasError ||
+              cancelMut.isPending ||
+              preview?.canCancel === false ||
+              // Metin isteyen sebep seçilip metin yazılmadıysa onay KAPALI —
+              // aksi halde raporda anlamsız bir "Diğer" satırı birikirdi.
+              reasonIncomplete
+            }
           >
             {cancelMut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
             Siparişi İptal Et

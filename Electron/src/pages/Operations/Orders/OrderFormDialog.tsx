@@ -122,8 +122,15 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
 
   const lineSummary = useMemo(() => {
     if (!order) return "";
-    const totalQty = order.lines.reduce((acc, l) => acc + Number(l.quantity), 0);
-    return `${order.lines.length} kalem · toplam ${totalQty.toLocaleString("tr-TR", { useGrouping: false })} m`;
+    // Özet AKTİF kalemleri anlatır — iptal edilmiş kalemin metrajı üretilecek
+    // işe dahil değildir ve toplamı şişirirdi.
+    const active = order.lines.filter((l) => l.cancelledAt == null);
+    const totalQty = active.reduce((acc, l) => acc + Number(l.quantity), 0);
+    const cancelled = order.lines.length - active.length;
+    return (
+      `${active.length} kalem · toplam ${totalQty.toLocaleString("tr-TR", { useGrouping: false })} m` +
+      (cancelled > 0 ? ` (${cancelled} iptal)` : "")
+    );
   }, [order]);
 
   return (

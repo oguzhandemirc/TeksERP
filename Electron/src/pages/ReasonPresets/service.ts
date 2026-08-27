@@ -13,7 +13,8 @@ export type ReasonPresetKind =
   | "ROLL_RECORD_CORRECTION"
   | "ROLL_MANUAL_ENTRY"
   | "ROLL_CANCEL"
-  | "WORK_ORDER_REWORK";
+  | "WORK_ORDER_REWORK"
+  | "ORDER_CANCEL";
 
 export interface ReasonPreset {
   id: string;
@@ -45,6 +46,9 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // yazılır, metin ayrıca fason çekisine talimat olur. Sunucudaki
   // `KIND_STORES_TEXT` ile birebir aynı tablo.
   WORK_ORDER_REWORK: false,
+  // Sipariş iptalinde satıra GÖRÜNEN metin yazılır (`Order.cancelReason`) +
+  // kod (`cancelReasonCode`) — top iptaliyle aynı sözleşme.
+  ORDER_CANCEL: true,
 };
 
 export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string }[] = [
@@ -72,6 +76,11 @@ export const KIND_TABS: { kind: ReasonPresetKind; title: string; hint: string }[
     kind: "WORK_ORDER_REWORK",
     title: "Yeniden Üretim",
     hint: "Depodaki bitmiş topu tekrar üretime/boyahaneye alma sebebi. Seçilen metin fason çeki listesine talimat olarak basılır.",
+  },
+  {
+    kind: "ORDER_CANCEL",
+    title: "Sipariş İptali",
+    hint: "Müşteri neden vazgeçti. İlk satırlar MÜŞTERİ kararıdır (satışın bakması gereken sinyal), son ikisi bizim kayıt/tedarik sorunumuzdur — rapor ikisini ayırır.",
   },
 ];
 

@@ -67,8 +67,64 @@ export interface OrderCancelPreview {
   canCancel: boolean;
 }
 
+/**
+ * Sipariş listesi özet şeridinin verisi (`GET /api/orders/stats`).
+ * Backend `OrderStats` tipinin aynası (Electron backend'i import edemez).
+ *
+ * ⚠️ Kapsam ayrımı bilinçli: ADET alanları listenin BİREBİR aynasıdır
+ * (iptaller panel varsayılanında gizli → `byStatus.CANCELLED` yalnız
+ * "İptalleri göster" açıkken dolar), METRAJ alanları iptalleri HER ZAMAN
+ * dışlar. İkisini birbirine uydurma.
+ */
+export interface OrderStats {
+  totalCount: number;
+  byStatus: Record<string, number>;
+  totalOrderedQty: number;
+  totalShippedQty: number;
+  totalOpenQty: number;
+  overdueCount: number;
+  dueThisWeekCount: number;
+  noWorkOrderCount: number;
+  amountByCurrency: Record<string, number>;
+}
+
+/** `GET /orders/:id/lines/:lineId/cancel-preview` yanıtı. */
+export interface OrderLineCancelPreview {
+  lineId: string;
+  orderNumber: string;
+  itemName: string;
+  colorName: string | null;
+  width: number | null;
+  requestedQty: number;
+  shippedQty: number;
+  /** İptal edilecek metraj — sevk edilen DÜŞMEZ ("kalanı iptal"). */
+  remainingQty: number;
+  affectedWorkOrders: Array<{
+    id: string;
+    workOrderNumber: string;
+    status: string;
+    /** Bu kalem son bağıysa iş emri stok üretimine döner. */
+    willBecomeStock: boolean;
+    blockedNoTargetItem: boolean;
+  }>;
+  isLastActiveLine: boolean;
+  /** Son kalemse siparişin düşeceği statü. */
+  resultingOrderStatus: "COMPLETED" | "CANCELLED" | null;
+  blockers: string[];
+  canCancel: boolean;
+}
+
 export const orderService = {
   ...base,
+  /**
+   * Özet şeridi sayıları — listeyle AYNI query parametrelerini alır.
+   * Backend where'i `buildListWhere` ile kurar, yani liste ile sapamaz.
+   */
+  getStats: (params: QueryParams): Promise<ApiResponse<OrderStats>> =>
+    apiClient
+      .get<ApiResponse<OrderStats>>(`/api/orders/stats${buildQueryString(params)}`)
+      .then((r) => r.data),
+
   /**
    * Sipariş kaleminin rengini değiştir — iş emri bağlıyken de çalışan DAR kapı
    * ("Rengi Değiştir → siparişi de düzelt", 2026-08-21). Sebep zorunlu.
@@ -123,12 +179,46 @@ export const orderService = {
    * Sipariş iptal — operatör seçimleriyle. `workOrderActions` boşsa backend
    * default davranışı uygular (preview'daki defaultAction'lar).
    */
+  /** Kalem iptali önizlemesi — etkilenecek iş emirleri + siparişin akıbeti. */
+  getLineCancelPreview: (
+    orderId: string,
+    lineId: string,
+  ): Promise<ApiResponse<OrderLineCancelPreview>> =>
+    apiClient
+      .get<ApiResponse<OrderLineCancelPreview>>(
+        `/api/orders/${orderId}/lines/${lineId}/cancel-preview`,
+      )
+      .then((r) => r.data),
+
+  /**
+   * Sipariş kalemini iptal et (SOFT — kalem listede kalır). Sebep isteğe bağlı;
+   * sipariş iptaliyle AYNI katalogdan gelir (`ORDER_CANCEL`).
+   */
+  cancelOrderLine: (
+    orderId: string,
+    lineId: string,
+    reason?: { reasonCode?: string | null; reasonText?: string | null },
+  ): Promise<ApiResponse<Order>> =>
+    apiClient
+      .post<ApiResponse<Order>>(`/api/orders/${orderId}/lines/${lineId}/cancel`, reason ?? {})
+      .then((r) => r.data),
+
+  /**
+   * Sipariş iptali. Sebep İSTEĞE BAĞLIDIR (2026-08-26) ve hem METİN hem KOD
+   * olarak gider: kod rapor anahtarıdır ve ASLA değişmez, metin fabrikanın o
+   * günkü etiketidir. Kodu istemci UYDURMAZ — katalogdan seçileni aynen yollar,
+   * serbest metinde kod göndermez (sunucu NULL bırakır).
+   */
   cancelWithActions: (
     id: string,
     workOrderActions: Array<{ workOrderId: string; action: OrderCancelAction }>,
+    reason?: { reasonCode?: string | null; reasonText?: string | null },
   ): Promise<ApiResponse<Order>> =>
     apiClient
-      .post<ApiResponse<Order>>(`/api/orders/${id}/cancel`, { workOrderActions })
+      .post<ApiResponse<Order>>(`/api/orders/${id}/cancel`, {
+        workOrderActions,
+        ...(reason ?? {}),
+      })
       .then((r) => r.data),
 
   suggestAliases: (

@@ -105,7 +105,7 @@ export async function recomputeOrderStatus(
       status: true,
       completedAt: true,
       manualClosedById: true,
-      lines: { select: { id: true, quantity: true } },
+      lines: { select: { id: true, quantity: true, cancelledAt: true } },
     },
   });
   if (!order) return null;
@@ -113,8 +113,18 @@ export async function recomputeOrderStatus(
   const ledger = await computeLineLedger(tx, order.lines.map((l) => l.id));
 
   // Satır denormunu yaz + header toplamını biriktir.
+  //
+  // ── İPTAL EDİLMİŞ KALEM (2026-08-27) ──────────────────────────────────────
+  // Denorm YAZILIR (sevk defteri iptalden etkilenmez — mal çıktıysa çıkmıştır),
+  // ama TOPLAMA `quantity` DEĞİL `shipped` girer. Gerekçe: iptal edilen kalemin
+  // kalanı artık beklenmiyor; `quantity` toplamda kalsaydı sipariş o farkı
+  // asla kapatamaz ve SONSUZA DEK "kısmi sevk" görünürdü.
+  //   • hiç sevk görmemiş iptal kalem → toplama 0 katar (yok gibi)
+  //   • 100 istenip 40 sevk edilip iptal edilen kalem → toplama 40 katar,
+  //     yani o kalem "tam karşılandı" sayılır ve sipariş kapanabilir.
   let shippedQty = new Prisma.Decimal(0);
   let totalRequired = new Prisma.Decimal(0);
+  let activeLineCount = 0;
   for (const l of order.lines) {
     const led = ledger.get(l.id) ?? { shipped: new Prisma.Decimal(0) };
     await tx.orderLine.update({
@@ -122,8 +132,29 @@ export async function recomputeOrderStatus(
       data: { shippedQty: led.shipped },
     });
     shippedQty = shippedQty.plus(led.shipped);
-    totalRequired = totalRequired.plus(l.quantity);
+    // ⚠️ GEVŞEK karşılaştırma (`== null`) BİLİNÇLİ: alanı `select`'ine almayan
+    // bir çağıran `undefined` gönderir ve KATI `=== null` orada FALSE döner —
+    // yani TÜM kalemler iptal sayılır, `allLinesCancelled` tetiklenir ve sipariş
+    // sevk yokken CANCELLED'a düşer. Ölçüldü: `test_helpers`in sahte tx'i tam
+    // bunu yaptı ve dört senaryo birden bozuldu. Eksik bir alan, siparişi iptal
+    // ettiremez — belirsizlikte AKTİF kabul edilir (önceki davranış).
+    if (l.cancelledAt == null) {
+      activeLineCount++;
+      totalRequired = totalRequired.plus(l.quantity);
+    } else {
+      totalRequired = totalRequired.plus(led.shipped);
+    }
   }
+  /**
+   * TÜM kalemleri iptal edilmiş sipariş (kullanıcı kuralı, 2026-08-27):
+   *   • bir şey sevk edilmişse → COMPLETED (iş yapıldı, gerisi istenmiyor)
+   *   • hiç sevk yoksa        → CANCELLED (ortada iş kalmadı)
+   *
+   * ⚠️ `order.lines.length > 0` şart: kalemi HİÇ OLMAYAN sipariş (form
+   * açılışında, kalemler eklenmeden önce) de "aktif kalem yok" durumundadır ve
+   * onu iptal etmek yeni siparişi doğduğu anda öldürürdü.
+   */
+  const allLinesCancelled = order.lines.length > 0 && activeLineCount === 0;
 
   // İptal terminal; manuel kapatılmış sipariş de terminal (kullanıcı kararı korunur).
   const terminal =
@@ -142,12 +173,19 @@ export async function recomputeOrderStatus(
         ? OrderStatus.COMPLETED
         : OrderStatus.PARTIAL_SHIPPED;
     }
+    // Son aktif kalem de iptal edildiyse sipariş açık kalamaz.
+    if (allLinesCancelled) {
+      newStatus = shippedQty.greaterThan(0) ? OrderStatus.COMPLETED : OrderStatus.CANCELLED;
+    }
   }
 
   const changed = newStatus !== order.status;
   const data: Prisma.OrderUncheckedUpdateInput = { shippedQty };
   if (changed) {
     data.status = newStatus;
+    // Kalem iptalleri yüzünden CANCELLED'a düşen siparişe de zaman damgası —
+    // damgasız iptal İptal Karnesi'nden sessizce düşerdi.
+    if (newStatus === OrderStatus.CANCELLED) data.cancelledAt = new Date();
     if (newStatus === OrderStatus.COMPLETED && !order.completedAt) {
       data.completedAt = new Date();
     }

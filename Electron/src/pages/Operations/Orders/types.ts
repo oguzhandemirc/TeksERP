@@ -41,6 +41,13 @@ export interface OrderLine {
   customerColorName: string | null;
   /** Kesim/sevk için serbest not — örn. kaç parçaya bölüneceği. Tamburda görünür. */
   cutNote: string | null;
+  /**
+   * İPTAL İZİ (2026-08-27). NULL = aktif kalem.
+   * Kalem SİLİNMEZ: listede "iptal" işaretli ve salt-okunur kalır, sevk edilmiş
+   * metrajı defterde durur. Sipariş iptalinden AYRI bir olaydır.
+   */
+  cancelledAt?: string | null;
+  cancelReason?: string | null;
   item?: OrderLineItem;
   color?: OrderLineColor | null;
   /** Müşterinin istediği özellikler — WO açılırken targetProperties önerisi olur. */

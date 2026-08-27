@@ -133,6 +133,9 @@ enum ReasonPresetKind {
   ROLL_MANUAL_ENTRY
   /// KK1 / Depo / Tambur — top iptal sebebi.
   ROLL_CANCEL
+  /// Sipariş iptali — "müşteri neden vazgeçti". 2026-08-26'ya kadar sebep
+  /// HİÇBİR yerde tutulmuyordu (audit bile yalnız status yazıyordu).
+  ORDER_CANCEL
   /// Hızlı İş Emri — depodaki BİTMİŞ topu yeniden üretime alma sebebi
   /// ("ton tutmadı", "leke"…). Metin SAKLAMAZ: kod + serbest metin iş emrinin
   /// `parameters.rework` alanına yazılır, metin ayrıca 1. adımın notuna geçip
@@ -456,6 +459,7 @@ model User {
   updatedLabelTemplates    LabelTemplate[]    @relation("LabelTemplateUpdatedBy")
   createdOrders            Order[]            @relation("OrderCreatedBy")
   updatedOrders            Order[]            @relation("OrderUpdatedBy")
+  cancelledOrderLines      OrderLine[]        @relation("OrderLineCancelledBy")
   createdBatchs            Batch[]            @relation("BatchCreatedBy")
   updatedBatchs            Batch[]            @relation("BatchUpdatedBy")
 
@@ -1974,6 +1978,20 @@ model Order {
   /// Liste sayfasında "shippedQty / sum(lines.quantity)" gösterimi için.
   shippedQty Decimal @default(0) @db.Decimal(12, 3)
 
+  // ── İPTAL İZİ (2026-08-26) ──────────────────────────────────────────────
+  /// İptal edildiği an. `completedAt`in ikizi: "dönemde kaç sipariş iptal oldu"
+  /// sorusu `orderDate`e (işin alındığı an) sorulamaz — sipariş Ocak'ta alınıp
+  /// Mart'ta iptal edilebilir ve iki soru farklı aylara aittir.
+  cancelledAt       DateTime? @db.Timestamptz
+  /// GÖRÜNEN sebep metni (operatörün seçtiği hazır satır ya da serbest yazısı).
+  cancelReason      String?   @db.Text
+  /// RAPOR ANAHTARI. Kod ASLA değişmez, etiket serbesttir (ReasonPreset düzeni);
+  /// kodu SUNUCU türetir (`resolveReasonCode`), istemci disiplinine bırakılmaz.
+  /// Serbest metin → NULL (uydurulmaz). Index BİLİNÇLİ YOK: rapor sorgusu
+  /// `status='CANCELLED'` eşitliğiyle başlar ve `(status, createdAt)` bileşiği
+  /// o daralmayı zaten veriyor.
+  cancelReasonCode  String?   @db.VarChar(64)
+
   // Tamamlanma kaydı
   completedAt       DateTime? @db.Timestamptz // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
   manualClosedById  String?   @db.Uuid // Manuel kapatan kullanıcı (null = otomatik kapandı)
@@ -2007,6 +2025,15 @@ model Order {
   @@index([manualClosedById])
   @@index([status, createdAt(sort: Desc)])
   @@index([deadline])
+  /// VARSAYILAN LİSTE SIRALAMASI. `(status, createdAt)` bileşiği yalnız status
+  /// EŞİTLİK predicate'iyle ordering verir; panelin varsayılanı ise
+  /// `status NOT IN ('CANCELLED')` (hideCancelled) → o index kullanılamaz.
+  /// Sipariş ekranından 30 günlük varsayılan tarih penceresi kaldırıldığı için
+  /// (2026-08-26) liste + keyset cursor + withTotal count aksi halde seq scan'e
+  /// düşerdi. Migration `20260826120000` bunu PARTIAL'a çevirir
+  /// (`WHERE status <> 'CANCELLED'`) — Prisma predicate farkını drift saymaz
+  /// (CLAUDE.md perf kuralı 4); envanteri `test_db_invariants` tutar.
+  @@index([createdAt(sort: Desc), id(sort: Desc)], map: "orders_active_createdAt_idx")
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([orderNumber(ops: raw("gin_trgm_ops"))], map: "orders_orderNumber_trgm_idx", type: Gin)
   @@map("orders")
@@ -2031,6 +2058,28 @@ model OrderLine {
   unitPrice  Decimal? @db.Decimal(12, 2) // For future finance module
   width      Decimal? @db.Decimal(12, 3) // İstenen en (cm)
 
+  // ── KALEM İPTALİ (2026-08-27) ────────────────────────────────────────────
+  /// İptal edildiği an. NULL = AKTİF kalem. Sipariş iptalinden AYRI bir olaydır:
+  /// 10 kalemlik siparişin 3 kalemi iptal edilip kalan 7'si üretilebilir.
+  ///
+  /// ⚠️ SOFT: satır SİLİNMEZ, listede "iptal" işaretli ve salt-okunur kalır —
+  /// sevk edilmiş metrajı defterde durmaya devam eder (`shippedQty`) ve
+  /// `recomputeOrderStatus` iptal kalemin İSTENEN'ini değil SEVK EDİLEN'ini
+  /// toplama katar; aksi halde iptal edilen kalem siparişi sonsuza dek açık
+  /// tutardı.
+  ///
+  /// ⚠️ Bu alanı okuyan HER "açık talep" yüzeyi tek kaynaktan süzülür:
+  /// `helpers/order-line-scope.helper.ts` (elle kopya AST bekçisiyle yasak).
+  cancelledAt      DateTime? @db.Timestamptz
+  /// GÖRÜNEN sebep metni. Katalog: `ReasonPresetKind.ORDER_CANCEL` (sipariş
+  /// iptaliyle AYNI liste — fabrikanın tek yerden düzenlediği sebepler ikiye
+  /// bölünmesin; kalem-özel sebep ihtiyacı doğarsa yeni kind açılır).
+  cancelReason     String?   @db.Text
+  /// RAPOR ANAHTARI — sunucu türetir (`resolveReasonCode`), serbest metinde NULL.
+  cancelReasonCode String?   @db.VarChar(64)
+  /// İptali yapan kullanıcı. Audit 6 ayda arşivlenir; künye kolonda kalır.
+  cancelledById    String?   @db.Uuid
+
   /// Tambur kesim talimatı — eşit-parça otomatik öneri. Örn 400 = "her 400 m'de bir kes".
   /// NULL = serbest kesim (operatör karar verir). Tambur bu değerden kesim önerir.
   pieceLengthM Decimal? @db.Decimal(12, 3)
@@ -2047,6 +2096,7 @@ model OrderLine {
 
   // Relations
   order                 Order                               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  cancelledBy           User?                               @relation("OrderLineCancelledBy", fields: [cancelledById], references: [id])
   item                  Item                                @relation(fields: [itemId], references: [id])
   color                 Color?                              @relation(fields: [colorId], references: [id])
   workOrderLinks        WorkOrderToOrderLine[]

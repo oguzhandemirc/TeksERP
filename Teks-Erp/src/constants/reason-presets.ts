@@ -48,7 +48,7 @@ export type ReasonPresetSeed = {
  * yenisini taşır, rapor anahtarı (kod) aynı kalır. Bayrağın "metin saklanır"
  * anlamı duruyor; "kod saklanmaz" anlamı DÜŞTÜ.
  */
-export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
+export const KIND_STORES_TEXT = {
   ROLL_SCRAP: false,
   ROLL_RECORD_CORRECTION: false,
   ROLL_MANUAL_ENTRY: true,
@@ -58,7 +58,13 @@ export const KIND_STORES_TEXT: Record<ReasonPresetKind, boolean> = {
   // adımının notuna geçip fason çekisine TALİMAT olarak basılır — ama bu, satıra
   // görünen metin yazmakla aynı şey değil; bayrak bu yüzden false.
   WORK_ORDER_REWORK: false,
-};
+  // Sipariş iptalinde satıra GÖRÜNEN metin yazılır (`Order.cancelReason`) —
+  // top iptaliyle aynı sözleşme. Kod ayrıca `cancelReasonCode`'a düşer.
+  ORDER_CANCEL: true,
+  // `as const satisfies` — değerler LİTERAL kalsın (true/false), ama eksik kind
+  // yine derlemede düşsün. `Record<..., boolean>` yazılsaydı literaller boolean'a
+  // genişler ve `TextReasonKind` bu tablodan TÜRETİLEMEZDİ (aşağıdaki nota bak).
+} as const satisfies Record<ReasonPresetKind, boolean>;
 
 /** Panelde/tablette listenin başlığı. */
 export const KIND_LABELS: Record<ReasonPresetKind, string> = {
@@ -67,6 +73,7 @@ export const KIND_LABELS: Record<ReasonPresetKind, string> = {
   ROLL_MANUAL_ENTRY: "Elle top ekleme sebepleri",
   ROLL_CANCEL: "Top iptal sebepleri",
   WORK_ORDER_REWORK: "Yeniden üretim sebepleri",
+  ORDER_CANCEL: "Sipariş iptal sebepleri",
 };
 
 /**
@@ -122,6 +129,26 @@ export const REWORK_REASONS: readonly ReasonPresetSeed[] = [
   { code: "DIGER", label: "Diğer", requiresText: true },
 ] as const;
 
+/**
+ * SİPARİŞ İPTALİ — "müşteri neden vazgeçti".
+ *
+ * Ayrım bilinçli: ilk dört satır MÜŞTERİ kararıdır (ticari sinyal — satışın
+ * bakması gereken şey), son ikisi BİZİM kayıt/tedarik sorunumuzdur. Rapor bu
+ * ikisini karıştırırsa "iptal oranımız yüksek" cümlesi hangi tarafın sorunu
+ * olduğunu söylemez. Kodlar rapor anahtarıdır ve ASLA değişmez; fabrika
+ * etiketleri panelden kendi diliyle düzenleyebilir.
+ */
+export const ORDER_CANCEL_REASONS: readonly ReasonPresetSeed[] = [
+  { code: "MUSTERI_VAZGECTI", label: "Müşteri vazgeçti", fullText: "Müşteri siparişten vazgeçti" },
+  { code: "FIYAT", label: "Fiyat anlaşmazlığı", fullText: "Fiyatta anlaşılamadı" },
+  { code: "TERMIN", label: "Termin uzun", fullText: "Verilen termin müşteriye uzun geldi" },
+  { code: "MUSTERI_DEGISIKLIK", label: "Müşteri değişiklik istedi", fullText: "Müşteri sipariş içeriğini değiştirmek istedi — yeni siparişle devam edildi" },
+  { code: "HATALI_KAYIT", label: "Hatalı kayıt", fullText: "Sipariş yanlış girildi (mükerrer / hatalı kayıt)" },
+  { code: "TEMIN_EDILEMEDI", label: "Temin edilemedi", fullText: "Kumaş / hammadde temin edilemedi" },
+  // Serbest metin kutusunun kataloğa bakan yüzü — Fire ekranıyla aynı desen.
+  { code: "DIGER", label: "Diğer", requiresText: true },
+] as const;
+
 /** Kind → sistem satırları. Sıra ANLAMLIDIR (dizideki sıra `sortOrder` olur). */
 export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPresetSeed[]> = {
   ROLL_SCRAP: SCRAP_REASONS,
@@ -129,6 +156,7 @@ export const REASON_PRESET_CATALOG: Record<ReasonPresetKind, readonly ReasonPres
   ROLL_MANUAL_ENTRY: MANUAL_ENTRY_REASONS,
   ROLL_CANCEL: CANCEL_REASONS,
   WORK_ORDER_REWORK: REWORK_REASONS,
+  ORDER_CANCEL: ORDER_CANCEL_REASONS,
 };
 
 export const REASON_PRESET_KINDS = Object.keys(REASON_PRESET_CATALOG) as ReasonPresetKind[];

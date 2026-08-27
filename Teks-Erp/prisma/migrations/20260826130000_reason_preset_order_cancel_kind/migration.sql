@@ -1,0 +1,15 @@
+-- SİPARİŞ İPTAL SEBEPLERİ (2026-08-26)
+--
+-- Ölçüm: sipariş iptalinde sebep HİÇBİR yerde tutulmuyordu. `Order`'da kolon
+-- yoktu, iptal ucu sebep parametresi almıyordu, audit kaydı bile yalnız
+-- {"status":"CANCELLED","actions":[]} yazıyordu. Yani "müşteriler neden
+-- vazgeçiyor" sorusu sorulamıyordu — veri yokluğu, sorgu eksikliği değil.
+--
+-- Liste DB'de yaşar (2026-08-19 kararı: hazır sebepler koddan DB'ye, fabrika
+-- kendi diliyle düzenler). Satırlar boot uzlaştırmasıyla gelir
+-- (`jobs/reason-preset-catalog.job.ts`); bu dosya YALNIZ enum değerini açar.
+--
+-- ⚠️ ALTER TYPE ... ADD VALUE, değeri KULLANAN bir statement ile aynı tx'te
+-- olamaz (PG 55P04). Bu dosya bilerek TEK ifadedir — kolonlar ayrı migration'da
+-- (20260826130100_order_cancel_reason).
+ALTER TYPE "ReasonPresetKind" ADD VALUE IF NOT EXISTS 'ORDER_CANCEL';

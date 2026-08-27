@@ -24,7 +24,7 @@ import {
   decodeOffsetCursor,
   encodeOffsetCursor,
 } from "../utils/cursor";
-import { PaginatedResponse, ApiResponse } from "../types/api.types";
+import { PaginatedResponse, ApiResponse, QueryParams } from "../types/api.types";
 import { Request } from "express";
 import { foldNameForCompare, normalizeDisplayName } from "./helpers/name-normalize.helper";
 import { dailyCodePrefix, nextDailySeq, foldCodeForCompare } from "../utils/code-format";
@@ -445,19 +445,39 @@ export class BaseService {
     return undefined;
   }
 
-  protected async findAllOffset(req: Request): Promise<PaginatedResponse<unknown>> {
-    const params = parseQueryParams(req);
-    params.sortBy = this.safeSortBy(params.sortBy || "createdAt");
-    params.filters = this.safeFilters(params.filters);
+  /**
+   * Liste `where`'ini kuran TEK NOKTA — offset, cursor ve özet (stats) yolları
+   * bunu çağırır.
+   *
+   * Neden tek nokta: dört adım (skaler filtre + arama → tarih aralığı →
+   * `extraWhere` → AND birleşimi) eskiden `findAllOffset` ve `findAllCursor`
+   * içinde AYRI AYRI yazılıydı. Aynı sınıf kopya `inventory.service`'te
+   * `buildRollWhere` ile çözülmüştü ve oradaki yorum sebebini söylüyor:
+   * "filtre eşleşmediğinde istatistik listeden sapar". Bir ekranın üst
+   * satırındaki özet ile altındaki tablo farklı sayı gösterirse operatör
+   * hangisine güveneceğini bilemez; bunu YAPISAL olarak imkânsız kılmak için
+   * where üretimi tek imzada toplandı.
+   *
+   * ⚠️ `safeFilters` bilerek İÇERİDE: dışarıda bırakılırsa yeni bir çağıran
+   * (ör. stats) onu atlar ve `filter[bilinmeyenKolon]` Prisma validation
+   * hatasıyla 500'e döner — süzgecin var olma sebebi tam olarak budur.
+   */
+  protected buildListWhere(params: QueryParams, req: Request): Record<string, unknown> {
     const built = buildWhereClause(
-      params.filters,
+      this.safeFilters(params.filters),
       this.config.searchFields,
       params.search,
       this.config.codeSearchFields
     );
     applyDateRange(built, params, this.config.dateFields ?? []);
     const extra = this.extraWhere(req);
-    const where = extra ? { AND: [built, extra] } : built;
+    return extra ? { AND: [built, extra] } : built;
+  }
+
+  protected async findAllOffset(req: Request): Promise<PaginatedResponse<unknown>> {
+    const params = parseQueryParams(req);
+    params.sortBy = this.safeSortBy(params.sortBy || "createdAt");
+    const where = this.buildListWhere(params, req);
     // F40: offset modunda id tie-breaker — eşit-değerli sortBy'da (ör. aynı isim)
     // sayfalar arası mükerrer/kayıp satırı önler (cursor yolu 347 ile parite).
     const orderBy =
@@ -505,7 +525,6 @@ export class BaseService {
    */
   protected async findAllCursor(req: Request): Promise<CursorPaginatedResponse<unknown>> {
     const params = parseQueryParams(req);
-    params.filters = this.safeFilters(params.filters);
     const rawLimit = parseInt(req.query.limit as string, 10) || 50;
     const limit = Math.min(Math.max(1, rawLimit), 200);
     const wantTotal = req.query.withTotal === "true";
@@ -515,17 +534,7 @@ export class BaseService {
 
     const cursor = decodeDynamicCursor(req.query.cursor as string | undefined);
 
-    const builtWhere = buildWhereClause(
-      params.filters,
-      this.config.searchFields,
-      params.search,
-      this.config.codeSearchFields
-    );
-    applyDateRange(builtWhere, params, this.config.dateFields ?? []);
-    const extra = this.extraWhere(req);
-    const baseWhere: Record<string, unknown> = extra
-      ? { AND: [builtWhere, extra] }
-      : builtWhere;
+    const baseWhere: Record<string, unknown> = this.buildListWhere(params, req);
 
     // İlişki / aggregate sıralaması (customer.name, branch.name, lines _count):
     // keyset imkansız (cursor değeri top-level skaler olmalı) → offset-encoded

@@ -47,7 +47,8 @@ export async function getCustomerOrderProfiles(): Promise<CustomerOrderProfileRo
         MAX(o."orderDate")   AS last_order_date
       FROM customers c
       LEFT JOIN orders o      ON o."customerId" = c.id
-      LEFT JOIN order_lines ol ON ol."orderId"  = o.id
+      -- aktif-kalem: iptal edilmiş kalem müşteri profiline girmez.
+      LEFT JOIN order_lines ol ON ol."orderId"  = o.id AND ol."cancelledAt" IS NULL
       WHERE c."isActive" = true
       GROUP BY c.id, c.name, c.code
     ),
@@ -56,7 +57,8 @@ export async function getCustomerOrderProfiles(): Promise<CustomerOrderProfileRo
         o."customerId" AS customer_id,
         i.name         AS item_name
       FROM orders o
-      JOIN order_lines ol ON ol."orderId" = o.id
+      -- aktif-kalem
+      JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL
       JOIN items i        ON ol."itemId"  = i.id
       GROUP BY o."customerId", i.name
       ORDER BY o."customerId", COUNT(*) DESC
@@ -66,7 +68,8 @@ export async function getCustomerOrderProfiles(): Promise<CustomerOrderProfileRo
         o."customerId" AS customer_id,
         col.name       AS color_name
       FROM orders o
-      JOIN order_lines ol ON ol."orderId" = o.id
+      -- aktif-kalem
+      JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL
       JOIN colors col     ON ol."colorId" = col.id
       GROUP BY o."customerId", col.name
       ORDER BY o."customerId", COUNT(*) DESC
@@ -76,7 +79,8 @@ export async function getCustomerOrderProfiles(): Promise<CustomerOrderProfileRo
         o."customerId" AS customer_id,
         ol.width       AS width
       FROM orders o
-      JOIN order_lines ol ON ol."orderId" = o.id
+      -- aktif-kalem
+      JOIN order_lines ol ON ol."orderId" = o.id AND ol."cancelledAt" IS NULL
       WHERE ol.width IS NOT NULL
       GROUP BY o."customerId", ol.width
       ORDER BY o."customerId", COUNT(*) DESC

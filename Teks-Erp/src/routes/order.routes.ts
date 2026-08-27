@@ -251,6 +251,12 @@ router.get(
  *                   properties:
  *                     workOrderId: { type: string, format: uuid }
  *                     action: { type: string, enum: [UNLINK_ONLY, CONVERT_TO_STOCK, CANCEL_WO] }
+ *               reasonCode:
+ *                 type: string
+ *                 description: Katalogdan iptal sebebi kodu (opsiyonel). Geçersizse 400.
+ *               reasonText:
+ *                 type: string
+ *                 description: Görünen/serbest sebep metni (opsiyonel). Kodu sunucu türetir.
  */
 const cancelBodySchema = z.object({
   workOrderActions: z
@@ -262,6 +268,19 @@ const cancelBodySchema = z.object({
     )
     .optional()
     .default([]),
+  /**
+   * İPTAL SEBEBİ (2026-08-26) — İSTEĞE BAĞLI.
+   *
+   * Zorunlu YAPILMADI: iptal zaten yıkıcı bir işlem ve önünde WO kararı olan
+   * bir onay ekranı var; sebebi de zorunlu kılmak operatörü "Diğer" seçmeye
+   * iter ve rapor kalitesini yükseltmez, DÜŞÜRÜR (top iptalindeki aynı karar).
+   *
+   * `reasonCode` katalogdan gelen kod, `reasonText` görünen/serbest metin.
+   * İkisinin uzlaştırılması SUNUCUDA (`resolveReasonCode`): açık kod katalogda
+   * doğrulanır, yoksa metinden türetilir, serbest metinde NULL kalır.
+   */
+  reasonCode: z.string().max(64).nullish(),
+  reasonText: z.string().max(1000).nullish(),
 });
 router.post(
   "/:id/cancel",
@@ -269,11 +288,12 @@ router.post(
   requirePermission("order:write"),
   async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const { workOrderActions } = cancelBodySchema.parse(req.body ?? {});
+      const { workOrderActions, reasonCode, reasonText } = cancelBodySchema.parse(req.body ?? {});
       const result = await orderService.cancelWithActions(
         assertValidUuid(req.params.id),
         workOrderActions,
-        req.user?.userId
+        req.user?.userId,
+        { reasonCode, reasonText }
       );
       res.status(200).json(result);
     } catch (error) {
@@ -317,6 +337,54 @@ router.post(
 // yarım kalır ("kaydettim ama nerede?"). YAZMA sınırı değişmedi — PATCH/DELETE/
 // iptal/manuel-kapatma hâlâ `order:write` ister (bekçi: test_mobile_order_permission).
 router.get("/", verifyToken, requireAnyPermission("order:read", "mobile:siparis"), controller.findAll);
+
+/**
+ * @openapi
+ * /api/orders/stats:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Sipariş listesi özet şeridi (adet + metraj + termin)
+ *     description: |
+ *       Listeyle AYNI filtreleri kabul eder (filter[], search, dateField/dateFrom/dateTo)
+ *       ve aynı where ifadesini kullanır — üstteki özet ile alttaki tablo sapamaz.
+ *
+ *       Kapsam ayrımı bilinçlidir: ADET alanları listenin birebir aynasıdır
+ *       (iptaller panel varsayılanında gizli olduğu için İPTAL kovası yalnız
+ *       "İptalleri göster" açıkken dolar), METRAJ alanları ise iptalleri her
+ *       zaman dışlar.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: filter[status]
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter[customerId]
+ *         schema: { type: string }
+ *       - in: query
+ *         name: filter[woState]
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Özet sayaçları
+ */
+// İzin liste ucuyla AYNI: şeridi göremeyen ama listeyi görebilen bir kullanıcı
+// olmamalı (kart/route hizası dersi — görünen yüzey ile veri yüzeyi ayrışmasın).
+router.get(
+  "/stats",
+  verifyToken,
+  requireAnyPermission("order:read", "mobile:siparis"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await orderService.getOrderStats(req);
+      res.json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
 
 /**
  * @openapi
@@ -703,6 +771,95 @@ router.patch("/:id", verifyToken, requirePermission("order:write"), controller.u
  *       400: { description: Sebep eksik / renk pasif / müşteriye atanamaz / izinli listede değil }
  *       409: { description: Sipariş iptal/tamamlanmış ya da kalem bu sırada değişti }
  */
+/**
+ * @openapi
+ * /api/orders/{id}/lines/{lineId}/cancel-preview:
+ *   get:
+ *     tags: [Orders]
+ *     summary: Kalem iptali önizlemesi — ne olacağının somut listesi
+ *     description: |
+ *       Etkilenecek iş emirlerini tek tek, koparılacak bağları ve bu kalem son
+ *       aktif kalemse siparişin düşeceği statüyü döner. Engel varsa
+ *       `canCancel:false` ve `blockers[]` ile sebebi yazılı gelir.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Önizleme }
+ *       404: { description: Kalem bulunamadı }
+ */
+router.get(
+  "/:id/lines/:lineId/cancel-preview",
+  verifyToken,
+  requirePermission("order:read"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const result = await orderService.getLineCancelPreview(
+        assertValidUuid(req.params.id),
+        assertValidUuid(req.params.lineId),
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/orders/{id}/lines/{lineId}/cancel:
+ *   post:
+ *     tags: [Orders]
+ *     summary: Sipariş kalemini iptal et (SOFT)
+ *     description: |
+ *       Kalem SİLİNMEZ — listede "iptal" işaretli ve salt-okunur kalır; sevk
+ *       edilmiş metrajı defterde durmaya devam eder ("kalanı iptal").
+ *
+ *       İş emri bağları OTOMATİK kopar; bir iş emrinin son bağıysa o iş emri
+ *       stok üretimine döner ("tip = bağın aynası"). Tek sert engel: hedef
+ *       kumaşı tanımlı olmayan iş emri stok üretimine dönemez.
+ *
+ *       Son aktif kalem iptal edilirse sipariş, sevk varsa COMPLETED, yoksa
+ *       CANCELLED olur (kural `recomputeOrderStatus`'ta).
+ *
+ *       Sebep İSTEĞE BAĞLIDIR ve `ReasonPresetKind.ORDER_CANCEL` kataloğundan
+ *       gelir; kodu sunucu türetir.
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reasonCode: { type: string }
+ *               reasonText: { type: string }
+ *     responses:
+ *       200: { description: Kalem iptal edildi, güncel sipariş döner }
+ *       400: { description: Engel var (önizlemedeki blockers) }
+ *       409: { description: Kalem bu sırada iptal edildi }
+ */
+router.post(
+  "/:id/lines/:lineId/cancel",
+  verifyToken,
+  requirePermission("order:write"),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const schema = z.object({
+        reasonCode: z.string().max(64).nullish(),
+        reasonText: z.string().max(1000).nullish(),
+      });
+      const body = schema.parse(req.body ?? {});
+      const result = await orderService.cancelOrderLine(
+        assertValidUuid(req.params.id),
+        assertValidUuid(req.params.lineId),
+        req.user?.userId,
+        { reasonCode: body.reasonCode, reasonText: body.reasonText },
+      );
+      res.status(200).json(result);
+    } catch (e) {
+      next(e);
+    }
+  },
+);
+
 router.patch(
   "/:id/lines/:lineId/color",
   verifyToken,

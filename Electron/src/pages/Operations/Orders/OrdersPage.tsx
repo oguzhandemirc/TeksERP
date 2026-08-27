@@ -33,6 +33,9 @@ import { useIsTabActive } from "@/components/layout/tabs/tab-active";
 import type { Order } from "./types";
 import { type OrderFormValues } from "./schema";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { usePreferences } from "@/providers/PreferencesProvider";
+import { OrdersStats, type OrderStatsView } from "./OrdersStats";
+import { useOrderStats } from "./useOrderStats";
 
 const FILTERS: FilterDef[] = [
   {
@@ -288,6 +291,44 @@ export function OrdersPage() {
     forceFilters,
   });
 
+  // ── Özet şeridi ──────────────────────────────────────────────────────────
+  const statsQuery = useOrderStats(forceFilters);
+  const { prefs, setPreference, ready: prefsReady } = usePreferences();
+  const statsView: OrderStatsView = prefs.orders?.statsView ?? "onerilen";
+  const setStatsView = (v: OrderStatsView) =>
+    // ⚠️ `prefsReady` gelmeden YAZMA: cache boşken setPreference
+    // DEFAULT_PREFERENCES + patch yazar ve 600 ms sonra kullanıcının TÜM
+    // tercihlerini (tema, favoriler, kolon düzeni) ezer.
+    setPreference({ orders: { ...prefs.orders, statsView: v } });
+
+  /**
+   * Rozet tıklaması → URL filtresi. `null` değer anahtarı SİLER; sayfa
+   * numarası/cursor sıfırlanır (yeni filtreyle eski sayfa anlamsız).
+   */
+  const applyStatsFilter = (patch: Record<string, string | null>) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null) next.delete(k);
+        else next.set(k, v);
+      }
+      next.delete("cursor");
+      next.delete("page");
+      return next;
+    });
+  };
+
+  /**
+   * Şeridin ÜSTÜNDEKİ kapsam etiketi. Sipariş ekranında 30 günlük varsayılan
+   * pencere KALDIRILDI (2026-08-26) — yani şerit varsayılan olarak tüm
+   * siparişleri sayar. Kullanıcı tarih seçtiğinde bunun görünmesi şart:
+   * envanterdeki `scopeLabel` dersi ("hangi kümeyi sayıyorum?").
+   */
+  const statsScopeLabel =
+    searchParams.get("dateFrom") || searchParams.get("dateTo")
+      ? "SEÇİLİ TARİH ARALIĞI"
+      : "TÜM SİPARİŞLER";
+
   const isEmpty = query.isSuccess && !search && pagination.total === 0;
 
   const createMut = useMutation({
@@ -360,7 +401,23 @@ export function OrdersPage() {
           />
         }
       />
-      <FilterBar filters={FILTERS} defaultDateRangeDays={30} />
+      {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı):
+          "ABC Tekstil'in 200 siparişi" sorusu pencere açıkken cevaplanamıyordu.
+          Sıralama maliyeti `orders_active_createdAt_idx` ile karşılanıyor. */}
+      <FilterBar filters={FILTERS} />
+
+      <div className="flex justify-end">
+        <OrdersStats
+          data={statsQuery.data?.data}
+          isLoading={statsQuery.isLoading}
+          scopeLabel={statsScopeLabel}
+          view={statsView}
+          onViewChange={setStatsView}
+          viewLocked={!prefsReady}
+          pricingEnabled={pricingEnabled}
+          onApplyFilter={applyStatsFilter}
+        />
+      </div>
 
       <DataTable<Order>
         table={table}

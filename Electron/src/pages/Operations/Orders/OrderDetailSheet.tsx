@@ -32,6 +32,7 @@ import { buildPicked, type PickedOrderLine } from "@/pages/Operations/WorkOrders
 import { orderService } from "./service";
 import { returnsService } from "@/pages/Operations/Returns/service";
 import { OrderCancelDialog } from "./OrderCancelDialog";
+import { OrderLineCancelDialog } from "./OrderLineCancelDialog";
 import { PartyCard } from "@/components/operations/PartyCard";
 import { LinkedWorkOrdersCard } from "./LinkedWorkOrdersCard";
 import { RecordInfoButton } from "@/components/RecordInfoButton";
@@ -49,7 +50,10 @@ const lineSig = (l: OrderLine) => `${l.itemId}::${l.colorId ?? ""}::${l.width ??
  * ya `> 0` ile karşılaştırdığı ya da yalnız açık kalemde kullandığı için görünür
  * bir fark yok — ama kopya kalsaydı üçüncü çağrı yerinde "−12 m açık" basardı.
  */
-const lineRem = (l: OrderLine) => lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0));
+// İptal edilmiş kalemin AÇIĞI YOKTUR: iş emri seçimine girmemeli ve
+// "sevk bekliyor" gibi görünmemeli (2026-08-27).
+const lineRem = (l: OrderLine) =>
+  l.cancelledAt != null ? 0 : lineOpen(Number(l.quantity), Number(l.shippedQty ?? 0));
 /** Çapaya göre hangi nitelikler farklı — overlay'de "neden seçilemez" metni için. */
 const diffLabel = (anchor: OrderLine, line: OrderLine) => {
   const parts: string[] = [];
@@ -78,6 +82,8 @@ export function OrderDetailSheet({
   const qc = useQueryClient();
   const [closeOpen, setCloseOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
+  /** Açık kalem-iptal diyaloğunun hedefi (null = kapalı). */
+  const [cancelLineId, setCancelLineId] = useState<string | null>(null);
   const [reason, setReason] = useState("");
   const [selectedLineIds, setSelectedLineIds] = useState<Set<string>>(new Set());
 
@@ -139,7 +145,12 @@ export function OrderDetailSheet({
     color: line.customerColorName ?? (line.colorId ? colorAliasMap.get(line.colorId) ?? null : null),
   });
 
-  const totalQty = order?.lines.reduce((acc, l) => acc + Number(l.quantity), 0) ?? 0;
+  // İlerleme çubuğunun PAYDASI aktif kalemlerden gelir: iptal edilmiş kalemin
+  // metrajı payda kalsaydı, tamamı sevk edilmiş bir sipariş asla %100
+  // görünmezdi (backend statüyü COMPLETED yaparken ekran "kısmi" derdi).
+  const activeLines = order?.lines.filter((l) => l.cancelledAt == null) ?? [];
+  const cancelledLineCount = (order?.lines.length ?? 0) - activeLines.length;
+  const totalQty = activeLines.reduce((acc, l) => acc + Number(l.quantity), 0);
   const isEditable = order && (order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
   const isCancellable = order && order.status !== "COMPLETED" && order.status !== "CANCELLED";
   const canClose = order && (order.status === "PENDING" || order.status === "APPROVED" || order.status === "PARTIAL_SHIPPED");
@@ -272,8 +283,12 @@ export function OrderDetailSheet({
 
             {/* Kapsama: istenen − sevk − WO-rezerve − serbest depo − ham stok = net açık.
                 "Depoda zaten karşılayan stok var mıydı" sorusunun cevabı. */}
+            {/* İptal edilmiş kalem karşılanma sorusuna girmez — onun için
+                "ne kadarı depodan karşılanır" diye bir soru yok. */}
             {order.status !== "CANCELLED" && order.status !== "COMPLETED" && (
-              <CoveragePanel lineIds={order.lines.map((l) => l.id)} />
+              <CoveragePanel
+                lineIds={order.lines.filter((l) => l.cancelledAt == null).map((l) => l.id)}
+              />
             )}
 
             {/* Bu siparişe gelen iadeler — bilgilendirici (sipariş yeniden açılmaz). */}
@@ -307,7 +322,8 @@ export function OrderDetailSheet({
 
             <div>
               <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                Sipariş Kalemleri ({order.lines.length})
+                Sipariş Kalemleri ({activeLines.length}
+                {cancelledLineCount > 0 ? ` + ${cancelledLineCount} iptal` : ""})
               </div>
               {woEligible && (
                 <div className="mb-2 flex items-start gap-2 rounded-md border border-info/25 bg-info/10 px-3 py-2 text-xs text-foreground">
@@ -322,6 +338,7 @@ export function OrderDetailSheet({
               )}
               <ul className="space-y-2">
                 {order.lines.map((line) => {
+                  const cancelled = line.cancelledAt != null;
                   const open = lineRem(line) > 0;
                   const isSel = selectedLineIds.has(line.id);
                   const dimmed =
@@ -337,6 +354,9 @@ export function OrderDetailSheet({
                         "relative rounded-md border p-3 transition-colors",
                         isSel && "border-primary bg-primary/5",
                         dimmed && "cursor-not-allowed select-none grayscale",
+                        // İptal edilmiş kalem SİLİNMEZ ama sönük ve salt-okunur:
+                        // listede durması izlenebilirlik içindir, aksiyon için değil.
+                        cancelled && "border-dashed bg-muted/30 opacity-70",
                       )}
                     >
                       {dimmed && (
@@ -359,7 +379,7 @@ export function OrderDetailSheet({
                             title={dimmed ? reason ?? undefined : undefined}
                           />
                         )}
-                        {woEligible && !open && (
+                        {woEligible && !open && !cancelled && (
                           <Badge
                             variant="muted"
                             className="mt-0.5 shrink-0 text-[10px] text-muted-foreground"
@@ -369,7 +389,15 @@ export function OrderDetailSheet({
                         )}
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium">{line.item?.name}</span>
+                            <span className={cn("font-medium", cancelled && "line-through")}>
+                              {line.item?.name}
+                            </span>
+                            {cancelled && (
+                              <Badge variant="destructive" className="gap-1 text-[10px]">
+                                <Ban className="h-2.5 w-2.5" />
+                                İptal
+                              </Badge>
+                            )}
                             {line.color && (
                               <Badge variant="muted" className="gap-1 text-[10px]">
                                 {line.color.hex && (
@@ -420,7 +448,32 @@ export function OrderDetailSheet({
                             </div>
                           )}
                           <OrderLineWoChips links={line.workOrderLinks} />
+                          {cancelled && line.cancelReason && (
+                            <div className="mt-1.5 text-[11px] text-muted-foreground">
+                              <span className="font-medium">İptal sebebi:</span> {line.cancelReason}
+                            </div>
+                          )}
                         </div>
+                        {/* Kalem iptali — yalnız AKTİF kalemde ve `order:write` ile.
+                            İptal edilmiş kalemde düğme çizilmez: gri bir buton
+                            olmayan bir yolu vaat eder. */}
+                        {!cancelled && (
+                          <PermissionGate permission="order:write">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                              title="Bu kalemi iptal et"
+                              aria-label="Kalemi iptal et"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCancelLineId(line.id);
+                              }}
+                            >
+                              <Ban className="h-3.5 w-3.5" />
+                            </Button>
+                          </PermissionGate>
+                        )}
                       </div>
                     </li>
                   );
@@ -496,6 +549,14 @@ export function OrderDetailSheet({
 
           </div>
         )}
+
+        <OrderLineCancelDialog
+          open={Boolean(cancelLineId)}
+          onOpenChange={(o) => !o && setCancelLineId(null)}
+          orderId={order?.id ?? null}
+          lineId={cancelLineId}
+          onCancelled={() => setCancelLineId(null)}
+        />
 
         <OrderCancelDialog
           open={cancelOpen}

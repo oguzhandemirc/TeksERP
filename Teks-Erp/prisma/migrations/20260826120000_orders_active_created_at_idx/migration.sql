@@ -1,0 +1,29 @@
+-- Sipariş listesinin VARSAYILAN SIRALAMASI için bileşik partial index.
+--
+-- Sorun: `orders` üzerinde tek başına `createdAt` index'i yoktu. Var olan tek
+-- `createdAt` içeren index `(status, createdAt DESC)` bileşiğidir ve btree onu
+-- yalnız `status` EŞİTLİK predicate'i verildiğinde ordering için kullanabilir.
+-- Panelin varsayılanı ise `hideCancelled` → `status NOT IN ('CANCELLED')`, yani
+-- eşitlik değil. Sonuç: varsayılan liste, keyset cursor'ın her sayfası ve
+-- `?withTotal=true` sayımı seq scan + top-N heapsort'a düşüyordu.
+--
+-- Tetikleyici: sipariş ekranından 30 günlük varsayılan tarih penceresi
+-- kaldırıldı (2026-08-26). Pencere bugüne dek taranan satır sayısını küçük
+-- tutarak sorunu gizliyordu; kalkınca maliyet tablo büyüdükçe doğrusal artar.
+--
+-- ⚠️ `id` KOLONU LOAD-BEARING — tekil `(createdAt)` YETMEZ. BaseService hem
+-- offset hem cursor yolunda sıralamaya HER ZAMAN `id` tie-breaker'ı ekler
+-- (`findAllOffset` orderBy dizisi + `dynamicCursorWhere` keyset koşulu), yani
+-- gerçek sorgu `ORDER BY "createdAt" DESC, id DESC`. Tekil index'le ölçüldü
+-- (2026-08-26): plan `Incremental Sort` (Presorted Key: createdAt) ekliyordu;
+-- bileşik index'le sıralama tamamen index'ten karşılanır ve keyset koşulu
+-- (`createdAt < X OR (createdAt = X AND id < Y)`) da aynı index'e oturur.
+--
+-- PARTIAL çünkü listenin varsayılanı iptalleri zaten dışlıyor. Prisma predicate
+-- farkını drift saymaz (CLAUDE.md perf kuralı 4) — bu yüzden şemada düz
+-- `@@index([createdAt(sort: Desc), id(sort: Desc)], map: "orders_active_createdAt_idx")`
+-- durur. Şema-dışı nesne envanteri: scripts/test_db_invariants.ts.
+--
+-- `statement_timeout = 0` GEREKMEZ: ölçüm (2026-08-26) `orders` = 78 satır.
+CREATE INDEX "orders_active_createdAt_idx" ON "orders" ("createdAt" DESC, "id" DESC)
+  WHERE status <> 'CANCELLED';
