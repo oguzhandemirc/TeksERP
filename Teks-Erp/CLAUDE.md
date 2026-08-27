@@ -97,8 +97,11 @@ Sadece bunlar. Alternatif tanıtma.
 | Logging | `morgan` |
 | Util | `uuid` |
 | Barcode | `bwip-js` |
+| Servis keşfi | `bonjour-service` (**1.4.4'e SABİT**) |
 | Etiket fontu (raster) | `opentype.js` (DejaVu TTF → 1bpp glif; fontlar `assets/fonts/`) |
 | Test data | `@faker-js/faker` (dev only) |
+
+> **`bonjour-service` — bilinçli istisna (2026-08-26).** Bu listenin kuralı "paket ekleme, kendin yaz"dır ve üç kez uygulandı (`node-cron`→`setInterval`, `handlebars`→kendi şablon motoru, CSV paketi→hiç). Burada tersine karar verildi çünkü alternatif ~250 satırlık **DNS tel biçimi** kodu yazmaktı: kodlama/çözümleme hatası sessizdir (ilan hiç görünmez, hata vermez) ve bakımı bize kalırdı. Ölçülen ayak izi: CommonJS (`module:"commonjs"` ile uyumlu, `ERR_REQUIRE_ESM` riski yok), tipleri paket içinde, 6 paket, yerel derleme yok, `paketle.ps1` `npm ci --omit=dev` ile otomatik taşır. **Sürüm SABİT (`1.4.4`, `^` yok)** — sonraki ana sürümler ESM-only olabilir ve `require()` yolunu sessizce kırar. Kullanımı tek dosyada (`src/jobs/mdns-advertiser.job.ts`) ve orada tembel `require` + try/catch ile yüklenir: paket kaybolsa bile sunucu ayakta kalır.
 
 ## RBAC Permission Kodları
 

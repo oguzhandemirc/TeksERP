@@ -25,6 +25,8 @@ import {
   DEFAULT_PORT,
 } from '../store/baseUrlStore';
 
+import { ServerDiscoveryList } from './ServerDiscoveryList';
+
 const COLORS = {
   bgDarker: '#0a1120',
   bgSoft: '#1e293b',
@@ -252,6 +254,25 @@ export default function ServerAddressSheet({
             )}
           </View>
         )}
+
+        {/* Keşif — "Test Et"in ÜSTÜNDE: elle adres yazmak son çare, önce ara. */}
+        <ServerDiscoveryList
+          currentUrl={buildUrl(scheme, host, port)}
+          recentUrls={recentUrls}
+          disabled={saving || testing.status === 'testing'}
+          onPick={(srv) => {
+            const parts = parseUrlParts(srv.baseUrl);
+            setScheme(parts.scheme);
+            setHost(parts.host);
+            setPort(parts.port);
+            setTesting({
+              status: 'ok',
+              message: srv.identity
+                ? `Bulundu — ${srv.identity.companyName || srv.identity.serverName}`
+                : 'Bulundu (kimlik bilgisi yok — eski sürüm olabilir)',
+            });
+          }}
+        />
 
         <View style={styles.actions}>
           <Button

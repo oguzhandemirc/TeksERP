@@ -32,6 +32,7 @@ import {
   DEFAULT_PORT,
 } from '../../../store/baseUrlStore';
 import ConfirmDialog from '../../../components/ConfirmDialog';
+import { ServerDiscoveryList } from '../../../components/ServerDiscoveryList';
 import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
 
 type TestResult =
@@ -281,6 +282,23 @@ export default function ServerSettingsScreen() {
             </View>
           </View>
         )}
+
+        {/* Keşif — durum bloğunun ÜSTÜNDE. Aynı bileşen kilit ekranındaki
+            ServerAddressSheet'te de kullanılıyor; ikisi ayrışmasın diye ortak. */}
+        <ServerDiscoveryList
+          currentUrl={rawUrl}
+          recentUrls={recentUrls}
+          disabled={saving || testing.status === 'testing'}
+          onPick={(srv) => {
+            applyParts(srv.baseUrl);
+            setTesting({
+              status: 'ok',
+              message: srv.identity
+                ? `Bulundu — ${srv.identity.companyName || srv.identity.serverName}`
+                : 'Bulundu (kimlik bilgisi yok — eski sürüm olabilir)',
+            });
+          }}
+        />
 
         <View style={styles.statusBlock}>
           {testing.status === 'testing' && (

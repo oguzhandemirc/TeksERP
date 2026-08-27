@@ -5,21 +5,23 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
-import { Loader2, Moon, Settings, Sun } from "lucide-react";
+import { Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { FormField } from "@/components/forms/FormField";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { authService } from "@/services/authService";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt } from "@/lib/jwt";
 import { readSessionConflict } from "@/lib/session-auth";
+import { pinServerIdentityAfterLogin } from "@/lib/server-identity";
+import { LoginForm } from "./LoginForm";
+import { ServerNotFoundPanel } from "./ServerNotFoundPanel";
+import { ServerIdentityMismatchDialog } from "@/components/settings/ServerIdentityMismatchDialog";
+import { useServerReachability } from "@/hooks/useServerReachability";
+import type { DiscoveredServer } from "@shared/ipc-contract";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
-import logoUrl from "@/assets/teks-logo-fullsize.png";
 
 /** 409 SESSION_EXISTS onay diyaloğu için, mevcut oturumu okunur cümleye çevir. */
 function describeExistingSession(info: ExistingSessionInfo): string {
@@ -77,6 +79,9 @@ export function LoginPage() {
       }
       setConflict(null);
       setUser(decoded);
+      // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
+      // Bundan sonraki keşiflerde kimlik tutmazsa kullanıcıya sorulur.
+      void pinServerIdentityAfterLogin();
       const dest = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
       navigate(dest, { replace: true });
     } catch (err) {
@@ -100,6 +105,9 @@ export function LoginPage() {
       setSubmitting(false);
     }
   };
+
+  const reach = useServerReachability();
+  const [mismatch, setMismatch] = useState<DiscoveredServer | null>(null);
 
   const onSubmit = (values: FormValues) => performLogin(values, false);
 
@@ -144,69 +152,30 @@ export function LoginPage() {
           }}
         />
 
-        <div className="w-full max-w-sm space-y-8">
-          <div className="flex flex-col items-center space-y-4 text-center">
-            <div className="relative">
-              <div className="absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-blue-500/20 via-indigo-500/15 to-teal-500/20 blur-2xl" />
-              <img
-                src={logoUrl}
-                alt="TeksERP"
-                className="h-24 w-24 rounded-[22px] object-cover shadow-lg ring-1 ring-white/10"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <h2 className="text-3xl font-semibold tracking-tight">TeksERP</h2>
-              <p className="text-sm text-muted-foreground">
-                Devam etmek için giriş yap.
-              </p>
-            </div>
-          </div>
+        <ServerIdentityMismatchDialog
+          open={mismatch !== null}
+          candidate={mismatch}
+          onCancel={() => setMismatch(null)}
+          onTrust={(c) => {
+            void (async () => {
+              await window.api?.discovery?.pin(c.identity?.installationId ?? null);
+              setMismatch(null);
+              await reach.recheck();
+            })();
+          }}
+        />
 
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              label="Kullanıcı adı"
-              htmlFor="username"
-              error={form.formState.errors.username}
-              required
-            >
-              <Input
-                id="username"
-                autoFocus
-                autoComplete="username"
-                placeholder="ör. admin"
-                {...form.register("username")}
-              />
-            </FormField>
-            <FormField
-              label="Şifre"
-              htmlFor="password"
-              error={form.formState.errors.password}
-              required
-            >
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                placeholder="••••••••"
-                {...form.register("password")}
-              />
-            </FormField>
-            <Button type="submit" className="h-11 w-full" disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Giriş yapılıyor...
-                </>
-              ) : (
-                "Giriş Yap"
-              )}
-            </Button>
-          </form>
-
-          <p className="text-center text-xs text-muted-foreground">
-            Hesap erişimi için yöneticinizle iletişime geçin.
-          </p>
-        </div>
+        {/* Sunucuya ulaşılamıyorsa giriş formu YERİNE sebebi ve çözümü göster —
+            boş bir form kullanıcıyı adını yanlış yazmakla suçlar. */}
+        {reach.status === "unreachable" ? (
+          <ServerNotFoundPanel
+            onResolved={() => void reach.recheck()}
+            onOpenAddressDialog={() => setApiDialogOpen(true)}
+            onMismatch={setMismatch}
+          />
+        ) : (
+        <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
+        )}
       </div>
     </div>
   );

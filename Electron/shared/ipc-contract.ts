@@ -5,6 +5,12 @@
  * - Yalnız serializable veri geçer.
  */
 
+// Keşif aday tipi saf mantık dosyasında yaşıyor (orada test edilebiliyor);
+// burada yeniden tanımlamak iki kopya demek olurdu.
+import type { DiscoveredServer } from "./discovery";
+
+export type { DiscoveredServer };
+
 export interface SecureStoreApi {
   get(key: string): Promise<string | null>;
   set(key: string, value: string): Promise<void>;
@@ -218,8 +224,96 @@ export interface ScaleApi {
   read: (opts: ScaleReadOpts) => Promise<ScaleReadResult>;
 }
 
+// --- Otomatik güncelleme (electron-updater) ---
+// Kurulu uygulama, yayın adresindeki `latest.yml`e bakıp yeni sürüm varsa arka
+// planda indirir; kurulum kullanıcı "Yeniden Başlat" dediğinde yapılır.
+// ⚠️ Yalnız PAKETLENMİŞ uygulamada çalışır — `npm run dev`de `enabled:false`dır
+// (electron-updater paketlenmemiş uygulamada hata fırlatır, bu yüzden hiç çağrılmaz).
+
+export type UpdateState =
+  /** Henüz kontrol edilmedi (açılışın ilk saniyeleri) ya da dev modu. */
+  | "idle"
+  /** Sunucuya soruluyor. */
+  | "checking"
+  /** Kurulu sürüm en güncel. */
+  | "up-to-date"
+  /** Yeni sürüm bulundu, indirme başlıyor. */
+  | "available"
+  /** İniyor (`percent`). */
+  | "downloading"
+  /** İndi — yeniden başlatınca kurulacak. */
+  | "ready"
+  /** Sunucuya ulaşılamadı / indirme düştü (`error`). */
+  | "error";
+
+export interface UpdateStatus {
+  state: UpdateState;
+  /** Şu an çalışan sürüm. */
+  currentVersion: string;
+  /** Bulunan yeni sürüm — yalnız available/downloading/ready durumlarında. */
+  newVersion?: string;
+  /** İndirme yüzdesi 0-100 — yalnız downloading. */
+  percent?: number;
+  /** Kullanıcıya gösterilecek Türkçe hata — yalnız error. */
+  error?: string;
+  /** Son BAŞARILI kontrolün zamanı (ISO). Hiç kontrol edilmediyse null. */
+  lastCheckedAt: string | null;
+  /** Güncellemenin arandığı adres (teşhis için Ayarlar'da gösterilir). */
+  feedUrl: string;
+  /** Adres bu makinede elle ezilmiş mi (varsayılan değil). */
+  feedUrlOverridden: boolean;
+  /** Paketlenmiş uygulama mı — false ise güncelleme hiç denenmez. */
+  enabled: boolean;
+}
+
+export interface UpdaterApi {
+  /** Anlık durum — ekran ilk açıldığında okunur. */
+  status: () => Promise<UpdateStatus>;
+  /** "Şimdi kontrol et". Zaten indirilmiş güncelleme varsa dokunmaz. */
+  check: () => Promise<UpdateStatus>;
+  /** İndirilen sürümü kurup uygulamayı yeniden başlatır (yalnız state=ready). */
+  install: () => void;
+  /** Bu makinenin yayın adresini ez / varsayılana döndür (null = varsayılan). */
+  setFeedUrl: (url: string | null) => Promise<UpdateStatus>;
+  /** Durum değiştikçe haber verir. Unsubscribe fonksiyonu döner. */
+  onStatus: (cb: (status: UpdateStatus) => void) => () => void;
+}
+
+// ---------------------------------------------------------------------------
+// Sunucu keşfi
+// ---------------------------------------------------------------------------
+
+export type DiscoveryStatus = "idle" | "running" | "done" | "error";
+
+export interface DiscoveryState {
+  status: DiscoveryStatus;
+  startedAt: number | null;
+  finishedAt: number | null;
+  /** Sıralı: en iyi aday ilk (bkz. shared/discovery.ts → rankCandidates). */
+  candidates: DiscoveredServer[];
+  /** main otomatik uyguladıysa dolu — renderer bunu kullanıcıya bildirir. */
+  applied: { baseUrl: string; reason: "single" | "pin-moved" } | null;
+  mdns: { available: boolean; error: string | null; hits: number };
+  /** `skippedReason` dolu = tarama BİLEREK koşmadı (gürültü emniyeti). */
+  scan: { ran: boolean; targets: number; open: number; skippedReason: string | null };
+  pinnedInstallationId: string | null;
+  error: string | null;
+}
+
+export interface DiscoveryApi {
+  /** O anki durum. ⚠️ PULL: push kanalı BİLEREK yok (splash→renderer geçişi listener'ları düşürür). */
+  state: () => Promise<DiscoveryState>;
+  /** Yeni bir keşif turu başlatır; koşan tur varsa onu döner. */
+  start: (opts?: { timeoutMs?: number }) => Promise<DiscoveryState>;
+  /** Tek bir adresi doğrular (Ayarlar'daki "Bağlantıyı Test Et"). */
+  probe: (baseUrl: string) => Promise<DiscoveredServer | null>;
+  /** Sunucu kimliğini bu makineye sabitler (null = sabitlemeyi kaldır). */
+  pin: (installationId: string | null) => Promise<void>;
+}
+
 export interface ApiBridge {
   secureStore: SecureStoreApi;
+  discovery: DiscoveryApi;
   appInfo: AppInfoApi;
   window: WindowApi;
   system: SystemApi;
@@ -229,6 +323,7 @@ export interface ApiBridge {
   scale: ScaleApi;
   pdf: PdfApi;
   files: FilesApi;
+  updater: UpdaterApi;
 }
 
 declare global {

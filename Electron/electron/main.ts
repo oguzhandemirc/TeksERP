@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import log from "electron-log/main.js";
 import { registerIpcHandlers } from "./ipc/index.js";
+import { startDiscoveryIfNeeded } from "./ipc/discovery.ipc.js";
 import { buildAppMenu } from "./menu.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -94,6 +95,13 @@ app.whenReady().then(async () => {
   }
 
   registerIpcHandlers();
+  // Sunucu keşfi — ATEŞLE VE UNUT, splash'i BEKLETMEZ. Splash videosu zaten
+  // ~16 sn'ye kadar zaman veriyor (finishSplash'in emniyet supabı) ve keşif
+  // onun altında paralel koşuyor; mutlu yolda renderer yüklenmeden biter ve
+  // adres yerine yazılmış olur. Bitmezse renderer boş adresle açılır ve
+  // kullanıcıya aday seçtirir — iki yol da aynı yere varır.
+  // ⚠️ `finishSplash`e BAĞLAMAYIN: `SPLASH_DONE` hızlı yolunu geriletir.
+  void startDiscoveryIfNeeded();
   buildAppMenu();
   await createMainWindow();
 

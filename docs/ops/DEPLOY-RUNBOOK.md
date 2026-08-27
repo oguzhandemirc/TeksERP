@@ -181,7 +181,22 @@ pm2 save                        # reboot'ta geri yüklenecek listeyi kaydet
 # Eski installer bunu otomatik yapıyordu — pm2 yolunda ELLE yapılır.
 New-NetFirewallRule -DisplayName "TeksERP API 4000" -Direction Inbound `
   -Protocol TCP -LocalPort 4000 -Action Allow
+
+# Sunucu keşfi (2026-08-26): backend kendini ağa "_teks-erp._tcp" olarak ilan
+# eder → yeni kurulan Electron paneli IP yazmadan bulur. Bu kural OLMADAN ilan
+# fabrika ağında GÖRÜNMEZ ve keşif yalnız istemcinin alt ağ taramasıyla çalışır
+# (yavaş ama çalışır — yani bu kural iyileştirmedir, ön koşul değil).
+# `kur.ps1` bunu artık kendisi ekliyor; bu satır mevcut kurulumlar için.
+New-NetFirewallRule -DisplayName "TeksERP mDNS 5353" -Direction Inbound `
+  -Protocol UDP -LocalPort 5353 -Action Allow
 ```
+
+> **Keşif gerçekten çalışıyor mu?** Tek ölçüm noktası:
+> `GET /api/admin/health` → `discovery.mdns.reason`. `"ok"` değilse ilan
+> kurulamamıştır — Windows'ta 5353 portunu **Apple Bonjour Service** (iTunes ile
+> gelir) ya da Adobe tutuyor olabilir. Kontrol: `Get-NetUDPEndpoint -LocalPort 5353`.
+> İlan kurulamasa bile panel sunucuyu ağ taramasıyla bulur; kapatmak için
+> `ecosystem.config.js` → `DISCOVERY_MDNS_ENABLED: "false"`.
 
 Erişim: `http://localhost:4000` / `http://<ip>:4000`, giriş `admin / 123123`.
 

@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { CheckCircle2, History, Loader2, RotateCcw, X, XCircle } from "lucide-react";
+import { CheckCircle2, History, Loader2, Radar, RotateCcw, X, XCircle } from "lucide-react";
+import { useServerDiscovery } from "@/hooks/useServerDiscovery";
+import { ServerDiscoveryPanel } from "./ServerDiscoveryPanel";
 import {
   Dialog,
   DialogContent,
@@ -55,6 +57,7 @@ type TestState =
  * son kullanılan adresler hızlı-seçim için listelenir.
  */
 export function ApiEndpointDialog({ open, onOpenChange }: Props) {
+  const discovery = useServerDiscovery();
   const [parts, setParts] = useState<ApiBaseUrlParts>({ protocol: "http", host: "", port: "" });
   const [recent, setRecent] = useState<string[]>([]);
   const [test, setTest] = useState<TestState>({ status: "idle" });
@@ -241,6 +244,24 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
             )}
           </p>
 
+          {/* Ağda bulunanlar — "Son kullanılanlar"ın ÜSTÜNDE: keşfedilen canlı
+              sunucu, geçmişte yazılmış bir adresten daha güncel bir bilgidir. */}
+          {(discovery.state?.candidates.length ?? 0) > 0 && (
+            <ServerDiscoveryPanel
+              state={discovery.state}
+              onPick={(c) => {
+                setParts(splitApiBaseUrl(c.baseUrl));
+                // Aday zaten doğrulanmıştı — tekrar test ettirmeye gerek yok.
+                setTest({
+                  status: "ok",
+                  message: c.identity
+                    ? `Bağlantı başarılı — ${c.identity.companyName || c.identity.serverName} (v${c.identity.version})`
+                    : "Bağlantı başarılı (sunucu kimlik bilgisi vermiyor — eski sürüm olabilir)",
+                });
+              }}
+            />
+          )}
+
           {/* Son kullanılan adresler — hızlı seçim */}
           {recent.length > 0 && (
             <div className="space-y-1.5">
@@ -307,6 +328,25 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
             Varsayılana dön
           </Button>
           <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void discovery.start(12000)}
+              disabled={discovery.state?.status === "running" || saving}
+              title="Ağdaki TeksERP sunucularını ara"
+            >
+              {discovery.state?.status === "running" ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Aranıyor...
+                </>
+              ) : (
+                <>
+                  <Radar className="mr-2 h-4 w-4" />
+                  Ağda Bul
+                </>
+              )}
+            </Button>
             <Button
               type="button"
               variant="outline"

@@ -37,6 +37,11 @@ const EXEMPT: Record<string, string> = {
   // 2026-08-09'dan beri YALNIZ canlılık döndürür; zengin panel
   // /api/admin/health arkasına alındı (F-CORE-GUV-002). Alan kümesi aşağıda kilitli.
   "GET /health": "canlılık ucu; login öncesi erişilebilir olmak zorunda",
+  // Servis keşfi kimlik ucu: istemci HENÜZ HANGİ SUNUCUYA bağlanacağını
+  // bilmiyorken çağırır — guard takılamaz (/health ile birebir aynı gerekçe).
+  // Yük DB'siz ve minimaldir; sızdırdığı her alan (hostname, firma adı, sürüm)
+  // zaten aynı LAN'da /health, mDNS ilanı ve login ekranı üzerinden açık.
+  "GET /identity": "servis keşfi kimlik ucu; istemci sunucuyu tanımadan çağırır",
   // Giriş uçları: token ÜRETEN uç token isteyemez.
   "POST /login": "token üreten uç",
   "POST /login-card": "kartla giriş — token üreten uç",

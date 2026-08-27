@@ -8,6 +8,9 @@ import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
 import { setupSwagger } from "./config/swagger";
+import { APP_VERSION } from "./lib/app-version";
+import { getMdnsState } from "./jobs/mdns-advertiser.job";
+import { getCachedInstallationIdentity } from "./jobs/installation-identity.job";
 import { errorHandler } from "./middlewares/error.middleware";
 import { installDecimalNumberSerializer } from "./utils/json-replacer";
 import prisma from "./lib/prisma";
@@ -64,6 +67,7 @@ import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
+import discoveryRoutes from "./routes/discovery.routes";
 import importRoutes from "./routes/import.routes";
 import masterDataMergeRoutes from "./routes/master-data-merge.routes";
 import configBundleRoutes from "./routes/config-bundle.routes";
@@ -168,16 +172,10 @@ app.use(resolveDevice);
 // resolveDevice'tan SONRA mount edilir ki `req.device` çözülmüş olsun.
 app.use((req, _res, next) => runWithRequestContext(req, next));
 
-// Sürüm bilgisi (durum sayfasında gösterilir). pm2 derlenmiş server.js'i doğrudan
-// çalıştırır (npm script üzerinden değil) → `npm_package_version` env'i üretimde
-// tanımsızdır; package.json'dan oku.
-let appVersion = "1.0.0";
-try {
-  const pkg = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"));
-  if (pkg?.version) appVersion = pkg.version;
-} catch {
-  /* package.json okunamazsa varsayılan sürümle devam */
-}
+// Sürüm bilgisi (durum sayfasında gösterilir). Okuma `lib/app-version.ts`e
+// taşındı — servis keşfi kimlik ucu da aynı sürümü basıyor ve `app.ts`'ten
+// import etmek döngü yaratırdı (app → routes → discovery.service → app).
+const appVersion = APP_VERSION;
 
 // Yedek klasörü: BACKUP_DIR üretimde pm2 ortamından gelir (ecosystem.config env
 // veya .env — tipik değer C:\ProgramData\TeksERP\backups). Tanımlıysa durum sayfası
@@ -451,6 +449,15 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     // Audit değiştirilemezliği (ISO 27001 A.8.15) — "on" = UPDATE/DELETE engelli.
     // null = DB okunamadı, "off" ile karıştırma.
     auditGuard,
+    // Servis keşfi — "yazdık ama sahada hiç çalışmadı"nın TEK ölçülebilir kanıtı.
+    // `mdns.reason` sahada `"ok"` değilse ilan kurulamamıştır (Windows'ta 5353'ü
+    // Apple Bonjour Service / Adobe tutuyor olabilir) ve keşif yalnız istemci
+    // tarafındaki alt ağ taramasıyla çalışıyordur. Buraya ait çünkü OPERASYONEL
+    // İÇ DURUM — kimliksiz keşif ucuna değil (bkz. routes/discovery.routes.ts).
+    discovery: {
+      mdns: getMdnsState(),
+      installationId: getCachedInstallationIdentity()?.installationId ?? null,
+    },
     // Backend prosesinin + makinenin kaynak kullanımı (CPU/RAM)
     ...readResourceMetrics(),
   };
@@ -460,6 +467,12 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
  * PUBLIC canlılık ucu — SÖZLEŞMESİ DONDURULMUŞ beş alan.
  * DB'ye YALNIZ ucuz bir `SELECT 1` atar: zengin yükün pg_stat sorgusu buraya
  * gerekmiyor ve kimliksiz bir istemcinin onu tetiklemesi için sebep yok.
+ *
+ * ⚠️ SUNUCU KİMLİĞİ BURAYA EKLENMEZ — `GET /api/discovery/identity` var
+ * (`routes/discovery.routes.ts`). Bu ucun dört tüketicisi (deploy/kur.ps1
+ * `Saglik`, public/status.js, Electron `useServerClock` ve `ApiEndpointDialog`)
+ * alan kümesine bağlı; ayrıca kimlik ucu DB'siz olmak zorunda, bu uç ise
+ * `SELECT 1` atıyor.
  */
 app.get("/health", async (_req: Request, res: Response) => {
   let db: "UP" | "DOWN" = "DOWN";
@@ -524,6 +537,10 @@ app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
+// Servis keşfi — KİMLİKSİZ ve DB'siz. İstemci sunucuyu ağda bulduktan sonra
+// "doğru kurulum mu" sorusunu buraya sorar; henüz giriş yapmamıştır, o yüzden
+// guard TAKILAMAZ (`/health` ile aynı gerekçe).
+app.use("/api/discovery", discoveryRoutes);
 // Toplu içe/dışa aktarım. ⚠️ Bu router KENDİ `express.json({limit:"10mb"})`
 // katmanını taşır (route seviyesinde) — global 1 MB limiti DEĞİŞMEZ; 10.000
 // satırlık bir dosya JSON'a çevrilince 1 MB'ı aşar ama gevşemenin diğer TÜM

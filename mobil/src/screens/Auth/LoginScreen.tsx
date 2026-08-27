@@ -12,6 +12,7 @@ import { useAuthStore } from '../../store/authStore';
 import { authService, type LoginMethod } from '../../services/auth.service';
 import { isLoginLocked } from '../../services/api';
 import { authActions } from '../../services/authActions';
+import { pinServerIdentityAfterLogin } from '../../services/serverIdentity';
 import { useSessionConflict } from '../../hooks/useSessionConflict';
 import { BarcodeScannerModal } from '../../components/BarcodeScannerModal';
 import PickerModal, { type PickerOption } from '../../components/PickerModal';
@@ -195,6 +196,10 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
     async (res: LoginResponse, fullName?: string) => {
       if (lock) await lock.onAuthenticated(res);
       else await setAuth(res.data.user, res.data.token, fullName);
+      // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
+      // Bundan sonra sunucu taşınırsa tablet adresi kendi düzeltir; kimliği
+      // TUTMAYAN bir sunucuya ise sessizce geçmez.
+      void pinServerIdentityAfterLogin();
     },
     [lock, setAuth],
   );

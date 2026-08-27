@@ -316,6 +316,7 @@ Yenisi için onay al. Mevcutlar:
 | Electron core | `electron`, `electron-vite`, `electron-builder` |
 | Native | `electron-log`, `electron-store`, `electron-window-state`, `electron-updater` |
 | Donanım (native) | `serialport`, `node-hid` (tartı/tarayıcı — `electron/ipc/scale.ipc.ts`, `scanner.ipc.ts`; `electron-rebuild` ile derlenir) |
+| Sunucu keşfi | `bonjour-service` (**1.4.4'e SABİT** — bkz. aşağıdaki not) |
 | UI | `react`, `react-dom`, `react-router-dom`, `react-hook-form`, `@hookform/resolvers`, `zod` |
 | Components | shadcn/ui (Radix + Tailwind), `cmdk`, `sonner`, `lucide-react`, `next-themes` |
 | Animasyon | `framer-motion` (`src/components/motion/`, `lib/motion.ts`) |
@@ -329,6 +330,16 @@ Yenisi için onay al. Mevcutlar:
 | QR / Renk | `qrcode.react`, `react-colorful` |
 | Export | `exceljs` (.xlsx — `src/lib/xlsx-export.ts`, `table-export.ts`), `@react-pdf/renderer` (PDF çıktı) |
 | Test | `vitest` + `@testing-library/react` (birim), `@stryker-mutator/core` (mutation), `@playwright/test` (e2e) |
+
+> **`bonjour-service` — sunucu keşfi (2026-08-26).** Saf JS, yerel derleme YOK →
+> `electron:rebuild` gerekmez, `asarUnpack` gerekmez. ⚠️ **`dependencies`'te durmak
+> ZORUNDA**: `externalizeDepsPlugin()` yalnız orayı okur; devDependencies'e düşerse
+> Vite paketi main bundle'ına gömmeye çalışır **ve** electron-builder onu production
+> `node_modules`'üne koymaz → kurulu uygulamada `MODULE_NOT_FOUND` ("dev'de çalışır,
+> kurulumda ölü"). Sürüm **sabit** (`^` yok) — sonraki ana sürümler ESM-only olabilir
+> ve `createRequire` yolunu sessizce kırar. Yükleme `electron/discovery/mdns-browser.ts`
+> içinde TEMBEL + try/catch: paket kaybolsa bile uygulama açılır, keşif alt ağ
+> taramasına düşer. Bekçi: `src/test/discovery-ipc-contract.test.ts`.
 
 ## Test Kullanıcıları
 

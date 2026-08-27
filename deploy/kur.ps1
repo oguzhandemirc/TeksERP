@@ -305,6 +305,29 @@ if ($LASTEXITCODE -ne 0) { Fail "pm2 start basarisiz. Geri donus: $kok\kur.ps1 -
 & $pm2 save    # ZORUNLU: reboot'ta dogru klasor kalksin (dump.pm2 tazelenir)
 Ok "baslatildi ve kaydedildi (pm2 save)"
 
+# --- Firewall: mDNS servis kesfi (UDP 5353) ---------------------------------
+# Sunucu kendini aga "_teks-erp._tcp" olarak ilan eder; yeni kurulan Electron
+# paneli boylece IP yazmadan bulur. Bu kural OLMADAN ilan fabrika aginda
+# GORUNMEZ (kesif yalnizca istemcinin alt ag taramasiyla calisir - yavas ama
+# calisir, o yuzden hata burada kurulumu KESMEZ).
+#
+# Idempotent: script her surumde yeniden kosuyor, mukerrer kural birikmesin.
+# TCP 4000 kurali BU SCRIPTTE DEGIL - elle acilir (docs/ops/DEPLOY-RUNBOOK.md).
+$mdnsKural = "TeksERP mDNS 5353"
+try {
+  if (-not (Get-NetFirewallRule -DisplayName $mdnsKural -ErrorAction SilentlyContinue)) {
+    New-NetFirewallRule -DisplayName $mdnsKural -Direction Inbound `
+      -Protocol UDP -LocalPort 5353 -Action Allow -ErrorAction Stop | Out-Null
+    Ok "firewall kurali eklendi: $mdnsKural"
+  } else {
+    Ok "firewall kurali zaten var: $mdnsKural"
+  }
+} catch {
+  # Fail DEGIL: kesif calismasa da fabrika calisir. Gorunur uyari yeter.
+  Uyar "firewall kurali eklenemedi ($mdnsKural): $($_.Exception.Message)"
+  Uyar "  -> sunucu kesfi yalnizca ag taramasiyla calisacak (yavas). Elle ekleyin."
+}
+
 # --- [9/9] Dogrulama --------------------------------------------------------
 Adim "[9/9] Saglik kontrolu..."
 $h = Saglik 120

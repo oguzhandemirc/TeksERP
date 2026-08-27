@@ -120,6 +120,7 @@ export const TABLE_LABELS: Record<string, string> = {
   permission_templates: "Yetki Şablonu",
   reason_presets: "Hazır Sebep",
   duplicate_reviews: "Mükerrer İncelemesi",
+  system_settings: "Sistem Ayarı",
 
   // Cihaz (mobil eşleştirme)
   users: "Kullanıcı",
@@ -185,6 +186,12 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   PERMISSION_CATALOG_RECONCILED: "Yetki kataloğu eşitlendi",
   PERMISSION_CATALOG_RECONCILE_FAILED: "Yetki kataloğu eşitlenemedi",
   ROLE_TEMPLATE_CATALOG_RECONCILED: "Rol kataloğu eşitlendi",
+
+  // ── SYSTEM · servis keşfi (kurulum kimliği) ──
+  INSTALLATION_ID_CREATED: "Kurulum kimliği oluşturuldu",
+  // ⚠️ Bu satırı görmek NORMAL DEĞİLDİR: kimlik yalnız kayıt bozulduğunda
+  // yenilenir ve yenilenince sahadaki her cihaz "farklı sunucu" uyarısı alır.
+  INSTALLATION_ID_REGENERATED: "Kurulum kimliği YENİLENDİ",
 };
 
 /** Sistem olayının Türkçe adı; bilinmeyen → ham değer (fail-open). */
@@ -338,6 +345,7 @@ export const ENUM_LABELS: Record<string, string> = {
   ROLL_MANUAL_ENTRY: "Elle top ekleme sebebi",
   ROLL_RECORD_CORRECTION: "Kayıt düzeltme sebebi",
   WORK_ORDER_REWORK: "Yeniden üretim sebebi",
+  ORDER_CANCEL: "Sipariş iptal sebebi",
   // TravelerTemplateMode
   BUILTIN: "Yerleşik",
   SECTIONS: "Bölümlü",

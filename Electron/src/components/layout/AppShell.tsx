@@ -4,6 +4,8 @@ import { Topbar } from "./Topbar";
 import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { TabHost } from "./tabs";
+import { UpdateGate } from "./UpdateGate";
+import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
 import { useTabShortcuts } from "@/hooks/useTabShortcuts";
@@ -78,6 +80,8 @@ export function AppShell() {
         onToggleSidebar={toggleSidebar}
         onOpenCommand={() => setPaletteOpen(true)}
       />
+      <UpdateGate />
+      <ServerOfflineBanner />
       <div className="flex min-h-0 flex-1">
         <Sidebar collapsed={collapsed} />
         <main className="relative min-w-0 flex-1 overflow-hidden">

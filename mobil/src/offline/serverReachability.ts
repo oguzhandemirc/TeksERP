@@ -104,6 +104,52 @@ function stopProbe(): void {
   probeAttempt = 0;
 }
 
+/** Kaçıncı başarısız yoklamadan sonra adres araması başlasın. */
+const SELF_HEAL_AFTER_ATTEMPTS = 3;
+/** Aynı kesinti içinde tekrar tekrar aramamak için. */
+let selfHealRunning = false;
+
+/**
+ * Sunucuyu ağda arar ve SABİTLENMİŞ KİMLİĞİ TUTAN bir aday bulursa adresi
+ * günceller. Hiçbir hata dışarı sızmaz — bu yol bir kolaylıktır, yoklama
+ * döngüsünü düşürmemelidir.
+ *
+ * ⚠️ İçe aktarma TEMBEL (`await import`): `discovery.service` NetInfo'ya ve
+ * `lib/discovery`ye bağlı; modül yükü sırasında statik import etmek bu dosyanın
+ * (offline sinyalinin) yükünü büyütür ve döngü riski açar — `baseUrlStore` bu
+ * dosyayı import ETMİYOR, biz onu import ediyoruz (tek yön kuralı).
+ */
+async function trySelfHeal(): Promise<void> {
+  if (selfHealRunning) return;
+  selfHealRunning = true;
+  try {
+    const [{ discoverServers }, store] = await Promise.all([
+      import('../services/discovery.service'),
+      import('../store/baseUrlStore'),
+    ]);
+    const pinned = await store.getPinnedInstallationId();
+    if (!pinned) return; // kimlik yoksa "aynı sunucu" kanıtlanamaz → sessiz geçiş YOK
+    const current = store.getCurrentBaseUrl();
+    const res = await discoverServers({
+      pinnedInstallationId: pinned,
+      preferredUrls: [current],
+      fullSweep: true,
+    });
+    // Karar SAF katmanda (`lib/discovery.pickSelfHealTarget`) — üç kuralı da
+    // orada bekçi kilitliyor. Burada yalnız uygulama var.
+    const { pickSelfHealTarget } = await import('../lib/discovery');
+    const moved = pickSelfHealTarget(res.candidates, current, pinned);
+    if (!moved) return;
+    await store.useBaseUrlStore.getState().setCustomUrl(moved.baseUrl);
+    // Adres değişince bu dosyadaki abonelik (installOnlineSignal) zaten
+    // revalidateServer'ı tetikliyor — ayrı tel gerekmez.
+  } catch {
+    /* best-effort */
+  } finally {
+    selfHealRunning = false;
+  }
+}
+
 function scheduleProbe(): void {
   if (probeTimer) return;
   // Jitter'lı backoff: onlarca tablet aynı anda ölü sunucuya yüklenmesin
@@ -124,6 +170,19 @@ function scheduleProbe(): void {
       if (await probeOnce()) {
         reportServerReachable();
       } else {
+        // KENDİ KENDİNE ONARMA: sunucu birkaç turdur cevap vermiyorsa adresi
+        // DEĞİŞMİŞ olabilir (yeni IP, taşınan makine). Ağda ARA; sabitlenmiş
+        // kimlikle eşleşen bir sunucu bulursak adresi kendimiz güncelleriz ve
+        // vardiyayı durduran kesinti birkaç saniyede kapanır.
+        //
+        // ⚠️ EŞİK (3) LOAD-BEARING: her başarısız yoklamada aramak, uykudan
+        // uyanan ya da anlık paraziti olan her tablette gereksiz tarama başlatır.
+        // 3. denemede ~10-20 sn geçmiş olur — "gerçekten kesildi" sinyali budur.
+        //
+        // ⚠️ SESSİZ GEÇİŞ YOK: yalnız KİMLİĞİ TUTAN aday uygulanır. Uyuşmayan
+        // sunucuya sessizce bağlanmak, operatörün yanlış fabrikanın verisine
+        // kayıt girmesi demektir.
+        if (probeAttempt === SELF_HEAL_AFTER_ATTEMPTS) void trySelfHeal();
         scheduleProbe();
       }
     })();
@@ -213,6 +272,11 @@ export function installOnlineSignal(): void {
 }
 
 /** Yalnız test için — modül durumunu sıfırlar. */
+/** Test-only: kendi kendine onarma kilidini de sıfırlar. */
+export function __resetSelfHealForTests(): void {
+  selfHealRunning = false;
+}
+
 export function __resetOnlineSignalForTests(): void {
   hasLink = true;
   serverReachable = true;

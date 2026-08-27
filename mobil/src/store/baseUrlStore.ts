@@ -4,6 +4,8 @@ import { storage } from '../utils/storage';
 
 const BACKEND_PORT = 4000;
 const CUSTOM_URL_KEY = 'api_base_url_custom';
+/** Bu cihazın bağlandığı sunucunun SABİTLENMİŞ kimliği (ilk başarılı girişte yazılır). */
+const PINNED_ID_KEY = 'api_server_installation_id';
 const RECENT_URLS_KEY = 'api_base_url_recent';
 const MAX_RECENT = 6;
 
@@ -73,6 +75,32 @@ function readRecent(raw: string | null): string[] {
     return Array.isArray(arr) ? arr.filter((x): x is string => typeof x === 'string') : [];
   } catch {
     return [];
+  }
+}
+
+/**
+ * Sabitlenmiş sunucu kimliği.
+ *
+ * ⚠️ SABİTLEME ANI = İLK BAŞARILI GİRİŞ, keşif anı DEĞİL. Bir sunucuyu prob
+ * etmek onun doğru sunucu olduğunun beyanı değildir — ağdaki herhangi bir makine
+ * proba cevap verebilir. Ama bir insan oraya kullanıcı adı ve şifresiyle
+ * GİRDİYSE "evet bu benim sunucum" demiş olur.
+ */
+export async function getPinnedInstallationId(): Promise<string | null> {
+  try {
+    return await storage.getItem(PINNED_ID_KEY);
+  } catch {
+    return null;
+  }
+}
+
+/** Kimliği sabitler. `null` → sabitlemeyi kaldırır. Hatası akışı DÜŞÜRMEZ. */
+export async function setPinnedInstallationId(id: string | null): Promise<void> {
+  try {
+    if (id && id.trim()) await storage.setItem(PINNED_ID_KEY, id.trim());
+    else await storage.deleteItem(PINNED_ID_KEY);
+  } catch {
+    /* sabitleme bir kolaylık; giriş yolunu düşüremez */
   }
 }
 

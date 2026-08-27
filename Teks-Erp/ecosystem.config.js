@@ -79,6 +79,21 @@ module.exports = {
         // 0.0.0.0 = fabrika ağındaki tabletler/istemciler erişebilsin.
         HOST: "0.0.0.0",
 
+        // --- Servis keşfi (jobs/mdns-advertiser.job.ts)
+        //
+        // Sunucu kendini ağa `_teks-erp._tcp` olarak ilan eder → yeni kurulan
+        // Electron paneli IP yazmadan bulur. VARSAYILAN AÇIK; kapatmak için
+        // burada "false" yaz (HOST/PORT ile aynı sınıf taşıma ayarı olduğu için
+        // feature-flag değil env).
+        //
+        // ⚠ UDP 5353 GELEN kuralı olmadan ilan fabrika ağında görünmez
+        // (docs/ops/DEPLOY-RUNBOOK.md firewall bölümü). Ayrıca Windows'ta o portu
+        // Apple Bonjour Service / Adobe tutuyor olabilir — o durumda ilan sessizce
+        // kapanır ve keşif yalnız istemcinin alt ağ taramasıyla çalışır.
+        // Gerçekten çalışıp çalışmadığı TEK yerden ölçülür:
+        //   GET /api/admin/health → discovery.mdns.reason === "ok"
+        // DISCOVERY_MDNS_ENABLED: "false",
+
         // --- Yedekleme (services/backup.service.ts + jobs/backup-scheduler.ts)
         //
         // ⚠ SAHADAKİ SUNUCUDA (SAHINSRV) GECE YEDEĞİNİ BACKEND ALMIYOR.

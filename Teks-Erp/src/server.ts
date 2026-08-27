@@ -1,8 +1,11 @@
 import "dotenv/config"; // .env yükle — diğer tüm importlardan ÖNCE (JWT_SECRET vb. modül-load anında okunur)
 import "./lib/zod-locale"; // Zod tr locale
-import os from "os";
 import app from './app';
 import prisma, { pool } from './lib/prisma';
+import { getLanAddresses } from './lib/lan-addresses';
+import { startInstallationIdentity } from './jobs/installation-identity.job';
+import { refreshDiscoveryCache } from './services/discovery.service';
+import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
 import { startBackupScheduler } from './jobs/backup-scheduler';
 import { startOffsiteSweeper } from './jobs/offsite-sweeper';
@@ -15,25 +18,6 @@ const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
 // HOST env ile override edilebilir (örn. sadece localhost'a kısıtlamak için 127.0.0.1).
 const HOST = process.env.HOST || "0.0.0.0";
-
-/**
- * Sunucunun erişilebildiği yerel ağ (LAN) IPv4 adreslerini arayüz adıyla döner.
- * İç (loopback) ve IPv6 adresleri elenir.
- */
-function getLanAddresses(): Array<{ iface: string; address: string }> {
-    const out: Array<{ iface: string; address: string }> = [];
-    const nets = os.networkInterfaces();
-    for (const [iface, addrs] of Object.entries(nets)) {
-        for (const net of addrs ?? []) {
-            // Node 18+ family bazen number (4) bazen string ('IPv4') döner — ikisini de karşıla.
-            const isIPv4 = net.family === "IPv4" || (net.family as unknown as number) === 4;
-            if (isIPv4 && !net.internal) {
-                out.push({ iface, address: net.address });
-            }
-        }
-    }
-    return out;
-}
 
 // =============================================================================
 // TEK-PROCESS INVARIANT (load-bearing) — tek `app.listen`, cluster/PM2-cluster/
@@ -127,6 +111,17 @@ const server = app.listen(Number(PORT), HOST, () => {
     // da güncellemez, dolayısıyla kimsenin yetkisi sessizce düşmez. Best-effort:
     // başarısız olursa sunucuyu düşürmez, gürültülü loglar.
     startPermissionCatalogReconciler();
+    // Kurulum kimliği — servis keşfinin "bu doğru sunucu mu" sorusunun cevabı.
+    // İzin kataloğuyla aynı sınıf: ilk açılışta bir kez doğar, best-effort,
+    // başarısız olsa bile sunucuyu düşürmez (yalnız keşif kimliksiz kalır).
+    startInstallationIdentity();
+    // Keşif ucunun bellek kopyası (firma adı + port). İstek yolunda DB'ye
+    // gidilmediği için burada bir kez doldurulur; firma adı sonradan değişirse
+    // bir sonraki restart'ta tazelenir (keşif için yeterli hassasiyet).
+    void refreshDiscoveryCache(Number(PORT));
+    // Servis ilanı — "ben buradayım". Her arızada sessizce kapanır (ilanın
+    // kendisi de fail-open); istemcide alt ağ taraması yedeği var.
+    void startMdnsAdvertiser({ port: Number(PORT) });
     void warnIfAuditGuardDisabled();
 
     void AuditService.logEvent({
@@ -158,8 +153,13 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     forceTimer.unref();
     // Son gecikme delta'ları kaybolmasın (dev'de nodemon her kayıtta restart eder!)
     // — 2sn tavanlı best-effort flush; başarısızlık kapanışı ASLA bloklamaz.
+    //
+    // mDNS ilanı AYNI 2sn'lik tavanın ALTINDA, flush ile PARALEL kapanır (sıralı
+    // olsaydı iki bütçe toplanır ve yukarıdaki 5sn'lik zorla-çıkış sayacını
+    // yakma riski doğardı). `stopMdnsAdvertiser` kendi içinde de 1sn kapı taşır
+    // ve asla reject etmez — goodbye paketi gitmezse kapanış yine de ilerler.
     void Promise.race([
-        flushLatencyNow().catch(() => {}),
+        Promise.allSettled([flushLatencyNow().catch(() => {}), stopMdnsAdvertiser()]),
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
         server.close(() => {

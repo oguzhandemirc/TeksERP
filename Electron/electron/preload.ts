@@ -11,6 +11,7 @@ import type {
   PdfSaveBatchOpts,
   FilesSaveBatchOpts,
   FileSaveOpts,
+  UpdateStatus,
 } from "@shared/ipc-contract";
 
 const api: ApiBridge = {
@@ -18,6 +19,12 @@ const api: ApiBridge = {
     get: (key) => ipcRenderer.invoke("secure-store:get", key),
     set: (key, value) => ipcRenderer.invoke("secure-store:set", key, value),
     delete: (key) => ipcRenderer.invoke("secure-store:delete", key),
+  },
+  discovery: {
+    state: () => ipcRenderer.invoke("discovery:state"),
+    start: (opts) => ipcRenderer.invoke("discovery:start", opts),
+    probe: (baseUrl: string) => ipcRenderer.invoke("discovery:probe", baseUrl),
+    pin: (installationId: string | null) => ipcRenderer.invoke("discovery:pin", installationId),
   },
   appInfo: {
     version: () => ipcRenderer.invoke("app:version"),
@@ -69,6 +76,17 @@ const api: ApiBridge = {
   files: {
     save: (opts: FileSaveOpts) => ipcRenderer.invoke("files:save", opts),
     saveBatch: (opts: FilesSaveBatchOpts) => ipcRenderer.invoke("files:saveBatch", opts),
+  },
+  updater: {
+    status: () => ipcRenderer.invoke("updater:status"),
+    check: () => ipcRenderer.invoke("updater:check"),
+    install: () => ipcRenderer.send("updater:install"),
+    setFeedUrl: (url: string | null) => ipcRenderer.invoke("updater:set-feed-url", url),
+    onStatus: (cb: (status: UpdateStatus) => void) => {
+      const listener = (_e: unknown, status: UpdateStatus) => cb(status);
+      ipcRenderer.on("updater:status", listener);
+      return () => ipcRenderer.removeListener("updater:status", listener);
+    },
   },
 };
 

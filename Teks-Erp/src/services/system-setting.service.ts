@@ -341,6 +341,19 @@ export const SETTING_KEYS = {
    *  `BACKUP_OFFSITE_DIR` env'i. Uzak hedeften BAĞIMSIZ — ikisi birlikte
    *  kullanılabilir (3-2-1 kuralı: iki ortam + bir offsite). */
   BACKUP_OFFSITE_DIR: "backup.offsiteDir",
+  /** Bu KURULUMUN kalıcı kimliği (uuid v4). İlk açılışta bir kez üretilir
+   *  (`jobs/installation-identity.job.ts`) ve bir daha ASLA değişmez.
+   *
+   *  ⚠️ Bu bir FEATURE FLAG DEĞİLDİR — `FeatureFlags` arayüzüne, `updateSchema`'ya
+   *  ve Electron ayar paneline BİLEREK girmez. Ayarlanabilir bir tercih değil,
+   *  makinenin kimliği; panelden değiştirilebilir olsaydı istemcilerin "bu, bağlandığım
+   *  sunucu mu" kontrolü tek tıkla geçersizleşirdi. Bu yüzden dört kapı ceremonisi
+   *  buraya uygulanmaz ve `test_feature_flag_contract` bunu görmez (görmemeli).
+   *
+   *  ⚠️ SIR DEĞİLDİR: aynı LAN'daki herkes `/api/discovery/identity` ile okuyabilir.
+   *  İşi kimlik DOĞRULAMAK değil, FARKLI BİR KURULUMU TESPİT etmek. Gerçek yetki
+   *  kontrolü JWT'dir. */
+  SYSTEM_INSTALLATION_ID: "system.installationId",
 } as const;
 
 const DEFAULT_DEADLINE_DAYS = 7;
