@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Keyboard,
   Loader2,
@@ -27,6 +27,7 @@ import { useAuthStore } from "@/store/auth";
 import { useTabsStore } from "@/store/tabs";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 import { foldSearchText } from "@/lib/search-fold";
+import { scoreCommandValue } from "./command-score";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { globalSearch } from "@/lib/search/globalSearch";
@@ -253,6 +254,29 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
       </>
     );
 
+  /**
+   * Bölümleri arama puanına göre sırala (cmdk yapmıyor — yukarıdaki nota bak).
+   * Puan, bölümdeki EN İYİ girdinin puanıdır; eşitlikte bildirilen sıra korunur
+   * (kararlı sıralama — aynı sorgu her seferinde aynı listeyi üretsin).
+   */
+  const sortedSections = useMemo(() => {
+    if (!search.trim()) return commandSections;
+    const scoreOf = (section: (typeof commandSections)[number]): number =>
+      Math.max(
+        0,
+        ...section.entries.map((e) =>
+          scoreCommandValue(
+            [e.label, e.description, e.keywords, section.heading].filter(Boolean).join(" "),
+            search,
+          ),
+        ),
+      );
+    return commandSections
+      .map((section, i) => ({ section, i, score: scoreOf(section) }))
+      .sort((a, b) => b.score - a.score || a.i - b.i)
+      .map((x) => x.section);
+  }, [commandSections, search]);
+
   return (
     // ⚠️ `filter` VERİLMEZSE cmdk kendi `command-score`'unu kullanır ve o yalnız
     // ASCII katlar: "kursun" yazan operatör "Kurşun Sırası"nı BULAMAZDI (ölçüldü
@@ -260,20 +284,9 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      filter={(value: string, search: string, keywords?: string[]) => {
-        // ⚠️ ÇİFT SÜZME NÖBETİ: sunucu satırları ZATEN süzülmüş geldi. Burada
-        // ikinci kez süzülürlerse, alias üzerinden eşleşen bir satır (terim
-        // "belle", başlık "18152") cmdk tarafından ELENİR — arama çalışır ama
-        // sonuç görünmez. `value` sorgudan bağımsız ve kararlı tutuluyor
-        // (sorguyu value'ya gömmek cmdk'nın seçim durumunu her tuşta sıfırlar).
-        if (value.startsWith(SERVER_ITEM_PREFIX)) return 1;
-        const q = foldSearchText(search);
-        if (!q) return 1;
-        const hay = foldSearchText([value, ...(keywords ?? [])].join(" "));
-        // Kelime kelime AND — "sip listesi" ile "listesi sip" aynı sonucu versin
-        // (sunucu aramasıyla aynı sözleşme).
-        return q.split(" ").every((t) => hay.includes(t)) ? 1 : 0;
-      }}
+      // Puanlama SAF bir modülde (`command-score.ts`) — satır içi `filter`
+      // prop'u test edilemez ve bu kural bir kez SESSİZCE bozuldu.
+      filter={scoreCommandValue}
     >
       <CommandInput
         placeholder="Sayfa, rapor, ayar ara..."
@@ -312,7 +325,14 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
           })}
         </CommandGroup>
 
-        {commandSections.map((section) => {
+        {/* ⚠️ BÖLÜM SIRASINI BİZ VERİYORUZ. cmdk grupları puana göre YENİDEN
+            SIRALAMIYOR (1.1.1'de ölçüldü: grup `value`si verilse de değişmedi) —
+            yani en iyi eşleşme başka bir bölümdeyse listenin ALTINDA kalıyor ve
+            Enter yanlış sayfayı açıyordu ("Müşteri Karnesi" → "Sipariş İptal
+            Karnesi"). Arama varken bölümler, İÇLERİNDEKİ EN YÜKSEK puana göre
+            sıralanır; arama yokken bildirilen sıra korunur (boş palette katalog
+            düzeni anlamlıdır). Puanlama tek kaynak: `command-score.ts`. */}
+        {sortedSections.map((section) => {
           const entries = section.entries.filter(isVisible);
           if (entries.length === 0) return null;
 
