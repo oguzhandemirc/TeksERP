@@ -13,8 +13,13 @@
 //   • boot'ta uzlaştırmadan SONRA doldurulur,
 //   • her yazma işlemi kendi sürecinin önbelleğini ANINDA tazeler,
 //   • TTL yalnız ikinci bir yazar (ör. ayrı bir script) ihtimaline karşı.
-// Önbellek boşsa doğrulama kod kataloğuna düşer — yani "DB henüz okunmadı"
-// durumu operatörü sebepsiz bırakmaz.
+// Önbellek HİÇ doldurulmadıysa doğrulama kod kataloğuna düşer — yani "DB henüz
+// okunmadı" durumu operatörü sebepsiz bırakmaz.
+//
+// ⚠️ TTL DOLMASI ÖNBELLEĞİ DÜŞÜRMEZ — bayat liste de döner ve arka planda bir
+// tazeleme tetiklenir (`cachedRows` üstündeki 2026-08-26 notu). Eski davranış
+// (bayat → `null` → kod kataloğu) fabrikanın PANELDEN EKLEDİĞİ her sebebi
+// geçersiz kılıyordu; "taze ya da hiç" burada yanlış takastır.
 //
 // ⚠️ DOĞRULAMA GİZLİ SATIRI DA KABUL EDER. Liste ucu yalnız aktifleri döner ama
 // tablette bayat liste taşıyan bir APK gizlenmiş kodu gönderebilir; onu 400'e
@@ -97,6 +102,12 @@ let cache: Map<ReasonPresetKind, ReasonPresetDto[]> | null = null;
 let cachedAt = 0;
 const CACHE_TTL_MS = 60_000;
 
+/** Arka plan tazelemesi uçuşta mı (aynı anda iki okuma DB'yi iki kez yoklamasın). */
+let backgroundRefresh: Promise<void> | null = null;
+/** Tazeleme DÜŞTÜYSE bu ana kadar yeniden denenmez (DB kapalıyken her okuma yoklamasın). */
+let refreshBlockedUntil = 0;
+const REFRESH_RETRY_MS = 5_000;
+
 function cacheIsFresh(): boolean {
   return cache !== null && Date.now() - cachedAt < CACHE_TTL_MS;
 }
@@ -112,20 +123,65 @@ export async function refreshReasonPresetCache(): Promise<void> {
   for (const row of rows) next.get(row.kind)?.push(row);
   cache = next;
   cachedAt = Date.now();
+  refreshBlockedUntil = 0;
+}
+
+/**
+ * Bayatlamış önbelleği ARKA PLANDA tazeler — çağıranı BEKLETMEZ.
+ *
+ * ⚠️ `refreshReasonPresetCache`'i bu kapıdan geçirmiyoruz: yazma işlemleri
+ * (`create`/`update`/…) kendi yazdıklarını GÖRMEK zorunda, uçuştaki eski bir
+ * okumaya iliştirilemezler. Tekilleştirme yalnız arka plan tazelemesine ait.
+ */
+function scheduleBackgroundRefresh(): void {
+  if (backgroundRefresh || Date.now() < refreshBlockedUntil) return;
+  backgroundRefresh = refreshReasonPresetCache()
+    .catch(() => {
+      // DB okunamadı — ELDEKİ liste korunur (bu fonksiyonun tüm varlık sebebi).
+      // Kısa bir bekleme koy ki DB kapalıyken her doğrulama yeni bir sorgu açmasın.
+      refreshBlockedUntil = Date.now() + REFRESH_RETRY_MS;
+    })
+    .finally(() => {
+      backgroundRefresh = null;
+    });
+}
+
+/**
+ * ⚠️ YALNIZ BEKÇİ İÇİN — önbelleği BAYATLATIR: satırlar yerinde DURUR, yalnız yaşı
+ * geçer. `invalidateReasonPresetCache` ile KARIŞTIRMA — o satırları da düşürür ve
+ * 2026-08-26 arızasının ölçülmesi gereken hâlini (liste ELDE ama BAYAT) hiç
+ * kurmaz. Bekçi bu ikisini ayırmazsa düzeltmeyi değil başka bir şeyi ölçer.
+ */
+export function expireReasonPresetCacheForTest(): void {
+  cachedAt = 0;
 }
 
 /** Test/araç kaçışı — önbelleği geçersiz kılar (bir sonraki okuma DB'ye gider). */
 export function invalidateReasonPresetCache(): void {
   cache = null;
   cachedAt = 0;
+  refreshBlockedUntil = 0;
 }
 
 /**
- * Senkron okuma. Önbellek yoksa/bayatsa `null` döner — çağıran kod kataloğuna
- * düşer. ⚠️ Burada DB okumaya KALKMA: fonksiyon tx içinden senkron çağrılıyor.
+ * Senkron okuma — BAYAT LİSTE DE DÖNER, yaşı yüzünden `null`'a düşmez.
+ * ⚠️ Burada DB okumaya KALKMA: fonksiyon tx içinden senkron çağrılıyor.
+ *
+ * ── NEDEN "BAYAT AMA VAR" > "TAZE YA DA HİÇ" (2026-08-26, saha arızası) ─────
+ * Eskiden TTL dolunca burası `null` dönüyordu ve doğrulama KOD kataloğuna
+ * düşüyordu. Kod kataloğunda yalnız SİSTEM satırları var — yani fabrikanın
+ * PANELDEN EKLEDİĞİ her sebep, önbelleğin tazelendiği 60 saniyelik pencerenin
+ * dışında GEÇERSİZ oluyordu. Sahadaki görünümü tam olarak şuydu: Tambur'da
+ * "Kayıt düzeltmesi" hazır seçeneklerle çalışıyor, fabrikanın kendi eklediği
+ * sebeple "tamamlanmadı — sunucu hatası" veriyordu. Önbelleği yalnız yazmalar
+ * tazelediği için pencere pratikte hiç açılmıyordu.
+ *
+ * TTL'in işi TAZELİK'tir, GEÇERLİLİK değil: 60 sn önce okunmuş bir liste,
+ * hiç okunmamış bir listeden her koşulda daha doğrudur. Bayatlık artık okumayı
+ * düşürmez, arka planda bir tazeleme TETİKLER (`scheduleBackgroundRefresh`).
  */
 function cachedRows(kind: ReasonPresetKind): ReasonPresetDto[] | null {
-  if (!cacheIsFresh()) return null;
+  if (!cacheIsFresh()) scheduleBackgroundRefresh();
   const rows = cache?.get(kind);
   // Boş dizi ile "hiç okunmadı" AYRI şeylerdir: uzlaştırma koşmuş ve fabrika
   // her satırı gizlemiş olabilir. Yine de boş katalog doğrulamayı kilitlerdi,
@@ -150,13 +206,32 @@ function cachedRows(kind: ReasonPresetKind): ReasonPresetDto[] | null {
 // senkron kapısına (`validateVarianceReason`) DOKUNMAZ — o kendi semantiğiyle kalır.
 
 /** Yalnız metin saklayan iki kind — diğerleri `validateVarianceReason`'dan geçer. */
-export type TextReasonKind = Extract<ReasonPresetKind, "ROLL_MANUAL_ENTRY" | "ROLL_CANCEL">;
+/**
+ * METİN SAKLAYAN kind'lar — `KIND_STORES_TEXT`ten TÜRETİLİR, elle yazılmaz.
+ *
+ * Eskiden burada elle bir union vardı (`"ROLL_MANUAL_ENTRY" | "ROLL_CANCEL"`) ve
+ * o tablonun ikiziydi. İki liste sessizce ayrışabilirdi: yeni bir kind'ı
+ * `KIND_STORES_TEXT`te true yapıp buraya eklemeyi unutan kişi, `resolveReasonCode`
+ * çağrısında anlamsız bir tip hatası alır ve çözümü genelde "cast" olur —
+ * o noktadan sonra kod sessizce yanlış kind'ı okur. Türetince ikizlik biter.
+ */
+export type TextReasonKind = {
+  [K in ReasonPresetKind]: (typeof KIND_STORES_TEXT)[K] extends true ? K : never;
+}[ReasonPresetKind];
 
 type ReasonRow = { code: string; label: string; fullText: string | null; legacyTexts: string[] };
 
 /** Kind'ın satırları: taze önbellek → DB tazeleme → (DB boşsa) kod kataloğu. */
 async function rowsForTextKind(kind: TextReasonKind): Promise<ReasonRow[]> {
-  if (!cacheIsFresh()) await refreshReasonPresetCache();
+  if (!cacheIsFresh()) {
+    try {
+      await refreshReasonPresetCache();
+    } catch {
+      // DB yoklaması düştü — ELDEKİ (bayat) liste korunur. Hiç yoksa aşağıda kod
+      // kataloğuna düşülür. Anlık bir DB tökezlemesi, fabrikanın eklediği sebebi
+      // "geçersiz kod" (400) yapmamalı — senkron kapıyla aynı gerekçe.
+    }
+  }
   const rows = cache?.get(kind);
   if (rows && rows.length > 0) return rows;
   // Uzlaştırma henüz koşmamış (boş DB) → kod kataloğu; doğrulama operatörü kilitlemez.

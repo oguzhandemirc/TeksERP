@@ -18,6 +18,7 @@ import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { sackBlockMessage } from "./helpers/sack-invariants.helper";
+import { openLineWhere } from "./helpers/order-line-scope.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
@@ -3384,17 +3385,15 @@ export class SubcontractorService {
       throw AppError.badRequest("Kalan kapama yalnızca fason adımlarında yapılabilir");
     }
 
-    // Sebep ÖN doğrulaması — tx'e girmeden 400 (validateVarianceReason düz Error
-    // atar, sarılmazsa 500 görünür ve operatör "sistem hatası" sanır). Asıl yazma
-    // yine recordVarianceTx içinden aynı kapıdan geçer.
-    try {
-      validateVarianceReason(RollVarianceKind.SCRAP, {
-        reasonCode: data.reasonCode,
-        reasonText: data.reasonText ?? null,
-      });
-    } catch (e) {
-      throw AppError.badRequest(e instanceof Error ? e.message : "Geçersiz sebep");
-    }
+    // Sebep ÖN doğrulaması — tx'e girmeden. Asıl yazma yine recordVarianceTx
+    // içinden aynı kapıdan geçer; buradaki kontrol yalnız hatayı transaction
+    // açılmadan ÖNCE çıkarır. (2026-08-26: `validateVarianceReason` artık kendisi
+    // AppError 400 atıyor — eskiden düz Error'dı ve sarılmazsa 500 görünüyordu.
+    // Sarmalayıcı kaldırıldı ki `details.code` kaybolmasın.)
+    validateVarianceReason(RollVarianceKind.SCRAP, {
+      reasonCode: data.reasonCode,
+      reasonText: data.reasonText ?? null,
+    });
 
     let closedQty = 0;
     await prisma.$transaction(async (tx) => {
@@ -5742,7 +5741,9 @@ export class SubcontractorService {
               itemId: { in: itemIds },
               id: { notIn: [...linkedLineIds] },
               order: { status: { notIn: ["CANCELLED", "COMPLETED"] } },
-              quantity: { gt: prisma.orderLine.fields.shippedQty },
+              // Aktif + açık kalem — tek kaynak (iptal edilmiş kaleme fasondan
+              // doğrudan sevk tahsis edilemez).
+              ...openLineWhere(prisma.orderLine.fields),
             },
             select: {
               id: true,

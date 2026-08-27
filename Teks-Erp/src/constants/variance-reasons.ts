@@ -24,6 +24,8 @@
 
 import { RollVarianceKind } from "@prisma/client";
 
+import { AppError } from "../utils/app-error";
+
 /** Sapmayı doğuran YOL. Sebep "neden", kaynak "nerede" sorusunu yanıtlar. */
 export const VARIANCE_SOURCES = {
   /** Tambur açık kumaş finalize'ı — kalan metraj kararı. */
@@ -246,13 +248,21 @@ export function validateVarianceReason(
   const hit = findReason(kind, code);
   if (!hit) {
     const catalog = reasonsForKind(kind);
-    throw new Error(
+    // ⚠️ 400, düz `Error` DEĞİL (2026-08-26). Düz Error error.middleware'de 500'e
+    // düşüyordu ve operatörün gördüğü tek şey "tamamlanmadı — sunucu hatası"
+    // oluyordu: sebebi söylemeyen bir mesaj, üstelik mobil kuyruk 5xx'i geçici
+    // sanıp üç kez daha deniyordu. Geçersiz sebep kodu bir İSTEMCİ hatasıdır.
+    // (Tek çağrı noktası bunu zaten elle sarıyordu — subcontractor.service
+    // "kalan kapama"; kural artık kapının kendisinde.)
+    throw AppError.badRequest(
       `Geçersiz sebep kodu: ${code} (geçerli: ${catalog.map((r) => r.code).join(", ")})`,
+      { code: "REASON_CODE_INVALID" },
     );
   }
   if (hit.requiresText && (!text || text.length < VARIANCE_MIN_REASON_TEXT)) {
-    throw new Error(
+    throw AppError.badRequest(
       `"${hit.label}" seçildiğinde açıklama yazılmalı (en az ${VARIANCE_MIN_REASON_TEXT} karakter)`,
+      { code: "REASON_TEXT_REQUIRED" },
     );
   }
   return { reasonCode: code, reasonText: text };

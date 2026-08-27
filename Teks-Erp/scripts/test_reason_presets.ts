@@ -38,6 +38,8 @@ import {
   resolveReasonCode,
   resolveReasonCodeFromText,
   assertKnownReasonCode,
+  expireReasonPresetCacheForTest,
+  invalidateReasonPresetCache,
 } from "../src/services/reason-preset.service";
 import {
   REASON_PRESET_CATALOG,
@@ -46,7 +48,12 @@ import {
   CANCEL_REASONS,
   slugifyReasonCode,
 } from "../src/constants/reason-presets";
-import { validateVarianceReason } from "../src/constants/variance-reasons";
+import {
+  validateVarianceReason,
+  RECORD_CORRECTION_REASONS,
+  SCRAP_REASONS,
+} from "../src/constants/variance-reasons";
+import { AppError } from "../src/utils/app-error";
 
 let pass = 0;
 let fail = 0;
@@ -180,6 +187,171 @@ async function main(): Promise<void> {
 
   const legacy = validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: "TOP_BASI" });
   check("sistem kodu (TOP_BASI) geçerli", legacy.reasonCode === "TOP_BASI");
+
+  // ── §3b BAYAT ÖNBELLEK — 2026-08-26 saha arızasının bekçisi ───────────────
+  //
+  // ARIZA: TTL (60 sn) dolunca senkron okuma `null` dönüyor, doğrulama KOD
+  // kataloğuna düşüyordu — orada yalnız SİSTEM satırları var. Sonuç: fabrikanın
+  // panelden eklediği her sebep, bir yazma işleminden sonraki 60 saniyenin
+  // dışında GEÇERSİZ oluyordu. Sahadaki görünümü: Tambur → "Kayıt düzeltmesi"
+  // hazır seçeneklerle çalışıyor, fabrikanın kendi sebebiyle "tamamlanmadı —
+  // sunucu hatası" veriyordu.
+  //
+  // ⚠️ BU BÖLÜMÜN KÖR NOKTASI, HATANIN KENDİSİYLE AYNI YERDEDİR: §3 doğrulamadan
+  // hemen ÖNCE `refreshReasonPresetCache()` çağırıyor, yani ölçümünü hep TAZE
+  // pencerede yapıyordu ve arızayı göremezdi. Buradaki her kontrol önbelleği
+  // BİLEREK bayatlatır. `invalidateReasonPresetCache()` ile değiştirme — o
+  // satırları da siler ve ölçülen şey "liste elde ama bayat" olmaktan çıkar.
+  console.log("\n── §3b Bayat önbellek: fabrikanın eklediği kod GEÇERLİ kalmalı ──");
+
+  const builtinScrapCodes = SCRAP_REASONS.map((r) => r.code);
+  check(
+    "körlük zemini: test kodu KOD kataloğunda YOK (yoksa aşağısı vakumen yeşil olurdu)",
+    !builtinScrapCodes.includes(row.code) && !builtinScrapCodes.includes(copy2.code),
+    `${row.code} / ${copy2.code}`,
+  );
+
+  // Regresyonda ATMAK yerine etiketli ❌ bassın (yoksa koşum burada kesilir ve
+  // §4-§6 hiç ölçülmez — bir arıza, bekçinin geri kalanını da kör eder).
+  const acceptedWhenStale = (kind: RollVarianceKind, code: string): boolean => {
+    expireReasonPresetCacheForTest();
+    try {
+      return validateVarianceReason(kind, { reasonCode: code }).reasonCode === code;
+    } catch {
+      return false;
+    }
+  };
+
+  await refreshReasonPresetCache();
+  check(
+    "BAYAT önbellekte fabrikanın kodu hâlâ kabul ediliyor (asıl arıza)",
+    acceptedWhenStale(RollVarianceKind.SCRAP, row.code),
+  );
+  check(
+    "BAYAT önbellekte GİZLENMİŞ kod da kabul ediliyor",
+    acceptedWhenStale(RollVarianceKind.SCRAP, copy2.code),
+  );
+
+  expireReasonPresetCacheForTest();
+  let staleRejected = false;
+  try {
+    validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: "UYDURMA_KOD_XYZ" });
+  } catch {
+    staleRejected = true;
+  }
+  check("BAYAT önbellekte bile uydurma kod REDDEDİLİYOR (fail-closed korundu)", staleRejected);
+
+  // Bayat okuma arka planda bir tazeleme TETİKLER — ve bunu ölçmenin tek dürüst
+  // yolu, önbelleğin GÖRMEDİĞİ bir satırın sonradan görünür olmasıdır.
+  // ⚠️ Satır servisle DEĞİL doğrudan prisma ile yazılır: `ReasonPresetService.create`
+  // önbelleği kendisi tazeler ve kontrol vakumen yeşile döner (ilk yazımda tam
+  // bu tuzağa düşüldü — "kod kabul edildi mi" sorusu bayat listeyle de EVET der).
+  const unseen = await prisma.reasonPreset.create({
+    data: {
+      kind: ReasonPresetKind.ROLL_SCRAP,
+      code: `${slugifyReasonCode(TEST_LABEL)}_GORULMEMIS`,
+      label: `${TEST_LABEL} GORULMEMIS`,
+      sortOrder: 9990,
+      isSystem: false,
+    },
+    select: { id: true, code: true },
+  });
+  created.push(unseen.id);
+
+  const seenBefore = (() => {
+    try {
+      return (
+        validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: unseen.code }).reasonCode ===
+        unseen.code
+      );
+    } catch {
+      return false;
+    }
+  })();
+  check(
+    "kontrol anlamlı: yeni satır önbellekte HENÜZ yok (yoksa aşağısı hiçbir şey ölçmez)",
+    !seenBefore,
+  );
+
+  // Bayat okuma → arka plan tazelemesi tetiklenir.
+  acceptedWhenStale(RollVarianceKind.SCRAP, row.code);
+  await new Promise((r) => setTimeout(r, 300));
+  let healed = false;
+  try {
+    healed =
+      validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: unseen.code }).reasonCode ===
+      unseen.code;
+  } catch {
+    healed = false;
+  }
+  check(
+    "bayat okuma arka planda tazeleme TETİKLİYOR (dışarıdan yazılan satır görünür oldu)",
+    healed,
+  );
+
+  // Kayıt düzeltmesi listesi de aynı kapıdan geçer — arıza orada görüldü.
+  const corr = await ReasonPresetService.create({
+    kind: ReasonPresetKind.ROLL_RECORD_CORRECTION,
+    label: `${TEST_LABEL} DUZELTME`,
+  });
+  created.push(corr.id);
+  check(
+    "körlük zemini: düzeltme kodu KOD kataloğunda YOK",
+    !RECORD_CORRECTION_REASONS.some((r) => r.code === corr.code),
+    corr.code,
+  );
+  check(
+    "BAYAT önbellekte fabrikanın KAYIT DÜZELTMESİ kodu kabul ediliyor",
+    acceptedWhenStale(RollVarianceKind.RECORD_CORRECTION, corr.code),
+  );
+
+  // ── §3c Geçersiz sebep 400 olmalı, 500 DEĞİL ──────────────────────────────
+  // Düz `Error` error.middleware'de 500'e düşüyordu: operatör "tamamlanmadı —
+  // sunucu hatası" görüyor, mobil kuyruk da 5xx'i geçici sanıp üç kez daha
+  // deniyordu. Geçersiz sebep kodu bir İSTEMCİ hatasıdır.
+  console.log("\n── §3c Geçersiz sebep = 400 (operatör 'sunucu hatası' görmesin) ──");
+  let thrown: unknown = null;
+  try {
+    validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: "UYDURMA_KOD_XYZ" });
+  } catch (e) {
+    thrown = e;
+  }
+  check(
+    "geçersiz kod AppError(400) atıyor",
+    thrown instanceof AppError && thrown.statusCode === 400,
+    thrown instanceof AppError ? `status=${thrown.statusCode}` : String(thrown),
+  );
+  check(
+    "istemcinin ayırt edebilmesi için details.code = REASON_CODE_INVALID",
+    thrown instanceof AppError && thrown.details?.code === "REASON_CODE_INVALID",
+  );
+
+  let textErr: unknown = null;
+  try {
+    validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: "DIGER", reasonText: "ab" });
+  } catch (e) {
+    textErr = e;
+  }
+  check(
+    "\"Diğer\" açıklamasız da AppError(400)",
+    textErr instanceof AppError && textErr.statusCode === 400,
+  );
+
+  // ── §3d Önbellek HİÇ dolmamışsa (boot öncesi) kod kataloğu — bilinçli ─────
+  // Bayatlık ≠ boşluk: liste hiç okunmadıysa elde doğrulanacak bir şey yok ve
+  // fail-closed davranmak doğrudur. Bu satır o ayrımı YAZILI tutar.
+  invalidateReasonPresetCache();
+  let coldRejected = false;
+  try {
+    validateVarianceReason(RollVarianceKind.SCRAP, { reasonCode: row.code });
+  } catch {
+    coldRejected = true;
+  }
+  check(
+    "önbellek HİÇ dolmamışsa kod kataloğuna düşer (bayatlıktan AYRI, bilinçli)",
+    coldRejected,
+  );
+  await refreshReasonPresetCache();
 
   // ── §4 Mobil zemin aynası ─────────────────────────────────────────────────
   console.log("\n── §4 Mobil çevrimdışı zemini aynası ──");

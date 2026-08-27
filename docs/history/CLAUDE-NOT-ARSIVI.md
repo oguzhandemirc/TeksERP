@@ -794,3 +794,67 @@ dosyalar `shasum` ile birebir geri yüklendi.
 **AÇIK:** mevcut bir iş emrine sonradan top EKLEME hâlâ yok (`attach-rolls` ucu 2026-06-12'de
 kaldırıldı) — her iki istemci de YENİ iş emri açar. SAP'ta da rework ayrı emirdir; kapatılan
 boşluk bu değil.
+
+## 2026-08-26 — Fabrikanın kendi eklediği sebep 60 saniyelik bir pencerede yaşıyordu ("taze ya da hiç" yanlış takas)
+
+**Saha bulgusu:** Tambur → "Bitir" → en alttaki **"Kayıt düzeltmesi"** → hazır seçeneklerden
+biriyle sorunsuz, ama fabrikanın panelden/tabletten **kendi eklediği** sebeple: önce iyimser
+"Tambur tamamlandı", sonra `1 sync`, sonra **"tamamlanmadı — sunucu hatası"**.
+
+**Kök neden — bekçinin kör noktası hatanın kendisiyle aynı yerdeydi.** Sapma doğrulaması
+(`validateVarianceReason`) transaction İÇİNDE ve SENKRON koşuyor, bu yüzden katalogu modül
+düzeyi bir önbellekten okuyor (`reason-preset.service.cachedRows`). Önbelleğin 60 sn TTL'i
+vardı ve dolduğunda fonksiyon **`null` dönüyordu** → doğrulama `constants/variance-reasons.ts`
+KOD kataloğuna düşüyordu. Orada yalnız **sistem** satırları var. Yani:
+
+* sistem kodu (`OLCUM_HATASI`, `TOP_BASI`…) her koşulda geçiyor,
+* fabrikanın eklediği kod yalnız **bir yazma işleminden sonraki 60 saniye** içinde geçiyor.
+
+Önbelleği tazeleyen tek şey boot ve katalog YAZMALARI olduğu için o pencere pratikte hiç açık
+olmuyordu: sebebi ekleyen kişi bir dakika içinde denerse çalışıyor, operatör ertesi gün
+denerse çalışmıyordu. **Ölçüldü** (dev DB, gerçek 61 sn beklemeyle): taze önbellekte KABUL,
+61 sn sonra `Geçersiz sebep kodu: … (geçerli: OLCUM_HATASI, GIRIS_FAZLA, MUKERRER_KAYIT,
+YANLIS_TOP, DIGER)`. `test_reason_presets §3` bunu göremezdi çünkü doğrulamadan hemen ÖNCE
+`refreshReasonPresetCache()` çağırıyor, yani ölçümünü hep taze pencerede yapıyordu.
+
+**Karar: TTL'in işi TAZELİK'tir, GEÇERLİLİK değil.** 60 sn önce okunmuş bir liste, hiç
+okunmamış bir listeden her koşulda daha doğrudur. `cachedRows` artık **bayat listeyi de
+döndürür** ve bayatlık okumayı düşürmek yerine arka planda bir tazeleme TETİKLER
+(`scheduleBackgroundRefresh` — çağıranı bekletmez, tek-uçuş, DB düşerse 5 sn geri çekilir ve
+ELDEKİ liste korunur). Aynı dayanıklılık async metin-kind yolunda da var (`rowsForTextKind`
+artık başarısız tazelemeyi yutup bayat listeyle devam eder).
+
+⚠️ **Bayatlık ≠ boşluk, ayrım bilinçli:** önbellek HİÇ dolmadıysa (boot uzlaştırması henüz
+koşmadı) hâlâ kod kataloğuna düşülür ve fabrika kodu reddedilir — elde doğrulanacak bir şey
+yokken fail-closed doğrudur. `expireReasonPresetCacheForTest()` (bayatlatır, satırları
+KORUR) ile `invalidateReasonPresetCache()` (satırları da düşürür) bu yüzden ayrı iki
+fonksiyondur; bekçi ikisini karıştırırsa düzeltmeyi değil başka bir şeyi ölçer.
+
+⚠️ **Tek-uçuş tekilleştirmesi YALNIZ arka plan tazelemesine ait.** `refreshReasonPresetCache`
+o kapıdan geçirilmedi: `create`/`update`/`duplicate`/`reorder` kendi yazdığını GÖRMEK zorunda,
+uçuştaki (yazmadan ÖNCE başlamış) bir okumaya iliştirilemez — iliştirilseydi hata daha dar
+ama aynı sınıftan geri gelirdi.
+
+**İkinci kusur — "sunucu hatası" mesajının kendisi.** `validateVarianceReason` düz `Error`
+atıyordu; `error.middleware` onu **500**'e çeviriyordu. Sonuç iki katmanlı: operatör sebebi
+söylemeyen bir mesaj görüyor, mobil kuyruk da 5xx'i geçici sanıp **üç kez daha deniyor**
+(`offline/mutations.ts`: 4xx fail-fast, 5xx üç deneme). Geçersiz sebep kodu bir İSTEMCİ
+hatasıdır → artık `AppError.badRequest` + `details.code` (`REASON_CODE_INVALID` /
+`REASON_TEXT_REQUIRED`), yani `resolveReasonCode`'un metin-kind tarafıyla aynı sözleşme.
+`subcontractor.service` "kalan kapama"daki elle try/catch sarmalayıcısı kaldırıldı — kural
+artık kapının kendisinde ve sarmalayıcı `details.code`'u yutuyordu.
+
+**Bekçi:** `test_reason_presets` §3b (bayat önbellek) · §3c (400, 500 değil) · §3d (soğuk
+önbellek bilinçli fail-closed) — 66 kontrol. **Dört negatif sondayla kırmızı verdiği
+doğrulandı:** ① bayat→`null` geri konunca 4 kontrol, ② arka plan tazelemesi silinince 1,
+③ 400 yerine düz `Error` atılınca 2, ④ `expireForTest` satırları da silseydi 3.
+⚠️ "Kendini onarır" kontrolünün İLK yazımı **etkisiz sondaydı** — "kod kabul edildi mi" diye
+soruyordu ve bayat liste de EVET der (② sondası yeşil kaldı). Dürüst ölçüm: önbelleğin
+GÖRMEDİĞİ bir satır (servisle değil **doğrudan prisma ile** yazılır, yoksa create kendi
+tazeler) bayat okumadan sonra görünür oluyor mu.
+
+**Migration YOK · izin YOK · APK YOK.** Yalnız backend; deploy edilince sahadaki tabletler
+değişmeden düzelir. Kapsam dışı bırakılan: geçmişte bu yüzden düşen kayıtlar (operatör
+tekrar girdi, sistemde iz yok).
+
+---
