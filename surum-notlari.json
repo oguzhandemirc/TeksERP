@@ -18,12 +18,20 @@
     {
       "id": "2026-08-28",
       "baslik": "Kendi kendine güncellenen program, yarı mamul ayrımı ve sipariş raporları",
-      "surumler": { "panel": "2.8.2", "tablet": "2.9.9" },
+      "surumler": {
+        "panel": "2.8.3",
+        "tablet": "2.9.9"
+      },
       "maddeler": [
         {
           "kapsam": "her-ikisi",
           "tip": "iyilestirme",
           "metin": "Program yeni sürümü kendisi indirip kuruyor. Artık bilgisayarlara ve tabletlere tek tek kurulum dosyası taşımaya gerek yok."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "yeni",
+          "metin": "Güncelleme kurulduktan sonra \"bu güncellemede neler değişti\" penceresi açılıyor. Eski notlara Ayarlar → Sürüm Notları'ndan her zaman ulaşabilirsiniz."
         },
         {
           "kapsam": "her-ikisi",
@@ -57,6 +65,11 @@
         },
         {
           "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İş emri açarken rotada eksik adım varsa artık engellenmiyor, yalnız uyarı veriliyor."
+        },
+        {
+          "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Stok listesindeki \"Tip\" sütunu yarı mamul topları \"Bitmiş\" gösteriyordu; düzeltildi."
         },
@@ -69,6 +82,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Kumaş Dengesi ekranı yarı mamul topları hesaba katmıyordu ve olmayan kumaş açığı gösterebiliyordu; düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Giriş ekranındaki uyarı pencerelerinde düğmeler ve kapatma işareti çalışmıyordu."
         },
         {
           "kapsam": "tablet",
