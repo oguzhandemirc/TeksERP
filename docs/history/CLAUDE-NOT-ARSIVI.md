@@ -859,6 +859,417 @@ tekrar girdi, sistemde iz yok).
 
 ---
 
+## 2026-08-26 — Electron dağıtımı: setup elden ele taşınıyordu, güncelleyici KURULUYDU ama hiçbir yere bağlanmamıştı
+
+**Şikâyet:** "Electron uygulamasını setup haline getirip fabrikada tek tek dağıtıyorum, bu çok yorucu."
+
+**Ölçüm:** `electron-updater@6.8.3` `Electron/package.json` bağımlılıklarında **duruyordu**, ama `electron/` altında tek referansı yoktu (`grep` → 0 sonuç) ve `build.publish` bloğu da yoktu — yani electron-builder `latest.yml`i hiç üretmiyordu. "Yazıldı ama mount edilmedi" sınıfının bir başka örneği: paket kurulu, kablo yok.
+
+**Kurulan akış:** yayın adresi generic provider (`https://demo.etkiliyazilim.com/guncelleme/electron/`); panel açılıştan 30 sn sonra ve 4 saatte bir `latest.yml`e bakar, yeni sürümü arka planda indirir, ekranın üstünde "Yeni sürüm hazır" şeridi çıkarır, kurulum kullanıcı "Yeniden Başlat" dediğinde yapılır. İşletme reçetesi: `docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`.
+
+**Kararlar ve neden böyle:**
+
+- **Kurulum yeri `perMachine: true` KALDI** (kullanıcı kararı) — uygulama "Program Files"ta olduğu için her kurulumda Windows bir kez izin sorar. ⚠️ **O makinedeki hesap yönetici değilse güncelleme O MAKİNEDE hiç kurulmaz** (panel eski sürümle çalışmaya devam eder — sessiz bir "bazıları güncellendi, bazıları güncellenmedi" durumu doğurur). Ölçülmedi; sahada tek makinede bakılacak. Çıkış yolu tek satır: `nsis.perMachine:false` + bir elle tur daha.
+- **`autoInstallOnAppQuit = false`** — kapanışta sessiz kurulum bilerek KAPALI. perMachine kurulumda kurulum yönetici izni ister; kapanışta tetiklenseydi operatör gittikten sonra ekranda cevapsız bir UAC penceresi asılı kalırdı. Kurulum yalnız kullanıcı başındayken, şeritten tetiklenir.
+- **`quitAndInstall(true, true)`** — sessiz kurulum + kurulumdan sonra otomatik yeniden açılış. `isSilent=false` NSIS sihirbazını açar ve operatöre "İleri, İleri" yaptırırdı.
+- **Şerit YALNIZ `ready` durumunda çıkar.** `downloading` gösterilmez (arka plan işi, gürültü); `error` de gösterilmez — internete çıkamayan bir makine her açılışta kırmızı şerit görürse şerit anlamını yitirir (körleşme). Hata Genel Ayarlar → Bu Bilgisayar → **Güncelleme** sekmesinde, oraya bakan kişiye yazılıdır.
+- **Dosya adı ASCII'ye çevrildi** — `artifactName` eskiden `${productName}` kullanıyordu, yani ad "Adnan Şahin ERP-2.7.1-Setup.exe" oluyordu. Bu ad `latest.yml` içinde URL olarak geçer; `Ş` + boşluk aktarımda (FTP / nginx / Windows→Linux kopya) sessizce bozulup 404 üretir. Ürün adı kısayolda AYNEN kalır, değişen yalnız DOSYA adı: `TeksERP-<sürüm>-Setup.exe`.
+- **Yayın adresi TEK KAYNAK `shared/update-feed.ts`** ve `package.json > build.publish` ile eşitliği bekçili (`src/test/update-feed-url.test.ts`, 3 kontrol; iki negatif sondayla kırmızı verdiği ölçüldü). Ayrışma arızası SESSİZDİR: uygulama A adresine bakar, Ayarlar ekranı B yazar, "dosyayı koydum ama gelmiyor" denir ve iz kalmaz. Bekçi ayrıca artifact adının ASCII kaldığını da kilitler.
+- **Makineye özel adres ezmesi var** (`config.updateFeedUrl`, secure-store) — yayın adresi pakete DERLEME ANINDA gömüldüğü için, adres yanlış gömülürse düzeltmenin tek yolu yeni setup dağıtmak olurdu; yani tam da kaçınılmak istenen elle tur. Bozuk ezme sessizce yok sayılır ve varsayılana dönülür (makineyi güncellemesiz bırakmaktansa).
+- **Hata metinleri Türkçeye çevriliyor** (`toTurkishError`) — ham metinler İngilizce ve teknik ("net::ERR_NAME_NOT_RESOLVED"); saha okuyucusu anlamadığı uyarıyı görmezden gelir. Tanınmayan hata ham hâliyle geçer (yutmak teşhisi imkânsız kılardı; tam metin `electron-log`ta zaten var).
+
+**Kaçınılmaz olan:** otomatik güncelleme, makinede zaten güncelleyiciyi taşıyan bir sürüm varsa çalışır → sahadaki kurulumlar için **son bir elle tur** şart. Bundan sonrası kendiliğinden.
+
+**Yan bulgu (bu işle ilgisiz, ortam):** `Electron/node_modules/recharts@3.8.1` diskte YARIM kuruluydu — `es6/util/cursor/` klasörü yoktu ve `electron-vite build` renderer aşamasında düşüyordu (npm tarball'ında dosyalar VAR, yani upstream değil yerel kurulum sorunu). `rm -rf node_modules/recharts && npm install recharts@3.8.1 --no-save` ile onarıldı, build çıkış kodu 0. Bu ağaçtan Windows setup üretmeden önce build'in yeşil olduğunu doğrula.
+
+**Yayın sunucusu AYNI GÜN kuruldu ve doğrulandı.** Sunucuda nginx YOK — ortam **Docker + Traefik v3.5**. Ayrı statik servis eklendi (`/opt/stack/apps/tekserp-guncelleme`, nginx:alpine 64 MB), kural ``Host(`guncelleme.etkiliyazilim.com`)`` — kullanıcı Cloudflare'den A kaydını açtı. İlk kurulum `demo.etkiliyazilim.com` altında `PathPrefix(/guncelleme)` ile yapılmıştı; **kullanıcı ayrı alan adı istedi ve karar daha iyiydi**: demo bir SPA ve bilinmeyen HER yola 200 + `index.html` dönüyor (ölçüldü), yani yayın onun isim alanını paylaşsaydı "404 mü, SPA mı" ayrımı okunmaz olurdu. ⚠️ **TLS Cloudflare Origin CA** (`*.etkiliyazilim.com` wildcard, 2036'ya kadar, `traefik/dynamic/tls.yml` → default store; ACME YOK çünkü alan adı bu CF hesabının zone'unda değil): **Origin CA'ya yalnız Cloudflare Edge güvenir** → kaydın proxy'si (turuncu bulut) AÇIK olmak ZORUNDA; DNS-only'ye çevrilirse istemci sertifikayı reddeder ve güncelleme SESSİZCE durur. Wildcard sayesinde yeni alt alan adı için ek sertifika işi çıkmadı. Dosyalar `tekserp-demo`nun `public/`ine KONULMADI — orası imajın parçası, demo yeniden derlenince yayın silinirdi (fabrika sunucusundaki `kur.ps1` `app\` tuzağının ikizi). Yayın klasörünün sahipliği `oguzhan`a verildi: **`sudo` ile `scp` yapılamaz**. Ölçüm (canlı): `guncelleme.etkiliyazilim.com/electron/…` → 200 + `text/yaml` + `no-cache, must-revalidate`, `ssl_verify=0`, `server: cloudflare`, **`cf-cache-status: DYNAMIC`** (Cloudflare `latest.yml`i önbelleklemiyor — önbelleklese yeni sürüm saatlerce görünmezdi); demo kökü ve `/health` **hâlâ 200** (regresyon yok). Yayınlama `deploy/electron-yayinla.ps1` — asıl işi **sırayı unutturmamak** (`latest.yml` EN SON; ters sırada henüz yüklenmemiş bir `.exe`yi işaret eden yayın kalır).
+
+**macOS'tan Windows paketi ALINABİLİYOR (ölçüldü, ama doğrulanmadı).** Düz `npm run build:win` macOS'ta düşer — `node-gyp does not support cross-compiling native modules from source`. Rebuild adımı atlanınca (`-c.npmRebuild=false`, script `build:win:cross`) 147 MB NSIS installer + blockmap + latest.yml sorunsuz üretildi, **wine bile gerekmedi**. Sebep: `serialport` ve `node-hid` **N-API prebuild** taşıyor (`node-napi-v4.node`) — Electron ABI'sinden bağımsızlar, rebuild gereksiz; Windows binary'lerinin (`PE32+ x86-64`) pakete girdiği tek tek ölçüldü. ⚠️ **"Doğru binary pakete girdi" ≠ "Windows'ta terazi/okuyucu açılıyor"**: bu modüller düşerse uygulama ÇÖKMEZ, sessizce `available:false` der — arıza kendini göstermez, sahada fark edilir. macOS paketi sahaya yayılmadan önce bir Windows makinesinde *Bu Bilgisayar → Yazıcı/Kantar* sekmelerinde cihazlar listelenmeli.
+
+**⚠️ Cloudflare 404 tuzağı (aynı gün yaşandı, kalıcı düzeltildi):** nginx `.exe` başlığı `add_header ... always` ile yazılmıştı; `always` başlığı **hata yanıtlarına da** ekler ve Cloudflare origin'in talimatına uyup **404'ü bir hafta önbelleğe alır**. Paket yüklenmeden önce yapılan tek bir sonda isteği, dosya yüklendikten SONRA bile bir hafta 404 döndürdü (dosya sunucuda 147 MB duruyordu; `?cb=…` ile 200, temiz URL ile 404 — teşhis bu ikiliyle kurulur). Düzeltme: `always` kaldırıldı + `error_page 404 → Cache-Control: no-store` ikinci hattı. Önbellekte kalmış 404 yalnız **Cloudflare panelinden Purge by URL** ile temizlenir. Ders şu sınıfa girer: *bir başlık direktifi, hata yolunu da kapsadığında sessiz bir kalıcılık üretir.* Teşhis yayın script'lerine kalıcı olarak kondu (mobil oturumunun önerisi): temiz URL ↔ `?onbellek-atla=` kıyası "dosya yüklenmemiş" ile "önbellekte kalmış 404"ü AYIRIR — ikisi aynı görünür ama biri yeniden yüklemekle, diğeri yalnız purge ile çözülür; ayrıca `content-length` kıyası yarım yüklemeyi yakalar (200 döner ama eksiktir). Üç dal negatif sondayla ölçüldü. Sunucu yapılandırması artık repoda: `deploy/guncelleme-sunucusu/` (elle kopyalanır — `kur.ps1` ile aynı "servis kendini güncelleyemez" durumu).
+
+**2026-08-27 — iki karar daha (ikisi de sahaya çıkmadan ÖNCE, yani bedava):** ① **Yol şeması müşteri bazlı oldu: `/<müşteri>/<ürün>/`** → `/adnansahin/electron/`, mobil `/adnansahin/mobil/`. Alan adı Etkili Yazılım'ın genel güncelleme sunucusudur; yeni müşteri eklemek yalnız klasör açmaktır (DNS/sertifika/servis YOK). Müşteri başına ALT ALAN ADI bilinçli seçilmedi: wildcard `*.etkiliyazilim.com` **iki seviyeli** adları kapsamaz. ⚠️ Bu kararın zamanlaması load-bearing: **adres pakete derleme anında gömülür**, sahaya çıktıktan sonra değiştirmek her makineyi tek tek gezmek demektir. ② **Güncelleme ZORUNLU** (kullanıcı kararı): şerit + "Sonra" ertelemesi kaldırıldı, yerine iki aşama geldi — inerken ince şerit (*"işinizi kaydedin"*), indikten sonra **kapatılamaz tam ekran kapı + 2 dk geri sayım** (`UpdateGate.tsx`, `GERI_SAYIM_SN`). Geri sayım zorunluluğu yumuşatmaz; güncelleme vardiya ortasında inebildiği için anında kesmek operatörün yarım formunu götürür ve olay *"bilgisayar kendi kendine kapandı"* diye okunurdu. İndirme şeridi de aynı sebeple load-bearing: kapı sürpriz olmasın. `install()` çift çağrılmasın diye ref (stale-closure kilidi) + state (buton kilidi) İKİSİ birden tutulur.
+
+**Geçiş köprüsü (bir hafta sonra silinecek):** 2.8.0 paketi ESKİ adresi (`/electron/`) taşıyordu ve test için indirilmişti. O paketi kurmuş bir makine yalnız oraya bakar → 2.8.1 **her iki yola** kondu. Güncellendikten sonra yeni adrese kendiliğinden geçer. Eski yol boşaltılabilir hale gelince silinir.
+
+**2026-08-27 (2. tur) — kullanıcı sordu: "otomatik denetliyor mu · modal çıkıyor mu · ara ara hatırlatıyor mu · backend hangi sürümü beklediğini söylüyor mu".** İlk ikisi vardı, son ikisi eksikti; ikisi de kapatıldı:
+
+**① Kapı kalıcı kilitlenebiliyordu (gerçek hata).** `kuruldu` tek-atışlık bir kilitti; kurulum başlamazsa (Windows izin penceresine "Hayır" en olası sebep) kapatılamayan ve hiçbir şey yapmayan bir ekran kalıyordu — panel kullanılamaz hale gelirdi. `KURULUM_BEKLEME_MS` (20 sn) bekçisi eklendi: uygulama kapanmadıysa kilit açılır, *"Kurulum başlatılamadı"* yazar ve **5 dk sonra yeniden dener** (ilk geri sayımdan uzun: aynı soruyu iki dakikada bir sormak operatörü "Hayır"a şartlandırır). Kullanıcının "ara ara hatırlatıyor mu" sorusunun karşılığı budur.
+
+**② İstemci sürüm politikası (`GET /api/client-policy/:istemci`, PUBLIC).** Backend "en az şu paneli bekliyorum" der; panel altındaysa **güncelleme inmemiş olsa bile** kapı açılır. Gerekçe deploy sırası: **backend ÖNCE** gider, yani yeni sözleşme çıktığında sahada bir süre eski paneller koşar ve bazı değişiklikler onlarda GÖRÜNÜR hata üretmez — alan sessizce düşer. Kararlar: değer **KODDA sabit** (`src/config/client-version-policy.ts`) — panelde ayar olsaydı yanlış girilen bir sayı sahadaki tüm panelleri kilitlerdi ve "şu API sürümü şu paneli gerektirir" cümlesi backend deploy'undan ayrı bir insan hamlesine bağlanırdı; istemci **FAIL-OPEN** (uç okunamaz/bozuk/404 → kilitleme YOK) — projenin fail-closed eğiliminin bilinçli istisnası, çünkü buradaki "kapalı" taraf tek bozuk yanıtla fabrikanın durması demek; uç **PUBLIC** (panel politikayı giriş öncesi sorar — kimlik aransaydı, sözleşmesi bozulduğu için giriş yapamayan panele "güncelle" diyebilme yolu kapanırdı; muafiyet gerekçesi `test_route_auth_coverage` EXEMPT'te); uç **parametreli** (yeni istemci route'a değil `CLIENT_VERSION_POLICIES` kayıt defterine yazılır). ⚠️ **`minVersion` sahadaki panel sürümünden BÜYÜK OLAMAZ** — olsaydı en güncel panel bile kapıda kalır ve indirecek bir şey olmadığı için ÇIKAMAZDI (kendi kendini kurtaramayan tek arıza biçimi); bekçi `test_client_policy.ts` (12 kontrol, iki negatif sondayla kırmızı). `minVersion` yalnız GERÇEK bir kırılmada yükseltilir; her sürümde artırmak, güncellemeyi indirememiş her makineyi üretim dışı bırakır.
+
+**AÇIK EKSİK — mobilde sürüm kapısı YOK** (mobil oturumu ölçtü, 2026-08-27): istek başlıklarında sürüm yok, backend'de mobil kapısı yok, istemcide kontrol yok, 426 yok. ⚠️ `runtimeVersion` bu deliği KAPATMAZ — o JS↔native uyumunu bağlar, backend sözleşmesi hakkında bir şey söylemez; üstelik runtimeVersion artınca eski APK'lı tabletler hiç OTA almaz ve eski JS yeni backend'e karşı SÜRESİZ koşar (üstelik mobil bilinçli offline yazıyor → sessiz alan düşmesinin en kötü zemini). Uç parametreli olduğu için bağlanmak yalnız kayıt defteri satırı + istemci kodu ister. **Kullanıcı kararı bekliyor.**
+
+**2026-08-27 (3. tur) — ÇOK MÜŞTERİ: "başka fabrikaya kurulum yaptığımda etkilenmemeli".** Yayın YOLU zaten müşteri bazlıydı; açık olan PAKET tarafıydı — adres pakete DERLEME ANINDA gömülüyor ve müşteri kodu elle değiştiriliyordu. Unutulan tek düzenleme "yeni fabrikanın paneli BAŞKA bir fabrikanın güncellemesini indirip kurar" sonucunu verirdi ve **hata sessizdir**: dosyalar kendi aralarında TUTARLI kalır, yalnızca yanlış müşteriyi gösterirler → tek müşteriyle hiç görünmez, ikincisinde patlar. Kurulan üç kademe: ① `shared/musteri.json` TEK KAYNAK (adres türetilir, elle yazılan ikinci kopya yok) · ② bekçi `update-feed-url.test.ts` (musteri.json ↔ package.json ↔ update-feed tutarlılığı — **sınırı dokümanda: üçü de aynı YANLIŞ müşteriyi gösterirse yakalayamaz**) · ③ **paketleme kapısı `deploy/electron-paketle.sh`**, derlemeden SONRA paketin İÇİNDEKİ `app-update.yml`i okuyup **argümanla verilen** müşteriyle kıyaslar.
+
+⚠️ **Kademe ③'ün load-bearing özelliği: DAİRESEL DEĞİL.** Beklenen değer argümandan (bağımsız niyet beyanı), gerçek değer çıktıdan gelir. Beklenen değeri de `musteri.json`dan alsaydı kontrol yanlış müşteri kodunu ASLA yakalayamazdı. Genel kural (mobil oturumunun formülasyonu, kendi kapısı tam bu yüzden dairesel çıkmıştı): **beklenen değeri gerçek değerle AYNI kaynaktan alan bir kapı, o kaynağın yanlış olmasını yakalayamaz** — "bekçinin kör noktası hatanın kendisiyle aynı yerdeydi" desenlerinin genel hali. Ölçüldü: adnansahin paketi "yenifabrika" iddiasıyla sunulunca kapı durdurdu, doğru müşteride sessiz geçti. Ayrıca kapı derlemenin ÖNÜNDE değil ARDINDA durur — mobil tarafında önde duran kapı yüzünden yanlış adresli APK yayına çıkmıştı. Yayın komutu da hedefi paketin KENDİ kimliğinden çözer → "A paketini B klasörüne yükleme" hatası yapısal olarak imkânsız. Yeni fabrika: sunucuda `mkdir` + `electron-paketle.sh <müşteri>` + `electron-yayinla.sh`; DNS/sertifika/servis YOK. Sürüm politikası AYRI EKSEN (her fabrikanın kendi backend'i servis eder).
+
+**Migration YOK · yeni izin YOK · APK YOK.** Sürüm 2.7.0 → 2.8.0 → 2.8.1 → **2.8.2**; yayında. ⚠️ Bu tur **backend deploy'u da gerektiriyor** (yeni uç). Kalan iş: **backend deploy + son elle tur** (§2).
+
+---
+
+## 2026-08-26 — Yarı mamul: filtre yetmedi, sekme oldu · ham stoktan iş emri açılamıyordu
+
+**Saha şikâyeti iki maddeydi, ölçüm tek eksik olduklarını gösterdi.**
+
+**① "Boyalı gelen kumaşa sadece kurşun+tambur yapacağız, bunu Electron'dan çözelim."**
+Giriş 2026-08-17'de yapılmıştı (`entrySource=SEMI_FINISHED` + `forcedStatus=STOCK`, Manuel
+Giriş'teki kutu). Eksik olan ÇIKIŞtı: o topu masaüstünden bir iş emrine bağlamanın yolu YOKTU.
+"Yeniden Üretime Al" yalnız Bitmiş Depo sekmesinde çiziliyordu ve gerekçesi koda yazılmıştı:
+*"Ham Stok'ta gösterilmez, oradaki top zaten üretime girmemiş — normal iş emri açma yolu
+kullanılır."* **O yol yok:** Yeni İş Emri formu top almıyor, mevcut iş emrine top ekleme ucu
+2026-06-12'de kaldırıldı. Yani gizlenen buton, olmayan bir kuralı taklit ediyordu. Backend
+baştan beri üçünü de kabul ediyor (`quickStart.attachable` = STOCK/WAREHOUSE/A1_STOCK).
+
+**Ölçüm (prod yedeği 2026-08-25, 2431 top): `SEMI_FINISHED` kaydı SIFIR.** Özellik bir haftadır
+hiç kullanılmamış ve sebebi tek değil — 2026-08-17 paketinin ÜÇ ucu birden açık kalmıştı:
+rota ("Yarı Mamul = Kurşun+Tambur") hiç oluşturulmamış (prod'da 2 rota var, ikisi de Boyahane
+ile başlıyor) · `mobile:kk1-yari-mamul` izni 0 kullanıcıda · masaüstünde iş emri açılamıyor.
+İlk ikisi `docs/ops/DEVIR-2026-08-17-FABRIKA-TALEP.md` kontrol listesinde madde 5-6 olarak
+yazılı ve yapılmamış. **Ders: "backend hazır, arayüz sonra" biten bir iş değildir — çıkışı
+olmayan bir giriş kapısı sıfır kullanım üretir ve bunu kimse hata olarak raporlamaz.**
+
+**② "Yarı mamul envanterde ham stok gibi görünüyor, bu yanlış."** — Haklı.
+
+**KARAR DÖNÜŞÜ (bilinçli).** `docs/design/FABRIKA-TALEP-2026-08-17.md §9` şöyle diyordu:
+*"Yarı mamül ham stoğa düşer, üzerinde ayırt edici işaret taşır, Ham Stok listesinde FİLTREYLE
+süzülür."* Filtre yetmedi: özellikle açılıp seçilmediği sürece yarı mamul ham kumaşın arasında
+kayboluyor, stok adedi ve metraj toplamı ikisini tek rakamda topluyordu. **Değişen şey yalnız
+GÖRÜNÜM: ayrı DEPO yine açılmıyor** (o kararın gerekçesi duruyor — fabrikada fiziksel karşılığı
+yok), ayrı **sekme** açılıyor. Statü, `entrySource` ve stok mekaniği aynı.
+
+**Terim:** "Yarı Mamul" (TDK yazımı; kodda her yerde "mamül" yazıyordu, 12 kullanıcı-görünür
+nokta düzeltildi). Tekdüzen hesap planında 151 Yarı Mamuller, SAP'de HALB. Tekstil
+alternatifleri bu kovayı adlandırmıyor: "ham bez" zaten boyasız malın adı, "boyalı ham" kendi
+içinde çelişik.
+
+### ⚠️ ÜÇ KAPSAM, biri BİLEREK geniş — `RAW_STOCK`'u DARALTMA
+
+| Kapsam | Ne demek | Kim kullanır |
+|---|---|---|
+| `RAW_STOCK` | üretime girmemiş STOCK topu — **ham + yarı mamul** | **Mobil** Hızlı İş Emri top seçicisi |
+| `RAW_STOCK_PURE` | yalnız ham | Masaüstü "Ham Stok" sekmesi |
+| `SEMI_FINISHED` | yalnız yarı mamul | Masaüstü "Yarı Mamul" sekmesi |
+
+`RAW_STOCK`'u "yarı mamul hariç" diye daraltmak **tableti bozar**: tablette üçüncü bir sekme
+YOK ve o toplar listeden düşer — yani sahada çalışan tek yol kapanır. Bu yüzden birleşim
+DOKUNULMADAN kaldı; APK sırası gelince tablet de üçüncü sekmeye geçer, **sunucu değişmeden**.
+Negasyon istemciden söylenemez (`buildWhereClause` yalnız eşitlik/CSV-`in`/boolean üretir), o
+yüzden ayrım servis katmanında yaşamak zorunda. Bekçi `test_semi_finished_entry §5`
+birleşim = dar kapsamların toplamı eşitliğini ölçer — regresyon kapısı odur.
+
+### Yol boyunca çıkan üç SESSİZ hata (hepsi aynı sınıf: "altıncı enum değeri unutuldu")
+
+1. **`entryTitle` switch'i** (`inventory.service`) — `SEMI_FINISHED` case'i yoktu, `default`
+   dalına düşüp topun geçmişinde **"Ham Giriş"** yazıyordu. Yorumu "beş değer de artık AÇIK
+   case'le eşleniyor" diyordu; altıncı değer sonradan eklenmiş.
+2. **Mobil KK1 "Son Kayıtlar" + "Tüm Girişler"** — `entrySource: 'SUPPLIER_RECEIPT,MANUAL_ENTRY'`
+   ile süzüyordu, yani **KK1'in kendi yarı mamul modunun yazdığı topu KK1 gizliyordu**.
+   Operatör az önce girdiği topu göremiyordu. (Düzeltme kodda; sahaya APK ile iner.)
+3. **`entrySource` anahtarına yazan İKİ filtre** (Electron) — base "Giriş Kaynağı" (5 seçenek,
+   SEMI_FINISHED yok) + Ham Stok'a eklenmiş "Giriş Türü" (3 seçenek). Aynı URL parametresine
+   yazıp birbirlerini eziyorlardı. İkincisi silindi, seçenek tekine taşındı.
+
+**Kalıcı çare:** bu üç yer de `Record<string,string>` / dizi literali / ham SQL olduğu için
+derleyici sessiz kalıyordu. Tip-güvenli olan yerlerde (`Record<RollEntrySource, …>`) altıncı
+değer zaten vardı. Yeni enum değeri eklerken **tip-güvenli olmayan** yüzeyleri ara.
+
+### Rapor da ayrıldı (yoksa çelişkiyi BİZ üretecektik)
+
+Stok Karnesi'nin "Ham" rakamı (`RAW = ["STOCK"]`) yarı mamulü içeriyordu. Envanteri ayırıp
+raporu bırakmak, bugün olmayan bir çelişki doğururdu: ekran 800 der, rapor 950. `summary`'ye
+`semiQty`/`semiCount` eklendi; yaş kovaları / ölü stok / `byItem` **yalnız `finished` üzerinde**
+çalıştığı için onlara dokunulmadı — ölü stok rakamı etkilenmedi.
+
+**Ayrımı TAKİP ETMEYEN yüzeyler (bilinçli, listelendi):** Kanban `hamStok` kolonu (düz
+`status=STOCK`; akış görünümü, stok sayım yüzeyi değil) · mobil Depo "Ham" sekmesi
+(`rollScope` kullanmıyor, APK işi) · Ürün Dengesi ve sipariş `freeStock` (**doğru davranış** —
+yarı mamul gerçekten kullanılabilir arzdır, dokunulmadı).
+
+**Beklenen ama sahada ilk kez görülecek:** renkli yarı mamul topu iş emrine bağlıyken hedef
+renk değiştirilirse `workorder-target-color.helper` onu "zaten boyandı" sayar ve
+`COLOR_DYED_BLOCKED` / `COLOR_PARTIAL_CONFIRM` sorar. Doğru semantik.
+
+### Diğer kararlar
+- **`rollScope` artık FAIL-CLOSED.** Tanınmayan değer eskiden hiçbir daralma yapmıyordu ve
+  liste CANCELLED/SHIPPED dahil TÜM tabloyu döndürüyordu — hata yok, log yok. Değer hiçbir
+  kullanıcı girdisinden gelmediği için (istemcilerde sabit) 400 güvenli.
+- **Manuel Giriş'teki sessiz tuzak kapatıldı:** Ham Stok'ta renk seçip kutuyu işaretlemeyen
+  operatörün topu Bitmiş Depo'ya düşüyordu, hiçbir uyarı yoktu. Artık amber uyarı çıkar
+  (engel değil — renkli bitmiş mal girmek meşru). Yarı Mamul sekmesinden açılınca kutu
+  ön-işaretli gelir ama GÖRÜNÜR kalır.
+- **Sekme listeleri AÇIK yazılır:** `RollsTableBody` gövdesini Kartela ve Top Arşivi sayfaları
+  da kullanıyor — "FINISHED_STOCK değilse göster" gibi negatif koşul oralara buton sızdırır.
+- **Bekçi açığı kapatıldı:** `ROLL_TABS`'a sekme eklenip `buildRollForceFilters`'a dal
+  yazılmayı unutmak **tip hatası vermiyordu**; sekme kapsamsız liste gösteriyordu. Yeni
+  `service.test.ts` bölümü bunu ölçer (körlük zemini dahil).
+
+**Migration YOK · yeni izin YOK · APK bu turda YOK.** Sıra: backend ÖNCE, Electron sonra
+(eski Electron `RAW_STOCK` göndermeye devam eder — geriye uyumlu). Bekçiler:
+`test_semi_finished_entry` (16, iki negatif sonda) · `test_stock_scorecard` (17, bir negatif
+sonda) · Electron `Rolls/service.test.ts` (iki negatif sonda).
+
+**Panelden yapılacak (kod değil):** "Yarı Mamul (Kurşun + Tambur)" rotası — bu rota olmadan
+yarı mamul topa iş emri açılamaz.
+
+## 2026-08-26 — Mobil uzaktan güncelleme: APK elden ele taşınıyordu, JS paketi hiç ayrılmamıştı
+
+**Soru:** *"apk olarak upload ediyorum ve tek tek yüklüyorum tablet/telefonlara; Google Play'e
+koyamıyorum, başka nasıl dağıtabiliriz?"*
+
+**Teşhis — sorun dağıtım kanalı değil, AYRIM eksikliğiydi.** `expo-updates` KURULU DEĞİLDİ
+(ölçüldü: `package.json`'da yok, `app.json`'da `updates` bloğu ve `runtimeVersion` yok), yani
+"ekran metnini düzelttim" ile "yeni Bluetooth modülü ekledim" **aynı** maliyeti taşıyordu: her
+ikisi de tam APK turu. Oysa değişikliklerin ~%90'ı JS'tir ve native'e hiç dokunmaz. Kurulan
+şey iki KATMAN:
+
+① **Uzaktan güncelleme (OTA)** — `expo-updates` + Expo Updates protokolü v1'i konuşan KENDİ
+backend'imiz (`/api/mobile/updates/manifest` + `/assets`). EAS Update (Expo bulutu) BİLİNÇLİ
+OLARAK ALINMADI: internet kopunca güncelleme yolu da kopardı ve bundle dış servise giderdi;
+fabrika sunucusu zaten tabletlerin bağlı olduğu makinedir. Uçlar **PUBLIC** (JWT yok) —
+kimlik aransaydı "açılmayan tablete düzeltme gönderme" yolu, yani kurtarmanın kendisi
+kapanırdı.
+
+② **Kurulum dosyası güncelleyicisi** — `/api/mobile/app-version` + `app-download`; tablette
+tek dokunuş, Android'in kurulum ekranı açılır. Sessiz kurulum YOK (ancak MDM ile mümkün;
+6-15 cihaz için maliyeti karşılığını vermedi — ölçülüp elendi).
+
+**`runtimeVersion` bu paketin taşıyıcı direğidir.** Paket yalnız aynı runtimeVersion'ı taşıyan
+APK'ya gider (sunucu tarafında fail-closed). Artırılmadan native değişiklik yayınlanırsa
+sahadaki TÜM tabletler açılışta çöker — bu, sistemin tek "hepsini birden öldüren" senaryosu.
+Bu yüzden `yayinla-ota.mjs` native girdilerin (bağımlılıklar + plugins + android bloğu) parmak
+izini alır, öncekiyle karşılaştırır ve runtimeVersion artmadıysa DURUR.
+
+**"Bayat adres" tuzağının OTA ikizi kapatıldı.** `build-apk.mjs`in başlığındaki iki ölçülmüş
+tuzak (Gradle görevinin env değişikliğiyle geçersiz kılınmaması + Metro transform önbelleğinin
+env'i anahtarına almaması) `expo export` yolunda da geçerlidir. Orada bedeli **bir cihazdı**;
+burada **sahadaki her tablet**tir — yanlış adresli paketi dağıtan şey, güncelleme
+mekanizmasının kendisi olurdu. Yayınlama script'i önbelleği siler ve **üretilen bundle'ın
+içindeki adresi geri okur**; tutmazsa paket yayınlanmaz. Adres çözümü artık TEK KAYNAK
+(`scripts/lib/adres.mjs`) — iki script farklı sırayla çözseydi aynı gün üretilen APK ile paket
+farklı sunucuya bakabilirdi.
+
+**Depo `app\` klasörünün DIŞINDA** (`C:\Etkili-Yazilim\mobil-guncelleme`, `MOBILE_UPDATE_DIR`
+ile taşınır). İçeride olsaydı `kur.ps1` her backend deploy'unda yayındaki paketi ve geri dönüş
+geçmişini silerdi — yani backend'i güncellemek mobil güncellemeyi öldürürdü, sessizce.
+
+**Geri alma dosya silmez:** `updates/<rv>/YAYINDA` işaretçisine eski damga yazılır. İşaretçi
+bozuksa sunucu **gürültülü hata** verir, sessizce en yeniye DÜŞMEZ (düşseydi geri alma yapan
+kişi eski paketin yayında olduğunu sanırdı). Manifest'teki varlık URL'leri **damgaya
+çivilidir** — Expo'nun referans implementasyonunda bu yok ve orada yarış var: manifest
+alındıktan sonra yeni yayın yapılırsa varlıklar yeni paketten servis edilir, hash tutmaz.
+
+**Yenileme kuralı (kullanıcı kararı):** indirilir indirilmez hemen yenilenir. Tek istisna veri
+kaybı önlemesidir — **gönderilmemiş istasyon kaydı varken yenilemez** (`reloadAsync` JS'i
+öldürür, uçuştaki KK1 girişi yarıda kalır); tavan 20 sn, dolarsa yenileme atlanır ve paket bir
+sonraki açılışta uygulanır.
+
+**Yolun ortasında çıkan gerçek açık — MÜHÜR.** Release APK Android'in **herkese açık deneme
+mührüyle** imzalanıyordu (ölçüldü: `signingConfig signingConfigs.debug`, SHA1
+`5E:8F:16:06:...` — standart debug key). İki sonucu vardı: aynı ağdaki biri uygulamanın
+üstüne kurulabilen sahte paket hazırlayabilirdi, ve mühür bir gün değişirse (klasör her
+derlemede yeniden üretiliyor) tabletlerde tek çare **silip yeniden kurmak** olurdu — kayıtlı
+sunucu adresi, oturum, cihaz eşleşmesi ve bekleyen kayıtlar giderdi. Kullanıcı kendi mührünü
+seçti (RSA 4096, 2056'ya kadar). ⚠️ İmza `plugins/withReleaseKeystore.js` ile **her
+prebuild'de yeniden yazılır** — `android/` git dışı prebuild çıktısı olduğu için elle
+düzenleme bir sonraki prebuild'de sessizce kaybolurdu (`usesCleartextTraffic`in 2026-08-15'te
+ısırdığı tuzağın birebir aynısı); eklenti bulamadığı yapıyı **atlamaz, hata fırlatır**.
+`build:apk` ayrıca üretilen APK'nın parmak izini mühürle karşılaştırır.
+
+**Derleme kapısı ilk gerçek koşumda kendi hatasını yakaladı:** `expo prebuild` koşmadan
+derleme yapılsa APK `ENABLED=false` ile, yani uzaktan güncelleme ALMADAN çıkacaktı ve bu
+hiçbir yerde görünmeyecekti. ⚠️ Kapı yazılırken kör noktası da ölçüldü: manifest
+`runtimeVersion`i **literal değil** `@string/expo_runtime_version` referansı olarak yazar —
+düz karşılaştıran bir kapı HER ZAMAN kırmızı verir, bir süre sonra devre dışı bırakılır ve
+gerçek sapmada da susar.
+
+**Bekçinin kör noktası hatanın kendisiyle aynı yerdeydi (yine).** Protokol bekçisinin yol
+kaçışı sondaları var OLMAYAN dosyaları hedefliyordu (`../../../etc/passwd` paket kökünün üç
+üstünde = depo içi, yok) → koruma silindiğinde de 404 dönerdi ve bekçi **52/52 yeşil kaldı**.
+Ölçülüp düzeltildi: kaçış sondası, kaçışın BAŞARILI olacağı gerçek bir hedefi denemeli.
+
+**Kapsam dışı bırakılanlar (gerekçeli):** MDM (6-15 cihaz, kurulum maliyeti karşılığını
+vermiyor) · kod imzalama (paketler LAN'da düz HTTP ile gelir, API ile aynı güven modeli;
+sunucu HTTPS'e geçerse açılmalı) · çalışma anında değiştirilebilir güncelleme adresi
+(`disableAntiBrickingMeasures` — yanlış adres uygulamayı kurtarılamaz hale getirir; bunun
+yerine ayrışma Ayarlar → Güncelleme ekranında GÖRÜNÜR kılındı).
+
+**Google'ın sideload doğrulaması** (2026-09'da dört ülke, 2027'de küresel; doğrulanmamış
+geliştiricide yeniden başlatma + 24 saat bekleme) yalnız KURULUM DOSYASINI etkiler — uzaktan
+güncelleme kapsam dışıdır. Türkiye ilk dalgada değil.
+
+Reçete: `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`. Migration YOK, izin YOK.
+
+### ⚠️ AYNI GÜN — KANAL DEĞİŞTİ: güncelleme fabrika sunucusundan İNTERNETE (VPS) alındı
+
+Yukarıdaki her şey kuruldu ve ölçüldü, sonra kullanıcı kanalı değiştirdi: *"tabletler
+güncellemeyi internetten alsın, aynı Electron'da olduğu gibi — fabrika ağına bağlılar ama
+wifi ve LAN üzerinden internete de her zaman erişiyorlar."* Sahaya çıkmamıştı, dolayısıyla
+geri alınan bir şey yok; değişen yalnız KANAL. **ERP bağlantısı aynı kaldı** — OTA
+paketinin içindeki JS hâlâ fabrika sunucusuna konuşur.
+
+**Kararı ÜÇ ÖLÇÜM belirledi (`expo-updates` native kaynağından):**
+
+① **İmza gövdenin HAM baytları üzerinden doğrulanır** (`CodeSigningConfiguration.kt:93-96`)
+→ manifest yayın anında **DONDURULMAK ZORUNDA**; sunucu her istekte yeniden üretirse
+baytlar değişir ve tablet paketi reddeder. Bu kısıt "iki ayrı protokol implementasyonu"
+sorusunu kendiliğinden çözdü: **üreten tek yer yayın script'i** (`mobil/scripts/lib/manifest.mjs`),
+sunucu yalnız bayt servis eder. Backend'in render eden ~300 satırı SİLİNDİ, yerine statik
+dosya servisi geldi ve VPS'teki nginx ile **birebir aynı yol düzenini** kullanıyor.
+
+② **İstemci mükerrer indirmeyi KENDİSİ engeller** — üç kat: `commitTime`
+(`LoaderSelectionPolicyFilterAware.kt:57`) → `id` (`Loader.kt:153-169`) → varlık bazında
+(`FileDownloader.kt:364`). Bu yüzden VPS'e dinamik servis/yeni konteyner GEREKMEDİ; Electron'un
+kullandığı nginx'e tek regex kural yetti (karar zaten kayıtlıydı: *"mobil `/mobil/` olarak
+aynı servise eklenir"*).
+
+③ **`runtimeVersion` filtresi SUNUCUNUN işi** — istemci indirme aşamasında BAKMIYOR
+(`LoaderSelectionPolicyFilterAware.kt:16-58`); yanlış sürüm gelirse indirir, launcher eler ve
+uygulama **sessizce** eski sürümle açılır. Çözüm yapısal: adres sürümü İÇERİR
+(`/mobil/ota/54.2/manifest`), her APK yalnız kendi paketini görür.
+
+**Kod imzalama AÇILDI** (kullanıcı kararı) — LAN'da opsiyoneldi, internette anlamı değişti:
+paket = tablete kod göndermek, VPS'e sızan biri sahadaki HER tablete istediğini gönderebilirdi.
+Özel anahtar `mobil/keystore/ota-keys/` (git dışı) ve **VPS'e GİTMEZ**. İmza geçersizse
+istemci güncellemeyi REDDEDER ve eski sürümle çalışmaya devam eder. ⚠️ İmza açıkken **her
+yanıt imzalı olmak zorunda** (`allowUnsignedManifests` varsayılan false) → statik kurguda
+`noUpdateAvailable` direktifi hiç kullanılmaz, her zaman manifest servis edilir (mükerrer
+indirmeyi zaten istemci engelliyor).
+
+**APK arm64'e indirildi** — ölçüldü: 113 MB → **49 MB** (mimari başına sıkıştırılmış:
+arm64 22,5 · v7a 15,3 · x86 24,5 · x86_64 23,9 · ortak 26,8). Artık internetten indiği için
+anlamlı. ⚠️ Kurulumdan önce sahadaki cihazların arm64 olduğu ölçülmeli.
+
+**Yol boyunca ısıran üç şey:**
+- `npx expo-updates codesigning:configure` app.json'a **değerlendirilmiş** yapılandırmayı geri
+  yazdı ve `updates.enabled`ı SESSİZCE `false` yaptı. O hâliyle derlenen APK hiç güncelleme
+  almazdı ve bu hiçbir yerde görünmezdi → bekçiye alındı (`update-feed-url.test.ts`).
+- `withReleaseKeystore` eklentisi **idempotent değildi**: ikinci `prebuild` koşumunda zaten
+  uygulanmış hâli "beklediğim satırı bulamadım" diye hata sayıp prebuild'i düşürüyordu.
+  Ayrım: ZATEN UYGULANMIŞ olmak başarıdır, BEKLENMEYEN şablon bulmak hatadır. Blok
+  eşleştirmesi de regex'ten parantez saymaya çevrildi (tembel regex iç bloğun kapanışında
+  duruyordu).
+- Ayarlar ekranındaki **"iki adres farklı" uyarısı** kanallar ayrılınca her cihazda kalıcı
+  olarak yanacaktı → kaldırıldı, iki bağlantı etiketleriyle bilgi olarak basılıyor. Hep
+  bağıran bir uyarı bir süre sonra okunmayan bir uyarıdır ve gerçek sapmada da susar.
+
+**Yeni/değişen bekçiler:** `test_mobile_update.ts` yeniden yazıldı (37 kontrol — donmuş
+baytların BOZULMADAN servis edilmesi, imzanın sertifikayla doğrulanması, **backend ↔ mobil ↔
+nginx sınırlayıcı tutarlılığı**; dört negatif sonda, *tek baytlık* bozulma dahil) ·
+`update-feed-url.test.ts` (7, dört negatif sonda). nginx yapılandırması artık **repoda**
+(`deploy/vps/`) — eskiden yalnız VPS'te yaşıyordu ve konteyner yeniden kurulsa kural sessizce
+kaybolurdu.
+
+**Yayın sunucusu KURULDU ve doğrulandı (2026-08-27).** Electron'u kuran oturumla konuşuldu ve
+onların standardına hizalanıldı — bu, tek başına çalışırken üretilecek üç yanlıştan döndü:
+
+- **Yol müşteri bazlı: `/<musteri>/<urun>/`** (`/adnansahin/mobil/`). Müşteri segmenti alt
+  alan adı DEĞİL çünkü Cloudflare Origin CA wildcard'ı (`*.etkiliyazilim.com`) iki seviyeli
+  adları kapsamıyor; her müşteri için ayrı sertifika gerekirdi. Kökte açtığım `html/mobil/`
+  kaldırıldı.
+- **Repo klasörü `deploy/guncelleme-sunucusu/`** (benim açtığım `deploy/vps/` silindi);
+  sunucudaki config'e DOĞRUDAN dokunulmaz — repodaki dosya düzenlenip kopyalanır, yoksa
+  değişiklik tek kopya olarak sunucuda kalır (`kur.ps1` ile aynı "servis kendini
+  güncelleyemez" durumu).
+- ⚠️ **Uzun-cache kurallarında `add_header … always` YASAK.** `always` başlığı HATA
+  yanıtlarına da ekler ve Cloudflare origin'in talimatına uyup **404'ü de bir hafta**
+  önbelleğe alır. Bir gün önce Electron'da birebir yaşanmış: 147 MB'lık paket sunucuda
+  dururken adres 404 döndü, ancak CF panelinden "Purge by URL" ile çözüldü. Taslağımda APK
+  kuralında tam da o `always` vardı; kaldırıldı. İkinci hat (`error_page 404 → no-store`)
+  ölçülerek doğrulandı: yükleme öncesi attığım sondalar önbelleğe girmedi.
+
+nginx değişikliği **yalnız ekleme** oldu (0 silinen / 40 eklenen satır, diff ile kanıtlandı);
+`nginx -t` + reload sonrası `/electron/latest.yml` içeriğinin BİREBİR aynı kaldığı kıyaslandı.
+
+**Uçtan uca ölçüm (canlı sunucuya karşı, istemcinin yaptığı iş birebir taklit edilerek):**
+manifest 200 + `expo-protocol-version: 1` + doğru sınırlayıcı · imza **APK'ya gömülü
+sertifikayla GEÇERLİ** · 43 varlığın 43'ü hash uyumlu indi (11,7 MB) · manifest no-cache,
+paket 7 gün · APK sha256'sı künyedekiyle birebir. 14/14.
+
+**Yan bulgu — aynı tuzağın zararsız biçimi yakalandı:** APK'nın içerik tipi ilk istekte
+`octet-stream` olarak önbelleğe girmiş, kural düzeltildikten sonra bile temiz URL eski
+başlığı döndürüyordu (`?cb=` ile doğru tip geliyor → teşhis: önbellek). Sürüm başına dosya
+adı değiştiği için gelecek yayınları etkilemez, ama yayın script'ine **kalıcı bir teşhis**
+eklendi: temiz URL ile `?cb=`li URL farklı yanıt veriyorsa gürültülü uyarı + "Purge by URL"
+reçetesi. Sessiz bir tuzak, bağıran bir kontrole çevrildi.
+
+Ayrıca `test_route_auth_coverage` kırmızıydı (uçlar kimliksiz, muaf listesinde değil) —
+komşu oturum haber verdi, gerekçeli iki satırla kapatıldı: koruma kimlik değil KOD
+İMZALAMADIR, uçlar giriş ekranından önce çağrılır.
+
+**⚠️ YAYIN SONRASI YAKALANAN İKİ HATA (2026-08-27, kullanıcı "bitti mi?" diye sorunca):**
+
+**① Yayınlanan APK YANLIŞ adresi taşıyordu.** Yol standardı `/adnansahin/`e taşınmadan
+ÖNCE derlenmişti; APK içinde `…/mobil/ota/54.2/manifest` gömülüydü ve o adres 404 veriyor.
+O APK kurulan tablet güncelleme sorar, 404 alır ve **bir daha hiç güncelleme almaz** —
+üstelik hiçbir yerde görünmez. `build-apk.mjs`in kapısı bunu YAKALIYORDU (sonradan koşulunca
+kırmızı verdi), ama derlemeden sonra tekrar koşulmadığı için yayın adımına ulaşamadı.
+Ders: **kapı, korumak istediği adımın ÖNÜNDE durmalı.** `deploy/mobil-yayinla.mjs`e yükleme
+ÖNCESİ bir kapı eklendi — APK'nın AndroidManifest'inden gömülü adresi okuyup bugünkü feed ile
+karşılaştırıyor, tutmazsa yüklemeden duruyor. Bozuk APK sunucudan kaldırıldı.
+
+**② `nativeParmakIzi` sürüm numarasını kapsıyordu — kapının kendisi zarar üretiyordu.**
+`android.versionCode` parmak izine giriyordu; her APK sürümü sahte bir "native değişti"
+alarmı üretip **gereksiz bir runtimeVersion artışına** zorlardı. Ve runtimeVersion artışı
+sahadaki TÜM tabletleri uzaktan güncellemeden koparır (yeni APK kurulana dek paket almazlar)
+— yani yanlış kapsamlı bir kapı, korumaya çalıştığı şeyin tam tersini yaptırırdı. Sürüm
+numaraları kapsam dışına alındı.
+
+**②b Düzeltmenin KENDİSİ aynı yanlış alarmı üretti — bir kat daha derin ders.** Kapsam
+değişince kayıtlı taban ESKİ algoritmayla hesaplanmış kaldı ve karşılaştırma yine "native
+değişti" dedi. Ölçümle çürütüldü: `versionCode` 54'e geri sarılınca hash kayıtla **birebir**
+eşleşti (`30aca7a9…`), yani fingerprint girdilerinde değişen tek şey oydu. Yani iki hash
+farklı kapsamla hesaplandığı için **karşılaştırılamaz**; bunu "değişti" diye okumak yanlış
+teşhistir ve sonucu ağırdır (zararlı runtimeVersion artışı). Çözüm: parmak izi kaydına
+**algoritma sürümü** (`alg`) yazılıyor; sürüm uyuşmazsa script ayrı ve doğru cümleyi kuruyor
+— *"karşılaştırılamıyor, runtimeVersion ARTIRMA, native değişmediğinden eminsen tabanı
+yenile"*. Genel kural: **bir kapının kapsamını değiştirmek, o kapının geçmiş kayıtlarını da
+geçersizleştirir** — kayda kapsamın sürümü yazılmazsa kapı, ilk koşumunda yanlış bağırır.
+
+**Yeni APK 2.9.8/vc55 olarak yayınlanıyor, aynı ada yeniden yüklenmedi:** APK adresi 7 gün
+önbellekli; aynı ada yeniden yüklemek Cloudflare'de bir hafta boyunca BOZUK paketin servis
+edilmesi riskiydi. Sürüm artırmak yeni adres demek — önbellek sorunu doğmadan çözülür.
+
+**2026-08-27 (öğleden sonra) — İKİNCİ FABRİKA + SÜRÜM KAPISI.** Kullanıcı ikinci bir
+fabrikaya kurulum yapacak; iki iş birlikte alındı.
+
+**① Müşteri bazlı yayın.** Yol düzeni zaten `/<musteri>/<urun>/` idi; eksik olan PAKET
+tarafıydı — müşteri kodu elle değiştiriliyordu ve unutulursa yeni fabrikanın tabletleri eski
+müşterinin OTA'sını çekerdi. Kod artık `mobil/musteri.json`da TEK KAYNAK, adres ondan türer.
+⚠️ **Asıl bulgu, mevcut kapının DAİRESEL olmasıydı:** APK'nın gömülü adresi `feed.cjs`teki
+sabitle karşılaştırılıyordu, ama `app.config.js` de adresi AYNI dosyadan türetiyor — müşteri
+yanlışsa ikisi de aynı yanlışı söyler ve kapı GEÇERDİ. Tek müşteriyle görünmez, ikincisinde
+patlar. **Genel kural: beklenen değeri gerçek değerle AYNI kaynaktan alan bir kapı, o
+kaynağın yanlış olmasını yakalayamaz** — beklenen değer bağımsız bir NİYET BEYANINDAN
+gelmeli. Derleme ve yayın komutları artık `--musteri` zorunlu alıyor ve kapılar onunla
+karşılaştırıyor. ⚠️ İkinci ders ölçümle geldi: yayın kapısının ilk yazımı `yayin.json`daki
+`musteri` alanına bakıyordu ve **ateşlemedi** — alanı taşımayan eski bir paket geçti ve
+yanlış müşteriye YÜKLENDİ (sunucudan temizlendi). Künye bir BEYANDIR; paketin tabletleri
+nereye göndereceğini **manifestteki varlık URL'leri** söyler. Kontrol beyana değil artefakta
+bakar.
+
+**② Sürüm kapısı — mobilde İKİ EKSEN.** Komşu oturumun Electron için kurduğu
+`client-policy` deseni alındı (`GET /api/client-policy/mobil`, kayıt defteri kodda sabit,
+istemci fail-open, tanımsız istemci 404). ⚠️ Ama masaüstünde olmayan bir sorun çıktı:
+**mobilde sürüm tek eksen değil.** APK sürümü yalnız kurulum dosyası değişince artar, JS
+düzeltmesi ise OTA ile gider ve `versionName`i DEĞİŞTİRMEZ — yani "2.9.9 görünen" bir
+tabletin JS'i haftalarca eski olabilir ve `minVersion` bunu ifade EDEMEZ. Politikaya
+`minPaketTarihi` eklendi (istemci `Updates.createdAt` ile kıyaslar). ⚠️ `paketTarihi === null`
+(hiç OTA almamış tablet) ESKİ SAYILMAZ — gömülü paket APK ile aynı yaşta; aksi hâlde yeni
+kurulan her tablet kilitlenirdi. **Kilit KOŞULLU** (Electron'dan bilinçli fark): yalnız
+düzeltme GERÇEKTEN kurulabilirken ve gönderilmemiş kayıt yokken kapanır, aksi halde kalıcı
+şerit. Gerekçe: interneti kopuk bir tableti kilitlemek, güncellemeyi indiremediği için
+**çıkışı olmayan** bir üretim durmasıdır ve mobil bilerek çevrimdışı yazabiliyor. Politika
+**kendiliğinden müşteriye özeldir** (her fabrikanın kendi backend'i servis eder); yayın
+kanalı ile politika ayrı eksenler.
+
+Bekçiler: `clientPolicy.service.test.ts` (14 — iki zarar yönünü de ölçer) ·
+`update-feed-url.test.ts` (10, müşteri türetme dahil) · komşunun `test_client_policy §5`
+mobil satırını otomatik kapsıyor. Yayında: **APK 2.9.9/vc56** (keşif + müşteri kanalı +
+sürüm kapısı, arm64) + OTA rv 54.2. Kullanıcı kararı **A**: tek APK, hepsi birlikte.
+
+Kalan: **her tablette uygulamayı sil + yeni APK'yı kur** (mühür değişti, ayrıca arm64).
+
 ## 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI
 
 **Saha bulgusu (ekrandan ölçüldü):** fabrika "Kayıt düzeltmesi" listesine kendi
@@ -921,3 +1332,60 @@ istemci değil ÜRETİLMİŞ CLIENT'tır.
 
 **Migration/izin/backend değişikliği YOK** — yalnız mobil. Sahaya çıkması için
 yeni APK gerekir.
+
+
+---
+
+## 2026-08-27 — "Sipariş bağlarsam hata veriyor, siparişsiz açınca geçiyor" — hedef, plandan değil SİPARİŞTEN türüyordu
+
+**Saha tarifi.** Mobil Hızlı İş Emri'nde sipariş bağlanıp rotada boyahane yoksa
+(sadece kurşun+tambur, ya da sadece tambur) iş emri 400 ile düşüyor; aynı toplarla
+siparişsiz açılınca sorunsuz geçiyor.
+
+**Sebep.** Sipariş bağlanınca hedef renk **sipariş satırından TÜRETİLİYOR**
+(`workorder.service.create` → `resolvedTargetColorId = onlyColorId`) — planlamacı hiç renk
+seçmese bile. Hemen ardından `assertRouteCoversTargets` koşuyor ve *"hedef renk var ama rotada
+renk veren adım yok"* diye reddediyor. Siparişsizken hedef renk hiç doğmadığı için kontrol de
+çalışmıyor. **Aynı tuzak ÖZELLİKTE de vardı:** sipariş satırının `requiredProperties`'i de
+otomatik hedefe geçiyor (`create`, `orderLineRequiredProperty` birleşimi) ve "rotada zımpara
+yok" diye aynı şekilde 400 veriyordu.
+
+**Kuralın gerekçesi burada geçersizdi.** Kural *"hedef asla uygulanmaz → planlama hatası"*
+diyor. Ama dışarıdan boyalı gelen kumaşa yalnız kurşun+tambur yapılacaksa rotada boyahane
+**olmaması doğrudur** ve eldeki mal zaten o renktedir — uygulanacak bir şey yoktur. Sipariş
+satırındaki renk bir plan beyanı değil, **müşterinin ne istediğidir**.
+
+**⚠️ AYRICA: aynı soruya iki farklı cevap veriliyordu.** 2026-08-21'de "Rengi Değiştir" yolu
+yeniden yazılırken karar açıkça verilmiş ve koda yorum olarak da yazılmıştı —
+`workorder-target-color.helper.ts`: *"Rota kapsaması — REDDETME, UYAR"* (`ApiResponse.warnings`).
+Yani **mevcut** iş emrinin rengini değiştirirken uyarı, **yeni** iş emri açarken sert hata. O
+gün düzenleme yolu düzeltilmiş, oluşturma yolu olduğu gibi bırakılmıştı.
+
+### KARAR (kullanıcı): kural KALKMIYOR, DARALIYOR
+
+Uyarıya çevirmek yerine **dar kapı** seçildi: nitelik eldeki topların **HEPSİNDE** zaten varsa
+kontrol atlanır.
+
+- `create()` üçüncü bir opsiyonel parametre alır: `goods { colorIds, propertyIdSets }` —
+  bağlanacak topların HÂLİHAZIRDA taşıdığı nitelikler. **Yalnız `quickStart` doldurur**
+  (tek yol: top okutarak açılan iş emri); `quickStart`'ın ön-doğrulama `select`'ine `colorId`
+  + `properties` eklendi.
+- **"Hepsi" load-bearing:** bir kısmı eksikse o toplar niteliği hiç kazanamaz → kural orada
+  hâlâ gerçek bir planlama hatasını yakalıyor. `some` yazmak kapıyı sessizce açar.
+- **Mal bilgisi yoksa muafiyet de yok** (F221 deseni). Masaüstü Yeni İş Emri formu top almaz →
+  düz `create` → davranış **birebir eskisi gibi**. Muafiyetin varsayılanı AÇIK olsaydı orası
+  sessizce gevşerdi.
+- Muafiyet **hedef rengi SİLMEZ** — WO'ya yine siparişin rengi yazılır (belge/rapor/plan-sapma
+  kapısı onu okuyor); atlanan şey yalnız rota kapsaması sorusudur.
+
+**Bekçi `test_wo_route_coverage_goods.ts` (7).** Değeri NEGATİF durumlarda: ham mal → hâlâ
+reddedilir · karışık küme (boyalı+ham) → hâlâ reddedilir · topsuz `create` → davranış
+değişmedi. **İki negatif sondayla kanıtlandı:** `every`→`some` yapılınca karışık küme kontrolü,
+`rollCount > 0` koşulu düşünce topsuz-create kontrolü kırmızıya döndü.
+
+**Migration YOK · izin YOK · APK YOK** — düzeltme tamamen sunucuda; tablet aynı isteği
+göndermeye devam eder, artık 400 almaz. Ekran tarafında ek bir iş gerekmiyor.
+
+**AÇIK KALAN (bilinçli):** oluşturma ↔ düzenleme asimetrisi TAM kapanmadı. Düzenlemede kapsama
+her durumda uyarı; oluşturmada mal uygun değilse hâlâ hata. İkisini tek kurala indirmek ayrı
+bir karar — bugünkü seçim, engeli yalnız yanlış olduğu yerde kaldırmak.

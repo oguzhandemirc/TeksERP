@@ -66,6 +66,7 @@ import {
   type SackAllocLine,
 } from "./helpers/allocation.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { collectBoundKeys } from "./helpers/label-context-fit";
 import { ApiResponse } from "../types/api.types";
@@ -1313,7 +1314,8 @@ export class ShippingService {
     }));
     const lines = params.orderIds.length
       ? await db.orderLine.findMany({
-          where: { orderId: { in: params.orderIds } },
+          // İptal edilmiş kaleme tahsis yapılmaz (2026-08-27) — tek kaynak.
+          where: { orderId: { in: params.orderIds }, ...ACTIVE_LINE },
           select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, createdAt: true, order: { select: { deadline: true, orderDate: true } } },
         })
       : [];

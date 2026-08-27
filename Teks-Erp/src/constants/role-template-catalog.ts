@@ -398,5 +398,5 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
   "mobile:kk1-desen":
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
   "mobile:kk1-yari-mamul":
-    "Ekran değil, KK1-içi yetenek (2026-08-17): dışarıdan alınan yarı mamül kabulü. Renkli mal kabulü açar; yanlışlıkla kullanılırsa top ham stoğa 'boyalı' düşer → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+    "Ekran değil, KK1-içi yetenek (2026-08-17): dışarıdan alınan yarı mamul kabulü. Renkli mal kabulü açar; yanlışlıkla kullanılırsa top ham stoğa 'boyalı' düşer → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
 };

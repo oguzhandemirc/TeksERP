@@ -154,6 +154,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
+  { table: "orders", index: "orders_active_createdAt_idx", uniq: false, predicate: `(status <> 'CANCELLED'::"OrderStatus")`, why: "varsayılan liste sıralaması: panel iptalleri gizler (hideCancelled), o yüzden (status, createdAt) bileşiği ordering veremez — 30 günlük tarih penceresi kaldırıldıktan sonra tek koruma bu" },
   // swatch_stock_reductions
   { table: "swatch_stock_reductions", index: "swatch_stock_reductions_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "kartela stok-düşüm idempotency" },
   // batches

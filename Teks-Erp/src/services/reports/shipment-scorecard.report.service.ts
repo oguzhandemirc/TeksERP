@@ -146,7 +146,10 @@ export async function getShipmentScorecard(
         o.deadline AS "deadline",
         -- tz-ok: "kaç gündür gecikmede" — iki an arası mutlak fark.
         EXTRACT(EPOCH FROM (now() - o.deadline)) / 86400.0 AS "daysLate",
-        (SELECT SUM(ol.quantity)::float FROM order_lines ol WHERE ol."orderId" = o.id) AS "plannedQty",
+        -- aktif-kalem: iptal edilmiş kalemin metrajı "planlanan"a girmez —
+        -- yoksa geciken sipariş olduğundan büyük görünür.
+        (SELECT SUM(ol.quantity)::float FROM order_lines ol
+          WHERE ol."orderId" = o.id AND ol."cancelledAt" IS NULL) AS "plannedQty",
         o."shippedQty"::float AS "shippedQty"
       FROM orders o JOIN customers cu ON cu.id = o."customerId"
       -- tz-ok: "termini geçti mi" bir AN karşılaştırmasıdır (mutlak), takvim

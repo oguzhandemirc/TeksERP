@@ -63,6 +63,11 @@ import { BatchTracePage } from "@/pages/Reports/Production/BatchTracePage";
 import { SalesReportsHubPage } from "@/pages/Reports/Sales/SalesReportsHubPage";
 import { ReturnScorecardPage } from "@/pages/Reports/Sales/ReturnScorecardPage";
 import { ShipmentScorecardPage } from "@/pages/Reports/Sales/ShipmentScorecardPage";
+import { OpenOrderCoveragePage } from "@/pages/Reports/Sales/OpenOrderCoveragePage";
+import { OrderIntakePage } from "@/pages/Reports/Sales/OrderIntakePage";
+import { DemandAnalysisPage } from "@/pages/Reports/Sales/DemandAnalysisPage";
+import { OrderLeadTimePage } from "@/pages/Reports/Sales/OrderLeadTimePage";
+import { OrderCancellationPage } from "@/pages/Reports/Sales/OrderCancellationPage";
 import { QualityReportsHubPage } from "@/pages/Reports/Quality/QualityReportsHubPage";
 import { QualityScorecardPage } from "@/pages/Reports/Quality/QualityScorecardPage";
 import { ScrapScorecardPage } from "@/pages/Reports/Quality/ScrapScorecardPage";
@@ -73,6 +78,7 @@ import { SubcontractReportsHubPage } from "@/pages/Reports/Subcontract/Subcontra
 import { SubcontractScorecardPage } from "@/pages/Reports/Subcontract/SubcontractScorecardPage";
 import { CustomerReportsHubPage } from "@/pages/Reports/Customer/CustomerReportsHubPage";
 import { OrderProfilePage } from "@/pages/Reports/Customer/OrderProfilePage";
+import { CustomerScorecardPage } from "@/pages/Reports/Customer/CustomerScorecardPage";
 import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
@@ -710,6 +716,46 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
+    path: "reports/sales/order-cancellation",
+    element: (
+      <ProtectedRoute requirePermission="report:sales">
+        <OrderCancellationPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/sales/order-leadtime",
+    element: (
+      <ProtectedRoute requirePermission="report:sales">
+        <OrderLeadTimePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/sales/demand-analysis",
+    element: (
+      <ProtectedRoute requirePermission="report:sales">
+        <DemandAnalysisPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/sales/order-intake",
+    element: (
+      <ProtectedRoute requirePermission="report:sales">
+        <OrderIntakePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/sales/open-order-coverage",
+    element: (
+      <ProtectedRoute requirePermission="report:sales">
+        <OpenOrderCoveragePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
     path: "reports/sales/return-scorecard",
     element: (
       <ProtectedRoute requirePermission="report:sales">
@@ -786,6 +832,14 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:customer">
         <CustomerReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/customer/scorecard",
+    element: (
+      <ProtectedRoute requirePermission="report:customer">
+        <CustomerScorecardPage />
       </ProtectedRoute>
     ),
   },

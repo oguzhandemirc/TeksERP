@@ -73,6 +73,27 @@ Electron/
 3. **`electron/preload.ts`'ye köprü ekle** — sadece serializable veri geçer.
 4. **Renderer'da `window.api.<domain>.<action>(...)` ile çağır.**
 
+## Otomatik Güncelleme (2026-08-26)
+
+Panel kendi kendini günceller — setup artık elden ele taşınmaz. Reçete:
+[`docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md`](../docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md).
+
+**Sürüm çıkarırken tek kritik adım: `package.json > version` ARTIRILMALI.**
+Artırılmazsa kurulu paneller "en güncelim" der ve yeni setup'ı hiç indirmez.
+
+| Kural | Neden |
+|---|---|
+| Yayın adresi TEK KAYNAK: `shared/update-feed.ts` ↔ `package.json > build.publish` | Ayrışma SESSİZ arıza üretir (uygulama A'ya bakar, ekran B yazar). Bekçi: `src/test/update-feed-url.test.ts` |
+| `build.<mac\|win>.artifactName` ASCII kalmalı — `${productName}` KULLANMA | Ad `latest.yml` içinde URL'dir; "Adnan Şahin ERP-…exe" adındaki `Ş`+boşluk aktarımda bozulup 404 üretir. Bekçi aynı dosyada |
+| `autoUpdater`a modül gövdesinde DOKUNMA | O bir getter — ilk erişimde Electron `app`ine dokunur; import anında sökülürse `app` henüz yoktur. `updater()` ile ilk kullanıma ertelenir |
+| `autoInstallOnAppQuit` KAPALI kalmalı | Kurulum "Program Files"a yazdığı için yönetici izni ister; kapanışta tetiklenirse operatör gittikten sonra ekranda cevapsız izin penceresi asılı kalır |
+| Şerit yalnız `ready` durumunda | `error` şeridi, internetsiz makinede her açılışta çıkıp körleştirir — hata Bu Bilgisayar → Güncelleme'de yazılı |
+
+⚠️ **`nsis.perMachine: true`** (uygulama Program Files'ta) → her güncellemede bir kez
+Windows izin penceresi. **O makinedeki hesap yönetici değilse güncelleme O MAKİNEDE
+kurulmaz** ve panel sessizce eski sürümde kalır. Değiştirmek tek satır, ama bir elle
+tur daha ister.
+
 ## API Kontratı
 
 Backend `Teks-Erp/` döndüğü şekiller — `src/types/api.ts`:
