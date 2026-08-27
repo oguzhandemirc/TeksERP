@@ -82,4 +82,37 @@ export const reasonPresetService = {
     apiClient
       .post<ReasonPreset>(`/reason-presets/${id}/duplicate`, label ? { label } : {})
       .then((r) => r.data),
+
+  /**
+   * Liste sırasını KALICI yapar.
+   *
+   * ⚠️ Sunucu o `kind`'ın TÜM id'lerini sırasıyla bekler — eksik id 400.
+   * Operatör ekranı yalnız AKTİF satırları çizdiği için ham "görünenlerin
+   * sırası" gönderilemez; `mergeVisibleOrder` gizli satırları kendi
+   * yuvalarında bırakıp araya görünenlerin yeni sırasını yerleştirir.
+   */
+  reorder: (kind: ReasonPresetKind, ids: string[]): Promise<ReasonPreset[]> =>
+    apiClient.patch<ReasonPreset[]>('/reason-presets/reorder', { kind, ids }).then((r) => r.data),
 };
+
+/**
+ * Görünen satırların yeni sırasını, TÜM satırların id listesine çevirir.
+ *
+ * Gizli (pasif) satır sürüklenemez ve yerini KAYBETMEZ: tam listede işgal
+ * ettiği yuva olduğu gibi kalır, yalnız görünen satırların işgal ettiği
+ * yuvalara yeni sıra yazılır. Naif yaklaşım (görünenler önce, gizliler sona)
+ * pasif satırları her sürüklemede listenin dibine toplardı — masaüstü düzenleme
+ * ekranında görünür bir yan etki.
+ *
+ * Saf fonksiyon: bekçi doğrudan ölçer.
+ */
+export function mergeVisibleOrder(
+  allRowIdsInCurrentOrder: string[],
+  visibleIdsInNewOrder: string[],
+): string[] {
+  const visible = new Set(visibleIdsInNewOrder);
+  let i = 0;
+  return allRowIdsInCurrentOrder.map((id) =>
+    visible.has(id) ? (visibleIdsInNewOrder[i++] ?? id) : id,
+  );
+}

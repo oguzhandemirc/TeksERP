@@ -858,3 +858,66 @@ değişmeden düzelir. Kapsam dışı bırakılan: geçmişte bu yüzden düşen
 tekrar girdi, sistemde iz yok).
 
 ---
+
+## 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI
+
+**Saha bulgusu (ekrandan ölçüldü):** fabrika "Kayıt düzeltmesi" listesine kendi
+sebeplerini ekledikçe (yedinci satırda görüldü) Tambur → Bitir → sebep adımında
+**"Geri" ve "Kaydet" ekranın alt kenarında kesiliyordu** — operatör kararı
+tamamlayamıyordu. Sebep yapısaldı: adım 2'nin başlığı, serbest metin kutusu,
+sebep listesi ve footer TEK bir `View` içindeydi ve sheet `maxHeight: winH*0.85`
+ile kırpılıyordu. Kırpılan taraf her zaman EN ALT, yani karar düğmeleri.
+
+**① Üç bölge (bölünme load-bearing).** Başlık + serbest metin SABİT · sebep
+listesi `Animated.ScrollView` içinde KAYAR (`flexShrink: 1` — sheet'in tavanı
+aşıldığında kırpılacak tek bölge orası) · Geri/Kaydet SABİT footer (üst çizgili).
+Liste büyüyen tek bölge olduğu için footer'ın ondan ayrı yaşaması bir tercih
+değil zorunluluk: yeni sebep eklemek listeyi uzatır, footer'ı değil.
+
+**② Sıra sürükle-bırakla KALICI.** Satır **basılı tutulup** sürüklenir
+(`react-native-sortables` — projede zaten kuruluydu, `ModuleSelectScreen`
+emsali; `Sortable.Touchable` ile tek dokunuş "seç", basılı tutma "sürükle",
+ikisi çakışmaz). Bırakınca `PATCH /api/reason-presets/reorder` yazar — uç
+2026-08-19'dan beri vardı ama HİÇBİR istemcisi yoktu.
+
+⚠️ **Sunucu o kind'ın TÜM id'lerini ister, operatör ekranı yalnız AKTİF satırları
+çizer.** Ham "görünenlerin sırası" gönderilemez (eksik liste → 400). Köprü
+`mergeVisibleOrder` (mobil `reasonPreset.service.ts`, saf fonksiyon): gizli satır
+TAM listede işgal ettiği YUVADA kalır, yalnız görünenlerin yuvalarına yeni sıra
+yazılır. Naif çözüm (görünenler önce, gizliler sona) pasif satırları her
+sürüklemede listenin dibine toplardı — masaüstü düzenleme ekranında görünür bir
+yan etki. Tam liste **yazma anında** çekilir (`list(true)`), ekranda tutulan bir
+kopya başka cihaz araya satır ekleyince bayat olurdu.
+
+⚠️ **Yerel sıra (`localOrder`) başarıda TEMİZLENMEZ** — temizlenirse liste,
+yenilenmiş sorgu inene kadar bir kare eski sırayı gösterir (göz kırpması).
+Hata durumunda temizlenir (eski sıraya dön) + toast. Sürükleme yalnız
+`canEditPresets` (`roll:manual-adjust` ∨ `mobile:tambur-duzelt`) olan kişide
+açık; gömülü çevrimdışı zemin satırlarında (`builtin:` sentetik id) KAPALI —
+sunucuda karşılığı olmayan satırın sırası yazılamaz.
+
+**Bekçi:** `mobil/src/services/reasonPreset.order.test.ts` (8 kontrol —
+`mergeVisibleOrder`'ın yuva korumasını, küme eşitliğini ve uzunluk invariantını
+ölçer). Naif uygulamayla **4 kontrol kırmızıya döndü** (negatif sonda).
+
+**Tablette uçtan uca doğrulandı** (APK 2.9.7/vc54, SM-X210): butonlar liste
+uzarken görünür kaldı · `input motionevent` ile basılı-tut-sürükle → satır en
+üste taşındı, `PATCH /reorder` 200 · `sortOrder` DB'de 0..6 yeniden yazıldı ·
+uygulama tamamen kapatılıp açıldıktan sonra sıra KORUNDU · liste kayarken
+başlık ve footer yerinde kaldı.
+
+⚠️ **Kurulum notu:** 2.9.7 imza uyuşmazlığı verdi (uzaktan güncelleme paketi
+mührü değiştirmiş) → kaldır+yeniden kur gerekti; cihaz kimliği değiştiği için
+tablet `PENDING` düştü ve yönetici onayı istedi. Sahaya çıkarken bu iki adım
+planlanmalı.
+
+⚠️ **Yan bulgu (bu paketin dışı):** uzun süredir koşan dev backend
+`GET /api/reason-presets`'te 400 veriyordu — başka bir oturumun eklediği
+`ReasonPresetKind.ORDER_CANCEL` enum değeri DB'ye gelmiş, sürecin Prisma
+client'ı eskiydi ve o satırları okurken P2023 atıyordu. `prisma generate` +
+restart çözdü. Ders: paylaşımlı ağaçta uzun koşan dev sunucu, başkasının
+migration'ıyla sessizce bayatlayabilir; belirti "uç 400 veriyor"dur, sebep
+istemci değil ÜRETİLMİŞ CLIENT'tır.
+
+**Migration/izin/backend değişikliği YOK** — yalnız mobil. Sahaya çıkması için
+yeni APK gerekir.

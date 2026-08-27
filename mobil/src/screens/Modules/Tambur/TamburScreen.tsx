@@ -100,12 +100,24 @@ import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList, usePressScale, AnimatedEntrance } from '../../../components/motion';
 import { colors, spacing, radius, shadow } from '../../../theme';
 import { MANUAL_MIN_REASON } from '../../../constants/manualReasons';
-import { useReasonPresets, isBuiltinPreset } from '../../../hooks/useReasonPresets';
+import Sortable, {
+  type SortableGridRenderItem,
+  type SortableGridDragEndParams,
+} from 'react-native-sortables';
+import {
+  useReasonPresets,
+  isBuiltinPreset,
+  useInvalidateReasonPresets,
+} from '../../../hooks/useReasonPresets';
+import {
+  reasonPresetService,
+  mergeVisibleOrder,
+} from '../../../services/reasonPreset.service';
 import ReasonPresetEditDialog, {
   type ReasonPresetEditMode,
 } from '../../../components/reasonPresets/ReasonPresetEditDialog';
 import type { ReasonPreset } from '../../../services/reasonPreset.service';
-import Animated from 'react-native-reanimated';
+import Animated, { useAnimatedRef } from 'react-native-reanimated';
 import { defectTypeService } from '../../../services/defectType.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { useFoldValues } from '../../../hooks/useFoldValues';
@@ -7115,6 +7127,147 @@ function FinalizeRemainingModal({
   const isCompactPortrait = winH > winW;
   const qtyText = `${remainingQty.toFixed(1)} mt`;
 
+  // ── SEBEP SIRASI — sürükle-bırak, KALICI (2026-08-26 saha isteği) ────────
+  // Sıra sunucuda yaşar (`ReasonPreset.sortOrder`); tabletten yapılan
+  // sürükleme onu kalıcı yazar, yani fabrikanın en sık kullandığı sebep
+  // listenin başında durur. Yerel sıra (`localOrder`) sunucu yanıtı gelene
+  // kadar listeyi yeni düzende tutar — yoksa parmak kalkar kalkmaz satır eski
+  // yerine geri sıçrar ve operatör "tutmadı" sanıp tekrar sürükler.
+  const reasonScrollRef = useAnimatedRef<Animated.ScrollView>();
+  const invalidatePresets = useInvalidateReasonPresets();
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+
+  // Kind değişince (fire ↔ kayıt düzeltmesi) yerel sıra BAŞKA listeye aitti.
+  useEffect(() => {
+    setLocalOrder(null);
+  }, [pending]);
+
+  const orderedPresets = useMemo<ReasonPreset[]>(() => {
+    if (!localOrder) return presets;
+    const byCode = new Map(presets.map((r) => [r.code, r]));
+    const out: ReasonPreset[] = [];
+    for (const code of localOrder) {
+      const hit = byCode.get(code);
+      if (hit) {
+        out.push(hit);
+        byCode.delete(code);
+      }
+    }
+    // Yerel sıra bayatsa (sürüklemeden sonra yeni sebep eklendi) tanınmayanlar
+    // sona düşer — yeni satır zaten oraya doğar.
+    for (const r of presets) if (byCode.has(r.code)) out.push(r);
+    return out;
+  }, [presets, localOrder]);
+
+  // ⚠️ Gömülü zemin satırları (`builtin:` sentetik id) sunucuda YOK — sıra
+  // yazılamaz. Çevrimdışı listede sürüklemeyi açmak, parmağı kalkınca hep
+  // hataya düşen bir jest demekti.
+  const canReorder =
+    !!canEditPresets && !loading && orderedPresets.every((r) => !isBuiltinPreset(r));
+
+  const reorder = useMutation({
+    mutationFn: async (visibleIdsInNewOrder: string[]) => {
+      // ⚠️ Sunucu o kind'ın TÜM id'lerini ister (gizlenmiş satırlar dahil) ve
+      // eksik listeyi 400'le reddeder. Tam listeyi YAZMA ANINDA çekiyoruz:
+      // ekranda tutulan bir kopya, başka bir cihaz araya satır eklediğinde
+      // bayat olurdu ve sıra sessizce yanlış yazılırdı.
+      const all = await reasonPresetService.list(true);
+      const rowsOfKind = all
+        .filter((r) => r.kind === presetKind)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const ids = mergeVisibleOrder(
+        rowsOfKind.map((r) => r.id),
+        visibleIdsInNewOrder,
+      );
+      return reasonPresetService.reorder(presetKind, ids);
+    },
+    onSuccess: () => {
+      // `localOrder` BİLEREK temizlenmiyor: temizlenirse liste, yenilenmiş
+      // sorgu inene kadar bir kare eski sırayı gösterir (göz kırpması).
+      invalidatePresets();
+    },
+    onError: (err: Error) => {
+      setLocalOrder(null); // eski sıraya dön — kâğıt üstünde yalan kalmasın
+      Toast.show({ type: 'error', text1: 'Sıra kaydedilemedi', text2: err.message });
+    },
+  });
+
+  // Sürükleme başlarken tek titreşim — parmağın altındaki satırın "koptuğunu"
+  // söyleyen tek işaret bu (kütüphanenin kendi haptiği KAPALI, ikisi çakışırdı).
+  const onReasonDragStart = useCallback(() => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, []);
+
+  const handleReasonDragEnd = useCallback(
+    ({ data }: SortableGridDragEndParams<ReasonPreset>) => {
+      setLocalOrder(data.map((r) => r.code));
+      reorder.mutate(data.map((r) => r.id));
+    },
+    [reorder],
+  );
+
+  const renderReasonItem = useCallback<SortableGridRenderItem<ReasonPreset>>(
+    ({ item }) => {
+      const active = reasonCode === item.code;
+      const editable = canEditPresets && !isBuiltinPreset(item);
+      return (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          {/* Sortable.Touchable: tek dokunuş → sebebi seç; BASILI TUTMA
+              sürükleme jestine bırakılır (ikisi çakışmaz). */}
+          <Sortable.Touchable
+            style={{ flex: 1 }}
+            onTap={() => {
+              if (!loading) setReasonCode(item.code);
+            }}
+          >
+            <View
+              style={{
+                minHeight: 52,
+                justifyContent: 'center',
+                paddingHorizontal: 14,
+                borderRadius: 10,
+                borderWidth: active ? 2 : 1,
+                borderColor: active ? '#1d4ed8' : '#cbd5e1',
+                backgroundColor: active ? '#eff6ff' : '#fff',
+              }}
+            >
+              <Text
+                style={{
+                  fontSize: 15,
+                  fontWeight: active ? '700' : '500',
+                  color: active ? '#1d4ed8' : '#334155',
+                }}
+              >
+                {item.label}
+              </Text>
+            </View>
+          </Sortable.Touchable>
+          {editable && (
+            <>
+              <IconButton
+                icon="pencil-outline"
+                size={20}
+                disabled={loading}
+                onPress={() => setEditing({ mode: 'edit', preset: item })}
+                style={{ margin: 0 }}
+                accessibilityLabel={`${item.label} — düzenle`}
+              />
+              <IconButton
+                icon="content-copy"
+                size={20}
+                disabled={loading}
+                onPress={() => setEditing({ mode: 'duplicate', preset: item })}
+                style={{ margin: 0 }}
+                accessibilityLabel={`${item.label} — çoğalt`}
+              />
+            </>
+          )}
+        </View>
+      );
+    },
+    [reasonCode, canEditPresets, loading],
+  );
+
   return (
     <AppModal
       visible={visible}
@@ -7211,8 +7364,17 @@ function FinalizeRemainingModal({
           </View>
         ) : (
           /* ADIM 2 — SEBEP. Hazır katalog: eldivenli operatör vardiya ortasında
-             metin yazmıyor, "aaa" yazıyor ve o boş bırakmaktan kötüdür. */
-          <View style={{ padding: 16, gap: 8 }}>
+             metin yazmıyor, "aaa" yazıyor ve o boş bırakmaktan kötüdür.
+
+             ⚠️ ÜÇ BÖLGE, ve bölünme LOAD-BEARING (2026-08-26 saha bulgusu):
+             başlık + serbest metin SABİT · sebep listesi KAYAR · Geri/Kaydet
+             SABİT. Öncesinde üçü tek `View`'daydı; sheet `maxHeight: %85` ile
+             kırpıldığı için fabrika listeye kendi sebeplerini ekledikçe (yedi
+             satırda görüldü) alttaki butonlar ekranın DIŞINDA kalıyor ve
+             operatör kaydı tamamlayamıyordu. Liste büyüyen tek bölge olduğu
+             için footer'ın ondan AYRI yaşaması bir tercih değil zorunluluk. */
+          <>
+            <View style={{ paddingHorizontal: 16, paddingTop: 16, gap: 8 }}>
             <Text style={{ color: '#0f172a', fontSize: 14, fontWeight: '700' }}>
               {pending === 'scrap'
                 ? `${qtyText} FİRE — sebep nedir?`
@@ -7251,78 +7413,62 @@ function FinalizeRemainingModal({
               style={{ backgroundColor: '#fff' }}
               left={<TextInput.Icon icon="pencil-outline" />}
             />
-
-            {presets.map((r) => {
-              const active = reasonCode === r.code;
-              const editable = canEditPresets && !isBuiltinPreset(r);
-              return (
-                <View key={r.code} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <TouchableRipple
-                    onPress={() => {
-                      setReasonCode(r.code);
-                      // Hazır satıra geçildiyse serbest metin NOT olarak kalır;
-                      // "Diğer"den çıkıldığında da silinmez — operatör yazdığı
-                      // cümleyi kaybetmemeli.
-                    }}
-                    disabled={loading}
-                    style={{
-                      flex: 1,
-                      minHeight: 52,
-                      justifyContent: 'center',
-                      paddingHorizontal: 14,
-                      borderRadius: 10,
-                      borderWidth: active ? 2 : 1,
-                      borderColor: active ? '#1d4ed8' : '#cbd5e1',
-                      backgroundColor: active ? '#eff6ff' : '#fff',
-                    }}
-                  >
-                    <Text
-                      style={{
-                        fontSize: 15,
-                        fontWeight: active ? '700' : '500',
-                        color: active ? '#1d4ed8' : '#334155',
-                      }}
-                    >
-                      {r.label}
-                    </Text>
-                  </TouchableRipple>
-                  {editable && (
-                    <>
-                      <IconButton
-                        icon="pencil-outline"
-                        size={20}
-                        disabled={loading}
-                        onPress={() => setEditing({ mode: 'edit', preset: r })}
-                        style={{ margin: 0 }}
-                        accessibilityLabel={`${r.label} — düzenle`}
-                      />
-                      <IconButton
-                        icon="content-copy"
-                        size={20}
-                        disabled={loading}
-                        onPress={() => setEditing({ mode: 'duplicate', preset: r })}
-                        style={{ margin: 0 }}
-                        accessibilityLabel={`${r.label} — çoğalt`}
-                      />
-                    </>
-                  )}
-                </View>
-              );
-            })}
-
-            {canEditPresets && (
-              <Button
-                mode="text"
-                icon="plus"
-                compact
-                disabled={loading}
-                onPress={() => setEditing({ mode: 'create', preset: null })}
-                labelStyle={{ fontSize: 13 }}
-              >
-                Yeni sebep ekle
-              </Button>
+            {canReorder && (
+              <Text style={{ color: '#94a3b8', fontSize: 11 }}>
+                Sırayı değiştirmek için satırı basılı tutup sürükleyin — sıra kalıcı olur.
+              </Text>
             )}
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+            </View>
+
+            {/* KAYAN BÖLGE. `flexShrink` load-bearing: sheet'in maxHeight'ı
+                aşıldığında kırpılacak tek bölge burasıdır. */}
+            <Animated.ScrollView
+              ref={reasonScrollRef}
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              <Sortable.Grid
+                columns={1}
+                data={orderedPresets}
+                keyExtractor={(r) => r.code}
+                renderItem={renderReasonItem}
+                rowGap={8}
+                sortEnabled={canReorder}
+                onDragStart={onReasonDragStart}
+                onDragEnd={handleReasonDragEnd}
+                hapticsEnabled={false}
+                autoScrollEnabled
+                scrollableRef={reasonScrollRef}
+              />
+
+              {canEditPresets && (
+                <Button
+                  mode="text"
+                  icon="plus"
+                  compact
+                  disabled={loading}
+                  onPress={() => setEditing({ mode: 'create', preset: null })}
+                  labelStyle={{ fontSize: 13 }}
+                  style={{ marginTop: 4 }}
+                >
+                  Yeni sebep ekle
+                </Button>
+              )}
+            </Animated.ScrollView>
+
+            {/* SABİT FOOTER — liste ne kadar uzarsa uzasın her zaman görünür. */}
+            <View
+              style={{
+                flexDirection: 'row',
+                gap: 8,
+                padding: 16,
+                paddingTop: 10,
+                borderTopWidth: 1,
+                borderTopColor: '#e2e8f0',
+                backgroundColor: '#fff',
+              }}
+            >
               <Button
                 mode="outlined"
                 onPress={() => {
@@ -7360,7 +7506,7 @@ function FinalizeRemainingModal({
                 Kaydet
               </Button>
             </View>
-          </View>
+          </>
         )}
       </View>
 
