@@ -41,3 +41,10 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# Uzaktan güncelleme paketi çıktısı (sunucuya kopyalanır, repoda durmaz)
+ota-cikti/
+.ota-parmak-izi.json
+
+# RELEASE imza anahtarı — ASLA commit edilmez (kaybı = tüm tabletlerde sil+yeniden kur)
+keystore/

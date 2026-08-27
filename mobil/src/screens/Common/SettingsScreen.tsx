@@ -20,6 +20,7 @@ import { useDeviceSettingsStore } from '../../store/deviceSettingsStore';
 import { useDeviceStore } from '../../store/deviceStore';
 import { useSessionStore } from '../../store/sessionStore';
 import { useSubcontractorDefault } from '../../hooks/useSubcontractorDefault';
+import { kuruluVersionName, otaKimlik, paketEtiketi } from '../../services/appUpdate.service';
 import type { RootStackParamList } from '../../navigation/types';
 import { SETTINGS_COLORS as COLORS } from './settings/settingsUi';
 
@@ -95,6 +96,16 @@ export default function SettingsScreen() {
           ? 'Fason: en son seçtiğim'
           : 'Fason: kategorinin favorisi',
       route: 'SettingsWorkPreferences',
+    },
+    {
+      key: 'update',
+      icon: 'cellphone-arrow-down',
+      title: 'Güncelleme',
+      // ⚠️ Menü satırı sayfanın ÖZETİDİR (diğer satırlarla aynı kural):
+      // çalışan sürüm buradan görünmezse, sahada "hangi sürüm var" sorusu
+      // sayfayı açmadan cevaplanamaz.
+      value: `${kuruluVersionName()} · ${paketEtiketi(otaKimlik())}`,
+      route: 'SettingsUpdate',
     },
   ];
 

@@ -40,7 +40,7 @@ interface Props {
   /** Başlık satırında, makine adı çipinin HEMEN YANINDA duracak ekran-özel
    *  tetik. `headerExtras` sağ uçta durur ve ekranın MODUNU değiştiren bir
    *  tuş orada "diğer aksiyonlar" arasında kaybolur — mod, bulunulan yerin
-   *  yanında okunmalı (2026-08-17 saha geri bildirimi, KK1 yarı mamül). */
+   *  yanında okunmalı (2026-08-17 saha geri bildirimi, KK1 yarı mamul). */
   titleRowExtras?: React.ReactNode;
   children: React.ReactNode;
 }

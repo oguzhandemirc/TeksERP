@@ -63,6 +63,15 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import {
+  adresiCoz as adresiCozPaylasilan,
+  envDosyasiOku,
+  ENV_DOSYALARI,
+  guncellemeAdresiCoz,
+  manifestUrl,
+  musteriOku,
+  feedUrl,
+} from './lib/adres.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -121,61 +130,10 @@ const SURUM_KAPISI_ATLA =
  * ------------------------------------------------------------------ */
 
 /** Basit `.env` ayrıştırıcı — dotenv'in bize lazım olan alt kümesi. */
-function envDosyasiOku(dosya) {
-  const sonuc = new Map();
-  let icerik;
-  try {
-    icerik = fs.readFileSync(dosya, 'utf8');
-  } catch {
-    return sonuc;
-  }
-  for (const ham of icerik.split(/\r?\n/)) {
-    const satir = ham.trim();
-    if (!satir || satir.startsWith('#')) continue;
-    const esitlik = satir.indexOf('=');
-    if (esitlik < 0) continue;
-    const anahtar = satir.slice(0, esitlik).trim().replace(/^export\s+/, '');
-    let deger = satir.slice(esitlik + 1).trim();
-    // Tırnaklı değerleri soy ("http://..." / 'http://...').
-    if (
-      (deger.startsWith('"') && deger.endsWith('"')) ||
-      (deger.startsWith("'") && deger.endsWith("'"))
-    ) {
-      deger = deger.slice(1, -1);
-    }
-    sonuc.set(anahtar, deger);
-  }
-  return sonuc;
-}
-
-/**
- * `.env*` dosyalarını Expo'nun kendi öncelik sırasıyla tarar (@expo/env:
- * `.env.<mode>.local` → `.env.local` → `.env.<mode>` → `.env`). Release
- * derlemesinde mode = production.
- */
-const ENV_DOSYALARI = ['.env.production.local', '.env.local', '.env.production', '.env'];
-
-function adresiCoz() {
-  // 1) Açık CLI argümanı — en yüksek öncelik, operatörün niyeti nettir.
-  const cliDeger = arg('api-url');
-  if (cliDeger) return { deger: cliDeger.trim(), kaynak: '--api-url argümanı' };
-
-  // 2) Ortam değişkeni — CI ve "tek satır export" kullanımı.
-  const envDeger = process.env.EXPO_PUBLIC_API_URL;
-  if (envDeger && envDeger.trim()) {
-    return { deger: envDeger.trim(), kaynak: 'EXPO_PUBLIC_API_URL ortam değişkeni' };
-  }
-
-  // 3) `.env*` dosyaları — Expo ile AYNI sırayla, ki script ile bundler
-  //    farklı değer görmesin.
-  for (const ad of ENV_DOSYALARI) {
-    const yol = path.join(PROJECT_ROOT, ad);
-    const deger = envDosyasiOku(yol).get('EXPO_PUBLIC_API_URL');
-    if (deger && deger.trim()) return { deger: deger.trim(), kaynak: `${ad} dosyası` };
-  }
-
-  return { deger: null, kaynak: null };
-}
+// Adres çözümü ARTIK PAYLAŞILAN MODÜLDE: `scripts/lib/adres.mjs`.
+// Sebep: uzaktan güncelleme paketini üreten `yayinla-ota.mjs` de AYNI adresi
+// çözmek zorunda. İki kopya, aynı gün üretilen APK ile paketin farklı sunucuya
+// bakmasına yol açardı — ve bu ayrışma hiçbir hata basmaz.
 
 /** Çözülen adresi kullanılabilirlik açısından denetler; sorun varsa DURUR. */
 function adresiDogrula(adres, kaynak) {
@@ -668,6 +626,278 @@ function apkDogrula(beklenenAdres, { derlemeBaslangici, apkYolu = APK_PATH } = {
  * Akış
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ * Uzaktan güncelleme kapısı — AndroidManifest gerçekten yapılandırıldı mı?
+ * ------------------------------------------------------------------ */
+
+/**
+ * ⚠️ NEDEN AYRI BİR KAPI: güncelleme adresi ve `runtimeVersion` APK'ya
+ * `expo prebuild` sırasında AndroidManifest'e yazılır. Bu script prebuild
+ * KOŞMAZ (`android/` zaten var kabul edilir), yani prebuild atlanırsa:
+ *
+ *   • `EXPO_UPDATE_URL` hiç yazılmaz → APK uzaktan güncelleme ALMAZ, ama
+ *     her şey normal görünür. Sahaya bir daha ulaşamayacağınız bir paket
+ *     kurmuş olursunuz ve bunu ancak ilk güncellemeyi göndermeye çalışınca
+ *     anlarsınız.
+ *   • Ya da manifest ESKİ adresi taşır → yeni sunucuya kurulan tabletler
+ *     eski sunucudan güncelleme arar (sessiz).
+ *
+ * Bu, `usesCleartextTraffic`in 2026-08-15'te ısırdığı tuzağın birebir aynısı:
+ * "prebuild çıktısı git dışıdır, elde kalan klasör doğru görünür".
+ */
+function guncellemeKapisi() {
+  const manifestYol = path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml');
+  let manifest;
+  try {
+    manifest = fs.readFileSync(manifestYol, 'utf8');
+  } catch {
+    dur('AndroidManifest.xml okunamadı', `Beklenen: ${manifestYol}`);
+  }
+
+  const oku = (ad) => {
+    const re = new RegExp(
+      `<meta-data[^>]*android:name="${ad.replace(/\./g, '\\.')}"[^>]*android:value="([^"]*)"`,
+    );
+    const m = re.exec(manifest);
+    if (m) return m[1];
+    // Öznitelik sırası ters de yazılabilir.
+    const re2 = new RegExp(
+      `<meta-data[^>]*android:value="([^"]*)"[^>]*android:name="${ad.replace(/\./g, '\\.')}"`,
+    );
+    return re2.exec(manifest)?.[1] ?? null;
+  };
+
+  const appCfg = JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'app.json'), 'utf8')).expo;
+  const rvBeklenen = String(appCfg.runtimeVersion ?? '');
+
+  // ⚠️⚠️ BEKLENEN ADRES `musteri.json`DAN DEĞİL, KOMUT ARGÜMANINDAN TÜRETİLİR.
+  //
+  // Bu, kapının çalışmasının TEK sebebi. Eski hâlinde beklenen adres
+  // `feed.cjs`ten geliyordu — ama `app.config.js` de adresi AYNI dosyadan
+  // türetiyor. Yani müşteri kodu yanlışsa ikisi de aynı yanlışı söyler ve kapı
+  // GEÇERDİ. Tek müşteriyle görünmez; ikinci fabrikada onun tabletleri birinci
+  // müşterinin güncellemesini çeker (sessiz, geri dönüşü elle tur).
+  //
+  // GENEL KURAL: beklenen değeri, gerçek değerle AYNI kaynaktan alan bir kapı,
+  // o kaynağın yanlış olmasını yakalayamaz. Beklenen değer bağımsız bir NİYET
+  // BEYANINDAN gelmeli — burada operatörün yazdığı `--musteri`.
+  const musteriArg = arg('musteri');
+  const dosyadaki = musteriOku();
+  if (!musteriArg) {
+    dur(
+      'HANGİ MÜŞTERİ İÇİN DERLENİYOR?',
+      '`--musteri=<kod>` zorunludur. Bu bir formalite değil: adres pakete',
+      'gömülür ve yanlış müşteri kodu, o fabrikanın tabletlerine BAŞKA bir',
+      'fabrikanın güncellemesini çektirir.',
+      '',
+      `Bu ağaç şu an "${dosyadaki.kod}" (${dosyadaki.ad}) için yapılandırılmış.`,
+      `Örnek:  npm run build:apk -- --musteri=${dosyadaki.kod}`,
+    );
+  }
+  if (musteriArg !== dosyadaki.kod) {
+    dur(
+      'MÜŞTERİ UYUŞMAZLIĞI',
+      `komutta      : ${musteriArg}`,
+      `musteri.json : ${dosyadaki.kod}`,
+      '',
+      'Ağaç başka bir müşteri için yapılandırılmış. Değiştirmek bilinçli ve',
+      'kayıtlı bir hamle olmalı:',
+      `  1) musteri.json → { "kod": "${musteriArg}", "ad": "…" }`,
+      '  2) npx expo prebuild --platform android   (adres manifeste yeniden yazılır)',
+      '  3) tekrar: npm run build:apk -- --musteri=' + musteriArg,
+    );
+  }
+  const beklenenUrl = manifestUrl(feedUrl(musteriArg), rvBeklenen);
+
+  // ⚠️ Manifest değeri LİTERAL OLMAYABİLİR: expo-updates `runtimeVersion`i
+  // `@string/expo_runtime_version` kaynak referansı olarak yazar. Doğrudan
+  // karşılaştırma yapan bir kapı burada HER ZAMAN kırmızı verir ve bir süre
+  // sonra "bu kapı zaten hep bağırıyor" diye devre dışı bırakılır — yani
+  // gerçek bir sapmada da susar. Referansı çöz.
+  const stringKaynagiCoz = (deger) => {
+    if (!deger || !deger.startsWith('@string/')) return deger;
+    const ad = deger.slice('@string/'.length);
+    try {
+      const xml = fs.readFileSync(
+        path.join(ANDROID_DIR, 'app/src/main/res/values/strings.xml'),
+        'utf8',
+      );
+      const m = new RegExp(`<string name="${ad}"[^>]*>([^<]*)</string>`).exec(xml);
+      return m ? m[1].trim() : deger;
+    } catch {
+      return deger;
+    }
+  };
+
+  const url = stringKaynagiCoz(oku('expo.modules.updates.EXPO_UPDATE_URL'));
+  const rv = stringKaynagiCoz(oku('expo.modules.updates.EXPO_RUNTIME_VERSION'));
+  const acik = oku('expo.modules.updates.ENABLED');
+
+  baslik('UZAKTAN GÜNCELLEME YAPILANDIRMASI');
+  bilgi(`Manifest ENABLED        : ${acik ?? '(yok)'}`);
+  bilgi(`Manifest EXPO_UPDATE_URL: ${url ?? '(yok)'}`);
+  bilgi(`Manifest RUNTIME_VERSION: ${rv ?? '(yok)'}`);
+
+  const sertifika = oku('expo.modules.updates.CODE_SIGNING_CERTIFICATE');
+  const imzaMeta = oku('expo.modules.updates.CODE_SIGNING_METADATA');
+  bilgi(`Manifest KOD İMZASI     : ${sertifika ? 'sertifika gömülü' : '(YOK)'}`);
+  bilgi(`Beklenen müşteri        : ${musteriArg} (komut argümanından)`);
+
+  const sorunlar = [];
+  if (acik !== 'true') sorunlar.push(`ENABLED "${acik ?? 'yok'}" (beklenen: true)`);
+  // ⚠️ Paket internetten geliyor: imzasız bir APK, sunucuya sızan birinin
+  // sahadaki HER tablete istediği kodu göndermesi demektir. Sertifika APK'ya
+  // gömülü DEĞİLSE istemci imzayı hiç KONTROL ETMEZ (FileDownloader.kt:559).
+  if (!sertifika) sorunlar.push('CODE_SIGNING_CERTIFICATE yok — istemci imzayı hiç kontrol etmez');
+  if (!imzaMeta) sorunlar.push('CODE_SIGNING_METADATA yok');
+  if (url !== beklenenUrl) sorunlar.push(`EXPO_UPDATE_URL "${url ?? 'yok'}" ≠ "${beklenenUrl}"`);
+  if (rvBeklenen && rv !== rvBeklenen)
+    sorunlar.push(`EXPO_RUNTIME_VERSION "${rv ?? 'yok'}" ≠ app.json "${rvBeklenen}"`);
+
+  if (sorunlar.length) {
+    dur(
+      'ANDROIDMANIFEST UZAKTAN GÜNCELLEMEYE HAZIR DEĞİL',
+      ...sorunlar.map((x) => `• ${x}`),
+      '',
+      'Sebep neredeyse her zaman aynı: `expo prebuild` bu adresle koşulmadı.',
+      'android/ klasörü git dışıdır ve prebuild ÇIKTISIDIR — elde kalan eski',
+      'klasör doğru görünür ama eski (ya da hiç) güncelleme adresi taşır.',
+      '',
+      'Çözüm (aynı adresle):',
+      `  EXPO_PUBLIC_API_URL=<erp adresi> npx expo prebuild --platform android`,
+      '  sonra tekrar: npm run build:apk',
+      '',
+      '⚠️ prebuild sonrası cleartext bayrağını da doğrula:',
+      "  grep -o 'usesCleartextTraffic=\"[^\"]*\"' android/app/src/main/AndroidManifest.xml",
+    );
+  }
+  bilgi('✔ Uzaktan güncelleme yapılandırması APK ile tutarlı.');
+}
+
+/**
+ * MÜHÜR KAPISI — üretilen APK bizim imza anahtarımızla mı imzalandı?
+ *
+ * ⚠️ NEDEN: `android/` prebuild çıktısıdır ve imza yapılandırması bir eklentiyle
+ * (plugins/withReleaseKeystore.js) her prebuild'de yeniden yazılır. Eklenti
+ * bozulur/atlanırsa React Native şablonunun varsayılanı devreye girer ve release
+ * APK **Android'in herkese açık DENEME mührüyle** imzalanır. O APK sorunsuz
+ * derlenir, kurulur, çalışır — tek farkı sahadaki tabletlere KURULAMAMASIDIR
+ * (imza uyuşmazlığı), ve o noktada tek çare uygulamayı silip yeniden kurmaktır.
+ *
+ * Beklenen parmak izi ayrı bir dosyada TUTULMAZ, mührün kendisinden okunur:
+ * ikinci bir kaynak, mühür değiştiğinde bayatlayıp yanlış alarm üretirdi.
+ */
+function imzaKapisi(apkYolu) {
+  const propYol = path.join(PROJECT_ROOT, 'keystore/keystore.properties');
+  if (!fs.existsSync(propYol)) {
+    dur(
+      'RELEASE MÜHRÜ BULUNAMADI',
+      `Beklenen: ${propYol}`,
+      'Bu dosya olmadan APK deneme mührüyle imzalanır ve sahadaki tabletlere',
+      'KURULAMAZ. Mührü yedekten geri koy (şifresiyle birlikte).',
+    );
+  }
+  const props = Object.fromEntries(
+    fs
+      .readFileSync(propYol, 'utf8')
+      .split(/\r?\n/)
+      .filter((l) => l.trim() && !l.trim().startsWith('#') && l.includes('='))
+      .map((l) => {
+        const i = l.indexOf('=');
+        return [l.slice(0, i).trim(), l.slice(i + 1).trim()];
+      }),
+  );
+
+  /** `AB:CD:...` ya da `abcd...` → karşılaştırılabilir düz küçük harf hex. */
+  const duzHex = (x) => (x ?? '').replace(/:/g, '').toLowerCase();
+
+  /**
+   * ⚠️ ARAÇ SEÇİMİ ÖLÇÜLDÜ (2026-08-26): `keytool -printcert -jarfile` yalnız
+   * **v1 (jar)** imzasını okur. minSdk 26 olduğu için AGP v1'i KAPATIR ve APK
+   * yalnız v2/v3 şemasıyla imzalanır → keytool hiçbir çıktı vermez. Doğru araç
+   * `apksigner`dır (Android SDK build-tools). keytool yalnız yedek yoldur.
+   */
+  const apksignerBul = () => {
+    const kokler = [
+      process.env.ANDROID_HOME,
+      process.env.ANDROID_SDK_ROOT,
+      path.join(os.homedir(), 'Library/Android/sdk'),
+      path.join(os.homedir(), 'Android/Sdk'),
+      'C:\\Android\\Sdk',
+      path.join(os.homedir(), 'AppData/Local/Android/Sdk'),
+    ].filter(Boolean);
+    const ad = process.platform === 'win32' ? 'apksigner.bat' : 'apksigner';
+    for (const kok of kokler) {
+      const bt = path.join(kok, 'build-tools');
+      if (!fs.existsSync(bt)) continue;
+      const surumler = fs
+        .readdirSync(bt)
+        .filter((d) => fs.existsSync(path.join(bt, d, ad)))
+        .sort();
+      if (surumler.length) return path.join(bt, surumler[surumler.length - 1], ad);
+    }
+    return null;
+  };
+
+  const magaza = spawnSync(
+    'keytool',
+    [
+      '-list', '-v',
+      '-keystore', path.join(PROJECT_ROOT, 'keystore', props.storeFile),
+      '-alias', props.keyAlias,
+      '-storepass', props.storePassword,
+    ],
+    { encoding: 'utf8' },
+  );
+  const beklenen = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(magaza.stdout ?? '')?.[1] ?? '');
+
+  let bulunan = '';
+  let aracHatasi = '';
+  const apksigner = apksignerBul();
+  if (apksigner) {
+    const r = spawnSync(apksigner, ['verify', '--print-certs', apkYolu], { encoding: 'utf8' });
+    // v1/v2/v3 imzacılarının HEPSİ aynı sertifikayı taşır; ilk eşleşme yeter.
+    bulunan = duzHex(/certificate SHA-256 digest:\s*([0-9a-f]+)/i.exec(r.stdout ?? '')?.[1] ?? '');
+    if (!bulunan) aracHatasi = (r.stderr || r.stdout || '').trim().split('\n')[0] ?? '';
+  } else {
+    aracHatasi = 'apksigner bulunamadı (Android SDK build-tools).';
+  }
+  if (!bulunan) {
+    // Yedek yol: v1 imzalı APK'lar için keytool.
+    const r = spawnSync('keytool', ['-printcert', '-jarfile', apkYolu], { encoding: 'utf8' });
+    bulunan = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(r.stdout ?? '')?.[1] ?? '');
+  }
+
+  baslik('MÜHÜR (İMZA) DOĞRULAMASI');
+  if (!beklenen) {
+    dur('Mühür okunamadı', 'keytool `keystore/` altındaki anahtarı açamadı — şifre/alias yanlış olabilir.');
+  }
+  if (!bulunan) {
+    // keytool APK imzasını okuyamadıysa SESSİZCE GEÇME: doğrulanamayan imza,
+    // doğrulanmış imza değildir.
+    dur(
+      'APK imzası okunamadı',
+      aracHatasi || '(araç çıktı vermedi)',
+      'Elle doğrula:',
+      `  apksigner verify --print-certs "${apkYolu}"`,
+    );
+  }
+  bilgi(`Mühür  : ${beklenen}`);
+  bilgi(`APK    : ${bulunan}`);
+  if (beklenen !== bulunan) {
+    apkyiReddet(apkYolu);
+    dur(
+      'APK YANLIŞ MÜHÜRLE İMZALANMIŞ',
+      'Üretilen paket bizim imza anahtarımızı taşımıyor — büyük olasılıkla',
+      'deneme (debug) mührüyle imzalandı ve sahadaki tabletlere KURULAMAZ.',
+      '',
+      'Kontrol et: plugins/withReleaseKeystore.js eklentisi app.json `plugins`',
+      'listesinde mi ve prebuild bu eklentiyle koştu mu?',
+    );
+  }
+  bilgi('✔ APK bizim mührümüzle imzalanmış.');
+}
+
 function androidVarMi() {
   if (!fs.existsSync(path.join(ANDROID_DIR, 'gradlew'))) {
     dur(
@@ -695,7 +925,7 @@ function ozet(adres, s, stat, apkYolu = APK_PATH) {
 }
 
 async function main() {
-  const { deger, kaynak } = adresiCoz();
+  const { deger, kaynak } = adresiCozPaylasilan(arg('api-url'), PROJECT_ROOT);
   const adres = adresiDogrula(deger, kaynak);
 
   baslik('TeksERP Mobil — RELEASE APK');
@@ -710,7 +940,15 @@ async function main() {
     // önce saniyeler içinde doğrula" — sürüm kayması tam olarak orada
     // yakalanmalı, 70 saniyelik derlemenin ortasında değil.
     surumBas();
-    console.log('\n  ✔ Ön kontrol tamam (--check): adres ve sürüm tutarlı. Derleme YAPILMADI.\n');
+    // Güncelleme kapısı ucuz yolda da koşar — "prebuild'i unuttum" hatası
+    // 70 saniyelik derlemenin sonunda değil, saniyeler içinde görünsün.
+    // android/ henüz üretilmemişse kapı atlanır (androidVarMi zaten söyler).
+    if (fs.existsSync(path.join(ANDROID_DIR, 'app/src/main/AndroidManifest.xml'))) {
+      guncellemeKapisi();
+    } else {
+      uyari('android/ klasörü yok — uzaktan güncelleme yapılandırması denetlenemedi.');
+    }
+    console.log('\n  ✔ Ön kontrol tamam (--check): adres, sürüm ve güncelleme yapılandırması tutarlı. Derleme YAPILMADI.\n');
     return;
   }
 
@@ -724,17 +962,20 @@ async function main() {
     if (hedef !== APK_PATH) uyari(`Kanonik yol dışındaki APK denetleniyor: ${hedef}`);
     const sVerify = surumBas();
     const stat = apkDogrula(adres, { apkYolu: hedef });
+    imzaKapisi(hedef);
     ozet(adres, sVerify, stat, hedef);
     return;
   }
 
   androidVarMi();
   const s = surumBas();
+  guncellemeKapisi();
 
   const derlemeBaslangici = Date.now();
   onbellekleriTemizle();
   gradleKos(adres);
   const stat = apkDogrula(adres, { derlemeBaslangici });
+  imzaKapisi(APK_PATH);
   ozet(adres, s, stat);
 }
 

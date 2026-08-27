@@ -21,6 +21,7 @@ import SettingsScreen from '../screens/Common/SettingsScreen';
 import ServerSettingsScreen from '../screens/Common/settings/ServerSettingsScreen';
 import PlaceHardwareScreen from '../screens/Common/settings/PlaceHardwareScreen';
 import ScannerSettingsScreen from '../screens/Common/settings/ScannerSettingsScreen';
+import UpdateSettingsScreen from '../screens/Common/settings/UpdateSettingsScreen';
 import WorkPreferencesScreen from '../screens/Common/settings/WorkPreferencesScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
@@ -216,6 +217,11 @@ export default function RootNavigator() {
           name="SettingsScanner"
           component={ScannerSettingsScreen}
           options={{ animation: "slide_from_right" }}
+        />
+        <Stack.Screen
+          name="SettingsUpdate"
+          component={UpdateSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen
           name="SettingsWorkPreferences"

@@ -2,7 +2,7 @@
   "expo": {
     "name": "TeksERP",
     "slug": "teks-erp-mobil",
-    "version": "2.9.6",
+    "version": "2.9.9",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,7 +21,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.teks.erp.mobil",
-      "versionCode": 53,
+      "versionCode": 56,
       "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.CAMERA",
@@ -30,7 +30,8 @@
         "android.permission.BLUETOOTH_CONNECT",
         "android.permission.BLUETOOTH_SCAN",
         "android.permission.ACCESS_FINE_LOCATION",
-        "android.permission.ACCESS_COARSE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.REQUEST_INSTALL_PACKAGES"
       ],
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
@@ -63,7 +64,10 @@
             "targetSdkVersion": 35,
             "minSdkVersion": 26,
             "buildToolsVersion": "35.0.0",
-            "usesCleartextTraffic": true
+            "usesCleartextTraffic": true,
+            "buildArchs": [
+              "arm64-v8a"
+            ]
           }
         }
       ],
@@ -73,7 +77,19 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-asset"
-    ]
+      "expo-asset",
+      "./plugins/withReleaseKeystore"
+    ],
+    "runtimeVersion": "54.2",
+    "updates": {
+      "enabled": true,
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0,
+      "codeSigningCertificate": "./keystore/ota-certs/certificate.pem",
+      "codeSigningMetadata": {
+        "keyid": "main",
+        "alg": "rsa-v1_5-sha256"
+      }
+    }
   }
 }

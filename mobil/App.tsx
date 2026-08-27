@@ -31,6 +31,7 @@ import { FLAGS_KEY } from './src/hooks/useFeatureFlags';
 import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
 import IdleLockGate from './src/components/lock/IdleLockGate';
+import UpdateGate from './src/components/UpdateGate';
 
 registerStationMutationDefaults();
 
@@ -185,6 +186,12 @@ export default function App() {
                 </SimplePortalScope>
               </PaperProvider>
             </View>
+            {/* Uzaktan güncelleme kapısı — EN ÜST katman, kilit katmanından da
+                SONRA. Yenileme örtüsü her şeyin üstünde görünmeli: `reloadAsync`
+                uygulamayı aniden yeniden başlatır ve altta kalan bir örtü,
+                operatörün bunu çökme sanmasını engelleyemez. Kayıt yokken
+                hiçbir şey çizmez (null döner). */}
+            <UpdateGate />
           </View>
         </PersistQueryClientProvider>
       </SafeAreaProvider>
