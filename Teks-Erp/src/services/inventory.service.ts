@@ -537,6 +537,9 @@ export interface ProductionFlowSackCard {
 /** Her kolon: en fazla 10 önizleme kaydı + gerçek toplam sayaç. */
 export interface ProductionFlowData {
   hamStok: { rolls: Roll[]; total: number };
+  /** Dışarıdan alınan yarı mamul — ham stokla AYNI raftadır ama farklı stok
+   *  türüdür ve akışa Kurşun'dan girer (boyahaneyi atlar). */
+  yariMamul: { rolls: Roll[]; total: number };
   fason: { rolls: Roll[]; total: number };
   kursun: { cards: ProductionFlowQueueCard[]; total: number };
   tambur: { cards: ProductionFlowQueueCard[]; total: number };
@@ -1598,8 +1601,8 @@ export class InventoryService {
   }): Promise<ApiResponse<ProductionFlowData>> {
     const PREVIEW = 10;
 
-    const rollColumn = async (status: RollStatus) => {
-      const where = { status };
+    const rollColumn = async (status: RollStatus, extra: Prisma.RollWhereInput = {}) => {
+      const where: Prisma.RollWhereInput = { status, ...extra };
       const [rolls, total] = await Promise.all([
         prisma.roll.findMany({
           where,
@@ -1748,8 +1751,32 @@ export class InventoryService {
       return { shipments, total };
     };
 
-    const [hamStok, fason, depo, kursun, tambur, sevk] = await Promise.all([
-      rollColumn(RollStatus.STOCK),
+    // ⚠️ HAM STOK KOLONU İKİ KEZ DÜZELTİLDİ (2026-08-27):
+    //
+    // ① `currentStepId: null` EKLENDİ. Kolon eskiden düz `{ status: STOCK }`
+    //    sorguyordu, yani bir adıma bağlı STOCK topu da sayıyordu — Envanter
+    //    sekmesi (`rollScope=RAW_STOCK*`) saymıyor. İki yüzey aynı adı taşıyıp
+    //    farklı rakam basıyordu ve bu YARI MAMULDEN BAĞIMSIZ, eski bir sapmaydı.
+    //    (Bugün prod'da fark 0 — 283 STOCK topun hepsi adımsız — ama koşul
+    //    olmadan eşitlik bir invariant değil, tesadüftü.)
+    //
+    // ② Yarı mamul AYRI KOLONA çıktı. Akış panosunda ikisi yan yana durur ama
+    //    aynı kova değildir: yarı mamul boyahaneyi ATLAR, akışa Kurşun'dan
+    //    girer. Tek kovada toplamak "ham kumaşım ne kadar" sorusuna yanlış
+    //    cevap veriyordu.
+    //
+    // Kapsam tanımları Envanter sekmeleriyle BİREBİR (`inventory.service`
+    // `rollScope` zinciri) — ayrışırlarsa aynı soruya iki rakam doğar.
+    const RAW_ON_SHELF: Prisma.RollWhereInput = { currentStepId: null };
+    const [hamStok, yariMamul, fason, depo, kursun, tambur, sevk] = await Promise.all([
+      rollColumn(RollStatus.STOCK, {
+        ...RAW_ON_SHELF,
+        entrySource: { not: RollEntrySource.SEMI_FINISHED },
+      }),
+      rollColumn(RollStatus.STOCK, {
+        ...RAW_ON_SHELF,
+        entrySource: RollEntrySource.SEMI_FINISHED,
+      }),
       rollColumn(RollStatus.AT_SUBCONTRACTOR),
       rollColumn(RollStatus.WAREHOUSE),
       kursunColumn(),
@@ -1757,7 +1784,7 @@ export class InventoryService {
       sevkColumn(),
     ]);
 
-    return { success: true, data: { hamStok, fason, kursun, tambur, depo, sevk } };
+    return { success: true, data: { hamStok, yariMamul, fason, kursun, tambur, depo, sevk } };
   }
 
   /**

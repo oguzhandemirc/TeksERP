@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Cog, Disc3, Package, Send, Truck, Warehouse, type LucideIcon } from "lucide-react";
+import { Cog, Disc3, Layers, Package, Send, Truck, Warehouse, type LucideIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Stagger, StaggerItem } from "@/components/motion";
 import { cn } from "@/lib/utils";
@@ -15,8 +15,8 @@ import type { Roll } from "./types";
 
 // Üretim akışı kolonları — salt-okunur görselleştirme (sürükleme yok). Veri TEK
 // istekte (`/api/rolls/production-flow`) gelir: her kolon en güncel/öncelikli 10
-// kayıt + gerçek toplam sayaç. HİBRİT model: Ham Stok / Fason / Depo rulo
-// statüsünden; Kurşun & Tambur istasyon kuyruğundan (parti = refakat kartı);
+// kayıt + gerçek toplam sayaç. HİBRİT model: Ham Stok / Yarı Mamul / Fason / Depo
+// rulo statüsünden; Kurşun & Tambur istasyon kuyruğundan (parti = refakat kartı);
 // Sevk kolonu çıkış bekleyen (PLANNED) planlı sevkler.
 interface KanbanColumn {
   key: keyof ProductionFlowData;
@@ -28,6 +28,13 @@ interface KanbanColumn {
 
 const COLUMNS: KanbanColumn[] = [
   { key: "hamStok", label: "Ham Stok", icon: Package, dot: "bg-station-kk1", bar: "bg-station-kk1" },
+  // Yarı mamul Ham Stok'un YANINDA durur (ikisi de raftaki giriş stoğu) ama AYRI
+  // kolondur: boyahaneyi ATLAR, akışa Kurşun'dan girer. Tek kovada toplamak
+  // "ham kumaşım ne kadar" sorusuna yanlış cevap veriyordu.
+  // Renk Ham Stok'tan AYRI (cyan): iki kolon yan yana ve aynı aileden, aynı
+  // tonda olsalar operatör sayaçları karıştırır — ayrımın görünürlüğü bu
+  // paketin varlık sebebi. Mobil Depo sekmesiyle aynı ton (#0891b2).
+  { key: "yariMamul", label: "Yarı Mamul", icon: Layers, dot: "bg-cyan-600", bar: "bg-cyan-600" },
   { key: "fason", label: "Fason'da", icon: Send, dot: "bg-station-fason", bar: "bg-station-fason" },
   { key: "kursun", label: "Kurşun Bekleyen", icon: Cog, dot: "bg-station-process", bar: "bg-station-process" },
   { key: "tambur", label: "Tambur Bekleyen", icon: Disc3, dot: "bg-station-tambur", bar: "bg-station-tambur" },
@@ -44,6 +51,7 @@ type Slice =
 function sliceForColumn(key: keyof ProductionFlowData, data: ProductionFlowData): Slice {
   switch (key) {
     case "hamStok": return { kind: "roll", ...data.hamStok };
+    case "yariMamul": return { kind: "roll", ...data.yariMamul };
     case "fason": return { kind: "roll", ...data.fason };
     case "depo": return { kind: "roll", ...data.depo };
     case "kursun": return { kind: "queue", ...data.kursun };

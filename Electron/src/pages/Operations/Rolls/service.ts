@@ -147,9 +147,11 @@ export interface ProductionFlowSackCard {
   totalQty: number;
 }
 
-/** 6 kolon; her biri ≤10 önizleme kaydı + gerçek toplam sayaç. */
+/** 7 kolon; her biri ≤10 önizleme kaydı + gerçek toplam sayaç. */
 export interface ProductionFlowData {
   hamStok: { rolls: Roll[]; total: number };
+  /** Dışarıdan alınan yarı mamul — ham stokla aynı rafta, farklı stok türü. */
+  yariMamul: { rolls: Roll[]; total: number };
   fason: { rolls: Roll[]; total: number };
   kursun: { cards: ProductionFlowQueueCard[]; total: number };
   tambur: { cards: ProductionFlowQueueCard[]; total: number };

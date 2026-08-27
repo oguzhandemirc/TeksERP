@@ -1361,7 +1361,25 @@ yeniden yazılırken karar açıkça verilmiş ve koda yorum olarak da yazılmı
 Yani **mevcut** iş emrinin rengini değiştirirken uyarı, **yeni** iş emri açarken sert hata. O
 gün düzenleme yolu düzeltilmiş, oluşturma yolu olduğu gibi bırakılmıştı.
 
-### KARAR (kullanıcı): kural KALKMIYOR, DARALIYOR
+### KARAR — İKİ AŞAMALI (aynı gün, ikinci tur kararı ilkini genişletti)
+
+**Önce dar kapı denendi:** kural kalsın, nitelik eldeki topların HEPSİNDE varsa kontrol atlansın.
+**Sonra kullanıcı asimetrinin tamamını kapatmayı seçti: KAPSAMA ARTIK REDDETMEZ, UYARIR.**
+Üç kapı da (`create` · `replace` · "Rengi Değiştir") tek kuralı söylüyor; yanıt
+`ApiResponse.warnings` taşıyor. Sektör dayanağı: rota/iş planı eksikliği ERP'lerde tipik olarak
+uyarıdır (SAP PP'de yönlendirme uyarısı üretim emrini durdurmaz), planlamacı bilinçli geçebilir.
+
+⚠️ **KABUL EDİLEN RİSK (kullanıcıya söylendi, kabul etti):** eksik rotayla iş emri açılabilir.
+Bedeli uyarı metnine yüklendi — NE eksik olduğunu **ve SONUCUNU** somut söyler
+(*"Rotada renk veren adım (boyahane) yok — toplar hedef rengi kendiliğinden ALMAYACAK…"*).
+"Rota uygun değil" gibi genel bir cümle planlamacıya ne yapacağını söylemez.
+
+**Dar kapı MANTIĞI DURUYOR, işi değişti:** artık engeli değil UYARIYI bastırıyor. Nitelik
+topların hepsinde zaten varsa uyarının cümlesi ("kendiliğinden almayacak") **yanlış** olur ve
+okunmayan bir uyarı üretir — okunmayan uyarı, olmayan uyarıdan kötüdür. `replace` mal bilgisini
+canlıdan okur (bağlı toplar), `create`'te çağıran verir.
+
+### Uygulama
 
 Uyarıya çevirmek yerine **dar kapı** seçildi: nitelik eldeki topların **HEPSİNDE** zaten varsa
 kontrol atlanır.
@@ -1386,6 +1404,211 @@ değişmedi. **İki negatif sondayla kanıtlandı:** `every`→`some` yapılınc
 **Migration YOK · izin YOK · APK YOK** — düzeltme tamamen sunucuda; tablet aynı isteği
 göndermeye devam eder, artık 400 almaz. Ekran tarafında ek bir iş gerekmiyor.
 
-**AÇIK KALAN (bilinçli):** oluşturma ↔ düzenleme asimetrisi TAM kapanmadı. Düzenlemede kapsama
-her durumda uyarı; oluşturmada mal uygun değilse hâlâ hata. İkisini tek kurala indirmek ayrı
-bir karar — bugünkü seçim, engeli yalnız yanlış olduğu yerde kaldırmak.
+**Asimetri KAPANDI** (ikinci tur): create · replace · "Rengi Değiştir" üçü de uyarıyor.
+`quickStart` `create`'in uyarılarını yanıtına taşır — taşımasaydı tablet iş emrini açar ve not
+yolda kaybolurdu (uyarıya çevirmenin tüm anlamı o notun görünmesiydi; bekçi bunu ölçüyor).
+
+---
+
+## 2026-08-27 — Sipariş görünürlüğü: şerit + altı rapor + iptal sebebi + kalem iptali
+
+Saha isteği ikiydi: *"envanterdeki renkli özet şeridinin aynısı sipariş ekranında da olsun"*
+ve *"siparişle ilgili kapsamlı raporlar"*. İkisi de yazılırken **ölçüm üç kez planı düzeltti** —
+notun asıl değeri o üç düzeltmede.
+
+### Özet şeridi — liste ile sapma YAPISAL olarak imkânsız
+
+Envanterin `RollsStats`i çalışıyordu çünkü liste ve özet `buildRollWhere` ile AYNI where'i
+paylaşıyor (o dosyanın yorumu sebebi yazıyor: *"filtre eşleşmediğinde istatistik listeden
+sapar"*). `BaseService`te böyle bir metot **yoktu** — dört adım `findAllOffset` ve
+`findAllCursor` içinde ayrı ayrı kopyalanmıştı. `buildListWhere` çıkarıldı; liste, cursor ve
+yeni `GET /api/orders/stats` üçü de onu çağırır. Bekçi `test_order_stats` (33) şerit sayısını
+listenin `withTotal` sayımıyla **her filtre kombinasyonunda** karşılaştırır.
+
+⚠️ **İki kapsam bilinçli olarak FARKLI:** ADET listenin aynasıdır (panel iptalleri gizlediği
+için İPTAL kovası yalnız tik açıkken dolar), METRAJ iptalleri HER ZAMAN dışlar — iptal edilmiş
+siparişin açık metrajı yoktur. Birini diğerine uydurmak ya şeridin toplamını listenin satır
+sayısından ayırır ya da iptal metrajını üretim planına sokar.
+
+⚠️ **Şerit görünümü üç modlu ve tercih HESAPTA** (`prefs.orders.statsView`) — tema/renk gibi
+kullanıcıyı takip eder. `UserPreference` "dört kapı" modelinin TERSİDİR: backend Zod'u
+`z.record(z.string(), z.unknown())`, hiçbir anahtarı tanımaz/atmaz → **backend'de tek satır
+değişmez**. Tuzak: `setPreference` önbellek boşken çağrılırsa `DEFAULT_PREFERENCES + patch`
+yazıp 600 ms sonra TÜM blob'u ezer (favoriler, kolon düzeni, `mobileModuleOrder` dahil);
+provider `ready` bayrağını üretir ama tüketicilerin hiçbiri kullanmıyordu — mod değiştirme
+düğmesi `ready` gelmeden yazmaz.
+
+### 30 günlük pencere kalktı → index BİLEŞİK olmak zorundaydı
+
+Sipariş ekranı varsayılan son 30 günü gösteriyordu, yani *"ABC Tekstil'in 200 siparişi"*
+sorusu pencere açıkken cevaplanamıyordu. Pencere kaldırıldı. `orders` üzerinde tek başına
+`createdAt` index'i YOKTU: var olan `(status, createdAt DESC)` yalnız `status` EŞİTLİK
+predicate'iyle ordering verir, panelin varsayılanı ise `status NOT IN ('CANCELLED')`.
+
+⚠️ **Tekil `(createdAt)` YETMEDİ ve bu ölçümle bulundu:** `BaseService` sıralamaya HER ZAMAN
+`id` tie-breaker'ı ekler (offset yolunda `orderBy` dizisi, cursor yolunda keyset koşulu), yani
+gerçek sorgu `ORDER BY "createdAt" DESC, id DESC`. Tekil index'le plan `Incremental Sort`
+(Presorted Key: createdAt) bırakıyordu. `(createdAt DESC, id DESC) WHERE status <> 'CANCELLED'`
+ile hem varsayılan liste hem keyset cursor sayfa-2 temiz `Index Only Scan`'e oturdu.
+Yeni bir sıralama index'i eklerken bu tie-breaker hatırlanmalı.
+
+### Altı rapor — hangi soruyu cevapladıkları yazılı
+
+Mevcut karnelerin HEPSİ sevk tarafına bakıyordu; sipariş GİRİŞİ hiç ölçülmüyordu.
+Açık Sipariş Karşılanma · Sipariş Karnesi · Müşteri Karnesi (ABC+RFM) · Talep Analizi ·
+Sipariş→Teslim Süresi · Sipariş İptal Karnesi.
+
+⚠️ **Karşılanma raporu `order.service.getCoverageForLines` KULLANMAZ.** O motor fungible depo
+havuzunu HER SATIRA TAM yazar — ekran içi tek sipariş için doğru, raporda ÇİFT SAYIM. Ölçüldü:
+120 m'lik stokla üç sipariş de "sevk edilebilir" görünüyor. Motor `production-balance.service`;
+havuz satırlara **aciliyet sırasına** göre bölünür (termin ASC, terminsiz EN SONA — söz
+verilmemiş işi söz verilmiş işin önüne geçirmemek için).
+
+⚠️ **Sipariş→Teslim Süresi'nde ana rakam MEDYANDIR**, ortalama yanında durur. Ortalama tek bir
+felaket siparişle yukarı çekilir ve ona dayanan termin sözü siparişlerin yarısında tutmaz.
+`minSample` (5) altında sayı BASILMAZ — az örneklemle hesaplanan medyan istatistik değil
+tesadüftür. Bugün canlıda örneklem 1: ekran "yeterli veri yok" diyor ama "37 gündür bekleyen
+açık sipariş" listesi yine işe yarıyor.
+
+⚠️ `factoryMonthSql` `constants/time.ts`'e eklendi (`factoryDaySql` ikizi). Ayın ilk gecesi
+(yerel 00:00–03:00) UTC'de HÂLÂ ÖNCEKİ AYDIR; çıplak `DATE_TRUNC('month')` mevsimsellik
+serisini kaydırır. Saat dilimi literalini çağıran tarafa kopyalama.
+
+### İptal sebebi: ÖNCE veri, SONRA rapor
+
+İptal Karnesi'nin planı "audit hazır" varsayıyordu. Ölçüm çürüttü: `Order`'da iptal sebebi
+kolonu YOKTU, iptal ucu sebep parametresi ALMIYORDU, audit kaydı bile yalnız
+`{"status":"CANCELLED","actions":[]}` yazıyordu. Yani *"müşteriler neden vazgeçiyor"* sorusu
+veri yokluğundan cevapsızdı. Sıra tersine çevrildi: önce `ReasonPresetKind.ORDER_CANCEL` +
+`Order.cancelledAt/cancelReason/cancelReasonCode`, rapor sonra.
+
+**KARAR — "değişiklik geçmişi" yarısı KAPSAM DIŞI (2026-08-27, kullanıcı onayı).**
+Raporun planlanan ikinci yarısı ("sipariş sonrası ne değişti") YAZILMADI. Üç ölçüm:
+① gerçek siparişlerdeki 29 `ORDER UPDATE` audit kaydının **hepsinde `changes` kolonu NULL** →
+alan bazlı değişiklik çıkarılamıyor; ② plan sapmalarının **zaten kendi karnesi var**
+(`plan-deviation-scorecard`) → o yarı tekrar olurdu; ③ geriye kalan tek ölçülebilir şey
+"75 siparişin 17'si düzenlenmiş" sayacıydı ve iptal oranı **zaten Sipariş Karnesi'nde**.
+Boş sütunlu bir rapor yüzeyi eklemek yanıltıcı olurdu (2026-08-09'da tam bu sebeple iki rapor
+kaldırılmıştı). İleride istenirse ön koşul: `AuditService`in ORDER UPDATE'te `changes`
+doldurması. Rapor `meta`sında ve servis başlığında da yazılı.
+
+⚠️ **Çıpa `cancelledAt`** (iptalin OLDUĞU an), `orderDate` değil: sipariş Ocak'ta alınıp Mart'ta
+iptal edilebilir. Sipariş Karnesi'ndeki iptal oranı FARKLI bir soruyu cevaplar ("bu ay ALINAN
+siparişlerin kaçı sonradan iptal oldu") ve iki rakamın birbirini tutması GEREKMEZ.
+Alan sonradan eklendiği için eski 4 iptalde NULL'dur → dönem raporuna girmezler; geriye dönük
+damga UYDURULMADI, sayıları `undatedCancelCount` ile ayrıca döner ve ekranda yazılıdır.
+
+### Sipariş KALEMİ iptali — asıl maliyet kolon değil, yayılım
+
+10 kalemlik siparişin 3 kalemini iptal etmek bugüne dek İMKÂNSIZDI: kalem çıkarmanın tek yolu
+hard-delete idi ve aktif iş emri bağı varsa tamamen reddediliyordu. Artık SOFT iptal — kalem
+listede üstü çizili kalır, sevk edilmiş metrajı defterde durur, iş emri bağı otomatik kopar
+(son bağsa iş emri STOK üretimine döner: "tip = bağın aynası").
+
+⚠️ **Statü aritmetiği işin kalbi:** `recomputeOrderStatus`ta
+`totalRequired = Σ(aktif.quantity) + Σ(iptal.shipped)`. İptal kalemin `quantity`si toplamda
+kalsaydı sipariş o farkı ASLA kapatamaz, **sonsuza dek PARTIAL_SHIPPED** görünürdü. Son aktif
+kalem gidince: sevk varsa COMPLETED, yoksa CANCELLED (kullanıcı kuralı).
+
+⚠️ **`==` vs `===` — sessiz felç.** Süzgeç `cancelledAt == null` (GEVŞEK) yazılır. Alanı
+`select`'ine almayan bir çağıran `undefined` gönderir ve KATI `=== null` orada FALSE döner →
+TÜM kalemler iptal sayılır → sipariş sevk yokken CANCELLED'a düşer. Ölçüldü: `test_helpers`in
+sahte tx'i tam bunu yaptı, dört senaryo birden bozuldu. Eksik bir alan siparişi iptal ettiremez.
+
+⚠️ **Aktif-kalem kuralı TEK KAYNAK** `helpers/order-line-scope.helper.ts` + AST bekçisi
+`test_order_line_scope_single_source` (fason `fason-open-dispatch.helper` emsali). Kural tek
+cümle: **GELECEK sorusu süzer, GEÇMİŞ sorusu süzmez.** Ham SQL'de gerekçeli
+`-- aktif-kalem-muaf:` işareti (`-- tz-ok:` deseninin ikizi) geçmiş sorgularını muaf tutar.
+Bekçi, elle taramada KAÇIRILAN üç süzgeci buldu: talep analizinin aylık ham SQL'i, müşteri
+sipariş profili, sevk & termin karnesinin `plannedQty`si.
+
+⚠️ **Düzenleme yolu da kapatıldı:** sipariş formu kalemleri toptan gönderir; iptal edilmiş kalem
+payload'da yoksa diff onu SİLER (iptal olgusu + sevk metrajı kaybolur), varsa metrajı
+DEĞİŞTİRİLEBİLİR. İkisi de sunucuda kapalı, istemci disiplinine bırakılmadı.
+
+**BİLİNEN SINIR (yazılı):** *"iptal anında iş emri açılmış mıydı"* ÖLÇÜLEMİYOR — iptal akışı WO
+bağlarını koparır, karar anındaki bağ sonradan okunamaz. Vekil ölçüler `daysToCancel` +
+`afterShipmentCount`. Ölçmek istenirse sayı iptal ANINDA dondurulmalı.
+
+### Bekçinin kör noktası hatanın kendisiyle aynı yerdeydi (tekrar)
+
+`test_order_line_cancel`ın ilk hâli aritmetik regresyonunu YAKALAMIYORDU: tek kalemli
+senaryoda "hepsi iptal" dalı statüyü doğrudan belirliyor ve `totalRequired` hiç gözlenmiyor.
+Negatif sonda ilk turda **yeşil kaldı**. Aritmetik ancak SİPARİŞTE AKTİF KALEM KALIRKEN görünür
+(§4b). Bu dosyaya senaryo eklerken aynı tuzak geçerli.
+
+**Migration:** `20260826120000` (orders sıralama index'i) · `20260826130000` (ORDER_CANCEL enum) ·
+`20260826130100` (sipariş iptal izi) · `20260827100000` (kalem iptali).
+**İzin YOK · APK YOK** (mobil sipariş iptal etmez). Backend ÖNCE deploy.
+
+---
+
+## 2026-08-27 (ikinci tur) — Yarı mamul ayrımı Kanban'a ve tablete taşındı + Kanban'ın ESKİ sapması
+
+2026-08-26'da envanter sekmesi ayrılmış, ayrımı takip ETMEYEN yüzeyler gerekçeleriyle
+listelenmişti. Kullanıcı o listeden ikisini kapsama aldı.
+
+### ① Üretim Akışı (Kanban) — iki düzeltme, TEK dokunuş
+
+**Yeni kolon "Yarı Mamul"**, Ham Stok'un yanında. Yan yana ama aynı kova değil: yarı mamul
+boyahaneyi **atlar**, akışa Kurşun'dan girer. Renk bilerek AYRI (cyan) — iki kolon komşu ve
+aynı aileden, aynı tonda olsalar operatör sayaçları karıştırır; ayrımın görünürlüğü bu paketin
+varlık sebebi. Mobil Depo sekmesiyle aynı ton.
+
+**⚠️ Aynı sorguda ESKİ ve BAĞIMSIZ bir sapma da kapandı.** Kolon `rollColumn(STOCK)` ile düz
+`{ status }` sorguyordu — `currentStepId` koşulu YOKTU. Yani bir adıma bağlı STOCK topu panoda
+sayılıyor, Envanter sekmesinde (`rollScope`) sayılmıyordu: **aynı adı taşıyan iki yüzey farklı
+rakam basıyordu ve bu yarı mamulden tamamen bağımsızdı.** Bugün prod'da fark 0 (283 STOCK topun
+hepsi adımsız), ama koşul olmadan eşitlik bir invariant değil TESADÜFtü.
+
+**Bekçi genişletildi** (`test_production_flow_columns`): eskiden yalnız kolon ANAHTARLARININ
+varlığını ölçüyordu, **sayı semantiğini değil** — panonun Envanter'den sapması bu yüzden yıllarca
+görünmedi. Artık her iki kolonun toplamı Envanter kapsamlarıyla karşılaştırılıyor + kolonların
+örtüşmediği ölçülüyor. **Negatif sonda:** adıma bağlı bir STOCK topu üretilip `currentStepId`
+koşulu kaldırıldı → `pano=48 envanter=47`, kırmızı. Koşul geri konunca 47=47.
+
+### ② Mobil Depo — "Ham" ikiye ayrıldı
+
+`DepoScreen` sekmeleri: Tümü · Depo · Çuvalda · **Ham** · **Yarı Mamul** · Kartela · Kartelalık.
+Eski "Ham" sekmesi düz `status:'STOCK'` gönderiyordu (`rollScope` DEĞİL) → yarı mamul ham kumaşla
+karışıktı. Artık `rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED`; **"Tümü" sekmesi bilerek statü
+tabanlı kalır** (orada ayrım gerekmez, ayrı sekmeler zaten var).
+
+⚠️ `rollScope=RAW_STOCK` (birleşim) Hızlı İş Emri top seçicisinde DOKUNULMADAN kaldı — daraltılsa
+yarı mamul oradan düşerdi.
+
+**Dağıtım:** APK GEREKMEZ — ve bu **ölçüldü, varsayılmadı**. Değişiklik saf JS (yeni native
+modül/izin yok, `app.json`a dokunmuyor) → uzaktan güncellemeyle gider. `npm run yayinla`'nın native
+parmak izi kontrolü: `3a17652b7719adb6` ↔ önceki kayıt `3a17652b7719adb6` (runtimeVersion 54.2),
+**birebir aynı** → bağımlılıklar/plugins/`android` bloğunun hiçbirine dokunulmamış. "OTA'ya uygun
+mu" sorusunu insan değil script cevaplar; yanlışlıkla native bir şeye dokunulsa script DURUR ve
+"runtimeVersion artır + yeni APK" der.
+
+Sıra: kullanıcı elle turu yapar (2.9.9 kurulur — mühür değişikliği yüzünden zaten gerekiyordu) →
+sonra `npm run yayinla -- --musteri=adnansahin`. Uzaktan güncelleme yalnız 2.9.9 kurulu tabletlere
+gider, o yüzden elle turdan ÖNCE yayınlamak işe yaramaz.
+
+**Bu, uzaktan güncelleme paketinin ilk pratik faydası oldu:** normalde ikinci bir tablet turu
+doğuracak bir iş, hiç tur gerektirmeden çıkıyor.
+
+### ③ Görsel tur — gözle bakmasa yakalanamayacak iki bulgu
+
+Playwright + `_electron.launch` ile uygulama gezildi (temiz `--user-data-dir` profili şart:
+yoksa önceki turun oturumu geri yüklenir, giriş ekranı hiç çıkmaz ve seçiciler tutmaz).
+
+1. **"Tip" kolonu yarı mamul topu "Bitmiş" gösteriyordu** (`columns.tsx`
+   `rollProcessingState`): `status===STOCK ? (colorId ? "bitmis" : "ham")`. Backend'in "renk varsa
+   bitmiş" sezgisinin İSTEMCİ İKİZİ — altıncı giriş kaynağını tanımıyordu. **Beşinci** "unutulmuş
+   enum" vakası (öncekiler: `entryTitle`, mobil KK1 listesi, iki `entrySource` filtresi,
+   `activity-utils` etiketleri). Yeni `yarimamul` durumu eklendi.
+2. **Stok Karnesi'nin 5 kartı 1024px'te sıkışıyordu** — "9283,8 m" iki satıra kırılıyordu.
+   `lg:grid-cols-3 xl:grid-cols-5` (beşli sıra yalnız 1280px'ten itibaren).
+
+**Doğrulanan eşitlik:** Stok Karnesi "Ham 47 top" ↔ Envanter Ham Stok rozeti 47 ↔ Kanban Ham Stok
+kolonu 47. Üç yüzey, tek rakam — paketin varlık sebebi olan invariant.
+
+**Gözle doğrulanamayan:** Manuel Giriş'teki amber uyarı (renk seçili + kutu işaretsiz) — turda o
+kombinasyona girilmedi, kullanıcının Windows provasında bakılacak.
+
+**Ders:** birim testi + typecheck yeşilken bile ekrana bakmak iki gerçek hata buldu; ikisi de
+"derleyici görmez" sınıfındaydı (biri string haritası, biri CSS breakpoint).

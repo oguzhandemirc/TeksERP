@@ -10,13 +10,17 @@
 // kontrolü koşuyor ve 400 veriyordu. Dışarıdan boyalı gelen kumaşa yalnız
 // kurşun+tambur yapılacaksa rotada boyahane OLMAMASI doğrudur.
 //
-// KARAR (kullanıcı, dar kapı): kural KALKMIYOR, DARALIYOR — nitelik eldeki
-// topların HEPSİNDE zaten varsa kontrol atlanır. Bir kısmında eksikse o toplar
-// niteliği hiç kazanamaz, yani kural orada hâlâ gerçek bir planlama hatasını
-// yakalıyor.
+// KARAR (kullanıcı, 2026-08-27, İKİ AŞAMALI):
+//   ① Kapsama artık REDDETMEZ, UYARIR (`ApiResponse.warnings`) — create · replace ·
+//      "Rengi Değiştir" üçü de aynı kuralı söyler. Sektör dayanağı: rota/iş planı
+//      eksikliği ERP'lerde uyarıdır, planlamacı bilinçli geçer.
+//   ② Nitelik eldeki topların HEPSİNDE zaten varsa UYARI DA ÇIKMAZ — uyarının
+//      cümlesi ("toplar bu rengi kendiliğinden almayacak") orada YANLIŞ olur ve
+//      okunmayan uyarı üretir.
 //
-// ⚠️ Bu testin değeri NEGATİF durumlarda: muafiyetin GENİŞLEMEDİĞİNİ ölçer.
-// §2/§3/§4 düşerse kapı açılmış demektir.
+// ⚠️ Bu testin değeri iki yönlü: iş emrinin AÇILDIĞINI **ve** uyarının doğru
+// yerde ÇIKIP doğru yerde ÇIKMADIĞINI ölçer. Uyarı hep çıkarsa gürültü olur,
+// hiç çıkmazsa kabul edilen risk (eksik rotayla iş emri) sessizleşir.
 // =============================================================================
 
 import { RollStatus, RollEntrySource } from "@prisma/client";
@@ -132,41 +136,49 @@ async function main() {
     );
     check("toplar bağlandı", ok.data?.attached === 2, `attached=${ok.data?.attached}`);
 
-    // ── §2 NEGATİF: mal HAM ise kural hâlâ engeller ─────────────────────────
-    // Kuralın asıl işi bu: renk gerçekten uygulanmayacak, plan hatalı.
-    const h1 = await mkRoll(null);
-    const msg2 = await expectReject(() =>
-      svc.quickStart({ steps, orderLineIds: [lineId], rollBarcodes: [h1] }, undefined),
-    );
     check(
-      "HAM mal + sipariş bağlı + boyahanesiz rota → hâlâ REDDEDİLİR",
-      msg2 !== null && /renk veren/i.test(msg2),
-      msg2 ?? "REDDEDİLMEDİ (muafiyet fazla genişlemiş)",
+      "mal zaten o renkte → UYARI DA ÇIKMAZ (yanlış cümle = gürültü)",
+      (ok.warnings ?? []).length === 0,
+      JSON.stringify(ok.warnings ?? []),
     );
 
-    // ── §3 NEGATİF: KARIŞIK küme (biri boyalı, biri ham) → REDDEDİLİR ───────
-    // "Hepsi" kuralı load-bearing: ham top rengi hiç kazanamaz.
+    // ── §2 HAM mal: iş emri AÇILIR ama UYARI ÇIKAR ──────────────────────────
+    // Kuralın asıl işi burada: renk gerçekten uygulanmayacak. Artık durdurmuyor
+    // (kabul edilen risk), ama sessiz de kalmıyor.
+    const h1 = await mkRoll(null);
+    const r2 = await svc.quickStart({ steps, orderLineIds: [lineId], rollBarcodes: [h1] }, undefined);
+    if (r2.data?.workOrder?.id) woIds.push(r2.data.workOrder.id);
+    check("HAM mal + boyahanesiz rota → iş emri AÇILIR (artık engel yok)", Boolean(r2.success));
+    check(
+      "HAM malda UYARI çıkar ve NE eksik olduğunu SOMUT söyler",
+      (r2.warnings ?? []).some((w) => /renk veren adım/i.test(w) && /ALMAYACAK/.test(w)),
+      JSON.stringify(r2.warnings ?? []),
+    );
+
+    // ── §3 KARIŞIK küme (biri boyalı, biri ham) → UYARI ÇIKAR ───────────────
+    // "Hepsi" kuralı load-bearing: ham top rengi hiç kazanamaz, uyarı MEŞRU.
     const m1 = await mkRoll(color.id);
     const m2 = await mkRoll(null);
-    const msg3 = await expectReject(() =>
-      svc.quickStart({ steps, orderLineIds: [lineId], rollBarcodes: [m1, m2] }, undefined),
-    );
+    const r3 = await svc.quickStart({ steps, orderLineIds: [lineId], rollBarcodes: [m1, m2] }, undefined);
+    if (r3.data?.workOrder?.id) woIds.push(r3.data.workOrder.id);
     check(
-      "KARIŞIK küme (boyalı + ham) → hâlâ REDDEDİLİR",
-      msg3 !== null && /renk veren/i.test(msg3),
-      msg3 ?? "REDDEDİLMEDİ (muafiyet 'hepsi' yerine 'herhangi biri' olmuş)",
+      "KARIŞIK küme (boyalı + ham) → uyarı BASTIRILMAZ",
+      (r3.warnings ?? []).some((w) => /renk veren adım/i.test(w)),
+      JSON.stringify(r3.warnings ?? []),
     );
 
-    // ── §4 NEGATİF: mal bilgisi YOKSA muafiyet de yok ───────────────────────
-    // Masaüstü formu top almaz → düz `create` çağrısı. Davranış eskisiyle aynı
-    // kalmalı; muafiyetin varsayılanı AÇIK olsaydı burası sessizce gevşerdi.
-    const msg4 = await expectReject(() =>
-      svc.create({ steps, orderLineIds: [lineId], targetItemId: item.id, type: "ORDER_PRODUCTION" }, undefined),
+    // ── §4 Mal bilgisi YOKSA bastırma da yok ────────────────────────────────
+    // Masaüstü formu top almaz → düz `create`. Bastırmanın varsayılanı AÇIK
+    // olsaydı burada uyarı sessizce kaybolurdu.
+    const r4 = await svc.create(
+      { steps, orderLineIds: [lineId], targetItemId: item.id, type: "ORDER_PRODUCTION" },
+      undefined,
     );
+    if (r4.data?.id) woIds.push(r4.data.id);
     check(
-      "topsuz create (masaüstü formu) → davranış DEĞİŞMEDİ, reddedilir",
-      msg4 !== null && /renk veren/i.test(msg4),
-      msg4 ?? "REDDEDİLMEDİ (muafiyet mal bilgisi olmadan da uygulanıyor)",
+      "topsuz create → iş emri açılır, uyarı ÇIKAR",
+      Boolean(r4.success) && (r4.warnings ?? []).some((w) => /renk veren adım/i.test(w)),
+      JSON.stringify(r4.warnings ?? []),
     );
 
     // ── §5 Siparişsiz akış bozulmadı ────────────────────────────────────────

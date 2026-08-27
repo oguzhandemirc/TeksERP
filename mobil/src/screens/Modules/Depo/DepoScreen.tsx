@@ -57,17 +57,25 @@ const PAGE_SIZE = 50;
 // Read-only liste + barkod scan + filtre + detay.
 // =============================================================================
 
-// Depo personeli sekmesi: Tümü (depo+ham) / Depo (WAREHOUSE serbest) /
-// Çuvalda (bir çuvala konmuş, sevk edilmemiş) / Ham (STOCK) / Kartela (Swatch).
+// Depo personeli sekmesi: Tümü (depo+ham+yarı mamul) / Depo (WAREHOUSE serbest) /
+// Çuvalda (bir çuvala konmuş, sevk edilmemiş) / Ham / Yarı Mamul / Kartela (Swatch).
 // Diğer sekmeler `shipmentScope:'free'` ile çuvaldakileri eler; IN_SACK sekmesi
 // tam tersine yalnız çuvaldakileri gösterir.
-type ModeFilter = 'ALL' | 'WAREHOUSE' | 'IN_SACK' | 'STOCK' | 'SWATCH' | 'KARTELALIK';
+//
+// ⚠️ "Ham" ve "Yarı Mamul" AYNI statüyü (STOCK) paylaşır — ayıran şey giriş
+// kaynağıdır (2026-08-27). Eskiden tek sekmeydi ve dışarıdan boyalı gelen mal
+// ham kumaşla karışık görünüyordu; masaüstünde de aynı ayrım yapıldı.
+// Ayrım SUNUCUDA: `rollScope=RAW_STOCK_PURE` / `SEMI_FINISHED`. Düz `status`
+// süzgeci ikisini ayıramaz — negasyon jenerik filtre katmanında YOK.
+type ModeFilter =
+  | 'ALL' | 'WAREHOUSE' | 'IN_SACK' | 'STOCK' | 'SEMI_FINISHED' | 'SWATCH' | 'KARTELALIK';
 
 const MODE_TABS: { key: ModeFilter; label: string; color: string }[] = [
   { key: 'ALL', label: 'Tümü', color: '#475569' },
   { key: 'WAREHOUSE', label: 'Depo', color: '#d97706' },
   { key: 'IN_SACK', label: 'Çuvalda', color: '#4338ca' },
   { key: 'STOCK', label: 'Ham', color: '#0ea5e9' },
+  { key: 'SEMI_FINISHED', label: 'Yarı Mamul', color: '#0891b2' },
   { key: 'SWATCH', label: 'Kartela', color: '#7c3aed' },
   { key: 'KARTELALIK', label: 'Kartelalık', color: '#059669' },
 ];
@@ -148,8 +156,9 @@ export default function DepoScreen() {
   // Roll listesi — status filtresi mode'a göre belirlenir. SWATCH modunda
   // bu query enabled=false (kartela ayrı endpoint).
   // ALL sekmesi depo karakterli tüm statüleri kapsar: WAREHOUSE (Tambur sonrası),
-  // A1_STOCK (2. kalite satılabilir),
-  // STOCK (ham). includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
+  // A1_STOCK (2. kalite satılabilir), STOCK (ham + yarı mamul — statü ikisini de
+  // taşır, "Tümü"de ayrım GEREKMEZ, ayrı sekmeler zaten var).
+  // includeFire=true olmadan backend FIRE kaliteleri sessizce gizler.
   const rollsFilters = useMemo<Record<string, string | string[]>>(() => {
     // Çuvalda sekmesi: bir çuvala konmuş (sackId dolu) + sevk edilmemiş toplar
     // (rollScope=IN_SACK). shipmentScope:'free' BİLİNÇLİ verilmez — o, çuvallanmış
@@ -167,7 +176,10 @@ export default function DepoScreen() {
       // (çuvala/sevkiyata okutulmuş) topları eler → çuvaldakiler "Çuvalda" sekmesinde/"Tümü"de.
       f.shipmentScope = 'free';
       if (mode === 'WAREHOUSE') f.status = 'WAREHOUSE';
-      else if (mode === 'STOCK') f.status = 'STOCK';
+      // ⚠️ `status:'STOCK'` DEĞİL: o, yarı mamulü de kapsar. İki dar kapsam
+      // sunucuda yaşıyor; `status:'ALL'` varsayılan STOCK süzgecini kaldırır.
+      else if (mode === 'STOCK') { f.rollScope = 'RAW_STOCK_PURE'; f.status = 'ALL'; }
+      else if (mode === 'SEMI_FINISHED') { f.rollScope = 'SEMI_FINISHED'; f.status = 'ALL'; }
       else if (mode === 'KARTELALIK') {
         f.statusIn = ['WAREHOUSE', 'A1_STOCK', 'STOCK'];
         f.markedForKartela = 'true';

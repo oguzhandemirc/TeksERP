@@ -24,8 +24,38 @@ async function main() {
   check("includeQueues=true hatasız döndü", full.success === true);
   const d = full.data;
   check(
-    "6 kolon da mevcut",
-    !!d && ["hamStok", "fason", "kursun", "tambur", "depo", "sevk"].every((k) => k in d),
+    "7 kolon da mevcut",
+    !!d && ["hamStok", "yariMamul", "fason", "kursun", "tambur", "depo", "sevk"].every((k) => k in d),
+  );
+
+  // ── Kolon TANIMI Envanter sekmeleriyle BİREBİR olmalı ────────────────────
+  // Bu bekçi eskiden yalnız anahtarların VARLIĞINI ölçüyordu, SAYI SEMANTİĞİNİ
+  // değil — pano ile Envanter aynı adı taşıyıp farklı rakam basabilirdi ve
+  // 2026-08-27'ye kadar bastı da (kolonda `currentStepId` koşulu yoktu).
+  const [rawShelf, semiShelf, strayStock] = await Promise.all([
+    prisma.roll.count({
+      where: { status: "STOCK", currentStepId: null, entrySource: { not: "SEMI_FINISHED" } },
+    }),
+    prisma.roll.count({
+      where: { status: "STOCK", currentStepId: null, entrySource: "SEMI_FINISHED" },
+    }),
+    // Adıma bağlı STOCK topu — anomali. Varsa panonun eski hâli onu sayardı,
+    // Envanter saymazdı; kontrolün ayırt ediciliği tam da buradan geliyor.
+    prisma.roll.count({ where: { status: "STOCK", currentStepId: { not: null } } }),
+  ]);
+  check(
+    "Ham Stok kolonu = Envanter 'Ham Stok' sekmesi (raftaki, yarı mamul HARİÇ)",
+    d?.hamStok.total === rawShelf,
+    `pano=${d?.hamStok.total} envanter=${rawShelf} (adıma bağlı STOCK: ${strayStock})`,
+  );
+  check(
+    "Yarı Mamul kolonu = Envanter 'Yarı Mamul' sekmesi",
+    d?.yariMamul.total === semiShelf,
+    `pano=${d?.yariMamul.total} envanter=${semiShelf}`,
+  );
+  check(
+    "iki kolon ÖRTÜŞMEZ (aynı top iki kez sayılmıyor)",
+    (d?.hamStok.rolls ?? []).every((r) => !(d?.yariMamul.rolls ?? []).some((x) => x.id === r.id)),
   );
   check(
     "kuyruk kartları workOrderNumber taşıyor (İE…)",

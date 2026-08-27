@@ -33,7 +33,7 @@ const DEAD_LABEL_STATUSES = new Set<string>([
  */
 function rollProcessingState(
   roll: Roll,
-): "ham" | "isleniyor" | "acik" | "bitmis" | "arsiv" {
+): "ham" | "yarimamul" | "isleniyor" | "acik" | "bitmis" | "arsiv" {
   if (
     roll.status === RollStatus.TAMBUR_CONSUMED ||
     roll.status === RollStatus.SUBCONTRACTOR_CONSUMED ||
@@ -58,6 +58,15 @@ function rollProcessingState(
   if (roll.parentReceiptId) {
     return "acik";
   }
+  // YARI MAMUL — dışarıdan boyalı/işlenmiş gelen mal (2026-08-27).
+  // ⚠️ Bu dal STOCK kontrolünden ÖNCE olmak ZORUNDA: aşağıdaki "renk varsa
+  // bitmiş" sezgisi yarı mamulü **"Bitmiş"** gösteriyordu — mal daha kurşun ve
+  // tambur görecekken. Sezginin kendisi doğru (renkli ham kumaş olmaz), yalnız
+  // altıncı giriş kaynağını tanımıyordu; backend'deki `entryTitle` switch'i ve
+  // mobil KK1 listesi de aynı sınıf hatayı taşıyordu.
+  if (roll.entrySource === "SEMI_FINISHED") {
+    return "yarimamul";
+  }
   if (roll.status === RollStatus.STOCK) {
     return roll.colorId ? "bitmis" : "ham";
   }
@@ -67,6 +76,7 @@ function rollProcessingState(
 
 const processingLabels: Record<ReturnType<typeof rollProcessingState>, string> = {
   ham: "Ham",
+  yarimamul: "Yarı Mamul",
   isleniyor: "İşleniyor",
   acik: "Açık Kumaş",
   bitmis: "Bitmiş",

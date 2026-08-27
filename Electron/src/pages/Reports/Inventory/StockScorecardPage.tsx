@@ -109,7 +109,9 @@ export function StockScorecardPage() {
         </div>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+      {/* ⚠️ 5 kart lg'de (1024px) SIKIŞIYOR — ölçüldü: "9283,8 m" iki satıra
+          kırılıyordu. Beşli sıra yalnız xl'den (1280px) itibaren; arada üçlü. */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <MetricCard
           label="Ölü stok"
           value={`${fmtNum(sc?.summary.deadQty)} m`}

@@ -137,6 +137,22 @@ function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
 /**
  * "Bu rota hedef rengi/özelliği UYGULAYABİLİR mi?" — create ve replace ORTAK.
  *
+ * ⚠️ 2026-08-27: ARTIK REDDETMİYOR, UYARIYOR — ve bu, aynı soruya iki farklı
+ * cevap veren bir ayrışmayı kapatıyor. 2026-08-21'de "Rengi Değiştir" yolu
+ * (`workorder-target-color.helper`) *"Rota kapsaması — REDDETME, UYAR"* kararıyla
+ * yeniden yazılmıştı; oluşturma yolu 400 vermeye devam ediyordu. Yani MEVCUT bir
+ * iş emrinin rengini değiştirmek uyarıyla geçiyor, YENİ bir iş emri açmak aynı
+ * durumda duruyordu.
+ *
+ * Sektör dayanağı: rota/iş planı eksikliği ERP'lerde tipik olarak uyarıdır
+ * (SAP PP: yönlendirme uyarısı üretim emrini durdurmaz), planlamacı bilinçli
+ * geçebilir. Sert kapının bedeli ölçüldü: dışarıdan boyalı gelen kumaşa yalnız
+ * kurşun+tambur yapılacak meşru senaryoyu tamamen engelliyordu.
+ *
+ * ⚠️ KABUL EDİLEN RİSK (kullanıcı kararı): eksik rotayla iş emri açılabilir.
+ * Bu yüzden uyarı metni NE eksik olduğunu ve SONUCUNU somut söyler — "rota
+ * uygun değil" gibi genel bir cümle planlamacıya ne yapacağını söylemez.
+ *
  * ⚠️ 2026-08-10'da SORU DEĞİŞTİ. Eskisi *"rotada fason kategorisi var mı"* diye
  * soruyordu ve tümü İÇ istasyonlardan oluşan bir rotayı, istasyonlar o işi
  * yapabilse bile 400 ile reddediyordu ("Hedef renk veya özellik seçildi ama
@@ -152,10 +168,10 @@ function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
  * edilip replace'te reddedilirdi (2026-08-02'de özellik kapsamasında tam bu
  * asimetri yaşandı).
  */
-async function assertRouteCoversTargets(
+async function collectRouteCoverageWarnings(
   steps: { stationId: string; requiredCategoryId?: string | null }[],
   need: { color: boolean; property: boolean },
-): Promise<void> {
+): Promise<string[]> {
   const stationIds = [...new Set(steps.map((s) => s.stationId).filter(Boolean))];
   const categoryIds = [
     ...new Set(steps.map((s) => s.requiredCategoryId).filter((c): c is string => !!c)),
@@ -189,18 +205,25 @@ async function assertRouteCoversTargets(
       pick(stById.get(s.stationId), s.requiredCategoryId ? catById.get(s.requiredCategoryId) : undefined),
     );
 
+  // ⚠️ UYARI, RED DEĞİL (2026-08-27 kullanıcı kararı). Gerekçe aşağıdaki blok
+  // yorumunda; metin SOMUT olmak zorunda ("rotada renk veren adım yok" + sonucu),
+  // "rota uygun değil" gibi genel bir cümle planlamacıya ne yapacağını söylemez.
+  const warnings: string[] = [];
   if (need.color && !can(stepCanApplyColor)) {
-    throw AppError.badRequest(
-      "Rotada 'renk veren' bir adım yok. Hedef rengin uygulanabilmesi için renk uygulayan " +
-        "bir istasyon (ör. boyahane) ya da renk veren bir fason adımı eklenmelidir.",
+    warnings.push(
+      "Rotada renk veren adım (boyahane) yok — toplar hedef rengi kendiliğinden ALMAYACAK. " +
+        "Mal zaten boyalı geliyorsa sorun değil; boyanacaksa rotaya renk uygulayan bir istasyon " +
+        "ya da renk veren bir fason adımı ekleyin.",
     );
   }
   if (need.property && !can(stepCanApplyProperty)) {
-    throw AppError.badRequest(
-      "Rotada 'özellik veren' bir adım yok. Hedef özelliklerin uygulanabilmesi için özellik " +
-        "uygulayan bir istasyon ya da fason adımı eklenmelidir.",
+    warnings.push(
+      "Rotada özellik veren adım yok — toplar hedef özellikleri kendiliğinden ALMAYACAK. " +
+        "Mal bu özelliklerle geliyorsa sorun değil; uygulanacaksa rotaya özellik uygulayan bir " +
+        "istasyon ya da fason adımı ekleyin.",
     );
   }
+  return warnings;
 }
 
 // =============================================================================
@@ -811,6 +834,8 @@ export class WorkOrderService {
     //    (yoksa renk asla uygulanmaz → planlama hatası).
     // 4) targetProperties dolu ise, rotada appliesProperty=true en az bir adım olmalı
     //    (simetrik kural — özellik asla uygulanmaz aksi halde).
+    /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
+    const routeWarnings: string[] = [];
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     if (
       targetPropertyIds.length === 0 &&
@@ -880,22 +905,18 @@ export class WorkOrderService {
         }
       }
 
-      // "Renk veren" / "Özellik veren" adım var mı? (rota uygunluk kontrolü)
+      // "Renk veren" / "Özellik veren" adım var mı? — UYARI üretir, reddetmez
+      // (gerekçe: `collectRouteCoverageWarnings` başlığı).
       //
-      // ⚠️ MAL ZATEN ÖYLE GELİYORSA KAPI AÇILIR (2026-08-27, saha bulgusu).
+      // ⚠️ MAL ZATEN ÖYLE GELİYORSA UYARI DA ÇIKMAZ. Uyarının söylediği şey
+      // "toplar bu niteliği kendiliğinden almayacak"tır; nitelik eldeki topların
+      // HEPSİNDE zaten varsa bu cümle yanlıştır ve gürültü olur (okunmayan uyarı,
+      // olmayan uyarıdan kötüdür). Dışarıdan boyalı gelen kumaşa yalnız
+      // kurşun+tambur yapılacak senaryonun tam karşılığı.
       //
-      // Kuralın gerekçesi "hedef asla uygulanmaz → planlama hatası"dır. Ama sipariş
-      // bağlanınca hedef renk/özellik SİPARİŞTEN TÜRETİLİR (yukarıda, `resolvedTargetColorId`)
-      // — yani planlamacının bir beyanı değil, müşterinin ne istediğidir. Dışarıdan
-      // boyalı gelen kumaşa yalnız kurşun+tambur yapılacaksa rotada boyahane OLMAMASI
-      // doğrudur ve eldeki mal zaten o renktedir; uygulanacak bir şey yoktur.
-      // Sahada bu, "sipariş bağlarsam hata veriyor, siparişsiz açınca geçiyor" olarak
-      // görünüyordu.
-      //
-      // Muafiyet BİLEREK DAR: nitelik topların **HEPSİNDE** olmalı. Bir kısmında
-      // eksikse o toplar niteliği hiç kazanamaz — kural orada hâlâ gerçek bir
-      // planlama hatasını yakalıyor. Mal bilgisi yoksa (masaüstü formu top almaz)
-      // muafiyet de yok, davranış eskisi gibi.
+      // "HEPSİ" load-bearing: bir kısmında eksikse o toplar niteliği hiç
+      // kazanamaz → uyarı MEŞRU, bastırılmaz. Mal bilgisi yoksa (masaüstü formu
+      // top almaz) bastırma da yok.
       const rollCount = goods?.colorIds.length ?? 0;
       const colorAlreadyOnGoods =
         rollCount > 0 &&
@@ -909,10 +930,12 @@ export class WorkOrderService {
       const uncoveredProps = targetPropertyIds.filter((pid) => !propsAlreadyOnGoods.has(pid));
 
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
-        await assertRouteCoversTargets(finalSteps, {
-          color: !!resolvedTargetColorId && !colorAlreadyOnGoods,
-          property: uncoveredProps.length > 0,
-        });
+        routeWarnings.push(
+          ...(await collectRouteCoverageWarnings(finalSteps, {
+            color: !!resolvedTargetColorId && !colorAlreadyOnGoods,
+            property: uncoveredProps.length > 0,
+          })),
+        );
       }
 
       // ── Özellik başına rota kapsaması ────────────────────────────────────
@@ -1104,6 +1127,10 @@ export class WorkOrderService {
       success: true,
       data: workOrder,
       message: `İş emri oluşturuldu: ${workOrder.workOrderNumber}`,
+      // Engel olmayan planlama notları (örn. "rotada renk veren adım yok").
+      // `update` yolu bunu 2026-08-21'den beri döndürüyordu; oluşturma yolu
+      // aynı durumu 400 ile reddettiği için hiç ihtiyaç duymamıştı.
+      ...(routeWarnings.length > 0 ? { warnings: routeWarnings } : {}),
     };
   }
 
@@ -1428,6 +1455,10 @@ export class WorkOrderService {
         (errors.length ? `, ${errors.length} top bağlanamadı.` : ".") +
         (dispatch ? ` Fasona sevk edildi: ${dispatch.dispatchNo}.` : "") +
         (dispatchWarning ? ` ${dispatchWarning}` : ""),
+      // `create`'in rota kapsaması uyarıları BURADAN GEÇMEK ZORUNDA — yoksa
+      // tablet iş emrini açar ve "rotada renk veren adım yok" notu yolda kaybolur
+      // (uyarıya çevirmenin tüm anlamı o notun görünmesiydi).
+      ...(createRes.warnings?.length ? { warnings: createRes.warnings } : {}),
     };
   }
 
@@ -5096,6 +5127,8 @@ export class WorkOrderService {
     }
 
     // ── targetProperties doğrulaması ─────────────────────────────────────────
+    /** Engel olmayan planlama notları — yanıtta `warnings` olarak döner. */
+    const replaceWarnings: string[] = [];
     let targetPropertyIds = [...new Set(data.targetPropertyIds ?? [])];
     if (
       targetPropertyIds.length === 0 &&
@@ -5163,10 +5196,32 @@ export class WorkOrderService {
       }
 
       if (resolvedTargetColorId || targetPropertyIds.length > 0) {
-        await assertRouteCoversTargets(finalSteps, {
-          color: !!resolvedTargetColorId,
-          property: targetPropertyIds.length > 0,
+        // `replace` de UYARIR, reddetmez — "tek kural" (2026-08-27). Bu yol
+        // üçüncü bir kapıydı: create 400 veriyordu, "Rengi Değiştir" uyarıyordu,
+        // replace de 400 veriyordu. Üçü de aynı soruyu soruyor.
+        //
+        // Mal bilgisi BURADA canlıdan okunur (create'te çağıran verir): iş emrine
+        // bağlı toplar zaten hedef rengi taşıyorsa uyarı YANLIŞ olurdu.
+        const attachedRolls = await prisma.roll.findMany({
+          where: { currentStep: { workOrderId: id } },
+          select: { colorId: true, properties: { select: { propertyId: true } } },
         });
+        const colorOnGoods =
+          attachedRolls.length > 0 &&
+          !!resolvedTargetColorId &&
+          attachedRolls.every((r) => r.colorId === resolvedTargetColorId);
+        const uncoveredProps =
+          attachedRolls.length > 0
+            ? targetPropertyIds.filter(
+                (pid) => !attachedRolls.every((r) => r.properties.some((p) => p.propertyId === pid)),
+              )
+            : targetPropertyIds;
+        replaceWarnings.push(
+          ...(await collectRouteCoverageWarnings(finalSteps, {
+            color: !!resolvedTargetColorId && !colorOnGoods,
+            property: uncoveredProps.length > 0,
+          })),
+        );
       }
     }
 
@@ -5528,6 +5583,7 @@ export class WorkOrderService {
       success: true,
       data: updated,
       message: `İş emri güncellendi: ${updated.workOrderNumber}`,
+      ...(replaceWarnings.length > 0 ? { warnings: replaceWarnings } : {}),
     };
   }
 
