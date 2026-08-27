@@ -27,6 +27,29 @@ bile kapıda kalır ve indirecek bir şey olmadığı için ÇIKAMAZDI (kendi ke
 kurtaramayan tek arıza biçimi). ⚠️ Yalnız GERÇEK bir kırılmada yükselt; her
 sürümde artırmak, güncellemeyi indirememiş her makineyi üretim dışı bırakır.
 
+### ⚠️ TETİK — şu değişiklikleri yaparken DUR ve `minVersion`'ı değerlendir
+
+Aşağıdakilerden birini yapıyorsan, işi bitirmeden önce "sahadaki eski istemci bu
+değişiklikten sonra ne yapar?" sorusunu **açıkça** cevapla:
+
+| Değişiklik | Eski istemcide ne olur |
+|---|---|
+| Bir uç **kaldırıldı** ya da yolu değişti | 404 — görünür hata, ama akış durur |
+| Yanıt alanının **adı** değişti / alan kaldırıldı | ⚠️ Alan sessizce `undefined` olur; ekran boş/0 gösterir, **kimse fark etmez** |
+| Alanın **tipi/birimi** değişti (string→number, m→cm) | ⚠️ Sessiz yanlış hesap — en tehlikelisi |
+| **Zorunlu** bir istek parametresi eklendi | 400 — eski istemci o işlemi hiç yapamaz |
+| Enum'a değer eklendi | Eski istemci onu tanımaz (bu repoda beş kez yaşandı: "altıncı enum değeri unutuldu") |
+| Yetki/izin kodu bir uçta zorunlu oldu | 403 — kullanıcı sebebi anlamaz |
+
+Cevap "eski istemci bozulur" ise `minVersion` yükseltilir. Cevap "eski istemci
+etkilenmez" ise **DOKUNMA** — her sürümde artırmak, güncellemeyi henüz
+indirememiş her makineyi üretim dışı bırakır.
+
+⚠️ **Sıra:** önce yeni istemci sürümü YAYINLANIR, sonra `minVersion` yükseltilmiş
+backend deploy edilir. Ters sırada her makine kapıyı görür ve indirecek bir şey
+olmadığı için çıkamaz. Ayrıntı ve örnek:
+`docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md` → "`minVersion`'a ne zaman dokunulur".
+
 Bekçi: `scripts/test_client_policy.ts` (kayıt defterindeki HER girdiyi kapsar).
 Sahaya çıkarma reçetesi: kök `CLAUDE.md` → "Sürüm Yayınlama".
 

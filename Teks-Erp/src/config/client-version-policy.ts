@@ -25,6 +25,23 @@
 // yanıt yüzünden fabrikanın tüm panellerinin çalışmaz hale gelmesidir.
 // =============================================================================
 
+/**
+ * Sunucunun tek bakışta okunabilir sürüm beyanı:
+ * "Ben şu API sürümüyüm ve şu istemcilerden şunları bekliyorum."
+ *
+ * Neden tek yanıtta: eskiden API sürümü `/health`te, beklentiler
+ * `/client-policy/:istemci`te ayrı ayrı duruyordu — "2.9.0 yayında, panelden
+ * 2.8.1, tabletten 2.9.8 bekliyor" cümlesini kurmak için üç ayrı istek ve elle
+ * birleştirme gerekiyordu. Uyum bir İLİŞKİDİR; ilişkinin iki ucu ayrı yerlerde
+ * durursa kimse bütünü görmez.
+ */
+export interface VersionManifest {
+  /** Bu backend'in sürümü (package.json). */
+  apiVersion: string;
+  /** İstemci kodu → politika. */
+  clients: Record<string, ClientVersionPolicy>;
+}
+
 export interface ClientVersionPolicy {
   /**
    * Bu backend'in çalışabildiği EN DÜŞÜK panel sürümü. Altındaki panel

@@ -81,6 +81,11 @@ check("uç PARAMETRELİ (yeni istemci route'a değil kayıt defterine yazılır)
   routeTs.includes('router.get("/:istemci"'));
 check("tanımsız istemci 404 (fail-open okunur; boş politika DEĞİL)",
   routeTs.includes("status(404)"));
+check("künye ucu var (GET /api/client-policy — API sürümü + TÜM istemciler)",
+  routeTs.includes('router.get("/"'));
+check("künye API sürümünü taşıyor", routeTs.includes("apiVersion: APP_VERSION"));
+check("tekil yanıt da apiVersion taşıyor (ikinci istek gerekmesin)",
+  routeTs.includes("apiVersion: APP_VERSION, ...policy"));
 
 console.log("\n§5 — Kayıt defteri");
 check("electron kayıtlı", CLIENT_VERSION_POLICIES.electron === ELECTRON_VERSION_POLICY);

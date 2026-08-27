@@ -314,6 +314,64 @@ artınca eski APK'lı tabletler hiç OTA almaz ve eski JS yeni backend'e karşı
 süresiz koşar. Uç parametreli olduğu için mobil bağlanmak istediğinde yalnız
 kayıt defterine bir satır + istemci kodu gerekir.
 
+### `minVersion`'a ne zaman dokunulur — iki durum
+
+`Teks-Erp/src/config/client-version-policy.ts` iki farklı iş yapan iki alan
+taşır. Karıştırmak pahalı:
+
+```ts
+export const ELECTRON_VERSION_POLICY = {
+  minVersion:     "2.8.1",   // ZORUNLU eşik — altındaki panel KİLİTLENİR
+  currentVersion: "2.8.2",   // yalnız bilgi — "yayında ne var"
+  message: "…",              // opsiyonel — kapı açılınca operatöre ne yazsın
+};
+```
+
+**Durum 1 — sıradan geliştirme (vakaların çoğu): `minVersion`'a DOKUNMA.**
+Yeni ekran, yeni rapor, yeni uç. Eski panel bunları çağırmıyor, çalışmaya devam
+ediyor ve otomatik güncellemeyle zaten birkaç saat içinde yeni sürüme geçiyor.
+`currentVersion`'ı güncellemek isteğe bağlıdır (bilgi amaçlı).
+
+**Durum 2 — sözleşmeyi kırdın: `minVersion`'ı yükselt.**
+Bir uç kaldırıldı · yol değişti · yanıt alanının adı/şekli değişti · zorunlu bir
+parametre eklendi. Eski istemci bunu çağırınca ya hata alır ya da **sessizce
+yanlış davranır** (alan düşer, ekranda boş görünür) — ikincisi en tehlikelisidir,
+çünkü kimse fark etmez.
+
+### ⚠️ Sıra pazarlık dışı
+
+```
+1. Yeni istemci sürümünü YAYINLA   (paketle + yayınla — indirilebilir OLSUN)
+2. SONRA backend'i minVersion yükseltilmiş haliyle deploy et
+```
+
+Ters yapılırsa: backend "2.9.0 istiyorum" der, yayında 2.9.0 yoktur ve **her
+makine kapıyı görür, indirecek bir şey olmadığı için çıkamaz.** Bekçi
+(`scripts/test_client_policy.ts`) bunun bir kısmını yakalar — `minVersion`,
+`Electron/package.json` sürümünden büyük olamaz — ama paketin gerçekten YAYINDA
+olup olmadığına bakmaz. O sıra insana aittir.
+
+**Örnek:** `/api/orders` yanıtından bir alan kaldırıldı, panel 2.9.0'da yeni
+alana geçti.
+
+```bash
+# 1) Önce panel yayına
+./deploy/electron-paketle.sh adnansahin 2.9.0 && ./deploy/electron-yayinla.sh
+```
+```ts
+// 2) Sonra politika + backend deploy
+minVersion: "2.9.0",   // eskiden 2.8.1
+message: "Sipariş ekranı yenilendi; eski sürüm listeyi eksik gösteriyor.",
+```
+
+**Mobil aynı dosyada ama İKİ EKSENLİ** (`minVersion` + `minPaketTarihi`): tablette
+JS düzeltmesi APK sürümünü değiştirmeden gider, dolayısıyla tek sayı "şu tarihli
+paketten yeni ol" diyemez. `minPaketTarihi` bugün BOŞ (kimseyi kilitlemiyor);
+doldurmadan önce o tarihi karşılayan paketin yayında olması şarttır.
+
+**Emin değilsen dokunma.** Otomatik güncelleme zaten herkesi kısa sürede yeni
+sürüme taşıyor; `minVersion` o mekanizmanın YETMEDİĞİ durumlar için acil frendir.
+
 ## Operatör ne görüyor — güncelleme ZORUNLUDUR
 
 Kullanıcı kararı (2026-08-26): güncelleme ertelenemez. Akış iki aşamalı:
