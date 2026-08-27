@@ -16,6 +16,20 @@ düzenleme** — bekçi drift'i yakalar ve paketleme durur.
 
 ---
 
+## Kim yazar
+
+**Taslağı Claude yazar, kullanıcı onaylar.** Sürüm çıkarma isteği geldiğinde
+akış şudur:
+
+1. Claude o turda ne yapıldığını operatör diline çevirip taslağı **sunar**
+2. Kullanıcı okur, düzeltir ya da onaylar
+3. Onaydan sonra kayıt dosyaya yazılır ve paketlemeye geçilir
+
+⚠️ Onay alınmadan paketleme adımına geçilmez. Notu okuyacak olan fabrika
+çalışanıdır; bir maddenin gerçekten öyle görünüp görünmediğini ancak sahayı
+bilen kişi teyit edebilir. Kapı yalnız notun VAR olduğunu denetler, DOĞRU
+olduğunu değil.
+
 ## Not yazma kuralları
 
 **Okuyucu fabrika çalışanı.** Teknik terim yok; bekçi bunu mekanik olarak

@@ -153,6 +153,10 @@ kendileri indirir. Elden setup/APK taşıma YOK — reçeteler:
 
 ```bash
 # 0) NOTU YAZ — her yayın turunda ŞART (kapı: not yoksa paketleme DURUR)
+#    ⚠️ TASLAĞI CLAUDE YAZAR, KULLANICI ONAYLAR. Sürüm çıkarma isteği geldiğinde
+#    önce o turda ne yapıldığını operatör diline çevirip kullanıcıya SUN; onay
+#    almadan paketleme adımına geçme. Notu okuyacak olan fabrika çalışanıdır,
+#    doğruluğunu ancak kullanıcı teyit edebilir.
 #    surum-notlari.json'a kayıt ekle → operatör diliyle, kapsam etiketli
 node scripts/surum-notlari-kopyala.mjs      # panel + tablet paketlerine kopyala
 node scripts/check-surum-notlari.mjs        # şema + dil + kopya denetimi
