@@ -114,9 +114,11 @@ export function OrderIntakePage() {
         <SimpleLineChart
           data={oi?.daily ?? []}
           xKey="day"
+          // Adet SAĞ eksende: metraj binlerle, adet birlerle ölçülür — tek
+          // eksende adet çizgisi dibe yapışıp görünmez oluyordu (ölçüldü).
           lines={[
             { key: "qty", label: "Metraj (m)" },
-            { key: "orderCount", label: "Sipariş" },
+            { key: "orderCount", label: "Sipariş", axis: "right" },
           ]}
           formatValue={(v) => fmtNum(v)}
         />

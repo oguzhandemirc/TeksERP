@@ -177,7 +177,11 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
       {/* Login ekranı tüm pencereyi `app-drag` yapıyor; portal'lanan dialog o
           OS-seviyesi sürükleme dikdörtgenine düştüğü için tıklamalar yutuluyor.
           `app-no-drag` ile dialog içini yeniden etkileşimli yapıyoruz. */}
-      <DialogContent className="max-w-lg app-no-drag">
+      {/* ⚠️ GENİŞLİK ALT SIRAYA GÖRE: burada DÖRT aksiyon var (Varsayılana dön ·
+          Ağda Bul · Bağlantıyı Test Et · Kaydet) ve etiketleri çalışırken UZUYOR
+          ("Aranıyor…", "Test ediliyor…"). `max-w-lg` (512px) içine sığmıyordu →
+          modal yatay kayıyordu (saha bildirimi 2026-08-27). */}
+      <DialogContent className="max-w-2xl app-no-drag">
         <DialogHeader>
           <DialogTitle>Sunucu Adresi</DialogTitle>
           <DialogDescription>
@@ -317,7 +321,10 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:justify-between">
+        {/* `flex-wrap`: dar pencerede/uzun etiketlerde alt sıra KAYMAK yerine
+            alta sarar. Genişlik tek başına yeterli değil — buton metinleri
+            duruma göre değiştiği için sabit bir genişlik her hali kapsayamaz. */}
+        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
           <Button
             type="button"
             variant="ghost"

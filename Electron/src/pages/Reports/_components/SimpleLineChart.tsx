@@ -5,6 +5,16 @@ interface LineDef {
   key: string;
   label: string;
   color?: string;
+  /**
+   * İKİNCİ EKSEN (opsiyonel). Farklı BİRİMDEKİ iki seriyi tek eksende çizmek
+   * küçük olanı dibe yapıştırır: Sipariş Karnesi'nde metraj ~5500'e çıkarken
+   * sipariş adedi 1–3 olduğu için adet çizgisi görünmez oluyordu (ölçüldü).
+   * Farklı birimler → ayrı eksen, ERP/BI standardı.
+   *
+   * ⚠️ Hiçbir seri `"right"` demezse eksen kimliği HİÇ üretilmez — mevcut
+   * çağıranların (Sevk & Termin karnesi) çıktısı birebir aynı kalır.
+   */
+  axis?: "left" | "right";
 }
 
 interface Props<T> {
@@ -24,13 +34,30 @@ export function SimpleLineChart<T>({
 }: Props<T>) {
   const valueFmt = formatValue ? (v: unknown) => formatValue(Number(v)) : undefined;
   const catFmt = formatCategory ? (v: unknown) => formatCategory(String(v)) : undefined;
+  const dual = lines.some((l) => l.axis === "right");
 
   return (
     <ResponsiveContainer width="100%" height="100%">
       <LineChart data={data} margin={{ top: 6, right: 12, left: 0, bottom: 6 }}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
         <XAxis dataKey={xKey} tickFormatter={catFmt} fontSize={11} stroke="hsl(var(--muted-foreground))" />
-        <YAxis tickFormatter={valueFmt} fontSize={11} stroke="hsl(var(--muted-foreground))" />
+        <YAxis
+          {...(dual ? { yAxisId: "left" } : {})}
+          tickFormatter={valueFmt}
+          fontSize={11}
+          stroke="hsl(var(--muted-foreground))"
+        />
+        {dual && (
+          // Sağ eksen SAYAÇ içindir — biçimlendirici uygulanmaz (metraj
+          // biçimi adet sütununa yanlış birim yazardı).
+          <YAxis
+            yAxisId="right"
+            orientation="right"
+            fontSize={11}
+            stroke="hsl(var(--muted-foreground))"
+            allowDecimals={false}
+          />
+        )}
         <Tooltip
           contentStyle={{
             background: "hsl(var(--popover))",
@@ -47,6 +74,7 @@ export function SimpleLineChart<T>({
             type="monotone"
             dataKey={l.key}
             name={l.label}
+            {...(dual ? { yAxisId: l.axis ?? "left" } : {})}
             stroke={l.color ?? CHART_COLORS[idx % CHART_COLORS.length]}
             strokeWidth={2}
             dot={{ r: 2 }}

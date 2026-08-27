@@ -23,6 +23,20 @@
 // okunamaz. Bunu ölçmek istersek iptal anında sayıyı DONDURMAK gerekir; bugün
 // vekil ölçü `daysToCancel` + `afterShipmentCount`.
 //
+// ── KAPSAM DIŞI: "DEĞİŞİKLİK GEÇMİŞİ" (karar, 2026-08-27) ──────────────────
+// Bu raporun planlanan ikinci yarısı ("sipariş sonrası ne değişti") BİLEREK
+// yazılmadı — eksik değil, ölçülüp vazgeçilmiş bir karardır:
+//   ① Gerçek siparişlerdeki 29 `ORDER UPDATE` audit kaydının HEPSİNDE `changes`
+//      kolonu NULL → alan bazlı değişiklik çıkarılamıyor.
+//   ② Plan sapmalarının ZATEN kendi karnesi var (`plan-deviation-scorecard`) —
+//      o yarı tekrar olurdu.
+//   ③ Geriye kalan tek ölçülebilir şey "kaç sipariş düzenlendi" sayacıydı ve
+//      iptal oranı ZATEN Sipariş Karnesi'nde.
+// Boş sütunlu bir rapor yüzeyi eklemek yanıltıcı olurdu (2026-08-09'da tam bu
+// sebeple iki rapor kaldırılmıştı). İleride istenirse ÖN KOŞUL: `AuditService`in
+// ORDER UPDATE'te `changes` alanını doldurması. Tam not:
+// docs/history/CLAUDE-NOT-ARSIVI.md → 2026-08-27 sipariş görünürlüğü.
+//
 // ⚠️ DAMGASIZ ESKİ İPTALLER: `cancelledAt` bu tarihte eklendi; öncesinde iptal
 // edilmiş siparişlerde NULL'dur ve dönem raporuna GİRMEZ. Sayıları ayrıca
 // döner (`undatedCancelCount`) — sessizce yok sayılmaları "geçmişte hiç iptal

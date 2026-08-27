@@ -90,6 +90,31 @@ describe("CommandPalette", () => {
     expect(openTab).toHaveBeenCalledWith("/system/settings?tab=production");
   });
 
+  /**
+   * SIRALAMA — tam ad eşleşmesi HER ZAMAN kazanır.
+   *
+   * Ölçülen arıza (2026-08-27): filtre 1/0 döndüğü için eşleşen her kayıt aynı
+   * puanı alıyordu ve sırayı DOM belirliyordu. "Müşteri Karnesi" yazan kullanıcı
+   * Enter'a basınca "Sipariş İptal Karnesi" açılıyordu — o kaydın AÇIKLAMASINDA
+   * "Müşteriler…" geçiyor ve listede daha yukarıda duruyor. Bir palette, tam adı
+   * yazılan sayfayı açmıyorsa palet değildir.
+   */
+  it("tam ad eşleşmesi ilk sırada — açıklamadan eşleşen kaydın ÖNÜNDE", async () => {
+    permissions = ["report:sales", "report:customer"];
+    open();
+    type("müşteri karnesi");
+
+    const items = await screen.findAllByRole("option");
+    const labels = items.map((el) => el.textContent ?? "");
+    // İkisi de eşleşmeli (küme değişmedi) ...
+    expect(labels.some((l) => l.includes("Müşteri Karnesi"))).toBe(true);
+    expect(labels.some((l) => l.includes("Sipariş İptal Karnesi"))).toBe(true);
+    // ... ama SIRA: tam ad önce.
+    const exact = labels.findIndex((l) => l.includes("Müşteri Karnesi"));
+    const viaDescription = labels.findIndex((l) => l.includes("Sipariş İptal Karnesi"));
+    expect(exact).toBeLessThan(viaDescription);
+  });
+
   it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {
     open();
     fireEvent.click(screen.getByText("Nerede Takıldı (WIP)"));
