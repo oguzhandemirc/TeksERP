@@ -384,6 +384,26 @@ function main() {
   bilgi(`Uygulama sürümü   : ${e.version} (vc ${e.android?.versionCode})`);
   console.log('');
 
+  // --- SÜRÜM NOTU KAPISI --------------------------------------------------
+  // Not yazılmadan sürüm çıkmaz (kullanıcı kararı). Bekçi ayrıca kopyaların
+  // taze olduğunu ve dilin operatör dili kaldığını da denetler.
+  //
+  // ⚠️ DAİRESEL DEĞİL: beklenen sürüm app.json'dan OKUNUP bekçiye ARGÜMAN
+  // olarak verilir; not dosyası onu üretmez, yalnız doğrular. Hiçbir script
+  // `surumler.tablet` alanını app.json'dan okuyup YAZMAMALI — yazsaydı kapı
+  // kendi yazdığını doğrular, yani hiçbir şey doğrulamazdı.
+  {
+    const bekci = path.join(PROJECT_ROOT, '..', 'scripts', 'check-surum-notlari.mjs');
+    const r = spawnSync(process.execPath, [bekci, `--tablet=${e.version}`], { stdio: 'inherit' });
+    if (r.status !== 0) {
+      dur(`Sürüm notu kapısı kırmızı.
+  ${e.version} için operatör notu yok ya da not kuralları ihlal edilmiş.
+  1) surum-notlari.json'a bu sürüm için kayıt ekle
+  2) node scripts/surum-notlari-kopyala.mjs
+  3) komutu tekrarla`);
+    }
+  }
+
   const { simdiki: parmakIzi } = parmakIziKapisi(runtimeVersion);
 
   if (SADECE_KONTROL) {

@@ -152,6 +152,11 @@ kendileri indirir. Elden setup/APK taşıma YOK — reçeteler:
 [`docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md`](docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md)
 
 ```bash
+# 0) NOTU YAZ — her yayın turunda ŞART (kapı: not yoksa paketleme DURUR)
+#    surum-notlari.json'a kayıt ekle → operatör diliyle, kapsam etiketli
+node scripts/surum-notlari-kopyala.mjs      # panel + tablet paketlerine kopyala
+node scripts/check-surum-notlari.mjs        # şema + dil + kopya denetimi
+
 # MASAÜSTÜ PANEL — sürümü ARTIR, müşteriyi BELİRT
 ./deploy/electron-paketle.sh <müşteri> [sürüm]   # derler + gömülü adresi doğrular
 ./deploy/electron-yayinla.sh                     # hedefi paketin kimliğinden çözer
@@ -163,7 +168,12 @@ cd mobil && npm run build:apk                        # native değişti → yeni
 node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
 ```
 
-**Dört kural — hepsinin bedeli ölçüldü:**
+**Beş kural — hepsinin bedeli ölçüldü:**
+
+0. **Sürüm notu yazılmadan sürüm çıkmaz.** Paketleme kapısı durdurur. Notlar
+   `surum-notlari.json`'da (tek kaynak, operatör dili, `panel`/`tablet`/`her-ikisi`
+   etiketli); panele ve tablete GÖMÜLÜR, güncelleme sonrası ilk açılışta bir kez
+   gösterilir. Reçete: `docs/ops/SURUM-NOTLARI.md`.
 
 1. **Sürüm numarası ARTIRILMAZSA hiçbir şey güncellenmez.** Panelde
    `Electron/package.json > version`, tablette `versionCode`. Dosyayı yüklesen

@@ -5,6 +5,8 @@ import { CommandPalette } from "./CommandPalette";
 import { ShortcutsDialog } from "./ShortcutsDialog";
 import { TabHost } from "./tabs";
 import { UpdateGate } from "./UpdateGate";
+import { SurumNotlariDialog } from "./SurumNotlariDialog";
+import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
@@ -60,6 +62,8 @@ export function AppShell() {
   });
   useTabShortcuts();
   useServerHeartbeat();
+  // Güncelleme sonrası "neler değişti" penceresi — kararı açılışta verir.
+  const { kuruluSurum } = useSurumNotuAcilis();
   useIdleLogout();
   useExpiryAutoLogout();
 
@@ -95,6 +99,7 @@ export function AppShell() {
       />
       <ShortcutsDialog open={helpOpen} onOpenChange={setHelpOpen} />
       <ScanResultOverlay />
+      <SurumNotlariDialog kuruluSurum={kuruluSurum} />
     </div>
   );
 }

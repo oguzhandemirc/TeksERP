@@ -178,6 +178,18 @@ sürüm kurulu" yazmalı. Bu yazı, o makinenin yayın adresine ulaşabildiğini
 
 ## §3 — Her yeni sürümde (rutin)
 
+### 0. Sürüm notunu yaz — ATLANIRSA PAKETLEME DURUR
+
+`surum-notlari.json`'a bu tur için kayıt ekle (operatör diliyle, her madde
+`panel`/`tablet`/`her-ikisi` etiketli), sonra:
+
+```bash
+node scripts/surum-notlari-kopyala.mjs
+```
+
+Not, güncelleme kurulduktan sonra ilk açılışta operatöre bir kez gösterilir.
+Kurallar ve örnekler: [`SURUM-NOTLARI.md`](SURUM-NOTLARI.md).
+
 ### 1. Sürüm numarasını artır — ATLANIRSA HİÇBİR ŞEY GÜNCELLENMEZ
 
 `Electron/package.json > version`. Güncelleyici karşılaştırmayı bu numaraya göre
@@ -511,7 +523,10 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | `Electron/shared/update-feed.ts` | Yayın adresi — TEK KAYNAK |
 | `Electron/electron/ipc/updater.ipc.ts` | Kontrol/indirme/kurulum + Türkçe hata çevirisi |
 | `Electron/src/hooks/useUpdater.ts` | Arayüzün durum aboneliği |
-| `Electron/src/components/layout/UpdateBanner.tsx` | "Yeni sürüm hazır" şeridi |
+| `Electron/src/components/layout/UpdateGate.tsx` | İnerken şerit + zorunlu kurulum kapısı |
+| `Electron/src/components/layout/SurumNotlariDialog.tsx` | "Neler değişti" penceresi |
+| `Electron/src/lib/surum-notlari.ts` | Gösterim kararı (saf, test edilir) |
+| `surum-notlari.json` + `scripts/check-surum-notlari.mjs` | Not kaynağı + bekçi |
 | `Electron/src/pages/GeneralSettings/UpdateSection.tsx` | Bu Bilgisayar → Güncelleme |
 | `Electron/src/test/update-feed-url.test.ts` | Adres + dosya adı bekçisi |
 | `deploy/electron-yayinla.ps1` | Yayınlama — Windows (sıra + doğrulama) |

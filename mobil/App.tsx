@@ -32,6 +32,7 @@ import { colors } from './src/theme/tokens';
 import { recordActivity } from './src/store/lockStore';
 import IdleLockGate from './src/components/lock/IdleLockGate';
 import UpdateGate from './src/components/UpdateGate';
+import { SurumNotuGate } from './src/components/SurumNotuGate';
 
 registerStationMutationDefaults();
 
@@ -191,6 +192,7 @@ export default function App() {
                 uygulamayı aniden yeniden başlatır ve altta kalan bir örtü,
                 operatörün bunu çökme sanmasını engelleyemez. Kayıt yokken
                 hiçbir şey çizmez (null döner). */}
+            <SurumNotuGate />
             <UpdateGate />
           </View>
         </PersistQueryClientProvider>

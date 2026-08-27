@@ -1,0 +1,86 @@
+{
+  "_aciklama": [
+    "TeksERP sürüm notları — TEK KAYNAK. Operatör diliyle yazılır (fabrika çalışanı okuyacak).",
+    "Bu dosya panel ve tablet paketlerine GÖMÜLÜR: Electron/src/data/ ve mobil/src/data/ altındaki",
+    "kopyalar buradan üretilir ve bekçi (scripts/test_surum_notlari.ts) birebir eşitliği kilitler.",
+    "Kopyaları ELLE düzenleme — bu dosyayı düzenle, `node scripts/surum-notlari-kopyala.mjs` çalıştır.",
+    "",
+    "id      : yayın turunun kimliği, YYYY-AA-GG. Üç ürünün sürümü bağımsız ilerlediği için",
+    "          ortak kimlik TARİHTİR. Aynı gün ikinci yayın olursa '2026-08-28b'.",
+    "surumler: o turda hangi ürün hangi sürüme çıktı. O turda çıkmayan ürünün alanı YAZILMAZ.",
+    "kapsam  : panel | tablet | her-ikisi — operatör hangi ekranda göreceğini bilsin.",
+    "          'sunucu' kapsamı YOKTUR: backend değişikliği ya panelde ya tablette görünür.",
+    "tip     : yeni | duzeltme | iyilestirme",
+    "",
+    "Dizi EN YENİ ÖNCE sıralıdır."
+  ],
+  "yayinlar": [
+    {
+      "id": "2026-08-28",
+      "baslik": "Kendi kendine güncellenen program, yarı mamul ayrımı ve sipariş raporları",
+      "surumler": { "panel": "2.8.2", "tablet": "2.9.9" },
+      "maddeler": [
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Program yeni sürümü kendisi indirip kuruyor. Artık bilgisayarlara ve tabletlere tek tek kurulum dosyası taşımaya gerek yok."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Yeni kurulan bilgisayar ve tabletler sunucuyu ağda kendisi buluyor; sunucu adresini elle yazmak gerekmiyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yarı mamul toplar artık kendi sekmesinde listeleniyor. Ham Stok sekmesi yalnız ham topları gösteriyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ham Stok ve Yarı Mamul sekmelerine \"Üretime Al\" düğmesi eklendi. Daha önce bu topları masaüstünden iş emrine bağlamanın bir yolu yoktu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sipariş ekranının üstüne özet şeridi geldi: toplam sipariş, açık metraj ve karşılanma durumu bir bakışta görünüyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Altı yeni rapor: Açık Sipariş Karşılanma, Sipariş Karnesi, Müşteri Karnesi, Talep Analizi, Sipariş-Teslim Süresi ve Sipariş İptal Karnesi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sipariş ve sipariş kalemi iptal edilebiliyor; iptal sebebi hazır listeden seçiliyor. Kısmi sevk edilmiş bir kalemde yalnız kalan miktar iptal edilir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Stok listesindeki \"Tip\" sütunu yarı mamul topları \"Bitmiş\" gösteriyordu; düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Üretim Akışı panosundaki \"Ham Stok\" sayısı, üretimde olan topları da sayarak envanterden farklı bir rakam gösteriyordu; düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Kumaş Dengesi ekranı yarı mamul topları hesaba katmıyordu ve olmayan kumaş açığı gösterebiliyordu; düzeltildi."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Depo ekranındaki \"Ham\" sekmesi ikiye ayrıldı: Ham ve Yarı Mamul."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "KK1 ekranında yarı mamul girişleri \"Son Kayıtlar\" listesinde görünmüyordu; düzeltildi."
+        }
+      ]
+    }
+  ]
+}

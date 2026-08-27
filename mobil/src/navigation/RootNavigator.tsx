@@ -22,6 +22,7 @@ import ServerSettingsScreen from '../screens/Common/settings/ServerSettingsScree
 import PlaceHardwareScreen from '../screens/Common/settings/PlaceHardwareScreen';
 import ScannerSettingsScreen from '../screens/Common/settings/ScannerSettingsScreen';
 import UpdateSettingsScreen from '../screens/Common/settings/UpdateSettingsScreen';
+import { SurumNotlariScreen } from '../screens/Common/settings/SurumNotlariScreen';
 import WorkPreferencesScreen from '../screens/Common/settings/WorkPreferencesScreen';
 import DevicePairingScreen from '../screens/Common/DevicePairingScreen';
 import MainNavigator from './MainNavigator';
@@ -221,6 +222,11 @@ export default function RootNavigator() {
         <Stack.Screen
           name="SettingsUpdate"
           component={UpdateSettingsScreen}
+          options={{ animation: 'slide_from_right' }}
+        />
+        <Stack.Screen
+          name="SettingsSurumNotlari"
+          component={SurumNotlariScreen}
           options={{ animation: 'slide_from_right' }}
         />
         <Stack.Screen

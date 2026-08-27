@@ -77,6 +77,21 @@ npx vitest run src/test/update-feed-url.test.ts --reporter=dot >/dev/null 2>&1 \
   || hata "Adres bekçisi kırmızı — musteri.json ile package.json ayrışmış olabilir.
   Ayrıntı için: cd Electron && npx vitest run src/test/update-feed-url.test.ts"
 
+# --- 2b) SÜRÜM NOTU KAPISI ------------------------------------------------
+# Not yazılmadan sürüm çıkmaz (kullanıcı kararı). Bekçi ayrıca kopyaların taze
+# olduğunu ve dilin operatör dili kaldığını da denetler.
+#
+# ⚠️ DAİRESEL DEĞİL: beklenen sürüm ARGÜMANDAN ($surum) geliyor, not dosyası
+# onu üretmiyor yalnız doğruluyor. Hiçbir script `surumler.panel` alanını
+# package.json'dan okuyup YAZMAMALI — yazsaydı kapı kendi yazdığını doğrular,
+# yani hiçbir şey doğrulamazdı.
+node "$kok/scripts/check-surum-notlari.mjs" --panel="$surum" \
+  || hata "Sürüm notu kapısı kırmızı.
+  $surum için operatör notu yok ya da not kuralları ihlal edilmiş.
+  1) surum-notlari.json'a bu sürüm için kayıt ekle
+  2) node scripts/surum-notlari-kopyala.mjs
+  3) komutu tekrarla"
+
 # --- 3) Derle -------------------------------------------------------------
 echo "Derleniyor (bu birkaç dakika sürer)…"
 rm -rf "release/$surum"

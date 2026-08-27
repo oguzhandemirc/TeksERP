@@ -9,6 +9,7 @@
 // Cihaz Eşleştirme zaten ayrı bir ekrandı (DevicePairing) — dokunulmadı.
 // =============================================================================
 
+import { SURUM_NOTLARI } from '../../services/surumNotlari';
 import React from 'react';
 import { View, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -47,6 +48,12 @@ export default function SettingsScreen() {
   const active = useSessionStore((s) => s.active);
   // Kişisel tercih (2026-08-09) — menü satırında özet göstermek için.
   const { mode: firmMode } = useSubcontractorDefault();
+
+  // Menü satırı sayfanın ÖZETİNİ göstermeli (dosyadaki kural).
+  const sonYayin = SURUM_NOTLARI[0];
+  const sonYayinOzet = sonYayin
+    ? `${SURUM_NOTLARI.length} not · son ${sonYayin.id.slice(0, 10)}`
+    : 'Not yok';
 
   const rows: MenuRow[] = [
     {
@@ -106,6 +113,13 @@ export default function SettingsScreen() {
       // sayfayı açmadan cevaplanamaz.
       value: `${kuruluVersionName()} · ${paketEtiketi(otaKimlik())}`,
       route: 'SettingsUpdate',
+    },
+    {
+      key: 'surumNotlari',
+      icon: 'text-box-outline',
+      title: 'Sürüm Notları',
+      value: sonYayinOzet,
+      route: 'SettingsSurumNotlari',
     },
   ];
 
