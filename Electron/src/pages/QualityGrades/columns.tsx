@@ -6,7 +6,9 @@ import type { QualityGrade, QualityTargetStatus } from "./types";
 const TARGET_STATUS_LABELS: Record<QualityTargetStatus, string> = {
   WAREHOUSE: "Depo",
   A1_STOCK: "A1 Stok",
-  STOCK: "Ham Stok (üretime devam)",
+  // "Ham Stok" DEĞİL: statü `STOCK`; topun hangi envanter sekmesinde görüneceğini
+  // giriş kaynağı belirler (ham → Ham Stok, yarı mamul → Yarı Mamul).
+  STOCK: "Stok (üretime devam)",
   SCRAP: "Fire",
 };
 

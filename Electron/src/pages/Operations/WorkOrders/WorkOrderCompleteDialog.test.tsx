@@ -148,7 +148,10 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
     ]);
   });
 
-  it("fason dönüşü topta 'Ham stok' seçeneği kapalı", async () => {
+  // Etiket 2026-08-27'de "Ham stok" → "Stoğa geri" oldu: dışarıdan alınan yarı
+  // mamul topu da bu dispozisyonla STOCK'a döner ama Envanter'de "Yarı Mamul"
+  // sekmesinde görünür; eski etiket operatörü yanlış sekmede arattırıyordu.
+  it("fason dönüşü topta 'Stoğa geri' seçeneği kapalı", async () => {
     const user = userEvent.setup();
     getCompletePreview.mockResolvedValue(
       previewData({ dispositionRolls: [roll({ canReturnToStock: false, processed: true })] }),
@@ -156,7 +159,7 @@ describe("WorkOrderCompleteDialog (kapanış dispozisyonu)", () => {
     render();
     await screen.findByText("BC-1");
     await user.click(combo(0));
-    const option = await screen.findByRole("option", { name: /Ham stok/i });
+    const option = await screen.findByRole("option", { name: /Stoğa geri/i });
     expect(option).toHaveAttribute("aria-disabled", "true");
   });
 

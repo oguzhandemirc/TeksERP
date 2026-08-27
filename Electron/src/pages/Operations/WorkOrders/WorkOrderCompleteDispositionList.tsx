@@ -19,7 +19,14 @@ export const DISPOSITION_OPTIONS: {
   label: string;
   hint: string;
 }[] = [
-  { value: "STOCK", label: "Ham stok", hint: "Kumaş geldiği gibi; yeni iş emrine sokulabilir" },
+  // "Ham stok" DEĞİL (2026-08-27): dışarıdan alınan yarı mamul topu da buraya
+  // döner ama Envanter'de "Yarı Mamul" sekmesinde görünür — eski etiket operatörü
+  // yanlış sekmede arattırırdı.
+  {
+    value: "STOCK",
+    label: "Stoğa geri",
+    hint: "Kumaş geldiği gibi; yeni iş emrine sokulabilir (Ham Stok / Yarı Mamul)",
+  },
   { value: "WAREHOUSE", label: "Bitmiş depo", hint: "Satışa/sevke hazır sayılır" },
   { value: "A1_STOCK", label: "2. kalite", hint: "A1 satılabilir stok" },
   { value: "SCRAP", label: "Fire", hint: "Mal vardı, çöpe gitti" },

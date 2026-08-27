@@ -47,6 +47,7 @@ const BALANCE_EXPORT_COLUMNS: ExportColumn<BalanceExportRow>[] = [
   { label: "Üretilecek (m)", value: (r) => r.spec.uretilecek, summable: true },
   { label: "Durum", value: (r) => (r.spec.uretilecek > 0 ? "Üretilecek" : "Karşılanıyor") },
   { label: "Ham (m, kumaş+renk)", value: (r) => r.group.ham },
+  { label: "Yarı Mamul (m, kumaş+renk)", value: (r) => r.group.yariMamul },
   { label: "Ham Açığı (m, kumaş+renk)", value: (r) => r.group.malzemeAcigi },
   { label: "Sipariş Sayısı", value: (r) => r.spec.lines.length, summable: true },
   // İstenen − Sevk = Talep (yukarıdaki sütun). Ayrı bir "Kalan" sütunu EKLENMEDİ:
@@ -183,6 +184,7 @@ export function ProductBalancePage() {
       uretimde: s.uretimde,
       uretilecek: s.uretilecek,
       ham: g.ham,
+      yariMamul: g.yariMamul,
       lines: s.lines,
     }), []);
 

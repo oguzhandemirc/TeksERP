@@ -3405,6 +3405,8 @@ export class InventoryService {
         id: true,
         barcode: true,
         status: true,
+        // Mesajda "ham stokta" mı "yarı mamul stoğunda" mı denileceğini belirler.
+        entrySource: true,
         preCancelStatus: true,
         batchId: true,
         sackId: true,
@@ -3489,8 +3491,15 @@ export class InventoryService {
     return {
       success: true,
       data: restored,
+      // ⚠️ "ham stokta" YALNIZ gerçekten ham olan mal için doğru. Yarı mamul topu
+      // da STOCK'a döner ama Envanter'de "Yarı Mamul" sekmesinde durur — mesaj
+      // onu ham stokta arattırırdı (2026-08-27).
       message: `İptal geri alındı — top ${existing.barcode ?? ""} tekrar ${
-        target === RollStatus.STOCK ? "ham stokta" : "envanterde"
+        target !== RollStatus.STOCK
+          ? "envanterde"
+          : existing.entrySource === RollEntrySource.SEMI_FINISHED
+            ? "yarı mamul stoğunda"
+            : "ham stokta"
       }.`.trim(),
     };
   }

@@ -21,6 +21,7 @@ import {
   OrderStatus,
   Prisma,
   ReasonPresetKind,
+  RollEntrySource,
   RollStatus,
   ShipmentStatus,
   WorkOrderStatus,
@@ -1442,7 +1443,8 @@ export class OrderService extends BaseService {
     // (bekleyen) mal serbest stok sayılmaz.
     const itemIds = [...new Set(lines.map((l) => l.itemId))];
     const freeGrouped = await prisma.roll.groupBy({
-      by: ["itemId", "colorId", "width", "status"],
+      // `entrySource`: ham ↔ yarı mamul ayrımı statüden çıkmaz (ikisi de STOCK).
+      by: ["itemId", "colorId", "width", "status", "entrySource"],
       where: {
         shipmentId: null,
         sackId: null,
@@ -1456,10 +1458,22 @@ export class OrderService extends BaseService {
     //  - Depo (WAREHOUSE, bitmiş/boyalı): renk + en BİREBİR (renk + en zaten sabit).
     //  - Ham (STOCK, işlenecek): renksiz (null) ham JOKER — boyahanede istenen renge
     //    boyanır, renkli talebe de sayılır; en AGNOSTİK (eni önemsiz). (Ürün Dengesi ile aynı.)
-    const matchFree = (line: (typeof lines)[number], status: RollStatus): Prisma.Decimal =>
+    /**
+     * `semi`: yalnız STOCK dalında anlamlı — `true` yarı mamul, `false` gerçek ham,
+     * `undefined` ikisi birden. Ayrım GÖSTERİM içindir; `netGap` zaten ham havuzunu
+     * hiç saymıyor (işlenmemiş girdi, mamul değil).
+     */
+    const matchFree = (
+      line: (typeof lines)[number],
+      status: RollStatus,
+      semi?: boolean,
+    ): Prisma.Decimal =>
       freeGrouped.reduce((sum, g) => {
         if (g.status !== status) return sum;
         if (g.itemId !== line.itemId) return sum;
+        if (semi !== undefined && (g.entrySource === RollEntrySource.SEMI_FINISHED) !== semi) {
+          return sum;
+        }
         if (status === RollStatus.WAREHOUSE) {
           if ((g.colorId ?? null) !== (line.colorId ?? null)) return sum;
           if (!widthEqual(g.width, line.width)) return sum;
@@ -1513,7 +1527,11 @@ export class OrderService extends BaseService {
       const inProduction =
         inProdBySpec.get(specKey(l.itemId, l.colorId, l.width)) ?? new Prisma.Decimal(0);
       const freeWarehouse = matchFree(l, RollStatus.WAREHOUSE);
-      const freeStock = matchFree(l, RollStatus.STOCK);
+      // Ham ↔ yarı mamul AYRI raporlanır (2026-08-27): ikisi de "işlenecek girdi"
+      // ama farklı stok türü ve envanterde ayrı sekmelerde duruyor. Toplamları
+      // eskisiyle aynı; değişen tek şey rakamın ikiye bölünmesi.
+      const freeStock = matchFree(l, RollStatus.STOCK, false);
+      const freeSemiFinished = matchFree(l, RollStatus.STOCK, true);
       const requested = new Prisma.Decimal(l.quantity);
       // Net açık = bitmiş/üretimdeki ürün açığı. Rezerv/çuvallanmış (packed) KALKTI —
       // packed hep 0 (yanıt şekli için tutulur). freeWarehouse havuz malını içermez (§4).
@@ -1534,6 +1552,7 @@ export class OrderService extends BaseService {
         inProduction,
         freeWarehouse,
         freeStock,
+        freeSemiFinished,
         netGap,
       };
     });
@@ -1556,13 +1575,22 @@ export class OrderService extends BaseService {
     itemId: string;
     colorId?: string | null;
     width?: number | null;
-  }): Promise<ApiResponse<{ freeWarehouse: number; inProduction: number; freeStock: number }>> {
+  }): Promise<
+    ApiResponse<{
+      freeWarehouse: number;
+      inProduction: number;
+      freeStock: number;
+      /** Dışarıdan alınan yarı mamul — `freeStock`tan AYRI raporlanır (2026-08-27). */
+      freeSemiFinished: number;
+    }>
+  > {
     const colorId = params.colorId ?? null;
     const width = params.width == null ? null : new Prisma.Decimal(params.width);
 
     // Serbest stok — hiçbir çuvala/sevkiyata girmemiş WAREHOUSE + STOCK (fungible havuz).
     const freeGrouped = await prisma.roll.groupBy({
-      by: ["colorId", "width", "status"],
+      // `entrySource`: ham ↔ yarı mamul statüden ayrılmaz (ikisi de STOCK).
+      by: ["colorId", "width", "status", "entrySource"],
       where: {
         shipmentId: null,
         sackId: null,
@@ -1578,6 +1606,7 @@ export class OrderService extends BaseService {
 
     let freeWarehouse = new Prisma.Decimal(0);
     let freeStock = new Prisma.Decimal(0);
+    let freeSemiFinished = new Prisma.Decimal(0);
     for (const g of freeGrouped) {
       const qty = g._sum.currentQty ?? new Prisma.Decimal(0);
       if (g.status === RollStatus.WAREHOUSE) {
@@ -1589,7 +1618,13 @@ export class OrderService extends BaseService {
         // Ham: renksiz joker (renkli talebe de sayılır), en-agnostik.
         const colorOk = g.colorId == null || colorId == null || g.colorId === colorId;
         if (!colorOk) continue;
-        freeStock = freeStock.plus(qty);
+        // Ham ↔ yarı mamul AYRI kovada; toplamları eskisiyle aynı, değişen yalnız
+        // rakamın ikiye bölünmesi (ikisi de gerçek arz — hiçbiri düşülmüyor).
+        if (g.entrySource === RollEntrySource.SEMI_FINISHED) {
+          freeSemiFinished = freeSemiFinished.plus(qty);
+        } else {
+          freeStock = freeStock.plus(qty);
+        }
       }
     }
 
@@ -1604,6 +1639,7 @@ export class OrderService extends BaseService {
         freeWarehouse: freeWarehouse.toNumber(),
         inProduction: inProduction.toNumber(),
         freeStock: freeStock.toNumber(),
+        freeSemiFinished: freeSemiFinished.toNumber(),
       },
     };
   }

@@ -16,7 +16,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
-import { OrderStatus, Prisma, RollStatus, WorkOrderStatus } from "@prisma/client";
+import { OrderStatus, Prisma, RollEntrySource, RollStatus, WorkOrderStatus } from "@prisma/client";
 import { ApiResponse } from "../types/api.types";
 import { computeWoMaterial } from "./helpers/coverage.helper";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
@@ -111,9 +111,18 @@ export interface BalanceGroup {
   depo: Prisma.Decimal;
   uretimde: Prisma.Decimal;
   uretilecek: Prisma.Decimal;
-  /** Sevksiz STOCK havuzu (ürün+renk; en-agnostik, renksiz ham renk-joker). */
+  /**
+   * Sevksiz HAM STOCK havuzu (ürün+renk; en-agnostik, renksiz ham renk-joker).
+   *
+   * ⚠️ Dışarıdan alınan yarı mamulü İÇERMEZ (2026-08-27) — o `yariMamul`de.
+   * Ayrım YALNIZ GÖSTERİMDEDİR: ikisi de gerçek arzdır ve `malzemeAcigi`
+   * hesabına BİRLİKTE girer (bkz. aşağıdaki not). Yarı mamulü arzdan düşmek
+   * olmayan bir kumaş açığı uydururdu.
+   */
   ham: Prisma.Decimal;
-  /** max(0, Σüretilecek − ham) → kumaş tedariki gereken kısım. */
+  /** Sevksiz YARI MAMUL havuzu (dışarıdan boyalı/işlenmiş geldi). Arzdır. */
+  yariMamul: Prisma.Decimal;
+  /** max(0, Σüretilecek − (ham + yariMamul)) → kumaş tedariki gereken kısım. */
   malzemeAcigi: Prisma.Decimal;
   specs: BalanceSpecRow[];
 }
@@ -261,7 +270,8 @@ export class ProductionBalanceService {
     //         tek sayılır. Renksiz (color=null) ham, boyanacağı için aynı ürünün
     //         her rengine joker sayılır (mevcut davranış korunur).
     const supply = await prisma.roll.groupBy({
-      by: ["itemId", "colorId", "width", "status"],
+      // `entrySource`: ham ↔ yarı mamul ayrımı statüden çıkmaz (ikisi de STOCK).
+      by: ["itemId", "colorId", "width", "status", "entrySource"],
       where: {
         status: { in: [RollStatus.WAREHOUSE, RollStatus.STOCK] },
         shipmentId: null,
@@ -326,7 +336,7 @@ export class ProductionBalanceService {
     const warehouseByKey = new Map<string, Prisma.Decimal>();
     const stockByItem = new Map<
       string,
-      { colorId: string | null; qty: Prisma.Decimal }[]
+      { colorId: string | null; qty: Prisma.Decimal; semi: boolean }[]
     >();
     for (const g of supply) {
       const qty = new Prisma.Decimal(g._sum.currentQty ?? 0);
@@ -339,7 +349,11 @@ export class ProductionBalanceService {
           list = [];
           stockByItem.set(g.itemId, list);
         }
-        list.push({ colorId: g.colorId, qty });
+        list.push({
+          colorId: g.colorId,
+          qty,
+          semi: g.entrySource === RollEntrySource.SEMI_FINISHED,
+        });
       }
     }
 
@@ -385,6 +399,7 @@ export class ProductionBalanceService {
           uretimde: D0(),
           uretilecek: D0(),
           ham: D0(),
+          yariMamul: D0(),
           malzemeAcigi: D0(),
           specs: [],
         };
@@ -403,9 +418,19 @@ export class ProductionBalanceService {
       for (const s of stockByItem.get(grp.itemId) ?? []) {
         const colorOk =
           s.colorId == null || grp.colorId == null || s.colorId === grp.colorId;
-        if (colorOk) grp.ham = grp.ham.plus(s.qty);
+        if (!colorOk) continue;
+        if (s.semi) grp.yariMamul = grp.yariMamul.plus(s.qty);
+        else grp.ham = grp.ham.plus(s.qty);
       }
-      grp.malzemeAcigi = Prisma.Decimal.max(0, grp.uretilecek.minus(grp.ham));
+      // ⚠️ AÇIK HESABINA İKİSİ BİRDEN GİRER. Yarı mamul dışarıdan alınmış olsa da
+      // rafta duran, üretime sokulabilir maldır — arzdan düşmek "kumaş tedarik
+      // et" diyen sahte bir açık üretirdi. Sektör karşılığı: SAP'de HALB ayrı
+      // stok TÜRÜdür (ayrı raporlanır) ama MRP/ATP'de arza girer.
+      // Ayrım burada değil, EKRANDA yaşar (iki ayrı kolon).
+      grp.malzemeAcigi = Prisma.Decimal.max(
+        0,
+        grp.uretilecek.minus(grp.ham.plus(grp.yariMamul)),
+      );
       // En alt-satırlarını en çok üretilecek olan üste.
       grp.specs.sort((a, b) => b.uretilecek.comparedTo(a.uretilecek));
     }

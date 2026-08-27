@@ -69,9 +69,11 @@ export interface BalanceGroup {
   depo: number;
   uretimde: number;
   uretilecek: number;
-  /** Sevksiz STOCK havuzu (kumaş+renk, en-agnostik). */
+  /** Sevksiz HAM havuzu (kumaş+renk, en-agnostik) — yarı mamul HARİÇ. */
   ham: number;
-  /** max(0, Σüretilecek − ham) → kumaş tedariki gereken kısım. */
+  /** Sevksiz YARI MAMUL havuzu (dışarıdan boyalı/işlenmiş geldi). Arzdır. */
+  yariMamul: number;
+  /** max(0, Σüretilecek − (ham + yariMamul)) → kumaş tedariki gereken kısım. */
   malzemeAcigi: number;
   specs: BalanceSpecRow[];
 }
@@ -93,5 +95,7 @@ export interface WoTarget {
   uretilecek: number;
   /** Grup ham havuzu (bu kumaş+renk için paylaşılan; en'e bölünmez). */
   ham: number;
+  /** Grup yarı mamul havuzu — ham ile AYNI arz kovasındadır (bkz. kullanım). */
+  yariMamul: number;
   lines: BalanceLine[];
 }

@@ -43,7 +43,11 @@ export function OrderLineAtpHint({ itemId, colorId, width }: Props) {
   if (!q.data?.data) return null;
 
   const { freeWarehouse, inProduction, freeStock } = q.data.data;
-  const hasNone = freeWarehouse <= 0 && inProduction <= 0 && freeStock <= 0;
+  // Eski sunucu bu alanı göndermiyor olabilir (backend ÖNCE deploy edilir ama
+  // sıra ters dönerse ipucu sessizce kaybolmasın) → 0'a düşer.
+  const freeSemi = q.data.data.freeSemiFinished ?? 0;
+  const hasNone =
+    freeWarehouse <= 0 && inProduction <= 0 && freeStock <= 0 && freeSemi <= 0;
 
   return (
     <p
@@ -62,6 +66,15 @@ export function OrderLineAtpHint({ itemId, colorId, width }: Props) {
             <>
               {" · "}Ham:{" "}
               <span className="font-medium tabular-nums text-foreground">{fmtM(freeStock)} m</span>
+            </>
+          )}
+          {/* Yarı mamul AYRI gösterilir: ham kumaşla aynı rafta ama farklı stok
+              türü — planlamacı "boyanacak mı, sadece işlenecek mi" ayrımını
+              buradan görür. İkisi de gerçek arzdır, hiçbiri düşülmez. */}
+          {freeSemi > 0 && (
+            <>
+              {" · "}Yarı mamul:{" "}
+              <span className="font-medium tabular-nums text-foreground">{fmtM(freeSemi)} m</span>
             </>
           )}
         </>

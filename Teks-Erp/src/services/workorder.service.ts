@@ -236,7 +236,10 @@ async function collectRouteCoverageWarnings(
 
 /** Kapanışta istasyonda kalan (in-flight) topa uygulanacak dispozisyon kararı. */
 export type CloseDisposition =
-  | "STOCK" // ham stok — işlem görmemiş mal üretime geri döner (yeni WO'ya sokulabilir)
+  // ⚠️ "ham stok" DEMEK DEĞİL: top `STOCK` statüsüne döner, hangi envanter
+  // sekmesinde görüneceğini `entrySource` belirler (ham → Ham Stok, dışarıdan
+  // alınan yarı mamul → Yarı Mamul). Etiketler bu yüzden "Stoğa geri" der.
+  | "STOCK" // stoğa geri — mal geldiği gibi, yeni bir iş emrine sokulabilir
   | "WAREHOUSE" // bitmiş depo — satışa/sevke hazır
   | "A1_STOCK" // 2. kalite satılabilir stok
   | "SCRAP" // gerçek fire (mal vardı, çöpe gitti)

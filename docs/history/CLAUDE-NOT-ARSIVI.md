@@ -1612,3 +1612,64 @@ kombinasyona girilmedi, kullanıcının Windows provasında bakılacak.
 
 **Ders:** birim testi + typecheck yeşilken bile ekrana bakmak iki gerçek hata buldu; ikisi de
 "derleyici görmez" sınıfındaydı (biri string haritası, biri CSS breakpoint).
+
+---
+
+## 2026-08-27 (üçüncü tur) — Yarı mamul ayrımı: kalan dört yüzey. AYRIM GÖSTERİMDE, ARZDA DEĞİL
+
+2026-08-26'daki taramada ayrımı takip ETMEYEN yüzeyler gerekçeleriyle listelenmişti; kullanıcı
+**hepsini** kapsama aldı. **Gerekçe ölçümdü:** prod'da bugün 0 yarı mamul kaydı var → akış
+başlamadan ÖNCE kapatılırsa sapmalar hiç görünmeden çözülür. Sonradan yapılsaydı fabrika önce
+yanlış rakamı görür, düzelttiğimizde rakam kayardı ve "sistem tutarsız" izlenimi doğardı.
+
+### ⚠️ PAKETİN TEK KURALI: yarı mamul ARZDIR, düşülmez — ayrı GÖSTERİLİR
+
+Kullanıcı kararı ve sektör dayanağı aynı yerde buluşuyor: SAP'de HALB ayrı bir stok TÜRÜdür
+(ayrı raporlanır, ayrı değerlenir) **ama MRP/ATP'de arza girer**. Yarı mamul rafta duran,
+üretime sokulabilir maldır; arzdan düşmek olmayan bir "kumaş tedarik et" açığı uydururdu.
+Bu kural aşağıdaki her maddede aynı biçimde uygulandı ve `test_semi_finished_surfaces` §2 ile
+kilitlendi — **negatif sonda ölçtü:** yarı mamul arzdan düşürülünce 400 m'lik talepte **200 m
+sahte kumaş açığı** doğuyor.
+
+### ① Ürün (Kumaş) Dengesi — `production-balance.service`
+`supply` groupBy'ına `entrySource` eklendi; `BalanceGroup.ham` daraldı, **yeni `yariMamul`**
+alanı geldi. **`malzemeAcigi` İKİSİNİ BİRDEN düşer** (`uretilecek − (ham + yariMamul)`).
+Ekranda: HAM kolonunun altında cyan `+ N yarı mamul` satırı (yalnız >0 iken), "İş Emri Aç"
+diyaloğunda kumaş açığı uyarısı da **toplam arza** bakar (`spec.ham + spec.yariMamul`) — iki
+taraf ayrışsaydı ekran ve backend farklı açık gösterirdi.
+
+### ② Sipariş karşılama — `order.service`
+`getCoverageForLines` → `freeSemiFinished` alanı; `matchFree`'ye opsiyonel `semi` süzgeci.
+`getSpecAvailability` → aynı ikili. `netGap` DEĞİŞMEDİ (ham havuzu zaten hiç sayılmıyordu —
+işlenmemiş girdi, mamul değil). Sipariş formundaki ipuçta artık "Ham: X · Yarı mamul: Y".
+⚠️ Electron tarafında alan **opsiyonel** okunur (`?? 0`) — backend ÖNCE deploy edilir ama sıra
+ters dönerse ipucu sessizce kaybolmasın.
+
+### ③ İptal geri alma mesajı — `inventory.service.restoreCancelledRoll`
+Her STOCK topu için *"tekrar ham stokta"* diyordu. Yarı mamul topu da STOCK'a döner ama
+Envanter'de **"Yarı Mamul"** sekmesinde durur → operatörü yanlış sekmede arattırıyordu. Artık
+`entrySource`e bakıp *"yarı mamul stoğunda"* diyor (`select`'e `entrySource` eklendi).
+
+### ④ Kapanış dispozisyonu etiketi — üç yüzey birden
+`"Ham stok"` → **`"Stoğa geri"`** (`WorkOrderCompleteDispositionList`), kalite hedef statüsü
+`"Ham Stok (üretime devam)"` → **`"Stok (üretime devam)"`** (`QualityGrades/columns`), backend
+sözleşme yorumu da düzeltildi. Gerekçe aynı: `STOCK` bir STATÜdür; topun hangi sekmede
+görüneceğini `entrySource` belirler. Hint artık "(Ham Stok / Yarı Mamul)" diyor.
+⚠️ `WorkOrderCompleteDialog.test` etiketi metinle arıyordu — test de güncellendi.
+
+### Bekçi: `scripts/test_semi_finished_surfaces.ts` (10)
+Dört yüzeyi de ölçer. **En değerli iki kontrol:**
+- **§2** açık hesabı yarı mamulü arz sayıyor mu (negatif sonda: 200 m sahte açık)
+- **§4 toplam korunuyor mu** — `ham + yarıMamul` ayırmadan önceki tek rakama eşit olmalı;
+  eşit değilse bir yerde metraj DÜŞÜRÜLMÜŞ demektir (ayrım sunumdur, aritmetik değil)
+
+⚠️ Fixture sırası load-bearing: **Ürün Dengesi TALEPTEN doğar**, sipariş kalemi olmayan bir
+spec listede HİÇ görünmez. Önce talep, sonra ölçüm — ters sırada test "grup=0" ile düşer.
+
+### Görsel doğrulama
+Kumaş Dengesi'nde `ALP GÜMÜŞ · EKRU` satırı ekranda ölçüldü: **HAM 0 · "+ 640 yarı mamul" ·
+ham açığı 260** (talep 900). Yarı mamul arza girmeseydi açık 900 çıkardı — kural ekranda da
+doğrulanmış oldu.
+
+**Migration YOK · yeni izin YOK · APK YOK.** Backend ÖNCE (Electron `freeSemiFinished`'i
+opsiyonel okuduğu için ters sıra da çökmez, yalnız ipucu eksik kalır).

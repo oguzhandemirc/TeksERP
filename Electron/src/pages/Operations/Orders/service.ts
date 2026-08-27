@@ -16,7 +16,10 @@ export interface AliasSuggestResponse {
 export interface SpecAvailability {
   freeWarehouse: number;
   inProduction: number;
+  /** Ham stok — yarı mamul HARİÇ (2026-08-27). */
   freeStock: number;
+  /** Dışarıdan alınan yarı mamul. Opsiyonel: eski sunucu göndermez. */
+  freeSemiFinished?: number;
 }
 
 /** Sipariş detayında "hangi sevkiyata ne kadar sevk edildi" satırı. */

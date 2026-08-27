@@ -80,7 +80,12 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
     spec.itemName +
     (spec.colorName ? ` · ${spec.colorName}` : "") +
     (spec.width ? ` · ${spec.width}cm` : "");
-  const rawShort = qtyNum > spec.ham;
+  // ⚠️ ARZ = ham + yarı mamul. Yarı mamul dışarıdan alınmış olsa da rafta duran,
+  // üretime sokulabilir maldır — açığı yalnız `ham`a bakarak hesaplamak olmayan
+  // bir "kumaş tedarik et" uyarısı üretirdi (backend `malzemeAcigi` de ikisini
+  // birden düşer; iki taraf ayrışmamalı).
+  const supply = spec.ham + spec.yariMamul;
+  const rawShort = qtyNum > supply;
   const bindCapped = mode === "bind" && qtyNum > demandTotal;
 
   const handleConfirm = () => {
@@ -128,7 +133,8 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
           <DialogDescription>
             <span className="font-medium text-foreground">{label}</span> için
             üretim emri. Talep {fmt(spec.talep)} · Depo {fmt(spec.depo)} ·
-            Üretimde {fmt(spec.uretimde)} · Ham havuzu {fmt(spec.ham)}.
+            Üretimde {fmt(spec.uretimde)} · Ham havuzu {fmt(spec.ham)}
+            {spec.yariMamul > 0 ? ` (+${fmt(spec.yariMamul)} yarı mamul)` : ""}.
           </DialogDescription>
         </DialogHeader>
 
@@ -184,8 +190,10 @@ export function ProductBalanceWoDialog({ spec, open, onOpenChange }: Props) {
           {rawShort && (
             <p className="flex items-center gap-1.5 text-xs text-amber-600 dark:text-amber-400">
               <AlertTriangle className="h-3.5 w-3.5" />
-              Ham stok {fmt(spec.ham)} m — {fmt(qtyNum - spec.ham)} m kumaş
-              tedariki gerekir (fabrika kumaş üretmez, işler).
+              Kullanılabilir kumaş {fmt(supply)} m
+              {spec.yariMamul > 0 ? ` (ham ${fmt(spec.ham)} + yarı mamul ${fmt(spec.yariMamul)})` : ""} —{" "}
+              {fmt(qtyNum - supply)} m kumaş tedariki gerekir (fabrika kumaş
+              üretmez, işler).
             </p>
           )}
         </div>

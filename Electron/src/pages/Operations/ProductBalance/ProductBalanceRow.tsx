@@ -86,11 +86,19 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
         <td className="text-right text-foreground">{fmt(g.talep)}</td>
         <td className="text-right text-muted-foreground">{fmt(g.depo)}</td>
         <td className="text-right text-muted-foreground">{fmt(g.uretimde)}</td>
+        {/* Ham havuzu — yarı mamul varsa ALTINDA ayrı satırda. İkisi de gerçek
+            arzdır (açık hesabı ikisini birden düşer); ayrı gösterilmelerinin
+            sebebi farklı stok TÜRÜ olmaları. */}
         <td
           className="text-right text-muted-foreground"
-          title="Ham havuzu — kumaş+renk için ortak (eni önemsiz). En'lere bölünmez."
+          title="Ham havuzu — kumaş+renk için ortak (eni önemsiz). En'lere bölünmez. Yarı mamul ayrı satırda; ham açığı ikisini birden düşer."
         >
           {fmt(g.ham)}
+          {g.yariMamul > 0 && (
+            <span className="block text-[10px] text-cyan-700 dark:text-cyan-400">
+              + {fmt(g.yariMamul)} yarı mamul
+            </span>
+          )}
         </td>
         <td className="text-right">
           {covered ? (
@@ -187,9 +195,10 @@ export const ProductBalanceRow = memo(function ProductBalanceRow({ group: g, isO
                   </table>
                 </div>
                 <p className="mt-1 text-[10px] text-muted-foreground">
-                  Ham {fmt(g.ham)} m bu en'ler arasında ortaktır — yukarıdaki
-                  üretilecek toplamı {fmt(g.uretilecek)} m, ham açığı{" "}
-                  {fmt(g.malzemeAcigi)} m.
+                  Ham {fmt(g.ham)} m
+                  {g.yariMamul > 0 ? ` + yarı mamul ${fmt(g.yariMamul)} m` : ""} bu
+                  en'ler arasında ortaktır — yukarıdaki üretilecek toplamı{" "}
+                  {fmt(g.uretilecek)} m, ham açığı {fmt(g.malzemeAcigi)} m.
                 </p>
               </div>
 
