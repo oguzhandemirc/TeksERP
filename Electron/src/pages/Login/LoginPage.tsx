@@ -13,7 +13,7 @@ import { authService } from "@/services/authService";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt } from "@/lib/jwt";
 import { readSessionConflict } from "@/lib/session-auth";
-import { pinServerIdentityAfterLogin } from "@/lib/server-identity";
+import { connectToDiscoveredServer, pinServerIdentityAfterLogin } from "@/lib/server-identity";
 import { LoginForm } from "./LoginForm";
 import { ServerNotFoundPanel } from "./ServerNotFoundPanel";
 import { ServerIdentityMismatchDialog } from "@/components/settings/ServerIdentityMismatchDialog";
@@ -112,10 +112,10 @@ export function LoginPage() {
   const onSubmit = (values: FormValues) => performLogin(values, false);
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden app-drag">
+    <div className="flex h-screen w-screen overflow-hidden">
       <LoginHero />
 
-      <div className="relative flex w-full items-center justify-center bg-background p-10 app-no-drag md:w-[460px] md:shrink-0">
+      <div className="relative flex w-full items-center justify-center bg-background p-10 md:w-[460px] md:shrink-0">
         <div className="absolute right-5 top-5 flex items-center gap-2">
           <button
             type="button"
@@ -158,8 +158,11 @@ export function LoginPage() {
           onCancel={() => setMismatch(null)}
           onTrust={(c) => {
             void (async () => {
-              await window.api?.discovery?.pin(c.identity?.installationId ?? null);
+              // Kimliği sabitlemek YETMEZ — adresi de uygula, yoksa recheck eski
+              // (ölü) adresi prob eder ve aynı "ulaşılamadı" ekranı geri gelir.
+              await connectToDiscoveredServer(c, { trustIdentity: true });
               setMismatch(null);
+              toast.success("Sunucuya bağlanıldı.", { description: c.baseUrl });
               await reach.recheck();
             })();
           }}

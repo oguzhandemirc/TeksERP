@@ -12,7 +12,13 @@
  * hazır olmayan sunucu). Eski bir sürümü sahtekârlıkla suçlamak, uyarıyı
  * yanlış-pozitif üretir hale getirir.
  */
-import { getActiveApiBaseUrl } from "./api-config";
+import type { DiscoveredServer } from "@shared/ipc-contract";
+import {
+  applyApiBaseUrl,
+  getActiveApiBaseUrl,
+  pushRecentApiBaseUrl,
+  setStoredApiBaseUrl,
+} from "./api-config";
 
 /** Giriş başarılı olduktan sonra çağrılır. Best-effort — hatası girişi etkilemez. */
 export async function pinServerIdentityAfterLogin(): Promise<void> {
@@ -26,4 +32,37 @@ export async function pinServerIdentityAfterLogin(): Promise<void> {
   } catch {
     /* sessiz geç — sabitleme bir kolaylık, giriş yolunu düşüremez */
   }
+}
+
+/**
+ * Keşfedilen bir sunucuyu AKTİF sunucu yapar (adres + kimlik, tek hamlede).
+ *
+ * ⚠️ TEK KAYNAK — iki çağıranı var ve ayrışmaları saha hatasına yol açtı:
+ * "uyuşmayan" adayı seçen kullanıcı `ServerIdentityMismatchDialog`ta "güven ve
+ * bağlan" deyince YALNIZ kimlik sabitleniyor, adres UYGULANMIYORDU. Sonuç:
+ * buton basılıyor, uygulama eski (ölü) adresi yeniden prob ediyor, aynı
+ * "Sunucuya ulaşılamadı" ekranı geri geliyor — kullanıcıya modal hiçbir şey
+ * yapmıyor gibi görünüyor ve ekrandan ÇIKIŞ YOLU KALMIYOR. Yeni bir "şu sunucuya
+ * bağlan" yüzeyi eklerken adresi elle uygulama, bunu çağır.
+ *
+ * `trustIdentity` yalnız uyuşmazlık onayından gelir: insan "bu benim sunucum"
+ * dediği için kimlik ŞİMDİ sabitlenir (normalde sabitleme ilk başarılı girişte
+ * olur — yukarıdaki nota bak).
+ */
+export async function connectToDiscoveredServer(
+  candidate: DiscoveredServer,
+  opts: { trustIdentity?: boolean } = {},
+): Promise<void> {
+  if (opts.trustIdentity) {
+    // Kimlik önce sabitlenir: adres uygulandıktan sonraki ilk prob'un yeniden
+    // "uyuşmazlık" demesini önler.
+    try {
+      await window.api?.discovery?.pin(candidate.identity?.installationId ?? null);
+    } catch {
+      /* sessiz geç — sabitleme kolaylıktır, bağlanma yolunu düşüremez */
+    }
+  }
+  applyApiBaseUrl(candidate.baseUrl);
+  await setStoredApiBaseUrl(candidate.baseUrl);
+  await pushRecentApiBaseUrl(candidate.baseUrl);
 }

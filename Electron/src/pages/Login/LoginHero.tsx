@@ -1,6 +1,15 @@
 export function LoginHero() {
   return (
     <div className="relative hidden flex-1 overflow-hidden bg-[#070b1a] md:flex">
+      {/* Pencereyi taşıma şeridi — macOS `titleBarStyle: "hiddenInset"` ile
+          başlık çubuğu yok, trafik ışıkları içeriğin üstünde yüzer ve pencereyi
+          taşımanın tek yolu bir sürükleme bölgesidir.
+          ⚠️ ŞERİT, SAYFANIN TAMAMI DEĞİL. OS sürükleme bölgesi GEOMETRİKTİR:
+          üstüne çizilen portal (modal, popover, toast) kendini bölgeden
+          DÜŞÜRMEZ — tıklamaları pencere-taşıma yutar. Tüm giriş ekranı `app-drag`
+          iken uyuşmazlık modalı bu yüzden tamamen ölüydü (çarpı dahil) ve her
+          tıklama maximize pencereyi eski boyutuna indiriyordu (2026-08-28). */}
+      <div aria-hidden className="app-drag absolute inset-x-0 top-0 z-20 h-12" />
       <div className="blob-1 absolute -top-40 -left-40 h-[640px] w-[640px] rounded-full bg-blue-600/45 blur-[120px]" />
       <div className="blob-2 absolute top-1/3 -right-40 h-[560px] w-[560px] rounded-full bg-indigo-500/40 blur-[120px]" />
       <div className="blob-3 absolute -bottom-40 left-1/4 h-[720px] w-[720px] rounded-full bg-teal-500/30 blur-[140px]" />

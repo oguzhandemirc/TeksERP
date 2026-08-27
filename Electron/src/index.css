@@ -388,6 +388,26 @@
   app-region: no-drag;
 }
 
+/* ⚠️ ÜSTTE ÇİZİLMEK, SÜRÜKLEME BÖLGESİNDEN ÇIKMAK DEĞİLDİR.
+   OS sürükleme bölgesi z-index'e değil GEOMETRİYE bakar: Chromium `drag`
+   dikdörtgenlerini toplar, `no-drag` olanları çıkarır — bölgeyi hiç beyan
+   etmeyen bir eleman (portal'lanan modal/popover/toast) üstte dursa bile
+   kendini DÜŞÜRMEZ ve tıklamaları pencere-taşıma yutar. Belirtisi yanıltıcıdır:
+   düğme "ölü" görünür, hata yoktur, log yoktur, sürüklenen tıklama maximize
+   pencereyi eski boyutuna indirdiği için "modal boyut değiştiriyor" sanılır.
+   Bu tuzak iki kez ısırdı (ApiEndpointDialog'a tek seferlik yama kondu,
+   sonra eklenen ServerIdentityMismatchDialog yamayı almadı ve tamamen ölü
+   açıldı) → çözüm artık PRİMİTİF DÜZEYİNDE: portal'lanan her katman kendini
+   bölgeden düşürür. Yeni bir katman türü eklerken damgasını buraya ekle. */
+[data-ui-overlay],
+[data-ui-dialog],
+[data-ui-sheet],
+[data-ui-pop],
+[data-sonner-toaster] {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
 /* Yoğunluk modu (kişiselleştirme) — kök font ölçeği rem-tabanlı tüm
    boşluk/tipografiyi orantılı küçültür. comfortable = varsayılan (kural yok). */
 html[data-density="compact"] {

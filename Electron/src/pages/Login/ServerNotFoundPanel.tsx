@@ -5,7 +5,7 @@ import type { DiscoveredServer } from "@shared/ipc-contract";
 import { Button } from "@/components/ui/button";
 import { ServerDiscoveryPanel } from "@/components/settings/ServerDiscoveryPanel";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
-import { applyApiBaseUrl, setStoredApiBaseUrl, pushRecentApiBaseUrl } from "@/lib/api-config";
+import { connectToDiscoveredServer } from "@/lib/server-identity";
 
 /**
  * Giriş formunun YERİNE çizilen "sunucuya ulaşılamadı" yüzeyi.
@@ -42,9 +42,7 @@ export function ServerNotFoundPanel({
       onMismatch(c);
       return;
     }
-    applyApiBaseUrl(c.baseUrl);
-    await setStoredApiBaseUrl(c.baseUrl);
-    await pushRecentApiBaseUrl(c.baseUrl);
+    await connectToDiscoveredServer(c);
     toast.success("Sunucuya bağlanıldı.", { description: c.baseUrl });
     onResolved();
   };

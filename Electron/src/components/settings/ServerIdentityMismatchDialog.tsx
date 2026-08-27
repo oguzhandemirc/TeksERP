@@ -19,11 +19,17 @@ import { Button } from "@/components/ui/button";
  * sabitlenmemiş cihaz) uyuşmazlık DEĞİLDİR ve bu diyaloğu açmaz — yanlış-pozitif
  * veren bir güvenlik sorusu ezberden geçilir ve gerçek uyuşmazlıkta da işe yaramaz.
  *
- * Üç tasarım kararı bilinçli:
+ * Dört tasarım kararı bilinçli:
  *  • Dışarı tıklamayla KAPANMAZ (yanlışlıkla geçilmesin).
- *  • Varsayılan ve odaklı buton "Bağlanma".
+ *  • Varsayılan ve odaklı buton GÜVENLİ olan ("Reddet") — tek dolu/renkli buton
+ *    odur. Riskli seçenek bilerek SESSİZ (çerçeveli, kırmızı yazı): iki dolu
+ *    buton yan yana durunca hangisinin güvenli olduğu okunmuyordu ve kırmızı
+ *    dolgu "iptal" diye okunup tam ters anlaşılıyordu (saha geri bildirimi
+ *    2026-08-28).
  *  • "Güven ve bağlan" 3 saniye pasif — kas hafızasıyla tıklanmasın diye
  *    konulmuş bilinçli bir kasis.
+ *  • "Reddet" — eski etiket "Bağlanma" idi ve olumsuz emir kipi "Bağlan"la
+ *    karışıyordu ("bağlanma" mı, "bağlan" mı?). Ret eylemi tek okunuşlu olmalı.
  */
 export interface ServerIdentityMismatchDialogProps {
   open: boolean;
@@ -64,7 +70,7 @@ export function ServerIdentityMismatchDialog({
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent
-        className="sm:max-w-lg"
+        className="sm:max-w-xl"
         onPointerDownOutside={(e) => e.preventDefault()}
         onEscapeKeyDown={(e) => e.preventDefault()}
       >
@@ -108,17 +114,34 @@ export function ServerIdentityMismatchDialog({
         </DialogHeader>
 
         <DialogFooter className="gap-2 sm:justify-between">
-          <Button type="button" variant="ghost" onClick={() => setShowDetails((v) => !v)}>
+          {/* `ghost` iken düğme olduğu anlaşılmıyordu (yalnız yazı) — dolgulu
+              gri: ikincil bir eylem olduğu belli, ana karara rakip değil. */}
+          <Button type="button" variant="secondary" onClick={() => setShowDetails((v) => !v)}>
             {showDetails ? "Ayrıntıları gizle" : "Ayrıntıları göster"}
           </Button>
           <div className="flex gap-2">
-            <Button type="button" variant="destructive" disabled={!armed}
-              onClick={() => onTrust(candidate)}>
-              {armed ? "Bu sunucuya güven ve bağlan" : "Bu sunucuya güven ve bağlan (…)"}
+            {/* Riskli yol — SESSİZ: çerçeve + kırmızı yazı. Dolu kırmızı olsaydı
+                hem güvenli butonla aynı görsel ağırlıkta olur hem de "iptal"
+                diye okunurdu. */}
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!armed}
+              onClick={() => onTrust(candidate)}
+              className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            >
+              Bu sunucuya güven ve bağlan
+              {/* Bekleme eki SABİT GENİŞLİKTE bir yuvada — metne eklenip
+                  çıkarılınca düğme (ve onunla footer) 3. saniyede yeniden
+                  yerleşiyordu; kullanıcı bunu "modal boyut değiştiriyor" diye
+                  bildirdi. Yuva her iki durumda da yer kaplar. */}
+              <span aria-hidden className="ml-1 inline-block w-3 text-center">
+                {armed ? "" : "…"}
+              </span>
             </Button>
-            {/* Varsayılan ve odaklı buton — güvenli olan. */}
+            {/* Varsayılan ve odaklı buton — güvenli olan, tek dolu renk. */}
             <Button type="button" autoFocus onClick={onCancel}>
-              Bağlanma
+              Reddet
             </Button>
           </div>
         </DialogFooter>

@@ -174,14 +174,11 @@ export function ApiEndpointDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      {/* Login ekranı tüm pencereyi `app-drag` yapıyor; portal'lanan dialog o
-          OS-seviyesi sürükleme dikdörtgenine düştüğü için tıklamalar yutuluyor.
-          `app-no-drag` ile dialog içini yeniden etkileşimli yapıyoruz. */}
       {/* ⚠️ GENİŞLİK ALT SIRAYA GÖRE: burada DÖRT aksiyon var (Varsayılana dön ·
           Ağda Bul · Bağlantıyı Test Et · Kaydet) ve etiketleri çalışırken UZUYOR
           ("Aranıyor…", "Test ediliyor…"). `max-w-lg` (512px) içine sığmıyordu →
           modal yatay kayıyordu (saha bildirimi 2026-08-27). */}
-      <DialogContent className="max-w-2xl app-no-drag">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Sunucu Adresi</DialogTitle>
           <DialogDescription>

@@ -3,7 +3,8 @@ import { AlertTriangle, Loader2, Radar, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { useServerStatusStore } from "@/store/serverStatus";
 import { useServerDiscovery } from "@/hooks/useServerDiscovery";
-import { applyApiBaseUrl, setStoredApiBaseUrl, getActiveApiBaseUrl } from "@/lib/api-config";
+import { getActiveApiBaseUrl } from "@/lib/api-config";
+import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { Button } from "@/components/ui/button";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 
@@ -54,8 +55,7 @@ export function ServerOfflineBanner() {
         (c) => c.matchesPinned === "match" && c.baseUrl !== current,
       );
       if (match && pinned) {
-        applyApiBaseUrl(match.baseUrl);
-        await setStoredApiBaseUrl(match.baseUrl);
+        await connectToDiscoveredServer(match);
         toast.success("Sunucu yeni adreste bulundu, bağlantı geri geldi.", {
           description: match.baseUrl,
         });
