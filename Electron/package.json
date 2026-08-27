@@ -1,7 +1,7 @@
 {
   "name": "adnan-sahin-erp-admin",
   "productName": "Adnan Şahin ERP",
-  "version": "2.7.0",
+  "version": "2.8.2",
   "private": true,
   "type": "module",
   "description": "Adnan Şahin ERP — Admin Panel by Etkili Yazılım",
@@ -15,6 +15,8 @@
     "build": "electron-vite build",
     "build:mac": "electron-vite build && electron-builder --mac",
     "build:win": "electron-vite build && electron-builder --win",
+    "release:win": "electron-vite build && electron-builder --win --publish never",
+    "build:win:cross": "electron-vite build && electron-builder --win -c.npmRebuild=false",
     "build:all": "electron-vite build && electron-builder -mwl",
     "preview": "electron-vite preview",
     "electron:rebuild": "electron-rebuild -f -w serialport,node-hid",
@@ -116,6 +118,13 @@
     "appId": "com.etkiliyazilim.adnan-sahin-erp",
     "productName": "Adnan Şahin ERP",
     "asar": true,
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://guncelleme.etkiliyazilim.com/adnansahin/electron/",
+        "channel": "latest"
+      }
+    ],
     "asarUnpack": [
       "**/node_modules/serialport/**",
       "**/node_modules/@serialport/**",
@@ -154,7 +163,7 @@
           ]
         }
       ],
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "TeksERP-${version}-${arch}.${ext}"
     },
     "win": {
       "icon": "resources/TeksERP-LOGO.ico",
@@ -166,7 +175,7 @@
           ]
         }
       ],
-      "artifactName": "${productName}-${version}-Setup.${ext}"
+      "artifactName": "TeksERP-${version}-Setup.${ext}"
     },
     "nsis": {
       "oneClick": false,

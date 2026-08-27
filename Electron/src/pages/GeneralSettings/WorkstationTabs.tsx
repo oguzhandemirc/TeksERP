@@ -1,10 +1,11 @@
 import { useCallback, useRef, useState } from "react";
-import { Printer, Scale, ScanLine, Server, type LucideIcon } from "lucide-react";
+import { Download, Printer, Scale, ScanLine, Server, type LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
 import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
 import { ScannerSettingsSection } from "./ScannerSettingsSection";
 import { ApiEndpointSection } from "./ApiEndpointSection";
+import { UpdateSection } from "./UpdateSection";
 import { SettingsDirtyProvider, useSettingsDirtyRegister } from "./settings-dirty";
 
 /**
@@ -17,6 +18,7 @@ const DEVICE_TABS: Array<{ id: string; label: string; icon: LucideIcon }> = [
   { id: "scale", label: "Kantar", icon: Scale },
   { id: "scanner", label: "Tabanca", icon: ScanLine },
   { id: "server", label: "Sunucu", icon: Server },
+  { id: "update", label: "Güncelleme", icon: Download },
 ];
 
 export function WorkstationTabs() {
@@ -70,6 +72,9 @@ export function WorkstationTabs() {
       </TabsContent>
       <TabsContent value="server" className="mt-0">
         <ApiEndpointSection />
+      </TabsContent>
+      <TabsContent value="update" className="mt-0">
+        <UpdateSection />
       </TabsContent>
     </Tabs>
     </SettingsDirtyProvider>

@@ -52,6 +52,26 @@ const EXEMPT: Record<string, string> = {
   "POST /announce": "tablet kendini bildirir — eşleşmeden önce token alamaz",
   "GET /status": "cihaz atama durumu yoklaması (x-device-id)",
   "GET /pairing-required": "eşleşme zorunlu mu — login öncesi gate",
+  // Mobil uzaktan güncelleme (LAN ikizi): tablet güncellemeyi GİRİŞ EKRANINDAN
+  // ÖNCE sorar — kimlik aransaydı "açılmayan tablete düzeltme gönderme" yolu,
+  // yani kurtarmanın kendisi kapanırdı (`/health` ile aynı gerekçe sınıfı).
+  // Uçlar SALT-OKUNUR ve fabrika verisi TAŞIMAZ; servis ettikleri şey zaten her
+  // tablete kurulu olan uygulamanın kendisidir. Sahadaki asıl kanal internettir
+  // (VPS) ve orada da aynı dosyalar kimliksiz servis edilir — Electron'un
+  // `Setup.exe`si ile aynı durum. Paketin DEĞİŞTİRİLMESİNE karşı koruma kimlik
+  // değil KOD İMZALAMADIR (imza geçersizse istemci güncellemeyi reddeder).
+  // Depo dışına çıkış `dosyaYolu()` ile kapalı; bekçi `test_mobile_update.ts` §6.
+  "GET /updates/ota/:runtimeVersion/manifest": "tablet güncellemeyi giriş öncesi sorar; koruma kod imzalamada",
+  // İstemci sürüm politikası: masaüstü panel "bu sunucu hangi panel sürümünü
+  // bekliyor" sorusunu GİRİŞ EKRANINDAN ÖNCE sorar. Kimlik aransaydı, sözleşmesi
+  // bozulduğu için giriş yapamayan bir panele "güncelle" diyebilme yolu — yani
+  // kurtarmanın kendisi — kapanırdı (`/health` ve mobil güncelleme uçlarıyla
+  // aynı gerekçe sınıfı). Yük SALT-OKUNUR, DB'ye dokunmaz ve iki sürüm
+  // numarasından ibarettir; fabrika verisi taşımaz. Sızdırdığı tek bilgi
+  // "sunucu şu panel sürümünü istiyor" — aynı LAN'da zaten `/identity` sürüm
+  // basıyor. Değer KODDA sabittir, uçtan yazılamaz. Bekçi: test_client_policy.ts
+  "GET /:istemci": "istemci sürüm politikasını giriş öncesi sorar; salt-okunur, iki sürüm numarası",
+  "GET /updates/{*yol}": "güncelleme paketi dosyaları — kimliksiz, yol kaçışı kapalı, imzayla korunur",
 };
 
 /**

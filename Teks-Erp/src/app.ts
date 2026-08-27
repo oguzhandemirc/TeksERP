@@ -85,6 +85,8 @@ import { getPresence } from "./lib/presence";
 
 import { runWithRequestContext } from "./lib/request-context";
 import searchRoutes from "./routes/search.routes";
+import mobileUpdateRoutes from "./routes/mobile-update.routes";
+import clientPolicyRoutes from "./routes/client-policy.routes";
 const app: Express = express();
 
 
@@ -573,6 +575,16 @@ app.use("/api/admin/devices", deviceAdminRouter);
 app.use("/api/work-sessions", workSessionRoutes);
 // Global arama (Ctrl+K) — izin süzgeci ROUTE'ta değil SERVİSTE, kova bazında.
 app.use("/api/search", searchRoutes);
+// Mobil uzaktan güncelleme (tabletlerin JS paketi + kurulum dosyası).
+// Uçların çoğu BİLEREK PUBLIC — tablet güncellemeyi giriş ekranından ÖNCE
+// sorar; kimlik aransaydı "açılmayan tablete düzeltme gönderme" yolu, yani
+// kurtarmanın ta kendisi kapanırdı. Depo `app\` DIŞINDA durur (deploy silmesin)
+// — bkz. src/config/mobile-update.ts.
+app.use("/api/mobile", mobileUpdateRoutes);
+
+// İstemci sürüm politikası — PUBLIC (panel giriş ekranından ÖNCE sorar).
+// Bkz. src/config/client-version-policy.ts.
+app.use("/api/client-policy", clientPolicyRoutes);
 
 // =============================================================================
 // JSON 404 — tanımsız /api/* route'lar için
