@@ -7,6 +7,7 @@ import { TabHost } from "./tabs";
 import { UpdateGate } from "./UpdateGate";
 import { SurumNotlariDialog } from "./SurumNotlariDialog";
 import { useSurumNotuAcilis } from "@/hooks/useSurumNotuAcilis";
+import { useGirisGuncellemeKontrolu } from "@/hooks/useGirisGuncellemeKontrolu";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
 import { ScanResultOverlay } from "@/components/scanner/ScanResultOverlay";
 import { useGlobalShortcuts } from "@/hooks/useGlobalShortcuts";
@@ -64,6 +65,8 @@ export function AppShell() {
   useServerHeartbeat();
   // Güncelleme sonrası "neler değişti" penceresi — kararı açılışta verir.
   const { kuruluSurum } = useSurumNotuAcilis();
+  // Her oturum açılışında güncelleme kontrolü (açılış + 4 saatlik ritme ek).
+  useGirisGuncellemeKontrolu();
   useIdleLogout();
   useExpiryAutoLogout();
 

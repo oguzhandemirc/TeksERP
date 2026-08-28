@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { View, StyleSheet, ScrollView, Image, TextInput } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SurumRozeti } from '../../components/SurumRozeti';
 import { Text, TouchableRipple, ActivityIndicator, Icon, IconButton } from 'react-native-paper';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
@@ -869,6 +870,11 @@ export default function LoginScreen({ lock }: { lock?: LoginLockContext } = {}) 
 
       {/* 'notify' politikasında SESSION_EXISTS onayı — kick modda hiç görünmez. */}
       {conflictModal}
+
+      {/* Sürüm + güncellik: giriş ekranı, "hangi sürümdeyim / güncel miyim"
+          sorusunun sorulduğu yer. Sahada telefonla destek isteyen kişiye
+          okutulacak ilk bilgi budur. */}
+      <SurumRozeti />
     </SafeAreaView>
   );
 }

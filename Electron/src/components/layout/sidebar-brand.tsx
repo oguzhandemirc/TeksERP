@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import logoUrl from "@/assets/teks-logo-fullsize.png";
 import { useCompanyName } from "@/hooks/usePricingEnabled";
+import { useUpdater } from "@/hooks/useUpdater";
+import { useSurumNotuStore } from "@/store/surum-notu";
 import { useServerClock } from "@/hooks/useServerClock";
 
 // Sunucu saatini yerel TZ'de biçimlendiren sabit formatlayıcılar (tek-site'de
@@ -104,10 +106,36 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/** Footer — ürün adı + sürüm üstte, "by Etkili Yazılım" dış bağlantısı altta.
+/**
+ * Güncelleme durumunun tek satırlık karşılığı. `null` dönerse satır çizilmez —
+ * bilgi vermeyen bir gösterge yer kaplamamalı.
+ */
+function guncellikMetni(state: string | undefined): { metin: string; sinif: string } | null {
+  switch (state) {
+    case "up-to-date":
+      return { metin: "güncel", sinif: "text-success" };
+    case "checking":
+      return { metin: "kontrol ediliyor…", sinif: "text-muted-foreground" };
+    case "available":
+    case "downloading":
+      return { metin: "güncelleme iniyor", sinif: "text-info" };
+    case "ready":
+      return { metin: "yeniden başlatılacak", sinif: "text-info" };
+    default:
+      // `error` ve `idle` BİLEREK gösterilmez: internete çıkamayan bir makine
+      // her açılışta kırmızı bir şey görürse gösterge körleşir. Hata Genel
+      // Ayarlar → Bu Bilgisayar → Güncelleme'de yazılıdır.
+      return null;
+  }
+}
+
+/** Footer — ürün adı + sürüm ve güncellik durumu; tıklanınca sürüm notları açılır.
  *  Daraltılmışta "EY" (sürüm tooltip'te). */
 export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   const version = useAppVersion();
+  const { status } = useUpdater();
+  const acSurumNotu = useSurumNotuStore((s) => s.ac);
+  const guncellik = guncellikMetni(status?.state);
   const handleClick = () => {
     void window.api?.system?.openExternal("https://etkiliyazilim.com");
   };
@@ -129,12 +157,20 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   }
   return (
     <div className="border-t border-border/50 px-4 py-3">
-      <p
-        className="truncate text-[10px] font-semibold leading-tight text-muted-foreground"
-        title={version ? `${PRODUCT_NAME} · sürüm ${version}` : PRODUCT_NAME}
+      {/* Sürüm artık tooltip'te değil GÖRÜNÜR: "hangi sürümü kullanıyorum" ve
+          "güncel miyim" soruları sahada en sık sorulan iki sorudur. Tıklama
+          sürüm notlarını açar — sürümü görüp "bunda ne var?" diyen kişi için
+          doğal yol. */}
+      <button
+        type="button"
+        onClick={() => acSurumNotu("tumu")}
+        title="Sürüm notları — bu sürümde neler değişti"
+        className="block w-full truncate text-left text-[10px] font-semibold leading-tight text-muted-foreground transition-colors hover:text-foreground"
       >
         {PRODUCT_NAME}
-      </p>
+        {version ? ` v${version}` : ""}
+        {guncellik ? <span className={` · ${guncellik.sinif}`}>· {guncellik.metin}</span> : null}
+      </button>
       <button
         type="button"
         onClick={handleClick}

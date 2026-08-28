@@ -17,10 +17,10 @@
   "yayinlar": [
     {
       "id": "2026-08-28",
-      "baslik": "Kendi kendine güncellenen program, yarı mamul ayrımı ve sipariş raporları",
+      "baslik": "İlk sürüm — kendi kendine güncellenen program",
       "surumler": {
-        "panel": "2.8.3",
-        "tablet": "2.9.9"
+        "panel": "1.0.0",
+        "tablet": "1.0.0"
       },
       "maddeler": [
         {

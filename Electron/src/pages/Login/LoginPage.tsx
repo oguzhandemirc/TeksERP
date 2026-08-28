@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
+import { SurumRozeti } from "@/components/SurumRozeti";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { authService } from "@/services/authService";
 import { tokenStore } from "@/lib/secure-token";
@@ -180,6 +181,7 @@ export function LoginPage() {
         <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />
         )}
       </div>
+      <SurumRozeti />
     </div>
   );
 }

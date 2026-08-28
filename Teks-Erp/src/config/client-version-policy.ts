@@ -87,8 +87,8 @@ export interface ClientVersionPolicy {
  * gezilecek (bkz. docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md §2).
  */
 export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
-  minVersion: "2.8.1",
-  currentVersion: "2.8.2",
+  minVersion: "1.0.0",
+  currentVersion: "1.0.0",
 };
 
 /**
@@ -122,8 +122,8 @@ export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
  * onlar zaten elle gezilecek.
  */
 export const MOBIL_VERSION_POLICY: ClientVersionPolicy = {
-  minVersion: "2.9.8",
-  currentVersion: "2.9.8",
+  minVersion: "1.0.0",
+  currentVersion: "1.0.0",
 };
 
 /**

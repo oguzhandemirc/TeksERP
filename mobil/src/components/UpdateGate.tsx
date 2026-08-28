@@ -22,6 +22,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, StyleSheet, Text, View } from 'react-native';
 import { Button } from 'react-native-paper';
 import * as Updates from 'expo-updates';
+import { useAuthStore } from '../store/authStore';
 
 import {
   apkDurumu,
@@ -97,6 +98,22 @@ export default function UpdateGate() {
     });
     return () => sub.remove();
   }, [sor, politikaKontrol]);
+
+  /* --- (1c) HER GİRİŞTE sor (kullanıcı isteği) ---------------------
+   * Ön plana dönüş tetiği 10 dakikalık bir aralıkla sınırlı; tablet vardiya
+   * boyunca açık kaldığı için o aralık çoğu zaman doludur. Oturum açılışı ayrı
+   * bir tetiktir ve aralığı BİLEREK sıfırlar: vardiya değişiminde giren kişi,
+   * bir öncekinin 9 dakika önce yaptığı kontrolün gölgesinde kalmamalı. */
+  const token = useAuthStore((st) => st.token);
+  const oncekiToken = useRef<string | null>(null);
+  useEffect(() => {
+    const girisOldu = !oncekiToken.current && !!token;
+    oncekiToken.current = token;
+    if (!girisOldu) return;
+    sonSorma.current = 0; // aralığı sıfırla — giriş her zaman taze kontrol hak eder
+    void sor();
+    void politikaKontrol();
+  }, [token, sor, politikaKontrol]);
 
   /* --- (2) İndirilmişi uygula -------------------------------------- */
   useEffect(() => {
