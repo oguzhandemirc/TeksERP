@@ -12,6 +12,7 @@ import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
+import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { FACTORY_TIMEZONE } from "../constants/time";
@@ -969,6 +970,11 @@ export class InventoryService {
           },
         });
         if (existing) {
+          // ⚠️ ÖNCE 4. DURUM: kayıt yazıldı ama SONRADAN İPTAL EDİLDİ mi?
+          // Payload özdeşliğinden ÖNCE gelmesi gerekiyor — özdeş bir payload
+          // iptal edilmiş kaydı "başarılı" diye döndürürdü ve operatör 100 m
+          // kumaşın kaydolduğunu sanırdı (T1-006; sahada 227 canlı token).
+          assertRollReplayAlive(existing);
           // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE geçerli.
           // Aynı token farklı topla kullanıldıysa (istemci hatası) 2. giriş sessizce
           // "kaydedildi" görünmemeli; kimlik-kilit alanları (item/renk/metre)
@@ -4268,6 +4274,8 @@ export class InventoryService {
           where: { clientToken: data.clientToken },
         });
         if (existing) {
+          // 4. durum: iptal/fire edilmiş açık kumaşın token'ı replay EDİLEMEZ.
+          assertRollReplayAlive(existing);
           return {
             success: true,
             data: existing,

@@ -17,6 +17,7 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { AppError } from "../utils/app-error";
+import { assertOrderReplayAlive } from "./helpers/token-replay.helper";
 import {
   OrderStatus,
   Prisma,
@@ -2036,6 +2037,15 @@ export class OrderService extends BaseService {
         : {}),
     })) as Record<string, unknown> | null;
     if (!existing) throw err;
+    // ⚠️ ÖNCE 4. DURUM (T1-006): sipariş yazıldı ama SONRADAN İPTAL EDİLDİ mi?
+    // Özdeşlik kontrolünden ÖNCE — aksi hâlde iptal edilmiş sipariş "başarılı"
+    // diye dönerdi ve müşteriye söz verilen metraj sipariş listesinde HİÇ
+    // görünmezdi (hata da görünmediği için kimse aramaz).
+    assertOrderReplayAlive({
+      id: String(existing.id),
+      status: existing.status as OrderStatus,
+      orderNumber: (existing.orderNumber as string | null) ?? null,
+    });
     // Hafif payload-özdeşlik (F117 emsali): kimlik-kilit alanları uyuşmalı.
     // Derin satır karşılaştırması bilinçli yapılmıyor (Decimal/alias-terfisi
     // kırılgan) — müşteri + şube + satır sayısı "farklı form oturumu"nu yakalar.

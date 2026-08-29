@@ -77,6 +77,7 @@ import {
   WorkOrderStatus,
 } from "@prisma/client";
 import { AppError } from "../utils/app-error";
+import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { resolveReasonCode } from "./reason-preset.service";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
@@ -1039,16 +1040,11 @@ export class TamburManualService {
       where: { clientToken: input.clientToken },
       select: { id: true, status: true, barcode: true },
     });
-    if (
-      priorRoll &&
-      (priorRoll.status === RollStatus.CANCELLED || priorRoll.status === RollStatus.SCRAP)
-    ) {
-      throw AppError.conflict(
-        "Bu kayıt daha önce oluşturulup iptal edilmiş — yeniden eklemek için formu " +
-          "yeniden açın (aynı işlem tekrar gönderilemez).",
-        { code: "ENTRY_CANCELLED", rollId: priorRoll.id, barcode: priorRoll.barcode },
-      );
-    }
+    // ⚠️ Kural TEK KAYNAKTA (2026-08-29 / T1-006). Bu blok bu dosyada İKİ KEZ
+    // elle yazılmıştı ve diğer ÜÇ replay okuyucusunda (KK1 ham giriş · açık
+    // kumaş · sipariş) hiç yoktu — kopyalanabilir bir kural, kopyalanmadığı
+    // yerde sessizce yok demektir.
+    if (priorRoll) assertRollReplayAlive(priorRoll);
 
     // FAZ 1 — topun kendisi. `isMobileOrigin=false` BİLİNÇLİ: istek Tambur
     // tabletinden (eşleşmiş cihaz) gelse de bu bir KK1 istasyon taraması DEĞİL,
@@ -1395,16 +1391,11 @@ export class TamburManualService {
     //
     // Doğru cevap NET HATA: mantıksal deneme iptalle KAPANMIŞTIR; yeni top
     // isteniyorsa yeni bir denemedir ve yeni token ister.
-    if (
-      priorRoll &&
-      (priorRoll.status === RollStatus.CANCELLED || priorRoll.status === RollStatus.SCRAP)
-    ) {
-      throw AppError.conflict(
-        "Bu kayıt daha önce oluşturulup iptal edilmiş — yeniden eklemek için formu " +
-          "yeniden açın (aynı işlem tekrar gönderilemez).",
-        { code: "ENTRY_CANCELLED", rollId: priorRoll.id, barcode: priorRoll.barcode },
-      );
-    }
+    // ⚠️ Kural TEK KAYNAKTA (2026-08-29 / T1-006). Bu blok bu dosyada İKİ KEZ
+    // elle yazılmıştı ve diğer ÜÇ replay okuyucusunda (KK1 ham giriş · açık
+    // kumaş · sipariş) hiç yoktu — kopyalanabilir bir kural, kopyalanmadığı
+    // yerde sessizce yok demektir.
+    if (priorRoll) assertRollReplayAlive(priorRoll);
 
     let created;
     try {
