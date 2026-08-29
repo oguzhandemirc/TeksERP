@@ -13,6 +13,7 @@ import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";
 import { TravelerCardService } from "../src/services/traveler-card.service";
 import { RollStatus, StepStatus } from "@prisma/client";
+import { randomUUID } from "crypto";
 
 let ITEM = "", GRADE = "", ADMIN = "", ST_BOYA = "", ST_KURSUN = "", SUB_BOYER = "";
 const WIDTH = 250;
@@ -165,6 +166,49 @@ async function main(): Promise<void> {
       returns: [{ rollId: extra }], newRolls: [{ qty: 295 }] }, ADMIN);
     check("IC4: ek parti kabul → toplam 2 born (kümülatif, çift yok)", (await bornLive(wo.woId, wo.kursunStep)) === 2, `born ${await bornLive(wo.woId, wo.kursunStep)}`);
     check("IC4: ek parti dönünce Boyahane yine COMPLETED", (await boyaStatus(wo.boyaStep)) === StepStatus.COMPLETED);
+  }
+
+  // ═══ IC5 — AYNI TOKEN, EŞZAMANLI (BULGU-T1-005) ═══
+  // Tx-ÖNCESİ token kontrolü SIRALI replay'i yakalar; EŞZAMANLI olanı yakalayamaz:
+  // iki istek de o kontrolü geçer, ikincisi `receipt.create`te clientToken
+  // P2002'sine çarpar. Eskiden predicate'siz `withBarcodeRetry` onu barkod
+  // çakışması sanıp 5 kez tekrarlıyor ve "Barkod üretimi 5 denemede başarısız
+  // oldu" 409'u dönüyordu. Operatör o mesajı görüp kabulü ELLE yeniden giriyor
+  // (yeni token → guard yok) ve teslimat İKİ KEZ düşülüyordu.
+  console.log("\n=== IC5: aynı clientToken paralel → tam 1 makbuz, iki istek de başarılı ===");
+  {
+    const { wo, rollIds } = await setupWoOnly("IC5", 1);
+    await sub.dispatch({ workOrderId: wo.woId, stepId: wo.boyaStep, subcontractorId: SUB_BOYER, rollIds }, ADMIN);
+    const token = randomUUID();
+    const istek = () =>
+      sub.receive(
+        {
+          workOrderId: wo.woId, stepId: wo.boyaStep, subcontractorId: SUB_BOYER,
+          clientToken: token,
+          returns: [{ rollId: rollIds[0] }], newRolls: [{ qty: 280 }],
+        },
+        ADMIN,
+      );
+    const sonuc = await Promise.allSettled([istek(), istek()]);
+    const basarili = sonuc.filter((r) => r.status === "fulfilled").length;
+    const mesajlar = sonuc.map((r) =>
+      r.status === "fulfilled"
+        ? String((r.value as { message?: string }).message ?? "")
+        : String((r.reason as Error).message ?? ""),
+    );
+    const makbuzSayisi = await prisma.subcontractorReceipt.count({
+      where: { clientToken: token },
+    });
+    check("IC5: iki istek de BAŞARILI (yanıltıcı barkod-409'u yok)", basarili === 2, mesajlar.join(" || ").slice(0, 160));
+    check("IC5: yalnız TEK makbuz doğdu", makbuzSayisi === 1, `makbuz=${makbuzSayisi}`);
+    check(
+      "IC5: kaybeden istek idempotent replay mesajı döndü",
+      mesajlar.some((m) => m.includes("idempotent retry")),
+      mesajlar.join(" || ").slice(0, 160),
+    );
+    check("IC5: teslimat TEK kez düşüldü (born 1)", (await bornLive(wo.woId, wo.kursunStep)) === 1, `born ${await bornLive(wo.woId, wo.kursunStep)}`);
+    // Temizlik makbuzları iş emri üzerinden buluyor (cleanup: workOrderId IN
+    // createdWoIds) — bu makbuz da o WO'ya bağlı, ek kayda gerek yok.
   }
 
   console.log(`\n──────────────────────────────────────────`);
