@@ -10,6 +10,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { SHRINK_REASON_CODE } from "../constants/variance-reasons";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse, PaginatedResponse } from "../types/api.types";
@@ -127,7 +128,7 @@ import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from
 import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
 
 import { diffFields } from "./helpers/audit-diff.helper";
-import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
+import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -317,6 +318,23 @@ export interface CancelWorkOrderInput {
    * döner — "eksik gönderdin" hatası bilinçli olarak YOKTUR.
    */
   dispositions?: Array<{ rollId: string; action: CancelDisposition }>;
+  /**
+   * AÇIKTA KALAN FASON SEVK KALEMİ İÇİN KARAR (2026-08-29 / BULGU-T1-009).
+   *
+   * Kısmi kabul edilmiş bir sevk (100 gitti, 51 geldi, 49 fasonda) İPTAL
+   * EDİLEMEZ — `cancel()` "kabul yapılmış" der. Eskiden bu sessizce yutuluyor ve
+   * boyahanedeki mal Ham Stok'a düşüyordu. İlk düzeltmem sert engeldi; o,
+   * 2026-08-17'de SAHA ŞİKÂYETİ üzerine kaldırılan engeli geri getiriyordu.
+   * Doğru olan, o gün kurulan desenin ta kendisi: AÇIKÇA SOR.
+   *
+   * `CLOSE_AS_SCRAP` = "kalan gelmeyecek" → mevcut `closeRemainder` motoru
+   * koşar (fire sapma defterine, kalem damgalanır, fason karnesi kapatır).
+   * Verilmezse 409 `FASON_REMAINDER_DECISION_REQUIRED` + kararın dayanacağı
+   * SOMUT liste (hangi sevk, hangi top, kaç metre) döner.
+   */
+  fasonRemainderAction?: "CLOSE_AS_SCRAP";
+  /** Fire sebebi (katalog kodu). Verilmezse sistem sebebi kullanılır. */
+  fasonRemainderReasonCode?: string;
   /**
    * FASONDAKİ TOPLAR İÇİN TEK KARAR (2026-08-17 saha isteği).
    *
@@ -3204,8 +3222,8 @@ export class WorkOrderService {
     input: CancelWorkOrderInput,
     userId: string | undefined,
     reason: string,
-  ): Promise<{ scrapRollIds: string[]; residualRollIds: string[] }> {
-    if (stepIds.length === 0) return { scrapRollIds: [], residualRollIds: [] };
+  ): Promise<{ scrapRollIds: string[]; residualRollIds: string[]; remainderClosed: boolean }> {
+    if (stepIds.length === 0) return { scrapRollIds: [], residualRollIds: [], remainderClosed: false };
 
     const fasonRolls = await prisma.roll.findMany({
       where: {
@@ -3222,7 +3240,7 @@ export class WorkOrderService {
       },
       select: { id: true },
     });
-    if (fasonRolls.length === 0) return { scrapRollIds: [], residualRollIds: [] };
+    if (fasonRolls.length === 0) return { scrapRollIds: [], residualRollIds: [], remainderClosed: false };
 
     if (!input.fasonAction) {
       // Modal iki seçeneği çizsin diye MAKİNE-OKUR kod. Uzun açıklama metni
@@ -3235,6 +3253,10 @@ export class WorkOrderService {
     if (reason.length < 3) {
       throw AppError.badRequest("İptal nedeni (en az 3 karakter) zorunludur");
     }
+
+    // "Kalan gelmeyecek" kararı uygulandı mı — iptal claim'i bunu bilmek ZORUNDA
+    // (aşağıdaki gerekçe). Varsayılan false: kapatma yapılmadıysa davranış aynı.
+    let remainderClosed = false;
 
     // Açık (iptal edilmemiş, kabulü yapılmamış) sevkleri kapat — iki kararda da
     // gerekli: iptal edilmiş bir iş emrine bağlı AÇIK sevk bırakmak, fason
@@ -3257,25 +3279,70 @@ export class WorkOrderService {
       // ⚠️ SONUÇ OKUNUR — `cancelBulk` PARÇALI başarır (BULGU-T1-009).
       // `cancel()` iş kuralı hatasını fırlatır ama toplu sarmalayıcı onu yutup
       // `failed[]`e yazar (bilinçli: tek kötü id 20 sevki fasonda bırakmasın).
-      // Bu dönüş atıldığında iptal, sevk KAPANMAMIŞKEN devam ediyordu ve
-      // aşağıdaki artık-yazımı topu içeri alıp blanket geri-çekmeye teslim
-      // ediyordu → boyahanedeki mal Ham Stok'ta görünüyor, açık sevk ortada
-      // kalıyor, aynı metraj İKİ yerde sayılıyordu. Ölçülen tetikleyici KISMİ
-      // KABUL: 100 m gitti, 51 m geldi, 49 m fasonda; kısmi makbuz kalemi
-      // KAPATMAZ (`OUTSTANDING_ITEM` `isPartial:false` arar) → sevk hâlâ açık,
-      // `cancel()` "kabul yapılmış" diye reddediyor.
+      // Dönüş atıldığında iptal, sevk KAPANMAMIŞKEN devam ediyor ve aşağıdaki
+      // artık-yazımı topu içeri alıp blanket geri-çekmeye teslim ediyordu →
+      // boyahanedeki mal Ham Stok'ta görünüyor, açık sevk ortada kalıyor.
+      //
+      // ⚠️⚠️ BURADA SERT ENGEL YOK — ve bu bilinçli bir DÖNÜŞ (2026-08-29, ikinci
+      // tur). İlk yazımda 409 ile durduruyordum; o, 2026-08-17'de SAHA ŞİKÂYETİ
+      // üzerine kaldırılan sert engeli geri getiriyordu ("bir iş emrini iptal
+      // etmek çok zor, bazen iptal edilemiyor"). O gün kurulan desen "engelleme,
+      // AÇIKÇA SOR"du ve doğru olan oydu — eksik olan tek şey, aynı sorunun
+      // AÇIKTA KALAN SEVK KALEMİ için sorulmamasıydı. Şimdi soruluyor.
       const failed = bulk.data.failed;
       if (failed.length > 0) {
-        const liste = failed.map((f) => f.dispatchNo ?? f.dispatchId).join(", ");
-        throw AppError.conflict(
-          `Fason sevki kapatılamadı (${liste}) — iş emri iptal edilmedi. ` +
-            `Genellikle sebep kısmi kabuldür: önce fasondan kalan malı kabul edin ` +
-            `ya da "kalan gelmeyecek" ile kapatın, sonra iptali tekrarlayın.`,
-          {
-            code: "FASON_DISPATCH_CANCEL_FAILED",
-            failed: failed.map((f) => ({ dispatchNo: f.dispatchNo, message: f.message })),
+        // Kapanmayan sevklerin OUTSTANDING kalemleri: operatörün karar vereceği
+        // fiziksel gerçek — "şu kadar metre hâlâ fasonda".
+        const kalanlar = await prisma.subcontractorDispatchItem.findMany({
+          where: {
+            ...outstandingItemOfOpenDispatch(),
+            dispatchId: { in: failed.map((f) => f.dispatchId) },
           },
-        );
+          select: {
+            id: true,
+            rollId: true,
+            dispatch: { select: { dispatchNo: true, stepId: true } },
+            roll: { select: { barcode: true, currentQty: true } },
+          },
+        });
+
+        if (input.fasonRemainderAction !== "CLOSE_AS_SCRAP") {
+          // MAKİNE-OKUR kod + kararın dayanacağı SOMUT liste. Modal bu listeyi
+          // çizer: hangi sevk, hangi top, kaç metre.
+          throw AppError.conflict(
+            `${kalanlar.length} top hâlâ fasonda (${kalanlar
+              .reduce((t, k) => t + Number(k.roll?.currentQty ?? 0), 0)
+              .toFixed(1)} m). İş emrini iptal etmek için bu malın ne olacağına karar verin.`,
+            {
+              code: "FASON_REMAINDER_DECISION_REQUIRED",
+              remainders: kalanlar.map((k) => ({
+                dispatchNo: k.dispatch.dispatchNo,
+                barcode: k.roll?.barcode ?? null,
+                qty: Number(k.roll?.currentQty ?? 0),
+              })),
+              failed: failed.map((f) => ({ dispatchNo: f.dispatchNo, message: f.message })),
+            },
+          );
+        }
+
+        // KARAR VERİLDİ: kalan gelmeyecek → mevcut `closeRemainder` motoruna
+        // havale. Kural TEK YERDE kalsın diye burada YENİDEN YAZILMIYOR: fire
+        // sapma defterine (`SUBCONTRACTOR_REMAINDER`) düşer, kalem damgalanır,
+        // fason karnesi kalemi "kapandı" sayar. Sebep ZORUNLU (2026-08-19
+        // kullanıcı kararı) — iptal sebebini taşıyoruz, uydurma bir metin değil.
+        const fasonSvc = new SubcontractorService();
+        remainderClosed = kalanlar.length > 0;
+        for (const k of kalanlar) {
+          await fasonSvc.closeRemainder(
+            {
+              stepId: k.dispatch.stepId,
+              rollId: k.rollId,
+              reasonCode: input.fasonRemainderReasonCode ?? SHRINK_REASON_CODE,
+              reasonText: `İş emri iptali: ${reason}`,
+            },
+            userId,
+          );
+        }
       }
     }
 
@@ -3314,6 +3381,7 @@ export class WorkOrderService {
     return {
       scrapRollIds: input.fasonAction === "SCRAP" ? fasonRolls.map((r) => r.id) : [],
       residualRollIds: residual.map((r) => r.id),
+      remainderClosed,
     };
   }
 
@@ -3409,10 +3477,21 @@ export class WorkOrderService {
       // Ayrıca eşzamanlı son-top finalize (tambur.finalize / kursun.finishStep)
       // WO'yu COMPLETED yaparsa bu claim count===0 görür → 409. tx-DIŞI ön-kontrol
       // (2371-2376) yalnız UX; asıl koruma burada.
+      // ⚠️ KENDİ ÜRETTİĞİMİZ TAMAMLANMA (2026-08-29 / BULGU-T1-009): "kalan
+      // gelmeyecek" kararı uygulandıysa `closeRemainder` fason adımını kapatır
+      // ve TEK ADIMLI iş emrinde bu, iş emrini COMPLETED'a çeker. O durumda bu
+      // claim kendi eylemimizi "başkası bu sırada tamamladı" sanıp 409 verir ve
+      // operatörün AZ ÖNCE onayladığı iptal sessizce yapılmamış olur — üstelik
+      // kalan zaten fire yazılmıştır, yani yarım iş kalır.
+      // Muafiyet DAR: yalnız bu istekte kalan kapatıldıysa ve yalnız COMPLETED
+      // için. CANCELLED/SUPERSEDED kapıları AYNEN duruyor.
+      const claimBlocked = fasonPlan.remainderClosed
+        ? [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED]
+        : [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED];
       const cancelClaim = await tx.workOrder.updateMany({
         where: {
           id,
-          status: { notIn: [WorkOrderStatus.COMPLETED, WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] },
+          status: { notIn: claimBlocked },
         },
         // İptal izi KOLONDA (2026-08-17): audit 6 ayda bir arşivleniyor, sebep
         // orada kalırsa "bu iş emri neden iptal edildi" sorusu sessizce

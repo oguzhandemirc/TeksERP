@@ -2292,6 +2292,31 @@ export class InventoryService {
    * yolunda; her okutmada koşturmak o yolu bedelsiz yere yavaşlatırdı ve iptal
    * edilmiş top okutma vakalarının çok küçük bir azınlığıdır.
    */
+
+  /**
+   * ESKİ (damgasız) geri alma iptallerini AUDIT'ten tanır — BULGU-T1-011.
+   *
+   * 2026-08-29'dan sonraki geri almalar izi satıra yazıyor; öncekiler yazmadı ve
+   * satırdan ayırt edilemiyor. Bu sorgu o boşluğu kapatır ve HİÇBİR SATIRI
+   * DEĞİŞTİRMEZ (kullanıcı kararı: eski kayıtlara dokunma).
+   *
+   * ⚠️ Kısa devre: satırda zaten damga varsa audit'e HİÇ BAKILMAZ — yeni
+   * kayıtlar için bedel sıfır. Sorgu yalnız damgasız iptallerde koşar.
+   * ⚠️ Kalıcı değil (audit 6 ayda arşivlenir) — bkz. helper'daki not.
+   */
+  private async isUndoSourcedByAudit(rollId: string, cancelReasonCode: string | null): Promise<boolean> {
+    if (cancelReasonCode) return false;
+    const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT count(*) AS n FROM system_logs
+      WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
+        AND (
+          ("newData" ->> 'cancelledChildId') = ${rollId}
+          OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
+        )
+    `;
+    return Number(rows[0]?.n ?? 0) > 0;
+  }
+
   private async buildCancelDiagnostics(
     roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null },
   ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
@@ -2314,6 +2339,7 @@ export class InventoryService {
       shipmentId: roll.shipmentId,
       currentStepId: roll.currentStepId,
       cancelReasonCode: roll.cancelReasonCode,
+      undoSourcedByAudit: await this.isUndoSourcedByAudit(roll.id, roll.cancelReasonCode),
       movementCount,
       operationCount,
       childCount,
@@ -3443,6 +3469,7 @@ export class InventoryService {
       shipmentId: existing.shipmentId,
       currentStepId: existing.currentStepId,
       cancelReasonCode: existing.cancelReasonCode,
+      undoSourcedByAudit: await this.isUndoSourcedByAudit(existing.id, existing.cancelReasonCode),
       movementCount,
       operationCount,
       childCount,

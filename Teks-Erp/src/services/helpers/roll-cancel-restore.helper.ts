@@ -63,6 +63,20 @@ export interface RollRestoreSignals {
    * buradan tanınır — kararın izi kaydın KENDİ satırında.
    */
   cancelReasonCode: string | null;
+  /**
+   * ESKİ KAYITLAR İÇİN GEÇİŞ SİNYALİ (2026-08-29 / BULGU-T1-011).
+   *
+   * 2026-08-29'dan önceki geri almalar satıra iz YAZMADI ve o kayıtlar satırdan
+   * ayırt EDİLEMİYOR (ölçüldü: saha kopyasında 88 iptal kesim parçasının
+   * hiçbirinde sebep kodu ya da metni yok). Onları tanıyan tek kaynak AUDIT.
+   *
+   * ⚠️ BU SİNYAL KALICI DEĞİL: audit 6 ayda arşivleniyor, yani pencere
+   * KAPANIYOR ve o gün bu koruma SESSİZCE açılır. Kalıcı çözüm izi satıra
+   * taşımaktır (`scripts/fix_tambur_undo_cancel_marker.ts`, kuru koşum
+   * varsayılan) — kullanıcı kararı olarak bekliyor. Bugünden sonraki her geri
+   * alma zaten satırına iz yazdığı için penceredeki risk yalnız o eski kümedir.
+   */
+  undoSourcedByAudit: boolean;
 }
 
 /**
@@ -119,7 +133,7 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
   // uyarı çıkmaz — fark ancak fiziksel sayımda görülür. Yukarıdaki beş sinyal
   // bunu göremiyordu: böyle bir parçanın hareketi, istasyon işlemi, çocuğu,
   // çuvalı, sevki YOKTUR (hepsi 0) — tam da "hiç yaşamamış" gibi görünür.
-  if (s.cancelReasonCode === TAMBUR_UNDO_CANCEL_CODE) {
+  if (s.cancelReasonCode === TAMBUR_UNDO_CANCEL_CODE || s.undoSourcedByAudit) {
     return (
       "Bu parça bir Tambur geri almasıyla iptal edilmiş ve metrajı kaynak topa " +
       "iade edilmiş — geri alınamaz. Aynı metrajı yeniden elde etmek için kaynak " +

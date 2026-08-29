@@ -283,6 +283,7 @@ async function main(): Promise<void> {
       dispatchItemCount: 0,
       kartelaItemCount: 0,
       cancelReasonCode: null,
+      undoSourcedByAudit: false,
     };
     check("temiz kayıt: engel yok", resolveRollRestoreBlockReason(base) === null);
     check(
@@ -426,6 +427,7 @@ async function main(): Promise<void> {
       status: done!.status,
       preCancelStatus: done!.preCancelStatus,
       cancelReasonCode: null,
+      undoSourcedByAudit: false,
       batchId: null,
       sackId: null,
       shipmentId: null,
@@ -509,6 +511,36 @@ async function main(): Promise<void> {
     );
     const sonra = await prisma.roll.findUnique({ where: { id: cocuk.id }, select: { status: true } });
     check("parça hâlâ iptal (dirilmedi)", sonra?.status === RollStatus.CANCELLED, String(sonra?.status));
+
+    // ── ESKİ KAYIT (damgasız) — AUDIT KAPISI ────────────────────────────────
+    // 2026-08-29 öncesi geri almalar satıra iz YAZMADI ve satırdan ayırt
+    // edilemiyor (saha kopyasında 88 parçanın hiçbirinde sebep kodu yok).
+    // Kullanıcı kararı: o satırlara DOKUNMA. O yüzden koruma audit'ten gelir.
+    // ⚠️ Bu koruma KALICI DEĞİL (audit 6 ayda arşivlenir) ve bunu bilerek
+    // yazıyoruz — sonda o pencerenin gerçekten çalıştığını ölçer.
+    await prisma.roll.update({
+      where: { id: cocuk.id },
+      data: { cancelReasonCode: null, cancelReason: null }, // eski kaydı taklit et
+    });
+    const damgasiz = await prisma.roll.findUnique({
+      where: { id: cocuk.id },
+      select: { cancelReasonCode: true },
+    });
+    check("sonda damgayı gerçekten sildi (eski kayıt taklidi)", damgasiz?.cancelReasonCode === null);
+
+    let eskiHata: string | undefined;
+    try {
+      await service.restoreCancelledRoll(cocuk.id, adminId);
+    } catch (e) {
+      eskiHata = (e as Error).message;
+    }
+    check(
+      "DAMGASIZ eski kayıt da korunuyor (audit kapısı)",
+      eskiHata !== undefined,
+      eskiHata?.slice(0, 55) ?? "DİRİLDİ! — audit kapısı çalışmıyor",
+    );
+    const eskiSonra = await prisma.roll.findUnique({ where: { id: cocuk.id }, select: { status: true } });
+    check("damgasız kayıt da iptal kaldı", eskiSonra?.status === RollStatus.CANCELLED, String(eskiSonra?.status));
   }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 

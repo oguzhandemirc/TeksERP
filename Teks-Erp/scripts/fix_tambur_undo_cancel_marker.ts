@@ -5,6 +5,13 @@
 //   npx tsx scripts/fix_tambur_undo_cancel_marker.ts            # yalnız rapor
 //   npx tsx scripts/fix_tambur_undo_cancel_marker.ts --apply    # yazar
 //
+// ⚠️ DURUM: KULLANICI KARARI — BU ARAÇ ŞU AN UYGULANMAYACAK (2026-08-29).
+// Eski kayıtların korunması artık AUDIT KAPISINDAN geliyor
+// (`inventory.isUndoSourcedByAudit`) ve hiçbir satıra dokunmuyor. Bu araç
+// yalnız TEK bir iş için duruyor: audit 6 ayda arşivlenince o koruma sessizce
+// açılır; damga kalıcıdır. Yani bu, "pencere kapanmadan izi satıra taşı"
+// seçeneğidir — zorunlu değil, kalıcılık tercihi.
+//
 // NEDEN GEREKLİ
 // 2026-08-29'dan itibaren Tambur geri alması iptal ettiği parçaya iki şey
 // yazıyor: `cancelReasonCode = TAMBUR_GERI_ALMA` (iz) ve `currentQty = 0`

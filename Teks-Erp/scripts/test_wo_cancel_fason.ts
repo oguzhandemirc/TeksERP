@@ -17,8 +17,8 @@
 //   2. Her iki karar da GERÇEKTEN uygulanır — top statüsü değişir.
 //   3. İptal izi KOLONDA durur (audit 6 ayda arşivleniyor; sebep orada kalırsa
 //      "neden iptal edildi" sorusu sessizce cevapsız kalır).
-//   4. (2026-08-29 / BULGU-T1-009) Sevk KAPATILAMADIYSA iptal DURUR ve mal
-//      fasonda kalır. Bu bekçi eskiden yalnız mutlu yolu ölçüyordu: `cancelBulk`
+//   4. (2026-08-29 / BULGU-T1-009) Sevk KAPATILAMADIYSA iptal SERT ENGELE
+//      DEĞİL AÇIK KARARA düşer. Bu bekçi eskiden yalnız mutlu yolu ölçüyordu: `cancelBulk`
 //      PARÇALI başarır (`failed[]`) ve o dönüş atıldığında iptal, sevk açıkken
 //      devam ediyor, boyahanedeki mal Ham Stok'ta görünüyordu. Tetikleyici
 //      KISMİ KABUL: kısmi makbuz sevk kalemini KAPATMAZ ama `cancel()` "kabul
@@ -231,14 +231,20 @@ async function main(): Promise<void> {
       const beforeStatus = (await prisma.roll.findUnique({ where: { id: rollP.id }, select: { status: true } }))?.status;
       check("kurulum: kısmi kabul sonrası top fasonda kaldı", beforeStatus === "AT_SUBCONTRACTOR", beforeStatus ?? "");
 
+      // ── KARAR GELMEDİ → SORU (sert engel DEĞİL) ──────────────────────────
       const partialErr = await errorOf(() =>
         svc.softDelete(woP.id, admin.id, { reason: "sipariş iptal oldu", fasonAction: "RETURN_TO_STOCK" }),
       );
-      check("kısmi kabullü iş emrinin iptali REDDEDİLDİ", partialErr !== null, partialErr?.message?.slice(0, 90) ?? "");
+      check("kalan fasondayken iptal DURDU (karar soruluyor)", partialErr !== null, partialErr?.message?.slice(0, 80) ?? "");
       check(
-        "hata MAKİNE-OKUR kod taşıyor (FASON_DISPATCH_CANCEL_FAILED)",
-        partialErr?.code === "FASON_DISPATCH_CANCEL_FAILED",
+        "hata MAKİNE-OKUR kod taşıyor (FASON_REMAINDER_DECISION_REQUIRED)",
+        partialErr?.code === "FASON_REMAINDER_DECISION_REQUIRED",
         partialErr?.code ?? "—",
+      );
+      check(
+        "mesaj SOMUT: kaç top, kaç metre",
+        Boolean(partialErr?.message.includes("fasonda") && /\d/.test(partialErr?.message ?? "")),
+        partialErr?.message?.slice(0, 70) ?? "",
       );
       const rollAfter = await prisma.roll.findUnique({ where: { id: rollP.id }, select: { status: true } });
       check(
@@ -247,11 +253,49 @@ async function main(): Promise<void> {
         rollAfter?.status ?? "",
       );
       const woAfter = await prisma.workOrder.findUnique({ where: { id: woP.id }, select: { status: true } });
-      check("iş emri iptal EDİLMEDİ (tx geri sarıldı)", woAfter?.status === "IN_PROGRESS", woAfter?.status ?? "");
-      const openLeft = await prisma.subcontractorDispatch.count({
-        where: { workOrderId: woP.id, cancelledAt: null },
+      check("iş emri henüz iptal EDİLMEDİ", woAfter?.status === "IN_PROGRESS", woAfter?.status ?? "");
+
+      // ── KARAR VERİLDİ → AKIŞ TAMAMLANIYOR (tek diyalog, tek onay) ────────
+      // 2026-08-17 saha kuralı: "tamamlanmamış her iş emri iptal EDİLEBİLİR,
+      // ama fasondaki mal için karar AÇIKÇA verilir." Sert engel o kuralı
+      // bozardı; açık karar hem kuralı hem defteri korur.
+      // ⚠️ SARMALI: bu çağrı patlarsa test ÇÖKER ve özet hiç basılmaz — negatif
+      // sonda "kırmızı verdi" yerine "çıktı vermedi" olur, ki bu zayıf sinyaldir
+      // (ölçüldü). Hata bir KONTROL olarak raporlanmalı.
+      const kararErr = await errorOf(() =>
+        svc.softDelete(woP.id, admin.id, {
+          reason: "sipariş iptal oldu",
+          fasonAction: "RETURN_TO_STOCK",
+          fasonRemainderAction: "CLOSE_AS_SCRAP",
+        }),
+      );
+      check(
+        "karar verilince iptal HATASIZ tamamlandı",
+        kararErr === null,
+        kararErr?.message?.slice(0, 70) ?? "",
+      );
+      const woSon = await prisma.workOrder.findUnique({ where: { id: woP.id }, select: { status: true } });
+      check("karar verilince iş emri İPTAL EDİLDİ (çıkmaz yok)", woSon?.status === "CANCELLED", woSon?.status ?? "");
+      const kalem = await prisma.subcontractorDispatchItem.findFirst({
+        where: { rollId: rollP.id },
+        select: { remainderClosedAt: true },
       });
-      check("açık fason sevki ORTADA KALMADI (hâlâ açık ve izlenebilir)", openLeft === 1, `açık sevk ${openLeft}`);
+      check("fason kalemi KAPANDI (damga basıldı)", kalem?.remainderClosedAt != null);
+      const sapma = await prisma.rollVariance.findFirst({
+        where: { rollId: rollP.id, source: "SUBCONTRACTOR_REMAINDER" },
+        select: { qty: true, kind: true },
+      });
+      check(
+        "kalan metraj FİRE olarak deftere yazıldı (buharlaşmadı)",
+        sapma != null && Number(sapma.qty) === 49,
+        sapma ? `${sapma.kind} ${Number(sapma.qty)} m` : "defterde YOK!",
+      );
+      const rollSon = await prisma.roll.findUnique({ where: { id: rollP.id }, select: { status: true } });
+      check(
+        "mal HAM STOĞA DÜŞMEDİ (hayalet stok yok)",
+        rollSon?.status !== "STOCK",
+        rollSon?.status ?? "",
+      );
     }
 
     // ── 8) İPTAL TX'İ DÜŞERSE FASON STATÜSÜ DE GERİ SARILIR (BULGU-T1-009) ──
