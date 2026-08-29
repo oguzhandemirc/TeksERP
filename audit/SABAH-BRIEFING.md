@@ -2,28 +2,25 @@
 
 ## 1. Tek cümlede
 
-Denetim bitti (243 bulgu, rapor + paylaşılabilir sayfa hazır) ve düzeltme turunun
-ilk altı commit'i `denetim-duzeltme` dalında duruyor; **veritabanı gece 05:00'ten
-beri erişilemez olduğu için DB'ye dokunan hiçbir doğrulama koşturulamadı.**
+Denetim bitti (243 bulgu, rapor + paylaşılabilir sayfa hazır) ve **ACİL paketinin
+tamamı düzeltildi, ölçüldü ve `denetim-duzeltme` dalına commit edildi**: altı S1
+bulgusu kapandı, her biri kırmızı verdiği KANITLANMIŞ bekçilerle korunuyor.
+Tam bekçi paketi **364/369** — kırmızı kalan 5'in tamamı denetim öncesinden geliyor.
 
-## 2. İlk yapılacak iş (5 dakika)
+## 2. Bugün kapanan ACİL kalemler (hepsi ölçüldü)
 
-Postgres.app `trust` bağlantıları için oturum açmış kullanıcıya onay diyaloğu
-göstermek zorunda; ekran kilitliyken gösteremiyor ve **psql dahil her bağlantı**
-reddediliyor:
+| Bulgu | Neydi | Commit |
+|---|---|---|
+| T1-005 (S1/K3) | Fason kabulde aynı fiş İKİ KEZ düşülüyordu (yanıltıcı barkod-409'u → operatör elle yeniden giriyor) | `15030ea6` |
+| T1-009 (S1/K3) | İş emri iptali, fason sevki kapatılamadığında da devam ediyor → boyahanedeki mal Ham Stok'ta | `705ca353` |
+| T1-010 (S2/K3) | Aynı talep İKİ KEZ sevk edilebiliyordu (planlı tahsis kapasiteden düşülmüyordu) | `811a6f2c` |
+| T3-003 (S1) | Sevkiyat İPTAL edilmiş siparişe yazılabiliyordu (durum hiçbir katmanda okunmuyordu) | `811a6f2c` |
+| T3-002 (S1) | Tabletten çıkan sevkiyat sipariş defterine hiç yazılmıyor + sonradan bağlamanın yolu yok | `78fb552b` |
+| D-A-01 + K-3 (S1) | "Düzelt" kesimi eziyordu · depo kesimi `initialQty`yi düşürüyordu | `4035b411` `31f2a945` |
 
-```
-FATAL: Postgres.app failed to verify "trust" authentication
-DETAIL: Postgres.app failed to show a dialog...
-```
-
-Çözüm (Postgres.app'in kendi önerisi): sunucuyu yeniden başlat (menü çubuğu →
-Stop/Start) ya da kalıcı çözüm için `pg_hba.conf`'u parola isteyecek biçimde
-değiştir. Sonra:
-
-```bash
-cd Teks-Erp && npx tsx scripts/run-all-tests.ts        # tam bekçi paketi (366)
-```
+Her düzeltme için **negatif sonda** koşuldu (düzeltme geri alınınca bekçi kırmızı
+veriyor mu). Toplam 12 sonda; ikisi bekçinin KÖR olduğunu gösterdi ve bekçi
+düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 
 ## 3. Doğrulama SONUÇLARI (2026-08-29 sabah, DB açıldıktan sonra koşuldu)
 
@@ -61,18 +58,29 @@ değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 12 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 18 commit)
+
+Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazıyor.
 
 | Commit | Ne | Doğrulama |
 |---|---|---|
 | `c6161d48` | Denetim artefaktları (rapor, 243 bulgu, haritalar, 41 repro scripti) | — |
 | `c0d87ea3` | Rota kimlik bekçisi: tam yol anahtarı + client-policy muafiyeti | ✅ 15/15 + negatif sonda |
-| `4035b411` | **"Düzelt" claim'i metrajı/statüyü pinliyor** (S1) | ⏳ DB bekliyor (tip ✅) |
-| `c75f71d0` | **kur.ps1 sunucunun ecosystem'ini ezmiyor** (S1) | ⏳ pwsh yok (elle okundu) |
-| `df1ad374` | **Yedek bayatlığı gece yedeğinden ölçülüyor + hüküm** (S1) | ⏳ DB bekliyor (tip ✅, statik bekçi ✅) |
-| `e5dff1ad` | CI sahaya çıkan dalda da koşuyor | ⏳ push gerekiyor |
-| `29eba6e6` | **Ekransız çakışma duyuruluyor** (S1, mobil) | ✅ 132/132 + iki negatif sonda |
-| `4f0636da` | 8 şema kısıt taslağı + veri onarım aracı (kuru koşum) | ⏳ DB bekliyor |
+| `4035b411` | **"Düzelt" claim'i metrajı/statüyü pinliyor** (S1) | ✅ 7/7 |
+| `c75f71d0` | **kur.ps1 sunucunun ecosystem'ini ezmiyor** (S1) | pwsh yok — elle okundu |
+| `df1ad374` | **Yedek bayatlığı gece yedeğinden ölçülüyor + hüküm** (S1) | ✅ |
+| `e5dff1ad` | CI sahaya çıkan dalda da koşuyor | push gerekiyor |
+| `29eba6e6` | **Ekransız çakışma duyuruluyor** (S1, mobil) | ✅ 132/132 + 2 sonda |
+| `4f0636da` | 8 şema kısıt taslağı + veri onarım aracı (kuru koşum) | ✅ kuru koşum |
+| `31f2a945` | **Depo kesimi `initialQty`ye dokunmuyor** (S1, 3 bulgu birden) | ✅ + sonda |
+| `15030ea6` | **Fason kabul idempotency'si** (S1) | ✅ 19/19 + sonda + 26 komşu bekçi |
+| `705ca353` | **İptal, fason sevki kapatılamazsa DURUR** (S1) | ✅ 20/20 + 2 sonda + §24c |
+| `811a6f2c` | **Aşırı sevk + iptal siparişe tahsis** (S1+S2) | ✅ 16/16 + 4 sonda |
+| `78fb552b` | **Tahsissiz sevk uyarısı + onarım ucu** (S1) | ✅ 29/29 + 2 sonda |
+
+⚠️ **`ec1c51e5` BENİM DEĞİL** — paketleme sırasında başka bir oturum "araca
+yüklenen çuval adedi" özelliğini (migration dahil) bu dala commit etti. Muhtemel
+niyet `adnansahin` idi; taşımak sizin kararınız, dokunmadım.
 
 Dal **push edilmedi** ve hiçbir şey `adnansahin`e merge edilmedi.
 
@@ -87,7 +95,10 @@ Dal **push edilmedi** ve hiçbir şey `adnansahin`e merge edilmedi.
 
 ## 6. Bugün fabrikanın koşabileceği kontrol
 
-Rapor §7.6'da 12 salt-okunur SQL var (her biri eşiğiyle). En acili:
+Rapor §7.6'da 12 salt-okunur SQL var (her biri eşiğiyle). Bugün **bir tane daha**
+eklendi — mutabakat kapısı §24c ("açık fason kalemi ama top fasonda değil");
+`consistency-check-derived.sql` ile birlikte koşar ve `npm test`'te de ölçülür.
+En acili hâlâ bu:
 
 ```sql
 -- Sipariş defterine hiç yazılmamış sevkiyat — kopyada 5 çıkıyordu, canlıda?
@@ -96,6 +107,11 @@ FROM shipments s
 WHERE s.status = 'DISPATCHED'
   AND NOT EXISTS (SELECT 1 FROM sack_allocations a WHERE a."shipmentId" = s.id);
 ```
+
+Çıkan her satır artık **onarılabilir**: `POST /api/shipping/shipments/:id/orders`
+(izin `shipping:write`) sevkiyatı doğru siparişe bağlar, defteri günceller ve
+irsaliyeyi v+1 olarak yeniden dondurur. Hangi sevkiyatın hangi siparişe
+yazılacağı hâlâ **satış + muhasebe kararıdır** (bkz. §5).
 
 ## 7. Denetimin çıktıları nerede
 
