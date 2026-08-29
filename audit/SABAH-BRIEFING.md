@@ -23,13 +23,16 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | Aynı kod (harf farkı) | `MC155`(3) · `BGR150`(2) | birleştirme |
 | Aynı kod (harf farkı) | **`SANTUK` ↔ `santuk` — İKİSİ DE AKTİF ve FARKLI kumaş** (BORANCIK ↔ ŞANTUK) | birleştirme DEĞİL, **yeniden adlandırma** (iş kararı) |
 
-**S2 paketi — dört bulgu daha kapandı:**
+**S2 paketi — yedi bulgu kapandı:**
 | Bulgu | Neydi |
 |---|---|
 | T1-006 | İptal edilmiş kaydın token'ı "başarılı" dönüyordu (sahada 227 canlı token) |
 | T2-005 | İptal edilmiş iş emrine bağlı sipariş HİÇ iptal edilemiyordu (2 sipariş kilitli) |
 | T2-013 | `admin:users` taşıyan hesap kendine `admin:*` yazabiliyordu |
 | T1-039 | Depo kesiminde tükenen kaynak 0 m'lik hayalet olarak depoda kalıyordu |
+| T1-002 | İki eşzamanlı aşım kesimi 100 m'lik toptan 240 m çocuk üretiyordu (defter 40 m yazıyordu) |
+| T1-045 | İçe aktarımın 10 MB'lık limiti hiç koşmuyordu — 2 MB'lık CSV 413 alıyor, mesaj yanlış sınırı söylüyordu |
+| — | `test_wip_scorecard` §4 ortam verisine bağımlıydı (ürün kusuru değil); kalıcı olarak ayrıldı |
 
 ## 2. Bugün kapanan ACİL kalemler (hepsi ölçüldü)
 
@@ -52,7 +55,7 @@ düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
 | 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
-| 3 | `run-all-tests.ts` (tam paket) | **366/371 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
+| 3 | `run-all-tests.ts` (tam paket) | **368/373 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
@@ -82,7 +85,7 @@ değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 23 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 25 commit)
 
 Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazıyor.
 
@@ -104,6 +107,8 @@ Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazı
 | `288a1d6a` | **Şema kısıtları K1·K5·K6·K7·K8** (+ migration) | ✅ fabrika kopyasında kuruldu |
 | `aa6f1d93` | **İptal edilmiş token replay'i** (S2) | ✅ 16/16 + sonda |
 | `c087b82f` | **Sipariş iptali çıkmazı · kendine tam yetki · hayalet top** (3×S2) | ✅ 16/16 + 3 sonda |
+| `c2af089d` | **Eşzamanlı aşım kesimi yoktan kumaş üretiyordu** (S2) | ✅ 15/15 + 3 sonda |
+| `3877d956` | **İçe aktarım gövde limiti + WIP bekçisi onarımı** (S2) | ✅ 9/9 + 3 sonda |
 
 ✅ **Başkasının commit'i taşındı:** "araca yüklenen çuval adedi" özelliği
 `adnansahin`e alındı (`50c320ef`) ve dal onun üzerine kuruldu — `adnansahin..HEAD`
