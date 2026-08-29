@@ -25,18 +25,42 @@ değiştir. Sonra:
 cd Teks-Erp && npx tsx scripts/run-all-tests.ts        # tam bekçi paketi (366)
 ```
 
-## 3. Doğrulama bekleyen komutlar (sırayla)
+## 3. Doğrulama SONUÇLARI (2026-08-29 sabah, DB açıldıktan sonra koşuldu)
 
-| # | Komut | Beklenen |
+| # | Kontrol | Sonuç |
 |---|---|---|
-| 1 | `npx tsx scripts/test_manual_props_claim_pin.ts` | 4/4 yeşil (yeni bekçi) |
-| 2 | `npx tsx scripts/audit_repro_D-A-01.ts` | Artık **409** vermeli; önce 10/10 bozuluyordu |
-| 3 | `npx tsx scripts/run-all-tests.ts` | Kırmızı kalan varsa listesi — düzeltmelerin komşu etkisi burada görünür |
-| 4 | `npx tsx scripts/fix_denetim_onarim.ts` | Kuru koşum: 8 onarım kaleminin güncel sayıları |
-| 5 | `curl -s localhost:4000/api/admin/health -H "Authorization: Bearer <token>" \| jq .backupHealth` | `verdict` + `ageHours` gerçek gece yedeğinden |
+| 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
+| 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ❌ **hâlâ kırmızı** — sebebi aşağıda; benim düzeltmemin kapsamı dışında |
+| 3 | `run-all-tests.ts` (tam paket) | **361/367 dosya yeşil**, 326 sn. Kırmızı 6'nın 5'i bilinen kalem, 1'i düzeltildi (aşağı) |
+| 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
+| 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
-⚠️ 3. adımda kırmızı çıkarsa: her düzeltme ayrı commit'te, tek tek geri alınabilir
-(`git revert <sha>`). Hiçbiri sahaya gitmedi.
+### 3.1 Repro neden hâlâ kırmızı — ve bu ne demek
+
+İki AYRI kusur varmış, ben birincisini kapattım:
+
+1. **Bayat okuma (kapandı, `4035b411`):** ekran 100 m okur, arada kesim olur,
+   düzeltme kesimi ezer. Artık 409.
+2. **İş kuralının kör olması (AÇIK):** depo kesimi `currentQty` **ve**
+   `initialQty`'yi birlikte düşürüyor (`tambur.service.ts:2245-2246`). Bu yüzden
+   kesimden sonra da "top bütün" görünüyor ve "yalnız bütün toplarda metraj
+   düzeltilir" kuralı kesilmiş topu da geçiriyor — okuma TAZE olsa bile operatör
+   eski değeri yazarsa 100 m'lik fiziksel toptan sistemde 140,5 m oluyor.
+
+İkincisinin düzeltmesi raporun **K-3** kalemi: kesim yalnız `currentQty` düşürsün.
+⚠️ Bu, rapor rakamlarını etkiler — bugün kesilmiş topun ana+çocuk `initialQty`
+toplamı 100 çıkıyor, değişiklikten sonra 140 çıkar. `initialQty` okuyan her rapor
+yolunun tek tek çıkarılması gerekir. **Karar bekliyor.**
+
+### 3.2 Kırmızı kalan 5 bekçi — hepsi ÖNCEDEN kırmızıydı
+
+| Bekçi | Sebep | Sınıf |
+|---|---|---|
+| `test_consistency` (§1,§11,§15,§16,§19,§20) | dev DB'de fixture kalıntıları ve bilinen drift | bilinen (rapor §8) |
+| `test_consistency_derived` §21 | 2 fixture iş emri | bilinen |
+| `test_db_invariants` | dev'de `colors_nameFoldColor_key` yok — "yumuşak kapı", temizlik sonrası enforce | bilinen/bilinçli |
+| `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
+| `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
 ## 4. Dalda ne var (`denetim-duzeltme`, 7 commit)
 
