@@ -3152,6 +3152,21 @@ export class WorkOrderService {
       closeOpenDispatchItems === 0 &&
       inFlightForClose <= CLOSE_DISPOSITION_MAX_ROLLS;
 
+    // Kısmi kabul edilmiş (kapatılamayan) sevk kalemleri: iptal bunları
+    // `cancelBulk` ile kapatamaz ve operatörden karar ister.
+    const fasonRemainders = await prisma.subcontractorDispatchItem.findMany({
+      where: {
+        ...outstandingItemOfOpenDispatch({ workOrderId: id }),
+        // Yalnız kabulü BAŞLAMIŞ olanlar: kabulsüz sevk `cancelBulk` ile
+        // sorunsuz kapanır, operatöre sorulacak bir şey yoktur.
+        receiptItems: { some: { receipt: { cancelledAt: null } } },
+      },
+      select: {
+        dispatch: { select: { dispatchNo: true } },
+        roll: { select: { barcode: true, currentQty: true } },
+      },
+    });
+
     return {
       success: true,
       data: {
@@ -3179,6 +3194,23 @@ export class WorkOrderService {
           subcontractorReturnInProductionCount: returnInProductionCount,
         },
         canSwitchToClose,
+        // ── AÇIKTA KALAN FASON KALEMİ (2026-08-29 / BULGU-T1-009) ────────────
+        // Modal soruyu ÖNDEN sorabilsin diye önizlemeye taşınıyor — mevcut
+        // `fasonAction` deseninin birebir aynısı (o da 409'u yakalamıyor,
+        // önizlemedeki sayıya bakıp soruyu baştan soruyor). Bu alan olmasaydı
+        // operatör iptale basıp işlenmemiş bir 409 görürdü.
+        // ADDITIVE — eski istemciler yok sayar.
+        fasonRemainder: {
+          count: fasonRemainders.length,
+          totalQty: Number(
+            fasonRemainders.reduce((t, k) => t + Number(k.roll?.currentQty ?? 0), 0).toFixed(1),
+          ),
+          items: fasonRemainders.map((k) => ({
+            dispatchNo: k.dispatch.dispatchNo,
+            barcode: k.roll?.barcode ?? null,
+            qty: Number(k.roll?.currentQty ?? 0),
+          })),
+        },
         closeHint: canSwitchToClose
           ? "Bu iş emri iptal edilemez ama kapatılabilir — istasyondaki toplara depo / 2. kalite / devir kararı verilir."
           : null,

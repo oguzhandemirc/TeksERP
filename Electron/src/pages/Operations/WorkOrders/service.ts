@@ -1063,6 +1063,16 @@ export interface WorkOrderCancelImpact {
     returnedFromSubcontractorCount: number;
     subcontractorReturnInProductionCount: number;
   };
+  /**
+   * AÇIKTA KALAN FASON KALEMİ (2026-08-29). Kısmi kabul edilmiş sevk iptalle
+   * kapanmaz; iptalin sürmesi için "kalan gelmeyecek" kararı gerekir. Soru
+   * ÖNDEN sorulur — `fasonAction` deseninin aynısı.
+   */
+  fasonRemainder?: {
+    count: number;
+    totalQty: number;
+    items: { dispatchNo: string | null; barcode: string | null; qty: number }[];
+  };
   /** İptal bloklu ama kapatma açık → arayüz "Kapat'a geç" sunar. */
   canSwitchToClose: boolean;
   closeHint: string | null;
@@ -1079,6 +1089,12 @@ export interface CancelWorkOrderPayload {
    * reddeder ve modal iki düğmeyi çizer.
    */
   fasonAction?: "RETURN_TO_STOCK" | "SCRAP";
+  /**
+   * AÇIKTA KALAN sevk kalemi için karar (2026-08-29). Verilmezse backend
+   * `FASON_REMAINDER_DECISION_REQUIRED` ile reddeder. `CLOSE_AS_SCRAP` =
+   * "kalan gelmeyecek" → fire sapma defterine yazılır, kalem kapanır.
+   */
+  fasonRemainderAction?: "CLOSE_AS_SCRAP";
 }
 
 export interface BatchDropPreviewRoll {
