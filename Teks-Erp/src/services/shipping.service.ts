@@ -1461,7 +1461,7 @@ export class ShippingService {
   }
 
   async createShipment(
-    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; destination?: ShipmentDestination; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
+    data: { sackIds: string[]; customerId: string; branchId?: string | null; orderIds?: string[]; orderless?: boolean; destination?: ShipmentDestination; procedureCode?: string | null; plateNumber?: string | null; driverName?: string | null; carrier?: string | null; clientToken?: string | null },
     userId?: string
   ): Promise<ApiResponse<unknown>> {
     // İdempotent replay (A4): timeout-retry aynı token'la gelir — çuvallar ilk
@@ -1531,11 +1531,30 @@ export class ShippingService {
       throw err;
     }
     const dispatched = !confirmationEnabled;
-    await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, destination, dispatched } });
+    // ── TAHSİSSİZ SEVK GÖRÜNÜR OLSUN (BULGU-T3-002) ─────────────────────────
+    // Sipariş seçilmeden kurulan sevkiyat hiçbir sipariş satırına yazılmaz:
+    // karşılanma tablosu, "açık talep" süzgeci, Ürün Dengesi, Sevk & Termin
+    // karnesi ve muhasebe fatura satırları o malı HİÇ görmez. Fabrika
+    // karşılanmış talebi yeniden üretir. Tablet ekranı `orderIds` GÖNDERMİYOR
+    // (sabit undefined) — yani oradan çıkan her sevkiyat sessizce böyleydi.
+    // ⚠️ 400 DEĞİL, UYARI: deploy sırası backend ÖNCE; sert red sahadaki tüm
+    // tabletleri aynı anda sevk yapamaz hâle getirirdi. Siparişsiz sevk zaten
+    // MEŞRU bir iştir (numune, fazla mal) — eksik olan şey niyetin BEYAN
+    // edilmesiydi. `orderless: true` gönderen istemci uyarı almaz.
+    const warnings: string[] = [];
+    if (orderIds.length === 0 && data.orderless !== true) {
+      warnings.push(
+        "Bu sevkiyat hiçbir siparişe yazılmadı — mal sipariş defterine işlenmedi ve " +
+          "karşılanma/açık talep ekranlarında görünmez. Siparişe yazmak için sevkiyat " +
+          "detayından \"Siparişe Bağla\" kullanın.",
+      );
+    }
+    await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, orderless: data.orderless === true, destination, dispatched } });
     return {
       success: true,
       data: { id: result.id, shipmentNo: result.shipmentNo, status: dispatched ? ShipmentStatus.DISPATCHED : ShipmentStatus.PLANNED, dispatched },
       message: dispatched ? `Sevk edildi: ${result.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`,
+      ...(warnings.length > 0 ? { warnings } : {}),
     };
   }
 
@@ -1617,6 +1636,88 @@ export class ShippingService {
         warnings,
         totals: { totalMeters: Number(totalMeters), sackCount: sacks.length, surplusMeters: Math.max(0, surplusMeters) },
       },
+    };
+  }
+
+  /**
+   * SEVKİYATI SİPARİŞE BAĞLA — sevk EDİLDİKTEN sonra da (BULGU-T3-002).
+   *
+   * Neden gerekli: tahsissiz çıkmış bir sevkiyatı düzeltmenin HİÇBİR yolu yoktu.
+   * `setShipmentOrdersTx` yalnız `createShipment`tan çağrılıyordu, `add-sacks` /
+   * `remove-sack` PLANNED istiyordu; tek çıkış storno + yeniden kurmaktı ve
+   * sevkiyat faturalanmışsa storno da reddediliyordu. Yani mal çıkmış, sipariş
+   * "Açık" kalmış ve kayıt kalıcı olarak yanlıştı.
+   *
+   * ⚠️ SIRA LOAD-BEARING: tahsisler silinir → ESKİ ∪ YENİ siparişlerin defteri
+   * yeniden hesaplanır (yoksa `shippedQty` hâlâ silinen tahsisleri sayar ve yeni
+   * kapasite EKSİK çıkar) → yeni tahsisler yazılır → defter tekrar hesaplanır.
+   *
+   * İrsaliye yeniden dondurulur (v+1): belge artık farklı bir sipariş kümesini
+   * anlatıyor, eski sürüm tarihsel kayıt olarak durur.
+   */
+  async setShipmentOrders(shipmentId: string, orderIdsIn: string[], userId?: string): Promise<ApiResponse<unknown>> {
+    const orderIds = [...new Set(orderIdsIn)];
+    const shipment = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { id: true, shipmentNo: true, status: true, customerId: true, branchId: true },
+    });
+    if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (shipment.status === ShipmentStatus.CANCELLED) {
+      throw AppError.conflict("İptal edilmiş sevkiyat siparişe bağlanamaz");
+    }
+    const branchId = shipment.branchId ?? null;
+    await this.assertOrdersBelong(orderIds, shipment.customerId, branchId);
+
+    const dispatched = shipment.status === ShipmentStatus.DISPATCHED;
+    await prisma.$transaction(async (tx) => {
+      const eski = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
+      const etkilenen = [...new Set([...eski.map((o) => o.orderId), ...orderIds])];
+
+      // ① Bu sevkiyatın tahsislerini kaldır ve defteri ONSUZ yeniden hesapla.
+      await tx.sackAllocation.deleteMany({ where: { sack: { shipmentId } } });
+      if (etkilenen.length > 0) {
+        const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: etkilenen } }, select: { id: true } });
+        await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
+        await recomputeOrderStatusForOrders(tx, etkilenen);
+      }
+
+      // ② Yeni kümeyi yaz + tahsisleri hesapla (iptal kontrolü orada, kilit altında).
+      await this.setShipmentOrdersTx(tx, shipmentId, orderIds);
+      await this.writeShipmentAllocationsTx(tx, shipmentId, orderIds, branchId);
+
+      // ③ Sevk EDİLMİŞ sevkiyatta bağ satırları pasif doğar — `performDispatchTx`
+      //    sevk anında hepsini pasifleştiriyor; buradan aktif satır bırakmak
+      //    sevkiyatı "hâlâ planlanıyor" gibi gösterirdi.
+      if (dispatched) {
+        await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
+      }
+
+      // ④ Defteri yeni tahsislerle tekrar hesapla.
+      if (etkilenen.length > 0) {
+        await recomputeOrderStatusForOrders(tx, etkilenen);
+      }
+
+      // ⑤ İrsaliye yeni sipariş kümesiyle yeniden donar (v+1). Yalnız sevk
+      //    edilmişte anlamlı — PLANNED sevkiyatın belgesi henüz donmamıştır.
+      if (dispatched) {
+        await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
+      }
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "SHIPMENT",
+      recordId: shipmentId,
+      newData: { kind: "SET_ORDERS", orderIds, dispatched },
+    });
+    return {
+      success: true,
+      data: { shipmentId, orderIds },
+      message:
+        orderIds.length === 0
+          ? "Sevkiyatın sipariş bağı kaldırıldı"
+          : `Sevkiyat ${orderIds.length} siparişe bağlandı — sipariş defteri güncellendi`,
     };
   }
 

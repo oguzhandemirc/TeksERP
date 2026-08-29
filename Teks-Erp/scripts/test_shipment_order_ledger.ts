@@ -20,6 +20,17 @@
 //      biri anlaşılır cevap verir, diğeri yarışı kapatır. Sonda ön kontrolün
 //      okumasını kandırarak pencereyi açar.
 //
+//   §4 TAHSİSSİZ SEVK GÖRÜNÜR — tablet ekranı `orderIds` GÖNDERMİYOR (sabit
+//      undefined), yani oradan çıkan HER sevkiyat sipariş defterine yazılmadan
+//      çıkıyordu ve hiçbir yerde iz bırakmıyordu. Artık yanıt uyarı taşır;
+//      `orderless: true` diyen istemci (niyet beyanı) uyarı almaz. 400 DEĞİL:
+//      backend önce deploy edilir, sert red tüm tabletleri kilitlerdi.
+//
+//   §5 ONARIM YOLU — sevk EDİLMİŞ sevkiyat sonradan siparişe bağlanabiliyor.
+//      Eskiden hiçbir yol yoktu (`setShipmentOrdersTx` yalnız createShipment'tan
+//      çağrılıyordu, add-sacks/remove-sack PLANNED istiyordu) → tek çıkış storno
+//      + yeniden kurmaktı, faturalanmışsa o da reddediliyordu.
+//
 //   §3 PROTOKOL SIRASI — kalem kilidi kapasite okumasından ÖNCE alınmalı (fason
 //      `directShip` ile aynı). Bu bir SIRA invariantıdır; davranışla ölçmek
 //      güvenilmez, çünkü `shipmentNo` çakışma-retry'si yarışı maskeler (ölçüldü:
@@ -232,6 +243,81 @@ async function main(): Promise<void> {
     "§2b: yarım sevkiyat kaydı kalmadı (tx geri sarıldı)",
     (await prisma.shipment.count({ where: { sacks: { some: { id: sackD } } } })) === 0,
   );
+
+  // ═══ §4 — tahsissiz sevk UYARI üretir, niyet beyanı susturur ═══
+  console.log("\n=== §4: siparişsiz sevkiyat uyarısı ===");
+  const sackE = await makeSack("E", 150);
+  const r4 = await svc.createShipment({ sackIds: [sackE], customerId }, undefined);
+  shipmentIds.push((r4.data as { id: string }).id);
+  check(
+    "§4: sipariş seçilmeden kurulan sevkiyat UYARI döndürdü",
+    (r4.warnings?.length ?? 0) > 0,
+    r4.warnings?.[0]?.slice(0, 60) ?? "uyarı yok",
+  );
+  check(
+    "§4: uyarı ne yapılacağını söylüyor (Siparişe Bağla)",
+    Boolean(r4.warnings?.[0]?.includes("Siparişe Bağla")),
+  );
+  const sackF = await makeSack("F", 150);
+  const r5 = await svc.createShipment({ sackIds: [sackF], customerId, orderless: true }, undefined);
+  shipmentIds.push((r5.data as { id: string }).id);
+  check(
+    "§4: NİYET beyan edilince (orderless) uyarı YOK — meşru siparişsiz sevk susturulabiliyor",
+    (r5.warnings?.length ?? 0) === 0,
+    r5.warnings?.[0]?.slice(0, 40) ?? "—",
+  );
+
+  // ═══ §5 — sevk EDİLMİŞ sevkiyatı sonradan siparişe bağla ═══
+  console.log("\n=== §5: onarım — sevk edilmiş sevkiyatı siparişe bağla ===");
+  const onarimOrder = await prisma.order.create({
+    data: { orderNumber: `TEST-SOL-F-${ts}`, customerId, lines: { create: [{ itemId, quantity: 200 }] } },
+    select: { id: true, lines: { select: { id: true } } },
+  });
+  const onarimLineId = onarimOrder.lines[0].id;
+  const bozukSh = (r4.data as { id: string }).id;
+  const bozukDurum = await prisma.shipment.findUnique({ where: { id: bozukSh }, select: { status: true } });
+  check("§5: onarılacak sevkiyat SEVK EDİLMİŞ durumda", bozukDurum?.status === ShipmentStatus.DISPATCHED, bozukDurum?.status ?? "");
+  check("§5: kurulumda defter BOŞ (hata durumunun kendisi)", (await shippedOf(onarimLineId)) === 0);
+
+  await svc.setShipmentOrders(bozukSh, [onarimOrder.id], undefined);
+  check("§5: bağlandıktan sonra tahsis yazıldı", (await tahsis(onarimLineId)) === 150, `Σ tahsis ${await tahsis(onarimLineId)}`);
+  check(
+    "§5: sipariş defteri güncellendi (shippedQty terfi etti)",
+    (await shippedOf(onarimLineId)) === 150,
+    `shippedQty ${await shippedOf(onarimLineId)}`,
+  );
+  const bag = await prisma.shipmentOrder.findMany({ where: { shipmentId: bozukSh }, select: { orderId: true, isActive: true } });
+  check("§5: bağ satırı yazıldı", bag.length === 1 && bag[0].orderId === onarimOrder.id);
+  check("§5: sevk edilmiş sevkiyatta bağ PASİF doğdu (dispatch semantiği korunuyor)", bag[0]?.isActive === false);
+  const belgeler = await prisma.printedDocument.findMany({
+    where: { sourceId: bozukSh, docType: "SHIPMENT_DISPATCH" },
+    select: { version: true },
+    orderBy: { version: "desc" },
+  });
+  check("§5: irsaliye yeni sipariş kümesiyle yeniden donduruldu (v+1)", (belgeler[0]?.version ?? 0) >= 2, `v${belgeler[0]?.version ?? 0}`);
+
+  // AYNI bağı tekrar yazmak tahsisi KÜÇÜLTMEMELİ: eski tahsis silindikten sonra
+  // defter ONSUZ yeniden hesaplanmazsa `shippedQty` hâlâ silineni sayar ve kalan
+  // kapasite EKSİK çıkar (200 − 150 = 50 m). Sıranın ölçüldüğü yer burası.
+  await svc.setShipmentOrders(bozukSh, [onarimOrder.id], undefined);
+  check(
+    "§5: aynı bağ tekrar yazılınca tahsis KÜÇÜLMEDİ (defter önce sıfırlanıyor)",
+    (await tahsis(onarimLineId)) === 150,
+    `Σ tahsis ${await tahsis(onarimLineId)}`,
+  );
+
+  // Bağı kaldırma da çalışmalı — defter geri düşer.
+  await svc.setShipmentOrders(bozukSh, [], undefined);
+  check("§5: bağ kaldırılınca defter geri düştü", (await shippedOf(onarimLineId)) === 0, `shippedQty ${await shippedOf(onarimLineId)}`);
+
+  // İptal edilmiş sevkiyat bağlanamaz.
+  const iptalSh = await prisma.shipment.create({
+    data: { shipmentNo: `TST-SOL-X-${ts}`, customerId, status: ShipmentStatus.CANCELLED },
+    select: { id: true },
+  });
+  shipmentIds.push(iptalSh.id);
+  const iptalErr = await hataOf(() => svc.setShipmentOrders(iptalSh.id, [onarimOrder.id], undefined));
+  check("§5: İPTAL edilmiş sevkiyat siparişe bağlanamıyor", iptalErr?.statusCode === 409, `${iptalErr?.statusCode ?? "—"}`);
 
   // ═══ §3 — protokol sırası (metin) ═══
   console.log("\n=== §3: kalem kilidi kapasite okumasından ÖNCE mi ===");

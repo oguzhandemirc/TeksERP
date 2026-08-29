@@ -298,12 +298,39 @@ router.post("/shipments/preview", verifyToken, READ, controller.previewCreateShi
 
 router.get("/direct-shipments/:id", verifyToken, READ, controller.getDirectShipment);
 router.get("/shipments/:id", verifyToken, READ, controller.getShipment);
+/**
+ * @openapi
+ * /api/shipping/shipments/{id}/orders:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Sevkiyatı siparişe bağla (sevk edildikten SONRA da)
+ *     description: >
+ *       Tahsissiz çıkmış sevkiyatı sipariş defterine işler. Tahsisler yeniden
+ *       hesaplanır, sipariş durumu güncellenir, sevk edilmişse irsaliye yeni
+ *       sipariş kümesiyle v+1 olarak dondurulur. Boş dizi bağı kaldırır.
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               orderIds: { type: array, items: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Sipariş bağı güncellendi }
+ *       409: { description: İptal edilmiş sevkiyat ya da sipariş }
+ */
+router.post("/shipments/:id/orders", verifyToken, WRITE, controller.setShipmentOrders);
 router.post("/shipments/:id/add-sacks", verifyToken, WRITE, controller.addSacksToShipment);
 router.post("/shipments/:id/remove-sack", verifyToken, WRITE, controller.removeSackFromShipment);
 router.post("/shipments/:id/destination", verifyToken, WRITE, controller.setDestination);
 router.post("/shipments/:id/procedure-code", verifyToken, WRITE, controller.setProcedureCode);
 router.get("/shipments/:id/dispatch-note", verifyToken, READ, controller.getDispatchNote);
 router.post("/shipments/:id/dispatch-note", verifyToken, WRITE, controller.setDispatchNote);
+// Araca yüklenen gerçek çuval adedi — operatör beyanı (bayrak kapalıyken 400).
+router.post("/shipments/:id/manual-sack-count", verifyToken, WRITE, controller.setManualSackCount);
 router.post("/shipments/:id/dispatch", verifyToken, WRITE, controller.dispatchShipment);
 router.get("/shipments/:id/cancel-preview", verifyToken, READ, controller.cancelPreview);
 router.post("/shipments/:id/cancel", verifyToken, WRITE, controller.cancelShipment);
