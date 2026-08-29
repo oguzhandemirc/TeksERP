@@ -23,7 +23,7 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | Aynı kod (harf farkı) | `MC155`(3) · `BGR150`(2) | birleştirme |
 | Aynı kod (harf farkı) | **`SANTUK` ↔ `santuk` — İKİSİ DE AKTİF ve FARKLI kumaş** (BORANCIK ↔ ŞANTUK) | birleştirme DEĞİL, **yeniden adlandırma** (iş kararı) |
 
-**S2 paketi — yedi bulgu kapandı:**
+**İkinci paket — dokuz bulgu kapandı (2 S1 + 7 S2):**
 | Bulgu | Neydi |
 |---|---|
 | T1-006 | İptal edilmiş kaydın token'ı "başarılı" dönüyordu (sahada 227 canlı token) |
@@ -32,6 +32,8 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | T1-039 | Depo kesiminde tükenen kaynak 0 m'lik hayalet olarak depoda kalıyordu |
 | T1-002 | İki eşzamanlı aşım kesimi 100 m'lik toptan 240 m çocuk üretiyordu (defter 40 m yazıyordu) |
 | T1-045 | İçe aktarımın 10 MB'lık limiti hiç koşmuyordu — 2 MB'lık CSV 413 alıyor, mesaj yanlış sınırı söylüyordu |
+| **T1-011** (S1) | Geri almayla iptal edilen kesim parçası diriltilebiliyordu — aynı metraj iki yerde. ⚠️ Denetimin sayısı EKSİKMİŞ: 50 değil **80 top / 3.317,2 m** |
+| **T1-008** (S1) | İçe aktarımda zaman aşımından sonra "Tekrar Dene" dosyayı ikinci kez yazıyordu (900 satır → 1.800 sipariş) |
 | — | `test_wip_scorecard` §4 ortam verisine bağımlıydı (ürün kusuru değil); kalıcı olarak ayrıldı |
 
 ## 2. Bugün kapanan ACİL kalemler (hepsi ölçüldü)
@@ -55,7 +57,7 @@ düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
 | 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
-| 3 | `run-all-tests.ts` (tam paket) | **368/373 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
+| 3 | `run-all-tests.ts` (tam paket) | **369/374 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
@@ -85,7 +87,7 @@ değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 25 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 28 commit)
 
 Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazıyor.
 
@@ -109,6 +111,8 @@ Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazı
 | `c087b82f` | **Sipariş iptali çıkmazı · kendine tam yetki · hayalet top** (3×S2) | ✅ 16/16 + 3 sonda |
 | `c2af089d` | **Eşzamanlı aşım kesimi yoktan kumaş üretiyordu** (S2) | ✅ 15/15 + 3 sonda |
 | `3877d956` | **İçe aktarım gövde limiti + WIP bekçisi onarımı** (S2) | ✅ 9/9 + 3 sonda |
+| `94b937c0` | **Geri almayla iptal edilen parça diriltilemiyor** (S1) | ✅ 63/63 + 2 sonda |
+| `56ccf218` | **İçe aktarım idempotency'si** (S1, + migration) | ✅ 16/16 + 3 sonda |
 
 ✅ **Başkasının commit'i taşındı:** "araca yüklenen çuval adedi" özelliği
 `adnansahin`e alındı (`50c320ef`) ve dal onun üzerine kuruldu — `adnansahin..HEAD`
@@ -117,6 +121,15 @@ uygulanmış olduğu için commit SİLİNMEDİ, taşındı (silseydik migration 
 ağaçtan kalkar, DB'de kalır ve iki bekçi boşuna kırmızıya dönerdi).
 
 Dal **push edilmedi** ve hiçbir şey `adnansahin`e merge edilmedi.
+
+## 4b. Prod'da koşulacak onarım araçları (ikisi de KURU KOŞUM varsayılan)
+
+| Araç | Ne yapar | Ölçüm |
+|---|---|---|
+| `fix_tambur_undo_cancel_marker.ts` | Geri almayla iptal edilmiş eski parçalara iz damgalar (diriltilmelerini engeller) | saha kopyasında **80 kayıt / 3.317,2 m** |
+| `fix_denetim_onarim.ts` | Denetimin veri onarım kalemleri | rapor §11 |
+
+⚠️ İkisi de `--apply` istiyor ve etkilenen HER kaydı somut listeliyor.
 
 ## 5. Senden beklenen iki karar
 
