@@ -15,12 +15,21 @@
 // Toplanabilir görünen iki sayı, toplanmaması gerekiyorsa aynı birimde basılmaz.
 //
 // ── "KESİM KAYBI" METRİĞİ BİLİNÇLİ OLARAK YOK ──────────────────────────────
-// Ölçüldü (2026-08-09, fabrika kopyası): kesimde tüketilen ebeveybin `currentQty`
+// Ölçüldü (2026-08-09, fabrika kopyası): kesimde tüketilen ebeveynin `currentQty`
 // SIFIRA çekiliyor ve metraj çocuklara geçiyor. Naif `Σ(initialQty − currentQty)`
 // bu yüzden **2522 m'lik hayali bir kayıp** raporlardı. Ebeveyn↔çocuk dengesi de
 // tutarlı değil (0 metrajlı ebeveynler, açıklanamayan ±200/−50 m farklar). Bir
 // "kayıp" rakamı ancak kimse onu açıklayamıyorsa zararlıdır — modelde bunu
 // taşıyacak bir kesim-olayı kaydı doğana kadar bu metrik YAZILMAYACAK.
+//
+// ⚠️ 2026-08-29 GÜNCELLEMESİ — yukarıdaki gerekçenin BİR AYAĞI DEĞİŞTİ: depo
+// kesimi artık `initialQty`ye dokunmuyor (BULGU-T2-016). Yani `initialQty −
+// currentQty` farkı bundan sonra doğan kesimlerde "hayali kayıp" değil, ÇOCUKLARA
+// AKTARILAN metrajdır ve çocukların toplamıyla mutabık olmalıdır. KARAR YİNE AYNI:
+// metrik yazılmıyor — çünkü (a) 2026-08-29 ÖNCESİ satırlarda ebeveynin `initialQty`si
+// düşürülmüş olarak duruyor (geçmiş bilerek düzeltilmedi), yani tek bir formül iki
+// rejimi birden doğru raporlayamaz; (b) gerçek kesim kaybı ancak bir kesim-olayı
+// kaydıyla ölçülebilir — fark hesabı "kayıp" ile "aktarım"ı hâlâ ayırt edemez.
 //
 // ── FİRE ≠ "FİRE KALİTESİ" — ama 2026-08-20'den beri ÖRTÜŞÜYORLAR ──────────
 // Bu karne `RollStatus.SCRAP`'ı (mal fiziksel olarak elendi) ölçer. Katalogdaki

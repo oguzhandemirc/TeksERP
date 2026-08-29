@@ -2092,7 +2092,8 @@ export class TamburService {
       : RollStatus.WAREHOUSE;
     // Aşım: operatör topu kayıtlıdan fazla ölçtü (tambur asıl ölçüm noktası).
     // Flag kapalıyken reddet (bugünkü davranış); açıkken kabul → parent top tamamen
-    // tüketilir (aşağıda currentQty/initialQty=0).
+    // tüketilir (aşağıda currentQty=0; `initialQty` giriş metrajı olarak KORUNUR —
+    // 2026-08-29 denetimi, BULGU-T2-016).
     const exceedsRemaining = data.cutLength > Number(parent.currentQty);
     if (exceedsRemaining && !(await readTamburOverQuantityEnabled())) {
       throw AppError.badRequest(
@@ -2215,14 +2216,29 @@ export class TamburService {
         });
       }
 
-      // Parent kısalıyor — initialQty'i de güncelle (her kesim sonrası reset).
-      // UI "currentQty / initialQty" ayrımı Top Kesme'de anlamsız: kesim
-      // sonrası eski etiket fiziksel olarak da geçersiz, operatör yenisini
-      // basar; sistemde "70 / 100" gösterimi yanıltıcı.
+      // Parent kısalıyor — YALNIZ `currentQty` düşer, `initialQty` DOKUNULMAZ.
+      //
+      // ⚠️ 2026-08-29 DENETİMİ ÖNCESİ buraya `initialQty` de yazılıyordu ("her
+      // kesim sonrası reset") ve gerekçesi gösterimdi: "70 / 100" yanıltıcı
+      // görünüyordu. Ama kolonun anlamı GÖSTERİM değil ÜRETİM ANI SNAPSHOT'ıdır
+      // ve onu düşürmek üç ayrı kusur üretiyordu:
+      //   ① İş emrinin ÜRETİLEN metrajı geriye dönük azalıyordu (BULGU-T2-016;
+      //      ölçüm: IE1408260004 −76,7 m; saha kopyasında 120 top bu durumda).
+      //   ② `rollWhole = initialQty.equals(currentQty)` kesimden SONRA da TRUE
+      //      kalıyordu → "yalnız bütün topta metraj düzeltilir" kuralı kesilmiş
+      //      topu da geçiriyor, operatör ekrandaki eski değeri yazınca 100 m'lik
+      //      fiziksel toptan sistemde 140,5 m doğuyordu (BULGU-T1-001 repro'su).
+      //   ③ "Tümden Geri Al" çocuk toplamını yazarken `initialQty` düşük kaldığı
+      //      için sapma defterine OLMAYAN bir AŞIM satırı yazılıyordu (BULGU-T2-002).
+      // Geri alma aritmetiği bundan ETKİLENMEZ: `computeRestoredQty` ebeveynin
+      // değil ÇOCUKLARIN `initialQty`'sini toplar (tambur-undo.service.ts:344).
+      // Gösterim tarafı: "60 / 100" artık doğru cümledir — "bu top 100 m girdi,
+      // 60 m'si elde" — ve kesilmiş topun metrajı ARTIK DÜZELTİLEMEZ (istenen).
+      //
       // Atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
-      // Önceki kesim de initialQty=currentQty yaptığı için iki decrement aynı sonucu verir.
       // Aşımda (cutLength > currentQty) decrement negatife düşer → bunun yerine topu
-      // tamamen tüket (currentQty/initialQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
+      // tamamen tüket (currentQty=0; initialQty korunur). gt:0 guard eşzamanlı
+      // çift-tüketimi engeller.
       // F128: guarded-decrement = atomik claim. WHERE'e status + shipmentId:null +
       // sackId:null eklenerek pre-tx (check-then-act) statü/rezervasyon/çuval kontrolü
       // tx içine alınır: eşzamanlı sevkiyat rezervasyonu (shipping updateMany {id,
@@ -2237,14 +2253,11 @@ export class TamburService {
               // ⚠️ `currentQty > 0` YOK — cutOpenFabric aşım dalıyla aynı gerekçe
               // (0'a inmiş topta ek kesim; 2026-08-12). Çuval/sevk guard'ları duruyor.
               where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null },
-              data: { currentQty: 0, initialQty: 0 },
+              data: { currentQty: 0 },
             })
           : await tx.roll.update({
               where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null, currentQty: { gte: data.cutLength } },
-              data: {
-                currentQty: { decrement: data.cutLength },
-                initialQty: { decrement: data.cutLength },
-              },
+              data: { currentQty: { decrement: data.cutLength } },
             });
       } catch (err) {
         if (
@@ -3307,8 +3320,12 @@ export class TamburService {
       });
 
       // Tambur movement'ı kapat. qtyOut = movement'ın KENDİ qtyIn'i (finalize()
-      // ile aynı kural — istasyona giren işlenmiş metraj): initialQty artık
-      // güvenilir değil (cutWarehouseRoll parent initialQty'yi resetler).
+      // ile aynı kural — istasyona giren işlenmiş metraj). Yedek kaynak
+      // `parent.initialQty`dir ve 2026-08-29'dan beri GÜVENİLİRDİR: depo kesimi
+      // artık o kolona dokunmuyor (BULGU-T2-016). Birincil kaynak yine movement'ın
+      // kendi `qtyIn`i — "istasyona giren metraj" sorusunun tek doğru cevabı odur;
+      // `initialQty` topun DOĞUŞTAKİ metrajıdır ve istasyona girerken kesilmiş
+      // olabilir.
       const movementNote =
         wantChild && remainingChildId
           ? `TAMBUR_FINALIZED:REMAINING_${remainingQty}_${childQualityGrade}`

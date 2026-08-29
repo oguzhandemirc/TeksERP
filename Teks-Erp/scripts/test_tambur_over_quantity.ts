@@ -9,7 +9,9 @@
 //     2. cutOpenFabric     (açık kumaş → top)
 //     3. finalize          (çoklu kesim)
 //   FLAG AÇIK → aşan giriş KABUL edilir, kaynak top TAMAMEN tüketilir (negatif kalan yok):
-//     4. cutWarehouseRoll(100m, kes 150) → çocuk 150m, parent currentQty=0 & initialQty=0
+//     4. cutWarehouseRoll(100m, kes 150) → çocuk 150m, parent currentQty=0 · initialQty=100
+//        (⚠️ 2026-08-29'dan beri `initialQty` KORUNUR — giriş metrajı snapshot'ıdır;
+//         gerekçe BULGU-T2-016 ve testin ilgili kontrolündeki not)
 //     5. cutOpenFabric(100m, 150)        → çocuk 150m, parent currentQty=0
 //     6. finalize(100m, cuts toplam 150) → çocuklar toplam 150m, parent TAMBUR_CONSUMED
 //   FLAG AÇIK + aşımsız → normal düşüm bozulmaz:
@@ -209,9 +211,17 @@ async function main() {
     where: { id: wh },
     select: { currentQty: true, initialQty: true },
   });
+  // ⚠️ SÖZLEŞME DEĞİŞTİ (2026-08-29, BULGU-T2-016): aşımda parent TÜKENİR ama
+  // `initialQty` GİRİŞ METRAJI olarak KORUNUR — eskiden ikisi de 0'a çekiliyordu.
+  // Eski davranış üç kusur üretiyordu: iş emrinin üretilen metrajı geriye dönük
+  // eksiliyordu, `rollWhole` guard'ı kesilmiş topu "bütün" sayıp metraj
+  // düzeltmesine izin veriyordu (BULGU-T1-001) ve "Tümden Geri Al" sapma
+  // defterine olmayan bir aşım yazıyordu (BULGU-T2-002).
+  // Kontrol artık İKİ YÖNLÜ: tüketim gerçekleşti (current=0) VE giriş metrajı
+  // silinmedi (initial=100) — ikincisi olmadan eski davranış sessizce geri gelir.
   check(
-    "cutWarehouseRoll parent tamamen tükendi (currentQty=0, initialQty=0)",
-    Number(whParent?.currentQty) === 0 && Number(whParent?.initialQty) === 0,
+    "cutWarehouseRoll parent tükendi (currentQty=0) ve giriş metrajı KORUNDU (initialQty=100)",
+    Number(whParent?.currentQty) === 0 && Number(whParent?.initialQty) === 100,
     `current=${whParent?.currentQty} initial=${whParent?.initialQty}`,
   );
 
