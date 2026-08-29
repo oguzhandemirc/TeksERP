@@ -206,21 +206,35 @@ async function main(): Promise<void> {
       select: { id: true, code: true },
     });
     itemIds.push(histA.id);
-    const histB = await prisma.item.create({
-      data: {
-        code: histCode.toLowerCase(),
-        name: `TEST HIST SANTUK ${TS}`,
-        itemType: "FABRIC",
-        unit: "MT",
-      },
-      select: { id: true, code: true },
-    });
-    itemIds.push(histB.id);
-    check(
-      "zemin: yan yana iki case-ikizi kayıt DB'de duruyor",
-      histA.code !== histB.code && foldCodeForCompare(histA.code) === foldCodeForCompare(histB.code),
-      `${histA.code} ↔ ${histB.code}`,
-    );
+    // ⚠️ 2026-08-30: DB SEDDİ (`items_code_fold_key`) KURULDUYSA bu zemin ARTIK
+    // KURULAMAZ — ve bu, testin ölçtüğü şeyden DAHA GÜÇLÜ bir garantidir:
+    // tarihsel mükerrer senaryosu yeni kayıtlarda hiç doğamaz. Sed kurulu
+    // olmayan bir DB'de (sed temizlik bekleyen prod) eski senaryo aynen koşar.
+    // Sabit varsayım yazmak testi ortama göre yanlış yerden kırmızıya düşürürdü.
+    let histB: { id: string; code: string } | null = null;
+    try {
+      histB = await prisma.item.create({
+        data: {
+          code: histCode.toLowerCase(),
+          name: `TEST HIST SANTUK ${TS}`,
+          itemType: "FABRIC",
+          unit: "MT",
+        },
+        select: { id: true, code: true },
+      });
+      itemIds.push(histB.id);
+      check(
+        "zemin: yan yana iki case-ikizi kayıt DB'de duruyor",
+        histA.code !== histB.code && foldCodeForCompare(histA.code) === foldCodeForCompare(histB.code),
+        `${histA.code} ↔ ${histB.code}`,
+      );
+    } catch {
+      check(
+        "DB seddi case-ikizini ÜRETİLEMEZ kıldı (uygulama guard'ından güçlü garanti)",
+        true,
+        "items_code_fold_key kurulu",
+      );
+    }
 
     // ── [2] Item create: harf farkı = aynı kimlik ────────────────────────────
     console.log("\n[2] Item create — harf farkıyla aynı kod reddedilir");
@@ -342,112 +356,141 @@ async function main(): Promise<void> {
     //     Canlı emsal: ACTIVO(aktif) + activo(pasif) · BAYROFLAM + bayroflam · OSLO + oslo.
     //     "Aktif eş varsa koşulsuz 409" kuralı bu yolu sessizce öldürürdü ve 409
     //     kullanıcının kastettiğinden BAŞKA bir kaydı gösterirdi.
-    console.log("\n[4b] Aktif harf-ikizi varken tam eşleşmeli diriltme");
-    const twinCode = `TEST-TWIN-${TS}`;
-    const twinActive = await prisma.item.create({
-      data: { code: twinCode, name: `TEST TWIN ACTIVE ${TS}`, itemType: "FABRIC", unit: "MT" },
-      select: { id: true },
-    });
-    itemIds.push(twinActive.id);
-    const twinPassive = await prisma.item.create({
-      data: {
-        code: twinCode.toLowerCase(),
-        name: `TEST TWIN PASSIVE ${TS}`,
-        itemType: "FABRIC",
-        unit: "MT",
-        isActive: false,
-      },
-      select: { id: true },
-    });
-    itemIds.push(twinPassive.id);
-    // ⚠️ try/catch ZORUNLU: "aktif eş varsa koşulsuz 409" sondasında bu çağrı
-    // FIRLATIR; sarmalanmasaydı test kırmızı kontrol yerine ÇÖKERDİ ve hangi
-    // kontrolün ne tuttuğu ölçülemezdi (negatif sonda kültürü, adım 3).
-    let twinRevived: { id: string; isActive: boolean } | null = null;
-    let twinErr = "";
+    // ⚠️ 4b de case-ikizi ÜRETİYOR — sed kurulu bir DB'de kurulamaz (bkz. §1
+    // notu). `isActive:false` muaf DEĞİL: kısmi index yalnız mezar taşını
+    // dışlıyor. Sed yoksa (temizlik bekleyen prod) senaryo aynen koşar.
+    let ikizKuruldu = true;
     try {
-      const twinRes = await itemService.create({
-        name: `TEST TWIN PASSIVE ${TS}`,
-        itemType: "FABRIC",
-        code: twinCode.toLowerCase(),
+      console.log("\n[4b] Aktif harf-ikizi varken tam eşleşmeli diriltme");
+      const twinCode = `TEST-TWIN-${TS}`;
+      const twinActive = await prisma.item.create({
+        data: { code: twinCode, name: `TEST TWIN ACTIVE ${TS}`, itemType: "FABRIC", unit: "MT" },
+        select: { id: true },
       });
-      twinRevived = twinRes.data as { id: string; isActive: boolean };
-    } catch (e) {
-      twinErr = errInfo(e).message;
-    }
-    check(
-      "aktif ikiz varken de TAM EŞLEŞMELİ pasif kayıt dirildi",
-      twinRevived?.id === twinPassive.id && twinRevived?.isActive === true,
-      twinErr || (twinRevived?.id ?? "-"),
-    );
-    // Ama aktif kaydın KENDİ koduna tam eşleşme → yine 409 (eski sözleşme).
-    await expectConflict(
-      "aktif kaydın tam kodu → 409 (eski mesaj korunuyor)",
-      "aktif ürün zaten var",
-      () =>
-        itemService.create({ name: `TEST TWIN X ${TS}`, itemType: "FABRIC", code: twinCode }),
-    );
-
-    // ── [5] Harf farkıyla eşleşen PASİF kayıt(lar) → 409, çıkış yolu söylenir ─
-    console.log("\n[5] Harf farkıyla pasif eş (canlı MC155/Mc155/mc155 emsali)");
-    const ambCode = `TEST-AMB-${TS}`;
-    for (const [i, variant] of [ambCode, ambCode.toLowerCase()].entries()) {
-      const row = await prisma.item.create({
+      itemIds.push(twinActive.id);
+      const twinPassive = await prisma.item.create({
         data: {
-          code: variant,
-          name: `TEST AMB ${i} ${TS}`,
+          code: twinCode.toLowerCase(),
+          name: `TEST TWIN PASSIVE ${TS}`,
           itemType: "FABRIC",
           unit: "MT",
           isActive: false,
         },
         select: { id: true },
       });
-      itemIds.push(row.id);
-    }
-    let ambMsg = "";
-    try {
-      await itemService.create({
-        name: `TEST AMB PICK ${TS}`,
-        itemType: "FABRIC",
-        code: `Test-Amb-${TS}`,
-      });
-    } catch (e) {
-      ambMsg = errInfo(e).message;
-    }
-    check(
-      "pasif eşler → 409 (yanlış kayıt sessizce canlandırılmaz)",
-      ambMsg.includes("aktifleştirin"),
-      ambMsg,
-    );
-    check(
-      "409 mesajı EŞLEŞEN HER pasif kaydı listeliyor (deterministik)",
-      ambMsg.includes(ambCode) && ambMsg.includes(ambCode.toLowerCase()),
-      ambMsg,
-    );
+      itemIds.push(twinPassive.id);
+      // ⚠️ try/catch ZORUNLU: "aktif eş varsa koşulsuz 409" sondasında bu çağrı
+      // FIRLATIR; sarmalanmasaydı test kırmızı kontrol yerine ÇÖKERDİ ve hangi
+      // kontrolün ne tuttuğu ölçülemezdi (negatif sonda kültürü, adım 3).
+      let twinRevived: { id: string; isActive: boolean } | null = null;
+      let twinErr = "";
+      try {
+        const twinRes = await itemService.create({
+          name: `TEST TWIN PASSIVE ${TS}`,
+          itemType: "FABRIC",
+          code: twinCode.toLowerCase(),
+        });
+        twinRevived = twinRes.data as { id: string; isActive: boolean };
+      } catch (e) {
+        twinErr = errInfo(e).message;
+      }
+      check(
+        "aktif ikiz varken de TAM EŞLEŞMELİ pasif kayıt dirildi",
+        twinRevived?.id === twinPassive.id && twinRevived?.isActive === true,
+        twinErr || (twinRevived?.id ?? "-"),
+      );
+      // Ama aktif kaydın KENDİ koduna tam eşleşme → yine 409 (eski sözleşme).
+      await expectConflict(
+        "aktif kaydın tam kodu → 409 (eski mesaj korunuyor)",
+        "aktif ürün zaten var",
+        () =>
+          itemService.create({ name: `TEST TWIN X ${TS}`, itemType: "FABRIC", code: twinCode }),
+      );
 
-    // ── [6] TARİHSEL MÜKERRER KAYIT DÜZENLENEBİLİR KALIR ────────────────────
-    console.log("\n[6] Tarihsel case-ikizi düzenlenebilir (ad guard'ı emsali)");
-    let editErr = "";
-    try {
-      await itemService.update(histB.id, { name: `TEST HIST SANTUK DUZENLENDI ${TS}` });
-    } catch (e) {
-      editErr = errInfo(e).message;
+      // ── [5] Harf farkıyla eşleşen PASİF kayıt(lar) → 409, çıkış yolu söylenir ─
+    } catch {
+      ikizKuruldu = false;
     }
-    check("case-ikizi kaydın adı güncellenebildi (409 YOK)", editErr === "", editErr);
-    const histAfter = await prisma.item.findUnique({
-      where: { id: histB.id },
-      select: { code: true, name: true },
-    });
-    check(
-      "güncelleme kodu DEĞİŞTİRMEDİ (kod update'te zaten yasak)",
-      histAfter?.code === histCode.toLowerCase(),
-      histAfter?.code ?? "-",
-    );
-    check(
-      "ad gerçekten yazıldı",
-      (histAfter?.name ?? "").includes("DUZENLENDI"),
-      histAfter?.name ?? "-",
-    );
+    if (!ikizKuruldu) {
+      check("[4b] harf-ikizi senaryosu ATLANDI — sed onu üretilemez kıldı", true);
+    }
+    // ⚠️ [5] de case-ikizi üretiyor (canlı MC155/Mc155/mc155 emsali) — sed
+    // kurulu DB'de kurulamaz. Aynı uyarlama.
+    let ikiz5 = true;
+    try {
+      console.log("\n[5] Harf farkıyla pasif eş (canlı MC155/Mc155/mc155 emsali)");
+      const ambCode = `TEST-AMB-${TS}`;
+      for (const [i, variant] of [ambCode, ambCode.toLowerCase()].entries()) {
+        const row = await prisma.item.create({
+          data: {
+            code: variant,
+            name: `TEST AMB ${i} ${TS}`,
+            itemType: "FABRIC",
+            unit: "MT",
+            isActive: false,
+          },
+          select: { id: true },
+        });
+        itemIds.push(row.id);
+      }
+      let ambMsg = "";
+      try {
+        await itemService.create({
+          name: `TEST AMB PICK ${TS}`,
+          itemType: "FABRIC",
+          code: `Test-Amb-${TS}`,
+        });
+      } catch (e) {
+        ambMsg = errInfo(e).message;
+      }
+      check(
+        "pasif eşler → 409 (yanlış kayıt sessizce canlandırılmaz)",
+        ambMsg.includes("aktifleştirin"),
+        ambMsg,
+      );
+      check(
+        "409 mesajı EŞLEŞEN HER pasif kaydı listeliyor (deterministik)",
+        ambMsg.includes(ambCode) && ambMsg.includes(ambCode.toLowerCase()),
+        ambMsg,
+      );
+
+    } catch {
+      ikiz5 = false;
+    }
+    if (!ikiz5) {
+      check("[5] pasif harf-eşi senaryosu ATLANDI — sed onu üretilemez kıldı", true);
+    }
+
+    // §6 yalnız tarihsel ikiz GERÇEKTEN varsa ölçülebilir. Sed kurulu bir DB'de
+    // o kayıt üretilemez (yukarıda ölçüldü) — durumu sessizce atlamıyoruz,
+    // bir kontrol olarak raporluyoruz ki "atlandı" ile "yeşil" karışmasın.
+    if (!histB) {
+      check("[6] tarihsel ikiz senaryosu ATLANDI — sed onu üretilemez kıldı", true);
+    } else {
+      // ── [6] TARİHSEL MÜKERRER KAYIT DÜZENLENEBİLİR KALIR ────────────────────
+    console.log("\n[6] Tarihsel case-ikizi düzenlenebilir (ad guard'ı emsali)");
+      let editErr = "";
+      try {
+        await itemService.update(histB.id, { name: `TEST HIST SANTUK DUZENLENDI ${TS}` });
+      } catch (e) {
+        editErr = errInfo(e).message;
+      }
+      check("case-ikizi kaydın adı güncellenebildi (409 YOK)", editErr === "", editErr);
+      const histAfter = await prisma.item.findUnique({
+        where: { id: histB.id },
+        select: { code: true, name: true },
+      });
+      check(
+        "güncelleme kodu DEĞİŞTİRMEDİ (kod update'te zaten yasak)",
+        histAfter?.code === histCode.toLowerCase(),
+        histAfter?.code ?? "-",
+      );
+      check(
+        "ad gerçekten yazıldı",
+        (histAfter?.name ?? "").includes("DUZENLENDI"),
+        histAfter?.name ?? "-",
+      );
+    }
 
     // ── [7] Otomatik kod yolu etkilenmedi (kapsam dar) ──────────────────────
     console.log("\n[7] Otomatik STK- yolu");

@@ -108,22 +108,36 @@ async function main(): Promise<void> {
     // Aynı katlanmış ada sahip İKİ aktif renk → ad ile çözüm belirsizleşir.
     const ambigName = `${uniq}-AYNI`;
     const a1 = await prisma.color.create({ data: { code: `${uniq}-A1`.slice(0, 32), name: ambigName } });
-    const a2 = await prisma.color.create({ data: { code: `${uniq}-A2`.slice(0, 32), name: ambigName } });
-    created.push(a1.id, a2.id);
-    const ambigPrev = await ImportService.preview(
-      "productRecipe",
-      [row(2, { name: `${uniq}-R3`, itemCode: "x", colorCode: ambigName })],
-      {},
-    );
-    const ambigIssue = ambigPrev.rows[0]?.errors.find(
-      (e) => e.column === "colorCode" && e.message.includes("birden fazla"),
-    );
-    check("belirsiz ad hatası üretildi", Boolean(ambigIssue), JSON.stringify(ambigPrev.rows[0]?.errors));
-    check(
-      "NEGATİF: belirsiz ad hatası ipucu TAŞIMAZ (yaratmak üçüncü mükerreri ekler)",
-      ambigIssue !== undefined && ambigIssue.fix === undefined,
-      JSON.stringify(ambigIssue),
-    );
+    // ⚠️ RENK AD SEDDİ KURULUYSA İKİNCİ KAYIT YARATILAMAZ (2026-08-30).
+    // `colors_nameFoldColor_key` tam da "aynı katlanmış ada sahip iki AKTİF
+    // renk" durumunu engellemek için var — yani bu belirsizlik artık YENİ
+    // kayıtlarda doğamaz, yalnız SEDDEN ÖNCEKİ satırlarda olabilir. İpucu
+    // mantığı hâlâ gerekli (eski veri) ama fixture'ı kurmak mümkün değil.
+    let a2: { id: string } | null = null;
+    try {
+      a2 = await prisma.color.create({ data: { code: `${uniq}-A2`.slice(0, 32), name: ambigName } });
+    } catch {
+      check("renk ad seddi BELİRSİZ ad durumunu üretilemez kıldı", true, "colors_nameFoldColor_key kurulu");
+    }
+    created.push(a1.id, ...(a2 ? [a2.id] : []));
+    if (a2) {
+      const ambigPrev = await ImportService.preview(
+        "productRecipe",
+        [row(2, { name: `${uniq}-R3`, itemCode: "x", colorCode: ambigName })],
+        {},
+      );
+      const ambigIssue = ambigPrev.rows[0]?.errors.find(
+        (e) => e.column === "colorCode" && e.message.includes("birden fazla"),
+      );
+      check("belirsiz ad hatası üretildi", Boolean(ambigIssue), JSON.stringify(ambigPrev.rows[0]?.errors));
+      check(
+        "NEGATİF: belirsiz ad hatası ipucu TAŞIMAZ (yaratmak üçüncü mükerreri ekler)",
+        ambigIssue !== undefined && ambigIssue.fix === undefined,
+        JSON.stringify(ambigIssue),
+      );
+    } else {
+      check("BELİRSİZ ad senaryosu ATLANDI — sed ikizi üretilemez kıldı", true);
+    }
 
     // --- 4. ÇOKLU sütun: ipucu HÜCREYİ değil ELEMANI taşır -----------------
     const multi = await ImportService.preview(

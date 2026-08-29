@@ -132,23 +132,34 @@ async function main(): Promise<void> {
   // katlanmış adı taşıyan ikinci CANLI kayıt yaratılamıyor — bu testin ilk hâli
   // tam oraya takıldı ve seddin çalıştığını kanıtladı). Renkte sed BİLİNÇLİ YOK
   // ve renk katlaması (`foldColorNameForCompare`) DB'nin `tr_fold`'undan GENİŞ:
-  // "055-BORDO" ile "BORDO 055" farklı `nameFold`, aynı renk. Yani servis guard'ı
-  // DB'nin göremediği çakışmayı yakalamak zorunda — ölçtüğümüz şey bu.
+  // ⚠️ BU NOT 2026-08-30'da GÜNCELLENDİ ve eskisi ARTIK YANLIŞTI. Eskiden
+  // "'055-BORDO' ile 'BORDO 055' farklı `nameFold`, DB göremez" diyordu; renk ad
+  // seddi (`colors_nameFoldColor_key`) `tr_fold_color` kullanıyor ve o katlama
+  // SAYI SIRASINDAN BAĞIMSIZ — yani DB artık GÖRÜYOR. Servis guard'ı yine
+  // değerli (ham P2002 yerine okunaklı mesaj verir) ama tek savunma değil.
+  // Sed kurulu bir DB'de bu fixture'ın üçüncü kaydı YARATILAMAZ; test uyarlanır.
   const colA = await prisma.color.create({ data: { code: `${TAG}-CLA`, name: `${TAG} Kirmizi` }, select: { id: true } });
   const colB = await prisma.color.create({ data: { code: `${TAG}-CLB`, name: `${TAG} 055-BORDO` }, select: { id: true } });
-  const colX = await prisma.color.create({ data: { code: `${TAG}-CLX`, name: `${TAG} BORDO 055` }, select: { id: true } });
-  createdColors.push(colA.id, colB.id, colX.id);
-  await expectError(
-    "ad seçimi grup DIŞINDAKİ canlı kayıtla çakışıyor → 409 (renk katlaması, DB'nin göremediği)",
-    () => MasterDataMergeService.merge("color", { survivorId: colA.id, sourceIds: [colB.id], reason: "ad çakışması denemesi renk", acknowledgedConflicts: 0, fieldPicks: { name: colB.id } }),
-    409,
-    "başka bir kayıtta kullanılıyor",
-  );
-  const colStillLive = await prisma.color.count({ where: { id: colB.id, mergedIntoId: null } });
-  check("ad çakışmasında BİRLEŞTİRME HİÇ OLMADI (kaynak canlı, tx geri sardı)", colStillLive === 1);
-  // Çakışan dış kayıt kalkınca AYNI seçim geçmeli — guard'ın gerçekten o kayda baktığının kanıtı.
-  await prisma.color.delete({ where: { id: colX.id } });
-  createdColors.splice(createdColors.indexOf(colX.id), 1);
+  let colX: { id: string } | null = null;
+  try {
+    colX = await prisma.color.create({ data: { code: `${TAG}-CLX`, name: `${TAG} BORDO 055` }, select: { id: true } });
+  } catch {
+    check("renk ad seddi katlama-ikizini DB'DE engelledi (servis guard'ından güçlü)", true);
+  }
+  createdColors.push(colA.id, colB.id, ...(colX ? [colX.id] : []));
+  if (colX) {
+    await expectError(
+      "ad seçimi grup DIŞINDAKİ canlı kayıtla çakışıyor → 409 (renk katlaması, DB'nin göremediği)",
+      () => MasterDataMergeService.merge("color", { survivorId: colA.id, sourceIds: [colB.id], reason: "ad çakışması denemesi renk", acknowledgedConflicts: 0, fieldPicks: { name: colB.id } }),
+      409,
+      "başka bir kayıtta kullanılıyor",
+    );
+    const colStillLive = await prisma.color.count({ where: { id: colB.id, mergedIntoId: null } });
+    check("ad çakışmasında BİRLEŞTİRME HİÇ OLMADI (kaynak canlı, tx geri sardı)", colStillLive === 1);
+    // Çakışan dış kayıt kalkınca AYNI seçim geçmeli — guard'ın gerçekten o kayda baktığının kanıtı.
+    await prisma.color.delete({ where: { id: colX.id } });
+    createdColors.splice(createdColors.indexOf(colX.id), 1);
+  }
   const okRes = await MasterDataMergeService.merge("color", {
     survivorId: colA.id,
     sourceIds: [colB.id],

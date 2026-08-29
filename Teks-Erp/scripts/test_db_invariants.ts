@@ -287,6 +287,20 @@ const EXPRESSION_UNIQUES: Array<{ table: string; index: string; expr: string; pr
     predicate: `("mergedIntoId" IS NULL)`,
     why: "renk ad seddi — ayraç + sayı-sırası bağımsız SQL ikizi; tombstone hariç (eksikse: temizlik + enforce bekliyor)",
   },
+  {
+    // 2026-08-30 (denetim K3) — migration 20260830090000_items_ad_kod_seddi.
+    // Barkod okuyucu küçük harfi büyüte çevirdiği için `santuk` ile `SANTUK`
+    // SAHADA AYNI koddur; iki ayrı kayıt olarak yaşamaları yanlış kumaşın
+    // seçilmesine yol açar (fabrikada tam olarak bu vardı: `SANTUK`/BORANCIK
+    // kullanımdayken `santuk`/ŞANTUK hiç kullanılmamış bir ikiz olarak duruyordu).
+    // ⚠️ İFADE İNDEKSİ: buraya YAZILMAZSA şema drift bekçisi onu "fazlalık"
+    // sayar (2026-08-25 renk seddi dersi).
+    table: "items",
+    index: "items_code_fold_key",
+    expr: "upper(code)",
+    predicate: `("mergedIntoId" IS NULL)`,
+    why: "kumaş kodu harf-duyarsız tekil; tombstone hariç (ön koşul: scripts/fix_kumas_kod_cakismasi.ts)",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

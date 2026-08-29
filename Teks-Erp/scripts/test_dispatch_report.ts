@@ -42,7 +42,7 @@ async function main() {
     select: { id: true },
   });
   const colorBG = await prisma.color.create({
-    data: { code: `TST-RPT-C-${ts}`, name: "BEYAZ-GÜMÜŞ" },
+    data: { code: `TST-RPT-C-${ts}`, name: `BEYAZ-GÜMÜŞ ${ts}` },
     select: { id: true },
   });
   const shipment = await prisma.shipment.create({
@@ -103,7 +103,7 @@ async function main() {
     // 1) ÜRÜN LİSTESİ: "MC 156 BEYAZ-GÜMÜŞ 150cm." (3 top, 105m) + "NEPS VUAL 40cm."? hayır renksiz/ensiz
     const mcGroup = d.products.find((p) => p.name.includes("MC 156"));
     check("ÜRÜN: MC 156 grubu 3 top / 105m", mcGroup?.rollCount === 3 && mcGroup?.totalMeters === 105, `${mcGroup?.rollCount}/${mcGroup?.totalMeters}`);
-    check("ÜRÜN: stok adı birleşik (ürün+renk+en)", mcGroup?.name === `MC 156 ${ts} BEYAZ-GÜMÜŞ 150cm.`, mcGroup?.name);
+    check("ÜRÜN: stok adı birleşik (ürün+renk+en)", mcGroup?.name === `MC 156 ${ts} BEYAZ-GÜMÜŞ ${ts} 150cm.`, mcGroup?.name);
     const nepsGroup = d.products.find((p) => p.name.includes("NEPS"));
     check("ÜRÜN: NEPS VUAL grubu 1 top / 40m", nepsGroup?.rollCount === 1 && nepsGroup?.totalMeters === 40);
 
@@ -117,7 +117,7 @@ async function main() {
     const ceki1 = d.cekiRows.filter((c) => c.sackCode === mc1);
     check("ÇEKİ AMB00001 2 satır", ceki1.length === 2);
     check("ÇEKİ ilk top kg=65,8, ikinci=0", ceki1[0]?.kg === 65.8 && ceki1[1]?.kg === 0);
-    check("ÇEKİ desen=ürün, varyant=renk", ceki1[0]?.desen === `MC 156 ${ts}` && ceki1[0]?.varyant === "BEYAZ-GÜMÜŞ");
+    check("ÇEKİ desen=ürün, varyant=renk", ceki1[0]?.desen === `MC 156 ${ts}` && ceki1[0]?.varyant === `BEYAZ-GÜMÜŞ ${ts}`);
     const ceki2 = d.cekiRows.filter((c) => c.sackCode === mc2);
     check("ÇEKİ AMB00002 ilk top kg=40, renksiz varyant boş", ceki2[0]?.kg === 40 && ceki2[1]?.kg === 0 && ceki2[1]?.varyant === "");
 
