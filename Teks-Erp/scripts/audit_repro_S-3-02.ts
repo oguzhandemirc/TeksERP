@@ -246,7 +246,14 @@ async function main(): Promise<void> {
     } else {
       ok("PARALEL koşumun 10 turunda phantom oluşmadı — bu ortamda TETİKLENEMEDİ (negatif sonuç)");
       info("Not: negatif sonuç kilidin var olduğunu KANITLAMAZ. tambur-undo'nun iki yazma");
-      info("      yolunda `touchWorkOrderTx` çağrısı KODDA YOKTUR (grep: 0 vuruş) —");
+      // ⚠️ 2026-08-29: bu not ARTIK YANLIŞ ve statik metin olduğu için kendini
+      // güncellemiyordu. `tambur-undo` üç yazma yolunda da WO satırını artık
+      // kilitliyor (`lockAndAssertWorkOrderLive` → `touchWorkOrderTx`) ve
+      // finalize yolu da aynı satırı kilitliyor → iki yol serileşiyor.
+      // Kilidin ETKİSİ kardeş repro'da ÖLÇÜLDÜ (audit_repro_KYY-1-01: kilitsiz
+      // 7/16 ihlal → kilitli 0/16); burada pencere dar olduğu için bu ortamda
+      // tetiklenemiyor ve negatif sonuç tek başına kanıt sayılmamalı.
+      info("      yolunda `touchWorkOrderTx` çağrısı ARTIK VAR (2026-08-29) —");
       info("      pencere dar olduğu için tek makinede her turda yakalanmayabilir.");
     }
   } finally {

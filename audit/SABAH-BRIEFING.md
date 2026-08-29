@@ -23,7 +23,7 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | Aynı kod (harf farkı) | `MC155`(3) · `BGR150`(2) | birleştirme |
 | Aynı kod (harf farkı) | **`SANTUK` ↔ `santuk` — İKİSİ DE AKTİF ve FARKLI kumaş** (BORANCIK ↔ ŞANTUK) | birleştirme DEĞİL, **yeniden adlandırma** (iş kararı) |
 
-**İkinci paket — on iki bulgu kapandı (3 S1 + 9 S2):**
+**İkinci paket — on beş bulgu kapandı (3 S1 + 12 S2):**
 | Bulgu | Neydi |
 |---|---|
 | T1-006 | İptal edilmiş kaydın token'ı "başarılı" dönüyordu (sahada 227 canlı token) |
@@ -35,7 +35,11 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | **T1-011** (S1) | Geri almayla iptal edilen kesim parçası diriltilebiliyordu — aynı metraj iki yerde. ⚠️ Denetimin sayısı EKSİKMİŞ: 50 değil **80 top / 3.317,2 m** |
 | **T1-008** (S1) | İçe aktarımda zaman aşımından sonra "Tekrar Dene" dosyayı ikinci kez yazıyordu (900 satır → 1.800 sipariş) |
 | **T1-003 + T1-004** | İş emri iptal edilirken canlı top bağlanıyordu — kilitsiz yarış. Repro: kilitsiz 7/16 ihlal, kilitli 0 |
+| T2-011 | Birleştirme audit'i fiziksel tablo adına yazılıyordu → Denetim Raporu'nda hiç görünmüyordu (13/13) |
+| T2-003 | Sevk defterine hiç audit yazılmıyordu — "bu mal neden siparişten düşmedi" cevapsızdı |
+| T3-004 | T1-003 ile AYNI kök neden; aynı kilitle kapandı (repro 10/10 temiz, ölçüm kardeş repro'da) |
 | — | `test_wip_scorecard` §4 ortam verisine bağımlıydı (ürün kusuru değil); kalıcı olarak ayrıldı |
+| — | İki birleştirme bekçisi kusurla AYNI kör noktayı paylaşıyordu; ikisi de düzeltildi |
 
 ## 2. Bugün kapanan ACİL kalemler (hepsi ölçüldü)
 
@@ -58,7 +62,7 @@ düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
 | 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
-| 3 | `run-all-tests.ts` (tam paket) | **370/375 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
+| 3 | `run-all-tests.ts` (tam paket) | **370/375 dosya yeşil** (gece turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
@@ -88,7 +92,7 @@ değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 32 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 36 commit)
 
 Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazıyor.
 
