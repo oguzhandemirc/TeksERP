@@ -5383,6 +5383,10 @@ model ImportRun {
   skipped  Int @default(0)
   failed   Int @default(0)
 
+  /// Koşumun BİTİŞ anı. `NULL` = HÂLÂ KOŞUYOR (2026-08-29 / BULGU-T1-008).
+  /// ⚠️ Bunun için `ImportRunStatus`'a RUNNING EKLENMEDİ: uygulanmış bir enum
+  /// değeri geri alınamaz, nullable bir kolon `DROP COLUMN` ile alınabilir.
+  finishedAt     DateTime?       @db.Timestamptz
   status         ImportRunStatus
   durationMs     Int             @default(0)
   /// PARTIAL'da: yazma hangi satırda durdu (dosyadaki satır numarası).

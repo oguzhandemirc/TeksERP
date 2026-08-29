@@ -24,6 +24,7 @@
 //      sonuç asla SESSİZ kalmaz; `ImportRun` satırı da kalıcı iz bırakır.
 // Bu ayrım kullanıcıya da aynen yazılır (panel sonuç kartı + şablon açıklaması).
 
+import { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
@@ -446,6 +447,23 @@ export class ImportService {
 
     if (options.clientToken) {
       const prior = await prisma.importRun.findUnique({ where: { clientToken: options.clientToken } });
+      // ⚠️ SÜREN KOŞUM BAŞARI DEĞİLDİR (2026-08-29 / BULGU-T1-008).
+      // Koşum kaydı eskiden SONDA yazılıyordu; 15 sn'lik istemci zaman aşımından
+      // sonra kullanıcı "Uygula"ya tekrar bastığında bu sorgu hâlâ NULL dönüyor
+      // ve dosya BAŞTAN yazılıyordu: 900 satırlık sipariş dosyası 1.800 sipariş
+      // üretiyor, kullanıcı İKİ KEZ DE hata görüyordu (ikinci koşumun kayıt
+      // yazımı `clientToken` P2002'sine düşüyor). Mükerrer sipariş = mükerrer
+      // talep = sahte kumaş açığı ve iki kez üretim planı.
+      // Kayıt artık BAŞTA yazılıyor; burada "hâlâ koşuyor"u 200 + "başarılı"
+      // saymak, belirsiz durumu başarı ilan etmek olurdu.
+      if (prior && prior.finishedAt === null) {
+        throw AppError.conflict(
+          "Bu yükleme HÂLÂ SÜRÜYOR — tekrar göndermeyin, aynı dosya iki kez yazılır. " +
+            "Bitmesini bekleyin ve İçe Aktarım Geçmişi'nden sonucu görün. " +
+            "Yükleme takıldıysa bu pencereyi kapatıp yeniden açın (yeni bir deneme başlatır).",
+          { code: "IMPORT_IN_PROGRESS", runId: prior.id, startedAt: prior.createdAt },
+        );
+      }
       if (prior) {
         // Aynı deneme yeniden gönderildi — YAZMA, önceki sonucu döndür.
         return {
@@ -476,128 +494,202 @@ export class ImportService {
     // diye. Kayıt sonda yazılsaydı, satır bazlı iz koşuma BAĞLANAMAZDI ve
     // "yanlış yükleme yaptım, ne oluştu?" sorusunun cevabı elle arkeoloji olurdu.
     const runId = crypto.randomUUID();
-    const ctx = emptyContext(userId);
-    const { prepared, unknownColumns } = await prepareRows(adapter, rows, options, ctx);
-    const results = prepared.map((p) => p.result);
-    const errorRows = results.filter((r) => r.action === "ERROR");
-    const onError = options.onError ?? "abort";
 
-    if (errorRows.length > 0 && onError === "abort") {
-      // Hiçbir şey yazılmadı. 400 gövdesinde satır sonuçları döner ki panel aynı
-      // önizleme tablosunu hatalarla gösterebilsin.
-      throw AppError.badRequest(
-        `${errorRows.length} satırda hata var — hiçbir kayıt yazılmadı. Hataları düzeltip yeniden yükleyin ya da 'hatalı satırları atla' seçeneğini işaretleyin.`,
-        { code: "IMPORT_VALIDATION_FAILED", rows: results, summary: summarize(results), unknownColumns },
-      );
-    }
-
-    let created = 0;
-    let updated = 0;
-    let skipped = 0;
-    let failed = errorRows.length;
-    let stoppedAtRowNo: number | undefined;
-    let status: ImportApplyResult["status"] = "APPLIED";
-    const auditEntries: Array<{
-      userId: string | undefined;
-      action: "CREATE" | "UPDATE";
-      tableName: string;
-      recordId: string;
-      newData: Record<string, unknown>;
-    }> = [];
-
-    for (const p of prepared) {
-      if (p.result.action === "ERROR") continue;
-      if (p.result.action === "SKIP") {
-        skipped++;
-        continue;
-      }
+    // ── TOKEN'I ŞİMDİ CLAIM ET (BULGU-T1-008) ──────────────────────────────
+    // Satır yazımı başlamadan ÖNCE. İki eşzamanlı istek aynı token'la gelirse
+    // ikincisi burada P2002'ye düşer ve yukarıdaki kurala göre 409 alır —
+    // "önce oku, sonra yaz" kontrolü tek başına yarışı kapatmıyordu.
+    // ⚠️ Başlangıç statüsü `FAILED`: koşum bu noktada hiçbir şey yazmamıştır ve
+    // süreç burada ölürse kayıt DOĞRU şeyi söyler. Sonda gerçek statüyle
+    // güncelleniyor.
+    if (options.clientToken) {
       try {
-        const out =
-          p.result.action === "CREATE"
-            ? await adapter.createOne(p, ctx)
-            : await adapter.updateOne(p, ctx);
-        if (p.result.action === "CREATE") created++;
-        else updated++;
-        p.result.targetId = out.id;
-        auditEntries.push({
-          userId,
-          action: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
-          tableName: adapter.tableName,
-          recordId: out.id,
-          // `importRunId` iki soruyu birden cevaplar: "bu kayıt nasıl oluştu"
-          // ve "bu koşumda neler oluştu". İkincisi olmadan hatalı bir yükleme
-          // geri alınamaz (hangi kayıtların yazıldığı bilinmez).
-          newData: { ...p.values, _source: "IMPORT", importRunId: runId },
+        await prisma.importRun.create({
+          data: {
+            id: runId,
+            entity,
+            userId: userId ?? null,
+            fileName: options.fileName ?? null,
+            clientToken: options.clientToken,
+            rowCount: rows.length,
+            status: "FAILED",
+            options: { mode: options.mode ?? "upsert" } as unknown as object,
+          },
         });
       } catch (e) {
-        // Doğrulama geçmişti ama yazma düştü (yarış / DB). DURUYORUZ: devam etmek
-        // hasarı büyütür ve kullanıcı nerede kaldığını bilemez.
-        failed++;
-        stoppedAtRowNo = p.input.rowNo;
-        p.result.action = "ERROR";
-        p.result.errors.push({
-          message: e instanceof Error ? e.message : "Yazma sırasında beklenmedik hata.",
-        });
-        status = created + updated > 0 ? "PARTIAL" : "FAILED";
-        break;
+        if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+          throw AppError.conflict(
+            "Bu yükleme HÂLÂ SÜRÜYOR (aynı anda ikinci kez gönderildi) — tekrar göndermeyin. " +
+              "Bitmesini bekleyin ve İçe Aktarım Geçmişi'nden sonucu görün.",
+            { code: "IMPORT_IN_PROGRESS" },
+          );
+        }
+        throw e;
       }
     }
 
-    if (status === "APPLIED" && failed > 0) status = "PARTIAL";
 
-    const durationMs = Date.now() - started;
-    const finalResults = prepared.map((p) => p.result);
-    const summary = summarize(finalResults);
-
-    const run = await prisma.importRun.create({
-      data: {
-        id: runId,
-        entity,
+    // ⚠️ BURADAN SONRASI SARMALI (BULGU-T1-008): token yukarıda CLAIM EDİLDİ.
+    // Gövde patlarsa (doğrulama hatası, adaptör arızası) satır `finishedAt`
+    // NULL kalır ve o token SONSUZA DEK "hâlâ koşuyor" görünür — kullanıcı
+    // aynı denemeyi tekrar gönderemez ve sebebini de anlamaz. Damgayı burada
+    // basıyoruz: koşum bitti, sonuç başarısız.
+    try {
+      const ctx = emptyContext(userId);
+      const { prepared, unknownColumns } = await prepareRows(adapter, rows, options, ctx);
+      const results = prepared.map((p) => p.result);
+      const errorRows = results.filter((r) => r.action === "ERROR");
+      const onError = options.onError ?? "abort";
+  
+      if (errorRows.length > 0 && onError === "abort") {
+        // Hiçbir şey yazılmadı. 400 gövdesinde satır sonuçları döner ki panel aynı
+        // önizleme tablosunu hatalarla gösterebilsin.
+        throw AppError.badRequest(
+          `${errorRows.length} satırda hata var — hiçbir kayıt yazılmadı. Hataları düzeltip yeniden yükleyin ya da 'hatalı satırları atla' seçeneğini işaretleyin.`,
+          { code: "IMPORT_VALIDATION_FAILED", rows: results, summary: summarize(results), unknownColumns },
+        );
+      }
+  
+      let created = 0;
+      let updated = 0;
+      let skipped = 0;
+      let failed = errorRows.length;
+      let stoppedAtRowNo: number | undefined;
+      let status: ImportApplyResult["status"] = "APPLIED";
+      const auditEntries: Array<{
+        userId: string | undefined;
+        action: "CREATE" | "UPDATE";
+        tableName: string;
+        recordId: string;
+        newData: Record<string, unknown>;
+      }> = [];
+  
+      for (const p of prepared) {
+        if (p.result.action === "ERROR") continue;
+        if (p.result.action === "SKIP") {
+          skipped++;
+          continue;
+        }
+        try {
+          const out =
+            p.result.action === "CREATE"
+              ? await adapter.createOne(p, ctx)
+              : await adapter.updateOne(p, ctx);
+          if (p.result.action === "CREATE") created++;
+          else updated++;
+          p.result.targetId = out.id;
+          auditEntries.push({
+            userId,
+            action: p.result.action === "CREATE" ? "CREATE" : "UPDATE",
+            tableName: adapter.tableName,
+            recordId: out.id,
+            // `importRunId` iki soruyu birden cevaplar: "bu kayıt nasıl oluştu"
+            // ve "bu koşumda neler oluştu". İkincisi olmadan hatalı bir yükleme
+            // geri alınamaz (hangi kayıtların yazıldığı bilinmez).
+            newData: { ...p.values, _source: "IMPORT", importRunId: runId },
+          });
+        } catch (e) {
+          // Doğrulama geçmişti ama yazma düştü (yarış / DB). DURUYORUZ: devam etmek
+          // hasarı büyütür ve kullanıcı nerede kaldığını bilemez.
+          failed++;
+          stoppedAtRowNo = p.input.rowNo;
+          p.result.action = "ERROR";
+          p.result.errors.push({
+            message: e instanceof Error ? e.message : "Yazma sırasında beklenmedik hata.",
+          });
+          status = created + updated > 0 ? "PARTIAL" : "FAILED";
+          break;
+        }
+      }
+  
+      if (status === "APPLIED" && failed > 0) status = "PARTIAL";
+  
+      const durationMs = Date.now() - started;
+      const finalResults = prepared.map((p) => p.result);
+      const summary = summarize(finalResults);
+  
+      // Token'lı koşumun satırı BAŞTA yazıldı → burada GÜNCELLENİR; token'sız
+      // (dahili/eski istemci) yolda hâlâ burada doğar. `upsert` ikisini de tek
+      // ifadede karşılar ve "başta yazıldı mı" sorusunu koda taşımaz.
+      const run = await prisma.importRun.upsert({
+        where: { id: runId },
+        update: {
+          rowCount: rows.length,
+          created,
+          updated,
+          skipped,
+          failed,
+          status,
+          durationMs,
+          finishedAt: new Date(),
+          stoppedAtRowNo: stoppedAtRowNo ?? null,
+          options: { mode: options.mode ?? "upsert", onError } as unknown as object,
+          errorReport: finalResults.filter(
+            (r) => r.action === "ERROR" || r.warnings.length > 0,
+          ) as unknown as object,
+        },
+        create: {
+          id: runId,
+          finishedAt: new Date(),
+          entity,
+          userId: userId ?? null,
+          fileName: options.fileName ?? null,
+          clientToken: options.clientToken ?? null,
+          rowCount: rows.length,
+          created,
+          updated,
+          skipped,
+          failed,
+          status,
+          durationMs,
+          stoppedAtRowNo: stoppedAtRowNo ?? null,
+          options: { mode: options.mode ?? "upsert", onError } as unknown as object,
+          // Yalnız SORUNLU satırlar saklanır — 10.000 satırlık başarılı bir koşumun
+          // tamamını JSON'a gömmek tabloyu şişirir ve hiçbir soruya cevap vermez.
+          errorReport: finalResults.filter(
+            (r) => r.action === "ERROR" || r.warnings.length > 0,
+          ) as unknown as object,
+        },
+      });
+  
+      // Audit: satır bazlı toplu (perf kuralı 9) + koşumun kendisi tek olay.
+      await AuditService.logMany(auditEntries);
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "IMPORT_RUN",
         userId: userId ?? null,
-        fileName: options.fileName ?? null,
-        clientToken: options.clientToken ?? null,
-        rowCount: rows.length,
+        tableName: adapter.tableName,
+        recordId: run.id,
+        payload: { entity, status, created, updated, skipped, failed, rowCount: rows.length, fileName: options.fileName ?? null },
+      });
+  
+      return {
+        entity,
+        runId: run.id,
+        status,
         created,
         updated,
         skipped,
         failed,
-        status,
         durationMs,
-        stoppedAtRowNo: stoppedAtRowNo ?? null,
-        options: { mode: options.mode ?? "upsert", onError } as unknown as object,
-        // Yalnız SORUNLU satırlar saklanır — 10.000 satırlık başarılı bir koşumun
-        // tamamını JSON'a gömmek tabloyu şişirir ve hiçbir soruya cevap vermez.
-        errorReport: finalResults.filter(
-          (r) => r.action === "ERROR" || r.warnings.length > 0,
-        ) as unknown as object,
-      },
-    });
-
-    // Audit: satır bazlı toplu (perf kuralı 9) + koşumun kendisi tek olay.
-    await AuditService.logMany(auditEntries);
-    await AuditService.logEvent({
-      category: "SYSTEM",
-      action: "IMPORT_RUN",
-      userId: userId ?? null,
-      tableName: adapter.tableName,
-      recordId: run.id,
-      payload: { entity, status, created, updated, skipped, failed, rowCount: rows.length, fileName: options.fileName ?? null },
-    });
-
-    return {
-      entity,
-      runId: run.id,
-      status,
-      created,
-      updated,
-      skipped,
-      failed,
-      durationMs,
-      rows: finalResults,
-      summary,
-      unknownColumns,
-      stoppedAtRowNo,
-    };
+        rows: finalResults,
+        summary,
+        unknownColumns,
+        stoppedAtRowNo,
+      };
+    } catch (e) {
+      if (options.clientToken) {
+        await prisma.importRun
+          .updateMany({
+            where: { id: runId, finishedAt: null },
+            data: { finishedAt: new Date(), status: "FAILED", durationMs: Date.now() - started },
+          })
+          .catch(() => {
+            /* damga best-effort: asıl hatayı gölgelemesin */
+          });
+      }
+      throw e;
+    }
   }
 
   /** Geçmiş — kalıcı (audit 6 ayda arşivlenir, bu tablo kalır). */
