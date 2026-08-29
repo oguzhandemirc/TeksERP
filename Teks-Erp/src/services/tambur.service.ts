@@ -2095,7 +2095,10 @@ export class TamburService {
     // tüketilir (aşağıda currentQty=0; `initialQty` giriş metrajı olarak KORUNUR —
     // 2026-08-29 denetimi, BULGU-T2-016).
     const exceedsRemaining = data.cutLength > Number(parent.currentQty);
-    if (exceedsRemaining && !(await readTamburOverQuantityEnabled())) {
+    // Bayrak tx İÇİNDE de gerekiyor (taze karar oradaki metrajdan veriliyor), o
+    // yüzden koşuldan bağımsız okunur — tek PK araması, ihmal edilebilir.
+    const asimIzinli = await readTamburOverQuantityEnabled();
+    if (exceedsRemaining && !asimIzinli) {
       throw AppError.badRequest(
         `Kesim metresi (${data.cutLength}) topun kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
@@ -2246,13 +2249,47 @@ export class TamburService {
       // updateMany {id, sackId:null}) araya girerse WHERE eşleşmez → P2025 → 409.
       // `sackId: null` şart: çuvaldaki topun metrajını eksiltmek çuval içeriğini
       // sessizce bozar (2026-07-30 hayalet-içerik bulgusu).
+      // ── AŞIM KARARI TX İÇİNDE, TAZE OKUMAYLA (2026-08-29 / BULGU-T1-002) ──
+      // `exceedsRemaining` tx'ten ÖNCE, HAVUZ bağlantısıyla okunmuş metrajdan
+      // hesaplanıyordu ve aşım dalının WHERE'inde METRAJ ŞARTI YOKTU. İki tablet
+      // 100 m'lik topu aynı anda 120 m okutup keserse ikisi de "aşım" der, ikisi
+      // de WHERE'e uyar, ikisi de commit eder: 240 m çocuk doğar, deftere gerçek
+      // 140 m yerine 2×20 = 40 m yazılır. Envantere yoktan 140 m kumaş girer ve
+      // iki barkodlu top da sevk edilebilir. Üstelik hata kendi izini siler.
+      //
+      // İKİ ŞEY birlikte gerekiyor: (1) kararın TAZE metrajdan verilmesi,
+      // (2) aşım dalının WHERE'ine `currentQty: <okunan taze değer>` iyimser
+      // guard'ı. PostgreSQL kilitte bekleyen UPDATE'i, önceki tx commit edince
+      // YENİ satır sürümüne göre yeniden değerlendirir → ikinci istek eşleşme
+      // bulamaz ve 409 alır. Guard olmadan yeniden değerlendirme geçer.
+      // ⚠️ `currentQty > 0` ŞARTI YİNE YOK: 0'a inmiş topta ikinci aşım kesimi
+      //    MEŞRU (mal fiziksel olarak elde, 2026-08-12 saha vakası).
+      const tazeParent = await tx.roll.findUnique({
+        where: { id: parent.id },
+        select: { currentQty: true },
+      });
+      if (!tazeParent) throw AppError.conflict("Top bu sırada silindi — listeyi yenileyin");
+      const tazeKalan = new Prisma.Decimal(tazeParent.currentQty);
+      const tazeAsim = tazeKalan.lessThan(data.cutLength);
+      if (tazeAsim && !asimIzinli) {
+        throw AppError.conflict(
+          `Kesim metresi (${data.cutLength}) topun kalan metresinden (${tazeKalan}) büyük — ` +
+            "top bu sırada başka bir kesimle eksildi. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+
       let updatedParent;
       try {
-        updatedParent = exceedsRemaining
+        updatedParent = tazeAsim
           ? await tx.roll.update({
-              // ⚠️ `currentQty > 0` YOK — cutOpenFabric aşım dalıyla aynı gerekçe
-              // (0'a inmiş topta ek kesim; 2026-08-12). Çuval/sevk guard'ları duruyor.
-              where: { id: parent.id, status: parent.status, shipmentId: null, sackId: null },
+              where: {
+                id: parent.id,
+                status: parent.status,
+                shipmentId: null,
+                sackId: null,
+                // İYİMSER GUARD — okunan taze değer. Bkz. yukarıdaki not.
+                currentQty: tazeKalan,
+              },
               data: { currentQty: 0 },
             })
           : await tx.roll.update({
@@ -2276,12 +2313,13 @@ export class TamburService {
       const kesimOncesiQty = Number(parent.currentQty);
 
       // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
-      if (exceedsRemaining) {
+      if (tazeAsim) {
         await recordVarianceTx(tx, {
           rollId: parent.id,
           workOrderStepId: null,
           kind: RollVarianceKind.OVERAGE,
-          qty: overageOf(data.cutLength, parent.currentQty),
+          // Defter payı da TAZE metrajdan (bayat değer 140 m'lik aşımı 20 m yazıyordu).
+          qty: overageOf(data.cutLength, tazeKalan),
           source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
           userId,
         });
@@ -2300,9 +2338,14 @@ export class TamburService {
       // metraj + statü. Geri alma yolu (`tambur-undo` depo dalı) bu iki kolonu
       // OKUR — yazmazsak diriltme metrajı çocuklardan TÜRETMEYE çalışır ve
       // aşımda `currentQty > initialQty` üretir (2026-08-09 dersi).
-      // ⚠️ Aşım dalında kaynak zaten 0'a çekiliyor; oradan da buraya düşülür ve
-      //    düşmesi DOĞRUDUR (0 m'lik top depoda durmamalı).
-      if (newParentQty === 0 && parent.status !== RollStatus.TAMBUR_CONSUMED) {
+      // ⚠️⚠️ AŞIM DALI HARİÇ — bu iki kural ÇARPIŞIYOR ve sınır burada (bekçi
+      //    `test_tambur_cut_concurrency` §3 ilk yazımda bunu kırmızı verdi):
+      //    aşım kesiminde parent 0'a iner ama FİZİKSEL kumaş bitmemiştir
+      //    (2026-08-12: "500 m kayıtlı kumaş 550 m çıkabilir, fazlalık tek
+      //    kesimde bitmeyebilir"). Orada emekli etmek, operatörün elindeki malı
+      //    kesmesini engeller ve "top işlenebilir durumda değil" 400'ü verir.
+      //    Emeklilik yalnız TAM BİTEN kesimde: kalan tam tükendi ve aşım YOK.
+      if (!tazeAsim && newParentQty === 0 && parent.status !== RollStatus.TAMBUR_CONSUMED) {
         await tx.roll.update({
           where: { id: parent.id },
           data: {
@@ -2788,7 +2831,9 @@ export class TamburService {
     // Flag kapalıyken reddet (bugünkü davranış); açıkken kabul → açık kumaşın tamamı
     // tek topa dönüşür, parent tamamen tüketilir (aşağıda currentQty=0).
     const exceedsRemaining = data.lengthMeters > Number(parent.currentQty);
-    if (exceedsRemaining && !(await readTamburOverQuantityEnabled())) {
+    // Bayrak tx İÇİNDE de gerekiyor (taze karar oradaki metrajdan veriliyor).
+    const asimIzinliOF = await readTamburOverQuantityEnabled();
+    if (exceedsRemaining && !asimIzinliOF) {
       throw AppError.badRequest(
         `Kesim metresi (${data.lengthMeters}) açık kumaşın kalan metresinden (${parent.currentQty}) büyük olamaz`,
       );
@@ -2956,12 +3001,28 @@ export class TamburService {
       // Parent atomic decrement — hesap DB-side, gte guard concurrent overdraw'a karşı.
       // Aşımda (lengthMeters > currentQty) decrement negatife düşer → bunun yerine açık
       // kumaşı tamamen tüket (currentQty=0). gt:0 guard eşzamanlı çift-tüketimi engeller.
+      // ── AŞIM KARARI TX İÇİNDE, TAZE OKUMAYLA (2026-08-29 / T1-002) ────────
+      // `cutWarehouseRoll` ikizinin birebir aynısı — gerekçe orada yazılı.
+      const tazeParent = await tx.roll.findUnique({
+        where: { id: parent.id },
+        select: { currentQty: true },
+      });
+      if (!tazeParent) throw AppError.conflict("Açık kumaş bu sırada silindi — listeyi yenileyin");
+      const tazeKalan = new Prisma.Decimal(tazeParent.currentQty);
+      const tazeAsim = tazeKalan.lessThan(data.lengthMeters);
+      if (tazeAsim && !asimIzinliOF) {
+        throw AppError.conflict(
+          `Kesim metresi (${data.lengthMeters}) açık kumaşın kalan metresinden (${tazeKalan}) büyük — ` +
+            "kumaş bu sırada başka bir kesimle eksildi. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+
       let updatedParent;
       try {
         // F130: guarded-decrement = atomik claim. status + currentStepId eklendi:
         // eşzamanlı KK2 reopen (currentStepId'yi KK2 step'e çeker) araya girerse
         // WHERE eşleşmez → P2025 → 409 (KK2'ye geri çekilmiş top kesilmez).
-        updatedParent = exceedsRemaining
+        updatedParent = tazeAsim
           ? await tx.roll.update({
               // ⚠️ AŞIM DALINDA `currentQty > 0` ŞARTI YOK (2026-08-12 saha
               // vakası): 500 m kayıtlı kumaş fiziksel 550 m çıkabilir ve fazlalık
@@ -2972,7 +3033,15 @@ export class TamburService {
               // burada ANLAMSIZ: 0'ın altına inilecek gerçek stok kalmadı; her
               // aşım kesimi çocuk + sapma satırı üretir (aşağıdaki defter), yani
               // iz kaybolmaz. KK2 reopen/statü guard'ları AYNEN duruyor.
-              where: { id: parent.id, status: RollStatus.IN_PRODUCTION, currentStepId: tamburStepId },
+              // ⚠️ `currentQty: tazeKalan` İYİMSER GUARD (2026-08-29 / T1-002):
+              // metraj şartı olmadan iki eşzamanlı aşım kesimi ikisi de eşleşiyor
+              // ve 100 m'lik kumaştan 240 m çocuk doğuyordu.
+              where: {
+                id: parent.id,
+                status: RollStatus.IN_PRODUCTION,
+                currentStepId: tamburStepId,
+                currentQty: tazeKalan,
+              },
               data: { currentQty: 0 },
             })
           : await tx.roll.update({
@@ -2997,12 +3066,13 @@ export class TamburService {
       // tüketiliyor ve "N m fazla çıktı" bilgisi buharlaşıyordu. Sonuç: rapor
       // yalnız eksi yönü görüyordu ("giriş 100, çıkış 140" açıklamasız kalıyordu).
       // Sebep SORULMAZ — aşımı sistem tespit eder, operatör beyan etmez.
-      if (exceedsRemaining) {
+      if (tazeAsim) {
         await recordVarianceTx(tx, {
           rollId: parent.id,
           workOrderStepId: tamburStepId,
           kind: RollVarianceKind.OVERAGE,
-          qty: overageOf(data.lengthMeters, parent.currentQty),
+          // Defter payı da TAZE metrajdan (bayat değer aşımı eksik yazıyordu).
+          qty: overageOf(data.lengthMeters, tazeKalan),
           source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
           userId,
         });
