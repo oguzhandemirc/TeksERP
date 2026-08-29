@@ -3927,15 +3927,60 @@ export class InventoryService {
         await touchWarehouseSackTx(tx, cur.sackId);
       }
 
-      // 1) Roll skaler alanları (renk/en/kalite) — üyelik PİNLİ atomik claim (serbest kalır).
+      // 1) Roll skaler alanları (renk/en/kalite/metraj) — atomik claim.
+      //
+      // ⚠️ CLAIM YALNIZ ÜYELİĞİ DEĞİL, KARARIN DAYANDIĞI ALANLARI DA PİNLER.
+      // Eskiden `where` yalnız `{ id, shipmentId: null, sackId }` idi; oysa bu
+      // fonksiyonun İKİ kararı da tx DIŞINDA okunan `roll` satırından geliyor:
+      //   • kapsam/yetki kararı  → `roll.status` (FREE_STOCK mu, süpervizör mü)
+      //   • metraj düzeltme izni → `rollWhole = initialQty.equals(currentQty)`
+      // Aradaki pencerede Tambur kesimi (`cutWarehouseRoll`) topun İKİ metrajını
+      // da düşürür ve yazım MUTLAK olduğu için (`currentQty = initialQty = m`)
+      // kesimi sessizce geri alır. Ölçüldü (audit_repro_D-A-01, 10/10 tekrar):
+      // 100 m'lik top, 40,5 m kesildikten sonra sistemde 140,5 m görünüyordu —
+      // fiziksel olarak var olmayan 40,5 m stoğa yazılmış oluyordu (BULGU-T1-001).
+      //
+      // `rollWhole` guard'ını tx İÇİNE taşımak YETMEZ: kesim parent'ın ikisini de
+      // düşürdüğü için kesimden SONRA da `initialQty == currentQty` olur, yani
+      // guard yeniden hesaplansa bile yeşil kalır. Tek çözüm okunan değeri
+      // pinlemektir — "gördüğüm satır hâlâ aynıysa yaz, değilse 409".
       if (Object.keys(rollData).length > 0) {
-        const upd = await tx.roll.updateMany({
-          where: { id: rollId, shipmentId: null, sackId: cur.sackId },
-          data: rollData,
-        });
+        const pin: Prisma.RollWhereInput = {
+          id: rollId,
+          shipmentId: null,
+          sackId: cur.sackId,
+          // Kapsam kararı bu statüden çözüldü (BULGU-T1-085).
+          status: roll.status,
+        };
+        // Metraj YAZILIYORSA okunan metraj da pinlenir. Yalnız yazıldığında:
+        // toplu renk/en düzeltmesi (`applyAttributeToRolls`) metraj göndermez ve
+        // üretimdeki topun metrajı meşru olarak değişebilir — orada pinlemek
+        // gereksiz 409 üretirdi.
+        if (rollData.currentQty !== undefined) {
+          pin.currentQty = roll.currentQty;
+          pin.initialQty = roll.initialQty;
+        }
+        const upd = await tx.roll.updateMany({ where: pin, data: rollData });
         if (upd.count === 0) {
+          // Çakışma yolunda TEK ek okuma: operatöre "ne değişti"yi söylemek,
+          // "yenileyip tekrar deneyin"i tahmin ettirmekten iyidir.
+          const taze = await tx.roll.findUnique({
+            where: { id: rollId },
+            select: { status: true, currentQty: true, shipmentId: true, sackId: true },
+          });
+          const neden = !taze
+            ? "top bu sırada silindi"
+            : taze.shipmentId
+              ? "top bu sırada bir sevkiyata atandı"
+              : taze.sackId !== cur.sackId
+                ? "topun çuvalı bu sırada değişti"
+                : taze.status !== roll.status
+                  ? `topun durumu bu sırada değişti (${roll.status} → ${taze.status})`
+                  : !taze.currentQty.equals(roll.currentQty)
+                    ? `topun metrajı bu sırada değişti (${roll.currentQty.toString()} → ${taze.currentQty.toString()} m) — büyük olasılıkla Tambur'da kesildi`
+                    : "top bu sırada başka bir işlemle güncellendi";
           throw AppError.conflict(
-            "Top bu sırada bir sevkiyata okutuldu/çıkarıldı — etiket güncellenemedi, yenileyip tekrar deneyin",
+            `${neden.charAt(0).toLocaleUpperCase("tr")}${neden.slice(1)} — düzeltme uygulanmadı. Ekranı yenileyip güncel değerlerle tekrar deneyin.`,
           );
         }
       }
