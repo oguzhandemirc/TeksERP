@@ -2271,6 +2271,9 @@ export class TamburService {
         throw err;
       }
       const newParentQty = Number(updatedParent.currentQty);
+      // Kapanış öncesi metraj = kesimden ÖNCEKİ kalan (claim kilidi altında
+      // okunan `parent.currentQty`), çocukların toplamı DEĞİL.
+      const kesimOncesiQty = Number(parent.currentQty);
 
       // AŞIM DEFTERİ — `cutOpenFabric` ikizi. Depo kesimi adıma bağlı DEĞİL.
       if (exceedsRemaining) {
@@ -2281,6 +2284,33 @@ export class TamburService {
           qty: overageOf(data.cutLength, parent.currentQty),
           source: VARIANCE_SOURCES.TAMBUR_OVERCUT,
           userId,
+        });
+      }
+
+      // ── KAYNAK TÜKENDİYSE EMEKLİ ET (2026-08-29 / BULGU-T1-039) ────────────
+      // Operatör 36,7 m'lik depo topunu tek parça hâlinde keser ve ekranı
+      // "Bitir" demeden kapatırsa kaynak top WAREHOUSE / 0 m / BARKODLU olarak
+      // depoda kalıyordu: Bitmiş Depo listesinde fazla bir satır, çuvala
+      // okutulabilen ve çuvalın "top adedi"ni şişiren bir hayalet, irsaliyede
+      // 0 m'lik bir kalem. Metraj toplamları etkilenmez (0 m), ADET metrikleri
+      // etkilenir — ve mutabakat kapısı bu satırları sonsuza dek anomali diye
+      // raporlar, yani kapının sinyali körelir.
+      //
+      // `finalizeWarehouseCut`in kapanışıyla AYNI hâl yazılır: kapanış öncesi
+      // metraj + statü. Geri alma yolu (`tambur-undo` depo dalı) bu iki kolonu
+      // OKUR — yazmazsak diriltme metrajı çocuklardan TÜRETMEYE çalışır ve
+      // aşımda `currentQty > initialQty` üretir (2026-08-09 dersi).
+      // ⚠️ Aşım dalında kaynak zaten 0'a çekiliyor; oradan da buraya düşülür ve
+      //    düşmesi DOĞRUDUR (0 m'lik top depoda durmamalı).
+      if (newParentQty === 0 && parent.status !== RollStatus.TAMBUR_CONSUMED) {
+        await tx.roll.update({
+          where: { id: parent.id },
+          data: {
+            status: RollStatus.TAMBUR_CONSUMED,
+            currentStepId: null,
+            preTamburCloseQty: new Prisma.Decimal(kesimOncesiQty),
+            preTamburCloseStatus: parent.status,
+          },
         });
       }
 

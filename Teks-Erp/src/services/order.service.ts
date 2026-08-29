@@ -116,14 +116,38 @@ function computeAllowedActions(
   return ["UNLINK_ONLY"];
 }
 
+/**
+ * Varsayılan aksiyon — İZİNLİ LİSTEDEN TÜRETİLİR, ayrı yazılmaz.
+ *
+ * ⚠️ Bu iki fonksiyon eskiden BAĞIMSIZDI ve sessizce ayrıştılar (BULGU-T2-005):
+ * İPTAL EDİLMİŞ iş emrine bağlı tek-siparişli bir siparişte izinli liste
+ * `["UNLINK_ONLY"]` iken varsayılan `CONVERT_TO_STOCK` dönüyordu. Arayüz izinli
+ * aksiyon tek olduğu için seçim kutusunu ÇİZMİYOR, dolayısıyla istemci bir şey
+ * göndermiyor, sunucu da varsayılana düşüyordu → "CONVERT_TO_STOCK geçersiz"
+ * 400'ü. Yenilemek işe yaramıyordu: sipariş HİÇBİR yoldan iptal edilemiyordu ve
+ * sonsuza dek "açık talep" sayılıyordu (prod'da 2 canlı sipariş bu durumdaydı;
+ * tek çıkış DB'ye elle müdahaleydi).
+ *
+ * Tercih hâlâ ifade edilir ("en sık vaka: malı stoğa al") ama izinli değilse
+ * listenin ilkine düşer — yani ayrışma YAPISAL OLARAK imkânsız.
+ */
 function pickDefaultAction(
   woStatus: string,
   isSoleOrder: boolean
 ): CancelAction {
-  if (woStatus === "PLANNED") return "UNLINK_ONLY";
-  if (isSoleOrder) return "CONVERT_TO_STOCK"; // en sık vaka: malı stoğa al
-  return "UNLINK_ONLY";
+  const allowed = computeAllowedActions(woStatus, isSoleOrder);
+  const tercih: CancelAction =
+    woStatus === "PLANNED" ? "UNLINK_ONLY" : isSoleOrder ? "CONVERT_TO_STOCK" : "UNLINK_ONLY";
+  return allowed.includes(tercih) ? tercih : allowed[0];
 }
+
+/**
+ * Bekçi ihracı — bu iki saf fonksiyonun AYRIŞAMAZLIĞI ölçülebilir olmalı
+ * (BULGU-T2-005). Üretim kodu bunu kullanmaz; kaynak okuyarak sözleşme ölçmek
+ * kırılgan olduğu için asıl kontrol her (durum × tek-sipariş) kombinasyonunu
+ * gerçekten koşturur.
+ */
+export const __test__ = { computeAllowedActions, pickDefaultAction };
 
 /**
  * Lines üzerinden totalAmount hesaplar. unitPrice null olan satırlar toplama
@@ -3138,6 +3162,18 @@ export class OrderService extends BaseService {
         }
         actionByWO.set(wo.id, provided.action);
       } else {
+        // FAIL-CLOSED: varsayılan da izinli listeden geçer. `pickDefaultAction`
+        // artık listeden türetiyor, yani buraya düşmek imkânsız — ama ayrışma
+        // bir daha olursa SESSİZ 400 yerine sebebini söyleyen bir hata çıksın
+        // (T2-005'in bedeli sessizliğiydi: operatör "Sayfayı yenileyin" görüp
+        // yeniliyor ve aynı duvara çarpıyordu).
+        if (!wo.allowedActions.includes(wo.defaultAction)) {
+          throw AppError.badRequest(
+            `İş emri ${wo.id} için varsayılan aksiyon ('${wo.defaultAction}') izinli değil ` +
+              `(izinli: ${wo.allowedActions.join(", ")}). Bu bir sunucu tutarsızlığıdır — ` +
+              "sipariş iptali için destek ekibine bildirin.",
+          );
+        }
         actionByWO.set(wo.id, wo.defaultAction);
       }
     }

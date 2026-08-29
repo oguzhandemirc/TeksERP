@@ -187,6 +187,20 @@ export class PermissionManagementService {
     // F255: upsert + tokenVersion bump ATOMİK. Bump KOŞULLU — yalnız tarih (veya
     // yeni satır) gerçekten değiştiyse (setUserPermissions kalıbı); idempotent
     // aynı-grant re-login zorlamaz. tx.* seri (Promise.all YOK).
+    // Yükseltme kapısı — tekil grant da bir yetki yazımıdır (T2-013). Zaten
+    // sahip olunan izni yeniden vermek yükselme DEĞİLDİR; onu aşağıdaki upsert
+    // zaten idempotent yapıyor, o yüzden kapı yalnız GERÇEKTEN yeni olanda
+    // tetiklensin diye mevcut satır kontrol edilir.
+    const zatenVar = await prisma.userPermission.findFirst({
+      where: { userId, permissionId: input.permissionId },
+      select: { id: true },
+    });
+    await PermissionManagementService.assertNoSelfEscalation(
+      actorUserId,
+      userId,
+      zatenVar ? [] : [input.permissionId],
+    );
+
     const created = await prisma.$transaction(async (tx) => {
       const before = await tx.userPermission.findUnique({
         where: { userId_permissionId: { userId, permissionId: input.permissionId } },
@@ -300,6 +314,13 @@ export class PermissionManagementService {
     const currentHasAdmin = existing.some((e) => adminPermIds.has(e.permissionId));
     const targetHasAdmin = permissionIds.some((id) => adminPermIds.has(id));
     const removesAdmin = currentHasAdmin && !targetHasAdmin;
+
+    // Yükseltme kapısı — mutasyondan ÖNCE (T2-013).
+    await PermissionManagementService.assertNoSelfEscalation(
+      actorUserId,
+      userId,
+      toAdd.map((i) => i.permissionId),
+    );
 
     await prisma.$transaction(async (tx) => {
       if (removesAdmin) {
@@ -576,6 +597,55 @@ export class PermissionManagementService {
     if (actorUserId && actorUserId === targetId) {
       throw AppError.badRequest("Kendi hesabınızı pasife alamazsınız");
     }
+  }
+
+  /**
+   * KENDİ YETKİNİ GENİŞLETEMEZSİN (BULGU-T2-013).
+   *
+   * `admin:users` taşıyan bir hesap kendi id'sine `admin:*` yazabiliyordu: 200
+   * döner, audit yazılır (aktör = kendisi), `tokenVersion++` ile yeniden girer
+   * ve artık tam yetkilidir — yedek, DB kopyası, PIN okuma dahil. Hiçbir ikinci
+   * onay, hiçbir alarm yoktu. Son-admin koruması yalnız yetki DÜŞÜREN dalda
+   * koşuyordu; YÜKSELTEN dalda hiçbir kontrol yoktu.
+   *
+   * Bu, yetki modelinin tamamını (26 rol, kategori ayrımı, görevler ayrılığı
+   * üçlüsü) `admin:users` taşıyan hesaplar için anlamsız kılıyordu: kademeler
+   * bir kişinin tek isteğiyle atlanabiliyorsa kademe yoktur.
+   *
+   * Kural DAR ve ölçülebilir: yalnız AKTÖR = HEDEF ve küme GENİŞLİYORSA reddet.
+   *   • kendi yetkisini DÜŞÜRMEK serbest (son-admin koruması zaten var),
+   *   • aynı kümeyi yeniden kaydetmek serbest (ekleme yok),
+   *   • BAŞKASINA yetki vermek serbest (davranış korunur — bu ucun asıl işi),
+   *   • `admin:*` zaten TAŞIYAN aktör muaf: fiilen her yetkiye sahip olduğu
+   *     için bir şey "eklemesi" yükselme değildir (kendi ekranını onarabilsin).
+   */
+  private static async assertNoSelfEscalation(
+    actorUserId: string | undefined,
+    userId: string,
+    addedPermissionIds: string[],
+  ): Promise<void> {
+    if (!actorUserId || actorUserId !== userId) return;
+    if (addedPermissionIds.length === 0) return;
+    const wildcard = await prisma.permission.findFirst({
+      where: { code: "admin:*" },
+      select: { id: true },
+    });
+    if (wildcard) {
+      const aktorTamYetkili = await prisma.userPermission.findFirst({
+        where: { userId: actorUserId, permissionId: wildcard.id },
+        select: { id: true },
+      });
+      if (aktorTamYetkili) return;
+    }
+    const eklenen = await prisma.permission.findMany({
+      where: { id: { in: addedPermissionIds } },
+      select: { code: true },
+    });
+    throw AppError.conflict(
+      "Kendi yetkilerinizi genişletemezsiniz — bu değişikliği başka bir yönetici yapmalı. " +
+        `İstenen yeni yetki: ${eklenen.map((p) => p.code).join(", ")}`,
+      { code: "SELF_ESCALATION", requestedCodes: eklenen.map((p) => p.code) },
+    );
   }
 
   /** Kullanıcı-yöneticisi izin kodları (admin:users ve wildcard admin:*). */
@@ -1003,6 +1073,9 @@ export class PermissionManagementService {
     });
     const existingIds = new Set(existing.map((e) => e.permissionId));
     const toAdd = templatePermIds.filter((id) => !existingIds.has(id));
+
+    // Yükseltme kapısı: şablon uygulamak da bir yetki yazımıdır (T2-013).
+    await PermissionManagementService.assertNoSelfEscalation(actorUserId, userId, toAdd);
 
     if (toAdd.length) {
       // İzin EKLENDİ → uçuştaki token'ı geçersiz kıl (grant/revoke/set ile AYNI
