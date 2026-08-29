@@ -2432,16 +2432,28 @@ export class OrderService extends BaseService {
           // yetmez). Sonra toDelete-scope taze link kontrolü: araya giren INSERT ya
           // guard'da yakalanır (409) ya da silme sonrası FK ihlaliyle düşer.
           await tx.$queryRaw`SELECT id FROM order_lines WHERE id = ANY(${toDelete}::uuid[]) FOR UPDATE`;
+          // ⚠️ KAPSAM İPTAL EDİLMİŞ İŞ EMİRLERİNİ DE İÇERİR (2026-08-29 / K5).
+          // Eskiden yalnız CANLI iş emirleri sayılıyordu; iptal edilmiş bir iş
+          // emrine bağlı kalem silinebiliyor ve bağ satırı `onDelete: Cascade`
+          // ile SESSİZCE düşüyordu → "bu iş emri hangi sipariş için açıldı"
+          // olgusu hiçbir iz bırakmadan kayboluyordu (BULGU-T1-100; sahada 3
+          // satır bu durumdaydı). Artık bağ DB seddiyle de korunuyor
+          // (`work_order_to_order_lines_orderLineId_fkey` → RESTRICT), yani bu
+          // kontrol kalkarsa kullanıcı ham FK hatası görürdü — mesajı veren yer
+          // burası, koruma ise DB'de.
           const linkedToDeleted = await tx.workOrderToOrderLine.findFirst({
-            where: {
-              orderLineId: { in: toDelete },
-              workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
-            },
-            select: { workOrderId: true },
+            where: { orderLineId: { in: toDelete } },
+            select: { workOrderId: true, workOrder: { select: { status: true, workOrderNumber: true } } },
           });
           if (linkedToDeleted) {
+            const wo = linkedToDeleted.workOrder;
+            const iptalli =
+              wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED;
             throw AppError.conflict(
-              "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
+              iptalli
+                ? `Bu kalem için ${wo.workOrderNumber} iş emri açılmış — iş emri iptal edilse de kayıt duruyor ve silinemez. ` +
+                  "Kalemi silmek yerine İPTAL edin; sevk edilmiş metraj ve geçmiş korunur."
+                : "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
             );
           }
           await tx.orderLine.deleteMany({ where: { id: { in: toDelete } } });

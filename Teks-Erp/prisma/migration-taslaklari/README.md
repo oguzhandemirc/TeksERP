@@ -18,6 +18,27 @@ analizini ve geri alma yolunu taşır.
 ⚠️ `CREATE INDEX CONCURRENTLY` Prisma migration'ının transaction'ı içinde ÇALIŞMAZ;
 o taslaklar `psql` ile elle koşulur ya da migration dosyasında transaction kapatılır.
 
+## DURUM (2026-08-29 akşamı — fabrika verisinin kopyasında ÖLÇÜLDÜ)
+
+Sekiz taslağın tamamı `tekserp_saha_0825`'in birebir kopyasına (33 MB, gerçek
+fabrika verisi) **gerçekten kuruldu**; her adım < 0,1 sn.
+
+| Taslak | Ölçüm | Karar |
+|---|---|---|
+| **K1** metraj üst sınırı | kuruldu · fabrikada **2 eski ihlal** · `VALIDATE` düşüyor | ✅ **UYGULANDI** — `NOT VALID` yumuşak kapı; yeni yazımları zorlar, 2 eski satır görünür kalır |
+| **K2** kumaş adı tekilliği | ❌ **DÜŞTÜ** — `v-1430` adını iki pasif kumaş taşıyor (`BGR150`, `MC155`) | ⛔ **BEKLİYOR** — önce mükerrer panelinden birleştirme |
+| **K3** kod harf-duyarsız tekillik | ❌ **DÜŞTÜ** — 3 grup: `MC155`(3) · `BGR150`(2) · **`SANTUK`(2, İKİSİ DE AKTİF)** | ⛔ **BEKLİYOR** — `SANTUK`/`santuk` iki FARKLI aktif kumaş (BORANCIK ↔ ŞANTUK); biri yeniden adlandırılmalı |
+| **K4** mezar taşı korunsun | kuruldu | ⛔ **UYGULANMADI (bilinçli)** — repo 2026-08-19'da bu bağın SetNull kalmasına gerekçeli karar verdi; ayrıca `/permanent` ucunun bağımlılık kapısı mezar taşına bakmıyor → kısıt orada okunaklı 400 değil HAM FK hatası üretirdi |
+| **K5** iş emri↔sipariş bağı | kuruldu · 140 bağ | ✅ **UYGULANDI** + kod ön koşulu (silme kapısı iptal edilmiş iş emirlerini de sayıyor, okunaklı 409) |
+| **K6** audit değiştirilemezliği | kuruldu · 10.485 log | ✅ **UYGULANDI** — ölçüldü: uygulamada kullanıcıyı SERT silen yol YOK, yani saha akışı etkilenmiyor (yalnız iki test temizliği düzeltildi) |
+| **K7** rapor indeksleri | üçü de kuruldu | ✅ **UYGULANDI** — `CONCURRENTLY` KULLANILMADI (Prisma migration tek tx'te koşar); `orders` 278 satır, düz `CREATE INDEX` ms mertebesinde |
+| **K8** kart basım tarihi | kuruldu · 153 kart yalan tarih taşıyor | ✅ **UYGULANDI** — yalnız VARSAYILAN kalktı, mevcut satırlara dokunulmadı; sıralama NULL'a hazırlandı |
+
+Uygulananlar: `prisma/migrations/20260829140000_denetim_sema_kisitlari/`.
+
+⚠️ **K6'nın ops ikizi migration DEĞİL:** `ALTER DATABASE <db> SET teks.audit_guard = 'on'`
+sahada elle koşulur (deploy adımı).
+
 ## Taslaklar
 
 | Dosya | Ne yapar | SQL bloğu |

@@ -215,6 +215,11 @@ async function main() {
       await prisma.device.deleteMany({ where: { id: { in: createdDeviceIds } } });
     }
     if (createdUserIds.length) {
+      // ⚠️ RESTRICT FK (2026-08-29 / K6): `system_logs."userId"` artık kullanıcıyı
+      // KİLİTLİYOR — audit izi, izi bırakan kişi silinerek anonimleştirilemez.
+      // Test kendi yarattığı kullanıcıyı sert siliyorsa ONUN audit satırlarını da
+      // silmek zorunda (sapma defteri `rollVariance` dersinin birebir ikizi).
+      await prisma.systemLog.deleteMany({ where: { userId: { in: createdUserIds } } });
       await prisma.user.deleteMany({ where: { id: { in: createdUserIds } } });
     }
     await prisma.$disconnect();

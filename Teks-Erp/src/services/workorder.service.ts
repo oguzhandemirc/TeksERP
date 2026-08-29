@@ -6215,7 +6215,7 @@ export class WorkOrderService {
     // davranışı için de seri okumak güvenli ve fark ölçülemez: 4 küçük sorgu).
     const card = await prisma.travelerCard.findUnique({
       where: { workOrderId },
-      select: { id: true, cardNumber: true, printedAt: true, version: true, status: true, contentDirty: true },
+      select: { id: true, cardNumber: true, printedAt: true, createdAt: true, version: true, status: true, contentDirty: true },
     });
 
     const dispatches = await prisma.subcontractorDispatch.findMany({
@@ -6273,7 +6273,11 @@ export class WorkOrderService {
         docType: "TRAVELER_CARD",
         sourceId: card.id,
         documentNo: card.cardNumber,
-        date: card.printedAt.toISOString(),
+        // Belge listesinde tarih SIRALAMA anahtarıdır. Hiç basılmamış kartın
+        // basım tarihi YOKTUR (K8) — kartın doğduğu ana düşülür, çünkü liste
+        // "bu iş emrinin belgeleri" sorusunu tarih sırasıyla cevaplıyor ve
+        // tarihsiz satır sıranın dışına düşerdi.
+        date: (card.printedAt ?? card.createdAt).toISOString(),
         group: "İş Emri Belgeleri",
         title: "Refakat Kartı",
         subtitle: `v${card.version} · Üretim sahasında topla birlikte dolaşır`,

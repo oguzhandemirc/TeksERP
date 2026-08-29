@@ -132,6 +132,11 @@ async function cleanup(): Promise<void> {
   // Login artık Session kaydı yaratıyor (jti registry) → user silmeden önce temizle
   // (sessions.userId onDelete Restrict).
   await prisma.session.deleteMany({ where: { userId: { in: userIds } } });
+  // ⚠️ RESTRICT FK (2026-08-29 / K6): `system_logs."userId"` artık kullanıcıyı
+  // KİLİTLİYOR — audit izi, izi bırakan kişi silinerek anonimleştirilemez.
+  // Test kendi yarattığı kullanıcıyı sert siliyorsa ONUN audit satırlarını da
+  // silmek zorunda (sapma defteri `rollVariance` dersinin birebir ikizi).
+  await prisma.systemLog.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.device.deleteMany({ where: { deviceId: { in: deviceLocalIds } } });
   await prisma.machine.deleteMany({ where: { id: { in: machineIds } } });
