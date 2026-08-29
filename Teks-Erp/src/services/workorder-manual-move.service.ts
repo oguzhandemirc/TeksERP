@@ -19,6 +19,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationType, StepStatus } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -594,6 +595,27 @@ export class WorkOrderManualMoveService {
 
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
+        // ⚠️ 0) TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-004): iş emri satırını
+        //    KİLİTLE ve durumunu TAZE doğrula. `loadContext` statüyü tx DIŞINDA
+        //    okuyor; planlamacı aynı anda iptal ederse taşıma İPTAL EDİLMİŞ iş
+        //    emrinin adımına canlı top bırakır — bu dosyanın BİLEREK engellediği
+        //    "canlı ama kimsenin okutamadığı top" çıkmazının ta kendisi
+        //    (`manualMoveWoBlockReason` aynı kuralı tx dışında söylüyor; burası
+        //    onun kilit altındaki ikizi).
+        await touchWorkOrderTx(tx, workOrderId);
+        const woFresh = await tx.workOrder.findUnique({
+          where: { id: workOrderId },
+          select: { status: true },
+        });
+        // WO silinmişse (olmamalı) taşımayı durdur — sessiz devam etmez.
+        if (!woFresh) throw AppError.conflict("İş emri bu sırada kayboldu — listeyi yenileyin.");
+        const tazeBlok = manualMoveWoBlockReason(woFresh.status);
+        if (tazeBlok) {
+          throw AppError.conflict(`${tazeBlok} — listeyi yenileyin.`, {
+            code: "WORKORDER_TERMINAL_DURING_MOVE",
+          });
+        }
+
         // 1) ATOMİK CLAIM — hedef adıma taşı, IN_PRODUCTION yap (fason adımı da awaiting).
         //    Movability invariant'ları where'de → arada değişirse count uyuşmaz → 409.
         const claim = await tx.roll.updateMany({

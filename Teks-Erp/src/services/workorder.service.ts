@@ -4610,6 +4610,33 @@ export class WorkOrderService {
     // girecek, "sequence okuma closure İÇİNDE" iskeleti şimdiden hazır. Sonuç dizileri
     // closure İÇİNDE tanımlı — retry mükerrer biriktirmesin.
     const { attached, errorMessages, batchRes } = await withBarcodeRetry(() => prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-004): iş emri satırını KİLİTLE
+      // ve durumunu TAZE doğrula. Statü tx DIŞINDA okunuyordu: planlamacı iş
+      // emrini iptal ederken operatör "Yeniden Üretime Al" basarsa 3 top
+      // İPTAL EDİLMİŞ iş emrinin adımına IN_PRODUCTION olarak bağlanıyor,
+      // hareket açılıyor, parti doğuyor ve `ensureWorkOrderInProgress` sessiz
+      // no-op yapıyordu — İKİ istek de success. Satılabilir bitmiş depo malı
+      // hiçbir yüzeyde bulunamaz hâle geliyordu (depo ekranında yok, tablette
+      // okutulamaz çünkü kart VOIDED, iş emri iptal göründüğü için kimse
+      // aramaz). CLAUDE.md'nin `manualMove` için BİLEREK engellediği "canlı ama
+      // kimsenin okutamadığı top" çıkmazının aynısı.
+      // Kilit ayrıca sırayı fason ailesiyle hizalar (ABBA kolu kapanır).
+      await touchWorkOrderTx(tx, workOrderId);
+      const woFresh = await tx.workOrder.findUnique({
+        where: { id: workOrderId },
+        select: { status: true, workOrderNumber: true },
+      });
+      if (
+        woFresh &&
+        (woFresh.status === WorkOrderStatus.CANCELLED || woFresh.status === WorkOrderStatus.SUPERSEDED)
+      ) {
+        throw AppError.conflict(
+          `${woFresh.workOrderNumber} iş emri bu sırada ${
+            woFresh.status === WorkOrderStatus.CANCELLED ? "iptal edildi" : "devredildi"
+          } — top bağlanamaz. Listeyi yenileyin.`,
+          { code: "WORKORDER_TERMINAL_DURING_ATTACH" },
+        );
+      }
       const attached: { id: string; barcode: string | null; prevStatus: RollStatus; qtyIn: number }[] = [];
       const errorMessages: string[] = [];
       // Bu attach dalgasının doğurduğu parti (K3) — succeeded>0 ise dolar.
