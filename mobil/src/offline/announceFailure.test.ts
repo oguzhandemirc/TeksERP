@@ -88,3 +88,44 @@ describe('failureToastText', () => {
     expect(failureToastText(null, 'Fason Sevk').text2).toContain('Bilinmeyen hata');
   });
 });
+
+// =============================================================================
+// BULGU-T3-001 (S1) — EKRANSIZ ÇAKIŞMA DUYURULUR
+// =============================================================================
+// Çakışma 409'unun tek yüzeyi ekranın modalıdır; ama o modal yalnız kaydı YAPAN
+// ekran ayaktayken çizilebilir. Uygulama kapanıp açıldığında kuyruktan replay
+// edilen kaydın ekranı yoktur → 409 hiçbir yerde görünmeden düşüyordu ve
+// fiziksel top sistemde hiç doğmuyordu. Damgayı `persistPolicy` yazar
+// (`EKRANSIZ_META`), `queryClient` onu `mutation.meta`dan okur.
+describe('shouldAnnounceFailure — ekransız çakışma (BULGU-T3-001)', () => {
+  const conflict = err('Bu top az önce girilmiş olabilir', {
+    details: { code: 'POSSIBLE_DUPLICATE' },
+  });
+
+  it('ekran VARKEN çakışma duyurulmaz (modal soruyor — eski sözleşme korunur)', () => {
+    expect(shouldAnnounceFailure(KK1, conflict)).toBe(false);
+    expect(shouldAnnounceFailure(KK1, conflict, false)).toBe(false);
+  });
+
+  it('ekran YOKKEN çakışma DUYURULUR (soruyu soracak modal yok)', () => {
+    expect(shouldAnnounceFailure(KK1, conflict, true)).toBe(true);
+  });
+
+  it('ekransızlık, istasyon-dışı ve noAuth kurallarını EZMEZ', () => {
+    expect(shouldAnnounceFailure(['orders'], conflict, true)).toBe(false);
+    const noAuth = err('oturum yok', { noAuth: true, details: { code: 'POSSIBLE_DUPLICATE' } });
+    expect(shouldAnnounceFailure(KK1, noAuth, true)).toBe(false);
+  });
+
+  it('ekransız çakışmanın toast metni "kayıt gitmedi" DEMEZ — önce baktırır', () => {
+    const { text1, text2 } = failureToastText(conflict, 'KK1 ham giriş');
+    expect(text1).toContain('BEKLEMEDE');
+    expect(text1).not.toContain('GİTMEDİ');
+    expect(text2).toContain('Listede yoksa');
+  });
+
+  it('çakışma OLMAYAN düşüşün metni değişmedi (regresyon)', () => {
+    const { text1 } = failureToastText(err('Sunucuya ulaşılamadı'), 'KK1 ham giriş');
+    expect(text1).toContain('GİTMEDİ');
+  });
+});

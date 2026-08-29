@@ -7,6 +7,7 @@ import {
   isStationMutationKey,
   shouldPersistMutation,
   revivePendingStationMutations,
+  EKRANSIZ_META,
 } from './persistPolicy';
 
 describe('keyStartsWith', () => {
@@ -113,5 +114,44 @@ describe('revivePendingStationMutations (restore zombi önleme)', () => {
     expect(revivePendingStationMutations({} as never)).toEqual({});
     expect(revivePendingStationMutations(pc(undefined))).toEqual({ clientState: { mutations: undefined } });
     expect(revivePendingStationMutations(pc([{ state: null }, {}]))).toBeDefined();
+  });
+});
+
+// =============================================================================
+// BULGU-T3-001 (S1) — diriltilen kayda EKRANSIZLIK damgası vurulur
+// =============================================================================
+describe('revivePendingStationMutations — ekransızlık damgası', () => {
+  it('diriltilen istasyon kaydına damga vurulur (mevcut meta korunur)', () => {
+    const persisted = {
+      clientState: {
+        mutations: [
+          {
+            mutationKey: ['station', 'kk1-create-entry'],
+            state: { status: 'pending', isPaused: false },
+            meta: { onceden: 1 },
+          },
+        ],
+      },
+    };
+    const out = revivePendingStationMutations(persisted);
+    const m = out.clientState.mutations[0] as { state: { isPaused: boolean }; meta: Record<string, unknown> };
+    expect(m.state.isPaused).toBe(true);
+    expect(m.meta[EKRANSIZ_META]).toBe(true);
+    expect(m.meta.onceden).toBe(1);
+  });
+
+  it('istasyon-dışı ve zaten paused kayda damga VURULMAZ (idempotent)', () => {
+    const persisted = {
+      clientState: {
+        mutations: [
+          { mutationKey: ['orders', 'create'], state: { status: 'pending', isPaused: false } },
+          { mutationKey: ['station', 'kk1-create-entry'], state: { status: 'pending', isPaused: true } },
+        ],
+      },
+    };
+    const out = revivePendingStationMutations(persisted);
+    const list = out.clientState.mutations as Array<{ meta?: Record<string, unknown> }>;
+    expect(list[0].meta?.[EKRANSIZ_META]).toBeUndefined();
+    expect(list[1].meta?.[EKRANSIZ_META]).toBeUndefined();
   });
 });

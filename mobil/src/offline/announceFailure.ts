@@ -47,13 +47,37 @@ export function isStationMutationKey(key: unknown): key is readonly unknown[] {
  *   • çakışma 409'u → ekran modalla SORUYOR; toast aynı kararı ikinci kez,
  *     üstelik cevaplanamaz biçimde sordururdu.
  */
-export function shouldAnnounceFailure(key: unknown, error: unknown): boolean {
+export function shouldAnnounceFailure(
+  key: unknown,
+  error: unknown,
+  /**
+   * Bu kaydın ARDINDA EKRAN VAR MI?
+   *
+   * Çakışma 409'unun tek yüzeyi ekranın kendi modalıdır — ama o modal yalnız
+   * kaydı YAPAN ekran ayaktayken çizilebilir. Uygulama kapanıp açıldığında
+   * kuyruktan replay edilen kaydın ekranı yoktur: soru sorulamaz, toast da
+   * basılmazsa 409 HİÇBİR YERDE görünmez ve fiziksel top sistemde hiç doğmaz
+   * (BULGU-T3-001). Bu yüzden ekransız kayıtta çakışma da DUYURULUR.
+   *
+   * ⚠️ Belirsizlikte DUYUR: alan okunamıyorsa (eski persist formatı, bozuk meta)
+   * `ekranYok` false kalır ve davranış eski hâline döner — ama diriltme yolunda
+   * damga `persistPolicy.revivePendingStationMutations` tarafından HER ZAMAN
+   * yazılır, yani sessizlik ancak damganın hiç yazılmadığı eski kayıtlarda olur.
+   */
+  ekranYok = false,
+): boolean {
   if (!isStationMutationKey(key)) return false;
   const e = (error ?? null) as FailureLike | null;
   if (e?.noAuth) return false; // HTTP'ye çıkmadı — düşüş değil, bekleyiş
   const code = e?.details?.code;
-  if (typeof code === 'string' && CONFLICT_CODES.has(code)) return false;
+  if (typeof code === 'string' && CONFLICT_CODES.has(code)) return ekranYok;
   return true;
+}
+
+/** Çakışma 409'u mu (ekranın modalıyla aynı soru)? Toast metni buna göre değişir. */
+export function isConflictFailure(error: unknown): boolean {
+  const code = ((error ?? null) as FailureLike | null)?.details?.code;
+  return typeof code === 'string' && CONFLICT_CODES.has(code);
 }
 
 /**
@@ -71,6 +95,15 @@ export function failureToastText(
   label: string,
 ): { text1: string; text2: string } {
   const e = (error ?? null) as FailureLike | null;
+  if (isConflictFailure(error)) {
+    // Ekransız çakışma: sunucu SORU sordu ama soracak ekran yok. Operatöre
+    // "kayıt yapılmadı" DENMEZ (sunucu aynı topu daha önce yazmış olabilir —
+    // sorunun kendisi bu); doğru yönerge önce BAKTIRMAKTIR.
+    return {
+      text1: `${label} — KAYIT BEKLEMEDE`,
+      text2: `${e?.message ?? 'Sunucu bu kaydı sordu'} · Listede yoksa yeniden girin.`,
+    };
+  }
   return {
     text1: `${label} — KAYIT GİTMEDİ`,
     // Sunucunun Türkçe mesajı varsa onu göster — sebebi o daha iyi biliyor.
