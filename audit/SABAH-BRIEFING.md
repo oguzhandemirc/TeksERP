@@ -30,27 +30,26 @@ cd Teks-Erp && npx tsx scripts/run-all-tests.ts        # tam bekçi paketi (366)
 | # | Kontrol | Sonuç |
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
-| 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ❌ **hâlâ kırmızı** — sebebi aşağıda; benim düzeltmemin kapsamı dışında |
-| 3 | `run-all-tests.ts` (tam paket) | **361/367 dosya yeşil**, 326 sn. Kırmızı 6'nın 5'i bilinen kalem, 1'i düzeltildi (aşağı) |
+| 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
+| 3 | `run-all-tests.ts` (tam paket) | **361/367 dosya yeşil** (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
-### 3.1 Repro neden hâlâ kırmızı — ve bu ne demek
+### 3.1 Repro KAPANDI — iki kusurdu, ikisi de düzeltildi
 
-İki AYRI kusur varmış, ben birincisini kapattım:
+1. **Bayat okuma (`4035b411`):** ekran 100 m okur, arada kesim olur, düzeltme
+   kesimi ezerdi. Claim artık okunan metrajı ve statüyü pinliyor → 409.
+2. **İş kuralının körlüğü (`31f2a945`, K-3):** depo kesimi `initialQty`yi de
+   düşürdüğü için kesilmiş top "bütün" görünüyor ve metraj düzeltmesinden
+   geçiyordu. Artık `initialQty` giriş metrajı olarak korunuyor.
 
-1. **Bayat okuma (kapandı, `4035b411`):** ekran 100 m okur, arada kesim olur,
-   düzeltme kesimi ezer. Artık 409.
-2. **İş kuralının kör olması (AÇIK):** depo kesimi `currentQty` **ve**
-   `initialQty`'yi birlikte düşürüyor (`tambur.service.ts:2245-2246`). Bu yüzden
-   kesimden sonra da "top bütün" görünüyor ve "yalnız bütün toplarda metraj
-   düzeltilir" kuralı kesilmiş topu da geçiriyor — okuma TAZE olsa bile operatör
-   eski değeri yazarsa 100 m'lik fiziksel toptan sistemde 140,5 m oluyor.
+`audit_repro_D-A-01` → **"değişmez korundu"** (FAZ1 + N=2/5/10 temiz).
+K-3 ayrıca iki bulguyu daha kapattı: üretilen metrajın geriye dönük eksilmesi
+(T2-016, saha kopyasında 120 top) ve "Tümden Geri Al"ın olmayan aşım yazması
+(T2-002). `prisma/migration-taslaklari/K1` kısıtının ön koşulu da sağlandı.
 
-İkincisinin düzeltmesi raporun **K-3** kalemi: kesim yalnız `currentQty` düşürsün.
-⚠️ Bu, rapor rakamlarını etkiler — bugün kesilmiş topun ana+çocuk `initialQty`
-toplamı 100 çıkıyor, değişiklikten sonra 140 çıkar. `initialQty` okuyan her rapor
-yolunun tek tek çıkarılması gerekir. **Karar bekliyor.**
+⚠️ Operatöre yansıması: **kesilmiş topun metrajı artık "Düzelt"ten
+değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 
 ### 3.2 Kırmızı kalan 5 bekçi — hepsi ÖNCEDEN kırmızıydı
 
@@ -62,7 +61,7 @@ yolunun tek tek çıkarılması gerekir. **Karar bekliyor.**
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 7 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 12 commit)
 
 | Commit | Ne | Doğrulama |
 |---|---|---|
