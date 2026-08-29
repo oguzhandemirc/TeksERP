@@ -7,6 +7,30 @@ tamamı düzeltildi, ölçüldü ve `denetim-duzeltme` dalına commit edildi**: 
 bulgusu kapandı, her biri kırmızı verdiği KANITLANMIŞ bekçilerle korunuyor.
 Tam bekçi paketi **364/369** — kırmızı kalan 5'in tamamı denetim öncesinden geliyor.
 
+## 1b. Akşam turu — şema kısıtları + S2 paketi
+
+**Şema kısıtları:** sekiz taslak, fabrika verisinin BİREBİR kopyasında (33 MB)
+gerçekten kuruldu. **Beşi uygulandı** (K1 metraj üst sınırı · K5 iş emri↔sipariş
+bağı · K6 audit değiştirilemezliği · K7 rapor indeksleri · K8 kart basım tarihi),
+**üçü gerekçeli dışarıda**: K2/K3 fabrika verisinde mükerrer olduğu için kurulmuyor
+(aşağıda), K4 ise repoda 2026-08-19'da alınmış gerekçeli bir kararı geçersiz
+kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
+
+⚠️ **K2/K3'ü açan tek şey fabrikanın yapacağı temizlik:**
+| Ne | Kayıtlar | Ne gerekiyor |
+|---|---|---|
+| Aynı ad | `v-1430` → `BGR150` + `MC155` (ikisi de pasif) | mükerrer panelinden birleştirme |
+| Aynı kod (harf farkı) | `MC155`(3) · `BGR150`(2) | birleştirme |
+| Aynı kod (harf farkı) | **`SANTUK` ↔ `santuk` — İKİSİ DE AKTİF ve FARKLI kumaş** (BORANCIK ↔ ŞANTUK) | birleştirme DEĞİL, **yeniden adlandırma** (iş kararı) |
+
+**S2 paketi — dört bulgu daha kapandı:**
+| Bulgu | Neydi |
+|---|---|
+| T1-006 | İptal edilmiş kaydın token'ı "başarılı" dönüyordu (sahada 227 canlı token) |
+| T2-005 | İptal edilmiş iş emrine bağlı sipariş HİÇ iptal edilemiyordu (2 sipariş kilitli) |
+| T2-013 | `admin:users` taşıyan hesap kendine `admin:*` yazabiliyordu |
+| T1-039 | Depo kesiminde tükenen kaynak 0 m'lik hayalet olarak depoda kalıyordu |
+
 ## 2. Bugün kapanan ACİL kalemler (hepsi ölçüldü)
 
 | Bulgu | Neydi | Commit |
@@ -28,7 +52,7 @@ düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
 | 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
-| 3 | `run-all-tests.ts` (tam paket) | **361/367 dosya yeşil** (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
+| 3 | `run-all-tests.ts` (tam paket) | **366/371 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
@@ -58,7 +82,7 @@ değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 18 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 23 commit)
 
 Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazıyor.
 
@@ -77,10 +101,15 @@ Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazı
 | `705ca353` | **İptal, fason sevki kapatılamazsa DURUR** (S1) | ✅ 20/20 + 2 sonda + §24c |
 | `811a6f2c` | **Aşırı sevk + iptal siparişe tahsis** (S1+S2) | ✅ 16/16 + 4 sonda |
 | `78fb552b` | **Tahsissiz sevk uyarısı + onarım ucu** (S1) | ✅ 29/29 + 2 sonda |
+| `288a1d6a` | **Şema kısıtları K1·K5·K6·K7·K8** (+ migration) | ✅ fabrika kopyasında kuruldu |
+| `aa6f1d93` | **İptal edilmiş token replay'i** (S2) | ✅ 16/16 + sonda |
+| `c087b82f` | **Sipariş iptali çıkmazı · kendine tam yetki · hayalet top** (3×S2) | ✅ 16/16 + 3 sonda |
 
-⚠️ **`ec1c51e5` BENİM DEĞİL** — paketleme sırasında başka bir oturum "araca
-yüklenen çuval adedi" özelliğini (migration dahil) bu dala commit etti. Muhtemel
-niyet `adnansahin` idi; taşımak sizin kararınız, dokunmadım.
+✅ **Başkasının commit'i taşındı:** "araca yüklenen çuval adedi" özelliği
+`adnansahin`e alındı (`50c320ef`) ve dal onun üzerine kuruldu — `adnansahin..HEAD`
+artık YALNIZ denetim commit'lerini gösteriyor. Migration paylaşımlı dev DB'ye
+uygulanmış olduğu için commit SİLİNMEDİ, taşındı (silseydik migration dosyası
+ağaçtan kalkar, DB'de kalır ve iki bekçi boşuna kırmızıya dönerdi).
 
 Dal **push edilmedi** ve hiçbir şey `adnansahin`e merge edilmedi.
 
