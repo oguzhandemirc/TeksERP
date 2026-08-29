@@ -1,0 +1,3236 @@
+{
+ "tour": 2,
+ "lens": "veri merkezli — prod kopyasında ihlal ara, kodda sebebini geriye izle",
+ "counts": {
+  "raw": 45,
+  "merged": 40,
+  "standing": 40,
+  "dropped": 0,
+  "s0": 0,
+  "s1": 1,
+  "s2": 13,
+  "s3s4": 26,
+  "k3": 0,
+  "k2": 38
+ },
+ "finders": [
+  {
+   "key": "V-1",
+   "ok": true,
+   "n": 7
+  },
+  {
+   "key": "V-2",
+   "ok": true,
+   "n": 11
+  },
+  {
+   "key": "V-3",
+   "ok": true,
+   "n": 10
+  },
+  {
+   "key": "V-4",
+   "ok": true,
+   "n": 12
+  },
+  {
+   "key": "V-5",
+   "ok": true,
+   "n": 5
+  }
+ ],
+ "standing": [
+  {
+   "id": "BULGU-T2-001",
+   "baslik": "Sevk edilen 7.200,6 m hiçbir sipariş satırına yazılmadı — specMatch tutmayan içerik SackAllocation üretmeden sevk ediliyor, 5 sevkiyat tamamen defter dışı, 7 kalem hâlâ '0 sevk'",
+   "siddet": "S1",
+   "kategori": "E",
+   "oncelik": "P2",
+   "modul": "Sevkiyat ↔ Sipariş",
+   "kanit_seviyesi": "K2",
+   "etkilenen_degismez": "INV-SEV-01/02: sevk edilen içerik = Σ tahsis (OrderLine.shippedQty); mal fiziksel çıktıysa sipariş defterine yansımalı",
+   "koruma_kontrolu": "consistency-check.sql §1/§2 türetilmiş eşitliği (shippedQty=Σtahsis) ölçer → dairesel, tahsisi hiç yazılmamış malı göremez; Q-SEV-08a (sevk>istenen) 0 çünkü fazlalık deftere girmiyor; DB kısıtı yok; sevk sonrası rapor yok (grep 'yazılamayan' yalnız önizleme satırını verir)",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/allocation.helper.ts",
+     "satir": "36-49",
+     "not": "specMatch renk/en dolu ise EŞİTLİK ister: colorId!=null && b.colorId!=null && a.colorId!==b.colorId → false"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/allocation.helper.ts",
+     "satir": "102-114",
+     "not": "need=quantity−shippedQty, eşleşmeyen havuz artığı hiçbir yere yazılmaz (if alloc>0 result.set)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "1339-1359",
+     "not": "writeShipmentAllocationsTx yalnız hesaplanan tahsisleri yazar; kapsanmayan içerik için ne hata ne kayıt. :1359 sözleşme: 'Fazla/eşleşmeyen/siparişsiz sevk edilebilir'"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "1507",
+     "not": "tek uyarı kurulum önizlemesinde (bilgi satırı, onay değil): 'Seçili siparişlere yazılamayan ~N m mal var — yine de sevk edilecek'"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "1339-1354",
+     "not": "writeShipmentAllocationsTx defter TEK ATIŞ yazar; allocations.length>0 dalında createMany, else YOK → 0 satır sessiz başarı"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "1873-1882",
+     "not": "performDispatchTx sevk anında yeniden tahsis YAPMAZ; boş defterden recomputeOrderStatusForOrders → shippedQty 0 yazar, freezeForSource irsaliyeyi dondurur"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/helpers/allocation.helper.ts",
+     "satir": "36-48, 211-241",
+     "not": "specMatch + distributeSacksToLines eşleşmeyen malı sessizce dışarıda bırakır"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/TUR2-V2-b1.sql",
+     "satir": "V2-Q08 + üç-kalem birebir-eşleşme sorgusu",
+     "not": "saha: 3 kalem (SIP1008260011/12/48, lid 335621b0/7606314a/1e70c8cf) item+renk+en birebir eşleşiyor, 55 top / 2.108,5 m sevk edildi, sack_allocations toplamı 0, shippedQty 0,000; ayrıca 5 sevkiyat sipariş kümesi dolu ama 0 tahsis / 3.040,2 m"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_logs (SHIPMENT/ORDER/ORDER_LINE/SACK)",
+     "satir": "-",
+     "not": "beş karşı-hipotez elendi: kalem düzenlenmemiş (0 ORDER_LINE log), need=1000 (direct-ship 0, iptal sevkiyat 0), kod aynı (b9fe724d 2026-07-12), tahsis silinmemiş (deleteMany koşmamış), motor çalıştı (SVK1808260003 ikinci kaleme 613,2 m yazdı, birebir eşleşeni atladı)"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/helpers/allocation.helper.ts",
+   "satir": "36-114 (+shipping.service.ts 1339-1359,1507,1873-1882)",
+   "failure_mode": "Depo sorumlusu SIP1008260003 (ALP·55-BEYAZ·500 m) için çuvala ALP·EKRU toplarını okutuyor (aynı kumaş, farklı renk). Sevkiyat kuruluyor, SVK1708260002 DISPATCHED, 8 top/348,3 m müşteriye gidiyor, irsaliye basılıyor. specMatch renkte takıldığı için tahsis yazılmıyor: sipariş 'APPROVED·Açık 500 m' kalıyor. Planlamacı aynı 500 m'yi yeniden üretime veriyor; muhasebe sevk raporu (brüt, _shipped.ts:70-76) 348,3 m görüyor ama sipariş defterinde karşılığı yok",
+   "veride_ihlal": {
+    "sorgu": "SELECT sh.\"shipmentNo\",(SELECT sum(r.\"currentQty\") FROM rolls r JOIN sacks s2 ON s2.id=r.\"sackId\" WHERE s2.\"shipmentId\"=sh.id) icerik,(SELECT sum(sa.qty) FROM sack_allocations sa JOIN sacks s3 ON s3.id=sa.\"sackId\" WHERE s3.\"shipmentId\"=sh.id) tahsis FROM shipments sh WHERE sh.status='DISPATCHED'",
+    "saha": 81,
+    "dev": 1,
+    "not": "DISPATCHED içerik 27.611,8 m, tahsis 20.459,2 m, defter dışı 7.152,6 m (23 sevkiyatta 7.200,6 m fark); hiç tahsis almayan 5 sevkiyat (SVK1708260002, SVK1808260001, SVK1908260002, SVK2008260001, SVK2008260005) = 81 top·3.040,2 m·3 müşteri; etkilenen 7 kalem (SIP1008260002/3/12/27/28/48, SIP1408260015) hâlâ shippedQty=0·3.700 m istenen. Kök: kalem ALP·55-BEYAZ·330 ↔ sevk ALP·EKRU·330 renk uyuşmazlığı"
+   },
+   "is_etkisi": "Sipariş karşılama defteri fiili sevkten 7,2 km kumaş geride; 'Açık' rakamına bakan planlamacı aynı malı yeniden üretir/sevk eder, sipariş kapanmaz (recomputeOrderStatus hep APPROVED/PARTIAL_SHIPPED); müşteriye yanlış renkte mal gitmiş olabileceği hiçbir yerde iz bırakmaz. Sevk raporu (brüt) ile sipariş defteri (tahsis) hiçbir ekranda uzlaştırılmıyor",
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Sevk sonrası görünürlük: sevkiyat detayı+liste 'siparişe yazılmayan metraj' sütunu (içerik−Σtahsis); mutabakata yeni bölüm 'DISPATCHED sevkiyatta tahsis edilmemiş içerik>0'; kurulum uyarısı 'yazılamayan' olduğunda ONAY istesin; eşleşmeme sebebi somut yazılsın"
+    },
+    {
+     "vade": "iş kararı",
+     "aciklama": "Geçmiş 7 kalem için tahsis elle yazılacaksa [PROD'DA ÇALIŞTIRMA] dry-run script; geri alma: sack_allocations satırlarını silip recomputeOrderStatus"
+    }
+   ],
+   "kabul_kriteri": "Renk uyuşmazlıklı çuval sevk edilince sevkiyat detayı '0 m siparişe yazıldı / 348 m yazılamadı' gösterir; mutabakat bölümü bugünkü 5 sevkiyatı listeler; negatif sonda: tahsis yazımı bilerek boş bırakılınca bölüm kırmızı",
+   "efor_gun": 2,
+   "onceki_defter": "FINDINGS.jsonl'de eşleşen id yok; K10 INV-SEV-08/H-2 fazla-sevk ayağını işaret ediyordu (Q-SEV-08a/b=0), bu bulgu neden 0 olduğunu açıklıyor: fazlalık deftere hiç girmiyor",
+   "finder": "V-1",
+   "merged_from": [
+    "V-1-03",
+    "V-2-01"
+   ],
+   "primary": "V-1-03",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md",
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S1",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "shipping.service.ts:1359 docstring'in kendisi 'Fazla/eşleşmeyen/siparişsiz sevk edilebilir' diyor; writeShipmentAllocationsTx (1339-1352) yalnız hesaplanan tahsisleri yazar, kapsanmayan içerik için hata/kayıt yok — allocation.helper.ts specMatch (36-49) renk uyuşmazlığında pool'u boş bırakıyor. Kod davranışı bulguyla birebir örtüşüyor, çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "allocation.helper.ts:36-48 specMatch renk/en doluysa eşitlik istiyor; shipping.service.ts:1339-1354 writeShipmentAllocationsTx eşleşmeyen artığı hiçbir yere yazmıyor (yalnız allocations.length>0 dalı createMany, else yok). :1507 uyarı yalnız önizleme bilgi satırı, engelleyici değil. Reconciliation/manual-match ucu grep ile bulunamadı — sevk edilip tahsis yazılmayan içerik kalıcı olarak defter dışında kalıyor, sonradan düzeltme yolu yok. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "allocation.helper.ts:36-48 specMatch kodu doğrulandı: colorId ikisi de dolu ve farklıysa false — iddia edildiği gibi katı. shipping.service.ts:1339-1352 writeShipmentAllocationsTx doğrulandı: deleteMany + yalnız hesaplanan (eşleşen) tahsisleri createMany; eşleşmeyen içerik için ne hata ne kayıt, else dalı yok. Yorum satırı bunu bilinçli tasarım olarak belgeliyor ('Fazla/eşleşmeyen/siparişsiz sevk edilebilir') — yani validation guard'ı YOK, girdi engellenmiyor (Ç5 uygulanamaz). DB'de SackAllocation üzerinde sevk içeriğiyle toplamı eşitleyen bir constraint/trigger yok (schema.prisma:4338-4354 — yalnız (sackId,orderLineId) unique). Prod rakamları (7.200,6 m / 5 sevkiyat) bu oturumda yeniden sorgulanamadı (DB erişimi yok) ama mekanizma kodda tam teyitli ve TUR2-V2-b1/b2/b3.sql dosyaları diskte gerçek sorgular olarak duruyor."
+    }
+   ],
+   "dogrulama": {
+    "output_file": "/Users/oad/Documents/projeler/AdnanSahin/audit/03-verify/BULGU-T2-001.md",
+    "achieved_level": "K1",
+    "verdict": "repro-tetiklenemedi",
+    "notes": "Kod tarafı tam doğrulandı: allocation.helper.ts:36-49 (specMatch renk/en eşitliği), :211-239 (distributeSacksToLines eşleşmeyen içeriği sessizce atlar), shipping.service.ts:1339-1354 (writeShipmentAllocationsTx — 0 tahsis sessiz başarı), :1507 (uyarı yalnız önizlemede, bloklamıyor), :1873-1882 (dispatch anında yeniden tahsis YOK, recomputeOrderStatusForOrders yalnız mevcut deftere bakıyor). Mekanizma bulgudaki gibi birebir. K2 SQL sorguları audit/data/BULGU-T2-001.sql'e yazıldı ve audit/tools/sql-saha.sh ile koşuldu, ancak ortam düzeyinde bir engelle karşılaşıldı: Postgres.app \"trust\" authentication bir GUI onay diyaloğu istiyor ve bu ajan oturumunda diyalog gösterilemediği için HER bağlantı (sql-dev.sh dahil, sorgudan bağımsız) reddediliyor — \"FATAL: Postgres.app failed to verify trust authentication ... failed to show a dialog\". pg_isready sunucunun ayakta olduğunu doğruluyor; 4 farklı deneme (TCP/socket, tekrar) aynı sonucu verdi. Bu benim kontrolümde olmayan bir host/oturum sorunudur (config dosyasına dokunmadım — salt-okunur kural + kapsam dışı). K3/davranışsal kanıt de aynı sebeple denenmedi (DB gerektiriyor). Sonuç: kanıt seviyesi K1'de kaldı; şiddet/kategori kaynak bulgudan değiştirilmedi (S1, kategori E). Bir sonraki turda DB erişimi düzelince K2 sorguları hazır (audit/data/BULGU-T2-001.sql) — doğrudan koşulabilir."
+   }
+  },
+  {
+   "id": "BULGU-T2-002",
+   "baslik": "Depo kesimini 'Tümden Geri Al' (applyFull) sapma defterine olmayan bir OVERAGE yazıyor — fire/aşım karnesi kesilen metraj kadar şişer",
+   "siddet": "S2",
+   "kategori": "E",
+   "oncelik": "P2",
+   "modul": "Tambur geri alma",
+   "kanit_seviyesi": "K1",
+   "etkilenen_degismez": "INV-AUD-05: OVERAGE = operatör kayıtlıdan fazla mal ölçtü; düzeltme işlemi aşım olarak yazılamaz",
+   "koruma_kontrolu": "recordVarianceTx (roll-variance.helper.ts:50-78) tek yazıcı ve gelen qty'yi sorgulamaz; OVERAGE için 'gerçekten aşım mı' kontrolü hiçbir yerde yok; bekçi test_tambur_undo §11 aşımı ÜRETİM dalında ölçüyor, depo kesimi+full undo kombinasyonu ölçülmüyor",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur-undo.service.ts",
+     "satir": "1516-1534",
+     "not": "applyFull: initialBump = restored.greaterThan(parentInitial) ? restored.minus(parentInitial) : 0; initialBump>0 ise recordVarianceTx OVERAGE, source=TAMBUR_UNDO_FULL"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur-undo.service.ts",
+     "satir": "1572",
+     "not": "initialQty:{increment:initialBump} — parent initialQty yapay yukarı çekilir"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur-undo.service.ts",
+     "satir": "339-380",
+     "not": "computeRestoredQty = Σ çocuk.initialQty + Σ RECORD_CORRECTION + Σ TAMBUR_UNDO_SINGLE; başlık :333-337 preTamburCloseQty'nin bu hesapta KULLANILMADIĞINI yazıyor"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur-undo.service.ts",
+     "satir": "1560-1562",
+     "not": "revivedStatus = stepId ? IN_PRODUCTION : (preTamburCloseStatus ?? WAREHOUSE) — depo dalı destekli"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/tambur-undo.service.ts",
+   "satir": "1516-1572",
+   "failure_mode": "Depoda 100 m top. 40 m kesim (parent 60/60), 'Bitir' ile kapanış (kalan 60 m çocuk, parent emekli 0/60). Hatalı kesim fark edilip Tümden Geri Al: restored=40+60=100, parentInitial=60 → initialBump=40 → sapma defterine 40 m OVERAGE düşer, parent 100/100. Metraj doğru döner ama fabrikanın aşım/fire karnesinde hiç yaşanmamış 40 m'lik 'fazla çıktı' görünür ve terslenemez",
+   "veride_ihlal": {
+    "sorgu": "SELECT kind,source,count(*),sum(qty) FROM roll_variances GROUP BY 1,2",
+    "saha": 0,
+    "dev": 0,
+    "not": "Arandı, 0 — source='TAMBUR_UNDO_FULL' OVERAGE satırı yok. Yol henüz koşmadı (depo kesimi+full undo kombinasyonu sahada hiç: preTamburCloseStatus 0/116). Ön koşul (yeniden yazılmış initialQty) canlıda 8 soyağacında MEVCUT (V-1-01). Bu yüzden K1"
+   },
+   "is_etkisi": "Fire/aşım karnesi ve plan-sapma raporları 'üretimde ne kadar kayıp/fazla var' sorusunu yanlış cevaplar; sahte OVERAGE terslenemez (reversedAt yalnız kaynak iptalinde yazılır). Fabrika bir düzeltme işlemini kayıp/fazla olarak okur",
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "V-1-01 düzeltilirse kendiliğinden kapanır (initialQty düşmezse initialBump doğmaz). Bağımsız korunma: initialBump yalnız üretim dalında (stepId!=null) hesaplansın; depo kesiminde geri konacak metraj preTamburCloseQty+Σçocuk üzerinden kurulup initialQty'ye dokunulmasın. Bekçiye depo kesimi+full undo senaryosu eklenmeli"
+    }
+   ],
+   "kabul_kriteri": "100 m topa 40 m depo kesimi + Bitir + Tümden Geri Al → parent 100/100, roll_variances'ta hiç satır yok; negatif sonda: initialBump koşulsuz hale getirilince bekçi kırmızı",
+   "efor_gun": 0.5,
+   "onceki_defter": "Tur 1 BULGU-T1-012 / BULGU-T1-044 komşuluğu; bu tetikleyici (sahte defter satırı) hiçbirinde yazılmamış",
+   "finder": "V-1",
+   "merged_from": [
+    "V-1-02"
+   ],
+   "primary": "V-1-02",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Kod izi bulguyu doğruluyor, çürütülemedi. Teks-Erp/src/services/tambur.service.ts:2237-2249: cutWarehouseRoll HER kesimde parent.currentQty VE initialQty'yi birlikte decrement eder (100m top 40m kesilince parent initialQty=60'a düşer, 100'e değil). tambur.service.ts:2571-2580 (finalizeWarehouseCut): kapanışta yalnız currentQty=0 yazılır, initialQty bir daha DOKUNULMAZ (60'ta kalır) — preTamburCloseQty/Status kaydedilir ama initialQty geri yükseltilmez. tambur-undo.service.ts:339-380 computeRestoredQty = Σçocuk.initialQty (40+60=100) + RECORD_CORRECTION toplamı (varianceKindForRemainingAction 'keep_*' aksiyonunda null döner → 0). tambur-undo.service.ts:1516-1534: parentInitial=parentRow.initialQty (=60, kesimden bayat kalmış) → initialBump=100-60=40 → recordVarianceTx(OVERAGE, source=TAMBUR_UNDO_FULL) çağrılır ve satır 1571-1572 initialQty:{increment:40} yazar. roll_variances tablosunda (schema.prisma:2847-2887) bu değeri doğrulayan hiçbir CHECK/trigger/unique yok (append-only defter, salt qty>=0 gibi bir kısıt da yok) — Ç2 uygulanamaz. Canlı DB'ye bu oturumda erişilemedi (Postgres.app trust-auth hatası, `audit/tools/sql-saha.sh` bağlanamadı) — bulgunun kendi 'saha:0/dev:0' veri iddiasını bağımsız doğrulayamadım, ama bu tek başına çürütme değildir (bulgu zaten K1 + 'yol henüz koşmadı' diyor); kod mekanizması iddia edilen senaryoyla birebir örtüşüyor."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/tambur.service.ts:2218-2246 (cutWarehouseRoll) parent.initialQty'yi HER kesimde currentQty ile birlikte decrement eder ('Parent kısalıyor — initialQty'i de güncelle'); finalizeWarehouseCut (tambur.service.ts:2577-2588) kapanışta yalnız currentQty=0 yazar, initialQty'ye DOKUNMAZ. Kod tabanının kendisi bu güvenilmezliği başka bir yerde İTİRAF EDİYOR: tambur.service.ts:3309-3311 'initialQty artık güvenilir değil (cutWarehouseRoll parent initialQty'yi resetler)' diyerek qtyOut hesabını initialQty yerine movement.qtyIn'den türetiyor — ama tambur-undo.service.ts:1519 (applyFull, depo dalı) tam da bu güvenilmez initialQty'yi 'parentInitial' olarak kullanıp restored (children toplamı) ile kıyaslıyor. varianceKindForRemainingAction (variance-reasons.ts:281-287) keep_1kalite/keep_a1 için null döner — yani bu senaryoda hiçbir RECORD_CORRECTION discardedAgg'a girmiyor, restored=childSum tek başına parentInitial'i (kesimlerle küçülmüş değeri) aşıyor. Senaryo (100m→40+60 iki çocuk, full undo) matematiksel olarak KOD İLE BİREBİR DOĞRULANDI: normal, sapmasız bir depo-kesim+bitir akışında bile applyFull spekülatif 40m OVERAGE yazar. Bu, iddia edilenden daha genel bir kusur — yalnız 'aşımlı kesim' değil, birden fazla kesimle biten HER depo-kesim tam-geri-alması etkilenir.",
+     "strengthened": "Kodun kendi yorumu (tambur.service.ts:3310-3311) initialQty'nin bu bağlamda güvenilmez olduğunu zaten belgeliyor ve production-dial (finalizeOpenFabric) kapanışta bu tuzağı qtyIn'e geçerek AŞMIŞ; tambur-undo.service.ts:1519 aynı dersi almamış — yani düzeltme başka bir yerde zaten var ama applyFull'a taşınmamış. Şiddet S2 makul, hatta yaygınlığı iddia edilenden geniş (yalnız aşımlı kesim değil, her çok-parçalı depo kesimi)."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Kod okuması bulguyu DOĞRULUYOR ve olduğundan daha sık tetiklenebileceğini gösteriyor. `cutWarehouseRoll` (tambur.service.ts:2242-2248) her parçalı kesimde parent'ın HEM currentQty HEM initialQty'sini decrement eder ('her kesim sonrası reset' — yorum satır 2218-2223); yani initialQty artık 'giriş metrajı' değil 'son kesimden kalan' anlamına gelir. `finalizeWarehouseCut` (satır 2581-2588) parent'ı TAMBUR_CONSUMED yaparken currentQty=0 yazar ama initialQty'ye DOKUNMAZ — o son (küçülmüş) değerinde donar. `computeRestoredQty` (satır 339-378) ise TÜM çocukların initialQty toplamını (yani kesimin tamamını, orijinal 100m'yi) döndürür. `applyFull`daki `initialBump = restored.greaterThan(parentInitial) ? ... : 0` (satır 1520-1522) bu ikisini karşılaştırdığı için, parent finalize'dan ÖNCE en az bir ara kesim gördüyse (ör. 40m kesilip 60m kalanla Bitir), restored HER ZAMAN parentInitial'ı aşar — bu yalnız 'operatör fazla ölçtü' (2026-08-09 kararının hedeflediği) durumda değil, NORMAL çok-parçalı depo kesiminin HER örneğinde olur. Bu, bulgunun tarif ettiği senaryoyu birebir doğruluyor.",
+     "strengthened": "Bulgu K1 kanıt seviyesiyle 'nadir/henüz koşmamış yol' izlenimi veriyor ama kod, tetikleyici koşulun sanılandan çok daha geniş olduğunu gösteriyor: yalnız operatörün fazla ölçtüğü aşım vakası değil, depo kesiminde BİRDEN FAZLA parça üretilip sonra Tümden Geri Alınan HER senaryo (kalanı 1.Kalite/A1/Fire olarak tutan normal iş akışı dahil) sahte OVERAGE üretir. Yani riskin gerçekleşme olasılığı bulguda ima edilenden belirgin biçimde yüksek — sahada Top Kesme + çok parçalı kesim + sonradan tam geri alma birleşimi ilk kullanıldığında tetiklenecek, istisnai bir 'operatör hatası' senaryosu değil."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-003",
+   "baslik": "Sevk defterine (SackAllocation) hiç audit yazılmıyor — 'bu mal neden siparişten düşmedi' sorusu geriye izlenemiyor",
+   "siddet": "S2",
+   "kategori": "I.3",
+   "oncelik": "P2",
+   "modul": "sevkiyat",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Proje kuralı 'Her CUD → AuditService.log()' (kök CLAUDE.md) bu tabloda uygulanmamış; audit tamper trigger (20260819161000) da SackAllocation'ı kapsamıyor.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "1345, 1352",
+     "not": "deleteMany + createMany — ikisi de AuditService.log çağırmıyor; tek audit :1446-1447 (SHIPMENT CREATE, newData yalnız kimlik listeleri, kaleme kaç metre yazıldığını taşımıyor)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "1560, 1582",
+     "not": "addSacksToShipment/removeSackFromShipment tahsisi yeniden yazar, audit'e yalnız {kind:'ADD_SACKS'} bırakır — defter mutasyonu görünmez"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/helpers/order-status.helper.ts",
+     "satir": "48-81",
+     "not": "OrderLine.shippedQty tamamen SackAllocation'dan türer — audit'siz tek para/sevk defteri"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_logs",
+     "satir": "-",
+     "not": "saha: tableName ILIKE '%ALLOC%' → 0 satır; audit'in tanıdığı tablolar yalnız ORDER, ORDER_LINE, SACK, SHIPMENT, WORK_ORDER, WORK_ORDER_STEP"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/shipping.service.ts",
+   "satir": "1345-1352",
+   "failure_mode": "Sipariş 'Açık 1000 m' görünür, operatör 'sevk ettim' der. Destek system_logs'a bakar: yalnız SHIPMENT CREATE {orderIds} vardır. Tahsisin hiç yazılmadığı mı, yazılıp silindiği mi, hangi metrajla yazıldığı mı ayırt edilemez — tek çare kaynak kodu okuyup tahmin (bu denetimde birebir yaşandı, mekanizma yine de kesinleşmedi).",
+   "is_etkisi": "Mali etkisi olan tek defterin değişim geçmişi yok; müşteri itirazında ('bu 560 m'yi kestiniz mi') kanıt zinciri kopuk.",
+   "veride_ihlal": {
+    "sorgu": "system_logs WHERE tableName ILIKE '%ALLOC%'",
+    "saha": 0,
+    "dev": 0,
+    "not": "46 tahsis satırı · 0 audit satırı"
+   },
+   "onceki_defter": "",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "Tahsis yazan sevkiyat system_logs'a yazılan+atlanan kalemleri gösteren tek satır bırakıyor; bekçi bu satırı arıyor.",
+   "etkilenen_degismez": "INV-AUD-01 — her CUD audit'e girer",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "writeShipmentAllocationsTx tx'ten SONRA best-effort AuditService.log({tableName:'SACK_ALLOCATION', action:'REPLACE', recordId:shipmentId, newData:{yazilan:[{lineId,qty}], atlanan:[{lineId,need,sebep}]}}); atlanan alanı V-2-01 teşhisini tek satıra indirir"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-02"
+   ],
+   "primary": "V-2-02",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "shipping.service.ts writeShipmentAllocationsTx (1345 deleteMany, 1352 createMany) hiçbir AuditService.log çağrısı içermiyor; dosyadaki tüm AuditService.log çağrıları (297,389,524,543... 1447 dahil) grep ile listelendi, SackAllocation/ALLOC ile ilgili hiçbiri yok. Yalnız SHIPMENT CREATE (1447) audit'i var, kaleme kaç metre yazıldığını taşımıyor. İddia doğrulandı."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "shipping.service.ts içinde sackAllocation.deleteMany/createMany çağrılarının (1345,1352,1976) hiçbirinin yanında AuditService.log yok; yalnız SHIPMENT seviyesinde CREATE/CANCEL audit'i var (newData yalnız kimlik listeleri, satır-metraj taşımıyor). Grep ile ALLOC ilişkili audit satırı bulunamadı. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "shipping.service.ts içinde deleteMany/createMany (SackAllocation, ~1345/1352) ve addSacksToShipment/removeSackFromShipment (1560/1582 civarı) etrafında AuditService.log çağrısı yok — dosyada tek audit noktası SHIPMENT CREATE (id listeleri taşıyor, tahsis metrajı taşımıyor). Proje kök kuralı ('Her CUD → AuditService.log()') bu tabloda uygulanmamış; audit_check_hardening migration'ı (20260731120000) yalnız var olan SystemLog satırlarının bütünlüğünü korur, eksik logu üretmez/zorlamaz — yani DB bu boşluğu KAPATMIYOR. system_logs.tableName ILIKE '%ALLOC%' sorgusunu bu oturumda yeniden koşamadım (DB erişimi yok) ama kod tarafında audit çağrısının gerçekten yokluğu doğrulandı, bu tek başına bulguyu ayakta tutmaya yeterli."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-004",
+   "baslik": "Mutabakat kapısının kör noktası kusurla aynı yerde: consistency-check §1/§2 denormu DEFTERE karşı ölçüyor, defterin eksikliğini tanım gereği göremiyor",
+   "siddet": "S2",
+   "kategori": "K.1",
+   "oncelik": "P2",
+   "modul": "sevkiyat/sipariş",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "consistency-check.sql elle koşuluyor ('3 ayda bir veya şüphe anında'); src/jobs altında otomatik mutabakat işi yok (archive, backup, offsite-sweeper, job-failure, katalog uzlaştırıcıları).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/consistency-check.sql",
+     "satir": "27-45, 47-56",
+     "not": "§1/§2 OrderLine.shippedQty ile Σ SackAllocation farkını arar; V-2-01'de ikisi de 0 → fark 0 → kapı yeşil, 2.108,5 m kayıp görünmez. Dosya başlığı kapsamı doğru tarif ediyor: yakaladığı şey DRIFT'tir, defterin hiç yazılmamış olması drift üretmez"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/TUR2-V2-b1.sql",
+     "satir": "V2-Q01, V2-Q02",
+     "not": "§1/§2 birebir kopyası saha'da 0 satır döndü — aynı anda V2-Q08 5 sevkiyat + üç-kalem sorgusu 2.108,5 m gösterirken"
+    }
+   ],
+   "dosya": "Teks-Erp/scripts/consistency-check.sql",
+   "satir": "27-56",
+   "failure_mode": "Ekip çeyrek sonunda test_consistency koşar, 22 bölüm yeşil, 'sevk defteri sağlam' sonucuna varır; oysa o çeyrek boyunca sipariş defterine hiç yazılmamış her sevk sessizce birikmiştir. Kapı yalnızca 'denorm defterden koptu mu' sorusunu yanıtlar, 'defter gerçeği taşıyor mu' sorusunu değil.",
+   "is_etkisi": "Yanlış güvence: V-2-01 tipi kayıp kapı yeşilken sınırsız süre birikebilir (bugün 2.108,5 m; 5 haftalık veri).",
+   "veride_ihlal": {
+    "sorgu": "V2-Q01/Q02",
+    "saha": 0,
+    "dev": 0,
+    "not": "kapı 0 döndürürken gerçek kayıp 2.108,5 m — kör nokta kanıtı"
+   },
+   "onceki_defter": "",
+   "efor_gun": 1,
+   "kabul_kriteri": "§1c bugünkü saha kopyasında 3 satır, düzeltme sonrası 0; negatif sonda (tahsis satırı geçici silinince) kırmızı.",
+   "etkilenen_degismez": "K.1 bekçi kapsamı — 'bekçinin kör noktası hatanın kendisiyle aynı yerde' (2026-08-22 §13 dersinin tekrarı)",
+   "oneriler": [
+    {
+     "vade": "orta",
+     "aciklama": "§1c 'defter eksikliği' bölümü + test_consistency.ts negatif sonda; /api/admin/health'e 'son mutabakat koşumu' sayacı ya da haftalık zamanlanmış koşum + job-failure kaydı"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-03"
+   ],
+   "primary": "V-2-03",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "consistency-check.sql §1/§2 (27-45,47-56) shippedQty'yi Σ SackAllocation'a karşı kıyaslıyor — ikisi de 0 kalırsa (tahsis hiç yazılmamışsa) fark 0 olur, kapı yeşil kalır. Dosyanın kendi başlığı da kapsamı 'drift' olarak tanımlıyor, 'defterin eksikliği' değil. Mantıksal kör nokta koddan doğrulandı."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "consistency-check.sql:27-45 doğrulandı — §1 yalnız OrderLine.shippedQty (denormalize) ile Σ SackAllocation[DISPATCHED] farkını arıyor; dosyanın kendi başlığı da bunu 'drift' kontrolü olarak tanımlıyor. Hiç yazılmamış tahsis (drift değil, eksik) bu sorguda fark üretmez — T2-001'in doğrulanmış mekanizmasıyla birebir örtüşüyor. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "consistency-check.sql:27-45 (§1) ve :47-56 (§2) doğrulandı: her ikisi de OrderLine.shippedQty/Order.shippedQty ile SackAllocation TOPLAMINI karşılaştırıyor — ikisi de aynı (yazılmamış) kaynaktan türediği için BULGU-T2-001 senaryosunda fark sıfır çıkar; kapı yapısal olarak defterin hiç yazılmamış olmasını göremez. Bu DB-taraflı bir 'çürütücü' constraint değil, aksine iddia edilen kör noktanın kendisi — dosyanın başlığı da kapsamı ('drift', DB seddi yok) doğru tanımlıyor, yani bulgu kodun kendi belgelediği sınırı doğru yorumluyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-005",
+   "baslik": "İptal edilmiş iş emrine bağlı sipariş HİÇ İPTAL EDİLEMİYOR: önizlemenin önerdiği aksiyon kendi izin listesinde yok — prod'da 2 canlı sipariş kilitli",
+   "siddet": "S2",
+   "kategori": "E",
+   "oncelik": "P2",
+   "modul": "sipariş",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "① Sunucuda defaultAction'ın allowedActions içinde olduğunu doğrulayan kontrol yok (:3112 yalnız provided.action ölçüyor). ② Tip düzeyinde zorlama yok (CancelAction union, defaultAction allowedActions'a bağlı değil). ③ Bekçi yok (test_order_cancellation.ts CANCELLED WO durumunu sondalamıyor). ④ İstemci de kurtarmıyor (tek-aksiyonlu satırda seçim çizilmiyor).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/order.service.ts",
+     "satir": "100-116, 118-125",
+     "not": "computeAllowedActions CANCELLED WO için ['UNLINK_ONLY'] döner; pickDefaultAction bu durumu ele almıyor → isSoleOrder=true dalından CONVERT_TO_STOCK döner (izin verilmeyen aksiyonu öneriyor)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/order.service.ts",
+     "satir": "3112-3115, 3119, 3200-3207",
+     "not": "istemci defaultAction gönderirse 400 'CONVERT_TO_STOCK geçersiz'; göndermezse :3119 sunucu geçersiz varsayılanı kullanır → CONVERT_TO_STOCK claim notIn:[CANCELLED,SUPERSEDED] 0 satır → 409 'Sayfayı yenileyin' (mesaj da yanıltıcı). İki çıkış yolu da kapalı"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "orders JOIN work_order_to_order_lines JOIN work_orders",
+     "satir": "-",
+     "not": "saha: o.status NOT IN (CANCELLED,COMPLETED) AND wo.status IN (CANCELLED,SUPERSEDED) → SIP0108260012 (IE0108260002) + SIP2408260016 (IE2408260015, IE2408260016), üçünde de isSoleOrder=true; iki sipariş bugün APPROVED"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/order.service.ts",
+   "satir": "118-125",
+   "failure_mode": "Planlamacı IE0108260002'yi iptal eder (meşru), sonra SIP0108260012'yi iptal etmek ister. Diyalog tek satır gösterir, seçim kutusu çizilmez (izinli aksiyon tek), 'İptal Et' → 400 'CONVERT_TO_STOCK geçersiz' ya da 409 'Sayfayı yenileyin'. Yenilemek işe yaramaz. Sipariş APPROVED olarak sonsuza dek listede kalır: açık talep süzgecine girer, üretim dengesinde kumaş açığı üretir, müşteri karnesinde açık iş sayılır, termin raporunda geciken sipariş görünür.",
+   "is_etkisi": "İki canlı sipariş yönetilemez durumda; ikisi de 'açık talep' sayıldığı için planlama ekranlarında gerçekte olmayan iş üretiyor. Tek çıkış yolu şu an DB'ye elle müdahale.",
+   "veride_ihlal": {
+    "sorgu": "orders açık ↔ WO CANCELLED/SUPERSEDED",
+    "saha": 2,
+    "not": "2 sipariş (SIP0108260012, SIP2408260016) kilitli; 3 WO satırı"
+   },
+   "onceki_defter": "BULGU-T1-036",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "(a) Bekçi: her (woStatus,isSoleOrder) için allowedActions.includes(defaultAction) (negatif sonda eski satırla kırmızı). (b) SIP0108260012 ve SIP2408260016 arayüzden iptal edilebiliyor.",
+   "etkilenen_degismez": "INV-SIP-06 — sipariş iptali durum makinesi",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "pickDefaultAction'a CANCELLED/SUPERSEDED → UNLINK_ONLY; asıl düzeltme iki fonksiyonu ayrışamaz kılmak: defaultAction = allowed.includes(tercih) ? tercih : allowed[0]; :3119 varsayılan dalı da allowedActions üzerinden fail-closed doğrulasın"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-11"
+   ],
+   "primary": "V-2-11",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "order.service.ts:96-115 computeAllowedActions CANCELLED/defansif dal için ['UNLINK_ONLY'] döner, ama pickDefaultAction (118-124) CANCELLED durumunu ayrıca ele almadığı için isSoleOrder=true'da 'CONVERT_TO_STOCK' döner — allowedActions dışı bir defaultAction. Electron OrderCancelDialog.tsx:71-83 useEffect HER WO için (allowedActions.length===1 olsa bile) actionByWO[wo.id]=wo.defaultAction atıyor; UI tek-seçenekli satırda (350-361) radio çizmiyor ve kullanıcı bu değeri değiştiremiyor. Submit (121,145) actionByWO[wo.id]??wo.defaultAction kullanıyor → CONVERT_TO_STOCK backend'e gidiyor, :3190-3193 fresh computeAllowedActions(CANCELLED,...) içermediği için 409'a düşüyor. Uçtan uca (backend+frontend) doğrulandı, çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "order.service.ts:100-125 doğrulandı: pickDefaultAction yalnız PLANNED durumunu ayırıyor, CANCELLED/SUPERSEDED WO'da isSoleOrder=true ise hâlâ CONVERT_TO_STOCK öneriyor; computeAllowedActions aynı durumda yalnız ['UNLINK_ONLY'] izin veriyor — defaultAction kendi allowedActions listesinde değil. Electron OrderCancelDialog.tsx:350-361 doğrulandı: allowedActions.length===1 dalında yalnız `only` (=UNLINK_ONLY) etiketi basılıyor ama radio/onChange hiç tetiklenmediği için actionByWO[wo.id] set edilmiyor ve submit'te (satır 121) `wo.defaultAction` (=CONVERT_TO_STOCK) gönderiliyor — ekranda görünen etiketle gönderilen aksiyon AYRIŞIYOR, tx içi taze-durum kontrolü bunu her seferinde 409'a düşürüyor (race değil, deterministik başarısızlık). Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "order.service.ts:100-125 doğrulandı: CANCELLED/SUPERSEDED WO için computeAllowedActions yalnız ['UNLINK_ONLY'] döner (yorum: 'gelmemesi gerek ama defansif'), ama pickDefaultAction (:118-125) woStatus'e bakmaksızın yalnız isSoleOrder'a göre dallanıyor — isSoleOrder=true ise CANCELLED WO'da da 'CONVERT_TO_STOCK' döner. İki yol da tıkanıyor: istemci defaultAction'ı olduğu gibi gönderirse :3112'de wo.allowedActions.includes kontrolü 400 verir (allowedActions zaten ['UNLINK_ONLY']); göndermezse :3183-3187'deki taze-durum kontrolü (computeAllowedActions(fs=CANCELLED,...).includes('CONVERT_TO_STOCK')===false) 409 'önizleme bayatladı' fırlatır — ki bu döngüseldir, WO durumu hiç değişmemiştir. DB tarafında bu asimetriyi engelleyen bir tip/constraint yok (CancelAction düz union, DB'de karşılığı yok). Kod okuması bulguyu birebir doğruluyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-006",
+   "baslik": "Mobil Hızlı İş Emri'nde fason firması çözülemezse mal fasona GİTMEZ; onay ekranı bunu kullanıcı tercihi gibi gösterir, başarı ekranı hiç söylemez",
+   "siddet": "S2",
+   "kategori": "E",
+   "oncelik": "P1",
+   "modul": "FASON/WO",
+   "kanit_seviyesi": "K2",
+   "dosya": "mobil/src/screens/Modules/HizliIsEmri/useQuickWorkOrder.ts",
+   "satir": "233, 875-876, 743-770",
+   "failure_mode": "Operatör tablette STD-BOYA rotasıyla Hızlı İş Emri açar (planlı firma yok, favori firma boş → firmId=null). 'Fasona gönder' anahtarı varsayılan AÇIK ama istemci firmId yoksa dispatchFirstStep:false gönderir; onay ekranı soluk 'Hayır, yalnız planlanır' basar, başarı ekranı sevk satırını hiç çizmez. Sonuç: WO PLANNED, top IN_PRODUCTION, fason sevki YOK; mal fabrikada durur ama sistem 'boyahanede üretimde' sayar (SAHA: IE2508260001 / T240826F0036 / 30 m, 3 gündür stranded).",
+   "is_etkisi": "Boyahane WIP ve fason karnesi eksik; iş emri sonsuza dek PLANNED kalır (kart ACTIVE, parti açık). Kurtarma yolu var (Fason Sevk ekranından elle gönderilir) → S1 değil S2.",
+   "etkilenen_degismez": "INV-FAS-01 / INV-SM-06 (AT_SUBCONTRACTOR ↔ açık fason sevk tutarlılığı)",
+   "koruma_kontrolu": "Sunucunun uyarı üreten dalı (workorder.service.ts:1406-1410 dispatchWarning) yalnız dispatchFirstStep=true iken koşar; firma yoksa istemci false gönderdiği için hiç tetiklenmez. Onay ekranı (StepConfirm.tsx:109-116) ve başarı ekranı (NewWorkOrderView.tsx:167-171) yalnız muted bilgi/sessizlik gösterir. Masaüstü karşılığı ReworkRollsDialog.tsx:344-353 disabled kutu + açıklama ile DOĞRU.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "mobil/src/screens/Modules/HizliIsEmri/useQuickWorkOrder.ts",
+     "satir": "875-876",
+     "not": "dispatchFirstStep && firstStepDispatch.isFason && !!firstStepDispatch.firmId — firma yoksa false gider"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/screens/Modules/HizliIsEmri/wizard/StepConfirm.tsx",
+     "satir": "109-116",
+     "not": "tek sinyal muted 'Hayır, yalnız planlanır'"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/screens/Modules/HizliIsEmri/NewWorkOrderView.tsx",
+     "satir": "167-171",
+     "not": "r.dispatch yoksa hiçbir şey basılmaz; res.message/res.warnings okunmaz"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/pages/Operations/Rolls/ReworkRollsDialog.tsx",
+     "satir": "344-353",
+     "not": "karşı örnek — disabled kutu + firma yoksa açıklayıcı metin (doğru desen)"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-34",
+     "not": "7 rota adımının tamamında plannedSubcontractorId=null, requiredCategoryId=null (BOYA-ZIMPARA 1-4, STD-BOYA 1-3)"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "-",
+     "not": "IE2508260001 PLANNED / T240826F0036 IN_PRODUCTION 30m / adımda firma yok / fason sevk YOK; kardeş IE2508260002-04 firma dolu → sevk var"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT wo.workOrderNumber, wo.status, r.status FROM work_orders wo JOIN work_order_steps s ON s.workOrderId=wo.id AND s.stepSequence=1 LEFT JOIN rolls r ON r.currentStepId=s.id WHERE wo.workOrderNumber LIKE 'IE2508%'",
+    "saha": 1,
+    "dev": 0,
+    "not": "IE2508260001 stranded (30m, IN_PRODUCTION, fason sevki yok)"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Tablet: firma çözülemediğinde onay ekranı muted bilgi değil UYARI olsun ve sebebi söylesin; masaüstündeki disabled kutu deseninin ikizi"
+    },
+    {
+     "vade": "2. tur",
+     "aciklama": "Başarı ekranı dispatchFirstStep istendi ama dispatch yoksa açık uyarı bandı bassın ('Fasona sevk YAPILMADI — Fason Sevk ekranından gönderin')"
+    },
+    {
+     "vade": "2. tur",
+     "aciklama": "Sunucu tarafı kalıcı: 'fason adımında currentStepId dolu ama açık sevk kalemi olmayan top' mutabakat sorgusu (consistency-check-derived.sql §27 adayı) — bugün böyle kapı YOK"
+    }
+   ],
+   "kabul_kriteri": "Firma seçmeden Hızlı İş Emri açıldığında onay ve başarı ekranlarında sevk yapılmadığını SÖYLEYEN metin görünür; yeni mutabakat sorgusu IE2508260001'i yakalar, firma seçilen üç kardeşi yakalamaz (negatif sonda).",
+   "efor_gun": 1.5,
+   "onceki_defter": "BULGU-T1-048",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-01"
+   ],
+   "primary": "V-3-01",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "mobil/src/screens/Modules/HizliIsEmri/useQuickWorkOrder.ts:875-876 — dispatchFirstStep gövdesi `dispatchFirstStep && firstStepDispatch.isFason && !!firstStepDispatch.firmId` ile kurulu; firmId çözülemezse (planlı firma yok, favori boş) sessizce false gönderiliyor. StepConfirm.tsx:109-116'da tek sinyal soluk (muted) 'Hayır, yalnız planlanır' satırı — engelleyici değil, kolayca atlanabilir bilgi satırı. Sunucu tarafındaki uyarı dalı (dispatchWarning) yalnız dispatchFirstStep=true iken tetiklendiği için firma yokken hiç çalışmıyor. Kod okuması bulguyu doğruluyor."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "useQuickWorkOrder.ts:875-878 tam olarak iddia edildiği gibi: dispatchFirstStep = dispatchFirstStep && isFason && !!firmId — firma yoksa sessizce false. workorder.service.ts:1395-1396 dispatchWarning bloğu yalnız dispatchFirstStep===true iken çalışıyor, yani firma yoksa hiç tetiklenmiyor. StepConfirm.tsx:109-116 gerçekten muted 'Hayır, yalnız planlanır' basıyor; NewWorkOrderView.tsx r.dispatch yoksa hiçbir sevk-durumu mesajı basmıyor. Çürütme bulunamadı.",
+     "corrected_impact": "yok"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "useQuickWorkOrder.ts:875-876 dispatchFirstStep gönderimi '&& !!firstStepDispatch.firmId' ile şartlı — doğrulandı. StepConfirm.tsx:43-47,109-116: willDispatch = dispatchFirstStep && isFason && !!firmId; Row hem toggle kapalıyken hem firma çözülemediğinde AYNI muted metni ('Hayır, yalnız planlanır') basıyor — iki farklı kök sebep ekranda AYIRT EDİLEMİYOR, kullanıcıya 'firma bulunamadı' bilgisi hiç verilmiyor. Karşı-örnek olarak gösterilen ReworkRollsDialog.tsx desenine (disabled+açıklayıcı metin) bakılmadı ama diğer kanıtlar iddiayı zaten doğruluyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-007",
+   "baslik": "Fason kabulünde clientToken her gönderimde yeniden üretiliyor — KISMİ kabulün tek replay koruması fiilen kapalı",
+   "siddet": "S2",
+   "kategori": "B.3",
+   "oncelik": "P1",
+   "modul": "FASON",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/services/subcontractor.service.ts",
+   "satir": "2345-2360, 2408-2414, 2879-2893",
+   "failure_mode": "Boyahaneden 100 m topun 30 m'si döner (kısmi). Operatör Electron'da 'Kabul Et'e basar; istek uzun fason kabul tx'inde timeout eder veya bağlantı düşer. Operatör tekrar basar → ikinci istek YENİ clientToken taşır: token guard'ı boş döner, küme guard'ı kısmi olduğu için continue der, decrement claim currentQty(70)>30 geçer. Sonuç: currentQty 100→70→40, iki SubcontractorReceipt, her birinden 30 m çocuk top doğar (toplam 60 m), fason hesabından 60 m düşülür. Fiziksel gerçek 30 m; stok 30 m fazla, fasonda kalan 30 m eksik.",
+   "is_etkisi": "Kısmi kabul defteri (SubcontractorReceiptItem.receivedQty) çift yazılır, fason cari hesabı ve 'fasonda kalan' bozulur; çekme (RollVariance SUBCONTRACTOR_RETURN) da iki kez yazılır. Geri alma LIFO iki makbuzu ters iptal gerektirir.",
+   "etkilenen_degismez": "INV-FAS idempotency (kısmi kabul replay = clientToken)",
+   "koruma_kontrolu": "Küme-eşitliği guard'ı kısmi makbuzu bilerek atlar (:2414 'if prior.items.some(isPartial) continue'); tek koruma clientToken cached makbuz (:2345-2360). Ama Electron (FasonReceiveDialog.tsx:195 crypto.randomUUID() mutationFn içinde) ve mobil (receivePayload.helper.ts:343 doSubmit her basışta) token'ı gönderirken üretir → aynı deneme farklı token. Advisory lock / claim yok. Bekçi kuralı TERS doğruluyor (receivePayload.helper.test.ts:331 not.toBe).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/subcontractor.service.ts",
+     "satir": "2408-2414",
+     "not": "kısmi makbuz cached DÖNMEZ — replay kimliği clientToken'dır (yorum)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/pages/Operations/WorkOrders/FasonReceiveDialog.tsx",
+     "satir": "194-195",
+     "not": "clientToken: crypto.randomUUID() mutationFn gövdesi içinde; yorum 'retry ikinci makbuz doğmaz' der (yanlış)"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/screens/Modules/FasonKabul/receivePayload.helper.ts",
+     "satir": "343",
+     "not": "generateClientUuid() buildPayload içinde; test:331 not.toBe ile çeliştiriyor"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/offline/entryAttempt.ts",
+     "satir": "-",
+     "not": "doğru desen mevcut ama fason kabulünde kullanılmıyor"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-15",
+     "not": "143 makbuzun yalnız 2'si token taşıyor (24.08 akşamı) → koruma sahada 24.08'e dek hiç yoktu"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*), count(clientToken), count(DISTINCT clientToken) FROM subcontractor_receipts",
+    "saha": 2,
+    "dev": 0,
+    "not": "143 makbuzdan 2 tokenli; kısmi kabul sahada henüz 1 kalem → ihlal doğmadı ama koruma yok"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Token'ı mutasyon dışında mantıksal deneme başına üret; yalnız belirsiz hatada (ağ/timeout/5xx) yapıştır, kesin 4xx'te bırak — entryAttempt.ts deseninin fason ikizi. mobilde buildReceivePayload'a token parametre olarak geçir. Bekçi not.toBe → toBe olmalı"
+    }
+   ],
+   "kabul_kriteri": "Aynı kısmi kabul ekranından art arda iki gönderim → ikincisi idempotent retry döner; subcontractor_receipts tek satır, currentQty tek kez düşer. Negatif sonda: token sabitlemesi kaldırılınca test kırmızı.",
+   "efor_gun": 1,
+   "onceki_defter": "BULGU-T1-005",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-02"
+   ],
+   "primary": "V-3-02",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Electron/src/pages/Operations/WorkOrders/FasonReceiveDialog.tsx:195 clientToken: crypto.randomUUID() DOĞRUDAN mutationFn gövdesinin İÇİNDE — her mutate() çağrısında (ilk deneme + her retry/tekrar tıklama) YENİ token üretiliyor; satır 194'teki yorum ('retry ikinci makbuz doğmaz') kodun gerçek davranışıyla ÇELİŞİYOR. Backend tarafı (subcontractor.service.ts:2345-2360) token eşleşmesine dayanan cache mekanizmasını doğru kurmuş ama istemci farklı token gönderdiği için bu koruma fiilen devre dışı kalıyor; küme-eşitliği guard'ı da (2408-2414) kısmi kabulde bilinçli olarak atlanıyor ('continue'). Kod okuması bulguyu doğruluyor, herhangi bir kilit/claim bu boşluğu kapatmıyor."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "FasonReceiveDialog.tsx:194-195 clientToken: crypto.randomUUID() mutationFn gövdesi İÇİNDE — her mutate/retry çağrısında yeniden üretiliyor; yorum ('retry ikinci makbuz doğmaz') yanlış. subcontractor.service.ts:2408-2414 küme-eşitliği guard'ı kısmi (isPartial) makbuzu bilerek atlıyor, tek koruma clientToken cache'i (2345-2360) — token her denemede farklı olduğu için bu koruma da devre dışı kalıyor. receivePayload.helper.test.ts:328-330 explicit olarak p1.clientToken !== p2.clientToken bekliyor — bekçi hatalı davranışı doğru olarak kodlamış. Çürütme bulunamadı, bulgu güçlü kanıtla doğrulandi.",
+     "corrected_impact": "yok"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "FasonReceiveDialog.tsx:194-195 clientToken: crypto.randomUUID() mutationFn GÖVDESİ içinde üretiliyor — her mut.mutate() çağrısında (dolayısıyla her yeniden deneme/manuel tekrar basışta) YENİ token. Yorum ('retry aynı isteği tekrarlarsa ikinci makbuz doğmaz') kodun kendi davranışıyla ÇELİŞİYOR. subcontractor.service.ts:2408-2414 küme-eşitliği guard'ı kısmi makbuzları BİLEREK atlıyor (prior.items.some(isPartial) → continue), yani kısmi kabulde clientToken TEK koruma ve o da istemcide sabitlenmemiş. Buton mut.isPending sırasında disabled (satır 394) — çift tıklama sırasında korunuyor, ama gerçek risk 'istek zaman aşımına uğradı/bağlantı düştü (isPending false'a döner), operatör TEKRAR bastı' senaryosu; bu tam olarak projenin kendi entryAttempt.ts (KK1) deseninin çözmek için var olduğu senaryo ve burada UYGULANMAMIŞ. Eşzamanlılık gerektirmiyor (Ç4 uygulanamaz), tek kullanıcı sıralı deneme yeterli."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-008",
+   "baslik": "recordPrintEvent sürümü atomik claim'siz yazıyor: eşzamanlı iki baskı olayı aynı sürüm numarasını üretir ve defterdeki kopya sessizce ezilir",
+   "siddet": "S2",
+   "kategori": "A.2",
+   "oncelik": "P2",
+   "modul": "REFAKAT KARTI",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/traveler-card.service.ts",
+   "satir": "349-380, 443-462",
+   "failure_mode": "IE2108260004 kartı v2'de; planlamacı önce rengi sonra eni değiştirir. Büro Electron'dan, usta tabletten kartı basıp ikisi de print-event gönderir (~200 ms ara). İkisi de card.version=2 okur, ikisi de plan.version=3 hesaplar ama içerikleri farklı (A: KIRMIZI 180, B: KIRMIZI 200). T1 commit v3=A; T2 commit v3 (aynı), defter upsert.update → v3=B (A ezildi). SONUÇ: sahada iki farklı kâğıt (v3·180, v3·200), defterde tek v3=B, sayaç 4 yerine 3'te. planKey eşitliği yok — gerçek içerik farkı ezildi.",
+   "is_etkisi": "Refakat kartı ISO 9001 kontrollü belgedir; sürüm 'bu kâğıt hangi planı gösteriyor'un tek kimliğidir (resolvePrintPlan 'TEK KARAR NOKTASI'). Numaranın iki farklı içeriği adlandırması kontrolün dayandığı eşitliği bozar.",
+   "etkilenen_degismez": "INV — refakat kartı version tekilliği / donmuş belge",
+   "koruma_kontrolu": "card.version ve plan havuz client'ında tx DIŞI okunur (:350, :364); tx içinde update({where:{id}}) ile version:plan.version KOŞULSUZ yazılır (:369-376) — beklenen version where'de yok, claim yok, advisory lock yok. archivePrintedVersionTx upsert.update dalı (:462) ikinci yazımı hata vermeden kabul eder. Doğru desen (print() :222-232 P2002 retry) recordPrintEvent'te YOK.",
+   "cakisma_senaryosu": "T1 (Electron) findUnique → card.version=2, plan.version=3 (içerik A). T2 (tablet, 200ms sonra) findUnique → hâlâ 2 (T1 commit etmedi), plan.version=3 (içerik B, en değişmiş). T1 commit: kart v3, defter v3=A. T2 commit: kart v3 (aynı), defter upsert.update → v3=B. SONUÇ: iki farklı kâğıt dolaşır, defterde tek v3(B), sayaç eksik.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/traveler-card.service.ts",
+     "satir": "350, 364",
+     "not": "findUnique + resolvePrintPlan HAVUZ (tx DIŞI)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/traveler-card.service.ts",
+     "satir": "369-376",
+     "not": "tx.update where:{id} — beklenen version YOK, claim YOK, version:plan.version koşulsuz"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/traveler-card.service.ts",
+     "satir": "443-462",
+     "not": "archivePrintedVersionTx upsert update dalı ikinci yazımı sessizce kabul eder"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-26",
+     "not": "17 kart version=2 (revizyon dalı canlı), 62 TRAVELER_CARD defter satırı (18.08-24.08) → yol erişilebilir"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT cardNumber, version FROM traveler_cards WHERE version>1",
+    "saha": 17,
+    "dev": 0,
+    "not": "Ezilme izi tanım gereği görünmez (üzerine yazıldı); yolun canlı olduğu ölçüldü"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "update'i atomik claim'e çevir: updateMany({where:{id, version:card.version}}), count===0 → tx'i bir kez yeniden koş (planı yeniden çöz), ikinci kez de kaybederse 409 CARD_VERSION_CHANGED. archivePrintedVersionTx upsert kalabilir (claim geçtikten sonra)"
+    }
+   ],
+   "kabul_kriteri": "İki paralel recordPrintEvent (N=2, gerçek DB) → biri v3 diğeri v4 üretir ya da 409 alır; defterde iki ayrı sürüm satırı ve snapshot. Negatif sonda: claim kaldırılınca test kırmızı.",
+   "efor_gun": 0.5,
+   "repro_script": "Teks-Erp/scripts/audit_repro_V-3-04.ts (öneri, 3. tura bırakıldı)",
+   "onceki_defter": "BULGU-T1-106",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-04"
+   ],
+   "primary": "V-3-04",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/traveler-card.service.ts:350-364 findUnique+resolvePrintPlan tx DIŞINDA; :369-376 tx.update where:{id} — beklenen version koşulu, advisory lock, unique-retry YOK (P2002 retry deseni :349 recordPrintEvent'te bulunmuyor, yalnız print() 222-232'de var). archivePrintedVersionTx (:443-462) upsert.update dalı ikinci yazımı sessizce kabul ediyor. İki eşzamanlı print-event çağrısı aynı version'ı hesaplayıp ikincisi birincinin snapshot'ını sessizce ezer — kod okunarak doğrulandı, guard bulunamadı."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "traveler-card.service.ts:349-380 doğrulandı: card+plan tx DIŞINDA (findUnique + resolvePrintPlan), tx içindeki update({where:{id}}) beklenen version/advisory lock taşımıyor (version:plan.version koşulsuz). archivePrintedVersionTx (:443-462) upsert.update dalı ikinci yazımı sessizce kabul ediyor. Controller/route katmanında da kilit yok (recordPrintEvent route'a çıplak bağlı). Race'in gerçekleşmesi için gereken koşul (iki print isteği arasında WO içerik değişikliği) senaryoda zaten varsayılmış ve kod bunu engellemiyor — çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "traveler-card.service.ts:349-353 doğrulandı: findUnique + resolvePrintPlan tx DIŞINDA (havuz client'ı). :368-380 tx.update({where:{id}}) — version alanı koşulsuz plan.version ile yazılıyor, where'de beklenen-version/claim YOK. archivePrintedVersionTx (:443-462) upsert.update dalı ikinci yazımı sessizce kabul ediyor; unique key (docType,sourceId,version) tam da bu senaryoda create yerine update'e düşüp içerik ezilmesine izin veriyor — DB kısıtı bu yarışı ENGELLEMİYOR, tam tersine upsert deseniyle sessiz üzerine-yazmayı MÜMKÜN KILIYOR. Codebase'de emsal (print():222-232 P2002 retry) burada yok — asimetri gerçek. Çakışma penceresi (~200ms, iki farklı istemci: Electron+tablet) fiilen imkânsız değil (Ç4 uygulanamaz)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-009",
+   "baslik": "Ad-mükerrer DB seddi dev↔saha iki yönde eksik: sahada items seddi YOK, dev'de colors seddi YOK; tek sinyal prod'a karşı koşturulamayan bir bekçi",
+   "siddet": "S3",
+   "kategori": "B.1",
+   "oncelik": "P1",
+   "modul": "ana-veri",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Partial UNIQUE <tablo>_nameFold_key aranıp pg_indexes'ten ölçüldü: customers+subcontractors iki ortamda VAR, items sahada YOK/dev'de VAR, colors sahada VAR/dev'de YOK. Uygulama bekçisi assertNameNotDuplicate check-then-act ve kilitsiz (T1-007). Migration yumuşak kapı (mükerrer varsa NOTICE+atla).",
+   "kanit": [
+    {
+     "tur": "migration",
+     "yol": "Teks-Erp/prisma/migrations/20260821150000_name_fold_unique_live/migration.sql",
+     "satir": "52-76",
+     "not": "yumuşak kapı: mükerrer varsa RAISE NOTICE + index atlanır"
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "model Item/Customer/Subcontractor",
+     "not": "@@unique([nameFold]) BEYAN EDİLİ ama sahada items'ta DB karşılığı yok → şema-DB ayrışık"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/base.service.ts",
+     "satir": "729-795",
+     "not": "assertNameNotDuplicate check-then-act, kilitsiz (T1-007)"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "pg_indexes + items/colors nameFold GROUP BY HAVING count>1",
+     "satir": "-",
+     "not": "saha: items sed YOK, 1 grup (nameFold='v-1430', iki satır b5b11cfa BGR150 + 6a189333 MC155, ikisi de isActive=false, rolls/order_lines/work_orders=0). dev: colors sed YOK, 1 grup (beyaz)"
+    },
+    {
+     "tur": "migration",
+     "yol": "Teks-Erp/prisma/migrations/20260821150000_name_fold_unique_live/migration.sql",
+     "satir": "53-77",
+     "not": "IF n_dup>0 THEN RAISE NOTICE '...ATLANDI...sonra bu dosyayı yeniden koş' ELSE CREATE UNIQUE INDEX IF NOT EXISTS. Temizlik sonrası yeniden koşacak komut/runbook/hatırlatıcı yok."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/run-all-tests.ts",
+     "satir": "102-118",
+     "not": "productionDbGate(): NODE_ENV/APP_ENV==='production' → process.exit(1), ALLOW_NONLOCAL_TEST_DB ile bile atlanamaz. test_db_invariants prod ortamında koşturulamaz."
+    },
+    {
+     "tur": "sema",
+     "yol": "pg_indexes diff (SAHA↔DEV)",
+     "satir": "-",
+     "not": "items_nameFold_key DEV'de VAR, SAHA'da YOK (tek yönlü yapısal drift). SAHA _prisma_migrations: 20260821150000 finished_at DOLU, rolled_back_at NULL → yeniden koşmaz."
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data (nameFold mükerrer sayımı)",
+     "satir": "-",
+     "not": "items nameFold='v-1430' → 2 satır (BGR150/V-1430, MC155/V-1430, 2026-07-17 34 sn arayla, ikisi pasif). 17 nameFold tablosunun 13'ünde hiçbir DB seddi yok; saha o 13'te mükerrer 0."
+    }
+   ],
+   "dosya": "Teks-Erp/prisma/migrations/20260821150000_name_fold_unique_live/migration.sql",
+   "satir": "52-77",
+   "failure_mode": "İki operatör aynı anda 'BAYRO FLAM' kumaşı kaydeder; assertNameNotDuplicate ikisinde de 'yok' der (kilit yok), items seddi olmadığı için ikisi de yazılır → aynı kumaş iki kodla stokta, sipariş kalemleri ikiye bölünür. Renkte aynı senaryo dev'de tetiklenebilir/sahada tetiklenemez; kumaşta tam tersi.",
+   "is_etkisi": "228 satırlık items tablosunun tamamı DB koruması olmadan yaşıyor; blokaj iki pasif ve hiç referanslanmayan satır. Prod'da test_db_invariants §1 kalıcı KIRMIZI → kırmızı körlüğü.",
+   "veride_ihlal": {
+    "sorgu": "SELECT tablename,indexname FROM pg_indexes WHERE indexdef ILIKE '%UNIQUE%' AND (indexname ILIKE '%fold%' OR indexdef ILIKE '%tr_fold%'); + items/colors nameFold GROUP BY HAVING count>1",
+    "saha": 1,
+    "dev": 1,
+    "not": "saha: items_nameFold_key YOK + 1 grup (v-1430, iki pasif satır). dev: colors_nameFoldColor_key YOK + 1 grup (beyaz)"
+   },
+   "etkilenen_degismez": "ad tekilliği (nameFold partial unique)",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "İki v-1430 satırını mükerrer panelinden birleştir (kullanım 0) → aynı migration'ı yeniden koş (enforce) → dev'de colors için aynısı. EXPRESSION_UNIQUES envanterine 'hangi ortamda hangi sed kurulu' bekçisi. [PROD'DA ÇALIŞTIRMA] geri alma DROP INDEX."
+    }
+   ],
+   "kabul_kriteri": "pg_indexes çıktısı saha ve dev'de aynı 4 index'i listeler; test_db_invariants §1 iki ortamda yeşil.",
+   "efor_gun": 0.5,
+   "onceki_defter": "T1-007 (ayakta S2) · T1-066 (ayakta S3)",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-01",
+    "V-5-03"
+   ],
+   "primary": "V-4-01",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md",
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-5-veri-numara-zaman-audit-madenciligi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "Teks-Erp/prisma/migrations/20260821150000_name_fold_unique_live/migration.sql:35-38 ve satır 30-33: kapsam BAŞTAN itibaren yalnız customers/items/subcontractors'tır; 'RENK HARİÇ (bilinçli): ... düz nameFold üzerine kısıt uygulama kuralından ZAYIF olur' notu, colors'ın bu migration'a hiç girmediğini, yumuşak-kapıdan atlanmadığını gösterir. Dolayısıyla 'dev'de colors seddi YOK' bulgusu items'daki gerçek (saha) gap'le SİMETRİK bir arıza değil — colors zaten tasarım gereği bu mekanizmanın dışında (bespoke foldColorNameForCompare kullanıyor). items tarafındaki gap (saha) bulgunun kendi kanıtlarında zaten NOTICE mekanizmasıyla açıklanan, gerçek ve doğru tespit edilmiş bir drift. Sonuç: bulgu doğru ama 'iki yönlü simetrik boşluk' çerçevesi yanlış — asıl risk tek yönlü (items/saha), colors kısmı S2'yi büyütmüyor, hafifletiyor."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "Teks-Erp/prisma/migrations/20260821150000_name_fold_unique_live/migration.sql:52-77 ve 20260825120000_color_name_unique_live/migration.sql:60-77 doğrular: yumuşak kapı tasarımı gerçek ve BİLİNÇLİ (dosya başlıklarında gerekçeli); mükerrer varsa ilgili tabloda index NOTICE ile atlanır. Bu, iddia edildiği gibi 'unutulmuş boşluk' değil, ölçülmüş ve izlenen (test_db_invariants §1/§5 bilerek kırmızı) geçici durum; app-layer assertNameNotDuplicate her koşulda birincil savunma olarak çalışmaya devam eder (DB seddi sadece ikincil son hat). DB canlı sorgulanamadı (Postgres.app trust auth hatası, connection localhost:5432 reddedildi) — saha/dev drift sayıları doğrulanamadı ama migration mantığı ve CLAUDE.md 2026-08-22/2026-08-25 notlarıyla tutarlı.",
+     "corrected_impact": "S3 — mekanizma doğru tespit edilmiş ama zaten belgelenmiş/izlenen, bilinçli aşamalı rollout; asıl risk (aynı adın eşzamanlı iki yazımı) hem app-guard hem de düşük olasılıklı bir yarış senaryosu, acil değil"
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "Teks-Erp/prisma/migrations/20260821150000_name_fold_unique_live/migration.sql:1-77 — dosyanın kendi başlık yorumu bu boşluğu zaten tam olarak tarif ediyor ('YUMUŞAK KAPI... prod'da index'in EKSİK olduğu sürece test_db_invariants §1 KIRMIZI verir — bilerek'). audit/00-map/K12-onceki-denetim-uzlastirma.md satır 94 ve 463 aynı olguyu ('items_nameFold_key sahada YOK, yumuşak kapı') ÖNCEKİ turda zaten değerlendirip 'KAPANMIŞ (kod değişti)' + 'K2 migration kataloğu bu farkı enforce bekliyor olarak taşımalı' diye kayda geçirmiş — yani bu bulgunun items/saha bacağı YENİ DEĞİL, bilinen/izlenen bir açık. base.service.ts:729-795 (assertNameNotDuplicate) her iki tabloda da BİRİNCİL savunma olarak duruyor ve check-then-act olsa da normal tekli-operatör trafiğinde (~0,7 istek/dk, aynı adı aynı saniyede İKİ operatörün yazması) pratik risk çok düşük; bulunan tek somut mükerrer (items 'v-1430') zaten 2 PASİF satır, 0 top/sipariş/iş emri bağlı — gerçek zarar yok.",
+     "corrected_impact": "S1 — mekanizma tasarım gereği (expand→backfill→contract, kullanıcı kararı 2026-08-22) ve zaten test_db_invariants §1 ile bilerek izleniyor; DB seddi olmasa da app-level guard birincil koruma olarak çalışıyor, gerçek çarpışma olasılığı düşük trafikte ihmal edilebilir, tespit edilen tek örnek zararsız (pasif, referanssız) kayıt."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-010",
+   "baslik": "Ana veriyi pasife alma bağımlılık-kontrolsüz ve önizlemesiz: sahada 1.500 m açık siparişin kumaşı pasif, 200 m canlı stok pasif kumaşa bağlı",
+   "siddet": "S2",
+   "kategori": "E",
+   "oncelik": "P1",
+   "modul": "ana-veri",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "softDelete okur→isActive=false yazar→audit; hiçbir bağımlılık kontrolü/preview/uyarı yok. hardDelete P2003→409 sarmalayıcısı YAZILMIŞ ama softDelete kapsamıyor. Proje kuralı 'yıkıcı işlemde preview endpoint döner' ihlal ediliyor.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/base.service.ts",
+     "satir": "1233-1252",
+     "not": "softDelete: findUnique→update({isActive:false})→AuditService.log; guard yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/base.controller.ts",
+     "satir": "118-125",
+     "not": "remove() doğrudan softDelete çağırır, preview yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/base.service.ts",
+     "satir": "1256-1281",
+     "not": "KARŞI-ÖRNEK: hardDelete P2003→409; ekip riski BİLİYOR, soft yolu kapsanmamış"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "order_lines JOIN items WHERE NOT isActive + rolls JOIN items WHERE NOT isActive",
+     "satir": "-",
+     "not": "saha: pasif kumaş açık sipariş kalemi=1 (SIP1208260004, MIKROCANVAS/SEFA, 1.500 m, APPROVED); pasif kumaş canlı top=2 (T050826H0025/26, ACTIVO, 100'er m, STOCK); renk/müşteri/istasyon/makine=0"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/base.service.ts",
+   "satir": "1233-1252",
+   "failure_mode": "Planlamacı 'SEFA' kumaşını mükerrer temizliği sırasında pasife alır; sistem sessiz. 1.500 m SIP1208260004 hâlâ AÇIK ama iş emri formunun kumaş seçicisi isActive:true süzgeciyle çalıştığı için kumaş listede yok → siparişe iş emri açılamaz. ACTIVO'nun 200 m'lik iki topu envanterde sayılır (rapor items.isActive süzmez) ama üretime alınamaz. Operatör 'kumaş kayboldu' der, sebep hiçbir ekranda yazmaz.",
+   "is_etkisi": "Açık siparişin üretimi sessizce bloke; envanterde 'var ama seçilemez' mal. Geri dönüş kolay (yeniden aktifleştir) ama teşhis zor — hiçbir uyarı/bant yok.",
+   "veride_ihlal": {
+    "sorgu": "order_lines/rolls JOIN items WHERE NOT items.isActive AND açık statü",
+    "saha": 3,
+    "dev": 0,
+    "not": "1 açık sipariş kalemi (1.500 m) + 2 canlı top (100'er m)"
+   },
+   "etkilenen_degismez": "açık siparişe bağlı ana veri aktif kalmalı",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "softDelete'e model başına bağımlılık sayacı (MERGE_MAP MOVE tabloları zaten var, merge-map.ts:65-230): canlı bağımlılık varsa 409+somut liste, force:true ile geçilir. GET /:id/deactivate-preview (merge önizlemesinin dar ikizi)."
+    }
+   ],
+   "kabul_kriteri": "SIP1208260004 kumaşını pasife alma denemesi '1 açık sipariş kalemi (1.500 m)+0 top' listesiyle 409; force ile audit satırı listeyi taşır.",
+   "efor_gun": 1.5,
+   "onceki_defter": "Yok (T1-035 tombstone/hardDelete kapsar, pasifleştirmeyi DEĞİL)",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-02"
+   ],
+   "primary": "V-4-02",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/base.service.ts:1233-1253 — softDelete() yalnız findUnique→update({isActive:false})→AuditService.log yapar; hiçbir bağımlılık/kullanım kontrolü, preview ya da uyarı yok. Karşılaştırma hardDelete (satır 1259-1290) P2003 FK ihlalini 409'a çeviriyor — ekip bağımlılık riskini biliyor ama soft yola hiç uygulamamış. Kod okuması bulguyu birebir doğruluyor, çürütücü bir guard/kilit yok."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/base.service.ts:1233-1252 softDelete gerçekten guard'sız (findUnique→update isActive:false→audit, hiçbir bağımlılık kontrolü yok); controller doğrudan çağırıyor (base.controller.ts:118-125). Karşılaştırma customer.service.ts:338-354 açık sipariş varsa softDelete'i somut liste ile 409 REDDEDİYOR — item.service.ts'de eşdeğer bir override YOK (grep boş döndü). Bu asimetri iddiayı doğrudan destekliyor, çürütücü kanıt bulunamadı.",
+     "corrected_impact": "yok"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "base.controller.ts:118-125 remove() doğrudan service.softDelete()'i çağırıyor, preview/guard yok — doğrulandı. base.service.ts:1231-1252 softDelete hiçbir bağımlılık kontrolü yapmıyor. GÜÇLENDİRİCİ kanıt: customer.service.ts:338-353 tam bu sınıf sorunu ÖNCEDEN çözmüş (M-26: açık siparişi olan müşteri pasifleştirilemez, somut sipariş no listesiyle 409) — yani ekip deseni biliyor ve bir modelde (Customer) uygulamış ama item.service.ts'de (grep ile aranıp softDelete override'ı bulunamadı) aynı guard YOK. Bulgu çürütülemedi, tam tersine somut bir emsal-var-ama-uygulanmamış örneğiyle güçlendi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-011",
+   "baslik": "Ana veri BİRLEŞTİRMESİNİN audit satırı fiziksel tablo adına (items) yazılıyor, diğer her yol mantıksal ada (ITEM); en yıkıcı işlem Denetim Raporu'nda kayboluyor",
+   "siddet": "S2",
+   "kategori": "I.3",
+   "oncelik": "P1",
+   "modul": "audit + ana-veri",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "MasterDataMergeService audit'i tableName:meta.table ile yazar (fiziksel ad: items/colors/subcontractors/customers). Diğer tüm yollar mantıksal ad yazar (ITEM/COLOR/...). Türkçe sözlükte (audit-labels.ts) fiziksel adların karşılığı YOK. test_audit_labels bekçisi yalnız DÜZ LİTERAL tarar, değişken (meta.table) kümeye girmez → bekçinin kör noktası hatanın kendisiyle aynı yerde.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/master-data-merge.service.ts",
+     "satir": "139-168, 719, 740",
+     "not": "META.table='customers'|'items'|'colors'|'subcontractors'; AuditService.log tableName:meta.table"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/base.service.ts",
+     "satir": "1216",
+     "not": "KARŞI-ÖRNEK: tableName:this.config.tableName → 'ITEM'"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/lib/audit-labels.ts",
+     "satir": "28+",
+     "not": "TABLE_LABELS'ta ITEM/COLOR/SUBCONTRACTOR VAR; items/colors/subcontractors/customers YOK"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_audit_labels.ts",
+     "satir": "117-121",
+     "not": "regex /tableName:\\s*\"([A-Za-z_]...)\"/ yalnız literal → meta.table hiç sorulmaz"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_logs WHERE tableName IN (items,colors,subcontractors,customers) + duplicate_reviews decidedById NULL",
+     "satir": "-",
+     "not": "saha: items UPDATE 6, colors 4, subcontractors 3 (13/13 birleştirme bu yolla); duplicate_reviews 13/13 decidedById NULL (entity=ITEM/COLOR UPPER — aynı olay iki tabloda iki anahtar)"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/master-data-merge.service.ts",
+   "satir": "719-740",
+   "failure_mode": "Muhasebe 'BGR 150 kumaşı neden kayboldu, kim sildi?' der. Denetçi modül=Kumaş(ITEM) seçer, tarih verir → hiçbir satır çıkmaz çünkü birleştirme 'items' adıyla yazılmış. id ile aransa bile modül ham 'items' basılır, ayrı grupta durur; kimin yaptığı duplicate_reviews'ta boştur (decidedById NULL).",
+   "is_etkisi": "Ana veri birleştirmesi en yıkıcı ve geri alınamayan işlem (MERGE_MAP 42 kural); izlenebilirlik tam orada kopuyor → ISO 9001/27001 kayıt bütünlüğü açığı.",
+   "veride_ihlal": {
+    "sorgu": "SELECT tableName,action,count(*) FROM system_logs WHERE tableName IN ('items','colors','subcontractors','customers') GROUP BY 1,2",
+    "saha": 13,
+    "dev": 0,
+    "not": "13/13 birleştirme fiziksel adla; 13/13 duplicate_reviews decidedById NULL"
+   },
+   "etkilenen_degismez": "audit tableName tekil adlandırma düzeni",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "META'ya auditTable:'ITEM'|'COLOR'... ekle, :719/:740'ta kullan. Geçmiş 13 satır DÜZELTİLMEZ (toplu UPDATE + tamper trigger); TABLE_LABELS'a eski adları 'Kumaş (birleştirme, eski kayıt)' diye ekle. test_audit_labels'a değişken-tableName kontrolü (grep -c 'tableName: [a-z]' → 0 iddiası, bugün 2 vuruş → kırmızı)."
+    }
+   ],
+   "kabul_kriteri": "Yeni birleştirme system_logs.tableName='ITEM' yazar; test_audit_labels değişken-tableName kontrolü düzeltmeden önce kırmızı, sonra yeşil.",
+   "efor_gun": 0.5,
+   "onceki_defter": "Yok (T1-127/T1-128 aktör/korelasyon; modül adı ayrışması yeni)",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-03"
+   ],
+   "primary": "V-4-03",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/master-data-merge.service.ts:139-168 META.table alanları fiziksel tablo adı ('items','colors','subcontractors','customers'); satır ~719-740 AuditService.log çağrısı tableName:meta.table ile bu fiziksel adı yazıyor. Karşı örnek base.service.ts:1219 tableName:this.config.tableName mantıksal ad ('ITEM' vb) kullanıyor. Electron/src/lib/audit-labels.ts TABLE_LABELS anahtarları büyük-harf mantıksal isimler (ITEM, CUSTOMER...); 'items'/'colors' gibi küçük-harf fiziksel anahtar YOK. scripts/test_audit_labels.ts:113-118 regex'i yalnız literal `tableName:\"X\"` ve sabit TABLE değişkeni arıyor — meta.table gibi runtime değişken atamasını yakalamıyor, bekçinin kör noktası bulguda iddia edildiği gibi doğrulandı."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "master-data-merge.service.ts:719-740 tableName:meta.table ile fiziksel ad ('items'/'colors'/'subcontractors'/'customers') yazıyor; base.service.ts:1216 ise tableName:this.config.tableName ('ITEM' vb.) kullanıyor — ayrışma teyit edildi. Electron/src/lib/audit-labels.ts TABLE_LABELS'ta yalnız büyük-harf mantıksal adlar var, küçük-harf fiziksel adlar YOK. test_audit_labels.ts:113-120 regex'i yalnız düz literal `tableName: \"X\"` arıyor; `tableName: meta.table` (değişken) yakalanmıyor — bekçinin kör noktası iddia edildiği gibi doğrulandı.",
+     "corrected_impact": "yok"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "master-data-merge.service.ts:139-168 META.table = 'customers'/'items'/'colors'/'subcontractors' (fiziksel), :719-740 AuditService.log(tableName: meta.table) — doğrulandı. audit-labels.ts TABLE_LABELS yalnız ITEM/CUSTOMER/COLOR/SUBCONTRACTOR (mantıksal, büyük harf) taşıyor; küçük harf fiziksel adlar YOK, tableLabel() bilinmeyen anahtarda ham string'e düşüyor (satır 134-136). GÜÇLENDİRİCİ: Electron/src/pages/System/Activity/ActivityFilters.tsx:77-88 'Modül' filtresi dropdown seçenekleri backend'den GERÇEK distinct tableName listesiyle geliyor (systemLogService.tables()) — yani 'ITEM' ve 'items' İKİ AYRI seçenek olarak listede duruyor, biri Türkçe etiketli biri ham teknik ad; birleştirme olayları yalnız ikinci (ham, tanınmayan) grupta. Denetçi 'Kumaş' (ITEM) seçtiğinde birleştirme satırları çıkmaz — iddia doğrulandı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-012",
+   "baslik": "İzinler ops-sql ile doğrudan DB'ye yazılmış: tokenVersion++ atlanmış, SoD-kritik shipping:undo-dispatch 6 kullanıcıya bu yolla verilmiş, grantedById boş",
+   "siddet": "S2",
+   "kategori": "E",
+   "oncelik": "P1",
+   "modul": "yetki",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Yetkiler JWT içinde taşınır (req.user=payload, DB'den tazelenmez). PermissionManagementService 'izin değişince tokenVersion++' değişmezini 3 yerde uygular. ops-sql yolu bu servisi ATLAR: grantedById yok, audit userId NULL, oturum düşmemiş. grep 'ops-sql' src → 0 (elle SQL, repoda yok).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/auth.middleware.ts",
+     "satir": "104",
+     "not": "req.user=payload → yetkiler JWT'den, DB'den tazelenmez"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/auth.service.ts",
+     "satir": "261",
+     "not": "getEffectivePermissions yalnız giriş anında"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/permission-management.service.ts",
+     "satir": "218, 334, 394, 1009-1021",
+     "not": "tokenVersion++ değişmezi 3 yerde; yorumu invariant diye adlandırıyor"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_logs tableName='USER_PERMISSION' grantedVia + user_permissions grantedById NULL + sessions penceresi",
+     "satir": "-",
+     "not": "saha: shipping:undo-dispatch 6, roll:history 6, settings:workstation 6, mobile:siparis 6 (grantedVia='ops-sql 2026-08-05'); grantedById NULL=24/353; 08-05 penceresinde 40 canlı oturum, revokedAt yalnız 1 (LOGOUT) → toplu iptal yok; oturum ömrü 30 gün"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/permission-management.service.ts",
+   "satir": "218-394",
+   "failure_mode": "Eda'ya 5 Ağustos'ta shipping:undo-dispatch verilir; panel+DB 'yetki var' der. Eda oturum kapatmadığı için token eski izin listesini taşır: 'Sevki Geri Al' → requirePermission 403 'yetki gerekli'. Sistem kendi kaydına göre sahip olduğu yetkiyi reddeder; yönetici teşhis edemez. İkinci yüz: SoD ihlalinin kimin kararıyla oluştuğu kayıtlı değil (grantedById+audit userId NULL) → ISO 27001 A.5.15/A.5.18.",
+   "is_etkisi": "Sevk stornosu (mali etkili) yetkisi 6 kullanıcıya kayıtsız dağıtılmış; T1-043'ün 'SoD üçlüsü 6 kullanıcıda' tablosunun MEKANİZMASI. 'Verdim ama çalışmıyor' destek talebi üretir.",
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM user_permissions WHERE grantedById IS NULL",
+    "saha": 24,
+    "dev": 0,
+    "not": "24/353, hepsi 08-05 iki ops koşumu; shipping:undo-dispatch 6 kullanıcıda"
+   },
+   "etkilenen_degismez": "izin değişince tokenVersion++ (JWT tazeleme)",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "grantedById NOT NULL KOYMA (tarihsel satır) ama panelde 'kaynağı bilinmeyen yetki' bandı. Ops yolu gerekirse repoda dry-run'lı script servisi çağırsın (ham SQL 42 kural + tokenVersion atlar). Telafi: izin değişikliği sonrası revokeAllForUser."
+    }
+   ],
+   "kabul_kriteri": "user_permissions grantedById NULL panelde sayaç; yeni ops koşumundan sonra ilgili kullanıcıların tokenVersion'ı artmış.",
+   "efor_gun": 1,
+   "onceki_defter": "T1-043 (ayakta S3) mekanizması; T1-051 (30 gün token) pencereyi uzatan çarpan",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-04"
+   ],
+   "primary": "V-4-04",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Kod tarafında çürütücü kanıt yok. auth.middleware.ts:104 (req.user=payload, DB'den tazelenmiyor) + permission-management.service.ts:218,334,394 (tokenVersion++ üç noktada uygulanan bir INVARİANT, DB seviyesinde ZORLANMIYOR — hiçbir trigger user_permissions insert/update'inde users.tokenVersion'ı otomatik artırmıyor; migration dosyalarında user_permissions'a bağlı trigger bulunamadı) confirmed. grantedById schema.prisma:588 nullable (`String?`), NOT NULL/CHECK yok → Ç2 uygulanamaz (DB bu boşluğu engellemiyor). Bu doğası gereği bir ops-SQL bypass'ı olduğu için hiçbir Prisma-katmanı kodu onu göremez (Ç1/Ç3 uygulanmaz — route/guard'a bağlı bir kod yolu değil, doğrudan DB yazımı). Canlı DB'ye bu oturumda erişilemedi, finder'ın grantedById NULL=24 satır ve şubelerdeki (shipping:undo-dispatch vb.) ops-sql grantedVia damgalı satır sayılarını bağımsız doğrulayamadım; ama iddia edilen mekanizma (JWT tazelenmeme + tokenVersion'ın yalnız app-katmanında zorlanması + grantedById'nin serbestçe NULL bırakılabilmesi) koddan doğrulanabiliyor."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "rbac.middleware.ts requirePermission/requireAnyPermission `req.user.permissions` (JWT payload) üzerinden `matchesPermission` çağırır — DB'den taze izin listesi ÇEKMEZ. auth.middleware.ts:104 `req.user = payload` bunu doğrular; middleware yalnız `tokenVersion` eşitliğini ve `Session.revokedAt`'ı kontrol eder (satır 74-96), izin İÇERİĞİNİ değil. permission-management.service.ts'teki HER app-level yazma yolu (grantPermission:217-219, setUserPermissions:332-335, revokePermission:394) tokenVersion++'ı AYNI tx'te uygular — yani invariant gerçekten kodda var ama yalnız bu üç fonksiyon üzerinden geçen yazımlarda. Elle SQL (ops-sql) bu üç fonksiyonu bypass ederse tokenVersion artmaz → verifyToken oturumu GEÇERLİ sayar (401 vermez) AMA payload.permissions bayat kalır → requirePermission yeni izni GÖRMEZ. `grep -rn 'ops-sql' Teks-Erp/src` boş döner, yani bu yol kod tabanında YOK — iddia edilen mekanizma (JWT'nin DB'den bağımsız taşınması + tokenVersion'ın yalnız üç fonksiyonda tetiklenmesi) kodda birebir doğrulandı; DB tarafındaki 24 grantedById=NULL / 6 kullanıcı rakamları bu ortamda psql erişimi olmadığı için (Postgres.app trust-auth hatası) doğrudan doğrulanamadı, ama kod mekanizması iddiayı tam destekliyor."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Mekanizma kod okumasıyla birebir doğrulandı: `auth.middleware.ts:76-81` yalnız `tokenVersion` uyuşmazlığında 401 basar (izin listesini DB'den tazelemez); `req.user = payload` (satır 104) JWT'nin İÇİNDEKİ izin listesidir. `rbac.middleware.ts:59,81` `req.user.permissions` üzerinden kontrol eder — canlı DB'yi sorgulamaz. Normal grant akışı (`permission-management.service.ts:218,334`) HER değişiklikte `tokenVersion++` yaparak eski token'ı geçersiz kılar. ops-sql yolu bu adımı atladığı için (grep 'ops-sql' src → 0) kullanıcının JWT'si oturum kapatılmadan (saha: oturum ömrü 30 gün) DB'deki gerçek durumu yansıtmaz — kullanıcı DB'de sahip olduğu izinle 403 alır. grantedById NULL / audit userId NULL iddiası da servisin normal yolunda bu alanların her zaman doldurulmasıyla (satır 202,207,224) tutarlı — yalnız servisi atlayan bir yazımla açıklanır.",
+     "strengthened": "yok"
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-013",
+   "baslik": "admin:users kendine admin:* yazabiliyor: son-admin koruması yalnız düşüren dalda koşar, yükselten dalda yok",
+   "siddet": "S2",
+   "kategori": "G",
+   "oncelik": "P1",
+   "modul": "yetki",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "PUT /users/:id/permissions + apply-template tek kapı requirePermission('admin:users'). Servis: actorUserId===userId kontrolü YOK; assertAdminCoverageAfterChange yalnız removesAdmin dalında; yükseltme dalında hiçbir ek kontrol/self-target engeli yok.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/routes/admin.routes.ts",
+     "satir": "406-410, 584-588",
+     "not": "put permissions + apply-template tek guard admin:users"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/permission-management.service.ts",
+     "satir": "248-330, 302-307",
+     "not": "removesAdmin=currentHasAdmin && !targetHasAdmin → assertAdminCoverage yalnız bu dalda; yükseltmede kontrol yok"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "admin:users olup admin:* olmayan aktif kullanıcı + USER_PERMISSION_SET self-target",
+     "satir": "-",
+     "not": "saha: admin:* sahipleri admin/Berat/AhmetOnur (3); admin:users olup admin:* olmayan=Enes (1). USER_PERMISSION_SET'te userId=recordId=admin iki kez (08-24, 08-06) → kendine-yazma yolu 2 kez fiilen kullanılmış"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/permission-management.service.ts",
+   "satir": "248-330",
+   "failure_mode": "Enes (admin:users+admin:settings, admin:* yok) PUT /admin/users/<kendi-id>/permissions çağırır, gövdeye admin:* id'sini ekler. 200 döner, audit yazılır (aktör=kendisi), tokenVersion++ ile yeniden girer, artık tam yetkili (yedek/DB kopyası/PIN okuma dahil). Hiçbir ikinci onay/alarm yok.",
+   "is_etkisi": "Yetki modelinin kademeleri (26 rol, kategori ayrımı, SoD üçlüsü) admin:users taşıyan hesaplar için anlamsız; T1-013 (PIN okuma) ve T1-043 (SoD) etki hesabını yukarı çeker.",
+   "veride_ihlal": {
+    "sorgu": "admin:users olup admin:* olmayan aktif kullanıcı; USER_PERMISSION_SET userId=recordId",
+    "saha": 1,
+    "dev": 0,
+    "not": "Enes profili + kendine-yazma yolu prod'da 2 kez kullanılmış (admin, zararsız ama yol canlı)"
+   },
+   "etkilenen_degismez": "yetki yükseltmede self-escalation engeli / SoD",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "setUserPermissions/applyTemplate içinde actorUserId===userId VE izin kümesi aktörünkini genişletiyorsa → 409 SELF_ESCALATION; yükseltme dalına acquireAdminGuardLock + audit escalation:true; admin:* verme yetkisini ayrı izne (admin:grant-admin) ayır (opsiyonel)."
+    }
+   ],
+   "kabul_kriteri": "Bekçi: admin:users aktörü kendi id'sine admin:* yazmayı dener → 409; başkasına → 200 (davranış korunur).",
+   "efor_gun": 0.5,
+   "onceki_defter": "T1-013 (ayakta S2) — saha verisiyle (Enes + 2 self-target audit) kanıtlandı",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-05"
+   ],
+   "primary": "V-4-05",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "admin.routes.ts:406-410 (PUT /users/:id/permissions) ve :584-588 (POST /users/:id/apply-template) tek guard requirePermission('admin:users'); actorUserId===userId veya hedef kullanıcı=aktör kontrolü YOK. permission-management.service.ts setUserPermissions (satır 248-330): removesAdmin=currentHasAdmin && !targetHasAdmin (296-307) yalnız 'admin çıkarma' dalında assertAdminCoverageAfterChange çağırıyor; targetHasAdmin=true olan (yükseltme) dalda hiçbir ek kontrol yok — grep ile actorUserId===userId veya self-target reddi bulunamadı. ADMIN_CODES=['admin:users','admin:*'] (satır 582) sabit liste, ikinci-onay/approval akışı DB'de de yok (permissions tablosunda admin:* için ayrı bir escalation-guard trigger/constraint bulunamadı). Ç2 uygulanamaz — userPermission insert'i DB açısından tamamen meşru bir satırdır, hiçbir unique/CHECK/FK bunu engellemez. Canlı DB'ye erişilemediği için finder'ın 'Enes profili + USER_PERMISSION_SET userId=recordId 2 kez' veri iddiasını bağımsız koşamadım, ama kod yolu (self-target'a admin:* atanabilmesi) tam iddia edildiği gibi açık."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "admin.routes.ts:406-410 (PUT /users/:id/permissions) ve :584-588 (POST /users/:id/apply-template) tek guard `requirePermission('admin:users')` taşır; `req.params.id === req.user.userId` (self-target) hiçbir yerde kontrol edilmiyor. permission-management.service.ts: `grantPermission`(175-237), `setUserPermissions`(248-354), `applyTemplate` içinde actorUserId'nin hedefle karşılaştırıldığı TEK satır yok — grep 'actorUserId' dosyada yalnız audit/tx bağlamında geçiyor. Buna karşılık aynı serviste self-deaktivasyon (satır 681: `assertNotSelfDeactivation`) ve self-silme (satır 742: `if (actorUserId === id) throw ... 'Kendi hesabınızı silemezsiniz'`) için AÇIK guard'lar var — yani yazarlar 'kendine zarar verme' sınıfını biliyor ve başka iki uçta uyguluyor, ama yetki YÜKSELTME ucunda uygulamamış. `assertAdminCoverageAfterChange` yalnız `removesAdmin` (admin:*'ı DÜŞÜREN) dalında çağrılıyor (satır 305-308/378-389); yükselten dalda hiçbir ek kontrol yok. İddia edilen mekanizma kodda birebir doğrulandı."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "`permission-management.service.ts:300-307` yalnız `removesAdmin = currentHasAdmin && !targetHasAdmin` dalında `assertAdminCoverageAfterChange` çağırıyor; yükseltme dalında (kendine admin:* eklemek) HİÇBİR ek kontrol yok. `admin.routes.ts:406-410` ve `:584-588` tek guard `requirePermission('admin:users')` — self-target (`req.params.id === req.user.userId`) engeli hiçbir yerde yok. Saha verisi bu yolun (userId=recordId=admin) fiilen 2 kez kullanıldığını gösteriyor — mekanizmanın canlı ve erişilebilir olduğunu kanıtlıyor.",
+     "strengthened": "yok"
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-014",
+   "baslik": "İş kuralı reddi (4xx/409) hiçbir sayaçta/defterde yok — prod'da 40 günde 175.242 istek, 15 hata satırı, tek bir 409 izi bile yok",
+   "siddet": "S2",
+   "kategori": "I.4",
+   "oncelik": "P2",
+   "modul": "hata/gözlemlenebilirlik",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/middlewares/error.middleware.ts",
+   "satir": "269-276",
+   "failure_mode": "kk1.duplicateGuardEnabled prod'da 2026-08-05 11:01'den beri AÇIK; operatör 90 sn içinde aynı ürün/renk/metraj/en ile ikinci top girince 409 POSSIBLE_DUPLICATE üretiliyor ve onay veriliyor. AppError dalı yanıtı yazıp dönüyor: audit yok, console yok, sayaç yok. Prod verisinde bu tuzağın tetiklendiği 13 çift ölçüldü ama hiçbiri hiçbir yerde görünmüyor; fabrika 'bu tuzak günde kaç kez soruyor, kaçı gerçek kopyaydı' diye sorunca cevap üretilemez, bayrağı kapatma kararı körlemesine verilir. MULTI_BATCH için daha kötü: kodu tanıyan istemci yok, operatör çıkmaza düşüyor ve sunucuda tek satır iz yok.",
+   "is_etkisi": "Ölçülemeyen tuzak yönetilemez; eşiği ayarlamak, bayrağı kapatmak ya da 'tablet APK'sı 409'u tanıyor mu' sorusunu cevaplamak için elde veri yok. Sahada bir istemci bir 409 kodunu tanımadığında merkez bunu ancak telefon geldiğinde öğrenir.",
+   "etkilenen_degismez": "Her iş kuralı reddi gözlemlenebilir olmalı (ölçülemeyen davranış yönetilemez)",
+   "onceki_defter": "BULGU-T1-126",
+   "efor_gun": 1.5,
+   "kabul_kriteri": "kk1.duplicateGuardEnabled açıkken üretilen bir 409, (a) system_logs'ta code=POSSIBLE_DUPLICATE ile bulunabilir ve (b) endpoint_latency_daily.err4xx artar; bekçi guard'ı tetikleyen bir sonda ile 1 audit satırı + 1 sayaç artışı ölçer.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "269-276",
+     "not": "AppError dalı: status+json yazıp return — audit YOK, console YOK, sayaç YOK. Aynı dosyada 5xx dalları (319-330,363,490,535,568,616) AuditService.logEvent çağırıyor — asimetri sessiz."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/latency-persist.service.ts",
+     "satir": "98",
+     "not": "if (status >= 500) d.errCount += 1; — kalıcı tablo 4xx'i saymıyor. latency-stats.service.ts:125 aynı satır (bellek)."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "888",
+     "not": "POSSIBLE_DUPLICATE 409 fırlatma noktası. grep ile 1.557 AppError fırlatma, 401'i AppError.conflict (409); makine-okunur kodların hiçbiri audit/sayaçta izlenmiyor."
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V5-01..10",
+     "satir": "-",
+     "not": "Bayrağın açıldığı andan kesim noktasına guard demeti (entrySource,itemId,colorId,initialQty,width,createdById,createdMachineId + 90sn iki yönlü pencere) → SUPPLIER_RECEIPT 13 çift. Tüm defterde POSSIBLE_DUPLICATE/CLIENT_TOKEN_COLLISION/PLAN_MISMATCH/MULTI_BATCH = 0. endpoint_latency_daily: 175.242 istek, errCount 15 (hepsi tek print-event 500'ü)."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "guard WHERE demeti self-join, 90sn pencere, bayrak açılışı→kesim noktası",
+    "saha": 13,
+    "dev": 0,
+    "not": "SUPPLIER_RECEIPT 13 çift 409 üretti, tümü izsiz; tüm 409 kodları için audit satırı 0"
+   },
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "latency-persist + latency-stats'ta errCount'u err4xx/err5xx olarak ikiye ayır (tek kolon, geriye uyumlu migration)."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "error.middleware AppError dalında err.details?.code DOLU ise AuditService.logEvent({category:DOMAIN, action:RULE_REJECT, code, path}) — best-effort, tx dışı; sadece details.code taşıyanları (~17 nokta) yaz, 404/401 gürültüsü defteri boğmasın."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "/api/admin/health'e rota × kod kırılımlı son-24-saat 4xx sayacı."
+    }
+   ],
+   "finder": "V-5",
+   "merged_from": [
+    "V-5-01"
+   ],
+   "primary": "V-5-01",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-5-veri-numara-zaman-audit-madenciligi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/middlewares/error.middleware.ts:269-276 — AppError dalı yalnız res.status(err.statusCode).json(...) yazıp return eder; console.error/AuditService.logEvent çağrısı yok. Aynı dosyada 5xx dalları (323,363,490,535,568,616) AuditService.logEvent çağırıyor — asimetri koddan doğrulandı. latency-persist.service.ts:98 `if (status >= 500) d.errCount += 1;` — 4xx sayılmıyor, iddia doğru."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "error.middleware.ts:264-270 AppError dalı yalnız res.status().json() yazıp dönüyor — console/audit/sayaç çağrısı yok (5xx dalları AuditService.logEvent çağırırken asimetri doğrulandı). inventory.service.ts POSSIBLE_DUPLICATE throw noktasında (satır ~888) da AuditService.log çağrısı yok. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/middlewares/error.middleware.ts:269-276 doğrulandı: AppError dalı yalnız res.status(...).json(...) yazıp return eder — AuditService çağrısı, console.* veya sayaç YOK. latency-persist.service.ts:98 (`if (status >= 500) d.errCount += 1;`) doğrulandı — 4xx sayılmıyor. inventory.service.ts:888 POSSIBLE_DUPLICATE fırlatma noktası kodu doğru okunmuş. DB tarafında bu tür iş-kuralı reddini engelleyen/kaydeden bir constraint/trigger yok (audit_check_hardening migration'ı yalnız SystemLog'un KENDİSİNİ korur, AppError yanıtlarını değil). Prod satır sayıları (175.242/15/13 çift) bu oturumda DB'ye erişilemediği için yeniden koşulamadı (Postgres.app trust-auth GUI dialog istiyor, headless erişilemiyor) ama mekanizma iddiası kod incelemesiyle tam örtüşüyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-015",
+   "baslik": "Topun metrajı audit defterinden yeniden kurulamıyor: depo kesimi EBEVEYNİN metrajını düşürüyor ama ebeveyne tek satır iz bırakmıyor",
+   "siddet": "S2",
+   "kategori": "I.3",
+   "oncelik": "P2",
+   "modul": "envanter/izlenebilirlik",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/services/tambur.service.ts",
+   "satir": "2302-2319",
+   "failure_mode": "2026-08-19 14:55'te açık kumaştan 36,7 m T190826F0119 kesildi, etiketi 3 kez basıldı; 15:18'de o topun içinden depo kesimiyle 36,7 m alındı → ebeveyn initialQty=0, currentQty=0 oldu ve Bitmiş Depo'da barkodlu, etiketi basılmış, 0 metrelik hayalet top olarak kaldı. Aynısı T190826F0120 (40 m) için tekrarlandı. Yazılan tek audit satırının recordId'si ÇOCUĞUN id'si; ebeveyn için ne audit, ne RollMovement, ne RollOperation, ne RollVariance doğar. Topun kendi Yaşam Döngüsü ekranı doğuş metrajını, satır başka sayı gösterir; farkı açıklayan kayıt yoktur.",
+   "is_etkisi": "① Bitmiş Depo'da satılamayan/görülemeyen hayalet toplar (bugün 2 adet, sevkiyata alınırsa müşteri irsaliyesine 0 m satır). ② İş emrinin üretilen metrajı geriye dönük düşüyor, kapanmış dönemin Karnesi sonradan farklı rakam basar. ③ Uyuşmazlıkta defter cevap veremiyor; ISO 9001/27001 izlenebilirlik iddiası boş.",
+   "etkilenen_degismez": "Bir topun metrajındaki her değişiklik defterden geriye kurulabilmeli",
+   "onceki_defter": "BULGU-T1-012",
+   "efor_gun": 1,
+   "kabul_kriteri": "Depo kesiminden sonra ebeveyn topun GET /api/rolls/:id/history çıktısında metrajın nereye gittiğini söyleyen bir olay bulunur; CREATE audit metrajı ↔ initialQty ayrışan ve hiçbir hareket/sapma satırı olmayan top mutabakat sorgusu 0 döner.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "2302-2319",
+     "not": "Kesimin TEK audit satırı recordId: result.child.id (ÇOCUK) — kind TAMBUR_CUT_FROM_WAREHOUSE; ebeveyn için satır YOK."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "2504-2590",
+     "not": "getRollHistory yalnız rollMovement/rollOperation/subcontractorDispatchItem/subcontractorReceiptItem okur; ilgili topların dördü de boş."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "3865-3869",
+     "not": "Düzelt yolu aynı deseni ikinci kez kuruyor: rollData.currentQty=m; rollData.initialQty=m;"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V5-11-metraj-defteri.sql",
+     "satir": "-",
+     "not": "CREATE audit metrajı ile rolls.initialQty AYRIŞIK 10 top; 3'ü hiç ROLL/UPDATE audit'i yok; initialQty=0 ile duran 8 top (2'si bugün WAREHOUSE). Somut: T190826F0119 (defter 36,7→satır 0, WAREHOUSE, etiketli), T190826F0120 (40→0), T150826F0006 (325→275, canlı)."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "CREATE audit metrajı ↔ rolls.initialQty diff + hareket/sapma satırı yokluğu",
+    "saha": 10,
+    "dev": 0,
+    "not": "10 top defter↔satır ayrışık, 3'ü hiç açıklanmıyor, 8'i initialQty=0 (2 canlı WAREHOUSE hayalet top)"
+   },
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "cutWarehouseRoll tx'inin İÇİNDE ebeveyn için bir RollMovement ya da RollVariance satırı yaz (source: TAMBUR_WAREHOUSE_CUT); tx'e bağlı olsun ki geri sarımda o da geri sarılsın. AuditService.log best-effort olduğu için tek başına yetmez."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "initialQty'ye dokunmayı ayrı karar olarak ele al (BULGU-T1-012): üretim anı snapshot'ı korunacaksa depo kesimi yalnız currentQty düşürmeli; kalan 0 m ebeveyni TAMBUR_CONSUMED'a çek."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "scripts/test_consistency.ts'e 'CREATE audit metrajı ↔ initialQty ayrışan ve hiçbir hareket/sapma satırı olmayan top = 0' bölümü."
+    }
+   ],
+   "finder": "V-5",
+   "merged_from": [
+    "V-5-02"
+   ],
+   "primary": "V-5-02",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-5-veri-numara-zaman-audit-madenciligi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/tambur.service.ts:2224-2251 depo kesiminde ebeveynin currentQty/initialQty'si atomik decrement ile düşürülüyor ama satır 2302-2319'daki TEK AuditService.log çağrısı recordId: result.child.id ile yalnız ÇOCUK için yazılıyor; ebeveyn (parent) için ayrı bir audit satırı, RollMovement veya RollOperation üretilmiyor (yalnız exceedsRemaining dalında RollVariance/OVERAGE yazılıyor, normal-kesim yolunda o da yok). Bu, bulgunun iddia ettiği 'ebeveyne tek satır iz bırakmıyor' durumunu birebir doğruluyor."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "tambur.service.ts:2302-2319 (cutWarehouseRoll) audit satırı yalnız recordId: result.child.id ile CREATE yazıyor, ebeveyn için audit YOK; ebeveynin currentQty/initialQty aynı fonksiyonda decrement/sıfırlanıyor (satır 2233-2248) ama iz düşmüyor. Ayrı bir finalizeWarehouseCut fonksiyonu (satır 2343-2657) parent audit'i (recordId: parent.id, 'WAREHOUSE_CUT_FINALIZED') YAZIYOR ama bu yalnız finalize ADIMI açıkça çağrılırsa tetiklenir — parent tam tüketildiğinde (aşım/tam-kesim) bu ikinci adımın zorunlu/otomatik çağrıldığına dair kanıt bulunamadı, iddiayı çürütmedi.",
+     "corrected_impact": "yok"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "tambur.service.ts:2298-2312 depo kesiminde TEK AuditService.log çağrısı var, recordId: result.child.id — ebeveyn (parent.id) için ne bu satırda ne öncesinde (2140-2245 taranan bloklarda) audit/RollMovement/RollOperation yazımı yok; yalnız newData JSON'ı içinde parentRollId/parentRemainingQty metin olarak duruyor (recordId ile aranamaz). Bu, getRollHistory'nin (recordId=roll.id bazlı) ebeveynin geçmişinde bu olayı hiç görememesi iddiasını doğrudan doğruluyor. Etkiyi hafifletecek bir üçüncü iz (ör. ayrı RollMovement satırı) bulunamadı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-016",
+   "baslik": "Depo kesimi (cutWarehouseRoll) initialQty'yi de düşürünce kesim aritmetiği geriye dönük denetlenemez hale geliyor ve mutabakat sorgusu sahte aşım alarmı üretiyor",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "Üretim/Tambur · Envanter",
+   "kanit_seviyesi": "K2",
+   "etkilenen_degismez": "INV-STK-03: initialQty = topun doğuş metrajı, kapanışta değişmez (schema.prisma:1628-1629 yorumu); Σ çocuk initialQty ≤ parent initialQty",
+   "koruma_kontrolu": "currentQty ≤ initialQty için DB CHECK yok (rolls üzerindeki 26 CHECK arasında bu ifade yok); initialQty'ye yazan yolda audit changes gövdesi boş; consistency-check.sql §13 yalnız currentQty > initialQty yönünü kapsıyor, aşağı yönlü yeniden yazımı hiçbir kapı görmüyor",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "2218-2247",
+     "not": "cutWarehouseRoll parent'ı kısaltırken iki kolonu birden düşürür: aşım dalı :2240 data:{currentQty:0, initialQty:0}; normal dal :2245-2246 initialQty:{decrement:cutLength}"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "2929-2937",
+     "not": "üretim ikizi cutOpenFabric YALNIZ currentQty'yi düşürür → iki kesim yolu aynı kolon için iki farklı sözleşme"
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "1628-1629",
+     "not": "şema yorumu bugünkü davranışın tersini söylüyor: 'initialQty kapanışta değişmiyor ama currentQty sıfırlanıyor'"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "3298-3300",
+     "not": "kodun kendisi çelişkiyi biliyor: 'initialQty artık güvenilir değil (cutWarehouseRoll parent initialQty'yi resetler)'"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/tambur.service.ts",
+   "satir": "2218-2247",
+   "failure_mode": "Depoda 100 m'lik T…F0119 topu. Operatör 40 m kesiyor → parent 60/60 (giriş metrajı da 100→60), çocuk 40 m. Kalan 60 m de kesiliyor → parent 0/0, ikinci çocuk 60 m. Artık DB'de '0 m'lik bir toptan 100 m çocuk doğmuş' soyağacı var; §13 sınıfı mutabakat sorgusu bunu 'aşım var ama sapma defterinde satır yok' diye raporluyor (sahada T080826F0017, T080826F0020) — aşım hiç yaşanmadı",
+   "veride_ihlal": {
+    "sorgu": "SELECT p.barcode,p.status,p.\"initialQty\",sum(c.\"initialQty\") FROM rolls p JOIN rolls c ON c.\"parentRollId\"=p.id WHERE p.\"initialQty\"=0 GROUP BY 1,2,3",
+    "saha": 8,
+    "dev": 2,
+    "not": "initialQty=0 + çocuklu parent saha 8 (T080826F0017/0019/0020, T160726F0001/0003, T030826F0003, T190826F0119/0120) / dev 2; aritmetiği tutmayan TAMBUR_CONSUMED parent 8/116; yeniden yazımdan doğan izsiz metraj 185,7 m; sahte 'defterlenmemiş aşım' alarmı 2 (T080826F0017 20m, T080826F0020 39m)"
+   },
+   "is_etkisi": "(1) 'Bu top nereden geldi / bu iş emri kaç metre üretti' sorusu depo kesiminden geçmiş her soyağacında cevapsız; iş emrinin ÇIKAN metrajı geriye dönük düşüyor. (2) Mutabakat kapısı iki sahte kırmızı taşıyor → kapıya güven aşınır, gerçek aşım kaybolur. (3) Aşım/fire raporlaması bu soyağaçlarında ölçülemez",
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "cutWarehouseRoll yalnız currentQty'yi düşürsün (cutOpenFabric ile aynı sözleşme); 'operatöre 70/100 gösterme' ihtiyacı sunum katmanında çözülür (liste zaten tek sayı basıyor)"
+    },
+    {
+     "vade": "geçiş",
+     "aciklama": "mevcut 8 satır düzeltilmez (kök nedeni gizlememek için §13'ün 2 satırıyla aynı gerekçe); mutabakata 'parent initialQty=0 ∧ çocuk metrajı>0' bilgi bölümü eklenir; şema yorumu davranışla hizalanır. İleride CHECK(currentQty<=initialQty) yazılacaksa ÖNCE bu yol düzeltilmelidir"
+    }
+   ],
+   "kabul_kriteri": "cutWarehouseRoll sonrası initialQty değişmez (100 m topa 40 m kesim → initialQty=100 ∧ currentQty=60); Σ çocuk initialQty ≤ parent initialQty depo kesimi zincirinde de sağlanır; negatif sonda: eski davranış geri konunca bekçi kırmızı",
+   "efor_gun": 1.5,
+   "onceki_defter": "Tur 1 BULGU-T1-012 (aynı kök neden, farklı ayak); FINDINGS.jsonl'de eşleşen id yok; K10 H-3 sorusu bu bulguyla cevaplandı (tambur.service.ts:2240/2246)",
+   "finder": "V-1",
+   "merged_from": [
+    "V-1-01"
+   ],
+   "primary": "V-1-01",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "tambur.service.ts:2218-2247 (cutWarehouseRoll, warehouse-cut path) confirmed to decrement/reset BOTH currentQty and initialQty on parent. tambur.service.ts:2929-2937 (cutOpenFabric, production-cut path) confirmed to touch only currentQty, leaving initialQty untouched — explicit asymmetry between the two cut paths for the same columns. tambur.service.ts:3298-3300 comment explicitly acknowledges 'initialQty artık güvenilir değil (cutWarehouseRoll parent initialQty'yi resetler)'. consistency-check.sql:192-198 (§13) confirmed to check only 'currentQty > initialQty' — the downward-rewrite direction described by the finding is structurally invisible to this guard, exactly as claimed."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-017",
+   "baslik": "Damgasız 4 final top (359 m) hiçbir dönemin Kalite/Fire Karnesi'nde yok — backfill_roll_production_timestamps sahada hiç koşmamış",
+   "siddet": "S3",
+   "kategori": "J",
+   "oncelik": "P4",
+   "modul": "Rapor tabanı",
+   "kanit_seviyesi": "K2",
+   "etkilenen_degismez": "Σ dönem üretimi = Σ final topların metrajı; hiçbir final top raporsuz kalmamalı",
+   "koruma_kontrolu": "damgasız topu gösteren tek yüzey Kalite Karnesi'nin 'çıpasız top' bandı; Fire Karnesi ikizinde o band YOK (grep: scrap-scorecard.report.service.ts içinde finalizedAt IS NULL sorgusu yok) → fire edilen 300 m hiçbir yerde sayılmıyor",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reports/quality-scorecard.report.service.ts",
+     "satir": "192-194",
+     "not": "WHERE r.finalizedAt>=… AND r.finalizedAt<=… AND status NOT IN(K18_DEAD) → finalizedAt NULL top hiçbir dönemde"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reports/scrap-scorecard.report.service.ts",
+     "satir": "316-318",
+     "not": "Fire Karnesi ikizi aynı süzgeç; çıpasız-top bandı yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/backfill_roll_production_timestamps.ts",
+     "satir": "-",
+     "not": "backfill scripti mevcut (Tur 1 BULGU-T1-136 parçalılık ayağı) ama sahada hiç koşmamış"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/reports/scrap-scorecard.report.service.ts",
+   "satir": "316-318",
+   "failure_mode": "2026-08-08'de 300 m'lik bc74b77d… topu fire ediliyor (SCRAP). Trigger ertesi gün geliyor, backfill koşmuyor → finalizedAt NULL. Fabrika 'Ağustos'ta ne kadar fire verdik' diye sorunca rapor 300 m'yi HİÇ göstermiyor; toplam fire oranı olduğundan düşük çıkıyor, hata hiçbir ekranda iz bırakmıyor",
+   "veride_ihlal": {
+    "sorgu": "SELECT id,barcode,status,\"currentQty\",\"createdAt\" FROM rolls WHERE status IN('WAREHOUSE','A1_STOCK','SCRAP') AND \"finalizedAt\" IS NULL",
+    "saha": 4,
+    "dev": 4,
+    "not": "bc74b77d…(barkodsuz) SCRAP 300,0 m 08.08; T080826F0018 WAREHOUSE 20,0 m; T080826F0021 WAREHOUSE 33,0 m; T080826F0022 WAREHOUSE 6,0 m. Toplam 4/359 m. statusChangedAt IS NULL olan 39 top da aynı dönemden (bilgi)"
+   },
+   "is_etkisi": "Fire raporu 300 m eksik, Kalite Karnesi 59 m eksik. Küçük rakamlar ama sessiz ve kalıcı: bu satırlar hiçbir dönemde toplanmadığı için toplam üretim ile karne toplamı kalıcı ayrışıyor",
+   "oneriler": [
+    {
+     "vade": "ops",
+     "aciklama": "backfill_roll_production_timestamps.ts sahada dry-run + --apply [PROD'DA ÇALIŞTIRMA — dry-run çıktısı 4 satırı birebir listelemeli]; geri alma: 4 id için damga tekrar NULL (ham SQL, updatedAt'e dokunmadan)"
+    },
+    {
+     "vade": "2. tur",
+     "aciklama": "Fire Karnesi'ne Kalite Karnesi'ndeki gibi 'çıpasız top' bandı; kalıcı çözüm rakamı kurtarmak değil kaybı görünür kılmak; /api/admin/health sayacına 'damgasız final top' eklenebilir"
+    }
+   ],
+   "kabul_kriteri": "SELECT count(*) FROM rolls WHERE status IN('WAREHOUSE','A1_STOCK','SCRAP') AND finalizedAt IS NULL = 0; Fire Karnesi çıpasız topu bir bantla gösterir",
+   "efor_gun": 0.5,
+   "onceki_defter": "Tur 1 BULGU-T1-032 trigger kaynak listesini (fire ucu kapsanmıyor) yazmıştı; bu bulgu çürütücünün işaret ettiği ayrı ayak: backfill hiç koşmadı, 4 top hiçbir dönemde yok",
+   "finder": "V-1",
+   "merged_from": [
+    "V-1-06"
+   ],
+   "primary": "V-1-06",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "scrap-scorecard.report.service.ts:178-179,204-205 doğrulandı: collectScrap de aynı finalizedAt aralık filtresini kullanıyor — finalizedAt NULL olan SCRAP/WAREHOUSE toplar hiçbir dönem sorgusuna girmiyor. backfill_roll_production_timestamps.ts script'i var ama sahada koşmadığı iddiası kod-erişilebilirlik açısından doğrulanamaz (saha DB bağlantısı bu ortamda kurulamadı) fakat mekanizma iddiası (rapor filtresi finalizedAt'a bağımlı, çıpasız top hiçbir dönemde görünmez) doğrudur. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-018",
+   "baslik": "Kapanmış dönem geriye dönük değişiyor: Temmuz'da finalize edilen 4 top (698 m) Ağustos'ta iptal edilince Temmuz karnesi sessizce düştü",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "Rapor tabanı ↔ Roll statü/metraj",
+   "kanit_seviyesi": "K2",
+   "etkilenen_degismez": "Dönem kararlılığı: kapanmış bir ayın üretim/fire rakamı geriye dönük değişmemeli, değişiyorsa loglanmalı",
+   "koruma_kontrolu": "dönem dondurma/kilit yok (grep periodClose/donem_kilit → 0); rapor snapshot'ı yok (donmuş belge yalnız sevk/irsaliye tarafında); değişimi loglayan iz yok (audit changes gövdesi bu yollarda boş)",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reports/quality-scorecard.report.service.ts",
+     "satir": "177,192-194",
+     "not": "SUM(r.currentQty) AS qty + WHERE finalizedAt BETWEEN … AND status NOT IN(K18_DEAD_STATUSES): dönem finalizedAt ile seçilir, satır bugünkü statü+metrajla toplanır"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/batch.service.ts",
+     "satir": "55-60",
+     "not": "K18_DEAD_STATUSES = CANCELLED/TAMBUR_CONSUMED/SUBCONTRACTOR_CONSUMED/KARTELA_CONSUMED; sonradan bu statülere geçen top geçmiş dönemden DÜŞER"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "3865-3869",
+     "not": "'Düzelt' ekranı currentQty VE initialQty'yi mutlak yazar → kapanmış ayın metrajı da değişir (Tur 1 BULGU-T1-001 rapor ayağı)"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/reports/quality-scorecard.report.service.ts",
+   "satir": "177-194",
+   "failure_mode": "20 Temmuz'da 1.150 m'lik top Tambur'da kesiliyor, 5 çocuk doğuyor, Temmuz karnesi bu üretimi yazıyor. 24 Ağustos'ta kesim geri alınıp 4 çocuk iptal ediliyor. Bugün Temmuz karnesi aynı aralıkla açıldığında 698 m daha az basıyor; ay sonu çıktısı ile bugünkü çıktı çelişiyor, farkın nereden geldiğini söyleyen tek kayıt bile yok (iptal edilen 92 kesim çocuğunun hiçbirinde cancelledAt/cancelReason yok)",
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*),sum(\"initialQty\") FROM rolls WHERE \"finalizedAt\" IS NOT NULL AND \"statusChangedAt\" IS NOT NULL AND date_trunc('month',\"statusChangedAt\" AT TIME ZONE 'Europe/Istanbul')>date_trunc('month',\"finalizedAt\" AT TIME ZONE 'Europe/Istanbul') AND status IN('SUBCONTRACTOR_CONSUMED','TAMBUR_CONSUMED','KARTELA_CONSUMED','CANCELLED')",
+    "saha": 4,
+    "dev": 0,
+    "not": "Finalize ayından SONRAKİ ayda ölü kümeye geçen 4 top/698,0 m (T200726F0002/0003/0005/0006, Temmuz→Ağustos); aynı ay içinde ölü kümeye geçen 87 top/6.084,2 m (Ağustos); bu topların iptal izi 0/4 cancelledAt"
+   },
+   "is_etkisi": "Karne rakamları geçmişe dönük oynak; 'Temmuz'da ne ürettik' sorusunun cevabı ne zaman sorulduğuna bağlı. Fabrika primi/kapasiteyi bu rakamlarla konuşuyorsa fark tartışma yaratır ve kaynağı gösterilemez",
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Karne sorgusuna 'dönemde finalize edildi ama artık ölü kümede' ayrı bant (rakamı sessizce düşürmek yerine 'Temmuz: 55.275 m üretildi, sonradan 698 m geri alındı')"
+    },
+    {
+     "vade": "uzun vade",
+     "aciklama": "dönem raporu için finalizedAt anındaki metrajın snapshot'ı (RollProductionSnapshot) ya da mevcut roll_variances defterinin dönem bazlı okunması; geri alma/iptal yollarının iz kolonlarını doldurması (Tur 1 BULGU-T1-033)"
+    }
+   ],
+   "kabul_kriteri": "Kapanmış ayın karnesi, o ay finalize edilip sonradan geri alınan metrajı ayrı satırda gösterir; bekçi: finalize→iptal senaryosunda dönem toplamı + geri alınan bandı toplamı sabit kalır",
+   "efor_gun": 1.5,
+   "onceki_defter": "Tur 1 BULGU-T1-072 çürütücüsünün önerdiği sınıf (orada SUBCONTRACTOR_CONSUMED yolu); burada iptal yolu canlı veriyle ölçüldü. BULGU-T1-001 ve BULGU-T1-032 komşu ama ayrı kök nedenler",
+   "finder": "V-1",
+   "merged_from": [
+    "V-1-07"
+   ],
+   "primary": "V-1-07",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "quality-scorecard.report.service.ts:192-194 doğrulandı: WHERE r.finalizedAt BETWEEN ... AND status NOT IN(K18_DEAD_STATUSES) — dönem finalizedAt ile seçiliyor ama satır BUGÜNKÜ statüyle filtreleniyor, yani sonradan CANCELLED/TAMBUR_CONSUMED vb. olan top geçmiş dönemden düşüyor. Dönem kilidi/snapshot mekanizması bulunamadı. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-019",
+   "baslik": "İade irsaliyesi numarası standart dışı ve SIRASIZ (IADE-GGAAYY-<uuid[0:6]>) — boşluk/mükerrer denetimi imkânsız",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "iade/belge",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Diğer 6 belge ailesi utils/code-format.ts nextDailySeq'e (boşluksuz PREFIX+GGAAYY+NNNN) bağlı; iade oraya bağlanmamış.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/return.service.ts",
+     "satir": "1084-1086",
+     "not": "documentNo = `IADE-${gg}${aa}${yy}-${rr.id.slice(0,6).toUpperCase()}` — UUID'nin ilk 6 hanesinden türetiliyor; yorum (:1030) kararı yazıyor"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "printed_documents WHERE docType='RETURN_DISPATCH'",
+     "satir": "-",
+     "not": "saha 4 satırın tamamı: IADE-030826-E27AAA / -67CAAA / -24709B / -29C873 → sıralı sayaç yok, Q-DOC-02 boşluk denetimi kurulamaz"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/return.service.ts",
+   "satir": "1084-1086",
+   "failure_mode": "Fabrika çeyreklik iade dosyası ister. SVK/FS/FK için 'gün başına max(sıra)=adet' boşluksuzluğu kanıtlar (saha 0 boşluk); IADE-… için böyle bir sorgu kurulamaz. Bir iade satırı iptal edilip belgesi VOIDED yapıldığında eksikliği gösterecek iz kalmaz.",
+   "is_etkisi": "İade belgesi müşteri kabul belgesidir; sıra bütünlüğü kanıtlanamayan seri ISO 9001 kontrollü belge / mali müşavir karşısında zayıf. Numara ayrıca süreç saat dilimine bağlı (T1-098).",
+   "veride_ihlal": {
+    "sorgu": "docType='RETURN_DISPATCH'",
+    "saha": 4,
+    "not": "4 iade belgesinin 4'ü de UUID-türetilmiş, sırasız"
+   },
+   "onceki_defter": "BULGU-T1-098",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "Yeni iade belgeleri ^IADE[0-9]{10}$ biçiminde; Q-DOC-02'ye IADE satırı eklendi, 0 boşluk.",
+   "etkilenen_degismez": "INV-DOC-01/02 — belge no PREFIX+GGAAYY+NNNN backend-authoritative, sıralı",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "nextDailySeq ailesine taşı (IADE/IAD ön eki); geçmiş 4 satır tarihsel kalır (donmuş belge), yeni seri bugünden başlar"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-05"
+   ],
+   "primary": "V-2-05",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/return.service.ts:1084-1086 doğrulandı: documentNo = `IADE-${gg}${aa}${yy}-${rr.id.slice(0,6).toUpperCase()}` — nextDailySeq'e (utils/code-format.ts:96) bağlı değil, sıralı sayaç yok. Diğer 6 belge ailesinin kullandığı boşluksuz sayaç mekanizması burada yok. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-020",
+   "baslik": "Refakat kartı sürüm defteri eksik: sürümü 2 olan 17 kartın 15'inde defter satırı yok",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "belge/iş emri",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Defter özelliği (commit 42c5112d) sonradan eklendi, geriye dönük backfill yok; eksikliği ölçen bekçi/mutabakat yok. K10 Q-WO-13 yalnız ters yönü ('kart sürümü < defter max') ölçüyor, 'defter < kart sürümü' yönü hiç sorulmamış.",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "traveler_cards vs printed_documents(TRAVELER_CARD)",
+     "satir": "-",
+     "not": "saha: version>defter_satır_sayısı ve version>1 → 15 satır (13'ünde hiç defter yok, 2'sinde yalnız v2 var v1 eksik: 5f0cf53b, 6929bc18). TRAVELER_CARD defterinin en eskisi 2026-08-18 08:45, oysa kartlar 2026-07'den beri basılıyor; 213 kartın 153'ünde hiç defter satırı yok"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/traveler-card.service.ts",
+   "satir": "350-378",
+   "failure_mode": "Sahadaki kâğıt 'Rev.1' der; sistemde yalnız Rev.2 kayıtlıdır. Kalite kaydı incelemesinde 'operatöre verilen ilk plan neydi' cevapsız; kart snapshot'ta güncel planı taşıdığı için eski plan hiçbir yerde durmaz.",
+   "is_etkisi": "Kontrollü belge izlenebilirliği (ISO 9001 §7.5.3) 15 iş emrinde eksik. Yeni kartlarda doğru çalışıyor — risk büyümüyor, geçmiş kapanmıyor.",
+   "veride_ihlal": {
+    "sorgu": "version>(defter satır sayısı) AND version>1",
+    "saha": 15,
+    "not": "15 kart; ayrıca sürüm boşluğu (min version=2) 2 kart"
+   },
+   "onceki_defter": "",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "Mutabakat simetrik hâle geldi ve bugünkü 15 satırı gösteriyor; backfill-yok kararı yazılı.",
+   "etkilenen_degismez": "INV-DOC-04 — her baskı PrintedDocument satırı, içerik değişince version++",
+   "oneriler": [
+    {
+     "vade": "orta",
+     "aciklama": "Q-WO-13'ün simetriği mutabakata; eksik v1'ler UYDURULMAZ (snapshot yok) — reconstructed=true ile kurmak DEĞİL, karar (backfill yok) CLAUDE.md'ye yazılır"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-06"
+   ],
+   "primary": "V-2-06",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "traveler-card.service.ts reprint() (satır 248-320) version:existing.version+1 yazıyor ama archivePrintedVersionTx (defter) ÇAĞIRMIYOR — yalnız recordPrintEvent (satır 350-378) tx içinde hem card update hem archivePrintedVersionTx yapıyor. Defter özelliği sonradan eklendiği ve reprint/eski sürümler için backfill olmadığı için sürüm>defter satırı boşluğu koda birebir uyuyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-021",
+   "baslik": "Donmuş belge defteri kaynağına FK ile bağlı değil, yetim temizliği yok: dev'de %99,5 yetim, documentNo 378 farklı kaynakta tekrar ediyor; Kalite Sertifikası ile Sevk İrsaliyesi de AYNI numarayı taşıyor",
+   "siddet": "S3",
+   "kategori": "C",
+   "oncelik": "P3",
+   "modul": "belge",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "printed_documents tek FK'sı printedById; sourceId polimorfik, FK'sız. Yetim süpüren job yok (ls src/jobs). Kaynak silen yollar mevcut: reset-operational.ts, clean_test_residue.ts, master-data /permanent uçları, db-copy.service geri yükleme.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "3680-3690",
+     "not": "buildQualityCertificateDoc documentNo=c.header.shipmentNo döner — irsaliyenin numarasını aynen kopyalar"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "printed_documents GROUP BY documentNo HAVING count>1",
+     "satir": "-",
+     "not": "saha: 14 gruptan 13'ü aynı kaynağın sürümleri (beklenen); 1 istisna SVK1708260001 → 2 satır / 1 kaynak / QUALITY_CERTIFICATE + SHIPMENT_DISPATCH, ikisi de v1/ACTIVE"
+    },
+    {
+     "tur": "sema",
+     "yol": "prisma printed_documents (\\d)",
+     "satir": "-",
+     "not": "tek FK printed_documents_printedById_fkey; sourceId üzerinde FK yok, documentNo kısıtsız"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "printed_documents yetim taraması (docType başına NOT EXISTS)",
+     "satir": "-",
+     "not": "dev: 12.690 belgenin 12.626'sı yetim (SHIPMENT_DISPATCH 2813, SUBCONTRACTOR_DISPATCH 7307, RETURN_DISPATCH 1396…); FS1908260001 → 378 farklı sourceId; saha: 0 yetim (risk henüz gerçekleşmemiş)"
+    }
+   ],
+   "dosya": "Teks-Erp/prisma/schema.prisma (printed_documents modeli)",
+   "satir": "model tanımı (+shipping.service.ts:3680-3690)",
+   "failure_mode": "Bir fason sevki (subcontractor_dispatches) herhangi bir yoldan fiziksel silinirse ait olduğu FS… irsaliyesi tabloda kalır; getCurrent sourceId'yi çözemez, buildDocContent null döner → belge listesinde görünen satır açılmaz. Aynı gün açılan bir sonraki fason sevki nextDailySeq ile AYNI FS… numarasını alır → iki farklı sevkiyata ait iki belge aynı numarayı taşır.",
+   "is_etkisi": "Bugün prod'da sıfır; ancak 'belge defteri append-only ve kaynağından bağımsız' varsayımı hiçbir sedle desteklenmiyor. Dev'de 12.626 ölü satır ayrıca performans/yedek yükü.",
+   "veride_ihlal": {
+    "sorgu": "docType başına NOT EXISTS yetim + documentNo tekrar",
+    "saha": 0,
+    "dev": 12626,
+    "not": "prod'da 0, dev'de %99,5 yetim + numara tekrarı 378"
+   },
+   "onceki_defter": "",
+   "efor_gun": 1,
+   "kabul_kriteri": "Yetim sayacı mutabakatta ve prod'da 0; dev temizlendikten sonra da 0.",
+   "etkilenen_degismez": "C — referans bütünlüğü (polimorfik sourceId)",
+   "oneriler": [
+    {
+     "vade": "orta",
+     "aciklama": "docType başına kısmi FK kurulamaz → mutabakat bölümü (yetim sayısı) + /api/admin/health sayacı; kaynak silen scriptler belgeyi de VOIDED işaretlesin; dev temizliği ayrı iş (dry-run+--apply)"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-04",
+    "V-2-07"
+   ],
+   "primary": "V-2-07",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "schema.prisma:4011-4040 model PrintedDocument yorumu birebir: 'Polimorfik kaynak... FK YOK (3 tabloya birden bağlanamaz); bütünlük servis katmanında.' sourceId üzerinde FK yok, documentNo'da unique kısıt yok — yetim satır ve numara tekrarı yapısal olarak mümkün, iddia doğrulandı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-022",
+   "baslik": "Fason kabul makbuzlarının 'donmuş' belgesi aslında SONRADAN yeniden kurulmuş: 7 belgenin 6'sı reconstructed, gecikme 5 güne kadar",
+   "siddet": "S3",
+   "kategori": "—",
+   "oncelik": "P3",
+   "modul": "belge/fason",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Fason SEVK'te freezeForSource tx içinde var (subcontractor.service.ts:1283) ama fason KABUL tx'inde yok → lazy-init (GET yolu) o günkü canlı veriden kuruyor.",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "printed_documents docType='SUBCONTRACTOR_RECEIPT'",
+     "satir": "-",
+     "not": "saha 7 belgenin 6'sı reconstructed=true; en uzun gecikme FK1208260013: makbuz 12.08 17:28 ↔ belge 17.08 17:20 (~5 gün); FK1308260005 ~1,8 gün. Karşılaştırma: SHIPMENT_DISPATCH 40/40, SUBCONTRACTOR_DISPATCH 214/214, TRAVELER_CARD 62/62, RETURN_DISPATCH 4/4 hepsi reconstructed=false"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/subcontractor.service.ts",
+   "satir": "kabul tx (freeze eksik)",
+   "failure_mode": "Fason kabul makbuzu 12.08'de kesilir (operatör kâğıdı alır). Belge kaydı 17.08'de o gün geçerli top verisinden kurulur. Aradaki 5 günde topun metrajı/kalitesi/rengi değişmişse sistemdeki 'resmî makbuz' sahadaki kâğıtla uyuşmaz ve uyuşmazlık reconstructed bayrağı dışında görünmez.",
+   "is_etkisi": "Fasoncuyla metraj/fire mutabakatında belge delil değeri düşük. 7 belgeden 6'sı.",
+   "veride_ihlal": {
+    "sorgu": "docType='SUBCONTRACTOR_RECEIPT' reconstructed",
+    "saha": 6,
+    "not": "6/7 reconstructed=true, gecikme 5 güne kadar"
+   },
+   "onceki_defter": "BULGU-T1-154",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "Yeni fason kabulünden sonra reconstructed=false belge doğuyor; bekçi (test_printed_documents.ts) ölçüyor.",
+   "etkilenen_degismez": "INV-DOC-03 — belge olay tx'inde donar",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "subcontractor.service kabul tx'inde freezeForSource(tx, SUBCONTRACTOR_RECEIPT, receipt.id, userId) çağrısı; lazy-init geriye dönük kayıtlar için kalsın ama belge yüzeyinde 'sonradan oluşturuldu' rozeti bassın"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-08"
+   ],
+   "primary": "V-2-08",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "subcontractor.service.ts içinde freezeForSource çağrıları yalnız satır 1283 (SUBCONTRACTOR_DISPATCH, sevk) ve 6305 (SUBCONTRACTOR_DIRECT_SHIP) civarında; receive() fonksiyonunda (SUBCONTRACTOR_RECEIPT, ~satır 2282-2450) hiç freezeForSource çağrısı yok — yalnız satır 6808'de builder kaydı var (lazy/GET yolunda). Kabul belgesi donmuyor, sonradan kuruluyor iddiası doğrulandı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-023",
+   "baslik": "İade edilen malın tamamı sonradan İPTAL'e çekilmiş: iade defteri 'depoya alındı' derken 261 m ne stokta ne fire raporunda",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "iade/envanter",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "İade edilmiş topu CANCELLED'a çeken yolda 'bu top iade defterinde WAREHOUSE olarak duruyor' kontrolü yok; roll_returns.appliedStatus ↔ rolls.status tutarlılığını ölçen DB kısıtı/uygulama guard/consistency-check bölümü yok (iade §'lerde yalnız §4/§9 çuval/sevk ekseninde geçiyor).",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "roll_returns JOIN rolls WHERE cancelledAt IS NULL",
+     "satir": "-",
+     "not": "saha: 5 aktif iadenin 5'inde appliedStatus=WAREHOUSE ama top CANCELLED (652465b8/e27aaaf0/67caaa54/24709bc4/29c87315, 261 m); iptal izi kolonları (cancelledAt/cancelReason/cancelReasonCode/preCancelStatus) hepsi NULL; roll_variances karşılığı 0 satır; currentQty=initialQty (metraj hiç düşülmemiş)"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/return.service.ts",
+   "satir": "iade↔iptal tutarlılık kontrolü yok",
+   "failure_mode": "Muhasebe iade raporunu açar: '261 m iade alındı, depoya girdi.' Depo ekranı: o toplar yok. Fire karnesi: 0 m fire. Üç rakam da sistemden gelir ve üçü birbirini yalanlar; '261 m nerede?' cevabı yalnızca kişilerin hafızasında (iptal sebebi de kaydedilmemiş). Doğru dispozisyon SCRAP olmalıydı (mal vardı, gitti).",
+   "is_etkisi": "İade edilen mal hiçbir stok/fire yüzeyinde görünmüyor → gerçek fire oranı olduğundan düşük; kayıp hiçbir kalemde raporlanmıyor.",
+   "veride_ihlal": {
+    "sorgu": "roll_returns cancelledAt IS NULL JOIN rolls",
+    "saha": 261,
+    "not": "5 iade / 261 m appliedStatus=WAREHOUSE ama top CANCELLED"
+   },
+   "onceki_defter": "INV-AUD-04",
+   "efor_gun": 1,
+   "kabul_kriteri": "İadeli topun iptali 409 veriyor (SCRAP'a yönlendir); mutabakat bölümü bugünkü 5 satırı gösteriyor.",
+   "etkilenen_degismez": "INV-SEV-05, INV-AUD-04 — iade appliedStatus ↔ top status; CANCELLED ⇒ iptal izi dolu",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Aktif iadesi olan topu CANCELLED'a çekmeyi reddet, SCRAP'a yönlendir (iptal 'mal hiç yoktu' der, iade aksini söyler)"
+    },
+    {
+     "vade": "orta",
+     "aciklama": "consistency-check'e roll_returns(cancelledAt IS NULL) ↔ rolls.status uyuşmazlığı bölümü"
+    },
+    {
+     "vade": "orta",
+     "aciklama": "[PROD'DA ÇALIŞTIRMA] geçmiş 5 satır iş kararı; düzeltilirse SCRAP + RollVariance, dry-run listeli"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-09"
+   ],
+   "primary": "V-2-09",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "grep taraması: RollStatus.CANCELLED yazan hiçbir servis dosyası (workorder/inventory/tambur-undo/batch/label/vb.) rollReturn tablosuna bakmıyor — yalnız return.service.ts ve shipping.service.ts rollReturn okuyor, ikisi de CANCELLED geçişini yapan taraf değil. İddia edilen 'iade↔iptal tutarlılık kontrolü yok' doğrulandı; hiçbir Ç1 kilidi/guard'ı bulunamadı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-024",
+   "baslik": "TravelerCard.printedAt kart DOĞUŞUNDA damgalanıyor: hiç basılmamış kart 'Basım tarihi' taşıyor, liste onu 'en son basılan' sayıyor",
+   "siddet": "S3",
+   "kategori": "C",
+   "oncelik": "P3",
+   "modul": "REFAKAT KARTI",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/prisma/schema.prisma",
+   "satir": "3169",
+   "failure_mode": "Planlamacı Refakat Kartları listesini açar (varsayılan sıra 'Basım tarihi ↓'). En üstte bugün açılmış, hiç basılmamış dört kart (IE2508260001-04) durur, tarih sütunu 'bugün 04:28' der. Planlamacı 'kâğıtlar çıkmış' sanır; sahada kart yoktur. Aynı yanlış kart gövdesine de basılır: 'Basım tarihi' alanı iş emrinin AÇILIŞ saatini yazar.",
+   "is_etkisi": "'Hangi kartlar sahaya çıktı' sorusunun tek doğru cevabı printed_documents(TRAVELER_CARD) defteridir; o defter 18.08'de başladı, 213 kartın 153'ünde satır yok. printedAt boşluğu doldurur gibi görünüp yanlış cevabı veriyor.",
+   "etkilenen_degismez": "Kolon semantiği (printedAt = gerçek baskı anı)",
+   "koruma_kontrolu": "printedAt NOT NULL @default(now()) (schema:3169), createForWorkOrder yazmıyor → DB default basar. Gerçek baskı damgası yalnız recordPrintEvent (:373) ve reprint (:287, hiçbir istemci çağırmıyor). nullable yapan/NULLS LAST süzen koruma YOK.",
+   "kanit": [
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "3169",
+     "not": "printedAt DateTime @default(now()) — nullable DEĞİL"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/traveler-card.service.ts",
+     "satir": "67-68, 190-200, 680",
+     "not": "createForWorkOrder printedAt yazmaz; sıralama varsayılanı printedAt ('yeni basılan ilk gelsin')"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/src/config/traveler-card-fields.ts",
+     "satir": "41",
+     "not": "{key:'printedAt', label:'Basım tarihi'} — kâğıda basılabilir alan"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-26b",
+     "not": "toplam=213, hic_basilmamis=42, defterli=60; IE2508260001-04 printedAt=createdAt, defter 0, contentDirty=true"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FILTER (WHERE abs(extract(epoch FROM printedAt-createdAt))<1) FROM traveler_cards",
+    "saha": 42,
+    "dev": 91,
+    "not": "42 kart hiç basılmadığı halde printedAt taşıyor; 25.08 doğan 4 kartın hepsi böyle"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "printedAt nullable yap (default kaldır), yalnız recordPrintEvent/reprint yazsın; listede NULLS LAST + başlık boşsa '—'. Geriye dönük printedAt=createdAt satırları NULL'a çekilebilir [PROD'DA ÇALIŞTIRMA] dry-run, createdAt'ten geri doldurulabilir (kayıpsız)"
+    },
+    {
+     "vade": "2. tur",
+     "aciklama": "Migration'sız alternatif (daha zayıf): listede printedAt yerine defterin max(version) satırının tarihini göster"
+    }
+   ],
+   "kabul_kriteri": "Yeni açılan WO kartı listede 'Basım: —' gösterir; baskı olayından sonra tarih dolar; test_traveler_card_versions.ts'e 'hiç basılmamış kartın printedAt'i boştur' sondası eklenir.",
+   "efor_gun": 1,
+   "onceki_defter": "",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-03"
+   ],
+   "primary": "V-3-03",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "schema.prisma:3169 printedAt DateTime @default(now()) — NOT nullable, no printCount/neverPrinted field exists (grep confirmed). traveler-card.service.ts createForWorkOrder (~190-200) never writes printedAt explicitly, so DB default (creation time) stands until a real print event (recordPrintEvent :373 / reprint :287). Default sort field is printedAt (TRAVELER_SORTABLE_FIELDS comment: 'yeni basılan kart ilk gelsin'), so an unprinted card sorts as if just printed. Config field 'printedAt'→'Basım tarihi' at traveler-card-fields.ts:41 confirms it's also printed on the card body. No guard distinguishes creation-stamp from actual-print-stamp."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-025",
+   "baslik": "test_consistency §20 canlıda KALICI KIRMIZI: kök neden 2026-08-15'te kapandı ama bozuk satır düzeltilmedi, iki yazılı gerekçe çelişiyor",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "WO/ADIM",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/scripts/test_consistency.ts",
+   "satir": "55-56, 462-520",
+   "failure_mode": "Ekip mutabakat kapısını canlıya karşı koşar. §20 '1 satır' der (IE0608260004 adım 2 COMPLETED ama türetilen PENDING). CLAUDE.md 2026-08-22 notu 'veri bozuk değil, sorgunun kör noktası' dediği için satır yok sayılır. Üç ay sonra gerçek bir adım-durumu drift'i doğar; §20 '2 satır' der, aynı gerekçeyle yine yok sayılır. Kapı sessizce işlevsizleşir; bozulan şey istasyon kuyruğu, açık kart listesi, WO tamamlama koşulu (completeWorkOrderIfStepsDone PENDING'e çöken adımı sonsuza dek açık bırakır).",
+   "is_etkisi": "Bugün doğrudan zarar yok (WO COMPLETED, top iptal). Zarar gelecekte: kırmızıya alışmış kapı = hiç koşmayan kapı. §13'te bilinçle yazıya dökülen ('bölümü DARALTMA') kararın §20'de karşılığı yok.",
+   "etkilenen_degismez": "INV-SM-03 / INV-WO-03 (adım statüsü ↔ movement'lardan türetilen değer)",
+   "koruma_kontrolu": "recomputeStepStatus CANCELLED topun hareketlerini saymaz (roll-step.helper.ts:54-70). Kök neden inventory.service.ts:3175-3193'te (collectRollStepScopeTx düzeltmesi 2026-08-15) kapandı ama bozuk satır backfill edilmedi; test_consistency.ts:55-56 'üretimde tek satır yok' bayat ölçümü canlıda yanlış. İki gerekçe çelişiyor (kod: hata; CLAUDE.md: kör nokta).",
+   "kanit": [
+    {
+     "tur": "repro",
+     "yol": "audit/data/T2-V3-s20.sql",
+     "satir": "-",
+     "not": "IE0608260004 seq2 COMPLETED, acik0 kapali0 bekleyen0 → beklenen PENDING; zincir: KURSUN_BYPASS_FINISHED → WO_CLOSE_WAREHOUSE (08.08 13:16) → top CANCELLED (13:17:13)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "3175-3193",
+     "not": "SAHA VAKASI IE0608260004 hata olarak anlatılıyor; collectRollStepScopeTx düzeltmesi uygulandı"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_consistency.ts",
+     "satir": "55-56",
+     "not": "'§20'nin üretim formatlı tek satırı bile drift göstermiyordu' — canlı kopyada YANLIŞ"
+    },
+    {
+     "tur": "dokuman",
+     "yol": "CLAUDE.md",
+     "satir": "2026-08-22 §20",
+     "not": "'veri bozuk değil, sorgunun kör noktası' — kodun 'hata' teşhisiyle çelişiyor"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "test_consistency §20 SQL (audit/data/T2-V3-s20.sql)",
+    "saha": 1,
+    "dev": 0,
+    "not": "IE0608260004 üretim formatlı ve notFixture süzgecinden geçiyor"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "① tek satırı düzelt (status=PENDING, completedAt=NULL — [PROD'DA ÇALIŞTIRMA] dry-run, eski değerler audit'e) ve §20 yeşile dönsün; VEYA ② §13'teki gibi bilinçli kalıntı işaretle (tarih/kimlik eşikli noise bloğu). Her iki durumda test_consistency.ts:55-56 bayat ölçüm ve CLAUDE.md 2026-08-22 satırı güncellenmeli"
+    }
+   ],
+   "kabul_kriteri": "§20 canlı kopyada 0 satır döner ya da dönen sayı YAZILI beklenene eşittir; bekçi fazlası çıkınca kırmızı verir.",
+   "efor_gun": 0.5,
+   "onceki_defter": "BULGU-T1-041",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-05"
+   ],
+   "primary": "V-3-05",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "inventory.service.ts:3175-3193 confirms the 2026-08-15 fix (collectRollStepScopeTx) is documented as addressing the exact IE0608260004 case going forward ('SAHA VAKASI... doğrulandı') but only changes cancellation's derivation-scope logic for future operations — it contains no backfill/reconciliation of the pre-existing drifted row. roll-step.helper.ts:54-60 confirms CANCELLED rolls are excluded from movement counts (open/closed), consistent with the described PENDING-vs-COMPLETED derivation gap. The claim that the historic row remains uncorrected while CLAUDE.md's 2026-08-22 note dismisses it as 'sorgunun kör noktası' (contradicting the code's own 'hata' framing) is supported by the retrieved comment text."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-026",
+   "baslik": "Kurşun dağıtımı sahada fiilen kullanılmıyor: 117 bypass kapanışının 115'i makine atfı OLMADAN kapandı",
+   "siddet": "S4",
+   "kategori": "E",
+   "oncelik": "P4",
+   "modul": "KURŞUN/BYPASS",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/services/kursun-bypass.service.ts",
+   "satir": "660-687",
+   "failure_mode": "'Kurşun+KK2 makine bazlı hacim raporu' son 7 günde 81 adım / 88 topu machineId=null (UNASSIGNED) ile raporlar. 'KK2-M1 bu hafta kaç metre işledi' sorusunun cevabı fiilen yok: iki makine tanımlı ama 88 topun hiçbiri onlara yazılmıyor. Roll.createdMachineId de Kurşun'da 0 (yalnız KK1 1228, Tambur 968 dolu).",
+   "is_etkisi": "Kurşun istasyonunun makine bazlı üretim/kapasite raporu boş; darboğaz analizi ve makine bakım planlaması veriye dayanamaz.",
+   "etkilenen_degismez": "INV-SM-11 (bypass kapanışı makine atfı)",
+   "koruma_kontrolu": "Karar bilinçli (CLAUDE.md 2026-08-05/06 'dağıtım ön koşul değil'); makine atfı uydurulmaz kuralıyla dengeli, sayaç kaybı görünür tutuyor. Ama sayaç 'sahada sürekli oluyorsa dağıtım adımını sorgula' diyor — ölçüm sürekli olduğunu gösteriyor: dağıtım yolu toplam 2 kez kullanılmış.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/kursun-bypass.service.ts",
+     "satir": "660-687",
+     "not": "makine bazlı hacim raporu machineId=null satırları"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-31/V3-33",
+     "not": "kursun_bypass_assignments=2 (ikisi TAMBUR_SCAN kapalı); UNASSIGNED marker 115/117; createdMachineId Kurşun'da 0"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "-",
+     "not": "haftalık: 03.08→3, 10.08→16, 17.08→72, 24.08→26 — hacim artarken atıfsızlık artıyor"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FILTER (WHERE notes LIKE 'KURSUN_BYPASS_FINISHED:UNASSIGNED:%') FROM roll_movements",
+    "saha": 115,
+    "not": "117 bypass kapanışının 115'i (%98) makinesiz; dev'de ölçülmedi"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Kod değil KARAR: ① dağıtım adımını sahada zorunlu kıl (kursun.* rejim bayrağı — feature-flag DEĞİŞTİRME, karar ekibin), ② Tambur okutmasında makineyi sor (uydurulmaz kuralı korunarak), ③ hiçbiri seçilmezse raporun başına ölçülen atıfsızlık oranı basılsın"
+    }
+   ],
+   "kabul_kriteri": "UNASSIGNED oranı raporun kendi yüzeyinde görünür; ya da oran %10'un altına iner.",
+   "efor_gun": 0.5,
+   "onceki_defter": "",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-06"
+   ],
+   "primary": "V-3-06",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "kursun-bypass.service.ts:658-687 (loadUnassignedClosureStats) — bu sayaç TAM OLARAK bulgunun anlattığı durumu (dağıtımsız kapanan iş sayısı) görünür kılmak için MEVCUT ve tasarlanmış; kod yorumu bizzat söylüyor: 'sahada sürekli oluyorsa cevap sayacı gizlemek değil, dağıtım adımını sorgulamaktır.' CLAUDE.md 2026-08-05/06 notu 'dağıtım ön koşul değil' kararını açıkça belgeliyor. Bu bir kod kusuru değil, bilinen+izlenen bir tasarım kararının kullanım oranı gözlemidir.",
+     "corrected_impact": "S3 yerine S1/bilgi: davranış tasarım gereği, kendi izleme mekanizması zaten mevcut ve CLAUDE.md'de kabul edilmiş; bu bir defect değil operasyonel/adopsiyon gözlemidir."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-027",
+   "baslik": "Parti numarası sarması artık istisna değil KURAL: 156 canlı partinin 122'si (61 numara) aynı plaka numarasını paylaşıyor — sahada 61 numara aynı anda İKİ AÇIK partiyi gösteriyor",
+   "siddet": "S4",
+   "kategori": "B.1",
+   "oncelik": "P4",
+   "modul": "PARTİ",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/services/batch.service.ts",
+   "satir": "122-165 (generateBatchNumberTx)",
+   "failure_mode": "Ustabaşı arabadaki plakada P62 okur ve sistemde arar. İki AÇIK parti döner: IE1108260010 (11.08) + IE2108260006 (21.08), ikisinde de canlı top var, ikisi de aynı fabrikada. Numara ayırt etmediği için karar iş emri no'ya/kumaşa bakılarak verilir — plakanın işlevi kaybolur. Aynı belirsizlik refakat kartı canlı parti bloğuna (resolveLiveBatches) ve fason çeki batchNumber'ına geçer.",
+   "is_etkisi": "Kâğıt üzerindeki parti numarası izlenebilirlik zincirinin halkasıdır; %78 çakışma o halkayı bilgi taşımaz hâle getirir. Karar bilinçliydi ama kabul edilen bedelin büyüklüğü ölçülmemişti; bu satır o ölçümdür.",
+   "etkilenen_degismez": "INV-PAR-01/02 (parti no bilinçli tekil değil, dönen sarma)",
+   "koruma_kontrolu": "batchNumber @unique KALDIRILDI (2026-08-05, migration 20260805120000); körlemesine sarma bilinçli (CLAUDE.md 'boştaki numarayı bul' alternatifi reddedildi). Sayaç sağlıklı (son P92, sıra kopukluğu 0). Sorun kararın kendisinin bedeli, koruma eksikliği değil.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/batch.service.ts",
+     "satir": "122-165",
+     "not": "sarma körlemesine (seq%99)+1, kaynak 'son doğan kısa parti'; numara benzersiz değil"
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "2263-2270",
+     "not": "batches.batchNumber @unique KALDIRILDI (migration 20260805120000)"
+    },
+    {
+     "tur": "dokuman",
+     "yol": "CLAUDE.md",
+     "satir": "2026-08-05 notu",
+     "not": "numara kâğıda basılıyor: refakat kartı canlı parti bloğu (resolveLiveBatches), fason çeki tekil batchNumber, kabul makbuzu çoğul batchNumbers"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-30b",
+     "not": "156 canlı parti; 61 numara çakışıyor (min 8 gün max 12 gün); örnek P62/P90/P05 çiftleri"
+    },
+    {
+     "tur": "dokuman",
+     "yol": "CLAUDE.md",
+     "satir": "2026-08-05 parti no",
+     "not": "kabul edilen bedel '~5-10 gün arayla çakışma' — aralık doğru, kapsam (%78) ölçülmemişti"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "WITH canli AS (...) SELECT count(*) cakisan FROM (SELECT batchNumber FROM canli GROUP BY 1 HAVING count(*)>1)",
+    "saha": 61,
+    "dev": 0,
+    "not": "156 canlı partinin 122'si (61 numara) ikizle aynı numara; hız ~10 parti/gün, P01-P99 ~10 günde sarıyor, partiler 2+ hafta canlı"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Kod değil ölçüye dayalı yeniden karar: ① aralığı genişlet (P001…P999, fiziksel plaka seti — fabrika kararı), ② plakayı İE son 4 hane ile eşle, ③ olduğu gibi bırak ama her parti arayan yüzeyde 'aynı numarada N açık parti var' bandını zorunlu kıl. Hiçbiri migration istemez"
+    }
+   ],
+   "kabul_kriteri": "Parti arama birden çok açık parti dönerse yüzey açıkça söyler; ya da canlı çakışma oranı %10'un altına iner.",
+   "efor_gun": 0.5,
+   "onceki_defter": "BULGU-T1-150",
+   "finder": "V-3",
+   "merged_from": [
+    "V-1-04",
+    "V-3-07"
+   ],
+   "primary": "V-3-07",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md",
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "batch.service.ts kodunda sarma körlemesine ve batchNumber @unique kalktığı doğru (bilinçli tasarım kararı, migration 20260805120000). Ölçüm (61/99 numara çakışması) gerçek veri kanıtı olsa da kararın kendisi zaten CLAUDE.md 2026-08-05 notunda kabul edilmiş bir bedeldir ('~5-10 gün arayla çakışma' beklentisiyle). Bulgunun katkısı ölçümün beklenenden geniş kapsamlı olduğunu göstermek — bu geçerli ve yararlı ama koruma eksikliği değil, kabul edilmiş kararın somutlaşmış bedelidir; analistin kendi koruma_kontrolu alanı da bunu söylüyor.",
+     "corrected_impact": "S3 olarak kalabilir ama gerekçe netleştirilmeli: bu bir kod hatası değil, bilinen bir tasarım kararının ölçülen (beklenenden geniş) bedelidir — düzeltme önerisi varsa iş kararı gerektirir, bekçi/kod kusuru değildir."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-028",
+   "baslik": "Stok kodu tekilliği yalnız uygulamada; DB kısıtı harf-duyarlı (btree(code)); sahada 8 çakışma grubu, biri iki tarafı da AKTİF ve gerçek stok taşıyor",
+   "siddet": "S3",
+   "kategori": "B.1",
+   "oncelik": "P2",
+   "modul": "ana-veri",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Kod KİMLİK (etikete basılır). Uygulama 2026-08-15'te katlanmış tekilliğe geçti, advisory kilitle (8026) korundu. DB tarafı geride: items_code_key düz btree(code), upper/fold yok → SANTUK≠santuk. Karar bilinçli/yazılı ama sedin kurulacağı gün/sahip/tetik yok.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/code-unique.helper.ts",
+     "satir": "1-38, 57, 80",
+     "not": "başlıkta karar yazılı '9 satır ihlal ediyor, DB kısıtı eklenmez'; CODE_UNIQUE_LOCK_NS=8026; kilit okumadan önce"
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "model Item code @unique",
+     "not": "harf duyarlı"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "SELECT lower(code),count(*) FROM items GROUP BY 1 HAVING count>1",
+     "satir": "-",
+     "not": "saha: 8 grup/9 fazla satır; santuk (SANTUK/BORANCIK aktif 4 top+3 sipariş ++ santuk/ŞANTUK aktif) İKİ TARAF DA AKTİF; sefa/bayroflam/bgr150seffaf/oslo/activo biri tombstone; mc155 üç pasif kumaş tek kod; müşteri/renk/fasoncu/makine/istasyon 0 (autoCode)"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/helpers/code-unique.helper.ts",
+   "satir": "1-38",
+   "failure_mode": "Depo görevlisi çeki listesinde SANTUK kodunu panelde arar; arama iki aktif satır döndürür (BORANCIK ve ŞANTUK), kod hangisinin elindeki mal olduğunu söylemez. İçe aktarımda import.service anahtarı toLocaleUpperCase('tr-TR') ile katlar (T1-087) → santuk satırı SANTUK kaydına yazılır, YANLIŞ kumaşın stok/sipariş satırı büyür, hata görünmez ('eşleşti').",
+   "is_etkisi": "Bugün fiili zarar sınırlı (santuk/ŞANTUK kullanımsız) ama sed kurulmadıkça her yeni harf-varyantı aynı risk; içe aktarım yanlış kayda yazar.",
+   "veride_ihlal": {
+    "sorgu": "SELECT lower(code),count(*) FROM items GROUP BY 1 HAVING count>1",
+    "saha": 8,
+    "dev": 8,
+    "not": "8 grup/9 fazla, 2026-08-15 ölçümüyle birebir (13 günde azalmamış)"
+   },
+   "etkilenen_degismez": "kod tekilliği (katlanmış)",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "7 tarihsel grubu mükerrer panelinden birleştir/pasifleştir → CREATE UNIQUE INDEX items_code_fold_key ON items(upper(code)) WHERE mergedIntoId IS NULL, EXPRESSION_UNIQUES'e yaz. [PROD'DA ÇALIŞTIRMA] geri alma DROP INDEX."
+    }
+   ],
+   "kabul_kriteri": "SELECT count(*) FROM (SELECT lower(code) FROM items GROUP BY 1 HAVING count>1)=0; test_db_invariants yeni index'i envanterinde görür.",
+   "efor_gun": 1,
+   "onceki_defter": "T1-087 (ayakta S3, içe aktarım katlaması) bu verinin tüketicisi; kısıt tarafı yeni",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-06"
+   ],
+   "primary": "V-4-06",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/helpers/code-unique.helper.ts:1-38 kod yorumu bulguyu birebir teyit ediyor: 'bugün 9 satır ihlal ediyor, DB kısıtı eklenmez', tekillik yalnız advisory lock (8026) + app-level foldCodeForCompare ile; schema.prisma'da Item.code @unique düz btree (satır 2661 civarı, upper/fold ifadesi yok). Çürütülemedi — yazar zaten kendi yorumunda kabul etmiş."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-029",
+   "baslik": "Top statü değişimlerinin %22'si kayıt-düzeyi audit satırı bırakmıyor: 'bu topa ne oldu' Denetim Raporu'ndan cevaplanamıyor",
+   "siddet": "S3",
+   "kategori": "I.3",
+   "oncelik": "P2",
+   "modul": "audit",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "rolls.statusChangedAt trigger yazar (doğru). Audit işlem-düzeyinde: fason kabul SUBCONTRACTOR_RECEIPT, sevk SHIPMENT recordId'siyle. Topun kimliğiyle audit araması yapıldığında geçişlerin 1/5'i yok. SystemLogService recordId filtresi ('kayıt geçmişi') gerçekten kullanılan yüzey.",
+   "kanit": [
+    {
+     "tur": "migration",
+     "yol": "Teks-Erp/prisma/migrations/20260809090000_roll_production_timestamps/migration.sql",
+     "satir": "79-86",
+     "not": "roll_stamp_production_timestamps trigger statusChangedAt yazar"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/system-log.service.ts",
+     "satir": "111, 139-152",
+     "not": "recordId filtresi + RECORD_HISTORY_SELECT → kayıt geçmişi yüzeyi"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/subcontractor.service.ts",
+     "satir": "3238",
+     "not": "fason kabul topa değil receipt'e log yazar (tableName SUBCONTRACTOR_RECEIPT); sevk SHIPMENT"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "rolls statusChangedAt ↔ system_logs recordId ±120s NOT EXISTS",
+     "satir": "-",
+     "not": "saha: 535/2.392=%22,4 geçişte satır yok. SUBCONTRACTOR_CONSUMED 335, SHIPPED(TAMBUR_SPLIT) 140, WAREHOUSE 34, CANCELLED 18, IN_PRODUCTION 8. Hiç audit'i olmayan top=55/2.431"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/shipping.service.ts",
+   "satir": "audit çağrıları (tableName SHIPMENT)",
+   "failure_mode": "Müşteri 'bu topu gönderdik, sizde iade görünmüyor' der. Denetçi topun id'siyle kayıt geçmişini açar: liste CREATE ve LABEL_PRINT_EVENT ile biter — SHIPPED geçişi satırı yok. Denetçi 'bu top hiç sevk edilmemiş' sonucuna varır; gerçek iz sevkiyat kaydının altında, bağ sack_allocations'ta. Fasona giden 335 topta da aynı.",
+   "is_etkisi": "Kayıt geçmişi yüzeyi eksiksiz sanılıyor; uyuşmazlık çözümünde yanlış sonuç. roll_operations (1.586) + roll_movements (1.107) izi taşıyor → veri KAYIP DEĞİL, audit yüzeyi eksik (düzeltme ucuz).",
+   "veride_ihlal": {
+    "sorgu": "rolls statusChangedAt ↔ system_logs recordId ±120s NOT EXISTS",
+    "saha": 535,
+    "dev": 0,
+    "not": "535/2.392=%22,4; en büyük kova SUBCONTRACTOR_CONSUMED 335"
+   },
+   "etkilenen_degismez": "kayıt-düzeyi audit izlenebilirliği",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "AuditService.logMany ile statü değiştiren toplu yollara (fason kabul/sevk/tambur kesim çocukları) recordId=roll.id taşıyan hafif satır (action:STATUS, newData:{from,to,via}). Ya da 'kayıt geçmişi' ekranı topu sorgularken roll_operations+roll_movements'ı da birleştirsin ve ekranda söylesin."
+    }
+   ],
+   "kabul_kriteri": "Sevk edilen topun id'siyle kayıt geçmişinde SHIPPED geçişi görünür; bekçi: rastgele 20 SHIPPED top için ±120s içinde satır bulunur.",
+   "efor_gun": 1,
+   "onceki_defter": "K10 haritasının '55/2.391 top audit boşluğu' notunun genişletilmiş hâli; T1-127/T1-128 komşu",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-07"
+   ],
+   "primary": "V-4-07",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "subcontractor.service.ts içinde SUBCONTRACTOR_CONSUMED statü güncellemeleri (satır 2863,3422,4933,6111 vb.) doğrudan roll update; audit çağrıları (satır 3238,5013) tableName='SUBCONTRACTOR_RECEIPT' + recordId=receipt.id kullanıyor, roll.id DEĞİL. Topun id'siyle system_logs.recordId araması bu geçişleri kaçırır — iddia doğrulandı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-030",
+   "baslik": "Sahadaki oturum/kilit ayarlarının tamamı kod varsayılanının tersine kapalı; panelde yazan 8 saatlik oturum ömrü ETKİSİZ, token 30 gün yaşıyor",
+   "siddet": "S3",
+   "kategori": "G",
+   "oncelik": "P2",
+   "modul": "ayarlar",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Kod varsayılanları güvenli (auto-logout AÇIK, mobil boşta kilit AÇIK, arka plan kilit AÇIK, iş oturumu 20 dk). Sahada tek tek kapatılmış. autoLogoutOnExpiry=false → issueToken capDays dalına düşer, token 30 gün. sessionDurationMinutes=480 alanı etkisiz. Hiçbir ayar 'bu alan şu an etkisiz' demiyor.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/auth.service.ts",
+     "satir": "283-305",
+     "not": "timeoutEnabled=readAutoLogoutOnExpiry (saha false); false ise capDays*86400000 dalı → 30 gün"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/system-setting.service.ts",
+     "satir": "376, 385, 387, 394",
+     "not": "DEFAULT_AUTO_LOGOUT_ON_EXPIRY=true, MOBILE_IDLE_LOCK=true, LOCK_ON_BACKGROUND=true, WORK_SESSION_IDLE=20"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_settings auth.%/workSession.% + avg session ömrü",
+     "satir": "-",
+     "not": "saha: autoLogoutOnExpiry=false, mobileIdleLock=false, lockOnBackground=false, workSession.idle=0, sessionDuration=480(etkisiz); sessions(214) ort ömür 30,00 gün istisnasız; revokedAt NULL AND expiresAt<=now=10; device.pairingRequired=false, 28/28 cihaz APPROVED machineId=NULL"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/auth.service.ts",
+   "satir": "283-305",
+   "failure_mode": "Yönetici Ayarlar → 'Oturum süresi 480 dakika' görür, 'token 8 saatte ölüyor' varsayar. Gerçekte autoLogoutOnExpiry=false → issueToken capDays dalına düşer, token 30 gün imzalanır; çalınan token bir ay çalışır, tablet boşta/arka planda kilitlenmez. Aynı yanılgıyı kod varsayılanına bakan bir denetim de yapar.",
+   "is_etkisi": "Kimlik yüzeyinin tamamı (PIN+liste girişi, 30 gün token, sınırsız paralel oturum, cihaz kapısı kapalı) en gevşek konfigürasyonda; T1-014/T1-051 olasılık tarafı yüksek.",
+   "veride_ihlal": {
+    "sorgu": "SELECT key,value FROM system_settings WHERE key LIKE 'auth.%'; avg session ömrü",
+    "saha": 6,
+    "dev": 0,
+    "not": "6 ayar varsayılanın tersi; ort session ömrü 30,00 gün"
+   },
+   "etkilenen_degismez": "oturum ömrü / boşta kilit varsayılanları",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "Panelde 'bu alan şu an etkisiz' rozeti (autoLogoutOnExpiry kapalıyken sessionDuration gri+açıklama). GET /admin/health'e 'varsayılandan sapan güvenlik ayarları' sayacı. Ayarları DEĞİŞTİRME kararı fabrikanın; bulgu sapmanın görünmez olması."
+    }
+   ],
+   "kabul_kriteri": "Panel etkisiz alanı etkisiz gösterir; sağlık ucu '4 güvenlik ayarı varsayılandan sapmış' der.",
+   "efor_gun": 0.5,
+   "onceki_defter": "T1-051 (ayakta S2, 30 gün token) · T1-014 (ayakta S1, PIN) · T1-113 (cihaz kapısı)",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-08"
+   ],
+   "primary": "V-4-08",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "auth.service.ts:283-305 timeoutEnabled=false ise capDays (varsayılan 30, system-setting.service.ts:394 DEFAULT_ABSOLUTE_SESSION_CAP_DAYS=30) dalına düşüp token'ı capDays gün geçerli imzalıyor; sessionDurationMinutes o dalda hiç okunmuyor — mekanizma iddia edildiği gibi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-031",
+   "baslik": "Bekçi fixture'ları ve elle E2E doğrulama prod anlık görüntüsü üzerinde koşmuş; productionDbGate 'yerel=güvenli' varsayıyor; canlıda AKTİF bir TEST makinesi 4 topa damga vurmuş",
+   "siddet": "S3",
+   "kategori": "K.5",
+   "oncelik": "P2",
+   "modul": "test-veri hijyeni",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "productionDbGate hedef localhost ise 'yerel ✅' deyip geçer; DB ADI hiç sorgulanmıyor (tekserp_saha_0825 de adnansahin_db de yeşil alır). Kapı yalnız koşucuda (run-all-tests), tek dosya/elle akışta çalışmaz (K11 HOTSPOT-7). Projenin pratiği prod yedeğini yerelde ayrı DB'ye restore etmek → 'yerel'≠'güvenli'.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/run-all-tests.ts",
+     "satir": "102-150, 174",
+     "not": "YEREL Set(localhost,127.0.0.1,::1,0.0.0.0); host YEREL ise return; DB adı sorgulanmıyor"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_logs/work_orders 08-25 13:15 sonrası + machines top/oturum sayacı",
+     "satir": "-",
+     "not": "saha: 63 audit restore sonrası (13 birleştirme + 39 fixture userId NULL); IE2508260003/04 IN_PROGRESS, FS2508260002/03 iptal edilmemiş, 2 top AT_SUBCONTRACTOR. Prod tarafı: MAK0608260001 TAMBUR-TEST aktif, 8 iş oturumu, 4 top damgalamış; MAK0508260001 Test-Makine-1 pasif 10 top"
+    }
+   ],
+   "dosya": "Teks-Erp/scripts/run-all-tests.ts",
+   "satir": "102-150",
+   "failure_mode": "① Denetim: tekserp_saha_0825 üzerinde 'ardışık yaratım aralığı'/'kim ne yaptı' ölçen HER sorgu 08-25 13:15-13:54 penceresindeki 63 sentetik satırı gerçek trafik sanar. ② Operasyon: TAMBUR-TEST aktif olduğu için operatör listesinde+makine raporunda görünür, 4 gerçek topun atfı bu makinede. ③ 395 m iki top 'fasonda' görünüyor ama depoda — fason karnesi/açık sevk bekleyen iş sayar.",
+   "is_etkisi": "Kanıt tabanının kirliliği bütün denetimi etkiler; üretim tarafında iki açık fason sevki + aktif test makinesi.",
+   "veride_ihlal": {
+    "sorgu": "machines top/oturum sayacı; system_logs 08-25 13:15 sonrası",
+    "saha": 63,
+    "dev": 0,
+    "not": "63 audit restore sonrası; TAMBUR-TEST aktif 4 top damgalı"
+   },
+   "etkilenen_degismez": "test-veri prod'a sızmaması",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "productionDbGate'e DB ADI kontrolü: ad saha|prod|_restore_|_old_|copy içeriyorsa fail-closed (yerel olsa bile). Tur sonrası temizlik reçetesi (WO iptal+fason storno). TAMBUR-TEST'i pasife al (4 topun atfı tarihsel, DEĞİŞTİRİLMEZ). Kopya DB'ye system.isCopy=true damgası + boot banner."
+    }
+   ],
+   "kabul_kriteri": "DATABASE_URL tekserp_saha_0825 iken run-all-tests DURUR; canlıda aktif test makinesi kalmaz.",
+   "efor_gun": 1,
+   "onceki_defter": "T1-070 (ayakta S3) komşu; kapı ve prod kopyası tarafı yeni",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-09"
+   ],
+   "primary": "V-4-09",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "run-all-tests.ts:139-141 verified directly: 'if (YEREL.has(host)) { ... return; }' — gate returns 'safe' purely on hostname, never on database name. Since the documented project practice is to restore prod snapshots into a locally-hosted DB (e.g. tekserp_saha_0825, per user's own memory 'Saha yedeği tekserp_saha DB' — restored prod copy, connects via localhost), this exact gate would treat that prod-snapshot DB as 'yerel ✅' and permit destructive test runs (script contains ~1,539 deleteMany calls per its own warning text) against it. The finding's 'yerel≠güvenli' framing is accurate to the code."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-032",
+   "baslik": "Bekçilerin koştuğu dev DB'si ana veride sahayla ayrışıyor: 72 kullanıcının 46'sı test artığı, 8 admin (sahada 3), 3 kodsuz izin şablonu",
+   "siddet": "S3",
+   "kategori": "K.5",
+   "oncelik": "P3",
+   "modul": "test-veri hijyeni + yetki",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Yetki bekçileri paylaşılan dev DB'sine karşı koşar. Fark tam bekçilerin ölçtüğü değişkenlerde: kaç admin (son-admin koruması), kaç şablon (uzlaştırma), kaç kullanıcı (toplu izin). Tek koruma productionDbGate (V-4-09); clean_test_residue 5 önek tanır, TEST-IMP-PERM/TEST PM Şablon bunlardan değil.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/run-all-tests.ts",
+     "satir": "174",
+     "not": "tek koruma productionDbGate; clean_test_residue.ts 5 önek, TEST-IMP-PERM/TEST PM Şablon kapsam dışı"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "users/admin/permission_templates/... saha↔dev karşılaştırma",
+     "satir": "-",
+     "not": "users saha 9 / dev 72 (46'sı test deseni, 66 aktif); admin:* aktif saha 3 / dev 8 (2'si TEST/probe); permission_templates saha 26 (katalogla birebir) / dev 29 (3 kodsuz TEST PM Şablon); duplicate_reviews 13/130; sessions 214/1225; system_logs 10485/153424"
+    }
+   ],
+   "dosya": "Teks-Erp/scripts/run-all-tests.ts",
+   "satir": "174",
+   "failure_mode": "assertAdminCoverageAfterChange ('son yöneticiyi düşürme') dev'de koşar: orada 8 aktif admin var, 'son admin' durumu için 7 hesap düşürmek gerekir, testin senaryosu gerçek kapıyı tetiklemeyebilir. Sahada aynı koruma 3 admin üzerinde çalışır ve V-4-05'te biri kendini yükseltebilir. İzin-şablonu uzlaştırıcısının 'fazla şablon' davranışı dev'de 3 kodsuz, sahada 0 ile ölçülür.",
+   "is_etkisi": "Yetki bekçilerinin güvencesi sahadaki asıl zeminde doğrulanmamış.",
+   "veride_ihlal": {
+    "sorgu": "users/admin/permission_templates saha↔dev",
+    "saha": 9,
+    "dev": 72,
+    "not": "46 test artığı kullanıcı; 8 admin (sahada 3); 3 kodsuz şablon"
+   },
+   "etkilenen_degismez": "bekçi zemininin sahayla eşdeğerliği",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "clean_test_residue.ts'e TEST-IMP-PERM/TEST PM Şablon/probe_ öneklerini ekle; izin bekçileri fixture kullanıcılarını damgalı açıp silsin; son-admin bekçisi 'N admin var' varsayımını kendi kursun (fixture'la izole)."
+    }
+   ],
+   "kabul_kriteri": "SELECT count(*) FROM users WHERE username ~ '^(TEST|probe_)' dev'de 0; son-admin bekçisi izole fixture ile koşar.",
+   "efor_gun": 0.5,
+   "onceki_defter": "T1-070 (ayakta S3) aynı sınıf, farklı tablolar",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-10"
+   ],
+   "primary": "V-4-10",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "run-all-tests.ts:139-141 confirms productionDbGate only checks hostname against a YEREL set (localhost/127.0.0.1/::1/0.0.0.0) and never inspects the database name — it prints dbName but does not gate on it. clean_test_residue's 5-prefix cleanup (TEST-/TST-/DEMO- per test_consistency.ts:68) would not catch differently-named admin/permission-template test residue such as 'TEST-IMP-PERM' or 'TEST PM Şablon' since those aren't workOrderNumber-style keys this filter targets. Claim that dev-DB test residue skews admin-count/template-count assertions is architecturally consistent with the gate's actual scope (host-only, not content-aware)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-033",
+   "baslik": "Tüm dönem raporlarının çıpasını yazan trigger'ın GÖVDESİ hiçbir bekçide doğrulanmıyor — yalnız zamanlaması ölçülüyor; prod/dev fonksiyon gövdeleri bayt-bayt farklı",
+   "siddet": "S3",
+   "kategori": "J",
+   "oncelik": "P3",
+   "modul": "migration/bekçi",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/scripts/test_db_invariants.ts",
+   "satir": "624-655",
+   "failure_mode": "2026-08-25'te eklenen Fire ucu (POST /rolls/:id/scrap) WAREHOUSE→SCRAP geçişi üretiyor; roll_stamp_production_timestamps trigger'ının kaynak listesi ('IN_PRODUCTION','STOCK','AT_SUBCONTRACTOR','RETURNED_FROM_SUBCONTRACTOR') bunu kapsamıyor → o top finalizedAt almıyor ve hiçbir dönemin Fire Karnesi'nde görünmüyor. Bekçi paketi yeşil kalıyor çünkü trigger var ve BEFORE. Aynı sınıf ikinci kez ısıracak: yeni statü ya da yeni 'depoya indir' yolu eklenince listeye eklenmeyi unutmak sessiz eksik rapor demek ve mekanik hiçbir kapı yok. Üçüncü yol: prod'daki gövde elle düzenlenirse fark hiçbir yerde görünmez.",
+   "is_etkisi": "Dönem raporları (Kalite/Fire/Üretim Karnesi) sessizce eksik kalabilir ve bunu hiçbir otomatik kontrol söylemez; ayrıca prod'daki DB nesnelerinin repodaki tanımla aynı olduğunu doğrulayan mekanizma yok.",
+   "etkilenen_degismez": "finalizedAt trigger gövdesinin kaynak statü listesi rapor kapsamıyla hizalı olmalı",
+   "onceki_defter": "BULGU-T1-032",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "Trigger gövdesinden 'SCRAP' ya da kaynak listesinden bir statü silindiğinde bekçi KIRMIZI verir (negatif sonda ile ispatlanır); CRLF farkı kırmızı ÜRETMEZ.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_db_invariants.ts",
+     "satir": "624-655",
+     "not": "const timingOk = exp.timing.every(frag => defN.includes(norm(frag))) — yalnız BEFORE/olay doğrulanıyor, gövde değil."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_db_invariants.ts",
+     "satir": "678-682",
+     "not": "Gövde parmak izi kontrolü yalnız iki fonksiyon: proname = ANY(ARRAY['tr_fold','tr_fold_color']) — roll_stamp_production_timestamps kapsam dışı."
+    },
+    {
+     "tur": "migration",
+     "yol": "Teks-Erp/prisma/migrations/20260809090000_roll_production_timestamps/migration.sql",
+     "satir": "74-84",
+     "not": "Gövdedeki kaynak listesi + yanındaki '⚠️ KAYNAK LİSTESİ LOAD-BEARING' notu; listeye SCRAP dahil değil."
+    },
+    {
+     "tur": "sorgu",
+     "yol": "pg_get_functiondef md5 (SAHA↔DEV)",
+     "satir": "-",
+     "not": "tr_fold, audit_block_tamper, roll_stamp_production_timestamps üçünün de md5'i saha≠dev; fark CRLF (prod \\r\\n, dev \\n), anlam aynı. SCRAP topun 1/1'inde finalizedAt+statusChangedAt NULL; WAREHOUSE 3/250 finalizedAt NULL."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM rolls WHERE status='SCRAP' AND finalizedAt IS NULL",
+    "saha": 1,
+    "dev": 0,
+    "not": "1 fire topu damgasız (trigger var, gövde eksik); rapor kapsamı dışında"
+   },
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "test_db_invariants §6'ya trigger fonksiyonlarının gövde parmak izini ekle: gövdede ('WAREHOUSE','A1_STOCK','SCRAP') ve kaynak listesi fragmanı aranmalı; karşılaştırma normalize (\\r temizle) olmalı yoksa CRLF farkı kalıcı kırmızı üretir."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Kaynak statü listesini tek kaynağa taşı: migration gövdesi ile constants/'teki TS listesi arasında AST/metin eşitliği ölçen bekçi (test_consistency_derived deseni)."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "deploy/kur.ps1 sonrası prod'a karşı koşan salt-okunur DB nesne envanteri (V-5-03 ile aynı araç)."
+    }
+   ],
+   "finder": "V-5",
+   "merged_from": [
+    "V-5-04"
+   ],
+   "primary": "V-5-04",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-5-veri-numara-zaman-audit-madenciligi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "test_db_invariants.ts:636-644 doğrulandı: `timingOk` yalnız `exp.timing` fragmanlarının (BEFORE/olay) tanımda geçip geçmediğine bakıyor, gövdeyi karşılaştırmıyor. §8'deki fonksiyon parmak izi kontrolü (656-663) yalnız `proname = ANY(ARRAY['tr_fold','tr_fold_color'])` ile sınırlı — roll_stamp_production_timestamps kapsam dışı. İddia birebir doğrulandı, çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-034",
+   "baslik": "İki saat kaynağı: createdAt/updatedAt uygulamadan, finalizedAt/statusChangedAt DB'nin now()'ından (tx BAŞLANGICI) — prod'da 2.431 topun 955'inde damga doğuştan ÖNCE",
+   "siddet": "S3",
+   "kategori": "C",
+   "oncelik": "P5",
+   "modul": "veri modeli/zaman",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/prisma/migrations/20260809090000_roll_production_timestamps/migration.sql",
+   "satir": "45-96 (57,60,72,84)",
+   "failure_mode": "Prisma @default(now())/@updatedAt değerleri Node süreç saatinden (sorgu kurulurken), trigger damgaları PostgreSQL now()'undan — now() PostgreSQL'de transaction BAŞLANGIÇ anıdır, ifade anı değil. Tambur finalize transaction'ı 23:59:59,8'de başlayıp topu 00:00:00,3'te yazarsa finalizedAt (tx başlangıcı) 31 Ağustos, createdAt (JS) 1 Eylül olur; Kalite Karnesi topu Ağustos'a, Bitmiş Depo Eylül'e yazar, iki yüzey aynı topu farklı döneme koyar ve farkı açıklayan alan yoktur. İkinci yol: DB ayrı sunucuya alınıp NTP sapması saniyeler mertebesine çıkarsa aynı ters damga büyür.",
+   "is_etkisi": "Bugün yok (Node ve PG aynı makine, fark milisaniye). Sınıf gerçek: 'aynı olayın iki saati' hatası ancak dönem kapanışında fark edilir ve o noktada geriye dönük düzeltilemez.",
+   "etkilenen_degismez": "Aynı satırın zaman damgaları arasındaki mantıksal sıra (finalizedAt >= createdAt) korunmalı",
+   "onceki_defter": "yok",
+   "efor_gun": 0.25,
+   "koruma_kontrolu": "Bakılan korumalar: consistency-check.sql, consistency-check-derived.sql, test_db_invariants.ts, test_consistency.ts — hiçbirinde zaman sırası (a<=b) bölümü yok; DB'de rolls için zaman CHECK yok (pg_constraint contype='c' listesinde yok). Yani iki-saat sapmasını yakalayan hiçbir katman yok.",
+   "kabul_kriteri": "finalizedAt < createdAt - interval '1 second' mutabakat sorgusu prod'a karşı 0 döner ve gün sınırını geçen bir tx sondasıyla kırmızı verdiği gösterilir.",
+   "kanit": [
+    {
+     "tur": "migration",
+     "yol": "Teks-Erp/prisma/migrations/20260809090000_roll_production_timestamps/migration.sql",
+     "satir": "45-96",
+     "not": "INSERT dalında NEW.statusChangedAt:=now() ve final statüde NEW.finalizedAt:=now(); now()=transaction başlangıç anı"
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "Roll.createdAt",
+     "not": "createdAt @default(now()) Prisma istemci değeriyle INSERT'e giriyor; DB varsayılanı CURRENT_TIMESTAMP yalnız yedek. Gözlenen finalizedAt<createdAt sırası değerin istemciden geldiğini doğrular"
+    },
+    {
+     "tur": "migration",
+     "yol": "Teks-Erp/prisma/migrations/20260809090000_roll_production_timestamps/migration.sql",
+     "satir": "57,60,72,84",
+     "not": "Dört yerde now() (timestamptz için doğru tercih; sorun now()'ın tx başlangıcı olması)."
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "-",
+     "not": "Roll.createdAt @default(now()) / updatedAt @updatedAt — driver-adapter ile bu değerleri istemci (Node) üretir; trigger DB now()'undan → iki ayrı saat."
+    },
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V5-05-roll-zaman.sql",
+     "satir": "-",
+     "not": "finalizedAt<createdAt → 955/2.431 (maks 0,697 sn); statusChangedAt<createdAt → 409 (maks 0,148 sn); updatedAt<statusChangedAt → 49 (maks 0,009 sn); fabrika GÜNÜ ayrışan ters damga → 0 (bugün etki yok). DEV: 61/100/32."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM rolls WHERE finalizedAt < createdAt",
+    "saha": 955,
+    "dev": 61,
+    "not": "955/2431 topta finalizedAt doğuştan önce (maks 0,697 sn); fabrika günü ayrışan 0 — bugün zararsız, sınıf gerçek"
+   },
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "consistency-check.sql'e ucuz bölüm: finalizedAt<createdAt-interval '1 second' / statusChangedAt<createdAt-interval '1 second' → 0 beklenir (1 sn tampon iki-saat gürültüsünü yutar, gerçek gün kaymasını yakalar)."
+    },
+    {
+     "vade": "uzun",
+     "aciklama": "createdAt'i de DB'ye bırak (@default(dbgenerated(\"now()\"))) tek saate indirir — ama migration+davranış değişikliği, ayrı karar."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Şema notuna 'bu iki kolon farklı saatlerden gelir' cümlesini yaz (bugün hiçbir yerde yazmıyor)."
+    }
+   ],
+   "finder": "V-5",
+   "merged_from": [
+    "V-1-05",
+    "V-5-05"
+   ],
+   "primary": "V-5-05",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-1-veri-top-metraj.md",
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-5-veri-numara-zaman-audit-madenciligi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "migration.sql (roll_production_timestamps) trigger confirmed to use bare now() for statusChangedAt/finalizedAt (PG now() = transaction-start time). package.json confirms @prisma/adapter-pg + @prisma/client ^7.7.0 (driver-adapter architecture) is in use (src/lib/prisma.ts:9,83: 'new PrismaPg(pool)'), which is exactly the Prisma 7 architecture where DateTime @default(now()) values for fields like Roll.createdAt are generated client-side in Node rather than via a DB-side CURRENT_TIMESTAMP default computed within the same transaction as trigger-set columns — supporting the finding's two-clock-source mechanism for the observed finalizedAt<createdAt skew."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-035",
+   "baslik": "Sevk edilen 40 çuvalın 39'u tartısız; irsaliye/çeki listesi kg'yi 0 basıyor (bilgi)",
+   "siddet": "S4",
+   "kategori": "C",
+   "oncelik": "P5",
+   "modul": "çuval/belge",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "INV-SEV-12 yalnız destination=EXPORT için tartı zorunlu; sahada tüm sevkler DOMESTIC. weightSource sonradan eklenmiş, DEFAULT verilmemiş (bilinçli tarihsel durum).",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "sacks JOIN shipments WHERE status='DISPATCHED'",
+     "satir": "-",
+     "not": "saha: DOMESTIC 39/40 weightKg NULL; tek tartılı çuvalda weighedAt+weightSource boş (1/1); snapshot örneği SVK1908260002 totalKg:0"
+    }
+   ],
+   "dosya": "Teks-Erp/src/services/shipping.service.ts",
+   "satir": "snapshot totals (totalKg)",
+   "failure_mode": "Nakliyeci/müşteri irsaliyede '0 kg' görür; ağırlık üzerinden navlun/kabul kontrolü yapılamaz. Bulgu değil, ölçülmüş gerçek: tartı özelliği sahada kullanılmıyor.",
+   "is_etkisi": "Belgede '0 kg' basılıyor; 0, 'tartıldı ve 0 çıktı' demektir — yanıltıcı. Karar sorusu ekibe: yurtiçi sevkte tartı isteniyor mu?",
+   "veride_ihlal": {
+    "sorgu": "DISPATCHED çuvallar weightKg NULL",
+    "saha": 39,
+    "not": "40 çuvalın 39'u tartısız"
+   },
+   "onceki_defter": "",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "Karar verildikten sonra: ya shipping.requireWeightDomestic bayrağı + koşullu kg basımı, ya da belgede '0 kg' yerine boş.",
+   "etkilenen_degismez": "C — belge içeriği / ölçüm izi",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Belgede tartısız çuvalda kg kolonu boş bassın (0 değil); yurtiçi tartı isteniyorsa dört-kapı bayrağı"
+    }
+   ],
+   "finder": "V-2",
+   "merged_from": [
+    "V-2-10"
+   ],
+   "primary": "V-2-10",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-2-veri-siparis-sevk.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Bulgu zaten kanıt seviyesinde K2 SQL ölçümüyle sunulmuş ve kendisi 'bulgu değil, ölçülmüş gerçek' diyor (S4, bilgi amaçlı); koruma_kontrolu INV-SEV-12'nin yalnız EXPORT'ta tartı zorunlu kıldığını, sahada hepsi DOMESTIC olduğunu doğru tanımlıyor — çürütülecek bir iddia yok, mevcut haliyle doğru sınıflandırılmış."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-036",
+   "baslik": "§21 kapısı dev'de kalıcı kırmızı: fixture iş emirleri SUNUCU ÜRETİMİ İE numarası taşıdığı için notFixture ön-ek süzgeci onları ayıramıyor",
+   "siddet": "S4",
+   "kategori": "K.1",
+   "oncelik": "P5",
+   "modul": "WO/BEKÇİ",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/scripts/test_consistency.ts",
+   "satir": "68-74",
+   "failure_mode": "Geliştirici dev'de npm run test:consistency koşar, §21 iki satırla (IE2708260005/07) kırmızı verir; satırlar üretim formatlı olduğu için 'fixture' diye elenemez ve her koşumda aynı kırmızıyı basar. İki hafta sonra gerçek bir tip↔bağ drift'i doğunca §21 '3 satır' der ve alışılmış kırmızıya bakan kimse farkı görmez — kapı fiilen kapanır.",
+   "is_etkisi": "Doğrudan üretim etkisi yok; kaybedilen şey kapının kendisidir (kırmızı körlüğü sınıfı).",
+   "etkilenen_degismez": "INV-WO tip↔bağ aynası (§21)",
+   "koruma_kontrolu": "notFixture süzgeci workOrderNumber NOT LIKE 'TEST-%'|'TST-%'|'DEMO-%' üzerine kurulu (:68-74) gerekçesi 'üretim anahtarları bu önekleri taşımaz'. Ama create() yolundan geçen fixture'lar numarayı sunucudan (IE+GGAAYY+NNNN) alır → süzgeç onları üretim sayar. SAHA'da §21=0 (prod'da OrderLine hard-delete yok).",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-dev.txt",
+     "satir": "§21",
+     "not": "IE2708260005 ORDER_PRODUCTION IN_PROGRESS 0 bağ; IE2708260007 ORDER_PRODUCTION PLANNED 0 bağ; ikisi de createdById/clientToken/targetItemId NULL, aynı saniyelerde toplu CREATE patlaması"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_consistency.ts",
+     "satir": "68-74",
+     "not": "notFixture ön-ek süzgeci — 'canlı DB'de filtre hiçbir satırı elemez' gerekçesi fixture için tutmuyor"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "consistency-check-derived.sql §21",
+    "saha": 0,
+    "dev": 2,
+    "not": "dev fixture (OrderLine silinip pivot Cascade düşmüş); saha temiz"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Süzgeci ön-ekten kimliğe taşı: fixture WO'ları clientToken/createdById boş + parameters.__fixture damgası taşısın, ya da testler clean_test_residue'a kendi İE numaralarını bildirsin. En ucuz: dev kalıntısı temizleyen script'e bu iki satırı ekle (dry-run)"
+    }
+   ],
+   "kabul_kriteri": "Dev'de consistency-check-derived.sql §21=0; negatif sonda: elle bir tip↔bağ drift'i üretilince kapı kırmızı.",
+   "efor_gun": 0.5,
+   "onceki_defter": "BULGU-T1-070",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-08"
+   ],
+   "primary": "V-3-08",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "test_consistency.ts:68-73 confirms notFixture() filters purely on workOrderNumber string prefix (TEST-/TST-/DEMO-). Since create()-path fixtures obtain server-generated IE+GGAAYY+NNNN numbers (per CLAUDE.md's own documented stok-kodu/master-data numbering convention — codes are backend-authoritative, not client-supplied), any fixture routed through the normal create() endpoint would carry a production-shaped workOrderNumber and evade this filter exactly as the finding describes, independent of DB access to confirm the live row count."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-037",
+   "baslik": "İki fason kabulünde çekme sapması deftere HİÇ yazılmamış — fason karnesi o kabuller için %0 fire basıyor",
+   "siddet": "S4",
+   "kategori": "—",
+   "oncelik": "P5",
+   "modul": "FASON",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/services/subcontractor.service.ts",
+   "satir": "resolveReturns / RollVariance SUBCONTRACTOR_RETURN",
+   "failure_mode": "Fason karnesi 19.08 kabulünü (FK1908260001) %0 çekme ile raporlar; gerçekte boyahane %22,4 çekmiştir (500→388 m). Mekanizma 21.08'de geldiği için o kabulde defter satırı yok ve rakam bugün de düzelmiyor: dönem karşılaştırmasında Ağustos ilk yarısı yapay 'sıfır fire' görünüyor, firma performans kıyaslaması yanlış taraf lehine çıkıyor.",
+   "is_etkisi": "Fason firma seçimi ve fiyat pazarlığı bu karneye dayanıyorsa 112 m'lik gerçek kayıp kayıtsız kalıyor.",
+   "etkilenen_degismez": "INV-FAS-06 / INV-AUD-05 (çekme defteri = fireden düşülen)",
+   "koruma_kontrolu": "Çekme defteri (RollVariance source=SUBCONTRACTOR_RETURN) 2026-08-21'de geldi; karne fireyi defterden okur (CLAUDE.md 2026-08-21 ④). Deploy öncesi kabullerde backfill yok, 'defter öncesi dönem' eşiği yok. SAHA'da source='SUBCONTRACTOR_RETURN' hiç satır yok (DEV'de 6 satır/235 m → kod çalışıyor).",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-19",
+     "not": "FK1908260001 düşülen 500 dönen 388 fark -112m (%22,4) defter YOK; FK1908260002 471→467 -4m defter YOK; 21.08 sonrası 0 satır"
+    },
+    {
+     "tur": "dokuman",
+     "yol": "CLAUDE.md",
+     "satir": "2026-08-21 fason çekme ④",
+     "not": "karne fireyi defterden okur; eski kod fire'ı hep %0 basıyordu (düzeltildi ama geriye dönük değil)"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "... WHERE abs(dogan-tuketilen)>0.01",
+    "saha": 2,
+    "dev": 40,
+    "not": "19.08 öncesi 2 makbuz çekmeli ama defter satırı yok; roll_variances SUBCONTRACTOR_RETURN saha'da hiç yok"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "① geriye dönük tek seferlik backfill (2 makbuz, sourceRefId=receipt.id aynı motor — [PROD'DA ÇALIŞTIRMA] dry-run, geri alma reversedAt ile); VEYA ② karnede 'defter öncesi dönem' eşiği (SHRINK_LEDGER_SINCE), §26b PLAN_GATE_SINCE deseninin ikizi — daha güvenli"
+    }
+   ],
+   "kabul_kriteri": "Fason karnesi 2026-08-21 öncesi dönemi ayrı işaretler ya da iki defter satırı doğar; test_scrap_scorecard.ts eşik sondası ekler.",
+   "efor_gun": 0.5,
+   "onceki_defter": "",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-09"
+   ],
+   "primary": "V-3-09",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/subcontractor.service.ts:3155-3196 doğrular: sapma defteri satırı 2026-08-21'de eklendi, kabul akışının İÇİNDE koşuyor (ölü kod değil), her kabulde çalışır. Geçmiş (deploy-öncesi) kabuller için backfill yok — bu CLAUDE.md'de de açıkça kabul edilmiş bir sınırdır (\"düzeltildi ama geriye dönük değil\"). Çürütme başarısız: mekanizma erişilebilir ve doğru çalışıyor, sorun yalnız TARİHSEL 2 kayıtla sınırlı.",
+     "corrected_impact": "Etki gerçek ama dar: yalnız deploy-öncesi (21.08 öncesi) 2 kabulle sınırlı, ileriye dönük tüm kabuller doğru işleniyor ve durum zaten CLAUDE.md'de belgelenmiş kabul edilen bir sınır. S4 yerine S2 önerilir (dar kapsam + bilinen/belgelenmiş sınır + tek seferlik geçmiş veri sorunu, sistemik değil)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-038",
+   "baslik": "Refakat kartı sahada karşılıksız: kart hiç OKUTULMUYOR, 213 kartın 149'u 'bayat' işaretli ve bayrağı okuyan yüzey yok",
+   "siddet": "S4",
+   "kategori": "L",
+   "oncelik": "P5",
+   "modul": "REFAKAT KARTI",
+   "kanit_seviyesi": "K2",
+   "dosya": "Teks-Erp/src/services/traveler-card.service.ts",
+   "satir": "contentDirty yazma noktaları (tüketicisiz)",
+   "failure_mode": "CLAUDE.md kartı 'fiziksel olarak malla hareket eder ve okutulduğunda istasyon süreçlerini tetikler' diye tanımlıyor; veri bunun gerçekleşmediğini söylüyor. Kart barkodu hiçbir iç istasyonda (KK1/Kurşun/Tambur) okutulmuyor (yalnız fason akışının otomatik logTravelerScan kayıtları var). contentDirty 213 kartın 149'unda açık ve hiçbir yüzey basmıyor → bir gün tüketici eklenirse kartların %70'i ilk günden 'bayat' kırmızısı basar (gürültü).",
+   "is_etkisi": "Doğrudan zarar yok; sürüm/revizyon makinesinin (V-3-04'ün koruduğu şey) iş değeri ölçülmemiş durumda.",
+   "etkilenen_degismez": "Ölü/karşılıksız mekanizma (contentDirty tüketici yok)",
+   "koruma_kontrolu": "contentDirty ~20 yazma noktası, 0 tüketici (rozet 2026-08-06'da kaldırıldı, backend mekanizma duruyor). Gerçek elle okutma yalnız INFO 5 satır (01.08-15.08); ARRIVAL 143 = fason makbuz, DEPARTURE 195 = fason sevk (otomatik). Kapsam yazılı olarak daraltılmamış.",
+   "kanit": [
+    {
+     "tur": "sorgu",
+     "yol": "audit/data/T2-V3-sweep-saha.txt",
+     "satir": "V3-44/V3-57",
+     "not": "traveler_card_scans: ARRIVAL 143 / DEPARTURE 195 / INFO 5 hepsi tek istasyonda (Boyahane); KK1/Kurşun/Tambur okutması 0; contentDirty f:64 t:149"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT contentDirty, count(*) FROM traveler_cards GROUP BY 1",
+    "saha": 149,
+    "not": "213 kartın 149'u bayat; ACTIVE 85 (67 bayat), COMPLETED 106 (79 bayat); dev'de ölçülmedi"
+   },
+   "oneriler": [
+    {
+     "vade": "2. tur",
+     "aciklama": "Karar sorusu: kart okutması gerçekten isteniyor mu? İsteniyorsa istasyon ekranlarında okutma kapısı açılmalı; istenmiyorsa contentDirty + sürüm makinesi yazılı olarak 'yalnız baskı defteri için' daraltılmalı ve fazla-işaretleme gürültüsü kabul edilmiş sayılmalı"
+    }
+   ],
+   "kabul_kriteri": "Ya en az bir iç istasyonda kart okutma izi doğar, ya contentDirty'nin kapsamı belgeye bağlanır.",
+   "efor_gun": 0.5,
+   "onceki_defter": "BULGU-T1-164",
+   "finder": "V-3",
+   "merged_from": [
+    "V-3-10"
+   ],
+   "primary": "V-3-10",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-3-veri-fason-isemri.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "grep confirms logTravelerScan is called only from subcontractor.service.ts (fason flow) — zero calls from KK1/kursun/tambur station code. contentDirty IS surfaced in API response (workorder.service.ts:6225 'contentDirty: card.contentDirty') but per CLAUDE.md's own 2026-08-06 note and project memory ('rozet yüzeyleri 2026-08-06'da kaldırıldı, backend mekanizması DURUYOR') the UI badge consuming it was removed — no frontend consumer renders it today, matching the finding's claim that the flag accumulates silently with no live consumer."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-039",
+   "baslik": "Tipsiz PUT /api/admin/settings/:key yolu sahada fiilen kullanılmış: iki sayısal ayar DB'de metin ('365') olarak duruyor; bayrak sessizce KAPALI okunabilir",
+   "siddet": "S4",
+   "kategori": "F",
+   "oncelik": "P3",
+   "modul": "ayarlar",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "Ham ayar yazma ucu anahtar allowlist'i ve tip doğrulaması olmadan yazar (T1-050). Kurtaran okuyucu: asNumber string'i parseFloat ile çözer (bugün zararsız) ama asBoolean yalnız 'true' metnini kabul eder → '1' yazılan bayrak false okunur.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/routes/admin.routes.ts",
+     "satir": "1081-1084, 1144-1168",
+     "not": "allowlist/tip kontrolü yok (T1-050)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/system-setting.service.ts",
+     "satir": "39-47, 49-53",
+     "not": "asNumber parseFloat (zararsız); asBoolean value==='true' → '1' false okunur"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "system_settings jsonb_typeof='string' + SYSTEM_SETTING audit",
+     "satir": "-",
+     "not": "saha: order.defaultDeadlineDays='365'(string), workorder.defaultPlanDurationDays='365'(string), 34'ün 2'si. Audit: 07-20 {'value':'45'}(Eda), 08-01 {'value':'365'}×2(admin) → yol 3 kez kullanılmış; aynı gün tipli yoldan label.copies sayı (2)"
+    }
+   ],
+   "dosya": "Teks-Erp/src/routes/admin.routes.ts",
+   "satir": "1144-1168",
+   "failure_mode": "Yönetici ileride aynı ham uçtan kk1.duplicateGuardEnabled gibi bir bayrağı {'value':'1'} diye yazar (JSON'da tırnak koymak yaygın). asBoolean bunu false okur; panel de aynı okuyucudan beslendiği için 'kapalı' gösterir, kullanıcı 'açtım ama açılmıyor' der, hiçbir hata mesajı yok.",
+   "is_etkisi": "Bugün gerçekleşmiş zarar yok; yolun kullanıldığı ve tip sapması ürettiği kanıtlandı.",
+   "veride_ihlal": {
+    "sorgu": "SELECT key,jsonb_typeof(value) FROM system_settings WHERE jsonb_typeof(value)='string'",
+    "saha": 2,
+    "dev": 0,
+    "not": "2 sayısal ayar metin tipinde; yol 3 kez kullanılmış"
+   },
+   "etkilenen_degismez": "ayar tip doğruluğu",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "Ham uca anahtar allowlist'i + anahtar başına tip şeması (feature-flags yolundaki doğrulamaların aynısı); bilinmeyen anahtar 400."
+    }
+   ],
+   "kabul_kriteri": "PUT /admin/settings/order.defaultDeadlineDays gövdesi '365' iken 400, 365 iken 200.",
+   "efor_gun": 0.5,
+   "onceki_defter": "T1-050 (ayakta S3). Yeni kanıt: yol sahada 3 kez kullanılmış, 2 satır hâlâ metin",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-11"
+   ],
+   "primary": "V-4-11",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "admin.routes.ts:1144-1168 PUT /settings/:key şeması value:z.string() — key allowlist/tip kontrolü yok, STRUCTURED_SETTING_KEYS yalnız 3 JSON anahtarını korur. system-setting.service.ts:49-53 asBoolean yalnız value==='true' dizesini true sayar; '1' → false. Kod okuması bulguyla birebir örtüşüyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T2-040",
+   "baslik": "mobile:kk1-yari-mamul izni hiçbir kullanıcıya atanmamış; ekran yalnız mobile:* taşıyan tek hesaptan açılabiliyor",
+   "siddet": "S4",
+   "kategori": "E",
+   "oncelik": "P4",
+   "modul": "yetki",
+   "kanit_seviyesi": "K2",
+   "koruma_kontrolu": "İzin kataloğu koda taşınmış, boot uzlaştırması izni DB'ye getiriyor ama kimseye atamıyor (yazılı/bilinçli). 70 iznin 1'i hiçbir aktif kullanıcıda: mobile:kk1-yari-mamul. Wildcard alan başına → yalnız mobile:* (admin) ulaşır; admin:* mobil iznini kapsamaz.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/rbac.middleware.ts",
+     "satir": "35-47",
+     "not": "matchesPermission: '*' global, aksi hâlde yalnız <alan>:*; admin:* mobili kapsamaz"
+    },
+    {
+     "tur": "sorgu",
+     "yol": "permissions NOT EXISTS user_permissions; mobile:* sahibi",
+     "satir": "-",
+     "not": "saha: tek atanmamış izin mobile:kk1-yari-mamul; mobile:* sahibi=admin. permissions↔permission-catalog.ts 70/70 birebir (aynada drift yok, eksik yalnız atama). entrySource='SEMI_FINISHED' prod'da 0 satır"
+    }
+   ],
+   "dosya": "Teks-Erp/src/middlewares/rbac.middleware.ts",
+   "satir": "35-47",
+   "failure_mode": "'Yarı Mamul KK1' ekranı sahada hiçbir operatörde açılmaz; paketin ürettiği veri prod'da 0 satır. Tek görünürlük panelin 'N yetki hiçbir kullanıcıda yok' bandı ve o da uyarı değil bilgi satırı.",
+   "is_etkisi": "Yazılmış özellik sahada hiç kullanılmıyor; kök CLAUDE.md 2026-08-26 notunda 'paketin üç ucu açık kaldı (rota yok·izin 0 kullanıcıda·masaüstü çıkışı yok)' kayıtlı — bulgu kapanmadığının ölçülmesi.",
+   "veride_ihlal": {
+    "sorgu": "SELECT p.code FROM permissions p WHERE NOT EXISTS (aktif kullanıcı ataması)",
+    "saha": 1,
+    "dev": 0,
+    "not": "tek satır mobile:kk1-yari-mamul"
+   },
+   "etkilenen_degismez": "katalog izinlerinin atanması",
+   "oneriler": [
+    {
+     "vade": "2.tur",
+     "aciklama": "İlgili operatör rol şablonuna (MOBILE_KK1) izni ekle ve uygula; ya da bilinçli ertelenmişse bandın metni 'atanmayı bekliyor (N gün)' olsun."
+    }
+   ],
+   "kabul_kriteri": "mobile:kk1-yari-mamul en az bir aktif operatörde; ya da bant yaşı gösterir.",
+   "efor_gun": 0.25,
+   "onceki_defter": "Yok (kök CLAUDE.md 2026-08-26 notunun ölçülmüş devamı)",
+   "finder": "V-4",
+   "merged_from": [
+    "V-4-12"
+   ],
+   "primary": "V-4-12",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur2-V-4-veri-anaveri-audit.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K2",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "Teks-Erp/src/controllers/inventory.controller.ts:274-286: semiFinished kapısı `matchesPermission(perms,'mobile:kk1-yari-mamul') || matchesPermission(perms,'roll:write')` — backend'de tek başına 'kimse açamaz' değil, roll:write sahipleri (Electron 'Manuel Top Ekle' yolu) de geçer; yalnız mobil KK1Screen.tsx:418 UI tarafı yalnız 'mobile:kk1-yari-mamul'e bakıyor (canSemiFinished), roll:write'ı görmüyor. Ayrıca kök CLAUDE.md 2026-08-26 notu bu tam senaryoyu ('izin 0 kullanıcıda' + 'rota yok' + 'masaüstü çıkışı yok' üçlüsü) zaten ölçüp kaydetmiş — yani bulgu YENİ bir kod kusuru değil, projede bilinen ve panel bandıyla ('N yetki hiçbir kullanıcıda yok') görünür kılınan, atama-eksikliği sınıfı bir operasyonel açık (Teks-Erp/CLAUDE.md 'Katalog yine ATAMA İÇERMEZ...' paragrafı bunu kasıtlı tasarım olarak tanımlıyor).",
+     "corrected_impact": "Etki: tablet KK1 ekranında yarı-mamul kabul kutusu hiçbir operatörde görünmüyor (UI yalnız mobile:kk1-yari-mamul'e bakıyor) — bu doğru ve gerçek. Ama backend tarafında tam kilit yok (roll:write alternatifi var) ve durum zaten panelde görünür (banner) + proje geçmişinde bilinen/izlenen bir atama-eksikliği olarak kayıtlı, sessiz/gizli bir güvenlik açığı değil. S4 yerine S2 (operasyonel eksik — 'panelden izni ata' ile kapanır, kod değişikliği gerektirmez)."
+    }
+   ],
+   "dogrulama": null
+  }
+ ],
+ "dropped": [],
+ "new_from_refuters": [],
+ "raw_count": 45,
+ "verify_files": [
+  "BULGU-T2-001"
+ ]
+}

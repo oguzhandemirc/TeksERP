@@ -1,0 +1,231 @@
+###############################################################
+# BULGU-T1-008 — K2 sonuçları
+# Koşum: 2026-08-28 18:24
+###############################################################
+
+=========== SAHA (prod kopyası tekserp_saha_0825, 2026-08-25) ===========
+--- S1: import_runs tablosu var mı + toplam koşum ---
+    tablo    | kosum_sayisi 
+-------------+--------------
+ import_runs |            0
+(1 row)
+
+--- S2: varlık başına koşum profili (satır sayısı / süre / ms-per-row) ---
+ entity | kosum | max_satir | max_sure_ms | ort_ms_satir | max_ms_satir | tavan_satir 
+--------+-------+-----------+-------------+--------------+--------------+-------------
+(0 rows)
+
+--- S3: 15 sn tavanını FİİLEN aşmış koşum var mı (pencere açılmış demektir) ---
+ id | entity | rowCount | durationMs | status | createdAt 
+----+--------+----------+------------+--------+-----------
+(0 rows)
+
+--- S4: clientToken TAŞIMAYAN koşumlar (kapı hiç devreye girmemiş) ---
+ tokensiz | tokenli | toplam 
+----------+---------+--------
+        0 |       0 |      0
+(1 row)
+
+--- S5: MÜKERRER YAZIM İZİ — aynı dosya adı + aynı varlık, 10 dk içinde 2+ koşum ---
+ kosum_1 | kosum_2 | entity | fileName | satir_1 | satir_2 | t1 | t2 | fark_sn 
+---------+---------+--------+----------+---------+---------+----+----+---------
+(0 rows)
+
+--- S6: İÇE AKTARIMLA yazılmış kayıtlar (audit izi: newData._source = IMPORT) ---
+ tableName | audit_satiri | ayri_kosum 
+-----------+--------------+------------
+(0 rows)
+
+--- S7: İÇE AKTARIMLA YAZILMIŞ MÜKERRER SİPARİŞ (fiili çift yazım) ---
+ customerId | gun | siparis | ayri_kosum | ornek_idler 
+------------+-----+---------+------------+-------------
+(0 rows)
+
+--- S8: KORUMA TEYİDİ — import_runs üzerindeki kısıtlar/index (kilit yerine ne var) ---
+             conname             | contype |                                      tanim                                       
+---------------------------------+---------+----------------------------------------------------------------------------------
+ import_runs_userId_fkey         | f       | FOREIGN KEY ("userId") REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+ import_runs_createdAt_not_null  | n       | NOT NULL "createdAt"
+ import_runs_created_not_null    | n       | NOT NULL created
+ import_runs_durationMs_not_null | n       | NOT NULL "durationMs"
+ import_runs_entity_not_null     | n       | NOT NULL entity
+ import_runs_failed_not_null     | n       | NOT NULL failed
+ import_runs_id_not_null         | n       | NOT NULL id
+ import_runs_rowCount_not_null   | n       | NOT NULL "rowCount"
+ import_runs_skipped_not_null    | n       | NOT NULL skipped
+ import_runs_status_not_null     | n       | NOT NULL status
+ import_runs_updated_not_null    | n       | NOT NULL updated
+ import_runs_pkey                | p       | PRIMARY KEY (id)
+(12 rows)
+
+            indexname             |                                                indexdef                                                 
+----------------------------------+---------------------------------------------------------------------------------------------------------
+ import_runs_clientToken_key      | CREATE UNIQUE INDEX "import_runs_clientToken_key" ON public.import_runs USING btree ("clientToken")
+ import_runs_createdAt_idx        | CREATE INDEX "import_runs_createdAt_idx" ON public.import_runs USING btree ("createdAt")
+ import_runs_entity_createdAt_idx | CREATE INDEX "import_runs_entity_createdAt_idx" ON public.import_runs USING btree (entity, "createdAt")
+ import_runs_pkey                 | CREATE UNIQUE INDEX import_runs_pkey ON public.import_runs USING btree (id)
+ import_runs_userId_idx           | CREATE INDEX "import_runs_userId_idx" ON public.import_runs USING btree ("userId")
+(5 rows)
+
+--- S9: KIYAS TABANI — orderService.create gerçek maliyeti (audit izinden sipariş yazma hızı) ---
+         dakika         | siparis 
+------------------------+---------
+ 2026-08-10 17:01:00+03 |       3
+ 2026-08-14 15:12:00+03 |       2
+ 2026-08-20 11:26:00+03 |       2
+ 2026-07-24 16:25:00+03 |       2
+ 2026-08-21 16:34:00+03 |       2
+(5 rows)
+
+
+=========== DEV (adnansahin_db) ===========
+--- S1: import_runs tablosu var mı + toplam koşum ---
+    tablo    | kosum_sayisi 
+-------------+--------------
+ import_runs |          299
+(1 row)
+
+--- S2: varlık başına koşum profili (satır sayısı / süre / ms-per-row) ---
+ entity | kosum | max_satir | max_sure_ms | ort_ms_satir |     max_ms_satir     | tavan_satir 
+--------+-------+-----------+-------------+--------------+----------------------+-------------
+ order  |     2 |         1 |         116 |        70.00 | 116.0000000000000000 |         129
+ color  |   297 |         2 |          22 |         4.26 |  21.0000000000000000 |         714
+(2 rows)
+
+--- S3: 15 sn tavanını FİİLEN aşmış koşum var mı (pencere açılmış demektir) ---
+ id | entity | rowCount | durationMs | status | createdAt 
+----+--------+----------+------------+--------+-----------
+(0 rows)
+
+--- S4: clientToken TAŞIMAYAN koşumlar (kapı hiç devreye girmemiş) ---
+ tokensiz | tokenli | toplam 
+----------+---------+--------
+      235 |      64 |    299
+(1 row)
+
+--- S5: MÜKERRER YAZIM İZİ — aynı dosya adı + aynı varlık, 10 dk içinde 2+ koşum ---
+               kosum_1                |               kosum_2                | entity | fileName | satir_1 | satir_2 |             t1             |             t2             | fark_sn 
+--------------------------------------+--------------------------------------+--------+----------+---------+---------+----------------------------+----------------------------+---------
+ b1274838-2c2b-4af2-9e0e-6f14db8c06a4 | f2ce7b4e-d37a-4ff5-ba4f-797d2406aa97 | order  |          |       1 |       1 | 2026-08-28 11:54:16.261+03 | 2026-08-28 11:54:16.312+03 |     0.1
+ d85fd63f-43ce-4693-8036-9e858b544af3 | cc38b1a8-5f6a-46b0-923b-06af2996ffd7 | color  |          |       1 |       1 | 2026-08-27 12:50:31.71+03  | 2026-08-27 12:50:31.722+03 |     0.0
+ 49530c18-036d-4fa4-9e43-6fa67bdd4be6 | d85fd63f-43ce-4693-8036-9e858b544af3 | color  |          |       1 |       1 | 2026-08-27 12:50:31.701+03 | 2026-08-27 12:50:31.71+03  |     0.0
+ 49530c18-036d-4fa4-9e43-6fa67bdd4be6 | cc38b1a8-5f6a-46b0-923b-06af2996ffd7 | color  |          |       1 |       1 | 2026-08-27 12:50:31.701+03 | 2026-08-27 12:50:31.722+03 |     0.0
+ 8db516ab-f747-4d22-860b-7f0336664e3d | cc38b1a8-5f6a-46b0-923b-06af2996ffd7 | color  |          |       1 |       1 | 2026-08-27 12:50:31.688+03 | 2026-08-27 12:50:31.722+03 |     0.0
+ 8db516ab-f747-4d22-860b-7f0336664e3d | d85fd63f-43ce-4693-8036-9e858b544af3 | color  |          |       1 |       1 | 2026-08-27 12:50:31.688+03 | 2026-08-27 12:50:31.71+03  |     0.0
+ 8db516ab-f747-4d22-860b-7f0336664e3d | 49530c18-036d-4fa4-9e43-6fa67bdd4be6 | color  |          |       1 |       1 | 2026-08-27 12:50:31.688+03 | 2026-08-27 12:50:31.701+03 |     0.0
+ 8569f261-47a9-4267-9b23-261cc545bf87 | 8db516ab-f747-4d22-860b-7f0336664e3d | color  |          |       1 |       1 | 2026-08-27 12:50:31.679+03 | 2026-08-27 12:50:31.688+03 |     0.0
+ 8569f261-47a9-4267-9b23-261cc545bf87 | d85fd63f-43ce-4693-8036-9e858b544af3 | color  |          |       1 |       1 | 2026-08-27 12:50:31.679+03 | 2026-08-27 12:50:31.71+03  |     0.0
+ 8569f261-47a9-4267-9b23-261cc545bf87 | cc38b1a8-5f6a-46b0-923b-06af2996ffd7 | color  |          |       1 |       1 | 2026-08-27 12:50:31.679+03 | 2026-08-27 12:50:31.722+03 |     0.0
+ 8569f261-47a9-4267-9b23-261cc545bf87 | 49530c18-036d-4fa4-9e43-6fa67bdd4be6 | color  |          |       1 |       1 | 2026-08-27 12:50:31.679+03 | 2026-08-27 12:50:31.701+03 |     0.0
+ 98eea293-b00c-4814-8240-c22578e4ffc2 | 49530c18-036d-4fa4-9e43-6fa67bdd4be6 | color  |          |       1 |       1 | 2026-08-27 12:41:13.041+03 | 2026-08-27 12:50:31.701+03 |   558.7
+ 98eea293-b00c-4814-8240-c22578e4ffc2 | cc38b1a8-5f6a-46b0-923b-06af2996ffd7 | color  |          |       1 |       1 | 2026-08-27 12:41:13.041+03 | 2026-08-27 12:50:31.722+03 |   558.7
+ 98eea293-b00c-4814-8240-c22578e4ffc2 | d85fd63f-43ce-4693-8036-9e858b544af3 | color  |          |       1 |       1 | 2026-08-27 12:41:13.041+03 | 2026-08-27 12:50:31.71+03  |   558.7
+ 98eea293-b00c-4814-8240-c22578e4ffc2 | 8569f261-47a9-4267-9b23-261cc545bf87 | color  |          |       1 |       1 | 2026-08-27 12:41:13.041+03 | 2026-08-27 12:50:31.679+03 |   558.6
+ 98eea293-b00c-4814-8240-c22578e4ffc2 | 8db516ab-f747-4d22-860b-7f0336664e3d | color  |          |       1 |       1 | 2026-08-27 12:41:13.041+03 | 2026-08-27 12:50:31.688+03 |   558.6
+ 422c9757-2b63-4988-aac6-afc7480a1833 | 49530c18-036d-4fa4-9e43-6fa67bdd4be6 | color  |          |       1 |       1 | 2026-08-27 12:41:13.029+03 | 2026-08-27 12:50:31.701+03 |   558.7
+ 422c9757-2b63-4988-aac6-afc7480a1833 | 8db516ab-f747-4d22-860b-7f0336664e3d | color  |          |       1 |       1 | 2026-08-27 12:41:13.029+03 | 2026-08-27 12:50:31.688+03 |   558.7
+ 422c9757-2b63-4988-aac6-afc7480a1833 | 98eea293-b00c-4814-8240-c22578e4ffc2 | color  |          |       1 |       1 | 2026-08-27 12:41:13.029+03 | 2026-08-27 12:41:13.041+03 |     0.0
+ 422c9757-2b63-4988-aac6-afc7480a1833 | cc38b1a8-5f6a-46b0-923b-06af2996ffd7 | color  |          |       1 |       1 | 2026-08-27 12:41:13.029+03 | 2026-08-27 12:50:31.722+03 |   558.7
+(20 rows)
+
+--- S6: İÇE AKTARIMLA yazılmış kayıtlar (audit izi: newData._source = IMPORT) ---
+ tableName | audit_satiri | ayri_kosum 
+-----------+--------------+------------
+ COLOR     |          294 |        197
+(1 row)
+
+--- S7: İÇE AKTARIMLA YAZILMIŞ MÜKERRER SİPARİŞ (fiili çift yazım) ---
+ customerId | gun | siparis | ayri_kosum | ornek_idler 
+------------+-----+---------+------------+-------------
+(0 rows)
+
+--- S8: KORUMA TEYİDİ — import_runs üzerindeki kısıtlar/index (kilit yerine ne var) ---
+             conname             | contype |                                      tanim                                       
+---------------------------------+---------+----------------------------------------------------------------------------------
+ import_runs_userId_fkey         | f       | FOREIGN KEY ("userId") REFERENCES users(id) ON UPDATE CASCADE ON DELETE SET NULL
+ import_runs_createdAt_not_null  | n       | NOT NULL "createdAt"
+ import_runs_created_not_null    | n       | NOT NULL created
+ import_runs_durationMs_not_null | n       | NOT NULL "durationMs"
+ import_runs_entity_not_null     | n       | NOT NULL entity
+ import_runs_failed_not_null     | n       | NOT NULL failed
+ import_runs_id_not_null         | n       | NOT NULL id
+ import_runs_rowCount_not_null   | n       | NOT NULL "rowCount"
+ import_runs_skipped_not_null    | n       | NOT NULL skipped
+ import_runs_status_not_null     | n       | NOT NULL status
+ import_runs_updated_not_null    | n       | NOT NULL updated
+ import_runs_pkey                | p       | PRIMARY KEY (id)
+(12 rows)
+
+            indexname             |                                                indexdef                                                 
+----------------------------------+---------------------------------------------------------------------------------------------------------
+ import_runs_clientToken_key      | CREATE UNIQUE INDEX "import_runs_clientToken_key" ON public.import_runs USING btree ("clientToken")
+ import_runs_createdAt_idx        | CREATE INDEX "import_runs_createdAt_idx" ON public.import_runs USING btree ("createdAt")
+ import_runs_entity_createdAt_idx | CREATE INDEX "import_runs_entity_createdAt_idx" ON public.import_runs USING btree (entity, "createdAt")
+ import_runs_pkey                 | CREATE UNIQUE INDEX import_runs_pkey ON public.import_runs USING btree (id)
+ import_runs_userId_idx           | CREATE INDEX "import_runs_userId_idx" ON public.import_runs USING btree ("userId")
+(5 rows)
+
+--- S9: KIYAS TABANI — orderService.create gerçek maliyeti (audit izinden sipariş yazma hızı) ---
+         dakika         | siparis 
+------------------------+---------
+ 2026-07-23 11:24:00+03 |       2
+ 2026-08-21 12:11:00+03 |       2
+ 2026-07-20 16:27:00+03 |       2
+ 2026-07-24 16:25:00+03 |       2
+ 2026-07-22 14:36:00+03 |       2
+(5 rows)
+
+
+=========== EK SORGU: dev'deki iki `order` koşumu (D-B-05 repro kalıntısı) ===========
+                  id                  | entity |             clientToken              | rowCount | created | status  | durationMs |         createdAt          
+--------------------------------------+--------+--------------------------------------+----------+---------+---------+------------+----------------------------
+ b1274838-2c2b-4af2-9e0e-6f14db8c06a4 | order  | d094a18b-1421-4f0f-9066-52ae58fbabe6 |        1 |       1 | APPLIED |        116 | 2026-08-28 11:54:16.261+03
+ f2ce7b4e-d37a-4ff5-ba4f-797d2406aa97 | order  | 4ddeae49-e1f9-49a9-bca1-ecea542d0764 |        1 |       1 | APPLIED |         24 | 2026-08-28 11:54:16.312+03
+ f60b2d1e-a200-4262-bf42-3dd1eb342852 | order  | 191bc5a3-137d-4ab0-88de-240b8afcbc2c |        1 |       1 | APPLIED |         88 | 2026-08-28 18:25:02.584+03
+ d98bdef9-b334-4997-b824-55c83875ade8 | order  | 97d6e009-889a-423c-af91-ab04bc8551ef |        1 |       1 | APPLIED |         21 | 2026-08-28 18:25:02.631+03
+ ef8bd156-2336-422b-a35b-876017659231 | order  | a501a8f2-9849-4193-817d-19c297093bc1 |        1 |       1 | APPLIED |         69 | 2026-08-28 18:30:10.279+03
+ c81b3bbe-8a91-4891-94f1-5fa0a12aeac6 | order  | e7ca949c-e9d8-4c3a-8719-62015b336d14 |        1 |       1 | APPLIED |         28 | 2026-08-28 18:30:10.366+03
+(6 rows)
+
+ ayni_tokenli_iki_kosum 
+------------------------
+                      0
+(1 row)
+
+
+===============================================================================
+ ÖLÇÜM (SQL DIŞI) — pencerenin FİİLEN açıldığı eşik
+===============================================================================
+Saha'da 0 koşum olduğu için "15 sn tavanı aşılır mı" sorusu veriden okunamıyor;
+iki ölçümle türetildi.
+
+(A) Satır başına gerçek maliyet — dev DB, `ImportService.apply("order", …)`
+    (audit_repro_BULGU-T1-008.ts §3; sıcak önbellek, yerel PG 18.6)
+       1 satır →  6 ms
+       5 satır → 22 ms
+      20 satır → 79 ms
+    marjinal maliyet ≈ 3,8 ms/satır  (sabit gider ≈ 3 ms)
+    → Electron `apiClient.ts:44` timeout 15.000 ms ≈ 3.900 SATIRDA aşılır.
+    ⚠️ Bu bir ALT SINIRDIR: prod (Windows native PG, ağ, eşzamanlı vardiya
+       yükü) daha yavaştır → eşik daha DÜŞÜKTÜR.
+
+(B) Gövde boyutu — Electron `ImportDialog` gövdesinin birebir şekli
+    ({rows:[{rowNo,cells}], options}); global parser sınırı 1 MB
+    (`src/app.ts:141`; router'ın kendi 10 MB parser'ı `import.routes.ts:28`
+    ONDAN SONRA mount edildiği için ETKİSİZ — K9 H-1 / KYY-38):
+      ZENGİN satır (13 sütun, 327 B/satır):
+         1.000 → 0,311 MB ✅ · 2.000 → 0,623 MB ✅ · 3.350 → 1,044 MB ⛔ 413
+      SADE satır (yalnız 4 zorunlu sütun, 112 B/satır):
+         3.350 → 0,356 MB ✅ · 5.000 → 0,532 MB ✅
+         8.000 → 0,853 MB ✅ · 10.000 → 1,066 MB ⛔ 413
+
+SONUÇ — pencere hangi dosyada AÇIK:
+  · SADE şablon (4 sütun): ~3.900 – ~9.800 satır arası dosyalar hem 1 MB
+    parser'ından geçer HEM DE 15 sn'yi aşar → PENCERE AÇIK.
+  · ZENGİN şablon (13 sütun): 1 MB sınırı ~3.200 satırda kapanır, 15 sn eşiği
+    ~3.900'dür → panelden gönderilebilen dosya zaman aşımına UĞRAMAZ,
+    pencere pratikte KAPALI (413 önce gelir).
+  · Zaman aşımı TEK tetikleyici değil: ağ kopması / VPN düşmesi / sunucu
+    yeniden başlatması da `ECONNABORTED`/5xx üretir ve "Tekrar Dene"
+    aynı `attemptToken` ile gider (ImportDialog.tsx:118,160 — token yalnız
+    [open, entity] değişince yenilenir). Bu yollarda satır sayısı ŞART DEĞİL.

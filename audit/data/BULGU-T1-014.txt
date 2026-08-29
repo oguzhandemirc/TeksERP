@@ -1,0 +1,114 @@
+# BULGU-T1-014 — K2 fiili maruziyet ölçümü (prod kopyası tekserp_saha_0825, 2026-08-25)
+# Koşum: 2026-08-28 18:26
+# Araç: audit/tools/sql-saha.sh (salt-okunur). PIN/parola/kart jetonu ÇIKTIYA BASILMADI — yalnız sınıf sayıları ve id'ler.
+
+Pager usage is off.
+### 1) Giriş yöntemi ayarı + PIN kilidi ayar satırları (yoksa KOD VARSAYILANI geçerli)
+              key              |                     value                      
+-------------------------------+------------------------------------------------
+ auth.loginMethods             | {"enabled": ["list", "pin"], "primary": "pin"}
+ auth.pinLockoutEscalateAfter  | 3
+ auth.pinLockoutLongPenaltyMin | 15
+(3 rows)
+
+### 2) PIN maruziyeti — kaç aktif kullanıcı tek-faktör PIN taşıyor
+ aktif_kullanici | pinli | kartli | farkli_pin 
+-----------------+-------+--------+------------
+               8 |     7 |      0 |          7
+(1 row)
+
+### 3) PIN taşıyan kullanıcılardan kaçı yönetici yetkisine sahip (admin:* / *:*)
+ pinli_yonetici 
+----------------
+              3
+(1 row)
+
+### 3b) PIN taşıyan yöneticilerin id ve yetki sayısı (kişisel veri/PIN YOK)
+                  id                  | admin_yetki_sayisi | toplam_yetki 
+--------------------------------------+--------------------+--------------
+ ea0a5585-443e-44e7-9614-719d8ec1f138 |                  3 |           54
+ b33559d0-4c30-43c1-9c96-e47d950acd22 |                  3 |           55
+ 44acc97b-a1e3-4844-84a4-1bd1cf88827d |                  2 |           58
+(3 rows)
+
+### 4) PIN entropi sınıfları — KAÇ TANE zayıf sınıfta (hangi sınıf/PIN BASILMAZ)
+ pin_sayisi | ayni_rakam | iki_hane_tekrar | uc_hane_tekrar | bilinen_zayif | yil_benzeri | sifirla_baslayan 
+------------+------------+-----------------+----------------+---------------+-------------+------------------
+          7 |          3 |               3 |              3 |             2 |           0 |                2
+(1 row)
+
+### 4b) PIN sayısal dağılım — bitişik/ardışık atama var mı (değerler BASILMAZ)
+ pin_sayisi | komsu_fark_10_alti | komsu_fark_1000_alti | farkli_ilk_hane_kovasi | kaba_isabet_yuzdesi_denemede 
+------------+--------------------+----------------------+------------------------+------------------------------
+          7 |                  0 |                    0 |                      6 |                       0.0008
+(1 row)
+
+### 5) Fiili saldırı izi — son 90 günde başarısız/başarılı giriş, IP çeşitliliği
+    action     | adet | farkli_ip |    ilk     |    son     
+---------------+------+-----------+------------+------------
+ LOGIN_FAILED  |   67 |        16 | 2026-07-16 | 2026-08-25
+ LOGIN_SUCCESS |  214 |        32 | 2026-07-16 | 2026-08-25
+(2 rows)
+
+### 5b) Tek IP tek günde kaç başarısız deneme (kilit eşiğinin sahadaki izi)
+   ipAddress   |    gun     | basarisiz 
+---------------+------------+-----------
+ 192.168.1.56  | 2026-08-01 |         8
+ 192.168.1.188 | 2026-08-05 |         7
+ 192.168.1.168 | 2026-08-12 |         6
+ 192.168.1.39  | 2026-08-01 |         5
+ 192.168.1.39  | 2026-08-05 |         5
+(5 rows)
+
+### 5c) LOGIN_FAILED payload: hangi giriş yöntemi
+   yontem   | adet 
+------------+------
+ admin      |   22
+ quick-pin  |   15
+ eda        |    9
+ Enes       |    4
+ ADMİN      |    3
+ samet      |    3
+ Admin      |    2
+ Samet      |    2
+ berat      |    2
+ SAMET      |    2
+ Osman      |    1
+ adnansahın |    1
+ adnansahin |    1
+(13 rows)
+
+### 6) 429 LOGIN_LOCKED sahada hiç kuruldu mu (kilit gerçekten devrede mi izi)
+ locked_kayit 
+--------------
+            0
+(1 row)
+
+
+### EK: zayıf-PIN aday kümesi (7b yönetici odaklı)
+Pager usage is off.
+### 7) Zayıf PIN aday kümesi — kaç PIN, kaç adaylık sözlükle bulunur (değer BASILMAZ)
+ aday_kumesi | pin_adedi 
+-------------+-----------
+          10 |         3
+          20 |         1
+     1000000 |         3
+(3 rows)
+
+### 7b) YÖNETİCİ yetkili kullanıcıların PIN aday kümesi (id + küme boyu; DEĞER YOK)
+                  id                  | admin_yetki | aday_kumesi 
+--------------------------------------+-------------+-------------
+ b33559d0-4c30-43c1-9c96-e47d950acd22 |           3 |          10
+ ea0a5585-443e-44e7-9614-719d8ec1f138 |           3 |     1000000
+ 44acc97b-a1e3-4844-84a4-1bd1cf88827d |           2 |     1000000
+(3 rows)
+
+### 8) admin:* yetkisi TAŞIYAN kullanıcı sayısı (PIN'li olsun olmasın)
+ admin_yetkili_aktif 
+---------------------
+                   4
+(1 row)
+
+
+### EK: devicePairingRequired ayarı yok → default false (mobileUsers kimliksiz)
+### EK: express-rate-limit YOK (package.json: yalnız helmet); tek savunma login-lockout bellek Map'i

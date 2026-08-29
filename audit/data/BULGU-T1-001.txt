@@ -1,0 +1,129 @@
+######## SAHA (tekserp_saha_0825, prod kopyasi 2026-08-25) ########
+=== Q1 · ROLL_MANUAL_OVERRIDE toplam log sayisi (yolun kullanim hacmi) ===
+ toplam_override | metraj_yazan | supervizor_duzeltme |    ilk     |    son     
+-----------------+--------------+---------------------+------------+------------
+               4 |            0 |                   0 | 2026-07-16 | 2026-08-03
+(1 row)
+
+
+=== Q2 · Metrajı FİİLEN degistiren override satirlari (eski<>yeni) ===
+ id | roll_id | eski_qty | yeni_qty | olay | createdAt 
+----+---------+----------+----------+------+-----------
+(0 rows)
+
+
+=== Q3 · ÇAKISMA: kesilmis (cocuklu) topa kesimden SONRA metraj yazilmis mi? ===
+ log_id | parent_roll_id | ilk_kesim | override_ts | log_eski_qty | log_yeni_qty 
+--------+----------------+-----------+-------------+--------------+--------------
+(0 rows)
+
+
+=== Q3b · Ayni cakismanin sayisi (0 ise: mekanizma canlida henuz tetiklenmemis) ===
+ cakisma_sayisi 
+----------------
+              0
+(1 row)
+
+
+=== Q4 · MARUZ KALAN NUFUS: "Duzelt" kapsamindaki (FREE_STOCK) kesilmis toplar ===
+  status   | kesilmis_parent | cocuk_toplam 
+-----------+-----------------+--------------
+ WAREHOUSE |               3 |            3
+(1 row)
+
+
+=== Q5 · consistency-check §13 (currentQty > initialQty) — BU HATAYI GORMEZ ===
+ s13_ihlal 
+-----------
+         2
+(1 row)
+
+
+=== Q5b · §13 ihlallerinin cocuklu (kesilmis) olanlari — kaynak ayrimi ===
+                  id                  | barcode |    status     | initialQty | currentQty | cocuk_sayisi 
+--------------------------------------+---------+---------------+------------+------------+--------------
+ 95c15daf-bc74-4e30-b6da-7f3e998360e3 |         | IN_PRODUCTION |    492.000 |    698.900 |            9
+ 92d0ef12-c14d-49b2-b9be-74612e3ab944 |         | IN_PRODUCTION |    500.000 |    520.500 |           15
+(2 rows)
+
+
+=== Q6 · Kesilmis toplarda cur=init esitligi (hatanin gorunmezliginin olcumu) ===
+ kesilmis_parent | cur_esit_init | yuzde 
+-----------------+---------------+-------
+             125 |             9 |   7.2
+(1 row)
+
+
+######## DEV (adnansahin_db) ########
+=== Q1 · ROLL_MANUAL_OVERRIDE toplam log sayisi (yolun kullanim hacmi) ===
+ toplam_override | metraj_yazan | supervizor_duzeltme |    ilk     |    son     
+-----------------+--------------+---------------------+------------+------------
+            1947 |          166 |                   0 | 2026-07-16 | 2026-08-27
+(1 row)
+
+
+=== Q2 · Metrajı FİİLEN degistiren override satirlari (eski<>yeni) ===
+                  id                  |               roll_id                | eski_qty | yeni_qty |  olay   |         createdAt          
+--------------------------------------+--------------------------------------+----------+----------+---------+----------------------------
+ fb823d53-c263-4e25-b068-0aea0087bb8f | 40835a5c-14af-4095-bf69-5e2b8bc60216 | 100      | 250      | RELABEL | 2026-08-27 12:52:41.521+03
+ feb672eb-e2cb-4c1f-bc7d-68aeef199812 | bda4782b-3982-41b4-b3fa-ae4d4b57fe8e | 100      | 250      | RELABEL | 2026-08-27 12:43:57.173+03
+ 9b650165-e0c7-4847-8fdd-5590d7294462 | 6b1f7809-ee48-4577-8332-0715cc7679df | 100      | 250      | RELABEL | 2026-08-27 02:30:11.076+03
+ 62891284-21a1-4248-bd65-cc45a129252a | 734b86c9-fa1e-45a4-9b62-a84c9b7b4b81 | 100      | 250      | RELABEL | 2026-08-26 22:44:08.645+03
+ 65dc7f93-e991-4b7e-9378-bb39444ee778 | f6027d0b-369e-46f3-8109-04f0cd3b0d77 | 100      | 250      | RELABEL | 2026-08-26 22:40:07.181+03
+ 9a10bf53-9443-492b-b122-5bfe0d90c128 | 1b658610-227c-4642-bdb5-20f13a1d9748 | 100      | 250      | RELABEL | 2026-08-26 22:13:37.109+03
+ 2ec24376-17bc-4e7f-aa76-67f833b5cab5 | 0d137100-d20a-412e-bbff-b96e9ae8780e | 100      | 250      | RELABEL | 2026-08-26 20:56:29.08+03
+ e90d6acd-6d2a-495e-b9be-ef6b4130620e | 97348bf9-3ab5-4f86-8708-42406d56ab1b | 100      | 250      | RELABEL | 2026-08-26 20:52:01.91+03
+ 14f5a438-191b-4a66-a641-85bf2846b45f | 4e14be5d-89d5-4020-9180-5d82ce6226de | 100      | 250      | RELABEL | 2026-08-25 14:03:04.856+03
+ 6d314f1b-ace5-48f8-82e2-863ca1dfa2c0 | bb141eb0-0f41-4a73-af60-4ef554b7d0c5 | 100      | 250      | RELABEL | 2026-08-25 04:09:01.42+03
+ fbebd5a3-c77e-4bd4-808e-1d5480bb383d | 164b2ba2-91bc-4638-9064-d4a14b101e95 | 100      | 250      | RELABEL | 2026-08-25 03:39:27.924+03
+ 490b2773-8da3-4950-ae27-7d393228d18b | 6a3ea0e0-e93f-492a-ace8-0a4e350018d3 | 100      | 250      | RELABEL | 2026-08-22 11:36:52.893+03
+ 87eb4fb4-f9d6-47de-8f67-bbdf9cd7124b | dab36120-bde7-48e0-ae0c-abff00f2e746 | 100      | 250      | RELABEL | 2026-08-22 03:16:34.904+03
+ 7fee94f8-73b8-4e4f-816d-e9464ba53263 | f64dc329-a84d-4778-b3a3-af3023206d31 | 100      | 250      | RELABEL | 2026-08-22 03:04:02.246+03
+ 1e4f279a-2222-40e9-be2c-0714c4c4d3e5 | a178cbc8-2eb5-4b28-989f-78c5c6d7ed42 | 100      | 250      | RELABEL | 2026-08-22 03:03:30.816+03
+ 2cebdcf0-dc50-4a49-a25a-84438ae64db8 | 57ac70f8-abec-4637-87a6-8d147573b980 | 100      | 250      | RELABEL | 2026-08-22 02:57:16.268+03
+ e9889fe6-dded-4bc7-a034-0be5a4c58f0c | 8cc9f71b-1c9c-476f-8703-ab80c4cd5cb7 | 100      | 250      | RELABEL | 2026-08-21 21:37:05.068+03
+ 54ef7a6a-764e-4bf4-bf51-b39106d4c632 | bd21fff6-b086-44e6-9612-7aa780a3db60 | 100      | 250      | RELABEL | 2026-08-21 20:04:04.432+03
+ 5745ef53-cbad-4899-af1e-82d23a369fa4 | 49f503c1-32a6-4f16-ad71-1c19cc145d59 | 100      | 250      | RELABEL | 2026-08-21 19:58:14.135+03
+ 6ff8f6d7-3857-448e-ab96-323f6dfc8d38 | 1d2d24fb-7953-4a1c-879e-351548098f0a | 100      | 250      | RELABEL | 2026-08-21 19:48:15.647+03
+(20 rows)
+
+
+=== Q3 · ÇAKISMA: kesilmis (cocuklu) topa kesimden SONRA metraj yazilmis mi? ===
+ log_id | parent_roll_id | ilk_kesim | override_ts | log_eski_qty | log_yeni_qty 
+--------+----------------+-----------+-------------+--------------+--------------
+(0 rows)
+
+
+=== Q3b · Ayni cakismanin sayisi (0 ise: mekanizma canlida henuz tetiklenmemis) ===
+ cakisma_sayisi 
+----------------
+              0
+(1 row)
+
+
+=== Q4 · MARUZ KALAN NUFUS: "Duzelt" kapsamindaki (FREE_STOCK) kesilmis toplar ===
+  status   | kesilmis_parent | cocuk_toplam 
+-----------+-----------------+--------------
+ WAREHOUSE |               1 |            1
+(1 row)
+
+
+=== Q5 · consistency-check §13 (currentQty > initialQty) — BU HATAYI GORMEZ ===
+ s13_ihlal 
+-----------
+         0
+(1 row)
+
+
+=== Q5b · §13 ihlallerinin cocuklu (kesilmis) olanlari — kaynak ayrimi ===
+ id | barcode | status | initialQty | currentQty | cocuk_sayisi 
+----+---------+--------+------------+------------+--------------
+(0 rows)
+
+
+=== Q6 · Kesilmis toplarda cur=init esitligi (hatanin gorunmezliginin olcumu) ===
+ kesilmis_parent | cur_esit_init | yuzde 
+-----------------+---------------+-------
+              12 |             3 |  25.0
+(1 row)
+

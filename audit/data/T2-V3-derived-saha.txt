@@ -1,0 +1,47 @@
+
+== 21) WorkOrder.type  ↔  sipariş bağının varlığı  (tip bağın AYNASIDIR) ==
+   (satır varsa: liste/künye/refakat kartı ile detay paneli FARKLI şey söylüyor)
+work_order_id|workOrderNumber|tip|durum|bag_sayisi|sapma|createdAt
+(0 rows)
+
+== 22) IN_PROGRESS iş emri ama TÜM adımları COMPLETED/SKIPPED ==
+   (satır varsa: completeWorkOrderIfStepsDone kaçırılmış — WO sonsuza dek açık kalır)
+work_order_id|workOrderNumber|durum|adim_sayisi|atlanan|son_adim_tamamlanma
+(0 rows)
+
+== 23) AÇIK kurşun bypass ataması ama sahibi iş emri TERMİNAL ==
+   (satır varsa: devir/tebdil/iptalde repoint ya da void unutulmuş)
+bypass_id|workOrderNumber|wo_durumu|makine_kodu|assignedAt|notes
+(0 rows)
+
+== 24a) Fason kalemin TEK tam makbuzu İPTAL edilmiş (kalem yeniden AÇIK) ==
+   (satır varsa: receipt.cancelledAt süzgeci olmayan HER kopya bu kalemi KAPALI sanır)
+dispatch_item_id|dispatchNo|barcode|top_durumu|dispatchedQty|tam_makbuz_satiri|dispatchedAt
+(0 rows)
+
+== 24b) DOĞRUDAN SEVK edilmiş sevkin topu HÂLÂ fasonda (AT_SUBCONTRACTOR) ==
+   (satır varsa: mal hem "müşteriye çıktı" hem "fasonda bekliyor" — çift sayım)
+dispatch_item_id|dispatchNo|directShippedAt|barcode|top_durumu|currentQty|dispatchedQty
+(0 rows)
+
+== 25) Kartelalık işareti etiket BASILDIKTAN SONRA değişmiş ama etiket BAYAT değil ==
+   (satır varsa: topun üstündeki kâğıt kartela damgası konusunda YALAN söylüyor)
+roll_id|barcode|durum|labelPrintedAt|son_kartela_degisimi
+(0 rows)
+
+== 26) BİLGİ — Depodaki top rengi ≠ iş emrinin hedef rengi, sapma defterinde İZ YOK ==
+   (satır DÖNMESİ tek başına hata DEĞİLDİR — aşağıdaki gerekçeyi oku; kapı §26b)
+roll_id|barcode|durum|workOrderNumber|top_rengi|plan_rengi|finalizedAt
+b1608523-f322-485e-949a-07e37d579dd5|T170826F0104|WAREHOUSE|IE1008260014|EKRU|55-BEYAZ|2026-08-17 15:56:44.564359+03
+7f74a6ee-3bb6-4f95-a429-9f857aee46a2|T170826F0105|WAREHOUSE|IE1008260014|EKRU|55-BEYAZ|2026-08-17 16:21:55.394082+03
+cafa56e3-4475-411c-a097-063b63d2d78d|T170826F0108|WAREHOUSE|IE1008260014|EKRU|55-BEYAZ|2026-08-17 16:25:28.059101+03
+d5596184-283d-499e-ac6a-1edcb999bba8|T170826F0113|WAREHOUSE|IE1008260014|EKRU|55-BEYAZ|2026-08-17 16:33:19.92946+03
+(4 rows)
+
+== 26b) KAPI — aynısı ama YALNIZ plan-sapma kapısı yürürlüğe girdikten SONRA finalize edilenler ==
+   (satır varsa: kapı atlanmış ya da defter yazılmamış) — eşik: 2026-08-20 00:00:00+03
+roll_id|barcode|workOrderNumber|top_rengi|plan_rengi|finalizedAt
+(0 rows)
+
+== Türetilmiş-alan kontrolü bitti. §21-§25 ve §26b boşsa sistem sağlıklı. ==
+   (§26 satırları kapı öncesi tarihsel kayıt olabilir — finalizedAt sütununa bak.)

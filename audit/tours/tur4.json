@@ -1,0 +1,2463 @@
+{
+ "tour": 4,
+ "lens": "sınır durum merkezli — zaman/sayaç sınırları, girdi uçları, altyapı kesintileri",
+ "counts": {
+  "raw": 34,
+  "merged": 26,
+  "standing": 26,
+  "dropped": 0,
+  "s0": 0,
+  "s1": 0,
+  "s2": 1,
+  "s3s4": 25,
+  "k3": 5,
+  "k2": 0
+ },
+ "finders": [
+  {
+   "key": "E-1",
+   "ok": true,
+   "n": 8
+  },
+  {
+   "key": "E-2",
+   "ok": true,
+   "n": 11
+  },
+  {
+   "key": "E-3",
+   "ok": true,
+   "n": 15
+  }
+ ],
+ "standing": [
+  {
+   "id": "BULGU-T4-001",
+   "baslik": "İçe aktarımda tarih hücresi takvimi doğrulamıyor: '31.02.2026' sessizce 3 Mart olur, 2 haneli yıl / sayısal hücre yanlış okunur",
+   "siddet": "S3",
+   "kategori": "F",
+   "oncelik": "P2",
+   "modul": "import (17 adaptör; order.adapter)",
+   "kanit_seviyesi": "K3",
+   "dosya": "Teks-Erp/src/services/import/import-coerce.ts",
+   "satir": "71-98",
+   "failure_mode": "Planlamacı müşterinin sipariş listesini içe aktarır; bir satırda termin '31.02.2026' yazar (yazım hatası ya da gün/ay yer değiştirmesi). parseDateCell yalnız `m 1..12, d 1..31` kontrolü yapıp Date.UTC(2026,1,31) çağırır → 3 Mart 2026 döner, `null` DÖNMEZ, satır hatasız kabul edilir. Sipariş 3 Mart terminiyle açılır, ekranda '3.03.2026' görünür, kimse hatayı yakalamaz. İkinci uç: kolon kaymış bir dosyada termin hücresine Excel seri numarası `45900` düşer; tanınmayan biçim `new Date(s)` yedeğine düşer ve JS bunu YIL olarak parse eder (yıl 45899) → sipariş asla 'geciken' listesine düşmez (`deadline < now()` hiç doğru olmaz) ve Ürün Dengesi'nde sonsuza kadar açık talep olarak durur.",
+   "is_etkisi": "Sipariş/termin verisi sessizce yanlış — üretim önceliği, OTIF karnesi (shipment-scorecard), Geciken Siparişler ve Ürün Dengesi hepsi bu iki kolonu okur. Kullanıcıya hiçbir uyarı çıkmadığı için hata dosyanın kendisinde aranır, sistemde değil.",
+   "koruma_kontrolu": "Bakıldı: (a) parseDateCell'de ay uzunluğu/artık yıl doğrulaması yok; (b) import.service.ts:88-91 yalnız `null` kontrolü yapıyor, dönen Date'i doğrulamıyor; (c) order.adapter.ts:57-58 sütun tanımında ek validate yok (yalnız help/example); (d) orders.orderDate / orders.deadline üzerinde CHECK yok (prisma/schema.prisma:1969-1975); (e) Zod bu yolda hiç koşmuyor (içe aktarım kendi dönüştürücüsünü kullanır).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "86-96",
+     "not": "else { const parsed = new Date(s); return Number.isNaN(...) ? null : parsed; } ... if (m<1||m>12||d<1||d>31) return null; const utcGuess = Date.UTC(y, m-1, d, 0,0,0);"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import.service.ts",
+     "satir": "88-91",
+     "not": "case \"date\": const d = parseDateCell(text); if (!d) return { error: ... } — null dönmediği için satır hatasız geçer"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/adapters/order.adapter.ts",
+     "satir": "57-58",
+     "not": "orderDate ve deadline type:\"date\" — ulaşılabilir yüzey (panelden sipariş içe aktarımı)"
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "1969-1975",
+     "not": "Order.orderDate / Order.deadline DateTime @db.Timestamptz — CHECK yok, DB tarafında hiçbir aralık koruması yok"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-1-02.log",
+     "satir": "1-40",
+     "not": "31.02.2026 -> 3.03.2026 · 30.02 -> 2.03 · 29.02.2026 -> 1.03 (artık yıl değil) · 31.04/31.06/31.09 -> ayın 1'i (6/6 kabul); \"45900\" -> yıl 45899, \"0\" -> 1999, \"1\" -> 2000, \"99999\" -> 99998 (6/6 tarih sayıldı)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "87-91",
+     "not": "else { const parsed = new Date(s); ... } — 2 haneli yıl bu yedeğe düşer ve JS AY.GÜN okur; hemen altındaki `if (m<1||m>12||d<1||d>31) return null` ayın GERÇEK uzunluğunu sormuyor."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "94",
+     "not": "Date.UTC(y, m-1, d, 0,0,0) — taşan günü bir sonraki aya taşır (31 Şubat = 3 Mart)."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/adapters/order.adapter.ts",
+     "satir": "57-58",
+     "not": "orderDate ve deadline sütunları type:'date' — bu yolun iki gerçek tüketicisi."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-01.log",
+     "satir": "§1, §2, §2b",
+     "not": "Ölçülen: 31.02.2026→2026-03-02T21:00Z · 29.02.2027→2027-02-28T21:00Z · 2026-02-30→2026-03-01T21:00Z · 01.02.26→2026-01-01T21:00Z (yerel ay=1 gün=2) · 31.12.2026 DOĞRU."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM orders WHERE \"orderDate\" > now() + interval '10 years' OR deadline > now() + interval '10 years' OR \"orderDate\" < timestamptz '2000-01-01';",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — DB erişimi yok (Postgres.app trust auth). İkinci sorgu: ay sonu kayması izi için ayın 1-3'üne yığılan içe aktarım tarihleri (GROUP BY factory day)."
+   },
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-1-02.ts ; Teks-Erp/scripts/audit_repro_E-2-01.ts (§1, §2, §2b) — koşuldu, log: audit/repro/E-2-01.log",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "parseDateCell'de üretilen Date'i geri biçimlendirip girdiyle karşılaştır (Intl en-CA + Europe/Istanbul): eşleşmiyorsa null dön → 31.02 reddedilir. Mevcut hata mesajı zaten var ('tarih okunamadı — GG.AA.YYYY yazın')."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Serbest `new Date(s)` yedeğini daralt: yalnız tam ISO desenine uyan hücrede kullan; salt rakam içeren hücre null dönsün. Excel seri numarasını DESTEKLEMEK ayrı bir karardır — bu düzeltme sessiz kabulü açık redde çevirir."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "scripts/test_import_* içine sınır vakaları (31.02, 29.02 artık-değil, salt rakam) negatif sondayla eklensin."
+    }
+   ],
+   "kabul_kriteri": "audit_repro_E-1-02.ts §1'de 6/6 satır null; §2'de 6/6 satır null; §3 (geçerli tarih → Europe/Istanbul yerel 00:00) değişmeden geçer.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "\"İçe aktarımda geçersiz hücre satırı REDDEDER\" (import.service sözleşmesi) + Order.deadline/orderDate'in gerçek takvim günü olması",
+   "onceki_defter": "yok",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-02",
+    "E-2-01"
+   ],
+   "primary": "E-1-02",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md",
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K3",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "import-coerce.ts:71-98 doğrulandı: dmy/ymd regex yakalarsa yalnız m∈[1,12], d∈[1,31] kontrol edilir, ayın GERÇEK gün sayısı hiç sorulmaz; Date.UTC taşan günü otomatik bir sonraki aya kaydırır (31 Şubat → 3 Mart) ve fonksiyon null DÖNMEZ. import.service.ts:88-91 yalnız null kontrolü yapar, dönen Date'in takvimsel geçerliliğini doğrulamaz. Repro logları (E-1-02, E-2-01) iddiayı ölçümle destekliyor. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "import-coerce.ts:71-98 satırları birebir doğrulandı; kod GÜNCEL olarak fabrika-günü/Istanbul-ofset düzeltmesini içeriyor (T4-002'den bağımsız, farklı dosya) ama takvim geçerliliği (ayın gerçek gün sayısı) HÂLÂ kontrol edilmiyor: node ile doğrulandı — Date.UTC(2026,1,31) → 2026-03-03T00:00:00Z (31 Şubat sessizce 3 Mart'a taşınıyor). import.service.ts:88-91 yalnız null kontrolü yapıyor, taşan tarihi reddetmiyor — doğrulandı. Bulgunun temel iddiası (31.02→Mart, takvim doğrulaması yok) canlı kod üzerinde doğrulandı; yalnız timing/UTC gerekçesi kısmen eskimiş ama esas kusur (overflow) sağlam.",
+     "corrected_impact": "S2 uygun"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/import/import-coerce.ts:71-96 birebir doğrulandı; ayrıca npx tsx ile canlı çalıştırıldı: '31.02.2026'->2026-03-02T21:00Z (yerel 3 Mart), '29.02.2026'(artık olmayan yıl)->2026-02-28T21:00Z, '31.04.2026'->2026-04-30T21:00Z, '01.02.26'(2 haneli yıl, dmy regex'i \\d{4} istediği için else dalına düşüyor)->2026-01-01T21:00Z, '45900'(Excel seri no)->yıl 45899. Kod satır satır iddiayla eşleşiyor; ay uzunluğu/artık yıl kontrolü gerçekten yok. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-002",
+   "baslik": "\"Tarih-yalnız\" alanlar UTC gece yarısına çakılıyor — bugün terminli sipariş 400 alır, termin gününde kapanan sipariş OTIF'te GEÇ sayılır",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P2",
+   "modul": "sipariş · iş emri · raporlar",
+   "kanit_seviyesi": "K3",
+   "dosya": "Teks-Erp/src/services/order.service.ts",
+   "satir": "955-964, 1848-1855",
+   "failure_mode": "(1) Planlamacı sabah 08:00'de acil sipariş girer, termini 'bugün' seçer. Electron `new Date(\"2026-09-01\").toISOString()` = 2026-09-01T00:00:00Z gönderir; create yolunda assertDeadlineNotBeforeOrderDate `ref = new Date()` (orderDate gönderilmiyor) ile kıyaslar → d < ref → 400 'Termin tarihi sipariş tarihinden önce olamaz'. Kural yalnız gece 00:00-03:00 arasında geçer; çalışma saatlerinin 3/4'ünde aynı gün terminli sipariş SİSTEME GİRİLEMEZ ve hata mesajı kullanıcının hiç girmediği 'sipariş tarihi'nden söz eder. (2) Termini 1 Eylül olan sipariş 1 Eylül 15:00'te kapanır → completedAt (12:00Z) > deadline (00:00Z) → OTIF karnesinde GEÇ, lateDaysSum'a 0,5 gün eklenir; aynı sipariş gece 01:00'de kapansa ZAMANINDA sayılırdı. (3) Gece 01:00'de açılan iş emrinin plannedStartDate'i 31 Ağustos 22:00Z olur; Düzenle diyaloğu `iso.slice(0,10)` ile '2026-08-31' gösterir (fabrika günü 1 Eylül) ve kullanıcı başka bir alanı düzeltip kaydederse plan başlangıcı kalıcı olarak 1 gün + 22 saat geriye yazılır.",
+   "is_etkisi": "Acil (aynı gün terminli) sipariş sisteme girilemiyor — operasyonel tıkanma + yanlış hata mesajı. Sevkiyat Karnesi (OTIF) ve Açık Sipariş Karşılama raporu termin gününü sistematik olarak fabrikanın aleyhine sayıyor; 'geciken sipariş' listesi termin gününün sabah 03:00'ında dolmaya başlıyor. İş emri plan tarihleri düzenleme sırasında sessizce geriye kayıyor ve Refakat Kartı'na basılan planlı tarih de bundan besleniyor.",
+   "koruma_kontrolu": "Bakıldı: (a) backend'de tarih-yalnız değerleri fabrika gününe oturtan hiçbir normalizasyon yok (grep factoryDayStart src/services/order.service.ts = 0 sonuç); (b) Order.deadline DateTime? @db.Timestamptz (schema:1975) — CHECK/trigger yok; (c) Zod yalnız z.coerce.date() (tip doğrulaması, semantik yok); (d) scripts/test_report_day_boundary.ts yalnız DATE_TRUNC/CURRENT_DATE/setHours tarar, bu sınıfı görmez; (e) scripts/test_order_leadtime.ts termin gün sınırını sondalamıyor; (f) create/update asimetrisi: update yolu (order.service.ts:2277-2282) current.orderDate kullanır ve DOĞRUDUR — koruma yalnız create'te yok.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/order.service.ts",
+     "satir": "955-964",
+     "not": "const ref = orderDate != null ? new Date(orderDate) : new Date(); if (d.getTime() < ref.getTime()) throw AppError.badRequest(...) — AN kıyası, gün kıyası değil; create çağrısı :1855"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/order.service.ts",
+     "satir": "1848-1852",
+     "not": "Backend varsayılan termini de tarih-yalnız DEĞİL: deadline = orderDate + N gün → siparişin girildiği SAATİ taşır (08:00'de girilen ile 22:00'de girilen aynı 'N gün' farklı biter)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reports/shipment-scorecard.report.service.ts",
+     "satir": "103-104, 146-152",
+     "not": "COUNT(*) FILTER (WHERE o.\"completedAt\" <= o.deadline) AS \"onTime\" · EXTRACT(EPOCH FROM (now() - o.deadline))/86400.0 AS \"daysLate\" + WHERE o.deadline < now()"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reports/open-order-coverage.report.service.ts",
+     "satir": "203-210",
+     "not": "const late = deadline.getTime() < now ? Math.floor((now - deadline)/86_400_000) : null; if (late != null ...) sum.overdueLines++ → termin GÜNÜNDE late=0 (null değil) → overdue kovasına düşer"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/pages/Operations/Orders/OrdersPage.tsx",
+     "satir": "168, 205",
+     "not": "deadline: v.deadline ? new Date(v.deadline).toISOString() : null — v.deadline 'YYYY-MM-DD' (OrderFormDialog.tsx:53 order.deadline.slice(0,10), schema.ts:52 z.string())"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/pages/Operations/WorkOrders/workOrderPayload.ts",
+     "satir": "15-17, 111-112",
+     "not": "dateOrNull = new Date(s).toISOString(); plannedStartDate/plannedEndDate — aynı kalıp; geri okuma workOrderPrefill.ts:22-25 iso.slice(0,10)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/workorder.service.ts",
+     "satir": "388-399",
+     "not": "resolvePlanDates: plannedStartDate = startInput ? new Date(startInput) : new Date() — boş bırakılırsa süreç anı yazılır, gece penceresinde UTC günü DÜNDÜR"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-1-03.log",
+     "satir": "1-45",
+     "not": "'1 Eylül' -> 2026-09-01T00:00:00Z = yerel 03:00 (fabrika günü başlangıcı 2026-08-31T21:00Z); bugün terminli sipariş 08:00/13:00/18:00'de 400 (3/4); OTIF 07:00/15:00/23:00 kapanışta GEÇ (3/4); coverage late=0; gece 01:00 ve 02:59'da açılan İE formda 2026-08-31 (2/3)"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT date_part('hour', deadline AT TIME ZONE 'Europe/Istanbul') AS yerel_saat, count(*) FROM orders WHERE deadline IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — DB erişimi yok. yerel_saat=3 → istemciden gelen tarih-yalnız, diğerleri backend varsayılanı. İkinci sorgu (OTIF'in yanlış 'geç' saydıkları): SELECT count(*) FROM orders WHERE \"completedAt\" IS NOT NULL AND deadline IS NOT NULL AND \"completedAt\" > deadline AND (\"completedAt\" AT TIME ZONE 'Europe/Istanbul')::date <= (deadline AT TIME ZONE 'Europe/Istanbul')::date; Üçüncü: SELECT count(*) FROM work_orders WHERE date_part('hour', \"plannedStartDate\" AT TIME ZONE 'Europe/Istanbul') < 3;"
+   },
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-1-03.ts",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Sözleşmeyi yaz ve TEK yerde uygula: 'termin/planlı tarih bir TAKVİM GÜNÜDÜR'. Backend, saat bileşeni 00:00Z olan (tarih-yalnız) değerleri kabul ederken fabrika gününün SONUNA çeksin: factoryDayStart(d + 1 gün) − 1 ms. Üç failure_mode da kapanır. Migration yok."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "assertDeadlineNotBeforeOrderDate create yolunda ref'i factoryDayStart(new Date()) yapsın (gün kıyası, an kıyası değil) — update yolu zaten doğru."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "İstemcide slice(0,10) yerine fabrika günü ile biçimle (Intl + Europe/Istanbul): OrderFormDialog.tsx:53, workOrderPrefill.ts:22-25, PermissionsTab.tsx:58. Aksi hâlde gece penceresinde görüntü hâlâ bir gün geri kalır."
+    },
+    {
+     "vade": "uzun",
+     "aciklama": "[PROD'DA ÇALIŞTIRMA] Alternatif kökten çözüm: deadline/plannedStartDate/plannedEndDate kolonlarını @db.Date'e çevirmek — tüm okuyucular etkilenir, prod_risk yüksek; geri alma kolon tipini timestamptz'e döndürmek. Bu tur için ÖNERİLMEZ."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Bekçi: test_report_day_boundary.ts'e 'tarih-yalnız alan' bölümü — deadline/plannedStartDate/validUntil yazan yolların fabrika gün sınırına oturduğunu negatif sondayla ölç."
+    }
+   ],
+   "kabul_kriteri": "audit_repro_E-1-03.ts §2'de 4/4 'kabul'; §3'te 4/4 'ZAMANINDA'; §4'te late === null; §5'te 0/3 kayma.",
+   "efor_gun": 1.5,
+   "etkilenen_degismez": "\"Termin bir takvim günüdür\" · \"Fabrika günü Europe/Istanbul takvim günüdür\" (CLAUDE.md + constants/time.ts) — kural okuma/gruplama tarafına uygulanmış, YAZMA tarafındaki tarih-yalnız alanlara uygulanmamış",
+   "onceki_defter": "yok",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-03"
+   ],
+   "primary": "E-1-03",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K3",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "order.service.ts:955-964 doğrulandı: assertDeadlineNotBeforeOrderDate anlık (getTime) kıyası yapar, fabrika günü normalizasyonu yok; orderDate create'te Electron'dan hiç gönderilmiyor (OrdersPage.tsx buildCreatePayload'da orderDate alanı YOK) → ref=new Date() (şu an). Electron deadline'ı 'YYYY-MM-DD'den new Date(...).toISOString() ile UTC gece yarısına çeviriyor (satır 168) — Europe/Istanbul'da yerel 03:00'ten sonraki her an için d<ref olur → 400. Import tarafındaki parseDateCell (aynı repoda) bu sorunu factory-day mantığıyla zaten çözmüş durumda; ama order.service.ts create/update akışı bu düzeltmeyi KULLANMIYOR — iddia edilen asimetri gerçek. shipment-scorecard/open-order-coverage raporlarındaki termin-günü karşılaştırmaları da aynı UTC-gece-yarısı sorununu taşıyor. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "order.service.ts:955-964 assertDeadlineNotBeforeOrderDate: ref = orderDate!=null ? new Date(orderDate) : new Date() — AN (instant) kıyası doğrulandı, gün kıyası yok. order.service.ts:1846-1851 create yolunda orderDate gönderilmezse default now(). audit/repro/E-1-03.log içinde script FİİLEN koşulmuş ve sonuçlar iddiayla birebir örtüşüyor: sabah/öğle/akşam saatlerinde 'bugün' terminli sipariş 400 alıyor (yalnız 00:00-03:00 penceresinde geçiyor), OTIF termin gününün 3/4'ünde GEÇ sayıyor, open-order-coverage termin gününde late=0 ile overdue kovasına düşürüyor, gece 01:00-02:59 açılan İE formda bir gün geri görünüyor. Bu K3 kanıtı (gerçek script çıktısı) iddiayı güçlü şekilde destekliyor; çürütülemedi.",
+     "corrected_impact": "S2 uygun, hatta yaygınlık/etkilenen yüzey sayısı (create+OTIF+coverage+WO formu+admin izin) göz önüne alınırsa S3'e çekilmesi bile tartışılabilir ama mevcut S2 makul kalır."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "order.service.ts:955-964 assertDeadlineNotBeforeOrderDate doğrulandı: ref = orderDate!=null ? new Date(orderDate) : new Date() — AN kıyası. Electron/src/pages/Operations/Orders/{OrderFormDialog.tsx,schema.ts} içinde 'orderDate' hiç geçmiyor (grep 0 sonuç) → create formunda hiçbir zaman gönderilmiyor, yani ref her zaman 'şu an' (gerçek saat-dakika). deadline ise date-only string'den UTC gece yarısına parse ediliyor (Electron OrdersPage.tsx:168/205 new Date(v.deadline).toISOString()) → İstanbul 00:00-03:00 dışındaki her saatte d<ref, 400. shipment-scorecard.report.service.ts (completedAt<=deadline) ve open-order-coverage.report.service.ts:203-206 (late=deadline<now?floor(...):null, termin gününde now geçtiği an late=0≠null→overdueLines) satır satır doğrulandı. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-003",
+   "baslik": "\"Aynı clientToken, FARKLI gövde\" kuralı yalnız 4 uçta var; Tambur depo kesimi, açık kumaş kesimi/oluşturma ve çuval açma ikinci FARKLI isteğe \"başarılı\" diyor",
+   "siddet": "S2",
+   "kategori": "B.3",
+   "oncelik": "P0",
+   "modul": "Tambur · depo · paketleme",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/tambur.service.ts",
+   "satir": "2276-2300 (ikiz: 2970-2990; inventory.service.ts:4217-4234; shipping.service.ts:181-215)",
+   "etkilenen_degismez": "İdempotent replay yalnız AYNI mantıksal işlem için geçerlidir; farklı gövde farklı işlemdir",
+   "koruma_kontrolu": "Aranan korumalar: (1) clientToken @unique VAR — ama tekillik yalnız ikinci KAYDI engeller, yanlış CEVABI engellemez; (2) F117 payload-özdeşlik kontrolü — KK1 (inventory.service.ts:967-1000), iş emri (workorder.service.ts:1180-1192), sipariş (order.service.ts:2022-2053), kartela (kartela.service.ts:1428) uçlarında VAR, beş uçta YOK; (3) atomik claim — kesim yolunda parent claim var ama replay dalı claim'in DIŞINDA çalışıyor; (4) istemci tarafı — token yalnız BAŞARIDA tazeleniyor (TamburScreen.tsx:1286, PaketlemeScreen.tsx:181), yani aynı token farklı gövdeyle sahada gerçekten gönderilebiliyor.",
+   "failure_mode": "Operatör R topundan 40 m keser, istek zaman aşımına uğrar ama sunucuda COMMIT olur (çocuk 40 m, parent 100→60). Operatör yeniden ölçer, 25 m yazar, tekrar 'Kes'e basar; token rollId başına tutulduğu için AYNI token gider. Sunucu P2002 alır, token'la bulduğu ilk çocuğu (40 m) + gelen rollId ile bulduğu parent'ı döndürür, mesaj 'Kesim zaten kaydedilmiş', HTTP 200. Operatörün düzeltmesi sessizce yutulur. Çuval açmada ikizi: A müşterisi için açılan çuval belirsiz düşer, operatör B müşterisini seçip tekrar dener, sunucu A'nın çuvalını 'Çuval açıldı' diyerek döndürür ve toplar yanlış müşterinin çuvalına okutulur.",
+   "is_etkisi": "Depoda ve Tambur'da metraj/kimlik sessizce yanlış kalır. Mutabakat sorgusu yakalayamaz: ortada tutarsız bir kayıt yok, YANLIŞ bir kayıt var. Çuval ayağında hata ancak irsaliye basılırken görülür.",
+   "cakisma_senaryosu": "T1 Tambur: cutWarehouseRoll(rollId=R, cutLength=40, token=T) → COMMIT (çocuk 40 m, parent 60 m); yanıt istemciye ULAŞMAZ (zaman aşımı). T2 Tambur: aynı ekran, cutWarehouseRoll(rollId=R, cutLength=25, token=T) → P2002 → catch dalı existing'i yalnız token'la, freshParent'ı gelen rollId ile bulur, ikisinin akraba olduğunu DOĞRULAMAZ. SONUÇ: HTTP 200 + 'Kesim zaten kaydedilmiş' + 40 m'lik çocuk; 25 m hiçbir yere yazılmaz, hiçbir uyarı çıkmaz.",
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-2-02.ts — koşuldu, TETİKLENEMEDİ (dev DB erişilemez: 'Postgres.app failed to verify trust authentication'); negatif sonuç audit/repro/E-2-02.log",
+   "efor_gun": 1.5,
+   "kabul_kriteri": "Beş uçta da aynı token + farklı gövde → 409 CLIENT_TOKEN_COLLISION; aynı token + AYNI gövde → 200 + 'zaten kaydedilmiş' (bugünkü davranış korunur); cutWarehouseRoll replay'inde existing.parentRollId !== rollId → 409.",
+   "onceki_defter": "BULGU-T3-028 (fason kabulünde aynı boşluk) · BULGU-T3-010 (iptal edilmiş sevkiyat replay'i) · BULGU-T1-006 (iptal edilmiş KK1 kaydı replay'i) — bu bulgu kalan BEŞ ucu ve kuralın tekleştirilmesini ekler; Tambur kesimi ve çuval açma hiçbir turda yazılmamıştı.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "967-1000",
+     "not": "DOĞRU kalıp (F117): sameItem && sameColor && sameQty değilse AppError.conflict(... code:'CLIENT_TOKEN_COLLISION', existing, incoming)."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "2276-2300",
+     "not": "EKSİK kalıp: existing yalnız clientToken ile, freshParent gelen rollId ile bulunuyor; akrabalık ve cutLength HİÇ kıyaslanmıyor → success:true + 'Kesim zaten kaydedilmiş'."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "2970-2990",
+     "not": "cutOpenFabric'te aynı eksik kalıp (yorumu 'cutWarehouseRoll ile aynı' diyor — eksiklik de aynı)."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "181-215",
+     "not": "openSack replay'i tx'e HİÇ girmeden ön kapıda dönüyor; customerId/branchId kıyaslanmıyor."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "4217-4234",
+     "not": "createOpenFabric replay'i: token'la bulunan Roll koşulsuz dönüyor; receiptId/stepId kıyaslanmıyor."
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/screens/Modules/Tambur/TamburScreen.tsx",
+     "satir": "737-747, 1286",
+     "not": "Token rollId başına tutulur ve YALNIZ başarıda düşer → aynı top için farklı metrajla yeniden gönderim sahada mümkün."
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/screens/Modules/TartiPaket/PaketlemeScreen.tsx",
+     "satir": "128, 179, 181",
+     "not": "openSack token'ı yalnız başarıda tazeleniyor; müşteri seçimi değişse de aynı kalıyor."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-02.log",
+     "satir": "tamamı",
+     "not": "Tetiklenemedi — DB erişilemez. Script fixture damgalı (AUDITREPRO-E-2-02-*) + finally temizlikli, FK sırasına uygun; DB açılınca doğrudan koşar."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "F117 kontrolünü ortak yardımcıya çıkar: helpers/idempotent-replay.helper.ts → assertSamePayloadOr409(existing, incoming, keys); kimlik-kilit alanları: kesimde parentRollId + cutLength (Decimal.equals), açık kumaşta parentReceiptId + stepId, çuvalda customerId + branchId, sevkiyatta customerId + çuval kümesi."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "cutWarehouseRoll/cutOpenFabric replay dalında existing.parentRollId === rollId doğrulaması pazarlık dışı — bugün yabancı ebeveyn/çocuk çifti döndürülebiliyor."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Mekanik bekçi: token taşıyan HER serviste 'farklı gövde → 409' bölümü olan tek bir scripts/test_client_token_collision.ts; negatif sonda ile kırmızı verdiği kanıtlansın."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-02"
+   ],
+   "primary": "E-2-02",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Kod tam iddia edildiği gibi doğrulandı. tambur.service.ts:2276-2300 (cutWarehouseRoll) ve 2970-2990 (cutOpenFabric) catch bloklarında P2002 sonrası `existing` yalnız clientToken ile, `freshParent` yalnız gelen rollId ile bulunuyor — cutLength/akrabalık HİÇ karşılaştırılmıyor, doğrudan success:true + 'Kesim zaten kaydedilmiş' dönüyor. Kıyasla inventory.service.ts:972-1004 (createInitialEntry) F117 desenini uyguluyor: sameItem/sameColor/sameQty kontrolü yoksa 409 CLIENT_TOKEN_COLLISION fırlatıyor — bu koruma tambur kesim yollarında YOK. inventory.service.ts:4221-4233 (createOpenFabric) de existing'i koşulsuz döndürüyor (receiptId/stepId kıyaslanmıyor). shipping.service.ts:181-199 (readOpenSackReplay) da customerId/branchId kıyaslamadan tx dışında koşulsuz cached sonucu dönüyor. clientToken @unique DB kısıtı yalnız ikinci INSERT'i engelliyor, yanlış payload'la gelen replay'in doğru cevap üretmesini garanti etmiyor — bu nedenle DB tarafında bulguyu çürüten bir unique/check/trigger yok. Şiddet ve senaryo tutarlı görünüyor; çürütme bulunamadı."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "tambur.service.ts:2276-2300 doğrulandı: P2002 catch dalı yalnız clientToken ile existing'i, rollId ile freshParent'ı bulup success:true dönüyor — cutLength/akrabalık karşılaştırması YOK (F117'nin inventory.service.ts:967-1000'deki sameItem&&sameColor&&sameQty kalıbı burada yok). shipping.service.ts:181-215 readOpenSackReplay de aynı şekilde customerId/branchId kıyaslamadan cached'i döndürüyor. inventory.service.ts:4217-4234 createOpenFabric replay'i de payload karşılaştırması yapmadan existing'i döner. Mobil taraf (TamburScreen.tsx:731-747) token'ı yalnız rollId değişince veya BAŞARI gelince yeniliyor — yani aynı rollId için timeout sonrası farklı cutLength ile tekrar deneme senaryosu istemci kodunda gerçekten mümkün. Bulgu kanıtlarla birebir doğrulandı, çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Doğrudan dosya okumasıyla 4 konum da doğrulandı: tambur.service.ts:2276-2300 (cutWarehouseRoll) ve :2970-2990 (cutOpenFabric) catch-P2002 dalında `existing` yalnız clientToken, `freshParent`/parent yalnız rollId ile bulunuyor — cutLength veya ebeveyn-çocuk ilişkisi hiç kıyaslanmadan success:true dönüyor (2970-2990'daki yorum bizzat 'cutWarehouseRoll ile aynı' diyerek eksikliğin bilinçli kopyalandığını doğruluyor). shipping.service.ts:181-215 openSack → readOpenSackReplay token'la bulduğu Sack'i customerId/branchId karşılaştırmadan döndürüyor. inventory.service.ts:4217-4234 createOpenFabric aynı bare-token lookup. Karşıt kanıt: inventory.service.ts:967-1000 (createInitialEntry) F117 desenini GERÇEKTEN uyguluyor — sameItem&&sameColor&&sameQty kontrolü + uyuşmazlıkta 409 CLIENT_TOKEN_COLLISION fırlatıyor; bu dördünde o karşılaştırma satırı yok. Mobil taraf da doğrulandı: TamburScreen.tsx:1286 ve PaketlemeScreen.tsx:181,229 token'ı YALNIZ başarıda yeniliyor (generateClientUuid() success callback'inde) — yani zaman aşımı+sunucu-taraflı commit senaryosunda aynı token farklı gövdeyle fiilen tekrar gönderilebiliyor; bu spekülatif bir yarış değil, idempotency retry yolunun kendisi. DB unique kısıtı (clientToken @unique) burada koruma değil tam da hatalı catch dalını TETİKLEYEN mekanizma. Route/flag koruması yok. Şiddet S2 makul: sessiz veri kaybı (operatörün düzeltmesi yutulur), HTTP 200 + yanıltıcı mesaj, alarm/mutabakat yakalamaz ama finansal/sevkiyat bütünlüğünü doğrudan bozmuyor — enflasyon yok, hafifletme de yok."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-004",
+   "baslik": "apply-attribute-to-rolls top sayısını sınırlamıyor — N seri transaction istemci bütçesini ve kapanış penceresini aşar, failed[] kimseye ulaşmaz",
+   "siddet": "S3",
+   "kategori": "F",
+   "oncelik": "P2",
+   "modul": "İş emri / top düzeltme",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "Zod şemasında .max() YOK (aynı dosyadaki üç kardeş şema .max(500) taşıyor: :118, :127, :137); döngüde zaman bütçesi, AbortSignal ya da devam-noktası yok; failed[] yalnız yanıt gövdesinde taşınıyor, audit satırı (workorder-link.service.ts:809-823) yalnız failedCount sayısını yazıyor, hangi topların düştüğünü DEĞİL. Tek fiili tavan 1 MB gövde limiti (~26.000 UUID).",
+   "dosya": "Teks-Erp/src/controllers/workorder.controller.ts",
+   "satir": "265-270 (döngü: workorder-link.service.ts:783-807)",
+   "failure_mode": "400 toplu bir iş emrinde planlamacı 'hepsinin rengini düzelt' der; döngü ~400 × 30-60 ms ≈ 15-25 s sürer. (a) Panel 15. saniyede vazgeçer, kırmızı toast basar; sunucu 400 topu düzeltir ama failed[] raporunu kimsenin dinlemediği sokete yazar; planlamacı 'olmadı' sanıp tekrar basar → ikinci koşum updatedAt'i tazeler ve envanter listelerinin sıralaması ikinci kez oynar. (b) Aynı işlem sırasında pm2 restart (deploy) ya da max_memory_restart gelirse döngü 5. saniyede process.exit(1) ile kesilir → 160 top yeni renkte, 240 top eski renkte kalır; fark hiçbir yerde yazılı değildir, audit satırı bile yazılmaz (o satır döngüden SONRA, :809). Plan rengi (changeTargetColor) daha önce commit edilmiştir → iş emri 'hedef renk X' der, toplarının %60'ı X'tir.",
+   "is_etkisi": "İş emri planı ile malın gerçeği ayrışır; Tambur plan-sapma kapısı (409 PLAN_MISMATCH) düzeltilmemiş topların her birinde tekrar soru sorar ve operatör 'zaten düzeltilmişti' diye onaylayıp geçer — kapının anlamı aşınır.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/workorder.controller.ts",
+     "satir": "265-270",
+     "not": "applyAttributeSchema: rollIds: z.array(z.string().uuid()).min(1) — .max() YOK"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/workorder.controller.ts",
+     "satir": "118, 127, 137",
+     "not": "Kardeş şemaların hepsi rollIds ... .max(500).optional() — asimetri"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/workorder-link.service.ts",
+     "satir": "783-807",
+     "not": "for (const roll of rolls) { await inventoryService.applyManualProperties(...) } — top başına AYRI tx, tavansız, bütçesiz"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/server.ts",
+     "satir": "150-154",
+     "not": "forceTimer = setTimeout(() => process.exit(1), 5000) — server.close() beklese de 5. saniyede süreç zorla ölür"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/ecosystem.config.js",
+     "satir": "57",
+     "not": "max_memory_restart: '1G' — restart vardiya ortasında uyarısız gelir"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Electron/src/services/apiClient.ts",
+     "satir": "44",
+     "not": "timeout: 15_000"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "Hedef rengi olan iş emirlerinde rolls.colorId <> workOrders.targetColorId olan açık kumaşların WO başına dağılımı (tam kapsama beklenirken kısmi kapsama = bu bulgunun izi)",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — DB erişilemedi."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Şemaya kardeşleriyle aynı tavanı koy: rollIds ... .max(500)."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Döngüye zaman bütçesi ekle (10 s dolunca dur, partial:true + remainingRollIds döndür) — kısmi sonuç bu projede kabul edilmiş bir tasarım; eksik olan parçalılığın GÖRÜNÜR olması."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "failed[]'i audit'e de yaz (rollIds zaten yazılıyor) ki yanıt kaybolsa bile iz kalsın."
+    }
+   ],
+   "kabul_kriteri": "501 top ile istek 400 alır; 500 topluk istek bütçeyi aşarsa partial:true + kalan liste döner; audit satırı düşen topların id'lerini taşır. Bekçi: scripts/test_wo_target_color_guard.ts'e bölüm; negatif sonda tavanın kaldırılması.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "Toplu işlemin sonucu (kaç kayıt uygulandı, hangileri düştü) kullanıcıya ulaşır",
+   "onceki_defter": "ilgili id yok",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-05"
+   ],
+   "primary": "E-3-05",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "workorder.controller.ts:265-270 doğrulandı: applyAttributeSchema.rollIds yalnız .min(1) taşır, kardeş şemalardaki (satır 118/127/137) .max(500) YOK. workorder-link.service.ts:784-808 doğrulandı: for-of döngüsü top başına ayrı applyManualProperties çağrısı yapar, tx/AbortSignal/zaman bütçesi yok; audit (810-824) yalnız `rollIds: ids` (TÜM giriş listesi) + `failedCount` yazıyor, HANGİ topların failed olduğunu (failed[] içeriğini) audit'e yazmıyor — iddia doğrulandı. ecosystem.config.js max_memory_restart:'1G' + server.ts forceTimer(5000) senaryoyu destekliyor. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "workorder.controller.ts:265: applyAttributeSchema rollIds z.array(...).min(1) — .max() YOK, doğrulandı. Aynı dosyada satır 118,127,137'deki kardeş şemalar (.max(500)) doğrulandı — asimetri gerçek. workorder-link.service.ts:783-807 for-döngüsü top başına ayrı applyManualProperties çağrısı (ayrı tx), tavansız — doğrulandı. server.ts:149-153 forceTimer 5000ms process.exit(1) doğrulandı; ecosystem.config.js max_memory_restart:'1G' doğrulandı. Audit satırı (workorder-link.service.ts ~809+) yalnız failedCount/updated sayısını yazıyor, hangi rollId'lerin düştüğünü DEĞİL — doğrulandı (failed[] yalnız HTTP yanıtında).",
+     "corrected_impact": "S2 uygun"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "workorder.controller.ts:265-270 applyAttributeSchema.rollIds'te .max() yok, kardeş şemalar (:101 .max(300), :118/:127 .max(500), :137 .max(500)) ile asimetri doğrulandı. workorder-link.service.ts:783-807 for-of döngüsü top başına ayrı applyManualProperties çağırıyor, tavan/bütçe yok; audit (:809-823) yalnız rollIds(=istenen tüm liste)+failedCount yazıyor, HANGİ topların düştüğü audit'e girmiyor (yalnız HTTP yanıtında). server.ts:148-152 forceTimer 5sn'de process.exit(1) doğrulandı. Senaryo (deploy/pm2 restart ortasında yarım kalma) gerçek bir eşzamanlılık penceresi; çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-005",
+   "baslik": "Toplu etiket (2000 top tavanı) tek-process sunucuda CPU+bellek tepesi üretiyor; tekrar basış işi ÇOĞALTIYOR, OOM restartına kadar gidebiliyor",
+   "siddet": "S3",
+   "kategori": "H",
+   "oncelik": "P3",
+   "modul": "Etiket baskı",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "Uçta 'zaten koşuyor' bayrağı, kullanıcı başına eşzamanlılık sınırı ve rate limit YOK (grep rateLimit src/routes/label.routes.ts = 0); sunucu tarafında handler'ı kesecek hiçbir şey yok — requestTimeout/headersTimeout/keepAliveTimeout grep src/server.ts,src/app.ts = 0; raster baytları akış yerine bellekte biriktiriliyor. Mevcut koruma (25 topta bir setImmediate) event-loop açlığını çözüyor ama SÜREYİ ve BELLEĞİ çözmüyor.",
+   "dosya": "Teks-Erp/src/controllers/label.controller.ts",
+   "satir": "19, 41 (servis: label.service.ts:1122-1136, 1170-1195)",
+   "failure_mode": "Depo sorumlusu 1.200 toplu listeyi seçip 'Hepsini Bas' der. Raster yolunda her etiket ~40-150 KB'lık bayt bloğu üretir [VARSAYIM — birim boyut ölçülemedi]; buffers[] ~50-180 MB, Buffer.concat bir kopya daha, toString('base64') ~1,33 katı bir string daha, res.json + compression bir kopya daha → tek istekte yüz megabaytlar mertebesinde geçici bellek. Bu sırada panel 15. saniyede vazgeçer; operatör 'yazıcıya gitmedi' deyip tekrar basar → aynı yük ikinci kez, birincisi hâlâ koşarken. İki-üç eşzamanlı render max_memory_restart:1G eşiğini aşarsa pm2 süreci öldürüp yeniden başlatır — o anda uçuşta olan her istek (KK1 girişleri, Tambur kesimleri, E-3-06/E-3-07'nin yarım çok-tx zincirleri) 5 sn'lik pencerede kesilir. Yani 'etiket basma' işlemi, tek process invariantı yüzünden fabrikayı yeniden başlatan bir tetiğe dönüşür.",
+   "is_etkisi": "Vardiya ortasında sunucu yeniden başlar (~10-20 sn kesinti + uçuştaki yazmaların kaybı); etiket basımı hiç tamamlanmaz ve tekrar denemek durumu kötüleştirir.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/label.controller.ts",
+     "satir": "19, 41",
+     "not": "rollIds: z.array(z.string().uuid()).min(1).max(2000) — iki toplu uçta da 2000 tavanı"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/label.service.ts",
+     "satir": "1122-1136",
+     "not": "F178 notu: 'her top ... bwipjs.toSVG'yi (Code128+QR) 2 SENKRON çağırır → event-loop starvation'; 25 topta bir setImmediate"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/label.service.ts",
+     "satir": "1170-1195",
+     "not": "const buffers: Buffer[] = []; ... buffers.push(renderedBytes(r)); ... Buffer.concat(buffers).toString('base64') — tüm baytlar bellekte + base64 kopyası"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/ecosystem.config.js",
+     "satir": "47-48, 57",
+     "not": "exec_mode:'fork', instances:1 (CPU tepesi tüm fabrikayı yavaşlatır) + max_memory_restart:'1G'"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Electron/src/services/apiClient.ts",
+     "satir": "44",
+     "not": "timeout: 15_000; bu uçta per-request override yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/server.ts",
+     "satir": "1-240",
+     "not": "grep requestTimeout|headersTimeout|keepAliveTimeout src/server.ts src/app.ts = 0 → istemci gitse de handler koşmaya devam eder"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "/api/admin/health → rssBytes/heapUsedBytes zaman serisi + pm2 restart_time sayacı; system_logs LABEL_PRINT olaylarının restart anlarıyla kesişimi",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — DB ve canlı /health erişilemedi."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Tavanı gerçekçi bir sayıya indir (ör. 250) ve panelde parçalama uygula ('1.200 top → 5 parti hâlinde basılacak')."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Uçta tek-uçuş guard'ı: koşan bir toplu render varken ikinci istek 409 PRINT_JOB_IN_PROGRESS (db-copy.service.ts:373-405 currentJob atomik claim deseni birebir emsal)."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Raster yolunda baytları biriktirmek yerine akış (chunked) ya da en azından contentB64 yerine binary gövde; ayrıca server.requestTimeout ayarla (ör. 120 s)."
+    }
+   ],
+   "kabul_kriteri": "2000 toplu istek 400 (tavan) alır; koşan bir render varken ikinci istek 409 alır; 250 toplu render sırasında /health eventLoopLag ve rssBytes ölçülüp kayda geçer. Bekçi: scripts/test_label_bulk_limits.ts (yeni).",
+   "efor_gun": 1,
+   "etkilenen_degismez": "Tek process invariantı: hiçbir tek istek sunucuyu yeniden başlatacak kaynağı tüketemez",
+   "onceki_defter": "ilgili id yok",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-08"
+   ],
+   "primary": "E-3-08",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "ecosystem.config.js:44-59 doğrulandı: exec_mode:'fork', instances:1 (TEK-PROCESS INVARIANT yorumuyla bilinçli), max_memory_restart:'1G'. label.controller.ts .max(2000) ve label.service.ts buffer biriktirme deseni kaynak metinde tarif edildiği gibi. Sunucu tarafında request/handler timeout'u yok (server.ts/app.ts) — istemci vazgeçse de handler koşmaya devam eder. Çürütülemedi; S2 mertebesinde makul (senaryo gerçekleşmesi için 1000+ toplu seçim + eşzamanlı tekrar basış gerekir, ama kod buna hiçbir engel koymuyor)."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "label.controller.ts:19,41 .max(2000) doğrulandı; label.service.ts:1170-1195 buffers[] + Buffer.concat + toString('base64') bellekte biriktiriyor doğrulandı; ecosystem.config.js:38-58 exec_mode:'fork', instances:1, max_memory_restart:'1G' doğrulandı; src/server.ts:149-153 forceTimer 5000ms process.exit(1) doğrulandı; grep rateLimit src/app.ts + src/routes/label.routes.ts = 0 sonuç (rate limit gerçekten yok). Tek düzeltme: iddia edilen 'birim boyut ölçülemedi/VARSAYIM' bandı zaten bulguda dürüstçe işaretlenmiş, bu K1 seviyesini düşürmüyor çünkü mekanizma (tek-process, tavansız bellek biriktirme, timeout sonrası tekrar deneme) kod ve konfigürasyonla doğrudan doğrulanıyor.",
+     "corrected_impact": "S2 uygun"
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "node -e ile ölçüldü: bwipjs.toSVG code128 ≈ 843 bayt, qrcode scale:3 ≈ 1975 bayt (Teks-Erp/src/services/label.service.ts:643-651 ile aynı parametreler) — toplam barkod SVG'si ~2,8 KB/etiket, iddia edilen 40-150 KB'nin 15-50 katı altında. 2000 topluk toplu istekte gerçek bellek yükü ~10-20 MB mertebesindedir (yüz megabayt DEĞİL), max_memory_restart:1G eşiğine tek istekle ulaşmak iddia edildiği kadar kolay değil. Mimari risk (tek-process, .max(2000) tavanı, 15sn client timeout'unda tekrar-basış'ın işi çoğaltması, event-loop starvation koruması olup bellek/süre korumasının olmaması) doğru ve kanıtlı duruyor, ama 'OOM'e kadar giden' S2 etkisi ölçülen bayt boyutlarıyla desteklenmiyor.",
+     "corrected_impact": "S1 — bellek riski gerçek ama tahmin edilenin çok altında (~10-20MB/istek); OOM/pm2-restart senaryosu abartılı, asıl gerçek risk tekrar-basışın işi çoğaltması + event-loop'u meşgul etmesi (istasyon yavaşlaması)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-006",
+   "baslik": "Yazıcı çıktısı alındıktan sonra ağ koparsa labelPrintedAt yazılmaz — mükerrer paneli YANLIŞ topu \"asıl\" önerir",
+   "siddet": "S3",
+   "kategori": "D",
+   "oncelik": "P3",
+   "modul": "Etiket / mükerrer paneli",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "recordPrintEvent'teki üç yazım tek tx'te DEĞİL (havuz client'ı, $transaction yok); baskı ile bildirim arasında 'gönderildi ama onaylanmadı' durumu tutulmuyor; print-event'in kaybolduğunu tespit eden mutabakat yok (grep labelPrintedAt scripts/consistency-check*.sql = 0); istemci tarafında print-event için kalıcı kuyruk yok.",
+   "dosya": "Teks-Erp/src/services/label.service.ts",
+   "satir": "2075-2118 (tüketici: duplicate-rolls.service.ts:210-213)",
+   "failure_mode": "KK1'de operatör topu girer, etiket yazıcıdan ÇIKAR ve kumaşa yapıştırılır; tam o anda tablet Wi-Fi'ı düşer (ya da sunucu pm2 restart alır) ve print-event isteği hiç varmaz → labelPrintedAt = null, labelDirty = true. Haftalar sonra mükerrer paneli o topu bir kümede bulur; küme içinde etiketi basılmış GÖRÜNEN başka bir top vardır ve panel onu 'asıl' önerir → operatör, üstünde fiziksel etiket olan gerçek topu MUKERRER diye iptal eder ve sahada hiçbir kaydı olmayan bir barkod kalır. İkinci yüzey: 'Yeniden Üretime Al' akışındaki ölü etiket uyarısı (koşul: etiketli VE ilk adım fason) bu topta hiç gösterilmez — top eski barkodlu etiketiyle boyahaneye gider ve yeni barkodla döner.",
+   "is_etkisi": "Gerçek topun iptali (envanterde eksik metraj) + sahada sahipsiz etiket; fason sevkinde yanlış barkodlu etiketle mal çıkması.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/label.service.ts",
+     "satir": "2075-2118",
+     "not": "seedRollLabelSnapshot → prisma.roll.update({ labelDirty:false, labelPrintedAt:new Date() }) → AuditService.log — üç ayrı yazım, tx yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/label.service.ts",
+     "satir": "2098-2102",
+     "not": "'labelPrintedAt → ortada fiziksel bir etiket VAR mı (baskıda damgalanır, bir daha silinmez)' — alanın tek anlamı bu"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/duplicate-rolls.service.ts",
+     "satir": "210-213",
+     "not": "const printed = rows.filter(r => r.labelPrintedAt !== null); const keep = (printed.length > 0 ? printed : rows)[0]; suggestedKeepId = keep.id"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "2949, 3347",
+     "not": "labelPrinted: roll.labelPrintedAt != null — yeniden üretime alma ekranındaki ölü etiket uyarısının kaynağı"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/kartela.service.ts",
+     "satir": "1222-1227",
+     "not": "labelPrintedAt: { not: null } — etiket hiç basılmadıysa bayatlatma yapılmaz"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/label.service.ts",
+     "satir": "2069-2074",
+     "not": "'YALNIZ gerçek baskı tamamlandığında çağrılmalı — yazıcısız/iptal niyet kaydı için seedRollLabelSnapshot' → yazıcı KAPALI hâli doğru tasarlanmış; kusur AĞ KAYBI yolunda"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM rolls WHERE barcode IS NOT NULL AND \"labelPrintedAt\" IS NULL AND status NOT IN ('CANCELLED','SCRAP'); + bunların system_logs'ta tableName='LABEL_PRINT' izi var mı",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — DB erişilemedi."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "seedRollLabelSnapshot + roll.update'i tek tx'e al (audit dışarıda kalsın, best-effort sözleşmesi korunur)."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "İstemci print-event'i kuyruğa alsın: baskı başarılıysa bildirim ağ dönene kadar saklansın (mobilde offline mutation altyapısı zaten var; masaüstünde küçük bir yerel kuyruk)."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Mükerrer panelinin 'asıl' önerisine ikinci bir sinyal ekle (labelDirty=false ∨ system_logs LABEL_PRINT izi) ve öneriyi 'kesin' değil 'aday' olarak sun."
+    }
+   ],
+   "kabul_kriteri": "print-event düştüğünde istemci onu yeniden gönderir ve labelPrintedAt dolar; consistency-check'e 'barkodlu ama labelPrintedAt null' sayacı eklenir.",
+   "efor_gun": 1,
+   "etkilenen_degismez": "labelPrintedAt = 'ortada fiziksel etiket var mı' sorusunun tek doğru cevabı",
+   "onceki_defter": "MATRIX.md K9 → H-7 (print-event 3 yazım tx'siz)",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-09"
+   ],
+   "primary": "E-3-09",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/label.service.ts:2075-2115 doğrulandı: recordPrintEvent üç ayrı prisma çağrısı yapar (seedRollLabelSnapshot, roll.update, AuditService.log), tek tx içinde DEĞİL; labelPrintedAt YALNIZ bu uç çağrılınca yazılır ve yorum satırı (2069-2074) bunun fiziksel baskı SONRASI istemciden gelen ayrı bir isteğe bağlı olduğunu doğruluyor. Ağ kaybı senaryosunda satır hiç koşmaz → labelPrintedAt null kalır. duplicate-rolls.service.ts:210-213 ve inventory.service.ts 2949/3347 tüketimi kaynak metinde belirtildiği gibi doğrulandı. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "mobil/src/components/LabelPrinter.tsx:247 recordPrintEvent çağrısı fire-and-forget (.catch ile yalnız console.warn, retry/kuyruk yok); Teks-Erp/src/services/label.service.ts:2098-2115 labelPrintedAt tek yazma noktası, tx dışı, üç ayrı adım (seedRollLabelSnapshot → update → best-effort audit). Fiziksel baskı (BT/expo-print) başarıyla biter, ardından ayrı ağ çağrısı düşerse labelPrintedAt kalıcı null kalır — hiçbir kalıcı kuyruk/mutabakat bunu yakalamıyor (grep ile teyit: recordPrintEvent için retry mekanizması kodda yok). duplicate-rolls.service.ts:210-213 ve inventory.service.ts:2949/3347 bu alanı doğrudan 'asıl top'/'ölü etiket' kararına bağlıyor, yani senaryo mantıksal olarak doğru. Etkiyi hafifleten tek şey: pencere dar (fiziksel baskı ile print-event isteği arasındaki birkaç saniye) — Ç6 olarak S2 uygun, S1'e düşürülmesi tartışılabilir ama kanıt S2'yi destekliyor.",
+     "corrected_impact": "S2 (pencere dar olduğu için gerçek oluşum sıklığı düşük, ama koruma hiç yok — mevcut şiddet makul)"
+    },
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "mobil/src/components/LabelPrinter.tsx:247 — labelService.recordPrintEvent(...).catch(e => console.warn(...)) : fiziksel baskı (BT/expo-print) TAMAMLANDIKTAN SONRA ayrı bir ağ isteğiyle atılıyor, hata yalnız console.warn'a düşüyor; kalıcı kuyruk/retry yok (grep: dosyada offline queue/AsyncStorage referansı yok). label.service.ts:2075-2118 üç ayrı yazımı (seedRollLabelSnapshot → roll.update(labelPrintedAt) → audit) tx olmadan yapıyor. duplicate-rolls.service.ts:210-213 doğrulandı: printed=rows.filter(labelPrintedAt!==null); keep=printed[0]||rows[0] — birebir iddia edilen davranış. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-007",
+   "baslik": "Masaüstü güncelleme kapısı koşulsuz — minVersion yükseltilir ve yayın sunucusuna erişilemezse panel çıkışsız kilitlenir",
+   "siddet": "S3",
+   "kategori": "F",
+   "oncelik": "P3",
+   "modul": "İstemci sürüm politikası",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "UpdateGate'te 'paket gerçekten indirilebilir mi' koşulu YOK (kapiAcik = enabled && (hazir || politikaKilidi)); mobilde aynı koruma VAR (kilitlenmeliMi: durum.eski && duzeltmeHazir && bekleyenYazim===0). Bekçi scripts/test_client_policy.ts:59-63 minVersion'ı REPODAKİ Electron/package.json ile karşılaştırıyor — deploy sırası 'backend ÖNCE' olduğu için sahadaki panel o an daha eskidir, yani bekçi korumak istediği anı ölçmüyor.",
+   "dosya": "Electron/src/components/layout/UpdateGate.tsx",
+   "satir": "63-67, 130",
+   "failure_mode": "Gerçek bir sözleşme kırılması olur ve minVersion 1.1.0'a yükseltilir; backend deploy edilir. O gün Cloudflare/VPS erişimi kesiktir (proxy DNS-only'ye düşmüş, Origin CA sertifikası, ya da paket yanlış müşteri yoluna yüklenmiş — reçetede sayılan gerçek arıza modları). Sahadaki panellerin hepsi kapıyı açar, status.state asla 'ready' olmaz, ekranda 'paket bekleniyor' yazar, kapatılamaz ve hiçbir hata gösterilmez (hata yalnız kapı açıkken gösterilir, burada gösterilecek hata da yoktur çünkü indirme hiç başlamamıştır). Fabrikanın masaüstü tarafı tamamen durur; kurtarma yolu sunucuya girip minVersion'ı geri çekip yeniden deploy etmektir.",
+   "is_etkisi": "Etkinleştiği gün büro tarafı tamamen durur; kendini kurtaramayan tek arıza biçimi. BUGÜN RİSK SIFIR (negatif kanıt): ELECTRON_VERSION_POLICY = {minVersion:'1.0.0', currentVersion:'1.0.0'} ve Electron/package.json version = 1.0.0 → isBelowMinimum hiçbir panelde true olamaz. Bulgu latenttir, bir minVersion yükseltmesiyle etkinleşir.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Electron/src/components/layout/UpdateGate.tsx",
+     "satir": "63-67",
+     "not": "const kapiAcik = Boolean(status?.enabled) && (hazir || politikaKilidi) — paket olmasa da kapı açılıyor"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/components/layout/UpdateGate.tsx",
+     "satir": "130",
+     "not": "const paketBekleniyor = politikaKilidi && !hazir — kilitli ekran, kurulacak bir şey YOK"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/services/clientPolicy.service.ts",
+     "satir": "107-119",
+     "not": "'İnterneti kopuk bir tableti kilitlemek ... ÇIKIŞI OLMAYAN bir üretim durmasıdır' → kilitlenmeliMi(durum, duzeltmeHazir, bekleyenYazim) — çözümün şekli zaten burada"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_client_policy.ts",
+     "satir": "59-63",
+     "not": "check('minVersion <= Electron package.json sürümü') — REPODAKİ sürüm; sahadaki panel deploy anında daha eskidir"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/src/config/client-version-policy.ts",
+     "satir": "89-92, 125-128",
+     "not": "minVersion/currentVersion = '1.0.0' (bugün kapı açılmaz); yorumlar bayat ('2.8.1', 'Bugünkü değer: 2.9.8')"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Electron/package.json",
+     "satir": "version",
+     "not": "1.0.0"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "yok — negatif kanıt repodan alındı",
+    "dev": 0,
+    "saha": 0,
+    "not": "Bugünkü değerler kapıyı hiç açmıyor (minVersion=currentVersion=1.0.0)."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "UpdateGate'e mobildeki koşulu taşı: kapiAcik = enabled && (hazir || (politikaKilidi && indirilebilir)); paket erişilemiyorsa kapı yerine kalıcı kırmızı şerit + hata metni."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Bekçiyi doğru şeye bağla: minVersion, bir önceki YAYINLANMIŞ sürümden büyük olamaz kuralı; ideali minVersion değişikliğini yayın script'inin doğrulaması."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Bayat yorumları ve currentVersion'ı gerçek sürümlerle eşitle."
+    }
+   ],
+   "kabul_kriteri": "minVersion sahadaki sürümün üstüne çekilip güncelleme adresi erişilemez yapıldığında panel KULLANILABİLİR kalır (şerit gösterir); bekçi bu senaryoyu ölçer.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "Hiçbir istemci kendini kurtaramayacağı bir kapıya kilitlenmez",
+   "onceki_defter": "ilgili id yok; kök CLAUDE.md 'minVersion sahadaki sürümden BÜYÜK OLAMAZ — kendi kendini kurtaramayan tek arıza biçimi' notu aynı riski yazılı olarak kaydediyor",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-13"
+   ],
+   "primary": "E-3-13",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S2",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta-siddet-dustu",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "UpdateGate.tsx:63-67,130 kodu iddia edildiği gibi: kapiAcik = enabled && (hazir || politikaKilidi) — paket indirilebilir olmasa da politikaKilidi tek başına kapıyı açabilir; paketBekleniyor durumunda çıkış yolu/hata gösterimi yok. client-version-policy.ts bugünkü değerler (1.0.0) kapıyı açmıyor olsa da bu negatif kanıt yalnız BUGÜN için geçerli — mekanizma minVersion yükseltildiğinde ve yayın sunucusuna erişilemediğinde iddia edilen kilitlenmeyi üretir; mobil tarafta aynı senaryoya karşı açık koruma (kilitlenmeliMi) var, Electron'da yok. Çürütülemedi."
+    },
+    {
+     "refuted": false,
+     "code": "Ç1",
+     "evidence": "Çekirdek mekanizma DOĞRU: UpdateGate.tsx:63-67 kapiAcik = enabled && (hazir || politikaKilidi) — paket inmese de politikaKilidi tek başına kapıyı açıyor; paketBekleniyor = politikaKilidi && !hazir — bu iki satır doğrulandı. Ancak 'hata HİÇ gösterilmez, körleştirir' iddiası YANLIŞ: electron/ipc/updater.ipc.ts autoUpdater.on('error', ...) → publish({state:'error', error: toTurkishError(err)}) çalışıyor VE UpdateGate.tsx paketBekleniyor dalında status.state==='error' ise status.error (Türkçe, sınıflandırılmış: 'sunucuya ulaşılamadı', 'sertifika kabul edilmedi' vb.) + 'Yeniden Dene' butonu gösteriliyor (satır ~170+). Kodun kendi yorumu da bunu açıkça belgeliyor: 'Kapı AÇIKKEN gösterilir — orada operatör beklemek zorunda ve neden beklediğini bilmeli.' Yani senaryo (server erişilemezse panel kilitlenir, indirilecek paket olmadığı için çıkış yolu yok) GERÇEK ve ciddi bir tasarım riski, ama 'sessiz/kör kilit, hata yok' anlatısı kodla çelişiyor — operatör NEDEN beklediğini görür, sadece işi bitiremez.",
+     "corrected_impact": "S2 — lockout riski gerçek ve şiddeti haklı, ama 'hata hiç gösterilmez' cümlesi kod tarafından çürütülüyor; düzeltilmiş anlatım: 'sunucu erişilemez durumda kalırsa panel açık ve okunabilir bir hata banner'ıyla kilitli kalır, kurtarma yolu yalnız minVersion'ı geri almak/sunucuyu onarmaktır' olmalı."
+    },
+    {
+     "refuted": false,
+     "code": "Ç6",
+     "evidence": "UpdateGate.tsx:160-171 doğrulandı: paketBekleniyor dalında status.state==='error' ise GERÇEK hata metni (updater.ipc.ts:214 toTurkishError(err)) gösteriliyor, ayrıca 'Şimdi kontrol et' manuel retry butonu (disabled yalnız checking/downloading'de) var. Yani iddianın merkezindeki 'hiçbir hata gösterilmez, ekranda sadece paket bekleniyor yazar' cümlesi YANLIŞ — kod error/checking/downloading üç ayrı durumu ayrı metinle basıyor ve kullanıcıya elle 'tekrar dene' yolu veriyor. Buna karşın kapiAcik = enabled && (hazir || politikaKilidi) satırı doğru: kapı, paketin gerçekten indirilebilir olup olmadığına BAKMADAN salt versiyon uyuşmazlığıyla açılıyor (mobildeki 'kilitlenmeliMi' dengi yok) — bu kısım geçerli kalıyor.",
+     "corrected_impact": "S1 — panel gerçekten kilitleniyor ve VPS erişilemezse kurtarma sunucu tarafında minVersion'ı geri almak/erişimi düzeltmek olarak kalıyor, ama operatör NEDENİNİ ('Güncelleme sunucusuna ulaşılamadı' + retry) görüyor; 'sessiz, çıkışsız, hatasız kilit' iddiası abartılı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-008",
+   "baslik": "Audit arşiv kesme tarihi `setMonth` ile ay uzunluğunu taşıyor — ayın 29/30/31'inde \"6 ay\" fiilen kısalır, o günlerin logu erken arşivlenir",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P4",
+   "modul": "audit / arşivleme",
+   "kanit_seviyesi": "K3",
+   "dosya": "Teks-Erp/src/services/audit.service.ts",
+   "satir": "204-206",
+   "failure_mode": "Arşivleyici 31 Ağustos 2026 gecesi koşar; MONTHS_TO_KEEP=6 iken `cutoff.setMonth(getMonth()-6)` \"31 Şubat\" üretir ve JS bunu 3 Mart'a devreder → cutoff 2026-03-03 (doğrusu 2026-02-28). 28 Şubat–3 Mart arasındaki tüm system_logs satırları 'altı aydan eski' sayılıp sıcak tablodan silinir ve Sistem→Loglar ekranında görünmez olur (arşiv tablosunu okuyan liste yüzeyi yok). Hata yok, log yok. Elle arşiv ucunda monthsToKeep=1 + 31 Mart koşumunda azami sapma 3 gün olarak ölçüldü.",
+   "is_etkisi": "ISO 27001 A.8.15 kapsamındaki denetim izinin '6 ay sıcak' sözü 3 güne kadar erken kesilir; veri kaybı yok (satır arşive taşınır) ama arşivi okuyan yüzey olmadığı için pratikte erişilemez olur. Ayrıca kesme yerel takvimde çalıştığı için sınır süreç saat dilimine de bağlıdır (constants/time.ts tek kaynağının dışında).",
+   "koruma_kontrolu": "Bakıldı: (a) archiveOlderThan içinde kelepçe yok; (b) archive-scheduler.ts:78 çağrı yerinde kelepçe yok; (c) admin.routes.ts:852 Zod yalnız 1..120 aralığını doğrular, kesme tarihini görmez; (d) DB'de CHECK/trigger yok; (e) feature-flag yok; (f) bekçi test_report_day_boundary.ts:202-208 `setMonth`i BİLEREK kapsam dışı bırakıyor — bekçinin kör noktası hatanın kendisiyle aynı yerde.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/audit.service.ts",
+     "satir": "204-206",
+     "not": "const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - monthsToKeep); — hedef ayda o gün yoksa JS bir sonraki aya devreder"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/jobs/archive-scheduler.ts",
+     "satir": "22, 78",
+     "not": "MONTHS_TO_KEEP = 6; AuditService.archiveOlderThan(MONTHS_TO_KEEP) — scheduler yolu"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/routes/admin.routes.ts",
+     "satir": "852, 869-870",
+     "not": "monthsToKeep: z.number().int().min(1).max(120) — elle arşiv ucu, en kötü sapma burada (monthsToKeep=1)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/latency-persist.service.ts",
+     "satir": "170-171",
+     "not": "KARŞI ÖRNEK / düzeltmenin şekli: cutoff.setUTCDate(cutoff.getUTCDate() - RETENTION_DAYS) ay/yıl devrini doğru yapar"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/scripts/test_report_day_boundary.ts",
+     "satir": "202-208",
+     "not": "Bekçi yorumu: 'KAPSAM DAR: yalnız setHours. setDate/setMonth BİLEREK dışarıda' — gerekçe 'süre kaydırma' için doğru, 'saklama sınırı' için yanlış"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-1-01.log",
+     "satir": "1-30",
+     "not": "31 Ağu 2026 → cutoff 2026-03-03 (doğrusu 2026-02-28), sapma 3 gün; 6 koşum gününün 5'inde sapma; azami sapma 3 gün (2026-03-31, monthsToKeep=1)"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT key, value FROM system_settings WHERE key = 'audit.lastArchiveAt'; SELECT min(\"createdAt\") FROM system_logs; SELECT max(\"createdAt\"), count(*) FROM system_log_archives;",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — bu oturumda DB erişimi yok (Postgres.app trust auth hatası; TCP+soket dört yol da reddedildi). K8 haritasının 2026-08-28 ölçümü: saha audit.lastArchiveAt = 2026-08-16 (ayın 16'sı → o koşumda sapma 0) ve system_log_archives 0 satır → bugüne kadar fiilen hiç satır taşınmamış. Kusur ilk gerçek arşiv koşumunda ve ayın son günlerine denk gelirse doğar."
+   },
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-1-01.ts",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "archiveOlderThan'da hedef ayın son gününe kelepçele ve kesmeyi fabrika gününe oturt: target.setDate(1); target.setMonth(now.getMonth()-N); lastDay = new Date(y, m+1, 0).getDate(); target.setDate(Math.min(now.getDate(), lastDay)); cutoff = factoryDayStart(target). Migration yok, veri dokunuşu yok, prod_risk düşük."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "test_report_day_boundary.ts'in setMonth muafiyetini daralt: 'süre kaydırma' (deadline+N gün) muaf kalsın, 'saklama sınırı' muaf OLMASIN (dosya bazlı allowlist)."
+    }
+   ],
+   "kabul_kriteri": "audit_repro_E-1-01.ts §1'de 6 koşum gününün hepsinde sapma = 0 gün; §2'de azami sapma 0 gün.",
+   "efor_gun": 0.3,
+   "etkilenen_degismez": "\"Audit logları 6 ay sıcak tabloda kalır\" (archive-scheduler.ts:22 + admin panel metni)",
+   "onceki_defter": "yok",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-01"
+   ],
+   "primary": "E-1-01",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K3",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/audit.service.ts:204-206 `cutoff.setMonth(cutoff.getMonth()-monthsToKeep)` — standart JS Date davranışı: hedef ayda o gün yoksa taşar (örn. 31 Ağustos - 6 ay = '31 Şubat' -> 3 Mart'a devreder). Erişilebilirlik doğrulandı: server.ts:9 `startArchiveScheduler` boot'ta çağrılıyor (Ç3 geçersiz), archive-scheduler.ts:78 `AuditService.archiveOlderThan(MONTHS_TO_KEEP=6)`. Hiçbir kelepçe/guard bulunamadı; test_report_day_boundary.ts:202-208 setMonth'u kapsam dışı bırakıyor (bulgunun iddiasıyla birebir örtüşüyor). Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-009",
+   "baslik": "Süreli yetki \"gün sonu\" değil sabah 03:00'ta biter ve \"bugüne kadar\" yetki verilemez — gece vardiyasının ortasında sessiz 403",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P3",
+   "modul": "yetki / oturum",
+   "kanit_seviyesi": "K3",
+   "dosya": "Teks-Erp/src/routes/admin.routes.ts",
+   "satir": "332, 339-341",
+   "failure_mode": "Süpervizör vardiya amirine 5 Eylül'e kadar `roll:manual-adjust` verir; panel validUntil'i 'YYYY-MM-DD' gönderir, z.coerce.date() bunu 2026-09-05T00:00:00Z (yerel 03:00) yapar ve auth.service oturum ömrünü bu ana kırpar. 5 Eylül gece 02:00'de amir Tambur'da kayıt düzeltmesi yapabilirken saat 03:00'ı geçtiğinde aynı işlem 403 döner; ekranda 'yetkiniz yok' yazar, 'yetkinizin süresi bugün sabah doldu' bilgisi hiçbir yerde yoktur ve token da 03:00'ta bittiği için kullanıcı vardiya ortasında yeniden giriş yapmak zorunda kalır. İkinci uç: aynı süpervizör 'bugün için' yetki vermek isterse `.refine(validUntil > new Date())` çalışma saatlerinde 400 verir; tek çıkış yolu yarını seçmek, yani yetkiyi istediğinden bir gün fazla vermektir.",
+   "is_etkisi": "Süreli yetki mekanizması (SoD üçlüsü: shipping:invoice, shipping:undo-dispatch, roll:manual-adjust) fabrikanın anladığı 'gün' ile çalışmıyor. Gece vardiyasında sessiz 403 + oturum düşmesi; yetki verirken bir gün fazla verme eğilimi (SoD gevşemesi).",
+   "koruma_kontrolu": "Bakıldı: (a) backend'de gün-sonu normalizasyonu yok (admin.routes.ts:332 salt z.coerce.date()); (b) user_permissions.validUntil üzerinde CHECK yok; (c) scripts/test_timed_permissions.ts gün sınırını değil yalnız 'süre dolunca yetki düşüyor mu'yu sondalıyor; (d) auth.service.ts:370-374 Math.max(1, ...) yalnız negatif expiresIn'i kelepçeler — bu DOĞRU yazılmış, ayrı konu; (e) istemcide (PermissionsTab.tsx:58,141) da normalizasyon yok, ham 'YYYY-MM-DD' gider.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/routes/admin.routes.ts",
+     "satir": "332, 339-341",
+     "not": "validUntil: z.coerce.date().optional().nullable() + .refine((v) => !v.validUntil || v.validUntil > new Date(), ...) — 'bugüne kadar' çalışma saatlerinde 400"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/auth.service.ts",
+     "satir": "317-338",
+     "not": "nearestExpiry validUntil: { gt: nowDate } → for (const boundary of [...]) { effectiveExpiresAt = boundary; hasExp = true; } — oturum ömrü bu ana kırpılır"
+    },
+    {
+     "tur": "kod",
+     "yol": "Electron/src/pages/Access/Users/PermissionsTab.tsx",
+     "satir": "55-58, 141",
+     "not": "initialDates[g.permissionId] = g.validUntil.slice(0,10); ... selected.map(id => ({ permissionId: id, validUntil: dates[id] || null })) — 'YYYY-MM-DD' gider"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-1-03.log",
+     "satir": "§6 (sondaki blok)",
+     "not": "'Bugüne kadar geçerli' izin @ 1.09.2026 10:00 -> 400; '2 Eylül'e kadar' izin -> yetki 2.09.2026 03:00'da düşüyor (2 Eylül vardiyasının ~21 saati yetkisiz)"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT date_part('hour', \"validUntil\" AT TIME ZONE 'Europe/Istanbul') AS yerel_saat, count(*) FROM user_permissions WHERE \"validUntil\" IS NOT NULL GROUP BY 1 ORDER BY 2 DESC;",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — DB erişimi yok. yerel_saat = 3 çıkan satırlar 'gün sonu değil sabah biten' yetkilerdir."
+   },
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-1-03.ts",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "admin.routes.ts şemasında gün normalizasyonu: saat bileşeni 00:00Z ise validUntil = factoryDayStart(d + 1 gün) − 1 ms, validFrom = factoryDayStart(d). .refine'ı gün kıyasına çevir (validUntil >= factoryDayStart(now)). Migration/izin kodu yok, APK gerekmez; mevcut satırlar dokunulmadan kalır."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "test_timed_permissions.ts'e iki kontrol: 'bugüne kadar' yetkisi kabul edilir; 'yarına kadar' yetkisi yarın 23:59 yerelde hâlâ geçerlidir, ertesi gün 00:01'de değildir."
+    }
+   ],
+   "kabul_kriteri": "test_timed_permissions.ts'te: (a) validUntil='bugün' 201 döner; (b) validUntil='yarın' verilen yetki yarın yerel 23:59'da hâlâ etkin, ertesi gün 00:01'de değil.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "\"Süreli yetki verilen GÜNÜN sonuna kadar geçerlidir\" (panel metni) + SoD üçlüsünün süre sınırı",
+   "onceki_defter": "yok",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-04"
+   ],
+   "primary": "E-1-04",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K3",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "admin.routes.ts:332,339-341 ve auth.service.ts:317-338 doğrulandı: validUntil z.coerce.date() ile 'YYYY-MM-DD' → UTC gece yarısı (Türkiye UTC+3, DST yok → yerel 03:00) olarak parse ediliyor, .refine(validUntil > new Date()) 'bugüne kadar' girişini çalışma saatlerinde 400'e düşürüyor; Electron PermissionsTab.tsx:55-58,141 ham 'YYYY-MM-DD' gönderiyor, normalize etmiyor. audit/repro/E-1-03.log §6 çalıştırılmış ve iddiayı BİREBİR doğruluyor: 'Bugüne kadar' izin @ 1.09.2026 10:00 → 400; '2 Eylül'e kadar' izin oturumu 2.09.2026 03:00'da kesiyor (K3 seviyesinde kanıt, kod okuması + çalışan repro örtüşüyor)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-010",
+   "baslik": "Belge numarası GGAAYY taşıyor → sözlüksel sıra kronolojik DEĞİL; ayrıca 9999'u aşan sıra biçim sözleşmesini sessizce kırıyor",
+   "siddet": "S3",
+   "kategori": "L",
+   "oncelik": "P4",
+   "modul": "belge numaralandırma / listeler",
+   "kanit_seviyesi": "K3",
+   "dosya": "Teks-Erp/src/utils/code-format.ts",
+   "satir": "33-35, 82-89, 109-112",
+   "failure_mode": "(a) Planlamacı İş Emirleri listesinde 'İş Emri No' başlığına tıklar (azalan). Beklediği 'en yeni iş emri en üstte'dir; aldığı şey ayın 31'inde açılmış tüm iş emirleri en üstte, sonra 30'unda açılanlar… çünkü kod GÜN-AY-YIL ile başlıyor: IE0109260001 < IE3108260001 ve yıl devrinde IE0101270001 < IE3112260001. Hata mesajı yok; liste bozuk değil, yalnız anlamsız. Aynısı Sevkiyatlar'da 'Sevkiyat No' ile olur. (b) Yoğun bir günde 10.000. sipariş numarası SIP01092610000 olur (13 -> 14 karakter); isDailyCode(code,'SIP') FALSE döner, yani tarama girişi doğrulaması kendi ürettiğimiz kodu tanımaz ve etikete basılan sabit-genişlik varsayımı düşer. Sayacın kendisi doğru devam eder (numerik max), kırılan şey biçim sözleşmesidir.",
+   "is_etkisi": "Liste sıralaması operatörü yanıltır — 'en son açtığım iş emri nerede' sorusu numara sırasıyla cevaplanamaz (ay/yıl devrinde tamamen karışır). Tavanda biçim sözleşmesinin sessizce kırılması, etiket/tarama tarafında ileride teşhisi zor bir sınıf açar.",
+   "koruma_kontrolu": "Bakıldı: (a) resolveSortBy yalnız alanın allowlist'te olup olmadığına bakar, semantiğine değil (base.service.ts:403,427,666); (b) belge no üreten hiçbir yerde 9999 kontrolü yok — grep '9999' src/services → yalnız roll-barcode.helper.ts; (c) orderNumber/shipmentNo/workOrderNumber VarChar(64) (schema:1961,2152) → 14 karakter DB'ye sorunsuz yazılır, uzunluk CHECK'i yok; (d) test_batch_number_format.ts yalnız PARTİ biçimini ölçer; (e) code-format.ts:33-35'teki 'orderBy: batchNumber KULLANMA' yasağı yalnız yorum, mekanik bekçisi yok.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/utils/code-format.ts",
+     "satir": "33-35",
+     "not": "'Bedeli: dolgusuz kodda SÖZLÜKSEL sıra ≠ SAYISAL sıra... Parti listeleyen hiçbir yer orderBy: batchNumber KULLANMAZ' — yasak YALNIZ parti için yazılı, aynı GGAAYY öneki diğer kodlarda da var"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/workorder.service.ts",
+     "satir": "28-36, 591",
+     "not": "WO_SORTABLE_FIELDS içinde 'workOrderNumber' VAR (sıralanabilir kolon); :591 `${prefix}${String(seq).padStart(4,\"0\")}` — tavan kontrolü yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "2346-2348",
+     "not": "const SORTABLE = [\"createdAt\", \"shipmentNo\", \"dispatchedAt\"] — shipmentNo sıralanabilir"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "90-94",
+     "not": "KARŞI ÖRNEK (doğru kalıp): if (first < 1 || last > MAX_ROLL_SEQ) throw AppError.conflict('Bu gün için ... top barkod sırası doldu (9999). Yarın 0001'den başlar.')"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/free-document.service.ts",
+     "satir": "48",
+     "not": "Tavan kontrolsüz elle 4-hane dolgu; aynı kalıp fabric-property.service.ts:48, workorder.service.ts:6549 (manifest CL), subcontractor.service.ts:1242/2785"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-1-04.log",
+     "satir": "1-40",
+     "not": "kronolojik IE3008260001->IE3108260001->IE0109260001->...->IE0101270001 vs sözlüksel IE0101270001->IE0109260001->...->IE3112260001; seq=10000 -> SIP01092610000 (uzunluk 14, isDailyCode=false), seq=9999 isDailyCode=true; T010926H10000 -> ROLL_BARCODE_RE=false + helper 409"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT max(length(\"workOrderNumber\")) FROM work_orders; SELECT max(length(\"orderNumber\")) FROM orders; SELECT \"day\",\"type\",n FROM roll_barcode_counters ORDER BY n DESC LIMIT 5;",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — DB erişimi yok. 12'yi aşan uzunluk = 9999 taşması fiilen yaşandı demektir. Ölçek notu (KUNYE): saha 213 iş emri / 278 sipariş → tavana bugün uzak; sıralama sorunu ise BUGÜN görünür."
+   },
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-1-04.ts",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Sıralama: workOrderNumber/shipmentNo/orderNumber sıralama isteğini createdAt'e eşle (kullanıcı 'numaraya göre' derken kronoloji kastediyor) ya da SQL'de GGAAYY parçalarını YYAAGG sırasına çeviren bir ifadeyle sırala. En ucuz ve tutarlı yol birincisidir."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Tavan: sıra üreten beş noktayı buildDailyCode altında topla ve seq > 9999 olduğunda roll-barcode.helper emsaliyle 409 fail-closed ver ('Bugünün belge sırası doldu'). Migration yok, veri dokunuşu yok."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "code-format.ts:33-35'teki yasağı mekanikleştir: AST bekçisi orderBy: { <no alanı> } yazımını yakalasın (emsal: test_fason_open_dispatch_single_source)."
+    }
+   ],
+   "kabul_kriteri": "audit_repro_E-1-04.ts §1'de seq 10000 için isDailyCode=true YA DA üretim yolunun 409 vermesi; §3'te sözlüksel sıra = kronolojik sıra (ya da ilgili alanların sıralanabilir listeden çıkması).",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "\"Belge numarası tek kalıptır: PREFIX+GGAAYY+NNNN, 4 hane\" (code-format.ts başlığı) + parti no için yazılı 'orderBy: <no> KULLANMA' kuralının diğer kod ailelerine uygulanması",
+   "onceki_defter": "yok (parti no tarafı bilinçli karar: MEMORY parti-no-kisa-donen / parti-no-bicimi-dolgusuz — bu bulgu o kararı AÇMAZ)",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-05"
+   ],
+   "primary": "E-1-05",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K3",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "workorder.service.ts:28-35 WO_SORTABLE_FIELDS içinde 'workOrderNumber' doğrulandı (satır ~33 civarı listede); shipping.service.ts:2346 `SORTABLE=['createdAt','shipmentNo','dispatchedAt']` doğrulandı. base.service.ts:395-407 safeSortBy yalnız kolonun var olup olmadığına bakıyor, GGAAYY prefiksli string sıralamasının kronolojik anlamsızlığına bakmıyor — resolveSortBy/safeSortBy DB düzeyinde semantik kontrol yapmıyor. (b) alt-iddiası (9999 taşması) BULGU-T4-026 ile örtüşüyor (Ç7 kısmi) ama (a) alt-iddiası (sözlüksel≠kronolojik sıralama, iki ayrı sortable alan üzerinden) bağımsız ve doğrulandı; bulgu bütünüyle Ç7 sayılamaz."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-011",
+   "baslik": "KK1 giriş damgası kelepçeyi aşınca sessizce sunucu saatine düşüyor — bozuk saatli tablette çevrimdışı kuyruk boşalınca meşru toplar 409 fırtınası üretir",
+   "siddet": "S3",
+   "kategori": "E",
+   "oncelik": "P4",
+   "modul": "KK1 ham giriş",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/helpers/duplicate-guard.helper.ts",
+   "satir": "36, 42, 113-127",
+   "failure_mode": "Bir KK1 tabletinin RTC pili biter, saat 2 gün geriye kayar (fabrika ağı internetsizse Android NTP düzeltmez). Operatör vardiya boyunca çevrimdışı 12 top girer; ağ gelince kuyruk boşalır. Her kaydın clientEnteredAt'i ENTRY_STAMP_MAX_PAST_MS (36 saat) kelepçesini geçemez → resolveEntryStamp hepsini null saklar ve mükerrer tuzağının 90 sn penceresi sunucu saatine düşer. Kuyruk tek flush'ta boşaldığı için (ölçülmüş: 5 top / 46 ms) aynı partiden eşit metrajlı ardışık toplar pencerenin İÇİNDE kalır ve 2.-12. toplar 409 POSSIBLE_DUPLICATE alır; operatör her biri için 'gerçekten ayrı bir top' modalını onaylamak zorunda kalır. Sistem tarafında hiçbir iz yoktur: ne 'bu cihazın saati bozuk' uyarısı, ne bir sayaç, ne audit satırı.",
+   "is_etkisi": "Tek bir bozuk saatli tablet, o cihazdan girilen her ham girişte onay modalı üretir; operatör modalı refleksle onaylamayı öğrenirse mükerrer tuzağı FİİLEN devre dışı kalır (gerçek mükerrer de onaylanır). Sessizlik, arızayı aylarca görünmez tutar. Etki kk1.duplicateGuardEnabled bayrağının AÇIK olmasına bağlıdır (kodda varsayılan KAPALI; MEMORY notu sahada AÇIK diyor) — flag gerektirir.",
+   "koruma_kontrolu": "Bakıldı: (a) kelepçe düşüşünde audit/log/sayaç YOK (grep storedEnteredAt src → yalnız yazım noktası); (b) /api/admin/health bu düşüşü saymıyor (app.ts health bloğu); (c) scripts/test_kk1_duplicate_guard.ts kelepçe sınırını case 15'te sondalıyor ama kelepçe DÜŞÜŞÜNÜN 409 fırtınasına yol açtığını ölçmüyor; (d) cihaz saatini doğrulayan/senkronlayan mekanizma yok; (e) mobil damgayı UTC ISO olarak gönderiyor (entryAttempt.ts:129) → naif-string/TZ karışıklığı YOK, tek değişken cihaz saatidir.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/duplicate-guard.helper.ts",
+     "satir": "36, 42, 113-127",
+     "not": "ENTRY_STAMP_MAX_PAST_MS = 36sa; ENTRY_STAMP_MAX_FUTURE_MS = 5dk; plausible değilse { storedEnteredAt: null, anchorMs: nowMs } — fail-open ve SESSİZ"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/duplicate-guard.helper.ts",
+     "satir": "93-96",
+     "not": "Dosyanın kendi gerekçesi: 'sunucu saatiyle ölçülen 90 sn penceresi her flush'ta DAİMA doludur ... bu yüzden 409 fırtınası üretirdi' — kelepçe aşıldığında sistem TAM O eski davranışa döner"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/inventory.service.ts",
+     "satir": "813-814, 845-865",
+     "not": "const { storedEnteredAt, anchorMs } = resolveEntryStamp(...); guard sorgusu since/until = anchorMs +/- 90 sn (iki yönlü) + clientEnteredAt null dalı createdAt'e düşer"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/offline/entryAttempt.ts",
+     "satir": "129",
+     "not": "return { clientToken: gen(), clientEnteredAt: now() } → toISOString (UTC) — istemci sözleşmesi doğru, sorun cihaz saatinde"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT r.\"createdMachineId\", count(*) FILTER (WHERE r.\"clientEnteredAt\" IS NULL) AS damgasiz, count(*) AS toplam FROM rolls r WHERE r.\"entrySource\" IN ('SUPPLIER_RECEIPT','MANUAL_ENTRY') AND r.\"createdAt\" > now() - interval '30 days' GROUP BY 1 ORDER BY 2 DESC;",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — DB erişimi yok. İkinci sorgu (saat kayması izi): SELECT percentile_disc(ARRAY[0.5,0.95,1.0]) WITHIN GROUP (ORDER BY extract(epoch from (\"createdAt\" - \"clientEnteredAt\"))) FROM rolls WHERE \"clientEnteredAt\" IS NOT NULL;"
+   },
+   "repro_script": "yazılamadı — 409 fırtınasını tetiklemek için canlı DB + tx gerekir (Postgres erişilemedi); saf katman (resolveEntryStamp kelepçesi) zaten scripts/test_kk1_duplicate_guard.ts case 15'te ölçülüyor",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Kelepçe düşüşünü ÖLÇÜLEBİLİR yap: resolveEntryStamp null döndüğünde /api/admin/health altında process-local bir sayaç (entryStampRejected) + cihaz başına günde 1 AuditService.logEvent (gürültü kelepçesiyle). Migration yok, izin yok."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Mobil tarafta cihaz saati ile sunucu saati farkı > 10 dk ise giriş ekranında bant ('Bu tabletin saati yanlış — X saat sapma'). Sunucu farkı zaten clientEnteredAt ile createdAt arasında görüyor. APK turu gerekir."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Bekçi: kelepçe dışı damgayla 5 ardışık aynı-metrajlı giriş → hepsinin 409 aldığı ÖLÇÜLÜR ve /health sayacı 5 artar (bugün 0 artıyor)."
+    }
+   ],
+   "kabul_kriteri": "Bekçi: kelepçe dışı damgayla 5 ardışık aynı-metrajlı KK1 girişi sonrası /health entryStampRejected = 5 (bugün böyle bir alan yok, 0).",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "\"Mükerrer tuzağının penceresi operatörün GERÇEK ritmini ölçer\" (duplicate-guard.helper.ts:89-96 sözleşmesi)",
+   "onceki_defter": "MEMORY.md > kk1-mukerrer-top-korumasi ('boşluk 90 sn dışı') — bu satır o boşluğun CIHAZ SAATİ ucunu ekler",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-07"
+   ],
+   "primary": "E-1-07",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "duplicate-guard.helper.ts:113-127 resolveEntryStamp doğrulandı: damga ENTRY_STAMP_MAX_PAST_MS(36sa)/FUTURE(5dk) dışındaysa storedEnteredAt=null, anchorMs=nowMs (sessiz sunucu-saatine düşüş) — yorumun kendisi bu senaryoyu ('sunucu saatiyle ölçülen 90 sn penceresi her flush'ta DAİMA doludur... 409 fırtınası üretirdi') açıkça tarif ediyor. grep ile storedEnteredAt/resolveEntryStamp çağrıları yalnız inventory.service.ts:814,928'de — hiçbir yerde sayaç/audit/log yazılmıyor (kelepçe aşımı için ayrı bir dal/log yok). Mekanizma iddia edildiği gibi çalışıyor; canlı veri kanıtı yok ama kod-mercek kapsamında Ç1/Ç3/Ç5 ile çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-012",
+   "baslik": "Gün sınırı tek kaynağa taşındı ama gösterim/belge-no tarafındaki 15 nokta hâlâ süreç saat dilimine bağlı ve TZ pinlenmemiş — gece kâğıt ile kod farklı gün söyleyebilir",
+   "siddet": "S3",
+   "kategori": "C",
+   "oncelik": "P4",
+   "modul": "belge render / iade belge no / deploy",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/return.service.ts",
+   "satir": "1084-1086 (+ 14 render noktası)",
+   "failure_mode": "Sunucu bir bakım sonrası UTC ile kurulur (ya da pm2 farklı bir Windows hesabından farklı bölge ayarıyla başlatılır — ecosystem.config.js TZ'yi PİNLEMİYOR). Gece 01:30'da kesilen fason çekisinin NUMARASI FS0109260007 olur (ddmmyy → factoryYmd, doğru), üstünde basılan TARİH ise 31.08.2026 olur (fason-ceki.html.ts:191 d.getDate() → süreç TZ'si UTC). Aynı kâğıt iki farklı gün söyler; fasoncu tarih üzerinden mutabakat yaptığı için itiraz doğar. Aynı gece kesilen iade irsaliyesinin NUMARASI da IADE-310826-... olur — return.service.ts:1086 ddmmyy'yi hiç kullanmadığı için belge numarasının kendisi fabrika gününden kayar. Hata yok, log yok, hiçbir bekçi kırmızı vermez.",
+   "is_etkisi": "Müşteriye/fasoncuya giden kâğıtta tarih ile belge numarası ayrışabilir; iade belge numarası tek-kalıp kuralının (PREFIX+GGAAYY+NNNN) dışında. Etkinin ortaya çıkması için tek bir ops değişikliği (sunucu TZ'si) yeterli ve o değişiklik hiçbir testi kırmaz — doğruluk yazılı olmayan bir varsayıma dayanıyor.",
+   "koruma_kontrolu": "Bakıldı: (a) scripts/test_report_day_boundary.ts:194-212 yalnız DATE_TRUNC/CURRENT_DATE/setHours tarar — getDate()/getMonth()/getFullYear() hiç aranmıyor; (b) boot'ta TZ doğrulayan assert yok (server.ts'de assertBaseServiceGuards var, TZ yok); (c) /api/admin/health süreç TZ'sini raporlamıyor; (d) ecosystem.config.js:72-140 env bloğunda TZ YOK, Dockerfile:23'te VAR (asimetri); (e) backup-naming.helper.ts:23 'SUNUCUNUN YEREL saatiyle' diyerek bilinçli muaf — o nokta bulgu değil.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/return.service.ts",
+     "satir": "1084-1086",
+     "not": "const d = rr.createdAt; documentNo = `IADE-${p(d.getDate())}${p(d.getMonth()+1)}${String(d.getFullYear()).slice(2)}-...` — BELGE NUMARASI süreç TZ'siyle, ddmmyy/fabrika günü KULLANILMIYOR"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/document-render/fason-ceki.html.ts",
+     "satir": "191",
+     "not": "p(d.getDate()).p(d.getMonth()+1).d.getFullYear() — aynı kalıp: traveler-card.html.ts:145,152 · traveler-card-raw.ts:58,66 · fason-receipt.html.ts:84 · fason-direct-ship.html.ts:138 · shipment-dispatch.html.ts:265 · return-dispatch.html.ts:69 · kartela-ceki.html.ts:103 · quality-certificate.html.ts:81 · free-document.html.ts:38 · printed-document.service.ts:273 · label-html.shared.ts:136-139 · free-document.service.ts:140"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/ecosystem.config.js",
+     "satir": "72-140",
+     "not": "env bloğu: NODE_ENV, APP_ENV, PORT, HOST, BACKUP_* ... TZ YOK. Karşılaştır: Dockerfile:23 TZ=Europe/Istanbul"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/utils/code-format.ts",
+     "satir": "55-61",
+     "not": "Aynı hata sınıfının BELGE NUMARASI ucu düzeltilmiş ve gerekçesi yazılı: 'UTC kurulan/konteynere alınan bir sunucuda her gece 00:00-03:00 arasında üretilen belge numaraları BİR ÖNCEKİ günün GGAAYY'sini taşır' — gösterim ucu bu düzeltmeye dahil edilmemiş"
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-1-01.log",
+     "satir": "§4 (sondaki blok)",
+     "not": "process TZ = Europe/Istanbul ölçüldü → kayma BUGÜN üretilemiyor. Negatif sonuç da kanıttır: kusur 'bugün yanlış' değil, 'doğruluk pinlenmemiş bir varsayıma bağlı'dır."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM roll_returns WHERE date_part('hour', \"createdAt\" AT TIME ZONE 'Europe/Istanbul') < 3;",
+    "not": "ARANDI, ÖLÇÜLEMEDİ — DB erişimi yok. Sorgu gece penceresinde üretilmiş belge sayısını (riskin maruz kalan kütlesini) verir. K8 haritasının saha ölçümü: oturum TZ = Europe/Istanbul (2026-08-25 kopyasının anı) → bugün kayma YOK."
+   },
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-1-01.ts",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "PİNLE: ecosystem.config.js env bloğuna TZ: \"Europe/Istanbul\" + server.ts boot'unda tek satır assert (Intl.DateTimeFormat().resolvedOptions().timeZone !== FACTORY_TIMEZONE → uyarı logu + /health alanı). Deploy dışı risk yok."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "TEK KAPIYA AL: belge render'larındaki p(d.getDate()) yardımcılarını constants/time.ts'e taşınacak ortak formatFactoryDate/Time ile değiştir. backup-naming.helper.ts BİLİNÇLİ muaf kalsın."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "return.service.ts:1086'daki IADE-... numarasını dailyCodePrefix('IADE', d) kalıbına çek. Belge numarası biçimi değişir → yalnız YENİ kayıtlar; eski numaralar DOKUNULMAZ (kâğıda basıldılar)."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Bekçi: test_report_day_boundary.ts tarayıcısına getDate()|getMonth()|getFullYear() deseni + backup-naming.helper.ts muafiyeti eklensin."
+    }
+   ],
+   "kabul_kriteri": "TZ=UTC ile koşulan yeni bekçi, belge render'ının ürettiği tarihin fabrika günüyle (factoryYmd) aynı olduğunu ölçer; bugün bu koşum gösterim noktalarını hiç ölçmüyor.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "\"Gün sınırı Europe/Istanbul'dur ve literal yalnız constants/time.ts'te bulunur\" (constants/time.ts:28-36)",
+   "onceki_defter": "yok",
+   "finder": "E-1",
+   "merged_from": [
+    "E-1-08"
+   ],
+   "primary": "E-1-08",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-1-sinir-zaman-sayac.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "ecosystem.config.js env bloğu (65-145 arası) satır satır tarandı — TZ değişkeni YOK; Dockerfile:23'te TZ=Europe/Istanbul var (asimetri doğrulandı, ama saha pm2/Windows dağıtımı Dockerfile'ı kullanmıyor). return.service.ts:1086 ve fason-ceki.html.ts:191 `getDate()/getMonth()/getFullYear()` ile süreç TZ'sine bağlı doğrulandı — kod ddmmyy/factoryYmd'nin (2026-08-xx) düzeltmesine dahil edilmemiş. Bulgu kendi kanıtında 'bugün kayma YOK, risk pinlenmemiş bir varsayıma bağlı' diyerek dürüst; latent risk olarak geçerli, abartı yok (S3 uygun)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-013",
+   "baslik": "Aynı fiziksel alanın üst sınırı uçtan uca dört farklı: kumaş eni bir uçta 1000 cm, ötekinde 999.999.999, üçüncüsünde SINIRSIZ",
+   "siddet": "S3",
+   "kategori": "F",
+   "oncelik": "P4",
+   "modul": "iş emri · fason kabul · kartela",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/controllers/workorder.controller.ts",
+   "satir": "268, 272, 279-281, 297-299 (+ subcontractor.controller.ts:77,85,119,159,160; kartela.controller.ts:23-24,38-39)",
+   "etkilenen_degismez": "Aynı kolona yazan tüm uçlar aynı değer aralığını kabul etmeli",
+   "koruma_kontrolu": "Bakılan korumalar: (1) Zod — tavan bazı uçlarda var, altı uçta hiç yok; (2) DB CHECK envanteri (error.middleware.ts:218-226 + scripts/test_db_invariants.ts beklenen listesi) — yalnız NONNEG kısıtları var, üst sınır CHECK'i YOK; (3) Decimal(12,3) tip sınırı 999.999.999,999 — aşılırsa PG 22003 → P2020 → 400, yani tip sınırının ALTINDAKİ saçma değerler (1 milyar cm en) hiçbir kapıya takılmıyor; (4) servis katmanı — changeWidth dışında makullük kontrolü aranıp bulunamadı; fason çekme uyarısı YALNIZ mobil istemcide (mobil/.../receivePayload.helper.ts:174-197).",
+   "failure_mode": "Planlamacı iş emri 'Düzenle' ekranında eni 1600 yazar (160 yerine). PATCH şemasında tavan olmadığı için kabul edilir. Sonra: (a) Tambur plan-sapma kapısı eni ±10 cm ile karşılaştırdığı için o iş emrinden çıkan HER top 409 PLAN_MISMATCH verir ve sapma defteri gerçek olmayan 1440 cm'lik sapmalarla dolar; (b) fason çekisine ve refakat kartına '1600 cm' basılır; (c) aynı değer 'Eni Değiştir' ekranından DÜZELTİLEMEZ, çünkü orası 1000 cm tavanı uyguluyor → 400 ve sebebi ekranda yazmıyor. Fason kabulde ikizi: newRolls[].qty tavansız olduğu için 250 m giden sevke 250000 girilebilir; sunucu makullük sormadığı için sapma defterine 249.750 m'lik OVERAGE satırı düşer ve fason karnesi bozulur.",
+   "is_etkisi": "Plan-sapma kapısı yanlış pozitif üretir (operatör onay yorgunluğu → gerçek sapmayı da onaylar); belgeler saçma ölçü basar; fason karnesi ve sapma defteri kirlenir; 'Düzenle'den girilen değer 'Eni Değiştir'den geri alınamaz.",
+   "efor_gun": 1,
+   "kabul_kriteri": "Aynı fiziksel alan için tüm yazma uçlarında AYNI tavan; PATCH /work-orders/:id ile change-width aynı değeri kabul/ret ediyor; AST bekçisi tavansız yeni bir ölçü alanında kırmızı veriyor (negatif sonda ile kanıtlı).",
+   "onceki_defter": "BULGU-T1-108 (toplu yazma şemalarında DİZİ tavanı eksik) — bu bulgu aynı ihmalin SKALER ikizidir: ayrı kod noktaları, ayrı düzeltme.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/workorder.controller.ts",
+     "satir": "279",
+     "not": "PATCH (Düzenle): width: z.number().positive().nullable().optional() — tavan YOK."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/workorder.controller.ts",
+     "satir": "272",
+     "not": "changeWidthSchema: .max(1000, 'En en fazla 1000 cm') — AYNI kolona 1000 cm tavanı."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/workorder.controller.ts",
+     "satir": "297",
+     "not": "replaceWorkOrderSchema: .max(999_999_999) — üçüncü tavan."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/subcontractor.controller.ts",
+     "satir": "77, 85, 119, 159, 160",
+     "not": "rollShipQtys / orderLineAllocations[].qty / receivedQty / newRolls[].qty / newRolls[].weightKg — hepsi z.number().positive(), tavan YOK."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/kartela.controller.ts",
+     "satir": "23-24, 38-39",
+     "not": "lengthCm / weightKg / bulkLengthCm / bulkWeightKg — tavan YOK."
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "1171, 1340-1342, 2159-2161",
+     "not": "width / initialQty / currentQty / weightKg / targetQuantity hepsi Decimal(12,3); üst sınır CHECK'i yok."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "218-226",
+     "not": "CHECK_CONSTRAINT_MESSAGES envanteri: tümü NONNEG/POS; üst sınır kısıtı listede yok."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "constants/measure-limits.ts tek kaynağı: MAX_WIDTH_CM=1000, MAX_QTY_M=100_000, MAX_WEIGHT_KG=100_000; tüm Zod şemaları yalnız bu sabitleri kullansın. PATCH ile change-width aynı tavanı taşısın."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "AST bekçisi: width/qty/weightKg adlı her z.number() alanı bir .max() taşımalı ve değeri sabit kümeden gelmeli (emsal: test_feature_flag_contract.ts panel↔backend taraması)."
+    },
+    {
+     "vade": "uzun",
+     "aciklama": "[PROD'DA ÇALIŞTIRMA] İkinci hat olarak rolls.width / work_orders.width üzerine üst sınır CHECK'i düşünülebilir — ÖNCE mevcut veri taranmalı (SELECT count(*) FROM work_orders WHERE width>1000); geri alma = DROP CONSTRAINT."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-03"
+   ],
+   "primary": "E-2-03",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "workorder.controller.ts: satır 268 (applyAttributeSchema) .max(1000), satır 272 (changeWidthSchema) .max(1000), satır 279 (updateWorkOrderSchema) width: z.number().positive().nullable().optional() — TAVAN YOK, satır 298 (replaceWorkOrderSchema) .max(999_999_999) — dört ayrı tavan doğrulandı kod okumasıyla. subcontractor.controller.ts: rollShipQtys/orderLineAllocations.qty/receivedQty/newRolls.qty hiçbirinde max yok (kartela.controller.ts lengthCm/weightKg de aynı). Tek DB CHECK üst-sınır kısıtı yok (schema.prisma alanları salt Decimal(12,3), üst sınır check'i yok)."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-014",
+   "baslik": "positive() alt sınırı yanıltıcı: 0 reddedilir ama 0,0004 kabul edilir ve Decimal(12,3) onu 0,000'a yuvarlar — sıfır metrajlı canlı top doğar",
+   "siddet": "S3",
+   "kategori": "C",
+   "oncelik": "P4",
+   "modul": "envanter · Tambur · fason",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/controllers/inventory.controller.ts",
+   "satir": "23 (+ tambur.controller.ts:34,81,133; subcontractor.controller.ts:119,159; tambur.service.ts:736-738)",
+   "etkilenen_degismez": "Canlı bir topun metrajı > 0 olmalı",
+   "koruma_kontrolu": "Bakılan korumalar: (1) Zod positive() — '>0' demektir, 5e-324 ve 1e-7 KABUL ediliyor (zod 4.3.6 ile çalıştırılarak ölçüldü); (2) servis guard'ları (if (!(c.length > 0)), tambur.service.ts:736-738) aynı JS sayısına bakıyor, yani yuvarlamadan ÖNCE koşuyor; (3) DB CHECK envanteri — yalnız nonneg var, '> 0' YOK, 0.000 satır DB'de de meşru; (4) yazımdan SONRA sıfır metraj kontrolü arandı (grep 'currentQty.*=== 0|initialQty.*<= 0'), yazma yollarında 0 vuruş.",
+   "failure_mode": "Tablet numpad'inde ondalık ayracı yanlış basılırsa (0.0004) ya da istemci 1e-7 gönderirse KK1 'kayıt başarılı' der, barkod basılır ve rolls satırı initialQty=0.000 / currentQty=0.000 ile doğar. Bu top: (a) envanterde 0 m görünür ama statüsü STOCK'tur; (b) where: { currentQty: { gt: 0 } } süzgeci taşıyan yüzeylerden tamamen düşer, yani bazı ekranlarda hiç görünmez; (c) Tambur kesiminde 0 metrajlı parça reserveRollBarcodes'tan bir barkod yakar ve fiziksel karşılığı olmayan bir etiket basılır.",
+   "is_etkisi": "Envanter adedi ile metrajı ayrışır (adet var, metraj yok); sıfır metrajlı top çuvala ve sevkiyata girebilir, irsaliyede '0 m' satırı doğar.",
+   "veride_ihlal": {
+    "sorgu": "SELECT count(*) FROM rolls WHERE \"initialQty\" = 0; SELECT count(*) FROM rolls WHERE \"initialQty\" > 0 AND \"initialQty\" < 1;",
+    "not": "ARANAMADI — dev ve saha DB'leri oturum boyunca erişilemez (Postgres.app trust auth hatası). Sorgu audit/repro/E-2-00-probe.ts içinde hazır bırakıldı."
+   },
+   "efor_gun": 0.5,
+   "kabul_kriteri": "initialQty: 0.0004 → 400 'Metraj en az 0,001 m olmalı'; 0.001 kabul; mevcut bekçilerin metraj fixture'ları değişmeden yeşil.",
+   "onceki_defter": "yok — ilgili kayıt bulunamadı.",
+   "kanit": [
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "1340-1342",
+     "not": "initialQty / currentQty / weightKg = Decimal(12,3) → 0.0004 PG tarafında 0.000'a yuvarlanır (standart numeric semantiği)."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/inventory.controller.ts",
+     "satir": "23",
+     "not": "initialQty: z.number().positive('Miktar pozitif olmalı').max(999_999_999) — alt sınır yalnız '>0'."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "736-738",
+     "not": "if (!(c.length > 0)) throw ... — servis guard'ı da ham JS sayısına bakıyor, yuvarlama sonrası değere değil."
+    },
+    {
+     "tur": "repro",
+     "yol": "/tmp/zodcheck.ts (zod 4.3.6, koşuldu)",
+     "satir": "-",
+     "not": "z.number().positive().max(999999999): 0 RED · -1 RED · NaN RED · Infinity RED · 1e9 RED · 1e-7 KABUL · 5e-324 KABUL."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "218-226",
+     "not": "CHECK envanteri: rolls_initialQty_nonneg / rolls_currentQty_nonneg — '>= 0', '> 0' değil."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Metraj/ağırlık/en alanlarına kolonun ondalık hassasiyetiyle aynı anlamlı alt sınır: .min(0.001); tek kaynak E-2-03'teki constants/measure-limits.ts olsun."
+    },
+    {
+     "vade": "uzun",
+     "aciklama": "[PROD'DA ÇALIŞTIRMA] DB ikinci hattı: CHECK (\"initialQty\" >= 0.001) — eski 0'lar varsa migration DÜŞER, önce say sonra karar ver; geri alma = DROP CONSTRAINT."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-04"
+   ],
+   "primary": "E-2-04",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "inventory.controller.ts:23 `initialQty: z.number().positive(...).max(999_999_999)` — alt sınır yalnız '>0', 1e-7 gibi mikroskopik değerleri kabul eder (zod positive() semantiği). schema.prisma:1340-1341 `Decimal(12,3)` doğrulandı — 0.0004 gibi bir değer 0.000'a yuvarlanır. inventory.service.ts genelinde initialQty üzerinde ek alt-sınır/post-yuvarlama kontrolü bulunamadı (grep sonucu yalnız Decimal dönüşümleri). Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-015",
+   "baslik": "DB restartı/ağ kopması/statement_timeout/bağlantı tavanı 503 değil generic 500 üretiyor — haritalanmamış SQLSTATE'ler (NUL bayt, deadlock, P1001/P1008/P1017/P2037/P2039) çıplak 500'e düşüyor",
+   "siddet": "S3",
+   "kategori": "I",
+   "oncelik": "P2",
+   "modul": "Çekirdek / hata yolu",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "error.middleware'de yalnız iki altyapı yolu 503 alıyor: classifyPoolTimeout dalı (:315-344) ve P2024/P2028 (:530-536). SERVER_FAULT_PRISMA_CODES (:148-155) ve CLIENT_DATA_PRISMA_CODES (:157-169) kümelerinin ikisinde de altyapı kodu YOK. grep -rln 'P1017|P1001|P1008|P2039|P2037' Teks-Erp/src --include=*.ts → 0 dosya (hiçbir dal, hiçbir yorum, hiçbir bekçi). Bekçi de aynı kör noktada: scripts/test_pool_health.ts yalnız düzeltilmiş iki yolu ölçüyor (:178 havuz→503, :196 P2028→503).",
+   "dosya": "Teks-Erp/src/middlewares/error.middleware.ts",
+   "satir": "148-169, 530-536, 560-586, 600-634 (+195-210,355-356,504-513,609-633)",
+   "failure_mode": "Vardiya ortasında PostgreSQL servisi yeniden başlar (Windows güncellemesi, elle restart, db-copy sonrası ALTER DATABASE RENAME takası). Uçuştaki Tambur kesim isteği ECONNRESET alır → adapter ConnectionClosed → Prisma P1017 → error.middleware'in 'SINIFLANDIRILMAMIŞ' dalı → HTTP 500 'Sunucu hatası oluştu.' + audit recordId='P1017', unclassified:true. 500, istemci sözleşmesinde 'sunucu bozuldu' demektir; doğrusu 'sonuç BELİRSİZ, aynı kimlikle tekrar dene'dir. /health poolAcquireTimeouts sayacı ARTMAZ (yalnız classifyPoolTimeout dalından beslenir) → olayın hiçbir metrikte izi kalmaz. İkinci yol: 50 s'yi aşan rapor/export → 57014 → P2039 → 500; operatör raporun çok büyük olduğunu asla öğrenmez. Üçüncü yol: 53300 (DB max_connections doldu — havuzun 30'u + pg_dump + pg_restore + psql) → P2037 → 500; havuz sağlıklı görünür çünkü tavana çarpan havuz değil DB'dir ve teşhis hiçbir yerde yazmaz.",
+   "is_etkisi": "Yanlış istemci sözleşmesi (Retry-After gitmez, 503'e özel istemci yolları devreye girmez); gerçek altyapı olayı uygulama hatasıyla aynı kovaya düşer; en pahalısı 500'ün mükerrer kayıt üreten insan-retry'ını tetiklemesi (E-3-01/E-3-02 ile birleşir).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/node_modules/@prisma/adapter-pg/dist/index.js",
+     "satir": "mapDriverError / mapSocketError",
+     "not": "ECONNREFUSED/ENOTFOUND→DatabaseNotReachable, ECONNRESET→ConnectionClosed, ETIMEDOUT→SocketTimeout, 53300→TooManyConnections; default: kind:'postgres' (57014, 57P01, 25P03, 40P01, 08006, 23514 hepsi buraya)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/node_modules/@prisma/client/runtime/client.js",
+     "satir": "fonksiyon hp/We/gp",
+     "not": "DatabaseNotReachable→P1001, SocketTimeout→P1008, ConnectionClosed→P1017, TlsConnectionError→P1011, TooManyConnections→P2037; kind:'postgres' → gp(e) → O('Database error. Code: `57014`...','P2039'); O instanceof kontrolüyle PrismaClientKnownRequestError'a çevriliyor, eşleşmeyen her şey HAM geri dönüyor"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "148-169",
+     "not": "SERVER_FAULT_PRISMA_CODES = {P2021,P2022,P2010,P2015,P2017,P2018}; CLIENT_DATA_PRISMA_CODES = {P2000,P2005,P2006,P2011,P2012,P2013,P2019,P2020,P2033} — hiçbirinde altyapı kodu yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "560-586",
+     "not": "Sınıflandırılmamış kod → 500 'Sunucu hatası oluştu.' + audit unclassified:true"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/lib/pool-health.ts",
+     "satir": "29-32, 103-107",
+     "not": "'KAPSAM: sayaç YALNIZ HTTP hata yolundan (error.middleware) artar' — recordPoolTimeout yalnız classifyPoolTimeout dalından çağrılıyor"
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/offline/mutations.ts",
+     "satir": "125-131",
+     "not": "stationRetry: 4xx fail-fast, 5xx ve ağ hatası 3 kez denenir — 500 alan istemci doğru davranıyor ama operatöre 'sunucu hatası' deniyor"
+    },
+    {
+     "tur": "kod",
+     "yol": "node_modules/@prisma/adapter-pg/dist/index.js",
+     "satir": "455-548",
+     "not": "mapDriverError switch'i 14 SQLSTATE çeviriyor; 22021 / 57014 / 40P01 / 23514 / 25P02 / 25P03 / 54000 YOK → default: {kind:'postgres', code, message, ...}."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "178-185",
+     "not": "Ekibin kendi ölçümü: 'ORM yolu → ÇIPLAK DriverAdapterError: code/meta YOK ... PrismaClientKnownRequestError dalına HİÇ girmez ve generic 500'e düşerdi ... audit'e recordId=DriverAdapterError yazılır.'"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "204-206",
+     "not": "Çıplak DriverAdapterError için TEK dal: if (c.code !== '23514' && c.originalCode !== '23514') continue; → yalnız CHECK ihlali çözülmüş."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/middlewares/error.middleware.ts",
+     "satir": "149-157, 504-513",
+     "not": "P2010 SERVER_FAULT_PRISMA_CODES içinde (yorumu 'ham sorgu yolu: RAPORLAR' diyor) → 500 + 'Sunucu yapılandırma hatası. Lütfen yöneticiyle iletişime geçin.'"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/CLAUDE.md (Operasyonel Bakım) + docker-compose.yml",
+     "satir": "-",
+     "not": "statement_timeout=50s DB seviyesinde AKTİF (dev adnansahin_db, saha tekserp) → 57014 gerçek ve ulaşılabilir bir sınır."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-01.log",
+     "satir": "§6",
+     "not": "NUL baytın arama katlamasından SAĞ çıktığı ölçüldü (fold sonrası da metinde kalıyor); Zod string şemalarında kontrol-karakteri süzgeci de yok."
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT \"recordId\", count(*), min(\"createdAt\"), max(\"createdAt\") FROM system_logs WHERE category='SYSTEM' AND action='ERROR' AND \"recordId\" IN ('P1001','P1008','P1011','P1017','P2037','P2039','DriverAdapterError') GROUP BY 1;",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — DB erişilemedi. MATRIX.md K6 prod kopyasında recordId='Error' sınıfının varlığını zaten kaydetmiş."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "error.middleware'e üçüncü küme: INFRA_TRANSIENT = {P1001,P1008,P1011,P1017,P2037,P2034} → respondServerBusy (503 + Retry-After) + ayrı sayaç (/health.dbTransientErrors)."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "P2039 özel: mesajındaki Code:`XXXXX` ayrıştırılıp SQLSTATE'e göre bölünsün — 57014/55P03/40P01/25P03 → 503 'işlem çok uzun sürdü / kilit bekledi'; 23514 bugünkü 409 dalını korusun (extractCheckConstraint zaten cause.code'a bakıyor, originalCode üzerinden genelleştir); kalanlar 500. Migration/izin YOK, yalnız backend."
+    }
+   ],
+   "kabul_kriteri": "scripts/test_pool_health.ts §4: sahte PrismaClientKnownRequestError (P1017, P2037) ve P2039 (Code:`57014`) enjekte eden uçlar → 503 + Retry-After + /health sayacı 1 artmış; P2039 (Code:`23514`) → 409 (mevcut CHECK mesajı korunmuş); tanınmayan kod → hâlâ 500 (fail-loud korunmuş). Negatif sonda: yeni küme boşaltılınca test kırmızı.",
+   "efor_gun": 1,
+   "etkilenen_degismez": "5xx = belirsiz sonuç; geçici altyapı arızası 503 + Retry-After ile bildirilir",
+   "onceki_defter": "MATRIX.md K6 → H-1 (57014/40P01/25P03/53300 generic 500, 503 sinyali yok)",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-03",
+    "E-2-06"
+   ],
+   "primary": "E-3-03",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md",
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "error.middleware.ts: SERVER_FAULT_PRISMA_CODES (148-155) ve CLIENT_DATA_PRISMA_CODES (157-169) kümelerinde P1001/P1008/P1011/P1017/P2037/P2039 YOK; classifyPoolTimeout (pool-health.ts:66-72) yalnız `err.constructor===Error` VE `code===undefined` olan çıplak hataları yakalıyor — PrismaClientKnownRequestError (satır 385'te ayrı dal, .code taşır) bu filtreden geçemez. Dolayısıyla iddia edilen kodlar 'TANINMAYAN kod' dalına (560-586) düşüp generic 500 üretir, 503 değil. Kod okuması bulguyla birebir örtüşüyor; çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-016",
+   "baslik": "İçe aktarım sayı okuması iki yereli desteklediğini söylüyor ama '1e5' → 15, '1,234,567' → null",
+   "siddet": "S3",
+   "kategori": "C",
+   "oncelik": "P1",
+   "modul": "içe aktarım",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/import/import-coerce.ts",
+   "satir": "31-52",
+   "etkilenen_degismez": "Hücrede yazan sayı ile DB'ye giren sayı aynı olmalı",
+   "koruma_kontrolu": "Bakılan korumalar: (1) coerceCell — n === null ise satır hatası (import.service.ts:73-80), yani OKUNAMAYAN sayı fail-closed; ama YANLIŞ okunan sayı için hiçbir kontrol yok; (2) negatiflik kontrolü var (n < 0 → hata), üst/alt makullük kontrolü yok; (3) adaptör sütunlarında maxLen yalnız metin tipinde geçerli, sayıda yok.",
+   "failure_mode": "Excel büyük/küçük sayıları hücrede bilimsel gösterimle tutabilir. Temizleme regex'i [^\\d.,+-] 'e'/'E' harfini de sildiği için '1e5' yazan bir metraj hücresi sisteme 15 olarak girer (ölçüldü) — sipariş 100.000 m yerine 15 m açılır, satır YEŞİL görünür, hiçbir uyarı çıkmaz. Aynı sınıfın işaretli varyantı '1E+15' ise '1+15'e düşüp null verir, yani iki hücre iki farklı yola gider: biri sessizce yanlış, öteki görünür hata. İkinci ayak: müşteriden gelen EN yerelli dosyada '1,234,567' yazan satır 'sayı okunamadı' ile düşer ve varsayılan onError:'abort' ile DOSYANIN TAMAMI yazılmaz; mesaj sebebi söylemez.",
+   "is_etkisi": "Sipariş miktarı / kumaş eni gibi P1 sınıfı sayılar sessizce yanlış girilir; karşılanma ve ürün dengesi hesapları o siparişi baştan yanlış bilir. Ters ayakta bir içe aktarım turu tamamen boşa gider.",
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-2-01.ts (§3) — koşuldu, log: audit/repro/E-2-01.log",
+   "efor_gun": 0.5,
+   "kabul_kriteri": "parseLocaleNumber('1e5') === null (ya da 100000 — seçim YAZILI olsun); parseLocaleNumber('1,234,567') === 1234567; mevcut yedi biçim (1.234,56 · 1,234.56 · 1234,5 · 1.234 · %12 · 12 m · 1.234.567) DEĞİŞMEDEN geçer.",
+   "onceki_defter": "yok — ilgili kayıt bulunamadı. Tek virgüllü '1,234'→1.234 okuması dosya başlığında gerekçesiyle yazılı BİLİNÇLİ bir tercihtir ve bu bulgu onu yeniden AÇMIYOR.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "32",
+     "not": "raw.replace(/\\s/g,'').replace(/[^\\d.,+-]/g,'') — 'e'/'E' burada siliniyor, '1e5' → '15'."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "42-45",
+     "not": "hasComma dalı tüm virgülleri noktaya çeviriyor → '1,234,567' → '1.234.567' → Number() NaN → null."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "19-30",
+     "not": "Dosya başlığı 'TR/EN karışık ... biçimi dayatmak yerine TESPİT et' diyor — iddia ile ölçüm ayrışıyor."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-01.log",
+     "satir": "§3",
+     "not": "Ölçülen: '1e5'→15 · '1,234,567'→null · '1.234.567'→1234567 · '1.234,56'→1234.56 · '1,234.56'→1234.56 · '%12'→12 · '12 m'→12."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Temizleme regex'i 'e'/'E' harfini ELEMESİN; bilimsel gösterimi ya açıkça destekle ya açıkça reddet (öneri: reddet — fabrika hücresinde '1e5' bir kazadır, 15 yazmak sessiz yanlıştır)."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Binlik grubu için iki ayraca ORTAK tek kural: ^[+-]?\\d{1,3}([.,]\\d{3})+$ ise binlik say. Şablonun Açıklama sayfasına desteklenen biçimler yazılsın."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-07"
+   ],
+   "primary": "E-2-07",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "node ile ölçüldü: '1e5'.replace(/\\s/g,'').replace(/[^\\d.,+-]/g,'') → '15' (e harfi silindi); '1,234,567' aynı regex sonrası değişmeden kalıyor, hasComma dalında tüm virgüller noktaya çevrilip Number('1.234.567')=NaN→null. import-coerce.ts:32,42-45 iddia edilen satırlarla birebir eşleşiyor; coerceCell (import.service.ts) null'da satır hatası veriyor (fail-closed) ama '1e5'→15 YANLIŞ-ama-geçerli sayı üretiyor, hiç yakalanmıyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-017",
+   "baslik": "Sunucu saati geriye kayarsa gece yedeği sessizce atlanır — tek bir log satırı bile yazılmaz",
+   "siddet": "S3",
+   "kategori": "I",
+   "oncelik": "P4",
+   "modul": "Yedekleme zamanlayıcısı",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "getLastRun/setLastRun çevresinde 'damga gelecekte mi' kontrolü YOK; /health.lastBackup yalnız DOSYADAN okur (app.ts:432), 'beklenen ama gelmeyen yedek' kavramı yok; yedek yaşına bakan eşik/alarm yok (E-3-11). Aynı riskin başka bir yerde çözülmüş hâli var: backup.service.ts:66,314 RETENTION_MIN_KEEP=3 'saat kayması sigortası'.",
+   "dosya": "Teks-Erp/src/jobs/backup-scheduler.ts",
+   "satir": "93-102",
+   "failure_mode": "Sunucunun CMOS pili ölür; makine 2026-08-29'da açılırken saati 2026-08-24 gösterir ve NTP düzeltir — ama bu arada backup.lastRunAt 2026-08-29 olarak yazılmıştır. Saati geri alınmış bir makinede damga beş gün ileridedir: beş gece boyunca 'if (last && last >= dueAt) return' doğru kalır, runIfDue her 15 dakikada bir SESSİZCE döner, BACKUP_FAILED audit'i yazılmaz (iş hiç başlamaz), /health.lastBackup beş gün önceki dosyayı gösterir ve kimse bakmaz. Altıncı günde disk arızası olursa beş günlük üretim verisi gider.",
+   "is_etkisi": "Felaket kurtarma penceresi sessizce genişler; 'yedek alınıyor' varsayımı kanıtsız kalır. Sahada scheduler kapalı (BACKUP_SCHEDULE_ENABLED=false) olduğu için etki dev + scheduler'ı açan kurulumlarla sınırlı — şiddet bu yüzden S3.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/jobs/backup-scheduler.ts",
+     "satir": "93-99",
+     "not": "const dueAt = new Date(factoryDayStart(now).getTime() + hour*3600000); if (now < dueAt) return; const last = await getLastRun(); if (last && last >= dueAt) return; — SESSİZ return, log yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/jobs/backup-scheduler.ts",
+     "satir": "100-102",
+     "not": "'Damgayı ÖNCE yaz (retry spam'ini engeller)' → await setLastRun(now)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/backup.service.ts",
+     "satir": "66, 314",
+     "not": "RETENTION_MIN_KEEP = 3 — 'en yeni 3 korunur, sistem saati kayması sigortası' (ekip bu risk sınıfının farkında)"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/ecosystem.config.js",
+     "satir": "100",
+     "not": "BACKUP_SCHEDULE_ENABLED: 'false' — sahada gece yedeğini harici Windows görevi alıyor"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "SELECT value FROM system_settings WHERE key='backup.lastRunAt'; -- değer now()'dan büyükse FİİLİ İHLAL",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — DB erişilemedi. Bu tek sorgu bulguyu K2'ye taşır."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "last > now + 1 saat ise damgayı BOZUK say: uyarı logla, reportJobFailure('backup', ...) ile audit'e yaz ve damgayı now'a çek."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "/health'e lastBackupAgeHours ekle ve eşik aşımında warnings[] girdisi (E-3-11 ile birlikte)."
+    }
+   ],
+   "kabul_kriteri": "Damga geleceğe kurulduğunda scheduler bir sonraki turda uyarı yazar ve yedeği alır; scripts/test_backup.ts'e 'gelecekteki damga' bölümü (negatif sonda: kontrol kaldırılınca kırmızı).",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "Her fabrika günü için en az bir yedek alınır ya da alınamadığı görünür olur",
+   "onceki_defter": "K8 hotspot 1 (damga işin başında + iş idempotent değil) — bu bulgu onun saat-kayması ayağı",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-10"
+   ],
+   "primary": "E-3-10",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/jobs/backup-scheduler.ts:93-99 doğrulandı: `const dueAt = ...; if (now < dueAt) return; const last = await getLastRun(); if (last && last >= dueAt) return;` — last'ın now'dan ileride olup olmadığına (saat geri kaymış makine) dair hiçbir kontrol yok, sessiz return, log/audit yok. setLastRun(now) damgayı işin başında yazıyor (100-102), bu da ikinci bir asimetrik risk değil aynı notta zaten belirtiliyor. Bulgu kendi kanıtında BACKUP_SCHEDULE_ENABLED=false (ecosystem.config.js:100, sahada harici Windows görevi devrede) olduğunu ZATEN açıklıyor — bu Ç3 için tam çürütme sayılmaz çünkü kural gereği 'flag gerektirir' notu bulguda mevcut ve kod bayrak açıldığında canlıdır; kapatılmamış bir gelecek risk olarak geçerliliğini koruyor."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-018",
+   "baslik": "/health status alanı sabit 'UP' — DB düşükken, disk dolarken, havuz zaman aşımı alırken ve yedek eskiyken de UP der; hiçbir metrik bir hükme dönüşmüyor",
+   "siddet": "S3",
+   "kategori": "I",
+   "oncelik": "P4",
+   "modul": "Sağlık ucu",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "grep warnings|degraded|threshold src/app.ts sağlık bloğunda = 0; bu değerleri düzenli yoklayan bir iş yok (src/jobs altında sağlık kontrolü yok, K8 envanteri de böyle diyor). Hafifletici: bilinen iki tüketici db'ye AYRICA bakıyor (deploy/kur.ps1:66, Teks-Erp/public/status.js:100-104) — ama disk/yedek/havuz/audit hiçbir yüzeyde alarma dönüşmüyor.",
+   "dosya": "Teks-Erp/src/app.ts",
+   "satir": "398-419, 479-493",
+   "failure_mode": "Yedek diski dolar (BACKUP_DIR %100). pg_dump başarısız olur, BACKUP_FAILED audit satırı yazılır, /health.diskFreeBytes neredeyse sıfırdır ve lastBackup günlerce eskir — ama status 'UP', HTTP 200. Fabrikada kimse /health JSON'unu okumadığı için durum ancak geri yükleme gerektiğinde fark edilir. Aynı körlük auditGuard:'off' (K8 sahada kapalı ölçmüş) ve poolAcquireTimeouts>0 için de geçerli.",
+   "is_etkisi": "Ölçülen her şey ölçülmüş olarak kalır, kimseyi uyandırmaz; 'sessiz ve alarmsız düzeltici' sınıfı burada tersine işler — alarm hiç yoktur.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/app.ts",
+     "satir": "398-419",
+     "not": "catch { db = 'DOWN' } ... return { status: 'UP', ..., db, ... } — status koşulsuz sabit"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/app.ts",
+     "satir": "479-493",
+     "not": "public /health: catch { db='DOWN' } ... res.status(200).json({ status:'UP', api:'UP', db, ... })"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/app.ts",
+     "satir": "425-470",
+     "not": "Hükme dönüşmeyen alanlar: poolAcquireTimeouts, poolWaitingMax, auditWriteFailures, diskFreeBytes/diskUsedPct, lastBackup, dbBlockedCount, longestQuerySec, restoreCopyCount, auditGuard, discovery.mdns.reason"
+    },
+    {
+     "tur": "kod",
+     "yol": "deploy/kur.ps1",
+     "satir": "66",
+     "not": "if ($h.status -eq 'UP' -and $h.db -eq 'UP') — db'ye ayrıca bakıyor (hafifletici)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/public/status.js",
+     "satir": "100-104",
+     "not": "var apiUp = j.api === 'UP' || j.status === 'UP'; var dbUp = j.db === 'UP' — db'ye ayrıca bakıyor (hafifletici)"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "yok — canlı /health ölçümü gerekiyor",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — canlı /health ve DB erişilemedi."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "status'u TÜRET: db==='DOWN' → 'DOWN'; diskUsedPct>90 ∨ lastBackup yaşı>36sa ∨ auditWriteFailures>0 ∨ poolAcquireTimeouts>0 ∨ auditGuard==='off' ∨ discovery.mdns.reason!=='ok' → 'DEGRADED'; yanına makine-okur issues: string[]."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "⚠️ Değişiklik YALNIZ /api/admin/health'te yapılmalı — public /health sözleşmesi DONDURULMUŞ (app.ts:470-477, dört tüketici alan kümesine bağlı); orada status'u değiştirmek kur.ps1'in Saglik döngüsünü kırar."
+    }
+   ],
+   "kabul_kriteri": "Disk/yedek/havuz eşikleri sahte değerlerle aşıldığında /api/admin/health.status === 'DEGRADED' ve issues sebebi adlandırır; deploy/kur.ps1 ve public/status.js davranışı DEĞİŞMEZ. Bekçi: scripts/test_observability_contract.ts'e bölüm.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "Ölçülen her arıza göstergesi bir hükme bağlanır",
+   "onceki_defter": "ilgili id yok",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-11"
+   ],
+   "primary": "E-3-11",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "app.ts:398-419 (zengin /api/admin/health) ve 479-493 (public /health) her ikisinde de status:'UP' KOŞULSUZ sabit — db='DOWN' olsa, auditGuard='off' olsa, diskFreeBytes sıfıra yaklaşsa, poolAcquireTimeouts>0 olsa da status hep 'UP' dönüyor; warnings/degraded/threshold deseni kodda yok. Hafifletici: kur.ps1:66 ve status.js:100-104 ayrıca db alanına bakıyor — ama disk/yedek/havuz/audit hiçbir tüketicide hükme dönüşmüyor, bulgu doğru."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-019",
+   "baslik": "pool.on('error') yalnız konsola yazıyor — DB bağlantı düşmeleri hiçbir sayaca, audit'e ya da /health'e girmiyor",
+   "siddet": "S3",
+   "kategori": "I",
+   "oncelik": "P5",
+   "modul": "Havuz",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "PoolHealth arayüzünde (src/lib/pool-health.ts:109-119) poolIdleErrors alanı yok; error olayı recordPoolTimeout'a bağlı değil; AuditService çağrısı yok. Kıyas: aynı havuzda connect ve acquire olayları ÖLÇÜLÜYOR (pool-health.ts:88-100). pm2 log rotasyonu varsayılan olarak yok (ecosystem.config.js:67-70 yorumu).",
+   "dosya": "Teks-Erp/src/lib/prisma.ts",
+   "satir": "75-82",
+   "failure_mode": "Fabrika switch'i arızalanır ve gün boyu saniyeler süren kopmalar yaşanır. Havuz her seferinde kendini onarır (doğru tasarım); operatörler ara sıra 'sunucu hatası' görür (E-3-03 yüzünden 500). Teşhis anında sorulan 'ağ mı, DB mi, uygulama mı?' sorusunun cevabı yalnızca ham pm2 log'unun içindedir; /health'te poolConnectsTotal'in artışı dolaylı bir ipucu verir ama 'bağlantı düştü' ile 'sessizlikten sonra ısındı' ayrımını yapamaz.",
+   "is_etkisi": "DB/ağ kararsızlığı ölçülemez; arıza teşhisi log arkeolojisine kalır ve pm2 log'u rotasyonsuzsa zaten kaybolur.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/lib/prisma.ts",
+     "satir": "75-82",
+     "not": "pool.on('error', (err) => { console.error('[prisma pool]: idle client hatası ...', err); }) — sayaç yok, audit yok"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/lib/pool-health.ts",
+     "satir": "88-100",
+     "not": "pool.on('connect') ve pool.on('acquire') ÖLÇÜLÜYOR — 'error' ölçülmüyor (asimetri)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/lib/pool-health.ts",
+     "satir": "109-119",
+     "not": "PoolHealth arayüzünde poolIdleErrors alanı yok"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/ecosystem.config.js",
+     "satir": "67-70",
+     "not": "'Rotasyonu pm2 kendisi YAPMAZ: pm2-logrotate modülü gerekir (runbook)'"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "yok — canlı /health ölçümü gerekiyor",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — canlı /health erişilemedi."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "pool.on('error') içinde poolIdleErrors sayacını artır (+ son hata metni/zamanı, recordPoolTimeout deseninin birebir ikizi) ve getPoolHealth()'e ekle. Audit'e yazma gerekmez (gürültü; ayrıca hata anında audit de aynı havuzu kullanır)."
+    }
+   ],
+   "kabul_kriteri": "Bağlantı zorla düşürüldüğünde /api/admin/health.poolIdleErrors artar. Bekçi: scripts/test_pool_health.ts'e bölüm.",
+   "efor_gun": 0.25,
+   "etkilenen_degismez": "Altyapı olayları ölçülebilir olmalı",
+   "onceki_defter": "ilgili id yok",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-12"
+   ],
+   "primary": "E-3-12",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/lib/prisma.ts:79-82 pool.on('error') yalnız console.error yazıyor, sayaç/audit yok. pool-health.ts:88-100 yalnız 'connect' ve 'acquire' olaylarını ölçüyor, 'error' hiç dinlenmiyor; PoolHealth arayüzünde (satır 109+) poolIdleErrors alanı yok. Bulgu kod okumasıyla birebir doğrulandı, çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-020",
+   "baslik": "Fason kabulünde barkod sayacı rezervasyonu transaction'ın içinde — F tipi sayaç satırı tx boyunca kilitli kalır, Tambur kesim/finalize kuyruğa girer",
+   "siddet": "S3",
+   "kategori": "A",
+   "oncelik": "P5",
+   "modul": "Fason kabul ↔ Tambur",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "Rezervasyon tx client'ı ile tx İÇİNDE yapılıyor; ekip aynı riski ölçmüş ve tx dışına almanın ikinci bir havuz bağlantısı gerektirip 30'luk havuzu tükettiğini kanıtlamış (roll-barcode.helper.ts:53-70) — yani bugünkü yerleşim BİLİNÇLİ takas. Eksik olan: 300 parça tavanında kilit tutma süresinin ÖLÇÜLMEMİŞ olması. KK1 ham girişi 'H' tipini kullandığı için çekişme yok (yanlış pozitif elendi).",
+   "dosya": "Teks-Erp/src/services/subcontractor.service.ts",
+   "satir": "3046-3050 (helper: roll-barcode.helper.ts:82-88)",
+   "failure_mode": "Boyahaneden 280 parçalık büyük bir teslimat kabul edilir. Kabul tx'i açılır, F sayacından 280 numara rezerve edilir (INSERT ... ON CONFLICT DO UPDATE n = n + count → SATIR KİLİDİ, commit'e kadar tutulur); ardından 280 roll + hareket + sapma satırı yazılır. Bu 3-8 saniye sürerse o pencerede Tambur'da kesim yapan operatörün finalize isteği BEKLER; tablet 10 saniyede vazgeçer ve 'kayıt yapılamadı' der. Sınır durumda (tx 20 s tavanına yaklaşırsa) bekleyen Tambur istekleri de kendi 20 s bütçelerini yakar → P2028 → 503 zinciri: tek bir büyük fason kabulü Tambur'da toplu 503 üretir.",
+   "is_etkisi": "Büyük bir fason kabulü sırasında Tambur istasyonu geçici olarak yazma yapamaz; operatör sebebini göremez.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/subcontractor.service.ts",
+     "satir": "3046-3050",
+     "not": "const reservedBorn = await reserveRollBarcodes(tx, 'F', nextStep ? 0 : bornRollInputs.length) — tx client'ı, tx'in ORTASINDA"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "82-88",
+     "not": "INSERT INTO roll_barcode_counters ... ON CONFLICT (day,type) DO UPDATE SET n = n + count RETURNING n — satır kilidi commit'e kadar tutulur"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "53-70",
+     "not": "Ekibin ölçümü: 'sayaç tx İÇİNDE → paralel istek 1345 ms bekliyor / tx AÇILMADAN ÖNCE → 39 ms (34 kat)'; ayrıca 'HAVUZ CLIENT'INI TX AÇIKKEN KULLANMA ... havuz (max 30) tükenir'"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/controllers/subcontractor.controller.ts",
+     "satir": "156-167",
+     "not": "newRolls ... .max(300)"
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-finalize.helper.ts",
+     "satir": "172",
+     "not": "Aynı F satırını kullanan diğer yollar: roll-finalize.helper:172, roll-disposition.helper:296, workorder-batch-drop.service:418, tambur.service:906"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "subcontractor_receipts başına kalem sayısı dağılımı (max(items)); /health.dbBlockedCount (wait_event_type='Lock') zaman serisi",
+    "dev": 0,
+    "saha": 0,
+    "not": "ARANMADI — DB erişilemedi."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Tavanı düşür (ör. 100) — 300 parçalık tek kabul operasyonel olarak da şüphelidir."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Ya da rezervasyonu tx'in EN SONUNA kaydır (bugün ortasında); kilidin tutulduğu süre yalnız yazımların kuyruğu kadar kalır ve havuz maliyeti YOKTUR çünkü hâlâ tx client'ı kullanılıyor."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Ölç: 300 parçalık kabulde kilit tutma süresi ve eşzamanlı Tambur gecikmesi."
+    }
+   ],
+   "kabul_kriteri": "300 parçalık kabul koşarken paralel bir Tambur finalize'ının beklemesi < 500 ms. Bekçi: scripts/test_fason_partial_receive.ts yanına eşzamanlılık sondası.",
+   "efor_gun": 0.5,
+   "etkilenen_degismez": "Sayaç kilidi sistem geneli serileşme noktasıdır; tutma süresi sınırlı kalmalı",
+   "onceki_defter": "F-CORE-VER-001 (2026-08-10 denetimi, aynı helper'da döngü→tek rezervasyon düzeltmesi)",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-14"
+   ],
+   "primary": "E-3-14",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "subcontractor.service.ts:3046-3050 `reserveRollBarcodes(tx, 'F', ...)` gerçekten TX CLIENT'I ile çağrılıyor (satır 3046 doğrulandı) — kilit commit'e kadar tutulur (helper'ın kendi doc'u 53-70 bunu 34 kat gecikme ölçümüyle teyit ediyor). subcontractor.controller.ts:165 `.max(300)` doğrulandı — büyük teslimatta 300 parçalık tx boyunca F sayaç satırı kilitli kalır, aynı satırı kullanan Tambur (tambur.service.ts:906) bekler. Bilinçli takas olduğu doğru ama 300 parça sınırında kilit süresi ölçülmemiş — bulgu bunu zaten 'eksik olan' diye belirtiyor, abartı yok."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-021",
+   "baslik": "mobil/app.json sürümü 1.0.0, build.gradle versionName 2.9.9 — sürüm kapısının karşılaştırdığı değer belirsiz",
+   "siddet": "S3",
+   "kategori": "F",
+   "oncelik": "P5",
+   "modul": "Mobil paketleme ↔ sürüm politikası",
+   "kanit_seviyesi": "K1",
+   "koruma_kontrolu": "İki dosyanın eşitliğini ölçen mekanik bir kapı bulunamadı (kullanıcı hafızası da 'app.json + build.gradle ELLE eşitlenir' diyor); clientPolicy.service.ts:87'de karşılaştırılan apkSurumu çağıranın verdiği değerdir ve kaynağı dosya başlığında yazılı değil.",
+   "dosya": "mobil/app.json",
+   "satir": "5 (ayrıca build.gradle:95-96)",
+   "failure_mode": "minVersion 1.1.0'a çekilir. Tabletler app.json sürümünü (1.0.0) okuyorsa HEPSİ kapıya düşer (güncel APK dahil); build.gradle sürümünü (2.9.9) okuyorsa HİÇBİRİ düşmez ve koruma hiç devreye girmez. İki sonuç da yanlıştır ve hangisinin geçerli olduğu koddan tek bakışta okunamaz. Ayrıca 'sürüm/güncellik her ekranda görünür' özelliği hangi değeri basarsa bassın diğerini yalanlar.",
+   "is_etkisi": "Sürüm kapısının davranışı öngörülemez; sahadaki tabletin gösterdiği sürüm numarası yanlış olabilir. Bugün risk düşük çünkü MOBIL_VERSION_POLICY.minVersion = '1.0.0'.",
+   "kanit": [
+    {
+     "tur": "konfig",
+     "yol": "mobil/app.json",
+     "satir": "5",
+     "not": "\"version\": \"1.0.0\""
+    },
+    {
+     "tur": "konfig",
+     "yol": "mobil/android/app/build.gradle",
+     "satir": "95-96",
+     "not": "versionCode 56, versionName \"2.9.9\""
+    },
+    {
+     "tur": "kod",
+     "yol": "mobil/src/services/clientPolicy.service.ts",
+     "satir": "87",
+     "not": "if (surumKarsilastir(apkSurumu, politika.minVersion) < 0) — apkSurumu'nun kaynağı belirtilmemiş"
+    },
+    {
+     "tur": "konfig",
+     "yol": "Teks-Erp/src/config/client-version-policy.ts",
+     "satir": "125-128",
+     "not": "MOBIL_VERSION_POLICY = { minVersion: '1.0.0', currentVersion: '1.0.0' } — bugün kapı açılmaz"
+    }
+   ],
+   "veride_ihlal": {
+    "sorgu": "yok — negatif kanıt repodan alındı",
+    "dev": 0,
+    "saha": 0,
+    "not": "Bugünkü minVersion=1.0.0 olduğu için kapı hangi değer okunursa okunsun açılmıyor."
+   },
+   "repro_script": "",
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "İki dosyayı eşitle ve eşitliği mekanik bir kapıya bağla (mobil/scripts/ içindeki build:apk:check bu işe aday); apkSurumu'nun hangi kaynaktan geldiğini clientPolicy.service.ts başlığında yaz."
+    }
+   ],
+   "kabul_kriteri": "app.json version ile build.gradle versionName eşit; eşitsizlik APK derleme kapısını düşürür.",
+   "efor_gun": 0.25,
+   "etkilenen_degismez": "Tabletin beyan ettiği sürüm tek kaynaktan gelir",
+   "onceki_defter": "Kullanıcı hafızası: 'APK derleme: sürüm eşitleme — app.json + build.gradle ELLE eşitlenir'",
+   "finder": "E-3",
+   "merged_from": [
+    "E-3-15"
+   ],
+   "primary": "E-3-15",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-3-sinir-altyapi.md"
+   ],
+   "siddet_ilk": "S3",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "kod okumasıyla hangi değerin kullanıldığı KESİN belirlendi (belirsiz değil): mobil/src/services/appUpdate.service.ts:224 kuruluVersionName() = Constants.expoConfig?.version (app.json 'version'='1.0.0'); build.gradle versionName(2.9.9) hiçbir yerde policy karşılaştırmasına girmiyor (grep: apkSurumu yalnız UpdateGate.tsx:74→kuruluVersionName()).",
+     "strengthened": "Bugün minVersion=1.0.0 olduğu için kapı sessizce açık kalıyor ama biri ileride minVersion'ı fabrikanın bildiği sürüm numarasına (build.gradle/APK etiketi, ör. 2.9.9) göre yükseltirse TÜM tabletler (güncel APK dahil) app.json'un bayat 1.0.0'ı yüzünden kapıya düşer — iddia edilen risk kod okumasıyla daha kesin doğrulandı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-022",
+   "baslik": "Barkod sayacının 9999 tavanı ARTIŞTAN SONRA kontrol ediliyor: reddedilen çok-segmentli rezervasyon günün kalan kapasitesini kalıcı olarak yakıyor",
+   "siddet": "S4",
+   "kategori": "A.6",
+   "oncelik": "P4",
+   "modul": "etiket / barkod üretimi",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+   "satir": "82-94",
+   "etkilenen_degismez": "Reddedilen bir rezervasyon sayacı ilerletmemeli",
+   "koruma_kontrolu": "Bakılan korumalar: (1) atomiklik — INSERT ... ON CONFLICT DO UPDATE ... RETURNING tek ifade, yarış YOK (bu bir eşzamanlılık bulgusu DEĞİL); (2) tx geri sarımı — fonksiyonun kendi sözleşmesi (satır 58-70) 'TX DIŞINDA, tx AÇILMADAN ÖNCE çağrılmak içindir' diyor ve gerçek çağrı yerleri taban prisma client'ıyla çağırıyor (tambur.service.ts ~905), yani artış ANINDA commit olur ve throw onu geri ALMAZ; (3) telafi — hata dalında sayacı geri alan bir kod aranıp bulunamadı.",
+   "failure_mode": "Gün içinde F tipi sayaç 9.850'de. 200 segmentlik bir Tambur finalize'ı gelir → n=10.050 yazılır ve COMMIT edilir, sonra istek 409 ile düşer. Bundan sonra: (a) boşta olan 149 barkod kaybolmuştur; (b) tek segmentlik bir kesim bile geçemez (last=10.051 > 9.999); (c) operatör 'geçici hata' sanıp tekrar dener, her deneme sayacı 200 daha ileri iter; (d) hata mesajı 'Yarın 0001'den başlar' der, yani sahada gün sonuna kadar o tipte çıktı alınamaz ve sebebi kapasite değil, kapasiteyi yakan reddedilmiş isteklerdir.",
+   "is_etkisi": "Yoğun bir günde Tambur çıktısı ve/veya KK1 girişi gün sonuna kadar durur; teşhis mesajı yanlış yöne (kapasite doldu) gönderir. Bugünkü hacimde (saha kopyasında toplam 2.431 top) ulaşılabilir DEĞİL — kayıt, kalıbın kendisi (check-after-increment + geri alınamayan yan etki) ve tavan sözleşmesinin belge numaralarıyla asimetrisi (E-2-11) içindir.",
+   "veride_ihlal": {
+    "sorgu": "SELECT day, type, n FROM roll_barcode_counters WHERE n > 9999 ORDER BY n DESC LIMIT 20;",
+    "not": "ARANAMADI — DB erişilemez. Sıfır satır beklenir; satır varsa o gün fiilen kilitlenmiştir."
+   },
+   "efor_gun": 0.5,
+   "kabul_kriteri": "n=9990 iken count=20 isteği 409 döner VE n 9990'da kalır; ardından count=9 isteği BAŞARILI olur. Bekçi: scripts/test_barcode_reservation.ts'e bölüm (negatif sonda: kontrolü artıştan sonraya alınca kırmızı).",
+   "onceki_defter": "BULGU-T1-093 (sayaç kilidinin uzun tx içinde tutulması) aynı dosyanın FARKLI sorusudur (kilit süresi); bu bulgu tavan aritmetiğidir.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "82-87",
+     "not": "ON CONFLICT (\"day\",\"type\") DO UPDATE SET \"n\" = \"roll_barcode_counters\".\"n\" + ${count} RETURNING \"n\" — artış önce."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "88-94",
+     "not": "if (first < 1 || last > MAX_ROLL_SEQ) throw AppError.conflict(...) — kontrol sonra; artışı geri alan telafi yok."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "58-70",
+     "not": "Sözleşme: 'BU FONKSİYON TX DIŞINDA, tx AÇILMADAN ÖNCE ÇAĞRILMAK İÇİNDİR' → artış anında commit."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/tambur.service.ts",
+     "satir": "905",
+     "not": "reserveRollBarcodesInOrder(prisma, segments.map(...)) — taban client; segment sayısı 200'e kadar (cuts .max(200))."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Kontrolü artışın İÇİNE al: ON CONFLICT ... DO UPDATE SET n = n + ${count} WHERE \"roll_barcode_counters\".\"n\" + ${count} <= ${MAX_ROLL_SEQ} RETURNING n — satır dönmezse tavan aşıldı, sayaç DEĞİŞMEDEN kalır."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Mesaj sebebi söylesin: 'bu istek N barkod istedi, bugün kalan M'. Rezervasyonu tx içine almak ÇÖZÜM DEĞİL — 2026-08-10'da ölçülerek reddedildi (1345 ms kilit)."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-05"
+   ],
+   "primary": "E-2-05",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "roll-barcode.helper.ts:82-94 doğrulandı: artış (INSERT...ON CONFLICT DO UPDATE) ÖNCE commit olur, `if (first<1 || last>MAX_ROLL_SEQ) throw` SONRA gelir — kendi doc yorumu (58-70) da 'tx AÇILMADAN ÖNCE çağrılmak içindir, taban prisma verilirse anında commit' diyor. tambur.service.ts:906 `reserveRollBarcodesInOrder(prisma, ...)` gerçekten BASE prisma client ile (tx değil) çağrılıyor — doğrulandı. Yani throw anında artış zaten kalıcı, telafi/geri-alma kodu yok. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-023",
+   "baslik": "parseBool: ASCII yazımlı 'hayir' tanınmıyor — 'aktif/pasif' için iki yazım eklenmiş, 'hayır' için unutulmuş",
+   "siddet": "S4",
+   "kategori": "F",
+   "oncelik": "P6",
+   "modul": "içe aktarım",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/import/import-coerce.ts",
+   "satir": "54-63",
+   "etkilenen_degismez": "Aynı anlamı taşıyan Türkçe yazımlar aynı sonucu vermeli",
+   "koruma_kontrolu": "Bakılan: (1) sözlükler TRUE_WORDS/FALSE_WORDS — 'AKTIF' ve 'AKTİF' ile 'PASIF' ve 'PASİF' çiftleri İKİŞER yazılmış, 'HAYIR' TEK yazılmış, 'HAYİR' YOK; (2) katlama fonksiyonu toLocaleUpperCase('tr-TR') (i→İ) — repoda kod karşılaştırması için doğru araç foldCodeForCompare (utils/code-format.ts:180-190) ama burada kullanılmıyor; (3) coerceCell null'da satır hatası üretiyor → FAIL-CLOSED (veri bozulmaz).",
+   "failure_mode": "Fabrikanın hazırladığı içe aktarım dosyasında 'Aktif' sütununa 'hayir' yazılmış satırlar 'Aktif: hayir anlaşılmadı — Evet/Hayır yazın' hatası verir ve varsayılan onError:'abort' ile dosyanın TAMAMI reddedilir. Aynı hücreye 'hayır' yazınca çalışır, 'hayir' yazınca çalışmaz; fark görsel olarak tek bir noktadır ve hata mesajı bunu söylemez.",
+   "is_etkisi": "İçe aktarım turu boşa gider; kullanıcı farkı bulana kadar dosyayı satır satır arar. Veri bozulmaz (fail-closed).",
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-2-01.ts (§4) — koşuldu, log: audit/repro/E-2-01.log",
+   "efor_gun": 0.25,
+   "kabul_kriteri": "parseBool('hayir')===false, parseBool('HAYIR')===false, parseBool('hayır')===false; parseBool('V')===null (bugünkü davranış korunur).",
+   "onceki_defter": "BULGU-T1-087 (içe aktarım anahtar katlaması toLocaleUpperCase('tr-TR')) aynı kök nedenin ANAHTAR ayağıdır; bu, aynı dosyanın SÖZLÜK ayağıdır ve ayrı satır olarak düzeltilir.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "54-55",
+     "not": "FALSE_WORDS = ['HAYIR','H','FALSE','0','PASIF','PASİF','YOK','NO','N'] — 'HAYİR' yok; TRUE_WORDS'te 'AKTIF' ve 'AKTİF' ikisi de var."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import-coerce.ts",
+     "satir": "59",
+     "not": "const s = raw.trim().toLocaleUpperCase('tr-TR') — 'hayir' → 'HAYİR'."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-01.log",
+     "satir": "§4",
+     "not": "Ölçülen: 'hayir'→null · 'hayır'→false · 'aktif'→true · 'pasif'→false."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "FALSE_WORDS'e 'HAYİR' ekle."
+    },
+    {
+     "vade": "orta",
+     "aciklama": "Kalıcı çözüm: karşılaştırmayı utils/code-format.foldCodeForCompare ile yap (i-ailesini I'ya indirger; repoda bu sorunun tek doğru cevabı olarak zaten yazılı) — sözlükte tek yazım yeter ve gelecekteki her kelime otomatik korunur."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-08"
+   ],
+   "primary": "E-2-08",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "node: 'hayir'.toLocaleUpperCase('tr-TR') → 'HAYİR' (dotted İ), FALSE_WORDS sadece 'HAYIR' (dotless I) içeriyor → eşleşmez → null → 'Evet/Hayır yazın' hatası → onError:abort ile dosya reddi. 'hayır' (doğru TR yazım) → 'HAYIR' → eşleşir. Kod satırları (54-55, 59) iddiayla birebir; TRUE_WORDS'te AKTIF/AKTİF ikisi de var, FALSE_WORDS'te HAYIR/HAYİR asimetrisi doğrulandı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-024",
+   "baslik": "İçe aktarım enum hücresi Türkçe katlamayla eşleştiriliyor: 'internal'/'critical' küçük harfle yazılınca reddediliyor",
+   "siddet": "S4",
+   "kategori": "F",
+   "oncelik": "P6",
+   "modul": "içe aktarım",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/import/import.service.ts",
+   "satir": "93-104",
+   "etkilenen_degismez": "Kod KİMLİKTİR, görüntü metni değil — kod karşılaştırması yerel-bağımsız olmalı",
+   "koruma_kontrolu": "Bakılan: (1) coerceCell enum dalı hem hücreyi hem e.value/e.label'ı toLocaleUpperCase('tr-TR') ile büyütüyor; (2) repoda doğru araç var ve üç yerde yazılı (helpers/fold-type.ts:15-18, config/label-elements.normalizeConditionValue, utils/code-format.foldCodeForCompare) ama burada kullanılmıyor; (3) eşleşmezse satır hatası → FAIL-CLOSED (veri bozulmaz).",
+   "failure_mode": "Kullanıcı istasyon içe aktarım dosyasında Tip sütununa (şablonun kendi value alanından kopyaladığı) 'internal' yazar; satır \"Tip: 'internal' geçerli değil. Kabul edilenler: İç · Fason (Dış)\" hatasıyla düşer. Varsayılan onError:'abort' ile dosya hiç yazılmaz. Aynı hücreye 'İç' ya da 'INTERNAL' yazınca çalışır. Etkilenen değerler ölçüldü: INTERNAL ve CRITICAL (i içeren enum kodları); CONSUMABLE / WAREHOUSE / A1_STOCK etkilenmiyor.",
+   "is_etkisi": "İçe aktarım kurulum işidir; her ret turu saatler alabilen elle düzeltmeye dönüşür. Veri bozulmaz (fail-closed).",
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-2-01.ts (§5) — koşuldu, log: audit/repro/E-2-01.log",
+   "efor_gun": 0.25,
+   "kabul_kriteri": "'internal', 'INTERNAL', 'İç', 'iç' dördü de INTERNAL'a çözülür; bilinmeyen değer hâlâ hata verir.",
+   "onceki_defter": "BULGU-T1-087 — aynı dosyanın ANAHTAR ayağı; bu, ENUM ayağıdır (farklı kod noktası, aynı kök neden).",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/import.service.ts",
+     "satir": "93-99",
+     "not": "const wanted = text.toLocaleUpperCase('tr-TR') + e.value.toLocaleUpperCase('tr-TR') === wanted — enum KODU Türkçe kuralla büyütülüyor."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/adapters/station.adapter.ts",
+     "satir": "35",
+     "not": "{ value: 'INTERNAL', label: 'İç' } — i içeren enum kodu."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/import/adapters/defect-type.adapter.ts",
+     "satir": "37-39",
+     "not": "{ value: 'CRITICAL', label: 'Kritik' } — ikinci etkilenen değer."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-01.log",
+     "satir": "§5",
+     "not": "'internal' vs 'INTERNAL' → EŞLEŞMEZ (tr-TR: İNTERNAL); 'critical' vs 'CRITICAL' → EŞLEŞMEZ; 'consumable' → EŞLEŞİR."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Enum karşılaştırmasını foldCodeForCompare ile yap (E-2-08 ile aynı dokunuş); etiket eşleşmesi de aynı fonksiyondan geçsin."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-09"
+   ],
+   "primary": "E-2-09",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "node: 'internal'.toLocaleUpperCase('tr-TR') → 'İNTERNAL' (dotted İ, i→İ kuralı), 'INTERNAL'.toLocaleUpperCase('tr-TR') → 'INTERNAL' (değişmez) → eşleşmez. import.service.ts:93-99 enum karşılaştırması tr-TR ile yapılıyor, doğrulandı. 'consumable' gibi i içermeyen kodlar etkilenmiyor (node ile ayrıca doğrulandı) — bulgunun kapsam iddiasıyla (yalnız i-içeren kodlar) tutarlı."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-025",
+   "baslik": "PATCH /reason-presets/reorder mükerrer id'yi elemiyor: kontrol kümeye değil DİZİ uzunluğuna bakıyor, bir satır hiç sıralanmıyor",
+   "siddet": "S4",
+   "kategori": "F",
+   "oncelik": "P4",
+   "modul": "sebep katalogları (ReasonPreset)",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/services/reason-preset.service.ts",
+   "satir": "497-513",
+   "etkilenen_degismez": "Sıralama isteği listenin TÜM satırlarını tam olarak birer kez içermeli",
+   "koruma_kontrolu": "Bakılan korumalar: (1) Zod — routes/reason-preset.routes.ts:54-57 ids: z.array(z.string().uuid()).min(1), .refine YOK, mükerrer kontrolü yok; (2) servis — ids.length !== known.size || ids.some(...) DİZİ uzunluğuna bakıyor, new Set(ids) alınmıyor; (3) DB — sortOrder üzerinde unique kısıt aranıp bulunamadı (schema.prisma'da sortOrder için @@unique yok), iki satırın aynı sırayı taşıması DB'de meşru.",
+   "failure_mode": "İstemci köprüsü mergeVisibleOrder görünen aktif satırların sırasını gizli (pasif) satırlarla harmanlıyor; bir kaydırma yarışında ya da o birleştirmedeki bir hatada aynı id iki kez listeye girerse (bilinen id sayısı 2 iken ids=[a,a]) uzunluk eşit ve her id bilinen olduğu için kapı AÇILIR. 'a' iki kez güncellenir (sortOrder 0 sonra 1), 'b'nin sortOrder'ına hiç dokunulmaz ve iki satır aynı sıraya düşer. O andan sonra Tambur'un sebep listesinde o iki satırın sırası PostgreSQL'in döndürme sırasına kalır — operatör listeyi her açtığında farklı sırayla görebilir ve 'sürükledim, kaydolmadı' der. Kayıt kaybı yok, görünür hata da yok.",
+   "is_etkisi": "Fabrikanın kendi belirlediği sebep sırası sessizce bozulur; 2026-08-26'da tam bu ekran için yapılan 'sıra sürüklenerek KALICI' işi kısmen boşa düşer.",
+   "veride_ihlal": {
+    "sorgu": "SELECT kind, \"sortOrder\", count(*) FROM reason_presets GROUP BY 1,2 HAVING count(*) > 1;",
+    "not": "ARANAMADI — DB erişilemez."
+   },
+   "efor_gun": 0.25,
+   "kabul_kriteri": "ids=[a,a] (bilinen: a,b) → 400; ids=[b,a] → 200 ve iki satır da farklı sortOrder alır. Bekçi: scripts/test_reason_presets.ts'e bölüm (negatif sonda: kontrolü diziye geri alınca kırmızı).",
+   "onceki_defter": "yok — ilgili kayıt bulunamadı.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reason-preset.service.ts",
+     "satir": "498-503",
+     "not": "const known = new Set(rows.map(r=>r.id)); if (ids.length !== known.size || ids.some(id => !known.has(id))) throw — ids DEDUP EDİLMİYOR."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/reason-preset.service.ts",
+     "satir": "504-512",
+     "not": "ids.map((id,i) => update({ where:{id}, data:{ sortOrder: i } })) — mükerrer id iki kez güncellenir, eksik kalan satıra hiç dokunulmaz."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/routes/reason-preset.routes.ts",
+     "satir": "54-57",
+     "not": "reorderSchema: ids: z.array(z.string().uuid()).min(1) — mükerrer kontrolü yok."
+    },
+    {
+     "tur": "sema",
+     "yol": "Teks-Erp/prisma/schema.prisma",
+     "satir": "-",
+     "not": "reason_presets.sortOrder üzerinde unique/CHECK yok → aynı sıra DB'de meşru, ihlal sessiz."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "Kontrolü kümeye çevir: const uniq = new Set(ids); if (uniq.size !== ids.length || uniq.size !== known.size || ids.some(id => !known.has(id))) throw."
+    },
+    {
+     "vade": "kısa",
+     "aciklama": "Zod'da ikinci hat: .refine(a => new Set(a).size === a.length, 'Liste mükerrer id içeriyor')."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-10"
+   ],
+   "primary": "E-2-10",
+   "repro_script": null,
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "Teks-Erp/src/services/reason-preset.service.ts:498-503 doğrulandı: `const known = new Set(rows.map(r=>r.id)); if (ids.length !== known.size || ids.some(id=>!known.has(id))) throw` — new Set(ids) alınmıyor, dizi uzunluğu known.size ile kıyaslanıyor. ids=[a,a] iken known.size=2 ise (a,b bilinen) uzunluk eşit ve her eleman bilinen → kapı geçilir; sonraki update döngüsü (504-512) 'a'yı iki kez, 'b'yi hiç güncellemez. routes/reason-preset.routes.ts:55-58 Zod şeması da `.refine`/dedup içermiyor. mobil mergeVisibleOrder (reasonPreset.service.ts:109-120) saf fonksiyon olup girdisi (TamburScreen.tsx:7178 — sunucudan taze `list(true)` ile REBUILD edilen id listesi) normal koşulda tekrarsızdır, yani MOBİL istemci pratikte bu yolu tetiklemez; ama Electron da (ReasonPresetsPage.tsx:79-91) ve doğrudan API çağrısı da aynı korumasız uca gider — savunma boşluğu gerçek, sadece iddia edilen 'sürükleme yarışı' senaryosu ölçülmedi (spekülatif), kod kusuru kanıtlanmış durumda. Şiddet zaten S4 (bilgi) olarak doğru etiketlenmiş."
+    }
+   ],
+   "dogrulama": null
+  },
+  {
+   "id": "BULGU-T4-026",
+   "baslik": "nextDailySeq tavansız: 9999'dan sonra üretilen belge kodu kendi tarama biçim doğrulamasından (isDailyCode) düşüyor",
+   "siddet": "S4",
+   "kategori": "A.6",
+   "oncelik": "P6",
+   "modul": "belge numaraları (SIP · İE · CV · RK · FS)",
+   "kanit_seviyesi": "K1",
+   "dosya": "Teks-Erp/src/utils/code-format.ts",
+   "satir": "96-112",
+   "etkilenen_degismez": "Üretilen her belge kodu kendi tarama biçimine (PREFIX+GGAAYY+NNNN) uymalı",
+   "koruma_kontrolu": "Bakılan korumalar: (1) nextDailySeq — max + 1, tavan kontrolü YOK; (2) buildDailyCode — padStart(4) sessizce 5 haneye taşar, throw yok; (3) isDailyCode — \\d{4} ile sabit, 5 haneli kodu tanımaz; (4) karşılaştırma çıpası: top barkodunda AYNI tavan ZORLANIYOR (roll-barcode.helper.ts:22, 90-94 → MAX_ROLL_SEQ + AppError.conflict). Sözleşme iki kod ailesi arasında ayrışmış.",
+   "failure_mode": "Bir günde 9.999'dan fazla çuval açılırsa (ya da veri taşıma/içe aktarım sırasında aynı gün için toplu kod üretilirse) 10.000. çuvalın kodu CV12072610000 olur (ölçüldü: uzunluk 14, isDailyCode=false). Operatör o çuvalı okuttuğunda scanSack biçim kapısından geçemez, kod 'çuval' sayılmaz ve top barkodu dalına düşer → 'bulunamadı'. Kayıt DB'de vardır; bulunamayan şey onu bulma YOLUDUR ve hata mesajı sebebi söylemez.",
+   "is_etkisi": "Bugünkü hacimde ulaşılabilir DEĞİL (saha kopyasında 40 sevkiyat / 278 sipariş). Kayıt, tavan sözleşmesinin iki kod ailesi arasında ayrışmış olması içindir: barkod 409 verir, belge numarası sessizce biçim dışına çıkar.",
+   "repro_script": "Teks-Erp/scripts/audit_repro_E-2-01.ts (§8) — koşuldu, log: audit/repro/E-2-01.log",
+   "efor_gun": 0.25,
+   "kabul_kriteri": "buildDailyCode('SIP', 10000) → AppError 409; buildDailyCode('P', 12345, d, 1) DEĞİŞMEDEN 'P...12345' üretir (parti no regresyon çıpası — dolgusuz/serbest hane BİLİNÇLİ karardır).",
+   "onceki_defter": "BULGU-T2-027 (parti no sarması) komşu ama farklı bir karardır; yeniden açılmıyor.",
+   "kanit": [
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/utils/code-format.ts",
+     "satir": "96-107",
+     "not": "nextDailySeq → return max + 1; — tavan kontrolü yok."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/utils/code-format.ts",
+     "satir": "84-94",
+     "not": "buildDailyCode → String(seq).padStart(digits,'0') — 10000 için 5 hane yazar, throw etmez."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/utils/code-format.ts",
+     "satir": "109-112",
+     "not": "isDailyCode → ^${prefix}\\d{6}\\d{4}$ — 5 haneli sırayı tanımaz."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/shipping.service.ts",
+     "satir": "494",
+     "not": "if (isDailyCode(code,'CV')) — çuval okutma dalının biçim kapısı; ikizi sack-search.service.ts:554, traveler-card.service.ts:72."
+    },
+    {
+     "tur": "kod",
+     "yol": "Teks-Erp/src/services/helpers/roll-barcode.helper.ts",
+     "satir": "22, 90-94",
+     "not": "Karşılaştırma çıpası: top barkodunda MAX_ROLL_SEQ=9999 ZORLANIYOR (AppError.conflict) — belge numaralarında aynı sözleşme yok."
+    },
+    {
+     "tur": "repro",
+     "yol": "audit/repro/E-2-01.log",
+     "satir": "§8",
+     "not": "max=9999 → seq=10000 → kod=SIP12072610000 (uzunluk 14) → isDailyCode(...)=false."
+    }
+   ],
+   "oneriler": [
+    {
+     "vade": "kısa",
+     "aciklama": "buildDailyCode, seq > 10^digits - 1 ise AppError.conflict fırlatsın (top barkoduyla aynı sözleşme ve mesaj kalıbı). Parti numarası (digits=1) BU KONTROLÜN DIŞINDA kalmalı — dolgusuzluk ve serbest hane bilinçli bir karardır (code-format.ts:25-37)."
+    }
+   ],
+   "finder": "E-2",
+   "merged_from": [
+    "E-2-11"
+   ],
+   "primary": "E-2-11",
+   "kaynak_dosyalar": [
+    "/Users/oad/Documents/projeler/AdnanSahin/audit/01-find/tur4-E-2-sinir-girdi.md"
+   ],
+   "siddet_ilk": "S4",
+   "kanit_seviyesi_ilk": "K1",
+   "siddet_kurali": "",
+   "curutme_status": "ayakta",
+   "verdicts": [
+    {
+     "refuted": false,
+     "code": "YOK",
+     "evidence": "code-format.ts: nextDailySeq (96-103) `return max+1` tavan kontrolsüz; buildDailyCode (84-89) padStart sessizce taşar; isDailyCode (109-112) regex `\\d{4}` sabit — 5 haneli kodu reddeder. shipping.service.ts:494 `if (isDailyCode(code,'CV'))` — CV kodu 9999'u aşınca bu dal atlanır ve kod top-barkodu aramasına düşer (yanıltıcı 'bulunamadı' zinciri doğrulandı, satır 494-499). roll-barcode.helper.ts:22,88-94 ile karşılaştırma: top barkodunda AYNI tavan `MAX_ROLL_SEQ` ile AppError.conflict fırlatılıyor — belge kodu ailesinde eş sözleşme yok. Çürütülemedi."
+    }
+   ],
+   "dogrulama": null
+  }
+ ],
+ "dropped": [],
+ "new_from_refuters": [],
+ "raw_count": 34,
+ "verify_files": []
+}

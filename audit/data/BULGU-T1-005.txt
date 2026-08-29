@@ -1,0 +1,109 @@
+############ SAHA (prod kopyası tekserp_saha_0825, 2026-08-25) ############
+=== §1 MARUZİYET: fason kabul hacmi, token taşıyan kabul, kısmi kalem ===
+ makbuz_toplam | makbuz_aktif | token_tasiyan | kalem_toplam | kalem_kismi | kismi_makbuz 
+---------------+--------------+---------------+--------------+-------------+--------------
+           143 |          143 |             2 |          638 |           1 |            1
+(1 row)
+
+
+=== §2 ZAMAN PENCERESİ: kısmi kabul yolu ne zaman açıldı / son kabul ne zaman ===
+ ilk_kabul  | son_kabul  |     ilk_tokenli_kabul      |     son_tokenli_kabul      
+------------+------------+----------------------------+----------------------------
+ 2026-07-20 | 2026-08-24 | 2026-08-24 19:21:11.556+03 | 2026-08-24 19:23:46.787+03
+(1 row)
+
+
+=== §3 İHLAL İMZASI A — aynı (WO, adım, firma) üzerinde 60 sn içinde iki AKTİF makbuz
+    ("yanıltıcı 409 → operatör elle yeniden girdi" imzası) ===
+ makbuz_1 | makbuz_2 | fis_1 | fis_2 | workOrderId | stepId | fark | a_tokenli | b_tokenli 
+----------+----------+-------+-------+-------------+--------+------+-----------+-----------
+(0 rows)
+
+
+=== §4 İHLAL İMZASI B — AYNI top iki AKTİF makbuzda ve kabul toplamı topun
+    başlangıç metrajını AŞIYOR (çift düşülen teslimat) ===
+ roll_id | barcode | aktif_makbuz | kabul_toplam | initialQty | currentQty | status 
+---------+---------+--------------+--------------+------------+------------+--------
+(0 rows)
+
+
+=== §5 İHLAL İMZASI C — aynı top birden çok AKTİF makbuzda (kısmi teslimat
+    MEŞRU olabilir; §4 ile birlikte okunur) ===
+ cok_makbuzlu_top 
+------------------
+                1
+(1 row)
+
+
+=== §6 KARŞILAŞTIRMA: aynı korumanın UYGULANDIĞI yollarda token hacmi
+    (yol ölü değil — token sözleşmesi sahada fiilen kullanılıyor) ===
+         tablo          | toplam | tokenli 
+------------------------+--------+---------
+ orders                 |    278 |     269
+ work_orders            |    213 |     213
+ rolls                  |   2431 |    2259
+ sacks                  |     41 |      39
+ shipments              |     40 |      39
+ subcontractor_receipts |    143 |       2
+(6 rows)
+
+
+############ DEV (adnansahin_db) ############
+=== §1 MARUZİYET: fason kabul hacmi, token taşıyan kabul, kısmi kalem ===
+ makbuz_toplam | makbuz_aktif | token_tasiyan | kalem_toplam | kalem_kismi | kismi_makbuz 
+---------------+--------------+---------------+--------------+-------------+--------------
+            52 |           50 |             0 |           22 |           0 |            0
+(1 row)
+
+
+=== §2 ZAMAN PENCERESİ: kısmi kabul yolu ne zaman açıldı / son kabul ne zaman ===
+ ilk_kabul  | son_kabul  | ilk_tokenli_kabul | son_tokenli_kabul 
+------------+------------+-------------------+-------------------
+ 2026-07-20 | 2026-08-21 |                   | 
+(1 row)
+
+
+=== §3 İHLAL İMZASI A — aynı (WO, adım, firma) üzerinde 60 sn içinde iki AKTİF makbuz
+    ("yanıltıcı 409 → operatör elle yeniden girdi" imzası) ===
+               makbuz_1               |               makbuz_2               |    fis_1     |    fis_2     |             workOrderId              |                stepId                |     fark     | a_tokenli | b_tokenli 
+--------------------------------------+--------------------------------------+--------------+--------------+--------------------------------------+--------------------------------------+--------------+-----------+-----------
+ cc41ec39-4777-4594-b65f-1f4fd2e64004 | de284684-b8f7-446a-b850-d5501482bad2 | FK2108260034 | FK2108260035 | c4582da9-b97f-4acb-965e-a08b21e91360 | e41e50ff-5689-4aa0-873e-7bf627dfaa9f | 00:00:00.06  | f         | f
+ 33dde83f-e96f-46ed-86f0-25e391533d21 | f4ade189-48c2-43a5-81b0-91bc5b6a8883 | FK2108260032 | FK2108260033 | 9ee69849-04b8-4f7d-9419-e0d419da3f72 | 2c6449db-b988-494d-b13e-6ae7dce0cfa5 | 00:00:00.038 | f         | f
+ 3b47052e-f4df-44c6-835e-2ee2c7ef3320 | 830cfc51-7906-4f95-8253-ce208dd48b42 | FK2108260018 | FK2108260019 | ac778414-d18f-44fb-a4c2-de9098f488cc | 13ba1380-bb8e-4741-8cd3-98d74e5599bc | 00:00:00.034 | f         | f
+ fdaaa339-088b-46bf-994e-4f39effd412b | 830cfc51-7906-4f95-8253-ce208dd48b42 | FK2108260017 | FK2108260019 | ac778414-d18f-44fb-a4c2-de9098f488cc | 13ba1380-bb8e-4741-8cd3-98d74e5599bc | 00:00:00.066 | f         | f
+ fdaaa339-088b-46bf-994e-4f39effd412b | 3b47052e-f4df-44c6-835e-2ee2c7ef3320 | FK2108260017 | FK2108260018 | ac778414-d18f-44fb-a4c2-de9098f488cc | 13ba1380-bb8e-4741-8cd3-98d74e5599bc | 00:00:00.032 | f         | f
+ 585cdf3c-3b1e-4052-94e7-c994f1902055 | 7d8bd69a-5a47-44f7-8152-5cfec9edbb4c | FK2108260013 | FK2108260014 | 6a9a3c9c-148b-4a62-a7ce-994529fc874f | 4c0bbf31-7624-4443-ab06-5098109552fc | 00:00:00.034 | f         | f
+ 3c42f259-4c5c-4a7f-af26-59e848a6c979 | a640d97c-2050-475b-a688-021168c712b4 | FK2108260011 | FK2108260012 | b667f14f-006c-4f5a-b384-6a54d36b0bed | 4a8d76c0-20a4-4c24-b74c-acbc7d9eb862 | 00:00:00.056 | f         | f
+ 12b1ed09-038d-4717-a502-fc186c1fcc94 | 09c7627d-01bb-4362-8845-193b38dd9a98 | FK2108260009 | FK2108260010 | b51b8c52-f71f-412c-af66-264aaf399799 | 09aa362d-1c6d-4296-8041-b21e294cb3a4 | 00:00:00.06  | f         | f
+ f109be99-3c9a-4468-86f5-4ac2af58d26b | 80e044b5-f04a-43f8-a86b-4e0a106cfb39 | FK2108260006 | FK2108260007 | b03684cb-8bc1-4478-a584-c6ddd53e7277 | 96577802-fadb-49e7-9e22-7041acdbabba | 00:00:00.052 | f         | f
+ 8750afb5-9c53-4c6a-bbf1-2c0bd01aed75 | 37fa3843-2437-4a3f-896a-25ddbd520ab6 | FK0208260001 | FK0208260002 | f3ac248b-a86d-4bbe-8197-ecb5ebbcaadc | 0bec9a94-2225-4b0c-b86e-39f7bbe3e029 | 00:00:43.399 | f         | f
+(10 rows)
+
+
+=== §4 İHLAL İMZASI B — AYNI top iki AKTİF makbuzda ve kabul toplamı topun
+    başlangıç metrajını AŞIYOR (çift düşülen teslimat) ===
+ roll_id | barcode | aktif_makbuz | kabul_toplam | initialQty | currentQty | status 
+---------+---------+--------------+--------------+------------+------------+--------
+(0 rows)
+
+
+=== §5 İHLAL İMZASI C — aynı top birden çok AKTİF makbuzda (kısmi teslimat
+    MEŞRU olabilir; §4 ile birlikte okunur) ===
+ cok_makbuzlu_top 
+------------------
+                0
+(1 row)
+
+
+=== §6 KARŞILAŞTIRMA: aynı korumanın UYGULANDIĞI yollarda token hacmi
+    (yol ölü değil — token sözleşmesi sahada fiilen kullanılıyor) ===
+         tablo          | toplam | tokenli 
+------------------------+--------+---------
+ orders                 |     79 |      75
+ work_orders            |    762 |      23
+ rolls                  |    296 |     154
+ sacks                  |      8 |       4
+ shipments              |      2 |       1
+ subcontractor_receipts |     52 |       0
+(6 rows)
+

@@ -1,0 +1,26 @@
+BULGU-T3-003 — K2 sorgu koşum denemesi sonucu
+
+DURUM: KOŞULAMADI — DB'ye hiçbir bağlantı yolu açılamadı.
+
+Denenenler (hepsi aynı hatayla düştü):
+  1. audit/tools/sql-dev.sh -c "select 1"
+  2. audit/tools/sql-saha.sh -c "select 1"
+  3. psql "postgresql://oad@localhost:5432/adnansahin_db" -c "select 1"
+  4. psql "postgresql://oad@/adnansahin_db?host=/tmp" -c "select 1"  (unix socket)
+
+Hata (hepsinde birebir aynı):
+  FATAL:  Postgres.app failed to verify "trust" authentication
+  DETAIL: Postgres.app failed to show a dialog. This can happen when the user
+          that started the server is no longer logged in. Try restarting the
+          PostgreSQL server.
+  HINT:   Change pg_hba.conf to require a password
+
+KÖK NEDEN: `ps aux` çıktısı sunucunun `shared_preload_libraries=auth_permission_dialog`
+ile başladığını gösteriyor (Postgres.app 18'in "trust" kimlik doğrulaması artık bir GUI
+onay diyaloğu istiyor: `PostgresPermissionDialog`). Bu ajan oturumu headless/arka plan
+olduğu için diyalog gösterilemiyor → sunucu bağlantıyı reddediyor. Bu, üretim/saha
+kısıtı değil, bu geliştirme makinesinin PostgreSQL 18 sürümüne özgü bir GUI-onay
+mekanizmasıdır ve mevcut ajan oturumunda aşılamıyor (sudo/GUI etkileşimi yok).
+
+SONUÇ: K2 (veride ihlal sorgusu) bu turda da elde EDİLEMEDİ — repro scriptinin
+kendi notuyla birebir aynı "ORTAM ENGELİ". kanit_seviyesi K1'de kalıyor.
