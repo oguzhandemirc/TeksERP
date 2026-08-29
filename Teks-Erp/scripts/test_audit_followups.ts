@@ -121,7 +121,11 @@ async function testTokenVersionBump(): Promise<void> {
 
   const perm = await prisma.permission.findFirst({ select: { id: true } });
   if (!perm) throw new Error("Permission yok (seed)");
-  await PermissionManagementService.grantPermission(u.id, { permissionId: perm.id }, u.id);
+  // ⚠️ AKTÖR ≠ HEDEF (2026-08-29 / T2-013): kendi yetkisini genişletmek artık
+  // 409 SELF_ESCALATION. Bu testin konusu `tokenVersion` bump'ı, aktör kimliği
+  // değil — gerçek kullanımda da yetkiyi başka bir yönetici verir.
+  const aktor = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
+  await PermissionManagementService.grantPermission(u.id, { permissionId: perm.id }, aktor?.id);
   const after = await prisma.user.findUnique({ where: { id: u.id }, select: { tokenVersion: true } });
   check("yetki grant → tokenVersion bump (2)", after?.tokenVersion === 2, String(after?.tokenVersion));
   check("eski token sürümü artık DB ile uyumsuz (middleware 401 verir)", (decoded?.tokenVersion ?? 0) !== (after?.tokenVersion ?? 0));
