@@ -16,12 +16,16 @@ bağı · K6 audit değiştirilemezliği · K7 rapor indeksleri · K8 kart bası
 (aşağıda), K4 ise repoda 2026-08-19'da alınmış gerekçeli bir kararı geçersiz
 kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 
-⚠️ **K2/K3'ü açan tek şey fabrikanın yapacağı temizlik:**
-| Ne | Kayıtlar | Ne gerekiyor |
-|---|---|---|
-| Aynı ad | `v-1430` → `BGR150` + `MC155` (ikisi de pasif) | mükerrer panelinden birleştirme |
-| Aynı kod (harf farkı) | `MC155`(3) · `BGR150`(2) | birleştirme |
-| Aynı kod (harf farkı) | **`SANTUK` ↔ `santuk` — İKİSİ DE AKTİF ve FARKLI kumaş** (BORANCIK ↔ ŞANTUK) | birleştirme DEĞİL, **yeniden adlandırma** (iş kararı) |
+✅ **K2/K3 AÇILDI (2026-08-30).** Kullanıcı kararı: birleştirme değil SİLME.
+Dev'de zincir uçtan uca koşuldu — 7 kullanılmamış kumaş silindi, bir renk ikizi
+birleştirildi, iki kısıt migration olarak uygulandı, renk seddi de enforce edildi.
+Fabrika verisine karşı simülasyon: **6 kayıt silinince kalan çakışma 0/0.**
+
+⚠️ Prod sırası pazarlık dışı: ① `scripts/fix_kumas_kod_cakismasi.ts` (kuru koşum
+→ listeyi oku → `--kod=santuk --apply`) ② `migrate deploy` (vardiya dışında).
+
+⚠️ Ölçüm bir varsayımı düzeltti: **renk seddinin prod'da kurulmasına engel YOK**
+(çakışma sıfır). "Dev'de eksik" kırmızısı dev'e özgüymüş.
 
 **İkinci paket — on beş bulgu kapandı (3 S1 + 12 S2):**
 | Bulgu | Neydi |
@@ -62,7 +66,7 @@ düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
 | 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
-| 3 | `run-all-tests.ts` (tam paket) | **370/375 dosya yeşil** (gece turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
+| 3 | `run-all-tests.ts` (tam paket) | **372/375 dosya yeşil** (2026-08-30) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
@@ -151,6 +155,16 @@ deftere yazılıyor).
 
 Bundan sonra saha kararıyla çakışan bir daraltma çıkarsa **durup soracağım**;
 sen yokken çıkarsa esnekliği koruyan tasarımı seçip işaretleyeceğim.
+
+## 4d. Kabul edilen riskler (kullanıcı kararı, 2026-08-30)
+
+| Konu | Karar |
+|---|---|
+| Tablet PIN'i tek başına kimlik (T1-014) | **Böyle kalsın** — fabrika ağı kapalı |
+| Sipariş defterine yazılmamış 7.200,6 m (T2-001) | **Siparişsiz sevkti** — dokunulmuyor |
+| Yedekler yalnız fabrika sunucusunda (T1-022) | **Şimdilik risk kabul** — ileride dış sunucu |
+| `.env` git geçmişinde (T1-053) | **Depo özel, sorun değil** |
+| Yedekten geri yükleme tatbikatı (T1-023) | **Yapılacak** — reçete hazırlanacak |
 
 ## 5. Senden beklenen iki karar
 
