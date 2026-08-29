@@ -2293,7 +2293,7 @@ export class InventoryService {
    * edilmiş top okutma vakalarının çok küçük bir azınlığıdır.
    */
   private async buildCancelDiagnostics(
-    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null },
+    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null },
   ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
     if (roll.status !== RollStatus.CANCELLED) return null;
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
@@ -2313,6 +2313,7 @@ export class InventoryService {
       sackId: roll.sackId,
       shipmentId: roll.shipmentId,
       currentStepId: roll.currentStepId,
+      cancelReasonCode: roll.cancelReasonCode,
       movementCount,
       operationCount,
       childCount,
@@ -3441,6 +3442,7 @@ export class InventoryService {
       sackId: existing.sackId,
       shipmentId: existing.shipmentId,
       currentStepId: existing.currentStepId,
+      cancelReasonCode: existing.cancelReasonCode,
       movementCount,
       operationCount,
       childCount,

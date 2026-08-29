@@ -34,6 +34,7 @@
 // =============================================================================
 
 import { RollStatus } from "@prisma/client";
+import { TAMBUR_UNDO_CANCEL_CODE } from "../../constants/reason-presets";
 
 /**
  * Geri alınabilirlik kararı için gereken TÜM sinyaller. Çağıran bunları tek
@@ -57,6 +58,11 @@ export interface RollRestoreSignals {
   dispatchItemCount: number;
   /** Kartela sevk kalemi. */
   kartelaItemCount: number;
+  /**
+   * İptalin SEBEP KODU. Sistem kaynaklı iptaller (bugün: Tambur geri alması)
+   * buradan tanınır — kararın izi kaydın KENDİ satırında.
+   */
+  cancelReasonCode: string | null;
 }
 
 /**
@@ -106,6 +112,19 @@ export function resolveRollRestoreBlockReason(s: RollRestoreSignals): string | n
   }
   if (s.dispatchItemCount > 0 || s.kartelaItemCount > 0) {
     return "Bu top bir fason/kartela sevkine girmiş — iptali buradan geri alınamaz.";
+  }
+  // ⚠️ ALTINCI SİNYAL (2026-08-29 / BULGU-T1-011): iptal bir GERİ ALMANIN ürünü
+  // mü? Tambur geri alması parçayı iptal ederken metrajını KAYNAK TOPA İADE
+  // eder; parça diriltilirse aynı metraj iki yerde sayılır ve hiçbir ekranda
+  // uyarı çıkmaz — fark ancak fiziksel sayımda görülür. Yukarıdaki beş sinyal
+  // bunu göremiyordu: böyle bir parçanın hareketi, istasyon işlemi, çocuğu,
+  // çuvalı, sevki YOKTUR (hepsi 0) — tam da "hiç yaşamamış" gibi görünür.
+  if (s.cancelReasonCode === TAMBUR_UNDO_CANCEL_CODE) {
+    return (
+      "Bu parça bir Tambur geri almasıyla iptal edilmiş ve metrajı kaynak topa " +
+      "iade edilmiş — geri alınamaz. Aynı metrajı yeniden elde etmek için kaynak " +
+      "topu tekrar kesin."
+    );
   }
   return null;
 }

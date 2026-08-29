@@ -73,6 +73,10 @@
 // =============================================================================
 
 import {
+  TAMBUR_UNDO_CANCEL_CODE,
+  TAMBUR_UNDO_CANCEL_TEXT,
+} from "../constants/reason-presets";
+import {
   Prisma,
   RollStatus,
   RollOperationType,
@@ -1076,7 +1080,22 @@ export class TamburUndoService {
           status: { in: CHILD_CANCELABLE_STATUSES },
           sackId: null, shipmentId: null, currentStepId: null,
         },
-        data: { status: RollStatus.CANCELLED },
+        // ⚠️ İZ + METRAJ BİRLİKTE (2026-08-29 / BULGU-T1-011). Geri alma bu
+        // parçanın metrajını KAYNAK TOPA İADE ediyor; parçada bırakmak "iptal
+        // ama metrajı üstünde" bir kayıt üretiyordu ve Envanter→Arşiv'den
+        // "İptali Geri Al" onu diriltince AYNI metraj iki yerde sayılıyordu
+        // (sahada 50 top / 1.834,8 m diriltilmeye hazır bekliyordu).
+        //   • `currentQty: 0` → dirilse bile 0 m dirilir (giriş metrajı
+        //     `initialQty`de DURUYOR, arşiv "bu kesim 40 m'ydi" diyebiliyor),
+        //   • `cancelReasonCode` → geri alma kaynaklı iptal SATIRIN KENDİSİNDEN
+        //     tanınır; geri alma kapısı buna bakıp reddeder. Audit'e dayanmak
+        //     olmazdı: 6 ayda arşivleniyor, kural sessizce açılırdı.
+        data: {
+          status: RollStatus.CANCELLED,
+          currentQty: 0,
+          cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
+          cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+        },
       });
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
@@ -1263,7 +1282,22 @@ export class TamburUndoService {
           status: { in: CHILD_CANCELABLE_STATUSES },
           sackId: null, shipmentId: null, currentStepId: null,
         },
-        data: { status: RollStatus.CANCELLED },
+        // ⚠️ İZ + METRAJ BİRLİKTE (2026-08-29 / BULGU-T1-011). Geri alma bu
+        // parçanın metrajını KAYNAK TOPA İADE ediyor; parçada bırakmak "iptal
+        // ama metrajı üstünde" bir kayıt üretiyordu ve Envanter→Arşiv'den
+        // "İptali Geri Al" onu diriltince AYNI metraj iki yerde sayılıyordu
+        // (sahada 50 top / 1.834,8 m diriltilmeye hazır bekliyordu).
+        //   • `currentQty: 0` → dirilse bile 0 m dirilir (giriş metrajı
+        //     `initialQty`de DURUYOR, arşiv "bu kesim 40 m'ydi" diyebiliyor),
+        //   • `cancelReasonCode` → geri alma kaynaklı iptal SATIRIN KENDİSİNDEN
+        //     tanınır; geri alma kapısı buna bakıp reddeder. Audit'e dayanmak
+        //     olmazdı: 6 ayda arşivleniyor, kural sessizce açılırdı.
+        data: {
+          status: RollStatus.CANCELLED,
+          currentQty: 0,
+          cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
+          cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+        },
       });
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
@@ -1491,7 +1525,22 @@ export class TamburUndoService {
           status: { in: CHILD_CANCELABLE_STATUSES },
           sackId: null, shipmentId: null, currentStepId: null,
         },
-        data: { status: RollStatus.CANCELLED },
+        // ⚠️ İZ + METRAJ BİRLİKTE (2026-08-29 / BULGU-T1-011). Geri alma bu
+        // parçanın metrajını KAYNAK TOPA İADE ediyor; parçada bırakmak "iptal
+        // ama metrajı üstünde" bir kayıt üretiyordu ve Envanter→Arşiv'den
+        // "İptali Geri Al" onu diriltince AYNI metraj iki yerde sayılıyordu
+        // (sahada 50 top / 1.834,8 m diriltilmeye hazır bekliyordu).
+        //   • `currentQty: 0` → dirilse bile 0 m dirilir (giriş metrajı
+        //     `initialQty`de DURUYOR, arşiv "bu kesim 40 m'ydi" diyebiliyor),
+        //   • `cancelReasonCode` → geri alma kaynaklı iptal SATIRIN KENDİSİNDEN
+        //     tanınır; geri alma kapısı buna bakıp reddeder. Audit'e dayanmak
+        //     olmazdı: 6 ayda arşivleniyor, kural sessizce açılırdı.
+        data: {
+          status: RollStatus.CANCELLED,
+          currentQty: 0,
+          cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
+          cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+        },
       });
       if (cancelled.count !== ids.length) {
         throw AppError.conflict("Parçalardan biri bu sırada başka akışa girdi — geri alma iptal edildi, yenileyin");

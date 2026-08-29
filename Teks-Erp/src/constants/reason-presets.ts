@@ -96,6 +96,27 @@ export const MANUAL_ENTRY_REASONS: readonly ReasonPresetSeed[] = [
  * yazılan tam cümle. İkisi bilerek ayrı: tablette okuyanla altı ay sonra
  * raporda okuyan aynı kişi değil.
  */
+/**
+ * SİSTEM SEBEBİ — seçilebilir bir sebep DEĞİLDİR (`SHRINK_REASON_CODE` emsali).
+ *
+ * Tambur geri alması bir kesim parçasını iptal ederken metrajı KAYNAK TOPA İADE
+ * EDER. O parça bundan sonra "iptal edilmiş ama metrajı üstünde duran" bir kayıt
+ * olur ve Envanter→Arşiv'den "İptali Geri Al" ile diriltilirse AYNI metraj iki
+ * yerde birden görünür (BULGU-T1-011; saha kopyasında 50 top / 1.834,8 m
+ * diriltilmeye hazır bekliyordu).
+ *
+ * Kodu `CANCEL_REASONS`'a EKLEMEDİK — o liste operatörün iptal ekranında
+ * gördüğü listedir ve oraya "Tambur geri alması" koymak, operatörün elle
+ * yaptığı bir iptali sistem iptali gibi işaretlemesinin yolunu açardı.
+ * Seçicilerde ÇIKMAZ, doğrulama KABUL eder.
+ *
+ * ⚠️ İZ SATIRIN KENDİSİNDE durmak ZORUNDA: tek alternatif audit'ti ve audit 6
+ * ayda arşivleniyor — ona dayanan bir kural zamanla SESSİZCE açılırdı
+ * (`entryReason`/`labelPrintedAt` dersinin aynısı).
+ */
+export const TAMBUR_UNDO_CANCEL_CODE = "TAMBUR_GERI_ALMA";
+export const TAMBUR_UNDO_CANCEL_TEXT = "Tambur geri alması — metraj kaynak topa iade edildi";
+
 export const CANCEL_REASONS: readonly ReasonPresetSeed[] = [
   { code: "MUKERRER", label: "Mükerrer", fullText: "Mükerrer giriş — aynı top iki kez kaydedildi" },
   { code: "YANLIS_METRAJ", label: "Yanlış metraj", fullText: "Yanlış metraj girildi" },

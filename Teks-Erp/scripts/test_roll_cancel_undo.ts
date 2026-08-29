@@ -25,6 +25,7 @@
 // =============================================================================
 
 import { randomUUID } from "crypto";
+import { TAMBUR_UNDO_CANCEL_CODE } from "../src/constants/reason-presets";
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
 import {
@@ -52,6 +53,8 @@ const created: string[] = [];
 async function makeRoll(opts: {
   labelPrinted: boolean;
   status?: RollStatus;
+  /** Varsayılan 100 — Tambur kesimi bölümü kendi metrajını verir. */
+  qty?: number;
 }): Promise<{ id: string; barcode: string }> {
   const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true } });
   if (!item) throw new Error("Aktif ürün yok — seed koşulmamış olabilir");
@@ -63,8 +66,8 @@ async function makeRoll(opts: {
     data: {
       itemId: item.id,
       barcode,
-      initialQty: 100,
-      currentQty: 100,
+      initialQty: opts.qty ?? 100,
+      currentQty: opts.qty ?? 100,
       status: opts.status ?? RollStatus.STOCK,
       entrySource: "SUPPLIER_RECEIPT",
       labelPrintedAt: opts.labelPrinted ? new Date() : null,
@@ -279,6 +282,7 @@ async function main(): Promise<void> {
       childCount: 0,
       dispatchItemCount: 0,
       kartelaItemCount: 0,
+      cancelReasonCode: null,
     };
     check("temiz kayıt: engel yok", resolveRollRestoreBlockReason(base) === null);
     check(
@@ -421,6 +425,7 @@ async function main(): Promise<void> {
     const block = resolveRollRestoreBlockReason({
       status: done!.status,
       preCancelStatus: done!.preCancelStatus,
+      cancelReasonCode: null,
       batchId: null,
       sackId: null,
       shipmentId: null,
@@ -452,7 +457,61 @@ async function main(): Promise<void> {
     }
   }
 
+  // ── §  TAMBUR GERİ ALMASININ İPTALİ DİRİLTİLEMEZ (2026-08-29 / T1-011) ────
+  // Geri alma bir kesim parçasını iptal ederken metrajını KAYNAK TOPA İADE eder.
+  // Parça bundan sonra "iptal ama metrajı üstünde" bir kayıt olurdu ve
+  // Envanter→Arşiv'den "İptali Geri Al" onu diriltince AYNI metraj iki yerde
+  // sayılırdı — hiçbir ekranda uyarı yok, fark ancak fiziksel sayımda görülür.
+  // Beş eski sinyal bunu GÖREMİYORDU: böyle bir parçanın hareketi, istasyon
+  // işlemi, çocuğu, çuvalı, sevki YOKTUR — tam da "hiç yaşamamış" gibi görünür.
+  console.log("\n── Tambur geri almasıyla iptal edilen parça ──");
+  {
+    const { TamburService } = await import("../src/services/tambur.service");
+    const { TamburUndoService } = await import("../src/services/tambur-undo.service");
+    const kaynak = await makeRoll({ labelPrinted: false, status: RollStatus.WAREHOUSE, qty: 100 });
+    const adminId = (await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }))?.id;
+    const kesim = await new TamburService().cutWarehouseRoll(kaynak.id, { cutLength: 40 }, adminId);
+    const cocuk = (kesim.data as { childRoll: { id: string } }).childRoll;
+
+    await new TamburUndoService().applyUndo(cocuk.id, adminId, { mode: "SINGLE" });
+
+    const c = await prisma.roll.findUnique({
+      where: { id: cocuk.id },
+      select: { status: true, currentQty: true, initialQty: true, cancelReasonCode: true },
+    });
+    check("geri alma parçayı iptal etti", c?.status === RollStatus.CANCELLED, String(c?.status));
+    check(
+      "parçanın METRAJI SIFIRLANDI (metraj kaynak topa döndü)",
+      Number(c?.currentQty) === 0,
+      `${c?.currentQty} m`,
+    );
+    check(
+      "giriş metrajı KORUNDU (arşiv 'bu kesim 40 m'ydi' diyebiliyor)",
+      Number(c?.initialQty) === 40,
+      `${c?.initialQty} m`,
+    );
+    check(
+      "iptalin kaynağı SATIRIN KENDİSİNDE (audit'e bağımlı değil)",
+      c?.cancelReasonCode === TAMBUR_UNDO_CANCEL_CODE,
+      String(c?.cancelReasonCode),
+    );
+
+    let dirilmeHatasi: string | undefined;
+    try {
+      await service.restoreCancelledRoll(cocuk.id, adminId);
+    } catch (e) {
+      dirilmeHatasi = (e as Error).message;
+    }
+    check("İPTALİ GERİ AL reddedildi", dirilmeHatasi !== undefined, dirilmeHatasi?.slice(0, 60) ?? "DİRİLDİ!");
+    check(
+      "mesaj ne yapılacağını söylüyor (kaynak topu tekrar kesin)",
+      Boolean(dirilmeHatasi?.includes("tekrar kesin")),
+    );
+    const sonra = await prisma.roll.findUnique({ where: { id: cocuk.id }, select: { status: true } });
+    check("parça hâlâ iptal (dirilmedi)", sonra?.status === RollStatus.CANCELLED, String(sonra?.status));
+  }
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+
 }
 
 main()
