@@ -19,17 +19,23 @@
 //
 // SAF: DB'ye yazmaz, HTTP isteği atmaz; yalnız Express route ağacını gezer.
 // =============================================================================
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import app from "../src/app";
 
 /**
  * Kimlik doğrulaması TAŞIMAYAN uçlar — her biri GEREKÇELİ.
- * Anahtar `METOD /route/path` (mount öneki YOK: Express 5'te mount layer'ın
- * `path`i eşleşme anına kadar dolmuyor, statik okunamıyor). Denetimde ölçüldü:
- * bu dokuz anahtarın HEPSİ uygulama genelinde BENZERSİZ, yani kimlik yeterli.
- * Yeni bir public uç çakışan bir anahtarla gelse bile listede olmadığı için
- * KIRMIZI verir — hata yönü doğru.
+ * Anahtar **TAM YOL**: `METOD /api/<mount>/<route>`.
+ *
+ * ⚠️ Eskiden anahtar router'a göreliydi (`METOD /route/path`) çünkü Express 5'te
+ * mount katmanı `path`i eşleşme anına kadar doldurmuyor. O sözleşmenin dayandığı
+ * "bu anahtarların hepsi uygulama genelinde benzersiz" varsayımı 2026-08-29
+ * denetiminde ÇÖKTÜ: `GET /api/client-policy/` eklenince anahtar `GET /` oldu ve
+ * o anahtar DÖRT ayrı router'ın kök ucuna birden uyuyor — muafiyet tek ucu değil
+ * bir DESENİ affederdi (bekçinin kendi kör noktası). Önek artık katmanın kendi
+ * eşleştiricisine (`layer.match(aday)`) sorularak çözülüyor; aday listesi
+ * `app.ts` + `routes/**` içindeki `.use("/...")` satırlarından toplanır ve önek
+ * çözülemezse körlük zemini KIRMIZI verir (eksik yollu anahtar sessiz geçmez).
  */
 const EXEMPT: Record<string, string> = {
   // Canlılık ucu — Electron login ÖNCESİ sunucu adresini bununla test ediyor
@@ -41,17 +47,17 @@ const EXEMPT: Record<string, string> = {
   // bilmiyorken çağırır — guard takılamaz (/health ile birebir aynı gerekçe).
   // Yük DB'siz ve minimaldir; sızdırdığı her alan (hostname, firma adı, sürüm)
   // zaten aynı LAN'da /health, mDNS ilanı ve login ekranı üzerinden açık.
-  "GET /identity": "servis keşfi kimlik ucu; istemci sunucuyu tanımadan çağırır",
+  "GET /api/discovery/identity": "servis keşfi kimlik ucu; istemci sunucuyu tanımadan çağırır",
   // Giriş uçları: token ÜRETEN uç token isteyemez.
-  "POST /login": "token üreten uç",
-  "POST /login-card": "kartla giriş — token üreten uç",
-  "POST /login-quick-pin": "PIN ile giriş — token üreten uç",
-  "GET /login-methods": "istemci hangi giriş yöntemleri açık öğrenir (login ekranı)",
-  "GET /mobile-users": "mobil giriş ekranı kullanıcı listesi (cihaz eşleşmesi zorunluysa 401)",
+  "POST /api/auth/login": "token üreten uç",
+  "POST /api/auth/login-card": "kartla giriş — token üreten uç",
+  "POST /api/auth/login-quick-pin": "PIN ile giriş — token üreten uç",
+  "GET /api/auth/login-methods": "istemci hangi giriş yöntemleri açık öğrenir (login ekranı)",
+  "GET /api/auth/mobile-users": "mobil giriş ekranı kullanıcı listesi (cihaz eşleşmesi zorunluysa 401)",
   // Cihaz el sıkışması: cihaz EŞLEŞMEDEN token alamaz.
-  "POST /announce": "tablet kendini bildirir — eşleşmeden önce token alamaz",
-  "GET /status": "cihaz atama durumu yoklaması (x-device-id)",
-  "GET /pairing-required": "eşleşme zorunlu mu — login öncesi gate",
+  "POST /api/devices/announce": "tablet kendini bildirir — eşleşmeden önce token alamaz",
+  "GET /api/devices/status": "cihaz atama durumu yoklaması (x-device-id)",
+  "GET /api/devices/pairing-required": "eşleşme zorunlu mu — login öncesi gate",
   // Mobil uzaktan güncelleme (LAN ikizi): tablet güncellemeyi GİRİŞ EKRANINDAN
   // ÖNCE sorar — kimlik aransaydı "açılmayan tablete düzeltme gönderme" yolu,
   // yani kurtarmanın kendisi kapanırdı (`/health` ile aynı gerekçe sınıfı).
@@ -61,7 +67,7 @@ const EXEMPT: Record<string, string> = {
   // `Setup.exe`si ile aynı durum. Paketin DEĞİŞTİRİLMESİNE karşı koruma kimlik
   // değil KOD İMZALAMADIR (imza geçersizse istemci güncellemeyi reddeder).
   // Depo dışına çıkış `dosyaYolu()` ile kapalı; bekçi `test_mobile_update.ts` §6.
-  "GET /updates/ota/:runtimeVersion/manifest": "tablet güncellemeyi giriş öncesi sorar; koruma kod imzalamada",
+  "GET /api/mobile/updates/ota/:runtimeVersion/manifest": "tablet güncellemeyi giriş öncesi sorar; koruma kod imzalamada",
   // İstemci sürüm politikası: masaüstü panel "bu sunucu hangi panel sürümünü
   // bekliyor" sorusunu GİRİŞ EKRANINDAN ÖNCE sorar. Kimlik aransaydı, sözleşmesi
   // bozulduğu için giriş yapamayan bir panele "güncelle" diyebilme yolu — yani
@@ -70,8 +76,16 @@ const EXEMPT: Record<string, string> = {
   // numarasından ibarettir; fabrika verisi taşımaz. Sızdırdığı tek bilgi
   // "sunucu şu panel sürümünü istiyor" — aynı LAN'da zaten `/identity` sürüm
   // basıyor. Değer KODDA sabittir, uçtan yazılamaz. Bekçi: test_client_policy.ts
-  "GET /:istemci": "istemci sürüm politikasını giriş öncesi sorar; salt-okunur, iki sürüm numarası",
-  "GET /updates/{*yol}": "güncelleme paketi dosyaları — kimliksiz, yol kaçışı kapalı, imzayla korunur",
+  "GET /api/client-policy/:istemci": "istemci sürüm politikasını giriş öncesi sorar; salt-okunur, iki sürüm numarası",
+  // Aynı politikanın ÇOĞUL hâli (`GET /api/client-policy/`, ce8681d1): sunucu
+  // "ben şu sürümüm ve şu istemcilerden şunları bekliyorum" cümlesini tek
+  // istekte verir. Tekil uçla AYNI veriyi, aynı gerekçeyle döner — panel bunu
+  // giriş ekranından önce sorar; yükü `CLIENT_VERSION_POLICIES` sabitinden
+  // gelir, DB'ye dokunmaz ve uçtan yazılamaz. Muafiyet BEYANI bu satırdır:
+  // uç 2026-08-28'de eklendiğinde listeye yazılmadığı için bekçi kırmızıya
+  // düştü ve `npm test` tip kapısından sonra ilk adımda duruyordu (BULGU-T1-016).
+  "GET /api/client-policy/": "sürüm künyesi (çoğul) — giriş öncesi sorulur; salt-okunur, DB'siz, sabitten",
+  "GET /api/mobile/updates/{*yol}": "güncelleme paketi dosyaları — kimliksiz, yol kaçışı kapalı, imzayla korunur",
 };
 
 /**
@@ -119,6 +133,9 @@ const MIN_ROUTE_LAYERS = 400;
 type Layer = {
   route?: { path: string; methods: Record<string, boolean>; stack: Array<{ name: string }> };
   handle?: { stack?: Layer[] };
+  /** Express 5 katmanı: mount önekini düz metin vermez, yalnız eşleştirici sunar. */
+  match?: (path: string) => boolean;
+  path?: string;
 };
 
 let pass = 0;
@@ -139,9 +156,42 @@ interface RouteInfo {
   chainLength: number;
 }
 
-function collectRoutes(): RouteInfo[] {
+/**
+ * MOUNT ÖNEKİ ADAYLARI — `app.use("/api/x", router)` ve `router.use("/y", alt)`
+ * satırlarından toplanır. Express 5 katmanı öneki düz metin TAŞIMAZ (`layer.path`
+ * ancak `match()` çağrıldıktan sonra dolar, `regexp` yoktur); bu yüzden önek,
+ * adayları katmanın kendi eşleştiricisine sorarak çözülür.
+ */
+function mountCandidates(): string[] {
+  const dosyalar: string[] = [join(__dirname, "..", "src", "app.ts")];
+  const routesDir = join(__dirname, "..", "src", "routes");
+  const gez = (dir: string): void => {
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) gez(p);
+      else if (e.name.endsWith(".ts")) dosyalar.push(p);
+    }
+  };
+  gez(routesDir);
+  const set = new Set<string>();
+  for (const f of dosyalar) {
+    const src = readFileSync(f, "utf8");
+    for (const m of src.matchAll(/\.use\(\s*["'`](\/[^"'`]*)["'`]/g)) set.add(m[1]);
+  }
+  // Uzun önek önce denenir: "/api" kısa öneki "/api/admin/devices"i gölgelemesin.
+  return [...set].sort((a, b) => b.length - a.length);
+}
+
+function birlestir(onek: string, yol: string): string {
+  const tam = `${onek}${yol}`.replace(/\/{2,}/g, "/");
+  return tam.length > 1 && tam.endsWith("/") ? tam : tam;
+}
+
+function collectRoutes(): { routes: RouteInfo[]; cozulemeyen: number } {
   const out: RouteInfo[] = [];
-  const walk = (layers: Layer[]): void => {
+  const adaylar = mountCandidates();
+  let cozulemeyen = 0;
+  const walk = (layers: Layer[], onek: string): void => {
     for (const l of layers) {
       if (l.route) {
         const methods = Object.keys(l.route.methods)
@@ -149,22 +199,37 @@ function collectRoutes(): RouteInfo[] {
           .join(",")
           .toUpperCase();
         out.push({
-          key: `${methods} ${l.route.path}`,
+          // ANAHTAR TAM YOLDUR (mount öneki dahil). Router'a göreli anahtar
+          // ("GET /") HER router'ın kök ucuna uyar; muafiyet listesi o zaman
+          // tek bir ucu değil bir DESENİ affeder — bekçinin kendi kör noktası
+          // (BULGU-T1-016 düzeltmesinde ölçüldü: "GET /" 4 ayrı uca uyuyordu).
+          key: `${methods} ${birlestir(onek, l.route.path)}`,
           hasAuth: l.route.stack.some((s) => s.name === "verifyToken"),
           chainLength: l.route.stack.length,
         });
       } else if (l.handle?.stack) {
-        walk(l.handle.stack);
+        let alt = "";
+        if (typeof l.match === "function") {
+          for (const c of adaylar) {
+            try {
+              if (l.match(c)) { alt = c; break; }
+            } catch {
+              /* eşleştirici bu adayı reddetti */
+            }
+          }
+        }
+        if (!alt && l.handle.stack.some((x) => x.route)) cozulemeyen++;
+        walk(l.handle.stack, birlestir(onek, alt));
       }
     }
   };
-  walk((app as unknown as { router: { stack: Layer[] } }).router.stack);
-  return out;
+  walk((app as unknown as { router: { stack: Layer[] } }).router.stack, "");
+  return { routes: out, cozulemeyen };
 }
 
 function main(): void {
   console.log("=== Route kimlik doğrulama kapsaması ===\n");
-  const routes = collectRoutes();
+  const { routes, cozulemeyen } = collectRoutes();
   const unauth = routes.filter((r) => !r.hasAuth);
   console.log(
     `  (tarandı: ${routes.length} route layer · ${unauth.length} tanesi verifyToken taşımıyor)\n`,
@@ -179,6 +244,13 @@ function main(): void {
   check(
     "körlük zemini: verifyToken taşıyan route BULUNDU (isim eşleşmesi çalışıyor)",
     routes.some((r) => r.hasAuth),
+  );
+  // Önek çözülemeyen bir mount, o router'ın TÜM uçlarını yanlış anahtarla
+  // (kısa yolla) kaydeder; muafiyet eşleşmesi de yanlış olur. Sessizce geçme.
+  check(
+    "körlük zemini: her mount önekinin karşılığı çözüldü",
+    cozulemeyen === 0,
+    cozulemeyen ? `${cozulemeyen} mount çözülemedi — anahtarlar eksik yol taşıyor` : "",
   );
 
   // ── 1) Muaf listesi DIŞINDA korumasız uç OLMAMALI ─────────────────────────
