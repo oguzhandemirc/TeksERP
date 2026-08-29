@@ -108,6 +108,7 @@ const PARTIAL_INDEXES: Array<{
   { table: "rolls", index: "rolls_markedForKartela_idx", uniq: false, predicate: `("markedForKartela" = true)`, why: "kartela adayı seyrek" },
   { table: "rolls", index: "rolls_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "rolls", index: "rolls_labelCustomerId_idx", uniq: false, predicate: `("labelCustomerId" IS NOT NULL)`, why: "null-yoğun FK (stok etiketi yaygın); sorgu yolu hep 'şu müşterinin topları'" },
+  { table: "rolls", index: "rolls_directShipmentId_idx", uniq: false, predicate: `("directShipmentId" IS NOT NULL)`, why: "null-yoğun FK — fason doğrudan sevk izi (K7c, 2026-08-29)" },
   {
     table: "rolls",
     index: "rolls_finalizedAt_idx",
@@ -194,7 +195,11 @@ const PARTIAL_INDEXES: Array<{
 //    `NOT VALID` eklenip sonra VALIDATE edildiler → `convalidated` da doğrulanır
 //    (validate edilmemiş bir CHECK eski satırları korumaz).
 // ─────────────────────────────────────────────────────────────────────────────
-const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
+// `notValid` = BİLİNÇLİ yumuşak kapı: kısıt YENİ ve GÜNCELLENEN satırları zorlar
+// ama eski ihlalleri geçmişte bırakır. Gerekçesi ZORUNLU (`why`) — çünkü "NOT
+// VALID kalmış, VALIDATE etmeyi unutmuşuz" ile "bilerek yumuşak" arasındaki fark
+// yalnız burada yazılıdır. Temizlik bitince girdiyi sil, `VALIDATE` et.
+const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string }> = [
   { table: "rolls", name: "rolls_currentQty_nonneg" },
   { table: "rolls", name: "rolls_initialQty_nonneg" },
   { table: "rolls", name: "rolls_weightKg_nonneg" },
@@ -226,6 +231,18 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string }> = [
   // "SUM(qty)" yazan her raporu sessizce yanlışlar (biri işareti dikkate alır,
   // diğeri almaz) ve bu yıllar sonra fark edilir.
   { table: "roll_variances", name: "roll_variances_qty_positive" },
+  // 2026-08-29 denetimi (K1) — migration 20260829140000_denetim_sema_kisitlari.
+  // "Topun kalan metrajı giriş metrajını aşamaz." Depo kesimi `initialQty`ye
+  // dokunduğu için yıllarca ihlal edilebiliyordu (T1-044 · T1-001 · T1-002 ·
+  // T3-011 · T2-016); kod tarafı düzeltildi, bu DB seddi ikinci hattır.
+  {
+    table: "rolls",
+    name: "rolls_qty_le_initial",
+    notValid:
+      "Fabrika verisinde 2 ESKİ ihlal satırı var (ölçüldü). Toplu UPDATE ile " +
+      "'düzeltmek' kök nedeni gizler ve kapıyı görünmez yapar — satırlar bilerek " +
+      "duruyor. Temizlik yapılınca: ALTER TABLE rolls VALIDATE CONSTRAINT rolls_qty_le_initial;",
+  },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -463,7 +480,19 @@ async function main(): Promise<void> {
       continue;
     }
     if (!live.validated) {
+      if (exp.notValid) {
+        // Bilinçli yumuşak kapı — YEŞİL ama GÖRÜNÜR. Gerekçe her koşumda basılır
+        // ki "geçici" durum sessizce kalıcılaşmasın.
+        check(exp.name, true, `BİLİNÇLİ NOT VALID — ${exp.notValid.slice(0, 90)}`);
+        continue;
+      }
       check(exp.name, false, "mevcut ama NOT VALID — eski satırlar doğrulanmamış");
+      continue;
+    }
+    if (exp.notValid) {
+      // Ters yön: envanter "yumuşak" diyor ama kısıt VALIDATE edilmiş → temizlik
+      // bitmiş demektir, girdi bayat. Ölü muaf gerçek bir ihlali gizler.
+      check(exp.name, false, "envanterde BİLİNÇLİ NOT VALID yazıyor ama kısıt VALIDATE edilmiş — girdiyi kaldır");
       continue;
     }
     check(exp.name, true, live.def.replace(/\s+/g, " ").slice(0, 62));

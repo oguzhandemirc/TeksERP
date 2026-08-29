@@ -72,6 +72,11 @@
 // HER kaydı somut listeler; apply tx-içi TAZE guard'larla (atomik claim) korunur.
 // =============================================================================
 
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import {
+  TAMBUR_UNDO_CANCEL_CODE,
+  TAMBUR_UNDO_CANCEL_TEXT,
+} from "../constants/reason-presets";
 import {
   Prisma,
   RollStatus,
@@ -262,12 +267,12 @@ export class TamburUndoService {
     }
     if (ctx.mode === "MANUAL") return this.applyManual(ctx.parentId, userId);
     if (ctx.mode === "SINGLE") {
-      return this.applySingle(ctx.parentId, ctx.children[0]!.id, userId, ctx.parentArchived);
+      return this.applySingle(ctx.parentId, ctx.children[0]!.id, userId, ctx.parentArchived, ctx.workOrder?.id ?? null);
     }
     if (ctx.mode === "SINGLE_RESTORE") {
-      return this.applySingleRestore(ctx.parentId, ctx.children[0]!.id, userId);
+      return this.applySingleRestore(ctx.parentId, ctx.children[0]!.id, userId, ctx.workOrder?.id ?? null);
     }
-    return this.applyFull(ctx.parentId, userId, opts?.reason ?? null);
+    return this.applyFull(ctx.parentId, userId, opts?.reason ?? null, ctx.workOrder?.id ?? null);
   }
 
   /** FULL'ün iki kapısı — TEK KAYNAK (preview + apply aynı yüklemi çağırır). */
@@ -1016,6 +1021,45 @@ export class TamburUndoService {
    * (IN_PRODUCTION); onayı zaten önizleme + operatörün butonu temsil ediyor.
    * softDelete adım/WO durumunu kendi recompute eder.
    */
+  /**
+   * TX'İN İLK İŞİ: iş emri satırını KİLİTLE ve durumunu TAZE doğrula.
+   *
+   * BULGU-T1-003. Geri alma iş emri satırını hiç kilitlemiyordu ve durumu tx
+   * DIŞINDA okumuş oluyordu. Planlamacı aynı saniyede iş emrini iptal ederse
+   * (ölçülen pencere: 6 ms) READ COMMITTED altında geri alma hâlâ IN_PROGRESS
+   * görüyor, kapıyı geçiyor ve topu İPTAL EDİLMİŞ iş emrinin SKIPPED adımına
+   * `IN_PRODUCTION` olarak diriltiyordu — üstüne kapanmayan bir hareket satırı.
+   * İki istek de 200 alıyordu.
+   *
+   * Sonuç, fiziksel olarak elde olan kumaşın sistemde ÇIKMAZA düşmesi: hiçbir
+   * istasyon okutamaz (refakat kartı VOIDED), envanter ve Üretim Akışı panosu
+   * onu üretimde sayar, kapanmayan hareket WIP sayacını kalıcı şişirir. Çıkış
+   * yolu yalnız `roll:manual-adjust` yetkili "Kurtar". Hiçbir alarm yok.
+   *
+   * Kilit ayrıca kilit SIRASINI kardeş yollarla (fason ailesi, `assign`,
+   * `completeWorkOrder`) hizalar → ABBA deadlock kolu da kapanır.
+   */
+  private async lockAndAssertWorkOrderLive(
+    tx: Prisma.TransactionClient,
+    workOrderId: string | null,
+  ): Promise<void> {
+    if (!workOrderId) return; // depo kesimi — iş emrine bağlı değil
+    await touchWorkOrderTx(tx, workOrderId);
+    const wo = await tx.workOrder.findUnique({
+      where: { id: workOrderId },
+      select: { status: true, workOrderNumber: true },
+    });
+    if (!wo) return;
+    if (wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED) {
+      throw AppError.conflict(
+        `${wo.workOrderNumber} iş emri bu sırada ${
+          wo.status === WorkOrderStatus.CANCELLED ? "iptal edildi" : "devredildi"
+        } — geri alma yapılamaz. Listeyi yenileyin.`,
+        { code: "WORKORDER_TERMINAL_DURING_UNDO" },
+      );
+    }
+  }
+
   private async applyManual(rollId: string, userId?: string): Promise<ApiResponse<unknown>> {
     // Tazeleme: önizleme ile uygulama arasında top kesilmiş/çuvala girmiş
     // olabilir. Guard'ı tekrar koştur (yıkıcı-işlem kuralı: apply kendi
@@ -1051,11 +1095,15 @@ export class TamburUndoService {
   private async applySingle(
     parentId: string,
     childId: string,
-    userId?: string,
+    userId: string | undefined,
     /** Kaynak arşivde mi — metrajın geri DÖNEMEYECEĞİ durum (2026-08-09). */
-    parentArchived = false,
+    parentArchived: boolean,
+    /** Kilitlenecek iş emri (null = depo kesimi) — tx'in İLK işi (T1-003). */
+    workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
     const result = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
+      await this.lockAndAssertWorkOrderLive(tx, workOrderId);
       const child = await tx.roll.findUnique({
         where: { id: childId },
         select: {
@@ -1076,7 +1124,22 @@ export class TamburUndoService {
           status: { in: CHILD_CANCELABLE_STATUSES },
           sackId: null, shipmentId: null, currentStepId: null,
         },
-        data: { status: RollStatus.CANCELLED },
+        // ⚠️ İZ + METRAJ BİRLİKTE (2026-08-29 / BULGU-T1-011). Geri alma bu
+        // parçanın metrajını KAYNAK TOPA İADE ediyor; parçada bırakmak "iptal
+        // ama metrajı üstünde" bir kayıt üretiyordu ve Envanter→Arşiv'den
+        // "İptali Geri Al" onu diriltince AYNI metraj iki yerde sayılıyordu
+        // (sahada 50 top / 1.834,8 m diriltilmeye hazır bekliyordu).
+        //   • `currentQty: 0` → dirilse bile 0 m dirilir (giriş metrajı
+        //     `initialQty`de DURUYOR, arşiv "bu kesim 40 m'ydi" diyebiliyor),
+        //   • `cancelReasonCode` → geri alma kaynaklı iptal SATIRIN KENDİSİNDEN
+        //     tanınır; geri alma kapısı buna bakıp reddeder. Audit'e dayanmak
+        //     olmazdı: 6 ayda arşivleniyor, kural sessizce açılırdı.
+        data: {
+          status: RollStatus.CANCELLED,
+          currentQty: 0,
+          cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
+          cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+        },
       });
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
@@ -1216,9 +1279,13 @@ export class TamburUndoService {
   private async applySingleRestore(
     parentId: string,
     childId: string,
-    userId?: string,
+    userId: string | undefined,
+    /** Kilitlenecek iş emri (null = depo kesimi) — tx'in İLK işi (T1-003). */
+    workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
     const result = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
+      await this.lockAndAssertWorkOrderLive(tx, workOrderId);
       // Çocuk — taze guard'lar (önizlemeden bu yana değişmiş olabilir).
       const child = await tx.roll.findUnique({
         where: { id: childId },
@@ -1263,7 +1330,22 @@ export class TamburUndoService {
           status: { in: CHILD_CANCELABLE_STATUSES },
           sackId: null, shipmentId: null, currentStepId: null,
         },
-        data: { status: RollStatus.CANCELLED },
+        // ⚠️ İZ + METRAJ BİRLİKTE (2026-08-29 / BULGU-T1-011). Geri alma bu
+        // parçanın metrajını KAYNAK TOPA İADE ediyor; parçada bırakmak "iptal
+        // ama metrajı üstünde" bir kayıt üretiyordu ve Envanter→Arşiv'den
+        // "İptali Geri Al" onu diriltince AYNI metraj iki yerde sayılıyordu
+        // (sahada 50 top / 1.834,8 m diriltilmeye hazır bekliyordu).
+        //   • `currentQty: 0` → dirilse bile 0 m dirilir (giriş metrajı
+        //     `initialQty`de DURUYOR, arşiv "bu kesim 40 m'ydi" diyebiliyor),
+        //   • `cancelReasonCode` → geri alma kaynaklı iptal SATIRIN KENDİSİNDEN
+        //     tanınır; geri alma kapısı buna bakıp reddeder. Audit'e dayanmak
+        //     olmazdı: 6 ayda arşivleniyor, kural sessizce açılırdı.
+        data: {
+          status: RollStatus.CANCELLED,
+          currentQty: 0,
+          cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
+          cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+        },
       });
       if (cancelled.count !== 1) {
         throw AppError.conflict("Parça bu sırada başka bir akışa girdi — geri alınamadı, yenileyin");
@@ -1428,10 +1510,14 @@ export class TamburUndoService {
 
   private async applyFull(
     parentId: string,
-    userId?: string,
-    reason?: string | null,
+    userId: string | undefined,
+    reason: string | null,
+    /** Kilitlenecek iş emri (null = depo kesimi) — tx'in İLK işi (T1-003). */
+    workOrderId: string | null,
   ): Promise<ApiResponse<unknown>> {
     const result = await prisma.$transaction(async (tx) => {
+      // ⚠️ TX'İN İLK İŞİ (2026-08-29 / BULGU-T1-003) — gerekçe helper'da.
+      await this.lockAndAssertWorkOrderLive(tx, workOrderId);
       const op = await tx.rollOperation.findFirst({
         where: { rollId: parentId, operationType: RollOperationType.TAMBUR_PROCESSED },
         orderBy: { createdAt: "desc" },
@@ -1491,7 +1577,22 @@ export class TamburUndoService {
           status: { in: CHILD_CANCELABLE_STATUSES },
           sackId: null, shipmentId: null, currentStepId: null,
         },
-        data: { status: RollStatus.CANCELLED },
+        // ⚠️ İZ + METRAJ BİRLİKTE (2026-08-29 / BULGU-T1-011). Geri alma bu
+        // parçanın metrajını KAYNAK TOPA İADE ediyor; parçada bırakmak "iptal
+        // ama metrajı üstünde" bir kayıt üretiyordu ve Envanter→Arşiv'den
+        // "İptali Geri Al" onu diriltince AYNI metraj iki yerde sayılıyordu
+        // (sahada 50 top / 1.834,8 m diriltilmeye hazır bekliyordu).
+        //   • `currentQty: 0` → dirilse bile 0 m dirilir (giriş metrajı
+        //     `initialQty`de DURUYOR, arşiv "bu kesim 40 m'ydi" diyebiliyor),
+        //   • `cancelReasonCode` → geri alma kaynaklı iptal SATIRIN KENDİSİNDEN
+        //     tanınır; geri alma kapısı buna bakıp reddeder. Audit'e dayanmak
+        //     olmazdı: 6 ayda arşivleniyor, kural sessizce açılırdı.
+        data: {
+          status: RollStatus.CANCELLED,
+          currentQty: 0,
+          cancelReasonCode: TAMBUR_UNDO_CANCEL_CODE,
+          cancelReason: TAMBUR_UNDO_CANCEL_TEXT,
+        },
       });
       if (cancelled.count !== ids.length) {
         throw AppError.conflict("Parçalardan biri bu sırada başka akışa girdi — geri alma iptal edildi, yenileyin");

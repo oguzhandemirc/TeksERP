@@ -77,7 +77,21 @@ export function shouldPersistMutation(mutation: {
 interface PersistedMutationLike {
   mutationKey?: unknown;
   state?: { status?: string; isPaused?: boolean };
+  /** Mutation meta'sı dehydrate/hydrate turundan geçer (query-core hydration.js). */
+  meta?: Record<string, unknown>;
 }
+
+/**
+ * Diriltilen kaydın damgası — "bu kaydın ARDINDA EKRAN YOK".
+ *
+ * Uygulama yeniden açıldığında kuyruktan replay edilen istasyon kaydının, onu
+ * yaratan ekranı artık yoktur; sunucu 409 ile SORU sorarsa (POSSIBLE_DUPLICATE
+ * "aynı top mu, ayrı top mu") o soruyu soracak modal da yoktur. Damga olmadan
+ * bu 409 hiçbir yüzeyde görünmeden düşüyordu — fiziksel top sistemde hiç
+ * doğmuyordu ve operatör bunu ancak envanterde arayınca fark edebiliyordu
+ * (BULGU-T3-001, S1).
+ */
+export const EKRANSIZ_META = 'ekransizDiriltildi';
 interface PersistedClientLike {
   clientState?: { mutations?: PersistedMutationLike[] };
 }
@@ -99,6 +113,8 @@ export function revivePendingStationMutations<T extends PersistedClientLike>(per
       !m.state.isPaused
     ) {
       m.state.isPaused = true;
+      // Ekransızlık damgası: replay 409 alırsa toast BASILIR (announceFailure).
+      m.meta = { ...(m.meta ?? {}), [EKRANSIZ_META]: true };
     }
   }
   return persisted;

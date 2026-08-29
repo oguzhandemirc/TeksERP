@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import express from "express";
+import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requirePermission } from "../middlewares/rbac.middleware";
@@ -25,7 +26,7 @@ import { getImportAdapter } from "../services/import/import-registry";
 const router = Router();
 
 // 10 MB — yalnız bu router için.
-const jsonBig = express.json({ limit: "10mb" });
+const jsonBig = express.json({ limit: BUYUK_GOVDE_LIMITI });
 
 /** `data:import` + hedef varlığın write izni. Adaptör `:entity`den çözülür. */
 function requireEntityWrite(req: Request, _res: Response, next: NextFunction): void {

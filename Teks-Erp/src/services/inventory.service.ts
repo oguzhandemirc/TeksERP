@@ -12,6 +12,7 @@ import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
+import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { FACTORY_TIMEZONE } from "../constants/time";
@@ -969,6 +970,11 @@ export class InventoryService {
           },
         });
         if (existing) {
+          // ⚠️ ÖNCE 4. DURUM: kayıt yazıldı ama SONRADAN İPTAL EDİLDİ mi?
+          // Payload özdeşliğinden ÖNCE gelmesi gerekiyor — özdeş bir payload
+          // iptal edilmiş kaydı "başarılı" diye döndürürdü ve operatör 100 m
+          // kumaşın kaydolduğunu sanırdı (T1-006; sahada 227 canlı token).
+          assertRollReplayAlive(existing);
           // F117: İdempotent retry SADECE gelen payload mevcut kayıtla ÖZDEŞSE geçerli.
           // Aynı token farklı topla kullanıldıysa (istemci hatası) 2. giriş sessizce
           // "kaydedildi" görünmemeli; kimlik-kilit alanları (item/renk/metre)
@@ -2286,8 +2292,33 @@ export class InventoryService {
    * yolunda; her okutmada koşturmak o yolu bedelsiz yere yavaşlatırdı ve iptal
    * edilmiş top okutma vakalarının çok küçük bir azınlığıdır.
    */
+
+  /**
+   * ESKİ (damgasız) geri alma iptallerini AUDIT'ten tanır — BULGU-T1-011.
+   *
+   * 2026-08-29'dan sonraki geri almalar izi satıra yazıyor; öncekiler yazmadı ve
+   * satırdan ayırt edilemiyor. Bu sorgu o boşluğu kapatır ve HİÇBİR SATIRI
+   * DEĞİŞTİRMEZ (kullanıcı kararı: eski kayıtlara dokunma).
+   *
+   * ⚠️ Kısa devre: satırda zaten damga varsa audit'e HİÇ BAKILMAZ — yeni
+   * kayıtlar için bedel sıfır. Sorgu yalnız damgasız iptallerde koşar.
+   * ⚠️ Kalıcı değil (audit 6 ayda arşivlenir) — bkz. helper'daki not.
+   */
+  private async isUndoSourcedByAudit(rollId: string, cancelReasonCode: string | null): Promise<boolean> {
+    if (cancelReasonCode) return false;
+    const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT count(*) AS n FROM system_logs
+      WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
+        AND (
+          ("newData" ->> 'cancelledChildId') = ${rollId}
+          OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
+        )
+    `;
+    return Number(rows[0]?.n ?? 0) > 0;
+  }
+
   private async buildCancelDiagnostics(
-    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null },
+    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null },
   ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
     if (roll.status !== RollStatus.CANCELLED) return null;
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
@@ -2307,6 +2338,8 @@ export class InventoryService {
       sackId: roll.sackId,
       shipmentId: roll.shipmentId,
       currentStepId: roll.currentStepId,
+      cancelReasonCode: roll.cancelReasonCode,
+      undoSourcedByAudit: await this.isUndoSourcedByAudit(roll.id, roll.cancelReasonCode),
       movementCount,
       operationCount,
       childCount,
@@ -3435,6 +3468,8 @@ export class InventoryService {
       sackId: existing.sackId,
       shipmentId: existing.shipmentId,
       currentStepId: existing.currentStepId,
+      cancelReasonCode: existing.cancelReasonCode,
+      undoSourcedByAudit: await this.isUndoSourcedByAudit(existing.id, existing.cancelReasonCode),
       movementCount,
       operationCount,
       childCount,
@@ -3927,15 +3962,60 @@ export class InventoryService {
         await touchWarehouseSackTx(tx, cur.sackId);
       }
 
-      // 1) Roll skaler alanları (renk/en/kalite) — üyelik PİNLİ atomik claim (serbest kalır).
+      // 1) Roll skaler alanları (renk/en/kalite/metraj) — atomik claim.
+      //
+      // ⚠️ CLAIM YALNIZ ÜYELİĞİ DEĞİL, KARARIN DAYANDIĞI ALANLARI DA PİNLER.
+      // Eskiden `where` yalnız `{ id, shipmentId: null, sackId }` idi; oysa bu
+      // fonksiyonun İKİ kararı da tx DIŞINDA okunan `roll` satırından geliyor:
+      //   • kapsam/yetki kararı  → `roll.status` (FREE_STOCK mu, süpervizör mü)
+      //   • metraj düzeltme izni → `rollWhole = initialQty.equals(currentQty)`
+      // Aradaki pencerede Tambur kesimi (`cutWarehouseRoll`) topun İKİ metrajını
+      // da düşürür ve yazım MUTLAK olduğu için (`currentQty = initialQty = m`)
+      // kesimi sessizce geri alır. Ölçüldü (audit_repro_D-A-01, 10/10 tekrar):
+      // 100 m'lik top, 40,5 m kesildikten sonra sistemde 140,5 m görünüyordu —
+      // fiziksel olarak var olmayan 40,5 m stoğa yazılmış oluyordu (BULGU-T1-001).
+      //
+      // `rollWhole` guard'ını tx İÇİNE taşımak YETMEZ: kesim parent'ın ikisini de
+      // düşürdüğü için kesimden SONRA da `initialQty == currentQty` olur, yani
+      // guard yeniden hesaplansa bile yeşil kalır. Tek çözüm okunan değeri
+      // pinlemektir — "gördüğüm satır hâlâ aynıysa yaz, değilse 409".
       if (Object.keys(rollData).length > 0) {
-        const upd = await tx.roll.updateMany({
-          where: { id: rollId, shipmentId: null, sackId: cur.sackId },
-          data: rollData,
-        });
+        const pin: Prisma.RollWhereInput = {
+          id: rollId,
+          shipmentId: null,
+          sackId: cur.sackId,
+          // Kapsam kararı bu statüden çözüldü (BULGU-T1-085).
+          status: roll.status,
+        };
+        // Metraj YAZILIYORSA okunan metraj da pinlenir. Yalnız yazıldığında:
+        // toplu renk/en düzeltmesi (`applyAttributeToRolls`) metraj göndermez ve
+        // üretimdeki topun metrajı meşru olarak değişebilir — orada pinlemek
+        // gereksiz 409 üretirdi.
+        if (rollData.currentQty !== undefined) {
+          pin.currentQty = roll.currentQty;
+          pin.initialQty = roll.initialQty;
+        }
+        const upd = await tx.roll.updateMany({ where: pin, data: rollData });
         if (upd.count === 0) {
+          // Çakışma yolunda TEK ek okuma: operatöre "ne değişti"yi söylemek,
+          // "yenileyip tekrar deneyin"i tahmin ettirmekten iyidir.
+          const taze = await tx.roll.findUnique({
+            where: { id: rollId },
+            select: { status: true, currentQty: true, shipmentId: true, sackId: true },
+          });
+          const neden = !taze
+            ? "top bu sırada silindi"
+            : taze.shipmentId
+              ? "top bu sırada bir sevkiyata atandı"
+              : taze.sackId !== cur.sackId
+                ? "topun çuvalı bu sırada değişti"
+                : taze.status !== roll.status
+                  ? `topun durumu bu sırada değişti (${roll.status} → ${taze.status})`
+                  : !taze.currentQty.equals(roll.currentQty)
+                    ? `topun metrajı bu sırada değişti (${roll.currentQty.toString()} → ${taze.currentQty.toString()} m) — büyük olasılıkla Tambur'da kesildi`
+                    : "top bu sırada başka bir işlemle güncellendi";
           throw AppError.conflict(
-            "Top bu sırada bir sevkiyata okutuldu/çıkarıldı — etiket güncellenemedi, yenileyip tekrar deneyin",
+            `${neden.charAt(0).toLocaleUpperCase("tr")}${neden.slice(1)} — düzeltme uygulanmadı. Ekranı yenileyip güncel değerlerle tekrar deneyin.`,
           );
         }
       }
@@ -4223,6 +4303,8 @@ export class InventoryService {
           where: { clientToken: data.clientToken },
         });
         if (existing) {
+          // 4. durum: iptal/fire edilmiş açık kumaşın token'ı replay EDİLEMEZ.
+          assertRollReplayAlive(existing);
           return {
             success: true,
             data: existing,

@@ -7,9 +7,14 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # ⚠️ `adnansahin` SAHAYA ÇIKAN daldır (fabrikanın sürümü oradan paketlenir) —
+    # `main` ise entegrasyon dalı. CI 2026-08-29'a kadar YALNIZ `main`e bağlıydı;
+    # ölçüldü (BULGU-T1-015): o tarihte `adnansahin`de 140 commit, 33 migration ve
+    # 67 yeni bekçi vardı ve HİÇBİRİ otomatik koşmamıştı. Yani "testler yeşil"
+    # cümlesi fabrikaya giden kod için hiçbir zaman doğrulanmamıştı.
+    branches: [main, adnansahin]
   pull_request:
-    branches: [main]
+    branches: [main, adnansahin]
   workflow_dispatch:
 
 # Teşhis adımının PR'a yorum yazabilmesi için (yeni repolarda varsayılan token

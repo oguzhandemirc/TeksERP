@@ -1,0 +1,234 @@
+########## SAHA (prod kopyası tekserp_saha_0825 — 2026-08-25 yedeği) ##########
+=== §1 Yedek olayları: trigger + offsite uyarısı ===
+                  id                  |           ist           |      action      | trigger | offsite_kapali_uyarisi |                               mesaj_bas                                
+--------------------------------------+-------------------------+------------------+---------+------------------------+------------------------------------------------------------------------
+ 75fd1826-f57d-4620-89a1-3b6d3f176e28 | 2026-08-25 03:05:08.166 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260825_030507.dump.
+ 84bfcba0-08ee-46e2-8abf-19f34ea38b37 | 2026-08-22 01:36:14.419 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260822_013613.dump. UYARI: OFFSI
+ 45e049c6-c2bb-4e9e-b953-8407ba2f0369 | 2026-08-21 10:33:15.198 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260821_103314.dump. UYARI: OFFSI
+ 76488f00-0d12-46aa-b577-3c7f6dc5ad9f | 2026-08-19 21:39:10.077 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260819_213909.dump. UYARI: OFFSI
+ 2aba1ef5-2f44-4aa1-b12b-cdbc15700722 | 2026-08-19 16:16:24.666 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260819_161624.dump. UYARI: OFFSI
+ 30de51bc-59dc-4c65-9be6-68c2985b238a | 2026-08-11 13:08:56.262 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260811_130855.dump. UYARI: OFFSI
+ 2bfef892-1fa2-4b1d-b93b-157d7472578c | 2026-08-05 16:09:10.697 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260805_160910.dump. UYARI: OFFSI
+ 1551a6a8-c901-4d1b-af22-c3f669fc0a62 | 2026-07-31 21:10:57.896 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260731_211057.dump. UYARI: OFFSI
+(8 rows)
+
+
+=== §2 Ayrisma tablosu: trigger x offsite-uyarisi ===
+ trigger | offsite_kapali_uyarisi | adet |           ilk           |           son           
+---------+------------------------+------+-------------------------+-------------------------
+ manual  | t                      |    7 | 2026-07-31 21:10:57.896 | 2026-08-22 01:36:14.419
+ nightly | f                      |    1 | 2026-08-25 03:05:08.166 | 2026-08-25 03:05:08.166
+(2 rows)
+
+
+=== §3 Backend zamanlayicisinin damgasi (TEK yazan: jobs/backup-scheduler.ts:32) ===
+         key          |           value            |           ist           
+----------------------+----------------------------+-------------------------
+ backup.lastNightlyAt | "2026-08-25T00:05:07.694Z" | 2026-08-25 03:05:07.791
+(1 row)
+
+
+=== §4 Deploy zaman cizelgesi (kur.ps1 [7/9] prisma migrate deploy izi) ===
+     deploy_ani      | migration_adedi |                 son_migration                  
+---------------------+-----------------+------------------------------------------------
+ 2026-08-25 13:21:00 |               1 | 20260825120000_color_name_unique_live
+ 2026-08-24 18:21:00 |              24 | 20260822120000_duplicate_reviews
+ 2026-08-17 16:16:00 |               3 | 20260817121448_traveler_card_doc_versions
+ 2026-08-15 10:53:00 |               8 | 20260810233446_roll_property_value
+ 2026-08-06 11:44:00 |               4 | 20260806040111_permission_template_code
+ 2026-08-05 13:51:00 |               1 | 20260805120000_batch_short_number
+ 2026-08-05 08:28:00 |               6 | 20260805100000_shipment_undo_and_return_group
+ 2026-08-03 10:29:00 |               1 | 20260803060000_roll_entry_source_tambur_manual
+ 2026-08-03 04:07:00 |               1 | 20260802183530_shipment_invoice_tracking
+ 2026-08-01 11:35:00 |               5 | 20260801050000_system_log_daily_stats_tz
+ 2026-07-31 20:35:00 |              17 | 20260731160000_lowprio_unique_hardening
+ 2026-07-16 12:44:00 |             119 | 20260716010000_add_workorder_superseded_status
+(12 rows)
+
+
+=== §5 Birlesik kronoloji: deploy mu, yedek mi (ayrisma penceresi) ===
+            ist             |          olay          |                        detay                        
+----------------------------+------------------------+-----------------------------------------------------
+ 2026-08-11 13:08:56.262    | YEDEK BACKUP_COMPLETED | manual | offsite_uyarisi=true
+ 2026-08-15 10:53:58.86611  | DEPLOY (migrate)       | 20260809015353_roll_variance_ledger
+ 2026-08-15 10:53:58.869265 | DEPLOY (migrate)       | 20260809020429_roll_pre_tambur_close
+ 2026-08-15 10:53:58.872836 | DEPLOY (migrate)       | 20260809021552_roll_variance_reversal
+ 2026-08-15 10:53:58.879657 | DEPLOY (migrate)       | 20260809023731_roll_label_customer
+ 2026-08-15 10:53:58.886534 | DEPLOY (migrate)       | 20260809090000_roll_production_timestamps
+ 2026-08-15 10:53:58.897614 | DEPLOY (migrate)       | 20260809232529_property_value_type_and_station_mode
+ 2026-08-15 10:53:58.901267 | DEPLOY (migrate)       | 20260810010330_station_capability_flags
+ 2026-08-15 10:53:58.906245 | DEPLOY (migrate)       | 20260810233446_roll_property_value
+ 2026-08-17 16:16:44.232951 | DEPLOY (migrate)       | 20260817004721_fabrika_talep_2026_08_17
+ 2026-08-17 16:16:44.243104 | DEPLOY (migrate)       | 20260817105016_wo_cancel_trail
+ 2026-08-17 16:16:44.245363 | DEPLOY (migrate)       | 20260817121448_traveler_card_doc_versions
+ 2026-08-19 16:16:24.666    | YEDEK BACKUP_COMPLETED | manual | offsite_uyarisi=true
+ 2026-08-19 21:39:10.077    | YEDEK BACKUP_COMPLETED | manual | offsite_uyarisi=true
+ 2026-08-21 10:33:15.198    | YEDEK BACKUP_COMPLETED | manual | offsite_uyarisi=true
+ 2026-08-22 01:36:14.419    | YEDEK BACKUP_COMPLETED | manual | offsite_uyarisi=true
+ 2026-08-24 18:21:07.537235 | DEPLOY (migrate)       | 20260819023127_record_provenance
+ 2026-08-24 18:21:07.620034 | DEPLOY (migrate)       | 20260819032151_record_provenance_a2
+ 2026-08-24 18:21:07.624343 | DEPLOY (migrate)       | 20260819034413_systemlog_drop_updatedat
+ 2026-08-24 18:21:07.626015 | DEPLOY (migrate)       | 20260819034951_systemlog_changes
+ 2026-08-24 18:21:07.627498 | DEPLOY (migrate)       | 20260819035418_systemlog_device
+ 2026-08-24 18:21:08.142228 | DEPLOY (migrate)       | 20260819060000_search_fold
+ 2026-08-24 18:21:08.162494 | DEPLOY (migrate)       | 20260819120000_import_runs
+ 2026-08-24 18:21:08.186224 | DEPLOY (migrate)       | 20260819140000_alias_search
+ 2026-08-24 18:21:08.188249 | DEPLOY (migrate)       | 20260819140000_systemlog_archive_changes_device
+ 2026-08-24 18:21:08.209734 | DEPLOY (migrate)       | 20260819160000_audit_requestid_devicefix
+ 2026-08-24 18:21:08.213064 | DEPLOY (migrate)       | 20260819161000_audit_tamper_guard
+ 2026-08-24 18:21:08.221367 | DEPLOY (migrate)       | 20260819170000_reason_presets
+ 2026-08-24 18:21:08.243349 | DEPLOY (migrate)       | 20260819190000_roll_plan_deviations
+ 2026-08-24 18:21:08.248129 | DEPLOY (migrate)       | 20260819200000_fason_partial_receive
+ 2026-08-24 18:21:08.284753 | DEPLOY (migrate)       | 20260819210000_master_data_merge_lineage
+ 2026-08-24 18:21:08.295876 | DEPLOY (migrate)       | 20260820020000_quality_grade_skip_label
+ 2026-08-24 18:21:08.297692 | DEPLOY (migrate)       | 20260820030000_fire_grade_targets_scrap
+ 2026-08-24 18:21:08.302386 | DEPLOY (migrate)       | 20260820040000_fire_label_marking
+ 2026-08-24 18:21:08.305583 | DEPLOY (migrate)       | 20260820050000_fire_label_dedup
+ 2026-08-24 18:21:08.309525 | DEPLOY (migrate)       | 20260821120000_roll_variance_source_ref
+ 2026-08-24 18:21:08.314716 | DEPLOY (migrate)       | 20260821150000_name_fold_unique_live
+ 2026-08-24 18:21:08.316842 | DEPLOY (migrate)       | 20260821150100_roll_reason_codes
+ 2026-08-24 18:21:08.318462 | DEPLOY (migrate)       | 20260821220000_reason_preset_legacy_texts
+ 2026-08-24 18:21:08.327767 | DEPLOY (migrate)       | 20260822120000_duplicate_reviews
+ 2026-08-25 03:05:08.166    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-25 13:21:56.628417 | DEPLOY (migrate)       | 20260825120000_color_name_unique_live
+(42 rows)
+
+
+=== §6 Offsite supurucu (rclone) izleri ===
+ action | adet | son 
+--------+------+-----
+(0 rows)
+
+
+########## DEV (adnansahin_db) ##########
+=== §1 Yedek olayları: trigger + offsite uyarısı ===
+                  id                  |           ist           |      action      | trigger | offsite_kapali_uyarisi |                               mesaj_bas                                
+--------------------------------------+-------------------------+------------------+---------+------------------------+------------------------------------------------------------------------
+ 6d085b98-3f51-403e-a259-5ba23ba0c281 | 2026-08-27 03:05:36.969 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260827_030535.dump.
+ fea56056-aa0d-4490-95d6-4dd050ea0a34 | 2026-08-26 20:35:54.065 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260826_203552.dump.
+ f0c65230-6bd8-41d8-a360-4ce2808c6b67 | 2026-08-24 03:27:18.042 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260824_032716.dump. UYARI: OFFSI
+ eaf2f911-9f62-4039-abcf-ee65ed19b368 | 2026-08-24 03:27:18.034 | BACKUP_FAILED    | nightly | f                      | Yedek hatası: ENOENT: no such file or directory, rename '/Users/oad/te
+ 23e9e6f5-01cb-4c0e-9165-563a7bd6a51f | 2026-08-23 03:14:24.752 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260823_031422.dump.
+ f33cb540-2e96-482b-ba8b-2937b18dbabf | 2026-08-23 03:14:24.752 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260823_031423.dump.
+ 52c0a610-2fed-4427-8203-53db2b0f4259 | 2026-08-22 03:08:15.917 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260822_030814.dump.
+ 79a0356b-0aad-414b-8c9b-3808846b30f9 | 2026-08-19 03:04:53.346 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260819_030452.dump.
+ 3d116681-d895-4311-b67e-e1f4ff68c71b | 2026-08-17 11:04:15.568 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260817_110414.dump.
+ 740bac7b-c54f-457b-9632-6625f76638d4 | 2026-08-16 03:16:30.033 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260816_031628.dump.
+ a04384da-7de7-4e76-81d3-9fb362e59cff | 2026-08-15 14:11:26.595 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260815_141125.dump.
+ 7c594373-54dc-4e73-adb5-43d2a017bdde | 2026-08-13 03:12:47.386 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260813_031246.dump.
+ 1b659631-c008-4b9d-acfc-f319710c12d5 | 2026-08-12 03:04:13.43  | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260812_030412.dump.
+ 29deb569-71c7-4e15-8174-e0dfd1a552bb | 2026-08-10 12:42:59.63  | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260810_124258.dump.
+ 929f4a2a-d64a-43e0-896b-01ce93bd6bd0 | 2026-08-09 04:18:09.983 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260809_041809.dump.
+ 73fea7a7-106d-4e4f-ad04-05548f55fc2b | 2026-08-07 03:01:39.073 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260807_030138.dump.
+ 37e81899-e50d-4df7-9731-46273d1986c8 | 2026-08-06 03:08:40.728 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260806_030840.dump.
+ bfa0d63a-63df-4bd9-a015-3cdae49b8457 | 2026-08-05 03:01:43.149 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260805_030142.dump.
+ 50acd6e2-8c41-416f-8a9b-a7eae23f780c | 2026-08-04 17:30:36.301 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260804_173035.dump.
+ 6b319f92-606c-470c-9583-286d5e8399c9 | 2026-08-03 03:14:45.636 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260803_031445.dump.
+ 8963a0a6-1e3b-4c05-805c-11de592d23fb | 2026-08-02 04:03:23.688 | BACKUP_COMPLETED | nightly | f                      | Yedek alındı ve doğrulandı: tekserp_20260802_040323.dump.
+ 1551a6a8-c901-4d1b-af22-c3f669fc0a62 | 2026-07-31 21:10:57.896 | BACKUP_COMPLETED | manual  | t                      | Yedek alındı ve doğrulandı: tekserp_20260731_211057.dump. UYARI: OFFSI
+(22 rows)
+
+
+=== §2 Ayrisma tablosu: trigger x offsite-uyarisi ===
+ trigger | offsite_kapali_uyarisi | adet |           ilk           |           son           
+---------+------------------------+------+-------------------------+-------------------------
+ manual  | t                      |    1 | 2026-07-31 21:10:57.896 | 2026-07-31 21:10:57.896
+ nightly | f                      |   20 | 2026-08-02 04:03:23.688 | 2026-08-27 03:05:36.969
+(2 rows)
+
+
+=== §3 Backend zamanlayicisinin damgasi (TEK yazan: jobs/backup-scheduler.ts:32) ===
+         key          |           value            |           ist           
+----------------------+----------------------------+-------------------------
+ backup.lastNightlyAt | "2026-08-27T00:05:35.507Z" | 2026-08-27 03:05:35.573
+(1 row)
+
+
+=== §4 Deploy zaman cizelgesi (kur.ps1 [7/9] prisma migrate deploy izi) ===
+     deploy_ani      | migration_adedi |                son_migration                
+---------------------+-----------------+---------------------------------------------
+ 2026-08-27 12:20:00 |               1 | 20260827100000_order_line_cancel
+ 2026-08-26 22:13:00 |               2 | 20260826130100_order_cancel_reason
+ 2026-08-26 20:50:00 |               1 | 20260826120000_orders_active_created_at_idx
+ 2026-08-25 14:05:00 |               1 | 20260825120000_color_name_unique_live
+ 2026-08-25 13:33:00 |               1 | 20260825140000_reason_preset_rework_kind
+ 2026-08-22 02:07:00 |               1 | 20260822120000_duplicate_reviews
+ 2026-08-22 01:38:00 |               1 | 20260821150000_name_fold_unique_live
+ 2026-08-21 22:05:00 |               1 | 20260821220000_reason_preset_legacy_texts
+ 2026-08-21 19:32:00 |               1 | 20260821150100_roll_reason_codes
+ 2026-08-21 11:46:00 |               1 | 20260821120000_roll_variance_source_ref
+ 2026-08-20 22:24:00 |               1 | 20260820050000_fire_label_dedup
+ 2026-08-20 22:23:00 |               1 | 20260820040000_fire_label_marking
+ 2026-08-20 21:58:00 |               1 | 20260820030000_fire_grade_targets_scrap
+ 2026-08-20 21:35:00 |               1 | 20260820020000_quality_grade_skip_label
+ 2026-08-19 18:38:00 |               1 | 20260819190000_roll_plan_deviations
+(15 rows)
+
+
+=== §5 Birlesik kronoloji: deploy mu, yedek mi (ayrisma penceresi) ===
+            ist             |          olay          |                        detay                        
+----------------------------+------------------------+-----------------------------------------------------
+ 2026-08-09 03:49:33.650129 | DEPLOY (migrate)       | 20260809090000_roll_production_timestamps
+ 2026-08-09 04:18:09.983    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-09 04:54:33.99624  | DEPLOY (migrate)       | 20260809015353_roll_variance_ledger
+ 2026-08-09 05:04:48.301192 | DEPLOY (migrate)       | 20260809020429_roll_pre_tambur_close
+ 2026-08-09 05:16:18.097814 | DEPLOY (migrate)       | 20260809021552_roll_variance_reversal
+ 2026-08-09 05:38:07.668094 | DEPLOY (migrate)       | 20260809023731_roll_label_customer
+ 2026-08-10 02:26:08.943064 | DEPLOY (migrate)       | 20260809232529_property_value_type_and_station_mode
+ 2026-08-10 04:04:01.385495 | DEPLOY (migrate)       | 20260810010330_station_capability_flags
+ 2026-08-10 12:42:59.63     | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-11 02:35:01.781581 | DEPLOY (migrate)       | 20260810233446_roll_property_value
+ 2026-08-12 03:04:13.43     | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-13 03:12:47.386    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-15 14:11:26.595    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-16 03:16:30.033    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-17 03:47:42.258614 | DEPLOY (migrate)       | 20260817004721_fabrika_talep_2026_08_17
+ 2026-08-17 11:04:15.568    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-17 13:50:40.767085 | DEPLOY (migrate)       | 20260817105016_wo_cancel_trail
+ 2026-08-17 15:15:06.00207  | DEPLOY (migrate)       | 20260817121448_traveler_card_doc_versions
+ 2026-08-19 03:04:53.346    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-19 05:31:44.467319 | DEPLOY (migrate)       | 20260819023127_record_provenance
+ 2026-08-19 06:22:08.776457 | DEPLOY (migrate)       | 20260819032151_record_provenance_a2
+ 2026-08-19 06:44:15.037417 | DEPLOY (migrate)       | 20260819034413_systemlog_drop_updatedat
+ 2026-08-19 06:49:51.962492 | DEPLOY (migrate)       | 20260819034951_systemlog_changes
+ 2026-08-19 06:54:19.057154 | DEPLOY (migrate)       | 20260819035418_systemlog_device
+ 2026-08-19 07:05:02.533473 | DEPLOY (migrate)       | 20260819120000_import_runs
+ 2026-08-19 13:35:49.386894 | DEPLOY (migrate)       | 20260819140000_systemlog_archive_changes_device
+ 2026-08-19 13:52:49.44917  | DEPLOY (migrate)       | 20260819060000_search_fold
+ 2026-08-19 13:59:40.635454 | DEPLOY (migrate)       | 20260819140000_alias_search
+ 2026-08-19 15:11:38.16133  | DEPLOY (migrate)       | 20260819170000_reason_presets
+ 2026-08-19 15:25:57.621601 | DEPLOY (migrate)       | 20260819160000_audit_requestid_devicefix
+ 2026-08-19 15:27:15.069727 | DEPLOY (migrate)       | 20260819161000_audit_tamper_guard
+ 2026-08-19 16:46:10.016088 | DEPLOY (migrate)       | 20260819200000_fason_partial_receive
+ 2026-08-19 17:14:21.595866 | DEPLOY (migrate)       | 20260819210000_master_data_merge_lineage
+ 2026-08-19 18:38:39.144483 | DEPLOY (migrate)       | 20260819190000_roll_plan_deviations
+ 2026-08-20 21:35:01.69713  | DEPLOY (migrate)       | 20260820020000_quality_grade_skip_label
+ 2026-08-20 21:58:49.100478 | DEPLOY (migrate)       | 20260820030000_fire_grade_targets_scrap
+ 2026-08-20 22:23:01.226313 | DEPLOY (migrate)       | 20260820040000_fire_label_marking
+ 2026-08-20 22:24:58.495846 | DEPLOY (migrate)       | 20260820050000_fire_label_dedup
+ 2026-08-21 11:46:00.986848 | DEPLOY (migrate)       | 20260821120000_roll_variance_source_ref
+ 2026-08-21 19:32:50.834918 | DEPLOY (migrate)       | 20260821150100_roll_reason_codes
+ 2026-08-21 22:05:05.82428  | DEPLOY (migrate)       | 20260821220000_reason_preset_legacy_texts
+ 2026-08-22 01:38:22.552971 | DEPLOY (migrate)       | 20260821150000_name_fold_unique_live
+ 2026-08-22 02:07:19.291751 | DEPLOY (migrate)       | 20260822120000_duplicate_reviews
+ 2026-08-22 03:08:15.917    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-23 03:14:24.752    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-23 03:14:24.752    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-24 03:27:18.034    | YEDEK BACKUP_FAILED    | nightly | offsite_uyarisi=false
+ 2026-08-24 03:27:18.042    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-25 13:33:16.086928 | DEPLOY (migrate)       | 20260825140000_reason_preset_rework_kind
+ 2026-08-25 14:05:14.86062  | DEPLOY (migrate)       | 20260825120000_color_name_unique_live
+ 2026-08-26 20:35:54.065    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-26 20:50:07.173174 | DEPLOY (migrate)       | 20260826120000_orders_active_created_at_idx
+ 2026-08-26 22:13:36.843772 | DEPLOY (migrate)       | 20260826130000_reason_preset_order_cancel_kind
+ 2026-08-26 22:13:37.715734 | DEPLOY (migrate)       | 20260826130100_order_cancel_reason
+ 2026-08-27 03:05:36.969    | YEDEK BACKUP_COMPLETED | nightly | offsite_uyarisi=false
+ 2026-08-27 12:20:24.070723 | DEPLOY (migrate)       | 20260827100000_order_line_cancel
+(56 rows)
+
+
+=== §6 Offsite supurucu (rclone) izleri ===
+ action | adet | son 
+--------+------+-----
+(0 rows)
+

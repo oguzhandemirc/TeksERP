@@ -95,6 +95,7 @@ import {
   validateVarianceReason,
 } from "../constants/variance-reasons";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { p2002Mentions } from "../utils/p2002";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -2279,7 +2280,64 @@ export class SubcontractorService {
   //   - Sonraki step PENDING kalır (Roll yok); operatör Kurşun/KK2'de ilk
   //     açık kumaş Roll'u oluşturduğunda step ACTIVE olur.
   //
+  /**
+   * Fason mal kabulü — dış kapı.
+   *
+   * ⚠️ TOKEN KİMLİĞİYLE İDEMPOTENT KURTARMA (BULGU-T1-005). Aynı fişin ikinci
+   * kopyası (çevrimdışı kuyruk replay'i / çift dokunuş) yarışı KAYBETTİĞİNDE üç
+   * ayrı noktada düşebilir ve üçü de farklı hata verir:
+   *   • tx ÖNCESİ iş kuralı  — "toplar bu adımda fasona gönderilmemiş veya zaten dönmüş"
+   *   • tx İÇİNDE claim      — top artık AT_SUBCONTRACTOR değil
+   *   • `receipt.create`     — `clientToken` P2002
+   * Operatör için üçü de aynı şeydir: "kabul zaten yapıldı". Bu yüzden kurtarma
+   * hata TÜRÜNE değil KİMLİĞE bakar: o token'la kaydedilmiş bir makbuz varsa
+   * denemenin işi ZATEN yapılmıştır ve doğru cevap odur.
+   *
+   * Eskiden kaybeden istek yanıltıcı bir 409 alıyordu ("Barkod üretimi 5 denemede
+   * başarısız oldu" — predicate'siz retry) ve operatör kabulü ELLE yeniden
+   * giriyordu; yeni token hiçbir guard'a takılmadığı için teslimat İKİ KEZ
+   * düşülüyordu (ölçüm: 300 m'lik topta 300 → 60, 2 aktif makbuz).
+   */
   async receive(
+    data: Parameters<SubcontractorService["receiveInner"]>[0],
+    userId?: string,
+  ): ReturnType<SubcontractorService["receiveInner"]> {
+    try {
+      return await this.receiveInner(data, userId);
+    } catch (err) {
+      if (!data.clientToken) throw err;
+      const cached = await prisma.subcontractorReceipt.findUnique({
+        where: { clientToken: data.clientToken },
+        include: {
+          subcontractor: true,
+          step: { include: { station: true } },
+          items: { include: { newRoll: true } },
+        },
+      });
+      // Token'la makbuz yoksa bu bir yarış değil, gerçek hatadır — yutma.
+      if (!cached) throw err;
+      // ⚠️ `cancelledAt` KAPISI ZORUNLU: iptal edilmiş bir kabulün token'ına
+      // "başarılı" demek, olmayan bir kabulü olmuş göstermek olurdu
+      // (idempotency'nin 4. durumu; KK1 ENTRY_CANCELLED emsali).
+      if (cached.cancelledAt) {
+        throw AppError.conflict(
+          "Bu kabul denemesi daha önce kaydedilmiş ve İPTAL edilmiş — aynı deneme tekrar gönderilemez. Kabulü ekrandan yeniden yapın.",
+          { code: "RECEIPT_CANCELLED" },
+        );
+      }
+      return {
+        success: true,
+        data: cached,
+        message: `Mal kabul zaten yapılmış (idempotent retry). Makbuz: ${cached.receiptNo}`,
+      };
+    }
+  }
+
+  /**
+   * Kabulün ASIL gövdesi. Dışarıya `receive()` sarmalayıcısı açılır — token
+   * kimliğiyle idempotent kurtarma orada yapılır (BULGU-T1-005).
+   */
+  private async receiveInner(
     data: {
       workOrderId: string;
       stepId: string;
@@ -2674,6 +2732,18 @@ export class SubcontractorService {
     // Kilit altında okunan TAZE hedef renk — tx dışındaki "iş emri de bu renge
     // dönsün" kararı (planColorAction=APPLY_TO_PLAN) bu değere göre verilir.
     let targetColorAtReceipt: string | null = wo.targetColorId ?? null;
+    // Yarış dalı çalıştı mı (aşağıdaki catch) — audit ve yan etkiler tekrarlanmasın.
+    // ⚠️ PREDICATE ZORUNLU (BULGU-T1-005). `withBarcodeRetry` predicate'siz
+    // çağrıldığında HER P2002'yi barkod/sıra çakışması sanıp 5 kez tekrarlar.
+    // Bu tx'te `clientToken` de @unique: aynı fişin eşzamanlı ikinci kopyası
+    // (çevrimdışı kuyruk replay'i) o çakışmaya düşer, beş deneme de aynı KALICI
+    // çakışmaya çarpar ve operatöre "Barkod üretimi 5 denemede başarısız oldu"
+    // 409'u döner — barkodla ilgisi olmayan bir mesaj. Operatör kabulü ELLE
+    // yeniden girer (yeni token → hiçbir guard'a takılmaz) ve teslimat İKİ KEZ
+    // düşülür. Ölçüldü: 300 m'lik topta currentQty 300 → 60 (180 olmalıydı),
+    // 2 aktif makbuz, 2 doğan top, 2 çekme sapması.
+    const sequenceCakismasi = (err: Prisma.PrismaClientKnownRequestError): boolean =>
+      !p2002Mentions(err, /clientToken|nameFold|one_pending_per_step|one_open_per_roll_step/i);
     const result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
       // Fason completion yarışı (subcon #4): WO satırını kilitle — stillAtSubcontractor
@@ -3230,7 +3300,7 @@ export class SubcontractorService {
         },
       });
       })
-    );
+    , undefined, sequenceCakismasi);
 
     await AuditService.log({
       userId,

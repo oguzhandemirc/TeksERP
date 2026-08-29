@@ -85,6 +85,9 @@ export const TABLE_LABELS: Record<string, string> = {
   SACK: "Çuval",
   SACK_SHIPMENT_ASSIGN: "Çuval → Sevkiyat",
   SHIPMENT: "Sevkiyat",
+  // Sevk defteri — mali etkisi olan tek defter (sipariş karşılanması ondan
+  // türer). 2026-08-29'a dek değişim geçmişi HİÇ yoktu (BULGU-T2-003).
+  SACK_ALLOCATION: "Sevk Tahsisi",
   SHIPMENT_LINE: "Sevkiyat Satırı",
   SHIPMENT_PLANNED_ORDER: "Sevkiyat Planlı Sipariş",
   packaging_queue: "Paketleme Kuyruğu",

@@ -77,6 +77,14 @@ const createShipmentSchema = z.object({
   // İdempotency (A4): timeout-retry aynı token'la kurulmuş sevkiyatı geri alır
   // (kör 409 yerine). Opsiyonel (eski istemci geri uyumu).
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  // Siparişsiz sevk NİYETİ (BULGU-T3-002). Beyan edilmezse yanıt uyarı taşır —
+  // 400 DEĞİL: sahadaki tabletler `orderIds` göndermiyor ve backend önce deploy
+  // edildiği için sert red hepsini aynı anda sevk yapamaz hâle getirirdi.
+  orderless: z.boolean().optional(),
+});
+const shipmentOrdersSchema = z.object({
+  // Boş dizi MEŞRU: "sipariş bağını kaldır".
+  orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).max(50),
 });
 // Sevk önizleme — çuval + (opsiyonel) müşteri/şube/sipariş; salt-okunur.
 const previewShipmentSchema = z.object({
@@ -90,6 +98,10 @@ const removeShipmentSackSchema = z.object({ sackId: z.string().uuid("Geçersiz �
 const destinationSchema = z.object({ destination: z.enum(["DOMESTIC", "EXPORT"]) });
 const procedureCodeSchema = z.object({ procedureCode: z.string().trim().max(64).nullable().optional() });
 const dispatchNoteSchema = z.object({ dispatchNote: z.string().trim().max(500).nullable().optional() });
+// Araca yüklenen gerçek çuval adedi (operatör beyanı). `null` = beyanı kaldır.
+const manualSackCountSchema = z.object({
+  manualSackCount: z.number().int().min(1).max(9999).nullable().optional(),
+});
 // Fatura işareti — `invoiceNo: null` (ya da boş) işareti KALDIRIR; tarih verilmezse
 // servis "şimdi"yi damgalar. Tutar/KDV alanı YOK (muhasebe yüzeyi miktar-odaklı).
 const invoiceSchema = z.object({
@@ -265,8 +277,17 @@ export class ShippingController {
   createShipment = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = createShipmentSchema.parse(req.body);
-      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null }, req.user?.userId);
+      const result = await this.service.createShipment({ sackIds: body.sackIds, customerId: body.customerId, branchId: body.branchId ?? null, orderIds: body.orderIds, destination: body.destination, procedureCode: body.procedureCode ?? null, plateNumber: body.plateNumber ?? null, driverName: body.driverName ?? null, carrier: body.carrier ?? null, clientToken: body.clientToken ?? null, orderless: body.orderless }, req.user?.userId);
       res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Sevkiyatı siparişe bağla / bağı değiştir — sevk EDİLDİKTEN sonra da. */
+  setShipmentOrders = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = shipmentOrdersSchema.parse(req.body);
+      const result = await this.service.setShipmentOrders(req.params.id as string, body.orderIds, req.user?.userId);
+      res.json(result);
     } catch (e) { next(e); }
   };
 
@@ -314,6 +335,18 @@ export class ShippingController {
     try {
       const body = dispatchNoteSchema.parse(req.body);
       const result = await this.service.setDispatchNote(req.params.id as string, body.dispatchNote ?? null, req.user?.userId);
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  setManualSackCount = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = manualSackCountSchema.parse(req.body);
+      const result = await this.service.setManualSackCount(
+        req.params.id as string,
+        body.manualSackCount ?? null,
+        req.user?.userId,
+      );
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

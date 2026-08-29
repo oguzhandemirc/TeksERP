@@ -1,0 +1,28 @@
+BULGU-T3-002 — K2 ölçüm denemesi (2026-08-29, DOĞRULAMA turu)
+
+SONUÇ: ÖLÇÜLEMEDİ (ortam engeli, kod kaynaklı değil).
+
+Hem audit/tools/sql-dev.sh (dev DB) hem audit/tools/sql-saha.sh (prod kopyası
+tekserp_saha_0825) bu oturumda aynı hatayla reddetti:
+
+    psql: error: connection to server at "localhost" (::1), port 5432 failed:
+    FATAL:  Postgres.app failed to verify "trust" authentication
+    DETAIL:  Postgres.app failed to show a dialog. This can happen when the
+    user that started the server is no longer logged in. Try restarting the
+    PostgreSQL server.
+
+Bu, Tur 3'ün doğrulayıcı (verifier) oturumunda audit/repro/S-2-01.log'a zaten
+düşmüş olan aynı engeldir (Postgres.app GUI onay diyaloğu bu ortamda
+gösterilemiyor — headless subagent'ın müdahale edebileceği bir şey değil).
+
+ANCAK: Bu sorgunun BİREBİR AYNISI Tur 2'de (bulgunun "kanit" dizisindeki son
+satır — audit/01-find/tur2-BIRLESIK.md:10, BULGU-T2-001) prod kopyasına karşı
+BAŞARIYLA koşturulmuş ve sonuç üretmişti:
+
+    5 sevkiyat / 7.200,6 m tahsis yazılmadan DISPATCHED olmuş
+    7 sipariş kalemi hâlâ "0 sevk" görünüyor
+
+Bu turda ben bu rakamı kendi oturumumda YENİDEN ÜRETEMEDİM (ortam engeli).
+Kanıt seviyesi bu nedenle K1'den K2'ye BAĞIMSIZ OLARAK çıkarılamadı; ancak
+önceki turun K2 ölçümü aynı sorgu+aynı zemin olduğu için GEÇERLİLİĞİNİ
+KORUYOR ve bu bulguyu doğrudan destekliyor (bkz. BULGU-T3-002.md).

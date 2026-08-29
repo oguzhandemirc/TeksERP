@@ -1,0 +1,32 @@
+KOŞUM: 2026-08-29 (Tur 3, ③ doğrulama oturumu)
+
+sql-dev.sh ve sql-saha.sh — İKİSİ DE ERİŞİLEMEDİ:
+
+  $ audit/tools/sql-dev.sh -c "SELECT 1;"
+  psql: error: connection to server at "localhost" (::1), port 5432 failed:
+  FATAL: Postgres.app failed to verify "trust" authentication
+  DETAIL: Postgres.app failed to show a dialog. This can happen when the user
+  that started the server is no longer logged in. Try restarting the
+  PostgreSQL server.
+  HINT: Change pg_hba.conf to require a password
+
+  $ audit/tools/sql-saha.sh -c "SELECT 1;"
+  (aynı hata)
+
+Postgres.app süreci (pid 770 ve yardımcı süreçleri) ÇALIŞIYOR (ps aux ile
+doğrulandı) ama auth_permission_dialog eklentisi bağlantıyı onaylamak için bir
+GUI diyaloğu açmayı deniyor ve bu ajan oturumunda (headless / GUI oturumu
+kopmuş) diyalog gösterilemiyor → her bağlantı reddediliyor. Bu, Tur 2'nin
+verify oturumunda da (S-3-02.log, 2026-08-29T00:33:38Z) aynı şekilde
+raporlanmış, ortam-genelinde ve bu oturuma özgü olmayan bir kısıt.
+
+SONUÇ: BULGU-T3-004.sql BU OTURUMDA ÇALIŞTIRILAMADI — "veride ihlal ARANDI mı
+ARANAMADI mı" sorusunun cevabı ARANAMADI'dır (ortam kısıtı, kod/bulgu kusuru
+değil). Sorgunun kendisi hazır ve DB erişimi döndüğünde doğrudan koşulabilir.
+
+Dolaylı/tarihsel kanıt (Tur 2'den, aynı yolun sahada aktif kullanıldığını
+gösterir — bu bulgunun ön koşulunun (Tambur geri alma akışının canlıda
+koşması) gerçek olduğunu destekler, doğrudan bu invariantı ölçmez):
+  V1-35: sahada 92 iptal edilmiş kesim çocuğu / 4.327,2 m — tambur-undo
+  yolunun (applySingleRestore/applyFull) canlı, düzenli kullanılan bir yol
+  olduğunu gösteriyor.

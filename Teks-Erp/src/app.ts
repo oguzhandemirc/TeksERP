@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from "express";
+import { VARSAYILAN_GOVDE_LIMITI, buyukGovdeYolu } from "./constants/body-limits";
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -87,6 +88,7 @@ import { runWithRequestContext } from "./lib/request-context";
 import searchRoutes from "./routes/search.routes";
 import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
+import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
 const app: Express = express();
 
 
@@ -138,7 +140,21 @@ app.use(latencyMiddleware);
 // tablet `/api/admin/perf` ekranında HİÇ görünmüyordu — uç sanki hiç çağrılmamış
 // gibi. Bağımlılık yok: morgan ve latency gövdeyi okumaz, resolveDevice yalnız
 // x-device-id başlığına bakar, route handler'ları zaten aşağıda.
-app.use(express.json({ limit: "1mb" }));
+//
+// ⚠️ `type` FONKSİYONU LOAD-BEARING (2026-08-29 / BULGU-T1-045): içe aktarım ve
+// yapılandırma paketi router'ları KENDİ 10 MB'lık `express.json` katmanlarını
+// taşıyor, ama bu global katman onlardan ÖNCE mount edildiği için o katmanlar
+// HİÇ KOŞMUYORDU — 2 MB'lık bir CSV burada 413'e düşüyordu. `type` false
+// dönünce gövde burada okunmaz ve router'ın kendi katmanına kalır.
+app.use(
+  express.json({
+    limit: VARSAYILAN_GOVDE_LIMITI,
+    type: (req) => {
+      if (buyukGovdeYolu(req.url)) return false;
+      return /[/+]json($|[^\w])/i.test(req.headers["content-type"] ?? "");
+    },
+  }),
+);
 
 // =============================================================================
 // Swagger UI Documentation
@@ -192,30 +208,107 @@ const backupDir = process.env.BACKUP_DIR;
 // yavaş değişir (~günlük) → diskCache ile aynı 30sn TTL cache yeterli. null geçerli
 // bir sonuç olduğundan bayatlığı değerle değil ayrı zaman damgasıyla izleriz.
 let backupCache: { name: string; time: string } | null = null;
+let nightlyCache: { name: string; time: string } | null = null;
 let backupCacheComputedAt = 0;
 const BACKUP_CACHE_MS = 30_000;
-function latestBackupInfo(): { name: string; time: string } | null {
-  if (!backupDir) return null;
+
+/**
+ * ⚠️ "EN YENİ YEDEK" İLE "GECE YEDEĞİ" AYNI ŞEY DEĞİL (BULGU-T1-024).
+ *
+ * Klasörde üç yaşam döngüsü bir arada durur (`backup-naming.helper.ts`):
+ *   `tekserp_`     → planlı gece yedeği + panelden elle alınan  → BAYATLIK BUNDAN ÖLÇÜLÜR
+ *   `premigrate_`  → deploy öncesi geri dönüş noktası
+ *   `pre-restore_` → geri yükleme öncesi güvenlik yedeği
+ * Eski kod en yeni `.dump`'ı ayrım yapmadan alıyordu; bir deploy `premigrate_`
+ * yazdığı anda "son yedek" TAZE görünüyordu — gece yedeği günlerdir düşse bile.
+ * Yani sayacı sıfırlayan şey, tam da yedeğin en çok gerektiği an (sürüm geçişi)
+ * oluyordu. Ölçüm: sahada 40 günlük defterde tek bir gece yedeği kaydı var.
+ */
+function scanBackups(): void {
   const now = Date.now();
-  if (backupCacheComputedAt > 0 && now - backupCacheComputedAt < BACKUP_CACHE_MS) {
-    return backupCache;
+  if (backupCacheComputedAt > 0 && now - backupCacheComputedAt < BACKUP_CACHE_MS) return;
+  backupCacheComputedAt = now;
+  if (!backupDir) {
+    backupCache = null;
+    nightlyCache = null;
+    return;
   }
   try {
     let newest: { name: string; mtimeMs: number } | null = null;
+    let newestNightly: { name: string; mtimeMs: number } | null = null;
     for (const f of fs.readdirSync(backupDir)) {
       if (!f.toLowerCase().endsWith(".dump")) continue;
       const st = fs.statSync(path.join(backupDir, f));
       if (!newest || st.mtimeMs > newest.mtimeMs) newest = { name: f, mtimeMs: st.mtimeMs };
+      if (f.startsWith(NIGHTLY_PREFIX) && (!newestNightly || st.mtimeMs > newestNightly.mtimeMs)) {
+        newestNightly = { name: f, mtimeMs: st.mtimeMs };
+      }
     }
-    backupCache = newest
-      ? { name: newest.name, time: new Date(newest.mtimeMs).toISOString() }
-      : null;
+    const bicim = (x: { name: string; mtimeMs: number } | null): { name: string; time: string } | null =>
+      x ? { name: x.name, time: new Date(x.mtimeMs).toISOString() } : null;
+    backupCache = bicim(newest);
+    nightlyCache = bicim(newestNightly);
   } catch {
     // Erişilemezse de cache'le — her 5sn'de tekrar deneyip bloklamasın.
     backupCache = null;
+    nightlyCache = null;
   }
-  backupCacheComputedAt = now;
+}
+
+function latestBackupInfo(): { name: string; time: string } | null {
+  scanBackups();
   return backupCache;
+}
+
+/**
+ * Gece yedeğinin HÜKMÜ — ham veri değil karar.
+ *
+ * Sinyal zaten üretiliyordu (`lastBackup`), eksik olan onu bir hükme bağlayan ve
+ * bir alıcıya veren katmandı: panelde yalnız tarih yazıyordu, "bu tarih kötü mü"
+ * sorusunu kimse sormuyordu. Üç durum + yapılandırılmamış:
+ *   ok      ≤ 26 sa  (24 sa + zamanlayıcı sapması payı)
+ *   uyari   ≤ 50 sa  (bir gece atlandı — henüz felaket değil, ama bakılmalı)
+ *   kritik  > 50 sa ya da HİÇ gece yedeği yok
+ */
+const NIGHTLY_OK_HOURS = 26;
+const NIGHTLY_WARN_HOURS = 50;
+function backupHealth(): {
+  verdict: "ok" | "uyari" | "kritik" | "yapilandirilmamis";
+  nightly: { name: string; time: string } | null;
+  ageHours: number | null;
+  reason: string;
+} {
+  if (!backupDir) {
+    return {
+      verdict: "yapilandirilmamis",
+      nightly: null,
+      ageHours: null,
+      reason: "BACKUP_DIR tanımlı değil — bu kurulumda yedek alınmıyor.",
+    };
+  }
+  scanBackups();
+  if (!nightlyCache) {
+    return {
+      verdict: "kritik",
+      nightly: null,
+      ageHours: null,
+      reason: `Yedek klasöründe hiç '${NIGHTLY_PREFIX}' yedeği yok (deploy/geri-yükleme yedekleri sayılmaz).`,
+    };
+  }
+  const yasSaat = (Date.now() - new Date(nightlyCache.time).getTime()) / 3_600_000;
+  const yuvarlak = Math.round(yasSaat * 10) / 10;
+  const verdict = yasSaat <= NIGHTLY_OK_HOURS ? "ok" : yasSaat <= NIGHTLY_WARN_HOURS ? "uyari" : "kritik";
+  return {
+    verdict,
+    nightly: nightlyCache,
+    ageHours: yuvarlak,
+    reason:
+      verdict === "ok"
+        ? `Son gece yedeği ${yuvarlak} saat önce.`
+        : verdict === "uyari"
+          ? `Son gece yedeği ${yuvarlak} saat önce — bir gece atlanmış olabilir.`
+          : `Son gece yedeği ${yuvarlak} saat önce — gece yedeği ÇALIŞMIYOR.`,
+  };
 }
 
 // =============================================================================
@@ -430,6 +523,9 @@ async function buildRichHealth(): Promise<Record<string, unknown>> {
     restoreCopyCount, // unutulmuş geri yükleme kopyası sayısı
     restoreCopyBytes, // bu kopyaların toplam disk kullanımı
     lastBackup: latestBackupInfo(),
+    // Ham veri değil HÜKÜM: "gece yedeği çalışıyor mu". `lastBackup` bilerek
+    // olduğu gibi bırakıldı (eski panel sözleşmesi), bu alan EK'tir.
+    backupHealth: backupHealth(),
     // Havuzun KENDİ durumu + kümülatif zaman aşımı sayacı. Yukarıdaki
     // `dbConnections` `pg_stat_activity` sayımıdır → SUNUCU tarafını sayar
     // (psql/pgAdmin/pg_dump dahil), idle/busy ayırt etmez ve havuzun kaç bağlantı

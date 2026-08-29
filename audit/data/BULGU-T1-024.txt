@@ -1,0 +1,194 @@
+# BULGU-T1-024 — K2 sorgu sonuçları
+# Koşum: 2026-08-28 · SALT-OKUNUR (audit/tools/sql-*.sh, default_transaction_read_only=on)
+# Sorgu dosyası: audit/data/BULGU-T1-024.sql
+
+################ SAHA (prod kopyası tekserp_saha_0825, 2026-08-25 yedeği) ################
+=== S0: log penceresi (gözlem aralığı) ===
+  ilk_log   |  son_log   | gun_sayisi | toplam_log 
+------------+------------+------------+------------
+ 2026-07-16 | 2026-08-25 |         40 |      10485
+(1 row)
+
+=== S1: yedek/iş defteri envanteri (action x trigger) ===
+         action         | trigger | adet |    ilk     |    son     
+------------------------+---------+------+------------+------------
+ BACKUP_COMPLETED       | manual  |    7 | 2026-07-31 | 2026-08-22
+ BACKUP_COMPLETED       | nightly |    1 | 2026-08-25 | 2026-08-25
+ BACKUP_DOWNLOAD        | -       |    1 | 2026-08-05 | 2026-08-05
+ BACKUP_RESTORE_PREVIEW | -       |    1 | 2026-07-31 | 2026-07-31
+ BACKUP_TRIGGER         | -       |    9 | 2026-07-16 | 2026-08-22
+(5 rows)
+
+=== S2: BAŞARISIZLIK izi hiç var mı? (BACKUP_FAILED + JOB_FAILED) ===
+ backup_failed | job_failed_backup | job_failed_tumu 
+---------------+-------------------+-----------------
+             0 |                 0 |               0
+(1 row)
+
+=== S3: gece yedeğinin defterdeki günlük kapsaması ===
+    ilk     |    son     | penceredeki_gun | gece_yedegi_olan_gun 
+------------+------------+-----------------+----------------------
+ 2026-07-16 | 2026-08-25 |              41 |                    1
+(1 row)
+
+=== S4: her BACKUP_COMPLETED satırı (dosya adı + tetikleyici) ===
+         createdAt          | trigger |            dosya             
+----------------------------+---------+------------------------------
+ 2026-07-31 21:10:57.896+03 | manual  | tekserp_20260731_211057.dump
+ 2026-08-05 16:09:10.697+03 | manual  | tekserp_20260805_160910.dump
+ 2026-08-11 13:08:56.262+03 | manual  | tekserp_20260811_130855.dump
+ 2026-08-19 16:16:24.666+03 | manual  | tekserp_20260819_161624.dump
+ 2026-08-19 21:39:10.077+03 | manual  | tekserp_20260819_213909.dump
+ 2026-08-21 10:33:15.198+03 | manual  | tekserp_20260821_103314.dump
+ 2026-08-22 01:36:14.419+03 | manual  | tekserp_20260822_013613.dump
+ 2026-08-25 03:05:08.166+03 | nightly | tekserp_20260825_030507.dump
+(8 rows)
+
+=== S5: backend zamanlayıcısının damgası (backup.lastNightlyAt) ===
+         key          |           deger            |         createdAt          |         updatedAt          
+----------------------+----------------------------+----------------------------+----------------------------
+ backup.lastNightlyAt | "2026-08-25T00:05:07.694Z" | 2026-08-25 03:05:07.791+03 | 2026-08-25 03:05:07.791+03
+(1 row)
+
+=== S6: deploy günleri = bayatlık sayacının sıfırlandığı günler ===
+ deploy_gunu | uygulanan_migration 
+-------------+---------------------
+ 2026-07-16  |                 119
+ 2026-07-31  |                  17
+ 2026-08-01  |                   5
+ 2026-08-03  |                   2
+ 2026-08-05  |                   7
+ 2026-08-06  |                   4
+ 2026-08-15  |                   8
+ 2026-08-17  |                   3
+ 2026-08-24  |                  24
+ 2026-08-25  |                   1
+(10 rows)
+
+
+################ DEV (adnansahin_db) ################
+=== S0: log penceresi (gözlem aralığı) ===
+  ilk_log   |  son_log   | gun_sayisi | toplam_log 
+------------+------------+------------+------------
+ 2026-07-16 | 2026-08-28 |         43 |     153424
+(1 row)
+
+=== S1: yedek/iş defteri envanteri (action x trigger) ===
+         action         | trigger | adet |    ilk     |    son     
+------------------------+---------+------+------------+------------
+ BACKUP_COMPLETED       | manual  |    1 | 2026-07-31 | 2026-07-31
+ BACKUP_COMPLETED       | nightly |   20 | 2026-08-02 | 2026-08-27
+ BACKUP_FAILED          | nightly |    1 | 2026-08-24 | 2026-08-24
+ BACKUP_RESTORE_PREVIEW | -       |    1 | 2026-07-31 | 2026-07-31
+ BACKUP_TRIGGER         | -       |    3 | 2026-07-16 | 2026-07-31
+(5 rows)
+
+=== S2: BAŞARISIZLIK izi hiç var mı? (BACKUP_FAILED + JOB_FAILED) ===
+ backup_failed | job_failed_backup | job_failed_tumu 
+---------------+-------------------+-----------------
+             1 |                 0 |               0
+(1 row)
+
+=== S3: gece yedeğinin defterdeki günlük kapsaması ===
+    ilk     |    son     | penceredeki_gun | gece_yedegi_olan_gun 
+------------+------------+-----------------+----------------------
+ 2026-07-16 | 2026-08-28 |              44 |                   19
+(1 row)
+
+=== S4: her BACKUP_COMPLETED satırı (dosya adı + tetikleyici) ===
+         createdAt          | trigger |            dosya             
+----------------------------+---------+------------------------------
+ 2026-07-31 21:10:57.896+03 | manual  | tekserp_20260731_211057.dump
+ 2026-08-02 04:03:23.688+03 | nightly | tekserp_20260802_040323.dump
+ 2026-08-03 03:14:45.636+03 | nightly | tekserp_20260803_031445.dump
+ 2026-08-04 17:30:36.301+03 | nightly | tekserp_20260804_173035.dump
+ 2026-08-05 03:01:43.149+03 | nightly | tekserp_20260805_030142.dump
+ 2026-08-06 03:08:40.728+03 | nightly | tekserp_20260806_030840.dump
+ 2026-08-07 03:01:39.073+03 | nightly | tekserp_20260807_030138.dump
+ 2026-08-09 04:18:09.983+03 | nightly | tekserp_20260809_041809.dump
+ 2026-08-10 12:42:59.63+03  | nightly | tekserp_20260810_124258.dump
+ 2026-08-12 03:04:13.43+03  | nightly | tekserp_20260812_030412.dump
+ 2026-08-13 03:12:47.386+03 | nightly | tekserp_20260813_031246.dump
+ 2026-08-15 14:11:26.595+03 | nightly | tekserp_20260815_141125.dump
+ 2026-08-16 03:16:30.033+03 | nightly | tekserp_20260816_031628.dump
+ 2026-08-17 11:04:15.568+03 | nightly | tekserp_20260817_110414.dump
+ 2026-08-19 03:04:53.346+03 | nightly | tekserp_20260819_030452.dump
+ 2026-08-22 03:08:15.917+03 | nightly | tekserp_20260822_030814.dump
+ 2026-08-23 03:14:24.752+03 | nightly | tekserp_20260823_031422.dump
+ 2026-08-23 03:14:24.752+03 | nightly | tekserp_20260823_031423.dump
+ 2026-08-24 03:27:18.034+03 | nightly | 
+ 2026-08-24 03:27:18.042+03 | nightly | tekserp_20260824_032716.dump
+ 2026-08-26 20:35:54.065+03 | nightly | tekserp_20260826_203552.dump
+ 2026-08-27 03:05:36.969+03 | nightly | tekserp_20260827_030535.dump
+(22 rows)
+
+=== S5: backend zamanlayıcısının damgası (backup.lastNightlyAt) ===
+         key          |           deger            |         createdAt          |         updatedAt          
+----------------------+----------------------------+----------------------------+----------------------------
+ backup.lastNightlyAt | "2026-08-27T00:05:35.507Z" | 2026-08-02 04:03:23.329+03 | 2026-08-27 03:05:35.573+03
+(1 row)
+
+=== S6: deploy günleri = bayatlık sayacının sıfırlandığı günler ===
+ deploy_gunu | uygulanan_migration 
+-------------+---------------------
+ 2026-07-16  |                 119
+ 2026-07-31  |                  17
+ 2026-08-01  |                   5
+ 2026-08-02  |                   1
+ 2026-08-03  |                   2
+ 2026-08-04  |                   1
+ 2026-08-05  |                   7
+ 2026-08-06  |                   2
+ 2026-08-09  |                   5
+ 2026-08-10  |                   2
+ 2026-08-11  |                   1
+ 2026-08-17  |                   3
+ 2026-08-19  |                  15
+ 2026-08-20  |                   4
+ 2026-08-21  |                   3
+ 2026-08-22  |                   2
+ 2026-08-25  |                   2
+ 2026-08-26  |                   3
+ 2026-08-27  |                   1
+(19 rows)
+
+
+################ EK: gerçek yedek klasörü (dev makinesi, salt-okunur) ################
+# BACKUP_DIR=/Users/oad/tekserp-backups
+pre-restore_adnansahin_db_20260802_before_dedup.dump Aug 2 04:16
+pre-restore_adnansahin_db_20260802_before_prod_restore.dump Aug 2 04:00
+tekserp_20260730_025754.dump Jul 30 02:57
+tekserp_20260730_030455.dump Jul 30 03:04
+tekserp_20260730_042509.dump Jul 30 04:25
+tekserp_20260730_044919.dump Jul 30 04:49
+tekserp_20260730_202444.dump Jul 30 20:24
+tekserp_20260731_030241.dump Jul 31 03:02
+tekserp_20260801_030152.dump Aug 1 03:01
+tekserp_20260802_031423.dump Aug 2 03:14
+tekserp_20260802_040323.dump Aug 2 04:03
+tekserp_20260803_031445.dump Aug 3 03:14
+tekserp_20260804_173035.dump Aug 4 17:30
+tekserp_20260805_030142.dump Aug 5 03:01
+tekserp_20260806_030840.dump Aug 6 03:08
+tekserp_20260807_030138.dump Aug 7 03:01
+tekserp_20260809_041809.dump Aug 9 04:18
+tekserp_20260810_124258.dump Aug 10 12:42
+tekserp_20260812_030412.dump Aug 12 03:04
+tekserp_20260813_031246.dump Aug 13 03:12
+tekserp_20260814_030341.dump Aug 14 03:03
+tekserp_20260815_030719.dump Aug 15 03:07
+tekserp_20260815_141125.dump Aug 15 14:11
+tekserp_20260816_031628.dump Aug 16 03:16
+tekserp_20260817_030948.dump Aug 17 03:09
+tekserp_20260817_110414.dump Aug 17 11:04
+tekserp_20260818_030329.dump Aug 18 03:03
+tekserp_20260819_030348.dump Aug 19 03:03
+tekserp_20260819_030452.dump Aug 19 03:04
+tekserp_20260820_031704.dump Aug 20 03:17
+tekserp_20260821_030458.dump Aug 21 03:04
+tekserp_20260822_030814.dump Aug 22 03:08
+tekserp_20260823_031422.dump Aug 23 03:14
+tekserp_20260823_031423.dump Aug 23 03:14
+tekserp_20260825_030507.dump Aug 25 03:05
+tekserp_20260826_203552.dump Aug 26 20:35
+tekserp_20260827_030535.dump Aug 27 03:05

@@ -58,12 +58,19 @@ export function WorkOrderCancelDialog({
    * "iptal etmek çok zor" şikâyetinin kaynağı buydu. Artık iki düğme.
    */
   const [fasonAction, setFasonAction] = useState<"RETURN_TO_STOCK" | "SCRAP" | null>(null);
+  // AÇIKTA KALAN sevk kalemi kararı (2026-08-29). Ayrı bir soru: yukarıdaki
+  // `fasonAction` ELİMİZDEKİ topların kaderini, bu ise HÂLÂ FASONDA OLAN ve geri
+  // gelmeyecek metrajın kaderini belirler.
+  const [remainderAck, setRemainderAck] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setChoices({});
     setReason("");
     setFasonAction(null);
+    // Kalan kararı da sıfırlanır — yapışkan onay bir sonraki iş emrinde
+    // sessizce fire yazdırırdı (kartelalık toggle dersi).
+    setRemainderAck(false);
   }, [open, workOrderId]);
 
   const impactQ = useQuery({
@@ -86,6 +93,7 @@ export function WorkOrderCancelDialog({
         reason: reason.trim(),
         ...(dispositions.length > 0 ? { dispositions } : {}),
         ...(fasonAction ? { fasonAction } : {}),
+        ...(remainderAck ? { fasonRemainderAction: "CLOSE_AS_SCRAP" as const } : {}),
       }),
     onSuccess: (res) => {
       toast.success(res.message ?? "İş emri iptal edildi");
@@ -102,6 +110,8 @@ export function WorkOrderCancelDialog({
 
   const pending = cancelMut.isPending;
   const fasonCount = impact?.fasonInFlightCount ?? 0;
+  const remainder = impact?.fasonRemainder;
+  const remainderCount = remainder?.count ?? 0;
   // FİRE kararı envanteri yok eder → süpervizör yetkisi (backend de arar).
   const needsAdjustForFason = fasonAction === "SCRAP";
   const canSubmit =
@@ -111,6 +121,9 @@ export function WorkOrderCancelDialog({
     // Fasonda top varsa karar ZORUNLU — backend kararsız isteği reddediyor,
     // düğmeyi burada da kapatmak kullanıcıyı gereksiz bir hataya sokmuyor.
     (fasonCount === 0 || fasonAction !== null) &&
+    // Kısmi kabullü sevk varsa kalan için de karar ZORUNLU — backend kararsız
+    // isteği `FASON_REMAINDER_DECISION_REQUIRED` ile reddediyor.
+    (remainderCount === 0 || remainderAck) &&
     (!needsAdjust || canAdjustRolls) &&
     (!needsAdjustForFason || canAdjustRolls);
 
@@ -189,6 +202,44 @@ export function WorkOrderCancelDialog({
                       </div>
                     </Button>
                   </div>
+                </div>
+              )}
+
+              {/* AÇIKTA KALAN SEVK KALEMİ — ayrı soru, ayrı gerçek.
+                  Yukarıdaki karar ELİMİZDEKİ topları çözer; bu, boyahanede
+                  KALAN ve geri gelmeyecek metrajı çözer. Sormadan iptal etmek
+                  o metrajı sessizce kaybederdi (fason mutabakatı bozulur). */}
+              {remainderCount > 0 && (
+                <div className="space-y-2 rounded-md border border-amber-500/50 bg-amber-500/10 p-3">
+                  <div className="text-sm font-medium">
+                    {remainderCount} top hâlâ fasonda ({remainder?.totalQty} m) — kısmen
+                    kabul edilmiş sevkler. Bu mal ne olacak?
+                  </div>
+                  <ul className="max-h-24 space-y-0.5 overflow-y-auto text-xs opacity-80">
+                    {remainder?.items.map((k, i) => (
+                      <li key={`${k.dispatchNo}-${k.barcode}-${i}`}>
+                        {k.dispatchNo ?? "—"} · {k.barcode ?? "(barkodsuz)"} · {k.qty} m
+                      </li>
+                    ))}
+                  </ul>
+                  <Button
+                    type="button"
+                    variant={remainderAck ? "destructive" : "outline"}
+                    className="h-auto w-full justify-start whitespace-normal py-2 text-left"
+                    onClick={() => setRemainderAck((v) => !v)}
+                  >
+                    <div>
+                      <div className="font-medium">Gelmeyecek — fire yaz ve iptali sürdür</div>
+                      <div className="text-xs opacity-80">
+                        Kalan metraj fason fire olarak deftere yazılır; sevk kalemi kapanır.
+                      </div>
+                    </div>
+                  </Button>
+                  {!remainderAck && (
+                    <div className="text-xs opacity-70">
+                      Mal geri gelecekse iptali erteleyin: önce fason kabulünü yapın.
+                    </div>
+                  )}
                 </div>
               )}
 

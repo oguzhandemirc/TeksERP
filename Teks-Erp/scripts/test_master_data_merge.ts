@@ -150,8 +150,20 @@ async function main(): Promise<void> {
   check("tombstone pasifleşti", tombstone?.isActive === false);
   check("birleştirme künyesi yazıldı", tombstone?.mergedAt !== null);
 
-  const audit = await prisma.systemLog.findFirst({
+  // Fiziksel adla YAZILMADIĞINI da ölçüyoruz — "ITEM bulundu" tek başına
+  // yetmez: kod ikisini birden yazıyor olsaydı da yeşil kalırdı.
+  const fizikselAdlaYazilan = await prisma.systemLog.count({
     where: { tableName: "items", recordId: source.id },
+  });
+  check("modül adı FİZİKSEL tabloya yazılmıyor (items)", fizikselAdlaYazilan === 0, `${fizikselAdlaYazilan} satır`);
+
+  const audit = await prisma.systemLog.findFirst({
+    // ⚠️ "ITEM" — fiziksel tablo adı ("items") DEĞİL (2026-08-29 / T2-011).
+    // Bu satır bir süre `"items"` arıyordu ve o yüzden hatayı GÖREMİYORDU:
+    // bekçinin kör noktası kusurla aynı yerdeydi. Denetim Raporu modül olarak
+    // mantıksal adı kullanır; birleştirme fiziksel adla yazıldığı için orada
+    // HİÇ görünmüyordu (saha kopyası: 13/13 birleştirme fiziksel adla).
+    where: { tableName: "ITEM", recordId: source.id },
     orderBy: { createdAt: "desc" },
   });
   check(
@@ -252,6 +264,7 @@ main()
     }).catch(() => undefined);
     await prisma.item.deleteMany({ where: { id: { in: created.items } } }).catch(() => undefined);
     await prisma.customer.deleteMany({ where: { id: { in: created.customers } } }).catch(() => undefined);
+
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await prisma.$disconnect();
     await pool.end();

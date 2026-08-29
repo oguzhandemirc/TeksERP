@@ -74,6 +74,10 @@ async function main() {
     select: { id: true },
   });
   const uid = user.id;
+  // ⚠️ AKTÖR ≠ HEDEF olmalı (2026-08-29 / T2-013): kendi yetkisini genişletmek
+  // artık 409 SELF_ESCALATION veriyor ve bu testin konusu SÜRE alanları, aktör
+  // kimliği değil. Gerçek kullanımda da yetkiyi başka bir yönetici verir.
+  const AKTOR = (await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }))?.id;
 
   try {
     // Baseline: zaman aşımı KAPALI + cap=30 gün → Part C etkileşimi deterministik.
@@ -84,7 +88,7 @@ async function main() {
 
     // --- 1. setUserPermissions validUntil'i DB'ye yazar ---
     const in2d = new Date(ts + 2 * DAY * 1000);
-    await PermissionManagementService.setUserPermissions(uid, [{ permissionId: permA.id, validUntil: in2d }], uid);
+    await PermissionManagementService.setUserPermissions(uid, [{ permissionId: permA.id, validUntil: in2d }], AKTOR);
     const rowA = await prisma.userPermission.findFirst({
       where: { userId: uid, permissionId: permA.id },
       select: { validUntil: true },
@@ -108,18 +112,18 @@ async function main() {
     );
 
     // --- 4. cap=0 (süresiz) bile olsa nearest validUntil exp'i kırpar ---
-    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 0 }, uid);
+    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 0 }, AKTOR);
     const span4 = spanOf((await AuthService.login(username, password)).token, secret);
     check(
       "4 cap=0 süresiz olsa da exp = nearest validUntil (2 gün)",
       span4 !== undefined && Math.abs(span4 - 2 * DAY) < 300,
       `span=${span4}s`,
     );
-    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 30 }, uid);
+    await systemSettingService.setFeatureFlags({ absoluteSessionCapDays: 30 }, AKTOR);
 
     // --- 5. GEÇMİŞ validUntil → getEffectivePermissions izni HARİÇ tutar ---
     const past = new Date(ts - 60 * 1000);
-    await PermissionManagementService.setUserPermissions(uid, [{ permissionId: permA.id, validUntil: past }], uid);
+    await PermissionManagementService.setUserPermissions(uid, [{ permissionId: permA.id, validUntil: past }], AKTOR);
     const eff2 = await AuthService.getEffectivePermissions(uid);
     check("5 süresi geçmiş izin → re-login'de HARİÇ (oturum ölür)", !eff2.includes(permA.code));
 
@@ -142,7 +146,7 @@ async function main() {
     check("7 süre değişimi tokenVersion++", tvAfter === tvBefore + 1, `${tvBefore}→${tvAfter}`);
 
     // --- 8. validUntil=null (süresiz izin) → izin aktif + exp = cap ---
-    await PermissionManagementService.setUserPermissions(uid, [{ permissionId: permA.id, validUntil: null }], uid);
+    await PermissionManagementService.setUserPermissions(uid, [{ permissionId: permA.id, validUntil: null }], AKTOR);
     const eff3 = await AuthService.getEffectivePermissions(uid);
     const rowNull = await prisma.userPermission.findFirst({
       where: { userId: uid, permissionId: permA.id },

@@ -1,0 +1,64 @@
+############ SAHA (tekserp_saha_0825 — prod 2026-08-25 kopyası) ############
+=== S1: AÇIK+OUTSTANDING sevk kaleminin toplarının statü kırılımı ===
+      status      | adet |  metraj  
+------------------+------+----------
+ AT_SUBCONTRACTOR |  188 | 21169.89
+(1 row)
+
+
+=== S2: İHLAL — açık+outstanding sevkin topu artık fasonda DEĞİL (örnek kayıtlar) ===
+ roll_id | status | currentQty | dispatchNo | workOrderNumber | wo_status 
+---------+--------+------------+------------+-----------------+-----------
+(0 rows)
+
+
+=== S3: MARUZİYET — İPTAL EDİLMİŞ iş emrine bağlı AÇIK+OUTSTANDING sevk ===
+ workOrderNumber | wo_status | cancelledAt | dispatchNo | d_cancelled 
+-----------------+-----------+-------------+------------+-------------
+(0 rows)
+
+
+=== S4: MARUZİYET TABANI — kısmi kabul (isPartial=true) sayısı + iptal WO sayısı ===
+ kismi_kabul_kalemi | aktif_makbuz | iptal_wo | iptal_wo_ozellik_sonrasi | acik_sevk 
+--------------------+--------------+----------+--------------------------+-----------
+                  1 |          143 |       22 |                        2 |       190
+(1 row)
+
+
+=== S5: İptal edilmiş WO adımında STOCK'a çekilmiş, sevk kalemi olan toplar ===
+ roll_id | status | currentStepId | dispatchNo | d_cancelled | workOrderNumber | wo_status 
+---------+--------+---------------+------------+-------------+-----------------+-----------
+(0 rows)
+
+
+############ DEV (adnansahin_db) ############
+=== S1: AÇIK+OUTSTANDING sevk kaleminin toplarının statü kırılımı ===
+ status | adet | metraj 
+--------+------+--------
+(0 rows)
+
+
+=== S2: İHLAL — açık+outstanding sevkin topu artık fasonda DEĞİL (örnek kayıtlar) ===
+ roll_id | status | currentQty | dispatchNo | workOrderNumber | wo_status 
+---------+--------+------------+------------+-----------------+-----------
+(0 rows)
+
+
+=== S3: MARUZİYET — İPTAL EDİLMİŞ iş emrine bağlı AÇIK+OUTSTANDING sevk ===
+ workOrderNumber | wo_status | cancelledAt | dispatchNo | d_cancelled 
+-----------------+-----------+-------------+------------+-------------
+(0 rows)
+
+
+=== S4: MARUZİYET TABANI — kısmi kabul (isPartial=true) sayısı + iptal WO sayısı ===
+ kismi_kabul_kalemi | aktif_makbuz | iptal_wo | iptal_wo_ozellik_sonrasi | acik_sevk 
+--------------------+--------------+----------+--------------------------+-----------
+                  0 |           50 |        2 |                        0 |        55
+(1 row)
+
+
+=== S5: İptal edilmiş WO adımında STOCK'a çekilmiş, sevk kalemi olan toplar ===
+ roll_id | status | currentStepId | dispatchNo | d_cancelled | workOrderNumber | wo_status 
+---------+--------+---------------+------------+-------------+-----------------+-----------
+(0 rows)
+

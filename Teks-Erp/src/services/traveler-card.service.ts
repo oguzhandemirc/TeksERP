@@ -678,7 +678,19 @@ export class TravelerCardService {
 
     const { skip, take } = buildPagination(params.page, params.pageSize);
     const sortField = resolveSortBy(params.sortBy, TRAVELER_SORTABLE_FIELDS, "printedAt");
-    const orderBy = { [sortField]: params.sortOrder };
+    // ⚠️ `printedAt` artık NULL olabilir (2026-08-29 / K8): kart doğarken
+    // varsayılan bir "basım tarihi" almıyor, çünkü o tarih YALANDI — kart iş
+    // emri açılışında doğuyor, baskı sonra (ya da hiç) yapılıyor.
+    // PostgreSQL'de `ORDER BY ... DESC` NULL'ları BAŞA koyar; hiçbir şey
+    // yapmasak yeni doğan kartlar listenin tepesine çıkardı — ki bu bugünkü
+    // davranışın ta kendisidir ("yeni kart üstte"). Yönü AÇIKÇA yazıyoruz ki
+    // sıralama PostgreSQL varsayılanına değil bizim kararımıza dayansın:
+    //   azalan  → basılmamış (yeni) kartlar ÖNCE  (bugünkü sıra korunur)
+    //   artan   → basılmamış kartlar SONA          ("en eski baskı önce")
+    const orderBy =
+      sortField === "printedAt"
+        ? { printedAt: { sort: params.sortOrder, nulls: params.sortOrder === "desc" ? "first" as const : "last" as const } }
+        : { [sortField]: params.sortOrder };
 
     const [items, total] = await Promise.all([
       prisma.travelerCard.findMany({
@@ -1041,7 +1053,11 @@ export class TravelerCardService {
       version: plan.version,
       // Arşiv kopyasında tarih O BASKININ tarihidir; kartın son baskı tarihini
       // yazmak geçmiş kâğıda bugünün damgasını vurmak olurdu.
-      printedAt: (plan.printedAt ?? card.printedAt).toISOString(),
+      // ⚠️ ÜÇÜNCÜ DAL 2026-08-29'da eklendi (K8): `card.printedAt` artık NULL
+      // olabilir — kart doğarken sahte bir "basım tarihi" almıyor. Hiç
+      // basılmamış bir kartın ÖNİZLEMESİ basılıyorsa kâğıdın üstündeki tarih
+      // ŞU AN'dır (baskı bu an yapılıyor); geçmişe ait bir tarih uydurulmaz.
+      printedAt: (plan.printedAt ?? card.printedAt ?? new Date()).toISOString(),
       status: card.status,
       voidReason: card.voidReason,
       qrSvg,

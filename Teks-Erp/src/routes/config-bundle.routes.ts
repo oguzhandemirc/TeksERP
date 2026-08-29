@@ -1,5 +1,6 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import express from "express";
+import { BUYUK_GOVDE_LIMITI } from "../constants/body-limits";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { matchesPermission, requireAnyPermission } from "../middlewares/rbac.middleware";
@@ -24,7 +25,7 @@ import {
 // şablonu taşıyorum" diyen birine rol şablonu yazdırırdı. FAIL-CLOSED.
 
 const router = Router();
-const jsonBig = express.json({ limit: "10mb" });
+const jsonBig = express.json({ limit: BUYUK_GOVDE_LIMITI });
 
 // KABA KAPI (route satırında görünür) — ince kapı `assertKindPermissions`.
 // İkisi birlikte: kaba kapı "bu uçla hiç işi olmayan"ı gövde ayrıştırılmadan

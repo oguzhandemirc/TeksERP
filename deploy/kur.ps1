@@ -162,7 +162,20 @@ $envKaynak = Join-Path $mevcut ".env"
 if (-not (Test-Path $envKaynak)) { Fail ".env BULUNAMADI: $envKaynak  -> sirlar olmadan kurulum yapilmaz." }
 $envYedek = Join-Path $env:TEMP "tekserp-env-$damga.bak"
 Copy-Item $envKaynak $envYedek -Force
-Ok "mevcut: $mevcut   |  .env kenara alindi"
+
+# ecosystem.config.js SUNUCUNUNDUR, paketin degil (denetim 2026-08-29, BULGU-T1-020).
+# Icinde .env'de olmayan OPERASYONEL ayarlar yasar: BACKUP_SCHEDULE_ENABLED,
+# BACKUP_DIR, BACKUP_RETENTION_DAYS, BACKUP_RCLONE_REMOTE/BIN/CONFIG, BACKUP_HOUR,
+# PG_BIN_DIR, DISCOVERY_MDNS_ENABLED. Paketteki dosya REPO varsayilanlarini tasir
+# (offsite bos, scheduler acik) -> her kurulum sahadaki ayari sessizce geri aliyordu:
+# gece yedegi ve makine disi kopya, guncelleme yapilan gece KAPANIYORDU.
+$ecoKaynak = Join-Path $mevcut "ecosystem.config.js"
+$ecoYedek  = $null
+if (Test-Path $ecoKaynak) {
+  $ecoYedek = Join-Path $env:TEMP "tekserp-ecosystem-$damga.bak"
+  Copy-Item $ecoKaynak $ecoYedek -Force
+}
+Ok "mevcut: $mevcut   |  .env + ecosystem.config.js kenara alindi"
 
 # --- Onay -------------------------------------------------------------------
 if (-not $Zorla) {
@@ -265,8 +278,45 @@ try {
   New-Item -ItemType Directory -Path $appDir | Out-Null
   Copy-Item "$temp\*" $appDir -Recurse -Force
   Copy-Item $envYedek (Join-Path $appDir ".env") -Force
+  # Sunucunun ecosystem'i KORUNUR; paketinki yanina '.paket' olarak birakilir.
+  # Prompt YOK (kurulum -Zorla ile otomatik kosabiliyor) - fark EKRANA basilir,
+  # karar operatorde kalir. Yeni ayar geldiyse .paket dosyasindan elle alinir.
+  if ($ecoYedek -and (Test-Path $ecoYedek)) {
+    $ecoHedef = Join-Path $appDir "ecosystem.config.js"
+    if (Test-Path $ecoHedef) { Copy-Item $ecoHedef "$ecoHedef.paket" -Force }
+    Copy-Item $ecoYedek $ecoHedef -Force
+  }
 } catch { GeriAlOtomatik "Dosya yerlestirme basarisiz: $($_.Exception.Message)" }
-Ok "app\ olusturuldu, .env tasindi"
+if ($ecoYedek) {
+  Ok "app\ olusturuldu, .env + ecosystem.config.js (SUNUCUNUNKI) tasindi"
+  # Fark ozeti: yalnizca env: blogundaki ANAHTARLAR karsilastirilir; deger
+  # basilmaz (sir olmasa da operasyonel bilgi ekrana dokulmesin).
+  # Yollar burada YENIDEN kurulur - try blogundaki degiskene guvenilmez.
+  $ecoHedef = Join-Path $appDir "ecosystem.config.js"
+  $ecoPaket = Join-Path $appDir "ecosystem.config.js.paket"
+  if (Test-Path $ecoPaket) {
+    $anahtar = {
+      param($yol)
+      if (-not (Test-Path $yol)) { return @() }
+      $ham = Get-Content $yol -Raw
+      if (-not $ham) { return @() }
+      ([regex]::Matches($ham, '(?m)^\s{6,}([A-Z][A-Z0-9_]{2,})\s*:') | ForEach-Object { $_.Groups[1].Value }) | Sort-Object -Unique
+    }
+    $sunucu = & $anahtar $ecoHedef
+    $paket  = & $anahtar $ecoPaket
+    $yeni   = @($paket  | Where-Object { $sunucu -notcontains $_ })
+    $dusen  = @($sunucu | Where-Object { $paket  -notcontains $_ })
+    if ($yeni.Count -or $dusen.Count) {
+      Write-Host ""
+      Write-Host "  ecosystem.config.js: sunucununki KORUNDU (paketinki: ecosystem.config.js.paket)" -ForegroundColor Yellow
+      if ($yeni.Count)  { Write-Host "    pakette YENI ayar : $($yeni  -join ', ')  -> gerekiyorsa elle ekleyin" -ForegroundColor Yellow }
+      if ($dusen.Count) { Write-Host "    pakette ARTIK YOK : $($dusen -join ', ')  -> sunucuda duruyor, gozden gecirin" -ForegroundColor Yellow }
+      Write-Host ""
+    }
+  }
+} else {
+  Ok "app\ olusturuldu, .env tasindi (onceki ecosystem.config.js yoktu - paketinki kullanilacak)"
+}
 
 Set-Location $appDir
 

@@ -28,6 +28,7 @@
 // =============================================================================
 
 import { Prisma, ReasonPresetKind, RollVarianceKind } from "@prisma/client";
+import { TAMBUR_UNDO_CANCEL_CODE, TAMBUR_UNDO_CANCEL_TEXT } from "../constants/reason-presets";
 
 import prisma from "../lib/prisma";
 import {
@@ -273,6 +274,11 @@ export async function assertKnownReasonCode(
   code: string,
 ): Promise<{ code: string; text: string }> {
   const trimmed = code.trim();
+  // SİSTEM KODLARI: hiçbir seçicide çıkmaz ama geçerlidir (`SHRINK_REASON_CODE`
+  // emsali). Operatör bunları seçemez; sistem yazar.
+  if (trimmed === TAMBUR_UNDO_CANCEL_CODE) {
+    return { code: TAMBUR_UNDO_CANCEL_CODE, text: TAMBUR_UNDO_CANCEL_TEXT };
+  }
   const rows = await rowsForTextKind(kind);
   const hit = rows.find((r) => r.code === trimmed);
   if (!hit) {

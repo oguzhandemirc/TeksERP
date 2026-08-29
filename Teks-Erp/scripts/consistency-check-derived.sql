@@ -9,7 +9,7 @@
 --   §21  WorkOrder.type                ← sipariş bağının VARLIĞI
 --   §22  WorkOrder.status              ← adım durumlarının TAMAMLANMIŞLIĞI
 --   §23  KursunBypassAssignment açıklığı ← sahibi iş emrinin CANLILIĞI
---   §24  Fason kalemin "açık/kapalı"lığı ← OPEN_OUTSTANDING dörtlüsü
+--   §24  Fason kalemin "açık/kapalı"lığı ← OPEN_OUTSTANDING dörtlüsü (a/b/c)
 --   §25  Roll.labelDirty               ← etiketi etkileyen son değişikliğin ANI
 --   §26  Roll.colorId                  ← iş emrinin hedef rengi (+ sapma defteri)
 --
@@ -195,6 +195,51 @@ WHERE sd."directShippedAt" IS NOT NULL
           AND sri."isPartial" = false
           AND sr."cancelledAt" IS NULL)
 ORDER BY sd."directShippedAt";
+
+\echo ''
+\echo '== 24c) AÇIK+OUTSTANDING fason kalemi ama top FASONDA DEĞİL =='
+\echo '   (satır varsa: boyahanedeki mal sistemde içeride görünüyor — aynı metraj İKİ yerde)'
+-- 24b'nin TERSİ yönü. Orada "mal çıktı ama fasonda görünüyor", burada "mal fasonda
+-- ama içeride görünüyor". İkisi ayrı bölümdür çünkü ayrı kod yolları üretir ve
+-- birini kapatan düzeltme diğerine dokunmaz.
+--
+-- Neden gerçek bir açık: 2026-08-29'a dek iş emri iptali `cancelBulk`ın PARÇALI
+-- başarısını okumuyordu (`failed[]` atılıyordu) ve hemen ardından gelen
+-- "artık kalan fason topları" yazımı topu tx DIŞINDA IN_PRODUCTION'a çekiyordu.
+-- Sevk kapanmamışken top içeri alınıyor, tx içindeki fason guard'ı onu artık
+-- göremiyor (count=0) ve blanket geri-çekme topu STOCK'a indiriyordu: açık sevk
+-- ortada, mal Ham Stok'ta. En sık tetikleyici KISMİ KABUL — kısmi makbuz kalemi
+-- KAPATMAZ (`isPartial=false` aranır) ama `cancel()` "kabul yapılmış" der.
+--
+-- ⚠️ `directShippedAt IS NULL` LOAD-BEARING: doğrudan sevkte top MEŞRUEN
+-- `SUBCONTRACTOR_CONSUMED` olur (o yön 24b'nin işi). Süzgeç olmasaydı her meşru
+-- doğrudan-sevk burada drift sayılırdı.
+-- Ölçüm (2026-08-29): dev 0 satır · saha kopyası 188 kalemin TAMAMI
+-- AT_SUBCONTRACTOR → invariant canlıda tutuyor, bölüm vakumen yeşil değil.
+SELECT sdi.id      AS dispatch_item_id,
+       sd."dispatchNo",
+       sd."dispatchedAt",
+       r.barcode,
+       r.status::text AS top_durumu,
+       r."currentQty",
+       sdi."dispatchedQty",
+       w."workOrderNumber",
+       w.status::text AS is_emri_durumu
+FROM subcontractor_dispatch_items sdi
+JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
+JOIN rolls r ON r.id = sdi."rollId"
+JOIN work_orders w ON w.id = sd."workOrderId"
+WHERE sd."cancelledAt" IS NULL
+  AND sd."directShippedAt" IS NULL
+  AND sdi."remainderClosedAt" IS NULL
+  AND r.status <> 'AT_SUBCONTRACTOR'
+  AND NOT EXISTS (
+        SELECT 1 FROM subcontractor_receipt_items sri
+        JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
+        WHERE sri."sourceDispatchItemId" = sdi.id
+          AND sri."isPartial" = false
+          AND sr."cancelledAt" IS NULL)
+ORDER BY sd."dispatchedAt";
 
 \echo ''
 \echo '== 25) Kartelalık işareti etiket BASILDIKTAN SONRA değişmiş ama etiket BAYAT değil =='

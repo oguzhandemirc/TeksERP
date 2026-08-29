@@ -1297,6 +1297,15 @@ model Item {
   /// sorusunun cevabı arşive gitmemeli (kayıt künyesi tasarımının gerekçesi).
   mergedAt       DateTime? @db.Timestamptz
   mergedById     String?   @db.Uuid
+  /// ⚠️ `onDelete` BİLEREK VERİLMEZ (= SetNull). 2026-08-29 denetimi burada
+  /// `Restrict` önerdi (K4: survivor silinirse tombstone "nereye birleşti"
+  /// diyemez) ve öneri UYGULANMADI — iki sebep ölçüldü: ① repo 2026-08-19'da
+  /// bu bağın SetNull kalmasına gerekçeli karar verdi (bağ SAHİPLİK değil
+  /// TARİHÇE işaretidir; tombstone survivor'dan bağımsız yaşamalı — bkz.
+  /// scripts/test_hard_delete_guard_coverage.ts), ② `/permanent` ucunun
+  /// bağımlılık kapısı mezar taşına BAKMAZ, yani Restrict orada okunaklı bir
+  /// 400 değil HAM FK hatası üretirdi. Yeniden denenecekse önce o kapıya
+  /// tombstone sayımı + mesaj eklenmeli.
   mergedInto     Item?     @relation("ItemMergeLineage", fields: [mergedIntoId], references: [id])
   mergedChildren Item[]    @relation("ItemMergeLineage")
   mergedBy       User?     @relation("ItemMergedBy", fields: [mergedById], references: [id])
@@ -1788,6 +1797,9 @@ model Roll {
   // tablonun bir alt kümesini tutar. Tek kolon yeter: raporlar önce dönemle
   // daraltıp sonra JOIN'liyor (kırılım item/color/subcontractor üzerinden).
   @@index([finalizedAt])
+  // K7c (2026-08-29): şemada DÜZ, DB'de PARTIAL (WHERE "directShipmentId" IS NOT NULL)
+  // — Prisma predicate farkını drift saymaz (CLAUDE.md perf kuralı 4).
+  @@index([directShipmentId])
   @@map("rolls")
 }
 
@@ -2036,6 +2048,9 @@ model Order {
   @@index([createdAt(sort: Desc), id(sort: Desc)], map: "orders_active_createdAt_idx")
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([orderNumber(ops: raw("gin_trgm_ops"))], map: "orders_orderNumber_trgm_idx", type: Gin)
+  // K7 (2026-08-29): rapor tarih eksenleri indeksiz taranıyordu (BULGU-T1-120).
+  @@index([orderDate])
+  @@index([completedAt])
   @@map("orders")
 }
 
@@ -2504,7 +2519,11 @@ model WorkOrderToOrderLine {
   allocatedQty Decimal @default(0) @db.Decimal(12, 3) // Metraj/kg cinsinden tahsis (sipariş birimiyle aynı)
 
   workOrder WorkOrder @relation(fields: [workOrderId], references: [id])
-  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Cascade)
+  /// K5 (2026-08-29): `Cascade` → `Restrict`. Sipariş kalemi silinince bu bağ
+  /// SESSİZCE düşüyordu; "bu iş emri hangi sipariş için açıldı" olgusu hiçbir
+  /// iz bırakmadan kayboluyordu (iptal edilmiş iş emirlerinde hâlâ mümkündü).
+  /// Doğru yol kalemi SİLMEK değil İPTAL etmek (`cancelledAt`).
+  orderLine OrderLine @relation(fields: [orderLineId], references: [id], onDelete: Restrict)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -3166,7 +3185,11 @@ model TravelerCard {
   workOrderId String             @unique @db.Uuid // Bir iş emri = tek refakat kartı
   version     Int                @default(1) // Kaçıncı basım (reprint = aynı satırda version++)
   status      TravelerCardStatus @default(ACTIVE)
-  printedAt   DateTime           @default(now()) @db.Timestamptz
+  /// K8 (2026-08-29): `@default(now())` KALDIRILDI. Kart iş emri açılışında
+  /// doğuyor ve varsayılan yüzünden HİÇ BASILMADAN "basım tarihi" taşıyordu
+  /// (BULGU-T2-024; saha kopyasında 153 kart). Baskı yolu alanı zaten AÇIKÇA
+  /// yazıyor (`print-event`), yani varsayılan yalnız yalan üretiyordu.
+  printedAt   DateTime?          @db.Timestamptz
   printedById String?            @db.Uuid
   voidedAt    DateTime?          @db.Timestamptz
   voidReason  String?
@@ -5190,7 +5213,10 @@ model SystemLog {
   requestId String?           @db.Uuid
 
   // Relations
-  user User? @relation(fields: [userId], references: [id])
+  /// K6 (2026-08-29): `onDelete: Restrict` — şema/migration RESTRICT diyordu ama
+  /// canlı FK `SET NULL` idi (BULGU-T1-034): kullanıcı silindiğinde onun tüm
+  /// audit izi anonimleşiyordu. Kullanıcılar zaten soft-delete edilir.
+  user User? @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // ⚠️ `updatedAt` YOK ve OLMAMALI (Faz B1, 2026-08-19): audit satırı yazıldıktan
   // sonra HİÇ güncellenmez (ISO 27001 A.8.15 — logların değiştirilmeye karşı
@@ -5357,6 +5383,10 @@ model ImportRun {
   skipped  Int @default(0)
   failed   Int @default(0)
 
+  /// Koşumun BİTİŞ anı. `NULL` = HÂLÂ KOŞUYOR (2026-08-29 / BULGU-T1-008).
+  /// ⚠️ Bunun için `ImportRunStatus`'a RUNNING EKLENMEDİ: uygulanmış bir enum
+  /// değeri geri alınamaz, nullable bir kolon `DROP COLUMN` ile alınabilir.
+  finishedAt     DateTime?       @db.Timestamptz
   status         ImportRunStatus
   durationMs     Int             @default(0)
   /// PARTIAL'da: yazma hangi satırda durdu (dosyadaki satır numarası).

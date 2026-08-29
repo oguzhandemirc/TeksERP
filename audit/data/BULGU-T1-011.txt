@@ -1,0 +1,118 @@
+############ SAHA (tekserp_saha_0825 — prod 2026-08-25 kopyası) ############
+=== 0) TAMBUR_UNDO* audit olay sayısı (kaynak evren) ===
+ undo_olay | cocuk_iptal_eden 
+-----------+------------------
+        53 |               50
+(1 row)
+
+
+=== 1) Undo ile iptal edilen çocuklar × restore yükleminin TAMAMI ===
+ diriltilebilir_undo_cocugu | toplam_metraj | parenti_olan | precancel_null | cancelledat_null 
+----------------------------+---------------+--------------+----------------+------------------
+                         50 |      1834.800 |           50 |             50 |               50
+(1 row)
+
+
+=== 2) Metraj GERÇEKTEN ebeveyne iade edilmiş miydi? (audit restoredTo) ===
+  restored_to  | top |  metraj  | iade_edilen 
+---------------+-----+----------+-------------
+ IN_PRODUCTION |  49 | 1819.800 |      1819.8
+ (yok/FULL)    |   1 |   15.000 |            
+(2 rows)
+
+
+=== 3) Örnek kayıtlar (ilk 10) — ebeveyn hâlâ canlı + metrajı iade almış ===
+ cocuk_id | cocuk_barkod | cocuk_qty | preCancelStatus | iz_yok |  restored_to  | restored_len | ebeveyn_id | ebeveyn_status  | ebeveyn_qty | ebeveyn_initial 
+----------+--------------+-----------+-----------------+--------+---------------+--------------+------------+-----------------+-------------+-----------------
+ 9000c3f7 | T120826F0001 |    40.000 |                 | t      | IN_PRODUCTION |           40 | e7eaa2a9   | TAMBUR_CONSUMED |       0.000 |         360.000
+ 787a76aa | T120826F0002 |    40.000 |                 | t      | IN_PRODUCTION |           40 | e7eaa2a9   | TAMBUR_CONSUMED |       0.000 |         360.000
+ b7e4f410 | T120826F0003 |    40.000 |                 | t      | IN_PRODUCTION |           40 | e7eaa2a9   | TAMBUR_CONSUMED |       0.000 |         360.000
+ 5076452d | T120826F0004 |    40.000 |                 | t      | IN_PRODUCTION |           40 | e7eaa2a9   | TAMBUR_CONSUMED |       0.000 |         360.000
+ 1a62ffaa | T210826F0025 |    40.000 |                 | t      | IN_PRODUCTION |           40 | a8fc61d7   | TAMBUR_CONSUMED |       0.000 |        1304.000
+ e3e3766b | T200826F0117 |    40.000 |                 | t      | IN_PRODUCTION |           40 | faa89e26   | TAMBUR_CONSUMED |       0.000 |         100.000
+ 7ca60858 | T200826F0116 |    40.000 |                 | t      | IN_PRODUCTION |           40 | 0d65c034   | TAMBUR_CONSUMED |       0.000 |          96.000
+ 911b656e | T200826F0087 |     9.700 |                 | t      | IN_PRODUCTION |          9.7 | 6d598b64   | TAMBUR_CONSUMED |       0.000 |        2570.000
+ 601c931a | T200826F0084 |    14.000 |                 | t      | IN_PRODUCTION |           14 | 6d598b64   | TAMBUR_CONSUMED |       0.000 |        2570.000
+ 6a413ba4 | T200826F0081 |    10.500 |                 | t      | IN_PRODUCTION |         10.5 | 6d598b64   | TAMBUR_CONSUMED |       0.000 |        2570.000
+(10 rows)
+
+
+=== 4) AUDIT LOGSUZ evren — parentRollId dolu + diriltilebilir TÜM iptaller ===
+ diriltilebilir_kesim_cocugu |  metraj  
+-----------------------------+----------
+                          88 | 3629.200
+(1 row)
+
+
+=== 5) KARŞILAŞTIRMA: TÜM diriltilebilir iptaller (parentsiz dahil) ===
+ tum_diriltilebilir |  metraj   | bunun_kesim_cocugu 
+--------------------+-----------+--------------------
+                215 | 19947.090 |                 88
+(1 row)
+
+
+############ DEV (adnansahin_db) ############
+=== 0) TAMBUR_UNDO* audit olay sayısı (kaynak evren) ===
+ undo_olay | cocuk_iptal_eden 
+-----------+------------------
+      1088 |              573
+(1 row)
+
+
+=== 1) Undo ile iptal edilen çocuklar × restore yükleminin TAMAMI ===
+ diriltilebilir_undo_cocugu | toplam_metraj | parenti_olan | precancel_null | cancelledat_null 
+----------------------------+---------------+--------------+----------------+------------------
+                         20 |      1666.000 |           20 |             20 |               20
+(1 row)
+
+
+=== 2) Metraj GERÇEKTEN ebeveyne iade edilmiş miydi? (audit restoredTo) ===
+  restored_to  | top | metraj  | iade_edilen 
+---------------+-----+---------+-------------
+ IN_PRODUCTION |  14 | 624.000 |         624
+ VARIANCE      |   4 | 362.000 |         362
+ (yok/FULL)    |   2 | 680.000 |            
+(3 rows)
+
+
+=== 3) Örnek kayıtlar (ilk 10) — ebeveyn hâlâ canlı + metrajı iade almış ===
+ cocuk_id | cocuk_barkod | cocuk_qty | preCancelStatus | iz_yok |  restored_to  | restored_len | ebeveyn_id | ebeveyn_status  | ebeveyn_qty | ebeveyn_initial 
+----------+--------------+-----------+-----------------+--------+---------------+--------------+------------+-----------------+-------------+-----------------
+ 6a5e78c2 | T130826F0007 |     2.000 |                 | t      | IN_PRODUCTION |            2 | 0e0cb41e   | IN_PRODUCTION   |       5.000 |         500.000
+ ff0bb82c | T130826F0006 |     1.000 |                 | t      | IN_PRODUCTION |            1 | 0e0cb41e   | IN_PRODUCTION   |       5.000 |         500.000
+ 7bbe8fee | T130826F0005 |     1.000 |                 | t      | IN_PRODUCTION |            1 | 0e0cb41e   | IN_PRODUCTION   |       5.000 |         500.000
+ 7e4ea67f | T130826F0003 |   500.000 |                 | t      |               |              | 0e0cb41e   | IN_PRODUCTION   |       5.000 |         500.000
+ d1d7b7b4 | T130826F0002 |    50.000 |                 | t      | IN_PRODUCTION |           50 | 0e0cb41e   | IN_PRODUCTION   |       5.000 |         500.000
+ 83f61d19 | T120826F0219 |   180.000 |                 | t      |               |              | 0e0cb41e   | IN_PRODUCTION   |       5.000 |         500.000
+ a78279f5 | T120826F0194 |    80.000 |                 | t      | IN_PRODUCTION |           80 | 806492de   | TAMBUR_CONSUMED |       0.000 |         240.000
+ 151282ec | T120826F0195 |    80.000 |                 | t      | IN_PRODUCTION |           80 | 806492de   | TAMBUR_CONSUMED |       0.000 |         240.000
+ ce2acb45 | T120826F0196 |    80.000 |                 | t      | IN_PRODUCTION |           80 | 806492de   | TAMBUR_CONSUMED |       0.000 |         240.000
+ 8087076b | T120826F0193 |    50.000 |                 | t      | IN_PRODUCTION |           50 | 806492de   | TAMBUR_CONSUMED |       0.000 |         240.000
+(10 rows)
+
+
+=== 4) AUDIT LOGSUZ evren — parentRollId dolu + diriltilebilir TÜM iptaller ===
+ diriltilebilir_kesim_cocugu |  metraj  
+-----------------------------+----------
+                          38 | 2460.000
+(1 row)
+
+
+=== 5) KARŞILAŞTIRMA: TÜM diriltilebilir iptaller (parentsiz dahil) ===
+ tum_diriltilebilir |  metraj  | bunun_kesim_cocugu 
+--------------------+----------+--------------------
+                 49 | 4329.000 |                 38
+(1 row)
+
+### saha
+ diriltilebilir_kesim_cocugu |  metraj  | iz_yok_undo_imzasi | iz_yok_metraj 
+-----------------------------+----------+--------------------+---------------
+                          88 | 3629.200 |                 88 |      3629.200
+(1 row)
+
+### dev
+ diriltilebilir_kesim_cocugu |  metraj  | iz_yok_undo_imzasi | iz_yok_metraj 
+-----------------------------+----------+--------------------+---------------
+                          38 | 2460.000 |                 38 |      2460.000
+(1 row)
+

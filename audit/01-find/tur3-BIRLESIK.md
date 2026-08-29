@@ -1,0 +1,60 @@
+# TUR 3 — Birleştirilmiş Bulgu Listesi
+
+Kaynak: `audit/01-find/tur3-S-1-senaryo-kk1.md`, `tur3-S-2-senaryo-sevkiyat.md`, `tur3-S-3-senaryo-tambur.md`,
+`tur3-S-4-senaryo-fason.md`, `tur3-S-5-senaryo-sistem.md`. Ham bulgu sayısı: 35. Birleştirme sonrası: 33
+(1 birleştirme: S-1-03 + S-5-04 aynı kök neden; 1 önceki tura ait olarak elendi: S-5-02 ≈ BULGU-T1-008).
+
+| Yeni ID | Başlık | Şiddet | Kanıt Sev. | Kategori | Modül | Dosya | Satır | Kaynak ID'ler |
+|---|---|---|---|---|---|---|---|---|
+| BULGU-T3-001 | Offline kuyruktan flush edilen KK1 kaydı 409 POSSIBLE_DUPLICATE alırsa hiçbir iz bırakmadan düşer — fiziksel top sistemde hiç doğmaz | S1 | K1 | B.3 | envanter / mobil-offline | mobil/src/offline/announceFailure.ts | 24-25, 50-57 | S-1-01 |
+| BULGU-T3-002 | Tabletten kurulan HER sevkiyat sipariş defteri yazmadan çıkıyor ve dispatch'ten sonra sipariş bağı kurmanın hiçbir yolu yok | S1 | K1 | E | Sevkiyat ↔ Sipariş | mobil/src/screens/Modules/TartiPaket/PaketlemeScreen.tsx | 286-295 | S-2-01 |
+| BULGU-T3-003 | Sevkiyat kurulurken sipariş (ya da kalemi) iptal edilirse mal İPTAL EDİLMİŞ talebe yazılıyor — sipariş statüsü hiçbir katmanda okunmuyor | S1 | K1 | A.1 | Sevkiyat ↔ Sipariş | Teks-Erp/src/services/shipping.service.ts | 1263-1276, 1316-1321, 1352, 1878 | S-2-02 |
+| BULGU-T3-004 | tambur-undo iş emri satırını kilitlemiyor: eşzamanlı son-top finalize'ında iş emri COMPLETED olurken adımda canlı top ve açık hareket kalıyor | S1 | K1 | A.1 | Üretim · Tambur geri alma | Teks-Erp/src/services/tambur-undo.service.ts | 1221, 1434 (+1330-1346, 1563-1578, 1376-1386, 1667-1677) | S-3-01 |
+| BULGU-T3-005 | 'Konumu Düzelt' / 'Boyahaneye Geri Gönder' iş emri satırını kilitlemiyor: kapanış sayımını ve kapanış dispozisyonunun 'kapsam birebir' guard'ını deliyor | S1 | K1 | A.1 | Üretim · manuel taşıma | Teks-Erp/src/services/workorder-manual-move.service.ts | 595-597 (+651-660, 785-795, 801-804, 813-823) | S-3-02 |
+| BULGU-T3-006 | Fiziksel yazıcı arızası yazılımda hiçbir sinyal üretmez; 90 sn'lik mükerrer penceresi ölçülen tekrar-giriş gecikmesinin (~34-52 dk) ~1/25'i ve kapatıcı iki bayrak sahada KAPALI | S2 | K1 | B.5 | envanter / etiket | Teks-Erp/src/services/helpers/duplicate-guard.helper.ts | 16 (+system-setting.service.ts:2186-2192, 2207-2213) | S-1-02 |
+| BULGU-T3-007 | KK1 ham girişi ürün/renk/özellik doğrulamasını transaction DIŞINDA yapar; eşzamanlı ana veri birleştirmesinde yeni top/kayıt MEZAR TAŞI kayda yazılır — birleştirme kilidi yalnız birleştirmeler arasında, taşıma turunun kaçırdığı satırlar hiçbir yere taşınmaz | S2 | K1 | A.1 | envanter / ana-veri | Teks-Erp/src/services/inventory.service.ts | 694-700 (tx dışı okuma) ↔ 818, 906-947 (tx içi yazım); + master-data-merge.service.ts:546, 629-651, 711 | S-1-03, S-5-04 |
+| BULGU-T3-008 | Offline flush'ta Roll.createdAt = FLUSH anıdır; 'Ham Stok'ta createdAt = KK1 girişi' invariantı kırık — Dashboard'ın 'bugün giren ham mal' sayacı yanlış güne yazıyor ve clientEnteredAt hiçbir yüzeyde okunmuyor | S2 | K1 | C | envanter / rapor | Teks-Erp/src/services/dashboard.service.ts | 130-134 (+ inventory.service.ts:928) | S-1-05 |
+| BULGU-T3-009 | Sevk anında tahsis yeniden hesaplanmıyor: storno'nun bıraktığı PLANNED sevkiyat eski `need` ile donuyor — ve tek uyarı yüzeyi sahada hiç çalışmıyor | S2 | K1 | E | Sevkiyat ↔ Sipariş | Teks-Erp/src/services/shipping.service.ts | 1806-1883, 2204-2206, 1509-1520 | S-2-03 |
+| BULGU-T3-010 | İptal edilmiş sevkiyatın clientToken replay'i 'Sevkiyat kuruldu' diyor — mal çıkmamıştır ve o mesajın işaret ettiği ekran bu fabrikada hiç yoktur | S2 | K1 | B.3 | Sevkiyat | Teks-Erp/src/services/shipping.service.ts | 1362-1374 (+1383-1386, 1440-1443) | S-2-04 |
+| BULGU-T3-011 | Tek parça geri almanın aşım koruması okuma ile yazma arasında duruyor: iki kardeş parça aynı anda geri alınırsa currentQty > initialQty sessizce doğuyor ve sapma defterine satır düşmüyor | S2 | K1 | A.1 | Üretim · Tambur geri alma · sapma defteri | Teks-Erp/src/services/tambur-undo.service.ts | 1124-1149 | S-3-03 |
+| BULGU-T3-012 | Plan-sapma kapısı hedefi transaction DIŞINDA okuyor: planlamacı 'Rengi Değiştir' yaparsa ya soru hiç sorulmadan plan-dışı mal depoya iner ya da geçersiz bir sapma deftere yazılır | S2 | K1 | A.1 | Üretim · plan-sapma defteri | Teks-Erp/src/services/tambur.service.ts | 710-716, 2733-2743, 3130-3140 (+935-938, 2794-2797, 3187-3190) | S-3-04 |
+| BULGU-T3-013 | finalize'ın idempotency'si KİMLİK TAŞIMIYOR: başka bir yolun kapattığı topta 'zaten tamamlandı' + success:true döner, operatörün kesim/kalite kararları sessizce kaybolur ve tablet YABANCI çocuklara etiket basar | S2 | K1 | B.3 | Üretim · Tambur finalize · etiket | Teks-Erp/src/services/tambur.service.ts | 612-660 (+3354-3364) | S-3-05 |
+| BULGU-T3-014 | Manuel ileri-atlamanın 'atlanan adımı SKIPPED yap' mantığı fasondaki malı görmez: mal dışarıdayken adım atlanır ve iş emri OTOMATİK kapanır | S2 | K1 | E | Üretim · manuel taşıma ↔ fason | Teks-Erp/src/services/workorder-manual-move.service.ts | 766-795 | S-3-06 |
+| BULGU-T3-015 | İş emri 'Düzenle'de iyimser kilit yok: ikinci kaydeden planlamacı, birincinin az önce bağladığı siparişi SESSİZCE siler ve iş emri 'Stoğa Üretim'e düşer | S2 | K1 | A.2 | Planlama · iş emri | Teks-Erp/src/services/workorder.service.ts | 5263-5270 (claim, versiyon yok); 5502-5503 (drop); 5525-5541 (recreate); 5062-5066 (type türetmesi) | S-3-07 |
+| BULGU-T3-016 | Fason kabul commit ederken "Rengi Değiştir" çalışırsa mal–plan bekçisi atlanır: iş emri yeni renge döner, eldeki mal eski renkte kalır ve hiçbir onay sorulmaz | S2 | K1 | A.2 | fason + iş emri planı | Teks-Erp/src/services/workorder-link.service.ts | 525, 564-573 | S-4-01 |
+| BULGU-T3-017 | "Kalan gelmeyecek" kararı kısmi kabulün iptalini kalıcı olarak kilitliyor — iptal önizlemesi "güvenli" diyor, uç 409 veriyor ve geri dönüş yolu yok | S2 | K1 | E | fason kısmi kabul | Teks-Erp/src/services/subcontractor.service.ts | 3419-3427, 4661-4694, 4930-4944 | S-4-02 |
+| BULGU-T3-018 | Kabul iptali, hâlâ AKTİF olan önceki teslimatın "Fasondan Döndü" izini siliyor — top geçmişi, üretim raporu ve vardiya aktivitesi sessizce eksiliyor | S2 | K1 | E | fason kısmi kabul | Teks-Erp/src/services/subcontractor.service.ts | 4963-4971 | S-4-03 |
+| BULGU-T3-019 | Fason Kabul ekranı sunucudan onay gelmeden "Mal kabul tamamlandı" yeşilini basıp formu siliyor — KK1'de ölçülüp yasaklanan desen burada duruyor ve gerekçesi kısmi kabulden beri yanlış | S2 | K1 | I | mobil fason kabul | mobil/src/screens/Modules/FasonKabul/FasonKabulScreen.tsx | 565-575 | S-4-04 |
+| BULGU-T3-020 | Kapanış bütçesi (5 sn) sistemdeki hiçbir uzun yazmanın bütçesini kapsamıyor — pm2 restart uçuştaki 20/120 saniyelik işi ZORLA keser ve kesildiğinin izi hiçbir yerde kalmaz | S2 | K1 | D | ops / kapanış (graceful shutdown) | Teks-Erp/src/server.ts | 146-152, 166-186 | S-5-01 |
+| BULGU-T3-021 | pg_dump/pg_restore/rclone çocukları kapanışta ne öldürülür ne beklenir; 3 saatlik üst sınırları da ebeveynle birlikte yok olur — restart sonrası ne tekil-koşum garantisi ne zaman aşımı kalır | S2 | K1 | A.5 | yedek / DB kopyası (ops) | Teks-Erp/src/services/helpers/pg-tool.helper.ts | 104-110 | S-5-03 |
+| BULGU-T3-022 | Audit arşivi ilk GERÇEK koşumunda düşecek: 5.000 satırlık batch × 14 kolon = 70.000 bind parametresi, PostgreSQL'in 65.535 sınırının üstünde — yol bugüne dek hiç koşmadı, bekçi tek satırla ölçüyor | S2 | K1 | H | audit / arşiv | Teks-Erp/src/services/audit.service.ts | 15, 205-262 | S-5-05 |
+| BULGU-T3-023 | Mükerrer tuzağının KİLİT ANAHTARI 3 ondalığa yuvarlanır, İKİZ SORGUSU yuvarlanmaz — tuzak tam da serileştirdiği çiftte boşa düşer | S3 | K1 | A.1 | envanter | Teks-Erp/src/services/inventory.service.ts | 866-867 (sorgu, ham) ↔ helpers/duplicate-guard.helper.ts:68-69 (anahtar, yuvarlanmış) | S-1-04 |
+| BULGU-T3-024 | Offline flush'ta kuyruktan boşalan kaydın üretim atfı (kim/hangi makine/hangi istasyon) FLUSH anındaki oturumdan yazılır; zaman boyutu taşınıyor, aktör ve yer boyutu taşınmıyor | S3 | K1 | C | envanter / izlenebilirlik | Teks-Erp/src/controllers/inventory.controller.ts | 294-301, 313 (+inventory.service.ts:920-924; mobil/src/services/roll.service.ts:100-157) | S-1-06 |
+| BULGU-T3-025 | Muhasebe listesinin dönem BANDI satırlardan farklı anlık görüntüden okunuyor — kardeş yolda kapatılan yarış burada açık | S3 | K1 | A.1 | Sevkiyat raporlama | Teks-Erp/src/services/shipping.service.ts | 2694-2717 (kardeş doğru yol: 2589-2612) | S-2-05 |
+| BULGU-T3-026 | Storno'nun 'sevkiyatı da kapat' kararı istemcide — alanı göndermeyen istemci rejime aykırı PLANNED sevkiyat ve kilitli çuval bırakıyor | S3 | K1 | F | Sevkiyat | Teks-Erp/src/services/shipping.service.ts | 2145, 2150, 2068-2076 (+Electron/.../UndoDispatchDialog.tsx:64) | S-2-06 |
+| BULGU-T3-027 | Plan-sapma karnesinde 'imza sayısı' kesim adedi kadar şişiyor — confirmationId bir imzayı değil bir yazma çağrısını sayıyor | S3 | K1 | E | Raporlar · Plan-Sapma Karnesi | Teks-Erp/src/services/helpers/tambur-plan-gate.helper.ts | 184 (+ plan-deviation-scorecard.report.service.ts:181-188) | S-3-08 |
+| BULGU-T3-028 | Aynı istemci anahtarıyla FARKLI gövde gelirse fason kabulü sessizce "başarılı" diyor — kardeş kartela ucu aynı durumda CLIENT_TOKEN_COLLISION veriyor | S3 | K1 | B.3 | fason kabul | Teks-Erp/src/services/subcontractor.service.ts | 2350-2378 | S-4-05 |
+| BULGU-T3-029 | Kabul iptalinin LIFO kapısı transaction dışında okunuyor ve kilit altında tekrarlanmıyor — araya giren ikinci teslimat kapıyı sessizce açık bırakıyor | S3 | K1 | A.2 | fason kısmi kabul | Teks-Erp/src/services/subcontractor.service.ts | 4755-4776 | S-4-06 |
+| BULGU-T3-030 | Kartela kabul iptali eşzamanlı stok düşümünü "sevkiyata/çuvala bağlanmış" diye raporluyor; stoktan düşülmüş kartelalar iptal kapsamından sessizce çıkıyor | S3 | K1 | I | kartela | Teks-Erp/src/services/kartela.service.ts | 806-818 | S-4-07 |
+| BULGU-T3-031 | Fason çekisinin üç alanı üç farklı tazelik politikasında; sistemin kendi değiştirdiği alan (EN) donmuş olan ve bayatlığı bildiren tek işaret hiçbir ekranda çizilmiyor | S3 | K1 | E | fason belge | Teks-Erp/src/services/subcontractor.service.ts | 6366-6385, 4452-4494 | S-4-08 |
+| BULGU-T3-032 | Restart'tan sonraki ilk saniyelerde fabrikanın KENDİ eklediği sebep kodları geçersiz sayılıyor — TTL için kapatılan 'taze ya da hiç' boşluğunun soğuk-başlangıç ikizi | S3 | K1 | A.8 | sebep katalogları (ReasonPreset) | Teks-Erp/src/services/reason-preset.service.ts | 101-103, 180-190 | S-5-06 |
+| BULGU-T3-033 | Arşiv 'archived' sayacı TAŞINAN değil SEÇİLEN satır sayısını döndürüyor — eşzamanlı iki arşivleme koşumunda '5.000 arşivlendi' der, gerçekte 0 taşımıştır | S4 | K1 | I | audit / arşiv | Teks-Erp/src/services/audit.service.ts | 206-262 | S-5-07 |
+
+## Birleştirme gerekçesi (BULGU-T3-007)
+
+`S-1-03` (KK1 ham girişi ürün/renk doğrulamasını tx dışında yapar → eşzamanlı ana veri birleştirmesinde
+yeni top mezar taşı kumaşa yazılır) ve `S-5-04` (ana veri birleştirmesi sürerken yazılan HER referans
+mezar taşında kalır — merge kilidi yalnız birleştirmeler arasında, taşımadan sonra/sırasında doğan satır
+hiçbir yere taşınmaz) **aynı kök nedeni** iki farklı senaryo başlığından (KK1 özelinde / genel sistem
+özelinde) anlatıyor: `master-data-merge.service.ts`'in kilidi yalnız iki birleştirme arasında serileşiyor,
+merge'e giren tabloya (item/customer/color/…) o an yazan başka bir mutasyonla YARIŞMIYOR. `S-1-03`'ün
+somut KK1 senaryosu + `S-5-04`'ün genel mekanik açıklaması birlikte tek bulguda tutuldu; primary `S-1-03`
+(en somut failure_mode + aynı K1 kanıt seviyesi).
+
+## Önceki tura ait olarak elenen (dropped_as_seen)
+
+`S-5-02` (İçe aktarım yarıda kesilirse import_runs satırı ve satır bazlı audit yalnız koşum BİTİNCE
+yazılıyor — replay anahtarı en sonda) — bu turun kendi metninde de açıkça "önceki defter: `BULGU-T1-008`"
+diye işaretlenmiş; aynı kod konumu (`import.service.ts:447-473, 508-544, 552-574`), aynı kök neden
+(replay anahtarı/iz kaydı koşum sonunda yazılıyor → zaman aşımından sonraki "Tekrar Dene" mükerrer
+kayıt üretir). Yeni bir kod noktası ya da farklı bir kusur getirmiyor.

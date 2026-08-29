@@ -1,0 +1,22 @@
+DENEME 1 — sql-saha.sh -c "SELECT 1;"
+psql: error: connection to server at "localhost" (::1), port 5432 failed:
+FATAL:  Postgres.app failed to verify "trust" authentication
+DETAIL:  Postgres.app failed to show a dialog. This can happen when the user
+that started the server is no longer logged in. Try restarting the PostgreSQL
+server.
+HINT:  Change pg_hba.conf to require a password
+
+DENEME 2 — sql-dev.sh -c "SELECT 1;"
+Aynı hata (postgres GUI-dialog auth ortamı bu ajan oturumunda kullanılamıyor;
+postgres süreci çalışıyor, socket dosyası mevcut, ama trust-auth dialog'unu
+gösterecek bir kullanıcı oturumu yok).
+
+SONUÇ: DB erişimi bu doğrulama oturumunda da (T1/finder oturumundaki gibi)
+KAPALI — ortam sorunu, sorgu/yetki sorunu değil. BULGU-T3-001.sql'deki not'ta
+açıklandığı gibi, bu bulgu sınıfı için DB sorgusu zaten YAPISAL OLARAK
+sonuçsuz kalır: reddedilen (409 POSSIBLE_DUPLICATE alan) ikinci top tx
+rollback'i yüzünden hiçbir satır bırakmaz (inventory.service.ts:864-901,
+guard bloğu → throw → Prisma tx rollback, barkod sayacı bile artmadan).
+Yani "veride ihlal" arayışı bu bulguda kavramsal olarak uygulanamaz — kaybın
+KENDİSİ görünmezliktir, bu da bulgunun S1 iddiasını (iz bırakmadan kayıp)
+dolaylı olarak DOĞRULAR.

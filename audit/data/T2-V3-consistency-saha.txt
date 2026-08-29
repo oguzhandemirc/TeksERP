@@ -1,0 +1,124 @@
+
+== 1) OrderLine.shippedQty  vs  Σ(SackAllocation[DISPATCHED] + DirectShipAllocation) ==
+   (satır varsa: sevk denormalize toplamı defterden kopmuş)
+order_line_id|kayitli|hesaplanan|fark
+(0 rows)
+
+== 2) Order.shippedQty  vs  Σ(OrderLine.shippedQty) ==
+order_id|shipped_kayitli|shipped_hesap
+(0 rows)
+
+== 3) Negatif miktar/metraj/kg  (CHECK backstop — normalde 0) ==
+tablo|kayit
+(0 rows)
+
+== 4) Roll ↔ Sack ↔ Shipment tutarlılık  (O-22 FK backstop — normalde 0) ==
+roll_id|sackId|roll_shipment|sack_shipment
+(0 rows)
+
+== 5) shipment_orders.isActive  vs  shipment.status  (denorm drift) ==
+   (satır varsa: isActive bayrağı bakımı bir sevkiyat geçişinde atlanmış)
+shipmentId|orderId|bayrak|gercek_durum
+(0 rows)
+
+== 6) Çuval seq ↔ shipmentId tutarlılığı  (depoda seq YOK, sevkiyatta seq VAR) ==
+sack_id|shipmentId|seq
+(0 rows)
+
+== 7) Çuvalda KAYITLI ama fiziksel olarak binada OLMAYAN top (HAYALET İÇERİK) ==
+   (satır varsa: bir akış topu ÇUVALDAN ÇIKARMADAN başka yere aldı — kartela/tambur/fason)
+   Onarım: npx tsx scripts/repair_sack_ghost_rolls.ts  (rapor) / --apply (uygula)
+roll_id|barcode|status|currentQty|sackNo|cuval_kg|shipmentNo|sevkiyat_durumu|updatedAt
+(0 rows)
+
+== 7b) SEVK EDİLMİŞ ama kartelaya/fasona DA gönderilmiş top  (GEÇMİŞ ÇİFT-SAYIM) ==
+   (satır varsa: aynı mal müşteriye faturalandı VE dışarıya çıktı — irsaliye DONMUŞ,
+    geri alınamaz; düzeltme yalnız reissue ile İNSAN kararıdır)
+roll_id|barcode|currentQty|sackNo|shipmentNo|dispatchedAt|kartela_sevk|fason_sevk
+(0 rows)
+
+== 7c) İPTAL EDİLMİŞ kartela hâlâ çuvalda  (simetri kontrolü — normalde 0) ==
+   (kartela.service iptalde sackId=null yazıyor; satır çıkarsa YENİ bir delik var)
+swatch_id|barcode|sackNo|cancelledAt
+(0 rows)
+
+== 8) Barkodsuz satılabilir top (WAREHOUSE/A1_STOCK ama barcode NULL) ==
+   (satır varsa: finalize/kapanış dispozisyonu barkod atamayı atlamış)
+id|status|currentQty|updatedAt
+(0 rows)
+
+== 9) SHIPPED top ama çuvalı yok / çuvalın sevkiyatı DISPATCHED değil ==
+id|barcode|status|sackId|shipmentId|sevk_durumu
+(0 rows)
+
+== 10) IN_PRODUCTION top ama currentStepId NULL veya WO CANCELLED/SUPERSEDED ==
+   ("canlı ama okutulamayan" top — çıkanlar süpervizör "Kurtar" adayıdır)
+id|barcode|status|currentStepId|workOrderId|wo_durumu
+(0 rows)
+
+== 11) Açık movement + top artık orada değil / ölü statüde (hayalet movement) ==
+movement_id|rollId|barcode|top_durumu|workOrderStepId|currentStepId|enteredAt
+(0 rows)
+
+== 12) Kapanmış movement'ta qtyOut <> qtyIn ==
+   (kural: qtyOut = qtyIn — commit 64263fc, 2026-07-30. O tarihten ÖNCEKİ
+    satırlar bilinen kalıntı olabilir; exitedAt dağılımına göre ayır.)
+id|rollId|workOrderStepId|qtyIn|qtyOut|exitedAt
+0e588bd0-526a-4d1f-8e7b-a7226d8a6872|45e45788-7d01-4896-b272-1a843afffcd7|ed66190d-576f-4103-8dca-f65c4bb2271a|200.000||2026-08-15 13:12:21.106384+03
+1f884bfb-056f-4d7f-81c9-e167ab29ca41|6a825427-05f4-4a86-aafb-59f31010dc8f|4403c9fd-45f9-4dfb-92af-8c1f3b8dd03e|501.000||2026-08-15 12:49:52.573+03
+8528bd34-2b76-45d7-93b7-8fa68d7e5108|e3303713-fd6e-45e1-975d-101656a2100a|136dcce1-d7a9-4b9f-ba12-93ba678d5931|2000.000|0.000|2026-08-15 12:26:07.489161+03
+2fc41cab-d786-405c-ab2b-8928d9dcead8|7fc69f2a-ef85-487e-8e2e-ba1d81c8592c|733ea83f-fefb-4764-9696-075d535f3813|300.000||2026-08-08 14:16:24.583647+03
+5bda3fb3-6dcc-440f-90d0-ccff0126573c|48c9f8fc-8ffe-431a-9ee2-7507945160e3|3bf2af12-c81c-4c54-98d7-452aa8de1e11|80.000||2026-08-05 13:41:14.186685+03
+86e0cb2a-24b6-4e06-96d4-0498c872d16c|f5ed20a0-3cde-49cd-a7af-d8d975ce4f59|3bf2af12-c81c-4c54-98d7-452aa8de1e11|100.000||2026-08-05 13:41:14.186685+03
+3f6fd4b5-e909-426b-bd00-f3e78239b221|7b433a22-deb8-4e10-850a-7131ba2a4efc|3bf2af12-c81c-4c54-98d7-452aa8de1e11|63.000||2026-08-05 13:41:14.186685+03
+9ef62c5f-6866-4c81-ba5e-f921a9c41151|6b00ece0-9b99-4bac-9191-884b641e0616|3d6bb30b-fa84-40f8-b3ef-79567c4347e7|100.000||2026-08-03 16:21:43.435111+03
+51a83f2a-18fd-4501-8c3b-7e7f5267c40c|751feb83-66cc-4fe7-bf0f-c9bd17df6b61|3d6bb30b-fa84-40f8-b3ef-79567c4347e7|100.000||2026-08-03 16:21:43.435111+03
+05a5dfe6-76af-4dce-a14b-50d8b8097c3a|7385b905-41f9-4cad-a5ed-ed1c16a8e4a4|3d6bb30b-fa84-40f8-b3ef-79567c4347e7|100.000||2026-08-03 16:21:43.435111+03
+9c42a3f3-1c6b-47cc-8130-0a0cefe819a7|99f5265a-b80e-4153-ae79-e889db2370f3|3d6bb30b-fa84-40f8-b3ef-79567c4347e7|105.000||2026-08-03 16:21:43.435111+03
+59ba6e07-9488-4b78-a946-65b654bdb586|73fb13d7-2d31-411b-9f97-18302edf9aa0|69f5f43e-450a-4115-bb29-e619bf97385b|300.000||2026-08-01 12:03:34.52494+03
+79bfe546-6a23-4ebc-bb0b-8fa359c1c045|25b5b100-e030-4761-bcbd-ab96d503b864|69f5f43e-450a-4115-bb29-e619bf97385b|100.000||2026-08-01 12:03:34.52494+03
+78a4548d-d182-466c-af5d-99ad6aa762ab|e524218c-ad21-44af-97f2-8d6b77324ccf|69f5f43e-450a-4115-bb29-e619bf97385b|100.000||2026-08-01 12:03:34.52494+03
+49681270-0d39-4ce5-85ea-1fc78662a8c6|c2d594ec-adb2-47d3-9085-e60d695de879|e52d193f-319b-4580-8dee-5bbbcb2ba266|1200.000||2026-07-22 15:47:38.604+03
+(15 rows)
+
+== 13) currentQty > initialQty (top yalnız kesimle azalır, artamaz) ==
+   KÖK NEDEN 2026-08-22de kapandı (tambur-undo applySingle canlı dalında aşım
+   koruması yoktu). Canlıdaki 2 eski satır BİLEREK düzeltilmedi — toplu UPDATE
+   kök nedeni gizler; bu bölüm onları görünür tutar.
+id|barcode|initialQty|currentQty|status
+95c15daf-bc74-4e30-b6da-7f3e998360e3||492.000|698.900|IN_PRODUCTION
+92d0ef12-c14d-49b2-b9be-74612e3ab944||500.000|520.500|IN_PRODUCTION
+(2 rows)
+
+== 14) Yarım fason kabul (top tüketildi ama receipt'ten çocuk doğmamış) ==
+tuketilen_top_id|barcode|updatedAt|receipt_id|receiptNo
+(0 rows)
+
+== 15) AT_SUBCONTRACTOR top ama açık fason sevk kaydı yok ==
+   (NOT: seed'li DEV ortamında yanlış pozitif — seed statüyü dispatch'siz yazar;
+    üretimde her satır gerçek anomalidir)
+id|barcode|updatedAt
+(0 rows)
+
+== 16) Kartsız iş emri (kart WO açılışında doğar — 2026-07-14 sonrası) ==
+   (workorder.service.create tx'i kartı koşulsuz doğurur; satır çıkması ya
+    doğrudan-SQL/restore artığı ya da yeni bir kart-atlama yoludur)
+id|workOrderNumber|status|createdAt
+(0 rows)
+
+== 17) Açık (isProcessed=false) RollError ama top ölü/emekli statüde ==
+hata_id|rollId|barcode|status|detectedAt
+(0 rows)
+
+== 18) Master-data ad mükerrer (aktif, case/boşluk-duyarsız) ==
+   (customers/items/subcontractors: DB partial UNIQUE VAR — nameFold, mergedIntoId IS NULL,
+    2026-08-21; bu satır orada GEVŞEK ayna. colors/routes: app-level guard, yalnız GÖZLEM;
+    otomatik birleştirme/silme ÖNERİLMEZ)
+tablo|ad|adet|kayitlar
+(0 rows)
+
+== 19) Fason sevk / doğrudan-sevk snapshot toplamı vs kalem toplamı ==
+tablo|kayit|kayitli|hesaplanan
+(0 rows)
+
+== Tutarlılık kontrolü bitti. Yukarıda hiç satır YOKSA sistem sağlıklı. ==

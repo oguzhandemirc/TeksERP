@@ -8,7 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
 import Toast from 'react-native-toast-message';
 import { jitteredBackoff } from './backoff';
-import { revivePendingStationMutations } from './persistPolicy';
+import { EKRANSIZ_META, revivePendingStationMutations } from './persistPolicy';
 import { failureToastText, shouldAnnounceFailure } from './announceFailure';
 // ⚠️ `stationLabels`ten — `mutations`tan DEĞİL: o dosya bu dosyayı import ediyor.
 import { stationOpLabel } from './stationLabels';
@@ -22,8 +22,12 @@ import { installOnlineSignal } from './serverReachability';
 installOnlineSignal();
 
 /** Kalıcı düşüşü operatöre ANINDA söyle (karar `offline/announceFailure.ts`). */
-function announceStationFailure(key: unknown, error: unknown): void {
-  if (!shouldAnnounceFailure(key, error)) return;
+function announceStationFailure(key: unknown, error: unknown, meta?: unknown): void {
+  // Diskten diriltilen kaydın ekranı yoktur → çakışma 409'u da duyurulur
+  // (BULGU-T3-001). Damgayı `persistPolicy.revivePendingStationMutations` yazar
+  // ve `meta` dehydrate/hydrate turundan geçer (query-core hydration).
+  const ekranYok = (meta as Record<string, unknown> | undefined)?.[EKRANSIZ_META] === true;
+  if (!shouldAnnounceFailure(key, error, ekranYok)) return;
   const { text1, text2 } = failureToastText(error, stationOpLabel(key));
   // Uzun tut: operatör tabletin başında olmayabilir, mesajı kaçırmasın.
   Toast.show({ type: 'error', text1, text2, visibilityTime: 6000 });
@@ -50,7 +54,7 @@ export const queryClient = new QueryClient({
   // basmak aynı kararı ikinci kez, üstelik cevaplanamaz biçimde sordururdu.
   mutationCache: new MutationCache({
     onError: (error, _variables, _ctx, mutation) =>
-      announceStationFailure(mutation.options.mutationKey, error),
+      announceStationFailure(mutation.options.mutationKey, error, mutation.meta),
   }),
   defaultOptions: {
     queries: {

@@ -10,7 +10,7 @@
 //   §21  WorkOrder.type                  ← sipariş bağının VARLIĞI
 //   §22  WorkOrder.status                ← adım durumlarının TAMAMLANMIŞLIĞI
 //   §23  KursunBypassAssignment açıklığı ← sahibi iş emrinin CANLILIĞI
-//   §24  Fason kalemin açık/kapalılığı   ← OPEN_OUTSTANDING dörtlüsü
+//   §24  Fason kalemin açık/kapalılığı   ← OPEN_OUTSTANDING dörtlüsü (a/b/c)
 //   §25  Roll.labelDirty                 ← etiketi etkileyen son değişimin ANI
 //   §26  Roll.colorId                    ← iş emrinin hedef rengi (+ sapma defteri)
 //
@@ -228,6 +228,40 @@ WHERE sd."directShippedAt" IS NOT NULL
   AND sd."cancelledAt" IS NULL
   AND sdi."remainderClosedAt" IS NULL
   AND r.status = 'AT_SUBCONTRACTOR'
+  AND NOT EXISTS (
+        SELECT 1 FROM subcontractor_receipt_items sri
+        JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
+        WHERE sri."sourceDispatchItemId" = sdi.id
+          AND sri."isPartial" = false
+          AND sr."cancelledAt" IS NULL)`,
+  },
+  {
+    // 24b'nin TERS yönü ve AYRI bir kod yolu: orada "mal çıktı ama fasonda
+    // görünüyor", burada "mal fasonda ama İÇERİDE görünüyor". 2026-08-29'a dek
+    // iş emri iptali `cancelBulk`ın PARÇALI başarısını okumuyordu ve artık-kalan
+    // yazımı topu tx DIŞINDA içeri alıyordu → açık sevk ortada kalırken mal Ham
+    // Stok'ta görünüyordu (BULGU-T1-009). ⚠️ `directShippedAt IS NULL` süzgeci
+    // load-bearing: doğrudan sevkte top MEŞRUEN SUBCONTRACTOR_CONSUMED olur.
+    id: "24c",
+    title: "AÇIK+OUTSTANDING fason kalemi ama top FASONDA DEĞİL (mal iki yerde)",
+    sql: `
+SELECT sdi.id      AS dispatch_item_id,
+       sd."dispatchNo",
+       sd."dispatchedAt",
+       r.barcode,
+       r.status::text AS top_durumu,
+       r."currentQty",
+       sdi."dispatchedQty",
+       w."workOrderNumber",
+       w.status::text AS is_emri_durumu
+FROM subcontractor_dispatch_items sdi
+JOIN subcontractor_dispatches sd ON sd.id = sdi."dispatchId"
+JOIN rolls r ON r.id = sdi."rollId"
+JOIN work_orders w ON w.id = sd."workOrderId"
+WHERE sd."cancelledAt" IS NULL
+  AND sd."directShippedAt" IS NULL
+  AND sdi."remainderClosedAt" IS NULL
+  AND r.status <> 'AT_SUBCONTRACTOR'
   AND NOT EXISTS (
         SELECT 1 FROM subcontractor_receipt_items sri
         JOIN subcontractor_receipts sr ON sr.id = sri."receiptId"
@@ -631,6 +665,46 @@ const PROBES: Probe[] = [
       });
       await tx.subcontractorDispatchItem.create({
         data: { dispatchId: dispatch.id, rollId: roll.id, dispatchedQty: 80 },
+      });
+    },
+  },
+  {
+    id: "24c",
+    what: "Açık+outstanding fason kalemi ama top STOCK'a düşmüş (mal iki yerde)",
+    expect: ["24c"],
+    build: async (tx) => {
+      const itemId = await seedItem(tx);
+      const stationId = await seedStation(tx, "SUBCONTRACTOR");
+      const woId = await seedWo(tx, itemId, { status: "CANCELLED" });
+      const step = await tx.workOrderStep.create({
+        data: { workOrderId: woId, stationId, stepSequence: 1, status: "ACTIVE" },
+      });
+      const batch = await tx.batch.create({ data: { batchNumber: tag("P"), workOrderId: woId } });
+      const sub = await tx.subcontractor.create({ data: { code: tag("FSN"), name: "Sonda Fason 24c" } });
+      const roll = await tx.roll.create({
+        data: {
+          barcode: tag("T"),
+          itemId,
+          initialQty: 100,
+          // Kısmi kabul kalıntısı: 51 geldi, 49 fasonda kaldı.
+          currentQty: 49,
+          // Doğru akışta AT_SUBCONTRACTOR olurdu — sondanın bozduğu şey bu.
+          status: "STOCK",
+        },
+      });
+      const dispatch = await tx.subcontractorDispatch.create({
+        data: {
+          dispatchNo: tag("SD"),
+          workOrderId: woId,
+          batchId: batch.id,
+          stepId: step.id,
+          subcontractorId: sub.id,
+          totalQty: 100,
+          dispatchedAt: new Date(),
+        },
+      });
+      await tx.subcontractorDispatchItem.create({
+        data: { dispatchId: dispatch.id, rollId: roll.id, dispatchedQty: 100 },
       });
     },
   },

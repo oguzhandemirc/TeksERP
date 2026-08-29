@@ -17,6 +17,7 @@ import {
   buildNextDynamicCursor,
 } from "../utils/cursor";
 import { AppError } from "../utils/app-error";
+import { assertOrderReplayAlive } from "./helpers/token-replay.helper";
 import {
   OrderStatus,
   Prisma,
@@ -115,14 +116,38 @@ function computeAllowedActions(
   return ["UNLINK_ONLY"];
 }
 
+/**
+ * Varsayılan aksiyon — İZİNLİ LİSTEDEN TÜRETİLİR, ayrı yazılmaz.
+ *
+ * ⚠️ Bu iki fonksiyon eskiden BAĞIMSIZDI ve sessizce ayrıştılar (BULGU-T2-005):
+ * İPTAL EDİLMİŞ iş emrine bağlı tek-siparişli bir siparişte izinli liste
+ * `["UNLINK_ONLY"]` iken varsayılan `CONVERT_TO_STOCK` dönüyordu. Arayüz izinli
+ * aksiyon tek olduğu için seçim kutusunu ÇİZMİYOR, dolayısıyla istemci bir şey
+ * göndermiyor, sunucu da varsayılana düşüyordu → "CONVERT_TO_STOCK geçersiz"
+ * 400'ü. Yenilemek işe yaramıyordu: sipariş HİÇBİR yoldan iptal edilemiyordu ve
+ * sonsuza dek "açık talep" sayılıyordu (prod'da 2 canlı sipariş bu durumdaydı;
+ * tek çıkış DB'ye elle müdahaleydi).
+ *
+ * Tercih hâlâ ifade edilir ("en sık vaka: malı stoğa al") ama izinli değilse
+ * listenin ilkine düşer — yani ayrışma YAPISAL OLARAK imkânsız.
+ */
 function pickDefaultAction(
   woStatus: string,
   isSoleOrder: boolean
 ): CancelAction {
-  if (woStatus === "PLANNED") return "UNLINK_ONLY";
-  if (isSoleOrder) return "CONVERT_TO_STOCK"; // en sık vaka: malı stoğa al
-  return "UNLINK_ONLY";
+  const allowed = computeAllowedActions(woStatus, isSoleOrder);
+  const tercih: CancelAction =
+    woStatus === "PLANNED" ? "UNLINK_ONLY" : isSoleOrder ? "CONVERT_TO_STOCK" : "UNLINK_ONLY";
+  return allowed.includes(tercih) ? tercih : allowed[0];
 }
+
+/**
+ * Bekçi ihracı — bu iki saf fonksiyonun AYRIŞAMAZLIĞI ölçülebilir olmalı
+ * (BULGU-T2-005). Üretim kodu bunu kullanmaz; kaynak okuyarak sözleşme ölçmek
+ * kırılgan olduğu için asıl kontrol her (durum × tek-sipariş) kombinasyonunu
+ * gerçekten koşturur.
+ */
+export const __test__ = { computeAllowedActions, pickDefaultAction };
 
 /**
  * Lines üzerinden totalAmount hesaplar. unitPrice null olan satırlar toplama
@@ -2036,6 +2061,15 @@ export class OrderService extends BaseService {
         : {}),
     })) as Record<string, unknown> | null;
     if (!existing) throw err;
+    // ⚠️ ÖNCE 4. DURUM (T1-006): sipariş yazıldı ama SONRADAN İPTAL EDİLDİ mi?
+    // Özdeşlik kontrolünden ÖNCE — aksi hâlde iptal edilmiş sipariş "başarılı"
+    // diye dönerdi ve müşteriye söz verilen metraj sipariş listesinde HİÇ
+    // görünmezdi (hata da görünmediği için kimse aramaz).
+    assertOrderReplayAlive({
+      id: String(existing.id),
+      status: existing.status as OrderStatus,
+      orderNumber: (existing.orderNumber as string | null) ?? null,
+    });
     // Hafif payload-özdeşlik (F117 emsali): kimlik-kilit alanları uyuşmalı.
     // Derin satır karşılaştırması bilinçli yapılmıyor (Decimal/alias-terfisi
     // kırılgan) — müşteri + şube + satır sayısı "farklı form oturumu"nu yakalar.
@@ -2432,16 +2466,28 @@ export class OrderService extends BaseService {
           // yetmez). Sonra toDelete-scope taze link kontrolü: araya giren INSERT ya
           // guard'da yakalanır (409) ya da silme sonrası FK ihlaliyle düşer.
           await tx.$queryRaw`SELECT id FROM order_lines WHERE id = ANY(${toDelete}::uuid[]) FOR UPDATE`;
+          // ⚠️ KAPSAM İPTAL EDİLMİŞ İŞ EMİRLERİNİ DE İÇERİR (2026-08-29 / K5).
+          // Eskiden yalnız CANLI iş emirleri sayılıyordu; iptal edilmiş bir iş
+          // emrine bağlı kalem silinebiliyor ve bağ satırı `onDelete: Cascade`
+          // ile SESSİZCE düşüyordu → "bu iş emri hangi sipariş için açıldı"
+          // olgusu hiçbir iz bırakmadan kayboluyordu (BULGU-T1-100; sahada 3
+          // satır bu durumdaydı). Artık bağ DB seddiyle de korunuyor
+          // (`work_order_to_order_lines_orderLineId_fkey` → RESTRICT), yani bu
+          // kontrol kalkarsa kullanıcı ham FK hatası görürdü — mesajı veren yer
+          // burası, koruma ise DB'de.
           const linkedToDeleted = await tx.workOrderToOrderLine.findFirst({
-            where: {
-              orderLineId: { in: toDelete },
-              workOrder: { status: { notIn: [WorkOrderStatus.CANCELLED, WorkOrderStatus.SUPERSEDED] } },
-            },
-            select: { workOrderId: true },
+            where: { orderLineId: { in: toDelete } },
+            select: { workOrderId: true, workOrder: { select: { status: true, workOrderNumber: true } } },
           });
           if (linkedToDeleted) {
+            const wo = linkedToDeleted.workOrder;
+            const iptalli =
+              wo.status === WorkOrderStatus.CANCELLED || wo.status === WorkOrderStatus.SUPERSEDED;
             throw AppError.conflict(
-              "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
+              iptalli
+                ? `Bu kalem için ${wo.workOrderNumber} iş emri açılmış — iş emri iptal edilse de kayıt duruyor ve silinemez. ` +
+                  "Kalemi silmek yerine İPTAL edin; sevk edilmiş metraj ve geçmiş korunur."
+                : "İş emri açılmış siparişin kalemleri değiştirilemez. Önce iş emrini iptal edin.",
             );
           }
           await tx.orderLine.deleteMany({ where: { id: { in: toDelete } } });
@@ -3116,6 +3162,18 @@ export class OrderService extends BaseService {
         }
         actionByWO.set(wo.id, provided.action);
       } else {
+        // FAIL-CLOSED: varsayılan da izinli listeden geçer. `pickDefaultAction`
+        // artık listeden türetiyor, yani buraya düşmek imkânsız — ama ayrışma
+        // bir daha olursa SESSİZ 400 yerine sebebini söyleyen bir hata çıksın
+        // (T2-005'in bedeli sessizliğiydi: operatör "Sayfayı yenileyin" görüp
+        // yeniliyor ve aynı duvara çarpıyordu).
+        if (!wo.allowedActions.includes(wo.defaultAction)) {
+          throw AppError.badRequest(
+            `İş emri ${wo.id} için varsayılan aksiyon ('${wo.defaultAction}') izinli değil ` +
+              `(izinli: ${wo.allowedActions.join(", ")}). Bu bir sunucu tutarsızlığıdır — ` +
+              "sipariş iptali için destek ekibine bildirin.",
+          );
+        }
         actionByWO.set(wo.id, wo.defaultAction);
       }
     }
