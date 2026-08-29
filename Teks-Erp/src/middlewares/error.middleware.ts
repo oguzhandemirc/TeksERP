@@ -6,6 +6,11 @@ import { Request, Response, NextFunction } from "express";
 import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import { AppError } from "../utils/app-error";
+import {
+  BUYUK_GOVDE_LIMITI,
+  VARSAYILAN_GOVDE_LIMITI,
+  buyukGovdeYolu,
+} from "../constants/body-limits";
 import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout, getPoolHealth } from "../lib/pool-health";
 import "../types/express-augment";
@@ -290,7 +295,11 @@ export const errorHandler = (
   if ((err as { type?: string }).type === "entity.too.large") {
     res.status(413).json({
       success: false,
-      message: "İstek gövdesi çok büyük (1MB sınırı aşıldı). Daha az kayıtla tekrar deneyin.",
+      // Sınır METİNDE sabit yazılmaz: içe aktarım yolları 10 MB'lık kendi
+      // katmanlarını taşıyor ve "1MB" demek operatöre yanlış sınırı söylerdi.
+      message:
+        `İstek gövdesi çok büyük (${buyukGovdeYolu(req.originalUrl) ? BUYUK_GOVDE_LIMITI : VARSAYILAN_GOVDE_LIMITI} sınırı aşıldı). ` +
+        "Daha az kayıtla tekrar deneyin.",
     });
     return;
   }

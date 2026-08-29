@@ -1,4 +1,5 @@
 import express, { Express, Request, Response } from "express";
+import { VARSAYILAN_GOVDE_LIMITI, buyukGovdeYolu } from "./constants/body-limits";
 import path from "path";
 import fs from "fs";
 import os from "os";
@@ -139,7 +140,21 @@ app.use(latencyMiddleware);
 // tablet `/api/admin/perf` ekranında HİÇ görünmüyordu — uç sanki hiç çağrılmamış
 // gibi. Bağımlılık yok: morgan ve latency gövdeyi okumaz, resolveDevice yalnız
 // x-device-id başlığına bakar, route handler'ları zaten aşağıda.
-app.use(express.json({ limit: "1mb" }));
+//
+// ⚠️ `type` FONKSİYONU LOAD-BEARING (2026-08-29 / BULGU-T1-045): içe aktarım ve
+// yapılandırma paketi router'ları KENDİ 10 MB'lık `express.json` katmanlarını
+// taşıyor, ama bu global katman onlardan ÖNCE mount edildiği için o katmanlar
+// HİÇ KOŞMUYORDU — 2 MB'lık bir CSV burada 413'e düşüyordu. `type` false
+// dönünce gövde burada okunmaz ve router'ın kendi katmanına kalır.
+app.use(
+  express.json({
+    limit: VARSAYILAN_GOVDE_LIMITI,
+    type: (req) => {
+      if (buyukGovdeYolu(req.url)) return false;
+      return /[/+]json($|[^\w])/i.test(req.headers["content-type"] ?? "");
+    },
+  }),
+);
 
 // =============================================================================
 // Swagger UI Documentation

@@ -164,16 +164,42 @@ async function main(): Promise<void> {
   // Bu, testin kendi kusuruydu — CLAUDE.md "ortamdaki veriye BAĞIMLI OLMA".
   // Doğru iddia: EN ESKİ fixture'ımız listede olmalı (o, yaş sırasında yukarıda)
   // ve bizim satırlarımız kendi aralarında ESKİDEN YENİYE sıralı olmalı.
-  const mine = sc.oldestWaiting.filter((r) => r.barcode?.startsWith(TAG));
-  check("en eski bekleyen fixture listede", mine.length >= 1, `gelen: ${mine.length} (liste 25 ile sınırlı)`);
+  // ⚠️ İKİNCİ TUR (2026-08-29): 2026-08-19'daki yama YETMEDİ. "En eski
+  // fixture'ımız listede olmalı" iddiası HÂLÂ ortam verisine bağlıydı — paylaşımlı
+  // dev DB'sinde 10 GÜNDEN ESKİ 33 bekleyen top birikince fixture 25'lik listeye
+  // hiç giremedi ve bekçi ÜRÜN doğruyken kırmızı verdi (ölçüldü; o gün açılan
+  // hareket sayısı 0, yani kimsenin değişikliği değil — DB doldu).
+  //
+  // Kalıcı çözüm: iddia LİSTENİN SÖZLEŞMESİNE taşındı (sıra · tavan · pozitif
+  // gün) — bunlar veriden bağımsızdır. Fixture'larımız listeye girdiyse kendi
+  // aralarındaki sıra da ölçülür; GİRMEDİYSE yokluğu KANITLANIR (liste dolu VE
+  // en genç satırı bile bizim en eski fixture'ımızdan yaşlı). Böylece "fixture
+  // yok" ile "liste bozuk" birbirinden ayrılır.
+  const liste = sc.oldestWaiting;
+  const mine = liste.filter((r) => r.barcode?.startsWith(TAG));
   check(
-    "bizim satırlarımız kendi aralarında eskiden yeniye sıralı",
-    mine.every((r, i) => i === 0 || (mine[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
-    mine.map((r) => r.daysWaiting).join(" ≥ "),
+    "liste EN ESKİDEN yeniye sıralı",
+    liste.every((r, i) => i === 0 || (liste[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
+    `${liste.length} satır`,
   );
-  // Sıra EN ESKİDEN başlar → ilk satır C (10 gün), A'nınkiler (3 gün) sonra.
-  check("en eski bekleyen başta (C, 10 gün)", mine[0]?.stationName === stC.name, `gelen: ${mine[0]?.stationName}`);
-  check("bekleme günü pozitif", (mine[0]?.daysWaiting ?? 0) > 0, `gelen: ${mine[0]?.daysWaiting}`);
+  check("liste 25 ile sınırlı", liste.length <= 25, `${liste.length} satır`);
+  check("her satırın bekleme günü pozitif", liste.every((r) => r.daysWaiting > 0));
+  if (mine.length > 0) {
+    check(
+      "fixture satırlarımız kendi aralarında eskiden yeniye sıralı",
+      mine.every((r, i) => i === 0 || (mine[i - 1]?.daysWaiting ?? 0) >= r.daysWaiting),
+      mine.map((r) => r.daysWaiting).join(" ≥ "),
+    );
+    // Sıra EN ESKİDEN başlar → C (10 gün) A'nınkilerden (3 gün) önce gelmeli.
+    check("en eski fixture önde (C, 10 gün)", mine[0]?.stationName === stC.name, `gelen: ${mine[0]?.stationName}`);
+  } else {
+    const enGenc = liste[liste.length - 1]?.daysWaiting ?? 0;
+    check(
+      "fixture'ın YOKLUĞU kanıtlandı (liste dolu ve en genç satırı bile 10 günden yaşlı)",
+      liste.length >= 25 && enGenc >= 10,
+      `${liste.length} satır · en genç ${enGenc} gün`,
+    );
+  }
 
   // ── 5) HİÇ BAŞLAMAMIŞ İŞ EMRİ ─────────────────────────────────────────────
   console.log("\n── 5) Hiç başlamamış canlı iş emirleri ──");
