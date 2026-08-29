@@ -345,6 +345,11 @@ curl -s http://localhost:4000/health
 
 ### Kopyaya geri yükleme (ÖNERİLEN — geri alınabilir)
 
+> **⚠️ Bu yol bir kez bile DENENMEDİ** (denetim 2026-08-29, T1-023). "Yedek
+> alınıyor" ile "yedekten dönülebiliyor" ayrı iki iddiadır. Prova reçetesi:
+> [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md) —
+> Faz A kesintisizdir, vardiya içinde de yapılabilir.
+
 Panel **Sistem → Veritabanı Geri Yükleme**. Yedek canlı veritabanının üzerine
 yazılmaz; **yeni bir veritabanına** geri yüklenir, doğrulanır, sonra takas edilir.
 
