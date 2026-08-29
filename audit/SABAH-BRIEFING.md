@@ -23,7 +23,7 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | Aynı kod (harf farkı) | `MC155`(3) · `BGR150`(2) | birleştirme |
 | Aynı kod (harf farkı) | **`SANTUK` ↔ `santuk` — İKİSİ DE AKTİF ve FARKLI kumaş** (BORANCIK ↔ ŞANTUK) | birleştirme DEĞİL, **yeniden adlandırma** (iş kararı) |
 
-**İkinci paket — dokuz bulgu kapandı (2 S1 + 7 S2):**
+**İkinci paket — on iki bulgu kapandı (3 S1 + 9 S2):**
 | Bulgu | Neydi |
 |---|---|
 | T1-006 | İptal edilmiş kaydın token'ı "başarılı" dönüyordu (sahada 227 canlı token) |
@@ -34,6 +34,7 @@ kılacağı ve okunaklı hata üretemeyeceği için uygulanmadı.
 | T1-045 | İçe aktarımın 10 MB'lık limiti hiç koşmuyordu — 2 MB'lık CSV 413 alıyor, mesaj yanlış sınırı söylüyordu |
 | **T1-011** (S1) | Geri almayla iptal edilen kesim parçası diriltilebiliyordu — aynı metraj iki yerde. ⚠️ Denetimin sayısı EKSİKMİŞ: 50 değil **80 top / 3.317,2 m** |
 | **T1-008** (S1) | İçe aktarımda zaman aşımından sonra "Tekrar Dene" dosyayı ikinci kez yazıyordu (900 satır → 1.800 sipariş) |
+| **T1-003 + T1-004** | İş emri iptal edilirken canlı top bağlanıyordu — kilitsiz yarış. Repro: kilitsiz 7/16 ihlal, kilitli 0 |
 | — | `test_wip_scorecard` §4 ortam verisine bağımlıydı (ürün kusuru değil); kalıcı olarak ayrıldı |
 
 ## 2. Bugün kapanan ACİL kalemler (hepsi ölçüldü)
@@ -57,7 +58,7 @@ düzeltildi (biri yorumdaki bir kelimeyi ölçüyordu).
 |---|---|---|
 | 1 | `test_manual_props_claim_pin.ts` (yeni bekçi) | ✅ **7/7** — araya kesim girince 409, kesimin metrajı korunuyor |
 | 2 | `audit_repro_D-A-01.ts` (hatanın ilk kanıtı) | ✅ **"değişmez korundu"** — K-3 ile kapandı (bkz. 3.1) |
-| 3 | `run-all-tests.ts` (tam paket) | **369/374 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
+| 3 | `run-all-tests.ts` (tam paket) | **370/375 dosya yeşil** (akşam turu sonrası) (K-3 sonrası tekrar koşuldu). Kırmızı 5'inin tamamı ÖNCEDEN kırmızıydı |
 | 4 | `test_timestamptz_contract.ts` | ✅ 13/13 (denetimin kendi sonda script'i sözleşmeyi ihlal ediyordu — `d1df0af2`) |
 | 5 | Mobil paket (`npx jest src/offline`) | ✅ 132/132 |
 
@@ -87,7 +88,7 @@ değiştirilemiyor.** Yanlış ölçümde kesim geri alınıp yeniden yapılır.
 | `test_master_data_name_dup` | yukarıdakinin ikizi (sed olmayınca P2002 doğmuyor) | bilinen/bilinçli |
 | `test_check_violation_mapping` | Prisma 7.9 CHECK ihlalini artık `PrismaClientKnownRequestError` sarmalıyor; bekçinin beklentisi bayat (kod tarafı İYİLEŞMİŞ) | yeni gözlem — küçük iş |
 
-## 4. Dalda ne var (`denetim-duzeltme`, 28 commit)
+## 4. Dalda ne var (`denetim-duzeltme`, 32 commit)
 
 Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazıyor.
 
@@ -113,6 +114,9 @@ Tümü ayrı commit; her biri ne yaptığını ve NEDEN o yolu seçtiğini yazı
 | `3877d956` | **İçe aktarım gövde limiti + WIP bekçisi onarımı** (S2) | ✅ 9/9 + 3 sonda |
 | `94b937c0` | **Geri almayla iptal edilen parça diriltilemiyor** (S1) | ✅ 63/63 + 2 sonda |
 | `56ccf218` | **İçe aktarım idempotency'si** (S1, + migration) | ✅ 16/16 + 3 sonda |
+| `d12f4abb` | **Fason kalanı: sert engel → AÇIK KARAR** (yön düzeltmesi) | ✅ 25/25 + 3 sonda |
+| `c4c9fde5` | İptal diyaloğu kalanı önden soruyor (Electron) | ✅ tip yeşil |
+| `69376d70` | **İş emri terminale düşerken yarış** (T1-003+T1-004) | ✅ repro: 7 ihlal → 0 |
 
 ✅ **Başkasının commit'i taşındı:** "araca yüklenen çuval adedi" özelliği
 `adnansahin`e alındı (`50c320ef`) ve dal onun üzerine kuruldu — `adnansahin..HEAD`
@@ -130,6 +134,19 @@ Dal **push edilmedi** ve hiçbir şey `adnansahin`e merge edilmedi.
 | `fix_denetim_onarim.ts` | Denetimin veri onarım kalemleri | rapor §11 |
 
 ⚠️ İkisi de `--apply` istiyor ve etkilenen HER kaydı somut listeliyor.
+
+## 4c. ⚠️ Bir yön düzeltmesi — okuman gereken tek şey buysa bu
+
+Sabah T1-009'u çözerken kısmi kabullü iş emrinin iptalini **sert engelle**
+durdurmuştum. Bu, 2026-08-17'de SAHA ŞİKÂYETİ üzerine kaldırılan engeli geri
+getiriyordu ("bir iş emrini iptal etmek çok zor"). Akşam **geri aldım** ve
+reponun kendi desenine çevirdim: engelleme yok, **açık karar** var — modal
+"49 m fasonda kaldı, ne olacak?" diye soruyor, "gelmeyecek, fire yaz" tek tıkla
+akışı sürdürüyor. Adım sayısı artmıyor, metraj da buharlaşmıyor (sebebiyle
+deftere yazılıyor).
+
+Bundan sonra saha kararıyla çakışan bir daraltma çıkarsa **durup soracağım**;
+sen yokken çıkarsa esnekliği koruyan tasarımı seçip işaretleyeceğim.
 
 ## 5. Senden beklenen iki karar
 
