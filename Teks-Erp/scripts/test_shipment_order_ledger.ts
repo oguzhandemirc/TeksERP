@@ -319,6 +319,23 @@ async function main(): Promise<void> {
   const iptalErr = await hataOf(() => svc.setShipmentOrders(iptalSh.id, [onarimOrder.id], undefined));
   check("§5: İPTAL edilmiş sevkiyat siparişe bağlanamıyor", iptalErr?.statusCode === 409, `${iptalErr?.statusCode ?? "—"}`);
 
+  // ═══ §6 — SEVK DEFTERİNİN İZİ (T2-003) ═══
+  // `SackAllocation` mali etkisi olan tek defterdir ve değişim geçmişi HİÇ
+  // yoktu: "sipariş 'Açık 1000 m' görünüyor ama operatör sevk ettim diyor"
+  // sorusunda destek, tahsisin HİÇ yazılmadığını mı yoksa yazılıp SİLİNDİĞİNİ
+  // mi ayırt edemiyordu (bu denetimde birebir yaşandı).
+  console.log("\n=== §6: sevk defterinin izi ===");
+  const izler = await prisma.systemLog.findMany({
+    where: { tableName: "SACK_ALLOCATION", recordId: { in: shipmentIds } },
+    select: { newData: true },
+  });
+  check("§6: tahsis yazımı audit'e düştü", izler.length > 0, `${izler.length} satır`);
+  const ornek = izler[0]?.newData as { yazilan?: unknown[]; atlanan?: unknown[] } | null;
+  check("§6: YAZILAN kalemler kayıtlı", Array.isArray(ornek?.yazilan), JSON.stringify(ornek?.yazilan)?.slice(0, 50) ?? "—");
+  // ⚠️ ASIL DEĞER BURADA: "şu satıra neden yazılmadı" sorusunu tek satırda
+  // cevaplar. Yalnız yazılanı görmek yarım cevaptır.
+  check("§6: ATLANAN kalemler de kayıtlı (asıl teşhis alanı)", Array.isArray(ornek?.atlanan));
+
   // ═══ §3 — protokol sırası (metin) ═══
   console.log("\n=== §3: kalem kilidi kapasite okumasından ÖNCE mi ===");
   const src = readFileSync(join(__dirname, "../src/services/shipping.service.ts"), "utf8");
