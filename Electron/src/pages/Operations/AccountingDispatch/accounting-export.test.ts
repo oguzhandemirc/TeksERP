@@ -49,6 +49,10 @@ const data: AccountingExportData = {
       driverName: "",
       carrier: "",
       sackCount: 1,
+      // Beyan var ve sistemin saydığından FARKLI: sahada 10 çuval tek kayda
+      // yazılmış. İki rakam da dosyada durmalı.
+      manualSackCount: 10,
+      dispatchNote: "Kapıda sayıldı",
       rollCount: 2,
       totalMeters: 100,
       totalKg: 50,
@@ -70,7 +74,7 @@ const data: AccountingExportData = {
     },
   ],
   byCustomer: [
-    { customerCode: "C1", customerName: "X", taxNumber: "123", shipmentCount: 1, sackCount: 1, rollCount: 2, totalMeters: 100, totalKg: 50 },
+    { customerCode: "C1", customerName: "X", taxNumber: "123", shipmentCount: 1, sackCount: 1, manualSackCount: 0, rollCount: 2, totalMeters: 100, totalKg: 50 },
   ],
   byProduct: [{ itemName: "A", colorName: "", width: 150, rollCount: 2, totalMeters: 100 }],
   returns: [
@@ -209,6 +213,37 @@ describe("buildAccountingWorkbookSheets — dönem dökümü (5 sayfa)", () => {
       "İcmal · Kumaş",
       "İade",
     ]);
+  });
+
+  it("Sevk Listesi: iki çuval rakamı da dosyada — sistem ve fiili AYRI kolonlar", () => {
+    // Sahada 10 çuval gönderilip hepsi tek çuval kaydına yazılıyor; fark meşru
+    // ve fark BİLGİNİN KENDİSİ. Biri diğerinin yerine geçerse muhasebe ya
+    // fiziksel gerçeği ya sistem kaydını kaybeder.
+    const sevk = sheets[0]!;
+    const keys = sevk.columns.map((c) => c.key);
+    expect(keys).toContain("sackCount");
+    expect(keys).toContain("manualSackCountOrBlank");
+    const row = sevk.rows[0] as { sackCount: number; manualSackCountOrBlank: number | null };
+    expect(row.sackCount).toBe(1);
+    expect(row.manualSackCountOrBlank).toBe(10);
+  });
+
+  it("Sevk Listesi: beyan yoksa fiili sütunu BOŞ kalır (0 değil)", () => {
+    // 0 yazmak "sıfır çuval gitti" diye okunurdu; beyan yokluğu bir rakam değil.
+    const beyansiz = buildAccountingWorkbookSheets({
+      ...data,
+      shipments: [{ ...data.shipments[0]!, manualSackCount: 0 }],
+    });
+    const row = beyansiz[0]!.rows[0] as { manualSackCountOrBlank: number | null };
+    expect(row.manualSackCountOrBlank).toBeNull();
+  });
+
+  it("Sevk Listesi: sevk notu muhasebeye de gidiyor", () => {
+    // Not eskiden yalnız irsaliyede duruyordu; "bu sevkte ne oldu" sorusu
+    // muhasebe dönem kapanışında da soruluyor.
+    const sevk = sheets[0]!;
+    expect(sevk.columns.map((c) => c.key)).toContain("dispatchNote");
+    expect((sevk.rows[0] as { dispatchNote: string }).dispatchNote).toBe("Kapıda sayıldı");
   });
 
   it("Sevk Listesi: EXPORT→Yurtdışı + tarih gerçek Date + TOPLAM", () => {

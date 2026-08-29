@@ -130,6 +130,9 @@ export const updateSchema = z.strictObject({
   devicePairingRequired: z.boolean().optional(),
   // shipping.confirmationEnabled — sevk onay adımı (UI rehberi).
   shipmentConfirmationEnabled: z.boolean().optional(),
+  // shipping.manualSackCountEnabled — "araca yüklenen gerçek çuval adedi" alanı
+  // (default false). Kapalıyken alan hiç sorulmaz ve belgede çıkmaz.
+  shipmentManualSackCountEnabled: z.boolean().optional(),
   // shipping.undoDispatchSameDayOnly — sevk geri almayı aynı günle sınırla
   // (default false = sınırsız). Backend ENFORCE (undoDispatch).
   shipmentUndoSameDayOnly: z.boolean().optional(),

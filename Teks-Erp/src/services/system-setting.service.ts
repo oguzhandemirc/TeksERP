@@ -130,6 +130,7 @@ export const SETTING_KEYS = {
    *  → DOĞRUDAN sevk edilir (DISPATCHED). AÇIKKEN: Sevk Et yalnız PLANNED sevkiyat kurar;
    *  çıkış ayrıca "Sevk Kapısı" ekranından dispatch edilir. */
   SHIPMENT_CONFIRMATION_ENABLED: "shipping.confirmationEnabled",
+  SHIPMENT_MANUAL_SACK_COUNT_ENABLED: "shipping.manualSackCountEnabled",
   /** Sevk geri alma (storno) YALNIZ aynı fabrika gününde mi yapılabilsin. Default false
    *  (KAPALI = zaman sınırı YOK). Açıkken `dispatchedAt` bugünün fabrika günü başlangıcından
    *  (Europe/Istanbul) önceyse 409. Fatura ve iade koşulları bu ayardan BAĞIMSIZ ve her
@@ -883,6 +884,7 @@ export interface FeatureFlags {
   devicePairingRequired: boolean;
   /** Sevk için ayrı "ambar aldı / çıkış" onay adımı zorunlu mu (default false). */
   shipmentConfirmationEnabled: boolean;
+  shipmentManualSackCountEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi (default false = sınırsız).
    *  Faturasız + iadesiz koşulları bundan bağımsız her zaman geçerlidir. */
   shipmentUndoSameDayOnly: boolean;
@@ -1191,6 +1193,7 @@ export class SystemSettingService {
       fasonNoteMobileEntry: await readFasonNoteMobileEntry(cacheClient),
       devicePairingRequired: await readDevicePairingRequired(cacheClient),
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
+      shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
@@ -1419,6 +1422,18 @@ export class SystemSettingService {
         SETTING_KEYS.DEVICE_PAIRING_REQUIRED,
         input.devicePairingRequired,
         "Mobil cihaz eşleştirmesi zorunlu olsun (kapalıyken eşleşmemiş cihazlar da girer)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shipmentManualSackCountEnabled")) {
+      if (typeof input.shipmentManualSackCountEnabled !== "boolean") {
+        throw AppError.badRequest("shipmentManualSackCountEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPMENT_MANUAL_SACK_COUNT_ENABLED,
+        input.shipmentManualSackCountEnabled,
+        "Sevkiyatta 'araca yüklenen gerçek çuval adedi' elle girilebilsin (kapalıyken alan hiç sorulmaz)",
         userId
       );
     }
@@ -2351,6 +2366,25 @@ export async function readDevicePairingRequired(
  * Sevk Et → createShipment DOĞRUDAN dispatch eder (DISPATCHED). Açıkken createShipment PLANNED
  * kurar; çıkış ayrıca "Sevk Kapısı"ndan dispatchShipment ile onaylanır. Kapı önü adımı YOK.
  */
+/**
+ * Sevkiyatta "araca yüklenen gerçek çuval adedi" elle girilebilsin mi?
+ * Default false (KAPALI) — alan hiç sorulmaz, belgede çıkmaz.
+ *
+ * Neden bayrak: sahada 10 çuval gönderilip hepsi tek çuval kaydına yazılıyor;
+ * bu her fabrikanın çalışma biçimi değil. Kapalıyken bugünkü davranış BİREBİR
+ * korunur (belge çıktısı bayt-bayt aynı).
+ */
+export async function readShipmentManualSackCountEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPMENT_MANUAL_SACK_COUNT_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
 export async function readShipmentConfirmationEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

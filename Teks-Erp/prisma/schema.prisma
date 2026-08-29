@@ -4232,6 +4232,19 @@ model Shipment {
   // her an düzenlenebilir (SÜRÜM DOĞURMAZ), tekrar baskıda da çıkar. Opsiyonel.
   dispatchNote String? @db.VarChar(500)
 
+  /// Araca yüklenen GERÇEK çuval adedi — operatörün beyanı.
+  ///
+  /// Neden var: sahada 10 çuval gönderilse bile hepsi tek bir çuval kaydının
+  /// içine yazılıyor. Sistemin saydığı `sacks.length` o yüzden fiziksel
+  /// gerçeği vermiyor ve irsaliyede "1 çuval" yazan bir araç 10 çuvalla yola
+  /// çıkıyor.
+  ///
+  /// Annotation katmanı (`dispatchNote` gibi): donmuş belge çekirdeğine
+  /// GİRMEZ, her an düzenlenebilir, SÜRÜM DOĞURMAZ, baskıda canlı çözülür.
+  /// NULL = beyan yok → belgede yalnız sistemin saydığı rakam çıkar.
+  /// `shipping.manualSackCountEnabled` bayrağı kapalıyken alan hiç sorulmaz.
+  manualSackCount Int? @db.SmallInt
+
   // Araç / sürücü (dispatch'te girilir)
   plateNumber String? @db.VarChar(32)
   driverName  String? @db.VarChar(100)

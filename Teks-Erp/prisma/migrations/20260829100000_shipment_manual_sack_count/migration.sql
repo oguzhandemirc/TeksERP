@@ -1,0 +1,13 @@
+-- Sevkiyata "araca yüklenen gerçek çuval adedi" (operatör beyanı).
+--
+-- Neden: sahada 10 çuval gönderilse bile hepsi tek bir çuval kaydının içine
+-- yazılıyor; sistemin saydığı `sacks.length` fiziksel gerçeği vermiyor ve
+-- irsaliyede "1 çuval" yazan bir araç 10 çuvalla yola çıkıyor.
+--
+-- NULL = beyan yok → belgede yalnız sistemin saydığı rakam çıkar (geriye
+-- uyumlu: mevcut tüm sevkiyatlar NULL kalır, çıktı bayt-bayt aynı).
+-- Alan `shipping.manualSackCountEnabled` bayrağı kapalıyken hiç sorulmaz.
+--
+-- SMALLINT bilinçli: bir araca sığabilecek çuval adedi için fazlasıyla yeterli
+-- (32767) ve satır başına 2 bayt.
+ALTER TABLE "shipments" ADD COLUMN "manualSackCount" SMALLINT;

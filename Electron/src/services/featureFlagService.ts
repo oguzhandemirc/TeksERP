@@ -249,6 +249,9 @@ export interface FeatureFlags {
    *  DOĞRUDAN sevk edilir (createShipment → DISPATCHED, stok o an düşer); açıkken önce
    *  PLANNED sevkiyat kurulur, çıkış ayrıca "Sevk Kapısı" ekranından onaylanır. */
   shipmentConfirmationEnabled: boolean;
+  /** Sevkiyatta "araca yüklenen gerçek çuval adedi" elle girilebilsin mi (false=default).
+   *  Kapalıyken alan hiç görünmez ve belgede çıkmaz; backend yazmayı da reddeder. */
+  shipmentManualSackCountEnabled: boolean;
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi yapılabilsin (false=default,
    *  yani tarih sınırı YOK). Faturalanmış ve iade alınmış sevkiyat koşulları bu ayardan
    *  BAĞIMSIZ, her zaman geçerlidir — bu yalnız ek bir daraltma. Backend ENFORCE eder. */

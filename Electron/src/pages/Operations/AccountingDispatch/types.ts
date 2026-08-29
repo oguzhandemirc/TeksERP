@@ -22,6 +22,11 @@ export interface DispatchListItem {
   totalKg: number;
   invoiceNo: string | null;
   invoicedAt: string | null;
+  /** Operatörün beyan ettiği FİZİKSEL çuval adedi (araca yüklenen); null = beyan yok.
+   *  `_count.sacks` sistemin saydığı kayıt adedidir — ikisi meşru olarak farklı olabilir. */
+  manualSackCount: number | null;
+  /** İrsaliye açıklaması — muhasebe satırında da görünür. */
+  dispatchNote: string | null;
 }
 
 /** Dönem bandı — filtreli kümenin TAMAMI (`?withSummary=true`), sayfa toplamı değil. */
@@ -101,7 +106,12 @@ export interface AccountingExportData {
     plateNumber: string;
     driverName: string;
     carrier: string;
+    /** Sistemin saydığı çuval KAYDI adedi. */
     sackCount: number;
+    /** Operatörün beyan ettiği FİZİKSEL çuval adedi; 0 = beyan yok. */
+    manualSackCount: number;
+    /** İrsaliye açıklaması — muhasebe satırında da görünür. */
+    dispatchNote: string;
     rollCount: number;
     totalMeters: number;
     totalKg: number;
@@ -126,6 +136,8 @@ export interface AccountingExportData {
     taxNumber: string;
     shipmentCount: number;
     sackCount: number;
+    /** Beyan edilenlerin toplamı — beyansız sevkiyatlar 0 ekler. */
+    manualSackCount: number;
     rollCount: number;
     totalMeters: number;
     totalKg: number;

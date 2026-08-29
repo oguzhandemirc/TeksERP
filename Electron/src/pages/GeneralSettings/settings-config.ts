@@ -321,6 +321,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalı (varsayılan): depo çuvallarını seç → doğrudan sevk edilir (stok o an düşer). Açık: önce PLANNED (planlı) sevkiyat kurulur; fiili çıkış ayrıca 'Sevk Kapısı' ekranından onaylanır. Stok her iki modda da yalnız çıkışta düşer. 'Sevk Kapısı' ekranı yalnız bu ayar AÇIKKEN menüde görünür; sevki geri alınan (storno) bir sevkiyat kapalı modda varsayılan olarak kapatılır (çuvallar depoya döner), beklemesi istenirse Sevkiyatlar ekranından 'Sevk Et' ile yeniden çıkarılır.",
       },
       {
+        key: "shipmentManualSackCountEnabled",
+        title: "Çuval sayısını elle gir",
+        desc: "Kapalı (varsayılan): irsaliyede yalnız sistemin saydığı çuval kaydı adedi kullanılır. Açık: sevkiyat ekranında \"Araca yüklenen çuval adedi\" alanı çıkar ve operatör gerçekte kaç çuval gittiğini yazar. Sahada 10 çuval gönderilip hepsi tek bir çuval kaydının içine yazıldığında sistemin saydığı rakam fiziksel gerçeği vermez; bu alan o farkı kapatır. Girilen rakam irsaliyede sistemin saydığıyla YAN YANA basılır (biri diğerinin yerine geçmez) ve muhasebe listesinde de görünür. Alan boş bırakılabilir — boşken belge bugünkü gibi basılır.",
+      },
+      {
         key: "shipmentUndoSameDayOnly",
         title: "Sevk geri almayı aynı günle sınırla",
         desc: "Kapalı (varsayılan): sevk edilmiş bir sevkiyat tarih sınırı olmadan geri alınabilir (\"Sevki Geri Al\" — mal hiç çıkmadıysa; irsaliye İPTAL edilir, toplar sevk öncesi rafına döner). Açık: yalnız BUGÜN sevk edilenler geri alınabilir. Faturalanmış sevkiyat ve bu sevkiyattan iade alınmış olması bu ayardan bağımsız olarak her zaman geri almayı engeller. Geri alma ayrı bir izin ister: shipping:undo-dispatch.",

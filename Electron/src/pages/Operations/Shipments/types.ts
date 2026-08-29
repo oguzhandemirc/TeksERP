@@ -229,6 +229,8 @@ export interface ShipmentDetail {
   procedureCode: string | null;
   /** İrsaliye açıklaması — sevkiyata kayıtlı serbest not (annotation). */
   dispatchNote: string | null;
+  /** Operatörün beyan ettiği fiziksel çuval adedi; null = beyan yok. */
+  manualSackCount: number | null;
   plateNumber: string | null;
   driverName: string | null;
   carrier: string | null;

@@ -66,7 +66,16 @@ interface ShipmentRow {
   plateNumber: string;
   driverName: string;
   carrier: string;
+  /** Sistemin saydığı çuval KAYDI adedi. */
   sackCount: number;
+  /**
+   * Operatörün beyan ettiği FİZİKSEL çuval adedi (araca yüklenen). 0 = beyan yok.
+   * `sackCount` ile ikisi birlikte durur; biri diğerinin yerine GEÇMEZ — sahada
+   * 10 çuval tek çuval kaydına yazıldığı için fark meşrudur.
+   */
+  manualSackCount: number;
+  /** İrsaliye açıklaması — muhasebeye giden satırda da görünür. */
+  dispatchNote: string;
   rollCount: number;
   totalMeters: number;
   totalKg: number;
@@ -93,6 +102,9 @@ interface CustomerAgg {
   taxNumber: string;
   shipmentCount: number;
   sackCount: number;
+  /** Beyan edilen fiziksel çuval toplamı. Beyansız sevkiyatlar 0 ekler —
+   *  yani bu toplam "beyan edilenlerin" toplamıdır, `sackCount`ın ikizi değil. */
+  manualSackCount: number;
   rollCount: number;
   totalMeters: Prisma.Decimal;
   totalKg: Prisma.Decimal;
@@ -248,6 +260,10 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       createdAt: true,
       destination: true,
       procedureCode: true,
+      // Muhasebe ekranı/dışa aktarımı ikisini de basar: operatörün beyan ettiği
+      // fiziksel çuval adedi ve sevk notu (eskiden yalnız irsaliyede vardı).
+      manualSackCount: true,
+      dispatchNote: true,
       plateNumber: true,
       driverName: true,
       carrier: true,
@@ -400,6 +416,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       driverName: sh.driverName ?? "",
       carrier: sh.carrier ?? "",
       sackCount,
+      manualSackCount: sh.manualSackCount ?? 0,
+      dispatchNote: sh.dispatchNote ?? "",
       rollCount,
       totalMeters: Number(sMeters),
       totalKg: Number(sKg),
@@ -430,12 +448,14 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
         taxNumber,
         shipmentCount: 0,
         sackCount: 0,
+        manualSackCount: 0,
         rollCount: 0,
         totalMeters: D0(),
         totalKg: D0(),
       } satisfies CustomerAgg);
     c.shipmentCount += 1;
     c.sackCount += sackCount;
+    c.manualSackCount += sh.manualSackCount ?? 0;
     c.rollCount += rollCount;
     c.totalMeters = c.totalMeters.plus(sMeters);
     c.totalKg = c.totalKg.plus(sKg);
@@ -502,6 +522,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
     const taxNumber = ds.customer.taxNumber ?? "";
 
     // Doğrudan sevkte çuval/araç/kg yok → sıfır/boş; yön varsayılan yurtiçi.
+    // `manualSackCount`/`dispatchNote` da yok: bu akış roll bazlı, çuval hiç
+    // oluşmuyor ve irsaliye açıklaması alanı DirectShipment'ta bulunmuyor.
     shipmentRows.push({
       shipmentNo: ds.shipmentNo,
       dispatchedAt,
@@ -516,6 +538,8 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
       driverName: "",
       carrier: "",
       sackCount: 0,
+      manualSackCount: 0,
+      dispatchNote: "",
       rollCount,
       totalMeters: Number(sMeters),
       totalKg: 0,
@@ -546,6 +570,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
         taxNumber,
         shipmentCount: 0,
         sackCount: 0,
+        manualSackCount: 0,
         rollCount: 0,
         totalMeters: D0(),
         totalKg: D0(),
@@ -623,6 +648,7 @@ export async function buildDispatchAccountingExport(req: Request): Promise<{
         taxNumber: c.taxNumber,
         shipmentCount: c.shipmentCount,
         sackCount: c.sackCount,
+        manualSackCount: c.manualSackCount,
         rollCount: c.rollCount,
         totalMeters: Number(c.totalMeters),
         totalKg: Number(c.totalKg),

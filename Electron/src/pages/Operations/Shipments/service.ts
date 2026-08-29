@@ -49,6 +49,15 @@ export const shipmentService = {
       .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/dispatch-note`, { dispatchNote })
       .then((r) => r.data),
 
+  /** Araca yüklenen gerçek çuval adedi — `null` beyanı kaldırır.
+   *  Bayrak kapalıyken backend 400 döner (UI'da gizlemek tek başına yetmez). */
+  setManualSackCount: (id: string, manualSackCount: number | null): Promise<ApiResponse<unknown>> =>
+    apiClient
+      .post<ApiResponse<unknown>>(`/api/shipping/shipments/${id}/manual-sack-count`, {
+        manualSackCount,
+      })
+      .then((r) => r.data),
+
   /** Storno önizlemesi — geri dönecek çuval/top + engel varsa sebebi (`blockReason`). */
   undoDispatchPreview: (id: string): Promise<ApiResponse<UndoDispatchPreview>> =>
     apiClient

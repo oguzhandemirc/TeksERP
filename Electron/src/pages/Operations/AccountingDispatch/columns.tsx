@@ -63,7 +63,12 @@ export function buildDispatchColumns(
           <span className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground">
             {row.original.kind === "DIRECT"
               ? `${c.rolls} top${c.orders > 0 ? ` · ${c.orders} sipariş` : ""}`
-              : `${c.sacks} çuval · ${c.rolls} top`}
+              : row.original.manualSackCount != null
+                ? // Beyan varsa ÖNCE fiziksel adet, parantezde sistemin saydığı.
+                  // İkisi biri diğerinin yerine geçmez: 10 çuval tek kayda
+                  // yazıldığında fark meşrudur ve fark bilginin kendisidir.
+                  `${row.original.manualSackCount} çuval (${c.sacks} kayıt) · ${c.rolls} top`
+                : `${c.sacks} çuval · ${c.rolls} top`}
             <ReturnsBadge count={c.returns} />
           </span>
         );

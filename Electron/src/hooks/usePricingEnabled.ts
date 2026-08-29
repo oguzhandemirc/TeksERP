@@ -93,6 +93,15 @@ export function useShipmentConfirmationEnabled(): boolean {
   return q.data?.data?.shipmentConfirmationEnabled ?? false;
 }
 
+/**
+ * `shipping.manualSackCountEnabled` — "araca yüklenen gerçek çuval adedi" alanı.
+ * Kapalıyken alan hiç çizilmez; backend yazmayı da reddeder.
+ */
+export function useShipmentManualSackCountEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.shipmentManualSackCountEnabled ?? false;
+}
+
 /** Kurşun bypass düzeni açık mı. Yüklenene kadar false (default kapalı).
  *  Yalnız YENİ dağıtımı kapılar — dağıtılmış iş emirleri bayrak kapansa da biter. */
 export function useKursunBypassEnabled(): boolean {

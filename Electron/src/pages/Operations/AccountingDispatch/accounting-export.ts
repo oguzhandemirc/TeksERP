@@ -36,19 +36,30 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Plaka", key: "plateNumber", width: 12 },
         { header: "Sürücü", key: "driverName", width: 16 },
         { header: "Taşıyıcı", key: "carrier", width: 16 },
-        { header: "Çuval", key: "sackCount", width: 9, numFmt: INT },
+        // İKİ ÇUVAL RAKAMI yan yana: "Çuval (sistem)" kayıt adedi, "Çuval (fiili)"
+        // operatörün araca yüklediğini beyan ettiği adet. Sahada 10 çuval tek
+        // kayda yazıldığı için ikisi meşru olarak farklıdır; muhasebe hangisini
+        // kullanacağına kendi karar verir. Beyan yoksa fiili sütunu BOŞ kalır
+        // (0 yazmak "sıfır çuval gitti" gibi okunurdu).
+        { header: "Çuval (sistem)", key: "sackCount", width: 13, numFmt: INT },
+        { header: "Çuval (fiili)", key: "manualSackCountOrBlank", width: 12, numFmt: INT },
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
         { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
         { header: "Toplam Kg", key: "totalKg", width: 12, numFmt: NUM1 },
         // Fatura izi — "hangi sevkin faturası kesilmedi" dönem kapanışında burada okunur.
         { header: "Fatura No", key: "invoiceNo", width: 18 },
         { header: "Fatura Tarihi", key: "invoicedAt", width: 14, numFmt: DATE },
+        // Sevk notu muhasebeye de gider: "bu sevkte ne oldu" sorusunun cevabı
+        // eskiden yalnız irsaliyede duruyordu.
+        { header: "Sevk Notu", key: "dispatchNote", width: 40 },
       ],
       rows: data.shipments.map((s) => ({
         ...s,
         dispatchedAt: toDate(s.dispatchedAt),
         invoicedAt: toDate(s.invoicedAt),
         yon: yon(s.destination),
+        // Beyan yoksa hücre BOŞ kalır — 0 yazmak "sıfır çuval gitti" diye okunur.
+        manualSackCountOrBlank: s.manualSackCount > 0 ? s.manualSackCount : null,
       })),
       totalRow: {
         customerName: "TOPLAM",

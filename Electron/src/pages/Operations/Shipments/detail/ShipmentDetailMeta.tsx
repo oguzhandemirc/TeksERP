@@ -7,6 +7,7 @@ import { shipmentDestinationLabels, type ShipmentDetail } from "../types";
 import { OrdersModal } from "./OrdersModal";
 import { ReturnsModal } from "./ReturnsModal";
 import { DispatchNoteEditor } from "../DispatchNoteEditor";
+import { ManualSackCountEditor } from "../ManualSackCountEditor";
 
 const num = (v: number | null | undefined) => formatNumber(v, 1);
 const int = (v: number | null | undefined) => formatNumber(v, 0);
@@ -78,6 +79,16 @@ export function ShipmentDetailMeta({ d }: { d: ShipmentDetail }) {
             irsaliyeye basılır. Opsiyonel, boşsa uyarı yok. */}
         <div className="border-t px-4 py-2.5">
           <DispatchNoteEditor shipmentId={d.id} />
+        </div>
+
+        {/* Araca yüklenen gerçek çuval adedi — bayrak kapalıysa hiç çizilmez.
+            Sistemin saydığı kayıt adedi karşılaştırma için yanında durur. */}
+        <div className="border-t px-4 py-2.5 empty:hidden">
+          <ManualSackCountEditor
+            shipmentId={d.id}
+            systemCount={d.summary?.sackCount ?? 0}
+            value={d.manualSackCount ?? null}
+          />
         </div>
       </div>
 

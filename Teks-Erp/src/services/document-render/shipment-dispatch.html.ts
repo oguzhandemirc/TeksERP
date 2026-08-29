@@ -55,6 +55,8 @@ const LABELS = {
     date: "Tarih",
     direction: "Yön",
     domestic: "Yurtiçi",
+    sackTotal: "Çuval Adedi",
+    sackSystem: "sistemde",
     export: "Yurtdışı",
     customsNo: "Gümrük/İhracat No",
     orders: "Sipariş",
@@ -98,6 +100,8 @@ const LABELS = {
     docNo: "Delivery Note No",
     date: "Date",
     direction: "Destination",
+    sackTotal: "Package Count",
+    sackSystem: "in system",
     domestic: "Domestic",
     export: "Export",
     customsNo: "Customs/Export No",
@@ -193,7 +197,20 @@ export interface ShipmentDispatchDoc {
   products: ShipmentDocProduct[];
   sacks: ShipmentDocSack[];
   cekiRows: ShipmentDocCeki[];
-  totals: { totalRolls: number; totalMeters: number; totalKg: number; sackCount: number };
+  totals: {
+    totalRolls: number;
+    totalMeters: number;
+    totalKg: number;
+    /** Sistemin saydığı çuval KAYDI adedi. */
+    sackCount: number;
+    /**
+     * Operatörün beyan ettiği FİZİKSEL çuval adedi (araca yüklenen).
+     * `null`/`undefined` = beyan yok → belgede yalnız `sackCount` çıkar.
+     * İkisi biri diğerinin yerine GEÇMEZ: sahada 10 çuval tek çuval kaydına
+     * yazıldığı için fark meşrudur ve o fark bilginin kendisidir.
+     */
+    manualSackCount?: number | null;
+  };
 }
 
 interface RenderMeta {
@@ -380,6 +397,18 @@ export function renderShipmentDispatchHtml(
     showDirection ? `<div class="ln">${L.direction}: <b>${esc(yon)}</b></div>` : "",
     showProcedure && h.procedureCode ? `<div class="ln">${L.customsNo}: <b>${esc(h.procedureCode)}</b></div>` : "",
     showOrders && h.orderNos ? `<div class="ln sub">${L.orders}: ${esc(h.orderNos)}</div>` : "",
+    // ÇUVAL ADEDİ — yalnız operatör BEYAN ETTİYSE basılır.
+    //
+    // ⚠️ Beyan yokken tek bayt bile eklenmez: bugüne kadar basılmış her irsaliye
+    // bayt-bayt aynı kalmalı (özellik bir bayrağın arkasında ve varsayılan
+    // KAPALI). Bu yüzden `sackCount` tek başına burada GÖSTERİLMEZ.
+    //
+    // Beyan varsa İKİ rakam birlikte çıkar: fiziksel adet büyük, sistemin
+    // saydığı kayıt adedi parantezde. Biri diğerinin yerine geçmez — sahada
+    // 10 çuval tek çuval kaydına yazıldığı için fark meşrudur ve fark bilgidir.
+    t.manualSackCount != null
+      ? `<div class="ln">${L.sackTotal}: <b>${t.manualSackCount}</b> <span class="sub">(${t.sackCount} ${L.sackSystem})</span></div>`
+      : "",
   ]
     .filter(Boolean)
     .join("");
