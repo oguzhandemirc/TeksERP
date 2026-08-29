@@ -92,8 +92,13 @@ async function main(): Promise<void> {
       return res;
     };
 
+    // ⚠️ İSTENEN DEĞER, OKUNAN DEĞERDEN FARKLI OLMALI. Aynı değer gönderilirse
+    // servis "değişiklik yok" der ve metrajı hiç YAZMAZ (no-op) — pin devreye
+    // girmez, 409 da doğmaz. İlk yazımda test tam bu tuzağa düştü: §2c "metraj
+    // korundu" diye YEŞİL veriyordu ama korunmasının sebebi düzeltmenin hiç
+    // yazılmamasıydı, yani kontrol hiçbir şey ölçmüyordu.
     const ok2 = await hata(() =>
-      inventory.applyManualProperties(t2.id, { colorId: t2.colorId, propertyIds: [], currentQty: 100, reason: "TEST bayat metraj" }, admin.id),
+      inventory.applyManualProperties(t2.id, { colorId: t2.colorId, propertyIds: [], currentQty: 95, reason: "TEST bayat metraj" }, admin.id),
     );
     delege.findUnique = orijinal;
 
