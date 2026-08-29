@@ -3204,8 +3204,8 @@ export class WorkOrderService {
     input: CancelWorkOrderInput,
     userId: string | undefined,
     reason: string,
-  ): Promise<{ scrapRollIds: string[] }> {
-    if (stepIds.length === 0) return { scrapRollIds: [] };
+  ): Promise<{ scrapRollIds: string[]; residualRollIds: string[] }> {
+    if (stepIds.length === 0) return { scrapRollIds: [], residualRollIds: [] };
 
     const fasonRolls = await prisma.roll.findMany({
       where: {
@@ -3222,7 +3222,7 @@ export class WorkOrderService {
       },
       select: { id: true },
     });
-    if (fasonRolls.length === 0) return { scrapRollIds: [] };
+    if (fasonRolls.length === 0) return { scrapRollIds: [], residualRollIds: [] };
 
     if (!input.fasonAction) {
       // Modal iki seçeneği çizsin diye MAKİNE-OKUR kod. Uzun açıklama metni
@@ -3250,10 +3250,33 @@ export class WorkOrderService {
     if (openDispatches.length > 0) {
       // `SubcontractorService` bu dosyada zaten üst seviyede import edilmiş
       // (fason sevk yolu onu kullanıyor) — ikinci bir yükleme yolu açmıyoruz.
-      await new SubcontractorService().cancelBulk(
+      const bulk = await new SubcontractorService().cancelBulk(
         { dispatchIds: openDispatches.map((d) => d.id), reason: `İş emri iptali: ${reason}` },
         userId,
       );
+      // ⚠️ SONUÇ OKUNUR — `cancelBulk` PARÇALI başarır (BULGU-T1-009).
+      // `cancel()` iş kuralı hatasını fırlatır ama toplu sarmalayıcı onu yutup
+      // `failed[]`e yazar (bilinçli: tek kötü id 20 sevki fasonda bırakmasın).
+      // Bu dönüş atıldığında iptal, sevk KAPANMAMIŞKEN devam ediyordu ve
+      // aşağıdaki artık-yazımı topu içeri alıp blanket geri-çekmeye teslim
+      // ediyordu → boyahanedeki mal Ham Stok'ta görünüyor, açık sevk ortada
+      // kalıyor, aynı metraj İKİ yerde sayılıyordu. Ölçülen tetikleyici KISMİ
+      // KABUL: 100 m gitti, 51 m geldi, 49 m fasonda; kısmi makbuz kalemi
+      // KAPATMAZ (`OUTSTANDING_ITEM` `isPartial:false` arar) → sevk hâlâ açık,
+      // `cancel()` "kabul yapılmış" diye reddediyor.
+      const failed = bulk.data.failed;
+      if (failed.length > 0) {
+        const liste = failed.map((f) => f.dispatchNo ?? f.dispatchId).join(", ");
+        throw AppError.conflict(
+          `Fason sevki kapatılamadı (${liste}) — iş emri iptal edilmedi. ` +
+            `Genellikle sebep kısmi kabuldür: önce fasondan kalan malı kabul edin ` +
+            `ya da "kalan gelmeyecek" ile kapatın, sonra iptali tekrarlayın.`,
+          {
+            code: "FASON_DISPATCH_CANCEL_FAILED",
+            failed: failed.map((f) => ({ dispatchNo: f.dispatchNo, message: f.message })),
+          },
+        );
+      }
     }
 
     // ── ARTIK KALAN FASON TOPLARI ──────────────────────────────────────────
@@ -3268,6 +3291,13 @@ export class WorkOrderService {
     // Hedef IN_PRODUCTION: sevk iptalinin ürettiği son durumun aynısı. Böylece
     // bundan sonrası SIRADAN bir "işlemdeki top" olur ve karar motoru (fire /
     // varsayılan stok) TEK yerde çalışır — ikinci bir dispozisyon yolu açmıyoruz.
+    // ⚠️ YAZIM BURADA DEĞİL, İPTAL TX'İNİN İÇİNDE (2026-08-29 / BULGU-T1-009).
+    // Eskiden bu satırlar havuz client'ıyla, tx DIŞINDA ve koşulsuz koşuyordu:
+    // aşağıdaki iptal tx'i herhangi bir sebeple düşerse (WO'yu başkası bu sırada
+    // tamamladı → claim 409, karar kapsamı guard'ı, dispozisyon hatası) statü
+    // çevirmesi KALICI oluyordu — yani iş emri hâlâ açıkken topları fason
+    // statüsünden çıkmış, "işlemdeki top" gibi görünen bir kalıntı bırakıyordu.
+    // Artık yalnız ADAY id'ler dönüyor; çevirme tx içinde ve claim'li yapılıyor.
     const residual = await prisma.roll.findMany({
       where: {
         id: { in: fasonRolls.map((r) => r.id) },
@@ -3275,20 +3305,15 @@ export class WorkOrderService {
           in: [RollStatus.AT_SUBCONTRACTOR, RollStatus.RETURNED_FROM_SUBCONTRACTOR],
         },
       },
-      select: { id: true, currentStepId: true },
+      select: { id: true },
     });
-    if (residual.length > 0) {
-      await prisma.roll.updateMany({
-        where: { id: { in: residual.map((r) => r.id) } },
-        data: { status: RollStatus.IN_PRODUCTION },
-      });
-    }
 
     // FİRE kararında topları normal dispozisyon motoruna havale et (kural tek
     // yerde kalsın); RETURN_TO_STOCK'ta ekstra iş yok — iptalin varsayılanı
     // zaten STOCK'tur ve toplu geri çekme onu uygular.
     return {
       scrapRollIds: input.fasonAction === "SCRAP" ? fasonRolls.map((r) => r.id) : [],
+      residualRollIds: residual.map((r) => r.id),
     };
   }
 
@@ -3410,6 +3435,38 @@ export class WorkOrderService {
             fresh?.status === WorkOrderStatus.COMPLETED ? "tamamlandı" : "iptal edildi"
           }, iptal edilemez. Listeyi yenileyin.`
         );
+      }
+
+      // ── ARTIK KALAN FASON TOPLARI — TX İÇİNDE, CLAIM'Lİ (BULGU-T1-009) ────
+      // Sevk iptali topları normalde geri getirir. Getirmediği durumlar var ve
+      // sahada BUNLAR takılmaya sebep oluyordu:
+      //   · top AT_SUBCONTRACTOR ama AÇIK sevki yok (kısmi kabul kalıntısı,
+      //     elle düzeltilmiş kayıt, eski veri),
+      //   · dönüş topu (SUBCONTRACTOR_RETURN) zaten içeride ama fason statüsünde.
+      // Bunları AÇIKÇA içeri alıyoruz; yoksa aşağıdaki guard yine tetikler ve
+      // kullanıcı kararı verdiği hâlde iptal edemez.
+      //
+      // Hedef IN_PRODUCTION: sevk iptalinin ürettiği son durumun aynısı — bundan
+      // sonrası SIRADAN bir "işlemdeki top" olur ve karar motoru (fire /
+      // varsayılan stok) TEK yerde çalışır.
+      //
+      // ⚠️ İKİ ŞEY LOAD-BEARING: (1) yazım bu tx'in İÇİNDE — tx düşerse çevirme
+      // de geri sarılır (eskiden havuz client'ıyla dışarıda koşuyor ve kalıcı
+      // kalıyordu); (2) `where`'deki statü süzgeci bir CLAIM'dir — id listesi
+      // tx'ten ÖNCE okundu, arada bir top meşru olarak başka statüye geçmiş
+      // olabilir ve onu körlemesine IN_PRODUCTION'a çekmek o işlemi ezerdi.
+      // Bu arada FASONA ÇIKAN yeni bir top ise listede olmadığı için aşağıdaki
+      // guard'a takılır ve iptal reddedilir (fail-closed, doğru yön).
+      if (fasonPlan.residualRollIds.length > 0) {
+        await tx.roll.updateMany({
+          where: {
+            id: { in: fasonPlan.residualRollIds },
+            status: {
+              in: [RollStatus.AT_SUBCONTRACTOR, RollStatus.RETURNED_FROM_SUBCONTRACTOR],
+            },
+          },
+          data: { status: RollStatus.IN_PRODUCTION },
+        });
       }
 
       // GUARD (claim'den SONRA — F57): Fasonda (boyahanede) işlem gören/görmüş

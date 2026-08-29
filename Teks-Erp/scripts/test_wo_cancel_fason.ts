@@ -17,9 +17,18 @@
 //   2. Her iki karar da GERÇEKTEN uygulanır — top statüsü değişir.
 //   3. İptal izi KOLONDA durur (audit 6 ayda arşivleniyor; sebep orada kalırsa
 //      "neden iptal edildi" sorusu sessizce cevapsız kalır).
+//   4. (2026-08-29 / BULGU-T1-009) Sevk KAPATILAMADIYSA iptal DURUR ve mal
+//      fasonda kalır. Bu bekçi eskiden yalnız mutlu yolu ölçüyordu: `cancelBulk`
+//      PARÇALI başarır (`failed[]`) ve o dönüş atıldığında iptal, sevk açıkken
+//      devam ediyor, boyahanedeki mal Ham Stok'ta görünüyordu. Tetikleyici
+//      KISMİ KABUL: kısmi makbuz sevk kalemini KAPATMAZ ama `cancel()` "kabul
+//      yapılmış" diye reddeder — yani en sık fason akışı tam bu dala düşüyor.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { WorkOrderService } from "../src/services/workorder.service";
+import { SubcontractorService } from "../src/services/subcontractor.service";
+import { TravelerCardService } from "../src/services/traveler-card.service";
+import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
 let pass = 0;
 let fail = 0;
@@ -159,12 +168,141 @@ async function main(): Promise<void> {
       svc.softDelete(done.id, undefined, { reason: "olmaz", fasonAction: "RETURN_TO_STOCK" }),
     );
     check("tamamlanmış iş emri iptal edilemiyor", doneErr !== null, doneErr?.message ?? "");
+
+    // ── 7) KISMİ KABUL: sevk kapatılamıyorsa iptal DURUR (BULGU-T1-009) ─────
+    // 100 m boyahaneye gitti, 51 m kabul edildi, 49 m fasonda kaldı. Kısmi
+    // makbuz sevk kalemini KAPATMAZ → sevk hâlâ AÇIK+OUTSTANDING → iptal onu
+    // `cancelBulk`a verir → `cancel()` "kabul yapılmış" diye reddeder → sonuç
+    // `failed[]`e düşer. Doğru davranış: iptal reddedilir ve mal fasonda kalır.
+    const admin = await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } });
+    const boyaStation = await prisma.station.findFirst({ where: { code: "BOYA_FASON" }, select: { id: true } });
+    const dyeHouse = await ensureTestDyeHouse();
+    check("kısmi kabul fixture'ı hazır (admin + BOYA_FASON + fason firma)", Boolean(admin && boyaStation && dyeHouse));
+    if (admin && boyaStation && dyeHouse) {
+      const woP = await prisma.workOrder.create({
+        data: {
+          workOrderNumber: `TEST-CANFAS-E-${ts}`,
+          status: "IN_PROGRESS",
+          type: "STOCK_PRODUCTION",
+          targetItemId: item.id,
+          steps: { create: [{ stationId: boyaStation.id, stepSequence: 1, status: "PENDING" }] },
+        },
+        include: { steps: true },
+      });
+      woIds.push(woP.id);
+      const stepP = woP.steps[0].id;
+      await prisma.$transaction((tx) => new TravelerCardService().createForWorkOrder(tx, woP.id, admin.id));
+      const rollP = await prisma.roll.create({
+        data: {
+          barcode: `TST-CANFAS-${ts}`,
+          itemId: item.id,
+          initialQty: 100,
+          currentQty: 100,
+          status: "STOCK",
+          width: 250,
+          createdById: admin.id,
+        },
+        select: { id: true },
+      });
+      rollIds.push(rollP.id);
+
+      const sub = new SubcontractorService();
+      await sub.dispatch(
+        { workOrderId: woP.id, stepId: stepP, subcontractorId: dyeHouse.id, rollIds: [rollP.id] },
+        admin.id,
+      );
+      await sub.receive(
+        {
+          workOrderId: woP.id,
+          stepId: stepP,
+          subcontractorId: dyeHouse.id,
+          returns: [{ rollId: rollP.id, receivedQty: 51 }],
+          newRolls: [{ qty: 51 }],
+        },
+        admin.id,
+      );
+      // Doğan toplar da temizlensin.
+      const born = await prisma.roll.findMany({
+        where: { parentReceipt: { workOrderId: woP.id } },
+        select: { id: true },
+      });
+      rollIds.push(...born.map((b) => b.id));
+
+      const beforeStatus = (await prisma.roll.findUnique({ where: { id: rollP.id }, select: { status: true } }))?.status;
+      check("kurulum: kısmi kabul sonrası top fasonda kaldı", beforeStatus === "AT_SUBCONTRACTOR", beforeStatus ?? "");
+
+      const partialErr = await errorOf(() =>
+        svc.softDelete(woP.id, admin.id, { reason: "sipariş iptal oldu", fasonAction: "RETURN_TO_STOCK" }),
+      );
+      check("kısmi kabullü iş emrinin iptali REDDEDİLDİ", partialErr !== null, partialErr?.message?.slice(0, 90) ?? "");
+      check(
+        "hata MAKİNE-OKUR kod taşıyor (FASON_DISPATCH_CANCEL_FAILED)",
+        partialErr?.code === "FASON_DISPATCH_CANCEL_FAILED",
+        partialErr?.code ?? "—",
+      );
+      const rollAfter = await prisma.roll.findUnique({ where: { id: rollP.id }, select: { status: true } });
+      check(
+        "boyahanedeki mal HAM STOĞA DÜŞMEDİ (fasonda kaldı)",
+        rollAfter?.status === "AT_SUBCONTRACTOR",
+        rollAfter?.status ?? "",
+      );
+      const woAfter = await prisma.workOrder.findUnique({ where: { id: woP.id }, select: { status: true } });
+      check("iş emri iptal EDİLMEDİ (tx geri sarıldı)", woAfter?.status === "IN_PROGRESS", woAfter?.status ?? "");
+      const openLeft = await prisma.subcontractorDispatch.count({
+        where: { workOrderId: woP.id, cancelledAt: null },
+      });
+      check("açık fason sevki ORTADA KALMADI (hâlâ açık ve izlenebilir)", openLeft === 1, `açık sevk ${openLeft}`);
+    }
+
+    // ── 8) İPTAL TX'İ DÜŞERSE FASON STATÜSÜ DE GERİ SARILIR (BULGU-T1-009) ──
+    // Artık-kalan fason toplarının IN_PRODUCTION'a çevrilmesi eskiden havuz
+    // client'ıyla, iptal tx'inin DIŞINDA koşuyordu: tx sonradan düşerse (burada
+    // dispozisyon kapsam guard'ı) iş emri hâlâ açıkken toplar fason statüsünden
+    // çıkmış oluyor ve geriye "işlemdeki top" gibi görünen bir kalıntı kalıyordu.
+    // Sonraki iptal denemesi o topu artık fasonda görmediği için karar da
+    // sormuyordu — yani kalıntı sessizce kalıcıydı.
+    const c = await makeWo("F");
+    const yabanci = await prisma.roll.create({
+      data: { itemId: item.id, initialQty: 10, currentQty: 10, status: "STOCK" },
+      select: { id: true },
+    });
+    rollIds.push(yabanci.id);
+    const rollbackErr = await errorOf(() =>
+      svc.softDelete(c.woId, undefined, {
+        reason: "kapsam dışı top ile iptal",
+        fasonAction: "RETURN_TO_STOCK",
+        // İşlemde OLMAYAN bir top için karar → kapsam guard'ı tx İÇİNDE düşer.
+        dispositions: [{ rollId: yabanci.id, action: "SCRAP" }],
+      }),
+    );
+    check("kapsam dışı karar iptali düşürdü", rollbackErr !== null, rollbackErr?.message?.slice(0, 70) ?? "");
+    const rollC = await prisma.roll.findUnique({ where: { id: c.rollId }, select: { status: true } });
+    check(
+      "tx geri sarıldı → top FASON statüsünde kaldı (kalıntı yok)",
+      rollC?.status === "AT_SUBCONTRACTOR",
+      rollC?.status ?? "",
+    );
+    const woF = await prisma.workOrder.findUnique({ where: { id: c.woId }, select: { status: true } });
+    check("iş emri de iptal edilmedi", woF?.status === "IN_PROGRESS", woF?.status ?? "");
   } finally {
+    // Fason zinciri ÖNCE (RESTRICT FK'lar: receipt/dispatch kalemleri topa bağlı).
+    const recIds = (
+      await prisma.subcontractorReceipt.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })
+    ).map((r) => r.id);
+    const dispIds = (
+      await prisma.subcontractorDispatch.findMany({ where: { workOrderId: { in: woIds } }, select: { id: true } })
+    ).map((d) => d.id);
+    await prisma.subcontractorReceiptItem.deleteMany({ where: { receiptId: { in: recIds } } }).catch(() => {});
+    await prisma.subcontractorReceiptProperty.deleteMany({ where: { receiptId: { in: recIds } } }).catch(() => {});
+    await prisma.subcontractorDispatchItem.deleteMany({ where: { dispatchId: { in: dispIds } } }).catch(() => {});
+    await prisma.subcontractorReceipt.deleteMany({ where: { id: { in: recIds } } }).catch(() => {});
+    await prisma.subcontractorDispatch.deleteMany({ where: { id: { in: dispIds } } }).catch(() => {});
     await prisma.rollMovement.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.rollOperation.deleteMany({ where: { rollId: { in: rollIds } } }).catch(() => {});
     await prisma.roll.deleteMany({ where: { id: { in: rollIds } } }).catch(() => {});
     await prisma.travelerCard.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
+    await prisma.batch.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: { in: woIds } } }).catch(() => {});
     await prisma.workOrder.deleteMany({ where: { id: { in: woIds } } }).catch(() => {});
     if (itemId) await prisma.item.deleteMany({ where: { id: itemId } }).catch(() => {});
