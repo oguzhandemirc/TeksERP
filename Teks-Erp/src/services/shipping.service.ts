@@ -25,6 +25,7 @@ import {
   PrintedDocType,
   PrintedDocStatus,
   LabelKind,
+  OrderStatus,
 } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
@@ -44,6 +45,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { p2002Mentions } from "../utils/p2002";
 import {
   readShipmentConfirmationEnabled,
+  readShipmentManualSackCountEnabled,
   readShipmentUndoSameDayOnly,
   readSimulatedWeightEnabled,
 } from "./system-setting.service";
@@ -1259,18 +1261,36 @@ export class ShippingService {
     return { sacks, customerId: target.customerId, branchId: target.branchId };
   }
 
-  /** Seçili siparişler hedef müşteri/şubeye ait mi. */
+  /**
+   * Seçili siparişler hedef müşteri/şubeye ait mi — VE hâlâ canlı mı.
+   *
+   * ⚠️ `status` seçimi 2026-08-29'da eklendi (BULGU-T3-003): bu yüklem sipariş
+   * DURUMUNU hiç okumuyordu. Sevkiyatçı "Sevkiyat Kur" diyaloğunu açık bırakıp
+   * dakikalar sonra onayladığında (liste açıldığı anda sipariş canlıydı) arada
+   * iptal edilmiş bir siparişe tahsis yazılabiliyordu: sipariş "İPTAL · Sevk
+   * 640 m" görünür, aynı kumaşın gerçekten açık siparişi mal alamaz ve fabrika
+   * onu yeniden üretir.
+   *
+   * Bu ÖN kontroldür (okunaklı 400, kullanıcı listeyi yenilesin). Yarışın
+   * kendisini kapatan şey `writeShipmentAllocationsTx`teki KİLİT ALTINDA taze
+   * doğrulamadır — ikisi ayrı işler görür, biri diğerinin yerine geçmez.
+   */
   private async assertOrdersBelong(orderIds: string[], customerId: string, branchId: string | null): Promise<void> {
     if (orderIds.length === 0) return;
     const orders = await prisma.order.findMany({
       where: { id: { in: orderIds } },
-      select: { id: true, customerId: true, branchId: true },
+      select: { id: true, customerId: true, branchId: true, status: true, orderNumber: true },
     });
     if (orders.length !== orderIds.length) throw AppError.notFound("Bazı siparişler bulunamadı");
     for (const o of orders) {
       if (o.customerId !== customerId) throw AppError.badRequest("Seçili siparişlerden biri sevkiyatın müşterisine ait değil");
       if (branchId != null && o.branchId != null && o.branchId !== branchId) {
         throw AppError.badRequest("Seçili siparişlerden biri sevkiyatın şubesine ait değil");
+      }
+      if (o.status === OrderStatus.CANCELLED) {
+        throw AppError.badRequest(
+          `${o.orderNumber} siparişi İPTAL edilmiş — sevkiyata eklenemez. Listeyi yenileyip malın gerçekten ait olduğu siparişi seçin.`,
+        );
       }
     }
   }
@@ -1319,10 +1339,39 @@ export class ShippingService {
           select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true, createdAt: true, order: { select: { deadline: true, orderDate: true } } },
         })
       : [];
+    // ── HENÜZ SEVK EDİLMEMİŞ AMA ZATEN AYRILMIŞ METRAJ (BULGU-T1-010) ────────
+    // `shippedQty` yalnız DISPATCH'te terfi eder (defter kuralı, doğru). Ama
+    // kapasite hesabı ondan İBARET olamaz: sevk onayı AÇIKKEN pazartesi kurulan
+    // PLANNED sevkiyat 500 m'yi ayırır, salı kurulan ikinci sevkiyat `shippedQty`
+    // hâlâ 0 olduğu için AYNI 500 m'yi bir daha ayırır ve ikisi sevk edilince
+    // 500 m'lik kalem 1000 m sevk edilmiş olur. Sipariş COMPLETED, "Açık 0",
+    // hiçbir uyarı yok, 500 m fazla mal müşteriye çıkmış. Bu bir YARIŞ DEĞİL —
+    // ardışık iki meşru işlemin sonucu, yani kilitle çözülmez.
+    // ⚠️ Bu düşüm hiçbir RAKAMI değiştirmez (`shippedQty`, İstenen|Sevk|Açık
+    // aynı kalır) — yalnız "bu kaleme daha ne kadar tahsis edilebilir"i
+    // düzeltir. Fazla mal yine sevk edilebilir; tahsissiz kalır (mevcut
+    // davranış), yani "fazla/eşleşmeyen sevk serbest" kuralı korunur.
+    // Sevkiyatın KENDİ tahsisleri çağıran tarafından zaten silinmiştir
+    // (`writeShipmentAllocationsTx` sil-yaz), o yüzden burada özel dışlama YOK.
+    const planlanmis = new Map<string, Prisma.Decimal>();
+    if (lines.length > 0) {
+      const rows = await db.sackAllocation.groupBy({
+        by: ["orderLineId"],
+        where: {
+          orderLineId: { in: lines.map((l) => l.id) },
+          sack: { shipment: { status: ShipmentStatus.PLANNED } },
+        },
+        _sum: { qty: true },
+      });
+      for (const r of rows) planlanmis.set(r.orderLineId, new Prisma.Decimal(r._sum.qty ?? 0));
+    }
+
     const allocLines: SackAllocLine[] = [];
     const lineNeeds = new Map<string, Prisma.Decimal>();
     for (const l of lines) {
-      const need = new Prisma.Decimal(l.quantity).minus(l.shippedQty);
+      const need = new Prisma.Decimal(l.quantity)
+        .minus(l.shippedQty)
+        .minus(planlanmis.get(l.id) ?? 0);
       lineNeeds.set(l.id, need);
       if (need.greaterThan(0)) {
         allocLines.push({
@@ -1335,7 +1384,19 @@ export class ShippingService {
     return { allocations, lineNeeds };
   }
 
-  /** Sevkiyatın tahsislerini sil-yaz (tüm çuvalları × seçili siparişleri). */
+  /**
+   * Sevkiyatın tahsislerini sil-yaz (tüm çuvalları × seçili siparişleri).
+   *
+   * ⚠️ SIRA LOAD-BEARING (2026-08-29 / BULGU-T1-010 + T3-003): kalem kilidi
+   * kapasite okumasından ÖNCE alınır. Eskiden `computeSackAllocations`
+   * `shippedQty`yi KİLİTSİZ okuyor, kilit ise ancak `performDispatchTx`in
+   * sonunda alınıyordu — yani iki paketleme istasyonu aynı kalem için aynı anda
+   * sevkiyat kurduğunda İKİSİ DE `shippedQty=0` görüyor, ikisi de "need=500"
+   * hesaplıyor ve 500 m'lik kalem 1000 m sevk edilmiş oluyordu. Sipariş
+   * COMPLETED, "Açık 0", hiçbir uyarı yok; fazla mal müşteriye çıkmış.
+   * Kilit önce alınınca ikinci istek birincinin commit'ini bekler ve kalan
+   * kapasiteyi TAZE okur. Fason `directShip` ile birebir aynı protokol.
+   */
   private async writeShipmentAllocationsTx(
     tx: Prisma.TransactionClient,
     shipmentId: string,
@@ -1347,6 +1408,32 @@ export class ShippingService {
     const sackRows = await tx.sack.findMany({ where: { shipmentId }, select: { id: true } });
     const sackIds = sackRows.map((s) => s.id);
     if (sackIds.length === 0) return;
+
+    // ① Etkilenen siparişlerin TAM satır kümesini kilitle (alt-küme kilidi
+    //    deadlock riski taşır — `touchOrderLinesTx` id'leri sıralı alır).
+    const lockRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
+    await touchOrderLinesTx(tx, lockRows.map((l) => l.id));
+
+    // ② Kilit ALTINDA taze doğrulama: sipariş bu arada iptal edilmiş olabilir.
+    //    `ACTIVE_LINE` yalnız KALEM iptalini süzer; başlık iptali kalemlere
+    //    `cancelledAt` DAMGALAMAZ (order.service `Order.status`ı yazar, o kadar)
+    //    → bu boşluk buradan kapanıyor. `ACTIVE_LINE`ın kendisine sipariş
+    //    durumunu EKLEMEDİK bilinçli olarak: o yüklem "açık talep"in tek
+    //    kaynağıdır ve karşılanma/denge/rapor yüzeylerinin hepsini birden
+    //    değiştirmek bu düzeltmenin kapsamı değil.
+    const liveOrders = await tx.order.findMany({
+      where: { id: { in: orderIds } },
+      select: { id: true, orderNumber: true, status: true },
+    });
+    const cancelled = liveOrders.filter((o) => o.status === OrderStatus.CANCELLED);
+    if (cancelled.length > 0) {
+      throw AppError.conflict(
+        `${cancelled.map((o) => o.orderNumber).join(", ")} bu sırada İPTAL edildi — sevkiyat kurulmadı. ` +
+          "Listeyi yenileyip malın gerçekten ait olduğu siparişi seçin.",
+        { code: "ORDER_CANCELLED_DURING_SHIPMENT" },
+      );
+    }
+
     const { allocations } = await this.computeSackAllocations(tx, { sackIds, orderIds, branchId });
     if (allocations.length > 0) {
       await tx.sackAllocation.createMany({ data: allocations.map((a) => ({ sackId: a.sackId, orderLineId: a.orderLineId, qty: a.qty })) });
@@ -1611,6 +1698,35 @@ export class ShippingService {
     if (updated.count === 0) throw AppError.notFound("Sevkiyat bulunamadı");
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DISPATCH_NOTE", dispatchNote: value } });
     return { success: true, data: { shipmentId, dispatchNote: value }, message: "İrsaliye açıklaması güncellendi" };
+  }
+
+  /**
+   * ARACA YÜKLENEN GERÇEK ÇUVAL ADEDİ — operatörün beyanı.
+   *
+   * Neden var: sahada 10 çuval gönderilse bile hepsi tek bir çuval kaydının
+   * içine yazılıyor. Sistemin saydığı `sacks.length` fiziksel gerçeği vermiyor;
+   * irsaliyede "1 çuval" yazan bir araç 10 çuvalla yola çıkıyor.
+   *
+   * `dispatchNote` ile AYNI KATMAN (annotation): donmuş belge çekirdeğine
+   * girmez, her an düzenlenebilir, sürüm doğurmaz, baskıda canlı çözülür.
+   * `null` = beyan yok → belgede yalnız sistemin saydığı rakam çıkar.
+   *
+   * ⚠️ Bayrak KAPALIYKEN yazma REDDEDİLİR (yalnız UI'da gizlemek yetmez: alan
+   * doğrudan uçtan da doldurulabilirdi ve kapalı bir özelliğin verisi sessizce
+   * belgeye sızardı).
+   */
+  async setManualSackCount(shipmentId: string, count: number | null, userId?: string): Promise<ApiResponse<unknown>> {
+    if (!(await readShipmentManualSackCountEnabled())) {
+      throw AppError.badRequest("Elle çuval adedi girişi kapalı (Ayarlar → Sevkiyat)");
+    }
+    const value = count == null ? null : Math.trunc(count);
+    if (value != null && (value < 1 || value > 9999)) {
+      throw AppError.badRequest("Çuval adedi 1 ile 9999 arasında olmalı");
+    }
+    const updated = await prisma.shipment.updateMany({ where: { id: shipmentId }, data: { manualSackCount: value } });
+    if (updated.count === 0) throw AppError.notFound("Sevkiyat bulunamadı");
+    await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "MANUAL_SACK_COUNT", manualSackCount: value } });
+    return { success: true, data: { shipmentId, manualSackCount: value }, message: "Çuval adedi güncellendi" };
   }
 
   /**
@@ -2374,6 +2490,10 @@ export class ShippingService {
       createdAt: true,
       invoiceNo: true,
       invoicedAt: true,
+      // Muhasebe ekranı ikisini de basıyor: sevk notu (eskiden yalnız irsaliyede
+      // vardı) ve operatörün beyan ettiği gerçek çuval adedi.
+      dispatchNote: true,
+      manualSackCount: true,
       customer: { select: { id: true, code: true, name: true } },
       branch: { select: { id: true, code: true, name: true } },
       _count: { select: { sacks: true, rolls: true, orders: true, returns: { where: { cancelledAt: null } } } },
@@ -2423,6 +2543,10 @@ export class ShippingService {
       invoicedAt: d.invoicedAt,
       customer: d.customer,
       branch: d.branch,
+      // Doğrudan sevkte ÇUVAL YOK (roll bazlı akış) → ikisi de null. Union'ın
+      // iki tarafı aynı alan kümesini taşımalı, yoksa liste satırı tipi ayrışır.
+      dispatchNote: null,
+      manualSackCount: null,
       totalMeters: Number(d.totalQty),
       totalKg: 0, // doğrudan sevkte çuval/tartı yok
       _count: { sacks: 0, rolls: d.rollCount, orders: d._count.allocations, returns: 0 },
@@ -2813,6 +2937,7 @@ export class ShippingService {
         id: true, shipmentNo: true, status: true, destination: true, procedureCode: true,
         plateNumber: true, driverName: true, carrier: true, dispatchedAt: true, createdAt: true,
         dispatchNote: true,
+        manualSackCount: true,
         customer: { select: { id: true, code: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         orders: {
@@ -3034,6 +3159,7 @@ export class ShippingService {
         destination: shipment.destination,
         procedureCode: shipment.procedureCode,
         dispatchNote: shipment.dispatchNote,
+        manualSackCount: shipment.manualSackCount,
         plateNumber: shipment.plateNumber,
         driverName: shipment.driverName,
         carrier: shipment.carrier,
@@ -3415,6 +3541,7 @@ async function collectShipmentDocContent(
     where: { id: shipmentId },
     select: {
       shipmentNo: true, status: true, procedureCode: true, destination: true, dispatchedAt: true, createdAt: true,
+      manualSackCount: true,
       plateNumber: true, driverName: true, carrier: true,
       customer: { select: { code: true, name: true, taxNumber: true, exportCode: true } },
       branch: { select: { code: true, name: true } },
@@ -3528,7 +3655,18 @@ async function collectShipmentDocContent(
     products,
     sacks: sackRows,
     cekiRows,
-    totals: { totalRolls, totalMeters, totalKg, sackCount: sh.sacks.length },
+    totals: {
+      totalRolls,
+      totalMeters,
+      totalKg,
+      // `sackCount` SİSTEMİN saydığı kayıt adedi — sözleşme değişmedi.
+      sackCount: sh.sacks.length,
+      // `manualSackCount` operatörün beyan ettiği FİZİKSEL adet. Belge ikisini
+      // birlikte basar (biri diğerinin yerine geçmez): sahada 10 çuval tek çuval
+      // kaydına yazıldığı için ikisi meşru olarak farklıdır ve fark BİLGİDİR.
+      // null = beyan yok → belgede yalnız sistemin rakamı çıkar.
+      manualSackCount: sh.manualSackCount,
+    },
   };
 }
 
