@@ -194,7 +194,10 @@ async function main(): Promise<void> {
   check("tombstone pasif + survivor'a bağlı", tomb.isActive === false && tomb.mergedIntoId === a.id);
 
   const auditFields = await prisma.systemLog.findFirst({
-    where: { tableName: "customers", recordId: a.id },
+    // ⚠️ MANTIKSAL ad (2026-08-29 / T2-011) — fiziksel "customers" DEĞİL.
+    // Birleştirme audit'i fiziksel tablo adıyla yazılıyordu ve Denetim
+    // Raporu'nda hiç görünmüyordu; bu bekçi de aynı kör noktayı paylaşıyordu.
+    where: { tableName: "CUSTOMER", recordId: a.id },
     orderBy: { createdAt: "desc" },
     select: { newData: true, oldData: true },
   });

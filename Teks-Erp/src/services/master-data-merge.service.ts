@@ -130,7 +130,20 @@ interface EntityMeta {
     findMany: (args: unknown) => Promise<unknown>;
     updateMany: (args: unknown) => Promise<{ count: number }>;
   };
+  /** FİZİKSEL tablo adı — ham SQL / Prisma delegate işleri için. */
   table: string;
+  /**
+   * AUDIT tablo adı — sistemin MANTIKSAL adı (`ITEM`, `COLOR`…).
+   *
+   * ⚠️ BULGU-T2-011: audit satırı `meta.table` ile, yani FİZİKSEL adla
+   * (`items`) yazılıyordu. Diğer HER yol mantıksal adı (`ITEM`) kullanıyor →
+   * Denetim Raporu'nda "Kumaş" seçen denetçi birleştirmeyi HİÇ göremiyordu.
+   * Ölçüldü: saha kopyasındaki 13 birleştirmenin 13'ü fiziksel adla yazılmış.
+   * Ana veri birleştirmesi bu sistemdeki EN YIKICI ve geri alınamayan işlemdir
+   * (42 kurallık eşleme haritası) — izlenebilirliğin tam orada kopması, kayıt
+   * bütünlüğü açığıdır.
+   */
+  auditTable: string;
   label: string;
   /** Birleştirmeyi engelleyen "aynı olmalı" kolonları (varsa). */
   identityFields: Array<{ field: string; label: string }>;
@@ -140,6 +153,7 @@ const META: Record<MergeEntity, EntityMeta> = {
   customer: {
     delegate: () => prisma.customer as never,
     table: "customers",
+    auditTable: "CUSTOMER",
     label: "müşteri",
     // Müşteri tipi (YURTİÇİ/İHRACAT) belgeyi ve vergi davranışını değiştirir.
     identityFields: [{ field: "type", label: "müşteri tipi" }],
@@ -147,6 +161,7 @@ const META: Record<MergeEntity, EntityMeta> = {
   item: {
     delegate: () => prisma.item as never,
     table: "items",
+    auditTable: "ITEM",
     label: "kumaş",
     // ⚠️ EN SİNSİ VERİ BOZMA YOLU: MT ölçülen kumaşı KG ölçülen kumaşa
     // birleştirmek, tüm metraj/ağırlık toplamlarını sessizce anlamsızlaştırır.
@@ -156,12 +171,14 @@ const META: Record<MergeEntity, EntityMeta> = {
   color: {
     delegate: () => prisma.color as never,
     table: "colors",
+    auditTable: "COLOR",
     label: "renk",
     identityFields: [],
   },
   subcontractor: {
     delegate: () => prisma.subcontractor as never,
     table: "subcontractors",
+    auditTable: "SUBCONTRACTOR",
     label: "fason firma",
     identityFields: [],
   },
@@ -716,7 +733,7 @@ export class MasterDataMergeService {
       await AuditService.log({
         userId: params.userId,
         action: "UPDATE",
-        tableName: meta.table,
+        tableName: meta.auditTable,
         recordId: s.id,
         oldData: { name: s.name, code: s.code, isActive: s.isActive, mergedIntoId: null },
         newData: {
@@ -737,7 +754,7 @@ export class MasterDataMergeService {
       await AuditService.log({
         userId: params.userId,
         action: "UPDATE",
-        tableName: meta.table,
+        tableName: meta.auditTable,
         recordId: params.survivorId,
         oldData: Object.fromEntries(
           result.fieldsApplied.map((f) => [f.field, fieldValueOf(result.survivorBefore, f.field)]),
