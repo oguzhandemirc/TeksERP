@@ -155,3 +155,63 @@ describe('revivePendingStationMutations — ekransızlık damgası', () => {
     expect(list[1].meta?.[EKRANSIZ_META]).toBeUndefined();
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEL TESTİ — damga gerçekten karar noktasına ULAŞIYOR mu (BULGU-T3-001)
+// ─────────────────────────────────────────────────────────────────────────────
+// ⚠️ İki UÇ zaten test ediliyordu: `revivePendingStationMutations` damgayı
+// basıyor mu, ve `shouldAnnounceFailure` damgalıyken duyuruyor mu. ARADAKİ TEL
+// test edilmiyordu ve içinde denenmemiş bir varsayım vardı: "`meta`
+// dehydrate/hydrate turundan geçer". Geçmeseydi düzeltme ÖLÜ olurdu ve iki uç
+// testi yine YEŞİL kalırdı — bu oturumda aynı sınıftan iki hata çıktı
+// ("bekçi ürünü değil kendi kopyasını ölçüyor").
+//
+// Bu test zinciri GERÇEK query-core ile koşturur:
+//   damga → dehydrate → hydrate → mutation.meta → shouldAnnounceFailure
+import { QueryClient, hydrate } from '@tanstack/query-core';
+import { shouldAnnounceFailure } from './announceFailure';
+
+describe('ekransızlık damgası dehydrate/hydrate turundan geçiyor (T3-001 teli)', () => {
+  it('damga hydrate sonrası mutation.meta üzerinden okunabiliyor', () => {
+    // ⚠️ Diskteki şekil ELLE kurulur, `dehydrate()` ile DEĞİL: `dehydrate`
+    // varsayılan olarak yalnız DURAKLATILMIŞ mutation'ları alır, oysa diriltme
+    // damgası tam da duraklatılmamış (`isPaused:false`) bekleyen kayda basılır.
+    // Uygulamada bu şekli persister yazar; test onu birebir taklit eder ve
+    // asıl ölçmek istediğimiz halkayı (GERÇEK `hydrate` + `mutation.meta`)
+    // olduğu gibi koşturur.
+    const persisted = {
+      clientState: {
+        mutations: [
+          {
+            mutationKey: ['station', 'kk1-create-entry'],
+            state: { status: 'pending', isPaused: false, variables: { a: 1 } },
+          },
+        ],
+        queries: [],
+      },
+    } as never;
+
+    // Diriltme damgayı basar.
+    const damgali = revivePendingStationMutations(persisted) as unknown as {
+      clientState: Parameters<typeof hydrate>[1];
+    };
+
+    // Yeni istemciye hydrate et — uygulamanın açılışta yaptığının aynısı.
+    const hedef = new QueryClient();
+    hydrate(hedef, damgali.clientState);
+    const [m] = hedef.getMutationCache().getAll();
+
+    expect(m).toBeDefined();
+    // ⭐ ASIL İDDİA: damga karar noktasının okuduğu yerde.
+    expect((m!.meta as Record<string, unknown> | undefined)?.[EKRANSIZ_META]).toBe(true);
+
+    // ⭐ ve karar gerçekten değişiyor: aynı 409, damgasız SUSAR, damgalı KONUŞUR.
+    const cakisma = Object.assign(new Error('Bu top az önce girilmiş olabilir'), {
+      details: { code: 'POSSIBLE_DUPLICATE' },
+    });
+    const ekranYok =
+      (m!.meta as Record<string, unknown> | undefined)?.[EKRANSIZ_META] === true;
+    expect(shouldAnnounceFailure(['station', 'kk1-create-entry'], cakisma, false)).toBe(false);
+    expect(shouldAnnounceFailure(['station', 'kk1-create-entry'], cakisma, ekranYok)).toBe(true);
+  });
+});
