@@ -19,6 +19,7 @@
 // sert öldürülmüşse (SIGKILL) asılı kalmış olabileceği için başta kendini onarır.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { extractCheckConstraint } from "../src/middlewares/error.middleware";
 
 let pass = 0,
   fail = 0;
@@ -36,33 +37,12 @@ const PROBE = "_test_chk_violation_probe";
 /** Testin kendi yarattığı çuval — `finally`'de silinir. */
 let probeSackId: string | null = null;
 
-/**
- * `error.middleware.extractCheckConstraint`'in BİREBİR kopyası. Middleware'den
- * export edilmiyor (Express bağımlılıkları test ortamına girmesin); kopya bilinçli
- * ve bu testin görevi ikisinin AYNI kalmasını kanıtlamak — mantık değişirse buradaki
- * beklentiler düşer.
- */
-function extractCheckConstraint(err: unknown): string | null {
-  if (!err || typeof err !== "object") return null;
-  const e = err as Record<string, unknown>;
-  const causes: Record<string, unknown>[] = [];
-  const own = e.cause;
-  if (own && typeof own === "object") causes.push(own as Record<string, unknown>);
-  const meta = e.meta;
-  if (meta && typeof meta === "object") {
-    const dae = (meta as Record<string, unknown>).driverAdapterError;
-    if (dae && typeof dae === "object") {
-      const c = (dae as Record<string, unknown>).cause;
-      if (c && typeof c === "object") causes.push(c as Record<string, unknown>);
-    }
-  }
-  for (const c of causes) {
-    if (c.code !== "23514" && c.originalCode !== "23514") continue;
-    const msg = String(c.originalMessage ?? c.message ?? "");
-    return /check constraint "([^"]+)"/.exec(msg)?.[1] ?? "";
-  }
-  return null;
-}
+// ⚠️ GERÇEK FONKSİYON İÇE AKTARILIYOR (2026-08-30). Burada eskiden BİREBİR bir
+// KOPYA vardı ve notu "bu testin görevi ikisinin AYNI kalmasını kanıtlamak"
+// diyordu — ama hiçbir şey ikisini karşılaştırmıyordu. Ölçüldü: middleware'deki
+// fonksiyon körleştirildiğinde bu test YEŞİL kaldı, yani ürünü değil kendi
+// kopyasını ölçüyordu. Kopya silindi; middleware fonksiyonu dışa açıldı
+// (modül düzeyinde yan etkisi yok, içe aktarmak güvenli).
 
 async function dropProbe(): Promise<void> {
   await prisma.$executeRawUnsafe(`ALTER TABLE "sacks" DROP CONSTRAINT IF EXISTS "${PROBE}"`);
@@ -94,14 +74,26 @@ async function run(): Promise<void> {
     ormErr = e;
   }
   check("ihlal hata fırlattı", ormErr !== undefined);
+  // ⚠️ ŞEKİL SÜRÜME BAĞLI — İDDİA ONA ÇAKILMAZ (2026-08-30 düzeltmesi).
+  // Bu iki kontrol eskiden "hata ÇIPLAK DriverAdapterError'dır" ve "`code` alanı
+  // YOKTUR" diyordu. Prisma 7.9 artık hatayı SARMALIYOR (`PrismaClientKnownRequestError`,
+  // `code: "P2039"`) — yani kod İYİLEŞTİ ve bekçi, iyileşmeyi regresyon sanıp
+  // kırmızı veriyordu. Sürüme çakılı bir iddia, yükseltmeyi cezalandırır.
+  //
+  // Ölçülmesi gereken şey şekil değil, ŞU: eşleyici hâlâ GEREKLİ mi? Yani hata,
+  // middleware'in ÖZEL dallarından birine (P2002/P2003/P2025…) düşüp orada
+  // anlamlı bir mesaj almıyor; düşseydi bu eşleyiciye gerek kalmazdı.
+  const ormCtor = (ormErr as { constructor?: { name?: string } })?.constructor?.name;
+  const ormCode = (ormErr as { code?: unknown })?.code;
   check(
-    "hata ÇIPLAK DriverAdapterError (Prisma known-error DEĞİL)",
-    (ormErr as { constructor?: { name?: string } })?.constructor?.name === "DriverAdapterError",
-    `${(ormErr as { constructor?: { name?: string } })?.constructor?.name}`,
+    "ORM yolunun şekli BİLİNEN ikisinden biri (sürüm değişimini görünür kılar)",
+    ormCtor === "DriverAdapterError" || ormCtor === "PrismaClientKnownRequestError",
+    `${ormCtor} · code=${String(ormCode)}`,
   );
   check(
-    "`code` alanı YOK → known-error dalı bunu YAKALAYAMAZ (regresyonun kökü)",
-    (ormErr as { code?: unknown })?.code === undefined,
+    "eşleyici HÂLÂ GEREKLİ — hata middleware'in özel dallarına düşmüyor",
+    !["P2002", "P2003", "P2025", "P2011"].includes(String(ormCode)),
+    `code=${String(ormCode)}`,
   );
   check(
     "⭐ eşleyici constraint adını çıkardı",
@@ -145,8 +137,16 @@ async function run(): Promise<void> {
 
   // ── 4) SIZINTI KONTROLÜ ───────────────────────────────────────────────────
   console.log("\n=== 4) İhlal eden satır YANITA sızmamalı ===");
+  // ⚠️ `detail` İKİ YERDE OLABİLİR ve TEK yere bakmak bu kontrolü KÖRELTİR
+  // (2026-08-30'da ölçüldü: Prisma 7.9'da satır değerleri artık
+  // `meta.driverAdapterError.cause.detail`te; eski `cause.detail` boş dönüyordu,
+  // yani "sızmıyor" iddiası hiçbir şey kanıtlamıyordu — zemin çökmüştü).
+  const ormAny = ormErr as {
+    cause?: Record<string, unknown>;
+    meta?: { driverAdapterError?: { cause?: Record<string, unknown> } };
+  };
   const detail = String(
-    ((ormErr as { cause?: Record<string, unknown> })?.cause?.detail ?? ""),
+    ormAny?.cause?.detail ?? ormAny?.meta?.driverAdapterError?.cause?.detail ?? "",
   );
   check("PG `detail` gerçekten satır değerlerini taşıyor (sızarsa tehlikeli)", detail.includes("Failing row"));
   // Middleware yanıtı yalnız constraint adını kullanır; `detail` hiç okunmaz.

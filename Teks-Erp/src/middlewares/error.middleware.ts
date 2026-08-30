@@ -190,7 +190,15 @@ const CLIENT_DATA_PRISMA_CODES = new Set<string>([
  * ⚠️ `cause.detail` İHLAL EDEN SATIRIN TÜM KOLON DEĞERLERİNİ taşır ("Failing row
  * contains (...)") → ASLA yanıta konmaz; yalnız sunucu log'una/audit'e gider.
  */
-function extractCheckConstraint(err: unknown): string | null {
+/**
+ * ⚠️ BEKÇİ İÇİN DIŞA AÇIK (2026-08-30). Eskiden `export` YOKTU ve
+ * `test_check_violation_mapping` bu fonksiyonun BİREBİR KOPYASINI taşıyordu;
+ * notu "bu testin görevi ikisinin AYNI kalmasını kanıtlamak" diyordu ama
+ * hiçbir şey ikisini karşılaştırmıyordu — bekçi ÜRÜNÜ değil kendi kopyasını
+ * ölçüyordu. Ölçüldü: middleware'deki fonksiyon körleştirildiğinde test YEŞİL
+ * kaldı. Artık gerçek fonksiyon test ediliyor, kopya silindi.
+ */
+export function extractCheckConstraint(err: unknown): string | null {
   if (!err || typeof err !== "object") return null;
   const e = err as Record<string, unknown>;
   const causes: Record<string, unknown>[] = [];
