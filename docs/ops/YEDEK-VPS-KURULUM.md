@@ -104,47 +104,95 @@ zaten kullanılan `/<müşteri>/<ürün>/` düzeninin aynısı.
 > ne zaman" bilgisi durur), yalnız uzantı değişir. Geri yüklerken `rclone` bunu
 > kendisi çözer; `.bin`i elle silmeyin.
 
-### A) VPS tarafı — bir kez (root)
+### A) VPS tarafı — bir kez (`sudo`)
+
+> **HEDEF SUNUCU (2026-08-31'de ölçüldü):** `mail.fztmehmetilhan.com`
+> (91.217.119.138, SSH portu **2222**, kullanıcı `oguzhan`, parolasız `sudo` var).
+> Ubuntu 22.04.5 · kökte 41 GB boş · `tekserp-guncelleme` ve `tekserp-demo`
+> konteynerleri burada.
+>
+> ⚠️ **PAYLAŞIMLI MAKİNE:** aynı sunucuda başka müşterilerin WordPress siteleri,
+> `postgres`, `mariadb`, `redis` ve `traefik` koşuyor. Bu, şifrelemeyi
+> "iyi olur"dan "şart"a çıkarır: o sitelerden biri ele geçse bile yedek dosyası
+> anlamsız bir blok olarak kalır.
+
+#### Ölçülmüş üç tuzak (hepsi sessiz arıza üretirdi)
+
+| Tuzak | Neden sessiz | Ölçüm |
+|---|---|---|
+| **`AllowUsers oguzhan`** | Sunucuda YALNIZ bu kullanıcı giriş yapabiliyor. Yeni yedek kullanıcısı açılsa bile kapıdan dönerdi; kurulum "bitti" görünürdü. | `00-hardening.conf` okundu |
+| **`Match Group` doğrulanamaz** | Kullanıcı henüz yokken grup da yok → `sshd -T` bloğun ateşlemediğini gösterdi. Kurulum sonrası "acaba çalışıyor mu" belirsiz kalırdı. | `sshd -T -C user=…` |
+| **`sshd -t` yeterli sanmak** | Sözdizimi kontrolü ETKİN AYARI göstermez. İki farklı yapılandırmayı da "geçerli" dedi. | aşağıdaki A5 |
+
+⚠️ **İki tahminim ÖLÇÜMLE ÇÜRÜDÜ, kayda geçiyorum:** ① `Subsystem sftp` satırının
+`Match` bloğunun içine düşüp sshd'yi kıracağını sandım — kırmadı; ② naif `Match`
+bloğunun genel ayarları bozacağını sandım — `sshd -T` çıktısı canlıyla birebir
+aynı çıktı. Yine de `Match all` ile kapatıyoruz: maliyeti sıfır, ileride
+`Include` sırası değişirse koruma yerinde kalır.
 
 ```bash
-# A1. Dizinler. ⚠️ chroot kökü root'a ait ve grup/başkası tarafından
-#     YAZILAMAZ olmak ZORUNDA — sshd aksi hâlde bağlantıyı reddeder.
-mkdir -p /srv/tekserp-yedek /srv/tekserp-arsiv
-chown root:root /srv/tekserp-yedek /srv/tekserp-arsiv
-chmod 755 /srv/tekserp-yedek
-chmod 700 /srv/tekserp-arsiv          # arşiv YALNIZ root
+# A1. Dizinler. ⚠️ chroot kökü root'a ait ve başkasınca YAZILAMAZ olmak ZORUNDA.
+sudo mkdir -p /srv/tekserp-yedek /srv/tekserp-arsiv
+sudo chown root:root /srv/tekserp-yedek /srv/tekserp-arsiv
+sudo chmod 755 /srv/tekserp-yedek
+sudo chmod 700 /srv/tekserp-arsiv          # arşiv YALNIZ root
 
-# A2. Fabrika kullanıcısı (kabuk YOK)
-groupadd -f yedek
-useradd -r -g yedek -s /usr/sbin/nologin -M -d /srv/tekserp-yedek/yedek-adnansahin yedek-adnansahin
-mkdir -p /srv/tekserp-yedek/yedek-adnansahin/gelen
-chown root:root /srv/tekserp-yedek/yedek-adnansahin      # chroot içi kök: root
-chmod 755        /srv/tekserp-yedek/yedek-adnansahin
-chown yedek-adnansahin:yedek /srv/tekserp-yedek/yedek-adnansahin/gelen
-chmod 700        /srv/tekserp-yedek/yedek-adnansahin/gelen
+# A2. Fabrika kullanıcısı (kabuk YOK, ev dizini chroot kökü)
+sudo groupadd -f yedek
+sudo useradd -r -g yedek -s /usr/sbin/nologin -M \
+     -d /srv/tekserp-yedek/yedek-adnansahin yedek-adnansahin
+sudo mkdir -p /srv/tekserp-yedek/yedek-adnansahin/gelen
+sudo chown root:root          /srv/tekserp-yedek/yedek-adnansahin
+sudo chmod 755                /srv/tekserp-yedek/yedek-adnansahin
+sudo chown yedek-adnansahin:yedek /srv/tekserp-yedek/yedek-adnansahin/gelen
+sudo chmod 700                /srv/tekserp-yedek/yedek-adnansahin/gelen
 
-# A3. Anahtar dosyası chroot'un DIŞINDA (fabrika kendi anahtarını değiştiremesin)
-mkdir -p /etc/ssh/yedek-anahtarlari && chmod 755 /etc/ssh/yedek-anahtarlari
-# (fabrikanın AÇIK anahtarı buraya yazılacak — B2'den sonra)
+# A3. Anahtarlar chroot'un DIŞINDA (fabrika kendi anahtarını değiştiremesin)
+sudo mkdir -p /etc/ssh/yedek-anahtarlari && sudo chmod 755 /etc/ssh/yedek-anahtarlari
 ```
 
 ```bash
-# A4. sshd kuralı
-cat > /etc/ssh/sshd_config.d/tekserp-yedek.conf <<'EOF'
-Match Group yedek
-  AuthorizedKeysFile /etc/ssh/yedek-anahtarlari/%u
+# A4a. ⚠️ ÖNCE giriş listesini genişlet — TEK SATIR hâlinde (iki ayrı AllowUsers
+#      satırı yazma; ilk satır kazanır ve yenisi sessizce yok sayılabilir).
+sudo cp /etc/ssh/sshd_config.d/00-hardening.conf /etc/ssh/sshd_config.d/00-hardening.conf.yedek
+sudo sed -i 's|^AllowUsers oguzhan$|AllowUsers oguzhan yedek-*|' /etc/ssh/sshd_config.d/00-hardening.conf
+
+# A4b. Yedek kullanıcısının kuralı. `Match User` (Group DEĞİL) — kullanıcı
+#      yokken bile doğrulanabilir; `Match all` bloğu kapatır.
+sudo tee /etc/ssh/sshd_config.d/90-tekserp-yedek.conf >/dev/null <<'EOF'
+Match User yedek-*
   ChrootDirectory /srv/tekserp-yedek/%u
   ForceCommand internal-sftp
-  PasswordAuthentication no
   AllowTcpForwarding no
-  X11Forwarding no
   PermitTTY no
+  AuthorizedKeysFile /etc/ssh/yedek-anahtarlari/%u
+Match all
 EOF
-sshd -t && systemctl reload ssh      # ⚠️ `sshd -t` GEÇMEDEN reload ETMEYİN
 ```
 
-**DOĞRULAMA A:** `sshd -t` sessiz çıkmalı. Çıkmazsa dosyayı silin, `reload`
-etmeyin — bozuk yapılandırma ile reload SSH'ı tamamen kapatabilir.
+```bash
+# A5. ⚠️ ASIL KAPI — `sshd -t` YETMEZ, ETKİN AYARI karşılaştır.
+sudo sshd -t && echo "sözdizimi OK"
+echo "--- yedek kullanıcısı: hapis + zorunlu sftp GÖRÜNMELİ ---"
+sudo sshd -T -C user=yedek-adnansahin,host=t,addr=1.2.3.4 \
+  | grep -E '^(chrootdirectory|forcecommand|permittty|authorizedkeysfile)'
+echo "--- normal kullanıcı: hepsi none/yes KALMALI ---"
+sudo sshd -T -C user=oguzhan,host=t,addr=1.2.3.4 \
+  | grep -E '^(chrootdirectory|forcecommand|permittty|subsystem)'
+```
+
+**DOĞRULAMA A (geçmeden ilerleme):** yedek kullanıcısında
+`chrootdirectory /srv/tekserp-yedek/%u` + `forcecommand internal-sftp`,
+normal kullanıcıda `chrootdirectory none` + `forcecommand none`.
+Beklenen çıkmazsa: `sudo cp …00-hardening.conf.yedek …00-hardening.conf`,
+`sudo rm …90-tekserp-yedek.conf` — **reload ETME**.
+
+```bash
+# A6. Ancak DOĞRULAMA A geçtiyse:
+sudo systemctl reload ssh
+# ⚠️ Bu terminali KAPATMA. Yeni bir pencerede `ssh yenisunucu` ile giriş
+# yapabildiğini teyit et; edemiyorsan açık terminalden geri al.
+```
 
 ### B) Fabrika sunucusu — bir kez
 
