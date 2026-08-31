@@ -130,18 +130,25 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
 > ```
 > `owner` ile `DATABASE_URL`'deki kullanıcı aynıysa override gerekmez.
 
-> ## ⚠️⚠️ BU DOSYA HER KURULUMDA EZİLİYOR — deploy sonrası KONTROL ET
+> ## ⚠️ BU DOSYA SUNUCUNUNDUR — deploy sonrası yine de KONTROL ET
 >
-> `kur.ps1` yeni paketi yerleştirirken `.env`'i **yedekleyip geri koyar**, ama
-> `ecosystem.config.js`'i **paketin kopyasıyla ezer** (`Copy-Item "$temp\*"`).
-> Yani sunucuda bu dosyaya elle yazdığınız her operasyonel ayar — offsite hedefi,
-> zamanlayıcı sahibi, saklama gün sayısı — bir sonraki güncellemede sessizce
-> repo değerine döner. Hata üretmez; tek iz bir pm2 log satırıdır.
+> `kur.ps1` bu dosyayı **`.env` ile aynı muameleye tabi tutar**: kurulum öncesi
+> kenara alır, yerleştirmeden sonra geri koyar (2026-08-29, commit `560f74f0`,
+> BULGU-T1-020). Paketin kopyası yanına `ecosystem.config.js.paket` olarak
+> bırakılır ve env anahtarlarının FARKI ekrana basılır ("pakette YENİ ayar" /
+> "pakette ARTIK YOK") — değerler basılmaz, karar operatörde kalır.
 >
-> **ÖLÇÜLDÜ (2026-08-31, BULGU-T1-020):** repo dosyası `BACKUP_SCHEDULE_ENABLED:
-> "false"` derken canlı sistem 2026-08-25 03:05'te `trigger=nightly` bir yedek
-> üretmiş — yani çalışan env repo dosyasından **ayrışmıştı**. Bir sonraki deploy
-> onu geri çevirir ve o gece yedeği backend'den ALINMAZ.
+> ⚠️ **ÖNCESİ (2026-08-29'dan önce) BÖYLE DEĞİLDİ** ve sahadaki ayar her
+> kurulumda sessizce repo değerine dönüyordu. Ölçüm o dönemin izini taşıyor:
+> repo dosyası `BACKUP_SCHEDULE_ENABLED:"false"` derken canlı sistem 2026-08-25
+> 03:05'te `trigger=nightly` bir yedek üretmiş — yani çalışan env repo
+> dosyasından ayrışmıştı.
+>
+> **Kontrol neden hâlâ gerekli — iki yol AÇIK kalıyor:**
+> 1. Pakette YENİ bir anahtar geldiyse **elle eklenir** (script eklemez, yalnız
+>    söyler). Eklenmezse o özellik sahada sessizce kapalı kalır.
+> 2. Sunucuda `ecosystem.config.js` YOKSA (ilk kurulum / dosya silinmişse) script
+>    paketinkini kullanır — repo varsayılanlarıyla, yani offsite hedefi BOŞ.
 >
 > **Deploy sonrası iki satırlık kontrol** (panel → Sistem → Sunucu Durumu ya da
 > doğrudan uç):
@@ -152,18 +159,10 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
 >                           offsite.configured       : true | false
 > ```
 >
-> - `scheduler` beklediğiniz sahibi göstermiyorsa → `ecosystem.config.js` ezilmiş.
 > - `scheduler:"harici"` **meşrudur** (yedeği Windows Görev Zamanlayıcı alır,
 >   backend çökse bile çalışsın diye) — ama o zaman `verdict` de `ok` olmalı;
 >   `harici` + `kritik` birlikte görünüyorsa **kimse yedek almıyor** demektir.
 > - `offsite.configured:false` → yedekler DB ile aynı diskte.
->
-> Kalıcı çözüm bir KARAR ister (bu tur bilerek verilmedi): **A)** operasyonel
-> yedek ayarlarını `.env`'e taşı (deploy'un koruduğu tek dosya) · **B)** repo
-> dosyasını sahanın gerçek değerleriyle eşitle · **C)** `kur.ps1` ecosystem'i de
-> kenara alıp birleştirsin ve farkı onaylatsın. ⚠️ C, deploy script'inde
-> değişiklik demektir ve **Windows/pwsh oturumu olmadan doğrulanamaz**
-> (`deploy/test/kur-gerialma.harness.ps1` ile prova edilmeli).
 
 > **⚠ Sessiz bozulma riski.** `BACKUP_DIR` NSSM servis kaydından geliyordu; pm2'ye
 > geçişte taşınmadıysa yedek alınmamış olur ve hiçbir hata görünmez. Panelde

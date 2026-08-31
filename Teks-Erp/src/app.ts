@@ -280,14 +280,13 @@ const NIGHTLY_WARN_HOURS = 50;
  * çökmüşken bile yedek alınsın diye; ikisi birden açık kalırsa her gece İKİ dump
  * alınır (kök CLAUDE.md, 2026-07-31).
  *
- * Neden görünür olması gerekiyor (BULGU-T1-020): bu değer
- * `ecosystem.config.js`te yaşıyor ve `kur.ps1` her kurulumda o dosyayı paketin
- * kopyasıyla EZİYOR (`.env` korunur, ecosystem KORUNMAZ). Sahada ölçüldü
- * (2026-08-31): repo dosyası `"false"` derken canlı sistem 2026-08-25 03:05'te
- * `trigger=nightly` bir yedek üretmiş — yani çalışan env repo dosyasından
- * AYRIŞMIŞ. Bir sonraki deploy onu sessizce geri çevirir ve tek iz, kimsenin
- * bakmadığı bir pm2 log satırıdır. Sahip bilgisi yaş hükmünün YANINDA durursa
- * "kimse yedek almıyor" durumu tek bakışta görünür.
+ * Neden görünür olması gerekiyor (BULGU-T1-020): bu değer `ecosystem.config.js`te
+ * yaşıyor. `kur.ps1` artık o dosyayı KORUYOR (2026-08-29, `560f74f0`) ama iki yol
+ * hâlâ açık: pakette gelen YENİ anahtar elle eklenmezse özellik sessizce kapalı
+ * kalır, ve sunucuda dosya hiç yoksa paketin repo varsayılanları geçerli olur.
+ * Ayrışmanın gerçek olduğu ölçüldü (2026-08-31): repo dosyası `"false"` derken
+ * canlı sistem 2026-08-25 03:05'te `trigger=nightly` bir yedek üretmiş. Sahip
+ * bilgisi yaş hükmünün YANINDA durursa "kimse yedek almıyor" tek bakışta görünür.
  */
 export function backupScheduler(): "backend" | "harici" {
   return process.env.BACKUP_SCHEDULE_ENABLED === "false" ? "harici" : "backend";
