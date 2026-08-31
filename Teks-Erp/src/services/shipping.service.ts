@@ -1542,11 +1542,30 @@ export class ShippingService {
       select: { id: true, shipmentNo: true, status: true },
     });
     if (!sh) return null;
+    // ⚠️ 4. DURUM — "yazıldı ama SONRADAN İPTAL EDİLDİ" (BULGU-T3-010).
+    // Tablet "Hemen Sevk Et" der, sunucu kurar ve çıkarır ama yanıt ağda
+    // kaybolur; mobil sözleşmesi gereği token YAPIŞIR. Bu arada masaüstünden
+    // storno + kapatma yapılır (sevkiyat CANCELLED, çuvallar havuza döner,
+    // irsaliye VOIDED). Tablet yeniden bağlanıp aynı token'la gönderdiğinde
+    // eskiden `success:true` + "Sevkiyat kuruldu" dönüyordu: operatör yeşili
+    // görüp evrak beklemeye geçiyor, oysa MAL ÇIKMAMIŞTIR ve o sevkiyat artık
+    // hiçbir ekranda yok. KK1/sipariş/fason ile aynı aile
+    // (`token-replay.helper`, ENTRY_CANCELLED / ORDER_CANCELLED / RECEIPT_CANCELLED).
+    // ⚠️ 409 = KESİN hata → mobil kuyruk token'ı BIRAKIR (entryAttempt sözleşmesi)
+    // ve operatör sevkiyatı yeniden kurar. 5xx dönseydi token yapışır, aynı ölü
+    // sevkiyat sonsuza dek yeniden sorulurdu.
+    if (sh.status === ShipmentStatus.CANCELLED) {
+      throw AppError.conflict(
+        `Bu sevkiyat (${sh.shipmentNo}) kurulmuş ama İPTAL EDİLMİŞ — mal çıkmadı. ` +
+          "Sevkiyatı yeniden kurun.",
+        { code: "SHIPMENT_CANCELLED", shipmentNo: sh.shipmentNo },
+      );
+    }
     const dispatched = sh.status === ShipmentStatus.DISPATCHED;
     return {
       success: true,
       data: { id: sh.id, shipmentNo: sh.shipmentNo, status: sh.status, dispatched },
-      message: dispatched ? `Sevk edildi: ${sh.shipmentNo}` : `Sevkiyat kuruldu (onay bekliyor): ${sh.shipmentNo}`,
+      message: dispatched ? `Sevk edildi: ${sh.shipmentNo}` : `Sevkiyat kuruldu: ${sh.shipmentNo}`,
     };
   }
 

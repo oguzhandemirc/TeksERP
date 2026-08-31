@@ -18,6 +18,7 @@
 // §3 Sipariş           — iptal edilmiş siparişin token'ı → 409 ORDER_CANCELLED
 // §4 REGRESYON         — iptal EDİLMEMİŞ kaydın replay'i BAYT BAYT aynı
 // §5 Tek kaynak        — kural elle kopyalanmamış (AST/metin)
+// §6 Sevkiyat          — iptal edilmiş sevkiyatın token'ı → 409 SHIPMENT_CANCELLED
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { InventoryService } from "../src/services/inventory.service";
@@ -138,6 +139,73 @@ async function main(): Promise<void> {
   const o5 = (await orderSvc.create({ customerId, clientToken: token5, lines: [{ itemId, quantity: 50 }] }, userId)).data as { id: string };
   const o5b = (await orderSvc.create({ customerId, clientToken: token5, lines: [{ itemId, quantity: 50 }] }, userId)).data as { id: string };
   check("§4: canlı siparişin replay'i hâlâ aynı kaydı dönüyor", o5b.id === o5.id);
+
+  // ═══ §6 — SEVKİYAT: iptal edilmiş sevkiyatın token'ı (BULGU-T3-010) ═══
+  // Tablet "Hemen Sevk Et" der, yanıt ağda kaybolur (token YAPIŞIR); masaüstünden
+  // storno + kapatma yapılır → sevkiyat CANCELLED, çuvallar havuza döner. Tablet
+  // aynı token'la yeniden gönderdiğinde eskiden `success:true` + "Sevkiyat
+  // kuruldu" dönüyordu: operatör yeşili görüp evrak beklemeye geçiyor, oysa MAL
+  // ÇIKMAMIŞTIR ve o sevkiyat hiçbir ekranda yok.
+  console.log("\n=== §6: sevkiyat — iptal edilmiş token ===");
+  {
+    const { ShippingService } = await import("../src/services/shipping.service");
+    const shipSvc = new ShippingService();
+    const token = randomUUID();
+    const dmg = `TSTREP${Date.now().toString().slice(-7)}`;
+    const musteri = await prisma.customer.create({
+      data: { code: `${dmg}C`.slice(0, 30), name: `${dmg} m` },
+      select: { id: true },
+    });
+    const cuval = await prisma.sack.create({
+      data: { sackNo: `${dmg}CV`.slice(0, 30), customerId: musteri.id },
+      select: { id: true },
+    });
+    // Çuval BOŞ olamaz ("Boş çuval sevk edilemez") — içine bir top koy.
+    const kumas = await prisma.item.findFirst({ where: { isActive: true, mergedIntoId: null }, select: { id: true } });
+    const topSevk = await prisma.roll.create({
+      data: {
+        barcode: `${dmg}R`.slice(0, 30),
+        itemId: kumas!.id,
+        initialQty: 50,
+        currentQty: 50,
+        status: RollStatus.WAREHOUSE,
+        sackId: cuval.id,
+      },
+      select: { id: true },
+    });
+    const kurulan = (await shipSvc.createShipment(
+      { customerId: musteri.id, sackIds: [cuval.id], orderless: true, clientToken: token },
+      undefined,
+    )) as { data: { id: string } };
+    // Sevkiyatı İPTAL et (mal çıkmamış hâle getir).
+    await prisma.shipment.update({
+      where: { id: kurulan.data.id },
+      data: { status: "CANCELLED" },
+    });
+    const e6 = await hataOf(() =>
+      shipSvc.createShipment(
+        { customerId: musteri.id, sackIds: [cuval.id], orderless: true, clientToken: token },
+        undefined,
+      ),
+    );
+    check(
+      "§6: iptal edilmiş sevkiyatın token'ı REDDEDİLDİ",
+      e6 !== null && e6.code === "SHIPMENT_CANCELLED",
+      e6 ? `code=${e6.code}` : "SESSİZCE GEÇTİ",
+    );
+    // ⚠️ 409 ŞART, 5xx DEĞİL: mobil kuyruk kesin 4xx'te token'ı BIRAKIR
+    // (`entryAttempt` sözleşmesi). 5xx dönseydi token yapışır ve aynı ölü
+    // sevkiyat sonsuza dek yeniden sorulurdu.
+    check("§6: hata KESİN (4xx) — token bırakılabilsin", e6?.statusCode === 409, `status=${e6?.statusCode}`);
+    await prisma.roll.updateMany({ where: { id: topSevk.id }, data: { sackId: null, shipmentId: null } }).catch(() => undefined);
+    await prisma.rollMovement.deleteMany({ where: { rollId: topSevk.id } }).catch(() => undefined);
+    await prisma.roll.deleteMany({ where: { id: topSevk.id } }).catch(() => undefined);
+    await prisma.sack.updateMany({ where: { id: cuval.id }, data: { shipmentId: null } }).catch(() => undefined);
+    await prisma.shipmentOrder.deleteMany({ where: { shipmentId: kurulan.data.id } }).catch(() => undefined);
+    await prisma.shipment.deleteMany({ where: { id: kurulan.data.id } }).catch(() => undefined);
+    await prisma.sack.deleteMany({ where: { id: cuval.id } }).catch(() => undefined);
+    await prisma.customer.deleteMany({ where: { id: musteri.id } }).catch(() => undefined);
+  }
 
   // ═══ §5 — kural TEK KAYNAKTA, elle kopyalanmamış ═══
   console.log("\n=== §5: tek kaynak (elle kopya yasağı) ===");

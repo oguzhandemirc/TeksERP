@@ -95,11 +95,17 @@ async function main(): Promise<void> {
 
   // ── Sevkiyat kur + sevk et ────────────────────────────────────────────────
   const kur = (await svc.createShipment(
-    { customerId: musteri.id, sackIds: [cuval.id], orderIds: [siparis.id], dispatchNow: true },
+    { customerId: musteri.id, sackIds: [cuval.id], orderIds: [siparis.id] },
     ADMIN,
-  )) as { data: { id: string } };
+  )) as { data: { id: string; dispatched?: boolean } };
   const sevkId = kur.data.id;
   temizle.shipment.push(sevkId);
+  // ⚠️ Anında sevk `shipping.confirmationEnabled` bayrağına bağlıdır — test onu
+  // DEĞİŞTİRMEZ (proje kuralı: bekçiler feature-flag'e dokunmaz). Bu yüzden
+  // sevkiyat hâlâ PLANNED ise AÇIKÇA sevk edilir; böylece kontrol ortamdaki
+  // bayrak durumundan BAĞIMSIZ olur.
+  const kurulan = await prisma.shipment.findUnique({ where: { id: sevkId }, select: { status: true } });
+  if (kurulan?.status !== "DISPATCHED") await svc.dispatchShipment(sevkId, {}, ADMIN);
 
   const ilkTahsis = await prisma.sackAllocation.aggregate({
     where: { sack: { shipmentId: sevkId } },
