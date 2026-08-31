@@ -9,9 +9,31 @@
 //
 // !! GERİ ALINAMAZ — önce yedek al veya sadece test ortamında çalıştır.
 
-import prisma from "../src/lib/prisma";
+import prisma, { pool } from "../src/lib/prisma";
+import { assertGelistirmeVeritabani } from "./db-guard";
 
 async function main() {
+  // ⛔ İLK İFADE — sıra load-bearing (BULGU-T1-019). Kapı TRUNCATE'ten SONRA
+  // çağrılsaydı hiçbir şey kazandırmazdı; eskiden tek koruma bir YORUM SATIRIYDI.
+  const { apply } = assertGelistirmeVeritabani("reset-operational", { applyGerekli: true });
+
+  // Ne kaybedileceğini ÖNCE göster. "N kayıt etkilenecek" gibi soyut sayı değil,
+  // ekranların adıyla (kök CLAUDE.md: yıkıcı işlemde etkilenen kayıtları somut listele).
+  const [top, ie, sip, sevk, kart, log] = await Promise.all([
+    prisma.roll.count(),
+    prisma.workOrder.count(),
+    prisma.order.count(),
+    prisma.shipment.count(),
+    prisma.travelerCard.count(),
+    prisma.systemLog.count(),
+  ]);
+  console.log("\nSilinecek:");
+  console.log(`   ${top} top · ${ie} iş emri · ${sip} sipariş · ${sevk} sevkiyat`);
+  console.log(`   ${kart} refakat kartı · ${log} sistem logu (arşiv dahil)`);
+  console.log("   Ana veri (ürün/renk/müşteri/kullanıcı/istasyon/rota/ayar) KORUNUR.\n");
+
+  if (!apply) return;
+
   console.log("⚠️  Operasyon verileri siliniyor… (master data korunur)\n");
 
   // Tek SQL ile: CASCADE → PostgreSQL tüm FK bağımlılık sırasını otomatik çözer.
@@ -73,6 +95,13 @@ async function main() {
 main()
   .catch((e) => {
     console.error("❌ Hata:", e.message);
-    process.exit(1);
+    process.exitCode = 1;
   })
-  .finally(() => prisma.$disconnect());
+  // ⚠️ `$disconnect()` TEK BAŞINA YETMEZ: havuz `idleTimeoutMillis: 600_000` ile
+  // kuruluyor → idle handle event loop'u 10 dk açık tutar ve betik "bitti ama
+  // çıkmadı" durumunda kalır (kök CLAUDE.md'nin kayıtlı tuzağı; kuru koşum
+  // eklenince birebir yaşandı). `pool.end()` şart.
+  .finally(async () => {
+    await prisma.$disconnect();
+    await pool.end();
+  });

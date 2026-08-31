@@ -23,6 +23,7 @@
 // =============================================================================
 
 import { Prisma } from "@prisma/client";
+import { assertGelistirmeVeritabani } from "./db-guard";
 import prisma from "../src/lib/prisma";
 import { pool } from "../src/lib/prisma";
 import { getSystemLogSummary } from "../src/services/reports/audit.report.service";
@@ -171,6 +172,10 @@ async function explainScans(range: DateRange): Promise<{ scans: number; execMs: 
 }
 
 async function main(): Promise<void> {
+  // ⛔ İLK İFADE (BULGU-T1-019, 2. tavsiye): bu betik `system_logs`e SENTETİK
+  // satır basar. Prod'a yazsaydı denetim defterini kirletirdi — üstelik audit
+  // tablosu değiştirilemez (trigger korumalı), yani temizliği de kolay olmazdı.
+  assertGelistirmeVeritabani("bench_audit_summary");
   console.log("\n=== AUDIT ÖZETİ A/B BENCH (teks_loadtest) ===\n");
   await ensureSeed();
 
