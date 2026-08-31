@@ -96,6 +96,13 @@ const closeRemainderSchema = z.object({
   reasonText: z.string().trim().max(500).nullish(),
 });
 
+/** Kalan kapamasının GERİ ALINMASI (BULGU-T3-017) — sebep İSTENMEZ: bu bir
+ *  düzeltmedir, yeni bir fire kararı değil. İz audit'te (SUBCONTRACTOR_REMAINDER_REOPENED). */
+const reopenRemainderSchema = z.object({
+  stepId: z.string().uuid(),
+  rollId: z.string().uuid(),
+});
+
 const cancelReceiptSchema = z.object({
   reason: z.string().trim().min(3, "İptal sebebi en az 3 karakter").max(500),
   /** Receipt'ten doğan açık kumaş roll'larını cascade iptal et. Liste backend
@@ -180,6 +187,7 @@ export class SubcontractorController {
     this.cancelDispatchBulk = this.cancelDispatchBulk.bind(this);
     this.receive = this.receive.bind(this);
     this.closeRemainder = this.closeRemainder.bind(this);
+    this.reopenRemainder = this.reopenRemainder.bind(this);
     this.pendingReturns = this.pendingReturns.bind(this);
     this.pendingReturnDetail = this.pendingReturnDetail.bind(this);
     this.listDispatches = this.listDispatches.bind(this);
@@ -334,6 +342,20 @@ export class SubcontractorController {
       res.status(200).json(result);
     } catch (err) {
       next(err);
+    }
+  }
+
+  /** Kalan kapamasını geri al — makbuz yeniden iptal edilebilir olsun (T3-017). */
+  async reopenRemainder(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = reopenRemainderSchema.parse(req.body);
+      const result = await this.service.reopenRemainder(
+        { stepId: body.stepId, rollId: body.rollId },
+        req.user?.userId,
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
     }
   }
 

@@ -363,6 +363,88 @@ async function main(): Promise<void> {
     check("P11: TOPLAM korunur (10 + 10 = 20)", Math.abs(total - 20) < 0.001, `toplam ${total}`);
   }
 
+  // ═══ P12 — KALAN KAPAMASI GERİ ALINABİLİR (BULGU-T3-017) ═══════════════════
+  // Operatör kısmi kabulde metrajı yanlış girer; ikinci masa "kalan gelmeyecek"
+  // der. Masa-1 düzeltmek ister: eskiden önizleme "güvenli" diyor, uç 409
+  // veriyor ve kapamanın geri alma yolu OLMADIĞI için makbuz BİR DAHA iptal
+  // edilemiyordu — defter kalıcı olarak yanlış kalıyordu (sahte fire + sahte
+  // üretim; düzeltmenin tek yolu DB müdahalesi).
+  console.log("\n=== P12: kalan kapaması geri alınabilir ===");
+  {
+    const sc = await setup("P12", 100);
+    await sub.dispatch(
+      { workOrderId: sc.woId, stepId: sc.boyaStep, subcontractorId: SUB_BOYER, rollIds: [sc.rollId] },
+      ADMIN,
+    );
+    // KISMİ kabul: 100 gitti, 15 geldi → top AT_SUBCONTRACTOR kalır.
+    const mk = await sub.receive(
+      {
+        workOrderId: sc.woId, stepId: sc.boyaStep, subcontractorId: SUB_BOYER,
+        returns: [{ rollId: sc.rollId, receivedQty: 15 }],
+        newRolls: [{ qty: 15 }],
+      },
+      ADMIN,
+    );
+    const makbuzId = (mk.data as { id: string }).id;
+
+    // Önizleme: kapamadan ÖNCE iptal güvenli olmalı (körlük zemini — aksi hâlde
+    // aşağıdaki "allSafe:false" kontrolü zaten baştan doğru olurdu).
+    const on1 = await sub.getCancelPreview(makbuzId);
+    check(
+      "P12: kapamadan ÖNCE iptal güvenli (körlük zemini)",
+      (on1.data as { allSafe: boolean }).allSafe === true,
+      `allSafe=${(on1.data as { allSafe: boolean }).allSafe}`,
+    );
+
+    // "Kalan gelmeyecek" — 85 m fire.
+    await sub.closeRemainder(
+      { stepId: sc.boyaStep, rollId: sc.rollId, reasonCode: "FASON_CEKME" },
+      ADMIN,
+    );
+
+    // ⭐ ÖNİZLEME ARTIK DÜRÜST: "güvenli" demiyor ve SEBEBİ söylüyor.
+    const on2 = (await sub.getCancelPreview(makbuzId)).data as {
+      allSafe: boolean;
+      remainderClosed: { blocked: boolean; message: string | null };
+    };
+    check("P12: kapamadan SONRA önizleme allSafe:false", on2.allSafe === false);
+    check(
+      "P12: sebep somut yazılı (operatör ne yapacağını okuyor)",
+      on2.remainderClosed.blocked && /geri al/i.test(on2.remainderClosed.message ?? ""),
+      on2.remainderClosed.message?.slice(0, 70) ?? "(mesaj yok)",
+    );
+
+    // ⭐ GERİ ALMA YOLU VAR.
+    await sub.reopenRemainder({ stepId: sc.boyaStep, rollId: sc.rollId }, ADMIN);
+    const geriTop = await prisma.roll.findUnique({
+      where: { id: sc.rollId },
+      select: { status: true },
+    });
+    check("P12: top yeniden fasonda", geriTop?.status === RollStatus.AT_SUBCONTRACTOR, String(geriTop?.status));
+
+    // ⚠️ SAPMA SATIRI SİLİNMEDİ, terslendi (append-only defter kuralı).
+    const sapma = await prisma.rollVariance.findMany({
+      where: { rollId: sc.rollId, source: VARIANCE_SOURCES.SUBCONTRACTOR_REMAINDER },
+      select: { reversedAt: true },
+    });
+    check("P12: fire satırı SİLİNMEDİ (defter append-only)", sapma.length > 0, `${sapma.length} satır`);
+    check("P12: satır `reversedAt` ile işaretli", sapma.every((v) => v.reversedAt !== null));
+
+    // ⭐ ASIL AMAÇ: makbuz artık iptal EDİLEBİLİR.
+    const on3 = (await sub.getCancelPreview(makbuzId)).data as {
+      allSafe: boolean;
+      bornRolls: Array<{ id: string }>;
+    };
+    check("P12: önizleme yeniden güvenli", on3.allSafe === true, `allSafe=${on3.allSafe}`);
+    const iptal = await sub
+      // ⚠️ Doğan açık kumaşlar AÇIKÇA onaylanır — proje kuralı: yıkıcı işlemde
+      // etkilenen her kayıt somut listelenir (önizleme listeyi verir).
+      .cancelReceipt(makbuzId, "P12 yanlis metraj duzeltmesi", ADMIN, on3.bornRolls.map((b) => b.id))
+      .then(() => ({ ok: true, msg: "" }))
+      .catch((e: unknown) => ({ ok: false, msg: String((e as Error).message).slice(0, 110) }));
+    check("P12: kabul GERÇEKTEN iptal edilebildi", iptal.ok, iptal.msg);
+  }
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 

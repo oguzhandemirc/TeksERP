@@ -3413,6 +3413,110 @@ export class SubcontractorService {
   //
   // Kapama ELLE yapılır ve sebep zorunludur (kullanıcı kararı 2026-08-19);
   // otomatik zaman aşımı YOK — yaş göstergesi bekleyen listesinde amber bant.
+  /**
+   * "Kalan gelmeyecek" kararını GERİ AL (BULGU-T3-017).
+   *
+   * ⚠️ NEDEN VAR: `closeRemainder` topu `SUBCONTRACTOR_CONSUMED` yapar ve o andan
+   * sonra o kabulün iptali 409 verir. Geri alma yolu OLMADIĞI için yanlış girilen
+   * bir metraj KALICI oluyordu: defterde "51 m kabul + 49 m fire", gerçekte
+   * "15 m kabul + 85 m fasonda"; fason karnesinde sahte fire, üretim rakamında
+   * sahte üretim. Düzeltmenin tek yolu DB müdahalesiydi.
+   *
+   * Kural (denetimin değişmezi): geri ALINAMAZ her karar için bir geri alma yolu
+   * bulunmalı — yoksa yanlış giriş kalıcı olur.
+   *
+   * ⚠️ SAPMA SATIRI SİLİNMEZ, `reversedAt` ile İŞARETLENİR (append-only defter;
+   * `cancelReceipt`in emsali). Fire raporu geçmişi kaybetmez, yalnız satırın
+   * tersine çevrildiğini bilir.
+   * ⚠️ Yeni migration ve YENİ İZİN KODU GEREKMEZ — `RollVariance.reversedAt`
+   * şemada zaten var; uç `subcontractor:write` ∨ `roll:manual-adjust` ile açılır.
+   */
+  async reopenRemainder(
+    data: { stepId: string; rollId: string },
+    userId?: string,
+  ): Promise<ApiResponse<{ rollId: string; restoredQty: number }>> {
+    const roll = await prisma.roll.findUnique({
+      where: { id: data.rollId },
+      select: { id: true, barcode: true, status: true, currentQty: true },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+    if (roll.status !== RollStatus.SUBCONTRACTOR_CONSUMED) {
+      throw AppError.conflict(
+        "Bu topun kalanı 'gelmeyecek' olarak kapatılmamış (ya da kapama zaten geri alınmış).",
+        { code: "REMAINDER_NOT_CLOSED" },
+      );
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Atomik claim — iki eşzamanlı geri alma birbirini ezmesin.
+      const claimed = await tx.roll.updateMany({
+        where: { id: data.rollId, status: RollStatus.SUBCONTRACTOR_CONSUMED },
+        data: { status: RollStatus.AT_SUBCONTRACTOR, currentStepId: data.stepId },
+      });
+      if (claimed.count !== 1) {
+        throw AppError.conflict(
+          "Top bu sırada başka bir işlemle değişmiş. Listeyi yenileyip tekrar deneyin.",
+        );
+      }
+
+      // Sapma satırını TERSLE (silme — append-only defter).
+      await tx.rollVariance.updateMany({
+        where: {
+          rollId: data.rollId,
+          workOrderStepId: data.stepId,
+          source: VARIANCE_SOURCES.SUBCONTRACTOR_REMAINDER,
+          reversedAt: null,
+        },
+        data: { reversedAt: new Date(), reversedById: userId ?? null },
+      });
+
+      // Açık sevk kaleminin kapama damgasını kaldır → outstanding filtreleri
+      // topu yeniden "fasonda bekliyor" sayar.
+      await tx.subcontractorDispatchItem.updateMany({
+        where: {
+          rollId: data.rollId,
+          remainderClosedAt: { not: null },
+          dispatch: { stepId: data.stepId, cancelledAt: null, directShippedAt: null },
+        },
+        data: { remainderClosedAt: null },
+      });
+
+      // Movement'ı yeniden AÇ — mal tekrar bu istasyonda bekliyor.
+      await tx.$executeRaw`
+        UPDATE "roll_movements"
+        SET "qtyOut" = NULL, "weightOut" = NULL, "exitedAt" = NULL, "notes" = 'REMAINDER_REOPENED'
+        WHERE "workOrderStepId" = ${data.stepId}::uuid
+          AND "rollId" = ${data.rollId}::uuid
+          AND "notes" LIKE 'REMAINDER_CLOSED%'
+      `;
+
+      // Adım kapanmışsa yeniden aç (mal geri geldi).
+      await tx.workOrderStep.updateMany({
+        where: { id: data.stepId, status: "COMPLETED" },
+        data: { status: "ACTIVE", completedAt: null },
+      });
+    });
+
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL",
+      recordId: data.rollId,
+      newData: {
+        event: "SUBCONTRACTOR_REMAINDER_REOPENED",
+        stepId: data.stepId,
+        barcode: roll.barcode,
+        restoredQty: Number(roll.currentQty),
+      },
+    });
+
+    return {
+      success: true,
+      data: { rollId: data.rollId, restoredQty: Number(roll.currentQty) },
+      message: `Kalan kapaması geri alındı — top yeniden fasonda bekliyor.`,
+    };
+  }
+
   async closeRemainder(
     data: {
       stepId: string;
@@ -4648,6 +4752,39 @@ export class SubcontractorService {
    * döner. Frontend bunu kullanarak operatöre "şu açık kumaş roll'ları da
    * iptal edilecek" onayı sunar. allSafe=false ise iptal disabled olmalı.
    */
+  /**
+   * KISMİ kabulün kaynak topları hâlâ fasonda mı? (BULGU-T3-017)
+   *
+   * Kısmi kabulde top TÜKETİLMEZ — `AT_SUBCONTRACTOR` kalır ve iptal, kabul
+   * edilen metrajı ona geri ekler. Ama "kalan gelmeyecek" (`closeRemainder`)
+   * kararı topu `SUBCONTRACTOR_CONSUMED` yapar; o andan sonra iptalin geri
+   * ekleyeceği bir top kalmaz ve uç 409 verir.
+   *
+   * ⚠️ ESKİDEN ÖNİZLEME BUNU GÖRMÜYORDU: `allSafe:true` diyor, operatör "İptal
+   * Et"e basıyor, 409 yiyordu — ve kapamanın geri alma yolu olmadığı için makbuz
+   * BİR DAHA iptal edilemiyordu. Defter kalıcı olarak yanlış kalıyordu (51 m
+   * kabul + 49 m sahte fire; gerçek 15 m kabul + 85 m fasonda).
+   *
+   * ⚠️ TEK KAYNAK: önizleme ve tx-içi guard AYNI yüklemden beslenir
+   * (`computeReceiptBatchMismatches` deseni). Ayrışırlarsa önizlemenin "güvenli"
+   * demesi ile ucun reddetmesi yine ayrı düşer.
+   */
+  private async findClosedRemainderItems(
+    db: Prisma.TransactionClient | typeof prisma,
+    receiptId: string,
+  ): Promise<Array<{ barcode: string | null; status: RollStatus }>> {
+    const kismiler = await db.subcontractorReceiptItem.findMany({
+      where: { receiptId, isPartial: true },
+      select: { newRollId: true },
+    });
+    if (kismiler.length === 0) return [];
+    const toplar = await db.roll.findMany({
+      where: { id: { in: kismiler.map((k) => k.newRollId) } },
+      select: { barcode: true, status: true },
+    });
+    return toplar.filter((t) => t.status !== RollStatus.AT_SUBCONTRACTOR);
+  }
+
   async getCancelPreview(receiptId: string): Promise<
     ApiResponse<{
       receiptNo: string;
@@ -4666,6 +4803,17 @@ export class SubcontractorService {
       };
       /** LIFO engeli (kısmi teslimat): aynı topa dokunan daha yeni aktif makbuzlar. */
       laterReceipts: string[];
+      /**
+       * ÜÇÜNCÜ ENGEL (BULGU-T3-017): kısmi kabulün kaynak topunun kalanı
+       * "gelmeyecek" olarak kapatılmışsa top artık fasonda DEĞİLDİR ve iptalin
+       * geri ekleyeceği bir şey kalmaz — uç 409 verir. Önizleme bunu önceden
+       * söylemeli; `cancelReceipt`in guard'ıyla AYNI yardımcıdan gelir.
+       */
+      remainderClosed: {
+        blocked: boolean;
+        rolls: string[];
+        message: string | null;
+      };
       allSafe: boolean;
       totalBornRolls: number;
     }>
@@ -4744,6 +4892,8 @@ export class SubcontractorService {
       orderBy: { createdAt: "desc" },
     });
 
+    const kapananKalanlar = await this.findClosedRemainderItems(prisma, receiptId);
+
     return {
       success: true,
       data: {
@@ -4756,12 +4906,26 @@ export class SubcontractorService {
           message: mismatchItems.length > 0 ? buildBatchMismatchMessage(mismatchItems) : null,
         },
         laterReceipts: laterReceipts.map((r) => r.receiptNo),
+        // ÜÇÜNCÜ ENGEL (BULGU-T3-017): kısmi kabulün kaynak topu artık fasonda
+        // değilse ("kalan gelmeyecek" kapaması) iptal 409 verir — önizleme bunu
+        // ÖNCEDEN söylemeli.
+        remainderClosed: {
+          blocked: kapananKalanlar.length > 0,
+          rolls: kapananKalanlar.map((t) => t.barcode ?? "(barkodsuz)"),
+          message:
+            kapananKalanlar.length > 0
+              ? `Bu kabulün kısmi topunun kalanı "gelmeyecek" olarak kapatılmış ` +
+                `(${kapananKalanlar.map((t) => t.barcode ?? "(barkodsuz)").join(", ")}). ` +
+                "Kabul iptal edilemez — önce kalan kapamasını geri alın."
+              : null,
+        },
         // Önizleme bayat olabilir ama "güvenli" demeden önce bilinen TÜM
         // engelleri saymak zorunda.
         allSafe:
           bornRolls.every((b) => b.safeToCancel) &&
           mismatchItems.length === 0 &&
-          laterReceipts.length === 0,
+          laterReceipts.length === 0 &&
+          kapananKalanlar.length === 0,
         totalBornRolls: bornRolls.length,
       },
     };

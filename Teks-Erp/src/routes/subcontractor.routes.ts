@@ -308,6 +308,43 @@ router.post(
 
 /**
  * @openapi
+ * /api/subcontractor/reopen-remainder:
+ *   post:
+ *     tags: [Subcontractor]
+ *     summary: "Kalan gelmeyecek" kararını geri al (fire kaydı terslenir)
+ *     description: |
+ *       `close-remainder` topu SUBCONTRACTOR_CONSUMED yapar ve o andan sonra o
+ *       kabulün iptali 409 verir. Geri alma yolu olmadan yanlış girilen bir metraj
+ *       KALICI oluyordu (defterde sahte fire + sahte üretim; düzeltmenin tek yolu
+ *       DB müdahalesi). Bu uç topu AT_SUBCONTRACTOR'a döndürür, sevk kaleminin
+ *       `remainderClosedAt` damgasını kaldırır, movement'ı yeniden açar ve sapma
+ *       satırını SİLMEZ — `reversedAt` ile işaretler (append-only defter).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stepId, rollId]
+ *             properties:
+ *               stepId: { type: string, format: uuid }
+ *               rollId: { type: string, format: uuid }
+ *     responses:
+ *       200: { description: Kapama geri alındı, top yeniden fasonda }
+ *       409: { description: Kalan kapatılmamış / eşzamanlı işlem }
+ */
+router.post(
+  "/reopen-remainder",
+  verifyToken,
+  // Düzeltme yetkisi: fason yazma ya da elle stok düzeltme. YENİ İZİN KODU YOK
+  // (sahada atanması unutulabilecek bir adım daha eklemeye değmez — 2026-08-01 dersi).
+  requireAnyPermission("workorder:write", "roll:manual-adjust", "mobile:fason-kabul"),
+  controller.reopenRemainder
+);
+
+/**
+ * @openapi
  * /api/subcontractor/pending-returns:
  *   get:
  *     tags: [Subcontractor]
