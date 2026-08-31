@@ -108,6 +108,7 @@ import {
   onReceiveFailed,
   onReceiveSucceeded,
   receiveFingerprint,
+  receiveSubmitFeedback,
   tokenForReceive,
   type ReceiveAttempt,
 } from './receiveAttempt';
@@ -579,20 +580,36 @@ export default function FasonKabulScreen() {
   >({
     mutationKey: STATION_MUT.FASON_KABUL_RECEIVE,
     onMutate: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Toast.show({
-        type: 'success',
-        text1: 'Mal kabul tamamlandı',
-        text2: onlineManager.isOnline()
-          ? undefined
-          : 'Çevrimdışı — sync bekliyor',
-      });
-      resetForm();
+      // ⚠️ ONAY GELMEDEN YEŞİL BASMA (BULGU-T3-019). Eski hâl koşulsuz "Mal kabul
+      // tamamlandı" yeşilini basıp formu SİLİYORDU. Sunucu 409 (ör.
+      // TARGET_COLOR_CHANGED) döndüğünde kırmızı 0,5 sn sonra çıkıyor; gürültülü
+      // fabrikada tablet standda duruyor, operatör yeşili görüp uzaklaşıyor. Mal
+      // fiziksel olarak içeride ama sistemde hâlâ AT_SUBCONTRACTOR — üstelik
+      // girilen parça metrajları da silinmiş oluyordu.
+      // KK1 ekranı bu dersi 2026-08-03'te öğrendi; desen oradan alındı.
+      //
+      // ⚠️ ÇEVRİMDIŞINDA YEŞİL DOĞRUDUR ve KALDIRILMADI: kayıt gerçekten diske
+      // alınmıştır, kuyruk dürüst konuşur. Formu da orada temizliyoruz — aksi
+      // hâlde operatör çevrimdışıyken sıradaki kabulü giremezdi (saha
+      // esnekliğini daraltmak, düzeltmenin amacı değil).
+      // Karar SAF FONKSİYONDA (`receiveSubmitFeedback`) — ekrandaki bir `if`'te
+      // yaşasaydı tersine çevrilmesi hiçbir testi kırmazdı.
+      const gb = receiveSubmitFeedback(onlineManager.isOnline());
+      if (gb.tip === 'success') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      else Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+      Toast.show({ type: gb.tip, text1: gb.baslik, text2: gb.altBaslik });
+      if (gb.formuTemizle) resetForm();
     },
     onSuccess: () => {
       // Makbuz kesildi → yapışkanlık BİTER. Sürseydi bir sonraki MEŞRU teslimat
       // cached makbuzu alır ve sessizce kaybolurdu (BULGU-T2-007).
       failedAttemptRef.current = onReceiveSucceeded();
+      // ⚠️ ASIL ONAY BURADA (BULGU-T3-019): yeşil ve form temizliği sunucu
+      // cevabından SONRA. Çevrimdışı dalında ikisi de `onMutate`te yapıldı;
+      // `resetForm` idempotenttir, ikinci çağrı zararsızdır.
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Toast.show({ type: 'success', text1: 'Mal kabul tamamlandı' });
+      resetForm();
       // Server confirm — query'leri tazele (kalan dönüşler, kabul geçmişi vs.)
       qc.invalidateQueries({ queryKey: ['pending-returns'] });
       qc.invalidateQueries({ queryKey: ['receipts'] });

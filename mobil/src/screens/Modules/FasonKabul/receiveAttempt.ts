@@ -128,3 +128,41 @@ export function onReceiveFailed(
 export function onReceiveSucceeded(): ReceiveAttempt | null {
   return null;
 }
+
+// =============================================================================
+// GÖNDERİM GERİ BİLDİRİMİ — "onay gelmeden yeşil basma" (BULGU-T3-019)
+// =============================================================================
+/** Kaydet'e basıldığında ekranın ne söyleyeceği ve formu temizleyip temizlemeyeceği. */
+export interface GonderimGeriBildirimi {
+  tip: 'success' | 'info';
+  baslik: string;
+  altBaslik: string;
+  /** Form ŞİMDİ temizlensin mi? (Aksi hâlde sunucu onayında temizlenir.) */
+  formuTemizle: boolean;
+}
+
+/**
+ * Saf karar — ekrandaki bir `if`'te yaşasaydı tersine çevrilmesi hiçbir testi
+ * kırmazdı (`shouldAnnounceFailure` emsali).
+ *
+ * ⚠️ ÇEVRİMDIŞINDA YEŞİL DOĞRUDUR: kayıt gerçekten diske alınmıştır, kuyruk
+ * dürüst konuşur — ve form da orada temizlenir, yoksa operatör çevrimdışıyken
+ * sıradaki kabulü giremezdi. Kaldırılan şey ÇEVRİMİÇİ yalanıdır: sunucu cevabı
+ * gelmeden "Mal kabul tamamlandı" demek, 409 dönen bir kabulde operatörü yeşil
+ * görüp uzaklaşmaya davet ediyordu (mal içeride, sistemde AT_SUBCONTRACTOR).
+ */
+export function receiveSubmitFeedback(cevrimici: boolean): GonderimGeriBildirimi {
+  return cevrimici
+    ? {
+        tip: 'info',
+        baslik: 'Kaydediliyor…',
+        altBaslik: 'Sonuç gelene kadar bekleyin, tekrar göndermeyin',
+        formuTemizle: false,
+      }
+    : {
+        tip: 'success',
+        baslik: 'Mal kabul sıraya alındı (çevrimdışı)',
+        altBaslik: 'Ağ gelince kendiliğinden gönderilecek',
+        formuTemizle: true,
+      };
+}

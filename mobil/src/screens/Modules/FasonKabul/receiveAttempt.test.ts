@@ -139,3 +139,50 @@ describe('② AYNADAKİ İKİZ — yeni teslimat sessizce yutulmaz', () => {
     expect(FASON_RETRY_WINDOW_MS).toBeLessThanOrEqual(30 * 60_000);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BULGU-T3-019 — onay gelmeden yeşil basma
+// ─────────────────────────────────────────────────────────────────────────────
+// Eski ekran KOŞULSUZ "Mal kabul tamamlandı" yeşilini basıp formu siliyordu.
+// Sunucu 409 dönünce kırmızı yarım saniye sonra çıkıyor; gürültülü fabrikada
+// operatör yeşili görüp uzaklaşıyor. Mal içeride, sistemde AT_SUBCONTRACTOR,
+// girilen parça metrajları da silinmiş.
+import { receiveSubmitFeedback } from './receiveAttempt';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+describe('receiveSubmitFeedback — onay gelmeden yeşil basılmaz (T3-019)', () => {
+  it('⭐ ÇEVRİMİÇİ: nötr "Kaydediliyor…" ve form KORUNUR', () => {
+    const g = receiveSubmitFeedback(true);
+    expect(g.tip).toBe('info');
+    expect(g.formuTemizle).toBe(false);
+    // Metin operatöre NE YAPACAĞINI söylemeli.
+    expect(`${g.baslik} ${g.altBaslik}`).toMatch(/bekle/i);
+  });
+
+  it('⭐ ÇEVRİMDIŞI: yeşil DOĞRUDUR ve form temizlenir (esneklik korunur)', () => {
+    // ⚠️ Bu kontrol, düzeltmenin fazla ileri gitmesine karşı: çevrimdışında
+    // kayıt gerçekten diske alınır. Yeşili oradan da kaldırsaydık kuyruk sessiz
+    // kalır, formu temizlemeseydik operatör sıradaki kabulü giremezdi.
+    const g = receiveSubmitFeedback(false);
+    expect(g.tip).toBe('success');
+    expect(g.formuTemizle).toBe(true);
+    expect(g.baslik).toMatch(/çevrimdışı/i);
+  });
+
+  it('iki dal FARKLI karar verir (fonksiyon sabit dönmüyor)', () => {
+    expect(receiveSubmitFeedback(true)).not.toEqual(receiveSubmitFeedback(false));
+  });
+
+  it('⭐ TEL: ekran kararı GERÇEKTEN bu fonksiyondan alıyor', () => {
+    // Saf karar yeşilken ekran kendi `if`'ini taşıyorsa düzeltme ölüdür.
+    // (Bu turda iki kez ısıran sınıf: "iki uç yeşil, aradaki tel kopuk".)
+    const ekran = readFileSync(join(__dirname, 'FasonKabulScreen.tsx'), 'utf8');
+    const kod = ekran.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+    expect(kod).toContain('receiveSubmitFeedback(onlineManager.isOnline())');
+    // Eski koşulsuz yeşil geri gelmemeli: `onMutate` içinde düz metin başlık YOK.
+    const onMutate = kod.slice(kod.indexOf('onMutate:'), kod.indexOf('onSuccess:'));
+    expect(onMutate).not.toContain("'Mal kabul tamamlandı'");
+    expect(onMutate.length).toBeGreaterThan(50); // körlük zemini: dilim gerçekten dolu
+  });
+});
