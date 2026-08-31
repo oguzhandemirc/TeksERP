@@ -104,6 +104,13 @@ import {
   shrinkExceedsTolerance,
   shrinkInfo,
 } from './receivePayload.helper';
+import {
+  onReceiveFailed,
+  onReceiveSucceeded,
+  receiveFingerprint,
+  tokenForReceive,
+  type ReceiveAttempt,
+} from './receiveAttempt';
 import type {
   PendingReturnGroup,
   PendingReturnParty,
@@ -556,6 +563,15 @@ export default function FasonKabulScreen() {
   // SubcontractorReceipt dönüşü). onMutate'te form anında temizlenir + toast
   // (offline ise "sync bekliyor"). Form rollback kompleks olduğu için
   // yapılmadı — operatör offline hatasında yeniden seçim/giriş yapar.
+  /**
+   * DÜŞMÜŞ DENEMENİN İZİ (BULGU-T2-007) — `useRef`, `useState` DEĞİL: bu değer
+   * hiçbir şey çizmez ve render tetiklemesi gereksiz yeniden hesaplama olurdu.
+   * Aynı teslimat belirsiz bir hatadan (ağ/timeout/5xx) sonra yeniden
+   * gönderilirse AYNI token'la gider → sunucu cached makbuzu döner, ikinci
+   * makbuz doğmaz. Sınırlar `receiveAttempt.ts`te gerekçeli.
+   */
+  const failedAttemptRef = useRef<ReceiveAttempt | null>(null);
+
   const receiveMutation = useMutation<
     Awaited<ReturnType<typeof subcontractorService.receive>>,
     Error,
@@ -574,14 +590,25 @@ export default function FasonKabulScreen() {
       resetForm();
     },
     onSuccess: () => {
+      // Makbuz kesildi → yapışkanlık BİTER. Sürseydi bir sonraki MEŞRU teslimat
+      // cached makbuzu alır ve sessizce kaybolurdu (BULGU-T2-007).
+      failedAttemptRef.current = onReceiveSucceeded();
       // Server confirm — query'leri tazele (kalan dönüşler, kabul geçmişi vs.)
       qc.invalidateQueries({ queryKey: ['pending-returns'] });
       qc.invalidateQueries({ queryKey: ['receipts'] });
       qc.invalidateQueries({ queryKey: ['rolls'] });
       qc.invalidateQueries({ queryKey: ['work-orders'] });
     },
-    onError: (err) => {
+    onError: (err, vars) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // ⚠️ ERKEN return'lerden ÖNCE: token yalnız sonucu BELİRSİZ bırakan hatada
+      // yapışır (ağ/timeout/5xx). Aşağıdaki TARGET_COLOR_CHANGED bir 409'dur →
+      // hiçbir şey yazılmadığı KESİNDİR → yapışkanlık temizlenir (BULGU-T2-007).
+      failedAttemptRef.current = onReceiveFailed(
+        vars.clientToken ?? '',
+        receiveFingerprint(vars),
+        err,
+      );
       // Planlamacı kabul sürerken iş emrinin rengini değiştirdi (2026-08-21):
       // sunucu eski rengi yazmak yerine 409 döndü. Bekleyen dönüşler tazelenir ki
       // parti yeniden seçilince YENİ renk ön seçili gelsin; mesaj ne yapılacağını söyler.
@@ -1237,7 +1264,7 @@ export default function FasonKabulScreen() {
         return null;
       }
     }
-    return buildReceivePayload({
+    const base = buildReceivePayload({
       selectedGroup,
       selectedParty,
       // `payloadRows` ekranın da okuduğu satırlardır (top bazlı giriş kapalıysa
@@ -1254,6 +1281,14 @@ export default function FasonKabulScreen() {
       remainderQty,
       planColorAction: planColorActionRef.current,
     });
+    if (!base) return null;
+    // İDEMPOTENCY (BULGU-T2-007): aynı teslimat belirsiz bir hatadan sonra
+    // yeniden gönderiliyorsa AYNI token'la gitmeli — yoksa sunucu ikinci bir
+    // makbuz açar ve metraj çift düşer. Karar `receiveAttempt.ts`te.
+    return {
+      ...base,
+      clientToken: tokenForReceive(failedAttemptRef.current, receiveFingerprint(base)),
+    };
   };
 
   const doSubmit = () => {

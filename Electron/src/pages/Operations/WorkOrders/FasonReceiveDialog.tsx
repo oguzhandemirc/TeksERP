@@ -1,5 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  onReceiveFailed,
+  onReceiveSucceeded,
+  receiveFingerprint,
+  tokenForReceive,
+  type ReceiveAttempt,
+} from "@/lib/fasonReceiveAttempt";
 import { Flame, Loader2, PackageCheck, Plus, Trash2 } from "lucide-react";
 import {
   Dialog,
@@ -173,9 +180,21 @@ function GroupCard({
   const canSubmit =
     checkedRolls.length > 0 && parsedPieces.length > 0 && (!g.colorRequired || Boolean(colorId));
 
+  /**
+   * Belirsiz hatayla (ağ/timeout/5xx) düşmüş deneme — BULGU-T2-007.
+   * Aynı teslimat yeniden gönderilirse AYNI token'la gider ve sunucu cached
+   * makbuzu döner; ikinci makbuz + ikinci kez metraj düşümü OLMAZ.
+   */
+  const failedAttemptRef = useRef<ReceiveAttempt | null>(null);
+  /**
+   * Son gönderimin kimliği. `mut.mutate()` argümansız çağrıldığı için `onError`
+   * değişkenleri GÖREMEZ — token/parmak izi buradan okunur.
+   */
+  const lastSentRef = useRef<{ token: string; fingerprint: string } | null>(null);
+
   const mut = useMutation({
-    mutationFn: () =>
-      workOrderService.receiveFason({
+    mutationFn: () => {
+      const govde = {
         workOrderId,
         stepId: g.stepId,
         subcontractorId: g.subcontractorId,
@@ -191,14 +210,31 @@ function GroupCard({
           };
         }),
         newRolls: parsedPieces.map((qty) => ({ qty })),
-        // İdempotency — retry aynı isteği tekrarlarsa ikinci makbuz doğmaz.
-        clientToken: crypto.randomUUID(),
-      }),
+      };
+      // ⚠️ TOKEN BURADA ÜRETİLMEZ, ÇÖZÜLÜR (BULGU-T2-007). Eskiden
+      // `crypto.randomUUID()` doğrudan gövdedeydi ve yanındaki yorum "retry
+      // ikinci makbuz doğmaz" diyordu — YANLIŞTI: `mutationFn` her denemede
+      // yeniden koşar, yani hem TanStack'in otomatik retry'ı hem operatörün
+      // ikinci tıklaması YENİ token gönderiyordu. Kural `lib/fasonReceiveAttempt`.
+      const fingerprint = receiveFingerprint(govde);
+      const clientToken = tokenForReceive(failedAttemptRef.current, fingerprint);
+      lastSentRef.current = { token: clientToken, fingerprint };
+      return workOrderService.receiveFason({ ...govde, clientToken });
+    },
     onSuccess: (res) => {
+      // Makbuz kesildi → yapışkanlık BİTER (sürseydi sonraki MEŞRU teslimat
+      // cached makbuzu alır ve sessizce kaybolurdu).
+      failedAttemptRef.current = onReceiveSucceeded();
       toast.success(res.message ?? "Fason kabul yapıldı");
       onDone();
     },
-    onError: (e: Error) => toast.error(e.message),
+    onError: (e: Error) => {
+      const son = lastSentRef.current;
+      failedAttemptRef.current = son
+        ? onReceiveFailed(son.token, son.fingerprint, e)
+        : null;
+      toast.error(e.message);
+    },
   });
 
   return (

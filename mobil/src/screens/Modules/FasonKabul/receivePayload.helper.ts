@@ -338,8 +338,14 @@ export function buildReceivePayload(args: BuildReceivePayloadArgs): ReceiveReque
       : {}),
     returns,
     newRolls: parsed,
-    // İdempotency: payload kurulurken BİR KEZ üretilir — offline kuyruk replay'i
-    // aynı token'ı taşır. Kısmi teslimatta replay'in tek kimliği budur.
+    // İdempotency: kısmi teslimatta replay'in TEK kimliği.
+    //
+    // ⚠️ BURADA ÜRETİLEN TOKEN YALNIZ KUYRUK YOLUNU KORUR (BULGU-T2-007):
+    // offline kuyruk payload'ı olduğu gibi yeniden yollar, yani replay aynı
+    // token'ı taşır. Operatörün ELLE tekrar basması bu fonksiyonu YENİDEN
+    // çağırır → yeni token → koruma düşer. O yolu ekran kapatır: kurulan
+    // payload'ın parmak izinden `receiveAttempt.tokenForReceive` ile karar verip
+    // token'ı EZER (tek mekanizma; buraya ikinci bir parametre EKLEME).
     clientToken: generateClientUuid(),
   };
 }
