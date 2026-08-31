@@ -356,6 +356,54 @@ curl -s http://localhost:4000/health
    ileri kayarsa gün hesabı hepsini "eski" sayıp silerdi).
 4. **Offsite kopya** — `BACKUP_OFFSITE_DIR`'e kopyalanır; ayarlı değilse uyarı üretir.
 
+### Makine dışı kopya (Google Drive / NAS / uzak sunucu) — KURULUM
+
+> **Kod tarafı HAZIR ve panelden yönetilir; eksik olan tek şey `rclone`
+> programının sunucuya konması.** Bu adım hiçbir yerde yazılı değildi
+> (BULGU-T1-022 doğrulaması, 2026-08-31).
+
+**Neden gerekli:** bugün yedekler veritabanıyla **aynı diskte**. Disk giderse
+geri dönülecek bir şey de gitmiş olur. Panelde "Bağlantıyı test et" düğmesi
+`rclone` yoksa şunu der: *"rclone çalıştırılamadı … Sunucuda kurulu mu?"* —
+yani arıza sessiz değil, ama kurulum yapılmadan hiçbir kopya çıkmaz.
+
+**Kurulum (sunucuda, bir kez):**
+
+1. `https://rclone.org/downloads/` → **Windows AMD64** zip'ini indirin.
+2. İçindeki `rclone.exe` dosyasını **`C:\Etkili-Yazilim\rclone\rclone.exe`**
+   yoluna koyun. (Başka bir yere koyacaksanız `ecosystem.config.js` →
+   `BACKUP_RCLONE_BIN` değerini o yola çevirin ve `pm2 restart` yapın.)
+3. Gerisi **panelden**: Sistem → **Yedekler** → *Makine dışı kopya* kartı.
+
+**Panelden bağlanma (Google Drive):**
+
+| Adım | Nerede |
+|---|---|
+| "Google Drive'a bağlan" sihirbazını aç | Yedekler ekranı, offsite kartı |
+| Tarayıcısı olan HERHANGİ bir bilgisayarda `rclone authorize "drive"` çalıştır | O bilgisayarda (sunucuda tarayıcı olmasına gerek yok) |
+| Google hesabıyla giriş yap, çıkan metni panele yapıştır | Panel, "Token" alanı |
+| Hedef adı ver (ör. `gdrive`) ve kaydet | Panel |
+| Uzak hedefi yaz: `gdrive:tekserp-yedek` | Panel, "Uzak hedef" alanı |
+| **Bağlantıyı test et** → yeşil olmalı | Panel |
+| İstersen **Şimdi kopyala** ile ilk kopyayı hemen çıkar | Panel |
+
+⚠️ **Kendi Google OAuth istemcimiz BİLEREK gömülmedi** — depoya bir client secret
+koymak, kapattığımız `.env` sızıntısının aynısını üretirdi. `rclone`un kendi
+istemcisi kullanılıyor; bu onun belgelenmiş "tarayıcısız sunucu" akışıdır.
+
+⚠️ **Yenileme anahtarı (`refresh_token`) zorunlu** — panel token'ı kabul etmeden
+önce kontrol eder. Olmadan erişim ~1 saatte biter ve gece kopyası sessizce
+durur; "çalışıyor sanıp korumasız kalmak" en kötü sonuçtur.
+
+⚠️ **Yedek dosyası fabrikanın TÜM verisini içerir** (müşteriler, fiyatlar, giriş
+bilgileri). Hedef Drive hesabının kime ait olduğu ve paylaşımı buna göre
+seçilmelidir. NAS/uzak sunucu tercih edilirse aynı kart `BACKUP_OFFSITE_DIR`
+(yerel/UNC yol) alanıyla da çalışır — rclone gerekmez.
+
+**Kopyalama ne zaman koşar:** backend açılışından sonra **saatlik** (gece yedeği
+02:00'de alınır; saatlik süpürme "sabaha kadar bir kez mutlaka" garantisi verir).
+Durum `/api/admin/health` → `offsite` alanında ve panelde görünür.
+
 > **⚠ Offsite bir ağ paylaşımıysa (`\\NAS\yedek`) hangi hesap yazıyor?** Kopyayı
 > backend prosesi yapar, yani **pm2'nin koştuğu hesap**. pm2 bir Windows servisi
 > olarak `LOCAL SYSTEM` altında koşuyorsa o hesabın ağ paylaşımlarında kimliği
