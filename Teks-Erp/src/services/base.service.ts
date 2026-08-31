@@ -7,6 +7,7 @@
 
 import prisma from "../lib/prisma";
 import { Prisma } from "@prisma/client";
+import { buildDependencyWarning, countLiveDependencies } from "./helpers/deactivate-impact.helper";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import {
@@ -1233,6 +1234,17 @@ export class BaseService {
   async softDelete(id: string, userId?: string): Promise<ApiResponse<unknown>> {
     const oldRecord = await this.delegate.findUnique({ where: { id } });
 
+    // ⚠️ PASİFE ALMANIN ETKİSİ GÖRÜNÜR OLMALI (BULGU-T2-010). Sahada ölçüldü:
+    // 1 AÇIK sipariş kalemi (1.500 m) ve 2 canlı top PASİF bir kumaşa bağlıydı.
+    // Etkisi sessiz: iş emri formunun seçicisi `isActive:true` süzdüğü için o
+    // siparişe iş emri AÇILAMAZ; toplar envanterde sayılır ama üretime alınamaz.
+    // Operatör "kumaş kayboldu" der, sebep hiçbir ekranda yazmaz.
+    // ⚠️ ENGELLEMİYOR — bilinçli: deploy sırası backend ÖNCE olduğu için panel
+    // bir onay diyaloğu öğrenene kadar pasife alma İMKÂNSIZ olurdu. Sayım
+    // mesaja ve audit'e giriyor; panel değişmeden uyarıyı gösteriyor.
+    const bagimliliklar = await countLiveDependencies(this.config.modelName, id);
+    const uyari = buildDependencyWarning(bagimliliklar);
+
     const updated = await this.delegate.update({
       where: { id },
       data: { isActive: false },
@@ -1247,10 +1259,19 @@ export class BaseService {
       tableName: this.config.tableName,
       recordId: id,
       oldData: oldRecord as Record<string, unknown> | null,
-      newData: { isActive: false },
+      newData: {
+        isActive: false,
+        // "Neden kayboldu" sorusunun cevabı defterde kalsın.
+        ...(bagimliliklar.length > 0 ? { liveDependencies: bagimliliklar } : {}),
+      },
     });
 
-    return { success: true, data: updated, message: "Kayıt pasife alındı" };
+    return {
+      success: true,
+      data: updated,
+      message: uyari ? `Kayıt pasife alındı. ${uyari}` : "Kayıt pasife alındı",
+      ...(bagimliliklar.length > 0 ? { warnings: [uyari as string] } : {}),
+    };
   }
 
   /**
