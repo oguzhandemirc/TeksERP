@@ -136,6 +136,12 @@ async function main() {
         update: {},
         create: { userId: admin.id, permissionId, grantedById: admin.id },
       });
+      // ⚠️ TOKEN TAZELEME ŞART (BULGU-T2-012): yetkiler JWT'den okunur, DB'den
+      // tazelenmez. `tokenVersion` artırılmazsa kullanıcı oturumunu kapatana
+      // kadar YENİ yetkiyi KULLANAMAZ — panel ve DB "yetki var" derken uç 403
+      // döner ve yönetici bunu teşhis edemez. Servis yolu (`permission-
+      // management.service`) bunu atomik yapar; ham yazan her yol elle yapmalı.
+      await prisma.user.update({ where: { id: admin.id }, data: { tokenVersion: { increment: 1 } } });
       console.log(`✅ admin ← ${code}`);
     }
   } else {

@@ -521,10 +521,30 @@ router.post(
 router.get(
   "/users/:id/credentials",
   verifyToken,
+  // ⚠️ İKİ İZİN BİRDEN (BULGU-T1-013). Bu uç bir kullanıcının 6 haneli PIN'ini ve
+  // kart kodunu DÜZ döner; `login-quick-pin` PIN'i TEK BAŞINA kimlik saydığı için
+  // okuyan kişi hedefin kimliğine bürünebilir — sonraki her storno/fire/izin
+  // değişikliği system_logs'a HEDEFİN adıyla yazılır. Aynı sırları taşıyan yedek
+  // indirme ucu (aşağıda) zaten `admin:settings` + `admin:users` zinciri
+  // istiyordu; eşik burada da aynı olmalı.
+  // ⚠️ ÖLÇÜLDÜ (saha, 2026-08-31): `admin:users` taşıyan DÖRT aktif hesabın
+  // DÖRDÜNDE de `admin:settings` var → sıkılaştırma bugün kimseyi dışarıda
+  // bırakmıyor.
+  requirePermission("admin:settings"),
   requirePermission("admin:users"),
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const data = await AuthService.getUserCredentials(req.params.id as string);
+      const hedefId = req.params.id as string;
+      const data = await AuthService.getUserCredentials(hedefId);
+      // ⚠️ ASIL KUSUR İZSİZLİKTİ: okuma hiçbir yere yazılmıyordu, yani "kim kimin
+      // PIN'ini gördü" sorusu sistemde CEVAPSIZDI. Best-effort (tx dışında,
+      // yazım hatası isteği düşürmez — audit sözleşmesi).
+      await AuditService.logEvent({
+        category: "SYSTEM",
+        action: "USER_CREDENTIAL_READ",
+        userId: req.user?.userId ?? null,
+        payload: { targetUserId: hedefId },
+      });
       res.status(200).json({ success: true, data });
     } catch (error) {
       next(error);

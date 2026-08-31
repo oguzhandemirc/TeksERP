@@ -71,6 +71,13 @@ export class PermissionManagementService {
    * "şu an geçerli mi"den farklıdır ve panel boşluğu göstermek için ilkini sorar.
    */
   static async listPermissions() {
+    // Tek round-trip: hangi izinde kaç "kaynaksız" atama var.
+    const kaynaksiz = await prisma.userPermission.groupBy({
+      by: ["permissionId"],
+      where: { grantedById: null },
+      _count: { _all: true },
+    });
+    const unknownBySource = new Map(kaynaksiz.map((r) => [r.permissionId, r._count._all]));
     const rows = await prisma.permission.findMany({
       orderBy: [{ category: "asc" }, { module: "asc" }, { code: "asc" }],
       include: {
@@ -88,6 +95,13 @@ export class PermissionManagementService {
     return rows.map(({ _count, templateMemberships, ...p }) => ({
       ...p,
       userCount: _count.userPermissions,
+      // KAYNAĞI BİLİNMEYEN ATAMA (BULGU-T2-012): `grantedById` NULL olan satır,
+      // "bu yetkiyi kim verdi" sorusunun cevapsız kaldığı bir atamadır. Sahada
+      // ölçüldü (2026-08-31): 24 satır, dördü de 2026-08-05'teki iki ham-SQL
+      // koşumundan — aralarında SoD-kritik `shipping:undo-dispatch` (6 kullanıcı).
+      // ⚠️ Kolona NOT NULL KONMAZ: tarihsel satırlar meşrudur ve silinemez.
+      // Çözüm görünürlük — panel bunu bir bantla söyleyebilsin.
+      unknownSourceCount: unknownBySource.get(p.id) ?? 0,
       templateCount: _count.templateMemberships,
       // Pasif şablonlar dışarıda: "kullanmıyoruz" kararı verilmiş bir rolü
       // öneri diye göstermek yanlış yönlendirir.
