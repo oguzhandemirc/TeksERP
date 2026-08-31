@@ -180,6 +180,17 @@ interface AllocationAuditTrail {
   shipmentId: string;
   yazilan: { orderLineId: string; qty: number }[];
   atlanan: { orderLineId: string; need: number }[];
+  /**
+   * SEVK ANINDA hiçbir sipariş satırına bağlanamayan metraj (BULGU-T3-009).
+   *
+   * ⚠️ Neden kaydediliyor: sevk anında tahsis yeniden hesaplanınca, talebi aşan
+   * mal artık siparişe YAZILMIYOR (doğrusu bu — eskiden 200 m'lik kaleme 500 m
+   * yazılıyordu ve fazlalık hiçbir ekranda görünmüyordu). Ama "yazılmıyor" ile
+   * "yok" aynı şey değildir: mal fiziksel olarak müşteriye gitti. Bu alan
+   * olmasaydı bir sessizliğin yerine BAŞKA bir sessizlik koymuş olurduk.
+   * `undefined` = sevk anı dışında hesaplanan iz (kuruluş/onarım yolu).
+   */
+  tahsissizMetraj?: number;
 }
 
 export class ShippingService {
@@ -1500,6 +1511,7 @@ export class ShippingService {
       shipmentId: string;
       yazilan: { orderLineId: string; qty: number }[];
       atlanan: { orderLineId: string; need: number }[];
+      tahsissizMetraj?: number;
     } | null,
     userId?: string,
   ): Promise<void> {
@@ -1509,7 +1521,12 @@ export class ShippingService {
       action: "UPDATE",
       tableName: "SACK_ALLOCATION",
       recordId: iz.shipmentId,
-      newData: { kind: "ALLOCATIONS_REWRITTEN", yazilan: iz.yazilan, atlanan: iz.atlanan },
+      newData: {
+        kind: "ALLOCATIONS_REWRITTEN",
+        yazilan: iz.yazilan,
+        atlanan: iz.atlanan,
+        ...(iz.tahsissizMetraj !== undefined ? { tahsissizMetraj: iz.tahsissizMetraj } : {}),
+      },
     });
   }
 
@@ -1585,7 +1602,10 @@ export class ShippingService {
         tahsisIzi = await this.writeShipmentAllocationsTx(tx, created.id, orderIds, branchId);
         // Onay kapalı → aynı tx'te sevk et (DISPATCHED).
         if (!confirmationEnabled) {
-          await this.performDispatchTx(tx, created.id, { plateNumber: data.plateNumber, driverName: data.driverName, carrier: data.carrier }, userId);
+          const dp = await this.performDispatchTx(tx, created.id, { plateNumber: data.plateNumber, driverName: data.driverName, carrier: data.carrier }, userId);
+          // Anında sevkte tahsis İKİ KEZ yazılır (kuruluşta + sevk anında);
+          // ikincisi birincisini siler ve GEÇERLİ olan odur → iz de o olmalı.
+          if (dp.iz) tahsisIzi = dp.iz;
         }
         return created;
       }),
@@ -2106,7 +2126,10 @@ export class ShippingService {
     shipmentId: string,
     data: { plateNumber?: string | null; driverName?: string | null; carrier?: string | null },
     userId?: string
-  ): Promise<number> {
+    // ⚠️ Dönüş artık {flipped, iz}: tahsis yeniden hesabının audit izi tx DIŞINDA
+    // yazılmalı (proje kuralı) → çağırana taşınır. Örnek alan desen:
+    // `createShipment`/`setShipmentOrders` (aynı iz `flushAllocationAudit`e gider).
+  ): Promise<{ flipped: number; iz: AllocationAuditTrail | null }> {
     const claim = await tx.shipment.updateMany({
       where: { id: shipmentId, status: ShipmentStatus.PLANNED },
       data: {
@@ -2164,6 +2187,11 @@ export class ShippingService {
       flipped += res.count;
     }
     // Tahsisler artık DISPATCHED sevkiyatta → shippedQty defterden yeniden hesaplanır.
+    const sevkiyat = await tx.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { branchId: true },
+    });
+    const dispatchBranchId = sevkiyat?.branchId ?? null;
     const orderRows = await tx.shipmentOrder.findMany({ where: { shipmentId }, select: { orderId: true } });
     // Lost-update kilidi: recompute defteri KİLİTSİZ okuyup shippedQty yazar — READ
     // COMMITTED altında aynı siparişe eşzamanlı iki terminal olay (iki dispatch, ya da
@@ -2174,10 +2202,35 @@ export class ShippingService {
     const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
     const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
     await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
+
+    // ⚠️ TAHSİS SEVK ANINDA YENİDEN HESAPLANIR (BULGU-T3-009). Eskiden sevkiyat
+    // kurulurken hesaplanan rakam sevk anına kadar DONUYORDU ve arada gerçek
+    // değişebiliyordu:
+    //   T0 sevkiyat DISPATCHED (500 m, siparişin 500 m'lik kalemine tahsisli)
+    //   T1 storno → sevkiyat PLANNED'a döner, tahsis satırları BİLİNÇLİ korunur
+    //   T2 satış aynı kalemi 200 m'ye düşürür
+    //   T3 "Sevk Et" → bayat 500 m `shippedQty`ye terfi eder
+    // Sonuç: 200 m'lik kaleme 500 m sevk yazılır; "Açık" −300 m çıkar, arayüz
+    // onu 0'a kelepçelediği için fazla sevk HİÇBİR EKRANDA görünmez.
+    //
+    // ⚠️ ÇIKIŞI ENGELLEMEZ — ölçüldü: `allocation.helper` içinde TEK BİR `throw`
+    // yok; talebi aşan mal basitçe TAHSİSSİZ kalır (`continue`/`break`). Yani
+    // mal her hâlükârda çıkar, değişen tek şey deftere yazılan rakamdır ve o
+    // rakam artık sevk anının gerçeğidir. Sahada yapılabilen hiçbir şey
+    // yapılamaz hâle gelmiyor.
+    const tazeTahsisIzi = await this.writeShipmentAllocationsTx(tx, shipmentId, orderIds, dispatchBranchId);
+    if (tazeTahsisIzi) {
+      // Çıkan mal ↔ siparişe yazılan: fark TAHSİSSİZ metrajdır. Sessiz kalmasın.
+      const mal = await tx.roll.aggregate({ where: { shipmentId }, _sum: { currentQty: true } });
+      const cikan = Number(mal._sum.currentQty ?? 0);
+      const yazilanToplam = tazeTahsisIzi.yazilan.reduce((a, y) => a + y.qty, 0);
+      const fark = Math.round((cikan - yazilanToplam) * 1000) / 1000;
+      tazeTahsisIzi.tahsissizMetraj = fark > 0 ? fark : 0;
+    }
     await recomputeOrderStatusForOrders(tx, orderIds);
     // Resmi belge — sevk irsaliyesi v1 burada donar.
     await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
-    return flipped;
+    return { flipped, iz: tazeTahsisIzi };
   }
 
   /**
@@ -2200,7 +2253,10 @@ export class ShippingService {
     if (shipment.sacks.length === 0) throw AppError.badRequest("Boş sevkiyat sevk edilemez");
     this.assertExportWeighed(shipment.sacks, shipment.destination);
 
-    const shippedRolls = await prisma.$transaction((tx) => this.performDispatchTx(tx, shipmentId, data, userId));
+    const dispatchSonuc = await prisma.$transaction((tx) => this.performDispatchTx(tx, shipmentId, data, userId));
+    const shippedRolls = dispatchSonuc.flipped;
+    // Tahsis yeniden hesabının izi — tx DIŞINDA (proje kuralı).
+    await this.flushAllocationAudit(dispatchSonuc.iz, userId);
     await AuditService.log({ userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId, newData: { kind: "DISPATCH", rollCount: shippedRolls, plateNumber: data.plateNumber ?? null, driverName: data.driverName ?? null } });
     return { success: true, data: { shipmentId, rollCount: shippedRolls }, message: "Sevk edildi — stok bina dışı, karşılanma kesinleşti" };
   }
