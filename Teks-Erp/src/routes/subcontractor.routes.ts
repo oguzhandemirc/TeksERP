@@ -311,14 +311,14 @@ router.post(
  * /api/subcontractor/reopen-remainder:
  *   post:
  *     tags: [Subcontractor]
- *     summary: "Kalan gelmeyecek" kararını geri al (fire kaydı terslenir)
+ *     summary: Kalan-gelmeyecek kararını geri al (fire kaydı terslenir)
  *     description: |
- *       `close-remainder` topu SUBCONTRACTOR_CONSUMED yapar ve o andan sonra o
+ *       close-remainder topu SUBCONTRACTOR_CONSUMED yapar ve o andan sonra o
  *       kabulün iptali 409 verir. Geri alma yolu olmadan yanlış girilen bir metraj
  *       KALICI oluyordu (defterde sahte fire + sahte üretim; düzeltmenin tek yolu
  *       DB müdahalesi). Bu uç topu AT_SUBCONTRACTOR'a döndürür, sevk kaleminin
- *       `remainderClosedAt` damgasını kaldırır, movement'ı yeniden açar ve sapma
- *       satırını SİLMEZ — `reversedAt` ile işaretler (append-only defter).
+ *       remainderClosedAt damgasını kaldırır, movement'ı yeniden açar ve sapma
+ *       satırını SİLMEZ - reversedAt ile işaretler (append-only defter).
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
  *       required: true
