@@ -110,6 +110,45 @@ LEFT JOIN (SELECT "orderLineId", SUM(qty) AS toplam FROM subcontractor_direct_sh
 WHERE ol."shippedQty" <> COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0)`,
   },
   {
+    id: "1c",
+    title: "Defterin KENDİSİ eksik: sipariş beyan eden sevkiyatın tahsis satırı yok",
+    // BULGU-T2-004 — §1/§2'nin KÖR NOKTASI. O ikisi denormalize alanı DEFTERE
+    // karşı ölçer; defter hiç yazılmamışsa iki taraf da 0 olur, fark 0 çıkar ve
+    // kapı YEŞİL yanar. Ölçüldü (saha kopyası, 2026-08-31): §1/§2 sıfır satır
+    // döndürürken 5 sevkiyatın 3.040,2 metresi sipariş defterine HİÇ girmemişti.
+    //
+    // ⚠️ KOŞUL `shipment_orders` ÜZERİNDEDİR ("tahsisi yok" DEĞİL). Siparişsiz
+    // sevk meşruen tahsissizdir; denetimin naif sorgusu (V2-Q08) onları da
+    // sayıyordu — aynı kopyada naif 6, gerçek 5. Naif hâli kalıcı yanlış kırmızı
+    // üretir ve kapı ilk haftasında devre dışı bırakılırdı.
+    //
+    // ONARIM ham UPDATE ile YAPILMAZ: `shippingService.setShipmentOrders` defteri
+    // yeniden kurar, sipariş toplamlarını yeniden hesaplar ve irsaliyeyi yeniden
+    // üretir.
+    //
+    // ⚠️ DEV'DEKİ YEŞİL "SORUN YOK" DEMEK DEĞİL — bölüm burada veri hacmi
+    // yüzünden neredeyse boşlukta koşuyor (ölçüldü 2026-08-31: dev 1
+    // `shipment_orders` / 2 DISPATCHED · saha kopyası 55 / 39). Bu dosyanın asıl
+    // değeri CANLI DB'ye karşı koşulmasıdır (CLAUDE.md); §1c özellikle öyledir.
+    //
+    // Negatif sonda (2026-08-31, rollback'li tx ile — veri bozulmadan): defteri
+    // yazılmış bir sevkiyatın tahsis satırları silinince 0 → 1 satır, ROLLBACK
+    // sonrası tekrar 0.
+    sql: `
+SELECT sh."shipmentNo",
+       sh."dispatchedAt"::date AS sevk_tarihi,
+       (SELECT count(*) FROM shipment_orders so WHERE so."shipmentId" = sh.id) AS beyan_edilen_siparis,
+       (SELECT COALESCE(SUM(r."currentQty"), 0) FROM sacks sk JOIN rolls r ON r."sackId" = sk.id
+         WHERE sk."shipmentId" = sh.id) AS deftere_girmeyen_metraj
+FROM shipments sh
+WHERE sh.status = 'DISPATCHED'
+  AND EXISTS (SELECT 1 FROM shipment_orders so WHERE so."shipmentId" = sh.id)
+  AND NOT EXISTS (
+    SELECT 1 FROM sacks sk JOIN sack_allocations sa ON sa."sackId" = sk.id
+     WHERE sk."shipmentId" = sh.id
+  )`,
+  },
+  {
     id: "2",
     title: "Order.shippedQty vs Σ(OrderLine.shippedQty)",
     sql: `

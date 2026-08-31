@@ -44,6 +44,31 @@ LEFT JOIN (SELECT "orderLineId", SUM(qty) AS toplam FROM subcontractor_direct_sh
 WHERE ol."shippedQty" <> COALESCE(sa.toplam, 0) + COALESCE(dsa.toplam, 0);
 
 \echo ''
+\echo '== 1c) DEFTERİN KENDİSİ EKSİK: sipariş BEYAN eden sevkiyatın tahsis satırı YOK =='
+\echo '   (§1/§2 bunu GÖREMEZ — tanım gereği: defter hiç yazılmamışsa denorm da 0 kalır,'
+\echo '    fark 0 çıkar, kapı yeşil yanar. BULGU-T2-004.)'
+-- ⚠️ KOŞUL `shipment_orders` ÜZERİNDEDİR, "tahsisi yok" DEĞİL. Siparişsiz sevk
+-- (müşteriye stoktan çıkış) MEŞRUEN tahsissizdir; naif sorgu onları da işaretler
+-- ve kapı kalıcı yanlış kırmızıya döner. Ölçüldü (saha kopyası, 2026-08-31):
+-- naif 6 satır · gerçek boşluk 5 — aradaki 1 meşru siparişsiz sevkti.
+-- Onarım: `shippingService.setShipmentOrders(shipmentId, orderIds)` (defteri
+-- yeniden kurar + irsaliyeyi yeniden üretir). Ham UPDATE ile DÜZELTME.
+SELECT sh."shipmentNo",
+       sh."dispatchedAt"::date AS sevk_tarihi,
+       (SELECT count(*) FROM shipment_orders so WHERE so."shipmentId" = sh.id) AS beyan_edilen_siparis,
+       (SELECT count(*) FROM sacks sk JOIN rolls r ON r."sackId" = sk.id WHERE sk."shipmentId" = sh.id) AS top,
+       (SELECT COALESCE(SUM(r."currentQty"), 0) FROM sacks sk JOIN rolls r ON r."sackId" = sk.id
+         WHERE sk."shipmentId" = sh.id) AS deftere_girmeyen_metraj
+FROM shipments sh
+WHERE sh.status = 'DISPATCHED'
+  AND EXISTS (SELECT 1 FROM shipment_orders so WHERE so."shipmentId" = sh.id)
+  AND NOT EXISTS (
+    SELECT 1 FROM sacks sk JOIN sack_allocations sa ON sa."sackId" = sk.id
+     WHERE sk."shipmentId" = sh.id
+  )
+ORDER BY sh."dispatchedAt";
+
+\echo ''
 \echo '== 2) Order.shippedQty  vs  Σ(OrderLine.shippedQty) =='
 SELECT o.id AS order_id,
        o."shippedQty" AS shipped_kayitli, COALESCE(SUM(ol."shippedQty"), 0) AS shipped_hesap
