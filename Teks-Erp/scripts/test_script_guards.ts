@@ -57,6 +57,15 @@ const KAPI = "assertGelistirmeVeritabani(";
  * Gerekçeli muaflar. ⚠️ Muaf, "bu dosya yıkıcı DEĞİL" demektir — "yıkıcı ama
  * geçsin" demek değildir. Bayatlığa karşı §2/§3 ile iki yönlü denetlenir.
  */
+/**
+ * Kapı taşıması BEKLENEN test dosyaları (BULGU-T1-018).
+ * ⚠️ Genel kural "test_* kapsam dışı"dır (kendi fixture'ını yaratır, bayatlayacak
+ * bir şey yoktur). İSTİSNA: gerçek veriye yazma riski TAŞIMIŞ ve bu yüzden
+ * ortam kapısı eklenmiş dosyalar. Liste küçülmez — bir dosya kapısını
+ * kaybederse §5 kırmızı verir.
+ */
+const KAPI_ZORUNLU_TESTLER = ["test_manual_move_fason_receive.ts"];
+
 const MUAFLAR: Record<string, string> = {
   "test_db_invariants.ts":
     "TRUNCATE bir STRING SABİTİNDE geçiyor (trigger tanımı: 'BEFORE DELETE OR UPDATE OR TRUNCATE') — yorum ayıklaması bunu elemez, çalıştırılan bir ifade de değil",
@@ -106,6 +115,18 @@ function main(): void {
   check("§2: ölü muaf yok", oluMuaf.length === 0, oluMuaf.join(", ") || "muaf listesi güncel");
   const hayalet = Object.keys(MUAFLAR).filter((f) => !dosyalar.includes(f));
   check("§3: muaf listesinde hayalet dosya yok", hayalet.length === 0, hayalet.join(", ") || "hepsi mevcut");
+
+  // ═══ §5 — ortam kapısı eklenmiş testler onu KAYBETMEMELİ ═══
+  const kapisizTest = KAPI_ZORUNLU_TESTLER.filter((f) => {
+    const yol = join(dizin, f);
+    if (!dosyalar.includes(f)) return true; // dosya kayboldu → liste bayat
+    return !readFileSync(yol, "utf8").includes(KAPI);
+  });
+  check(
+    "§5: ortam kapısı eklenmiş testler kapıyı KORUYOR",
+    kapisizTest.length === 0,
+    kapisizTest.join(", ") || KAPI_ZORUNLU_TESTLER.join(", "),
+  );
 
   // ═══ §4 — kapı VAR olmakla REDDETMEK ayrı iddialardır ═══
   // Uzak host + tanınmayan DB adıyla gerçekten çalıştırılır; betik veriye
