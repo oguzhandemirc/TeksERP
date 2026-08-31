@@ -124,10 +124,10 @@ router.get(
  *       "null" METNİ uuid kolonuna gidip 400 üretirdi.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
- *       - { in: query, name: filter[itemId], schema: { type: string } }
- *       - { in: query, name: filter[customerId], schema: { type: string }, description: "UUID · CSV · 'null' (yalnız varsayılanlar)" }
- *       - { in: query, name: filter[kind], schema: { type: string, enum: [PURCHASE, SALE] } }
- *       - { in: query, name: filter[currency], schema: { type: string, enum: [TRY, USD, EUR, GBP, RUB] } }
+ *       - { in: query, name: "filter[itemId]", schema: { type: string } }
+ *       - { in: query, name: "filter[customerId]", schema: { type: string }, description: "UUID · CSV · 'null' (yalnız varsayılanlar)" }
+ *       - { in: query, name: "filter[kind]", schema: { type: string, enum: [PURCHASE, SALE] } }
+ *       - { in: query, name: "filter[currency]", schema: { type: string, enum: [TRY, USD, EUR, GBP, RUB] } }
  *       - { in: query, name: search, schema: { type: string }, description: Kalem kodu/adı }
  *     responses:
  *       200: { description: Sayfalanmış fiyat listesi }

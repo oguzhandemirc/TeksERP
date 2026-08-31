@@ -532,6 +532,60 @@ export const ENUM_LABELS: Record<string, string> = {
   // YarnMovementKind (düzeltme kayıtları)
   ADJUST_IN: "Düzeltme (giriş)",
   ADJUST_OUT: "Düzeltme (çıkış)",
+  // ───────────────────────────────────────────────────────────────────────
+  // TİCARET PAKETİ ENUM DEĞERLERİ (merge, 2026-09-01)
+  // Bekçi `test_audit_labels` §4 her Prisma enum değerinin Türkçesini ister;
+  // bu değerler `feature/depo-mal-kabul`ta doğdu, bekçi ise `adnansahin`de —
+  // ikisi ilk kez burada karşılaştı ve 40 değer etiketsizdi (denetim ekranı
+  // ham `CHEQUE_ENDORSE` basıyordu).
+  // ───────────────────────────────────────────────────────────────────────
+  // ── Cari hareket kaynağı (CariTxnSource) — ön muhasebe defteri
+  INVOICE: "Fatura",
+  INVOICE_CANCEL: "Fatura iptali",
+  PAYMENT: "Tahsilat / Ödeme",
+  PAYMENT_CANCEL: "Tahsilat / Ödeme iptali",
+  CHEQUE_RECEIVE: "Çek/senet alındı",
+  CHEQUE_ISSUE: "Çek/senet verildi",
+  CHEQUE_ENDORSE: "Çek/senet cirosu",
+  CHEQUE_BOUNCE: "Çek/senet karşılıksız",
+  CHEQUE_CANCEL: "Çek/senet iptali",
+  ADJUSTMENT: "Düzeltme kaydı",
+  ADJUSTMENT_CANCEL: "Düzeltme iptali",
+  // ── Çek/senet olayı (ChequeEventType)
+  ISSUE: "Düzenlendi",
+  RECEIVE: "Alındı",
+  DEPOSIT: "Bankaya verildi",
+  COLLECT: "Tahsil edildi",
+  COLLECT_CANCEL: "Tahsil stornosu",
+  ENDORSE: "Ciro edildi",
+  BOUNCE: "Karşılıksız çıktı",
+  PAY: "Ödendi",
+  // ── Çek/senet türü (ChequeDocType)
+  CHEQUE: "Çek",
+  PROMISSORY_NOTE: "Senet",
+  // ── Depo defteri olayı (WarehouseEventType)
+  ENTRY: "Depoya giriş",
+  TRANSFER: "Depolar arası transfer",
+  TRANSFER_REVERSAL: "Transfer stornosu",
+  SHIPMENT: "Sevk çıkışı",
+  SHIPMENT_REVERSAL: "Sevk stornosu",
+  RETURN: "İade girişi",
+  CANCEL: "Kayıttan düşme",
+  // ── Donmuş belge türü (PrintedDocType) — ticaret paketi
+  TRANSFER_DISPATCH: "Depo transfer irsaliyesi",
+  GOODS_RECEIPT: "Mal kabul fişi",
+  INVOICE_INTERNAL: "İç fatura",
+  PAYMENT_RECEIPT: "Tahsilat/Ödeme makbuzu",
+  RECONCILIATION_LETTER: "Mutabakat mektubu",
+  CHEQUE_DELIVERY_NOTE: "Çek/senet teslim bordrosu",
+  STOCK_COUNT: "Sayım tutanağı",
+  // ── Diğer ticaret enum'ları
+  PURCHASE_RECEIPT: "Satın alınan mal (mal kabul)",
+  ROLL: "Top",
+  RUB: "Rus Rublesi",
+  TCMB: "TCMB",
+  BOTH: "Hem müşteri hem tedarikçi",
+
 };
 
 // =============================================================================

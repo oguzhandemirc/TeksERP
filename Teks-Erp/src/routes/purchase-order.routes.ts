@@ -157,7 +157,7 @@ router.get("/", requireAnyPermission(...READ_PERMS), async (req: Request, res: R
  * /api/purchase-orders/open-lines:
  *   get:
  *     tags: [PurchaseOrders]
- *     summary: "Ne ısmarladım, ne geldi" — karşılanmamış sipariş kalemleri
+ *     summary: '"Ne ısmarladım, ne geldi" — karşılanmamış sipariş kalemleri'
  *     description: >
  *       Yalnız `OPEN`/`PARTIAL` siparişlerin `receivedQty < qty` olan kalemleri.
  *       Süzme SUNUCUDA yapılır: istemcide süzmek yalnız o anki sayfayı süzer ve

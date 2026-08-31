@@ -196,7 +196,7 @@ router.post(
  *     description: Mal parça parça gelir — fiş bir KAPTIR, satırlar sonradan eklenebilir.
  *     security: [{ bearerAuth: [] }]
  *     responses:
- *       200: { description: Eklendi (failed[] atlanan satırları taşır) }
+ *       200: { description: "Eklendi (failed[] atlanan satırları taşır)" }
  *       409: { description: Fiş iptal edilmiş }
  */
 router.post(
