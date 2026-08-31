@@ -116,6 +116,37 @@ birincisiyle karşılaştırılabilir olsun.
 
 ---
 
+## Ne kadar veri kaybedebiliriz, ne kadar sürede döneriz (RPO / RTO)
+
+> **BULGU-T1-022:** bu iki sayı sistemin hiçbir yerinde YAZILI DEĞİLDİ. Yedek
+> alınıyor, geri yükleme yolu var, ama "en kötü ihtimalle ne kaybederiz" sorusuna
+> kimse bakmadan cevap veremiyordu. Aşağısı yeni bir karar değil, **bugünkü
+> kurulumun ölçülmüş sonucudur.**
+
+| Soru | Bugünkü cevap | Neden |
+|---|---|---|
+| **RPO** — en fazla ne kadarlık veri kaybı | **≤ 24 saat** | Yedek günde BİR kez alınıyor (Windows Görev Zamanlayıcı `TeksERP-DB-Backup`, 02:00). Gün içinde çökerse o güne ait tüm giriş/sevk/kabul kaybolur. |
+| **RTO** — ne kadar sürede ayağa kalkarız | **Faz A + dakikalar** | Faz A (kopyaya geri yükleme) tatbikatta ölçülür ve yukarıdaki tabloya yazılır; Faz B (takas) `pm2 stop` → rename → `migrate deploy` → `pm2 start`, saniyeler mertebesinde. |
+| **PITR** (an bazlı geri dönüş) | **YOK** | WAL arşivleme kurulu değil. Yalnız gece yedeğine dönülebilir. |
+| **Makine dışı kopya** | **Mekanizma VAR, yapılandırılmamış** | `rclone` süpürücüsü kodda hazır (`offsite-backup.helper`); `BACKUP_RCLONE_REMOTE` boş olduğu için çalışmıyor → yedekler DB ile **aynı diskte**. |
+
+### Bu üç sayı neyi söylüyor
+
+- **Disk ölürse fabrika bir günü kaybeder** ve yedekler de aynı diskte olduğu için
+  **hiçbir şeyi geri getiremez.** Bu, bilinen ve kabul edilmiş bir risktir
+  (kullanıcı kararı 2026-08-30) — ama artık YAZILI.
+- Riski düşürmenin en ucuz iki adımı, sırayla:
+  1. `BACKUP_RCLONE_REMOTE` doldurulur → gece yedeği makine dışına da kopyalanır
+     (kod hazır, tek satırlık ayar; panelde "Bağlantıyı test et" düğmesi var).
+  2. Gün içi ikinci bir yedek saati → RPO 24 saatten 12 saate iner.
+- **PITR gerçekten isteniyorsa** ayrı bir iştir (WAL arşivleme + saklama alanı) ve
+  bu kurulumun kapsamında değildir.
+
+⚠️ Bu tablo tatbikattan SONRA güncellenir: Faz A süresi ölçülünce RTO satırına
+gerçek rakam yazılır ("dakikalar" değil, "N dakika").
+
+---
+
 ## Bu provanın KAPSAMADIĞI şey
 
 ⚠️ Faz B (gerçek takas) denenmiyor. Yani "kopya doğru üretiliyor" kanıtlanıyor,
