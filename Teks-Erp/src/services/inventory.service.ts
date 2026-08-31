@@ -12,6 +12,7 @@ import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
+import { assertMasterDataLiveTx, lockAgainstMergeTx } from "./helpers/master-data-live.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
@@ -902,6 +903,21 @@ export class InventoryService {
             );
           }
         }
+
+        // ⚠️ ANA VERİ TAZE DOĞRULAMA — KİLİT ALTINDA (BULGU-T3-007). Yukarıdaki
+        // ürün/renk kontrolleri tx DIŞINDA koştu; o pencerede panelden bir
+        // birleştirme commit etmiş olabilir ve bu kayıt MEZAR TAŞI bir kumaşa
+        // yazılırdı: top canlı ve barkodlu olur ama ürün filtresinde, Ürün
+        // Dengesi'nde ve sipariş karşılamada HİÇ GÖRÜNMEZ (hepsi
+        // `mergedIntoId IS NULL` süzer). Birleştirmenin taşıma turu da o satırı
+        // göremezdi — henüz yoktu.
+        // ⚠️ YENİ KISIT DEĞİL: pasif ürün zaten reddediliyordu; burada aynı kural
+        // yarış penceresini de kapatacak şekilde TEKRARLANIYOR.
+        // ⚠️ SIRA LOAD-BEARING: önce PAYLAŞIMLI kilit, sonra taze okuma. Kilit
+        // olmadan taze okuma da yetmez — ölçüldü: repro §2, 12 turun 3'ünde
+        // hâlâ mezar taşına yazıyordu (birleştirme henüz commit etmemişti).
+        await lockAgainstMergeTx(tx);
+        await assertMasterDataLiveTx(tx, { itemId: data.itemId, colorId: data.colorId ?? null });
 
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
         const barcode = await generateRollBarcode(tx, rollType);

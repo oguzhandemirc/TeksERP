@@ -30,6 +30,7 @@
 // =============================================================================
 
 import { Prisma, OrderStatus, RollStatus, WorkOrderStatus, WorkOrderType } from "@prisma/client";
+import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
@@ -108,8 +109,12 @@ function num(d: Prisma.Decimal | null | undefined): number | null {
   return d == null ? null : Number(d);
 }
 
-async function loadWo(workOrderId: string): Promise<WoForLink> {
-  const wo = await prisma.workOrder.findUnique({
+async function loadWo(
+  workOrderId: string,
+  // Kilit altında TAZE okuma için tx istemcisi geçilebilir (BULGU-T3-016).
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<WoForLink> {
+  const wo = await db.workOrder.findUnique({
     where: { id: workOrderId },
     select: {
       id: true,
@@ -519,13 +524,58 @@ export class WorkOrderLinkService {
       throw AppError.badRequest("İş emri zaten bu renkte.");
     }
 
-    // TEK BEKÇİ (2026-08-21): terminal statü + renk aktif + izinli renk listesi +
-    // MAL–PLAN uyumu (boyanmış top ↔ yeni renk; düzeltilecekler hariç) + rota
-    // kapsaması uyarısı — "Düzenle" ile birebir aynı kurallar (helper başlığı).
-    const gate = await assertTargetColorChange(prisma, wo, colorId, {
-      confirmPartial: opts.confirmPartial,
-      recolorRollIds: opts.recolorRollIds,
+    // ⚠️ BEKÇİ + CLAIM AYNI KİLİDİN ALTINDA (BULGU-T3-016). Eskiden bekçi tx
+    // DIŞINDA koşuyordu ve fason kabulünün commit penceresinde (~600 ms, çok
+    // toplu kabulde daha uzun) mal–plan kuralı ATLANABİLİYORDU:
+    //
+    //   T1 tablet: `receive` tx'i açık, `touchWorkOrderTx` WO satırını kilitledi,
+    //              doğan toplar ESKİ hedef renkle (MAVİ) yazılıyor.
+    //   T2 panel:  `changeTargetColor(MAVİ→KIRMIZI)`; bekçi kilit DIŞINDA okur,
+    //              canlı boyanmış top 0 görür (hepsi AT_SUBCONTRACTOR) → SERBEST.
+    //   T1 commit: mal içeride, MAVİ.
+    //   T2 claim:  `targetColorId = MAVİ` hâlâ doğru (kabul o kolona dokunmadı)
+    //              → geçer. Sonuç: plan KIRMIZI, elde MAVİ toplar; verilmesi
+    //              gereken 409 COLOR_DYED_BLOCKED hiç üretilmez.
+    //
+    // ⚠️ YENİ KURAL DEĞİL — 2026-08-21'de verilen kararın (COLOR_DYED_BLOCKED /
+    // COLOR_PARTIAL_CONFIRM + Tebdil/yeni iş emri/topları düzelt seçenekleri)
+    // güvenilir hâle gelmesi. Operatörün yapabildiği hiçbir şey yapılamaz
+    // olmuyor; yalnız cevabın doğru olması garanti altına alınıyor.
+    // ⚠️ BEDELİ (bilinçli): "Rengi Değiştir" artık o iş emrinde koşan bir fason
+    // kabulünün bitmesini BEKLER. `touchWorkOrderTx` ile aynı satır kilidi.
+    // ⚠️ Audit tx DIŞINDA kalır (proje kuralı); `markTravelerCardDirtyTx` içeride.
+    const { gate, claimCount } = await prisma.$transaction(async (tx) => {
+      // İLK İFADE — sıra load-bearing: kilit bekçiden SONRA alınsaydı hiçbir şey
+      // kazandırmazdı (KK1 advisory kilidi ve parti sayacı ile aynı ders).
+      await touchWorkOrderTx(tx, workOrderId);
+      // Kilit altında TAZE oku: kabul commit ettiyse doğan toplar artık görünür.
+      const tazeWo = await loadWo(workOrderId, tx);
+      // TEK BEKÇİ (2026-08-21): terminal statü + renk aktif + izinli renk listesi +
+      // MAL–PLAN uyumu (boyanmış top ↔ yeni renk; düzeltilecekler hariç) + rota
+      // kapsaması uyarısı — "Düzenle" ile birebir aynı kurallar (helper başlığı).
+      const g = await assertTargetColorChange(tx, tazeWo, colorId, {
+        confirmPartial: opts.confirmPartial,
+        recolorRollIds: opts.recolorRollIds,
+      });
+      // Atomik claim: eşzamanlı tamamlanma/iptal/devir sırasında yazma sızmasın;
+      // `targetColorId` koşulu bekçinin baktığı değerin hâlâ geçerli olduğunu
+      // iddia eder (kilit altında olduğu için artık gerçekten öyle).
+      const c = await tx.workOrder.updateMany({
+        where: {
+          id: workOrderId,
+          status: { notIn: PLAN_CHANGE_FROZEN_STATUSES },
+          targetColorId: tazeWo.targetColorId,
+        },
+        data: { targetColorId: colorId },
+      });
+      if (c.count > 0) await markTravelerCardDirtyTx(tx, workOrderId);
+      return { gate: g, claimCount: c.count };
     });
+    if (claimCount === 0) {
+      throw AppError.conflict(
+        "İş emri bu sırada değişti (tamamlandı, iptal edildi ya da rengi başka biri değiştirdi) — yenileyip tekrar deneyin.",
+      );
+    }
 
     let newColorName: string | null = null;
     if (colorId) {
@@ -558,23 +608,6 @@ export class WorkOrderLinkService {
         ),
     ];
 
-    // Atomik claim: eşzamanlı tamamlanma/iptal/devir sırasında yazma sızmasın;
-    // `targetColorId` koşulu bekçinin baktığı değerin hâlâ geçerli olduğunu iddia
-    // eder (arada başka biri değiştirdiyse kısmi-boya/kilit kararı bayatlamıştır).
-    const claim = await prisma.workOrder.updateMany({
-      where: {
-        id: workOrderId,
-        status: { notIn: PLAN_CHANGE_FROZEN_STATUSES },
-        targetColorId: wo.targetColorId,
-      },
-      data: { targetColorId: colorId },
-    });
-    if (claim.count === 0) {
-      throw AppError.conflict(
-        "İş emri bu sırada değişti (tamamlandı, iptal edildi ya da rengi başka biri değiştirdi) — yenileyip tekrar deneyin.",
-      );
-    }
-    await markTravelerCardDirtyTx(prisma, workOrderId);
 
     await AuditService.log({
       userId,
