@@ -46,7 +46,11 @@ async function main() {
   const madeIds: string[] = [];
   const mk = (over: Record<string, unknown>) => ({
     code: `TST-PSO-${ts}-${madeIds.length}`,
-    name: "TEST İstasyon Sahiplik",
+    // ⚠️ AD DA BENZERSİZ: `peripheral_devices` üzerinde ad seddi var
+    // (`peripheral_devices_nameFold_key`, 2026-08-31 / BULGU-T1-007) ve bu test
+    // tek koşumda BİRDEN FAZLA donanım yaratıyor. Sabit ad ikinci create'i
+    // P2002'ye düşürüyordu. Damga kodunkiyle AYNI kaynaktan gelir.
+    name: `TEST İstasyon Sahiplik ${ts}-${madeIds.length}`,
     kind: "SCALE",
     connectionType: "BLUETOOTH_SPP",
     address: "00:11:22:33:44:55",

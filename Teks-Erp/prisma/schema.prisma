@@ -787,6 +787,12 @@ model Machine {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("MachineUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007) — KAPSAMLI: makine adı İSTASYON İÇİNDE
+  /// tekildir (`duplicateNameScopeField: "stationId"`), global DEĞİL. Düz
+  /// `@@unique([nameFold])` yazmak "Makine 1" adını fabrikada tek bir istasyona
+  /// hapsederdi; denetimin "kalan tablolara nameFold seddi ekle" tavsiyesi bu
+  /// ayrımı içermiyordu. Migration: `20260831120000_namefold_sed_kalan_tablolar`.
+  @@unique([stationId, nameFold])
   @@index([stationId])
   @@index([nameFold])
   @@map("machines")
@@ -930,6 +936,12 @@ model PeripheralDevice {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("PeripheralDeviceUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([machineId])
   @@index([deviceId])
   @@index([stationId])
@@ -1076,6 +1088,12 @@ model Route {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("RouteUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([customerId])
   @@index([isFavorite])
   @@index([nameFold])
@@ -1202,6 +1220,12 @@ model ProductRecipe {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ProductRecipeUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([itemId])
   @@index([colorId])
   @@index([routeId])
@@ -1310,10 +1334,6 @@ model Item {
   mergedChildren Item[]    @relation("ItemMergeLineage")
   mergedBy       User?     @relation("ItemMergedBy", fields: [mergedById], references: [id])
 
-  @@index([itemType])
-  @@index([nameFold])
-  @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "items_nameFold_trgm_idx", type: Gin)
-  @@index([mergedIntoId])
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Prisma 7 partial predicate'i drift saymaz; ama uniqueness
   // FARKI (index↔unique) drift SAYAR → bu yüzden @@unique olmalı (aksi halde migrate dev
@@ -1324,6 +1344,10 @@ model Item {
   // prod'da temizlik (Mükerrer Kayıtlar paneli) bitene dek index EKSİK olabilir;
   // `test_db_invariants` orada kırmızı = "enforce bekliyor" (migration dosyasını yeniden koş).
   @@unique([nameFold])
+  @@index([itemType])
+  @@index([nameFold])
+  @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "items_nameFold_trgm_idx", type: Gin)
+  @@index([mergedIntoId])
   @@map("items")
 }
 
@@ -1579,14 +1603,14 @@ model Roll {
   /// Sebep AUDIT'TE DEĞİL BURADA: iptal edilmiş bir kaydı inceleyen kişinin ilk
   /// sorusu "bu neden iptal edildi" ve cevabı altı ay sonra da durmalı (bkz.
   /// `labelPrintedAt` notundaki arşivleme tuzağı).
-  cancelledAt   DateTime? @db.Timestamptz
-  cancelledById String?   @db.Uuid
-  cancelReason  String?   @db.VarChar(500)
+  cancelledAt      DateTime? @db.Timestamptz
+  cancelledById    String?   @db.Uuid
+  cancelReason     String?   @db.VarChar(500)
   /// İptal sebebinin KATALOG KODU (2026-08-21, kind ROLL_CANCEL) — `entryReasonCode`
   /// ile aynı sözleşme: metin görünen kayıt, kod rapor anahtarı; sunucu metinden
   /// türetir, açık kod katalogda doğrulanır; NULL = serbest metin / sebepsiz iptal.
   /// `restoreCancelledRoll` metinle birlikte bunu da NULL'lar.
-  cancelReasonCode String? @db.VarChar(64)
+  cancelReasonCode String?   @db.VarChar(64)
 
   /// İptalden ÖNCEKİ statü — geri alma (`restoreCancelledRoll`) buraya döner.
   /// `preShipStatus` emsalinin birebir aynısı ve aynı sebeple: körlemesine `STOCK`'a
@@ -1891,14 +1915,14 @@ model Customer {
   mergedChildren Customer[] @relation("CustomerMergeLineage")
   mergedBy       User?      @relation("CustomerMergedBy", fields: [mergedById], references: [id])
 
+  // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
+  // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
+  @@unique([nameFold])
   @@index([type])
   @@index([documentProfileId])
   @@index([nameFold])
   @@index([nameFold(ops: raw("gin_trgm_ops"))], map: "customers_nameFold_trgm_idx", type: Gin)
   @@index([mergedIntoId])
-  // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
-  // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
-  @@unique([nameFold])
   @@map("customers")
 }
 
@@ -1994,15 +2018,15 @@ model Order {
   /// İptal edildiği an. `completedAt`in ikizi: "dönemde kaç sipariş iptal oldu"
   /// sorusu `orderDate`e (işin alındığı an) sorulamaz — sipariş Ocak'ta alınıp
   /// Mart'ta iptal edilebilir ve iki soru farklı aylara aittir.
-  cancelledAt       DateTime? @db.Timestamptz
+  cancelledAt      DateTime? @db.Timestamptz
   /// GÖRÜNEN sebep metni (operatörün seçtiği hazır satır ya da serbest yazısı).
-  cancelReason      String?   @db.Text
+  cancelReason     String?   @db.Text
   /// RAPOR ANAHTARI. Kod ASLA değişmez, etiket serbesttir (ReasonPreset düzeni);
   /// kodu SUNUCU türetir (`resolveReasonCode`), istemci disiplinine bırakılmaz.
   /// Serbest metin → NULL (uydurulmaz). Index BİLİNÇLİ YOK: rapor sorgusu
   /// `status='CANCELLED'` eşitliğiyle başlar ve `(status, createdAt)` bileşiği
   /// o daralmayı zaten veriyor.
-  cancelReasonCode  String?   @db.VarChar(64)
+  cancelReasonCode String?   @db.VarChar(64)
 
   // Tamamlanma kaydı
   completedAt       DateTime? @db.Timestamptz // İlk COMPLETED'a düştüğü an (otomatik veya manuel)
@@ -2616,6 +2640,12 @@ model QualityGrade {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("QualityGradeUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([isActive, sortOrder])
   @@index([nameFold])
   @@index([descriptionFold])
@@ -2667,6 +2697,12 @@ model ReturnReason {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ReturnReasonUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([isActive, sortOrder])
   @@index([nameFold])
   @@index([descriptionFold])
@@ -2715,6 +2751,12 @@ model DefectType {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("DefectTypeUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([isActive])
   @@index([nameFold])
   @@index([descriptionFold])
@@ -3127,19 +3169,19 @@ enum DuplicateReviewDecision {
 }
 
 model DuplicateReview {
-  id        String                  @id @default(uuid()) @db.Uuid
-  entity    DuplicateReviewEntity
+  id          String                  @id @default(uuid()) @db.Uuid
+  entity      DuplicateReviewEntity
   /// `min(aId,bId):max(aId,bId)` — çiftin sıradan bağımsız anahtarı.
-  pairKey   String                  @db.VarChar(80)
-  aId       String                  @db.Uuid
-  bId       String                  @db.Uuid
-  decision  DuplicateReviewDecision
+  pairKey     String                  @db.VarChar(80)
+  aId         String                  @db.Uuid
+  bId         String                  @db.Uuid
+  decision    DuplicateReviewDecision
   /// Karar anındaki tespit gerekçeleri (kural/skor/ayrıntı) — snapshot, sorgulanmaz.
-  evidence  Json?
-  note      String?                 @db.VarChar(500)
-  decidedById String?               @db.Uuid
-  decidedBy   User?                 @relation("DuplicateReviewDecidedBy", fields: [decidedById], references: [id])
-  decidedAt DateTime                @default(now()) @db.Timestamptz
+  evidence    Json?
+  note        String?                 @db.VarChar(500)
+  decidedById String?                 @db.Uuid
+  decidedBy   User?                   @relation("DuplicateReviewDecidedBy", fields: [decidedById], references: [id])
+  decidedAt   DateTime                @default(now()) @db.Timestamptz
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -3741,12 +3783,12 @@ model Subcontractor {
   mergedChildren Subcontractor[] @relation("SubcontractorMergeLineage")
   mergedBy       User?           @relation("SubcontractorMergedBy", fields: [mergedById], references: [id])
 
-  @@index([documentProfileId])
-  @@index([nameFold])
-  @@index([mergedIntoId])
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
   @@unique([nameFold])
+  @@index([documentProfileId])
+  @@index([nameFold])
+  @@index([mergedIntoId])
   @@map("subcontractors")
 }
 
@@ -4693,6 +4735,12 @@ model FabricProperty {
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("FabricPropertyUpdatedBy", fields: [updatedById], references: [id])
 
+  /// AD SEDDİ (2026-08-31, BULGU-T1-007). Uygulama guard'ı
+  /// (`assertNameNotDuplicate`) kilitsiz check-then-act'tir: iki eşzamanlı istek
+  /// aynı adı yazabilir. Kullanıcıya Türkçe 409'u guard verir; bu index onun
+  /// kapatamadığı yarış/ham-SQL/içe-aktarım yollarına karşı SESSİZ SON HATTIR.
+  /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
+  @@unique([nameFold])
   @@index([isActive, sortOrder])
   @@index([category])
   @@index([nameFold])

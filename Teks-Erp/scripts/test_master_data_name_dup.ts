@@ -414,6 +414,168 @@ async function main() {
     await prisma.color.deleteMany({ where: { id: { in: created.colorIds } } }).catch(() => {});
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // §10 — SED ENVANTERİ (2026-08-31, BULGU-T1-007): her nameFold tablosu ya
+  //       SEDLİ ya da GEREKÇELİ MUAF. İKİ YÖNLÜ.
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Neden gerekli: `assertNameNotDuplicate` kilitsiz check-then-act'tir ve
+  // `create()` transaction bile açmaz — yarışı kapatan tek şey DB seddidir.
+  // Yeni bir `nameFold` kolonu eklendiğinde sed eklemeyi unutmak SESSİZDİR:
+  // uygulama guard'ı normal yolda çalıştığı için hiçbir şey kırmızıya dönmez.
+  //
+  // ⚠️ Muaf listesi GEREKÇELİDİR ve BAYATLIĞA KARŞI DENETLENİR: muaf edilen
+  // tablo sonradan sedlenirse ölü muaf testi DÜŞÜRÜR. Ölü muaf, gerçek bir
+  // boşluğu sessizce kapsam dışında tutar.
+  const SED_MUAFLARI: Record<string, string> = {
+    // Uygulama guard'ı YOK (`duplicateNameField` tanımlı değil) → bugün mükerrer
+    // ad MEŞRUDUR. Sed eklemek uygulamanın aynası değil YENİ KISIT olurdu; iş
+    // kararı bekliyor ("iki müşterinin de 'Merkez' şubesi olabilir mi?").
+    customer_branches: "uygulama guard'ı yok — iş kararı bekliyor",
+    label_templates: "uygulama guard'ı yok — iş kararı bekliyor",
+    permission_templates: "uygulama guard'ı yok — iş kararı bekliyor",
+    subcontractor_categories: "uygulama guard'ı yok — iş kararı bekliyor",
+    // Saha kopyasında TEMİZ, dev'de 3 grup — üçü de test fixture artığı
+    // ("TEST Rota Zımpara" ×3). Sabit adla istasyon yaratan fixture'lar
+    // damgalanmadan sed eklemek onları 2. koşumda P2002'ye düşürür.
+    // ⚠️ KANIT BU DOSYADA: §8 ("Tarihsel mükerrer düzenlenebilir kalır") aynı
+    // adlı İKİ istasyonu bilerek doğrudan DB'ye yazıyor — sed eklemek o senaryoyu
+    // imkânsız kılar. Ayrıca dev'deki 3 mükerrer grubun üçü de fixture artığı
+    // ("TEST Rota Zımpara" ×3); saha kopyasında istasyonlar TEMİZ.
+    stations: "tarihsel-mükerrer senaryosu + sabit adlı fixture'lar (§8)",
+  };
+
+  const foldTablolar = await prisma.$queryRaw<Array<{ tablo: string }>>`
+    SELECT table_name AS tablo FROM information_schema.columns
+    WHERE table_schema = 'public' AND column_name = 'nameFold'
+    ORDER BY 1
+  `;
+  const sedliler = await prisma.$queryRaw<Array<{ tablo: string }>>`
+    SELECT DISTINCT t.relname AS tablo
+    FROM pg_index x
+    JOIN pg_class i ON i.oid = x.indexrelid
+    JOIN pg_class t ON t.oid = x.indrelid
+    JOIN pg_namespace n ON n.oid = t.relnamespace
+    WHERE n.nspname = 'public' AND x.indisunique AND x.indisvalid
+      AND (i.relname LIKE '%nameFold%' OR pg_get_indexdef(i.oid) ILIKE '%nameFold%')
+  `;
+  const sedliSet = new Set(sedliler.map((r) => r.tablo));
+
+  // KÖRLÜK ZEMİNİ: sorgular boş dönerse aşağıdaki iki kontrol vakumen yeşil kalır.
+  check(
+    `§10: nameFold tabloları tarandı (körlük zemini)`,
+    foldTablolar.length >= 15,
+    `${foldTablolar.length} tablo`,
+  );
+  check(`§10: sedli tablo bulundu (körlük zemini)`, sedliSet.size >= 8, `${sedliSet.size} sedli`);
+
+  // ① Sedsiz VE muaf olmayan tablo kalmamalı.
+  const acikta = foldTablolar
+    .map((r) => r.tablo)
+    .filter((t) => !sedliSet.has(t) && !(t in SED_MUAFLARI));
+  check(
+    "§10a: sedsiz ve gerekçesiz nameFold tablosu YOK",
+    acikta.length === 0,
+    acikta.join(", ") || "hepsi ya sedli ya gerekçeli muaf",
+  );
+
+  // ② Ölü muaf kalmamalı (muaf ama artık sedli).
+  const oluMuaf = Object.keys(SED_MUAFLARI).filter((t) => sedliSet.has(t));
+  check(
+    "§10b: ölü muaf yok (muaf edilen tablo sedlenmemiş)",
+    oluMuaf.length === 0,
+    oluMuaf.join(", ") || "muaf listesi güncel",
+  );
+  // ③ Muaf listesindeki tablo gerçekten var olmalı (yeniden adlandırma sonrası bayat girdi).
+  const hayaletMuaf = Object.keys(SED_MUAFLARI).filter(
+    (t) => !foldTablolar.some((r) => r.tablo === t),
+  );
+  check(
+    "§10c: muaf listesinde hayalet tablo yok",
+    hayaletMuaf.length === 0,
+    hayaletMuaf.join(", ") || "hepsi mevcut",
+  );
+  console.log(`   muaflar: ${Object.entries(SED_MUAFLARI).map(([t, n]) => `${t} (${n})`).join(" · ")}`);
+
+  // ── §10d: sed VAR olmakla ISIRMAK ayrı iddialardır ────────────────────────
+  // "index listede görünüyor" ile "ikinci kaydı gerçekten reddediyor" farklı
+  // şeyler. Aşağısı uygulama guard'ını ATLAYARAK (prisma doğrudan) yazar.
+  const ek = `${Date.now()}`.slice(-6);
+  const sedIds = { defect: [] as string[], station: [] as string[], machine: [] as string[] };
+  try {
+    const d1 = await prisma.defectType.create({
+      data: { code: `TEST-SED-D1-${ek}`, name: `Test Sed Hata ${ek}` },
+    });
+    sedIds.defect.push(d1.id);
+    await expectP2002(
+      "§10d: aynı ad ikinci kez YAZILAMAZ (defect_types seddi ısırıyor)",
+      async () => {
+        const d2 = await prisma.defectType.create({
+          // Kod FARKLI — reddin sebebi ad olmalı, kod değil.
+          data: { code: `TEST-SED-D2-${ek}`, name: `Test Sed Hata ${ek}` },
+        });
+        sedIds.defect.push(d2.id);
+      },
+      "defect_types_nameFold_key",
+    );
+
+    // ── Kapsamlı sed: makine adı İSTASYON İÇİNDE tekil ──────────────────────
+    const st1 = await prisma.station.create({
+      data: { code: `TEST-SED-S1-${ek}`, name: `Test Sed İst A ${ek}`, kind: "OTHER", type: "INTERNAL" },
+    });
+    const st2 = await prisma.station.create({
+      data: { code: `TEST-SED-S2-${ek}`, name: `Test Sed İst B ${ek}`, kind: "OTHER", type: "INTERNAL" },
+    });
+    sedIds.station.push(st1.id, st2.id);
+
+    const m1 = await prisma.machine.create({
+      data: { code: `TEST-SED-M1-${ek}`, name: `Makine ${ek}`, stationId: st1.id },
+    });
+    sedIds.machine.push(m1.id);
+    await expectP2002(
+      "§10d: AYNI istasyonda aynı makine adı reddedilir",
+      async () => {
+        const m2 = await prisma.machine.create({
+          data: { code: `TEST-SED-M2-${ek}`, name: `Makine ${ek}`, stationId: st1.id },
+        });
+        sedIds.machine.push(m2.id);
+      },
+      "machines_stationId_nameFold_key",
+    );
+
+    // ⭐ EN KRİTİK KONTROL: sed KAPSAMLI kalmalı. Biri onu düz
+    // `@@unique([nameFold])`e çevirirse (denetimin naif tavsiyesi) burası
+    // kırmızı verir — o değişiklik "Makine 1" adını fabrikada TEK bir istasyona
+    // hapsederdi.
+    //
+    // ⚠️ ÖLÇÜLDÜ (sonda, 2026-08-31): sed düz nameFold'a çevrildiğinde bu
+    // kontrola sıra GELMEYEBİLİR — dosyanın önceki bölümleri de farklı
+    // istasyonlarda aynı adlı makine yaratıyor ve orada P2002 ile ÇÖKÜYOR.
+    // Çöküş de kırmızıdır (`main().catch` → exit 1) ama sebebi Prisma yığınının
+    // içinde kalır. İki sinyali de tanı: buradaki net mesaj YA DA
+    // `machines_stationId_nameFold_key` içeren beklenmeyen bir çöküş.
+    let farkliIstasyonOk = false;
+    try {
+      const m3 = await prisma.machine.create({
+        data: { code: `TEST-SED-M3-${ek}`, name: `Makine ${ek}`, stationId: st2.id },
+      });
+      sedIds.machine.push(m3.id);
+      farkliIstasyonOk = true;
+    } catch (e) {
+      farkliIstasyonOk = false;
+      console.log(`   (farklı istasyon reddedildi: ${(e as Error).message.slice(0, 90)})`);
+    }
+    check(
+      "§10d: FARKLI istasyonda aynı makine adı SERBEST (sed kapsamlı kaldı)",
+      farkliIstasyonOk,
+      farkliIstasyonOk ? "aynı ad iki istasyonda yaşayabiliyor" : "sed düz nameFold'a düşmüş",
+    );
+  } finally {
+    await prisma.machine.deleteMany({ where: { id: { in: sedIds.machine } } }).catch(() => {});
+    await prisma.station.deleteMany({ where: { id: { in: sedIds.station } } }).catch(() => {});
+    await prisma.defectType.deleteMany({ where: { id: { in: sedIds.defect } } }).catch(() => {});
+  }
+
+
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);

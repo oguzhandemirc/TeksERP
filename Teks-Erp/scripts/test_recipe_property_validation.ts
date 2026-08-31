@@ -50,7 +50,7 @@ async function main(): Promise<void> {
     let badProp: unknown;
     try {
       await recipes.create(
-        { code: `TST-RCP-BADP-${stamp}`, name: "t", itemId: ITEM, properties: [{ propertyId: NONEXISTENT }] },
+        { code: `TST-RCP-BADP-${stamp}`, name: `t-badp-${stamp}`, itemId: ITEM, properties: [{ propertyId: NONEXISTENT }] },
         ADMIN
       );
     } catch (e) {
@@ -62,7 +62,9 @@ async function main(): Promise<void> {
     const dupRes = await recipes.create(
       {
         code: `TST-RCP-DUP-${stamp}`,
-        name: "t",
+        // ⚠️ Ad da benzersiz: `product_recipes` ad seddi (2026-08-31, T1-007);
+        // üç reçetenin üçü de "t" adını taşıyordu, ikincisi P2002 alıyordu.
+        name: `t-dup-${stamp}`,
         itemId: ITEM,
         properties: [{ propertyId: PROP }, { propertyId: PROP }],
       },
@@ -77,7 +79,7 @@ async function main(): Promise<void> {
 
     // C) geçerli tek property → success
     const okRes = await recipes.create(
-      { code: `TST-RCP-OK-${stamp}`, name: "t", itemId: ITEM, properties: [{ propertyId: PROP }] },
+      { code: `TST-RCP-OK-${stamp}`, name: `t-ok-${stamp}`, itemId: ITEM, properties: [{ propertyId: PROP }] },
       ADMIN
     );
     check("geçerli property → success", okRes.success === true);
