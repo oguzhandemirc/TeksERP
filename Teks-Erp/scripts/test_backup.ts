@@ -599,6 +599,41 @@ main()
     console.error("Test çalıştırılamadı:", err);
     fail += 1;
   })
+  .then(async () => {
+    // ═══════════════════════════════════════════════════════════════════════
+    // §S — GECE YEDEĞİNİN SAHİBİ görünür mü (BULGU-T1-020)
+    // ═══════════════════════════════════════════════════════════════════════
+    // "Yedek alınıyor mu" ile "yedeği KİM alıyor" ayrı sorular. İkincisi
+    // `ecosystem.config.js`te yaşıyor ve `kur.ps1` her kurulumda o dosyayı
+    // paketinkiyle EZİYOR (`.env` korunur, ecosystem KORUNMAZ) → sahadaki
+    // ayar sessizce repo değerine döner. Ölçüldü (2026-08-31): repo
+    // `BACKUP_SCHEDULE_ENABLED:"false"` derken canlı sistem 2026-08-25
+    // 03:05'te `trigger=nightly` yedek üretmiş, yani AYRIŞMIŞ.
+    //
+    // ⚠️ Bu alan bir ALARM DEĞİL, bir OLGU: sahada "harici" MEŞRUDUR (backend
+    // çökse de yedek alınsın). Değeri, yaş hükmünün yanında durup "kimse
+    // almıyor" durumunu tek bakışta görünür kılmasıdır.
+    console.log("\n=== §S: gece yedeğinin sahibi (/api/admin/health) ===");
+    const eski = process.env.BACKUP_SCHEDULE_ENABLED;
+    try {
+      const { backupScheduler } = await import("../src/app");
+      process.env.BACKUP_SCHEDULE_ENABLED = "false";
+      const harici = backupScheduler();
+      delete process.env.BACKUP_SCHEDULE_ENABLED;
+      const backend = backupScheduler();
+      process.env.BACKUP_SCHEDULE_ENABLED = "true";
+      const acikca = backupScheduler();
+
+      check("§S: BACKUP_SCHEDULE_ENABLED=false → 'harici'", harici === "harici", harici);
+      // ⚠️ İKİ YÖNLÜ: yalnız 'false' dalını ölçmek, fonksiyon sabit 'harici'
+      // döndürse de YEŞİL kalırdı.
+      check("§S: değişken YOKKEN → 'backend' (varsayılan)", backend === "backend", backend);
+      check("§S: 'true' → 'backend'", acikca === "backend", acikca);
+    } finally {
+      if (eski === undefined) delete process.env.BACKUP_SCHEDULE_ENABLED;
+      else process.env.BACKUP_SCHEDULE_ENABLED = eski;
+    }
+  })
   .finally(() => {
     console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     process.exit(fail > 0 ? 1 : 0);

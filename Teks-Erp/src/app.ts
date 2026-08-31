@@ -272,10 +272,32 @@ function latestBackupInfo(): { name: string; time: string } | null {
  */
 const NIGHTLY_OK_HOURS = 26;
 const NIGHTLY_WARN_HOURS = 50;
+/**
+ * Gece yedeğinin SAHİBİ — "backend" mi "harici" (Windows Görev Zamanlayıcı) mı?
+ *
+ * ⚠️ İKİSİ DE MEŞRU, bu bir alarm DEĞİL bir OLGUdur: sahadaki sunucuda yedeği
+ * bilerek harici görev alıyor (`BACKUP_SCHEDULE_ENABLED=false`) — backend
+ * çökmüşken bile yedek alınsın diye; ikisi birden açık kalırsa her gece İKİ dump
+ * alınır (kök CLAUDE.md, 2026-07-31).
+ *
+ * Neden görünür olması gerekiyor (BULGU-T1-020): bu değer
+ * `ecosystem.config.js`te yaşıyor ve `kur.ps1` her kurulumda o dosyayı paketin
+ * kopyasıyla EZİYOR (`.env` korunur, ecosystem KORUNMAZ). Sahada ölçüldü
+ * (2026-08-31): repo dosyası `"false"` derken canlı sistem 2026-08-25 03:05'te
+ * `trigger=nightly` bir yedek üretmiş — yani çalışan env repo dosyasından
+ * AYRIŞMIŞ. Bir sonraki deploy onu sessizce geri çevirir ve tek iz, kimsenin
+ * bakmadığı bir pm2 log satırıdır. Sahip bilgisi yaş hükmünün YANINDA durursa
+ * "kimse yedek almıyor" durumu tek bakışta görünür.
+ */
+export function backupScheduler(): "backend" | "harici" {
+  return process.env.BACKUP_SCHEDULE_ENABLED === "false" ? "harici" : "backend";
+}
+
 function backupHealth(): {
   verdict: "ok" | "uyari" | "kritik" | "yapilandirilmamis";
   nightly: { name: string; time: string } | null;
   ageHours: number | null;
+  scheduler: "backend" | "harici";
   reason: string;
 } {
   if (!backupDir) {
@@ -283,6 +305,7 @@ function backupHealth(): {
       verdict: "yapilandirilmamis",
       nightly: null,
       ageHours: null,
+      scheduler: backupScheduler(),
       reason: "BACKUP_DIR tanımlı değil — bu kurulumda yedek alınmıyor.",
     };
   }
@@ -292,6 +315,7 @@ function backupHealth(): {
       verdict: "kritik",
       nightly: null,
       ageHours: null,
+      scheduler: backupScheduler(),
       reason: `Yedek klasöründe hiç '${NIGHTLY_PREFIX}' yedeği yok (deploy/geri-yükleme yedekleri sayılmaz).`,
     };
   }
@@ -302,6 +326,7 @@ function backupHealth(): {
     verdict,
     nightly: nightlyCache,
     ageHours: yuvarlak,
+    scheduler: backupScheduler(),
     reason:
       verdict === "ok"
         ? `Son gece yedeği ${yuvarlak} saat önce.`
