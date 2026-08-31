@@ -94,3 +94,56 @@ hâlini doğrula.
 | Fason kabulünde SUNUCU tarafı gövde kapısı (T4-003 muaf listesi) | Kimlik = `returns` kümesi + `receivedQty`'ler; kısmi teslimatta meşruen tekrar eden top kümesiyle çakışmamalı — ayrı ve dikkatli iş |
 | 5 sevkiyatın sipariş defteri onarımı (T2-004) | `setShipmentOrders` hazır; hangi siparişe bağlanacağı **iş kararı** |
 | `stations` / 4 tabloya ad seddi (T1-007) | Fixture damgalaması + "iki müşterinin de 'Merkez' şubesi olabilir mi" sorusu |
+
+---
+
+# Bayatlık taraması — 2026-08-31
+
+Kullanıcı kararı: "önce listeyi temizle". Açık görünen 40 S1/S2 bulgusundan
+ölçülebilenler ölçüldü. **Yöntem sırası:** ① bulgunun `repro_script`i varsa
+KOŞTURULDU (kesin cevap) · ② yoksa mekanizma bugünkü kodda arandı · ③ ikisi de
+yoksa "taranmadı" olarak bırakıldı.
+
+⚠️ Ölçüm sırasında bir tuzağa düştüm ve kayda geçiyorum: repro'ları önce
+`timeout 300 npx tsx …` ile koşturdum — **macOS'ta `timeout` komutu YOK**, on
+script de "çıktı yok" verdi ve bu sessizce "hepsi kapalı" gibi okunabilirdi.
+Toplu ölçümde her zaman "hiç mi koşmadı" sorusunu ayrıca sor.
+
+## ZATEN KAPALIYMIŞ (iş yapılmadı — 6)
+
+| Bulgu | Kanıt |
+|---|---|
+| T1-003 | `tambur-undo.service`te `lockAndAssertWorkOrderLive` üç tx'in de ilk ifadesi |
+| T1-004 | `touchWorkOrderTx` hem `workorder.service` hem `workorder-manual-move`ta · repro `KYY-3-04` → 0 ihlal |
+| T1-012 | `tambur.service`: "Parent kısalıyor — YALNIZ `currentQty` düşer, `initialQty` DOKUNULMAZ" |
+| T2-013 | `assertNoSelfEscalation` üç çağrı noktasından koşuyor, kural denetimin önerisiyle birebir |
+| T3-004 | repro `S-3-02` → 0 kırmızı |
+| T3-011 | repro `S-3-01` → 0 kırmızı |
+
+## BUGÜN KAPATILDI (2)
+
+`T1-013` (PIN okuma: iki izin + audit izi) · `T2-012` (atamanın kaynağı görünür +
+ops betikleri token tazeliyor). Bkz. commit `db49d6dd`.
+
+## ÖLÇÜLDÜ, AÇIK (12)
+
+| Bulgu | Ölçüm | Not |
+|---|---|---|
+| T3-007 | repro `S-1-03` → **4 kırmızı** | KK1 ham girişi ürün/renk doğrulamasını tx DIŞINDA yapıyor |
+| T3-016 | repro `S-4-01` → **4 başarısız** | Fason kabul commit ederken "Rengi Değiştir" mal–plan bekçisini atlatıyor |
+| T3-017 | repro `S-4-02` → **3 başarısız** | "Kalan gelmeyecek" kısmi kabulün iptalini kalıcı kilitliyor |
+| T3-009 | repro `KYY-3-01` → **4 ihlal** | Sevk anında tahsis yeniden hesaplanmıyor (storno'nun bıraktığı PLANNED) |
+| T3-010 | repro `S-2-04` → **2 başarısız** | İptal edilmiş sevkiyatın token replay'i "Sevkiyat kuruldu" diyor |
+| T3-019 | repro `S-4-05` → **2 başarısız** | Fason Kabul sunucu onayı gelmeden yeşil basıp formu sıfırlıyor |
+| T1-014 | `login-lockout.ts` kilidi `new Map()` — bellek içi, kalıcı/kullanıcı-anahtarlı değil | PIN politikası KARAR ister |
+| T1-018 | `test_manual_move_fason_receive.ts` kendi fixture'ını yaratmıyor (0 eşleşme) | Gerçek fason sevkinde kabul yapıyor |
+| T2-010 | `base.service`te pasife almada bağımlılık kontrolü yok | |
+| T3-006 | Yazıcı arıza sinyali kodda yok | |
+| T1-022 | Offsite MEKANİZMASI var (`rclone`, 27 referans) ama **RPO/RTO hiçbir dokümanda yazılı değil**; sahada yapılandırılmamış | Denetimin "makine dışı kopya yok" ifadesi kod için YANLIŞ, saha için doğru |
+| T1-023 | Tatbikat REÇETESİ yazıldı (`docs/ops/YEDEK-GERI-YUKLEME-TATBIKATI.md`); tatbikatın kendisi kullanıcı işi | |
+
+## TARANMADI (~18)
+
+Kalan S2/P2–P3 bulguları (`T1-036`, `T1-039`, `T1-049`, `T1-051`, `T1-060`,
+`T1-074`, `T2-005`, `T2-008`, `T2-014`, `T2-015`, `T3-012`…`T3-022` vb.) bu
+turda ölçülmedi. Repro'su olmadığı için her biri elle kod okuması ister.
