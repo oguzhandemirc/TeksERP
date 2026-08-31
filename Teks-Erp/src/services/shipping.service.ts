@@ -1923,7 +1923,8 @@ export class ShippingService {
       throw AppError.badRequest("Seçilen toplar farklı depolarda — tek sevkiyat tek depodan çıkar.");
     }
 
-    let result: { id: string; shipmentNo: string };
+    // `iz` = tahsis iz defteri (çekirdekten taşınır, tx DIŞINDA flush edilir).
+    let result: { id: string; shipmentNo: string; iz: AllocationAuditTrail | null };
     try {
       result = await withBarcodeRetry(
         () =>
@@ -1980,6 +1981,13 @@ export class ShippingService {
     }
 
     const dispatched = !(await readShipmentConfirmationEnabled());
+    // ⚠️ TAHSİS İZİ BURADA DA YAZILIR (merge, 2026-09-01). Hızlı Sevk yalnız
+    // `feature/depo-mal-kabul`ta, tahsis iz defteri (`flushAllocationAudit`)
+    // yalnız `adnansahin`de vardı — iki yol İLK KEZ bu merge'de yan yana geldi
+    // ve çekirdek paylaşıldığı hâlde iz yalnız çuvaldan-sevk yolunda yazılıyordu.
+    // Ayrışması, "aynı çekirdek aynı defteri tutar" varsayımını sessizce bozardı:
+    // hızlı sevkle giden mal tahsis geçmişinde görünmezdi.
+    await this.flushAllocationAudit(result.iz, userId);
     await AuditService.log({
       userId,
       action: "CREATE",
