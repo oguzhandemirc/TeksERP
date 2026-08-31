@@ -21,6 +21,34 @@ import { ReasonPresetsPage } from "@/pages/ReasonPresets/ReasonPresetsPage";
 import { QualityGradesPage } from "@/pages/QualityGrades/QualityGradesPage";
 import { ColorsPage } from "@/pages/Colors/ColorsPage";
 import { ReturnReasonsPage } from "@/pages/ReturnReasons/ReturnReasonsPage";
+import { WarehousesPage } from "@/pages/Warehouses/WarehousesPage";
+import { GoodsReceiptsPage } from "@/pages/Operations/GoodsReceipts/GoodsReceiptsPage";
+import { CarilerPage } from "@/pages/Definitions/CarilerPage";
+import { FinanceHubPage } from "@/pages/Finance/FinanceHubPage";
+import { CariPage } from "@/pages/Finance/CariPage";
+import { InvoicesPage } from "@/pages/Finance/InvoicesPage";
+import { PaymentsPage } from "@/pages/Finance/PaymentsPage";
+import { AccountsPage } from "@/pages/Finance/AccountsPage";
+import { CashTransactionsPage } from "@/pages/Finance/CashTransactions/CashTransactionsPage";
+import { RatesPage } from "@/pages/Finance/RatesPage";
+// Paket C (2026-08-14) — hepsi NAMED export; default import boş ekran verir.
+import { ChequesPage } from "@/pages/Finance/Cheques/ChequesPage";
+import { AllocationsPage } from "@/pages/Finance/Allocations/AllocationsPage";
+import { PeriodClosePage } from "@/pages/Finance/PeriodClose/PeriodClosePage";
+import { FinanceReportsHubPage } from "@/pages/Reports/Finance/FinanceReportsHubPage";
+import { AgingReportPage } from "@/pages/Reports/Finance/AgingReportPage";
+import { CashBookPage } from "@/pages/Reports/Finance/CashBookPage";
+import { ChequeDuePage } from "@/pages/Reports/Finance/ChequeDuePage";
+import { VatSummaryPage } from "@/pages/Reports/Finance/VatSummaryPage";
+import { FxDiffPage } from "@/pages/Reports/Finance/FxDiffPage";
+// Paket D (2026-08-14) — hepsi NAMED export.
+import { YarnStockPage } from "@/pages/Operations/Yarn/YarnStockPage";
+import { PurchaseOrdersPage } from "@/pages/Operations/PurchaseOrders/PurchaseOrdersPage";
+import { ItemPricesPage } from "@/pages/Definitions/ItemPrices/ItemPricesPage";
+import { WarehouseTransfersPage } from "@/pages/Operations/WarehouseTransfers/WarehouseTransfersPage";
+// Paket J2 #19 (2026-08-15) — NAMED export; default import boş ekran verir.
+import { StockCountsPage } from "@/pages/Operations/StockCounts/StockCountsPage";
+import { StockCountDetailPage } from "@/pages/Operations/StockCounts/StockCountDetailPage";
 import { RoutesPage } from "@/pages/Routes/RoutesPage";
 import { ProductRecipesPage } from "@/pages/ProductRecipes/ProductRecipesPage";
 import { FabricPropertiesPage } from "@/pages/FabricProperties/FabricPropertiesPage";
@@ -159,7 +187,9 @@ export const contentRoutes: RouteObject[] = [
   {
     path: "definitions/labels",
     element: (
-      <ProtectedRoute requirePermission="station:read">
+      // Karo (Definitions/tile-config "labels") ile AYNI liste — ayrışırsa kart
+      // görünür, tıklayınca /forbidden.
+      <ProtectedRoute requireAnyPermission={["station:read", "label-template:read"]}>
         <EtiketlerPage />
       </ProtectedRoute>
     ),
@@ -218,6 +248,184 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="return:read">
         <ReturnReasonsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── ÖN MUHASEBE ────────────────────────────────────────────────────────
+  // ⚠️ Route izni ile hub karosunun `permissionAny` listesi AYNI olmalı
+  // (Finance/tile-config.ts) — ayrışırsa kart görünür, tıklanır, /forbidden.
+  // Modülün GÖRÜNÜRLÜK kapısı ise bayrak: menü satırı `financeEnabled`
+  // olmadan çizilmez ve backend her ucu 403'ler.
+  {
+    path: "finance",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <FinanceHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/cari",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <CariPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/invoices",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <InvoicesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/payments",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <PaymentsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/accounts",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <AccountsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Kasanın KENDİ defteri (carisiz masraf/gelir/virman/açılış). İzin
+    // `finance:read` — karo (Finance/tile-config) ile BİREBİR aynı; yazma
+    // (`finance:payment`) sayfa İÇİNDE `PermissionGate` ile ayrılır, route'a
+    // konsaydı kayıtları görmesi gereken kişi ekrandan tamamen dışarıda kalırdı.
+    path: "finance/cash-transactions",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <CashTransactionsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/rates",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <RatesPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── Paket C (2026-08-14) ──────────────────────────────────────────────────
+  // ⚠️ İzin `finance:read` — karo listesiyle (Finance/tile-config) BİREBİR aynı.
+  // Yazma yetkileri (finance:cheque · finance:payment · finance:close) sayfanın
+  // İÇİNDE `PermissionGate` ile ayrılır: route'a yazma iznini koymak, kayıtları
+  // görmesi gereken muhasebeciyi ekrandan tamamen dışarıda bırakırdı.
+  {
+    path: "finance/cheques",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <ChequesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/allocations",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <AllocationsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "finance/period-close",
+    element: (
+      <ProtectedRoute requirePermission="finance:read">
+        <PeriodClosePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Birleşik cari görünümü — karo (Definitions/tile-config) ile AYNI izin listesi.
+    path: "definitions/cariler",
+    element: (
+      <ProtectedRoute requireAnyPermission={["customer:read", "subcontractor:read"]}>
+        <CarilerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/goods-receipts",
+    element: (
+      <ProtectedRoute requirePermission="goods-receipt:read">
+        <GoodsReceiptsPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── Paket D (2026-08-14) ──────────────────────────────────────────────────
+  // İzinler backend'le BİREBİR: yarn.routes `/stocks` → `warehouse:read`,
+  // purchase-order.routes okuma → `purchase-order:read` (yazma ucu `:write`,
+  // ikisinden biri ekranı açar), item-price.routes okuma → `item:read`.
+  // Karo listeleriyle de aynı; ayrışırsa kullanıcı karoyu görür, tıklar ve
+  // /forbidden'a düşer (bu projede yaşanmış bir sapma).
+  {
+    path: "operations/yarn-stock",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <YarnStockPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/purchase-orders",
+    element: (
+      <ProtectedRoute requireAnyPermission={["purchase-order:read", "purchase-order:write"]}>
+        <PurchaseOrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "definitions/item-prices",
+    element: (
+      <ProtectedRoute requirePermission="item:read">
+        <ItemPricesPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/warehouse-transfers",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:transfer">
+        <WarehouseTransfersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // İzin backend'le BİREBİR: `stock-count.routes.ts` okuma uçları `warehouse:read`.
+    // Detay da aynı izinle açılır; YAZMA yüzeyi sayfanın İÇİNDE ayrıca kapılı
+    // (`warehouse:transfer` · Tamamla için `roll:manual-adjust` + `yarn:write`).
+    path: "operations/stock-counts",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <StockCountsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "operations/stock-counts/:id",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <StockCountDetailPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Depolar — "tek depo varken gizle" kuralının DIŞINDA (ikinci depoyu açmanın
+    // tek yolu burasıdır); yalnız izinle kapılı. Karo ile route AYNI izni taşır.
+    path: "definitions/warehouses",
+    element: (
+      <ProtectedRoute requirePermission="warehouse:read">
+        <WarehousesPage />
       </ProtectedRoute>
     ),
   },
@@ -808,6 +1016,61 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="report:inventory">
         <StockScorecardPage />
+      </ProtectedRoute>
+    ),
+  },
+  // ── Paket C4 — ön muhasebe raporları (2026-08-14) ─────────────────────────
+  // ⚠️ ADRES KALIBI PAZARLIK DIŞI: `/reports/<kategori>/<rapor>` (ÜÇ segment).
+  // `ReportSideRail` kategoriyi path'in İKİNCİ segmentinden çözer ve
+  // `parts.length < 3` ise `return null` yapar → iki segmentli bir adreste
+  // (`/reports/finance-aging` gibi) sağ şerit SESSİZCE kaybolur ve komut paleti
+  // girişi de doğmaz. Adres değişecekse tek dokunulacak yer
+  // `Reports/Finance/tile-config.ts`'teki `to` alanlarıdır.
+  {
+    path: "reports/finance",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <FinanceReportsHubPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/aging",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <AgingReportPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/cash-book",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <CashBookPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/cheque-due",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <ChequeDuePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/vat-summary",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <VatSummaryPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: "reports/finance/fx-diff",
+    element: (
+      <ProtectedRoute requirePermission="report:finance">
+        <FxDiffPage />
       </ProtectedRoute>
     ),
   },

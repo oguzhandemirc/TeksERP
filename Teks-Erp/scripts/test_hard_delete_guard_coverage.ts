@@ -38,6 +38,14 @@ const EXPECTED: Record<string, string> = {
   "Customer <- CustomerBranch.customer : Cascade": "guarded (branchCount) — sayım 0 değilse silme zaten bloklanır",
   "Customer <- CustomerColorAlias.customer : Cascade": "cascade-intended — alias müşterisiz anlamsız",
   "Customer <- CustomerItemAlias.customer : Cascade": "cascade-intended — alias müşterisiz anlamsız",
+  // Paket D (2026-08-14) — `CustomerItemAlias` ile BİREBİR aynı şekil ve aynı
+  // gerekçe: fiyat satırı, ait olduğu müşteri/kalem yokken anlamsızdır. Kalıcı
+  // silme zaten bağımlılık-guard'lı `DELETE /:id/permanent` ucundan geçiyor;
+  // fiyat satırı orada "kullanımda" sayılmaz, çünkü geçmiş belgeler tutarı
+  // `InvoiceLine.unitPrice` / `Roll.purchasePrice` ile DONDURMUŞTUR — yani
+  // cascade geçmişi değiştirmez, yalnız ölü bir varsayılanı temizler.
+  "Customer <- ItemPrice.customer : Cascade": "cascade-intended — müşteri istisnası müşterisiz anlamsız",
+  "Item <- ItemPrice.item : Cascade": "cascade-intended — fiyat kalemsiz anlamsız",
   "Customer <- CustomerStandaloneLabel.customer : Cascade": "cascade-intended — müşteri etiket konfigürasyonu",
   "Customer <- CustomerTemplateRoute.customer : Cascade": "cascade-intended — müşteri şablon yönlendirmesi",
   "Customer <- Route.customer : SetNull": "guarded (routeCount, A5 2026-07-31)",
@@ -62,6 +70,9 @@ const EXPECTED: Record<string, string> = {
   // SetNull'dır ve `colorId IS NULL` bu sistemde "HAM KUMAŞ" demektir, yani
   // bir rengi silmek boyalı topları sessizce hama çevirir.
   "Customer <- Sack.customer : SetNull": "guarded (sackCount, 2026-07-15)",
+  // Ticaret paketi (2026-08-13): firma TEDARİKÇİ rolündeyken mal kabul fişine
+  // bağlanır; guard'sız silmede satın alma izi sessizce kopardı.
+  "Customer <- GoodsReceipt.supplier : SetNull": "guarded (goodsReceiptCount, 2026-08-13)",
   // 2026-08-09 — `Roll.labelCustomerId`, `lastLabelSnapshot.customerId`'nin
   // SORGULANABİLİR aynası (sahiplik DEĞİL, basılmış kâğıdın izi).
   //

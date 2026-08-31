@@ -90,6 +90,57 @@ export const PERMISSION_CATALOG = [
   { code: "shipping:undo-dispatch", module: "LOGISTICS", category: "web", description: "Sevk edilmiş sevkiyatı geri alma (irsaliye iptal + stok depoya)" },
   { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
   { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
+  // ── Ticaret paketi: çoklu depo + mal kabul (2026-08-13) ────────────────────
+  { code: "warehouse:read", module: "LOGISTICS", category: "web", description: "Depo tanımlarını görüntüleme" },
+  { code: "warehouse:write", module: "LOGISTICS", category: "web", description: "Depo tanımı oluşturma/düzenleme + varsayılan depo seçimi" },
+  // Transfer AYRI izin: depo ADINI düzeltebilen herkesin STOK TAŞIYABİLMESİ
+  // istenmiyor (shipping:write ↔ shipping:undo-dispatch ayrımıyla aynı gerekçe).
+  { code: "warehouse:transfer", module: "LOGISTICS", category: "web", description: "Depolar arası transfer belgesi oluşturma/iptal" },
+  { code: "goods-receipt:read", module: "LOGISTICS", category: "web", description: "Mal kabul fişlerini görüntüleme" },
+  // `roll:write`e YASLANMAZ: o izin fabrika rollerinde yaygın ve Mal Kabul karosu
+  // fabrikada görünür hale gelirdi (ekran yalnız alım-satım kurulumu içindir).
+  { code: "goods-receipt:write", module: "LOGISTICS", category: "web", description: "Mal kabul fişi oluşturma/iptal (satın alınan malın depo girişi)" },
+  // ── Paket D (ticaret paketi, 2026-08-14) ───────────────────────────────────
+  // ⚠️ ÜÇÜNÜN DE OKUMASI MEVCUT İZİNLERE BİNER (yeni `*:read` kodu AÇILMADI):
+  // iplik stoğu `warehouse:read`, fiyat `item:read`. Sebep: fiyatı OKUMAK
+  // faturayı hazırlayan HERKESİN işidir; ayrı bir `price:read` onu herkese
+  // vermek zorunda kalacağımız bir gürültü olur ve "kurulumda atanması
+  // unutulacak bir adım daha" demekti. Yazma ayrı bir yetkidir.
+  { code: "yarn:write", module: "LOGISTICS", category: "web", description: "İplik stok hareketi: giriş/çıkış + sayım düzeltmesi (kg defteri)" },
+  // Satış fiyatını KİM belirler — `item:write` (kalemi yeniden adlandıran)
+  // ile aynı kişi olmak zorunda değil.
+  { code: "price:write", module: "MASTER_DATA", category: "web", description: "Kalem fiyatı yazma: kart varsayılanı + müşteri istisnası" },
+  // Alış siparişi `order:*`ten AYRI: o kodlar SATIŞ siparişine aittir ve
+  // ikisini tek izne bağlamak, satışçıya tedarikçiye sipariş açtırmak olurdu.
+  { code: "purchase-order:read", module: "LOGISTICS", category: "web", description: "Alış siparişlerini görüntüleme (ne ısmarlandı, ne geldi)" },
+  { code: "purchase-order:write", module: "LOGISTICS", category: "web", description: "Alış siparişi açma/düzenleme/iptal" },
+  // ── Ticaret paketi: ön muhasebe (2026-08-13) ──────────────────────────────
+  // ⚠️ Modül "FINANCE" — `PermissionCategory` ENUM'una DOKUNULMAZ (o Prisma
+  // enum'u; `module` serbest string). Kategori "web": muhasebeci "Yönetim"
+  // menüsünü ve Sistem hub'ını GÖRMEZ (`hasAdminAccess` saymaz).
+  { code: "finance:read", module: "FINANCE", category: "web", description: "Cari/fatura/tahsilat görüntüleme — TUTAR GÖRME kapısı" },
+  { code: "finance:write", module: "FINANCE", category: "web", description: "Fatura taslağı + cari/kasa/banka/kur tanımları" },
+  // ⚠️ GÖREV AYRILIĞI (SoD): taslak hazırlayan ile deftere İŞLEYEN aynı kişi
+  // olmak zorunda değil. Onay geri alınamaz bir muhasebe olayıdır (iptal ancak
+  // storno ile); `finance:write` bunu VERMEZ.
+  { code: "finance:invoice", module: "FINANCE", category: "web", description: "Fatura onaylama + iptal (storno) — cari deftere işler" },
+  // Parayı sayan ile faturayı kesen de ayrı olabilmeli.
+  { code: "finance:payment", module: "FINANCE", category: "web", description: "Tahsilat/ödeme kaydı + iptali — kasa/banka bakiyesine işler" },
+  // ⚠️ ÇEK AYRI İZİN (C1, 2026-08-14): `finance:payment` KAPSAMAZ. Tahsilat bir
+  // ANDIR ve kaydı o an kapanır; çek HAFTALARCA yaşayan bir varlıktır ve
+  // geçişleri (ciro · karşılıksız · iptal) hem cari deftere hem banka
+  // bakiyesine yazar, üstelik terminal durumlar geri alınamaz. Portföyü
+  // GÖRMEK için bu izin gerekmez (`finance:read` yeter) — kapatılan şey
+  // yazmadır: tutarı gören herkes çek tahsil edememeli.
+  { code: "finance:cheque", module: "FINANCE", category: "web", description: "Çek/senet portföyü: giriş/çıkış + ciro · tahsil · karşılıksız · iade" },
+  // ⚠️ DÖNEM KAPANIŞI AYRI İZİN (C3): `finance:invoice` KAPSAMAZ ve kapsamamalı.
+  // Fatura onaylayan kişi her gün deftere satır YAZAR; dönem kapatan kişi
+  // GEÇMİŞİ MÜHÜRLER — kapanmış döneme yazma girişimi artık 409 döner ve
+  // yeniden açan kişi o mührü kırar. Görev ayrılığının aynı ailesi:
+  // `shipping:write` ↔ `shipping:undo-dispatch`. Kapanışı GÖRMEK için bu izin
+  // gerekmez (`finance:read` yeter) — kapatılan şey mühürleme/kırma yetkisidir.
+  { code: "finance:close", module: "FINANCE", category: "web", description: "Dönem kapanışı: cari dönemi mühürle + yeniden aç" },
+  { code: "report:finance", module: "REPORTS", category: "web", description: "Cari bakiye · yaşlandırma · ekstre · kasa-banka raporları" },
   { code: "admin:users", module: "ADMIN", category: "admin", description: "Kullanıcı + yetki yönetimi" },
   { code: "admin:settings", module: "ADMIN", category: "admin", description: "Sistem ayarları + log arşiv" },
   // 2026-08-05: "Bu Bilgisayar" (yerel donanım) ayarları — etiket yazıcısı,

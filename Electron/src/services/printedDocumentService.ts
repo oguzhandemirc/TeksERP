@@ -22,7 +22,21 @@ export type PrintedDocType =
   // buradan basılmaz — kartın kendi HTML ucu (`/api/traveler-cards/:id/html`)
   // kullanılır. Bu tipte yalnız `listVersions` çağrılır; `getCurrent`/`reissue`
   // backend'de bilerek 400 verir (SELF_MANAGED_DOC_TYPES).
-  | "TRAVELER_CARD";
+  | "TRAVELER_CARD"
+  // Ticaret paketi (2026-08-13) — iç depo belgeleri. ⚠️ Electron backend enum'unu
+  // IMPORT EDEMEZ (ayrı proje): bu union `PrintedDocType` ile ELLE senkron tutulur,
+  // tıpkı `DOC_TYPE_TO_KEY` aynası gibi.
+  | "TRANSFER_DISPATCH"
+  | "GOODS_RECEIPT"
+  // Ön muhasebe çıktıları (2026-08-14).
+  | "INVOICE_INTERNAL"
+  | "PAYMENT_RECEIPT"
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18) — donmuş mutabakat mektubu
+  // ve donmuş çek/senet teslim bordrosu (H6'nın ANLIK çıktısının resmi ikizi).
+  | "RECONCILIATION_LETTER"
+  | "CHEQUE_DELIVERY_NOTE"
+  // Tam stok sayımı (2026-08-15, J2 #19) — fark fişinin donmuş tutanağı.
+  | "STOCK_COUNT";
 
 export type PrintedDocStatus = "ACTIVE" | "SUPERSEDED" | "VOIDED";
 

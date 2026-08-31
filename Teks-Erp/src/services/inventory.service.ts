@@ -11,6 +11,8 @@ import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
+import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
+import { writeWarehouseMovement, writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { AppError } from "../utils/app-error";
 import { assertMasterDataLiveTx, lockAgainstMergeTx } from "./helpers/master-data-live.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
@@ -19,6 +21,10 @@ import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
 import { FACTORY_TIMEZONE } from "../constants/time";
 import { resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
+// G4 sayım metraj düzeltmesi — sapma satırı TEK yazma noktasından doğar
+// (`roll-variance.helper` başlığındaki kural: çağıran `tx.rollVariance.create` yazmaz).
+import { recordVarianceTx } from "./helpers/roll-variance.helper";
+import { VARIANCE_SOURCES } from "../constants/variance-reasons";
 import {
   resolveRollRestoreBlockReason,
   resolveRestoreTargetStatus,
@@ -50,6 +56,10 @@ import {
   duplicateGuardCreatedAtFloor,
   resolveEntryStamp,
 } from "./helpers/duplicate-guard.helper";
+
+// G4 — sayım metraj düzeltmesinin sapma kaynağı: katalogdan (2026-08-14 dikişi
+// — ilk yazımdaki geçici tip köprüsü kaldırıldı, kaynak tek yerde).
+const QTY_ADJUST_VARIANCE_SOURCE = VARIANCE_SOURCES.WAREHOUSE_QTY_ADJUST;
 
 const ROLL_DATE_FIELDS = ["createdAt"] as const;
 
@@ -108,6 +118,8 @@ import {
   RollOperationType,
   RollEntrySource,
   RollForm,
+  RollVarianceKind,
+  GoodsReceiptStatus,
   ItemType,
   StationKind,
   StationPropertyMode,
@@ -115,11 +127,16 @@ import {
   WorkOrderStatus,
   ShipmentStatus,
   ReasonPresetKind,
-  RollVarianceKind,
+  WarehouseEventType,
 } from "@prisma/client";
 import { resolveReasonCode } from "./reason-preset.service";
 // Fire sebebi metin SAKLAMAYAN bir kind'tır → sapma kataloğunun senkron kapısı.
 import { validateVarianceReason } from "../constants/variance-reasons";
+// G2 (2026-08-14): tekil top iptali alış siparişi rollup'ını tetikler.
+// Yön TEK TARAFLI (inventory → purchase-order); purchase-order.service
+// inventory'yi import ETMEZ — döngü yok (goods-receipt.service ikisini
+// birden import eden üst katmandır).
+import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import {
   ensureWorkOrderInProgress,
   openMovementForNextStep,
@@ -436,6 +453,11 @@ const ROLL_LIST_INCLUDE = {
   // GİRİŞ İSTASYONU — yazma tarafı olmadan görünmez, okuma tarafı olmadan yazılan
   // değer görünmez. İkisi AYNI commit'te olmalı.
   entryStation: { select: { id: true, code: true, name: true } },
+  // DEPO — "mal hangi depoda" sorusunun liste yüzeyi. `warehouseId` skaler olarak
+  // zaten dönüyordu ama ADI olmadan kolon yazılamazdı (aynı sınıf hata:
+  // "alan var sanıldı, o yanıtta yoktu"). Liste ve DETAY aynı şekli döner —
+  // ayrışırsa satır ile panel aynı top için farklı şey söyler.
+  warehouse: { select: { id: true, code: true, name: true } },
   properties: {
     select: {
       propertyId: true,
@@ -550,6 +572,24 @@ export interface ProductionFlowData {
   sevk: { shipments: ProductionFlowSackCard[]; total: number };
 }
 
+/**
+ * `createInitialEntry`in yanıtı — `ApiResponse<Roll>` + REPLAY İŞARETİ.
+ *
+ * ⚠️ `idempotent: true` = "bu çağrıda YENİ top DOĞMADI, aynı `clientToken`la
+ * daha önce yazılmış olan geri döndü". Alan bilgi amaçlı DEĞİL, KARAR
+ * verdiricidir: çağıran taraf bir DEFTER tutuyorsa (miktar sayacı, kapasite,
+ * kota) replay'i saymamalıdır — o mal zaten bir kez sayılmıştır.
+ *
+ * Neden mesaj metnine bakılmıyor: "Top zaten kayıtlı (idempotent retry)"
+ * cümlesi operatöre gösterilen bir METİNDİR; ilk düzenleyen kişi onu
+ * değiştirdiğinde metne bakan çağıran replay'i sessizce "yeni top" saymaya
+ * başlar — hata yok, log yok, yalnız iki kez sayılmış mal. Karar alanı ayrı.
+ *
+ * Alan OPSİYONELDİR ve yalnız replay'de doldurulur: mevcut çağıranların
+ * hiçbiri (`inventory.controller`, `tambur-manual.service`) etkilenmez.
+ */
+export type InitialEntryResult = ApiResponse<Roll> & { idempotent?: true };
+
 export class InventoryService {
   /**
    * Initial goods receipt — creates a new Roll in STOCK status.
@@ -661,6 +701,54 @@ export class InventoryService {
        */
       entryStationId?: string | null;
       /**
+       * Topun gireceği DEPO (ticaret paketi, 2026-08-13).
+       *
+       * VERİLMEZSE varsayılan depoya düşer — fabrika akışlarının (KK1 ham giriş,
+       * Tambur manuel) hiçbiri bunu göndermez ve davranışları güncelleme
+       * öncesiyle bayt-bayt aynı kalır. Yalnız Mal Kabul fişi açıkça verir.
+       * Doğrulama (var mı/aktif mi) `resolveTargetWarehouseId`'de.
+       */
+      warehouseId?: string | null;
+      /**
+       * Satın alma birim fiyatı (mal kabul yolu) — topun kalıcı alış bedeli.
+       *
+       * ⚠️ Tip `Prisma.Decimal.Value` (number | string | Decimal), düz `number`
+       * DEĞİL: kalem kartından çözülen fiyat (D2 `resolveItemPrice`) bir
+       * `Decimal`dır ve `number`a çevirmek Decimal kolonuna JS float sokmak
+       * demekti (CLAUDE.md perf/doğruluk kuralı). Prisma `Decimal.Value`u
+       * doğrudan kabul eder.
+       */
+      purchasePrice?: Prisma.Decimal.Value | null;
+      /** Topu doğuran mal kabul fişi (yalnız `GoodsReceipt` yolu doldurur). */
+      goodsReceiptId?: string | null;
+      /**
+       * Topun KARŞILADIĞI alış siparişi kalemi (J2, 2026-08-15) — yalnız
+       * `GoodsReceipt` yolu doldurur, orada da yalnız fiş bir siparişe bağlıysa.
+       *
+       * ⚠️ BURADA TÜRETİLMEZ (`entryStationId` / `forcedEntrySource` emsali):
+       * kalem seçimi FIFO kapasite defterine bakar ve o defter fiş boyunca
+       * yaşar (satırlar ayrı tx'lerde doğuyor) — tek satırlık bu create
+       * noktasından görülemez. Çağıran çözer, AÇIKÇA verir.
+       *
+       * ⚠️ İZ BİLGİLENDİRİCİDİR, KARŞILANMA HESABI DEĞİL: `receivedQty`nin tek
+       * kaynağı `purchase-order.service` rollup zinciridir (şema yorumu).
+       */
+      purchaseOrderLineId?: string | null;
+      /**
+       * KK1 AĞIRLIK POLİTİKASINDAN MUAFİYET (saha planı A1, 2026-08-15).
+       *
+       * `kk1.weightEntryEnabled` bir KK1 İSTASYON politikasıdır: o istasyonda
+       * kantar yoksa/kapalıysa operatörün elle kg girmesi engellenir. Mal Kabul
+       * ise bir DEPO GİRİŞİDİR — perde/tekstil ticaretinde kumaş kg+metre çift
+       * birimle alınır ve kg girişi standarttır. Muafiyet verilmeden önce bu
+       * bayrak KAPALI kurulumlarda mal kabulün kg'li HER satırı "Ağırlık (kg)
+       * girişi bu istasyonda kapalı" ile reddediliyordu (saha vakası: 10 satır).
+       *
+       * F221 deseni: alan verilmezse politika AYNEN uygulanır (KK1 + tambur
+       * yolları davranış değiştirmez); yalnız Mal Kabul yolu bilerek geçer.
+       */
+      skipKk1WeightPolicy?: boolean;
+      /**
        * `lastLabelSnapshot`'a yazılacak minimal etiket NİYETİ
        * (`{orderLineId}` | `{customerId}` | `{stock:true}`). Çözümü ÇAĞIRAN yapar
        * (`helpers/label-intent.helper`) — burada DB okuması yok.
@@ -679,14 +767,31 @@ export class InventoryService {
        * bağlıdır (default KAPALI — bkz. system-setting.service).
        */
       duplicateGuard?: { confirmed: boolean };
+      /**
+       * TX KAPISI (Sınıf 4 — I1, 2026-08-14): top'u yazan transaction'ın İLK
+       * ifadesi olarak çağrılır. Mal Kabul yolu buradan fişi
+       * `updateMany WHERE status=ACTIVE` ile kilitler (satır doğumu ile fiş
+       * iptali AYNI satır kilidinde serileşir); kapı throw ederse tx geri
+       * sarılır — top hiç doğmaz, barkod sayacı da artmaz (kilit barkod
+       * üretiminden ÖNCE olduğu için boşluk oluşmaz).
+       *
+       * F221 deseni: verilmezse TEK ifade bile eklenmez — KK1 ham giriş /
+       * Tambur manuel yolları bayt-bayt aynı kalır. Kilit sırası notu: kapı
+       * (goods_receipts satır kilidi) mükerrer tuzağının advisory kilidinden
+       * (8021) ÖNCE koşar; iki kilidi birden alan başka yazar yok (KK1
+       * fiş satırına, `cancel` 8021'e hiç dokunmaz) → ABBA imkânsız. Mal Kabul
+       * yolu `duplicateGuard` da geçirmediği için bugün ikisi aynı tx'te
+       * zaten buluşmuyor.
+       */
+      txGate?: (tx: Prisma.TransactionClient) => Promise<void>;
     },
-  ): Promise<ApiResponse<Roll>> {
+  ): Promise<InitialEntryResult> {
     // KK1 istasyonunda ağırlık (kg) girişi admin ayarıyla kapatılabilir (default kapalı).
     // UI alanı gizlemek yetmez — kapalıyken gelen ağırlık payload'ını (yanlışlıkla ya da
     // kötü niyetle) backend REDDEDER. Tüm istemcilerin (mobil + Electron + script) tek
     // choke-point'i burası (defense-in-depth). Zod weightKg'yi pozitif zorunlu kıldığından
     // >0 kontrolü, undefined/eksik girişleri serbest bırakır.
-    if ((data.weightKg ?? 0) > 0 && !(await readKk1WeightEntryEnabled())) {
+    if ((data.weightKg ?? 0) > 0 && !opts?.skipKk1WeightPolicy && !(await readKk1WeightEntryEnabled())) {
       throw AppError.badRequest("Ağırlık (kg) girişi bu istasyonda kapalı");
     }
 
@@ -819,6 +924,10 @@ export class InventoryService {
     let roll: Awaited<ReturnType<typeof prisma.roll.create>>;
     try {
       roll = await prisma.$transaction(async (tx) => {
+        // TX KAPISI (Sınıf 4 — I1): İLK ifade. Mal Kabul satırı burada fişi
+        // claim'ler; `cancel` ile yarış bu satır kilidinde serileşir. Kapı
+        // verilmemişse (fabrika yolları) tek ifade bile eklenmez.
+        if (opts?.txGate) await opts.txGate(tx);
         if (guardActive) {
           // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcode`'dan da ÖNCE.
           //
@@ -921,9 +1030,17 @@ export class InventoryService {
 
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
         const barcode = await generateRollBarcode(tx, rollType);
+        // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
+        // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
+        const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
         const created = await tx.roll.create({
           data: {
             barcode,
+            warehouseId: targetWarehouseId,
+            purchasePrice: opts?.purchasePrice ?? null,
+            goodsReceiptId: opts?.goodsReceiptId ?? null,
+            // Sipariş kalemi izi (J2) — verilmezse NULL (fabrika yolları hiç vermez).
+            purchaseOrderLineId: opts?.purchaseOrderLineId ?? null,
             clientToken: data.clientToken ?? null,
             itemId: data.itemId,
             colorId: data.colorId ?? null,
@@ -968,6 +1085,17 @@ export class InventoryService {
             data: dedupedProps.map((propertyId) => ({ rollId: created.id, propertyId })),
           });
         }
+        // DEPO DEFTERİ — mal DIŞARIDAN geldi (KK1 ham giriş / elle ekleme / Tambur
+        // manuel / Mal Kabul). Kesim çocuğu bu yoldan geçmez ve satır yazmaz:
+        // kesim bir dönüşümdür, hareket değil (bkz. warehouse-ledger.helper).
+        await writeWarehouseMovement(tx, {
+          rollId: created.id,
+          eventType: WarehouseEventType.ENTRY,
+          qty: data.initialQty,
+          toWarehouseId: targetWarehouseId,
+          goodsReceiptId: opts?.goodsReceiptId ?? null,
+          userId: userId ?? null,
+        });
         return created;
       });
     } catch (err) {
@@ -1004,6 +1132,11 @@ export class InventoryService {
               success: true,
               data: existing,
               message: `Top zaten kayıtlı (idempotent retry). Barkod: ${existing.barcode}`,
+              // ⚠️ YENİ TOP DOĞMADI — defter tutan çağıran bunu SAYMAMALI
+              // (`InitialEntryResult` başlığındaki gerekçe). Mal Kabul bu
+              // alana bakarak sipariş kalemi kapasitesini ikinci kez
+              // tüketmiyor; alan düşerse o hata sessizce geri gelir.
+              idempotent: true,
             };
           }
           throw AppError.conflict(
@@ -1132,6 +1265,14 @@ export class InventoryService {
     delete where.colorId;
     if (colorIdFilter) {
       where.colorId = colorIdFilter;
+    }
+
+    // DEPO filtresi — çoklu seçim (CSV → `in`). `readIdCondition` olmadan CSV ham
+    // geçer ve uuid kolonunda P2007 → HTTP 400 üretir (colorId ile aynı arıza modu).
+    const warehouseIdFilter = readIdCondition(f["warehouseId"]);
+    delete where.warehouseId;
+    if (warehouseIdFilter) {
+      where.warehouseId = warehouseIdFilter;
     }
 
     const processingStatus = f["processingStatus"] as string | undefined;
@@ -2202,6 +2343,9 @@ export class InventoryService {
         createdMachine: { select: { id: true, name: true, code: true } },
         // GİRİŞ İSTASYONU — liste include'uyla AYNI şekil.
         entryStation: { select: { id: true, code: true, name: true } },
+        // Detay paneli listeyle AYNI şekli döner (ROLL_LIST_INCLUDE emsali).
+        warehouse: { select: { id: true, code: true, name: true } },
+        goodsReceipt: { select: { id: true, receiptNo: true, deliveryNoteNo: true } },
         // TOPUN BULUNDUĞU ADIM/İSTASYON — liste include'uyla AYNI şekil.
         // İkisi ayrışırsa panel ile satır aynı top için farklı şey söyler.
         currentStep: {
@@ -3334,6 +3478,18 @@ export class InventoryService {
       }
       const r = await tx.roll.findUniqueOrThrow({ where: { id } });
 
+      // DEPO DEFTERİ — mal depodan DÜŞTÜ (kayıt hatalıydı ya da fire).
+      // `warehouseId` BİLEREK temizlenmez: "en son hangi depodaydı" izi kalsın ve
+      // iptal geri alınırsa (restoreCancelled) top rafına dönebilsin.
+      await writeWarehouseMovement(tx, {
+        rollId: id,
+        eventType: WarehouseEventType.CANCEL,
+        qty: r.currentQty,
+        fromWarehouseId: r.warehouseId,
+        userId: userId ?? null,
+        notes: cancelReasonText ? cancelReasonText.slice(0, 300) : null,
+      });
+
       // Etkilenen step'lerin status'unu recompute et.
       //
       // ⚠️ SIRA LOAD-BEARING: recompute ATOMİK CLAIM'den SONRA koşmak ZORUNDA —
@@ -3402,6 +3558,42 @@ export class InventoryService {
         stepStatusChanges: updated.stepChanges.length ? updated.stepChanges : undefined,
       },
     });
+
+    // ── G2 (2026-08-14): ALIŞ SİPARİŞİ ROLLUP SENKRONU ─────────────────────
+    // Bu top bir mal kabul fişinden doğduysa (`goodsReceiptId`) ve fiş bir alış
+    // siparişine bağlıysa, iptal karşılanma kaynağını değiştirdi → rollup
+    // tazelenir. Eskiden bu yol senkronu HİÇ çağırmıyordu ve `receivedQty`
+    // bayat kalıyordu (detaydaki `drift` bandının en olası sebebi buydu).
+    //
+    // ⚠️ NEDEN AYRI TX (fiş-iptal deseninin aynısı — goods-receipt.service:782):
+    //   ① İptal fiziksel bir gerçeği kaydeder; rapor rakamı güncellenemedi diye
+    //     geri alınmaz (`syncPurchaseOrderSafely` hatayı warn'layıp yutar,
+    //     rollup bir sonraki senkronda/`resync`te kendini onarır — drift bandı
+    //     + "Tazele" görünür kılar, sessiz değil).
+    //   ② `syncPurchaseOrder` kendi tx'ini açar ve 8027 advisory kilidini tx'in
+    //     İLK ifadesi olarak alır; yukarıdaki iptal tx'inin İÇİNE gömmek kilidi
+    //     top satır kilitlerinden SONRAYA düşürürdü (kilit sırası kuralı).
+    //
+    // ⚠️ FİŞ CANCELLED İSE SENKRON KOŞMAZ: `computeReceivedByItemTx` yalnız
+    // ACTIVE fişleri sayar → iptal fişin topu zaten kaynak dışında, senkron
+    // tanım gereği no-op olurdu. Bu dal ayrıca fiş-iptal döngüsünün (fişi ÖNCE
+    // CANCELLED'a çeken `goodsReceiptService.cancel`, sonra topları tek tek
+    // buradan geçiren yol) N gereksiz senkron tx'i ödemesini önler — o yolun
+    // kendi tek senkronu zaten sonda koşuyor.
+    if (existing.goodsReceiptId) {
+      try {
+        const receipt = await prisma.goodsReceipt.findUnique({
+          where: { id: existing.goodsReceiptId },
+          select: { purchaseOrderId: true, status: true },
+        });
+        if (receipt?.purchaseOrderId && receipt.status === GoodsReceiptStatus.ACTIVE) {
+          await syncPurchaseOrderSafely(receipt.purchaseOrderId);
+        }
+      } catch (e) {
+        // Fiş okuması da best-effort: iptal tamamlandı, rakam drift bandında görünür.
+        console.warn(`[inventory] top iptali PO senkronu başarısız (${id}):`, (e as Error).message);
+      }
+    }
 
     return {
       success: true,
@@ -4101,6 +4293,230 @@ export class InventoryService {
   }
 
   /**
+   * G4 (2026-08-14, ticaret paketi) — SAYIM METRAJ DÜZELTMESİ.
+   * `PATCH /api/rolls/:id/qty` · izin `roll:manual-adjust` · sebep ZORUNLU (min 3).
+   *
+   * `applyManualProperties`'in metraj dalıyla KARIŞTIRMA — iki ayrı iş:
+   *   • Orası ÖLÇÜM düzeltmesidir: yalnız BÜTÜN topta (initialQty == currentQty)
+   *     çalışır ve initialQty'yi de yeniden yazar ("giriş ölçümü baştan yanlıştı").
+   *   • Burası SAYIM gerçeğidir: kayıtlı 500 m'lik top rafta 480 m çıktı. YALNIZ
+   *     `currentQty` değişir — `initialQty` tarihsel giriş kaydıdır, DOKUNULMAZ;
+   *     fark zaten `initialQty - currentQty` olarak okunur (detay panelindeki
+   *     "Başlangıç: N m" satırı). Kısmen tüketilmiş topta da çalışır.
+   *
+   * KAPSAM DAR — yalnız FREE_STOCK (STOCK/WAREHOUSE/A1_STOCK) + çuvalsız/sevksiz/
+   * adımsız; gerisi ANLAMLI 409: üretimdeki topun metrajını istasyon akışı
+   * (kurşun/tambur ölçümü) belirler, sevk edilmişin kaydına dokunulmaz (brüt
+   * kuralı), fasondaki mal fiziksel olarak dışarıda, arşiv statüde canlı stok yok.
+   *
+   * İZ — RollVariance sapma defterine satır (yön → tür). Yeni `RollVarianceKind`
+   * değeri EKLENMEDİ (enum değişikliği = migration; bu iş migration'sız) — iki
+   * mevcut tür zaten tam bu iki soruyu yanıtlıyor:
+   *   • sayım DÜŞÜK  → `RECORD_CORRECTION` ("mal hiç yoktu / kayıt yanlıştı").
+   *     FIRE DEĞİL: fire "mal vardı, çöpe gitti" kararıdır ve Tambur/WO-kapanış
+   *     dispozisyonunun işidir; sayım farkını SCRAP'a yazmak fire oranını
+   *     sistematik şişirirdi (RollVarianceKind şema notu).
+   *   • sayım YÜKSEK → `OVERAGE` ("kayıtlıdan fazla çıktı") — tambur aşımının
+   *     depo ikizi.
+   *
+   * Depo hareket defterine (`WarehouseMovement`) satır YAZILMAZ: o KONUM
+   * defteridir ("hangi depoya girdi/çıktı") ve ADJUST olay tipi de yoktur;
+   * miktar sapmasının defteri RollVariance'tır. İki defter, iki ayrı soru.
+   */
+  async adjustRollQty(
+    rollId: string,
+    data: { newQty: number; reason: string },
+    userId?: string,
+  ): Promise<ApiResponse<Record<string, unknown>>> {
+    // Servis katmanı Zod'a güvenmez (bekçiler servis üzerinden çağırır) —
+    // sebep zorunluluğu burada da ölçülür.
+    const reason = data.reason?.trim() ?? "";
+    if (reason.length < 3) {
+      throw AppError.badRequest(
+        "Metraj düzeltmesi için işlem nedeni (en az 3 karakter) zorunludur.",
+      );
+    }
+    if (!(data.newQty > 0)) {
+      throw AppError.badRequest("Geçerli bir metraj (mt) girilmeli");
+    }
+
+    const FREE_STOCK: RollStatus[] = [
+      RollStatus.STOCK,
+      RollStatus.WAREHOUSE,
+      RollStatus.A1_STOCK,
+    ];
+
+    const roll = await prisma.roll.findUnique({
+      where: { id: rollId },
+      select: {
+        id: true,
+        barcode: true,
+        status: true,
+        initialQty: true,
+        currentQty: true,
+        sackId: true,
+        shipmentId: true,
+        currentStepId: true,
+      },
+    });
+    if (!roll) throw AppError.notFound("Top bulunamadı");
+
+    // Kapsam dışı statüler — sessiz red değil, SOMUT sebep (yıkıcı-işlem kuralının
+    // okuma yönü: operatör neden yapamadığını görmeli, doğaçlamaya itilmemeli).
+    if (!FREE_STOCK.includes(roll.status)) {
+      if (roll.status === RollStatus.IN_PRODUCTION) {
+        throw AppError.conflict(
+          "Bu top üretimde — metrajı istasyon akışı (kurşun/tambur ölçümü) belirler; sayım düzeltmesi yalnız serbest stok (Ham Stok / Bitmiş Depo / 2. Kalite) topunda yapılır.",
+        );
+      }
+      if (roll.status === RollStatus.SHIPPED) {
+        throw AppError.conflict(
+          "Bu top sevk edilmiş — çıkış kaydına dokunulmaz (brüt kuralı); fark iade/storno akışıyla kapatılır.",
+        );
+      }
+      if (
+        roll.status === RollStatus.AT_SUBCONTRACTOR ||
+        roll.status === RollStatus.AT_KARTELA ||
+        roll.status === RollStatus.RETURNED_FROM_SUBCONTRACTOR
+      ) {
+        throw AppError.conflict(
+          "Bu top fasonda/kartelada — mal fiziksel olarak dışarıda; metraj kabul adımında ölçülür.",
+        );
+      }
+      throw AppError.conflict(
+        `Bu top emekli/arşiv statüde (${roll.status}) — düzeltilecek canlı stok kaydı yok.`,
+      );
+    }
+    if (roll.sackId) {
+      throw AppError.conflict(
+        "Bu top bir çuvalın içinde — metraj düzeltmesi çuval toplamını ve çuval etiketini bayatlatır; önce çuvaldan çıkarın.",
+      );
+    }
+    if (roll.shipmentId) {
+      throw AppError.conflict(
+        "Bu top bir sevkiyata atanmış — önce sevkiyattan çıkarın.",
+      );
+    }
+    if (roll.currentStepId) {
+      // FREE_STOCK statüsüyle bir iş emri adımında duran top (ham kesim devamı
+      // gibi) yine istasyon akışının malıdır — prepareRawForSale ile aynı guard.
+      throw AppError.conflict(
+        "Bu top bir iş emri adımına bağlı — metrajı istasyon akışı belirler; önce üretimden ayırın.",
+      );
+    }
+
+    const oldQty = roll.currentQty;
+    const newQty = new Prisma.Decimal(data.newQty);
+    if (newQty.equals(oldQty)) {
+      throw AppError.badRequest("Yeni metraj mevcut kayıtla aynı — düzeltilecek fark yok.");
+    }
+
+    const isShort = newQty.lessThan(oldQty);
+    const kind = isShort ? RollVarianceKind.RECORD_CORRECTION : RollVarianceKind.OVERAGE;
+    const diff = isShort ? oldQty.minus(newQty) : newQty.minus(oldQty);
+
+    let varianceId: string | null = null;
+    await prisma.$transaction(async (tx) => {
+      // ATOMİK CLAIM (check-then-act YASAK): üyelik + statü + METRAJ tek WHERE'de.
+      // `currentQty: oldQty` gerçek bir CAS'tır — iki paralel düzeltme aynı eski
+      // değeri okur; satır kilidini kazanan yazar, kaybedenin WHERE'i commit
+      // edilmiş YENİ değeri görüp count=0 ile 409'a düşer. Kaybeden de yazsaydı
+      // sapma defteri aynı farkı İKİ KEZ görürdü (varyans satırı claim'in
+      // ARKASINDA, aynı tx'te — ya birlikte olur ya hiç).
+      const claim = await tx.roll.updateMany({
+        where: {
+          id: rollId,
+          status: { in: FREE_STOCK },
+          sackId: null,
+          shipmentId: null,
+          currentStepId: null,
+          currentQty: oldQty,
+        },
+        // labelDirty: metraj etikete basılıyor (`label-field-values`) — fiziksel
+        // etiket artık yanlış sayıyı taşıyor. "Fark yok" hâli yukarıda elendi,
+        // yani işaret hiçbir no-op kayıtta yanmaz.
+        data: { currentQty: newQty, labelDirty: true },
+      });
+      if (claim.count === 0) {
+        // count-0 tanısı (2026-08-14 eki ①): sebep tx içinde TAZE okumayla söylenir —
+        // yarışın kaybedenine jenerik "olmadı" değil, o an geçerli engel anlatılır.
+        const fresh = await tx.roll.findUnique({
+          where: { id: rollId },
+          select: { status: true, sackId: true, shipmentId: true, currentStepId: true, currentQty: true },
+        });
+        if (!fresh) throw AppError.notFound("Top bulunamadı");
+        if (!FREE_STOCK.includes(fresh.status)) {
+          throw AppError.conflict(
+            `Top bu sırada ${fresh.status} statüsüne geçti — yenileyip tekrar deneyin.`,
+          );
+        }
+        if (fresh.sackId) {
+          throw AppError.conflict("Top bu sırada bir çuvala okutuldu — önce çuvaldan çıkarın.");
+        }
+        if (fresh.shipmentId) {
+          throw AppError.conflict("Top bu sırada bir sevkiyata atandı — önce sevkiyattan çıkarın.");
+        }
+        if (fresh.currentStepId) {
+          throw AppError.conflict("Top bu sırada bir iş emrine bağlandı — önce üretimden ayırın.");
+        }
+        throw AppError.conflict(
+          "Topun metrajı bu sırada değişti (eşzamanlı düzeltme/işlem) — güncel değeri kontrol edip tekrar deneyin.",
+        );
+      }
+
+      varianceId = await recordVarianceTx(tx, {
+        rollId,
+        kind,
+        qty: diff,
+        source: QTY_ADJUST_VARIANCE_SOURCE,
+        // RECORD_CORRECTION sebep KATALOGLUDUR (fail-closed) — sayım düzeltmesinin
+        // serbest gerekçesi "DIGER" + metin olarak yazılır (requiresText≥3, yukarıda
+        // garanti). Sayım sahada sıklaşırsa doğru adım kataloğa "SAYIM_FARKI"
+        // eklemektir (J: tam sayım belgesi işi), DIGER'i büyütmek değil.
+        // OVERAGE sebep İSTEMEZ; operatörün gerekçesi yine reasonText'te taşınır.
+        reasonCode: isShort ? "DIGER" : null,
+        reasonText: reason,
+        userId: userId ?? null,
+      });
+    });
+
+    // Audit tx-DIŞI (best-effort konvansiyonu — bu dosyadaki diğer CUD'ler gibi).
+    // Kalıcı gerekçe RollVariance satırındadır (audit 6 ayda arşivlenir; sapma
+    // defteri verinin parçasıdır — Roll.entryReason emsali).
+    await AuditService.log({
+      userId,
+      action: "UPDATE",
+      tableName: "ROLL_QTY_ADJUST",
+      recordId: rollId,
+      oldData: { currentQty: Number(oldQty) },
+      newData: {
+        currentQty: Number(newQty),
+        diffQty: Number(diff),
+        kind,
+        reason,
+        varianceId,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        rollId,
+        barcode: roll.barcode,
+        oldQty: Number(oldQty),
+        newQty: Number(newQty),
+        diffQty: Number(diff),
+        direction: isShort ? "SHORT" : "OVER",
+        kind,
+        varianceId,
+      },
+      message: isShort
+        ? `Metraj düzeltildi: ${Number(oldQty)} m → ${Number(newQty)} m (−${Number(diff)} m kayıt düzeltmesi)`
+        : `Metraj düzeltildi: ${Number(oldQty)} m → ${Number(newQty)} m (+${Number(diff)} m fazlalık)`,
+    };
+  }
+
+  /**
    * Saha #10: ham/stok kumaşı doğrudan satışa hazırla — STOCK topu WAREHOUSE'a
    * geçirir (sevke hazır). Fabrika işlemeden gelen ham kumaş bu yolla sevk akışına
    * girer (kapsama renk-null spec eşleşmesiyle çalışır). Guard: top serbest olmalı
@@ -4260,9 +4676,15 @@ export class InventoryService {
       // (touchWorkOrderTx) ALTINDA — `assign` de aynı kilidi alır, yarış serileşir.
       await assertKursunTabletMayWrite(tx, data.stepId, "açık kumaş açma");
 
+      // DEPO: açık kumaş ÜRETİMDE doğar, bir depoda değil — ama kolon "en son
+      // bulunduğu depo"yu taşır ve NULL bırakmak envanteri deliklendirir. Tek
+      // depolu fabrikada zaten tek doğru cevap var; çok depolu ticaret kurulumu
+      // bu yolu (fason dönüşü açık kumaş) hiç kullanmıyor.
+      const openFabricWarehouseId = await resolveTargetWarehouseId(tx);
       const created = await tx.roll.create({
         data: {
           barcode: null,
+          warehouseId: openFabricWarehouseId,
           clientToken: data.clientToken ?? null,
           itemId: fr.workOrder.targetItemId,
           colorId: receipt.appliedColorId,

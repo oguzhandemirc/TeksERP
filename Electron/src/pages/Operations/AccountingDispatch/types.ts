@@ -20,6 +20,7 @@ export interface DispatchListItem {
   _count: { sacks: number; rolls: number; orders: number; returns: number };
   totalMeters: number;
   totalKg: number;
+  /** DIŞ muhasebe programındaki belgenin izi — bu sistemde fatura KESMEZ. */
   invoiceNo: string | null;
   invoicedAt: string | null;
   /** Operatörün beyan ettiği FİZİKSEL çuval adedi (araca yüklenen); null = beyan yok.
@@ -27,6 +28,19 @@ export interface DispatchListItem {
   manualSackCount: number | null;
   /** İrsaliye açıklaması — muhasebe satırında da görünür. */
   dispatchNote: string | null;
+  /**
+   * İÇ faturalar (`Invoice.shipmentId` / `directShipmentId`) — iptal edilmişler
+   * HARİÇ (backend `assertSourceFree` ile AYNI süzgeç).
+   *
+   * ⚠️ `invoiceNo` ile KARIŞTIRMA: o dış izdir ve `invoiceNo` dolu diye iç
+   * faturalama yolunu kapatmak, dış numarası işaretlenmiş sevkiyatta iç fatura
+   * kesilmesini tamamen engelliyordu (tersi de vardı: iç taslak varken düğme
+   * çıkıp kullanıcıyı kesin bir 409'a yürütüyordu).
+   *
+   * Eski backend'de alan hiç gelmez → `undefined` (iç fatura bilinmiyor sayılır
+   * ve düğme bugünkü gibi çıkar).
+   */
+  invoices?: Array<{ id: string; docNo: string; status: "DRAFT" | "CONFIRMED" | "CANCELLED" }>;
 }
 
 /** Dönem bandı — filtreli kümenin TAMAMI (`?withSummary=true`), sayfa toplamı değil. */

@@ -2,20 +2,57 @@ import type { ReactNode } from "react";
 import { HintIcon, HintBody, InfoPopover, type HintVariant } from "./SettingHint";
 
 /**
+ * Satırın KÜNYESİ — varsayılan rozeti + "kimi etkiler".
+ *
+ * NEDEN AYRI BİR SATIR: ayar ekranında en sık sorulan iki soru "ben mi
+ * değiştirdim, hep böyle miydi" ve "bunu açarsam kimin ekranı değişir"dir.
+ * İkisi de uzun açıklamanın içine gömülüydü ve fiilen okunmuyordu.
+ * ⚠️ Rozet BEYANDIR, ölçüm değil: doğruluğunu backend okuyucusuna karşı
+ * `test_feature_flag_contract` §12 doğrular.
+ */
+export function SettingMeta({
+  defaultLabel,
+  audience,
+}: {
+  defaultLabel: string;
+  audience: readonly string[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+      <span className="rounded border px-1.5 py-0.5 font-medium">{defaultLabel}</span>
+      {audience.length > 0 && <span>· Etkilenen: {audience.join(", ")}</span>}
+    </div>
+  );
+}
+
+/**
  * Tek bir aç/kapa ayar satırı: sol tarafta başlık + (i) info balonu, sağda checkbox.
  * `admin:settings` yetkisi olmayan kullanıcıya `ReadOnlyRow` gösterilir.
  * Açıklama varsayılan olarak (i) info balonunda gösterilir (`hint="popover"`).
+ *
+ * `summary`/`defaultOn`/`audience` BİLEREK opsiyoneldir: Genel Ayarlar
+ * katalogundan gelen satırlar (bkz. `FlagDef`) üçünü de ZORUNLU taşır, ama bu
+ * bileşen belge/etiket/cihaz panellerinde de kullanılır ve oradaki yerel
+ * toggle'ların bir "varsayılan rozeti" yoktur.
  */
 export function FlagToggle({
   title,
+  summary,
   desc,
+  defaultOn,
+  audience,
   checked,
   disabled = false,
   onChange,
   hint = "popover",
 }: {
   title: string;
+  /** Satırda basılan TEK cümle; verilmezse uzun açıklama `hint` kuralına düşer. */
+  summary?: string;
   desc: ReactNode;
+  /** Backend'in kayıt yokken döndüğü değer — AÇIK/KAPALI rozeti. */
+  defaultOn?: boolean;
+  audience?: readonly string[];
   checked: boolean;
   disabled?: boolean;
   onChange: (next: boolean) => void;
@@ -28,7 +65,14 @@ export function FlagToggle({
           <span>{title}</span>
           <HintIcon variant={hint} desc={desc} />
         </div>
-        <HintBody variant={hint} desc={desc} />
+        {summary && <p className="text-xs text-muted-foreground">{summary}</p>}
+        {defaultOn !== undefined && (
+          <SettingMeta
+            defaultLabel={`Varsayılan: ${defaultOn ? "AÇIK" : "KAPALI"}`}
+            audience={audience ?? []}
+          />
+        )}
+        {!summary && <HintBody variant={hint} desc={desc} />}
       </div>
       <input
         type="checkbox"

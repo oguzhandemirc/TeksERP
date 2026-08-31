@@ -143,6 +143,15 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // Yazıcısını/kantarını kendisi kuran personel — sunucuya hiçbir şey yazmaz,
       // etkisi tek bilgisayarla sınırlıdır (bkz. permission-catalog.ts gerekçesi).
       "settings:workstation",
+      // Ticaret paketi (2026-08-13): depoyu GÖRÜR ve depolar arası TAŞIR.
+      // ⚠️ Fabrikada görünür fark YOK — tek depo varken transfer karosu ve depo
+      // seçicileri zaten çizilmiyor; izin var ama yüzey yok.
+      "warehouse:read",
+      "warehouse:transfer",
+      // ⚠️ `goods-receipt:*` BİLEREK YOK: Mal Kabul ekranı yalnız izinle kapılı
+      // (tek depolu ticaret kurulumu da kullanacağı için multiWarehouse şartı
+      // konamaz) → şablona akarsa fabrikada karo BELİRİR. Alım-satım kurulumunda
+      // admin bu izinleri elle atar.
     ],
   },
   {
@@ -162,6 +171,54 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "report:customer",
       "report:inventory",
       "report:subcontract",
+      // ── Ön muhasebe (2026-08-13) ────────────────────────────────────────
+      // ⚠️ GÖREV AYRILIĞI korunuyor: bu rol taslak hazırlar ve ONAYLAR
+      // (`finance:invoice`) — çünkü muhasebeci zaten `shipping:invoice` ile
+      // dış fatura izini işaretliyor, aynı kişi. TAHSİLAT (`finance:payment`)
+      // BİLİNÇLİ OLARAK YOK: parayı sayan ile faturayı kesen ayrı olabilmeli;
+      // gerekiyorsa panelden ayrıca verilir.
+      // ⚠️ Bu izinler ÜRETİCİ FABRİKAYA da gider ama `finance.enabled` bayrağı
+      // varsayılan KAPALI olduğu için orada tek satır bile çizilmez —
+      // görünürlüğün gerçek kapısı bayraktır, izin değil.
+      "finance:read",
+      "finance:write",
+      "finance:invoice",
+      // ⚠️ ÇEK/SENET muhasebecinin işidir (çek giriş bordrosu, portföy takibi,
+      // karşılıksız kaydı) — `finance:payment` yokluğuyla çelişmez: o izin
+      // NAKİT/havale sayan kişiyi tanımlar, bu izin bir BELGE VARLIĞININ
+      // yaşam döngüsünü yönetir. Fabrikada etkisi yok (`finance.enabled`
+      // varsayılan kapalı).
+      "finance:cheque",
+      // ⚠️ DÖNEM KAPANIŞI muhasebecinin işidir — ve bilinçli olarak "Kasa /
+      // Tahsilat" rolüne VERİLMEDİ: parayı sayan ile dönemi mühürleyen aynı
+      // kişi olursa, sayım hatası kapanışla birlikte geçmişe gömülür. Görev
+      // ayrılığının aynı ailesi: `shipping:write` ↔ `shipping:undo-dispatch`.
+      "finance:close",
+      "report:finance",
+    ],
+  },
+  {
+    // Ticaret paketi (2026-08-13) — GÖREV AYRILIĞI gereği ayrı rol: parayı
+    // sayan kişi ile faturayı kesen kişi aynı olmak ZORUNDA değil. Küçük
+    // firmada ikisi de aynı kullanıcıya verilebilir; ayrımı yazılım dayatmaz,
+    // yalnız MÜMKÜN kılar. `finance:read` olmadan tahsilat ekranı tutar
+    // gösteremezdi (o izin tutar görme kapısıdır).
+    code: "WEB_CASHIER",
+    name: "Kasa / Tahsilat",
+    description:
+      "Tahsilat ve ödeme kaydı, kasa/banka bakiyesi — fatura onaylama YETKİSİ YOK",
+    mode: "list",
+    codes: [
+      "finance:read",
+      "finance:payment",
+      // Çek TAHSİLİ kasa işidir: para o an banka/kasa bakiyesine girer. İzni
+      // "kayıt" ve "tahsil" diye İKİYE BÖLMEK düşünüldü ve reddedildi — sahada
+      // çeki deftere geçiren ile bankaya götüren çoğu zaman aynı kişidir ve
+      // ikinci bir izin, kurulumda atanması unutulacak bir adım daha demekti.
+      "finance:cheque",
+      "customer:read",
+      "subcontractor:read",
+      "report:finance",
     ],
   },
   {
@@ -253,6 +310,98 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     ],
   },
   {
+    // ── TİCARET KURULUMU: TEK ŞABLON (2026-08-14) ─────────────────────────
+    // Persona denetimi ölçtü: "birkaç depo + mal kabul + depodan satış + sevk,
+    // üretim ve mobil YOK" kullanıcısını kurmak için ÜÇ şablon (Depo&Sevkiyat +
+    // Muhasebe + Satış) uygulayıp üstüne elle 4 izin vermek gerekiyordu; iki
+    // izin (roll:read, order:read) atlanırsa Envanter ve Siparişler ekranları
+    // HİÇ görünmüyor ve kullanıcı sebebini hiçbir yerde göremiyordu.
+    //
+    // ⚠️ Bu şablon FABRİKAYA DA GİDER ama kimseye ATANMAZ (kural: katalog koda,
+    // atama panele). Görünürlük riski yok: mal kabul/depo/muhasebe yüzeylerinin
+    // hepsi ya multiWarehouse ya finance.enabled rejimine kapılı ve fabrika
+    // ikisinde de kapalı taraftadır.
+    //
+    // ⚠️ goods-receipt:* bilinçli olarak BAŞKA hiçbir şablonda yok
+    // (test_single_warehouse_parity §5c). Burada olması o kuralın İSTİSNASIDIR
+    // ve bekçinin muaf listesine gerekçesiyle yazıldı — ticaret kurulumunun
+    // tanımı gereği mal kabul onun ana işidir.
+    code: "WEB_TRADE",
+    name: "Ticaret (Depo + Satış + Muhasebe)",
+    description:
+      "Alım-satım kurulumu: mal kabul, depo/transfer, stok, sipariş, sevkiyat, iade ve ön muhasebe — ÜRETİM YOK",
+    mode: "list",
+    codes: [
+      // Depo & stok
+      "warehouse:read",
+      "warehouse:write",
+      "warehouse:transfer",
+      "goods-receipt:read",
+      "goods-receipt:write",
+      "roll:read",
+      "roll:write",
+      // Paket D — iplik kg-defteri + alış siparişi + fiyatlama.
+      // ⚠️ Dördü de YALNIZ bu rolde: fabrika rollerine vermek anlamsız olurdu
+      // (kavramlar `finance.enabled` rejimine ait ve fabrikada bayrak kapalı),
+      // üstelik yetki listesini kullanılmayan satırlarla şişirirdi. Ayrı bir
+      // "satın almacı" / "fiyatlamacı" rolü gerçekten doğarsa o zaman bölünür —
+      // bugünkü persona tek kişi (bkz. finance:payment/cheque/close gerekçesi).
+      "yarn:write",
+      "purchase-order:read",
+      "purchase-order:write",
+      "price:write",
+      // ⚠️ C4 KÖPRÜSÜNÜN OKUMA AYAĞI — SÜS DEĞİL. Alış artık HER cariden
+      // yapılabiliyor ve cari kartları iki tabloda yaşıyor; panelin tedarikçi
+      // seçicisi (`SupplierSelect`) fason bacağını `GET /api/subcontractors`
+      // ile çekiyor ve o uç `subcontractor:read` istiyor. Bu satır olmadan
+      // ekran ÇALIŞIYOR görünür ama kutu her açılışta 403 alır, yalnız cari
+      // kartlar listelenir ve fason firmadan alım panelden ULAŞILAMAZ hâle
+      // gelir (arıza geçici bir ağ hatası gibi okunur). Yazma izni bilinçli
+      // VERİLMEDİ: ticaret kullanıcısı fason firma kartı AÇMAZ, var olanı seçer.
+      "subcontractor:read",
+      // Satış & sevkiyat
+      "order:read",
+      "order:write",
+      "customer:read",
+      "customer:write",
+      "customer-alias:read",
+      "customer-alias:write",
+      "shipping:read",
+      "shipping:write",
+      "shipping:invoice",
+      "return:read",
+      "return:write",
+      // Katalog — ticaret firması kendi kumaş/renk kartlarını açar
+      "item:read",
+      "item:write",
+      "property:read",
+      "quality:read",
+      // Etiket (opsiyonel kullanım; basmak zorunlu değil)
+      "label:read",
+      "label:print",
+      "label-template:read",
+      // Ön muhasebe — SoD gereği finance:payment DAHİL (tek kişilik ekipte aynı
+      // kişi; ayrı çalışan varsa panelden ayrılır). Çek/senet aynı gerekçeyle:
+      // alım-satım firmasında vadeli tahsilatın ana aracı çektir, portföy
+      // olmadan rol eksik kalırdı.
+      "finance:read",
+      "finance:write",
+      "finance:invoice",
+      "finance:payment",
+      "finance:cheque",
+      // Dönem kapanışı da aynı "tek kişilik ekip" gerekçesiyle: bu rolün
+      // personası ZATEN muhasebeyi kendisi tutuyor. Ayrımı isteyen kurulum
+      // `finance:close`u panelden söker — kurulum reçetesi (TICARET-KURULUM.md)
+      // bunu bir seçenek olarak söyler.
+      "finance:close",
+      // Raporlar
+      "report:sales",
+      "report:inventory",
+      "report:customer",
+      "report:finance",
+    ],
+  },
+  {
     code: "WEB_SYSTEM_ADMIN",
     name: "Sistem Yöneticisi",
     description:
@@ -268,6 +417,11 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       // gerekir (bu rolde YOK, yani sysadmin varsayılan olarak yalnız
       // "geçmişi görebilir"; gerçek yükleme için ilgili write izni eklenir).
       "data:import",
+      // Depo TANIMI (yeni depo açma, varsayılan depo seçimi) sistem yapılandırmasıdır,
+      // günlük depo işi değil. Depo & Sevkiyat rolüne KONULMADI: fabrikada tek depo
+      // varken depo yüzeyleri gizli ve öyle kalmalı — ikinci depoyu açmak bilinçli
+      // bir kurulum kararıdır (`warehouse:transfer` ise günlük iş, o rolde).
+      "warehouse:write",
     ],
   },
 ];
@@ -399,4 +553,9 @@ export const ROLE_COVERAGE_EXEMPT: Readonly<Record<string, string>> = {
     "Ekran değil, KK1-içi yetenek: inline yeni desen açma. Yalnız seçili ham giriş operatörlerine verilir (permission-catalog.ts).",
   "mobile:kk1-yari-mamul":
     "Ekran değil, KK1-içi yetenek (2026-08-17): dışarıdan alınan yarı mamul kabulü. Renkli mal kabulü açar; yanlışlıkla kullanılırsa top ham stoğa 'boyalı' düşer → varsayılan operatör paketine GİRMEZ, panelden seçili kişiye verilir.",
+  // 2026-08-14: goods-receipt:* muafları KALDIRILDI — artık dar bir rol
+  // (WEB_TRADE) onları taşıyor. Muaf bırakmak "ölü muaf" olurdu ve bekçinin
+  // iki yönlü denetimi zaten kırmızı verdi. Fabrika görünürlüğü şablonla
+  // değil REJİMLE korunuyor: şablon kimseye atanmaz ve mal kabul karosu
+  // goods-receipt izni olmayan kullanıcıda zaten çizilmez.
 };

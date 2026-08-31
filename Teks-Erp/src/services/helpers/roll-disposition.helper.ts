@@ -37,8 +37,15 @@ export type RollDispositionAction =
   | "SCRAP"
   | "CANCELLED";
 
-/** Kararın hangi yüzeyden geldiği — hareket notu önekini belirler. */
-export type DispositionOrigin = "WO_CLOSE" | "WO_CANCEL" | "BATCH_DROP";
+/**
+ * Kararın hangi yüzeyden geldiği — hareket notu önekini belirler.
+ *
+ * ⚠️ `STOCK_COUNT` (J2 #19) yalnız `closeOpenMovementsTx`i kullanır, tam
+ * `applyRollDispositionsTx` motorunu DEĞİL: sayımda statü claim'i çağıranda
+ * yaşar, çünkü kaybeden satır hata FIRLATMAZ — "kapsam dışı" olarak işaretlenip
+ * belgeye yazılır (motor ise haklı olarak 409 atar ve tüm kararı geri sarar).
+ */
+export type DispositionOrigin = "WO_CLOSE" | "WO_CANCEL" | "BATCH_DROP" | "STOCK_COUNT";
 
 /** Dispozisyonun hedef `RollStatus`'u. */
 export const DISPOSITION_TARGET_STATUS: Record<RollDispositionAction, RollStatus> = {
@@ -67,6 +74,10 @@ export const DISPOSITION_NOTE_PREFIXES: readonly DispositionOrigin[] = [
   "WO_CLOSE",
   "WO_CANCEL",
   "BATCH_DROP",
+  // J2 #19 — sayım fark fişi de bu motorun hareket kapanışını kullanır
+  // (`qtyOut = 0`, storno). Muaf listesine girmeseydi `test_consistency` §12
+  // sayım yapılmış her kurulumda kırmızıya dönerdi.
+  "STOCK_COUNT",
 ] as const;
 
 /**
@@ -346,8 +357,13 @@ export async function applyRollDispositionsTx(
  * ⚠️ Eski not PARANTEZ İÇİNDE korunur — 2026-08-04'te `softDelete` notu körlemesine
  * ezip `TAMBUR_MANUAL_ROLL: <sebep>` izini siliyordu. Gerekçe nota da yazılır çünkü
  * `SystemLog` 6 ayda bir arşivlenir, `RollMovement.notes` arşivlenmez.
+ *
+ * ⚠️ EXPORT EDİLDİ (J2 #19): tam stok sayımı kendi statü claim'ini yapar ama
+ * hareket kapanışını KOPYALAMAZ. Kopyalansaydı sayım yolu bir gün `qtyOut`u
+ * `currentQty` ile kapatır ve HİÇ VAR OLMAMIŞ metraj istasyon iş hacmine
+ * yazılırdı — bu dosyanın var oluş sebebinin ta kendisi.
  */
-async function closeOpenMovementsTx(
+export async function closeOpenMovementsTx(
   tx: TxClient,
   params: {
     rollIds: string[];

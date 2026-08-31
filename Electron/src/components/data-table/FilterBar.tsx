@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, X } from "lucide-react";
+import { AlertOctagon, Check, ChevronDown, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -406,13 +406,44 @@ function MultiSelectFilter({
 //
 // ⚠️ `shouldFilter={false}` ZORUNLU. Kaldırılırsa arama "çalışıyor" görünür ama
 // Türkçe terimlerde sonuç sessizce kaybolur.
+//
+// ── SEÇENEK LİSTESİ DÜŞTÜĞÜNDE "Sonuç yok." YAZILMAZ ────────────────────────
+// ⚠️ 2026-08-12 SAHA VAKASININ SINIFI. O gün lookup servisinin YOLU yanlıştı,
+// istek 404 aldı ve `FilterBar` bunu "Sonuç yok." diye bastı — kullanıcı filtreyi
+// boş sanıp süzmeden çalıştı. O gün semptom (URL) düzeltildi, SEBEP (hata = boş)
+// düzeltilmedi. `LookupErrorRow` sebebi kapatır: hata varken CommandEmpty
+// ÇİZİLMEZ, yerine sebebi söyleyen ve yeniden denemeyi teklif eden blok gelir.
 // =============================================================================
+function LookupErrorRow({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex items-start gap-2 px-3 py-3 text-xs">
+      <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+      <div className="min-w-0 flex-1">
+        <p className="font-medium text-destructive">Seçenekler yüklenemedi</p>
+        <p className="mt-0.5 text-muted-foreground">
+          Bu <strong>“seçenek yok”</strong> anlamına GELMEZ — liste sunucudan alınamadı, filtre
+          eksik süzer.
+        </p>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="mt-2 h-6 px-2 text-xs"
+          onClick={onRetry}
+        >
+          Tekrar dene
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind: "lookup" }>>) {
   const [open, setOpen] = useState(false);
   const value = sp.get(`filter[${def.key}]`) ?? "";
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: [def.queryKey, "filter-lookup", def.extraFilters, debouncedSearch],
     queryFn: () =>
       def.service.getAll({
@@ -471,8 +502,11 @@ function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind
             onValueChange={setSearch}
           />
           <CommandList>
-            <CommandEmpty>Sonuç yok.</CommandEmpty>
+            {/* "Sonuç yok." YALNIZ başarılı+boş yanıtta. */}
+            {isError ? <LookupErrorRow onRetry={() => void refetch()} /> : <CommandEmpty>Sonuç yok.</CommandEmpty>}
             <CommandGroup>
+              {/* "Tümü" hata durumunda da durur: filtreyi TEMİZLEMEK, seçenek
+                  listesi okunamasa bile yapılabilmeli. */}
               <CommandItem
                 value="__all__"
                 onSelect={() => {
@@ -642,7 +676,7 @@ function MultiLookupFilter({
   // Çoklu seçim de aynı sözleşme — bkz. `LookupFilter` başlığındaki gerekçe.
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebouncedValue(search, 300);
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: [def.queryKey, "filter-lookup-multi", def.extraFilters, debouncedSearch],
     queryFn: () =>
       def.service.getAll({
@@ -710,7 +744,7 @@ function MultiLookupFilter({
             onValueChange={setSearch}
           />
           <CommandList>
-            <CommandEmpty>Sonuç yok.</CommandEmpty>
+            {isError ? <LookupErrorRow onRetry={() => void refetch()} /> : <CommandEmpty>Sonuç yok.</CommandEmpty>}
             <CommandGroup>
               {items.map((it) => {
                 const selected = selectedIds.includes(it.id);
@@ -777,7 +811,7 @@ function DependentLookupFilter({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [parentId]);
 
-  const { data } = useQuery({
+  const { data, isError, refetch } = useQuery({
     queryKey: [def.queryKey, "filter-dependent", parentId],
     queryFn: () => def.fetchOptions(parentId),
     enabled: Boolean(parentId),
@@ -853,7 +887,7 @@ function DependentLookupFilter({
         >
           <CommandInput placeholder={`${def.label} ara...`} className="h-8" />
           <CommandList>
-            <CommandEmpty>Sonuç yok.</CommandEmpty>
+            {isError ? <LookupErrorRow onRetry={() => void refetch()} /> : <CommandEmpty>Sonuç yok.</CommandEmpty>}
             <CommandGroup>
               {items.map((it) => {
                 const selected = selectedIds.includes(it.id);

@@ -20,6 +20,7 @@ import { ServerNotFoundPanel } from "./ServerNotFoundPanel";
 import { ServerIdentityMismatchDialog } from "@/components/settings/ServerIdentityMismatchDialog";
 import { useServerReachability } from "@/hooks/useServerReachability";
 import type { DiscoveredServer } from "@shared/ipc-contract";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
@@ -118,14 +119,16 @@ export function LoginPage() {
 
       <div className="relative flex w-full items-center justify-center bg-background p-10 md:w-[460px] md:shrink-0">
         <div className="absolute right-5 top-5 flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setApiDialogOpen(true)}
-            aria-label="Sunucu adresi ayarları"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
+          {IS_ELECTRON && (
+            <button
+              type="button"
+              onClick={() => setApiDialogOpen(true)}
+              aria-label="Sunucu adresi ayarları"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background text-muted-foreground transition hover:text-foreground"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -136,7 +139,7 @@ export function LoginPage() {
           </button>
         </div>
 
-        <ApiEndpointDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />
+        {IS_ELECTRON && <ApiEndpointDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />}
 
         <ConfirmDialog
           open={conflict !== null}

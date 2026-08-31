@@ -155,9 +155,20 @@ export function ActivityDetailSheet({ logId, onClose, source = "active" }: Props
                 <summary className="cursor-pointer text-xs uppercase tracking-wider text-muted-foreground">
                   Ham veri (teknik)
                 </summary>
+                {/* ⚠️ `tableName` bağlam OLARAK geçer: bazı enum değerleri iki
+                    enum'da çelişir (`PURCHASE` fatura türü ↔ fiyat türü) ve
+                    yalnız `TABLO.alan` çifti onları ayırabilir. */}
                 <div className="mt-2 space-y-3">
-                  <AuditDataBlock title="Önceki Değer" data={query.data.oldData} />
-                  <AuditDataBlock title="Yeni Değer" data={query.data.newData} />
+                  <AuditDataBlock
+                    title="Önceki Değer"
+                    data={query.data.oldData}
+                    tableName={query.data.tableName}
+                  />
+                  <AuditDataBlock
+                    title="Yeni Değer"
+                    data={query.data.newData}
+                    tableName={query.data.tableName}
+                  />
                 </div>
               </details>
             </>

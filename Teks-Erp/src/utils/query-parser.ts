@@ -7,6 +7,7 @@
 
 import { Request } from "express";
 import { QueryParams } from "../types/api.types";
+import { factoryDayKeyUtcMidnight } from "../constants/time";
 import { AppError } from "./app-error";
 
 const DEFAULT_PAGE = 1;
@@ -98,16 +99,47 @@ function parseIsoDate(value: unknown): Date | undefined {
  */
 export function applyDateRange(
   where: Record<string, unknown>,
-  params: QueryParams,
+  // ⚠️ Tip BİLEREK dar (merge, 2026-09-01): bu yardımcı yalnız üç tarih alanını
+  // okur. Tam `QueryParams` istemek, sayfalama dışında sıralama TAŞIMAYAN
+  // servisleri (ticaret listeleri) sahte `sortBy/sortOrder` uydurmaya zorluyordu.
+  params: Pick<QueryParams, "dateField" | "dateFrom" | "dateTo">,
   allowedFields: readonly string[]
 ): void {
   if (!params.dateField || !allowedFields.includes(params.dateField)) return;
   if (!params.dateFrom && !params.dateTo) return;
+  const dateOnly = DATE_ONLY_COLUMNS.has(params.dateField);
   const range: { gte?: Date; lte?: Date } = {};
-  if (params.dateFrom) range.gte = params.dateFrom;
-  if (params.dateTo) range.lte = params.dateTo;
+  if (params.dateFrom) range.gte = dateOnly ? factoryDayKeyUtcMidnight(params.dateFrom) : params.dateFrom;
+  if (params.dateTo) range.lte = dateOnly ? factoryDayKeyUtcMidnight(params.dateTo) : params.dateTo;
   where[params.dateField] = range;
 }
+
+// ── `@db.Date` KOLONLARI — GÜN-YALNIZ SINIR ÇEVİRİMİ (2026-08-15) ────────────
+// SORUN. Liste filtrelerinin geri kalanı `timestamptz` kolonlara bakar ve orada
+// istemcinin gönderdiği MUTLAK AN aynen kullanılır ("backend ekstra yuvarlama
+// yapmaz" sözleşmesi). `@db.Date` kolonda aynı sözleşme SESSİZCE BİR GÜN
+// KAYDIRIR: Prisma bir `@db.Date` karşılaştırmasını UTC gün-parçasına indirger,
+// Istanbul'un yerel gece yarısı ise UTC'de bir ÖNCEKİ günün 21:00'idir.
+//   Ölçüldü (2026-08-15): muhasebeci "1–31 Ağustos" seçince listede 31 Temmuz
+//   kuru da çıkıyordu — hata yok, log yok.
+// ÇÖZÜM. Gün-yalnız kolonlarda istemcinin ANI, FABRİKA takvim gününe indirgenir
+// (`factoryDayKeyUtcMidnight` — aynı kolona YAZARKEN de kullanılan fonksiyon).
+//
+// ⚠️ LİSTE SERVİS BAZLI DEĞİL ŞEMA BAZLIDIR: hangi kolonun `@db.Date` olduğu
+// bir servis tercihi değil bir ŞEMA gerçeğidir.
+// ⚠️ AD ÇAKIŞMASI YASAK: burada listelenen ad, şemadaki HER modelde `@db.Date`
+// olmalı. Bekçi (`test_ticaret_links_and_filters` §5c) mekanik doğrular.
+export const DATE_ONLY_COLUMNS: ReadonlySet<string> = new Set([
+  // ExchangeRate.rateDate — "15 Temmuz'daki EUR kuru" takvim günüdür, an değil.
+  "rateDate",
+  // EndpointLatencyDaily.day — rollup anahtarı; bugün filtrelenmiyor ama aynı
+  // sınıf (ad çakışması denetimi bu satır sayesinde `day`i de kapsar).
+  "day",
+  // CashPeriodClose.periodEnd + CariPeriodClose.periodEnd — "2025 Aralık
+  // kapanışı" takvim günüdür. Bugün `dateFields` whitelist'inde DEĞİL; yine de
+  // burada durur, çünkü liste ŞEMAYI aynalar.
+  "periodEnd",
+]);
 
 /**
  * Filtre değerini temiz bir liste hâline getirir. FilterBar çoklu seçimi
@@ -356,4 +388,139 @@ export function buildPagination(page: number, pageSize: number): { skip: number;
     );
   }
   return { skip, take: pageSize };
+}
+
+/**
+ * Değer bu enum'un bir üyesi mi? (tip daraltmalı)
+ *
+ * ⚠️ Merge notu (2026-09-01): `adnansahin` dalında kullanan kalmadığı için
+ * düşmüştü; ticaret servisleri (`purchase-order.service`) kullanıyor.
+ */
+export function isEnumMember<T extends Record<string, string>>(
+  enumObj: T,
+  value: string
+): value is T[keyof T] {
+  return Object.prototype.hasOwnProperty.call(enumObj, value);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ESKİ YOL — ILIKE VARYANT ARAMASI (yalnız TİCARET tabloları için)
+// =============================================================================
+// ⚠️ BU KOD BİLİNÇLİ OLARAK YAŞIYOR; "buildTextSearch varken bu neden duruyor?"
+// sorusunun cevabı ŞEMADADIR, tercihte değil.
+//
+// `buildTextSearch` (yukarıda) her metin kolonunun yanında DB'nin ürettiği
+// `<kolon>Fold` gölgesinin BULUNDUĞUNU varsayar — o gölgeler migration
+// `20260819060000_search_fold` ile geldi ve YALNIZ o tarihte var olan üretim
+// tablolarını kapsıyor. Ticaret paketinin tabloları (cari_accounts · invoices ·
+// payments · cheques · cash_transactions · yarn_stocks · item_prices ·
+// purchase_orders · cheque_delivery_notes) o migration'dan SONRA, ayrı bir
+// dalda doğdu ve fold kolonu TAŞIMIYOR. Onlarda `buildTextSearch` çağırmak
+// var olmayan bir kolona sorar → arama 500 verir (sessiz değil ama ölümcül).
+//
+// Bu yüzden iki yol yan yana duruyor ve SINIR NETTİR:
+//   • fold kolonu OLAN tablo  → `buildTextSearch` (trigram index, ~6 ms)
+//   • ticaret tabloları       → `buildTurkishSearch` (ILIKE varyantları)
+//
+// KALICI ÇÖZÜM (yapılmadı, bilinçli): ticaret tablolarına da fold kolonu +
+// trigram index ekleyen bir migration yazmak ve çağrıları çevirmek. Bu bir
+// MERGE kararı değil, ölçülüp planlanacak ayrı bir iştir — `test_db_invariants`
+// envanterine ~10 yeni partial/GIN index satırı da eklenmesi gerekir.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TR_FOLD = /[iıİIçÇğĞöÖşŞüÜ]/;
+/** ⚠️ Çarpım ÜSTELDİR (2^n) — sınır bilinçli olarak düşük (en fazla 8 desen). */
+const TR_MAX_I_POSITIONS = 3;
+
+/**
+ * tr-BAŞLIK DÜZENİ: her kelimenin ilk harfi tr-BÜYÜK, gerisi tr-küçük.
+ *
+ * ⚠️ `toLocaleUpperCase("tr-TR")` ZORUNLU (ASCII `toUpperCase` DEĞİL): "işçi"
+ * → ASCII'de "Işçi" (NOKTASIZ I) üretilir ve DB'deki "İşçi" ile eşleşmez.
+ */
+function trTitleCase(term: string): string {
+  const lower = term.toLocaleLowerCase("tr-TR");
+  let out = "";
+  let atWordStart = true;
+  for (const ch of lower) {
+    const isWordChar = /[0-9a-zçğıöşü]/.test(ch);
+    out += atWordStart && isWordChar ? ch.toLocaleUpperCase("tr-TR") : ch;
+    atWordStart = !isWordChar;
+  }
+  return out;
+}
+
+/**
+ * Bir i-ailesi karakterinin, ILIKE altında AYRI kovalara düşen iki yazımı.
+ *
+ * ⚠️ NOKTALI ile NOKTASIZ AİLE BİRBİRİNE KATLANMAZ: Türkçe'de "işçi" ile "ışçı"
+ * FARKLI kelimelerdir.
+ */
+function iFamilyVariants(ch: string): readonly [string, string] | null {
+  if (ch === "i" || ch === "İ") return ["i", "İ"];
+  if (ch === "ı" || ch === "I") return ["ı", "I"];
+  return null;
+}
+
+/**
+ * Terimin ILIKE ile denenecek TÜM yazımları (tekilleştirilmiş, sıra kararlı).
+ * Ayrı export: bekçi desen kümesini DB'ye gitmeden de ölçebilsin.
+ */
+export function turkishSearchPatterns(search: string): string[] {
+  const term = search.trim();
+  if (!term) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  const push = (p: string): void => {
+    if (p && !seen.has(p)) {
+      seen.add(p);
+      out.push(p);
+    }
+  };
+  push(term);
+  if (TR_FOLD.test(term)) {
+    push(term.toLocaleUpperCase("tr-TR"));
+    push(term.toLocaleLowerCase("tr-TR"));
+    // ⭐ BAŞLIK DÜZENİ — normalize EDİLMEYEN yarının olağan yazımı
+    // ("Ege Kumaş İthalat", "T. İş Bankası").
+    push(trTitleCase(term));
+  }
+  const chars = [...term];
+  const positions: number[] = [];
+  for (let i = 0; i < chars.length; i++) {
+    if (iFamilyVariants(chars[i] as string)) positions.push(i);
+  }
+  if (positions.length > 0 && positions.length <= TR_MAX_I_POSITIONS) {
+    const combos = 1 << positions.length;
+    for (let mask = 0; mask < combos; mask++) {
+      const out2 = [...chars];
+      positions.forEach((pos, bit) => {
+        const pair = iFamilyVariants(chars[pos] as string);
+        if (pair) out2[pos] = (mask >> bit) & 1 ? pair[1] : pair[0];
+      });
+      push(out2.join(""));
+    }
+  }
+  return out;
+}
+
+/**
+ * Türkçe-duyarlı `contains` OR koşulları üretir (ESKİ YOL — bkz. yukarıdaki blok).
+ * paths nokta-notasyonu ile nested relation destekler ("customer.name").
+ *
+ * DİKKAT: boş term/paths → [] döner; boş [] doğrudan `.OR`'a atanırsa Prisma
+ * HİÇBİR kaydı eşlemez → çağıran mutlaka `if (search)` guard'ını korumalı.
+ */
+export function buildTurkishSearch<T = Record<string, unknown>>(
+  search: string,
+  paths: readonly string[]
+): T[] {
+  const term = search.trim();
+  if (!term || paths.length === 0) return [];
+  const patterns = turkishSearchPatterns(term);
+  const clauses: Record<string, unknown>[] = [];
+  for (const path of paths) {
+    for (const p of patterns) clauses.push(nestPath(path, { contains: p, mode: "insensitive" }));
+  }
+  return clauses as unknown as T[];
 }

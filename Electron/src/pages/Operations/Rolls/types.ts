@@ -145,6 +145,9 @@ export interface Roll {
    * İstasyonsuz girişlerde (Electron paneli) ve geçmiş kayıtlarda null.
    */
   entryStation?: { id: string; code: string; name: string } | null;
+  /** Topun bulunduğu FİZİKSEL depo (2026-08-13). Liste + detay aynı şekli döner. */
+  warehouse?: { id: string; code: string; name: string } | null;
+  warehouseId?: string | null;
   parentRollId: string | null;
   /** Açık kumaş Roll'lar için fason kabul referansı. */
   parentReceiptId: string | null;

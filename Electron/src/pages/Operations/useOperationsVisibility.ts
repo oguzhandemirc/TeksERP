@@ -1,4 +1,9 @@
+import { useQuery } from "@tanstack/react-query";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { sackStoreService } from "./SackStore/service";
 import type { OperationsVisibilityContext } from "./tile-config";
 
 /**
@@ -18,5 +23,32 @@ import type { OperationsVisibilityContext } from "./tile-config";
  */
 export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
-  return { shipmentConfirmationEnabled };
+  const { hasPermission } = useRoleAccess();
+  const { multiWarehouse } = useMultiWarehouse();
+  const flagsQuery = useFeatureFlags();
+  const financeEnabled = flagsQuery.data?.data?.financeEnabled ?? false;
+  // Backend varsayılanı AÇIK — belirsizken de açık kabul edilir (panelin her
+  // yerindeki yazım: `productionEnabled ?? true`).
+  const productionEnabled = flagsQuery.data?.data?.productionEnabled ?? true;
+
+  // Çıkış bekleyen sevkiyat SONDASI — yalnız karar bunu gerektiriyorsa koşar:
+  // bayrak açıksa karo zaten görünür (sorgu gereksiz), izin yoksa uç 403 verir.
+  // `limit: 1` yeter — sayı değil VARLIK soruluyor.
+  const probeEnabled = !shipmentConfirmationEnabled && hasPermission("shipping:read");
+  const pending = useQuery({
+    queryKey: ["ops-visibility", "planned-shipments"],
+    queryFn: () => sackStoreService.list({ limit: 1 }),
+    enabled: probeEnabled,
+    staleTime: 60 * 1000,
+  });
+
+  return {
+    shipmentConfirmationEnabled,
+    financeEnabled,
+    productionEnabled,
+    pendingPlannedShipments: pending.data?.data?.length ?? 0,
+    // Tek kaynak `useMultiWarehouse` — karar burada YENİDEN hesaplanmaz
+    // (kopyalansa biri gün gelir "aktif" süzgecini unuturdu).
+    multiWarehouse,
+  };
 }

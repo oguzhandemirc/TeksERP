@@ -7,7 +7,21 @@ import { fieldLabel, formatAuditValue } from "@/lib/audit-labels";
  * Düz nesne değilse (dizi/skaler) ham JSON'a düşer. Aktivite Günlüğü ve Sistem
  * Kayıtları detay çekmecelerinin ortak bloğu — eski ham `JSON.stringify` yerine.
  */
-export function AuditDataBlock({ title, data }: { title: string; data: unknown }) {
+export function AuditDataBlock({
+  title,
+  data,
+  tableName,
+}: {
+  title: string;
+  data: unknown;
+  /**
+   * Kaydın tablosu (`SystemLog.tableName`). Bazı enum DEĞERLERİ iki farklı
+   * enum'da ÇELİŞİR (`PURCHASE`: fatura türü ↔ fiyat türü · `ISSUED`: çekin
+   * türü ↔ durumu) ve bunları yalnız `TABLO.alan` bağlamı ayırabilir. Prop
+   * verilmezse global sözlük kullanılır — davranış bugünküyle aynı.
+   */
+  tableName?: string | null;
+}) {
   if (data == null) return null;
   if (typeof data !== "object" || Array.isArray(data)) {
     return <RawJsonBlock title={title} data={data} />;
@@ -29,7 +43,7 @@ export function AuditDataBlock({ title, data }: { title: string; data: unknown }
             <span className="w-40 shrink-0 text-muted-foreground">
               {fieldLabel(key)}
             </span>
-            <AuditValue value={value} />
+            <AuditValue value={value} tableName={tableName} field={key} />
           </div>
         ))}
       </div>
@@ -37,7 +51,16 @@ export function AuditDataBlock({ title, data }: { title: string; data: unknown }
   );
 }
 
-function AuditValue({ value }: { value: unknown }) {
+function AuditValue({
+  value,
+  tableName,
+  field,
+}: {
+  value: unknown;
+  tableName?: string | null;
+  field: string;
+}) {
+  // İç içe nesne/dizi → kompakt JSON (alan adı yine Türkçe üstte).
   if (value !== null && typeof value === "object") {
     return (
       <div className="min-w-0 flex-1">
@@ -47,7 +70,7 @@ function AuditValue({ value }: { value: unknown }) {
   }
   return (
     <span className="min-w-0 flex-1 break-words font-mono">
-      {formatAuditValue(value)}
+      {formatAuditValue(value, { tableName, field })}
     </span>
   );
 }

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, AlertTriangle, PackageSearch } from "lucide-react";
+import { Loader2, AlertTriangle, PackageSearch, ListChecks } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,6 +32,8 @@ import {
 } from "./service";
 import { ReturnRollCard } from "./ReturnRollCard";
 import { ReturnSackCard } from "./ReturnSackCard";
+import { ShipmentReturnPicker } from "./ShipmentReturnPicker";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 
 const TEXTAREA_CLS =
   "flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring";
@@ -66,6 +68,12 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
   const [reasonText, setReasonText] = useState("");
   const [note, setNote] = useState("");
   const [qualityGradeId, setQualityGradeId] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  // Sevkiyattan seçme yolu sevkiyat OKUMA izni ister; yoksa buton hiç çizilmez
+  // (mevcut okutma yolları çalışmaya devam eder).
+  const { hasAnyPermission } = useRoleAccess();
+  const canPickShipment = hasAnyPermission(["shipping:read", "shipping:write"]);
 
   const reasonsQ = useQuery({
     queryKey: ["return-reasons", "picker"],
@@ -252,6 +260,23 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
                 )}
                 <span className="ml-1">Sorgula</span>
               </Button>
+              {/* BARKODSUZ YOL — okutmanın yerine geçmez, yanına gelir.
+                  Müşteriden dönen malın üstünde etiket olmayabilir (ticaret
+                  kullanıcısı hiç basmamıştır); sevkiyat + çuval seçilerek aynı
+                  `lookupSack` akışına girilir.
+                  ⚠️ `shipping:read` YOKSA HİÇ ÇİZİLMEZ: gri buton, arkasında
+                  403 olan bir yolu vaat ederdi. */}
+              {canPickShipment && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  title="Malın çıktığı sevkiyattan seç"
+                  onClick={() => setPickerOpen(true)}
+                >
+                  <ListChecks className="h-4 w-4" />
+                  <span className="ml-1">Sevkiyattan Seç</span>
+                </Button>
+              )}
             </div>
           </FormField>
 
@@ -374,6 +399,18 @@ export function ReturnEntryDialog({ open, onOpenChange, initialBarcode }: Props)
           </Button>
         </DialogFooter>
       </DialogContent>
+      {/* Seçim yapılınca kod kutuya yazılır VE mevcut sorgu akışı tetiklenir —
+          böylece aday siparişler, kalite kapısı ve guard'lar tek yoldan gelir.
+          Kutuyu doldurup sorguyu tetiklememek, kullanıcıyı "kod geldi ama bir
+          şey olmadı" durumunda bırakırdı. */}
+      <ShipmentReturnPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        onPick={(sackNo) => {
+          setBarcode(sackNo);
+          lookupMut.mutate(sackNo);
+        }}
+      />
     </Dialog>
   );
 }

@@ -1,4 +1,4 @@
-import express, { Express, Request, Response } from "express";
+import express, { Express, NextFunction, Request, Response } from "express";
 import { VARSAYILAN_GOVDE_LIMITI, buyukGovdeYolu } from "./constants/body-limits";
 import path from "path";
 import fs from "fs";
@@ -66,6 +66,22 @@ import documentProfileRoutes from "./routes/document-profile.routes";
 import freeDocumentRoutes from "./routes/free-document.routes";
 import returnRoutes from "./routes/return.routes";
 import returnReasonRoutes from "./routes/return-reason.routes";
+import warehouseRoutes from "./routes/warehouse.routes";
+import goodsReceiptRoutes from "./routes/goods-receipt.routes";
+import financeRoutes from "./routes/finance.routes";
+import chequeRoutes from "./routes/cheque.routes";
+import financePeriodRoutes from "./routes/finance-period.routes";
+import cashPeriodRoutes from "./routes/cash-period.routes";
+// Resmi ön muhasebe belgeleri (J2 #18) — ikisi de KENDİ kapısını taşır.
+import reconciliationLetterRoutes from "./routes/reconciliation-letter.routes";
+import chequeDeliveryNoteRoutes from "./routes/cheque-delivery-note.routes";
+// Paket D (ticaret) — üçü de KENDİ `verifyToken + requireFinanceEnabled`
+// kapısını taşır → app seviyesinde, spesifik ön ekle bağlanırlar.
+import yarnRoutes from "./routes/yarn.routes";
+import itemPriceRoutes from "./routes/item-price.routes";
+import purchaseOrderRoutes from "./routes/purchase-order.routes";
+import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
+import stockCountRoutes from "./routes/stock-count.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
 import discoveryRoutes from "./routes/discovery.routes";
@@ -82,6 +98,11 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
+import {
+  readWebHardeningConfig,
+  createRateLimiter,
+  HSTS_MAX_AGE_SEC,
+} from "./middlewares/web-hardening";
 import { getPresence } from "./lib/presence";
 
 import { runWithRequestContext } from "./lib/request-context";
@@ -91,6 +112,26 @@ import clientPolicyRoutes from "./routes/client-policy.routes";
 import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
 const app: Express = express();
 
+// =============================================================================
+// İnternete açma sertleştirmesi (ORTAM DEĞİŞKENİ ARKASINDA)
+// =============================================================================
+// Gerekçelerin tamamı `middlewares/web-hardening.ts` başlığında. Buradaki tek
+// kural: değişken YOKKEN çözülen değerler bugünkü davranışı birebir üretir
+// (trustProxy=null → set edilmez · corsOrigins=null → kısıt yok ·
+// swaggerEnabled=NODE_ENV!=="production" → mevcut kapı · httpsEnabled=false →
+// HSTS kapalı · rateLimit.enabled=false → middleware hiç MOUNT EDİLMEZ).
+const hardening = readWebHardeningConfig();
+
+// ⚠️⚠️ EN KRİTİK SATIR. Ters vekil (nginx/Cloudflare) arkasında `trust proxy`
+// verilmezse `req.ip` HERKES için kenar sunucusunun IP'sidir. Sonuç sessiz ve
+// yıkıcı: giriş kilidi ile hız sınırı tüm ziyaretçileri TEK kovada toplar —
+// şifresini yanlış giren ilk ziyaretçi kurulumun tamamını kilitler. Ayrıca
+// erişim log'undaki (morgan 'combined') IP de kenar IP'si olur, yani olay
+// incelemesi imkânsızlaşır.
+// Değişken yoksa Express varsayılanı (`false`) korunur — LAN'da doğrusu odur.
+if (hardening.trustProxy !== null) {
+  app.set("trust proxy", hardening.trustProxy);
+}
 
 // =============================================================================
 // Core Middlewares
@@ -101,19 +142,67 @@ const app: Express = express();
 // yalnizca http://...:4000 konustugu icin bu istekler basarisiz olur ve durum
 // sayfasi "Kontrol ediliyor..." ekraninda donar. Direktifi null'a cekip kaldir.
 // HSTS de HTTPS olmadigi icin anlamsiz (tarayici http'de zaten yok sayar).
+//
+// WEB PANELI (OPT-IN, 2026-08-12): `WEB_DIST_DIR` ortam degiskeni dolu ise web
+// paneli build'i (Electron/dist-web) ayni origin'den servis edilir — panel ile
+// API tek adreste bulusur (CORS/mixed-content/adres-ayari uclusu tamamen duser).
+// Degisken YOKKEN davranis bayt-bayt bugunku gibidir; fabrika deploy'u etkilenmez.
+const webDistDir = process.env.WEB_DIST_DIR ?? null;
 app.use(
   helmet({
     contentSecurityPolicy: {
       useDefaults: true,
-      directives: { upgradeInsecureRequests: null },
+      directives: {
+        // HTTPS_ENABLED verilmedigi surece direktif null'a cekili kalir (yukaridaki
+        // gerekce: HTTP-only sunucuda tarayici alt-istekleri https'e cevirir ve
+        // durum sayfasi donar). HTTPS arkasinda helmet varsayilani geri gelir:
+        // tum alt-istekler zaten ayni origin'den ve https uzerinden geldigi icin
+        // pratikte no-op'tur, karisik-icerige (mixed content) karsi ucuz bir seddir.
+        ...(hardening.httpsEnabled ? {} : { upgradeInsecureRequests: null }),
+        // Panel modunda header CSP'si panelin index.html'indeki meta CSP ile
+        // esitlenir (efektif politika iki CSP'nin KESISIMIdir — helmet
+        // varsayilanlari daha dar oldugu icin panelin blob: worker'lari ve
+        // data: baglantilarini sessizce kirardi). Panel modu disinda helmet
+        // varsayilanlari aynen kalir.
+        ...(webDistDir
+          ? {
+              scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+              connectSrc: ["'self'", "data:"],
+              imgSrc: ["'self'", "data:", "blob:"],
+              fontSrc: ["'self'", "data:"],
+              frameSrc: ["'self'", "blob:"],
+              workerSrc: ["'self'", "blob:"],
+            }
+          : {}),
+      },
     },
-    strictTransportSecurity: false,
+    // HSTS: HTTP-only LAN kurulumunda yalnizca anlamsiz DEGIL, TEHLIKELIDIR —
+    // tarayici basligi bir kez gordugunde o host icin https'i AYLARCA zorunlu
+    // kilar; sunucu 443 dinlemedigi icin panel acilmaz ve geri donus sunucuda
+    // degil kullanicinin HSTS onbelleginde oldugu icin uzaktan duzeltilemez.
+    // Bu yuzden ortamin TAHMINIYLE degil operatorun BEYANIYLA (HTTPS_ENABLED) acilir.
+    ...(hardening.httpsEnabled
+      ? { strictTransportSecurity: { maxAge: HSTS_MAX_AGE_SEC, includeSubDomains: true } }
+      : { strictTransportSecurity: false }),
   })
 );
 // exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
 // header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
 // guard'ı buna bakar) + sunucu saati (apiClient offset) okunabilsin diye gerekli.
-app.use(cors({ exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"] }));
+//
+// ⚠️ ORIGIN KISITI OPT-IN. Varsayılan (CORS_ORIGINS yok) kısıtsız kalır ve bu
+// LAN'da bilinçlidir: fabrikada panel/tablet birden çok origin'den konuşuyor
+// (Electron renderer, http://<lan-ip>, WEB_DIST_DIR modunda aynı origin) ve
+// listeyi eksik yazmak sahayı sessizce durdururdu. İnternete açılırken liste
+// verilir; `cors` yalnız eşleşen origin'i yansıtır, eşleşmeyene ACAO başlığını
+// HİÇ basmaz ve `Vary: Origin` ekler.
+// ⚠️ CORS BİR YETKİ DUVARI DEĞİLDİR — yalnız tarayıcıyı bağlar (curl/mobil
+// istemci etkilenmez). Uçların asıl koruması `verifyToken` + `requirePermission`;
+// origin listesi onların YERİNE geçmez.
+app.use(cors({
+  exposedHeaders: ["X-Label-Language", "X-Label-Kind", "X-Label-Count", "X-Label-Template-Id", "X-Label-Variant-Match", "Date"],
+  ...(hardening.corsOrigins ? { origin: hardening.corsOrigins } : {}),
+}));
 // gzip + brotli yoksa sıkıştır — JSON listelerde 60-80% boyut tasarrufu.
 // 1KB altı response'lar atlanır (overhead'e değmez).
 app.use(compression({ threshold: 1024 }));
@@ -159,7 +248,16 @@ app.use(
 // =============================================================================
 // Swagger UI Documentation
 // =============================================================================
-setupSwagger(app);
+// ⚠️ İKİ KAPI, İKİSİ DE FAIL-CLOSED. `setupSwagger` zaten `NODE_ENV==="production"`
+// iken erken dönüyor; buradaki kapı ONU KALDIRMAZ, ÖNÜNE geçer. Sebep: internete
+// açılan demo `NODE_ENV=production` ile koşmak ZORUNDA değil (dev modda daha hızlı
+// teşhis edilebilir) ve o durumda iç API şeması — tüm uç adları, gövde şemaları,
+// izin isimleri — kimliksiz herkese açık olurdu. `SWAGGER_ENABLED=false` ortamdan
+// bağımsız kapatır. Tersi çalışmaz ve bu bilinçlidir: `SWAGGER_ENABLED=true`
+// üretimde de mount ETMEZ, çünkü içerideki eski kapı hâlâ yerinde durur.
+if (hardening.swaggerEnabled) {
+  setupSwagger(app);
+}
 
 // =============================================================================
 // Durum Sayfası (kök /) + statik varlıklar
@@ -170,6 +268,13 @@ setupSwagger(app);
 // helmet'in varsayılan CSP'si inline script'i bloklar; harici 'self' dosyalar geçer.
 // CWD = backend kökü (dev) veya app\ (üretimde pm2 `cwd`) → her ikisinde de
 // public\ klasörü bunun altındadır.
+// Web paneli statigi DURUM SAYFASINDAN ONCE baglanir: panel modunda kok (/)
+// artik paneldir (durum bilgisi /health'te yasamaya devam eder). Env yokken bu
+// blok hic kosmaz ve kok, asagidaki durum sayfasidir.
+if (webDistDir) {
+  app.use(express.static(webDistDir));
+}
+
 const publicDir = path.join(process.cwd(), "public");
 app.use(express.static(publicDir));
 
@@ -615,6 +720,32 @@ app.get("/health", async (_req: Request, res: Response) => {
 });
 
 // =============================================================================
+// Hız sınırı (OPT-IN — RATE_LIMIT_ENABLED)
+// =============================================================================
+// ⚠️ KAPALIYKEN MOUNT BİLE EDİLMEZ: bayrak yoksa aşağıdaki blok hiç koşmaz,
+// middleware zincirine tek layer eklenmez, istek başına tek satır kod çalışmaz.
+// "Devre dışı bir middleware'i her isteğe takmak" fabrikada ölçülebilir bir
+// maliyet olmasa da sıfır-fark iddiasını zayıflatırdı.
+//
+// KONUM: route kayıtlarından hemen ÖNCE, morgan + latency'den SONRA. İkincisi
+// F-CORE-OPS-003 dersinin aynısı — reddedilen istek de erişim log'una ve gecikme
+// metriğine düşmeli, yoksa 429 fırtınasına girmiş bir istemci hiçbir panoda
+// görünmez. Statik varlıklar ve `/health` kapsam DIŞI (sınıflandırma yalnız
+// /api altındaki YAZMA metodlarını ve üç giriş ucunu sayar).
+if (hardening.rateLimit.enabled) {
+  app.use(
+    "/api",
+    createRateLimiter({
+      windowMs: hardening.rateLimit.windowMs,
+      limits: { login: hardening.rateLimit.loginMax, write: hardening.rateLimit.writeMax },
+      // ⚠️ Giriş kilidiyle AYNI istemci kaynağı: biri kenar IP'sini, diğeri
+      // gerçek ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
+      clientIpHeader: hardening.clientIpHeader,
+    }),
+  );
+}
+
+// =============================================================================
 // API Routes
 // =============================================================================
 app.use("/api/auth", authRoutes);
@@ -657,6 +788,40 @@ app.use("/api/document-profiles", documentProfileRoutes);
 app.use("/api/free-documents", freeDocumentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
+app.use("/api/warehouses", warehouseRoutes);
+app.use("/api/goods-receipts", goodsReceiptRoutes);
+// Paket D — iplik kg-defteri · kalem fiyatı · alış siparişi. Üçü de ticaret
+// rejimine ait; fabrikada `finance.enabled` kapalı olduğu için hepsi 403 döner
+// (bekçi: scripts/test_finance_regime_gate.ts).
+app.use("/api/yarn", yarnRoutes);
+app.use("/api/item-prices", itemPriceRoutes);
+app.use("/api/purchase-orders", purchaseOrderRoutes);
+app.use("/api/warehouse-transfers", warehouseTransferRoutes);
+// Tam stok sayımı (J2 #19) — kendi `verifyToken + requireFinanceEnabled`
+// kapısını taşır; fark fişi TOP ve İPLİK defterlerine yazdığı için rejim kapısı
+// pazarlık dışıdır (bekçi: scripts/test_finance_regime_gate.ts).
+app.use("/api/stock-counts", stockCountRoutes);
+// Ön muhasebe — router'ın KENDİSİ `requireFinanceEnabled` taşır (bayrak
+// kapalıysa hepsi 403). Tek tek uçlarda tekrarlanmaz.
+// ⚠️ Çek/senet router'ı DAHA SPESİFİK prefix taşıdığı için `/api/finance`ten
+// ÖNCE kaydedilir: sonra kaydedilseydi istek önce finance router'ına girer,
+// orada eşleşme bulamayıp çıkar ve `verifyToken` + `requireFinanceEnabled`
+// (bir ayar okuması) her çek isteğinde İKİ KEZ koşardı.
+app.use("/api/finance/cheques", chequeRoutes);
+// Dönem kapanışı (C3) — AYNI gerekçe, aynı sıra kuralı. Kendi kapısını taşıyan
+// her ön muhasebe router'ı buraya, `/api/finance`ten ÖNCE bağlanır; kapısını
+// MİRAS ALAN alt router (`/allocations`) ise `finance.routes.ts` İÇİNE bağlanır.
+// İkisini karıştırmak ya kapıyı ikilemek ya da hiç koşmamasına yol açar.
+app.use("/api/finance/period-closes", financePeriodRoutes);
+// Kasa/banka dönem kapanışı (K-1) — aynı desen, aynı sıra kuralı.
+app.use("/api/finance/cash-period-closes", cashPeriodRoutes);
+// Resmi ön muhasebe belgeleri (J2 #18) — aynı desen, aynı sıra kuralı: kendi
+// `verifyToken + requireFinanceEnabled` kapısını taşıdıkları için `/api/finance`
+// GENEL ön ekinden ÖNCE bağlanırlar (sonra bağlansalardı her istek önce finance
+// router'ına girer, eşleşme bulamayıp çıkar ve kapı iki kez koşardı).
+app.use("/api/finance/reconciliation-letters", reconciliationLetterRoutes);
+app.use("/api/finance/cheque-delivery-notes", chequeDeliveryNoteRoutes);
+app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
 // Servis keşfi — KİMLİKSİZ ve DB'siz. İstemci sunucuyu ağda bulduktan sonra
@@ -721,6 +886,24 @@ app.use("/api", (req: Request, res: Response) => {
     message: `Endpoint bulunamadı: ${req.method} ${req.originalUrl}`,
   });
 });
+
+// =============================================================================
+// SPA fallback (yalniz panel modunda) — /api* disindaki HTML isteyen GET'ler
+// panelin index.html'ine duser. Panel HashRouter kullandigi icin bugun derin
+// yol istegi zaten gelmez ("/" + asset'ler yeter); bu blok, router ileride
+// BrowserRouter'a gecerse yenileme/derin baglanti 404'lerini simdiden kapatir.
+// =============================================================================
+if (webDistDir) {
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method !== "GET") return next();
+    if (req.path.startsWith("/api")) return next(); // JSON 404 sozlesmesi bozulmasin
+    if (!req.accepts("html")) return next();
+    // `root` opsiyonu SART: mutlak yol verilirse `send` yolun ICINDEKI nokta
+    // segmentlerini (orn. gelistirme worktree'sindeki `.claude/`) gizli dosya
+    // sayip 404 uretir; root'a gore "index.html" ise nokta segmenti tasimaz.
+    res.sendFile("index.html", { root: webDistDir });
+  });
+}
 
 // =============================================================================
 // Global Error Handler (must be LAST middleware)

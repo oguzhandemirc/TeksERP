@@ -1,6 +1,7 @@
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { definitionTiles, type DefinitionTile } from "./tile-config";
 import { definitionGroups, type DefinitionGroupKey } from "./groups-config";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
@@ -12,7 +13,11 @@ export function DefinitionsHubPage() {
   // admin:*) her kartı görür. `permissionAny` taşıyan kartlar için tek tek
   // izin aranır — belge tasarım kartları böyle, çünkü dar izinli kullanıcı
   // (document-template:*) admin DEĞİLDİR ve kısa devreden faydalanamaz.
+  const visibilityCtx = useOperationsVisibilityContext();
   const visibleTiles = definitionTiles.filter((t) => {
+    // Rejim kuralı İZİNDEN ve admin kısa devresinden ÖNCE: kurulum türü
+    // sorusudur, yetki değil — admin de fabrika rejiminde Cariler'i görmez.
+    if (t.visibleWhen && !t.visibleWhen(visibilityCtx)) return false;
     if (isAdmin) return true;
     if (t.permissionAny) return hasAnyPermission(t.permissionAny);
     return !t.permission || hasPermission(t.permission);

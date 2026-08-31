@@ -1,6 +1,7 @@
 import {
   Activity,
   Building2,
+  Calculator,
   Factory,
   ShieldCheck,
   Truck,
@@ -16,6 +17,7 @@ import { inventoryReportTiles } from "./Inventory/tile-config";
 import { subcontractReportTiles } from "./Subcontract/tile-config";
 import { customerReportTiles } from "./Customer/tile-config";
 import { auditReportTiles } from "./Audit/tile-config";
+import { financeReportTiles } from "./Finance/tile-config";
 
 export interface ReportTile {
   key: string;
@@ -24,6 +26,16 @@ export interface ReportTile {
   icon: LucideIcon;
   to: string;
   permission?: string;
+  /**
+   * Bu karo yalnız ilgili REJİM bayrağı AÇIKKEN çizilir (`nav-config.ts` deseni).
+   *
+   * ⚠️ İzin filtresi TEK BAŞINA YETMEZ: `ReportsHubPage` süzgeci `isAdmin ||`
+   * ile kısa devre yapıyor, yani `report:finance` taşımayan bir ADMİN bile
+   * karoyu görürdü — tıklayınca üç ucun üçü de `requireFinanceEnabled` ile 403
+   * döner ve kullanıcı sebebi hiçbir yerde göremez. Bayrak GÖRÜNÜRLÜK,
+   * izin KİŞİ kapısıdır; ikisi birbirinin yerine geçmez.
+   */
+  featureFlag?: "financeEnabled";
 }
 
 /**
@@ -38,6 +50,7 @@ export const reportCategoryTiles: Record<string, HubTile[]> = {
   subcontract: subcontractReportTiles,
   customer: customerReportTiles,
   audit: auditReportTiles,
+  finance: financeReportTiles,
 };
 
 /** Kategori başlığı — rail'in tepesinde gösterilir. */
@@ -49,6 +62,7 @@ export const reportCategoryTitle: Record<string, string> = {
   subcontract: "Fason",
   customer: "Müşteri",
   audit: "Denetim",
+  finance: "Ön Muhasebe",
 };
 
 export const reportTiles: ReportTile[] = [
@@ -107,5 +121,16 @@ export const reportTiles: ReportTile[] = [
     icon: Activity,
     to: "/reports/audit",
     permission: "report:audit",
+  },
+  // Paket C4 (2026-08-14) — ticaret rejimine ait; fabrikada `finance.enabled`
+  // KAPALI olduğu için bu karo orada HİÇ çizilmez.
+  {
+    key: "finance",
+    title: "Ön Muhasebe",
+    description: "Cari yaşlandırma, kasa & banka defteri, cari ekstre",
+    icon: Calculator,
+    to: "/reports/finance",
+    permission: "report:finance",
+    featureFlag: "financeEnabled",
   },
 ];

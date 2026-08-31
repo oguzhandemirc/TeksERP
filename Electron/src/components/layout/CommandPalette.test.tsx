@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
+import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config";
 import { CommandPalette } from "./CommandPalette";
 
 /**
@@ -23,9 +24,17 @@ vi.mock("@/hooks/useRoleAccess", () => ({
     hasAllPermissions: (ps: string[]) => ps.every((p) => permissions.includes(p)),
   }),
 }));
+// ⚠️ BAĞLAM TAM ve TİPLİ verilir. Eksik alan `undefined` gelir ve o alana bakan
+// her `visibleWhen` yüklemi SESSİZCE false döner — yani palet girişi kaybolur
+// ama test "izin/katalog hatası" diye okunur. Dönüş tipini yazmak, bağlama yeni
+// bir alan eklendiği gün bu mock'u DERLEME zamanında düşürür.
+let regime = { productionEnabled: true, financeEnabled: false };
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
-  useOperationsVisibilityContext: () => ({
+  useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
     shipmentConfirmationEnabled: false,
+    pendingPlannedShipments: 0,
+    multiWarehouse: false,
+    ...regime,
   }),
 }));
 vi.mock("@/hooks/useFavorites", () => ({
@@ -58,6 +67,7 @@ const type = (text: string) =>
 describe("CommandPalette", () => {
   beforeEach(() => {
     permissions = ["report:production", "roll:read", "workorder:read", "admin:settings", "admin:users"];
+    regime = { productionEnabled: true, financeEnabled: false };
     openTab.mockClear();
   });
 
@@ -113,6 +123,25 @@ describe("CommandPalette", () => {
     const exact = labels.findIndex((l) => l.includes("Müşteri Karnesi"));
     const viaDescription = labels.findIndex((l) => l.includes("Sipariş İptal Karnesi"));
     expect(exact).toBeLessThan(viaDescription);
+  });
+
+  /**
+   * REJİM PARİTESİ — palet, ayarlar ekranında GİZLİ olan bir sekmeye derin
+   * bağlantı vermemeli. Fabrikada (finance kapalı) "Depo & Muhasebe" bölümü
+   * çizilmiyor; paletten seçilseydi kullanıcı `?tab=finance` ile gider ve sayfa
+   * sessizce başka bir sekmeye düşerdi ("Kurşun Sırası" dersi).
+   */
+  it("fabrikada (muhasebe kapalı) muhasebe ayar girişi paletten düşer", () => {
+    open();
+    type("risk limiti");
+    expect(screen.queryByText(/risk limiti aşımında/i)).not.toBeInTheDocument();
+  });
+
+  it("ticarette (muhasebe açık) aynı ayar girişi paletten bulunur", async () => {
+    regime = { productionEnabled: true, financeEnabled: true };
+    open();
+    type("risk limiti");
+    expect(await screen.findByText(/risk limiti aşımında/i)).toBeInTheDocument();
   });
 
   it("seçim hedefi sekme olarak açar — varsa odaklar (yeni PENCERE açmaz)", () => {

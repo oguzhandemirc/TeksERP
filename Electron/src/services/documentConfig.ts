@@ -246,6 +246,23 @@ export interface DocDef {
    *  YALNIZ önizleme çerçevesini çizmek için kullanılır; sapma baskıyı etkilemez
    *  (baskıda gerçek değer backend'den gelir). */
   defaultMarginMm?: number;
+  /**
+   * TİCARET REJİMİNE AİT BELGE — `finance.enabled` kapalıyken Belge Şablonları
+   * seçicisinde LİSTELENMEZ.
+   *
+   * ⚠️ ÖLÇÜT: belgenin KAYNAĞI fabrika kurulumunda var olabilir mi? Kaynağını
+   * yazan uçlar `requireFinanceEnabled` arkasındaysa o belge fabrikada TANIM
+   * GEREĞİ doğamaz; şablonunu ayarlatmak "hiç basılmayacak bir kâğıdın
+   * yerleşimini kurcalatmak"tır ve "sıfır görünür fark" garantisini bozar.
+   *
+   * ⚠️ `depoTransfer` ve `malKabul` BİLEREK İŞARETSİZ: `warehouse-transfer
+   * .routes` ve `goods-receipt.routes` rejim kapısı TAŞIMAZ (depo defterini
+   * fabrika yolları da yazıyor — KK1 girişi/sevk/iade; mal kabul ise İZİNLE
+   * kapılı). Kaynakları fabrikada meşru olduğu için belgeleri de meşrudur.
+   * Bu alanı bir belgeye eklemeden önce sorulacak soru "ticaret gibi mi
+   * duruyor" değil, "kaynağını yazan uç rejim kapılı mı" olmalıdır.
+   */
+  requiresFinance?: boolean;
 }
 
 /**
@@ -301,6 +318,15 @@ export const DOC_TYPE_TO_KEY: Record<string, string> = {
   SUBCONTRACTOR_RECEIPT: "fasonKabul",
   QUALITY_CERTIFICATE: "kaliteSertifikasi",
   RETURN_DISPATCH: "iadeIrsaliyesi",
+  TRANSFER_DISPATCH: "depoTransfer",
+  GOODS_RECEIPT: "malKabul",
+  INVOICE_INTERNAL: "fatura",
+  PAYMENT_RECEIPT: "tahsilatMakbuzu",
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18).
+  RECONCILIATION_LETTER: "mutabakatMektubu",
+  CHEQUE_DELIVERY_NOTE: "cekTeslimBordrosu",
+  // Tam stok sayımı (2026-08-15, J2 #19) — depo belgesi ailesi.
+  STOCK_COUNT: "stokSayimi",
 };
 
 /**
@@ -432,6 +458,159 @@ export const DOC_FIELD_CATALOGS: Record<string, DocFieldDef[]> = {
     { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
     { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
     { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // ── Ticaret paketi: iç depo belgeleri (2026-08-13) ────────────────────────
+  // Backend'de `depoTransfer` / `malKabul` (doc-fields.ts) — bekçi ikisinin
+  // birebirliğini mekanik doğrular (test_doc_density_fields).
+  depoTransfer: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  malKabul: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // Stok sayım tutanağı (2026-08-15, J2 #19) — transfer/mal kabul ile AYNI
+  // iskelet (`warehouse-doc.html.ts` üçünü tek gövdeden basar), dolayısıyla
+  // alan listesi de birebir aynı sırada.
+  stokSayimi: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // Ön muhasebe çıktıları — backend `doc-fields.ts` ile BİREBİR (sıra dahil).
+  fatura: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  tahsilatMakbuzu: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+  ],
+  // ── Resmi ön muhasebe belgeleri (2026-08-15, J2 #18) ──────────────────────
+  // Aile listesinin AYNISI + `decl` (BEYAN metni). Beyan bu iki belgede süs
+  // değil belgenin kendisidir: mektup mutabakat RİCA eder, bordro TESLİM beyan
+  // eder. Fatura/makbuzda beyan bloğu hiç basılmadığı için onlarda YOK.
+  mutabakatMektubu: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+    { key: "decl", label: "Beyan metni", group: "footer" },
+  ],
+  cekTeslimBordrosu: [
+    { key: "company", label: "Firma adı", group: "header" },
+    { key: "letterhead", label: "Künye satırları (adres/tel/vergi)", group: "header" },
+    { key: "sayinLabel", label: '"SAYIN:" etiketi', group: "header" },
+    { key: "sayin", label: "Müşteri / firma adı", group: "header" },
+    { key: "subLine", label: "Alt bilgi satırı (kod / vergi no)", group: "header" },
+    { key: "title", label: "Belge başlığı", group: "header" },
+    { key: "lnLabel", label: "Sağ blok etiketleri (Belge No: / Tarih:)", group: "header" },
+    { key: "lnValue", label: "Sağ blok DEĞERLERİ (belge no, tarih…)", group: "header" },
+    { key: "vehicle", label: "Araç / referans satırı", group: "header" },
+    { key: "secHead", label: "Tablo başlıkları", group: "table" },
+    { key: "secCell", label: "Tablo hücreleri", group: "table" },
+    { key: "secTot", label: "TOPLAM satırı", group: "table" },
+    { key: "note", label: "Not / alt bilgi", group: "footer" },
+    { key: "signLabel", label: "İmza etiketleri", group: "footer" },
+    { key: "stamp", label: "Basım damgası (tarih / basan)", group: "footer" },
+    { key: "boxTitle", label: "Kutu başlığı", group: "boxes" },
+    { key: "boxRow", label: "Kutu satırı (etiket + değer)", group: "boxes" },
+    { key: "secCaption", label: "Liste başlığı (tablo içi)", group: "table" },
+    { key: "decl", label: "Beyan metni", group: "footer" },
   ],
 };
 
@@ -723,6 +902,227 @@ export const DOC_DEFS: DocDef[] = [
           { key: "width", label: "En" },
           { key: "grade", label: "Kalite" },
           { key: "qty", label: "Metre" },
+        ],
+      },
+    ],
+  },
+  // ── Ticaret paketi: iç depo belgeleri (müşteriye gitmez) ──────────────────
+  {
+    key: "depoTransfer",
+    label: "Depo Transfer İrsaliyesi",
+    defaultTitle: "Depo Transfer İrsaliyesi",
+    fields: DOC_FIELD_CATALOGS.depoTransfer,
+    defaultSignatures: ["Teslim Eden", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "createdBy", label: "Düzenleyen" },
+      { key: "rollTable", label: "Taşınan top tablosu" },
+    ],
+    tables: [
+      {
+        key: "rollTable",
+        label: "Taşınan Toplar",
+        columns: [
+          { key: "barcode", label: "Barkod" },
+          { key: "itemColor", label: "Ürün / renk" },
+          { key: "width", label: "En" },
+          { key: "qty", label: "Metre" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "malKabul",
+    label: "Mal Kabul Fişi",
+    defaultTitle: "Mal Kabul Fişi",
+    fields: DOC_FIELD_CATALOGS.malKabul,
+    defaultSignatures: ["Teslim Eden (Tedarikçi)", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "deliveryNote", label: "Tedarikçi irsaliye no" },
+      { key: "createdBy", label: "Teslim alan" },
+      { key: "rollTable", label: "Kabul edilen top tablosu" },
+    ],
+    tables: [
+      {
+        key: "rollTable",
+        label: "Kabul Edilen Toplar",
+        columns: [
+          { key: "barcode", label: "Barkod" },
+          { key: "itemColor", label: "Ürün / renk" },
+          { key: "width", label: "En" },
+          { key: "qty", label: "Metre" },
+        ],
+      },
+    ],
+  },
+  {
+    // ⚠️ Bölüm/kolon anahtarları `warehouse-doc.renderStockCountHtml`in
+    // okuduklarıyla BİREBİR olmak zorunda — ayrışırsa panelde ayar görünür ama
+    // belgede karşılığı olmaz ("ayar var, kapısı yok").
+    key: "stokSayimi",
+    // Rejim: stok sayımı `stock-count.routes` (router.use requireFinanceEnabled) → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
+    label: "Stok Sayım Tutanağı",
+    defaultTitle: "Stok Sayım Tutanağı",
+    fields: DOC_FIELD_CATALOGS.stokSayimi,
+    // ⚠️ ÜÇ imza, "Teslim Eden / Teslim Alan" DEĞİL: bu kâğıtla teslim edilen
+    // bir şey yok. Sayan · kontrol · onay ayrımı, fark fişinin arkasındaki
+    // görev ayrılığının kâğıt üzerindeki karşılığıdır (renderer ile aynı).
+    defaultSignatures: ["Sayan", "Kontrol Eden", "Onaylayan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "countStatus", label: "Sayım durumu (taslak / tamamlandı)" },
+      { key: "createdBy", label: "Sayımı açan / tamamlayan" },
+      { key: "rollTable", label: "Sayım listesi — toplar" },
+      { key: "yarnTable", label: "Sayım listesi — iplik (kg)" },
+      // ⚠️ Fark özeti KAPATILABİLİR ama varsayılan AÇIK: tutanağın kanıt değeri
+      // (kaç top düşüldü, kaç kg fark yazıldı) tam olarak bu bloktadır.
+      { key: "countSummary", label: "Fark özeti bloğu" },
+    ],
+    tables: [
+      {
+        key: "rollTable",
+        label: "Sayım Listesi — Toplar",
+        columns: [
+          { key: "barcode", label: "Barkod" },
+          { key: "itemColor", label: "Ürün / renk" },
+          { key: "expectedQty", label: "Beklenen (defter)" },
+          { key: "countedQty", label: "Sayılan" },
+          // "Durum" kolonu kapsam-dışı SEBEBİNİ de taşır; kapatmak, atlanan
+          // satırların nedenini kâğıttan siler.
+          { key: "state", label: "Durum" },
+        ],
+      },
+    ],
+  },
+  {
+    // ⚠️ `sections` ve `columns` anahtarları renderer'ın okuduklarıyla BİREBİR
+    // olmak zorunda (`finance-doc.html.ts`) — ayrışırsa panelde ayar görünür
+    // ama belgede karşılığı olmaz ("ayar var, kapısı yok").
+    key: "fatura",
+    // Rejim: fatura `finance.routes` (router seviyesinde requireFinanceEnabled) → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
+    label: "Fatura (İç)",
+    defaultTitle: "Satış Faturası",
+    fields: DOC_FIELD_CATALOGS.fatura,
+    defaultSignatures: ["Düzenleyen", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "dueDate", label: "Vade" },
+      { key: "externalNo", label: "Belge / irsaliye no" },
+      { key: "createdBy", label: "Düzenleyen" },
+      { key: "lineTable", label: "Kalem tablosu" },
+      { key: "totals", label: "Toplam bloğu" },
+    ],
+    tables: [
+      {
+        key: "lineTable",
+        label: "Fatura Kalemleri",
+        columns: [
+          { key: "description", label: "Açıklama" },
+          { key: "qty", label: "Miktar" },
+          { key: "unitPrice", label: "Birim fiyat" },
+          { key: "discountRate", label: "İskonto %" },
+          { key: "vatRate", label: "KDV %" },
+          { key: "lineNet", label: "Tutar" },
+        ],
+      },
+    ],
+  },
+  {
+    // ⚠️ MAKBUZDA SATIR TABLOSU YOK — makbuz TEK bir olayı belgeler. `tables: []`
+    // bilinçli: boş bir tablo tanımı panelde "kolonları ayarla" vaadi verir ve
+    // karşılığı olmayan bir ayar üretir.
+    key: "tahsilatMakbuzu",
+    // Rejim: tahsilat/ödeme `finance.routes` → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
+    label: "Tahsilat / Ödeme Makbuzu",
+    defaultTitle: "Tahsilat Makbuzu",
+    fields: DOC_FIELD_CATALOGS.tahsilatMakbuzu,
+    defaultSignatures: ["Ödeyen", "Tahsil Eden"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Tarih" },
+      { key: "account", label: "Kasa / banka" },
+      { key: "createdBy", label: "Düzenleyen" },
+    ],
+    tables: [],
+  },
+  {
+    // ⚠️ `sections`/`columns` anahtarları renderer'ın okuduklarıyla BİREBİR
+    // (`finance-doc.renderReconciliationLetterHtml`).
+    key: "mutabakatMektubu",
+    // Rejim: `reconciliation-letter.routes` kendi rejim kapısını taşır → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
+    label: "Mutabakat Mektubu",
+    defaultTitle: "Cari Mutabakat Mektubu",
+    fields: DOC_FIELD_CATALOGS.mutabakatMektubu,
+    // ⚠️ İmza etiketleri "Teslim Eden / Teslim Alan" DEĞİL: bu kâğıtla teslim
+    // edilen bir şey yok, karşı taraftan MUTABAKAT beyanı isteniyor.
+    defaultSignatures: ["Düzenleyen", "Mutabıkız — Kaşe / İmza"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Düzenleme tarihi" },
+      // ⚠️ "Bakiye tarihi" düzenleme tarihinden FARKLI bir gün olabilir ve
+      // mektubun ANLATTIĞI dönem odur — kapatmak kâğıdı tarihsiz bırakır.
+      { key: "asOf", label: "Bakiye tarihi (kesit)" },
+      { key: "createdBy", label: "Düzenleyen" },
+      { key: "balanceTable", label: "Bakiye dökümü tablosu" },
+      { key: "declaration", label: "Mutabakat rica metni" },
+    ],
+    tables: [
+      {
+        key: "balanceTable",
+        label: "Bakiye Dökümü",
+        columns: [
+          { key: "currency", label: "Para birimi" },
+          { key: "debit", label: "Borç" },
+          { key: "credit", label: "Alacak" },
+          { key: "balance", label: "Bakiye (mutlak)" },
+          // Tutar MUTLAK basılır; işaretin anlamı bu kolondadır (BORÇ/ALACAK/
+          // KAPALI). Kolonu kapatmak bakiyeyi YÖNSÜZ bırakır.
+          { key: "side", label: "Durum (Borç / Alacak)" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "cekTeslimBordrosu",
+    // Rejim: `cheque-delivery-note.routes` kendi rejim kapısını taşır → fabrikada kaynak DOĞAMAZ, şablon listelenmez.
+    requiresFinance: true,
+    label: "Çek / Senet Teslim Bordrosu",
+    // ⚠️ GERÇEK başlık YÖNDEN gelir ("Alınan …" / "Verilen …"); buradaki değer
+    // yalnız panelin varsayılanı ve override edilmediğinde renderer kendi
+    // yön etiketli başlığını basar (fatura/makbuzdaki durumun aynısı).
+    defaultTitle: "Çek / Senet Teslim Bordrosu",
+    fields: DOC_FIELD_CATALOGS.cekTeslimBordrosu,
+    defaultSignatures: ["Teslim Eden", "Teslim Alan"],
+    sections: [
+      { key: "documentNo", label: "Belge no" },
+      { key: "date", label: "Teslim tarihi" },
+      { key: "createdBy", label: "Düzenleyen" },
+      { key: "chequeTable", label: "Çek / senet tablosu" },
+      { key: "declaration", label: "Teslim beyanı metni" },
+    ],
+    tables: [
+      {
+        key: "chequeTable",
+        label: "Teslim Edilen Çek / Senetler",
+        columns: [
+          { key: "no", label: "Sıra" },
+          { key: "docNo", label: "Belge no" },
+          { key: "serialNo", label: "Seri no" },
+          { key: "issueDate", label: "Keşide" },
+          { key: "dueDate", label: "Vade" },
+          { key: "drawer", label: "Keşideci" },
+          { key: "bank", label: "Banka" },
+          { key: "currency", label: "Para birimi" },
+          { key: "amount", label: "Tutar" },
         ],
       },
     ],

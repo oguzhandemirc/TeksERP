@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Plus, Trash2, PackagePlus, Package, Info, StickyNote, X } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { useItemPriceSuggestion, describeSuggestion } from "@/hooks/useItemPriceSuggestion";
 import { usePulseSync } from "@/hooks/usePulseSync";
 import { itemService } from "@/pages/Items/service";
 import type { Item, ItemCreatePayload } from "@/pages/Items/types";
@@ -26,11 +27,69 @@ interface Props {
   onChange: (next: OrderLineFormValues[]) => void;
   error?: string;
   lineErrors?: (LineError | undefined)[];
-  /** Müşterinin aliası — alias suggest için. */
+  /** Müşterinin aliası — alias suggest için; fiyat önerisinde müşteri istisnası. */
   customerId: string | null;
+  /**
+   * Siparişin para birimi — SATIŞ fiyat önerisinin (`resolveItemPrice` SALE)
+   * anahtarı. Verilmezse (ya da serbest metinse — alan max 8 karakter serbest)
+   * öneri isteği HİÇ atılmaz; fiyat alanı bugünkü gibi elle kalır.
+   */
+  currency?: string;
 }
 
-export function OrderLinesEditor({ value, onChange, error, lineErrors, customerId }: Props) {
+/**
+ * Birim fiyat hücresi — kalem seçilince satış fiyatı önerisi (D2/F2).
+ *
+ * Ayrı bileşen, süs değil: öneri kancası satır başınadır ve kancalar `map`
+ * içinde çağrılamaz. Yazma kuralı ortak saf yüklemde (`shouldApplySuggestion`):
+ * boşken doldur · kullanıcının yazdığını ASLA ezme · kaynak değişince yalnız
+ * bizim yazdığımız değeri tazele. `financeEnabled` kapısı kancanın içindedir —
+ * fabrika görünümünde istek HİÇ atılmaz (403 üretirdi).
+ */
+function OrderLinePriceField({
+  line, customerId, currency, onPatch,
+}: {
+  line: OrderLineFormValues;
+  customerId: string | null;
+  currency: string | null;
+  onPatch: (patch: Partial<OrderLineFormValues>) => void;
+}) {
+  const patchRef = useRef(onPatch);
+  patchRef.current = onPatch;
+  const suggestion = useItemPriceSuggestion({
+    itemId: line.itemId || null,
+    kind: "SALE",
+    currency,
+    customerId,
+    current: line.unitPrice ?? "",
+    // Sipariş formu fiyatı STRING tutar (schema.ts) — sayı string'e çevrilir,
+    // temizlik boş string yazar.
+    onApply: (p) => patchRef.current({ unitPrice: p === null ? "" : String(p) }),
+  });
+  const helper = describeSuggestion({
+    price: suggestion.price,
+    source: suggestion.source,
+    message: suggestion.message,
+    current: line.unitPrice ?? "",
+  });
+
+  return (
+    <div className="col-span-4 sm:col-span-2">
+      <Input
+        className="text-sm w-full"
+        type="number"
+        step="0.01"
+        min={0}
+        placeholder="Birim fiyat"
+        value={line.unitPrice ?? ""}
+        onChange={(e) => onPatch({ unitPrice: e.target.value })}
+      />
+      {helper && <p className="mt-1 text-[10px] text-muted-foreground">{helper}</p>}
+    </div>
+  );
+}
+
+export function OrderLinesEditor({ value, onChange, error, lineErrors, customerId, currency }: Props) {
   const qc = useQueryClient();
   const pricingEnabled = usePricingEnabled();
   const [quickAddForLine, setQuickAddForLine] = useState<string | null>(null);
@@ -208,14 +267,11 @@ export function OrderLinesEditor({ value, onChange, error, lineErrors, customerI
                   }
                 />
                 {pricingEnabled && (
-                  <Input
-                    className="col-span-4 sm:col-span-2 text-sm"
-                    type="number"
-                    step="0.01"
-                    min={0}
-                    placeholder="Birim fiyat"
-                    value={line.unitPrice ?? ""}
-                    onChange={(e) => updateLine(line.clientId, { unitPrice: e.target.value })}
+                  <OrderLinePriceField
+                    line={line}
+                    customerId={customerId}
+                    currency={currency ?? null}
+                    onPatch={(p) => updateLine(line.clientId, p)}
                   />
                 )}
                 <div className="col-span-12">

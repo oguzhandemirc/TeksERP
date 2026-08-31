@@ -15,6 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge, workOrderStatusTones } from "@/components/operations/StatusBadge";
 import { workOrderStatusLabels } from "@/types/enums";
+import { shipmentStatusLabels, type ShipmentStatus } from "@/pages/Operations/Shipments/types";
 import { orderService } from "./service";
 import { reasonPresetService } from "@/pages/ReasonPresets/service";
 import type {
@@ -209,8 +210,13 @@ export function OrderCancelDialog({
             </div>
             <div className="mt-1 text-xs text-muted-foreground">
               Önce şu sevkiyat(lar) tamamlanmalı veya iptal edilmeli:{" "}
+              {/* Ham enum YASAK — engeli OKUYAMAYAN operatör engeli çözemez.
+                  Sözlük tek kaynak: `Shipments/types.shipmentStatusLabels`. */}
               {preview.activeShipments
-                .map((s) => `${s.shipmentNo} (${s.status})`)
+                .map(
+                  (s) =>
+                    `${s.shipmentNo} (${shipmentStatusLabels[s.status as ShipmentStatus] ?? s.status})`,
+                )
                 .join(", ")}
             </div>
           </div>

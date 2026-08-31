@@ -84,7 +84,17 @@ export default [
       "release/**",
       "node_modules/**",
       "dist/**",
+      // WEB hedefinin build çıktısı (`npm run build:web` → vite.config.web.ts).
+      // .gitignore'a eklenmişti ama eslint'e eklenmemişti: `npm run lint`
+      // minify edilmiş paketi tarayıp onlarca sahte hata basıyor ("'S' is
+      // defined but never used", satır 1 sütun 3671) ve gerçek hataları
+      // gürültüde boğuyordu.
+      "dist-web/**",
       "electron.vite.config.ts",
+      // Aynı sınıf: Node bağlamında koşan build yapılandırması (`process` vb.
+      // globalleri kullanır). Kardeşi `electron.vite.config.ts` zaten muaf;
+      // web hedefi eklenirken bu satır atlanmıştı.
+      "vite.config.web.ts",
     ],
   },
 ];

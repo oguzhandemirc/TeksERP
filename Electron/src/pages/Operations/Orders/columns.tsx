@@ -181,9 +181,16 @@ function DeadlineCell({ order }: { order: Order }) {
   );
 }
 
-export function buildOrderColumns(pricingEnabled: boolean): ColumnDef<Order>[] {
+/**
+ * ⚠️ İŞ EMRİ KOLONU ÜRETİM MODÜLÜ KAPALIYKEN DÜŞER (`productionEnabled`,
+ * varsayılan AÇIK — `financeEnabled` ile İLGİSİ YOK): alım-satım
+ * firması üretim yapmıyor, o kolon her satırda "İş emri yok" basıyor ve
+ * ekranın en geniş kolonlarından birini hiçbir bilgi taşımadan işgal ediyordu.
+ * Fabrikada BİREBİR bugünkü (bekçi: orders-regime.test.ts).
+ */
+export function buildOrderColumns(pricingEnabled: boolean, productionEnabled = true): ColumnDef<Order>[] {
   return [
-    ...orderColumns,
+    ...(productionEnabled ? orderColumns : orderColumns.filter((c) => c.id !== "workOrder")),
     ...(pricingEnabled
       ? [
           {

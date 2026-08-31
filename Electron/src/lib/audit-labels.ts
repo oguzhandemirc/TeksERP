@@ -131,6 +131,36 @@ export const TABLE_LABELS: Record<string, string> = {
   pairing_codes: "Eşleştirme Kodu",
   latency_stats: "Gecikme İstatistiği",
   sessions: "Oturum",
+
+  // ---------------------------------------------------------------------------
+  // TİCARET (ön muhasebe + satın alma + depo) — 2026-08-15
+  // ---------------------------------------------------------------------------
+  // ⚠️ `WAREHOUSE` BURADA "Depo" (tablo), `ENUM_LABELS`te "Depoda" (RollStatus).
+  // İki AYRI harita, iki AYRI soru — "zaten var" sanıp atlama.
+  INVOICE: "Fatura",
+  PAYMENT: "Tahsilat / Ödeme",
+  PAYMENT_ALLOCATION: "Fatura Kapama (Mahsup)",
+  CHEQUE: "Çek / Senet",
+  CHEQUE_DELIVERY_NOTE: "Çek Teslim Bordrosu",
+  CARI_ACCOUNT: "Cari Hesap",
+  CARI_PERIOD_CLOSE: "Cari Dönem Kapanışı",
+  CASH_TRANSACTION: "Kasa Hareketi",
+  CASH_PERIOD_CLOSE: "Kasa Dönem Kapanışı",
+  CASH_BOX: "Kasa",
+  BANK_ACCOUNT: "Banka Hesabı",
+  EXCHANGE_RATE: "Döviz Kuru",
+  RECONCILIATION_LETTER: "Mutabakat Mektubu",
+  GOODS_RECEIPT: "Mal Kabul Fişi",
+  PURCHASE_ORDER: "Alış Siparişi",
+  ITEM_PRICE: "Ürün Fiyatı",
+  STOCK_COUNT: "Stok Sayımı",
+  STOCK_COUNT_LINE: "Stok Sayım Satırı",
+  WAREHOUSE: "Depo",
+  WAREHOUSE_TRANSFER: "Depo Transferi",
+  YARN_MOVEMENT: "İplik Hareketi",
+
+  // Fabrika tarafında da etiketsiz kalmış olanlar (aynı tarama).
+  ROLL_QTY_ADJUST: "Top Metraj Düzeltmesi",
 };
 
 /** Ham tableName'i Türkçe etiketle. Boş → "—", bilinmeyen → ham değer. */
@@ -209,6 +239,9 @@ export function eventActionLabel(action: string): string {
 // Alan adı sözlüğü BURADA DEĞİL — `audit-field-labels.ts` (backend aynası).
 // `fieldLabel` eski çağrı noktalarını bozmamak için korunan takma addır.
 export { AUDIT_FIELD_LABELS, auditFieldLabel } from "./audit-field-labels";
+// Takma ad (merge, 2026-09-01): ticaret bekçisi (`audit-labels.trade.test.ts`)
+// sözlüğü bu adla import ediyor. İKİNCİ BİR SÖZLÜK DEĞİL — aynı nesne.
+export { AUDIT_FIELD_LABELS as FIELD_LABELS } from "./audit-field-labels";
 export { auditFieldLabel as fieldLabel } from "./audit-field-labels";
 
 /** Enum DEĞERLERİ (durum/tür kolonlarının içeriği) → Türkçe. Bilinmeyen → ham. */
@@ -439,9 +472,116 @@ export const ENUM_LABELS: Record<string, string> = {
   DOMAIN: "Veri Değişikliği",
   web: "Web",
   admin: "Yönetim",
+
+  // ---------------------------------------------------------------------------
+  // TİCARET ENUM DEĞERLERİ — 2026-08-15
+  // ---------------------------------------------------------------------------
+  // ⚠️ BU HARİTA DEĞER-KAPSAMLIDIR, alan-kapsamlı DEĞİL: aynı değer iki enum'da
+  // birden geçebilir ve etiket HER İKİSİ İÇİN DE doğru olmak zorundadır. Bağlamı
+  // satırın alan adı verir (`fieldLabel` → "Yön" / "Tür" / "Durum"):
+  //   • IN/OUT   → PaymentDirection **ve** YarnMovementKind → "Giriş"/"Çıkış"
+  //     (yön-nötr; "Tahsilat" yazmak iplik hareketinde düpedüz yanlış olurdu)
+  //   • ISSUED   → ChequeStatus (verildi) **ve** ChequeKind (kendi çekimiz)
+  //   • DRAFT    → InvoiceStatus **ve** StockCountStatus
+  // İki değer farklı enum'larda ÇELİŞİRSE alan-kapsamlı ikinci bir katman
+  // gerekir; bugün gerekmiyor ve gereksiz katman iki sözlüğü drift ettirir.
+  // ⚠️ Zaten var olanları TEKRAR EKLEME: CANCELLED · COMPLETED · ACTIVE ·
+  // CUSTOMER · SUBCONTRACTOR · OTHER · TRY/USD/EUR/GBP yukarıda tanımlı.
+
+  // InvoiceStatus / StockCountStatus
+  DRAFT: "Taslak",
+  CONFIRMED: "Onaylandı",
+  // InvoiceType
+  SALES: "Satış Faturası",
+  PURCHASE: "Alış Faturası",
+  // PriceKind.SALE — `PURCHASE` ile ÇİFT DEĞİL: `SALE` yalnız PriceKind'da
+  // geçer, dolayısıyla global etiketi çelişmez. Kardeşi `PURCHASE` ise
+  // InvoiceType ile ÇAKIŞIR ve `FIELD_ENUM_OVERRIDES` ile ayrılır. Bu satır
+  // olmadan bir SATIŞ fiyatı düzenlemesi denetimde ham "SALE" basıyordu.
+  SALE: "Satış",
+  SALES_RETURN: "Satış İadesi",
+  PURCHASE_RETURN: "Alış İadesi",
+  // PaymentDirection (Payment + CashTransaction) / YarnMovementKind
+  IN: "Giriş",
+  OUT: "Çıkış",
+  // PaymentMethod
+  CASH: "Nakit",
+  BANK_TRANSFER: "Havale / EFT",
+  CREDIT_CARD: "Kredi Kartı",
+  // CashTxnKind
+  EXPENSE: "Gider",
+  INCOME: "Gelir",
+  TRANSFER_IN: "Virman (gelen)",
+  TRANSFER_OUT: "Virman (giden)",
+  OPENING: "Açılış / Devir",
+  // ChequeStatus (metinler `Cheques/labels.STATUS_LABEL` ile aynı anlamda)
+  PORTFOLIO: "Elimizde (portföy)",
+  AT_BANK: "Bankada (tahsilde)",
+  ENDORSED: "Ciro edildi",
+  COLLECTED: "Tahsil edildi",
+  BOUNCED: "Karşılıksız",
+  RETURNED: "İade edildi",
+  PAID: "Ödendi",
+  // ChequeKind — `ISSUED` ChequeStatus ile ORTAK; etiket ikisinde de doğru.
+  RECEIVED: "Aldığımız",
+  ISSUED: "Verdiğimiz (kendi çekimiz)",
+  // PurchaseOrderStatus — `PO_STATUS_LABEL` ile aynı anlam; "Bekliyor"/"Tamamlandı"
+  // burada PENDING/COMPLETED ile çakışacağı için ayırt edici yazıldı.
+  OPEN: "Açık (mal bekleniyor)",
+  CLOSED: "Kapandı (tamamlandı)",
+  // YarnMovementKind (düzeltme kayıtları)
+  ADJUST_IN: "Düzeltme (giriş)",
+  ADJUST_OUT: "Düzeltme (çıkış)",
 };
 
-export function enumValueLabel(value: string): string {
+// =============================================================================
+// ALAN-KAPSAMLI İKİNCİ KATMAN — SADECE GERÇEK ÇELİŞKİLER İÇİN
+// =============================================================================
+// `ENUM_LABELS` DEĞER-kapsamlıdır ve paylaşılan değerlerin çoğunda bu doğrudur
+// (IN/OUT hem PaymentDirection hem YarnMovementKind için "Giriş"/"Çıkış"tır).
+// Ama iki değer farklı enum'larda GERÇEKTEN ÇELİŞİYORSA tek harita yalan söyler
+// ve dosyanın kendi uyarısı bunu zaten öngörüyordu. 2026-08-15'te iki gerçek
+// çelişki ölçüldü:
+//
+//   • `PURCHASE` → InvoiceType'ta "Alış Faturası" · PriceKind'da bir FATURA
+//     DEĞİL bir fiyat türüdür. `ITEM_PRICE` audit'i `kind: PURCHASE|SALE`
+//     yazıyor (`item-price.service`), yani bir fiyat düzenlemesinin diff'i
+//     "Tür: Alış Faturası" basıyordu; kardeşi `SALE` ise haritada HİÇ yoktu →
+//     aynı alanın iki değeri, biri yanlış Türkçe, diğeri ham İngilizce.
+//   • `ISSUED` → ChequeKind'da "Verdiğimiz (kendi çekimiz)" · ChequeStatus'ta
+//     "Verildi" (çek ekranının kendi sözlüğü: `Cheques/labels.STATUS_LABEL`).
+//     İkisi AYNI tabloda yaşadığı için tablo-kapsamlı bir katman YETMEZ.
+//
+// ⚠️ ANAHTAR `TABLO.alan` — yalnız tablo yeterli değildir (CHEQUE hem `kind`
+// hem `status` taşır), yalnız alan da yeterli değildir (`kind` bir düzine
+// tabloda geçer). Bağlam `AuditDataBlock`a `tableName` prop'uyla girer.
+// ⚠️ BU KATMAN KÜÇÜK KALMALI: her paylaşılan değer için satır eklemek iki
+// sözlüğü kaçınılmaz olarak drift ettirir. Kural — yalnız ANLAMLARI ÇELİŞEN
+// değerler buraya girer; anlamı ortak olan (IN/OUT, DRAFT) global haritada
+// kalır. Bekçi: `audit-labels.trade.test.ts` (aile bazında, bağlamıyla ölçer).
+const FIELD_ENUM_OVERRIDES: Record<string, Record<string, string>> = {
+  // PriceKind.PURCHASE — fiyat KARTI türü; "fatura" kelimesi buraya girmez.
+  // ⚠️ Kardeşi `SALE` burada YOK ve olmamalı: o değer yalnız PriceKind'da geçer,
+  // yani global "Satış" etiketi zaten doğrudur. Global cevapla AYNI olan bir
+  // override iki sözlüğü gereksizce drift ettirir (bekçi bunu reddeder).
+  "ITEM_PRICE.kind": { PURCHASE: "Alış" },
+  // ChequeStatus.ISSUED — çekin DURUMU ("verildi"), türü değil.
+  // ⚠️ `CHEQUE.kind` bilerek override ALMAZ: global "Verdiğimiz (kendi
+  // çekimiz)" onun için zaten doğrudur.
+  "CHEQUE.status": { ISSUED: "Verildi" },
+};
+
+/** Audit değeri bağlamı — `tableName` yoksa yalnız global harita kullanılır. */
+export interface EnumLabelContext {
+  tableName?: string | null;
+  field?: string | null;
+}
+
+export function enumValueLabel(value: string, ctx?: EnumLabelContext): string {
+  if (ctx?.tableName && ctx.field) {
+    const scoped = FIELD_ENUM_OVERRIDES[`${ctx.tableName}.${ctx.field}`]?.[value];
+    if (scoped) return scoped;
+  }
   return ENUM_LABELS[value] ?? value;
 }
 
@@ -452,7 +592,7 @@ const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/;
  * null→"—", boolean→Evet/Hayır, ISO tarih→gg.AA.yyyy SS:dd, enum→Türkçe, aksi ham.
  * Nesne/dizi burada ele alınmaz (çağıran taraf ham JSON'a düşer).
  */
-export function formatAuditValue(value: unknown): string {
+export function formatAuditValue(value: unknown, ctx?: EnumLabelContext): string {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Evet" : "Hayır";
   if (typeof value === "number") return String(value);
@@ -461,7 +601,9 @@ export function formatAuditValue(value: unknown): string {
       const d = parseISO(value);
       if (isValid(d)) return format(d, "dd.MM.yyyy HH:mm", { locale: tr });
     }
-    return ENUM_LABELS[value] ?? value;
+    // ⚠️ Bağlam VARSA alan-kapsamlı katmandan geçer (çelişen enum değerleri);
+    // yoksa bugünkü davranış birebir korunur.
+    return enumValueLabel(value, ctx);
   }
   return String(value);
 }

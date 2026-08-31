@@ -85,6 +85,14 @@ enum RollEntrySource {
   TAMBUR_MANUAL
   TAMBUR_SPLIT // Tambur'da KES kararı sonucu ayrılan parça (parentRollId dolu)
   SUBCONTRACTOR_RETURN // Boyahane vb. fason dönüşü — açık kumaş Roll (parentReceiptId dolu, barcode null)
+  /// SATIN ALINAN mal — Mal Kabul fişiyle (GoodsReceipt) doğrudan depoya giren top
+  /// (2026-08-13, ticaret paketi). `SUPPLIER_RECEIPT`ten AYRI: o, KK1 istasyonunda
+  /// ÖLÇÜLEREK/işlenerek alınan ham maldır ve üretim rotasının başıdır; bu ise
+  /// üretime hiç girmeyen, alınıp satılan maldır. Envanterde ayırt edilebilmesi
+  /// gerekir (alım-satım firmasında stoğun TAMAMI bu kaynaktan gelir).
+  /// ⚠️ ALTER TYPE ADD VALUE enum'a SONA ekler — sıra DB ile uyumlu kalsın diye
+  /// yeni değer daima en alta yazılır (PrintedDocType emsali).
+  PURCHASE_RECEIPT
   /// DIŞARIDAN ALINAN YARI MAMÜL (2026-08-17). Kumaş boyalı/işlenmiş gelir ama
   /// bitmiş DEĞİLDİR: fabrikada kurşun + tambur (ya da yalnız tambur) görecek.
   ///
@@ -178,6 +186,11 @@ enum RollForm {
 enum CompanyType {
   CUSTOMER
   SUPPLIER
+  /// Alıcı + Satıcı (2026-08-14, ticaret paketi) — sektör standardı üçlü
+  /// (Logo/Mikro cari kartı). ⚠️ Tip bir ETİKET, duvar DEĞİL: hiçbir akış tipi
+  /// zorlamaz (mal kabul/fatura yalnız "kart var + aktif" bakar); değer yalnız
+  /// liste/rapor filtresini dürüstleştirir. Tek kart = tek cari = mahsup.
+  BOTH
 }
 
 // F6+D-15: Device.kind serbest string yerine enum (saha cihaz tipi).
@@ -337,6 +350,10 @@ enum Currency {
   USD
   EUR
   GBP
+  /// 2026-08-13 — ticaret paketi (fiyatlama). SONA eklendi: ALTER TYPE ADD VALUE
+  /// ile eklenen değer aynı transaction içinde KULLANILAMAZ, bu yüzden kendi
+  /// migration'ında gelir.
+  RUB
 }
 
 /// Login yapan istemci türü — aynı-tip oturum politikası bunun üzerinden çalışır
@@ -402,6 +419,17 @@ model User {
   processedRollErrors        RollError[]              @relation("RollErrorProcessedBy")
   createdRolls               Roll[]                   @relation("RollCreatedBy")
   cancelledRolls             Roll[]                   @relation("RollCancelledBy")
+  // Ticaret paketi — depo hareketleri / transfer / mal kabul izleri
+  warehouseMovements         WarehouseMovement[]      @relation("WarehouseMovementUser")
+  createdTransfers           WarehouseTransfer[]      @relation("WarehouseTransferCreatedBy")
+  cancelledTransfers         WarehouseTransfer[]      @relation("WarehouseTransferCancelledBy")
+  createdGoodsReceipts       GoodsReceipt[]           @relation("GoodsReceiptCreatedBy")
+  cancelledGoodsReceipts     GoodsReceipt[]           @relation("GoodsReceiptCancelledBy")
+  // Paket D (ticaret).
+  yarnMovements              YarnMovement[]           @relation("YarnMovementUser")
+  createdPurchaseOrders      PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
+  cancelledPurchaseOrders    PurchaseOrder[]          @relation("PurchaseOrderCancelledBy")
+  shortClosedPurchaseOrders  PurchaseOrder[]          @relation("PurchaseOrderShortClosedBy")
   manualClosedOrders         Order[]                  @relation("OrderManualClosedBy")
   systemSettingsUpdates      SystemSetting[]
   preference                 UserPreference?
@@ -1334,6 +1362,15 @@ model Item {
   mergedChildren Item[]    @relation("ItemMergeLineage")
   mergedBy       User?     @relation("ItemMergedBy", fields: [mergedById], references: [id])
 
+  invoiceLines InvoiceLine[]
+
+  // Paket D (ticaret) — fabrikada hiçbiri doğmaz.
+  yarnStocks         YarnStock[]
+  yarnMovements      YarnMovement[]
+  prices             ItemPrice[]
+  purchaseOrderLines PurchaseOrderLine[]
+  stockCountLines    StockCountLine[]
+
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Prisma 7 partial predicate'i drift saymaz; ama uniqueness
   // FARKI (index↔unique) drift SAYAR → bu yüzden @@unique olmalı (aksi halde migrate dev
@@ -1542,6 +1579,61 @@ model Roll {
   /// karardan ÖNCE doğmuş toplar.
   entryStationId String? @db.Uuid
 
+  /// TOPUN DEPOSU — şu an (ya da en son) bulunduğu fiziksel depo (2026-08-13).
+  ///
+  /// Öncesinde "depo" bir varlık değil bir STATÜYDÜ (`WAREHOUSE` + `shipmentId`/
+  /// `sackId` boşluğu). Tek depolu fabrikada bu doğruydu; çok depolu ticaret
+  /// kurulumunda "mal hangi depoda" cevapsız kalıyordu.
+  ///
+  /// ⚠️ HİÇ NULL'LANMAZ. Sevk/iptal/fire topu başka statüye çeker ama deposunu
+  /// SİLMEZ — bu yüzden sevk stornosu için ayrı bir snapshot alanı (`preShipStatus`
+  /// emsali) GEREKMEZ: geri dönüş adresi topun kendi satırındadır.
+  ///
+  /// ⚠️ NULL yalnız GEÇİŞ DÖNEMİDİR (backfill öncesi). Doldurma sonrası
+  /// `test_db_invariants` NULL sayısını 0'a sabitler; kolon bir sonraki sürümde
+  /// NOT NULL'a çekilir. Nullable başlamanın sebebi: 9 fiziksel `roll.create`
+  /// noktasından biri gözden kaçarsa NOT NULL production'da 500 üretirdi.
+  ///
+  /// Tek doldurma noktası: `helpers/warehouse.helper.resolveTargetWarehouseId`
+  /// (açık depo yoksa varsayılan depo) — fabrika akışları hiç parametre vermez.
+  warehouseId String? @db.Uuid
+
+  /// Bu topu doğuran MAL KABUL FİŞİ (satın alınan mal). NULL = üretimden/başka
+  /// yoldan doğmuş top. `parentReceiptId` (fason kabulü) ile karıştırma: o
+  /// fasondan DÖNEN malın izidir, bu SATIN ALINAN malın.
+  goodsReceiptId String? @db.Uuid
+
+  /// Bu topun karşıladığı ALIŞ SİPARİŞİ KALEMİ (J2, 2026-08-15) — "aynı
+  /// üründen iki terminli sipariş" sorusunun izi. NULL = siparişsiz kabul /
+  /// siparişte olmayan kalem / 2026-08-15 öncesi kayıt (geriye doldurulmaz —
+  /// entryStationId emsali).
+  /// ⚠️ İZ BİLGİLENDİRİCİDİR, KARŞILANMA HESABI DEĞİL: "ne kadar geldi"nin tek
+  /// kaynağı `computeReceivedByItemTx` + `distributeFifo` zinciri (rollup +
+  /// drift onarımı orada). Bu kolon o zinciri DEĞİŞTİRMEZ ve ondan OKUNMAZ;
+  /// yalnız topun hangi kalemin malı olarak geldiğini söyler.
+  /// ⚠️ onDelete SET NULL BİLİNÇLİ (`WarehouseMovement.sackId` emsali, RESTRICT
+  /// değil): PO kalemi replace akışında gerçekten silinir (fiş varken
+  /// `receivedQty > 0` guard'ı düzenlemeyi zaten bloklar → normal yolda bu FK
+  /// hiç tetiklenmez); rollup drift'li kenar durumda izi NULL'a düşürmek, PO
+  /// düzenlemeyi ya da topu kilitlemekten iyidir — iz defter değildir.
+  purchaseOrderLineId String? @db.Uuid
+
+  /// Satın alma BİRİM fiyatı (ticaret paketi, 2026-08-14) — topun metre/kg
+  /// başına alış bedeli. Para birimi topun KENDİ alanında değil, doğduğu
+  /// fişte (`GoodsReceipt.currency`): fiş tek para birimlidir ve fiyatı
+  /// satırda, birimi belgede tutmak "aynı fişte iki para birimi" saçmalığını
+  /// yapısal olarak imkânsız kılar.
+  ///
+  /// ⚠️ NEDEN TOPTA: alış fiyatı topun KALICI özelliğidir — stok değerlemesi
+  /// ("depoda kaç para var") ve alış faturasının satır tutarı ondan türer;
+  /// fişe tek fiyat yazmak aynı fişte farklı fiyatlı kalemleri (olağan)
+  /// imkânsız kılardı. Nullable: üretimden doğan topun alış fiyatı YOKTUR ve
+  /// uydurulmaz. Fabrikada daima NULL — kolon eklemek PG11+'ta metadata-only.
+  ///
+  /// Index BİLİNÇLİ EKLENMEDİ: hiçbir sorgu fiyatla süzmüyor (raporlar topu
+  /// başka kolondan bulup fiyatı OKUR) ve `rolls` zaten en çok indeksli tablo.
+  purchasePrice Decimal? @db.Decimal(14, 4)
+
   // Paketleme — topun okutulduğu sevkiyat oturumu. NULL = henüz sevkiyata girmedi
   // (serbest depo). Çuvallanan top PLANNED boyunca WAREHOUSE kalır ama
   // shipmentId dolu → SERBEST stoktan düşer (çuval depo/kapı önü). SHIPPED'a yalnız
@@ -1749,12 +1841,25 @@ model Roll {
   cancelledBy          User?                       @relation("RollCancelledBy", fields: [cancelledById], references: [id])
   createdMachine       Machine?                    @relation("RollCreatedMachine", fields: [createdMachineId], references: [id])
   entryStation         Station?                    @relation("RollEntryStation", fields: [entryStationId], references: [id])
+  /// ⚠️ onDelete: Restrict — Prisma'nın opsiyonel ilişkilerdeki VARSAYILANI
+  /// `SetNull`'dır ve burada YANLIŞ olurdu: bir depoyu silmek, içindeki topları
+  /// SESSİZCE deposuz bırakırdı (ölçüldü — bekçi bunu yakaladı). Servis guard'ı
+  /// zaten dolu depoyu silmiyor; RESTRICT o kuralı DB seddine çevirir.
+  warehouse            Warehouse?                  @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  /// Aynı gerekçe: fiş silinirse topun kökeni sessizce kaybolurdu (fişler zaten
+  /// silinmez, iptal edilir).
+  goodsReceipt         GoodsReceipt?               @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+  /// SET NULL gerekçesi kolonun kendi yorumunda (iz ≠ defter).
+  purchaseOrderLine    PurchaseOrderLine?          @relation(fields: [purchaseOrderLineId], references: [id], onDelete: SetNull)
+  warehouseMovements   WarehouseMovement[]
   labelCustomer        Customer?                   @relation("RollLabelCustomer", fields: [labelCustomerId], references: [id])
   properties           RollProperty[]
   shipment             Shipment?                   @relation(fields: [shipmentId], references: [id])
   sack                 Sack?                       @relation(fields: [sackId], references: [id])
   returns              RollReturn[]
   batch                Batch?                      @relation(fields: [batchId], references: [id])
+  /// Ticaret paketi (J2 #19) — bu topun göründüğü sayım satırları.
+  stockCountLines      StockCountLine[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -1771,6 +1876,19 @@ model Roll {
   // "Bu istasyonda girilen toplar" — sütun bugün, filtre yarın.
   // createdMachineId ile AYNI desen (kardeş alan): tam index, opsiyonel ilişki.
   @@index([entryStationId])
+  // Depo bazlı stok listesi/sayımı: "X deposunda WAREHOUSE olan toplar".
+  // Eşitlik kolonu önce (perf kuralı 2). Mevcut [status, itemId, colorId, width]
+  // fungible-havuz indeksine depo boyutu BİLİNÇLİ eklenmedi: o sorgu bugün
+  // depo-bağımsız koşuyor ve `rolls` zaten en çok indeksli tablo — depo filtresi
+  // o yola girerse EXPLAIN kanıtıyla eklenecek.
+  @@index([warehouseId, status])
+  // Mal kabul fişinin topları (fiş detayı + iptal kapsamı).
+  // PARTIAL (WHERE "goodsReceiptId" IS NOT NULL) — çoğu topta null.
+  @@index([goodsReceiptId])
+  // "Bu sipariş kalemini hangi toplar karşıladı" (termin bazlı karşılama izi).
+  // PARTIAL (WHERE "purchaseOrderLineId" IS NOT NULL) — goodsReceiptId ile aynı
+  // desen; migration 20260814210000, test_db_invariants envanterinde kayıtlı.
+  @@index([purchaseOrderLineId])
   // Liste sayfaları: status filter + createdAt desc sort
   @@index([status, createdAt])
   // Envanter sekmeleri: status filter + updatedAt desc sort ("son hareket" sıralaması).
@@ -1870,6 +1988,11 @@ model Customer {
   shipments        Shipment[]
   sacks            Sack[]
   rollReturns      RollReturn[]
+  /// Bu firmadan alınan mal kabul fişleri (tedarikçi rolü — CompanyType.SUPPLIER).
+  goodsReceipts    GoodsReceipt[]            @relation("GoodsReceiptSupplier")
+  // Paket D (ticaret) — müşteri fiyat istisnaları + tedarikçi olarak alış siparişleri.
+  itemPrices       ItemPrice[]
+  purchaseOrders   PurchaseOrder[]           @relation("PurchaseOrderSupplier")
   directShipments  DirectShipment[]
   templateRoutes   CustomerTemplateRoute[]
   standaloneLabels CustomerStandaloneLabel[]
@@ -1914,6 +2037,8 @@ model Customer {
   mergedInto     Customer?  @relation("CustomerMergeLineage", fields: [mergedIntoId], references: [id])
   mergedChildren Customer[] @relation("CustomerMergeLineage")
   mergedBy       User?      @relation("CustomerMergedBy", fields: [mergedById], references: [id])
+
+  cariAccount CariAccount?
 
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
@@ -3521,6 +3646,8 @@ model DirectShipment {
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
   reasonFold String?  @default(dbgenerated())
 
+  invoices Invoice[]
+
   @@index([dispatchId])
   @@index([customerId])
   @@index([shippedAt])
@@ -3602,6 +3729,7 @@ model SubcontractorReceipt {
   @@index([workOrderId, receivedAt])
   // Composite: Fason firma-filtreli + tarih sıralı liste
   @@index([subcontractorId, receivedAt])
+  invoices Invoice[]
   @@map("subcontractor_receipts")
 }
 
@@ -3740,6 +3868,9 @@ model Subcontractor {
   plannedRouteSteps RouteStep[]               @relation("RouteStepPlannedSubcontractor")
   kartelaDispatches KartelaDispatch[]         @relation("KartelaDispatchSub")
   kartelaReceipts   KartelaReceipt[]          @relation("KartelaReceiptSub")
+  // C4 (2026-08-15) — fason firmadan ALIŞ bacağı (mal kabul + alış siparişi).
+  goodsReceiptsAsSupplier  GoodsReceipt[]  @relation("GoodsReceiptSubcontractorSupplier")
+  purchaseOrdersAsSupplier PurchaseOrder[] @relation("PurchaseOrderSubcontractorSupplier")
   documentProfile   DocumentProfile?          @relation("SubcontractorDocProfile", fields: [documentProfileId], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -3782,6 +3913,8 @@ model Subcontractor {
   mergedInto     Subcontractor?  @relation("SubcontractorMergeLineage", fields: [mergedIntoId], references: [id])
   mergedChildren Subcontractor[] @relation("SubcontractorMergeLineage")
   mergedBy       User?           @relation("SubcontractorMergedBy", fields: [mergedById], references: [id])
+
+  cariAccount CariAccount?
 
   // @@unique (index DEĞİL): DB'de PARTIAL UNIQUE (WHERE "mergedIntoId" IS NULL) — ad mükerreri
   // DB seddi (D3/B6, 2026-08-21). Gerekçe, ad kuralı ve YUMUŞAK KAPI notu: Item modelindeki aynı not.
@@ -4058,6 +4191,31 @@ enum PrintedDocType {
   SUBCONTRACTOR_RECEIPT // Fason kabul makbuzu (SubcontractorReceipt)
   QUALITY_CERTIFICATE // Kalite/sevk sertifikası (Shipment — kalite özeti)
   RETURN_DISPATCH // İade irsaliyesi (RollReturn)
+  // 2026-08-13 ticaret paketi (yine SONA — ALTER TYPE ADD VALUE kuralı). İkisi de
+  // İÇ belgedir (müşteriye gitmez) ama resmi zincir aynıdır: donmuş snapshot +
+  // versiyon + İPTAL filigranı.
+  TRANSFER_DISPATCH // Depolar arası transfer irsaliyesi (WarehouseTransfer)
+  GOODS_RECEIPT // Mal kabul fişi (GoodsReceipt — satın alınan malın depo girişi)
+  // 2026-08-14 ön muhasebe çıktıları (yine SONA — ALTER TYPE ADD VALUE kuralı).
+  // ⚠️ İkisi de DONMUŞ DEFTER semantiği taşır ve bu bilinçli: fatura/makbuz
+  // resmi kayıttır, sonradan içerik değişirse basılı kâğıt yalan söyler.
+  // Zincir aynı: snapshot + versiyon + revizyon + İPTAL filigranı.
+  INVOICE_INTERNAL // İç satış/alış faturası (Invoice — ONAYDA donar, stornoda VOID)
+  PAYMENT_RECEIPT // Tahsilat/ödeme makbuzu (Payment — KAYITTA donar, iptalde VOID)
+  // 2026-08-15 resmi ön muhasebe belgeleri (yine SONA — ALTER TYPE ADD VALUE kuralı).
+  // ⚠️ İkisi de MÜŞTERİYE/KARŞI TARAFA GİDER (fatura/makbuzdan farkı bu): biri
+  // imzalanıp geri gelmesi beklenen mutabakat mektubu, diğeri elden teslim
+  // tutanağı. Kaynak modelleri BU İŞ İÇİN AÇILDI (ReconciliationLetter /
+  // ChequeDeliveryNote) — donmuş belge `docType + sourceId` ister ve o kaynak
+  // yoksa belgenin numarası, sürümü ve revizyon geçmişi olamaz.
+  RECONCILIATION_LETTER // Cari mutabakat mektubu (ReconciliationLetter — OLUŞTURMADA donar)
+  CHEQUE_DELIVERY_NOTE // Çek/senet teslim bordrosu (ChequeDeliveryNote — OLUŞTURMADA donar)
+  // 2026-08-15 tam stok sayımı (yine SONA — ALTER TYPE ADD VALUE kuralı).
+  // ⚠️ İÇ belgedir (depo ekibi + denetçi) ama zincir aynı: TAMAMLANMADA donar.
+  // Donma anı bilinçli olarak TAMAMLANMA'dır, oluşturma DEĞİL: taslak sayım bir
+  // ÇALIŞMA KÂĞIDIDIR (satırlar işaretlendikçe değişir) ve resmileşen şey
+  // "sayım kesiti + uygulanan fark"tır.
+  STOCK_COUNT // Sayım listesi + fark fişi (StockCount — TAMAMLANMADA donar)
   // 2026-08-17 — Refakat kartı versiyon geçmişi. sourceId = TravelerCard.id.
   // ⚠️ KENDİ KENDİNİ YÖNETEN belge tipi: satırları YALNIZ traveler-card.service
   //    (`recordPrintEvent`) yazar, generic freeze/reissue/getHtml yolları bu tipe
@@ -4201,6 +4359,13 @@ model Sack {
   customerId   String?           @db.Uuid
   branchId     String?           @db.Uuid
   shipmentId   String?           @db.Uuid // NULL = çuval depo havuzunda; dolu = sevkiyata atanmış
+  /// Çuvalın bulunduğu depo (2026-08-14, ticaret paketi). NULLABLE — fabrika
+  /// sıfır-fark: tek depolu kurulumda hiçbir yüzey okumaz, eski satırlar NULL
+  /// kalabilir. Doğumda damgalanır (openSack/split), NULL kalmış eski çuval İLK
+  /// transferinde SAHİPLENİLİR (lazy adoption — üye topların ortak deposu).
+  /// İnvariant: çuvalın topları çuvalın deposundadır; transfer çuvalı BÜTÜN
+  /// taşıdığı ve top-transferi çuvaldaki topu reddettiği için korunur.
+  warehouseId  String?           @db.Uuid
   seq          Int? // Sevkiyat içinde sıra (Çuval 1, 2, 3...); havuzdayken NULL
   weightKg     Decimal?          @db.Decimal(12, 3) // Brüt tartı (kumaş + dara); tekli top kg tutulmaz
   // O-19: tartı izi — kim tarttı, ne zaman.
@@ -4248,10 +4413,14 @@ model Sack {
   customer    Customer?        @relation(fields: [customerId], references: [id])
   branch      CustomerBranch?  @relation(fields: [branchId], references: [id])
   shipment    Shipment?        @relation(fields: [shipmentId], references: [id])
+  /// Restrict: içinde çuval duran depo silinemez (Roll.warehouseId ile aynı karar —
+  /// SET NULL, konum bilgisini sessizce yok ederdi).
+  warehouse   Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
   weighedBy   User?            @relation("SackWeighedBy", fields: [weighedById], references: [id])
   rolls       Roll[] // Bu çuvaldaki toplar (içerik)
   swatches    Swatch[] // Bu çuvaldaki kartelalar (içerik)
   allocations SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
+  warehouseMovements WarehouseMovement[] // Çuval-bütün transfer izleri
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4267,6 +4436,7 @@ model Sack {
   @@unique([id, shipmentId])
   // Havuz/liste sorguları: müşteri + oluşturma sırası (FIFO = createdAt).
   @@index([customerId, createdAt])
+  @@index([warehouseId])
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([sackNo(ops: raw("gin_trgm_ops"))], map: "sacks_sackNo_trgm_idx", type: Gin)
   @@map("sacks")
@@ -4328,15 +4498,17 @@ model Shipment {
   invoicedById String?   @db.Uuid
 
   // Relations
-  customer     Customer        @relation(fields: [customerId], references: [id])
-  dispatchedBy User?           @relation("ShipmentDispatchedBy", fields: [dispatchedById], references: [id])
-  invoicedBy   User?           @relation("ShipmentInvoicedBy", fields: [invoicedById], references: [id])
-  branch       CustomerBranch? @relation(fields: [branchId], references: [id])
-  sacks        Sack[]
-  orders       ShipmentOrder[] // Donmuş tahsislerden türetilen sipariş kümesi (denorm; irsaliye orderNos)
-  rolls        Roll[] // Atanan çuvalların içindeki toplar
-  swatches     Swatch[] // Atanan çuvalların içindeki kartelalar (siparişe sayılmaz)
-  returns      RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
+  customer           Customer            @relation(fields: [customerId], references: [id])
+  dispatchedBy       User?               @relation("ShipmentDispatchedBy", fields: [dispatchedById], references: [id])
+  invoicedBy         User?               @relation("ShipmentInvoicedBy", fields: [invoicedById], references: [id])
+  branch             CustomerBranch?     @relation(fields: [branchId], references: [id])
+  sacks              Sack[]
+  orders             ShipmentOrder[] // Donmuş tahsislerden türetilen sipariş kümesi (denorm; irsaliye orderNos)
+  rolls              Roll[] // Atanan çuvalların içindeki toplar
+  swatches           Swatch[] // Atanan çuvalların içindeki kartelalar (siparişe sayılmaz)
+  returns            RollReturn[] // Bu sevkiyattan gelen iadeler (izlenebilirlik)
+  /// Bu sevkin depo defterindeki izleri (SHIPMENT / SHIPMENT_REVERSAL).
+  warehouseMovements WarehouseMovement[]
 
   createdAt       DateTime @default(now()) @db.Timestamptz
   updatedAt       DateTime @updatedAt @db.Timestamptz
@@ -4370,6 +4542,8 @@ model Shipment {
   createdBy   User?   @relation("ShipmentCreatedBy", fields: [createdById], references: [id])
   updatedById String? @db.Uuid
   updatedBy   User?   @relation("ShipmentUpdatedBy", fields: [updatedById], references: [id])
+
+  invoices Invoice[]
 
   @@index([customerId, status])
   @@index([branchId])
@@ -4495,6 +4669,8 @@ model RollReturn {
   roll           Roll          @relation(fields: [rollId], references: [id])
   fromShipment   Shipment?     @relation(fields: [fromShipmentId], references: [id])
   customer       Customer      @relation(fields: [customerId], references: [id])
+  /// İadenin depo defterindeki izi (RETURN — mal hangi depoya geri girdi).
+  warehouseMovements WarehouseMovement[]
   order          Order?        @relation(fields: [orderId], references: [id])
   item           Item          @relation(fields: [itemId], references: [id])
   color          Color?        @relation(fields: [colorId], references: [id])
@@ -5460,4 +5636,1865 @@ enum ImportRunStatus {
   PARTIAL
   /// Hiçbir şey yazılamadı.
   FAILED
+}
+
+// =============================================================================
+// TİCARET PAKETİ — ÇOKLU DEPO + MAL KABUL (2026-08-13)
+// =============================================================================
+// Tasarım + gerekçeler: docs/design/TICARET-PAKETI-TASARIM.md
+//
+// Öncesinde "depo" bir VARLIK değil bir STATÜYDÜ (`RollStatus.WAREHOUSE` +
+// `shipmentId`/`sackId` boşluğu → `getWarehouseScope`). Tek depolu üretici
+// fabrikada bu doğruydu. Alım-satım kurulumunda N depo + depolar arası transfer
+// gerekiyor ve "mal hangi depoda / nereden nereye gitti" sorusu cevapsızdı.
+//
+// ⚠️ FABRİKA UYUMU: bu blok tamamen EKLEMELİdir. Depo verilmeyen her yol
+// varsayılan depoya düşer (`resolveTargetWarehouseId`); tek depo varken arayüzde
+// hiçbir depo yüzeyi çizilmez. Bekçi: scripts/test_single_warehouse_parity.ts
+// =============================================================================
+
+/// FİZİKSEL DEPO. Saf tanım verisi (BaseService CRUD).
+///
+/// ⚠️ `Station` DEĞİLDİR: istasyon bir ÜRETİM noktasıdır (`StationKind`), depo bir
+/// STOK lokasyonudur. İkisini birleştirmek fabrikanın istasyon listesine sahte
+/// depo satırları sokardı.
+model Warehouse {
+  id   String @id @default(uuid()) @db.Uuid
+  /// DP + GGAAYY + NNNN (BaseService autoCode).
+  code String @unique @db.VarChar(32)
+  name String @db.VarChar(100)
+
+  /// Depo belirtilmeyen her girişin düştüğü depo. Sistemde TAM BİR TANE olur.
+  /// DB'de ŞEMA-DIŞI partial unique — warehouses_one_default WHERE "isDefault"=true
+  /// (traveler_card_templates_one_default emsali). Şemada `@@unique` olarak durur
+  /// çünkü Prisma 7 index↔unique farkını drift SAYAR (perf kuralı 4).
+  /// Servis guard'ı: varsayılan depo pasifleştirilemez/silinemez.
+  isDefault Boolean @default(false)
+  isActive  Boolean @default(true)
+  address   String? @db.VarChar(300)
+  notes     String? @db.VarChar(500)
+
+  rolls         Roll[]
+  transfersFrom WarehouseTransfer[] @relation("TransferFrom")
+  transfersTo   WarehouseTransfer[] @relation("TransferTo")
+  movementsFrom WarehouseMovement[] @relation("MovementFrom")
+  movementsTo   WarehouseMovement[] @relation("MovementTo")
+  goodsReceipts GoodsReceipt[]
+  sacks         Sack[]
+
+  // Paket D (ticaret) — iplik kg-stoğu depo bazlıdır.
+  yarnStocks    YarnStock[]
+  yarnMovements YarnMovement[]
+
+  // J2 #19 — tam stok sayımı depo bazlıdır (bir sayım = bir depo).
+  stockCounts StockCount[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([isDefault])
+  @@index([isActive])
+  @@map("warehouses")
+}
+
+/// Depo hareketinin TÜRÜ. Yön `fromWarehouseId`/`toWarehouseId` doluluğundan değil
+/// BURADAN okunur — `qty` her zaman pozitiftir (RollVariance emsali).
+enum WarehouseEventType {
+  ENTRY // depoya doğum (mal kabul, KK1, tambur finalize, fason dönüşü) — from boş
+  TRANSFER // depolar arası — from + to dolu ve FARKLI
+  TRANSFER_REVERSAL // transfer iptali (ters yön, aynı transferId)
+  SHIPMENT // müşteriye sevk — to boş
+  SHIPMENT_REVERSAL // sevk stornosu — mal depoya döndü
+  RETURN // müşteri iadesi girişi
+  CANCEL // top iptali/fire (softDelete) — depodan düştü
+}
+
+/// DEPO HAREKET DEFTERİ — append-only: "mal hangi depoya girdi / hangisinden çıktı".
+///
+/// ⚠️ NEDEN AYRI TABLO, neden `RollMovement` DEĞİL: o tablonun `workOrderStepId`
+/// alanı NOT NULL'dır ve bir İŞ EMRİ ADIMINA giriş/çıkışı temsil eder; iş emri
+/// olmayan bir depo transferi oraya yapısal olarak sığmaz. Ayrıca ölçüldü: depo
+/// hayatı bugün TAMAMEN hareketsiz (bitmiş topların hiçbirinde kapanmış
+/// RollMovement yok) — yani orası bu soruyu zaten yanıtlamıyor. Emsal gerekçe:
+/// `RollVariance` ("neden ayrı tablo, neden metadata değil").
+///
+/// ⚠️ Statü TERFİSİ hareket DEĞİLDİR: `STOCK → WAREHOUSE` (prepareRawForSale)
+/// satır YAZMAZ — bu defter KONUM defteridir, statü izi audit'tedir.
+model WarehouseMovement {
+  id        String             @id @default(uuid()) @db.Uuid
+  rollId    String             @db.Uuid
+  eventType WarehouseEventType
+
+  fromWarehouseId String? @db.Uuid
+  toWarehouseId   String? @db.Uuid
+
+  /// Olay anındaki metraj — HER ZAMAN POZİTİF; yönü `eventType` söyler.
+  qty Decimal @db.Decimal(12, 3)
+
+  // Belge bağları — typed FK (polimorfik değil). Hangi olayda hangisi dolar:
+  // TRANSFER*/transferId · ENTRY(mal kabul)/goodsReceiptId · SHIPMENT*/shipmentId
+  // · RETURN/rollReturnId. Diğer ENTRY yolları (KK1, tambur) belgesizdir.
+  transferId     String? @db.Uuid
+  goodsReceiptId String? @db.Uuid
+  shipmentId     String? @db.Uuid
+  rollReturnId   String? @db.Uuid
+  /// Top bu harekete bir ÇUVALIN üyesi olarak girdiyse çuvalın kimliği — transfer
+  /// iptalinin guard'ı ("top hâlâ AYNI çuvalda mı") buradan okur. onDelete SET NULL
+  /// bilinçli: boş çuval silinebilir (bilinçli istisna listesinde) ve silinmiş
+  /// çuvalın izini NULL'a düşürmek zararsızdır — toplar zaten çuvaldan çıkarılmış
+  /// olur ve iptal onları serbest top olarak geri taşır (fiziksel gerçekle birebir).
+  sackId         String? @db.Uuid
+
+  userId String? @db.Uuid
+  notes  String? @db.VarChar(300)
+
+  roll          Roll               @relation(fields: [rollId], references: [id], onDelete: Cascade)
+  fromWarehouse Warehouse?         @relation("MovementFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse?         @relation("MovementTo", fields: [toWarehouseId], references: [id])
+  transfer      WarehouseTransfer? @relation(fields: [transferId], references: [id])
+  goodsReceipt  GoodsReceipt?      @relation(fields: [goodsReceiptId], references: [id])
+  shipment      Shipment?          @relation(fields: [shipmentId], references: [id])
+  rollReturn    RollReturn?        @relation(fields: [rollReturnId], references: [id])
+  sack          Sack?              @relation(fields: [sackId], references: [id], onDelete: SetNull)
+  user          User?              @relation("WarehouseMovementUser", fields: [userId], references: [id])
+
+  /// Append-only log → `updatedAt` YOK (konvansiyon).
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([rollId, createdAt])
+  @@index([toWarehouseId, eventType, createdAt])
+  @@index([fromWarehouseId, eventType, createdAt])
+  @@index([transferId])
+  @@index([goodsReceiptId])
+  @@index([sackId])
+  @@map("warehouse_movements")
+}
+
+enum WarehouseTransferStatus {
+  COMPLETED
+  CANCELLED
+}
+
+/// DEPOLAR ARASI TRANSFER BELGESİ.
+///
+/// TEK ADIMLI: "yolda" (in-transit) durumu yok — yerel depolar arasında araç takibi
+/// ihtiyacı yok. Gerekirse enum'a SONA `IN_TRANSIT` eklenerek açılır.
+///
+/// ⚠️ SATIR TABLOSU YOK: kalemler `WarehouseMovement` satırlarıdır (`transferId`).
+/// Belgenin donmuş içeriği zaten `PrintedDocument.snapshot`'ta yaşar.
+model WarehouseTransfer {
+  id         String @id @default(uuid()) @db.Uuid
+  /// DT + GGAAYY + NNNN (nextPrefixedSequence + withBarcodeRetry).
+  transferNo String @unique @db.VarChar(32)
+
+  fromWarehouseId String                  @db.Uuid
+  toWarehouseId   String                  @db.Uuid
+  status          WarehouseTransferStatus @default(COMPLETED)
+  notes           String?                 @db.VarChar(500)
+
+  /// İstemci idempotency anahtarı — timeout/retry'da mükerrer transfer doğmasın.
+  clientToken String? @unique @db.Uuid
+
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  fromWarehouse Warehouse           @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse           @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  createdBy     User?               @relation("WarehouseTransferCreatedBy", fields: [createdById], references: [id])
+  cancelledBy   User?               @relation("WarehouseTransferCancelledBy", fields: [cancelledById], references: [id])
+  movements     WarehouseMovement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([fromWarehouseId, createdAt])
+  @@index([toWarehouseId, createdAt])
+  @@index([status, createdAt])
+  @@map("warehouse_transfers")
+}
+
+enum GoodsReceiptStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// MAL KABUL FİŞİ — satın alınan malın depoya girişi (üretimsiz stok girişi).
+///
+/// Topları `InventoryService.createInitialEntry` ÜRETİR (`forcedStatus: WAREHOUSE`,
+/// `forcedEntrySource: PURCHASE_RECEIPT`) — ikinci bir giriş motoru YAZILMAZ;
+/// mükerrer tuzağı, barkod rezervasyonu, izinli renk/özellik doğrulaması ve
+/// idempotency o yoldan bedava gelir. Emsal: `tambur-manual.produceFinishedRoll`.
+///
+/// ALIŞ SİPARİŞİ (PurchaseOrder) Faz 2 — kullanıcı kararı gereği sipariş
+/// OPSİYONEL. Faz 1'de tedarikçi + tedarikçinin kâğıt irsaliye numarası yeterli.
+model GoodsReceipt {
+  id        String @id @default(uuid()) @db.Uuid
+  /// MK + GGAAYY + NNNN.
+  receiptNo String @unique @db.VarChar(32)
+
+  warehouseId    String  @db.Uuid
+  /// Tedarikçi — `Customer` (`CompanyType.SUPPLIER`). Ayrı tedarikçi modeli
+  /// AÇILMADI: cari kart tek yerde kalsın (ön muhasebe de oraya bağlanacak).
+  supplierId     String? @db.Uuid
+  /// FASON TEDARİKÇİ (saha planı C4, 2026-08-15): alış HER cariden yapılabilir
+  /// (Logo/Mikro/SAP BP standardı) — boyahaneden mal alımı meşrudur ve fatura/
+  /// tahsilat katmanı zaten iki tarafı da taşıyor (CariAccount customerId XOR
+  /// subcontractorId). `supplierId` ile XOR — İKİSİ BİRDEN DOLU OLAMAZ (servis
+  /// guard'ı; "iki tedarikçili fiş" diye bir şey yok). Tam cari birleşmesi
+  /// (tek tablo, SAP BP) ayrı ve büyük bir iştir — bu köprüdür.
+  subcontractorId String? @db.Uuid
+  /// Tedarikçinin kendi irsaliye numarası (serbest metin) — alış faturası
+  /// mutabakatının çıpası.
+  deliveryNoteNo String? @db.VarChar(64)
+
+  /// Fişin para birimi (ticaret paketi) — satırların `Roll.purchasePrice`
+  /// değerleri BU birimdedir. Fiş TEK para birimlidir: karışık fiş, alış
+  /// faturasını iki para biriminde kesmeyi gerektirirdi ve fatura tek
+  /// birimlidir. Varsayılan TRY → mevcut fişler ve fabrika davranışı aynı.
+  currency Currency @default(TRY)
+
+  status GoodsReceiptStatus @default(ACTIVE)
+  notes  String?            @db.VarChar(500)
+
+  /// HAM STOK GİRİŞİ (saha planı C2, 2026-08-15): perde/tekstil ticaretinde iki
+  /// meşru alım var — satılacak BİTMİŞ mal (varsayılan, toplar `WAREHOUSE`) ve
+  /// işlenmek üzere alınan HAM mal (fasona gidecek → toplar `STOCK`). Karar FİŞ
+  /// seviyesindedir (satır seviyesi bilinçli AÇILMADI: karışık fiş "fiş bir
+  /// kaptır" okumasını bozar; ikinci fiş açılır). Varsayılan false → mevcut
+  /// davranış bayt-bayt.
+  rawStockEntry Boolean @default(false)
+
+  clientToken String? @unique @db.Uuid
+
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  /// Paket D — bu fiş hangi alış siparişini karşılıyor (opsiyonel: siparişsiz
+  /// mal kabulü meşru kalır; sipariş bir PLANDIR, kabulün ön koşulu değil).
+  purchaseOrderId String? @db.Uuid
+
+  warehouse     Warehouse           @relation(fields: [warehouseId], references: [id])
+  supplier      Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  /// C4 — fason tedarikçi bacağı (Restrict: tedarikçisi silinen fiş kalamaz;
+  /// subcontractor zaten soft-delete dünyasında).
+  subcontractorSupplier Subcontractor? @relation("GoodsReceiptSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  yarnMovements YarnMovement[]
+  createdBy   User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
+  cancelledBy User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
+  rolls       Roll[]
+  movements   WarehouseMovement[]
+  invoices    Invoice[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([warehouseId, createdAt])
+  @@index([supplierId, createdAt])
+  // C4 — "bu fason firmadan alınan fişler" (tedarikçi bacağının simetriği).
+  @@index([subcontractorId, createdAt])
+  @@index([status, createdAt])
+  // Paket D — "bu siparişin fişleri" sorgusu (sipariş detayı + karşılanma).
+  @@index([purchaseOrderId])
+  @@map("goods_receipts")
+}
+
+// =============================================================================
+// ÖN MUHASEBE (Paket 2) — cari · fatura · tahsilat · kasa/banka · kur
+// =============================================================================
+// KAPSAM: bu bir MUHASEBE PROGRAMI DEĞİL, bir ÖN muhasebe defteridir. ERP resmî
+// fatura KESMEZ (e-fatura yok); dış muhasebe programında kesilen belgenin izi
+// `externalNo` ile eşlenir. Amaç "kim bana ne kadar borçlu, ben kime ne kadar
+// borçluyum, kasada/bankada ne var" sorularını sevkiyat/fason verisinden
+// TÜRETEREK cevaplamak.
+//
+// ⚠️ FABRİKA SIFIR-FARK: tüm yüzeyler `finance.enabled` bayrağı (varsayılan
+// KAPALI) + `finance:*` izinleri arkasında. Tablolar boş kaldığı sürece hiçbir
+// mevcut sorgu bunlara dokunmaz.
+// =============================================================================
+
+/// Cari hesabın hangi taraf kaydına bağlı olduğu.
+enum CariKind {
+  CUSTOMER
+  SUBCONTRACTOR
+}
+
+/// Cari hesap — MÜŞTERİ/FASON kartının MUHASEBE yüzü.
+///
+/// ⚠️ Neden ayrı tablo: `Customer`/`Subcontractor` operasyonun kartlarıdır ve
+/// onlara vergi dairesi / vade / risk limiti eklemek, muhasebe alanlarını
+/// operasyon ekranlarına sızdırırdı. Ayrıca cari LAZY açılır (ilk fatura/tahsilat
+/// anında) — bugün 200 müşterinin çoğunun cari hareketi yok, hepsine boş hesap
+/// açmak listeyi anlamsız şişirirdi.
+///
+/// ⚠️ `customerId` XOR `subcontractorId`: ikisi de dolu ya da ikisi de boş
+/// OLAMAZ. DB'de CHECK constraint ile kilitli (şema-dışı, envanterde kayıtlı).
+model CariAccount {
+  id   String   @id @default(uuid()) @db.Uuid
+  kind CariKind
+
+  customerId      String? @unique @db.Uuid
+  subcontractorId String? @unique @db.Uuid
+
+  /// Vergi dairesi BURADA — Customer/Subcontractor kartlarına dokunulmaz.
+  taxOffice String? @db.VarChar(100)
+
+  /// Fatura/tahsilat formlarının ön-doldurduğu para birimi (ezilebilir).
+  defaultCurrency Currency @default(TRY)
+
+  /// Vade günü — "fatura + N gün". Yaşlandırma raporunun girdisi.
+  paymentTermDays Int?
+
+  /// Risk limiti UYARIDIR, bloklamaz: satışı durdurma kararı ticari bir karardır
+  /// ve yazılımın vardiya ortasında sessizce vermesi yanlış olurdu.
+  riskLimit Decimal? @db.Decimal(14, 2)
+
+  notes    String? @db.VarChar(500)
+  isActive Boolean @default(true)
+
+  customer      Customer?      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  subcontractor Subcontractor? @relation(fields: [subcontractorId], references: [id], onDelete: Restrict)
+
+  balances     CariBalance[]
+  transactions CariTransaction[]
+  invoices     Invoice[]
+  payments     Payment[]
+
+  /// Çek/senet (C1) — üç ayrı rol, üç ayrı ilişki:
+  ///   `cheques`         : bu cariden ALINAN / bu cariye VERİLEN çekler
+  ///   `endorsedCheques` : bu cariye CİRO EDİLEN çekler (borcumuzu çekle kapattık)
+  ///   `chequeEvents`    : olay defterinde karşı taraf olarak geçtiği satırlar
+  cheques         Cheque[]      @relation("ChequeCari")
+  endorsedCheques Cheque[]      @relation("ChequeEndorsedTo")
+  chequeEvents    ChequeEvent[] @relation("ChequeEventCounterCari")
+
+  /// Dönem kapanışları (C3) — ekstrenin DEVİR satırının kaynağı.
+  periodCloses CariPeriodClose[]
+
+  /// Resmi ön muhasebe belgeleri (2026-08-15): mutabakat mektubu bu cariye
+  /// KESİLİR, çek teslim bordrosu bu cariye TESLİM EDİLMİŞ olabilir (opsiyonel
+  /// hedef — bordronun karşı tarafı banka da olabilir, serbest metin de).
+  reconciliationLetters ReconciliationLetter[]
+  chequeDeliveryNotes   ChequeDeliveryNote[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([kind, isActive])
+  @@map("cari_accounts")
+}
+
+/// Cari bakiyesi — PARA BİRİMİ BAZINDA AYRI.
+///
+/// ⚠️ Döviz bakiyeleri TL'ye EZİLMEZ: 1000 USD alacak ile 30.000 TL alacak farklı
+/// şeylerdir ve tek kolona toplanırsa hangi kurla kapatılacağı bilgisi kaybolur.
+/// TL karşılığı raporda, rapor günü kuruyla ve DİPNOTLU gösterilir.
+///
+/// Denormalize: `CariTransaction` toplamıyla aynı tx'te atomik increment edilir.
+/// Doğruluğunun DB seddi yoktur → `test_consistency` bölümü zorunludur
+/// (`Order.shippedQty` emsali).
+model CariBalance {
+  cariId   String   @db.Uuid
+  currency Currency
+  balance  Decimal  @default(0) @db.Decimal(14, 2)
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@id([cariId, currency])
+  @@map("cari_balances")
+}
+
+enum InvoiceType {
+  SALES
+  PURCHASE
+  SALES_RETURN
+  PURCHASE_RETURN
+}
+
+enum InvoiceStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
+}
+
+/// Fatura — TASLAK üretilir, ONAY ile deftere işler.
+///
+/// ⚠️ CONFIRMED fatura ASLA düzenlenmez/silinmez; düzeltme = İPTAL (storno) +
+/// yeni fatura. Sektör standardı budur ve `CariTransaction`'ın append-only
+/// olmasının sebebi de odur.
+///
+/// ⚠️ "Bir kaynak → en çok BİR aktif fatura": kaynak bağları üzerinde şema-dışı
+/// partial unique'ler var (WHERE status <> 'CANCELLED'). Çift taslak yapısal
+/// olarak imkânsız — aksi halde aynı sevkiyat iki kez faturalanır ve cari
+/// bakiyesi sessizce iki katına çıkardı.
+model Invoice {
+  id     String        @id @default(uuid()) @db.Uuid
+  /// SF/AF/SI/AI + GGAAYY + NNNN.
+  docNo  String        @unique @db.VarChar(32)
+  type   InvoiceType
+  status InvoiceStatus @default(DRAFT)
+
+  cariId String @db.Uuid
+
+  currency Currency @default(TRY)
+
+  /// Belgeye DAMGALANAN kur — sonradan kur tablosu düzeltilse bile bu belge
+  /// kendi kuruyla kalır (donmuş belge kuralının muhasebe karşılığı).
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
+
+  issueDate DateTime  @db.Timestamptz
+  dueDate   DateTime? @db.Timestamptz
+
+  /// Dış muhasebe programında kesilen faturanın numarası (varsa).
+  externalNo String? @db.VarChar(64)
+  notes      String? @db.VarChar(500)
+
+  /// Satırlardan Decimal ile yeniden hesaplanıp ONAY anında damgalanır.
+  subtotal         Decimal @default(0) @db.Decimal(14, 2)
+  discountTotal    Decimal @default(0) @db.Decimal(14, 2)
+  vatTotal         Decimal @default(0) @db.Decimal(14, 2)
+  withholdingTotal Decimal @default(0) @db.Decimal(14, 2)
+  grandTotal       Decimal @default(0) @db.Decimal(14, 2)
+
+  /// TL karşılığı — rapor toplamları tek para biriminde okunabilsin diye.
+  grandTotalTry Decimal @default(0) @db.Decimal(14, 2)
+
+  /// KAPANAN TUTAR (C2) — `PaymentAllocation` satırlarının denormalize toplamı.
+  ///
+  /// ⚠️ AÇIK/KISMİ/KAPALI DURUMU AYRI BİR KOLON DEĞİLDİR: `paidTotal` ile
+  /// `grandTotal` KARŞILAŞTIRILARAK türetilir. İki denormalize alan (tutar +
+  /// durum) bir gün birbirinden ayrışır ve o gün "kapalı görünen ama parası
+  /// gelmemiş fatura" doğar; tek sayı + türetme ayrışamaz.
+  ///
+  /// ⚠️ Yazımı RAW ATOMİK SAYAÇTIR: `UPDATE ... SET "paidTotal" = "paidTotal" + $a
+  /// WHERE id = $i AND "paidTotal" + $a <= "grandTotal"` (Prisma `where`'i iki
+  /// kolonu karşılaştıramaz) + `count === 0` → 409. DB seddi ayrıca CHECK ile
+  /// kilitli; ikisi aynı şeyi iki katmanda söyler.
+  paidTotal Decimal @default(0) @db.Decimal(14, 2)
+
+  /// KAYNAK BAĞLARI — typed nullable FK (polimorfik sourceType+sourceId DEĞİL:
+  /// FK'siz bağ, kaynak silinince sessizce hayalet fatura bırakırdı).
+  shipmentId             String? @db.Uuid
+  directShipmentId       String? @db.Uuid
+  returnGroupId          String? @db.Uuid
+  subcontractorReceiptId String? @db.Uuid
+  /// Mal kabul fişi (ticaret paketi) — alış faturasının kaynağı. Partial unique
+  /// ile "bir fiş → en çok BİR aktif fatura" (diğer kaynaklarla aynı sed).
+  goodsReceiptId         String? @db.Uuid
+
+  confirmedAt   DateTime? @db.Timestamptz
+  confirmedById String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  cari                 CariAccount           @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  shipment             Shipment?             @relation(fields: [shipmentId], references: [id], onDelete: Restrict)
+  directShipment       DirectShipment?       @relation(fields: [directShipmentId], references: [id], onDelete: Restrict)
+  subcontractorReceipt SubcontractorReceipt? @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
+  goodsReceipt         GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
+
+  lines        InvoiceLine[]
+  /// Paket D — iplik faturasının stok hareketi bağı (opsiyonel; iplik dışı
+  /// faturada boş kalır).
+  yarnMovements YarnMovement[]
+  transactions CariTransaction[]
+  allocations  PaymentAllocation[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // AÇIK FATURA yolu (C2/C4 yaşlandırmasının tek sorgusu). DB'de PARTIAL'dır:
+  // `WHERE status = 'CONFIRMED' AND "paidTotal" < "grandTotal"` (migration
+  // 20260814102000). Şemada düz `@@index` bırakılır — Prisma 7 predicate farkını
+  // drift SAYMAZ ama index↔unique farkını SAYAR (perf kuralı 4).
+  // Kolon sırası: eşitlikler (cari, para birimi) önce, sıralama (vade) sonra.
+  @@index([cariId, currency, dueDate], map: "invoices_open")
+  @@index([cariId, status, issueDate])
+  @@index([type, status, issueDate])
+  @@index([status, issueDate])
+  @@index([shipmentId])
+  @@index([directShipmentId])
+  @@index([returnGroupId])
+  @@index([subcontractorReceiptId])
+  @@index([goodsReceiptId])
+  @@map("invoices")
+}
+
+/// Fatura satırı — `itemId` OPSİYONEL.
+///
+/// ⚠️ Serbest satır bilinçli: firma iplik de satabiliyor ve iplik stok modelinde
+/// YOK. Zorunlu `itemId`, olmayan bir ürünü uydurmaya zorlardı. Açıklama her
+/// satırda vardır ve belgeye o basılır.
+model InvoiceLine {
+  id        String @id @default(uuid()) @db.Uuid
+  invoiceId String @db.Uuid
+  lineNo    Int
+
+  itemId      String? @db.Uuid
+  description String  @db.VarChar(300)
+
+  qty       Decimal @db.Decimal(14, 3)
+  unit      String  @default("m") @db.VarChar(16)
+  unitPrice Decimal @db.Decimal(14, 4)
+
+  /// Oranlar SATIRA DAMGALANIR — KDV kataloğu sonradan değişse bile geçmiş
+  /// fatura kendi oranıyla okunur.
+  discountRate Decimal @default(0) @db.Decimal(5, 2)
+  vatRate      Decimal @default(0) @db.Decimal(5, 2)
+
+  /// Fason tevkifatı (satın alma faturasında).
+  withholdingRate Decimal @default(0) @db.Decimal(5, 2)
+
+  lineTotal Decimal @db.Decimal(14, 2)
+  vatAmount Decimal @db.Decimal(14, 2)
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  item    Item?   @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@unique([invoiceId, lineNo])
+  @@index([itemId])
+  @@map("invoice_lines")
+}
+
+/// Cari hareketin KAYNAĞI — ekstrede satırın "neden var olduğu".
+///
+/// ⚠️ ÇEK DEĞERLERİ SONA EKLENDİ (2026-08-14, migration 20260814100000). PG
+/// kuralı: `ALTER TYPE ... ADD VALUE` ile eklenen değer AYNI transaction içinde
+/// KULLANILAMAZ → kendi migration'ında gelirler (RUB / PrintedDocType emsali).
+///
+/// ÇEKİN DEFTER ANLARI (C1 kilitli kararı — Logo "Çek Giriş Bordrosu" davranışı):
+/// çek ALINDIĞI AN cari alacaklanır; müşteri çeki verdiğinde ticari olarak
+/// ödemiştir. Karşılıksız riski, kaydı GECİKTİRMENİN değil TERS KAYITLA geri
+/// almanın gerekçesidir (append-only felsefesi).
+///   • `CHEQUE_RECEIVE`  — müşteriden çek/senet alındı → müşteri CREDIT
+///   • `CHEQUE_ISSUE`    — kendi çekimiz/senedimiz verildi → cari DEBIT
+///   • `CHEQUE_ENDORSE`  — ciro → ciro edilen cariye DEBIT (tek olay, iki cari)
+///   • `CHEQUE_BOUNCE`   — karşılıksız → müşteriye DEBIT (+ ciro edilmişse ciro
+///     carisine ters CREDIT)
+///   • `CHEQUE_CANCEL`   — çek kaydının geri alınması: portföyden İADE (sahibine
+///     geri verildi) ve hatalı kaydın stornosu. `INVOICE_CANCEL`/`PAYMENT_CANCEL`
+///     konvansiyonunun aynısı; ekstrede olayın hangisi olduğunu `description`
+///     söyler. **`CHEQUE_BOUNCE` bunun içine KATLANMADI** çünkü "karşılıksız",
+///     muhasebecinin ekstrede aktif olarak ARADIĞI olaydır — iptalle aynı ada
+///     düşerse aranamaz hâle gelir.
+///
+/// ⚠️ TAHSİL (COLLECT) ve KENDİ ÇEKİMİZİN ÖDENMESİ (PAY) burada YOKTUR ve bu
+/// bilinçlidir: o anlarda yalnız banka/kasa bakiyesi oynar, cari İKİNCİ kez
+/// hareket görmez (görseydi aynı borç iki kez kapanmış sayılırdı).
+enum CariTxnSource {
+  INVOICE
+  INVOICE_CANCEL
+  PAYMENT
+  PAYMENT_CANCEL
+  ADJUSTMENT
+  CHEQUE_RECEIVE
+  CHEQUE_ISSUE
+  CHEQUE_ENDORSE
+  CHEQUE_BOUNCE
+  CHEQUE_CANCEL
+  /// Devir stornosu (2026-08-14): `ADJUSTMENT`ın tipli ters yolu — bu değer
+  /// gelmeden devir, ters yolu OLMAYAN tek ileri kayıt tipiydi ve 409 mesajı
+  /// var olmayan bir yolu gösteriyordu. SONA eklendi (ADD VALUE aynı-tx kuralı,
+  /// kendi migration'ında).
+  ADJUSTMENT_CANCEL
+}
+
+/// Cari hareket defteri — APPEND-ONLY.
+///
+/// ⚠️ UPDATE/DELETE YOK. Düzeltme daima TERS SATIRDIR (storno). Bir defterin
+/// güvenilirliği tam olarak bundan gelir: geçmişi değiştirilebilen defter,
+/// denetimde hiçbir şey kanıtlamaz.
+///
+/// `debit`/`credit` iki AYRI kolon (tek işaretli kolon değil): muhasebede borç
+/// ve alacak ayrı sütunlardır ve ekstre o şekilde basılır.
+model CariTransaction {
+  id       String   @id @default(uuid()) @db.Uuid
+  cariId   String   @db.Uuid
+  currency Currency
+  txnDate  DateTime @db.Timestamptz
+
+  debit  Decimal @default(0) @db.Decimal(14, 2)
+  credit Decimal @default(0) @db.Decimal(14, 2)
+
+  /// TL karşılığı — dönem toplamları tek birimde okunabilsin diye damgalanır.
+  amountTry    Decimal @default(0) @db.Decimal(14, 2)
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
+
+  sourceType  CariTxnSource
+  invoiceId   String?       @db.Uuid
+  paymentId   String?       @db.Uuid
+  /// Çek/senet kaynağı (C1). Diğer iki kaynak bağıyla aynı desen: polimorfik
+  /// sourceId DEĞİL, typed nullable FK — kaynak silinemez, hayalet satır doğmaz.
+  chequeId    String?       @db.Uuid
+  /// STORNO BAĞI (2026-08-14, SAP FB08 modeli): bu satır bir ters kayıtsa,
+  /// TERSLEDİĞİ orijinal satırın kimliği. `@unique` = bir satır EN FAZLA BİR KEZ
+  /// terslenebilir (çift storno P2002 → 409). DB'de partial'a çevrilir
+  /// (`WHERE NOT NULL` — null-yoğun kolon, perf kuralı 4); şemada `@unique`
+  /// kalmak ZORUNDA (Prisma index↔unique farkını drift sayar).
+  /// İlk tüketici: devir stornosu (`ADJUSTMENT_CANCEL`). Diğer `*_CANCEL`
+  /// satırları bağsız doğmuş durumda — geriye doldurulmaz, yeni yazımlar
+  /// bağlamak isterse alan hazır.
+  reversesTxnId String? @unique @db.Uuid
+  description String?       @db.VarChar(300)
+
+  createdById String? @db.Uuid
+
+  cari    CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  invoice Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  cheque  Cheque?     @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  /// Ters kayıt → orijinal (Restrict: orijinal satır silinemez — zaten defter
+  /// append-only, bu FK o kuralın storno bacağını DB'ye de söyletir).
+  reverses   CariTransaction? @relation("TxnReversal", fields: [reversesTxnId], references: [id], onDelete: Restrict)
+  reversedBy CariTransaction? @relation("TxnReversal")
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([cariId, currency, txnDate])
+  @@index([invoiceId])
+  @@index([paymentId])
+  // Bir çekin defterdeki tüm izleri (alış → ciro → karşılıksız zinciri) tek
+  // sorguda okunur. PARTIAL DEĞİL — komşu iki kaynak bağı da (invoiceId,
+  // paymentId) tam index; aynı tablodaki üç bağın üçü aynı desende kalsın.
+  @@index([chequeId])
+  @@map("cari_transactions")
+}
+
+enum PaymentDirection {
+  IN
+  OUT
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CREDIT_CARD
+  OTHER
+}
+
+enum PaymentStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// Tahsilat / ödeme.
+///
+/// ⚠️ Çek/senet BU FAZDA YOK (Faz 2): çekin kendi yaşam döngüsü var (portföy →
+/// ciro → tahsil → karşılıksız) ve onu `PaymentMethod`'a bir değer olarak
+/// eklemek, o döngüyü modellemeden "tahsil edildi" demek olurdu.
+model Payment {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// TH/OD + GGAAYY + NNNN.
+  docNo String @unique @db.VarChar(32)
+
+  direction PaymentDirection
+  method    PaymentMethod
+  status    PaymentStatus    @default(ACTIVE)
+
+  cariId String @db.Uuid
+
+  currency     Currency @default(TRY)
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  amount       Decimal  @db.Decimal(14, 2)
+  amountTry    Decimal  @db.Decimal(14, 2)
+
+  /// FATURAYA KAPATILAN tutar (C2) — `amount`'ı AŞAMAZ (CHECK). Kalanı "serbest
+  /// tahsilat"tır ve yaşlandırma raporunda sanal FIFO mahsupla gösterilir.
+  allocatedTotal Decimal @default(0) @db.Decimal(14, 2)
+
+  /// Kasa VEYA banka — ikisi birden olamaz (CHECK constraint).
+  cashBoxId     String? @db.Uuid
+  bankAccountId String? @db.Uuid
+
+  paymentDate DateTime @db.Timestamptz
+  reference   String?  @db.VarChar(120)
+  notes       String?  @db.VarChar(500)
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  cari        CariAccount  @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  transactions CariTransaction[]
+  allocations  PaymentAllocation[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([cariId, status, paymentDate])
+  @@index([direction, status, paymentDate])
+  @@index([cashBoxId, paymentDate])
+  @@index([bankAccountId, paymentDate])
+  @@map("payments")
+}
+
+/// Kasa — TEK PARA BİRİMLİ.
+///
+/// ⚠️ Çok para birimli tek kasa, "kasada ne var" sorusunu cevaplanamaz yapardı
+/// (hangi kurla toplanacak?). RUB kasası ayrı karttır.
+model CashBox {
+  id       String   @id @default(uuid()) @db.Uuid
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  currency Currency @default(TRY)
+
+  /// Denormalize — İKİ YAZAR: `Payment` (carili tahsilat/ödeme) ve
+  /// `CashTransaction` (carisiz masraf/gelir/virman/açılış). İkisi de aynı
+  /// tx'te increment eder; mutabakat `test_consistency` §23 İKİ TABLOYU birden
+  /// toplar — yalnız birine bakan bir sorgu, diğer yazarın hareketlerini
+  /// "drift" sanardı.
+  balance Decimal @default(0) @db.Decimal(14, 2)
+
+  isActive Boolean @default(true)
+  notes    String? @db.VarChar(500)
+
+  payments         Payment[]
+  cashTransactions CashTransaction[]
+  /// Elden tahsil edilen çekin olay satırı (C1) — kasa bakiyesinin ÜÇÜNCÜ
+  /// yazarı. `test_consistency` §23 formülü bu tabloyu da toplamak zorunda.
+  chequeEvents     ChequeEvent[]
+  periodCloses     CashPeriodClose[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([isActive])
+  @@map("cash_boxes")
+}
+
+/// Banka hesabı — kasa ile aynı kural (tek para birimi).
+model BankAccount {
+  id       String   @id @default(uuid()) @db.Uuid
+  code     String   @unique @db.VarChar(32)
+  name     String   @db.VarChar(100)
+  bankName String?  @db.VarChar(100)
+  iban     String?  @db.VarChar(34)
+  currency Currency @default(TRY)
+  balance  Decimal  @default(0) @db.Decimal(14, 2)
+  isActive Boolean  @default(true)
+  notes    String?  @db.VarChar(500)
+
+  payments         Payment[]
+  cashTransactions CashTransaction[]
+  /// Tahsile/teminata verilen çekler (C1) — `Cheque.bankAccountId` denormalize
+  /// başlığı; `chequeEvents` ise o çekin banka bakiyesini oynatan olay satırları.
+  cheques          Cheque[]
+  chequeEvents     ChequeEvent[]
+  periodCloses     CashPeriodClose[]
+  /// Çek teslim bordrosunun hedefi bu hesap olabilir (tahsile/teminata veriş).
+  chequeDeliveryNotes ChequeDeliveryNote[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([isActive])
+  @@map("bank_accounts")
+}
+
+/// KASA/BANKA DÖNEM KAPANIŞI (2026-08-14, K-1 — kullanıcı kararı).
+///
+/// NEDEN: `CashTransaction.txnDate` kullanıcı girdisi ve kasa/banka bakiyesine
+/// yazan ÜÇ yazarın (Payment · CashTransaction · ChequeEvent COLLECT/PAY)
+/// hiçbirinde dönem kilidi yoktu — geçmişe tarihli bir hareket, yazdırılıp
+/// Excel'e alınmış kasa defteri sayfasını SESSİZCE değiştirebiliyordu. Cari
+/// dönem kapanışı kasayı kapsamıyordu ve bu hiçbir yerde yazılı değildi.
+///
+/// `CariPeriodClose`un hesap-bazlı ikizi. Fark: cari kapanışı (cari × para
+/// birimi) bazlı; kasa kapanışı HESAP bazlıdır (kasa sayımı hesap hesap
+/// yapılır ve her hesap zaten TEK para birimlidir → currency boyutu yok).
+///
+/// ⚠️ cashBoxId XOR bankAccountId — Payment/CashTransaction ile aynı sözleşme;
+/// DB'de CHECK ile kilitli (`cash_period_close_account_xor`).
+model CashPeriodClose {
+  id String @id @default(uuid()) @db.Uuid
+
+  cashBoxId     String? @db.Uuid
+  bankAccountId String? @db.Uuid
+
+  /// Dönemin SON GÜNÜ (dahil). Başlangıç saklanmaz — önceki kapanıştan
+  /// türetilir (CariPeriodClose gerekçesiyle birebir).
+  periodEnd DateTime @db.Date
+
+  /// O ana kadarki hesap bakiyesi. Negatif olabilir → CHECK yok.
+  closingBalance Decimal @db.Decimal(14, 2)
+  /// Fotoğrafa giren hareket sayısı (ÜÇ yazarın toplamı) — yeniden türetimde
+  /// tutmuyorsa defter kapanıştan sonra değişmiş demektir.
+  txnCount       Int
+
+  notes      String? @db.VarChar(500)
+  closedById String? @db.Uuid
+
+  reopenedAt   DateTime? @db.Timestamptz
+  reopenedById String?   @db.Uuid
+  reopenReason String?   @db.VarChar(300)
+
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // DB'de PARTIAL UNIQUE ×2: `WHERE "reopenedAt" IS NULL AND "cashBoxId" IS NOT NULL`
+  // ve banka ikizi (cari_period_close_active_uq emsali — düz unique, yeniden
+  // açılan dönemin bir daha kapatılmasını engellerdi; XOR yüzünden tek bileşik
+  // unique de kurulamaz, NULL taraf çakışmaz). Şemada `@@unique` kalmak ZORUNDA.
+  @@unique([cashBoxId, periodEnd], map: "cash_period_close_box_active_uq")
+  @@unique([bankAccountId, periodEnd], map: "cash_period_close_bank_active_uq")
+  @@index([cashBoxId, periodEnd])
+  @@index([bankAccountId, periodEnd])
+  @@map("cash_period_closes")
+}
+
+/// Carisiz kasa/banka hareketinin TÜRÜ.
+///
+/// ⚠️ Neden ayrı model (`Payment`e nullable `cariId` DEĞİL): `Payment`'ın
+/// sözleşmesi "cari deftere satır + bakiye + kasa aynı tx'te oynar"dır ve o
+/// sözleşme storno, kapama ve ekstre yollarının tamamında varsayılır. Kira
+/// ödemesinin carisi YOKTUR; `cariId`yi nullable yapmak, en hassas kod
+/// yolundaki her `Payment` okumasına sessiz bir "cari var mı" dalı eklerdi.
+/// Ayrım aynı zamanda ekranı da doğru böler: Tahsilat/Ödeme listesi CARİ
+/// hareketidir, Kasa Hareketleri ise kasanın kendi defteridir.
+enum CashTxnKind {
+  /// Gider — kira, maaş, elektrik, nakliye…
+  EXPENSE
+  /// Carisiz gelir — kur farkı geliri, hurda satışı, tahsilat dışı giriş.
+  INCOME
+  /// Virman — kasadan bankaya / bankadan kasaya. TEK uç İKİ satır üretir
+  /// (`transferGroupId` ile bağlı): biri OUT, diğeri IN.
+  TRANSFER_OUT
+  TRANSFER_IN
+  /// Açılış/devir bakiyesi — sisteme geçişte kasada/bankada var olan para.
+  /// Bakiye elle YAZILMAZ (generic CRUD'da `stripBalance` engelliyor); açılış
+  /// da bir HAREKETTİR, böylece "bu para nereden geldi" defterden okunur.
+  OPENING
+}
+
+/// Kasa/banka hareketi — CARİSİZ.
+///
+/// Yön `direction` kolonundadır, tutar HER ZAMAN POZİTİFTİR (RollVariance /
+/// WarehouseMovement emsali: işaretli tutar yönü iki yerde saklamaktır ve
+/// ikisi bir gün ayrışır).
+model CashTransaction {
+  id     String           @id @default(uuid()) @db.Uuid
+  /// KH + GGAAYY + NNNN.
+  docNo  String           @unique @db.VarChar(32)
+  kind   CashTxnKind
+  direction PaymentDirection
+  status PaymentStatus    @default(ACTIVE)
+
+  /// Kasa VEYA banka — ikisi birden olamaz (CHECK, Payment ile aynı kural).
+  cashBoxId     String? @db.Uuid
+  bankAccountId String? @db.Uuid
+
+  currency Currency @default(TRY)
+  /// Hesabın para biriminde; kur damgası TL karşılığı raporlar için.
+  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
+  amount       Decimal @db.Decimal(14, 2)
+  amountTry    Decimal @db.Decimal(14, 2)
+
+  txnDate     DateTime @db.Timestamptz
+  /// Serbest kategori metni ("Kira", "Elektrik"). Katalog BİLİNÇLİ olarak
+  /// yok: fabrika/ticaret gider kalemleri çok değişken ve boş bir katalog
+  /// kullanıcıyı "Diğer"e mahkûm ederdi (KK1 sebep kataloğu dersi: kategori
+  /// GERÇEK serbest metinlere bakılarak sonradan kurulur).
+  category    String?  @db.VarChar(120)
+  description String?  @db.VarChar(300)
+  reference   String?  @db.VarChar(120)
+
+  /// Virmanın İKİ satırını bağlar (aynı uçta doğarlar). Tekil hareketlerde NULL.
+  transferGroupId String? @db.Uuid
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  clientToken String? @unique @db.Uuid
+
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([cashBoxId, txnDate])
+  @@index([bankAccountId, txnDate])
+  @@index([kind, status, txnDate])
+  @@index([transferGroupId])
+  @@map("cash_transactions")
+}
+
+enum ExchangeRateSource {
+  MANUAL
+  TCMB
+}
+
+/// Günlük kur.
+///
+/// ⚠️ `rateDate` @db.Date — bu bir TAKVİM GÜNÜ anahtarıdır, an değil
+/// (`EndpointLatencyDaily.day` emsali). Timestamptz'ye çevrilirse gün sınırı
+/// saat dilimine bağlanır ve "13 Ağustos kuru" iki farklı satıra düşebilir.
+/// `test_timestamptz_contract` muaf listesine yazılmıştır.
+///
+/// Faz 1'de yalnız MANUAL (elle giriş); TCMB çekme işi Faz 2.
+model ExchangeRate {
+  id       String   @id @default(uuid()) @db.Uuid
+  rateDate DateTime @db.Date
+  currency Currency
+
+  /// 1 birim döviz kaç TL.
+  rate   Decimal            @db.Decimal(18, 6)
+  source ExchangeRateSource @default(MANUAL)
+
+  createdById String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([rateDate, currency])
+  @@index([currency, rateDate])
+  @@map("exchange_rates")
+}
+
+// =============================================================================
+// ÇEK / SENET PORTFÖYÜ (Paket C1) — migration 20260814101000
+// =============================================================================
+// ⚠️ NEDEN AYRI MODEL, NEDEN `PaymentMethod`'a CHEQUE DEĞERİ EKLENMEDİ:
+// `Payment` bir ANDIR — para o an el değiştirir ve olay orada biter. Çek bir
+// VARLIKTIR: haftalarca yaşar, vadesi vardır ve dört ayrı yola sapabilir
+// (tahsil · ciro · karşılıksız · iade). Çeki `PaymentMethod`'a bir değer olarak
+// eklemek, sistemin EN HASSAS kod yoluna (tahsilat + cari bakiye + storno)
+// sessiz bir "bu aslında henüz para değil" dalı sokmak olurdu. Logo/Mikro da
+// aynı ayrımı yapar (Çek/Senet ayrı modül, kendi bordro belgeleriyle).
+//
+// ⚠️ KASA/BANKA BAKİYESİNE İKİNCİ YAZAR: `Payment` ve `CashTransaction`'ın
+// yanına şimdi `ChequeEvent` (COLLECT/PAY) da geliyor. `test_consistency`
+// §23/§24 mutabakat formülü ÜÇ tabloyu birden toplamak zorundadır — yalnız
+// ikisine bakan bir sorgu, ilk çek tahsilatında "drift" diye KIRMIZI verir.
+// =============================================================================
+
+/// Çekin yönü — ALINAN (müşteri çeki, portföyümüzde) mi VERİLEN (kendi çekimiz)
+/// mi. Kart ayrı tutulmadı çünkü iki yönün alanları birebir aynı; ayıran şey
+/// yalnız defter işaretleri ve izlenen durum kümesidir.
+enum ChequeKind {
+  RECEIVED
+  ISSUED
+}
+
+/// Çek mi senet mi. Senet AYNI modülde: yaşam döngüsü (portföy → tahsil /
+/// karşılıksız / ciro) birebir aynıdır; ayrı tablo, aynı kodu iki kez yazmak
+/// olurdu. Fark yalnız belge numarası ön ekinde ve baskıda görünür.
+enum ChequeDocType {
+  CHEQUE
+  PROMISSORY_NOTE
+}
+
+/// Çekin DENORMALİZE başlık durumu — gerçek tarihçe `ChequeEvent`'tedir.
+///
+/// ⚠️ Bu kolon bir ÖZETTİR, kaynak değil: portföy listesi ve vade takibi her
+/// satır için olay defterini taramak zorunda kalmasın diye var. Geçişler ATOMİK
+/// CLAIM ile yazılır (`updateMany WHERE {id, beklenen-durum}` + count===0 → 409)
+/// — aksi halde iki eşzamanlı "tahsil et" iki kez banka bakiyesi artırırdı.
+///
+/// TERMİNAL: `COLLECTED` · `BOUNCED` · `RETURNED` · `PAID` · `CANCELLED`.
+/// `ENDORSED` terminal DEĞİLDİR: ciro edilen çek de karşılıksız çıkabilir ve o
+/// zaman İKİ cari birden ters kayıt alır.
+enum ChequeStatus {
+  /// Alınan çek elimizde (kind=RECEIVED doğuş durumu).
+  PORTFOLIO
+  /// Tahsile/teminata bankaya verildi — henüz para gelmedi.
+  AT_BANK
+  /// Ciro edildi (borcumuzu bu çekle kapattık).
+  ENDORSED
+  /// Tahsil edildi — banka/kasa +amount.
+  COLLECTED
+  /// Karşılıksız çıktı — defter TERS KAYITLA geri alınır.
+  BOUNCED
+  /// Sahibine iade edildi (müşteri nakit ödedi, çeki geri istedi).
+  RETURNED
+  /// Kendi çekimiz verildi (kind=ISSUED doğuş durumu).
+  ISSUED
+  /// Kendi çekimiz ödendi — banka −amount.
+  PAID
+  /// Kayıt hatası stornosu. Fiziksel DELETE yok; satır durur, defter ters kayıtla kapanır.
+  CANCELLED
+}
+
+/// Çek / senet — PORTFÖY VARLIĞI.
+///
+/// ⚠️ DEFTER ANI (kilitli karar): çek ALINDIĞI AN cari alacaklanır. Müşteri çeki
+/// verdiğinde ticari olarak ödemiştir; ekstre aksini söylerse iki taraf iki
+/// gerçekle çalışır ve mutabakat imkânsızlaşır. Karşılıksız riski, kaydı
+/// GECİKTİRMENİN değil TERS KAYITLA geri almanın gerekçesidir.
+///
+/// ⚠️ `status` ile `ChequeEvent` AYRIŞAMAZ: her geçiş aynı tx'te hem başlığı
+/// hem olay satırını yazar (`ChequeEvent.toStatus` = yeni başlık). Bekçi bu
+/// mutabakatı mekanik doğrular.
+model Cheque {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// CKA/CKV/SNA/SNV + GGAAYY + NNNN (alınan/verilen çek · alınan/verilen senet).
+  docNo String @unique @db.VarChar(32)
+
+  kind    ChequeKind
+  docType ChequeDocType @default(CHEQUE)
+
+  /// Doğuş durumunu KIND belirler (RECEIVED→PORTFOLIO, ISSUED→ISSUED) → bilinçli
+  /// olarak `@default` YOK: sabit bir varsayılan, iki yönden birini sessizce
+  /// yanlış durumda doğururdu.
+  status ChequeStatus
+
+  /// Çeki VEREN (kind=RECEIVED) ya da çeki ALDIĞIMIZ (kind=ISSUED) cari.
+  cariId String @db.Uuid
+
+  /// Ciro edildiyse ALAN cari. Ciro sonrası da DOLU KALIR (NULL'lanmaz): çek
+  /// karşılıksız çıkarsa ters kaydın kime yazılacağını bu alan söyler ve portföy
+  /// listesi "kimde" sorusunu buradan cevaplar.
+  endorsedToCariId String? @db.Uuid
+
+  /// Tahsile/teminata verildiği ya da (kendi çekimizde) üzerine yazıldığı banka.
+  bankAccountId String? @db.Uuid
+
+  currency Currency @default(TRY)
+  /// Belgeye DAMGALANAN kur — kur tablosu sonradan düzeltilse bile bu çek kendi
+  /// kuruyla okunur (fatura emsali).
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  amount       Decimal  @db.Decimal(14, 2)
+  amountTry    Decimal  @db.Decimal(14, 2)
+
+  /// FATURAYA KAPATILAN tutar (C2) — `amount`'ı AŞAMAZ (CHECK). Çekle kapama,
+  /// tahsilatla kapamayla AYNI `PaymentAllocation` tablosundan geçer: iki ayrı
+  /// kapama motoru, "bu fatura ne kadar kapandı" sorusuna iki cevap üretirdi.
+  allocatedTotal Decimal @default(0) @db.Decimal(14, 2)
+
+  /// KEŞİDE tarihi — çekin ÜZERİNDEKİ tarih (kâğıdın bilgisi; SAP Belegdatum).
+  /// ⚠️ DEFTER ÇIPASI DEĞİLDİR (2026-08-14 sağlamlık tasarımı): keşide tarihi
+  /// çekin alındığı gün değildir — ileri keşide standart pratik, geçmiş keşideli
+  /// çek almak olağan. Defter/kilit/belge-no/kur `postingDate`ten okunur. Alan
+  /// yine de ZORUNLU ve atılamaz: TTK 796 ibraz süresi keşideden hesaplanır
+  /// (hukuki veri) ve panel kâğıdın tarihini ayrıca sorar.
+  issueDate DateTime @db.Timestamptz
+  /// İŞLEM tarihi (SAP Buchungsdatum) — çekin DEFTERE girdiği gün. Cari defter
+  /// `txnDate`i, dönem kilidi çıpası, belge numarasının GGAAYY'si ve kur çözümü
+  /// DÖRDÜ DE buradan. Varsayılan bugün; geçmişe girilebilir, dönem kilidi
+  /// kapılar ("işlem tarihi kullanıcınındır, kilit kapılar" — payment emsali).
+  /// Migration `postingDate = issueDate` backfill'i ile geldi: veri taşıyan bir
+  /// kurulumda defter ZATEN issueDate'ten yazılmıştı — ekstre bayt-bayt değişmez.
+  postingDate DateTime @db.Timestamptz
+  /// VADE — portföyün birinci sıralama anahtarı ve yaşlandırmanın girdisi.
+  /// `@db.Date` DEĞİL: `Invoice.dueDate` ile aynı sözleşmede kalsın (istemci
+  /// yerel gün sınırını mutlak ana çevirip gönderiyor).
+  dueDate   DateTime @db.Timestamptz
+
+  /// Çekin ÜZERİNDEKİ numara — bizim `docNo`'muzdan farklıdır (o bizim iç belge
+  /// numaramız). Opsiyonel: eldivenli girişte okunaksız çeki bloklamamak için.
+  serialNo   String? @db.VarChar(64)
+  bankName   String? @db.VarChar(100)
+  branchName String? @db.VarChar(100)
+  /// KEŞİDECİ — çeki yazan kişi/firma. Sektörde sıkça ÜÇÜNCÜ ŞAHIS çeki alınır
+  /// (müşteri kendi müşterisinin çekini ciro eder), yani cari ile aynı olmayabilir.
+  drawerName String? @db.VarChar(150)
+
+  notes String? @db.VarChar(500)
+
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  createdById String? @db.Uuid
+  /// Kayıt-yaratan uç sözleşmesi. Olay geçişlerinde clientToken YOK ve gerekmez:
+  /// orada idempotency'yi atomik claim'in kendisi verir (beklenen durum bir kez
+  /// tüketilir, ikinci istek 409 alır).
+  clientToken String? @unique @db.Uuid
+
+  cari           CariAccount  @relation("ChequeCari", fields: [cariId], references: [id], onDelete: Restrict)
+  endorsedToCari CariAccount? @relation("ChequeEndorsedTo", fields: [endorsedToCariId], references: [id], onDelete: Restrict)
+  bankAccount    BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+
+  events       ChequeEvent[]
+  transactions CariTransaction[]
+  allocations  PaymentAllocation[]
+  /// Bu çekin girdiği teslim bordroları (2026-08-15). ⚠️ ÇOĞUL ve bu bilinçli:
+  /// aynı çek bordroya girip geri alınabilir ve yeniden teslim edilebilir
+  /// (bordro iptal edilir, yenisi kesilir) — bordro çekin DURUMUNU değiştirmez.
+  deliveryNoteItems ChequeDeliveryNoteItem[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Şu carinin portföyünde ne var" — eşitlik önce, vade (sıralama) sonra.
+  @@index([cariId, status, dueDate])
+  // "Vadesi yaklaşan / geçen çekler" — portföy ekranının varsayılan sorgusu.
+  @@index([status, dueDate])
+  @@index([endorsedToCariId])
+  @@index([bankAccountId])
+  @@map("cheques")
+}
+
+/// Çek olayının TÜRÜ — `ChequeStatus` ile birebir eşlenmez:
+/// `DEPOSIT`→AT_BANK, `COLLECT`→COLLECTED, `PAY`→PAID gibi olay→durum eşlemesi
+/// serviste yaşar. Ayrı enum olmasının sebebi: durum "nerede", olay "ne oldu"
+/// sorusunu cevaplar; ikisi tek enuma katlanırsa iade ile iptalin AYNI durumda
+/// bitmesi gerekirdi.
+enum ChequeEventType {
+  RECEIVE
+  ISSUE
+  DEPOSIT
+  COLLECT
+  ENDORSE
+  BOUNCE
+  RETURN
+  PAY
+  CANCEL
+  /// Tahsil stornosu (2026-08-14, K-2): yanlış COLLECT işaretlenen çek eskiden
+  /// SONSUZA DEK "tahsil edildi" kalıyordu — kasa stornosu kasayı düzeltir ama
+  /// çekin durumunu düzeltemezdi ve sonradan GERÇEKTEN karşılıksız çıkan çekte
+  /// portföy yalan söylerdi. Bu olay banka/kasa ters hareketi + durumu geri
+  /// (DEPOSITED→ya da PORTFOLIO) çeker; olay defterinde KENDİ adıyla durur.
+  COLLECT_CANCEL
+}
+
+/// Çekin durum defteri — APPEND-ONLY (`CariTransaction` emsali: `updatedAt` YOK).
+///
+/// ⚠️ UPDATE/DELETE YOK. "Çek ne zaman bankaya verildi, ne zaman karşılıksız
+/// döndü" sorusunun tek güvenilir kaynağı budur; `Cheque.status` yalnız son
+/// satırın özetidir.
+model ChequeEvent {
+  id       String          @id @default(uuid()) @db.Uuid
+  chequeId String          @db.Uuid
+  type     ChequeEventType
+
+  /// Geçişin İKİ ucu da saklanır: `toStatus` başlıkla mutabakatı (son satır =
+  /// `Cheque.status`) mekanik doğrulanabilir yapar, `fromStatus` ise atomik
+  /// claim'in NEYİ tükettiğini kayda geçirir. Doğuş satırında `fromStatus` NULL.
+  fromStatus ChequeStatus?
+  toStatus   ChequeStatus
+
+  eventDate DateTime @db.Timestamptz
+
+  /// ENDORSE'ta ciro edilen cari — olayın karşı tarafı.
+  counterCariId String? @db.Uuid
+  /// COLLECT/PAY/DEPOSIT hesabı. Tahsil elden de olabildiği için kasa da meşru;
+  /// ikisi BİRDEN dolu olamaz (CHECK).
+  bankAccountId String? @db.Uuid
+  cashBoxId     String? @db.Uuid
+
+  notes       String? @db.VarChar(300)
+  createdById String? @db.Uuid
+
+  cheque      Cheque       @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  counterCari CariAccount? @relation("ChequeEventCounterCari", fields: [counterCariId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  cashBox     CashBox?     @relation(fields: [cashBoxId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([chequeId, eventDate])
+  // Kasa defteri (C4): "dönemde tahsil edilen çekler" — tür + tarih aralığı.
+  @@index([type, eventDate])
+  // Hesap bazlı kasa/banka defteri — bakiyenin üçüncü yazarının okuma yolu.
+  @@index([bankAccountId, eventDate])
+  @@index([cashBoxId, eventDate])
+  @@index([counterCariId])
+  @@map("cheque_events")
+}
+
+// =============================================================================
+// FATURA KAPAMA (Paket C2) — migration 20260814102000
+// =============================================================================
+// "Hangi tahsilat hangi faturayı kapattı" bağı. Bu bağ olmadan yaşlandırma
+// raporu yazılamaz: cari bakiyesi TEK sayıdır ve "bu 10.000 TL hangi faturanın
+// karşılığı" sorusunu cevaplayamaz.
+// =============================================================================
+
+/// Fatura ↔ tahsilat/çek kapama satırı.
+///
+/// ⚠️ DEFTERE SATIR YAZMAZ. Cari bakiyesi zaten İKİ kez oynadı (fatura onayında
+/// ve tahsilatta); kapama üçüncü kez yazsaydı aynı para iki kez sayılırdı.
+/// Kapama yalnız EŞLEŞTİRMEDİR — bakiyeyi değil, bakiyenin YAŞINI belirler.
+///
+/// ⚠️ `paymentId` XOR `chequeId` (CHECK): bir kapama satırının kaynağı ya nakit/
+/// havale tahsilatıdır ya çektir. İkisi birden dolu olsaydı aynı kapama iki
+/// sayacı birden tüketir (`Payment.allocatedTotal` + `Cheque.allocatedTotal`) ve
+/// ikisi de fatura tarafıyla ayrışırdı.
+///
+/// ⚠️ FIFO bir ÖNERİDİR, otomatik commit DEĞİL: `GET open-invoices` vade sıralı
+/// aday listesi döner, kullanıcı düzeltebilir. Muhasebede "hangi ödemenin hangi
+/// faturaya sayılacağı" ticari bir karardır (vade farkı, iskonto, itiraz).
+///
+/// ⚠️ Kapsam BİLİNÇLİ DAR (Faz 3'e bırakılanlar): aynı cari + aynı para birimi +
+/// yön eşleşmesi (IN↔SALES, OUT↔PURCHASE). Çapraz kur / çapraz cari kapama
+/// (mahsuplaşma) ayrı bir iştir ve kur farkı hesabı gerektirir.
+model PaymentAllocation {
+  id String @id @default(uuid()) @db.Uuid
+
+  invoiceId String @db.Uuid
+
+  paymentId String? @db.Uuid
+  chequeId  String? @db.Uuid
+
+  /// Kapatılan tutar — FATURANIN para biriminde (eşleşme serviste zorunlu).
+  amount Decimal @db.Decimal(14, 2)
+
+  notes       String? @db.VarChar(300)
+  createdById String? @db.Uuid
+
+  invoice Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  cheque  Cheque?  @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // ⚠️ `@@unique([invoiceId, paymentId])` BİLİNÇLİ OLARAK YOK: aynı tahsilatın
+  // aynı faturaya birden çok kez kısmi kapaması meşrudur (düzeltme/bölme) ve
+  // toplamı zaten sayaç CHECK'leri sınırlar. Unique koymak, mükerrer tıklamayı
+  // engellemek yerine meşru düzeltmeyi bloklardı.
+  @@index([invoiceId])
+  @@index([paymentId])
+  @@index([chequeId])
+  @@map("payment_allocations")
+}
+
+// =============================================================================
+// DÖNEM KAPANIŞI (Paket C3) — migration 20260814103000
+// =============================================================================
+// Kapanış bir FOTOĞRAFTIR: "31.12.2025 itibarıyla bu cari bize 42.150 TL
+// borçluydu". Deftere satır YAZMAZ — devir bir hareket değil, hareketlerin o
+// ana kadarki toplamıdır; satır yazsaydı bir sonraki ekstre aynı tutarı hem
+// devir satırında hem hareketlerde sayardı.
+// =============================================================================
+
+/// Cari dönem kapanışı — para birimi BAZINDA.
+///
+/// ⚠️ KAPALI DÖNEME KAYIT = KİLİT (409), uyarı DEĞİL. Uyarı okunmaz; sessiz
+/// yeniden-hesap ise daha kötüdür — kapanmış ve dışarıya beyan edilmiş bir
+/// rakamı kimse istemeden değiştirir. Tek yüklem `assertPeriodOpenTx`;
+/// `CariTransaction` yazan BEŞ yol (fatura onay/storno, tahsilat/storno, çek
+/// olayları) satır yazmadan ÖNCE onu çağırır.
+///   • Storno'lar doğal olarak sızmaz: iptal satırları `txnDate = now` taşır,
+///     yani cari (açık) döneme düşerler — geçmiş dönem yeniden yazılmaz.
+///
+/// ⚠️ REOPEN SATIRI SİLMEZ, İŞARETLER (`reopenedAt`). Kapanış her an yeniden
+/// türetilebilir (kaynak defter append-only), o yüzden kaydın kendisi değil
+/// "kapalı sayılıp sayılmadığı" bilgisi taşınır — ve "bu dönem bir kez kapandı,
+/// sonra açıldı" izi denetimde tam olarak aranan şeydir.
+///
+/// ⚠️ `periodEnd` `@db.Date` — TAKVİM GÜNÜ anahtarıdır, an değil ("2025 Aralık
+/// kapanışı"). Timestamptz olsaydı gün sınırı saat dilimine bağlanır ve aynı
+/// kapanış iki farklı satıra düşebilirdi (`ExchangeRate.rateDate` emsali).
+/// `test_timestamptz_contract` muaf listesine gerekçesiyle yazılmıştır.
+model CariPeriodClose {
+  id       String   @id @default(uuid()) @db.Uuid
+  cariId   String   @db.Uuid
+  currency Currency
+
+  /// Dönemin SON GÜNÜ (dahil). Başlangıç saklanmaz: bir önceki kapanıştan
+  /// türetilir — iki uç da saklansaydı aralarında boşluk/örtüşme doğabilirdi.
+  periodEnd DateTime @db.Date
+
+  /// O ana kadarki bakiye. NEGATİF OLABİLİR (alacaklıysak) → CHECK yok.
+  closingBalance Decimal @db.Decimal(14, 2)
+  /// Kapanışa giren hareket sayısı — "fotoğraf ne kadar hareketten üretildi"
+  /// kontrol toplamı; yeniden türetildiğinde tutmuyorsa defter değişmiş demektir.
+  txnCount       Int
+
+  notes      String? @db.VarChar(500)
+  closedById String? @db.Uuid
+
+  reopenedAt   DateTime? @db.Timestamptz
+  reopenedById String?   @db.Uuid
+  reopenReason String?   @db.VarChar(300)
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // DB'de PARTIAL UNIQUE: `WHERE "reopenedAt" IS NULL` (migration 20260814103000).
+  // Düz unique olsaydı yeniden açılan bir dönem BİR DAHA kapatılamazdı (eski
+  // satır aynı anahtarı tutmaya devam ederdi). Şemada `@@unique` kalmak ZORUNDA:
+  // Prisma predicate farkını drift saymaz ama index↔unique farkını SAYAR.
+  @@unique([cariId, currency, periodEnd], map: "cari_period_close_active_uq")
+  // Kapanış GEÇMİŞİ (yeniden açılmışlar dahil) — partial unique bu sorguyu
+  // karşılayamaz, çünkü PG partial index'i yalnız predicate'i ispatlanabilen
+  // sorguda kullanır.
+  @@index([cariId, periodEnd])
+  @@map("cari_period_closes")
+}
+
+// =============================================================================
+// PAKET D — TİCARET GENİŞLEMESİ (2026-08-14)
+// =============================================================================
+// D1 iplik kg-stok · D2 fiyat (kart + müşteri istisnası) · D3 alış siparişi.
+// Üçü de ticaret rejimine aittir (`finance.enabled`); fabrikada hiçbir yüzeyi
+// görünmez ve hiçbir mevcut tabloya davranış eklemez.
+// =============================================================================
+
+/// İplik hareketinin YÖNÜ. Miktar HER ZAMAN POZİTİFTİR — yönü bu enum söyler
+/// (`WarehouseMovement.qty` emsali). Sayım farkı bu yüzden tek bir "ADJUST"
+/// değil İKİ değerdir: işaretli tek alan, bir gün birinin `Math.abs()` yazıp
+/// eksi farkı artı saymasına açık kapı bırakırdı.
+enum YarnMovementKind {
+  IN
+  OUT
+  ADJUST_IN
+  ADJUST_OUT
+}
+
+/// İplik stoğunun (kalem × depo) DENORMALİZE kg bakiyesi.
+///
+/// ⚠️ İkinci yazar YOK: `balanceKg`'a yalnız `yarn.service` dokunur ve HER
+/// yazım aynı tx'te bir `YarnMovement` satırı doğurur. Mutabakat bekçisi
+/// Σ(hareket) ile karşılaştırır (`CariBalance` ↔ `CariTransaction` emsali).
+///
+/// ⚠️ LOT'A YÜKSELTME YOLU AÇIK ve KIRICI DEĞİL: bu tablo (kalem × depo)
+/// ROLLUP'ıdır. Lot geldiğinde `YarnLot` + `YarnMovement.lotId` (nullable)
+/// eklenir, lot bazlı bakiye AYRI bir tabloya iner ve BU tablo toplam olarak
+/// doğru kalmaya devam eder — yani buradaki `@@unique` değişmez. Bakiyeyi
+/// baştan lot bazına kurmak, lotsuz bugünkü veriyi göçe mahkûm ederdi.
+model YarnStock {
+  id          String @id @default(uuid()) @db.Uuid
+  itemId      String @db.Uuid
+  warehouseId String @db.Uuid
+
+  balanceKg Decimal @default(0) @db.Decimal(14, 3)
+
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([itemId, warehouseId])
+  @@index([warehouseId])
+  @@map("yarn_stocks")
+}
+
+/// İplik stok defteri — APPEND-ONLY (bu yüzden `updatedAt` YOK, konvansiyon).
+///
+/// ⚠️ Satır SİLİNMEZ/DÜZELTİLMEZ: yanlış giriş TERS KAYITLA kapatılır
+/// (ADJUST_OUT). Defter felsefesi cari/kasa ile aynı — geçmişi düzeltmek
+/// değil, düzeltmeyi de deftere yazmak.
+model YarnMovement {
+  id          String           @id @default(uuid()) @db.Uuid
+  itemId      String           @db.Uuid
+  warehouseId String           @db.Uuid
+  kind        YarnMovementKind
+
+  /// HER ZAMAN POZİTİF (DB CHECK ile kilitli); yönü `kind` söyler.
+  qtyKg Decimal @db.Decimal(14, 3)
+
+  /// Belge bağları — typed FK (polimorfik değil), `WarehouseMovement` emsali.
+  /// Hepsi opsiyoneldir: BELGESİZ elle düzeltme (`POST /api/yarn/movements`)
+  /// meşru bir yoldur ve öyle kalır.
+  ///
+  /// ⚠️ `stockCountId` (2026-08-15, J2 #19): satırı doğuran TAM SAYIM. Serbest
+  /// `reason` metnine "SAY... sayım farkı" yazmak YETMEZ — metin aranabilir
+  /// değildir ve "bu sayım hangi düzeltmeleri yazdı" sorusu tipli bağ olmadan
+  /// LIKE ile cevaplanırdı. Bağ ayrıca sayımın kendisini silinemez yapar
+  /// (Restrict): fişi doğuran belge ortadan kaybolamaz.
+  goodsReceiptId String? @db.Uuid
+  invoiceId      String? @db.Uuid
+  stockCountId   String? @db.Uuid
+
+  /// Satın alma BİRİM fiyatı — fişin para biriminde, `Roll.purchasePrice`
+  /// simetriği (2026-08-14, Sınıf 5). Bu alan gelmeden iplik satırı fiyat
+  /// TAŞIYAMIYORDU: fişte fiyat girmek 400 yiyor, alış faturası taslağı iplikte
+  /// hep sıfırla doğup elle fiyat adımına düşüyordu. Fiyat kabul ANINDA donar
+  /// (append-only satırda) — maliyet/fatura mutabakatının çıpası.
+  /// ⚠️ Ters kayıtlar (ADJUST_OUT, fiş iptali) fiyat TAŞIMAZ — geri sarım
+  /// ticari bir olay değildir, miktar defteridir.
+  unitPrice Decimal? @db.Decimal(14, 4)
+
+  /// Serbest gerekçe. ⚠️ Audit'e DEĞİL kolona yazılır: `archive-scheduler`
+  /// `SystemLog`'u 6 ayda bir taşır ve "bu düzeltme neden yapıldı" sorusunun
+  /// cevabı sessizce kaybolurdu (`Roll.entryReason` emsali).
+  reason String? @db.VarChar(300)
+
+  userId String? @db.Uuid
+
+  item         Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  warehouse    Warehouse     @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  goodsReceipt GoodsReceipt? @relation(fields: [goodsReceiptId], references: [id])
+  invoice      Invoice?      @relation(fields: [invoiceId], references: [id])
+  stockCount   StockCount?   @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
+  user         User?         @relation("YarnMovementUser", fields: [userId], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  @@index([itemId, warehouseId, createdAt])
+  @@index([warehouseId, createdAt])
+  @@index([goodsReceiptId])
+  @@index([invoiceId])
+  @@index([stockCountId])
+  @@map("yarn_movements")
+}
+
+/// Fiyatın YÖNÜ — alış mı satış mı.
+enum PriceKind {
+  PURCHASE
+  SALE
+}
+
+/// Kalem fiyatı: KART VARSAYILANI + MÜŞTERİ İSTİSNASI.
+///
+/// ⚠️ `Item`'a fiyat alanı EKLENMEDİ: fabrika kartı ticaret paketinin
+/// kavramlarıyla şişmemeli ve fiyat (kalem × müşteri × yön × para birimi)
+/// dört boyutludur — tek kolona sığmaz.
+///
+/// ⚠️ `customerId` NULL = kart varsayılanı. Bu yüzden DB'de İKİ PARTIAL UNIQUE
+/// vardır (migration'da ham SQL): düz `@@unique` NULL'ları ÇAKIŞTIRMAZ, yani
+/// aynı kaleme İKİ farklı "varsayılan fiyat" sessizce doğardı ve `resolveItemPrice`
+/// hangisini seçtiğini kimse söyleyemezdi. Şemada `@@unique` olarak durmak
+/// ZORUNDA: Prisma 7 predicate farkını drift saymaz, index↔unique farkını SAYAR.
+model ItemPrice {
+  id         String    @id @default(uuid()) @db.Uuid
+  itemId     String    @db.Uuid
+  customerId String?   @db.Uuid
+  kind       PriceKind
+  currency   Currency
+  price      Decimal   @db.Decimal(14, 4)
+
+  item     Item      @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // → partial: WHERE "customerId" IS NULL      (kart varsayılanı tektir)
+  @@unique([itemId, kind, currency], map: "item_price_default_uq")
+  // → partial: WHERE "customerId" IS NOT NULL  (müşteri istisnası tektir)
+  @@unique([itemId, customerId, kind, currency], map: "item_price_customer_uq")
+  @@index([customerId])
+  @@map("item_prices")
+}
+
+/// Alış siparişi durumu. `PARTIAL`/`CLOSED` kabul edilen miktardan TÜRETİLİR
+/// (servis her mal kabulünde yeniden hesaplar) — kullanıcı elle işaretlemez.
+enum PurchaseOrderStatus {
+  OPEN
+  PARTIAL
+  CLOSED
+  CANCELLED
+}
+
+/// Alış siparişi — "ne ısmarladım, ne geldi".
+///
+/// ⚠️ Mevcut `Order` BÜKÜLMEDİ: o model satış/üretim dünyasına bağlıdır
+/// (iş emri, sevkiyat, tahsis, refakat kartı). Alış siparişini oraya sokmak,
+/// üretim tarafındaki her sorguya "ama bu alış siparişi değilse" şartı
+/// eklemek demekti — ve o şartı unutan ilk sorgu sessizce yanlış olurdu.
+model PurchaseOrder {
+  id      String @id @default(uuid()) @db.Uuid
+  /// AS + GGAAYY + NNNN.
+  orderNo String @unique @db.VarChar(32)
+
+  /// Tedarikçi = `Customer` (`CompanyType.SUPPLIER`) — `GoodsReceipt.supplierId`
+  /// ile AYNI kaynak. Ayrı tedarikçi modeli açılmadı (cari kart tek yerde).
+  /// C4 (2026-08-15): fason tedarikçi bacağı gelince NULLABLE oldu — sipariş ya
+  /// müşteri-tipli tedarikçiden ya FASON firmadan verilir; TAM BİRİ dolu olmak
+  /// ZORUNDA (XOR, servis guard'ı — GoodsReceipt ile aynı sözleşme).
+  supplierId      String? @db.Uuid
+  subcontractorId String? @db.Uuid
+  currency   Currency @default(TRY)
+
+  status       PurchaseOrderStatus @default(OPEN)
+  orderDate    DateTime            @db.Timestamptz
+  expectedDate DateTime?           @db.Timestamptz
+  notes        String?             @db.VarChar(500)
+
+  clientToken String? @unique @db.Uuid
+
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  /// SHORT-CLOSE ("kalanı kapat", G2 2026-08-14): dolu ise sipariş, kalan
+  /// miktarlar GELMEYECEK kararıyla kapatılmıştır. İPTALDEN FARKI: iptal "bu
+  /// sipariş hiç olmadı" der (kabul görmüşse reddedilir); short-close "olan
+  /// KALIR, kalanı gelmeyecek" der — gelen malın kaydı ve karşılanması durur.
+  /// ⚠️ `status` türetilmiş olmaya devam eder; bu bayrak doluyken senkron
+  /// durumu CLOSED bırakır (`syncPurchaseOrderTx` — EZMEZ). Bayrağı temizleyen
+  /// tek yol `reopenShortClose`tur ve durum kaynaktan yeniden türetilir.
+  shortClosedAt    DateTime? @db.Timestamptz
+  /// Düşük-trafik audit FK — perf kuralı 1'in bilinçli istisnası (indexsiz;
+  /// `printedById`/`grantedById` emsali). Sorgu yolu doğarsa index eklenir.
+  shortClosedById  String?   @db.Uuid
+  shortCloseReason String?   @db.VarChar(300)
+
+  supplier      Customer?           @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  subcontractorSupplier Subcontractor? @relation("PurchaseOrderSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  createdBy     User?               @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  cancelledBy   User?               @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id])
+  shortClosedBy User?               @relation("PurchaseOrderShortClosedBy", fields: [shortClosedById], references: [id])
+  lines         PurchaseOrderLine[]
+  goodsReceipts GoodsReceipt[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([supplierId, status])
+  @@index([subcontractorId, status])
+  @@index([status, orderDate])
+  @@map("purchase_orders")
+}
+
+/// Alış siparişi kalemi.
+///
+/// ⚠️ `receivedQty` DENORMALİZE — gerçek desen `increment` DEĞİL, KAYNAKTAN
+/// ROLLUP'tır (yorum 2026-08-14'te servis gerçeğiyle hizalandı): senkron 8027
+/// advisory kilidi altında `computeReceivedByItemTx` ile yeniden hesaplanıp
+/// MUTLAK yazılır (`purchase-order.service.syncPurchaseOrderTx`) — kendini
+/// onaran sayaç. Fazla kabulü DB CHECK engellemez (fiziksel olarak fazla mal
+/// GELEBİLİR); servis uyarır, kayıt gerçeği yazar.
+model PurchaseOrderLine {
+  id              String @id @default(uuid()) @db.Uuid
+  purchaseOrderId String @db.Uuid
+  lineNo          Int
+
+  itemId String @db.Uuid
+  /// Sipariş birimi kalemin kendi birimidir (`Item.unit`) — satırda tekrar
+  /// saklanmaz ki ikisi ayrışmasın.
+  qty         Decimal  @db.Decimal(14, 3)
+  receivedQty Decimal  @default(0) @db.Decimal(14, 3)
+  unitPrice   Decimal? @db.Decimal(14, 4)
+
+  notes String? @db.VarChar(300)
+
+  purchaseOrder PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  item          Item          @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  /// Bu kalemi karşılayan toplar (iz — gerekçe `Roll.purchaseOrderLineId`de).
+  rolls         Roll[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@unique([purchaseOrderId, lineNo])
+  @@index([itemId])
+  @@map("purchase_order_lines")
+}
+
+// =============================================================================
+// RESMİ ÖN MUHASEBE BELGELERİ (2026-08-15, J2 #18) — migration 20260814220100
+// =============================================================================
+// İki YENİ SAHİPLENEN model. İkisi de var olan bir veriyi yeniden anlatır; yeni
+// bir defter AÇMAZLAR:
+//   • ReconciliationLetter → cari defterin bir ANDAKİ bakiye fotoğrafı
+//   • ChequeDeliveryNote   → seçilen çeklerin teslim tutanağı
+//
+// ⚠️ NEDEN AYRI MODEL (H6'nın "bordro grubunu sahiplenen kaynak model yok"
+// notunun cevabı): donmuş belge `docType + sourceId` ister. Kaynak yalnız
+// "kullanıcının o anki seçimi" olduğunda belgenin numarası, sürümü ve revizyon
+// geçmişi OLAMAZ ve aynı seçimle iki kez basmak iki ayrı olay üretmez. Bu iki
+// tablo tam olarak o eksik kimliği taşır.
+//
+// ⚠️ İKİSİ DE DEFTERE YAZMAZ. Ne `CariTransaction` ne bakiye ne kasa/banka —
+// hiçbiri oynamaz. Mutabakat mektubu bakiyeyi OKUR, bordro çekin DURUM
+// MAKİNESİNE DOKUNMAZ (v1 belge-only kararı; teslim olayları mevcut çek
+// akışında: deposit/endorse/collect). Bu yüzden dönem kilidi de aranmaz.
+//
+// ⚠️ `clientToken` BİLİNÇLİ OLARAK YOK — gerekçe servis dosyalarının başında
+// (özet: bu iki kayıt para/stok/defter oynatmaz, ekrandaki bir SEÇİMDEN doğar
+// ve mükerrer kopyanın maliyeti "boşa giden bir belge numarası"dır; iptali de
+// tek adımdır). Kayıt-yaratan uç sözleşmesine dönmek istenirse eklenmesi tek
+// nullable kolon + partial unique index'tir.
+// =============================================================================
+
+/// Mutabakat mektubunun durumu. `Payment`/`GoodsReceipt` emsali: iki değerli
+/// enum + `cancelledAt/By/Reason` üçlüsü. Yalın `cancelledAt IS NULL` yerine
+/// enum seçilmesinin sebebi atomik claim'dir — iptal `updateMany WHERE {id,
+/// status: ACTIVE}` ile TEK KEZ tüketilir ve ikinci istek 409 alır.
+enum ReconciliationLetterStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// CARİ MUTABAKAT MEKTUBU — "şu tarih itibarıyla bakiyeniz şudur, mutabık
+/// mısınız?" diye karşı tarafa giden, imzalanıp geri gelmesi beklenen belge.
+///
+/// ⚠️ BAKİYE SATIRLARI BU TABLODA SAKLANMAZ ve bu bilinçli: fotoğrafı donmuş
+/// `PrintedDocument.snapshot` taşır (belge OLUŞTURMADA donar). İkinci bir kopya
+/// tutmak, aynı rakam için iki kaynak demekti — ve ikisi ayrıştığı gün hangisinin
+/// "resmi" olduğu sorusunun cevabı olmazdı. Tablo yalnız belgenin KİMLİĞİNİ ve
+/// ÜRETİM PARAMETRELERİNİ (cari + kesit tarihi) taşır.
+///
+/// ⚠️ `asOf` BELGENİN İÇERİĞİDİR, düzenleme tarihi DEĞİL: geçmişe dönük bir
+/// kesit ("31 Temmuz itibarıyla") olağandır. Belge numarasının GGAAYY'si bu
+/// yüzden `asOf`tan değil DÜZENLEME anından okunur (`createdAt` ile aynı gün).
+model ReconciliationLetter {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// MBT + GGAAYY + NNNN (düzenleme günü).
+  docNo String @unique @db.VarChar(32)
+
+  cariId String @db.Uuid
+
+  /// BAKİYE KESİTİ — `txnDate <= asOf` olan tüm hareketler sayılır.
+  asOf DateTime @db.Timestamptz
+
+  status ReconciliationLetterStatus @default(ACTIVE)
+  notes  String?                    @db.VarChar(500)
+
+  /// ⚠️ FK YOK ve index YOK — ön muhasebe konvansiyonu (`Payment`/`Cheque`/
+  /// `Invoice` de `createdById`i çıplak UUID taşır). Düşük trafikli "kim yaptı"
+  /// izi; sorgu yolu doğarsa FK+index birlikte eklenir.
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  cari CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Şu carinin mutabakatları, yeniden eskiye" — eşitlik önce, sıralama sonra.
+  @@index([cariId, createdAt])
+  @@map("reconciliation_letters")
+}
+
+/// Çek teslim bordrosunun durumu — `ReconciliationLetterStatus` ile aynı
+/// gerekçe (atomik claim). Ayrı enum: iki belgenin durum uzayları bağımsız
+/// evrilebilmeli (ör. bordroya ileride "TESLİM ALINDI" eklenirse mutabakat
+/// mektubu ondan etkilenmemeli).
+enum ChequeDeliveryNoteStatus {
+  ACTIVE
+  CANCELLED
+}
+
+/// ÇEK / SENET TESLİM BORDROSU — H6'nın ANLIK Electron çıktısının donmuş resmi
+/// sürümü (`Electron/src/pages/Finance/Cheques/chequeBordro.ts`).
+///
+/// ⚠️ ÇEKİN DURUM MAKİNESİNE DOKUNMAZ (v1 kararı, J2 #18 planı). Bordro kesmek
+/// "bankaya verdim" ya da "ciro ettim" DEMEK DEĞİLDİR — o olaylar kendi
+/// uçlarından (`deposit`/`endorse`/`pay`) geçer ve defteri onlar oynatır.
+/// Bordro yalnız KAĞITTIR: karşı tarafın imzaladığı teslim tutanağı.
+///
+/// ⚠️ BİR BORDRO TEK YÖN TAŞIR (`kind`) — H6'nın çekirdek kuralı buradan
+/// aynalanır: aldığımız kıymetlerle kendi borç senetlerimiz aynı kâğıda giremez
+/// (toplam iki ayrı şey demeye başlar ve "teslim alan" imzası neyin teslim
+/// alındığını söylemez olur). Alan denormalize DEĞİL, belgenin KİMLİĞİDİR;
+/// servis satırlarla tutarlılığını doğrular.
+///
+/// ⚠️ HEDEF ÜÇ BİÇİMDE OLABİLİR ve EN FAZLA BİRİ YAPILANDIRILMIŞTIR:
+/// `bankAccountId` (tahsile/teminata veriş) · `cariId` (ciro/borç kapama) ·
+/// `targetLabel` (serbest metin — H6'nın `place` alanı). İkisi birden dolu bir
+/// bordro, aynı kâğıdın iki yere teslim edildiğini iddia ederdi.
+model ChequeDeliveryNote {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// BRD + GGAAYY + NNNN (teslim günü).
+  docNo String @unique @db.VarChar(32)
+
+  /// Bordronun yönü — satırlardaki çeklerin `kind`i ile AYNI olmak zorunda.
+  kind ChequeKind
+
+  /// TESLİM tarihi — belge numarasının GGAAYY çıpası ve kâğıda basılan tarih
+  /// (`Payment.paymentDate` / `Cheque.postingDate` emsali: iş olayının tarihi
+  /// kullanıcınındır). Geçmişe girilebilir; defter oynamadığı için kilit yok.
+  deliveryDate DateTime @db.Timestamptz
+
+  bankAccountId String? @db.Uuid
+  cariId        String? @db.Uuid
+  /// Serbest hedef metni (H6 `place`) — "X Bankası Kadıköy Şubesi" gibi.
+  targetLabel   String? @db.VarChar(200)
+
+  status ChequeDeliveryNoteStatus @default(ACTIVE)
+  notes  String?                  @db.VarChar(500)
+
+  /// FK/index yok — `ReconciliationLetter.createdById` ile aynı gerekçe.
+  createdById   String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  cari        CariAccount? @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  items       ChequeDeliveryNoteItem[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  @@index([kind, deliveryDate])
+  @@index([cariId])
+  @@index([bankAccountId])
+  @@map("cheque_delivery_notes")
+}
+
+/// Bordro ↔ çek pivotu. APPEND-ONLY (`updatedAt` YOK — pivot konvansiyonu).
+///
+/// ⚠️ ÇEKİN TUTARI/VADESİ BURAYA KOPYALANMAZ: kâğıdın fotoğrafı donmuş
+/// `PrintedDocument.snapshot`tadır (Sınıf 5 — türet, ikinci kaynak açma).
+/// Pivot yalnız "bu çek bu bordroda vardı" der.
+///
+/// ⚠️ Bordro İPTAL edilince satırlar SİLİNMEZ: iptal edilmiş belge de
+/// basılabilir olmalı (donmuş belge kuralı) ve "hangi çekler bu bordrodaydı"
+/// sorusunun cevabı iptalden sonra da gerekir.
+model ChequeDeliveryNoteItem {
+  id       String @id @default(uuid()) @db.Uuid
+  noteId   String @db.Uuid
+  chequeId String @db.Uuid
+
+  note   ChequeDeliveryNote @relation(fields: [noteId], references: [id], onDelete: Cascade)
+  cheque Cheque             @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // Aynı çek aynı bordroya İKİ KEZ giremez — teslim tutanağında mükerrer satır,
+  // toplamı sessizce şişirirdi.
+  @@unique([noteId, chequeId])
+  @@index([chequeId])
+  @@map("cheque_delivery_note_items")
+}
+
+// =============================================================================
+// TAM STOK SAYIMI (2026-08-15, J2 #19)
+// =============================================================================
+
+/// Sayımın yaşam döngüsü. `DRAFT` bir ÇALIŞMA KÂĞIDIDIR (hiçbir deftere satır
+/// yazmaz), `COMPLETED` fark fişinin YAZILDIĞI andır, `CANCELLED` sayımdan
+/// vazgeçildiğini söyler.
+///
+/// ⚠️ `COMPLETED` TERMİNALDİR — geri alma v1'de YOKTUR ve bu bilinçlidir:
+/// tamamlama iki ayrı deftere (top iptali + iplik hareketi) yazar ve o
+/// yazımların doğru geri alma yolu kendi ters kayıtlarıdır (topta "iptali geri
+/// al", iplikte ADJUST tersi). Sayıma "geri al" eklemek, iki defteri sayım
+/// belgesi üzerinden ikinci kez oynatan üçüncü bir yol açardı.
+enum StockCountStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
+}
+
+/// Sayım satırının türü — iki farklı stok modelinin AYNI belgede yaşaması.
+///
+/// ⚠️ Ayrı tablo AÇILMADI (`StockCountRollLine` + `StockCountYarnLine`): sayım
+/// belgesi tek bir olaydır ve iki tablo, "bu sayımın satırları" sorusunu her
+/// yerde iki sorguya bölerdi. Ayrım `kind` + karşılıklı-dışlayan iki nullable FK
+/// ile taşınır (`rollId` XOR `itemId`); tutarlılığı servis kurar.
+enum StockCountLineKind {
+  ROLL
+  YARN
+}
+
+/// TAM STOK SAYIMI — bir deponun belirli bir andaki FOTOĞRAFI + sayım sonucu.
+///
+/// ⚠️ FOTOĞRAF OLUŞTURMADA ÇEKİLİR (satırlar aynı tx'te doğar), fark fişi
+/// TAMAMLANMADA yazılır. İkisi arasında geçen sürede stok hareket edebilir; bu
+/// yüzden tamamlama HER SATIRDA TX-İÇİ TAZE CLAIM yapar ve kayan satırı
+/// "kapsam dışı" olarak işaretler (sessizce eski fotoğrafa göre yazmak, gerçekte
+/// sevk edilmiş bir topu iptal etmek demekti).
+///
+/// ⚠️ Bir depoda AYNI ANDA tek DRAFT sayım olabilir (servis guard'ı, 409). İki
+/// açık sayım aynı malı iki kez sayar ve iki fark fişi doğurur — ikincisi
+/// birincinin düzelttiği farkı bir kez daha yazardı.
+model StockCount {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// SAY + GGAAYY + NNNN (düzenleme günü).
+  countNo String @unique @db.VarChar(32)
+
+  warehouseId String @db.Uuid
+
+  status StockCountStatus @default(DRAFT)
+  notes  String?          @db.VarChar(500)
+
+  completedAt   DateTime? @db.Timestamptz
+  completedById String?   @db.Uuid
+  cancelledAt   DateTime? @db.Timestamptz
+  cancelledById String?   @db.Uuid
+  cancelReason  String?   @db.VarChar(300)
+
+  /// ⚠️ FK YOK ve index YOK — ön muhasebe/belge konvansiyonu
+  /// (`ReconciliationLetter.createdById` emsali): düşük trafikli "kim yaptı" izi.
+  createdById String? @db.Uuid
+
+  warehouse     Warehouse        @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  lines         StockCountLine[]
+  yarnMovements YarnMovement[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // "Bu depoda açık sayım var mı" (create guard'ı) + "bu deponun sayımları"
+  // (liste) — eşitlik önce, statü sonra.
+  @@index([warehouseId, status])
+  @@map("stock_counts")
+}
+
+/// SAYIM SATIRI — beklenen (fotoğraf) ile sayılan (fiziksel) arasındaki karşılaşma.
+///
+/// ⚠️ `found` ÜÇ DURUMLUDUR ve `null` LOAD-BEARING'dir: `true` = bulundu,
+/// `false` = BULUNAMADI (fark fişi topu iptal eder), `null` = HENÜZ SAYILMADI.
+/// İşaretsiz satırı "eksik" saymak, yarım kalmış bir sayımın tamamlanmasıyla
+/// deponun yarısını sessizce silmek olurdu — bu yüzden yalnız AÇIKÇA `false`
+/// işaretlenen satır işlem görür.
+///
+/// ⚠️ ROLL satırında `countedQty` BİLGİ NOTUDUR, emir değil: metraj düzeltmesi
+/// G4'ün işidir (`inventory.adjustRollQty` — kendi sapma kaydı, kendi izni).
+/// Sayım fark fişi topun metrajına DOKUNMAZ.
+model StockCountLine {
+  id           String             @id @default(uuid()) @db.Uuid
+  stockCountId String             @db.Uuid
+  kind         StockCountLineKind
+
+  /// ROLL satırında dolu, YARN satırında NULL (ve tersi). PG'de NULL'lar
+  /// birbirinden AYRIDIR — bu yüzden aşağıdaki iki `@@unique` birbirini bozmaz:
+  /// "aynı sayımda aynı top iki satır olamaz" ve "aynı sayımda aynı kalem iki
+  /// satır olamaz" AYNI ANDA geçerlidir.
+  rollId String? @db.Uuid
+  itemId String? @db.Uuid
+
+  /// Fotoğraf anındaki DEFTER değeri (ROLL: metre, YARN: kg).
+  expectedQty Decimal @db.Decimal(14, 3)
+
+  /// Fiziksel sayım sonucu. YARN'da farkın kaynağıdır; ROLL'da bilgi notudur.
+  countedQty Decimal? @db.Decimal(14, 3)
+
+  /// YALNIZ ROLL satırında anlamlı (üç durumlu — model notuna bak).
+  found Boolean?
+
+  notes String? @db.VarChar(300)
+
+  /// Tamamlamada satır İŞLENEMEDİYSE somut sebep ("bu sırada sevk edildi",
+  /// "bakiye değişti"). ⚠️ `notes` ile karıştırma: o SAYAN kişinin yazdığı
+  /// serbest nottur, bu SİSTEMİN cevabıdır ve donmuş belgede sebep satırı olur.
+  /// Sessiz atlama en kötü davranış olurdu: fark fişi eksik yazılır, kimse
+  /// nedenini bilmez.
+  outOfScopeReason String? @db.VarChar(200)
+
+  stockCount StockCount @relation(fields: [stockCountId], references: [id], onDelete: Restrict)
+  roll       Roll?      @relation(fields: [rollId], references: [id], onDelete: Restrict)
+  item       Item?      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // `stockCountId` FK indeksi bu iki composite unique'in ÖN EKİNDEN gelir
+  // (ayrı @@index([stockCountId]) yazmak dördüncü bir ağaç bakımı demekti).
+  @@unique([stockCountId, rollId])
+  @@unique([stockCountId, itemId])
+  @@index([rollId])
+  @@index([itemId])
+  @@map("stock_count_lines")
 }

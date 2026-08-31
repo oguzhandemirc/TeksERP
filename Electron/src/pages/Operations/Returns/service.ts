@@ -32,8 +32,23 @@ export interface ReturnRow {
    * İRSALİYENİN kaynağı (`returnGroupId ?? id`) — backend türetir. Belgeyi AÇARKEN
    * satırın kendi id'si DEĞİL bu kullanılır: çok kalemli iadede belge yalnız grup
    * liderine bağlıdır, üye id'siyle sorulunca "belge yok" görünürdü.
+   *
+   * ⚠️ İÇ FATURANIN kaynak bağı da BUDUR (`Invoice.returnGroupId`) — satırın kendi
+   * id'si değil. Backend "bir iade grubu → tek aktif fatura" seddini bu değer
+   * üzerinden kurar (`invoice.service.assertSourceFree`).
    */
   documentSourceId: string;
+  /**
+   * Bu iade GRUBUNDAN doğmuş, iptal edilmemiş iç faturanın belge numarası.
+   *
+   * ⚠️ BUGÜN HİÇBİR UÇ DOLDURMUYOR (dikiş bekliyor — sonuç JSON'una yazıldı):
+   * `/api/returns` listesi `Invoice` tarafına bakmıyor ve fatura listesi
+   * `returnGroupId` ile sorgulanamıyor (`LIST_SELECT` kolonu taşımıyor, filtre
+   * de yok). Alan `undefined` kaldığı sürece "zaten faturalanmış" kolu
+   * (`canDraftReturnInvoice`) uykudadır ve mükerrer faturayı backend'in 409'u
+   * durdurur. Optional bırakıldı ki dikiş uygulanınca tek satır değişsin.
+   */
+  invoiceDocNo?: string | null;
 }
 
 // --- İade girişi (lookup → create) — backend return.service ile uyumlu ---
@@ -104,11 +119,15 @@ export type ReturnsCursorResponse = CursorPaginatedResponse<ReturnRow> & {
   summary?: ReturnsSummary;
 };
 
+/** Liste ucu — servis nesnesinin DIŞINDA, çünkü `listGroupMembers` de onu çağırır
+ *  ve nesnenin kendi ilkleyicisinden kendine referans vermek TS'te `any`'ye düşer. */
+const fetchReturnsCursor = (params: CursorParams): Promise<ReturnsCursorResponse> =>
+  apiClient
+    .get<ReturnsCursorResponse>(`/api/returns${buildCursorQueryString(params)}`)
+    .then((r) => r.data);
+
 export const returnsService = {
-  listCursor: (params: CursorParams): Promise<ReturnsCursorResponse> =>
-    apiClient
-      .get<ReturnsCursorResponse>(`/api/returns${buildCursorQueryString(params)}`)
-      .then((r) => r.data),
+  listCursor: fetchReturnsCursor,
 
   /** QR/barkod okut → top + sevkiyat + aday siparişler + returnGradingEnabled. */
   lookup: (barcode: string): Promise<ApiResponse<ReturnLookupResult>> =>
@@ -158,6 +177,48 @@ export const returnsService = {
     apiClient
       .post<ApiResponse<{ id: string; rollId: string }>>(`/api/returns/${id}/cancel`, { reason })
       .then((r) => r.data),
+
+  /**
+   * Bir iade GRUBUNUN aktif kalemleri — satış-iade faturasının satır kaynağı.
+   *
+   * ⚠️ Yeni uç YOK ve gerekmiyor: `filter[returnGroupId]` diye bir süzgeç
+   * olmadığı için grup, `fromShipmentId` üzerinden çekilip `documentSourceId`
+   * ile daraltılır. Bu güvenli, çünkü backend **TEK SEVKİYAT KURALI**'nı
+   * uyguluyor (`return.service.createReturn`: bir iade belgesi tek sevkiyata
+   * aittir) — yani grubun TÜM kalemleri bu sorgunun kapsamındadır.
+   *
+   * ⚠️ Varsayılan kapsam AKTİF (backend `cancelledAt: null`) → iptal edilmiş
+   * kalem faturaya girmez; iade irsaliyesinin kalem kümesiyle birebir.
+   *
+   * ⚠️ SAYFA SONU YUTULMAZ: `hasMore` bittiği yere kadar okunur; tavana
+   * çarpılırsa HATA fırlatılır. Sessizce kısa kesmek, eksik satırlı bir fatura
+   * taslağı doğururdu (kullanıcı farkı göremez — en kötü sonuç).
+   */
+  listGroupMembers: async (row: ReturnRow): Promise<ReturnRow[]> => {
+    // Sevkiyat bağı yoksa grup kurulamaz (çoklu iade zaten sevkiyat gerektirir)
+    // → satırın kendisi tek kalemdir.
+    if (!row.fromShipment?.id) return [row];
+
+    const PAGE = 200;
+    const MAX_PAGES = 10;
+    const all: ReturnRow[] = [];
+    let cursor: string | null = null;
+    for (let i = 0; i < MAX_PAGES; i += 1) {
+      const res: ReturnsCursorResponse = await fetchReturnsCursor({
+        limit: PAGE,
+        cursor,
+        filters: { fromShipmentId: row.fromShipment.id },
+      });
+      all.push(...res.data);
+      cursor = res.pagination.nextCursor;
+      if (!res.pagination.hasMore || !cursor) {
+        return all.filter((r) => r.documentSourceId === row.documentSourceId);
+      }
+    }
+    throw new Error(
+      "Bu sevkiyatın iade kayıtları tek seferde okunamadı — fatura taslağı eksik satırla açılmasın diye durduruldu.",
+    );
+  },
 
   /** Bir siparişe gelen (aktif) iade özeti — adet + metraj. Sipariş detayı satırı için. */
   summaryForOrder: (orderId: string): Promise<ReturnsSummary> =>

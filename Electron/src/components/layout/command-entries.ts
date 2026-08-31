@@ -3,12 +3,14 @@ import { navGroups } from "./nav-config";
 import { definitionTiles } from "@/pages/Definitions/tile-config";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
 import { operationsTiles } from "@/pages/Operations/tile-config";
+import { financeTiles } from "@/pages/Finance/tile-config";
 import { accessTiles } from "@/pages/Access/tile-config";
 import { systemTiles } from "@/pages/System/tile-config";
 import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
 } from "@/pages/GeneralSettings/settings-config";
+import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
@@ -65,6 +67,22 @@ export const commandSections: CommandSection[] = [
       },
     ],
   },
+  {
+    // ⚠️ Muhasebe ekranları palette KOŞULSUZ listelenir; görünürlük kapısı
+    // izindir (`permissionAny`). Bayrak kapalı bir kurulumda finance izni
+    // atanmamış olur, dolayısıyla satırlar da çıkmaz — ve bayrak açılıp izin
+    // verilen an kendiliğinden belirirler. Palete ayrıca bayrak yüklemi
+    // koymak, hub karolarıyla ayrışabilecek İKİNCİ bir kural demekti.
+    heading: "Muhasebe",
+    entries: financeTiles.map<CommandEntry>((tile) => ({
+      key: `fin:${tile.key}`,
+      label: tile.title,
+      description: tile.description,
+      icon: tile.icon,
+      to: tile.to,
+      permissionAny: tile.permissionAny,
+    })),
+  },
   ...reportCommandSections,
   ...definitionGroups.map<CommandSection>((group) => ({
     heading: `Tanımlar · ${group.title}`,
@@ -80,6 +98,8 @@ export const commandSections: CommandSection[] = [
         // permissionAny taşıyan karolar (belge tasarım ekranları) route ile
         // AYNI listeyi kullanır — düşürülürse kart görünür, sayfa açılmaz.
         permissionAny: tile.permissionAny,
+        // Rejim yüklemi karodan taşınır (cari rejimi) — palet hub'dan ayrışamaz.
+        visibleWhen: tile.visibleWhen,
       })),
   })),
   {
@@ -120,6 +140,9 @@ export const commandSections: CommandSection[] = [
       // atan bir giriş, izni olmayan kullanıcıya "yetkim varmış ama bozuk"
       // dedirtir ("Kurşun Sırası" dersi, `visibleWhen` notu).
       permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
+      // Rejim yüklemi ayar ekranından TAŞINIR (kopyalanmaz): fabrikada gizli
+      // olan "Muhasebe" sekmesine palet derin bağlantı vermemeli.
+      visibleWhen: settingsCategoryVisibleWhen(cat),
       keywords: cat.keywords,
     })),
   },

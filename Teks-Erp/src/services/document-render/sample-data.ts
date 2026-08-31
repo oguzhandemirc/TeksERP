@@ -177,4 +177,185 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
   // Buraya sahte bir kart koymak, iki ayrı örnek verinin zamanla ayrışması demekti.
   // Ulaşılamaz: generic sample-html yolu bu tipte 400 verir (SELF_MANAGED_DOC_TYPES).
   TRAVELER_CARD: {},
+  // ── Ticaret paketi: iç depo belgeleri (2026-08-13) ────────────────────────
+  // Örnek veri, Belge Şablonları ekranının CANLI ÖNİZLEMESİNİ besler — bu yüzden
+  // belge tipiyle AYNI commit'te gelmek zorunda (örneksiz tip = boş/çöp kart).
+  TRANSFER_DISPATCH: {
+    header: {
+      documentNo: "DT1308260001",
+      date: ISO,
+      fromWarehouseName: "Merkez Depo",
+      fromWarehouseCode: "DP-MERKEZ",
+      toWarehouseName: "Şube Deposu",
+      toWarehouseCode: "DP1308260002",
+      createdBy: "Mehmet Yılmaz",
+    },
+    lines: [
+      { barcode: "T130826F0101", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, qty: 120 },
+      { barcode: "T130826F0102", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, qty: 85.5 },
+    ],
+    notes: "Şube talebi üzerine sevk edildi",
+  },
+  GOODS_RECEIPT: {
+    header: {
+      documentNo: "MK1308260001",
+      date: ISO,
+      warehouseName: "Merkez Depo",
+      warehouseCode: "DP-MERKEZ",
+      supplierName: "Örnek Tedarik A.Ş.",
+      supplierCode: "MUS1308260007",
+      deliveryNoteNo: "IRS-2026-4471",
+      createdBy: "Ayşe Kaya",
+    },
+    lines: [
+      { barcode: "T130826F0201", itemName: "Perde Kumaşı", colorName: "Krem", width: 300, qty: 200 },
+      { barcode: "T130826F0202", itemName: "Perde Kumaşı", colorName: "Krem", width: 300, qty: 180 },
+      { barcode: "T130826F0203", itemName: "Tül", colorName: null, width: 280, qty: 150 },
+    ],
+    notes: null,
+  },
+
+  // Ön muhasebe çıktıları (2026-08-14). Sınır durumları BİLİNÇLİ olarak örnekte:
+  // faturada dövizli + tevkifatlı bir kalem (TL karşılığı satırı ve tevkifat
+  // satırı önizlemede görünsün), makbuzda ise TL (en sık hâl).
+  INVOICE_INTERNAL: {
+    header: {
+      documentNo: "FTR1408260001",
+      date: new Date().toISOString(),
+      dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
+      type: "SALES",
+      typeLabel: "Satış Faturası",
+      partyName: "Örnek Tekstil Ltd. Şti.",
+      partyCode: "CR-000148",
+      partyTaxInfo: "Merkez V.D. · 1234567890",
+      currency: "USD",
+      exchangeRate: "40.250000",
+      externalNo: "IRS-2026-8812",
+      createdBy: "Ayşe Kaya",
+    },
+    lines: [
+      { description: "Patos Kumaş · Gri", qty: "520", unit: "m", unitPrice: "3.4500",
+        discountRate: "0", vatRate: "20", lineNet: "1794.00", lineVat: "358.80" },
+      { description: "Saten Kumaş · Ekru", qty: "180", unit: "m", unitPrice: "5.1000",
+        discountRate: "5", vatRate: "20", lineNet: "872.10", lineVat: "174.42" },
+      { description: "Nakliye bedeli", qty: "1", unit: "adet", unitPrice: "150.0000",
+        discountRate: "0", vatRate: "20", lineNet: "150.00", lineVat: "30.00" },
+    ],
+    totals: { net: "2816.10", vat: "563.22", withholding: "112.64", grand: "3266.68", grandTry: "131483.87" },
+    notes: null,
+  },
+  PAYMENT_RECEIPT: {
+    header: {
+      documentNo: "THS1408260001",
+      date: new Date().toISOString(),
+      direction: "IN",
+      directionLabel: "Tahsilat Makbuzu",
+      partyName: "Örnek Tekstil Ltd. Şti.",
+      partyCode: "CR-000148",
+      method: "BANK_TRANSFER",
+      methodLabel: "Havale / EFT",
+      accountName: "Ziraat Bankası — TL Vadesiz",
+      currency: "TRY",
+      exchangeRate: null,
+      createdBy: "Ayşe Kaya",
+    },
+    amount: "50000.00",
+    amountTry: null,
+    notes: "Ağustos dönemi kısmi tahsilat.",
+  },
+
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18). Sınır durumları yine
+  // BİLİNÇLİ olarak örnekte: mutabakatta ÜÇ para birimi (biri SIFIR bakiyeli —
+  // "hareketi var ama kapanmış" satırı da mutabakatın konusudur) ve bordroda
+  // İKİ para birimi (tek TOPLAM yazılmadığı dal önizlemede görünsün).
+  RECONCILIATION_LETTER: {
+    header: {
+      documentNo: "MBT1508260001",
+      date: new Date().toISOString(),
+      asOf: new Date().toISOString(),
+      partyName: "Örnek Tekstil Ltd. Şti.",
+      partyCode: "CR-000148",
+      partyTaxInfo: "Merkez V.D. · 1234567890",
+      createdBy: "Ayşe Kaya",
+    },
+    balances: [
+      { currency: "TRY", debit: "184500.00", credit: "121000.00", balance: "63500.00" },
+      { currency: "USD", debit: "12000.00", credit: "15400.00", balance: "-3400.00" },
+      { currency: "EUR", debit: "5000.00", credit: "5000.00", balance: "0.00" },
+    ],
+    notes: null,
+  },
+  CHEQUE_DELIVERY_NOTE: {
+    header: {
+      documentNo: "BRD1508260001",
+      date: new Date().toISOString(),
+      kind: "RECEIVED",
+      kindLabel: "Alınan",
+      targetName: "Ziraat Bankası — TL Vadesiz",
+      targetKindLabel: "Teslim Edilen Banka",
+      createdBy: "Ayşe Kaya",
+    },
+    lines: [
+      {
+        docNo: "CKA1508260001", serialNo: "0034512", issueDate: ISO,
+        dueDate: new Date(Date.now() + 45 * 864e5).toISOString(),
+        drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
+        currency: "TRY", amount: "42500.00",
+      },
+      {
+        docNo: "CKA1508260002", serialNo: "0034513", issueDate: ISO,
+        dueDate: new Date(Date.now() + 60 * 864e5).toISOString(),
+        drawerName: "Yıldız Konfeksiyon A.Ş.", bankName: "Garanti BBVA",
+        currency: "TRY", amount: "18750.50",
+      },
+      {
+        docNo: "SNA1508260003", serialNo: null, issueDate: ISO,
+        dueDate: new Date(Date.now() + 30 * 864e5).toISOString(),
+        drawerName: "Delta Tekstil Ltd.", bankName: null,
+        currency: "USD", amount: "5000.00",
+      },
+    ],
+    totals: [
+      { currency: "TRY", count: 2, amount: "61250.50" },
+      { currency: "USD", count: 1, amount: "5000.00" },
+    ],
+    notes: "Tahsile verilmek üzere teslim edilmiştir.",
+  },
+
+  // Tam stok sayımı (2026-08-15, J2 #19). SINIR DURUMLARI BİLİNÇLİ OLARAK
+  // ÖRNEKTE: dört top durumunun DÖRDÜ de (bulundu · eksik · sayılmadı · kapsam
+  // dışı) ve iplikte hem uygulanan fark hem kapsam dışı satır var — şablonu
+  // ayarlayan kişi "DURUM" kolonunun neye benzediğini önizlemede görmeli.
+  STOCK_COUNT: {
+    header: {
+      documentNo: "SAY1508260001",
+      date: ISO,
+      warehouseName: "Merkez Depo",
+      warehouseCode: "DP-MERKEZ",
+      createdBy: "Ayşe Kaya",
+      completedBy: "Mehmet Yılmaz",
+      status: "Tamamlandı",
+      // Örnek TAMAMLANMIŞ tutanaktır (panel önizlemesi belgenin resmi hâlini
+      // göstermeli) — bayrak açıkça yazılır ki "alan yoksa true" yedeğine
+      // dayanmasın; o yedek yalnız 2026-08-15 öncesi snapshot'lar için var.
+      finalized: true,
+    },
+    rollLines: [
+      { barcode: "T150826F0301", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, expectedQty: 120, countedQty: 120, state: "FOUND", outOfScopeReason: null, notes: null },
+      { barcode: "T150826F0302", itemName: "Perde Kumaşı", colorName: "Ekru", width: 300, expectedQty: 85.5, countedQty: null, state: "MISSING", outOfScopeReason: null, notes: "Rafta bulunamadı" },
+      { barcode: "T150826F0303", itemName: "Tül", colorName: null, width: 280, expectedQty: 150, countedQty: null, state: "UNCOUNTED", outOfScopeReason: null, notes: null },
+      { barcode: "T150826F0304", itemName: "Tül", colorName: null, width: 280, expectedQty: 60, countedQty: null, state: "OUT_OF_SCOPE", outOfScopeReason: "Bu sırada sevk edildi", notes: null },
+    ],
+    yarnLines: [
+      { itemName: "Pamuk İplik Ne 30", expectedKg: 500, countedKg: 487.5, diffKg: -12.5, state: "APPLIED", outOfScopeReason: null },
+      { itemName: "Polyester İplik 150D", expectedKg: 200, countedKg: 200, diffKg: 0, state: "MATCH", outOfScopeReason: null },
+      { itemName: "Viskon İplik Ne 40", expectedKg: 75, countedKg: 80, diffKg: null, state: "OUT_OF_SCOPE", outOfScopeReason: "Bakiye sayımdan sonra değişti (defter 95 kg)" },
+    ],
+    summary: {
+      rollTotal: 4, rollFound: 1, rollMissing: 1, rollUncounted: 1, rollOutOfScope: 1,
+      expectedMeters: 415.5, missingMeters: 85.5,
+      yarnTotal: 3, yarnApplied: 1, yarnUncounted: 0, yarnOutOfScope: 1, yarnDiffKg: -12.5,
+    },
+    notes: "Yıl sonu tam sayımı.",
+  },
 };

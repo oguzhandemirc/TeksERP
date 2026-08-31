@@ -1,0 +1,101 @@
+// =============================================================================
+// MAL KABUL SATIR EDİTÖRÜ — saf katman bekçisi (Sınıf 5: iplik ayrımı)
+// =============================================================================
+// İki sözleşmeyi kilitler:
+//
+// ① **m ↔ kg TOPLANMAZ** (`receiptTotals`): iplik satırının kg'si `meters`e
+//    sızarsa formun canlı özeti anlamsız bir "toplam" basar — backend
+//    `ReceiptTotals` yorumunun aynası.
+//
+// ② **İPLİK SATIRI KUMAŞA ÖZGÜ ALANLARI HİÇ GÖNDERMEZ** (`expandLines`):
+//    `colorId`/`width`/`weightKg`/`foldType`/`propertyIds` anahtarı payload'da
+//    OLMAMALI — backend `addYarnLine` bunları 400 ile reddeder ve hata,
+//    operatörün hiç görmediği (ekranda "—" çizilen) bir alandan gelirdi.
+//
+// `yarnItemIds` verilmeden çağrı ESKİ davranışla bire bir kalmalı (kumaş-only
+// kurulumda bu özellik tek bayt fark üretmez).
+import { describe, expect, it } from "vitest";
+import { expandLines, receiptTotals, type DraftLine } from "./ReceiptLineRows";
+
+const line = (o: Partial<DraftLine>): DraftLine => ({
+  key: crypto.randomUUID(),
+  itemId: "fabric-1",
+  colorId: null,
+  initialQty: 100,
+  width: null,
+  weightKg: null,
+  foldType: null,
+  unitPrice: null,
+  propertyIds: [],
+  count: 1,
+  ...o,
+});
+
+const YARN = new Set(["yarn-1"]);
+
+describe("receiptTotals — iplik ayrımı", () => {
+  it("yarnItemIds verilmezse tüm satırlar kumaş sayılır (eski davranış)", () => {
+    const t = receiptTotals([line({ initialQty: 100, count: 2 }), line({ itemId: "yarn-1", initialQty: 50 })]);
+    expect(t).toMatchObject({ rolls: 3, meters: 250, yarnLines: 0, yarnKg: 0 });
+  });
+
+  it("iplik kg'si metreye TOPLANMAZ, ayrı sayaçlara düşer", () => {
+    const t = receiptTotals(
+      [
+        line({ initialQty: 100, count: 2, unitPrice: 10 }), // kumaş: 200 m, 2 top, 2000 para
+        line({ itemId: "yarn-1", initialQty: 50, count: 3, unitPrice: 4 }), // iplik: 150 kg, 3 satır, 600 para
+      ],
+      YARN,
+    );
+    expect(t.rolls).toBe(2);
+    expect(t.meters).toBe(200); // ⚠️ 350 DEĞİL — kg metreye sızmadı
+    expect(t.yarnLines).toBe(3);
+    expect(t.yarnKg).toBe(150);
+    // Para tek birimde (fişin para birimi) — kumaş + iplik BİRLİKTE meşru.
+    expect(t.amount).toBe(2600);
+  });
+
+  it("yalnız-iplik fişte top sayacı 0, iplik sayaçları dolu (form bunu geçerli sayar)", () => {
+    const t = receiptTotals([line({ itemId: "yarn-1", initialQty: 500 })], YARN);
+    expect(t).toMatchObject({ rolls: 0, meters: 0, yarnLines: 1, yarnKg: 500 });
+  });
+});
+
+describe("expandLines — iplik payload sözleşmesi", () => {
+  it("iplik satırı kumaşa özgü ANAHTARLARI hiç taşımaz (400 kümesinin aynası)", () => {
+    const [p] = expandLines(
+      // Bayat değerler bilerek dolu — temizleme effect'i atlanmış olsa bile
+      // payload katmanı sızdırmamalı (ikinci hat).
+      [line({ itemId: "yarn-1", initialQty: 50, unitPrice: 4, colorId: "c1", width: 250, weightKg: 9, foldType: "4-KAT", propertyIds: ["p1"] })],
+      YARN,
+    );
+    expect(p).toBeDefined();
+    expect(p).toMatchObject({ itemId: "yarn-1", initialQty: 50, unitPrice: 4 });
+    for (const k of ["colorId", "width", "weightKg", "foldType", "propertyIds"]) {
+      expect(p && k in p, `iplik payload'ında "${k}" anahtarı OLMAMALI`).toBe(false);
+    }
+  });
+
+  it("kumaş satırı eski şekliyle açılır ve adet kadar payload doğar", () => {
+    const out = expandLines([line({ colorId: "c1", width: 250, count: 3, propertyIds: ["p1"] })], YARN);
+    expect(out).toHaveLength(3);
+    expect(out[0]).toMatchObject({ itemId: "fabric-1", colorId: "c1", width: 250, propertyIds: ["p1"] });
+    // Her top KENDİ idempotency anahtarını taşır.
+    expect(new Set(out.map((x) => x.clientToken)).size).toBe(3);
+  });
+
+  it("iplikte adet = N ayrı defter satırı (toplam kg doğru)", () => {
+    const out = expandLines([line({ itemId: "yarn-1", initialQty: 50, count: 4 })], YARN);
+    expect(out).toHaveLength(4);
+    expect(out.every((x) => x.initialQty === 50)).toBe(true);
+    expect(new Set(out.map((x) => x.clientToken)).size).toBe(4);
+  });
+
+  it("itemId'siz / miktarsız / adetsiz satırlar açılmaz (mevcut süzgeç iplikte de geçerli)", () => {
+    const out = expandLines(
+      [line({ itemId: "" }), line({ itemId: "yarn-1", initialQty: 0 }), line({ itemId: "yarn-1", count: 0 })],
+      YARN,
+    );
+    expect(out).toHaveLength(0);
+  });
+});

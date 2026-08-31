@@ -295,6 +295,45 @@ router.post("/direct-shipments/:id/invoice", verifyToken, INVOICE_WRITE, control
 router.post("/shipments", verifyToken, WRITE, controller.createShipment);
 router.get("/shipments", verifyToken, READ, controller.listShipments);
 router.post("/shipments/preview", verifyToken, READ, controller.previewCreateShipment);
+/**
+ * @openapi
+ * /api/shipping/shipments/from-rolls:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: HIZLI SEVK — topları doğrudan sevk et (çuval otomatik)
+ *     description: >
+ *       Çuval kullanıcıya görünmez: tek transaction içinde otomatik açılır,
+ *       toplar bağlanır ve normal sevkiyat çekirdeği koşar (tahsis/irsaliye/
+ *       iade zinciri birebir aynı). Girdi rollIds — BARKOD İSTEMEZ.
+ *       İhracat çuval tartısı istediği için bu yoldan yapılamaz (400).
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Sevk edildi / sevkiyat kuruldu }
+ *       400: { description: Uygun olmayan top / farklı depo / ihracat }
+ *       409: { description: Toplar bu sırada başka akışa girdi }
+ */
+router.post("/shipments/from-rolls", verifyToken, WRITE, controller.createShipmentFromRolls);
+/**
+ * @openapi
+ * /api/shipping/shippable-rolls:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: HIZLI SEVK — FIFO önerisi (kumaş+renk ver, en eski topları öner)
+ *     description: >
+ *       "3 top patos sattım, hangileri umurumda değil" akışı. Uygunluk yüklemi
+ *       sevk claim'iyle AYNI kaynaktan gelir — önerilen top sevkte reddedilmez.
+ *       Sıra: statusChangedAt (rafta bekleme) → createdAt → id (deterministik).
+ *       Öneri bağlayıcı değildir; kullanıcı listeden çıkarabilir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: itemId, required: true, schema: { type: string } }
+ *       - { in: query, name: colorId, schema: { type: string } }
+ *       - { in: query, name: warehouseId, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, default: 20, maximum: 200 } }
+ *     responses:
+ *       200: { description: FIFO sıralı uygun toplar }
+ */
+router.get("/shippable-rolls", verifyToken, READ, controller.findShippableRolls);
 
 router.get("/direct-shipments/:id", verifyToken, READ, controller.getDirectShipment);
 router.get("/shipments/:id", verifyToken, READ, controller.getShipment);

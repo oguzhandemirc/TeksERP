@@ -1,7 +1,9 @@
 import {
   ShoppingCart,
   Factory,
+  ArrowLeftRight,
   Package,
+  PackagePlus,
   Scale,
   Truck,
   SwatchBook,
@@ -11,9 +13,17 @@ import {
   ScanBarcode,
   PackageOpen,
   Share2,
+  Boxes,
+  ShoppingBasket,
+  ClipboardCheck,
   type LucideIcon,
 } from "lucide-react";
 import type { OperationGroupKey } from "./groups-config";
+// Paket D — görünürlük kuralları SAF katmanda (bileşen içindeki bir `&&`
+// zinciri tersine çevrilse hiçbir testi kırmazdı; projenin yazılı deseni).
+import { isYarnStockVisible } from "./Yarn/yarn-regime";
+import { isPurchaseOrdersVisible } from "./PurchaseOrders/po-regime";
+import { isStockCountVisible, STOCK_COUNTS_PATH } from "./StockCounts/stockCount-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -35,6 +45,48 @@ import type { OperationGroupKey } from "./groups-config";
 export interface OperationsVisibilityContext {
   /** `shipping.confirmationEnabled` — sevk onayı ara adımı. */
   shipmentConfirmationEnabled: boolean;
+  /**
+   * Çıkış bekleyen (PLANNED) sevkiyat sayısı — bayrak KAPALIYKEN bile Sevk
+   * Kapısı'nı görünür tutan "işi kaldıysa dur" koşulunun girdisi. Bilinmiyorsa
+   * (izin yok / henüz yüklenmedi) 0 — karo yalnız bayrağa göre karar verir.
+   */
+  pendingPlannedShipments: number;
+  /**
+   * ÇOK DEPOLU kurulum mu (aktif depo > 1)?
+   *
+   * ⚠️ "Fabrikada sıfır görünür fark" kuralının karo ayağı: tek depolu üretici
+   * fabrikada Depo Transferi karosu ÇİZİLMEZ — orada taşınacak ikinci depo yok
+   * ve karo yalnız gürültü olurdu. İkinci depo açıldığı gün kendiliğinden belirir.
+   * Emsal: mobil `PlaceActions` (seçenek sayısı 1 ise madde anlamsız).
+   *
+   * Mal Kabul karosu bu bayrağa BAĞLANMAZ — tek depolu bir alım-satım firması da
+   * onu kullanır; orada kapı İZİNDİR (`goods-receipt:*`, hiçbir varsayılan rolde yok).
+   */
+  multiWarehouse: boolean;
+  /**
+   * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
+   * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
+   * AÇIKKEN tek "Cariler" karosu, KAPALIYKEN (fabrika) bugünkü Müşteriler +
+   * Fason Firmalar. Belirsizken (yükleniyor) FALSE → fabrika görünümüne düşülür
+   * (Sidebar featureFlag kararıyla aynı yön: yanlış tarafa düşmek fabrikada
+   * karo titremesi demekti, ticarette yalnız kısa bir gecikme).
+   */
+  financeEnabled: boolean;
+  /**
+   * Üretim modülü açık mı (`production.enabled`, varsayılan AÇIK). Belirsizken
+   * TRUE'ya düşülür — backend varsayılanı da odur.
+   *
+   * ⚠️ ALAN LOAD-BEARING AMA BUGÜN HİÇBİR KARARI DEĞİŞTİRMİYOR, ve bu bilinçli:
+   * komut paletinin Genel Ayarlar girişleri `settingsCategoryVisibleWhen`
+   * yüklemini TAŞIYOR (kopyalamıyor) ve o yüklem `SettingsRegime` bekliyor —
+   * yani bu bağlamın iki rejim anahtarını da taşıması TİP ZORUNLULUĞU. Bugün
+   * hiçbir ayar kategorisi `productionEnabled` ile kapılı DEĞİL, çünkü backend'de
+   * `requireProductionEnabled` diye bir kapı yok ve o ayarların yönettiği
+   * davranışlar (KK1 tuzağı, scan-back, Tambur aşımı, parti no biçimi) bayrak
+   * kapalıyken de koşuyor — gizlemek yalnız geri dönüş yolunu kapatırdı.
+   * Ölçen bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14.
+   */
+  productionEnabled: boolean;
 }
 
 export interface OperationsTile {
@@ -104,6 +156,68 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/rolls",
     group: "warehouse",
     permission: "roll:read",
+  },
+  {
+    key: "goods-receipts",
+    title: "Mal Kabul",
+    description: "Satın alınan malın depo girişi — fiş + barkod + etiket",
+    icon: PackagePlus,
+    to: "/operations/goods-receipts",
+    group: "warehouse",
+    // Kapı İZİN: bu ekran yalnız alım-satım kurulumundadır (üretici fabrika malı
+    // KK1'den alır) ve izin hiçbir varsayılan rol şablonunda YOK.
+    // ⚠️ `multiWarehouse` şartı KONMAZ — tek depolu ticaret firması da kullanır.
+    permission: "goods-receipt:read",
+  },
+  // ── Paket D (2026-08-14) — ticaret paketi ─────────────────────────────────
+  // İkisi de `visibleWhen` ile REJİM bayrağına bağlı: fabrikada
+  // `finance.enabled` KAPALI ve bu karolar orada HİÇ çizilmez. Yüklem SAF bir
+  // modülden DOĞRUDAN geçirilir (sarmalayan ok fonksiyonu YAZILMAZ) — komut
+  // paleti bekçisi karo ile palet girişinin AYNI fonksiyon nesnesini taşıdığını
+  // `toBe` ile doğruluyor.
+  {
+    key: "yarn-stock",
+    title: "İplik Kg-Stok",
+    description: "İplik kg bakiyeleri + hareket dökümü (top/barkod yok)",
+    icon: Boxes,
+    to: "/operations/yarn-stock",
+    group: "warehouse",
+    permission: "warehouse:read",
+    visibleWhen: isYarnStockVisible,
+  },
+  {
+    key: "purchase-orders",
+    title: "Alış Siparişleri",
+    description: "Ne ısmarladım, ne geldi — tedarikçi siparişleri ve kalan miktarlar",
+    icon: ShoppingBasket,
+    to: "/operations/purchase-orders",
+    group: "warehouse",
+    permissionAny: ["purchase-order:read", "purchase-order:write"],
+    visibleWhen: isPurchaseOrdersVisible,
+  },
+  {
+    key: "warehouse-transfers",
+    title: "Depo Transferi",
+    description: "Depolar arası taşıma + transfer irsaliyesi",
+    icon: ArrowLeftRight,
+    to: "/operations/warehouse-transfers",
+    group: "warehouse",
+    permission: "warehouse:transfer",
+    // Tek depolu kurulumda taşınacak ikinci depo YOK → karo çizilmez (fabrikada
+    // sıfır görünür fark). İkinci depo açıldığı gün kendiliğinden belirir.
+    visibleWhen: (ctx) => ctx.multiWarehouse,
+  },
+  {
+    key: "stock-counts",
+    title: "Stok Sayımı",
+    description: "Depoyu say, defterle karşılaştır, farkı fark fişiyle kayda geçir",
+    icon: ClipboardCheck,
+    to: STOCK_COUNTS_PATH,
+    group: "warehouse",
+    permission: "warehouse:read",
+    // Saf yüklem DOĞRUDAN geçirilir (sarmalayan ok fonksiyonu YAZILMAZ) — palet
+    // paritesi bekçisi karo ile girişin AYNI fonksiyon nesnesini taşımasını arar.
+    visibleWhen: isStockCountVisible,
   },
   {
     key: "shipments",

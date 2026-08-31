@@ -33,12 +33,21 @@
 import { PrintedDocType, Prisma } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { getRegisteredDocBuilders } from "../src/services/printed-document.service";
-// Builder kayıtları import YAN ETKİSİYLE oluşur — bu dört import silinirse
-// registry boş kalır ve bekçi vakumen yeşile döner (körlük zemini onu yakalar).
+// Builder kayıtları import YAN ETKİSİYLE oluşur — bu importlar silinirse registry
+// boş kalır ve bekçi vakumen yeşile döner (körlük zemini onu yakalar).
+// ⚠️ YENİ BELGE TİPİ EKLERKEN buraya da import ekle; eklemezsen "kayıtlı builder
+// yok" diye kırmızı verir (2026-08-13'te transfer/mal kabul tam böyle yakalandı).
 import "../src/services/shipping.service";
 import "../src/services/subcontractor.service";
 import "../src/services/kartela.service";
 import "../src/services/return.service";
+import "../src/services/warehouse-transfer.service";
+import "../src/services/goods-receipt.service";
+import "../src/services/invoice.service";
+import "../src/services/payment.service";
+import "../src/services/reconciliation-letter.service";
+import "../src/services/cheque-delivery-note.service";
+import "../src/services/stock-count.service";
 
 let pass = 0;
 let fail = 0;
@@ -75,6 +84,25 @@ const REAL_SOURCE: Record<PrintedDocType, () => Promise<string | null>> = {
   // bölümlerinde zaten atlanır. Kaynak çözücüsü yine de yazılır: `null` dönmek
   // "veri yok" demektir ve muaflığı sessizce gizlemez.
   [PrintedDocType.TRAVELER_CARD]: async () => null,
+  [PrintedDocType.TRANSFER_DISPATCH]: async () =>
+    (await prisma.warehouseTransfer.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.GOODS_RECEIPT]: async () =>
+    (await prisma.goodsReceipt.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // Ön muhasebe: TASLAK fatura da geçerli bir kaynaktır (builder durumdan
+  // bağımsız çalışmalı — iptal edilmişi bile `voidInfo` ile basar).
+  [PrintedDocType.INVOICE_INTERNAL]: async () =>
+    (await prisma.invoice.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.PAYMENT_RECEIPT]: async () =>
+    (await prisma.payment.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.RECONCILIATION_LETTER]: async () =>
+    (await prisma.reconciliationLetter.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  [PrintedDocType.CHEQUE_DELIVERY_NOTE]: async () =>
+    (await prisma.chequeDeliveryNote.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
+  // Tam stok sayımı: TASLAK sayım da geçerli bir kaynaktır — `fresh` onu
+  // bilinçli olarak `null`la geçer (belge yalnız tamamlanmada doğar), ama SORGU
+  // ŞEKLİ yine de koşar ve bu bekçinin ölçtüğü şey odur.
+  [PrintedDocType.STOCK_COUNT]: async () =>
+    (await prisma.stockCount.findFirst({ select: { id: true }, orderBy: { createdAt: "desc" } }))?.id ?? null,
 };
 
 /** Çağrıyı koşar; YALNIZ şema/sorgu-şekli hatasında `false` döner.

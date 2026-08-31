@@ -58,6 +58,113 @@ export const SETTING_KEYS = {
   SHIPPING_TOLERANCE_METERS: "shipping.toleranceMeters",
   /** Pricing/currency UI'da gösterilsin mi (sipariş ve ileride sevkiyat). */
   FINANCE_PRICING_ENABLED: "finance.pricingEnabled",
+  // Ön muhasebe modülünün ANA şalteri (2026-08-13). ⚠️ `pricingEnabled` ile
+  // KARIŞTIRMA: o, OPERASYON ekranlarındaki fiyat alanlarını açar; bu, ayrı bir
+  // MUHASEBE modülünü (cari/fatura/tahsilat) açar. İki kapı bağımsızdır —
+  // fiyatı sipariş ekranında gösteren fabrikanın cari defteri tutması gerekmez.
+  FINANCE_ENABLED: "finance.enabled",
+  /** Kasa (fiziksel nakit) eksi bakiyeye DÜŞEMESİN (default FALSE). Backend
+   *  ENFORCE eder — 4 İLERİ yolda 409 (ödeme OUT · masraf fişi · virmanın çıkan
+   *  kasa bacağı · çek ödeme); BANKA MUAF (kredili mevduat meşru), İPTAL/STORNO
+   *  yolları MUAF (yanlış tahsilat "kasa yetmez" diye iptal edilemez kalmasın).
+   *  Tek yüklem: `helpers/cash-balance-guard.helper.assertCashBalanceCoversTx`. */
+  FINANCE_BLOCK_NEGATIVE_CASH_ENABLED: "finance.blockNegativeCashEnabled",
+  /** Fatura satırının VARSAYILAN KDV oranı, % (0-100; default 20). Logo/Mikro
+   *  "firma parametresi" karşılığı. İKİ tüketici: Electron fatura formunun yeni
+   *  satırı ve mal kabulden üretilen alış taslağı (`invoice.service`) — ikisi
+   *  de buradan okur, oran iki yerde ayrı sürüklenmez. Yalnız ÖN-DOLUM:
+   *  kullanıcı satırda her zaman değiştirebilir, backend satır bazında geleni
+   *  kabul etmeye devam eder. */
+  FINANCE_DEFAULT_VAT_RATE: "finance.defaultVatRate",
+  // ===========================================================================
+  // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1 — YALNIZ KAYIT)
+  // ===========================================================================
+  // ⚠️ Dokuzu da varsayılan FALSE ve BUGÜN HİÇBİR SERVİS OKUMUYOR. Bu bilinçli
+  // bir ARA DURUMDUR: dört kapı (servis · route şeması · Electron arayüzü ·
+  // panel satırı) önce kurulur, guard/otomasyon SONRAKİ dalgada bağlanır.
+  // Sebep sıra disiplinidir — 2026-08-04 `kk1DuplicateGuardEnabled` vakasında
+  // davranış önce yazılmış, route şeması unutulmuştu: bayrak sahada AÇILAMADI
+  // ve daha kötüsü KAPATILAMADI. Kapılar önce kurulursa davranışı bağlayan
+  // dalga, kapatma yolu hazır halde başlar.
+  // ⚠️ Bayrağı okuyan kodu yazarken JSDoc'taki MUAF listesini birebir uygula;
+  // muaflar sonradan hatırlanan ayrıntı değil, kuralın parçasıdır.
+  /** Cari RİSK LİMİTİ aşımında satış faturası ONAYINI engelle (default FALSE).
+   *  Bugün limit yalnız bir UYARIDIR (`CariAccount.riskLimit` şema notu: "satışı
+   *  durdurma kararı TİCARİ bir karardır"); bayrak açıkken o karar sistemleşir
+   *  ve onay 409 döner. ⚠️ Kapsam YALNIZ SATIŞ faturası onayıdır: alış faturası,
+   *  taslak oluşturma/düzenleme ve İPTAL/storno yolları MUAF (limiti aşan bir
+   *  faturayı iptal edememek çıkmaz olurdu). */
+  FINANCE_RISK_LIMIT_BLOCK_ENABLED: "finance.riskLimitBlockEnabled",
+  /** Sevk onayında otomatik satış faturası TASLAĞI üret (default FALSE).
+   *  ⚠️ Üretilen şey TASLAKTIR (`InvoiceStatus.DRAFT`) — onay HER ZAMAN elle
+   *  kalır; bayrak "fatura kes" değil "veri girişini bir kez daha yazdırma"
+   *  demektir. `financeEnabled` KAPALIYKEN bu bayrak açık olsa bile kanca
+   *  no-op'tur (modül şalteri üstte). Taslak üretimi başarısız olursa sevk
+   *  DÜŞMEZ — sevk operasyonu muhasebe kancasına rehin edilmez. */
+  FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED: "finance.autoDraftFromShipmentEnabled",
+  /** Tahsilat/ödeme kaydında en eski açık faturalara OTOMATİK kapama — FIFO
+   *  (default FALSE). Bugün kapama (`PaymentAllocation`) elle seçilir; açıkken
+   *  tutar vade/tarih sırasıyla açık bakiyelere dağıtılır ve artan tutar
+   *  AÇIKTA (avans) kalır. ⚠️ Otomatik kapama SİLİNEBİLİR olmalıdır — elle
+   *  kurulan tahsis ile aynı tablodadır, "sistem yaptı" diye kilitlenmez.
+   *  Farklı para birimli fatura ATLANIR (kur kararı otomatikleştirilmez). */
+  FINANCE_AUTO_ALLOCATE_ON_PAYMENT_ENABLED: "finance.autoAllocateOnPaymentEnabled",
+  /** İplik ÇIKIŞINDA bakiyeyi eksiye düşürecek hareketi engelle (default FALSE).
+   *  Emsal `FINANCE_BLOCK_NEGATIVE_CASH_ENABLED` — orada kasa, burada
+   *  `YarnStock.balanceKg`. ⚠️ MUAF: ters/düzeltme kayıtları (`ADJUST_OUT` ile
+   *  yazılan storno) ve belge İPTAL yolları — yanlış girilmiş bir hareket
+   *  "bakiye yetmiyor" diye geri alınamaz kalmamalı. Yani kural İLERİ yolda
+   *  (`OUT`) uygulanır. Açmadan önce açılış/devir bakiyelerinin girildiğinden
+   *  emin ol: sistemde 0 görünen dolu bir depodan tek çıkış bile yapılamaz. */
+  YARN_BLOCK_NEGATIVE_BALANCE_ENABLED: "yarn.blockNegativeBalanceEnabled",
+  /** Alış siparişine bağlı mal kabulde SİPARİŞ MİKTARINI AŞAN satırı engelle
+   *  (default FALSE). Bugünkü davranış bilinçlidir ve varsayılan olarak KALIR:
+   *  fiziksel olarak fazla mal GELEBİLİR, servis uyarır ve kayıt gerçeği yazar
+   *  (`PurchaseOrderLine.receivedQty` şema notu). Bayrak, toleransı sıfırlayan
+   *  firmalar içindir. ⚠️ Kapsam YALNIZ siparişe BAĞLI kabuldür — serbest
+   *  (siparişsiz) mal kabulünde aşılacak bir miktar yoktur, MUAF. Kabul iptali
+   *  ve düzeltme de MUAF. */
+  PURCHASE_BLOCK_OVER_RECEIPT_ENABLED: "purchase.blockOverReceiptEnabled",
+  /** Mal kabul satırında BİRİM FİYAT zorunlu (default FALSE). Açıkken fiyat
+   *  satırdan ya da siparişten çözülemezse kabul 400 alır. Gerekçe: fiyat kabul
+   *  ANINDA donar (`YarnMovement.unitPrice` / `Roll.purchasePrice`) ve alış
+   *  faturası taslağı oradan doğar — sonradan girilen fiyat maliyeti geçmişe
+   *  dönük değiştirir. ⚠️ MUAF: ters/iptal satırları fiyat TAŞIMAZ (geri sarım
+   *  ticari bir olay değildir) ve bedelsiz kalemler için kaçış yolu
+   *  `financeAllowZeroPriceLineEnabled`tir — ikisi birlikte düşünülür. */
+  GOODS_RECEIPT_REQUIRE_PRICE_ENABLED: "goodsReceipt.requirePriceEnabled",
+  /** SIFIR fiyatlı fatura satırıyla ONAYA izin ver (default FALSE = sıfır fiyat
+   *  reddedilir). Promosyon/numune/bedelsiz sevk içindir. ⚠️ İzin verilen şey
+   *  SIFIRDIR, boş/çözülemeyen fiyat DEĞİL: "0 yazdım" bir karardır, "fiyat
+   *  bulunamadı" bir eksiktir ve ikisi aynı kapıdan geçirilemez. NEGATİF fiyat
+   *  her hâlükârda reddedilir (iade/indirim ayrı belgedir). */
+  FINANCE_ALLOW_ZERO_PRICE_LINE_ENABLED: "finance.allowZeroPriceLineEnabled",
+  /** İLERİ TARİHLİ mali belge tarihini engelle (default FALSE). Açıkken fatura /
+   *  tahsilat-ödeme / masraf / virman belgesinin TARİHİ fabrika gününün
+   *  (Europe/Istanbul) ilerisindeyse 400. ⚠️ MUAF (Sınıf 1): çekin KEŞİDE ve
+   *  VADE tarihi — ileri tarihli çek işin normalidir, onu engellemek özelliği
+   *  kullanılamaz kılardı. Sınır FABRİKA GÜNÜ sonudur (`factoryDayStart`
+   *  ailesi), UTC gün sonu DEĞİL. */
+  FINANCE_FUTURE_DATED_DOCUMENT_BLOCK_ENABLED: "finance.futureDatedDocumentBlockEnabled",
+  /** Satış faturası ONAYINDA iplik satırlarını STOKTAN DÜŞ (default FALSE).
+   *  Kapalıyken stok yalnız sevk/depo hareketiyle düşer. Açıkken onay, kalemin
+   *  VARSAYILAN deposundan bir `YarnMovement(OUT)` doğurur. ⚠️ ÇİFTE DÜŞÜM
+   *  RİSKİ: sevkten de düşen bir kurulumda bu bayrağı açmak aynı kg'yi iki kez
+   *  düşürür — bayrak "stoğu fatura mı sevk mi düşürüyor" REJİM sorusudur, ek
+   *  bir güvence değil. İPTAL/storno düşülen miktarı geri yazar. */
+  FINANCE_YARN_OUT_ON_INVOICE_ENABLED: "finance.yarnOutOnInvoiceEnabled",
+  /**
+   * ÜRETİM modülü açık mı — envanterdeki üretim sekmeleri (Üretimde · Üretim
+   * Akışı · Fasonda · Kurşun/Tambur Bekleyen) ve Siparişler'deki iş emri
+   * yüzeyleri buna bakar.
+   *
+   * ⚠️ VARSAYILAN AÇIK ve `finance.enabled`'dan BAĞIMSIZ. Önceden bu yüzeyler
+   * "finance açıksa gizle" diye çözülüyordu; o kısayol, ön muhasebeyi açan bir
+   * FABRİKANIN üretim sekmelerini sessizce kaybetmesi demekti (2026-08-14 saha
+   * bildirimi). İki soru ayrıdır: "muhasebe tutuyor muyum" ile "üretim yapıyor
+   * muyum" aynı anda EVET olabilir.
+   */
+  PRODUCTION_ENABLED: "production.enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -398,6 +505,12 @@ export const DEFAULT_ABSOLUTE_SESSION_CAP_DAYS = 30;
 const MAX_ABSOLUTE_SESSION_CAP_DAYS = 365;
 /** Hızlı-PIN/kart deneme kilidi varsayılanları + aralıkları. */
 export const DEFAULT_PIN_LOCKOUT_ENABLED = true;
+/** Fatura satırı varsayılan KDV oranı (%). 20 = bugünkü hardcode'un birebir
+ *  karşılığı — ayar satırı yoksa davranış bayt-bayt aynı kalır. Tam sayı
+ *  DAYATILMAZ (kolon Decimal(5,2); küsuratlı oran temsil edilebilir). */
+export const DEFAULT_FINANCE_VAT_RATE = 20;
+const MIN_FINANCE_VAT_RATE = 0;
+const MAX_FINANCE_VAT_RATE = 100;
 /** Otomatik gece yedeği saati varsayılanı (yerel saat). Eski Görev Zamanlayıcı da 03:00'tü. */
 export const DEFAULT_BACKUP_HOUR = 3;
 const MIN_BACKUP_HOUR = 0;
@@ -850,6 +963,56 @@ export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı (panel başlığı + uygulama geneli). */
   companyName: string;
   pricingEnabled: boolean;
+  /** Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka) açık mı.
+   *  Varsayılan KAPALI — üretici fabrika bu modülü kullanmıyor ve kapalıyken
+   *  menüde tek satır bile görünmez. `pricingEnabled` ile bağımsız. */
+  financeEnabled: boolean;
+  /** Kasa eksi bakiyeye düşemesin (default false). Backend ENFORCE — 4 ileri
+   *  yol 409 (ödeme OUT · masraf · virman çıkan kasa bacağı · çek ödeme);
+   *  banka ve iptal/storno yolları MUAF. */
+  financeBlockNegativeCashEnabled: boolean;
+  /** Fatura satırının varsayılan KDV oranı, % (0-100; default 20). Yalnız
+   *  ön-dolum — kullanıcı satırda değiştirebilir. */
+  financeDefaultVatRate: number;
+  // --- TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1) --------------
+  // ⚠️ Dokuzu da default FALSE ve bugün HİÇBİR servis okumuyor (bilinçli ara
+  // durum — bkz. SETTING_KEYS bloğundaki gerekçe). Davranışı bağlayan dalga
+  // buradaki MUAF listelerini birebir uygular.
+  /** Cari risk limiti aşımında SATIŞ faturası onayını engelle (default false).
+   *  Bugün limit yalnız uyarıdır; açıkken onay 409 döner. MUAF: alış faturası,
+   *  taslak yolları ve iptal/storno. */
+  financeRiskLimitBlockEnabled: boolean;
+  /** Sevk onayında otomatik satış faturası TASLAĞI üret (default false). Onay
+   *  her zaman elle kalır; `financeEnabled` kapalıyken kanca no-op'tur ve
+   *  taslak hatası sevki DÜŞÜRMEZ. */
+  financeAutoDraftFromShipmentEnabled: boolean;
+  /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
+   *  false). Artan tutar avans olarak açıkta kalır; otomatik tahsis elle
+   *  silinebilir; farklı para birimli fatura atlanır. */
+  financeAutoAllocateOnPaymentEnabled: boolean;
+  /** İplik çıkışında eksi bakiyeye düşecek hareketi engelle (default false).
+   *  Kasa emsali. MUAF: ters/düzeltme (`ADJUST_OUT`) ve belge iptali. */
+  yarnBlockNegativeBalanceEnabled: boolean;
+  /** Alış siparişine bağlı mal kabulde sipariş miktarını aşan satırı engelle
+   *  (default false = fazla mal kaydedilir, servis uyarır). MUAF: siparişsiz
+   *  kabul, kabul iptali/düzeltmesi. */
+  purchaseBlockOverReceiptEnabled: boolean;
+  /** Mal kabul satırında birim fiyat zorunlu (default false). Çözülemezse 400.
+   *  MUAF: ters/iptal satırları. Bedelsiz kalem kaçışı
+   *  `financeAllowZeroPriceLineEnabled`tir. */
+  goodsReceiptRequirePriceEnabled: boolean;
+  /** Sıfır fiyatlı fatura satırıyla onaya izin ver (default false). İzin
+   *  verilen SIFIRDIR, boş/çözülemeyen fiyat değil; negatif her hâlükârda red. */
+  financeAllowZeroPriceLineEnabled: boolean;
+  /** İleri tarihli mali belge tarihini engelle (default false). Sınır FABRİKA
+   *  günüdür. MUAF (Sınıf 1): çekin keşide ve vade tarihi. */
+  financeFutureDatedDocumentBlockEnabled: boolean;
+  /** Satış faturası onayında iplik satırlarını varsayılan depodan stoktan düş
+   *  (default false = stok yalnız sevkte düşer). ⚠️ Sevkten de düşen kurulumda
+   *  açmak ÇİFTE DÜŞÜM olur — bu bir rejim sorusudur. İptal geri yazar. */
+  financeYarnOutOnInvoiceEnabled: boolean;
+  /** Üretim modülü (envanter üretim sekmeleri + iş emri yüzeyleri). Varsayılan AÇIK. */
+  productionEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -1179,6 +1342,22 @@ export class SystemSettingService {
     const flags: FeatureFlags = {
       companyName: await readCompanyName(cacheClient),
       pricingEnabled: await readPricingEnabled(cacheClient),
+      financeEnabled: await readFinanceEnabled(cacheClient),
+      financeBlockNegativeCashEnabled: await readFinanceBlockNegativeCashEnabled(cacheClient),
+      financeDefaultVatRate: await readFinanceDefaultVatRate(cacheClient),
+      financeRiskLimitBlockEnabled: await readFinanceRiskLimitBlockEnabled(cacheClient),
+      financeAutoDraftFromShipmentEnabled:
+        await readFinanceAutoDraftFromShipmentEnabled(cacheClient),
+      financeAutoAllocateOnPaymentEnabled:
+        await readFinanceAutoAllocateOnPaymentEnabled(cacheClient),
+      yarnBlockNegativeBalanceEnabled: await readYarnBlockNegativeBalanceEnabled(cacheClient),
+      purchaseBlockOverReceiptEnabled: await readPurchaseBlockOverReceiptEnabled(cacheClient),
+      goodsReceiptRequirePriceEnabled: await readGoodsReceiptRequirePriceEnabled(cacheClient),
+      financeAllowZeroPriceLineEnabled: await readFinanceAllowZeroPriceLineEnabled(cacheClient),
+      financeFutureDatedDocumentBlockEnabled:
+        await readFinanceFutureDatedDocumentBlockEnabled(cacheClient),
+      financeYarnOutOnInvoiceEnabled: await readFinanceYarnOutOnInvoiceEnabled(cacheClient),
+      productionEnabled: await readProductionEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -1266,6 +1445,176 @@ export class SystemSettingService {
         SETTING_KEYS.FINANCE_PRICING_ENABLED,
         input.pricingEnabled,
         "Sipariş/sevkiyat ekranlarında para birimi + fiyat alanlarını göster",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeEnabled")) {
+      if (typeof input.financeEnabled !== "boolean") {
+        throw AppError.badRequest("financeEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_ENABLED,
+        input.financeEnabled,
+        "Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeBlockNegativeCashEnabled")) {
+      if (typeof input.financeBlockNegativeCashEnabled !== "boolean") {
+        throw AppError.badRequest("financeBlockNegativeCashEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED,
+        input.financeBlockNegativeCashEnabled,
+        "Kasa eksi bakiyeye düşemesin (ödeme · masraf · virman · çek ödeme 409; banka ve iptal yolları muaf)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeDefaultVatRate")) {
+      const v = input.financeDefaultVatRate;
+      if (
+        typeof v !== "number" ||
+        !Number.isFinite(v) ||
+        v < MIN_FINANCE_VAT_RATE ||
+        v > MAX_FINANCE_VAT_RATE
+      ) {
+        throw AppError.badRequest(
+          `Varsayılan KDV oranı ${MIN_FINANCE_VAT_RATE}–${MAX_FINANCE_VAT_RATE} arasında bir sayı olmalı`
+        );
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_DEFAULT_VAT_RATE,
+        v,
+        "Fatura satırının varsayılan KDV oranı, % (yalnız ön-dolum; satırda değiştirilebilir)",
+        userId
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1)
+    // -------------------------------------------------------------------------
+    // Dokuz boolean; hepsi default FALSE ve bugün okuyan servis YOK. Yazma
+    // dalları şimdi kurulur ki davranışı bağlayan dalga, ACİL KAPATMA yolu
+    // hazır halde başlasın (2026-08-04 kk1 dersi).
+    if (Object.prototype.hasOwnProperty.call(input, "financeRiskLimitBlockEnabled")) {
+      if (typeof input.financeRiskLimitBlockEnabled !== "boolean") {
+        throw AppError.badRequest("financeRiskLimitBlockEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_ENABLED,
+        input.financeRiskLimitBlockEnabled,
+        "Risk limiti aşımında satış faturası onayını engelle (alış · taslak · iptal muaf)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeAutoDraftFromShipmentEnabled")) {
+      if (typeof input.financeAutoDraftFromShipmentEnabled !== "boolean") {
+        throw AppError.badRequest("financeAutoDraftFromShipmentEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED,
+        input.financeAutoDraftFromShipmentEnabled,
+        "Sevk onayında otomatik satış faturası TASLAĞI oluştur (onay yine elle)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeAutoAllocateOnPaymentEnabled")) {
+      if (typeof input.financeAutoAllocateOnPaymentEnabled !== "boolean") {
+        throw AppError.badRequest("financeAutoAllocateOnPaymentEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_AUTO_ALLOCATE_ON_PAYMENT_ENABLED,
+        input.financeAutoAllocateOnPaymentEnabled,
+        "Tahsilat/ödemede en eski açık faturalara otomatik kapama (FIFO; artan tutar avansta kalır)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "yarnBlockNegativeBalanceEnabled")) {
+      if (typeof input.yarnBlockNegativeBalanceEnabled !== "boolean") {
+        throw AppError.badRequest("yarnBlockNegativeBalanceEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.YARN_BLOCK_NEGATIVE_BALANCE_ENABLED,
+        input.yarnBlockNegativeBalanceEnabled,
+        "İplik çıkışında eksi bakiyeye düşecek hareketi engelle (storno/iptal muaf)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "purchaseBlockOverReceiptEnabled")) {
+      if (typeof input.purchaseBlockOverReceiptEnabled !== "boolean") {
+        throw AppError.badRequest("purchaseBlockOverReceiptEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.PURCHASE_BLOCK_OVER_RECEIPT_ENABLED,
+        input.purchaseBlockOverReceiptEnabled,
+        "Alış siparişine bağlı mal kabulde sipariş miktarını aşan satırı engelle",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "goodsReceiptRequirePriceEnabled")) {
+      if (typeof input.goodsReceiptRequirePriceEnabled !== "boolean") {
+        throw AppError.badRequest("goodsReceiptRequirePriceEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.GOODS_RECEIPT_REQUIRE_PRICE_ENABLED,
+        input.goodsReceiptRequirePriceEnabled,
+        "Mal kabul satırında birim fiyat zorunlu (çözülemezse 400; ters/iptal satırları muaf)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeAllowZeroPriceLineEnabled")) {
+      if (typeof input.financeAllowZeroPriceLineEnabled !== "boolean") {
+        throw AppError.badRequest("financeAllowZeroPriceLineEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_ALLOW_ZERO_PRICE_LINE_ENABLED,
+        input.financeAllowZeroPriceLineEnabled,
+        "Sıfır fiyatlı fatura satırıyla onaya izin ver (promosyon/numune; negatif fiyat yine red)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeFutureDatedDocumentBlockEnabled")) {
+      if (typeof input.financeFutureDatedDocumentBlockEnabled !== "boolean") {
+        throw AppError.badRequest("financeFutureDatedDocumentBlockEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_FUTURE_DATED_DOCUMENT_BLOCK_ENABLED,
+        input.financeFutureDatedDocumentBlockEnabled,
+        "İleri tarihli mali belge tarihini engelle (çek keşide/vade tarihi MUAF)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "financeYarnOutOnInvoiceEnabled")) {
+      if (typeof input.financeYarnOutOnInvoiceEnabled !== "boolean") {
+        throw AppError.badRequest("financeYarnOutOnInvoiceEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.FINANCE_YARN_OUT_ON_INVOICE_ENABLED,
+        input.financeYarnOutOnInvoiceEnabled,
+        "Satış faturası onayında iplik satırlarını varsayılan depodan stoktan düş",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "productionEnabled")) {
+      if (typeof input.productionEnabled !== "boolean") {
+        throw AppError.badRequest("productionEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.PRODUCTION_ENABLED,
+        input.productionEnabled,
+        "Üretim modülü (envanter üretim sekmeleri · iş emri yüzeyleri)",
         userId
       );
     }
@@ -2127,6 +2476,205 @@ export async function readPricingEnabled(
     select: { value: true },
   });
   return asBoolean(setting?.value);
+}
+
+/**
+ * Ön muhasebe modülü açık mı? Default false.
+ *
+ * ⚠️ Bu bayrak GÖRÜNÜRLÜK değil REJİM anahtarıdır: kapalıyken menü satırı
+ * çizilmez, route 403 verir ve otomatik taslak kancaları no-op olur. Üçü de
+ * ayrı ayrı test edilir (`test_finance_flag_off`) — yalnız menüyü gizlemek,
+ * adresi bilen birine modülü açık bırakırdı.
+ */
+export async function readFinanceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Kasa eksi bakiye engeli açık mı? Default false.
+ *
+ * ENFORCEMENT READER — bilerek cache'siz (`readTamburOverQuantityEnabled`
+ * emsali): guard tx içinde her seferinde taze okur; panelden kapatılan bayrak
+ * bir sonraki işlemde anında etkisizleşir (acil kapatma yolu). Tek tüketici:
+ * `helpers/cash-balance-guard.helper.assertCashBalanceCoversTx`.
+ */
+export async function readFinanceBlockNegativeCashEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_BLOCK_NEGATIVE_CASH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Fatura satırının varsayılan KDV oranı (%). Kayıt yoksa / aralık dışıysa 20
+ * (= 2026-08-14 öncesi hardcode; ayar dokunulmamış kurulumda sıfır fark).
+ * İki tüketici: `invoice.service.createDraftFromGoodsReceipt` (alış taslağı)
+ * ve Electron fatura formunun yeni satırı — ikisi de tek kaynaktan okur.
+ */
+export async function readFinanceDefaultVatRate(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_DEFAULT_VAT_RATE },
+    select: { value: true },
+  });
+  const parsed = asNumber(setting?.value);
+  if (parsed === null || parsed < MIN_FINANCE_VAT_RATE || parsed > MAX_FINANCE_VAT_RATE) {
+    return DEFAULT_FINANCE_VAT_RATE;
+  }
+  return parsed;
+}
+
+// =============================================================================
+// TİCARET/MUHASEBE REJİM OKUYUCULARI (2026-08-14, dalga 1 — HENÜZ ÇAĞIRAN YOK)
+// =============================================================================
+// Dokuzu da ENFORCEMENT READER kalıbındadır (`readFinanceBlockNegativeCashEnabled`
+// emsali): bilerek CACHE'SİZ ve `tx` parametreli — guard tx içinde her seferinde
+// taze okur, böylece panelden kapatılan bayrak bir SONRAKİ işlemde anında
+// etkisizleşir (acil kapatma yolu). Kayıt yoksa hepsi FALSE döner (`asBoolean`),
+// yani bugünkü davranış birebir korunur.
+//
+// ⚠️ Bu fonksiyonların bugün ÇAĞIRANI YOKTUR ve bu bilinçlidir; "ölü kod" diye
+// silme — dört kapı sözleşmesinin servis ayağıdır (bekçi:
+// `scripts/test_feature_flag_contract.ts`). Davranışı bağlayan dalga, ilgili
+// SETTING_KEYS JSDoc'undaki MUAF listesini birebir uygular.
+
+/** Risk limiti aşımında satış faturası onayını engelle? Default false. */
+export async function readFinanceRiskLimitBlockEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_RISK_LIMIT_BLOCK_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Sevk onayında otomatik satış faturası TASLAĞI üretilsin mi? Default false. */
+export async function readFinanceAutoDraftFromShipmentEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_AUTO_DRAFT_FROM_SHIPMENT_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama? Default false. */
+export async function readFinanceAutoAllocateOnPaymentEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_AUTO_ALLOCATE_ON_PAYMENT_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** İplik çıkışında eksi bakiye engeli açık mı? Default false. */
+export async function readYarnBlockNegativeBalanceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.YARN_BLOCK_NEGATIVE_BALANCE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Siparişe bağlı mal kabulde fazla kabul engeli açık mı? Default false. */
+export async function readPurchaseBlockOverReceiptEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PURCHASE_BLOCK_OVER_RECEIPT_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Mal kabul satırında birim fiyat zorunlu mu? Default false. */
+export async function readGoodsReceiptRequirePriceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.GOODS_RECEIPT_REQUIRE_PRICE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Sıfır fiyatlı fatura satırıyla onaya izin var mı? Default false. */
+export async function readFinanceAllowZeroPriceLineEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_ALLOW_ZERO_PRICE_LINE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** İleri tarihli mali belge engeli açık mı? Default false (çek tarihleri MUAF). */
+export async function readFinanceFutureDatedDocumentBlockEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_FUTURE_DATED_DOCUMENT_BLOCK_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Satış faturası onayında iplik stoktan düşülsün mü? Default false. */
+export async function readFinanceYarnOutOnInvoiceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.FINANCE_YARN_OUT_ON_INVOICE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Üretim modülü açık mı. ⚠️ VARSAYILAN **TRUE** — ayar satırı yoksa fabrika
+ * bugünkü davranışını aynen sürdürür. Diğer bayraklar varsayılan KAPALI
+ * olduğu için bu tersliği bilerek yazıyoruz: burada "kapalı" demek, kurulmuş
+ * bir fabrikanın üretim ekranlarını yok etmek olurdu.
+ */
+export async function readProductionEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PRODUCTION_ENABLED },
+    select: { value: true },
+  });
+  if (!setting) return true;
+  return setting.value === true || setting.value === "true";
 }
 
 /**

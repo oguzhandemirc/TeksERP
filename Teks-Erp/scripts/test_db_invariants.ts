@@ -109,6 +109,8 @@ const PARTIAL_INDEXES: Array<{
   { table: "rolls", index: "rolls_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
   { table: "rolls", index: "rolls_labelCustomerId_idx", uniq: false, predicate: `("labelCustomerId" IS NOT NULL)`, why: "null-yoğun FK (stok etiketi yaygın); sorgu yolu hep 'şu müşterinin topları'" },
   { table: "rolls", index: "rolls_directShipmentId_idx", uniq: false, predicate: `("directShipmentId" IS NOT NULL)`, why: "null-yoğun FK — fason doğrudan sevk izi (K7c, 2026-08-29)" },
+  { table: "rolls", index: "rolls_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun FK: yalnız mal kabulle doğmuş toplarda dolu (migration 20260813090000)" },
+  { table: "rolls", index: "rolls_purchaseOrderLineId_idx", uniq: false, predicate: `("purchaseOrderLineId" IS NOT NULL)`, why: "null-yoğun FK: yalnız PO'lu mal kabulle doğmuş toplarda dolu (migration 20260814210000)" },
   {
     table: "rolls",
     index: "rolls_finalizedAt_idx",
@@ -153,6 +155,115 @@ const PARTIAL_INDEXES: Array<{
   { table: "roll_errors", index: "roll_errors_roll_meter_defect_uq", uniq: true, predicate: `("defectTypeId" IS NOT NULL)`, why: "aynı metrede mükerrer hata seddi" },
   // roll_returns — çok kalemli iade grubu (migration 20260805100000)
   { table: "roll_returns", index: "roll_returns_returnGroupId_idx", uniq: false, predicate: `("returnGroupId" IS NOT NULL)`, why: "null-yoğun: tekil iadelerde NULL" },
+  // ticaret paketi — çoklu depo + mal kabul (migration 20260813090000)
+  {
+    table: "warehouses",
+    index: "warehouses_isDefault_key",
+    uniq: true,
+    predicate: `("isDefault" = true)`,
+    why: "sistemde TEK varsayılan depo — düz unique olsaydı toplam İKİ depo tutulabilirdi (traveler_card_templates_one_default emsali)",
+  },
+  { table: "warehouse_transfers", index: "warehouse_transfers_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "goods_receipts", index: "goods_receipts_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "warehouse_movements", index: "warehouse_movements_transferId_idx", uniq: false, predicate: `("transferId" IS NOT NULL)`, why: "null-yoğun belge bağı (KK1/tambur girişleri belgesiz)" },
+  { table: "warehouse_movements", index: "warehouse_movements_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun belge bağı" },
+  // ticaret paketi — çuval-bütün transfer (migration 20260813212341)
+  { table: "warehouse_movements", index: "warehouse_movements_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun: yalnız çuval-bütün transfer satırları taşır" },
+  { table: "sacks", index: "sacks_warehouseId_idx", uniq: false, predicate: `("warehouseId" IS NOT NULL)`, why: "eski çuvallar NULL (lazy adoption) — dolu satırlar 'bu depoda hangi çuvallar' sorgusunun yolu" },
+  // ticaret paketi — ön muhasebe (migration 20260813201311)
+  // ⚠️ "BİR KAYNAK → EN ÇOK BİR AKTİF FATURA". Uygulama katmanındaki
+  // findFirst→if→create yarışa açıktır; yapısal engel partial unique'tir. Aynı
+  // sevkiyat iki kez faturalanırsa cari bakiyesi sessizce İKİ KATINA çıkar ve
+  // fark ay sonunda müşteriyle yüzleşince anlaşılır.
+  // `status <> 'CANCELLED'`: iptal edilmiş fatura yerinde kalır (donmuş belge
+  // silinmez) ama yeni fatura kesilmesini ENGELLEMEMELİDİR — storno'nun amacı bu.
+  { table: "invoices", index: "invoices_one_active_per_shipment", uniq: true, predicate: `(("shipmentId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir sevkiyat → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_direct_shipment", uniq: true, predicate: `(("directShipmentId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir doğrudan sevk → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_return_group", uniq: true, predicate: `(("returnGroupId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir iade grubu → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_subcon_receipt", uniq: true, predicate: `(("subcontractorReceiptId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir fason kabul → tek aktif fatura" },
+  { table: "invoices", index: "invoices_one_active_per_goods_receipt", uniq: true, predicate: `(("goodsReceiptId" IS NOT NULL) AND (status <> 'CANCELLED'::"InvoiceStatus"))`, why: "bir mal kabul fişi → tek aktif alış faturası" },
+  { table: "invoices", index: "invoices_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  { table: "payments", index: "payments_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  // ticaret paketi — carisiz kasa hareketi (migration 20260813230932)
+  { table: "cash_transactions", index: "cash_transactions_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  // ⚠️ AÇILIŞ HESAP BAŞINA TEK: ikinci devir satırı "hangisi gerçek açılış"
+  // sorusunu cevapsız bırakır ve bakiyeyi sessizce şişirir. İptal edilmiş
+  // açılış yenisini ENGELLEMEZ (yanlış devir düzeltilebilmeli).
+  { table: "cash_transactions", index: "cash_txn_one_opening_per_cashbox", uniq: true, predicate: `((kind = 'OPENING'::"CashTxnKind") AND ("cashBoxId" IS NOT NULL) AND (status <> 'CANCELLED'::"PaymentStatus"))`, why: "kasa başına tek açılış" },
+  { table: "cash_transactions", index: "cash_txn_one_opening_per_bank", uniq: true, predicate: `((kind = 'OPENING'::"CashTxnKind") AND ("bankAccountId" IS NOT NULL) AND (status <> 'CANCELLED'::"PaymentStatus"))`, why: "banka hesabı başına tek açılış" },
+  { table: "cari_accounts", index: "cari_accounts_customerId_key", uniq: true, predicate: `("customerId" IS NOT NULL)`, why: "müşteri başına tek cari; NULL'lar (fason cariler) girmez" },
+  { table: "cari_accounts", index: "cari_accounts_subcontractorId_key", uniq: true, predicate: `("subcontractorId" IS NOT NULL)`, why: "fason başına tek cari; NULL'lar (müşteri cariler) girmez" },
+  // ticaret paketi — çek/senet portföyü (migration 20260814101000)
+  { table: "cheques", index: "cheques_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency: NULL'lar unique'e girmez" },
+  // ticaret paketi — fatura kapama (migration 20260814102000)
+  // ⚠️ AÇIK FATURA yolu. Predicate LOAD-BEARING ve iki işi var: (1) kapanmış +
+  // iptal edilmiş faturalar indekse hiç girmez → index cironun değil AÇIK
+  // BAKİYENİN büyüklüğünde kalır; (2) predicate düşerse yaşlandırma raporu
+  // sessizce tüm fatura geçmişini tarar (sonuç doğru, sorgu yıllar içinde
+  // yavaşlar — hata da log da yok).
+  {
+    table: "invoices",
+    index: "invoices_open",
+    uniq: false,
+    predicate: `((status = 'CONFIRMED'::"InvoiceStatus") AND ("paidTotal" < "grandTotal"))`,
+    why: "açık fatura taraması (yaşlandırma + kapama ekranı) — kapanan satırlar indeksten düşer",
+  },
+  // ticaret paketi — cari dönem kapanışı (migration 20260814103000)
+  // ⚠️ PARTIAL olması ZORUNLU: reopen satırı SİLMEZ, işaretler. Düz unique
+  // olsaydı yeniden açılan dönem BİR DAHA kapatılamazdı (eski satır anahtarı
+  // tutmaya devam eder, ikinci kapanış P2002 alırdı).
+  {
+    table: "cari_period_closes",
+    index: "cari_period_close_active_uq",
+    uniq: true,
+    predicate: `("reopenedAt" IS NULL)`,
+    why: "cari+para birimi+dönem başına TEK AKTİF kapanış; yeniden açılanlar anahtarı bırakır",
+  },
+  // 2026-08-14 — Paket D fiyatlama (migration 20260814072115_paket_d_...).
+  // ⚠️ İKİ partial unique, çünkü `customerId IS NULL` = KART VARSAYILANI ve
+  // Postgres NULL'ları birbirine eşit SAYMAZ: düz unique aynı kaleme iki
+  // "varsayılan fiyat" satırı doğmasına izin verirdi ve `resolveItemPrice`
+  // hangisini seçtiğini kimse söyleyemezdi (hata çıkmaz, fiyat SALINIR).
+  {
+    table: "item_prices",
+    index: "item_price_default_uq",
+    uniq: true,
+    predicate: `("customerId" IS NULL)`,
+    why: "kalem+yön+para birimi başına TEK kart varsayılanı",
+  },
+  {
+    table: "item_prices",
+    index: "item_price_customer_uq",
+    uniq: true,
+    predicate: `("customerId" IS NOT NULL)`,
+    why: "kalem+müşteri+yön+para birimi başına TEK istisna",
+  },
+  // 2026-08-14 — sağlamlık paketi (migration 20260814110200_saglamlik_paketi).
+  // Storno bağı: bir defter satırı EN FAZLA BİR KEZ terslenebilir.
+  {
+    table: "cari_transactions",
+    index: "cari_transactions_reversesTxnId_key",
+    uniq: true,
+    predicate: `("reversesTxnId" IS NOT NULL)`,
+    why: "çift storno P2002→409; null-yoğun kolon → partial",
+  },
+  // Kasa/banka dönem kapanışı — cari_period_close_active_uq'nun hesap-bazlı
+  // ikizleri. `reopenedAt IS NULL`: yeniden açılan dönem anahtarı bırakır;
+  // hesap kolonu predicate'te: XOR gereği yarısı NULL, index kendi tarafını taşır.
+  {
+    table: "cash_period_closes",
+    index: "cash_period_close_box_active_uq",
+    uniq: true,
+    predicate: `(("reopenedAt" IS NULL) AND ("cashBoxId" IS NOT NULL))`,
+    why: "kasa+dönem başına TEK AKTİF kapanış",
+  },
+  {
+    table: "cash_period_closes",
+    index: "cash_period_close_bank_active_uq",
+    uniq: true,
+    predicate: `(("reopenedAt" IS NULL) AND ("bankAccountId" IS NOT NULL))`,
+    why: "banka+dönem başına TEK AKTİF kapanış",
+  },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
   { table: "orders", index: "orders_active_createdAt_idx", uniq: false, predicate: `(status <> 'CANCELLED'::"OrderStatus")`, why: "varsayılan liste sıralaması: panel iptalleri gizler (hideCancelled), o yüzden (status, createdAt) bileşiği ordering veremez — 30 günlük tarih penceresi kaldırıldıktan sonra tek koruma bu" },
@@ -243,6 +354,80 @@ const CHECK_CONSTRAINTS: Array<{ table: string; name: string; notValid?: string 
       "'düzeltmek' kök nedeni gizler ve kapıyı görünmez yapar — satırlar bilerek " +
       "duruyor. Temizlik yapılınca: ALTER TABLE rolls VALIDATE CONSTRAINT rolls_qty_le_initial;",
   },
+  // 2026-08-13 — ön muhasebe (migration 20260813201311_finance_preaccounting).
+  // Muhasebe seddleri "veri tutarlı olsun" değil "DEFTER OKUNABİLİR olsun"
+  // içindir: yönü iki yerde saklayan (işaretli tutar) ya da yarım durum bırakan
+  // (onaylı ama kim/ne zaman boş) bir satır, denetimde hiçbir şey kanıtlamaz.
+  { table: "cari_accounts", name: "cari_accounts_party_xor" },
+  { table: "cari_accounts", name: "cari_accounts_kind_matches_party" },
+  { table: "payments", name: "payments_account_xor" },
+  { table: "payments", name: "payments_amount_positive" },
+  { table: "payments", name: "payments_rate_positive" },
+  { table: "cari_transactions", name: "cari_txn_debit_credit_xor" },
+  { table: "invoices", name: "invoices_status_stamps" },
+  { table: "invoices", name: "invoices_rate_positive" },
+  { table: "invoice_lines", name: "invoice_lines_positive" },
+  { table: "exchange_rates", name: "exchange_rates_rate_positive" },
+  // 2026-08-14 — carisiz kasa hareketi (migration 20260813230932_cash_transaction).
+  { table: "cash_transactions", name: "cash_txn_account_xor" },
+  { table: "cash_transactions", name: "cash_txn_amount_positive" },
+  { table: "cash_transactions", name: "cash_txn_rate_positive" },
+  // Tür ↔ yön tutarlılığı: "gider ama bakiye artmış" satırı kasa defterini
+  // okunamaz yapar.
+  { table: "cash_transactions", name: "cash_txn_kind_matches_direction" },
+  // Virman satırı grubunu taşımak ZORUNDA (grupsuz TRANSFER_OUT = karşı bacağı
+  // bulunamayan yarım virman); tekil hareket taşıyamaz.
+  { table: "cash_transactions", name: "cash_txn_transfer_group" },
+  { table: "cash_transactions", name: "cash_txn_cancel_stamp" },
+  // Alış fiyatı negatif olamaz (0 meşru: bedelsiz numune).
+  { table: "rolls", name: "rolls_purchase_price_nonneg" },
+  // 2026-08-14 — çek/senet portföyü (migration 20260814101000_cheque_portfolio).
+  { table: "cheques", name: "cheques_amount_positive" },
+  { table: "cheques", name: "cheques_rate_positive" },
+  // ⚠️ CİRO TUTARLILIĞI — planın yazdığı KATI çift-yönlü eşitlik
+  // (`status='ENDORSED'` ⇔ `endorsedToCariId IS NOT NULL`) BİLİNÇLİ OLARAK
+  // uygulanmadı, çünkü planın KENDİ kuralıyla çelişiyordu: "BOUNCE → ENDORSED'dan
+  // geldiyse ciro carisine ters CREDIT". Ciro edilmiş çek karşılıksız çıkınca
+  // durum BOUNCED olur ama ters kaydın kime yazılacağı hâlâ BİLİNMEK ZORUNDA.
+  // Korunan iki yarı: ENDORSED ciro carisiz olamaz + canlı/ciro edilmemiş çek
+  // (PORTFOLIO/AT_BANK/ISSUED) sahte ciro izi taşıyamaz.
+  { table: "cheques", name: "cheques_endorsed_cari" },
+  // Olay satırı kasa VEYA banka taşır, ikisi birden değil ("en çok bir" —
+  // olayların çoğu hiçbir hesaba dokunmaz). payments_account_xor ile aynı gerekçe.
+  { table: "cheque_events", name: "cheque_events_account_not_both" },
+  // 2026-08-14 — fatura kapama (migration 20260814102000_payment_allocation).
+  { table: "payment_allocations", name: "payment_allocations_source_xor" },
+  { table: "payment_allocations", name: "payment_allocations_amount_positive" },
+  // ⚠️ SAYAÇ SEDDLERİ — `Order.shippedQty` dersinin (seddi OLMAYAN denormalize
+  // alan, drift'i yıllarca görünmez) muhasebe karşılığı. Üst sınır DB'de kilitli
+  // olduğu için "tutarından fazla kapanmış fatura" satırı YAZILAMAZ; bu üçü
+  // düşerse kapama sayaçları sessizce gerçeğin üstüne çıkabilir.
+  { table: "invoices", name: "invoices_paid_total_range" },
+  { table: "payments", name: "payments_allocated_total_range" },
+  { table: "cheques", name: "cheques_allocated_total_range" },
+  // 2026-08-14 — Paket D (migration 20260814072115_paket_d_...).
+  // Miktar HER ZAMAN pozitif; yönü `kind` söyler (WarehouseMovement emsali).
+  // Sıfır da yasak: "hiçbir şey olmadı" bir defter satırı değildir.
+  { table: "yarn_movements", name: "yarn_movements_qty_positive" },
+  // Fiyat negatif olamaz; SIFIR serbest (promosyon/numune satırı meşru).
+  { table: "item_prices", name: "item_prices_price_nonneg" },
+  { table: "purchase_order_lines", name: "purchase_order_lines_qty_positive" },
+  { table: "purchase_order_lines", name: "purchase_order_lines_received_nonneg" },
+  // ⚠️ `receivedQty <= qty` seddi BİLİNÇLİ OLARAK YOK: fiziksel olarak fazla mal
+  // GELEBİLİR ve kayıt gerçeği yazmalıdır. Servis uyarır, DB engellemez — aksi
+  // halde depocu gelen malı sisteme HİÇ giremezdi. Bu satır bir eksiklik değil,
+  // yazılı bir karardır; "tamamlamak" için eklemeyin.
+  // ⚠️ `yarn_stocks.balanceKg >= 0` seddi de YOK: sayım girilmeden çıkış
+  // yapılırsa bakiye GERÇEKTEN eksidir ve GÖRÜNMELİDİR. Sıfıra kırpmak eksiği
+  // gizleyip envanteri sessizce yanlışlardı.
+  // 2026-08-14 — sağlamlık paketi (20260814110200).
+  // Kapanış hesabı kasa XOR banka (Payment/CashTransaction sözleşmesi).
+  { table: "cash_period_closes", name: "cash_period_close_account_xor" },
+  // ⚠️ SINIF 4 SEDDİ: parasız-terminal çekte (BOUNCED/RETURNED/CANCELLED) canlı
+  // kapama tutarı olamaz. Uygulamanın çift yönlü CAS yüklemi atlanırsa (ham SQL,
+  // yeni geçiş yolu) satırın kendisi direnir. COLLECTED bilinçli DIŞARIDA:
+  // tahsil edilmiş çeke kapama meşrudur.
+  { table: "cheques", name: "cheques_terminal_not_allocated" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────

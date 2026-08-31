@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Printer, PanelRight } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
+import { FilePlus2, Plus, Printer, PanelRight } from "lucide-react";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -20,6 +21,9 @@ import { returnColumns } from "./returnsColumns";
 import { returnsService, type ReturnRow, type ReturnsCursorResponse } from "./service";
 import { ReturnsDetailSheet } from "./ReturnsDetailSheet";
 import { ReturnEntryDialog } from "./ReturnEntryDialog";
+import { ReturnInvoiceDraft } from "./ReturnInvoiceDraft";
+import { canDraftReturnInvoice } from "./returnInvoice";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 
@@ -73,8 +77,13 @@ function ReturnsStatusFilter() {
 }
 
 export function ReturnsPage() {
+  const qc = useQueryClient();
   const [selected, setSelected] = useState<ReturnRow | null>(null);
   const [docReturn, setDocReturn] = useState<ReturnRow | null>(null);
+  // İÇ fatura taslağı — yalnız TİCARET REJİMİNDE. Fabrikada ön muhasebe modülü
+  // kapalı olduğu için düğme hiç çizilmez (fabrika sıfır-fark; sevkiyat emsali).
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const [invoiceFor, setInvoiceFor] = useState<ReturnRow | null>(null);
   const [entryOpen, setEntryOpen] = useState(false);
   const [scanBarcode, setScanBarcode] = useState("");
   const [scanSeed, setScanSeed] = useState<string | undefined>(undefined);
@@ -119,8 +128,12 @@ export function ReturnsPage() {
           value={scanBarcode}
           onChange={setScanBarcode}
           onScan={startReturnScan}
-          placeholder="Sevk edilmiş top barkodu okut → iade gir"
-          expectPrefix="ROLL"
+          placeholder="Top barkodu veya çuval kodu okut → iade gir"
+          // İki kod türü de kabul edilir — diyalogdaki kutu zaten ikisini de
+          // çözüyor (classifyBarcode). Yalnız ROLL kabul etmek, çuval kodunu
+          // okutan operatöre "yanlış kod" uyarısı verirken AYNI kodun diyalog
+          // içinde çalıştığı tuhaf bir tutarsızlık üretiyordu.
+          expectPrefix={["ROLL", "SACK"]}
           submitLabel="İade Gir"
         />
       </PermissionGate>
@@ -158,6 +171,16 @@ export function ReturnsPage() {
             <ContextMenuItem onSelect={() => setDocReturn(r)}>
               <Printer /> İade İrsaliyesi
             </ContextMenuItem>
+            {/* Faturalanmış / iptal edilmiş grupta ÇIKMAZ — gri satır olmayan bir
+                yolu vaat eder (yüklem `canDraftReturnInvoice`). İzin `finance:write`,
+                `return:write` DEĞİL: biri iade defterine, diğeri cari deftere yazar. */}
+            {canDraftReturnInvoice(r, financeEnabled) && (
+              <PermissionGate permission="finance:write">
+                <ContextMenuItem onSelect={() => setInvoiceFor(r)}>
+                  <FilePlus2 /> Satış İade Faturası
+                </ContextMenuItem>
+              </PermissionGate>
+            )}
           </>
         )}
       />
@@ -172,7 +195,22 @@ export function ReturnsPage() {
         description="Müşteriden dönen topun kabul belgesi."
         writePermission="return:write"
       />
-      <ReturnsDetailSheet row={selected} onClose={() => setSelected(null)} />
+      <ReturnsDetailSheet
+        row={selected}
+        onClose={() => setSelected(null)}
+        financeEnabled={financeEnabled}
+        onDraftInvoice={setInvoiceFor}
+      />
+      {/* Taslak diyaloğu TEK yerde mount edilir (sayfa) — detay sheet'i yalnız
+          tetikler. İki mount, iki bağımsız durum ve iki farklı ön-dolum demekti. */}
+      <ReturnInvoiceDraft
+        row={invoiceFor}
+        onClose={() => setInvoiceFor(null)}
+        onCreated={() => {
+          void qc.invalidateQueries({ queryKey: ["returns"] });
+          void qc.invalidateQueries({ queryKey: ["finance"] });
+        }}
+      />
       <ReturnEntryDialog
         open={entryOpen}
         onOpenChange={(o) => {

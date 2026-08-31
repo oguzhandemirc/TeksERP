@@ -6,6 +6,7 @@ import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
 } from "@/pages/GeneralSettings/settings-config";
+import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
 import { operationGroups } from "@/pages/Operations/groups-config";
 import { accessGroups } from "@/pages/Access/tile-config";
@@ -58,6 +59,10 @@ const settingsFlagEntries: CommandEntry[] = SETTINGS_CATEGORIES.flatMap((cat) =>
     icon: cat.icon,
     to: `/system/settings?tab=${cat.id}`,
     permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
+    // Kategori girişiyle AYNI rejim yüklemi — fabrikada gizli olan bir bölümün
+    // TEK TEK ayar satırları da paletten düşer (aksi halde palet, sayfada
+    // olmayan bir sekmeye götürürdü).
+    visibleWhen: settingsCategoryVisibleWhen(cat),
     keywords: `ayar ${cat.label} ${flag.group ?? ""} ${cat.keywords ?? ""}`,
     deep: true,
   })),

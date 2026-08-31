@@ -102,6 +102,14 @@ const rescueSchema = z.object({
   reason: z.string().trim().min(3, "İşlem nedeni en az 3 karakter").max(500),
 });
 
+// G4 (2026-08-14, ticaret) — SAYIM metraj düzeltmesi: yalnız currentQty değişir
+// (initialQty tarihsel giriş kaydı — relabelSchema'nın metraj dalıyla karıştırma:
+// o, BÜTÜN topta ölçüm düzeltmesidir ve initialQty'yi de yazar). Sebep ZORUNLU.
+const qtyAdjustSchema = z.object({
+  newQty: z.number().positive("Yeni metraj pozitif olmalı").max(999_999, "Metraj çok büyük"),
+  reason: z.string().trim().min(3, "İşlem nedeni (en az 3 karakter) zorunludur").max(500),
+});
+
 // İptali geri al. Sebep OPSİYONEL (iptalin kendisinden farklı, bilinçli): geri alma
 // zaten düzeltici bir işlemdir ve önündeki tek engel kapsam guard'ıdır — sürtünme
 // eklemek operatörü yine "yeniden giriş" doğaçlamasına iter, ki bu özelliğin tam
@@ -206,6 +214,10 @@ export class InventoryController {
     this.rescuePreview = this.rescuePreview.bind(this);
     this.rescueStuck = this.rescueStuck.bind(this);
     this.listDuplicateRolls = this.listDuplicateRolls.bind(this);
+    // ⚠️ bind UNUTULMAZ — print-event vakası (2026-08): bind'sız handler her
+    // istekte `this.service` undefined ile 500 verir ve servis-katmanı bekçileri
+    // bunu göremez.
+    this.adjustQty = this.adjustQty.bind(this);
   }
 
   /**
@@ -713,6 +725,24 @@ export class InventoryController {
         },
         req.user?.userId,
         { permissions: req.user?.permissions ?? [] },
+      );
+      res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * PATCH /api/rolls/:id/qty — G4 sayım metraj düzeltmesi (roll:manual-adjust).
+   * Yalnız FREE_STOCK + çuvalsız/sevksiz top; RollVariance + audit + labelDirty izi.
+   */
+  async adjustQty(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = qtyAdjustSchema.parse(req.body);
+      const result = await this.service.adjustRollQty(
+        req.params.id as string,
+        { newQty: body.newQty, reason: body.reason },
+        req.user?.userId,
       );
       res.status(200).json(result);
     } catch (error) {

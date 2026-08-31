@@ -799,6 +799,57 @@ router.patch(
 
 /**
  * @openapi
+ * /api/rolls/{id}/qty:
+ *   patch:
+ *     tags: [Inventory]
+ *     summary: Sayım metraj düzeltmesi — yalnız currentQty (G4, ticaret paketi)
+ *     description: |
+ *       Fiziksel sayımda kayıtlıdan farklı çıkan topun metrajını düzeltir
+ *       (500 m kayıtlı → rafta 480 m). YALNIZ `currentQty` değişir; `initialQty`
+ *       tarihsel giriş kaydıdır, dokunulmaz (fark `initialQty - currentQty`
+ *       olarak okunur). `/label` ucunun metraj dalından farkı: o, BÜTÜN topta
+ *       ölçüm düzeltmesidir ve initialQty'yi de yeniden yazar.
+ *
+ *       KAPSAM DAR: yalnız serbest stok (STOCK/WAREHOUSE/A1_STOCK) + çuvalsız +
+ *       sevksiz + iş emri adımına bağlı olmayan top. Diğerleri anlamlı 409
+ *       (üretimdeki topun metrajını istasyon akışı belirler; sevk edilmişin
+ *       kaydına dokunulmaz; fasondaki mal dışarıda).
+ *
+ *       İZ: RollVariance sapma defteri satırı (düşük sayım → RECORD_CORRECTION,
+ *       yüksek sayım → OVERAGE) + audit (ROLL_QTY_ADJUST) + `labelDirty=true`
+ *       (metraj etikete basılıyor — fiziksel etiket bayatlar). Atomik claim:
+ *       eşzamanlı iki düzeltmeden yalnız biri geçer, kaybeden 409 alır.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [newQty, reason]
+ *             properties:
+ *               newQty: { type: number, minimum: 0, exclusiveMinimum: true, description: Sayımda ölçülen gerçek metraj (mt) }
+ *               reason: { type: string, minLength: 3, maxLength: 500, description: İşlem nedeni (sapma defterine yazılır) }
+ *     responses:
+ *       200: { description: "Metraj düzeltildi (oldQty/newQty/diffQty/kind/varianceId)" }
+ *       400: { description: Geçersiz metraj / sebep eksik / fark yok }
+ *       404: { description: Top bulunamadı }
+ *       409: { description: Kapsam dışı statü · çuvalda/sevkte/adımda · eşzamanlı değişiklik }
+ */
+router.patch(
+  "/:id/qty",
+  verifyToken,
+  requirePermission("roll:manual-adjust"),
+  controller.adjustQty,
+);
+
+/**
+ * @openapi
  * /api/rolls/{id}/rescue-preview:
  *   get:
  *     tags: [Inventory]

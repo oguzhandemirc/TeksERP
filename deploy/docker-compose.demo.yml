@@ -1,0 +1,62 @@
+name: tekserp-demo
+
+# =============================================================================
+# TeksERP DEMO — /opt/stack/apps/tekserp-demo/docker-compose.yml
+# =============================================================================
+# Sunucu kuralları (/opt/stack yığını) birebir izlendi: app dizini altında
+# compose, `web`+`backend` dış ağları, mem_limit, healthcheck, Traefik etiketleri.
+# Komşu servisler (mail, wordpress, fizyoterapist, postgres) CANLI — bu dosya
+# onların hiçbirine dokunmaz.
+#
+# ⚠️ `demo.etkiliyazilim.com` yönlendirmesi ÖNCE placeholder'daydı
+# (apps/etkiliyazilim-demo). AYNI Host kuralını taşıyan iki router Traefik'te
+# belirsiz davranış üretir → cutover'da placeholder ÖNCE durdurulur.
+# Placeholder dosyaları SİLİNMEZ: geri dönüş yolu odur.
+# =============================================================================
+
+services:
+  app:
+    build:
+      # Kaynak ağacı rsync ile buraya geliyor; imaj sunucuda derleniyor ki
+      # "yerelde derledim, kopyaladım" sınıfı sürüm kayması olmasın.
+      context: ./repo
+      dockerfile: Dockerfile
+    image: tekserp-demo:latest
+    container_name: tekserp-demo
+    # Sunucuda ~3.2 GB boş. Sınırsız bırakmak, tek bir kaçak sorgunun komşu
+    # canlı servisleri (mail/wordpress) OOM ile düşürmesi demekti.
+    mem_limit: 1024m
+    memswap_limit: 1280m
+    restart: unless-stopped
+    env_file: .env
+    expose:
+      - "4000"
+    volumes:
+      # Yedekler KALICI: konteyner yeniden kurulunca gece yedeği kaybolmasın.
+      - ./backups:/app/backups
+    networks: [web, backend]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=web
+      - "traefik.http.routers.tekserpdemo.rule=Host(`demo.etkiliyazilim.com`)"
+      - traefik.http.routers.tekserpdemo.entrypoints=websecure
+      # ⚠️ certresolver YOK ve bu BİLİNÇLİ: etkiliyazilim.com bu Cloudflare
+      # hesabının zone'unda olmadığı için DNS-01 çalışmaz. Sertifika, Cloudflare
+      # Origin CA olarak traefik/dynamic/tls.yml üzerinden default store'a
+      # yükleniyor — placeholder da tam olarak bu kurguyla çalışıyordu.
+      - traefik.http.routers.tekserpdemo.tls=true
+      - traefik.http.services.tekserpdemo.loadbalancer.server.port=4000
+    healthcheck:
+      # /health DB'ye gerçekten dokunuyor — TCP yoklaması "ayakta ama DB'siz"
+      # konteyneri sağlıklı gösterirdi.
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:4000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+networks:
+  web:
+    external: true
+  backend:
+    external: true

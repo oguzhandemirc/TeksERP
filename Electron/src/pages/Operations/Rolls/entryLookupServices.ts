@@ -54,3 +54,21 @@ export const entryStationLookupService = {
     return asPage(r.data.data ?? []);
   },
 };
+
+/**
+ * DEPO seçenekleri — filtre çubuğundaki "Depo" çipi için.
+ *
+ * ⚠️ Yol TAM yazılır (`/api/warehouses`): `apiClient.baseURL` `/api` İÇERMEZ;
+ * öneksiz yol 404 alır ve FilterBar hatayı yutup "Sonuç yok." gösterir
+ * (2026-08-12'de sahada tam bu yaşandı — filtre boş değildi, istek yanlış
+ * kapıya gidiyordu).
+ */
+export const warehouseLookupService = {
+  getAll: async (): Promise<PaginatedResponse<LookupRow>> => {
+    const r = await apiClient.get<{
+      success: boolean;
+      data: Array<{ id: string; name: string; code: string | null }>;
+    }>("/api/warehouses", { params: { page: 1, pageSize: 200, "filter[isActive]": "true" } });
+    return asPage(r.data.data ?? []);
+  },
+};

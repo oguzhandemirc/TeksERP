@@ -384,6 +384,38 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<string, string>> = {
   operatorId: "Operatör",
   assignedToId: "Atanan kişi",
   printedById: "Basan kişi",
+  // ── TİCARET / ÖN MUHASEBE ALANLARI (merge, 2026-09-01) ──────────────────────
+  // Kaynak: `feature/depo-mal-kabul`. Ayna KURALI gereği backend ile Electron'a
+  // AYNI satırlar yazılır (bekçi: `scripts/test_audit_labels.ts` §1).
+  docNo: "Belge No",
+  issueDate: "Belge Tarihi",
+  transferNo: "Transfer No",
+  countNo: "Sayım No",
+  orderNo: "Sipariş No",
+  cariId: "Cari Hesap",
+  supplierId: "Tedarikçi",
+  warehouseId: "Depo",
+  exchangeRate: "Kur",
+  vatRate: "KDV Oranı",
+  netAmount: "Net Tutar",
+  allocatedTotal: "Kapatılan Tutar",
+  balanceKg: "Bakiye (kg)",
+  qtyKg: "Miktar (kg)",
+  // ── Üretim/kayıt alanları (aynı kaynaktan, sözlükte eksikti) ───────────────
+  targetStatus: "Hedef Durum",
+  endMeter: "Bitiş Metre",
+  defectType: "Hata Tipi",
+  severity: "Şiddet",
+  actionTaken: "Alınan Aksiyon",
+  isProcessed: "İşlendi",
+  plateNumber: "Plaka",
+  driverName: "Sürücü",
+  categoryId: "Kategori",
+  firstName: "Ad",
+  lastName: "Soyad",
+  permission: "Yetki",
+  ipAddress: "IP Adresi",
+  clientType: "İstemci",
 };
 
 /**

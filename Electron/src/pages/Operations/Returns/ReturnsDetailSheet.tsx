@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Loader2, Pencil } from "lucide-react";
+import { FilePlus2, Loader2, Pencil } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +18,7 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { returnReasonService } from "@/pages/ReturnReasons/service";
 import { returnsService, type ReturnAppliedStatus, type ReturnRow } from "./service";
+import { canDraftReturnInvoice } from "./returnInvoice";
 
 const DEC = new Intl.NumberFormat("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
 const TEXTAREA_CLS =
@@ -38,7 +39,19 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   );
 }
 
-export function ReturnsDetailSheet({ row, onClose }: { row: ReturnRow | null; onClose: () => void }) {
+export function ReturnsDetailSheet({
+  row,
+  onClose,
+  financeEnabled = false,
+  onDraftInvoice,
+}: {
+  row: ReturnRow | null;
+  onClose: () => void;
+  /** Ticaret rejimi (`finance.enabled`) — fabrikada iade faturası düğmesi çizilmez. */
+  financeEnabled?: boolean;
+  /** Satış iade faturası taslağı — diyalog SAYFADA mount edilir (tek durum). */
+  onDraftInvoice?: (row: ReturnRow) => void;
+}) {
   const qc = useQueryClient();
   const [reason, setReason] = useState("");
   const [editing, setEditing] = useState(false);
@@ -135,6 +148,26 @@ export function ReturnsDetailSheet({ row, onClose }: { row: ReturnRow | null; on
                 <Row label="Teslim alan">{row.receivedBy?.fullName ?? "—"}</Row>
                 <Row label="Tarih">{safeFormat(row.createdAt, "dd.MM.yyyy HH:mm")}</Row>
               </div>
+
+              {/* ⚠️ İKİ AYRI İŞ, İKİ AYRI İZİN — karıştırma:
+                  • "Düzelt / İptal" (`return:write`) = İADE defterine dokunur.
+                  • "Satış İade Faturası" (`finance:write`) = bu sistemde iç
+                    fatura taslağı doğurur, onaylanınca CARİ deftere işler.
+                  Faturalanmış ya da iptal edilmiş grupta düğme HİÇ çizilmez
+                  (yüklem `returnInvoice.canDraftReturnInvoice`). */}
+              {onDraftInvoice && canDraftReturnInvoice(row, financeEnabled) && (
+                <PermissionGate permission="finance:write">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    title="Bu iadeden satış iade faturası taslağı oluştur"
+                    onClick={() => onDraftInvoice(row)}
+                  >
+                    <FilePlus2 className="mr-1 h-4 w-4" />
+                    Satış İade Faturası
+                  </Button>
+                </PermissionGate>
+              )}
 
               {cancelled ? (
                 <div className="space-y-1 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">

@@ -17,7 +17,6 @@ import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnab
 import { featureFlagService } from "@/services/featureFlagService";
 import {
   DOC_DEFS,
-  DOC_DEF_MAP,
   resolveDocConfig,
   type DocumentsConfig,
   type DocumentConfig,
@@ -65,7 +64,28 @@ export function DocumentConfigSection({
     [external?.value, flagsQ.data?.data?.documentsConfig],
   );
 
+  // ⚠️ REJİM SÜZGECİ (2026-08-15): fabrikada (`finance.enabled` KAPALI) ticaret
+  // belgeleri LİSTELENMEZ. Eskiden `DOC_DEFS.map(...)` koşulsuzdu — karo/route/
+  // palet için saf yüklem + bekçi kurulmuşken bu ÜÇÜNCÜ giriş kapısı açık
+  // kalıyordu: fabrikadaki bir `document-template:read` kullanıcısı hiç
+  // basamayacağı "Stok Sayım Tutanağı"/"Fatura"/"Mutabakat Mektubu" satırlarını
+  // görüp canlı önizlemesini açabiliyordu (örnek veriyle gerçekten render olur).
+  // ⚠️ BELİRSİZKEN (bayrak yüklenmedi) DAR kapsam: `?? false` — karo yüklemiyle
+  // aynı yön ("bir an belirip kaybolan satır" sıfır-fark garantisini bozar).
+  const financeEnabled = flagsQ.data?.data?.financeEnabled ?? false;
+  const visibleDefs = useMemo(
+    () => DOC_DEFS.filter((d) => !d.requiresFinance || financeEnabled),
+    [financeEnabled],
+  );
+
   const [selected, setSelected] = useState(DOC_DEFS[0]?.key ?? "");
+  // Süzgeç dışında kalan bir belge seçili kalırsa ekran BOŞ gövde çizerdi
+  // (`def` undefined) — bayrak sonradan yüklendiği için bu gerçek bir sıralama.
+  useEffect(() => {
+    if (visibleDefs.length > 0 && !visibleDefs.some((d) => d.key === selected)) {
+      setSelected(visibleDefs[0]!.key);
+    }
+  }, [visibleDefs, selected]);
   const [draft, setDraft] = useState<DocumentsConfig>(current);
   useEffect(() => {
     setDraft(current);
@@ -96,7 +116,11 @@ export function DocumentConfigSection({
 
   if (!external && flagsQ.isLoading) return <Skeleton className="h-64 w-full" />;
 
-  const def = DOC_DEF_MAP[selected];
+  // ⚠️ `DOC_DEF_MAP[selected]` DEĞİL, GÖRÜNÜR kümeden çözülür: rejim dışı bir
+  // belge (örn. kayıtlı seçim ya da yukarıdaki effect koşmadan önceki ilk
+  // render) gövdeyi HİÇ çizmemeli. Aksi halde süzgeç yalnız açılır listeyi
+  // kapatır, ayar panelini kapatmazdı.
+  const def = visibleDefs.find((d) => d.key === selected);
   const resolved = resolveDocConfig(draft, selected);
   const dirty = JSON.stringify(draft) !== JSON.stringify(current);
 
@@ -133,7 +157,7 @@ export function DocumentConfigSection({
               <SelectValue placeholder="Belge seç…" />
             </SelectTrigger>
             <SelectContent>
-              {DOC_DEFS.map((d) => (
+              {visibleDefs.map((d) => (
                 <SelectItem key={d.key} value={d.key}>
                   {d.label}
                 </SelectItem>

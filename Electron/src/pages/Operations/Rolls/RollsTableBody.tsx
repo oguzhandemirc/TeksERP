@@ -1,6 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { Factory, PanelRight, Recycle, Trash2 } from "lucide-react";
+import { Factory, PanelRight, Recycle, Ruler, Trash2, Truck } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ContextMenuItem, ContextMenuSeparator } from "@/components/ui/context-menu";
 import { CopyMenuItem } from "@/components/data-table/row-menu-items";
@@ -16,11 +16,35 @@ import { subcontractorCategoryService } from "@/pages/SubcontractorCategories/se
 import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import { ReworkRollsDialog } from "./ReworkRollsDialog";
+import { QuickShipDialog } from "./QuickShipDialog";
+import { ShipmentDispatchNote } from "@/pages/Operations/Shipments/ShipmentDispatchNote";
+import { canQuickShip, type QuickShipRoll } from "./quickShipService";
+import { canAdjustRollQty } from "./qtyAdjustService";
+import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import type { RollStatusTabKey } from "./service";
 import { stationService } from "@/pages/Stations/service";
-import { entryStationLookupService, entryUserLookupService } from "./entryLookupServices";
+import { entryStationLookupService, entryUserLookupService, warehouseLookupService } from "./entryLookupServices";
 import { useFoldValues } from "@/hooks/useFoldValues";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import type { Roll } from "./types";
+
+/**
+ * Liste satırı → Hızlı Sevk satırı. Ad alanları listede zaten çözülü geliyor
+ * (`ROLL_LIST_INCLUDE`); diyalog ikinci bir istek atmaz.
+ */
+function toQuickShipRoll(r: Roll): QuickShipRoll {
+  return {
+    id: r.id,
+    barcode: r.barcode,
+    qty: Number(r.currentQty),
+    width: r.width,
+    itemName: r.item?.name ?? "—",
+    colorName: r.color?.name ?? null,
+    warehouseId: r.warehouseId ?? null,
+  };
+}
 
 /** Kat filtresinin yer tutucusu — seçenekleri `buildRollFilterDefs` doldurur. */
 const FOLD_FILTER_PLACEHOLDER: FilterDef = {
@@ -105,6 +129,20 @@ const FILTERS: FilterDef[] = [
     label: "Giriş İstasyonu",
     service: entryStationLookupService,
     queryKey: "roll-entry-stations",
+  },
+  // DEPO (2026-08-13): malın ŞU AN hangi FİZİKSEL depoda durduğu.
+  // ⚠️ Üç komşu filtreyle karıştırma — dördü FARKLI soru sorar:
+  //   İstasyon (currentStationId)    → şu an hangi ÜRETİM noktasında
+  //   Giriş İstasyonu (entryStationId) → sisteme nereden GİRDİ (kalıcı köken)
+  //   Giriş Kaynağı (entrySource)     → girişin TÜRÜ
+  //   Depo (warehouseId)              → hangi BİNADA duruyor
+  // Yalnız ÇOK DEPOLU kurulumda listeye eklenir (tek depoda ayırt edeceği şey yok).
+  {
+    kind: "multi-lookup",
+    key: "warehouseId",
+    label: "Depo",
+    service: warehouseLookupService,
+    queryKey: "warehouses-filter",
   },
   // EKLEYEN (2026-08-12): "hangi personel girdi". Kolon 2026-08-05'ten beri
   // vardı, filtre yoktu — 50 bin satırda gözle aranıyordu. Seçenekler yalnız
@@ -220,12 +258,19 @@ const FASON_FILTERS: FilterDef[] = [
 export function buildRollFilterDefs(
   tab: RollStatusTabKey,
   foldOptions: { value: string; label: string }[] = [],
+  multiWarehouse = false,
 ): FilterDef[] {
   // `kind` ile daralt: FilterDef bir union ve `dateRange` varyantında `key` YOK
   // (düz `f.key` derlenmez).
   const base = narrowEntrySource(
     tab,
     FILTERS.flatMap<FilterDef>((f) => {
+      if (f.kind === "multi-lookup" && f.key === "warehouseId") {
+        // TEK DEPOLU kurulumda düşürülür: seçeneksiz/tek seçenekli bir kutu,
+        // kullanıcıya ayırt edecek bir şey vaat eder ama hiçbir şey ayırmaz
+        // (kat filtresinin boş katalogda düşürülmesiyle aynı gerekçe).
+        return multiWarehouse ? [f] : [];
+      }
       if (f.kind !== "multi-select" || f.key !== "foldType") return [f];
       return foldOptions.length > 0 ? [{ ...f, options: foldOptions }] : [];
     }),
@@ -280,15 +325,24 @@ export function RollsTableBody({
   const [selected, setSelected] = useState<Roll | null>(null);
   const [bulkCancelOpen, setBulkCancelOpen] = useState(false);
   const [reworkOpen, setReworkOpen] = useState(false);
+  const [quickShipOpen, setQuickShipOpen] = useState(false);
+  const [shippedId, setShippedId] = useState<string | null>(null);
+  // G4 — sayım metraj düzeltmesi (yalnız ticaret rejimi + roll:manual-adjust).
+  const [qtyAdjustRoll, setQtyAdjustRoll] = useState<Roll | null>(null);
+  const { hasPermission } = useRoleAccess();
+  const canManualAdjust = hasPermission("roll:manual-adjust");
 
   const { values: foldValues } = useFoldValues();
+  // Depo filtresi yalnız ÇOK DEPOLU kurulumda listeye girer (tek kaynak hook).
+  const { multiWarehouse } = useMultiWarehouse();
   const filters = useMemo(
     () =>
       buildRollFilterDefs(
         tab,
         foldValues.map((v) => ({ value: v.code, label: v.name })),
+        multiWarehouse,
       ),
-    [tab, foldValues],
+    [tab, foldValues, multiWarehouse],
   );
 
   // Toplu iptal — Ham Stok + Bitmiş Depo'da sunulur (STOCK/WAREHOUSE→CANCELLED,
@@ -318,6 +372,16 @@ export function RollsTableBody({
   // Bitmiş depo topu "yeniden" üretime alınır (bir tur görmüş); ham stok ve yarı
   // mamul ilk kez girer. Fark yalnız başlık/ikon/toast metnindedir.
   const reworkMode = tab === "FINISHED_STOCK" ? "rework" : "start";
+  // HIZLI SEVK GÖRÜNÜRLÜĞÜ — iki koşul, ikisi de gerekli:
+  //  ① Sekme "Bitmiş Depo": sevk edilebilir topların yaşadığı tek sekme. Diğer
+  //     sekmelerdeki toplar tanım gereği sevk edilemez (üretimde/fasonda/çuvalda)
+  //     ve buton orada sürekli 400 üreten ölü bir yol olurdu.
+  //  ② TİCARET REJİMİ (`finance.enabled`): FABRİKADA SIFIR FARK kuralı. Fabrikanın
+  //     sevk akışı FİZİKSEL çuval üzerinden yürür (Paketleme/Çuvallar; ihracatta
+  //     çuval tartısı zorunlu) — orada "tartısız çuvalı otomatik açan" bir kestirme
+  //     yeni bir yol AÇMAK olurdu, mevcut yolu hızlandırmak değil.
+  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const quickShippable = canQuickShip(tab, financeEnabled);
 
   return (
     <>
@@ -339,10 +403,19 @@ export function RollsTableBody({
         // Ham Stok'ta seçim çubuğuna "Stoktan Kaldır" (iptal) — DataTable bunu
         // alt şeride (Seçimi temizle'nin yanına) koyar; ayrı üst şerit yok.
         bulkActions={
-          bulkCancelable || reworkable
+          bulkCancelable || reworkable || quickShippable
             ? (rows) =>
                 rows.length > 0 ? (
                   <>
+                    {/* HIZLI SEVK — "seçtiklerimi gönder". Yalnız Bitmiş Depo
+                        sekmesinde + ticaret rejiminde (bkz. yukarıdaki yüklem). */}
+                    {quickShippable && (
+                      <PermissionGate permission="shipping:write">
+                        <Button size="sm" className="gap-1.5" onClick={() => setQuickShipOpen(true)}>
+                          <Truck className="h-4 w-4" /> Seçilenleri Sevk Et
+                        </Button>
+                      </PermissionGate>
+                    )}
                     {reworkable && (
                       // İzin `workorder:write` — uç zaten onu kabul ediyor
                       // (`quick-start`). Yeni izin kodu AÇILMADI.
@@ -386,6 +459,15 @@ export function RollsTableBody({
             <ContextMenuItem onSelect={() => setSelected(roll)}>
               <PanelRight /> Detayı aç (panel)
             </ContextMenuItem>
+            {/* G4 — "Metraj Düzelt" (sayım): YALNIZ ticaret rejiminde çizilir
+                (`canAdjustRollQty` yüklemi financeEnabled'ı da içerir, bekçili:
+                qtyAdjust.test.ts) + roll:manual-adjust. Fabrika yüzeyi bugünküyle
+                birebir — orada metraj istasyon akışının işidir. */}
+            {canManualAdjust && canAdjustRollQty(roll, financeEnabled) && (
+              <ContextMenuItem onSelect={() => setQtyAdjustRoll(roll)}>
+                <Ruler /> Metraj Düzelt (sayım)
+              </ContextMenuItem>
+            )}
             {roll.barcode && (
               <>
                 <ContextMenuSeparator />
@@ -400,6 +482,10 @@ export function RollsTableBody({
         open={Boolean(selected)}
         onOpenChange={(open) => !open && setSelected(null)}
       />
+      <RollQtyAdjustDialog
+        roll={qtyAdjustRoll}
+        onOpenChange={(open) => !open && setQtyAdjustRoll(null)}
+      />
       <BulkCancelRollsDialog
         open={bulkCancelOpen}
         onOpenChange={setBulkCancelOpen}
@@ -412,6 +498,26 @@ export function RollsTableBody({
         mode={reworkMode}
         rolls={selectedRolls}
         onDone={() => table.resetRowSelection()}
+      />
+      {/* Koşullu mount: her açılış taze bileşen → seçim `useState` başlangıcı
+          olarak girer, prop senkronu (ve onun sonsuz döngü riski) gerekmez. */}
+      {quickShipOpen && (
+        <QuickShipDialog
+          open
+          onOpenChange={(open) => {
+            setQuickShipOpen(open);
+            if (!open) table.resetRowSelection();
+          }}
+          initialRolls={selectedRolls.map(toQuickShipRoll)}
+          onShipped={setShippedId}
+        />
+      )}
+      {/* Sevk sonrası kestirme: irsaliye. Kullanıcı sevk ekranını aramaz —
+          kâğıt zaten sevk anında istenen tek şeydir. */}
+      <ShipmentDispatchNote
+        shipmentId={shippedId}
+        open={Boolean(shippedId)}
+        onOpenChange={(open) => !open && setShippedId(null)}
       />
     </>
   );

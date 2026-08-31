@@ -582,6 +582,191 @@ WHERE a.kayitli <> (CASE WHEN a.acik > 0 THEN 'ACTIVE'
       why: "fixture WO'ları: testler adım durumunu doğrudan yazar / yarım temizler (ölçüm: 305 driftin 305'i fixture)",
     },
   },
+  // ───────────────────────────────────────────────────────────────────────────
+  // §21-§24 — ÖN MUHASEBE. `consistency-check.sql`'de karşılıkları YOK.
+  //
+  // `CariBalance.balance`, `CashBox.balance` ve `BankAccount.balance` üçü de
+  // DENORMALİZE ve DB SEDDİ YOK. Tek koruma "defter satırı ile bakiye AYNI
+  // transaction'da atomik increment ile yazılır" disiplinidir; disiplin sessizce
+  // kırılır (hata yok, log yok) ve fark ancak ay sonunda müşteriyle yüzleşince
+  // anlaşılır. Bu, `Order.shippedQty`nin (D-9) muhasebe ikizidir.
+  //
+  // ⚠️ Bu bölümler MUHASEBE MODÜLÜ KAPALI kurulumda da koşar ve BOŞ TABLODA
+  // TRIVIALLY yeşildir — bu doğrudur ve zararsızdır: fabrikada satır olmadığı
+  // için sapma da olamaz. Modül açıldığı gün bekçi kendiliğinden anlamlanır.
+  // ───────────────────────────────────────────────────────────────────────────
+  {
+    id: "21",
+    title: "CariBalance.balance vs Σ(CariTransaction.debit − credit)",
+    sql: `
+SELECT b."cariId"::text AS cari_id, b.currency::text AS para_birimi,
+       b.balance AS kayitli,
+       COALESCE(t.toplam, 0) AS hesaplanan,
+       b.balance - COALESCE(t.toplam, 0) AS fark
+FROM cari_balances b
+LEFT JOIN (
+  SELECT "cariId", currency, SUM(debit) - SUM(credit) AS toplam
+  FROM cari_transactions GROUP BY "cariId", currency
+) t ON t."cariId" = b."cariId" AND t.currency = b.currency
+WHERE b.balance <> COALESCE(t.toplam, 0)`,
+  },
+  {
+    id: "22",
+    // Ters yön: defterde satırı olan her (cari, para birimi) için bakiye SATIRI
+    // olmalı. Yalnız §21'e bakmak, bakiye satırı hiç DOĞMAMIŞ bir cariyi
+    // kaçırırdı — o cari listede "bakiyesiz" görünür, alacak sessizce kaybolur.
+    title: "Defterde hareketi olan her (cari, para birimi) için CariBalance satırı var",
+    sql: `
+SELECT t."cariId"::text AS cari_id, t.currency::text AS para_birimi,
+       0 AS kayitli, t.toplam AS hesaplanan, -t.toplam AS fark
+FROM (
+  SELECT "cariId", currency, SUM(debit) - SUM(credit) AS toplam
+  FROM cari_transactions GROUP BY "cariId", currency
+) t
+LEFT JOIN cari_balances b ON b."cariId" = t."cariId" AND b.currency = t.currency
+WHERE b."cariId" IS NULL AND t.toplam <> 0`,
+  },
+  {
+    id: "23",
+    title: "CashBox.balance vs Σ(Payment + CashTransaction + ChequeEvent: IN − OUT)",
+    sql: `
+SELECT c.id::text AS kasa_id, c.name, c.balance AS kayitli,
+       COALESCE(p.toplam, 0) AS hesaplanan,
+       c.balance - COALESCE(p.toplam, 0) AS fark
+FROM cash_boxes c
+LEFT JOIN (
+  -- ⚠️ ÜÇ YAZAR: carili tahsilat/ödeme (payments) · carisiz kasa hareketi
+  -- (cash_transactions: masraf/gelir/virman/açılış) · çek/senet olayları
+  -- (cheque_events: elden tahsil / kendi çekimizin elden ödenmesi). Yalnız
+  -- birine bakan bir mutabakat, diğerlerinin hareketlerini "drift" sanardı.
+  SELECT "cashBoxId", SUM(t) AS toplam FROM (
+    SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM payments WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
+    UNION ALL
+    SELECT "cashBoxId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM cash_transactions WHERE status <> 'CANCELLED' AND "cashBoxId" IS NOT NULL GROUP BY "cashBoxId"
+    UNION ALL
+    -- ⚠️ 'COLLECT', 'PAY' ve 'COLLECT_CANCEL' para oynatır. 'DEPOSIT' de
+    -- banka/kasa alanı taşır ama o yalnız "çek nereye teslim edildi" izidir —
+    -- henüz tahsil edilmemiştir; dahil edilseydi vadesi gelmemiş çek nakit
+    -- sayılırdı. COLLECT_CANCEL (K-2, 2026-08-14) tahsil stornosudur: para
+    -- hesaptan GERİ çıkar → ELSE dalının -amount'ı doğru işareti verir (PAY ile
+    -- aynı yön). Listeye eklenmeseydi ilk stornoda bu mutabakat sahte drift
+    -- basardı (kasa yazıcısının dikiş notu, madde 8).
+    SELECT e."cashBoxId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+      FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
+      WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL') AND e."cashBoxId" IS NOT NULL GROUP BY e."cashBoxId"
+  ) u GROUP BY "cashBoxId"
+) p ON p."cashBoxId" = c.id
+WHERE c.balance <> COALESCE(p.toplam, 0)`,
+  },
+  {
+    id: "24",
+    title: "BankAccount.balance vs Σ(Payment + CashTransaction + ChequeEvent: IN − OUT)",
+    sql: `
+SELECT a.id::text AS hesap_id, a.name, a.balance AS kayitli,
+       COALESCE(p.toplam, 0) AS hesaplanan,
+       a.balance - COALESCE(p.toplam, 0) AS fark
+FROM bank_accounts a
+LEFT JOIN (
+  -- Üç yazar — §23 ile aynı gerekçe. Banka tarafında çek payı BÜYÜKTÜR:
+  -- vadeli tahsilatın olağan yolu çektir.
+  SELECT "bankAccountId", SUM(t) AS toplam FROM (
+    SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM payments WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
+    UNION ALL
+    SELECT "bankAccountId", SUM(CASE WHEN direction = 'IN' THEN amount ELSE -amount END) AS t
+      FROM cash_transactions WHERE status <> 'CANCELLED' AND "bankAccountId" IS NOT NULL GROUP BY "bankAccountId"
+    UNION ALL
+    -- 'DEPOSIT' hariç (§23 notu): tahsile verilen çek henüz para değildir.
+    -- COLLECT_CANCEL dahil — kasa dalıyla (§23) aynı gerekçe.
+    SELECT e."bankAccountId", SUM(CASE WHEN e.type = 'COLLECT' THEN ch.amount ELSE -ch.amount END) AS t
+      FROM cheque_events e JOIN cheques ch ON ch.id = e."chequeId"
+      WHERE e.type IN ('COLLECT', 'PAY', 'COLLECT_CANCEL') AND e."bankAccountId" IS NOT NULL GROUP BY e."bankAccountId"
+  ) u GROUP BY "bankAccountId"
+) p ON p."bankAccountId" = a.id
+WHERE a.balance <> COALESCE(p.toplam, 0)`,
+  },
+  {
+    id: "26",
+    // VİRMAN İKİ BACAKLIDIR: bir grup ya iki satır taşır (biri OUT biri IN,
+    // tutarları eşit) ya hiç. Tek bacaklı grup = "para çıktı ama girmedi" —
+    // kasa defterinde açıklanamayan fark olarak görünür ve kaynağı bulunamaz.
+    title: "Virman grupları iki bacaklı ve dengeli (çıkan = giren)",
+    sql: `
+SELECT "transferGroupId"::text AS grup, count(*)::text AS kayitli,
+       SUM(CASE WHEN direction = 'OUT' THEN amount ELSE -amount END)::text AS hesaplanan,
+       0 AS fark
+FROM cash_transactions
+WHERE "transferGroupId" IS NOT NULL AND status <> 'CANCELLED'
+GROUP BY "transferGroupId"
+HAVING count(*) <> 2
+    OR SUM(CASE WHEN direction = 'OUT' THEN amount ELSE -amount END) <> 0
+    OR count(DISTINCT currency) <> 1`,
+  },
+  {
+    id: "25",
+    // ONAYLI faturanın deftere işlemiş OLMASI gerekir; iptal edilmiş faturanın
+    // ise TERS satırı olmalı. İkisi de "yarım kalmış transaction" belirtisidir:
+    // fatura CONFIRMED görünür ama cari borcu hiç doğmamıştır (ya da tersi).
+    title: "Onaylı fatura defterde var / iptal edilen faturanın storno satırı var",
+    sql: `
+SELECT i.id::text AS fatura_id, i."docNo",
+       (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE') AS kayitli,
+       (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE_CANCEL') AS hesaplanan,
+       0 AS fark
+FROM invoices i
+WHERE (i.status = 'CONFIRMED'
+       AND (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE') <> 1)
+   OR (i.status = 'CANCELLED' AND i."confirmedAt" IS NOT NULL
+       AND (SELECT COUNT(*) FROM cari_transactions t WHERE t."invoiceId" = i.id AND t."sourceType" = 'INVOICE_CANCEL') <> 1)`,
+  },
+  // ── Paket D — iplik kg-defteri (2026-08-14) ───────────────────────────────
+  // ⚠️ id'ler "27"/"28": ilk öneri "25"/"26" idi ve İKİSİ DE ALINMIŞTI (yukarıda
+  // fatura/storno ve virman dengesi). Bu dosyada id benzersizliğini doğrulayan
+  // bir kontrol YOK → mükerrer id sessizce geçer ve iki bölüm tek satır gibi
+  // raporlanırdı. Yeni bölüm eklerken en büyük id'yi GERÇEKTEN kontrol et.
+  {
+    id: "27",
+    // `YarnStock.balanceKg`, DB seddi (CHECK/trigger) OLMAYAN denormalize bir
+    // alandır — `CariBalance` ile birebir aynı sınıf. Tek yazar `yarn.service`
+    // ve her yazım aynı tx'te bir hareket satırı doğurur; ikisi ayrışırsa
+    // bakiye sessizce yalan söyler (hata yok, log yok).
+    title: "YarnStock.balanceKg vs Σ(YarnMovement: IN/ADJUST_IN − OUT/ADJUST_OUT)",
+    sql: `
+SELECT s."itemId"::text AS kalem, s."warehouseId"::text AS depo,
+       s."balanceKg"::text AS kayitli,
+       COALESCE(m.toplam, 0)::text AS hesaplanan,
+       (s."balanceKg" - COALESCE(m.toplam, 0))::text AS fark
+FROM yarn_stocks s
+LEFT JOIN (
+  SELECT "itemId", "warehouseId",
+         SUM(CASE WHEN kind IN ('IN','ADJUST_IN') THEN "qtyKg" ELSE -"qtyKg" END) AS toplam
+  FROM yarn_movements GROUP BY "itemId", "warehouseId"
+) m ON m."itemId" = s."itemId" AND m."warehouseId" = s."warehouseId"
+WHERE s."balanceKg" <> COALESCE(m.toplam, 0)`,
+  },
+  {
+    id: "28",
+    // TERS YÖN: hareketi olan (kalem, depo) çifti için stok satırı hiç
+    // doğmamışsa bakiye ekranda GÖRÜNMEZ — mal defterde vardır ama envanterde
+    // yoktur. §22'nin (CariBalance satırı eksik) iplik karşılığı.
+    //
+    // ⚠️ Süzgeç `toplam <> 0` DEĞİL: net sıfıra inen bir çift de satır TAŞIMALI
+    // (giriş+çıkış olmuş, kalem o depoda İŞLEM GÖRMÜŞ). Ayrıca negatif bakiye
+    // burada ihlal SAYILMAZ — o bilinçli olarak meşrudur (sayım girilmeden
+    // çıkış), aranan şey SAPMA'dır.
+    title: "Hareketi olan (kalem, depo) için YarnStock satırı yok",
+    sql: `
+SELECT m."itemId"::text AS kalem, m."warehouseId"::text AS depo,
+       0 AS kayitli, m.adet::text AS hesaplanan, m.adet::text AS fark
+FROM (
+  SELECT "itemId", "warehouseId", COUNT(*) AS adet
+  FROM yarn_movements GROUP BY "itemId", "warehouseId"
+) m
+LEFT JOIN yarn_stocks s ON s."itemId" = m."itemId" AND s."warehouseId" = m."warehouseId"
+WHERE s."itemId" IS NULL`,
+  },
 ];
 
 async function driftCount(s: Section): Promise<number> {

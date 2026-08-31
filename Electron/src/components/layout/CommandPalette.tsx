@@ -37,6 +37,8 @@ import {
   serverItemValue,
   type SearchRow,
 } from "@/lib/search/search-targets";
+import { isRollTabEntryVisible } from "@/pages/Operations/Rolls/tabs-regime";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 
 interface Props {
   open: boolean;
@@ -104,7 +106,13 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   };
 
   /** Katalog listesinde ŞU AN çizilir mi — alt başlıklar yalnız arama sırasında. */
-  const isVisible = (entry: CommandEntry) => isAllowed(entry) && (searching || !entry.deep);
+  // TİCARET REJİMİ: gizlenen Envanter sekmelerinin derin bağlantıları da
+  // paletten düşer — aksi halde palet, sayfada olmayan bir sekmeye götürürdü.
+  const productionEnabled = useFeatureFlags().data?.data?.productionEnabled ?? true;
+  const isVisible = (entry: CommandEntry) =>
+    isAllowed(entry) &&
+    (searching || !entry.deep) &&
+    isRollTabEntryVisible(entry.key, productionEnabled);
 
   // Favoriler `deep` süzgecine TABİ DEĞİL: kullanıcı bir sayfayı bilerek
   // sabitlemişse, o sayfa alt başlık katalogundan gelse bile favorisi boş

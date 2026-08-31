@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -13,6 +13,7 @@ import { ReorderableTabBar } from "@/components/layout/ReorderableTabBar";
 import { classifyBarcode, BARCODE_FORMATS } from "@/lib/scanner/barcode-kind";
 import { useTabOrder } from "@/hooks/useTabOrder";
 import { useDataTable } from "@/hooks/useDataTable";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { DataTableTools } from "@/components/data-table/DataTableTools";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import { useTableExportAll } from "@/hooks/useTableExportAll";
@@ -33,16 +34,15 @@ import {
   rollTabDefaultSortBy,
   type RollStatusTabKey,
 } from "./service";
-import { ROLL_TABS, isRollTabKey, type RollTabKey } from "./tabs-config";
+import { isRollTabKey, type RollTabKey } from "./tabs-config";
+import { resolveRollTabs } from "./tabs-regime";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { downloadInventorySummary } from "./inventorySummary";
 import type { LabelCustomerContext } from "@/services/labelService";
 import type { Roll } from "./types";
 
 // Sekme listesi `tabs-config.ts`te — komut paleti aynı listeden `?tab=` derin
 // bağlantısı üretiyor (kopyalanırsa palet ile sayfa ayrışır).
-const TABS = ROLL_TABS;
-const REORDERABLE_KEYS = TABS.map((t) => t.key);
-
 export function RollsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get("tab");
@@ -60,7 +60,24 @@ export function RollsPage() {
   const [scanRoll, setScanRoll] = useState<Roll | null>(null);
   const [summaryBusy, setSummaryBusy] = useState(false);
   // "Tümünü İndir" ilerlemesi (sağ alt) — 30k'da "N / ~T" göstergesi için.
+  const [dlProgress, setDlProgress] = useState<{ loaded: number; total?: number } | null>(null);
+  // TİCARET REJİMİ: üretim sekmeleri süzülür, depo etiketleri değişir.
+  // ⚠️ Şerit, "Envanter Özeti" indirmesi ve sekme sırası AYNI listeyi okur —
+  // biri ham `ROLL_TABS`e dönerse ticaret kullanıcısına gizlenen sekme geri
+  // gelir (ya da özet Excel'i tanım gereği boş sayfalar üretir).
+  const flags = useFeatureFlags().data?.data;
+  const financeEnabled = flags?.financeEnabled ?? false;
+  // ⚠️ Varsayılan TRUE: ayar hiç yazılmamış bir kurulumda (ve bayrak henüz
+  // yüklenmemişken) fabrika sekmelerini kaybetmemeli.
+  const productionEnabled = flags?.productionEnabled ?? true;
+  const TABS = useMemo(
+    () => resolveRollTabs(productionEnabled, financeEnabled),
+    [productionEnabled, financeEnabled],
+  );
+  const REORDERABLE_KEYS = useMemo(() => TABS.map((t) => t.key), [TABS]);
   const { ordered, reorder } = useTabOrder("rolls", REORDERABLE_KEYS);
+  // Depo kolonu + filtresi yalnız ÇOK DEPOLU kurulumda çizilir (tek kaynak hook).
+  const { multiWarehouse } = useMultiWarehouse();
 
   // "Envanter Özeti" — her kategori için backend sayımı (top + metre) tek Excel'e.
   // Tablo-dışı KANBAN hariç tüm sekmeler; ekrandaki 100 değil GERÇEK toplamlar.
@@ -151,6 +168,10 @@ export function RollsPage() {
       entrySource: false,
       createdBy: false,
       entryStation: false,
+      // DEPO kolonu TEK DEPOLU kurulumda gizli: orada her top aynı depoda ve
+      // kolon yalnız gürültü olur ("fabrikada sıfır görünür fark"). İkinci depo
+      // açıldığı gün kendiliğinden görünür.
+      warehouse: multiWarehouse,
     },
     enabled: isTableTab,
   });
@@ -196,6 +217,16 @@ export function RollsPage() {
     }
     setTab(next);
   };
+
+  // ⚠️ REJİM DEĞİŞİNCE / GİZLİ SEKMEYE DERİN BAĞLANTIYLA GELİNİNCE düşülecek
+  // bir yer olmalı: ticarette `?tab=PRODUCTION` sekmeyi ŞERİTTE göstermez ama
+  // state'te tutar → kullanıcı hiçbir sekmesi seçili görünmeyen bir ekranda
+  // tanım gereği boş bir tabloya bakar ve "liste bozuk" der. İlk görünür
+  // sekmeye düşülür. (Bayrak yüklenmeden liste tam olduğu için bu effect
+  // fabrikada HİÇ tetiklenmez.)
+  useEffect(() => {
+    if (TABS.length > 0 && !TABS.some((t) => t.key === tab)) setTab(TABS[0]!.key);
+  }, [TABS, tab]);
 
   // Dashboard'tan `?tab=...` ile gelindiğinde initial state ile senkron;
   // URL'i temizle ki sekme değişimi geri-tuş davranışına karışmasın.

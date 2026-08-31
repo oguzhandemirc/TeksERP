@@ -218,6 +218,54 @@ export interface FeatureFlags {
   /** ERP'nin kurulduğu firmanın adı — panel başlığı + uygulama geneli. */
   companyName: string;
   pricingEnabled: boolean;
+  /** Ön muhasebe modülü (cari · fatura · tahsilat · kasa/banka). Varsayılan
+   *  KAPALI — kapalıyken menüde tek satır bile çizilmez ve route 403 verir.
+   *  ⚠️ `pricingEnabled` ile bağımsız: o OPERASYON ekranlarındaki fiyat
+   *  alanlarını açar, bu ayrı bir MUHASEBE modülünü açar. */
+  financeEnabled: boolean;
+  /** KASA eksi bakiyeye düşemesin (default false). Backend ENFORCE: 4 ileri yol
+   *  409 (ödeme OUT · masraf fişi · virmanın çıkan kasa bacağı · çek ödeme);
+   *  BANKA MUAF (kredili mevduat meşru), iptal/storno yolları MUAF. */
+  financeBlockNegativeCashEnabled: boolean;
+  /** Fatura satırının varsayılan KDV oranı, % (0–100; default 20). Yalnız
+   *  ÖN-DOLUM — fatura formunun yeni satırı ve mal kabulden üretilen alış
+   *  taslağı bu değerle açılır; satırda değiştirilebilir. */
+  financeDefaultVatRate: number;
+  // --- TİCARET/MUHASEBE REJİM ANAHTARLARI (2026-08-14, dalga 1) --------------
+  // ⚠️ Dokuzu da default FALSE ve backend'de bugün HİÇBİR servis okumuyor
+  // (bilinçli ara durum): dört kapı önce kurulur, guard/otomasyon sonraki
+  // dalgada bağlanır. Panelde toggle'lar görünür ve kaydedilir; davranış
+  // değişikliği YOKTUR. Açıklama metinleri `settings-config.ts`te.
+  /** Cari risk limiti aşımında SATIŞ faturası onayını engelle (default false).
+   *  Bugün limit yalnız uyarıdır; açıkken onay 409 döner. MUAF: alış faturası,
+   *  taslak yolları, iptal/storno. */
+  financeRiskLimitBlockEnabled: boolean;
+  /** Sevk onayında otomatik satış faturası TASLAĞI üret (default false). Onay
+   *  her zaman elle kalır; ön muhasebe kapalıyken kanca no-op'tur. */
+  financeAutoDraftFromShipmentEnabled: boolean;
+  /** Tahsilat/ödemede en eski açık faturalara otomatik FIFO kapama (default
+   *  false). Artan tutar avans olarak açıkta kalır; tahsis elle silinebilir. */
+  financeAutoAllocateOnPaymentEnabled: boolean;
+  /** İplik çıkışında eksi bakiyeye düşecek hareketi engelle (default false).
+   *  Kasa emsali. MUAF: ters/düzeltme kayıtları ve belge iptali. */
+  yarnBlockNegativeBalanceEnabled: boolean;
+  /** Alış siparişine bağlı mal kabulde sipariş miktarını aşan satırı engelle
+   *  (default false = fazla mal kaydedilir, sistem uyarır). */
+  purchaseBlockOverReceiptEnabled: boolean;
+  /** Mal kabul satırında birim fiyat zorunlu (default false; çözülemezse 400). */
+  goodsReceiptRequirePriceEnabled: boolean;
+  /** Sıfır fiyatlı fatura satırıyla onaya izin ver (default false). İzin
+   *  verilen SIFIRDIR, boş fiyat değil; negatif fiyat her hâlükârda reddedilir. */
+  financeAllowZeroPriceLineEnabled: boolean;
+  /** İleri tarihli mali belge tarihini engelle (default false). Sınır FABRİKA
+   *  günüdür. MUAF: çekin keşide ve vade tarihi (ileri tarihli çek normaldir). */
+  financeFutureDatedDocumentBlockEnabled: boolean;
+  /** Satış faturası onayında iplik satırlarını varsayılan depodan stoktan düş
+   *  (default false = stok yalnız sevkte düşer). ⚠️ Sevkten de düşen kurulumda
+   *  açmak ÇİFTE DÜŞÜM olur — rejim sorusudur, ek güvence değil. */
+  financeYarnOutOnInvoiceEnabled: boolean;
+  /** Üretim modülü — envanter üretim sekmeleri + iş emri yüzeyleri. Varsayılan AÇIK. */
+  productionEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */

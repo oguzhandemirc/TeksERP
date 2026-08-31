@@ -92,6 +92,60 @@ export const DOC_PERMISSIONS: Record<string, { read: string[]; write: string[] }
     ],
     write: ["workorder:write"],
   },
+  // ── Ticaret paketi: iç depo belgeleri (2026-08-13) ────────────────────────
+  // Liste izniyle BASKI izni hizalı tutulur: belgeyi ekranda görüp basamamak
+  // sessiz bir 403 kapanıdır (operatör satıra basar, hiçbir şey olmaz).
+  TRANSFER_DISPATCH: {
+    read: ["warehouse:transfer", "warehouse:read", "warehouse:write"],
+    write: ["warehouse:transfer"],
+  },
+  GOODS_RECEIPT: {
+    read: ["goods-receipt:read", "goods-receipt:write"],
+    write: ["goods-receipt:write"],
+  },
+  // Tam stok sayımı (2026-08-15, J2 #19). READ, WRITE'ı KAPSAR.
+  // ⚠️ READ = `warehouse:read` (sayımı okumak depoyu okumaktır) + sayımı
+  // yürüten iki yetki. WRITE (revizyon) = `roll:manual-adjust`: revize edilen
+  // kâğıt, TOPLARI KAYITTAN DÜŞMÜŞ bir fark fişidir; onu yeniden basan kişi o
+  // kararı verebilen kişi olmalı. `warehouse:transfer` (taslak sayımı kuran
+  // yetki) bilinçle WRITE'ta DEĞİL — stok taşıyabilen herkes fark fişini
+  // yeniden yazamamalı. Kaynak uçlarla HİZALI (`stock-count.routes`):
+  // ayrışırsa kullanıcı belgeyi doğurur ama revize edemez (ya da tersi).
+  STOCK_COUNT: {
+    read: ["warehouse:read", "warehouse:transfer", "roll:manual-adjust"],
+    write: ["roll:manual-adjust"],
+  },
+  // Ön muhasebe çıktıları (2026-08-14). READ, WRITE'ı KAPSAR — yazabilen okur.
+  // ⚠️ Revizyon (write) `finance:invoice`/`finance:payment` ister, `finance:write`
+  // DEĞİL: taslak kurabilen kişi resmi belgeyi revize edememeli — o, deftere
+  // işlemiş bir kaydın kâğıdını değiştirmektir.
+  INVOICE_INTERNAL: {
+    read:  ["finance:read", "finance:write", "finance:invoice"],
+    write: ["finance:invoice"],
+  },
+  PAYMENT_RECEIPT: {
+    read:  ["finance:read", "finance:write", "finance:payment"],
+    write: ["finance:payment"],
+  },
+  // Resmi ön muhasebe belgeleri (2026-08-15, J2 #18). READ, WRITE'ı KAPSAR.
+  // ⚠️ Revizyon (write) burada `finance:write`tir — fatura/makbuzdaki
+  // `finance:invoice`/`finance:payment` DEĞİL. Gerekçe simetrik: orada belge
+  // deftere İŞLEMİŞ bir kaydın kâğıdıdır (revize eden kişi o kaydı doğuran
+  // yetkiye sahip olmalı); burada belge hiçbir deftere yazmayan bir OKUMANIN
+  // kâğıdıdır ve onu düzenleyen izin `finance:write`tir. Kaynak uçlarla
+  // (`POST /reconciliation-letters`, `POST /cheque-delivery-notes`) HİZALI —
+  // ayrışırsa kullanıcı belgeyi doğurabilir ama revize edemez.
+  // ⚠️ `report:finance` READ'e eklendi: muhasebe raporlarını okuyan kişi (cari
+  // ekstre / yaşlandırma) mutabakat mektubunu da açabilmeli; o izin zaten aynı
+  // tutar bilgisini gösteriyor, yeni bir şey sızmaz.
+  RECONCILIATION_LETTER: {
+    read:  ["finance:read", "finance:write", "report:finance"],
+    write: ["finance:write"],
+  },
+  CHEQUE_DELIVERY_NOTE: {
+    read:  ["finance:read", "finance:write", "finance:cheque", "report:finance"],
+    write: ["finance:write"],
+  },
 };
 
 /** docType path paramına göre ilgili modülün izinlerini uygular. */

@@ -4,6 +4,7 @@ import {
   type OperationsVisibilityContext,
 } from "./tile-config";
 import { commandSections } from "@/components/layout/command-entries";
+import { definitionTiles } from "@/pages/Definitions/tile-config";
 
 /**
  * Karo görünürlüğünün doğruluk tablosu.
@@ -21,7 +22,17 @@ import { commandSections } from "@/components/layout/command-entries";
 function ctx(
   over: Partial<OperationsVisibilityContext> = {},
 ): OperationsVisibilityContext {
-  return { shipmentConfirmationEnabled: false, ...over };
+  return {
+    shipmentConfirmationEnabled: false,
+    pendingPlannedShipments: 0,
+    // Varsayılan TEK DEPO (fabrika kurulumu) — depo yüzeyleri çizilmemeli.
+    multiWarehouse: false,
+    // Varsayılan FABRİKA rejimi (muhasebe kapalı) — Cariler karosu çizilmemeli.
+    financeEnabled: false,
+    // Üretim modülü varsayılan AÇIK (backend default'u ile aynı yön).
+    productionEnabled: true,
+    ...over,
+  };
 }
 
 describe("karo bağlantıları", () => {
@@ -52,9 +63,37 @@ describe("karo bağlantıları", () => {
     expect(Object.keys(ctx())).toEqual(["shipmentConfirmationEnabled"]);
   });
 
-  it("koşullu karo YALNIZ Sevk Kapısı (kurşun karoları koşulsuzlaştı)", () => {
+  it("⭐ Depo Transferi TEK depoda çizilmez, ikinci depo açılınca belirir", () => {
+    const predicate = tile("warehouse-transfers")?.visibleWhen;
+    expect(predicate).toBeDefined();
+    // Fabrika kurulumu (tek depo): karo YOK — "sıfır görünür fark" kuralı.
+    expect(predicate?.(ctx())).toBe(false);
+    // İkinci depo açıldığı an kendiliğinden görünür.
+    expect(predicate?.(ctx({ multiWarehouse: true }))).toBe(true);
+  });
+
+  it("Mal Kabul karosu depo sayısına BAĞLI DEĞİL (kapısı izindir)", () => {
+    const tileDef = tile("goods-receipts");
+    expect(tileDef).toBeDefined();
+    // Tek depolu bir alım-satım firması da bu ekranı kullanır → koşul konmaz;
+    // fabrikada görünmemesini sağlayan şey `goods-receipt:read` izninin hiçbir
+    // varsayılan rol şablonunda OLMAMASIDIR.
+    expect(tileDef?.visibleWhen).toBeUndefined();
+    expect(tileDef?.permission).toBe("goods-receipt:read");
+  });
+
+  it("koşullu karolar: Sevk Kapısı + Depo Transferi + Paket D (iplik · alış siparişi)", () => {
     const conditional = operationsTiles.filter((t) => t.visibleWhen).map((t) => t.key);
-    expect(conditional.sort()).toEqual(["sack-store"]);
+    // ⚠️ Bu liste AÇIKÇA sayılır ve genişletmek BİLİNÇLİ bir karardır: kümeye
+    // sessizce karo eklenmesin diye kurulmuş. 2026-08-14'te iki karo eklendi
+    // (Paket D, `finance.enabled` rejimine bağlı).
+    expect(conditional.sort()).toEqual([
+      "purchase-orders",
+      "sack-store",
+      "stock-counts",
+      "warehouse-transfers",
+      "yarn-stock",
+    ]);
   });
 });
 
@@ -65,6 +104,41 @@ describe("karo bağlantıları", () => {
  * Bağ AYNI fonksiyon nesnesi üzerinden kurulur (kopyalanmış ikinci bir kural,
  * ilkinden zamanla ayrışırdı).
  */
+/**
+ * CARİ REJİMİ (2026-08-14): Tanımlar'da bayrak AÇIKKEN tek "Cariler",
+ * KAPALIYKEN (fabrika) Müşteriler + Fason Firmalar. Üç örtüşen liste
+ * karışıklığının kilidi: rejim kuralı düşerse ya fabrika menüsü değişir
+ * (sıfır-fark ihlali) ya ticarette üç liste geri gelir.
+ */
+describe("Tanımlar — cari rejimi", () => {
+  const tile = (key: string) => definitionTiles.find((t) => t.key === key);
+
+  it("fabrika rejimi (bayrak kapalı): Müşteriler + Fason görünür, Cariler görünmez", () => {
+    const c = ctx();
+    expect(tile("cariler")?.visibleWhen?.(c)).toBe(false);
+    expect(tile("customers")?.visibleWhen?.(c)).toBe(true);
+    expect(tile("subcontractors")?.visibleWhen?.(c)).toBe(true);
+  });
+
+  it("ticaret rejimi (bayrak açık): yalnız Cariler görünür", () => {
+    const c = ctx({ financeEnabled: true });
+    expect(tile("cariler")?.visibleWhen?.(c)).toBe(true);
+    expect(tile("customers")?.visibleWhen?.(c)).toBe(false);
+    expect(tile("subcontractors")?.visibleWhen?.(c)).toBe(false);
+  });
+
+  it("palet, Tanımlar karolarının rejim yüklemini AYNI fonksiyon olarak taşıyor", () => {
+    const defEntries = commandSections
+      .filter((s2) => s2.heading.startsWith("Tanımlar"))
+      .flatMap((s2) => s2.entries);
+    for (const key of ["cariler", "customers", "subcontractors"]) {
+      const t = tile(key);
+      const entry = defEntries.find((e) => e.to === t?.to);
+      expect(entry?.visibleWhen, `palet girişi yüklem taşımıyor: ${key}`).toBe(t?.visibleWhen);
+    }
+  });
+});
+
 describe("komut paleti — karo yüklemi taşınıyor", () => {
   const opsEntries =
     commandSections.find((s) => s.heading === "Operasyon")?.entries ?? [];

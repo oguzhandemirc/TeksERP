@@ -1,0 +1,412 @@
+// =============================================================================
+// ÇEK / SENET PORTFÖYÜ
+// =============================================================================
+// ⚠️ VARSAYILAN FİLTRE "CANLI OLANLAR"dır, "tümü" değil. Portföyün tek sorusu
+// "elimde ne var, sırada ne var" — tahsil edilmiş/iptal edilmiş yüzlerce kayıt
+// listenin başına gelirse (liste VADE sıralı!) o soru cevapsız kalır. Geçmiş
+// kayıtlar gizlenmiş DEĞİL, tek seçimle geri gelir ve seçim şeritte GÖRÜNÜR
+// durur — kullanıcı dar bir listeye baktığını bilmeli.
+//
+// ⚠️ SÜZME SUNUCUDA. Liste sayfalıdır; istemcide süzmek yalnız O ANKİ SAYFAYI
+// süzer ve kullanıcı "kayıt yok" sanır — oysa kayıt sonraki sayfadadır.
+//
+// ⚠️ KIRPMA SESSİZ DEĞİL: sunucu toplamı gösterilen satır sayısını aşarsa bunu
+// ekranda YAZARIZ. "İlk 100 kayıt" gerçeği söylenmezse, aradığı çeki bulamayan
+// kullanıcı onun sistemde olmadığı sonucuna varır.
+//
+// ⚠️ "HATA" ile "KAYIT YOK" AYRI EKRANLARDIR. İstek düşerse (modül kapalı, izin
+// yok, sunucuya ulaşılamıyor) elimizde boş bir dizi kalır ve o diziyi "portföy
+// boş" diye basmak DÜPEDÜZ YALANDIR — kullanıcı çekinin sistemde olmadığı
+// sonucuna varır ve ikinci kez girer. Interceptor'ın bastığı toast birkaç
+// saniyede kaybolur; ekranda kalan cümle doğruyu söylemek zorunda (2026-08-12
+// FilterBar vakasının aynısı: yanlış kapıya giden istek "Sonuç yok." olarak
+// görünüyordu).
+//
+// ⚠️ Yazma düğmeleri `finance:cheque` ile kapılıdır; ekranın kendisi
+// `finance:read` ile açılır (backend de tam olarak böyle: portföy bir TUTAR
+// GÖRÜNÜMÜDÜR ve aynı bilgi cari ekstresinde zaten görünüyor — ikinci bir izne
+// kapamak aynı veriyi bir ekranda var, bir ekranda yok yapardı).
+//
+// ⚠️ TOPLU SEÇİM YALNIZ EKRANDAKİ SAYFAYA AİTTİR ve filtre/işlem değişince
+// TEMİZLENİR. Sebep: bordro seçili SATIRLARDAN beslenir; liste yenilenip
+// seçili bir id ekrandan düşerse o kayıt bordrodan SESSİZCE kaybolurdu
+// (kullanıcı "seçmiştim" der, kâğıtta yoktur). Temizlenen seçim görünür bir
+// olaydır — kaybolan satır değildir.
+// =============================================================================
+import { useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { FileCheck2, FileClock, FileText, Plus, X } from "lucide-react";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/button";
+import { PermissionGate } from "@/components/PermissionGate";
+import { ReportExportBar } from "@/pages/Reports/_components";
+import { buildChequeExport } from "./chequeExport";
+import { selectAllIds, selectionBlockReason, selectionKind, totalsByCurrency } from "./chequeBordro";
+import { money, type Currency } from "../service";
+import { getChequeSummary, listCheques, type ChequeKind, type ChequeRow, type ChequeStatus } from "./service";
+import {
+  ChequeSummaryCards,
+  type ChequeDueFilterPatch,
+  type ChequeDueSelection,
+} from "./ChequeSummaryCards";
+import { ChequeTable } from "./ChequeTable";
+import { ChequeFormDialog } from "./ChequeFormDialog";
+import { ChequeActionDialog } from "./ChequeActionDialog";
+import { ChequeDetailDialog } from "./ChequeDetailDialog";
+import { ChequeBordroDialog } from "./ChequeBordroDialog";
+import { ChequeOfficialBordroDialog } from "./ChequeOfficialBordroDialog";
+import { ChequeDeliveryNoteListDialog } from "./ChequeDeliveryNoteListDialog";
+import { KIND_LABEL } from "./labels";
+import {
+  ChequeFilterBar, EMPTY_FILTERS, LIVE_STATUS, isFilterDirty, type ChequeFilterState,
+} from "./ChequeFilterBar";
+import { dayEndIso, dayStartIso } from "./dates";
+import type { ChequeActionDef } from "./transitions";
+
+const PAGE_SIZE = 100;
+
+export function ChequesPage() {
+  const qc = useQueryClient();
+  const [filters, setFilters] = useState<ChequeFilterState>(EMPTY_FILTERS);
+  const [formOpen, setFormOpen] = useState(false);
+  const [formKind, setFormKind] = useState<ChequeKind>("RECEIVED");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [actionTarget, setActionTarget] = useState<{ row: ChequeRow; def: ChequeActionDef } | null>(null);
+  const [selectedIds, setSelectedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [bordroOpen, setBordroOpen] = useState(false);
+  // RESMÎ bordro — anlık bordronun YERİNE geçmez, YANINDA durur (bkz.
+  // `chequeDeliveryNote.ts` başlığı: biri hızlı kâğıt, biri belge numaralı kayıt).
+  const [officialBordroOpen, setOfficialBordroOpen] = useState(false);
+  // KESİLMİŞ bordroların listesi — belgeye DÖNÜŞ YOLU. Bu ekran olmadan bir
+  // `BRD…` kaydı, oluşturma diyaloğu kapandığı anda ulaşılamaz hâle geliyordu
+  // (iptal ucu dahil; gerekçe `../officialDocs.ts`).
+  const [noteListOpen, setNoteListOpen] = useState(false);
+
+  const { search, status, kind, docType, currency, dueFrom, dueTo } = filters;
+
+  const q = useQuery({
+    queryKey: ["finance", "cheques", search, status, kind, docType, currency, dueFrom, dueTo],
+    queryFn: () =>
+      listCheques({
+        page: 1,
+        pageSize: PAGE_SIZE,
+        search: search || undefined,
+        status: status || undefined,
+        kind: kind || undefined,
+        docType: docType || undefined,
+        currency: currency || undefined,
+        // Gün sınırı İSTEMCİNİNDİR: yerel 00:00 / 23:59:59.999 (bkz. dates.ts).
+        // Boş/bozuk değer `undefined` döner → parametre hiç gitmez.
+        dueFrom: dayStartIso(dueFrom),
+        dueTo: dayEndIso(dueTo),
+      }),
+  });
+
+  const summaryQ = useQuery({
+    queryKey: ["finance", "cheques", "summary"],
+    queryFn: () => getChequeSummary(),
+  });
+
+  // Bir geçiş HEM cari defteri HEM kasa/banka bakiyesini oynatır → dar
+  // invalidate ekranın bir yarısını bayat bırakır.
+  // Seçim de TEMİZLENİR: durum değişen bir çek (örn. az önce bankaya verilen)
+  // seçili kalırsa bir sonraki bordroya sessizce girerdi.
+  const invalidate = () => {
+    setSelectedIds(new Set());
+    void qc.invalidateQueries({ queryKey: ["finance"] });
+  };
+
+  // ⚠️ `?? []` HER RENDER'DA YENİ DİZİ üretir → ona bağlı `useMemo`'lar (dışa
+  // aktarım spec'i ve seçili satırlar) hiç önbelleklenemez. Kimliği sabitle.
+  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
+  const total = q.data?.pagination.total ?? 0;
+  const dirty = isFilterDirty(filters);
+
+  // Filtre değişince seçim sıfırlanır (dosya başlığındaki gerekçe). Bağımlılıklar
+  // ilkel değerler — nesne kimliğine bağlanmak her render'da sıfırlama demekti.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [search, status, kind, docType, currency, dueFrom, dueTo]);
+
+  // TOPLU SEÇİM — kural katmanı `chequeBordro.ts`te (ekran onu çağırır, kopyalamaz).
+  const selectedRows = useMemo(() => rows.filter((r) => selectedIds.has(r.id)), [rows, selectedIds]);
+  const lockedKind = selectionKind(selectedRows);
+  const pageSelectable = selectAllIds(rows, lockedKind);
+  const selectedTotals = totalsByCurrency(selectedRows);
+
+  const toggleRow = (row: ChequeRow) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(row.id)) next.delete(row.id);
+      else if (selectionBlockReason(row, selectionKind(rows.filter((r) => next.has(r.id))))) return prev;
+      else next.add(row.id);
+      return next;
+    });
+
+  const toggleAll = () =>
+    setSelectedIds((prev) => {
+      const allOn =
+        pageSelectable.ids.length > 0 && pageSelectable.ids.every((id) => prev.has(id));
+      return allOn ? new Set() : new Set(pageSelectable.ids);
+    });
+  const activeKey = kind && status && !status.includes(",") ? `${kind}:${status}` : null;
+
+  const selectBucket = (k: ChequeKind, s: ChequeStatus) =>
+    // İkinci tıkla kovadan çık — seçilebilen her şey geri alınabilmeli.
+    setFilters((f) =>
+      activeKey === `${k}:${s}`
+        ? { ...f, kind: "", status: LIVE_STATUS }
+        : { ...f, kind: k, status: s },
+    );
+
+  // Vade kartı seçimi (H4 dikişi): kart backend'in liveStatuses+today değerinden
+  // ürettiği yamayı gönderir — süzgeç LİSTEYLE tek kaynaktan kurulur. İkinci
+  // tık varsayılana döner (kova kartlarıyla aynı sözleşme).
+  const [activeDueKey, setActiveDueKey] = useState<ChequeDueSelection | null>(null);
+  const selectDue = (patch: ChequeDueFilterPatch, selection: ChequeDueSelection | null) => {
+    setActiveDueKey(selection);
+    setFilters((f) =>
+      selection === null
+        ? { ...f, kind: "", status: LIVE_STATUS, dueFrom: "", dueTo: "" }
+        : { ...f, ...patch },
+    );
+  };
+
+  const openForm = (k: ChequeKind) => {
+    setFormKind(k);
+    setFormOpen(true);
+  };
+
+  // DIŞA AKTARIM — spec TIKLANDIĞINDA kurulur ve EKRANDAKİ satırlardan beslenir
+  // (yeni istek YOK): dosyadaki liste, ekrandaki listeden farklı olamaz. Aktif
+  // süzgeçler dosyanın kapağına yazılır — varsayılan "canlı olanlar" da bir
+  // süzgeçtir ve söylenmezse dosya tam portföy sanılır (bkz. `chequeExport.ts`).
+  const spec = useMemo(
+    () => () => (rows.length > 0 ? buildChequeExport({ rows, filters, total }) : null),
+    [rows, filters, total],
+  );
+
+  return (
+    <PageShell>
+      <PageHeader
+        title="Çek / Senet Portföyü"
+        description="Alınan çek kaydedildiği AN carinin borcunu azaltır; tahsil edildiğinde kasa/banka bakiyesi artar. Her adım defterde iz bırakır."
+        actions={
+          <div className="flex items-center gap-2">
+            {/* Dışa aktarım YAZMA İZNİ İSTEMEZ (`finance:cheque` gate'inin
+                DIŞINDA): dosya, ekranı zaten açabilen kişinin gördüğü listenin
+                taşınabilir hâlidir — okuma ile yazmayı aynı kapıya bağlamak,
+                portföyü görebilen ama çek işleyemeyen kullanıcıyı (muhasebe)
+                dosyasız bırakırdı. Liste boşken/hata varken düğmeler iş yapmaz:
+                boş bir Excel "portföy boş" diye okunur ve bu bir YALAN olur. */}
+            {/* TESLİM BORDROSU da yazma izni İSTEMEZ: hiçbir kayıt oluşturmaz,
+                sunucuya istek atmaz — seçilen satırların kâğıda dökülmüş
+                hâlidir (dışa aktarımla aynı gerekçe). Seçim yokken KAPALI ve
+                sebebi `title`da yazar; sessizce kapalı bir düğme "bozuk" diye
+                okunur. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              disabled={selectedRows.length === 0}
+              title={
+                selectedRows.length === 0
+                  ? "Bordro için listeden çek/senet seçin (satır başındaki kutular)"
+                  : `${selectedRows.length} kayıt için teslim bordrosu`
+              }
+              onClick={() => setBordroOpen(true)}
+            >
+              <FileText className="h-4 w-4" />
+              Teslim Bordrosu
+              {selectedRows.length > 0 ? ` (${selectedRows.length})` : ""}
+            </Button>
+            {/* RESMÎ BORDRO — anlık çıktının YANINDA, yerine değil. İkisi ayrı
+                iştir ve metinler farkı söyler: "Teslim Bordrosu" hızlı kâğıt
+                (kayıt YOK), "Resmî Bordro" belge numaralı kayıt (BRD…, sürüm
+                geçmişi, iptal edilebilir). Tek düğmede birleştirmek, hızlı bakış
+                isteyen kullanıcıya her tıklamada iptal edilmesi gereken resmi
+                bir kayıt açtırırdı.
+                ⚠️ İzin `finance:write` — `finance:cheque` DEĞİL (backend rotası
+                da öyle): bordro çekin durumuna dokunmaz, yalnız belge üretir. */}
+            <PermissionGate permission="finance:write">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                disabled={selectedRows.length === 0}
+                title={
+                  selectedRows.length === 0
+                    ? "Resmî bordro için listeden çek/senet seçin (satır başındaki kutular)"
+                    : `${selectedRows.length} kayıt için belge numaralı teslim bordrosu`
+                }
+                onClick={() => setOfficialBordroOpen(true)}
+              >
+                <FileCheck2 className="h-4 w-4" />
+                Resmî Bordro
+                {selectedRows.length > 0 ? ` (${selectedRows.length})` : ""}
+              </Button>
+            </PermissionGate>
+            {/* KESİLMİŞ BORDROLAR — seçimden BAĞIMSIZ (aranan şey bir BELGEDİR,
+                bir kıymet değil) ve YAZMA İZNİ İSTEMEZ: liste `finance:read`,
+                iptal düğmesi listenin İÇİNDE `finance:write` ile kapılı. Ekranı
+                açabilen ama çek işleyemeyen muhasebeci de bordroyu yeniden
+                basabilmeli (dışa aktarım kararıyla aynı gerekçe). */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              title="Kesilmiş resmî bordroları aç, yeniden bas ya da iptal et"
+              onClick={() => setNoteListOpen(true)}
+            >
+              <FileClock className="h-4 w-4" />
+              Bordrolar
+            </Button>
+            <ReportExportBar disabled={rows.length === 0} buildSpec={spec} />
+            <PermissionGate permission="finance:cheque">
+              <div className="flex gap-2">
+                <Button onClick={() => openForm("RECEIVED")}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Çek Girişi
+                </Button>
+                <Button variant="outline" onClick={() => openForm("ISSUED")}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Çek Çıkışı
+                </Button>
+              </div>
+            </PermissionGate>
+          </div>
+        }
+      />
+
+      <ChequeFilterBar value={filters} onChange={setFilters} />
+
+      <PageBody className="p-6">
+        <ChequeSummaryCards
+          rows={summaryQ.data ?? []}
+          isLoading={summaryQ.isLoading}
+          isError={summaryQ.isError}
+          onSelect={selectBucket}
+          activeKey={activeKey}
+          onSelectDue={selectDue}
+          activeDueKey={activeDueKey}
+        />
+
+        {q.isLoading ? (
+          <p className="text-sm text-muted-foreground">Yükleniyor…</p>
+        ) : q.isError ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/5 p-6 text-center text-sm">
+            <p className="font-medium text-destructive">Portföy listesi yüklenemedi.</p>
+            <p className="mt-1 text-muted-foreground">
+              Bu bir “kayıt yok” cevabı DEĞİLDİR — istek sunucuya ulaşamadı ya da reddedildi. Kayıtlarınız
+              yerinde duruyor; yeni giriş yapmadan önce tekrar deneyin.
+            </p>
+            <Button variant="outline" size="sm" className="mt-3" onClick={() => void q.refetch()}>
+              Tekrar dene
+            </Button>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="rounded-md border border-dashed p-8 text-center text-sm text-muted-foreground">
+            {dirty
+              ? "Bu filtreyle kayıt yok. Geçmiş kayıtlar için durum filtresini “Tümü” yapın."
+              : "Portföyde canlı çek/senet yok. “Çek Girişi” ile müşteriden aldığınız çeki kaydedebilirsiniz."}
+          </div>
+        ) : (
+          <>
+            {selectedRows.length > 0 && (
+              // SEÇİM ŞERİDİ — ne seçildiği, hangi yönde ve ne kadar. Sayıyı
+              // burada göstermezsek kullanıcı bordroyu basana kadar seçiminin
+              // ne olduğunu göremez.
+              <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+                <strong>{selectedRows.length} kayıt seçili</strong>
+                {lockedKind && <span className="text-muted-foreground">{KIND_LABEL[lockedKind]}</span>}
+                {selectedTotals.map((b) => (
+                  <span key={b.currency}>{money(b.total, b.currency as Currency)}</span>
+                ))}
+                {pageSelectable.skipped > 0 && (
+                  // ATLANANI SÖYLE: "tümünü seç" tek yön kuralı yüzünden tanım
+                  // gereği kısmi olabilir; sessiz kısmi seçim en kötü davranış.
+                  <span className="text-amber-700 dark:text-amber-500">
+                    sayfadaki {pageSelectable.skipped} kayıt bu seçime eklenemez (farklı yön ya da
+                    iptal edilmiş)
+                  </span>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-6"
+                  onClick={() => setSelectedIds(new Set())}
+                >
+                  <X className="mr-1 h-3.5 w-3.5" />
+                  Seçimi temizle
+                </Button>
+              </div>
+            )}
+            <ChequeTable
+              rows={rows}
+              onDetail={(r) => setDetailId(r.id)}
+              onAction={(row, def) => setActionTarget({ row, def })}
+              selection={{
+                selectedIds,
+                onToggle: toggleRow,
+                blockReason: (row) => selectionBlockReason(row, lockedKind),
+                allChecked:
+                  pageSelectable.ids.length > 0 &&
+                  pageSelectable.ids.every((id) => selectedIds.has(id)),
+                someChecked: selectedRows.length > 0,
+                onToggleAll: toggleAll,
+              }}
+            />
+            {total > rows.length && (
+              <p className="mt-3 text-xs text-amber-700 dark:text-amber-500">
+                {total} kaydın ilk {rows.length} tanesi gösteriliyor (vade sırasına göre). Aradığınızı bulmak
+                için arama ya da vade aralığı filtresini kullanın.
+              </p>
+            )}
+          </>
+        )}
+      </PageBody>
+
+      {/* Diyaloglar KOŞULLU mount edilir: her açılış taze bileşen demektir ve
+          ön-doldurma yalnız başlangıç değeri olarak kalır. */}
+      {formOpen && (
+        <ChequeFormDialog
+          open={formOpen}
+          initialKind={formKind}
+          onOpenChange={setFormOpen}
+          onCreated={invalidate}
+        />
+      )}
+      {actionTarget && (
+        <ChequeActionDialog
+          row={actionTarget.row}
+          def={actionTarget.def}
+          open
+          onOpenChange={(o) => !o && setActionTarget(null)}
+          onDone={invalidate}
+        />
+      )}
+      {detailId && (
+        <ChequeDetailDialog chequeId={detailId} open onOpenChange={(o) => !o && setDetailId(null)} />
+      )}
+      {bordroOpen && (
+        // Bordro SEÇİLİ SATIRLARDAN beslenir (yeni istek yok): kâğıttaki liste,
+        // ekrandaki seçimden farklı olamaz.
+        <ChequeBordroDialog rows={selectedRows} open onOpenChange={setBordroOpen} />
+      )}
+      {officialBordroOpen && (
+        // Resmî bordro da SEÇİLİ SATIRLARDAN beslenir — belgedeki liste,
+        // ekrandaki seçimden farklı olamaz.
+        <ChequeOfficialBordroDialog
+          rows={selectedRows}
+          open
+          onOpenChange={setOfficialBordroOpen}
+        />
+      )}
+      {noteListOpen && (
+        // Kesilmiş bordroların listesi — koşullu mount (state kapanınca ölür).
+        <ChequeDeliveryNoteListDialog open onOpenChange={setNoteListOpen} />
+      )}
+    </PageShell>
+  );
+}

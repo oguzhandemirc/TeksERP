@@ -16,8 +16,9 @@
 // siparişten" sorusu personelin sevkiyat aday siparişlerinden seçimiyle cevaplanır.
 // =============================================================================
 
-import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus } from "@prisma/client";
+import { Prisma, RollStatus, OrderStatus, PrintedDocType, ShipmentStatus, WarehouseEventType } from "@prisma/client";
 import { normalizeScanCode } from "../utils/code-format";
+import { writeWarehouseMovement } from "./helpers/warehouse-ledger.helper";
 import prisma from "../lib/prisma";
 import {
   printedDocumentService,
@@ -85,6 +86,29 @@ function withDocumentSourceId<T extends { id: string; returnGroupId: string | nu
   row: T,
 ): T & { documentSourceId: string } {
   return { ...row, documentSourceId: row.returnGroupId ?? row.id };
+}
+
+/**
+ * Sayfadaki iade satırlarına "bu grup faturalanmış mı" bilgisini ekler
+ * (H8 dikişi, 2026-08-14 — `attachBadges` deseni: SAYFA kapsamlı TEK ek sorgu).
+ *
+ * Panelin "Satış İade Faturası" düğmesi bu alana bakar: alan olmadan düğme
+ * faturalanmış grupta da çıkar ve kullanıcı ancak backend 409'unda öğrenirdi
+ * (sesli ama geç). Yalnız İPTAL EDİLMEMİŞ fatura sayılır — iptal edilen fatura
+ * grubu yeniden faturalamaya açar (backend partial unique'i de aynı kuralı
+ * uygular; iki katman aynı şeyi söyler).
+ */
+async function attachReturnInvoices<T extends { documentSourceId: string }>(
+  rows: T[],
+): Promise<Array<T & { invoiceDocNo: string | null }>> {
+  if (rows.length === 0) return rows.map((r) => ({ ...r, invoiceDocNo: null }));
+  const sourceIds = [...new Set(rows.map((r) => r.documentSourceId))];
+  const invoices = await prisma.invoice.findMany({
+    where: { returnGroupId: { in: sourceIds }, status: { not: "CANCELLED" } },
+    select: { returnGroupId: true, docNo: true },
+  });
+  const byGroup = new Map(invoices.map((i) => [i.returnGroupId as string, i.docNo]));
+  return rows.map((r) => ({ ...r, invoiceDocNo: byGroup.get(r.documentSourceId) ?? null }));
 }
 
 export class ReturnService {
@@ -363,6 +387,8 @@ export class ReturnService {
         qualityGradeId: true,
         shipmentId: true,
         sackId: true,
+        // İade depo defterine "hangi depoya geri girdi" yazar (sevkte temizlenmez).
+        warehouseId: true,
         shipment: {
           select: {
             id: true,
@@ -542,6 +568,19 @@ export class ReturnService {
           select: { id: true },
         });
         createdIds.push(rr.id);
+
+        // DEPO DEFTERİ — mal müşteriden GERİ GELDİ ve depoya girdi. Hedef depo,
+        // topun sevkten önce durduğu depodur: `Roll.warehouseId` sevkte
+        // temizlenmiyor, dolayısıyla iade malı geldiği rafa döner (SCRAP'a düşse
+        // bile "hangi depoya girdi" izi doğru kalır).
+        await writeWarehouseMovement(tx, {
+          rollId: r.id,
+          eventType: WarehouseEventType.RETURN,
+          qty,
+          toWarehouseId: r.warehouseId ?? null,
+          rollReturnId: rr.id,
+          userId,
+        });
       }
 
       // GRUP anahtarı = LİDERİN id'si. Tekil iadede alan NULL kalır → belge çözümü,
@@ -723,7 +762,7 @@ export class ReturnService {
       ]);
       const hasMore = items.length > limit;
       const page = hasMore ? items.slice(0, limit) : items;
-      const data = page.map(withDocumentSourceId);
+      const data = await attachReturnInvoices(page.map(withDocumentSourceId));
       const last = data[data.length - 1] as Record<string, unknown> | undefined;
       const nextCursor = hasMore ? buildNextDynamicCursor(last, "createdAt") : null;
       return {
@@ -749,7 +788,7 @@ export class ReturnService {
       }),
       summarize(),
     ]);
-    return { success: true, data: items.map(withDocumentSourceId), summary };
+    return { success: true, data: await attachReturnInvoices(items.map(withDocumentSourceId)), summary };
   }
 
   // =========================================================================

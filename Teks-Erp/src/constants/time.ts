@@ -161,3 +161,56 @@ export function factoryDayKeyUtcMidnight(at: Date = new Date()): Date {
   const { y, m, d } = factoryParts(at);
   return new Date(Date.UTC(y, m - 1, d));
 }
+
+/**
+ * `at` anının ait olduğu FABRİKA takvim gününün SON anı (yerel 23:59:59.999),
+ * MUTLAK AN olarak. `factoryDayStart`in aynası; `lte` filtrelerinde kullanılır.
+ *
+ * Ertesi günün başlangıcından 1 ms geri sayılır — "23:59:59.999'u elle kur"
+ * yaklaşımı DST ileri-atlama günlerinde var olmayan bir duvar saatine denk
+ * gelebilir; gün başlangıcı üzerinden türetmek her takvimde doğrudur.
+ * (+36 sa: DST kaymasından büyük, iki günden küçük → hedef her zaman ERTESİ gün.)
+ */
+export function factoryDayEnd(at: Date = new Date()): Date {
+  const start = factoryDayStart(at);
+  const nextStart = factoryDayStart(new Date(start.getTime() + 36 * 3600_000));
+  return new Date(nextStart.getTime() - 1);
+}
+
+/**
+ * İSTEMCİDEN GELEN TARİH SINIRLARINI mutlak ana çevirir (GÜN-YALNIZ biçim için).
+ *
+ * ⚠️⚠️ NEDEN VAR: `2026-07-31` biçimindeki gün-yalnız bir değer ECMAScript'te
+ * UTC GECE YARISI'dır (`new Date("2026-07-31")` → 03:00 Europe/Istanbul), yani
+ * bir gün sınırı DEĞİL, o günün içinde rastgele bir andır. Sonucu YÖNE göre
+ * değişir ve İKİSİ DE sessizdir:
+ *   • `lte` (bitiş) → o günün neredeyse TAMAMI dışarıda kalır. "31 Temmuz
+ *     itibarıyla" diye kesilen DONMUŞ bir resmi belge, 31 Temmuz'un hareketleri
+ *     olmadan doğru görünen ama EKSİK bir rakam basar — hata yok, log yok,
+ *     kâğıt basılmış olur.
+ *   • `gte` (başlangıç) → o günün ilk üç saati (gece vardiyası) düşer.
+ * İstemcinin doğru göndermesine güvenmek yetmez: ikinci bir istemci (mobil,
+ * entegrasyon, script, Swagger'dan elle deneme) aynı ucu çağırdığı gün hata
+ * TAM DA resmi belgede doğar.
+ *
+ * SÖZLEŞME: gün-yalnız değer → o FABRİKA gününün BAŞI/SONU · tam ISO damgası →
+ * AYNEN (istemci anı kendisi seçmiştir, ikinci kez yorumlamak niyeti ezer).
+ */
+function resolveDayBoundary(value: string, edge: "start" | "end"): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(value);
+  // Gün-yalnız değer ÖĞLEN UTC ile çıpalanır: hangi saat diliminde yorumlanırsa
+  // yorumlansın aynı takvim gününe düşer (gece yarısı çıpası negatif ofsetli bir
+  // sunucuda günü bir geri kaydırırdı).
+  const anchor = new Date(`${value}T12:00:00.000Z`);
+  return edge === "start" ? factoryDayStart(anchor) : factoryDayEnd(anchor);
+}
+
+/** `lte` (bitiş, DAHİL) sınırı — gün-yalnız değer o günün SONUNA çözülür. */
+export function resolveRangeEnd(value: string): Date {
+  return resolveDayBoundary(value, "end");
+}
+
+/** `gte` (başlangıç, DAHİL) sınırı — gün-yalnız değer o günün BAŞINA çözülür. */
+export function resolveRangeStart(value: string): Date {
+  return resolveDayBoundary(value, "start");
+}

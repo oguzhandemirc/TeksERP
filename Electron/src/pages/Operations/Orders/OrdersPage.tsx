@@ -15,9 +15,10 @@ import { PermissionGate } from "@/components/PermissionGate";
 import { useDataTable } from "@/hooks/useDataTable";
 import { useHideCancelled } from "@/hooks/useHideCancelled";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
-import { usePricingEnabled } from "@/hooks/usePricingEnabled";
+import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
 import { buildOrderColumns } from "./columns";
+import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
 import { OrderDetailSheet } from "./OrderDetailSheet";
 import { OrderFormDialog } from "./OrderFormDialog";
@@ -279,7 +280,17 @@ export function OrdersPage() {
   }, [searchParams, setSearchParams]);
 
   const pricingEnabled = usePricingEnabled();
-  const columns = useMemo(() => buildOrderColumns(pricingEnabled), [pricingEnabled]);
+  // TİCARET REJİMİ — üretim yüzeyleri (iş emri kolonu · filtresi · toplu
+  // aksiyonu) süzülür. Fabrikada birebir bugünkü.
+  const productionEnabled = useFeatureFlags().data?.data?.productionEnabled ?? true;
+  const columns = useMemo(
+    () => buildOrderColumns(pricingEnabled, productionEnabled),
+    [pricingEnabled, productionEnabled],
+  );
+  const filters = useMemo(
+    () => resolveOrderFilters(FILTERS, productionEnabled),
+    [productionEnabled],
+  );
 
   const { showCancelled, setShowCancelled, forceFilters } = useHideCancelled();
 
@@ -403,8 +414,10 @@ export function OrdersPage() {
       />
       {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı):
           "ABC Tekstil'in 200 siparişi" sorusu pencere açıkken cevaplanamıyordu.
-          Sıralama maliyeti `orders_active_createdAt_idx` ile karşılanıyor. */}
-      <FilterBar filters={FILTERS} />
+          Sıralama maliyeti `orders_active_createdAt_idx` ile karşılanıyor.
+          ⚠️ Liste `filters` (rejim-duyarlı) kullanır, ham `FILTERS` DEĞİL —
+          ticaret kurulumunda üretim filtreleri süzülür (`resolveOrderFilters`). */}
+      <FilterBar filters={filters} />
 
       <div className="flex justify-end">
         <OrdersStats
@@ -447,13 +460,21 @@ export function OrdersPage() {
             <CopyMenuItem label="Sipariş no" value={order.orderNumber} />
           </>
         )}
-        selectionHint="İş emri açmak için bir veya daha fazla sipariş seçin."
-        bulkActions={(rows) => (
-          <BulkCreateWorkOrderAction
-            orders={rows}
-            onDone={() => table.resetRowSelection()}
-          />
-        )}
+        selectionHint={
+          canBulkCreateWorkOrder(productionEnabled)
+            ? "İş emri açmak için bir veya daha fazla sipariş seçin."
+            : null
+        }
+        bulkActions={
+          canBulkCreateWorkOrder(productionEnabled)
+            ? (rows) => (
+                <BulkCreateWorkOrderAction
+                  orders={rows}
+                  onDone={() => table.resetRowSelection()}
+                />
+              )
+            : undefined
+        }
       />
 
       <OrderDetailSheet

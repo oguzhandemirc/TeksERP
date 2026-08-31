@@ -1,15 +1,13 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { FileSpreadsheet, Printer, Tags } from "lucide-react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { FileSpreadsheet, Printer } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printHtmlString } from "@/lib/print";
-import { labelService } from "@/services/labelService";
-import { useLabelPrinter } from "@/hooks/useLabelPrinter";
 import { printedDocumentService } from "@/services/printedDocumentService";
+import { BulkRollLabelButton } from "@/components/print/BulkRollLabelButton";
 import { buildWorkbook, saveWorkbook } from "@/lib/xlsx-export";
 import { accountingDispatchService } from "./service";
 import { buildDispatchReportSheets } from "./accounting-export";
@@ -52,40 +50,9 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
     staleTime: 60_000,
   });
   const report = reportQ.data?.data;
-  // Yapılandırılmış seri/COM Argox varsa toplu etiketi TEK native job'la diyalogsuz bas.
-  const { directEnabled, printRollsBulk, peripheralId } = useLabelPrinter();
-
-  // Toplu etiketteki topların id'leri + WYSIWYG önizleme (ilk top, aktif dilde).
-  // peripheralId: önizleme bu PC'ye seçili yazıcının dilinde çözülür (baskıyla aynı).
+  // Toplu etiketteki topların id'leri — düğme + önizleme ORTAK bileşende
+  // (BulkRollLabelButton); yazıcı dallanması orada tek yerde yaşıyor.
   const rollIds = (report?.cekiRows ?? []).map((c) => c.rollId).filter(Boolean);
-  const [labelOpen, setLabelOpen] = useState(false);
-  const labelPreviewQ = useQuery({
-    queryKey: ["dispatch-bulk-label-preview", rollIds[0], peripheralId],
-    queryFn: () => labelService.getRollPreview(rollIds[0]!, undefined, peripheralId),
-    enabled: labelOpen && rollIds.length > 0,
-    staleTime: 0,
-  });
-  const lp = labelPreviewQ.data;
-
-  // Saha #7: toplu etiket — fişteki tüm topların etiketini tek baskıda çıkar.
-  const bulkLabelMut = useMutation({
-    mutationFn: async () => {
-      if (rollIds.length === 0) throw new Error("Bu sevkiyatta top yok");
-      if (directEnabled) {
-        // Diyalogsuz: N farklı topun PPLA'sı tek seri/COM gönderiminde.
-        const r = await printRollsBulk(rollIds);
-        if (!r.ok) throw new Error(r.error ?? "Yazıcıya gönderilemedi");
-        return null;
-      }
-      const bulkHtml = await labelService.getBulkRollLabelsHtml(rollIds);
-      await printHtmlString(bulkHtml);
-      return null;
-    },
-    onSuccess: () => {
-      if (directEnabled) toast.success("Etiketler yazıcıya gönderildi.");
-    },
-    onError: (e: Error) => toast.error(e.message),
-  });
 
   // Tek sevk fişi → Excel (3 sayfa) — açık fişin verisinden.
   const exportReceiptExcel = async () => {
@@ -121,15 +88,7 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
             >
               <FileSpreadsheet className="h-4 w-4" /> Excel
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="gap-1.5"
-              disabled={!report || rollIds.length === 0}
-              onClick={() => setLabelOpen(true)}
-            >
-              <Tags className="h-4 w-4" /> Toplu Etiket
-            </Button>
+            <BulkRollLabelButton rollIds={rollIds} className="gap-1.5" />
             <Button
               size="sm"
               className="gap-1.5"
@@ -160,37 +119,6 @@ export function DispatchReceiptDialog({ receiptFor, onClose }: Props) {
       </DialogContent>
     </Dialog>
 
-    {/* Toplu etiket önizleme — ilk topun aktif-dil WYSIWYG'i + kaç top basılacağı */}
-    <Dialog open={labelOpen} onOpenChange={(o) => !o && setLabelOpen(false)}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Toplu Etiket — {rollIds.length} top</DialogTitle>
-        </DialogHeader>
-        {lp && (
-          <div className="text-[11px] text-muted-foreground">
-            Aktif dil: <strong>{lp.language}</strong> · ilk top gösteriliyor ({rollIds.length} top basılacak)
-          </div>
-        )}
-        {labelPreviewQ.isLoading ? (
-          <Skeleton className="h-[440px] w-full" />
-        ) : lp?.mode === "text" ? (
-          <pre className="h-[440px] w-full overflow-auto whitespace-pre-wrap break-all rounded border bg-muted/20 p-3 font-mono text-[11px]">{lp.content}</pre>
-        ) : (
-          <iframe title="Toplu etiket önizleme" srcDoc={lp?.content ?? ""} sandbox="allow-same-origin allow-modals" className="h-[440px] w-full rounded border bg-white" />
-        )}
-        <DialogFooter>
-          <Button variant="outline" size="sm" onClick={() => setLabelOpen(false)}>İptal</Button>
-          <Button
-            size="sm"
-            className="gap-1.5"
-            disabled={bulkLabelMut.isPending || rollIds.length === 0}
-            onClick={() => { bulkLabelMut.mutate(); setLabelOpen(false); }}
-          >
-            <Printer className="h-4 w-4" /> {bulkLabelMut.isPending ? "Basılıyor…" : `${rollIds.length} etiketi bas`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
     </>
   );
 }

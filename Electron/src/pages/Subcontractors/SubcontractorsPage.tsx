@@ -18,7 +18,7 @@ interface BackendPayload {
   categoryIds: string[];
 }
 
-const buildPayload = (
+export const buildSubcontractorPayload = (
   v: SubcontractorFormValues,
   initial: Subcontractor | null,
 ): BackendPayload => ({
@@ -53,7 +53,7 @@ export function SubcontractorsPage() {
           initial={initial}
           isSubmitting={isSubmitting}
           onSubmit={(values) =>
-            onSubmit(buildPayload(values, initial) as unknown as Partial<Subcontractor>)
+            onSubmit(buildSubcontractorPayload(values, initial) as unknown as Partial<Subcontractor>)
           }
         />
       )}

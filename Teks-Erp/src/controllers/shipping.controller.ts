@@ -86,6 +86,30 @@ const shipmentOrdersSchema = z.object({
   // Boş dizi MEŞRU: "sipariş bağını kaldır".
   orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).max(50),
 });
+// HIZLI SEVK — çuval YOK, doğrudan top listesi. Barkod İSTEMEZ (rollIds):
+// etiket basmayan kullanıcı birinci sınıf. 500 tavanı createShipment ile aynı
+// gerekçe (tek tx'in uzunluğu).
+const quickShipmentSchema = z.object({
+  rollIds: z.array(z.string().uuid("Geçersiz top ID")).min(1, "En az bir top seçilmeli").max(500),
+  customerId: z.string().uuid("Geçersiz müşteri ID"),
+  branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
+  orderIds: z.array(z.string().uuid("Geçersiz sipariş ID")).optional(),
+  destination: z.enum(["DOMESTIC", "EXPORT"]).optional(),
+  procedureCode: z.string().trim().max(64).nullable().optional(),
+  plateNumber: z.string().trim().max(32).nullable().optional(),
+  driverName: z.string().trim().max(100).nullable().optional(),
+  carrier: z.string().trim().max(100).nullable().optional(),
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+});
+// FIFO öneri sorgusu — `itemId` ZORUNLU: kumaşsız çağrı "depodaki en eski 20 top"
+// demek olurdu ve karışık spec'li bir öneri sevk edilemez (tek irsaliye tek müşteri
+// ama operatör neyi sattığını bilir). Renk opsiyonel (renksiz ham kumaş meşru).
+const shippableRollsSchema = z.object({
+  itemId: z.string().uuid("Geçersiz kumaş ID"),
+  colorId: z.string().uuid("Geçersiz renk ID").optional(),
+  warehouseId: z.string().uuid("Geçersiz depo ID").optional(),
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
 // Sevk önizleme — çuval + (opsiyonel) müşteri/şube/sipariş; salt-okunur.
 const previewShipmentSchema = z.object({
   sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmeli").max(500),
@@ -288,6 +312,41 @@ export class ShippingController {
       const body = shipmentOrdersSchema.parse(req.body);
       const result = await this.service.setShipmentOrders(req.params.id as string, body.orderIds, req.user?.userId);
       res.json(result);
+    } catch (e) { next(e); }
+  };
+
+  createShipmentFromRolls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = quickShipmentSchema.parse(req.body);
+      const result = await this.service.createShipmentFromRolls(
+        {
+          rollIds: body.rollIds,
+          customerId: body.customerId,
+          branchId: body.branchId ?? null,
+          orderIds: body.orderIds,
+          destination: body.destination,
+          procedureCode: body.procedureCode ?? null,
+          plateNumber: body.plateNumber ?? null,
+          driverName: body.driverName ?? null,
+          carrier: body.carrier ?? null,
+          clientToken: body.clientToken ?? null,
+        },
+        req.user?.userId,
+      );
+      res.status(201).json(result);
+    } catch (e) { next(e); }
+  };
+
+  findShippableRolls = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const q = shippableRollsSchema.parse(req.query);
+      const result = await this.service.findShippableRolls({
+        itemId: q.itemId,
+        colorId: q.colorId ?? null,
+        warehouseId: q.warehouseId ?? null,
+        limit: q.limit ?? 20,
+      });
+      res.status(200).json(result);
     } catch (e) { next(e); }
   };
 
