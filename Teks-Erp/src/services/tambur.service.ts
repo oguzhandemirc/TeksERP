@@ -16,6 +16,7 @@
 
 import prisma from "../lib/prisma";
 import { normalizeScanCode } from "../utils/code-format";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import { ApiResponse } from "../types/api.types";
@@ -2371,6 +2372,21 @@ export class TamburService {
         const existing = await prisma.roll.findUnique({ where: { clientToken: data.clientToken } });
         const freshParent = await prisma.roll.findUnique({ where: { id: rollId } });
         if (existing && freshParent) {
+          // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003). Eskiden burada hiçbir
+          // karşılaştırma yoktu: operatör 40 m kesip zaman aşımına düşer, yeniden
+          // ölçüp 25 m yazar, aynı token gider ve sunucu ilk kesimin çocuğunu
+          // "Kesim zaten kaydedilmiş" diye döndürürdü — düzeltme SESSİZCE yutulur.
+          // Üstelik `existing` token'la, `freshParent` gelen `rollId` ile
+          // bulunduğu için YABANCI bir ebeveyn/çocuk çifti de dönebiliyordu.
+          assertReplayPayloadMatches(
+            [
+              { ad: "parentRollId", mevcut: existing.parentRollId, gelen: rollId },
+              { ad: "cutLength", mevcut: existing.initialQty, gelen: data.cutLength },
+            ],
+            "Bu istemci anahtarı FARKLI bir kesim için kullanılmış. Ekranı yenileyip " +
+              "kesimi tekrar girin — önceki kesim zaten kayıtlı olabilir.",
+            { childBarcode: existing.barcode },
+          );
           return {
             success: true,
             data: {
@@ -3092,6 +3108,19 @@ export class TamburService {
         const existing = await prisma.roll.findUnique({ where: { clientToken: data.clientToken } });
         const freshParent = await prisma.roll.findUnique({ where: { id: openFabricRollId } });
         if (existing && freshParent) {
+          // ⚠️ Aynı kapı, ikinci nokta (BULGU-T4-003). Bu dalın yorumu
+          // "cutWarehouseRoll ile aynı" diyordu — EKSİKLİK de aynıydı.
+          assertReplayPayloadMatches(
+            [
+              { ad: "parentRollId", mevcut: existing.parentRollId, gelen: openFabricRollId },
+              // ⚠️ Bu yolda alan adı `lengthMeters` (kesim yolunda `cutLength`) —
+              // aynı gerçeğin iki adı; kopyalarken sessizce kaymaya açık.
+              { ad: "cutLength", mevcut: existing.initialQty, gelen: data.lengthMeters },
+            ],
+            "Bu istemci anahtarı FARKLI bir kesim için kullanılmış. Ekranı yenileyip " +
+              "kesimi tekrar girin — önceki kesim zaten kayıtlı olabilir.",
+            { childBarcode: existing.barcode },
+          );
           return {
             success: true,
             data: { childRoll: existing, parentRemainingQty: Number(freshParent.currentQty) },

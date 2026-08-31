@@ -12,6 +12,7 @@ import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { AppError } from "../utils/app-error";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { ApiResponse, PaginatedResponse, QueryParams } from "../types/api.types";
@@ -4305,6 +4306,18 @@ export class InventoryService {
         if (existing) {
           // 4. durum: iptal/fire edilmiş açık kumaşın token'ı replay EDİLEMEZ.
           assertRollReplayAlive(existing);
+          // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003): token'la bulunan Roll
+          // eskiden KOŞULSUZ dönüyordu — başka bir makbuzun/adımın açık kumaşı
+          // "zaten açılmış" diye gösterilebiliyordu.
+          assertReplayPayloadMatches(
+            [
+              { ad: "parentReceiptId", mevcut: existing.parentReceiptId, gelen: data.receiptId },
+              { ad: "currentStepId", mevcut: existing.currentStepId, gelen: data.stepId },
+            ],
+            "Bu istemci anahtarı FARKLI bir açık kumaş kaydı için kullanılmış. " +
+              "Ekranı yenileyip tekrar deneyin.",
+            { rollId: existing.id },
+          );
           return {
             success: true,
             data: existing,

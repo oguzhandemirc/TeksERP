@@ -29,6 +29,7 @@ import {
 } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
 import {
   printedDocumentService,
@@ -187,7 +188,10 @@ export class ShippingService {
   // =========================================================================
 
   /** A4 replay: token'la daha önce açılmış çuvalı openSack yanıt şekliyle döner. */
-  private async readOpenSackReplay(clientToken: string): Promise<ApiResponse<unknown> | null> {
+  private async readOpenSackReplay(
+    clientToken: string,
+    gelen: { customerId?: string | null; branchId?: string | null },
+  ): Promise<ApiResponse<unknown> | null> {
     const s = await prisma.sack.findUnique({
       where: { clientToken },
       select: {
@@ -197,6 +201,21 @@ export class ShippingService {
       },
     });
     if (!s) return null;
+    // ⚠️ AYNI TOKEN, FARKLI GÖVDE (BULGU-T4-003). Eskiden token'la bulunan çuval
+    // KOŞULSUZ dönüyordu: A müşterisi için açılan çuval belirsiz düşer, operatör
+    // B müşterisini seçip tekrar dener, sunucu A'nın çuvalını "Çuval açıldı"
+    // diyerek döndürür ve toplar YANLIŞ MÜŞTERİNİN çuvalına okutulurdu.
+    // ⚠️ Müşterisiz çuval MEŞRUDUR (genel stok, depo havuzu modeli) — `null` ile
+    // `null` aynı sayılır; kapı yalnız GERÇEK farkta kapanır.
+    assertReplayPayloadMatches(
+      [
+        { ad: "customerId", mevcut: s.customerId, gelen: gelen.customerId },
+        { ad: "branchId", mevcut: s.branchId, gelen: gelen.branchId },
+      ],
+      "Bu istemci anahtarı FARKLI bir müşteri/şube için açılmış bir çuvala ait. " +
+        "Ekranı yenileyip çuvalı tekrar açın.",
+      { sackNo: s.sackNo },
+    );
     return {
       success: true,
       data: {
@@ -219,7 +238,7 @@ export class ShippingService {
     // İdempotent replay (A4): aynı token'la tekrar gelen istek (timeout-retry /
     // çift dokunuş) yeni BOŞ çuval açmaz — ilk denemede açılan çuvalı döner.
     if (data.clientToken) {
-      const cached = await this.readOpenSackReplay(data.clientToken);
+      const cached = await this.readOpenSackReplay(data.clientToken, { customerId: data.customerId, branchId: data.branchId });
       if (cached) return cached;
     }
     if (data.weightKg != null && !(data.weightKg > 0)) {
@@ -298,7 +317,7 @@ export class ShippingService {
     } catch (err) {
       // Yarış replay'i: pre-check ile create arası aynı token'lı ikinci istek kazandıysa.
       if (data.clientToken && p2002Mentions(err, /clientToken/i)) {
-        const cached = await this.readOpenSackReplay(data.clientToken);
+        const cached = await this.readOpenSackReplay(data.clientToken, { customerId: data.customerId, branchId: data.branchId });
         if (cached) return cached;
       }
       throw err;
