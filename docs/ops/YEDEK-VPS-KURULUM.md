@@ -1,29 +1,35 @@
-# Makine dışı yedek — kendi VPS'imize (çok fabrikalı)
+# Makine dışı yedek — kendi VDS'imize (çok fabrikalı)
 
-> **Amaç:** fabrikanın gece yedeği, fabrikanın diskinden BAŞKA bir yerde de dursun.
-> Bugün yedekler veritabanıyla aynı diskte; disk giderse geri dönülecek şey de gider.
->
-> **Karar seti (kullanıcı, 2026-08-31):** kimlik IP ile değil **anahtarla** ·
-> dosyalama çok fabrikalı ve okunur · içerik **şifreli**, dosya adları **açık** ·
-> kurulum adım adım birlikte.
+> **DURUM: SUNUCU TARAFI KURULDU ve ÖLÇÜLDÜ — 2026-09-01.**
+> Kalan tek adım fabrika sunucusuna rclone kurulumu (§B).
+
+Sunucu: **`80.253.255.188`** (`tekserp-vds`, Ubuntu 24.04 LTS) — güncelleme
+yayınıyla aynı makine, ayrı kullanıcılar ve ayrı dizin ağaçlarıyla.
+
+**Amaç:** fabrikanın gece yedeği, fabrikanın diskinden BAŞKA bir yerde de dursun.
+Öncesinde yedekler veritabanıyla aynı diskteydi; disk giderse geri dönülecek şey
+de giderdi. Fidye yazılımı ayrıca standart olarak **önce yedek klasörünü**
+hedefler ve orada saldırgan için tek bir hedef vardı.
+
+**Karar seti (kullanıcı):** kimlik IP ile değil **anahtarla** · dosyalama çok
+fabrikalı ve okunur · içerik **şifreli**, dosya adları **açık** · saklama
+**30 gün günlük + 12 ay aylık** · uyarı şimdilik yalnız panelde.
 
 ---
 
 ## Kim neye erişir (güven modeli)
 
-Bu tablo mimarinin özetidir; kurulum adımları bunu zorlar.
-
 | Taraf | Yapabildiği | Yapamadığı |
 |---|---|---|
-| **Fabrikanın sunucusu** (arka plan servisi) | Kendi klasörüne (`gelen/`) dosya bırakmak; bıraktığını görmek | Başka fabrikanın klasörüne bakmak · arşive ulaşmak · geçmişi yok etmek · dosyaları açmak (şifre onda değil) |
-| **Fabrika personeli** | — | VPS'e giriş yapmak (kabuk yok, oturum yok, parola yok) |
+| **Fabrikanın sunucusu** (arka plan servisi) | Kendi `gelen/` klasörüne dosya bırakmak; bıraktığını görmek | Başka fabrikanın klasörüne bakmak · arşive ulaşmak · geçmişi yok etmek · dosyaları açmak (şifre onda değil) |
+| **Fabrika personeli** | — | Sunucuya giriş yapmak (kabuk yok, oturum yok, parola yok) |
 | **Siz (satıcı)** | Arşivi okumak, indirmek, şifreyi açmak, geri yüklemek | — |
+| **Sunucuyu ele geçiren** | Şifreli blobları görmek | Onları açmak — çözme parolası sunucuda YOK |
 
-**Fabrika personeli VPS'e erişmez.** Bağlanan şey insan değil, arka plandaki
-yedek servisidir; onun anahtarı kabuk açamaz (`internal-sftp`), yalnız kendi
-klasörünü görür (`ChrootDirectory`) ve o klasörde bulduğu tek şey kendi
-gönderdiği dosyalardır — zaten fabrikanın kendi diskinde de duran, üstelik
-**şifreli** dosyalar. Yani o anahtarla hiçbir yeni bilgi elde edilemez.
+**Ölçüldü (2026-09-01):** fabrika kullanıcısı `/srv/tekserp-arsiv` ve `/etc`
+dizinlerini göremiyor (`Can't ls: not found`), chroot kökünde yalnız `gelen/`
+görüyor, kabuk isteği `This service allows sftp connections only` ile
+reddediliyor.
 
 ⚠️ **Şifreyi yalnız siz taşıyorsanız, yedeği yalnız siz açabilirsiniz.** Bu
 istenen şeydir ama bir yükümlülük doğurur: size ulaşılamazsa fabrika bu
@@ -34,231 +40,228 @@ bırakmak dürüst orta yoldur.
 
 ---
 
-## Neden bu tasarım (üç karar, üç gerekçe)
+## Neden bu tasarım (dört karar, dört gerekçe)
 
 **① Kimlik anahtarla, IP'yle değil.** Fabrikanın internet IP'si değişebilir;
-anahtar değişmez, iptal edilebilir ve *kimin* gönderdiğini kesin söyler. Yeni
-fabrika = yeni anahtar + yeni klasör.
+anahtar değişmez, iptal edilebilir ve *kimin* gönderdiğini kesin söyler. Her
+fabrikanın kendi kullanıcısı (`fab-<fabrika>`) ve kendi anahtarı olur.
 
-**② İçerik şifreli, dosya adı açık.** Yedek dosyası müşteri/fiyat listesinin
-yanında **her operatörün PIN'ini ve kart kodunu DÜZ METİN** taşıyor
-(`schema.prisma`: `quickPin`, `cardToken` — hash yok). VPS kiralık ve internete
-açık bir makine; ele geçerse fabrikaya giriş de ele geçerdi. Dosya adlarını
-şifrelemiyoruz ki "hangi fabrikadan ne zaman geldi" sunucuda gözle okunabilsin.
+**② `rclone copy` — `sync` DEĞİL.** `sync` hedefi kaynağa eşitler: yereldeki
+dosya silinir/şifrelenirse uzaktaki de gider, yani fidye yazılımı offsite
+kopyayı da imha eder. `copy` yalnız **ekler**. Bu kural
+`offsite-backup.helper.ts`te de yazılıdır; orada uzaktan silen tek satır yok.
 
-**③ Silme değil, kopya + anlık görüntü.** Yükleme `rclone copy` ile yapılır
-(`sync` DEĞİL — kodda gerekçesi yazılı: `sync` yereli silineni uzaktan da
-silerdi, yani fidye yazılımı offsite kopyayı da imha ederdi). Buna ek olarak VPS
-her gece `gelen/` içeriğinin **sabit-bağ (hardlink) anlık görüntüsünü** yalnız
-`root`'un eriştiği arşive alır. Fabrikanın anahtarı ele geçse bile geçmiş durur.
+**③ İçerik kilitli, dosya adları açık.** Sunucuda *"kimin hangi yedeği ne zaman
+gelmiş"* tek bakışta okunur — çok fabrikalı düzende asıl işletme ihtiyacı bu.
+İçerik anahtarsız işe yaramaz.
+**Ölçüldü:** kaynak `62aadd8d…` · sunucudaki ham içerik `c825b5bd…` (farklı →
+gerçekten şifreli) · doğru parolayla `62aadd8d…` · yanlış parolayla
+`failed to authenticate decrypted block`.
 
-> ⚠️ **Neden "taşıma" değil "anlık görüntü":** dosyaları `gelen/`den taşısaydık,
-> fabrikanın `rclone`u onları uzakta bulamayıp **her saat yeniden yüklerdi**.
-> Sabit bağ ile dosya iki yerde birden görünür, disk maliyeti sıfırdır ve
-> `gelen/` budandığında arşiv kopyası yaşamaya devam eder.
+**④ Arşiv SERT KOPYA, hardlink değil.** Hardlink yer kazandırırdı ama aynı
+inode'u paylaştığı için SFTP ile **yerinde kırpılan** bir dosya arşivdeki
+kopyayı da bozardı. Yedek sisteminde çalışma kopyası ile arşiv aynı baytları
+paylaşmamalı. Maliyet fabrika başına ~0,5 GB — 59 GB'lık diskte önemsiz.
+
+---
+
+## ⚠️ Ölçümle öğrenilen üç tuzak
+
+Tahmin değil — kurulum sırasında **fiilen ısırdı**:
+
+| Tuzak | Belirti | Çözüm |
+|---|---|---|
+| **crypt varsayılan son eki** | Dosya sunucuya `…dump.bin` düşer; arşivleme script'inin `*.dump` süzgeci onu **hiç görmez**, yedek sessizce arşivlenmez | `suffix = none` |
+| **`known_hosts` tek anahtar tipi** | `knownhosts: key mismatch` — dosyada yalnız ed25519 varken sunucu ecdsa/rsa sunuyor | `ssh-keyscan` çıktısının **tamamını** al (üç tip) |
+| **Arşiv `gelen/`den TAŞIRSA** | `rclone copy` dosyayı "eksik" görüp her gece **yeniden yükler**; panelin `missingCount` sayacı kalıcı kırmızıya döner | Arşiv **kopyalar**, taşımaz; `gelen/` yalnız 35 günden eskiyi budar (fabrika onu zaten silmiştir) |
 
 ---
 
 ## Kapasite
 
-Saha veritabanı **33 MB** (ölçüldü 2026-08-31) → sıkıştırılmış yedek ~5–15 MB.
-Aylık ~450 MB. On fabrika × bir yıl bile birkaç GB. Saklama konusunda cömert
-olabiliriz.
+Dump ~10 MB (saha DB'si 33 MB, sıkıştırılmış custom format). **30 gün günlük +
+12 ay aylık** → fabrika başına **~0,5 GB**; `gelen/` aynası ~0,3 GB. On fabrika
+bile ~8 GB.
+
+> ℹ️ Fabrikanın kendi diski de 30 gün tutuyor (`BACKUP_RETENTION_DAYS=30`).
+> Sunucudaki kopya günlük pencerede **derinlik değil, makine bağımsızlığı**
+> ekler; derinliği 12 aylık kopyalar verir. Uzatmak tek satır:
+> `/usr/local/sbin/tekserp-yedek-arsivle` → `GUNLUK_SAKLA` / `AYLIK_SAKLA`.
 
 ---
 
 ## Dosya düzeni
 
 ```
-/srv/tekserp-yedek/                     ← chroot kökü (root'a ait, yazılamaz)
-└── yedek-adnansahin/
-    └── gelen/                          ← fabrika YALNIZ buraya yazar
-        tekserp_2026-08-31_0200.dump    ← içerik şifreli, ad açık
+/srv/tekserp-yedek/adnansahin/          ← chroot KÖKÜ (root:root 755)
+└── gelen/                              ← fabrika buraya YAZAR (fab-adnansahin 755)
 
-/srv/tekserp-arsiv/                     ← YALNIZ root
-└── adnansahin/2026/08/
-    tekserp_2026-08-31_0200.dump        ← gelen/ ile sabit bağ (disk maliyeti ~0)
-    INDEX.tsv                           ← tarih · dosya · boyut · sha256 · varış
-DURUM.txt                               ← tüm fabrikalar: son yedek, yaş, boyut
+/srv/tekserp-arsiv/adnansahin/          ← root:root 750 — fabrika ERİŞEMEZ
+├── gunluk/2026-09-01/tekserp_20260901_020000.dump
+├── aylik/2026-09/tekserp_20260901_020000.dump
+├── INDEX.tsv    dosya · boyut · sha256 · geliş anı · gün · arşiv yolu
+└── DURUM.txt    son yedek · kapsanan gün · eksik gün · bütünlük · arşiv boyutu
 ```
 
-Yeni fabrika eklemek: yeni kullanıcı + klasör + anahtar. Güncelleme sunucusunda
-zaten kullanılan `/<müşteri>/<ürün>/` düzeninin aynısı.
+Yeni fabrika = aynı iki ağaca bir dizin + bir kullanıcı + bir anahtar.
+Arşivleme script'i `/srv/tekserp-yedek/*/` üzerinde döner, **elle liste tutmaz**.
 
 ---
 
-## KURULUM
-
-> **Ne prova edildi, ne edilmedi (dürüst ayrım):**
-> - ✅ **`rclone.conf` biçimi ve şifreleme davranışı GERÇEK `rclone` ile ölçüldü**
->   (v1.74.3, 2026-08-31). Aşağıdaki B4 bloğu olduğu gibi kabul edildi; içerik
->   şifreli çıktı, düz PIN/kart kodu/müşteri adı dosyada BULUNAMADI; yanlış
->   parolayla açma denemesi "bad password" ile reddedildi (kontrolün körlük
->   zemini). Doğru parolayla içerik birebir geri okundu.
-> - ⚠️ **VPS ve Windows adımları prova EDİLMEDİ** (bu makinede VPS erişimi ve
->   Windows yok). Adım adım birlikte koşacağız; her adımın sonunda bir DOĞRULAMA
->   var — o geçmeden ilerlemeyin.
->
-> ⚠️ **ÖLÇÜLDÜ: `rclone` şifreli dosyaya `.bin` soneki ekler.** Sunucuda dosya
-> `tekserp_2026-08-31_0200.dump**.bin**` olarak görünür — ad hâlâ okunur ("kim,
-> ne zaman" bilgisi durur), yalnız uzantı değişir. Geri yüklerken `rclone` bunu
-> kendisi çözer; `.bin`i elle silmeyin.
-
-### A) VPS tarafı — bir kez (`sudo`)
-
-> **HEDEF SUNUCU (2026-08-31'de ölçüldü):** `mail.fztmehmetilhan.com`
-> (91.217.119.138, SSH portu **2222**, kullanıcı `oguzhan`, parolasız `sudo` var).
-> Ubuntu 22.04.5 · kökte 41 GB boş · `tekserp-guncelleme` ve `tekserp-demo`
-> konteynerleri burada.
->
-> ⚠️ **PAYLAŞIMLI MAKİNE:** aynı sunucuda başka müşterilerin WordPress siteleri,
-> `postgres`, `mariadb`, `redis` ve `traefik` koşuyor. Bu, şifrelemeyi
-> "iyi olur"dan "şart"a çıkarır: o sitelerden biri ele geçse bile yedek dosyası
-> anlamsız bir blok olarak kalır.
-
-#### Ölçülmüş üç tuzak (hepsi sessiz arıza üretirdi)
-
-| Tuzak | Neden sessiz | Ölçüm |
-|---|---|---|
-| **`AllowUsers oguzhan`** | Sunucuda YALNIZ bu kullanıcı giriş yapabiliyor. Yeni yedek kullanıcısı açılsa bile kapıdan dönerdi; kurulum "bitti" görünürdü. | `00-hardening.conf` okundu |
-| **`Match Group` doğrulanamaz** | Kullanıcı henüz yokken grup da yok → `sshd -T` bloğun ateşlemediğini gösterdi. Kurulum sonrası "acaba çalışıyor mu" belirsiz kalırdı. | `sshd -T -C user=…` |
-| **`sshd -t` yeterli sanmak** | Sözdizimi kontrolü ETKİN AYARI göstermez. İki farklı yapılandırmayı da "geçerli" dedi. | aşağıdaki A5 |
-
-⚠️ **İki tahminim ÖLÇÜMLE ÇÜRÜDÜ, kayda geçiyorum:** ① `Subsystem sftp` satırının
-`Match` bloğunun içine düşüp sshd'yi kıracağını sandım — kırmadı; ② naif `Match`
-bloğunun genel ayarları bozacağını sandım — `sshd -T` çıktısı canlıyla birebir
-aynı çıktı. Yine de `Match all` ile kapatıyoruz: maliyeti sıfır, ileride
-`Include` sırası değişirse koruma yerinde kalır.
+## A) Sunucu tarafı — KURULDU
 
 ```bash
-# A1. Dizinler. ⚠️ chroot kökü root'a ait ve başkasınca YAZILAMAZ olmak ZORUNDA.
-sudo mkdir -p /srv/tekserp-yedek /srv/tekserp-arsiv
-sudo chown root:root /srv/tekserp-yedek /srv/tekserp-arsiv
-sudo chmod 755 /srv/tekserp-yedek
-sudo chmod 700 /srv/tekserp-arsiv          # arşiv YALNIZ root
+# A1. Dizinler. ⚠️ chroot kökü root'a ait ve başkasınca YAZILAMAZ olmak ZORUNDA
+#     (aksi halde sshd "bad ownership or modes" ile reddeder).
+mkdir -p /srv/tekserp-yedek/adnansahin/gelen
+chown root:root /srv/tekserp-yedek /srv/tekserp-yedek/adnansahin
+chmod 755       /srv/tekserp-yedek /srv/tekserp-yedek/adnansahin
+mkdir -p /srv/tekserp-arsiv/adnansahin/{gunluk,aylik}
+chown -R root:root /srv/tekserp-arsiv && chmod -R 750 /srv/tekserp-arsiv
 
-# A2. Fabrika kullanıcısı (kabuk YOK, ev dizini chroot kökü)
-sudo groupadd -f yedek
-sudo useradd -r -g yedek -s /usr/sbin/nologin -M \
-     -d /srv/tekserp-yedek/yedek-adnansahin yedek-adnansahin
-sudo mkdir -p /srv/tekserp-yedek/yedek-adnansahin/gelen
-sudo chown root:root          /srv/tekserp-yedek/yedek-adnansahin
-sudo chmod 755                /srv/tekserp-yedek/yedek-adnansahin
-sudo chown yedek-adnansahin:yedek /srv/tekserp-yedek/yedek-adnansahin/gelen
-sudo chmod 700                /srv/tekserp-yedek/yedek-adnansahin/gelen
+# A2. Fabrika kullanıcısı — kabuk YOK
+useradd --system --no-create-home \
+  --home-dir /srv/tekserp-yedek/adnansahin --shell /usr/sbin/nologin fab-adnansahin
+chown fab-adnansahin:fab-adnansahin /srv/tekserp-yedek/adnansahin/gelen
 
-# A3. Anahtarlar chroot'un DIŞINDA (fabrika kendi anahtarını değiştiremesin)
-sudo mkdir -p /etc/ssh/yedek-anahtarlari && sudo chmod 755 /etc/ssh/yedek-anahtarlari
+# A3. Anahtar chroot'un DIŞINDA — fabrika kendi anahtarını değiştiremesin
+mkdir -p /etc/ssh/yedek-anahtarlari
+# <açık anahtar> → /etc/ssh/yedek-anahtarlari/fab-adnansahin  (root:root 644)
+
+# A4a. ⚠️ ÖNCE giriş listesi — TEK SATIR. İkinci bir AllowUsers satırı yazma:
+#      ilk satır kazanır, yenisi sessizce yok sayılır ve fabrika giremez.
+#      00-hardening.conf → AllowUsers oguzhan yayinci fab-adnansahin
 ```
 
-```bash
-# A4a. ⚠️ ÖNCE giriş listesini genişlet — TEK SATIR hâlinde (iki ayrı AllowUsers
-#      satırı yazma; ilk satır kazanır ve yenisi sessizce yok sayılabilir).
-sudo cp /etc/ssh/sshd_config.d/00-hardening.conf /etc/ssh/sshd_config.d/00-hardening.conf.yedek
-sudo sed -i 's|^AllowUsers oguzhan$|AllowUsers oguzhan yedek-*|' /etc/ssh/sshd_config.d/00-hardening.conf
+`/etc/ssh/sshd_config.d/90-tekserp-yedek.conf`:
 
-# A4b. Yedek kullanıcısının kuralı. `Match User` (Group DEĞİL) — kullanıcı
-#      yokken bile doğrulanabilir; `Match all` bloğu kapatır.
-sudo tee /etc/ssh/sshd_config.d/90-tekserp-yedek.conf >/dev/null <<'EOF'
-Match User yedek-*
-  ChrootDirectory /srv/tekserp-yedek/%u
-  ForceCommand internal-sftp
-  AllowTcpForwarding no
-  PermitTTY no
-  AuthorizedKeysFile /etc/ssh/yedek-anahtarlari/%u
+```
+Match User fab-adnansahin
+    ChrootDirectory /srv/tekserp-yedek/adnansahin
+    ForceCommand internal-sftp
+    AllowTcpForwarding no
+    X11Forwarding no
+    PasswordAuthentication no
+    PubkeyAuthentication yes
+    AuthorizedKeysFile /etc/ssh/yedek-anahtarlari/%u
 Match all
-EOF
 ```
+
+⚠️ `Match User` (Group DEĞİL): kullanıcı yokken de doğrulanabilir ve
+`sshd -T -C user=…` ile **ölçülebilir**. `Match all` bloğu KAPATIR — yoksa
+ayarlar sonraki dosyalara sızar.
+
+### ⚠️ A5 — ASIL KAPI: `sshd -t` YETMEZ
+
+`sshd -t` yalnız sözdizimine bakar. Kuralın **kime** uygulandığını ve bizi
+bozmadığını ancak etkin ayar söyler:
 
 ```bash
-# A5. ⚠️ ASIL KAPI — `sshd -t` YETMEZ, ETKİN AYARI karşılaştır.
-sudo sshd -t && echo "sözdizimi OK"
-echo "--- yedek kullanıcısı: hapis + zorunlu sftp GÖRÜNMELİ ---"
-sudo sshd -T -C user=yedek-adnansahin,host=t,addr=1.2.3.4 \
-  | grep -E '^(chrootdirectory|forcecommand|permittty|authorizedkeysfile)'
-echo "--- normal kullanıcı: hepsi none/yes KALMALI ---"
-sudo sshd -T -C user=oguzhan,host=t,addr=1.2.3.4 \
-  | grep -E '^(chrootdirectory|forcecommand|permittty|subsystem)'
+sshd -t
+sshd -T -C user=fab-adnansahin | grep -iE 'chroot|forcecommand|authorizedkeys'
+sshd -T -C user=oguzhan        | grep -iE 'chroot|forcecommand'   # none olmalı
 ```
 
-**DOĞRULAMA A (geçmeden ilerleme):** yedek kullanıcısında
-`chrootdirectory /srv/tekserp-yedek/%u` + `forcecommand internal-sftp`,
-normal kullanıcıda `chrootdirectory none` + `forcecommand none`.
-Beklenen çıkmazsa: `sudo cp …00-hardening.conf.yedek …00-hardening.conf`,
-`sudo rm …90-tekserp-yedek.conf` — **reload ETME**.
+**Ölçüldü:** fabrika kullanıcısı chroot + `internal-sftp` alıyor; `oguzhan`
+`chrootdirectory none` / `forcecommand none` — `Match all` doğru kapatmış.
 
-```bash
-# A6. Ancak DOĞRULAMA A geçtiyse:
-sudo systemctl reload ssh
-# ⚠️ Bu terminali KAPATMA. Yeni bir pencerede `ssh yenisunucu` ile giriş
-# yapabildiğini teyit et; edemiyorsan açık terminalden geri al.
-```
+> ⚠️ Reload'dan sonra **mevcut terminali KAPATMA**; yeni pencerede
+> `ssh tekserp-vds` ile girebildiğini teyit et. Giremiyorsan açık terminalden
+> `/root/00-hardening.conf.yedek-*` dosyasını geri koy ve reload et.
 
-### B) Fabrika sunucusu — bir kez
+---
+
+## B) Fabrika sunucusu — YAPILACAK (tek kalan adım)
+
+Kurulum paketi: **`~/Documents/TeksERP-VDS-Kurulum/fabrika-adnansahin/`**
+(depo DIŞINDA — özel anahtar git'e girmez).
 
 ```powershell
-# B1. rclone (yoksa): https://rclone.org/downloads/ → Windows AMD64
+# B1. rclone — https://rclone.org/downloads/ → Windows AMD64
 #     rclone.exe → C:\Etkili-Yazilim\rclone\rclone.exe
 
-# B2. Bu fabrikaya ait anahtar (parolasız — servis kendi kendine koşar)
-ssh-keygen -t ed25519 -N "" -C "tekserp-yedek-adnansahin" `
-  -f C:\Etkili-Yazilim\backups\vps_yedek_key
-type C:\Etkili-Yazilim\backups\vps_yedek_key.pub    # ← çıktıyı bana/VPS'e verin
+# B2. Paketi kopyala → C:\Etkili-Yazilim\rclone\
+#     adnansahin_yedek · vps_known_hosts · rclone.conf
+
+# B3. Bağlantı sınaması
+C:\Etkili-Yazilim\rclone\rclone.exe --config C:\Etkili-Yazilim\rclone\rclone.conf lsd vps-sftp:
+
+# B4. Backend .env
+#     BACKUP_RCLONE_BIN=C:\Etkili-Yazilim\rclone\rclone.exe
+#     BACKUP_RCLONE_CONFIG=C:\Etkili-Yazilim\rclone\rclone.conf
+
+# B5. Hedefi PANELDEN ayarla: Sistem → Yedekler → Makine Dışı Yedek → "yedek:"
 ```
 
-**A3'e dönüş (VPS, root):** yukarıdaki `.pub` içeriğini tek satır olarak
-`/etc/ssh/yedek-anahtarlari/yedek-adnansahin` dosyasına yazın, `chmod 644`.
+⚠️ `--config` **açıkça** verilmek zorunda. Verilmezse rclone, pm2'nin koştuğu
+Windows hesabının profilini (`%APPDATA%\rclone\rclone.conf`) okur ve
+yapılandırmayı bulamaz — sessiz başarısızlık.
 
-```powershell
-# B3. Şifreleme parolası — birlikte üretilir, parola yöneticisine + kasaya yazılır.
-#     rclone parolayı düz saklamaz; "obscure" edilmiş hâlini ister:
-C:\Etkili-Yazilim\rclone\rclone.exe obscure "<parola>"
+**Fabrika tarafında yeni kod YAZILMAZ.** Süpürücü, motor, uçlar ve panel kartı
+2026-08-10 denetiminde yazıldı ve duruyor:
+`src/jobs/offsite-sweeper.ts` · `src/services/helpers/offsite-backup.helper.ts` ·
+`src/routes/admin.routes.ts` (`/backups/offsite`, `/test`, `/sweep`) ·
+`Electron/src/pages/System/Backups/OffsiteBackupCard.tsx`
+
+---
+
+## C) Sunucu tarafı — arşivleme, doğrulama, budama
+
+`/usr/local/sbin/tekserp-yedek-arsivle`, `/etc/cron.d/tekserp-yedek` ile
+**15 dakikada bir**:
+
+1. `gelen/`deki yeni `*.dump` dosyalarını bulur (INDEX'te olanı atlar)
+2. Hâlâ yükleniyor olabileceği için boyutu **20 sn arayla iki kez ölçer**
+3. sha256 hesaplar, `gunluk/<gün>/` altına **kopyalar**
+4. Ayın ilk yedeğini ayrıca `aylik/<ay>/` altına kopyalar
+5. `INDEX.tsv`e satır ekler
+6. Budar: günlük >30 gün · aylık >12 ay · `gelen/` >35 gün
+7. Arşivin tamamını sha256 ile **yeniden doğrular**, `DURUM.txt` yazar
+
+### ⚠️ Bütünlük ≠ Geçerlilik
+
+Sunucu şifreli blobu **açamaz** (anahtar burada yok, bilinçli). Buradaki kontrol
+baytın bozulmadığını söyler, dump'ın **açılabildiğini** söylemez — o fabrikada
+`verifyBackupFile` (`pg_restore --list`) ile ölçülür. Ayrım `DURUM.txt`in
+altında yazılıdır; yanlış güven üretmemek için oradan silinmemeli.
+
+---
+
+## D) Provası — kurulum bitmiş sayılmaz
+
+**Denenmemiş yedek, yedek değildir.** Sunucudan bir yedek indirilir, şifresi
+çözülür ve **kopya veritabanına** yüklenir (`db-copy.service.ts` — canlı DB'ye
+asla dokunulmaz). Reçete:
+[`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md)
+
+```bash
+rclone --config <conf> copy yedek:tekserp_YYYYMMDD_HHMMSS.dump ./
 ```
 
-```ini
-; B4. C:\Etkili-Yazilim\backups\rclone.conf
-[vps]
-type = sftp
-host = <VPS-IP>
-user = yedek-adnansahin
-key_file = C:\Etkili-Yazilim\backups\vps_yedek_key
-; ⚠️ Kabuk YOK (internal-sftp): rclone kabuk komutu denemesin.
-shell_type = none
-md5sum_command = none
-sha1sum_command = none
+---
 
-[yedek]
-type = crypt
-remote = vps:gelen
-; ⚠️ Dosya adları AÇIK kalsın — "kim, ne zaman" sunucuda okunabilsin.
-filename_encryption = off
-directory_name_encryption = false
-password = <B3'ün ÇIKTISI>
+## Negatif sondalar — koruma gerçekten kırmızı verebiliyor mu
+
+Kırmızı verebildiği kanıtlanmamış bir bekçi, bekçi değil süstür.
+**2026-09-01'de üçü de koşuldu ve geçti:**
+
+| Sonda | Yapılan | Sonuç |
+|---|---|---|
+| **A — silme** | Fabrika kullanıcısı `gelen/`den dosyayı SFTP ile sildi | Arşiv kopyası **sağ kaldı** (3.000.000 bayt) — fidye yazılımı senaryosunun karşılığı |
+| **B — bozulma** | Arşivdeki dosyanın 100. baytı değiştirildi | `DURUM.txt`: **"1 dosya kontrol edildi, 1 BOZUK"** |
+| **C — yanlış parola** | crypt yanlış parolayla okundu | `failed to authenticate decrypted block` |
+
+Script'i değiştirirsen **üçünü de tekrarla**.
+
+---
+
+## Geri dönüş
+
+```bash
+rm /etc/ssh/sshd_config.d/90-tekserp-yedek.conf
+cp /root/00-hardening.conf.yedek-* /etc/ssh/sshd_config.d/00-hardening.conf
+sshd -t && systemctl reload ssh
+rm /etc/cron.d/tekserp-yedek
 ```
 
-```javascript
-// B5. ecosystem.config.js (sunucununki) → env
-BACKUP_RCLONE_CONFIG: "C:/Etkili-Yazilim/backups/rclone.conf",
-BACKUP_RCLONE_BIN:    "C:/Etkili-Yazilim/rclone/rclone.exe",
-BACKUP_RCLONE_REMOTE: "yedek:",
-// pm2 restart gerekir. ⚠️ kur.ps1 bu dosyayı KORUYOR (2026-08-29) ama pakette
-// YENİ bir anahtar gelirse elle eklenir — deploy sonrası kontrol listesine bakın.
-```
-
-**DOĞRULAMA B:** Panel → Sistem → Yedekler → *Makine dışı kopya* →
-**"Bağlantıyı test et"** yeşil olmalı. Sonra **"Şimdi kopyala"** → VPS'te
-`/srv/tekserp-yedek/yedek-adnansahin/gelen/` dolmalı.
-
-### C) VPS tarafı — arşivleme ve saklama (root cron)
-
-`/usr/local/bin/tekserp-yedek-arsivle.sh` her gece koşar:
-`gelen/` içeriğini `/srv/tekserp-arsiv/<müşteri>/<yıl>/<ay>/` altına **sabit
-bağla** kopyalar, `INDEX.tsv`ye satır ekler, `DURUM.txt`yi tazeler, `gelen/`i
-N günden eskiler için budar (arşiv kopyası yaşamaya devam eder).
-
-### D) Provası — kurulum bitmiş sayılmaz
-
-VPS'ten bir dosya indirilip **şifresi açılarak** geri yüklenmeli:
-`rclone copy yedek:<dosya> .` → `pg_restore` → doğrulama.
-Aksi hâlde "yedek var" ile "yedekten dönülüyor" ayrı iddialar olarak kalır
-(bkz. [`YEDEK-GERI-YUKLEME-TATBIKATI.md`](YEDEK-GERI-YUKLEME-TATBIKATI.md)).
+Arşiv silinmez — geri dönüş yalnız erişimi kapatır, veriyi değil.
