@@ -153,12 +153,12 @@ uyarının aynısına düşer.
 | T3-017 | ✅ KAPANDI (`81b7b41b`) | repro `S-4-02` 6/6; önizleme dürüst + `reopen-remainder` ucu |
 | T3-019 | ✅ KAPANDI (`b1f...`) | onay gelmeden yeşil basılmıyor; ⚠️ çevrimdışı yeşil KORUNDU (esneklik) |
 | T1-022 | ✅ YAZILDI (`0cc47462`) | RPO ≤ 24 sa · RTO Faz A + dakikalar · PITR yok · offsite mekanizma var, ayar boş |
-| T1-014 | 🔸 AÇIK — **KARAR İSTER** | `login-lockout.ts` kilidi `new Map()` (bellek içi). PIN politikası iş kararı: PIN+kart mı, kaç deneme, kilidi kim açar |
+| T1-014 | ⏸️ **KULLANICI KARARI: ŞİMDİLİK DOKUNMA** (2026-08-31) | `login-lockout.ts` kilidi bellek içi ve gelen bilgisayara göre; fabrika kapalı ağda, risk kabul edildi. Yeniden açılırsa en düşük sürtünmeli seçenek: kilidi kişi bazına taşımak (dürüst kullanıcı için hiçbir değişiklik yok) |
 | T1-018 | ✅ KAPANDI (`7eead1af`) | kendi fixture'ı + ortam kapısı; makbuz sayısı 137→137 (artık bırakmıyor) |
 | T2-010 | ✅ KAPANDI (görünürlük) | pasife alma canlı bağımlılığı mesajda+audit'te söylüyor. ⚠️ ENGELLEMİYOR — denetimin 409+force önerisi panel güncellenene kadar sahada bir yeteneği kapatırdı |
 | T3-006 | 🔸 AÇIK | yazıcı arıza sinyali kodda yok |
 | T1-023 | 🔸 KULLANICI İŞİ | tatbikat reçetesi yazıldı; tatbikatın kendisi sahada koşulmalı |
-| T2-001 | 🔶 KISMEN (`1e5d6ce5`) | mutabakat §1d kaybı görünür kılıyor (saha: 23 sevkiyat / 7.200,6 m) + sevk anında `tahsissizMetraj` izi. Sevkiyat detayındaki sütun ve 7 kalemin ONARIMI iş kararı |
+| T2-001 | 🔶 KISMEN + ⏸️ **KULLANICI KARARI: GEÇMİŞE DOKUNMA** (2026-08-31) | mutabakat §1d kaybı görünür kılıyor (saha: 23 sevkiyat / 7.200,6 m) + sevk anında `tahsissizMetraj` izi. Geçmiş olduğu gibi kalıyor; §1d her koşumda 23 sevkiyatı listeleyecek. ⚠️ 7 kalem "hiç sevk edilmemiş" görünmeye devam eder |
 
 ## TARANMADI (~18)
 
