@@ -149,6 +149,39 @@ WHERE sh.status = 'DISPATCHED'
   )`,
   },
   {
+    id: "1d",
+    title: "Deftere girmeyen metraj: çıkan mal > siparişe yazılan",
+    // BULGU-T2-001 — §1c'nin bir adım ötesi. §1c "hiç tahsis yok" hâlini
+    // yakalar; bu bölüm KISMİ yazılanı da yakalar. Kök sebep tipik olarak
+    // `specMatch`: kaleme 55-BEYAZ istenmiş, çuvala aynı kumaşın EKRU'su
+    // okutulmuş → tahsis yazılmıyor, sipariş "Açık" kalıyor ve planlamacı aynı
+    // metrajı YENİDEN üretime veriyor.
+    //
+    // ÖLÇÜM (saha kopyası, 2026-08-31): 23 sevkiyat / 7.200,6 m; dev'de 0.
+    //
+    // ⚠️ Bu satırlar "veri bozuk" DEMEK DEĞİL: mal çıktı, irsaliye basıldı,
+    // muhasebe brüt raporu onu görüyor. Görünmeyen tek şey SİPARİŞ DEFTERİ.
+    // Onarım İŞ KARARIDIR (hangi kaleme yazılacağı) — kapı görünür tutar.
+    // ⚠️ Siparişsiz sevk kapsam DIŞI (§1c ile aynı gerekçe).
+    sql: `SELECT sh."shipmentNo",
+       sh."dispatchedAt"::date AS sevk_tarihi,
+       round(x.icerik::numeric, 1)                     AS cikan_metraj,
+       round(x.tahsis::numeric, 1)                     AS siparise_yazilan,
+       round((x.icerik - x.tahsis)::numeric, 1)        AS deftere_girmeyen
+FROM shipments sh
+JOIN LATERAL (
+  SELECT
+    COALESCE((SELECT sum(r."currentQty") FROM rolls r JOIN sacks s2 ON s2.id = r."sackId"
+               WHERE s2."shipmentId" = sh.id), 0) AS icerik,
+    COALESCE((SELECT sum(sa.qty) FROM sack_allocations sa JOIN sacks s3 ON s3.id = sa."sackId"
+               WHERE s3."shipmentId" = sh.id), 0) AS tahsis
+) x ON TRUE
+WHERE sh.status = 'DISPATCHED'
+  AND EXISTS (SELECT 1 FROM shipment_orders so WHERE so."shipmentId" = sh.id)
+  AND x.icerik - x.tahsis > 0.001
+ORDER BY (x.icerik - x.tahsis) DESC`,
+  },
+  {
     id: "2",
     title: "Order.shippedQty vs Σ(OrderLine.shippedQty)",
     sql: `
