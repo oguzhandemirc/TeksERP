@@ -16,6 +16,40 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-02",
+      "baslik": "Dışarıdan takip — patron ekranı ve iki adımlı doğrulama",
+      "surumler": {
+        "panel": "1.1.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Fabrika dışından bağlanıp stok, açık siparişler, üretim akışı, sevkiyat ve fasondaki mal özetini gösteren yeni bir ekran eklendi. Yetkisi olan kişi telefonundan ya da evinden girebiliyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Kullanıcı ayarlarına “İki Adımlı” sekmesi geldi. Dışarıdan bağlanacak kişiler için telefonla doğrulama kuruluyor; kurulum bağlantısını yönetici üretip kişiye iletiyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yetki paketlerine “Patron (Uzaktan Takip)” eklendi. Bu paket izleme ile sipariş, iş emri ve müşteri kaydı açma yetkisi verir; stok düzeltme, fatura işareti ve sevk geri alma işlemlerini kapsamaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Aynı hesapla hem bilgisayardan hem telefon tarayıcısından girildiğinde iki oturum artık birbirini kapatmıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Fabrika içindeki çalışma değişmedi: panel ve tabletler eskisi gibi açılıyor, hızlı PIN ve kart ile giriş aynen çalışıyor."
+        }
+      ]
+    },
+    {
       "id": "2026-08-28",
       "baslik": "İlk sürüm — kendi kendine güncellenen program",
       "surumler": {

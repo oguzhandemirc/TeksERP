@@ -20,6 +20,25 @@ import musteri from "./musteri.json";
 export const MUSTERI_KODU = musteri.kod;
 export const MUSTERI_ADI = musteri.ad;
 
+/**
+ * BU FABRİKANIN DIŞ (İNTERNET) ADRESİ — uzaktan erişim tüneline bakan adres.
+ *
+ * ⚠️ GÜNCELLEME ADRESİNDEN TÜRETİLMEZ ve türetilmemeli. İkisi AYRI KANALDIR:
+ * güncelleme paketi yayın sunucusundan gelir (`guncelleme.etkiliyazilim.com`),
+ * ERP ise fabrikanın kendi tünelinden. Aynı `musteri.kod`u paylaşmaları bir
+ * tesadüftür, bağımlılık değil — birini diğerinden üretmek, bir gün biri
+ * değiştiğinde diğerini sessizce yanlışlar. (Aynı ders mobilde ölçüldü:
+ * API kanalı ile güncelleme kanalı bilerek ayrı tutuluyor.)
+ *
+ * NEREDE KULLANILIR: iki adımlı doğrulama kurulum bağlantısı. Yönetici o
+ * bağlantıyı FABRİKA İÇİNDEN üretiyor; adres buradan gelmezse bağlantı
+ * `http://192.168.1.250:4000/...` olur ve kullanıcının telefonunda AÇILMAZ.
+ *
+ * Boş bırakılırsa (uzaktan erişim kullanmayan kurulum) bağlantı mevcut
+ * adresten üretilir — LAN'da kurulum yapan kurulumlar için doğru davranış.
+ */
+export const ERP_DIS_ADRESI: string = (musteri as { erpAdresi?: string }).erpAdresi ?? "";
+
 /** Tüm müşterilerin ortak yayın kökü. */
 export const UPDATE_BASE_URL = "https://guncelleme.etkiliyazilim.com/";
 

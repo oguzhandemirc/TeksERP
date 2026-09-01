@@ -18,6 +18,7 @@
  *   5175 → 4000 çapraz istek çalışır.
  */
 import { fileURLToPath, URL } from "node:url";
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -35,6 +36,17 @@ export default defineConfig(({ command }) => ({
       ? {
           "import.meta.env.VITE_API_BASE_URL": JSON.stringify(
             process.env.VITE_WEB_API_BASE_URL ?? "",
+          ),
+          // Fabrikanın DIŞ adresi — iki adımlı doğrulama kurulum bağlantısı
+          // bununla üretilir. `shared/musteri.json` TEK KAYNAK; komut satırından
+          // yazdırmak, bir yazım hatasının sessizce çalışmayan bir bağlantı
+          // üretmesi demekti (yönetici bağlantıyı gönderir, kullanıcıda açılmaz).
+          "import.meta.env.VITE_PUBLIC_APP_URL": JSON.stringify(
+            process.env.VITE_PUBLIC_APP_URL ??
+              (JSON.parse(
+                readFileSync(new URL("./shared/musteri.json", import.meta.url), "utf-8"),
+              ) as { erpAdresi?: string }).erpAdresi ??
+              "",
           ),
         }
       : undefined,

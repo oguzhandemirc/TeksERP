@@ -10,6 +10,7 @@ import {
   TOTP_REQUIRED_CODE,
 } from "@/lib/totp-auth";
 import { buildTotpEnrollUrl, TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
+import { ERP_DIS_ADRESI, MUSTERI_KODU } from "@shared/update-feed";
 
 /**
  * İKİ ADIMLI DOĞRULAMA — istemci tarafı sözleşmesi.
@@ -150,5 +151,42 @@ describe("2FA kurulum bağlantısı", () => {
     expect(routerSrc).toContain("TOTP_ENROLL_PATH");
     expect(appSrc).toContain("TOTP_ENROLL_PATH");
     expect(routerSrc).not.toMatch(/path:\s*"\/2fa-kurulum"/);
+  });
+});
+
+describe("fabrikanın dış adresi — tek kaynak", () => {
+  it("musteri.json'da tanımlı ve https", () => {
+    expect(ERP_DIS_ADRESI).toMatch(/^https:\/\/[a-z0-9.-]+$/);
+  });
+
+  it("⚠️ GÜNCELLEME ADRESİNDEN TÜRETİLMEZ", () => {
+    // İkisi ayrı kanal: güncelleme yayın sunucusundan, ERP fabrikanın kendi
+    // tünelinden gelir. Aynı müşteri kodunu paylaşmaları tesadüf; birini
+    // diğerinden üretmek, biri değiştiğinde ötekini sessizce yanlışlar.
+    const cfg = readFileSync(resolve(process.cwd(), "shared/update-feed.ts"), "utf-8");
+    expect(cfg).toContain("musteri as { erpAdresi?: string }");
+    // Adres güncelleme kökünden ŞABLONLA kurulmuş olmamalı.
+    expect(cfg).not.toMatch(/ERP_DIS_ADRESI[^\n]*UPDATE_BASE_URL/);
+  });
+
+  it("build bu adresi pakete gömüyor", () => {
+    const vite = readFileSync(resolve(process.cwd(), "vite.config.web.ts"), "utf-8");
+    expect(vite).toContain("VITE_PUBLIC_APP_URL");
+    expect(vite).toContain("musteri.json");
+  });
+
+  it("kurulum bağlantısı bu adresle üretilince telefonda açılabilir olur", () => {
+    const url = buildTotpEnrollUrl("abc", ERP_DIS_ADRESI);
+    expect(url.startsWith("https://")).toBe(true);
+    // ⚠️ Asıl arıza buydu: LAN adresiyle üretilen bağlantı kullanıcının
+    // telefonunda AÇILMAZ ve hata da vermez, sadece boş sayfa gelir.
+    expect(url).not.toMatch(/localhost|127\.0\.0\.1|192\.168\./);
+    expect(url).toContain(`#${TOTP_ENROLL_PATH}?token=abc`);
+  });
+
+  it("müşteri kodu ile adres tutarlı (yanlış müşteriye paket çıkmasın)", () => {
+    // Paketleme betiği müşteri kodunu argümanla doğruluyor; adres de aynı
+    // dosyada durduğu için yanlış müşterinin paketine doğru adres giremez.
+    expect(ERP_DIS_ADRESI).toContain(MUSTERI_KODU);
   });
 });
