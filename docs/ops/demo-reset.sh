@@ -91,7 +91,12 @@ for arg in "$@"; do
 done
 
 # --- SABİTLER — değişkenleştirilmez (yukarıdaki 1. madde) ---------------------
-HOST=yenisunucu
+# ⚠️ TAKMA AD ZORUNLU DEĞİL (2026-09-01) — `deploy-demo.sh` ile aynı gerekçe:
+# `~/.ssh/config`teki `yenisunucu` girdisi her makinede bulunmayabilir.
+HOST=${DEMO_HOST:-yenisunucu}
+SSH_OPTS=${DEMO_SSH_OPTS:-}
+[ -n "$SSH_OPTS" ] && export RSYNC_RSH="ssh $SSH_OPTS"
+ssh() { command ssh ${=SSH_OPTS} "$@"; }
 APPDIR=/opt/stack/apps/tekserp-demo
 DB=tekserp_demo          # ⚠️ SABİT. Parametreyle değiştirilemez.
 DB_OWNER=tekserp
