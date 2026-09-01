@@ -135,8 +135,17 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 
 ## Açık iş
 
-- [ ] Cloudflare Origin CA sertifikası → `/opt/stack/traefik/certs/` (şu an **geçici kendinden imzalı**)
-- [ ] DNS: `guncelleme` A kaydı → `80.253.255.188`, proxy açık
-- [ ] Fabrika sunucusuna rclone kurulumu (`YEDEK-VPS-KURULUM.md` §B)
+- [x] ~~Cloudflare Origin CA sertifikası~~ — **kuruldu 2026-09-01**, geçerlilik **2041-08-28**
+      (`/opt/stack/traefik/certs/`, cert 644 · key 600, ikisi de root'a ait).
+      Kurulumdan önce çift eşleşmesi hem yerelde hem sunucuda doğrulandı —
+      eşleşmeyen bir çift TLS'i tamamen düşürür.
+- [x] ~~DNS: `guncelleme` A kaydı → `80.253.255.188`~~ — **çevrildi ve doğrulandı**
+      (işaretli istek yeni sunucunun erişim kaydında görüldü)
+- [ ] **Cloudflare SSL kipi → "Full (strict)"** — şu an "Full": CF↔origin bacağı
+      şifreli ama kimliği doğrulanmıyor. Gerçek Origin CA sertifikası artık
+      yerinde olduğu için sıkılaştırılabilir.
+- [ ] Fabrika sunucusuna rclone kurulumu (`YEDEK-VPS-KURULUM.md` §B) — sunucuya
+      henüz tek yedek gelmedi
 - [ ] Geri yükleme provası
+- [ ] Eski sunucudaki yayın kopyasını kapat (~2026-09-08, bir haftalık geri dönüş)
 - [ ] **Kod imzalama** — taşıma ihtimali düşürür, imza sonucu ortadan kaldırır

@@ -16,10 +16,13 @@
 > | Yayın dosyaları (356 MB) kopyalandı | ✅ **bayt bayt doğrulandı** |
 > | DNS öncesi içerik doğrulaması (`Host` başlığı) | ✅ eski sunucuyla birebir |
 > | Yedek mimarisi (SFTP hapsi · şifreleme · arşiv) | ✅ **bitti, negatif sondalı** |
-> | Cloudflare Origin CA sertifikası | ⏳ **kullanıcıda** (şu an geçici kendinden imzalı) |
-> | DNS çevirme | ⏳ **kullanıcıda** |
+> | Cloudflare Origin CA sertifikası | ✅ kuruldu — geçerlilik **2041-08-28** |
+> | DNS çevirme | ✅ **çevrildi ve kanıtlandı** (iz, yeni sunucunun erişim kaydında) |
+> | Yayın script'lerinin hedefi | ✅ `tekserp-yayin`e çevrildi (eskisi eski sunucuya yüklüyordu) |
+> | Cloudflare SSL kipi → Full (strict) | ⏳ **kullanıcıda** |
 > | Fabrikaya rclone kurulumu | ⏳ |
 > | Geri yükleme provası | ⏳ |
+> | Eski sunucudaki kopyayı kapat | ⏳ ~2026-09-08 |
 
 ## Neden
 
