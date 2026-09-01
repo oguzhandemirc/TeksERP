@@ -485,7 +485,26 @@ async function main(): Promise<void> {
     }
 
     // =========================================================================
-    // B-devam) Gövdeye sızdırılan `targetStepId` YOK SAYILIR (bu uç kart tanımaz)
+    // B-devam) Gövdeye sızdırılan `targetStepId` artık 400 — SESSİZCE ATILMAZ
+    //
+    // ⚠️ BU KURAL 2026-09-01'DE BİLİNÇLİ OLARAK TERSİNE ÇEVRİLDİ. Eskiden aynı
+    // çağrı 201 dönüyordu ve bu dosya onu "Zod tarafından atıldı" diye ölçüyordu.
+    // Ters çevirmenin gerekçesi (geri almadan önce ÇÜRÜT):
+    //
+    //   • Kontrolördeki karar "`targetStepId` YOKTUR ve olmayacaktır" —
+    //     yani alanın ÖZELLİK olarak eklenmemesi. Sessiz atma o kararın parçası
+    //     DEĞİL, `z.object`in varsayılan davranışıydı; bu bölüm onu yalnız
+    //     KAYDEDİYORDU.
+    //   • İki uç kardeş ve gövdeleri karışmaya açık — mobil servis dosyası bunu
+    //     kendi içinde uyarıyor ("`TamburManualRollRequest` ile KARIŞTIRMA:
+    //     orada `targetStepId` ZORUNLUDUR").
+    //   • Sessiz atmanın bedeli ölçüldü (canlı demo): adım göndererek üretim
+    //     yapıldığında uç 201 döner, operatör "üretildi ✓" görür, ama top iş
+    //     emrine HİÇ bağlanmaz → iş emrinin çıkan metrajı ve sipariş
+    //     karşılanması sessizce eksik kalır. 400 aynı hatayı GELİŞTİRME anında
+    //     görünür kılar.
+    //   • Sahadaki istemciler kırılmaz: mobil yükü şemanın alt kümesi,
+    //     Electron bu ucu hiç çağırmıyor (ikisi de ölçüldü).
     // =========================================================================
     const strayStep = await produce(
       {
@@ -498,8 +517,8 @@ async function main(): Promise<void> {
       fieldToken,
     );
     check(
-      "gövdedeki targetStepId Zod tarafından atıldı → 201",
-      strayStep.status === 201,
+      "gövdedeki targetStepId REDDEDİLDİ → 400 (sessizce atılmıyor)",
+      strayStep.status === 400,
       `status=${strayStep.status}`,
     );
     const strayStepData = dataOf(strayStep);

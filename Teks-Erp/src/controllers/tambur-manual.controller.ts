@@ -101,12 +101,25 @@ const manualRollSchema = z.object({
     .positive("Ağırlık pozitif olmalı")
     .max(999_999, "Ağırlık gerçekçi değil")
     .optional(),
-});
+}).strict();
 
 // KARTSIZ BİTMİŞ ÜRÜN ("Manuel Mod") — `manualRollSchema`in PARENT-SIZ hâli.
 // `targetStepId` YOKTUR ve olmayacaktır: bu ucun ayırt edici özelliği tam olarak
 // kart/adım gerektirmemesidir (opsiyonel bir adım alanı eklemek iki niyeti tek
 // gövdede birleştirir). `itemId` buna karşılık ZORUNLU — miras alınacak iş emri yok.
+//
+// ⚠️ `.strict()` LOAD-BEARING (2026-09-01, canlı demoda ölçüldü). İki uç
+// kardeştir ve gövdeleri karışmaya AÇIKTIR — mobil servis dosyası bunu zaten
+// uyarıyor ("`TamburManualRollRequest` ile KARIŞTIRMA: orada `targetStepId`
+// ZORUNLUDUR"). Şema katı DEĞİLKEN `targetStepId` gönderen bir çağrı 400 almaz:
+// Zod anahtarı SESSİZCE atar, uç 201 döner ve operatör "üretildi ✓" görür — ama
+// top iş emrine HİÇ bağlanmaz (`producedInStepId` NULL kalır), yani iş emrinin
+// çıkan metrajı ve sipariş karşılanması sessizce eksik kalır. Ölçüldü: hedef
+// ürünü ACTİVO olan bir iş emrine adım göndererek üretim yaptım, 201 aldım,
+// top depoya BAĞIMSIZ düştü. Katı şemada aynı çağrı 400 verir ve çağıran
+// hangi ucu kullanacağını anlar. Mobil yükü şemanın ALT KÜMESİ (ölçüldü:
+// `mobil/src/services/tambur.service.ts`), Electron bu ucu hiç çağırmıyor →
+// katılaştırma sahadaki hiçbir istemciyi kırmaz.
 const produceSchema = z.object({
   itemId: z.string().uuid("Geçersiz ürün ID"),
   colorId: z.string().uuid("Geçersiz renk ID").optional().nullable(),
@@ -143,7 +156,9 @@ const produceSchema = z.object({
   // Sebebin KATALOG KODU — `manualRollSchema` ile aynı sözleşme (Zod strip tuzağı).
   reasonCode: z.string().trim().max(64, "Sebep kodu çok uzun").optional().nullable(),
   clientToken: z.string().uuid("Geçersiz istemci anahtarı"),
-});
+  // ⚠️ Bkz. yukarıdaki `.strict()` gerekçesi — asıl korunan uç BURASI:
+  // `targetStepId` gönderen çağrı artık 400 alır, sessizce bağımsız top üretmez.
+}).strict();
 
 export class TamburManualController {
   private service: TamburManualService;

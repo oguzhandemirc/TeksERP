@@ -35,10 +35,17 @@ const weighSackSchema = z.object({
   source: z.enum(["SCALE", "MANUAL", "SIMULATED"]).optional(),
 });
 // Çuval müşterisi değiştir — müşteri/şube OPSİYONEL (null = müşterisiz genel stok).
+// ⚠️ `.strict()` LOAD-BEARING (2026-09-01). Her iki alan da opsiyonel ve
+// controller `body.customerId ?? null` yazıyor → alan GELMEZSE çuvalın müşterisi
+// SİLİNİR. Katı olmayan şemada bir yazım hatası (`{ id }`, `{ musteriId }`)
+// sessizce "müşteriyi kaldır"a dönüşür ve uç 200 döner: ölçüldü, `{ id }`
+// gövdesiyle 200 alındı. Niyet ("ata") ile sonuç ("kaldır") ters; katı şemada
+// aynı çağrı 400 verir. Boşaltma MEŞRU bir işlemdir (çuval depo nesnesidir,
+// müşteri opsiyonel) — o yüzden alan `null` ile AÇIKÇA gönderilmeye devam eder.
 const reassignSackCustomerSchema = z.object({
   customerId: z.string().uuid("Geçersiz müşteri ID").nullable().optional(),
   branchId: z.string().uuid("Geçersiz şube ID").nullable().optional(),
-});
+}).strict();
 const removeSackSchema = z.object({ withContents: z.boolean().optional() });
 // Çuval notu — iç serbest not; boş/whitespace veya null → temizle.
 const sackNotesSchema = z.object({ notes: z.string().trim().max(500, "Not en fazla 500 karakter").nullable().optional() });
