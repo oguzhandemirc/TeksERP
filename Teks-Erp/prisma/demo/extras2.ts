@@ -148,68 +148,146 @@ export async function iplikStokKur(): Promise<void> {
 // -----------------------------------------------------------------------------
 // ③ KALEM FİYATLARI
 // -----------------------------------------------------------------------------
-// Fiyat çözüm zinciri (müşteri istisnası > kart varsayılanı) demoda GÖRÜNSÜN
-// diye iki katman birden yazılır.
+// ⚠️ SATIŞ ALIŞTAN TÜRETİLİR — bağımsız rastgele DEĞİL.
+//
+// İlk yazımda ikisi ayrı aralıklardan çekiliyordu (satış 90-250, alış 60-170) ve
+// aralıklar ÖRTÜŞÜYORDU: 30 kartın 5'inde ALIŞ ≥ SATIŞ çıktı (ölçüldü, canlıda).
+// Müşteri istisnası da bağımsızdı → 20 istisnanın 6'sı MALİYETİN ALTINDA,
+// 3'ü LİSTE FİYATININ ÜSTÜNDEydi. Fiyat ekranına bakan biri bunu ilk bakışta
+// görür ve "veriler uydurma" der — demonun inandırıcılığı burada kırılır.
+//
+// Doğru model tek yönlü bir zincirdir:
+//     alış  →  satış = alış × marj  →  müşteri fiyatı = satış × iskonto
+// Böylece satış DAİMA alışın üstünde, müşteri fiyatı DAİMA listenin altında ama
+// maliyetin üstünde kalır (en kötü hâlde alış × 1.28 × 0.88 ≈ alış × 1.13).
+//
+// ⚠️ RASTGELE SIRA, ATLAMA MANTIĞINDAN ÖNCE İLERLETİLİR: eski kod değerleri
+// "kayıt yoksa" dalının İÇİNDE çekiyordu, yani akış kaç kaydın zaten var
+// olduğuna göre kayıyor ve seed her koşumda FARKLI fiyat üretiyordu. Değerler
+// artık koşulsuz çekilir → aynı kalem her koşumda aynı fiyatı alır.
+//
+// ⚠️ UPSERT (skip DEĞİL): mevcut tutarsız satırlar da düzeltilsin. `ItemPrice`
+// fiziksel güncellemeye açıktır (kök CLAUDE.md'de bilinçli istisna) ve defter
+// bağı yoktur — kesilmiş faturalar `InvoiceLine.unitPrice` ile DONMUŞTUR, yani
+// geçmiş belgeler bu düzeltmeden etkilenmez.
 export async function fiyatKur(): Promise<void> {
   adim("Kalem fiyatları");
   const kalemler = await prisma.item.findMany({
     where: { itemType: "FABRIC", isActive: true },
     select: { id: true },
+    orderBy: { code: "asc" },
     take: 30,
   });
   const musteriler = await prisma.customer.findMany({
     where: { isActive: true, mergedIntoId: null, type: { in: ["CUSTOMER", "BOTH"] } },
     select: { id: true },
+    orderBy: { code: "asc" },
     take: 4,
   });
   if (kalemler.length === 0) {
     not("Kumaş yok — kalem fiyatı yazılamaz.");
     return;
   }
-  const r = rastgele(1357);
-  let yeni = 0;
 
-  for (const k of kalemler) {
-    for (const kind of ["SALE", "PURCHASE"] as const) {
-      const varOlan = await prisma.itemPrice.findFirst({
-        where: { itemId: k.id, customerId: null, kind, currency: "TRY" },
-        select: { id: true },
-      });
-      if (varOlan) continue;
-      const taban = kind === "SALE" ? 90 + r() * 160 : 60 + r() * 110;
+  const r = rastgele(1357);
+  const yuvarla = (x: number): number => Math.round(x * 100) / 100;
+  let yazilan = 0;
+
+  /** Değer değiştiyse yazar; aynıysa dokunmaz (ikinci koşum "0 yeni" versin). */
+  async function fiyatYaz(
+    itemId: string,
+    customerId: string | null,
+    kind: "SALE" | "PURCHASE",
+    price: number,
+  ): Promise<void> {
+    const mevcut = await prisma.itemPrice.findFirst({
+      where: { itemId, customerId, kind, currency: "TRY" },
+      select: { id: true, price: true },
+    });
+    if (mevcut) {
+      if (Number(mevcut.price) === price) return;
+      await prisma.itemPrice.update({ where: { id: mevcut.id }, data: { price } });
+    } else {
       await prisma.itemPrice.create({
-        data: {
-          itemId: k.id,
-          customerId: null,
-          kind,
-          currency: "TRY",
-          price: Math.round(taban * 100) / 100,
-        },
+        data: { itemId, customerId, kind, currency: "TRY", price },
       });
-      yeni++;
     }
+    yazilan++;
   }
-  // Müşteri İSTİSNASI — zincirin üst basamağı.
+
+  const satisFiyati = new Map<string, number>();
+  for (const k of kalemler) {
+    const alis = yuvarla(60 + r() * 110);
+    const marj = 1.28 + r() * 0.34; // %28-%62 brüt marj
+    const satis = yuvarla(alis * marj);
+    satisFiyati.set(k.id, satis);
+    await fiyatYaz(k.id, null, "PURCHASE", alis);
+    await fiyatYaz(k.id, null, "SALE", satis);
+  }
+
+  // Müşteri İSTİSNASI — zincirin üst basamağı: liste fiyatına İSKONTO.
   for (const m of musteriler) {
     for (const k of kalemler.slice(0, 5)) {
-      const varOlan = await prisma.itemPrice.findFirst({
-        where: { itemId: k.id, customerId: m.id, kind: "SALE", currency: "TRY" },
-        select: { id: true },
-      });
-      if (varOlan) continue;
-      await prisma.itemPrice.create({
-        data: {
-          itemId: k.id,
-          customerId: m.id,
-          kind: "SALE",
-          currency: "TRY",
-          price: Math.round((80 + r() * 140) * 100) / 100,
-        },
-      });
-      yeni++;
+      const liste = satisFiyati.get(k.id);
+      const iskonto = 0.88 + r() * 0.08; // %4-%12 iskonto
+      if (liste == null) continue;
+      await fiyatYaz(k.id, m.id, "SALE", yuvarla(liste * iskonto));
     }
   }
-  say("kalem fiyatı", yeni);
+  // ── ONARIM TURU — bu seed'in ŞU ANKİ diliminin DIŞINDA kalan satırlar ─────
+  // ⚠️ Üretimi düzeltmek TEK BAŞINA YETMEZ: eski kod fiyatları SIRASIZ 30 kaleme
+  // yazmıştı, yeni kod `code`'a göre ilk 30'a yazıyor → eski tutarsız satırlar
+  // başka kalemlerde ÖKSÜZ kalıyor ve ekranda görünmeye devam ediyordu
+  // (ölçüldü: düzeltmeden sonra hâlâ 4 kart + 10 istisna bozuktu).
+  // Bu tur, kim yazmış olursa olsun TÜM tutarsız satırları onarır.
+  const tumKartlar = await prisma.itemPrice.findMany({
+    where: { customerId: null, currency: "TRY" },
+    select: { id: true, itemId: true, kind: true, price: true },
+  });
+  const kart = new Map<string, { alis?: { id: string; v: number }; satis?: { id: string; v: number } }>();
+  for (const row of tumKartlar) {
+    const g = kart.get(row.itemId) ?? {};
+    if (row.kind === "PURCHASE") g.alis = { id: row.id, v: Number(row.price) };
+    if (row.kind === "SALE") g.satis = { id: row.id, v: Number(row.price) };
+    kart.set(row.itemId, g);
+  }
+  let onarilan = 0;
+  // ⚠️ BAND: yalnız "alış ≥ satış" değil, İNANILMAZ MARJ da aynı sınıf kusurdur.
+  // Bağımsız rastgele üretim %272'ye varan marjlar bırakmıştı (ölçüldü, 52 kartın
+  // 9'u %90 üstü). Toptan kumaşta makul aralık ~%25-70; dışına taşanlar bandın
+  // içine çekilir. Onarım SABİT çarpanla yapılır — rastgele olsaydı aynı girdi
+  // her koşumda farklı sonuç verir ve idempotentlik bozulurdu.
+  const ALT_MARJ = 0.25;
+  const UST_MARJ = 0.7;
+  for (const [itemId, g] of kart) {
+    if (!g.alis || !g.satis || g.alis.v <= 0) continue;
+    const marj = (g.satis.v - g.alis.v) / g.alis.v;
+    if (marj >= ALT_MARJ && marj <= UST_MARJ) continue;
+    const yeniSatis = yuvarla(g.alis.v * (marj > UST_MARJ ? 1.55 : 1.35));
+    await prisma.itemPrice.update({ where: { id: g.satis.id }, data: { price: yeniSatis } });
+    g.satis.v = yeniSatis;
+    kart.set(itemId, g);
+    onarilan++;
+  }
+  // Müşteri istisnaları: maliyetin ALTINA düşemez, listenin ÜSTÜNE çıkamaz.
+  const istisnalar = await prisma.itemPrice.findMany({
+    where: { customerId: { not: null }, currency: "TRY", kind: "SALE" },
+    select: { id: true, itemId: true, price: true },
+  });
+  for (const ist of istisnalar) {
+    const g = kart.get(ist.itemId);
+    if (!g?.alis || !g.satis) continue;
+    const v = Number(ist.price);
+    if (v >= g.alis.v && v <= g.satis.v) continue;
+    await prisma.itemPrice.update({
+      where: { id: ist.id },
+      data: { price: yuvarla(g.satis.v * 0.93) },
+    });
+    onarilan++;
+  }
+  if (onarilan > 0) say("tutarsız fiyat onarıldı", onarilan);
+
+  say("kalem fiyatı (yazılan/düzeltilen)", yazilan);
 }
 
 // -----------------------------------------------------------------------------

@@ -2807,13 +2807,40 @@ export class SubcontractorService {
           status: RollStatus.AT_SUBCONTRACTOR,
           currentStepId: data.stepId,
         },
-        select: { id: true, currentQty: true },
+        // `colorId` — renk MİRASI için (aşağıdaki blok).
+        select: { id: true, currentQty: true, colorId: true },
       });
       if (freshReturns.length !== data.returns.length) {
         throw AppError.conflict(
           "Toplardan biri bu sırada başka bir işlemle (kabul/iptal) değişmiş. Listeyi yenileyip tekrar deneyin."
         );
       }
+      // ── RENK MİRASI — renk UYGULAMAYAN fason adımı rengi SİLMEZ (2026-09-01)
+      // Ölçülen saha vakası: "Boya + Zımpara" rotasında mal boyahaneden RENKLİ
+      // dönüyor, sonra ZIMPARA kabulünde renk NULL'a düşüyordu — çünkü renk
+      // yalnız üç kaynaktan çözülüyordu: açık override · (istasyon renk
+      // uyguluyorsa) WO hedefi · aksi hâlde NULL. Zımpara `appliesColor=false`
+      // olduğu için üçüncü dala düşüyor ve doğan top RENKSİZ doğuyordu.
+      //
+      // Bu, "bitmiş toplar renksiz" şikayetinin MEKANİZMASIYDI: boyadan SONRA
+      // gelen her fason adımı rengi siliyordu (canlı demoda 86 bitmiş topun
+      // 40'ı renksizdi).
+      //
+      // Kural: zımpara/baskı gibi bir adım kumaşın RENGİNİ DEĞİŞTİRMEZ → doğan
+      // top ebeveyninin rengini taşır.
+      // ⚠️ YALNIZ TEK RENKLİYSE: kabulde birden çok renkte top varsa hangisinin
+      // doğacağı belirsizdir; renk UYDURULMAZ, null bırakılır (fail-closed).
+      // ⚠️ Açık `appliedColorId: null` override'ı EZİLMEZ — o "rengi kaldır"
+      // demektir ve meşrudur (`!== undefined` kontrolü onu korur).
+      if (data.appliedColorId === undefined && !appliesColor) {
+        const ebeveynRenkleri = new Set(
+          freshReturns.map((r) => r.colorId).filter((x): x is string => x != null),
+        );
+        if (ebeveynRenkleri.size === 1) {
+          resolvedAppliedColorId = [...ebeveynRenkleri][0] as string;
+        }
+      }
+
       const remainingByRoll = new Map(freshReturns.map((r) => [r.id, r.currentQty]));
       /** rollId → bu makbuzun kabul ettiği metraj (defter satırı) + kısmi mi. */
       const plans = data.returns.map((ret) => {
