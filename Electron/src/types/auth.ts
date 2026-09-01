@@ -12,8 +12,13 @@ export interface JwtPayload {
   iat?: number;
 }
 
-/** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır. */
-export type ClientType = "electron" | "mobile";
+/** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır.
+ *
+ *  ⚠️ `web`, `electron`tan AYRI bir tiptir (2026-09-01). Web paneli Electron
+ *  renderer'ının aynı kodudur ama AYNI tip gönderilseydi, aynı kişinin telefon
+ *  tarayıcısından girmesi masaüstü oturumunu düşürürdü (politika varsayılanı
+ *  `kick`) — uzaktan takip senaryosunun tam tersi. */
+export type ClientType = "electron" | "mobile" | "web";
 
 /** Aynı hesabın aynı tip cihazda ikinci oturumuna karşı politika (backend enforce).
  *  kick = eskiyi düşür, notify = kullanıcıya sor, off = sınırsız çoklu oturum. */
@@ -27,6 +32,15 @@ export interface LoginRequest {
   /** 'notify' politikasında aynı hesap başka yerde açıkken kullanıcı onayı verince
    *  true ile tekrar çağrılır; backend iki oturumu da açık tutar. */
   confirmKick?: boolean;
+  /**
+   * İkinci faktör — TOTP kodu (6 hane) ya da kurtarma kodu (XXXX-XXXX).
+   *
+   * ⚠️ YALNIZ UZAK (tünel) girişlerinde istenir; LAN'da backend hiç bakmaz.
+   * İstemci bunu kendiliğinden göndermez: önce kodsuz dener, backend
+   * `409 TOTP_REQUIRED` derse kod adımını açar. "Her ihtimale karşı sor"
+   * yaklaşımı fabrikadaki her operatöre gereksiz bir alan gösterirdi.
+   */
+  totpCode?: string;
 }
 
 /** 409 SESSION_EXISTS yanıtındaki mevcut oturum bilgisi (backend `details`). */

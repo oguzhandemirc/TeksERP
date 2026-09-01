@@ -2,11 +2,25 @@ import type { AxiosRequestConfig } from "axios";
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
 import type { JwtPayload, LoginRequest, LoginResponse } from "@/types/auth";
+import { IS_ELECTRON } from "@/lib/runtime-env";
+
+/**
+ * Bu build hangi istemci tipi olarak giriş yapıyor.
+ *
+ * ⚠️ AYNI KOD, İKİ HEDEF. `dist-web` build'i Electron renderer'ının ta kendisidir
+ * ve eskiden o da `clientType:"electron"` gönderiyordu — sonucu, patronun telefon
+ * tarayıcısından girince masaüstü oturumunu DÜŞÜRMESİYDİ (aynı-tip politikası
+ * varsayılanı `kick`). Artık her hedef kendi oturum yuvasını alıyor.
+ *
+ * Bu bir güvenlik sınırı DEĞİLDİR (istemci uydurabilir) ve backend de öyle
+ * kullanmaz: uzak/LAN ayrımı soket portundan çözülür.
+ */
+const CLIENT_TYPE = IS_ELECTRON ? "electron" : "web";
 
 export const authService = {
   /**
-   * Giriş — gövdeye her zaman `clientType:'electron'` eklenir (same-type oturum
-   * politikası masaüstü/mobil ayrımı yapar). Çağıran `confirmKick` ile 'notify'
+   * Giriş — gövdeye `clientType` eklenir (Electron'da 'electron', tarayıcıda
+   * 'web'; same-type oturum politikası bu ayrımla çalışır). Çağıran `confirmKick` ile 'notify'
    * çakışmasını onaylayabilir. `config` ile per-istek axios ayarı (ör.
    * `suppressErrorToast`) geçilebilir — hata UX'ini çağıran yönetir.
    */
@@ -14,7 +28,7 @@ export const authService = {
     apiClient
       .post<LoginResponse>(
         "/api/auth/login",
-        { clientType: "electron", ...credentials },
+        { clientType: CLIENT_TYPE, ...credentials },
         config,
       )
       .then((r) => r.data),

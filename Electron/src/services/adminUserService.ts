@@ -31,6 +31,20 @@ export interface PermissionSetItem {
   validUntil?: string | null;
 }
 
+/** `GET /api/admin/users/:id/totp` yanıtı. */
+export interface TotpStatus {
+  enabled: boolean;
+  enabledAt: string | null;
+  /** Kullanılmamış kurtarma kodu sayısı — "1 kod kaldı" uyarısının kaynağı. */
+  remainingRecoveryCodes: number;
+}
+
+/** Açılan kurulum penceresi. ⚠️ Sır DÖNMEZ — QR'ı kullanıcı kendi penceresinde okur. */
+export interface TotpWindow {
+  token: string;
+  expiresAt: string;
+}
+
 export const adminUserService = {
   list: (): Promise<ApiResponse<AdminUserListItem[]>> =>
     apiClient.get<ApiResponse<AdminUserListItem[]>>("/api/admin/users").then((r) => r.data),
@@ -95,6 +109,24 @@ export const adminUserService = {
     apiClient
       .patch<ApiResponse<AdminUserListItem>>(`/api/admin/users/${userId}`, { fullName })
       .then((r) => r.data),
+
+  // ── İki adımlı doğrulama (2026-09-01, uzaktan erişim) ─────────────────────
+  // Kurulumun TEK yolu buradan açılan penceredir; kullanıcı kendi başına 2FA
+  // bağlayamaz (parola sızmışsa saldırgan kendi telefonunu bağlardı).
+  getTotpStatus: (userId: string): Promise<ApiResponse<TotpStatus>> =>
+    apiClient
+      .get<ApiResponse<TotpStatus>>(`/api/admin/users/${userId}/totp`)
+      .then((r) => r.data),
+
+  /** 15 dk ömürlü, TEK KULLANIMLIK kurulum penceresi açar. */
+  openTotpWindow: (userId: string): Promise<ApiResponse<TotpWindow>> =>
+    apiClient
+      .post<ApiResponse<TotpWindow>>(`/api/admin/users/${userId}/totp/window`, {})
+      .then((r) => r.data),
+
+  /** 2FA'yı kaldırır — telefon kaybı / cihaz değişimi. Açık oturumlar düşer. */
+  resetTotp: (userId: string): Promise<void> =>
+    apiClient.post(`/api/admin/users/${userId}/totp/reset`, {}).then(() => undefined),
 
   applyTemplate: (
     userId: string,

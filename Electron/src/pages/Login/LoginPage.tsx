@@ -1,33 +1,35 @@
 import { useState } from "react";
-import axios from "axios";
-import { useLocation, useNavigate } from "react-router-dom";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 import { toast } from "sonner";
 import { Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { SurumRozeti } from "@/components/SurumRozeti";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
-import { authService } from "@/services/authService";
-import { tokenStore } from "@/lib/secure-token";
-import { decodeJwt } from "@/lib/jwt";
-import { readSessionConflict } from "@/lib/session-auth";
-import { connectToDiscoveredServer, pinServerIdentityAfterLogin } from "@/lib/server-identity";
+import { connectToDiscoveredServer } from "@/lib/server-identity";
+import { useLoginFlow } from "./useLoginFlow";
 import { LoginForm } from "./LoginForm";
+import { TotpStep } from "./TotpStep";
+import { TotpEnrollmentNotice } from "./TotpEnrollmentNotice";
 import { ServerNotFoundPanel } from "./ServerNotFoundPanel";
 import { ServerIdentityMismatchDialog } from "@/components/settings/ServerIdentityMismatchDialog";
 import { useServerReachability } from "@/hooks/useServerReachability";
 import type { DiscoveredServer } from "@shared/ipc-contract";
 import { IS_ELECTRON } from "@/lib/runtime-env";
-import { useAuthStore } from "@/store/auth";
-import { canEnterApp, type ExistingSessionInfo } from "@/types/auth";
+import type { ExistingSessionInfo } from "@/types/auth";
 import { LoginHero } from "./LoginHero";
 
 /** 409 SESSION_EXISTS onay diyaloğu için, mevcut oturumu okunur cümleye çevir. */
 function describeExistingSession(info: ExistingSessionInfo): string {
-  const where = info.deviceType === "electron" ? "başka bir bilgisayarda" : "bir mobil cihazda";
+  // ⚠️ ÜÇ DEĞERLİ: `web` eklendiğinde (2026-09-01) iki dallı ifade onu sessizce
+  // "mobil cihaz" diye gösteriyordu — bu repoda beş kez yaşanan "unutulmuş enum
+  // değeri" sınıfı. Kayıt (Record) biçimi, dördüncü değer eklenirse TS'in
+  // eksikliği DERLEMEDE söylemesini sağlar.
+  const WHERE: Record<ExistingSessionInfo["deviceType"], string> = {
+    electron: "başka bir bilgisayarda",
+    web: "bir tarayıcıda",
+    mobile: "bir mobil cihazda",
+  };
+  const where = WHERE[info.deviceType] ?? "başka bir cihazda";
   const when = info.createdAt
     ? ` (${new Date(info.createdAt).toLocaleString("tr-TR")}'de açıldı)`
     : "";
@@ -37,81 +39,24 @@ function describeExistingSession(info: ExistingSessionInfo): string {
   );
 }
 
-const schema = z.object({
-  username: z.string().min(1, "Kullanıcı adı gerekli"),
-  password: z.string().min(1, "Şifre gerekli"),
-});
-
-type FormValues = z.infer<typeof schema>;
-
 export function LoginPage() {
-  const navigate = useNavigate();
-  const location = useLocation();
-  const setUser = useAuthStore((s) => s.setUser);
-  const [submitting, setSubmitting] = useState(false);
+  const {
+    form,
+    submitting,
+    conflict,
+    setConflict,
+    totp,
+    setTotp,
+    enrollmentNeeded,
+    setEnrollmentNeeded,
+    performLogin,
+  } = useLoginFlow();
   const [apiDialogOpen, setApiDialogOpen] = useState(false);
-  // 409 SESSION_EXISTS ('notify' politikası) — onay bekleyen çakışma bilgisi.
-  const [conflict, setConflict] = useState<{ values: FormValues; existing: ExistingSessionInfo } | null>(null);
   const { theme, setTheme } = useTheme();
-
-  const form = useForm<FormValues>({
-    resolver: zodResolver(schema),
-    defaultValues: { username: "", password: "" },
-  });
-
-  /**
-   * Girişi dener. `confirmKick=true` → 'notify' politikasında kullanıcı "iki
-   * oturum da açık kalsın" onayı verince tekrar çağrılır. Hata UX'ini bu fonksiyon
-   * yönetir (`suppressErrorToast`): 401 (yanlış şifre) interceptor'ın özel dalında
-   * zaten toast'lanır; 409 SESSION_EXISTS onay diyaloğunu açar; diğerleri burada.
-   */
-  const performLogin = async (values: FormValues, confirmKick: boolean) => {
-    setSubmitting(true);
-    try {
-      const res = await authService.login(
-        { ...values, confirmKick: confirmKick || undefined },
-        { suppressErrorToast: true },
-      );
-      await tokenStore.set(res.data.token);
-      const decoded = decodeJwt(res.data.token) ?? res.data.user;
-      if (!canEnterApp(decoded.permissions)) {
-        await tokenStore.clear();
-        toast.error("Bu uygulamayı kullanma yetkin yok. Yöneticine başvur.");
-        return;
-      }
-      setConflict(null);
-      setUser(decoded);
-      // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
-      // Bundan sonraki keşiflerde kimlik tutmazsa kullanıcıya sorulur.
-      void pinServerIdentityAfterLogin();
-      const dest = (location.state as { from?: { pathname?: string } })?.from?.pathname ?? "/";
-      navigate(dest, { replace: true });
-    } catch (err) {
-      const existing = readSessionConflict(err);
-      if (existing) {
-        // 'notify': aynı hesap başka yerde açık — kullanıcıya sor, onaylarsa
-        // confirmKick=true ile tekrar dene (iki oturum da açık kalır).
-        setConflict({ values, existing });
-        return;
-      }
-      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-      // 401 ve login-403 interceptor'da toast'landı; kalanları burada göster.
-      if (status !== 401 && status !== 403) {
-        const message = axios.isAxiosError(err)
-          ? ((err.response?.data as { message?: string } | undefined)?.message ??
-            (err.response ? "Giriş yapılamadı." : "Sunucuya ulaşılamıyor."))
-          : "Giriş yapılamadı.";
-        toast.error(message);
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const reach = useServerReachability();
   const [mismatch, setMismatch] = useState<DiscoveredServer | null>(null);
 
-  const onSubmit = (values: FormValues) => performLogin(values, false);
+  const onSubmit = (values: LoginFormValues) => performLogin(values, false);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden">
@@ -179,6 +124,26 @@ export function LoginPage() {
             onResolved={() => void reach.recheck()}
             onOpenAddressDialog={() => setApiDialogOpen(true)}
             onMismatch={setMismatch}
+          />
+        ) : enrollmentNeeded ? (
+          <TotpEnrollmentNotice
+            onBack={() => {
+              setEnrollmentNeeded(false);
+              form.resetField("password");
+            }}
+          />
+        ) : totp ? (
+          <TotpStep
+            submitting={submitting}
+            invalid={totp.invalid}
+            onSubmit={(code) => void performLogin(totp.values, false, code)}
+            onCancel={() => {
+              setTotp(null);
+              // Şifreyi TEMİZLE: kullanıcı geri döndüyse ya yanlış hesapla
+              // giriyordu ya vazgeçti; dolu bir şifre alanı bırakmak, ortak
+              // kullanılan bir makinede sonraki kişiye açık kapı olurdu.
+              form.resetField("password");
+            }}
           />
         ) : (
         <LoginForm form={form} submitting={submitting} onSubmit={onSubmit} />

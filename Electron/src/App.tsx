@@ -13,6 +13,7 @@ import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
+import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -84,7 +85,15 @@ function Root() {
   const user = useAuthStore((s) => s.user);
 
   if (!isHydrated) return null;
-  if (!user || !canEnterApp(user.permissions)) {
+  // ⚠️ 2FA KURULUM SAYFASI OTURUM DURUMUNDAN BAĞIMSIZ AÇILIR.
+  // Bağlantı çoğu zaman giriş yapmamış birine gider, ama giriş YAPMIŞ bir
+  // makinede açılırsa (yönetici kendi ekranında denerken, ya da kullanıcı
+  // fabrikada oturum açıkken) `AppShell` çizilir ve `#/2fa-kurulum` hiçbir
+  // içerik rotasına uymadığı için BOŞ SAYFA görünürdü — hata yok, log yok.
+  const onEnrollPath =
+    typeof window !== "undefined" &&
+    window.location.hash.startsWith(`#${TOTP_ENROLL_PATH}`);
+  if (onEnrollPath || !user || !canEnterApp(user.permissions)) {
     return <RouterProvider router={authRouter} />;
   }
   return <AppShell />;

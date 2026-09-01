@@ -18,9 +18,10 @@ import { PermissionsTab } from "./PermissionsTab";
 import { ResetPasswordTab } from "./ResetPasswordTab";
 import { CardTokenTab } from "./CardTokenTab";
 import { QuickPinTab } from "./QuickPinTab";
+import { TwoFactorTab } from "./TwoFactorTab";
 import { adminUserService, type AdminUserListItem } from "@/services/adminUserService";
 
-type UserDetailTab = "permissions" | "password" | "card" | "quick-pin";
+type UserDetailTab = "permissions" | "password" | "card" | "quick-pin" | "two-factor";
 
 interface Props {
   user: AdminUserListItem | null;
@@ -140,6 +141,7 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
               <TabsTrigger value="password" className="flex-1">Şifre Sıfırla</TabsTrigger>
               <TabsTrigger value="card" className="flex-1">Personel Kartı</TabsTrigger>
               <TabsTrigger value="quick-pin" className="flex-1">Hızlı PIN</TabsTrigger>
+              <TabsTrigger value="two-factor" className="flex-1">İki Adımlı</TabsTrigger>
             </TabsList>
             <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-4">
               <TabsContent value="permissions" className="mt-0 h-full">
@@ -153,6 +155,9 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
               </TabsContent>
               <TabsContent value="quick-pin" className="mt-0">
                 <QuickPinTab userId={user.id} username={user.username} />
+              </TabsContent>
+              <TabsContent value="two-factor" className="mt-0">
+                <TwoFactorTab userId={user.id} username={user.username} />
               </TabsContent>
             </div>
           </Tabs>
