@@ -91,6 +91,24 @@ async function main(): Promise<void> {
     check("ileri: parti kimliği korundu (keep)", at3.every((r) => r.batchId === batchId));
     check("ileri: boyahane atlandı → renk WO hedef renginden sentezlendi", at3.every((r) => r.colorId === c.COLOR));
     check("ileri: Tambur'da taze açık movement", (await prisma.rollMovement.count({ where: { rollId: { in: rollIds }, workOrderStepId: s3, exitedAt: null } })) === 3);
+
+    // ⚠️ KAPANAN MOVEMENT `qtyOut` YAZAR (2026-09-01, canlı demoda ölçüldü).
+    // Invariant: kapanmış movement'ta `qtyOut = qtyIn` (commit 64263fc);
+    // `consistency-check.sql §12` onu ölçer. Manuel taşıma, movement kapatan altı
+    // noktadan tek istisnaydı — yalnız `exitedAt` yazıyor, `qtyOut`u NULL
+    // bırakıyordu. Bedeli sessiz: `qtyOut` toplayan istasyon hacim/verim
+    // hesapları taşınan topun metrajını hiç görmez ve hata da vermez. Bu kontrol
+    // ölçümü çıkış anına taşır (mutabakat taraması ancak kirlenmiş DB'de görür).
+    const kapanan = await prisma.rollMovement.findMany({
+      where: { rollId: { in: rollIds }, exitedAt: { not: null } },
+      select: { qtyIn: true, qtyOut: true },
+    });
+    check("ileri: kapanan movement sayısı > 0 (körlük zemini)", kapanan.length > 0, `n=${kapanan.length}`);
+    check(
+      "ileri: kapanan movement'ta qtyOut = qtyIn (NULL DEĞİL)",
+      kapanan.every((m) => m.qtyOut != null && Number(m.qtyOut) === Number(m.qtyIn)),
+      kapanan.map((m) => `${String(m.qtyIn)}→${String(m.qtyOut)}`).join(" "),
+    );
     const s3status = (await prisma.workOrderStep.findUnique({ where: { id: s3 }, select: { status: true } }))?.status;
     check("ileri: hedef adım ACTIVE", s3status === "ACTIVE", s3status);
 

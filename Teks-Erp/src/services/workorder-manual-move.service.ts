@@ -666,10 +666,28 @@ export class WorkOrderManualMoveService {
             where: { rollId: { in: selectedIds }, workOrderStepId: { in: laterStepIds } },
           });
         }
-        await tx.rollMovement.updateMany({
-          where: { rollId: { in: selectedIds }, exitedAt: null },
-          data: { exitedAt: new Date(), notes: "MANUAL_MOVE_OUT" },
-        });
+        // ⚠️ KAPANAN MOVEMENT `qtyOut`/`weightOut` YAZMAK ZORUNDA (2026-09-01).
+        // Invariant: kapanmış movement'ta `qtyOut = qtyIn` (commit 64263fc) —
+        // `scripts/consistency-check.sql §12` ve `test_consistency` onu ölçer.
+        // Burası movement kapatan ALTI noktadan tek istisnaydı: yalnız `exitedAt`
+        // yazıyordu, `qtyOut` NULL kalıyordu. Ölçüldü (canlı demo): "Konumu
+        // Düzelt" ile taşınan 204,9 m'lik top §12'yi kırmızıya düşürdü. Bedeli
+        // sessiz: `qtyOut` toplayan istasyon hacim/verim hesapları o topun
+        // metrajını hiç görmez, hata da vermez.
+        //
+        // `updateMany` bir kolonu BAŞKA bir kolondan yazamaz (qtyOut = qtyIn),
+        // o yüzden ham SQL. Zaman JS'ten BAĞLI PARAMETRE olarak geçer — `NOW()`
+        // yazmak `test_raw_sql_hygiene` gerekçe işareti gerektirirdi ve burada
+        // kazandıracağı bir şey yok.
+        const cikisAni = new Date();
+        await tx.$executeRaw`
+          UPDATE "roll_movements"
+             SET "exitedAt"  = ${cikisAni},
+                 "qtyOut"    = "qtyIn",
+                 "weightOut" = "weightIn",
+                 "notes"     = 'MANUAL_MOVE_OUT'
+           WHERE "rollId" = ANY(${selectedIds}::uuid[])
+             AND "exitedAt" IS NULL`;
         await tx.rollMovement.createMany({
           data: ctx.selected.map((r) => ({
             rollId: r.id,
