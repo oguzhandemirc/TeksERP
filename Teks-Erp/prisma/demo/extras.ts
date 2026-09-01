@@ -256,3 +256,57 @@ export async function kurTarihcesiKur(): Promise<void> {
   }
   say("kur satırı (upsert)", yeni);
 }
+
+// -----------------------------------------------------------------------------
+// BELGE TASARIM TANIMLARI — Belge Profili + Refakat Kartı Şablonu
+// -----------------------------------------------------------------------------
+// ⚠️ Bu iki ekran canlı demoda BOMBOŞ açılıyordu (2026-09-01 taraması: her ikisi
+// de 0 satır). Boş bir TANIM ekranı, müşteriye "bu özellik yok" der — oysa ikisi
+// de çalışan yüzeyler. Refakat kartı şablonunun boş olması ayrıca TASARIM
+// GEREĞİDİR (tablo boşken kart yerleşik biçimde basılır, "şablon oluşturmak
+// aktif bir karardır" — kök CLAUDE.md); yani buradaki satır davranışı
+// değiştirmez, yalnız özelliği GÖRÜNÜR kılar.
+//
+// ⚠️ `config` GÖVDESİ ZORLANMAZ: iki servis de kendi normalize/sanitize
+// katmanından geçirir (`sanitizeDocumentsConfig` · `normalizeTravelerCardConfig`).
+// Buraya elle bir iç yapı yazmak, o katmanlar değiştiğinde seed'i sessizce
+// bayatlatırdı — boş `config` ile varsayılanları kullandırıyoruz.
+export async function belgeTasarimKur(): Promise<void> {
+  adim("Belge tasarımı — profil + refakat kartı şablonu");
+
+  const profilAdi = "Standart Müşteri Belgesi";
+  const varProfil = await prisma.documentProfile.findFirst({
+    where: { name: profilAdi },
+    select: { id: true },
+  });
+  if (!varProfil) {
+    await prisma.documentProfile.create({
+      data: {
+        name: profilAdi,
+        description: "Yurt içi müşteriler için varsayılan irsaliye/çeki düzeni.",
+        config: {},
+      },
+    });
+    say("belge profili");
+  }
+
+  const sablonAdi = "Standart Refakat Kartı";
+  const varSablon = await prisma.travelerCardTemplate.findFirst({
+    where: { name: sablonAdi },
+    select: { id: true },
+  });
+  if (!varSablon) {
+    await prisma.travelerCardTemplate.create({
+      // SECTIONS = "orta seviye": bölüm sırası/aç-kapa panelden yönetilir.
+      // RAW_HTML seed'e uygun değil (uzman modu, gövdeyi biz yazarsak fabrika
+      // onu düzenlemek yerine silmek zorunda kalır).
+      data: { name: sablonAdi, mode: "SECTIONS", config: {}, isDefault: false },
+    });
+    say("refakat kartı şablonu");
+  }
+
+  const p = await prisma.documentProfile.count();
+  const t = await prisma.travelerCardTemplate.count();
+  console.log(`   belge profili=${p} · refakat kartı şablonu=${t}`);
+  if (p === 0 || t === 0) not("Belge tasarım ekranlarından biri BOŞ kalıyor.");
+}

@@ -172,11 +172,18 @@ export async function iplikStokKur(): Promise<void> {
 // geçmiş belgeler bu düzeltmeden etkilenmez.
 export async function fiyatKur(): Promise<void> {
   adim("Kalem fiyatları");
+  // ⭐ FİYAT KARTI HER AKTİF KUMAŞA YAZILIR (2026-09-01). Eskiden `take: 30`
+  // vardı ve 125 kumaşın 68'i FİYATSIZ kalıyordu. Bu, ekranda boş bir hücre
+  // değil KAPALI BİR YOLDU: sevkiyattan üretilen fatura taslağı `unitPrice: 0`
+  // ile doğuyor, `confirm` de fiyatsız faturayı DOĞRU biçimde reddediyor
+  // ("… birim fiyatı girilmemiş — fiyatsız fatura onaylanamaz") → müşteri
+  // rastgele bir kumaşla fatura kesmeye kalkınca duvara çarpıyordu. Ölçüldü:
+  // SAMARA ALTIN'da tam bu yaşandı. Sınırın hiçbir gerekçesi yoktu; 125 kumaş
+  // × 2 kart ≈ 250 satır, maliyeti yok.
   const kalemler = await prisma.item.findMany({
     where: { itemType: "FABRIC", isActive: true },
     select: { id: true },
     orderBy: { code: "asc" },
-    take: 30,
   });
   const musteriler = await prisma.customer.findMany({
     where: { isActive: true, mergedIntoId: null, type: { in: ["CUSTOMER", "BOTH"] } },

@@ -23,7 +23,7 @@ import { assertDemoDatabase, assertNotProductionCopy, dbAdi, sayaclar, notlarLis
 import { katalogKur } from "./demo/catalog";
 import { carilerKur, siparislerKur } from "./demo/sales";
 import { envanterKur } from "./demo/inventory";
-import { kartelaKur, transferKur, sayimKur, kurTarihcesiKur } from "./demo/extras";
+import { kartelaKur, transferKur, sayimKur, kurTarihcesiKur, belgeTasarimKur } from "./demo/extras";
 import { isEmirleriKur } from "./demo/production";
 import { sevkiyatKur } from "./demo/shipping";
 import { finansKur } from "./demo/finance";
@@ -56,6 +56,7 @@ async function main(): Promise<void> {
   await fiyatKur();
   await cihazKur();
   await demoKullanicisiYetkilendir();
+  await belgeTasarimKur();
   await firmaKunyesiKur();
 
   const olcumHatasi = await dogrula();

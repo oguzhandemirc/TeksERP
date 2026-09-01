@@ -45,13 +45,31 @@ const orderService = new OrderService({
   nestedCreateFields: ["lines"],
 });
 
+/** Şehir → alan kodu; telefon GERÇEKÇİ ve KAYDA ÖZEL olsun diye. */
+const ALAN_KODU: Record<string, string> = {
+  İstanbul: "0212", Antalya: "0242", Bursa: "0224", Nevşehir: "0384", Ankara: "0312",
+  İzmir: "0232", Konya: "0332", Gaziantep: "0342", Denizli: "0258", Kayseri: "0352",
+  Adana: "0322", Trabzon: "0462", Eskişehir: "0222", Mersin: "0324", Samsun: "0362",
+};
+
 export async function carilerKur(): Promise<string[]> {
   adim("Cari — alıcılar");
   const ids: string[] = [];
+  let sira = 0;
   for (const a of ALICILAR) {
+    sira++;
+    // ⚠️ TELEFON KAYDA ÖZEL OLMALI (2026-09-01, canlı demoda ölçüldü). Eskiden
+    // hepsine `0212 000 00 00` yazılıyordu; Mükerrer Kayıtlar panelinin KİMLİK
+    // kuralı (aynı telefon = aynı tüzel kişi) bunu haklı olarak yakalayıp
+    // BİRBİRİYLE ALAKASIZ 12 firmayı tek "mükerrer" grubu olarak sunuyordu.
+    // Müşteri o ekranı açtığında gördüğü ilk şey saçma bir grup oluyordu.
+    // (Motor tarafı da sertleştirildi — yer tutucu bastırma — ama demo verisinin
+    // kendisi de gerçekçi olmalı: alıcıların telefonu farklı olur.)
+    const kod = ALAN_KODU[a.city] ?? "0212";
+    const telefon = `${kod} ${String(300 + sira).padStart(3, "0")} ${String(10 + sira).padStart(2, "0")} ${String(20 + sira).padStart(2, "0")}`;
     const c = await prisma.customer.upsert({
       where: { code: a.code },
-      update: {},
+      update: { contactPhone: telefon },
       create: {
         code: a.code,
         name: a.name,
@@ -59,7 +77,7 @@ export async function carilerKur(): Promise<string[]> {
         country: "Türkiye",
         type: "CUSTOMER",
         contactName: "Satın Alma Birimi",
-        contactPhone: "0212 000 00 00",
+        contactPhone: telefon,
       },
       select: { id: true },
     });
