@@ -7,6 +7,7 @@ import { CopyContextMenu } from "@/components/CopyContextMenu";
 import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
+import { BossShell } from "@/components/layout/BossShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
@@ -14,6 +15,8 @@ import { tokenStore } from "@/lib/secure-token";
 import { decodeJwt, jwtPayloadExpiryMs } from "@/lib/jwt";
 import { canEnterApp } from "@/types/auth";
 import { TOTP_ENROLL_PATH } from "@/lib/totp-enroll-url";
+import { BOSS_PATH } from "@/lib/boss-path";
+import { useHashPath } from "@/lib/use-hash-path";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -83,6 +86,9 @@ function CacheUserGuard() {
 function Root() {
   const isHydrated = useAuthStore((s) => s.isHydrated);
   const user = useAuthStore((s) => s.user);
+  // ⚠️ REAKTİF OKUMA ŞART — düz `window.location.hash` React'e hiçbir şey
+  // söylemez ve kabuk geçişleri tepkisiz kalır (bkz. `use-hash-path.ts`).
+  const hashPath = useHashPath();
 
   if (!isHydrated) return null;
   // ⚠️ 2FA KURULUM SAYFASI OTURUM DURUMUNDAN BAĞIMSIZ AÇILIR.
@@ -90,11 +96,16 @@ function Root() {
   // makinede açılırsa (yönetici kendi ekranında denerken, ya da kullanıcı
   // fabrikada oturum açıkken) `AppShell` çizilir ve `#/2fa-kurulum` hiçbir
   // içerik rotasına uymadığı için BOŞ SAYFA görünürdü — hata yok, log yok.
-  const onEnrollPath =
-    typeof window !== "undefined" &&
-    window.location.hash.startsWith(`#${TOTP_ENROLL_PATH}`);
+  const onEnrollPath = hashPath === TOTP_ENROLL_PATH;
   if (onEnrollPath || !user || !canEnterApp(user.permissions)) {
     return <RouterProvider router={authRouter} />;
+  }
+  // PATRON KABUĞU — `#/boss` ile açılır. `AppShell`in sekme şeridi + sidebar'ı
+  // telefonda kullanılamıyor; patron ekranı tek iş yaptığı için ince kabuk
+  // yeterli. Kabuk `content-routes`u AYNI router altyapısıyla çalıştırır, yani
+  // detaya iniş bugünkü ekranlarla sorunsuz çalışır (bkz. BossShell başlığı).
+  if (hashPath === BOSS_PATH || hashPath.startsWith(`${BOSS_PATH}/`)) {
+    return <BossShell />;
   }
   return <AppShell />;
 }
