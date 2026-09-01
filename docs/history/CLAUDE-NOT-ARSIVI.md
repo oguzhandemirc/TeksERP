@@ -1673,3 +1673,245 @@ doğrulanmış oldu.
 
 **Migration YOK · yeni izin YOK · APK YOK.** Backend ÖNCE (Electron `freeSemiFinished`'i
 opsiyonel okuduğu için ters sıra da çökmez, yalnız ipucu eksik kalır).
+
+---
+
+## 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip
+
+**Talep:** patron dışarıdan stoğu/siparişi izlesin; ara sıra sipariş, iş emri ve
+müşteri kaydı da açsın. Yani salt-okunur bir ayna DEĞİL, **canlı ve yazabilen dar
+bir yüzey**.
+
+### Neden tünel — ve neden ayna DEĞİL
+
+Üç seçenek tartıldı. **Bulut ayna elendi** çünkü tek yönlüdür: yazma gelince ya
+iki yönlü senkron yazılacaktı (çatışma çözümü + kuyruk + sıralama — ayrı bir
+proje) ya da yazmalar için yine canlı bağlantıya düşülecekti. **Uygulama
+seviyesi senkron da elendi**: bu koddaki atomik claim'ler, `pg_advisory_xact_lock`
+(8021/8022/8024/8028) ve `clientToken` idempotency'sinin TAMAMI tek DB varsayar.
+
+İlk tasarım WireGuard + kendi VPS'imizdi; **Cloudflare Tunnel + Access'e
+çevrildi**. Fark tünelde değil KİMLİKTE: Access, ERP'ye ulaşmadan önce bir
+e-posta OTP duvarı koyar ve bu TeksERP'ye tek satır kod yazmadan gelir.
+"CF araya girer, trafiği görür" itirazı bu projede geçersiz — turuncu bulut
+Origin CA yüzünden zaten zorunlu, yani CF her hâlde TLS'i sonlandırıyor.
+
+### Uzaklık SOKETTEN çözülür — `clientType`ten değil
+
+Aynı process iki dünyaya hizmet ediyor: LAN (`0.0.0.0:4000`) ve tünel
+(`127.0.0.1:REMOTE_PORT`). Ayrımın kaynağı `req.socket.localPort`tur.
+
+⚠️ **`clientType` bir güvenlik sınırı DEĞİLDİR** — gövdeden gelir, internetten
+gelen biri `clientType:"electron"` yazıp LAN kurallarına (PIN girişi, TOTP
+muafiyeti) düşerdi. Tünel dinleyicisi **yalnız `127.0.0.1`e** bağlanır; LAN'dan
+erişilemediği için uydurulamaz ve **paylaşılan sır yoktur** (sızacak ya da
+rotasyona girecek bir şey yok).
+
+⚠️ **4001 `0.0.0.0`a AÇILAMAZ.** Açılırsa fabrikadaki herhangi biri kendini
+"uzak" gösterebilir ya da tersi olur; iki yönde de kural seti sessizce yanlış
+uygulanır. `HOST` env'i bilerek onurlandırılmaz — o LAN dinleyicisinin ayarıdır.
+
+### İkinci katman: Access JWT, FAIL-CLOSED
+
+Uzak `/api` isteklerinde `Cf-Access-Jwt-Assertion` RS256 + JWKS ile doğrulanır
+(`jsonwebtoken` zaten bağımlılıkta; JWK→PEM `node:crypto`nun kendi `format:"jwk"`
+desteğiyle — `jwks-rsa` GEREKMEZ).
+
+Bu yalnız derinlik savunması değil: **Access politikası CF panelinden
+yanlışlıkla kaldırılırsa** kimlik duvarı sessizce düşerdi ve bunu hiçbir yerden
+göremezdik. Burada uzak erişim DURUR.
+
+⚠️ JWKS önbelleğinde **TTL'in işi TAZELİKTİR, GEÇERLİLİK DEĞİL** (2026-08-26
+`ReasonPreset` dersinin birebir aynısı): süre dolunca `null` dönüp fail-closed'a
+düşmek, CF'e giden tek bir yavaş isteğin patronu kapıda bırakması demekti. Bayat
+anahtarlar da döndürülür + arka planda tazeleme tetiklenir. **Bayatlık ≠ boşluk**:
+önbellek HİÇ dolmadıysa fail-closed KALIR (ve bu güvenli — JWKS'e ulaşılamıyorsa
+tünel de ayakta değildir, yani gerçek bir uzak istek gelemez).
+
+### Uzakta kapalı yollar — neden 404, neden 403 değil
+
+`login-quick-pin` · `login-card` · `mobile-users` · `/api/devices` ·
+`/api/discovery` · `/api/mobile` · `/api-docs`.
+
+En kritiği PIN: **`users.quickPin` 6 HANE, DÜZ METİN ve sistem genelinde
+`@unique`** — yani PIN tek başına kimliği belirler. 10^6'lık bir uzayı internete
+açmak tüm operatör hesaplarını kaba kuvvete açmaktır. `POST /api/devices/announce`
+ise kimliksiz PENDING cihaz yaratır ve tavan 200'dür → tablet eşleştirmesi
+DoS'lanabilirdi.
+
+**403 değil 404**: 403 "burada bir şey var ama giremezsin" der ve keşfe davet
+eder. Servis katmanında da ikinci hat var (`assertNotRemote`) — kenar denylist'i
+bir refactor ya da yanlış mount sırasıyla düşerse devreye girer.
+
+### Sessizce kapanan açık: `CLIENT_IP_HEADER`
+
+Başlık app-wide okunsaydı **karışık modda LAN'daki biri
+`CF-Connecting-IP: <rastgele>` yazarak giriş kilidini VE hız sınırını tamamen
+etkisizleştirirdi** (her denemede farklı kova). Güven artık
+`clientIpHeaderRemoteOnly` ile daraltılıyor ve bayrak `REMOTE_PORT`ten
+TÜRETİLİYOR — uzaktan erişim kapalı kurulumlarda (demo dahil) davranış birebir
+eskisi gibi.
+
+⚠️ `TRUST_PROXY` app-wide AYARLANMAZ: Express'in `trust proxy`si uygulama
+genelidir ve LAN'da da `X-Forwarded-For`a güvenirdi. Zaten `resolveClientIp`in
+dokümanı 2026-08-14'te `TRUST_PROXY`nin bu işi çözemediğini canlı demoda
+ölçmüştü — asıl mekanizma başlıktır.
+
+### helmet İKİ ÖRNEK, tek process
+
+HSTS + CSP `upgrade-insecure-requests` internette gerekli; **LAN'da AYNI
+başlıklar paneli KIRAR** — tarayıcı `http://192.168.1.250:4000` adresini kalıcı
+https'e çevirir, sunucu 443 dinlemediği için panel açılmaz ve geri dönüş
+SUNUCUDA DEĞİL kullanıcının HSTS önbelleğindedir. Tek bir helmet örneğini
+"ortalama" yapılandırmayla kurmak mümkün değil → iki örnek, istek başına seçim.
+
+⚠️ Dispatcher'ın **fonksiyon adı `helmetMiddleware` olmak ZORUNDA**: Express
+katman adını fonksiyondan alır ve `test_middleware_order` sırayı ADLA doğrular.
+İsimsiz arrow yazıldığında katman "bulunamadı" olur ve sıra sözleşmesi
+SESSİZCE ölçülmez hâle gelir (ilk yazımda tam bu oldu).
+
+### İKİ DİNLEYİCİ ≠ İKİ PROCESS
+
+`server.ts`teki tek-process invariantı korunuyor: presence Map'i, feature-flag
+cache'i ve zamanlayıcı bayrakları PROCESS-local'dir; tek process içinde ikinci
+bir soket açmak onların hiçbirini çoğaltmaz. Bozulan şey ikinci bir NODE SÜRECİ
+olurdu — o hâlâ YASAK. (Invariant yorumu "tek `app.listen`" diyordu, düzeltildi.)
+
+### TOTP — kendi kodumuz, dış vektörle doğrulandı
+
+`node:crypto` HMAC-SHA1, yeni paket YOK. Standarda uyum **RFC 4226 + 6238 test
+vektörleriyle DIŞARIDAN** doğrulandı; kendi ürettiğini doğrulayan bir tur hatalı
+uygulamayı da onaylardı ve Google Authenticator uyumsuzluğu ancak sahada,
+girişte görülürdü.
+
+**Kurulumun TEK yolu yöneticinin açtığı 15 dk'lık tek kullanımlık penceredir.**
+"Parola doğruysa kullanıcı kendi kursun" (TOFU) reddedildi: parola sızmışsa
+saldırgan 2FA'yı KENDİ telefonuna bağlar ve meşru sahibi kilitler — yani 2FA'nın
+koruduğu TEK senaryo kapanırdı.
+
+⚠️ **İkinci faktör `issueToken`den ÖNCE koşar.** Sonraya bırakılsaydı yalnız
+parolayı ele geçiren biri, TOTP'yi hiç geçemese bile meşru kullanıcıyı
+oturumundan atabilirdi (`kick` politikası oturum kaydı açarken diğerlerini
+düşürüyor).
+
+**Üç hata kodu, üç farklı statü** ve ayrım keyfi değil — giriş kilidi yalnız
+**401**'i kaba kuvvet sayar (`auth.controller` F49): 403 kurulum yok · 409 kod
+istendi · 401 kod yanlış. 409'u 401 sanmak meşru kullanıcıyı KOD İSTENDİĞİ İÇİN
+kilitler; 401'i 409 sanmak yanlış kod girmeyi sonsuz denemeye çevirir.
+
+Kurtarma kodları **bcrypt** ile saklanır (`quickPin`/`cardToken`tan ayrılan
+nokta ve bilinçli): kurtarma kodu parolaya denk bir sırdır, oysa PIN LAN-only
+fiziksel bir kolaylıktır.
+
+### `ClientType.WEB`
+
+Web paneli Electron renderer'ının AYNI kodudur ve `clientType:"electron"`
+gönderiyordu → patron telefondan girince masaüstü oturumunu DÜŞÜRÜYORDU
+(`sameTypeSessionPolicy` varsayılanı `kick`). Artık kendi oturum yuvasını alıyor.
+
+⚠️ `isDesktopClient`te **`!== "mobile"` YAZILMAZ**: `clientType` opsiyoneldir ve
+`undefined` tarihsel olarak MOBİL demektir; negatif yazım alanı hiç göndermeyen
+eski mobil istemcileri masaüstü sayıp hepsini 403'e düşürürdü.
+
+Aynı dokunuşta **altıncı "unutulmuş enum değeri"** yakalandı:
+`describeExistingSession` iki dallıydı ve `web`i sessizce "mobil cihaz" diye
+gösteriyordu → `Record` biçimine alındı (dördüncü değer eklenirse TS derlemede
+söyler).
+
+### `GET /api/boss/overview` — tek uç, bölüm bazlı izin
+
+Beş bölüm (stok · sipariş · üretim · sevkiyat · fason), **yeni iş mantığı YOK**:
+mevcut rapor servisleri compose edilir. Naif çözüm istemcinin altı raporu ayrı
+çağırmasıydı; bedeli tünel üzerinden altı gidiş-dönüş değil sadece — her istemci
+hangi raporu çağıracağını KENDİ bilirdi ("ayrışan yüzey" sınıfı).
+
+**İzin süzmesi SERVİSTE** (`GET /api/search` deseni) ve **yeni izin kodu YOK**
+(2026-08-01 kurşun bypass dersi: yeni kod = sahada atanması unutulacak bir adım
+daha). Yetkisiz bölümün SORGUSU HİÇ KOŞMAZ.
+
+⚠️ **Üretim kartı ADET basar, metraj değil.** `getProductionFlow` kolon başına
+yalnız sayım döndürüyor; burada metraja çevirmek aynı sorunun İKİNCİ tanımını
+doğururdu (2026-08-27: pano 48 / envanter 47).
+
+`WEB_BOSS` rol şablonu bilinçli DAR: `report:finance` YOK (alt-ağaç zaten
+`requireFinanceEnabled` arkasında ve fabrikada kapalı — koymak hiçbir şey
+açmayan ama "verilmiş" görünen bir izin bırakırdı), SoD üçlüsü YOK,
+`report:audit` YOK (denetim takip değil YÖNETİM yüzeyi).
+
+### `BossShell` — sekme sistemi bypass, router altyapısı DEĞİL
+
+`AppShell` "uygulama içinde tarayıcı sekmeleri" modeli; telefonda sekme şeridi
+ekranın üçte birini yer ve dokunmatikte kapatma düğmeleri isabet almaz.
+
+⚠️ **Ama kendi memory router'ını KURMA.** `content-routes` sayfaları `useTabId`,
+`TabPortalProvider` ve geçmiş defterine (`history-depth`) bağlı — onlarsız
+`PageHeader`ın geri oku SESSİZCE ölür ve modaller yanlış yere portallanır. Tek
+"boss" sekmesi açıp aynı makineyi kullanmak, detaya inişin bugünkü ekranlarla
+çalışmasını sağlıyor.
+
+⚠️ **Hash değişimi React'e hiçbir şey söylemez.** `Root` kapısı düz
+`window.location.hash` okuyordu → "Tam panele geç" adresi değiştiriyor ama ekran
+patron kabuğunda ASILI KALIYORDU; hata yok, log yok, tepkisiz düğme.
+`useHashPath` (`useSyncExternalStore` + `hashchange`/`popstate`).
+
+### Web paneli backend PAKETİNE girer
+
+`deploy/paketle.ps1` `Electron/dist-web`i derleyip pakete koyar; sunucuda
+`app\dist-web`. **Sürüm drift'i matematiksel olarak imkânsız** — ayrı kanaldan
+yayınlansaydı SPA bir sürümü, API başka bir sürümü konuşabilirdi ve belirtisi
+"ekran boş" olurdu.
+
+⚠️ **Eksiklik SESSİZDİR**: `WEB_DIST_DIR` var olmayan bir klasörü gösterirse
+`express.static` no-op olur ve kök (/) panelin YERİNE durum sayfasını basar. Bu
+yüzden iki kapı: derleme başarısızsa paket ÜRETİLMEZ, derleme 0 dönüp BOŞ klasör
+bırakırsa da üretilmez (`index.html` kontrol edilir).
+
+⚠️ PowerShell'de **backtick KAÇIŞ karakteridir** — hata mesajında
+`` `npm install` `` yazmak `` `n `` yüzünden satır kırıyordu.
+
+### Bekçiler
+
+| Bekçi | Kontrol | Negatif sonda |
+|---|---|---|
+| `test_remote_access_guard` | 51 | 4 (denylist · helmet · IP başlığı · Access JWT) |
+| `test_totp` | 69 | RFC vektörleri dış referans |
+| `test_boss_overview` | 60 | 4 (izin süzmesi · kolon sayımı · matchesPermission · kırılım) |
+| `login-totp.test` (Electron) | 14 | 2 |
+| `boss-shell.test` (Electron) | 11 | 3 |
+
+⚠️ **`test_remote_access_guard`ın asıl iddiası "LAN yolu değişmedi"** ve bu
+gerçek bir HTTP sunucusuyla, İKİ PORT üzerinden ölçülür. Yalnız uzak yolu test
+etmek vakumen yeşil kalırdı (uzak yol zaten yeni kod).
+
+⚠️ **`test_boss_overview`da kırılım kontrolü İLK YAZIMDA YOKTU** ve bunu negatif
+sonda yakaladı: `byCustomer` alanını değiştirmek DERLENİYOR ve testi GEÇİYORDU.
+Sonda seçerken ikinci tuzak: bu veride `openQty === uncoveredQty` (hiçbir sipariş
+depodan karşılanmıyor) → o ikisini değiştiren sonda YEŞİL kalır; kırmızı kanıtı
+`fromWarehouseQty` ile alınır.
+
+⚠️ **`login-totp.test` ilk yazımda KENDİ YORUMUNU yakaladı** (doküman
+bloğundaki `clientType:"electron"` ifadesini kod sandı). Kaynak taraması yapan
+her bekçi önce yorumları atmalı — aynı ders `print-merge`te de ölçülmüştü.
+
+### Canlı ölçüm (iki dinleyici, tek process)
+
+LAN `clientType:"web"` girişi kabul · `/api/boss/overview` gerçek veri (ham
+31971 · yarı 7660 · bitmiş 30671 m, 69 açık kalem / 78870 m, 23 geciken, 7
+kolon, 6 istasyon, fasonda 1200 m) · tünel portunda Access başlığı yokken 403 ·
+PIN/cihaz uçları tünelde 404 ama LAN'da 401/400 (erişilebilir) · HSTS + CSP
+upgrade yalnız tünelde · `WEB_DIST_DIR` ile kök panel + asset 200.
+
+**Migration:** `20260901173733_uzaktan_erisim_totp` (additive — `ALTER TYPE ADD
+VALUE` + iki tablo). ⚠️ Prisma'nın ürettiği iki `DropForeignKey` satırı ELLE
+SİLİNDİ (DEFERRABLE composite FK tuzağı, perf kuralı 4) ve `test_schema_drift`
+ile doğrulandı. **Yeni izin kodu YOK · APK YOK.**
+
+**AÇIK MADDELER:**
+- Uzak TOTP akışı canlı ölçülemedi (tünel portu geçerli Access JWT'si istiyor) —
+  gerçek CF kurulumunda bir kez denenmeli (reçete: kabul ölçümü #5).
+- Fiziksel LAN regresyonu (tablet PIN + panel) fabrikada yapılmalı.
+- **Faz 2 mobil uygulaması Access ile sürtüşecek**: native istemci servis
+  token'ı ister, o da APK'ya gömülü paylaşılan bir sır demektir. O gün ya
+  `/api/*` Access dışına alınıp yalnız SPA gatelenir, ya mobil için ayrı yol.
+- Kesintide patron veri göremez (CF Error 1033). Kalıcı çözüm okuma replikası ve
+  o **WireGuard ister** — CF Tunnel PostgreSQL replikasyonunu taşımaz.
