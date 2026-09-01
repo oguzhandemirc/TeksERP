@@ -91,6 +91,52 @@ const NAME_FOLD_COLUMNS: ReadonlySet<string> = new Set(["nameFold", "nameFoldCol
  * Çoklu kolon (composite unique) için ilk kolonu döner; null/undefined varsa
  * çağıran "field" generic fallback'ine düşer.
  */
+/**
+ * `PrismaClientValidationError` metninden SUÇLU ALANI çıkarır.
+ *
+ * Neden gerekli (2026-09-01, canlı demoda ölçüldü): bu hatanın tek yanıtı
+ * *"Geçersiz veri yapısı. Gönderilen alanları ve tipleri kontrol edin."*
+ * idi — HANGİ alanın yanlış olduğunu söylemiyordu. `POST /api/items`e
+ * `unit: "m"` göndermek (ki `ItemUnit` enum'u `MT|KG|ADET` bekler) tam olarak
+ * bunu üretti: 400, sıfır ipucu, ve alan adı yanıtta da log'da da yok.
+ * Kör mesaj bu sınıfın TAMAMINI kapsıyor (Zod şeması olmayan her BaseController
+ * ucu doğrudan Prisma'ya gider), o yüzden düzeltme uç bazında değil BURADA.
+ *
+ * ⚠️ HAM METİN İSTEMCİYE BASILMAZ. Prisma'nın mesajı gönderilen `data`
+ * bloğunun TAMAMINI içerir (fiyat, vergi no, not…). Yalnız alan adı ve
+ * beklenen tip dışarı çıkar; gerisi log'da kalır.
+ */
+export function extractPrismaValidationField(err: unknown): { field: string; reasonTr: string } | null {
+  const msg = err instanceof Error ? err.message : typeof err === "string" ? err : "";
+  if (!msg) return null;
+
+  // "Invalid value for argument `unit`. Expected ItemUnit."
+  const gecersiz = msg.match(/Invalid value for argument `([^`]+)`\.?(?:\s*Expected ([A-Za-z0-9_ ,]+)\.)?/);
+  if (gecersiz?.[1]) {
+    const beklenen = gecersiz[2]?.trim();
+    return {
+      field: gecersiz[1],
+      reasonTr: beklenen ? `geçersiz değer taşıyor (beklenen: ${beklenen})` : "geçersiz bir değer taşıyor",
+    };
+  }
+  // "Unknown argument `foo`."  /  "Unknown arg `foo`"
+  const bilinmeyen = msg.match(/Unknown (?:argument|arg) `([^`]+)`/);
+  if (bilinmeyen?.[1]) {
+    return { field: bilinmeyen[1], reasonTr: "bu kayıt tipinde tanımlı değil" };
+  }
+  // "Argument `name` is missing."
+  const eksik = msg.match(/Argument `([^`]+)` is missing/);
+  if (eksik?.[1]) {
+    return { field: eksik[1], reasonTr: "zorunlu ama gönderilmemiş" };
+  }
+  // "Argument `qty`: Invalid value provided. Expected Decimal, provided String."
+  const tip = msg.match(/Argument `([^`]+)`: Invalid value provided\.\s*Expected ([A-Za-z0-9_ ,]+?),\s*provided/);
+  if (tip?.[1]) {
+    return { field: tip[1], reasonTr: `yanlış tipte (beklenen: ${tip[2]?.trim()})` };
+  }
+  return null;
+}
+
 function extractUniqueColumn(meta: Record<string, unknown> | undefined): string | null {
   if (!meta) return null;
 
@@ -716,9 +762,13 @@ export const errorHandler = (
 
   // Prisma validation errors (wrong data shape for model)
   if (err instanceof Prisma.PrismaClientValidationError || err.constructor.name === "PrismaClientValidationError") {
+    const alan = extractPrismaValidationField(err);
     res.status(400).json({
       success: false,
-      message: "Geçersiz veri yapısı. Gönderilen alanları ve tipleri kontrol edin.",
+      message: alan
+        ? `Geçersiz veri yapısı: '${alan.field}' alanı ${alan.reasonTr}. Bu alanı düzeltip tekrar deneyin.`
+        : "Geçersiz veri yapısı. Gönderilen alanları ve tipleri kontrol edin.",
+      ...(alan ? { errors: [{ field: alan.field, message: alan.reasonTr }] } : {}),
     });
     return;
   }
