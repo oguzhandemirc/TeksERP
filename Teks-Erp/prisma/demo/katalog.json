@@ -1,0 +1,1062 @@
+{
+ "items": [
+  {
+   "code": "Ege",
+   "name": "EGE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "BAYROFLAM",
+   "name": "BAYRO FLAM",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "bayrosimli",
+   "name": "BAYRO SİMLİ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "alp",
+   "name": "ALP",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "alpaltin",
+   "name": "ALP ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "panos",
+   "name": "PANOS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "bgr150seffaf",
+   "name": "BGR 150 ŞEFFAF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "nepsvual",
+   "name": "NEPS VUAL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "lenor",
+   "name": "LENOR",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "mitra",
+   "name": "MİTRA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "kristal",
+   "name": "KRİSTAL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "roma",
+   "name": "ROMA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "dnr-9000",
+   "name": "DNR-9000",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "asante",
+   "name": "ASANTE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "tergal",
+   "name": "TERGAL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "simlikrep",
+   "name": "PIRILTI KREP",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "adel",
+   "name": "ADEL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ipekkrep",
+   "name": "İPEK KREP",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "hera",
+   "name": "HERA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "20011",
+   "name": "20011",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "20111",
+   "name": "MABEL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SANTUK",
+   "name": "BORANCIK",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "canvas",
+   "name": "CANVAS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "sable",
+   "name": "SABLE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "1093",
+   "name": "1093",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "belarus",
+   "name": "BELARUS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "bermuda",
+   "name": "BERMUDA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "granada",
+   "name": "GRANADA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "lena",
+   "name": "LENA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "linen",
+   "name": "LİNEN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "linenfoldet",
+   "name": "LİNEN FOLDET",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "monica",
+   "name": "MONİCA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "pera",
+   "name": "PERA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "poperman",
+   "name": "POPERMAN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "zella",
+   "name": "ZELLA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "elisado",
+   "name": "ELİSADO",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ponpon",
+   "name": "İROLANA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "1059",
+   "name": "1059",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "simlineps",
+   "name": "SİMLİ NEPS VUAL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "lina",
+   "name": "LİNA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "anna",
+   "name": "ANNA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "artemis",
+   "name": "ARTEMİS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "asc01",
+   "name": "ASC-01",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "classicvoile",
+   "name": "CLASSİC VOİLE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "galina",
+   "name": "GALİNA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "victoria",
+   "name": "VİCTORİA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ttmpiramit",
+   "name": "TTM PİRAMİT",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ttmbambu",
+   "name": "TTM BAMBU",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "rosin",
+   "name": "ROSİN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "8147",
+   "name": "8147",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "300txtr",
+   "name": "300TXTR NEGATİF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "matdoner",
+   "name": "MAT DÖNER",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "santuk",
+   "name": "ŞANTUK",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "hermes",
+   "name": "HERMES",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "alpgumus",
+   "name": "ALP GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "teras",
+   "name": "TERAS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "bgr150alti",
+   "name": "BGR 150 ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "bgr150gumus",
+   "name": "BGR 150 GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "mrt04",
+   "name": "MRT04",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "popermansimli",
+   "name": "POPERMAN SİMLİ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "krep",
+   "name": "KREP",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "EDOLALTIN",
+   "name": "EDOL ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "EDOLGUMUS",
+   "name": "EDOL GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "EDOLSEFFAF",
+   "name": "EDOL ŞEFFAF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "BGR150SEFFAF",
+   "name": "BGR 150 ŞEFFAF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "18152",
+   "name": "18152",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "DOMAS",
+   "name": "DOMAS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "JUSTE",
+   "name": "JUSTE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SAMARA",
+   "name": "SAMARA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SIMLILINENFOLDET",
+   "name": "SİMLİ LİNEN FOLDET",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "HERAGUMUS",
+   "name": "HERA -GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "HERAALTIN",
+   "name": "HERA-ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "OSLOGUMUS",
+   "name": "OSLO GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "OSLOALTIN",
+   "name": "OSLO ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "OSLO",
+   "name": "OSLO",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ELISADONOPE",
+   "name": "ELİSADO-NOPE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "CELIK",
+   "name": "ÇELIK",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "HERASEFFAF",
+   "name": "HERA -ŞEFFAF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ASAL",
+   "name": "ASAL",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000002",
+   "name": "318980",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "2024",
+   "name": "2024",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000007",
+   "name": "HERA SEDEF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000008",
+   "name": "NUMUNE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000014",
+   "name": "KRİSTAL ALTIN -BEJ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000013",
+   "name": "KRİSTAL GÜMÜŞ -GRİ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000012",
+   "name": "KRİSTAL ALTIN -EKRU",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000011",
+   "name": "KRİSTAL GÜMÜŞ -EKRU",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000010",
+   "name": "KRİSTAL GÜMÜŞ-BEYAZ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "KRISTALALTIN",
+   "name": "KRİSTAL -ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "KRISTALGUMUS",
+   "name": "KRİSTAL -GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "TOROS",
+   "name": "TOROS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ALPSEDEF",
+   "name": "ALP SEDEF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "PIRAMITALTIN",
+   "name": "PİRAMİT- ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "BELLE",
+   "name": "BELLE",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "PIRAMITGUMUS",
+   "name": "PİRAMİT-GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "PIRAMITSEFFAF",
+   "name": "PİRAMİT-ŞEFFAF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "sefa",
+   "name": "MİKRO CANVAS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SAHARINKA",
+   "name": "SAHARİNKA",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "linus",
+   "name": "LİNUS",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SAMARAALTIN",
+   "name": "SAMARA ALTIN",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SAMARAGUMUS",
+   "name": "SAMARA GÜMÜŞ",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "SAMARASEFFAF",
+   "name": "SAMARA ŞEFFAF",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "MC-159",
+   "name": "MC-159",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "MC-165",
+   "name": "MC-165",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "MC-158",
+   "name": "MC-158",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "MC-157",
+   "name": "MC-157",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "1015BEYAZSADECELIK",
+   "name": "1015-BEYAZ SADE ÇELİK SİMSİZ (SİYAH ÇÖZGÜ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000009",
+   "name": "1015-BEYAZ SİMSİZ (BEYAZ ÇÖZGÜ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000015",
+   "name": "1015 GÜMÜŞ SİMLİ (BEYAZ ÇÖZGÜ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "1015GUMUS",
+   "name": "1015-GÜMÜŞ SİMLİ (SİYAH ÇÖZGÜ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "1015ALTIN",
+   "name": "1015-ALTIN (BEYAZ ÇÖZGÜ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000016",
+   "name": "1015 ALTIN (SİYAH ÇÖZGÜ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000018",
+   "name": "ACTİVO BEYAZ -(BEYAZ GÜMÜŞ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000017",
+   "name": "ACTİVO SİYAH-(KREM ALTIN)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "ACTIVOKREMGUMUS",
+   "name": "ACTİVO BEYAZ-(KREM GÜMÜŞ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000006",
+   "name": "ACTİVO SİYAH-( KREM GÜMÜŞ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000005",
+   "name": "ACTİVO BEYAZ-(KREM ALTIN )",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000004",
+   "name": "ACTİVO SİYAH-(BEYAZ GÜMÜŞ)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000003",
+   "name": "ACTİVO BEYAZ-(BEYAZ ALTIN)",
+   "unit": "MT",
+   "width": null
+  },
+  {
+   "code": "STK-000019",
+   "name": "ACTİVO SİYAH-(BEYAZ ALTIN)",
+   "unit": "MT",
+   "width": null
+  }
+ ],
+ "colors": [
+  {
+   "name": "03-KREM",
+   "hex": null
+  },
+  {
+   "name": "490-TAŞ",
+   "hex": null
+  },
+  {
+   "name": "038-GRİ",
+   "hex": "#70737b"
+  },
+  {
+   "name": "029-TAŞ",
+   "hex": "#886650"
+  },
+  {
+   "name": "063-PUDRA",
+   "hex": "#eaa4df"
+  },
+  {
+   "name": "077-VİZON",
+   "hex": "#a25c22"
+  },
+  {
+   "name": "55-BEYAZ",
+   "hex": "#ffffff"
+  },
+  {
+   "name": "27-KREM",
+   "hex": null
+  },
+  {
+   "name": "ALTIN-EKRU",
+   "hex": null
+  },
+  {
+   "name": "GÜMÜŞ-EKRU",
+   "hex": null
+  },
+  {
+   "name": "GÜMÜŞ-BEYAZ",
+   "hex": null
+  },
+  {
+   "name": "ŞEFFAF-BEYAZ",
+   "hex": null
+  },
+  {
+   "name": "ŞEFFAF-EKRU",
+   "hex": null
+  },
+  {
+   "name": "ALTIN-BEYAZ",
+   "hex": null
+  },
+  {
+   "name": "OPTİK",
+   "hex": "#ffffff"
+  },
+  {
+   "name": "330-BEYAZ",
+   "hex": null
+  },
+  {
+   "name": "V15",
+   "hex": null
+  },
+  {
+   "name": "1217-BEJ",
+   "hex": null
+  },
+  {
+   "name": "OPTİK-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "BEYAZ-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "KREM-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "KREM-ALTIN",
+   "hex": null
+  },
+  {
+   "name": "B.BEYAZ-ALTIN",
+   "hex": null
+  },
+  {
+   "name": "B.BEYAZ-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "B.KREM-ALTIN",
+   "hex": null
+  },
+  {
+   "name": "B.KREM-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "B.OPTİK-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "S.BEYAZ-ALTIN",
+   "hex": null
+  },
+  {
+   "name": "S.BEYAZ-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "S.KREM-ALTIN",
+   "hex": null
+  },
+  {
+   "name": "S.KREM-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "S.OPTİK-GÜMÜŞ",
+   "hex": null
+  },
+  {
+   "name": "GRİ",
+   "hex": "#57585a"
+  },
+  {
+   "name": "VİZON",
+   "hex": "#69573b"
+  },
+  {
+   "name": "1341-GRİ",
+   "hex": "#717171"
+  },
+  {
+   "name": "1195-GRİ",
+   "hex": "#949494"
+  },
+  {
+   "name": "1191-BEJ",
+   "hex": null
+  },
+  {
+   "name": "1193-VİZON",
+   "hex": null
+  },
+  {
+   "name": "1342-BEJ",
+   "hex": null
+  },
+  {
+   "name": "078-KAHVE",
+   "hex": null
+  },
+  {
+   "name": "1263-A.TAŞ",
+   "hex": null
+  },
+  {
+   "name": "292-7791-GRİ",
+   "hex": null
+  },
+  {
+   "name": "ALTIN-EKRU",
+   "hex": null
+  },
+  {
+   "name": "V63",
+   "hex": "#ffffff"
+  },
+  {
+   "name": "BEYAZ",
+   "hex": "#ffffff"
+  },
+  {
+   "name": "01-BEYAZ",
+   "hex": "#ffffff"
+  },
+  {
+   "name": "240-BEYAZ",
+   "hex": "#ffffff"
+  },
+  {
+   "name": "V-2",
+   "hex": null
+  },
+  {
+   "name": "078-BYR-K.KAHVE",
+   "hex": "#7b392d"
+  },
+  {
+   "name": "1195-GRİ",
+   "hex": "#37383a"
+  },
+  {
+   "name": "1216-GRİ",
+   "hex": "#797979"
+  },
+  {
+   "name": "V-1461",
+   "hex": null
+  },
+  {
+   "name": "EKRU",
+   "hex": null
+  },
+  {
+   "name": "V-4",
+   "hex": null
+  },
+  {
+   "name": "V-6",
+   "hex": null
+  },
+  {
+   "name": "V-11",
+   "hex": null
+  },
+  {
+   "name": "V-25",
+   "hex": null
+  },
+  {
+   "name": "V-17",
+   "hex": null
+  },
+  {
+   "name": "V-18",
+   "hex": null
+  },
+  {
+   "name": "V-20",
+   "hex": null
+  },
+  {
+   "name": "V-28",
+   "hex": null
+  },
+  {
+   "name": "V-1462",
+   "hex": null
+  },
+  {
+   "name": "A.GRİ",
+   "hex": null
+  },
+  {
+   "name": "06-KREM",
+   "hex": null
+  },
+  {
+   "name": "V-1",
+   "hex": null
+  },
+  {
+   "name": "46150",
+   "hex": null
+  },
+  {
+   "name": "BEJ",
+   "hex": null
+  },
+  {
+   "name": "V-5",
+   "hex": null
+  },
+  {
+   "name": "V-13",
+   "hex": null
+  },
+  {
+   "name": "V-3",
+   "hex": null
+  },
+  {
+   "name": "V-14",
+   "hex": null
+  }
+ ],
+ "properties": [
+  {
+   "code": "OZL2107260001",
+   "name": "YUMUŞAK TUŞE -1",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "OZL2107260002",
+   "name": "AÇMAZLIK",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "ZIMPARALI",
+   "name": "ZIMPARALI",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "KURSUN",
+   "name": "KURŞUNLU",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "OZL3007260001",
+   "name": "YUMUŞAK TUŞE-6",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "OZL0308260001",
+   "name": "YUMUŞATICI",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "OZL0608260001",
+   "name": "APRE",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "OZL0708260001",
+   "name": "JET PİŞİRME",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "OZL2107260003",
+   "name": "JET BOYA PİŞİRME",
+   "valueType": "FLAG"
+  },
+  {
+   "code": "KAT",
+   "name": "Kat",
+   "valueType": "CHOICE"
+  }
+ ]
+}
