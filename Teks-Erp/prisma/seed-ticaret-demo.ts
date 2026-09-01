@@ -72,6 +72,10 @@ import { cashPeriodCloseService } from "../src/services/cash-period-close.servic
 import { returnService } from "../src/services/return.service";
 import { systemSettingService } from "../src/services/system-setting.service";
 import { PermissionManagementService } from "../src/services/permission-management.service";
+import {
+  foldColorNameForCompare,
+  foldNameForCompare,
+} from "../src/services/helpers/name-normalize.helper";
 
 // -----------------------------------------------------------------------------
 // 0) GÜVENLİK KAPISI
@@ -519,12 +523,27 @@ async function findByLooseName(
   tablo: "color" | "item",
   ad: string,
 ): Promise<{ id: string } | null> {
-  const hedef = ad.trim().toLowerCase();
+  // ⚠️ `toLowerCase()` TÜRKÇEDE YETMEZ ve 2026-09-01 deploy'unda ISIRDI:
+  // "GRİ".toLowerCase() → "gri̇" (i + BİRLEŞİMLİ NOKTA), "Gri" ise "gri" —
+  // eşleşme kaçtı, seed ikinci bir "Gri" yaratmaya çalıştı ve DB'nin renk ad
+  // seddine (`colors_nameFoldColor_key`, `tr_fold_color`) çarptı.
+  // Kural: karşılaştırma UYGULAMANIN KANONİK katlamasıyla yapılır — bekçinin ve
+  // DB'nin kullandığı ölçüyle aynı olmalı, yoksa "seed temiz sanır, DB reddeder"
+  // ayrışması doğar. Renk kendi katlamasını kullanır (ayırıcıları da düşürür).
   const rows =
     tablo === "color"
-      ? await prisma.color.findMany({ where: { isActive: true }, select: { id: true, name: true } })
-      : await prisma.item.findMany({ where: { isActive: true }, select: { id: true, name: true } });
-  return rows.find((r) => r.name.trim().toLowerCase() === hedef) ?? null;
+      ? await prisma.color.findMany({
+          where: { isActive: true, mergedIntoId: null },
+          select: { id: true, name: true },
+        })
+      : await prisma.item.findMany({
+          where: { isActive: true, mergedIntoId: null },
+          select: { id: true, name: true },
+        });
+  const katla = (x: string): string =>
+    tablo === "color" ? foldColorNameForCompare(x) : foldNameForCompare(x);
+  const hedef = katla(ad);
+  return rows.find((r) => katla(r.name) === hedef) ?? null;
 }
 
 async function ensureColors(): Promise<Map<string, string>> {
@@ -2083,6 +2102,13 @@ async function ensureReturns(
       unit: unitLabel(r.item.unit),
     });
   }
+
+  // ⚠️ ZATEN VARSA YENİDEN GÖNDERME — satırlar İADE EDİLEN TOPLARDAN türetilir
+  // ve o küme koşumlar arasında değişir (iade/storno akışları topları oynatır).
+  // Aynı token + farklı gövde artık 409 alıyor (gövde kapısı, 2026-09-01);
+  // belge zaten doğru oluştu, yeniden hesaplanmış payload'la göndermenin işi yok.
+  // (Aynı düzeltme `ensureInvoices`in iki satış faturası noktasında da var.)
+  if (invoiceBefore) return;
 
   const draft = await invoiceService.createDraft(
     {
