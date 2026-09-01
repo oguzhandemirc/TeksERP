@@ -188,10 +188,17 @@ echo "OK — yayında: $surum"
 # "Bu sürümü kim, ne zaman, hangi makineden, hangi sağlamayla yayınladı."
 # Sahada bir panel bozulduğunda ilk soru "hangi paketi almış" olur; defter
 # olmadan cevap yalnız dosya tarihidir ve o da kopyalamayla değişir.
-ssh "$SSH_HEDEF" "printf '%s\t%s\t%s\t%s\t%s\n' \
+#
+# ⚠️ Defter yayın ağacının (html/) DIŞINDA durur. İlk yazımda html/ içindeydi ve
+# internete AÇIKTI (ölçüldü: HTTP 200) — iç makine adlarını ve yayın geçmişini
+# sızdırıyordu. nginx'e kural yazmak da olurdu ama kırılgan: yarın oraya konan
+# ikinci bir iç dosya yine sızardı. Ayrım DİZİNDE olmalı — html/ yalnız kamuya
+# açık olması gereken şeyleri barındırır.
+DEFTER_DIZIN="$(dirname "$YAYIN_KOK")/defter"
+ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && printf '%s\t%s\t%s\t%s\t%s\n' \
   '$(date -Iseconds)' '$surum' '$(whoami)@$(hostname -s)' \
   '$(shasum -a 256 "$setup" | cut -c1-16)' '$(wc -c < "$setup" | tr -d " ")' \
-  >> '$YAYIN_KOK/$musteri/electron/YAYIN-DEFTERI.tsv'" 2>/dev/null \
+  >> '$DEFTER_DIZIN/$musteri-YAYIN-DEFTERI.tsv'" 2>/dev/null \
   && echo "  ✓ yayın defterine yazıldı" \
   || echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)"
 

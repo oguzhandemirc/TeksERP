@@ -71,14 +71,19 @@ için fazladan bir sır tutmamak.
 güvenir. DNS-only'ye çevrilirse `electron-updater` sertifikayı reddeder ve
 güncelleme **sessizce** durur.
 
+⚠️ **`html/` yalnız KAMUYA AÇIK dosyaları barındırır.** Yayın defteri ilk yazımda
+oradaydı ve internete açıktı (ölçüldü: HTTP 200) — iç makine adlarını ve yayın
+geçmişini sızdırıyordu. Ayrım nginx kuralıyla değil **dizinle** yapılır; kural
+yazmak kırılgandır, yarın oraya konan ikinci bir iç dosya yine sızar.
+
 ### Dizinler
 
 ```
 /opt/stack/traefik/                     traefik.yml · dynamic/ · certs/
 /opt/stack/apps/tekserp-guncelleme/
 ├── html/adnansahin/electron/           Setup.exe · blockmap · latest.yml
-│                                       + YAYIN-DEFTERI.tsv (kim/ne zaman/hangi sağlama)
 ├── html/adnansahin/mobil/              ota/ · apk/
+├── defter/<musteri>-YAYIN-DEFTERI.tsv  kim/ne zaman/hangi sağlama
 └── nginx/default.conf                  ⚠️ root'a ait — yayinci DEĞİŞTİREMEZ
 
 /srv/tekserp-yedek/<fabrika>/gelen/     fabrika SFTP ile buraya yazar
