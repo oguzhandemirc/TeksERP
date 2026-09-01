@@ -69,6 +69,7 @@ import {
 } from "./goods-receipt.service";
 import { assertPeriodOpenTx } from "./helpers/period-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface InvoiceLineInput {
@@ -230,6 +231,60 @@ const DETAIL_SELECT = {
   },
 } as const;
 
+/**
+ * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
+ * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı.
+ *
+ * ⚠️ NEDEN SATIR PARMAK İZİ, NEDEN TOPLAM DEĞİL: `subtotal`/`grandTotal`
+ * TASLAKTA 0'dır — şema "satırlardan yeniden hesaplanıp ONAY anında damgalanır"
+ * diyor. Toplamı kıyaslamak taslak yolunda hiçbir şey ölçmezdi. Para riski tam
+ * da satırdadır (kullanıcı birim fiyatı düzeltip aynı token'la tekrar gönderir),
+ * bu yüzden satırlar sıra + açıklama + miktar + birim fiyat olarak kıyaslanır.
+ *
+ * ⚠️ `currency`/`issueDate` varsayılan alır → kıyaslamaya GİRMEZ (saklanan dolu,
+ * gelen `undefined` olur ve MEŞRU tekrar 409'a düşerdi).
+ */
+const INVOICE_REPLAY_SELECT = {
+  id: true,
+  docNo: true,
+  type: true,
+  // ⚠️ `Invoice`ta customerId/subcontractorId KOLONU YOK — taraf `cariId` ile
+  // bağlanır ve onu servis girdiden ÇÖZER. Girdiyi saklanan cariId ile
+  // kıyaslamak iki farklı şeyi karşılaştırmak olurdu; kimlik `type` + SATIR
+  // İZİdir (para riskini taşıyan alan zaten satırdır).
+  lines: { select: { description: true, qty: true, unitPrice: true }, orderBy: { lineNo: "asc" } },
+} as const;
+
+/** Decimal/sayı/metin karışımını TEK biçime indirger — "40" ile 40.0000 eşit sayılsın. */
+function faturaSatirIzi(
+  satirlar: ReadonlyArray<{ description: string; qty: Prisma.Decimal.Value; unitPrice: Prisma.Decimal.Value }>,
+): string {
+  return satirlar
+    .map(
+      (l) =>
+        `${(l.description ?? "").trim()}|${new Prisma.Decimal(l.qty).toFixed(4)}|${new Prisma.Decimal(l.unitPrice).toFixed(4)}`,
+    )
+    .join("¬");
+}
+
+function assertInvoiceReplay(
+  existing: {
+    id: string;
+    type: InvoiceType;
+    lines: Array<{ description: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal }>;
+  },
+  input: CreateInvoiceInput,
+): void {
+  assertReplayPayloadMatches(
+    [
+      { ad: "type", mevcut: existing.type, gelen: input.type },
+      { ad: "satırlar", mevcut: faturaSatirIzi(existing.lines), gelen: faturaSatirIzi(input.lines) },
+    ],
+    "Bu istemci anahtarı FARKLI bir fatura için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    { invoiceId: existing.id },
+  );
+}
+
 export class InvoiceService {
   // ---------------------------------------------------------------------------
   // TASLAK
@@ -251,9 +306,12 @@ export class InvoiceService {
     if (input.clientToken) {
       const existing = await prisma.invoice.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, docNo: true },
+        select: INVOICE_REPLAY_SELECT,
       });
-      if (existing) return { success: true, data: existing, message: "Fatura zaten oluşturulmuş." };
+      if (existing) {
+        assertInvoiceReplay(existing, input);
+        return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Fatura zaten oluşturulmuş." };
+      }
     }
 
     const issueDate = input.issueDate ?? new Date();
@@ -373,9 +431,13 @@ export class InvoiceService {
       if (input.clientToken && isClientTokenP2002(err)) {
         const existing = await prisma.invoice.findUnique({
           where: { clientToken: input.clientToken },
-          select: { id: true, docNo: true },
+          select: INVOICE_REPLAY_SELECT,
         });
-        if (existing) return { success: true, data: existing, message: "Fatura zaten oluşturulmuş." };
+        if (existing) {
+          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
+          assertInvoiceReplay(existing, input);
+          return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Fatura zaten oluşturulmuş." };
+        }
       }
       throw err;
     }

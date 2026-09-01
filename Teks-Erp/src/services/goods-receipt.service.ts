@@ -73,6 +73,7 @@ import { describeContractPricing, loadContractPrices } from "./helpers/contract-
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { applyDateRange, buildWhereClause } from "../utils/query-parser";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const inventory = new InventoryService();
@@ -626,9 +627,28 @@ export class GoodsReceiptService {
     if (input.clientToken) {
       const dupe = await prisma.goodsReceipt.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, receiptNo: true },
+        select: {
+          id: true, receiptNo: true, warehouseId: true, supplierId: true,
+          subcontractorId: true, purchaseOrderId: true, deliveryNoteNo: true,
+        },
       });
       if (dupe) {
+        // AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
+        // `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı. Kapı
+        // olmadan, kullanıcı depoyu/tedarikçiyi düzeltip aynı token'la tekrar
+        // gönderdiğinde ESKİ fiş "zaten açılmış" diye dönüyordu.
+        // ⚠️ `currency` varsayılan alır → kıyaslamaya GİRMEZ.
+        assertReplayPayloadMatches(
+          [
+            { ad: "warehouseId", mevcut: dupe.warehouseId, gelen: input.warehouseId },
+            { ad: "supplierId", mevcut: dupe.supplierId, gelen: input.supplierId },
+            { ad: "subcontractorId", mevcut: dupe.subcontractorId, gelen: input.subcontractorId },
+            { ad: "purchaseOrderId", mevcut: dupe.purchaseOrderId, gelen: input.purchaseOrderId },
+            { ad: "deliveryNoteNo", mevcut: dupe.deliveryNoteNo, gelen: input.deliveryNoteNo },
+          ],
+          "Bu istemci anahtarı FARKLI bir mal kabul fişi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+          { goodsReceiptId: dupe.id },
+        );
         return {
           success: true,
           data: await this.loadDetail(dupe.id),

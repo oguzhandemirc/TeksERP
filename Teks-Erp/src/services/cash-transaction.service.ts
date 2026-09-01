@@ -25,6 +25,7 @@ import { D, resolveExchangeRate } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 const CASH_PREFIX = "KH";
@@ -63,6 +64,38 @@ export interface TransferInput {
   txnDate?: Date;
   description?: string | null;
   clientToken?: string | null;
+}
+
+/**
+ * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01).
+ *
+ * `clientToken` bir TEKRAR anahtarıdır, bir "üzerine yaz" anahtarı değil. Kapı
+ * olmadan replay okuyucusu bulduğu kaydı KOŞULSUZ döndürüyordu ve sonuç sessiz
+ * bir PARA hatasıydı: panelde token diyalog AÇILIŞINDA üretilip `tokenRef`te
+ * tutuluyor (`CashTxnFormDialog.tsx` — "TEK MOUNT = TEK MANTIKSAL DENEME"),
+ * yani gönderim zaman aşımına uğrayıp kullanıcı TUTARI DEĞİŞTİRİP tekrar
+ * gönderdiğinde ikinci istek aynı token'la gelir. Eski davranış ilk kaydı
+ * "Kayıt zaten oluşturulmuş" diyerek döndürürdü — kullanıcı yeni tutarın
+ * yazıldığını sanırdı.
+ *
+ * ⚠️ YALNIZ ZORUNLU (varsayılansız) alanlar kıyaslanır. `txnDate`/`currency`
+ * gibi servis tarafında varsayılan atanan alanlar buraya KONMAZ: saklanan değer
+ * doludur, gelen `undefined`dır ve kapı MEŞRU tekrarları 409'a düşürürdü.
+ */
+function assertCashTxnReplay(
+  existing: { id: string; kind: CashTxnKind; amount: Prisma.Decimal; cashBoxId: string | null; bankAccountId: string | null },
+  input: CashTxnInput,
+): void {
+  assertReplayPayloadMatches(
+    [
+      { ad: "kind", mevcut: existing.kind, gelen: input.kind },
+      { ad: "amount", mevcut: existing.amount, gelen: input.amount },
+      { ad: "cashBoxId", mevcut: existing.cashBoxId, gelen: input.cashBoxId },
+      { ad: "bankAccountId", mevcut: existing.bankAccountId, gelen: input.bankAccountId },
+    ],
+    "Bu istemci anahtarı FARKLI bir kasa hareketi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    { cashTransactionId: existing.id },
+  );
 }
 
 async function nextCashNo(tx: Prisma.TransactionClient, date: Date): Promise<string> {
@@ -186,9 +219,16 @@ export class CashTransactionService {
     if (input.clientToken) {
       const existing = await prisma.cashTransaction.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, docNo: true },
+        select: { id: true, docNo: true, kind: true, amount: true, cashBoxId: true, bankAccountId: true },
       });
-      if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+      if (existing) {
+        assertCashTxnReplay(existing, input);
+        return {
+          success: true,
+          data: { id: existing.id, docNo: existing.docNo },
+          message: "Kayıt zaten oluşturulmuş.",
+        };
+      }
     }
 
     const txnDate = input.txnDate ?? new Date();
@@ -285,9 +325,17 @@ export class CashTransactionService {
       if (input.clientToken && isClientTokenP2002(err)) {
         const existing = await prisma.cashTransaction.findUnique({
           where: { clientToken: input.clientToken },
-          select: { id: true, docNo: true },
+          select: { id: true, docNo: true, kind: true, amount: true, cashBoxId: true, bankAccountId: true },
         });
-        if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+        if (existing) {
+          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
+          assertCashTxnReplay(existing, input);
+          return {
+            success: true,
+            data: { id: existing.id, docNo: existing.docNo },
+            message: "Kayıt zaten oluşturulmuş.",
+          };
+        }
       }
       throw err;
     }

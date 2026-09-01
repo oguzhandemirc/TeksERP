@@ -17,6 +17,7 @@ import { printedDocumentService, registerPrintedDocBuilder } from "./printed-doc
 import { renderWarehouseTransferHtml, type WarehouseTransferDoc } from "./document-render/warehouse-doc.html";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
@@ -101,9 +102,39 @@ export class WarehouseTransferService {
     if (input.clientToken) {
       const dupe = await prisma.warehouseTransfer.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, transferNo: true },
+        select: {
+          id: true, transferNo: true, fromWarehouseId: true, toWarehouseId: true,
+          // ⚠️ SATIR TABLOSU YOK (dosya başlığı): transferin kalemleri
+          // `WarehouseMovement` satırlarıdır. Top başına İKİ satır doğar
+          // (çıkış + giriş) → aşağıda Set ile tekilleştirilir.
+          movements: { select: { rollId: true } },
+        },
       });
       if (dupe) {
+        // AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
+        // `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı. Burada
+        // riski TOP KÜMESİ taşır: kullanıcı seçimi düzeltip aynı token'la tekrar
+        // gönderdiğinde eski transfer "zaten yapılmış" diye dönüyordu ve
+        // eklediği toplar HİÇ taşınmamış oluyordu.
+        // ⚠️ Küme SIRASIZ kıyaslanır — istemcinin seçim sırası anlam taşımaz.
+        // ⚠️ ÇUVALLAR AÇILIR: transfer çuvalı BÜTÜN olarak taşır, yani hareket
+        // defterinde çuvalın ÜYE TOPLARI da vardır ama `input.rollIds` onları
+        // İÇERMEZ. Sadece `rollIds` ile kıyaslamak, çuval taşıyan her meşru
+        // tekrarı 409'a düşürürdü (kapının kendisi arıza olurdu).
+        const cuvalToplari = sackIds.length
+          ? await prisma.roll.findMany({ where: { sackId: { in: sackIds } }, select: { id: true } })
+          : [];
+        const izMevcut = [...new Set(dupe.movements.map((m) => m.rollId))].sort().join(",");
+        const izGelen = [...new Set([...input.rollIds, ...cuvalToplari.map((r) => r.id)])].sort().join(",");
+        assertReplayPayloadMatches(
+          [
+            { ad: "fromWarehouseId", mevcut: dupe.fromWarehouseId, gelen: input.fromWarehouseId },
+            { ad: "toWarehouseId", mevcut: dupe.toWarehouseId, gelen: input.toWarehouseId },
+            { ad: "toplar", mevcut: izMevcut, gelen: izGelen },
+          ],
+          "Bu istemci anahtarı FARKLI bir depo transferi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+          { warehouseTransferId: dupe.id },
+        );
         return { success: true, data: await this.loadDetail(dupe.id), message: `Bu transfer zaten yapılmış (${dupe.transferNo}).` };
       }
     }

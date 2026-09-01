@@ -92,6 +92,7 @@ import {
   resolveSupplierParty,
   type ResolvedSupplierParty,
 } from "./helpers/supplier-party.helper";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 /**
@@ -461,6 +462,51 @@ const LIST_SELECT = {
   _count: { select: { lines: true, goodsReceipts: true } },
 } as const;
 
+/**
+ * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
+ * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı.
+ * ⚠️ `currency`/`orderDate` varsayılan alır → kıyaslamaya GİRMEZ.
+ */
+const PO_REPLAY_SELECT = {
+  id: true,
+  orderNo: true,
+  supplierId: true,
+  subcontractorId: true,
+  lines: { select: { itemId: true, qty: true, unitPrice: true }, orderBy: { lineNo: "asc" } },
+} as const;
+
+/** Satır izi — Decimal/sayı/metin karışımı TEK biçime indirgenir. */
+function poSatirIzi(
+  satirlar: ReadonlyArray<{ itemId: string; qty: Prisma.Decimal.Value; unitPrice?: Prisma.Decimal.Value | null }>,
+): string {
+  return satirlar
+    .map(
+      (l) =>
+        `${l.itemId}|${new Prisma.Decimal(l.qty).toFixed(4)}|${l.unitPrice == null ? "-" : new Prisma.Decimal(l.unitPrice).toFixed(4)}`,
+    )
+    .join("¬");
+}
+
+function assertPoReplay(
+  existing: {
+    id: string;
+    supplierId: string | null;
+    subcontractorId: string | null;
+    lines: Array<{ itemId: string; qty: Prisma.Decimal; unitPrice: Prisma.Decimal | null }>;
+  },
+  input: PurchaseOrderCreateInput,
+): void {
+  assertReplayPayloadMatches(
+    [
+      { ad: "supplierId", mevcut: existing.supplierId, gelen: input.supplierId },
+      { ad: "subcontractorId", mevcut: existing.subcontractorId, gelen: input.subcontractorId },
+      { ad: "satırlar", mevcut: poSatirIzi(existing.lines), gelen: poSatirIzi(input.lines) },
+    ],
+    "Bu istemci anahtarı FARKLI bir alış siparişi için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    { purchaseOrderId: existing.id },
+  );
+}
+
 export class PurchaseOrderService {
   // ---------------------------------------------------------------------------
   // Doğrulamalar
@@ -535,9 +581,10 @@ export class PurchaseOrderService {
     if (input.clientToken) {
       const existing = await prisma.purchaseOrder.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, orderNo: true },
+        select: PO_REPLAY_SELECT,
       });
       if (existing) {
+        assertPoReplay(existing, input);
         return {
           success: true,
           data: await this.getById(existing.id),
@@ -591,9 +638,11 @@ export class PurchaseOrderService {
       if (input.clientToken && isClientTokenP2002(err)) {
         const existing = await prisma.purchaseOrder.findUnique({
           where: { clientToken: input.clientToken },
-          select: { id: true, orderNo: true },
+          select: PO_REPLAY_SELECT,
         });
         if (existing) {
+          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
+          assertPoReplay(existing, input);
           return {
             success: true,
             data: await this.getById(existing.id),

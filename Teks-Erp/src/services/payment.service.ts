@@ -32,6 +32,7 @@ import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 // B4 — liste filtreleri: CSV çoklu seçim tek kaynaktan çözülür (ham CSV bir
 // uuid kolonuna giderse P2007 → 400; CLAUDE.md 2026-08-06).
 import { buildTurkishSearch, isEnumMember, readFilterList, readIdCondition } from "../utils/query-parser";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 export interface CreatePaymentInput {
@@ -109,6 +110,50 @@ async function autoAllocateNoteAfterPayment(
   }
 }
 
+/**
+ * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçenin tamamı
+ * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığında.
+ *
+ * ⚠️ YALNIZ ZORUNLU (varsayılansız) alanlar: `currency` ve `paymentDate`
+ * servis tarafında varsayılan alır → saklanan dolu, gelen `undefined` olur ve
+ * kıyaslamaya konursa MEŞRU tekrar 409'a düşerdi.
+ */
+const REPLAY_SELECT = {
+  id: true,
+  docNo: true,
+  direction: true,
+  method: true,
+  amount: true,
+  // ⚠️ customerId/subcontractorId KOLONU YOK — taraf `cariId` ile bağlanır ve
+  // servis onu girdiden çözer; girdiyi saklanan cariId ile kıyaslayamayız.
+  cashBoxId: true,
+  bankAccountId: true,
+} as const;
+
+function assertPaymentReplay(
+  existing: {
+    id: string;
+    direction: PaymentDirection;
+    method: PaymentMethod;
+    amount: Prisma.Decimal;
+    cashBoxId: string | null;
+    bankAccountId: string | null;
+  },
+  input: CreatePaymentInput,
+): void {
+  assertReplayPayloadMatches(
+    [
+      { ad: "direction", mevcut: existing.direction, gelen: input.direction },
+      { ad: "method", mevcut: existing.method, gelen: input.method },
+      { ad: "amount", mevcut: existing.amount, gelen: input.amount },
+      { ad: "cashBoxId", mevcut: existing.cashBoxId, gelen: input.cashBoxId },
+      { ad: "bankAccountId", mevcut: existing.bankAccountId, gelen: input.bankAccountId },
+    ],
+    "Bu istemci anahtarı FARKLI bir tahsilat/ödeme için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    { paymentId: existing.id },
+  );
+}
+
 export class PaymentService {
   /**
    * Tahsilat (IN) / ödeme (OUT) kaydeder.
@@ -130,9 +175,12 @@ export class PaymentService {
     if (input.clientToken) {
       const existing = await prisma.payment.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, docNo: true },
+        select: REPLAY_SELECT,
       });
-      if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+      if (existing) {
+        assertPaymentReplay(existing, input);
+        return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
+      }
     }
 
     const paymentDate = input.paymentDate ?? new Date();
@@ -298,9 +346,13 @@ export class PaymentService {
       if (input.clientToken && isClientTokenP2002(err)) {
         const existing = await prisma.payment.findUnique({
           where: { clientToken: input.clientToken },
-          select: { id: true, docNo: true },
+          select: REPLAY_SELECT,
         });
-        if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+        if (existing) {
+          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
+          assertPaymentReplay(existing, input);
+          return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
+        }
       }
       throw err;
     }

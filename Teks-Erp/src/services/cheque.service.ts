@@ -55,6 +55,7 @@ import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
 
 // -----------------------------------------------------------------------------
@@ -579,6 +580,37 @@ function weekStartYmd(ymd: string): string {
   return utcMsToYmd(ms - back * DUE_DAY_MS);
 }
 
+/**
+ * AYNI TOKEN, FARKLI GÖVDE → 409 (2026-09-01). Gerekçe:
+ * `cash-transaction.service.ts` → `assertCashTxnReplay` başlığı.
+ * ⚠️ `currency`/`issueDate`/`postingDate` varsayılan alır → kıyaslamaya GİRMEZ.
+ */
+const CHEQUE_REPLAY_SELECT = {
+  // ⚠️ customerId/subcontractorId KOLONU YOK — taraf `cariId` ile bağlanır.
+  id: true, docNo: true, kind: true, amount: true, cariId: true,
+} as const;
+
+function assertChequeReplay(
+  existing: {
+    id: string; kind: ChequeKind; amount: Prisma.Decimal;
+    cariId: string | null;
+  },
+  input: CreateChequeInput,
+): void {
+  assertReplayPayloadMatches(
+    [
+      { ad: "kind", mevcut: existing.kind, gelen: input.kind },
+      { ad: "amount", mevcut: existing.amount, gelen: input.amount },
+      // `cariId` YALNIZ girdide de doğrudan verilmişse kıyaslanır; müşteri/fason
+      // üzerinden lazy çözülen hâlde girdi `undefined`dır ve o durumda bu alan
+      // kıyaslamaya girmez (null ≡ undefined kuralı).
+      { ad: "cariId", mevcut: input.cariId == null ? null : existing.cariId, gelen: input.cariId },
+    ],
+    "Bu istemci anahtarı FARKLI bir çek/senet için kullanılmış. Ekranı yenileyip tekrar deneyin.",
+    { chequeId: existing.id },
+  );
+}
+
 export class ChequeService {
   // ---------------------------------------------------------------------------
   // DOĞUŞ
@@ -597,9 +629,12 @@ export class ChequeService {
     if (input.clientToken) {
       const existing = await prisma.cheque.findUnique({
         where: { clientToken: input.clientToken },
-        select: { id: true, docNo: true },
+        select: CHEQUE_REPLAY_SELECT,
       });
-      if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+      if (existing) {
+        assertChequeReplay(existing, input);
+        return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
+      }
     }
 
     const kind = input.kind;
@@ -715,9 +750,13 @@ export class ChequeService {
       if (input.clientToken && isClientTokenP2002(err)) {
         const existing = await prisma.cheque.findUnique({
           where: { clientToken: input.clientToken },
-          select: { id: true, docNo: true },
+          select: CHEQUE_REPLAY_SELECT,
         });
-        if (existing) return { success: true, data: existing, message: "Kayıt zaten oluşturulmuş." };
+        if (existing) {
+          // Ön kontrolle AYNI kapı: yarışı kaybeden istek de farklı gövdeyse 409 alır.
+          assertChequeReplay(existing, input);
+          return { success: true, data: { id: existing.id, docNo: existing.docNo }, message: "Kayıt zaten oluşturulmuş." };
+        }
       }
       throw err;
     }

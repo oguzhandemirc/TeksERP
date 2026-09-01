@@ -479,6 +479,14 @@ async function main(): Promise<void> {
       async (tx) => {
         // "Kazanan uçuşta": gerçek create'in yazdığı satırın asgarisi — token
         // unique indekse girer ama COMMIT edilmez.
+        //
+        // ⚠️ SATIR DA YAZILIR (2026-09-01): `createDraft` artık AYNI TOKEN /
+        // FARKLI GÖVDE'yi 409 ile reddediyor (`assertInvoiceReplay`) ve faturada
+        // kimliğin taşıyıcısı SATIRLARDIR (taslakta toplamlar 0 — onayda
+        // damgalanıyor). Satırsız bir kazanan, kaybedenin gövdesiyle GERÇEKTEN
+        // farklıdır; fixture o hâlde "aynı mantıksal istek"i temsil etmeyi
+        // bırakır ve §12 kendi kurgusunu ölçer. Satır kaybedeninkiyle BİREBİR:
+        // LINES[0] → 100 × 25, KDV %20.
         const winner = await tx.invoice.create({
           data: {
             docNo: `${TAG}-RPL1`,
@@ -487,6 +495,18 @@ async function main(): Promise<void> {
             cariId: cariId as string,
             issueDate: new Date(),
             clientToken: rplToken,
+            lines: {
+              create: [
+                {
+                  lineNo: 1,
+                  description: LINES[0]!.description,
+                  qty: LINES[0]!.qty,
+                  unitPrice: LINES[0]!.unitPrice,
+                  lineTotal: 2500,
+                  vatAmount: 500,
+                },
+              ],
+            },
           },
           select: { id: true, docNo: true },
         });
