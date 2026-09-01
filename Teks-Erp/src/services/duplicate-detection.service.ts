@@ -102,7 +102,25 @@ export interface DuplicateScanResult {
     hiddenNotDuplicate: number;
   };
   groups: DuplicateCandidateGroup[];
+  /**
+   * YER TUTUCU sayıldığı için çift ÜRETMEYEN kimlik değerleri (bkz. kural 2).
+   * Panelde "şu telefon 12 kayıtta — kimlik sayılmadı" bandı olarak gösterilir:
+   * bastırma sessiz olsaydı "bu ikisi neden eşleşmedi" sorusu cevapsız kalırdı.
+   */
+  suppressedIdentities: {
+    field: string;
+    label: string;
+    value: string;
+    recordCount: number;
+  }[];
 }
+
+/**
+ * Bir kimlik değerinin kaç kayıtta geçerse "yer tutucu" sayılacağı sınırı.
+ * Bunun ÜSTÜ çift üretmez. Gevşek tutuldu: aynı tüzel kişinin merkez/şube/eski
+ * kart şeklinde birkaç meşru cari kartı olabilir ve o kümeler yakalanmalı.
+ */
+const IDENTITY_MAX_GROUP = 4;
 
 type Row = {
   id: string;
@@ -351,6 +369,9 @@ export const DuplicateDetectionService = {
       DuplicateReviewService.mapByPairKey(entity),
     ]);
 
+    // Yer tutucu sayılıp çift üretmeyen kimlik değerleri (kural 2'de doldurulur).
+    const suppressedIdentities: DuplicateScanResult["suppressedIdentities"] = [];
+
     // Çift → gerekçe listesi (aynı çift birden çok kuralla gelebilir).
     const evidenceByPair = new Map<string, { aId: string; bId: string; evidence: DuplicatePairEvidence[] }>();
     const add = (a: Row, b: Row, ev: DuplicatePairEvidence): void => {
@@ -388,6 +409,28 @@ export const DuplicateDetectionService = {
     }
 
     // 2) KİMLİK — normalize edilmiş alan değeri eşitliği
+    //
+    // ⚠️ YER TUTUCU BASTIRMA (2026-09-01, canlı demoda ölçüldü). Kimlik kuralı
+    // "aynı değer = aynı tüzel kişi" varsayar; bu varsayım değer AZ sayıda
+    // kayıtta geçtiğinde güçlüdür. Sahada ise kimlik alanları santral numarası,
+    // `0000000000`, içe aktarım varsayılanı ya da muhasebecinin ortak e-postası
+    // ile doldurulur — ve o değer ONLARCA kayda yayılır. Ölçüm: demoda 12 müşteri
+    // `0212 000 00 00` taşıyordu ve panel BİRBİRİYLE ALAKASIZ 12 firmayı
+    // (Akdeniz Otelcilik · Konya Ev Yaşam · İzmir Dekorasyon …) TEK mükerrer
+    // grubu olarak sunuyordu. Böyle bir grup paneli itibarsızlaştırır: operatör
+    // bir kez "bu saçma" deyip ekranı bir daha açmaz, gerçek mükerrerler de
+    // görülmez. Aynı gerekçeyle Jaro-Winkler de kaldırılmıştı (2026-08-22).
+    //
+    // Kural: bir kimlik DEĞERİ `IDENTITY_MAX_GROUP`'tan fazla kayıtta geçiyorsa
+    // o değer kimlik değil YER TUTUCU sayılır ve çift üretmez. Eşik bilinçli
+    // gevşek — aynı tüzel kişinin meşruen birkaç cari kartı olabilir (merkez /
+    // şube / eski kart; P5 kararı), o kümeler eşiğin altında kalır.
+    //
+    // ⚠️ SESSİZ DEĞİL: bastırılan her değer yanıtta `suppressedIdentities` ile
+    // raporlanır. Sessiz bastırma, "bu iki kayıt neden eşleşmedi" sorusunu
+    // cevapsız bırakır ve bir sonraki bakımcı kuralı yeniden açar.
+    // Yanlış-negatif riski küçük: gerçekten aynı firmanın 5+ kartı varsa adları
+    // da benzer olur ve BULANIK AD kuralı (3) onları yine yakalar.
     for (const rule of IDENTITY_RULES[entity]) {
       const byVal = new Map<string, Row[]>();
       for (const r of rows) {
@@ -401,6 +444,15 @@ export const DuplicateDetectionService = {
       }
       for (const [val, list] of byVal) {
         if (list.length < 2) continue;
+        if (list.length > IDENTITY_MAX_GROUP) {
+          suppressedIdentities.push({
+            field: rule.field,
+            label: rule.label,
+            value: val,
+            recordCount: list.length,
+          });
+          continue;
+        }
         for (let i = 0; i < list.length; i++)
           for (let j = i + 1; j < list.length; j++)
             add(list[i], list[j], {
@@ -526,6 +578,7 @@ export const DuplicateDetectionService = {
       thresholdPct,
       totals: { records: rows.length, pairs: pairs.length, groups: groups.length, hiddenNotDuplicate },
       groups,
+      suppressedIdentities,
     };
   },
 

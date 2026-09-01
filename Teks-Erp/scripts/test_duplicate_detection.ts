@@ -257,6 +257,42 @@ async function main(): Promise<void> {
   check("BOM + başlık", csv.startsWith("﻿grup;kural;skor;"));
   check("A–B satırı var, noktalı virgül ayraç", csv.split("\r\n").some((l) => l.includes(custA.id) && l.includes(custB.id) && l.split(";").length >= 15));
 
+  // ── §7 YER TUTUCU KİMLİK BASTIRMA ─────────────────────────────────────────
+  // Ölçülen arıza (2026-09-01, canlı demo): 12 müşteri aynı santral numarasını
+  // (`0212 000 00 00`) taşıyordu ve kimlik kuralı BİRBİRİYLE ALAKASIZ 12 firmayı
+  // tek mükerrer grubu yapıyordu. Kimlik varsayımı ("aynı değer = aynı tüzel
+  // kişi") ancak değer AZ kayıtta geçerken geçerlidir.
+  console.log("\n── §7 Yer tutucu kimlik bastırma ──");
+  const YER_TUTUCU = "0212 000 00 00";
+  const yerTutucular: string[] = [];
+  // Eşiği (4) AŞACAK kadar: 6 alakasız firma, hepsi aynı telefonda.
+  for (let i = 0; i < 6; i++) {
+    const c = await prisma.customer.create({
+      data: { code: `${TAG}-YT${i}`, name: `${TAG} Bağımsız Firma ${i} ${["Akdeniz", "Konya", "İzmir", "Trakya", "Bursa", "Ankara"][i]}`, contactPhone: YER_TUTUCU },
+      select: { id: true },
+    });
+    yerTutucular.push(c.id);
+    created.customers.push(c.id);
+  }
+  const s7 = await DuplicateDetectionService.scan("customer");
+  const ytKume = new Set(yerTutucular);
+  const ytCifti = s7.groups.some((g) =>
+    g.pairs.some((p) => ytKume.has(p.aId) && ytKume.has(p.bId)),
+  );
+  check("§7a alakasız firmalar aynı telefonla EŞLEŞMEDİ", !ytCifti);
+  const bastirilan = s7.suppressedIdentities.find((x) => x.field === "contactPhone" && x.recordCount >= 6);
+  check("§7b bastırma RAPORLANDI (sessiz değil)", Boolean(bastirilan), `${bastirilan?.recordCount ?? 0} kayıt`);
+
+  // ⚠️ NEGATİF TARAF: bastırma "kimlik kuralını kapat" DEĞİLDİR. Eşiğin
+  // ALTINDAKİ paylaşım (2 kayıt, aynı VKN) hâlâ eşleşmeli — yoksa düzeltme
+  // gerçek mükerrerleri de yutmuş olur.
+  const s7b = s7.groups.some((g) => g.pairs.some((p) =>
+    (p.aId === custA.id && p.bId === custB.id) || (p.aId === custB.id && p.bId === custA.id)));
+  check("§7c az-sayıda paylaşılan VKN hâlâ eşleşiyor", s7b);
+
+  // Körlük zemini: tarama gerçekten kayıt gördü mü (boş taramada §7a vakumen yeşil).
+  check("§7d körlük zemini — tarama kayıt gördü", s7.totals.records >= 6, `${s7.totals.records} kayıt`);
+
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }
 
