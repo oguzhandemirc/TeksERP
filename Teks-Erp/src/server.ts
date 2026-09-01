@@ -131,7 +131,16 @@ const server = app.listen(Number(PORT), HOST, () => {
     if (remoteAccess.remotePort !== null) {
         console.log("--------------------------------------------------------");
         console.log(`  Uzaktan erişim: 127.0.0.1:${remoteAccess.remotePort} (cloudflared)`);
-        console.log(`                  Access: ${remoteAccess.accessTeamDomain}`);
+        if (remoteAccess.accessWallDisabled) {
+            // ⚠️ Kapalı bir kimlik duvarı SESSİZ KALMAZ. Bu satır, "acaba Access
+            // çalışıyor mu" sorusunun pm2 log'undan tek bakışta cevaplanabildiği
+            // yerdir; aksi halde duvarın olmadığı bir kurulum, olduğu sanılan bir
+            // kurulumdan ayırt edilemezdi.
+            console.log("                  Access: ⚠️ KAPALI (CF_ACCESS_ENABLED=false)");
+            console.log("                  → uzak girişi koruyan tek katman: parola + TOTP");
+        } else {
+            console.log(`                  Access: ${remoteAccess.accessTeamDomain}`);
+        }
     }
     console.log("========================================================");
     console.log("");

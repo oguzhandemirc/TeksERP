@@ -104,6 +104,37 @@ function sectionConfig(): void {
     silent,
   );
   check("Geçersiz REMOTE_PORT → KAPALI", bad.remotePort === null);
+
+  // ── Kimlik duvarını BİLEREK kapatma (2026-09-02) ─────────────────────────
+  // ⭐ Buradaki asıl iddia "kapatılabiliyor" DEĞİL, **kazara kapanamıyor**.
+  // Ayrım load-bearing: eksik ayar tüneli hiç açmaz (fail-closed), ama operatör
+  // açıkça yazdıysa açar. Yani duvarı kaybetmenin tek yolu onu kaybetmeyi
+  // SEÇMEKTİR — yazım hatası, boş değer ya da unutulmuş satır yetmez.
+  const wallOff = readRemoteAccessConfig(
+    { REMOTE_PORT: "4001", CF_ACCESS_ENABLED: "false" },
+    silent,
+  );
+  check("CF_ACCESS_ENABLED=false → tünel AÇIK, duvar kapalı", wallOff.remotePort === 4001);
+  check("  duvar kapalı işaretleniyor", wallOff.accessWallDisabled === true);
+  check("  Access alanları temizleniyor", wallOff.accessTeamDomain === null);
+
+  for (const [label, raw] of [
+    ["boş", ""],
+    ["yazım hatası (fasle)", "fasle"],
+    ["true", "true"],
+    ["belirsiz (maybe)", "maybe"],
+  ] as const) {
+    const cfg = readRemoteAccessConfig({ REMOTE_PORT: "4001", CF_ACCESS_ENABLED: raw }, silent);
+    // ⭐ Hiçbiri duvarı DÜŞÜRMEZ: ya tünel hiç açılmaz (Access alanları yok) ya da
+    // duvar istenir. Kritik olan `accessWallDisabled === false` kalması.
+    check(`  '${label}' duvarı DÜŞÜRMEZ`, cfg.accessWallDisabled === false);
+  }
+
+  const wallOffTr = readRemoteAccessConfig(
+    { REMOTE_PORT: "4001", CF_ACCESS_ENABLED: "hayır" },
+    silent,
+  );
+  check("Türkçe 'hayır' da kabul edilir", wallOffTr.accessWallDisabled === true);
 }
 
 // -----------------------------------------------------------------------------
@@ -402,6 +433,41 @@ async function sectionEndToEnd(): Promise<void> {
     check("körlük zemini: CSP başlığı gerçekten basılıyor", lanCsp.length > 20);
   } finally {
     child.kill("SIGKILL");
+  }
+
+  // ── 5d) DUVAR KAPALIYKEN: /api geçer ama DİĞER KURALLAR DURUR ────────────
+  // ⭐ Bu bölümün asıl işi, kimlik duvarını kapatmanın YANLIŞLIKLA başka
+  // korumaları da kapatmadığını kanıtlamak. Access'i kaldırmak "uzak yolu
+  // LAN'a çevirmek" DEĞİLDİR: PIN girişi hâlâ kapalı, HSTS hâlâ basılıyor.
+  let w: Spawned | null = null;
+  try {
+    const remotePort = await freePort();
+    w = await spawnApp({
+      NODE_ENV: "development",
+      REMOTE_PORT: String(remotePort),
+      CF_ACCESS_ENABLED: "false",
+    });
+  } catch (err) {
+    check("duvarsız sunucu ayağa kalktı", false, err instanceof Error ? err.message : String(err));
+    return;
+  }
+  try {
+    const api = await probe(w.remote, "/api/auth/login-methods");
+    check(
+      "duvar KAPALI: uzak /api artık 403 DEĞİL",
+      api.status === 200,
+      `status=${api.status}`,
+    );
+    const pin = await probe(w.remote, "/api/auth/login-quick-pin", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ pin: "000000" }),
+    });
+    check("duvar KAPALI: PIN girişi HÂLÂ 404", pin.status === 404, `status=${pin.status}`);
+    const hsts = (await probe(w.remote, "/health")).headers.get("strict-transport-security");
+    check("duvar KAPALI: HSTS HÂLÂ basılıyor", hsts !== null, String(hsts));
+  } finally {
+    w.child.kill("SIGKILL");
   }
 }
 

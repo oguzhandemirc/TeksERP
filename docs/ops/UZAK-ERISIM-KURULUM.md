@@ -55,6 +55,29 @@ Burada uzak erişim **DURUR** — sessiz bir açık yerine gürültülü bir ar�
 > ⚠️ **Cloudflare proxy (turuncu bulut) AÇIK kalmalı** — bu kurulumun geri
 > kalanıyla aynı gerekçe (`SUNUCU-ENVANTERI.md`).
 
+### 1b) Access kullanmamayı seçerseniz (2026-09-02)
+
+Access'i **kurmayabilirsiniz**. Sahada ölçülen gerekçe: her cihazda günde bir
+e-posta kodu, bilgisayarla arası iyi olmayan bir kullanıcı için gerçek bir engel.
+
+Bu durumda Adım 1'de **yalnız tüneli** kurun (Access application açmayın) ve
+`.env`de Access alanları yerine tek satır yazın:
+
+```ini
+CF_ACCESS_ENABLED="false"
+RATE_LIMIT_ENABLED="true"
+```
+
+**Ne kaybedersiniz:** ERP giriş ekranı doğrudan internete bakar. **Ne KAYBETMEZSİNİZ:**
+şifre + TOTP (iki faktör) yerinde kalır, uzakta PIN/kart/cihaz/keşif uçları hâlâ
+404 döner, HSTS hâlâ basılır, hız sınırı ve deneme kilidi çalışır. Access bir
+kattı, tek kat değil.
+
+⚠️ **Kapatma AÇIK BEYANLA olur.** Access alanlarını boş bırakmak duvarı kapatmaz,
+**tüneli hiç açmaz**. Yazım hatası ya da unutulmuş bir satır kimlik duvarını
+sessizce düşüremez. Kapalıyken açılış log'u her restart'ta uyarır — duvarsız bir
+kurulum, duvarlı sanılan bir kurulumdan ayırt edilebilir olmalı.
+
 ### 2) Fabrika sunucusu — cloudflared
 
 ```powershell
@@ -119,8 +142,8 @@ Bu adımlar atlanırsa yanlış yapılandırma **sessiz** kalır.
 | 1 | LAN'dan `http://<lan-ip>:4000/api/auth/login-methods` | **200** |
 | 2 | LAN yanıtında `Strict-Transport-Security` başlığı | **YOK** |
 | 3 | Tabletten PIN ile giriş | **çalışır** |
-| 4 | Dışarıdan `https://<musteri>-erp.etkiliyazilim.com` | Access e-posta OTP ekranı |
-| 5 | Access'i geçtikten sonra parola + **TOTP** | giriş başarılı |
+| 4 | Dışarıdan `https://<musteri>-erp.etkiliyazilim.com` | Access kuruluysa e-posta OTP ekranı; kurulu değilse doğrudan ERP girişi |
+| 5 | Parola + **TOTP** | giriş başarılı — ⚠️ kodsuz deneme `TOTP_REQUIRED` ile REDDEDİLMELİ |
 | 6 | Dışarıdan `…/api/auth/login-quick-pin` | **404** |
 | 7 | Dışarıdan `…/api/devices/status` | **404** |
 | 8 | Uzak yanıtta `Strict-Transport-Security` | **VAR** |

@@ -43,6 +43,19 @@ export type RemoteAccessConfig = {
   accessTeamDomain: string | null;
   /** Access uygulamasının AUD etiketi (CF panelinden alınır). */
   accessAud: string | null;
+  /**
+   * Kimlik duvarı BİLEREK kapatıldı mı (`CF_ACCESS_ENABLED=false`).
+   *
+   * ⚠️ Bu bir AÇIK BEYANDIR, eksik yapılandırmanın sonucu DEĞİL. Ayrım
+   * load-bearing: Access alanları unutulduğunda tünel açılmaz (fail-closed),
+   * ama operatör "duvarı istemiyorum" diye YAZDIYSA açılır. Yani kimlik
+   * duvarını kaybetmenin tek yolu onu kaybetmeyi seçmektir.
+   *
+   * Kapalıyken geriye kalan koruma: ERP parolası + TOTP (iki faktör),
+   * giriş hız sınırı, deneme kilidi, ve tünelde PIN/kart/cihaz/keşif
+   * uçlarının 404 olması. Bunlar Access'ten BAĞIMSIZ çalışır.
+   */
+  accessWallDisabled: boolean;
 };
 
 const PORT_MIN = 1;
@@ -59,7 +72,12 @@ export function readRemoteAccessConfig(
   env: NodeJS.ProcessEnv = process.env,
   onWarn: WarnFn = (m) => console.warn(m),
 ): RemoteAccessConfig {
-  const off: RemoteAccessConfig = { remotePort: null, accessTeamDomain: null, accessAud: null };
+  const off: RemoteAccessConfig = {
+    remotePort: null,
+    accessTeamDomain: null,
+    accessAud: null,
+    accessWallDisabled: false,
+  };
 
   const rawPort = env.REMOTE_PORT?.trim();
   if (!rawPort) return off;
@@ -74,18 +92,40 @@ export function readRemoteAccessConfig(
     return off;
   }
 
+  // ⚠️ AÇIK KAPATMA — yalnız operatör BEYAN ederse. Sadece "false"/"0"/"hayır"
+  // gibi net bir olumsuzluk kabul edilir; boş ya da anlaşılmaz değer duvarı
+  // KAPATMAZ (yazım hatası yüzünden kimlik duvarı düşmesin).
+  const wallRaw = (env.CF_ACCESS_ENABLED ?? "").trim().toLowerCase();
+  const wallDisabled = ["false", "0", "no", "off", "hayir", "hayır", "kapali", "kapalı"].includes(
+    wallRaw,
+  );
+  if (wallDisabled) {
+    onWarn(
+      "[remote-access] ⚠️ CLOUDFLARE ACCESS KİMLİK DUVARI KAPALI (CF_ACCESS_ENABLED=false). " +
+        "Uzak girişleri koruyan tek katman ERP parolası + TOTP'dir. " +
+        "Giriş hız sınırının (RATE_LIMIT_ENABLED) açık olduğundan emin olun.",
+    );
+    return { remotePort: port, accessTeamDomain: null, accessAud: null, accessWallDisabled: true };
+  }
+
   // `https://` ön eki yazılmış olabilir; ana makine adına indir.
   const team = env.CF_ACCESS_TEAM_DOMAIN?.trim().replace(/^https?:\/\//i, "").replace(/\/+$/, "");
   const aud = env.CF_ACCESS_AUD?.trim();
   if (!team || !aud) {
     onWarn(
       "[remote-access] REMOTE_PORT verildi ama CF_ACCESS_TEAM_DOMAIN/CF_ACCESS_AUD eksik — " +
-        "uzaktan erişim KAPALI (kimlik duvarsız tünel açılmaz).",
+        "uzaktan erişim KAPALI. Kimlik duvarını BİLEREK kullanmıyorsanız " +
+        "CF_ACCESS_ENABLED=false yazın (eksik ayar duvarı sessizce düşürmez).",
     );
     return off;
   }
 
-  return { remotePort: port, accessTeamDomain: team, accessAud: aud };
+  return {
+    remotePort: port,
+    accessTeamDomain: team,
+    accessAud: aud,
+    accessWallDisabled: false,
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -261,8 +301,12 @@ const ACCESS_HEADER = "cf-access-jwt-assertion";
  * Cloudflare'in kendisidir; bu, o kapının hâlâ orada olduğunun kanıtıdır.
  */
 export function verifyAccessJwt(cfg: RemoteAccessConfig): RequestHandler {
-  const { accessTeamDomain, accessAud } = cfg;
+  const { accessTeamDomain, accessAud, accessWallDisabled } = cfg;
   return (req, res, next) => {
+    // Duvar bilerek kapatıldıysa doğrulama yapılmaz. Diğer uzak kuralları
+    // (PIN/kart 404, TOTP zorunluluğu, HSTS) DEĞİŞMEZ — onlar Access'ten
+    // bağımsızdır ve kapanmaz.
+    if (accessWallDisabled) return next();
     if (!req.isRemote || !accessTeamDomain || !accessAud) return next();
 
     const raw = req.headers[ACCESS_HEADER];
