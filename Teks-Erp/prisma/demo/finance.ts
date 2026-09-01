@@ -19,6 +19,7 @@
 import prisma from "../../src/lib/prisma";
 import { invoiceService } from "../../src/services/invoice.service";
 import { paymentService } from "../../src/services/payment.service";
+import { paymentAllocationService } from "../../src/services/payment-allocation.service";
 import { adim, say, not, demoToken, gunOnce, rastgele, sec } from "./_kit";
 
 const FATURA = 34;
@@ -196,7 +197,94 @@ export async function finansKur(): Promise<void> {
     }
   }
 
+  // ── DÖVİZLİ ZİNCİR — Kur Farkı raporunun TEK besleyicisi ─────────────────
+  // ⚠️ Rapor, faturanın kesildiği gün ile tahsilatın yapıldığı gün arasındaki
+  // KUR FARKINDAN doğar. Aynı gün kesilip aynı gün kapanan dövizli bir belge
+  // rapora 0,00 yazar ve ekran "çalışmıyor" görünür. Bu yüzden fatura ve
+  // tahsilat BİLEREK farklı günlere konur (kur tarihçesi zaten 120 günlük).
+  await dovizliZincir(musteriler, kalemler, r);
+
   const f = await prisma.invoice.count();
   const p = await prisma.payment.count();
   console.log(`   toplam fatura=${f} · tahsilat/ödeme=${p}`);
+}
+
+
+/**
+ * Dövizli fatura → FARKLI GÜNDE dövizli tahsilat → tahsis.
+ *
+ * ⚠️ TAHSİS AÇIKÇA YAPILIR: otomatik FIFO kapama bayrağı bu kurulumda kapalı
+ * olabilir; kur farkı satırı `PaymentAllocation` olmadan DOĞMAZ (raporun çıpası
+ * tahsis kaydıdır).
+ */
+async function dovizliZincir(
+  musteriler: Array<{ id: string }>,
+  kalemler: Array<{ id: string; name: string }>,
+  r: () => number,
+): Promise<void> {
+  const bankaUsd = await prisma.bankAccount.findFirst({
+    where: { isActive: true, currency: "USD" },
+    select: { id: true },
+  });
+  if (!bankaUsd || musteriler.length === 0 || kalemler.length === 0) {
+    not("USD banka hesabı yok — Kur Farkı raporu boş kalacak.");
+    return;
+  }
+
+  for (let i = 0; i < 6; i++) {
+    const fToken = demoToken(`fx-invoice:${i}`);
+    const pToken = demoToken(`fx-payment:${i}`);
+    const zatenVar = await prisma.invoice.findUnique({ where: { clientToken: fToken }, select: { id: true } });
+    if (zatenVar) continue;
+
+    const musteriId = sec(musteriler, r).id;
+    const faturaGun = 8 + i * 3;          // fatura ESKİ
+    const tahsilatGun = Math.max(1, faturaGun - 5 - i); // tahsilat SONRA → kur değişmiş
+    const k = sec(kalemler, r);
+    const qty = 100 + Math.round(r() * 400);
+    const price = Math.round((12 + r() * 20) * 100) / 100;
+
+    try {
+      const inv = await invoiceService.createDraft(
+        {
+          type: "SALES",
+          customerId: musteriId,
+          issueDate: gunOnce(faturaGun),
+          currency: "USD",
+          lines: [{ itemId: k.id, description: k.name, qty, unitPrice: price, vatRate: 20 }],
+          clientToken: fToken,
+        } as never,
+        undefined,
+      );
+      const invoiceId = inv.data?.id;
+      if (!invoiceId) continue;
+      await invoiceService.confirm(invoiceId, undefined);
+
+      const tutar = Math.round(qty * price * 1.2 * 100) / 100;
+      const pay = await paymentService.create(
+        {
+          direction: "IN",
+          method: "BANK_TRANSFER",
+          customerId: musteriId,
+          amount: tutar,
+          currency: "USD",
+          paymentDate: gunOnce(tahsilatGun),
+          bankAccountId: bankaUsd.id,
+          reference: `USD havale ${i + 1}`,
+          clientToken: pToken,
+        },
+        undefined,
+      );
+      const paymentId = pay.data?.id;
+      if (!paymentId) continue;
+
+      await paymentAllocationService.allocate(
+        { invoiceId, paymentId, amount: tutar },
+        undefined,
+      );
+      say("dövizli kapama (kur farkı)");
+    } catch (e) {
+      not(`Dövizli zincir #${i} kurulamadı: ${(e as Error).message}`);
+    }
+  }
 }

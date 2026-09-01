@@ -26,6 +26,7 @@ import { envanterKur } from "./demo/inventory";
 import { kartelaKur, transferKur, sayimKur, kurTarihcesiKur } from "./demo/extras";
 import { sevkiyatKur } from "./demo/shipping";
 import { finansKur } from "./demo/finance";
+import { cuvalKur, iplikStokKur, fiyatKur, cihazKur } from "./demo/extras2";
 import { demoKullanicisiYetkilendir, firmaKunyesiKur } from "./demo/users";
 import { dogrula } from "./demo/verify";
 
@@ -48,6 +49,10 @@ async function main(): Promise<void> {
   await sayimKur();
   await sevkiyatKur();
   await finansKur();
+  await cuvalKur();
+  await iplikStokKur();
+  await fiyatKur();
+  await cihazKur();
   await demoKullanicisiYetkilendir();
   await firmaKunyesiKur();
 
