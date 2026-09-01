@@ -19,7 +19,14 @@ APPLY=0
 # yerel yol gömmek, betiği başka bir makinede/worktree.de sessizce yanlış
 # ağacı göndermeye iterdi.
 SRC=${0:A:h:h:h}
-HOST=yenisunucu
+# ⚠️ TAKMA AD ZORUNLU DEĞİL (2026-09-01): `~/.ssh/config`teki `yenisunucu`
+# girdisi her makinede bulunmayabilir (bu turda yoktu). Ortamdan geçersiz
+# kılınabilir; `SSH_OPTS` de rsync'in taşıyıcısına aktarılır ki alternatif port
+# gerektiğinde config'e DOKUNMADAN deploy edilebilsin.
+HOST=${DEMO_HOST:-yenisunucu}
+SSH_OPTS=${DEMO_SSH_OPTS:-}
+[ -n "$SSH_OPTS" ] && export RSYNC_RSH="ssh $SSH_OPTS"
+ssh() { command ssh ${=SSH_OPTS} "$@"; }
 APPDIR=/opt/stack/apps/tekserp-demo
 
 say()  { print -r -- ""; print -r -- "▸ $*"; }

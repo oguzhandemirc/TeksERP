@@ -40,7 +40,7 @@
 #
 # ⚠️ SIRA PAZARLIK DIŞI:
 #   stop app → yedek → DROP/CREATE → statement_timeout → migrate deploy →
-#   seed.ts → seed-ticaret-demo.ts → up -d → doğrulama
+#   seed.ts → seed-ticaret-demo.ts → seed-demo-full.ts → up -d → doğrulama
 #
 #   • `stop app` ÖNCE: açık bağlantı varken `DROP DATABASE` hata verir. Betik
 #     ayrıca artık bağlantıları `pg_terminate_backend` ile düşürür (healthcheck
@@ -207,6 +207,16 @@ say "7/8 seed-ticaret-demo.ts  → demo verisi + WEB_TRADE yetkisi"
 # vermesi, seed'in bir yazma yolunda `clientToken` çıpasını kaybettiği anlamına
 # gelir (bkz. `findDuplicateDemoRecords` başlığı).
 run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx tsx prisma/seed-ticaret-demo.ts\"'"
+
+say "7.5/8 seed-demo-full.ts  → tam vitrin (katalog · sipariş · üretim · sevkiyat · muhasebe)"
+# ⚠️ SIRA: ticaret seed'inden SONRA. Bu seed onun ürettiği carileri, kasa/banka
+# hesaplarını ve `demo` kullanıcısını KULLANIR (demo hesabına ADMIN_FULL uygular).
+#
+# ⚠️ ÇIKIŞ KODU 1 = "bir ekran BOŞ kalacak" ya da bir senaryo sessizce atlandı.
+# Seed kendi kabul ölçütlerini ölçer (en önemlisi: bitmiş/sevk edilmiş hiçbir top
+# RENKSİZ olamaz) ve ekran doluluk tablosunu basar. `run` betiği durdurur — bu
+# BİLİNÇLİDİR: boş ekranla yayına çıkmak, demonun tek kabul edilemez sonucudur.
+run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx tsx prisma/seed-demo-full.ts\"'"
 
 # --- 8) Ayağa kaldır + doğrula -------------------------------------------------
 say "8/8 docker compose up -d + doğrulama"
