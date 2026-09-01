@@ -1,0 +1,35 @@
+# =============================================================================
+# cloudflared — FABRİKA SUNUCUSU TÜNEL YAPILANDIRMASI (şablon)
+# =============================================================================
+# Kurulum yeri (Windows):  C:\Etkili-Yazilim\cloudflared\config.yml
+# Reçete:                  docs/ops/UZAK-ERISIM-KURULUM.md
+#
+# ⚠️ BU DOSYA ŞABLONDUR. Gerçek `<tünel-id>` ve kimlik dosyası MÜŞTERİYE ÖZELDİR
+# ve DEPOYA GİRMEZ — tünel kimlik bilgisi, o fabrikanın verisine erişim demektir.
+# =============================================================================
+
+tunnel: <tünel-id>
+credentials-file: C:\Etkili-Yazilim\cloudflared\<tünel-id>.json
+
+# Bağlantı dayanıklılığı — fabrika internetinin kısa kesintilerinde tünel
+# kendini toparlasın. Varsayılanlar zaten makul; burada AÇIKÇA yazılıyorlar ki
+# bir sorun çıktığında "ayarlanmamış mı acaba" sorusu doğmasın.
+retries: 5
+grace-period: 30s
+
+ingress:
+  # ⚠️ HEDEF 127.0.0.1 VE `REMOTE_PORT` OLMAK ZORUNDA.
+  #
+  #  • 127.0.0.1 — uzak/LAN ayrımının TAMAMI bu porta LAN'dan erişilememesine
+  #    dayanıyor (`req.socket.localPort`, remote-access.middleware.ts).
+  #    `localhost` yazmak da riskli: IPv6 (::1) çözülürse dinleyici orada değil.
+  #  • Port, backend `.env`indeki REMOTE_PORT ile AYNI olmalı. Farklı yazılırsa
+  #    tünel LAN portuna (4000) bağlanır ve her uzak istek "LAN" sayılır:
+  #    PIN girişi açılır, TOTP zorunluluğu düşer, HSTS basılmaz. SESSİZ ve
+  #    TEHLİKELİ bir yanlış yapılandırma — kurulum sonrası mutlaka doğrula
+  #    (reçetedeki "Kabul ölçümü" adımı).
+  - hostname: <musteri>-erp.etkiliyazilim.com
+    service: http://127.0.0.1:4001
+
+  # Zorunlu son kural.
+  - service: http_status:404

@@ -21,6 +21,32 @@ dalından derleniyor, müşteriye gösterim için).
 
 ---
 
+## Fabrika sunucusu — ağ
+
+| Port | Ne | Kim erişir |
+|---|---|---|
+| **4000** | ERP backend (HTTP) | Fabrika LAN'ı — panel + tabletler |
+| **4001** | ERP backend, **tünel dinleyicisi** | ⚠️ **YALNIZ `127.0.0.1`** — pratikte yalnız aynı makinedeki `cloudflared` |
+| 5432 | PostgreSQL | `listen_addresses='127.0.0.1'` — yalnız yerel |
+
+⚠️ **GELEN PORT AÇILMAZ.** Uzaktan erişim `cloudflared` servisiyle sağlanır ve
+o **dışarı doğru** bağlanır; güvenlik duvarında hiçbir kural değişmez.
+
+⚠️ **4001 `0.0.0.0`a AÇILAMAZ.** Uzak/LAN ayrımının tamamı bu porta LAN'dan
+erişilememesine dayanıyor (`req.socket.localPort` → `req.isRemote`). Açılırsa
+fabrikadaki herhangi biri kendini "uzak" gösterebilir ya da tersi olur; iki
+yönde de kural seti sessizce yanlış uygulanır.
+
+### Fabrika sunucusundaki servisler
+
+| Servis | Ne yapar | Not |
+|---|---|---|
+| `pm2` → tekserp | ERP backend | **fork modu, tek instance** (tek-process invariant) |
+| Görev Zamanlayıcı → `TeksERP-DB-Backup` | Gece yedeği 02:00 | Backend çökse de koşar |
+| **`cloudflared`** | Uzaktan erişim tüneli | **YENİ (2026-09-01)** · Windows servisi · reçete: [`UZAK-ERISIM-KURULUM.md`](UZAK-ERISIM-KURULUM.md) |
+
+---
+
 ## tekserp-vds — ayrıntı
 
 **Ubuntu 24.04.1 LTS · 2 çekirdek · 3 GB RAM · 66 GB disk · Europe/Istanbul**
@@ -117,6 +143,7 @@ yazmak kırılgandır, yarın oraya konan ikinci bir iç dosya yine sızar.
 | | Fabrika sunucusu | tekserp-vds | Yedek arşivi |
 |---|---|---|---|
 | **Müşteri / fabrika personeli** | ✅ (kendi ERP'si) | ❌ | ❌ |
+| **Patron (uzaktan, tünel)** | ✅ salt takip + dar yazma — Access OTP + parola + TOTP | ❌ | ❌ |
 | **Fabrikanın yedek servisi** | ✅ | yalnız `gelen/`e **yazar** | ❌ |
 | **Biz** | ✅ | ✅ | ✅ |
 | **Sunucuyu ele geçiren** | — | ✅ | yalnız **şifreli** bloblar |
@@ -127,6 +154,7 @@ Yedek şifreleme parolası **sunucuda YOK** — fabrikada ve parola yöneticisin
 
 ## İlgili reçeteler
 
+- [`UZAK-ERISIM-KURULUM.md`](UZAK-ERISIM-KURULUM.md) — patron modülü tüneli (Cloudflare Tunnel + Access)
 - [`YEDEK-VPS-KURULUM.md`](YEDEK-VPS-KURULUM.md) — yedek mimarisi, ölçülen tuzaklar
 - [`VDS-TASIMA.md`](VDS-TASIMA.md) — taşıma sırası ve geri dönüş
 - [`ELECTRON-OTOMATIK-GUNCELLEME.md`](ELECTRON-OTOMATIK-GUNCELLEME.md) — panel güncellemesi
