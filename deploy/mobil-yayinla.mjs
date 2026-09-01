@@ -68,7 +68,41 @@ const KURU = argv.includes('--kuru');
  * segmenti alt alan adı yerine YOL olarak ayrılıyor: Cloudflare Origin CA
  * wildcard'ı iki seviyeli alt alan adlarını kapsamıyor.
  */
-const SSH_HEDEF = arg('ssh') || process.env.SSH_HEDEF || 'yenisunucu';
+// ⚠️ 2026-09-01: varsayılan `yenisunucu`dan `tekserp-yayin`e çevrildi — yayın
+// 80.253.255.188'e taşındı ve DNS de oraya döndü. `yenisunucu` artık ESKİ
+// sunucudur; kullanıcı `yayinci` (sudo YOK). Bkz. docs/ops/VDS-TASIMA.md
+const SSH_HEDEF = arg('ssh') || process.env.SSH_HEDEF || 'tekserp-yayin';
+
+// ⚠️ MÜŞTERİ KAPISINDAN ÖNCE: bu kip MUTLAK bir URL alır, dolayısıyla müşteri
+// kodunu bilmesine gerek yoktur. Kapının arkasında kalsaydı, "yayını denetle"
+// gibi zararsız bir okuma bile müşteri argümanı isterdi — ve dokümandaki komut
+// kopyalanınca patlardı (2026-08-28'de tam bu yaşandı).
+const dogrulaUrl = arg('dogrula');
+if (dogrulaUrl) {
+  baslik('YAYIN DENETİMİ (yükleme yok)');
+  const beklenenBoyut = Number(arg('boyut')) || undefined;
+
+  // ⚠️ ATLANAN KONTROLÜ SÖYLE. Denetim kipinde yerel paket elde olmayabilir;
+  // o zaman boyut kıyası yapılamaz ve YARIM yüklenmiş bir dosya bu kipten
+  // "sağlam" diye geçer. Sessizce atlanan bir kontrol, yapılmış SANILIR —
+  // "ölçülmemiş olanı ölçülmüş gibi bırakma" kuralının aynısı.
+  if (!beklenenBoyut) {
+    uyari(
+      'Boyut kıyası ATLANDI (--boyut verilmedi).\n' +
+        '     Bu kip yalnız ERİŞİLEBİLİRLİK ve ÖNBELLEK tutarlılığını ölçer;\n' +
+        '     yarım yüklenmiş bir dosya buradan "sağlam" görünür.\n' +
+        '     Tam denetim için: --boyut=<yerel dosyanın bayt sayısı>',
+    );
+  }
+
+  const ok = await dosyaDogrula(dogrulaUrl, { yerelBoyut: beklenenBoyut });
+  bilgi(
+    ok
+      ? `\n  ✔ Yayın sağlam${beklenenBoyut ? ' (boyut dahil doğrulandı).' : ' — ama yukarıdaki kapsam notuna bak.'}`
+      : '\n  ⚠ Yayın erişilebilir ama yukarıdaki uyarıya bak.',
+  );
+  process.exit(0);
+}
 
 /**
  * ⚠️ MÜŞTERİ, KOMUTTAN — hem yükleme yolu hem doğrulama adresi ondan türer.
@@ -488,33 +522,6 @@ async function apkYayinla(apkYol) {
 
 // Yükleme yapmadan mevcut bir yayını denetle. Yayın sonrası "hâlâ ayakta mı"
 // sorusunun ucuz cevabı; ayrıca doğrulama mantığının kendisini sınamanın yolu.
-const dogrulaUrl = arg('dogrula');
-if (dogrulaUrl) {
-  baslik('YAYIN DENETİMİ (yükleme yok)');
-  const beklenenBoyut = Number(arg('boyut')) || undefined;
-
-  // ⚠️ ATLANAN KONTROLÜ SÖYLE. Denetim kipinde yerel paket elde olmayabilir;
-  // o zaman boyut kıyası yapılamaz ve YARIM yüklenmiş bir dosya bu kipten
-  // "sağlam" diye geçer. Sessizce atlanan bir kontrol, yapılmış SANILIR —
-  // "ölçülmemiş olanı ölçülmüş gibi bırakma" kuralının aynısı.
-  if (!beklenenBoyut) {
-    uyari(
-      'Boyut kıyası ATLANDI (--boyut verilmedi).\n' +
-        '     Bu kip yalnız ERİŞİLEBİLİRLİK ve ÖNBELLEK tutarlılığını ölçer;\n' +
-        '     yarım yüklenmiş bir dosya buradan "sağlam" görünür.\n' +
-        '     Tam denetim için: --boyut=<yerel dosyanın bayt sayısı>',
-    );
-  }
-
-  const ok = await dosyaDogrula(dogrulaUrl, { yerelBoyut: beklenenBoyut });
-  bilgi(
-    ok
-      ? `\n  ✔ Yayın sağlam${beklenenBoyut ? ' (boyut dahil doğrulandı).' : ' — ama yukarıdaki kapsam notuna bak.'}`
-      : '\n  ⚠ Yayın erişilebilir ama yukarıdaki uyarıya bak.',
-  );
-  process.exit(0);
-}
-
 const paket = arg('paket');
 const apk = arg('apk');
 if (!paket && !apk) {

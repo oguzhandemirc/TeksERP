@@ -15,7 +15,14 @@
 # =============================================================================
 set -euo pipefail
 
-SSH_HEDEF="${SSH_HEDEF:-yenisunucu}"   # ~/.ssh/config takma adı (port 2222 orada)
+# ~/.ssh/config takma adı. ⚠️ 2026-09-01'de `yenisunucu`dan `tekserp-yayin`e
+# çevrildi: yayın 80.253.255.188'e taşındı ve DNS de oraya döndü. İki ayrıntı
+# load-bearing:
+#  · `yenisunucu` artık ESKİ sunucudur (91.217.119.138) — adı yanıltıcı ama
+#    demo işi ve bir haftalık geri dönüş yolu orada, o yüzden bırakıldı.
+#  · `tekserp-yayin` kullanıcısı `yayinci`: sudo YOK, yalnız yayın ağacına
+#    yazar. Yönetici hesabıyla yayın yapılmaz.
+SSH_HEDEF="${SSH_HEDEF:-tekserp-yayin}"
 YAYIN_KOK="${YAYIN_KOK:-/opt/stack/apps/tekserp-guncelleme/html}"
 BASE_URL="${BASE_URL:-https://guncelleme.etkiliyazilim.com}"
 
