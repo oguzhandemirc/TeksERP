@@ -80,6 +80,17 @@ const CAP_LABEL: Record<string, string> = {
   "report:sales": "Satış raporu görebilir",
   "document-template:write": "Belge tasarımını değiştirebilir",
   "settings:workstation": "Bu bilgisayarın donanım ayarlarını değiştirebilir",
+  // Depo mal kabul + ön muhasebe (2026-09-01) — kutunun yanında NE yapabildiği
+  // yazmazsa yönetici atama ekranında ham kodu okur.
+  "goods-receipt:write": "Mal kabul fişi açıp düzenleyebilir",
+  "warehouse:write": "Depo tanımı ve sayım düzenleyebilir",
+  "yarn:write": "İplik stok hareketi girebilir",
+  "price:write": "Kalem fiyatı tanımlayabilir",
+  "finance:write": "Cari/kasa/banka kartı düzenleyebilir",
+  "finance:invoice": "Fatura kesip iptal edebilir",
+  "finance:payment": "Tahsilat/ödeme girebilir",
+  "finance:cheque": "Çek/senet işleyebilir",
+  "finance:close": "Dönem kapanışı yapabilir",
 };
 
 /** Etiketi olmayan kod için kodun kendisi basılır — sessiz boşluk bırakma. */
@@ -160,6 +171,46 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "definitions/traveler-card-studio", app: "desktop", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "definitions/free-documents", app: "desktop", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
   { key: "settings", app: "desktop", title: "Genel Ayarlar", requires: ["admin:settings", "settings:workstation"], capabilities: ["settings:workstation"] },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Bu iki modül `feature/depo-mal-kabul` dalında, manifesto ise `adnansahin`
+  // dalında doğdu — birleşene kadar hiç yan yana gelmediler. Sonuç: 18 ekran ve
+  // 16 izin manifestoda HİÇ görünmüyordu. Etkisi yalnız bekçi kırmızısı değil:
+  // manifesto `GET /api/admin/screens` ile Yetki Kataloğu ekranına servis
+  // ediliyor ve yönetici "bu kutu hangi ekranı açar" sorusunun cevabını orada
+  // arıyor. Beyansız izin o ekranda GEREKÇESİZ bir kutu olarak duruyordu.
+  //
+  // ⚠️ Finans ekranlarının HEPSİ `finance:read` ile açılır — yazma yetkileri
+  // (`finance:invoice`, `finance:payment`, `finance:cheque`, `finance:close`)
+  // sayfa İÇİNDE `PermissionGate` ile ayrılır, route'a konmaz. Bu yüzden onlar
+  // `requires` değil `capabilities`tir; kart listesiyle (Finance/tile-config)
+  // birebir aynı olması gereken şey `requires` tarafıdır.
+  { key: "finance", app: "desktop", title: "Ön Muhasebe", requires: ["finance:read"], capabilities: [] },
+  { key: "finance/cari", app: "desktop", title: "Cari Hesaplar", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/invoices", app: "desktop", title: "Faturalar", requires: ["finance:read"], capabilities: ["finance:invoice"] },
+  { key: "finance/payments", app: "desktop", title: "Tahsilat ve Ödemeler", requires: ["finance:read"], capabilities: ["finance:payment"] },
+  { key: "finance/accounts", app: "desktop", title: "Kasa ve Banka Hesapları", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/cash-transactions", app: "desktop", title: "Kasa Hareketleri", requires: ["finance:read"], capabilities: ["finance:payment"] },
+  { key: "finance/rates", app: "desktop", title: "Döviz Kurları", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/cheques", app: "desktop", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
+  { key: "finance/allocations", app: "desktop", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
+  { key: "finance/period-close", app: "desktop", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
+  { key: "reports/finance", app: "desktop", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
+  // Depo tarafı. ⚠️ `operations/yarn-stock` ve `operations/stock-counts` giriş
+  // izni `warehouse:read`tir (backend `yarn.routes`/`stock-count.routes` ile
+  // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
+  { key: "operations/goods-receipts", app: "desktop", title: "Mal Kabul", requires: ["goods-receipt:read"], capabilities: ["goods-receipt:write"] },
+  { key: "operations/purchase-orders", app: "desktop", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },
+  { key: "operations/yarn-stock", app: "desktop", title: "İplik Kg-Stok", requires: ["warehouse:read"], capabilities: ["yarn:write"] },
+  { key: "operations/stock-counts", app: "desktop", title: "Stok Sayımı", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
+  { key: "operations/warehouse-transfers", app: "desktop", title: "Depo Transferi", requires: ["warehouse:transfer"], capabilities: [] },
+  { key: "definitions/warehouses", app: "desktop", title: "Depolar", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
+  { key: "definitions/item-prices", app: "desktop", title: "Kalem Fiyatları", requires: ["item:read"], capabilities: ["price:write"] },
+  // Cariler = müşteri + fason firma TEK listede (satın alma tarafı da cari
+  // gördüğü için). Giriş izni İKİSİNDEN BİRİ yeter — route `requireAnyPermission`.
+  { key: "definitions/cariler", app: "desktop", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },
 ];
 
 const mobile: ScreenEntry[] = [

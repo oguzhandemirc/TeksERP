@@ -1466,7 +1466,13 @@ export class GoodsReceiptService {
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<{ rows: unknown[]; total: number }> {
-    const where = buildWhereClause(params.filters, ["receiptNo", "deliveryNoteNo", "notes"], params.search);
+    // ⚠️ KOD ↔ METİN kovası AYRI (2026-09-01): fiş/irsaliye numarası KATLANMAZ
+    // (kod kovası, ham kolon); yalnız serbest metin `notesFold` gölgesine gider.
+    // İkisi tek kovadayken var olmayan `receiptNoFold`a soruluyordu → 500.
+    const where = buildWhereClause(params.filters, ["notes"], params.search, [
+      "receiptNo",
+      "deliveryNoteNo",
+    ]);
     // ⚠️ TARİH ARALIĞI (2026-08-15): `applyDateRange` bu serviste HİÇ
     // çağrılmıyordu → `dateFrom` gönderen istemci filtresinin çalıştığını
     // sanıyor, liste TAM dönüyordu (sessiz yanlış cevap; "bu tedarikçiden bu ay

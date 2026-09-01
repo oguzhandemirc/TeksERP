@@ -308,7 +308,15 @@ async function main() {
     numMissingInService.length === 0,
     `yazılmıyor: ${numMissingInService.join(", ")}`,
   );
-  const numUnmanaged = aNum.filter((k) => !D.includes(k) && !NUMERIC_PANEL_EXEMPT[k]);
+  // ⚠️ SAYISAL anahtar panelde `numberKey:` ile yazılır → kümesi `DNum`, `D` DEĞİL
+  // (2026-09-01 düzeltmesi). Bu iki satır `D`ye bakıyordu ve sonuç İKİ YÖNLÜ
+  // yanlıştı: (a) panelde DOĞRU yazılmış `fasonShrinkTolerancePct` ve
+  // `duplicatesFuzzyThresholdPct` "yönetilemez" diye kırmızı veriyordu,
+  // (b) simetrik olarak, gerçekten yönetilemez bir sayısal anahtar boolean
+  // `key:` olarak da geçiyorsa SESSİZCE geçerdi. `DNum` zaten 141. satırda tam
+  // bu ayrım için hesaplanıyor — kullanılmıyordu.
+  const inPanel = (k: string): boolean => D.includes(k) || DNum.includes(k);
+  const numUnmanaged = aNum.filter((k) => !inPanel(k) && !NUMERIC_PANEL_EXEMPT[k]);
   check(
     "yönetilemez SAYISAL anahtar yok (panelde yok + muaf değil)",
     numUnmanaged.length === 0,
@@ -320,7 +328,7 @@ async function main() {
     numStaleUnknown.length === 0,
     `API'de yok: ${numStaleUnknown.join(", ")}`,
   );
-  const numStaleNowInPanel = Object.keys(NUMERIC_PANEL_EXEMPT).filter((k) => D.includes(k));
+  const numStaleNowInPanel = Object.keys(NUMERIC_PANEL_EXEMPT).filter((k) => inPanel(k));
   check(
     "sayısal muaf listesindeki anahtar panele eklenmemiş (eklenmişse muafı kaldır)",
     !electronFound || numStaleNowInPanel.length === 0,
@@ -456,6 +464,19 @@ async function main() {
     string,
     { why: string; file: string; needle: string }
   > = {
+    // ⚠️ FEATURE FLAG DEĞİL — makinenin KİMLİĞİ (`system-setting.service.ts:455`
+    // başlığı bunu açıkça yazıyor: "`test_feature_flag_contract` bunu görmez
+    // (görmemeli)"). Yazarın niyeti muafiyetti, muaf SATIRI eklenmemişti; bu
+    // yüzden §11 bugüne kadar kırmızı kaldı (2026-09-01'de `origin/adnansahin`
+    // üzerinde de kırmızı olduğu ölçüldü — birleştirmenin ürünü DEĞİL).
+    // Panelde yüzeyi YOK ve OLMAMALI: panelden değiştirilebilir olsaydı
+    // istemcilerin "bağlandığım sunucu değişti mi" kontrolü tek tıkla
+    // geçersizleşirdi. Yüzeyi, değeri ÜRETEN boot işidir.
+    SYSTEM_INSTALLATION_ID: {
+      why: "Feature flag değil, kurulum kimliği — panel yüzeyi YOK (bilinçli); boot işi üretir, /api/discovery/identity okur",
+      file: "Teks-Erp/src/jobs/installation-identity.job.ts",
+      needle: "SETTING_KEYS.SYSTEM_INSTALLATION_ID",
+    },
     SHIPPING_TOLERANCE_METERS: {
       why: "Panel: Genel Ayarlar → Siparişler → 'Sipariş tamamlanma toleransı' (settingFields)",
       file: "Electron/src/pages/GeneralSettings/settings-config.ts",

@@ -560,7 +560,8 @@ export class WarehouseTransferService {
     dateFrom?: Date;
     dateTo?: Date;
   }): Promise<{ rows: unknown[]; total: number }> {
-    const where = buildWhereClause(params.filters, ["transferNo", "notes"], params.search);
+    // ⚠️ KOD ↔ METİN kovası AYRI — bkz. `goods-receipt.service.ts` gerekçesi.
+    const where = buildWhereClause(params.filters, ["notes"], params.search, ["transferNo"]);
     // ⚠️ TARİH ARALIĞI (2026-08-15): mal kabul listesiyle aynı boşluk —
     // `applyDateRange` hiç çağrılmadığı için `dateFrom` SESSİZCE yok sayılıyor
     // ve liste tam dönüyordu. Whitelist DAR: `createdAt` transferin yapıldığı

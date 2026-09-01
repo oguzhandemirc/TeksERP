@@ -5692,8 +5692,23 @@ model Warehouse {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  /// KATLANMIŞ GÖLGE KOLONLAR (2026-09-01, birleştirme onarımı).
+  /// Depo/muhasebe tabloları arama motorunun fold mimarisinden ÖNCE yazıldı
+  /// (`20260819060000_search_fold` onları kapsamıyordu). `searchFields` metin
+  /// yolu `<kolon>Fold` sorar → kolon yoksa Prisma doğrulama hatası → depo
+  /// listesinde arama kutusuna yazan kullanıcı **500** alıyordu (ölçüldü).
+  nameFold    String? @default(dbgenerated())
+  addressFold String? @default(dbgenerated())
+  notesFold   String? @default(dbgenerated())
+
   @@unique([isDefault])
+  /// AD SEDDİ: `assertNameNotDuplicate` kilitsiz check-then-act'tir (tx bile
+  /// açmaz) — yarışı kapatan tek şey budur. Bekçi: `test_master_data_name_dup`
+  /// §10 (her `nameFold` tablosu ya sedli ya gerekçeli muaf).
+  @@unique([nameFold])
   @@index([isActive])
+  @@index([addressFold])
+  @@index([notesFold])
   @@map("warehouses")
 }
 
@@ -5809,9 +5824,14 @@ model WarehouseTransfer {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  /// Katlanmış gölge — bkz. `Warehouse.nameFold` gerekçesi. `transferNo` KOD
+  /// kovasına taşındı (katlanmaz), yalnız serbest metin burada.
+  notesFold String? @default(dbgenerated())
+
   @@index([fromWarehouseId, createdAt])
   @@index([toWarehouseId, createdAt])
   @@index([status, createdAt])
+  @@index([notesFold])
   @@map("warehouse_transfers")
 }
 
@@ -5898,8 +5918,13 @@ model GoodsReceipt {
   // C4 — "bu fason firmadan alınan fişler" (tedarikçi bacağının simetriği).
   @@index([subcontractorId, createdAt])
   @@index([status, createdAt])
+  /// Katlanmış gölge — bkz. `Warehouse.nameFold` gerekçesi. `receiptNo` ve
+  /// `deliveryNoteNo` KOD kovasına taşındı (katlanmaz), yalnız serbest metin burada.
+  notesFold String? @default(dbgenerated())
+
   // Paket D — "bu siparişin fişleri" sorgusu (sipariş detayı + karşılanma).
   @@index([purchaseOrderId])
+  @@index([notesFold])
   @@map("goods_receipts")
 }
 
@@ -6377,6 +6402,11 @@ model CashBox {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  /// Katlanmış gölge — bkz. `Warehouse.nameFold` gerekçesi.
+  nameFold String? @default(dbgenerated())
+
+  /// AD SEDDİ — bkz. `Warehouse.nameFold` gerekçesi.
+  @@unique([nameFold])
   @@index([isActive])
   @@map("cash_boxes")
 }
@@ -6406,7 +6436,15 @@ model BankAccount {
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
 
+  /// Katlanmış gölge — bkz. `Warehouse.nameFold` gerekçesi. `iban` KOD kovasına
+  /// taşındı (boşluksuz ASCII; katlama onu bozardı).
+  nameFold     String? @default(dbgenerated())
+  bankNameFold String? @default(dbgenerated())
+
+  /// AD SEDDİ — bkz. `Warehouse.nameFold` gerekçesi.
+  @@unique([nameFold])
   @@index([isActive])
+  @@index([bankNameFold])
   @@map("bank_accounts")
 }
 

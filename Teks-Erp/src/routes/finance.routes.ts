@@ -671,7 +671,9 @@ router.post("/payments/:id/cancel", requirePermission("finance:payment"), async 
 const cashBoxService = new BaseService({
   modelName: "cashBox",
   tableName: "CASH_BOX",
-  searchFields: ["code", "name"],
+  // ⚠️ KOD ↔ METİN kovası AYRI — bkz. `warehouse.service.ts` gerekçesi.
+  searchFields: ["name"],
+  codeSearchFields: ["code"],
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "kasa",
@@ -680,7 +682,9 @@ const cashBoxService = new BaseService({
 const bankAccountService = new BaseService({
   modelName: "bankAccount",
   tableName: "BANK_ACCOUNT",
-  searchFields: ["code", "name", "bankName", "iban"],
+  // ⚠️ `iban` de KOD kovasında: boşluksuz ASCII saklanır, katlama onu bozar.
+  searchFields: ["name", "bankName"],
+  codeSearchFields: ["code", "iban"],
   uniqueField: "code",
   duplicateNameField: "name",
   entityLabel: "banka hesabı",

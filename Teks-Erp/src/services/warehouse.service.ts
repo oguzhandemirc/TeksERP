@@ -86,7 +86,11 @@ class WarehouseService extends BaseService {
     super({
       modelName: "warehouse",
       tableName: "WAREHOUSE",
-      searchFields: ["code", "name", "address", "notes"],
+      // ⚠️ KOD ↔ METİN kovası AYRI (2026-09-01): metin yolu `<kolon>Fold`
+      // gölgesini sorar, kod yolu ham kolonu. `code` metin kovasında kaldığı
+      // sürece var olmayan `codeFold`a soruluyordu → arama kutusuna yazınca 500.
+      searchFields: ["name", "address", "notes"],
+      codeSearchFields: ["code"],
       uniqueField: "code",
       duplicateNameField: "name",
       entityLabel: "depo",
