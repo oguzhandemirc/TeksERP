@@ -24,6 +24,7 @@ import { katalogKur } from "./demo/catalog";
 import { carilerKur, siparislerKur } from "./demo/sales";
 import { envanterKur } from "./demo/inventory";
 import { kartelaKur, transferKur, sayimKur, kurTarihcesiKur } from "./demo/extras";
+import { isEmirleriKur } from "./demo/production";
 import { sevkiyatKur } from "./demo/shipping";
 import { finansKur } from "./demo/finance";
 import { cuvalKur, iplikStokKur, fiyatKur, cihazKur } from "./demo/extras2";
@@ -43,6 +44,7 @@ async function main(): Promise<void> {
   const alicilar = await carilerKur();
   await siparislerKur(alicilar, itemIds, colorIds);
   await envanterKur(itemIds, colorIds);
+  await isEmirleriKur(colorIds);
   await kurTarihcesiKur();
   await kartelaKur();
   await transferKur();
