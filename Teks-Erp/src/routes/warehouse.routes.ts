@@ -157,6 +157,28 @@ router.get(
  *       200: { description: Depo detayı }
  *       404: { description: Bulunamadı }
  */
+/**
+ * @openapi
+ * /api/warehouses/similar-names:
+ *   get:
+ *     tags: [Warehouses]
+ *     summary: Benzer depo adları (mükerreri REDDETMEK yerine ÖNLEMEK)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: name
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Benzer adlar }
+ */
+// BENZER KAYITLAR (2026-09-01). Depo adı artık DB seddiyle TEKİLDİR
+// (`warehouses_nameFold_key`) — uyarı olmadan kullanıcı mükerrer adı ancak
+// KAYDEDERKEN, ham bir hata olarak öğrenirdi. `customer.routes` emsali.
+// ⚠️ `/:id`den ÖNCE tanımlı olmalı; sonra gelirse Express "similar-names"i id
+// sanar ve `uuid-param` middleware'i 400 döndürür.
+// ⚠️ İzin WRITE: uç var olan adları listeler ve yalnız KAYIT AÇAN kişiye lazım.
+router.get("/similar-names", verifyToken, requirePermission("warehouse:write"), controller.similarNames);
+
 router.get(
   "/:id",
   verifyToken,

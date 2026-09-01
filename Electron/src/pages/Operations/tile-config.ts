@@ -46,12 +46,6 @@ export interface OperationsVisibilityContext {
   /** `shipping.confirmationEnabled` — sevk onayı ara adımı. */
   shipmentConfirmationEnabled: boolean;
   /**
-   * Çıkış bekleyen (PLANNED) sevkiyat sayısı — bayrak KAPALIYKEN bile Sevk
-   * Kapısı'nı görünür tutan "işi kaldıysa dur" koşulunun girdisi. Bilinmiyorsa
-   * (izin yok / henüz yüklenmedi) 0 — karo yalnız bayrağa göre karar verir.
-   */
-  pendingPlannedShipments: number;
-  /**
    * ÇOK DEPOLU kurulum mu (aktif depo > 1)?
    *
    * ⚠️ "Fabrikada sıfır görünür fark" kuralının karo ayağı: tek depolu üretici

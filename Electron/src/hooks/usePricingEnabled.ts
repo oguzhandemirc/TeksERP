@@ -31,6 +31,18 @@ export function usePricingEnabled(): boolean {
   return q.data?.data?.pricingEnabled ?? false;
 }
 
+/**
+ * DEMO KURULUMU MU?
+ *
+ * ⚠️ `?? false` load-bearing: bayrak yüklenene kadar (ve okunamazsa) demo
+ * yardımcıları ÇİZİLMEZ. Ters varsayılan, sunucuya ulaşamayan bir panelde
+ * fabrikaya demo düğmeleri gösterirdi.
+ */
+export function useDemoModeEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.demoModeEnabled ?? false;
+}
+
 export function useTargetQuantityEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.targetQuantityEnabled ?? false;

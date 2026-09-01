@@ -20,6 +20,7 @@
 // "Sonuç yok." gösterdi (sahada yakalandı, 2026-08-12).
 import apiClient from "@/services/apiClient";
 import type { PaginatedResponse } from "@/types/api";
+import { PICKER_MAX_PAGE_SIZE } from "@/lib/picker-loader";
 
 interface LookupRow {
   id: string;
@@ -68,7 +69,10 @@ export const warehouseLookupService = {
     const r = await apiClient.get<{
       success: boolean;
       data: Array<{ id: string; name: string; code: string | null }>;
-    }>("/api/warehouses", { params: { page: 1, pageSize: 200, "filter[isActive]": "true" } });
+    }>("/api/warehouses", {
+      // ⚠️ Sınır SABİTTEN — bkz. `lib/picker-loader.ts` gerekçesi.
+      params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, "filter[isActive]": "true" },
+    });
     return asPage(r.data.data ?? []);
   },
 };

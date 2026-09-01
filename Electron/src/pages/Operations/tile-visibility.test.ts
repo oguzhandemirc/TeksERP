@@ -24,7 +24,6 @@ function ctx(
 ): OperationsVisibilityContext {
   return {
     shipmentConfirmationEnabled: false,
-    pendingPlannedShipments: 0,
     // Varsayılan TEK DEPO (fabrika kurulumu) — depo yüzeyleri çizilmemeli.
     multiWarehouse: false,
     // Varsayılan FABRİKA rejimi (muhasebe kapalı) — Cariler karosu çizilmemeli.
@@ -60,7 +59,22 @@ describe("karo bağlantıları", () => {
     // "İptal Et" ile çözülür — bu ekrana ihtiyaç yok. Bağlama sayaç geri
     // eklenirse bu test derlenmez (ctx tipi tek alan) — bilinçli.
     expect(predicate?.(ctx())).toBe(false);
-    expect(Object.keys(ctx())).toEqual(["shipmentConfirmationEnabled"]);
+
+    // ⚠️ KONTROL BİÇİMİ DEĞİŞTİ, NİYETİ DEĞİL (2026-09-01, birleştirme).
+    // Eskiden `Object.keys(ctx())` tek elemanlıydı ve bu, "bağlama sayaç geri
+    // eklenmedi" iddiasının vekiliydi. Depo/muhasebe karoları bağlama MEŞRU
+    // alanlar getirdi (`multiWarehouse` → Depo Transferi, `financeEnabled` →
+    // Cariler/İplik) — anahtar listesini kilitlemek artık o meşru alanları da
+    // yasaklar. Asıl iddia doğrudan yazılıyor: bağlamda SAYAÇ/SONDA yok ve
+    // Sevk Kapısı yalnız bayrağa bakar.
+    expect(Object.keys(ctx())).not.toContain("pendingPlannedShipments");
+    expect(
+      Object.entries(ctx()).filter(([, v]) => typeof v === "number"),
+    ).toEqual([]);
+    // Diğer alanlar ne olursa olsun karar DEĞİŞMEZ — yüklem saf bayraktır.
+    expect(
+      predicate?.(ctx({ multiWarehouse: true, financeEnabled: true, productionEnabled: false })),
+    ).toBe(false);
   });
 
   it("⭐ Depo Transferi TEK depoda çizilmez, ikinci depo açılınca belirir", () => {

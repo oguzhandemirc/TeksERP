@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { warehouseFormDefaults, warehouseFormSchema, type WarehouseFormValues } from "./schema";
 import type { Warehouse } from "./types";
+import { SimilarNamesWarning } from "@/components/forms/SimilarNamesWarning";
 
 interface Props {
   open: boolean;
@@ -50,6 +51,14 @@ export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isS
           )}
           <FormField label="Depo Adı" htmlFor="name" error={form.formState.errors.name} required>
             <Input id="name" autoFocus placeholder="Merkez Depo, Şube Deposu..." {...form.register("name")} />
+            {/* Mükerreri REDDETMEK yerine ÖNLEMEK — depo adı DB seddiyle
+                tekildir (`warehouses_nameFold_key`), uyarı olmasa kullanıcı
+                bunu ancak kaydederken ham hata olarak görürdü. */}
+            <SimilarNamesWarning
+              entity="warehouses"
+              name={form.watch("name") ?? ""}
+              excludeId={initial?.id}
+            />
           </FormField>
           <FormField label="Adres" htmlFor="address" error={form.formState.errors.address}>
             <Input id="address" placeholder="(opsiyonel)" {...form.register("address")} />

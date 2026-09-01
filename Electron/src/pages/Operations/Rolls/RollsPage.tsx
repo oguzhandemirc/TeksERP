@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Plus, ClipboardList, Loader2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { DemoBar } from "@/components/demo/DemoBar";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
@@ -250,6 +251,10 @@ export function RollsPage() {
             <RefreshButton
               queryKey={tab === "KANBAN" ? ["rolls"] : ["rolls", tab]}
             />
+            {/* DEMO yardımcısı — bayrak kapalıyken HİÇBİR ŞEY çizmez (bileşenin
+                ilk satırı kapı). "Yeniden Etiketle" akışı elle kurulması zor bir
+                ön koşul ister: topun ÖNCE etiketlenmiş SONRA değişmiş olması. */}
+            <DemoBar scenario="RELABEL_STALE" invalidateKeys={[["rolls"]]} />
             {(tab === "RAW_STOCK" || tab === "SEMI_FINISHED" || tab === "FINISHED_STOCK") && (
               <PermissionGate permission="roll:write">
                 <Button

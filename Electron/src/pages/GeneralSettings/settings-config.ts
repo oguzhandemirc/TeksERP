@@ -2,6 +2,7 @@ import {
   Building2,
   Banknote,
   Blocks,
+  FlaskConical,
   ClipboardList,
   Factory,
   Truck,
@@ -203,7 +204,8 @@ export type SettingsSectionId =
   | "production"
   | "trade"
   | "printing"
-  | "system";
+  | "system"
+  | "demo";
 
 /**
  * REJİM kapısı — bir KATEGORİNİN tamamı bu bayrağa bağlıdır. `undefined` → her
@@ -260,6 +262,10 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "trade", label: "Depo & Muhasebe" },
   { id: "printing", label: "Baskı & Cihazlar" },
   { id: "system", label: "Sistem" },
+  // ⚠️ AYRI BÖLÜM, `modules` DEĞİL: `modules` rejim anahtarlarının (`SettingsRegimeKey`)
+  // evidir ve oraya konsaydı `demoModeEnabled` de bir rejim anahtarı sanılırdı.
+  // Demo modu bir MODÜL değil, kurulumun NE OLDUĞUNA dair bir beyandır.
+  { id: "demo", label: "Demo" },
 ];
 
 export interface SettingsCategory {
@@ -915,6 +921,40 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "oturum süre süresi token jwt giriş çıkış logout otomatik hareketsizlik idle zaman aşımı timeout güvenlik session ömür dakika saat çalışma oturumu makine yer onayı saha work session kart personel kartı qr login pin giriş yöntemi token dolunca otomatik çıkış autoLogout aynı hesap ikinci oturum eşzamanlı politika kick notify eskiyi düşür sınırsız başka bilgisayar mobil hareketsizlik kilidi kilit ekranı tablet telefon",
     kind: "session",
     section: "system",
+  },
+  {
+    // ═══════════════════════════════════════════════════════════════════════
+    // DEMO KURULUMU — sürüm paketinde OTOMATİK KAPALI
+    // ═══════════════════════════════════════════════════════════════════════
+    // Bu bir TERCİH değil, kurulumun NE OLDUĞUNA dair bir beyandır. Açıkken
+    // panelde DEMO rozeti çizilir ve `/api/demo/*` senaryo üreticileri açılır
+    // (fabrikada test edilmesi zor ekranları — "yeniden etiketle", kartela,
+    // kurşun kuyruğu — tek tıkla doldurmak için).
+    //
+    // ⚠️ Varsayılan KAPALI ve bu YAPISAL bir güvencedir: sürüm paketine sızan
+    // bir demo yardımcısı, sahada hiçbir şey yapılmadığı sürece ETKİSİZDİR.
+    // Backend uçları da bayrağı KENDİ okur (`requireDemoMode`) — menüyü
+    // gizlemek yetmez, adresi bilen biri ekranı yine açardı.
+    id: "demo",
+    label: "Demo",
+    icon: FlaskConical,
+    description:
+      "Bu kurulum bir DEMO/EĞİTİM kurulumu mu? Açıkken örnek senaryo üreten yardımcılar ve DEMO rozeti görünür.",
+    keywords:
+      "demo eğitim tanıtım örnek senaryo test sunum müşteri gösterimi deneme kurulum sandbox",
+    kind: "flags",
+    section: "demo",
+    flags: [
+      {
+        key: "demoModeEnabled",
+        title: "Bu kurulum bir DEMO kurulumudur",
+        summary:
+          "Ekranlarda örnek veri üreten 'Demo' yardımcıları ve üst şeritte DEMO rozeti görünür.",
+        defaultOn: false,
+        audience: ["Yönetim"],
+        desc: "KAPALI (varsayılan) olduğunda hiçbir demo yardımcısı çizilmez ve /api/demo/* uçları 403 döner — yani gerçek bir fabrika kurulumunda bu bölümün varlığı tek başına hiçbir şeyi değiştirmez. AÇIK olduğunda, sahada denenmesi zor akışlar (yeniden etiketle, kartela sevk/kabul, kurşun kuyruğu, planlı sevkiyat) tek tıkla örnek veriyle doldurulabilir; üretilen her kayıt DEMO- önekiyle ve denetim izi bırakarak doğar. Gerçek bir fabrikada AÇMAYIN.",
+      },
+    ],
   },
 ];
 

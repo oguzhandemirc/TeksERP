@@ -335,6 +335,8 @@ export interface FeatureFlags {
   fasonShrinkTolerancePct: number;
   /** Mükerrer paneli — bulanık ad eşleştirme açık mı (true=default). Kapalıyken
    *  yalnız kesin ad + kimlik çakışması aday üretir. */
+  /** Demo kurulumu mu — panelde DEMO rozeti + senaryo yardımcıları. */
+  demoModeEnabled: boolean;
   duplicatesFuzzyEnabled: boolean;
   /** Mükerrer paneli — bulanık benzerlik eşiği, YÜZDE (default 90, 50-100).
    *  ⚠️ null DÖNMEZ: alan temizlenirse fabrika varsayılanına döner. */

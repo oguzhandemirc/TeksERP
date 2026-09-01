@@ -84,6 +84,7 @@ import warehouseTransferRoutes from "./routes/warehouse-transfer.routes";
 import stockCountRoutes from "./routes/stock-count.routes";
 import currencyRoutes from "./routes/currency.routes";
 import featureFlagRoutes from "./routes/feature-flag.routes";
+import demoRoutes from "./routes/demo.routes";
 import discoveryRoutes from "./routes/discovery.routes";
 import importRoutes from "./routes/import.routes";
 import masterDataMergeRoutes from "./routes/master-data-merge.routes";
@@ -824,6 +825,8 @@ app.use("/api/finance/cheque-delivery-notes", chequeDeliveryNoteRoutes);
 app.use("/api/finance", financeRoutes);
 app.use("/api/currencies", currencyRoutes);
 app.use("/api/feature-flags", featureFlagRoutes);
+// Demo senaryoları — `demo.modeEnabled` kapalıyken hepsi 403 (requireDemoMode).
+app.use("/api/demo", demoRoutes);
 // Servis keşfi — KİMLİKSİZ ve DB'siz. İstemci sunucuyu ağda bulduktan sonra
 // "doğru kurulum mu" sorusunu buraya sorar; henüz giriş yapmamıştır, o yüzden
 // guard TAKILAMAZ (`/health` ile aynı gerekçe).

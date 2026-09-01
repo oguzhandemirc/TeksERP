@@ -206,6 +206,7 @@ export const updateSchema = z.strictObject({
   fasonShrinkTolerancePct: z.number().min(0).max(100).nullable().optional(),
   // Mükerrer paneli (2026-08-22): bulanık ad eşleştirme bayrağı + eşik (yüzde).
   // `null` = eşiği temizle → fabrika varsayılanı (90). Alt sınır 50 (gürültü).
+  demoModeEnabled: z.boolean().optional(),
   duplicatesFuzzyEnabled: z.boolean().optional(),
   duplicatesFuzzyThresholdPct: z.number().min(50).max(100).nullable().optional(),
   // ⚠️ Bu satır UNUTULURSA bayrak panelden AÇILAMAZ **ve daha kötüsü

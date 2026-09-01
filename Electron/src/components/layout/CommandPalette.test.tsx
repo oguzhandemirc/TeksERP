@@ -32,7 +32,6 @@ let regime = { productionEnabled: true, financeEnabled: false };
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
     shipmentConfirmationEnabled: false,
-    pendingPlannedShipments: 0,
     multiWarehouse: false,
     ...regime,
   }),

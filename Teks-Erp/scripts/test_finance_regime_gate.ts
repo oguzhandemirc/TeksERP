@@ -105,6 +105,19 @@ const TICARET_MODELLERI = new Set([
 // -----------------------------------------------------------------------------
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
   {
+    dosya: "routes/demo.routes.ts",
+    neden:
+      "DEMO senaryo üreticileri (2026-09-01). Ticaret modeline dokunuş GEÇİŞLİDİR ve " +
+      "YANILTICI: router hiçbir ticaret işi yapmaz, `InventoryService`i yalnız top/etiket " +
+      "senaryosu için (`applyManualProperties`) import eder — o servis kocaman olduğu için " +
+      "transitif tarama `purchaseOrder`a kadar uzanıyor. Rejim kapısı `requireFinanceEnabled` " +
+      "OLAMAZ: senaryo muhasebeyle ilgisizdir ve ön muhasebe kapalı bir kurulumda da " +
+      "çalışmalıdır. Router'ın KENDİ kapısı vardır ve daha DARdır: `requireDemoMode` — " +
+      "fabrikada (demo modu kapalı) tüm uçlar 403 döner, yani yazma yüzeyi SIFIRDIR. " +
+      "⚠️ Buraya bir FİNANS senaryosu eklenirse bu muaf YENİDEN DEĞERLENDİRİLMELİ: o gün " +
+      "gerekçenin 'ticaret işi yapmaz' ayağı düşer.",
+  },
+  {
     dosya: "routes/return.routes.ts",
     neden:
       "İade FABRİKANIN ana akışıdır (mobil iade ekranı + RollReturn) → rejim kapısı KONULAMAZ. " +

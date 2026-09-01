@@ -15,6 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { warehouseService } from "@/pages/Warehouses/service";
 import type { Warehouse } from "@/pages/Warehouses/types";
+import { loadAllForPicker } from "@/lib/picker-loader";
 
 export const WAREHOUSES_QUERY_KEY = ["warehouses", "active"] as const;
 
@@ -23,9 +24,10 @@ export function useWarehouses() {
   return useQuery({
     queryKey: WAREHOUSES_QUERY_KEY,
     queryFn: async (): Promise<Warehouse[]> => {
-      const res = await warehouseService.getAll({
-        page: 1,
-        pageSize: 200,
+      // ⚠️ Satır içi `pageSize` YOK: sınır TEK KAYNAKTAN gelir
+      // (`loadAllForPicker`). Backend `MAX_PAGE_SIZE` tarihte 100→200→500
+      // değişti ve her seferinde satır içi çağrılar 400 üretti.
+      const res = await loadAllForPicker(warehouseService, {
         sortBy: "name",
         sortOrder: "asc",
         filters: { isActive: "true" },

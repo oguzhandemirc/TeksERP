@@ -7,6 +7,7 @@ import apiClient from "@/services/apiClient";
 // ekranının saf katmanı. Buraya kopyalamak, "aynı fatura kapama ekranında
 // gecikmiş, listede değil" tutarsızlığının kapısını açardı.
 import { isOverdue, toKurus } from "./Allocations/allocationMath";
+import { PICKER_MAX_PAGE_SIZE } from "@/lib/picker-loader";
 
 export type Currency = "TRY" | "USD" | "EUR" | "GBP" | "RUB";
 export type InvoiceType = "SALES" | "PURCHASE" | "SALES_RETURN" | "PURCHASE_RETURN";
@@ -613,14 +614,16 @@ export async function cancelPayment(id: string, reason?: string) {
 
 export async function listCashBoxes(): Promise<Paged<AccountRow>> {
   const res = await apiClient.get("/api/finance/cash-boxes", {
-    params: { page: 1, pageSize: 200, sortBy: "name", sortOrder: "asc" },
+    // ⚠️ Sınır SABİTTEN: "tümünü çek" davranışının tavanı tek yerde yaşar
+    // (`PICKER_MAX_PAGE_SIZE`, backend `MAX_PAGE_SIZE` ile eşli).
+    params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "name", sortOrder: "asc" },
   });
   return res.data;
 }
 
 export async function listBankAccounts(): Promise<Paged<AccountRow>> {
   const res = await apiClient.get("/api/finance/bank-accounts", {
-    params: { page: 1, pageSize: 200, sortBy: "name", sortOrder: "asc" },
+    params: { page: 1, pageSize: PICKER_MAX_PAGE_SIZE, sortBy: "name", sortOrder: "asc" },
   });
   return res.data;
 }
@@ -641,9 +644,19 @@ export async function createBankAccount(body: {
   return res.data;
 }
 
+/**
+ * Kur listesi SAYFA BOYUTU — "tümünü çek" tavanı DEĞİL.
+ *
+ * ⚠️ `PICKER_MAX_PAGE_SIZE` KULLANILMAZ: kur tarihçesi bir picker beslemez,
+ * ekranda EN SON kurlar gösterilir ve tablo yıllar içinde binlerce satıra
+ * çıkar. Sınırı picker tavanına bağlamak, o tavan büyüdüğünde bu ekranı
+ * sessizce yavaşlatırdı. Adlandırılmış sabit, niyeti (sayfa boyutu) açık yazar.
+ */
+const RATE_LIST_PAGE_SIZE = 100;
+
 export async function listRates(): Promise<Paged<RateRow>> {
   const res = await apiClient.get("/api/finance/exchange-rates", {
-    params: { page: 1, pageSize: 100, sortBy: "rateDate", sortOrder: "desc" },
+    params: { page: 1, pageSize: RATE_LIST_PAGE_SIZE, sortBy: "rateDate", sortOrder: "desc" },
   });
   return res.data;
 }

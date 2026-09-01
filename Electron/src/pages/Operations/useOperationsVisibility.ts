@@ -31,22 +31,16 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   // yerindeki yazım: `productionEnabled ?? true`).
   const productionEnabled = flagsQuery.data?.data?.productionEnabled ?? true;
 
-  // Çıkış bekleyen sevkiyat SONDASI — yalnız karar bunu gerektiriyorsa koşar:
-  // bayrak açıksa karo zaten görünür (sorgu gereksiz), izin yoksa uç 403 verir.
-  // `limit: 1` yeter — sayı değil VARLIK soruluyor.
-  const probeEnabled = !shipmentConfirmationEnabled && hasPermission("shipping:read");
-  const pending = useQuery({
-    queryKey: ["ops-visibility", "planned-shipments"],
-    queryFn: () => sackStoreService.list({ limit: 1 }),
-    enabled: probeEnabled,
-    staleTime: 60 * 1000,
-  });
-
+  // ⚠️ ÇIKIŞ BEKLEYEN SEVKİYAT SONDASI KALDIRILDI (2026-09-01, birleştirme).
+  // 2026-08-22 kararı Sevk Kapısı karosunu SAF BAYRAĞA bağladı ve `sack-store/
+  // board?limit=1` sondasını kaldırdı. Birleştirmede kararın yalnız YARISI
+  // taşındı: karo yüklemi düzeltilmişti ama bağlam alanı ve onu besleyen sorgu
+  // depo dalından hayatta kaldı — Operasyon hub'ı her açılışta KİMSENİN
+  // OKUMADIĞI bir istek atıyordu.
   return {
     shipmentConfirmationEnabled,
     financeEnabled,
     productionEnabled,
-    pendingPlannedShipments: pending.data?.data?.length ?? 0,
     // Tek kaynak `useMultiWarehouse` — karar burada YENİDEN hesaplanmaz
     // (kopyalansa biri gün gelir "aktif" süzgecini unuturdu).
     multiWarehouse,

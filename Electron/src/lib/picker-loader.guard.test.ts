@@ -52,6 +52,22 @@ const ALLOWED: Record<string, string> = {
   "lib/picker-loader.ts": "helper'ın kendisi — sınırı O tanımlıyor",
   "pages/Operations/Rolls/useRollStats.ts":
     "picker DEĞİL: liste sayfasının URL parametrelerine varsayılan sayfa boyutu veriyor",
+  // ── Depo/Muhasebe LİSTE SAYFALARI (2026-09-01, birleştirme) ───────────────
+  // Bunlarda 100/200 bir "tümünü çek" TAVANI DEĞİL, arama sonucunun SAYFA
+  // BOYUTUdur (`OrderPickerDialog` ile aynı sınıf): sunucu araması + filtre var,
+  // `loadAllForPicker`a çevirmek aramayı KALDIRIR ve tüm defteri istemciye çeker.
+  // ⚠️ Ayrı ve BİLİNEN sınır: bu sayfalarda sayfalama YOK — kayıt 100'ü aşarsa
+  // fazlası GÖRÜNMEZ. Kural ihlali değil, ayrı bir iş (takip).
+  "pages/Finance/CariPage.tsx": "arama tabanlı cari listesi — 100 sayfa boyutu",
+  "pages/Finance/InvoicesPage.tsx": "arama tabanlı fatura listesi — 100 sayfa boyutu",
+  "pages/Finance/Allocations/service.ts":
+    "tahsis edilebilir çek arama sonucu — 200 sayfa boyutu, picker değil",
+  "pages/Operations/GoodsReceipts/GoodsReceiptsPage.tsx":
+    "arama tabanlı mal kabul listesi — 100 sayfa boyutu",
+  "pages/Operations/WarehouseTransfers/WarehouseTransfersPage.tsx":
+    "transfer listesi — 100 sayfa boyutu",
+  "pages/Operations/WarehouseTransfers/service.ts":
+    "BARKOD çözümü: okutulan barkodun aday kümesi (statü süzgeçli), picker değil",
   "pages/Operations/WorkOrders/OrderPickerDialog.tsx":
     "ARAMA tabanlı picker (debounce'lu sunucu araması + filtre + özel uç). " +
     "Orada 100 bir 'tümünü çek' tavanı değil, sonuç sayfası boyutudur — " +

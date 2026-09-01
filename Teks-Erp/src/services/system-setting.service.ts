@@ -303,6 +303,20 @@ export const SETTING_KEYS = {
    * o kalıp burada "temizlendi" ile "sıfır tolerans"ı aynı yere düşürürdü.
    */
   FASON_SHRINK_TOLERANCE_PCT: "fason.shrinkTolerancePct",
+  /**
+   * DEMO KURULUMU MU? (default FALSE)
+   *
+   * Bir TERCİH değil, bir REJİM anahtarıdır (`finance.enabled` emsali): açıkken
+   * `/api/demo/*` altındaki senaryo üreticileri açılır ve panelde "DEMO" rozeti
+   * çizilir. Kapalıyken o uçlar 403 döner — yani sürüm paketine sızan bir demo
+   * yardımcısı sahada KENDİLİĞİNDEN etkisizdir.
+   *
+   * ⚠️ NEDEN ENV DEĞİL: env ile açılan bir modu KAPATMAK sunucuya erişim ister.
+   * Bu depo "unutulabilir elle adım" sınıfını üç kez mekanikleştirdi; karar
+   * operatörün BEYANINA bağlanır, ortam tahminine değil.
+   * ⚠️ OKUMA CACHE'SİZ: acil kapatma anahtarı — etkisi bir SONRAKİ istekte görünmeli.
+   */
+  DEMO_MODE_ENABLED: "demo.modeEnabled",
   /** Mükerrer paneli — bulanık ad eşleştirme açık mı (default TRUE). */
   DUPLICATES_FUZZY_ENABLED: "duplicates.fuzzyEnabled",
   /** Mükerrer paneli — bulanık ad benzerlik eşiği, YÜZDE (default 90, aralık 50-100). */
@@ -1075,6 +1089,8 @@ export interface FeatureFlags {
   fasonShrinkWarnEnabled: boolean;
   /** Çekme toleransı — YÜZDE. Default 10. `0` = tolerans yok (her fark uyarır). */
   fasonShrinkTolerancePct: number;
+  /** Demo kurulumu mu (default FALSE) — `/api/demo/*` senaryo üreticilerini açar. */
+  demoModeEnabled: boolean;
   /** Mükerrer paneli: bulanık ad eşleştirme (default TRUE). Kapalıyken yalnız kesin ad + kimlik. */
   duplicatesFuzzyEnabled: boolean;
   /** Mükerrer paneli: bulanık benzerlik eşiği — YÜZDE (default 90, 50-100). */
@@ -1384,6 +1400,7 @@ export class SystemSettingService {
       tamburShortCutA1ThresholdM: await readTamburShortCutA1ThresholdM(cacheClient),
       fasonShrinkWarnEnabled: await readFasonShrinkWarnEnabled(cacheClient),
       fasonShrinkTolerancePct: await readFasonShrinkTolerancePct(cacheClient),
+      demoModeEnabled: await readDemoModeEnabled(cacheClient),
       duplicatesFuzzyEnabled: await readDuplicatesFuzzyEnabled(cacheClient),
       duplicatesFuzzyThresholdPct: await readDuplicatesFuzzyThresholdPct(cacheClient),
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
@@ -1984,6 +2001,17 @@ export class SystemSettingService {
         SETTING_KEYS.FASON_SHRINK_TOLERANCE_PCT,
         v === null ? DEFAULT_FASON_SHRINK_TOLERANCE_PCT : v,
         "Fason kabulünde çekme toleransı (yüzde) — altındaki fark uyarı üretmez",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "demoModeEnabled")) {
+      if (typeof input.demoModeEnabled !== "boolean") {
+        throw AppError.badRequest("demoModeEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DEMO_MODE_ENABLED,
+        input.demoModeEnabled,
+        "Demo kurulumu — senaryo üreticileri ve DEMO rozeti",
         userId
       );
     }
@@ -3147,6 +3175,24 @@ export async function readFasonShrinkTolerancePct(
 }
 
 /** Mükerrer paneli — bulanık ad eşleştirme (default TRUE; kayıt yoksa açık). */
+/**
+ * Demo modu açık mı. KAYIT YOKSA **FALSE** — panel `defaultOn: false` ile
+ * birebir (bekçi `test_feature_flag_contract` §12 bu eşitliği ölçer).
+ *
+ * ⚠️ Varsayılanın FALSE olması bu bayrağın en önemli özelliğidir: sürüme sızan
+ * bir demo yardımcısı, fabrikada hiçbir şey yapılmadığı sürece ETKİSİZDİR.
+ */
+export async function readDemoModeEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEMO_MODE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
 export async function readDuplicatesFuzzyEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

@@ -1,5 +1,6 @@
 import { PanelLeft, Search, LogOut, RotateCw, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { NotificationBell } from "./NotificationBell";
 import {
@@ -66,6 +67,8 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
       </div>
 
       <div className="ml-auto flex items-center gap-1 app-no-drag">
+        {/* Unutulmuş demo modu SESSİZ kalamaz — bayrak kapalıyken hiçbir şey çizilmez. */}
+        <DemoModeBadge />
         <Button
           variant="ghost"
           size="icon"

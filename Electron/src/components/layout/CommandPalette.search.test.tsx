@@ -49,6 +49,14 @@ vi.mock("@/store/auth", () => ({
 }));
 
 const get = vi.fn();
+// ⚠️ BAYRAK KANCASI DA MOCK'LANIR (2026-09-01, birleştirme): palet artık
+// `useFeatureFlags()` okuyor (gizlenen Envanter sekmelerinin derin bağlantıları
+// paletten düşsün diye) ve o kanca `apiClient.get`e gider. Casus GLOBAL olduğu
+// için o istek "sunucuya sordu" sayılıyordu — oysa testin iddiası ARAMA ucuna
+// sorulmadığıdır. Diğer altı kanca gibi mock'lanır (dosyanın kendi deseni).
+vi.mock("@/hooks/usePricingEnabled", () => ({
+  useFeatureFlags: () => ({ data: { data: { productionEnabled: true } } }),
+}));
 vi.mock("@/services/apiClient", () => ({ default: { get: (...a: unknown[]) => get(...a) } }));
 
 const reply = (data: unknown) => ({ data: { data } });
