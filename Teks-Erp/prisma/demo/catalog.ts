@@ -139,13 +139,22 @@ export async function katalogKur(): Promise<{
   }
 
   // ── KUMAŞ ÖZELLİKLERİ ─────────────────────────────────────────────────────
-  const mevcutOzellik = await prisma.fabricProperty.findMany({ select: { id: true, code: true } });
+  // ⚠️ ADA GÖRE DE TEKİLLEŞTİR: `fabric_properties_nameFold_key` seddi var ve
+  // yalnız KOD kontrolü yetmiyor — canlı demoda aynı adı FARKLI kodla taşıyan
+  // özellikler vardı ve seed sunucuda P2002 ile düştü (ölçüldü). Renk ve kumaş
+  // tarafında zaten yapılıyordu; özellik atlanmıştı.
+  const mevcutOzellik = await prisma.fabricProperty.findMany({
+    select: { id: true, code: true, name: true },
+  });
   const ozellikKod = new Set(mevcutOzellik.map((p) => p.code));
+  const ozellikFold = new Set(mevcutOzellik.map((p) => katla(p.name)));
   const propertyIds: string[] = mevcutOzellik.map((p) => p.id);
 
   for (const p of k.properties) {
-    if (ozellikKod.has(p.code)) continue;
+    const pf = katla(p.name);
+    if (ozellikKod.has(p.code) || !pf || ozellikFold.has(pf)) continue;
     ozellikKod.add(p.code);
+    ozellikFold.add(pf);
     const olusan = await prisma.fabricProperty.create({
       data: {
         code: p.code,
