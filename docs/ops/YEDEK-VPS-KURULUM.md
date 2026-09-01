@@ -174,28 +174,38 @@ sshd -T -C user=oguzhan        | grep -iE 'chroot|forcecommand'   # none olmalı
 ## B) Fabrika sunucusu — YAPILACAK (tek kalan adım)
 
 Kurulum paketi: **`~/Documents/TeksERP-VDS-Kurulum/fabrika-adnansahin/`**
-(depo DIŞINDA — özel anahtar git'e girmez).
+(depo DIŞINDA — özel anahtar git'e girmez). Klasörü fabrika sunucusuna kopyala,
+**içinden** yönetici PowerShell'de:
 
 ```powershell
-# B1. rclone — https://rclone.org/downloads/ → Windows AMD64
-#     rclone.exe → C:\Etkili-Yazilim\rclone\rclone.exe
-
-# B2. Paketi kopyala → C:\Etkili-Yazilim\rclone\
-#     adnansahin_yedek · vps_known_hosts · rclone.conf
-
-# B3. Bağlantı sınaması
-C:\Etkili-Yazilim\rclone\rclone.exe --config C:\Etkili-Yazilim\rclone\rclone.conf lsd vps-sftp:
-
-# B4. Backend .env
-#     BACKUP_RCLONE_BIN=C:\Etkili-Yazilim\rclone\rclone.exe
-#     BACKUP_RCLONE_CONFIG=C:\Etkili-Yazilim\rclone\rclone.conf
-
-# B5. Hedefi PANELDEN ayarla: Sistem → Yedekler → Makine Dışı Yedek → "yedek:"
+.\kur-yedek.ps1
 ```
+
+Script beş adımı sırayla yapar: rclone (yoksa indirir) → yapılandırma + anahtar
+→ **bağlantı ve YAZMA sınaması** → `ecosystem.config.js` → `pm2 restart`.
+
+⚠️ **Sıra bilinçli: yapılandırmaya ancak sınama geçtiyse dokunulur.** Ters
+sırada, çalışmayan bir hedefle pm2 yeniden başlar ve gece yedeği sessizce
+hiçbir yere gitmez. Okuma sınaması da yetmez — yazma izni ayrıca kanıtlanır.
+
+⚠️ **Ayarlar `.env`de DEĞİL, `ecosystem.config.js`te yaşar** (`C:\Etkili-Yazilim\app\`).
+O dosya **sunucunundur, paketin değil** (denetim 2026-08-29, BULGU-T1-020): paketteki
+kopya repo varsayılanlarını taşır ve her kurulum sahadaki ayarı sessizce geri
+alıyordu — gece yedeği ve makine dışı kopya, güncelleme yapılan gece kapanıyordu.
+Script dosyayı yedekler, düzenler ve `node --check` ile doğrular; sözdizimi
+bozulursa **geri alır** (bozuk ecosystem pm2'yi hiç başlatmaz).
 
 ⚠️ `--config` **açıkça** verilmek zorunda. Verilmezse rclone, pm2'nin koştuğu
 Windows hesabının profilini (`%APPDATA%\rclone\rclone.conf`) okur ve
 yapılandırmayı bulamaz — sessiz başarısızlık.
+
+**Son adım panelde:** Sistem → Yedekler → Makine Dışı Yedek → hedef `yedek:` →
+"Bağlantıyı test et" + "Şimdi kopyala". Kartta **eksik: 0** görünmeli.
+
+> ℹ️ Hedefin yetkili kaynağı **panel ayarıdır** (`readOffsiteRemote`); ortam
+> değişkeni yalnız yedektir. Süpürücünün açılış uyarısı yalnız ortam değişkenine
+> bakar ve DB'ye gidemez (boot'ta koşar) — bu yüzden metni koşullu yazıldı.
+> Script ikisini de aynı değere ayarlar, böylece uyarı hiç doğmaz.
 
 **Fabrika tarafında yeni kod YAZILMAZ.** Süpürücü, motor, uçlar ve panel kartı
 2026-08-10 denetiminde yazıldı ve duruyor:
