@@ -15,7 +15,14 @@
 # =============================================================================
 set -euo pipefail
 
-SSH_HEDEF="${SSH_HEDEF:-yenisunucu}"   # ~/.ssh/config takma adı (port 2222 orada)
+# ~/.ssh/config takma adı. ⚠️ 2026-09-01'de `yenisunucu`dan `tekserp-yayin`e
+# çevrildi: yayın 80.253.255.188'e taşındı ve DNS de oraya döndü. İki ayrıntı
+# load-bearing:
+#  · `yenisunucu` artık ESKİ sunucudur (91.217.119.138) — adı yanıltıcı ama
+#    demo işi ve bir haftalık geri dönüş yolu orada, o yüzden bırakıldı.
+#  · `tekserp-yayin` kullanıcısı `yayinci`: sudo YOK, yalnız yayın ağacına
+#    yazar. Yönetici hesabıyla yayın yapılmaz.
+SSH_HEDEF="${SSH_HEDEF:-tekserp-yayin}"
 YAYIN_KOK="${YAYIN_KOK:-/opt/stack/apps/tekserp-guncelleme/html}"
 BASE_URL="${BASE_URL:-https://guncelleme.etkiliyazilim.com}"
 
@@ -82,11 +89,57 @@ if [ "$denetim_kipi" = "0" ]; then
   mb=$(( $(wc -c < "$setup") / 1024 / 1024 ))
   echo "Yüklenecek: TeksERP-$surum-Setup.exe (${mb} MB) + blockmap + latest.yml"
 
+  # --- DEĞİŞMEZLİK KAPISI ------------------------------------------------
+  # Yayınlanmış bir sürümün dosyaları ÜZERİNE YAZILMAZ. Aynı numarayla farklı
+  # bayt iki şeyi birden bozar: ① `blockmap` delta güncellemesi eski pakete
+  # göre hesaplandığı için sahadaki panel bozuk indirme yapar; ② "1.0.0 hangi
+  # derleme" sorusu cevapsız kalır — hata raporu ile paket eşleşmez.
+  # Aynı bayt ise yükleme atlanır (yeniden yayın zararsız/idempotent olsun).
+  uzak_sha=$(ssh "$SSH_HEDEF" "test -f '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' && \
+      sha256sum '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' | cut -d' ' -f1" 2>/dev/null || true)
+  if [ -n "$uzak_sha" ]; then
+    yerel_sha=$(shasum -a 256 "$setup" | cut -d' ' -f1)
+    if [ "$uzak_sha" = "$yerel_sha" ]; then
+      echo "  ↷ $surum sunucuda AYNI baytlarla zaten var — yükleme atlanıyor."
+      atla_yukleme=1
+    else
+      hata "DEĞİŞMEZLİK İHLALİ — $surum sunucuda FARKLI baytlarla duruyor.
+  sunucu: $uzak_sha
+  yerel : $yerel_sha
+  Yayınlanmış bir sürümün üzerine yazmak, sahadaki panellerin delta
+  güncellemesini bozar. Sürüm numarasını ARTIR ve yeniden paketle."
+    fi
+  fi
+
+  if [ "${atla_yukleme:-0}" != "1" ]; then
   echo "1/2  paket + blockmap..."
   scp "$setup" "$blockmap" "$SSH_HEDEF:$UZAK_DIZIN/"
 
   echo "2/2  latest.yml (en son — sıra önemli)..."
   scp "$latest" "$SSH_HEDEF:$UZAK_DIZIN/"
+  fi
+
+  # --- SAĞLAMA DOĞRULAMASI (boyut YETMEZ) --------------------------------
+  # Boyut kıyası yarım yüklemeyi yakalar ama BOZUK yüklemeyi yakalamaz: aynı
+  # uzunlukta bozulmuş bayt dizisi de doğru boyutu verir. `latest.yml`in
+  # taşıdığı sha512 zaten electron-updater'ın kuracağı beklentidir — sunucuya
+  # İNEN dosyadan yeniden hesaplayıp karşılaştırmak, panel indirmeden önce
+  # aynı soruyu sormak demektir. Hesap SUNUCUDA yapılır (141 MB'ı geri
+  # indirmeden).
+  bek_sha512=$(grep -m1 -A2 "url: TeksERP-$surum-Setup.exe" "$latest" | grep -m1 "sha512:" | awk '{print $2}')
+  if [ -n "$bek_sha512" ]; then
+    gercek_sha512=$(ssh "$SSH_HEDEF" \
+      "openssl dgst -sha512 -binary '$UZAK_DIZIN/TeksERP-$surum-Setup.exe' | openssl base64 -A")
+    if [ "$bek_sha512" != "$gercek_sha512" ]; then
+      hata "SAĞLAMA UYUŞMUYOR — sunucudaki paket latest.yml'in söylediği dosya DEĞİL.
+  beklenen: $bek_sha512
+  sunucuda: $gercek_sha512
+  Panel bu paketi reddeder. Yeniden yükle."
+    fi
+    echo "  ✓ sha512 doğrulandı (latest.yml ↔ sunucudaki paket)"
+  else
+    echo "  ⚠️ latest.yml'de sha512 bulunamadı — sağlama doğrulaması ATLANDI."
+  fi
 fi
 
 echo "Doğrulanıyor..."
@@ -137,5 +190,39 @@ fi
 
 echo "OK — yayında: $surum"
 [ "$denetim_kipi" = "1" ] && exit 0
+
+# --- YAYIN DEFTERİ ---------------------------------------------------------
+# "Bu sürümü kim, ne zaman, hangi makineden, hangi sağlamayla yayınladı."
+# Sahada bir panel bozulduğunda ilk soru "hangi paketi almış" olur; defter
+# olmadan cevap yalnız dosya tarihidir ve o da kopyalamayla değişir.
+#
+# ⚠️ Defter yayın ağacının (html/) DIŞINDA durur. İlk yazımda html/ içindeydi ve
+# internete AÇIKTI (ölçüldü: HTTP 200) — iç makine adlarını ve yayın geçmişini
+# sızdırıyordu. nginx'e kural yazmak da olurdu ama kırılgan: yarın oraya konan
+# ikinci bir iç dosya yine sızardı. Ayrım DİZİNDE olmalı — html/ yalnız kamuya
+# açık olması gereken şeyleri barındırır.
+DEFTER_DIZIN="$(dirname "$YAYIN_KOK")/defter"
+ssh "$SSH_HEDEF" "mkdir -p '$DEFTER_DIZIN' && printf '%s\t%s\t%s\t%s\t%s\n' \
+  '$(date -Iseconds)' '$surum' '$(whoami)@$(hostname -s)' \
+  '$(shasum -a 256 "$setup" | cut -c1-16)' '$(wc -c < "$setup" | tr -d " ")' \
+  >> '$DEFTER_DIZIN/$musteri-YAYIN-DEFTERI.tsv'" 2>/dev/null \
+  && echo "  ✓ yayın defterine yazıldı" \
+  || echo "  ⚠️ yayın defteri yazılamadı (yayın etkilenmedi)"
+
+# --- ESKİ SÜRÜMLERİ BUDA ---------------------------------------------------
+# Son 5 sürüm durur. Bugün sınırsız birikiyordu: her paket ~141 MB, yılda
+# birkaç sürümle disk sessizce doluyor. `latest.yml` her zaman korunur;
+# silinen yalnız ARTIK GÖSTERİLMEYEN eski paketlerdir.
+# ⚠️ Silmeden önce yayındaki sürüm dışlanır — çalışan yayına dokunulmaz.
+ssh -T "$SSH_HEDEF" bash -s -- "$UZAK_DIZIN" "$surum" <<'BUDA' 2>/dev/null || true
+  dizin="$1"; guncel="$2"; tut=5
+  cd "$dizin" || exit 0
+  ls -1t TeksERP-*-Setup.exe 2>/dev/null | grep -v "TeksERP-$guncel-Setup.exe" \
+    | tail -n +$tut | while read -r eski; do
+        echo "  ↷ budandı: $eski"
+        rm -f "$eski" "$eski.blockmap"
+      done
+BUDA
+
 echo "Fabrikadaki paneller en geç 4 saat içinde görür."
 echo "Hemen denemek için: Genel Ayarlar > Bu Bilgisayar > Güncelleme > Şimdi kontrol et"

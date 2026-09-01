@@ -3,6 +3,26 @@
 > **Karar (kullanıcı, 2026-08-31):** güncelleme yayını ve yedekler, başka
 > müşterilerin siteleriyle paylaşılan makineden **ayrı bir VDS'e** alınır.
 > Demo şimdilik eski yerinde kalır.
+>
+> ## DURUM — 2026-09-01
+>
+> Sunucu kiralandı: **`80.253.255.188`** (`tekserp-vds`, Ubuntu 24.04.1 LTS,
+> 2 çekirdek / 3 GB / 66 GB). Envanter: [`SUNUCU-ENVANTERI.md`](SUNUCU-ENVANTERI.md)
+>
+> | Adım | Durum |
+> |---|---|
+> | Sertleştirme (SSH · ufw · fail2ban · yamalar) | ✅ **bitti, ölçüldü** |
+> | Docker + traefik + dizin düzeni | ✅ bitti |
+> | Yayın dosyaları (356 MB) kopyalandı | ✅ **bayt bayt doğrulandı** |
+> | DNS öncesi içerik doğrulaması (`Host` başlığı) | ✅ eski sunucuyla birebir |
+> | Yedek mimarisi (SFTP hapsi · şifreleme · arşiv) | ✅ **bitti, negatif sondalı** |
+> | Cloudflare Origin CA sertifikası | ✅ kuruldu — geçerlilik **2041-08-28** |
+> | DNS çevirme | ✅ **çevrildi ve kanıtlandı** (iz, yeni sunucunun erişim kaydında) |
+> | Yayın script'lerinin hedefi | ✅ `tekserp-yayin`e çevrildi (eskisi eski sunucuya yüklüyordu) |
+> | Cloudflare SSL kipi → Full (strict) | ⏳ **kullanıcıda** |
+> | Fabrikaya rclone kurulumu | ⏳ |
+> | Geri yükleme provası | ⏳ |
+> | Eski sunucudaki kopyayı kapat | ⏳ ~2026-09-08 |
 
 ## Neden
 
@@ -22,14 +42,17 @@ imzalama "sonucu" ortadan kaldırır — ikisi birbirinin yerine geçmez.
 
 ---
 
-## Ne sipariş edilecek
+## Ne alındı (ve neden yeter — ölçüldü)
 
-| | |
-|---|---|
-| CPU / RAM | 2 çekirdek / 2 GB — fazlasıyla yeter (nginx statik + gece kopyalama) |
-| Disk | **40 GB**. Bugünkü yayın 356 MB; yedek fabrika başına yılda ~1 GB |
-| İşletim sistemi | **Ubuntu 22.04 LTS** — mevcut sunucuyla aynı, komutlar birebir çalışsın |
-| Konum | Fark etmez; Cloudflare önde |
+| | Alınan | Gerçek ihtiyaç |
+|---|---|---|
+| CPU | 2 çekirdek | Statik dosya servisi + gece kopyalama — işlemci neredeyse boşta |
+| RAM | 3 GB | **0,5 GB**: nginx 17 MB + traefik 30 MB + işletim sistemi ~400 MB |
+| Disk | 66 GB | Yayın 356 MB + yedek ~0,5 GB/fabrika/yıl |
+| Ağ | 100 Mbit/s | Bir panel güncellemesi 141 MB ≈ 15 sn; Cloudflare önbelleği yükü ayrıca düşürür |
+| OS | **Ubuntu 24.04.1 LTS** | 2029'a kadar destek (22.04 → 2027) |
+
+Bellek rakamları tahmin değil, eski sunucuda `docker stats` ile ölçüldü.
 
 ## Taşınacaklar (ölçülmüş envanter)
 

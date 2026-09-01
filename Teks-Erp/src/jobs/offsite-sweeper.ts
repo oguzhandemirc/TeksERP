@@ -88,10 +88,22 @@ export function startOffsiteSweeper(): void {
   }
   if (!(process.env.BACKUP_RCLONE_REMOTE ?? "").trim()) {
     // Sessiz kalmak yasak: bu, felaket kurtarma yolunun KAPALI olduğu anlamına
-    // gelir ve sunucu log'unda görünmesi gereken bir cümledir.
+    // GELEBİLİR ve sunucu log'unda görünmesi gereken bir cümledir.
+    //
+    // ⚠️ "GELEBİLİR" — kesin değil. Hedefin YETKİLİ kaynağı panel ayarıdır
+    // (`readOffsiteRemote` → önce `SETTING_KEYS.BACKUP_OFFSITE_REMOTE`, env
+    // yalnız YEDEK). Burada ayarı okuyamayız: bu kod boot'ta koşar ve DB'ye
+    // gitmek açılışı veritabanı hazırlığına bağlardı. Bu yüzden cümle
+    // KOŞULLU kuruldu.
+    //
+    // Eski hâli düz "TÜM YEDEKLER AYNI DİSKTE" diyordu ve panelden ayarlanmış
+    // bir kurulumda bu YANLIŞ ALARM'dı — yedekler sorunsuz gidiyorken her
+    // açılışta felaket uyarısı basılır, ekip de uyarıları okumamayı öğrenirdi.
     console.warn(
-      "[offsite] BACKUP_RCLONE_REMOTE boş — TÜM YEDEKLER VERİTABANIYLA AYNI DİSKTE. " +
-        "Tek disk arızası/fidye yazılımı ikisini birden götürür.",
+      "[offsite] BACKUP_RCLONE_REMOTE ortam değişkeni boş. Hedef PANELDEN " +
+        "ayarlanmadıysa tüm yedekler veritabanıyla AYNI DİSKTE demektir ve tek " +
+        "disk arızası/fidye yazılımı ikisini birden götürür. " +
+        "Kontrol: Sistem → Yedekler → Makine Dışı Yedek.",
     );
   }
 
@@ -101,7 +113,7 @@ export function startOffsiteSweeper(): void {
   }, STARTUP_DELAY_MS);
   console.log(
     `[offsite] süpürücü aktif — her ${Math.round(SWEEP_INTERVAL_MS / 60000)} dk'da bir ` +
-      `${process.env.BACKUP_DIR} → ${process.env.BACKUP_RCLONE_REMOTE || "<hedef yok>"}`,
+      `${process.env.BACKUP_DIR} → ${process.env.BACKUP_RCLONE_REMOTE || "<panelden çözülecek>"}`,
   );
 }
 
