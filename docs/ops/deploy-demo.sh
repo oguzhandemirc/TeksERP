@@ -59,7 +59,10 @@ run "ssh $HOST 'cd $APPDIR && sudo docker compose build'"
 
 # --- 3) Migration -------------------------------------------------------------
 # Sağlamlık paketi: +3 (→180) · G2 short-close (2026-08-14 gece): +1 → 181.
-say "3/6 prisma migrate deploy (180 → 181 beklenir)"
+# ⚠️ BİRLEŞTİRME (2026-09-01): `integration/depo-muhasebe` dalı `adnansahin`in
+# 44 migration'ını da getirir + bu turda 2 yeni (arama fold kolonları ve ad
+# seddi) → sunucudaki 181'den 227'ye çıkar. Sayı YERİNDE ölçüldü.
+say "3/6 prisma migrate deploy (181 → 227 beklenir)"
 run "ssh $HOST 'cd $APPDIR && sudo docker compose run --rm --entrypoint sh app -c \"npx prisma migrate deploy\"'"
 
 # --- 4) Ayağa kaldır (boot uzlaştırması: 6 izin + rol şablonları) -------------
@@ -88,7 +91,11 @@ if [ "$APPLY" -eq 1 ]; then
     mark=$([ "$code" = "404" ] && echo "❌ MOUNT YOK" || echo "✓")
     printf '  %-34s %s  %s\n' "$u" "$code" "$mark"
   done
-  print -r -- "  --- sayılar (beklenen: 83 / 39 / 39 / 181 — sağlamlık paketi izin EKLEMEZ, yalnız migration) ---"
+  # ⚠️ BEKLENEN SAYILAR BİRLEŞTİRMEYLE DEĞİŞTİ (2026-09-01, yerelde ölçüldü):
+  #   izin katalogu 83 → 86 · rol şablonu 39 → 28 (kod kataloğuna taşındı, sistem
+  #   rolleri konsolide) · migration 181 → 227 · demo kullanıcısı 40 → 86
+  #   (ADMIN_FULL: WEB_TRADE üretim/kartela/rapor izinlerini taşımıyordu).
+  print -r -- "  --- sayılar (beklenen: izin 86 / rol 28 / demo 86 / migration 227) ---"
   ssh "$HOST" "sudo docker exec postgres psql -U tekserp -d tekserp_demo -tAF' | ' -c \"
 SELECT 'izin katalogu', count(*)::text FROM permissions
 UNION ALL SELECT 'WEB_TRADE sablonu', count(*)::text FROM permission_template_items i JOIN permission_templates t ON t.id=i.\\\"templateId\\\" WHERE t.code='WEB_TRADE'

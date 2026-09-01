@@ -50,6 +50,10 @@ export async function envanterKur(itemIds: string[], colorIds: string[]): Promis
     select: { id: true, code: true },
   });
   const kalite = (kod: string) => kaliteler.find((q) => q.code === kod)?.id ?? null;
+  // ⚠️ `Roll.qualityGrade` SNAPSHOT METNİ de yazılmalı — etiket emitter'ı kaliteyi
+  // ORADAN okur, `qualityGradeId`den değil. Yalnız id yazınca demo topunun
+  // etiketinde kalite alanı BOŞ basılıyordu (ölçüldü: `test_scrap_grade_label`
+  // §5b "FIRE bulunan: 0" — bekçi bunu benim verimle yakaladı).
 
   const r = rastgele(778899);
   const satirlar: Array<Record<string, unknown>> = [];
@@ -127,6 +131,7 @@ export async function envanterKur(itemIds: string[], colorIds: string[]): Promis
       width: 140 + Math.round(r() * 16) * 10,
       foldType: sec(KATLAR, r),
       qualityGradeId: kaliteId,
+      qualityGrade: kaliteId ? kaliteler.find((q) => q.id === kaliteId)?.code ?? null : null,
       warehouseId: depo?.id ?? null,
       // Kalite karnesinin ÇIPASI — `finalizedAt` yoksa bitmiş toplar raporda YOK.
       finalizedAt: bitmis || status === RollStatus.SCRAP ? dogum : null,
