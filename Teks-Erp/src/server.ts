@@ -16,6 +16,7 @@ import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
 import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
+import { readRemoteAccessConfig } from './middlewares/remote-access.middleware';
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -23,9 +24,9 @@ const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || "0.0.0.0";
 
 // =============================================================================
-// TEK-PROCESS INVARIANT (load-bearing) — tek `app.listen`, cluster/PM2-cluster/
-// worker_threads YOK. Şu bellek-içi mekanizmalar buna BAĞLI ve 2. worker/replica
-// eklenince SESSİZCE bozulur:
+// TEK-PROCESS INVARIANT (load-bearing) — cluster/PM2-cluster/worker_threads YOK.
+// Şu bellek-içi mekanizmalar buna BAĞLI ve 2. worker/replica eklenince SESSİZCE
+// bozulur:
 //   - presence (lib/presence.ts) → her process kendi Map'i (sayım parçalanır)
 //   - feature-flag cache (system-setting.service.ts) → invalidate process-local
 //   - archive-scheduler (jobs/archive-scheduler.ts) → lastRun check-then-act çift-arşiv
@@ -34,7 +35,16 @@ const HOST = process.env.HOST || "0.0.0.0";
 // Yatay ölçeklenirse taşıma katmanı gerekir: presence/cache → Redis (pub/sub
 // invalidation), scheduler → DB advisory lock veya ayrı tek worker. Bu varsayım
 // LAN-only tek-sunucu kurulumda kasıtlıdır (ARCHITECTURE.md "Single-process").
+//
+// ⚠️ İKİ DİNLEYİCİ ≠ İKİ PROCESS (2026-09-01, uzaktan erişim). `REMOTE_PORT`
+// verildiğinde AYNI `app` bir kez daha `listen` edilir (127.0.0.1). Bu invariantı
+// BOZMAZ: yukarıdaki mekanizmaların hepsi PROCESS-local'dir (Map, cache, zamanlayıcı
+// bayrağı) ve tek process içinde ikinci bir soket açmak onların hiçbirini
+// çoğaltmaz. Bozulan şey ikinci bir NODE SÜRECİ olurdu — o hâlâ YASAK.
 // =============================================================================
+
+// Uzaktan erişim (Cloudflare Tunnel) dinleyicisi. `REMOTE_PORT` yoksa null.
+const remoteAccess = readRemoteAccessConfig();
 
 // F29: BaseController mass-assignment koruması (sanitizeWriteData) Prisma DMMF'e
 // bağlı — kaynağı çözülemezse fail-open olur. Boot'ta fail-CLOSED doğrula.
@@ -118,6 +128,11 @@ const server = app.listen(Number(PORT), HOST, () => {
             ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
             : "kapalı"}`);
     }
+    if (remoteAccess.remotePort !== null) {
+        console.log("--------------------------------------------------------");
+        console.log(`  Uzaktan erişim: 127.0.0.1:${remoteAccess.remotePort} (cloudflared)`);
+        console.log(`                  Access: ${remoteAccess.accessTeamDomain}`);
+    }
     console.log("========================================================");
     console.log("");
 
@@ -168,6 +183,26 @@ const server = app.listen(Number(PORT), HOST, () => {
     });
 });
 
+/**
+ * TÜNEL DİNLEYİCİSİ — YALNIZ `127.0.0.1`.
+ *
+ * ⚠️ HOST SABİT VE LOAD-BEARING. `0.0.0.0`a açılsaydı bu port LAN'dan da
+ * erişilebilir olurdu ve `req.socket.localPort`e dayanan tüm uzak/LAN ayrımı
+ * çökerdi: fabrikadaki herhangi biri `<lan-ip>:4001`e bağlanıp "uzak" sayılırdı
+ * (ya da tersi — LAN'daki bir istemci kendini uzak gösterip Access JWT kapısına
+ * takılırdı). `cloudflared` aynı makinede koştuğu için 127.0.0.1 yeterlidir.
+ *
+ * `HOST` env'i BİLEREK onurlandırılmaz — o LAN dinleyicisinin ayarıdır.
+ */
+const remoteServer =
+  remoteAccess.remotePort === null
+    ? null
+    : app.listen(remoteAccess.remotePort, "127.0.0.1", () => {
+        console.log(
+          `[remote-access] tünel dinleyicisi hazır: 127.0.0.1:${remoteAccess.remotePort}`,
+        );
+      });
+
 // L (düşük bulgu): graceful shutdown — eskiden hiç handler yoktu, restart'ta
 // (pm2 restart/deploy, Ctrl+C) uçuştaki istekler TCP düzeyinde kopuyordu.
 // server.close() yeni bağlantıyı reddedip mevcut istekleri bitirir; 5s'de
@@ -193,6 +228,9 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         Promise.allSettled([flushLatencyNow().catch(() => {}), stopMdnsAdvertiser()]),
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
+        // Tünel dinleyicisi ÖNCE kapanır: yeni uzak istek kabul edilmesin ama
+        // LAN'daki uçuştaki istekler normal akışında bitsin.
+        remoteServer?.close();
         server.close(() => {
             console.log("Sunucu kapandı.");
             // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından

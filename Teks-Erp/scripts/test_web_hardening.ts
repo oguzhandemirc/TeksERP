@@ -699,7 +699,14 @@ function sectionWiring(): void {
     ["app.ts trustProxy null iken set ETMİYOR", /hardening\.trustProxy\s*!==\s*null/],
     ["app.ts corsOrigins'i cors()'a veriyor", /hardening\.corsOrigins\s*\?\s*\{\s*origin:/],
     ["app.ts swaggerEnabled ile setupSwagger'ı kapılıyor", /if\s*\(\s*hardening\.swaggerEnabled\s*\)/],
-    ["app.ts httpsEnabled ile HSTS'i açıyor", /hardening\.httpsEnabled[\s\S]{0,200}strictTransportSecurity/],
+    // ⚠️ 2026-09-01'de bu sonda ÜÇE BÖLÜNDÜ. helmet artık İKİ ÖRNEK kurulup
+    // istek başına seçiliyor (LAN'a HTTP, tünele HTTPS — bkz. app.ts). Eski tek
+    // regex (`hardening.httpsEnabled` … `strictTransportSecurity` yakınlığı)
+    // yeni yapıda eşleşmiyordu; sondayı GEVŞETMEK yerine üç ayrı iddiaya
+    // bölmek, "HSTS bayraktan sürülüyor" garantisini kaybetmeden korur.
+    ["app.ts HSTS'i bir BAYRAKTAN sürüyor (sabit değil)", /httpsMode[\s\S]{0,300}strictTransportSecurity/],
+    ["app.ts LAN helmet'ini hardening.httpsEnabled ile kuruyor", /buildHelmet\(\s*hardening\.httpsEnabled\s*\)/],
+    ["app.ts helmet'i istek başına isRemote'a göre seçiyor", /req\.isRemote\s*\?\s*helmetRemote\s*:\s*helmetLan/],
     ["app.ts rateLimit.enabled ile limiter'ı mount ediyor", /if\s*\(\s*hardening\.rateLimit\.enabled\s*\)/],
     ["app.ts limiter'ı /api altına bağlıyor", /app\.use\(\s*\n?\s*["']\/api["'],\s*\n?\s*createRateLimiter/],
     // Fabrika dalının LİTERALLERİ duruyor — `test_middleware_order` bunlara bakıyor;

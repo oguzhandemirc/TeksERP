@@ -35,8 +35,9 @@ export function resolveLoginLockoutKey(
   req: Request,
   /** Gerçek istemci IP'sini taşıyan güvenilen başlık — bkz. resolveClientIp. */
   clientIpHeader: string | null = null,
+  clientIpHeaderRemoteOnly = false,
 ): string {
-  const ip = resolveClientIp(req, clientIpHeader);
+  const ip = resolveClientIp(req, clientIpHeader, clientIpHeaderRemoteOnly);
   if (ip) return ip;
   if (req.device?.deviceId) return `dev:${req.device.deviceId}`;
   const h = req.headers["x-device-id"];
@@ -111,8 +112,9 @@ export function resolveLoginLockoutKeys(
 ): LockoutKeySpec[] {
   // Uyarılar boot'ta app.ts tarafından basılıyor — her giriş denemesinde
   // tekrarlamak log'u boğar, o yüzden burada sessiz okunur.
-  const { loginLockoutScope, clientIpHeader } = readWebHardeningConfig(env, () => {});
-  const ipKey = resolveLoginLockoutKey(req, clientIpHeader);
+  const { loginLockoutScope, clientIpHeader, clientIpHeaderRemoteOnly } =
+    readWebHardeningConfig(env, () => {});
+  const ipKey = resolveLoginLockoutKey(req, clientIpHeader, clientIpHeaderRemoteOnly);
   if (loginLockoutScope === "ip") return [{ key: ipKey, budgetMultiplier: 1 }];
   return [
     { key: `${ipKey}|${normalizeIdentity(identity)}`, budgetMultiplier: 1 },

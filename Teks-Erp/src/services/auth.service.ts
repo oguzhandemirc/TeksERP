@@ -18,14 +18,47 @@ import {
   readAbsoluteSessionCapDays,
 } from "./system-setting.service";
 import { SessionRegistryService } from "./session-registry.service";
+import { TotpAccountService } from "./totp-account.service";
 
 /** Login çağrılarının istemci bağlamı — Session registry + aynı-tip politika için.
  *  clientType body'den (default 'mobile'); deviceId x-device-id/req.device'den;
  *  confirmKick 'notify' politikasında "ikisi de açık kalsın" onayı. */
 export interface LoginContext {
-  clientType?: "electron" | "mobile";
+  clientType?: LoginClientType;
   deviceId?: string | null;
   confirmKick?: boolean;
+  /**
+   * İstek TÜNEL dinleyicisinden mi geldi (`req.isRemote`). ⚠️ Gövdeden DEĞİL,
+   * `remote-access.middleware` tarafından soket portundan çözülür — istemci
+   * uyduramaz. `true` ise ikinci faktör (TOTP) ZORUNLUDUR.
+   */
+  isRemote?: boolean;
+  /** Uzak girişte TOTP kodu ya da kurtarma kodu. */
+  totpCode?: string;
+}
+
+/** Gövdeden gelen istemci türü. `undefined` = mobil (tarihsel varsayılan). */
+export type LoginClientType = "electron" | "mobile" | "web";
+
+/**
+ * MASAÜSTÜ SINIFI istemci mi (Electron paneli ya da tarayıcıdaki web paneli)?
+ *
+ * İkisi AYNI React kodudur, yalnız kabuğu farklıdır — dolayısıyla "bu hesabın
+ * masaüstü paneline erişimi var mı" kuralı ikisine de uygulanır.
+ *
+ * ⚠️ `!== "mobile"` YAZILMAZ: `clientType` opsiyoneldir ve `undefined` tarihsel
+ * olarak MOBİL demektir. Negatif yazım, alanı hiç göndermeyen eski mobil
+ * istemcileri masaüstü sayıp hepsini 403'e düşürürdü.
+ */
+function isDesktopClient(clientType: LoginClientType | undefined): boolean {
+  return clientType === "electron" || clientType === "web";
+}
+
+/** Gövde değeri → `Session.deviceType`. Bilinmeyen/eksik → MOBILE (tarihsel varsayılan). */
+function resolveDeviceType(clientType: LoginClientType | undefined): ClientType {
+  if (clientType === "electron") return ClientType.ELECTRON;
+  if (clientType === "web") return ClientType.WEB;
+  return ClientType.MOBILE;
 }
 
 /** Personel kartı QR içeriği: TEKSU:<userId>:<32-hex token>. Makine QR'ı ham
@@ -75,6 +108,12 @@ export class AuthService {
       throw AppError.unauthorized("Geçersiz kullanıcı adı veya şifre");
     }
 
+    // ⚠️ SIRA LOAD-BEARING: ikinci faktör `issueToken`den ÖNCE. `issueToken`
+    // oturum kaydı AÇAR ve `kick` politikasında kullanıcının DİĞER oturumlarını
+    // düşürür — sonraya bırakılsaydı yalnız parolayı ele geçiren biri, TOTP'yi
+    // hiç geçemese bile meşru kullanıcıyı oturumundan atabilirdi.
+    await this.assertSecondFactor(user.id, ctx);
+
     return this.issueToken(
       { id: user.id, username: user.username, tokenVersion: user.tokenVersion },
       ctx
@@ -91,6 +130,7 @@ export class AuthService {
     cardCode: string,
     ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
+    this.assertNotRemote(ctx);
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("card")) {
       throw AppError.forbidden(
@@ -118,6 +158,7 @@ export class AuthService {
     pin: string,
     ctx?: LoginContext
   ): Promise<{ token: string; user: JwtPayload }> {
+    this.assertNotRemote(ctx);
     const methods = await readLoginMethods();
     if (!methods.enabled.includes("pin")) {
       throw AppError.forbidden(
@@ -250,6 +291,50 @@ export class AuthService {
    *  registry'ye kayıt açar (aynı-tip politikası burada uygulanır) ve jti'yi jwtid
    *  olarak token'a gömer → middleware anlık iptal kontrolü yapabilir. 'notify'
    *  politikası + onaysız çakışma → openLoginSession 409 SESSION_EXISTS fırlatır. */
+  /**
+   * UZAK GİRİŞTE İKİNCİ FAKTÖR KAPISI. LAN'da tam no-op.
+   *
+   * Üç sonuç, üçü de FARKLI HTTP kodu — çünkü giriş kilidi yalnız **401**'i
+   * kaba kuvvet sayar (`auth.controller` F49 kuralı):
+   *   • 403 TOTP_ENROLLMENT_REQUIRED → kurulum yok. Kimlik denemesi DEĞİL.
+   *   • 409 TOTP_REQUIRED → kod istendi. Kimlik denemesi DEĞİL (istemci kodu
+   *     ekleyip aynı uca tekrar POST eder).
+   *   • 401 TOTP_INVALID → yanlış kod. Kaba kuvvet SAYILIR ve sayılmalıdır:
+   *     TOTP uzayı yalnız 10^6'dır, kilit olmadan çevrimiçi tahmin edilebilirdi.
+   */
+  private static async assertSecondFactor(userId: string, ctx?: LoginContext): Promise<void> {
+    if (!ctx?.isRemote) return;
+
+    const status = await TotpAccountService.getStatus(userId);
+    if (!status.enabled) {
+      throw AppError.forbidden(
+        "Uzaktan erişim için iki adımlı doğrulama kurulmalı. " +
+          "Yöneticinizden kurulum bağlantısı isteyin.",
+        { code: "TOTP_ENROLLMENT_REQUIRED" },
+      );
+    }
+
+    const code = (ctx.totpCode ?? "").trim();
+    if (!code) {
+      throw AppError.conflict("Doğrulama kodu gerekli.", { code: "TOTP_REQUIRED" });
+    }
+    if (!(await TotpAccountService.verifySecondFactor(userId, code))) {
+      throw AppError.unauthorized("Doğrulama kodu geçersiz.", { code: "TOTP_INVALID" });
+    }
+  }
+
+  /**
+   * PIN/kart girişini uzakta reddet — `remote-access.middleware`in İKİNCİ HATTI.
+   *
+   * Kenar denylist'i (middleware) birincil kapıdır; burası, o kapı bir refactor
+   * ya da yanlış mount sırası yüzünden düşerse devreye girer. `notFound`
+   * seçilmesi bilinçli: middleware ile AYNI cevabı vererek "bu uç uzakta var mı"
+   * sorusunu cevapsız bırakır.
+   */
+  private static assertNotRemote(ctx?: LoginContext): void {
+    if (ctx?.isRemote) throw AppError.notFound("Kaynak bulunamadı");
+  }
+
   private static async issueToken(
     user: {
       id: string;
@@ -260,11 +345,11 @@ export class AuthService {
   ): Promise<{ token: string; user: JwtPayload }> {
     const permissions = await this.getEffectivePermissions(user.id);
 
-    // Masaüstü (Electron) girişi: kullanıcının en az bir MASAÜSTÜ (mobil-olmayan)
-    // izni olmalı. Yalnız mobil izinli (mobile:*) hesap panele giremez → 403,
-    // token BİLE üretilmez. Mobil girişte bu kısıt yok.
+    // Masaüstü (Electron VE web paneli) girişi: kullanıcının en az bir MASAÜSTÜ
+    // (mobil-olmayan) izni olmalı. Yalnız mobil izinli (mobile:*) hesap panele
+    // giremez → 403, token BİLE üretilmez. Mobil girişte bu kısıt yok.
     if (
-      ctx?.clientType === "electron" &&
+      isDesktopClient(ctx?.clientType) &&
       !permissions.some((p) => !p.startsWith("mobile:"))
     ) {
       throw AppError.forbidden(
@@ -341,8 +426,10 @@ export class AuthService {
     // Session expiresAt: JWT exp ile HİZALI (kapalı+cap=0 → uzak gelecek; notify
     // 'aktif oturum' kontrolü expiresAt>now'a bakar).
     const expiresAt = effectiveExpiresAt;
-    const deviceType: ClientType =
-      ctx?.clientType === "electron" ? ClientType.ELECTRON : ClientType.MOBILE;
+    // ⚠️ WEB kendi yuvasını alır — ELECTRON'a katlanmaz. Katlansaydı aynı kişinin
+    // telefon tarayıcısındaki oturumu masaüstü panelini düşürürdü (politika
+    // varsayılanı `kick`), ki uzaktan takip senaryosunun tam tersi olurdu.
+    const deviceType: ClientType = resolveDeviceType(ctx?.clientType);
     const policy = await readSameTypeSessionPolicy();
 
     // Oturum kaydını AÇ (token imzalanmadan önce — notify çakışmasında token üretilmez).

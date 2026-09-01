@@ -9,6 +9,12 @@ import helmet from "helmet";
 import morgan from "morgan";
 import compression from "compression";
 import { setupSwagger } from "./config/swagger";
+import {
+  markRemote,
+  readRemoteAccessConfig,
+  remoteDenylist,
+  verifyAccessJwt,
+} from "./middlewares/remote-access.middleware";
 import { APP_VERSION } from "./lib/app-version";
 import { getMdnsState } from "./jobs/mdns-advertiser.job";
 import { getCachedInstallationIdentity } from "./jobs/installation-identity.job";
@@ -149,8 +155,31 @@ if (hardening.trustProxy !== null) {
 // API tek adreste bulusur (CORS/mixed-content/adres-ayari uclusu tamamen duser).
 // Degisken YOKKEN davranis bayt-bayt bugunku gibidir; fabrika deploy'u etkilenmez.
 const webDistDir = process.env.WEB_DIST_DIR ?? null;
-app.use(
-  helmet({
+
+// =============================================================================
+// UZAKTAN ERİŞİM (Cloudflare Tunnel) — zincirin EN BAŞI
+// =============================================================================
+// `markRemote` yalnız `req.isRemote`i doldurur (soket portundan, senkron, ~0
+// maliyet). helmet'ten ÖNCE olmak ZORUNDA: aşağıdaki güvenlik başlıkları bu
+// bayrağa göre AYRIŞIYOR. Uzaktan erişim kapalıysa (`REMOTE_PORT` yok) bayrak
+// her istekte `false` kalır ve bundan sonraki her şey bugünküyle birebir aynıdır.
+const remoteAccess = readRemoteAccessConfig();
+app.use(markRemote(remoteAccess.remotePort));
+// Uzakta kapalı yollar (PIN/kart girişi, cihaz eşleştirme, keşif, swagger) —
+// gerekçeler `remote-access.middleware.ts` içinde. LAN'da tam no-op.
+app.use(remoteDenylist);
+
+// ⚠️ HELMET İKİ ÖRNEK, TEK PROCESS. Aynı süreç LAN'a HTTP, tünele HTTPS servis
+// ediyor ve bu iki dünyanın güvenlik başlıkları BİRBİRİNİ DIŞLIYOR:
+//   • HSTS + CSP `upgrade-insecure-requests` internette gereklidir;
+//   • LAN'da AYNI başlıklar paneli KIRAR — tarayıcı `http://192.168.1.250:4000`
+//     adresini kalıcı olarak https'e çevirir, sunucu 443 dinlemediği için panel
+//     açılmaz ve geri dönüş SUNUCUDA DEĞİL kullanıcının HSTS önbelleğindedir.
+// Tek bir helmet örneğini "ortalama" bir yapılandırmayla kurmak mümkün değil;
+// bu yüzden iki örnek kurulup istek başına seçilir. `hardening.httpsEnabled`
+// hâlâ onurlandırılır (demo kurulumu onu kullanıyor) — uzak istek onu ZORLAR.
+function buildHelmet(httpsMode: boolean): express.RequestHandler {
+  return helmet({
     contentSecurityPolicy: {
       useDefaults: true,
       directives: {
@@ -159,7 +188,7 @@ app.use(
         // durum sayfasi donar). HTTPS arkasinda helmet varsayilani geri gelir:
         // tum alt-istekler zaten ayni origin'den ve https uzerinden geldigi icin
         // pratikte no-op'tur, karisik-icerige (mixed content) karsi ucuz bir seddir.
-        ...(hardening.httpsEnabled ? {} : { upgradeInsecureRequests: null }),
+        ...(httpsMode ? {} : { upgradeInsecureRequests: null }),
         // Panel modunda header CSP'si panelin index.html'indeki meta CSP ile
         // esitlenir (efektif politika iki CSP'nin KESISIMIdir — helmet
         // varsayilanlari daha dar oldugu icin panelin blob: worker'lari ve
@@ -182,10 +211,15 @@ app.use(
     // kilar; sunucu 443 dinlemedigi icin panel acilmaz ve geri donus sunucuda
     // degil kullanicinin HSTS onbelleginde oldugu icin uzaktan duzeltilemez.
     // Bu yuzden ortamin TAHMINIYLE degil operatorun BEYANIYLA (HTTPS_ENABLED) acilir.
-    ...(hardening.httpsEnabled
+    ...(httpsMode
       ? { strictTransportSecurity: { maxAge: HSTS_MAX_AGE_SEC, includeSubDomains: true } }
       : { strictTransportSecurity: false }),
-  })
+  });
+}
+const helmetLan = buildHelmet(hardening.httpsEnabled);
+const helmetRemote = buildHelmet(true);
+app.use((req, res, next) =>
+  (req.isRemote ? helmetRemote : helmetLan)(req, res, next),
 );
 // exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
 // header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
@@ -742,9 +776,24 @@ if (hardening.rateLimit.enabled) {
       // ⚠️ Giriş kilidiyle AYNI istemci kaynağı: biri kenar IP'sini, diğeri
       // gerçek ziyaretçiyi sayarsa iki koruma farklı kişileri sınırlar.
       clientIpHeader: hardening.clientIpHeader,
+      // ⚠️ Karışık modda başlık yalnız tünel isteklerinde okunur — LAN'daki
+      // biri `CF-Connecting-IP` uydurup hız sınırını atlayamasın.
+      clientIpHeaderRemoteOnly: hardening.clientIpHeaderRemoteOnly,
     }),
   );
 }
+
+// =============================================================================
+// CLOUDFLARE ACCESS JWT — uzak isteklerde ikinci kimlik katmanı (FAIL-CLOSED)
+// =============================================================================
+// Yalnız `/api` altında ve yalnız `req.isRemote` iken koşar. Statik SPA
+// dosyaları kapsam dışı: onlar zaten kamuya açık JS/CSS ve her birinde JWKS
+// araması yapmak bedava değil.
+//
+// Asıl kimlik duvarı Cloudflare'in kendisidir; bu katman o duvarın HÂLÂ ORADA
+// olduğunun kanıtıdır. Access politikası panelden yanlışlıkla kaldırılırsa
+// burada uzak erişim DURUR — sessiz bir açık yerine gürültülü bir arıza.
+app.use("/api", verifyAccessJwt(remoteAccess));
 
 // =============================================================================
 // API Routes

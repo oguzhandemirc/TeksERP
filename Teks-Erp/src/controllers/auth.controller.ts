@@ -7,6 +7,7 @@ import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
+import { TotpAccountService } from "../services/totp-account.service";
 import { readDevicePairingRequired, readLoginMethods, readCompanyName } from "../services/system-setting.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
@@ -21,7 +22,9 @@ import "../types/express-augment";
 // Session/eşzamanlılık: her login yolu clientType (electron|mobile, default mobile) +
 // confirmKick ('notify' politikasında "ikisi de açık kalsın" onayı) taşır. deviceId
 // request'ten türetilir (req.device.deviceId ya da x-device-id header) — body'de değil.
-const clientTypeSchema = z.enum(["electron", "mobile"]).optional();
+// "web" = tarayıcıdaki panel (Electron kabuğu olmadan aynı React kodu).
+// Kendi oturum yuvasını alır; masaüstü izin kapısına electron ile BİRLİKTE tabidir.
+const clientTypeSchema = z.enum(["electron", "mobile", "web"]).optional();
 
 // Zod schemas for validation
 const loginSchema = z.object({
@@ -29,6 +32,14 @@ const loginSchema = z.object({
   password: z.string().min(1, "Şifre gerekli"),
   clientType: clientTypeSchema,
   confirmKick: z.boolean().optional(),
+  /**
+   * İkinci faktör — YALNIZ uzak (tünel) girişlerinde istenir. TOTP kodu (6 hane)
+   * ya da kurtarma kodu (XXXX-XXXX) olabilir; ayrımı servis yapar.
+   *
+   * ⚠️ Uzunluk üst sınırı var: `bcrypt.compare` kurtarma kodu yolunda çağrılıyor
+   * ve sınırsız bir metin kabul etmek gereksiz CPU yakardı.
+   */
+  totpCode: z.string().trim().min(1).max(64).optional(),
 });
 
 const loginCardSchema = z.object({
@@ -134,6 +145,11 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
+      // ⚠️ GÖVDEDEN DEĞİL — `remote-access.middleware` soket portundan çözer.
+      // Gövdeye açılsaydı internetten gelen biri `isRemote:false` yazıp ikinci
+      // faktörü tamamen atlardı.
+      isRemote: req.isRemote === true,
+      totpCode: body.totpCode,
     };
 
     try {
@@ -225,6 +241,7 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
+      isRemote: req.isRemote === true,
     };
     try {
       const result = await AuthService.loginWithCard(body.cardCode, ctx);
@@ -307,6 +324,7 @@ export class AuthController {
       clientType: body.clientType,
       deviceId: resolveLoginDeviceId(req),
       confirmKick: body.confirmKick,
+      isRemote: req.isRemote === true,
     };
     try {
       const result = await AuthService.loginWithQuickPin(body.pin, ctx);
@@ -495,4 +513,52 @@ export class AuthController {
       next(error);
     }
   }
+  /**
+   * GET /api/auth/totp/enroll?token= — kurulum penceresini OKU (QR göster).
+   *
+   * ⚠️ PUBLIC ve bu bilinçlidir: kurulumu yapan kişinin henüz oturumu yoktur
+   * (2FA kurulmadan uzaktan giremiyor). Koruma kimlik değil, TOKEN'dır: tek
+   * kullanımlık, 15 dk ömürlü ve yalnız `admin:users` taşıyan biri üretebilir.
+   */
+  static async totpEnrollRead(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const token = z.string().uuid().parse(req.query.token);
+      const w = await TotpAccountService.readWindow(token);
+      res.status(200).json({
+        success: true,
+        data: {
+          username: w.username,
+          otpauthUri: w.otpauthUri,
+          // Elle giriş için — QR okutamayan cihazlarda tek çıkış yolu.
+          secret: w.secret,
+          expiresAt: w.expiresAt,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * POST /api/auth/totp/enroll — kurulumu TAMAMLA.
+   * Kurtarma kodları YALNIZ BURADA, bir kez döner; sunucuda hash'li saklanır.
+   */
+  static async totpEnrollConsume(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const body = z
+        .object({ token: z.string().uuid(), code: z.string().trim().min(1).max(16) })
+        .parse(req.body);
+      const out = await TotpAccountService.consumeWindow(body.token, body.code);
+      res.status(200).json({
+        success: true,
+        data: { username: out.username, recoveryCodes: out.recoveryCodes },
+        message:
+          "İki adımlı doğrulama kuruldu. Kurtarma kodlarını güvenli bir yere kaydedin — " +
+          "bir daha gösterilmeyecek.",
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
 }

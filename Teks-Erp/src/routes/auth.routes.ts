@@ -16,6 +16,13 @@ router.post("/login-quick-pin", AuthController.loginQuickPin); // salt hızlı-P
 router.get("/login-methods", AuthController.loginMethods); // login ekranı auth'suz okur
 router.get("/mobile-users", AuthController.mobileUsers);
 
+// İki adımlı doğrulama KURULUMU — public, korumanın kaynağı tek kullanımlık
+// token'dır (yalnız `admin:users` üretebilir; bkz. TotpAccountService başlığı).
+// ⚠️ Uzaktan erişim kapısı bu iki ucu KAPATMAZ ve kapatmamalıdır: kurulumu
+// yapacak kişi tanımı gereği henüz uzaktan giriş YAPAMIYOR olan kişidir.
+router.get("/totp/enroll", AuthController.totpEnrollRead);
+router.post("/totp/enroll", AuthController.totpEnrollConsume);
+
 // Protected
 // K6 (2026-06-12): POST /register kaldırıldı — hiçbir istemci çağırmıyordu;
 // kullanıcı oluşturmanın tek yolu POST /api/admin/users (permission-management).

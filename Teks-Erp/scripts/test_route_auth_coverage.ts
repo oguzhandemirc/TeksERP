@@ -65,6 +65,15 @@ const EXEMPT: Record<string, string> = {
   "POST /api/auth/login-quick-pin": "PIN ile giriş — token üreten uç",
   "GET /api/auth/login-methods": "istemci hangi giriş yöntemleri açık öğrenir (login ekranı)",
   "GET /api/auth/mobile-users": "mobil giriş ekranı kullanıcı listesi (cihaz eşleşmesi zorunluysa 401)",
+  // İki adımlı doğrulama KURULUMU (2026-09-01, uzaktan erişim). Kimlik aranamaz
+  // çünkü kurulumu yapacak kişi tanımı gereği HENÜZ GİREMEYEN kişidir: uzaktan
+  // giriş TOTP olmadan reddediliyor, TOTP de bu uçtan kuruluyor. Guard takmak
+  // "kilidi açmak için içeride olmalısın" döngüsü kurardı.
+  // Koruma kimlik DEĞİL, TOKEN'dır: tek kullanımlık, 15 dk ömürlü ve yalnız
+  // `admin:users` taşıyan biri üretebiliyor (POST /api/admin/users/:id/totp/window).
+  // Yanlış kod da kurulumu tamamlamaz ve pencere ikinci kez kullanılamaz.
+  "GET /api/auth/totp/enroll": "2FA kurulum penceresini okur; koruma tek kullanımlık token (yalnız admin üretir)",
+  "POST /api/auth/totp/enroll": "2FA kurulumunu tamamlar; aynı token koruması + kod doğrulaması",
   // Cihaz el sıkışması: cihaz EŞLEŞMEDEN token alamaz.
   "POST /api/devices/announce": "tablet kendini bildirir — eşleşmeden önce token alamaz",
   "GET /api/devices/status": "cihaz atama durumu yoklaması (x-device-id)",

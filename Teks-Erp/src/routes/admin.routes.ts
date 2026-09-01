@@ -9,6 +9,7 @@ import { requirePermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
+import { TotpAccountService } from "../services/totp-account.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
@@ -243,6 +244,90 @@ router.post(
         req.user?.userId
       );
       res.status(200).json({ success: true, data: user });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/totp:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Kullanıcının iki adımlı doğrulama durumu
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/users/:id/totp",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json({
+        success: true,
+        data: await TotpAccountService.getStatus(req.params.id as string),
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/totp/window:
+ *   post:
+ *     tags: [Admin]
+ *     summary: İki adımlı doğrulama KURULUM PENCERESİ aç (15 dk, tek kullanımlık)
+ *     description: >
+ *       Dönen `token` kullanıcıya iletilir; kullanıcı `GET /api/auth/totp/enroll?token=`
+ *       ile QR'ı görür ve `POST` ile kurulumu tamamlar. Kurulumun TEK yolu budur —
+ *       kullanıcı kendi başına 2FA bağlayamaz (parola sızmışsa saldırgan kendi
+ *       telefonunu bağlayıp meşru sahibi kilitlerdi).
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/totp/window",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const out = await TotpAccountService.openWindow({
+        userId: req.params.id as string,
+        openedById: req.user?.userId as string,
+      });
+      // ⚠️ `secret` yanıtta DÖNMEZ — yöneticinin kullanıcının sırrını görmesi
+      // için bir sebep yok; QR'ı kullanıcı kendi penceresinde okur.
+      res.status(201).json({
+        success: true,
+        data: { token: out.token, expiresAt: out.expiresAt },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/users/{id}/totp/reset:
+ *   post:
+ *     tags: [Admin]
+ *     summary: İki adımlı doğrulamayı SIFIRLA (telefon kaybı / cihaz değişimi)
+ *     security: [{ bearerAuth: [] }]
+ */
+router.post(
+  "/users/:id/totp/reset",
+  verifyToken,
+  requirePermission("admin:users"),
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await TotpAccountService.reset({
+        userId: req.params.id as string,
+        byId: req.user?.userId as string,
+      });
+      res.status(200).json({ success: true, message: "İki adımlı doğrulama sıfırlandı" });
     } catch (error) {
       next(error);
     }

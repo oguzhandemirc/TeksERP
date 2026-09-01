@@ -74,6 +74,20 @@ export type WebHardeningConfig = {
    * aralıklarına açıyor, yani başlık dışarıdan uydurulamaz.
    */
   clientIpHeader: string | null;
+  /**
+   * `clientIpHeader` YALNIZ uzak (tünel) isteklerinde mi okunsun?
+   *
+   * ⚠️ BU AYRIM BİR AÇIĞI KAPATIR (2026-09-01, patron modülü). Uzaktan erişim
+   * açıkken TEK process iki dünyaya birden hizmet eder: LAN (`0.0.0.0:PORT`) ve
+   * tünel (`127.0.0.1:REMOTE_PORT`). Başlık her isteğe uygulansaydı LAN'daki
+   * herhangi biri `CF-Connecting-IP: <rastgele>` yazarak giriş kilidini VE hız
+   * sınırını tamamen etkisizleştirirdi — her denemede farklı kova.
+   *
+   * Değer `REMOTE_PORT`ten TÜRETİLİR: uzaktan erişim kapalıysa (bugünkü demo
+   * kurulumu dahil) `false` kalır ve davranış BİREBİR eskisi gibidir — o
+   * kurulumlarda tüm trafik zaten ters vekilden geliyor.
+   */
+  clientIpHeaderRemoteOnly: boolean;
 };
 
 /** Uyarı kanalı — bekçi gürültüsüz koşabilsin diye enjekte edilebilir. */
@@ -249,6 +263,9 @@ export function readWebHardeningConfig(
     // Başlık adı küçük harfe indirilir: Node gelen başlıkları küçük harfle
     // saklar, "CF-Connecting-IP" yazan bir .env sessizce eşleşmezdi.
     clientIpHeader: (env.CLIENT_IP_HEADER ?? "").trim().toLowerCase() || null,
+    // Karışık mod (LAN + tünel aynı process'te) yalnız REMOTE_PORT verildiğinde
+    // doğar; başlık güveni de yalnız orada daraltılır.
+    clientIpHeaderRemoteOnly: Boolean((env.REMOTE_PORT ?? "").trim()),
   };
 }
 
@@ -324,8 +341,15 @@ export function classifyRateLimitRequest(method: string, originalUrl: string): R
  * Başlık VAR ama boş/bozuk gelirse yine `req.ip`'e düşülür: eksik bir başlık
  * yüzünden isteği reddetmek, korumadan beklenen şey değil.
  */
-export function resolveClientIp(req: Request, header: string | null): string | null {
-  if (header) {
+export function resolveClientIp(
+  req: Request,
+  header: string | null,
+  /** Bkz. `WebHardeningConfig.clientIpHeaderRemoteOnly`. */
+  remoteOnly = false,
+): string | null {
+  // ⚠️ Karışık modda başlık yalnız TÜNELDEN gelen isteklerde okunur; LAN'dan
+  // gelen bir istek onu uydurabileceği için orada `req.ip`e düşülür.
+  if (header && (!remoteOnly || req.isRemote === true)) {
     const raw = req.headers[header];
     const v = Array.isArray(raw) ? raw[0] : raw;
     // Virgüllü liste gelirse İLK değer istemcidir (XFF sözleşmesi).
@@ -339,8 +363,9 @@ export function resolveRateLimitKey(
   req: Request,
   bucket: RateLimitBucket,
   clientIpHeader: string | null = null,
+  clientIpHeaderRemoteOnly = false,
 ): string {
-  const ip = resolveClientIp(req, clientIpHeader);
+  const ip = resolveClientIp(req, clientIpHeader, clientIpHeaderRemoteOnly);
   if (ip) return `${bucket}|${ip}`;
   const h = req.headers["x-device-id"];
   const v = Array.isArray(h) ? h[0] : h;
@@ -361,6 +386,8 @@ export type RateLimiterOptions = {
    * gerçek istemciyi sayarsa iki koruma farklı kişileri sınırlar.
    */
   clientIpHeader?: string | null;
+  /** Bkz. `WebHardeningConfig.clientIpHeaderRemoteOnly`. */
+  clientIpHeaderRemoteOnly?: boolean;
 };
 
 export type RateLimiter = RequestHandler & {
@@ -415,7 +442,9 @@ export function createRateLimiter(opts: RateLimiterOptions): RateLimiter {
     if (!bucket) return next();
 
     const limit = opts.limits[bucket];
-    const key = resolveRateLimitKey(req, bucket, opts.clientIpHeader ?? null);
+    const key = resolveRateLimitKey(
+      req, bucket, opts.clientIpHeader ?? null, opts.clientIpHeaderRemoteOnly ?? false,
+    );
     const t = now();
     const windowStart = t - opts.windowMs;
 

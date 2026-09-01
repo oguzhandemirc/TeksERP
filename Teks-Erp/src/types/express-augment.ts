@@ -26,6 +26,23 @@ declare module "express-serve-static-core" {
        *  cihazlarına (TABLET/PHONE) uygulanır; DESKTOP (Electron) muaf. */
       kind: string;
     };
+    /**
+     * İstek TÜNEL dinleyicisinden mi geldi (Cloudflare Tunnel → 127.0.0.1:REMOTE_PORT)?
+     *
+     * `remote-access.middleware.ts` zincirin en başında doldurur. LAN'da ve
+     * uzaktan erişim kapalıyken DAİMA `false` — yani fabrika davranışı sıfır-fark.
+     *
+     * ⚠️ Bu bayrak `clientType`ten TÜRETİLMEZ; kaynağı isteğin kabul edildiği
+     * yerel porttur ve istemci onu seçemez. Uzak/LAN ayrımı yapan her kural
+     * (PIN girişi, TOTP zorunluluğu, HSTS/CSP, istemci IP başlığı) buna bakar.
+     */
+    isRemote?: boolean;
+    /**
+     * Cloudflare Access'in doğruladığı kimlik (yalnız `isRemote` isteklerde).
+     * ERP oturumunun YERİNE GEÇMEZ — kenardaki ön kapının kim olduğudur;
+     * yetkilendirme yine `verifyToken` + `requirePermission` ile yapılır.
+     */
+    accessIdentity?: { email: string | null; sub: string | null };
   }
 }
 

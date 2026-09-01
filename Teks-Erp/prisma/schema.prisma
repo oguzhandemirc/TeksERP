@@ -357,10 +357,18 @@ enum Currency {
 }
 
 /// Login yapan istemci türü — aynı-tip oturum politikası bunun üzerinden çalışır
-/// (1 Electron + 1 mobil serbest; 2. aynı-tip kick/notify/off ile yönetilir).
+/// (her tipten 1 oturum serbest; 2. aynı-tip kick/notify/off ile yönetilir).
+///
+/// ⚠️ WEB, ELECTRON'dan AYRI bir tiptir ve bu bilinçlidir (2026-09-01, patron
+/// modülü). Web paneli Electron renderer'ının aynı kodudur ve eskiden
+/// `clientType:"electron"` gönderiyordu — sonucu, aynı kişinin telefon
+/// tarayıcısından girince masaüstü oturumunu DÜŞÜRMESİYDİ (`sameTypeSessionPolicy`
+/// varsayılanı `kick`). Uzaktan takip eden biri için bu, her cihaz değişiminde
+/// karşı taraftaki oturumun kapanması demekti.
 enum ClientType {
   ELECTRON
   MOBILE
+  WEB
 }
 
 // =============================================================================
@@ -368,29 +376,42 @@ enum ClientType {
 // =============================================================================
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  username     String    @unique @db.VarChar(50)
-  passwordHash String
-  fullName     String    @db.VarChar(100)
-  isActive     Boolean   @default(true)
+  id            String    @id @default(uuid()) @db.Uuid
+  username      String    @unique @db.VarChar(50)
+  passwordHash  String
+  fullName      String    @db.VarChar(100)
+  isActive      Boolean   @default(true)
   // JWT iptal sayacı: yetki grant/revoke/set + şifre sıfırlamada artar. verifyToken
   // her istekte token'daki sürümle karşılaştırır → eski oturum anında düşer.
-  tokenVersion Int       @default(1)
+  tokenVersion  Int       @default(1)
   /// QR personel kartı sırrı (32-hex, düz saklanır — fiziksel kart taşıyıcı sır;
   /// bcrypt login sıcak yolunda gereksiz). Kart içeriği "TEKSU:<userId>:<cardToken>".
   /// Kart kaybolursa admin ROTASYON yapar → eski kart anında ölür. NULL = kart yok.
   /// Kartla giriş yalnız auth.loginMethods "card" içerirken çalışır.
-  cardToken    String?   @unique @db.VarChar(64)
+  cardToken     String?   @unique @db.VarChar(64)
   /// Salt-PIN girişi için HIZLI PIN (6 hane) — şifreden AYRI ve sistem genelinde
   /// BENZERSİZ (PIN tek başına kimliği belirler; findUnique ile giriş). Düz saklanır
   /// (LAN-only + kısa ömür/rotasyon admin'den; cardToken emsali). NULL = tanımsız.
   /// Salt-PIN girişi yalnız auth.loginMethods "pin" içerirken çalışır.
-  quickPin     String?   @unique @db.VarChar(12)
+  quickPin      String?   @unique @db.VarChar(12)
+  /// TOTP (RFC 6238) sırrı — base32. NULL = iki adımlı doğrulama KURULU DEĞİL.
+  /// ⚠️ Kurulumun TEK yolu `TotpEnrollment` penceresidir; kullanıcı kendi başına
+  /// yazamaz (bkz. o modelin notu). Düz saklanır — HMAC anahtarı olduğu için
+  /// hash'lenemez; korunması DB/yedek şifrelemesine aittir (`quickPin` emsali).
+  totpSecret    String?   @db.VarChar(64)
+  /// Doğrulamanın tamamlandığı an. NULL ise sır yazılmış olsa bile TOTP KAPALIDIR
+  /// (yarım kalan kurulum kimseyi kilitlemesin) — okuma yolları bu alana bakar.
+  totpEnabledAt DateTime? @db.Timestamptz
+  /// Kabul edilen EN SON TOTP adımı — replay kilidi (RFC 6238 §5.2). Aynı kod
+  /// 30 sn boyunca geçerlidir; bu alan olmadan araya giren biri onu ikinci kez
+  /// kullanabilirdi.
+  totpLastStep  Int?
+
   /// KALICI SİLME işareti (geri alınamaz). NULL = normal kayıt (isActive true=aktif,
   /// false=GEÇİCİ pasif, geri alınabilir). Dolu = silinmiş: kayıt yalnız veri
   /// bütünlüğü/geçmiş için durur, listede görünmez, aktifleştirilemez; username
   /// serbest bırakılır (del_ ön-ek), kimlikler temizlenir. Pasif ≠ silinmiş.
-  deletedAt    DateTime? @db.Timestamptz
+  deletedAt DateTime? @db.Timestamptz
 
   // Relations
   permissions                UserPermission[]         @relation("UserPermissionUser")
@@ -450,6 +471,11 @@ model User {
   /// İptal ettiği iş emirleri (2026-08-17 iptal izi). Düşük trafik "kim yaptı"
   /// FK'sı — sorgulanmadıkça indexlenmez (CLAUDE.md perf kuralı 1 istisnası).
   cancelledWorkOrders WorkOrder[] @relation("WorkOrderCancelledBy")
+
+  /// İki adımlı doğrulama (2026-09-01, patron modülü / uzaktan erişim).
+  totpEnrollments       TotpEnrollment[]   @relation("TotpEnrollmentUser")
+  openedTotpEnrollments TotpEnrollment[]   @relation("TotpEnrollmentOpenedBy")
+  recoveryCodes         UserRecoveryCode[] @relation("UserRecoveryCodeUser")
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -578,6 +604,68 @@ model Session {
 
   @@index([userId])
   @@map("sessions")
+}
+
+/// İKİ ADIMLI DOĞRULAMA KURULUM PENCERESİ (2026-09-01, uzaktan erişim).
+///
+/// Uzaktan (Cloudflare Tunnel üzerinden) giriş TOTP olmadan kabul edilmez. Peki
+/// TOTP'yi kullanıcı NEREDE kurar? Üç seçenek tartıldı:
+///   • "Parola doğruysa uzaktan da kursun" → parola sızmışsa saldırgan 2FA'yı
+///     KENDİ telefonuna bağlar ve meşru sahibi kilitler. 2FA'nın koruduğu tek
+///     senaryoyu kapatır; REDDEDİLDİ.
+///   • "Yalnız fabrika ağından" → en sert, ama telefon her değiştiğinde
+///     fabrikaya gitmek gerekir.
+///   • SEÇİLEN: `admin:users` yetkisi olan biri pencereyi AÇAR, kullanıcı o
+///     pencerede istediği yerden kurar. Kurulumu bir İNSAN yetkilendirir; parola
+///     tek başına yetmez. Kayıp telefon da aynı kapıdan çözülür.
+///
+/// Pencere TEK KULLANIMLIKTIR ve kısa ömürlüdür (`expiresAt`). `secret` burada
+/// bekler; `consumedAt` yazılana kadar `User.totpSecret`e TAŞINMAZ — yarım kalan
+/// bir kurulum kimsenin girişini bozmaz.
+model TotpEnrollment {
+  id         String @id @default(uuid()) @db.Uuid
+  userId     String @db.Uuid
+  /// Pencereyi açan yönetici (audit izi — "bu 2FA'yı kim yetkilendirdi").
+  openedById String @db.Uuid
+  /// Kurulum bağlantısının tek kullanımlık anahtarı (URL'de taşınır).
+  token      String @unique @db.Uuid
+  /// Aday TOTP sırrı (base32). Doğrulanana kadar User'a yazılmaz.
+  secret     String @db.VarChar(64)
+
+  expiresAt  DateTime  @db.Timestamptz
+  consumedAt DateTime? @db.Timestamptz
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  user     User @relation("TotpEnrollmentUser", fields: [userId], references: [id], onDelete: Cascade)
+  openedBy User @relation("TotpEnrollmentOpenedBy", fields: [openedById], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@map("totp_enrollments")
+}
+
+/// KURTARMA KODLARI — telefon kaybedildiğinde hesabın tek çıkışı.
+///
+/// ⚠️ `codeHash` bcrypt'tir, düz metin DEĞİL (`quickPin`/`cardToken`'dan ayrılan
+/// nokta budur ve bilinçlidir): kurtarma kodu parolaya denk bir sırdır, oysa PIN
+/// LAN-only fiziksel bir kolaylıktır. Yedek dosyası sızsa bile kurtarma kodları
+/// kullanılamaz.
+///
+/// Satır SİLİNMEZ, `usedAt` damgalanır — "kaç kod kaldı" ve "ne zaman kullanıldı"
+/// soruları denetimde sorulur.
+model UserRecoveryCode {
+  id       String    @id @default(uuid()) @db.Uuid
+  userId   String    @db.Uuid
+  codeHash String    @db.VarChar(72)
+  usedAt   DateTime? @db.Timestamptz
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  user User @relation("UserRecoveryCodeUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_recovery_codes")
 }
 
 /// Yetki kataloğu — runtime'da sadece bu tablo + UserPermission birlikte tüketilir.
@@ -3717,8 +3805,9 @@ model SubcontractorReceipt {
   /// Bu receipt'ten doğan "açık kumaş" Roll'ları (Kurşun/KK2 öncesi).
   bornRolls         Roll[]                         @relation("RollFromReceipt")
 
-  createdAt DateTime @default(now()) @db.Timestamptz
-  updatedAt DateTime @updatedAt @db.Timestamptz
+  createdAt DateTime  @default(now()) @db.Timestamptz
+  updatedAt DateTime  @updatedAt @db.Timestamptz
+  invoices  Invoice[]
 
   @@index([stepId])
   @@index([manifestNo])
@@ -3729,7 +3818,6 @@ model SubcontractorReceipt {
   @@index([workOrderId, receivedAt])
   // Composite: Fason firma-filtreli + tarih sıralı liste
   @@index([subcontractorId, receivedAt])
-  invoices Invoice[]
   @@map("subcontractor_receipts")
 }
 
@@ -3860,18 +3948,18 @@ model Subcontractor {
   documentProfileId String? @db.Uuid
 
   // Relations
-  categories        SubcontractorToCategory[]
-  dispatches        SubcontractorDispatch[]   @relation("DispatchSubcontractor")
-  plannedDispatches SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")
-  receipts          SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
-  plannedSteps      WorkOrderStep[]           @relation("StepPlannedSubcontractor")
-  plannedRouteSteps RouteStep[]               @relation("RouteStepPlannedSubcontractor")
-  kartelaDispatches KartelaDispatch[]         @relation("KartelaDispatchSub")
-  kartelaReceipts   KartelaReceipt[]          @relation("KartelaReceiptSub")
+  categories               SubcontractorToCategory[]
+  dispatches               SubcontractorDispatch[]   @relation("DispatchSubcontractor")
+  plannedDispatches        SubcontractorDispatch[]   @relation("DispatchPlannedSubcontractor")
+  receipts                 SubcontractorReceipt[]    @relation("ReceiptSubcontractor")
+  plannedSteps             WorkOrderStep[]           @relation("StepPlannedSubcontractor")
+  plannedRouteSteps        RouteStep[]               @relation("RouteStepPlannedSubcontractor")
+  kartelaDispatches        KartelaDispatch[]         @relation("KartelaDispatchSub")
+  kartelaReceipts          KartelaReceipt[]          @relation("KartelaReceiptSub")
   // C4 (2026-08-15) — fason firmadan ALIŞ bacağı (mal kabul + alış siparişi).
-  goodsReceiptsAsSupplier  GoodsReceipt[]  @relation("GoodsReceiptSubcontractorSupplier")
-  purchaseOrdersAsSupplier PurchaseOrder[] @relation("PurchaseOrderSubcontractorSupplier")
-  documentProfile   DocumentProfile?          @relation("SubcontractorDocProfile", fields: [documentProfileId], references: [id])
+  goodsReceiptsAsSupplier  GoodsReceipt[]            @relation("GoodsReceiptSubcontractorSupplier")
+  purchaseOrdersAsSupplier PurchaseOrder[]           @relation("PurchaseOrderSubcontractorSupplier")
+  documentProfile          DocumentProfile?          @relation("SubcontractorDocProfile", fields: [documentProfileId], references: [id])
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4410,16 +4498,16 @@ model Sack {
   notes        String?           @db.VarChar(500)
 
   // Relations
-  customer    Customer?        @relation(fields: [customerId], references: [id])
-  branch      CustomerBranch?  @relation(fields: [branchId], references: [id])
-  shipment    Shipment?        @relation(fields: [shipmentId], references: [id])
+  customer           Customer?           @relation(fields: [customerId], references: [id])
+  branch             CustomerBranch?     @relation(fields: [branchId], references: [id])
+  shipment           Shipment?           @relation(fields: [shipmentId], references: [id])
   /// Restrict: içinde çuval duran depo silinemez (Roll.warehouseId ile aynı karar —
   /// SET NULL, konum bilgisini sessizce yok ederdi).
-  warehouse   Warehouse?       @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
-  weighedBy   User?            @relation("SackWeighedBy", fields: [weighedById], references: [id])
-  rolls       Roll[] // Bu çuvaldaki toplar (içerik)
-  swatches    Swatch[] // Bu çuvaldaki kartelalar (içerik)
-  allocations SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
+  warehouse          Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
+  weighedBy          User?               @relation("SackWeighedBy", fields: [weighedById], references: [id])
+  rolls              Roll[] // Bu çuvaldaki toplar (içerik)
+  swatches           Swatch[] // Bu çuvaldaki kartelalar (içerik)
+  allocations        SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
   warehouseMovements WarehouseMovement[] // Çuval-bütün transfer izleri
 
   createdAt DateTime @default(now()) @db.Timestamptz
@@ -4666,18 +4754,18 @@ model RollReturn {
   updatedAt DateTime @updatedAt @db.Timestamptz
 
   // Relations
-  roll           Roll          @relation(fields: [rollId], references: [id])
-  fromShipment   Shipment?     @relation(fields: [fromShipmentId], references: [id])
-  customer       Customer      @relation(fields: [customerId], references: [id])
+  roll               Roll                @relation(fields: [rollId], references: [id])
+  fromShipment       Shipment?           @relation(fields: [fromShipmentId], references: [id])
+  customer           Customer            @relation(fields: [customerId], references: [id])
   /// İadenin depo defterindeki izi (RETURN — mal hangi depoya geri girdi).
   warehouseMovements WarehouseMovement[]
-  order          Order?        @relation(fields: [orderId], references: [id])
-  item           Item          @relation(fields: [itemId], references: [id])
-  color          Color?        @relation(fields: [colorId], references: [id])
-  reason         ReturnReason? @relation(fields: [reasonId], references: [id])
-  qualityGrade   QualityGrade? @relation(fields: [qualityGradeId], references: [id])
-  receivedBy     User          @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
-  cancelledBy    User?         @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
+  order              Order?              @relation(fields: [orderId], references: [id])
+  item               Item                @relation(fields: [itemId], references: [id])
+  color              Color?              @relation(fields: [colorId], references: [id])
+  reason             ReturnReason?       @relation(fields: [reasonId], references: [id])
+  qualityGrade       QualityGrade?       @relation(fields: [qualityGradeId], references: [id])
+  receivedBy         User                @relation("RollReturnReceivedBy", fields: [receivedById], references: [id])
+  cancelledBy        User?               @relation("RollReturnCancelledBy", fields: [cancelledById], references: [id])
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("reasonText")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -4685,7 +4773,7 @@ model RollReturn {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  reasonTextFold String?       @default(dbgenerated())
+  reasonTextFold     String?             @default(dbgenerated())
   /// KATLANMIŞ ARAMA GÖLGESİ — DEĞERİ DB ÜRETİR, UYGULAMA HİÇ YAZMAZ.
   /// `GENERATED ALWAYS AS (public.tr_fold("note")) STORED` (migration
   /// `20260819060000_search_fold`). Prisma generated kolonu bilmez; `dbgenerated()`
@@ -4693,7 +4781,7 @@ model RollReturn {
   /// ⚠️ Yazma yolları bu alanı GÖNDEREMEZ — `sanitizeWriteData` dbgenerated
   /// alanları düşürür; PG de reddeder. `sortBy`/`filter` yüzeyine de KAPALIDIR.
   /// ⚠️ Kolonun tipini/collation'ını değiştirmek isteyen ÖNCE bunu DROP etmeli.
-  noteFold       String?       @default(dbgenerated())
+  noteFold           String?             @default(dbgenerated())
 
   @@index([orderId])
   @@index([customerId, createdAt])
@@ -5854,10 +5942,10 @@ model GoodsReceipt {
   /// MK + GGAAYY + NNNN.
   receiptNo String @unique @db.VarChar(32)
 
-  warehouseId    String  @db.Uuid
+  warehouseId     String  @db.Uuid
   /// Tedarikçi — `Customer` (`CompanyType.SUPPLIER`). Ayrı tedarikçi modeli
   /// AÇILMADI: cari kart tek yerde kalsın (ön muhasebe de oraya bağlanacak).
-  supplierId     String? @db.Uuid
+  supplierId      String? @db.Uuid
   /// FASON TEDARİKÇİ (saha planı C4, 2026-08-15): alış HER cariden yapılabilir
   /// (Logo/Mikro/SAP BP standardı) — boyahaneden mal alımı meşrudur ve fatura/
   /// tahsilat katmanı zaten iki tarafı da taşıyor (CariAccount customerId XOR
@@ -5867,7 +5955,7 @@ model GoodsReceipt {
   subcontractorId String? @db.Uuid
   /// Tedarikçinin kendi irsaliye numarası (serbest metin) — alış faturası
   /// mutabakatının çıpası.
-  deliveryNoteNo String? @db.VarChar(64)
+  deliveryNoteNo  String? @db.VarChar(64)
 
   /// Fişin para birimi (ticaret paketi) — satırların `Roll.purchasePrice`
   /// değerleri BU birimdedir. Fiş TEK para birimlidir: karışık fiş, alış
@@ -5897,31 +5985,30 @@ model GoodsReceipt {
   /// mal kabulü meşru kalır; sipariş bir PLANDIR, kabulün ön koşulu değil).
   purchaseOrderId String? @db.Uuid
 
-  warehouse     Warehouse           @relation(fields: [warehouseId], references: [id])
-  supplier      Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
+  warehouse             Warehouse           @relation(fields: [warehouseId], references: [id])
+  supplier              Customer?           @relation("GoodsReceiptSupplier", fields: [supplierId], references: [id])
   /// C4 — fason tedarikçi bacağı (Restrict: tedarikçisi silinen fiş kalamaz;
   /// subcontractor zaten soft-delete dünyasında).
-  subcontractorSupplier Subcontractor? @relation("GoodsReceiptSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
-  purchaseOrder PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
-  yarnMovements YarnMovement[]
-  createdBy   User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
-  cancelledBy User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
-  rolls       Roll[]
-  movements   WarehouseMovement[]
-  invoices    Invoice[]
+  subcontractorSupplier Subcontractor?      @relation("GoodsReceiptSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  purchaseOrder         PurchaseOrder?      @relation(fields: [purchaseOrderId], references: [id])
+  yarnMovements         YarnMovement[]
+  createdBy             User?               @relation("GoodsReceiptCreatedBy", fields: [createdById], references: [id])
+  cancelledBy           User?               @relation("GoodsReceiptCancelledBy", fields: [cancelledById], references: [id])
+  rolls                 Roll[]
+  movements             WarehouseMovement[]
+  invoices              Invoice[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
+  /// Katlanmış gölge — bkz. `Warehouse.nameFold` gerekçesi. `receiptNo` ve
+  /// `deliveryNoteNo` KOD kovasına taşındı (katlanmaz), yalnız serbest metin burada.
+  notesFold String?  @default(dbgenerated())
 
   @@index([warehouseId, createdAt])
   @@index([supplierId, createdAt])
   // C4 — "bu fason firmadan alınan fişler" (tedarikçi bacağının simetriği).
   @@index([subcontractorId, createdAt])
   @@index([status, createdAt])
-  /// Katlanmış gölge — bkz. `Warehouse.nameFold` gerekçesi. `receiptNo` ve
-  /// `deliveryNoteNo` KOD kovasına taşındı (katlanmaz), yalnız serbest metin burada.
-  notesFold String? @default(dbgenerated())
-
   // Paket D — "bu siparişin fişleri" sorgusu (sipariş detayı + karşılanma).
   @@index([purchaseOrderId])
   @@index([notesFold])
@@ -6128,12 +6215,12 @@ model Invoice {
   subcontractorReceipt SubcontractorReceipt? @relation(fields: [subcontractorReceiptId], references: [id], onDelete: Restrict)
   goodsReceipt         GoodsReceipt?         @relation(fields: [goodsReceiptId], references: [id], onDelete: Restrict)
 
-  lines        InvoiceLine[]
+  lines         InvoiceLine[]
   /// Paket D — iplik faturasının stok hareketi bağı (opsiyonel; iplik dışı
   /// faturada boş kalır).
   yarnMovements YarnMovement[]
-  transactions CariTransaction[]
-  allocations  PaymentAllocation[]
+  transactions  CariTransaction[]
+  allocations   PaymentAllocation[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -6257,12 +6344,12 @@ model CariTransaction {
   amountTry    Decimal @default(0) @db.Decimal(14, 2)
   exchangeRate Decimal @default(1) @db.Decimal(18, 6)
 
-  sourceType  CariTxnSource
-  invoiceId   String?       @db.Uuid
-  paymentId   String?       @db.Uuid
+  sourceType    CariTxnSource
+  invoiceId     String?       @db.Uuid
+  paymentId     String?       @db.Uuid
   /// Çek/senet kaynağı (C1). Diğer iki kaynak bağıyla aynı desen: polimorfik
   /// sourceId DEĞİL, typed nullable FK — kaynak silinemez, hayalet satır doğmaz.
-  chequeId    String?       @db.Uuid
+  chequeId      String?       @db.Uuid
   /// STORNO BAĞI (2026-08-14, SAP FB08 modeli): bu satır bir ters kayıtsa,
   /// TERSLEDİĞİ orijinal satırın kimliği. `@unique` = bir satır EN FAZLA BİR KEZ
   /// terslenebilir (çift storno P2002 → 409). DB'de partial'a çevrilir
@@ -6271,15 +6358,15 @@ model CariTransaction {
   /// İlk tüketici: devir stornosu (`ADJUSTMENT_CANCEL`). Diğer `*_CANCEL`
   /// satırları bağsız doğmuş durumda — geriye doldurulmaz, yeni yazımlar
   /// bağlamak isterse alan hazır.
-  reversesTxnId String? @unique @db.Uuid
-  description String?       @db.VarChar(300)
+  reversesTxnId String?       @unique @db.Uuid
+  description   String?       @db.VarChar(300)
 
   createdById String? @db.Uuid
 
-  cari    CariAccount @relation(fields: [cariId], references: [id], onDelete: Restrict)
-  invoice Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
-  payment Payment?    @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  cheque  Cheque?     @relation(fields: [chequeId], references: [id], onDelete: Restrict)
+  cari       CariAccount      @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  invoice    Invoice?         @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  payment    Payment?         @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  cheque     Cheque?          @relation(fields: [chequeId], references: [id], onDelete: Restrict)
   /// Ters kayıt → orijinal (Restrict: orijinal satır silinemez — zaten defter
   /// append-only, bu FK o kuralın storno bacağını DB'ye de söyletir).
   reverses   CariTransaction? @relation("TxnReversal", fields: [reversesTxnId], references: [id], onDelete: Restrict)
@@ -6423,13 +6510,13 @@ model BankAccount {
   isActive Boolean  @default(true)
   notes    String?  @db.VarChar(500)
 
-  payments         Payment[]
-  cashTransactions CashTransaction[]
+  payments            Payment[]
+  cashTransactions    CashTransaction[]
   /// Tahsile/teminata verilen çekler (C1) — `Cheque.bankAccountId` denormalize
   /// başlığı; `chequeEvents` ise o çekin banka bakiyesini oynatan olay satırları.
-  cheques          Cheque[]
-  chequeEvents     ChequeEvent[]
-  periodCloses     CashPeriodClose[]
+  cheques             Cheque[]
+  chequeEvents        ChequeEvent[]
+  periodCloses        CashPeriodClose[]
   /// Çek teslim bordrosunun hedefi bu hesap olabilir (tahsile/teminata veriş).
   chequeDeliveryNotes ChequeDeliveryNote[]
 
@@ -6532,22 +6619,22 @@ enum CashTxnKind {
 /// WarehouseMovement emsali: işaretli tutar yönü iki yerde saklamaktır ve
 /// ikisi bir gün ayrışır).
 model CashTransaction {
-  id     String           @id @default(uuid()) @db.Uuid
+  id        String           @id @default(uuid()) @db.Uuid
   /// KH + GGAAYY + NNNN.
-  docNo  String           @unique @db.VarChar(32)
-  kind   CashTxnKind
+  docNo     String           @unique @db.VarChar(32)
+  kind      CashTxnKind
   direction PaymentDirection
-  status PaymentStatus    @default(ACTIVE)
+  status    PaymentStatus    @default(ACTIVE)
 
   /// Kasa VEYA banka — ikisi birden olamaz (CHECK, Payment ile aynı kural).
   cashBoxId     String? @db.Uuid
   bankAccountId String? @db.Uuid
 
-  currency Currency @default(TRY)
+  currency     Currency @default(TRY)
   /// Hesabın para biriminde; kur damgası TL karşılığı raporlar için.
-  exchangeRate Decimal @default(1) @db.Decimal(18, 6)
-  amount       Decimal @db.Decimal(14, 2)
-  amountTry    Decimal @db.Decimal(14, 2)
+  exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
+  amount       Decimal  @db.Decimal(14, 2)
+  amountTry    Decimal  @db.Decimal(14, 2)
 
   txnDate     DateTime @db.Timestamptz
   /// Serbest kategori metni ("Kira", "Elektrik"). Katalog BİLİNÇLİ olarak
@@ -6712,7 +6799,7 @@ model Cheque {
   /// Tahsile/teminata verildiği ya da (kendi çekimizde) üzerine yazıldığı banka.
   bankAccountId String? @db.Uuid
 
-  currency Currency @default(TRY)
+  currency     Currency @default(TRY)
   /// Belgeye DAMGALANAN kur — kur tablosu sonradan düzeltilse bile bu çek kendi
   /// kuruyla okunur (fatura emsali).
   exchangeRate Decimal  @default(1) @db.Decimal(18, 6)
@@ -6730,7 +6817,7 @@ model Cheque {
   /// çek almak olağan. Defter/kilit/belge-no/kur `postingDate`ten okunur. Alan
   /// yine de ZORUNLU ve atılamaz: TTK 796 ibraz süresi keşideden hesaplanır
   /// (hukuki veri) ve panel kâğıdın tarihini ayrıca sorar.
-  issueDate DateTime @db.Timestamptz
+  issueDate   DateTime @db.Timestamptz
   /// İŞLEM tarihi (SAP Buchungsdatum) — çekin DEFTERE girdiği gün. Cari defter
   /// `txnDate`i, dönem kilidi çıpası, belge numarasının GGAAYY'si ve kur çözümü
   /// DÖRDÜ DE buradan. Varsayılan bugün; geçmişe girilebilir, dönem kilidi
@@ -6741,7 +6828,7 @@ model Cheque {
   /// VADE — portföyün birinci sıralama anahtarı ve yaşlandırmanın girdisi.
   /// `@db.Date` DEĞİL: `Invoice.dueDate` ile aynı sözleşmede kalsın (istemci
   /// yerel gün sınırını mutlak ana çevirip gönderiyor).
-  dueDate   DateTime @db.Timestamptz
+  dueDate     DateTime @db.Timestamptz
 
   /// Çekin ÜZERİNDEKİ numara — bizim `docNo`'muzdan farklıdır (o bizim iç belge
   /// numaramız). Opsiyonel: eldivenli girişte okunaksız çeki bloklamamak için.
@@ -6768,9 +6855,9 @@ model Cheque {
   endorsedToCari CariAccount? @relation("ChequeEndorsedTo", fields: [endorsedToCariId], references: [id], onDelete: Restrict)
   bankAccount    BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
 
-  events       ChequeEvent[]
-  transactions CariTransaction[]
-  allocations  PaymentAllocation[]
+  events            ChequeEvent[]
+  transactions      CariTransaction[]
+  allocations       PaymentAllocation[]
   /// Bu çekin girdiği teslim bordroları (2026-08-15). ⚠️ ÇOĞUL ve bu bilinçli:
   /// aynı çek bordroya girip geri alınabilir ve yeniden teslim edilebilir
   /// (bordro iptal edilir, yenisi kesilir) — bordro çekin DURUMUNU değiştirmez.
@@ -7151,9 +7238,9 @@ model PurchaseOrder {
   /// C4 (2026-08-15): fason tedarikçi bacağı gelince NULLABLE oldu — sipariş ya
   /// müşteri-tipli tedarikçiden ya FASON firmadan verilir; TAM BİRİ dolu olmak
   /// ZORUNDA (XOR, servis guard'ı — GoodsReceipt ile aynı sözleşme).
-  supplierId      String? @db.Uuid
-  subcontractorId String? @db.Uuid
-  currency   Currency @default(TRY)
+  supplierId      String?  @db.Uuid
+  subcontractorId String?  @db.Uuid
+  currency        Currency @default(TRY)
 
   status       PurchaseOrderStatus @default(OPEN)
   orderDate    DateTime            @db.Timestamptz
@@ -7180,13 +7267,13 @@ model PurchaseOrder {
   shortClosedById  String?   @db.Uuid
   shortCloseReason String?   @db.VarChar(300)
 
-  supplier      Customer?           @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
-  subcontractorSupplier Subcontractor? @relation("PurchaseOrderSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
-  createdBy     User?               @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
-  cancelledBy   User?               @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id])
-  shortClosedBy User?               @relation("PurchaseOrderShortClosedBy", fields: [shortClosedById], references: [id])
-  lines         PurchaseOrderLine[]
-  goodsReceipts GoodsReceipt[]
+  supplier              Customer?           @relation("PurchaseOrderSupplier", fields: [supplierId], references: [id], onDelete: Restrict)
+  subcontractorSupplier Subcontractor?      @relation("PurchaseOrderSubcontractorSupplier", fields: [subcontractorId], references: [id], onDelete: Restrict)
+  createdBy             User?               @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id])
+  cancelledBy           User?               @relation("PurchaseOrderCancelledBy", fields: [cancelledById], references: [id])
+  shortClosedBy         User?               @relation("PurchaseOrderShortClosedBy", fields: [shortClosedById], references: [id])
+  lines                 PurchaseOrderLine[]
+  goodsReceipts         GoodsReceipt[]
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -7210,7 +7297,7 @@ model PurchaseOrderLine {
   purchaseOrderId String @db.Uuid
   lineNo          Int
 
-  itemId String @db.Uuid
+  itemId      String   @db.Uuid
   /// Sipariş birimi kalemin kendi birimidir (`Item.unit`) — satırda tekrar
   /// saklanmaz ki ikisi ayrışmasın.
   qty         Decimal  @db.Decimal(14, 3)
@@ -7366,8 +7453,8 @@ model ChequeDeliveryNote {
   cancelledById String?   @db.Uuid
   cancelReason  String?   @db.VarChar(300)
 
-  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  cari        CariAccount? @relation(fields: [cariId], references: [id], onDelete: Restrict)
+  bankAccount BankAccount?             @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  cari        CariAccount?             @relation(fields: [cariId], references: [id], onDelete: Restrict)
   items       ChequeDeliveryNoteItem[]
 
   createdAt DateTime @default(now()) @db.Timestamptz

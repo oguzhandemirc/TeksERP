@@ -5,7 +5,7 @@
 // oturum politikası. AuthService.issueToken login yolunda openLoginSession'ı çağırır.
 //
 // Kurallar:
-//  - 1 Electron + 1 mobil HER ZAMAN serbest — politika yalnız AYNI deviceType'ın
+//  - HER TİPTEN 1 oturum serbest (Electron · mobil · web) — politika yalnız AYNI deviceType'ın
 //    2. girişine uygulanır (cross-type asla çakışmaz).
 //  - 'kick' (default): aynı (userId,deviceType) aktif oturumları revoke et, sonra
 //    yeni satır oluştur (tek tx — atomik). Eski cihaz bir sonraki istekte 401.
