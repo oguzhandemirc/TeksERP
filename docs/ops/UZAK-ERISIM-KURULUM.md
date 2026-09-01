@@ -78,8 +78,11 @@ REMOTE_PORT="4001"
 CF_ACCESS_TEAM_DOMAIN="firma.cloudflareaccess.com"
 CF_ACCESS_AUD="<Access uygulamasının AUD etiketi>"
 RATE_LIMIT_ENABLED="true"
-WEB_DIST_DIR="C:\Etkili-Yazilim\app\Electron\dist-web"
+WEB_DIST_DIR="C:\Etkili-Yazilim\app\dist-web"
 ```
+
+> `dist-web` backend paketiyle BİRLİKTE gelir (`deploy/paketle.ps1`), yani
+> `app\dist-web` altındadır ve sürümü API ile her zaman aynıdır.
 
 Ardından `pm2 restart tekserp && pm2 save`. Boot banner'ında şu satır görünmeli:
 
