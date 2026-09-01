@@ -310,6 +310,50 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
     ],
   },
   {
+    // ── PATRON / YÖNETİCİ (2026-09-01, uzaktan takip) ─────────────────────
+    // Uzaktan (Cloudflare Tunnel) bağlanıp fabrikayı izleyen kişi. Kapsam
+    // "her şeyi görsün" DEĞİL — bilinçli olarak dar tutuldu:
+    //
+    // ⚠️ `report:finance` YOK. Finans alt-ağacı ayrıca `requireFinanceEnabled`
+    // rejimine kapılı ve üretici fabrikada KAPALI; şablona koymak, hiçbir şey
+    // açmayan ama "verilmiş" görünen bir izin bırakırdı. Finans gerçekten
+    // isteniyorsa panelden ayrıca verilir.
+    //
+    // ⚠️ SoD üçlüsü (`roll:manual-adjust`, `shipping:invoice`,
+    // `shipping:undo-dispatch`) YOK — 2026-08-06 kararı gereği yalnız
+    // Muhasebe/Süpervizör rollerinde. Patronun uzaktan stok düzeltmesi ya da
+    // sevk stornosu yapması beklenmiyor; ikisi de fiziksel malla ilgili
+    // kararlar ve sahadaki kişinin işidir.
+    //
+    // `report:audit` de YOK: denetim kayıtları kullanıcı davranışını izler ve
+    // bu, takip değil yönetim yüzeyidir (`admin:settings` ile aynı sınıf).
+    code: "WEB_BOSS",
+    name: "Patron (Uzaktan Takip)",
+    description:
+      "Stok, sipariş, üretim, sevkiyat ve fason takibi + sipariş/iş emri/müşteri kaydı — SoD ve finans YETKİLERİ HARİÇ",
+    mode: "list",
+    codes: [
+      // Okuma — /boss özeti ve detaya iniş
+      "report:production",
+      "report:sales",
+      "report:quality",
+      "report:inventory",
+      "report:subcontract",
+      "report:customer",
+      "roll:read",
+      "order:read",
+      "workorder:read",
+      "shipping:read",
+      "customer:read",
+      "item:read",
+      "station:read",
+      // Yazma — "nadiren de olsa" istenen üçlü
+      "order:write",
+      "workorder:write",
+      "customer:write",
+    ],
+  },
+  {
     // ── TİCARET KURULUMU: TEK ŞABLON (2026-08-14) ─────────────────────────
     // Persona denetimi ölçtü: "birkaç depo + mal kabul + depodan satış + sevk,
     // üretim ve mobil YOK" kullanıcısını kurmak için ÜÇ şablon (Depo&Sevkiyat +

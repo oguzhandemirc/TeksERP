@@ -92,6 +92,27 @@ export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
 };
 
 /**
+ * WEB PANELİ (2026-09-01, patron modülü) — Electron renderer'ının tarayıcıda
+ * koşan ikizi (`npm run build:web` → `dist-web`, `WEB_DIST_DIR` ile aynı
+ * origin'den servis edilir).
+ *
+ * ⚠️ ELECTRON POLİTİKASININ TAKMASI DEĞİL, AYRI BİR EKSEN. Aynı kaynak koddan
+ * doğsalar da SÜRÜMLERİ birlikte hareket etmez: panel kendi güncelleyicisiyle
+ * (`latest.yml`) gelir, web paneli ise backend paketiyle BİRLİKTE deploy edilir
+ * (`deploy/paketle.ps1` → `kur.ps1`). Ortak bir politika, bir kanaldaki
+ * gecikmeyi diğerine kilit olarak yansıtırdı.
+ *
+ * Bugün pratikte drift İMKÂNSIZ (SPA backend'in yanında gidiyor), o yüzden
+ * `minVersion` en düşük değerde duruyor. Eksen yine de burada: Faz 2'de mobil
+ * patron uygulaması gelirse ya da SPA ayrı bir kanaldan yayınlanırsa
+ * yükseltilecek yer burasıdır.
+ */
+export const WEB_VERSION_POLICY: ClientVersionPolicy = {
+  minVersion: "1.0.0",
+  currentVersion: "1.0.0",
+};
+
+/**
  * İstemci → politika kayıt defteri. Uç bunun üzerinden servis eder
  * (`GET /api/client-policy/:istemci`), böylece yeni bir istemci eklemek
  * BURAYA bir satır yazmaktır — route'a dokunmak gerekmez.
@@ -100,7 +121,8 @@ export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
  * fail-open olduğu için 404'ü "politika yok, kilitleme" diye okur. Boş bir
  * politika döndürmek, "kural yok" ile "kural okunamadı" arasındaki farkı
  * silerdi.
- *
+ */
+
 /**
  * Mobil (Android tablet) politikası.
  *
@@ -132,4 +154,5 @@ export const MOBIL_VERSION_POLICY: ClientVersionPolicy = {
 export const CLIENT_VERSION_POLICIES: Record<string, ClientVersionPolicy> = {
   electron: ELECTRON_VERSION_POLICY,
   mobil: MOBIL_VERSION_POLICY,
+  web: WEB_VERSION_POLICY,
 };

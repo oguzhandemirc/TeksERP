@@ -145,7 +145,21 @@ const EXEMPT: Record<string, string> = {
  * beyanlı ve `test_global_search §1-2` mekanik doğruluyor (kova izni ⊆ liste
  * ucunun izni + her kod katalogda tanımlı).
  */
-const BARE_CHAIN_BASELINE = 12;
+/**
+ * ⚠️ 12 → 13 (2026-09-01, BİLİNÇLİ): `GET /api/boss/overview` (patron özeti)
+ * yalnız `verifyToken` taşır — `GET /api/search` ile BİREBİR aynı gerekçe.
+ * Uç ÇOK BÖLÜMLÜDÜR (stok · sipariş · üretim · sevkiyat · fason) ve tek bir
+ * statik izin kodu doğru cevabı veremez: yalnız `report:sales` taşıyan biri
+ * sipariş özetini görebilmeli ama stok ve fason rakamlarını GÖRMEMELİ.
+ * Route satırına dar bir kod yazmak özeti o kişiye tamamen kapatır, geniş bir
+ * kod yazmak ise izni anlamsızlaştırır — bu yüzden eleme BÖLÜM BAZINDA
+ * serviste yapılır (F221 deseni): `getBossOverview` her bölümü
+ * `matchesPermission` ile eler ve yetkisiz bölüm HİÇ SORGULANMAZ.
+ * Kapsam `test_permission_catalog`in `DINAMIK_IZIN_KAYNAKLARI` tablosunda
+ * beyanlı; `test_boss_overview §1` her bölümü hem pozitif hem NEGATİF yönde
+ * mekanik doğruluyor (tek izin yalnız kendi bölümünü açıyor mu).
+ */
+const BARE_CHAIN_BASELINE = 13;
 
 /** Körlük zemini: tarayıcı boşa düşerse "ihlal yok" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın. */
 const MIN_ROUTE_LAYERS = 400;

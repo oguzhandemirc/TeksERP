@@ -131,6 +131,8 @@ export const TABLE_LABELS: Record<string, string> = {
   pairing_codes: "Eşleştirme Kodu",
   latency_stats: "Gecikme İstatistiği",
   sessions: "Oturum",
+  totp_enrollments: "İki Adımlı Doğrulama Kurulumu",
+  user_recovery_codes: "Kurtarma Kodu",
 
   // ---------------------------------------------------------------------------
   // TİCARET (ön muhasebe + satın alma + depo) — 2026-08-15
@@ -291,6 +293,9 @@ export const ENUM_LABELS: Record<string, string> = {
   SUPPLIER: "Tedarikçi",
   ELECTRON: "Masaüstü",
   MOBILE: "Mobil",
+  // Tarayıcıdaki panel (patron/uzaktan erişim) — Electron'dan AYRI bir oturum
+  // yuvası taşır, o yüzden denetim kaydında da ayrı görünmeli.
+  WEB: "Web",
   TABLET: "Tablet",
   PHONE: "Telefon",
   DESKTOP: "Masaüstü",

@@ -116,6 +116,7 @@ import { runWithRequestContext } from "./lib/request-context";
 import searchRoutes from "./routes/search.routes";
 import mobileUpdateRoutes from "./routes/mobile-update.routes";
 import clientPolicyRoutes from "./routes/client-policy.routes";
+import bossRoutes from "./routes/boss.routes";
 import { NIGHTLY_PREFIX } from "./services/helpers/backup-naming.helper";
 const app: Express = express();
 
@@ -218,9 +219,14 @@ function buildHelmet(httpsMode: boolean): express.RequestHandler {
 }
 const helmetLan = buildHelmet(hardening.httpsEnabled);
 const helmetRemote = buildHelmet(true);
-app.use((req, res, next) =>
-  (req.isRemote ? helmetRemote : helmetLan)(req, res, next),
-);
+// ⚠️ FONKSİYON ADI LOAD-BEARING: `helmetMiddleware`. Express katman adını
+// fonksiyondan alır ve `test_middleware_order` zincirdeki sırayı ADLA doğruluyor
+// (helmet → cors → compression → …). İsimsiz bir arrow yazıldığında katman
+// "bulunamadı" olur ve sıra sözleşmesi SESSİZCE ölçülmez hâle gelir — ilk
+// yazımda tam bu oldu. Ad, helmet'in kendi katman adıyla da tutarlı.
+app.use(function helmetMiddleware(req, res, next) {
+  (req.isRemote ? helmetRemote : helmetLan)(req, res, next);
+});
 // exposedHeaders: tarayıcı/Electron renderer'ı cross-origin custom response
 // header'larını ancak burada listelenirse JS'e açar. Etiket dili (native baskı
 // guard'ı buna bakar) + sunucu saati (apiClient offset) okunabilsin diye gerekli.
@@ -922,6 +928,8 @@ app.use("/api/mobile", mobileUpdateRoutes);
 // İstemci sürüm politikası — PUBLIC (panel giriş ekranından ÖNCE sorar).
 // Bkz. src/config/client-version-policy.ts.
 app.use("/api/client-policy", clientPolicyRoutes);
+// Patron özeti — bölüm bazlı izin süzmesi SERVİSTE (bkz. routes/boss.routes.ts).
+app.use("/api/boss", bossRoutes);
 
 // =============================================================================
 // JSON 404 — tanımsız /api/* route'lar için

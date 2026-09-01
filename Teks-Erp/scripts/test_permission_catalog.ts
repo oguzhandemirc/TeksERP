@@ -135,6 +135,12 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // çözülemezler; kapsamı `test_global_search.ts §2` kuruyor: katalogdaki HER
   // kovanın izni permission-catalog'da tanımlı VE liste ucunun izniyle hizalı mı.
   "src/services/search.service.ts": [`${DELEGE}scripts/test_global_search.ts`],
+  // PATRON ÖZETİ (2026-09-01): bölüm başına izin `BOSS_SECTION_PERMISSIONS`
+  // tablosunda durur ve servis `matchesPermission(perms, code)` ile bölümü ELER
+  // — yetkisiz bölümün sorgusu HİÇ KOŞMAZ (route yalnız `verifyToken` ister,
+  // global aramayla birebir aynı desen ve gerekçe). Kodlar tek bir sabitte
+  // olduğu için AST onları çözebiliyor; delegasyona gerek yok.
+  "src/services/boss/overview.service.ts": ["BOSS_SECTION_PERMISSIONS"],
   // BİRLEŞTİRME (2026-08-19): ikinci kapı izni `import-registry`den çözülüyor
   // (`adapter.writePermission`) — import.routes.ts ile BİREBİR aynı desen ve
   // aynı gerekçe: ikinci bir varlık→izin listesi tutmamak için. Kapsam

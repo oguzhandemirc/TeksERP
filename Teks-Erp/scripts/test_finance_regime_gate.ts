@@ -138,6 +138,22 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "dokunan dallar servis içinde ayrıca kapılıdır; fabrika yolu bayt-bayt aynı kalır.",
   },
   {
+    dosya: "routes/boss.routes.ts",
+    neden:
+      "PATRON ÖZETİ (2026-09-01). Ticaret modeline dokunuş GEÇİŞLİ ve YANILTICI: " +
+      "router hiçbir ticaret işi yapmaz, `getBossOverview` üretim akışı kolonları " +
+      "için `InventoryService`i import ediyor ve o servis kocaman olduğu için " +
+      "transitif tarama `purchaseOrder`a kadar uzanıyor — `demo.routes.ts` ve " +
+      "`inventory.routes.ts` ile BİREBİR aynı olgu. Rejim kapısı " +
+      "`requireFinanceEnabled` OLAMAZ: patron özeti üretim/stok/sevkiyat " +
+      "takibidir ve ön muhasebe KAPALI olan üretici fabrikada çalışmak zorundadır " +
+      "(zaten ilk müşterisi orası). Yazma yüzeyi SIFIR: router'da tek bir GET var, " +
+      "hiçbir tabloya INSERT/UPDATE üretmez. Finans verisi de sızmaz — özet " +
+      "bilinçli olarak `report:finance` bölümü TAŞIMIYOR (bkz. WEB_BOSS rol " +
+      "şablonu gerekçesi). ⚠️ Buraya finans içeren bir bölüm eklenirse bu muaf " +
+      "YENİDEN DEĞERLENDİRİLMELİ: o gün gerekçenin 'finans taşımaz' ayağı düşer.",
+  },
+  {
     dosya: "routes/inventory.routes.ts",
     neden:
       "Envanter FABRİKANIN ana router'ıdır → rejim kapısı KONULAMAZ. purchaseOrder izi tek " +
