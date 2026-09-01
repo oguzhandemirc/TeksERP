@@ -467,19 +467,37 @@ async function ensureWarehouses(): Promise<{ merkez: string; sube: string }> {
   const def = await ensureDefaultWarehouse();
   note(def.action === "created", `depo: ${def.name} (varsayılan)`);
 
-  const existing = await prisma.warehouse.findUnique({ where: { code: "DEMO-DEPO-SUBE" }, select: { id: true } });
-  const sube = await prisma.warehouse.upsert({
+  // ⚠️ KOD İLE UPSERT TEK BAŞINA YETMEZ — bu fonksiyon aşağıdaki
+  // `findByLooseName` doktrinini (ADI kullanılan kart VARSA yeniden kullan)
+  // uygulamıyordu ve 2026-09-01 deploy'unda ISIRDI:
+  //   canlı demoda "Şube Depo" `DP0109260001` (servisin ürettiği OTOMATİK kod)
+  //   ile duruyordu; kod araması ıskaladı, create denendi ve `warehouses_nameFold_key`
+  //   ile P2002 verdi → seed yarıda kaldı, deploy durdu.
+  // Ad seddi (2026-09-01) bu durumu "sessiz mükerrer"den "sert hata"ya çevirdi;
+  // doğru çözüm seddi gevşetmek değil, seed'i kendi kuralına uydurmaktır.
+  const kodDaki = await prisma.warehouse.findUnique({
     where: { code: "DEMO-DEPO-SUBE" },
-    update: {},
-    create: {
-      code: "DEMO-DEPO-SUBE",
-      name: "Şube Depo",
-      address: "Ege Serbest Bölge, 3. Kısım, İzmir",
-      notes: "Demo verisi — şube stoklarının tutulduğu ikinci depo.",
-    },
     select: { id: true },
   });
-  note(!existing, "depo: Şube Depo");
+  const hedefAd = "Şube Depo";
+  const adDaki =
+    kodDaki ??
+    (await prisma.warehouse.findFirst({
+      where: { name: { equals: hedefAd, mode: "insensitive" } },
+      select: { id: true },
+    }));
+  const sube =
+    adDaki ??
+    (await prisma.warehouse.create({
+      data: {
+        code: "DEMO-DEPO-SUBE",
+        name: hedefAd,
+        address: "Ege Serbest Bölge, 3. Kısım, İzmir",
+        notes: "Demo verisi — şube stoklarının tutulduğu ikinci depo.",
+      },
+      select: { id: true },
+    }));
+  note(!adDaki, "depo: Şube Depo");
 
   return { merkez: def.id, sube: sube.id };
 }
@@ -997,7 +1015,15 @@ async function ensureInvoices(
     const token = demoToken("invoice:sales-confirmed");
     const before = await prisma.invoice.findUnique({ where: { clientToken: token }, select: { id: true } });
     const lines = await buildSalesLines(shipments.hizli, priceByItemCode);
-    if (lines.length === 0) {
+    // ⚠️ ZATEN VARSA YENİDEN GÖNDERME (2026-09-01). `buildSalesLines` satırları
+    // sevkiyatın CANLI toplarından türetir; ilk koşumdan sonra iadeler topları
+    // çıkarınca ikinci koşumda payload KÜÇÜLÜR. Aynı token + farklı gövde artık
+    // 409 `CLIENT_TOKEN_COLLISION` alıyor (gövde kapısı, 2026-09-01) — eskiden
+    // sessizce ilk fatura dönüyordu. Belge zaten doğru oluştu; onu YENİDEN
+    // hesaplanmış bir payload'la yeniden göndermenin bir işi yok.
+    if (before) {
+      confirmedSalesCariId = confirmedSalesCariId ?? null;
+    } else if (lines.length === 0) {
       console.warn("   ⚠️ Onaylı satış faturası için satır üretilemedi — atlandı.");
     } else {
       const draft = await invoiceService.createDraft(
@@ -1033,7 +1059,10 @@ async function ensureInvoices(
     const token = demoToken("invoice:sales-draft");
     const before = await prisma.invoice.findUnique({ where: { clientToken: token }, select: { id: true } });
     const lines = await buildSalesLines(shipments.cuval, priceByItemCode);
-    if (lines.length === 0) {
+    // Bkz. yukarıdaki gerekçe — zaten varsa yeniden gönderilmez.
+    if (before) {
+      // no-op: taslak fatura zaten oluşturulmuş.
+    } else if (lines.length === 0) {
       console.warn("   ⚠️ Taslak satış faturası için satır üretilemedi — atlandı.");
     } else {
       const draft = await invoiceService.createDraft(

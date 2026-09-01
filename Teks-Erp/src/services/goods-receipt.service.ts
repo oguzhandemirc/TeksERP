@@ -638,11 +638,22 @@ export class GoodsReceiptService {
         // olmadan, kullanıcı depoyu/tedarikçiyi düzeltip aynı token'la tekrar
         // gönderdiğinde ESKİ fiş "zaten açılmış" diye dönüyordu.
         // ⚠️ `currency` varsayılan alır → kıyaslamaya GİRMEZ.
+        // ⚠️ TÜRETİLEN ALAN, GİRDİ VERMEDİYSE KIYASLANMAZ (2026-09-01 düzeltmesi).
+        // `supplierId`/`subcontractorId` girdide OPSİYONELDİR ve verilmezse
+        // servis onları ALIŞ SİPARİŞİNDEN türetir ("tek kaynak"). Saklanan
+        // türetilmiş değeri, meşruen boş gelen girdiyle kıyaslamak replay'i
+        // YANLIŞ 409'a düşürür — `seed-ticaret-demo` tam bu yüzden ikinci
+        // koşumda kırıldı ve deploy durdu (ölçüldü, canlı sunucuda).
+        // Kural: kıyaslama yalnız girdinin GERÇEKTEN taşıdığı alanlar üzerinden.
         assertReplayPayloadMatches(
           [
             { ad: "warehouseId", mevcut: dupe.warehouseId, gelen: input.warehouseId },
-            { ad: "supplierId", mevcut: dupe.supplierId, gelen: input.supplierId },
-            { ad: "subcontractorId", mevcut: dupe.subcontractorId, gelen: input.subcontractorId },
+            ...(input.supplierId !== undefined
+              ? [{ ad: "supplierId", mevcut: dupe.supplierId, gelen: input.supplierId }]
+              : []),
+            ...(input.subcontractorId !== undefined
+              ? [{ ad: "subcontractorId", mevcut: dupe.subcontractorId, gelen: input.subcontractorId }]
+              : []),
             { ad: "purchaseOrderId", mevcut: dupe.purchaseOrderId, gelen: input.purchaseOrderId },
             { ad: "deliveryNoteNo", mevcut: dupe.deliveryNoteNo, gelen: input.deliveryNoteNo },
           ],
