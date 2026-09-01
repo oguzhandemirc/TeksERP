@@ -84,7 +84,14 @@ export function StationLoad() {
           // 170px, satırı 1fr ile eşit doldurur, taşınca alt satıra iner (örtüşme
           // yok). Aşırı fazlada widget dashboard'u ezmesin diye max-yükseklik +
           // dikey kaydırma; az istasyonda yükseklik zorlanmaz (scroll çıkmaz).
-          <div className="grid max-h-[30rem] grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3 overflow-y-auto pr-0.5">
+          //
+          // ⚠️ `auto-fit`, `auto-fill` DEĞİL. İkisi de "sığdığı kadar track üret"
+          // der ama `auto-fill` BOŞ track'leri canlı tutar ve `1fr` artan genişliği
+          // onlara da dağıtır → 6 istasyon varken kartlar 170px'te kalıp sağda
+          // koca bir boşluk bırakıyordu (saha geri bildirimi). `auto-fit` boş
+          // track'leri 0'a çökertir, böylece genişliği YALNIZ gerçek kartlar
+          // paylaşır ve şerit ekran genişliğine göre ölçeklenir.
+          <div className="grid max-h-[30rem] grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3 overflow-y-auto pr-0.5">
             {sortByFlow(data).map((s) => (
               <StationCell key={s.id} station={s} />
             ))}
@@ -178,7 +185,9 @@ function Metric({ label, value, tone }: { label: string; value: number; tone: st
 
 function LoadingGrid() {
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-3">
+    // İskelet, veri gelince yerleşim ZIPLAMASIN diye gerçek grid'le AYNI
+    // (`auto-fit`) olmak zorunda.
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3">
       {Array.from({ length: 8 }).map((_, i) => (
         <Skeleton key={i} className="h-24" />
       ))}
