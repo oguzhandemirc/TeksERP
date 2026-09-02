@@ -48,6 +48,12 @@ import {
   normalizeFeed,
 } from './lib/adres.mjs';
 import { imzaBasligi, manifestKur, multipartDogrula, multipartKur } from './lib/manifest.mjs';
+import {
+  etiketDefteriKiyasla,
+  sonrakiSurumEtiketten,
+  yayindakiApkKunyesi,
+  yayindakiTabletSurumu,
+} from '../../scripts/lib/surum.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(HERE, '..');
@@ -79,6 +85,9 @@ const SADECE_KONTROL = argv.includes('--check');
 const PARMAK_IZI_KABUL = argv.includes('--parmak-izini-kabul-et');
 /** İmzasız yayın — YALNIZ imzasız bir APK'ya (eski kurulum) yayın yaparken. */
 const IMZASIZ = argv.includes('--imzasiz');
+/** Yama hanesini otomatik artırma — `--surum=X.Y.Z` ya da `--surum-artirma` ile kapanır. */
+const SURUM_ELLE = arg('surum');
+const SURUM_ARTIRMA_YOK = argv.includes('--surum-artirma');
 
 /* ------------------------------------------------------------------ *
  * (a) Adres
@@ -117,6 +126,20 @@ function adresCoz() {
 
 function appJson() {
   return JSON.parse(fs.readFileSync(path.join(PROJECT_ROOT, 'app.json'), 'utf8')).expo;
+}
+
+/**
+ * `app.json > expo.version` alanını yazar.
+ *
+ * ⚠️ Dosyanın TAMAMI yeniden yazılır ama yalnız tek alan değişir: biçim
+ * (2 boşluk + sondaki satır sonu) korunur, yoksa her yayın turu app.json'da
+ * gürültülü bir diff bırakır.
+ */
+function surumuYaz(yeniSurum) {
+  const yol = path.join(PROJECT_ROOT, 'app.json');
+  const tam = JSON.parse(fs.readFileSync(yol, 'utf8'));
+  tam.expo.version = yeniSurum;
+  fs.writeFileSync(yol, `${JSON.stringify(tam, null, 2)}\n`);
 }
 
 /**
@@ -336,7 +359,7 @@ function paketiDogrula(hedefDizin, beklenenAdres) {
  * main
  * ------------------------------------------------------------------ */
 
-function main() {
+async function main() {
   baslik('TeksERP Mobil — UZAKTAN GÜNCELLEME PAKETİ');
 
   const { deger: adres, kaynak } = adresCoz();
@@ -367,7 +390,7 @@ function main() {
   const { deger: feed, kaynak: feedKaynak } = guncellemeAdresiCoz(
     arg('update-url') || feedUrl(musteri),
   );
-  const e = appJson();
+  let e = appJson();
   const runtimeVersion = String(e.runtimeVersion ?? '').trim();
   if (!runtimeVersion) {
     dur(
@@ -383,6 +406,116 @@ function main() {
   bilgi(`  kaynak          : ${feedKaynak}`);
   bilgi(`Uygulama sürümü   : ${e.version} (vc ${e.android?.versionCode})`);
   console.log('');
+
+  // --- SÜRÜM NUMARASI -----------------------------------------------------
+  // Uzaktan güncelleme eskiden sürüm numarasını HİÇ değiştirmiyordu: tablette
+  // haftalarca "1.0.0" yazıyor, içindeki JS ise bambaşka oluyordu. Ayrım
+  // görünmezdi — sahada "hangi sürümdesin" sorusunun cevabı yoktu ve sürüm
+  // notu kapısı da tek numaraya yığılıyordu.
+  //
+  // ⚠️ Numara APK'dan DEĞİL, PAKETTEN okunuyor: `kuruluVersionName()` →
+  // `Constants.expoConfig.version` → manifestin `extra.expoClient`i. Yani bu
+  // satırı artırmak, native tarafa dokunmadan tablette görünen sürümü
+  // değiştirir (bkz. appUpdate.service.ts).
+  //
+  // ⚠️ TABAN GİT ETİKETİDİR (`tablet-v*`), yerel app.json ya da yayın sunucusu
+  // DEĞİL — gerekçe: scripts/lib/surum.mjs başlığı. Etiketi bu script atmaz;
+  // yayın başarılı olunca `deploy/mobil-yayinla.mjs` atar.
+  let hedefSurum = e.version;
+  if (SURUM_ELLE) {
+    hedefSurum = SURUM_ELLE;
+    bilgi(`Sürüm             : ${hedefSurum} (elle verildi)`);
+  } else if (SURUM_ARTIRMA_YOK) {
+    bilgi(`Sürüm             : ${hedefSurum} (--surum-artirma: dokunulmadı)`);
+  } else {
+    const karar = sonrakiSurumEtiketten('tablet');
+    if (!karar.surum) {
+      dur(
+        'Sıradaki sürüm belirlenemedi',
+        karar.gerekce,
+        '',
+        `İlk sürümü elle ver:            npm run yayinla -- --musteri=${musteri} --surum=1.0.1`,
+        `ya da yayındaki sürümü etiketle: git tag -a tablet-v${e.version} -m tablet`,
+      );
+    }
+    // Etiket KARAR verir, sunucu DOĞRULAR — gerekçe: scripts/lib/surum.mjs.
+    const kiyas = etiketDefteriKiyasla(
+      karar.surum,
+      await yayindakiTabletSurumu(manifestUrl(feed, runtimeVersion), runtimeVersion),
+    );
+    if (kiyas.durum === 'zaten-yayinda') {
+      dur(
+        `${karar.surum} ZATEN YAYINDA`,
+        karar.gerekce,
+        '',
+        'Son yayından beri yeni commit yok, yani çıkacak bir değişiklik de yok.',
+        'Aynı numaranın üstüne farklı kod yazmak sahada iki ayrı programı aynı',
+        'isimle dolaştırır — kapı bunun için var.',
+        '',
+        'Yeni iş varsa commit et; yarım kalan yayını tamamlıyorsan:',
+        `  npm run yayinla -- --musteri=${musteri} --surum=${karar.surum}`,
+      );
+    }
+    if (kiyas.durum === 'bayat') {
+      dur(
+        'ETİKET DEFTERİ BAYAT',
+        `hesaplanan: ${karar.surum}`,
+        `yayında   : ${kiyas.yayinda}`,
+        '',
+        'Bu numarayla yayınlamak, sahadakinden ESKİ bir paketi güncel gösterir.',
+        'Muhtemel sebep: yayın başka bir makineden yapıldı, etiket itilmedi.',
+        `Çözüm: git fetch --tags   ya da   git tag -a tablet-v${kiyas.yayinda} -m tablet`,
+      );
+    }
+    if (kiyas.durum === 'olculemedi') {
+      uyari('Yayındaki sürüm okunamadı; etiket defteri DOĞRULANMADI (internet?).');
+    }
+    hedefSurum = karar.surum;
+    bilgi(`Sürüm             : ${karar.surum} — ${karar.gerekce}`);
+  }
+  // ⚠️ `--check` YAN ETKİSİZ OLMALI. Ön kontrol, dosyayı değiştirmeden "bu tur
+  // ne olurdu"yu göstermek içindir; app.json'a yazsaydı yalnız bakmak için
+  // koşan biri sürümü sessizce ilerletir ve fark etmezdi. Aşağıdaki kapılar
+  // yine HEDEF sürümü ölçer — yani ön kontrol gerçek turun sorusunu sorar.
+  if (hedefSurum !== e.version && !SADECE_KONTROL) {
+    surumuYaz(hedefSurum);
+    // Yazımdan sonra yeniden oku: `e` bayat kalırsa nota bakılan sürüm ile
+    // pakete gömülen sürüm ayrışır ve kapı kendi doğrulamadığı bir numarayı
+    // yayınlar.
+    e = appJson();
+  } else {
+    e = { ...e, version: hedefSurum };
+  }
+
+  // --- versionCode KAPISI -------------------------------------------------
+  // ⚠️ OTA paketi `android.versionCode`u DA taşır ve tablet onu KURULU APK'nın
+  // sürümü sanar (`kuruluVersionCode()` → `Constants.expoConfig.android
+  // .versionCode`). Uzaktan güncellemeyle yükseltilirse tablet kendini
+  // olmadığı bir APK sürümünde sanar ve gerçek kurulum dosyası güncellemesini
+  // BİR DAHA teklif etmez — sessiz ve kalıcı bir arıza.
+  {
+    const kunye = await yayindakiApkKunyesi(feed);
+    const yayindakiVc = kunye?.versionCode;
+    const yereldekiVc = e.android?.versionCode;
+    if (typeof yayindakiVc === 'number' && yayindakiVc !== yereldekiVc) {
+      dur(
+        'versionCode yayındaki APK ile UYUŞMUYOR',
+        `app.json     : ${yereldekiVc}`,
+        `yayındaki APK: ${yayindakiVc} (${kunye?.versionName ?? '?'})`,
+        '',
+        'Uzaktan güncelleme paketi bu değeri de taşır ve tablet onu KURULU',
+        'sürümü sanar. Farklı gönderilirse tablet gerçek APK güncellemesini',
+        'bir daha teklif etmez.',
+        '',
+        'Yapılacak: native değişmediyse app.json > android.versionCode değerini',
+        `yayındaki ${yayindakiVc} değerine geri al; gerçekten yeni bir APK`,
+        'çıkıyorsa ÖNCE onu yayınla (deploy/mobil-yayinla.mjs), sonra OTA gönder.',
+      );
+    }
+    if (typeof yayindakiVc !== 'number') {
+      uyari('Yayında kurulum dosyası künyesi yok — versionCode kapısı atlandı.');
+    }
+  }
 
   // --- SÜRÜM NOTU KAPISI --------------------------------------------------
   // Not yazılmadan sürüm çıkmaz (kullanıcı kararı). Bekçi ayrıca kopyaların
@@ -532,4 +665,6 @@ function main() {
   console.log('');
 }
 
-main();
+main().catch((e) => {
+  dur('Beklenmeyen hata', e?.stack ?? String(e));
+});

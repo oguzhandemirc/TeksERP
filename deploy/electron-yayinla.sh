@@ -224,5 +224,25 @@ ssh -T "$SSH_HEDEF" bash -s -- "$UZAK_DIZIN" "$surum" <<'BUDA' 2>/dev/null || tr
       done
 BUDA
 
+# --- SÜRÜM ETİKETİ ---------------------------------------------------------
+# Bir sonraki turun tabanı budur (`electron-paketle.sh` okur). Etiket YAYIN
+# BİTTİKTEN sonra atılır — "sahaya çıkan kod tam olarak buydu" kaydıdır, elle
+# verilen bir karar değil.
+#
+# ⚠️ BEST-EFFORT: yayın zaten yapıldı. Etiketleme düşerse UYARI basılır, yayın
+# başarısız sayılmaz — aksi hâlde operatör başarılı bir yayını tekrarlamaya
+# itilirdi. Var olan etiket TAŞINMAZ: aynı turda ikinci müşteriye yayın
+# yaparken `-f` ile taşımak, etiketin işaret ettiği kodu sessizce değiştirirdi.
+node --input-type=module -e "
+  import { etiketAt } from '$kok/scripts/lib/surum.mjs';
+  const s = etiketAt('panel', '$surum');
+  const mesaj = {
+    'atildi': '  ✓ sürüm etiketi atıldı: ' + s.ad,
+    'zaten-var': '  · sürüm etiketi zaten var: ' + s.ad + ' (aynı tur)',
+    'basarisiz': '  ⚠️ sürüm etiketi atılamadı: ' + s.ad + ' (yayın etkilenmedi)',
+  }[s.durum];
+  console.log(mesaj + (s.not ? ' — ' + s.not : ''));
+" || echo "  ⚠️ sürüm etiketi atılamadı (yayın etkilenmedi)"
+
 echo "Fabrikadaki paneller en geç 4 saat içinde görür."
 echo "Hemen denemek için: Genel Ayarlar > Bu Bilgisayar > Güncelleme > Şimdi kontrol et"

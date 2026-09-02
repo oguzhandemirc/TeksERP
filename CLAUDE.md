@@ -162,13 +162,15 @@ kendileri indirir. Elden setup/APK taşıma YOK — reçeteler:
 node scripts/surum-notlari-kopyala.mjs      # panel + tablet paketlerine kopyala
 node scripts/check-surum-notlari.mjs        # şema + dil + kopya denetimi
 
-# MASAÜSTÜ PANEL — sürümü ARTIR, müşteriyi BELİRT
-./deploy/electron-paketle.sh <müşteri> [sürüm]   # derler + gömülü adresi doğrular
+# MASAÜSTÜ PANEL — sürüm OTOMATİK artar (yama hanesi), müşteriyi BELİRT
+./deploy/electron-paketle.sh <müşteri>           # son git etiketinden 1.1.0 → 1.1.1
+./deploy/electron-paketle.sh <müşteri> 1.2.0     # küçük/büyük hane = KARAR, elle
 ./deploy/electron-yayinla.sh                     # hedefi paketin kimliğinden çözer
 ./deploy/electron-yayinla.sh --dogrula           # yükleme YOK, yayını denetle
 
 # TABLET — değişikliğin cinsi kanalı belirler
-cd mobil && npm run yayinla -- --musteri=<müşteri>   # JS-only → OTA (tablet kendi tazeler)
+cd mobil && npm run yayinla -- --musteri=<müşteri>   # JS-only → OTA; sürüm de otomatik artar
+cd mobil && npm run yayinla -- --musteri=<müşteri> --surum=1.2.0   # haneyi elle ver
 cd mobil && npm run build:apk                        # native değişti → yeni APK (elle kurulur)
 node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
 ```
@@ -182,7 +184,8 @@ node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
 
 1. **Sürüm numarası ARTIRILMAZSA hiçbir şey güncellenmez.** Panelde
    `Electron/package.json > version`, tablette `versionCode`. Dosyayı yüklesen
-   bile istemci "en güncelim" der.
+   bile istemci "en güncelim" der. **Yama hanesini artık script artırıyor**
+   (2026-09-02) — OTA turları dahil; ayrıntı 5. kural.
 2. **Ham `npm run build:win` KULLANMA** — bir önceki müşterinin adresiyle
    derler. Yayın adresi pakete **derleme anında** gömülür; yanlış müşteri kodu
    taşıyan paket **başka bir fabrikanın güncellemesini indirip kurar** ve hata
@@ -192,6 +195,32 @@ node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
    henüz yüklenmemiş dosyayı işaret eden bir manifest yayında kalır.
 4. **Cloudflare proxy'si (turuncu bulut) AÇIK kalmalı** — sertifika Origin CA,
    ona yalnız CF Edge güvenir; DNS-only'ye çevrilirse güncelleme sessizce durur.
+5. **Yama hanesi OTOMATİK; taban GİT ETİKETİ, doğrulayan YAYIN SUNUCUSU**
+   (`scripts/lib/surum.mjs`, etiketler `panel-v*` / `tablet-v*`).
+   Uzaktan güncelleme eskiden numaraya hiç dokunmuyordu: tablette haftalarca
+   "1.0.0" yazarken içindeki JS bambaşkaydı ve sürüm notları tek numaraya
+   yığılıyordu. Artık her OTA turu da bir yama numarası alır — numara APK'dan
+   değil PAKETTEN okunuyor (`Constants.expoConfig.version` → manifestin
+   `extra.expoClient`i), yani native'e dokunmadan değişir.
+   ⚠️ **Taban neden ETİKET:** numara KODA aittir, kanala değil. Sunucudan
+   okunsaydı her müşteri kendi sayısını üretir ve iki farklı kod aynı numarayı
+   taşıyabilirdi ("panel 1.1.1'de şu hata var" → hangi 1.1.1?). Yerel dosyadan
+   okunsaydı komutun her koşumu numarayı atlatırdı (yayın komutu bir turda
+   birden çok kez koşar: not kapısı kırmızı, derleme düşer).
+   ⚠️ **Etiketi script atar**, yayın BİTTİKTEN sonra — "şu commit'ten sonrası
+   yeni sürüm" diye bir karar verilmez. HEAD etiketin üstündeyken numara
+   KORUNUR; bu hem tekrar koşumu hem de *aynı turda ikinci müşteri* için ayrı
+   derlemeyi kapsar (yayın adresi pakete derleme anında gömüldüğü için her
+   müşteri ayrı derleme ister, ama ikisi de AYNI kodun yayınıdır).
+   ⚠️ **Etiket defteri bayatlayabilir** (başka makineden yayın, etiket
+   itilmedi, depo yeniden klonlandı) → hesaplanan numara yayındakiyle
+   kıyaslanır; eşit ya da geride ise DURULUR. Yayın okunamazsa sessiz geçilir
+   (doğrulama, kapı değil — internetsiz paketleme mümkün kalmalı).
+   ⚠️ **Küçük/büyük hane elle** verilir; o bir karardır.
+   ⚠️ **OTA turunda `android.versionCode`a DOKUNULMAZ** — paket onu da taşır ve
+   tablet KURULU APK sürümü sanar (`kuruluVersionCode()`); yükseltilirse gerçek
+   APK güncellemesini bir daha teklif etmez. Yayın script'i yayındaki
+   `apk/surum.json` ile kıyaslayıp durdurur. Bekçi: `scripts/test_surum.mjs`.
 
 ⚠️ **Yeni müşteri:** sunucuda `mkdir <müşteri>/electron` + paketle + yayınla.
 DNS, sertifika, servis GEREKMEZ. Müşteri kodu tek kaynakta

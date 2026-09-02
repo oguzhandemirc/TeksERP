@@ -45,6 +45,12 @@ jobs:
       # kuralı dokümante eder. Gerekçe: scripts/check-migrations.mjs başlığı.
       - name: Migration hijyeni (commit edilmemiş migration/test)
         run: node scripts/check-migrations.mjs
+      # Sürüm numarası kuralı — ağ İSTEMEZ (git etiketleri geçici bir depoda
+      # kurulur). Bu kural sessiz bozulur: yanlış tarafa kayarsa ya numaralar
+      # atlanır, ya hiç artmaz, ya da yayındaki bir numaranın üstüne yazılır —
+      # üçü de ancak sahada fark edilir.
+      - name: Sürüm numarası kuralı
+        run: node scripts/test_surum.mjs
 
   # ===========================================================================
   # BACKEND — Express + Prisma; Postgres service + migrate deploy + seed + test

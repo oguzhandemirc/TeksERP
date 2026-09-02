@@ -190,21 +190,47 @@ node scripts/surum-notlari-kopyala.mjs
 Not, güncelleme kurulduktan sonra ilk açılışta operatöre bir kez gösterilir.
 Kurallar ve örnekler: [`SURUM-NOTLARI.md`](SURUM-NOTLARI.md).
 
-### 1. Sürüm numarasını artır — ATLANIRSA HİÇBİR ŞEY GÜNCELLENMEZ
+### 1. Sürüm numarası — YAMA HANESİ OTOMATİK
 
 `Electron/package.json > version`. Güncelleyici karşılaştırmayı bu numaraya göre
 yapar; numara aynı kalırsa panel "en güncelim" der ve yeni setup'ı hiç indirmez.
 
+Paketleme komutuna sürüm vermezsen **yama hanesi kendiliğinden artar**:
+
 ```
-2.8.0  →  2.8.1     (hata düzeltmesi)
-2.8.1  →  2.9.0     (yeni özellik)
+1.1.0  →  1.1.1     (otomatik — hata düzeltmesi)
+1.1.1  →  1.2.0     (ELLE — yeni özellik, sözleşme değişikliği)
 ```
+
+**Taban git etiketidir** (`panel-v*`), yerel `package.json` ya da yayın sunucusu
+değil. Numara **koda** aittir, kanala değil: sunucudan okunsaydı her müşteri
+kendi sayısını üretir ve iki farklı kod aynı numarayı taşıyabilirdi — *"panel
+1.1.1'de şu hata var"* cümlesi anlamını yitirirdi. Yerel dosyadan okunsaydı
+komutun her koşumu numarayı atlatırdı (bu komut bir turda birden çok kez koşar:
+not kapısı kırmızı verir, derleme düşer).
+
+**Etiketi sen atmıyorsun** — `electron-yayinla.sh` yayın bittikten sonra atıyor.
+"Şu commit'ten sonrası yeni sürüm" diye bir karar vermek gerekmiyor; etiket
+geriye dönük bir kayıt: *"sahaya çıkan kod tam olarak buydu."*
+
+⚠️ **HEAD etiketin üstündeyken numara KORUNUR.** İki işi birden görür: komutun
+tekrar koşumu, ve *aynı turda ikinci müşteri* — yayın adresi pakete derleme
+anında gömüldüğü için her müşteri ayrı derleme ister, ama ikisi de aynı kodun
+yayınıdır ve aynı numarayı taşımalıdır.
+
+⚠️ **Etiket defteri bayatlayabilir** (yayın başka bir makineden yapıldı ve
+etiket itilmedi; depo yeniden klonlandı). Bu yüzden hesaplanan numara yayındaki
+`latest.yml` ile kıyaslanır: eşit ya da geride ise **durulur**. Yayın adresine
+ulaşılamazsa kıyas atlanır ve uyarı basılır — bu bir doğrulama, kapı değil
+(internetsiz paketleme mümkün kalmalı).
+
+Kural + bekçi: `scripts/lib/surum.mjs` · `scripts/test_surum.mjs`.
 
 ### 2. Paketle — MÜŞTERİ BELİRTEREK
 
 ```bash
-./deploy/electron-paketle.sh adnansahin          # mevcut sürümle
-./deploy/electron-paketle.sh adnansahin 2.9.0    # sürümü de ayarla
+./deploy/electron-paketle.sh adnansahin          # yama hanesi otomatik artar
+./deploy/electron-paketle.sh adnansahin 1.2.0    # haneyi elle ver
 ```
 
 Script müşteri kodunu `shared/musteri.json` ve `package.json > build.publish`

@@ -57,10 +57,46 @@ EXPO_PUBLIC_API_URL=http://192.168.1.250:4000/api npm run yayinla
 node ../deploy/mobil-yayinla.mjs --paket=ota-cikti/<rv>/<damga>
 ```
 
-`npm run yayinla` sırasıyla: ERP adresini çözer → **native parmak izini** önceki yayınla
-karşılaştırır → Metro önbelleğini siler → `expo export` → **üretilen bundle'ın içindeki ERP
-adresini geri okur** → manifest'i dondurur, **imzalar** ve imzayı **sertifikayla doğrular**.
-Herhangi biri düşerse paket üretilmez.
+`npm run yayinla` sırasıyla: ERP adresini çözer → **sürüm numarasını belirler** →
+**native parmak izini** önceki yayınla karşılaştırır → Metro önbelleğini siler →
+`expo export` → **üretilen bundle'ın içindeki ERP adresini geri okur** → manifest'i
+dondurur, **imzalar** ve imzayı **sertifikayla doğrular**. Herhangi biri düşerse paket
+üretilmez.
+
+### 3.1 Sürüm numarası — uzaktan güncelleme de artık numara alır
+
+Uzaktan güncelleme uzun süre sürüm numarasına **hiç dokunmuyordu**: tablette haftalarca
+"1.0.0" yazarken içindeki JS bambaşka olabiliyordu. Ayrım görünmezdi — sahada "hangi
+sürümdesin" sorusunun cevabı yoktu ve sürüm notları tek numaraya yığılıyordu.
+
+Artık `app.json > expo.version` her yayın turunda **yama hanesinden** artar
+(`1.0.0 → 1.0.1 → 1.0.2`). Numara **APK'dan değil PAKETTEN** okunuyor
+(`kuruluVersionName()` → `Constants.expoConfig.version` → manifestin `extra.expoClient`i),
+yani native tarafa dokunmadan tablette görünen sürüm değişir.
+
+```bash
+npm run yayinla -- --musteri=adnansahin                 # otomatik: 1.0.1
+npm run yayinla -- --musteri=adnansahin --surum=1.2.0   # haneyi elle ver
+npm run yayinla -- --musteri=adnansahin --surum-artirma # hiç dokunma
+```
+
+**Taban git etiketidir** (`tablet-v*`), yerel `app.json` ya da yayın sunucusu değil —
+gerekçe Electron reçetesindekiyle aynı ve tek kaynakta: `scripts/lib/surum.mjs` başlığı.
+Etiketi `deploy/mobil-yayinla.mjs` yayın bittikten sonra atar. **OTA ve APK aynı
+çizgidedir**: `expo.version` hem paketin sürümü hem APK'nın `versionName`idir.
+
+⚠️ **`--check` yan etkisizdir** — hedef sürümü gösterir ama `app.json`a yazmaz. Yalnız
+bakmak için koşan biri sürümü sessizce ilerletmemeli.
+
+⚠️ **OTA turunda `android.versionCode`a DOKUNULMAZ.** Paket bu değeri de taşır ve tablet
+onu **kurulu APK'nın** sürümü sanar (`kuruluVersionCode()` → `Constants.expoConfig
+.android.versionCode`). Uzaktan yükseltilirse tablet kendini olmadığı bir APK sürümünde
+sanar ve gerçek kurulum dosyası güncellemesini **bir daha teklif etmez** — sessiz ve
+kalıcı bir arıza. Yayın script'i yayındaki `apk/surum.json` künyesiyle kıyaslar ve
+farklıysa durur. Gerçekten yeni bir APK çıkıyorsa **önce APK yayınlanır**, sonra OTA.
+
+Bekçi: `scripts/test_surum.mjs` (18 kontrol; §3 gerçek git etiketleri üzerinde, geçici
+bir depoda — bu deponun etiketlerine dokunmadan).
 
 `mobil-yayinla.mjs` yükler: **önce paket dosyaları, sonra manifest** (ters sırada, henüz
 yüklenmemiş varlıkları gösteren bir yayın ortaya çıkar). Son adım **dışarıdan HTTPS

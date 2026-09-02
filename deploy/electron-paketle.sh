@@ -3,8 +3,8 @@
 # Electron panelini BELİRLİ BİR MÜŞTERİ için paketler.
 # Reçete: docs/ops/ELECTRON-OTOMATIK-GUNCELLEME.md
 #
-#   ./deploy/electron-paketle.sh adnansahin
-#   ./deploy/electron-paketle.sh yenifabrika 2.9.0     # sürümü de ayarla
+#   ./deploy/electron-paketle.sh adnansahin             # yama hanesi OTOMATİK artar
+#   ./deploy/electron-paketle.sh yenifabrika 2.9.0     # haneyi elle ver
 #
 # NEDEN AYRI BİR KOMUT: yayın adresi pakete DERLEME ANINDA gömülür. Müşteri kodu
 # elle değiştirilseydi, unutulan tek bir düzenleme "yeni fabrikanın paneli başka
@@ -31,7 +31,8 @@ istenen_surum="${2:-}"
 
 [ -n "$musteri" ] || hata "Müşteri kodu gerekli.
   Kullanım: ./deploy/electron-paketle.sh <müşteri-kodu> [sürüm]
-  Örnek:    ./deploy/electron-paketle.sh adnansahin"
+  Örnek:    ./deploy/electron-paketle.sh adnansahin
+  Sürüm verilmezse yama hanesi son git etiketinden türetilerek artar."
 
 # Kod URL'in parçası olacak: küçük harf, rakam ve tire. Türkçe karakter/boşluk
 # taşıyan bir kod, adresi aktarımda sessizce bozulan bir yayına çevirirdi.
@@ -39,6 +40,60 @@ echo "$musteri" | grep -qE '^[a-z0-9][a-z0-9-]{1,30}$' \
   || hata "Müşteri kodu yalnız küçük harf, rakam ve tire içerebilir (2-31 karakter): '$musteri'"
 
 cd "$electron_dir"
+
+# --- 0) SÜRÜM NUMARASI ----------------------------------------------------
+# Sürüm verilmediyse YAMA hanesi otomatik artar (1.1.0 → 1.1.1 → 1.1.2).
+#
+# ⚠️ TABAN GİT ETİKETİDİR (`panel-v*`), yerel package.json ya da yayın sunucusu
+# DEĞİL. Sebep: numara KODA aittir, kanala değil. Taban sunucudan okunsaydı her
+# müşteri kendi sayısını üretirdi ve iki farklı kod aynı numarayı taşıyabilirdi
+# — "panel 1.1.1'de şu hata var" cümlesi anlamını yitirirdi. Yerel dosyadan
+# okunsaydı komutun her koşumu numarayı atlatırdı (bu komut bir turda birden
+# çok kez koşar: not kapısı kırmızı verir, derleme düşer).
+#
+# Etiketi bu script ATMAZ; yayın başarılı olunca `electron-yayinla.sh` atar.
+# Yani "şu commit'ten sonrası yeni sürüm" diye bir karar vermek gerekmez.
+#
+# Küçük/büyük hane bir KARARDIR (sözleşme kırıldı mı) — komuta elle yazılır:
+#   ./deploy/electron-paketle.sh adnansahin 1.2.0
+if [ -z "$istenen_surum" ]; then
+  istenen_surum=$(node --input-type=module -e "
+    import {
+      etiketDefteriKiyasla, sonrakiSurumEtiketten, yayindakiPanelSurumu,
+    } from '$kok/scripts/lib/surum.mjs';
+    const k = sonrakiSurumEtiketten('panel');
+    if (!k.surum) {
+      console.error('  ✖ Sıradaki sürüm belirlenemedi: ' + k.gerekce);
+      console.error('    İlk sürümü elle ver:  ./deploy/electron-paketle.sh $musteri 1.1.1');
+      console.error('    ya da yayındaki sürümü etiketle:  git tag -a panel-v<sürüm> -m panel');
+      process.exit(1);
+    }
+    // Etiket KARAR verir, sunucu DOĞRULAR — gerekçe: scripts/lib/surum.mjs.
+    const yayinda = await yayindakiPanelSurumu('$BASE_URL$musteri/electron/');
+    const kiyas = etiketDefteriKiyasla(k.surum, yayinda);
+    if (kiyas.durum === 'zaten-yayinda') {
+      console.error('  ✖ ' + k.surum + ' ZATEN YAYINDA — ' + k.gerekce);
+      console.error('    Son yayından beri yeni commit yok, yani çıkacak değişiklik de yok.');
+      console.error('    Aynı numaranın üstüne farklı kod yazmak sahada iki ayrı programı');
+      console.error('    aynı isimle dolaştırır — kapı bunun için var.');
+      console.error('    Yeni iş varsa commit et; yarım kalan yüklemeyi tamamlıyorsan:');
+      console.error('      ./deploy/electron-paketle.sh $musteri ' + k.surum);
+      process.exit(1);
+    }
+    if (kiyas.durum === 'bayat') {
+      console.error('  ✖ ETİKET DEFTERİ BAYAT — hesaplanan ' + k.surum + ', yayında ' + yayinda);
+      console.error('    Bu numarayla yayınlamak, sahadakinden ESKİ bir paketi güncel gösterir.');
+      console.error('    Muhtemel sebep: yayın başka bir makineden yapıldı, etiket itilmedi.');
+      console.error('    Çözüm:  git fetch --tags   ya da   git tag -a panel-v' + yayinda + ' -m panel');
+      process.exit(1);
+    }
+    if (kiyas.durum === 'olculemedi') {
+      console.error('  ⚠  Yayındaki sürüm okunamadı; etiket defteri DOĞRULANMADI (internet?).');
+    }
+    console.error('  Sürüm: ' + k.surum + ' — ' + k.gerekce);
+    console.log(k.surum);
+  ") || hata "Sıradaki sürüm hesaplanamadı."
+fi
 
 # --- 1) Müşteriyi ve sürümü tek kaynağa yaz -------------------------------
 mevcut=$(node -p "require('./shared/musteri.json').kod")

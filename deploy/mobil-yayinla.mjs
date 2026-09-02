@@ -30,6 +30,7 @@ import zlib from 'node:zlib';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { etiketAt, manifestGovdesindenSurum } from '../scripts/lib/surum.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MOBIL = path.resolve(HERE, '..', 'mobil');
@@ -520,6 +521,21 @@ async function apkYayinla(apkYol) {
 
 /* ------------------------------------------------------------------ */
 
+/**
+ * Yayınlanan OTA paketinin sürümü — donmuş manifestin `extra.expoClient`inden.
+ *
+ * ⚠️ `mobil/app.json` OKUNMAZ: yayınlanan şey PAKETTİR ve paket üretildikten
+ * sonra çalışma ağacındaki sürüm değişmiş olabilir. Etiket, yayınlanan baytın
+ * taşıdığı numarayı göstermeli.
+ */
+function yayinlananPaketSurumu(paketDizin) {
+  try {
+    return manifestGovdesindenSurum(fs.readFileSync(path.join(paketDizin, 'manifest'), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
 // Yükleme yapmadan mevcut bir yayını denetle. Yayın sonrası "hâlâ ayakta mı"
 // sorusunun ucuz cevabı; ayrıca doğrulama mantığının kendisini sınamanın yolu.
 const paket = arg('paket');
@@ -533,3 +549,29 @@ if (!paket && !apk) {
 }
 if (paket) await paketiYayinla(path.resolve(paket));
 if (apk) await apkYayinla(path.resolve(apk));
+
+/* ------------------------------------------------------------------ *
+ * Sürüm etiketi
+ * ------------------------------------------------------------------ */
+// Bir sonraki turun tabanı budur (`mobil/scripts/yayinla-ota.mjs` okur).
+// Etiket YAYIN BİTTİKTEN sonra atılır — "sahaya çıkan kod tam olarak buydu"
+// kaydıdır, elle verilen bir karar değil.
+//
+// ⚠️ BEST-EFFORT: yayın zaten yapıldı; etiketleme düşerse UYARI basılır.
+// Var olan etiket TAŞINMAZ (aynı turda ikinci müşteri).
+//
+// ⚠️ OTA ve APK AYNI ÇİZGİDEDİR: `app.json > expo.version` hem paketin sürümü
+// hem APK'nın `versionName`idir. İki ayrı ön ek, aynı numarayı iki yerde
+// saydırıp çizgiyi ikiye bölerdi.
+{
+  const etiketSurumu = paket ? yayinlananPaketSurumu(path.resolve(paket)) : arg('surum');
+  if (etiketSurumu) {
+    const t = etiketAt('tablet', etiketSurumu);
+    const mesaj = {
+      atildi: `  ✓ sürüm etiketi atıldı: ${t.ad}`,
+      'zaten-var': `  · sürüm etiketi zaten var: ${t.ad} (aynı tur)`,
+      basarisiz: `  ⚠️ sürüm etiketi atılamadı: ${t.ad} (yayın etkilenmedi)`,
+    }[t.durum];
+    console.log(`\n${mesaj}${t.not ? ` — ${t.not}` : ''}`);
+  }
+}
