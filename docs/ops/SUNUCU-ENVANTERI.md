@@ -16,8 +16,8 @@
 
 ⚠️ Eski sunucu **paylaşımlı**: başka müşterilerin WordPress siteleri, `postgres`,
 `mariadb`, `redis` orada koşuyor. Yeni VDS'in var oluş sebebi budur.
-`demo.etkiliyazilim.com` bilinçli olarak orada kalıyor (`feature/depo-mal-kabul`
-dalından derleniyor, müşteriye gösterim için).
+`demo.etkiliyazilim.com` bilinçli olarak orada kalıyor (müşteriye gösterim için;
+2026-09-02'den beri `main`'den derlenir — `feature/depo-mal-kabul` dalı emekli).
 
 ---
 

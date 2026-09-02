@@ -18,11 +18,27 @@ kaynağı. Akış ve gerekçe: [`docs/ops/DEPLOY-RUNBOOK.md §3`](../docs/ops/DE
 
 | | `D:\tekserp-build\tekserp` | `C:\Etkili-Yazilim\tekserp` |
 |---|---|---|
-| checkout | **tam**, `adnansahin` dalının ucu | sparse — yalnız `Teks-Erp/`, **`deploy/` diskte YOK** |
-| refspec | `+refs/heads/*` | `+refs/heads/main` — **`adnansahin`'i fetch'te GÖRMEZ** (`git pull` bayat kalır, HEAD 7 commit geride kaldı) |
-| kullanım | **paket üretimi + `kur.ps1` kopyası** | kullanma; kullanılacaksa önce `git sparse-checkout add deploy` + `git fetch origin adnansahin:refs/remotes/origin/adnansahin` |
+| checkout | **tam**, `main` dalının ucu (2026-09-02'ye dek `adnansahin`) | sparse — yalnız `Teks-Erp/`, **`deploy/` diskte YOK** |
+| refspec | `+refs/heads/*` | `+refs/heads/main` — yalnız `main`'i görür (2026-09-02'den sonra bu yeterli; eskiden `adnansahin`'i görmediği için 7 commit geride kalmıştı) |
+| kullanım | **paket üretimi + `kur.ps1` kopyası** | kullanma; kullanılacaksa önce `git sparse-checkout add deploy` |
 
 2026-08-25 deploy'u `D:`'den yapıldı; dokümanlar o güne dek `C:`'yi anlatıyordu (yanlıştı).
+
+### ⚠️ 2026-09-02 — `adnansahin` dalı EMEKLİ, build klonu `main`'e alınır (tek seferlik sunucu adımı)
+
+Müşteri dalı kalktı (`docs/design/MODUL-BAYRAK-TASARIM.md` §0); paket artık `main`'den üretilir.
+Build klonu hâlâ `adnansahin`'deyse `git pull` "upstream yok" diye düşer — sıradaki paketlemeden ÖNCE:
+
+```powershell
+# SUNUCUDA — BUILD klonu (D:)
+cd D:\tekserp-build\tekserp
+git fetch --prune origin
+git checkout main
+git pull
+git branch -D adnansahin      # yerel kalıntı; origin'de zaten yok
+```
+
+`paketle.ps1` dal adını yalnız `PAKET.json`a yazar, `kur.ps1` onu yalnız basar — dal adına bağlı bir kapı YOK, `main`'den üretilen paket aynı sözleşmeyle kurulur.
 
 ### `kur.ps1` ↔ `paketle.ps1` sözleşmesi (2026-08-25'te doğrulandı)
 

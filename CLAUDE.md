@@ -10,6 +10,8 @@ Tekstil fabrikası ERP sistemi. Üç alt proje:
 
 Her alt projenin kendi `CLAUDE.md`'si vardır. **Admin frontend değişiklikleri `Electron/`'a yazılır** — `React/` dizini artık yok.
 
+**Dallanma (2026-09-02):** `feature/*` → `main`; **müşteri dalı YOK.** `adnansahin` ve `feature/depo-mal-kabul` dalları emekli edildi (ikisi de `main`'in atası — tek commit kaybolmadı). Tek gövde, tek şema, tek sürüm çizgisi; müşteri farkı yalnız bayrak profilinde yaşar — "adnansahin'de yok" demek "bayrağı kapalı" demek. `if (musteri === 'X')` fork'un ilk sinyalidir, yasak. Tasarım: `docs/design/MODUL-BAYRAK-TASARIM.md` (§12 uygulama kuralları bağlayıcı). Fabrika paketi ve demo derlemesi `main`'den üretilir.
+
 ## Üretim Akışı
 
 ```

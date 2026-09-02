@@ -10,7 +10,8 @@
 #   orada yapilamaz. Paket sunucudaki BUILD klonundan uretilir
 #   (D:\tekserp-build\tekserp - tam klon, dalin ucu; klon kokunde
 #   .\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim). C:\Etkili-Yazilim\tekserp
-#   klonu sparse + dar refspec'tir, adnansahin dalini gormez - paket icin KULLANMA
+#   klonu sparse + dar refspec'tir (yalnizca main) - paket icin KULLANMA. Dal artik
+#   her iki klonda da main (2026-09-02: musteri dali adnansahin emekli edildi).
 #   (bkz. deploy/README.md). Calisan kod hicbir zaman klondan kosmaz.
 #
 # BU DOSYANIN REPODAKI KOPYASI: <repo>/deploy/kur.ps1 - kaynak orasidir. Script
