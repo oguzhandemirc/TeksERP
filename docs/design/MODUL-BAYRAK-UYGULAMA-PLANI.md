@@ -227,6 +227,23 @@ tablosu); `MODULE_DISABLED` makine-okunur kod; `REGIME_GATES` + regime-gate
 bekçileri modül başına bölünür; `test_<modul>_flag_off` ikizleri.
 Grandfathering migration: mevcut DB'ye bugünkü değerler damgalanır.
 
+**P1 — AÇIK KALANLAR (sonraki paketler, kaybolmasın):**
+- **Mobilde `MODULE_DISABLED`ın kullanıcı yüzü YOK** (2026-09-03 ölçümü): modül
+  kapalı tablette ekran menüde durur (`useVisibleScreens.conditional` boş — yalnız
+  izin), her aksiyon jenerik hata toast'ı basar (offline kuyruk 403'ü kesin hata
+  sayıp kalıcı yazmaz, veri riski yok). Adnan'da üretim AÇIK → bugün görünmez.
+  Toptancı profili (üretim kapalı) satıldığı gün ŞART: `announceFailure`a
+  `details.code === "MODULE_DISABLED"` dalı ("Bu modül bu kurulumda kapalı") +
+  `useVisibleScreens.conditional`ı `useFeatureFlags`ten besleme (APK ister).
+- `/api/rolls` karma router: üretim kapalıyken `/open-fabric`, `/:id/kursun-finish`,
+  `/production-flow`, `/subcontractor-summary` AÇIK kalır — uç-bazlı kapı.
+- "Depo & Muhasebe" ayar bölümü hâlâ `financeEnabled` rejiminde (P5 ile birlikte).
+- **Sürüm notu TASLAĞI (kullanıcı ONAYI bekler — paketleme YAPILMAZ):** panel:
+  "Genel Ayarlar → Modüller'e Ticaret · İplik · Çoklu Depo anahtarları eklendi.
+  İplik / Alış Siparişi / Fiyat Listesi / Stok Sayımı ekranlarının kapalı olma
+  sebebi artık Ticaret modülü (eskiden Ön Muhasebe). Fabrikada görünür değişiklik
+  yok." — kapsam `panel`; tablet için not gerekmez.
+
 **P2 · Süperadmin:** yukarıdaki bölüm — şema kolonu + job + `["*"]` bypass +
 `hasAdminAccess` düzeltmesi + 5 gizleme süzgeci + guard dalı. Bekçi:
 `test_superadmin.ts` (gizlilik: 5 yüzeyde görünmez · yetki: her uca girer ·
