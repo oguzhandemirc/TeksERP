@@ -210,7 +210,7 @@ kullanım audit'e.
 
 ## Dilim 1 — iş paketleri (bağımlılık sırasıyla)
 
-**P1 · Modül anahtarları (backend):** 6 yeni anahtar (`ticaret.enabled`,
+**P1 · Modül anahtarları (backend):** ✅ UYGULANDI 2026-09-03 (`feature/modul-bayrak` c94035cc · 251767ca · 06e23448; karar notu arşivde "Modül anahtarları P1"). 6 yeni anahtar (`ticaret.enabled`,
 `iplik.enabled`, `depo.multiEnabled`, `kumasTeknik.enabled`,
 `tezgah.enabled` yer tutucu, `production.enabled` terfisi) — her biri dört
 kapıdan; modül başına ADLANDIRILMIŞ middleware, **ad = `require` +
