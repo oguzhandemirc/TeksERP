@@ -2,7 +2,7 @@
 // STOK SAYIMI GÖRÜNÜRLÜĞÜ — BEKÇİ
 // =============================================================================
 // Kural bir bileşenin içindeki `&&` zinciri olsaydı tersine çevrilmesi hiçbir
-// testi kırmazdı: fabrikada (`finance.enabled` KAPALI) ticaret ekranı belirir ve
+// testi kırmazdı: fabrikada (`ticaret.enabled` KAPALI) ticaret ekranı belirir ve
 // "sıfır görünür fark" garantisi sessizce düşerdi. Bu dosyanın ilk işi o
 // sessizliği imkânsız kılmak.
 //
@@ -24,19 +24,28 @@ import { operationsTiles } from "../tile-config";
 import { STOCK_COUNTS_PATH, isStockCountVisible, stockCountPath } from "./stockCount-regime";
 
 describe("rejim", () => {
-  it("⭐ fabrikada (finance kapalı) GÖRÜNMEZ", () => {
-    expect(isStockCountVisible({ financeEnabled: false })).toBe(false);
+  it("⭐ fabrikada (ticaret modülü kapalı) GÖRÜNMEZ", () => {
+    expect(isStockCountVisible({ ticaretEnabled: false })).toBe(false);
   });
 
   it("ticaret kurulumunda görünür", () => {
-    expect(isStockCountVisible({ financeEnabled: true })).toBe(true);
+    expect(isStockCountVisible({ ticaretEnabled: true })).toBe(true);
+  });
+
+  it("⭐ ÖN MUHASEBEDEN BAĞIMSIZ — muhasebe kapalı ticaret kurulumunda da görünür", () => {
+    // 2026-09-02'ye kadar bu ekran `financeEnabled`e asılıydı; ticaret paketi
+    // ayrıldı. Fatura tutmayan bir alım-satım firması stok sayımı yapar.
+    // ⚠️ Değişkene alınıyor: doğrudan yazılan nesne literali TS'in "fazla alan"
+    // denetimine takılır — yapısal tiplemenin ölçtüğü şey karo bağlamının GEÇMESİ.
+    const tradeNoFinance = { ticaretEnabled: true, financeEnabled: false };
+    expect(isStockCountVisible(tradeNoFinance)).toBe(true);
   });
 
   it("karo bağlamının FAZLA alanları kararı etkilemez (yapısal tip)", () => {
     // tile-config'in geniş bağlamı bu şekli sağlar; yüklem YALNIZ bayrağa bakar.
     // Depo sayısı bilerek sınanıyor: "çok depolu fabrika" da bir fabrikadır ve
     // orada bu ekran görünmemeli (Depo Transferi karosunun kuralı BAŞKADIR).
-    const factory = { financeEnabled: false, multiWarehouse: true, pendingPlannedShipments: 3 };
+    const factory = { ticaretEnabled: false, depoMultiEnabled: true, pendingPlannedShipments: 3 };
     expect(isStockCountVisible(factory)).toBe(false);
   });
 });

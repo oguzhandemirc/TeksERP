@@ -1,18 +1,23 @@
 // =============================================================================
-// DEPO LİSTESİ + "TEK DEPO MU" bayrağı
+// DEPO LİSTESİ + "ÇOK DEPOLU MU" bayrağı
 // =============================================================================
-// ⚠️ FABRİKADA SIFIR GÖRÜNÜR FARK KURALININ ARAYÜZ AYAĞI: aktif depo sayısı 1 ise
-// hiçbir depo yüzeyi çizilmez (seçici, kolon, filtre, transfer karosu). Tek depolu
-// üretici fabrika güncelleme sonrası tek piksel fark görmemeli; ikinci depo
-// açıldığı gün yüzeyler kendiliğinden belirir.
+// ⚠️ FABRİKADA SIFIR GÖRÜNÜR FARK KURALININ ARAYÜZ AYAĞI: çoklu depo modülü
+// kapalıysa hiçbir depo yüzeyi çizilmez (seçici, kolon, filtre, transfer karosu).
+// Tek depolu üretici fabrika güncelleme sonrası tek piksel fark görmemeli.
 //
-// Emsal: mobil `PlaceActions.tsx` — makine/bölüm çipi yalnız seçenek sayısı 1'den
-// büyükken çizilir ("1 tane varsa değişilecek bir yer YOK, madde anlamsız").
+// ⚠️ 2026-09-02 — KARAR VERİDEN DEĞİL BAYRAKTAN OKUNUR. Eskiden `warehouses.length
+// > 1` idi: ikinci depo açan herkes yüzeyleri de açmış oluyordu ve backend'de
+// buna karşılık gelen bir kapı yoktu. Artık `depo.multiEnabled` modül anahtarı
+// tek kaynak — transfer uçlarındaki `requireDepoMultiEnabled` kapısıyla AYNI
+// değeri okur, yani "karo var ama uç 403" (ya da tersi) ayrışması imkânsız.
+// Fabrikanın değeri migration'da AKTİF DEPO SAYISINDAN ölçülerek damgalandı,
+// yani bu geçiş sahada tek piksel fark üretmez.
 //
-// TEK KAYNAK: `multiWarehouse` kararını hiçbir ekran kendi başına hesaplamaz.
-// Kopyalanırsa biri gün gelir "aktif" süzgecini unutur ve pasif depolar sayılır.
+// TEK KAYNAK: `multiWarehouse` kararını hiçbir ekran kendi başına hesaplamaz —
+// hesaplanacak bir şey de kalmadı, okunacak bir bayrak var.
 // =============================================================================
 import { useQuery } from "@tanstack/react-query";
+import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { warehouseService } from "@/pages/Warehouses/service";
 import type { Warehouse } from "@/pages/Warehouses/types";
 import { loadAllForPicker } from "@/lib/picker-loader";
@@ -39,14 +44,21 @@ export function useWarehouses() {
 }
 
 /**
- * Çok depolu kurulum mu? Liste yüklenene kadar `false` döner — yani belirsizken
- * yüzey ÇİZİLMEZ. Bilinçli: yanlış tarafa düşmek "fabrikada bir an için depo
- * kolonu belirip kaybolması" demekti; tersi yalnız bir gecikmedir.
+ * Çok depolu kurulum mu (`depo.multiEnabled`)? Bayrak yüklenene kadar `false`
+ * döner — yani belirsizken yüzey ÇİZİLMEZ. Bilinçli: yanlış tarafa düşmek
+ * "fabrikada bir an için depo kolonu belirip kaybolması" demekti; tersi yalnız
+ * bir gecikmedir.
+ *
+ * ⚠️ `warehouses` dizisi AYNEN döner (seçiciler onu kullanır) — değişen tek şey
+ * kararın KAYNAĞI. `isLoading` de depo listesinin yüklenmesidir: seçici çizmeden
+ * önce beklenecek şey odur, bayrak değil.
  */
 export function useMultiWarehouse(): { multiWarehouse: boolean; warehouses: Warehouse[]; isLoading: boolean } {
   const q = useWarehouses();
+  const flagsQuery = useFeatureFlags();
   const warehouses = q.data ?? [];
-  return { multiWarehouse: warehouses.length > 1, warehouses, isLoading: q.isLoading };
+  const multiWarehouse = flagsQuery.data?.data?.depoMultiEnabled ?? false;
+  return { multiWarehouse, warehouses, isLoading: q.isLoading };
 }
 
 /** Varsayılan depo (tek depolu kurulumda seçici çizilmeden otomatik seçilir). */

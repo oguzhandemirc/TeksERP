@@ -17,10 +17,16 @@
 //     "bedava"); mesaj küçük yardımcı metin olarak gösterilir.
 //
 // ── REJİM KAPISI ────────────────────────────────────────────────────────────
-// `/api/item-prices/*` router'ı `requireFinanceEnabled` taşır — bayrak kapalı
-// fabrikada istek 403 üretir VE interceptor toast basar. Bu yüzden kanca
-// `financeEnabled`'ı KENDİSİ okur ve bayrak kapalıyken istek HİÇ atılmaz;
-// tüketicinin unutabileceği bir kapı değil, kancanın kendi sözleşmesidir.
+// `/api/item-prices/*` router'ı `requireTicaretEnabled` taşır (2026-09-02'ye
+// kadar `requireFinanceEnabled` idi) — kapalı kurulumda istek 403 üretir VE
+// interceptor toast basar. Bu yüzden kanca kapıyı KENDİSİ okur ve modül
+// kapalıyken istek HİÇ atılmaz; tüketicinin unutabileceği bir kapı değil,
+// kancanın kendi sözleşmesidir.
+//
+// ⚠️ OKUNAN BAYRAK ROUTE'UN KAPISIYLA AYNI OLMAK ZORUNDA. `financeEnabled`
+// okunmaya devam etseydi iki yönde de sessiz arıza olurdu: ticaret açık +
+// muhasebe kapalı kurulumda öneri hiç gelmez (sebebi hiçbir yerde yazmaz),
+// tersinde ise her yazımda 403 toast'ı basılırdı.
 //
 // ⚠️ Saf fonksiyonlar (isBlank* / sameSuggestionValue / shouldApply* /
 // computeDueDateSuggestion / describeSuggestion) React'sız test edilir —
@@ -220,8 +226,8 @@ export interface ItemPriceSuggestionArgs {
   /** Müşteri istisnası için CUSTOMER tarafının id'si; fason cari / tedarikçisiz
    *  bağlamda null → kart varsayılanı aranır. */
   customerId?: string | null;
-  /** Ek kapı (ör. salt-okunur form). `financeEnabled` kapısı kancanın KENDİ
-   *  içindedir, buraya taşınmaz. */
+  /** Ek kapı (ör. salt-okunur form). Modül kapısı (`ticaretEnabled`) kancanın
+   *  KENDİ içindedir, buraya taşınmaz. */
   enabled?: boolean;
   /** Alanın ŞU ANKİ değeri — yazma kararı bununla verilir. */
   current: SuggestionValue;
@@ -239,11 +245,11 @@ export interface ItemPriceSuggestionState {
 }
 
 export function useItemPriceSuggestion(args: ItemPriceSuggestionArgs): ItemPriceSuggestionState {
-  const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  const ticaretEnabled = useFeatureFlags().data?.data?.ticaretEnabled ?? false;
   const customerId = args.customerId ?? null;
 
   const active =
-    financeEnabled &&
+    ticaretEnabled &&
     (args.enabled ?? true) &&
     Boolean(args.itemId) &&
     isResolvableCurrency(args.currency);

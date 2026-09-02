@@ -46,17 +46,22 @@ export interface OperationsVisibilityContext {
   /** `shipping.confirmationEnabled` — sevk onayı ara adımı. */
   shipmentConfirmationEnabled: boolean;
   /**
-   * ÇOK DEPOLU kurulum mu (aktif depo > 1)?
+   * ÇOK DEPOLU kurulum mu (`depo.multiEnabled`)?
    *
-   * ⚠️ "Fabrikada sıfır görünür fark" kuralının karo ayağı: tek depolu üretici
-   * fabrikada Depo Transferi karosu ÇİZİLMEZ — orada taşınacak ikinci depo yok
-   * ve karo yalnız gürültü olurdu. İkinci depo açıldığı gün kendiliğinden belirir.
-   * Emsal: mobil `PlaceActions` (seçenek sayısı 1 ise madde anlamsız).
+   * ⚠️ 2026-09-02: bu alan artık VERİDEN TÜRETİLMİYOR (eskiden "aktif depo > 1")
+   * — gerçek bir modül anahtarı. Sebep: türetilmiş durum ikinci depo açılır
+   * açılmaz yüzeyleri getiriyordu; modülü açma kararı artık AÇIK bir karardır ve
+   * backend kapısıyla (`requireDepoMultiEnabled`, transfer uçları) aynı kaynaktan
+   * beslenir. Adı `depoMultiEnabled` — bayrağın adıyla birebir (ctx'te ikinci bir
+   * ad, "hangisi asıl" sorusunu doğururdu).
+   *
+   * "Fabrikada sıfır görünür fark" kuralının karo ayağı: fabrikada anahtar
+   * KAPALI damgalandı (migration ölçtü) → Depo Transferi karosu ÇİZİLMEZ.
    *
    * Mal Kabul karosu bu bayrağa BAĞLANMAZ — tek depolu bir alım-satım firması da
    * onu kullanır; orada kapı İZİNDİR (`goods-receipt:*`, hiçbir varsayılan rolde yok).
    */
-  multiWarehouse: boolean;
+  depoMultiEnabled: boolean;
   /**
    * Ön muhasebe modülü açık mı (`finance.enabled`) — fiilen "bu bir TİCARET
    * kurulumu" anahtarı. Tanımlar menüsünün cari rejimi buna bakar: bayrak
@@ -70,17 +75,37 @@ export interface OperationsVisibilityContext {
    * Üretim modülü açık mı (`production.enabled`, varsayılan AÇIK). Belirsizken
    * TRUE'ya düşülür — backend varsayılanı da odur.
    *
-   * ⚠️ ALAN LOAD-BEARING AMA BUGÜN HİÇBİR KARARI DEĞİŞTİRMİYOR, ve bu bilinçli:
-   * komut paletinin Genel Ayarlar girişleri `settingsCategoryVisibleWhen`
+   * ⚠️ ALAN LOAD-BEARING AMA BUGÜN HİÇBİR KARO KARARINI DEĞİŞTİRMİYOR, ve bu
+   * bilinçli: komut paletinin Genel Ayarlar girişleri `settingsCategoryVisibleWhen`
    * yüklemini TAŞIYOR (kopyalamıyor) ve o yüklem `SettingsRegime` bekliyor —
-   * yani bu bağlamın iki rejim anahtarını da taşıması TİP ZORUNLULUĞU. Bugün
-   * hiçbir ayar kategorisi `productionEnabled` ile kapılı DEĞİL, çünkü backend'de
-   * `requireProductionEnabled` diye bir kapı yok ve o ayarların yönettiği
-   * davranışlar (KK1 tuzağı, scan-back, Tambur aşımı, parti no biçimi) bayrak
-   * kapalıyken de koşuyor — gizlemek yalnız geri dönüş yolunu kapatırdı.
+   * yani bu bağlamın iki rejim anahtarını da taşıması TİP ZORUNLULUĞU.
+   *
+   * 2026-09-02: backend'de artık `requireProductionEnabled` diye GERÇEK bir kapı
+   * var (route · iş emri · tambur · kurşun · parti · refakat kartı router'ları).
+   * Karoların ve ayar kategorilerinin bu bayrağın arkasına alınması yine de ayrı
+   * bir paketin işidir (P5) — bugün kapı arkasında OLMAYAN yüzeyler de var
+   * (`/api/rolls` bilinçli kapısız), yani gizlemek yanlış vaat olurdu.
    * Ölçen bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14.
    */
   productionEnabled: boolean;
+  /**
+   * TİCARET modülü açık mı (`ticaret.enabled`)? Alış siparişi · mal kabul · fiyat
+   * listesi · stok sayımı yüzeylerinin rejim kapısı. Backend ikizi
+   * `requireTicaretEnabled`. Belirsizken FALSE (fabrika görünümü — "sıfır fark").
+   *
+   * ⚠️ `financeEnabled` ile AYNI ŞEY DEĞİL: 2026-09-02'ye kadar bu ekranlar
+   * ön muhasebe bayrağına asılıydı; ticaret paketi ondan ayrıldı. Bir kurulum
+   * fatura tutmadan alım-satım yapabilir (ticaret açık, muhasebe kapalı).
+   */
+  ticaretEnabled: boolean;
+  /**
+   * İPLİK modülü açık mı? ⚠️ Buradaki değer ETKİN değerdir
+   * (`ticaretEnabled && iplikEnabled`) — bağımlılık TEK YERDE, bağlamı kuran
+   * `useOperationsVisibilityContext` içinde çözülür. Karo yüklemleri zinciri
+   * yeniden kurmaz; kurarlarsa bir gün biri unutur ve ticaret kapalıyken iplik
+   * karosu belirir (backend yine 403 verir → tıklanan boş ekran).
+   */
+  iplikEnabled: boolean;
 }
 
 export interface OperationsTile {
@@ -160,7 +185,7 @@ export const operationsTiles: OperationsTile[] = [
     group: "warehouse",
     // Kapı İZİN: bu ekran yalnız alım-satım kurulumundadır (üretici fabrika malı
     // KK1'den alır) ve izin hiçbir varsayılan rol şablonunda YOK.
-    // ⚠️ `multiWarehouse` şartı KONMAZ — tek depolu ticaret firması da kullanır.
+    // ⚠️ `depoMultiEnabled` şartı KONMAZ — tek depolu ticaret firması da kullanır.
     permission: "goods-receipt:read",
   },
   // ── Paket D (2026-08-14) — ticaret paketi ─────────────────────────────────
@@ -199,7 +224,7 @@ export const operationsTiles: OperationsTile[] = [
     permission: "warehouse:transfer",
     // Tek depolu kurulumda taşınacak ikinci depo YOK → karo çizilmez (fabrikada
     // sıfır görünür fark). İkinci depo açıldığı gün kendiliğinden belirir.
-    visibleWhen: (ctx) => ctx.multiWarehouse,
+    visibleWhen: (ctx) => ctx.depoMultiEnabled,
   },
   {
     key: "stock-counts",

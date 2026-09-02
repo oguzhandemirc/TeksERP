@@ -32,7 +32,9 @@ let regime = { productionEnabled: true, financeEnabled: false };
 vi.mock("@/pages/Operations/useOperationsVisibility", () => ({
   useOperationsVisibilityContext: (): OperationsVisibilityContext => ({
     shipmentConfirmationEnabled: false,
-    multiWarehouse: false,
+    depoMultiEnabled: false,
+    ticaretEnabled: false,
+    iplikEnabled: false,
     ...regime,
   }),
 }));

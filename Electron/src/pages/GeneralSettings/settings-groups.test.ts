@@ -128,9 +128,11 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
     }
   });
 
-  // ⭐ Mal Kabul'ün ayarları HER REJİMDE ulaşılabilir. Ekranın kendisi rejimsiz
-  // (`goods-receipt.routes.ts`te `requireFinanceEnabled` YOK) ve enforcement
-  // koşuluyor; gizlenirlerse "açtım, kapatamıyorum" çıkmazı doğar.
+  // ⭐ Mal Kabul'ün ayarları HER REJİMDE ulaşılabilir. Ekranın kapısı
+  // `financeEnabled` DEĞİLDİR (2026-09-02'den beri `requireTicaretEnabled`) ve
+  // enforcement koşuyor; gizlenirlerse "açtım, kapatamıyorum" çıkmazı doğar.
+  // Kategori bir gün `ticaretEnabled` ile kapılanacaksa o ayrı bir karardır
+  // (P5) — bu pakette hiçbir kategorinin rejimi değişmedi.
   it("depo/satın alma kategorisi rejimden BAĞIMSIZ (kapatılamaz ayar çıkmazı)", () => {
     const warehouse = SETTINGS_CATEGORIES.find((c) => c.id === "warehouse");
     expect(warehouse?.regime).toBeUndefined();
@@ -142,10 +144,11 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
     }
   });
 
-  // `productionEnabled` bugün hiçbir kategoriyi kapılayamaz: backend'de
-  // `requireProductionEnabled` yok, mobil bayrağı hiç taşımıyor ve İş Emirleri /
-  // Kartela karoları `visibleWhen` taşımıyor — yani bayrak kapalıyken de o
-  // ayarların yönettiği davranışlar koşuyor.
+  // `productionEnabled` bugün hiçbir kategoriyi kapılamaz. GEREKÇE 2026-09-02'de
+  // DEĞİŞTİ: backend'de artık `requireProductionEnabled` diye gerçek bir kapı VAR,
+  // ama bu kategorilerdeki ayarların yönettiği davranışların bir kısmı o kapının
+  // ARKASINDA DEĞİL (`/api/rolls` bilinçli kapısız) — yani bayrak kapalıyken de
+  // koşuyorlar. Kategorileri kapatmak ayrı bir paketin işi (P5).
   it("üretim/kalite kategorileri rejimden BAĞIMSIZ (yüzeyleri de öyle)", () => {
     for (const id of ["work-orders", "production", "kartela"]) {
       expect(SETTINGS_CATEGORIES.find((c) => c.id === id)?.regime, id).toBeUndefined();

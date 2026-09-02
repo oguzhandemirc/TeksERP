@@ -2,7 +2,7 @@
 // İPLİK KG-STOK GÖRÜNÜRLÜĞÜ — BEKÇİ
 // =============================================================================
 // Kural bir bileşenin içindeki `&&` zinciri olsaydı tersine çevrilmesi hiçbir
-// testi kırmazdı: fabrikada (finance.enabled KAPALI) ticaret ekranı belirir ve
+// testi kırmazdı: fabrikada (iplik.enabled KAPALI) ticaret ekranı belirir ve
 // "sıfır görünür fark" garantisi sessizce düşerdi. Bu dosyanın tek işi o
 // sessizliği imkânsız kılmak.
 //
@@ -20,17 +20,27 @@ import { YARN_KINDS, YARN_KIND_META } from "./service";
 import { EMPTY_YARN_FILTERS, yarnEmptyStateMessage } from "./YarnFilterBar";
 
 describe("rejim", () => {
-  it("fabrikada (finance kapalı) GÖRÜNMEZ", () => {
-    expect(isYarnStockVisible({ financeEnabled: false })).toBe(false);
+  it("fabrikada (iplik modülü kapalı) GÖRÜNMEZ", () => {
+    expect(isYarnStockVisible({ iplikEnabled: false })).toBe(false);
   });
 
-  it("ticaret kurulumunda görünür", () => {
-    expect(isYarnStockVisible({ financeEnabled: true })).toBe(true);
+  it("iplik modülü açıkken görünür", () => {
+    expect(isYarnStockVisible({ iplikEnabled: true })).toBe(true);
+  });
+
+  it("⭐ yüklem TİCARETE BAKMAZ — bağımlılık tek yerde (bağlamı kuran hook) çözülür", () => {
+    // Ticaret kapalı + iplik açık bir bağlam buraya GELMEZ: etkin değeri
+    // `useOperationsVisibilityContext` hesaplar (ticaret && iplik). Zinciri
+    // burada ikinci kez kurmak iki kopya demekti — biri gün gelir ayrışırdı.
+    // ⚠️ Değişkene alınıyor: doğrudan nesne literali TS'in "fazla alan" denetimine
+    // takılır; ölçülen şey yüklemin ticaret alanına HİÇ bakmadığıdır.
+    const effectiveOnly = { iplikEnabled: true, ticaretEnabled: false };
+    expect(isYarnStockVisible(effectiveOnly)).toBe(true);
   });
 
   it("karo bağlamının FAZLA alanları kararı etkilemez (yapısal tip)", () => {
     // tile-config'in geniş bağlamı bu şekli sağlar; yüklem yalnız bayrağa bakar.
-    const ctx = { financeEnabled: false, multiWarehouse: true, pendingPlannedShipments: 3 };
+    const ctx = { iplikEnabled: false, depoMultiEnabled: true, pendingPlannedShipments: 3 };
     expect(isYarnStockVisible(ctx)).toBe(false);
   });
 });

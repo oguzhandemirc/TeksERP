@@ -1,9 +1,9 @@
 // =============================================================================
 // TAM STOK SAYIMI — GÖRÜNÜRLÜK REJİMİ (saf katman)
 // =============================================================================
-// NEDEN SAF FONKSİYON: stok sayımı TİCARET paketine aittir. Üretici fabrikada
-// `finance.enabled` KAPALIDIR ve bu ekran orada HİÇ çizilmemelidir ("sıfır
-// görünür fark" kuralı). Kural bir bileşenin içindeki `&&` zinciri olarak
+// NEDEN SAF FONKSİYON: stok sayımı TİCARET modülüne aittir (`ticaret.enabled`;
+// 2026-09-02'ye kadar `finance.enabled`'a asılıydı). Üretici fabrikada anahtar
+// KAPALIDIR ve bu ekran orada HİÇ çizilmemelidir ("sıfır görünür fark" kuralı). Kural bir bileşenin içindeki `&&` zinciri olarak
 // bırakılsaydı tersine çevrilmesi HİÇBİR TESTİ KIRMAZDI — projenin yazılı
 // deseni bu yüzden saf yüklem: `canQuickShip`, `isYarnStockVisible`,
 // `isPurchaseOrdersVisible`. Bekçi: `stockCount-regime.test.ts`.
@@ -11,7 +11,7 @@
 // ⚠️ BU BİR YETKİ DUVARI DEĞİLDİR. Erişimin kapısı İZİNDİR (`warehouse:read` /
 // `warehouse:transfer` / `roll:manual-adjust` + `yarn:write`) ve asıl sed
 // BACKEND'dedir: `stock-count.routes.ts` router'ın tamamına önce
-// `requireFinanceEnabled`, sonra uç bazında `requirePermission` uygular.
+// `requireTicaretEnabled`, sonra uç bazında `requirePermission` uygular.
 // Buradaki kural yalnız "menüde/palette çizilsin mi" sorusunu cevaplar; adres
 // çubuğundan girilen route çalışmaya devam eder ve veri yine backend kapısına
 // takılır.
@@ -31,13 +31,13 @@
  * karo bağlamına bağımlı olmaz ve bekçisi tek satırla kurulur.
  */
 export interface StockCountVisibilityContext {
-  /** `finance.enabled` — fiilen "bu bir TİCARET kurulumu" anahtarı. */
-  financeEnabled: boolean;
+  /** `ticaret.enabled` — ticaret modülü (ön muhasebeden BAĞIMSIZ). */
+  ticaretEnabled: boolean;
 }
 
 /** Stok Sayımı karosu / menü satırı / palet girişi çizilsin mi? */
 export function isStockCountVisible(ctx: StockCountVisibilityContext): boolean {
-  return ctx.financeEnabled;
+  return ctx.ticaretEnabled;
 }
 
 /**

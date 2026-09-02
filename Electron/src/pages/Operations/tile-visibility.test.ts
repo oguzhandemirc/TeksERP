@@ -25,11 +25,16 @@ function ctx(
   return {
     shipmentConfirmationEnabled: false,
     // Varsayılan TEK DEPO (fabrika kurulumu) — depo yüzeyleri çizilmemeli.
-    multiWarehouse: false,
+    depoMultiEnabled: false,
     // Varsayılan FABRİKA rejimi (muhasebe kapalı) — Cariler karosu çizilmemeli.
     financeEnabled: false,
     // Üretim modülü varsayılan AÇIK (backend default'u ile aynı yön).
     productionEnabled: true,
+    // Ticaret ve iplik modülleri fabrikada KAPALI (migration'ın damgaladığı
+    // değerler) — alış siparişi / stok sayımı / iplik karoları çizilmemeli.
+    ticaretEnabled: false,
+    // ⚠️ ETKİN değer (ticaret && iplik) — bağlamı kuran hook zinciri çözer.
+    iplikEnabled: false,
     ...over,
   };
 }
@@ -63,7 +68,7 @@ describe("karo bağlantıları", () => {
     // ⚠️ KONTROL BİÇİMİ DEĞİŞTİ, NİYETİ DEĞİL (2026-09-01, birleştirme).
     // Eskiden `Object.keys(ctx())` tek elemanlıydı ve bu, "bağlama sayaç geri
     // eklenmedi" iddiasının vekiliydi. Depo/muhasebe karoları bağlama MEŞRU
-    // alanlar getirdi (`multiWarehouse` → Depo Transferi, `financeEnabled` →
+    // alanlar getirdi (`depoMultiEnabled` → Depo Transferi, `financeEnabled` →
     // Cariler/İplik) — anahtar listesini kilitlemek artık o meşru alanları da
     // yasaklar. Asıl iddia doğrudan yazılıyor: bağlamda SAYAÇ/SONDA yok ve
     // Sevk Kapısı yalnız bayrağa bakar.
@@ -73,17 +78,21 @@ describe("karo bağlantıları", () => {
     ).toEqual([]);
     // Diğer alanlar ne olursa olsun karar DEĞİŞMEZ — yüklem saf bayraktır.
     expect(
-      predicate?.(ctx({ multiWarehouse: true, financeEnabled: true, productionEnabled: false })),
+      predicate?.(
+        ctx({ depoMultiEnabled: true, financeEnabled: true, productionEnabled: false }),
+      ),
     ).toBe(false);
   });
 
-  it("⭐ Depo Transferi TEK depoda çizilmez, ikinci depo açılınca belirir", () => {
+  it("⭐ Depo Transferi çoklu depo modülü KAPALIYKEN çizilmez", () => {
     const predicate = tile("warehouse-transfers")?.visibleWhen;
     expect(predicate).toBeDefined();
-    // Fabrika kurulumu (tek depo): karo YOK — "sıfır görünür fark" kuralı.
+    // Fabrika kurulumu (modül kapalı): karo YOK — "sıfır görünür fark" kuralı.
     expect(predicate?.(ctx())).toBe(false);
-    // İkinci depo açıldığı an kendiliğinden görünür.
-    expect(predicate?.(ctx({ multiWarehouse: true }))).toBe(true);
+    // ⚠️ 2026-09-02: kapı artık depo SAYISI değil, `depo.multiEnabled` modül
+    // anahtarı — ikinci depo açmak tek başına yüzeyi getirmez (backend transfer
+    // uçları da aynı anahtarla kapılı; ayrışırsa karo var / uç 403 olurdu).
+    expect(predicate?.(ctx({ depoMultiEnabled: true }))).toBe(true);
   });
 
   it("Mal Kabul karosu depo sayısına BAĞLI DEĞİL (kapısı izindir)", () => {

@@ -1,7 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useShipmentConfirmationEnabled } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
-import { useMultiWarehouse } from "@/hooks/useWarehouses";
 import { useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { sackStoreService } from "./SackStore/service";
 import type { OperationsVisibilityContext } from "./tile-config";
@@ -24,12 +23,24 @@ import type { OperationsVisibilityContext } from "./tile-config";
 export function useOperationsVisibilityContext(): OperationsVisibilityContext {
   const shipmentConfirmationEnabled = useShipmentConfirmationEnabled();
   const { hasPermission } = useRoleAccess();
-  const { multiWarehouse } = useMultiWarehouse();
   const flagsQuery = useFeatureFlags();
   const financeEnabled = flagsQuery.data?.data?.financeEnabled ?? false;
   // Backend varsayılanı AÇIK — belirsizken de açık kabul edilir (panelin her
   // yerindeki yazım: `productionEnabled ?? true`).
   const productionEnabled = flagsQuery.data?.data?.productionEnabled ?? true;
+  const ticaretEnabled = flagsQuery.data?.data?.ticaretEnabled ?? false;
+  // ⚠️ ETKİN DEĞER, HAM DEĞİL — bağımlılık (iplik → ticaret) panelde TEK yerde
+  // çözülür: burada. Backend de aynı kuralı kapının içinde uygular; ham değer
+  // yalnız Genel Ayarlar toggle'ının kendi yazdığını geri okuması için döner.
+  // Zinciri karo yüklemlerine dağıtmak, bir gün birinin unutması demekti.
+  const iplikEnabled =
+    ticaretEnabled && (flagsQuery.data?.data?.iplikEnabled ?? false);
+  // 2026-09-02: ÇOK DEPO artık veri türevi DEĞİL, modül anahtarı. Eskiden
+  // `useMultiWarehouse()` (aktif depo > 1) okunuyordu — o hook da artık aynı
+  // bayrağı okuyor, yani tek kaynak korunuyor. Buradan çağrılmamasının sebebi
+  // depo listesi sorgusunun bu ekranda hiç gerekmemesi (hub her açılışta
+  // kimsenin okumadığı bir istek atıyordu — 2026-09-01 sondasının aynısı).
+  const depoMultiEnabled = flagsQuery.data?.data?.depoMultiEnabled ?? false;
 
   // ⚠️ ÇIKIŞ BEKLEYEN SEVKİYAT SONDASI KALDIRILDI (2026-09-01, birleştirme).
   // 2026-08-22 kararı Sevk Kapısı karosunu SAF BAYRAĞA bağladı ve `sack-store/
@@ -41,8 +52,8 @@ export function useOperationsVisibilityContext(): OperationsVisibilityContext {
     shipmentConfirmationEnabled,
     financeEnabled,
     productionEnabled,
-    // Tek kaynak `useMultiWarehouse` — karar burada YENİDEN hesaplanmaz
-    // (kopyalansa biri gün gelir "aktif" süzgecini unuturdu).
-    multiWarehouse,
+    ticaretEnabled,
+    iplikEnabled,
+    depoMultiEnabled,
   };
 }

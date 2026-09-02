@@ -3,9 +3,9 @@
 // =============================================================================
 // NEDEN AYRI BİR MODÜL ve neden SATIR İÇİ OK FONKSİYONU DEĞİL:
 //
-// ① SAF KATMAN KURALI — alış siparişi TİCARET paketine aittir. Üretici
-//    fabrikada `finance.enabled` KAPALIDIR ve bu ekran hiçbir yerde
-//    görünmemelidir ("sıfır görünür fark"). Kural bir bileşenin içindeki `&&`
+// ① SAF KATMAN KURALI — alış siparişi TİCARET modülüne aittir (`ticaret.enabled`;
+//    2026-09-02'ye kadar `finance.enabled`'a asılıydı). Üretici fabrikada anahtar
+//    KAPALIDIR ve bu ekran hiçbir yerde görünmemelidir ("sıfır görünür fark"). Kural bir bileşenin içindeki `&&`
 //    zinciri olarak bırakılsaydı tersine çevrilmesi HİÇBİR TESTİ KIRMAZDI;
 //    projenin yazılı deseni bu yüzden saf yüklem (`canQuickShip`,
 //    `resolveRollTabs`, `orders-regime.ts`, `yarn-regime.ts`).
@@ -20,7 +20,7 @@
 //
 // ⚠️ BU BİR YETKİ DUVARI DEĞİLDİR. Erişimin kapısı İZİNDİR
 // (`purchase-order:read` / `:write`) ve asıl sed BACKEND'dedir:
-// `purchase-order.routes.ts` her uçta ÖNCE `requireFinanceEnabled`, sonra
+// `purchase-order.routes.ts` her uçta ÖNCE `requireTicaretEnabled`, sonra
 // `requirePermission` uygular. Buradaki kural yalnız "menüde çizilsin mi"
 // sorusunu cevaplar.
 //
@@ -37,11 +37,11 @@
  * kurulur.
  */
 export interface PurchaseOrderVisibilityContext {
-  /** `finance.enabled` — fiilen "bu bir TİCARET kurulumu" anahtarı. */
-  financeEnabled: boolean;
+  /** `ticaret.enabled` — ticaret modülü (ön muhasebeden BAĞIMSIZ). */
+  ticaretEnabled: boolean;
 }
 
 /** Alış siparişleri karosu / komut paleti girişi çizilsin mi? */
 export function isPurchaseOrdersVisible(ctx: PurchaseOrderVisibilityContext): boolean {
-  return ctx.financeEnabled;
+  return ctx.ticaretEnabled;
 }

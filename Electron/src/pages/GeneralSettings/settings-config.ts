@@ -80,10 +80,15 @@ export interface FlagDef {
    * Toggle AÇIKKEN altında çizilen sayısal alan (opsiyonel) — "bayrak + eşik"
    * ikilisi tek satırda, TEK Kaydet altında yaşasın diye.
    *
-   * ⚠️ İç alan adı `numberKey` — `key:` OLMAMALI: sözleşme bekçisi
-   * (`test_feature_flag_contract.ts`) panel kümesini satır başı `key: "..."`
-   * regex'iyle okur; `key` adıyla yazılsaydı sayısal anahtar boolean D kümesine
-   * sızar ve bekçi yanlış şey ölçerdi.
+   * ⚠️ İç alan adı `numberKey` — düz `key` OLMAMALI: sözleşme bekçisi
+   * (`test_feature_flag_contract.ts`) panel kümesini alan adına bakarak okur ve
+   * boolean bayrakları düz `key` alanından toplar; sayısal anahtar da o adla
+   * yazılsaydı boolean D kümesine sızar ve bekçi yanlış şey ölçerdi.
+   * (Kural GİRİNTİ ya da satır başı DEĞİL — regex 2026-09-03'te biçimden
+   * kurtarıldı; Prettier'ın nesneyi tek satıra alması artık yanlış kırmızı
+   * üretmiyor. Bu yorumda örnek bir alan yazımı GÖSTERİLMEZ: bekçi kaynağı
+   * tarar ve yorumdaki örnek de kümeye hayalet bir anahtar eklerdi — birebir
+   * yaşandı, `system-setting.service.ts`teki aynı ders.)
    */
   numberField?: {
     numberKey: NumberFlagKey;
@@ -222,10 +227,10 @@ export type SettingsSectionId =
  * öğesidir; "Depo & Muhasebe" başlığı altında hem rejime bağlı (Muhasebe) hem
  * bağlı olmayan (Depo & Satın Alma) bir sekme yan yana durur. Kapıyı başlığa
  * koymak, kapsamı yerleşim tercihine bağlar ve tam da 2026-08-15'te olan şeyi
- * yapar: `goodsReceiptRequirePriceEnabled` (Mal Kabul ekranı rejimden BAĞIMSIZ,
- * `goods-receipt.routes.ts`te `requireFinanceEnabled` YOK) `financeEnabled`
- * kapatılınca panelden tamamen kaybolur ve mal kabul fişleri 400 almaya devam
- * ederdi. Bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14 — panelde
+ * yapar: `goodsReceiptRequirePriceEnabled` (Mal Kabul ekranının kapısı
+ * `financeEnabled` DEĞİLDİR — 2026-09-02'den beri `requireTicaretEnabled`)
+ * `financeEnabled` kapatılınca panelden tamamen kaybolur ve mal kabul fişleri
+ * 400 almaya devam ederdi. Bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14 — panelde
  * rejimle gizlenen HER bayrağın okuyucusunu tarar ve rejimsiz bir route'tan
  * ulaşılabiliyorsa kırmızı verir.
  *
@@ -238,14 +243,20 @@ export type SettingsSectionId =
  * ⚠️ Rejim ANAHTARLARININ KENDİSİ koşulsuz görünen "Modüller" kategorisinde
  * yaşar, asla kapılı bir kategoride.
  *
- * NOT — `productionEnabled` bugün HİÇBİR kategoriyi kapılamaz ve bu bir eksik
- * değil ÖLÇÜMDÜR: backend'de `requireProductionEnabled` diye bir middleware
- * YOKTUR, mobil `featureFlag.service` bu alanı hiç taşımaz ve İş Emirleri /
- * Kartela karoları `visibleWhen` taşımaz. Yani bayrak kapatılsa bile KK1 tuzağı,
- * scan-back doğrulaması, Tambur aşım kesimi ve parti no biçimi aynen çalışır —
- * ayarlarını gizlemek yalnız geri dönüş yolunu kapatırdı. Gün gelir üretim
- * yüzeyleri gerçekten rejim kapısına alınırsa bu anahtar burada kullanılabilir;
- * o güne kadar §14 onu reddeder.
+ * NOT — `productionEnabled` bugün yine HİÇBİR kategoriyi kapılamaz, ama gerekçe
+ * 2026-09-02'de DEĞİŞTİ: backend'de artık `requireProductionEnabled` diye gerçek
+ * bir kapı VAR (route.routes · workorder.routes · tambur.routes · … on router).
+ * Kategorileri kapılamamasının bugünkü sebebi başka: bu kategorilerdeki ayarların
+ * yönettiği davranışların bir kısmı (KK1 tuzağı, scan-back, parti no biçimi)
+ * üretim kapısının ARKASINDA DEĞİL — mobil `/api/rolls` bilinçli olarak kapısız.
+ * Gizlemek yine yalnız geri dönüş yolunu kapatırdı. Modül-kapalı kategorilerin
+ * salt-okunur bandı ayrı bir paketin işidir (P5); o gün bu union genişler.
+ * §14 o güne kadar `productionEnabled`ı bir kategori kapısı olarak reddeder.
+ *
+ * ⚠️ Aynı sebeple `ticaretEnabled`/`iplikEnabled`/`depoMultiEnabled` de bu union'a
+ * GİRMEDİ: anahtarların kendisi eklendi (aşağıdaki "Modüller" kategorisi), ama
+ * hiçbir kategori onların arkasına alınmadı — "Depo & Muhasebe" bölümü hâlâ
+ * `financeEnabled`e bağlıdır ve o karar bu pakette değişmedi.
  */
 export type SettingsRegimeKey = "productionEnabled" | "financeEnabled";
 
@@ -320,9 +331,9 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     label: "Modüller",
     icon: Blocks,
     description:
-      "Bu kurulumda hangi modüller açık — üretim ve ön muhasebe. Menüler, ekranlar ve otomatik kancalar bu iki anahtara bakar.",
+      "Bu kurulumda hangi modüller açık. Menüler, ekranlar, backend kapıları ve otomatik kancalar bu anahtarlara bakar.",
     keywords:
-      "modül rejim üretim muhasebe ön muhasebe finance production aç kapat kurulum fabrika ticaret alım satım menü gizle",
+      "modül rejim üretim muhasebe ön muhasebe finance production aç kapat kurulum fabrika ticaret alım satım iplik kg depo çoklu depo transfer menü gizle",
     kind: "flags",
     section: "modules",
     flags: [
@@ -344,6 +355,41 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Muhasebeci", "Yönetim"],
         desc: "Kapalıyken (varsayılan) menüde 'Muhasebe' satırı çizilmez, ekranlar açılmaz ve sevkiyattan otomatik fatura taslağı ÜRETİLMEZ. Bu bir görünürlük ayarı değil rejim anahtarıdır — kapatmak mevcut kayıtları silmez, yalnız modülü devre dışı bırakır. Ekranları görmek için ayrıca 'finance:*' yetkisi gerekir. Ayarlar ekranında da 'Depo & Muhasebe' bölümü bu anahtara bağlıdır.",
       },
+      // ⚠️ SIRA LOAD-BEARING (görsel değil, iş sırası): İplik satırı Ticaret'in
+      // ALTINDA durur çünkü backend bağımlılığı öyle — ticaret kapalıyken iplik
+      // açılamaz (400 MODULE_DEPENDENCY). Kullanıcı listeyi yukarıdan aşağı
+      // okuyup açtığında doğru sırayı kendiliğinden uygular.
+      {
+        key: "ticaretEnabled",
+        title: "Ticaret modülünü aç",
+        summary:
+          "Alış siparişi, mal kabul, fiyat listeleri ve stok sayımı ekranları açılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Muhasebeci", "Yönetim"],
+        desc: "Kapalıyken (üretici fabrikanın varsayılanı) alış siparişi · mal kabul · fiyat listesi · stok sayımı uçları 403 verir ve karoları çizilmez. Ön muhasebeden BAĞIMSIZDIR: bu anahtar MAL hareketinin ticari yüzünü açar, 'Ön muhasebe' ise cari/fatura defterini. Alım-satım yapan bir firmada ikisi de açıktır; yalnız üretim yapan fabrikada ikisi de kapalı kalır.",
+      },
+      {
+        key: "iplikEnabled",
+        title: "İplik modülünü aç",
+        summary:
+          "İplik kg stok defteri ve hareketleri (giriş/çıkış/sayım düzeltmesi) açılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) iplik kg defteri uçları 403 verir ve karo çizilmez. ⚠️ TİCARET MODÜLÜNE BAĞLIDIR: Ticaret kapalıyken bu anahtar açılamaz (kaydetmede hata verir) ve açık bırakılmış olsa bile ekran çalışmaz. Kapatma sırası da terstir — önce İplik, sonra Ticaret kapatılır.",
+      },
+      {
+        key: "depoMultiEnabled",
+        title: "Çoklu depo modülünü aç",
+        summary:
+          "Depo seçicileri, listelerdeki depo kolonu ve depolar arası transfer ekranı açılır.",
+        defaultOn: false,
+        audience: ["Depocu", "Yönetim"],
+        desc: "Kapalıyken (tek depolu kurulumun varsayılanı) depo seçicileri ve depo kolonu çizilmez, Depo Transferi karosu görünmez ve transfer uçları 403 verir — tek depoda taşınacak ikinci bir yer yoktur. Depo TANIMI ve depo defteri bu anahtardan BAĞIMSIZDIR: kapalıyken de depo kartı açılabilir, hareketler yazılmaya devam eder. ⚠️ Bu karar 2026-09-02'ye kadar depo SAYISINDAN türetiliyordu; artık açık bir anahtar — ikinci depoyu açmak yüzeyleri kendiliğinden getirmez, bu satır da açılmalıdır.",
+      },
+      // ⚠️ `kumasTeknikEnabled` ve `tezgahEnabled` BİLEREK BURADA YOK: arkalarında
+      // henüz hiçbir yüzey/kapı yok, satırları yalnız "açtım ama hiçbir şey
+      // olmadı" üretirdi. Backend sözleşme bekçisinde gerekçeli muaf listesinde
+      // (`PANEL_EXEMPT`) duruyorlar; yüzey doğduğu gün buraya eklenirler.
     ],
   },
   {

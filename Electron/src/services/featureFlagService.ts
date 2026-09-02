@@ -264,8 +264,27 @@ export interface FeatureFlags {
    *  (default false = stok yalnız sevkte düşer). ⚠️ Sevkten de düşen kurulumda
    *  açmak ÇİFTE DÜŞÜM olur — rejim sorusudur, ek güvence değil. */
   financeYarnOutOnInvoiceEnabled: boolean;
-  /** Üretim modülü — envanter üretim sekmeleri + iş emri yüzeyleri. Varsayılan AÇIK. */
+  /** Üretim modülü — envanter üretim sekmeleri + iş emri yüzeyleri. Varsayılan AÇIK.
+   *  2026-09-02: artık gerçek bir backend kapısı var (`requireProductionEnabled`). */
   productionEnabled: boolean;
+  /** Ticaret modülü (alış siparişi · mal kabul · fiyat listeleri · stok sayımı).
+   *  Varsayılan KAPALI. `financeEnabled` ile BAĞIMSIZ: o cari/fatura defterini,
+   *  bu MAL hareketinin ticari yüzünü açar. Backend kapısı `requireTicaretEnabled`. */
+  ticaretEnabled: boolean;
+  /** İplik modülü (kg defteri — iplik stok ve hareketleri). Varsayılan KAPALI.
+   *  ⚠️ TİCARETE BAĞIMLI: bu alan HAM değerdir (panel toggle'ı kendi yazdığını geri
+   *  okusun diye). Etkin değer `ticaretEnabled && iplikEnabled` — panelde TEK yerde
+   *  çözülür (`useOperationsVisibilityContext`), backend'de kapının içinde. */
+  iplikEnabled: boolean;
+  /** Çoklu depo modülü (depo seçici · depo kolonu · depolar arası transfer).
+   *  Varsayılan KAPALI. ⚠️ 2026-09-02'ye kadar bu karar VERİDEN türetiliyordu
+   *  (aktif depo > 1); artık gerçek bir anahtar — `useMultiWarehouse` bunu okur. */
+  depoMultiEnabled: boolean;
+  /** Kumaş teknik kartı modülü. YER TUTUCU — arkasında henüz yüzey yok, bu yüzden
+   *  Genel Ayarlar'da satırı da YOK (bkz. `settings-config.ts` "Modüller"). */
+  kumasTeknikEnabled: boolean;
+  /** Dokuma tezgah izleme modülü. YER TUTUCU — üretime bağımlı; panelde satırı yok. */
+  tezgahEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı — default false; backend ENFORCE eder. */
