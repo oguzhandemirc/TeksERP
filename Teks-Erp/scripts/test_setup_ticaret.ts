@@ -109,7 +109,15 @@ async function main(): Promise<void> {
   );
 
   // Paylaşılan ayarların ÖNCEKİ hâli — finally'de geri yazılır.
-  const FLAG_KEYS = [SETTING_KEYS.FINANCE_ENABLED, SETTING_KEYS.FINANCE_PRICING_ENABLED];
+  // ⚠️ Modül anahtarları da bu listede: `--apply` artık ticaret+iplik
+  // şalterlerini de açıyor ve bunlar paylaşılan dev DB'sinin ayarlarıdır →
+  // `finally` bloğu hepsini ÖNCEKİ değerine geri yazar.
+  const FLAG_KEYS = [
+    SETTING_KEYS.FINANCE_ENABLED,
+    SETTING_KEYS.FINANCE_PRICING_ENABLED,
+    SETTING_KEYS.TICARET_ENABLED,
+    SETTING_KEYS.IPLIK_ENABLED,
+  ];
   const savedRows = await prisma.systemSetting.findMany({
     where: { key: { in: FLAG_KEYS } },
     select: { key: true, value: true },
@@ -223,6 +231,18 @@ async function main(): Promise<void> {
       "§3e finance.pricingEnabled AÇIK",
       flagMap.get(SETTING_KEYS.FINANCE_PRICING_ENABLED) === true,
       String(flagMap.get(SETTING_KEYS.FINANCE_PRICING_ENABLED)),
+    );
+    check(
+      "§3d2 ticaret.enabled AÇIK",
+      flagMap.get(SETTING_KEYS.TICARET_ENABLED) === true,
+      String(flagMap.get(SETTING_KEYS.TICARET_ENABLED)),
+    );
+    // ⚠️ İplik ticarete BAĞIMLI: bu satır aynı zamanda adım SIRASININ ölçümüdür.
+    // Ters sırada ilk `setFeatureFlags` çağrısı 400 `MODULE_DEPENDENCY` alırdı.
+    check(
+      "§3e2 iplik.enabled AÇIK (ticaretten SONRA açıldı)",
+      flagMap.get(SETTING_KEYS.IPLIK_ENABLED) === true,
+      String(flagMap.get(SETTING_KEYS.IPLIK_ENABLED)),
     );
     const def = await prisma.warehouse.findFirst({ where: { isDefault: true }, select: { code: true } });
     check("§3f Varsayılan depo var", def !== null, def?.code ?? "(yok)");

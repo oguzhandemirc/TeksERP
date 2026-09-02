@@ -33,10 +33,18 @@
 //
 // Salt-okunur: DB'ye dokunmaz, boş CI veritabanında da tam koşar.
 // Koşum: npx tsx scripts/test_finance_regime_gate.ts
+//
+// ⚠️ 2026-09-02 — TARAYICI `scripts/lib/regime-gate-scan.ts`E TAŞINDI. Bu dosya
+// artık YALNIZ ön muhasebe için parametre veriyor (model seti + kapı adı +
+// muaf listesi); AST mantığı dört modül bekçisiyle ORTAK. Kopyalanmadı çünkü
+// kopya bekçi, bekçilerin en kötü cinsidir: biri düzeltilir, diğerleri eski
+// mantıkla yeşil kalır. DAVRANIŞ BİREBİR KORUNDU — kontrol adları, eşikler ve
+// çıktı satırları taşımadan önceki hâliyle aynıdır (ölçüm: taşımadan önce ve
+// sonra "6 geçti, 0 başarısız" + aynı §1b listesi).
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
-import * as ts from "typescript";
+import { rejimTaramasiKur } from "./lib/regime-gate-scan";
 
 let pass = 0,
   fail = 0;
@@ -52,7 +60,6 @@ function check(label: string, ok: boolean, extra = ""): void {
 
 const KOK = path.resolve(__dirname, "..");
 const SRC = path.join(KOK, "src");
-const GIRIS = path.join(SRC, "app.ts");
 
 /**
  * TİCARET-ÖZEL Prisma model erişimcileri.
@@ -86,37 +93,31 @@ const TICARET_MODELLERI = new Set([
   "reconciliationLetter",
   "chequeDeliveryNote",
   "chequeDeliveryNoteItem",
-  // Tam stok sayımı (J2 #19). ⚠️ Kapsam bugün ZATEN türetiliyor (servis
-  // `yarnStock`/`yarnMovement` okuyor) — listede durmalarının sebebi İLERİSİ:
-  // yalnız bu tablolara dokunan bir servis/router yazıldığı gün (ör. salt-okunur
-  // sayım raporu) kapsam dışında kalmasın.
-  "stockCount",
-  "stockCountLine",
-  // Paket D
-  "yarnStock",
-  "yarnMovement",
-  "itemPrice",
-  "purchaseOrder",
-  "purchaseOrderLine",
+  // ⚠️ 2026-09-02 — YEDİ MODEL BU SETTEN ÇIKTI, SİLİNMEDİ: `stockCount`,
+  // `stockCountLine`, `itemPrice`, `purchaseOrder`, `purchaseOrderLine` artık
+  // TİCARET modülünün (`ticaret.enabled` / `requireTicaretEnabled`), `yarnStock`
+  // ve `yarnMovement` ise İPLİK modülünün (`iplik.enabled` /
+  // `requireIplikEnabled`) kapsamındadır ve kendi bekçilerinde ölçülürler.
+  // Burada bırakılsalardı bu bekçi o router'larda `requireFinanceEnabled`
+  // arar ve KAPISIZ ilan ederdi — oysa kapıları var, yalnız adı değişti.
+  // Bu dosya bundan sonra YALNIZ ön muhasebe defterini (cari · fatura ·
+  // tahsilat · kasa/banka · çek) sorar.
 ]);
 
 // -----------------------------------------------------------------------------
 // MUAF LİSTESİ — gerekçeli, iki yönlü denetlenir
 // -----------------------------------------------------------------------------
+// ⚠️ 2026-09-02 — ÜÇ MUAF BU LİSTEDEN ÇIKTI (demo · boss · inventory) çünkü
+// tek bağları `purchaseOrder`dı ve o model artık TİCARET setinde. Burada
+// kalsalardı §3b "gereksiz muaf" der ve kırmızı verirdi. SİLİNMEDİLER,
+// TAŞINDILAR: üçü de `test_ticaret_regime_gate.ts`in muaf listesinde AYNI
+// gerekçelerle duruyor (`InventoryService` üzerinden geçişli dokunuş orada da
+// aynen sürüyor). Metinleri geçici olarak burada YORUM hâlinde bekletiliyordu;
+// ticaret bekçisi yazılıp doğrulandığı için kopya 2026-09-03'te silindi —
+// aynı gerekçenin iki yerde yaşaması, bir gün ayrışıp "hangisi güncel"
+// sorusunu doğuracak bir borçtu.
+
 const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
-  {
-    dosya: "routes/demo.routes.ts",
-    neden:
-      "DEMO senaryo üreticileri (2026-09-01). Ticaret modeline dokunuş GEÇİŞLİDİR ve " +
-      "YANILTICI: router hiçbir ticaret işi yapmaz, `InventoryService`i yalnız top/etiket " +
-      "senaryosu için (`applyManualProperties`) import eder — o servis kocaman olduğu için " +
-      "transitif tarama `purchaseOrder`a kadar uzanıyor. Rejim kapısı `requireFinanceEnabled` " +
-      "OLAMAZ: senaryo muhasebeyle ilgisizdir ve ön muhasebe kapalı bir kurulumda da " +
-      "çalışmalıdır. Router'ın KENDİ kapısı vardır ve daha DARdır: `requireDemoMode` — " +
-      "fabrikada (demo modu kapalı) tüm uçlar 403 döner, yani yazma yüzeyi SIFIRDIR. " +
-      "⚠️ Buraya bir FİNANS senaryosu eklenirse bu muaf YENİDEN DEĞERLENDİRİLMELİ: o gün " +
-      "gerekçenin 'ticaret işi yapmaz' ayağı düşer.",
-  },
   {
     dosya: "routes/return.routes.ts",
     neden:
@@ -130,208 +131,51 @@ const MUAF: ReadonlyArray<{ dosya: string; neden: string }> = [
       "gözden kaçmıştı (shipping.service'in statik invoice importu kaldırılınca tek başına " +
       "görünür oldu).",
   },
+  // ⚠️ `routes/goods-receipt.routes.ts` MUAFI 2026-09-02'de KALDIRILDI ve bu bir
+  // gerekçe değişikliğidir, temizlik değil. Eski metin "Mal kabul FABRİKADA DA
+  // kullanılır → rejim kapısı KONULAMAZ" diyordu; dosyanın KENDİ başlığı ise
+  // tersini söylüyor ("üretici fabrikada kullanılmaz — mal KK1'den ham girer")
+  // ve ölçüm başlığı doğruladı (fabrikada bu uçlara istek yok, izinler hiçbir
+  // rol şablonunda tanımlı değil). Mal kabul artık `requireTicaretEnabled`
+  // taşıyor; pozitif beklenti ticaret bekçisinde ADLA yazılıdır (model
+  // türetmesiyle DEĞİL: `goodsReceipt`i model setine koymak `InventoryService`
+  // üzerinden 13 router'ı kapsama alıp muaf listesini 9'a çıkarıyordu).
   {
     dosya: "routes/goods-receipt.routes.ts",
     neden:
-      "Mal kabul FABRİKADA DA kullanılır (satın alınan kumaşın depo girişi) → rejim kapısı " +
-      "KONULAMAZ. Ticaret alanlarına (alış fiyatı, iplik hareketi, alış siparişi bağı) " +
-      "dokunan dallar servis içinde ayrıca kapılıdır; fabrika yolu bayt-bayt aynı kalır.",
-  },
-  {
-    dosya: "routes/boss.routes.ts",
-    neden:
-      "PATRON ÖZETİ (2026-09-01). Ticaret modeline dokunuş GEÇİŞLİ ve YANILTICI: " +
-      "router hiçbir ticaret işi yapmaz, `getBossOverview` üretim akışı kolonları " +
-      "için `InventoryService`i import ediyor ve o servis kocaman olduğu için " +
-      "transitif tarama `purchaseOrder`a kadar uzanıyor — `demo.routes.ts` ve " +
-      "`inventory.routes.ts` ile BİREBİR aynı olgu. Rejim kapısı " +
-      "`requireFinanceEnabled` OLAMAZ: patron özeti üretim/stok/sevkiyat " +
-      "takibidir ve ön muhasebe KAPALI olan üretici fabrikada çalışmak zorundadır " +
-      "(zaten ilk müşterisi orası). Yazma yüzeyi SIFIR: router'da tek bir GET var, " +
-      "hiçbir tabloya INSERT/UPDATE üretmez. Finans verisi de sızmaz — özet " +
-      "bilinçli olarak `report:finance` bölümü TAŞIMIYOR (bkz. WEB_BOSS rol " +
-      "şablonu gerekçesi). ⚠️ Buraya finans içeren bir bölüm eklenirse bu muaf " +
-      "YENİDEN DEĞERLENDİRİLMELİ: o gün gerekçenin 'finans taşımaz' ayağı düşer.",
-  },
-  {
-    dosya: "routes/inventory.routes.ts",
-    neden:
-      "Envanter FABRİKANIN ana router'ıdır → rejim kapısı KONULAMAZ. purchaseOrder izi tek " +
-      "daldan gelir (G2, 2026-08-14): `softDelete`, iptal edilen top bir mal kabul fişinden " +
-      "doğduysa (`Roll.goodsReceiptId` dolu) PO rollup senkronunu tetikler. Fabrikada " +
-      "goodsReceiptId'li top VAR OLAMAZ (fişi yazan tek yol goods-receipt akışı ve onun " +
-      "uçları rejim kapılı) → dal tek sorgu bile koşmaz, fabrika yolu bayt-bayt aynı kalır. " +
-      "Yeni yazma yüzeyi de açılmaz: senkron purchaseOrderId'yi istemciden değil topun " +
-      "kendi fiş zincirinden çözer. Bekçi: test_purchase_order.ts §T (negatif sondalı).",
+      "MAL KABUL — GEREKÇE 2026-09-02'de DEĞİŞTİ (muaf kaldırılıp yeniden yazıldı). " +
+      "Eski gerekçe 'fabrikada da kullanılır, kapı KONULAMAZ' idi ve YANLIŞTI: router " +
+      "artık `router.use(verifyToken, requireTicaretEnabled)` taşıyor, yani KAPISIZ DEĞİL. " +
+      "Burada muaf olmasının sebebi kapısızlık değil, FİNANS modeline dokunuşunun SALT-OKUMA " +
+      "olması: tek iz `invoice.findFirst` — fiş iptalinde 'bu fişten kesilmiş canlı fatura " +
+      "var mı' kontrolü (`return.routes` ile aynı sınıf). Hiçbir finans tablosuna " +
+      "INSERT/UPDATE üretmez; ön muhasebe kapalıyken sorgu 0 satır döner. " +
+      "⚠️ Bu bekçi `kapiliMi`yi BİLEREK yalnız `requireFinanceEnabled`e bakacak şekilde " +
+      "tutuyor (yüklem bir ad KÜMESİNE genelleştirilirse bu satır §3b'de 'gereksiz' olur ve " +
+      "SİLİNMELİDİR — o gün ölçüm zaten 'kapılı' diyecektir). Mal kabulün kapısı ADLA, " +
+      "ticaret bekçisinde pozitif kontrol olarak ölçülür.",
   },
 ];
 
-function oku(dosya: string): ts.SourceFile {
-  return ts.createSourceFile(dosya, fs.readFileSync(dosya, "utf8"), ts.ScriptTarget.Latest, true);
-}
-
-function cozYol(kaynak: string, spec: string): string | null {
-  if (!spec.startsWith(".")) return null;
-  const taban = path.resolve(path.dirname(kaynak), spec);
-  for (const aday of [`${taban}.ts`, path.join(taban, "index.ts")]) {
-    if (fs.existsSync(aday)) return aday;
-  }
-  return null;
-}
-
-/** Dosyanın YEREL import ettiği modüller (mutlak yol). */
-function yerelImportlar(dosya: string): string[] {
-  const sf = oku(dosya);
-  const cikti: string[] = [];
-  const gez = (n: ts.Node): void => {
-    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier)) {
-      const h = cozYol(dosya, n.moduleSpecifier.text);
-      if (h) cikti.push(h);
-    }
-    ts.forEachChild(n, gez);
-  };
-  gez(sf);
-  return cikti;
-}
-
-/** Dosya ticaret-özel bir modele DOĞRUDAN dokunuyor mu (`prisma.x` / `tx.x`)? */
-function ticaretModeliKullaniyor(dosya: string): string | null {
-  const sf = oku(dosya);
-  let bulunan: string | null = null;
-  const gez = (n: ts.Node): void => {
-    if (bulunan) return;
-    if (ts.isPropertyAccessExpression(n) && TICARET_MODELLERI.has(n.name.text)) {
-      const o = n.expression;
-      const kok = ts.isIdentifier(o) ? o.text : ts.isPropertyAccessExpression(o) ? o.name.text : "";
-      if (kok === "prisma" || kok === "tx" || kok === "client" || kok === "db") {
-        bulunan = n.name.text;
-        return;
-      }
-    }
-    ts.forEachChild(n, gez);
-  };
-  gez(sf);
-  return bulunan;
-}
-
-/**
- * Dosya (ya da transitif SERVİS bağımlılıkları) ticaret modeline dokunuyor mu?
- *
- * ⚠️ ALT ROUTER'LAR ZİNCİRE GİRMEZ (`.routes.ts` atlanır) ve bu kural
- * load-bearing: `reports.routes.ts` yalnız bir TOPLAYICIDIR — kendi handler'ı
- * yoktur, yedi domain router'ını mount eder. Alt router üzerinden "ticarete
- * dokunuyor" sayılsaydı, kapıyı toplayıcıya takmak gerekirdi ve o kapı
- * üretim/kalite/stok raporlarını da rejime bağlayıp fabrikada kapatırdı.
- * Doğru yer alt router'ın KENDİSİDİR (`finance.report.routes.ts` orada taşıyor);
- * her router bağımsız bir birim olarak değerlendirilir.
- *
- * (Bu satır ilk yazımda yoktu ve bekçi tam da bu yüzden yanlış pozitif verdi —
- * kaydı burada duruyor ki "gereksiz optimizasyon" diye silinmesin.)
- */
-function ticaretDokunuyorTransitif(giris: string, derinlik = 3): string | null {
-  const gorulen = new Set<string>();
-  let kuyruk: Array<{ f: string; d: number }> = [{ f: giris, d: 0 }];
-  while (kuyruk.length) {
-    const { f, d } = kuyruk.shift() as { f: string; d: number };
-    if (gorulen.has(f)) continue;
-    gorulen.add(f);
-    const m = ticaretModeliKullaniyor(f);
-    if (m) return m;
-    if (d < derinlik) {
-      kuyruk = kuyruk.concat(
-        yerelImportlar(f)
-          .filter((x) => !x.endsWith(".routes.ts"))
-          .map((x) => ({ f: x, d: d + 1 })),
-      );
-    }
-  }
-  return null;
-}
-
-/** Dosya `requireFinanceEnabled`i GERÇEKTEN çağırıyor mu (yorumda geçmesi sayılmaz)? */
-function rejimKapisiVar(dosya: string): boolean {
-  const sf = oku(dosya);
-  let var_ = false;
-  const gez = (n: ts.Node): void => {
-    if (var_) return;
-    // `router.use(verifyToken, requireFinanceEnabled)` ya da route argümanı
-    if (ts.isIdentifier(n) && n.text === "requireFinanceEnabled") {
-      // Yalnız import bildiriminde geçiyorsa saymayız — çağrı/argüman olmalı.
-      const p = n.parent;
-      if (!ts.isImportSpecifier(p) && !ts.isImportClause(p)) var_ = true;
-      return;
-    }
-    ts.forEachChild(n, gez);
-  };
-  gez(sf);
-  return var_;
-}
-
-/** `A.use(..., B)` kenarları — mount grafiği (test_route_mount_reachability ile aynı mantık). */
-function mountEdilenler(dosya: string): string[] {
-  const sf = oku(dosya);
-  const imp = new Map<string, string>();
-  const kullanilan = new Set<string>();
-  const gez = (n: ts.Node): void => {
-    if (ts.isImportDeclaration(n) && ts.isStringLiteral(n.moduleSpecifier)) {
-      const h = cozYol(dosya, n.moduleSpecifier.text);
-      if (h && n.importClause?.name) imp.set(n.importClause.name.text, h);
-    }
-    if (ts.isCallExpression(n)) {
-      const e = n.expression;
-      if (ts.isPropertyAccessExpression(e) && e.name.text === "use") {
-        for (const a of n.arguments) if (ts.isIdentifier(a)) kullanilan.add(a.text);
-      }
-    }
-    ts.forEachChild(n, gez);
-  };
-  gez(sf);
-  const out: string[] = [];
-  for (const ad of kullanilan) {
-    const h = imp.get(ad);
-    if (h) out.push(h);
-  }
-  return out;
-}
-
-function tumRouterlar(): string[] {
-  const cikti: string[] = [];
-  const yuru = (dir: string): void => {
-    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-      const tam = path.join(dir, e.name);
-      if (e.isDirectory()) yuru(tam);
-      else if (e.name.endsWith(".routes.ts")) cikti.push(tam);
-    }
-  };
-  yuru(path.join(SRC, "routes"));
-  return cikti.sort();
-}
+// ⚠️ AST yardımcıları (`oku` · `yerelImportlar` · `mountEdilenler` ·
+// `ticaretModeliKullaniyor` · `ticaretDokunuyorTransitif` · `rejimKapisiVar` ·
+// `tumRouterlar`) 2026-09-02'de `scripts/lib/regime-gate-scan.ts`e taşındı.
+// Buradaki tek fark PARAMETRELERDİR: model seti yukarıda, kapı adı aşağıda.
 
 async function main(): Promise<void> {
   console.log("=== REJİM KAPISI BEKÇİSİ (fabrika sıfır-fark) ===\n");
 
-  const routerlar = tumRouterlar();
-
-  // Mount grafiği: her router için "beni kim mount etti" (ebeveyn zinciri).
-  const ebeveyn = new Map<string, string[]>();
-  const tumDosyalar = [GIRIS, ...routerlar];
-  for (const f of tumDosyalar) {
-    for (const c of mountEdilenler(f)) {
-      ebeveyn.set(c, [...(ebeveyn.get(c) ?? []), f]);
-    }
-  }
-
-  /** Kapı dosyanın kendisinde ya da MOUNT EDEN zincirde var mı? */
-  const kapiliMi = (f: string, gorulen = new Set<string>()): boolean => {
-    if (gorulen.has(f)) return false;
-    gorulen.add(f);
-    if (rejimKapisiVar(f)) return true;
-    return (ebeveyn.get(f) ?? []).some((p) => p !== GIRIS && kapiliMi(p, gorulen));
-  };
-
-  const ticaretRouterlari = routerlar
-    .map((f) => ({ f, model: ticaretDokunuyorTransitif(f) }))
-    .filter((x) => x.model !== null);
+  // ⚠️ `kapiAdlari` BİLEREK TEK ELEMANLI: mal kabul muafının gerekçesi bu
+  // daralığa dayanıyor (aşağıdaki `goods-receipt` satırının uyarısına bak).
+  const tarama = rejimTaramasiKur({
+    src: SRC,
+    modeller: TICARET_MODELLERI,
+    kapiAdlari: ["requireFinanceEnabled"],
+  });
+  const routerlar = tarama.routerlar;
+  const kapiliMi = tarama.kapiliMi;
+  const ticaretDokunuyorTransitif = tarama.modelDokunusu;
+  const ticaretRouterlari = tarama.ilgiliRouterlar();
 
   // ── §1 KÖRLÜK ZEMİNİ ──────────────────────────────────────────────────────
   // Türetme boşa düşerse ("hiç ticaret router'ı bulunamadı") sonuç "ihlal yok"

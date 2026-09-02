@@ -1,8 +1,9 @@
 // =============================================================================
 // TAM STOK SAYIMI ROTALARI (2026-08-15, J2 #19)
 // =============================================================================
-// ⚠️ HER uç İKİ kapıdan geçer: `requireFinanceEnabled` (bu kurulum ticaret
-// paketini kullanıyor mu) + `requirePermission` (bu kişi bunu yapabilir mi).
+// ⚠️ HER uç İKİ kapıdan geçer: `requireTicaretEnabled` (bu kurulum ticaret
+// paketini kullanıyor mu — 2026-09-02'de `requireFinanceEnabled`ten taşındı)
+// + `requirePermission` (bu kişi bunu yapabilir mi).
 // Bayrak kapısını atlayan tek bir uç, fabrikada modülü fiilen açık bırakır —
 // ve bu servis iplik defterine yazıyor, yani fabrika sıfır-fark garantisi
 // doğrudan buradan kırılırdı.
@@ -33,14 +34,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireFinanceEnabled } from "../middlewares/finance.middleware";
+import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { stockCountService } from "../services/stock-count.service";
 import { resolveRangeEnd, resolveRangeStart } from "../constants/time";
 
 const router = Router();
 
 // Modül kapısı — bu router'daki HER uç için.
-router.use(verifyToken, requireFinanceEnabled);
+router.use(verifyToken, requireTicaretEnabled);
 
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
 const statusEnum = z.enum(["DRAFT", "COMPLETED", "CANCELLED"]);

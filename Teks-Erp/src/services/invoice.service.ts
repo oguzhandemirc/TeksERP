@@ -44,7 +44,7 @@ import {
   readFinanceAllowZeroPriceLineEnabled,
   readFinanceDefaultVatRate,
   readFinanceRiskLimitBlockEnabled,
-  readFinanceYarnOutOnInvoiceEnabled,
+  resolveYarnOutOnInvoiceEnabled,
 } from "./system-setting.service";
 import { assertNotFutureDatedTx } from "./helpers/future-date-guard.helper";
 // ⚠️ İPLİK DEFTERİNE TEK YAZAR `yarn.service`tir (dosya başlığındaki "tek yazar"
@@ -1273,7 +1273,11 @@ export class InvoiceService {
     ref: { invoiceId: string; docNo: string; type: InvoiceType; userId?: string },
   ): Promise<YarnLedgerEffect[]> {
     if (ref.type !== InvoiceType.SALES) return [];
-    const enabled = await readFinanceYarnOutOnInvoiceEnabled(tx);
+    // ⚠️ ALT BAYRAK DOĞRUDAN OKUNMAZ — köprü tek resolver'dan geçer
+    // (`finance && ticaret && iplik && altBayrak`). Alt bayrağı burada tek
+    // başına okumak, İPLİK MODÜLÜ KAPALI bir kurulumda satış faturasının
+    // `YarnMovement` yazmaya devam etmesi demekti.
+    const enabled = await resolveYarnOutOnInvoiceEnabled(tx);
     if (!enabled) return [];
 
     const lines = await tx.invoiceLine.findMany({

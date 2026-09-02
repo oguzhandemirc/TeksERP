@@ -377,9 +377,12 @@ async function main(): Promise<void> {
   }));
   // KÖRLÜK ZEMİNİ: regex bozulursa aşağıdaki kontroller "ihlal yok" diye yeşil kalırdı.
   check("§7a Kaynak taraması gerçekten uç buldu (körlük zemini)", routeDefs.length >= 4, `uç=${routeDefs.length}`);
+  // ⚠️ 2026-09-02: kapı `requireTicaretEnabled`e taşındı (fiyat listesi MAL
+  // tarafıdır, cari defteri değil). Yorum sökme (`stripComments`) hâlâ
+  // load-bearing: dosya başlığı kapı satırını ÖRNEK olarak içeriyor.
   check(
     "§7b ⭐ Rejim kapısı router seviyesinde (fabrikada sıfır-fark)",
-    /router\.use\(\s*verifyToken\s*,\s*requireFinanceEnabled\s*\)/.test(src),
+    /router\.use\(\s*verifyToken\s*,\s*requireTicaretEnabled\s*\)/.test(src),
   );
   // ⚠️ SEGMENT SINIRI "BİR SONRAKİ UÇ"TUR, sabit karakter penceresi DEĞİL.
   // İlk yazımda pencere `r.at + 400` idi ve bekçi KÖRDÜ (2026-08-14 sondasıyla

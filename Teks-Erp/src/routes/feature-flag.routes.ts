@@ -149,6 +149,21 @@ export const updateSchema = z.strictObject({
   // sorusudur, ek güvence değil.
   financeYarnOutOnInvoiceEnabled: z.boolean().optional(),
   productionEnabled: z.boolean().optional(),
+  // ---------------------------------------------------------------------------
+  // MODÜL ANAHTARLARI (2026-09-02) — hepsi REJİM anahtarı, hepsi default KAPALI
+  // ---------------------------------------------------------------------------
+  // ⚠️ `strictObject` — burada olmayan anahtar PATCH'i 400 yapar; bayrak
+  // eklerken asıl tehlike açamamak değil KAPATAMAMAKtır (2026-08-05 kk1 dersi).
+  // Bu beşi acil kapatma anahtarıdır: modül sahada yanlış davranırsa tek geri
+  // dönüş yolu budur.
+  // ⚠️ BAĞIMLILIK burada DEĞİL serviste ölçülür (`assertModuleDependencies`):
+  // Zod tek tek alanları görür, "iplik açık + ticaret DB'de kapalı" ise gövde
+  // ile DB'nin BİRLEŞİMİNDEN doğar.
+  ticaretEnabled: z.boolean().optional(),
+  iplikEnabled: z.boolean().optional(),
+  depoMultiEnabled: z.boolean().optional(),
+  kumasTeknikEnabled: z.boolean().optional(),
+  tezgahEnabled: z.boolean().optional(),
   targetQuantityEnabled: z.boolean().optional(),
   rawWidthEnabled: z.boolean().optional(),
   kk1WeightEntryEnabled: z.boolean().optional(),

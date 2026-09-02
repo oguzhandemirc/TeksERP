@@ -2344,18 +2344,30 @@ async function printSummary(dbName: string): Promise<void> {
  * bir demo, ticaret paketini değil FABRİKA ERP'sini gösterir — gösterilmek
  * istenenin tam tersini.
  *
- * ⚠️ ÇOK DEPO bayrakla DEĞİL VERİDEN çözülür (`useMultiWarehouse`): aktif depo
- * sayısı 1'den büyükse depo yüzeyleri kendiliğinden açılır. Bu yüzden burada
- * yalnız iki finans bayrağı set edilir; depo tarafını `ensureWarehouses` zaten
- * iki depo yaratarak sağlıyor.
+ * ⚠️ ÇOK DEPO 2026-09-02'ye kadar bayrakla DEĞİL VERİDEN çözülüyordu (aktif
+ * depo sayısı > 1). Artık bir REJİM anahtarı: `ensureWarehouses` iki depo
+ * yaratsa bile `depo.multiEnabled` açılmadan transfer ucu 403 verir ve depo
+ * yüzeyleri çizilmez — bu yüzden demo onu da açar.
  *
  * İdempotent: zaten açıksa yazılmaz (ayar tablosuna gereksiz audit düşmesin).
  */
 async function ensureRegimeFlags(userId: string): Promise<void> {
   const mevcut = (await systemSettingService.getFeatureFlags()).data;
-  const hedef: Array<["financeEnabled" | "pricingEnabled", boolean]> = [
+  const hedef: Array<
+    [
+      "financeEnabled" | "pricingEnabled" | "ticaretEnabled" | "iplikEnabled" | "depoMultiEnabled",
+      boolean,
+    ]
+  > = [
     ["financeEnabled", true],
     ["pricingEnabled", true],
+    // Ticaret paketinin modül şalterleri. ⚠️ İplik ticarete BAĞIMLI; ikisi de
+    // AYNI `setFeatureFlags` çağrısında gittiği için sıra sorun değildir
+    // (doğrulama gövdenin tamamına bakar), ama ayrı çağrılara bölünürse
+    // ticaret önce gitmelidir.
+    ["ticaretEnabled", true],
+    ["iplikEnabled", true],
+    ["depoMultiEnabled", true],
   ];
   const eksik = hedef.filter(([k, v]) => mevcut?.[k] !== v);
   if (eksik.length === 0) {

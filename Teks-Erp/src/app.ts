@@ -845,15 +845,23 @@ app.use("/api/free-documents", freeDocumentRoutes);
 app.use("/api/returns", returnRoutes);
 app.use("/api/return-reasons", returnReasonRoutes);
 app.use("/api/warehouses", warehouseRoutes);
+// Mal kabul — 2026-09-02'den beri `verifyToken + requireTicaretEnabled`
+// kapısını KENDİ taşır (modül paketinin tek bilinçli davranış farkı).
 app.use("/api/goods-receipts", goodsReceiptRoutes);
-// Paket D — iplik kg-defteri · kalem fiyatı · alış siparişi. Üçü de ticaret
-// rejimine ait; fabrikada `finance.enabled` kapalı olduğu için hepsi 403 döner
-// (bekçi: scripts/test_finance_regime_gate.ts).
+// Paket D — iplik kg-defteri · kalem fiyatı · alış siparişi. Kapıları
+// 2026-09-02'de modül anahtarlarına TAŞINDI: iplik `iplik.enabled` (ticarete
+// bağımlı), fiyat + alış siparişi `ticaret.enabled`. Fabrikada üçü de kapalı
+// olduğu için hepsi 403 döner (bekçi: scripts/test_finance_regime_gate.ts +
+// modül ikizleri).
+
 app.use("/api/yarn", yarnRoutes);
 app.use("/api/item-prices", itemPriceRoutes);
 app.use("/api/purchase-orders", purchaseOrderRoutes);
+// Depolar arası transfer — kendi `verifyToken + requireDepoMultiEnabled`
+// kapısını taşır. Depo TANIMI ve DEFTERİ (`/api/warehouses`) rejimsiz KALIR;
+// kapı yalnız çoklu depo YÜZEYİNE takılıdır.
 app.use("/api/warehouse-transfers", warehouseTransferRoutes);
-// Tam stok sayımı (J2 #19) — kendi `verifyToken + requireFinanceEnabled`
+// Tam stok sayımı (J2 #19) — kendi `verifyToken + requireTicaretEnabled`
 // kapısını taşır; fark fişi TOP ve İPLİK defterlerine yazdığı için rejim kapısı
 // pazarlık dışıdır (bekçi: scripts/test_finance_regime_gate.ts).
 app.use("/api/stock-counts", stockCountRoutes);

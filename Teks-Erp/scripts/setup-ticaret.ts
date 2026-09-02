@@ -47,6 +47,8 @@ export const TRADE_TEMPLATE_CODE = "WEB_TRADE";
 export type StepKey =
   | "finance.enabled"
   | "finance.pricingEnabled"
+  | "ticaret.enabled"
+  | "iplik.enabled"
   | "role:WEB_TRADE"
   | "warehouse:default";
 
@@ -208,6 +210,21 @@ export async function runTicaretSetup(opts: SetupOptions): Promise<SetupReport> 
       title: "Fiyat/para birimi alanları (finance.pricingEnabled)",
       current: flags.pricingEnabled,
       payload: { pricingEnabled: true },
+    },
+    // ⚠️ SIRA LOAD-BEARING: ticaret İPLİKTEN ÖNCE. Her adım AYRI bir
+    // `setFeatureFlags` çağrısıdır ve iplik ticarete bağımlıdır — ters sırada
+    // ilk çağrı 400 `MODULE_DEPENDENCY` alır ve kurulum yarıda kalır.
+    {
+      key: "ticaret.enabled",
+      title: "Ticaret modülü (ticaret.enabled)",
+      current: flags.ticaretEnabled,
+      payload: { ticaretEnabled: true },
+    },
+    {
+      key: "iplik.enabled",
+      title: "İplik modülü (iplik.enabled)",
+      current: flags.iplikEnabled,
+      payload: { iplikEnabled: true },
     },
   ];
 

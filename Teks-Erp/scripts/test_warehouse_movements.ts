@@ -303,11 +303,16 @@ async function main(): Promise<void> {
   // ⚠️ Metin araması DEĞİL İMPORT araması: depo route'u kararın GEREKÇESİNİ
   // yorumda `requireFinanceEnabled` adıyla anlatıyor. Düz `includes` o yorumu
   // "kapı var" diye okur — bekçi kendi belgelendirmemize takılırdı.
-  const financeImport = /from\s+"\.\.\/middlewares\/finance\.middleware"/;
+  // ⚠️ 2026-09-02: modül kapıları AYRI bir dosyada (`module.middleware.ts`) —
+  // `finance.middleware.ts`e eklenselerdi bu kontrolün sağ tarafı (depo route'u
+  // o dosyadan import ETMEZ) yanlış sebeple kırılırdı. Aranan import artık
+  // modül dosyasıdır ve iplik ucunun taşıdığı ad `requireIplikEnabled`.
+  const modulImport = /from\s+"\.\.\/middlewares\/module\.middleware"/;
   check(
-    "§6c ⭐ REJİM KAPISI ASİMETRİSİ ÖLÇÜLDÜ: iplik uçları `requireFinanceEnabled` TAŞIR, depo defteri TAŞIMAZ " +
-      "(defteri fabrika yolları da yazıyor — kapı koymak fabrikada yazılanı fabrikada okunamaz yapardı)",
-    financeImport.test(yarnSrc) && !financeImport.test(whSrc),
+    "§6c ⭐ REJİM KAPISI ASİMETRİSİ ÖLÇÜLDÜ: iplik uçları `requireIplikEnabled` TAŞIR, depo defteri (tanım + " +
+      "hareket) HİÇBİR modül kapısı TAŞIMAZ (defteri fabrika yolları da yazıyor — kapı koymak fabrikada " +
+      "yazılanı fabrikada okunamaz yapardı; çoklu depo kapısı yalnız TRANSFER router'ındadır)",
+    modulImport.test(yarnSrc) && !modulImport.test(whSrc),
   );
   check(
     "§6d Uç izinle kapılı ve okuma kümesi geniş (transfer yapan da defteri görür)",

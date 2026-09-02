@@ -51,8 +51,18 @@ import {
   readFinanceAllowZeroPriceLineEnabled,
   readFinanceFutureDatedDocumentBlockEnabled,
   readFinanceYarnOutOnInvoiceEnabled,
+  // §15 — modül şalterleri (2026-09-02). Aynı derleme bağı gerekçesi: okuyucu
+  // silinirse `npm run typecheck:scripts` bekçi koşmadan ÖNCE kırmızı verir.
+  readFinanceEnabled,
+  readProductionEnabled,
+  readTicaretEnabled,
+  readIplikEnabled,
+  readDepoMultiEnabled,
+  readKumasTeknikEnabled,
+  readTezgahEnabled,
 } from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
+import { yorumlariSok } from "./lib/regime-gate-scan";
 
 let pass = 0;
 let fail = 0;
@@ -81,6 +91,13 @@ const PANEL_EXEMPT: Record<string, string> = {
   nativeSendEnabled: "kind:'label' — Etiket section'ı yönetir",
   mobileRasterEnabled: "kind:'label' — Etiket section'ı yönetir",
   scrapGradeLabelEnabled: "kind:'label' — Etiket section'ı yönetir",
+  // YER TUTUCU MODÜL ANAHTARLARI (2026-09-02). Arkalarında henüz TEK BİR yüzey
+  // yok: ne route kapısı, ne ekran, ne kanca. Panele bir toggle koymak,
+  // kullanıcıya açtığında hiçbir şeyin değişmediği bir düğme vermek olurdu.
+  // Dilim 3/4'te yüzeyleri doğduğunda panele girer ve bu iki satır SİLİNİR
+  // (muaf listesi iki yönlü denetlenir — panele girip muafta kalırsa kırmızı).
+  kumasTeknikEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 3'te panele girer",
+  tezgahEnabled: "yer tutucu — arkasında yüzey YOK; Dilim 4'te panele girer",
 };
 
 const ELECTRON_CONFIG = path.resolve(
@@ -92,8 +109,32 @@ const SERVICE_SRC = path.resolve(
   "../src/services/system-setting.service.ts",
 );
 
+// -----------------------------------------------------------------------------
+// PANEL KÜMESİ (D) — 2026-09-03 SONDALARI (cp+md5 ile geri alındı; taban 55/0):
+//   SONDA-27 (YANLIŞ-KIRMIZI sondası): `settings-config.ts`te `depoMultiEnabled`
+//     satırı Prettier'ın üretebileceği biçime alındı (`{ key: "…",` — nesnenin ilk
+//     alanı süslü parantezle AYNI satırda) → çıkış 0 · 55/0 YEŞİL. Eski satır-başı
+//     regex'iyle bu 3 ❌ veriyordu ve satır PANELDE DURUYORDU (gürültülü yanlış
+//     kırmızı; ekip böyle kırmızıları görmezden gelmeyi öğrenir).
+//   SONDA-28 (GERÇEK-KIRMIZI zemini): AYNI satır SİLİNDİ → çıkış 1 · 3 ❌
+//     ("yönetilemez boolean bayrak" + "DÖRT KAPI" + "PANEL_EXEMPT"). Yani regex
+//     gevşetilirken bekçi KÖRLEŞMEDİ — iki sonda birlikte bunu kanıtlar.
+// -----------------------------------------------------------------------------
+/**
+ * Kaynak dosyadan anahtar toplar.
+ *
+ * ⚠️ YORUMLAR SÖKÜLÜR ve bu load-bearing: regex kaynağı düz metin olarak tarar,
+ * yani bir AÇIKLAMA satırındaki örnek yazım da kümeye girer. `setFeatureFlags`
+ * başlığında bu ders zaten yazılı ("bu YORUMDA da örnek çağrı YAZILMAZ — regex
+ * yorumu da okur ve kümeye hayalet bir anahtar ekler") ve 2026-09-03'te panel
+ * tarafında birebir tekrarlandı: D kümesi regex'i satır başı şartından
+ * kurtarılınca `settings-config.ts`teki bir yorumdaki örnek `...` diye bir
+ * anahtar üretti ve "panelin gösterdiği anahtar API'de yok" kırmızısı verdi.
+ * Çözüm yorumu düzeltmek DEĞİL (bir sonraki yorum yine ısırır), tarayıcıyı
+ * yorum körü yapmaktır.
+ */
 function readKeys(file: string, re: RegExp): string[] {
-  const src = readFileSync(file, "utf8");
+  const src = yorumlariSok(readFileSync(file, "utf8"));
   const out = new Set<string>();
   for (const m of src.matchAll(re)) out.add(m[1]!);
   return [...out];
@@ -131,16 +172,21 @@ async function main() {
     electronFound,
     ELECTRON_CONFIG,
   );
-  const D = electronFound
-    ? readKeys(ELECTRON_CONFIG, /^\s*key:\s*"([^"]+)"/gm)
-    : [];
+  // ⚠️ REGEX SATIR BAŞINA BAĞLI DEĞİL (2026-09-02 düzeltmesi). Eski yazım
+  // (`/^\s*key:/gm`) `key:`in KENDİ SATIRINDA başlamasını şart koşuyordu ve
+  // bu KOZMETİK bir kuraldı: Prettier'ın üretebileceği masum bir biçim
+  // (`{ key: "depoMultiEnabled",` — nesnenin ilk alanı süslü parantezle aynı
+  // satırda) bekçiyi YANLIŞ KIRMIZIYA düşürüyordu ("panele ekle" diyordu,
+  // oysa satır panelde duruyordu). Gerçek kural biçim değil VARLIK.
+  // ⚠️ `(?<![A-Za-z])` yalnız kelime sınırı içindir: `numberKey:` zaten büyük
+  // K taşıdığı için eşleşmez (regex case-sensitive), ama `foo_key:` gibi bir
+  // ad da kümeye sızmasın diye açıkça kapatıldı.
+  const D = electronFound ? readKeys(ELECTRON_CONFIG, /(?<![A-Za-z])key:\s*"([^"]+)"/g) : [];
   // ⚠️ Panelin SAYISAL alanları `numberKey:` ile yazılır — `key:` DEĞİL. Ad
-  // bilinçli farklı: yukarıdaki D regex'i satır başı `key:` yakaladığı için
-  // aynı adla yazılsalardı sayısal anahtarlar boolean kümesine sızar ve 5.
-  // kontrol ("yönetilemez boolean bayrak") yanlış şey ölçerdi.
-  const DNum = electronFound
-    ? readKeys(ELECTRON_CONFIG, /^\s*numberKey:\s*"([^"]+)"/gm)
-    : [];
+  // bilinçli farklı: aynı adla yazılsalardı sayısal anahtarlar boolean
+  // kümesine sızar ve 5. kontrol ("yönetilemez boolean bayrak") yanlış şey
+  // ölçerdi.
+  const DNum = electronFound ? readKeys(ELECTRON_CONFIG, /numberKey:\s*"([^"]+)"/g) : [];
 
   console.log(
     `\n   A(api)=${A.length} (boolean ${aBool.length}) · B(şema)=${B.length} · ` +
@@ -714,17 +760,28 @@ async function main() {
   // `readXEnabled()` kapısını taşıyan dosyada durulur) ve panelde gizlenen her
   // bayrağın okuyucusunu tüketen dosya bu kümede mi diye bakılır.
   //
-  // ⚠️ `productionEnabled` bugün hiçbir kategoriyi kapılayamaz ve bu KURALIN
-  // SONUCUDUR, ayrı bir istisna değil: backend'de `requireProductionEnabled`
-  // diye bir middleware yoktur → hiçbir yol kapalı değildir → her tüketici
-  // ulaşılabilir çıkar. Gün gelir üretim yüzeyleri gerçekten rejime alınırsa
-  // bu bölüm kendiliğinden izin verir.
+  // ⚠️ 2026-09-02: `productionEnabled` ARTIK GERÇEK BİR KAPI — üretim
+  // router'ları `requireProductionEnabled` taşıyor. Eskiden burada "bu anahtar
+  // hiçbir kategoriyi kapılayamaz, çünkü backend'de böyle bir middleware
+  // YOKTUR" yazıyordu; o cümle artık YANLIŞ ve silindi. Aynı iddiayı taşıyan
+  // panel yorumları (`settings-config.ts`, `tile-config.ts`) da birlikte
+  // güncellenir.
+  //
+  // ⚠️ YER TUTUCULAR BURAYA GİRMEZ: `kumasTeknikEnabled`/`tezgahEnabled`ın
+  // middleware'i YOK (arkalarında route yok). Satır eklemek, "her REGIME_GATES
+  // middleware'i ≥1 route'ta geçer" kontrolüne ÖLÜ bir satır sokardı.
   const SRC_ROOT = path.resolve(__dirname, "../src");
   const REGIME_GATES: Record<string, { middleware: string; selfGate: string }> = {
     financeEnabled: { middleware: "requireFinanceEnabled", selfGate: "readFinanceEnabled(" },
     productionEnabled: {
       middleware: "requireProductionEnabled",
       selfGate: "readProductionEnabled(",
+    },
+    ticaretEnabled: { middleware: "requireTicaretEnabled", selfGate: "readTicaretEnabled(" },
+    iplikEnabled: { middleware: "requireIplikEnabled", selfGate: "readIplikEnabled(" },
+    depoMultiEnabled: {
+      middleware: "requireDepoMultiEnabled",
+      selfGate: "readDepoMultiEnabled(",
     },
   };
 
@@ -791,8 +848,12 @@ async function main() {
   };
 
   // --- panelin gizlediği bayraklar -------------------------------------------
-  // Kategori blokları 4 boşluk girintili `id:`/`regime:`, satırlar 8 boşluk
-  // girintili `key:` ile yazılır (bkz. `SETTINGS_CATEGORIES`).
+  // ⚠️ BURADAKİ GİRİNTİ ŞARTI GERÇEK BİR KURALDIR, D kümesindeki gibi kozmetik
+  // DEĞİL: kategori SINIRINI (`^ {4}id:`) girintiden başka bir şey vermiyor —
+  // aynı dosyada `id:` alanı iç nesnelerde de geçiyor. Satır anahtarları da
+  // kategori bloğu İÇİNDE arandığı için burada dar kalmaları güvenli.
+  // (D kümesi ise dosyanın TAMAMINI tarar ve orada girinti şartı yalnız
+  // yanlış kırmızı üretiyordu — 2026-09-02'de kaldırıldı.)
   type PanelCat = { id: string; regime?: string; flagKeys: string[]; rawConsts: string[] };
   const panelCats: PanelCat[] = [];
   if (electronFound) {
@@ -846,6 +907,35 @@ async function main() {
     );
   }
 
+  // ⚠️ 2026-09-02 — YUKARIDAKİ DÖNGÜNÜN KÖR NOKTASI KAPATILDI. O döngü yalnız
+  // PANELDE `regime:` kullanan anahtarlar için koşar; hiçbir ayar kategorisini
+  // kapılamayan bir rejim anahtarı (bugün `productionEnabled`, `ticaretEnabled`,
+  // `iplikEnabled`, `depoMultiEnabled` — dördü de panelde kategori kapılamıyor)
+  // iki kontrolün de DIŞINDA kalırdı. Sonuç: middleware'i olmayan ÖLÜ bir
+  // REGIME_GATES satırı sessizce yaşar ve tablo "backend'de kapı var" diye
+  // yalan söyler. Aşağıdaki kontrol tabloyu KENDİ evreninde denetler.
+  const oluGate = Object.entries(REGIME_GATES).filter(
+    ([, g]) => !routeFiles.some((r) => srcText.get(r)!.includes(g.middleware)),
+  );
+  check(
+    "⭐ REGIME_GATES'teki HER middleware en az bir route dosyasında geçiyor (ölü satır yok)",
+    oluGate.length === 0,
+    oluGate.length
+      ? `hiçbir route'ta geçmeyen kapı: ${oluGate.map(([k, g]) => `${k}→${g.middleware}`).join(", ")} — ` +
+        "ya middleware yazılmamış ya route'a takılmamış; yer tutucu anahtarları TABLOYA HİÇ EKLEME"
+      : `${Object.keys(REGIME_GATES).length} rejim kapısı canlı`,
+  );
+  // selfGate metni okuyucunun ADIYLA ve KAPANIŞ PARANTEZİYLE yazılır; parantez
+  // unutulursa sızıntı taraması sessizce daralır (`readTicaret` başka ada da uyar).
+  const kotuSelfGate = Object.entries(REGIME_GATES).filter(
+    ([, g]) => !g.selfGate.endsWith("(") || !srcText.get(SETTING_SERVICE_REL)!.includes(g.selfGate),
+  );
+  check(
+    "REGIME_GATES `selfGate` metinleri gerçek okuyucuya işaret ediyor (kapanış parantezli)",
+    kotuSelfGate.length === 0,
+    kotuSelfGate.map(([k, g]) => `${k}→${g.selfGate}`).join(", "),
+  );
+
   // apiKey/ham anahtar → okuyucu adları
   const readersForConst = (constName: string): string[] =>
     [...svc.matchAll(/export (?:async )?function (read[A-Z]\w*)\(/g)]
@@ -882,6 +972,121 @@ async function main() {
 
   console.log(
     `\n   §14 — rejim kapılı kategoriler: ${gatedCats.map((c) => `${c.id}(${c.regime})`).join(", ") || "(yok)"}`,
+  );
+
+  // ---------------------------------------------------------------------------
+  // 15) MODÜL ŞALTERLERİ — ADIYLA KİLİTLİ (§10 kalıbının ikizi)
+  // ---------------------------------------------------------------------------
+  // NEDEN AYRI BİR BÖLÜM: yukarıdaki dört küme denetimi bu yedi anahtarı
+  // kendiliğinden kapsar ama yalnız kümeleri BİRBİRİYLE karşılaştırır. Bir
+  // anahtar dört kapıdan da AYNI ANDA silinirse kümeler tutarlı kalır ve her
+  // kontrol yeşil olur. Modül şalterlerinde bunun bedeli en yüksektir: bir
+  // kurulumun "hangi modülleri kullanıyorum" cevabı sessizce kaybolur ve
+  // route kapıları (`module.middleware.ts`) okuyacak ayar bulamaz → varsayılana
+  // düşer. `production` için varsayılan AÇIK, diğerleri için KAPALI — yani
+  // kaybın yönü modülden modüle değişir; bu da hatayı daha da sinsi yapar.
+  //
+  // NEGATİF SONDALAR (2026-09-02, md5 ile birebir geri alındı):
+  //   SONDA-19 → REGIME_GATES'e middleware'i olmayan bir satır eklendi
+  //              (`kumasTeknikEnabled`) → çıkış 1 · 1 ❌ "ölü satır yok" kontrolü.
+  //              Eski hâlde bu satır SESSİZCE yaşardı (panelde kategori
+  //              kapılamayan anahtar iki eski kontrolün de dışındaydı).
+  //   SONDA-20 → `tezgahEnabled` `updateSchema`dan silindi → çıkış 1 · 4 ❌
+  //              (§1 + §3 + §15 dört-kapı + §15 boolean tipi).
+  //   SONDA-21 → `readProductionEnabled`in "satır yoksa TRUE" sigortası
+  //              düşürüldü → çıkış 1 · 2 ❌ (§12 panel rozeti + §15 varsayılan).
+  const MODULE_FLAGS = [
+    "productionEnabled",
+    "financeEnabled",
+    "ticaretEnabled",
+    "iplikEnabled",
+    "depoMultiEnabled",
+    "kumasTeknikEnabled",
+    "tezgahEnabled",
+  ] as const;
+
+  const moduleGaps = MODULE_FLAGS.flatMap((k) => {
+    const missing = [
+      aBool.includes(k) ? null : "api",
+      B.includes(k) ? null : "şema",
+      C.includes(k) ? null : "servis",
+      // ⚠️ Panel ayağı MUAF LİSTESİNE saygılı: yer tutucu anahtarların
+      // (`kumasTeknik`, `tezgah`) arkasında henüz TEK BİR yüzey yok ve panele
+      // toggle koymak, açtığında hiçbir şeyin değişmediği bir düğme vermek
+      // olurdu. Muaf gerekçeleri PANEL_EXEMPT'te yazılı ve §5 onları iki yönlü
+      // denetliyor (panele girerlerse muafta kalmaları KIRMIZI verir).
+      !electronFound || D.includes(k) || PANEL_EXEMPT[k] ? null : "panel",
+    ].filter(Boolean);
+    return missing.length ? [`${k}(${missing.join("+")})`] : [];
+  });
+  check(
+    `⭐ ${MODULE_FLAGS.length} modül şalterinin hepsi DÖRT KAPIDA da duruyor`,
+    moduleGaps.length === 0,
+    `eksik: ${moduleGaps.join(", ")}`,
+  );
+
+  const moduleTypeGaps = MODULE_FLAGS.filter((k) => {
+    const ok = updateSchema.safeParse({ [k]: true }).success;
+    const rejectsString = !updateSchema.safeParse({ [k]: "evet" }).success;
+    return !(ok && rejectsString);
+  });
+  check(
+    "modül şalterleri şemada boolean doğruluyor (true kabul · metin red)",
+    moduleTypeGaps.length === 0,
+    `gevşek/eksik: ${moduleTypeGaps.join(", ")}`,
+  );
+
+  // KAYIT YOKKEN VARSAYILAN — grandfathering'in kod tarafındaki yarısı.
+  // Ortam verisinden BAĞIMSIZ ölçülür (satır YOK diyen sahte istemci); canlı
+  // DB'ye bakmak, birinin panelden açtığı bir dev kurulumunda sahte kırmızı
+  // verirdi.
+  const emptyClient3 = {
+    systemSetting: { findUnique: () => Promise.resolve(null) },
+  } as unknown as Pick<typeof prisma, "systemSetting">;
+  const moduleDefaults: Record<string, boolean> = {
+    productionEnabled: await readProductionEnabled(emptyClient3),
+    financeEnabled: await readFinanceEnabled(emptyClient3),
+    ticaretEnabled: await readTicaretEnabled(emptyClient3),
+    iplikEnabled: await readIplikEnabled(emptyClient3),
+    depoMultiEnabled: await readDepoMultiEnabled(emptyClient3),
+    kumasTeknikEnabled: await readKumasTeknikEnabled(emptyClient3),
+    tezgahEnabled: await readTezgahEnabled(emptyClient3),
+  };
+  // ⚠️ `productionEnabled` TEK İSTİSNA ve bu kalıcı bir karardır: damgası
+  // OLMAYAN bir kopyada (eski dump, dev DB, prova) fabrika üretimsiz kalmasın.
+  // Diğer altısında varsayılan KAPALI — dokunulmamış kurulumda davranış değişmez.
+  const beklenenVarsayilan: Record<string, boolean> = {
+    productionEnabled: true,
+    financeEnabled: false,
+    ticaretEnabled: false,
+    iplikEnabled: false,
+    depoMultiEnabled: false,
+    kumasTeknikEnabled: false,
+    tezgahEnabled: false,
+  };
+  const varsayilanSapma = MODULE_FLAGS.filter(
+    (k) => moduleDefaults[k] !== beklenenVarsayilan[k],
+  ).map((k) => `${k}=${moduleDefaults[k]} (beklenen ${beklenenVarsayilan[k]})`);
+  check(
+    "⭐ modül okuyucularının kayıt YOKKEN varsayılanı (production→AÇIK, diğerleri→KAPALI)",
+    varsayilanSapma.length === 0,
+    varsayilanSapma.join(", "),
+  );
+
+  // Panel `defaultOn` rozeti ↔ backend varsayılanı §12'de zaten karşılaştırılıyor;
+  // burada yalnız modül satırlarının o taramaya GİRDİĞİNİ doğruluyoruz (panelde
+  // hiç satırı olmayan bir modül §12'de sessizce kapsam dışı kalırdı).
+  const panelsizModul = MODULE_FLAGS.filter(
+    (k) => electronFound && !D.includes(k) && !PANEL_EXEMPT[k],
+  );
+  check(
+    "her modül şalteri ya panelde ya gerekçeli PANEL_EXEMPT'te",
+    panelsizModul.length === 0,
+    panelsizModul.join(", "),
+  );
+
+  console.log(
+    `\n   §15 — modül şalterleri: ${MODULE_FLAGS.map((k) => `${k}=${moduleDefaults[k] ? "açık" : "kapalı"}(varsayılan)`).join(" · ")}`,
   );
 
   // ---------------------------------------------------------------------------

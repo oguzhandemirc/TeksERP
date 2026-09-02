@@ -56,6 +56,10 @@ import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import type { AppError } from "../src/utils/app-error";
 
+import { ensureIplikModuluAcik } from "./fixture-module-flags";
+
+/** ⚠️ Modül düzeyinde: `finally` bloğu `main()` gövdesinin DIŞINDA koşar. */
+let modulGeriAl: (() => Promise<void>) | null = null;
 let pass = 0;
 let fail = 0;
 function check(label: string, ok: boolean, extra = ""): void {
@@ -150,6 +154,14 @@ async function ledgerSum(itemId: string, warehouseId: string): Promise<Prisma.De
 }
 
 async function main(): Promise<void> {
+// ⚠️ MODÜL ORTAMI (2026-09-02): iplik kg defterinin kapısı SERVİS düzeyindedir
+// (`applyYarnMovementTx` ilk işi `readIplikEnabled`). Fabrika profilinde iplik
+// KAPALI olduğu için bu test onsuz 403 alır ve defteri HİÇ ölçemez. Fixture
+// modülü açar, `finally` BULDUĞU değere geri yazar — gevşetilen kapı DEĞİL,
+// kurulan ORTAMDIR (kapının kendi bekçileri: test_iplik_regime_gate §4d +
+// test_module_flag_off).
+  modulGeriAl = await ensureIplikModuluAcik();
+
   console.log("=== İplik kg-stok bekçisi ===\n");
 
   // Bayrağın FOTOĞRAFI (finally'de birebir geri konur) + §1–§9 için kapalı zemin.
@@ -558,7 +570,10 @@ async function main(): Promise<void> {
   // ölçmedi" boşluğudur ve fabrikanın sıfır-fark garantisi oradan sızar.
   const routeSrc = readFileSync(join(__dirname, "..", "src", "routes", "yarn.routes.ts"), "utf8");
   const routeLines = routeSrc.split("\n");
-  const gateIdx = routeLines.findIndex((l) => /router\.use\(\s*verifyToken\s*,\s*requireFinanceEnabled\s*\)/.test(l));
+  // ⚠️ 2026-09-02: kapı `requireIplikEnabled`. İplik artık kendi modül
+  // anahtarını taşıyor (`iplik.enabled`) ve o kapı ÖNCE ticareti ölçüyor —
+  // bağımlılık middleware'in İÇİNDE, router'da zincir YOK (tek satır kalır).
+  const gateIdx = routeLines.findIndex((l) => /router\.use\(\s*verifyToken\s*,\s*requireIplikEnabled\s*\)/.test(l));
   const endpointIdx = routeLines
     .map((l, i) => (/^\s*router\.(get|post|patch|put|delete)\(/.test(l) ? i : -1))
     .filter((i) => i >= 0);
@@ -872,6 +887,11 @@ main()
     fail++;
   })
   .finally(async () => {
+    if (modulGeriAl) {
+      await modulGeriAl().catch((e: Error) =>
+        console.error("   ⚠️  modül bayrakları geri yazılamadı:", e.message),
+      );
+    }
     try {
       // Bayrağı FOTOĞRAFINA geri döndür (paylaşımlı dev DB — iz bırakma).
       // ⚠️ Satır YOKTUYSA silinir: `false` yazıp bırakmak "kayıtsız = false"

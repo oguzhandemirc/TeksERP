@@ -43,6 +43,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { assertYarnBalanceCoversTx } from "./helpers/yarn-balance-guard.helper";
+import { readIplikEnabled } from "./system-setting.service";
 import { buildNextCursor, cursorWhere, decodeCursor } from "../utils/cursor";
 import { buildTurkishSearch } from "../utils/query-parser";
 import type { ApiResponse } from "../types/api.types";
@@ -155,6 +156,26 @@ export interface YarnMovementTxResult {
  * son hanede ayrışır.
  */
 export async function applyYarnMovementTx(tx: Tx, input: YarnMovementTxInput): Promise<YarnMovementTxResult> {
+  // ⚠️ MODÜL KAPISI — GÖVDENİN İLK İŞİ, ÇAĞIRAN BAZLI DEĞİL (2026-09-02, D1 #2).
+  // Ölçülmüş boşluk: `goods-receipt` ve `stock-count` router'ları yalnız
+  // `requireTicaretEnabled` taşır; ticaret AÇIK + iplik KAPALI bir kurulumda o
+  // iki yüzey kapıdan geçip kg defterine GERÇEKTEN yazıyordu (K10'un fatura
+  // için kapattığı sızıntının birebir ikizi). Route kapısı çözüm DEĞİL: o
+  // zaman KUMAŞ mal kabulü ve kumaş sayımı da iplik modülüne bağlanırdı.
+  // Doğru yer TEK YAZAR'ın içidir — "yeni çağıran kapısız doğamaz" (eksi
+  // bakiye guard'ıyla aynı gerekçe, birkaç satır aşağıda).
+  // ⚠️ TEK KAYNAK: çağıranlara (goods-receipt · stock-count · invoice · yarn
+  // servisinin kendi uçları) AYRICA kontrol EKLENMEZ — ikinci kopya bir gün
+  // ayrışır ve hangisinin doğru olduğu sorusu doğar.
+  // ⚠️ `tx` ile okunur (kendi transaction'ının gördüğü değer), CACHE'siz.
+  if (!(await readIplikEnabled(tx))) {
+    throw AppError.forbidden(
+      "İplik modülü bu kurulumda kapalı — iplik hareketi yazılamaz. " +
+        "Genel Ayarlar → Modüller bölümünden açılabilir.",
+      { code: "MODULE_DISABLED", modul: "iplik" },
+    );
+  }
+
   const qty = D(input.qtyKg).toDecimalPlaces(KG_SCALE, Prisma.Decimal.ROUND_HALF_UP);
   if (qty.lte(0)) {
     // İkinci hat DB CHECK'idir; burada erken ve Türkçe hata veriyoruz ki

@@ -11,6 +11,7 @@ import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
 import { TotpAccountService } from "../services/totp-account.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
+import { MODULE_SETTING_KEYS } from "../constants/module-flags";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
 import {
@@ -1256,6 +1257,20 @@ router.put(
       if (STRUCTURED_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
           "Bu ayar yapılandırılmış JSON içerir — kendi tipli ekranından güncelleyin, düz metinle değiştirilemez",
+        );
+      }
+      // MODÜL ANAHTARLARI BU UÇTAN YAZILAMAZ (2026-09-02).
+      // ⚠️ Bu bir kolaylık değil, KAPATILAN BİR AÇIK: bu uç düz string yazar
+      // (`"true"`), okuyucular da `"true"`yu kabul eder — yani modül şalteri
+      // buradan çevrilebiliyordu ve o yol `PATCH /api/feature-flags`teki
+      // anahtar-kapsamlı guard'ı, tip kontrolünü ve BAĞIMLILIK doğrulamasını
+      // (`assertModuleDependencies`) komple atlıyordu. Tek yazma yüzeyi
+      // kalmalı, yoksa "ticaret kapalı ama iplik açık" gibi tutarsız bir çift
+      // hiçbir kapıdan geçmeden doğar.
+      if (MODULE_SETTING_KEYS.has(key)) {
+        throw AppError.badRequest(
+          "Modül anahtarları yalnız Genel Ayarlar → Modüller (PATCH /api/feature-flags) üzerinden değiştirilir",
+          { code: "MODULE_KEY_RESERVED", key },
         );
       }
       const { value, description } = settingUpsertSchema.parse(req.body);

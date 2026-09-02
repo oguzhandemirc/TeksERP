@@ -1,8 +1,11 @@
 // =============================================================================
 // İPLİK KG-STOK ROTALARI (Paket D1)
 // =============================================================================
-// ⚠️ HER uç İKİ kapıdan geçer: `requireFinanceEnabled` (bu kurulum ticaret
-// paketini kullanıyor mu) + `requirePermission` (bu kişi bunu yapabilir mi).
+// ⚠️ HER uç İKİ kapıdan geçer: `requireIplikEnabled` (bu kurulum iplik
+// modülünü kullanıyor mu) + `requirePermission` (bu kişi bunu yapabilir mi).
+// ⚠️ Kapı 2026-09-02'de `requireFinanceEnabled`ten TAŞINDI ve BAĞIMLIDIR:
+// `requireIplikEnabled` önce TİCARETİ ölçer (iplik ticaret paketinin parçası),
+// ticaret kapalıysa 403 mesajı eksik olan anahtarı — ticareti — söyler.
 // Bayrak kapısını atlayan TEK bir uç, fabrikada modülü fiilen açık bırakır ve
 // "sıfır-fark" garantisi oradan sızar (adresi bilen ya da eski sekmesi açık
 // kalan kullanıcı yine yazar).
@@ -20,13 +23,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireFinanceEnabled } from "../middlewares/finance.middleware";
+import { requireIplikEnabled } from "../middlewares/module.middleware";
 import { yarnService } from "../services/yarn.service";
 
 const router = Router();
 
 // Modül kapısı — bu router'daki HER uç için.
-router.use(verifyToken, requireFinanceEnabled);
+router.use(verifyToken, requireIplikEnabled);
 
 const isoDate = z.string().datetime({ offset: true }).or(z.string().date());
 

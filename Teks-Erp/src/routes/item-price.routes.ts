@@ -5,14 +5,16 @@
 //
 //     app.use("/api/item-prices", itemPriceRoutes);
 //
-// Bu router `router.use(verifyToken, requireFinanceEnabled)` ile kendi rejim
+// Bu router `router.use(verifyToken, requireTicaretEnabled)` ile kendi rejim
 // kapısını taşıdığı için app.ts'e SPESİFİK ön ekle bağlanır. `/api/finance`
 // altına konulmadı: fiyat bir MASTER-DATA ayarıdır (kalem kartının uzantısı),
 // bir defter kaydı değil — panelde de Tanımlar tarafında yaşayacak.
 //
 // ── ⚠️ İKİ KAPI, İKİ SORU ────────────────────────────────────────────────────
-// `requireFinanceEnabled` → "bu kurulum ticaret paketini kullanıyor mu"
-// `requirePermission`     → "bu kişi bunu yapabilir mi"
+// `requireTicaretEnabled` → "bu kurulum ticaret paketini kullanıyor mu"
+//                            (2026-09-02'de `requireFinanceEnabled`ten taşındı:
+//                            fiyat listesi MAL tarafıdır, cari defteri değil)
+// `requirePermission`      → "bu kişi bunu yapabilir mi"
 // Bayrak kapısını atlayan TEK bir uç, üretici fabrikada modülü fiilen açık
 // bırakır ve "sıfır-fark" garantisini deler. Kapı `router.use` ile TOPLU
 // konulur; uç uç yazılırsa biri unutulur ve unutulan uç sessizce açık kalır.
@@ -35,13 +37,13 @@ import { z } from "zod";
 import { itemPriceService } from "../services/item-price.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission } from "../middlewares/rbac.middleware";
-import { requireFinanceEnabled } from "../middlewares/finance.middleware";
+import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { parseQueryParams } from "../utils/query-parser";
 
 const router = Router();
 
 // Modül kapısı — bu router'daki HER uç için.
-router.use(verifyToken, requireFinanceEnabled);
+router.use(verifyToken, requireTicaretEnabled);
 
 const kindEnum = z.enum(["PURCHASE", "SALE"]);
 const currencyEnum = z.enum(["TRY", "USD", "EUR", "GBP", "RUB"]);

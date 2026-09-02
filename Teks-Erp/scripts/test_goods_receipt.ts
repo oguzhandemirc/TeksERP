@@ -94,6 +94,10 @@ import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 // ve `findFirst` onu yine bulur (2026-08-02 saha bulgusu, fixture dosyası başlığı).
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 
+import { ensureIplikModuluAcik } from "./fixture-module-flags";
+
+/** ⚠️ Modül düzeyinde: `finally` bloğu `main()` gövdesinin DIŞINDA koşar. */
+let modulGeriAl: (() => Promise<void>) | null = null;
 let pass = 0;
 let fail = 0;
 function check(label: string, ok: boolean, detail = ""): void {
@@ -151,6 +155,14 @@ function deferred(): { promise: Promise<void>; resolve: () => void } {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 async function main(): Promise<void> {
+// ⚠️ MODÜL ORTAMI (2026-09-02): iplik kg defterinin kapısı SERVİS düzeyindedir
+// (`applyYarnMovementTx` ilk işi `readIplikEnabled`). Fabrika profilinde iplik
+// KAPALI olduğu için bu test onsuz 403 alır ve defteri HİÇ ölçemez. Fixture
+// modülü açar, `finally` BULDUĞU değere geri yazar — gevşetilen kapı DEĞİL,
+// kurulan ORTAMDIR (kapının kendi bekçileri: test_iplik_regime_gate §4d +
+// test_module_flag_off).
+  modulGeriAl = await ensureIplikModuluAcik();
+
   console.log("=== Mal kabul bekçisi ===\n");
 
   const def = await ensureDefaultWarehouse();
@@ -1187,6 +1199,11 @@ main()
     fail++;
   })
   .finally(async () => {
+    if (modulGeriAl) {
+      await modulGeriAl().catch((e: Error) =>
+        console.error("   ⚠️  modül bayrakları geri yazılamadı:", e.message),
+      );
+    }
     try {
       const rolls = await prisma.roll.findMany({ where: { goodsReceiptId: { in: receiptIds } }, select: { id: true } });
       const ids = rolls.map((r) => r.id);

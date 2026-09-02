@@ -10,11 +10,15 @@
 // ALAN bir alt router olsaydı üst router'ın İÇİNE bağlanırdı (finance
 // `/allocations` emsali) — bu router öyle değil.
 //
-// ⚠️ İKİ KAPI, İKİ SORU: `requireFinanceEnabled` ("bu kurulum ticaret paketini
+// ⚠️ İKİ KAPI, İKİ SORU: `requireTicaretEnabled` ("bu kurulum ticaret paketini
 // kullanıyor mu") + `requirePermission` ("bu kişi bunu yapabilir mi"). Fabrikada
-// `finance.enabled` KAPALI ve tek bir kapısız uç, "fabrika sıfır-fark"
+// `ticaret.enabled` KAPALI ve tek bir kapısız uç, "fabrika sıfır-fark"
 // garantisini deler: adresi bilen bir kullanıcı ekranı yine açar ve kapalı
 // modüle kayıt yazar.
+//
+// ⚠️ KAPI 2026-09-02'de `requireFinanceEnabled`ten TAŞINDI: alış siparişi bir
+// MAL hareketidir, cari/fatura defteri DEĞİL. Ticaret paketini kullanan ama
+// ön muhasebe tutmayan bir kurulum bu ekranı açabilmeli (iki soru ayrıdır).
 //
 // ⚠️ ROTA SIRASI: `/open-lines` `/:id`ten ÖNCE. Sonra yazılsaydı Express
 // "open-lines"ı bir id sanır, `assertValidUuid` 400 verir ve uç sahada "bozuk"
@@ -37,14 +41,14 @@ import { z } from "zod";
 import { purchaseOrderService } from "../services/purchase-order.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission, requirePermission } from "../middlewares/rbac.middleware";
-import { requireFinanceEnabled } from "../middlewares/finance.middleware";
+import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { assertValidUuid } from "../middlewares/uuid-param.middleware";
 import { isCursorRequested, parseQueryParams } from "../utils/query-parser";
 
 const router = Router();
 
 // Rejim kapısı — bu router'daki HER uç için.
-router.use(verifyToken, requireFinanceEnabled);
+router.use(verifyToken, requireTicaretEnabled);
 
 const READ_PERMS = ["purchase-order:read", "purchase-order:write"] as const;
 

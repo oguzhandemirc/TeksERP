@@ -5,11 +5,20 @@
 import { Router } from "express";
 import { WorkOrderController } from "../controllers/workorder.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
+import { requireProductionEnabled } from "../middlewares/module.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { workOrderTravelerRouter } from "./traveler-card.routes";
 
 const controller = new WorkOrderController();
 const router = Router();
+
+// Modül kapısı — bu router'daki HER uç için (2026-09-02).
+// ⚠️ Kapı `verifyToken`dan SONRA: kimliksiz istek 401 almalı, 403 değil
+// (403 "kaynak var ama modül kapalı" bilgisini kimliksiz kişiye sızdırırdı).
+// ⚠️ `router.use` ile TOPLU: uç uç yazılırsa biri unutulur ve unutulan uç
+// sessizce açık kalır. Sıra da load-bearing — bu satırdan ÖNCE tanımlanan bir
+// uç kapıyı HİÇ görmez (Express kayıt sırası; hata da log da üretmez).
+router.use(verifyToken, requireProductionEnabled);
 
 // /api/work-orders/:id/traveler-cards altında refakat kartı endpoint'leri
 router.use("/:id/traveler-cards", workOrderTravelerRouter);

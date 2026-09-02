@@ -112,6 +112,10 @@ import { STOCK_COUNT_REASON_CODE, VARIANCE_SOURCES } from "../src/constants/vari
 // "builder kayıtlı" kontrolü vakumen yeşile döner (registry boş kalır).
 import "../src/services/stock-count.service";
 
+import { ensureIplikModuluAcik } from "./fixture-module-flags";
+
+/** ⚠️ Modül düzeyinde: `finally` bloğu `main()` gövdesinin DIŞINDA koşar. */
+let modulGeriAl: (() => Promise<void>) | null = null;
 const inventory = new InventoryService();
 
 let pass = 0;
@@ -185,6 +189,14 @@ async function linesOf(countId: string) {
 }
 
 async function main(): Promise<void> {
+// ⚠️ MODÜL ORTAMI (2026-09-02): iplik kg defterinin kapısı SERVİS düzeyindedir
+// (`applyYarnMovementTx` ilk işi `readIplikEnabled`). Fabrika profilinde iplik
+// KAPALI olduğu için bu test onsuz 403 alır ve defteri HİÇ ölçemez. Fixture
+// modülü açar, `finally` BULDUĞU değere geri yazar — gevşetilen kapı DEĞİL,
+// kurulan ORTAMDIR (kapının kendi bekçileri: test_iplik_regime_gate §4d +
+// test_module_flag_off).
+  modulGeriAl = await ensureIplikModuluAcik();
+
   console.log("=== Tam stok sayımı bekçisi ===\n");
 
   // ── FİKSTÜR ─────────────────────────────────────────────────────────────
@@ -877,10 +889,14 @@ async function main(): Promise<void> {
 
   // Rota kapıları — KAYNAK taraması (kapı silinirse fabrika rejimi açılır).
   const routeSrc = readFileSync(join(__dirname, "../src/routes/stock-count.routes.ts"), "utf8");
-  check("10h) ⭐ rota REJİM kapısını taşıyor", routeSrc.includes("requireFinanceEnabled"));
+  // ⚠️ KAPI 2026-09-02'de `requireFinanceEnabled` → `requireTicaretEnabled`
+  // olarak TAŞINDI: stok sayımı bir MAL sorusudur (top + iplik defteri), cari
+  // defter değil. Ad değişikliği bu iki satırla AYNI commit'te gitmezse bekçi
+  // kırmızı verir — sözleşmenin metinle kilitlendiği yer burası.
+  check("10h) ⭐ rota REJİM kapısını taşıyor", routeSrc.includes("requireTicaretEnabled"));
   check(
     "10i) rejim kapısı router seviyesinde (her uç için)",
-    /router\.use\(\s*verifyToken\s*,\s*requireFinanceEnabled\s*\)/.test(routeSrc),
+    /router\.use\(\s*verifyToken\s*,\s*requireTicaretEnabled\s*\)/.test(routeSrc),
   );
   check(
     "10j) ⭐ tamamlama ucu İKİ defterin de yetkisini arıyor",
@@ -897,6 +913,11 @@ main()
     fail++;
   })
   .finally(async () => {
+    if (modulGeriAl) {
+      await modulGeriAl().catch((e: Error) =>
+        console.error("   ⚠️  modül bayrakları geri yazılamadı:", e.message),
+      );
+    }
     try {
       // FK sırası: yarnMovement (stockCount RESTRICT) → printedDocument →
       // stockCountLine (roll/item/stockCount RESTRICT) → stockCount →

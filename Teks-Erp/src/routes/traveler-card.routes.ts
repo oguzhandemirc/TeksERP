@@ -10,6 +10,7 @@ import { Router } from "express";
 import { TravelerCardController } from "../controllers/traveler-card.controller";
 import { DOCUMENT_DESIGN_READ } from "../constants/document-design";
 import { verifyToken } from "../middlewares/auth.middleware";
+import { requireProductionEnabled } from "../middlewares/module.middleware";
 import {
   requirePermission,
   requireAnyPermission,
@@ -18,6 +19,10 @@ import {
 const controller = new TravelerCardController();
 
 /** WO-scoped router — /api/work-orders/:id/traveler-cards altında mount edilir */
+// ⚠️ ÜRETİM KAPISINI ÜST ROUTER'DAN MİRAS ALIR (`workorder.routes.ts`, kapı
+// satırı sub-mount'tan ÖNCE). Burada İKİNCİ kez takmak, her kart isteğinde bir
+// ayar okumasını iki katına çıkarırdı (app.ts'teki `/api/finance/cheques` sıra
+// kuralıyla aynı gerekçe). Kapısız DEĞİL, kapısı mirastır.
 export const workOrderTravelerRouter = Router({ mergeParams: true });
 
 /**
@@ -100,6 +105,15 @@ workOrderTravelerRouter.get(
 
 /** Kart bazlı router — /api/traveler-cards altında mount edilir */
 const travelerCardRouter = Router();
+
+// Modül kapısı — bu router'daki HER uç için (2026-09-02). Refakat kartı bir
+// ÜRETİM nesnesidir (iş emriyle doğar, malla gezer); ŞABLON stüdyosu ise ayrı
+// bir belge yüzeyidir (`traveler-template.routes`, `document-template:*`) ve
+// bilinçli olarak kapısızdır — üretim kapalı bir kurulumda da belge tasarımı
+// düzenlenebilmeli.
+// ⚠️ Kapı `verifyToken`dan SONRA (kimliksiz istek 401 almalı, 403 değil) ve
+// tüm uçlardan ÖNCE (Express kayıt sırası).
+travelerCardRouter.use(verifyToken, requireProductionEnabled);
 
 /**
  * @openapi

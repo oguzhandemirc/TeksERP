@@ -11,9 +11,20 @@ import { describeOverReceipt, goodsReceiptService } from "../services/goods-rece
 import { describeContractPricing } from "../services/helpers/contract-price.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireTicaretEnabled } from "../middlewares/module.middleware";
 import { parseQueryParams } from "../utils/query-parser";
 
 const router = Router();
+
+// Modül kapısı — bu router'daki HER uç için (2026-09-02).
+// ⚠️ Bu, modül paketinin TEK bilinçli davranış farkıdır: mal kabul bugüne
+// kadar kapısızdı ve eski gerekçe "fabrikada da kullanılır" diyordu. Dosyanın
+// KENDİ başlığı bunun tersini söylüyor ("üretici fabrikada kullanılmaz — mal
+// KK1'den ham girer") ve ölçüm de onu doğruladı: fabrikada bu uçlara giden
+// istek yok, izinler hiçbir rol şablonunda tanımlı değil. Kapısız bırakmak,
+// alım-satım kurulumunun ANA giriş kapısını her kurulumda açık tutmak olurdu.
+// Kapı `verifyToken`dan SONRA: kimliksiz istek 401 almalı, 403 değil.
+router.use(verifyToken, requireTicaretEnabled);
 
 const lineSchema = z.object({
   itemId: z.string().uuid(),

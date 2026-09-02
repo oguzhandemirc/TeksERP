@@ -14,6 +14,13 @@ import {
   DEFAULT_DUPLICATES_FUZZY_THRESHOLD_PCT,
   DUPLICATES_FUZZY_MIN_PCT,
 } from "../constants/duplicate-rules";
+// ⚠️ TEK YÖNLÜ BAĞIMLILIK: `constants/module-flags.ts` bu servisi IMPORT ETMEZ
+// (DB anahtarları orada düz string). Ters yön dairesel bağımlılık kurar ve
+// modül init sırasına göre `undefined` bir Set üretirdi — kapı sessizce açılır.
+import {
+  MODULE_DEPENDENCIES,
+  MODULE_LABELS,
+} from "../constants/module-flags";
 import {
   sanitizeBlankGrid,
   sanitizeDocFields,
@@ -165,6 +172,36 @@ export const SETTING_KEYS = {
    * muyum" aynı anda EVET olabilir.
    */
   PRODUCTION_ENABLED: "production.enabled",
+  // ---------------------------------------------------------------------------
+  // MODÜL ANAHTARLARI (2026-09-02) — `finance.enabled`/`production.enabled` ile
+  // AYNI SINIF: görünürlük değil REJİM. Kapalıyken menü çizilmez, route 403
+  // verir (`middlewares/module.middleware.ts`), kancalar no-op olur.
+  // ⚠️ Beşi de VARSAYILAN KAPALI (`asBoolean(undefined) → false`) — mevcut
+  // fabrikanın değerini migration DAMGALAR (20260902230000); koddaki varsayılan
+  // yalnız SATIR-YOK sigortasıdır. Tek kaynak: `constants/module-flags.ts`.
+  // ---------------------------------------------------------------------------
+  /** Ticaret modülü: alış siparişi · mal kabul · fiyat listeleri · stok sayımı.
+   *  ⚠️ `finance.enabled` ile KARIŞTIRMA: o cari/fatura/tahsilat DEFTERİNİ
+   *  açar, bu MAL hareketinin ticari yüzünü (alım-satım kurulumu). Üretici
+   *  fabrika ikisini de kullanmaz; bir toptancı ikisini de kullanır. */
+  TICARET_ENABLED: "ticaret.enabled",
+  /** İplik modülü: `YarnStock`/`YarnMovement` kg defteri.
+   *  ⚠️ TİCARETE BAĞIMLI (`MODULE_DEPENDENCIES`): iplik alış/satış yüzeyleri
+   *  olmadan tek başına anlamsızdır. Alt bayrağı `yarn.blockNegativeBalanceEnabled`
+   *  ile KARIŞTIRMA — o davranış ayarı, bu modülün şalteri. */
+  IPLIK_ENABLED: "iplik.enabled",
+  /** Çoklu depo modülü: depo seçici · depo kolonu · depolar arası transfer.
+   *  ⚠️ 2026-09-02'ye kadar bu bir ANAHTAR DEĞİL VERİ TÜREVİYDİ (panelde
+   *  `warehouses.length > 1`). Damga o türevi ÖLÇEREK yazar; bundan sonra
+   *  ikinci depo açmak yüzeyleri kendiliğinden AÇMAZ — anahtar açılmalıdır. */
+  DEPO_MULTI_ENABLED: "depo.multiEnabled",
+  /** Kumaş teknik kartı modülü (en · gramaj · kompozisyon · atkı/çözgü).
+   *  YER TUTUCU — arkasında henüz yüzey YOK; panele de girmez (bekçi muafı). */
+  KUMAS_TEKNIK_ENABLED: "kumasTeknik.enabled",
+  /** Dokuma tezgah izleme modülü. YER TUTUCU — arkasında henüz yüzey YOK.
+   *  ÜRETİME BAĞIMLI (`MODULE_DEPENDENCIES`): üretim kapalıyken izlenecek iş
+   *  emri yoktur. */
+  TEZGAH_ENABLED: "tezgah.enabled",
   /** İş emrinde "hedef metraj" alanı gösterilsin mi. Default false (proses-only fabrika). */
   WORKORDER_TARGET_QUANTITY_ENABLED: "workorder.targetQuantityEnabled",
   /** KK1 ham kumaş girişinde "en" alanı gösterilsin mi. Default false (ham en önemsiz). */
@@ -1025,8 +1062,26 @@ export interface FeatureFlags {
    *  (default false = stok yalnız sevkte düşer). ⚠️ Sevkten de düşen kurulumda
    *  açmak ÇİFTE DÜŞÜM olur — bu bir rejim sorusudur. İptal geri yazar. */
   financeYarnOutOnInvoiceEnabled: boolean;
-  /** Üretim modülü (envanter üretim sekmeleri + iş emri yüzeyleri). Varsayılan AÇIK. */
+  /** Üretim modülü (envanter üretim sekmeleri + iş emri yüzeyleri). Varsayılan AÇIK.
+   *  Route kapısı `requireProductionEnabled` (2026-09-02'den beri gerçek bir kapı). */
   productionEnabled: boolean;
+  /** Ticaret modülü (alış siparişi · mal kabul · fiyat listeleri · stok sayımı).
+   *  Varsayılan KAPALI. `financeEnabled` ile bağımsız: biri MAL hareketinin
+   *  ticari yüzünü, diğeri cari/fatura defterini açar. */
+  ticaretEnabled: boolean;
+  /** İplik modülü (kg defteri: `YarnStock`/`YarnMovement`). Varsayılan KAPALI.
+   *  ⚠️ TİCARETE BAĞIMLI — ticaret kapalıyken açılamaz (400) ve kapı 403 verir.
+   *  Bu alan HAM değerdir; etkin değeri (ticaret && iplik) kapı çözer. */
+  iplikEnabled: boolean;
+  /** Çoklu depo modülü (depo seçici · depo kolonu · depolar arası transfer).
+   *  Varsayılan KAPALI; mevcut kurulumda değer aktif depo sayısından ÖLÇÜLEREK
+   *  damgalandı (migration 20260902230000). */
+  depoMultiEnabled: boolean;
+  /** Kumaş teknik kartı modülü. YER TUTUCU — arkasında henüz yüzey yok. */
+  kumasTeknikEnabled: boolean;
+  /** Dokuma tezgah izleme modülü. YER TUTUCU — arkasında henüz yüzey yok.
+   *  ÜRETİME BAĞIMLI (üretim kapalıyken açılamaz). */
+  tezgahEnabled: boolean;
   targetQuantityEnabled: boolean;
   rawWidthEnabled: boolean;
   /** KK1 ham kumaş girişinde ağırlık (kg) alanı gösterilsin mi. Default false;
@@ -1374,6 +1429,16 @@ export class SystemSettingService {
         await readFinanceFutureDatedDocumentBlockEnabled(cacheClient),
       financeYarnOutOnInvoiceEnabled: await readFinanceYarnOutOnInvoiceEnabled(cacheClient),
       productionEnabled: await readProductionEnabled(cacheClient),
+      // MODÜL ANAHTARLARI — ⚠️ `cacheClient` argümanı ATLANAMAZ: bu yol tek
+      // atışlık toplu okumadır, argümansız çağrı beş DB round-trip'i ekler.
+      // ⚠️ HAM değer döner (etkin `iplik = ticaret && iplik` DEĞİL): panel
+      // toggle'ı kendi yazdığını geri okumak zorunda, yoksa kullanıcı ticaret
+      // kapalıyken ipliği açar ve anahtar kapalı görünmeye devam eder.
+      ticaretEnabled: await readTicaretEnabled(cacheClient),
+      iplikEnabled: await readIplikEnabled(cacheClient),
+      depoMultiEnabled: await readDepoMultiEnabled(cacheClient),
+      kumasTeknikEnabled: await readKumasTeknikEnabled(cacheClient),
+      tezgahEnabled: await readTezgahEnabled(cacheClient),
       targetQuantityEnabled: await readTargetQuantityEnabled(cacheClient),
       rawWidthEnabled: await readRawWidthEnabled(cacheClient),
       kk1WeightEntryEnabled: await readKk1WeightEntryEnabled(cacheClient),
@@ -1438,6 +1503,88 @@ export class SystemSettingService {
   }
 
   /**
+   * Bir modül anahtarının bu PATCH'ten SONRAKİ etkin değeri.
+   *
+   * Gövde o anahtarı taşıyorsa gövdedeki değer, taşımıyorsa DB'deki değer
+   * kazanır — "kısmi PATCH" sözleşmesinin birebir karşılığı.
+   *
+   * ⚠️ Gövdedeki değer boolean DEĞİLSE DB'ye düşülür: tip hatasını asıl yazma
+   * dalı ("<alan> boolean olmalı") söylemeli. Burada `Boolean("hayır") === true`
+   * yapmak, yanlış yazımı bağımlılık hatasıyla maskelerdi.
+   * ⚠️ Okuma CACHE'SİZ okuyuculardan: `getFeatureFlags` 30 sn'lik önbelleğinden
+   * beslenseydi, aynı saniyede ticareti kapatıp ipliği açan bir çift bayat
+   * veriyle doğrulanırdı.
+   */
+  private async effectiveModuleValue(
+    input: Record<string, unknown>,
+    key: string,
+  ): Promise<boolean> {
+    const raw = input[key];
+    if (Object.prototype.hasOwnProperty.call(input, key) && typeof raw === "boolean") {
+      return raw;
+    }
+    switch (key) {
+      case "ticaretEnabled":
+        return readTicaretEnabled();
+      case "iplikEnabled":
+        return readIplikEnabled();
+      case "productionEnabled":
+        return readProductionEnabled();
+      case "tezgahEnabled":
+        return readTezgahEnabled();
+      case "depoMultiEnabled":
+        return readDepoMultiEnabled();
+      case "kumasTeknikEnabled":
+        return readKumasTeknikEnabled();
+      case "financeEnabled":
+        return readFinanceEnabled();
+      default:
+        // Bağımlılık haritasına modül olmayan bir anahtar girmiş demektir.
+        throw AppError.badRequest(`Bilinmeyen modül anahtarı: ${key}`);
+    }
+  }
+
+  /**
+   * MODÜL BAĞIMLILIKLARI (`constants/module-flags.ts` → `MODULE_DEPENDENCIES`).
+   *
+   * Kural tek cümle: bağımlı modül AÇIK kalacaksa ön koşulu da AÇIK kalmalı.
+   * Bu tek yüklem iki yönü birden kapsar — bağımlıyı açmak da ön koşulu
+   * kapatmak da aynı yasak durumu (açık bağımlı + kapalı ön koşul) üretir;
+   * mesaj kullanıcının HANGİ hamleyi yaptığına göre yazılır, çünkü "önce
+   * ticareti açın" ile "önce ipliği kapatın" farklı ekranlara götürür.
+   *
+   * ⚠️ TÜM yazmalardan ÖNCE koşar (setFeatureFlags'in ilk ifadesi): dallar tek
+   * tx değildir, araya girseydi yarım gövde yazılırdı.
+   */
+  private async assertModuleDependencies(input: Record<string, unknown>): Promise<void> {
+    for (const [dependent, prerequisite] of Object.entries(MODULE_DEPENDENCIES)) {
+      // Gövde bu çiftin HİÇBİR ucuna dokunmuyorsa ölçmeye gerek yok (iki
+      // gereksiz DB okuması) — ve zaten var olan tutarsız bir çifti burada
+      // reddetmek, ilgisiz bir ayarı kaydetmeyi imkânsız kılardı.
+      const dokunuyor =
+        Object.prototype.hasOwnProperty.call(input, dependent) ||
+        Object.prototype.hasOwnProperty.call(input, prerequisite);
+      if (!dokunuyor) continue;
+
+      const dependentAcik = await this.effectiveModuleValue(input, dependent);
+      if (!dependentAcik) continue;
+      const prerequisiteAcik = await this.effectiveModuleValue(input, prerequisite);
+      if (prerequisiteAcik) continue;
+
+      const bagimliAd = MODULE_LABELS[dependent] ?? dependent;
+      const onKosulAd = MODULE_LABELS[prerequisite] ?? prerequisite;
+      const bagimliAciliyor =
+        Object.prototype.hasOwnProperty.call(input, dependent) && input[dependent] === true;
+      throw AppError.badRequest(
+        bagimliAciliyor
+          ? `${bagimliAd} modülü ${onKosulAd} modülüne bağlıdır — önce ${onKosulAd} modülünü açın`
+          : `${bagimliAd} modülü ${onKosulAd} modülüne bağlıdır — önce ${bagimliAd} modülünü kapatın`,
+        { code: "MODULE_DEPENDENCY", modul: dependent, bagimliOldugu: prerequisite },
+      );
+    }
+  }
+
+  /**
    * Bir feature flag'i toggle et. Kabul: { pricingEnabled: boolean }.
    * Verilmeyen alanlar dokunulmaz.
    */
@@ -1453,6 +1600,12 @@ export class SystemSettingService {
     userId: string | undefined
   ): Promise<ApiResponse<FeatureFlags>> {
     if (!userId) throw AppError.unauthorized();
+
+    // MODÜL BAĞIMLILIĞI — HER YAZMADAN ÖNCE, TOPLUCA (2026-09-02).
+    // ⚠️ Sıra load-bearing: aşağıdaki `this.set` çağrıları TEK TX DEĞİLDİR.
+    // Doğrulama dalların arasına serpiştirilseydi "ticaret kapandı, iplik açık
+    // kaldı" gibi YARIM bir gövde yazılır ve geri alınamazdı.
+    await this.assertModuleDependencies(input as Record<string, unknown>);
 
     if (Object.prototype.hasOwnProperty.call(input, "pricingEnabled")) {
       if (typeof input.pricingEnabled !== "boolean") {
@@ -1632,6 +1785,79 @@ export class SystemSettingService {
         SETTING_KEYS.PRODUCTION_ENABLED,
         input.productionEnabled,
         "Üretim modülü (envanter üretim sekmeleri · iş emri yüzeyleri)",
+        userId
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // MODÜL ANAHTARLARI (2026-09-02)
+    // ⚠️ `description` metinleri grandfathering migration'ındakiyle BİREBİR
+    // AYNI olmak zorunda (bekçi karşılaştırır): ayrışırsa aynı satır, damgayı
+    // atan kuruluma bir açıklamayla, panelden ilk düzenlemeden sonra başka bir
+    // açıklamayla görünür.
+    // ⚠️ Yazım kalıbı (`hasOwnProperty` + ALAN ADI düz metin) LOAD-BEARING:
+    // bekçi C kümesini tam bu çağrının regex'iyle çıkarıyor; döngü ya da
+    // destructuring yazımı dalları görünmez yapar ve sözleşme kontrolü sahte
+    // yeşile düşer. Bu YORUMDA da örnek çağrı YAZILMAZ — regex yorumu da
+    // okur ve kümeye hayalet bir anahtar ekler (ölçüldü: `...` diye bir
+    // anahtar "ulaşılamaz yazma dalı" kırmızısı üretti).
+    // -------------------------------------------------------------------------
+    if (Object.prototype.hasOwnProperty.call(input, "ticaretEnabled")) {
+      if (typeof input.ticaretEnabled !== "boolean") {
+        throw AppError.badRequest("ticaretEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TICARET_ENABLED,
+        input.ticaretEnabled,
+        "Ticaret modülü (alış siparişi · mal kabul · fiyat listeleri · stok sayımı)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "iplikEnabled")) {
+      if (typeof input.iplikEnabled !== "boolean") {
+        throw AppError.badRequest("iplikEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.IPLIK_ENABLED,
+        input.iplikEnabled,
+        "İplik modülü (kg defteri — iplik stok ve hareketleri)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "depoMultiEnabled")) {
+      if (typeof input.depoMultiEnabled !== "boolean") {
+        throw AppError.badRequest("depoMultiEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.DEPO_MULTI_ENABLED,
+        input.depoMultiEnabled,
+        "Çoklu depo modülü (depo seçici · depo kolonu · depolar arası transfer)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "kumasTeknikEnabled")) {
+      if (typeof input.kumasTeknikEnabled !== "boolean") {
+        throw AppError.badRequest("kumasTeknikEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.KUMAS_TEKNIK_ENABLED,
+        input.kumasTeknikEnabled,
+        "Kumaş teknik kartı modülü (en · gramaj · kompozisyon · atkı/çözgü)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "tezgahEnabled")) {
+      if (typeof input.tezgahEnabled !== "boolean") {
+        throw AppError.badRequest("tezgahEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.TEZGAH_ENABLED,
+        input.tezgahEnabled,
+        "Dokuma tezgah izleme modülü",
         userId
       );
     }
@@ -2701,8 +2927,121 @@ export async function readProductionEnabled(
     where: { key: SETTING_KEYS.PRODUCTION_ENABLED },
     select: { value: true },
   });
+  // ⚠️ SATIR-YOK SİGORTASI — SADELEŞTİRME (`asBoolean`a çevirme) YASAK.
+  // 2026-09-02 grandfathering damgasından sonra canlıda satır HEP var, yani bu
+  // dal orada bir daha ÖLÇÜLMEZ; ama damgası olmayan her kopyada (eski dump,
+  // geliştirici DB'si, damganın "geçmişi olan kurulum" koşulunun elediği taze
+  // kurulum) tek ayakta duran şey budur. `requireProductionEnabled` artık
+  // gerçek bir route kapısı olduğu için burayı `false`a çevirmek, üretim
+  // modülünün TAMAMINI (tabletler dahil) sessizce kapatır.
   if (!setting) return true;
   return setting.value === true || setting.value === "true";
+}
+
+/**
+ * Ticaret modülü açık mı? Default FALSE.
+ *
+ * ⚠️ GÖRÜNÜRLÜK değil REJİM anahtarı: kapalıyken menü satırı çizilmez, route
+ * 403 verir (`requireTicaretEnabled`) ve ticari kancalar no-op olur.
+ * ⚠️ Okuma CACHE'SİZ (`module.middleware.ts` argümansız çağırır) — acil
+ * kapatma yolu. Mevcut kurulumdaki değeri migration DAMGALAR (20260902230000);
+ * aşağıdaki varsayılan yalnız satır-yok sigortasıdır.
+ */
+export async function readTicaretEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TICARET_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * İplik modülü açık mı? Default FALSE. HAM değer döner.
+ *
+ * ⚠️ ETKİN DEĞER BURADA ÇÖZÜLMEZ: iplik ticarete bağımlıdır ve "ticaret &&
+ * iplik" birleşimi TEK yerde — `requireIplikEnabled` kapısında — yapılır.
+ * Burada da çözülseydi panel toggle'ı kendi yazdığını geri okuyamaz, kullanıcı
+ * ipliği açar ve anahtar kapalı görünmeye devam ederdi.
+ */
+export async function readIplikEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.IPLIK_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Çoklu depo modülü açık mı? Default FALSE.
+ *
+ * ⚠️ Bu anahtar 2026-09-02'de bir VERİ TÜREVİNİN (panelde aktif depo sayısı >
+ * 1) yerine geçti; mevcut kurulumun değeri o türev ÖLÇÜLEREK damgalandı.
+ * Bundan sonra ikinci depoyu açmak yüzeyleri kendiliğinden AÇMAZ — bilinçli
+ * bir davranış değişikliği (bkz. migration 20260902230000 başlığı).
+ */
+export async function readDepoMultiEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEPO_MULTI_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Kumaş teknik kartı modülü açık mı? Default FALSE. YER TUTUCU — arkasında
+ *  henüz yüzey yok, bu yüzden middleware'i de YAZILMADI (ölü kapı yazmıyoruz). */
+export async function readKumasTeknikEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.KUMAS_TEKNIK_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/** Dokuma tezgah izleme modülü açık mı? Default FALSE. YER TUTUCU (üretime bağımlı). */
+export async function readTezgahEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.TEZGAH_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * KÖPRÜ BAYRAĞI — "satış faturası onayında iplik stoktan düşülsün mü" sorusunun
+ * TEK karar noktası: `finance && ticaret && iplik && altBayrak`.
+ *
+ * NEDEN TEK RESOLVER: alt bayrak İKİ modülün kesişiminde yaşıyor (fatura
+ * finansta, kg defteri iplikte). Tüketici alt bayrağı doğrudan okusaydı, iplik
+ * modülü KAPALI bir kurulumda satış faturası `YarnMovement` yazmaya devam
+ * ederdi — "modül kapalıyken alt bayrak OKUNMAZ" kuralının bilinen tek somut
+ * ihlali buydu. Bekçi `readFinanceYarnOutOnInvoiceEnabled` çağrısının YALNIZ
+ * burada geçtiğini kilitler; ikinci bir çağrı yerine bu fonksiyonu çağır.
+ *
+ * ⚠️ Sıra ucuzdan pahalıya değil, ANLAMLIDIR: en dıştaki modül şalterinden
+ * içeri doğru — kapalı bir modülde alt bayrağın değeri hiç sorulmaz.
+ */
+export async function resolveYarnOutOnInvoiceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readFinanceEnabled(tx))) return false;
+  if (!(await readTicaretEnabled(tx))) return false;
+  if (!(await readIplikEnabled(tx))) return false;
+  return readFinanceYarnOutOnInvoiceEnabled(tx);
 }
 
 /**

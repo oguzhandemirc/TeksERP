@@ -9,9 +9,19 @@ import { z } from "zod";
 import { warehouseTransferService } from "../services/warehouse-transfer.service";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { requireDepoMultiEnabled } from "../middlewares/module.middleware";
 import { parseQueryParams } from "../utils/query-parser";
 
 const router = Router();
+
+// Modül kapısı — bu router'daki HER uç için (2026-09-02).
+// ⚠️ AYRIM: depo TANIMI ve DEFTERİ rejimsizdir (`warehouse.service.ts` başlığı
+// — defteri KK1/sevk/iade/fason da yazar, kapı koymak fabrikada YAZILANI
+// fabrikada OKUNAMAZ yapardı); TRANSFER ise çoklu depo YÜZEYİDİR ve tek depolu
+// bir kurulumda taşınacak ikinci depo yoktur. Panel karosu zaten çizilmiyordu;
+// kapı o görünmez yüzeyi sunucuda da kapatır.
+// Kapı `verifyToken`dan SONRA: kimliksiz istek 401 almalı, 403 değil.
+router.use(verifyToken, requireDepoMultiEnabled);
 
 const createSchema = z.object({
   fromWarehouseId: z.string().uuid(),

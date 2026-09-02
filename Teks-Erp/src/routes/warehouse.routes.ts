@@ -92,10 +92,12 @@ router.get(
 // ⚠️ `/:id`'DEN ÖNCE (`/stats` emsali): sonra kaydedilseydi Express "movements"ı
 // path param sanar ve uç ya 404 ya P2007 verirdi.
 //
-// ⚠️ REJİM KAPISI (`requireFinanceEnabled`) BİLEREK YOK — gerekçe
-// `warehouse.service.ts` başlığında: defteri fabrika yolları da yazıyor
-// (KK1 girişi · top iptali · sevk · iade), kapı koymak fabrikada YAZILAN
-// defteri fabrikada OKUNAMAZ yapardı. Kardeş depo/transfer uçları da rejimsiz.
+// ⚠️ REJİM KAPISI BİLEREK YOK — gerekçe `warehouse.service.ts` başlığında:
+// defteri fabrika yolları da yazıyor (KK1 girişi · top iptali · sevk · iade),
+// kapı koymak fabrikada YAZILAN defteri fabrikada OKUNAMAZ yapardı.
+// ⚠️ Kardeş `/api/warehouse-transfers/*` 2026-09-02'den beri KAPILI
+// (`requireDepoMultiEnabled`) — burası "depo tanımı/defteri", orası "çoklu
+// depo yüzeyi". Bu satırı okuyup transferdeki kapıyı tutarsızlık sanma.
 //
 // ⚠️ UUID alanları `.uuid()` ile doğrulanır: ham CSV/serbest metin doğrudan
 // Prisma'ya giderse P2007 doğar ve `error.middleware` onu jenerik "Geçersiz veri

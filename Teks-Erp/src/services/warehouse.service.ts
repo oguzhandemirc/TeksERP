@@ -32,8 +32,12 @@ import type { ApiResponse } from "../types/api.types";
 // yazılıyor: satırları `inventory` (KK1 girişi, top iptali), `shipping` (sevk +
 // storno), `return.service` (müşteri iadesi) ve `subcontractor` üretiyor —
 // dördü de fabrika yollarıdır ve `finance.enabled` KAPALIYKEN de koşar. Kapı
-// koymak, fabrikada YAZILAN defteri fabrikada OKUNAMAZ yapardı. Kardeş uçlar
-// (`GET /api/warehouses`, `/api/warehouse-transfers/*`) de rejimsizdir; tutarlı.
+// koymak, fabrikada YAZILAN defteri fabrikada OKUNAMAZ yapardı.
+// ⚠️ AYRIM (2026-09-02): depo TANIMI ve DEFTERİ (`GET /api/warehouses`,
+// `/api/warehouses/movements`) rejimsiz KALIR; `/api/warehouse-transfers/*`
+// ise `depo.multiEnabled` kapısı TAŞIR. İkisi farklı sorulardır: defteri
+// yazmak çekirdek iştir, depolar ARASI taşıma ise çoklu depo yüzeyidir ve tek
+// depolu bir kurulumda taşınacak ikinci depo yoktur.
 //
 // ⚠️ YÖN (`direction`) SUNUCUDA TÜRETİLİR, istemcide DEĞİL. "Giren mi çıkan mı"
 // sorusunun cevabı BAKAN DEPOYA görelidir (aynı TRANSFER satırı kaynak depo
