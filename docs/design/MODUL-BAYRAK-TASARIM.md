@@ -15,7 +15,8 @@ kod kimliği olmaktan çıkar, üçüncü müşteride işin yarısı merge.
 
 **Kutsal kısıt:** Adnan Şahin'de hiçbir davranış değişmez. Her yeni anahtar
 migration'la mevcut DB'ye "dünkü davranış" değeriyle damgalanır; yeni müşteri
-varsayılanını kurulum profili (seed) yazar. Tek bilinçli istisna §6'da.
+varsayılanını kurulum profili (seed) yazar. Bilinçli istisnalar karar #4'te (§4):
+mal kabul ve depo transferi uçları — ikisi de fabrikada erişilmeyen yüzey.
 
 **Kabul testi:** fabrikanın gerçek dump'ı (`tekserp_20260902_201133.dump` emsali)
 locale geri yüklenir → `migrate deploy` → bekçiler + `test_consistency` → basit
@@ -107,7 +108,7 @@ ekran soruyu otomatik sorar.
 | 1 | Sevk–sipariş bağı | **Enum** `shipping.orderRequirement = off\|warn\|block`, varsayılan `warn` (bugünkü davranış — kod zaten uyarı basıyor) |
 | 2 | KK1 | **Motor çekirdek** (Roll doğuran servis + guard'lar tek kaynak, kapatılamaz); **iki sunum**: KK1 istasyon ekranı üretim modülünde, toptancıya aynı motorun üstüne ayrı sade "Mal Girişi" ekranı (ilk toptancı müşteride yazılır) |
 | 3 | Atkı/çözgü/gramaj | **Item'a nullable kolonlar** (`modul.kumas-teknik`). Tekstile özel ERP pratiği (Datatex tarzı); FabricProperty'ye NUMERIC eklenmez (katalog ayrık sınıflar için). SAP tarzı esnek sayısal katalog ileride üstüne eklenebilir, çelişmez |
-| 4 | Mal kabul uçları | `modul.ticaret` kapısına girer — planın TEK bilinçli davranış değişikliği (bugün bilinçli kapısız; fabrikada bu uçlara giden sıfır istek ölçüldü) |
+| 4 | Mal kabul + depo transferi uçları | Mal kabul `modul.ticaret`, depo transferi `modul.coklu-depo` kapısına girer — planın İKİ bilinçli statü değişikliği (2026-09-02 P1 ölçümü: fabrika dump'ında 0 mal kabul, 0 depo, 0 transfer; transfer karosu tek depoda zaten gizli). Bugün ikisi de bilinçli kapısız; `warehouse.service` defteri KAPISIZ KALIR (fabrika yolları da yazar) |
 | 5 | Yönetim yetkisi | `modul.*` yalnız süperadmin; davranış bayrakları fabrika admininde (bugünkü `admin:settings`) + **ayar şifresi** (§7.2) |
 | 6 | Rezervasyon | **Şimdi altyapı kurulacak** (maliyet uyarısı yapıldı, kullanıcı kararı). Kendi append-only defteri + çift-yüklem kuralı + DB CHECK; `SackAllocation`a DOKUNULMAZ (o sevk muhasebesidir) |
 | 7 | Süperadmin uzak erişim | Tünelden girebilir, **TOTP zorunlu**, muafiyet yok |
@@ -264,8 +265,8 @@ Varsayılanlar = bugünkü davranış. Tam liste + maliyet analizi sentez çıkt
 > kapatıldı (#7, #8), iki orantı düzeltildi (#1 kapsamı, #3 muafiyeti).
 
 1. **Adnansahin sıfır fark** — kod paketi (P1-P6) dump provası + mevcut test
-   seti yeşil olmadan bitmiş sayılmaz. Tek bilinçli istisna: mal kabul 403.
-   (P7 doküman işi — prova kapsamı dışı.)
+   seti yeşil olmadan bitmiş sayılmaz. Bilinçli istisna İKİ uç: mal kabul 403 +
+   depo transferi 403 (karar #4). (P7 doküman işi — prova kapsamı dışı.)
 2. **Grandfathering mekaniktir:** yeni anahtarın mevcut DB'deki değeri
    migration DAMGASIDIR; koddaki default yalnız satır-yok sigortasıdır; yeni
    kurulumun değerini profil yazar. Varsayılan çatışması koddaki default'la

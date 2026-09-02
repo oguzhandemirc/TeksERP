@@ -18,9 +18,9 @@ satıcıya ait gizli SÜPERADMİN, modül/bayrak yönetimi için Sistem Profili 
 ve kaliteyi istasyon türünden yeteneğe taşıyan refactor (farklı KK topolojili
 fabrikalar için).
 
-**Kutsal kısıt:** Adnan Şahin'de sıfır davranış farkı (tek bilinçli istisna: mal
-kabul uçları `modul.ticaret` kapısına girince 403 dönmesi — prod ölçümü: bu
-uçlara giden hiç istek yok). Kabul testi: fabrikanın gerçek dump'ı üstünde
+**Kutsal kısıt:** Adnan Şahin'de sıfır davranış farkı (bilinçli istisna İKİ uç: mal
+kabul `modul.ticaret`, depo transferi `modul.coklu-depo` kapısına girince 403
+— dump ölçümü 2026-09-02: 0 mal kabul, 0 depo, 0 transfer; transfer karosu zaten gizli). Kabul testi: fabrikanın gerçek dump'ı üstünde
 migrate + bekçiler + basit profille LAN regresyonu.
 
 ## Kapsam
@@ -213,8 +213,16 @@ kullanım audit'e.
 **P1 · Modül anahtarları (backend):** 6 yeni anahtar (`ticaret.enabled`,
 `iplik.enabled`, `depo.multiEnabled`, `kumasTeknik.enabled`,
 `tezgah.enabled` yer tutucu, `production.enabled` terfisi) — her biri dört
-kapıdan; modül başına ADLANDIRILMIŞ middleware (`requireTicaretEnabled`...,
-jenerik fabrika YOK — bekçiler metin arar); route kapıları taşınır (tesisat
+kapıdan; modül başına ADLANDIRILMIŞ middleware, **ad = `require` +
+PascalCase(API alanı)**: `requireTicaretEnabled` · `requireIplikEnabled` ·
+`requireDepoMultiEnabled` · `requireProductionEnabled` (2026-09-02 kararı — plandaki
+`requireUretimEnabled` taslak addı; alan `productionEnabled` ve bekçi `REGIME_GATES`
+zaten bu adı yazıyordu); yer tutucu `kumasTeknik`/`tezgah` için middleware ve panel
+toggle YOK (route'suz kapı ölü satır; `PANEL_EXEMPT` gerekçeli); `iplik→ticaret`
+bağımlılığı middleware zincirinde + `setFeatureFlags` yazma doğrulamasında (400
+`MODULE_DEPENDENCY`), okuyucular HAM değer döner; `modul.*` ortak ön ek taşımadığı
+için süperadmin guard'ı (P2) ad kalıbıyla değil tek kaynak `MODULE_FLAG_KEYS`
+kümesiyle (`src/constants/module-flags.ts`) tanımlanır; (jenerik fabrika YOK — bekçiler metin arar); route kapıları taşınır (tesisat
 tablosu); `MODULE_DISABLED` makine-okunur kod; `REGIME_GATES` + regime-gate
 bekçileri modül başına bölünür; `test_<modul>_flag_off` ikizleri.
 Grandfathering migration: mevcut DB'ye bugünkü değerler damgalanır.
@@ -232,7 +240,13 @@ boğazı + panel UI + drift onarımları). Davranış birebir — mevcut bekçi 
 yeşil kalmalı; yeni bekçi `test_station_quality_capability.ts` (backfill
 doğruluğu + boğazın tekliği AST taraması + negatif sonda).
 
-**P5 · Karo/ctx + Sistem Profili ekranı (Electron):**
+**P5 · Karo/ctx + Sistem Profili ekranı (Electron):** ⚠️ 2026-09-02 notu:
+`depo.multiEnabled` artık ANLIK DAMGA, canlı türev değil — fabrika ikinci depoyu
+açınca yüzeyler eskisi gibi kendiliğinden BELİRMEZ. P5 iki uyarı ekler: Sistem
+Profili'nde "aktif depo >1 ama anahtar kapalı" amber bandı + Depolar ekranında ikinci
+aktif depo kaydedilirken "Çoklu depo modülü kapalı — yüzeyler görünmeyecek, Sistem
+Profili'nden açılmalı" uyarısı (anahtarı kimin açacağı kullanıcı-karar kuyruğunda).
+
 `OperationsVisibilityContext`e alanlar (derleme zoruyla yayılır) + modül başına
 saf `*-regime.ts` yüklemi + `nav-config` union + `ctx.multiWarehouse` →
 `depo.multiEnabled`. Yeni "Sistem Profili" sayfası (yalnız süperadmin görür):
@@ -261,8 +275,8 @@ eşlenmesi + `test_screen_catalog` genişletmesi (gerekçeli `MODULESIZ_EKRANLAR
 4. Süperadmin turu: PIN'le tablete gir (listede yok) · panelde `*` ile tüm
    menüler · audit'te "Sistem Bakımı" · fabrika admini modul.* yazamıyor (403)
    · ayar şifresi yanlışsa bayrak kaydedilemiyor.
-5. Tek bilinçli fark ölçümü: mal kabul uçları kapalı modülde 403 — başka
-   hiçbir uçta statü farkı yok (route-diff scripti ile ölçülür).
+5. Bilinçli fark ölçümü: mal kabul + depo transferi uçları kapalı modülde 403 —
+   başka hiçbir uçta statü farkı yok (route-diff scripti ile ölçülür).
 6. Sürüm notu + `panel-v*/tablet-v*` etiketli yayın; Electron+APK gerekmiyor
    (yalnız panel yüzeyi değişti → panel sürümü yeter; tablet OTA yalnız
    görünmez süzgeçler için opsiyonel).
