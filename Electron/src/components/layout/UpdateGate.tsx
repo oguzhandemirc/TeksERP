@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Download, RefreshCw } from "lucide-react";
+import { useState as useReactState } from "react";
+import { AlertTriangle, Download, RefreshCw, Server } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useUpdater } from "@/hooks/useUpdater";
 import { useClientPolicy } from "@/hooks/useClientPolicy";
 import { isBelowMinimum } from "@/lib/version-compare";
+import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 
 /**
  * Kapı açıldıktan sonra kurulumun kendiliğinden başlamasına kalan süre.
@@ -56,6 +59,24 @@ function sureMetni(sn: number): string {
 export function UpdateGate() {
   const { status, check, install } = useUpdater();
   const policy = useClientPolicy();
+  /**
+   * ⚠️ ÇIKMAZ KAPISI (2026-09-02, sahada yaşandı).
+   *
+   * `minVersion` kilidi kapatılamaz olarak tasarlandı ve o doğru: eski panel
+   * yanlış veri göstermemeli. Ama kilit **YANLIŞ SUNUCUYA** bağlanmış bir
+   * panelde de kapanıyor ve orada çıkış yolu YOKTU: adresi değiştirecek ekrana
+   * ulaşmak için giriş yapmış olmak, giriş ekranına dönmek için de kapıyı
+   * geçmek gerekiyordu. Tek kurtuluş `secure.json`u elle silmekti — operatörün
+   * yapamayacağı, uzaktan da yönlendirilemeyecek bir şey (panel açılmıyor ki).
+   *
+   * Bu düğme kilidin amacını BOZMAZ: veriye erişim vermiyor, yalnız "hangi
+   * sunucuya soruyorum" sorusunu düzeltmeyi mümkün kılıyor. Kural sunucuda
+   * yaşadığı için doğru sunucuya bağlanan panel zaten kilitlenmez.
+   *
+   * Yalnız POLİTİKA kilidinde gösterilir — indirilmiş bir güncelleme beklerken
+   * adres değiştirmenin anlamı yok ve orada gecikme yaratmak istemiyoruz.
+   */
+  const [adresAcik, setAdresAcik] = useReactState(false);
 
   const kuruldu = useRef(false);
   const [kuruluyor, setKuruluyor] = useState(false);
@@ -185,6 +206,26 @@ export function UpdateGate() {
               />
               Şimdi kontrol et
             </Button>
+            {/* Masaüstüne özel: web panelinde adres sayfanın origin'idir,
+                değiştirilemez (ve değiştirilmemeli). */}
+            {IS_ELECTRON && (
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="mt-2 w-full gap-2 text-muted-foreground"
+                  onClick={() => setAdresAcik(true)}
+                >
+                  <Server className="h-4 w-4" />
+                  Sunucu adresini değiştir
+                </Button>
+                <p className="mt-2 text-center text-xs text-muted-foreground">
+                  Yanlış sunucuya bağlandıysanız bu ekran açılır. Adresi düzeltince
+                  kilit kalkar.
+                </p>
+                <ApiEndpointDialog open={adresAcik} onOpenChange={setAdresAcik} />
+              </>
+            )}
           </>
         ) : (
           <>
