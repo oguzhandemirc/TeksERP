@@ -60,6 +60,18 @@ import {
   readDepoMultiEnabled,
   readKumasTeknikEnabled,
   readTezgahEnabled,
+  // §16 — ENUM ayağı (2026-09-03, Dilim 2). Aynı derleme bağı gerekçesi: okuyucu
+  // ya da değer kümesi silinirse `npm run typecheck:scripts` bekçi koşmadan
+  // ÖNCE kırmızı verir.
+  readSameTypeSessionPolicy,
+  readShippingOrderRequirement,
+  readShippingInvoiceMode,
+  SAME_TYPE_SESSION_POLICIES,
+  SHIPMENT_ORDER_REQUIREMENTS,
+  SHIPPING_INVOICE_MODES,
+  DEFAULT_SAME_TYPE_SESSION_POLICY,
+  DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
+  DEFAULT_SHIPPING_INVOICE_MODE,
 } from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
 import { yorumlariSok } from "./lib/regime-gate-scan";
@@ -797,10 +809,26 @@ async function main() {
   })(SRC_ROOT);
   const relOf = (f: string) => path.relative(SRC_ROOT, f).split(path.sep).join("/");
   const srcText = new Map(srcFiles.map((f) => [relOf(f), readFileSync(f, "utf8")]));
+  // ⚠️ YORUM KÖRLÜĞÜ (2026-09-03 / D8 ölçümü). Aşağıdaki üç tarama da KODA
+  // bakmak zorunda; ham metne bakan hâli ÜÇ AYRI yönde yalan söylüyordu:
+  //   ① tüketici taraması → YANLIŞ KIRMIZI: `readTamburOverQuantityEnabled`
+  //      üç "tüketici" gösteriyordu ama ikisi (`cash-balance-guard.helper`,
+  //      `yarn-balance-guard.helper`) okuyucuyu yalnız YORUMDA "emsali" diye
+  //      anıyordu — bir kategoriye `regime:` eklendiği gün sızıntı listesi
+  //      düzeltilemez bir kırmızı verirdi.
+  //   ② kapı taraması (`includes(gate.middleware)`) → YANLIŞ YEŞİL: kapı adını
+  //      yalnız açıklama satırında anan bir router "kapılı" sayılır, ulaşım
+  //      kümesi daralır ve sızıntı GÖRÜNMEZ olur (aynı hata `reports.routes`ta
+  //      ölçülmüştü — `regime-gate-scan` başlığındaki AST kararının sebebi).
+  //   ③ `selfGate` taraması → YANLIŞ YEŞİL: okuyucuyu yorumda anan bir dosya
+  //      "kendi kapısını taşıyor" sayılıp ulaşım grafiğinden düşer.
+  // İmport grafiği de koddan kurulur: yorum satırına alınmış bir `from "./x"`
+  // sahte kenar üretir (ters yönde yanlış kırmızı).
+  const srcCode = new Map([...srcText].map(([rel, text]) => [rel, yorumlariSok(text)]));
   const SETTING_SERVICE_REL = "services/system-setting.service.ts";
 
   const importsOf = new Map<string, string[]>();
-  for (const [rel, text] of srcText) {
+  for (const [rel, text] of srcCode) {
     const dir = path.posix.dirname(rel);
     const outs: string[] = [];
     // ⚠️ DİNAMİK `import("./x")` DE SAYILIR. Yalnız statik `from "./x"` taransa
@@ -826,20 +854,64 @@ async function main() {
     `dosya=${srcText.size} route=${routeFiles.length}`,
   );
 
+  // ⚠️ ALT ROUTER KAPIYI MOUNT'TAN MİRAS ALIR (2026-09-03 ölçümü). "Kapı metnini
+  // taşımayan her route dosyası kapısızdır" varsayımı YANLIŞ: `finance-allocation.
+  // routes.ts` kendi başına mount EDİLMEZ, `finance.routes.ts` onu
+  // `router.use("/allocations", …)` ile bağlar ve oradaki `router.use(verifyToken,
+  // requireFinanceEnabled)` alt router'ın da kapısıdır. Bu gerçek modellenmezse
+  // sızıntı listesi DÜZELTİLEMEZ bir kırmızı verir (dosyaya kapı eklemek
+  // gereksiz ikinci kapı olurdu; kaldırmak da gerçeği değiştirmez).
+  //
+  // ⚠️ Bu körlük yorum ayıklamasıyla ORTAYA ÇIKTI, onun ürünü DEĞİL: ham metin
+  // taranırken dosyanın BAŞLIĞINDAKİ "…requireFinanceEnabled kapısını MİRAS ALIR"
+  // açıklaması onu tesadüfen "kapılı" gösteriyordu. Yani doğru cevap YANLIŞ
+  // sebeple veriliyordu ve mount düzeni değişse kimse görmeyecekti.
+  const routeSet = new Set(routeFiles);
+  const routeParents = new Map<string, string[]>(routeFiles.map((r) => [r, []]));
+  for (const r of routeFiles) {
+    for (const c of importsOf.get(r) ?? []) {
+      if (routeSet.has(c) && c !== r) routeParents.get(c)!.push(r);
+    }
+  }
+  const altRouterSayisi = routeFiles.filter((r) => routeParents.get(r)!.length > 0).length;
+  check(
+    "§14 zemin: alt router mount grafiği kuruldu (≥1 route başka route'a bağlanıyor)",
+    altRouterSayisi >= 1,
+    `alt router=${altRouterSayisi} — 0 ise miras modeli no-op'a düşmüş, ` +
+      "kapıyı mount'tan alan router'lar yeniden sahte sızıntı üretir",
+  );
+
   /** Bu rejim kapalıyken hâlâ ULAŞILABİLİR olan `src` dosyaları. */
   const ungatedReach = (regime: string): Set<string> => {
     const gate = REGIME_GATES[regime]!;
     const reached = new Set<string>();
-    const queue = routeFiles.filter((r) => !srcText.get(r)!.includes(gate.middleware));
+    // Kapısız KÖKLER: kapı metnini taşımayan ve başka bir route'a bağlanmayan
+    // (yani `app.ts`'ten doğrudan mount edilen) router'lar. Sonra miras aşağı
+    // yayılır: kapısız bir router'ın bağladığı alt router da kapısızdır.
+    const kapili = (r: string) => srcCode.get(r)!.includes(gate.middleware);
+    const queue = routeFiles.filter((r) => !kapili(r) && routeParents.get(r)!.length === 0);
+    const kapisiz = new Set(queue);
+    for (let i = 0; i < queue.length; i++) {
+      for (const c of importsOf.get(queue[i]!) ?? []) {
+        if (!routeSet.has(c) || kapisiz.has(c) || kapili(c)) continue;
+        kapisiz.add(c);
+        queue.push(c);
+      }
+    }
     for (let i = 0; i < queue.length; i++) {
       for (const next of importsOf.get(queue[i]!) ?? []) {
+        // ⚠️ ROUTE dosyaları bu turda ATLANIR — kapısız route kümesi YUKARIDA
+        // (miras yayılımıyla) tam olarak hesaplandı. Burada da yürünseydi,
+        // kapısız bir router'ın bağladığı KAPILI alt router "ulaşılabilir"
+        // sayılır ve kendi kapısı yok sayılırdı.
+        if (routeSet.has(next)) continue;
         // ⚠️ system-setting.service ATLANIR: her okuyucunun TANIMI orada yaşıyor;
         // grafikte geçilirse "tüketici" kavramı anlamını yitirir.
         if (next === SETTING_SERVICE_REL || reached.has(next)) continue;
         // ⚠️ Kendi rejim kapısını taşıyan dosya BİR KAPIDIR: içine girilmez.
         // `shipment-auto-draft.helper` tam bu durumda — rejimsiz sevk yolundan
         // çağrılıyor ama ilk ifadesi `readFinanceEnabled()`.
-        if (srcText.get(next)!.includes(gate.selfGate)) continue;
+        if (srcCode.get(next)!.includes(gate.selfGate)) continue;
         reached.add(next);
         queue.push(next);
       }
@@ -906,7 +978,7 @@ async function main() {
   for (const regime of new Set(gatedCats.map((c) => c.regime!))) {
     const gate = REGIME_GATES[regime];
     const gatedRoutes = gate
-      ? routeFiles.filter((r) => srcText.get(r)!.includes(gate.middleware))
+      ? routeFiles.filter((r) => srcCode.get(r)!.includes(gate.middleware))
       : [];
     check(
       `rejim '${regime}' backend'de gerçekten bir kapı (≥1 route ${gate?.middleware ?? "?"} taşıyor)`,
@@ -923,7 +995,7 @@ async function main() {
   // REGIME_GATES satırı sessizce yaşar ve tablo "backend'de kapı var" diye
   // yalan söyler. Aşağıdaki kontrol tabloyu KENDİ evreninde denetler.
   const oluGate = Object.entries(REGIME_GATES).filter(
-    ([, g]) => !routeFiles.some((r) => srcText.get(r)!.includes(g.middleware)),
+    ([, g]) => !routeFiles.some((r) => srcCode.get(r)!.includes(g.middleware)),
   );
   check(
     "⭐ REGIME_GATES'teki HER middleware en az bir route dosyasında geçiyor (ölü satır yok)",
@@ -936,7 +1008,7 @@ async function main() {
   // selfGate metni okuyucunun ADIYLA ve KAPANIŞ PARANTEZİYLE yazılır; parantez
   // unutulursa sızıntı taraması sessizce daralır (`readTicaret` başka ada da uyar).
   const kotuSelfGate = Object.entries(REGIME_GATES).filter(
-    ([, g]) => !g.selfGate.endsWith("(") || !srcText.get(SETTING_SERVICE_REL)!.includes(g.selfGate),
+    ([, g]) => !g.selfGate.endsWith("(") || !srcCode.get(SETTING_SERVICE_REL)!.includes(g.selfGate),
   );
   check(
     "REGIME_GATES `selfGate` metinleri gerçek okuyucuya işaret ediyor (kapanış parantezli)",
@@ -961,7 +1033,7 @@ async function main() {
     ];
     for (const reader of new Set(readerNames)) {
       const re = new RegExp(`\\b${reader}\\b`);
-      const consumers = [...srcText.entries()]
+      const consumers = [...srcCode.entries()]
         .filter(([rel, text]) => rel !== SETTING_SERVICE_REL && !rel.startsWith("routes/") && re.test(text))
         .map(([rel]) => rel);
       const open = consumers.filter((c) => reach.has(c));
@@ -976,6 +1048,20 @@ async function main() {
     leaks.length
       ? `rejimsiz yoldan hâlâ tetiklenebiliyor (kategoriden 'regime' alanını kaldır): ${leaks.join(" · ")}`
       : "",
+  );
+
+  // KÖRLÜK ZEMİNİ — yorum ayıklamanın GERÇEKTEN bir fark yarattığını ölçer.
+  // Yoksa `yorumlariSok` bir gün no-op'a dönerse (regex bozulur, dosya boş
+  // döner) yukarıdaki üç tarama sessizce ham metne geri döner ve bu bölüm
+  // "ihlal yok" derken aslında hiçbir şeye bakmamış olur.
+  const yorumFarki = [...srcText.entries()].filter(
+    ([rel, text]) => srcCode.get(rel)!.length < text.length,
+  ).length;
+  check(
+    "§14 zemin: tüketici/kapı taramaları YORUMSUZ koda bakıyor",
+    yorumFarki >= 100,
+    `yorumu ayıklanan dosya=${yorumFarki} — 0 ise \`yorumlariSok\` no-op'a düşmüş, ` +
+      "tarama ham metne geri dönmüş demektir (yanlış kırmızı + yanlış yeşil birlikte)",
   );
 
   console.log(
@@ -1153,6 +1239,230 @@ async function main() {
     `\n   §15 — modül şalterleri: ${MODULE_FLAGS.map((k) => `${k}=${moduleDefaults[k] ? "açık" : "kapalı"}(varsayılan)`).join(" · ")}`,
   );
 
+
+  // ---------------------------------------------------------------------------
+  // 16) ⭐ ENUM AYAĞI — bekçinin ÜÇÜNCÜ KÖR NOKTASI (2026-09-03, Dilim 2)
+  // ---------------------------------------------------------------------------
+  // Bekçi bugüne kadar YALNIZ boolean (`aBool`, §1-§6) ve sayısal (`aNumeric`/
+  // `aNum`, §8) anahtarları ölçüyordu. METİN değerli (kapalı kümeli = enum) bir
+  // ayar HİÇBİR kontrolden geçmiyordu ve bu boşluk KANITLIYDI: `sameTypeSessionPolicy`
+  // ne bir kümede ne bir muaf listesindeydi — dört kapıdan biri düşse (örn.
+  // `updateSchema` satırı silinse) her kontrol YEŞİL kalır, ayar sahada ne
+  // açılabilir ne KAPATILABİLİRDİ. 2026-08-04 `kk1DuplicateGuardEnabled`
+  // vakasının birebir tekrarı.
+  //
+  // Bu ayak eklenmeden yeni enum bayrak yazılmaz (Dilim 2 kararı D1).
+  //
+  // ⚠️ EVRENİN SINIRI: `typeof === "string"` yetmez — `companyName` de metindir
+  // ama ENUM DEĞİLDİR (kapalı değer kümesi yok, kendi kartından yönetilir).
+  // Serbest metinler GEREKÇELİ muaf listesindedir ve liste İKİ YÖNLÜ denetlenir:
+  // ölü bir satır, gerçek bir enum bayrağını sessizce kapsam dışında tutardı.
+  const FREE_TEXT_FLAGS: Record<string, string> = {
+    companyName: "serbest METİN — kapalı değer kümesi yok; panel Şirket Bilgileri kartı yazar",
+  };
+  const aEnum = A.filter((k) => typeof flags[k] === "string" && !FREE_TEXT_FLAGS[k]);
+
+  // Panelde enum satırı `enumKey:` ile yazılır — `key:` DEĞİL. Ad bilinçli farklı:
+  // aynı adla yazılsaydı enum anahtarı D (boolean) kümesine sızar ve §5
+  // ("yönetilemez boolean bayrak") yanlış şey ölçerdi. `numberKey:` ayrımının
+  // varlık sebebi birebir aynıydı.
+  const DEnum = electronFound ? readKeys(ELECTRON_CONFIG, /enumKey:\s*"([^"]+)"/g) : [];
+
+  const ENUM_PANEL_EXEMPT: Record<string, string> = {
+    sameTypeSessionPolicy: "kind:'session' — Oturum section'ı yönetir (kendi select'i var)",
+  };
+
+  console.log(
+    `\n   §16 — A(enum)=${aEnum.length} [${aEnum.join(", ")}] · D(enum satırı)=${DEnum.length}`,
+  );
+
+  // ZEMİN: enum anahtarı bulunamıyorsa (tip değişti, regex bozuldu) "ihlal yok"
+  // ile "hiçbir şeye bakmadım" AYNI yeşile çıkardı.
+  check("zemin: A enum ≥ 3 anahtar", aEnum.length >= 3, `aEnum=${aEnum.join(", ")}`);
+  check(
+    "zemin: panelde ≥ 1 `enumKey` satırı okundu",
+    !electronFound || DEnum.length >= 1,
+    `DEnum=${DEnum.length} — regex/alan adı bozulduysa §16 panel ayağı vakumen yeşil kalır`,
+  );
+
+  const enumMissingInSchema = aEnum.filter((k) => !B.includes(k));
+  check(
+    "⭐ API'nin döndüğü her ENUM ayar updateSchema'da var",
+    enumMissingInSchema.length === 0,
+    `şemada YOK: ${enumMissingInSchema.join(", ")} → panelden PATCH 400 alır (ne açılır ne KAPATILIR)`,
+  );
+  const enumMissingInService = aEnum.filter((k) => !C.includes(k));
+  check(
+    "API'nin döndüğü her ENUM ayarın setFeatureFlags yazma dalı var",
+    enumMissingInService.length === 0,
+    `yazılmıyor: ${enumMissingInService.join(", ")} → uç 200 der, DB değişmez`,
+  );
+
+  // Şema satırı gerçekten KAPALI KÜME mi? `z.string()`e gevşetilirse panel bir
+  // yazım hatasını ("blok", "BLOCK") sessizce DB'ye yazdırır ve okuyucunun kod
+  // sigortası devreye girer — yani ayar "kaydedildi" der, davranış değişmez.
+  const enumTypeGaps = aEnum.filter((k) => {
+    const current = flags[k] as string;
+    const acceptsCurrent = updateSchema.safeParse({ [k]: current }).success;
+    const rejectsBogus = !updateSchema.safeParse({ [k]: "__hicboylebirdegeryok__" }).success;
+    const rejectsBool = !updateSchema.safeParse({ [k]: true }).success;
+    return !(acceptsCurrent && rejectsBogus && rejectsBool);
+  });
+  check(
+    "⭐ ENUM ayarlar şemada KAPALI KÜME doğruluyor (geçerli kabul · uydurma red · boolean red)",
+    enumTypeGaps.length === 0,
+    `gevşek/eksik: ${enumTypeGaps.join(", ")}`,
+  );
+
+  const enumUnmanaged = aEnum.filter((k) => !DEnum.includes(k) && !ENUM_PANEL_EXEMPT[k]);
+  check(
+    "yönetilemez ENUM ayar yok (panelde yok + muaf değil)",
+    !electronFound || enumUnmanaged.length === 0,
+    `${enumUnmanaged.join(", ")} — panele (enumFlags) ekle ya da gerekçeli muaf yaz`,
+  );
+  const enumPanelGhosts = DEnum.filter((k) => !A.includes(k));
+  check(
+    "panelin ENUM satırlarının hepsi API yanıtında var",
+    enumPanelGhosts.length === 0,
+    `API'de YOK: ${enumPanelGhosts.join(", ")}`,
+  );
+
+  // Muaf/serbest-metin BAYATLIĞI — iki yönlü, dört kontrol.
+  const enumStaleUnknown = Object.keys(ENUM_PANEL_EXEMPT).filter((k) => !aEnum.includes(k));
+  check(
+    "ENUM muaf listesinde artık var olmayan anahtar yok",
+    enumStaleUnknown.length === 0,
+    `API'de enum değil/yok: ${enumStaleUnknown.join(", ")}`,
+  );
+  const enumStaleNowInPanel = Object.keys(ENUM_PANEL_EXEMPT).filter((k) => DEnum.includes(k));
+  check(
+    "ENUM muaf listesindeki anahtar panele eklenmemiş (eklenmişse muafı kaldır)",
+    !electronFound || enumStaleNowInPanel.length === 0,
+    `artık panelde: ${enumStaleNowInPanel.join(", ")}`,
+  );
+  const freeTextStale = Object.keys(FREE_TEXT_FLAGS).filter((k) => typeof flags[k] !== "string");
+  check(
+    "serbest-metin muaf listesinde artık metin OLMAYAN anahtar yok",
+    freeTextStale.length === 0,
+    `metin değil: ${freeTextStale.join(", ")} — muafı kaldır, yoksa gerçek bir enum kapsam dışı kalır`,
+  );
+  const freeTextInPanel = Object.keys(FREE_TEXT_FLAGS).filter((k) => DEnum.includes(k));
+  check(
+    "serbest-metin anahtarı `enumFlags` satırı olarak yazılmamış",
+    !electronFound || freeTextInPanel.length === 0,
+    `panelde enum satırı var: ${freeTextInPanel.join(", ")} — kapalı kümesi olmayan ayar select ile yönetilemez`,
+  );
+
+  // PANELİN "VARSAYILAN" BEYANI ↔ BACKEND OKUYUCUSU — §12'nin enum ikizi.
+  // Panel her enum satırının altına "Varsayılan: <etiket>" basar ve bu bir
+  // BEYANDIR; ikinci kaynak olduğu için ölçülür (canlı DB'ye BAKILMAZ, sahte
+  // "kayıt yok" istemcisiyle çağrılır — birinin panelden değiştirdiği bir dev
+  // kurulumu sahte kırmızı üretirdi).
+  const declaredEnumDefaults = new Map<string, string>();
+  if (electronFound) {
+    const cfg = readFileSync(ELECTRON_CONFIG, "utf8");
+    // ⚠️ ARADAKİ BAŞKA BİR `enumKey:` SATIRI GEÇİLEMEZ (§12'de birebir aynı
+    // tuzak ölçüldü: `defaultOn` taşımayan bir satır, sonrakinin beyanını
+    // sahiplenip sahte kırmızı vermişti).
+    for (const m of cfg.matchAll(
+      /enumKey:\s*"([^"]+)"(?:(?!enumKey:\s*")[\s\S])*?defaultValue:\s*"([^"]+)"/g,
+    )) {
+      if (!declaredEnumDefaults.has(m[1]!)) declaredEnumDefaults.set(m[1]!, m[2]!);
+    }
+  }
+  check(
+    "zemin: panelde her `enumKey` satırının `defaultValue` beyanı okundu",
+    !electronFound || declaredEnumDefaults.size === DEnum.length,
+    `beyan=${declaredEnumDefaults.size} ↔ satır=${DEnum.length}`,
+  );
+  const enumDefaultMismatch: string[] = [];
+  const enumUnreadable: string[] = [];
+  for (const [key, declared] of declaredEnumDefaults) {
+    const readerName = readerByApiKey.get(key);
+    const fn = readerName
+      ? (systemSettingModule as unknown as Record<string, unknown>)[readerName]
+      : undefined;
+    if (typeof fn !== "function") {
+      enumUnreadable.push(`${key}${readerName ? `(${readerName} export değil)` : "(okuyucu çözülemedi)"}`);
+      continue;
+    }
+    const actual = await (fn as (c: unknown) => Promise<unknown>)(emptyClient2);
+    if (actual !== declared) enumDefaultMismatch.push(`${key}: panel=${declared} ↔ backend=${String(actual)}`);
+  }
+  check(
+    "⭐ panelin ENUM 'Varsayılan' beyanı backend okuyucusuyla birebir",
+    enumDefaultMismatch.length === 0,
+    enumDefaultMismatch.join(" · "),
+  );
+  check(
+    "her ENUM panel satırının okuyucusu getFeatureFlags'ten çözülebiliyor",
+    enumUnreadable.length === 0,
+    enumUnreadable.join(", "),
+  );
+
+  // ⭐ KOD SİGORTASI — DB'de ÇÖP değer varken okuyucu VARSAYILANA düşmeli.
+  // Enum bayraklarında bu, "varsayılan = bugünkü davranış" vaadinin tek mekanik
+  // garantisidir: elle SQL / eski dump / yarım migration bir gün "BLOCK" ya da
+  // `true` yazarsa sahayı kilitlememeli. Boolean'da karşılığı `asBoolean`ın
+  // kendisidir; enumda okuyucunun `includes` kontrolü YAZILMAK ZORUNDA.
+  const junkClient = {
+    systemSetting: {
+      findUnique: () => Promise.resolve({ value: "__hicboylebirdegeryok__" }),
+    },
+  } as unknown as Pick<typeof prisma, "systemSetting">;
+  const junkFallbacks: Array<[string, unknown, unknown]> = [
+    ["sameTypeSessionPolicy", await readSameTypeSessionPolicy(junkClient), DEFAULT_SAME_TYPE_SESSION_POLICY],
+    ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
+    ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
+  ];
+  const junkGaps = junkFallbacks.filter(([, got, want]) => got !== want);
+  check(
+    "⭐ ENUM okuyucuları DB'deki ÇÖP değerde varsayılana düşüyor (kod sigortası)",
+    junkGaps.length === 0,
+    junkGaps.map(([k, got, want]) => `${k}: ${String(got)} (beklenen ${String(want)})`).join(" · "),
+  );
+
+  // ADIYLA KİLİT — §10/§15 kalıbı. Dört kapıdan AYNI ANDA silinen bir anahtar
+  // küme karşılaştırmasında TUTARLI görünür ve her kontrol yeşil kalır; bu
+  // bölüm "tutarlı mı" değil "HÂLÂ VAR MI" sorar.
+  const ENUM_FLAGS = [
+    "sameTypeSessionPolicy",
+    "shippingOrderRequirement",
+    "shippingInvoiceMode",
+  ] as const;
+  const enumGaps = ENUM_FLAGS.flatMap((k) => {
+    const missing = [
+      aEnum.includes(k) ? null : "api",
+      B.includes(k) ? null : "şema",
+      C.includes(k) ? null : "servis",
+      !electronFound || DEnum.includes(k) || ENUM_PANEL_EXEMPT[k] ? null : "panel",
+    ].filter(Boolean);
+    return missing.length ? [`${k}(${missing.join("+")})`] : [];
+  });
+  check(
+    `⭐ ${ENUM_FLAGS.length} enum bayrağının hepsi DÖRT KAPIDA da duruyor`,
+    enumGaps.length === 0,
+    `eksik: ${enumGaps.join(", ")}`,
+  );
+
+  // Değer KÜMELERİ şemayla birebir mi? Şema `z.enum([...])` ile ayrı bir liste
+  // yazar; küme ile şema ayrışırsa panel geçerli bir seçeneği kaydedemez (400)
+  // ya da okuyucunun reddedeceği bir değeri yazar (ayar "kaydedildi" der,
+  // davranış değişmez).
+  const VALUE_SETS: Array<[string, readonly string[]]> = [
+    ["sameTypeSessionPolicy", SAME_TYPE_SESSION_POLICIES],
+    ["shippingOrderRequirement", SHIPMENT_ORDER_REQUIREMENTS],
+    ["shippingInvoiceMode", SHIPPING_INVOICE_MODES],
+  ];
+  const valueSetGaps = VALUE_SETS.flatMap(([k, values]) =>
+    values.filter((v) => !updateSchema.safeParse({ [k]: v }).success).map((v) => `${k}:${v}`),
+  );
+  check(
+    "⭐ enum değer kümelerinin HER üyesi updateSchema'da kabul ediliyor",
+    valueSetGaps.length === 0,
+    `şema reddediyor: ${valueSetGaps.join(", ")} — küme ile z.enum listesi ayrışmış`,
+  );
+
   // ---------------------------------------------------------------------------
   console.log("\n   SETTING_KEYS muafları (feature-flag yükünde DÖNMEYEN, kendi yüzeyi olan):");
   for (const [k, s] of Object.entries(NON_FLAG_SETTING_SURFACE)) {
@@ -1165,6 +1475,14 @@ async function main() {
   }
   console.log("\n   Sayısal muaflar (panelde numberFlags satırı olmayan sayısal anahtarlar):");
   for (const [k, why] of Object.entries(NUMERIC_PANEL_EXEMPT)) {
+    console.log(`     · ${k} — ${why}`);
+  }
+  console.log("\n   ENUM muaflar (panelde enumFlags satırı olmayan kapalı-kümeli ayarlar):");
+  for (const [k, why] of Object.entries(ENUM_PANEL_EXEMPT)) {
+    console.log(`     · ${k} — ${why}`);
+  }
+  console.log("\n   Serbest METİN (enum SAYILMAYAN string anahtarlar):");
+  for (const [k, why] of Object.entries(FREE_TEXT_FLAGS)) {
     console.log(`     · ${k} — ${why}`);
   }
 

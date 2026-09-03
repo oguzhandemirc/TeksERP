@@ -48,6 +48,7 @@ import prisma, { pool } from "../src/lib/prisma";
 import { TamburManualService } from "../src/services/tambur-manual.service";
 import { createManualMoveFixture } from "./fixture-manual-move";
 import { RollStatus } from "@prisma/client";
+import { readBatchAutoCreateEnabled } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -311,8 +312,28 @@ async function main(): Promise<void> {
       select: { batchId: true },
     });
     check("açık parti yokken top yaratıldı", Boolean(bareData.rollId));
-    check("parti NULL kaldı (uydurma parti yok)", bareRow.batchId === null, String(bareRow.batchId));
-    check("yanıt batchNumber null", bareData.batchNumber == null, String(bareData.batchNumber));
+    // ⚠️ BU DAL REJİME BAĞLIDIR (D7 — `batch.autoCreateEnabled`). "Parti NULL
+    // kalır" cümlesi bayrağın KAPALI (varsayılan) hâlinin sözleşmesidir; bayrak
+    // açıkken sunucunun partiyi KENDİSİ açması D7'nin TANIMIDIR, arıza değil.
+    // Bekçi rejimi ÖLÇÜP ona göre soruyor: koşulsuz yazım, bayrağı açan
+    // fabrikaya kırmızı bir bekçi seti bırakıyordu (2026-09-03 ölçümü).
+    // Bayrağın kendi kapsam/kaçış kuralları `test_quality_batch_flags`ta.
+    const autoParti = await readBatchAutoCreateEnabled();
+    if (autoParti) {
+      check(
+        "parti OTOMATİK doğdu (D7 açık — `batch.autoCreateEnabled`)",
+        bareRow.batchId !== null,
+        String(bareRow.batchId),
+      );
+      check(
+        "yanıt batchNumber dolu (D7 açık)",
+        typeof bareData.batchNumber === "string" && bareData.batchNumber.length > 0,
+        String(bareData.batchNumber),
+      );
+    } else {
+      check("parti NULL kaldı (uydurma parti yok)", bareRow.batchId === null, String(bareRow.batchId));
+      check("yanıt batchNumber null", bareData.batchNumber == null, String(bareData.batchNumber));
+    }
     // Bu topu fixture teardown'ından ÖNCE söküyoruz: adıma bağlı olduğu için
     // WO silinemez (FK RESTRICT). Sıra hareket → operasyon → top.
     await prisma.rollMovement.deleteMany({ where: { rollId: bareData.rollId } });

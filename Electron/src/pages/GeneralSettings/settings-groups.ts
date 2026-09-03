@@ -249,6 +249,10 @@ export interface SettingsSearchHit {
   wholeCategory: boolean;
   flagKeys: string[];
   numberFlagKeys: string[];
+  /** Kapalı kümeli (enum) satırların anahtarları — ayrı küme, çünkü panel
+   *  onları AYRI bir listede çizer ve `flagKeys`e karıştırmak sayaç/görünürlük
+   *  yüklemlerini boolean satırlar hakkında yalan söyletirdi. */
+  enumFlagKeys: string[];
   settingFieldKeys: string[];
 }
 
@@ -281,12 +285,34 @@ export function searchSettings(
     const numberFlagKeys = (cat.numberFlags ?? [])
       .filter((f) => hit(f.title, q) || hit(f.desc, q))
       .map((f) => f.key as string);
+    const enumFlagKeys = (cat.enumFlags ?? [])
+      .filter(
+        (f) =>
+          hit(f.title, q) ||
+          hit(f.summary, q) ||
+          hit(f.desc, q) ||
+          f.options.some((o) => hit(o.label, q) || hit(o.hint, q)),
+      )
+      .map((f) => f.enumKey as string);
     const settingFieldKeys = (cat.settingFields ?? [])
       .filter((f) => hit(f.title, q) || hit(f.desc, q))
       .map((f) => f.key as string);
 
-    if (wholeCategory || flagKeys.length || numberFlagKeys.length || settingFieldKeys.length) {
-      hits.push({ categoryId: cat.id, wholeCategory, flagKeys, numberFlagKeys, settingFieldKeys });
+    if (
+      wholeCategory ||
+      flagKeys.length ||
+      numberFlagKeys.length ||
+      enumFlagKeys.length ||
+      settingFieldKeys.length
+    ) {
+      hits.push({
+        categoryId: cat.id,
+        wholeCategory,
+        flagKeys,
+        numberFlagKeys,
+        enumFlagKeys,
+        settingFieldKeys,
+      });
     }
   }
   return hits;
@@ -301,7 +327,14 @@ export function searchSettings(
  * kategorinin de "arama altında" olduğunu söyler.
  */
 export function emptySettingsHit(categoryId: string): SettingsSearchHit {
-  return { categoryId, wholeCategory: false, flagKeys: [], numberFlagKeys: [], settingFieldKeys: [] };
+  return {
+    categoryId,
+    wholeCategory: false,
+    flagKeys: [],
+    numberFlagKeys: [],
+    enumFlagKeys: [],
+    settingFieldKeys: [],
+  };
 }
 
 /** Bu satır ŞU ANDA çizilsin mi (arama yoksa her zaman evet). */
@@ -311,11 +344,17 @@ export function isSettingRowVisible(hit: SettingsSearchHit | undefined, key: str
   return (
     hit.flagKeys.includes(key) ||
     hit.numberFlagKeys.includes(key) ||
+    hit.enumFlagKeys.includes(key) ||
     hit.settingFieldKeys.includes(key)
   );
 }
 
 /** Sekme şeridinde basılan eşleşme sayısı (kategori kimliği eşleştiyse gösterilmez). */
 export function settingsHitCount(hit: SettingsSearchHit): number {
-  return hit.flagKeys.length + hit.numberFlagKeys.length + hit.settingFieldKeys.length;
+  return (
+    hit.flagKeys.length +
+    hit.numberFlagKeys.length +
+    hit.enumFlagKeys.length +
+    hit.settingFieldKeys.length
+  );
 }

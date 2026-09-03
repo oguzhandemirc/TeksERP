@@ -131,7 +131,14 @@ async function main(): Promise<void> {
   const parentId = (parent.data as { id: string }).id;
   createdRollIds.push(parentId);
 
-  const cut = await tambur.cutWarehouseRoll(parentId, { cutLength: 40, rawDestination: "WAREHOUSE" });
+  // `qualityGrade` AÇIKÇA: giriş topu gradesiz doğuyor,
+  // `quality.gradeRequiredEnabled` AÇIKKEN kesim GRADE_REQUIRED verirdi ve
+  // depo damgası bekçisi kendi konusunu ölçemezdi.
+  const cut = await tambur.cutWarehouseRoll(parentId, {
+    cutLength: 40,
+    rawDestination: "WAREHOUSE",
+    qualityGrade: "1.KALITE",
+  });
   const childId = (cut.data as { childRoll?: { id: string } }).childRoll?.id;
   if (childId) createdRollIds.push(childId);
   const childRow = childId

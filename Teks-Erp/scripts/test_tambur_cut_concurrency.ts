@@ -56,6 +56,12 @@ async function depoTopu(tag: string, qty: number): Promise<string> {
       currentQty: qty,
       status: RollStatus.WAREHOUSE,
       finalizedAt: new Date(),
+      // ⚠️ KALİTE FIXTURE'DA (2026-09-03): depo topu gerçekte kalitesiyle
+      // depoya iner. Gradesiz fixture, `quality.gradeRequiredEnabled` AÇIK bir
+      // kurulumda bu bekçiyi kendi konusundan (eşzamanlılık) değil D6
+      // kapısından kırmızıya düşürüyordu — yarış guard'ı hiç ölçülmeden
+      // 409 yerine 400 GRADE_REQUIRED dönüyordu.
+      qualityGrade: "1.KALITE",
     },
     select: { id: true },
   });

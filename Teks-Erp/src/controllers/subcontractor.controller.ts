@@ -85,6 +85,10 @@ const directShipSchema = z.object({
     .array(z.object({ orderLineId: z.string().uuid(), qty: z.number().positive() }))
     .max(200)
     .optional(),
+  /** "Siparişsiz devam et" beyanı — `shipping.orderRequirement=block` kaçış
+   *  kapısı. Zod'a EKLENMEZSE alan sessizce düşer ve kaçış yolu hiç açılmaz
+   *  (istemci kutuyu işaretler, uçta yine 400 yer). */
+  orderless: z.boolean().optional(),
 });
 
 // "Kalan gelmeyecek" kapaması — fire kararı, sebep ZORUNLU (fire kataloğundan;
@@ -526,6 +530,7 @@ export class SubcontractorController {
           branchId: body.branchId,
           completeWorkOrder: body.completeWorkOrder,
           orderLineAllocations: body.orderLineAllocations,
+          orderless: body.orderless,
         },
         req.user?.userId,
       );

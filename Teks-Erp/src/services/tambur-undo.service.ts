@@ -90,7 +90,7 @@ import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { recordVarianceTx } from "./helpers/roll-variance.helper";
 import { VARIANCE_SOURCES } from "../constants/variance-reasons";
-import { readTamburUndoFullSameDayOnly } from "./system-setting.service";
+import { resolveTamburUndoFullSameDayOnly } from "./system-setting.service";
 import { factoryDayStart } from "../constants/time";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
@@ -772,7 +772,7 @@ export class TamburUndoService {
 
     // AYNI GÜN sınırı — bayrağa bağlı, varsayılan KAPALI. Yalnız FULL'ü kapılar;
     // tekil iptal ETKİLENMEZ (asıl koruma parçaların kendi guard'larındadır).
-    if (await readTamburUndoFullSameDayOnly()) {
+    if (await resolveTamburUndoFullSameDayOnly()) {
       const closedAt = op?.createdAt ?? null;
       if (closedAt && closedAt < factoryDayStart()) {
         return bail(

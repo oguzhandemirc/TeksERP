@@ -1002,15 +1002,19 @@ async function main(): Promise<void> {
   // `isSystemAccount` üzerinde partial unique kurulamaz (kolon bir bayraktır,
   // "yalnız bir satır true olabilir" kısıtı ancak `WHERE "isSystemAccount"`
   // predicate'li ifade-unique ile yazılabilirdi ve o da tek-satır tablosu
-  // taklidi olurdu). Uygulama tarafında `ensureSuperadminAccount` `findFirst`
-  // ile idempotenttir; ikinci bir satır ancak ELLE SQL / içe aktarım / bozuk
-  // bir migration ile doğar.
+  // taklidi olurdu). Uygulama tarafında kurulum script'i (`npm run
+  // superadmin:kur` → `scripts/superadmin-olustur.ts`) `findFirst` ile
+  // idempotenttir; ikinci bir satır ancak ELLE SQL / içe aktarım / bozuk bir
+  // migration ile doğar.
   //
   // NEDEN ÖNEMLİ: `getEffectivePermissions` bypass'ı ve `flagWriteGuard`ın
-  // supabı "sistem hesabı" kavramını TEKİL sayar; job da rotasyonu `findFirst`
-  // ile bulduğu satıra uygular. İki satır varsa FORCE_SYNC hangisini
-  // güncelleyeceğini SIRAYA bırakır (deterministik değil) ve rotasyon sonrası
-  // satıcı "parola çalışmıyor" der — hiçbir yerde hata görünmeden.
+  // supabı "sistem hesabı" kavramını TEKİL sayar; kurulum script'i de hem
+  // idempotentlik dalını hem `--rotate` rotasyonunu `findFirst` ile bulduğu
+  // satıra uygular. İki satır varsa rotasyon hangisini güncelleyeceğini SIRAYA
+  // bırakır (deterministik değil) ve rotasyon sonrası satıcı "parola
+  // çalışmıyor" der — hiçbir yerde hata görünmeden.
+  // ⚠️ 2026-09-03 (P8): boot job'ı artık hesap YARATMAZ/ROTASYONLAMAZ —
+  // `.env` tohumlama yolu kaldırıldı, tek yazar script'tir.
   //
   // ⚠️ `test_superadmin.ts` geçici olarak İKİNCİ bir sistem hesabı yaratır ve
   // siler → bu iki bekçi EŞZAMANLI KOŞMAZ.
@@ -1024,7 +1028,8 @@ async function main(): Promise<void> {
     sistemHesaplari.length <= 1
       ? `${sistemHesaplari.length} satır`
       : `${sistemHesaplari.length} satır: ${sistemHesaplari.map((u) => u.username).join(", ")} — ` +
-        "rotasyon (SUPERADMIN_FORCE_SYNC) hangisini güncelleyeceğini SIRAYA bırakır"
+        "kurulum script'i (`npm run superadmin:kur`) İLK satırı çözer; rotasyon " +
+        "hangisini güncelleyeceğini SIRAYA bırakır — fazlalık satır elle silinmeli"
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

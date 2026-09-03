@@ -15,6 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionGate } from "@/components/PermissionGate";
 import { accountingDispatchService } from "./service";
+import { canBulkMarkInvoiceTrace } from "./invoiceDraftVisibility";
+import { useShippingInvoiceMode } from "@/hooks/usePricingEnabled";
 import type { InvoiceTarget } from "./InvoiceDialog";
 
 /**
@@ -48,6 +50,7 @@ export function BulkInvoiceAction({ rows, queryKey, onDone }: Props): React.Reac
   const [open, setOpen] = useState(false);
   const [invoiceNo, setInvoiceNo] = useState("");
   const [busy, setBusy] = useState(false);
+  const invoiceMode = useShippingInvoiceMode();
 
   if (rows.length === 0) return null;
 
@@ -82,6 +85,11 @@ export function BulkInvoiceAction({ rows, queryKey, onDone }: Props): React.Reac
     setInvoiceNo("");
     if (failed.length === 0) onDone?.();
   };
+
+  // ⚠️ `ic` rejiminde bu düğme HİÇ ÇİZİLMEZ: toplu akış yalnız YAZAR (numara
+  // zorunlu, `null` göndermez) — yani orada tek yaptığı şey uçtan 400 almak
+  // olurdu. Tekil düğme ise mevcut bir izi KALDIRMAK için ayakta kalır.
+  if (!canBulkMarkInvoiceTrace(invoiceMode)) return null;
 
   return (
     <PermissionGate permission="shipping:invoice">

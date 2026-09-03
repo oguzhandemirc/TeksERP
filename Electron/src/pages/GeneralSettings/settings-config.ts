@@ -20,6 +20,10 @@ import type { ComponentType } from "react";
 import type { FeatureFlags } from "@/services/featureFlagService";
 import { SETTING_KEYS as RAW_SETTING_KEYS } from "@/services/systemSettingService";
 import { BatchNumberHint } from "./BatchNumberHint";
+import {
+  SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
+  SHIPPING_INVOICE_MODE_OPTIONS,
+} from "@/lib/shipping-flags";
 
 /** FeatureFlags'in yalnızca BOOLEAN değerli anahtarları (toggle edilebilenler).
  *  travelerCardConfig gibi nesne ayarları bu listeden hariçtir — kendi paneli var. */
@@ -100,6 +104,41 @@ export interface FlagDef {
     /** Alan boş bırakıldığında (null) gösterilecek uyarı — kural etkisiz kalır. */
     emptyWarning: string;
   };
+}
+
+/**
+ * FeatureFlags'in METİN (enum) değerli anahtarları — `enumFlags` satırları.
+ *
+ * ⚠️ `companyName` de metindir ama bir ENUM DEĞİLDİR (kapalı değer kümesi yok)
+ * ve kendi kartından yönetilir; buraya yalnız kapalı kümeli ayarlar girer.
+ */
+type EnumFlagKey = {
+  [K in keyof FeatureFlags]: FeatureFlags[K] extends string ? K : never;
+}[keyof FeatureFlags];
+
+/**
+ * Kapalı değer kümeli (enum) feature-flag satırı — boolean toggle'larla AYNI
+ * taslak + AYNI Kaydet + AYNI PATCH altında yaşar.
+ *
+ * ⚠️ İç alan adı **`enumKey`** olmak ZORUNDA, düz `key` DEĞİL. Sözleşme bekçisi
+ * (`Teks-Erp/scripts/test_feature_flag_contract.ts`) panelin BOOLEAN kümesini
+ * kaynak metninden `key:` alanına bakarak toplar; enum anahtarı da o adla
+ * yazılsaydı boolean kümesine sızar ve "yönetilemez boolean bayrak" kontrolü
+ * yanlış şey ölçerdi. `numberKey:` ayrımının varlık sebebi birebir aynıydı.
+ *
+ * ⚠️ `defaultValue` bir BEYANDIR ve ikinci kaynaktır — bekçi §16 onu backend
+ * okuyucusunu BOŞ istemciyle çağırarak doğrular; yanlış yazmak kırmızı verir.
+ */
+export interface EnumFlagDef {
+  enumKey: EnumFlagKey;
+  title: string;
+  summary: string;
+  desc: string;
+  /** Backend'in KAYIT YOKKEN döndüğü değer (rozet: "Varsayılan: …"). */
+  defaultValue: string;
+  options: ReadonlyArray<{ value: string; label: string; hint: string }>;
+  audience: SettingAudience[];
+  group?: string;
 }
 
 /**
@@ -367,6 +406,8 @@ export interface SettingsCategory {
   flags?: FlagDef[];
   /** kind === "flags" sekmesine gömülü sayısal feature-flag alanları (opsiyonel). */
   numberFlags?: NumberFlagDef[];
+  /** kind === "flags" sekmesine gömülü KAPALI KÜMELİ (enum) ayarlar (opsiyonel). */
+  enumFlags?: EnumFlagDef[];
   /** Feature-flag sözleşmesi DIŞINDAKİ ham system-setting alanları (opsiyonel). */
   settingFields?: SettingFieldDef[];
   /**
@@ -600,6 +641,48 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         audience: ["Sevkiyat", "Yönetim"],
         desc: "Kapalıyken (varsayılan) cihaz kaydında “simülasyon” açık bir kantardan okunan kg backend tarafından REDDEDİLİR (400) — simüle kantar 10-100 kg arası rastgele değer üretir ve çuval kg'si sevk irsaliyesine + çeki listesine basılır (müşteri/gümrük belgesi). Elle giriş (⋮ → “Elle kg gir”) bu ayardan ETKİLENMEZ; kantarsız/arızalı durumun kaçış yoludur. Yalnızca demo/eğitim kurulumunda açın.",
       },
+      {
+        key: "shippingWeighRequiredEnabled",
+        title: "Sevk öncesi tüm çuvallar tartılmış olsun",
+        summary:
+          "Yurtiçi sevkte de tartı zorunlu olur; tartısız çuval varken sevkiyat kurulamaz.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Depocu"],
+        group: "Tartı",
+        desc: "Kapalı (varsayılan): yalnız YURTDIŞI sevk tüm çuvalların tartılı olmasını ister — yurtiçi sevk tartısız yapılabilir (bugünkü davranış). Açık: yurtiçi sevk de tartı ister; sevkiyat kurma, çuval ekleme ve sevk etme adımlarının üçü de tartısız çuval varken 400 verir ve hangi çuvalların tartısız olduğunu söyler. İHRACAT KURALI BU AYARDAN BAĞIMSIZDIR ve her zaman geçerlidir (ayar yalnız genişletir, gevşetmez). ⚠️ İKİ YAN ETKİ: (1) “Hızlı Sevk” (topları seç → tek adımda sevk) tamamen kapanır — orada çuval operatöre görünmeden doğduğu için tartılamaz; sevk Paketleme/Çuvallar ekranından yapılır. (2) Tartılı bir çuvala sonradan top eklenirse kg SIFIRLANIR (bayat kg irsaliyeye gitmesin diye) — o çuval yeniden tartılmadan sevk edilemez; operatör bunu “sistem tartıyı unuttu” diye okumasın.",
+      },
+      {
+        key: "shippingManualWeightRestrictedEnabled",
+        title: "Elle kg girişini sevkiyat sorumlusuyla sınırla",
+        summary:
+          "Tablet operatörü kantardan tartar; elle kg yalnız sevkiyat yazma yetkisi olan kişide.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Operatör"],
+        group: "Tartı",
+        desc: "⚠️ ÖNKOŞUL: Tüm tabletler ve paneller güncel olmalı. Eski istemciler tartı kaynağını bildirmediği için elle tartı yolu toplu olarak kapanır. — Kapalı (varsayılan): çuval tartısı elle de girilebilir, kimse ayırt edilmez (bugünkü davranış). Açık: elle giriş yalnız “shipping:write” yetkisi taşıyan kişide serbest kalır; yalnız mobil paketleme/sevkiyat yetkisiyle gelen tablet operatörü kantardan tartmak zorundadır (elle girerse 403). Yeni bir yetki kodu EKLENMEZ — ayrım mevcut yetkilerle kurulur, yani kimseye yeni bir şey atamanız gerekmez. Çuval açılışında kg gönderen yol da aynı kuraldan geçer (arka kapı yok).",
+      },
+    ],
+    enumFlags: [
+      {
+        enumKey: "shippingOrderRequirement",
+        title: "Sevkiyat siparişe bağlansın mı",
+        summary:
+          "Siparişsiz sevkte ne yapılsın: sorma · uyar (varsayılan) · zorunlu tut.",
+        defaultValue: "warn",
+        options: SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
+        audience: ["Sevkiyat", "Planlamacı"],
+        desc: "⚠️ ÖNKOŞUL (yalnız “Zorunlu tut” için): Tabletlerde sipariş seçici bulunan APK kurulu olmalı. Bugünkü tablet Paketleme ekranı sipariş göndermiyor — “block” seçilirse sahada HİÇ sevkiyat kurulamaz. Önce APK, sonra bu ayar. — Siparişe yazılmayan mal, karşılanma/açık talep/Ürün Dengesi ekranlarında GÖRÜNMEZ; fabrika karşılanmış talebi yeniden üretir. “Uyar” (varsayılan) sevkiyatı kurar ve ekranda uyarı basar. “Zorunlu tut” kurulumu engeller — ama “Siparişsiz devam et” işaretlenirse yine geçer (numune/fazla mal meşru bir iştir; kural “sipariş seç” değil “ne yaptığını söyle”). Engel YALNIZ kurulumdadır: ayar açılmadan önce kurulmuş planlı sevkiyatların çıkışı kilitlenmez. Fasondan doğrudan sevk de AYNI kurala tabidir (orada da “Siparişsiz devam et” kutusu vardır).",
+      },
+      {
+        enumKey: "shippingInvoiceMode",
+        title: "Fatura izi nereden yazılsın",
+        summary:
+          "Sevkin fatura numarası dış programdan elle mi işaretlensin, ERP faturasından mı gelsin.",
+        defaultValue: "dis",
+        options: SHIPPING_INVOICE_MODE_OPTIONS,
+        audience: ["Muhasebeci", "Sevkiyat"],
+        desc: "“Dış programdan” (varsayılan): fatura başka bir muhasebe programında kesilir, buraya yalnız numarası + tarihi elle işaretlenir (bugünkü davranış). “Yalnız ERP faturası”: elle işaretleme kapanır (400) ve numara yalnız Muhasebe → Faturalar'da onaylanan faturadan gelir; yanlış girilmiş bir izi KALDIRMAK her modda mümkün kalır. “İkisi de”: elle işaret serbesttir ama sevkin ERP faturası varsa uyarı çıkar (engel yok) — geçiş dönemi için. Fasondan doğrudan sevk de aynı kurala tabidir. NOT: sevk sonrası otomatik fatura taslağı bu ayardan etkilenmez, kendi ön muhasebe anahtarına bağlıdır.",
+      },
     ],
   },
   {
@@ -652,6 +735,15 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: true,
         audience: ["Planlamacı"],
         desc: "Açıkken (varsayılan) yeni iş emri formundaki Parti Kodu alanının üstünde son verilmiş parti numarası rozet olarak yazar. Planlamacıya fikir verir; SIRADAKİ numarayı VAAT ETMEZ (numara parti doğduğu anda atanır, aradaki her yeni parti sırayı kaydırır). Yalnız gösterimdir — numara üretimini etkilemez.",
+      },
+      {
+        key: "batchAutoCreateEnabled",
+        title: "Açık parti yokken partiyi sistem kendisi açsın",
+        summary:
+          "Tambur'dan elle top eklerken iş emrinde hiç açık parti yoksa sistem yeni bir parti açıp topu ona bağlar.",
+        defaultOn: false,
+        audience: ["Planlamacı", "Operatör"],
+        desc: "Kapalıyken (varsayılan) Tambur'da elle top eklenirken iş emrinde hiç açık parti yoksa top PARTİSİZ doğar (bugünkü davranış). Açıkken sistem o anda yeni bir parti açar ve topu ona bağlar — operatöre soru sorulmaz, açılan partinin numarası kayıt sonrası ekranda yazar. Birden fazla açık parti varsa davranış değişmez: operatöre hangi partiye ekleneceği sorulur. ÖNKOŞUL: Bu ayar 'parti ZORUNLU olsun' demek DEĞİLDİR — operatörün elle parti açmasını isteyen düzen ayrı bir pakettir; bugün sistemde sıfırdan parti yaratan bir ekran yok, o yüzden 'zorunlu' seçeneği sahayı çıkışsız bırakırdı. İş emrine top bağlamanın diğer yolları (Hızlı İş Emri, toplu top ekleme) bu ayardan ETKİLENMEZ — orada parti zaten her zaman doğar.",
       },
     ],
     settingFields: [
@@ -706,6 +798,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Operatör"],
         desc: "Açıkken aynı operatör/makine 90 saniye içinde birebir aynı kumaş + metraj + en girerse sistem uyarır ve kaydı ancak açık onayla alır (engellemez — arka arkaya birebir aynı top gerçekten gelebilir). Sunucu yeniden başlarken tuşa üst üste basılması sonucu doğan kopya stok kayıtlarına karşı ikinci savunma hattıdır. ⚠️ Açmadan önce sahadaki tabletlerin güncel sürüme yükseltildiğinden emin olun — eski sürüm bu uyarıyı tanımaz.",
+      },
+      {
+        key: "qualityGradeRequiredEnabled",
+        group: "KK1 / Kalite",
+        title: "Top kalitesi zorunlu olsun",
+        summary:
+          "Kalite seçilmeden top girilemez, kesilemez ve iş emri kapanışında depoya indirilemez.",
+        defaultOn: false,
+        audience: ["Operatör", "Yönetim"],
+        desc: "Kapalıyken (varsayılan) kalite opsiyoneldir: kaliteye bakılmadan girilen top 'Belirsiz' kalitede yaşar ve kararı sonraki istasyon verir. Açıkken kalite DÖRT yerde zorunlu olur: (1) ham/manuel top girişi, (2) Tambur'da kesim toplamı topun metrajını doldurmuyorsa doğan 'kalan' parça — kaynak topun da kalitesi yoksa, (3) depodaki topun kesilmesi, (4) iş emri kapanışında 'depoya al' / '2. kalite' kararı verilen toplar. Bilerek DIŞARIDA bırakılanlar: açık kumaş kesimi (kalite zaten hep dolu), fason kabulünde doğan toplar (kaliteye orada bakılmaz — karar Tambur'un), son adımın otomatik depo indirişi (kilitlenirse iş emri hiç kapanmaz) ve iade kabulü (kalite girecek ekran yok). ÖNKOŞUL: Açmadan önce sahadaki tabletler güncel APK'da olmalı — 'kalan parça için kalite' alanı eski sürümde YOK ve o dal 'kalite zorunlu' hatasıyla durur; ayrıca çevrimdışı kuyrukta bekleyen kalitesiz kayıtlar gönderilirken reddedilir ve tekrar denenmez.",
       },
       {
         key: "kk1OnlineOnlyEnabled",

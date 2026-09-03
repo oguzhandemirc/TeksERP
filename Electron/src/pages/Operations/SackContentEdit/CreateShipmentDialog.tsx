@@ -18,7 +18,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { loadAllForPicker } from "@/lib/picker-loader";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
-import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
+import {
+  useCustomerBranchesEnabled,
+  useShippingOrderRequirement,
+  useShippingWeighRequiredEnabled,
+} from "@/hooks/usePricingEnabled";
 import { sackHubService } from "./service";
 import { invalidateSackHub } from "./useSackData";
 import { ShipmentOrderSelect } from "./ShipmentOrderSelect";
@@ -58,6 +62,10 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const [customerId, setCustomerId] = useState<string | undefined>();
   const [branchId, setBranchId] = useState<string | null>(null);
   const branchesEnabled = useCustomerBranchesEnabled();
+  const orderRequirement = useShippingOrderRequirement();
+  const weighRequired = useShippingWeighRequiredEnabled();
+  /** Sunucunun döndüğü engel-olmayan notlar — sevkiyat KURULDUKTAN sonra. */
+  const [postWarnings, setPostWarnings] = useState<string[]>([]);
   const [orderless, setOrderless] = useState(false);
   const [orderIds, setOrderIds] = useState<Set<string>>(new Set());
   const [destination, setDestination] = useState<ShipmentDestination>("DOMESTIC");
@@ -72,6 +80,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
     setOrderless(false);
     setOrderIds(new Set());
     setDestination("DOMESTIC");
+    setPostWarnings([]);
     setClientToken(crypto.randomUUID()); // yeni açılış = yeni mantıksal deneme
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, sackKey]);
@@ -107,6 +116,7 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         orderIds: activeOrderIds,
         destination,
         clientToken,
+        orderless,
       }),
     onSuccess: (res) => {
       // Sevk onayı KAPALIYKEN (varsayılan) backend oluşturur oluşturmaz sevk eder
@@ -117,8 +127,15 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
           : `Sevkiyat kuruldu — onay bekliyor: ${res.data.shipmentNo}`,
       );
       invalidateSackHub(qc, { shipment: true });
-      onOpenChange(false);
       onCreated();
+      // ⚠️ UYARI TOAST DEĞİL, LİSTE — ve diyalog AÇIK KALIR. Sunucunun
+      // `warnings`i (bugün: "bu sevkiyat hiçbir siparişe yazılmadı") 2026-09-03'e
+      // kadar HİÇ gösterilmiyordu: `warn` rejimi kâğıt üzerinde vardı, ekranda
+      // yoktu. Toast 4 saniyede kaybolur ve tam da bu uyarı bir DÜZELTME
+      // çağrısıdır ("sevkiyat detayından Siparişe Bağla") — okunacak zaman ister.
+      const w = res.warnings ?? [];
+      if (w.length > 0) setPostWarnings(w);
+      else onOpenChange(false);
     },
   });
 
@@ -224,6 +241,15 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
               <Checkbox checked={orderless} onCheckedChange={(v) => setOrderless(!!v)} />
               Siparişsiz devam et (mal hiçbir siparişe sayılmaz)
             </label>
+            {/* `block` rejiminde bu kutu bir tercih değil TEK KAÇIŞ YOLUDUR —
+                sunucu siparişsiz kurulumu 400 ile reddeder. Kuralı burada
+                söylemek, kullanıcıyı 400'e kadar götürmekten iyidir. */}
+            {orderRequirement === "block" && !orderless && orderIds.size === 0 && (
+              <p className="mb-2 text-xs text-amber-600 dark:text-amber-500">
+                Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da yukarıdaki
+                kutuyu işaretleyip siparişsiz sevk niyetini beyan edin.
+              </p>
+            )}
             {!orderless &&
               (effCustomerId ? (
                 <ShipmentOrderSelect customerId={effCustomerId} branchId={effBranchId ?? null} selectedIds={orderIds} onToggle={toggleOrder} />
@@ -248,24 +274,44 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
               </SelectContent>
             </Select>
           </div>
-          {destination === "EXPORT" && unweighed > 0 && (
+          {(destination === "EXPORT" || weighRequired) && unweighed > 0 && (
             <Callout tone="danger" title="Tartısız çuval var">
-              {unweighed} çuval tartılmadı — yurtdışı sevkte tüm çuvallar tartılı olmalı, aksi halde backend reddeder.
+              {unweighed} çuval tartılmadı —{" "}
+              {destination === "EXPORT"
+                ? "yurtdışı sevkte tüm çuvallar tartılı olmalı"
+                : "bu kurulumda sevk öncesi tüm çuvallar tartılmalı"}
+              , aksi halde backend reddeder. Tartılı bir çuvala sonradan top eklendiyse kg
+              sıfırlanmıştır — yeniden tartın.
+            </Callout>
+          )}
+          {/* Sunucunun engel-olmayan notları — sevkiyat KURULDU, ama bir şey
+              söylenmesi gerekiyor. Diyalog bu liste görünürken kapanmaz. */}
+          {postWarnings.length > 0 && (
+            <Callout tone="warning" title="Sevkiyat kuruldu — dikkat">
+              <ul className="list-disc space-y-1 pl-4">
+                {postWarnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
             </Callout>
           )}
         </div>
 
         <DialogFooter className="border-t pt-3">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createMut.isPending}>
-            Vazgeç
+            {postWarnings.length > 0 ? "Kapat" : "Vazgeç"}
           </Button>
-          <Button
-            onClick={() => createMut.mutate()}
-            disabled={!canCreate}
-            className="gap-2 bg-primary font-semibold shadow-md shadow-primary/30"
-          >
-            <Truck className="h-4 w-4" /> {createMut.isPending ? "İşleniyor…" : "Sevk Et"}
-          </Button>
+          {/* Sevkiyat kurulduktan sonra "Sevk Et" ÇİZİLMEZ: ikinci tık yeni bir
+              mantıksal denemedir ve aynı çuvalları arayıp 409 alırdı. */}
+          {postWarnings.length === 0 && (
+            <Button
+              onClick={() => createMut.mutate()}
+              disabled={!canCreate}
+              className="gap-2 bg-primary font-semibold shadow-md shadow-primary/30"
+            >
+              <Truck className="h-4 w-4" /> {createMut.isPending ? "İşleniyor…" : "Sevk Et"}
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

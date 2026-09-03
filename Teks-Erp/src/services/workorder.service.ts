@@ -120,7 +120,10 @@ import {
   type BatchDropInput,
 } from "./workorder-batch-drop.service";
 import { TravelerCardService } from "./traveler-card.service";
-import { readWorkOrderDefaultPlanDurationDays } from "./system-setting.service";
+import {
+  readWorkOrderDefaultPlanDurationDays,
+  readQualityGradeRequiredEnabled,
+} from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from "../utils/code-format";
@@ -4017,6 +4020,23 @@ export class WorkOrderService {
           "Kalite yalnız depo / 2. kalite dispozisyonunda verilebilir",
         );
       }
+    }
+
+    // ── KALİTE ZORUNLU (D6) — YALNIZ SATILABİLİR DİSPOZİSYONLAR ─────────────
+    // Kapanışta istasyonda kalan top depoya (`WAREHOUSE`) ya da 2. kaliteye
+    // (`A1_STOCK`) çekiliyorsa artık SATILABİLİR bir maldır — kalitesi belirsiz
+    // kalamaz. Diğer dört karar KAPSAM DIŞI ve bu bilinçli: `STOCK` (ham stok)
+    // ve `TRANSFER` (yeni WO'ya devir) topu üretimde bırakır, `SCRAP`/`CANCELLED`
+    // ise topu zaten defterden düşürür — hiçbirinde "kalite" bir karar değildir.
+    // Okuma KOŞULLU: eksik kalite yoksa bayrağa hiç bakılmaz.
+    const gradelessSellable = dispositions.filter(
+      (d) => (d.action === "WAREHOUSE" || d.action === "A1_STOCK") && !d.qualityGradeId,
+    );
+    if (gradelessSellable.length > 0 && (await readQualityGradeRequiredEnabled())) {
+      throw AppError.badRequest(
+        `Depoya / 2. kaliteye çekilen ${gradelessSellable.length} top için kalite zorunlu`,
+        { code: "GRADE_REQUIRED", rollIds: gradelessSellable.map((d) => d.rollId) },
+      );
     }
 
     const stepIds = existing.steps.map((s) => s.id);

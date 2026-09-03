@@ -221,6 +221,7 @@ export function GeneralSettingsPage() {
                   <FeatureFlagSection
                     flags={cat.flags ?? []}
                     numberFlags={cat.numberFlags}
+                    enumFlags={cat.enumFlags}
                     settingFields={cat.settingFields}
                     superadminOnly={cat.superadminOnly}
                     moduleClosed={isCategoryModuleClosed(cat, modules)}

@@ -63,7 +63,14 @@ async function main(): Promise<void> {
   check("A4) qty giriş metrajı", Number(entryRows[0]?.qty) === 120, `qty=${entryRows[0]?.qty}`);
 
   // ── B) ⭐ Kesim çocuğu satır YAZMAZ ──────────────────────────────────────
-  const cut = await tambur.cutWarehouseRoll(parentId, { cutLength: 40, rawDestination: "WAREHOUSE" });
+  // `qualityGrade` AÇIKÇA: giriş topu gradesiz doğuyor,
+  // `quality.gradeRequiredEnabled` AÇIKKEN kesim 400 GRADE_REQUIRED'a düşerdi
+  // ve defter bekçisi kendi konusunu hiç ölçemezdi.
+  const cut = await tambur.cutWarehouseRoll(parentId, {
+    cutLength: 40,
+    rawDestination: "WAREHOUSE",
+    qualityGrade: "1.KALITE",
+  });
   const childId = (cut.data as { childRoll?: { id: string } }).childRoll?.id;
   if (childId) rollIds.push(childId);
   const childRows = childId ? await prisma.warehouseMovement.count({ where: { rollId: childId } }) : -1;

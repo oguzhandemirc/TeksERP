@@ -107,6 +107,10 @@ const quickShipmentSchema = z.object({
   driverName: z.string().trim().max(100).nullable().optional(),
   carrier: z.string().trim().max(100).nullable().optional(),
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+  // Siparişsiz sevk NİYETİ — `createShipmentSchema` ile AYNI sözleşme (Dilim 2).
+  // Alan burada YOKKEN `z.object` onu sessizce düşürüyordu: hızlı sevkte niyet
+  // beyan etmenin hiçbir yolu yoktu ve `block` rejiminde tek çıkış kapanırdı.
+  orderless: z.boolean().optional(),
 });
 // FIFO öneri sorgusu — `itemId` ZORUNLU: kumaşsız çağrı "depodaki en eski 20 top"
 // demek olurdu ve karışık spec'li bir öneri sevk edilemez (tek irsaliye tek müşteri
@@ -160,7 +164,13 @@ export class ShippingController {
   openSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = openSackSchema.parse(req.body);
-      const result = await this.service.openSack({ customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo, clientToken: body.clientToken ?? null }, req.user?.userId);
+      const result = await this.service.openSack(
+        { customerId: body.customerId ?? null, branchId: body.branchId ?? null, weightKg: body.weightKg, sackNo: body.sackNo, clientToken: body.clientToken ?? null },
+        req.user?.userId,
+        // Elle-tartı kısıtı yalnız HTTP yolunda uygulanır (F221) — izin listesi
+        // buradan geçer, dahili çağrılar (script/job/servis) etkilenmez.
+        { permissions: req.user?.permissions },
+      );
       res.status(201).json(result);
     } catch (e) { next(e); }
   };
@@ -191,7 +201,8 @@ export class ShippingController {
       const result = await this.service.weighSack(
         { sackId: req.params.id as string, weightKg: body.weightKg, ...(body.source ? { source: body.source } : {}) },
         req.user?.userId,
-        stamp ? { machineId: stamp.machineId, stationId: stamp.stationId } : undefined
+        stamp ? { machineId: stamp.machineId, stationId: stamp.stationId } : undefined,
+        { permissions: req.user?.permissions },
       );
       res.status(200).json(result);
     } catch (e) { next(e); }
@@ -331,6 +342,7 @@ export class ShippingController {
           customerId: body.customerId,
           branchId: body.branchId ?? null,
           orderIds: body.orderIds,
+          orderless: body.orderless,
           destination: body.destination,
           procedureCode: body.procedureCode ?? null,
           plateNumber: body.plateNumber ?? null,

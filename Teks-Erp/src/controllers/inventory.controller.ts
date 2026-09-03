@@ -315,6 +315,11 @@ export class InventoryController {
         // (tambur-manual) `opts` vermediği için etkilenmez (F221 deseni).
         {
           duplicateGuard: { confirmed: confirmDuplicate === true },
+          // KALİTE ZORUNLU (D6) — mükerrer tuzağıyla AYNI F221 gerekçesi:
+          // kural yalnız bu HTTP yolunda (KK1 tableti + Electron "Manuel Top
+          // Ekle") koşar; dahili çağıranlar (tambur-manual, mal kabul, depo
+          // transferi) `opts.gradeRequired` göndermediği için etkilenmez.
+          gradeRequired: true,
           // GİRİŞ İSTASYONU — oturumdan. Bu yolda ADIM YOKTUR (top henüz hiçbir
           // iş emrine bağlı değil), dolayısıyla tek doğru kaynak oturumdur.
           //

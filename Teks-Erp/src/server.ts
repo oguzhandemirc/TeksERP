@@ -165,10 +165,11 @@ const server = app.listen(Number(PORT), HOST, () => {
     // İzin kataloğuyla aynı sınıf: ilk açılışta bir kez doğar, best-effort,
     // başarısız olsa bile sunucuyu düşürmez (yalnız keşif kimliksiz kalır).
     startInstallationIdentity();
-    // SATICI (süperadmin) hesabı — `.env`de SUPERADMIN_* varsa doğar, yoksa
-    // sessiz no-op. Aynı zamanda "sistem hesabı var mı" kayıt defterini tazeler:
-    // hesap YOKSA modül anahtarı kapısı devre dışı kalır (emniyet supabı), yani
-    // bu satır olmadan yeni bir kurulumda modülleri KİMSE açamazdı.
+    // SATICI (süperadmin) hesabı — bu satır hesap YARATMAZ (2026-09-03 P8: tek
+    // doğuş yolu sunucuda elle koşulan `npm run superadmin:kur`). Yaptığı iş
+    // "sistem hesabı var mı" kayıt defterini tazelemek: hesap YOKSA modül
+    // anahtarı kapısı devre dışı kalır (emniyet supabı), yani bu satır olmadan
+    // yeni bir kurulumda modülleri KİMSE açamazdı.
     startSuperadminAccount();
     // KURULUM PROFİLİ — taze kurulumda modül anahtarlarını `.env`deki
     // `TEKSERP_PROFIL` profilinden yazar. Mevcut kurulumda grandfathering

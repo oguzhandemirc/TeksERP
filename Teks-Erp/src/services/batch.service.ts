@@ -31,7 +31,7 @@ import {
   parseShortBatchCode,
 } from "../utils/code-format";
 import { AuditService } from "./audit.service";
-import { readBatchShortNumberEnabled } from "./system-setting.service";
+import { resolveBatchShortNumberEnabled } from "./system-setting.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { AppError } from "../utils/app-error";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
@@ -125,7 +125,7 @@ export async function generateBatchNumberTx(
 ): Promise<string> {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(${BATCH_NUMBER_LOCK_NS}::int, ${BATCH_NUMBER_LOCK_KEY}::int)`;
 
-  if (await readBatchShortNumberEnabled(tx)) {
+  if (await resolveBatchShortNumberEnabled(tx)) {
     return buildShortBatchCode(nextShortBatchSeq(await readLastShortBatchSeqTx(tx)));
   }
 
@@ -183,7 +183,7 @@ export async function getBatchNumberState(): Promise<{
   lastCode: string | null;
   nextCode: string | null;
 }> {
-  const enabled = await readBatchShortNumberEnabled();
+  const enabled = await resolveBatchShortNumberEnabled();
   if (!enabled) {
     return {
       enabled,

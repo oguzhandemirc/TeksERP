@@ -87,7 +87,7 @@ export const SYSTEM_ACTOR_FULLNAME = "Sistem Bakımı";
  * verir (`middlewares/system-account.middleware.ts`), yani id ile ne künye ne
  * DÜZ PIN okunabilir.
  *
- * ⚠️ `username` .env'den gelen gerçek kullanıcı adı DEĞİL, sabit "sistem"tir —
+ * ⚠️ `username` kurulumda belirlenen gerçek kullanıcı adı DEĞİL, sabit "sistem"tir —
  * o ad giriş için kullanılan bir sırdır ve `username` 78 ayrı select'te tel
  * üstündedir (hepsini daraltmak sözleşme kırar; doğru çözüm nötrlemektir).
  */

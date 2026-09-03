@@ -362,6 +362,124 @@ function main(): void {
     `okuyan dosyalar: ${altBayrakCagiranlar.join(", ") || "(hiç — okuyucu silinmiş olabilir)"}`,
   );
 
+  // ── §8b ⭐ MODÜL ALTI BAYRAKLAR TEK RESOLVER'DA (§3.6 / D8) ───────────────
+  // §8'in genelleştirilmişi. Ebeveyni olan alt bayrakların HAM okuyucusu, ETKİN
+  // değeri çözen resolver'ın DIŞINDA çağrılmamalı — çağrılırsa modül KAPALIYKEN
+  // de o bayrağın kuralı koşar. Ölçüldü (Dilim 2 keşfi): `requireProductionEnabled`
+  // taşımayan route'lardan 443 kaynak dosyanın 350'sine hâlâ ulaşılıyor, yani
+  // "router zaten kapılı" cümlesi bu bayraklar için YETERLİ DEĞİL.
+  //
+  // ⚠️ `yorumlariSok` ŞART: `cash-balance-guard.helper` ve `yarn-balance-guard.helper`
+  // `readTamburOverQuantityEnabled`i yalnız YORUMDA "emsali" diye anıyor; ham
+  // metin taraması bu iki dosyayı "tüketici" sanıp düzeltilemez kırmızı verirdi
+  // (aynı körlük `test_feature_flag_contract §14`te de vardı, aynı gün kapandı).
+  const RESOLVER_ALTI: Record<string, { resolver: string; ebeveyn: string }> = {
+    readPurchaseBlockOverReceiptEnabled: {
+      resolver: "resolvePurchaseBlockOverReceiptEnabled",
+      ebeveyn: "ticaret",
+    },
+    readGoodsReceiptRequirePriceEnabled: {
+      resolver: "resolveGoodsReceiptRequirePriceEnabled",
+      ebeveyn: "ticaret",
+    },
+    readKursunBypassEnabled: { resolver: "resolveKursunBypassEnabled", ebeveyn: "üretim" },
+    readTamburOverQuantityEnabled: {
+      resolver: "resolveTamburOverQuantityEnabled",
+      ebeveyn: "üretim",
+    },
+    readTamburUndoFullSameDayOnly: {
+      resolver: "resolveTamburUndoFullSameDayOnly",
+      ebeveyn: "üretim",
+    },
+    readBatchShortNumberEnabled: {
+      resolver: "resolveBatchShortNumberEnabled",
+      ebeveyn: "üretim",
+    },
+    // ⚠️ İPLİK KÖPRÜSÜ DE BU TABLODA (2026-09-03). §8 onun yalnız TEKLİĞİNİ
+    // ölçüyordu — resolver'ın gerçekten modül şalterini okuduğunu ve
+    // `getFeatureFlags`in HAM değeri döndürdüğünü HİÇ ölçmüyordu. Yani D8'in
+    // ilk resolver'ı, D8 için yazılan tablonun dışında kalmıştı.
+    readFinanceYarnOutOnInvoiceEnabled: {
+      resolver: "resolveYarnOutOnInvoiceEnabled",
+      ebeveyn: "ticaret+iplik",
+    },
+  };
+
+  const servisKodu = yorumlariSok(fs.readFileSync(SERVIS, "utf8"));
+  /** §8c tamlık taraması — yorumlar SÖKÜLMÜŞ hâl (yorumdaki örnek imza sayılmasın). */
+  const servisKaynagiHam = servisKodu;
+
+  // ── §8c ⭐ TABLO TAMLIĞI: İKİ YÖNLÜ ────────────────────────────────────────
+  // §8b'nin kör noktası tablonun KENDİSİYDİ: yeni bir modül-altı resolver
+  // yazılırsa (ya da mevcut biri yeniden adlandırılırsa) bekçi onu HİÇ görmez
+  // ve "tek resolver" kuralı sessizce yalnız eski beşlik için geçerli kalır.
+  // Ölçüm kaynağa bakar, listeye değil.
+  //   ① kaynaktaki HER `resolve*` tabloda mı (yeni resolver kaçamaz)
+  //   ② tablodaki HER resolver kaynakta var mı (ölü satır tabloyu şişirmesin)
+  const kaynaktakiResolverlar = [
+    ...servisKaynagiHam.matchAll(/export\s+async\s+function\s+(resolve[A-Za-z0-9_]*)\s*\(/g),
+  ].map((m) => m[1]);
+  const tablodakiResolverlar = Object.values(RESOLVER_ALTI).map((v) => v.resolver);
+  const tabloDisi = kaynaktakiResolverlar.filter((r) => !tablodakiResolverlar.includes(r));
+  check(
+    "§8c ⭐ system-setting.service'teki HER `resolve*` §8b tablosunda (yeni resolver bekçiden kaçamaz)",
+    tabloDisi.length === 0,
+    tabloDisi.length > 0
+      ? `tabloya eklenmemiş: ${tabloDisi.join(", ")}`
+      : `${kaynaktakiResolverlar.length} resolver kapsandı`,
+  );
+  const oluSatir = tablodakiResolverlar.filter((r) => !kaynaktakiResolverlar.includes(r));
+  check(
+    "§8c ⭐ tablodaki HER resolver kaynakta GERÇEKTEN var (ölü satır yok)",
+    oluSatir.length === 0,
+    oluSatir.length > 0 ? `kaynakta bulunamadı: ${oluSatir.join(", ")}` : "",
+  );
+  check(
+    "§8c-zemin: resolver taraması boş dönmedi (regex bozulursa §8c vakumen yeşil kalır)",
+    kaynaktakiResolverlar.length >= 5,
+    `${kaynaktakiResolverlar.length} resolver bulundu`,
+  );
+  for (const [hamOkuyucu, { resolver, ebeveyn }] of Object.entries(RESOLVER_ALTI)) {
+    const cagiranlar = srcDosyalari
+      .filter((f) => new RegExp(`\\b${hamOkuyucu}\\s*\\(`).test(yorumlariSok(fs.readFileSync(f, "utf8"))))
+      .map((f) => path.relative(SRC, f).split(path.sep).join("/"));
+    check(
+      `§8b ⭐ ${hamOkuyucu} YALNIZ system-setting.service içinde okunuyor (${ebeveyn} altı)`,
+      cagiranlar.length === 1 && cagiranlar[0] === "services/system-setting.service.ts",
+      `okuyan dosyalar: ${cagiranlar.join(", ") || "(hiç — okuyucu silinmiş olabilir)"} — ` +
+        `enforcement noktaları ${resolver} çağırmalı`,
+    );
+    // Resolver GERÇEKTEN modül şalterini soruyor mu? "resolve" adını taşıyıp
+    // ham değeri döndüren bir gövde §8b'yi vakumen yeşile düşürürdü.
+    const govde = middlewareGovdeAnalizi(SERVIS, resolver);
+    check(
+      `§8b ${resolver} tanımlı ve modül şalterini okuyor`,
+      govde.bulundu && govde.okuyucular.some((o) => /^read(Production|Ticaret)Enabled$/.test(o.ad)),
+      govde.bulundu
+        ? `gövdedeki okuyucular: ${govde.okuyucular.map((o) => o.ad).join(", ") || "(hiç)"}`
+        : "fonksiyon bulunamadı",
+    );
+    check(
+      `§8b ${resolver} alt bayrağın HAM okuyucusunu çağırıyor`,
+      servisKodu.includes(`return ${hamOkuyucu}(tx)`),
+      "resolver alt bayrağı okumuyorsa modül açıkken bile yanlış cevap verir",
+    );
+  }
+  // `getFeatureFlags` HAM değeri döndürmeye DEVAM etmeli (P1/K4): panel kendi
+  // yazdığını geri okur. Etkin değer dönseydi, modülü kapalı bir kurulumda
+  // kullanıcı bayrağı açar ve toggle kapalı görünmeye devam ederdi.
+  const ffGovde = servisKodu.slice(
+    servisKodu.indexOf("async getFeatureFlags("),
+    servisKodu.indexOf("async getFeatureFlags(") + 12000,
+  );
+  for (const [hamOkuyucu, { resolver }] of Object.entries(RESOLVER_ALTI)) {
+    check(
+      `§8b ⭐ getFeatureFlags HAM değeri döndürüyor: ${hamOkuyucu}`,
+      ffGovde.includes(`${hamOkuyucu}(cacheClient)`) && !ffGovde.includes(`${resolver}(cacheClient)`),
+      "panel kendi yazdığı değeri geri okumak zorunda (K4)",
+    );
+  }
+
   // ── §9 ⭐ OKUYUCULAR HAM DEĞER DÖNER (K4 sözleşmesi) ──────────────────────
   // `readIplikEnabled` ETKİN değeri (`ticaret && iplik`) DÖNMEZ: birleşimin TEK
   // çözüm noktası middleware'dir (panel toggle'ı kendi yazdığını geri okumak

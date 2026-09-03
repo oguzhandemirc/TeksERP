@@ -128,8 +128,19 @@ export async function createManualMoveFixture(
     await prisma.rollProperty.deleteMany({ where: { rollId: { in: allRollIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: { in: allRollIds } } });
     await prisma.roll.deleteMany({ where: { id: { in: allRollIds } } });
-    await prisma.systemLog.deleteMany({ where: { recordId: batch.id } });
-    await prisma.batch.deleteMany({ where: { id: batch.id } });
+    // ⚠️ PARTİ SİLME İŞ EMRİ KAPSAMLIDIR, "fixture'ın açtığı parti" DEĞİL.
+    // Fixture tek parti açar ama bu WO'ya SONRADAN başka partiler doğabilir —
+    // `batch.autoCreateEnabled` (D7) açıkken sunucu Tambur manuel girişinde
+    // partiyi kendisi yaratır. Tek-id'li silme onları bırakır ve
+    // `batches_workOrderId_fkey` WO silmesini P2003 ile düşürür: bekçi kırmızı
+    // verir ama sebebi ölçtüğü kuralla İLGİSİZDİR (2026-09-03'te ölçüldü).
+    const woBatches = await prisma.batch.findMany({
+      where: { workOrderId: wo.id },
+      select: { id: true },
+    });
+    const batchIds = woBatches.map((b) => b.id);
+    await prisma.systemLog.deleteMany({ where: { recordId: { in: batchIds } } });
+    await prisma.batch.deleteMany({ where: { id: { in: batchIds } } });
     await prisma.systemLog.deleteMany({ where: { recordId: wo.id } });
     await prisma.travelerCard.deleteMany({ where: { workOrderId: wo.id } });
     await prisma.workOrderStep.deleteMany({ where: { workOrderId: wo.id } });

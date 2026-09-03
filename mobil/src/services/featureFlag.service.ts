@@ -102,6 +102,14 @@ export interface FeatureFlags {
    *  TABLETİNİ salt-okunur yapar; kararı adım adım backend bildirir
    *  (`KursunStepSummary.tabletReadOnly`). */
   kursunBypassEnabled: boolean;
+  /** Sevk öncesi TÜM çuvallar tartılmış olsun mu (default false → yalnız yurtdışı
+   *  sevk tartı ister). Backend ENFORCE eder; ekran yalnız "Sevk Et"i erken
+   *  kapatıp sebebini yazar. ⚠️ Tartılı çuvala sonradan top eklenirse kg SIFIRLANIR
+   *  — operatör bunu "sistem unuttu" diye okumasın diye ipucu metni bunu söyler. */
+  shippingWeighRequiredEnabled: boolean;
+  /** Elle kg girişi yalnız `shipping:write` taşıyan kimlikte mi serbest (default
+   *  false). Backend ENFORCE eder; tablette "Elle kg gir" satırı ÇİZİLMEZ. */
+  shippingManualWeightRestrictedEnabled: boolean;
   /** Müşteri şubeleri (sevk noktaları) kullanılıyor mu (default TRUE). Kapalıysa
    *  sipariş formu şube alanını hiç göstermez. Yalnız UI rehberi — backend
    *  `branchId` gönderilirse yine doğrular. */
@@ -147,6 +155,11 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // Fail-closed yön: bayrak okunamazsa da fire topa etiket BASILMAZ.
   scrapGradeLabelEnabled: false,
   kursunBypassEnabled: false,
+  // FAIL-OPEN (ikisi de): bayrak yüklenemedi diye sahayı sevk edemez hâle
+  // getirmek YANLIŞ yön — otorite sunucudadır ve kesin kapı odur. İstemcinin işi
+  // uyarıyı önceden göstermek/olmayan yolu çizmemek, kapı olmak değil.
+  shippingWeighRequiredEnabled: false,
+  shippingManualWeightRestrictedEnabled: false,
   // Backend/Electron ile aynı yön: şube kullanımı varsayılan AÇIK.
   customerBranchesEnabled: true,
 };

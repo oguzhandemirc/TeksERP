@@ -81,7 +81,8 @@ import { assertRollReplayAlive } from "./helpers/token-replay.helper";
 import { resolveReasonCode } from "./reason-preset.service";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
-import { K18_DEAD_STATUSES } from "./batch.service";
+import { K18_DEAD_STATUSES, createBatchTx } from "./batch.service";
+import { readBatchAutoCreateEnabled } from "./system-setting.service";
 import { InventoryService } from "./inventory.service";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import {
@@ -1028,6 +1029,22 @@ export class TamburManualService {
       );
     }
     // openBatches.length === 0 → parti hiç kullanılmamış; NULL meşrudur.
+    //
+    // ── OTOMATİK PARTİ (D7, `batch.autoCreateEnabled`) ─────────────────────
+    // Bayrak AÇIKKEN bu dal artık NULL bırakmaz: sunucu partiyi KENDİSİ açar.
+    // ⚠️ ADI "otomatik", "zorunlu" DEĞİL — burada 400 vermek ÇIKIŞSIZ bir kapı
+    // olurdu: sistemde sıfırdan parti YARATAN bir uç yok (`batch.routes` yalnız
+    // move/merge/split taşır) ve operatörün kapıyı açacak hiçbir yolu olmazdı.
+    // Bayrak KAPALIYKEN (varsayılan) davranış bayt-bayt bugünküdür.
+    //
+    // ⚠️ Karar burada VERİLİR, parti aşağıda FAZ 2 TX'İNDE doğar. Sebep: parti
+    // burada doğsaydı ve top bağlaması sonra düşseydi (claim çakışması, ölü
+    // WO…) her denemede BOŞ bir parti kalır ve kısa numara sayacını (P01…P99)
+    // boşuna yakardı — 99 numaralık dönen sayaçta bu ucuz bir hata değil.
+    const autoCreateBatch =
+      !input.batchId && openBatches.length === 0
+        ? await readBatchAutoCreateEnabled()
+        : false;
 
 
     // ⚠️ İPTAL EDİLMİŞ TOPUN TOKEN'I REPLAY EDİLEMEZ (2026-08-04) —
@@ -1144,6 +1161,19 @@ export class TamburManualService {
 
       // Atomik claim — createInitialEntry topu renkliyse WAREHOUSE, renksizse
       // STOCK yaratır; ikisi de serbest olmalı (çuval/sevk yok, adımsız).
+      // OTOMATİK PARTİ (D7) — TX İÇİNDE doğar ki claim düşerse parti de geri
+      // sarılsın (boş parti + yanan numara kalmaz). İdempotent dal yukarıda
+      // ERKEN döndüğü için replay ikinci bir parti açmaz.
+      if (autoCreateBatch && !resolvedBatchId) {
+        const { batch } = await createBatchTx(tx, {
+          workOrderId: step.workOrderId,
+          rollIds: [],
+          userId: ctx.userId,
+        });
+        resolvedBatchId = batch.id;
+        resolvedBatchNumber = batch.batchNumber;
+      }
+
       const claim = await tx.roll.updateMany({
         where: {
           id: roll.id,
@@ -1234,7 +1264,13 @@ export class TamburManualService {
         batchNumber: resolvedBatchNumber,
         // Parti OPERATÖRÜN seçimi mi, sistemin tek-seçenekten türettiği mi?
         // Sonradan "yanlış partiye yazılmış" denirse cevabı bu ayrım verir.
-        batchSource: input.batchId ? "OPERATOR" : resolvedBatchId ? "AUTO_SINGLE" : "NONE",
+        batchSource: input.batchId
+          ? "OPERATOR"
+          : autoCreateBatch
+            ? "AUTO_CREATED"
+            : resolvedBatchId
+              ? "AUTO_SINGLE"
+              : "NONE",
       },
     });
 

@@ -52,7 +52,7 @@ import {
   assertKursunTabletMayWrite,
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
-import { readKursunBypassEnabled } from "./system-setting.service";
+import { resolveKursunBypassEnabled } from "./system-setting.service";
 
 /**
  * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
@@ -1503,7 +1503,7 @@ export class KursunQcService {
         reason: `Bu iş ${assignedMachineName} makinesine dağıtıldı — kâğıtla işleniyor. Tambur'da kart okutulduğunda kurşun adımı kapanır.`,
       };
     }
-    const flagEnabled = await readKursunBypassEnabled();
+    const flagEnabled = await resolveKursunBypassEnabled();
     if (!flagEnabled) return null;
 
     const eligibility = await resolveStepBypassEligibility(prisma, stepId);

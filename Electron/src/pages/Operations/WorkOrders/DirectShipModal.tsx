@@ -19,7 +19,10 @@ import { cn } from "@/lib/utils";
 import { EntityPickerModal } from "@/components/forms/entity-picker/EntityPickerModal";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
-import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
+import {
+  useCustomerBranchesEnabled,
+  useShippingOrderRequirement,
+} from "@/hooks/usePricingEnabled";
 import type { Customer } from "@/pages/Customers/types";
 import { workOrderService } from "./service";
 
@@ -54,6 +57,11 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
   // Karşılanma metrajı elle düzenlenebilir (input açık) olan sipariş satırları —
   // varsayılan OTOMATİK; pencil'e basınca override input'u açılır.
   const [allocOpen, setAllocOpen] = useState<Set<string>>(new Set());
+  // "Bu mal bilerek siparişsiz gidiyor" beyanı — `block` rejiminin TEK kaçış
+  // yolu. Fason doğrudan sevk çoğu zaman son duraktır (numune / kalan mal);
+  // kaçış olmasaydı `block` bu akışı tamamen kilitlerdi.
+  const [orderless, setOrderless] = useState(false);
+  const orderRequirement = useShippingOrderRequirement();
 
   const previewQ = useQuery({
     queryKey: ["direct-ship-preview", dispatchId],
@@ -95,6 +103,7 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
         orderLineAllocations: Object.entries(alloc)
           .filter(([, qty]) => qty > 0)
           .map(([orderLineId, qty]) => ({ orderLineId, qty })),
+        orderless,
       }),
     onSuccess: (res) => {
       toast.success(`Fasondan sevk edildi: ${res.data?.dispatchNo ?? dispatchNo}`);
@@ -130,6 +139,10 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
     Boolean(customerId) &&
     reason.trim().length >= 3 &&
     allocTotal <= shippedTotal && // siparişlere işlenen, fiziksel sevkten fazla olamaz
+    // `block` rejimi: sipariş bağı YOK ve niyet BEYAN edilmedi → sunucu 400
+    // verir. Kullanıcıyı 400'e kadar götürmek yerine kapıyı burada tut
+    // (`CreateShipmentDialog` deseninin birebir ikizi).
+    !(orderRequirement === "block" && allocTotal <= 0 && !orderless) &&
     !mut.isPending;
 
   const toggleRoll = (id: string, checked: boolean) =>
@@ -410,6 +423,28 @@ export function DirectShipModal({ open, onOpenChange, workOrderId, dispatchId, d
                   <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                     Hangi siparişe gitti? (opsiyonel — sevk edilen metre otomatik işlenir)
                   </div>
+                  {/* `block` rejiminde bu kutu bir tercih değil TEK KAÇIŞ
+                      YOLUDUR — sunucu siparişsiz doğrudan sevki 400 ile
+                      reddeder. Diğer rejimlerde çizilmez (gürültü olurdu). */}
+                  {orderRequirement === "block" && (
+                    <>
+                      <label className="mb-2 flex items-center gap-2 text-xs font-medium">
+                        <Checkbox
+                          data-testid="ds-orderless"
+                          checked={orderless}
+                          onCheckedChange={(v) => setOrderless(!!v)}
+                        />
+                        Siparişsiz devam et (mal hiçbir siparişe sayılmaz)
+                      </label>
+                      {!orderless && allocTotal <= 0 && (
+                        <p className="mb-2 text-xs text-amber-600 dark:text-amber-500">
+                          Bu kurulumda sevkiyat siparişe bağlanmalı — aşağıdan sipariş
+                          seçin ya da yukarıdaki kutuyu işaretleyip siparişsiz sevk
+                          niyetini beyan edin.
+                        </p>
+                      )}
+                    </>
+                  )}
                   {!customerId ? (
                     <div className="rounded-md border border-dashed p-2 text-center text-xs italic text-muted-foreground">
                       Önce müşteri seçin — siparişler o müşteriye göre listelenir.

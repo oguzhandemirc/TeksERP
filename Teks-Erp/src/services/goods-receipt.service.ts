@@ -48,8 +48,8 @@ import { applyYarnMovementTx, reverseGoodsReceiptYarnTx, yarnMovementSign } from
 // J1 — iki OPT-IN katılık bayrağı (ikisi de varsayılan KAPALI; kapalıyken tek
 // maliyet ayar okumasıdır ve davranış bayt-bayt bugünküdür).
 import {
-  readGoodsReceiptRequirePriceEnabled,
-  readPurchaseBlockOverReceiptEnabled,
+  resolveGoodsReceiptRequirePriceEnabled,
+  resolvePurchaseBlockOverReceiptEnabled,
 } from "./system-setting.service";
 // Paket D3 — fiş bir ALIŞ SİPARİŞİNİ karşılayabilir. Bağ OPSİYONELDİR: sipariş
 // bir PLANDIR, kabulün ön koşulu değil (siparişsiz mal kabulü meşru kalır).
@@ -926,8 +926,8 @@ export class GoodsReceiptService {
     // yolunda tek ek sorgu bile koşmaz. Enforcement reader kalıbı gereği ayar
     // okuması cache'sizdir: panelden kapatılan bayrak bir sonraki fişte anında
     // etkisizleşir (acil kapatma yolu).
-    const requirePrice = await readGoodsReceiptRequirePriceEnabled();
-    const blockOverReceipt = receipt.purchaseOrderId ? await readPurchaseBlockOverReceiptEnabled() : false;
+    const requirePrice = await resolveGoodsReceiptRequirePriceEnabled();
+    const blockOverReceipt = receipt.purchaseOrderId ? await resolvePurchaseBlockOverReceiptEnabled() : false;
     // ── SİPARİŞ BAĞLAMI (J1 guard'ı ① + J2 damgası ②) ──────────────────────
     // ⚠️ BAYRAKTAN BAĞIMSIZ YÜKLENİR ve bu J2 ile geldi: damga bir DAVRANIŞ
     // değil bir İZDİR (koşulsuz yazılır, hiçbir satırı reddetmez) — bayrağın

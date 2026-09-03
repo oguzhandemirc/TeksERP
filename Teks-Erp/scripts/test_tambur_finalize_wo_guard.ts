@@ -59,6 +59,12 @@ let woId: string | null = null;
           // producedInStepId BİLEREK null (Top Kesme çocuğu senaryosu) — WO
           // çözümü artık currentStep'ten; null köken WO kapamayı engellememeli.
           entrySource: "SUPPLIER_RECEIPT",
+          // ⚠️ KALİTE FIXTURE'DA (2026-09-03): finalize 100 m'lik topu 40 m
+          // kesiyor → 60 m'lik KALAN-KUYRUK child'ı parent'ın kalitesini
+          // devralır. Parent gradesizken `quality.gradeRequiredEnabled` AÇIK bir
+          // kurulumda kuyruk kapısı 400 GRADE_REQUIRED veriyor ve bu bekçi
+          // (iptal/devredilmiş WO guard'ı) konusunu ölçemeden düşüyordu.
+          qualityGrade: "1.KALITE",
         },
         select: { id: true },
       });

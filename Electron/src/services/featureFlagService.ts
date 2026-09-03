@@ -2,6 +2,7 @@ import apiClient from "./apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type { SameTypeSessionPolicy } from "@/types/auth";
+import type { ShipmentOrderRequirement, ShippingInvoiceMode } from "@/lib/shipping-flags";
 import {
   type CompanyLetterhead,
   type DocumentsConfig,
@@ -324,6 +325,24 @@ export interface FeatureFlags {
    *  yani tarih sınırı YOK). Faturalanmış ve iade alınmış sevkiyat koşulları bu ayardan
    *  BAĞIMSIZ, her zaman geçerlidir — bu yalnız ek bir daraltma. Backend ENFORCE eder. */
   shipmentUndoSameDayOnly: boolean;
+  /** Sevkiyat siparişe bağlanmalı mı: 'off' (sorma) | 'warn' (default, uyar) |
+   *  'block' (zorunlu). Backend ENFORCE eder ama kapı YALNIZ KURULUMDA —
+   *  bayrak açılmadan kurulmuş PLANNED sevkiyatların çıkışı kilitlenmez.
+   *  `orderless: true` (Siparişsiz devam et) 'block'ta da MUAF. */
+  shippingOrderRequirement: ShipmentOrderRequirement;
+  /** Sevk öncesi TÜM çuvallar tartılmış olsun mu (false=default → yalnız yurtdışı
+   *  sevk tartı ister). Açıkken Hızlı Sevk KOMPLE kapanır (çuval görünmeden
+   *  doğduğu için tartılamaz). Backend ENFORCE eder; ihracat kuralı bayraktan
+   *  BAĞIMSIZ olarak her zaman geçerlidir. */
+  shippingWeighRequiredEnabled: boolean;
+  /** Elle kg girişi yalnız `shipping:write` taşıyan kimlikte mi serbest
+   *  (false=default → mobil paketleme izni de yeter). Backend ENFORCE eder.
+   *  YENİ İZİN KODU YOK — ayrım mevcut izinlerle kurulur. */
+  shippingManualWeightRestrictedEnabled: boolean;
+  /** Sevkin fatura izi: 'dis' (default — dış programdan elle işaretlenir) |
+   *  'ic' (yalnız ERP faturası damgalar, elle iz 400) | 'ikisi' (serbest, iç
+   *  faturası varsa uyarır). Backend ENFORCE eder. İz KALDIRMA her modda açık. */
+  shippingInvoiceMode: ShippingInvoiceMode;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */
@@ -379,6 +398,18 @@ export interface FeatureFlags {
   batchShortNumberEnabled: boolean;
   /** İş emri formundaki "Son Kullanılan Parti No" rozeti (yalnız gösterim). */
   batchLastNumberHintEnabled: boolean;
+  /** TOP KALİTESİ ZORUNLU mu (D6)? Default FALSE = bugünkü davranış (kalite
+   *  opsiyonel, `qualityGrade` NULL doğabilir). Backend ENFORCE eder ama DAR
+   *  kapsamda: KK1/manuel giriş · Tambur kalan-kuyruk topu · depo kesimi ·
+   *  iş emri kapanışının WAREHOUSE/A1_STOCK satırları. Kapsam DIŞI (bilinçli):
+   *  açık kumaş kesimi · fason kabul doğumu · son-adım finalize · iade kabulü.
+   *  ⚠️ ÖNKOŞUL: kalan-kuyruk dalı için tablette "kalan parça kalitesi" alanı
+   *  olan APK gerekir. */
+  qualityGradeRequiredEnabled: boolean;
+  /** Açık parti yokken sunucu partiyi KENDİSİ açsın mı (D7)? Default FALSE.
+   *  ⚠️ "Parti zorunlu" DEĞİL: elle parti yaratan bir uç/ekran olmadığı için
+   *  "zorunlu" seçeneği çıkışsız bir kapı olurdu (ayrı paket). */
+  batchAutoCreateEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat; 1..43200 = 30 gün). Giriş
    *  sonrası token kaç dakika geçerli kalır; süre dolunca (aktif kullanırken bile)
    *  yeniden giriş gerekir. Backend ENFORCE eder (yalnız sonraki girişlere uygulanır;

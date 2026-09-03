@@ -244,6 +244,36 @@ export const SETTING_KEYS = {
   /** İade kabulünde personel topun kalitesini değiştirebilsin mi. Default false
    *  (kapalıyken kalite butonu gizlenir + backend gönderilen override'ı yok sayar). */
   RETURN_GRADING_ENABLED: "return.gradingEnabled",
+  /** TOP KALİTESİ ZORUNLU MU (D6, 2026-09-03). Default FALSE = bugünkü davranış
+   *  (kalite opsiyoneldir, `qualityGrade` NULL doğabilir).
+   *
+   *  ⚠️ KAPSAM DAR ve BİLİNÇLİ — yalnız "final ürün kararı" veren DÖRT yüzey:
+   *  KK1/manuel giriş (`createInitialEntry`, F221 opt-in) · Tambur kalan-kuyruk
+   *  topu · depo kesimi (`cutWarehouseRoll`) · WO kapanış dispozisyonunun
+   *  `WAREHOUSE`/`A1_STOCK` satırları. KAPSAM DIŞI (gerekçeli, bekçide NEGATİF
+   *  sonda): `cutOpenFabric` (kalite zaten hep dolu) · fason kabul doğumu
+   *  (bilinçli null — "kaliteye bakılmadı") · `finalizeRollsAtLastStep`
+   *  (WO kapanışını komple kilitlerdi) · iade kabulü (`return.gradingEnabled`
+   *  kapalıyken kalite girecek yüzey YOK — anlam çatışması).
+   *
+   *  ⚠️ ÇEKİRDEKTİR, üretim modülünün ALTINDA DEĞİL: KK1 dalı Roll doğuran
+   *  motorda yaşar (tasarım karar #2 — "motor çekirdek, sunum modülde") ve
+   *  toptancının "Mal Girişi" ekranı da aynı motoru kullanacak. Bu yüzden
+   *  `resolve*` yok, DÜZ okuyucu.
+   *
+   *  ⚠️ ÖNKOŞUL: Tambur kalan-kuyruk dalı bayrak açıkken 400 verir; tablette
+   *  "kalan parça için kalite" alanı olan APK ŞART (bkz. panel açıklaması). */
+  QUALITY_GRADE_REQUIRED_ENABLED: "quality.gradeRequiredEnabled",
+  /** AÇIK PARTİ YOKKEN SUNUCU PARTİYİ KENDİSİ AÇSIN MI (D7, 2026-09-03).
+   *  Default FALSE = bugünkü davranış (0 açık parti → top PARTİSİZ doğar).
+   *
+   *  ⚠️ ADI "otomatik", "zorunlu" DEĞİL ve bu bilinçli: "parti zorunlu" bir
+   *  ÇIKIŞSIZ KAPI olurdu — sistemde sıfırdan parti YARATAN uç yok
+   *  (`batch.routes` yalnız move/merge/split taşır), yani operatörün kapıyı
+   *  açacak hiçbir yolu olmazdı. Tek enforcement noktası `tambur-manual`
+   *  "0 açık parti → null" dalıdır; `attachRolls`/`quickStart` DOKUNULMAZ
+   *  (parti orada zaten koşulsuz doğuyor). Elle parti açma yüzeyi ayrı paket. */
+  BATCH_AUTO_CREATE_ENABLED: "batch.autoCreateEnabled",
   /** Kartela kabulünde uzunluk(cm)/ağırlık(kg) alanları gösterilsin mi. Default false
    *  (bu firma kartelayı yalnız ADET sayar; kapalıyken kabul ekranında ve kartela
    *  listelerinde cm/kg gizlenir). Başka firmalara açık satılabilir. Backend ENFORCE
@@ -281,6 +311,66 @@ export const SETTING_KEYS = {
    *  (Europe/Istanbul) önceyse 409. Fatura ve iade koşulları bu ayardan BAĞIMSIZ ve her
    *  zaman geçerlidir — bu yalnız EK bir daraltmadır. ENFORCE edilir (backend). */
   SHIPMENT_UNDO_SAME_DAY_ONLY: "shipping.undoDispatchSameDayOnly",
+  /** Sevkiyat SİPARİŞE bağlanmalı mı — `off` | `warn` (default) | `block`.
+   *
+   *  `warn` = BUGÜNKÜ davranış: siparişsiz sevk kurulur, yanıt `warnings` taşır
+   *  (`orderless: true` beyanı uyarıyı susturur — niyet beyan edilmiştir).
+   *  `off`  = YALNIZ siparişsizlik uyarısını susturur; önizlemenin diğer İKİ
+   *           uyarısı (tahsis fazlası · başka açık sevkiyatta bekleyen mükerrer
+   *           tahsis) AYAKTA kalır — onlar farklı soruların cevabıdır.
+   *  `block`= sipariş bağı ZORUNLU; `orderless: true` beyanı yine MUAF (numune /
+   *           fazla mal meşru bir iştir, kural "niyet beyan edilsin"dir).
+   *
+   *  ⚠️ KAPI YALNIZ KURULUMDA (`createShipment` · `createShipmentFromRolls` ·
+   *  `setShipmentOrders`ın boş-dizi dalı). `dispatchShipment`e KONMAZ: bayrak
+   *  açılmadan kurulmuş PLANNED sevkiyatlar siparişsizdir ve çıkışları
+   *  kilitlenirse mal bina içinde kalır (tasarım §11 "geçmişe etki eden bayrak
+   *  yok"). ENFORCE edilir (backend). */
+  SHIPPING_ORDER_REQUIREMENT: "shipping.orderRequirement",
+  /** Sevk öncesi TÜM çuvallar tartılmalı mı. Default false = BUGÜNKÜ davranış
+   *  (yalnız `destination = EXPORT` tartı ister). Açıkken yurtiçi sevk de tartı
+   *  ister ve hızlı sevk (`from-rolls`) KOMPLE kapanır — orada çuval operatöre
+   *  görünmeden doğar, tartılamaz.
+   *
+   *  ⚠️ İHRACAT KURALI BAYRAKTAN BAĞIMSIZ: bayrak yalnız GENİŞLETİR, asla
+   *  gevşetmez (gümrük/mevzuat kuralı bayraklanamaz — tasarım §11).
+   *  ⚠️ `markSackContentChangedTx` çuval içeriği değişince kg'yi SIFIRLAR →
+   *  tartılı çuvala tek top eklemek sevki 400'e düşürür. Panel/tablet metni
+   *  bunu açıkça söyler ("içerik değişti, yeniden tartın").
+   *  ENFORCE edilir (backend). */
+  SHIPPING_WEIGH_REQUIRED_ENABLED: "shipping.weighRequiredEnabled",
+  /** ELLE tartı (`weightSource = MANUAL`) yalnız `shipping:write` taşıyan
+   *  kimlikte serbest olsun mu. Default false = BUGÜNKÜ davranış (herkes elle
+   *  girebilir). Açıkken tablet izniyle (`mobile:tarti-paket` / `mobile:sevkiyat`)
+   *  gelen istek kantar okuması (`SCALE`) göndermek zorundadır.
+   *
+   *  YENİ İZİN KODU YOK (2026-08-01 kurşun-bypass dersi: izin doğar, kimseye
+   *  atanmaz, sebep hiçbir yerde yazmaz) — ayrım mevcut `shipping:write` ↔ mobil
+   *  ekran izinleri arasındadır.
+   *  ⚠️ `source` OPSİYONELLİĞİ KAPATILMAZ (eski istemci toplu 403 olurdu) →
+   *  bayrak açıkken `source` göndermeyen istek MANUAL sayılır ve aynı kuraldan
+   *  geçer. Bu yüzden bayrak "tüm tabletler+paneller güncellenmeden AÇILMAZ".
+   *  ⚠️ İKİNCİ YOL da kapalı: `openSack` gövdesindeki `weightKg` aynı yüklemden
+   *  geçer (yoksa fail-open + "elle girildi" izlenebilirlik yalanı).
+   *  ENFORCE edilir (backend). */
+  SHIPPING_MANUAL_WEIGHT_RESTRICTED_ENABLED: "shipping.manualWeightRestrictedEnabled",
+  /** Sevkin FATURA İZİ nereden yazılsın — `dis` (default) | `ic` | `ikisi`.
+   *
+   *  `dis`   = BUGÜNKÜ davranış: fatura dış muhasebe programında kesilir, ERP'ye
+   *            yalnız numarası elle işaretlenir (`POST .../:id/invoice`).
+   *  `ic`    = elle iz ucu 400 `INVOICE_TRACE_DISABLED`; numara yalnız iç fatura
+   *            onayından (`invoice.service.confirm`) damgalanır. ⚠️ İZ KALDIRMA
+   *            (`invoiceNo: null`) `ic` modunda da AÇIK kalır — yoksa mod
+   *            açılmadan önce basılmış yanlış izler kalıcı olurdu.
+   *  `ikisi` = elle iz serbest; iç faturası OLAN sevke yazılırsa yanıt `warnings`
+   *            taşır (amber), ENGEL YOK.
+   *
+   *  ⚠️ İÇ ONAYIN DAMGASI HER MODDA KALIR: storno kapısı (`resolveUndoBlockReason`)
+   *  yalnız `invoiceNo`ya bakar; damga da kaldırılsaydı "faturalanmış sevk geri
+   *  alınamaz" koruması sessizce düşerdi.
+   *  ⚠️ `maybeAutoDraftInvoiceAfterDispatch` bu bayraktan ETKİLENMEZ (finans
+   *  kancası, kendi çift kapısı var). ENFORCE edilir (backend). */
+  SHIPPING_INVOICE_MODE: "shipping.invoiceMode",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -541,6 +631,31 @@ export type SameTypeSessionPolicy = "kick" | "notify" | "off";
 export const SAME_TYPE_SESSION_POLICIES: SameTypeSessionPolicy[] = ["kick", "notify", "off"];
 /** Aynı-tip oturum politikası varsayılanı — eskiyi düşür, yeni kazanır. */
 export const DEFAULT_SAME_TYPE_SESSION_POLICY: SameTypeSessionPolicy = "kick";
+
+// ---------------------------------------------------------------------------
+// SEVKİYAT ENUM BAYRAKLARI (2026-09-03, Dilim 2)
+// ---------------------------------------------------------------------------
+// KALIP `SameTypeSessionPolicy` emsalinin BİREBİR ikizidir: tip + değer dizisi +
+// DEFAULT sabiti. Dizinin tek işi "panelden gelen metin geçerli mi" değildir —
+// OKUYUCU da onu kullanır (`includes` başarısızsa DEFAULT döner), yani DB'ye
+// elle yazılmış çöp bir değer davranışı değiştiremez. Bu KOD SİGORTASI, "yeni
+// bayrağın varsayılanı BUGÜNKÜ davranıştır" vaadinin tek mekanik garantisidir.
+//
+// ⚠️ Yeni enum bayrağı eklerken `scripts/test_feature_flag_contract.ts` §16
+// (aEnum ayağı) kendiliğinden kapsar: dört kapı + panel + varsayılan + çöp-değer
+// sondası. Muaf yazmak GEREKMEZ, panele satır eklemek GEREKİR.
+
+/** Sevkiyat ↔ sipariş bağı zorunluluğu. `warn` = bugünkü davranış. */
+export type ShipmentOrderRequirement = "off" | "warn" | "block";
+export const SHIPMENT_ORDER_REQUIREMENTS: ShipmentOrderRequirement[] = ["off", "warn", "block"];
+/** Varsayılan `warn` — BUGÜNKÜ davranış (siparişsiz sevk kurulur, uyarı döner). */
+export const DEFAULT_SHIPMENT_ORDER_REQUIREMENT: ShipmentOrderRequirement = "warn";
+
+/** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
+export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
+export const SHIPPING_INVOICE_MODES: ShippingInvoiceMode[] = ["dis", "ic", "ikisi"];
+/** Varsayılan `dis` — BUGÜNKÜ davranış (elle fatura işareti serbest). */
+export const DEFAULT_SHIPPING_INVOICE_MODE: ShippingInvoiceMode = "dis";
 /** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
 export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
 /** Mobil idle ekran kilidi varsayılanı — açık. */
@@ -1121,6 +1236,17 @@ export interface FeatureFlags {
   /** Sevk geri alma (storno) yalnız aynı fabrika gününde mi (default false = sınırsız).
    *  Faturasız + iadesiz koşulları bundan bağımsız her zaman geçerlidir. */
   shipmentUndoSameDayOnly: boolean;
+  /** Sevkiyat siparişe bağlanmalı mı: 'off' | 'warn' (default) | 'block'.
+   *  Backend ENFORCE eder — kapı YALNIZ kurulumda (dispatch'e konmaz). */
+  shippingOrderRequirement: ShipmentOrderRequirement;
+  /** Sevk öncesi TÜM çuvallar tartılmalı mı (default false → yalnız ihracat).
+   *  Backend ENFORCE eder; ihracat kuralı bayraktan bağımsız her zaman geçerli. */
+  shippingWeighRequiredEnabled: boolean;
+  /** Elle tartı (MANUAL) yalnız `shipping:write` taşıyan kimlikte mi serbest
+   *  (default false = herkes girebilir). Backend ENFORCE eder. YENİ İZİN YOK. */
+  shippingManualWeightRestrictedEnabled: boolean;
+  /** Fatura izi rejimi: 'dis' (default) | 'ic' | 'ikisi'. Backend ENFORCE eder. */
+  shippingInvoiceMode: ShippingInvoiceMode;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -1159,6 +1285,13 @@ export interface FeatureFlags {
    *  Kapalıyken eski `P + GGAAYY + sıra` kalıbı. Açıkken parti no benzersiz DEĞİLDİR. */
   batchShortNumberEnabled: boolean;
   batchLastNumberHintEnabled: boolean;
+  /** Top kalitesi zorunlu mu (D6)? Default FALSE. Backend ENFORCE eder ama DAR
+   *  kapsamda (KK1 girişi · Tambur kalan-kuyruk · depo kesimi · WO kapanışının
+   *  depo/2.kalite satırları). ÇEKİRDEK — üretim modülüne bağlı DEĞİL. */
+  qualityGradeRequiredEnabled: boolean;
+  /** Açık parti yokken sunucu partiyi kendisi açsın mı (D7)? Default FALSE.
+   *  Backend ENFORCE eder (`tambur-manual` elle top ekleme yolu). */
+  batchAutoCreateEnabled: boolean;
   /** Oturum (JWT) ömrü — DAKİKA (default 480 = 8 saat). Dakika-granüler ayar; UI bunu
    *  yönetir. Backend ENFORCE eder (login'de jwt.sign expiresIn = ×60 sn). */
   sessionDurationMinutes: number;
@@ -1465,6 +1598,11 @@ export class SystemSettingService {
       shipmentConfirmationEnabled: await readShipmentConfirmationEnabled(cacheClient),
       shipmentManualSackCountEnabled: await readShipmentManualSackCountEnabled(cacheClient),
       shipmentUndoSameDayOnly: await readShipmentUndoSameDayOnly(cacheClient),
+      shippingOrderRequirement: await readShippingOrderRequirement(cacheClient),
+      shippingWeighRequiredEnabled: await readShippingWeighRequiredEnabled(cacheClient),
+      shippingManualWeightRestrictedEnabled:
+        await readShippingManualWeightRestrictedEnabled(cacheClient),
+      shippingInvoiceMode: await readShippingInvoiceMode(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -1481,6 +1619,8 @@ export class SystemSettingService {
       kursunBypassEnabled: await readKursunBypassEnabled(cacheClient),
       batchShortNumberEnabled: await readBatchShortNumberEnabled(cacheClient),
       batchLastNumberHintEnabled: await readBatchLastNumberHintEnabled(cacheClient),
+      qualityGradeRequiredEnabled: await readQualityGradeRequiredEnabled(cacheClient),
+      batchAutoCreateEnabled: await readBatchAutoCreateEnabled(cacheClient),
       sessionDurationMinutes: sessionMinutes,
       sessionDurationHours: Math.max(1, Math.round(sessionMinutes / 60)),
       idleTimeoutMinutes: await readIdleTimeoutMinutes(cacheClient),
@@ -2064,6 +2204,57 @@ export class SystemSettingService {
       );
     }
 
+    // ── SEVKİYAT DAVRANIŞ BAYRAKLARI (Dilim 2) ────────────────────────────────
+    if (Object.prototype.hasOwnProperty.call(input, "shippingOrderRequirement")) {
+      const v = input.shippingOrderRequirement;
+      if (typeof v !== "string" || !SHIPMENT_ORDER_REQUIREMENTS.includes(v as ShipmentOrderRequirement)) {
+        throw AppError.badRequest("Sipariş bağı kuralı 'off', 'warn' veya 'block' olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_ORDER_REQUIREMENT,
+        v,
+        "Sevkiyat siparişe bağlansın mı: off (sorma) / warn (uyar) / block (zorunlu)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingWeighRequiredEnabled")) {
+      if (typeof input.shippingWeighRequiredEnabled !== "boolean") {
+        throw AppError.badRequest("shippingWeighRequiredEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_WEIGH_REQUIRED_ENABLED,
+        input.shippingWeighRequiredEnabled,
+        "Sevk öncesi tüm çuvallar tartılmış olsun (kapalıyken yalnız yurtdışı sevk tartı ister)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingManualWeightRestrictedEnabled")) {
+      if (typeof input.shippingManualWeightRestrictedEnabled !== "boolean") {
+        throw AppError.badRequest("shippingManualWeightRestrictedEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_MANUAL_WEIGHT_RESTRICTED_ENABLED,
+        input.shippingManualWeightRestrictedEnabled,
+        "Elle çuval tartısı yalnız sevkiyat sorumlusunda (tablet operatörü kantardan tartar)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingInvoiceMode")) {
+      const v = input.shippingInvoiceMode;
+      if (typeof v !== "string" || !SHIPPING_INVOICE_MODES.includes(v as ShippingInvoiceMode)) {
+        throw AppError.badRequest("Fatura izi rejimi 'dis', 'ic' veya 'ikisi' olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_INVOICE_MODE,
+        v,
+        "Sevkin fatura izi: dis (dış programdan elle) / ic (yalnız ERP faturası) / ikisi (serbest, uyarır)",
+        userId
+      );
+    }
+
     if (Object.prototype.hasOwnProperty.call(input, "kursunBypassEnabled")) {
       if (typeof input.kursunBypassEnabled !== "boolean") {
         throw AppError.badRequest("kursunBypassEnabled boolean olmalı");
@@ -2084,6 +2275,30 @@ export class SystemSettingService {
         SETTING_KEYS.BATCH_SHORT_NUMBER_ENABLED,
         input.batchShortNumberEnabled,
         "Parti no kısa ve dönen (P01…P99, sonra başa sarar) — kapalıyken P + GGAAYY + günlük sıra",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "qualityGradeRequiredEnabled")) {
+      if (typeof input.qualityGradeRequiredEnabled !== "boolean") {
+        throw AppError.badRequest("qualityGradeRequiredEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.QUALITY_GRADE_REQUIRED_ENABLED,
+        input.qualityGradeRequiredEnabled,
+        "Top kalitesi zorunlu — KK1 girişi, Tambur kalan-kuyruk topu, depo kesimi ve iş emri kapanışının depo/2. kalite satırları kalitesiz geçemez",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "batchAutoCreateEnabled")) {
+      if (typeof input.batchAutoCreateEnabled !== "boolean") {
+        throw AppError.badRequest("batchAutoCreateEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.BATCH_AUTO_CREATE_ENABLED,
+        input.batchAutoCreateEnabled,
+        "Açık parti yokken sunucu partiyi kendisi açar (elle top eklemede) — 'parti zorunlu' DEĞİL, otomatik parti",
         userId
       );
     }
@@ -3342,6 +3557,91 @@ export async function readShipmentUndoSameDayOnly(
   return asBoolean(setting?.value);
 }
 
+// ---------------------------------------------------------------------------
+// SEVKİYAT DAVRANIŞ BAYRAKLARI — OKUYUCULAR (Dilim 2, 2026-09-03)
+// ---------------------------------------------------------------------------
+// ⚠️ DÖRDÜ DE ENFORCEMENT OKUYUCUSUDUR ("yalnız UI rehberi" DEĞİL) — bu yüzden
+// enforcement yolunda ARGÜMANSIZ (önbelleksiz) çağrılırlar. `getFeatureFlags`in
+// 30 sn'lik önbelleği yalnız PANEL YANITINA aittir; bayrak aynı zamanda acil
+// geri dönüş anahtarıdır ve kapatıldığı an geçerli olmalıdır.
+//
+// ⚠️ DÖRDÜ DE EBEVEYNSİZDİR — Sevkiyat & Depo tasarım §2'de ÇEKİRDEK bloktur,
+// arkasında modül anahtarı YOKTUR. §3.6'nın "etkin değer = modülAçık && bayrak"
+// tek-resolver kuralı buraya UYGULANMAZ; mekanik uygulayan biri ölü bir
+// `modulAcik` sabiti icat eder ve sonraki okuyucu "hangi modül?" diye arar.
+// Düz okuyucu BİLİNÇLİ.
+
+/**
+ * Sevkiyat siparişe bağlanmalı mı? Default `warn` = BUGÜNKÜ davranış.
+ *
+ * Satır YOKSA **veya değer kümede DEĞİLSE** varsayılana düşer — ikincisi kod
+ * sigortasıdır: DB'ye elle yazılmış bir çöp değer ("blok", "BLOCK", true)
+ * sahayı sessizce kilitleyemez.
+ */
+export async function readShippingOrderRequirement(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ShipmentOrderRequirement> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_ORDER_REQUIREMENT },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && SHIPMENT_ORDER_REQUIREMENTS.includes(v as ShipmentOrderRequirement)) {
+    return v as ShipmentOrderRequirement;
+  }
+  return DEFAULT_SHIPMENT_ORDER_REQUIREMENT;
+}
+
+/**
+ * Sevk öncesi TÜM çuvallar tartılmalı mı? Default FALSE = bugünkü davranış
+ * (yalnız `destination = EXPORT` tartı ister).
+ */
+export async function readShippingWeighRequiredEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_WEIGH_REQUIRED_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Elle tartı (MANUAL) yetkiye bağlansın mı? Default FALSE = bugünkü davranış
+ * (mobil ekran izniyle gelen operatör de elle kg girebilir).
+ */
+export async function readShippingManualWeightRestrictedEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_MANUAL_WEIGHT_RESTRICTED_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Fatura izi rejimi. Default `dis` = BUGÜNKÜ davranış (elle işaret serbest).
+ * Çöp değer → varsayılan (yukarıdaki kod sigortası gerekçesi birebir).
+ */
+export async function readShippingInvoiceMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ShippingInvoiceMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_INVOICE_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && SHIPPING_INVOICE_MODES.includes(v as ShippingInvoiceMode)) {
+    return v as ShippingInvoiceMode;
+  }
+  return DEFAULT_SHIPPING_INVOICE_MODE;
+}
+
 /**
  * Kurşun bypass düzeni açık mı? Default FALSE (KAPALI). Fabrika kurşun istasyonlarına
  * tablet koymuyorsa açılır: kurşun fiziksel olarak yapılır, dijital izlenmez (hatalar
@@ -3405,6 +3705,151 @@ export async function readBatchShortNumberEnabled(
   // Default AÇIK: kayıt yoksa true.
   if (!setting) return true;
   return asBoolean(setting.value);
+}
+
+/**
+ * TOP KALİTESİ ZORUNLU MU (D6)? Default FALSE = bugünkü davranış.
+ *
+ * ⚠️ DÜZ OKUYUCU, `resolve*` DEĞİL — ve bu bilinçli bir karardır. Bayrağın KK1
+ * dalı `createInitialEntry` motorunda yaşar; o motor ÇEKİRDEKTİR (tasarım
+ * karar #2: "motor çekirdek, sunum modülde") ve üretim modülü kapalı bir
+ * toptancı kurulumunda da aynı Roll'ları doğuracaktır. Üretim şalterine
+ * bağlansaydı, üretim kapalıyken kalite kuralı SESSİZCE yok olurdu.
+ *
+ * Kapsam listesi ve kapsam DIŞI bırakılanların gerekçesi `SETTING_KEYS`
+ * yorumunda; bekçi `scripts/test_quality_batch_flags.ts`.
+ */
+export async function readQualityGradeRequiredEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.QUALITY_GRADE_REQUIRED_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * AÇIK PARTİ YOKKEN SUNUCU PARTİYİ KENDİSİ AÇSIN MI (D7)? Default FALSE.
+ *
+ * ⚠️ Düz okuyucu (`resolve*` YOK): parti nesnesi üretim modülüne ait olsa da
+ * bu bayrağın tek tüketicisi `tambur-manual.service` ve o servis üretim kapılı
+ * router'ların (`tambur.routes`, `mobile` Tambur uçları) arkasında yaşıyor —
+ * ikinci bir şalter, aynı kapıyı iki kez kilitlemek olurdu. Bayrağın adı
+ * "zorunlu" DEĞİL "otomatik": gerekçe `SETTING_KEYS` yorumunda.
+ *
+ * ⚠️ Bu cümle VARSAYIM DEĞİL, ÖLÇÜM (2026-09-03): kapısız 70 route'tan başlayan
+ * ulaşım grafiği 329 dosyaya varıyor ve `tambur-manual.service.ts` o kümede
+ * YOK. Aynı cümlenin `workorder.defaultPlanDurationDays` için kurulan hâli
+ * YANLIŞTI (bkz. §3.6 başlığı) — "router kapılı" demek "servise kapısız yoldan
+ * ulaşılamaz" demek DEĞİLDİR ve her seferinde ölçülmesi gerekir. Yeni bir
+ * çağıran eklenirse (örn. panelden elle top ekleme) bu ölçüm YENİLENİR.
+ */
+export async function readBatchAutoCreateEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.BATCH_AUTO_CREATE_ENABLED },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+// =============================================================================
+// §3.6 — MODÜL ALTI BAYRAKLARIN TEK RESOLVER'LARI (D8, 2026-09-03)
+// =============================================================================
+// SORUN: alt bayrak okuyucuları HAM değer döndürüyor ve enforcement noktaları
+// onları doğrudan çağırıyordu → modül KAPALIYKEN de alt bayrağın kuralı
+// koşmaya devam ediyordu. Ölçüldü (Dilim 2 keşfi): `requireProductionEnabled`
+// kapısı olmayan route'lardan 443 kaynak dosyanın 350'sine hâlâ ulaşılıyor,
+// yani "route kapısı zaten var" cümlesi bu bayraklar için YETERLİ DEĞİL.
+//
+// KALIP (emsal `resolveYarnOutOnInvoiceEnabled`): resolver okuyucu katmanında
+// yaşar, gövde sırası ANLAMLIDIR — en dıştaki modül şalterinden içeri; kapalı
+// modülde alt bayrağın DEĞERİ HİÇ SORULMAZ.
+//
+// ⚠️ `getFeatureFlags` HAM okuyucuyu çağırmaya DEVAM EDER (P1/K4 dersi): panel
+// kendi yazdığı değeri geri okumak zorunda. Etkin değeri döndürseydik, modülü
+// kapalı bir kurulumda kullanıcı bayrağı açar ve toggle kapalı görünmeye devam
+// ederdi.
+//
+// ⚠️ KAPSAM: yalnız EBEVEYNİ OLAN ve modül kapalıyken çalışması ANLAMSIZ olan
+// bayraklar. ÇEKİRDEK kalanlar (resolver YOK, gerekçeli): `kk1.*` (stok-giriş
+// motoru) · sevkiyat/depo · ana veri · sipariş · sistem/kimlik/belge ·
+// `quality.gradeRequiredEnabled` + `batch.autoCreateEnabled` (yukarıdaki iki
+// okuyucunun notları) · `fason.*` ve `kartela.*` (ait oldukları `modul.fason` /
+// `modul.kartela` ANAHTARLARI P1'de YAZILMADI — ebeveyni olmayan bayrağa
+// resolver kurulamaz; anahtarlar doğduğunda buraya taşınırlar).
+//
+// ⚠️ `workorder.defaultPlanDurationDays` BİLİNÇLİ MUAF ve gerekçe TEK CÜMLE:
+// bu bir SAYISAL VARSAYILAN (plan bitiş tarihi boş bırakılırsa +N gün), enforce
+// edilen bir KURAL değil — resolver'ın işi "modül kapalıysa kuralı koşturma"dır
+// ve burada koşacak kural yok ("modül kapalıyken hangi sayı" sorusunun anlamlı
+// bir cevabı da yok: 0 gün planı bozar, null kolonun tipini bozar).
+//
+// ⚠️ "Router zaten kapılı" GEREKÇE DEĞİLDİR — ölçüldü ve YANLIŞ olurdu:
+// `workorder.routes` `requireProductionEnabled` taşıyor ama tek tüketici
+// `workorder.service`e kapısız yoldan da ulaşılıyor
+// (`routes/order.routes.ts → services/order.service.ts → services/workorder.service.ts`;
+// 80 route'un 70'i üretim kapısı taşımıyor, ulaşılan dosya 329). Bu bayrağın
+// muafiyeti bu yüzden ULAŞILABİLİRLİĞE değil, bayrağın CİNSİNE dayanır.
+// =============================================================================
+
+/** Alış siparişi aşımı bloklansın mı — ETKİN değer (`ticaret && bayrak`). */
+export async function resolvePurchaseBlockOverReceiptEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readTicaretEnabled(tx))) return false;
+  return readPurchaseBlockOverReceiptEnabled(tx);
+}
+
+/** Mal kabulde fiyat zorunlu mu — ETKİN değer (`ticaret && bayrak`). */
+export async function resolveGoodsReceiptRequirePriceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readTicaretEnabled(tx))) return false;
+  return readGoodsReceiptRequirePriceEnabled(tx);
+}
+
+/** Kurşun bypass düzeni — ETKİN değer (`üretim && bayrak`). */
+export async function resolveKursunBypassEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readProductionEnabled(tx))) return false;
+  return readKursunBypassEnabled(tx);
+}
+
+/**
+ * Tambur metraj aşımı serbest mi — ETKİN değer (`üretim && bayrak`).
+ *
+ * ⚠️ HAM VARSAYILAN AÇIK, ETKİN DEĞER ÜRETİM KAPALIYKEN KAPALI. Yön bilinçli:
+ * aşımı kabul etmek bir ÜRETİM gerçeğidir (tambur asıl ölçüm noktası); üretim
+ * modülü kullanılmayan bir kurulumda o gerçeğin karşılığı yoktur ve "kayıtlıdan
+ * fazla metraj" sessizce kabul edilmemelidir.
+ */
+export async function resolveTamburOverQuantityEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readProductionEnabled(tx))) return false;
+  return readTamburOverQuantityEnabled(tx);
+}
+
+/** Tambur "tümden geri al" aynı-gün sınırı — ETKİN değer (`üretim && bayrak`). */
+export async function resolveTamburUndoFullSameDayOnly(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readProductionEnabled(tx))) return false;
+  return readTamburUndoFullSameDayOnly(tx);
+}
+
+/** Parti no kısa/dönen biçimi — ETKİN değer (`üretim && bayrak`). */
+export async function resolveBatchShortNumberEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  if (!(await readProductionEnabled(tx))) return false;
+  return readBatchShortNumberEnabled(tx);
 }
 
 /**

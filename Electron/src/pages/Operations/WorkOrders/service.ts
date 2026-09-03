@@ -483,6 +483,10 @@ export const workOrderService = {
       branchId?: string;
       completeWorkOrder?: boolean;
       orderLineAllocations?: { orderLineId: string; qty: number }[];
+      /** "Siparişsiz devam et" beyanı — `shipping.orderRequirement=block`
+       *  rejiminin TEK kaçış yolu. Alan gövdeye BAĞLANMAZSA kutu ekranda
+       *  görünür ama uçta yine 400 yenir (ölü checkbox sınıfı). */
+      orderless?: boolean;
     },
   ) =>
     apiClient

@@ -6,7 +6,14 @@ import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { safeFormat, formatNumber } from "@/lib/format";
-import { canDraftInvoice, internalInvoiceOf, invoiceLinkLabel } from "./invoiceDraftVisibility";
+import {
+  canDraftInvoice,
+  canMarkInvoiceTrace,
+  internalInvoiceOf,
+  invoiceLinkLabel,
+  invoiceTraceModeNote,
+} from "./invoiceDraftVisibility";
+import type { ShippingInvoiceMode } from "@/lib/shipping-flags";
 import type { DispatchListItem } from "./types";
 
 export function buildDispatchColumns(
@@ -18,6 +25,8 @@ export function buildDispatchColumns(
   financeEnabled: boolean,
   /** Mevcut İÇ faturayı açar (taslak ya da onaylı). */
   onOpenInvoice: (invoiceId: string) => void,
+  /** `shipping.invoiceMode` — elle iz yolunun rejimi. */
+  invoiceMode: ShippingInvoiceMode,
 ): ColumnDef<DispatchListItem>[] {
   return [
     {
@@ -112,24 +121,37 @@ export function buildDispatchColumns(
             ) : (
               <span className="text-xs text-muted-foreground">—</span>
             )}
-            <PermissionGate permission="shipping:invoice">
-              {/* `ghost` DEĞİL `outline`: ghost varyantının kenarlığı ve zemini yok,
-                  kolonun içinde düz metin gibi okunuyordu — tıklanabilir olduğu
-                  belli olmuyordu. Kenarlıklı varyant onu düğmeye benzetir. */}
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-6 gap-1 px-2 text-[11px]"
-                title={r.invoiceNo ? "Fatura bilgisini düzenle / işareti kaldır" : "Faturalandı olarak işaretle"}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onInvoice(r);
-                }}
-              >
-                <Receipt className="h-3.5 w-3.5" />
-                {r.invoiceNo ? "Düzenle" : "İşaretle"}
-              </Button>
-            </PermissionGate>
+            {/* ⚠️ REJİME BAĞLI: `ic` modunda elle iz YAZILAMAZ (uç 400 verir) —
+                düğme yalnız MEVCUT bir izi kaldırmak için çizilir. Gri buton
+                yerine hiç çizmemek tercih edilir (olmayan yolu vaat etme). */}
+            {canMarkInvoiceTrace(r, invoiceMode) && (
+              <PermissionGate permission="shipping:invoice">
+                {/* `ghost` DEĞİL `outline`: ghost varyantının kenarlığı ve zemini yok,
+                    kolonun içinde düz metin gibi okunuyordu — tıklanabilir olduğu
+                    belli olmuyordu. Kenarlıklı varyant onu düğmeye benzetir. */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-6 gap-1 px-2 text-[11px]"
+                  title={
+                    invoiceTraceModeNote(r, invoiceMode) ??
+                    (r.invoiceNo
+                      ? "Fatura bilgisini düzenle / işareti kaldır"
+                      : "Faturalandı olarak işaretle")
+                  }
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onInvoice(r);
+                  }}
+                >
+                  <Receipt className="h-3.5 w-3.5" />
+                  {r.invoiceNo ? "Düzenle" : "İşaretle"}
+                  {invoiceTraceModeNote(r, invoiceMode) && (
+                    <span className="text-amber-600 dark:text-amber-500">•</span>
+                  )}
+                </Button>
+              </PermissionGate>
+            )}
             {/* ⚠️ İKİ AYRI İŞ, İKİ AYRI İZİN — karıştırma:
                 • "İşaretle" (`shipping:invoice`) = DIŞ muhasebe programında
                   kesilmiş belgenin numarasını buraya İZ olarak yazar.

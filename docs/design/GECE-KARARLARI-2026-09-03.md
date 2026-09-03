@@ -17,7 +17,9 @@
 
 ## P2 — süperadmin (peer onaylı, referans: arşiv notu "Süperadmin P2")
 
-Q1 supap · Q2 TOTP env tohumu + kurtarma kodu YOK · Q3 takma ad + 404 · Q4 FORCE_SYNC rotasyon · Q5 salt-okunur Modüller — hepsi arşiv notunda gerekçeli.
+Q1 supap · Q2 ~~TOTP env tohumu~~ + kurtarma kodu YOK · Q3 takma ad + 404 · Q4 ~~FORCE_SYNC rotasyon~~ · Q5 salt-okunur Modüller — hepsi arşiv notunda gerekçeli.
+
+> ⛔ **Q2/Q4 AYNI GÜN GEÇERSİZ (P8):** `.env` doğuş/rotasyon yolu kaldırıldı; hesap ve TOTP sırrı yalnız sunucuda elle koşulan `npm run superadmin:kur` (`-- --rotate`) ile doğar. Script **gerçek TTY ister** (`ssh -t` / `docker exec -it`). Cihaz kaybının iki yolu bugün: LAN'dan parola/PIN + sunucuda `--rotate`.
 
 ## P3 — ayar şifresi (gece kararı; tasarım §7.2'yi somutlar)
 

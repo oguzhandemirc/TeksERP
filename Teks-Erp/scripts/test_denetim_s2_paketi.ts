@@ -176,6 +176,9 @@ async function main(): Promise<void> {
       currentQty: 40,
       status: RollStatus.WAREHOUSE,
       finalizedAt: new Date(),
+      // Depo topu kalitesiyle iner — gradesiz fixture bu bekçiyi kendi
+      // konusundan değil `quality.gradeRequiredEnabled` kapısından düşürürdü.
+      qualityGrade: "1.KALITE",
     },
     select: { id: true },
   });
@@ -203,7 +206,10 @@ async function main(): Promise<void> {
 
   // REGRESYON: KISMİ kesimde kaynak depoda KALMALI
   const kaynak2 = await prisma.roll.create({
-    data: { barcode: `TST-S2B-${ts}`, itemId, initialQty: 40, currentQty: 40, status: RollStatus.WAREHOUSE, finalizedAt: new Date() },
+    data: {
+      barcode: `TST-S2B-${ts}`, itemId, initialQty: 40, currentQty: 40,
+      status: RollStatus.WAREHOUSE, finalizedAt: new Date(), qualityGrade: "1.KALITE",
+    },
     select: { id: true },
   });
   rollIds.push(kaynak2.id);

@@ -6,6 +6,8 @@
 // birini tersine çevirmek hiçbir testi kırmazdı.
 // =============================================================================
 
+import type { ShippingInvoiceMode } from "@/lib/shipping-flags";
+
 export interface InternalInvoiceLink {
   id: string;
   docNo: string;
@@ -79,4 +81,47 @@ export function invoiceLinkLabel(row: DispatchRowLike, financeEnabled: boolean):
   const inv = internalInvoiceOf(row);
   if (!inv) return null;
   return inv.status === "DRAFT" ? "Taslağı aç" : "Faturayı aç";
+}
+
+// =============================================================================
+// ELLE FATURA İZİ ("İşaretle" / "Düzenle") — REJİME BAĞLI GÖRÜNÜRLÜK
+// =============================================================================
+// ⚠️ ÜÇ YÜZEY, TEK YÜKLEM. Elle iz Electron'da ÜÇ yerden veriliyor: muhasebe
+// listesinin satır düğmesi, Sevkiyatlar sayfasının sağ-tık menüsü ve toplu
+// işaretleme. Biri gizlenip diğeri unutulursa kullanıcı yolu görür ve uçta 400
+// yer — `document-design.ts`teki "kart ile route AYNI listeyi taşımalı"
+// dersinin birebir ikizi. Bu yüzden kural saf yüklemde toplandı.
+
+/**
+ * Elle fatura izi YAZMA/DÜZENLEME yolu çizilsin mi.
+ *
+ * `dis` / `ikisi` → her zaman (bugünkü davranış; `ikisi`de yanına amber not).
+ * `ic`            → YALNIZ zaten bir iz varsa: o zaman düğmenin işi YAZMAK değil
+ *                   KALDIRMAKTIR ve backend de bunu her modda kabul eder (mod
+ *                   açılmadan önce basılmış yanlış izler kalıcı olmasın).
+ */
+export function canMarkInvoiceTrace(
+  row: DispatchRowLike,
+  mode: ShippingInvoiceMode,
+): boolean {
+  if (mode !== "ic") return true;
+  return Boolean(row.invoiceNo);
+}
+
+/** Toplu işaretleme yolu — YALNIZ yazar, hiçbir şey kaldırmaz → `ic`de kapalı. */
+export function canBulkMarkInvoiceTrace(mode: ShippingInvoiceMode): boolean {
+  return mode !== "ic";
+}
+
+/**
+ * `ikisi` rejiminde iç faturası olan satırda basılan amber not — backend'in
+ * `warnings` metninin istemci aynası (engel DEĞİL, uyarı).
+ */
+export function invoiceTraceModeNote(
+  row: DispatchRowLike,
+  mode: ShippingInvoiceMode,
+): string | null {
+  if (mode !== "ikisi") return null;
+  const inv = internalInvoiceOf(row);
+  return inv ? `Bu sevkin ERP faturası var (${inv.docNo}) — elle iz mükerrer kayıt üretebilir.` : null;
 }

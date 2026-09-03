@@ -3,8 +3,9 @@
 // =============================================================================
 // NEDEN VAR — EMNİYET SUPABI. Modül anahtarlarını YALNIZ sistem hesabı yazabilir
 // (`feature-flag.routes.ts` üçüncü dalı). Kural doğru ama tek başına bir
-// KİLİTLENME üretir: `.env`'de SUPERADMIN_* satırları olmayan bir kurulumda
-// sistem hesabı hiç doğmaz ve modül anahtarlarını HİÇ KİMSE değiştiremez.
+// KİLİTLENME üretir: satıcı hesabı sunucuda elle kurulur (`npm run
+// superadmin:kur`, 2026-09-03 P8) ve script koşulmadığı sürece hiç doğmaz —
+// o kurulumda modül anahtarlarını HİÇ KİMSE değiştiremezdi.
 // Bu, `constants/document-design.ts`teki "admin:settings DÖRT EKRANI DA AÇMAYA
 // DEVAM EDER" dersinin birebir tekrarı olurdu (deploy anında herkesi dışarıda
 // bırakan sıkı ayrım).

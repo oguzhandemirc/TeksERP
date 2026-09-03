@@ -472,7 +472,15 @@ async function main(): Promise<void> {
     const { TamburUndoService } = await import("../src/services/tambur-undo.service");
     const kaynak = await makeRoll({ labelPrinted: false, status: RollStatus.WAREHOUSE, qty: 100 });
     const adminId = (await prisma.user.findFirst({ where: { username: "admin" }, select: { id: true } }))?.id;
-    const kesim = await new TamburService().cutWarehouseRoll(kaynak.id, { cutLength: 40 }, adminId);
+    // `qualityGrade` AÇIKÇA verilir: kaynak top gradesiz doğuyor ve
+    // `quality.gradeRequiredEnabled` AÇIK bir kurulumda kesim 400
+    // GRADE_REQUIRED'a düşerdi — bekçinin konusu (geri alma ↔ diriltme) hiç
+    // ölçülmeden. Operatörün kesimde kalite seçmesinin birebir karşılığı.
+    const kesim = await new TamburService().cutWarehouseRoll(
+      kaynak.id,
+      { cutLength: 40, qualityGrade: "1.KALITE" },
+      adminId,
+    );
     const cocuk = (kesim.data as { childRoll: { id: string } }).childRoll;
 
     await new TamburUndoService().applyUndo(cocuk.id, adminId, { mode: "SINGLE" });

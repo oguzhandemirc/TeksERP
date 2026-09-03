@@ -19,7 +19,7 @@ import { ACCOUNTING_FILTERS } from "./filters";
 import { DispatchReceiptDialog } from "./DispatchReceiptDialog";
 import { InvoiceDialog } from "./InvoiceDialog";
 import { useAccountingExport } from "./useAccountingExport";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useFeatureFlags, useShippingInvoiceMode } from "@/hooks/usePricingEnabled";
 import { ShipmentInvoiceDraft } from "./ShipmentInvoiceDraft";
 import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
 import type { DispatchCursorResponse, DispatchListItem } from "./types";
@@ -46,12 +46,23 @@ export function AccountingDispatchPage() {
   // İÇ fatura taslağı — yalnız TİCARET REJİMİNDE. Fabrikada ön muhasebe modülü
   // kapalı olduğu için düğme hiç çizilmez (fabrika sıfır-fark).
   const financeEnabled = useFeatureFlags().data?.data?.financeEnabled ?? false;
+  // Elle fatura izi rejimi — üç yüzeyin (satır düğmesi · sağ-tık · toplu) ORTAK
+  // kaynağı. Varsayılan `dis` = bugünkü davranış.
+  const invoiceMode = useShippingInvoiceMode();
   const [draftFor, setDraftFor] = useState<DispatchListItem | null>(null);
   // Mevcut İÇ fatura (taslak ya da onaylı) — satırdaki bağdan açılır.
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const columns = useMemo(
-    () => buildDispatchColumns(setReceiptFor, setInvoiceFor, setDraftFor, financeEnabled, setOpenInvoiceId),
-    [financeEnabled],
+    () =>
+      buildDispatchColumns(
+        setReceiptFor,
+        setInvoiceFor,
+        setDraftFor,
+        financeEnabled,
+        setOpenInvoiceId,
+        invoiceMode,
+      ),
+    [financeEnabled, invoiceMode],
   );
 
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<DispatchListItem>({

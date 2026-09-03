@@ -71,7 +71,7 @@ const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void =
   //   alandır (JWT claim'i DEĞİL) — bu yüzden burada DB'ye gidilmez ve guard
   //   `next`i aynı tick'te çağırır.
   if (keys.some((k) => MODULE_FLAG_KEYS.has(k))) {
-    // EMNİYET SUPABI: sistem hesabı YOKSA (`.env`'de SUPERADMIN_* yok) kural
+    // EMNİYET SUPABI: sistem hesabı YOKSA (kurulum script'i hiç koşulmamış) kural
     // devre dışıdır — aksi halde modül anahtarını HİÇ KİMSE değiştiremezdi
     // (`constants/document-design.ts`teki "admin:settings dört ekranı da açmaya
     // devam eder" dersi). Hesap doğduğu AN kilit mutlaktır.
@@ -304,6 +304,21 @@ export const updateSchema = z.strictObject({
   // shipping.undoDispatchSameDayOnly — sevk geri almayı aynı günle sınırla
   // (default false = sınırsız). Backend ENFORCE (undoDispatch).
   shipmentUndoSameDayOnly: z.boolean().optional(),
+  // ── SEVKİYAT DAVRANIŞ BAYRAKLARI (Dilim 2, 2026-09-03) ─────────────────────
+  // ⚠️ `strictObject`: bu dört satır UNUTULURSA bayraklar panelden AÇILAMAZ **ve
+  // daha kötüsü KAPATILAMAZ** (PATCH 400) — `kk1DuplicateGuardEnabled` vakası.
+  // Bekçi: `scripts/test_feature_flag_contract.ts` §16 (enum ayağı) + §1/§3.
+  // shipping.orderRequirement — sevkiyat siparişe bağlansın mı (default warn = bugünkü).
+  // ENFORCE edilir ama YALNIZ kurulumda; `block` sahadaki APK güncellenmeden AÇILMAZ.
+  shippingOrderRequirement: z.enum(["off", "warn", "block"]).optional(),
+  // shipping.weighRequiredEnabled — sevk öncesi tüm çuvallar tartılı olsun (default false).
+  // İhracat kuralı bu bayraktan BAĞIMSIZ ve her zaman geçerli.
+  shippingWeighRequiredEnabled: z.boolean().optional(),
+  // shipping.manualWeightRestrictedEnabled — elle kg yalnız `shipping:write` (default false).
+  // ⚠️ Eski istemci `source` göndermez → MANUAL sayılır → bayrak açıkken 403. Panel+APK önce.
+  shippingManualWeightRestrictedEnabled: z.boolean().optional(),
+  // shipping.invoiceMode — fatura izi rejimi (default dis = bugünkü elle işaret).
+  shippingInvoiceMode: z.enum(["dis", "ic", "ikisi"]).optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).
@@ -340,6 +355,18 @@ export const updateSchema = z.strictObject({
   // batch.lastNumberHintEnabled — iş emri formundaki "Son Kullanılan Parti No"
   // rozeti (default TRUE). YALNIZ GÖSTERİM; numara üretimine dokunmaz.
   batchLastNumberHintEnabled: z.boolean().optional(),
+  // quality.gradeRequiredEnabled — top kalitesi ZORUNLU mu (default FALSE = bugün).
+  // Backend ENFORCE eder ama DAR kapsamda: KK1/manuel giriş · Tambur kalan-kuyruk
+  // topu · depo kesimi · WO kapanışının WAREHOUSE/A1_STOCK satırları. Kapsam dışı
+  // yüzeyler (cutOpenFabric · fason kabul doğumu · son-adım finalize · iade kabulü)
+  // gerekçeleriyle system-setting.service SETTING_KEYS yorumunda.
+  // ⚠️ ÖNKOŞUL: Tambur kalan-kuyruk dalı için tablette "kalan parça kalitesi" alanı
+  // olan APK gerekir — bkz. panel açıklaması.
+  qualityGradeRequiredEnabled: z.boolean().optional(),
+  // batch.autoCreateEnabled — açık parti yokken sunucu partiyi KENDİSİ açsın mı
+  // (default FALSE = bugün: top partisiz doğar). "Parti zorunlu" DEĞİL: elle parti
+  // yaratan uç olmadığı için "zorunlu" çıkışsız bir kapı olurdu.
+  batchAutoCreateEnabled: z.boolean().optional(),
   // auth.sessionDurationMinutes — oturum (JWT) ömrü, dakika (1–43200 = 30 gün). Backend ENFORCE (login).
   sessionDurationMinutes: z.number().int().min(1).max(43200).optional(),
   // auth.sessionDurationHours — oturum (JWT) ömrü, saat (1–720). GERİYE-UYUM (dakika alanı öncelikli).

@@ -23,7 +23,10 @@ import { ApiResponse } from "../types/api.types";
 import { resolveQualityGradeId, resolveQualityGradeIdStrict } from "./helpers/quality-grade.helper";
 import { resolveEntryStationId } from "./helpers/roll-entry-station.helper";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
-import { readTamburOverQuantityEnabled } from "./system-setting.service";
+import {
+  resolveTamburOverQuantityEnabled,
+  readQualityGradeRequiredEnabled,
+} from "./system-setting.service";
 import { recordVarianceTx, overageOf } from "./helpers/roll-variance.helper";
 import {
   VARIANCE_SOURCES,
@@ -747,12 +750,37 @@ export class TamburService {
       // flag açıksa kabul edilir (parent toptan TAMBUR_CONSUMED olur; segmentler
       // operatörün ölçtüğü uzunlukla yaratılır, "kalan kuyruk" bloğu offsetD >= totalQtyD
       // olduğu için atlanır → negatif kalan oluşmaz). Flag kapalıyken bugünkü davranış: reddet.
-      const overEnabled = await readTamburOverQuantityEnabled();
+      const overEnabled = await resolveTamburOverQuantityEnabled();
       if (!overEnabled) {
         throw AppError.badRequest(
           `Kesim uzunlukları toplamı (${cumulativeLenD.toString()}m) topun metrajını (${totalQtyD.toString()}m) aşıyor`
         );
       }
+    }
+
+    // ── KALİTE ZORUNLU (D6) — KALAN-KUYRUK TOPU ────────────────────────────
+    // Kesimlerin toplamı metrajın ALTINDA kalırsa sistem otomatik bir "kalan"
+    // child üretir ve onun kalitesi PARENT'tan devralınır (aşağıdaki
+    // REMAINING_TAIL segmenti). Parent gradesizse o top KALİTESİZ doğar —
+    // operatörün kesimlerde seçtiği kaliteler bu topa uygulanmaz.
+    //
+    // ⚠️ Koşul aşımla SIMETRİK okunur: aşım varsa (`cumulativeLenD >=
+    // totalQtyD`) kuyruk bloğu zaten atlanır, dolayısıyla kapı da susar.
+    // Bayrak okuması ancak GERÇEKTEN gradesiz kuyruk doğacaksa yapılır.
+    //
+    // ⚠️ ÖNKOŞUL (reçetede yazılı): bu dal bayrak açıkken 400 verir ve
+    // tabletin "kalan parça için kalite" alanı olan APK'sı ŞARTTIR — aksi
+    // halde gradesiz parent'lı HER finalize durur.
+    if (
+      cumulativeLenD.lessThan(totalQtyD) &&
+      !roll.qualityGrade &&
+      (await readQualityGradeRequiredEnabled())
+    ) {
+      throw AppError.badRequest(
+        "Kalan parçanın kalitesi belirsiz — kesim toplamı topun metrajını doldurmuyor ve " +
+          "kaynak topun kalitesi yok. Kalan için kalite seçin ya da kesimlerle metrajın tamamını kapatın.",
+        { code: "GRADE_REQUIRED" }
+      );
     }
     // Defect ID referansları parent'a ait olmalı.
     for (const c of inputCuts) {
@@ -2108,7 +2136,7 @@ export class TamburService {
     const exceedsRemaining = data.cutLength > Number(parent.currentQty);
     // Bayrak tx İÇİNDE de gerekiyor (taze karar oradaki metrajdan veriliyor), o
     // yüzden koşuldan bağımsız okunur — tek PK araması, ihmal edilebilir.
-    const asimIzinli = await readTamburOverQuantityEnabled();
+    const asimIzinli = await resolveTamburOverQuantityEnabled();
     if (exceedsRemaining && !asimIzinli) {
       throw AppError.badRequest(
         `Kesim metresi (${data.cutLength}) topun kalan metresinden (${parent.currentQty}) büyük olamaz`,
@@ -2120,6 +2148,19 @@ export class TamburService {
       data.qualityGrade && data.qualityGrade !== parent.qualityGrade
         ? await resolveQualityGradeIdStrict(data.qualityGrade)
         : parent.qualityGradeId;
+    // KALİTE ZORUNLU (D6) — DEPO KESİMİ. Çözülen kalite (operatörün seçtiği ya
+    // da parent'tan miras) NULL kalıyorsa çocuk top kalitesiz doğar; bayrak
+    // açıkken bu yol kapalıdır. Okuma KOŞULLU: kalite doluysa sorgu yapılmaz.
+    //
+    // ⚠️ `cutOpenFabric` KAPSAM DIŞI ve bu bilinçli — orada kalite her hâlükârda
+    // dolu ("1.KALITE" varsayılanına düşer), yani kapının ısıracağı bir durum
+    // yok; eklemek yalnız her açık-kumaş kesimine bir sorgu ekletirdi.
+    if (!resolvedQualityGrade && (await readQualityGradeRequiredEnabled())) {
+      throw AppError.badRequest(
+        "Kesilen parçanın kalitesi zorunlu — kaynak topun kalitesi de yok, kaliteyi seçin.",
+        { code: "GRADE_REQUIRED" },
+      );
+    }
     // Miras kopyası DEĞER-FARKINDA (2026-08-11, denetim F6): kesim çocuğu
     // ebeveynin GRAMAJ=50GR seçimini de devralır — fiziksel gerçek bu (aynı
     // kumaşın parçası), valueId düşürülürse çocuk "gramajı belirsiz" doğardı.
@@ -2864,7 +2905,7 @@ export class TamburService {
     // tek topa dönüşür, parent tamamen tüketilir (aşağıda currentQty=0).
     const exceedsRemaining = data.lengthMeters > Number(parent.currentQty);
     // Bayrak tx İÇİNDE de gerekiyor (taze karar oradaki metrajdan veriliyor).
-    const asimIzinliOF = await readTamburOverQuantityEnabled();
+    const asimIzinliOF = await resolveTamburOverQuantityEnabled();
     if (exceedsRemaining && !asimIzinliOF) {
       throw AppError.badRequest(
         `Kesim metresi (${data.lengthMeters}) açık kumaşın kalan metresinden (${parent.currentQty}) büyük olamaz`,

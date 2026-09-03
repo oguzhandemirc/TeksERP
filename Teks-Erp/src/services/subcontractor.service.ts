@@ -98,6 +98,10 @@ import {
   validateVarianceReason,
 } from "../constants/variance-reasons";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import {
+  assertOrderLinkAllowed,
+  resolveOrderRequirement,
+} from "./helpers/shipment-order-requirement.helper";
 import { p2002Mentions } from "../utils/p2002";
 
 // -----------------------------------------------------------------------------
@@ -6161,6 +6165,11 @@ export class SubcontractorService {
        *  false (default) → sadece toplar sevk edilir, WO açık kalır (kalan üretim devam). */
       completeWorkOrder?: boolean;
       orderLineAllocations?: Array<{ orderLineId: string; qty: number }>;
+      /** "Bu mal bilerek siparişsiz gidiyor" beyanı — `shipping.orderRequirement`
+       *  `block` rejiminin KAÇIŞ KAPISI. Fason doğrudan sevk çoğu zaman son
+       *  duraktır (numune / kalan mal) ve kapı kaçışsız kalırsa o akış tamamen
+       *  kilitlenirdi. Kural "sipariş seç" değil "ne yaptığını söyle"dir. */
+      orderless?: boolean;
     },
     userId?: string,
   ): Promise<ApiResponse<unknown>> {
@@ -6257,6 +6266,8 @@ export class SubcontractorService {
 
     // Opsiyonel karşılanma doğrulaması (verilmişse).
     const allocations = data.orderLineAllocations ?? [];
+    /** Tahsislerin dokunduğu SİPARİŞLER — sipariş bağı kapısının girdisi. */
+    const allocOrderIds = new Set<string>();
     if (allocations.length > 0) {
       const rollSpecs = await prisma.roll.findMany({
         where: { id: { in: shipRollIds } },
@@ -6304,8 +6315,21 @@ export class SubcontractorService {
         if (!matches) {
           throw AppError.badRequest("Seçilen sipariş satırı bu sevkteki toplarla eşleşmiyor");
         }
+        allocOrderIds.add(line.order.id);
       }
     }
+
+    // ═══ SİPARİŞ BAĞI KAPISI — `createShipment`in İKİZİ, tx'ten ÖNCE ═══
+    // Fason doğrudan sevk mal fabrikaya HİÇ girmeden müşteriye çıkar; sevkiyat
+    // servisinden geçmez, yani `createShipment`e konan kapı buraya UZANMIYORDU
+    // ve `block` rejimi bu yoldan sessizce atlatılabiliyordu (2026-09-03 canlı
+    // ölçüm: 110 m mal, 0 sipariş bağıyla, 200 ile bina dışına çıktı).
+    // ⚠️ İKİNCİ BİR YÜKLEM YAZILMAZ — kardeş bayrak `invoiceMode` da doğrudan
+    // sevki aynı yardımcıyla kapsıyor; kural tek yerde yaşar.
+    assertOrderLinkAllowed(await resolveOrderRequirement(), {
+      orderIds: [...allocOrderIds],
+      orderless: data.orderless,
+    });
 
     // withBarcodeRetry: shipmentNo (@unique, DSK+GGAAYY+NNNN) tx içinde günün
     // max'ından üretiliyor (nextDirectShipmentNo); eşzamanlı iki doğrudan sevk

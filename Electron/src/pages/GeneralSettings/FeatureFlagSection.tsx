@@ -9,7 +9,13 @@ import { useAuthStore } from "@/store/auth";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService, type FeatureFlags } from "@/services/featureFlagService";
 import { systemSettingService } from "@/services/systemSettingService";
-import type { FlagDef, NumberFlagDef, NumberFlagKey, SettingFieldDef } from "./settings-config";
+import type {
+  EnumFlagDef,
+  FlagDef,
+  NumberFlagDef,
+  NumberFlagKey,
+  SettingFieldDef,
+} from "./settings-config";
 import { FlagToggle, ReadOnlyRow, SettingMeta } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
@@ -32,6 +38,7 @@ import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 export function FeatureFlagSection({
   flags,
   numberFlags = [],
+  enumFlags = [],
   settingFields = [],
   superadminOnly = false,
   moduleClosed = false,
@@ -42,6 +49,10 @@ export function FeatureFlagSection({
   /** Sekmeye gömülü SAYISAL feature-flag alanları — toggle'larla AYNI taslak +
    *  AYNI PATCH'te yazılır. */
   numberFlags?: NumberFlagDef[];
+  /** Kapalı kümeli (enum) feature-flag satırları — toggle'larla AYNI taslak +
+   *  AYNI PATCH. Ayrı bir kaydetme yolu açmak "iki Kaydet, hangisi neyi yazdı"
+   *  karışıklığıydı (üç yazma yolunun tek Kaydet altında toplanma gerekçesi). */
+  enumFlags?: EnumFlagDef[];
   /** Ham system-setting sayısal alanları — aynı Kaydet, ayrı uç. */
   settingFields?: SettingFieldDef[];
   /** Kategori yalnız satıcı (süperadmin) hesabına YAZILIR — bkz.
@@ -185,6 +196,23 @@ export function FeatureFlagSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverNumStr]);
 
+  // ENUM taslağı — sunucudaki metin doğrudan tutulur. `?? defaultValue` yazımı
+  // load-bearing: bayrak henüz yüklenmemişken (ilk render) boş string seçilirse
+  // <select> "kontrolsüz→kontrollü" uyarısı verir ve daha kötüsü, kullanıcı hiç
+  // dokunmadan "değişti" sayılıp yanlış bir değer kaydedilebilirdi.
+  const serverEnumFor = (f: EnumFlagDef): string => {
+    const v = server?.[f.enumKey];
+    return typeof v === "string" && f.options.some((o) => o.value === v) ? v : f.defaultValue;
+  };
+  const serverEnumStr = JSON.stringify(enumFlags.map((f) => serverEnumFor(f)));
+  const [enumDraft, setEnumDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const next: Record<string, string> = {};
+    for (const f of enumFlags) next[f.enumKey] = serverEnumFor(f);
+    setEnumDraft(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serverEnumStr]);
+
   const serverFieldStr = JSON.stringify(settingFields.map((f) => serverFieldFor(f)));
   const [fieldDraft, setFieldDraft] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -209,7 +237,10 @@ export function FeatureFlagSection({
   const fieldDirty = settingFields.some(
     (f) => (fieldDraft[f.key] ?? serverFieldFor(f)) !== serverFieldFor(f),
   );
-  const dirty = flagsDirty || numbersDirty || numDirty || fieldDirty;
+  const enumDirty = enumFlags.some(
+    (f) => (enumDraft[f.enumKey] ?? serverEnumFor(f)) !== serverEnumFor(f),
+  );
+  const dirty = flagsDirty || numbersDirty || numDirty || enumDirty || fieldDirty;
   const numValid = numberFlags.every((f) => {
     const v = numDraft[f.key];
     return v === undefined || (Number.isFinite(v) && v >= f.min && v <= f.max);
@@ -240,6 +271,12 @@ export function FeatureFlagSection({
           (patch as Record<string, number>)[f.key] = v;
         }
       }
+      for (const f of enumFlags) {
+        const v = enumDraft[f.enumKey];
+        if (v !== undefined && v !== serverEnumFor(f)) {
+          (patch as Record<string, string>)[f.enumKey] = v;
+        }
+      }
       if (Object.keys(patch).length > 0) await featureFlagService.update(patch);
       for (const f of settingFields) {
         const v = fieldDraft[f.key];
@@ -268,6 +305,9 @@ export function FeatureFlagSection({
     const nextNum: Record<string, number> = {};
     for (const f of numberFlags) nextNum[f.key] = serverNumFor(f);
     setNumDraft(nextNum);
+    const nextEnum: Record<string, string> = {};
+    for (const f of enumFlags) nextEnum[f.enumKey] = serverEnumFor(f);
+    setEnumDraft(nextEnum);
     const nextField: Record<string, number> = {};
     for (const f of settingFields) nextField[f.key] = serverFieldFor(f);
     setFieldDraft(nextField);
@@ -281,6 +321,7 @@ export function FeatureFlagSection({
   // (`wholeCategory`) hepsi görünür — yüklem saf katmanda, bkz. settings-groups.
   const shownFlags = flags.filter((f) => isSettingRowVisible(searchHit, f.key));
   const shownNumberFlags = numberFlags.filter((f) => isSettingRowVisible(searchHit, f.key));
+  const shownEnumFlags = enumFlags.filter((f) => isSettingRowVisible(searchHit, f.enumKey));
   const shownSettingFields = settingFields.filter((f) => isSettingRowVisible(searchHit, f.key));
 
   // Ardışık aynı `group` flag'leri tek bloğa topla (sıra korunur).
@@ -370,6 +411,44 @@ export function FeatureFlagSection({
     );
   };
 
+  /**
+   * ENUM satırı — başlık + tek cümle özet + <select> + seçili seçeneğin gerekçesi.
+   *
+   * Salt-okunur dalda düğme DEĞİL DEĞER basılır: gri bir <select> "değiştirilebilir"
+   * vaat eder (belge tasarım izni dersinin ikizi — olmayan bir yolu gösterme).
+   */
+  const renderEnum = (f: EnumFlagDef) => {
+    const value = enumDraft[f.enumKey] ?? serverEnumFor(f);
+    const selected = f.options.find((o) => o.value === value);
+    const defaultLabel =
+      f.options.find((o) => o.value === f.defaultValue)?.label ?? f.defaultValue;
+    return (
+      <div key={f.enumKey} className="space-y-1.5">
+        <p className="text-sm font-medium">{f.title}</p>
+        <SettingMeta defaultLabel={`Varsayılan: ${defaultLabel}`} audience={f.audience} />
+        <p className="text-xs text-muted-foreground">{f.summary}</p>
+        {canEdit ? (
+          <select
+            value={value}
+            disabled={mut.isPending}
+            onChange={(e) => setEnumDraft((d) => ({ ...d, [f.enumKey]: e.target.value }))}
+            className="h-9 w-full max-w-md rounded-md border bg-background px-2 text-sm"
+          >
+            {f.options.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <div className="text-sm font-semibold">{selected?.label ?? value}</div>
+        )}
+        {selected && <p className="text-xs text-muted-foreground">{selected.hint}</p>}
+        <p className="text-xs text-muted-foreground/80">{f.desc}</p>
+      </div>
+    );
+  };
+
   const renderNumber = (
     f: NumberFlagDef | SettingFieldDef,
     value: number,
@@ -409,7 +488,10 @@ export function FeatureFlagSection({
   );
 
   const nothingShown =
-    shownFlags.length === 0 && shownNumberFlags.length === 0 && shownSettingFields.length === 0;
+    shownFlags.length === 0 &&
+    shownNumberFlags.length === 0 &&
+    shownEnumFlags.length === 0 &&
+    shownSettingFields.length === 0;
 
   return (
     <div>
@@ -450,6 +532,10 @@ export function FeatureFlagSection({
             ),
           )}
         </div>
+      )}
+
+      {shownEnumFlags.length > 0 && (
+        <div className="mt-6 space-y-5 border-t pt-5">{shownEnumFlags.map(renderEnum)}</div>
       )}
 
       {shownSettingFields.length > 0 && (

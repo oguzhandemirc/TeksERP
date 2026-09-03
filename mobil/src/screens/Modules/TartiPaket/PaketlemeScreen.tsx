@@ -42,8 +42,11 @@ import SackManualWeightSheet from './SackManualWeightSheet';
 import { SackLabelPrinter, type SackLabelJob } from '../../../components/labels/SackLabelPrinter';
 import {
   useShipmentConfirmationEnabled,
+  useShippingManualWeightRestrictedEnabled,
+  useShippingWeighRequiredEnabled,
   FLAGS_KEY,
 } from '../../../hooks/useFeatureFlags';
+import { usePermissions } from '../../../hooks/usePermission';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
 
@@ -117,6 +120,15 @@ export default function PaketlemeScreen() {
   // Sevk onayı açık: createShipment PLANNED bırakır (çıkış Sevk Çıkışı'ndan).
   // Kapalı (varsayılan): backend doğrudan sevk eder (tek adım).
   const confirmationEnabled = useShipmentConfirmationEnabled();
+  // Tartı rejimi — kapalıyken (varsayılan) yalnız yurtdışı sevk tartı ister.
+  const weighRequiredFlag = useShippingWeighRequiredEnabled();
+  // Elle kg kısıtı. ⚠️ Otorite SUNUCUDA; burada yalnız menü satırı çizilmez
+  // (gri/çalışmayan bir satır olmayan yolu vaat eder). Mobil `has()` domain
+  // joker'ini (`shipping:*`) tanımaz — sapma FAIL-CLOSED yönde ve zararsız:
+  // sunucu isteği yine kabul eder, kullanıcı yalnız kısayolu görmez.
+  const { has } = usePermissions();
+  const manualWeightRestricted = useShippingManualWeightRestrictedEnabled();
+  const canEnterManualWeight = !manualWeightRestricted || has('shipping:write');
 
   const scanBusy = useRef(false);
   const ensureSackRef = useRef<Promise<string> | null>(null);
@@ -293,7 +305,10 @@ export default function PaketlemeScreen() {
         destination,
         clientToken: shipTokenRef.current,
       });
-      return created.data;
+      // ⚠️ UYARILAR YANITIN KÖKÜNDE (`ApiResponse.warnings`), `data`nın İÇİNDE
+      // DEĞİL — `created.data` döndürüp geçmek 2026-09-03'e kadar tabletin
+      // hiçbir uyarı GÖRMEMESİNİN sebebiydi ("uyar" rejimi sahada sessizdi).
+      return { ...created.data, warnings: created.warnings ?? [] };
     },
     onSuccess: (data) => {
       shipTokenRef.current = generateClientUuid(); // başarı → taze token (ekran zaten kapanır)
@@ -303,6 +318,17 @@ export default function PaketlemeScreen() {
         text1: data.dispatched ? 'Sevk edildi' : 'Sevkiyat kuruldu — Sevk Çıkışı’ndan onayla',
         text2: data.shipmentNo,
       });
+      // Engel-olmayan notlar AYRI bir toast'ta ve DAHA UZUN durur: başarı
+      // toast'ının `text2`sine sıkıştırmak sevkiyat numarasını yutardı ve uyarı
+      // metni iki satıra sığmıyor. Sıra load-bearing (başarı önce görünür).
+      if (data.warnings.length > 0) {
+        Toast.show({
+          type: 'info',
+          text1: 'Dikkat',
+          text2: data.warnings.join(' · '),
+          visibilityTime: 8000,
+        });
+      }
       finishAndBack();
     },
     onError: (e: Error) => {
@@ -391,26 +417,41 @@ export default function PaketlemeScreen() {
   const expandContent = (id: string) => !isLargeSackList || id === activeSackId || Boolean(sackQ);
 
   // ── Sevk kısıtları — dolu çuval + (yurtdışı ise) tartı. Mühür/şube kısıtı yok.
-  const requireWeigh = destination === 'EXPORT';
+  const requireWeigh = destination === 'EXPORT' || weighRequiredFlag;
   const unweighed = shippableSacks.filter((s) => (s.weightKg ?? 0) <= 0);
   const canShip = shippableSacks.length > 0 && (!requireWeigh || unweighed.length === 0);
 
   let shipHint = '';
   if (shippableSacks.length === 0) shipHint = 'Dolu çuval yok — çuvala top/kartela okut.';
   else if (requireWeigh && unweighed.length > 0)
-    shipHint = `${unweighed.length} çuval tartısız (yurtdışı — tartı zorunlu).`;
+    shipHint =
+      destination === 'EXPORT'
+        ? `${unweighed.length} çuval tartısız (yurtdışı — tartı zorunlu).`
+        : // ⚠️ "İÇERİK DEĞİŞTİ" CÜMLESİ LOAD-BEARING: tartılı bir çuvala sonradan
+          // top eklenince kg SIFIRLANIR (bayat kg irsaliyeye gitmesin diye) ve
+          // operatör bunu "sistem tartımı unuttu" diye okuyup destek arar.
+          `${unweighed.length} çuval tartısız — sevk öncesi tartı zorunlu. ` +
+          'Çuvala sonradan top eklendiyse tartı sıfırlanmıştır, yeniden tartın.';
 
   // ⋮ menüsü — kartta yer kaplamayan taşan aksiyonlar. Sık kullanılan (dokun=aktif,
   // ⚖=tart) kartta kalır; gerisi buraya. Silme onayı DEĞİŞMEZ: dolu çuval yine
   // etkilenen topları tek tek listeleyen onaydan geçer (yıkıcı-işlem kuralı).
   const buildSackActions = (sk: PoolSack): SackAction[] => [
-    {
-      key: 'manual-kg',
-      icon: 'keyboard-outline',
-      label: 'Elle kg gir',
-      hint: sackWeigh.hasScale ? 'Kantar okunamazsa' : 'Bu yerde kantar tanımlı değil',
-      onPress: () => setManualWeighTarget({ id: sk.id, label: sackCode(sk), weightKg: sk.weightKg }),
-    },
+    // ⚠️ SATIRIN KENDİSİ ÇİZİLMEZ (koşullu spread) — devre dışı bir satır
+    // "yetkim olsa çalışırdı" demez, "bozuk" der. Sebep, tartı düğmesinin
+    // ipucunda yazılı kalır.
+    ...(canEnterManualWeight
+      ? ([
+          {
+            key: 'manual-kg',
+            icon: 'keyboard-outline',
+            label: 'Elle kg gir',
+            hint: sackWeigh.hasScale ? 'Kantar okunamazsa' : 'Bu yerde kantar tanımlı değil',
+            onPress: () =>
+              setManualWeighTarget({ id: sk.id, label: sackCode(sk), weightKg: sk.weightKg }),
+          },
+        ] as SackAction[])
+      : []),
     {
       key: 'label',
       icon: 'tag-outline',

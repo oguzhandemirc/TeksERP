@@ -73,6 +73,19 @@ export function useShipmentConfirmationEnabled(): boolean {
   return useFeatureFlags().data?.shipmentConfirmationEnabled ?? false;
 }
 
+/** Sevk öncesi TÜM çuvallar tartılı olmalı mı? Default FALSE (yalnız yurtdışı).
+ *  FAIL-OPEN: bayrak yüklenemezse sahayı sevk edemez hâle getirmeyiz — kesin
+ *  kapı sunucudadır, ekran yalnız uyarıyı ÖNCEDEN gösterir. */
+export function useShippingWeighRequiredEnabled(): boolean {
+  return useFeatureFlags().data?.shippingWeighRequiredEnabled ?? false;
+}
+
+/** Elle kg girişi yetkiyle sınırlı mı? Default FALSE. FAIL-OPEN aynı gerekçe:
+ *  istemci yalnız menü satırını gizler, reddi sunucu verir. */
+export function useShippingManualWeightRestrictedEnabled(): boolean {
+  return useFeatureFlags().data?.shippingManualWeightRestrictedEnabled ?? false;
+}
+
 /** Tambur'da çıkan top metresi kayıtlı metreyi aşabilir mi? Default TRUE (açık →
  *  aşımda operatöre onay diyaloğu gösterilir). Admin kapatırsa aşan giriş engellenir. */
 export function useTamburOverQuantityEnabled(): boolean {

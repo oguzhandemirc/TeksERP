@@ -51,8 +51,28 @@ import {
   readShipmentConfirmationEnabled,
   readShipmentManualSackCountEnabled,
   readShipmentUndoSameDayOnly,
+  readShippingManualWeightRestrictedEnabled,
+  readShippingWeighRequiredEnabled,
   readSimulatedWeightEnabled,
 } from "./system-setting.service";
+// Dilim 2 — sevkiyat davranış bayraklarının TEK karar noktaları. Kapılar burada
+// DEĞİL helper'da yaşıyor ki üç yazma yolu (çuvaldan sevk · hızlı sevk · siparişe
+// bağla) aynı yüklemi paylaşsın; kopyalanan bir guard zamanla ayrışır ve fark en
+// kötü yerde (sessiz kaçış kapısı) ortaya çıkar.
+import {
+  assertOrderLinkAllowed,
+  orderlessWarning,
+  resolveOrderRequirement,
+} from "./helpers/shipment-order-requirement.helper";
+import {
+  assertManualWeightAllowed,
+  assertSacksWeighed,
+} from "./helpers/shipping-weigh-gate.helper";
+import {
+  assertInvoiceTraceAllowed,
+  invoiceTraceWarning,
+  resolveInvoiceMode,
+} from "./helpers/shipping-invoice-mode.helper";
 import { factoryDayStart } from "../constants/time";
 import { resolveTargetWarehouseId } from "./helpers/warehouse.helper";
 import { dailyCodePrefix, isDailyCode, nextDailySeq, normalizeScanCode } from "../utils/code-format";
@@ -264,8 +284,21 @@ export class ShippingService {
    */
   async openSack(
     data: { customerId?: string | null; branchId?: string | null; weightKg?: number | null; sackNo?: string | null; clientToken?: string | null },
-    userId?: string
+    userId?: string,
+    /** F221 deseni — verilmezse elle-tartı kısıtı ATLANIR (dahili çağrı). */
+    opts?: { permissions?: string[] }
   ): Promise<ApiResponse<unknown>> {
+    // ── ARKA KAPI DA KAPALI (Dilim 2) ─────────────────────────────────────────
+    // Açılışta verilen `weightKg` doğrudan `weightSource = MANUAL` yazar (bugün
+    // hiçbir istemci göndermiyor, yol geri uyum için duruyor). Yalnız `weighSack`e
+    // guard konsaydı bayrak FAIL-OPEN olurdu — ve daha kötüsü, o yolla yazılan kg
+    // raporda "elle girildi" sayılır ama hiçbir kapıdan geçmemiş olurdu.
+    if (data.weightKg != null) {
+      assertManualWeightAllowed({
+        restricted: await readShippingManualWeightRestrictedEnabled(),
+        permissions: opts?.permissions,
+      });
+    }
     // İdempotent replay (A4): aynı token'la tekrar gelen istek (timeout-retry /
     // çift dokunuş) yeni BOŞ çuval açmaz — ilk denemede açılan çuvalı döner.
     if (data.clientToken) {
@@ -958,7 +991,9 @@ export class ShippingService {
       source?: "SCALE" | "MANUAL" | "SIMULATED";
     },
     userId?: string,
-    stamp?: { machineId?: string | null; stationId?: string | null }
+    stamp?: { machineId?: string | null; stationId?: string | null },
+    /** F221 deseni — verilmezse elle-tartı kısıtı ATLANIR (dahili çağrı). */
+    opts?: { permissions?: string[] }
   ): Promise<ApiResponse<unknown>> {
     const hasWeight = data.weightKg !== undefined && data.weightKg !== null;
     if (!hasWeight) throw AppError.badRequest("Tartı girilmeli");
@@ -985,6 +1020,19 @@ export class ShippingService {
     // `weighedById` + audit ile izlenebilir. `DEVICE_PAIRING_REQUIRED`'ın kabul ettiği
     // güven seviyesiyle aynı.
     const declaredSource = data.source ?? "MANUAL";
+    // ── ELLE TARTI KISITI (`shipping.manualWeightRestrictedEnabled`) ──────────
+    // ⚠️ SIRA LOAD-BEARING: manual-restrict SİMÜLE korumasından ÖNCE koşar,
+    // çünkü MANUAL beyanı simüle dalına HİÇ GİRMEZ (orada bilinçli olarak muaf).
+    // Sonraya konsaydı kapı MANUAL yolunda hiç çalışmazdı.
+    // ⚠️ `declaredSource`e bakar, `data.source`a DEĞİL: `source` opsiyoneldir ve
+    // gönderilmezse MANUAL sayılır — ham alana bakan bir guard eski istemciyi
+    // (undefined) sessizce geçirir ve bayrak fail-open olur.
+    if (declaredSource === "MANUAL") {
+      assertManualWeightAllowed({
+        restricted: await readShippingManualWeightRestrictedEnabled(),
+        permissions: opts?.permissions,
+      });
+    }
     // ⚠️ `simulated` blok DIŞINDA: kolona ÇÖZÜLMÜŞ kaynak yazılacak, beyan edilen
     // değil. Aksi halde bayrak AÇIKKEN (demo/eğitim) sunucu çapraz kontrolü cihazı
     // simüle bulup isteği GEÇİRDİĞİNDE kolona "SCALE" yazılırdı — yani kolonun tek
@@ -1289,7 +1337,7 @@ export class ShippingService {
   ) {
     const sacks = await prisma.sack.findMany({
       where: { id: { in: sackIds } },
-      select: { id: true, customerId: true, branchId: true, shipmentId: true, weightKg: true, _count: { select: { rolls: true, swatches: true } } },
+      select: { id: true, sackNo: true, customerId: true, branchId: true, shipmentId: true, weightKg: true, _count: { select: { rolls: true, swatches: true } } },
     });
     if (sacks.length !== sackIds.length) throw AppError.notFound("Bazı çuvallar bulunamadı");
     for (const s of sacks) {
@@ -1361,13 +1409,22 @@ export class ShippingService {
     }
   }
 
-  private assertExportWeighed(
-    sacks: { weightKg: Prisma.Decimal | null }[],
+  /**
+   * Tartı kapısı — bayrağı OKUR ve tek yüklemi (`assertSacksWeighed`) çağırır.
+   *
+   * Eski adı `assertExportWeighed` idi ve yalnız ihracatı biliyordu; `weighRequired`
+   * bayrağı geldiğinde ad da yalan söylemeye başlardı. İhracat dalı hâlâ bayraktan
+   * BAĞIMSIZ: bayrak yalnız genişletir.
+   *
+   * ⚠️ `setDestination` BİLİNÇLİ KAPISIZ — sevkiyat sonradan EXPORT yapılabiliyor
+   * ve orada tartı sorulmuyor. Bugün zararsız (çıkış `dispatchShipment`te yakalanır);
+   * "unutulmuş kapı" sanıp dördüncü bir kontrol EKLEME.
+   */
+  private async assertWeighed(
+    sacks: { sackNo?: string | null; weightKg: Prisma.Decimal | null }[],
     destination: ShipmentDestination
-  ): void {
-    if (destination !== ShipmentDestination.EXPORT) return;
-    const unweighed = sacks.filter((s) => s.weightKg == null || !new Prisma.Decimal(s.weightKg).greaterThan(0));
-    if (unweighed.length > 0) throw AppError.badRequest("Yurtdışı sevkte tüm çuvallar tartılı olmalı");
+  ): Promise<void> {
+    assertSacksWeighed(sacks, destination, await readShippingWeighRequiredEnabled());
   }
 
   /** ShipmentOrder denorm'unu kullanıcının seçtiği sipariş kümesine ayarla. */
@@ -1616,7 +1673,11 @@ export class ShippingService {
     const branchId = data.branchId ?? null;
     const { sacks } = await this.loadSacksForShipment(sackIds, { customerId: data.customerId, branchId });
     const destination = data.destination ?? ShipmentDestination.DOMESTIC;
-    this.assertExportWeighed(sacks, destination);
+    await this.assertWeighed(sacks, destination);
+    // SİPARİŞ BAĞI KAPISI — tx'ten ÖNCE (girdi guard'ı). `block` rejiminde
+    // sipariş yoksa ve niyet beyan edilmediyse 400; diğer rejimlerde no-op.
+    const orderRequirement = await resolveOrderRequirement();
+    assertOrderLinkAllowed(orderRequirement, { orderIds, orderless: data.orderless });
     await this.assertOrdersBelong(orderIds, data.customerId, branchId);
     // Sevk onayı KAPALI (varsayılan) → aynı adımda dispatch; AÇIK → PLANNED kalır (Sevk Kapısı).
     const confirmationEnabled = await readShipmentConfirmationEnabled();
@@ -1672,14 +1733,15 @@ export class ShippingService {
     // tabletleri aynı anda sevk yapamaz hâle getirirdi. Siparişsiz sevk zaten
     // MEŞRU bir iştir (numune, fazla mal) — eksik olan şey niyetin BEYAN
     // edilmesiydi. `orderless: true` gönderen istemci uyarı almaz.
+    // ⚠️ METİN ARTIK ORTAK YARDIMCIDA (`orderlessWarning`): Hızlı Sevk de aynı
+    // uyarıyı üretir. Buraya elle bir metin YAZMA — 2026-09-03'e kadar iki yol
+    // ayrışıktı ve Hızlı Sevk hiç uyarı basmıyordu.
     const warnings: string[] = [];
-    if (orderIds.length === 0 && data.orderless !== true) {
-      warnings.push(
-        "Bu sevkiyat hiçbir siparişe yazılmadı — mal sipariş defterine işlenmedi ve " +
-          "karşılanma/açık talep ekranlarında görünmez. Siparişe yazmak için sevkiyat " +
-          "detayından \"Siparişe Bağla\" kullanın.",
-      );
-    }
+    const orderlessNote = orderlessWarning(orderRequirement, {
+      orderIds,
+      orderless: data.orderless,
+    });
+    if (orderlessNote) warnings.push(orderlessNote);
     await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, orderless: data.orderless === true, destination, dispatched } });
     // Otomatik fatura taslağı — YALNIZ gerçekten sevk edildiyse. PLANNED bir
     // sevkiyat "mal çıktı" demez; onay açıkken taslak `dispatchShipment`'te doğar.
@@ -1862,6 +1924,8 @@ export class ShippingService {
       customerId: string;
       branchId?: string | null;
       orderIds?: string[];
+      /** Siparişsiz sevk NİYETİ — `createShipment` ile AYNI sözleşme (Dilim 2). */
+      orderless?: boolean;
       destination?: ShipmentDestination;
       procedureCode?: string | null;
       plateNumber?: string | null;
@@ -1882,14 +1946,27 @@ export class ShippingService {
     const branchId = data.branchId ?? null;
     const destination = data.destination ?? ShipmentDestination.DOMESTIC;
 
-    // ⚠️ İHRACAT çuval TARTISI ister (`assertExportWeighed`) ve hızlı sevkte
-    // çuval yeni doğduğu için tartısı YOKTUR. Sessizce yurtiçi saymak gümrük
-    // belgesini yanlışlardı; kullanıcıyı doğru akışa yönlendiriyoruz.
-    if (destination === ShipmentDestination.EXPORT) {
+    // ⚠️ TARTI İSTEYEN HER REJİM HIZLI SEVKİ KAPATIR ve çuval yeni doğduğu için
+    // tartısı YOKTUR. İki kaynak: (a) ihracat (her zaman, bayraktan bağımsız),
+    // (b) `shipping.weighRequiredEnabled` (yurtiçi dahil).
+    //
+    // ⚠️ ALTERNATİF REDDEDİLDİ ("hızlı sevkte kg sor"): çuval kullanıcıya
+    // GÖRÜNMEZ, tek tx içinde doğar — kg alanı eklemek hızlı sevkin varlık
+    // sebebini (üç ekran → bir ekran) yok ederdi. Bayrağı açan kurulum bu bedeli
+    // bilerek kabul eder; sürüm notunda operatör diliyle yazılıdır.
+    const weighRequired = await readShippingWeighRequiredEnabled();
+    if (destination === ShipmentDestination.EXPORT || weighRequired) {
       throw AppError.badRequest(
-        "İhracat sevkiyatı çuval tartısı ister — Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun.",
+        destination === ShipmentDestination.EXPORT
+          ? "İhracat sevkiyatı çuval tartısı ister — Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun."
+          : "Bu kurulumda sevk öncesi çuval tartısı zorunlu — Hızlı Sevk çuvalı görünmeden ürettiği için tartılamaz. " +
+              "Paketleme / Çuvallar ekranından çuvalı açıp tartın, sonra sevkiyatı kurun.",
+        { code: destination === ShipmentDestination.EXPORT ? "EXPORT_WEIGH_REQUIRED" : "WEIGH_REQUIRED" },
       );
     }
+    // SİPARİŞ BAĞI KAPISI — `createShipment` ile AYNI yüklem (kaçış kapısı yok).
+    const orderRequirement = await resolveOrderRequirement();
+    assertOrderLinkAllowed(orderRequirement, { orderIds, orderless: data.orderless });
     await this.assertOrdersBelong(orderIds, data.customerId, branchId);
 
     // Ön kontrol (tx DIŞINDA, UX için): uygun olmayan topu ekranda söyle —
@@ -1993,10 +2070,19 @@ export class ShippingService {
       action: "CREATE",
       tableName: "SHIPMENT",
       recordId: result.id,
-      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds },
+      newData: { kind: "QUICK_FROM_ROLLS", shipmentNo: result.shipmentNo, customerId: data.customerId, rollCount: rollIds.length, orderIds, orderless: data.orderless === true },
     });
     // Hızlı sevk de ORTAK kancayı çağırır — çuvaldan sevkle davranış ayrışmasın.
     const draftNote = dispatched ? await this.maybeAutoDraftInvoiceAfterDispatch(result.id, userId) : null;
+    // SİPARİŞSİZLİK UYARISI — `createShipment` ile AYNI metin, AYNI yardımcı.
+    // 2026-09-03'e kadar bu yol hiç uyarı üretmiyordu: tablet Hızlı Sevk'ten
+    // çıkan her sevkiyat sessizce tahsissizdi ve kimse görmüyordu.
+    const quickWarnings: string[] = [];
+    const quickOrderlessNote = orderlessWarning(orderRequirement, {
+      orderIds,
+      orderless: data.orderless,
+    });
+    if (quickOrderlessNote) quickWarnings.push(quickOrderlessNote);
     return {
       success: true,
       data: {
@@ -2010,6 +2096,7 @@ export class ShippingService {
         (dispatched
           ? `Sevk edildi: ${result.shipmentNo} (${rollIds.length} top)`
           : `Sevkiyat kuruldu (onay bekliyor): ${result.shipmentNo}`) + (draftNote ? ` · ${draftNote}` : ""),
+      ...(quickWarnings.length > 0 ? { warnings: quickWarnings } : {}),
     };
   }
 
@@ -2080,7 +2167,19 @@ export class ShippingService {
         }
       }
     } else {
-      warnings.push("Sipariş seçilmedi — mal hiçbir siparişten düşülmeden sevk edilecek.");
+      // ⚠️ REJİME BAĞLI TEK UYARI BU. `off` yalnız BUNU susturur; yukarıdaki iki
+      // uyarı (tahsis fazlası · başka açık sevkiyatta bekleyen mükerrer tahsis)
+      // farklı soruların cevabıdır ve her rejimde AYAKTA kalır — diziyi topluca
+      // susturmak, kırmızı tonlu mükerrer sevk uyarısını da öldürürdü.
+      const mode = await resolveOrderRequirement();
+      if (mode === "block") {
+        warnings.push(
+          "Bu kurulumda sevkiyat siparişe bağlanmalı — sipariş seçin ya da " +
+            '"Siparişsiz devam et" ile niyeti beyan edin.',
+        );
+      } else if (mode === "warn") {
+        warnings.push("Sipariş seçilmedi — mal hiçbir siparişten düşülmeden sevk edilecek.");
+      }
     }
 
     return {
@@ -2120,6 +2219,11 @@ export class ShippingService {
     if (shipment.status === ShipmentStatus.CANCELLED) {
       throw AppError.conflict("İptal edilmiş sevkiyat siparişe bağlanamaz");
     }
+    // ⚠️ KAÇIŞ KAPISI — boş dizi "sipariş bağını KALDIR" demektir ve `block`
+    // rejiminde kurulum kapısını atlatmanın en kısa yoludur (kur → bağı kaldır).
+    // Beyan yolu burada YOKTUR (uç yalnız `orderIds` alır): niyetini beyan etmek
+    // isteyen kullanıcı sevkiyatı zaten `orderless: true` ile kurar.
+    assertOrderLinkAllowed(await resolveOrderRequirement(), { orderIds });
     const branchId = shipment.branchId ?? null;
     await this.assertOrdersBelong(orderIds, shipment.customerId, branchId);
 
@@ -2187,7 +2291,7 @@ export class ShippingService {
     if (shipment.status !== ShipmentStatus.PLANNED) throw AppError.conflict("Yalnız planlanan sevkiyata çuval eklenebilir");
     const branchId = shipment.branchId ?? null;
     const { sacks } = await this.loadSacksForShipment(sackIds, { customerId: shipment.customerId, branchId });
-    this.assertExportWeighed(sacks, shipment.destination);
+    await this.assertWeighed(sacks, shipment.destination);
 
     let izAdd: AllocationAuditTrail | null = null;
     await prisma.$transaction(async (tx) => {
@@ -2310,6 +2414,28 @@ export class ShippingService {
   ): Promise<ApiResponse<unknown>> {
     const value = invoiceNo?.trim().slice(0, 64) || null;
     const stamp = value ? (invoicedAt ?? new Date()) : null;
+    // ── FATURA İZİ REJİMİ (`shipping.invoiceMode`) ────────────────────────────
+    // `clearing` = izi KALDIRMA → her modda serbest (yanlış iz düzeltilebilmeli).
+    const invoiceMode = await resolveInvoiceMode();
+    assertInvoiceTraceAllowed(invoiceMode, { clearing: value === null });
+    // `ikisi` uyarısı için iç fatura NESTED RELATION'dan okunur — `prisma.invoice.`
+    // erişimcisi bu servise GİRMEZ (rejim bekçisi sevkiyat router'ını "kapısız
+    // ticaret" ilan ederdi).
+    const internalDocNo =
+      invoiceMode === "ikisi" && value !== null
+        ? (
+            await prisma.shipment.findUnique({
+              where: { id: shipmentId },
+              select: {
+                invoices: {
+                  where: { status: { not: InvoiceStatus.CANCELLED } },
+                  select: { docNo: true },
+                  take: 1,
+                },
+              },
+            })
+          )?.invoices[0]?.docNo ?? null
+        : null;
     const updated = await prisma.shipment.updateMany({
       where: { id: shipmentId, status: ShipmentStatus.DISPATCHED },
       data: { invoiceNo: value, invoicedAt: stamp, invoicedById: value ? (userId ?? null) : null },
@@ -2327,10 +2453,15 @@ export class ShippingService {
       recordId: shipmentId,
       newData: { kind: "INVOICE_MARK", invoiceNo: value, invoicedAt: stamp },
     });
+    const traceNote = invoiceTraceWarning(invoiceMode, {
+      clearing: value === null,
+      internalDocNo,
+    });
     return {
       success: true,
       data: { shipmentId, invoiceNo: value, invoicedAt: stamp },
       message: value ? "Fatura bilgisi kaydedildi" : "Fatura işareti kaldırıldı",
+      ...(traceNote ? { warnings: [traceNote] } : {}),
     };
   }
 
@@ -2344,6 +2475,28 @@ export class ShippingService {
   ): Promise<ApiResponse<unknown>> {
     const value = invoiceNo?.trim().slice(0, 64) || null;
     const stamp = value ? (invoicedAt ?? new Date()) : null;
+    // ⚠️ DOĞRUDAN SEVK DE KAPSAMDA. Kapsam dışı bırakmak, `ic` modunda elle izin
+    // kapatıldığı ama iç fatura satır kurucusunun yalnız `Shipment` tanıdığı bir
+    // dünyada fasona doğrudan sevkin faturalanacak HİÇBİR yolunu bırakmazdı —
+    // ama simetriyi bozmak da "aynı ekran, iki farklı kural" demekti. Karar:
+    // kapsamda; `ic` modunu açan kurulum doğrudan sevki de ERP'den faturalar.
+    const invoiceMode = await resolveInvoiceMode();
+    assertInvoiceTraceAllowed(invoiceMode, { clearing: value === null });
+    const internalDocNo =
+      invoiceMode === "ikisi" && value !== null
+        ? (
+            await prisma.directShipment.findUnique({
+              where: { id: directShipmentId },
+              select: {
+                invoices: {
+                  where: { status: { not: InvoiceStatus.CANCELLED } },
+                  select: { docNo: true },
+                  take: 1,
+                },
+              },
+            })
+          )?.invoices[0]?.docNo ?? null
+        : null;
     const updated = await prisma.directShipment.updateMany({
       where: { id: directShipmentId },
       data: { invoiceNo: value, invoicedAt: stamp, invoicedById: value ? (userId ?? null) : null },
@@ -2356,10 +2509,15 @@ export class ShippingService {
       recordId: directShipmentId,
       newData: { kind: "INVOICE_MARK", invoiceNo: value, invoicedAt: stamp },
     });
+    const traceNote = invoiceTraceWarning(invoiceMode, {
+      clearing: value === null,
+      internalDocNo,
+    });
     return {
       success: true,
       data: { directShipmentId, invoiceNo: value, invoicedAt: stamp },
       message: value ? "Fatura bilgisi kaydedildi" : "Fatura işareti kaldırıldı",
+      ...(traceNote ? { warnings: [traceNote] } : {}),
     };
   }
 
@@ -2625,13 +2783,13 @@ export class ShippingService {
   ): Promise<ApiResponse<unknown>> {
     const shipment = await prisma.shipment.findUnique({
       where: { id: shipmentId },
-      select: { id: true, status: true, destination: true, sacks: { select: { weightKg: true } } },
+      select: { id: true, status: true, destination: true, sacks: { select: { sackNo: true, weightKg: true } } },
     });
     if (!shipment) throw AppError.notFound("Sevkiyat bulunamadı");
     if (shipment.status === ShipmentStatus.DISPATCHED) throw AppError.conflict("Sevkiyat zaten sevk edilmiş");
     if (shipment.status !== ShipmentStatus.PLANNED) throw AppError.conflict("Yalnız planlanan sevkiyat sevk edilebilir");
     if (shipment.sacks.length === 0) throw AppError.badRequest("Boş sevkiyat sevk edilemez");
-    this.assertExportWeighed(shipment.sacks, shipment.destination);
+    await this.assertWeighed(shipment.sacks, shipment.destination);
 
     const dispatchSonuc = await prisma.$transaction((tx) => this.performDispatchTx(tx, shipmentId, data, userId));
     const shippedRolls = dispatchSonuc.flipped;

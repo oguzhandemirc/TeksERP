@@ -16,6 +16,8 @@ import { PermissionGate } from "@/components/PermissionGate";
 // (`InvoiceTarget`) — iki ekran TEK dialog + TEK uç kullansın diye kopyalanmadı.
 import { InvoiceDialog } from "@/pages/Operations/AccountingDispatch/InvoiceDialog";
 import { BulkInvoiceAction } from "@/pages/Operations/AccountingDispatch/BulkInvoiceAction";
+import { canMarkInvoiceTrace } from "@/pages/Operations/AccountingDispatch/invoiceDraftVisibility";
+import { useShippingInvoiceMode } from "@/hooks/usePricingEnabled";
 import { downloadDocsPdf, downloadDocsExcel, type DocTarget } from "./shipmentDocExport";
 import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 import type { PrintedDocType } from "@/services/printedDocumentService";
@@ -136,6 +138,8 @@ export function ShipmentsPage() {
   const [docView, setDocView] = useState<{ docType: PrintedDocType; sourceId: string; title: string } | null>(null);
   const [invoiceRow, setInvoiceRow] = useState<ShipmentListItem | null>(null);
   const [searchParams] = useSearchParams();
+  // Elle fatura izi rejimi — muhasebe listesiyle AYNI yüklem (üç yüzey tek kural).
+  const invoiceMode = useShippingInvoiceMode();
 
   // Liste→detay bağlam taşıma: aktif kumaş/renk (içerik) filtresi VARSA detay path'ine
   // matchItem/matchColor (csv) query ekle → detay sayfası eşleşen topları vurgular +
@@ -267,7 +271,10 @@ export function ShipmentsPage() {
               {/* Fatura işareti — yalnız ÇIKMIŞ sevkiyatta anlamlı (sevk edilmemiş
                   mal faturalanmaz). Aynı işaret Muhasebe Sevkiyat ekranından da
                   verilebilir; ikisi de tek dialog + tek ucu kullanır. */}
-              {s.status === "DISPATCHED" && (
+              {/* ⚠️ ÜÇÜNCÜ YÜZEY — muhasebe listesi ve toplu işaretle ile AYNI
+                  yüklemden beslenir (`canMarkInvoiceTrace`). Biri gizlenip bu
+                  unutulsaydı kullanıcı menüyü görür, uçta 400 yerdi. */}
+              {s.status === "DISPATCHED" && canMarkInvoiceTrace(s, invoiceMode) && (
                 <PermissionGate permission="shipping:invoice">
                   <ContextMenuSeparator />
                   <ContextMenuItem onSelect={() => setInvoiceRow(s)}>

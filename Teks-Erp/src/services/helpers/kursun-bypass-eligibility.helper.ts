@@ -32,7 +32,7 @@ import {
   type PrismaClient,
 } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
-import { readKursunBypassEnabled } from "../system-setting.service";
+import { resolveKursunBypassEnabled } from "../system-setting.service";
 import {
   assertStepNotBypassAssigned,
   KURSUN_BYPASS_MARKER_PREFIX,
@@ -266,7 +266,7 @@ export async function assertKursunTabletMayWrite(
   await assertStepNotBypassAssigned(db, stepId, actionLabel);
 
   // 2) Rejim kapısı. Bayrak kapalıysa burada biter — ek yükleme YOK.
-  const flagEnabled = await readKursunBypassEnabled(db);
+  const flagEnabled = await resolveKursunBypassEnabled(db);
   if (!flagEnabled) return;
 
   const eligibility = await resolveStepBypassEligibility(db, stepId);

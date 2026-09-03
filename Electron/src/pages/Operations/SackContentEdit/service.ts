@@ -238,6 +238,14 @@ export const sackHubService = {
     procedureCode?: string | null;
     /** İdempotency — deneme başına bir üretilir, retry aynı token'la (backend replay, A4). */
     clientToken?: string;
+    /**
+     * Siparişsiz sevk NİYETİ. ⚠️ 2026-09-03'e kadar bu alan servis tipinde de
+     * gövdede de YOKTU: paneldeki "Siparişsiz devam et" kutusu ÖLÜYDÜ (state
+     * vardı, sunucuya hiç gitmiyordu) ve kullanıcı kutuyu işaretlese bile
+     * backend uyarı basmaya devam ediyordu. `shipping.orderRequirement=block`
+     * rejiminde ise bu alan TEK kaçış yoludur.
+     */
+    orderless?: boolean;
   }): Promise<ApiResponse<CreatedShipment>> =>
     apiClient
       .post<ApiResponse<CreatedShipment>>(`/api/shipping/shipments`, {
@@ -248,6 +256,10 @@ export const sackHubService = {
         ...(body.destination ? { destination: body.destination } : {}),
         ...(body.procedureCode ? { procedureCode: body.procedureCode } : {}),
         ...(body.clientToken ? { clientToken: body.clientToken } : {}),
+        // ⚠️ AÇIKÇA gönderilir (true DE false DA değil — yalnız true anlamlı,
+        // false varsayılan). `orderless: true` uyarıyı susturur ve `block`
+        // rejiminde kapıdan geçirir.
+        ...(body.orderless ? { orderless: true } : {}),
       })
       .then((r) => r.data),
 };

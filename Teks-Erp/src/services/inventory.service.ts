@@ -33,6 +33,7 @@ import {
 import {
   readKk1WeightEntryEnabled,
   readKk1DuplicateGuardEnabled,
+  readQualityGradeRequiredEnabled,
 } from "./system-setting.service";
 import {
   parseQueryParams,
@@ -775,6 +776,22 @@ export class InventoryService {
        */
       duplicateGuard?: { confirmed: boolean };
       /**
+       * KALİTE ZORUNLULUĞU (D6, 2026-09-03) — **yalnız HTTP yolu geçer**.
+       *
+       * F221 deseni (`duplicateGuard` ikizi): alan verilmezse enforcement
+       * ATLANIR. Bu bilinçlidir — dahili çağıranlar (`tambur-manual.service`
+       * ×2, `goods-receipt.service`, `warehouse-transfer.service`) kaliteyi
+       * kendi bağlamlarından çözer ya da bilerek NULL bırakır; koşulsuz bir
+       * kural mal kabulü ve elle top eklemeyi de kilitlerdi.
+       *
+       * Kural ayrıca `quality.gradeRequiredEnabled` bayrağına bağlıdır
+       * (default KAPALI). ⚠️ Bayrak açılmadan önce sahadaki tabletler kalite
+       * alanı gönderen APK'ya güncellenmiş olmalı: çevrimdışı kuyruktaki
+       * kalitesiz kayıtlar flush'ta 400 alır ve `entryAttempt` 400'ü "kesin
+       * hata" saydığı için tekrar denemez (kayıt toast bırakıp kaybolur).
+       */
+      gradeRequired?: boolean;
+      /**
        * TX KAPISI (Sınıf 4 — I1, 2026-08-14): top'u yazan transaction'ın İLK
        * ifadesi olarak çağrılır. Mal Kabul yolu buradan fişi
        * `updateMany WHERE status=ACTIVE` ile kilitler (satır doğumu ile fiş
@@ -887,6 +904,15 @@ export class InventoryService {
     const qualityGradeId = trimmedQuality
       ? await resolveQualityGradeIdStrict(trimmedQuality)
       : null;
+
+    // KALİTE ZORUNLU (D6) — F221 opt-in; yalnız HTTP (KK1 / Electron manuel)
+    // yolu bu bayrağı taşır. Okuma KOŞULLU: kalite zaten doluysa bayrağa hiç
+    // bakılmaz (her ham girişe bir PK araması eklemek istemiyoruz).
+    if (!qualityGradeCode && opts?.gradeRequired && (await readQualityGradeRequiredEnabled())) {
+      throw AppError.badRequest("Top kalitesi zorunlu — kalite seçmeden giriş yapılamaz", {
+        code: "GRADE_REQUIRED",
+      });
+    }
 
     // Statü: çağıran AÇIKÇA söylediyse o (bitmiş ürün yolu), söylemediyse KK1
     // sezgisi. Renkli manuel giriş = hazır/işlenmiş kumaş (dışarıdan boyalı/işlemli

@@ -59,7 +59,7 @@ import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { p2002Mentions } from "../utils/p2002";
-import { readKursunBypassEnabled } from "./system-setting.service";
+import { resolveKursunBypassEnabled } from "./system-setting.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
@@ -483,7 +483,7 @@ export class KursunBypassService {
    */
   async getVisibility(): Promise<ApiResponse<KursunBypassVisibility>> {
     const [flagEnabled, pendingAssignmentCount, tabletRegimeCount] = await Promise.all([
-      readKursunBypassEnabled(),
+      resolveKursunBypassEnabled(),
       prisma.kursunBypassAssignment.count({ where: PENDING_ASSIGNMENT_WHERE }),
       prisma.workOrderStep.count({
         where: {
@@ -511,7 +511,7 @@ export class KursunBypassService {
    * makine servisi çağırması gerekmesin).
    */
   async listDistribution(): Promise<ApiResponse<KursunDistributionPayload>> {
-    const flagEnabled = await readKursunBypassEnabled();
+    const flagEnabled = await resolveKursunBypassEnabled();
 
     // ATAMA HEDEFLERİ = KALİTE yürüten istasyona bağlı AKTİF makineler.
     // Filtre `assign`'ın kabul koşuluyla BİREBİR aynı tutulur (aktif makine +
@@ -830,7 +830,7 @@ export class KursunBypassService {
         //    satırında kalıcıdır, aksi halde bayrağı kapatmak sahadaki yarım işi
         //    kilitlerdi (iş bir makineden diğerine alınamazdı).
         if (!existingPending) {
-          const enabled = await readKursunBypassEnabled(tx);
+          const enabled = await resolveKursunBypassEnabled(tx);
           if (!enabled) {
             throw AppError.badRequest(
               "Kurşun bypass özelliği kapalı — yeni dağıtım yapılamaz. Ayarlardan açın.",
@@ -1466,7 +1466,7 @@ export class KursunBypassService {
    * düşerdi — sahada operatörü çıkmaza sokan sınıf.
    *
    * ÜÇ KOŞUL ve üçü de mevcut TEK KAYNAKLARDAN okunur, yeni kural yazılmaz:
-   *   1. Bayrak AÇIK (`readKursunBypassEnabled`) — kapalıyken kurşun tableti
+   *   1. Bayrak AÇIK (`resolveKursunBypassEnabled` — üretim modülü && bayrak) — kapalıyken kurşun tableti
    *      normal dijital akışta çalışır ve onu sessizce atlamak kalite verisini
    *      hiç girilmemiş bırakırdı.
    *   2. Adım bypass'a UYGUN (`resolveBypassBlockReason` — KK2 kaydı yok, hata
@@ -1497,7 +1497,7 @@ export class KursunBypassService {
       }
     | { ok: false; reason: string | null }
   > {
-    if (!(await readKursunBypassEnabled(db))) return { ok: false, reason: null };
+    if (!(await resolveKursunBypassEnabled(db))) return { ok: false, reason: null };
 
     const step = await db.workOrderStep.findFirst({
       where: {

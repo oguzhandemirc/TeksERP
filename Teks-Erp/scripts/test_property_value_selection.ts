@@ -322,7 +322,14 @@ async function main() {
     // ── 13) Kesim çocuğu valueId'yi DEVRALIR (F6 — cutWarehouseRoll, WO'suz) ─
     // r2 şu an: gramaj=50GR (test 8'den).
     const tamburSvc = new TamburService();
-    const cut = await tamburSvc.cutWarehouseRoll(r2, { cutLength: 40 });
+    // `qualityGrade` AÇIKÇA (2026-09-03): fixture topu gradesiz doğuyor ve
+    // `quality.gradeRequiredEnabled` AÇIK bir kurulumda kesim 400
+    // GRADE_REQUIRED'a düşerdi — bu bekçinin konusu (valueId mirası) hiç
+    // ölçülmeden. Kalite seçimi kesimin doğal parçasıdır.
+    const cut = await tamburSvc.cutWarehouseRoll(r2, {
+      cutLength: 40,
+      qualityGrade: "1.KALITE",
+    });
     const childId = cut.data!.childRoll.id;
     rollIds.push(childId);
     const childProps = await prisma.rollProperty.findMany({

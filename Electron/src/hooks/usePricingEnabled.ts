@@ -2,6 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { featureFlagService, DEFAULT_COMPANY_NAME } from "@/services/featureFlagService";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import { isSameTypeSessionPolicy } from "@/lib/session-auth";
+import {
+  DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
+  DEFAULT_SHIPPING_INVOICE_MODE,
+  isShipmentOrderRequirement,
+  isShippingInvoiceMode,
+  type ShipmentOrderRequirement,
+  type ShippingInvoiceMode,
+} from "@/lib/shipping-flags";
 
 const QUERY_KEY = ["feature-flags"];
 
@@ -112,6 +120,44 @@ export function useShipmentConfirmationEnabled(): boolean {
 export function useShipmentManualSackCountEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.shipmentManualSackCountEnabled ?? false;
+}
+
+/**
+ * `shipping.weighRequiredEnabled` — sevk öncesi TÜM çuvallar tartılı olsun mu.
+ *
+ * ⚠️ FAIL-OPEN (yüklenene kadar `false`): bayrak henüz gelmediği için sahayı
+ * "sevk edemez" hâle getirmek yanlış yön — otorite zaten SUNUCUDADIR ve tartısız
+ * sevki o reddeder. İstemcinin işi uyarıyı ÖNCEDEN göstermek, kapı olmak değil.
+ */
+export function useShippingWeighRequiredEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.shippingWeighRequiredEnabled ?? false;
+}
+
+/**
+ * `shipping.manualWeightRestrictedEnabled` — elle kg girişi yetkiyle sınırlı mı.
+ *
+ * ⚠️ FAIL-OPEN: istemci yalnız menü satırını gizler; reddi sunucu verir. Kapalı
+ * yönde varsaymak, bayrak yüklenemediğinde yetkili kullanıcıdan da kaçış yolunu
+ * (kantarsız/arızalı durum) alırdı.
+ */
+export function useShippingManualWeightRestrictedEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.shippingManualWeightRestrictedEnabled ?? false;
+}
+
+/** `shipping.orderRequirement` — sevkiyat siparişe bağlansın mı. Varsayılan `warn`. */
+export function useShippingOrderRequirement(): ShipmentOrderRequirement {
+  const q = useFeatureFlags();
+  const v = q.data?.data?.shippingOrderRequirement;
+  return isShipmentOrderRequirement(v) ? v : DEFAULT_SHIPMENT_ORDER_REQUIREMENT;
+}
+
+/** `shipping.invoiceMode` — fatura izi rejimi. Varsayılan `dis` (bugünkü). */
+export function useShippingInvoiceMode(): ShippingInvoiceMode {
+  const q = useFeatureFlags();
+  const v = q.data?.data?.shippingInvoiceMode;
+  return isShippingInvoiceMode(v) ? v : DEFAULT_SHIPPING_INVOICE_MODE;
 }
 
 /** Kurşun bypass düzeni açık mı. Yüklenene kadar false (default kapalı).

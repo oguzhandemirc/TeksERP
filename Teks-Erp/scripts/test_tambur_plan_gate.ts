@@ -111,6 +111,13 @@ const batchIds: string[] = [];
           status: RollStatus.IN_PRODUCTION,
           currentStepId: step.id,
           entrySource: "SUPPLIER_RECEIPT",
+          // ⚠️ KALİTE FIXTURE'DA (2026-09-03): finalize 100 m'lik topu 40 m
+          // kesiyor → 60 m'lik KALAN-KUYRUK child'ı PARENT'ın kalitesini
+          // devralır. Parent gradesizken `quality.gradeRequiredEnabled` AÇIK bir
+          // kurulumda kuyruk kapısı 400 GRADE_REQUIRED veriyor ve bu bekçi kendi
+          // konusunu (plan sapması) ölçemeden düşüyordu. KK1 (RAW_QC) bir kalite
+          // istasyonu olduğu için üretimdeki topun kaliteli olması gerçekçidir.
+          qualityGrade: "1.KALITE",
         },
         select: { id: true },
       });

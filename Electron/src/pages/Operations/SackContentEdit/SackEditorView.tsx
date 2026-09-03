@@ -28,6 +28,8 @@ import { useSackWeighAction } from "./useSackWeighAction";
 import { StaleLabelsBanner } from "./StaleLabelsBanner";
 import { ContentMismatchBanner } from "./ContentMismatchBanner";
 import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useShippingManualWeightRestrictedEnabled } from "@/hooks/usePricingEnabled";
 import type { EditorTarget } from "./types";
 
 const fmtM = (n: number) => n.toLocaleString("tr-TR", { useGrouping: false, maximumFractionDigits: 1 });
@@ -47,6 +49,12 @@ export function SackEditorView({
   onReassigned: (patch: ReassignPatch) => void;
 }) {
   const qc = useQueryClient();
+  // ELLE TARTI KISITI — bayrak açıkken yalnız `shipping:write` taşıyan kimlik
+  // elle kg girebilir (yeni izin kodu YOK; ayrım mevcut yetkilerle kurulur).
+  // ⚠️ Otorite SUNUCUDA: burada yapılan yalnız yolu göstermemek.
+  const { hasPermission } = useRoleAccess();
+  const manualWeightRestricted = useShippingManualWeightRestrictedEnabled();
+  const canEnterManualWeight = !manualWeightRestricted || hasPermission("shipping:write");
   const contentsQ = useSackContents(target.sackId);
   const data = contentsQ.data?.data;
   const rolls = data?.rolls ?? [];
@@ -190,9 +198,19 @@ export function SackEditorView({
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onClick={() => setWeighOpen(true)}>
-                      <Keyboard className="mr-2 h-4 w-4" /> Elle kg gir
-                    </DropdownMenuItem>
+                    {/* ⚠️ GRİ BUTON DEĞİL, ÇİZİLMEZ: olmayan bir yolu vaat etmek
+                        (belge tasarım izni dersi). Sunucu zaten 403 verir —
+                        burada yapılan iş yalnız kullanıcıyı oraya kadar
+                        götürmemek. Yüklem izne VE bayrağa birlikte bakar. */}
+                    {canEnterManualWeight ? (
+                      <DropdownMenuItem onClick={() => setWeighOpen(true)}>
+                        <Keyboard className="mr-2 h-4 w-4" /> Elle kg gir
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem disabled>
+                        <Keyboard className="mr-2 h-4 w-4" /> Elle giriş kapalı — kantardan tartın
+                      </DropdownMenuItem>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>

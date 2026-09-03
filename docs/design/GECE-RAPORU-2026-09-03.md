@@ -31,7 +31,7 @@ Diğer 4 uç (item-price · purchase-order · stock-count · yarn) zaten `financ
 Tamamı gerekçeli: `GECE-KARARLARI-2026-09-03.md`. Öne çıkanlar:
 
 - **P1:** DB anahtarları `finance.enabled` kalıbında (`ticaret.enabled` …), middleware `require<Alan>Enabled`; grandfathering değeri **sabit değil "dünkü davranış"** — `ticaret/iplik := finance.enabled` (sabit `false` yazsaydık demo kurulumunda dört yüzey sessizce 403'e düşerdi).
-- **P2:** hesap YOKSA modül-yazma kilidi devre dışı + audit (**emniyet supabı** — sert kilit deploy anında fabrikayı kilitlerdi); TOTP `.env`'den tohumlanır, **kurtarma kodu bilinçli yok**; audit satırları takma adla görünür, kimlik uçları **404**; `SUPERADMIN_FORCE_SYNC` rotasyonu.
+- **P2:** hesap YOKSA modül-yazma kilidi devre dışı + audit (**emniyet supabı** — sert kilit deploy anında fabrikayı kilitlerdi); **kurtarma kodu bilinçli yok**; audit satırları takma adla görünür, kimlik uçları **404**. ⛔ **Aynı gün P8 ile değişti:** TOTP sırrı ~~`.env`'den tohumlanır~~ ve rotasyon ~~`SUPERADMIN_FORCE_SYNC`~~ DEĞİL — hesabın tek doğuş/rotasyon yolu sunucuda elle koşulan `npm run superadmin:kur` (`-- --rotate`), `.env` yolu tamamen kaldırıldı.
 - **P3:** şifre **başlıkta** (`X-Settings-Password`), hash `set()` dışında; süperadmin ve belge-only gövde muaf; hash yoksa kapı uyur.
 - **P4:** boğaz **ikiz** (yüklem + Prisma where-parçası) — 28 karar noktasının 12'si `where` içinde; `assertWoAtStepKind` Faz B'ye bırakıldı.
 - **P6:** profiller **TS sabiti** (plandaki `deploy/profiller/*.json` üretim paketine hiç girmiyor — ölçüldü); `TEKSERP_PROFIL` yoksa job hiçbir şey yazmaz.
