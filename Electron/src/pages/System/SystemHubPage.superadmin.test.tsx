@@ -5,14 +5,19 @@
 // keşfe davet etmemesi gerekir. Ama kapı İZNİN YERİNE GEÇMEZ — karo hâlâ
 // `admin:settings` taşır ve route ile birebir kalır (`tile-route-permission`).
 //
-// ⚠️ SUPAP DA ÖLÇÜLÜYOR: sistem hesabı hiç doğmamış bir kurulumda karo GÖRÜNÜR.
-// Aksi halde süperadminsiz kurulum modüllerini yapılandıracak ekranı hiç bulamaz.
+// ⚠️ SUPAP BU KARODA YOK (kullanıcı kararı 2026-09-03): sistem hesabı hiç
+// doğmamış olsa BİLE karo çizilmez — satıcı ekranı fabrikaya görünmez.
+// Kilitlenme riski YOK çünkü YAZMA yolu ayrı ve supaplı: o kurulumda
+// Genel Ayarlar → Modüller sekmesi fabrika yöneticisine açık kalır
+// (`FeatureFlagSection`, bandıyla birlikte). Görünürlük ile yazma AYRI
+// sorulardır — `lib/superadmin-gate.ts` ikisini iki ayrı yüklemle söyler.
 // =============================================================================
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
 import { systemTiles } from "./tile-config";
+import { isSuperadminGateOpen, isSystemAccountIdentity } from "@/lib/superadmin-gate";
 
 vi.mock("@/hooks/useRoleAccess", () => ({
   useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }),
@@ -60,9 +65,21 @@ describe("Sistem Profili karosu", () => {
     expect(screen.getByText(KARO)).toBeTruthy();
   });
 
-  it("⭐ SUPAP: sistem hesabı hiç doğmamışsa çizilir", () => {
+  it("⭐ SUPAP KAROYU AÇMAZ: sistem hesabı hiç doğmamışsa da çizilmez", () => {
+    // Bu testin ESKİ hâli tam tersini ölçüyordu. Karar değişti: satıcı ekranı
+    // her durumda gizli; kilitlenmeyi önleyen şey Genel Ayarlar'daki yazma
+    // yolunun açık kalması (aşağıdaki ikinci beklenti onun ikizi).
     useAuthStore.setState({ isSystemAccount: false, systemAccountExists: false });
     renderWithProviders(<SystemHubPage />);
-    expect(screen.getByText(KARO)).toBeTruthy();
+    expect(screen.queryByText(KARO)).toBeNull();
+  });
+
+  it("⭐ KİLİTLENME YOK: supap açıkken modül anahtarları Genel Ayarlar'dan YAZILABİLİR", () => {
+    // Görünürlük kapısı supapsız, YAZMA kapısı supaplı — ikisi birlikte her
+    // kurulumda en az bir yazıcı bırakır (kilitlenme ihtimali sıfır).
+    expect(isSuperadminGateOpen({ isSystemAccount: false, systemAccountExists: false })).toBe(true);
+    expect(isSystemAccountIdentity({ isSystemAccount: false, systemAccountExists: false })).toBe(false);
+    // Hesap doğduğu an yazma satıcıya geçer, sekme salt-okunur olur.
+    expect(isSuperadminGateOpen({ isSystemAccount: false, systemAccountExists: true })).toBe(false);
   });
 });

@@ -88,6 +88,17 @@ export function FeatureFlagSection({
       "Bu anahtarları yalnız sistem yöneticisi değiştirir. Modül açma/kapatma talebiniz için yazılım firmanıza başvurun.",
     );
   }
+  // ⚠️ SUPAP DEVREDE — bilgi bandı (kilit DEĞİL, tersine: kilidin AÇIK olma
+  //    sebebi). Sistem hesabı hiç kurulmamışsa satıcıya ait anahtarları
+  //    fabrika yöneticisi yönetebilir; yoksa kurulum modülleri bir daha
+  //    açamazdı. Kullanıcı 2026-09-03 kararı: Sistem Profili EKRANI bu
+  //    durumda da gizli kalır, ama YAZMA yolu burada açık durur — yazma ile
+  //    görünürlük ayrı sorulardır (`lib/superadmin-gate.ts`).
+  if (superadminOnly && hasSettingsPermission && !isSystemAccount && !systemAccountExists) {
+    lockNotes.push(
+      "Sistem yöneticisi hesabı bu kurulumda henüz tanımlı değil — o güne kadar bu anahtarları yönetici değiştirebilir.",
+    );
+  }
   if (lockedByModule) {
     // ⚠️ METİN "ETKİSİZ" DEMEZ ve bu ÖLÇÜLMÜŞ bir kısıttır: tasarımın "modül
     // kapalıyken alt bayrak hiç okunmaz" tek-resolver kuralı (§3.6) backend'de

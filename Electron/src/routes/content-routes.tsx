@@ -685,7 +685,7 @@ export const contentRoutes: RouteObject[] = [
     // ⚠️ Karo `permission`ı ile AYNI kod — `tile-route-permission.test`.
     path: "system/module-profile",
     element: (
-      <ProtectedRoute requirePermission="admin:settings">
+      <ProtectedRoute requirePermission="admin:settings" requireSystemAccount>
         <ModuleProfilePage />
       </ProtectedRoute>
     ),

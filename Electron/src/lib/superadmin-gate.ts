@@ -27,7 +27,33 @@ export interface SuperadminGateState {
   systemAccountExists: boolean;
 }
 
-/** Satıcıya ait yüzeyler bu oturumda YAZILABİLİR mi? */
+/**
+ * Modül anahtarları bu oturumda YAZILABİLİR mi? (supap DAHİL)
+ *
+ * Backend `flagWriteGuard`ın üçüncü dalının aynası. Supap açıkken (kurulumda
+ * hiç sistem hesabı yok) fabrika yöneticisi Genel Ayarlar → Modüller'den
+ * anahtarları YÖNETEBİLİR — yoksa süperadminsiz kurulum modülleri bir daha
+ * açamaz ve tek çıkış ham API kalırdı.
+ */
 export function isSuperadminGateOpen(state: SuperadminGateState): boolean {
   return state.isSystemAccount || !state.systemAccountExists;
+}
+
+/**
+ * Bu oturum SATICI hesabı mı? — SATICI YÜZEYLERİNİN GÖRÜNÜRLÜK kapısı.
+ *
+ * ⚠️ `isSuperadminGateOpen`in İKİZİ DEĞİL, farklı bir soru sorar ve SUPAP
+ * TAŞIMAZ (kullanıcı kararı 2026-09-03): "Sistem Profili satıcı ekranıdır,
+ * süperadmin hesabı yokken de fabrikaya GÖRÜNMEZ."
+ *   • YAZMA sorusu  → `isSuperadminGateOpen` (supaplı; kilitlenmeyi önler)
+ *   • GÖRÜNÜRLÜK    → bu yüklem (supapsız; satıcı yüzeyi keşfe davet etmez)
+ *
+ * ⚠️ KİLİTLENME NEDEN İMKÂNSIZ: iki yüklem birlikte her durumda EN AZ BİR
+ * yazıcı bırakır. Sistem hesabı YOKSA Sistem Profili ekranı gizlidir ama
+ * Genel Ayarlar → Modüller fabrika yöneticisine AÇIKTIR (bant onu söyler);
+ * hesap VARSA o sekme salt-okunur olur ve yazma satıcıya geçer. Bu ikisinden
+ * birini supaplı/supapsız yaparken diğerini de gözden geçir.
+ */
+export function isSystemAccountIdentity(state: SuperadminGateState): boolean {
+  return state.isSystemAccount;
 }

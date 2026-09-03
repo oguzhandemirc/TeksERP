@@ -24,7 +24,7 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import { useFavorites } from "@/hooks/useFavorites";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
-import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
+import { isSystemAccountIdentity } from "@/lib/superadmin-gate";
 import { useTabsStore } from "@/store/tabs";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 import { foldSearchText } from "@/lib/search-fold";
@@ -59,7 +59,8 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   // üçüncü giriş kapısıdır ve hub'da gizlenen satıcı ekranını göstermemeli.
   const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
   const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
-  const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
+  // Palet de GÖRÜNÜRLÜK yüklemini kullanır (hub karosuyla aynı soru).
+  const superadminGateOpen = isSystemAccountIdentity({ isSystemAccount, systemAccountExists });
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
