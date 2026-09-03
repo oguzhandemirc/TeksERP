@@ -170,6 +170,11 @@ tüm izinler atanmış). Şifresi/PIN'i fabrikaya asla verilmez.
 - **Giriş:** panelde parola (+uzakta TOTP); tablette kendi 6 haneli PIN'i.
 - **Audit:** karar #8 — tam iz, fabrika yüzeyinde "Sistem Bakımı".
 - **Yetkisi:** `modul.*` yazımı YALNIZ süperadmin.
+- **TOTP kurtarma kodu BİLİNÇLİ YOK (2026-09-03):** env'den tohumlanan süperadminde
+  `remainingRecoveryCodes: 0`. Cihaz kaybı zaten iki yollu (LAN'dan parola/PIN +
+  `SUPERADMIN_FORCE_SYNC` ile env'den yeniden tohum); kurtarma kodu bir sır yüzeyi
+  daha demek (üretilir, saklanır, yedeğe sızar). Az yüzey > konfor. Giriş kilidi
+  süperadmini de KAPSAR (muafiyet = parolaya sınırsız deneme); kilitlenince LAN yolu açık.
 
 ### 7.2 Ayar şifresi (kullanıcı isteği)
 
@@ -299,6 +304,11 @@ Varsayılanlar = bugünkü davranış. Tam liste + maliyet analizi sentez çıkt
     Decimal JSON'da string'dir, panelde toplanmaz ("mobil brütü elle kurmaz"
     emsali). Türkçe virgül girişi ("12,50") finans formuna dokunan ilk işte
     ölçülür.
+12. **Süreç: ajan/test sunucusunu yalnız KENDİ PID'inle öldür** — `pkill -f
+    "tsx src/server.ts"` YASAK (2026-09-03: bir ajanın :4100 test sunucusunu
+    kapatırken kullanıcının :4000 dev sunucusunu da düşürdüğü ölçüldü; aynı komut
+    satırı). Sunucuyu `run_in_background` ile başlat, PID'i sakla, o PID'i öldür;
+    paralel ajanlara AYRI port ver (4100 paylaşımı sahte kırmızı üretti).
 
 ## 13. Uygulama dilimleri (kod onayı ayrıca alınacak)
 

@@ -131,6 +131,59 @@ geçersizdir (eksik yapılandırma "yarı açık" değil KAPALI demektir).
 > bilinçli olarak REDDEDİLDİ (parola sızmışsa saldırgan kendi telefonunu bağlar
 > ve meşru sahibi kilitler — 2FA'nın koruduğu tek senaryo).
 
+### 5) Satıcı hesabı (süperadmin) — `.env` satırları + restart
+
+Modül anahtarlarını (Ticaret / İplik / Çoklu depo / Üretim …) **yalnız satıcı
+hesabı** değiştirebilir. Hesap `.env`den doğar; `kur.ps1` mevcut `.env`i olduğu
+gibi TAŞIR ama **güncellemez** → bu satırlar sunucuda **ELLE** eklenir, yoksa
+hesap hiç doğmaz ve kimse fark etmez (izin kataloğu / rol şablonu vakalarının
+aynı sınıfı).
+
+```powershell
+# 1) Parola hash'ini ÜRET (düz parola .env'e yazılmaz)
+node -e "console.log(require('bcryptjs').hashSync(process.argv[1],10))" '<parola>'
+
+# 2) C:\Etkili-Yazilim\app\.env dosyasına ekle (ÜÇÜ BİRLİKTE)
+#    SUPERADMIN_USERNAME="bakim"
+#    SUPERADMIN_PASSWORD_HASH="$2b$10$..."
+#    SUPERADMIN_PIN="<6 hane>"
+#    SUPERADMIN_TOTP_SECRET="<base32>"   # opsiyonel; uzaktan giriş için
+
+pm2 restart tekserp && pm2 save
+```
+
+Boot log'unda `[superadmin] Satıcı hesabı oluşturuldu (sistem hesabı).`
+görünmeli. Görünmüyorsa: değişkenlerden biri eksik/bozuktur — o durumda hata
+`Sistem Kayıtları`na `JOB_FAILED:superadmin` olarak da düşer.
+(Log satırı **kullanıcı adını basmaz**: aynı ad audit yüzeylerinde bilerek
+gizleniyor, pm2 log'u ise fabrika sunucusunda okunabilir.)
+
+> ⚠️ **Değerler fabrikaya VERİLMEZ**, parola yöneticisinde tutulur.
+> ⚠️ **`ecosystem.config.js`'e YAZILMAZ** (git'e girer, sır taşımaz).
+> ⚠️ Hesap **hiç yaratılmazsa** modül anahtarları bugünkü gibi `admin:settings`
+> ile yazılmaya devam eder (emniyet supabı — kilitlenme yok). Hesap doğduğu AN
+> kilit mutlaktır.
+> ⚠️ **Rotasyon:** `SUPERADMIN_FORCE_SYNC=true` ile restart parola + PIN + TOTP
+> sırrını `.env` değerlerine eşitler (TOTP satırı boşsa iki adımlı doğrulamayı
+> TEMİZLER) ve eski oturumları düşürür — sonra bu satırı **kaldırın**.
+> **`SUPERADMIN_USERNAME` DEĞİŞTİRİLMEZ** (giriş kimliğidir; sessizce
+> değiştirmek satıcıyı bir sonraki girişte dışarıda bırakırdı): env'deki ad
+> kayıtlıdan farklıysa boot log'una uyarı düşer ve
+> `SUPERADMIN_CREDENTIALS_SYNCED` audit'i `usernameMismatch: true` taşır.
+> `SUPERADMIN_PIN` başka bir kullanıcıda kullanılıyorsa rotasyon UYGULANMAZ:
+> hesaba hiçbir şey yazılmaz, `JOB_FAILED:superadmin` izi doğar ve iş TEKRAR
+> DENENMEZ (yapılandırma hatasıdır, geçici arıza değil).
+> ⚠️ **Satırların `.env`'den kaldırılması kilidi AÇMAZ** — kilit `.env`'e değil
+> DB satırına bakar (ölçüldü). Hesap durduğu sürece modül anahtarları yalnız
+> satıcı hesabıyla yazılır.
+> ⚠️ **Hesabı KALDIRMA** (satıcı ilişkisi biterse): `.env` satırlarını sil +
+> `UPDATE users SET "isSystemAccount"=false, "isActive"=false WHERE "isSystemAccount"=true;`
+> + **`pm2 restart tekserp` ŞART**. Kilit defteri TEK YÖNDE tazelenir: yokluktan
+> varlığa istek anında, varlıktan yokluğa yalnız restart'ta (fail-closed) —
+> restart'sız bırakılırsa modül anahtarlarını restart'a kadar HİÇ KİMSE yazamaz.
+> ⚠️ **Kabul edilmiş risk (F287):** `pg_dump` / `db-copy` bu hesabın düz PIN'ini
+> de taşır; yedek indirebilen personel onu okuyabilir. Karşılığı hızlı rotasyondur.
+
 ---
 
 ## Kabul ölçümü — kurulum sonrası ZORUNLU
