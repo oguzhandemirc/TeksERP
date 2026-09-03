@@ -33,11 +33,17 @@ Kullanıcı bunları Windows'a taşıdı (Mac'te `~/Desktop/tekserp-kurulum`'day
 | `tekserp-backend-20260903_210124-8ba92ca7.zip` | Sunucu paketi, 116 MB | 231 migration + `node_modules` dahil → sunucuda internet GEREKMEZ |
 | `TeksERP-1.2.0-Setup.exe` | Panel, 141 MB | macOS'ta derlendi; Windows native ikilileri (`PE32+`) pakete girdiği DOĞRULANDI |
 | `TeksERP-1.0.1-vc58.apk` | Tablet, 50 MB | İmzası doğrulandı; gömülü adres `http://192.168.1.250:4000/api` |
-| `kur.ps1` | Sürüm kurulum script'i | Repo kaynağı `deploy/kur.ps1` |
-| `ilk-kurulum.ps1` | İskelet script'i | Repo kaynağı `deploy/ilk-kurulum.ps1` — taşınmadıysa git'ten al |
+| `ilk-kurulum.ps1` | Sıfırdan iskelet kurar | ADIM 3.3'te koşar. Repo kaynağı `deploy/ilk-kurulum.ps1` |
+| `kur.ps1` | Sürümü kurar (yükseltme aracı) | ADIM 3.4'te koşar. Repo kaynağı `deploy/kur.ps1` |
+| `OKU-ONCE.md` | Bu belge | Repo kaynağı `docs/ops/EV-PROVASI-DEVIR-2026-09-04.md` |
+| `KURULUM.md` | Tam kurulum reçetesi | Bu notta olmayan ayrıntı (yedek, pm2, sorun giderme) oradadır |
+
+Klasördeki her şey elinin altında — git'e, internete, başka bir makineye
+ihtiyacın yok.
 
 ⚠️ Script'ler **bulundukları yeri kullanmaz** (sıfır konum referansı). Nereye
-kuracaklarını yalnız `-Kok` belirler; zip'i tam yolla verirsin.
+kuracaklarını yalnız `-Kok` belirler; zip'i tam yolla verirsin. Yani klasörü
+nereye açtığın önemsizdir.
 
 ---
 
