@@ -1,4 +1,4 @@
-# Gece Raporu — 2026-09-03 (02:00 → 09:30)
+# Gece Raporu — 2026-09-03 (02:00 → 12:30)
 
 > Tek yerden okunacak özet. Ayrıntı: kararlar `GECE-KARARLARI-2026-09-03.md` ·
 > karar notları `docs/history/CLAUDE-NOT-ARSIVI.md` · doküman turu
@@ -11,9 +11,10 @@
 | **Dilim 0** — repo birleşmesi | ✅ | `main` ff-merge; `adnansahin` + `feature/depo-mal-kabul` origin'den silindi; dallanma kuralı CLAUDE.md'de |
 | **P1** — modül anahtarları (backend) | ✅ | `c94035cc` · `251767ca` · `06e23448` · `199213e4` |
 | **P2** — süperadmin (satıcı hesabı) | ✅ | `bfddd846` · `745bf3eb` · `628f8c12` · `bd71a0b2` |
-| **P3** — ayar şifresi | 🟡 **WIP** `9f33d0e3` — uygulandı ve ölçüldü; güvenlik turunun 3 major bulgusu için düzeltme turu KOŞUYOR |
-| **P4** — kalite-yetenek Faz A | 📋 spec hazır (`p4-spec.md`), kod başlamadı |
-| **P5 / P6** — Electron karo + Sistem Profili / tamlık bekçisi + profiller | 📋 spec hazır; **sıra değişti: P6 önce, P5 sonra** (P5, P6'nın `ScreenEntry.modul` alanına bağımlı) |
+| **P3** — ayar şifresi | ✅ `9f33d0e3` + `f948780f` + `37b44508` (güvenlik turunun 3 major + 3 minor bulgusu ve doğrulayıcının 3 ek bulgusu kapatıldı) |
+| **P4** — kalite-yetenek Faz A | ✅ `8ba7b3fb` + drift `f19f9864` (ikiz boğaz; 23 uçta 0 statü farkı) |
+| **P6** — tamlık bekçisi + profiller + job | ✅ `874afd5a` (93/93 ekran eşlendi; profiller TS sabiti) |
+| **P5** — Electron karo/kilit + Sistem Profili | ✅ `ff6f847f` (karo ve menüde sıfır görünür fark) |
 | **P7** — doküman mercek turu | ✅ rapor `50bd77e2` (116 madde); uygulama sabah onayından sonra |
 
 **Ölçüm özeti:** P1'de 1036 kontrol yeşil · P2'de `test_superadmin` iki kurulumda (hesaplı 126/0, hesapsız 138/0) + 43/0 tek-kaynak bekçisi · P3'te 102/0. Her pakette fabrika dump'ı provası (230 migration, `test_consistency` aynı 4 bilinen bölüm, `test_db_invariants` 157/0) ve "Adnan Şahin'de sıfır fark" ölçümü (70 mount, hesapsız/hesaplı birebir).
@@ -68,6 +69,23 @@ Adversarial turların ürettiği, planda olmayan bulgular:
 
 ## 7. Sırada
 
-`P3 düzeltme turu (koşuyor)` → **P4** (kalite-yetenek Faz A) → **P6** (tamlık bekçisi + profiller) → **P5** (Electron karo + Sistem Profili) → P7 uygulaması (onaylı maddeler) → Dilim 1 kapanış provası → **Dilim 2** (davranış bayrakları: `shipping.orderRequirement` · `weighRequired` · `invoiceMode` · `gradeRequired` · `batchRequired` + §3.6 tek resolver) → **Dilim 3** (kumaş-teknik + rezervasyon tasarımı) → Dilim 4 yalnız tasarım.
+**Dilim 1 BİTTİ** (P1–P7). Sırada: P7 uygulaması (onaylı maddeler) → Dilim 1 kapanış provası → **Dilim 2** (davranış bayrakları: `shipping.orderRequirement` · `weighRequired` · `invoiceMode` · `gradeRequired` · `batchRequired` + §3.6 tek resolver) → **Dilim 3** (kumaş-teknik + rezervasyon tasarımı) → Dilim 4 yalnız tasarım.
 
 **Model notu:** Fable haftalık hak %75'e dayandığı için gece 09:00'dan itibaren tüm ajanlar Opus (yüksek efor, kritik doğrulamada çift tur). Ana oturumunuzu da `/model opus` yapmanız önerildi.
+
+## 8. Dilim 1 kapanışı — sabahtan bu yana eklenenler
+
+| Paket | Ne bulundu / ne yapıldı |
+|---|---|
+| **P3 düzeltme** | Yedek hedefi (tam DB dökümünün gideceği yer) şifresiz değiştirilebiliyordu; şifrede Türkçe karakter kabul ediliyordu ama HTTP başlığı taşıyamıyor (fabrika rotasyona kadar kilitlenirdi); denetim kaydı query string'i yazıyordu. Kapsam artık ELLE SAYILMIYOR — ayar yazan her uç bir tarayıcıyla ölçülüyor. |
+| **P4** | Kalite artık istasyon TÜRÜ değil YETENEĞİ. Boğaz ikiz (yüklem + sorgu parçası) çünkü 28 karar noktasının 12'si sorgunun içinde, biri de atomik claim. Bekçisi ilk yazımda kördü, sonda ölçtü, sayım bazlıya çevrildi. |
+| **P6** | 93 ekranın tamamı bir modüle ya da çekirdek bloğa eşlendi. Plandaki profil dosyası yolu ölçümle reddedildi: `deploy/` üretim paketine hiç girmiyor, job dosyayı bulamaz ve sessizce hiçbir şey yapmazdı. |
+| **P5** | İki canlı ayrışma kapandı (karo görünür, uç 403). Ayar kategorilerinde modül artık kilit, gizleme değil. Palette iki sızıntı vardı: üretim kapalıyken "Yeni İş Emri" ve "İstasyon Yetenekleri" hâlâ açılabiliyordu. "Kapatırsan gizlenir" listesi tablet ekranlarını yutuyordu — satıcı, üretimi kapatınca tabletin duracağını göremiyordu. |
+| **P7** | Doküman mercek raporu (116 madde) hazır; uygulama sabah onayına bağlı. |
+| **Dilim 2** | Keşif bitti, spec ve kararlar yazıldı (`GECE-KARARLARI` sonundaki tablo). Üç "çıkışsız kapı" ölçüldü: `block` rejimi bugün açılsa fabrikada hiç sevkiyat kurulamaz (tablet sipariş göndermiyor); `manualWeightRestricted` eski istemcileri toplu 403'e düşürür; `batch.requiredEnabled` parti yaratma yolu olmadığı için çıkışsızdı → adı ve davranışı `batch.autoCreateEnabled` olarak değiştirildi. |
+
+**Yeni sabah onayı maddeleri:**
+1. Sistem Profili ekranı `admin:settings` ile de salt-okunur açılıyor (karo ve palet satıcıya özel). Kimlik kapısına mı bağlansın, yoksa şeffaflık için böyle mi kalsın?
+2. Ayar kilidi istemci taraflı: panel "dondu" diyor, API hâlâ yazıyor. Tasarım §3.6 Dilim 2'ye alındı.
+3. Fabrikada süperadmin hesabı yokken (SUPERADMIN_* env verilmeden deploy) Sistem Profili karosu fabrika yöneticisine GÖRÜNÜR — emniyet supabının doğal sonucu.
+4. Ayar ekranında iki görünür değişiklik var: "Depo & Satın Alma" sekmesi "Mal Kabul & Alış" oldu ve yeni bir "İplik" sekmesi doğdu.
