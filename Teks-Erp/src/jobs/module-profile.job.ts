@@ -168,10 +168,28 @@ export async function ensureModuleProfile(
   const varOlan = new Set(mevcut.map((r) => r.key));
   const eksikler = beklenen.filter((k) => !varOlan.has(k));
 
-  if (eksikler.length === 0) {
+  // ⚠️ YÜKLEM "7/7 SATIR VAR MI" DEĞİL, "HİÇ SATIR VAR MI".
+  //
+  // Profil job'unun sorduğu soru "bu TAZE bir kurulum mu"dur; bir modül satırı
+  // bile varsa kurulum kararı ZATEN VERİLMİŞTİR ve eksik satır BİLİNÇLİ
+  // olabilir. Fabrikada tam olarak öyle: grandfathering migration'ı ALTI anahtar
+  // damgalar, `finance.enabled`i BİLEREK yazmaz (o satırın YOKLUĞU dünkü
+  // davranıştır — okuyucu `false` döner).
+  //
+  // "7/7 ara, eksiği tamamla" yüklemi bunu "eksik" sanıp profilden yazıyordu ve
+  // Dilim 1 kabul provası bunu ÖLÇTÜ: mevcut fabrikada `TEKSERP_PROFIL=tam` ile
+  // boot edilince `finance.enabled=true` yazılıyor ve ÖN MUHASEBE MODÜLÜ
+  // SESSİZCE AÇILIYORDU (`/api/finance/cheques` 403 MODULE_DISABLED → 403 yetki).
+  //
+  // Bu yüklem sınıfı kalıcı olarak kapatır: yarın sekizinci bir modül anahtarı
+  // eklendiğinde migration yedi yazsa bile job "kurulmuş" der ve dokunmaz.
+  if (varOlan.size > 0) {
     console.log(
-      `[module-profile] Modül anahtarlarının ${beklenen.length}/${beklenen.length} satırı zaten var — ` +
-        "dokunulmadı (profil yalnız TAZE kuruluma uygulanır).",
+      `[module-profile] Kurulumda ${varOlan.size}/${beklenen.length} modül anahtarı zaten var — ` +
+        "dokunulmadı (profil yalnız HİÇ anahtarı olmayan TAZE kuruluma uygulanır)." +
+        (eksikler.length > 0
+          ? ` Yazılmayanlar bilinçli kabul edildi: ${eksikler.join(", ")}.`
+          : ""),
     );
     return { action: "exists" };
   }

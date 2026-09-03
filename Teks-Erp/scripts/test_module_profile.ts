@@ -397,14 +397,30 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
      WHERE "key" = ANY(${[...beklenen, PROFILE_STAMP_SETTING_KEY]}::text[])`;
   const oncekiHarita = new Map(oncekiler.map((r) => [r.key, r]));
   check(
-    "§7a Körlük zemini: test DB'sinde yedi modül satırı da var (ölçüm bu tabana kurulu)",
-    beklenen.every((k) => oncekiHarita.has(k)),
+    "§7a Körlük zemini: test DB'sinde EN AZ BİR modül satırı var (ölçüm bu tabana kurulu)",
+    beklenen.some((k) => oncekiHarita.has(k)),
     `${oncekiler.filter((r) => r.key !== PROFILE_STAMP_SETTING_KEY).length}/${beklenen.length} satır`,
   );
-  if (!beklenen.every((k) => oncekiHarita.has(k))) {
-    atla("§7/§9 canlı ölçüm", "modül satırları eksik — önce `prisma migrate deploy` koş");
+  // ⚠️ ZEMİN "7/7" DEĞİL "EN AZ BİR" — ve eksik satır ATLAMA SEBEBİ DEĞİL.
+  //
+  // Eski hâli 7/7 arıyor, aksi durumda §7b/§7c'yi sessizce ATLIYORDU. Gerçek
+  // fabrika hâli tam da atlanan durumdu (grandfathering ALTI anahtar yazar,
+  // `finance.enabled`i bilerek yazmaz) — yani "job satır varken dokunmaz"
+  // sözleşmesi FABRİKADA hiç ölçülmüyordu. Dilim 1 kabul provası açığı orada
+  // buldu: job 7/7 arayıp eksiği profilden yazıyor ve `tam` profiliyle ön
+  // muhasebeyi sessizce açıyordu. Artık kısmi durum da ölçülüyor.
+  if (!beklenen.some((k) => oncekiHarita.has(k))) {
+    atla("§7/§9 canlı ölçüm", "hiç modül satırı yok — önce `prisma migrate deploy` koş");
     return;
   }
+  const eksikSatirlar = beklenen.filter((k) => !oncekiHarita.has(k));
+  check(
+    "§7a2 ⭐ KISMİ kurulum da ölçülüyor (eksik satır ATLAMA sebebi değil)",
+    true,
+    eksikSatirlar.length === 0
+      ? "7/7 satır — tam kurulum"
+      : `${eksikSatirlar.length} satır bilinçli yok: ${eksikSatirlar.join(", ")}`,
+  );
 
   const HEDEF = "tezgah.enabled";
   const damgaOnce = oncekiHarita.get(PROFILE_STAMP_SETTING_KEY) ?? null;
@@ -457,54 +473,70 @@ async function canliOlcum(beklenen: string[]): Promise<void> {
       `action=${rInv.action}`,
     );
 
-    // (4) EKSİK SATIR + geçerli profil → YALNIZ eksik yazılır + damga atılır.
+    // (4) ⭐ EKSİK SATIR + geçerli profil → YİNE DE DOKUNMAZ.
+    //
+    // ⚠️ BU BÖLÜM 2026-09-03'te TERSİNE ÇEVRİLDİ. Eski sözleşme "eksiği
+    //    tamamla" idi ve bekçi onu ölçüyordu; Dilim 1 kabul provası bunun
+    //    fabrikada GERÇEK BİR AÇIK olduğunu ölçtü: grandfathering migration'ı
+    //    `finance.enabled`i BİLEREK yazmaz (satırın yokluğu dünkü davranıştır),
+    //    job onu "eksik" sanıp profilden yazıyordu ve `TEKSERP_PROFIL=tam` ile
+    //    mevcut bir fabrikada ÖN MUHASEBE MODÜLÜ SESSİZCE AÇILIYORDU.
+    //    Yeni sözleşme: bir modül satırı bile varsa kurulum kararı VERİLMİŞTİR.
     await prisma.systemSetting.delete({ where: { key: PROFILE_STAMP_SETTING_KEY } }).catch(() => undefined);
     const r2 = await ensureModuleProfile({ TEKSERP_PROFIL: "dokuma" });
-    const yazilan = await prisma.systemSetting.findUnique({ where: { key: HEDEF } });
+    const hedefSonrasi = await prisma.systemSetting.findUnique({ where: { key: HEDEF } });
     check(
-      "§7f ⭐ Eksik satır profilden yazıldı (`applied`)",
-      r2.action === "applied" && r2.yazilan.length === 1 && r2.yazilan[0] === HEDEF,
-      `action=${r2.action} yazilan=${r2.action === "applied" ? r2.yazilan.join(",") : "—"}`,
+      "§7f ⭐ KISMİ kurulumda job DOKUNMUYOR (`exists`) — eksik satır BİLİNÇLİ kabul edilir",
+      r2.action === "exists",
+      `action=${r2.action}`,
     );
     check(
-      "§7g Yazılan değer profilden geldi ve jsonb BOOLEAN",
-      yazilan?.value === true && typeof yazilan?.value === "boolean",
-      `value=${JSON.stringify(yazilan?.value)} (dokuma profilinde tezgah AÇIK)`,
-    );
-    check(
-      "§7h Yazılan satırın açıklaması tek kaynaktan",
-      yazilan?.description === MODULE_DESCRIPTIONS[HEDEF],
-      `description="${yazilan?.description}"`,
+      "§7g ⭐ Silinen satır profilden GERİ YAZILMADI (fabrikadaki `finance.enabled` sınıfı)",
+      hedefSonrasi === null,
+      hedefSonrasi ? `beklenmedik satır: ${JSON.stringify(hedefSonrasi.value)}` : "satır yok",
     );
     const damga = await prisma.systemSetting.findUnique({
       where: { key: PROFILE_STAMP_SETTING_KEY },
     });
-    const damgaGovde = damga?.value as { profil?: string; uygulandiAt?: string } | null;
     check(
-      "§9a ⭐ Satır YAZILDIĞINDA `system.profile` damgası doğuyor",
-      damgaGovde?.profil === "dokuma" && typeof damgaGovde?.uygulandiAt === "string",
-      JSON.stringify(damga?.value),
-    );
-    check(
-      "§9b Damga tarihi ISO okunabilir",
-      !Number.isNaN(Date.parse(damgaGovde?.uygulandiAt ?? "")),
-      damgaGovde?.uygulandiAt,
+      "§9a ⭐ Hiç satır yazılmadıysa damga da ATILMIYOR ('profil uygulandı' yalanı doğmasın)",
+      damga === null,
+      damga ? `beklenmedik damga: ${JSON.stringify(damga.value)}` : "damga yok",
     );
 
-    // (5) DAMGA YALNIZ YAZILDIĞINDA: satırlar tamken damga TAZELENMEZ.
-    await prisma.systemSetting.delete({ where: { key: PROFILE_STAMP_SETTING_KEY } });
+    // (5) ⭐ HİÇ SATIR YOKKEN → taze kurulum yolu: yedisi de yazılır + damga.
+    //     Zeminin kendisi: yukarıdaki "dokunma" kontrolleri, job hiç yazamıyor
+    //     olsaydı da yeşil kalırdı — bu blok onu ayırt eder.
+    await prisma.systemSetting.deleteMany({ where: { key: { in: beklenen } } });
     const r3 = await ensureModuleProfile({ TEKSERP_PROFIL: "basit" });
+    const tazeSatirlar = await prisma.systemSetting.findMany({
+      where: { key: { in: beklenen } },
+      select: { key: true, value: true },
+    });
+    check(
+      "§9b ⭐ HİÇ satır yokken profil UYGULANIR (`applied`, 7/7)",
+      r3.action === "applied" && tazeSatirlar.length === beklenen.length,
+      `action=${r3.action} satır=${tazeSatirlar.length}/${beklenen.length}`,
+    );
     const damga2 = await prisma.systemSetting.findUnique({
       where: { key: PROFILE_STAMP_SETTING_KEY },
     });
+    const damgaGovde2 = damga2?.value as { profil?: string; uygulandiAt?: string } | null;
     check(
-      "§9c ⭐ Hiç satır yazılmadıysa damga da ATILMIYOR ('profil uygulandı' yalanı doğmasın)",
-      r3.action === "exists" && damga2 === null,
-      `action=${r3.action} damga=${damga2 ? "VAR" : "yok"}`,
+      "§9c Satır YAZILDIĞINDA `system.profile` damgası doğuyor ve ISO tarih taşıyor",
+      damgaGovde2?.profil === "basit" && !Number.isNaN(Date.parse(damgaGovde2?.uygulandiAt ?? "")),
+      JSON.stringify(damga2?.value),
+    );
+    check(
+      "§9d `basit` profili tasarım §10 tablosuyla hizalı (yalnız üretim AÇIK)",
+      tazeSatirlar.every((r) => (r.key === "production.enabled") === (r.value === true)),
+      tazeSatirlar.map((r) => `${r.key}=${JSON.stringify(r.value)}`).join(" · "),
     );
   } finally {
     // Bulunan hâle GERİ DÖN — değer + açıklama + ZAMAN DAMGALARI.
-    for (const key of [HEDEF, PROFILE_STAMP_SETTING_KEY]) {
+    // ⚠️ TÜM modül anahtarları + damga geri yüklenir: §9b bloğu `deleteMany`
+    //    ile hepsini siliyor, yalnız HEDEF'i geri koymak DB'yi bozardı.
+    for (const key of [...beklenen, PROFILE_STAMP_SETTING_KEY]) {
       const eski = oncekiHarita.get(key);
       if (!eski) {
         await prisma.systemSetting.delete({ where: { key } }).catch(() => undefined);

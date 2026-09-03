@@ -240,12 +240,31 @@ async function main(): Promise<void> {
   );
 
   if (!topVar) {
-    // BOŞ KURULUM — damga BEKLENMEZ. Bu, §1b'nin canlı kanıtıdır.
-    check(
-      "§2b ⭐ Geçmişi olmayan kurulumda modül satırı YOK (koşulun canlı kanıtı)",
-      satirlar.length === 0,
-      satirlar.length ? `beklenmedik satır: ${satirlar.map((s) => s.key).join(", ")}` : "",
-    );
+    // BOŞ KURULUM — MİGRATION damgası beklenmez. Bu, §1b'nin canlı kanıtıdır.
+    // ⚠️ AMA PROFİL JOB'U AYRI BİR YAZARDIR: `TEKSERP_PROFIL` verilmiş taze bir
+    //    kurulumda boot job'u yedi satırı yazar ve `system.profile` damgasını
+    //    atar — bu DOĞRU davranıştır, migration'ın koşulunu çürütmez. Damgayı
+    //    sormadan "satır YOK" demek, ilk gerçek yeni müşteri kurulumunda bu
+    //    bekçiyi kırmızı açardı (Dilim 1 kabul provası ölçtü). İki yazar iki
+    //    ayrı soru: migration GEÇMİŞİ olan kurulumu damgalar, job HİÇ anahtarı
+    //    olmayan kuruluma profil uygular.
+    const profilDamgasi = await prisma.systemSetting.findUnique({
+      where: { key: "system.profile" },
+      select: { value: true },
+    });
+    if (profilDamgasi) {
+      check(
+        "§2b ⭐ Satırlar PROFİL job'undan (damga var) — migration koşulu ÇÜRÜMEDİ",
+        satirlar.length > 0,
+        `system.profile=${JSON.stringify(profilDamgasi.value).slice(0, 90)}`,
+      );
+    } else {
+      check(
+        "§2b ⭐ Geçmişi olmayan kurulumda modül satırı YOK (koşulun canlı kanıtı)",
+        satirlar.length === 0,
+        satirlar.length ? `beklenmedik satır: ${satirlar.map((s) => s.key).join(", ")}` : "",
+      );
+    }
   } else {
     const eksik = BEKLENEN.filter((b) => !harita.has(b.key)).map((b) => b.key);
     check(

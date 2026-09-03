@@ -188,6 +188,13 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   // ── AUTH ──
   LOGIN_SUCCESS: "Başarılı giriş",
   LOGIN_FAILED: "Başarısız giriş",
+  // Dilim 1 (modül/bayrak) olayları — Sistem → Olaylar ekranında ham kodla
+  // görünmesinler diye Türkçeleri burada. `test_audit_labels` bunları ölçer.
+  LOGIN_LOCKED: "Giriş kilitlendi",
+  MODULE_PROFILE_APPLIED: "Kurulum profili uygulandı",
+  SUPERADMIN_ACCOUNT_CREATED: "Satıcı hesabı oluşturuldu",
+  SUPERADMIN_ABSENT_MODULE_WRITE: "Satıcı hesabı yokken modül anahtarı yazıldı",
+  SYSTEM_ACCOUNT_ACCESS_BLOCKED: "Sistem hesabına erişim engellendi",
   LOGIN_CONFLICT: "Giriş engellendi (oturum açık)",
   LOGOUT: "Çıkış yapıldı",
 

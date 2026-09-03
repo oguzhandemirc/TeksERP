@@ -172,8 +172,12 @@ const server = app.listen(Number(PORT), HOST, () => {
     startSuperadminAccount();
     // KURULUM PROFİLİ — taze kurulumda modül anahtarlarını `.env`deki
     // `TEKSERP_PROFIL` profilinden yazar. Mevcut kurulumda grandfathering
-    // damgası (migration 20260902230000) zaten satırları getirdiği için TAM
-    // NO-OP; env verilmemişse HİÇBİR ŞEY yazılmaz (yanlış profili kalıcı
+    // damgası (migration 20260902230000) EN AZ BİR anahtar getirdiği için job
+    // "exists" der ve DOKUNMAZ — yüklem "7/7 satır" değil "hiç satır var mı"
+    // (Dilim 1 kabul provası ölçtü: 7/7 arayan sürüm, fabrikada bilerek
+    // yazılmamış `finance.enabled`i "eksik" sanıp profilden yazıyordu ve
+    // `tam` profiliyle ön muhasebeyi sessizce açıyordu). Env verilmemişse
+    // HİÇBİR ŞEY yazılmaz (yanlış profili kalıcı
     // damgalamamak için — bir kez yazıldı mı ikinci koşum dokunmaz).
     startModuleProfileJob();
     // Keşif ucunun bellek kopyası (firma adı + port). İstek yolunda DB'ye

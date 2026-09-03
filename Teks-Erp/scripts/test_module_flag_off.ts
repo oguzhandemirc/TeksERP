@@ -480,11 +480,29 @@ async function main(): Promise<void> {
         : `${bulunan.size}/${MODULLER.length} satır`,
     );
   } else {
-    check(
-      "§3 Boş kurulumda modül satırı BEKLENMEZ (damga koşullu — profil job'ının işi)",
-      bulunan.size === 0,
-      `bulunan=${[...bulunan].join(", ") || "(yok)"}`,
-    );
+    // ⚠️ PROFİL DAMGASI VARSA SATIRLAR MEŞRUDUR. Geçmişi olmayan kurulumda
+    //    grandfathering migration'ı satır yazmaz (koşulu `rolls` tablosu), AMA
+    //    `TEKSERP_PROFIL` verilmiş taze bir kurulumda boot job'u yedi satırı
+    //    yazar ve bu DOĞRU davranıştır. Damgayı sormadan "satır YOK" demek,
+    //    ilk gerçek yeni müşteri kurulumunda paketi kırmızı açardı
+    //    (Dilim 1 kabul provası ölçtü).
+    const profilDamgasi = await prisma.systemSetting.findUnique({
+      where: { key: "system.profile" },
+      select: { value: true },
+    });
+    if (profilDamgasi) {
+      check(
+        "§3 Taze kurulumda satırlar PROFİL job'undan gelmiş (damga var → meşru)",
+        bulunan.size > 0,
+        `damga=${JSON.stringify(profilDamgasi.value).slice(0, 80)} · bulunan=${bulunan.size}`,
+      );
+    } else {
+      check(
+        "§3 Boş kurulumda modül satırı BEKLENMEZ (damga YOK → profil de uygulanmamış)",
+        bulunan.size === 0,
+        `bulunan=${[...bulunan].join(", ") || "(yok)"}`,
+      );
+    }
   }
 
   // ── HTTP AYAĞI ───────────────────────────────────────────────────────────
