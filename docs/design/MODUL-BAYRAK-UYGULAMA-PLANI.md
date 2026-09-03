@@ -249,7 +249,7 @@ Grandfathering migration: mevcut DB'ye bugünkü değerler damgalanır.
 `test_superadmin.ts` (gizlilik: 5 yüzeyde görünmez · yetki: her uca girer ·
 audit: satır yazılır, takma ad basılır · negatif sonda: süzgeç kalkınca kırmızı).
 
-**P3 · Ayar şifresi:** hash + doğrulama dalı + Electron diyaloğu (bayrak
+**P3 · Ayar şifresi:** ✅ UYGULANDI 2026-09-03 (`9f33d0e3` + `f948780f`; karar notu arşivde "Ayar şifresi P3"; planda OLMAYAN kapsam: `/admin/backups/offsite` — kapsam artık AST tripwire ile ölçülüyor). hash + doğrulama dalı + Electron diyaloğu (bayrak
 kaydetmeden önce sorar) + süperadmin ekranından üret/değiştir/iptal + audit.
 
 **P4 · Kalite-yetenek Faz A:** yukarıdaki bölüm (kolon + backfill + tek yüklem
