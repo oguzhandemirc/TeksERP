@@ -16,6 +16,56 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-03",
+      "baslik": "Modüller, satıcı hesabı ve ayar güvenliği",
+      "surumler": {
+        "panel": "1.2.0",
+        "tablet": "1.0.1"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Genel Ayarlar'a \"Modüller\" bölümü eklendi. Bu bölüm kurulumda hangi bölümlerin açık olduğunu gösterir: Üretim, Ön Muhasebe, Alım-Satım, İplik, Çoklu Depo. Sizde bugün ne açıksa aynen öyle kalıyor, hiçbir ekran kaybolmadı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "İplik Stoğu, Alış Siparişi, Kalem Fiyatları ve Stok Sayımı ekranlarının kapalı olma sebebi artık \"Alım-Satım modülü kapalı\" olarak yazıyor. Önceden sadece yetki hatası veriyordu ve sebebi anlaşılmıyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ayarlar için ikinci bir şifre tanımlanabiliyor. Tanımlandığında davranış ayarlarını değiştirmek için her kayıtta bu şifre soruluyor — açık kalmış bir yönetici oturumundan ayar değiştirilmesini önlüyor. Tanımlanmadığı sürece hiçbir yerde sorulmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İstasyon kartına \"Kalite kontrol uygular\" seçeneği geldi. Böylece kalite kontrolü tek bir istasyona bağlı olmaktan çıktı; ileride ikinci bir kalite noktası tanımlanabilecek. Mevcut Kurşun+KK istasyonunuz aynen çalışıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sevkiyat istasyonu panelden düzenlenemiyordu; düzenlenirse tabletin tartı ekranı kapanıyordu. Düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Ayarlarda \"Depo & Satın Alma\" sekmesinin adı \"Mal Kabul & Alış\" oldu ve iplik ayarları için ayrı bir \"İplik\" sekmesi açıldı."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Tam yetkili bir hesapla tablete girildiğinde \"yetkiniz yok\" ekranında kalınabiliyordu. Düzeltildi."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Siparişe bağlanmadan sevkiyat kurulduğunda uyarı artık hem panelde hem tablette görünüyor. Uyarı sadece bilgi amaçlı; sevkiyat yine kuruluyor."
+        }
+      ]
+    },
+    {
       "id": "2026-09-02",
       "baslik": "Dışarıdan takip — patron ekranı ve iki adımlı doğrulama",
       "surumler": {
