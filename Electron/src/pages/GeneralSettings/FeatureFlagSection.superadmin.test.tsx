@@ -51,7 +51,12 @@ const FLAG: FlagDef = {
   desc: "Kapalıyken uçlar 403 verir.",
 };
 
-const BANT = /yalnız sistem yöneticisi değiştirir/i;
+// ⚠️ BANDA ÖZGÜ METİN (2026-09-03): satırın kendi sebep cümlesi de artık
+// "yalnız sistem yöneticisi değiştirir" diyor (`ReadOnlyRow.reason`), yani eski
+// desen İKİ elemana birden uyup `getByText`i düşürüyordu. Bandı ayıran parça
+// yönlendirme cümlesidir.
+const BANT = /Modül açma\/kapatma talebiniz için yazılım firmanıza başvurun/i;
+const SATIR_SEBEBI = /^Bu anahtarı yalnız sistem yöneticisi değiştirir\.$/;
 
 function setIdentity(isSystemAccount: boolean, systemAccountExists: boolean) {
   useAuthStore.setState({ isSystemAccount, systemAccountExists });
@@ -69,6 +74,10 @@ describe("Modüller kategorisi — süperadmin kilidi", () => {
     renderWithProviders(<FeatureFlagSection flags={[FLAG]} superadminOnly />);
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.getByText(BANT)).toBeTruthy();
+    // ⭐ SATIR DA AYNI TEŞHİSİ BASAR: eskiden sabit "admin:settings yetkisi
+    // gerekir" yazıyordu ve kullanıcı olmayan bir yetkiyi aramaya giderdi.
+    expect(screen.getByText(SATIR_SEBEBI)).toBeTruthy();
+    expect(screen.queryByText(/admin:settings/)).toBeNull();
     expect(screen.queryByRole("button", { name: /kaydet/i })).toBeNull();
   });
 

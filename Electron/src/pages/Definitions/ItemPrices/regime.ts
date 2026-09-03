@@ -2,17 +2,30 @@
 // KALEM FİYATI — REJİM + İZİN SÜZGECİ (saf katman)
 // =============================================================================
 // NEDEN SAF FONKSİYON: bu yüzeyin tamamı TİCARET paketine aittir. Fabrikada
-// `finance.enabled` KAPALIDIR ve hiçbir parçası görünmemelidir. Kural bileşen
+// `ticaret.enabled` KAPALIDIR ve hiçbir parçası görünmemelidir. Kural bileşen
 // içindeki bir `&&` zincirinde bırakılsaydı tersine çevrilmesi hiçbir testi
 // kırmazdı — projenin yazılı deseni bu yüzden ayrı saf katmandır
 // (`canQuickShip`, `resolveRollTabs`, `orders-regime.ts`). Bekçi: `regime.test.ts`.
 //
 // ── ⚠️ İKİ AYRI SORU, İKİ AYRI KAPI ──────────────────────────────────────────
-//   REJİM (`financeEnabled`) → "bu KURULUM ticaret paketini kullanıyor mu"
+//   REJİM (`ticaretEnabled`) → "bu KURULUM ticaret paketini kullanıyor mu"
 //   İZİN  (`item:read` / `price:write`) → "bu KİŞİ bunu yapabilir mi"
-// Backend de tam olarak böyle: `router.use(verifyToken, requireFinanceEnabled)`
+// Backend de tam olarak böyle: `router.use(verifyToken, requireTicaretEnabled)`
 // + uç bazlı `requirePermission`. Rejim kapalıyken izin taşıyan muhasebeci bile
-// modülü açamaz (403: "Ön muhasebe modülü bu kurulumda kapalı").
+// modülü açamaz (403: "Ticaret modülü bu kurulumda kapalı").
+//
+// ── ⚠️ 2026-09-03: BAYRAK `financeEnabled` DEĞİL `ticaretEnabled` ────────────
+// Backend kapısı 2026-09-02'de `requireFinanceEnabled` → `requireTicaretEnabled`
+// olarak TAŞINDI (`item-price.routes.ts:46`), panel ise `financeEnabled`te
+// KALDI. Bu, YÖNÜ TERS bir ayrışmaydı ve iki kurulumda birden yanlış davranırdı:
+//   · ticaret AÇIK + muhasebe KAPALI  → uç 200 döner ama karo/panel GİZLİ
+//     (kullanıcı fiyat listesine hiçbir yerden ulaşamaz).
+//   · ticaret KAPALI + muhasebe AÇIK  → karo GÖRÜNÜR, her istek 403.
+// `test_screen_catalog` bunu "GERÇEK DRIFT, gerekçeli park" diye KARO_BEKLEYEN
+// listesinde tutuyordu; bu değişiklik o parkı kapatır.
+//
+// ⚠️ Fiyat OKUMA yüzeyi ticarete bağlıdır, ÖN MUHASEBEYE değil: bir firma
+// fatura defteri tutmadan da alım-satım yapıp fiyat listesi tutabilir.
 //
 // ⚠️ Bu bir GÜVENLİK SEDDİ DEĞİLDİR — sed backend'dedir. Buradaki iş, kapalı
 // bir modülün düğmesini kullanıcıya hiç göstermemektir: görünen ama her
@@ -20,8 +33,8 @@
 // =============================================================================
 
 export interface ItemPriceAccess {
-  /** `feature-flags.financeEnabled` — REJİM. Yüklenene kadar `false`. */
-  financeEnabled: boolean;
+  /** `feature-flags.ticaretEnabled` — REJİM. Yüklenene kadar `false`. */
+  ticaretEnabled: boolean;
   /** `item:read` — fiyatı OKUMAK faturayı hazırlayan herkesin işidir. */
   canRead: boolean;
   /** `price:write` — fiyatı KİM belirler (görev ayrılığı ailesi). */
@@ -30,14 +43,14 @@ export interface ItemPriceAccess {
 
 /** Fiyat yüzeyi (sayfa · ürün kartındaki "Fiyatlar" bölümü) çizilir mi? */
 export function itemPricesVisible(a: ItemPriceAccess): boolean {
-  return a.financeEnabled && a.canRead;
+  return a.ticaretEnabled && a.canRead;
 }
 
 /**
  * Yazma aksiyonları (Tanımla/Düzelt/Kaldır) çizilir mi?
  *
  * ⚠️ `itemPricesVisible`i İÇERİR — göremediği bir listeye yazma düğmesi
- * koyulamaz. Ayrı yazılsalardı `financeEnabled=false` + `price:write` taşıyan
+ * koyulamaz. Ayrı yazılsalardı `ticaretEnabled=false` + `price:write` taşıyan
  * bir kullanıcıda düğme çizilir, uç 403 verirdi.
  */
 export function itemPricesEditable(a: ItemPriceAccess): boolean {
@@ -73,6 +86,6 @@ export function canOfferNewPrice(a: ItemPriceAccess, listLoaded: boolean): boole
  * ANA OTURUM İÇİN: `tile-config.ts`'e eklenecek satır bu yüklemi kullanır —
  * `visibleWhen: itemPricesTileVisible`.
  */
-export function itemPricesTileVisible(ctx: { financeEnabled: boolean }): boolean {
-  return ctx.financeEnabled;
+export function itemPricesTileVisible(ctx: { ticaretEnabled: boolean }): boolean {
+  return ctx.ticaretEnabled;
 }

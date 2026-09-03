@@ -24,6 +24,7 @@ import { useOperationsVisibilityContext } from "@/pages/Operations/useOperations
 import { useFavorites } from "@/hooks/useFavorites";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { useAuthStore } from "@/store/auth";
+import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 import { useTabsStore } from "@/store/tabs";
 import { commandSections, findCommandEntry, type CommandEntry } from "./command-entries";
 import { foldSearchText } from "@/lib/search-fold";
@@ -54,6 +55,11 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
   // somut bir hataydı: route kapısı aynı koşulu uyguladığı için paletten seçen
   // kullanıcı sayfa yerine hub'a atılıyordu.
   const visibilityCtx = useOperationsVisibilityContext();
+  // ⚠️ Sistem hub'ının süzgeciyle AYNI kaynak (`lib/superadmin-gate.ts`): palet
+  // üçüncü giriş kapısıdır ve hub'da gizlenen satıcı ekranını göstermemeli.
+  const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
+  const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
+  const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
   const { favorites } = useFavorites();
   const { prefs, setPreference } = usePreferences();
   const { theme, setTheme } = useTheme();
@@ -99,6 +105,8 @@ export function CommandPalette({ open, onOpenChange, onShowHelp }: Props) {
     // Durum süzgeci İZİNDEN ÖNCE: yüklem "bu ekranın şu an yapacağı iş var mı"
     // sorusunu yanıtlar, izinden bağımsızdır ve ikisi VE ile birleşir.
     if (entry.visibleWhen && !entry.visibleWhen(visibilityCtx)) return false;
+    // Kimlik kapısı (satıcı ekranları) — hub karosuyla AYNI yüklem, tek kaynak.
+    if (entry.superadminOnly && !superadminGateOpen) return false;
     if (entry.permissionAny) return hasAnyPermission(entry.permissionAny);
     if (entry.permission) return hasPermission(entry.permission);
     if (entry.adminOnly) return isAdmin;

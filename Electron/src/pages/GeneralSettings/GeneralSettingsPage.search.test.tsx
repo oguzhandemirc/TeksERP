@@ -198,13 +198,18 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
 // REJİM — kategori kapısı (bölüm kapısı DEĞİL)
 // =============================================================================
 describe("Genel Ayarlar — rejim kapısı ekranda", () => {
-  it("fabrikada (finance kapalı) Muhasebe gizlenir ama Depo & Satın Alma DURUR", () => {
+  it("fabrikada (finance kapalı) Muhasebe gizlenir ama Mal Kabul & Alış DURUR", () => {
     (flags as unknown as Record<string, boolean>).financeEnabled = false;
     try {
       renderWithProviders(<GeneralSettingsPage />);
       expect(screen.queryByRole("tab", { name: /^Muhasebe$/i })).not.toBeInTheDocument();
-      // ⭐ Mal Kabul ekranı rejimsiz çalışıyor → ayarları da ulaşılabilir kalmalı.
-      expect(screen.getByRole("tab", { name: /Depo & Satın Alma/i })).toBeInTheDocument();
+      // ⭐ Mal Kabul'ün ayarları ön muhasebe rejimiyle GİZLENMEZ. 2026-09-03'te
+      // kategoriye TİCARET KİLİDİ eklendi (`moduleKey`) ama kilit gizleme
+      // DEĞİLDİR: sekme her rejimde çizilmeye devam eder. (Etiket aynı turda
+      // "Depo & Satın Alma" → "Mal Kabul & Alış" oldu; iplik satırı kendi
+      // kategorisine ayrıldı, çünkü tek `moduleKey` iki modülü anlatamaz.)
+      expect(screen.getByRole("tab", { name: /Mal Kabul & Alış/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /^İplik$/i })).toBeInTheDocument();
       // Rejim anahtarlarının kendisi her zaman ulaşılabilir (geri açma yolu).
       expect(screen.getByRole("tab", { name: /^Modüller$/i })).toBeInTheDocument();
     } finally {

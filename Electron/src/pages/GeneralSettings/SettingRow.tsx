@@ -168,15 +168,27 @@ export function ReadOnlyLine({ label, value }: { label: string; value: string })
   );
 }
 
-/** Yetkisiz kullanıcı için salt-okunur durum satırı (Açık/Kapalı rozeti). */
+/**
+ * Salt-okunur durum satırı (Açık/Kapalı rozeti).
+ *
+ * ⚠️ SEBEP PROP'A ÇIKARILDI (2026-09-03). Metin sabit "admin:settings yetkisi
+ * gerekir" idi ve artık ÜÇ farklı sebeple salt-okunur çizilebiliyoruz: izin
+ * eksikliği · süperadmin kimliği · modül kapalı. Sabit metin, son ikisinde
+ * satırın YANLIŞ TEŞHİS basması demekti — kullanıcı olmayan bir yetkiyi
+ * aramaya gider (bant doğruyu söylerken satır başka bir şey der). Varsayılan
+ * bugünkü cümledir: sebep verilmeyen çağrı yeri davranışını korur.
+ */
 export function ReadOnlyRow({
   title,
   enabled,
+  reason,
   onLabel = "Açık",
   offLabel = "Kapalı",
 }: {
   title: string;
   enabled: boolean;
+  /** Neden düzenlenemiyor — verilmezse izin cümlesi (bugünkü davranış). */
+  reason?: ReactNode;
   onLabel?: string;
   offLabel?: string;
 }) {
@@ -185,7 +197,11 @@ export function ReadOnlyRow({
       <div>
         <div className="font-medium">{title}</div>
         <p className="text-xs text-muted-foreground">
-          Bu ayarı değiştirmek için <code>admin:settings</code> yetkisi gerekir.
+          {reason ?? (
+            <>
+              Bu ayarı değiştirmek için <code>admin:settings</code> yetkisi gerekir.
+            </>
+          )}
         </p>
       </div>
       <span className="shrink-0 rounded-md border px-2 py-0.5 text-xs">

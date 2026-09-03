@@ -854,7 +854,14 @@ async function main() {
   // kategori bloğu İÇİNDE arandığı için burada dar kalmaları güvenli.
   // (D kümesi ise dosyanın TAMAMINI tarar ve orada girinti şartı yalnız
   // yanlış kırmızı üretiyordu — 2026-09-02'de kaldırıldı.)
-  type PanelCat = { id: string; regime?: string; flagKeys: string[]; rawConsts: string[] };
+  type PanelCat = {
+    id: string;
+    regime?: string;
+    /** MODÜL KİLİDİ (2026-09-03 / P5) — `regime`in ikizi DEĞİL: rejim GİZLER, bu KİLİTLER. */
+    moduleKey?: string;
+    flagKeys: string[];
+    rawConsts: string[];
+  };
   const panelCats: PanelCat[] = [];
   if (electronFound) {
     const cfg = readFileSync(ELECTRON_CONFIG, "utf8");
@@ -869,6 +876,7 @@ async function main() {
       panelCats.push({
         id: marks[i]![1]!,
         regime: /^ {4}regime:\s*"([^"]+)",$/m.exec(block)?.[1],
+        moduleKey: /^ {4}moduleKey:\s*"([^"]+)",$/m.exec(block)?.[1],
         flagKeys: [...block.matchAll(/^ {8}key:\s*"([^"]+)",$/gm)].map((m) => m[1]!),
         rawConsts: [...block.matchAll(/RAW_SETTING_KEYS\.([A-Z0-9_]+)/g)].map((m) => m[1]!),
       });
@@ -972,6 +980,62 @@ async function main() {
 
   console.log(
     `\n   §14 — rejim kapılı kategoriler: ${gatedCats.map((c) => `${c.id}(${c.regime})`).join(", ") || "(yok)"}`,
+  );
+
+  // ---------------------------------------------------------------------------
+  // 14b) MODÜL KİLİDİ — `SettingsCategory.moduleKey` (2026-09-03 / P5)
+  // ---------------------------------------------------------------------------
+  // ⚠️ §14'ÜN SIZINTI TARAMASI BURAYA UYGULANMAZ ve bu bilinçlidir. O tarama
+  // "gizlenen ayarın enforcement'ı gerçekten ulaşılamaz mı" diye sorar; kilit
+  // ise hiçbir şeyi ulaşılamaz YAPMAZ — kategori görünür kalır, yalnız satırlar
+  // salt-okunur çizilir. Aynı yüklemi kilide uygulamak, panelde hiçbir modül
+  // kilidinin kurulamaması demekti (üretim/ticaret satırlarının enforcement'ı
+  // rejimsiz yollardan da koşuyor; somut zincirler §14'ün ölçümünde duruyor).
+  //
+  // §14b ÜÇ ŞEY ölçer:
+  //   ① `moduleKey` değeri REGIME_GATES anahtarlarından biri — yazım hatası
+  //      kategoriyi SESSİZCE kilitsiz bırakır (panelde `modules[key]` undefined
+  //      → `!undefined` → "kapalı" bile diyemez, TS union'ı tutarsa da runtime'da
+  //      bir gün geniş bir string gelirse kapı yön değiştirir).
+  //   ② Aynı kategori hem `regime` hem `moduleKey` TAŞIMAZ — "gizli VE kilitli"
+  //      anlamsızdır (gizli kategorinin kilidi kimseye görünmez).
+  //   ③ `modules` ve `demo` ASLA kilitlenemez: modül anahtarlarının evi kendi
+  //      kilidinin arkasına konarsa modüller bir daha AÇILAMAZ (2026-08-05
+  //      `kk1DuplicateGuardEnabled` dersinin arayüz ikizi).
+  // ⚠️ ZEMİN ŞART: kilitli kategori kalmazsa ayrıştırma bozulmuş olabilir ve üç
+  // kontrol de VAKUMEN yeşil kalırdı (§14'ün kendi `gatedCats.length >= 1`
+  // kalıbı).
+  const lockedCats = panelCats.filter((c) => c.moduleKey);
+  check(
+    "§14b zemin: `moduleKey` taşıyan kategori ayrıştırıldı (≥1)",
+    !electronFound || lockedCats.length >= 1,
+    `kilitli=${lockedCats.length} — ayrıştırma bozulduysa §14b vakumen yeşil kalır`,
+  );
+  const bilinmeyenKilit = lockedCats.filter((c) => !REGIME_GATES[c.moduleKey!]);
+  check(
+    "§14b ⭐ `moduleKey` değeri backend rejim kapılarından biri (yazım hatası yok)",
+    bilinmeyenKilit.length === 0,
+    bilinmeyenKilit.length
+      ? `${bilinmeyenKilit.map((c) => `${c.id}→${c.moduleKey}`).join(", ")} — geçerli: ${Object.keys(REGIME_GATES).join(", ")}`
+      : "",
+  );
+  const ikisiBirden = panelCats.filter((c) => c.regime && c.moduleKey);
+  check(
+    "§14b ⭐ hiçbir kategori hem `regime` hem `moduleKey` taşımaz (iki farklı semantik)",
+    ikisiBirden.length === 0,
+    ikisiBirden.map((c) => `${c.id}(regime=${c.regime}, moduleKey=${c.moduleKey})`).join(", "),
+  );
+  const YASAKLI_KILIT = ["modules", "demo"];
+  const yasakliKilitli = lockedCats.filter((c) => YASAKLI_KILIT.includes(c.id));
+  check(
+    "§14b ⭐ modül anahtarlarının EVİ (`modules`) ve `demo` kilitlenemez",
+    yasakliKilitli.length === 0,
+    yasakliKilitli.length
+      ? `${yasakliKilitli.map((c) => c.id).join(", ")} — kilitlenirse modüller bir daha yapılandırılamaz`
+      : "",
+  );
+  console.log(
+    `   §14b — modül kilitli kategoriler: ${lockedCats.map((c) => `${c.id}(${c.moduleKey})`).join(", ") || "(yok)"}`,
   );
 
   // ---------------------------------------------------------------------------

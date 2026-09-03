@@ -58,6 +58,7 @@ import { SubcontractorCategoriesPage } from "@/pages/SubcontractorCategories/Sub
 import { SubcontractorsPage } from "@/pages/Subcontractors/SubcontractorsPage";
 import { StationCapabilitiesPage } from "@/pages/StationCapabilities/StationCapabilitiesPage";
 import { SystemHubPage } from "@/pages/System/SystemHubPage";
+import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
 import {
@@ -672,6 +673,20 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requireAnyPermission={[SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION]}>
         <GeneralSettingsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Sistem Profili — satıcı ekranı. ⚠️ ROUTE KAPISI `admin:settings` ve KİMLİK
+    // KAPISI BURADA YOK, bilinçli: fabrika yöneticisi sayfayı SALT-OKUNUR
+    // görmeli ("hangi modüller açık" sorusunun cevabı bir yerde yazmalı).
+    // Keşfi kısan şey hub KAROSUDUR (`SystemTile.superadminOnly`) ve palet
+    // girişidir; yazma yüzeyini kapatan şey de kimliktir (sayfa içinde).
+    // ⚠️ Karo `permission`ı ile AYNI kod — `tile-route-permission.test`.
+    path: "system/module-profile",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <ModuleProfilePage />
       </ProtectedRoute>
     ),
   },

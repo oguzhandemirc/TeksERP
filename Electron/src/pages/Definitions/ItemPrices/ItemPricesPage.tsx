@@ -117,10 +117,10 @@ export function ItemPricesPage() {
       <PageBody className="p-6">
         {access.isLoading ? (
           <p className="text-sm text-muted-foreground">Yükleniyor…</p>
-        ) : !access.financeEnabled ? (
+        ) : !access.ticaretEnabled ? (
           <Callout tone="muted" title="Fiyat tanımları bu kurulumda kapalı">
-            Kalem fiyatı ön muhasebe paketinin bir parçasıdır. Genel Ayarlar → Muhasebe bölümünden
-            açılabilir.
+            Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Genel Ayarlar
+            → Modüller bölümünden açılabilir.
           </Callout>
         ) : !access.canRead ? (
           <Callout tone="warning" title="Bu ekranı görme yetkiniz yok">

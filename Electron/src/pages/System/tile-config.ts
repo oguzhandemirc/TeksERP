@@ -1,4 +1,4 @@
-import { Activity, Archive, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, Upload, type LucideIcon, Merge } from "lucide-react";
+import { Activity, Archive, Blocks, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, Upload, type LucideIcon, Merge } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -16,6 +16,23 @@ export interface SystemTile {
    * dersi). Verilmezse karo `admin:settings` sayılır (Sistem hub'ının varsayılanı).
    */
   permission?: string;
+  /**
+   * Karo YALNIZ satıcı (süperadmin) hesabına çizilir — ÜÇÜNCÜ kapı.
+   *
+   * ⚠️ İZNİN YERİNE GEÇMEZ, ÜSTÜNE EKLENİR: karo `permission`ını taşımaya devam
+   * eder ve route ile birebir kalır (`tile-route-permission.test`). İzni bırakıp
+   * yalnız kimliğe dayanmak o bekçinin kapsamını daraltırdı.
+   *
+   * ⚠️ ROUTE'A KİMLİK KAPISI KONULMAZ ve bu bilinçli: fabrika yöneticisi
+   * adresten (ya da satıcının telefonda tarifiyle) sayfayı açtığında SALT-OKUNUR
+   * görmeli — "hangi modüller açık" sorusunun cevabı bir yerde yazmalı. Karonun
+   * gizlenmesi bir keşif kararıdır, bir yetki duvarı değil.
+   *
+   * ⚠️ Yüklem tek kaynaktan gelir (`lib/superadmin-gate.ts`) — supap
+   * (`!systemAccountExists`) üç tüketicinin birinde unutulursa süperadminsiz
+   * kurulum modüllerini bir daha yapılandıramaz.
+   */
+  superadminOnly?: boolean;
 }
 
 export interface SystemTileSection {
@@ -158,6 +175,21 @@ export const systemTiles: SystemTile[] = [
     icon: DatabaseZap,
     to: "/system/db-restore",
     group: "config",
+  },
+  {
+    // Satıcı ekranı: kurulumun modül fotoğrafı + profil uygulama. Genel Ayarlar →
+    // Modüller sekmesiyle AYNI anahtarları yazar (aynı bileşen gömülü), farkı
+    // profil karşılaştırması · bağımlılık okları · "kapatırsan gizlenir"
+    // önizlemesi · tutarsızlık bantlarıdır.
+    key: "module-profile",
+    title: "Sistem Profili",
+    description: "Bu kurulumda hangi modüller açık — profil uygula, bağımlılıkları ve kapatma etkisini gör",
+    icon: Blocks,
+    to: "/system/module-profile",
+    group: "config",
+    // ⚠️ content-routes.tsx'teki ProtectedRoute ile AYNI kod.
+    permission: "admin:settings",
+    superadminOnly: true,
   },
   {
     key: "settings",

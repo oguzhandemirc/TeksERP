@@ -19,7 +19,7 @@ import { useFavorites } from "@/hooks/useFavorites";
 import { useMenuOrder } from "@/hooks/useMenuOrder";
 import { ADMIN_PERMISSION_LIST } from "@/types/auth";
 import { navGroups, type NavItem, type NavGroup } from "./nav-config";
-import { useFeatureFlags } from "@/hooks/usePricingEnabled";
+import { useOperationsVisibilityContext } from "@/pages/Operations/useOperationsVisibility";
 import { findCommandEntry, type CommandEntry } from "./command-entries";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarBrand, SidebarFooter } from "./sidebar-brand";
@@ -31,7 +31,14 @@ interface Props {
 
 export function Sidebar({ collapsed }: Props) {
   const { isAdmin, hasPermission, hasAnyPermission } = useRoleAccess();
-  const flagsQuery = useFeatureFlags();
+  // ⚠️ BAYRAKLAR BAĞLAMDAN OKUNUR, sorgudan DEĞİL (2026-09-03). Eski satır
+  // `flagsQuery.data?.data?.[item.featureFlag] ?? false` idi: TEK bir jenerik
+  // varsayılan. `featureFlag` union'ı beş modüle genişlerken bu, sessiz bir
+  // hata kaynağına dönüşürdü — `production.enabled`ın backend varsayılanı AÇIK
+  // olduğu için `?? false` fabrikada satırı bayrak yüklenene kadar GİZLER ve
+  // gözle görülür bir titreme doğurur. Bağlam ayrıca `iplikEnabled`ı ETKİN
+  // değeriyle (`ticaret && iplik`) verir; zincir tek yerde çözülür.
+  const visibilityCtx = useOperationsVisibilityContext();
   const { favorites, reorderFavorites } = useFavorites();
   const { orderItems, setGroupOrder } = useMenuOrder();
 
@@ -44,10 +51,10 @@ export function Sidebar({ collapsed }: Props) {
   const visible = (item: NavItem) => {
     if (item.adminOnly && !isAdmin && !hasAnyPermission(ADMIN_PERMISSION_LIST)) return false;
     if (item.permission && !hasPermission(item.permission)) return false;
-    // ⚠️ Bayrak yüklenene kadar KAPALI tarafa düşülür (`?? false`): belirsizken
-    // satır çizmek, fabrikada "Muhasebe" menüsünün bir an belirip kaybolması
-    // demekti. Tersi yalnız bir gecikmedir (useMultiWarehouse ile aynı karar).
-    if (item.featureFlag && !(flagsQuery.data?.data?.[item.featureFlag] ?? false)) return false;
+    // Belirsizken düşülecek taraf BAYRAĞA GÖRE değişir ve kararı bağlam verir:
+    // "Muhasebe" belirsizken çizilmez (fabrikada bir an belirip kaybolmasın),
+    // üretim belirsizken çizilir (fabrikada bir an kaybolup gelmesin).
+    if (item.featureFlag && !visibilityCtx[item.featureFlag]) return false;
     return true;
   };
 

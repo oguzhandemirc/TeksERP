@@ -14,6 +14,7 @@ import { FlagToggle, ReadOnlyRow, SettingMeta } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
 import { isSettingRowVisible, type SettingsSearchHit } from "./settings-groups";
+import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 
 /**
  * Bir kategorinin özellik anahtarlarını config'ten render eder — TEK kaydetme
@@ -33,6 +34,8 @@ export function FeatureFlagSection({
   numberFlags = [],
   settingFields = [],
   superadminOnly = false,
+  moduleClosed = false,
+  moduleLabel,
   searchHit,
 }: {
   flags: FlagDef[];
@@ -44,6 +47,14 @@ export function FeatureFlagSection({
   /** Kategori yalnız satıcı (süperadmin) hesabına YAZILIR — bkz.
    *  `SettingsCategory.superadminOnly`. Görünürlüğü etkilemez. */
   superadminOnly?: boolean;
+  /**
+   * Bu kategorinin MODÜLÜ bu kurulumda kapalı → satırlar salt-okunur (bkz.
+   * `SettingsCategory.moduleKey`). Görünürlüğü ETKİLEMEZ: kategori çizilmeye
+   * devam eder ki fabrika ayarın hangi değerde donduğunu görsün.
+   */
+  moduleClosed?: boolean;
+  /** Bandın adıyla söyleyeceği modül ("Ticaret" · "Üretim" …). */
+  moduleLabel?: string;
   /** Arama açıksa bu kategorinin eşleşme fotoğrafı; yoksa tüm satırlar çizilir. */
   searchHit?: SettingsSearchHit;
 }) {
@@ -60,10 +71,33 @@ export function FeatureFlagSection({
   // anahtarları BUGÜNKÜ gibi `admin:settings` ile yazılır — yoksa süperadminsiz
   // her kurulum, kendi modüllerini bir daha açamayacak şekilde KİLİTLENİRDİ.
   // Ayrışırlarsa arıza sessizdir (panel yazılabilir çizer, sunucu 403 verir).
-  const superadminGateOpen = isSystemAccount || !systemAccountExists;
-  const canEdit = hasPermission("admin:settings") && (!superadminOnly || superadminGateOpen);
+  const superadminGateOpen = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
+  const hasSettingsPermission = hasPermission("admin:settings");
+  const canEdit = hasSettingsPermission && (!superadminOnly || superadminGateOpen) && !moduleClosed;
   /** Salt-okunur SEBEBİ kimlik kapısı mı (izin eksikliği değil)? */
-  const lockedBySuperadmin = superadminOnly && !superadminGateOpen && hasPermission("admin:settings");
+  const lockedBySuperadmin = superadminOnly && !superadminGateOpen && hasSettingsPermission;
+  /** …yoksa modülün kapalı olması mı? */
+  const lockedByModule = moduleClosed && hasSettingsPermission;
+  // ⚠️ BANT TEKİL DEĞİL LİSTE: iki sebep AYNI ANDA doğru olabilir (satıcıya ait
+  // bir kategori + kapalı modül). Tek bant çizilseydi kullanıcı ilkini görüp
+  // düzeltir, sonra ikincisine çarpardı — "sebebi hiçbir yerde yazmıyor"
+  // arızasının taksitli hâli.
+  const lockNotes: string[] = [];
+  if (lockedBySuperadmin) {
+    lockNotes.push(
+      "Bu anahtarları yalnız sistem yöneticisi değiştirir. Modül açma/kapatma talebiniz için yazılım firmanıza başvurun.",
+    );
+  }
+  if (lockedByModule) {
+    // ⚠️ METİN "ETKİSİZ" DEMEZ ve bu ÖLÇÜLMÜŞ bir kısıttır: tasarımın "modül
+    // kapalıyken alt bayrak hiç okunmaz" tek-resolver kuralı (§3.6) backend'de
+    // HENÜZ YOK — üretim kapalı bir kurulumda `kk1DuplicateGuardEnabled` hâlâ
+    // `/api/rolls` üzerinden koşuyor. "Bu ayarın etkisi yok" cümlesi bugün bir
+    // YALAN olurdu; bandın söylediği şey yalnız DONDUĞU ve nasıl çözüleceğidir.
+    lockNotes.push(
+      `${moduleLabel ?? "Bu"} modülü bu kurulumda kapalı — bu ayarlar dondu; modül açılınca yeniden düzenlenebilir. Modüller sekmesinden açılabilir.`,
+    );
+  }
 
   const flagsQ = useFeatureFlags();
   const server = flagsQ.data?.data;
@@ -246,6 +280,13 @@ export function FeatureFlagSection({
     else groups.push({ name: f.group, items: [f] });
   }
 
+  /** Salt-okunur satırın altına yazılacak SEBEP — bant ile aynı sırayla. */
+  const readOnlyReason: string | undefined = lockedByModule
+    ? `${moduleLabel ?? "Bu"} modülü kapalı — ayar dondu.`
+    : lockedBySuperadmin
+      ? "Bu anahtarı yalnız sistem yöneticisi değiştirir."
+      : undefined;
+
   const renderRow = (flag: FlagDef) => {
     const checked = flagDraft[flag.key] ?? server?.[flag.key] ?? false;
     return (
@@ -262,7 +303,13 @@ export function FeatureFlagSection({
             onChange={(v) => setFlagDraft((d) => ({ ...d, [flag.key]: v }))}
           />
         ) : (
-          <ReadOnlyRow title={flag.title} enabled={server?.[flag.key] ?? false} />
+          <ReadOnlyRow
+            title={flag.title}
+            enabled={server?.[flag.key] ?? false}
+            // ⚠️ Satır ile bant AYNI teşhisi basar; sabit izin cümlesi burada
+            // üçüncü bir yalan olurdu (bkz. `ReadOnlyRow` gerekçesi).
+            reason={readOnlyReason}
+          />
         )}
         {/* Canlı bilgi bloğu (opsiyonel) — statik `desc`'ten farkı sunucudan okunan
             bir DEĞERİ göstermesi. Bileşen gösterecek şey yoksa kendisi null döner.
@@ -355,17 +402,18 @@ export function FeatureFlagSection({
 
   return (
     <div>
-      {/* Kilit BANDI — "değişiklik neden kaydedilmiyor" sorusunun tek cevabı bu
-          satır. Sadece disabled toggle çizmek sebebi hiçbir yerde söylemezdi. */}
-      {lockedBySuperadmin && (
+      {/* Kilit BANTLARI — "değişiklik neden kaydedilmiyor" sorusunun tek cevabı
+          bunlar. Sadece disabled toggle çizmek sebebi hiçbir yerde söylemezdi.
+          LİSTE olması load-bearing: iki sebep aynı anda doğru olabilir. */}
+      {lockNotes.map((note) => (
         <div
+          key={note}
           role="note"
           className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
         >
-          Bu anahtarları yalnız sistem yöneticisi değiştirir. Modül açma/kapatma
-          talebiniz için yazılım firmanıza başvurun.
+          {note}
         </div>
-      )}
+      ))}
       {nothingShown && (
         <p className="text-sm text-muted-foreground">Bu bölümde arama ile eşleşen ayar yok.</p>
       )}

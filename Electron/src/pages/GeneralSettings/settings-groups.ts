@@ -12,9 +12,11 @@
 // yalnız "hangi bölüm çizilsin" sorusunu yanıtlar.
 // =============================================================================
 
+import { MODULE_LABELS } from "@/lib/module-flags";
 import {
   SETTINGS_SECTIONS,
   type SettingsCategory,
+  type SettingsModuleKey,
   type SettingsSection,
 } from "./settings-config";
 
@@ -58,6 +60,74 @@ export function resolveSettingsRegime(
 export function isCategoryVisible(category: SettingsCategory, regime: SettingsRegime): boolean {
   if (!category.regime) return true;
   return regime[category.regime];
+}
+
+// -----------------------------------------------------------------------------
+// MODÜL DURUMU — KİLİT (gizleme DEĞİL)
+// -----------------------------------------------------------------------------
+
+/**
+ * Kilit kararının okuduğu modül fotoğrafı.
+ *
+ * ⚠️ `SettingsRegime`DEN AYRI BİR TİP ve bu bilinçli: rejim GİZLER, bu KİLİTLER.
+ * Tek tipte birleştirmek `settingsCategoryVisibleWhen`in (komut paleti derin
+ * bağlantısı) bir gün kilitlenen kategoriyi de GİZLEMESİNE davetiye olurdu —
+ * palet, kilitli bir sekmeyi göstermeye devam etmek ZORUNDA (kullanıcı ayarın
+ * hangi değerde donduğunu oradan görüyor).
+ *
+ * ⚠️ `iplikEnabled` ETKİN değerdir (`ticaret && iplik`) — zincir tek yerde
+ * çözülür. Ham değer okunsaydı ticaret kapalı + iplik açık bir kurulumda karo
+ * gizli, ayar sekmesi düzenlenebilir olurdu: aynı soruya iki cevap.
+ */
+export interface SettingsModuleState {
+  productionEnabled: boolean;
+  financeEnabled: boolean;
+  ticaretEnabled: boolean;
+  iplikEnabled: boolean;
+  depoMultiEnabled: boolean;
+}
+
+/**
+ * Bayraklar yüklenmemişken BACKEND VARSAYILANLARINA düşen çözücü.
+ *
+ * ⚠️ YÖNLER FARKLI ve hepsi backend ile aynı: `production.enabled` AÇIK
+ * (`readProductionEnabled`ın "satır yoksa TRUE" sigortası), diğerleri KAPALI.
+ * Tek bir `?? false` yazılsaydı fabrikada "İş Emirleri" sekmesi bayrak
+ * yüklenene kadar KİLİTLİ görünür, sonra açılırdı — kullanıcı bir saniyeliğine
+ * "modülüm kapalı" yalanını okur.
+ */
+export function resolveSettingsModuleState(
+  flags: Partial<SettingsModuleState> | undefined | null,
+): SettingsModuleState {
+  const ticaretEnabled = flags?.ticaretEnabled ?? false;
+  return {
+    productionEnabled: flags?.productionEnabled ?? true,
+    financeEnabled: flags?.financeEnabled ?? false,
+    ticaretEnabled,
+    // ETKİN değer — bağımlılık burada, TEK yerde çözülür.
+    iplikEnabled: ticaretEnabled && (flags?.iplikEnabled ?? false),
+    depoMultiEnabled: flags?.depoMultiEnabled ?? false,
+  };
+}
+
+/**
+ * Bu kategorinin satırları modül kapalı olduğu için DONDU mu?
+ *
+ * ⚠️ GÖRÜNÜRLÜĞÜ ETKİLEMEZ. `groupSettingsCategories` ve
+ * `settingsCategoryVisibleWhen` bu fonksiyonu ÇAĞIRMAZ; çağırsalardı kilit
+ * sessizce gizlemeye dönerdi (bekçi bunu ayrıca ölçüyor).
+ */
+export function isCategoryModuleClosed(
+  category: SettingsCategory,
+  modules: SettingsModuleState,
+): boolean {
+  if (!category.moduleKey) return false;
+  return !modules[category.moduleKey];
+}
+
+/** Kilit bandında geçen Türkçe modül adı (backend `MODULE_LABELS` aynası). */
+export function settingsModuleLabel(key: SettingsModuleKey): string {
+  return MODULE_LABELS[key];
 }
 
 export interface SettingsSectionGroup {

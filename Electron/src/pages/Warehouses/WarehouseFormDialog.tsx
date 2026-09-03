@@ -1,4 +1,6 @@
 import { EntityFormDialog } from "@/components/forms/EntityFormDialog";
+import { useMultiWarehouse } from "@/hooks/useWarehouses";
+import { shouldWarnMultiWarehouseClosed } from "./multiWarehouseWarning";
 import { FormField } from "@/components/forms/FormField";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,6 +17,18 @@ interface Props {
 }
 
 export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isSubmitting }: Props) {
+  // ⚠️ 2026-09-02'den beri çok-depoluluk VERİDEN TÜRETİLMİYOR: ikinci depoyu
+  // açmak yüzeyleri kendiliğinden getirmez, `depo.multiEnabled` de açılmalıdır.
+  // Kullanıcı bunu kaydettikten SONRA "seçici niye çıkmadı" diye aramasın diye
+  // kaydetmeden ÖNCE söylüyoruz (varsayılan depo uyarısıyla aynı desen).
+  const { multiWarehouse, warehouses } = useMultiWarehouse();
+  const warnMultiClosed = shouldWarnMultiWarehouseClosed({
+    depoMultiEnabled: multiWarehouse,
+    activeWarehouseIds: warehouses.filter((w) => w.isActive).map((w) => w.id),
+    editingId: initial?.id ?? null,
+    willBeActive: initial ? initial.isActive : true,
+  });
+
   const defaults: WarehouseFormValues = initial
     ? {
         name: initial.name,
@@ -39,6 +53,16 @@ export function WarehouseFormDialog({ open, onOpenChange, initial, onSubmit, isS
           {initial?.code && (
             <div className="text-xs text-muted-foreground">
               Kod: <span className="font-mono">{initial.code}</span>
+            </div>
+          )}
+          {warnMultiClosed && (
+            // ENGEL DEĞİL BİLGİ: ikinci depo tanımlamak modülden bağımsız
+            // olarak meşrudur (depo kartı ve defteri anahtarsız da çalışır).
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+              <b>Çoklu depo modülü kapalı.</b> İkinci aktif depo tanımlayabilirsiniz ama depo
+              seçicileri, listelerdeki depo kolonu ve Depo Transferi ekranı görünmez; transfer
+              uçları da 403 verir. Açmak için: Sistem → Sistem Profili (ya da Genel Ayarlar →
+              Modüller).
             </div>
           )}
           {initial?.isDefault && (

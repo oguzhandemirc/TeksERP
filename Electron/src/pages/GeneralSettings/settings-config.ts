@@ -2,6 +2,7 @@ import {
   Building2,
   Banknote,
   Blocks,
+  Boxes,
   FlaskConical,
   ClipboardList,
   Factory,
@@ -260,6 +261,22 @@ export type SettingsSectionId =
  */
 export type SettingsRegimeKey = "productionEnabled" | "financeEnabled";
 
+/**
+ * Bir ayar kategorisini KİLİTLEYEBİLEN modül anahtarları (gizleme DEĞİL — bkz.
+ * `SettingsCategory.moduleKey`).
+ *
+ * ⚠️ Yer tutucu modüller (`kumasTeknikEnabled` / `tezgahEnabled`) bilerek YOK:
+ * arkalarında ayar satırı da yüzey de bulunmuyor, union'a girselerdi hiçbir
+ * kategoriye konamayan ölü değerler olurlardı. Bekçi (`§14b`) değerlerin
+ * backend rejim kapılarıyla (`REGIME_GATES`) birebirliğini ölçer.
+ */
+export type SettingsModuleKey =
+  | "productionEnabled"
+  | "financeEnabled"
+  | "ticaretEnabled"
+  | "iplikEnabled"
+  | "depoMultiEnabled";
+
 /** Bölüm = SALT YERLEŞİM (başlık + sıra). Rejim kapısı taşımaz — bkz. yukarıdaki gerekçe. */
 export interface SettingsSection {
   id: SettingsSectionId;
@@ -295,6 +312,35 @@ export interface SettingsCategory {
    * Mekanik bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14.
    */
   regime?: SettingsRegimeKey;
+  /**
+   * Bu kategorinin satırlarını KİLİTLEYEN modül anahtarı (2026-09-03, P5).
+   *
+   * ⚠️ `regime`in İKİZİ DEĞİL, `superadminOnly`nin ikizidir:
+   *   · `regime`        → kategoriyi GİZLER (hiç çizilmez)
+   *   · `moduleKey`     → kategori GÖRÜNÜR kalır, satırlar salt-okunur + bant
+   *   · `superadminOnly`→ aynı kilit, sebebi KİMLİK
+   * Modül kapalıyken gizlemek REDDEDİLDİ: fabrika hangi ayarın hangi değerde
+   * DONDUĞUNU görebilmeli, ve daha önemlisi "açtım, kapatamıyorum" çıkmazının
+   * ikizi burada doğardı — gizlenen bir kategori, modül yeniden açıldığında
+   * geri gelene kadar hiçbir yerde YAZMAZ.
+   *
+   * ⚠️ NEDEN `SettingsRegimeKey` GENİŞLETİLMEDİ: o union GİZLEME kapısıdır ve
+   * `test_feature_flag_contract §14` onu ÖLÇER — üretim/ticaret/depo
+   * anahtarlarının hiçbiri bugün bir kategoriyi gizleyemez (satırların
+   * enforcement'ı rejimsiz yollardan da koşuyor; somut sızıntı zincirleri
+   * ölçüldü). Kilit o ölçümün DIŞINDADIR çünkü hiçbir şeyi ulaşılamaz
+   * yapmıyor; ölçen bekçi `§14b`.
+   *
+   * ⚠️ KATEGORİ DÜZEYİ — satır düzeyi (`FlagDef.moduleKey`) BİLİNÇLİ olarak
+   * yazılmadı: bant "bu kategoride BAZI satırlar kilitli" demek zorunda kalır
+   * ve kullanıcı hangisinin donduğunu satır satır aramak zorunda kalırdı. Karma
+   * kategori varsa çözüm kategoriyi BÖLMEKtir (emsal: "Depo & Satın Alma" →
+   * "Mal Kabul & Alış" + "İplik", 2026-09-03).
+   *
+   * ⚠️ `modules` ve `demo` kategorileri bunu ASLA taşımaz (bekçi kilitler):
+   * modül anahtarlarının evi kendi kilidinin arkasına konamaz.
+   */
+  moduleKey?: SettingsModuleKey;
   /**
    * Bu kategoriyi GÖRMEK için yeterli izinlerden herhangi biri. Verilmezse
    * `admin:settings` gerekir — yeni kategori eklerken varsayılan DAR olsun diye
@@ -565,6 +611,12 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "iş emri hedef metraj parti kodu batch otomatik üretim miktarı termin planlama süre gün varsayılan deadline plan parti no kısa dönen 99 plaka numara",
     kind: "flags",
     section: "production",
+    // ÜRETİM MODÜLÜ — KİLİT (gizleme DEĞİL). Beş satırın beşi de iş emri/parti
+    // nesnesine ait: üretim kapalıyken iş emri açılamaz (`workorder.routes` →
+    // `requireProductionEnabled`), yani parti no biçimi ya da planlama süresi
+    // ayarlanacak bir şey kalmaz. Kategori GÖRÜNÜR kalır ki fabrika değerleri
+    // görsün ve modülü açtığı an düzenleyebilsin.
+    moduleKey: "productionEnabled",
     flags: [
       {
         key: "targetQuantityEnabled",
@@ -777,43 +829,43 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
     ],
   },
-  // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu üç
-  // ayarı yapan kişi depo/satın alma sorumlusudur ve ayarların değiştirdiği şey
-  // mal kabul + iplik çıkışı EKRANLARININ davranışıdır (fatura/cari değil).
+  // Depo/satın alma bayrakları bilinçli olarak Muhasebe sekmesinde DEĞİL: bu
+  // ayarları yapan kişi depo/satın alma sorumlusudur ve ayarların değiştirdiği
+  // şey mal kabul + iplik çıkışı EKRANLARININ davranışıdır (fatura/cari değil).
   // "Mal kabulde fiyat zorunlu" ayarı muhasebeye HİZMET eder ama muhasebecinin
   // ekranında yaşamaz — sekme, ayarın etkilediği ekranın sahibine göre seçilir.
   //
-  // ⚠️⚠️ REJİM KAPISI YOK — YERLEŞİM "Depo & Muhasebe" BAŞLIĞI ALTINDA OLSA DA.
-  // Üç bayrağın da enforcement'ı `finance.enabled` KAPALIYKEN DE koşar:
-  //   · goodsReceiptRequirePriceEnabled / purchaseBlockOverReceiptEnabled →
-  //     `goods-receipt.service.confirm`; `goods-receipt.routes.ts` REJİMSİZDİR
-  //     (kapı yalnız izin: `goods-receipt:*`) ve Mal Kabul karosu da rejimsizdir.
-  //   · yarnBlockNegativeBalanceEnabled → `yarn-balance-guard.helper`; iplik
-  //     defterine `goods-receipt.service` de yazar (`applyYarnMovementTx`), yani
-  //     rejimsiz yoldan tetiklenir.
-  // Kapılansaydı: fiyat zorunluluğunu açıp ön muhasebeyi bırakan firma, mal kabul
-  // fişleri 400 alırken bayrağı kapatacak hiçbir ekran bulamazdı; simetrik olarak
-  // ön muhasebe kullanmayan ama mal kabul kullanan firma onu hiç AÇAMAZDI.
-  // Bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14.
+  // ⚠️⚠️ REJİM (GİZLEME) KAPISI YOK, MODÜL (KİLİT) KAPISI VAR — ikisi ayrı şey.
+  // Üç bayrağın da enforcement'ı `finance.enabled` KAPALIYKEN koşar, yani bu
+  // kategori ön muhasebe rejimiyle GİZLENEMEZ (o karar değişmedi ve `§14`
+  // ölçüyor). Kilit ise farklı bir soruya cevap verir: "bu ayarın ait olduğu
+  // MODÜL bu kurulumda satın alındı mı?" — ve kilit hiçbir şeyi ulaşılamaz
+  // yapmadığı için o ölçümün dışındadır.
+  //
+  // ⚠️ KATEGORİ 2026-09-03'TE İKİYE BÖLÜNDÜ ve sebebi granülarite: tek kategori
+  // İKİ farklı modülün satırlarını taşıyordu (2 ticaret + 1 iplik). Tek bir
+  // `moduleKey` bunu anlatamazdı; satır düzeyinde kilit ise bandı "bazı satırlar
+  // kilitli" demeye zorlar ve kullanıcı hangisinin donduğunu tek tek arardı.
+  // Bölme, `moduleKey`in kategori düzeyinde kalmasını sağlayan karardır.
   {
     id: "warehouse",
-    label: "Depo & Satın Alma",
+    label: "Mal Kabul & Alış",
     icon: Warehouse,
-    description: "Mal kabul, alış siparişi ve iplik stok hareketlerinin katılık ayarları.",
+    description: "Mal kabul ve alış siparişi katılık ayarları.",
     keywords:
       "depo ambar mal kabul giriş irsaliye alış satın alma sipariş tedarikçi fazla kabul tolerans " +
-      "iplik kg stok bakiye eksi negatif birim fiyat zorunlu maliyet",
+      "birim fiyat zorunlu maliyet ticaret",
     kind: "flags",
     section: "trade",
+    // TİCARET MODÜLÜ — KİLİT. İki satırın da enforcement'ı
+    // `goods-receipt.service.confirm`tedir ve o servise giden router
+    // 2026-09-02'den beri `requireTicaretEnabled` taşır: ticaret kapalıyken mal
+    // kabul fişi HİÇ oluşturulamaz, yani bu iki katılık ayarının uygulanacağı
+    // bir kayıt yoktur. Kategori GÖRÜNÜR kalır — "açtım, kapatamıyorum"
+    // çıkmazının panel ikizi gizlemekle doğardı, kilitlemekle değil (modül her
+    // zaman Modüller sekmesinden geri açılabilir).
+    moduleKey: "ticaretEnabled",
     flags: [
-      {
-        key: "yarnBlockNegativeBalanceEnabled",
-        title: "İplik stoğu eksi bakiyeye düşemesin",
-        summary: "Bakiyeyi eksiye düşürecek iplik çıkışı reddedilir; ters/düzeltme kayıtları muaf.",
-        defaultOn: false,
-        audience: ["Depocu"],
-        desc: "Açıkken iplik ÇIKIŞI, o kalemin ilgili depodaki kg bakiyesini eksiye düşürecekse reddedilir. Kapalıyken (varsayılan) kayıt geçer ve bakiye eksiye düşebilir. Ters/düzeltme kayıtları ile belge iptalleri MUAFTIR — yanlış girilmiş bir hareket 'bakiye yetmiyor' diye geri alınamaz kalmamalı. ⚠️ Açmadan önce depoların açılış/devir bakiyelerinin girildiğinden emin olun: sistemde 0 görünen dolu bir depodan tek çıkış bile yapılamaz.",
-      },
       {
         key: "purchaseBlockOverReceiptEnabled",
         title: "Siparişten fazla mal kabulünü engelle",
@@ -829,6 +881,31 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         defaultOn: false,
         audience: ["Depocu", "Muhasebeci"],
         desc: "Açıkken satırda birim fiyat yoksa ve siparişten de çözülemiyorsa mal kabul kaydedilemez. Gerekçe: fiyat kabul ANINDA donar ve alış faturası taslağı ile maliyet oradan doğar; sonradan girilen fiyat geçmişe dönük maliyet düzeltmesi demektir. Kapalıyken (varsayılan) fiyatsız kabul yapılabilir, fatura aşamasında girilir. Ters/iptal satırları fiyat taşımaz, muaftır. Bedelsiz mal için Muhasebe'deki 'Sıfır fiyatlı fatura satırına izin ver' ayarıyla birlikte düşünün.",
+      },
+    ],
+  },
+  {
+    // 2026-09-03'te "Depo & Satın Alma"dan AYRILDI: tek satır, ama başka bir
+    // MODÜLÜN satırı (`iplik.enabled`). Karma kategoride kilit anlatılamıyordu.
+    // ⚠️ KİLİT ETKİN DEĞERE bakar (`ticaret && iplik`): İplik, Ticaret'e
+    // bağımlıdır ve ticaret kapalıyken iplik açık BIRAKILMIŞ olsa bile ekran
+    // çalışmaz. Zinciri çözen tek yer `resolveSettingsModuleState`.
+    id: "yarn",
+    label: "İplik",
+    icon: Boxes,
+    description: "İplik kg stok hareketlerinin katılık ayarları.",
+    keywords: "iplik kg stok bakiye eksi negatif çıkış sayım düzeltme depo yarn",
+    kind: "flags",
+    section: "trade",
+    moduleKey: "iplikEnabled",
+    flags: [
+      {
+        key: "yarnBlockNegativeBalanceEnabled",
+        title: "İplik stoğu eksi bakiyeye düşemesin",
+        summary: "Bakiyeyi eksiye düşürecek iplik çıkışı reddedilir; ters/düzeltme kayıtları muaf.",
+        defaultOn: false,
+        audience: ["Depocu"],
+        desc: "Açıkken iplik ÇIKIŞI, o kalemin ilgili depodaki kg bakiyesini eksiye düşürecekse reddedilir. Kapalıyken (varsayılan) kayıt geçer ve bakiye eksiye düşebilir. Ters/düzeltme kayıtları ile belge iptalleri MUAFTIR — yanlış girilmiş bir hareket 'bakiye yetmiyor' diye geri alınamaz kalmamalı. ⚠️ Açmadan önce depoların açılış/devir bakiyelerinin girildiğinden emin olun: sistemde 0 görünen dolu bir depodan tek çıkış bile yapılamaz.",
       },
     ],
   },

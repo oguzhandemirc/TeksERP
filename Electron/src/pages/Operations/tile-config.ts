@@ -24,6 +24,14 @@ import type { OperationGroupKey } from "./groups-config";
 import { isYarnStockVisible } from "./Yarn/yarn-regime";
 import { isPurchaseOrdersVisible } from "./PurchaseOrders/po-regime";
 import { isStockCountVisible, STOCK_COUNTS_PATH } from "./StockCounts/stockCount-regime";
+import { isGoodsReceiptVisible } from "./GoodsReceipts/goodsReceipt-regime";
+// P5 (2026-09-03) — üretim karoları `production.enabled` bayrağının arkasına
+// alındı; üçü de `requireProductionEnabled` taşıyan router'lara bakıyor.
+import {
+  isKursunPlanningVisible,
+  isProductBalanceVisible,
+  isWorkOrdersVisible,
+} from "./production-regime";
 
 /**
  * Karo görünürlüğünün bağlı olduğu ÇALIŞMA ANI durumu (hub + komut paleti).
@@ -75,17 +83,23 @@ export interface OperationsVisibilityContext {
    * Üretim modülü açık mı (`production.enabled`, varsayılan AÇIK). Belirsizken
    * TRUE'ya düşülür — backend varsayılanı da odur.
    *
-   * ⚠️ ALAN LOAD-BEARING AMA BUGÜN HİÇBİR KARO KARARINI DEĞİŞTİRMİYOR, ve bu
-   * bilinçli: komut paletinin Genel Ayarlar girişleri `settingsCategoryVisibleWhen`
-   * yüklemini TAŞIYOR (kopyalamıyor) ve o yüklem `SettingsRegime` bekliyor —
-   * yani bu bağlamın iki rejim anahtarını da taşıması TİP ZORUNLULUĞU.
+   * 2026-09-03 (P5): artık GERÇEKTEN karo kararı veriyor — İş Emirleri · Kumaş
+   * Dengesi · Kurşun Planlama (Operasyon) ve Üretim Rotaları · İş Emri
+   * Şablonları · Refakat Kartı (Tanımlar) bu bayrağa bağlandı. Yüklemler saf
+   * katmanda: `Operations/production-regime.ts` · `Definitions/production-regime.ts`.
+   * Backend ikizi `requireProductionEnabled` (route · iş emri · tambur · kurşun ·
+   * parti · refakat kartı router'ları).
    *
-   * 2026-09-02: backend'de artık `requireProductionEnabled` diye GERÇEK bir kapı
-   * var (route · iş emri · tambur · kurşun · parti · refakat kartı router'ları).
-   * Karoların ve ayar kategorilerinin bu bayrağın arkasına alınması yine de ayrı
-   * bir paketin işidir (P5) — bugün kapı arkasında OLMAYAN yüzeyler de var
-   * (`/api/rolls` bilinçli kapısız), yani gizlemek yanlış vaat olurdu.
-   * Ölçen bekçi: `Teks-Erp/scripts/test_feature_flag_contract.ts` §14.
+   * ⚠️ ALAN AYRICA TİP ZORUNLULUĞU: komut paletinin Genel Ayarlar girişleri
+   * `settingsCategoryVisibleWhen` yüklemini TAŞIYOR (kopyalamıyor) ve o yüklem
+   * `SettingsRegime` bekliyor — yani bu bağlam iki rejim anahtarını da taşımak
+   * zorunda. Karo bağı düşse bile alan kalır.
+   *
+   * ⚠️ AYAR KATEGORİLERİ AYRI BİR SORU ve orada kapı GİZLEME değil KİLİTTİR
+   * (`SettingsCategory.moduleKey`): bu bayrağın arkasında OLMAYAN yüzeyler de
+   * var (`/api/rolls` bilinçli kapısız), yani ayar sekmesini gizlemek "açtım,
+   * kapatamıyorum" çıkmazı üretirdi. Ölçen bekçi:
+   * `Teks-Erp/scripts/test_feature_flag_contract.ts` §14 / §14b.
    */
   productionEnabled: boolean;
   /**
@@ -157,6 +171,11 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/work-orders",
     group: "production",
     permission: "workorder:read",
+    // ÜRETİM MODÜLÜ (2026-09-03): backend `workorder.routes` zaten
+    // `requireProductionEnabled` taşıyordu; karo bayraksızdı → modül kapalı bir
+    // kurulumda kart görünür, tıklayınca 403. Yüklem SAF modülden DOĞRUDAN
+    // geçirilir (sarmalayan ok fonksiyonu YAZILMAZ — palet kimlik testi).
+    visibleWhen: isWorkOrdersVisible,
   },
   {
     key: "product-balance",
@@ -166,6 +185,8 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/product-balance",
     group: "planning",
     permission: "workorder:read",
+    // Backend ikizi `production-balance.routes` → `requireProductionEnabled`.
+    visibleWhen: isProductBalanceVisible,
   },
   {
     key: "rolls",
@@ -183,10 +204,16 @@ export const operationsTiles: OperationsTile[] = [
     icon: PackagePlus,
     to: "/operations/goods-receipts",
     group: "warehouse",
-    // Kapı İZİN: bu ekran yalnız alım-satım kurulumundadır (üretici fabrika malı
-    // KK1'den alır) ve izin hiçbir varsayılan rol şablonunda YOK.
+    // İKİ KAPI (2026-09-03'te düzeltildi): İZİN + REJİM.
+    // ① İzin — `goods-receipt:read`, hiçbir varsayılan rol şablonunda YOK.
+    // ② Rejim — `ticaret.enabled`. Eski yorum "kapı İZİN" diyordu ve bu, backend
+    //    2026-09-02'de `requireTicaretEnabled`e geçtikten sonra YANLIŞ hâle
+    //    gelmişti: modül kapalı + izin verilmiş bir kurulumda karo çizilir,
+    //    tıklayınca uç 403 verirdi (canlı ayrışma, `test_screen_catalog`
+    //    KARO_BEKLEYEN listesinde park ediliyordu).
     // ⚠️ `depoMultiEnabled` şartı KONMAZ — tek depolu ticaret firması da kullanır.
     permission: "goods-receipt:read",
+    visibleWhen: isGoodsReceiptVisible,
   },
   // ── Paket D (2026-08-14) — ticaret paketi ─────────────────────────────────
   // İkisi de `visibleWhen` ile REJİM bayrağına bağlı: fabrikada
@@ -330,9 +357,13 @@ export const operationsTiles: OperationsTile[] = [
     to: "/operations/kursun-dagitim",
     group: "production",
     // Route ile hizalı: kaliteci sırayı yönetir, dağıtımcı makineye verir —
-    // ikisi de aynı ekranı kullanır. `visibleWhen` YOK: ekran artık
-    // `production.kursunBypassEnabled` bayrağından bağımsız (bayrak yalnız
-    // ekranın içindeki dağıtım kontrollerini açar/kapatır).
+    // ikisi de aynı ekranı kullanır.
     permissionAny: ["quality:write", "workorder:distribute"],
+    // ⚠️ İKİ FARKLI BAYRAK, KARIŞTIRMA: ekran hâlâ
+    // `production.kursunBypassEnabled`ten BAĞIMSIZ (o bayrak yalnız ekranın
+    // İÇİNDEKİ dağıtım kontrollerini açar/kapatır). Buradaki kapı MODÜL
+    // anahtarı `production.enabled` — backend ikizi `kursun-bypass.routes`
+    // üzerindeki `requireProductionEnabled` (2026-09-03).
+    visibleWhen: isKursunPlanningVisible,
   },
 ];

@@ -27,15 +27,22 @@ export interface ReportTile {
   to: string;
   permission?: string;
   /**
-   * Bu karo yalnız ilgili REJİM bayrağı AÇIKKEN çizilir (`nav-config.ts` deseni).
+   * Bu karo yalnız ilgili MODÜL bayrağı AÇIKKEN çizilir (`nav-config.ts` deseni).
    *
    * ⚠️ İzin filtresi TEK BAŞINA YETMEZ: `ReportsHubPage` süzgeci `isAdmin ||`
    * ile kısa devre yapıyor, yani `report:finance` taşımayan bir ADMİN bile
    * karoyu görürdü — tıklayınca üç ucun üçü de `requireFinanceEnabled` ile 403
    * döner ve kullanıcı sebebi hiçbir yerde göremez. Bayrak GÖRÜNÜRLÜK,
    * izin KİŞİ kapısıdır; ikisi birbirinin yerine geçmez.
+   *
+   * ⚠️ DEĞER, BAĞLAM ALANININ ADIDIR (`OperationsVisibilityContext`) ve karar
+   * O BAĞLAMDAN okunur — `useFeatureFlags()`ten değil. Sebep varsayılanların
+   * YÖNÜ: `financeEnabled` belirsizken KAPALI, `productionEnabled` belirsizken
+   * AÇIK sayılır. İkisini tek bir `?? false` ile okumak, fabrikada üretim
+   * raporları karosunun bir an kaybolup geri gelmesi demekti ("sıfır görünür
+   * fark" ihlali). Zincir tek yerde: `useOperationsVisibilityContext`.
    */
-  featureFlag?: "financeEnabled";
+  featureFlag?: "financeEnabled" | "productionEnabled";
 }
 
 /**
@@ -73,6 +80,12 @@ export const reportTiles: ReportTile[] = [
     icon: Factory,
     to: "/reports/production",
     permission: "report:production",
+    // ÜRETİM MODÜLÜ (2026-09-03). ⚠️ BİLİNÇLİ ASİMETRİ: `/api/reports` KARMA bir
+    // router ve BİLEREK kapısız (`module.middleware` başlığı) — yani modül
+    // kapalıyken karo gizlenir ama uç 200 dönmeye devam eder. Bu, "karo var /
+    // uç 403" ayrışmasının TERSİ ve zararsız yönüdür: kullanıcı görmediği bir
+    // ekranı açmaz; uç bazlı ayrım yazıldığı gün kapı da eklenir.
+    featureFlag: "productionEnabled",
   },
   {
     key: "sales",
@@ -89,6 +102,8 @@ export const reportTiles: ReportTile[] = [
     icon: ShieldCheck,
     to: "/reports/quality",
     permission: "report:quality",
+    // Üretim modülü — `reports/production` ile aynı karma-router asimetrisi.
+    featureFlag: "productionEnabled",
   },
   {
     key: "inventory",

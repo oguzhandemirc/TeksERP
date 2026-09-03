@@ -11,6 +11,18 @@ export interface CommandEntry {
   /** Birden çok izinden HERHANGİ biri yeterli (tile permissionAny ile hizalı). */
   permissionAny?: string[];
   adminOnly?: boolean;
+  /**
+   * Yalnız satıcı (süperadmin) hesabına gösterilir — `SystemTile.superadminOnly`
+   * aynası.
+   *
+   * ⚠️ `visibleWhen` ile ANLATILAMAZ: o yüklem modül bağlamını (`ctx`) okur,
+   * bu ise KİMLİK sorusudur ve bağlam kimlik taşımaz (taşısaydı karo bağlamı
+   * bir yetki nesnesine dönüşürdü). Süzgeç `CommandPalette` içinde, tek
+   * kaynaktan (`lib/superadmin-gate.ts`) uygulanır.
+   *
+   * ⚠️ İZNİN YERİNE GEÇMEZ: giriş kendi `permission`ını taşımaya devam eder.
+   */
+  superadminOnly?: boolean;
   /** Görünmeyen ek arama anahtarları (cmdk eşleşme değerine eklenir). */
   keywords?: string;
   /**

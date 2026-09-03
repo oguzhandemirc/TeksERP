@@ -13,9 +13,12 @@ import {
   emptySettingsHit,
   flattenSettingsGroups,
   groupSettingsCategories,
+  isCategoryModuleClosed,
   resolveActiveSettingsCategory,
+  resolveSettingsModuleState,
   resolveSettingsRegime,
   searchSettings,
+  settingsModuleLabel,
   settingsHitCount,
 } from "./settings-groups";
 import { FeatureFlagSection } from "./FeatureFlagSection";
@@ -49,8 +52,15 @@ export function GeneralSettingsPage() {
   // açılamazdı (bkz. settings-config `SettingsRegimeKey` gerekçesi).
   const flagsQ = useFeatureFlags();
   const regime = resolveSettingsRegime(flagsQ.data?.data);
+  // ⚠️ MODÜL DURUMU REJİMDEN AYRI OKUNUR ve gruplamaya GİRMEZ: rejim GİZLER,
+  // modül KİLİTLER. `groupSettingsCategories`e geçirilseydi kilit sessizce
+  // gizlemeye dönerdi — kullanıcı ayarın hangi değerde donduğunu göremezdi.
+  const modules = resolveSettingsModuleState(flagsQ.data?.data);
   const groups = useMemo(
     () => groupSettingsCategories(permitted, regime),
+    // ⚠️ DİZİ ELLE GÜNCELLENİR (exhaustive-deps kapalı): alan eklenip burası
+    // güncellenmezse gruplama SESSİZCE bayat kalır ve derleme DÜŞMEZ.
+    // `modules` bilerek YOK — gruplama onu okumuyor (kilit ≠ gizleme).
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [permitted.map((c) => c.id).join(","), regime.productionEnabled, regime.financeEnabled],
   );
@@ -213,6 +223,8 @@ export function GeneralSettingsPage() {
                     numberFlags={cat.numberFlags}
                     settingFields={cat.settingFields}
                     superadminOnly={cat.superadminOnly}
+                    moduleClosed={isCategoryModuleClosed(cat, modules)}
+                    moduleLabel={cat.moduleKey ? settingsModuleLabel(cat.moduleKey) : undefined}
                     // Arama açıkken isabetsiz kategori BOŞ isabet alır: aksi
                     // halde "eşleşen ayar yok" diyen şeridin yanında dolu bir
                     // liste kalırdı.

@@ -61,7 +61,12 @@ export function WarehousesPage() {
     <>
       <CrudPage<Warehouse>
         title="Depolar"
-        description="Fiziksel depo tanımları. Deposu belirtilmeyen her giriş VARSAYILAN depoya yazılır; ikinci depo açıldığında depo seçicileri ve transfer ekranı kendiliğinden görünür. Satırdaki “Hareketler” düğmesi o deponun defterini açar: hangi mal nereden girdi, nereye çıktı."
+        // ⚠️ 2026-09-03: "ikinci depo açıldığında seçiciler KENDİLİĞİNDEN görünür"
+        // cümlesi 2026-09-02'de YANLIŞ hâle geldi — çok-depoluluk artık veriden
+        // türetilmiyor, açık bir modül anahtarı (`depo.multiEnabled`). Metin
+        // düzeltilmezse kullanıcı ikinci depoyu açar, hiçbir şey değişmez ve
+        // sebebi tam da bu ekranda yanlış yazıyor olurdu.
+        description="Fiziksel depo tanımları. Deposu belirtilmeyen her giriş VARSAYILAN depoya yazılır. Depo seçicileri ve Depo Transferi ekranı ÇOKLU DEPO MODÜLÜ açıldığında görünür — ikinci depo açmak tek başına yetmez. Satırdaki “Hareketler” düğmesi o deponun defterini açar: hangi mal nereden girdi, nereye çıktı."
         entityName="Depo"
         queryKey="warehouses"
         service={warehouseService}

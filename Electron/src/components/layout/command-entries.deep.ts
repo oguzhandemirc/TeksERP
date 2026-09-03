@@ -8,6 +8,7 @@ import {
 } from "@/pages/GeneralSettings/settings-config";
 import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
+import { isStationCapabilitiesVisible } from "@/pages/Definitions/production-regime";
 import { operationGroups } from "@/pages/Operations/groups-config";
 import { accessGroups } from "@/pages/Access/tile-config";
 import { systemTileSections } from "@/pages/System/tile-config";
@@ -140,6 +141,9 @@ const orphanPageEntries: CommandEntry[] = [
     permission: "station:read",
     keywords: "istasyon yetenek renk özellik kabiliyet",
     deep: true,
+    // ⚠️ Karosu YOK → palet tek keşif yolu ve kapıyı ELLE taşımak zorunda
+    // (gerekçe yüklemin kendi JSDoc'unda). P5 doğrulamasının bulgusu.
+    visibleWhen: isStationCapabilitiesVisible,
   },
 ];
 

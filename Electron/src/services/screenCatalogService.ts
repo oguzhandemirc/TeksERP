@@ -21,6 +21,20 @@ export interface ScreenEntry {
   /** Ekranı AÇMAK için gereken izinler — HERHANGİ BİRİ yeterli. */
   requires: string[];
   capabilities: ScreenCapability[];
+  /**
+   * Bu ekranın ait olduğu MODÜL ya da çekirdek blok (2026-09-03 / P6).
+   *
+   * Üç biçim: modül anahtarı (`productionEnabled`), çekirdek blok
+   * (`cekirdek:ana-veri`) ya da anahtarı henüz olmayan planlanan modül
+   * (`planlanan:kartela`). Sistem Profili ekranının "bu modülü kapatırsan şu
+   * ekranlar gizlenir" önizlemesi bu alandan üretilir.
+   *
+   * ⚠️ OPSİYONEL YAZILDI ve bu bilinçli: alanı taşımayan ESKİ bir backend'e
+   * bağlanan panel, listeyi okuyamamış gibi değil, alanı boş görmüş gibi
+   * davranmalı. Önizleme tarafı zaten fail-closed ("liste okunamadı") — boş
+   * liste "hiçbir şey gizlenmeyecek" YALANINI basmaz.
+   */
+  modul?: string;
 }
 
 export interface ScreenCatalog {

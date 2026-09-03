@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { allCommandEntries, commandSections, findBreadcrumbParent } from "./command-entries";
+import { navGroups } from "./nav-config";
+import { reportTiles } from "@/pages/Reports/tile-config";
 
 /**
  * KOMUT PALETİ BEKÇİSİ.
@@ -98,5 +100,53 @@ describe("komut paleti kataloğu", () => {
   it("bölüm başlıkları benzersiz (cmdk grupları çakışmasın)", () => {
     const headings = commandSections.map((s) => s.heading);
     expect(new Set(headings).size).toBe(headings.length);
+  });
+
+  // ===========================================================================
+  // ⭐ ÜÇÜNCÜ GİRİŞ KAPISI — MENÜDE GİZLENEN SATIR PALETTE KALMAZ (2026-09-03)
+  // ===========================================================================
+  // 2026-09-03 öncesi `navGroups` girdileri palete kopyalanırken YALNIZ izin ve
+  // `adminOnly` taşınıyordu; `featureFlag` DÜŞÜYORDU. Tek örnek "Muhasebe"ydi ve
+  // zararsız görünüyordu — çünkü bayrak kapalı bir kurulumda `finance:read` izni
+  // de atanmaz. Zararsızlık bir TESADÜFE dayanıyordu. Union beş modüle
+  // genişlerken tesadüf biter: bir gün izni herkeste olan bir modül satırı
+  // eklenir ve palet, menüde olmayan ekrana derin bağlantı verir.
+  it("⭐ nav satırının modül bayrağı palet girişine TAŞINIR", () => {
+    const navEntries = commandSections
+      .filter((s) => navGroups.some((g) => g.label === s.heading))
+      .flatMap((s) => s.entries);
+    // Körlük zemini: bugün bayrak taşıyan en az bir nav satırı var.
+    const flagged = navGroups.flatMap((g) => g.items).filter((i) => i.featureFlag);
+    expect(flagged.length).toBeGreaterThanOrEqual(1);
+
+    for (const item of navGroups.flatMap((g) => g.items)) {
+      const entry = navEntries.find((e) => e.key === `nav:${item.to}`);
+      expect(entry, `${item.to} palet girişi yok`).toBeDefined();
+      if (!item.featureFlag) {
+        expect(entry?.visibleWhen, item.to).toBeUndefined();
+        continue;
+      }
+      expect(entry?.visibleWhen, `${item.to} bayrağı taşımıyor`).toBeDefined();
+      // Yüklem GERÇEKTEN o alanı okuyor mu — kimlik değil DAVRANIŞ ölçülüyor
+      // (alan adı bir string; yanlış alanı okuyan bir yüklem de "tanımlı"dır).
+      const ctxTrue = { [item.featureFlag]: true } as never;
+      const ctxFalse = { [item.featureFlag]: false } as never;
+      expect(entry?.visibleWhen?.(ctxTrue), item.to).toBe(true);
+      expect(entry?.visibleWhen?.(ctxFalse), item.to).toBe(false);
+    }
+  });
+
+  it("⭐ rapor kategorisinin modül bayrağı da palet girişine taşınır (hub + ALT raporlar)", () => {
+    const flagged = reportTiles.filter((t) => t.featureFlag);
+    expect(flagged.length).toBeGreaterThanOrEqual(1);
+    for (const cat of flagged) {
+      const section = commandSections.find((s) => s.heading === `Raporlar · ${cat.title}`);
+      expect(section, cat.key).toBeDefined();
+      // Alt rapor route'ları da kategori kapısındadır → hepsi yüklem taşımalı.
+      for (const e of section!.entries) {
+        const ctxFalse = { [cat.featureFlag!]: false } as never;
+        expect(e.visibleWhen?.(ctxFalse), `${cat.key}/${e.key}`).toBe(false);
+      }
+    }
   });
 });

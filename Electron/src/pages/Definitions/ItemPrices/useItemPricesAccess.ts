@@ -30,7 +30,9 @@ export function useItemPricesAccess(): ItemPricesAccessState {
   // ekranı bir an için açmak, açık bir kurulumda bir an geç açmaktan kötüdür.
   // `isLoading` ayrıca dönüyor ki ekran "modül kapalı" cümlesini erken basmasın.
   const access: ItemPriceAccess = {
-    financeEnabled: flags.data?.data?.financeEnabled ?? false,
+    // ⚠️ TİCARET bayrağı (2026-09-03) — backend `item-price.routes` kapısı
+    // `requireTicaretEnabled`. Ön muhasebe bayrağı buraya GERİ KONULMAZ.
+    ticaretEnabled: flags.data?.data?.ticaretEnabled ?? false,
     canRead: hasPermission("item:read"),
     canWrite: hasPermission("price:write"),
   };

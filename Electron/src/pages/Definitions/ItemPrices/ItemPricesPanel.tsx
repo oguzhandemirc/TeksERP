@@ -139,12 +139,13 @@ export function ItemPricesPanel({ itemId, itemLabel, unit, hideResolveCheck }: P
     return <p className="text-sm text-muted-foreground">Yükleniyor…</p>;
   }
 
-  if (!access.financeEnabled) {
-    // Backend'in cümlesiyle aynı yönü gösterir (403: "Genel Ayarlar → Muhasebe").
+  if (!access.ticaretEnabled) {
+    // Backend'in cümlesiyle aynı yönü gösterir (403: "Ticaret modülü bu
+    // kurulumda kapalı — Genel Ayarlar → Modüller").
     return (
       <Callout tone="muted" title="Fiyat tanımları bu kurulumda kapalı">
-        Kalem fiyatı ön muhasebe paketinin bir parçasıdır. Genel Ayarlar → Muhasebe bölümünden
-        açılabilir.
+        Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Genel Ayarlar →
+        Modüller bölümünden açılabilir.
       </Callout>
     );
   }

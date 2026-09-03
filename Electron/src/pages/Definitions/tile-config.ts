@@ -27,6 +27,13 @@ import type { OperationsVisibilityContext } from "@/pages/Operations/tile-config
 import { DOCUMENT_DESIGN_READ } from "@/lib/permissions";
 // Paket D — görünürlük SAF katmanda (bkz. ItemPrices/regime.ts gerekçesi).
 import { itemPricesTileVisible } from "./ItemPrices/regime";
+// P5 (2026-09-03) — Tanımlar'ın ÜÇ üretim karosu `production.enabled`e bağlandı
+// (çekirdek ana veri karoları bilerek dışarıda; gerekçe dosya başlığında).
+import {
+  isProductRecipesVisible,
+  isRoutesVisible,
+  isTravelerCardVisible,
+} from "./production-regime";
 
 export interface DefinitionTile {
   key: string;
@@ -214,6 +221,8 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/routes",
     group: "production",
     permission: "station:read",
+    // Backend ikizi `route.routes` → `requireProductionEnabled`.
+    visibleWhen: isRoutesVisible,
   },
   {
     key: "product-recipes",
@@ -223,6 +232,7 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/product-recipes",
     group: "production",
     permission: "station:read",
+    visibleWhen: isProductRecipesVisible,
   },
   {
     // TEK KART, DÖRT SEKME — dört ayrı kart menüyü kalabalıklaştırırdı ve
@@ -264,6 +274,11 @@ export const definitionTiles: DefinitionTile[] = [
     to: "/definitions/traveler-card",
     group: "cikti",
     permissionAny: DOCUMENT_DESIGN_READ,
+    // ⚠️ KARTIN AYARI üretim nesnesidir (manifestoda `productionEnabled`);
+    // hemen altındaki "Refakat Kartı Şablonları" ise BELGE nesnesidir ve
+    // koşulsuz kalır. İkisini aynı kefeye koymak, üretim kapalı bir kurulumda
+    // belge tasarımcısını da kilitlerdi.
+    visibleWhen: isTravelerCardVisible,
   },
   {
     key: "traveler-card-studio",

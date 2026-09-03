@@ -39,11 +39,15 @@ import {
   isSettingRowVisible,
   normalizeSettingsSearch,
   resolveActiveSettingsCategory,
+  isCategoryModuleClosed,
+  resolveSettingsModuleState,
   resolveSettingsRegime,
   searchSettings,
   settingsCategoryVisibleWhen,
   settingsHitCount,
+  settingsModuleLabel,
 } from "./settings-groups";
+import { MODULE_LABELS } from "@/lib/module-flags";
 
 const FACTORY = { productionEnabled: true, financeEnabled: false };
 const TRADE = { productionEnabled: false, financeEnabled: true };
@@ -131,8 +135,8 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
   // ⭐ Mal Kabul'ün ayarları HER REJİMDE ulaşılabilir. Ekranın kapısı
   // `financeEnabled` DEĞİLDİR (2026-09-02'den beri `requireTicaretEnabled`) ve
   // enforcement koşuyor; gizlenirlerse "açtım, kapatamıyorum" çıkmazı doğar.
-  // Kategori bir gün `ticaretEnabled` ile kapılanacaksa o ayrı bir karardır
-  // (P5) — bu pakette hiçbir kategorinin rejimi değişmedi.
+  // 2026-09-03'te kategoriye TİCARET KİLİDİ (`moduleKey`) eklendi — kilit
+  // GİZLEME DEĞİLDİR, bu yüzden aşağıdaki iddia aynen geçerli kalır.
   it("depo/satın alma kategorisi rejimden BAĞIMSIZ (kapatılamaz ayar çıkmazı)", () => {
     const warehouse = SETTINGS_CATEGORIES.find((c) => c.id === "warehouse");
     expect(warehouse?.regime).toBeUndefined();
@@ -157,6 +161,104 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
       (c) => c.id,
     );
     expect(ids).toEqual(expect.arrayContaining(["work-orders", "production", "kartela"]));
+  });
+
+  // ===========================================================================
+  // ⭐ MODÜL KİLİDİ — GİZLEMEZ (2026-09-03, P5)
+  // ===========================================================================
+  // `regime` GİZLER, `moduleKey` KİLİTLER. İkisi karışırsa arıza şudur: modül
+  // kapalı bir kurulumda kategori hiç çizilmez, kullanıcı ayarın hangi değerde
+  // donduğunu göremez ve modülü açtığında da geri gelene kadar bunu hiçbir
+  // yerde okuyamaz. Aşağıdaki üç kontrol o karışmayı imkânsız kılar.
+  it("⭐ moduleKey taşıyan kategori HER modül durumunda GÖRÜNÜR (kilit ≠ gizleme)", () => {
+    const locked = SETTINGS_CATEGORIES.filter((c) => c.moduleKey);
+    // Zemin: liste boşalırsa "ihlal yok" ile "hiçbir şeye bakmadım" aynı yeşile
+    // çıkardı.
+    expect(locked.length).toBeGreaterThanOrEqual(3);
+    for (const regime of [FACTORY, TRADE, BOTH]) {
+      const ids = flattenSettingsGroups(groupSettingsCategories(SETTINGS_CATEGORIES, regime)).map(
+        (c) => c.id,
+      );
+      for (const c of locked) expect(ids, `${c.id} @ ${JSON.stringify(regime)}`).toContain(c.id);
+    }
+  });
+
+  it("⭐ palet yüklemi moduleKey'den ETKİLENMEZ (kilitli sekmeye derin bağlantı DURUR)", () => {
+    for (const c of SETTINGS_CATEGORIES.filter((x) => x.moduleKey && !x.regime)) {
+      expect(settingsCategoryVisibleWhen(c), c.id).toBeUndefined();
+    }
+  });
+
+  it("⭐ hiçbir kategori hem regime hem moduleKey taşımaz (iki farklı semantik)", () => {
+    const ikisi = SETTINGS_CATEGORIES.filter((c) => c.regime && c.moduleKey).map((c) => c.id);
+    // "Gizli VE kilitli" anlamsızdır: gizli bir kategorinin kilidi görünmez.
+    expect(ikisi).toEqual([]);
+  });
+
+  it("⭐ modül anahtarlarının EVİ (modules) ve demo kilitlenemez", () => {
+    for (const id of ["modules", "demo"]) {
+      expect(SETTINGS_CATEGORIES.find((c) => c.id === id)?.moduleKey, id).toBeUndefined();
+    }
+  });
+
+  it("⭐ KK1 satırlarını taşıyan 'Üretim — Saha' kategorisi KİLİTLENMEZ", () => {
+    // Gerekçe ölçüldü: KK1 tuzağı/ağırlık/scan-back gibi satırların enforcement'ı
+    // `/api/rolls` üzerinden koşuyor ve o router BİLİNÇLİ olarak üretim kapısının
+    // ARKASINDA DEĞİL. Üretim kapalı bir kurulumda (toptancı) ham giriş hâlâ
+    // anlamlıdır; kategoriyi kilitlemek çalışan bir davranışın ayarını dondururdu.
+    expect(SETTINGS_CATEGORIES.find((c) => c.id === "production")?.moduleKey).toBeUndefined();
+    // Kartela modülünün ANAHTARI yok (tasarımda planlanan) → kilitlenemez.
+    expect(SETTINGS_CATEGORIES.find((c) => c.id === "kartela")?.moduleKey).toBeUndefined();
+  });
+
+  it("isCategoryModuleClosed: anahtarsız kategori ASLA kilitli değil", () => {
+    const modules = resolveSettingsModuleState({});
+    for (const c of SETTINGS_CATEGORIES.filter((x) => !x.moduleKey)) {
+      expect(isCategoryModuleClosed(c, modules), c.id).toBe(false);
+    }
+  });
+
+  it("⭐ modül durumu varsayılanları backend ile AYNI YÖNDE (üretim AÇIK, gerisi kapalı)", () => {
+    const bos = resolveSettingsModuleState(undefined);
+    expect(bos).toEqual({
+      // Bayrak yüklenmeden "İş Emirleri kilitli" yazmak, bir saniyelik yalandır.
+      productionEnabled: true,
+      financeEnabled: false,
+      ticaretEnabled: false,
+      iplikEnabled: false,
+      depoMultiEnabled: false,
+    });
+  });
+
+  it("⭐ iplik ETKİN değerdir (ticaret kapalıyken iplik açık bile olsa KİLİTLİ)", () => {
+    const ticaretKapali = resolveSettingsModuleState({ ticaretEnabled: false, iplikEnabled: true });
+    expect(ticaretKapali.iplikEnabled).toBe(false);
+    const ikisiAcik = resolveSettingsModuleState({ ticaretEnabled: true, iplikEnabled: true });
+    expect(ikisiAcik.iplikEnabled).toBe(true);
+    const yarn = SETTINGS_CATEGORIES.find((c) => c.id === "yarn");
+    expect(yarn?.moduleKey).toBe("iplikEnabled");
+    expect(isCategoryModuleClosed(yarn!, ticaretKapali)).toBe(true);
+    expect(isCategoryModuleClosed(yarn!, ikisiAcik)).toBe(false);
+  });
+
+  it("⭐ karma kategori KALMADI: her kilitli kategorinin satırları TEK modüle ait", () => {
+    // Bu iddianın somut ölçümü: iplik satırı "Mal Kabul & Alış"tan ayrıldı.
+    // Karma kalsaydı bant "bazı satırlar kilitli" demek zorunda kalırdı.
+    const warehouse = SETTINGS_CATEGORIES.find((c) => c.id === "warehouse");
+    expect(warehouse?.moduleKey).toBe("ticaretEnabled");
+    expect((warehouse?.flags ?? []).map((f) => f.key)).toEqual([
+      "purchaseBlockOverReceiptEnabled",
+      "goodsReceiptRequirePriceEnabled",
+    ]);
+    expect(
+      (SETTINGS_CATEGORIES.find((c) => c.id === "yarn")?.flags ?? []).map((f) => f.key),
+    ).toEqual(["yarnBlockNegativeBalanceEnabled"]);
+  });
+
+  it("kilit bandındaki modül adı backend AYNASINDAN gelir", () => {
+    for (const c of SETTINGS_CATEGORIES.filter((x) => x.moduleKey)) {
+      expect(settingsModuleLabel(c.moduleKey!), c.id).toBe(MODULE_LABELS[c.moduleKey!]);
+    }
   });
 
   it("fabrikada (finance kapalı) YALNIZ muhasebe kategorisi gizlenir", () => {

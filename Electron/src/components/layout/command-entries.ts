@@ -11,9 +11,11 @@ import {
   SETTINGS_CATEGORIES,
 } from "@/pages/GeneralSettings/settings-config";
 import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
+import { regimePredicate } from "@/lib/regime-predicate";
 import { reportCommandSections } from "./command-entries.reports";
 import { deepCommandSections } from "./command-entries.deep";
 import type { CommandEntry, CommandSection } from "./command-entries.types";
+import { isWorkOrdersVisible } from "@/pages/Operations/production-regime";
 
 export type { CommandEntry, CommandSection } from "./command-entries.types";
 
@@ -38,6 +40,14 @@ export const commandSections: CommandSection[] = [
       to: item.to,
       permission: item.permission,
       adminOnly: item.adminOnly,
+      // ⚠️ MODÜL BAYRAĞI DA TAŞINIR (2026-09-03). Eskiden yalnız izin/adminOnly
+      // kopyalanıyordu: menüde bayrakla gizlenen satır PALETTE DURUYORDU. Bugün
+      // tek örnek "Muhasebe"ydi ve zararsız görünüyordu (bayrak kapalı bir
+      // kurulumda `finance:read` izni de atanmaz), ama zararsızlık bir TESADÜFE
+      // dayanıyordu. Union beş modüle genişlerken tesadüf biter — üçüncü giriş
+      // kapısı kuralla çelişirse kullanıcı paletten seçip 403/yönlendirme yer
+      // ve sebebini hiçbir yerde göremez ("Kurşun Sırası" dersi).
+      visibleWhen: item.featureFlag ? regimePredicate(item.featureFlag) : undefined,
     })),
   })),
   {
@@ -64,6 +74,12 @@ export const commandSections: CommandSection[] = [
         to: "/operations/work-orders/new",
         permission: "workorder:write",
         keywords: "iş emri oluştur ekle yeni üretim aç",
+        // ⚠️ KARO İLE AYNI YÜKLEM NESNESİ — karosuz girdiler kapıyı ELLE taşır.
+        // Yukarıdaki `operationsTiles` döngüsü yüklemi otomatik taşıyor; bu
+        // girdi o döngünün DIŞINDA olduğu için üretim modülü kapalıyken
+        // palette kalıyordu (karo gizli, giriş açık → form açılır, her istek
+        // `requireProductionEnabled` 403'ü alır). P5 doğrulaması ölçtü.
+        visibleWhen: isWorkOrdersVisible,
       },
     ],
   },
@@ -125,6 +141,10 @@ export const commandSections: CommandSection[] = [
       // yoksa Sistem hub'ının varsayılan kapısı. Palet ile karo/route ayrışırsa
       // kullanıcı paletten tıklayıp /forbidden'a düşer.
       permission: tile.permission ?? "admin:settings",
+      // ⚠️ KİMLİK KAPISI DA TAŞINIR: karo hub'da gizlenip palette kalsaydı
+      // fabrika yöneticisi satıcı ekranını Ctrl+K'dan bulurdu — hub karosunun
+      // gizlenme SEBEBİ (keşfe davet etmemek) o üçüncü kapıdan sızardı.
+      superadminOnly: tile.superadminOnly,
     })),
   },
   {
