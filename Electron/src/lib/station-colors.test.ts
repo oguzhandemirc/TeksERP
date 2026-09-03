@@ -6,7 +6,8 @@ describe("stationToneForKind", () => {
     expect(stationToneForKind("RAW_QC")).toBe("kk1");
     expect(stationToneForKind("PROCESS_QC")).toBe("process");
     expect(stationToneForKind("TAMBUR")).toBe("tambur");
-    expect(stationToneForKind("WAREHOUSE")).toBe("depo");
+    // ⚠️ "WAREHOUSE" backend enum'unda YOK (ölü daldı) — gerçek değer SHIPPING.
+    expect(stationToneForKind("SHIPPING")).toBe("depo");
   });
   it("bilinmeyen kind → process (varsayılan)", () => {
     expect(stationToneForKind("ANYTHING_ELSE")).toBe("process");

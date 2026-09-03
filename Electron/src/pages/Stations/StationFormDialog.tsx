@@ -29,6 +29,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
         isActive: initial.isActive,
         appliesColor: initial.appliesColor ?? false,
         appliesProperty: initial.appliesProperty ?? true,
+        appliesQuality: initial.appliesQuality ?? false,
         defaultCategoryId: initial.defaultCategoryId ?? null,
       }
     : stationFormDefaults;
@@ -122,7 +123,7 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               renk atanabilir hale gelir (2026-08-06 uyarısı). */}
           <FormField
             label="Yetenekler"
-            hint="Bu istasyondan geçen topa ne uygulanabilir? Fason istasyonlarda kategori de renk/özellik verebilir — ikisinden biri yeterlidir."
+            hint="Bu istasyondan geçen topa ne uygulanabilir? Renk/özellikte fason istasyonlarda KATEGORİ de verebilir — ikisinden biri yeterlidir. KALİTE'de kategori karşılığı YOKTUR: yalnız bu kutu belirler."
           >
             <div className="space-y-1.5">
               <label className="flex items-center gap-2 text-sm">
@@ -130,6 +131,15 @@ export function StationFormDialog({ open, onOpenChange, initial, onSubmit, isSub
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" {...form.register("appliesProperty")} /> Özellik uygular
+              </label>
+              {/* ⚠️ Kutu HER görev türünde görünür — gizli kural icat edilmez.
+                  KK1 (RAW_QC) ve Sevkiyat WO adımı olmadığı için orada etkisizdir.
+                  ⚠️ İkinci bir KK istasyonu tanımlayıp Kurşun→KK→Tambur rotası
+                  kurmayın: kurşun bypass uygunluğu "sonraki adım Tambur" şartına
+                  bakar ve sessizce kapanır (Faz B'de çözülecek). */}
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" {...form.register("appliesQuality")} /> Kalite kontrol
+                uygular (Kurşun + KK2 süreci bu istasyonda yürür)
               </label>
             </div>
           </FormField>

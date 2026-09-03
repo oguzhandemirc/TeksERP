@@ -12,6 +12,11 @@ export interface Station {
   appliesColor: boolean;
   /** Bu istasyon ÖZELLİK uygulayabilir mi? */
   appliesProperty: boolean;
+  /**
+   * Bu istasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü? (2026-09-03)
+   * Renk/özellikten farkı: fason kategorisinden türetilmez, atama listesi yoktur.
+   */
+  appliesQuality: boolean;
   defaultCategoryId: string | null;
   defaultCategory?: { id: string; code: string; name: string } | null;
   createdAt: string;

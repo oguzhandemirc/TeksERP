@@ -71,6 +71,7 @@ const STATION_EXPORT_COLUMNS: ExportColumn<StationMachineExportRow>[] = [
   { label: "İstasyon Durumu", value: (r) => (r.station.isActive ? "Aktif" : "Pasif") },
   { label: "Renk Uygular", value: (r) => (r.station.appliesColor ? "Evet" : "Hayır") },
   { label: "Özellik Uygular", value: (r) => (r.station.appliesProperty ? "Evet" : "Hayır") },
+  { label: "Kalite Kontrol Uygular", value: (r) => (r.station.appliesQuality ? "Evet" : "Hayır") },
   { label: "İstasyon Özellik Sayısı", value: (r) => r.propertyCount ?? "" },
   { label: "Makine Kodu", value: (r) => r.machine?.code ?? "" },
   { label: "Makine", value: (r) => r.machine?.name ?? "" },
@@ -85,6 +86,11 @@ const STATION_EXPORT_COLUMNS: ExportColumn<StationMachineExportRow>[] = [
   },
 ];
 
+// ⚠️ İSTEK GÖVDESİNİ ELLE KURAN HER KATMAN SESSİZ BİR ALLOWLIST'TİR
+// (2026-08-13 dersi). 2026-09-03 taramasında ölçüldü: `appliesColor` ve
+// `appliesProperty` kutuları formda vardı ama BURADAN GÖNDERİLMİYORDU — yani
+// yetenek kutuları ÖLÜYDÜ (kaydet, hiçbir şey değişmez). Yeni bir alan
+// eklerken bu satırı da ekle, yoksa kutu sessizce hiçbir şey yapmaz.
 const buildStationPayload = (v: StationFormValues, initial: Station | null): Partial<Station> => ({
   // Kod backend'de üretilir (IST+GGAAYY+NNNN); create'te gönderilmez, edit'te korunur.
   ...(initial?.code ? { code: initial.code } : {}),
@@ -93,6 +99,9 @@ const buildStationPayload = (v: StationFormValues, initial: Station | null): Par
   kind: v.kind,
   department: v.department || null,
   isActive: v.isActive,
+  appliesColor: v.appliesColor,
+  appliesProperty: v.appliesProperty,
+  appliesQuality: v.appliesQuality,
   defaultCategoryId: v.type === "EXTERNAL" ? v.defaultCategoryId ?? null : null,
 });
 

@@ -16,6 +16,7 @@ export const stationFormSchema = z.object({
       StationKind.PROCESS_QC,
       StationKind.TAMBUR,
       StationKind.SUBCONTRACTOR,
+      StationKind.SHIPPING,
       StationKind.OTHER,
     ],
     { message: "İstasyon türü seçilmeli" },
@@ -29,6 +30,7 @@ export const stationFormSchema = z.object({
   // Yetenek bayrakları — HER TİPTE sorulur (iç istasyon da renk/özellik verebilir).
   appliesColor: z.boolean(),
   appliesProperty: z.boolean(),
+  appliesQuality: z.boolean(),
   defaultCategoryId: z.string().nullable().optional(),
 });
 
@@ -44,5 +46,8 @@ export const stationFormDefaults: StationFormValues = {
   // Renk için "kapalı" güvenli taraf: yanlışlıkla Tambur adımına renk atanmasın.
   appliesColor: false,
   appliesProperty: true,
+  // Kalite varsayılanı KAPALI — backend kolon varsayılanıyla aynı. Kalite bir
+  // istisnadır: yeni istasyon sessizce KK yürütür hale gelmemeli.
+  appliesQuality: false,
   defaultCategoryId: null,
 };

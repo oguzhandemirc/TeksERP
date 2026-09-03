@@ -221,6 +221,9 @@ export function StationCapabilitiesPage() {
                     <Sparkles className="h-3.5 w-3.5" /> Özellik
                   </span>
                 </TableHead>
+                {/* Kalite: SALT ROZET — atama listesi YOK (kalite kademesi
+                    `QualityGrade` kataloğundan gelir, istasyona bağlı değil). */}
+                <TableHead>Kalite</TableHead>
                 <TableHead className="text-right">İşlem</TableHead>
               </TableRow>
             </TableHeader>
@@ -228,7 +231,7 @@ export function StationCapabilitiesPage() {
               {query.isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 5 }).map((_, j) => (
+                    {Array.from({ length: 6 }).map((_, j) => (
                       <TableCell key={j}>
                         <Skeleton className="h-4 w-full" />
                       </TableCell>
@@ -237,7 +240,7 @@ export function StationCapabilitiesPage() {
                 ))
               ) : filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                     İstasyon bulunamadı.
                   </TableCell>
                 </TableRow>
@@ -262,6 +265,13 @@ export function StationCapabilitiesPage() {
                           </Badge>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        {cap.canApplyQuality ? (
+                          <Badge variant="muted">Evet</Badge>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">Hayır</span>
                         )}
                       </TableCell>
                       <TableCell>

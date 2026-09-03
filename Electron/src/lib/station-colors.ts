@@ -21,7 +21,10 @@ export function stationToneForKind(kind: string): StationToneKey {
       return "process";
     case "TAMBUR":
       return "tambur";
-    case "WAREHOUSE":
+    // ⚠️ Eskiden burada `case "WAREHOUSE"` vardı — backend `StationKind`'da
+    // ÖYLE BİR DEĞER YOK (2026-09-03 drift taraması): dal ÖLÜYDÜ ve sevkiyat
+    // istasyonu varsayılan `process` tonuna düşüyordu.
+    case "SHIPPING":
       return "depo";
     default:
       return "process";

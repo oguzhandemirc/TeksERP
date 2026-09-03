@@ -45,11 +45,16 @@ export const stationTypeLabels: Record<StationType, string> = {
   EXTERNAL: "Harici (Fason)",
 };
 
+// ⚠️ Backend `enum StationKind` (schema.prisma) ile BİREBİR. `SHIPPING`
+// 2026-09-03'e kadar EKSİKTİ: sevkiyat istasyonu panelde `stationKindLabels`
+// üzerinden `undefined` basıyordu ve form zod'u onu reddediyordu (SEVK_1
+// düzenlenirse OTHER'a düşer, tablet tartı ekranı kapanırdı).
 export const StationKind = {
   RAW_QC: "RAW_QC",
   PROCESS_QC: "PROCESS_QC",
   TAMBUR: "TAMBUR",
   SUBCONTRACTOR: "SUBCONTRACTOR",
+  SHIPPING: "SHIPPING",
   OTHER: "OTHER",
 } as const;
 export type StationKind = (typeof StationKind)[keyof typeof StationKind];
@@ -59,6 +64,7 @@ export const stationKindLabels: Record<StationKind, string> = {
   PROCESS_QC: "Kurşun + Kalite Kontrol 2",
   TAMBUR: "Tambur",
   SUBCONTRACTOR: "Fason / Dış İşlem",
+  SHIPPING: "Sevkiyat / Tartı",
   OTHER: "Diğer",
 };
 

@@ -12,6 +12,12 @@ export interface StationCapabilitySummary {
   canApplyColor: boolean;
   /** İstasyon özellik uygulayabilir mi? Kategori varsa appliesProperty; yoksa true. */
   canApplyProperty: boolean;
+  /**
+   * İstasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü?
+   * ⚠️ Backend `deriveCapabilityFlags` ÇÖZER — panel kendi `kind` kontrolünü
+   * YAZMAZ (kural tek kaynakta: `helpers/quality-station.helper`).
+   */
+  canApplyQuality: boolean;
   colorCount: number;
   propertyCount: number;
 }
@@ -25,6 +31,7 @@ export interface StationCapabilityDetail {
   hasDefaultCategory: boolean;
   canApplyColor: boolean;
   canApplyProperty: boolean;
+  canApplyQuality: boolean;
   colors: { id: string; code: string; name: string; hex: string | null }[];
   properties: StationCapabilityProperty[];
 }

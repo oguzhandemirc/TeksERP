@@ -3,13 +3,20 @@
 export type QualityGradeCode = '1.KALITE' | 'A1' | '2.KALITE' | 'FIRE';
 
 export type CompanyType = 'CUSTOMER' | 'SUBCONTRACTOR' | 'BOTH';
-export type StationType = 'PROCESS' | 'PROCESS_QC' | 'EXTERNAL' | 'WAREHOUSE';
+// ⚠️ BACKEND `enum StationType` İLE ELLE SENKRON (schema.prisma). 2026-09-03
+// drift taraması: dört değerin ÜÇÜ hayaletti ('PROCESS', 'PROCESS_QC',
+// 'WAREHOUSE' — backend'de YOK) ve gerçek değer 'INTERNAL' EKSİKTİ. Hayalet
+// değer sessizce zarar verir (aşağıdaki StepStatus notunun tarif ettiği sınıf):
+// `station.type === 'WAREHOUSE'` yazan kod derlenir, koşulu ASLA sağlanmaz.
+export type StationType = 'INTERNAL' | 'EXTERNAL';
+// ⚠️ BACKEND `enum StationKind` İLE ELLE SENKRON. Aynı taramada: 'EXTERNAL'
+// hayaletti (o bir StationType değeri), 'SHIPPING' ise EKSİKTİ.
 export type StationKind =
   | 'RAW_QC'
-  | 'EXTERNAL'
   | 'PROCESS_QC'
   | 'TAMBUR'
   | 'SUBCONTRACTOR'
+  | 'SHIPPING'
   | 'OTHER';
 // ⚠️ BACKEND `StepStatus` İLE ELLE SENKRON (schema.prisma → `enum StepStatus`).
 // NEDEN 'CANCELLED' ÇIKARILDI (2026-07-31 denetimi): backend enum'unda yalnız
