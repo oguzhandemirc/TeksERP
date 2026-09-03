@@ -823,6 +823,25 @@ model Station {
   /// için **true** üretiyordu (KURSUN özelliği KURSUN_KK2'ye böyle bağlanmıştı).
   appliesProperty Boolean @default(true)
 
+  /// Bu istasyon KALİTE KONTROL (KK/muayene) yürütür mü? (2026-09-03)
+  ///
+  /// Eskiden bu soru istasyonun TÜRÜNDEN türetiliyordu (`kind === PROCESS_QC`)
+  /// ve 28 karar noktasına elle kopyalanmıştı; yani "kalite" bir yetenek değil
+  /// bir tür adıydı ve ikinci bir KK istasyonu tanımlanamıyordu.
+  ///
+  /// ⚠️ VARSAYILAN FALSE — bugünkü davranışı BİREBİR korumak için: göçte YALNIZ
+  /// `kind = 'PROCESS_QC'` satırları `true`ya çekildi (migration
+  /// 20260903020000). `true` varsayılan, her yeni istasyonu sessizce kalite
+  /// yürütür yapardı; kalite bir istisnadır, kural değil.
+  ///
+  /// ⚠️ Bu bayrak PLANLAMA sorusunu yanıtlar ("bu adım KK yürütür mü").
+  /// `appliesColor`/`appliesProperty`den farkı: KATEGORİDE KARŞILIĞI YOK —
+  /// `SubcontractorCategory`de `appliesQuality` kolonu yoktur, çünkü fason
+  /// firma kalite notu yazmaz (kalite kaydı KK1 girişi + Tambur finalize'da
+  /// doğar). Bu yüzden `seedCapabilityFromCategory` bu alana DOKUNMAZ ve ortak
+  /// yüklem `stepCanApplyQuality` tek argümanlıdır.
+  appliesQuality Boolean @default(false)
+
   // Relations
   machines             Machine[]
   /// Bu istasyonda sisteme GİREN toplar (Roll.entryStationId) — kalıcı köken izi.

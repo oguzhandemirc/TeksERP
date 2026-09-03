@@ -34,6 +34,12 @@ import {
 } from "@prisma/client";
 import { assertWoAtStepKind } from "./helpers/roll-step.helper";
 import {
+  QUALITY_STATION_WHERE,
+  QUALITY_STEP_ERROR,
+  STEP_QUALITY_SELECT,
+  stepCanApplyQuality,
+} from "./helpers/quality-station.helper";
+import {
   assertPropertySelectionsValid,
   type PropertySelection,
   copyStationCapabilitiesToRoll,
@@ -232,7 +238,10 @@ export class KursunQcService {
     // Açık top varken status COMPLETED olamaz (recomputeStepStatus ACTIVE yapar),
     // o yüzden bu kısayol normal akıştaki açık kartları etkilemez.
     const pqStep = await prisma.workOrderStep.findFirst({
-      where: { workOrderId: card.workOrderId, station: { kind: StationKind.PROCESS_QC } },
+      where: {
+        workOrderId: card.workOrderId,
+        station: { ...QUALITY_STATION_WHERE },
+      },
       orderBy: { stepSequence: "asc" },
       select: { id: true, status: true },
     });
@@ -287,7 +296,7 @@ export class KursunQcService {
     const OPEN_CARDS_CAP = 500;
     const steps = await prisma.workOrderStep.findMany({
       where: {
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
         status: { not: "COMPLETED" },
         currentRolls: { some: {} },
         // Kurşun bypass'a DAĞITILMIŞ adımlar bu listede GÖRÜNMEZ: bu liste
@@ -404,7 +413,7 @@ export class KursunQcService {
     userId?: string,
     machineId?: string | null
   ): Promise<ApiResponse<RollOperation>> {
-    await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
+    await this.assertRollInQualityStep(data.rollId, data.stepId);
 
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
@@ -601,7 +610,7 @@ export class KursunQcService {
       );
     }
 
-    await this.assertRollInStep(data.rollId, data.stepId, StationKind.PROCESS_QC);
+    await this.assertRollInQualityStep(data.rollId, data.stepId);
 
     // Kurşun bypass: dağıtılmış adımda hatalar KÂĞITTA tutulur (fabrika kurşun
     // istasyonuna tablet koymuyor). Dijital RollError açmak iki soruna yol açar:
@@ -780,10 +789,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
-    if (step.station.kind !== StationKind.PROCESS_QC) {
-      throw AppError.badRequest(
-        "finishStep yalnızca PROCESS_QC adımları için çağrılabilir"
-      );
+    if (!stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
 
     const openMovements = await prisma.rollMovement.findMany({
@@ -1044,8 +1051,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (step.station.kind !== StationKind.PROCESS_QC) {
-      throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
+    if (!stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
     if (step.status !== StepStatus.COMPLETED) {
       throw AppError.badRequest(
@@ -1214,8 +1221,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (step.station.kind !== StationKind.PROCESS_QC) {
-      throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
+    if (!stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
 
     const block = (reason: string) => ({
@@ -1316,10 +1323,16 @@ export class KursunQcService {
     }
   }
 
-  private async assertRollInStep(
+  /**
+   * Top gerçekten BU adımda mı ve bu adım KALİTE yürütüyor mu?
+   *
+   * ⚠️ Eskiden `expectedKind` argümanı alan jenerik bir yardımcıydı; iki
+   * çağıranı da `StationKind.PROCESS_QC` geçiyordu. Kalite artık istasyon
+   * yeteneği (`stepCanApplyQuality`) — argüman düştü.
+   */
+  private async assertRollInQualityStep(
     rollId: string,
     stepId: string,
-    expectedKind: StationKind
   ): Promise<void> {
     const roll = await prisma.roll.findUnique({
       where: { id: rollId },
@@ -1333,13 +1346,11 @@ export class KursunQcService {
     }
     const step = await prisma.workOrderStep.findUnique({
       where: { id: stepId },
-      select: { station: { select: { kind: true } } },
+      select: { station: { select: STEP_QUALITY_SELECT } },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (step.station.kind !== expectedKind) {
-      throw AppError.badRequest(
-        `Bu adım ${expectedKind} tipinde değil (mevcut: ${step.station.kind})`
-      );
+    if (!stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
   }
 
@@ -1359,10 +1370,8 @@ export class KursunQcService {
       },
     });
     if (!step) throw AppError.notFound("Adım bulunamadı");
-    if (step.station.kind !== StationKind.PROCESS_QC) {
-      throw AppError.badRequest(
-        "Bu adım Kurşun + QC2 tipinde değil"
-      );
+    if (!stepCanApplyQuality(step.station)) {
+      throw AppError.badRequest(QUALITY_STEP_ERROR);
     }
 
     // Adımda şu anda açık olan rollerin hareket kayıtları.
@@ -1531,7 +1540,7 @@ export class KursunQcService {
   async listQueue(): Promise<ApiResponse<KursunQueueItem[]>> {
     const steps = await prisma.workOrderStep.findMany({
       where: {
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
         status: { not: StepStatus.COMPLETED },
         currentRolls: { some: {} },
       },
@@ -1652,7 +1661,7 @@ export class KursunQcService {
       where: {
         id: { in: ids },
         status: { not: StepStatus.COMPLETED },
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
       },
       select: { id: true },
     });
@@ -1698,18 +1707,20 @@ export class KursunQcService {
       where: {
         id: stepId,
         status: { not: StepStatus.COMPLETED },
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
       },
       data: { isUrgent, urgentMarkedAt: isUrgent ? new Date() : null },
     });
     if (claimed.count === 0) {
       const existing = await prisma.workOrderStep.findUnique({
         where: { id: stepId },
-        select: { status: true, station: { select: { kind: true } } },
+        select: { status: true, station: { select: STEP_QUALITY_SELECT } },
       });
       if (!existing) throw AppError.notFound("Adım bulunamadı");
-      if (existing.station.kind !== StationKind.PROCESS_QC) {
-        throw AppError.badRequest("Bu adım Kurşun + QC2 tipinde değil");
+      // ⚠️ Bu tanı, hemen üstteki atomik claim'in WHERE'inin İKİZİdir — ikisi
+      // AYNI yüklemden beslenmezse yarışın kaybedenine yanlış sebep basılır.
+      if (!stepCanApplyQuality(existing.station)) {
+        throw AppError.badRequest(QUALITY_STEP_ERROR);
       }
       throw AppError.badRequest("Adım tamamlanmış, acil işaretlenemez");
     }

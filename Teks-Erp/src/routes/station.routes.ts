@@ -163,6 +163,18 @@ router.get("/:id", verifyToken, requirePermission("station:read"), stationContro
  *                 description: Domain rolü — API davranış dispatch'i için kullanılır (ör. PROCESS_QC → Kurşun+QC2 akışı, TAMBUR → kesim/karar akışı). Varsayılan OTHER.
  *                 example: OTHER
  *               department: { type: string, example: "TERBIYE" }
+ *               allowAsWorkOrderStep:
+ *                 type: boolean
+ *                 description: İş emri adım picker'ında görünsün mü. false → KK1 gibi giriş noktaları (yalnız Roll oluşturur, üretim akışına adım olarak girmez). Varsayılan true.
+ *               appliesColor:
+ *                 type: boolean
+ *                 description: Bu istasyon RENK uygulayabilir mi (rota adımına renk hedefi yazılabilmesi buna bağlıdır). Varsayılan false.
+ *               appliesProperty:
+ *                 type: boolean
+ *                 description: Bu istasyon ÖZELLİK uygulayabilir mi. Varsayılan true.
+ *               appliesQuality:
+ *                 type: boolean
+ *                 description: Bu istasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü. Varsayılan false.
  *     responses:
  *       201:
  *         description: İstasyon oluşturuldu
@@ -195,6 +207,12 @@ router.post("/", verifyToken, requirePermission("station:write"), stationControl
  *                 type: string
  *                 enum: [RAW_QC, PROCESS_QC, TAMBUR, SUBCONTRACTOR, SHIPPING, OTHER]
  *               department: { type: string }
+ *               allowAsWorkOrderStep: { type: boolean }
+ *               appliesColor: { type: boolean }
+ *               appliesProperty: { type: boolean }
+ *               appliesQuality:
+ *                 type: boolean
+ *                 description: Bu istasyon KALİTE KONTROL (Kurşun + KK2) yürütür mü.
  *               isActive: { type: boolean }
  *     responses:
  *       200:

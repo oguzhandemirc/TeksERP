@@ -77,6 +77,11 @@ import {
   resolveBypassBlockReason,
   type RouteStepRef,
 } from "./helpers/kursun-bypass-eligibility.helper";
+import {
+  QUALITY_STATION_WHERE,
+  STEP_QUALITY_SELECT,
+  stepCanApplyQuality,
+} from "./helpers/quality-station.helper";
 
 /**
  * Bypass kapanışının movement notes marker ÖN EKİ. Tur kimliği (uuid) suffix
@@ -93,7 +98,7 @@ export { KURSUN_BYPASS_MARKER_PREFIX };
  * DAĞITILMADAN yapılan kapanışın marker ön eki (2026-08-06).
  *
  * ⚠️ `KURSUN_BYPASS_MARKER_PREFIX` ile BAŞLAMAK ZORUNDA. Ön eki bağımsız bir
- * değer yapmak sessiz bir regresyon üretirdi: `hasBypassClosureOnProcessQcTx`
+ * değer yapmak sessiz bir regresyon üretirdi: `hasBypassClosureOnQualityStepTx`
  * (inventory) ve `loadBypassEligibilitySignals.closedNonBypass` bu satırları
  * `startsWith(KURSUN_BYPASS_MARKER_PREFIX)` ile tanıyor — eşleşme kopsaydı
  * çok-partili işin İKİNCİ turu "bu adımda bypass dışı kapanmış hareket var"
@@ -137,7 +142,7 @@ const PENDING_ASSIGNMENT_WHERE = {
  *     ile tek sorguda eler (LIST_CAP kırpmasına da bağımlı değildir).
  */
 const WAITING_STEP_BASE_WHERE = {
-  station: { kind: StationKind.PROCESS_QC },
+  station: { ...QUALITY_STATION_WHERE },
   movements: { some: { exitedAt: null } },
   workOrder: { status: { in: ASSIGNABLE_WO_STATUSES } },
 } satisfies Prisma.WorkOrderStepWhereInput;
@@ -508,12 +513,14 @@ export class KursunBypassService {
   async listDistribution(): Promise<ApiResponse<KursunDistributionPayload>> {
     const flagEnabled = await readKursunBypassEnabled();
 
-    // ATAMA HEDEFLERİ = PROCESS_QC istasyonuna bağlı AKTİF makineler.
+    // ATAMA HEDEFLERİ = KALİTE yürüten istasyona bağlı AKTİF makineler.
     // Filtre `assign`'ın kabul koşuluyla BİREBİR aynı tutulur (aktif makine +
-    // istasyon kind'ı PROCESS_QC) — aksi halde listede görünen bir makine
+    // istasyon kalite yürütüyor) — aksi halde listede görünen bir makine
     // seçildiğinde 400 alınır ve dağıtımcı sebebi anlamaz.
+    // ⚠️ Bu filtre ile `assign`ın kabul koşulu (`stepCanApplyQuality`) AYNI
+    // ikiz boğazdan beslenir: `QUALITY_STATION_WHERE` ↔ `stepCanApplyQuality`.
     const machineRows = await prisma.machine.findMany({
-      where: { isActive: true, station: { kind: StationKind.PROCESS_QC } },
+      where: { isActive: true, station: { ...QUALITY_STATION_WHERE } },
       select: {
         id: true,
         code: true,
@@ -785,7 +792,7 @@ export class KursunBypassService {
                 id: true,
                 stepSequence: true,
                 status: true,
-                station: { select: { kind: true, name: true } },
+                station: { select: { ...STEP_QUALITY_SELECT, name: true } },
               },
             },
           },
@@ -797,7 +804,7 @@ export class KursunBypassService {
           );
         }
 
-        // 3) Kurşun adımı = stepSequence'a göre İLK PROCESS_QC adımı
+        // 3) Kurşun adımı = stepSequence'a göre İLK KALİTE adımı
         //    (assertWoAtStepKind ile aynı semantik).
         const routeSteps: RouteStepRef[] = wo.steps.map((s) => ({
           id: s.id,
@@ -805,7 +812,7 @@ export class KursunBypassService {
           status: s.status,
           station: s.station,
         }));
-        const step = wo.steps.find((s) => s.station.kind === StationKind.PROCESS_QC);
+        const step = wo.steps.find((s) => stepCanApplyQuality(s.station));
         if (!step) {
           throw AppError.badRequest("Bu iş emrinde Kurşun + KK2 adımı tanımlı değil");
         }
@@ -906,14 +913,16 @@ export class KursunBypassService {
             name: true,
             isActive: true,
             stationId: true,
-            station: { select: { name: true, kind: true } },
+            station: { select: { name: true, ...STEP_QUALITY_SELECT } },
           },
         });
         if (!machine) throw AppError.notFound("Makine bulunamadı");
         if (!machine.isActive) throw AppError.badRequest("Seçilen makine pasif");
-        if (machine.station.kind !== StationKind.PROCESS_QC) {
+        // ⚠️ `listDistribution`ın makine filtresiyle (QUALITY_STATION_WHERE)
+        // BİREBİR aynı kural — ikiz boğazın iki ucu.
+        if (!stepCanApplyQuality(machine.station)) {
           throw AppError.badRequest(
-            `Seçilen makine Kurşun + KK2 (PROCESS_QC) istasyonuna bağlı değil (bağlı olduğu istasyon: ${machine.station.name})`,
+            `Seçilen makine kalite kontrol yürüten bir istasyona bağlı değil (bağlı olduğu istasyon: ${machine.station.name})`,
           );
         }
 
@@ -1493,7 +1502,7 @@ export class KursunBypassService {
     const step = await db.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
         movements: { some: { exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
@@ -1618,7 +1627,7 @@ export class KursunBypassService {
     const step = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
         movements: { some: { exitedAt: null } },
       },
       orderBy: { stepSequence: "asc" },
@@ -2147,7 +2156,7 @@ export class KursunBypassService {
     const step = await prisma.workOrderStep.findFirst({
       where: {
         workOrderId,
-        station: { kind: StationKind.PROCESS_QC },
+        station: { ...QUALITY_STATION_WHERE },
         movements: {
           some: {
             exitedAt: { not: null },
@@ -2323,7 +2332,7 @@ export class KursunBypassService {
    *
    * @param markerPrefix Kapanışın kaynağını `RollMovement.notes`'a yazan ön ek.
    *   İki değer de `KURSUN_BYPASS_MARKER_PREFIX` ile BAŞLAR — okuyan yerler
-   *   (`hasBypassClosureOnProcessQcTx`, `loadBypassEligibilitySignals`) satırı
+   *   (`hasBypassClosureOnQualityStepTx`, `loadBypassEligibilitySignals`) satırı
    *   `startsWith` ile tanıyor; kopması sessiz regresyon üretirdi.
    */
   private async closeBypassMovementsTx(

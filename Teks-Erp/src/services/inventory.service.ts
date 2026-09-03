@@ -146,7 +146,7 @@ import {
 } from "./helpers/roll-step.helper";
 import { collectRollStepScopeTx } from "./helpers/roll-step-scope.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { hasBypassClosureOnProcessQcTx } from "./helpers/kursun-bypass-guard.helper";
+import { hasBypassClosureOnQualityStepTx } from "./helpers/kursun-bypass-guard.helper";
 import { assertKursunTabletMayWrite } from "./helpers/kursun-bypass-eligibility.helper";
 import {
   assertPropertySelectionsValid,
@@ -155,6 +155,12 @@ import {
   loadStationPropertyCaps,
 } from "./helpers/station-capability-transfer.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
+import {
+  QUALITY_STATION_WHERE,
+  QUALITY_STEP_ERROR,
+  STEP_QUALITY_SELECT,
+  stepCanApplyQuality,
+} from "./helpers/quality-station.helper";
 import { touchWarehouseSackTx } from "./helpers/shipment-locks.helper";
 import {
   assertTargetablePropertyIds,
@@ -1783,7 +1789,10 @@ export class InventoryService {
     const kursunColumn = async (): Promise<{ cards: ProductionFlowQueueCard[]; total: number }> => {
       if (!opts.includeQueues) return { cards: [], total: 0 };
       const where: Prisma.WorkOrderStepWhereInput = {
-        station: { kind: StationKind.PROCESS_QC },
+        // ⚠️ Kolon ADI "Kurşun" KALIR. Faz A'da küme birebir aynı (backfill
+        // yalnız PROCESS_QC'yi işaretler); ikinci bir KK istasyonu doğarsa
+        // kolonun ölçtüğü şey ile adı ayrışır — etiket kararı Faz B'de.
+        station: { ...QUALITY_STATION_WHERE },
         status: { not: StepStatus.COMPLETED },
         currentRolls: { some: {} },
       };
@@ -4613,16 +4622,16 @@ export class InventoryService {
     const step = await prisma.workOrderStep.findUnique({
       where: { id: data.stepId },
       include: {
-        station: { select: { kind: true } },
+        station: { select: STEP_QUALITY_SELECT },
       },
     });
     if (!step) throw AppError.notFound("İş emri adımı bulunamadı");
     if (step.workOrderId !== receipt.workOrderId) {
       throw AppError.badRequest("Adım bu iş emrine ait değil");
     }
-    if (step.station.kind !== StationKind.PROCESS_QC) {
+    if (!stepCanApplyQuality(step.station)) {
       throw AppError.badRequest(
-        "Açık kumaş Roll sadece PROCESS_QC (Kurşun/KK2) istasyonunda açılabilir",
+        `Açık kumaş Roll sadece kalite kontrol yürüten adımda açılabilir — ${QUALITY_STEP_ERROR}`,
       );
     }
     if (step.status === StepStatus.COMPLETED || step.status === StepStatus.SKIPPED) {
@@ -5060,7 +5069,7 @@ export class InventoryService {
           include: {
             // `appliesColor` + `requiredCategory`: adım renk verebiliyor mu (tek yüklem
             // stepCanApplyColor) — bitişte renksiz topa WO hedef rengi yazılır (3c).
-            station: { select: { kind: true, appliesColor: true } },
+            station: { select: { ...STEP_QUALITY_SELECT, appliesColor: true } },
             requiredCategory: { select: { appliesColor: true } },
             workOrder: {
               include: {
@@ -5085,15 +5094,12 @@ export class InventoryService {
     // QC2_COMPLETED RollOperation'ı varsa "zaten yapıldı" diye success dön
     // (duplicate movement/RollError yaratma riski yok — bu noktada zaten
     // ileri taşınmış).
-    if (
-      !roll.currentStep ||
-      roll.currentStep.station.kind !== StationKind.PROCESS_QC
-    ) {
+    if (!roll.currentStep || !stepCanApplyQuality(roll.currentStep.station)) {
       const priorFinish = await prisma.rollOperation.findFirst({
         where: {
           rollId,
           operationType: RollOperationType.QC2_COMPLETED,
-          step: { station: { kind: StationKind.PROCESS_QC } },
+          step: { station: { ...QUALITY_STATION_WHERE } },
         },
         select: { id: true, workOrderStepId: true },
       });
@@ -5113,7 +5119,7 @@ export class InventoryService {
       // yüzden yukarıdaki sonda onu göremez. İş dağıtılıp Tambur'da kapandıysa
       // adım GERÇEKTEN tamamlanmıştır — tabletin offline kuyruğundan geç gelen
       // istek teknik bir 400 değil, idempotent başarı almalı.
-      if (await hasBypassClosureOnProcessQcTx(prisma, rollId)) {
+      if (await hasBypassClosureOnQualityStepTx(prisma, rollId)) {
         return {
           success: true,
           data: {
@@ -5128,8 +5134,12 @@ export class InventoryService {
       if (!roll.currentStep) {
         throw AppError.badRequest("Roll bir step'te değil");
       }
+      // ⚠️ Metin yüklemle AYNI dili konuşur: yukarıdaki koşul artık yeteneğe
+      // bakıyor, mesaj "tür" derse yeteneği kapalı ama türü PROCESS_QC olan bir
+      // adımda operatör yanlış teşhis okur. Mevcut istasyon adı/tür bağlam
+      // olarak kalır.
       throw AppError.badRequest(
-        `Roll PROCESS_QC step'inde değil (mevcut: ${roll.currentStep.station.kind})`,
+        `${QUALITY_STEP_ERROR} (topun bulunduğu adım: ${roll.currentStep.station.kind})`,
       );
     }
 

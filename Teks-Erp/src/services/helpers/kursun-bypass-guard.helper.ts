@@ -21,6 +21,7 @@
 // =============================================================================
 
 import { Prisma, StationKind, StepStatus, type PrismaClient } from "@prisma/client";
+import { QUALITY_STATION_WHERE } from "./quality-station.helper";
 import { AppError } from "../../utils/app-error";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
@@ -89,7 +90,7 @@ export async function assertStepNotBypassAssigned(
 }
 
 /**
- * Bu top, bir PROCESS_QC adımını BYPASS kapanışıyla mı geride bıraktı?
+ * Bu top, bir KALİTE (Kurşun + KK2) adımını BYPASS kapanışıyla mı geride bıraktı?
  *
  * NEDEN GEREKLİ: bypass rejimi bilinçli olarak `QC2_COMPLETED` RollOperation'ı
  * YAZMAZ (kimse tablette kaliteyi görmedi). `inventory.kursunFinish`'in
@@ -99,10 +100,10 @@ export async function assertStepNotBypassAssigned(
  * `Roll PROCESS_QC step'inde değil (mevcut: TAMBUR)` gibi teknik bir 400 döner —
  * oysa istenen iş GERÇEKTEN yapılmıştır, doğru cevap idempotent başarıdır.
  *
- * Yalnız top PROCESS_QC'yi çoktan terk etmişken çağrılır; bu yüzden "evet"
+ * Yalnız top kalite adımını çoktan terk etmişken çağrılır; bu yüzden "evet"
  * demek hiçbir mükerrer yazma doğurmaz (çağıran erken döner).
  */
-export async function hasBypassClosureOnProcessQcTx(
+export async function hasBypassClosureOnQualityStepTx(
   db: Db,
   rollId: string,
 ): Promise<boolean> {
@@ -112,7 +113,7 @@ export async function hasBypassClosureOnProcessQcTx(
       exitedAt: { not: null },
       notes: { startsWith: KURSUN_BYPASS_MARKER_PREFIX },
       // İlişki alanının adı `step` (kolon `workOrderStepId`) — schema.prisma:1880.
-      step: { station: { kind: StationKind.PROCESS_QC } },
+      step: { station: { ...QUALITY_STATION_WHERE } },
     },
     select: { id: true },
   });

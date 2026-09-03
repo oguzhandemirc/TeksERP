@@ -37,6 +37,7 @@ import {
   assertStepNotBypassAssigned,
   KURSUN_BYPASS_MARKER_PREFIX,
 } from "./kursun-bypass-guard.helper";
+import { STEP_QUALITY_SELECT, stepCanApplyQuality } from "./quality-station.helper";
 
 /** Hem havuz client'ı hem transaction client'ı kabul eden okuma tipi (any YOK). */
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -185,7 +186,7 @@ export function resolveBypassBlockReason(
  *
  * Kurşun tabletinin yolu bunu kullanır (`kursun-qc.service`): hem kart
  * okutulduğunda salt-okunur bilgi ekranını tetikler hem de yazma guard'ını
- * besler. Adım bulunamazsa / PROCESS_QC değilse `null` döner — "uygun değil"
+ * besler. Adım bulunamazsa / kalite yürütmüyorsa `null` döner — "uygun değil"
  * DEMEK DEĞİLDİR, "bu soru bu adım için anlamsız" demektir; çağıran ayırt eder.
  */
 export async function resolveStepBypassEligibility(
@@ -197,7 +198,9 @@ export async function resolveStepBypassEligibility(
     select: {
       id: true,
       status: true,
-      station: { select: { kind: true } },
+      // ⚠️ `STEP_QUALITY_SELECT` — yüklem `appliesQuality`yi de okur; select
+      // genişletilmezse Prisma tipi tutmaz.
+      station: { select: STEP_QUALITY_SELECT },
       movements: {
         where: { exitedAt: null },
         select: { qtyIn: true },
@@ -217,7 +220,7 @@ export async function resolveStepBypassEligibility(
       },
     },
   });
-  if (!step || step.station.kind !== StationKind.PROCESS_QC) return null;
+  if (!step || !stepCanApplyQuality(step.station)) return null;
 
   const signals = await loadBypassEligibilitySignals(db, [step.id]);
   const blockReason = resolveBypassBlockReason(step, signals);

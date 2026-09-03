@@ -91,6 +91,13 @@ const COLUMNS: ImportColumn[] = [
     example: "Evet",
   },
   {
+    key: "appliesQuality",
+    label: "Kalite Kontrol Uygular",
+    type: "bool",
+    help: "Evet / Hayır. Kurşun + KK2 süreci bu istasyonda yürür mü. Boş bırakılırsa Hayır.",
+    example: "Hayır",
+  },
+  {
     key: "isActive",
     label: "Aktif",
     type: "bool",
@@ -123,7 +130,8 @@ export const stationImportAdapter: ImportAdapter = {
       // Beyan edilen HER sütun seçilir — eksik alan UPDATE diff'inden düşerdi.
       select: {
         id: true, code: true, name: true, type: true, kind: true, department: true,
-        allowAsWorkOrderStep: true, appliesColor: true, appliesProperty: true, isActive: true,
+        allowAsWorkOrderStep: true, appliesColor: true, appliesProperty: true,
+        appliesQuality: true, isActive: true,
         defaultCategory: { select: { code: true } },
       },
     });
@@ -147,7 +155,7 @@ export const stationImportAdapter: ImportAdapter = {
       });
     }
     // NOT NULL kolonlar "NULL" ile boşaltılamaz.
-    for (const key of ["name", "type", "kind", "allowAsWorkOrderStep", "appliesColor", "appliesProperty", "isActive"] as const) {
+    for (const key of ["name", "type", "kind", "allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "isActive"] as const) {
       if (row.values[key] === null) {
         row.result.errors.push({ column: key, message: "Bu alan boşaltılamaz (NULL yazılamaz)." });
       }
@@ -184,7 +192,8 @@ export const stationImportAdapter: ImportAdapter = {
       orderBy: { code: "asc" },
       select: {
         code: true, name: true, type: true, kind: true, department: true,
-        allowAsWorkOrderStep: true, appliesColor: true, appliesProperty: true, isActive: true,
+        allowAsWorkOrderStep: true, appliesColor: true, appliesProperty: true,
+        appliesQuality: true, isActive: true,
         defaultCategory: { select: { code: true } },
       },
     });
@@ -198,6 +207,7 @@ export const stationImportAdapter: ImportAdapter = {
       allowAsWorkOrderStep: r.allowAsWorkOrderStep ? "Evet" : "Hayır",
       appliesColor: r.appliesColor ? "Evet" : "Hayır",
       appliesProperty: r.appliesProperty ? "Evet" : "Hayır",
+      appliesQuality: r.appliesQuality ? "Evet" : "Hayır",
       isActive: r.isActive ? "Evet" : "Hayır",
     }));
   },
@@ -209,7 +219,7 @@ function toServicePayload(row: PreparedRow): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const key of [
     "code", "name", "type", "kind", "department",
-    "allowAsWorkOrderStep", "appliesColor", "appliesProperty", "isActive",
+    "allowAsWorkOrderStep", "appliesColor", "appliesProperty", "appliesQuality", "isActive",
   ]) {
     if (v[key] !== undefined) out[key] = v[key];
   }

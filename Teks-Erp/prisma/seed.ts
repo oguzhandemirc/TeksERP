@@ -305,8 +305,16 @@ async function main() {
       department: "KALITE", allowAsWorkOrderStep: false,
     },
   });
+  // ⚠️ `appliesQuality` AÇIKÇA YAZILIR — aşağıdaki (2026-08-10) notun birebir
+  // ikizi: kalite backfill'i (migration 20260903020000) seed'den ÖNCE, tablo
+  // BOŞKEN koşar → taze kurulumda bu satır kolon varsayılanıyla (false) doğardı.
+  // Faz A'da `stepCanApplyQuality`nin `kind === PROCESS_QC` dalı hatayı örter;
+  // Faz B'de o dal kalkınca taze kurulum SESSİZCE kalitesiz doğardı.
   const kursun = await prisma.station.create({
-    data: { code: "KURSUN_KK2", name: "Kurşun + KK2", type: "INTERNAL", kind: "PROCESS_QC", department: "KALITE" },
+    data: {
+      code: "KURSUN_KK2", name: "Kurşun + KK2", type: "INTERNAL", kind: "PROCESS_QC",
+      department: "KALITE", appliesQuality: true,
+    },
   });
   const tambur = await prisma.station.create({
     data: { code: "TAMBUR_1", name: "Tambur", type: "INTERNAL", kind: "TAMBUR", department: "KALITE" },

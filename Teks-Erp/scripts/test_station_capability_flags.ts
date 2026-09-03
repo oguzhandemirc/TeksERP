@@ -70,7 +70,7 @@ async function main() {
       kind: "OTHER",
       // appliesColor kolon varsayılanı = false (bugünkü davranışın karşılığı)
     },
-    select: { id: true, appliesColor: true, appliesProperty: true },
+    select: { id: true, appliesColor: true, appliesProperty: true, appliesQuality: true },
   });
   cleanupStationIds.push(stPlain.id);
 
@@ -82,7 +82,7 @@ async function main() {
       kind: "OTHER",
       appliesColor: true,
     },
-    select: { id: true, appliesColor: true, appliesProperty: true },
+    select: { id: true, appliesColor: true, appliesProperty: true, appliesQuality: true },
   });
   cleanupStationIds.push(stDye.id);
 
