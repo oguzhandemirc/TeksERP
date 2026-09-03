@@ -4,6 +4,7 @@ import app from './app';
 import prisma, { pool } from './lib/prisma';
 import { getLanAddresses } from './lib/lan-addresses';
 import { startInstallationIdentity } from './jobs/installation-identity.job';
+import { startSuperadminAccount } from './jobs/superadmin.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
@@ -163,6 +164,11 @@ const server = app.listen(Number(PORT), HOST, () => {
     // İzin kataloğuyla aynı sınıf: ilk açılışta bir kez doğar, best-effort,
     // başarısız olsa bile sunucuyu düşürmez (yalnız keşif kimliksiz kalır).
     startInstallationIdentity();
+    // SATICI (süperadmin) hesabı — `.env`de SUPERADMIN_* varsa doğar, yoksa
+    // sessiz no-op. Aynı zamanda "sistem hesabı var mı" kayıt defterini tazeler:
+    // hesap YOKSA modül anahtarı kapısı devre dışı kalır (emniyet supabı), yani
+    // bu satır olmadan yeni bir kurulumda modülleri KİMSE açamazdı.
+    startSuperadminAccount();
     // Keşif ucunun bellek kopyası (firma adı + port). İstek yolunda DB'ye
     // gidilmediği için burada bir kez doldurulur; firma adı sonradan değişirse
     // bir sonraki restart'ta tazelenir (keşif için yeterli hassasiyet).

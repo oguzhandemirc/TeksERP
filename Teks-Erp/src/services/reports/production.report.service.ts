@@ -13,6 +13,7 @@
 // =============================================================================
 
 import prisma from "../../lib/prisma";
+import { SQL_VISIBLE_USER } from "../helpers/system-account.helper";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { factoryDaySql } from "../../constants/time";
@@ -56,6 +57,9 @@ export async function getOperatorPerformance(range: DateRange, limit = 50): Prom
     JOIN users u ON ro."operatorId" = u.id
     WHERE ro."createdAt" >= ${range.from} AND ro."createdAt" <= ${range.to}
       AND ro."inheritedFromParentRollId" IS NULL
+      -- Operatör karnesi bir ÜRETİM raporudur (denetim değil): satıcı hesabı
+      -- bakım sırasında bir RollOperation yazarsa karnede satır AÇMAMALI.
+      AND ${SQL_VISIBLE_USER}
     GROUP BY u.id, u.username, u."fullName"
     ORDER BY "totalOps" DESC
     LIMIT ${limit}

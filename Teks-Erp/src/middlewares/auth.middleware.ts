@@ -73,7 +73,10 @@ export const verifyToken = async (
     const payload = AuthService.verifyToken(token);
     const fresh = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { tokenVersion: true, isActive: true },
+      // ⚠️ `isSystemAccount` BİLEREK burada okunur (JWT claim'i değil): istek
+      // başına ZATEN yapılan bir okuma, yani maliyet sıfır; değer DB-taze; ve
+      // guard'lar senkron kalabilir (bkz. types/express-augment.ts).
+      select: { tokenVersion: true, isActive: true, isSystemAccount: true },
     });
     if (!fresh || !fresh.isActive) {
       throw AppError.unauthorized("Hesap pasif veya bulunamadı. Tekrar giriş yapın.");
@@ -101,6 +104,7 @@ export const verifyToken = async (
       throw AppError.unauthorized(msg, { code: "SESSION_REVOKED", reason });
     }
     req.user = payload;
+    req.isSystemAccount = fresh.isSystemAccount === true;
     touchUser(payload.userId); // anlık "online" izleme (bellekte, maliyetsiz)
     touchSessionLastSeen(payload.jti); // Session.lastSeenAt throttled (fire-and-forget)
     next();

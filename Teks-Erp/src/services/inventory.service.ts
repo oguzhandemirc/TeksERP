@@ -7,6 +7,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { visibleUserWhere } from "./helpers/system-account.helper";
 import { normalizeScanCode } from "../utils/code-format";
 import { AuditService } from "./audit.service";
 import { normalizeFoldType, resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -1975,7 +1976,9 @@ export class InventoryService {
     const ids = groups.map((g) => g.createdById).filter((v): v is string => !!v);
     if (ids.length === 0) return { success: true, data: [] };
     const users = await prisma.user.findMany({
-      where: { id: { in: ids } },
+      // ⚠️ Bu dropdown `username`i `code` ALT ETİKETİ olarak GÖRÜNÜR basıyor
+      // (aşağıda) — takma adın tek başına yetmediği yüzeylerden biri. Süzgeç şart.
+      where: visibleUserWhere({ id: { in: ids } }),
       select: { id: true, username: true, fullName: true },
       orderBy: { fullName: "asc" },
     });

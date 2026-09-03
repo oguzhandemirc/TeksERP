@@ -12,6 +12,7 @@ import prisma from "../lib/prisma";
 import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { ACTOR_SELECT, maskSystemActor } from "./helpers/system-account.helper";
 
 /**
  * Eşleşme bekleyen cihaz üst sınırı (F-CORE-GUV-003). Kimlik doğrulamasız
@@ -133,6 +134,14 @@ export class DeviceService {
     }
 
     // Son oturum açma — [deviceId, startedAt] index'i sort-free karşılar.
+    //
+    // ⚠️ AKTÖR SÜZÜLMEZ, NÖTRLENİR (2026-09-03). Bu yüzey "bu cihazı en son KİM
+    // açtı" sorusunu cevaplar; süzgeç burada YALAN üretirdi (satır düşerse cihaz
+    // hiç kullanılmamış görünür). Ama düz `username` select'i de yanlıştı ve
+    // ÖLÇÜLDÜ (D1): satıcı tablete PIN'le girince — tasarımın KENDİ akışı —
+    // oturum o cihaza yazılıyor ve `admin:settings` taşıyan her yönetici Cihazlar
+    // ekranında gerçek giriş adını görüyordu. Doğru çözüm audit yüzeyleriyle
+    // AYNI: `ACTOR_SELECT` + `maskSystemActor` (satır kalır, kimlik nötrlenir).
     const lastSession = await prisma.workSession.findFirst({
       where: { deviceId: id },
       orderBy: { startedAt: "desc" },
@@ -141,13 +150,17 @@ export class DeviceService {
         startedAt: true,
         endedAt: true,
         endReason: true,
-        user: { select: { id: true, username: true, fullName: true } },
+        user: { select: ACTOR_SELECT },
         machine: { select: { id: true, code: true, name: true } },
         station: { select: { id: true, code: true, name: true, kind: true } },
       },
     });
 
-    return { ...rest, hardware: [...hardware.values()], lastSession };
+    return {
+      ...rest,
+      hardware: [...hardware.values()],
+      lastSession: lastSession ? { ...lastSession, user: maskSystemActor(lastSession.user) } : null,
+    };
   }
 
   /**

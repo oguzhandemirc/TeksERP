@@ -38,6 +38,18 @@ declare module "express-serve-static-core" {
      */
     isRemote?: boolean;
     /**
+     * İstek SATICI (süperadmin) hesabından mı geliyor?
+     *
+     * `auth.middleware.verifyToken` doldurur — `User.isSystemAccount` her
+     * istekte ZATEN yapılan tazelik okumasından (tokenVersion/isActive) gelir,
+     * yani ek sorgu maliyeti YOKTUR ve değer DB-tazedir.
+     *
+     * ⚠️ `isRemote` kalıbı: middleware doldurur, İSTEMCİ SEÇEMEZ. JWT claim'i
+     * DEĞİLDİR — token'a gömülseydi bayrak kaldırılan bir hesap, token'ı
+     * dolana kadar süperadmin kalırdı. Modül anahtarı kapısı buna bakar.
+     */
+    isSystemAccount?: boolean;
+    /**
      * Cloudflare Access'in doğruladığı kimlik (yalnız `isRemote` isteklerde).
      * ERP oturumunun YERİNE GEÇMEZ — kenardaki ön kapının kim olduğudur;
      * yetkilendirme yine `verifyToken` + `requirePermission` ile yapılır.

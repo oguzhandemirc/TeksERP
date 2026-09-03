@@ -73,6 +73,7 @@
 // =============================================================================
 
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import {
   TAMBUR_UNDO_CANCEL_CODE,
   TAMBUR_UNDO_CANCEL_TEXT,
@@ -296,9 +297,15 @@ export class TamburUndoService {
    */
   private fullPermissionBlockReason(opts?: UndoRequestOptions): string | null {
     if (!opts?.permissions) return null;
+    // ⚠️ `matchesPermission` — düz `includes` DEĞİL. Süperadmin `["*"]` taşır ve
+    // düz karşılaştırma onu TANIMAZDI: kapı middleware'den SONRA, servis içinde
+    // koştuğu için hata 403 gibi bile görünmez ("yetkiniz yok" iş kuralı reddi).
+    // ⚠️ `admin:*` KISAYOLU KORUNUR (ikinci yüklem): düz çevirme
+    // `matchesPermission(["admin:*"], "tambur:undo-full")` = false demek olurdu →
+    // bugün bu kısayolla geri alma yapabilen kullanıcılar yetki KAYBEDERDİ.
     const ok =
-      opts.permissions.includes(UNDO_FULL_PERMISSION) ||
-      opts.permissions.includes("admin:*");
+      matchesPermission(opts.permissions, UNDO_FULL_PERMISSION) ||
+      matchesPermission(opts.permissions, "admin:*");
     if (ok) return null;
     return (
       "Tümden geri alma yetkiniz yok — bu işlem iş emrinin geçmişini yeniden yazar " +

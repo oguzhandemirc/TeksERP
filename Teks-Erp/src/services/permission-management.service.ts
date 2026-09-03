@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { AppError } from "../utils/app-error";
+import { visibleUserWhere } from "./helpers/system-account.helper";
 import { AuditService } from "./audit.service";
 import { AuthService } from "./auth.service";
 import { readLoginMethods } from "./system-setting.service";
@@ -120,7 +121,8 @@ export class PermissionManagementService {
       // Silinmiş kullanıcılar (deletedAt dolu) listede GÖRÜNMEZ — yalnız veri
       // bütünlüğü/sistem geçmişi için DB'de durur. Pasif (isActive=false, deletedAt
       // null) kayıtlar görünür ki admin aktifleştirebilsin.
-      where: { deletedAt: null },
+      // Satıcı (sistem) hesabı da görünmez — TEK KAYNAK helper, elle kopya YASAK.
+      where: visibleUserWhere({ deletedAt: null }),
       select: {
         id: true,
         username: true,
@@ -139,7 +141,9 @@ export class PermissionManagementService {
    */
   static async getUserById(id: string) {
     const user = await prisma.user.findFirst({
-      where: { id, deletedAt: null },
+      // ⚠️ Sistem hesabında sonuç BOŞ → aşağıdaki `notFound` koşar, yani 404.
+      // 403 verilseydi hesabın VARLIĞINI doğrulardı (uzak PIN ucunun 404 emsali).
+      where: visibleUserWhere({ id, deletedAt: null }),
       select: {
         id: true,
         username: true,

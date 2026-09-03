@@ -20,6 +20,7 @@ import { join } from "node:path";
 import prisma from "../src/lib/prisma";
 import { readDemoModeEnabled } from "../src/services/system-setting.service";
 import { DEMO_SCENARIOS, demoService } from "../src/services/demo.service";
+import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 
 let pass = 0;
@@ -138,6 +139,27 @@ async function main(): Promise<void> {
   );
   const tamYetki = demoService.listScenarios(["admin:*"]);
   check("§6d `admin:*` hepsini açar", tamYetki.every((s) => s.allowed));
+  // §6e SATICI HESABI: `["*"]` de hepsini açmalı. `listScenarios` düz `includes`
+  // kullandığı sürece süperadmin her senaryoyu `allowed:false` görürdü — kapı
+  // route'ta doğru, EKRAN yanlış (2026-09-03 `*` körlüğü düzeltmesi).
+  // ⚠️ `"*"` katalogda YOKTUR (bilinçli — hiçbir panelden atanamaz), yani
+  // `PermissionCode` union'ına da girmez; cast burada o gerçeğin ifadesidir.
+  const superadmin = demoService.listScenarios(["*"] as unknown as Parameters<
+    typeof demoService.listScenarios
+  >[0]);
+  check("§6e ⭐ `[\"*\"]` (satıcı hesabı) hepsini açar", superadmin.every((s) => s.allowed));
+  // §6f DEVİR: `test_permission_catalog` demo.service'i dinamik kaynak sayıp
+  // BU dosyaya devrediyor (senaryo dizisindeki string'ler yalnız izin değil,
+  // etiket/kod da taşıyor → orada AST ayıramıyor). Kapsam BURADA mekanik kurulur.
+  const katalogKodlari = new Set<string>(PERMISSION_CATALOG.map((p) => p.code));
+  const eksikIzin = [
+    ...new Set(DEMO_SCENARIOS.flatMap((sc) => sc.permissions)),
+  ].filter((c) => !katalogKodlari.has(c));
+  check(
+    "§6f ⭐ her senaryo izni permission-catalog'da TANIMLI (devir: test_permission_catalog)",
+    eksikIzin.length === 0,
+    eksikIzin.length ? `KATALOGDA YOK: ${eksikIzin.join(", ")}` : `${katalogKodlari.size} kod`,
+  );
 
   // ── §8 UI BİLEŞENLERİ KAPISIZ OLAMAZ ───────────────────────────────────
   // `components/demo/` altındaki HER bileşen `useDemoModeEnabled()` çağırmalı.

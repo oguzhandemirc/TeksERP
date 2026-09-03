@@ -13,6 +13,12 @@ import prisma from "../lib/prisma";
 import { resolveChangeValues, attachLabels } from "./helpers/audit-value-resolver";
 import { Prisma, SystemLogCategory } from "@prisma/client";
 import { decodeCursor, cursorWhere, buildNextCursor } from "../utils/cursor";
+import {
+  ACTOR_SELECT,
+  VISIBLE_ACTOR,
+  SYSTEM_ACTOR_USERNAME,
+  maskSystemActor,
+} from "./helpers/system-account.helper";
 
 export interface SystemLogListParams {
   cursor?: string;
@@ -52,7 +58,9 @@ const LIST_SELECT = {
   // "aynı işlemdekiler" sorgusunu kurar. Küçük skaler — perf kuralı 13'ün
   // (devasa JSON'ları listede çekme) kapsamına girmez.
   requestId: true,
-  user: { select: { id: true, username: true, fullName: true } },
+  // ⚠️ AKTÖR SEÇİMİ TEK KAYNAKTAN (`ACTOR_SELECT`): `isSystemAccount` alanını da
+  // taşır, çünkü `maskSystemActor` o alan OLMADAN sessizce no-op'a düşer.
+  user: { select: ACTOR_SELECT },
 } as const;
 
 /**
@@ -98,6 +106,54 @@ function parseCategories(raw: string | undefined): SystemLogCategory[] | undefin
     .map((s) => s.trim())
     .filter((s) => s.length > 0 && allowed.has(s));
   return parts.length ? (parts as SystemLogCategory[]) : undefined;
+}
+
+/**
+ * Audit satırının aktörünü nötrler — satırı DÜŞÜRMEZ.
+ *
+ * KARAR #8 (tam iz): sistem hesabının yaptığı iş audit'te GÖRÜNÜR kalır, yalnız
+ * kim olduğu "sistem / Sistem Bakımı" olarak yazılır. Satırı süzmek iki şeyi
+ * birden bozardı: denetim izini (bakım işlemi kayıptan sayılırdı) ve — nullable
+ * ilişki yüzünden — `userId = null` olan 641 sistem olayını (2 Eyl fabrika
+ * dump'ının TAZE restore'unda ölçüldü: 16241 satırın 641'i, %3.9).
+ *
+ * ⚠️ MASKE SATIR DÜZEYİNDEDİR, YALNIZ AKTÖR NESNESİNDE DEĞİL (2026-09-03).
+ * `AUTH` kategorisindeki satırların `recordId`'si GİRİŞ ADIdır — `auth.controller`
+ * onu `body.username` / `result.user.username` ile yazar. Yani maskesiz hâlde
+ * aynı JSON satırında `{"recordId":"<gerçek ad>","user":{"username":"sistem"}}`
+ * yan yana duruyordu ve takma adı ÇÜRÜTÜYORDU (ölçüldü: D1/D2, LOGIN_SUCCESS).
+ * Bu yüzden aktör sistem hesabıysa ve satır `tableName === "AUTH"` ise `recordId`
+ * de `SYSTEM_ACTOR_USERNAME`e nötrlenir — geçmiş satırlar dahil, çünkü maske
+ * OKUMA anında uygulanır.
+ *
+ * ⚠️ NEDEN YALNIZ `AUTH`: başka tablolarda `recordId` bir UUID'dir (kaydın id'si)
+ * ve onu ezmek kayıt-bazlı geçmişi (`?tableName=&recordId=`) kırardı. Ad taşıyan
+ * TEK yüzey giriş olaylarıdır.
+ *
+ * ⚠️ KABUL EDİLEN AÇIK: `GET /api/admin/system-logs?recordId=<ad>` filtresi DB'deki
+ * HAM değere bakar, yani adı ZATEN BİLEN biri o satırları bulabilir (numaralandırma
+ * orakülü — "bu ad sistemde var mı" sorusu cevaplanır). Kapatılmadı çünkü filtre
+ * ham kolon üzerinde çalışır ve maskelenmiş değere göre süzmek kayıt-bazlı geçmişin
+ * sözleşmesini bozardı. Sınır: parola/PIN/TOTP SIRDIR ve hiçbir yüzeyde geçmez;
+ * kullanıcı adı yalnız GÖRÜNÜRLÜKTEN çıkarılır (tahmin edilemezliği koruma DEĞİL).
+ */
+function withMaskedActor<
+  T extends {
+    user?: { id: string; username: string; fullName: string; isSystemAccount?: boolean } | null;
+    tableName?: string | null;
+    recordId?: string | null;
+  },
+>(row: T): Omit<T, "user"> & { user: { id: string; username: string; fullName: string } | null } {
+  const { user, ...rest } = row;
+  const sistem = user?.isSystemAccount === true;
+  const nötrRecordId = sistem && rest.tableName === "AUTH";
+  return {
+    ...rest,
+    ...(nötrRecordId ? { recordId: SYSTEM_ACTOR_USERNAME } : {}),
+    user: user ? maskSystemActor(user) : null,
+  } as Omit<T, "user"> & {
+    user: { id: string; username: string; fullName: string } | null;
+  };
 }
 
 export class SystemLogService {
@@ -163,7 +219,7 @@ export class SystemLogService {
 
     return {
       success: true,
-      data,
+      data: data.map(withMaskedActor),
       pagination: { nextCursor, hasMore, limit },
     };
   }
@@ -171,11 +227,14 @@ export class SystemLogService {
   static async findById(id: string) {
     const record = await prisma.systemLog.findUnique({
       where: { id },
-      include: { user: { select: { id: true, username: true, fullName: true } } },
+      include: { user: { select: ACTOR_SELECT } },
     });
     if (!record) return { success: false, data: null, message: "Kayıt bulunamadı" };
     const labels = await resolveChangeValues([record.changes as never]);
-    return { success: true, data: { ...record, changes: attachLabels(record.changes, labels) } };
+    return {
+      success: true,
+      data: withMaskedActor({ ...record, changes: attachLabels(record.changes, labels) }),
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -243,22 +302,29 @@ export class SystemLogService {
     const users = userIds.length
       ? await prisma.user.findMany({
           where: { id: { in: userIds } },
-          select: { id: true, username: true, fullName: true },
+          select: ACTOR_SELECT,
         })
       : [];
     const userMap = new Map(users.map((u) => [u.id, u]));
 
-    const enriched = data.map((d) => ({
-      id: d.id,
-      category: d.category,
-      action: d.action,
-      tableName: d.tableName,
-      recordId: d.recordId,
-      ipAddress: d.ipAddress,
-      requestId: d.requestId,
-      createdAt: d.createdAt,
-      user: d.userId ? userMap.get(d.userId) ?? null : null,
-    }));
+    // ⚠️ Arşiv satırı DA KALIR (karar #8 — tam iz); gizlenen yalnız kimliktir.
+    // ⚠️ MASKE TEK SARMALAYICIDAN geçer (`withMaskedActor`) — elle
+    // `maskSystemActor(...)` çağırmak `recordId` nötrlemesini ATLAR ve arşiv
+    // kolu canlı kolun bir ADIM GERİSİNDE kalır (ölçülmüş sınıf: "ayrışan
+    // yüzey"). Dört okuma yolu da aynı sarmalayıcıyı kullanmak ZORUNDA.
+    const enriched = data.map((d) =>
+      withMaskedActor({
+        id: d.id,
+        category: d.category,
+        action: d.action,
+        tableName: d.tableName,
+        recordId: d.recordId,
+        ipAddress: d.ipAddress,
+        requestId: d.requestId,
+        createdAt: d.createdAt,
+        user: d.userId ? (userMap.get(d.userId) ?? null) : null,
+      }),
+    );
 
     const last = data[data.length - 1];
     const nextCursor = hasMore && last ? buildNextCursor(last) : null;
@@ -273,16 +339,18 @@ export class SystemLogService {
   static async findArchiveById(id: string) {
     const record = await prisma.systemLogArchive.findUnique({ where: { id } });
     if (!record) return { success: false, data: null, message: "Kayıt bulunamadı" };
+    // ⚠️ HAM aktör okunur, maskeyi `withMaskedActor` uygular (dört okuma yolunun
+    // TEK sarmalayıcısı — `recordId` nötrlemesi de oradadır).
     const user = record.userId
       ? await prisma.user.findUnique({
           where: { id: record.userId },
-          select: { id: true, username: true, fullName: true },
+          select: ACTOR_SELECT,
         })
       : null;
     const labels = await resolveChangeValues([record.changes as never]);
     return {
       success: true,
-      data: { ...record, user, changes: attachLabels(record.changes, labels) },
+      data: withMaskedActor({ ...record, user, changes: attachLabels(record.changes, labels) }),
     };
   }
 
@@ -294,7 +362,10 @@ export class SystemLogService {
   static async listActiveUsers() {
     return dropdownCache.get("users", async () => {
       const rows = await prisma.systemLog.findMany({
-        where: { userId: { not: null }, category: "DOMAIN" },
+        // ⚠️ Bu DROPDOWN'dır (olay listesi DEĞİL) → satıcı hesabı burada SÜZÜLÜR.
+        // `userId: { not: null }` zaten var, yani NULLABLE tuzağı burada YOK; düz
+        // `user: VISIBLE_USER` doğru yazımdır (bkz. helper başlığı).
+        where: { userId: { not: null }, category: "DOMAIN", ...VISIBLE_ACTOR },
         distinct: ["userId"],
         select: { user: { select: { id: true, username: true, fullName: true } } },
         take: 200,

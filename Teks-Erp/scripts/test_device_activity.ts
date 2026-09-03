@@ -450,8 +450,12 @@ async function main() {
     check("13b. hardware dedup (legacy + M:N → 1) + medya dolu (100×148)",
       detail.hardware.length === 1 && Number(detail.hardware[0].labelWidthMm) === 100 && Number(detail.hardware[0].labelHeightMm) === 148,
       `adet=${detail.hardware.length}`);
+    // ⚠️ `user` artık NULLABLE tipte: `detail` aktörü `maskSystemActor`tan
+    // geçiriyor (satıcı hesabının giriş adı Cihazlar ekranında ham basılıyordu).
+    // `WorkSession.userId` NOT NULL olduğu için değer pratikte hep dolu; kontrol
+    // `?.` ile yazılır ve null gelirse yine KIRMIZI verir.
     check("13c. cihaz lastSession = en son oturum (canlı)",
-      detail.lastSession?.id === sessionLive.id && detail.lastSession?.user.id === user.id);
+      detail.lastSession?.id === sessionLive.id && detail.lastSession?.user?.id === user.id);
 
     // 14: getUserById — kullanıcı ayak izi başlığı
     const ud = await PermissionManagementService.getUserById(user.id);

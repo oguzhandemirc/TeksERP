@@ -25,6 +25,7 @@
 // Bu ayrım kullanıcıya da aynen yazılır (panel sonuç kartı + şablon açıklaması).
 
 import { Prisma } from "@prisma/client";
+import { matchesPermission } from "../../middlewares/rbac.middleware";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
 import { AuditService } from "../audit.service";
@@ -379,8 +380,11 @@ export class ImportService {
     canWrite: boolean;
     canRead: boolean;
   }> {
+    // ⚠️ `matchesPermission` — gerçek kapı (`routes/import.routes.ts`) zaten onu
+    // kullanıyor; burası yalnız LİSTE süslemesiydi ve süperadmine her satırı
+    // `canRead:false` gösteriyordu ("ekran hayır, uç evet" tutarsızlığı).
     const has = (code: string): boolean =>
-      permissions.includes(code) || permissions.includes("admin:*");
+      matchesPermission(permissions, code) || matchesPermission(permissions, "admin:*");
     return listAdapters().map((a) => ({
       entity: a.entity,
       label: a.label,

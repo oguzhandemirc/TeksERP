@@ -165,6 +165,16 @@ async function main(): Promise<void> {
     JSON.stringify(secret[0]));
   check("gizli alan listesi dolu", AUDIT_DIFF_SECRET_FIELDS.size >= 5,
     `${AUDIT_DIFF_SECRET_FIELDS.size} alan`);
+  // ⚠️ SAYI YETMEZ, İSİM ARANIR: eşleşme TAM ADdır (`Set.has`), yani "…Hash"
+  // son eki otomatik yakalanmaz. Bir sır alanı listeden düşerse sayı hâlâ >=5
+  // kalır ve kontrol vakumen yeşil verirdi.
+  const beklenenGizli = [
+    "passwordHash", "quickPin", "cardToken",
+    "totpSecret", "settingsPasswordHash", "superadminPin",
+  ];
+  const eksikGizli = beklenenGizli.filter((f) => !AUDIT_DIFF_SECRET_FIELDS.has(f));
+  check("gizli alan listesi ADLARI taşıyor", eksikGizli.length === 0,
+    eksikGizli.length ? `eksik: ${eksikGizli.join(", ")}` : beklenenGizli.join(", "));
 
   // OPAK ALAN: devasa JSON'u audit'e gömmek satırı yüzlerce KB yapar.
   const opaque = diffFields({ snapshot: { a: 1 } }, { snapshot: { a: 2 } });

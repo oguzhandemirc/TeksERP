@@ -15,6 +15,7 @@
 // =============================================================================
 
 import prisma from "../lib/prisma";
+import { VISIBLE_ACTOR } from "./helpers/system-account.helper";
 import { Prisma } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -476,7 +477,10 @@ export class WorkSessionService {
   static async listActive(): Promise<ApiResponse<unknown[]>> {
     await sweepIdleSessions();
     const items = await prisma.workSession.findMany({
-      where: { endedAt: null },
+      // Satıcı (sistem) hesabının oturumu canlı panelde GÖRÜNMEZ.
+      // ⚠️ `WorkSession.userId` ZORUNLU (şema: `user User @relation`), bu yüzden
+      // düz `VISIBLE_ACTOR` doğru yazımdır — nullable tuzağı burada YOK.
+      where: { endedAt: null, ...VISIBLE_ACTOR },
       include: SESSION_INCLUDE,
       orderBy: { startedAt: "asc" },
     });
@@ -506,6 +510,10 @@ export class WorkSessionService {
       ...(q.from || q.to
         ? { startedAt: { ...(q.from ? { gte: q.from } : {}), ...(q.to ? { lte: q.to } : {}) } }
         : {}),
+      // ⚠️ Süzgeç ORTAK `where` nesnesinde: hemen aşağıda `count` ve `findMany`
+      // AYNI nesneyi paylaşıyor. Yalnız birine yazılsaydı toplam ile satır sayısı
+      // ayrışır ve sayfalama sayacı sapardı.
+      ...VISIBLE_ACTOR,
     };
     // F275: MAX_OFFSET guard (skip>10K → Türkçe 400). WorkSession her login/vardiyada
     // büyür; ham (page-1)*pageSize sınırsız derin OFFSET taramasına açıktı.

@@ -17,9 +17,10 @@
 // göre `undefined` bir Set üretir — yani kapı sessizce açılır. İkilik bekçiyle
 // kilitlenir (`scripts/test_module_flags.ts`: MODULE_SETTING_KEYS ↔ SETTING_KEYS).
 //
-// TÜKETİCİLER: `setFeatureFlags` bağımlılık doğrulaması · `admin.routes` ham
-// ayar ucunun reddi (K7) · (sonraki paket) `flagWriteGuard` süperadmin dalı ·
-// bekçi `scripts/test_module_flags.ts`.
+// TÜKETİCİLER (DÖRT): `setFeatureFlags` bağımlılık doğrulaması · `admin.routes`
+// ham ayar ucunun reddi (K7) · `feature-flag.routes.ts` `flagWriteGuard`ının
+// SÜPERADMİN dalı (modül anahtarını yalnız sistem hesabı yazar) · bekçi
+// `scripts/test_module_flags.ts`.
 // =============================================================================
 
 /**

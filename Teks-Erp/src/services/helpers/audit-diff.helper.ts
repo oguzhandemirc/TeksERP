@@ -31,10 +31,26 @@ export interface FieldChange {
  *     değil. Değer yazılmaz — yalnız "değişti" bilgisi kalır.
  *   · GÜRÜLTÜ (`updatedAt`, künye kolonları): her update'te değişir, hiçbir şey
  *     anlatmaz ve gerçek değişikliği gözden kaçırtır.
+ *
+ * ⚠️⚠️ MASKELEME KAPSAMI YANILTICIDIR: bu küme YALNIZ `changes` kolonuna
+ * uygulanır. `AuditService.log`un `oldData`/`newData`sı ve `logEvent`in
+ * `payload`ı SystemLog'a HAM yazılır (`audit.service.ts`) — yani bir alanı bu
+ * listeye eklemek "artık sır sızmaz" DEMEK DEĞİLDİR. Sır taşıyan her çağıranın
+ * kendi yükü temiz olmak ZORUNDA (emsal: `setQuickPin` audit'e ham PIN değil
+ * `rotated: boolean` yazar).
+ *
+ * ⚠️ EŞLEŞME TAM ADDIR (`Set.has`) — "…Hash"/"…Secret" son ekleri otomatik
+ * yakalanmaz; yeni sır alanı ADIYLA eklenir.
  */
 const SECRET_FIELDS = new Set([
   "passwordHash", "password", "pin", "pinHash", "quickPin",
   "cardToken", "token", "refreshToken", "secret",
+  // TOTP sırrı HMAC anahtarıdır — düz saklanır, diff'e girmemeli.
+  "totpSecret",
+  // P3 (ayar şifresi) önden eklendi: alan doğduğu gün maskeli doğsun.
+  "settingsPasswordHash",
+  // Süperadmin PIN'inin herhangi bir yüke sızması durumunda ikinci hat.
+  "superadminPin",
 ]);
 const NOISE_FIELDS = new Set([
   "updatedAt", "createdAt", "updatedById", "createdById", "id",

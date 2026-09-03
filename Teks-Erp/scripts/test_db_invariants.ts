@@ -30,6 +30,10 @@
 // "envanter tek ve doğrulanan yerde yaşar" iddiası kâğıt üstünde kalırdı — nitekim
 // eski sürümde tespit yalnız 2 bölümde vardı ve o ikisi de `exit 0`'lı ⚠️ basıyordu.
 //
+// 2026-09-03'te ONUNCU bölüm eklendi: satıcı (sistem) hesabı TEKİLLİĞİ. O bir
+// DB invariantı ama şema onu ifade edemez (bir bayrak kolonunda "yalnız bir
+// satır true" kısıtı) — yani tam da bu dosyanın konusu.
+//
 // Salt-okunur: hiçbir yazma/fixture yok, herhangi bir ortamda güvenle koşar.
 // Koşum: npx tsx scripts/test_db_invariants.ts
 // =============================================================================
@@ -991,6 +995,36 @@ async function main(): Promise<void> {
     foldNamedNotGenerated.length === 0,
     foldNamedNotGenerated.map((g) => `${g.tbl}.${g.col}`).join(", ") ||
       "sapma yok — süzgeç yalnız DB-üretimli kolonları düşürüyor"
+  );
+
+  // ── 10) Satıcı (sistem) hesabı TEKİLLİĞİ ──────────────────────────────────
+  // NEDEN BURADA: bu bir DB invariantıdır ama şema onu İFADE EDEMEZ —
+  // `isSystemAccount` üzerinde partial unique kurulamaz (kolon bir bayraktır,
+  // "yalnız bir satır true olabilir" kısıtı ancak `WHERE "isSystemAccount"`
+  // predicate'li ifade-unique ile yazılabilirdi ve o da tek-satır tablosu
+  // taklidi olurdu). Uygulama tarafında `ensureSuperadminAccount` `findFirst`
+  // ile idempotenttir; ikinci bir satır ancak ELLE SQL / içe aktarım / bozuk
+  // bir migration ile doğar.
+  //
+  // NEDEN ÖNEMLİ: `getEffectivePermissions` bypass'ı ve `flagWriteGuard`ın
+  // supabı "sistem hesabı" kavramını TEKİL sayar; job da rotasyonu `findFirst`
+  // ile bulduğu satıra uygular. İki satır varsa FORCE_SYNC hangisini
+  // güncelleyeceğini SIRAYA bırakır (deterministik değil) ve rotasyon sonrası
+  // satıcı "parola çalışmıyor" der — hiçbir yerde hata görünmeden.
+  //
+  // ⚠️ `test_superadmin.ts` geçici olarak İKİNCİ bir sistem hesabı yaratır ve
+  // siler → bu iki bekçi EŞZAMANLI KOŞMAZ.
+  console.log("\n── 10) Satıcı (sistem) hesabı tekilliği ──");
+  const sistemHesaplari = await prisma.$queryRaw<Array<{ id: string; username: string }>>`
+    SELECT id, username FROM users WHERE "isSystemAccount" = true ORDER BY "createdAt"
+  `;
+  check(
+    "sistem hesabı en fazla 1 satır",
+    sistemHesaplari.length <= 1,
+    sistemHesaplari.length <= 1
+      ? `${sistemHesaplari.length} satır`
+      : `${sistemHesaplari.length} satır: ${sistemHesaplari.map((u) => u.username).join(", ")} — ` +
+        "rotasyon (SUPERADMIN_FORCE_SYNC) hangisini güncelleyeceğini SIRAYA bırakır"
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

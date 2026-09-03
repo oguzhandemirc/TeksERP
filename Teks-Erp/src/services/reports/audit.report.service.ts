@@ -7,6 +7,10 @@
 
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
+import {
+  SQL_ACTOR_FULLNAME,
+  SQL_ACTOR_USERNAME,
+} from "../helpers/system-account.helper";
 import type { DateRange } from "./_shared";
 import { factoryDaySql } from "../../constants/time";
 
@@ -126,8 +130,8 @@ export async function getUserActivity(range: DateRange): Promise<UserActivityRow
   >(Prisma.sql`
     SELECT
       sl."userId"                                     AS "userId",
-      u.username                                       AS username,
-      u."fullName"                                     AS "fullName",
+      ${SQL_ACTOR_USERNAME}                            AS username,
+      ${SQL_ACTOR_FULLNAME}                            AS "fullName",
       COUNT(*) FILTER (WHERE sl.action = 'CREATE')     AS "createCount",
       COUNT(*) FILTER (WHERE sl.action = 'UPDATE')     AS "updateCount",
       COUNT(*) FILTER (WHERE sl.action = 'DELETE')     AS "deleteCount",
@@ -136,7 +140,11 @@ export async function getUserActivity(range: DateRange): Promise<UserActivityRow
     FROM system_logs sl
     LEFT JOIN users u ON u.id = sl."userId"
     WHERE sl."createdAt" >= ${range.from} AND sl."createdAt" <= ${range.to}
-    GROUP BY sl."userId", u.username, u."fullName"
+    -- SATIR SUZULMEZ (karar #8 - tam iz); gizlenen yalniz KIMLIKTIR ve bunu
+    -- SELECT tarafindaki CASE yapar. Suzmek userId IS NULL olan sistem
+    -- olaylarini da (LEFT JOIN -> u NULL) dusururdu; ayrica bu bir DENETIM
+    -- raporudur. GROUP BY ifadeleri SELECT ile AYNI metin olmak ZORUNDA.
+    GROUP BY sl."userId", ${SQL_ACTOR_USERNAME}, ${SQL_ACTOR_FULLNAME}
     ORDER BY "totalCount" DESC
     LIMIT 100
   `);

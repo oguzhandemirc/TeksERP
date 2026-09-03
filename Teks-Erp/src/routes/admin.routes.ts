@@ -5,7 +5,8 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { SCREEN_CATALOG, permissionsWithoutScreen } from "../constants/screen-catalog";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { requirePermission } from "../middlewares/rbac.middleware";
+import { blockSystemAccountTarget } from "../middlewares/system-account.middleware";
+import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
 import { PermissionManagementService } from "../services/permission-management.service";
@@ -36,6 +37,41 @@ import { z } from "zod";
 import "../types/express-augment";
 
 const router = Router();
+
+// =============================================================================
+// SATICI (SİSTEM) HESABI — HEDEF ALINAMAZ
+// =============================================================================
+// `/api/admin/users/:id` ile başlayan HER uç (künye · yetki · PIN · kart ·
+// parola · TOTP · pasifleştir · kalıcı sil) sistem hesabında **404** verir.
+// Önek kapısı bilinçlidir: on sekizinci uç yazıldığında da kapalı doğar.
+// Gerekçe, bedel ve "neden 403 değil" → `middlewares/system-account.middleware.ts`.
+// ⚠️ `verifyToken` burada TEKRAR koşar; kimliksiz bir DB okuması hesabın varlığını
+// sızdıran bir orakül açardı.
+//
+// ⚠️ ÖNEK KAPISI ALT ROTADAN DAHA DAR OLAMAZ (2026-09-03, D1 bulgusu).
+// Önek `requirePermission("admin:users")` idi; altındaki `GET /users/:id/credentials`
+// ise `admin:settings` + `admin:users` İKİLİSİNİ ilan ediyor. Bugün davranışsal fark
+// YOK (o rota zaten `admin:users` da istiyor — main'de de öyleydi, yani D1'in
+// "regresyon" teşhisi bu noktada yanlıştı), ama önekin izin kümesi alt rotaların
+// BİRLEŞİMİNDEN dar kaldığı an fark GERÇEK olur: on sekizinci uç `admin:settings`
+// ile yazıldığında kullanıcı kartı görür, tıklar ve rotanın HİÇ İSTEMEDİĞİ bir
+// izni suçlayan 403 alır ("kart görür, tıklar, /forbidden" sınıfı).
+// Bu yüzden önek BİRLEŞİMİ taşır; DARALTMAYI alt rotanın kendi zinciri yapar.
+// Bekçi: `scripts/test_superadmin.ts` §M (AST — önek kümesi ⊇ her alt rota kümesi).
+//
+// ⚠️ KABUL EDİLEN BEDEL: yalnız `admin:settings` taşıyan (bugün 0 kullanıcı) biri
+// artık öneği geçip `blockSystemAccountTarget`e ulaşır → sistem hesabı id'sinde
+// 404, normal id'de alt rotanın 403'ü. Yani "bu id özel" ayrımı o dar kümeye
+// görünür. Yeni bir sızıntı DEĞİL: aynı kişi audit listesinde aktörün id'sini
+// zaten görüyor (karar #8 — id KORUNUR). Sır olan PIN/parola her iki yolda da
+// kapalı kalır.
+// =============================================================================
+router.use(
+  "/users/:id",
+  verifyToken,
+  requireAnyPermission("admin:users", "admin:settings"),
+  blockSystemAccountTarget,
+);
 
 // =============================================================================
 // PERMISSION CATALOG

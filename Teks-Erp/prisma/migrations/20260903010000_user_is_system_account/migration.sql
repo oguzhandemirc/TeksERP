@@ -1,0 +1,15 @@
+-- users.isSystemAccount: SATICI (süperadmin) hesabı işareti.
+--
+-- NEDEN KOLON (rol/izin DEĞİL): süperadmin bir ROL olsaydı rol şablonu
+-- uygulaması izinleri kullanıcıya KOPYALARDI (`UserPermission` satırı doğar →
+-- panelin yetki sayacı hesabı sızdırır) ve rol, rol listesinde görünürdü.
+-- Kimlik bir GERÇEK satırın bayrağıdır; tam yetki (`["*"]`) koddan gelir.
+--
+-- ADDITIVE ve DAVRANIŞ-NÖTR: mevcut 64 satırın hepsi `false` doğar, yani hiçbir
+-- yüzey değişmez. 20260810010330 (appliesColor/appliesProperty) emsalinden TEK
+-- farkı budur: orada mevcut satırların DOLDURULMASI gerekiyordu, burada
+-- gerekmiyor — backfill UPDATE'i BİLEREK YOK.
+--
+-- INDEX YOK: kolon seçici değil (sistemde en fazla bir true satır) ve süzgeç
+-- her zaman başka bir koşulun yanında koşar.
+ALTER TABLE "users" ADD COLUMN "isSystemAccount" BOOLEAN NOT NULL DEFAULT false;

@@ -19,6 +19,7 @@
 // aynısı: enforcement çağrı yüzeyinde yaşar.
 // =============================================================================
 import { RollStatus } from "@prisma/client";
+import { matchesPermission } from "../middlewares/rbac.middleware";
 import prisma from "../lib/prisma";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
@@ -71,8 +72,12 @@ export class DemoService {
 
   /** Panel bu listeyi çizer; `allowed` kullanıcının izinlerine göre hesaplanır. */
   listScenarios(userPermissions: string[]): Array<DemoScenario & { allowed: boolean }> {
+    // ⚠️ `matchesPermission` — düz `includes` süperadminin `["*"]`ini tanımaz ve
+    // ekran "yetkin yok" derken uç ÇALIŞIR (gösterim/kapı ayrışması).
+    // `admin:*` dalı KORUNUR (bugünkü kısayol).
     const yetkili = (kodlar: string[]): boolean =>
-      userPermissions.includes("admin:*") || kodlar.every((k) => userPermissions.includes(k));
+      matchesPermission(userPermissions, "admin:*") ||
+      kodlar.every((k) => matchesPermission(userPermissions, k));
     return DEMO_SCENARIOS.map((s) => ({ ...s, allowed: yetkili(s.permissions) }));
   }
 

@@ -2,8 +2,10 @@
 // MODÜL ANAHTARLARI — TEK KAYNAK SÖZLEŞMESİ
 // =============================================================================
 // `src/constants/module-flags.ts` yedi modül şalterinin TEK KAYNAĞIDIR ve
-// dört tüketicisi var: `setFeatureFlags` bağımlılık doğrulaması · `admin.routes`
-// ham ayar ucunun reddi (K7) · middleware kapıları · grandfathering migration'ı.
+// BEŞ tüketicisi var: `setFeatureFlags` bağımlılık doğrulaması · `admin.routes`
+// ham ayar ucunun reddi (K7) · middleware kapıları · grandfathering migration'ı ·
+// `feature-flag.routes.ts` `flagWriteGuard`ının SÜPERADMİN dalı (2026-09-03 —
+// modül anahtarını yalnız sistem hesabı yazar; ayrı bekçi `test_superadmin.ts`).
 // Bu bekçi o dosyanın gerçeği söylediğini ölçer.
 //
 // ⚠️ EN ÖNEMLİ KONTROL §2: `MODULE_SETTING_KEYS` DB anahtarlarını DÜZ STRING

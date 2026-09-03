@@ -17,6 +17,14 @@ import {
   DOCUMENT_DESIGN_FLAG_KEYS,
   DOCUMENT_DESIGN_WRITE,
 } from "../constants/document-design";
+import { MODULE_FLAG_KEYS } from "../constants/module-flags";
+import {
+  systemAccountLockActive,
+  refreshSystemAccountRegistry,
+} from "../services/helpers/system-account.registry";
+import { AuditService } from "../services/audit.service";
+import { AppError } from "../utils/app-error";
+import "../types/express-augment";
 
 const router = Router();
 
@@ -28,6 +36,12 @@ const router = Router();
  * şablon tasarımcısına oturum ömrünü, yedek saatini ve kk1 tuzağını da
  * vermek olurdu; kapalı bırakmak ise dar iznin hiçbir işe yaramaması demekti.
  *
+ * ÜÇ DAL (2026-09-03'te modül dalı eklendi — ayrıntı gövdedeki yorumlarda):
+ *   ① gövde EN AZ BİR modül anahtarı taşıyorsa → sistem hesabı (süperadmin) şartı
+ *      (sistem hesabı HİÇ YOKSA supap: defter TAZELENİR, hâlâ yoksa ② + ③'e düşer)
+ *   ② gövde YALNIZ belge tasarım anahtarları taşıyorsa → dar izin
+ *   ③ gerisi → `admin:settings`
+ *
  * Kural: gövde YALNIZ belge tasarım anahtarlarını taşıyorsa dar izin yeter.
  * Tek bir yabancı anahtar (ya da BOŞ gövde) → `admin:settings`. FAIL-CLOSED:
  * tanınmayan/beklenmeyen her şey geniş izne düşer, Zod `strictObject`
@@ -37,13 +51,96 @@ const router = Router();
  */
 const flagWriteGuard = (req: Request, res: Response, next: NextFunction): void => {
   const keys = Object.keys((req.body ?? {}) as Record<string, unknown>);
+
+  // ── ① MODÜL DALI — EN ÖNDE ve `.some` ile ────────────────────────────────
+  // Modül anahtarları (`ticaretEnabled`, `productionEnabled`, …) kurulumun
+  // HANGİ ÜRÜNÜ satın aldığını söyler; fabrika yöneticisinin ayarı değildir.
+  //
+  // ⚠️ `.some` — belge dalının `.every`'sinin TERSİ ve bu bilinçlidir. Belge dalı
+  //   "yalnız bu anahtarlar varsa DAR izin yeter" der (izin GENİŞLETİR);
+  //   modül dalı "içinde bir tane bile varsa süperadmin şartı" der (izin
+  //   DARALTIR). `.every` yazılsaydı `{ ticaretEnabled, backupHour }` karma
+  //   gövdesi bu dala hiç girmez ve `admin:settings` taşıyan yönetici modülü
+  //   sessizce açardı. FAIL-CLOSED.
+  // ⚠️ SIRA: dal en önde. Bugün belge dalı `.every` olduğu için karışım zaten
+  //   ona düşmez; ama ileride eklenecek dördüncü bir `.some` dalı sessizce öne
+  //   geçebilirdi.
+  // ⚠️ SENKRON: `req.isSystemAccount` `verifyToken`in doldurduğu istek-taze bir
+  //   alandır (JWT claim'i DEĞİL) — bu yüzden burada DB'ye gidilmez ve guard
+  //   `next`i aynı tick'te çağırır.
+  if (keys.some((k) => MODULE_FLAG_KEYS.has(k))) {
+    // EMNİYET SUPABI: sistem hesabı YOKSA (`.env`'de SUPERADMIN_* yok) kural
+    // devre dışıdır — aksi halde modül anahtarını HİÇ KİMSE değiştiremezdi
+    // (`constants/document-design.ts`teki "admin:settings dört ekranı da açmaya
+    // devam eder" dersi). Hesap doğduğu AN kilit mutlaktır.
+    if (systemAccountLockActive()) {
+      moduleLockedBranch(req, res, next);
+      return;
+    }
+    // ── SUPAP DALI — TEK ASENKRON YOL (2026-09-03, D1 bulgusu) ─────────────
+    // Defter yalnız boot'ta yazılıyordu: süreç hesapsız açılıp DB'ye SONRADAN
+    // hesap gelirse (elle SQL, içe aktarım, yedekten geri yükleme) supap bir
+    // sonraki restart'a kadar açık kalıyordu — FAIL-OPEN yönde bir pencere.
+    // Burada tek indeksli bir sorguyla defter TAZELENİR ve karar ondan sonra
+    // verilir.
+    //
+    // ⚠️ YALNIZ BU DAL ASENKRON. Kilitli dal (yukarıda) SENKRON kalır: fabrikada
+    // hesap VARDIR, yani sıcak yol hiç DB'ye gitmez ve bekçi harness'ının
+    // "aynı tick" sözleşmesi orada aynen ölçülebilir.
+    // ⚠️ Sorgu düşerse `next(err)` → 500, yani YAZMA OLMAZ (fail-closed).
+    void refreshSystemAccountRegistry()
+      .then((varMi) => {
+        if (varMi) {
+          // Hesap boot'tan SONRA doğmuş — kilit derhal yürürlüktedir.
+          moduleLockedBranch(req, res, next);
+          return;
+        }
+        // Supap gerçekten açık — görünürlük için iz bırak (best-effort).
+        void AuditService.logEvent({
+          category: "SYSTEM",
+          action: "SUPERADMIN_ABSENT_MODULE_WRITE",
+          userId: req.user?.userId ?? null,
+          tableName: "system_settings",
+          payload: { keys: keys.filter((k) => MODULE_FLAG_KEYS.has(k)) },
+        });
+        belgeVeAdminDallari(keys, req, res, next);
+      })
+      .catch(next);
+    return;
+  }
+
+  belgeVeAdminDallari(keys, req, res, next);
+};
+
+/** ① modül dalının KİLİTLİ hâli — senkron, `next`i aynı tick'te çağırır. */
+function moduleLockedBranch(req: Request, res: Response, next: NextFunction): void {
+  if (req.isSystemAccount !== true) {
+    next(
+      AppError.forbidden("Modül anahtarları yalnız sistem hesabı tarafından değiştirilir.", {
+        code: "MODULE_FLAG_SUPERADMIN_ONLY",
+      }),
+    );
+    return;
+  }
+  // Kimlik VE izin: `["*"]` `admin:settings`i zaten geçer, ama kapı
+  // kimliğin izin denetiminin YERİNE geçmediğini yazılı tutar.
+  requirePermission("admin:settings")(req, res, next);
+}
+
+/** ② + ③ mevcut belge / admin dalları (mantık DEĞİŞMEDİ, yalnız çıkarıldı). */
+function belgeVeAdminDallari(
+  keys: string[],
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   const onlyDocumentKeys =
     keys.length > 0 && keys.every((k) => DOCUMENT_DESIGN_FLAG_KEYS.has(k));
   const guard = onlyDocumentKeys
     ? requireAnyPermission(...DOCUMENT_DESIGN_WRITE)
     : requirePermission("admin:settings");
   guard(req, res, next);
-};
+}
 
 // Tek tablo hücresi — göster + boyut + kalınlık (default'larla tam nesne üretir).
 // `px` 2026-08-05'te eklendi (panel tek birime geçti); `size` kademesi eski

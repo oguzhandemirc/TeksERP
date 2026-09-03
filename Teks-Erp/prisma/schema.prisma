@@ -413,6 +413,13 @@ model User {
   /// serbest bırakılır (del_ ön-ek), kimlikler temizlenir. Pasif ≠ silinmiş.
   deletedAt DateTime? @db.Timestamptz
 
+  /// Satıcı (süperadmin) hesabı. Fabrika yüzeylerinden TEK KAYNAK helper ile
+  /// süzülür (`services/helpers/system-account.helper.ts`); audit'e TAM yazılır
+  /// (fullName "Sistem Bakımı" doğar, aktör adı yüzeyde nötrlenir). YALNIZ boot
+  /// job'ı (`jobs/superadmin.job.ts`) yazar — hiçbir Zod şemasına girmez, yani
+  /// panelden ne atanabilir ne kaldırılabilir.
+  isSystemAccount Boolean @default(false)
+
   // Relations
   permissions                UserPermission[]         @relation("UserPermissionUser")
   grantedPermissions         UserPermission[]         @relation("UserPermissionGrantedBy")

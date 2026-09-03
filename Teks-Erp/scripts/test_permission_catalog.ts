@@ -147,6 +147,22 @@ const DINAMIK_IZIN_KAYNAKLARI: Record<string, readonly string[]> = {
   // `test_master_data_merge.ts` içinde kuruluyor (dört varlığın da write izni
   // katalogda tanımlı mı + renk gerçekten `property:write` mi).
   "src/routes/master-data-merge.routes.ts": [`${DELEGE}scripts/test_master_data_merge.ts`],
+  // SÜPERADMİN (2026-09-03): üç yer düz `includes("admin:*")` yapıyordu ve bu
+  // tarayıcının GÖRMEDİĞİ bir yazımdı; `matchesPermission`e çevrildiler (`["*"]`
+  // taşıyan satıcı hesabı tanınsın diye) ve o anda BU bekçinin kapsamına
+  // girdiler — yani kırmızı bir REGRESYON değil, yeni kazanılmış kapsamdır.
+  //
+  // Tümden geri alma kapısı: kod tek bir dosya-içi sabitte (`UNDO_FULL_PERMISSION`).
+  "src/services/tambur-undo.service.ts": ["UNDO_FULL_PERMISSION"],
+  // Demo senaryolarının `allowed` bayrağı: kodlar `DEMO_SCENARIOS[i].permissions`
+  // dizilerinden gelir. Sabit adıyla beyan YETMEZ — dizi izin KODUNUN yanında
+  // etiket/senaryo kodu gibi başka string'ler de taşır ve AST onları ayıramaz
+  // (yanlış pozitif "katalogda olmayan izin: 'Envanter → top detayı'"). Kapsam
+  // `test_demo_mode.ts §6f`de MEKANİK kurulur: her senaryo izni katalogda mı.
+  "src/services/demo.service.ts": [`${DELEGE}scripts/test_demo_mode.ts`],
+  // İçe aktarım varlık listesi: kodlar `import-registry` ADAPTÖRLERİNDEN gelir —
+  // `src/routes/import.routes.ts` ile BİREBİR aynı desen ve aynı devir.
+  "src/services/import/import.service.ts": [`${DELEGE}scripts/test_import_framework.ts`],
 };
 
 // Taramanın gerçekten "bir şeye baktığını" doğrulayan zeminler. Bir refactor

@@ -9,6 +9,7 @@ import jwt from "jsonwebtoken";
 import { randomBytes, randomInt, randomUUID } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
+import { visibleUserWhere } from "./helpers/system-account.helper";
 import { AuditService } from "./audit.service";
 import {
   readSessionDurationMinutes,
@@ -498,7 +499,11 @@ export class AuthService {
     // başlamamış mobil izin sahibi listede görünüp login olup 403 (boş izin) almasın.
     const now = new Date();
     return prisma.user.findMany({
-      where: {
+      // Satıcı hesabı tablet giriş listesinde GÖRÜNMEZ. Bugün zaten görünmezdi
+      // (mobil GRANT satırı doğmuyor, `["*"]` koddan geliyor) — ama kural
+      // "grant'ı yok" değil "sistem hesabı" olmalı: teşhis için tek bir mobil
+      // izin verilse liste anında sızardı.
+      where: visibleUserWhere({
         isActive: true,
         permissions: {
           some: {
@@ -509,7 +514,7 @@ export class AuthService {
             permission: { code: { startsWith: "mobile:" } },
           },
         },
-      },
+      }),
       select: { id: true, username: true, fullName: true },
       orderBy: { fullName: "asc" },
       take: 500,
@@ -535,6 +540,22 @@ export class AuthService {
    * validFrom/validUntil pencereleri filtrelenir.
    */
   static async getEffectivePermissions(userId: string): Promise<string[]> {
+    // ── SATICI (süperadmin) BYPASS'I — TEK NOKTA ─────────────────────────────
+    // Süperadmin bir ROL DEĞİLDİR: rol şablonu uygulaması izinleri kullanıcıya
+    // KOPYALAR (`UserPermission` satırı doğar) ve panelin yetki sayacı gizli
+    // hesabı sızdırırdı; ayrıca izin kataloğunda `code: "*"` satırı YOKTUR,
+    // yani bu değer hiçbir panelden atanamaz — YALNIZ kod üretir.
+    //
+    // Erken dönüş grant sorgusundan ÖNCE: DB'ye hiç satır yazılmaz, okunmaz.
+    // `matchesPermission` (`rbac.middleware.ts`) `*`i ZATEN ilk satırda tanır →
+    // bütün `requirePermission`/`requireAnyPermission` kapıları maliyetsiz geçer.
+    // Tek çağıran `issueToken` olduğu için bu bir GİRİŞ başına maliyettir.
+    const owner = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSystemAccount: true },
+    });
+    if (owner?.isSystemAccount) return ["*"];
+
     const now = new Date();
     const grants = await prisma.userPermission.findMany({
       where: {

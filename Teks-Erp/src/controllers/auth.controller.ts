@@ -5,6 +5,7 @@
 import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
+import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
 import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
@@ -459,6 +460,10 @@ export class AuthController {
         return;
       }
 
+      // Guard'ın supap dalıyla AYNI yüklem: defter "yok" diyorsa DB'den bir kez
+      // doğrular (hesap boot'tan SONRA doğduysa panel kapıyla aynı anda kilitlenir —
+      // 2026-09-03 V bulgusu: /auth/me `false` derken PATCH 403 yiyordu).
+      const systemAccountExists = await resolveSystemAccountLock();
       res.status(200).json({
         success: true,
         data: {
@@ -466,6 +471,20 @@ export class AuthController {
           username: user.username,
           fullName: user.fullName,
           permissions: req.user?.permissions ?? [],
+          // Panel "Modüller" kategorisini SALT-OKUNUR çizerken bu ikisini okur.
+          // ⚠️ İkisi de SUNUCUDAN gelir, istemci türetmez: `isSystemAccount`
+          // isteğin taze kimliğidir (`verifyToken`), `systemAccountExists`
+          // guard'ın emniyet supabının AYNI kaynağıdır — ayrışırsa panel
+          // yazılabilir gösterip 403 yerdi (ya da tersi).
+          isSystemAccount: req.isSystemAccount === true,
+          // ⚠️ `systemAccountExistsKnown()` DEĞİL (2026-09-03, D2 bulgusu).
+          // Defter üç durumludur ve "bilinmiyor" hâlinde KAPI KİLİTLİDİR
+          // (fail-closed). Ham okuma orada `false` derdi → panel supabı AÇIK
+          // çizer, kullanıcı toggle'ı çevirir, sunucu 403 verir ve bandı da
+          // çizmediği için sebep hiçbir yerde yazmaz. Boot penceresi ~3 sn'dir
+          // ama job 5 denemede düşerse KALICI olur. Tek doğru ayna guard'ın
+          // KENDİ yüklemidir (tembel doğrulamalı sürümü — yukarıda).
+          systemAccountExists,
         },
       });
     } catch (error) {
