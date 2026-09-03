@@ -287,7 +287,7 @@ if ($gercek -ne $beklenen) {
   Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
   Fail "PAKET BOZUK - beyan $beklenen dosya, zip'te $gercek. Fark: $($beklenen - $gercek). Paket SILINDI."
 }
-Ok "zip dogrulandi: $gercek girdi = beyan"
+Write-Host "  + zip dogrulandi: $gercek girdi = beyan" -ForegroundColor Green
 
 # Prisma istemcisi paketin icinde mi? Yoksa backend acilisSTA duser ve pm2
 # 'online' gosterirken restart dongusune girer - en sinsi arizalardan biri.
@@ -302,7 +302,7 @@ if (-not $NodeModulesHaric) {
     Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
     Fail "PAKET BOZUK - node_modules/.prisma/client YOK. Backend acilamaz. Paket SILINDI."
   }
-  Ok "prisma istemcisi pakette: $client dosya ($wasm wasm)"
+  Write-Host "  + prisma istemcisi pakette: $client dosya ($wasm wasm)" -ForegroundColor Green
 }
 
 Remove-Item $stage -Recurse -Force
