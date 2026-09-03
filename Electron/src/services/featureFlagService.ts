@@ -1,4 +1,5 @@
 import apiClient from "./apiClient";
+import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type { SameTypeSessionPolicy } from "@/types/auth";
 import {
@@ -469,14 +470,32 @@ export interface BatchNumberState {
   nextCode: string | null;
 }
 
-export const featureFlagService = {
-  get: (): Promise<ApiResponse<FeatureFlags>> =>
-    apiClient.get<ApiResponse<FeatureFlags>>("/api/feature-flags").then((r) => r.data),
+/**
+ * `GET /api/feature-flags` yükü — bayraklar + kapı DURUMU.
+ *
+ * ⚠️ `settingsPasswordRequired` bir BAYRAK DEĞİL, `FeatureFlags` sözleşmesinin
+ * içinde de değil (backend onu yanıta ayrıca ekler): bayrak olsaydı dört
+ * kapıdan geçip YAZILABİLİR olurdu ve 30 sn'lik bayrak önbelleğine takılıp
+ * kaldırılmış bir şifreyi sormaya devam ederdi. Panel bunu yalnız BİLGİ olarak
+ * kullanır (kilit ikonu) — kapıyı sunucu uygular.
+ */
+export type FeatureFlagsView = FeatureFlags & { settingsPasswordRequired?: boolean };
 
+export const featureFlagService = {
+  get: (): Promise<ApiResponse<FeatureFlagsView>> =>
+    apiClient.get<ApiResponse<FeatureFlagsView>>("/api/feature-flags").then((r) => r.data),
+
+  /**
+   * ⚠️ AYAR ŞİFRESİ KAPISINDAN GEÇER. İstek önce şifresiz gider; sunucu
+   * isterse diyalog açılır ve AYNI yük başlıkla tekrarlanır (yük burada
+   * yeniden hesaplanmaz — çağıranın verdiği `flags` nesnesi birebir gider).
+   */
   update: (flags: Partial<FeatureFlags>): Promise<ApiResponse<FeatureFlags>> =>
-    apiClient
-      .patch<ApiResponse<FeatureFlags>>("/api/feature-flags", flags)
-      .then((r) => r.data),
+    withSettingsPassword((headers) =>
+      apiClient
+        .patch<ApiResponse<FeatureFlags>>("/api/feature-flags", flags, { headers })
+        .then((r) => r.data),
+    ),
 
   /**
    * Kısa parti sayacının durumu — Genel Ayarlar'daki göstergeyi besler.
@@ -500,10 +519,17 @@ export const featureFlagService = {
       .then((r) => r.data),
 
   /** Belge logosunu güncelle (dataUrl=null → kaldır). PNG/JPEG/SVG, ~100KB sınırı. */
+  /** ⚠️ Ayar şifresi kapısından geçer (firma kimliği — belge muafiyeti YOK). */
   setDocumentsLogo: (dataUrl: string | null): Promise<ApiResponse<{ dataUrl: string | null }>> =>
-    apiClient
-      .put<ApiResponse<{ dataUrl: string | null }>>("/api/feature-flags/documents-logo", { dataUrl })
-      .then((r) => r.data),
+    withSettingsPassword((headers) =>
+      apiClient
+        .put<ApiResponse<{ dataUrl: string | null }>>(
+          "/api/feature-flags/documents-logo",
+          { dataUrl },
+          { headers },
+        )
+        .then((r) => r.data),
+    ),
 };
 
 export interface CurrencyOption {

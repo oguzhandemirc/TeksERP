@@ -6,6 +6,7 @@ import { Request, Response, NextFunction } from "express";
 import { z } from "zod";
 import { AuthService } from "../services/auth.service";
 import { resolveSystemAccountLock } from "../services/helpers/system-account.registry";
+import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import type { LoginContext } from "../services/auth.service";
 import { AuditService } from "../services/audit.service";
 import { TotpAccountService } from "../services/totp-account.service";
@@ -464,6 +465,13 @@ export class AuthController {
       // doğrular (hesap boot'tan SONRA doğduysa panel kapıyla aynı anda kilitlenir —
       // 2026-09-03 V bulgusu: /auth/me `false` derken PATCH 403 yiyordu).
       const systemAccountExists = await resolveSystemAccountLock();
+      // Ayar şifresi TANIMLI mı (2026-09-03 / P3). Panel bunu "Kaydet"in yanına
+      // kilit rozeti çizmek ve diyaloğu ÖNCEDEN hazırlamak için okur.
+      // ⚠️ SIR DEĞİL: yalnız "tanımlı mı" bilgisi döner, hash DÖNMEZ; bilgi
+      // zaten ilk 403 `SETTINGS_PASSWORD_REQUIRED` ile de öğrenilirdi.
+      // ⚠️ CACHE'SİZ okunur (rejim okuması): şifre kaldırıldığı ANDA panel de
+      // sormayı bırakmalı.
+      const settingsPasswordRequired = await isSettingsPasswordConfigured();
       res.status(200).json({
         success: true,
         data: {
@@ -485,6 +493,7 @@ export class AuthController {
           // ama job 5 denemede düşerse KALICI olur. Tek doğru ayna guard'ın
           // KENDİ yüklemidir (tembel doğrulamalı sürümü — yukarıda).
           systemAccountExists,
+          settingsPasswordRequired,
         },
       });
     } catch (error) {

@@ -184,6 +184,33 @@ gizleniyor, pm2 log'u ise fabrika sunucusunda okunabilir.)
 > ⚠️ **Kabul edilmiş risk (F287):** `pg_dump` / `db-copy` bu hesabın düz PIN'ini
 > de taşır; yedek indirebilen personel onu okuyabilir. Karşılığı hızlı rotasyondur.
 
+### Ayar şifresi (ikinci kapı) — opsiyonel, süperadmin yönetir
+
+Tanımlıysa **ayar/bayrak kaydeden her istek** ikinci bir şifre sorar (açık
+kalmış bir admin oturumundan ayar değişmesin). `.env`'de **DEĞİLDİR** — satıcı
+hesabıyla girip tanımlanır:
+
+```
+PUT    /api/admin/settings-password   { "password": "<en az 8 karakter>" }   # tanımla / değiştir
+DELETE /api/admin/settings-password                                          # kaldır (kapı uyur)
+GET    /api/admin/settings-password                                          # tanımlı mı
+```
+
+> ⚠️ Üç uç da **yalnız satıcı hesabına** açıktır; fabrika yöneticisi için
+> **404** döner (403 ucun varlığını doğrulardı).
+> ⚠️ **Tanımlı değilse hiçbir istek şifre istemez** — mevcut kurulumlarda sıfır fark.
+> ⚠️ Kapsam: `PATCH /api/feature-flags` · `PUT /api/feature-flags/documents-logo` ·
+> `PUT /api/admin/settings/:key`. **Süperadmin muaftır** (kapıyı o kurar) ve
+> yalnız belge tasarımı anahtarı taşıyan gövde (Belge Şablonları / Refakat Kartı)
+> da muaftır — o ekranın personeli `admin:settings` taşımaz.
+> ⚠️ **Unutulursa** yalnız satıcı yeniler/kaldırır; fabrikanın kendi başına
+> sıfırlayacağı bir yol BİLİNÇLİ OLARAK yoktur (olsaydı kapı hiçbir şey korumazdı).
+> ⚠️ Hatalı deneme sayısı **giriş kilidiyle AYNI şaltere** bağlıdır
+> (`auth.pinLockoutEnabled`); eşik aşılınca `429` + bekleme süresi döner.
+> ⚠️ Şifre `system_settings` içinde **bcrypt hash** olarak durur; ham ayar
+> ucundan ne yazılabilir ne de listelenir (`GET /api/admin/settings` yükünde
+> `security.` ile başlayan satır DÖNMEZ).
+
 ---
 
 ## Kabul ölçümü — kurulum sonrası ZORUNLU

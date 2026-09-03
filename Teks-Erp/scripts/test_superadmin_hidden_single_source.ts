@@ -172,7 +172,10 @@ const WILDCARD_MUAF: Record<string, string> = {
 const ALAN_ALLOWLIST: Record<string, string> = {
   "services/helpers/system-account.helper.ts": "kuralın tek kaynağı",
   "jobs/superadmin.job.ts": "TEK YAZAR (boot job)",
-  "middlewares/system-account.middleware.ts": "404 kapısı — hedefi okur",
+  "middlewares/system-account.middleware.ts":
+    "404 kapıları — hedefi okur (`blockSystemAccountTarget`) + isteği okur (`requireSystemAccountOr404`)",
+  "middlewares/settings-password.middleware.ts":
+    "ayar şifresi kapısı — satıcı hesabı MUAF (kapıyı o kurar); kimliği yalnız OKUR",
   "middlewares/auth.middleware.ts": "istek başına taze kimlik okuması (`req.isSystemAccount`)",
   "types/express-augment.ts": "`req.isSystemAccount` tip beyanı",
   "controllers/auth.controller.ts": "`/auth/me` yanıtı (panel salt-okunur kararı)",

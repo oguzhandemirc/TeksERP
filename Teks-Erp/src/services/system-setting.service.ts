@@ -29,6 +29,7 @@ import {
   type DocFieldStyle,
   type DocStyleConfig,
 } from "./document-render/doc-style";
+import { SECURITY_SETTING_PREFIX } from "../constants/reserved-settings";
 import { resolveConfigPageSize } from "./document-render/traveler-card.density";
 import {
   sanitizeTravelerFields,
@@ -1247,6 +1248,15 @@ export function invalidateFeatureFlagsCache(): void {
 export class SystemSettingService {
   async list(): Promise<ApiResponse<unknown[]>> {
     const items = await prisma.systemSetting.findMany({
+      // ⚠️ SIR SATIRLARI LİSTEDE DÖNMEZ (2026-09-03 / P3). `system_settings` artık
+      // ayar olmayan bir satır da taşıyor: ayar şifresinin bcrypt hash'i. Bu uç
+      // TÜM satırları döndürdüğü için hash burada görünseydi kapı FİİLEN ÖLÜRDÜ —
+      // çevrimdışı kırma için bcrypt gövdesi yeterli ve yükü okuyan herkes
+      // şifrenin tanımlı olduğunu da öğrenirdi. Süzgeç TEK ANAHTAR değil ÖN EK
+      // bazlı: yarın eklenecek ikinci bir sır satırı da doğduğu an korunur
+      // ("unutulmuş altıncı enum" sınıfı). Yazma tarafının ikizi:
+      // `isReservedSettingKey` (admin.routes PUT /settings/:key).
+      where: { NOT: { key: { startsWith: SECURITY_SETTING_PREFIX } } },
       orderBy: { key: "asc" },
       include: {
         updatedBy: { select: { id: true, fullName: true } },

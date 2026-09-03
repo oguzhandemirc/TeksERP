@@ -92,6 +92,14 @@ function yetkiVerirMi(
   const req = { user: { permissions }, body } as unknown as Request;
   const res = {} as Response;
   for (const halka of zincir.slice(1, -1)) {
+    // ⚠️ AYAR ŞİFRESİ KAPISI BU HARNESS'IN KONUSU DEĞİL (2026-09-03 / P3).
+    // `requireSettingsPassword` bir YETKİ kapısı değil NİYET kapısıdır (izin
+    // zincirinin ARDINA takılır) ve tasarımı gereği ASENKRONDUR — kendi DB
+    // okumasını yapar, yani `next`i aynı tick'te çağırmaz. Bu döngü "next aynı
+    // tick'te çağrıldı mı" ile ölçtüğü için onu zincire dahil etmek, izin
+    // kararı DOĞRUYKEN bile `false` üretirdi (yanlış kırmızı). Kapının kendi
+    // bekçisi ayrıdır: `test_settings_password.ts`.
+    if (halka.handle.name === "requireSettingsPassword") continue;
     let hata: unknown;
     let cagrildi = false;
     halka.handle(req, res, ((e?: unknown) => {

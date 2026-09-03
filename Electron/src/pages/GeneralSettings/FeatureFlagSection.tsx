@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { KeyRound } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -412,6 +413,17 @@ export function FeatureFlagSection({
           canSave={numbersValid && numValid && fieldValid}
           onSave={() => mut.mutate()}
           onReset={reset}
+          /* Kapı AÇIKSA kullanıcı bunu KAYDET'e basmadan bilmeli — yoksa
+             beklenmedik bir şifre sorusu "hata mı aldım?" diye okunur.
+             Bilgi sunucudan gelir (`settingsPasswordRequired`); kapıyı
+             uygulayan yine sunucudur, bu satır yalnız haber verir. */
+          note={
+            server?.settingsPasswordRequired ? (
+              <span className="inline-flex items-center gap-1">
+                <KeyRound className="h-3 w-3" /> Kaydederken ayar şifresi sorulur
+              </span>
+            ) : undefined
+          }
         />
       )}
     </div>

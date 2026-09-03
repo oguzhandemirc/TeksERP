@@ -13,6 +13,16 @@ import { PermissionManagementService } from "../services/permission-management.s
 import { TotpAccountService } from "../services/totp-account.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { MODULE_SETTING_KEYS } from "../constants/module-flags";
+import { isReservedSettingKey } from "../constants/reserved-settings";
+import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
+import { requireSystemAccountOr404 } from "../middlewares/system-account.middleware";
+import {
+  setSettingsPassword,
+  revokeSettingsPassword,
+  isSettingsPasswordConfigured,
+  SETTINGS_PASSWORD_MIN_LENGTH,
+  SETTINGS_PASSWORD_MAX_LENGTH,
+} from "../services/settings-password.service";
 import { SystemLogService } from "../services/system-log.service";
 import { triggerManualBackup, listBackups, resolveBackupPath } from "../services/backup.service";
 import {
@@ -1287,6 +1297,10 @@ router.put(
   "/settings/:key",
   verifyToken,
   requirePermission("admin:settings"),
+  // ⚠️ İZİNDEN SONRA (2026-09-03 / P3): niyet kapısı yetki kapısının YERİNE
+  // geçmez, ARDINA takılır. Ters sırada yetkisiz bir kullanıcı da şifre
+  // denemesi yaparak kilit sayacını doldurabilir (meşru yöneticiye DoS).
+  requireSettingsPassword,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const key = req.params.key as string;
@@ -1303,6 +1317,19 @@ router.put(
       // (`assertModuleDependencies`) komple atlıyordu. Tek yazma yüzeyi
       // kalmalı, yoksa "ticaret kapalı ama iplik açık" gibi tutarsız bir çift
       // hiçbir kapıdan geçmeden doğar.
+      // SIR SATIRLARI BU UÇTAN YAZILAMAZ (2026-09-03 / P3).
+      // ⚠️ Gerekçe modül anahtarlarınınkinden FARKLI ve daha keskin: ayar
+      // şifresinin hash'i buradan yazılabilseydi, `admin:settings` taşıyan
+      // herkes KENDİ bildiği bir şifrenin hash'ini basıp kapıyı kendine
+      // açardı — yani ayar şifresi, tam da korumaya çalıştığı iznin sahibi
+      // tarafından ele geçirilebilirdi. Tek yazıcı: süperadminin
+      // `PUT /api/admin/settings-password` ucu.
+      if (isReservedSettingKey(key)) {
+        throw AppError.badRequest(
+          "Bu ayar güvenlik satırıdır ve bu uçtan değiştirilemez",
+          { code: "SETTING_KEY_RESERVED", key },
+        );
+      }
       if (MODULE_SETTING_KEYS.has(key)) {
         throw AppError.badRequest(
           "Modül anahtarları yalnız Genel Ayarlar → Modüller (PATCH /api/feature-flags) üzerinden değiştirilir",
@@ -1321,6 +1348,122 @@ router.put(
       next(error);
     }
   }
+);
+
+// =============================================================================
+// AYAR ŞİFRESİ (ikinci kapı) — YALNIZ SÜPERADMİN
+// =============================================================================
+// Tasarım §7.2: "Süperadmin üretir/dağıtır/değiştirir/iptal eder." Fabrika
+// yöneticisi bu ucu GÖREMEZ bile: kimlik tutmuyorsa 404 (403 özelliğin ve
+// hesabın VARLIĞINI doğrulardı — `blockSystemAccountTarget` ile aynı gerekçe).
+//
+// ⚠️ SÜPERADMİN YOKSA ÖZELLİK ERİŞİLEMEZ ve bu BİLİNÇLİDİR: şifreyi fabrika
+//    admininin kendisi tanımlayabilseydi, kapı "açık kalmış admin oturumuna"
+//    karşı hiçbir şey korumazdı (o oturum şifreyi de değiştirebilirdi).
+// ⚠️ ROTASYON ESKİ OTURUMLARI DÜŞÜRMEZ: ayar şifresi bir kullanıcı oturumu
+//    değil, işlem başına sorulan ikinci bir kanıttır (`tokenVersion` yolu
+//    burada anlamsız olurdu).
+// =============================================================================
+
+const settingsPasswordSchema = z.object({
+  password: z
+    .string()
+    .min(
+      SETTINGS_PASSWORD_MIN_LENGTH,
+      `Ayar şifresi en az ${SETTINGS_PASSWORD_MIN_LENGTH} karakter olmalı`,
+    )
+    .max(
+      SETTINGS_PASSWORD_MAX_LENGTH,
+      `Ayar şifresi en fazla ${SETTINGS_PASSWORD_MAX_LENGTH} karakter olabilir`,
+    ),
+});
+
+/**
+ * @openapi
+ * /api/admin/settings-password:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Ayar şifresi tanımlı mı (yalnız sistem hesabı)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ configured: boolean }" }
+ *       404: { description: Sistem hesabı değil }
+ */
+router.get(
+  "/settings-password",
+  verifyToken,
+  requireSystemAccountOr404,
+  async (_req: Request, res: Response, next: NextFunction) => {
+    try {
+      res
+        .status(200)
+        .json({ success: true, data: { configured: await isSettingsPasswordConfigured() } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/admin/settings-password:
+ *   put:
+ *     tags: [Admin]
+ *     summary: Ayar şifresini tanımla/değiştir (yalnız sistem hesabı)
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               password: { type: string }
+ *     responses:
+ *       200: { description: "{ configured: true, rotated: boolean }" }
+ *       404: { description: Sistem hesabı değil }
+ */
+router.put(
+  "/settings-password",
+  verifyToken,
+  requireSystemAccountOr404,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { password } = settingsPasswordSchema.parse(req.body);
+      const { rotated } = await setSettingsPassword(password, req.user?.userId);
+      // ⚠️ YANIT ŞİFRE/HASH TAŞIMAZ — yalnız "tanımlı" bilgisi ve hangi olayın
+      // yazıldığı. İz audit'tedir (`SETTINGS_PASSWORD_SET` / `..._ROTATED`).
+      res.status(200).json({ success: true, data: { configured: true, rotated } });
+    } catch (error) {
+      next(error);
+    }
+  },
+);
+
+/**
+ * @openapi
+ * /api/admin/settings-password:
+ *   delete:
+ *     tags: [Admin]
+ *     summary: Ayar şifresini kaldır — kapı UYUR (yalnız sistem hesabı)
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: "{ configured: false, removed: boolean }" }
+ *       404: { description: Sistem hesabı değil }
+ */
+router.delete(
+  "/settings-password",
+  verifyToken,
+  requireSystemAccountOr404,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { removed } = await revokeSettingsPassword(req.user?.userId);
+      res.status(200).json({ success: true, data: { configured: false, removed } });
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 
 // =============================================================================

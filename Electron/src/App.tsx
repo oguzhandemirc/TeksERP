@@ -9,6 +9,7 @@ import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
 import { BossShell } from "@/components/layout/BossShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDialog";
 import { authRouter } from "./router";
 import { useAuthStore } from "@/store/auth";
 import { tokenStore } from "@/lib/secure-token";
@@ -129,6 +130,11 @@ export function App() {
           </PreferencesProvider>
           <Toaster />
           <CopyContextMenu />
+          {/* Ayar şifresi sorusu — App düzeyinde TEK mount. Açılışını bir
+              kullanıcı jesti değil, `withSettingsPassword`ın gördüğü 403
+              tetikler; bu yüzden yazma yüzeylerinin yanında değil burada durur
+              (iki yüzeyden iki diyalog üst üste binmesin). */}
+          <SettingsPasswordDialog />
         </QueryClientProvider>
       </ThemeProvider>
     </ErrorBoundary>

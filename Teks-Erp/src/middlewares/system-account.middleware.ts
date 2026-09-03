@@ -79,3 +79,30 @@ export async function blockSystemAccountTarget(
     next(error);
   }
 }
+
+/**
+ * SÜPERADMİN-ONLY YÜZEY KAPISI: istek sahibi sistem hesabı DEĞİLSE **404**
+ * (2026-09-03 / P3 — ayar şifresi yönetimi).
+ *
+ * ⚠️ 403 DEĞİL, aynı gerekçeyle: 403 "böyle bir uç var ve sen yetkisizsin"
+ * der, yani satıcı hesabının VARLIĞINI ve yönettiği yüzeyi doğrular. Fabrika
+ * yöneticisi için bu uç hiç YOKTUR.
+ *
+ * ⚠️ `verifyToken`DAN SONRA takılır: kimliksiz istek 401 almalıdır. Kimliksiz
+ * bir istek burada 404 alsaydı, "kimlik olmadan da 404" gözlemi ucun varlığını
+ * ele veren ikinci bir orakül olurdu.
+ *
+ * ⚠️ Kimlik `req.isSystemAccount`tır — istek başına DB'den TAZE okunur
+ * (`verifyToken`), JWT claim'i DEĞİL: istemci seçemez.
+ */
+export function requireSystemAccountOr404(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
+  if (req.isSystemAccount !== true) {
+    next(AppError.notFound("Kayıt bulunamadı"));
+    return;
+  }
+  next();
+}

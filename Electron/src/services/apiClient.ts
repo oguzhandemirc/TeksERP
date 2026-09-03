@@ -69,6 +69,8 @@ let lastSessionExpiredToastAt = 0;
 interface ApiErrorBody {
   message?: string;
   errors?: Array<{ field: string; message: string }>;
+  /** `AppError` ayrıntısı — hata KODU burada yaşar (`details.code`). */
+  details?: { code?: string };
 }
 
 /** Backend validation errors → tek satır okunabilir mesaj. */
@@ -112,6 +114,18 @@ apiClient.interceptors.response.use(
       const body = error.response?.data as ApiErrorBody | undefined;
       // İstek kendi hata mesajını gösterecekse genel toast'ı atla (duplicate önle).
       const suppressToast = Boolean(error.config?.suppressErrorToast);
+
+      // AYAR ŞİFRESİ KAPISI — toast'ı `withSettingsPassword` yönetir.
+      // ⚠️ Genel 403 toast'ı ("Bu işlem için yetkiniz bulunmuyor") burada
+      // YANLIŞ bir cümledir: kullanıcının yetkisi vardır, sorulan şey niyet
+      // ispatıdır — ve diyalog zaten açılacaktır. 429 LOCKED'ın kalan-süre
+      // cümlesi de tek yerden basılır, yoksa çift toast çıkardı.
+      // Kapsam DAR: yalnız `SETTINGS_PASSWORD*` kodları; başka 403'ler
+      // bugünkü davranışını korur.
+      if (typeof body?.details?.code === "string" &&
+          body.details.code.startsWith("SETTINGS_PASSWORD")) {
+        return Promise.reject(error);
+      }
 
       if (status === 401) {
         const isLoginRequest = error.config?.url?.includes("/api/auth/login");

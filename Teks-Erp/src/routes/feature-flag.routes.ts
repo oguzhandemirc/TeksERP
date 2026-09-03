@@ -18,6 +18,8 @@ import {
   DOCUMENT_DESIGN_WRITE,
 } from "../constants/document-design";
 import { MODULE_FLAG_KEYS } from "../constants/module-flags";
+import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
+import { isSettingsPasswordConfigured } from "../services/settings-password.service";
 import {
   systemAccountLockActive,
   refreshSystemAccountRegistry,
@@ -564,7 +566,23 @@ router.get(
   async (_req: Request, res: Response, next: NextFunction) => {
     try {
       const result = await systemSettingService.getFeatureFlags();
-      res.status(200).json(result);
+      // ⚠️ `settingsPasswordRequired` FeatureFlags'IN İÇİNDE DEĞİL, yanıta
+      // EKLENİR — iki bağımsız gerekçe:
+      //  ① O bir bayrak değil, bir DURUM: `getFeatureFlags` 30 sn önbelleklidir
+      //     ve şifre iptal edildiği an kapı uyumalıdır. Önbelleğe girseydi panel
+      //     TTL boyunca kaldırılmış bir şifreyi sormaya devam ederdi.
+      //  ② Bayrak olsaydı DÖRT KAPIDAN geçmesi gerekirdi (SETTING_KEYS +
+      //     sanitize + Zod + Electron aynası) ve o zincir onu YAZILABİLİR
+      //     yapardı — hash'in tanımlı olup olmadığı yazılacak bir ayar değildir.
+      // SIR DEĞİLDİR: istemci "kaydederken şifre soracağım" kararını buradan
+      // verir; bilgi zaten ilk 403 `SETTINGS_PASSWORD_REQUIRED` ile de öğrenilir.
+      res.status(200).json({
+        ...result,
+        data: {
+          ...result.data,
+          settingsPasswordRequired: await isSettingsPasswordConfigured(),
+        },
+      });
     } catch (error) {
       next(error);
     }
@@ -597,6 +615,12 @@ router.patch(
   "/",
   verifyToken,
   flagWriteGuard,
+  // ⚠️ `flagWriteGuard`DAN SONRA (2026-09-03 / P3). Sıra load-bearing: izin
+  // kararı ÖNCE verilir, yoksa yetkisiz bir kullanıcı da şifre denemesi yaparak
+  // kilit sayacını doldurur (meşru yöneticiye DoS). Ayrıca guard SENKRON
+  // kalmak zorundadır (bekçi harness'ı `next`i aynı tick'te bekler) — bu kapı
+  // ondan sonra geldiği için kendi DB okumasını serbestçe yapabilir.
+  requireSettingsPassword,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = updateSchema.parse(req.body);
@@ -674,6 +698,9 @@ router.put(
   "/documents-logo",
   verifyToken,
   requirePermission("admin:settings"),
+  // Firma kimliği de ayar şifresine tabidir (gövde belge-tasarım anahtarı
+  // TAŞIMAZ → muafiyet dalına düşmez; `{ dataUrl }` yabancı anahtardır).
+  requireSettingsPassword,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = logoSchema.parse(req.body);

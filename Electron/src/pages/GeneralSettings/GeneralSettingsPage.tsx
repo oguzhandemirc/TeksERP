@@ -19,6 +19,7 @@ import {
   settingsHitCount,
 } from "./settings-groups";
 import { FeatureFlagSection } from "./FeatureFlagSection";
+import { SettingsPasswordCard } from "./SettingsPasswordCard";
 import { DevicePairingSection } from "./DevicePairingSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
@@ -220,6 +221,10 @@ export function GeneralSettingsPage() {
                     }
                   />
                 )}
+                {/* Ayar şifresi — "Modüller" sekmesinin altında, YALNIZ satıcı
+                    hesabında (kart kendi kimlik kapısını uygular; backend uçları
+                    başka kimlikte 404 döner). */}
+                {cat.id === "modules" && <SettingsPasswordCard />}
                 {cat.kind === "device" && <DevicePairingSection />}
                 {/* Bu bilgisayara özel donanım — iç içe (segment) sekmeler. */}
                 {cat.kind === "workstation" && <WorkstationTabs />}

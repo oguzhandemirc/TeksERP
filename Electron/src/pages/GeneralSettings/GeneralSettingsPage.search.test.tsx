@@ -68,6 +68,12 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 vi.mock("@/services/systemSettingService", () => ({
   systemSettingService: { list: vi.fn().mockResolvedValue({ success: true, data: [] }), upsert: vi.fn() },
   SETTING_KEYS: {},
+  // "Modüller" sekmesinde artık ayar şifresi kartı da var; kart yalnız satıcı
+  // hesabında çizilir (bu testte kimlik fabrika yöneticisi) ama modül SEVİYESİNDE
+  // import edilir → mock eksik export'ta patlar.
+  settingsPasswordAdminService: { status: vi.fn(), set: vi.fn(), revoke: vi.fn() },
+  SETTINGS_PASSWORD_MIN_LENGTH: 8,
+  SETTINGS_PASSWORD_MAX_LENGTH: 128,
 }));
 
 const search = () => screen.getByPlaceholderText("Ayar ara…");
