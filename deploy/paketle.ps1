@@ -201,8 +201,32 @@ if ($NodeModulesHaric) {
 }
 
 # --- [5/6] Manifest ---------------------------------------------------------
+# ⚠ DOSYA LISTESI TEK KAYNAKTIR: manifest de zip de ASAGIDAKI $dosyalar'dan
+#   beslenir. 2026-09-04 ev provasinda ikisi AYRI yollardan uretiliyordu
+#   (`Get-ChildItem -Force` sayiyor, `Compress-Archive -Path "$stage\*"`
+#   zipliyor) ve nokta ile baslayan girdiler SESSIZCE dusuyordu:
+#     - `node_modules/.prisma/client` yok  -> backend "Cannot find module
+#       '.prisma/client/default'" ile restart dongusune girer
+#     - `node_modules/.bin` yok            -> `npx prisma` bulunamaz, kur.ps1 [7/9] duser
+#   Olculdu: 13658 dosya sayildi, 13518 zip'lendi, 140 dosya kayip; hicbir kapi
+#   gormedi. PowerShell POSIX'te nokta ile baslayan her sey HIDDEN'dir ve
+#   `Compress-Archive` gizli girdileri atlar (`-Force` karsiligi yoktur).
 Adim "[5/6] Manifest yaziliyor..."
-$dosyalar = Get-ChildItem $stage -Recurse -File -Force
+
+# node_modules/.bin BILEREK DISARIDA: macOS/Linux'ta orada sembolik baglar durur
+# (`prisma -> ../prisma/build/index.js`). Windows'ta npm bunun yerine `.cmd`
+# shim'i uretir; sembolik bagin ISARET ETTIGI icerigi kopyalamak da ise yaramaz
+# (uzantisiz dosya Windows'ta calistirilamaz). Bu yuzden `kur.ps1` prisma'yi
+# `.bin` uzerinden DEGIL, dogrudan `node node_modules\prisma\build\index.js`
+# ile cagirir - hangi platformda paketlendiginden bagimsiz.
+$binDisla = "node_modules" + [IO.Path]::DirectorySeparatorChar + ".bin" + [IO.Path]::DirectorySeparatorChar
+$kok_ = $stage.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+$dosyalar = @(
+  Get-ChildItem $stage -Recurse -File -Force |
+    Where-Object { -not $_.FullName.Substring($kok_.Length).StartsWith($binDisla) }
+)
+if ($dosyalar.Count -eq 0) { Fail "Stage bos - paketlenecek dosya yok." }
+
 $manifest = [ordered]@{
   ad              = $ad
   commit          = $commit
@@ -212,11 +236,14 @@ $manifest = [ordered]@{
   # Makine/kullanici adi: Windows'ta COMPUTERNAME+USERNAME, POSIX'te HOSTNAME+USER.
   # Damga bilgi amacli; cozulemezse "?" yazilir, paketleme DURMAZ.
   ureten          = "$([System.Environment]::MachineName)\$([System.Environment]::UserName)"
+  paketleyenPlatform = if ($IsWindows) { "windows" } elseif ($IsMacOS) { "macos" } else { "linux" }
   nodeSurumu      = (& node --version).Trim()
   npmSurumu       = (& npm --version).Trim()
   uygulamaSurumu  = (Get-Content "$proj\package.json" -Raw | ConvertFrom-Json).version
   migrationSayisi = $migSayi
   nodeModulesDahil= (-not $NodeModulesHaric)
+  # PAKET.json'in KENDISI bu sayiya dahil DEGILDIR (henuz yazilmadi). Zip'te
+  # tam olarak $dosyalar.Count + 1 girdi olmasi beklenir - kapi bunu olcer.
   dosyaSayisi     = $dosyalar.Count
   toplamBayt      = ($dosyalar | Measure-Object Length -Sum).Sum
   serverJsSha256  = (Get-FileHash "$stage\dist\server.js" -Algorithm SHA256).Hash
@@ -229,7 +256,55 @@ Adim "[6/6] Zip'leniyor..."
 $ciktiDir = (Resolve-Path $Cikti).Path
 $zip = Join-Path $ciktiDir "$ad.zip"
 if (Test-Path $zip) { Remove-Item $zip -Force }
-Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal
+
+# Girdiler TEK TEK eklenir. `Compress-Archive` (gizli girdileri atlar) ve
+# `ZipFile::CreateFromDirectory` (sembolik bag hedefi yoksa TUM paketlemeyi
+# exception'la dusurur - olculdu) yerine acik liste: ne eklendigini biliyoruz.
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$arsiv = [IO.Compression.ZipFile]::Open($zip, [IO.Compression.ZipArchiveMode]::Create)
+try {
+  $eklenen = 0
+  foreach ($f in @($dosyalar) + @(Get-Item "$stage\PAKET.json")) {
+    # Zip icindeki yol AYIRICISI daima '/' olmalidir; Windows'ta '\' yazilirsa
+    # klasor yapisi bazi acicilarda tek uzun dosya adina donusur.
+    $rel = $f.FullName.Substring($kok_.Length).Replace([IO.Path]::DirectorySeparatorChar, '/')
+    [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($arsiv, $f.FullName, $rel, [IO.Compression.CompressionLevel]::Optimal)
+    $eklenen++
+  }
+} finally { $arsiv.Dispose() }
+
+# --- KAPI: beyan ile gercek ayrisirsa PAKET URETILMEZ ------------------------
+# Bu kapi 2026-09-04'te yoktu ve 140 dosyalik kayip sahaya kadar gitti.
+$beklenen = $dosyalar.Count + 1   # +1 = PAKET.json
+$arsivOku = [IO.Compression.ZipFile]::OpenRead($zip)
+try   { $gercek = @($arsivOku.Entries | Where-Object { $_.FullName -notmatch '/$' }).Count
+        $iceriyor = { param($yol) [bool]($arsivOku.Entries | Where-Object { $_.FullName -eq $yol }) } }
+finally { $arsivOku.Dispose() }
+
+if ($gercek -ne $beklenen) {
+  Remove-Item $zip -Force -ErrorAction SilentlyContinue
+  Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+  Fail "PAKET BOZUK - beyan $beklenen dosya, zip'te $gercek. Fark: $($beklenen - $gercek). Paket SILINDI."
+}
+Ok "zip dogrulandi: $gercek girdi = beyan"
+
+# Prisma istemcisi paketin icinde mi? Yoksa backend acilisSTA duser ve pm2
+# 'online' gosterirken restart dongusune girer - en sinsi arizalardan biri.
+if (-not $NodeModulesHaric) {
+  $arsivOku = [IO.Compression.ZipFile]::OpenRead($zip)
+  try {
+    $client = @($arsivOku.Entries | Where-Object { $_.FullName -like 'node_modules/.prisma/client/*' }).Count
+    $wasm   = @($arsivOku.Entries | Where-Object { $_.FullName -like 'node_modules/.prisma/client/*.wasm' }).Count
+  } finally { $arsivOku.Dispose() }
+  if ($client -eq 0) {
+    Remove-Item $zip -Force -ErrorAction SilentlyContinue
+    Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
+    Fail "PAKET BOZUK - node_modules/.prisma/client YOK. Backend acilamaz. Paket SILINDI."
+  }
+  Ok "prisma istemcisi pakette: $client dosya ($wasm wasm)"
+}
+
 Remove-Item $stage -Recurse -Force
 
 $zipMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)

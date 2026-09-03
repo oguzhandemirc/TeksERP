@@ -9,7 +9,7 @@
 #   C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket D:\tekserp-backend-....zip
 #     Eski kurulum yerinde kalir; devretme = eskiyi durdur, yeniyi baslat.
 #     Geri donus = yeniyi durdur, eskiyi baslat (DB'ler de ayridir).
-#     ⚠ Her kok kendi pm2 daemon'ini tasir; komutlarda PM2_HOME onemli.
+#     ⚠ Windows'ta PM2_HOME surecleri AYIRMAZ (tek pipe) - yalniz log/dump konumu.
 #
 # NEDEN guncelle.ps1'IN YERINI ALDI:
 #   CALISAN kurulum (app\) bir git klonu DEGIL, hazir pakettir; "pull et + derle"
@@ -51,8 +51,15 @@ param(
   #   sabit oldugu surece bu model yazilamiyordu ve tek yol calisan kurulumun
   #   uzerine yazmakti.
   #
-  # ⚠ HER KOK KENDI PM2 DAEMON'INI TASIR ($kok\pm2-home). Ayni uygulama adi iki
-  #   kokte CAKISMAZ - listeler ayridir. Ama komut verirken DOGRU PM2_HOME'u
+  # ⚠ WINDOWS'TA PM2_HOME SURECLERI AYIRMAZ (2026-09-04 ev provasi, BULGU-4).
+  #   pm2 daemon'i `\\.\pipe\rpc.sock` adini kullanir ve bu ad PM2_HOME'a gore
+  #   isimlendirilmez - makinede TEK pipe vardir. Ayri PM2_HOME yalnizca
+  #   `dump.pm2` ve log KONUMUNU ayirir; SUREC LISTESINI AYIRMAZ. Yan yana iki
+  #   kok ayni daemon'i paylasir.
+  #   ⚠ Ayrica: her iki kokun pm2 komutlari AYNI YUKSELTME SEVIYESINDEN
+  #   verilmelidir. Yonetici daemon + yetkisiz istemci = `connect EPERM
+  #   \\.\pipe\rpc.sock` ve bu hata "uygulama yok" gibi okunur.
+  #   Komut verirken DOGRU PM2_HOME'u
   #   kullan, yoksa "uygulama yok" dersin. Script bunu kendisi ayarlar.
   #
   # ⚠ IKISI AYNI ANDA CALISAMAZ: ayni PORT (.env) ve ayni DB'ye baglanirlar.
@@ -159,6 +166,7 @@ foreach ($z in $zorunlu) {
 if (Test-Path "$temp\prisma.config.ts") { Fail "Pakette hem .ts hem .js prisma config var - hangisinin okundugu belirsiz." }
 if (Test-Path "$temp\src")              { Uyar "Pakette src\ var - bu paket eski bir paketle.ps1 ile uretilmis olabilir." }
 
+$m = $null
 if (Test-Path "$temp\PAKET.json") {
   $m = Get-Content "$temp\PAKET.json" -Raw | ConvertFrom-Json
   Write-Host "  commit          : $($m.commit)  ($($m.dal))"
@@ -170,6 +178,57 @@ if (Test-Path "$temp\PAKET.json") {
 } else { Uyar "PAKET.json yok - eski surum paket." }
 
 $nmVar = Test-Path "$temp\node_modules"
+
+# ⚠ 2026-09-04 ev provasi (BULGU-1): bu kapi "paket saglam" dedi ve paket 140
+#   dosya eksikti. Kapi YANLIS SORUYU soruyordu - yalnizca ust duzey klasorlere
+#   bakiyordu. Eksik olanlar nokta ile baslayan girdilerdi ve ikisi de olumcul:
+#     node_modules/.prisma/client  -> backend "Cannot find module
+#       '.prisma/client/default'" ile ACILMAZ; pm2 'online' gosterirken restart
+#       dongusune girer (en sinsi ariza: sureç doğar, saniyeler icinde olur)
+#     dist/tools/superadmin-olustur.cjs -> satici hesabi HIC kurulamaz
+#   Beyan/gercek sayisi da kiyaslanir: PAKET.json 13658 diyordu, zip'te 13518
+#   vardi ve kimse gormedi.
+if ($nmVar) {
+  # `.bin` BILEREK aranmaz: macOS/Linux'ta uretilen pakette orada sembolik baglar
+  # olur (Windows'ta ise yaramaz) ve bu script prisma'yi `.bin` uzerinden DEGIL
+  # dogrudan node ile cagirir. bkz. [7/9].
+  foreach ($z in @("node_modules\.prisma\client", "node_modules\prisma\build\index.js")) {
+    if (-not (Test-Path (Join-Path $temp $z))) { Fail "Paket BOZUK - eksik: $z  (backend acilamaz)" }
+  }
+}
+if (-not (Test-Path "$temp\dist\tools\superadmin-olustur.cjs")) {
+  Uyar 'dist\tools\superadmin-olustur.cjs YOK - (npm run superadmin:kur) bu paketle KOSMAZ - satici hesabi kurulamaz.'
+}
+
+if ($m -and $m.dosyaSayisi) {
+  # PAKET.json kendisi sayima dahil DEGIL -> beklenen = dosyaSayisi + 1
+  $gercekDosya = (Get-ChildItem $temp -Recurse -File -Force).Count
+  $beklenen = [int]$m.dosyaSayisi + 1
+  if ($gercekDosya -ne $beklenen) {
+    Fail "Paket BOZUK - beyan $beklenen dosya, acilanlar $gercekDosya. Fark: $($beklenen - $gercekDosya)."
+  }
+  Ok "dosya sayisi beyanla uyusuyor ($gercekDosya)"
+}
+
+# Node surumu: package.json ZEMIN koyar (`engines.node`), bu kapi onu OLCER.
+# 2026-09-04 ev provasi (BULGU-6): dokuman "22.x" diyordu, saha makinesi 26.4,
+# paketi ureten 26.8 idi ve hicbir kapi farki gormuyordu. Ust sinir YOK.
+$nodeSurum = (& node --version) -replace '^v',''
+$nodeMajor = [int](($nodeSurum -split '\.')[0])
+$paketJson = Get-Content (Join-Path $temp "package.json") -Raw | ConvertFrom-Json
+$zemin = 22
+if ($paketJson.engines -and $paketJson.engines.node -match '(\d+)') { $zemin = [int]$Matches[1] }
+if ($nodeMajor -lt $zemin) {
+  Fail "Node $nodeSurum bu paket icin COK ESKI (en az $zemin gerekiyor). Once Node'u yukseltin."
+}
+Ok "node $nodeSurum (zemin: >=$zemin)"
+if ($m -and $m.nodeSurumu) {
+  $ureticiMajor = [int](($m.nodeSurumu -replace '^v','' -split '\.')[0])
+  if ($nodeMajor -lt $ureticiMajor) {
+    Uyar "Paket Node $($m.nodeSurumu) ile uretildi, bu sunucuda Node $nodeSurum var - daha ESKI. Sorun cikarsa ilk buraya bakin."
+  }
+}
+
 $migSayi = (Get-ChildItem "$temp\prisma\migrations" -Directory).Count
 Ok "paket saglam ($migSayi migration klasoru)"
 
@@ -348,12 +407,16 @@ if ($ecoYedek) {
 
 Set-Location $appDir
 
+# Prisma CLI'nin giris noktasi. `.bin` shim'lerine BAGIMLI DEGILDIR - bkz. [7/9].
+$prismaCli = Join-Path $appDir "node_modules\prisma\build\index.js"
+if (-not (Test-Path $prismaCli)) { GeriAlOtomatik "prisma CLI bulunamadi: $prismaCli" }
+
 # --- [6/9] Bagimliliklar (pakette yoksa) ------------------------------------
 if (-not $nmVar) {
   Adim "[6/9] Uretim bagimliliklari kuruluyor (npm ci --omit=dev)..."
   npm ci --omit=dev --no-audit --no-fund
   if ($LASTEXITCODE -ne 0) { GeriAlOtomatik "npm ci basarisiz (internet erisimi var mi?)" }
-  npx prisma generate
+  & node $prismaCli generate
   if ($LASTEXITCODE -ne 0) { GeriAlOtomatik "prisma generate basarisiz" }
   Ok "bagimliliklar kuruldu"
 } else {
@@ -362,13 +425,18 @@ if (-not $nmVar) {
 
 # --- [7/9] Migration - GERI ALINAMAZ ESIK -----------------------------------
 Adim "[7/9] Migration'lar uygulaniyor (GERI ALINAMAZ ESIK)..."
-npx prisma migrate deploy
+# ⚠ `npx prisma` KULLANILMAZ (2026-09-04 ev provasi, BULGU-1). `npx` CLI'yi
+#   `node_modules\.bin` uzerinden cozer; o klasor macOS/Linux'ta uretilen
+#   pakette ya hic yoktur ya da Windows'ta calismayan sembolik baglar tasir
+#   (npm `.cmd` shim'lerini KURULUM ANINDA, kendi platformunda uretir). Giris
+#   noktasini dogrudan cagirmak her platformda ayni sekilde calisir.
+& node $prismaCli migrate deploy
 if ($LASTEXITCODE -ne 0) {
   Write-Host ""
   Write-Host "  X MIGRATION BASARISIZ" -ForegroundColor Red
   Write-Host "    DB kismi degismis OLABILIR. Otomatik geri alinmiyor - karar senin." -ForegroundColor Yellow
   Write-Host ""
-  Write-Host "    Durumu gor :  cd $appDir ; npx prisma migrate status"
+  Write-Host "    Durumu gor :  cd $appDir ; node node_modules\prisma\build\index.js migrate status"
   Write-Host "    Kodu geri al:  $kok\kur.ps1 -GeriAl"
   Write-Host "    DB'yi geri al: pg_restore ... $dump   (KURULUM dokumanina bak)"
   KokeDon

@@ -552,10 +552,45 @@ async function main(): Promise<void> {
     const pkg = JSON.parse(fs.readFileSync(path.join(KOK, "package.json"), "utf8")) as {
       scripts?: Record<string, string>;
     };
+    // ⚠️ 2026-09-04 ev provası (BULGU-2): komut eskiden
+    // `tsx scripts/superadmin-olustur.ts` idi ve SAHADAKİ PAKETTE ÇALIŞMIYORDU —
+    // pakette ne `scripts/` ne `tsx` vardı (`npm ci --omit=dev` tsx'i eler).
+    // Hesabın TEK doğuş yolu bu script olduğu için kurulum sessizce hesapsız
+    // kalıyordu. Komut artık derlenmiş, platformdan bağımsız çıktıyı koşar.
+    const kurKomut = pkg.scripts?.["superadmin:kur"] ?? "";
     check(
-      "`npm run superadmin:kur` script satırı var ve doğru dosyayı gösteriyor",
-      (pkg.scripts?.["superadmin:kur"] ?? "").includes("superadmin-olustur.ts"),
-      pkg.scripts?.["superadmin:kur"] ?? "—",
+      "`npm run superadmin:kur` DERLENMİŞ aracı gösteriyor (pakette `tsx`/`scripts/` YOK)",
+      /node\s+dist[\\/]tools[\\/]superadmin-olustur\.cjs/.test(kurKomut),
+      kurKomut || "—",
+    );
+    check(
+      "komut `tsx` ÇAĞIRMIYOR (dev bağımlılığı; üretim paketinde bulunmaz)",
+      !/\btsx\b/.test(kurKomut),
+      kurKomut || "—",
+    );
+    // Derleme o çıktıyı GERÇEKTEN üretiyor mu — komut ile üretici ayrışırsa
+    // paket yine hesapsız kalır ve bunu ancak sahada fark ederiz.
+    const araclarBuilder = path.join(KOK, "scripts", "build-araclar.mjs");
+    check("araç derleyicisi var (`scripts/build-araclar.mjs`)", fs.existsSync(araclarBuilder));
+    if (fs.existsSync(araclarBuilder)) {
+      const bsrc = fs.readFileSync(araclarBuilder, "utf8");
+      check(
+        "derleyici tam olarak `npm run superadmin:kur`un beklediği yolu üretiyor",
+        bsrc.includes("dist/tools/superadmin-olustur.cjs") &&
+          bsrc.includes("scripts/superadmin-olustur.ts"),
+      );
+    }
+    check(
+      "`npm run build` araç derlemesini de koşuyor (yoksa çıktı bayatlar/hiç doğmaz)",
+      (pkg.scripts?.build ?? "").includes("build-araclar.mjs"),
+      pkg.scripts?.build ?? "—",
+    );
+    // Kaynak hâlâ `src/` DIŞINDA olmalı: `test_superadmin_hidden_single_source §6`
+    // `isSystemAccount` yazan kodun sunucu ağacına girmemesini şart koşuyor.
+    check(
+      "yazıcı kaynağı `src/` DIŞINDA duruyor (ikinci doğuş yolu kazayla açılamaz)",
+      fs.existsSync(path.join(KOK, "scripts", "superadmin-olustur.ts")) &&
+        !fs.existsSync(path.join(KOK, "src", "scripts", "superadmin-olustur.ts")),
     );
     // Electron sözlüğü: iki yeni olayın Türkçesi.
     const etiketler = fs.readFileSync(

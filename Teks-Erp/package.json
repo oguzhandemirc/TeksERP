@@ -1,17 +1,21 @@
 {
   "name": "tekserp-backend",
   "version": "2.9.0",
+  "engines": {
+    "node": ">=22"
+  },
   "description": "TeksERP - Tekstil ERP Backend",
   "scripts": {
     "dev": "nodemon --watch src --ext ts --exec ts-node src/server.ts",
-    "build": "tsc",
+    "build": "tsc && node scripts/build-araclar.mjs",
     "seed": "npx prisma db seed",
     "seed:fixtures": "tsx prisma/seed-fixtures.ts",
     "seed:demo": "tsx prisma/seed-demo-stations.ts",
     "seed:scenario": "ts-node prisma/seed-shipping-scenario.ts",
     "seed:ticaret-demo": "tsx prisma/seed-ticaret-demo.ts",
     "setup:ticaret": "tsx scripts/setup-ticaret.ts",
-    "superadmin:kur": "tsx scripts/superadmin-olustur.ts",
+    "superadmin:kur": "node dist/tools/superadmin-olustur.cjs",
+    "superadmin:kur:kaynak": "tsx scripts/superadmin-olustur.ts",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",

@@ -130,10 +130,41 @@ export async function ensureModuleProfile(
   const parsed = readProfileEnv(env);
 
   if (parsed.kind === "absent") {
-    console.log(
-      "[module-profile] TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI " +
-        "(kod varsayılanları geçerli: üretim açık, diğer altısı kapalı).",
-    );
+    // ⚠️ MESAJ SATIRLARA BAKARAK KURULUR (2026-09-04 ev provası, BULGU-5).
+    // Eskiden env yokluğunda satırlar HİÇ sayılmadan "modül anahtarları
+    // YAZILMADI" basılıyordu. Yükseltilen bir kurulumda anahtarlar zaten
+    // vardır (grandfathering migration'ı yazar) ve operatör bu satırı okuyup
+    // `.env`e gereksiz yere profil ekleyip sunucuyu yeniden başlatıyordu —
+    // hiçbir şey değişmeyecekti, çünkü satır varken profil zaten uygulanmaz.
+    // Sonuç doğruydu, MESAJ yanıltıcıydı.
+    //
+    // Dönüş değeri BİLEREK `absent` kalır: sözleşme "env yoksa YAZMA"dır ve
+    // bekçi (§7d) onu ölçer. Değişen yalnız operatöre söylenen cümle.
+    //
+    // Sayım BEST-EFFORT: env yokluğu dalı bugüne dek DB'ye hiç dokunmuyordu ve
+    // bu özellik korunur — DB henüz ayakta değilse eski cümleye düşülür,
+    // boot bu yüzden gecikmez/başarısız olmaz.
+    let mevcutSayi: number | null = null;
+    try {
+      mevcutSayi = await prisma.systemSetting.count({
+        where: { key: { in: [...MODULE_SETTING_KEYS] } },
+      });
+    } catch {
+      mevcutSayi = null;
+    }
+    if (mevcutSayi !== null && mevcutSayi > 0) {
+      console.log(
+        `[module-profile] TEKSERP_PROFIL tanımlı değil; kurulumda ${mevcutSayi}/${MODULE_SETTING_KEYS.size} ` +
+          "modül anahtarı ZATEN VAR — yapılacak bir şey yok. " +
+          "(Profil yalnız HİÇ anahtarı olmayan TAZE kuruluma uygulanır; " +
+          "`.env`e profil eklemek mevcut anahtarları DEĞİŞTİRMEZ.)",
+      );
+    } else {
+      console.log(
+        "[module-profile] TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI " +
+          "(kod varsayılanları geçerli: üretim açık, diğer altısı kapalı).",
+      );
+    }
     return { action: "absent" };
   }
 

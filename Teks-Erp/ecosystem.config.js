@@ -14,7 +14,7 @@
 //
 // ⚠ Log klasörü ÖNCEDEN var olmalı — pm2 out_file/error_file dizinini kendisi
 // OLUŞTURMAZ, yoksa log yazamaz:
-//     mkdir C:\Etkili-Yazilim\logs
+//     mkdir <KOK>\logs   (ilk-kurulum.ps1 bunu zaten olusturur)
 //
 // Ayrıntı ve reboot kalıcılığı: docs/ops/DEPLOY-RUNBOOK.md
 //
@@ -23,6 +23,24 @@
 // altındaki .env okunur). Aşağıdaki `env` bloğu yalnız sır olmayan operasyonel
 // değerleri taşır — eskiden NSSM'in AppEnvironmentExtra'sının yaptığı iş.
 // =============================================================================
+
+const path = require("path");
+
+// =============================================================================
+// KURULUM KOKU — SABIT DEGIL, TURETILIR (2026-09-04 ev provasi, BULGU-3)
+// =============================================================================
+// Bu dosya eskiden dort yolu `C:/Etkili-Yazilim` olarak SABIT yaziyordu. `kur.ps1`
+// `-Kok` ile baska bir koke kurulabildigi icin (yan yana kurulum modeli) bu
+// yollar sessizce YANLIS yere isaret ediyordu: loglar yazilamiyor, `BACKUP_DIR`
+// var olmayan bir klasoru gosteriyor ve HICBIR UYARI uretmiyordu.
+//
+// Kurulum duzeni daima <KOK>\app oldugu icin kok, dosyanin kendi konumundan
+// cozulur. Fabrikadaki kurulum C:\Etkili-Yazilim\app oldugundan uretilen
+// degerler ESKISIYLE BIREBIR AYNIDIR - sifir fark.
+//
+// ⚠ Windows yollari ileri bolu ile yazilir; Node her iki ayiriciyi da kabul eder
+// ve ters bolu JSON/log satirlarinda kacis karakteri gibi okunur.
+const KOK = path.resolve(__dirname, "..").replace(/\\/g, "/");
 
 module.exports = {
   apps: [
@@ -68,8 +86,8 @@ module.exports = {
       // -----------------------------------------------------------------------
       // morgan 'combined' üretimde ANSI'siz yazar (app.ts F17) → dosya temiz kalır.
       // Rotasyonu pm2 kendisi YAPMAZ: pm2-logrotate modülü gerekir (runbook).
-      out_file: "C:/Etkili-Yazilim/logs/backend-out.log",
-      error_file: "C:/Etkili-Yazilim/logs/backend-err.log",
+      out_file: `${KOK}/logs/backend-out.log`,
+      error_file: `${KOK}/logs/backend-err.log`,
       time: true,
 
       env: {
@@ -108,7 +126,7 @@ module.exports = {
 
         // BACKUP_DIR TANIMSIZSA panel yedekleri göremez ve elle yedek alınamaz.
         // Sahadaki değer: C:/Etkili-Yazilim/backups
-        BACKUP_DIR: "C:/Etkili-Yazilim/backups",
+        BACKUP_DIR: `${KOK}/backups`,
 
         // Saklama GÜN bazlı (varsayılan 30) — sahadaki `yedekle.ps1` politikasıyla
         // AYNI olmalı. Eskiden "en yeni 14 dosya"ydı; aynı klasöre/aynı `tekserp_*`
@@ -141,7 +159,7 @@ module.exports = {
         // emsali) — pm2 restart gerekmez. Kayıt bir kez oluştuktan sonra bu
         // satırı değiştirmek hiçbir şeyi değiştirmez; panelden bakın.
         BACKUP_RCLONE_REMOTE: "",
-        BACKUP_RCLONE_BIN: "C:/Etkili-Yazilim/rclone/rclone.exe",
+        BACKUP_RCLONE_BIN: `${KOK}/rclone/rclone.exe`,
         // rclone yapılandırma dosyası (Drive token'ı burada durur). Boşsa
         // `<BACKUP_DIR>/../rclone.conf` kullanılır — yedek klasörünün İÇİNE
         // konmaz, orası buluta süpürülüyor.
@@ -156,7 +174,7 @@ module.exports = {
         // sunucudan ESKİ bir majorsa pg_dump çalışmayı reddeder. Gerçek yolu
         // teyit et: Get-ChildItem 'C:\Program Files\PostgreSQL' -Directory
         // Sahadaki değer (PostgreSQL 16.9 native kurulum):
-        PG_BIN_DIR: "C:/Etkili-Yazilim/pgsql/bin",
+        PG_BIN_DIR: `${KOK}/pgsql/bin`,
 
         // --- Kopyaya geri yükleme (Sistem → Veritabanı Geri Yükleme)
         // PGDATA_DIR: disk guard'ının ölçeceği birim. Verilmezse tablespace
