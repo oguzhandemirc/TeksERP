@@ -244,7 +244,7 @@ Grandfathering migration: mevcut DB'ye bugünkü değerler damgalanır.
   sebebi artık Ticaret modülü (eskiden Ön Muhasebe). Fabrikada görünür değişiklik
   yok." — kapsam `panel`; tablet için not gerekmez.
 
-**P2 · Süperadmin:** yukarıdaki bölüm — şema kolonu + job + `["*"]` bypass +
+**P2 · Süperadmin:** ✅ UYGULANDI 2026-09-03 (`feature/modul-bayrak` bfddd846 · 745bf3eb · 628f8c12; karar notu arşivde "Süperadmin P2"; planda OLMAYAN üç boşluk kapandı: mobil `has('*')`, backend `includes("admin:*")` ×3, `credentials` ucu düz PIN zinciri). yukarıdaki bölüm — şema kolonu + job + `["*"]` bypass +
 `hasAdminAccess` düzeltmesi + 5 gizleme süzgeci + guard dalı. Bekçi:
 `test_superadmin.ts` (gizlilik: 5 yüzeyde görünmez · yetki: her uca girer ·
 audit: satır yazılır, takma ad basılır · negatif sonda: süzgeç kalkınca kırmızı).
