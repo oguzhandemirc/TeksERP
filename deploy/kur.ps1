@@ -5,6 +5,12 @@
 #   C:\Etkili-Yazilim\kur.ps1 -Paket D:\tekserp-backend-20260801_120000-abc1234.zip
 #   C:\Etkili-Yazilim\kur.ps1 -GeriAl          # son kuruluma geri don
 #
+#   YAN YANA (guvenli gecis) - eskiye HIC dokunmadan yeni koke kur:
+#   C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket D:\tekserp-backend-....zip
+#     Eski kurulum yerinde kalir; devretme = eskiyi durdur, yeniyi baslat.
+#     Geri donus = yeniyi durdur, eskiyi baslat (DB'ler de ayridir).
+#     ⚠ Her kok kendi pm2 daemon'ini tasir; komutlarda PM2_HOME onemli.
+#
 # NEDEN guncelle.ps1'IN YERINI ALDI:
 #   CALISAN kurulum (app\) bir git klonu DEGIL, hazir pakettir; "pull et + derle"
 #   orada yapilamaz. Paket sunucudaki BUILD klonundan uretilir
@@ -36,11 +42,26 @@
 param(
   [string]$Paket,
   [switch]$GeriAl,
-  [switch]$Zorla
+  [switch]$Zorla,
+  # KURULUM KOKU. Varsayilan sahadaki yol; YAN YANA kurulum icin degistirilir.
+  #
+  # ⚠ NEDEN PARAMETRE (2026-09-04): guvenli gecis modeli "eskiyi YERINDE birak,
+  #   yeniyi AYRI koke kur, pm2'yi devret" seklindedir. Eski kurulum dosya
+  #   duzeyinde HIC dokunulmadan kalir; geri donus = eski pm2'yi baslat. Kok
+  #   sabit oldugu surece bu model yazilamiyordu ve tek yol calisan kurulumun
+  #   uzerine yazmakti.
+  #
+  # ⚠ HER KOK KENDI PM2 DAEMON'INI TASIR ($kok\pm2-home). Ayni uygulama adi iki
+  #   kokte CAKISMAZ - listeler ayridir. Ama komut verirken DOGRU PM2_HOME'u
+  #   kullan, yoksa "uygulama yok" dersin. Script bunu kendisi ayarlar.
+  #
+  # ⚠ IKISI AYNI ANDA CALISAMAZ: ayni PORT (.env) ve ayni DB'ye baglanirlar.
+  #   Devretmeden once eskisini durdur.
+  [string]$Kok = "C:\Etkili-Yazilim"
 )
 $ErrorActionPreference = "Stop"
 
-$kok       = "C:\Etkili-Yazilim"
+$kok       = $Kok
 $appDir    = "$kok\app"
 $eskiKlon  = "$kok\tekserp\Teks-Erp"      # ilk gecis: git klonundan gelen kurulum
 $pm2       = "$kok\pm2\node_modules\.bin\pm2.cmd"
