@@ -77,6 +77,9 @@ export function useLoginFlow() {
       setTotp(null);
       setEnrollmentNeeded(false);
       setUser(decoded);
+      // Token'da OLMAYAN kimlik alanları (sistem hesabı / kurulumda var mı)
+      // `/auth/me`den gelir — arka planda; navigasyonu bekletmez.
+      void useAuthStore.getState().refreshSystemAccount();
       // Kimlik sabitleme: insan bu sunucuya GİRDİ, yani "bu benim sunucum" dedi.
       // Bundan sonraki keşiflerde kimlik tutmazsa kullanıcıya sorulur.
       void pinServerIdentityAfterLogin();

@@ -12,6 +12,27 @@ export interface JwtPayload {
   iat?: number;
 }
 
+/**
+ * `GET /api/auth/me` yanıtı — JWT'nin AYNISI DEĞİLDİR.
+ *
+ * ⚠️ `isSystemAccount` ve `systemAccountExists` bilerek token'a KONMADI
+ * (2026-09-03): token uzun ömürlüdür ve istemcide çözülür; kimlik-benzeri bir
+ * bayrağı oraya koymak "bayat ama imzalı" bir yetki iddiası üretirdi. İkisi de
+ * her istekte SUNUCUDAN çözülür — `isSystemAccount` `verifyToken`ın taze DB
+ * okumasından, `systemAccountExists` ise backend guard'ının emniyet supabıyla
+ * AYNI kayıt defterinden. Ayrışırlarsa panel yazılabilir gösterip 403 yerdi.
+ */
+export interface AuthMeResponse {
+  userId: string;
+  username: string;
+  fullName?: string;
+  permissions: string[];
+  /** Bu oturum satıcı (süperadmin) hesabı mı. */
+  isSystemAccount: boolean;
+  /** Bu kurulumda bir sistem hesabı DOĞMUŞ mu (yoksa modül anahtarı kapısı devre dışı). */
+  systemAccountExists: boolean;
+}
+
 /** Giriş yapan istemcinin türü — same-type oturum politikası bununla ayrışır.
  *
  *  ⚠️ `web`, `electron`tan AYRI bir tiptir (2026-09-01). Web paneli Electron
@@ -91,9 +112,18 @@ export function matchesPermission(
   return false;
 }
 
-/** ADMIN modülü görünürlüğü için (nav/adminOnly öğeler) — yetki bypass'ı DEĞİL. */
+/** ADMIN modülü görünürlüğü için (nav/adminOnly öğeler) — yetki bypass'ı DEĞİL.
+ *
+ * ⚠️ `matchesPermission` ile ölçülür, düz `includes` ile DEĞİL (2026-09-03).
+ * Eski yazım global `"*"`i tanımıyordu: satıcı (süperadmin) hesabı backend'den
+ * `["*"]` alır ve `hasAdminAccess(["*"])` FALSE dönüyordu → Sistem hub'ında
+ * `adminOnly` karolar (SystemHubPage.tsx: `if (t.adminOnly && !isAdmin) return
+ * false` — izin dalına HİÇ düşmez) ve yalnız `adminOnly` taşıyan komut paleti
+ * girdileri gizleniyordu. Sidebar bozulmuyordu (ikinci dalı
+ * `hasAnyPermission(ADMIN_PERMISSION_LIST)`), yani belirti KISMİ ve sessizdi.
+ * Mevcut hesaplarda fark YOK: `admin:*` taşıyan kullanıcı iki yazımda da true. */
 export function hasAdminAccess(permissions: string[]): boolean {
-  return ADMIN_PERMISSION_LIST.some((p) => permissions.includes(p));
+  return ADMIN_PERMISSION_LIST.some((p) => matchesPermission(permissions, p));
 }
 
 export function canEnterApp(permissions: string[]): boolean {

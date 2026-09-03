@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { useAuthStore } from "@/store/auth";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { featureFlagService, type FeatureFlags } from "@/services/featureFlagService";
 import { systemSettingService } from "@/services/systemSettingService";
@@ -30,6 +31,7 @@ export function FeatureFlagSection({
   flags,
   numberFlags = [],
   settingFields = [],
+  superadminOnly = false,
   searchHit,
 }: {
   flags: FlagDef[];
@@ -38,12 +40,29 @@ export function FeatureFlagSection({
   numberFlags?: NumberFlagDef[];
   /** Ham system-setting sayısal alanları — aynı Kaydet, ayrı uç. */
   settingFields?: SettingFieldDef[];
+  /** Kategori yalnız satıcı (süperadmin) hesabına YAZILIR — bkz.
+   *  `SettingsCategory.superadminOnly`. Görünürlüğü etkilemez. */
+  superadminOnly?: boolean;
   /** Arama açıksa bu kategorinin eşleşme fotoğrafı; yoksa tüm satırlar çizilir. */
   searchHit?: SettingsSearchHit;
 }) {
   const qc = useQueryClient();
   const { hasPermission } = useRoleAccess();
-  const canEdit = hasPermission("admin:settings");
+  const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
+  const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
+  // ⚠️ İZİN ve KİMLİK ÇARPILIR, birinin yerine geçmez: satıcı hesabı zaten
+  // `["*"]` taşıdığı için `hasPermission` onda da true'dur, ama izinsiz bir
+  // kullanıcının kimlik kapısından geçmesi diye bir şey olmamalı.
+  //
+  // ⚠️ SUPAP (`!systemAccountExists`) backend `flagWriteGuard`ın üçüncü dalıyla
+  // AYNI kaynaktan beslenir: sistem hesabı HİÇ doğmamış bir kurulumda modül
+  // anahtarları BUGÜNKÜ gibi `admin:settings` ile yazılır — yoksa süperadminsiz
+  // her kurulum, kendi modüllerini bir daha açamayacak şekilde KİLİTLENİRDİ.
+  // Ayrışırlarsa arıza sessizdir (panel yazılabilir çizer, sunucu 403 verir).
+  const superadminGateOpen = isSystemAccount || !systemAccountExists;
+  const canEdit = hasPermission("admin:settings") && (!superadminOnly || superadminGateOpen);
+  /** Salt-okunur SEBEBİ kimlik kapısı mı (izin eksikliği değil)? */
+  const lockedBySuperadmin = superadminOnly && !superadminGateOpen && hasPermission("admin:settings");
 
   const flagsQ = useFeatureFlags();
   const server = flagsQ.data?.data;
@@ -335,6 +354,17 @@ export function FeatureFlagSection({
 
   return (
     <div>
+      {/* Kilit BANDI — "değişiklik neden kaydedilmiyor" sorusunun tek cevabı bu
+          satır. Sadece disabled toggle çizmek sebebi hiçbir yerde söylemezdi. */}
+      {lockedBySuperadmin && (
+        <div
+          role="note"
+          className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+        >
+          Bu anahtarları yalnız sistem yöneticisi değiştirir. Modül açma/kapatma
+          talebiniz için yazılım firmanıza başvurun.
+        </div>
+      )}
       {nothingShown && (
         <p className="text-sm text-muted-foreground">Bu bölümde arama ile eşleşen ayar yok.</p>
       )}

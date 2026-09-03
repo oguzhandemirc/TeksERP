@@ -1,7 +1,7 @@
 import type { AxiosRequestConfig } from "axios";
 import apiClient from "./apiClient";
 import type { ApiResponse } from "@/types/api";
-import type { JwtPayload, LoginRequest, LoginResponse } from "@/types/auth";
+import type { AuthMeResponse, LoginRequest, LoginResponse } from "@/types/auth";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
 /**
@@ -58,6 +58,14 @@ export const authService = {
       )
       .then(() => undefined),
 
-  getMe: (): Promise<ApiResponse<JwtPayload>> =>
-    apiClient.get<ApiResponse<JwtPayload>>("/api/auth/me").then((r) => r.data),
+  /**
+   * Oturumun SUNUCUDAN çözülen kimliği. Token'da olmayan iki alanı taşır
+   * (`isSystemAccount` / `systemAccountExists`) — bkz. `AuthMeResponse`.
+   * Genel hata toast'ı bastırılır: bu çağrı arka plandadır, düşerse panel
+   * fail-closed varsayılanlarıyla (yazma kapalı) çalışmaya devam eder.
+   */
+  getMe: (): Promise<ApiResponse<AuthMeResponse>> =>
+    apiClient
+      .get<ApiResponse<AuthMeResponse>>("/api/auth/me", { suppressErrorToast: true })
+      .then((r) => r.data),
 };

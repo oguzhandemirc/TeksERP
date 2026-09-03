@@ -5,16 +5,55 @@ import { tokenStore } from "@/lib/secure-token";
 interface AuthState {
   user: JwtPayload | null;
   isHydrated: boolean;
+  /**
+   * Bu oturum satıcı (süperadmin) hesabı mı — `/api/auth/me`den, JWT'den DEĞİL.
+   * `refreshSystemAccount()` doldurur; token çözümünden türetilemez.
+   */
+  isSystemAccount: boolean;
+  /**
+   * Kurulumda bir sistem hesabı DOĞMUŞ mu — backend guard'ının emniyet supabıyla
+   * AYNI kaynak (`systemAccountExistsKnown`).
+   *
+   * ⚠️ VARSAYILAN `true` ve bu FAIL-CLOSED yöndür: cevap gelmeden önce panel
+   * "sistem hesabı var, modül anahtarları bana kapalı" varsayar. Ters varsayım
+   * (`false`) ekranı yazılabilir çizip 403 yedirirdi — kullanıcıya "kaydet"
+   * dedirtip sunucuda reddedilmek, kısa süre salt-okunur görmekten kötüdür.
+   */
+  systemAccountExists: boolean;
   setUser: (user: JwtPayload | null) => void;
   setHydrated: (hydrated: boolean) => void;
+  /** `/api/auth/me`den sistem-hesabı bayraklarını tazeler. ASLA reject etmez
+   *  (best-effort): düşerse fail-closed varsayılanlar yerinde kalır. */
+  refreshSystemAccount: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isHydrated: false,
-  setUser: (user) => set({ user }),
+  isSystemAccount: false,
+  systemAccountExists: true,
+  // ⚠️ `user = null` sistem-hesabı bayraklarını da SIFIRLAR. Tek yer değil iki
+  // yol buraya düşüyor (manuel çıkış + apiClient'ın 401 dalı) ve ikisinde de
+  // eski kimliğin bayrağı kalsaydı, aynı makinede nöbetleşen bir sonraki
+  // kullanıcı `refreshSystemAccount()` cevap verene kadar YANLIŞ ekranı görürdü.
+  setUser: (user) =>
+    set(user === null ? { user: null, isSystemAccount: false, systemAccountExists: true } : { user }),
   setHydrated: (isHydrated) => set({ isHydrated }),
+  refreshSystemAccount: async () => {
+    try {
+      // Dinamik import: apiClient ↔ auth store döngüsünü kır (logout ile aynı desen).
+      const { authService } = await import("@/services/authService");
+      const me = await authService.getMe();
+      set({
+        isSystemAccount: me.data.isSystemAccount === true,
+        // Alan taşımayan ESKİ backend → `true` (fail-closed; bkz. tip yorumu).
+        systemAccountExists: me.data.systemAccountExists !== false,
+      });
+    } catch {
+      /* sunucuya ulaşılamadı / oturum düştü — varsayılanlar korunur */
+    }
+  },
   logout: async () => {
     // LOCAL-FIRST çıkış (Faz 2): UI sunucuyu BEKLEMEZ. Eski hali revoke POST'unu
     // await ediyordu — sunucu asılıysa login sayfası 15sn'e kadar gecikiyordu.
@@ -35,7 +74,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       /* disk silinemedi — user null yine de set edilir; token exp ile ölür */
     }
-    set({ user: null });
+    // Sistem-hesabı bayrakları da SIFIRLANIR: aynı makinede nöbetleşen bir
+    // sonraki kullanıcı, öncekinin kimliğiyle çizilmiş bir ekran görmemeli.
+    set({ user: null, isSystemAccount: false, systemAccountExists: true });
     if (token) {
       // Dinamik import: apiClient ↔ auth store döngüsünü kır (eski desen korunur).
       void (async () => {

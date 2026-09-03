@@ -301,6 +301,22 @@ export interface SettingsCategory {
    * (izin unutulursa kategori gizlenir; ters kurgu sistem ayarını sızdırırdı).
    */
   permissionAny?: string[];
+  /**
+   * Bu kategorinin satırlarını YALNIZ satıcı (süperadmin) hesabı yazabilir;
+   * fabrika yöneticisi kategoriyi GÖRÜR ama salt-okunur çizilir + bant.
+   *
+   * ⚠️ İZİN DEĞİL KİMLİK kapısıdır: `admin:settings` taşıyan fabrika admini bu
+   * satırları backend'de de yazamaz (`flagWriteGuard` üçüncü dalı → 403
+   * `MODULE_FLAG_SUPERADMIN_ONLY`). Ekranı tamamen GİZLEMEK bilinçli olarak
+   * REDDEDİLDİ: fabrika hangi modüllerin açık olduğunu görebilmeli, yoksa
+   * "menüde niye yok" sorusunun cevabı hiçbir yüzeyde yazmaz.
+   *
+   * ⚠️ `regime`in İKİZİ DEĞİL: rejim kategoriyi GİZLER, bu KİLİTLER. İkisini
+   * aynı alanla anlatmak, "Modüller" kategorisini bir gün kendi anahtarının
+   * arkasına almaya davet ederdi — geri dönüşü olmayan tuzak (bkz. kategori
+   * başındaki "REJİM ANAHTARLARININ EVİ" notu).
+   */
+  superadminOnly?: boolean;
   /** kind === "flags" için doldurulur. */
   flags?: FlagDef[];
   /** kind === "flags" sekmesine gömülü sayısal feature-flag alanları (opsiyonel). */
@@ -336,6 +352,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       "modül rejim üretim muhasebe ön muhasebe finance production aç kapat kurulum fabrika ticaret alım satım iplik kg depo çoklu depo transfer menü gizle",
     kind: "flags",
     section: "modules",
+    // Yazma satıcı hesabına ait (backend `flagWriteGuard`ın aynası); fabrika
+    // yöneticisi kategoriyi salt-okunur görür. Sistem hesabı HİÇ doğmamış bir
+    // kurulumda panel yine yazabilir — supap `systemAccountExists` üzerinden
+    // ve backend'deki emniyet supabıyla AYNI kaynaktan (bkz. FeatureFlagSection).
+    superadminOnly: true,
     flags: [
       {
         key: "productionEnabled",

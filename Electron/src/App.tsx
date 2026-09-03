@@ -38,6 +38,7 @@ const queryClient = new QueryClient({
 function AuthHydrator() {
   const setUser = useAuthStore((s) => s.setUser);
   const setHydrated = useAuthStore((s) => s.setHydrated);
+  const refreshSystemAccount = useAuthStore((s) => s.refreshSystemAccount);
 
   useEffect(() => {
     void (async () => {
@@ -49,13 +50,17 @@ function AuthHydrator() {
         const expMs = jwtPayloadExpiryMs(decoded);
         if (decoded && (expMs === null || expMs > Date.now())) {
           setUser(decoded);
+          // Token'da OLMAYAN kimlik alanları (sistem hesabı) sunucudan gelir —
+          // arka planda, best-effort: açılışı bekletmez, düşerse fail-closed
+          // varsayılanlar (yazma kapalı) yerinde kalır.
+          void refreshSystemAccount();
         } else {
           await tokenStore.clear();
         }
       }
       setHydrated(true);
     })();
-  }, [setUser, setHydrated]);
+  }, [setUser, setHydrated, refreshSystemAccount]);
 
   return null;
 }

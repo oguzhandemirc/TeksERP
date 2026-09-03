@@ -21,6 +21,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
+import { useAuthStore } from "@/store/auth";
 import type { FeatureFlags } from "@/services/featureFlagService";
 import { GeneralSettingsPage } from "./GeneralSettingsPage";
 
@@ -76,6 +77,12 @@ const DIRTY_BADGE = "• Kaydedilmemiş değişiklik";
 describe("Genel Ayarlar — arama süzer, gezinmez", () => {
   beforeEach(() => {
     permissions = ["admin:settings"];
+    // ⚠️ 2026-09-03: "Modüller" kategorisi artık `superadminOnly` — satıcı
+    // (süperadmin) hesabı YOKSA fabrika yöneticisi yazmaya devam eder (emniyet
+    // supabı). Bu bekçinin konusu ARAMA ↔ TASLAK ilişkisi; kilit ölçümü ayrı
+    // dosyada (`FeatureFlagSection.superadmin.test.tsx`). Burada fabrikanın
+    // BUGÜNKÜ hâli kurulur: sistem hesabı henüz doğmamış → toggle yazılabilir.
+    useAuthStore.setState({ isSystemAccount: false, systemAccountExists: false });
   });
 
   /**

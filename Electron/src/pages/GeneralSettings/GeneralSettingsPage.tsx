@@ -211,6 +211,7 @@ export function GeneralSettingsPage() {
                     flags={cat.flags ?? []}
                     numberFlags={cat.numberFlags}
                     settingFields={cat.settingFields}
+                    superadminOnly={cat.superadminOnly}
                     // Arama açıkken isabetsiz kategori BOŞ isabet alır: aksi
                     // halde "eşleşen ayar yok" diyen şeridin yanında dolu bir
                     // liste kalırdı.
