@@ -131,7 +131,7 @@ function satirNo(sf: ts.SourceFile, node: ts.Node): number {
 // `getEffectivePermissions` bypass'ı) tam da işini yapamaz hale gelir.
 const PRISMA_MUAF: Record<string, string> = {
   "jobs/superadmin.job.ts":
-    "hesabı YARATAN/ROTASYONLAYAN job — süzgeç kendi işini görünmez kılardı",
+    "hesabın VARLIĞINI okuyan boot job'ı (kilit defteri tazeleme) — süzülürse defter hep 'yok' der ve emniyet supabı kalıcı AÇIK kalır; hesabı YARATAN yer bu dosya değil (2026-09-03 P8: `scripts/superadmin-olustur.ts`)",
   "services/auth.service.ts:143":
     "kart ile GİRİŞ — süzülürse satıcı sisteme hiç giremez (hesabın varlık sebebi)",
   "services/auth.service.ts:173":
@@ -167,11 +167,16 @@ const WILDCARD_MUAF: Record<string, string> = {
  * §6 — `isSystemAccount` adının geçebileceği dosyalar (YAZMA allowlist'i).
  *
  * Alan panelden ATANAMAZ: hiçbir Zod şemasında, hiçbir `update`/`create`
- * gövdesinde geçmez. Tek yazar boot job'ıdır.
+ * gövdesinde geçmez. ⚠️ 2026-09-03 (P8) — TEK YAZAR ARTIK `src/` AĞACINDA
+ * DEĞİL: alanı yalnız sunucuda elle koşulan `scripts/superadmin-olustur.ts`
+ * yazar ve bu tarayıcı `src/` altını tarar. Yani buradaki allowlist'in tamamı
+ * artık OKUYUCUdur; `src/` altında yeni bir YAZICI belirirse o, doğuş yolunun
+ * ikinci kez açılması demektir (P8'in kaldırdığı şey).
  */
 const ALAN_ALLOWLIST: Record<string, string> = {
   "services/helpers/system-account.helper.ts": "kuralın tek kaynağı",
-  "jobs/superadmin.job.ts": "TEK YAZAR (boot job)",
+  "jobs/superadmin.job.ts":
+    "boot job'ı — hesabın VARLIĞINI okur (`where: { isSystemAccount: true }`), YAZMAZ",
   "middlewares/system-account.middleware.ts":
     "404 kapıları — hedefi okur (`blockSystemAccountTarget`) + isteği okur (`requireSystemAccountOr404`)",
   "middlewares/settings-password.middleware.ts":
@@ -488,15 +493,19 @@ console.log("\n=== 6) `isSystemAccount` YAZMA allowlist'i (panelden ATANAMAZ) ==
   );
 
   // Üçüncü yüklem — TEK YAZAR: `isSystemAccount: true` yazan bir Prisma
-  // create/update gövdesi yalnız job'da olabilir.
+  // create/update gövdesi `src/` altında HİÇ olamaz.
+  // ⚠️ 2026-09-03 (P8): boot job'ının muafiyeti KALDIRILDI — `.env` tohumlama
+  // yolu silindiği için job artık yalnız `where:` ile OKUR, hesabı yaratan tek
+  // yer `scripts/superadmin-olustur.ts`tir (o dosya `src/` ağacında değil,
+  // bekçisi `test_superadmin_provision`). Muafiyeti geri koymak, hesabı
+  // yaratabilen ikinci bir sunucu-içi yolu sessizce meşrulaştırırdı.
   const yazanlar: string[] = [];
   for (const f of FILES) {
     const r = rel(f);
-    if (r === "jobs/superadmin.job.ts") continue;
     const src = fs.readFileSync(f, "utf8");
     src.split("\n").forEach((line, i) => {
       const kod = line.split("//")[0] ?? "";
-      // `where:` içindeki `isSystemAccount: true` OKUMA'dır (job + middleware);
+      // `where:` içindeki `isSystemAccount: true` OKUMA'dır (boot job + middleware);
       // yazma bir `data:` gövdesinde olur. Yüklemi dar tutmak için hem satırı
       // hem önceki 3 satırı `data:` açısından yokla.
       if (!/isSystemAccount\s*:\s*true/.test(kod)) return;
@@ -505,9 +514,9 @@ console.log("\n=== 6) `isSystemAccount` YAZMA allowlist'i (panelden ATANAMAZ) ==
     });
   }
   check(
-    "`isSystemAccount: true` yazan TEK yer boot job'ı",
+    "`isSystemAccount: true` YAZAN yer `src/` altında YOK (tek yazar kurulum script'i)",
     yazanlar.length === 0,
-    yazanlar.join(", ") || "başka yazar yok",
+    yazanlar.join(", ") || "sunucu kodunda yazar yok — hesap yalnız `npm run superadmin:kur` ile doğar",
   );
 }
 

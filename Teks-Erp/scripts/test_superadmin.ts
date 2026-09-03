@@ -13,9 +13,10 @@
 //   ③ KİLİT    — `flagWriteGuard`ın ÜÇÜNCÜ dalı gövdedeki modül anahtarlarını
 //                görünce süperadmin şartı koyar.
 //   ④ SUPAP    — sistem hesabı HİÇ YOKSA kilit devre dışıdır; aksi halde
-//                `SUPERADMIN_*` yazılmamış her kurulumda modül anahtarını HİÇ
-//                KİMSE değiştiremezdi (`document-design.ts`teki "admin:settings
-//                dört ekranı da açmaya devam eder" dersinin birebir tekrarı).
+//                kurulum script'i (`npm run superadmin:kur`) koşulmamış her
+//                kurulumda modül anahtarını HİÇ KİMSE değiştiremezdi
+//                (`document-design.ts`teki "admin:settings dört ekranı da
+//                açmaya devam eder" dersinin birebir tekrarı).
 //
 // DOKUZ SESSİZ BOZULMA YOLU VAR, DOKUZU DA BURADA KİLİTLİ:
 //   1. GUARD YÖN DEĞİŞTİRİR — `.some` `.every` olursa `{ ticaretEnabled,
@@ -56,9 +57,11 @@
 //    `bekci.superadmin.<pid>`) ve `finally`de siler. `test_db_invariants` §10
 //    ("sistem hesabı ≤ 1") ile EŞZAMANLI KOŞMAZ. Yazma yaptığı için hedef-DB
 //    kapısından geçer (`lib/hedef-db-kapisi.ts`).
-// ⚠️ FORCE_SYNC (rotasyon) yalnız TEK sistem hesabı varsa ve o BİZİM fixture'ımız
-//    ise ölçülür — aksi halde gerçek bir satıcı hesabının parolasını döndürürdü.
-//    Ölçülemediğinde ATLANIR (kırmızı DEĞİL): eksik ölçüm kendini söyler.
+// ⚠️ DOĞUM YOLU VE ROTASYON BU DOSYADA ÖLÇÜLMEZ (2026-09-03, P8): `.env`
+//    tohumlaması kaldırıldı, tek yol `npm run superadmin:kur` ve onun bekçisi
+//    `scripts/test_superadmin_provision.ts`tir. Buradaki fixture hesabı DOĞRUDAN
+//    `prisma.user.create` ile doğar (§I) — kimlik/yetki/kilit/gizlilik ölçümünün
+//    ön koşuludur, doğum yolunun ölçümü değil.
 //
 // Koşum: npx tsx scripts/test_superadmin.ts
 //        (HTTP ayağı için: PORT=<port> … npx tsx src/server.ts &  → TEST_API_URL)
@@ -66,11 +69,11 @@
 // NEGATİF SONDALAR — 2026-09-03'te ÖLÇÜLDÜ. Taban (İKİ kurulum, ikisi de yeşil):
 //   • hesap VAR  (`tekserp_modul_test`, `bakim`): **126 geçti / 0 / 16 atlandı**
 //   • hesap YOK  (aynı DB, `bakim` geçici pasif; sunucu hesapsız açıldı): **138 / 0 / 3**
-//     — doğum yolu · supap davranışı · FORCE_SYNC rotasyonu burada GERÇEKTEN koşar.
+//     — supap DAVRANIŞI (hesapsız kurulum) burada GERÇEKTEN koşar.
 // Sayılar DB durumuna bağlıdır; kalıcı olan 'hangi kontrol kırmızı olur' cümlesidir.
 // ⚠️ Atlananların HEPSİ gerekçeli ve gerekçe DB'nin durumundan doğar: bu DB'de
-// zaten bir satıcı hesabı (`bakim`) var → doğum yolu · tam rotasyon · "supap
-// DAVRANIŞI" ölçülemez; onların yerine "tembel doğrulama" ölçülür (ikisi mantıken
+// zaten bir satıcı hesabı (`bakim`) var → "supap DAVRANIŞI" (hesapsız kurulum)
+// ölçülemez; onun yerine "tembel doğrulama" ölçülür (ikisi mantıken
 // dışlayıcıdır ve bekçi hangisini koştuğunu her koşumda YAZAR).
 // Her sondadan sonra `cp` + `md5 -q` ile birebir geri alındı; HTTP davranışını
 // ölçen sondalarda sunucu YENİDEN BAŞLATILDI (tsx sıcak yükleme yapmaz — aksi
@@ -131,13 +134,10 @@ import {
   setSystemAccountExists,
   systemAccountLockActive,
   systemAccountExistsKnown,
+  resolveSystemAccountLock,
   __resetSystemAccountRegistryForTests,
 } from "../src/services/helpers/system-account.registry";
-import {
-  readSuperadminEnv,
-  ensureSuperadminAccount,
-  SYSTEM_ACCOUNT_FULLNAME,
-} from "../src/jobs/superadmin.job";
+import { SYSTEM_ACCOUNT_FULLNAME } from "../src/jobs/superadmin.job";
 import { blockSystemAccountTarget } from "../src/middlewares/system-account.middleware";
 import { verifyToken } from "../src/middlewares/auth.middleware";
 import jwt from "jsonwebtoken";
@@ -290,8 +290,6 @@ const FIXTURE_PAROLA = "bekci-superadmin-2026";
 let fixtureId: string | null = null;
 /** §L'nin sentetik arşiv satırı — `finally`de silinir (arşiv kolu maskesi ölçümü). */
 let arsivSondaId: string | null = null;
-/** Bu koşumda sistem hesabını BİZ mi yarattık (FORCE_SYNC ölçümünün ön koşulu)? */
-let fixtureTekSistemHesabi = false;
 
 async function main(): Promise<void> {
   // ── Hedef DB kapısı ────────────────────────────────────────────────────────
@@ -563,385 +561,50 @@ async function main(): Promise<void> {
   check("DB'de de `*` izin satırı YOK", dbYildiz === 0, `${dbYildiz} satır`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n=== I) Doğum job'u — saf env okuyucusu (DB'siz) ===");
-  {
-    const gecerliHash = "$2b$10$" + "a".repeat(53);
-    const bos = readSuperadminEnv({} as NodeJS.ProcessEnv);
-    check("üçlünün HİÇBİRİ yoksa → 'absent' (sessiz no-op)", bos.kind === "absent", bos.kind);
-
-    const eksik = readSuperadminEnv({ SUPERADMIN_USERNAME: "bakim" } as NodeJS.ProcessEnv);
-    check(
-      "üçlü EKSİKSE → 'invalid' (sessiz DEĞİL: niyet belli, kurulum yarım)",
-      eksik.kind === "invalid",
-      eksik.kind === "invalid" ? eksik.reasons.join(" · ") : eksik.kind,
-    );
-
-    const duzParola = readSuperadminEnv({
-      SUPERADMIN_USERNAME: "bakim",
-      SUPERADMIN_PASSWORD_HASH: "duz-parola-123",
-      SUPERADMIN_PIN: "481902",
-    } as NodeJS.ProcessEnv);
-    check(
-      "DÜZ parola bcrypt sanılmaz → 'invalid'",
-      duzParola.kind === "invalid",
-      "aksi halde hesap düz metinle doğar ve HİÇBİR ZAMAN giriş yapılamaz",
-    );
-
-    const kotuPin = readSuperadminEnv({
-      SUPERADMIN_USERNAME: "bakim",
-      SUPERADMIN_PASSWORD_HASH: gecerliHash,
-      SUPERADMIN_PIN: "1234",
-    } as NodeJS.ProcessEnv);
-    check("6 hane olmayan PIN → 'invalid'", kotuPin.kind === "invalid");
-
-    const kotuTotp = readSuperadminEnv({
-      SUPERADMIN_USERNAME: "bakim",
-      SUPERADMIN_PASSWORD_HASH: gecerliHash,
-      SUPERADMIN_PIN: "481902",
-      SUPERADMIN_TOTP_SECRET: "!!!-base32-degil-!!!",
-    } as NodeJS.ProcessEnv);
-    check("bozuk base32 TOTP sırrı → 'invalid'", kotuTotp.kind === "invalid");
-
-    const tamam = readSuperadminEnv({
-      SUPERADMIN_USERNAME: "bakim",
-      SUPERADMIN_PASSWORD_HASH: gecerliHash,
-      SUPERADMIN_PIN: "481902",
-      SUPERADMIN_FORCE_SYNC: "true",
-    } as NodeJS.ProcessEnv);
-    check("geçerli üçlü → 'ok'", tamam.kind === "ok");
-    check("FORCE_SYNC bayrağı okunuyor", tamam.kind === "ok" && tamam.config.forceSync === true);
-    check(
-      "TOTP verilmezse null (uzaktan giriş kurulum ister, LAN'dan girilir)",
-      tamam.kind === "ok" && tamam.config.totpSecret === null,
-    );
-
-    // ⚠️ `process.env` MUTASYONU YASAK (web-hardening deseni). Okuyucunun saf
-    // olduğu ölçülür: verilen kayıt dışında hiçbir yere bakmamalı.
-    const oncekiEnvAnahtarSayisi = Object.keys(process.env).filter((k) =>
-      k.startsWith("SUPERADMIN_"),
-    ).length;
-    readSuperadminEnv({ SUPERADMIN_USERNAME: "x" } as NodeJS.ProcessEnv);
-    check(
-      "okuyucu `process.env`i MUTATE ETMİYOR",
-      Object.keys(process.env).filter((k) => k.startsWith("SUPERADMIN_")).length ===
-        oncekiEnvAnahtarSayisi,
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n=== I2) Doğum job'u — SIR HİJYENİ (audit yükü) ===");
-  {
-    // ⚠️ `AuditService` `payload`ı HAM yazar (maskeleme YALNIZ `changes`
-    // kolonuna uygulanır) → temizlik ÇAĞIRANIN sorumluluğudur. Bu kontrol
-    // `payload:` nesne literallerinin ANAHTARLARINA bakar.
-    const jobYol = path.join(SRC, "jobs", "superadmin.job.ts");
-    const jobSrc = fs.readFileSync(jobYol, "utf8");
-    const ts = await import("typescript");
-    const sf = ts.createSourceFile(jobYol, jobSrc, ts.ScriptTarget.Latest, true);
-    const YASAK = ["passwordHash", "quickPin", "pin", "totpSecret", "secret", "password"];
-    const ihlaller: string[] = [];
-    let olculenPayload = 0;
-    const gez = (n: import("typescript").Node): void => {
-      if (
-        ts.isPropertyAssignment(n) &&
-        ts.isIdentifier(n.name) &&
-        n.name.text === "payload" &&
-        ts.isObjectLiteralExpression(n.initializer)
-      ) {
-        olculenPayload++;
-        for (const p of n.initializer.properties) {
-          const ad = p.name && ts.isIdentifier(p.name) ? p.name.text : null;
-          if (ad && YASAK.includes(ad)) ihlaller.push(ad);
-        }
-      }
-      ts.forEachChild(n, gez);
-    };
-    gez(sf);
-    check("körlük zemini — job'da en az 2 audit `payload` bulundu", olculenPayload >= 2, `${olculenPayload}`);
-    check(
-      "audit yükünde hash/PIN/TOTP sırrı YOK",
-      ihlaller.length === 0,
-      ihlaller.join(", ") || "yalnız username + TOTP durumu ('seeded'/'cleared')",
-    );
-    // Rotasyon sözleşmesi: eski oturumlar anında düşmeli.
-    check(
-      "FORCE_SYNC `tokenVersion`ı artırıyor (eski oturumlar düşer)",
-      /tokenVersion\s*:\s*\{\s*increment\s*:\s*1\s*\}/.test(jobSrc),
-    );
-    // Yarış çözümü: şema-DIŞI unique de regex'te olmalı.
-    check(
-      "P2002 regex'i şema-dışı `users_username_lower_uq`'yu da tanıyor",
-      /users_\(username_key\|username_lower_uq\|quickPin_key\)/.test(jobSrc),
-      "tanımazsa yarış 'bilinmeyen hata' sayılır ve 5 kez boşuna denenir",
-    );
-    // ── A4: FORCE_SYNC (rotasyon) yolu SERTLEŞTİ (D2 minor) ─────────────────
-    // ⚠️ P2002 dalı BAŞTA yalnız `create`i sarıyordu. `update` yolu da çarpar
-    // (env'deki PIN başka bir kullanıcıda) ve o hata yukarı çıkınca
-    // `startSuperadminAccount` bunu "DB hazır olmayabilir" sanıp 5×15 sn boyunca
-    // YENİDEN DENER — sonunda ham Prisma mesajıyla düşer. Bu bir YAPILANDIRMA
-    // hatasıdır: retry'sız, adıyla raporlanmalı.
-    const jobKod = yorumlariSok(jobSrc);
-    const p2002Sayisi = (jobKod.match(/p2002Mentions\(/g) ?? []).length;
-    check(
-      "FORCE_SYNC (update) yolu da P2002 ile sarılı — İKİ ayrı `p2002Mentions` dalı",
-      p2002Sayisi >= 2,
-      `${p2002Sayisi} dal — tek dal varsa yalnız create korunuyordur`,
-    );
-    check(
-      "`prisma.user.update` bir `try` bloğunun İÇİNDE",
-      /try\s*\{[\s\S]{0,600}prisma\.user\.update\(/.test(jobKod),
-    );
-    // ⚠️ KULLANICI ADI SENKRONLANMAZ: ad GİRİŞ KİMLİĞİdir; sessizce değiştirmek
-    // satıcıyı bir sonraki girişte dışarıda bırakır. Uyuşmazlık GÜRÜLTÜLÜ olur.
-    check(
-      "FORCE_SYNC kullanıcı adını DEĞİŞTİRMİYOR (update gövdesinde `username` yok)",
-      !/prisma\.user\.update\(\{[\s\S]{0,500}\busername\s*:/.test(jobKod),
-      "ad değişirse satıcı yeni adla girmeyi bilmez — 'parola çalışmıyor' sınıfı",
-    );
-    check(
-      "ad uyuşmazlığı ÖLÇÜLÜYOR ve audit yüküne bayrak olarak yazılıyor",
-      /existing\.username\s*!==\s*cfg\.username/.test(jobKod) &&
-        /usernameMismatch/.test(jobKod),
-    );
-    // ⚠️ A1: audit yükünde GERÇEK kullanıcı adı da YOK (yalnız sır değil, AD da).
-    check(
-      "audit yükünde `username` alanı YOK (takma ad audit detayında da korunur)",
-      !/payload\s*:\s*\{[^}]*\busername\s*:/.test(jobKod),
-      "`recordId` zaten hesabın id'si; ad yazılınca `newData` gerçek adı basıyordu (D1/D2)",
-    );
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n=== I3) Doğum job'u — DB davranışı (idempotentlik) ===");
+  console.log("\n=== I) Fixture sistem hesabı — §G/§J/§L'nin ön koşulu ===");
+  // ⚠️ DOĞUM YOLU ARTIK BU DOSYADA ÖLÇÜLMEZ (2026-09-03, P8). Hesabın tek doğuş
+  // yolu `scripts/superadmin-olustur.ts` (npm run superadmin:kur) ve onun bekçisi
+  // `scripts/test_superadmin_provision.ts`tir — `.env` tohumlaması KALDIRILDI
+  // (eski §I/§I2/§I3 bölümleri o bekçiye taşındı: idempotentlik · sır hijyeni ·
+  // rotasyon · "mevcut kullanıcı yükseltilemez"). Bu dosya KİMLİK · YETKİ · KİLİT
+  // · GİZLİLİK davranışını ölçer ve onun için bir sistem hesabına ihtiyaç duyar;
+  // o hesabı DOĞRUDAN yaratır (doğum yolundan bağımsız), `finally`de siler.
   {
     const gecerliHash = await AuthService.hashPassword(FIXTURE_PAROLA);
-    const sahteEnv = {
-      SUPERADMIN_USERNAME: FIXTURE_USERNAME,
-      SUPERADMIN_PASSWORD_HASH: gecerliHash,
-      SUPERADMIN_PIN: rastgeleKullanilmamisPin(),
-    } as NodeJS.ProcessEnv;
-
-    const oncekiSayi = await prisma.user.count({ where: { isSystemAccount: true } });
-
-    // (a) env YOKSA satır doğmaz.
-    const yokEnv = await ensureSuperadminAccount({} as NodeJS.ProcessEnv);
-    check("env yok → 'absent' ve satır doğmaz", yokEnv.action === "absent", yokEnv.action);
+    const dogrudan = await prisma.user.create({
+      data: {
+        username: FIXTURE_USERNAME,
+        // Takma ad DOĞUŞTA yazılır — gerçek ad hiçbir zaman DB'ye girmez.
+        fullName: SYSTEM_ACCOUNT_FULLNAME,
+        passwordHash: gecerliHash,
+        isSystemAccount: true,
+        isActive: true,
+      },
+      select: { id: true, fullName: true },
+    });
+    fixtureId = dogrudan.id;
+    check("fixture sistem hesabı yaratıldı", fixtureId !== null, FIXTURE_USERNAME);
     check(
-      "env yok → sistem hesabı sayısı DEĞİŞMEDİ",
-      (await prisma.user.count({ where: { isSystemAccount: true } })) === oncekiSayi,
+      `fixture'ın tam adı takma ad ("${SYSTEM_ACCOUNT_FULLNAME}")`,
+      dogrudan.fullName === SYSTEM_ACCOUNT_FULLNAME,
+    );
+    const grantSayisi = await prisma.userPermission.count({ where: { userId: fixtureId } });
+    check(
+      "sistem hesabının GRANT satırı YOK (yetki koddan gelir)",
+      grantSayisi === 0,
+      `${grantSayisi} satır`,
     );
 
-    // (b) BOZUK env → satır doğmaz (gürültülü hata ayrı yolda ölçülüyor).
-    const bozuk = await ensureSuperadminAccount({
-      SUPERADMIN_USERNAME: "x",
-      SUPERADMIN_PASSWORD_HASH: "duz",
-      SUPERADMIN_PIN: "12",
-    } as NodeJS.ProcessEnv);
-    check("bozuk env → 'invalid' ve satır doğmaz", bozuk.action === "invalid", bozuk.action);
-    check(
-      "bozuk env → sistem hesabı sayısı DEĞİŞMEDİ",
-      (await prisma.user.count({ where: { isSystemAccount: true } })) === oncekiSayi,
-    );
-
-    // (c) İLK koşum: hesap yoksa doğar, varsa DOKUNULMAZ.
-    const ilk = await ensureSuperadminAccount(sahteEnv);
-    check(
-      "ilk koşum: 'created' (hesap yoktu) ya da 'exists' (vardı, DOKUNULMADI)",
-      ilk.action === "created" || ilk.action === "exists",
-      ilk.action,
-    );
-    if (ilk.action === "created") {
-      fixtureId = ilk.id;
-      const satir = await prisma.user.findUnique({
-        where: { id: ilk.id },
-        select: { username: true, fullName: true, isSystemAccount: true, isActive: true },
-      });
-      check("doğan hesap `isSystemAccount: true`", satir?.isSystemAccount === true);
-      check(
-        `doğan hesabın tam adı takma ad ("${SYSTEM_ACCOUNT_FULLNAME}")`,
-        satir?.fullName === SYSTEM_ACCOUNT_FULLNAME,
-        satir?.fullName ?? "—",
-      );
-      check("doğan hesap aktif", satir?.isActive === true);
-      const grantSayisi = await prisma.userPermission.count({ where: { userId: ilk.id } });
-      check(
-        "doğan hesabın GRANT satırı YOK (yetki koddan gelir)",
-        grantSayisi === 0,
-        `${grantSayisi} satır`,
-      );
-      const digerleri = await prisma.user.count({ where: { isSystemAccount: true } });
-      fixtureTekSistemHesabi = digerleri === 1;
-    } else {
-      // ⚠️ Bu DB'de zaten bir sistem hesabı var → job DOKUNMADI (doğru davranış).
-      // Doğum YOLU ölçülemez, ama aşağıdaki §G/§J/§L ölçümleri bir fixture'a
-      // ihtiyaç duyar ve o hesabın parolasını BİLMİYORUZ (rotasyonlamak da
-      // gerçek bir satıcı hesabını bozardı). Bu yüzden fixture DOĞRUDAN
-      // yaratılır — job yolundan bağımsız, `finally`de silinir.
-      atla("doğum yolu ölçümü", "bu DB'de zaten bir sistem hesabı var (job DOKUNMADI — doğru davranış)");
-      atlanan += 3;
-      const dogrudan = await prisma.user.create({
-        data: {
-          username: FIXTURE_USERNAME,
-          fullName: SYSTEM_ACCOUNT_FULLNAME,
-          passwordHash: gecerliHash,
-          isSystemAccount: true,
-          isActive: true,
-        },
-        select: { id: true },
-      });
-      fixtureId = dogrudan.id;
-      console.log(`   ℹ️  §G/§J/§L için geçici fixture sistem hesabı yaratıldı (${FIXTURE_USERNAME}).`);
-    }
-
-    // (d) İKİNCİ koşum İKİNCİ satır YARATMAZ (idempotentlik — asıl ölçüm).
-    const sayiIlkSonrasi = await prisma.user.count({ where: { isSystemAccount: true } });
-    const ikinci = await ensureSuperadminAccount(sahteEnv);
-    check("ikinci koşum → 'exists' (mevcut hesaba DOKUNULMAZ)", ikinci.action === "exists", ikinci.action);
-    check(
-      "ikinci koşum İKİNCİ satır yaratmadı",
-      (await prisma.user.count({ where: { isSystemAccount: true } })) === sayiIlkSonrasi,
-      `${sayiIlkSonrasi}`,
-    );
-
-    // (e) Job her koşumda kayıt defterini TAZELER (guard'ın supabı buradan besleniyor).
-    check("job kayıt defterini tazeledi (hesap var → kilit yürürlükte)", systemAccountLockActive() === true);
-    check("`systemAccountExists` panel için 'var' diyor", systemAccountExistsKnown() === true);
-
-    // (e2) ⚠️ ROTASYON REÇETESİNİN KENDİ YOLU — "hesap VAR + .env'de SUPERADMIN_*
-    //      YOK → kilit YÜRÜRLÜKTE" (B2 / D2 major #3). Reçete FORCE_SYNC'ten sonra
-    //      satırların `.env`den KALDIRILMASINI söyler; kurulumu yapan kişi çoğu
-    //      zaman ÜÇÜNÜ birden siler. Defter env'e bakarsa (`parsed.kind !== "absent"
-    //      && existing !== null` gibi masum görünen bir yazım) supap o boot'ta
-    //      SESSİZCE açılır: fabrika admini modül anahtarını yazar, hata yok, log yok.
-    //      Bugünkü kod DOĞRU — defter yalnız DB'ye bakar. Bu kontrol onu kilitler.
+    // Kilit defteri: hesap VAR → kilit yürürlükte (supap dalı §F'de ölçüldü).
     __resetSystemAccountRegistryForTests();
-    const envsizAmaHesapli = await ensureSuperadminAccount({} as NodeJS.ProcessEnv);
     check(
-      "env YOK + hesap VAR → job yine de 'absent' döner (env kararı ≠ kilit kararı)",
-      envsizAmaHesapli.action === "absent",
-      envsizAmaHesapli.action,
+      "defter 'yok' derken DB'de hesap VAR → tembel doğrulama KİLİTLER",
+      (await resolveSystemAccountLock()) === true,
     );
     check(
-      "env YOK + hesap VAR → KİLİT YÜRÜRLÜKTE (supap AÇILMAZ)",
-      systemAccountLockActive() === true && systemAccountExistsKnown() === true,
-      "defter DB'den beslenir, `.env`den DEĞİL — reçetenin 'satırları kaldırın' adımı kilidi açmamalı",
-    );
-    check(
-      "env YOK + hesap VAR → fabrika admini modül anahtarını YAZAMAZ (uçtan uca)",
+      "hesap varken fabrika admini modül anahtarını YAZAMAZ (uçtan uca)",
       (await izin(SADECE_ADMIN, { ticaretEnabled: true }, false))?.gecti === false,
     );
-
-    // (f0) A4 — FORCE_SYNC + ÇAKIŞAN PIN → 'invalid' (retry YOK, hesap DEĞİŞMEZ).
-    //
-    // ⚠️ BU ÖLÇÜM YIKICI DEĞİL ve bu bilinçli: `quickPin` sistem genelinde
-    // `@unique`, yani BAŞKA bir kullanıcının PIN'i verilirse `prisma.user.update`
-    // TEK ifadede P2002 ile düşer ve hesaba HİÇBİR ŞEY yazılmaz. Bu yüzden gerçek
-    // bir satıcı hesabı olan DB'de de koşabilir (parola/PIN döndürmez) — oysa
-    // (f)'deki tam rotasyon ölçümü yalnız kendi fixture'ımızda yapılabilir.
-    const pinliBaskaKullanici = await prisma.user.findFirst({
-      where: { isSystemAccount: false, quickPin: { not: null } },
-      select: { id: true, quickPin: true },
-    });
-    if (!pinliBaskaKullanici?.quickPin) {
-      atla(
-        "FORCE_SYNC çakışan PIN ölçümü",
-        "bu DB'de PIN taşıyan normal kullanıcı yok — çakışma kurulamaz",
-      );
-      atlanan += 1;
-    } else {
-      const oncekiHash = await prisma.user.findFirst({
-        where: { isSystemAccount: true },
-        select: { id: true, passwordHash: true, quickPin: true },
-      });
-      const cakisma = await ensureSuperadminAccount({
-        ...sahteEnv,
-        SUPERADMIN_PIN: pinliBaskaKullanici.quickPin,
-        SUPERADMIN_FORCE_SYNC: "true",
-      } as NodeJS.ProcessEnv);
-      check(
-        "FORCE_SYNC + çakışan PIN → 'invalid' (retry YOK, ham Prisma hatası yukarı çıkmaz)",
-        cakisma.action === "invalid",
-        cakisma.action === "invalid" ? cakisma.reasons.join(" · ") : cakisma.action,
-      );
-      const sonrakiHash = await prisma.user.findFirst({
-        where: { id: oncekiHash?.id ?? "" },
-        select: { passwordHash: true, quickPin: true },
-      });
-      check(
-        "çakışmada sistem hesabına HİÇBİR ŞEY yazılmadı (tek ifade, atomik)",
-        sonrakiHash?.passwordHash === oncekiHash?.passwordHash &&
-          sonrakiHash?.quickPin === oncekiHash?.quickPin,
-      );
-    }
-
-    // (f) FORCE_SYNC — YALNIZ kendi fixture'ımız tek sistem hesabıysa.
-    if (fixtureId && fixtureTekSistemHesabi) {
-      const oncesi = await prisma.user.findUnique({
-        where: { id: fixtureId },
-        select: { tokenVersion: true },
-      });
-      const yeniHash = await AuthService.hashPassword(`${FIXTURE_PAROLA}-2`);
-      const sync = await ensureSuperadminAccount({
-        ...sahteEnv,
-        SUPERADMIN_PASSWORD_HASH: yeniHash,
-        SUPERADMIN_FORCE_SYNC: "true",
-      } as NodeJS.ProcessEnv);
-      check("FORCE_SYNC → 'synced'", sync.action === "synced", sync.action);
-      const sonrasi = await prisma.user.findUnique({
-        where: { id: fixtureId },
-        select: { tokenVersion: true, passwordHash: true },
-      });
-      check(
-        "FORCE_SYNC `tokenVersion`ı artırdı (eski oturumlar düştü)",
-        (sonrasi?.tokenVersion ?? 0) === (oncesi?.tokenVersion ?? 0) + 1,
-        `${oncesi?.tokenVersion} → ${sonrasi?.tokenVersion}`,
-      );
-      check("FORCE_SYNC parola hash'ini env'e eşitledi", sonrasi?.passwordHash === yeniHash);
-      check(
-        "FORCE_SYNC İKİNCİ satır yaratmadı",
-        (await prisma.user.count({ where: { isSystemAccount: true } })) === sayiIlkSonrasi,
-      );
-      // A4 — FARKLI AD: 'synced' döner ama ad DEĞİŞMEZ + audit bayrağı doğar.
-      const syncMismatch = await ensureSuperadminAccount({
-        ...sahteEnv,
-        SUPERADMIN_USERNAME: `${FIXTURE_USERNAME}.baska`,
-        SUPERADMIN_PASSWORD_HASH: yeniHash,
-        SUPERADMIN_FORCE_SYNC: "true",
-      } as NodeJS.ProcessEnv);
-      check("FORCE_SYNC + FARKLI ad → yine 'synced'", syncMismatch.action === "synced", syncMismatch.action);
-      const adSonrasi = await prisma.user.findUnique({
-        where: { id: fixtureId },
-        select: { username: true },
-      });
-      check(
-        "FORCE_SYNC kullanıcı adını DEĞİŞTİRMEDİ (giriş kimliği korunur)",
-        adSonrasi?.username === FIXTURE_USERNAME,
-        adSonrasi?.username ?? "—",
-      );
-      await new Promise((r) => setTimeout(r, 300)); // audit best-effort
-      const syncIz = await prisma.systemLog.findFirst({
-        where: { action: "SUPERADMIN_CREDENTIALS_SYNCED", recordId: fixtureId },
-        orderBy: { createdAt: "desc" },
-        select: { newData: true },
-      });
-      const syncYuk = JSON.stringify(syncIz?.newData ?? {});
-      check(
-        "ad uyuşmazlığı audit'e `usernameMismatch: true` olarak düştü",
-        /"usernameMismatch"\s*:\s*true/.test(syncYuk),
-        syncYuk.slice(0, 160),
-      );
-      check(
-        "senkron audit yükünde GERÇEK kullanıcı adı YOK",
-        !syncYuk.includes(FIXTURE_USERNAME),
-        syncYuk.slice(0, 160),
-      );
-    } else {
-      atla(
-        "FORCE_SYNC (rotasyon) ölçümü",
-        "bu DB'de bizim fixture'ımız TEK sistem hesabı değil — gerçek bir satıcı hesabının parolasını döndürmemek için ATLANDI",
-      );
-      atlanan += 8; // `atla` 1'i sayar; o dalda 9 kontrol var (A4 ad-uyuşmazlığı dahil)
-    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1283,19 +946,24 @@ async function main(): Promise<void> {
 
   // ═══════════════════════════════════════════════════════════════════════════
   async function httpTuru(): Promise<void> {
-    // ⚠️ FORCE_SYNC ölçümü parolayı değiştirmiş olabilir — hangi parolanın
-    // geçerli olduğunu ARAMAYIZ, ikisini de deneriz (ölçüm, tahmin değil).
+    // Fixture'ın parolası bu dosyada TEK ve SABİTTİR: rotasyon burada artık
+    // ölçülmüyor (2026-09-03, P8 — doğum yolu + `--rotate`
+    // `test_superadmin_provision`ın işi), yani "hangi parola geçerli" diye
+    // aday deneyecek bir belirsizlik kalmadı. Aday listesi bırakılsaydı
+    // gerçek bir parola sözleşmesi kırılması "ikinci aday tuttu" diye
+    // SESSİZCE yeşil kalırdı.
     let token: string | null = null;
-    for (const parola of [`${FIXTURE_PAROLA}-2`, FIXTURE_PAROLA]) {
+    {
       const r = await fetch(`${BASE}/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: FIXTURE_USERNAME, password: parola, clientType: "electron" }),
+        body: JSON.stringify({
+          username: FIXTURE_USERNAME,
+          password: FIXTURE_PAROLA,
+          clientType: "electron",
+        }),
       });
-      if (r.ok) {
-        token = ((await r.json()) as { data: { token: string } }).data.token;
-        break;
-      }
+      if (r.ok) token = ((await r.json()) as { data: { token: string } }).data.token;
     }
     if (!token) {
       // `fail++` YOK — bu bir sözleşme ihlali değil, ÖLÇÜM YAPILAMAMASIDIR
@@ -1505,12 +1173,6 @@ async function temizleBayatFixtureler(): Promise<void> {
   await prisma.systemLogArchive.deleteMany({
     where: { tableName: "AUTH", recordId: { startsWith: "bekci.superadmin." } },
   });
-}
-
-/** `quickPin` sistem genelinde `@unique` — çakışmayan bir 6 hane üretir. */
-function rastgeleKullanilmamisPin(): string {
-  // Fixture PIN'i SAHTEDİR ve `finally`de hesapla birlikte silinir.
-  return String(100000 + Math.floor(Math.random() * 899999));
 }
 
 async function serverUp(): Promise<boolean> {

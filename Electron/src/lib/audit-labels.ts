@@ -192,6 +192,8 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   // görünmesinler diye Türkçeleri burada. `test_audit_labels` bunları ölçer.
   LOGIN_LOCKED: "Giriş kilitlendi",
   MODULE_PROFILE_APPLIED: "Kurulum profili uygulandı",
+  SUPERADMIN_PROVISIONED: "Satıcı hesabı kuruldu",
+  SUPERADMIN_ROTATED: "Satıcı hesabının parolası/PIN'i yenilendi",
   SUPERADMIN_ACCOUNT_CREATED: "Satıcı hesabı oluşturuldu",
   SUPERADMIN_ABSENT_MODULE_WRITE: "Satıcı hesabı yokken modül anahtarı yazıldı",
   SYSTEM_ACCOUNT_ACCESS_BLOCKED: "Sistem hesabına erişim engellendi",

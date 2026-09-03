@@ -41,7 +41,7 @@
      - **Sonradan değiştirmek mevcut anahtarları DEĞİŞTİRMEZ** — modül açıp kapatma
        Sistem Profili ekranından (`PATCH /api/feature-flags`) yapılır.
      - Yükseltilen (mevcut) kurulumda satırlar zaten var → job tam **no-op**.
-   - ⚠️ **2026-09-03 — ENV artık iki değişkenle bitmiyor.** Satıcı (süperadmin) hesabı `.env`den tohumlanır ve **satırlar yoksa hesap hiç doğmaz** (`src/jobs/superadmin.job.ts`; eksikse boot log'unda "SUPERADMIN_* tanımlı değil — satıcı hesabı oluşturulmadı"). Yeni kurulumda ekle: `SUPERADMIN_USERNAME` · `SUPERADMIN_PASSWORD_HASH` (HAM parola DEĞİL, hazır bcrypt `$2b$10$…`) · `SUPERADMIN_PIN` (TAM 6 hane, sistem genelinde benzersiz) · opsiyonel `SUPERADMIN_TOTP_SECRET` (uzaktan giriş için zorunlu). Örnek satırlar `Teks-Erp/.env.example`, kurulum reçetesi `docs/ops/UZAK-ERISIM-KURULUM.md`. ⚠️ Bu değerler `.env` + parola yöneticisi dışında HİÇBİR yere yazılmaz (repo/log/audit diff dahil).
+   - ⚠️ **2026-09-03 — satıcı (süperadmin) hesabı `.env`de DEĞİLDİR.** Eski `SUPERADMIN_*` satırları **KALDIRILDI**; hesap artık A3b'deki script ile kurulur. `.env`e yazmayın — orada durursa hiçbir işe yaramaz ve sırrı diskte kalıcılaştırır.
 
 ### A2. Ortam ayarları (`Teks-Erp/ecosystem.config.js` — sır DEĞİL; git'te)
 5. Yedekleme ve port ayarları burada durur. **`BACKUP_DIR` tanımsızsa gece yedeği ÇALIŞMAZ** — deploy sonrası backend log'unda `[backup] BACKUP_DIR tanımsız` satırının **olmadığını** teyit et. Diğerleri: `BACKUP_OFFSITE_DIR` (makine dışı kopya; boşsa yedekler DB ile aynı diskte), `BACKUP_HOUR` (default 3), `PG_BIN_DIR` (`pg_dump`/`pg_restore` konumu — Windows'ta PATH'te olmaz).
@@ -57,6 +57,50 @@
    - **`migrate dev`'i ASLA prod'da çalıştırma** — reset riski. Sıfırdan kurulumda `migrate deploy` yeterli (reset etmez).
    - `migrate deploy` geri alınmaz; tek rollback = yedekten restore.
    - **`npm ci --omit=dev` kullanıyorsan:** `prisma.config.ts` yüklenmesi `ts-node`'a (devDependency) bağlı → `migrate deploy` patlar. Çözüm: `copy deploy\prisma.config.prod.js prisma.config.js`. devDeps kuruluysa kopyalama.
+
+### A3b. Satıcı (süperadmin) hesabını kur
+
+> Modül anahtarlarını (Ticaret / İplik / Çoklu depo / Üretim …) **yalnız bu hesap**
+> değiştirebilir. Fabrikanın hiçbir yüzeyinde görünmez; audit'e "Sistem Bakımı"
+> adıyla yazılır. Panelden ne atanabilir ne silinebilir.
+
+```powershell
+cd C:\Etkili-Yazilim\app
+npm run superadmin:kur                # kurulum (idempotent)
+npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
+```
+
+> ⚠️ **GERÇEK TERMİNAL ŞART — uzaktan koşuyorsan `-t` VER.** Script parolayı
+> maskeleyerek sorar; girdi boru/dosya olduğunda hiçbir soru cevaplanamaz ve
+> **süreç hata vermeden, zaman aşımına düşmeden bekler**. Doğrusu:
+> `ssh -t sunucu 'cd C:\Etkili-Yazilim\app && npm run superadmin:kur'`,
+> `docker exec -it <konteyner> npm run superadmin:kur` ya da doğrudan sunucu
+> konsolu. `-t` unutulursa script artık **gürültülü hata verip çıkar**
+> ("etkileşimli terminal ister") — eskiden sessizce donuyordu, yani kurulum
+> tamamlanmamış olur ve kimse fark etmezdi. Kurulum betiğinden / pm2 / CI
+> içinden çağırmayın.
+
+Script kullanıcı adını (öneri `bakim`), parolayı (**iki kez, ekrana basılmaz**) ve
+6 haneli hızlı giriş PIN'ini sorar (boş bırakılırsa üretilir); iki adımlı
+doğrulama sırrını üretip **QR olarak BİR KEZ** basar.
+
+- ⚠️ **Çıktı bir daha gösterilmez.** PIN + TOTP sırrı **parola yöneticisine**
+  kaydedilir, **fabrikaya VERİLMEZ**. Hiçbir dosyaya, log'a ya da audit kaydına
+  yazılmaz (audit'e yalnız "kuruldu / yenilendi" izi düşer).
+- ⚠️ **Var olan bir kullanıcı YÜKSELTİLEMEZ** — script mevcut bir kullanıcı adı
+  verilirse hata verir. Gizli hesap görünür bir hesaptan türetilemez: o
+  kullanıcının geçmişi, oturumları ve audit satırları maskeli hesaba taşınamaz.
+- ⚠️ **İkinci koşum hiçbir şeyi değiştirmez** ("zaten kurulu"). Parola/PIN
+  yenilemenin tek yolu `--rotate`'tır ve o **açık oturumları düşürür**.
+- ⚠️ **Hesap kurulmazsa** modül anahtarları bugünkü gibi `admin:settings` ile
+  yazılmaya devam eder (emniyet supabı — kimse kilitlenmez). Hesap doğduğu AN
+  kilit mutlaktır ve **restart GEREKMEZ** (kilit defteri ilk istekte tazelenir).
+- ⚠️ `kur.ps1` mevcut `.env`i olduğu gibi taşır; bu adım **`.env`e bağlı
+  olmadığı için** güncellemelerde kaybolmaz — ama yeni kurulumda **atlanırsa
+  hesap hiç doğmaz** ve kimse fark etmez.
+
+Ayrıntı + uzaktan erişim bağlamı: [`UZAK-ERISIM-KURULUM.md`](./UZAK-ERISIM-KURULUM.md) §5.
+
 7. DB-level (migration ile DEĞİL, manuel, önerilir):
    ```
    ALTER DATABASE <db> SET statement_timeout = '50s';

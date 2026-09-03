@@ -170,11 +170,18 @@ tüm izinler atanmış). Şifresi/PIN'i fabrikaya asla verilmez.
 - **Giriş:** panelde parola (+uzakta TOTP); tablette kendi 6 haneli PIN'i.
 - **Audit:** karar #8 — tam iz, fabrika yüzeyinde "Sistem Bakımı".
 - **Yetkisi:** `modul.*` yazımı YALNIZ süperadmin.
-- **TOTP kurtarma kodu BİLİNÇLİ YOK (2026-09-03):** env'den tohumlanan süperadminde
+- **TOTP kurtarma kodu BİLİNÇLİ YOK (2026-09-03):** süperadminde
   `remainingRecoveryCodes: 0`. Cihaz kaybı zaten iki yollu (LAN'dan parola/PIN +
-  `SUPERADMIN_FORCE_SYNC` ile env'den yeniden tohum); kurtarma kodu bir sır yüzeyi
-  daha demek (üretilir, saklanır, yedeğe sızar). Az yüzey > konfor. Giriş kilidi
-  süperadmini de KAPSAR (muafiyet = parolaya sınırsız deneme); kilitlenince LAN yolu açık.
+  sunucuda `npm run superadmin:kur -- --rotate` ile TOTP'yi yeniden üretme);
+  kurtarma kodu bir sır yüzeyi daha demek (üretilir, saklanır, yedeğe sızar).
+  Az yüzey > konfor. Giriş kilidi süperadmini de KAPSAR (muafiyet = parolaya
+  sınırsız deneme); kilitlenince LAN yolu açık.
+  ⚠️ **2026-09-03 (P8) — `.env` TOHUMLAMA YOLU KALDIRILDI.** Hesap artık env'den
+  doğmaz; `SUPERADMIN_USERNAME/PASSWORD_HASH/PIN/TOTP_SECRET/FORCE_SYNC`
+  satırlarını hiçbir kod okumaz (boot job'ı yalnız kalanları UYARIR — anahtar
+  adı basar, değer asla). Tek doğuş/rotasyon yolu sunucuda elle koşulan
+  `npm run superadmin:kur` (`--rotate`), ve script **gerçek TTY ister**
+  (`ssh -t` / `docker exec -it`; kapı olmadan boruda sessizce donuyordu).
 
 ### 7.2 Ayar şifresi (kullanıcı isteği)
 

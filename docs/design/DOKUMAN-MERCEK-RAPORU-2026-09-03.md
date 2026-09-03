@@ -53,7 +53,7 @@
 
 1. **`TICARET-KURULUM.md` §1 eksik** — `ticaret.enabled` varsayılan KAPALI ve dört route'u kapılıyor; reçeteyi elle uygulayan kişi mal kabul/alış siparişi/fiyat/sayım uçlarında **403 `MODULE_DISABLED`** alır. (Bootstrap script'i doğru; ayrışan yalnız doküman.)
 2. **`KURULUM.md:120` ham `npm run build:win`** — çok müşteride "başka fabrikanın güncellemesini kuran paket" üretir ve hata SESSİZDİR. Aynı çelişki `ELECTRON-OTOMATIK-GUNCELLEME.md` diyagramında (satır 16-18) da var — belge kendi 240-243. satırında bu komutu yasaklıyor.
-3. **`KURULUM.md` A1 ENV bloğu `SUPERADMIN_*` istemiyor** — satırlar yoksa satıcı hesabı **hiç doğmaz** (`superadmin.job.ts:90-110`); yeni fabrika süperadminsiz doğar, `modul.*` yazımı emniyet supabına düşer.
+3. ~~**`KURULUM.md` A1 ENV bloğu `SUPERADMIN_*` istemiyor**~~ — ⛔ **ÜSTÜ ÇİZİLDİ (2026-09-03 P8):** `.env` doğuş yolu KALDIRILDI, dolayısıyla bu bulgunun reçetesi (B18) **uygulanmamalıdır**. Satıcı hesabı sunucuda `npm run superadmin:kur` ile kurulur; yeni fabrika yine süperadminsiz doğar ama bu artık bilinçli tasarımdır (emniyet supabı) ve reçetesi `KURULUM.md` A3b'dedir.
 
 ---
 
@@ -140,8 +140,16 @@
 - **Öneri:** rakam yerine *"katalogdaki kadar"* (tek kaynak `permission-catalog.ts` + `role-template-catalog.ts`; seed listeyi taşımaz, boot uzlaştırması getirir).
 - **Not:** `prisma/seed.ts:15-17` yorumu da 58/15'te kalmış.
 
-### B18 — `docs/ops/KURULUM.md:22-31` · A1 ENV bloğu · `[ÇEKİRDEK]`
-- **Eklenecek metin:** *"⚠️ 2026-09-03 — ENV artık iki değişkenle bitmiyor. Satıcı (süperadmin) hesabı `.env`den tohumlanır ve **satırlar yoksa hesap hiç doğmaz** (`src/jobs/superadmin.job.ts:90-110`; eksikse boot log'unda \"SUPERADMIN_* tanımlı değil — satıcı hesabı oluşturulmadı\"). Yeni kurulumda ekle: `SUPERADMIN_USERNAME` · `SUPERADMIN_PASSWORD_HASH` (HAM parola DEĞİL, hazır bcrypt `$2b$10$…`) · `SUPERADMIN_PIN` (TAM 6 hane, sistem genelinde benzersiz) · opsiyonel `SUPERADMIN_TOTP_SECRET` (uzaktan giriş için zorunlu). Örnek satırlar `Teks-Erp/.env.example:66-82`, kurulum reçetesi `docs/ops/UZAK-ERISIM-KURULUM.md:147-173`. ⚠️ Bu değerler `.env` + parola yöneticisi dışında HİÇBİR yere yazılmaz (repo/log/audit diff dahil)."*
+### B18 — `docs/ops/KURULUM.md:22-31` · A1 ENV bloğu · `[ÇEKİRDEK]` — ~~ÜSTÜ ÇİZİLDİ~~
+> ⛔ **ÜSTÜ ÇİZİLDİ — 2026-09-03 P8 ile `.env` yolu KALDIRILDI. AŞAĞIDAKİ METNİ UYGULAMAYIN:**
+> uygulanırsa kaldırılan sır yüzeyi (`.env`de duran parola hash'i + PIN + TOTP
+> sırrı) reçeteyle geri gelir. Satıcı hesabının tek doğuş yolu artık sunucuda
+> elle koşulan `npm run superadmin:kur`tur (idempotent; rotasyon `--rotate`;
+> **gerçek TTY ister** — `ssh -t` / `docker exec -it`). Bu maddenin yerini
+> `KURULUM.md` A3b "Süperadmin kurulumu" bölümü aldı; `.env`de kalan
+> `SUPERADMIN_*` satırları artık okunmuyor ve boot log'unda **silinmeleri**
+> için uyarı basılıyor (yalnız anahtar adı; değer asla).
+- ~~**Eklenecek metin:**~~ *"⚠️ 2026-09-03 — ENV artık iki değişkenle bitmiyor. Satıcı (süperadmin) hesabı `.env`den tohumlanır ve **satırlar yoksa hesap hiç doğmaz** (`src/jobs/superadmin.job.ts:90-110`; eksikse boot log'unda \"SUPERADMIN_* tanımlı değil — satıcı hesabı oluşturulmadı\"). Yeni kurulumda ekle: `SUPERADMIN_USERNAME` · `SUPERADMIN_PASSWORD_HASH` (HAM parola DEĞİL, hazır bcrypt `$2b$10$…`) · `SUPERADMIN_PIN` (TAM 6 hane, sistem genelinde benzersiz) · opsiyonel `SUPERADMIN_TOTP_SECRET` (uzaktan giriş için zorunlu). Örnek satırlar `Teks-Erp/.env.example:66-82`, kurulum reçetesi `docs/ops/UZAK-ERISIM-KURULUM.md:147-173`. ⚠️ Bu değerler `.env` + parola yöneticisi dışında HİÇBİR yere yazılmaz (repo/log/audit diff dahil)."*
 
 ### B19 — `docs/ops/KURULUM.md:120` · D bölümü, installer üretimi · `[ÇEKİRDEK]` ⚠️ **çok müşteride kritik**
 - **Eski:** "35. **Installer üret:** `npm run build:win`"
@@ -773,6 +781,6 @@ Bu turda **içerik silme / cümle yeniden yazma / bölüm birleştirme önerisi 
 
 ### Temiz çıkanlar (dokunulmadı)
 
-`docs/ops/UZAK-ERISIM-KURULUM.md` (çok müşteri farkında, `SUPERADMIN_*` bölümü güncel) · `docs/ops/YEDEK-VPS-KURULUM.md` (`fab-<fabrika>` şablonu + güven modeli yazılı) · `deploy/README.md` (dal emekli notu işlenmiş) · `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md` (yol düzeni + `runtimeVersion` doğru) · `docs/design/YETKI-MIMARISI.md` (zaten çok müşteri çerçevesiyle yazılmış) · `docs/ops/URETIM-KONTROL-LISTESI.md` (kendi TARİHSEL uyarısını taşıyor).
+`docs/ops/UZAK-ERISIM-KURULUM.md` (çok müşteri farkında; süperadmin bölümü 2026-09-03 P8 ile `npm run superadmin:kur`a çevrildi — `SUPERADMIN_*` env yolu artık yok) · `docs/ops/YEDEK-VPS-KURULUM.md` (`fab-<fabrika>` şablonu + güven modeli yazılı) · `deploy/README.md` (dal emekli notu işlenmiş) · `docs/ops/MOBIL-UZAKTAN-GUNCELLEME.md` (yol düzeni + `runtimeVersion` doğru) · `docs/design/YETKI-MIMARISI.md` (zaten çok müşteri çerçevesiyle yazılmış) · `docs/ops/URETIM-KONTROL-LISTESI.md` (kendi TARİHSEL uyarısını taşıyor).
 
 **Ayrıca dokunulmayan çekirdek bölümler:** kök `CLAUDE.md` "Ortak Konvansiyonlar" madde metinleri · BEŞ SAĞLAMLIK SINIFI (244-254) · İdempotency (143) · WO kapatma dispozisyonu (98) · Tambur finalize WO disiplini (150) · `Teks-Erp/CLAUDE.md` istemci sürüm politikası (7-54) · DB performans kuralları (246-268) · timestamptz/fabrika günü (282-302) · `Electron/CLAUDE.md` process boundary (58-68) · sayfa iskeleti (146-198) · gezinme (199-238) · `mobil/CLAUDE.md` güncelleme kanalları (19-163) · liste sayfalama (401-429).

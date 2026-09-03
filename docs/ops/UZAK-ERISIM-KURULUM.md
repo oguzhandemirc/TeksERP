@@ -131,58 +131,79 @@ geçersizdir (eksik yapılandırma "yarı açık" değil KAPALI demektir).
 > bilinçli olarak REDDEDİLDİ (parola sızmışsa saldırgan kendi telefonunu bağlar
 > ve meşru sahibi kilitler — 2FA'nın koruduğu tek senaryo).
 
-### 5) Satıcı hesabı (süperadmin) — `.env` satırları + restart
+### 5) Satıcı hesabı (süperadmin) — `npm run superadmin:kur`
 
 Modül anahtarlarını (Ticaret / İplik / Çoklu depo / Üretim …) **yalnız satıcı
-hesabı** değiştirebilir. Hesap `.env`den doğar; `kur.ps1` mevcut `.env`i olduğu
-gibi TAŞIR ama **güncellemez** → bu satırlar sunucuda **ELLE** eklenir, yoksa
-hesap hiç doğmaz ve kimse fark etmez (izin kataloğu / rol şablonu vakalarının
-aynı sınıfı).
+hesabı** değiştirebilir. Hesap **sunucuda elle koşulan bir script'le** doğar.
+
+> ⚠️ **2026-09-03 — `.env` YOLU KALDIRILDI.** Eski `SUPERADMIN_USERNAME` /
+> `SUPERADMIN_PASSWORD_HASH` / `SUPERADMIN_PIN` / `SUPERADMIN_TOTP_SECRET` /
+> `SUPERADMIN_FORCE_SYNC` satırları artık **hiçbir işe yaramaz**; boot job'ı
+> onları OKUMAZ. Varsa **silin** — sırrı diskte kalıcılaştırmaktan başka bir şey
+> yapmazlar; boot log'u da kalanları görürse uyarır (`[superadmin] ⚠️ Ortamda
+> ARTIK KULLANILMAYAN … satır var` — yalnız **anahtar adı** basılır, değer asla). Gerekçe: iki doğuş yolu = iki sır yüzeyi; `.env` yolunda hash + PIN
+> + TOTP sırrı yedeğe, `kur.ps1`in taşıdığı dosyaya ve ekran paylaşımına
+> giriyordu, üstelik "FORCE_SYNC satırını sonra kaldırın" gibi unutulabilir bir
+> adım gerektiriyordu.
 
 ```powershell
-# 1) Parola hash'ini ÜRET (düz parola .env'e yazılmaz)
-node -e "console.log(require('bcryptjs').hashSync(process.argv[1],10))" '<parola>'
-
-# 2) C:\Etkili-Yazilim\app\.env dosyasına ekle (ÜÇÜ BİRLİKTE)
-#    SUPERADMIN_USERNAME="bakim"
-#    SUPERADMIN_PASSWORD_HASH="$2b$10$..."
-#    SUPERADMIN_PIN="<6 hane>"
-#    SUPERADMIN_TOTP_SECRET="<base32>"   # opsiyonel; uzaktan giriş için
-
-pm2 restart tekserp && pm2 save
+cd C:\Etkili-Yazilim\app
+npm run superadmin:kur                # kurulum (idempotent — hesap varsa DOKUNMAZ)
+npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
 ```
 
-Boot log'unda `[superadmin] Satıcı hesabı oluşturuldu (sistem hesabı).`
-görünmeli. Görünmüyorsa: değişkenlerden biri eksik/bozuktur — o durumda hata
-`Sistem Kayıtları`na `JOB_FAILED:superadmin` olarak da düşer.
-(Log satırı **kullanıcı adını basmaz**: aynı ad audit yüzeylerinde bilerek
-gizleniyor, pm2 log'u ise fabrika sunucusunda okunabilir.)
+> ⚠️ **GERÇEK TERMİNAL ŞART — uzaktan koşuyorsan `-t` VER.** Script parolayı
+> maskeleyerek sorar; girdi boru/dosya olduğunda hiçbir soru cevaplanamaz ve
+> **süreç hata vermeden, zaman aşımına düşmeden bekler**. Doğrusu:
+> `ssh -t sunucu 'cd C:\Etkili-Yazilim\app && npm run superadmin:kur'`,
+> `docker exec -it <konteyner> npm run superadmin:kur` ya da doğrudan sunucu
+> konsolu. `-t` unutulursa script artık **gürültülü hata verip çıkar**
+> ("etkileşimli terminal ister") — eskiden sessizce donuyordu, yani kurulum
+> tamamlanmamış olur ve kimse fark etmezdi. Kurulum betiğinden / pm2 / CI
+> içinden çağırmayın.
 
-> ⚠️ **Değerler fabrikaya VERİLMEZ**, parola yöneticisinde tutulur.
-> ⚠️ **`ecosystem.config.js`'e YAZILMAZ** (git'e girer, sır taşımaz).
-> ⚠️ Hesap **hiç yaratılmazsa** modül anahtarları bugünkü gibi `admin:settings`
-> ile yazılmaya devam eder (emniyet supabı — kilitlenme yok). Hesap doğduğu AN
-> kilit mutlaktır.
-> ⚠️ **Rotasyon:** `SUPERADMIN_FORCE_SYNC=true` ile restart parola + PIN + TOTP
-> sırrını `.env` değerlerine eşitler (TOTP satırı boşsa iki adımlı doğrulamayı
-> TEMİZLER) ve eski oturumları düşürür — sonra bu satırı **kaldırın**.
-> **`SUPERADMIN_USERNAME` DEĞİŞTİRİLMEZ** (giriş kimliğidir; sessizce
-> değiştirmek satıcıyı bir sonraki girişte dışarıda bırakırdı): env'deki ad
-> kayıtlıdan farklıysa boot log'una uyarı düşer ve
-> `SUPERADMIN_CREDENTIALS_SYNCED` audit'i `usernameMismatch: true` taşır.
-> `SUPERADMIN_PIN` başka bir kullanıcıda kullanılıyorsa rotasyon UYGULANMAZ:
-> hesaba hiçbir şey yazılmaz, `JOB_FAILED:superadmin` izi doğar ve iş TEKRAR
-> DENENMEZ (yapılandırma hatasıdır, geçici arıza değil).
-> ⚠️ **Satırların `.env`'den kaldırılması kilidi AÇMAZ** — kilit `.env`'e değil
-> DB satırına bakar (ölçüldü). Hesap durduğu sürece modül anahtarları yalnız
-> satıcı hesabıyla yazılır.
-> ⚠️ **Hesabı KALDIRMA** (satıcı ilişkisi biterse): `.env` satırlarını sil +
+Script sırayla sorar: **kullanıcı adı** (öneri `bakim` — nötr seçin, satıcıyı
+çağrıştırmasın) · **parola** (iki kez, ekrana basılmaz) · **6 haneli hızlı giriş
+PIN'i** (boş bırakılırsa üretilir). İki adımlı doğrulama sırrını üretir ve
+`otpauth://` URI'siyle birlikte **terminalde QR olarak BİR KEZ** basar —
+authenticator uygulamasıyla o an okutun.
+
+> ⚠️ **Çıktı bir daha gösterilmez.** PIN + TOTP sırrı parola yöneticisinde
+> tutulur, **fabrikaya VERİLMEZ**. Hiçbir dosyaya/log'a/audit yüküne yazılmaz;
+> audit'e yalnız `SUPERADMIN_PROVISIONED` / `SUPERADMIN_ROTATED` izi düşer
+> (sırsız, gerçek kullanıcı adı da yok).
+> ⚠️ **Var olan bir kullanıcı YÜKSELTİLEMEZ.** Mevcut bir kullanıcı adı
+> verilirse script hata verir: gizli hesap görünür bir hesaptan türetilemez —
+> o kullanıcının geçmişi, oturumları ve audit satırları maskeli hesaba TAŞINAMAZ
+> (audit maskesi satır düzeyindedir; taşınsaydı fabrikanın kendi kayıtları bir
+> anda "Sistem Bakımı" adına geçerdi). Panelde düğme, API'de uç YOKTUR.
+> ⚠️ **İkinci koşum hiçbir şeye dokunmaz** ("zaten kurulu", çıkış 0) — yoksa
+> "bir daha çalıştırayım" refleksi satıcının elindeki parolayı öldürürdü.
+> ⚠️ **RESTART GEREKMEZ.** Kilit defteri, hesabın olmadığı kurulumda her istekte
+> tembel doğrulama yapar: hesap doğduğu AN kilit yürürlüğe girer.
+> ⚠️ Hesap **hiç kurulmazsa** modül anahtarları bugünkü gibi `admin:settings`
+> ile yazılmaya devam eder (emniyet supabı — kilitlenme yok). Boot log'unda
+> `[superadmin] Satıcı hesabı yok — emniyet supabı devrede` satırı bunu söyler.
+
+**ROTASYON** (`--rotate`): parola + PIN + TOTP sırrı **yenilenir** ve
+`tokenVersion` artar → **açık oturumların hepsi anında düşer**. Kalıcı bir
+"rotasyon bayrağı" YOKTUR; kaldırılması unutulacak bir satır bırakmaz.
+
+> ⚠️ **KULLANICI ADI DEĞİŞMEZ** (giriş kimliğidir; sessizce değiştirmek satıcıyı
+> bir sonraki girişte dışarıda bırakırdı). Ad gerçekten değişecekse hesap elle
+> güncellenir.
+> ⚠️ **PIN başka bir kullanıcıdaysa** rotasyon UYGULANMAZ — script hata verir ve
+> hesaba hiçbir şey yazılmaz (`quickPin` sistem genelinde benzersiz).
+> ⚠️ **Kurulu hesap yokken `--rotate`** hata verir; hesap YARATMAZ.
+
+> ⚠️ **Hesabı KALDIRMA** (satıcı ilişkisi biterse):
 > `UPDATE users SET "isSystemAccount"=false, "isActive"=false WHERE "isSystemAccount"=true;`
 > + **`pm2 restart tekserp` ŞART**. Kilit defteri TEK YÖNDE tazelenir: yokluktan
 > varlığa istek anında, varlıktan yokluğa yalnız restart'ta (fail-closed) —
 > restart'sız bırakılırsa modül anahtarlarını restart'a kadar HİÇ KİMSE yazamaz.
 > ⚠️ **Kabul edilmiş risk (F287):** `pg_dump` / `db-copy` bu hesabın düz PIN'ini
-> de taşır; yedek indirebilen personel onu okuyabilir. Karşılığı hızlı rotasyondur.
+> de taşır; yedek indirebilen personel onu okuyabilir. Karşılığı hızlı rotasyondur
+> (`--rotate`).
 
 ### Ayar şifresi (ikinci kapı) — opsiyonel, süperadmin yönetir
 
