@@ -134,6 +134,21 @@ export class AuthController {
     // kalır. Ayarın etiketi bunu söylemeli.
     const lockoutKey = resolveLoginLockoutKeys(req, `u:${body.username}`);
     const lock = await reserveLoginAttempt(lockoutKey);
+    // ⚠️ DENETİM: kilit YALNIZ KURULDUĞU ANDA yazılır (ayar şifresi kapısıyla
+    // AYNI kural — iki yol aynı sayacı paylaşıyor, denetim davranışı da
+    // ayrışmamalı). Eskiden bu yol hiç yazmıyordu: "5 yanlış parolada hesap
+    // kilitlendi" olayı Sistem Kayıtları'nda GÖRÜNMÜYORDU (yalnız LOGIN_FAILED
+    // satırları vardı, kilidin kurulduğu an ayırt edilemiyordu). `blocked`
+    // dalına yazmak ise 429 başına bir satır demekti — sel.
+    if (lock.justLocked) {
+      void AuditService.logEvent({
+        category: "AUTH",
+        action: "LOGIN_LOCKED",
+        recordId: body.username,
+        ipAddress,
+        payload: { retryAfterSec: lock.retryAfterSec },
+      });
+    }
     if (lock.blocked) {
       next(
         AppError.tooManyRequests(

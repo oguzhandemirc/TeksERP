@@ -191,7 +191,7 @@ kalmış bir admin oturumundan ayar değişmesin). `.env`'de **DEĞİLDİR** —
 hesabıyla girip tanımlanır:
 
 ```
-PUT    /api/admin/settings-password   { "password": "<en az 8 karakter>" }   # tanımla / değiştir
+PUT    /api/admin/settings-password   { "password": "<8-72 karakter, boşluksuz ASCII>" }  # tanımla / değiştir
 DELETE /api/admin/settings-password                                          # kaldır (kapı uyur)
 GET    /api/admin/settings-password                                          # tanımlı mı
 ```
@@ -199,14 +199,28 @@ GET    /api/admin/settings-password                                          # t
 > ⚠️ Üç uç da **yalnız satıcı hesabına** açıktır; fabrika yöneticisi için
 > **404** döner (403 ucun varlığını doğrulardı).
 > ⚠️ **Tanımlı değilse hiçbir istek şifre istemez** — mevcut kurulumlarda sıfır fark.
-> ⚠️ Kapsam: `PATCH /api/feature-flags` · `PUT /api/feature-flags/documents-logo` ·
-> `PUT /api/admin/settings/:key`. **Süperadmin muaftır** (kapıyı o kurar) ve
-> yalnız belge tasarımı anahtarı taşıyan gövde (Belge Şablonları / Refakat Kartı)
-> da muaftır — o ekranın personeli `admin:settings` taşımaz.
+> ⚠️ **ŞİFRE YALNIZ BOŞLUKSUZ ASCII OLABİLİR (8–72 karakter).** Türkçe harf
+> (ş/ğ/ü/ö/ç/ı) ve boşluk **reddedilir** — sebep teknik ve serttir: şifre
+> `X-Settings-Password` başlığıyla taşınır, HTTP başlığı bu karakterleri
+> taşıyamaz. Kabul edilseydi tanımlama 200 dönerdi ama **hiçbir istemci o
+> şifreyi iletemezdi** ve fabrika, rotasyona kadar bütün ayar/bayrak
+> ekranlarından kilitli kalırdı. Üst sınır 72'dir çünkü bcrypt yalnız ilk 72
+> baytı karıştırır (daha uzunu sessizce kırpılırdı).
+> ⚠️ Kapsam **beş yazma yüzeyi**: `PATCH /api/feature-flags` ·
+> `PUT /api/feature-flags/documents-logo` · `PUT /api/admin/settings/:key` ·
+> `PATCH /api/admin/backups/offsite` · `POST /api/admin/backups/offsite/authorize`.
+> Son ikisi "yedek" ekranında yaşıyor ama `system_settings`e yazar ve
+> **yedeklerin gideceği yeri** belirler — kapsamın yüklemi ekran değil, yazma.
+> **Süperadmin muaftır** (kapıyı o kurar) ve yalnız belge tasarımı anahtarı
+> taşıyan gövde (Belge Şablonları / Refakat Kartı) da muaftır — o ekranın
+> personeli `admin:settings` taşımaz.
 > ⚠️ **Unutulursa** yalnız satıcı yeniler/kaldırır; fabrikanın kendi başına
 > sıfırlayacağı bir yol BİLİNÇLİ OLARAK yoktur (olsaydı kapı hiçbir şey korumazdı).
 > ⚠️ Hatalı deneme sayısı **giriş kilidiyle AYNI şaltere** bağlıdır
-> (`auth.pinLockoutEnabled`); eşik aşılınca `429` + bekleme süresi döner.
+> (`auth.pinLockoutEnabled`) ama **AYRI SAYAÇ** kullanır: ayar şifresini yanlış
+> girmek kimsenin oturum açmasını engellemez, tersi de geçerlidir. Eşik aşılınca
+> `429` + `Retry-After` başlığı + bekleme süresi döner; denetim kaydı (`SETTINGS_PASSWORD_LOCKED`)
+> **kilidin kurulduğu anda bir kez** yazılır, her 429'da değil.
 > ⚠️ Şifre `system_settings` içinde **bcrypt hash** olarak durur; ham ayar
 > ucundan ne yazılabilir ne de listelenir (`GET /api/admin/settings` yükünde
 > `security.` ile başlayan satır DÖNMEZ).

@@ -139,17 +139,29 @@ function toSpecs(key: string | LockoutKeySpec[]): LockoutKeySpec[] {
  * geri alır (net sıfır). Eşiği kuran deneme yine doğrulamaya geçer, SONRAKİ
  * denemeler bloklanır (orijinal "N deneme sonra kilit" semantiği korunur). Kilit
  * kapalıysa (pinLockoutEnabled=false) her zaman {blocked:false}.
+ *
+ * ⚠️ `justLocked` = "kilit TAM BU DENEMEDE kuruldu" (bir kova ilk kez
+ * `blockedUntil` aldı). Çağıranlar denetim satırını YALNIZ bu anda yazar.
+ * Gerekçe ÖLÇÜLDÜ (D2, 2026-09-03): audit `blocked` dalında yazılıyordu, yani
+ * kilitliyken gelen HER istek bir satır üretiyordu — 60 paralel istek 60 satır
+ * ekledi (koşum toplamı 319 LOCKED). Yetkili bir oturumdan saniyede yüzlerce
+ * satırla `system_logs` şişirilebiliyordu ve asıl sinyal ("kilit kuruldu")
+ * gürültüde kayboluyordu. Olay bir DURUM değil bir GEÇİŞTİR; bir kez yazılır.
+ *
+ * ⚠️ `justLocked` dönen istek `blocked:false`tur ve doğrulamaya DEVAM EDER —
+ * bu, "N deneme sonra kilit" semantiğinin doğal sonucudur; kilit bir SONRAKİ
+ * istekte hissedilir.
  */
 export async function reserveLoginAttempt(
   key: string | LockoutKeySpec[],
-): Promise<{ blocked: boolean; retryAfterSec: number }> {
+): Promise<{ blocked: boolean; retryAfterSec: number; justLocked: boolean }> {
   // Beş ayar TEK sorguda (readPinLockoutConfig). Önbellek YOK — her denemede canlı
   // DB okunur, yani "middleware tazeliği" garantisi aynen korunur; yalnız
   // round-trip 5→1 iner. Ayrıca bu, aşağıdaki SENKRON BÖLGE invariant'ını
   // GÜÇLENDİRİR: iki await aşaması (enabled, sonra Promise.all) yerine tek
   // interleaving noktası kalır.
   const { enabled, attempts, penaltySec, escalateAfter, longPenaltyMin } = await readPinLockoutConfig();
-  if (!enabled) return { blocked: false, retryAfterSec: 0 };
+  if (!enabled) return { blocked: false, retryAfterSec: 0, justLocked: false };
 
   // --- SENKRON BÖLGE: buradan sonra await YOK → paralel N istek seri işlenir. ---
   const now = Date.now();
@@ -165,10 +177,12 @@ export async function reserveLoginAttempt(
     if (e && e.blockedUntil > now) blockedForMs = Math.max(blockedForMs, e.blockedUntil - now);
   }
   if (blockedForMs > 0) {
-    return { blocked: true, retryAfterSec: Math.ceil(blockedForMs / 1000) };
+    return { blocked: true, retryAfterSec: Math.ceil(blockedForMs / 1000), justLocked: false };
   }
 
   // 2) REZERVASYON — her kova kendi eşiğiyle (çarpan 1 = bugünkü eşik).
+  let justLocked = false;
+  let newBlockMs = 0;
   for (const spec of specs) {
     const entry = failCounts.get(spec.key)
       ?? { fails: 0, penaltyRounds: 0, blockedUntil: 0, lastFailAt: 0 };
@@ -191,6 +205,9 @@ export async function reserveLoginAttempt(
         entry.penaltyRounds >= escalateAfter
           ? now + longPenaltyMin * 60 * 1000
           : now + penaltySec * 1000;
+      // GEÇİŞ ANI — çağıranın denetim satırını yazacağı tek nokta.
+      justLocked = true;
+      newBlockMs = Math.max(newBlockMs, entry.blockedUntil - now);
     }
     failCounts.set(spec.key, entry);
   }
@@ -204,7 +221,11 @@ export async function reserveLoginAttempt(
     }
   }
 
-  return { blocked: false, retryAfterSec: 0 }; // bu deneme doğrulamaya geçer
+  // ⚠️ `retryAfterSec` burada BİLGİDİR, sözleşme değil: istek bloklanmadı (bu
+  // deneme doğrulamaya geçer), yalnız kilidin kurulduğu an denetime yazılabilsin
+  // diye cezanın süresi taşınır. `blocked` yüklemine bakmadan başlığa/mesaja
+  // basan bir çağıran kullanıcıya yanlış cümle kurar.
+  return { blocked: false, retryAfterSec: Math.ceil(newBlockMs / 1000), justLocked };
 }
 
 /**

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
+import { withSettingsPassword } from "@/lib/settings-password";
 import type { RestoreImpact, RestoreImpactResponse } from "./restore-impact.types";
 
 /** Ön ekten türeyen yedek türü — backend bildirir (prefix mantığı tek kaynakta). */
@@ -220,12 +221,24 @@ export function useOffsiteStatus() {
   });
 }
 
+/**
+ * ⚠️ AYAR ŞİFRESİ KAPISINDAN GEÇER (2026-09-03 / P3 düzeltme turu).
+ * Bu uç `system_settings`e yazar ve yazdığı şey **yedeklerin gideceği yerdir** —
+ * yani gece dökümünün (kullanıcı hash'leri, PIN/kart değerleri dahil) hedefi.
+ * Kapı bir yetki değil NİYET kapısıdır: şifre tanımlı değilse istek şifresiz
+ * gider ve hiçbir şey değişmez.
+ *
+ * ⚠️ Yük içeride YENİDEN HESAPLANMAZ — `run` aynı `body` ile tekrarlanır
+ * (`withSettingsPassword` sözleşmesi).
+ */
 export async function updateOffsiteConfig(body: {
   remote?: string;
   localDir?: string;
 }): Promise<{ remote: string; localDir: string }> {
-  const { data } = await apiClient.patch("/api/admin/backups/offsite", body);
-  return data.data;
+  return withSettingsPassword(async (headers) => {
+    const { data } = await apiClient.patch("/api/admin/backups/offsite", body, { headers });
+    return data.data;
+  });
 }
 
 export async function testOffsiteConnection(): Promise<{ ok: boolean; message: string }> {
@@ -249,6 +262,9 @@ export async function authorizeOffsiteDrive(body: {
   name: string;
   token: string;
 }): Promise<{ message: string }> {
-  const { data } = await apiClient.post("/api/admin/backups/offsite/authorize", body);
-  return data.data;
+  // ⚠️ Kardeş uçla aynı gerekçe: ayar şifresi kapısından geçer.
+  return withSettingsPassword(async (headers) => {
+    const { data } = await apiClient.post("/api/admin/backups/offsite/authorize", body, { headers });
+    return data.data;
+  });
 }

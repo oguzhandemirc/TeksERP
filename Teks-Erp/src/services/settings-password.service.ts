@@ -29,14 +29,29 @@ import bcrypt from "bcryptjs";
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { SETTINGS_PASSWORD_HASH_KEY } from "../constants/reserved-settings";
+import { AppError } from "../utils/app-error";
 
 /** bcrypt maliyeti — kullanıcı parolalarıyla AYNI (auth.service `hash(p, 10)`). */
 const BCRYPT_COST = 10;
 
-/** Kabul edilen şifre uzunluğu. Alt sınır kaba tahmine karşı, üst sınır bcrypt
- *  72 bayt sınırının altında kalmak + gövde şişmesini engellemek için. */
+/**
+ * Kabul edilen şifre uzunluğu.
+ *
+ * ⚠️ ÜST SINIR 72 ve bu SAYI KEYFİ DEĞİL — bcrypt'in kendi sınırıdır: algoritma
+ * parolanın yalnız İLK 72 BAYTINI karıştırır, gerisini SESSİZCE ATAR. ÖLÇÜLDÜ
+ * (2026-09-03, D2): sınır 128 iken süperadmin 100 karakterlik bir şifre tanımladı
+ * ve doğrulamada `"A"×72` ile `"A"×72+"ZZZZ"` İKİSİ DE 200 verdi, `"A"×71` 403
+ * verdi. Yani kullanıcı "uzun şifre = güçlü" sanırken son 28 karakter hiç
+ * sayılmıyordu. Sınırı 72'ye çekmek sessiz kırpmayı görünür bir redde çevirir.
+ *
+ * ⚠️ 72 KARAKTER = 72 BAYT yalnız ASCII'de doğrudur; şifre kümesi
+ * (`settingsPasswordSchema` regex'i) zaten yazdırılabilir ASCII ile sınırlı
+ * olduğu için ikisi burada eşittir. Yine de savunma derinliği olarak
+ * `assertSettingsPasswordUsable` bcrypt'in KENDİ `truncates()` yüklemiyle ölçer
+ * — regex bir gün gevşerse sessiz kırpma geri gelmesin.
+ */
 export const SETTINGS_PASSWORD_MIN_LENGTH = 8;
-export const SETTINGS_PASSWORD_MAX_LENGTH = 128;
+export const SETTINGS_PASSWORD_MAX_LENGTH = 72;
 
 /** Audit olayları — tek yerde, bekçi ve reçete bu adları arar. */
 export const SETTINGS_PASSWORD_EVENTS = {
@@ -81,6 +96,24 @@ export async function isSettingsPasswordConfigured(
 }
 
 /**
+ * bcrypt'in SESSİZ KIRPMASINA karşı son kapı. `settingsPasswordSchema` zaten
+ * 72 karakterde keser; bu yüklem BAYT üzerinden ölçer ve şemadan bağımsız
+ * koşar (servisin ileride başka bir çağıranı doğarsa da korunur).
+ *
+ * ⚠️ SESSİZ KIRPMA NEDEN TEHLİKELİ: kırpılan şifre YAZILIR ve DOĞRULANIR —
+ * hiçbir yerde hata görünmez; yalnız gerçekte geçerli olan sır kullanıcının
+ * bildiğinden kısadır. Görünür bir 400, sessiz bir zayıflamadan iyidir.
+ */
+export function assertSettingsPasswordUsable(password: string): void {
+  if (bcrypt.truncates(password)) {
+    throw AppError.badRequest(
+      `Ayar şifresi en fazla ${SETTINGS_PASSWORD_MAX_LENGTH} bayt olabilir (bcrypt sınırı) — daha kısa bir şifre seçin.`,
+      { code: "SETTINGS_PASSWORD_TOO_LONG" },
+    );
+  }
+}
+
+/**
  * Şifreyi TANIMLA/DEĞİŞTİR (süperadmin). Var olan hash üzerine yazmak
  * ROTASYONdur — audit olayı ona göre ayrışır ki "ilk kez tanımlandı" ile
  * "değiştirildi" denetimde karışmasın.
@@ -89,6 +122,7 @@ export async function setSettingsPassword(
   password: string,
   userId: string | undefined,
 ): Promise<{ rotated: boolean }> {
+  assertSettingsPasswordUsable(password);
   const rotated = (await readSettingsPasswordHash()) !== null;
   const hash = await bcrypt.hash(password, BCRYPT_COST);
   await prisma.systemSetting.upsert({

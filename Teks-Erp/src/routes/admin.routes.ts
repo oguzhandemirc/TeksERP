@@ -1365,6 +1365,20 @@ router.put(
 //    burada anlamsız olurdu).
 // =============================================================================
 
+// ⚠️ KARAKTER KÜMESİ LOAD-BEARING — "kullanılamayan şifre" sınıfı (D2, 2026-09-03).
+// Şifre `X-Settings-Password` BAŞLIĞIYLA taşınır ve HTTP başlık değeri
+// (RFC 7230 field-value) yalnız tek-bayt yazdırılabilir karakter kabul eder:
+//   • Türkçe harf → Node/undici/axios istemcide `ByteString` hatası verir, istek
+//     HİÇ ÇIKMAZ; ham UTF-8 baytlarıyla gönderilse (curl) sunucu latin1 çözer ve
+//     bcrypt uyuşmaz → 403 INVALID.
+//   • Baş/son boşluk → HTTP OWS kırpması yer, yine 403 INVALID.
+// ÖLÇÜLDÜ: süperadmin "Ayarşifresi-Ğüçlü2026" tanımladı → PUT 200, ama hiçbir
+// istemci o şifreyi İLETEMEDİ; fabrika beş yazma yüzeyinden rotasyona kadar
+// KİLİTLİ kaldı. Bu yüzden red YAZMA ANINDA verilir.
+// ⚠️ `.trim()` KULLANILMAZ: sessizce değiştirilmiş bir sır, kullanıcının
+// bildiğinden farklı bir sırdır — kırpmak yerine REDDET.
+const SETTINGS_PASSWORD_CHARSET = /^[\x21-\x7E]+$/;
+
 const settingsPasswordSchema = z.object({
   password: z
     .string()
@@ -1375,6 +1389,10 @@ const settingsPasswordSchema = z.object({
     .max(
       SETTINGS_PASSWORD_MAX_LENGTH,
       `Ayar şifresi en fazla ${SETTINGS_PASSWORD_MAX_LENGTH} karakter olabilir`,
+    )
+    .regex(
+      SETTINGS_PASSWORD_CHARSET,
+      "Ayar şifresi 8–72 karakter, yalnız boşluksuz ASCII olabilir (başlıkla taşınır — Türkçe karakter ve boşluk kullanılamaz)",
     ),
 });
 
@@ -1704,6 +1722,15 @@ router.patch(
   verifyToken,
   requirePermission("admin:settings"),
   requirePermission("admin:users"), // ← yukarıdaki gerekçe: hedef = yedeklerin gideceği yer
+  // ⚠️ AYAR ŞİFRESİ KAPISI (2026-09-03 / P3 düzeltme turu — D2 bulgusu #1).
+  // Bu uç `systemSettingService.set()` ile `system_settings`e YAZAR, yani spec'in
+  // "üç yazma yüzeyi" saydığı kümeye AİTTİR ama gözden kaçmıştı. Kapsam boşluğu
+  // teorik değildi: ölçümde açık kalmış bir admin oturumundan yedek hedefi
+  // (rclone remote / yerel dizin) ŞİFRESİZ değiştirildi (200). Hedef, gece
+  // yedeğinin — yani kullanıcı parolası hash'lerini, quickPin/cardToken
+  // değerlerini ve ayar şifresi hash'ini taşıyan TAM DB dökümünün — gideceği
+  // yerdir; tasarım §7.2'nin korumak istediği senaryo tam da buydu.
+  requireSettingsPassword,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = offsiteConfigSchema.parse(req.body);
@@ -1778,6 +1805,10 @@ router.post(
   verifyToken,
   requirePermission("admin:settings"),
   requirePermission("admin:users"),
+  // ⚠️ Kardeş uçla AYNI gerekçe (yukarıdaki PATCH bloğu): Drive yenileme
+  // anahtarını yazmak, yedeklerin gideceği hesabı belirlemektir. Gövde
+  // (`{name, token}`) belge-muafiyetine DÜŞMEZ.
+  requireSettingsPassword,
   async (req: Request, res: Response, next: NextFunction) => {
     try {
       const body = offsiteTokenSchema.parse(req.body);

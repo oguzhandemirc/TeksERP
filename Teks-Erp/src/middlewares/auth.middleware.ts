@@ -90,9 +90,27 @@ export const verifyToken = async (
     }
     const session = await prisma.session.findUnique({
       where: { jti: payload.jti },
-      select: { revokedAt: true, revokeReason: true },
+      // ⚠️ `userId` DE OKUNUR (2026-09-03 / P3 düzeltme turu — D2 NOT'u):
+      // savunma derinliği. Eskiden yalnız "bu jti canlı mı" soruluyordu, "bu
+      // jti BU KULLANICIYA mı ait" sorulmuyordu — yani JWT_SECRET'ı ele geçiren
+      // biri, başka bir oturumun geçerli jti'sini alıp payload'a İSTEDİĞİ
+      // userId'yi (örn. satıcı hesabını) yazabiliyordu. ÖLÇÜLDÜ: admin'in
+      // jti'si + `bakim` userId/tokenVersion ile imzalanan token `/auth/me`den
+      // 200 `isSystemAccount:true` aldı. Ön koşul sunucu sırrının sızması, yani
+      // zaten ağır bir olay; ama `Session.userId` kolonu ELDEYKEN kontrol
+      // etmemek bedava bir katmanı boşa bırakmaktı. Ek maliyet: sıfır (aynı
+      // sorguda bir kolon).
+      select: { revokedAt: true, revokeReason: true, userId: true },
     });
     if (!session) {
+      throw AppError.unauthorized("Oturum kaydı bulunamadı. Tekrar giriş yapın.", {
+        code: "SESSION_INVALID",
+      });
+    }
+    if (session.userId !== payload.userId) {
+      // Aynı kod + aynı mesaj: "hangi oturum kimin" bilgisini dışarı SIZDIRMAZ
+      // (ayrı bir kod/mesaj, saldırgana jti'nin geçerli ama sahibinin farklı
+      // olduğunu söyleyen bir orakül olurdu).
       throw AppError.unauthorized("Oturum kaydı bulunamadı. Tekrar giriş yapın.", {
         code: "SESSION_INVALID",
       });

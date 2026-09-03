@@ -11,6 +11,7 @@ import {
   settingsPasswordAdminService,
   SETTINGS_PASSWORD_MIN_LENGTH,
   SETTINGS_PASSWORD_MAX_LENGTH,
+  SETTINGS_PASSWORD_CHARSET,
 } from "@/services/systemSettingService";
 
 /**
@@ -71,10 +72,17 @@ export function SettingsPasswordCard() {
 
   const busy = saveMut.isPending || revokeMut.isPending;
   const tooShort = password.length > 0 && password.length < SETTINGS_PASSWORD_MIN_LENGTH;
+  const tooLong = password.length > SETTINGS_PASSWORD_MAX_LENGTH;
+  // ⚠️ ANLIK UYARI, KAYITTA SÜRPRİZ DEĞİL: sunucu bu şifreyi zaten 400 ile
+  // reddediyor; kart uyarmasaydı süperadmin sebebini ("neden geçersiz?")
+  // yalnız hata mesajından öğrenirdi. Daha kötüsü, denetim ÖNCE yoktu: şifre
+  // KABUL EDİLİYOR ama hiçbir istemci başlıkla taşıyamıyordu.
+  const badCharset = password.length > 0 && !SETTINGS_PASSWORD_CHARSET.test(password);
   const mismatch = repeat.length > 0 && repeat !== password;
   const canSave =
     password.length >= SETTINGS_PASSWORD_MIN_LENGTH &&
     password.length <= SETTINGS_PASSWORD_MAX_LENGTH &&
+    SETTINGS_PASSWORD_CHARSET.test(password) &&
     repeat === password &&
     !busy;
 
@@ -92,7 +100,9 @@ export function SettingsPasswordCard() {
         kayıtta bu şifre sorulur — açık kalmış bir yönetici oturumundan ayar
         değiştirilmesin diye. Kaldırılırsa kapı uyur, hiçbir istek şifre
         istemez. ⚠️ Unutulursa fabrikanın kendi sıfırlama yolu YOKTUR; yalnız
-        buradan yenilenir.
+        buradan yenilenir. Şifre {SETTINGS_PASSWORD_MIN_LENGTH}–
+        {SETTINGS_PASSWORD_MAX_LENGTH} karakter, boşluksuz ve Türkçe karaktersiz
+        olmalıdır.
       </p>
 
       <div className="mt-4 grid gap-3 sm:max-w-sm">
@@ -109,6 +119,18 @@ export function SettingsPasswordCard() {
           {tooShort && (
             <p className="text-xs text-destructive">
               En az {SETTINGS_PASSWORD_MIN_LENGTH} karakter olmalı.
+            </p>
+          )}
+          {tooLong && (
+            <p className="text-xs text-destructive">
+              En fazla {SETTINGS_PASSWORD_MAX_LENGTH} karakter olabilir (şifreleme sınırı).
+            </p>
+          )}
+          {badCharset && (
+            <p className="text-xs text-destructive">
+              Türkçe karakter (ş, ğ, ü, ö, ç, ı) ve boşluk kullanılamaz — şifre
+              istekle birlikte başlıkta taşındığı için yalnız boşluksuz İngiliz
+              alfabesi, rakam ve noktalama kabul edilir.
             </p>
           )}
         </div>

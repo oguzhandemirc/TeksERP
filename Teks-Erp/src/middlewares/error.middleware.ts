@@ -415,6 +415,18 @@ export const errorHandler = (
 
   // Known operational errors
   if (err instanceof AppError) {
+    // ⚠️ 429 SÖZLEŞMESİ TEK NOKTADAN (2026-09-03 / P3 düzeltme turu).
+    // Hız sınırlayıcı (`web-hardening`) ve SERVER_BUSY yolu `Retry-After`
+    // basıyordu; kilit yolları (`LOGIN_LOCKED`, `SETTINGS_PASSWORD_LOCKED`)
+    // süreyi YALNIZ `details.retryAfterSec` altında veriyordu. Electron bugün
+    // gövdeyi okuyor (çalışıyor), ama standart sinyali eksik bırakmak yarın
+    // araya girecek her vekil/istemci için sessiz bir boşluk. Kaynak yine tek:
+    // süreyi hesaplayan yerler `details.retryAfterSec` yazar, başlığı BURASI
+    // basar — iki yerde hesaplansaydı ayrışırlardı.
+    const retryAfterSec = (err.details as { retryAfterSec?: unknown } | undefined)?.retryAfterSec;
+    if (err.statusCode === 429 && typeof retryAfterSec === "number" && retryAfterSec > 0) {
+      res.setHeader("Retry-After", String(Math.ceil(retryAfterSec)));
+    }
     res.status(err.statusCode).json({
       success: false,
       message: err.message,

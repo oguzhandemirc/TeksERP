@@ -17,7 +17,7 @@
 //                KİMSE değiştiremezdi (`document-design.ts`teki "admin:settings
 //                dört ekranı da açmaya devam eder" dersinin birebir tekrarı).
 //
-// SEKİZ SESSİZ BOZULMA YOLU VAR, SEKİZİ DE BURADA KİLİTLİ:
+// DOKUZ SESSİZ BOZULMA YOLU VAR, DOKUZU DA BURADA KİLİTLİ:
 //   1. GUARD YÖN DEĞİŞTİRİR — `.some` `.every` olursa `{ ticaretEnabled,
 //      backupHour }` KARMA gövdesi dala hiç girmez ve `admin:settings` taşıyan
 //      yönetici modülü sessizce açar. Hiçbir test kırılmaz, hiçbir log çıkmaz.
@@ -45,6 +45,12 @@
 //      ÖNCE koşar; izni birleşimden dar olursa alt rotanın ilan ettiği izne
 //      sahip kullanıcı ucu HİÇ göremez ve 403 rotanın istemediği izni suçlar
 //      ("kart görür, tıklar, /forbidden" sınıfı). §M mekanik olarak ölçer.
+//   9. OTURUM KİMLİĞE BAĞLANMAZ — `verifyToken` jti'yi "canlı mı" diye sorup
+//      "KİMİN" diye sormazsa, JWT_SECRET'ı bilen biri başkasının geçerli
+//      jti'siyle satıcı kimliğini üretir (ölçüldü: `/auth/me` 200
+//      `isSystemAccount:true`). §J(c) hem yabancı jti'yi (401 SESSION_INVALID)
+//      hem ZEMİNİ (kendi jti'si GEÇER) ölçer — ikincisi olmadan sonda vakumen
+//      yeşil olurdu.
 //
 // ⚠️ BU BEKÇİ GEÇİCİ OLARAK İKİNCİ BİR SİSTEM HESABI YARATIR (kendi fixture'ı,
 //    `bekci.superadmin.<pid>`) ve `finally`de siler. `test_db_invariants` §10
@@ -104,6 +110,12 @@
 //               kaldı. Sonda "kırmızı vermedi" ise ÖNCE sondayı doğrula.
 //   SONDA-F12 → 125/1 · A1: job audit yüküne `username: cfg.username` geri kondu
 //               → §I2 "audit yükünde `username` alanı YOK" ❌
+//   SONDA-F13 → 110/2 (34 atlandı) · P3 düzeltme turu: `auth.middleware`teki
+//               `session.userId !== payload.userId` dalı etkisizleştirildi →
+//               §J(c) "YABANCI jti + süperadmin userId → 401" ve kod kontrolü
+//               ❌ (yabancı jti ile satıcı kimliği ÜRETİLDİ). ⚠️ Aynı sondada
+//               §J(c) ZEMİNİ ("kendi jti'siyle GEÇER") yeşil kaldı — sonda
+//               "her token 401 alıyor" yanılgısı üretmiyor.
 // =============================================================================
 
 import * as fs from "node:fs";
@@ -127,6 +139,8 @@ import {
   SYSTEM_ACCOUNT_FULLNAME,
 } from "../src/jobs/superadmin.job";
 import { blockSystemAccountTarget } from "../src/middlewares/system-account.middleware";
+import { verifyToken } from "../src/middlewares/auth.middleware";
+import jwt from "jsonwebtoken";
 import { AuthService } from "../src/services/auth.service";
 import { AppError } from "../src/utils/app-error";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
@@ -1051,6 +1065,72 @@ async function main(): Promise<void> {
         "UUID olmayan `:id` dokunulmadan geçer (bugünkü hata yolu korunur)",
         uuidDegil === undefined,
       );
+    }
+
+    // (c) OTURUM ↔ KULLANICI BAĞI (2026-09-03 / P3 düzeltme turu — D2 NOT'u).
+    // ⚠️ `verifyToken` eskiden yalnız "bu jti canlı mı" soruyordu, "bu jti BU
+    //    KULLANICIYA mı ait" sorusunu SORMUYORDU. Sonuç ölçüldü: JWT_SECRET'ı
+    //    bilen biri BAŞKA bir oturumun geçerli jti'sini alıp payload'a satıcı
+    //    hesabının userId'sini yazıyor ve `/auth/me`den 200 `isSystemAccount:true`
+    //    alıyordu — yani süperadmin kimliği, hesabın parolasına HİÇ dokunmadan
+    //    üretilebiliyordu. Ön koşul (sunucu sırrının sızması) ağırdır, ama
+    //    `Session.userId` kolonu ELDEYKEN bağı kontrol etmemek bedava bir
+    //    savunma katmanını boşa bırakmaktı. Bu sonda tam o katmanı ölçer.
+    {
+      const sistem = await prisma.user.findFirst({
+        where: { isSystemAccount: true },
+        select: { id: true, username: true, tokenVersion: true },
+      });
+      const canliOturum = await prisma.session.findFirst({
+        where: { revokedAt: null, user: { isSystemAccount: false, isActive: true } },
+        orderBy: { createdAt: "desc" },
+        select: { jti: true, userId: true },
+      });
+      if (!sistem || !canliOturum) {
+        atla("oturum ↔ kullanıcı bağı", "sistem hesabı ya da canlı oturum yok — 3 kontrol ölçülmedi");
+        atlanan += 3;
+      } else {
+        const sahibi = await prisma.user.findUnique({
+          where: { id: canliOturum.userId },
+          select: { id: true, username: true, tokenVersion: true, isActive: true },
+        });
+        const imzala = (u: { id: string; username: string; tokenVersion: number }): string =>
+          jwt.sign(
+            { userId: u.id, username: u.username, permissions: [], tokenVersion: u.tokenVersion },
+            process.env.JWT_SECRET as string,
+            { jwtid: canliOturum.jti },
+          );
+        const kosVerify = (token: string): Promise<unknown> => {
+          const req = { headers: { authorization: `Bearer ${token}` } } as unknown as Request;
+          return new Promise((resolve) => {
+            void verifyToken(req, {} as Response, ((e?: unknown) => resolve(e)) as NextFunction);
+          });
+        };
+
+        // ZEMİN: aynı jti KENDİ sahibiyle imzalanınca GEÇER. Bu kontrol olmadan
+        // aşağıdaki "401" vakumen yeşil olurdu (her token 401 alıyor olabilirdi).
+        const zemin = sahibi ? await kosVerify(imzala(sahibi)) : "sahip yok";
+        check(
+          "zemin: jti KENDİ kullanıcısıyla imzalanınca verifyToken GEÇER",
+          zemin === undefined,
+          zemin instanceof AppError ? `${zemin.statusCode} ${zemin.message}` : String(zemin),
+        );
+
+        const yabanci = await kosVerify(imzala(sistem));
+        check(
+          "YABANCI jti + süperadmin userId → 401 (oturum başkasının)",
+          yabanci instanceof AppError && yabanci.statusCode === 401,
+          yabanci instanceof AppError ? `${yabanci.statusCode}` : String(yabanci),
+        );
+        check(
+          "kod `SESSION_INVALID` — mesaj 'jti geçerli ama sahibi başka'yı SIZDIRMAZ",
+          yabanci instanceof AppError &&
+            (yabanci as unknown as { details?: { code?: string } }).details?.code === "SESSION_INVALID",
+          yabanci instanceof AppError
+            ? String((yabanci as unknown as { details?: { code?: string } }).details?.code)
+            : String(yabanci),
+        );
+      }
     }
   }
 

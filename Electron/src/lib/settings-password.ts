@@ -1,8 +1,14 @@
 // =============================================================================
 // AYAR ŞİFRESİ ARACISI — `withSettingsPassword`
 // =============================================================================
-// Backend (P3): üç yazma yüzeyi (`PATCH /api/feature-flags`,
-// `PUT /api/feature-flags/documents-logo`, `PUT /api/admin/settings/:key`)
+// Backend (P3): BEŞ yazma yüzeyi (`PATCH /api/feature-flags`,
+// `PUT /api/feature-flags/documents-logo`, `PUT /api/admin/settings/:key`,
+// `PATCH /api/admin/backups/offsite`, `POST /api/admin/backups/offsite/authorize`)
+// ⚠️ KAPSAMIN YÜKLEMİ EKRAN DEĞİL YAZMA: "bu uç `system_settings`e (ya da
+// yedek hedefi gibi eşdeğer bir yapılandırmaya) yazıyor mu". Bu yüzden liste
+// elle sayılmaz — backend'de `src/routes/**` üzerinde AST tripwire var
+// (`test_settings_password §J`). Yeni bir yazıcı uç doğduğunda İSTEMCİ ayağı
+// da bu sarmalayıcıdan geçmeli, yoksa kullanıcı 403 alır ve diyalog açılmaz.
 // ayar şifresi tanımlıysa `X-Settings-Password` başlığı ister. Kapı bir YETKİ
 // değil NİYET kapısıdır: açık kalmış bir admin oturumundan bayrak çevrilmesin.
 //

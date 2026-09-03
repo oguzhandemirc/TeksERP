@@ -7,10 +7,19 @@
 // olan kişiden, o anda klavyenin başında GERÇEKTEN o kişinin olduğunu ispatlaması
 // istenir. Bu yüzden izin zincirinin YERİNE geçmez, ARDINA takılır.
 //
-// KAPSAM (spec A2 — üç yazma yüzeyi):
-//   • `PATCH /api/feature-flags`            (davranış bayrakları + ayarlar)
-//   • `PUT   /api/feature-flags/documents-logo` (firma kimliği)
-//   • `PUT   /api/admin/settings/:key`      (yapılandırılmış ham ayarlar)
+// KAPSAM — BEŞ YAZMA YÜZEYİ (spec A2 üç sayıyordu; D2 turu ikisini daha buldu):
+//   • `PATCH /api/feature-flags`                 (davranış bayrakları + ayarlar)
+//   • `PUT   /api/feature-flags/documents-logo`  (firma kimliği)
+//   • `PUT   /api/admin/settings/:key`           (yapılandırılmış ham ayarlar)
+//   • `PATCH /api/admin/backups/offsite`         (yedek hedefi — 2026-09-03)
+//   • `POST  /api/admin/backups/offsite/authorize` (Drive token — 2026-09-03)
+//
+// ⚠️ KAPSAMIN YÜKLEMİ "AYAR EKRANI" DEĞİL, "`system_settings`e YAZIYOR MU"dur.
+//    Son ikisi tam da bu yüzden kaçmıştı: onlar "yedek" ekranında yaşıyor ama
+//    `systemSettingService.set()` çağırıyorlar. Yeni bir yüzey eklerken soru
+//    budur; bekçi (`test_settings_password` §J tripwire) `src/routes/**`
+//    içindeki HER `systemSettingService.set(` / `setFeatureFlags(` /
+//    `systemSetting.upsert(` çağıranını tarar ve kapısız olanı KIRMIZI yapar.
 //
 // ⚠️ HASH YOKSA KAPI UYUR. Sıfır fark kuralı (tasarım §12/1): şifre tanımlı
 //    olmayan bir kurulumda hiçbir istek şifre istemez, hiçbir yanıt şekli
@@ -60,8 +69,19 @@ export const SETTINGS_PASSWORD_HEADER = "x-settings-password";
  *    `setFeatureFlags`in yazma dalına bir adım uzaklıkta bırakırdı.
  *  ② Gövdedeki alan `changes`/`oldData`/`newData` yollarından audit'e sızabilir
  *    (maskeleme yalnız `changes` kolonuna uygulanır — sır hijyeni, §12/8).
- *  ③ Aynı middleware üç FARKLI gövde şekline takılır (`{value}`, `{dataUrl}`,
- *    bayrak yükü); ortak bir alan adı üçünü de kirletirdi.
+ *  ③ Aynı middleware BEŞ FARKLI gövde şekline takılır (`{value}`, `{dataUrl}`,
+ *    bayrak yükü, `{remote,localDir}`, `{name,token}`); ortak bir alan adı
+ *    hepsini kirletirdi.
+ *
+ * ⚠️ QUERY / GÖVDE / COOKIE FALLBACK'İ YASAK — ve bu bir üslup tercihi değil,
+ *    ÖLÇÜLMÜŞ bir sızıntıdır (D2, 2026-09-03). `?sp=` gibi bir yedek okuma
+ *    eklenirse şifre İKİ ayrı deftere düz metin düşer:
+ *      • erişim logu (morgan) İSTEK URL'İNİ basar — sunucu log dosyasında
+ *        `PATCH /api/feature-flags?password=… 403` satırı ölçüldü;
+ *      • USED audit yükü isteğin yolunu taşır → `system_logs`.
+ *    Cookie de aynı sınıftır (tarayıcı deposu + otomatik yeniden gönderim).
+ *    Şifre YALNIZ `x-settings-password` başlığından okunur; bekçi bunu METİNLE
+ *    değil DAVRANIŞLA ölçer (§C: gövde/query/cookie/benzer-adlı başlık → 403).
  */
 function readHeaderPassword(req: Request): string | null {
   const raw = req.headers[SETTINGS_PASSWORD_HEADER];
@@ -151,7 +171,14 @@ export async function requireSettingsPassword(
     //    o karar burada da geçerlidir; ikinci bir bayrak, panelde "kapattım ama
     //    hâlâ kilitleniyor" ayrışması üretirdi.
     const lock = await reserveLoginAttempt(lockKeys);
-    if (lock.blocked) {
+    // ⚠️ DENETİM SATIRI KİLİDİN KURULDUĞU ANDA YAZILIR, HER 429'DA DEĞİL.
+    //    Eskiden `blocked` dalında yazılıyordu; ÖLÇÜLDÜ (D2): kilitliyken gelen
+    //    60 istek 60 satır ekledi. Kilit bir DURUM değil bir GEÇİŞTİR — "kim,
+    //    ne zaman kilitlendi" sorusu tek satırla cevaplanır, gerisi gürültüdür
+    //    (ve yetkili bir oturumdan `system_logs`u şişirmenin bedava yoluydu).
+    //    ⚠️ Bu satırı yazan istek `blocked:false`tur ve aşağıda doğrulamaya
+    //    devam eder (403 INVALID alır); 429'lar bir SONRAKİ istekten başlar.
+    if (lock.justLocked) {
       void AuditService.logEvent({
         category: "SYSTEM",
         action: SETTINGS_PASSWORD_EVENTS.LOCKED,
@@ -159,6 +186,8 @@ export async function requireSettingsPassword(
         tableName: "system_settings",
         payload: { userId, retryAfterSec: lock.retryAfterSec },
       });
+    }
+    if (lock.blocked) {
       next(
         AppError.tooManyRequests(
           `Çok fazla hatalı ayar şifresi denemesi. ${lock.retryAfterSec} saniye sonra tekrar deneyin.`,
@@ -218,7 +247,15 @@ export async function requireSettingsPassword(
       payload: {
         userId,
         keys: Object.keys((req.body ?? {}) as Record<string, unknown>),
-        path: req.originalUrl ?? null,
+        // ⚠️ `req.baseUrl + req.path` — `req.originalUrl` DEĞİL, salt `req.path` de DEĞİL.
+        // `originalUrl` QUERY STRING'i taşır; bir gün biri şifreyi (ya da başka bir
+        // sırrı) query'ye koyarsa o değer denetim tablosuna DÜZ METİN düşerdi
+        // (D2 bulgusu #3). Ama salt `req.path` MOUNT'A GÖRELİDİR ve `PATCH
+        // /api/feature-flags` için "/" olur — denetimin "hangi uçta" sorusu
+        // cevapsız kalırdı (P3 doğrulayıcısı ölçtü: asıl korunan yüzeyde satır
+        // hiçbir şey tanımlamıyordu). `baseUrl + path` ikisini birden verir:
+        // tam yol + query YOK (ölçüldü: `?x=y` yüke girmiyor).
+        path: `${req.baseUrl ?? ""}${req.path ?? ""}` || null,
       },
     });
     next();

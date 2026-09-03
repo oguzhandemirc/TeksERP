@@ -6,11 +6,18 @@
 // bayrak çevrilmesin. Şifreyi SÜPERADMİN üretir/değiştirir/iptal eder; fabrika
 // yöneticisi onu ne yazabilir ne de okuyabilir.
 //
-// YEDİ SESSİZ BOZULMA YOLU VAR, YEDİSİ DE BURADA KİLİTLİ:
-//   1. KAPI BİR UÇTAN DÜŞER — `requireSettingsPassword` üç yazma yüzeyinin
+// ON SESSİZ BOZULMA YOLU VAR, ONU DA BURADA KİLİTLİ:
+//   1. KAPI BİR UÇTAN DÜŞER — `requireSettingsPassword` BEŞ yazma yüzeyinin
 //      birinden silinirse (örn. `documents-logo`) o yüzey şifresiz kalır ve
-//      HİÇBİR test kırılmaz: kalan iki uç yeşil çalışmaya devam eder. §J zinciri
+//      HİÇBİR test kırılmaz: kalan uçlar yeşil çalışmaya devam eder. §J zinciri
 //      ROUTER STACK'inden okur (metin değil — import edilmiş gerçek katman adı).
+//   1b. ALTINCI YÜZEY KAPISIZ DOĞAR — §J'nin elle listesi tam da böyle
+//      eksikti (spec "üç" dedi, D2 turu `PATCH /admin/backups/offsite` ile
+//      `POST /admin/backups/offsite/authorize`i buldu: ayar YAZIYORLAR ama
+//      "yedek" ekranında yaşadıkları için kapsam sayımına girmemişlerdi).
+//      Artık §J'nin sonunda bir TRIPWIRE var: `src/routes/**` içinde
+//      `systemSettingService.set(` / `setFeatureFlags(` / `systemSetting.upsert(`
+//      çağıran HER uç bloğu kapıyı taşımak ZORUNDA (muaflar gerekçeli + iki yönlü).
 //   2. SIRA TERSİNE DÖNER — `reserveLoginAttempt` `bcrypt.compare`den SONRAYA
 //      kayarsa deneme sınırı fiilen ölür (kilitli anahtar da bcrypt maliyeti
 //      koşturmaya devam eder: hem brute-force hem CPU/DoS ayağı açılır). §F bunu
@@ -28,6 +35,18 @@
 //   7. YAZMA `systemSettingService.set()`e KAYAR — `set()` audit'i `oldData`/
 //      `newData` ile HAM çağırır (maskeleme yalnız `changes` kolonuna uygulanır),
 //      yani hash denetim tablosuna DÜZ METİN düşer. §K kaynakta ölçer.
+//   8. ŞİFRE İKİNCİ BİR KANALDAN OKUNUR — query/gövde/cookie yedeği eklenirse
+//      sır iki deftere düşer (morgan erişim logu URL'yi basar; USED audit yükü
+//      isteğin yolunu taşır). Eski bekçi burada KÖRDÜ: yalnız METİN regex'i
+//      vardı ve `?sp=` yedeği eklendiğinde koşum 90/0 yeşil kaldı. §C artık
+//      DAVRANIŞ ölçer (dokuz yanlış kanal → 403) + USED `path`inde `?` yok.
+//   9. KULLANILAMAZ ŞİFRE TANIMLANIR — Türkçe harf/boşluk HTTP başlığında
+//      taşınamaz, 72 bayttan uzunu bcrypt SESSİZCE kırpar. Şema reddetmezse
+//      süperadmin "tanımlandı" görür, sonra hiçbir istemci o şifreyi
+//      iletemez ve fabrika rotasyona kadar kilitli kalır. §B ölçer.
+//  10. KİLİT AUDIT'İ SELE DÖNER — satır `blocked` dalında yazılırsa kilitliyken
+//      gelen HER istek bir satır üretir (ölçüldü: 60 istek → +60). §F "tur
+//      başına ≤1" ölçer. Ayrıca 429 sözleşmesi (`Retry-After`) §N'de.
 //
 // ⚠️ BU BEKÇİ YAZAR: ayar şifresinin hash satırını KENDİ kurar ve `finally`de
 //    ÖNCEKİ HÂLE döndürür (satır yoksa siler, varsa birebir geri yazar). Fabrika
@@ -44,9 +63,11 @@
 // Koşum: DATABASE_URL=… JWT_SECRET=… npx tsx scripts/test_settings_password.ts
 //        (HTTP ayağı için ayrıca: PORT=4112 … npx tsx src/server.ts & → TEST_API_URL)
 //
-// TABAN (2026-09-03, `tekserp_modul_test`):
-//   • sunucu AYAKTA (:4112)  → **102 geçti / 0 başarısız / 0 atlandı**
-//   • sunucu YOK             → **90 / 0 / 13 atlandı** (HTTP ayağı bant basar)
+// TABAN (2026-09-03 düzeltme turu sonrası, `tekserp_modul_test`):
+//   • sunucu YOK             → **128 geçti / 0 başarısız / 13 atlandı**
+//   • sunucu AYAKTA          → +12 HTTP kontrolü (atlanan 13 → 1)
+// (Düzeltme turu öncesi taban 90/0/13 idi; artış §B karakter kümesi, §C kanal
+//  davranışı, §F kilit seli, §J tripwire ve §N `Retry-After` kontrolleridir.)
 // Sayılar DB durumuna bağlıdır; kalıcı olan "hangi kontrol kırmızı olur" cümlesidir.
 //
 // NEGATİF SONDALAR — 2026-09-03'te ÖLÇÜLDÜ; her sondadan sonra `cp` + `md5 -q`
@@ -69,6 +90,26 @@
 //   SONDA-7 -> çıkış 1 · 4 ❌ · `isReservedSettingKey` reddi silindi (§I ×4 —
 //              hash ham ayar ucundan 200 ile YAZILDI)
 //   SONDA-8 -> çıkış 1 · 3 ❌ · `list()` ön ek süzgeci silindi (§H liste ×2 + kaynak)
+//
+// D2 DÜZELTME TURU SONDALARI — 2026-09-03'te ÖLÇÜLDÜ (cp + `md5 -q` ile birebir
+// geri alındı; taban sunucusuz **128 geçti / 0 başarısız / 13 atlandı**):
+//   SONDA-9  -> 125/4 · `requireSettingsPassword` `PATCH /backups/offsite`
+//               zincirinden silindi → §J "zincirde" + "idx" ❌ VE TRIPWIRE ×2 ❌
+//               ("ayar YAZAN uç kapısız: admin.routes.ts::/backups/offsite").
+//               ⚠️ Tripwire'ın DEĞERİ tam burada: elle liste güncellenmeden yeni
+//               bir yazıcı uç doğsaydı yalnız tripwire kırmızı olurdu.
+//   SONDA-10 -> 112/16 · `settingsPasswordSchema`den `.regex(...)` düştü →
+//               §B'nin üç red kontrolü 200 döndü (Türkçe / baş-boşluklu /
+//               boşluklu şifre KABUL edildi) + "hash değişmedi" ❌; kalanı
+//               kaskad (son kabul edilen şifre hash'i ezdi → §C/§D/§F).
+//   SONDA-11 -> 127/1 · `readHeaderPassword`e `?sp=` yedeği eklendi (KS8) →
+//               §C "query `?sp=` ile kapı AÇILMAZ" ❌. ⚠️ ESKİ BEKÇİDE BU SONDA
+//               90/0 YEŞİL KALIYORDU — bu satır tam o kör noktanın kapağıdır.
+//   SONDA-12 -> 126/2 · USED audit yükü `req.path` yerine `req.originalUrl`e
+//               döndü → §C `path` ×2 ❌ (yükte `?sp=sizmamali-deger…` göründü).
+//   SONDA-13 -> 127/1 · LOCKED audit'i `justLocked` yerine `blocked` dalına
+//               döndü → §F "tur başına ≤1" ❌ (1 yerine 3 satır).
+//   SONDA-14 -> 127/1 · `error.middleware`ten `Retry-After` dalı silindi → §N ❌.
 // =============================================================================
 
 import * as fs from "node:fs";
@@ -83,6 +124,12 @@ import {
   SECURITY_SETTING_PREFIX,
 } from "../src/constants/reserved-settings";
 import { systemSettingService } from "../src/services/system-setting.service";
+import {
+  assertSettingsPasswordUsable,
+  SETTINGS_PASSWORD_MAX_LENGTH,
+} from "../src/services/settings-password.service";
+import { errorHandler } from "../src/middlewares/error.middleware";
+import bcrypt from "bcryptjs";
 import { hedefDbAdi, hedefDbEngeli } from "./lib/hedef-db-kapisi";
 import { yorumlariSok } from "./lib/regime-gate-scan";
 
@@ -132,7 +179,7 @@ type RouteLayer = {
     }>;
   };
 };
-type Yontem = "get" | "put" | "patch" | "delete";
+type Yontem = "get" | "post" | "put" | "patch" | "delete";
 
 function katmanlar(router: unknown, yontem: Yontem, yol: string) {
   const stack = (router as { stack: RouteLayer[] }).stack;
@@ -155,6 +202,8 @@ interface KosumSecenek {
   headers?: Record<string, string>;
   isSystemAccount?: boolean;
   params?: Record<string, string>;
+  /** Query string — ŞİFRE BURADAN OKUNMAMALI (§C davranış kontrolü). */
+  query?: Record<string, string>;
   ip?: string;
   userId?: string;
   /** true → son katman (handler) da koşar; false → yalnız middleware'ler. */
@@ -214,6 +263,9 @@ function tekKatman(
 
 let aktorId = "00000000-0000-4000-8000-000000000001";
 
+/** Sahte mount ön eki: gerçek Express'te `req.baseUrl` bu, `req.path` mount'a görelidir. */
+const MOUNT_ONEKI = "/api/sonda-mount";
+
 async function kostur(
   router: unknown,
   yontem: Yontem,
@@ -232,11 +284,23 @@ async function kostur(
     body: opt.body ?? {},
     headers: opt.headers ?? {},
     params: opt.params ?? {},
-    query: {},
+    query: opt.query ?? {},
     ip: opt.ip ?? IP_ANA,
     isSystemAccount: opt.isSystemAccount,
     method: yontem.toUpperCase(),
-    originalUrl: `/api${yol}`,
+    // ⚠️ ÜÇ ALAN BİLEREK AYRIŞTIRILIR — gerçek Express'i modellemek için:
+    //    `originalUrl` = tam yol + QUERY · `baseUrl` = MOUNT ön eki ·
+    //    `path` = mount'a GÖRELİ yol. Audit hangisini yazıyor sorusu ancak
+    //    üçü ayrıyken ölçülebilir: salt `req.path` yazımı `PATCH
+    //    /api/feature-flags` için "/" üretir (kimlik kaybı, P3 doğrulayıcısı
+    //    ölçtü), `originalUrl` ise query'yi sızdırır (KS8).
+    baseUrl: MOUNT_ONEKI,
+    path: yol,
+    originalUrl: `${MOUNT_ONEKI}${yol}${
+      opt.query && Object.keys(opt.query).length > 0
+        ? `?${new URLSearchParams(opt.query).toString()}`
+        : ""
+    }`,
   } as unknown as Request;
 
   const kosulacak = opt.handler ? zincir.slice(1) : zincir.slice(1, -1);
@@ -384,6 +448,62 @@ async function main(): Promise<void> {
     Boolean(kisaHata) && (kisaHata?.name === "ZodError" || statu(bKisa) === 400),
     kisaHata?.name ?? `${statu(bKisa)}`,
   );
+  // ── KULLANILAMAZ ŞİFRE SINIFI (D2 bulgusu #2) ─────────────────────────────
+  // ⚠️ Şifre `X-Settings-Password` BAŞLIĞIYLA taşınır. HTTP başlık değeri
+  // (RFC 7230 field-value) Türkçe harf taşıyamaz — Node/undici/axios istemcide
+  // `ByteString` hatası verir (istek HİÇ ÇIKMAZ), curl ham UTF-8 gönderse
+  // sunucu latin1 çözer ve bcrypt uyuşmaz. Boşluk da OWS kırpmasına uğrar.
+  // ÖLÇÜLDÜ: böyle bir şifre PUT'ta 200 alıyordu ve fabrika, rotasyona kadar
+  // BEŞ yazma yüzeyinin hepsinden kilitli kalıyordu. Red YAZMA ANINDA verilir.
+  const reddedilmeli: Array<[string, string]> = [
+    ["Türkçe karakterli şifre", "Ayarsifresi-Ğüçlü2026"],
+    ["baş/son boşluklu şifre", "  bosluklu-sifre-2026"],
+    ["içinde boşluk olan şifre", "bosluklu sifre 2026"],
+    ["73 karakterlik şifre (bcrypt 72 bayt sınırı)", "A".repeat(73)],
+  ];
+  for (const [etiket, sifre] of reddedilmeli) {
+    const r = await kostur(adminRouter, "put", "/settings-password", {
+      isSystemAccount: true,
+      body: { password: sifre },
+      handler: true,
+    });
+    const h = r?.hata as { name?: string } | undefined;
+    check(
+      `${etiket} REDDEDİLİR (sessizce kabul edilmez)`,
+      Boolean(h) && (h?.name === "ZodError" || statu(r) === 400),
+      h?.name ?? `${statu(r)}`,
+    );
+  }
+  // Reddedilen denemeler DB'ye dokunmadı — hash hâlâ DOĞRU_SIFRE'nin.
+  const bHalaDogru = await prisma.systemSetting.findUnique({
+    where: { key: SETTINGS_PASSWORD_HASH_KEY },
+    select: { value: true },
+  });
+  check(
+    "reddedilen şifreler hash'i DEĞİŞTİRMEDİ (yarım yazım yok)",
+    await bcrypt.compare(DOGRU_SIFRE, metin(bHalaDogru?.value)),
+  );
+  // 72 karakter SINIRDA kabul edilir (kural "72'den uzun", "72" değil).
+  check(
+    "72 karakter bcrypt tarafından KIRPILMAZ (sınır doğru yerde)",
+    !bcrypt.truncates("A".repeat(72)) && bcrypt.truncates("A".repeat(73)),
+  );
+  // Servis katmanı da kendi başına korur (şema ileride gevşerse).
+  let truncHata: unknown = null;
+  try {
+    assertSettingsPasswordUsable("A".repeat(73));
+  } catch (e) {
+    truncHata = e;
+  }
+  check(
+    "`assertSettingsPasswordUsable` 400 SETTINGS_PASSWORD_TOO_LONG atar",
+    truncHata instanceof AppError &&
+      truncHata.statusCode === 400 &&
+      (truncHata as unknown as { details?: { code?: string } }).details?.code ===
+        "SETTINGS_PASSWORD_TOO_LONG",
+    truncHata instanceof AppError ? `${truncHata.statusCode}` : String(truncHata),
+  );
+
   const bGet = await kostur(adminRouter, "get", "/settings-password", {
     isSystemAccount: true,
     handler: true,
@@ -418,6 +538,58 @@ async function main(): Promise<void> {
   const c6data = (c6?.body as { data?: Record<string, unknown> })?.data ?? {};
   check("hash var → GET /feature-flags `settingsPasswordRequired: true`", c6data.settingsPasswordRequired === true, JSON.stringify(c6data.settingsPasswordRequired));
 
+  // ── ŞİFRE YALNIZ BAŞLIKTAN OKUNUR — DAVRANIŞ KOLU (D2 bulgusu #3 / KS8) ──
+  // ⚠️ ESKİ BEKÇİ BURADA KÖRDÜ: §K yalnız METİN regex'iyle "gövdeden okumuyor"
+  //    diyordu. `readHeaderPassword`e bir `?sp=` yedeği eklendiğinde koşum
+  //    90/0 YEŞİL kaldı. Sink gerçek ve ölçüldü: query string erişim loguna
+  //    (morgan) ve USED audit'inin `path` alanına düz metin olarak düşer.
+  //    Bu yüzden "yalnız başlık" artık DAVRANIŞLA ölçülür: doğru şifre yanlış
+  //    kanalla gelirse kapı AÇILMAMALI.
+  const kanallar: Array<[string, KosumSecenek]> = [
+    ["gövde `settingsPassword`", { body: { backupHour: 3, settingsPassword: DOGRU_SIFRE } }],
+    ["gövde `password`", { body: { backupHour: 3, password: DOGRU_SIFRE } }],
+    ["gövde `x-settings-password`", { body: { backupHour: 3, "x-settings-password": DOGRU_SIFRE } }],
+    ["query `?sp=`", { body: { backupHour: 3 }, query: { sp: DOGRU_SIFRE } }],
+    ["query `?password=`", { body: { backupHour: 3 }, query: { password: DOGRU_SIFRE } }],
+    [
+      "query `?settingsPassword=`",
+      { body: { backupHour: 3 }, query: { settingsPassword: DOGRU_SIFRE } },
+    ],
+    ["Cookie", { body: { backupHour: 3 }, headers: { cookie: `settingsPassword=${DOGRU_SIFRE}` } }],
+    [
+      "`Settings-Password` başlığı (yanlış ad)",
+      { body: { backupHour: 3 }, headers: { "settings-password": DOGRU_SIFRE } },
+    ],
+    [
+      "`X-Settings-Password-2` başlığı (yanlış ad)",
+      { body: { backupHour: 3 }, headers: { "x-settings-password-2": DOGRU_SIFRE } },
+    ],
+  ];
+  for (const [etiket, opt] of kanallar) {
+    const r = await BAYRAK({ permissions: ADMIN, ...opt });
+    check(
+      `DOĞRU şifre ${etiket} ile gelirse kapı AÇILMAZ (403 REQUIRED)`,
+      kod(r) === "SETTINGS_PASSWORD_REQUIRED" && statu(r) === 403,
+      `${statu(r)} ${kod(r)}`,
+    );
+  }
+  // Zemin: aynı yükü DOĞRU KANALDAN gönderince geçiyor (yukarısı vakumen yeşil değil).
+  const cKanalZemin = await BAYRAK({
+    permissions: ADMIN,
+    body: { backupHour: 3 },
+    headers: basligi(DOGRU_SIFRE),
+  });
+  check("zemin: aynı yük BAŞLIKLA geçer (kanal kontrolleri vakumen değil)", cKanalZemin?.gecti === true, kod(cKanalZemin));
+
+  // Query TAŞIYAN başarılı bir istek — USED audit'i query'yi YAZMAMALI.
+  const cQueryIzi = await BAYRAK({
+    permissions: ADMIN,
+    body: { backupHour: 3 },
+    query: { sp: "sizmamali-deger", password: "sizmamali-deger" },
+    headers: basligi(DOGRU_SIFRE),
+  });
+  check("query'li istek doğru başlıkla GEÇER (zemin)", cQueryIzi?.gecti === true, kod(cQueryIzi));
+
   // Audit: USED satırı yazıldı mı ve yükü TEMİZ mi (best-effort → küçük bekleme).
   await new Promise((r) => setTimeout(r, 400));
   const usedSatirlar = await prisma.systemLog.findMany({
@@ -435,6 +607,29 @@ async function main(): Promise<void> {
     usedYuk.slice(0, 160),
   );
   check("USED yükünde ŞİFRE/HASH YOK", !usedYuk.includes(DOGRU_SIFRE) && !usedYuk.includes("$2"), usedYuk.slice(0, 160));
+  // ⚠️ `path` QUERY'SİZ olmalı (`req.path`, `req.originalUrl` DEĞİL): query'ye
+  //    konan her şey — bir gün şifre de olabilir — denetim tablosuna DÜZ METİN
+  //    düşerdi. Yukarıdaki `cQueryIzi` isteği tam da bunu ölçmek için query
+  //    taşıyor; `originalUrl`e dönülürse burası KIRMIZI olur (KS8).
+  const usedPathlar = usedSatirlar
+    .map((r) => (r.newData as { path?: unknown } | null)?.path)
+    .filter((v): v is string => typeof v === "string");
+  check("zemin: USED yükünde `path` alanı var", usedPathlar.length > 0, `${usedPathlar.length} satır`);
+  check(
+    "USED `path` QUERY STRING taşımaz (`req.path`, `originalUrl` DEĞİL)",
+    usedPathlar.length > 0 && usedPathlar.every((v) => !v.includes("?")),
+    usedPathlar.join(" | ").slice(0, 160),
+  );
+  check(
+    "USED `path` ucun TAM yolunu taşır (mount ön eki DAHİL — salt `req.path` DEĞİL)",
+    usedPathlar.length > 0 && usedPathlar.every((v) => v.startsWith(MOUNT_ONEKI) && v.length > MOUNT_ONEKI.length),
+    `beklenen ön ek ${MOUNT_ONEKI} — gelen: ${usedPathlar.join(" | ").slice(0, 120)}`,
+  );
+  check(
+    "USED `path` query'ye konan değeri SIZDIRMAZ",
+    !usedYuk.includes("sizmamali-deger"),
+    usedYuk.slice(0, 200),
+  );
   const failedSatir = await prisma.systemLog.count({
     where: { action: "SETTINGS_PASSWORD_FAILED", createdAt: { gte: KOSUM_BASI } },
   });
@@ -503,10 +698,23 @@ async function main(): Promise<void> {
     check("kilitliyken DOĞRU şifre de 429 (sıranın davranışsal kanıtı)", kod(fDogru) === "SETTINGS_PASSWORD_LOCKED" && statu(fDogru) === 429, `${statu(fDogru)} ${kod(fDogru)}`);
     const fBasliksiz = await BAYRAK({ permissions: ADMIN, body: { backupHour: 3 }, ip: IP_KILIT });
     check("kilitliyken başlıksız istek de 429 (kilit REQUIRED'dan önce)", kod(fBasliksiz) === "SETTINGS_PASSWORD_LOCKED", kod(fBasliksiz));
+    // ⚠️ TEK SATIR: kilit bir DURUM değil bir GEÇİŞTİR (D2 bulgusu #4).
+    //    Eskiden audit `blocked` dalında yazılıyordu, yani kilitliyken gelen
+    //    HER istek bir satır üretiyordu (60 paralel istek → +60 satır ölçüldü):
+    //    yetkili bir oturumdan `system_logs`u şişirmenin bedava yolu ve asıl
+    //    sinyali ("kim, ne zaman kilitlendi") gürültüye gömen bir sel.
+    //    Bu koşumda kilit BİR KEZ kuruldu; üstüne EN AZ ÜÇ bloklu istek geldi
+    //    (429 kod ölçümü + doğru şifre + başlıksız) → satır sayısı yine 1.
+    await new Promise((r) => setTimeout(r, 300));
     const lockedSatir = await prisma.systemLog.count({
       where: { action: "SETTINGS_PASSWORD_LOCKED", createdAt: { gte: KOSUM_BASI } },
     });
     check("audit `SETTINGS_PASSWORD_LOCKED` satırı yazıldı", lockedSatir >= 1, `${lockedSatir} satır`);
+    check(
+      "KİLİT TURU BAŞINA EN FAZLA 1 LOCKED satırı (429 seli YOK)",
+      lockedSatir === 1,
+      `${lockedSatir} satır — bloklu istek sayısı ≥3`,
+    );
     // Süperadmin kilitten de MUAF (kapı ①'de biter — kurtarma yolu kapanmasın).
     const fSuper = await BAYRAK({ isSystemAccount: true, permissions: ["*"], body: { backupHour: 3 }, ip: IP_KILIT });
     check("kilitli IP'den bile süperadmin GEÇER (kurtarma yolu)", fSuper?.gecti === true, kod(fSuper));
@@ -688,6 +896,13 @@ async function main(): Promise<void> {
     ["PATCH /api/feature-flags", featureFlagRouter, "patch", "/", "flagWriteGuard"],
     ["PUT /api/feature-flags/documents-logo", featureFlagRouter, "put", "/documents-logo", ""],
     ["PUT /api/admin/settings/:key", adminRouter, "put", "/settings/:key", ""],
+    // ⚠️ 2026-09-03 / D2 bulgusu #1 — BU İKİSİ KAPSAM DIŞINDA KALMIŞTI.
+    //    "Yedek" ekranında yaşıyorlar ama `systemSettingService.set()` ile
+    //    `system_settings`e yazıyorlar; yazdıkları şey YEDEKLERİN GİDECEĞİ
+    //    YERDİR (gece dökümü = kullanıcı hash'leri + PIN/kart + ayar şifresi
+    //    hash'i). Ölçümde açık kalmış admin oturumundan ŞİFRESİZ 200 alındı.
+    ["PATCH /api/admin/backups/offsite", adminRouter, "patch", "/backups/offsite", ""],
+    ["POST /api/admin/backups/offsite/authorize", adminRouter, "post", "/backups/offsite/authorize", ""],
   ];
   for (const [etiket, router, yontem, yol, oncekiKatman] of yuzeyler) {
     const zincir = katmanlar(router, yontem, yol);
@@ -715,6 +930,189 @@ async function main(): Promise<void> {
   // OKUMA yüzeyi kapıyı TAŞIMAZ (kapı yalnız yazmada — okuma 403'e düşerse panel açılmaz).
   const getAdlar = (katmanlar(featureFlagRouter, "get", "/") ?? []).map((k) => k.name);
   check("GET /api/feature-flags kapıyı TAŞIMAZ (okuma serbest)", !getAdlar.includes(KAPI), getAdlar.join(" → "));
+
+  // ── TRIPWIRE: ALTINCI YÜZEY KAPISIZ DOĞAMAZ ────────────────────────────────
+  // ⚠️ Yukarıdaki liste ELLE yazılır ve bu onun körlüğüdür: spec "üç yazma
+  //    yüzeyi" dedi, ölçüm iki tane daha buldu (D2 #1). Elle listeyi genişletmek
+  //    aynı hatayı bir kez daha yapmaya davettir. Bu yüzden kapsamın yüklemi
+  //    ARTIK ADLARDAN DEĞİL DAVRANIŞTAN türer: `src/routes/**` içinde ayar
+  //    yazan HER uç bloğu (`systemSettingService.set(` / `setFeatureFlags(` /
+  //    `systemSetting.upsert(`) zincirinde `requireSettingsPassword` TAŞIMALI.
+  //    Muafiyet mümkün ama GEREKÇELİ ve İKİ YÖNLÜ denetlenir (artık uymayan bir
+  //    muafiyet de kırmızıdır — ölü muaf satırı yarınki kaçağı gizler).
+  {
+    const YAZICI_KALIPLARI = [
+      "systemSettingService.set(",
+      "setFeatureFlags(",
+      "systemSetting.upsert(",
+    ];
+    /**
+     * `dosya::yolAdı` → gerekçe. Dolduran kişi gerekçeyi YAZAR (ölü satır da kırmızı).
+     *
+     * ⚠️ TRIPWIRE'IN SINIRI: yalnız route dosyasında LİTERAL çağrıyı görür.
+     *    SERVİS üzerinden dolaylı yazan uç (ör. `db-copy.service` içindeki
+     *    `prisma.systemSetting.upsert`) bu taramaya GİRMEZ — böyle bir uç
+     *    bulunduğunda elle bu listeye ya da §J'nin adlı listesine yazılır.
+     *    P3 doğrulayıcısı üç böyle uç ölçtü (aşağıda) ve karar burada yazılı.
+     */
+    const MUAF: Record<string, string> = {};
+
+    // ── DOLAYLI YAZICILAR (tripwire'ın GÖREMEDİĞİ sınıf — karar kaydı) ───────
+    // Tripwire route dosyasındaki LİTERAL çağrıyı arar; servis üzerinden yazan
+    // uç ona görünmez. P3 doğrulayıcısı böyle ÜÇ uç ölçtü ve kararı burada:
+    //   `db-copy.routes.ts` POST / · POST /:name/verify · DELETE /:name
+    //   → `db-copy.service` `prisma.systemSetting.upsert` ile `dbRestore.copies`
+    //     anahtarını yazar. KAPI TAKILMADI: yazdığı şey politika AYARI değil
+    //     MAKİNE DEFTERİ (hangi kopya ne zaman alındı); ayar şifresinin koruduğu
+    //     senaryo "açık oturumdan DAVRANIŞ değiştirilmesi" ve kopya alma zaten
+    //     `admin:settings` + kendi onay akışıyla korunuyor.
+    // ⚠️ Bu liste MUAF değildir (tripwire onları hiç bulmaz, muaf ölü kalırdı) —
+    //    bayatlamasın diye aşağıdaki kontrol dolaylı yazımın HÂLÂ var olduğunu ölçer.
+    {
+      const dbCopySrc = fs.readFileSync(path.join(SRC, "services", "db-copy.service.ts"), "utf8");
+      check(
+        "dolaylı yazıcı kaydı bayat değil: db-copy.service hâlâ systemSetting'e yazıyor",
+        /systemSetting\.(upsert|update|create)\(/.test(yorumlariSok(dbCopySrc)),
+        "yazmıyorsa yukarıdaki karar kaydı silinmeli (ölü gerekçe)",
+      );
+    }
+    const kullanilanMuaf = new Set<string>();
+
+    const routesDir = path.join(SRC, "routes");
+    // ⚠️ ÖZYİNELİ: `src/routes/` altında ALT DİZİNLER var (`reports/` 8 dosya).
+    //    Düz `readdirSync` onları görmez ve P3 doğrulayıcısı bunu ÖLÇTÜ: alt
+    //    dizindeki kapısız bir yazıcı uçla bekçi 128/0 YEŞİL kalıyordu.
+    const dosyalar = fs
+      .readdirSync(routesDir, { recursive: true, encoding: "utf8" })
+      .filter((f) => f.endsWith(".ts"))
+      .sort();
+    check("zemin: route dosyaları okundu", dosyalar.length > 10, `${dosyalar.length} dosya`);
+    check(
+      "zemin: ALT DİZİN dosyaları da okundu (özyineli tarama)",
+      dosyalar.some((f) => f.includes("/")),
+      dosyalar.filter((f) => f.includes("/")).length + " alt dizin dosyası",
+    );
+
+    const bulunanlar: string[] = [];
+    let kapisiz = 0;
+    for (const dosya of dosyalar) {
+      // ⚠️ YORUMLAR SÖKÜLÜR: bu bekçinin ve kaynağın kendi açıklama satırları
+      //    kalıpları METİN olarak içerir; sökülmezse her dosya "yazıcı" sanılır.
+      const kaynak = yorumlariSok(fs.readFileSync(path.join(routesDir, dosya), "utf8"));
+      // Uç blokları: bir `router.<yöntem>(`den bir SONRAKİNE kadar.
+      const kayitlar = [...kaynak.matchAll(/router\.(get|post|put|patch|delete|use)\(/g)];
+      for (let i = 0; i < kayitlar.length; i++) {
+        const bas = kayitlar[i]!.index ?? 0;
+        const son = i + 1 < kayitlar.length ? (kayitlar[i + 1]!.index ?? kaynak.length) : kaynak.length;
+        const blok = kaynak.slice(bas, son);
+        if (!YAZICI_KALIPLARI.some((k) => blok.includes(k))) continue;
+        const yolAdi = blok.match(/^router\.\w+\(\s*\n?\s*"([^"]*)"/)?.[1] ?? "(yolsuz)";
+        const anahtar = `${dosya}::${yolAdi}`;
+        bulunanlar.push(anahtar);
+        if (MUAF[anahtar]) {
+          kullanilanMuaf.add(anahtar);
+          continue;
+        }
+        if (!blok.includes(KAPI)) {
+          kapisiz++;
+          check(`ayar YAZAN uç kapısız: ${anahtar}`, false, "zincirde `requireSettingsPassword` YOK");
+        }
+      }
+    }
+    // ⚠️ Zemin: tarayıcı gerçekten YAZICI blok buluyor mu ve BİLDİĞİMİZ üçünü
+    //    de görüyor mu? Puf bir sayı (">0") yetmez: regex bozulunca ya da dosya
+    //    taşınınca döngü sessizce hiçbir şey ölçmez ve tripwire vakumen yeşile
+    //    döner — yani tam da eklenme sebebi kaybolur.
+    //    ⚠️ `POST /backups/offsite/authorize` bu listede YOKTUR ve olması da
+    //    gerekmez: o uç `system_settings`e değil rclone yapılandırma DOSYASINA
+    //    yazar (`writeRcloneDriveToken`). Kapısı §J'nin elle listesinde ölçülür;
+    //    tripwire yalnız "ayar tablosuna yazan" sınıfı tarar.
+    const BEKLENEN = [
+      "admin.routes.ts::/settings/:key",
+      "admin.routes.ts::/backups/offsite",
+      "feature-flag.routes.ts::/",
+    ];
+    for (const beklenen of BEKLENEN) {
+      check(
+        `zemin: tripwire ayar YAZAN ucu görüyor — ${beklenen}`,
+        bulunanlar.includes(beklenen),
+        bulunanlar.join(", "),
+      );
+    }
+    check("ayar yazan HER uç ayar şifresi kapısını taşıyor", kapisiz === 0, `${kapisiz} kapısız`);
+    const oluMuaf = Object.keys(MUAF).filter((k) => !kullanilanMuaf.has(k));
+    check(
+      "muaf listesi ÖLÜ satır taşımıyor (iki yönlü denetim)",
+      oluMuaf.length === 0,
+      oluMuaf.join(", "),
+    );
+
+    // ── Electron AYNASI (sınır sabitleri) ───────────────────────────────────
+    // ⚠️ Backend sınırı daralırsa panel kartı geçerli gösterir, kayıt 400 alır
+    //    ve sebebi hiçbir yerde yazmaz (P3 doğrulayıcısı ölçtü: backend 72→64
+    //    yapıldığında iki tarafın testleri de yeşil kaldı). Emsal:
+    //    `test_document_template_permission`ın Electron `permissions.ts` aynası.
+    //    İki taraf da METİNDEN okunur: sabit hangi dosyada olursa olsun ayna tutar.
+    const elServis = path.join(SRC, "..", "..", "Electron", "src", "services", "systemSettingService.ts");
+    const beCharsetSrc = fs.readFileSync(path.join(SRC, "routes", "admin.routes.ts"), "utf8");
+    const beCharset = beCharsetSrc.match(/SETTINGS_PASSWORD_CHARSET\s*=\s*(\/[^;\n]+\/)/)?.[1] ?? null;
+    check("zemin: backend CHARSET sabiti okunabildi", beCharset !== null, String(beCharset));
+    if (fs.existsSync(elServis)) {
+      const el = fs.readFileSync(elServis, "utf8");
+      const elMax = el.match(/SETTINGS_PASSWORD_MAX_LENGTH\s*=\s*(\d+)/)?.[1] ?? null;
+      const elCharset = el.match(/SETTINGS_PASSWORD_CHARSET\s*=\s*(\/[^;\n]+\/)/)?.[1] ?? null;
+      check(
+        "Electron aynası: MAX_LENGTH backend ile birebir",
+        elMax === String(SETTINGS_PASSWORD_MAX_LENGTH),
+        `Electron=${elMax ?? "yok"} · backend=${SETTINGS_PASSWORD_MAX_LENGTH}`,
+      );
+      check(
+        "Electron aynası: CHARSET backend ile birebir",
+        elCharset !== null && elCharset === beCharset,
+        `Electron=${elCharset ?? "yok"} · backend=${beCharset ?? "yok"}`,
+      );
+    } else {
+      atla("Electron aynası", "Electron dosyası yok (backend-only checkout) — 2 kontrol ölçülmedi");
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n=== N) 429 sözleşmesi: `Retry-After` başlığı (tek noktadan) ===");
+  // ⚠️ Süreyi HESAPLAYAN yer `details.retryAfterSec` yazar, BAŞLIĞI basan yer
+  //    `error.middleware`dir. İki yerde hesaplansaydı ayrışırlardı; kilit
+  //    yolları (`LOGIN_LOCKED`, `SETTINGS_PASSWORD_LOCKED`) eskiden başlığı
+  //    HİÇ basmıyordu — repo'nun kendi hız sınırlayıcısı basıyordu (tutarsızlık).
+  {
+    const basliklar = new Map<string, string>();
+    const sahte = {
+      headersSent: false,
+      setHeader: (k: string, v: string) => basliklar.set(k.toLowerCase(), v),
+      status: () => sahte,
+      json: () => sahte,
+    } as unknown as Response;
+    const req429 = { method: "PATCH", originalUrl: "/api/feature-flags" } as unknown as Request;
+    errorHandler(
+      AppError.tooManyRequests("Çok fazla hatalı ayar şifresi denemesi.", {
+        code: "SETTINGS_PASSWORD_LOCKED",
+        retryAfterSec: 60,
+      }),
+      req429,
+      sahte,
+      (() => undefined) as NextFunction,
+    );
+    check("429 + retryAfterSec → `Retry-After` başlığı basılır", basliklar.get("retry-after") === "60", basliklar.get("retry-after") ?? "(yok)");
+
+    basliklar.clear();
+    errorHandler(
+      AppError.forbidden("Bu değişiklik için ayar şifresi gerekli.", {
+        code: "SETTINGS_PASSWORD_REQUIRED",
+      }),
+      req429,
+      sahte,
+      (() => undefined) as NextFunction,
+    );
+    check("403 yolunda `Retry-After` BASILMAZ (dar kural)", !basliklar.has("retry-after"), basliklar.get("retry-after") ?? "(yok)");
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n=== K) Hash yazımı `systemSettingService.set()` KULLANMAZ ===");
@@ -965,6 +1363,20 @@ main()
         where: {
           createdAt: { gte: KOSUM_BASI },
           action: { startsWith: "SETTINGS_PASSWORD_" },
+        },
+      });
+      // ⚠️ İKİNCİ TEMİZLİK — `security.*` recordId'li HER satır (yalnız
+      //    `SETTINGS_PASSWORD_*` olayları DEĞİL). Sebep ölçüldü (D2 NOT'u):
+      //    §I "reserved key reddi" sondası ham ayar ucundan yazma DENER; reddin
+      //    silindiği bir sondada o yazım GERÇEKLEŞİR ve `systemSettingService.set`
+      //    arkasında `CREATE / SYSTEM_SETTING / security.settingsPasswordHash`
+      //    audit satırı bırakır. Eski `finally` onu görmüyordu ve satır test
+      //    DB'sinde kalıcı oldu; "security.* recordId'li audit 0 olmalı" türü
+      //    bir tripwire orada YANLIŞ KIRMIZI verirdi.
+      await prisma.systemLog.deleteMany({
+        where: {
+          createdAt: { gte: KOSUM_BASI },
+          recordId: { startsWith: SECURITY_SETTING_PREFIX },
         },
       });
     } catch (e) {

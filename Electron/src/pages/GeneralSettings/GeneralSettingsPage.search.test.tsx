@@ -73,7 +73,8 @@ vi.mock("@/services/systemSettingService", () => ({
   // import edilir → mock eksik export'ta patlar.
   settingsPasswordAdminService: { status: vi.fn(), set: vi.fn(), revoke: vi.fn() },
   SETTINGS_PASSWORD_MIN_LENGTH: 8,
-  SETTINGS_PASSWORD_MAX_LENGTH: 128,
+  SETTINGS_PASSWORD_MAX_LENGTH: 72,
+  SETTINGS_PASSWORD_CHARSET: /^[\x21-\x7E]+$/,
 }));
 
 const search = () => screen.getByPlaceholderText("Ayar ara…");

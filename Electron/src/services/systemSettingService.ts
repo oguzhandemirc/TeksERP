@@ -74,6 +74,19 @@ export const settingsPasswordAdminService = {
       .then((r) => r.data),
 };
 
-/** Backend `settings-password.service` ile AYNI sınırlar (Zod: 8–128). */
+/**
+ * Backend `settings-password.service` + `settingsPasswordSchema` ile AYNI
+ * sınırlar. ⚠️ ÜÇÜ DE LOAD-BEARING (2026-09-03 / D2 turu):
+ *  • 8 alt sınır — kaba tahmine karşı.
+ *  • 72 üst sınır — bcrypt yalnız ilk 72 baytı karıştırır; daha uzunu SESSİZCE
+ *    kırpılır (ölçüldü: 100 karakterlik şifrede ilk 72 doğrulamaya yetiyordu).
+ *  • KARAKTER KÜMESİ — şifre `X-Settings-Password` BAŞLIĞIYLA taşınır. Türkçe
+ *    harf axios/fetch'te `ByteString` hatası verir (istek hiç çıkmaz), boşluk
+ *    HTTP kırpmasına uğrar. Kart burada uyarmazsa süperadmin "tanımlandı"
+ *    toast'ını görür, sonra hiçbir istemci o şifreyi İLETEMEZ ve fabrika
+ *    rotasyona kadar bütün ayar yüzeylerinden kilitli kalır.
+ */
 export const SETTINGS_PASSWORD_MIN_LENGTH = 8;
-export const SETTINGS_PASSWORD_MAX_LENGTH = 128;
+export const SETTINGS_PASSWORD_MAX_LENGTH = 72;
+/** Yazdırılabilir ASCII, boşluk YOK — backend Zod regex'inin birebir ikizi. */
+export const SETTINGS_PASSWORD_CHARSET = /^[\x21-\x7E]+$/;
