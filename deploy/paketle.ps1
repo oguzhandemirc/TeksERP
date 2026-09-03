@@ -71,7 +71,11 @@ Write-Host "  dal=$dal  commit=$commit"
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $ad    = "tekserp-backend-$stamp-$commit"
-$stage = Join-Path $env:TEMP $ad
+# ⚠️ `$env:TEMP` YALNIZ Windows'ta tanimlidir; macOS/Linux'ta $null gelir ve
+# `Join-Path` "Cannot bind argument to parameter 'Path'" ile duser. Paket
+# ARTIK macOS'tan da uretiliyor (pwsh 7), o yuzden platform-bagimsiz API.
+# Windows'ta bu cagri zaten %TEMP% dondurur - davranis degismez.
+$stage = Join-Path ([System.IO.Path]::GetTempPath()) $ad
 if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
 New-Item -ItemType Directory -Path $stage | Out-Null
 
@@ -205,7 +209,9 @@ $manifest = [ordered]@{
   dal             = $dal
   calismaAgaciTemiz = [bool](-not $kirli)
   uretimZamani    = (Get-Date).ToString("s")
-  ureten          = "$env:COMPUTERNAME\$env:USERNAME"
+  # Makine/kullanici adi: Windows'ta COMPUTERNAME+USERNAME, POSIX'te HOSTNAME+USER.
+  # Damga bilgi amacli; cozulemezse "?" yazilir, paketleme DURMAZ.
+  ureten          = "$([System.Environment]::MachineName)\$([System.Environment]::UserName)"
   nodeSurumu      = (& node --version).Trim()
   npmSurumu       = (& npm --version).Trim()
   uygulamaSurumu  = (Get-Content "$proj\package.json" -Raw | ConvertFrom-Json).version
