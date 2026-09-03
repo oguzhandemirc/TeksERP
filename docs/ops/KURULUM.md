@@ -16,7 +16,7 @@
 **Tek yol: elle kurulum + pm2.** (2026-07-30: Inno Setup/NSSM installer'ı — `setup.exe`, `manage.ps1` — **tamamen kaldırıldı**. Ayrıntılı runbook: `DEPLOY-RUNBOOK.md`.)
 
 ### A0. Ön koşullar
-1. **Node.js 22.x** (CI: `node-version: 22`), **PostgreSQL 18.x** (dev 18.4 ile parite) ve **pm2** (`npm i -g pm2`) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
+1. **Node.js 22.x** (CI: `node-version: 22`), **PostgreSQL 16.x** (2026-09-04 ÖLÇÜMÜ: saha `SAHINSRV` **16.9**, geliştirme konteyneri **16.15** — parite ana sürümde. ⚠️ Burada uzun süre "18.x (dev 18.4 ile parite)" yazıyordu; ne saha ne dev 18'di ve bu satıra güvenen biri sahaya yükleyemeyeceği bir dump üretirdi: `pg_restore` GERİYE çalışmaz, 18'in dump'ı 16'ya yüklenmez. Sürümü değiştirmeden önce İKİSİNİ DE ölç.) ve **pm2** (`npm i -g pm2`) kur. `package.json`'da `engines` yok — sürüm operasyonel gerekliliktir.
 2. Boş bir PostgreSQL veritabanı + login rolü oluştur. **Rol CREATEDB yetkili olmalı** — Prisma 7 `migrate deploy` bağlanınca DB'yi oluşturmayı dener; yetki yoksa "permission denied to create database" ile patlar.
 3. **`postgresql.conf` TeksERP ayarlarını uygula** — `listen_addresses='127.0.0.1'`, `statement_timeout='50s'`, `log_min_duration_statement=500`, timezone ve bellek tuning'i. Bu değerlerin **tek kalan kaydı** `DEPLOY-RUNBOOK.md §6`'dır (installer'dan taşındı); atlanırsa default `work_mem=4MB`/`shared_buffers=128MB` ile yıllık raporlar `statement_timeout`'a takılır.
 
