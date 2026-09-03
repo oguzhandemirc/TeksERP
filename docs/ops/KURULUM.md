@@ -23,21 +23,45 @@
 ### A0b. İskeleti kur (SIFIRDAN kurulumda — `ilk-kurulum.ps1`)
 
 ```powershell
-.\ilk-kurulum.ps1 -DbAdi tekserp -DbParola <postgres-parolası>
+# Sıfırdan (veritabanı da yok) + fabrika yedeğini yükle:
+.\ilk-kurulum.ps1 -DbParola <app-parolası> -PostgresParola <postgres-parolası> -Dump "<dump>"
+
+# Veritabanı ZATEN varsa: -PostgresParola gerekmez.
+.\ilk-kurulum.ps1 -DbAdi tekserp_yeni -DbParola <p> -DbKullanici postgres
 ```
 
 Klasör iskeletini (`app` · `backups` · `logs` · `pg-setup` · `pm2-home`), pg
-araçları bağlantısını (`pgsql\bin` → kurulu PostgreSQL), `db-credentials.json`
-dosyasını, `.env`i (JWT_SECRET makinede üretilir) ve yerel pm2 kurulumunu hazırlar.
-İDEMPOTENT: var olan hiçbir şeyi ezmez, `.env`e hiç dokunmaz.
+araçları bağlantısını (`pgsql\bin` → kurulu PostgreSQL), **veritabanını ve kendi
+rolünü**, `db-credentials.json` dosyasını, `.env`i (JWT_SECRET makinede üretilir)
+ve yerel pm2 kurulumunu hazırlar. `-Dump` verilirse fabrika yedeğini de yükler.
 
 ⚠️ **Neden ayrı bir script:** `kur.ps1` bir YÜKSELTME aracıdır — ilk satırlarında
 "Mevcut kurulum bulunamadı" ile durur ve `.env`i mevcut kurulumdan alır. Sahadaki
 iskelet bir kez, artık var olmayan bir installer'la kurulmuştu; sıfırdan kurulumun
 yazılı yolu yoktu ve adımlar hafızadan tekrarlanıyordu (2026-09-04 ölçümü).
 
-⚠️ Veritabanını **oluşturmaz ve dump yüklemez** — ikisi de veri işlemidir ve karar
-ister. Bağlanamazsa komutları yazar, siz koşarsınız.
+⚠️ **İDEMPOTENT ve hiçbir şeyi ezmez:** `.env`e dokunmaz (sır dosyası), var olan
+veritabanının içine karışmaz, **var olan bir rolün parolasını DEĞİŞTİRMEZ** (o rolü
+başka bir kurulum kullanıyor olabilir — sessizce ezmek onu düşürürdü; script uyarır
+ve gereken `ALTER ROLE` komutunu yazar).
+
+⚠️ **Uygulama kendi rolüyle koşar, superuser'la değil.** Veritabanının sahibi o rol
+olur; şemada `CREATE EXTENSION` yok (ölçüldü), yani migration'lar için superuser
+gerekmiyor. Superuser parolası yalnız rolü/veritabanını YARATMAK için istenir ve
+hiçbir yere yazılmaz.
+
+⚠️ **Dump yalnız BOŞ veritabanına yüklenir** (fail-closed). Dolu bir şemanın üzerine
+restore, hangi satırın hangi sürümden geldiği bir daha bilinemeyen yarım bir şema
+bırakır. Yedek `--no-owner --no-privileges` ile ve **uygulama rolüyle** yüklenir:
+`postgres` ile yüklenirse tablolar `postgres`'e ait olur ve uygulama kendi
+veritabanında yazamaz.
+
+⚠️ **Parolanın varsayılanı YOK** ve olmayacak — bu dosya fabrika sunucusunda da
+koşar; gömülü bir varsayılan oraya da gider ve "sonra değiştiririz" adımı unutulur.
+
+⚠️ **`db-credentials.json` alan adları iki nesildir:** yeni kurulumlar `user`/`pass`
+yazar, sahadaki eski dosya `superuser`/`superpass` taşır. `kur.ps1` ikisini de okur
+— çalışan bir sunucudaki dosyayı elle düzeltmek gerekmez.
 
 ### A1. ENV hazırla (`Teks-Erp/.env` — sırlar; git'e girmez)
 4. İki değişkeni yaz:

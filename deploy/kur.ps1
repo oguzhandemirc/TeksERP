@@ -212,8 +212,14 @@ if (-not $Zorla) {
 Adim "[3/9] Guvenlik yedegi aliniyor (premigrate_)..."
 $cred = Get-Content $credFile -Raw | ConvertFrom-Json
 $dump = "$backupDir\premigrate_$damga.dump"
-$env:PGPASSWORD = $cred.superpass
-& "$pgbin\pg_dump.exe" -h localhost -p $cred.port -U $cred.superuser -d $cred.db -Fc -f $dump
+# Alan adlari iki nesildir: yeni kurulumlar `user`/`pass` yazar (uygulama rolu),
+# fabrikadaki eski dosya `superuser`/`superpass` tasir. Ikisini de okuruz -
+# tek isim dayatmak, calisan bir sunucudaki dosyayi elle duzeltmek demekti.
+$dbKul = if ($cred.user) { $cred.user } else { $cred.superuser }
+$dbPar = if ($cred.pass) { $cred.pass } else { $cred.superpass }
+if (-not $dbKul -or -not $dbPar) { Fail "db-credentials.json kimlik tasimiyor (user/pass ya da superuser/superpass)." }
+$env:PGPASSWORD = $dbPar
+& "$pgbin\pg_dump.exe" -h localhost -p $cred.port -U $dbKul -d $cred.db -Fc -f $dump
 if ($LASTEXITCODE -ne 0 -or -not (Test-Path $dump)) { $env:PGPASSWORD=""; Fail "Yedek ALINAMADI -> kurulum IPTAL." }
 & "$pgbin\pg_restore.exe" --list $dump > $null
 if ($LASTEXITCODE -ne 0) { $env:PGPASSWORD=""; Fail "Yedek DOGRULANAMADI (bozuk dump) -> kurulum IPTAL." }

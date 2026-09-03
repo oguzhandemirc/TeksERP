@@ -33,8 +33,8 @@ Kullanıcı bunları Windows'a taşıdı (Mac'te `~/Desktop/tekserp-kurulum`'day
 | `tekserp-backend-20260903_210124-8ba92ca7.zip` | Sunucu paketi, 116 MB | 231 migration + `node_modules` dahil → sunucuda internet GEREKMEZ |
 | `TeksERP-1.2.0-Setup.exe` | Panel, 141 MB | macOS'ta derlendi; Windows native ikilileri (`PE32+`) pakete girdiği DOĞRULANDI |
 | `TeksERP-1.0.1-vc58.apk` | Tablet, 50 MB | İmzası doğrulandı; gömülü adres `http://192.168.1.250:4000/api` |
-| `ilk-kurulum.ps1` | Sıfırdan iskelet kurar | ADIM 3.3'te koşar. Repo kaynağı `deploy/ilk-kurulum.ps1` |
-| `kur.ps1` | Sürümü kurar (yükseltme aracı) | ADIM 3.4'te koşar. Repo kaynağı `deploy/kur.ps1` |
+| `ilk-kurulum.ps1` | Veritabanı + iskelet kurar | ADIM 3.2'de koşar. Repo kaynağı `deploy/ilk-kurulum.ps1` |
+| `kur.ps1` | Sürümü kurar (yükseltme aracı) | ADIM 3.3'te koşar. Repo kaynağı `deploy/kur.ps1` |
 | `OKU-ONCE.md` | Bu belge | Repo kaynağı `docs/ops/EV-PROVASI-DEVIR-2026-09-04.md` |
 | `KURULUM.md` | Tam kurulum reçetesi | Bu notta olmayan ayrıntı (yedek, pm2, sorun giderme) oradadır |
 
@@ -83,43 +83,59 @@ YANLIŞTI: saha 16.9, geliştirme konteyneri 16.15. 2026-09-04'te düzeltildi.
 Node yoksa: Node.js 22 LTS kur. pm2'yi ELLE kurma — `ilk-kurulum.ps1` yerel
 olarak kuracak.
 
-### 3.2 Veritabanı + fabrika yedeği
+### 3.2 Veritabanı + yedek + iskelet — TEK KOMUT
 
-Script bunu **bilerek yapmaz** (veri işlemi, karar ister).
+```powershell
+.\ilk-kurulum.ps1 -Kok C:\TeksERP -DbParola 123123 -PostgresParola <postgres-parolasi> -Dump "<dump tam yolu>"
+```
 
+Bu tek komut şunları yapar: klasörler · `pgsql\bin` bağlantısı · **`tekserp` rolü
+ve `tekserp` veritabanı** · fabrika yedeğini yükler · `db-credentials.json` ·
+`app\.env` (JWT_SECRET makinede üretilir) · yerel pm2.
+
+`-Dump` isteğe bağlı — vermezsen boş veritabanıyla devam eder ve `kur.ps1`
+migration'ları sıfırdan uygular.
+
+**Beklenen son satırlar:**
+```
+  + rol olusturuldu: tekserp  (superuser DEGIL ...)
+  + veritabani olusturuldu: tekserp  (sahibi: tekserp)
+  + yuklendi  |  migration: 191  |  top: <birkaç bin>
+  + baglanti OK  |  uygulanmis migration: 191
+```
+
+Migration 191 doğru sayıdır — yeni sürüm henüz kurulmadı, `kur.ps1` onu 231'e
+çıkaracak. 231 görüyorsan yanlış veritabanına bakıyorsun.
+
+⚠️ **İDEMPOTENT.** İkinci kez koşmak güvenli: var olan rol, veritabanı ve
+özellikle **`.env` ASLA ezilmez**. Var olan bir rolün parolası da değiştirilmez
+(o rolü başka bir kurulum kullanıyor olabilir); script bu durumda uyarır ve
+gereken `ALTER ROLE` komutunu yazar.
+
+⚠️ **Dump yalnız BOŞ veritabanına yüklenir.** Doluysa script durur — dolu bir
+şemanın üzerine restore, hangi satırın hangi sürümden geldiği bir daha
+bilinemeyen yarım bir şema bırakır. Farklı bir ad ver (`-DbAdi tekserp_yeni`)
+ya da o veritabanını elle sil.
+
+⚠️ Parolayı **sen veriyorsun, script'te varsayılan yok.** Ev provasında
+`123123` yeterli; fabrikada gerçek bir parola ver. Gömülü bir varsayılan
+fabrikaya da giderdi.
+
+**Elle yapmak istersen** (script'in yaptığının aynısı):
 ```powershell
 $pg = "C:\Program Files\PostgreSQL\16\bin"
-& "$pg\createdb.exe" -h localhost -p 5432 -U postgres tekserp_yeni
-& "$pg\pg_restore.exe" -h localhost -p 5432 -U postgres -d tekserp_yeni --no-owner "<dump yolu>"
+& "$pg\psql.exe" -U postgres -c "CREATE ROLE tekserp WITH LOGIN PASSWORD '123123'"
+& "$pg\psql.exe" -U postgres -c "CREATE DATABASE tekserp OWNER tekserp"
+& "$pg\pg_restore.exe" -U tekserp -d tekserp --no-owner --no-privileges "<dump>"
 ```
+⚠️ Restore'u **`tekserp` rolüyle** yap. `postgres` ile yaparsan tablolar
+`postgres`'e ait olur ve uygulama kendi veritabanında yazamaz.
 
-`--no-owner` yüzünden sahiplik uyarıları normaldir. Doğrula:
+⚠️ Dump hedef veritabanı adını **taşımaz** (`-Fc`, `-C` yok) — hangi ada
+yüklediğin tamamen senin seçimin.
 
-```powershell
-& "$pg\psql.exe" -h localhost -p 5432 -U postgres -d tekserp_yeni -tAc "SELECT count(*) FROM _prisma_migrations WHERE finished_at IS NOT NULL"
-& "$pg\psql.exe" -h localhost -p 5432 -U postgres -d tekserp_yeni -tAc "SELECT count(*) FROM rolls"
-```
 
-**Beklenen:** migration ~191 (henüz yeni sürüm kurulmadı), top 4000+.
-191 değil de 231 görüyorsan yanlış veritabanına bakıyorsun.
-
-### 3.3 İskelet
-
-```powershell
-.\ilk-kurulum.ps1 -Kok C:\TeksERP -DbAdi tekserp_yeni -DbParola <postgres-parolası>
-```
-
-Kurar: klasörler · `pgsql\bin` bağlantısı (kurulu PostgreSQL'e junction) ·
-`pg-setup\db-credentials.json` · `app\.env` (JWT_SECRET makinede üretilir) ·
-yerel pm2. **İdempotent** — iki kez koşmak güvenli, `.env`e asla dokunmaz.
-
-**Beklenen son satır:** `baglanti OK | uygulanmis migration: 191`
-
-⚠️ `.env` ve `db-credentials.json` AYNI veritabanını göstermeli. Script ikisini
-tek kaynaktan yazdığı için ayrışmaz — elle düzenlersen bu garanti gider. Ayrışırsa
-yedek bir veritabanından alınır, migration başkasına uygulanır.
-
-### 3.4 Sürümü kur
+### 3.3 Sürümü kur
 
 ```powershell
 .\kur.ps1 -Kok C:\TeksERP -Paket "<zip tam yolu>"
@@ -134,7 +150,7 @@ davranış), `[7/9]` migration'lar uygulanır, `[9/9]` sağlık `ok`.
 Migration **geri alınamaz eşiktir**. Ondan sonraki hatada script otomatik geri
 almaz, komutları yazar — kararı insan verir.
 
-### 3.5 Satıcı (süperadmin) hesabı
+### 3.4 Satıcı (süperadmin) hesabı
 
 ```powershell
 cd C:\TeksERP\app
@@ -153,7 +169,7 @@ sistem kilitlenmez — ama satıcı ekranı da hiç açılmaz.
 Script idempotenttir: hesap varsa DOKUNMAZ. Parola/PIN/TOTP bir kez gösterilir,
 kaydet.
 
-### 3.6 Panel
+### 3.5 Panel
 
 `TeksERP-1.2.0-Setup.exe` → kur → aç.
 
@@ -168,7 +184,7 @@ Bu ayrım bilinçli: modül yüklenemezse ayrı mesaj, cihaz yoksa boş liste. T
 düğmesine sahte bir COM adresiyle basarsan "yüklü değil" DIŞINDA her hata
 (port açılamadı, zaman aşımı) modülün çalıştığı anlamına gelir.
 
-### 3.7 Tablet
+### 3.6 Tablet
 
 `TeksERP-1.0.1-vc58.apk` → kur → aç.
 
@@ -200,6 +216,7 @@ Açılışta güncelleme kontrolü otomatik (`checkAutomatically: ON_LOAD`).
 | Gradle'a JDK vermek yetmez | İmza doğrulaması AYRI süreç, `keytool`u PATH'ten arar. Derleme geçer, doğrulama düşer ve hata "şifre yanlış" der — oysa Java eksiktir. |
 | Sürüm otomatik değil | `build-apk.mjs` sürümü artırmaz, yalnız raporlar. Küçük/büyük hane elle verilir. |
 | PostgreSQL sürümü | Doküman 18 diyordu, saha 16.9. Ortam sürümleri dokümanın en hızlı bayatlayan kısmı — ölç. |
+| Restore'u yanlış rolle yapmak | `postgres` ile restore edilen tablolar `postgres`'e ait olur; uygulama kendi veritabanında yazamaz. `-U tekserp --no-owner` ile yükle (script bunu kendisi yapar). |
 | `kur.ps1` yükseltme aracıdır | Mevcut kurulum yoksa durur, `.env`i mevcut kurulumdan alır. Sıfırdan kurulum için `ilk-kurulum.ps1` yazıldı. |
 
 ---
