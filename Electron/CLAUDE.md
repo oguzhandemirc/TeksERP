@@ -4,6 +4,8 @@ Electron 42 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok. 
 
 > Root `CLAUDE.md` ve `Teks-Erp/ARCHITECTURE.md` domain referansıdır.
 
+> ⚠️ Profil gerçeği — "Adnan Şahin ERP" bugünkü **paket kimliğidir**, ürünün adı değil: `package.json` `productName` ve `appId: com.etkiliyazilim.adnan-sahin-erp` sabittir ve müşteriyle BİRLİKTE TÜREMEZ — `deploy/electron-paketle.sh` yalnız `shared/musteri.json`u (kod/ad/ERP adresi) yazar. İkinci müşteride panel yine bu adla kurulur; çözüm `if (musteri === 'X')` değil, paket kimliğini `musteri.json`dan türetmektir (ayrı karar). bkz. `docs/design/MODUL-BAYRAK-TASARIM.md` §11 son madde.
+
 ## Komutlar
 
 ```bash
@@ -123,6 +125,8 @@ const { isAdmin, hasPermission, hasAnyPermission, hasAllPermissions } = useRoleA
 ```
 
 `isAdmin = hasAdminAccess(permissions)` → `admin:users | admin:settings | admin:*` permission'larından herhangi biri varsa true. **`hasRole` yok** — tüm yetki kontrolü permission bazlı.
+
+> ⚠️ **Eksik/bayat (2026-09-03):** `hasAdminAccess` artık düz `includes` değil **`matchesPermission`** ile ölçer (`src/types/auth.ts` — `hasAdminAccess` → `ADMIN_PERMISSION_LIST.some(p => matchesPermission(...))`) → **global `"*"` de true döner**. Bu, süperadmin (satıcı) hesabı içindir: backend `getEffectivePermissions` ona `["*"]` verir, DB'de grant satırı doğmaz. Düz `includes` yazımına geri dönme — `adminOnly` karolar (`SystemHubPage`) izin dalına HİÇ düşmediği için belirti KISMİ ve sessiz olur.
 
 **Uygulamaya kabul (`canEnterApp`):** Kullanıcının en az bir **mobil-olmayan (masaüstü) izni** olmalı — yalnız `mobile:*` izinli hesaplar panele giremez (backend `login`'de `clientType='electron'` iken 403 döner, token bile üretmez). Admin-only sayfalar `<ProtectedRoute requirePermission="admin:*">` ile kilitli.
 
@@ -365,6 +369,8 @@ Yenisi için onay al. Mevcutlar:
 ## Test Kullanıcıları
 
 Seed **yalnız `admin / 123123`** üretir (tüm permission'lar atanmış — ~55 kod, kanonik `Teks-Erp/prisma/seed.ts`). Eski isimli test kullanıcıları (mehmet.planlama vb.) **kaldırıldı** — her reseed'de tek tek silmek zorunda kalınıyordu. Yeni kullanıcılar admin UI'sından açılır ve **yetkisiz başlar**; admin `/admin/users/:id/permissions`'tan en az bir masaüstü izni atamadıkça uygulamaya giremezler (`canEnterApp` false — yalnız `mobile:*` izinli hesap Electron login'de 403 alır).
+
+> ⚠️ **Sayı bayat (2026-09-03):** seed admine **katalogdaki tüm izinleri** atar ve bugün bu **86** koddur (`Teks-Erp/prisma/seed.ts`, `PERMISSION_CATALOG.length`); "~55 kod" ifadesi 2026-08 öncesine aittir. Sayıyı sabitleme — "katalogdaki tüm izinler" yeterli.
 
 ## Yeni Sayfa Kontrol Listesi
 

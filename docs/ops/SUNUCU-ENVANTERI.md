@@ -14,6 +14,8 @@
 | **tekserp-vds** | `80.253.255.188` | Güncelleme yayını + makine dışı yedek | **YENİ** (2026-09-01) |
 | Eski yayın sunucusu | `91.217.119.138` | Güncelleme yayını (devrediliyor) + `demo` | Geçiş sürüyor |
 
+> ⚠️ Çok müşteri notu — bu tablo **fabrika başına bir satır** taşımalıdır (`Fabrika sunucusu — <müşteri kodu>`), çünkü her kurulumun kendi LAN'ı, kendi tünel hostname'i (`<musteri>-erp.etkiliyazilim.com`), kendi yedek kullanıcısı (`fab-<müşteri>`) ve kendi yayın klasörü (`/<müşteri>/electron`, `/<müşteri>/mobil`) vardır. Aşağıdaki "Fabrika sunucusu — ağ / servisler" bölümleri **her fabrika için aynı şablondur** (4000 LAN · 4001 yalnız 127.0.0.1 · 5432 yerel) — şablon çekirdektir, satırlar müşteri başına çoğalır.
+
 ⚠️ Eski sunucu **paylaşımlı**: başka müşterilerin WordPress siteleri, `postgres`,
 `mariadb`, `redis` orada koşuyor. Yeni VDS'in var oluş sebebi budur.
 `demo.etkiliyazilim.com` bilinçli olarak orada kalıyor (müşteriye gösterim için;

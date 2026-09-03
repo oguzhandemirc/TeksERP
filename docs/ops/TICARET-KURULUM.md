@@ -1,5 +1,7 @@
 # TeksERP — TİCARET (alım-satım) Kurulum Reçetesi
 
+> ⚠️ Bu belge fiilen **ikinci kurulum profilidir** ("Ticaret / alım-satım") — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md` §10 profil tablosu. ⚠️ **2026-09-03 ölçüm düzeltmesi (mercek raporundan sonra):** "üretim izinle gizlenir" artık BAYAT — `production.enabled` **kapıya terfi etti** ve bugün `requireProductionEnabled` ile 11 router'ı kapılıyor (`workorder` · `tambur` · `kursun-qc` · `kursun-bypass` · `batch` · `route` · `station-capability` · `traveler-card` · `product-recipe` · `production-balance` …). Ticaret profili artık şudur: `ticaret.enabled` AÇIK · `finance.enabled` AÇIK · `production.enabled` KAPALI.
+
 > **Bu doküman kimin için:** kumaş ÜRETMEYEN, **alıp satan** bir firmanın kurulumunu yapan kişi.
 > Akış: satın al → **mal kabul** → depo → **sevk** → **fatura** → **tahsilat** → rapor.
 > Üretim (KK1 · Kurşun/KK2 · Tambur · fason) bu kurulumda **kullanılmaz**.
@@ -49,6 +51,10 @@ soru cevapladıkları için.)
 |---|---|---|---|
 | `finance.enabled` | Muhasebe → "Ön muhasebe modülünü aç" | **KAPALI** | **AÇ** |
 | `finance.pricingEnabled` | Siparişler → "Sipariş para birimi ve fiyat alanlarını göster" | **KAPALI** | **AÇ** |
+| `ticaret.enabled` | Muhasebe/Modüller (Sistem Profili) | **KAPALI** | **AÇ** |
+| `iplik.enabled` | aynı (ticarete bağımlı) | **KAPALI** | iplik kg defteri kullanılıyorsa **AÇ** |
+
+⚠️ **2026-09-03 — BU BÖLÜM EKSİKTİ: rejim bayrağı ARTIK ÜÇ (tabloya iki satır eklendi).** `ticaret.enabled` (varsayılan **KAPALI**) alış siparişi · mal kabul · fiyat listeleri · stok sayımı uçlarının ÖNÜNDE kapı olarak durur (`src/routes/goods-receipt.routes.ts:27`, `purchase-order.routes.ts:51`, `item-price.routes.ts:46`, `stock-count.routes.ts:44` → `requireTicaretEnabled`). Açılmazsa reçetenin ana akışı (satın al → mal kabul) **403 `MODULE_DISABLED`** verir. İplik kg defteri kullanılacaksa ayrıca `iplik.enabled` — ticarete bağımlıdır, ticaret KAPALIYKEN açılamaz (400 `MODULE_DEPENDENCY`).
 
 **İkisi bağımsızdır ve karıştırılmamalıdır:**
 `pricingEnabled` **operasyon** ekranlarındaki fiyat/para birimi alanlarını açar (sipariş satırı,
@@ -318,6 +324,8 @@ npx tsx scripts/setup-ticaret.ts --user muhasebe --apply --yes
 **Yaptıkları:** `finance.enabled` + `finance.pricingEnabled` bayraklarını açar · `WEB_TRADE`
 şablonunu verilen kullanıcıya **merge** eder · varsayılan depoyu garantiler.
 **Yapmadıkları:** hiçbir bayrağı KAPATMAZ, hiçbir izni GERİ ALMAZ, hiçbir kaydı SİLMEZ.
+
+⚠️ **2026-09-03 düzeltme —** betik artık **DÖRT** bayrak açar: `finance.enabled` · `finance.pricingEnabled` · `ticaret.enabled` · `iplik.enabled` (`scripts/setup-ticaret.ts` `flagPlan`). Bayrak sırası **load-bearing: ticaret İPLİKTEN ÖNCE** yazılır (iplik ticarete bağımlı; ters sırada ilk çağrı 400 `MODULE_DEPENDENCY` alır ve kurulum yarıda kalır). Yukarıdaki "Yaptıkları" cümlesi iki bayrakta kalmış.
 
 - **İdempotent:** ikinci koşum her adım için "atlandı" der.
 - **DB adı kapısı YOKTUR** (gerçek müşteri DB'sinde koşacak) — koruma `--apply` + onay

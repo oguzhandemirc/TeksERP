@@ -4,6 +4,8 @@
 **APK:** `2.7.5` / versionCode `42` — masaüstünde, tablette açılışı doğrulandı.
 (2.7.4 aynı gün ikinci turla değiştirildi; sahaya **2.7.5** kurulur.)
 
+> ⚠️ **Dal satırı TARİHSELDİR:** `adnansahin` dalı 2026-09-02'de **EMEKLİ** edildi (`main`'in atası; tek commit kaybolmadı). İş bugün `main` üzerindedir — bkz. `deploy/README.md` ve `docs/design/MODUL-BAYRAK-TASARIM.md` §0. Bu belgeyi okuyup var olmayan dala `checkout` deneme.
+
 ---
 
 ## 1. Ne bitti

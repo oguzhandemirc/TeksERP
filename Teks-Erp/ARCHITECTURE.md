@@ -28,7 +28,7 @@
 Teks-Erp/
 ├── prisma/
 │   ├── schema.prisma          # ~78 model, ~35 enum (kanonik kaynak — sayı yaklaşık)
-│   ├── seed.ts                # Tek dosya: 58 permission (katalog src/constants/permission-catalog.ts'ten) + 16 template + 1 kullanıcı (admin) + 3 kalite + master demo
+│   ├── seed.ts                # Tek dosya: 86 permission (2026-09-03 ölçümü; katalog src/constants/permission-catalog.ts'ten) + 16 template + 1 kullanıcı (admin) + 3 kalite + master demo
 │   └── migrations/            # ~114 migration (son: 20260714151000_dispatch_item_unique_dispatch_roll)
 │
 ├── src/
@@ -185,6 +185,8 @@ Enum sayısı ~**35** (kanonik: `grep '^enum' schema.prisma`; aşağıdaki tablo
 | `ScanType` | ARRIVAL, DEPARTURE, INFO |
 | `LabelKind` | (bkz. `schema.prisma` — etiket türleri) |
 
+> ⚠️ Profil gerçeği — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md` §5.2: **"çözgü/dokuma yapmaz" referans fabrikanın rotasıdır, sistemin kısıtı değil.** Devere/çözgü/haşıl yeni mimari istemez — istasyon kataloğuna istasyon, rotaya adım olarak girer. Dokuma müşterisi geldiğinde tek tasarım işi rotanın başında topun **tezgahtan doğması**dır (doğum damgası: tezgah + çözgü levendi + iplik lotu). `WARP` enum değerinin kaldırılması bir profil sadeleştirmesiydi; dokuma dilimi açılırsa geri gelme kararı ayrıca verilir.
+
 ### Schema Kuralları
 
 - **PK:** Tüm modellerde `String @id @default(uuid())`
@@ -192,6 +194,7 @@ Enum sayısı ~**35** (kanonik: `grep '^enum' schema.prisma`; aşağıdaki tablo
 - **Soft delete:** Fiziksel DELETE yok — `isActive: false` veya status değişikliği
 - **Audit:** Her CUD `SystemLog`'a yazılır → `AuditService.log()` üzerinden
 - **`StationKind`** — istasyon **domain rolü**; API davranışını dispatch eder (PROCESS_QC için Kurşun+QC2 akışı vb.)
+    - ⚠️ Bilinen katılık — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md` §5.1. Davranışın **istasyon TÜRÜnden** dispatch edilmesi bugünkü gerçektir ama ürün sınırı değildir: renk (`appliesColor`, 2026-08-02), özellik (`StationProperty`) ve **kalite** (`Station.appliesQuality`, 2026-09-03 · P4 Faz A) aynı dönüşümü yaşayıp türden **yeteneğe** taşındı. Yeni davranışı `StationKind`'a bağlamadan önce sor: bu gerçekten domain rolü mü, yoksa istasyon yeteneği mi? Kalan etki alanı (Faz B): `RollError` yaşam döngüsü ("PROCESS_QC'de açılır" varsayımı), kurşun bypass bayrağı, tabletin istasyon-türünden ekran seçimi.
 - **`Station.allowAsWorkOrderStep`** — WO step picker'da gösterilsin mi? **KK1 gibi giriş noktaları için false**: KK1 sadece Roll oluşturma noktası, WorkOrderStep olarak rotaya eklenmez.
 
 ### Roll Yaşam Döngüsü
@@ -301,7 +304,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ## 6. RBAC Permission Kodları
 
-`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **58 permission**, 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
+`requirePermission(code)` middleware'i `req.user.permissions[]` array'ini kontrol eder. Toplam **86 permission** (⚠️ 2026-09-03 ölçümü — kanonik sayı `src/constants/permission-catalog.ts`; dokümana sabitleme), 10 modül. Permissions doğrudan kullanıcıya bağlanır (`UserPermission` modeli); ayrıca tekrar kullanılabilir setler için `PermissionTemplate` / `PermissionTemplateItem` var (rol modeli **yok**).
 
 | Modül | Permissions |
 |---|---|
@@ -322,7 +325,7 @@ Swagger UI: **http://localhost:4000/api-docs** — her endpoint için `summary`,
 
 ### Seed Sonrası Yetki Dağılımı
 
-`seed.ts` **yalnız `admin`'i (tüm 58 permission) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
+`seed.ts` **yalnız `admin`'i (katalogdaki tüm izinler — bugün 86) seed'ler** (`prisma/seed.ts` §3-4). Ek test kullanıcıları 2026-07-03'te KALDIRILDI (her reseed'de tek tek silmek gerekiyordu). Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; 0-izinli RBAC senaryosu gereken HTTP testleri (`test_http_api`, `test_direct_ship_api`) kendi geçici kullanıcısını üretip temizler.
 
 ### Yeni Endpoint Yazarken (2026-08-01 — TEK DOSYA)
 
@@ -887,13 +890,16 @@ WHERE name IN ('statement_timeout','idle_in_transaction_session_timeout',
 
 **Yeni kurulum / DB taşıma sonrası uygulamak için:**
 ```sql
--- DB adı ortama göre: dev = adnansahin_db (.env), Windows production = TeksErpDb (installer).
+-- DB adı ortam/müşteri başına FARKLIDIR ve yetkili değer o kurulumun `.env`indedir
+-- (2026-09-03 ölçümü: dev = tekserp_demo, saha üretim = tekserp). Aşağıdaki <db> yer tutucusunu
+-- o kurulumun gerçek DB adıyla değiştir. ⚠️ `installer` yolu 2026-07-30'da tamamen kaldırıldı —
+-- `TeksErpDb` adı yalnız o installer'ın ürettiği tarihsel kurulumlarda geçerlidir.
 -- Canlı dev değeri 50s (pg_db_role_setting, 2026-06-12 doğrulandı).
-ALTER DATABASE "TeksErpDb" SET statement_timeout = '50s';
-ALTER DATABASE "TeksErpDb" SET idle_in_transaction_session_timeout = '5min';
-ALTER DATABASE "TeksErpDb" SET log_min_duration_statement = '500ms';
-ALTER DATABASE "TeksErpDb" SET log_lock_waits = 'on';
-ALTER DATABASE "TeksErpDb" SET log_temp_files = '10MB';
+ALTER DATABASE "<db>" SET statement_timeout = '50s';
+ALTER DATABASE "<db>" SET idle_in_transaction_session_timeout = '5min';
+ALTER DATABASE "<db>" SET log_min_duration_statement = '500ms';
+ALTER DATABASE "<db>" SET log_lock_waits = 'on';
+ALTER DATABASE "<db>" SET log_temp_files = '10MB';
 -- Session düzeyi için tekrar bağlan veya pg_reload_conf() çağır.
 ```
 
@@ -1018,7 +1024,7 @@ npx tsc --noEmit             # Type-check (build'siz)
 
 | Username | Şifre | Yetkiler |
 |---|---|---|
-| `admin` | `123123` | ✅ TÜM 58 permission (seed §4) |
+| `admin` | `123123` | ✅ katalogdaki TÜM izinler (bugün 86) (seed §4) |
 
 > **2026-07-03:** Seed'de YALNIZ `admin` var. Eski ek test kullanıcıları (mehmet.planlama, ali.operator, ...) KALDIRILDI — her reseed'de tek tek silinmeleri gerekiyordu. Yeni kullanıcılar admin panelinden (`POST /api/admin/users`) açılır; yeni kullanıcı varsayılan olarak üretim istasyon izinlerini (KK1/KK2/Tambur) + mobil kimlik (hızlı PIN + QR kart) alır (opt-out'lu). 0-izinli RBAC testleri kendi geçici kullanıcısını üretip temizler.
 

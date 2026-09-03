@@ -5,6 +5,8 @@
 
 > ## ⚑ 2026-06-28 EK — Kartela ADET-bazlı stok + "seçerek sevk" + ölçüm opsiyonel
 >
+> ⚠️ Profil gerçeği — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md`. "Bu firma" = referans profil (adnansahin); ayrım zaten bayrakta yaşıyor (`kartela.measurementEnabled`, varsayılan KAPALI) ve belgenin kendi cümlesi de bunu söylüyor ("Başka firmalara AÇIK satılabilir"). Kartela akışının tamamı ileride kendi modül anahtarının altına yerleşir; ölçüm bayrağı o modülün **alt bayrağı** olur ve modül kapalıyken okunmaz bile.
+>
 > Sahadan düzeltme: **kartelaya fiziksel ETİKET vurulmuyor; yalnız ADET sayılıyor.**
 > Boyut (cm) / ağırlık (kg) bu firma için önemsiz. Müşteriye sevk: sevkiyatçı
 > göndereceği kartelayı **listeden seçer** (barkod okutma YOK) ve adet **kartela

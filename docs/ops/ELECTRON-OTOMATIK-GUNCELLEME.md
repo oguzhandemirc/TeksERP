@@ -22,6 +22,8 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
   latest.yml                                        (2 dk geri sayım) → kurar
 ```
 
+> ⚠️ **Düzeltme (2026-09-03) — yukarıdaki diyagramın ilk iki satırı BAYAT.** (a) "sürüm no'yu artır" → doğrusu **"sürüm notunu yaz (kapı)"**: yama hanesini 2026-09-02'den beri script artırıyor (taban git etiketi `panel-v*`, doğrulayan yayın sunucusu — `scripts/lib/surum.mjs`); elle artırma yalnız küçük/büyük hane içindir ve o bir karardır. (b) `npm run build:win` → doğrusu **`./deploy/electron-paketle.sh <müşteri>`**; ham `build:win` bir önceki müşterinin adresiyle derler ve bu komut bu belgenin kendi "2. Paketle" bölümünde zaten yasaklı. Belge kendi içinde çelişiyordu ve çelişkinin yanlış tarafı en çok okunan diyagramdaydı.
+
 - **Yayın adresi:** `https://guncelleme.etkiliyazilim.com/adnansahin/electron/`
   Tek kaynak: `Electron/shared/update-feed.ts` + `Electron/package.json > build.publish`.
   İkisinin eşitliği `src/test/update-feed-url.test.ts` bekçisiyle kilitli.

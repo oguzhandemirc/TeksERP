@@ -19,6 +19,8 @@ mimari değişiklik gerekmiyor. Gerçek boşluklar üç tane:
 3. **Para tarafı yok.** Cari hesap, fatura, tahsilat, döviz — hiçbiri modelde yok
    (yalnız `Order.currency` + `OrderLine.unitPrice` tohumu ekili).
 
+> ⚠️ Profil gerçeği — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md`. "Tek depo" referans fabrikanın kurulumudur; sistem tarafında karşılığı artık bir **modül anahtarıdır** (`depo.multiEnabled`, varsayılan KAPALI — `src/constants/module-flags.ts`). Ayrım veri-türevi ("kaç depo var") değil anahtardır: transfer uçları `requireDepoMultiEnabled` ile kapılıdır (`warehouse-transfer.routes.ts:24`), depo **defteri** ise kapısız çekirdektir (fabrika yolları da yazar).
+
 ### Pazarlıksız kısıt: fabrikada SIFIR görünür fark
 
 Aynı kod canlı fabrikaya da gidecek. Fabrika kullanıcısı güncellemeden sonra **tek piksel** fark
@@ -155,6 +157,8 @@ ikinci depoyu yaratabilmenin tek yolu odur.
    sıralaması tam o kolondan çözülür (emsal: `backfill_roll_production_timestamps.ts`).
 4. Kod devrede → NULL doğamaz. 5. Sonraki sürümde `SET NOT NULL`.
 
+> ⚠️ Profil gerçeği — backfill'in "hangi depoydu" varsayımı yalnız **tek depolu geçmiş** için geçerlidir; çok depolu bir kurulumda aynı script kullanılamaz (`depo.multiEnabled` — bkz. yukarıdaki §1 şerhi ve `MODUL-BAYRAK-TASARIM.md`).
+
 ## 8. İzinler
 
 `warehouse:read` · `warehouse:write` · **`warehouse:transfer`** (ayrı: depo adını düzeltebilen herkes
@@ -162,6 +166,8 @@ stok taşıyamamalı) · `goods-receipt:read` · `goods-receipt:write`.
 ⚠️ `goods-receipt:*` mevcut rol şablonlarına **EKLENMEZ** — Mal Kabul karosu yalnız izinle kapılı
 (tek depolu ticaret firması da kullanacağı için `multiWarehouse` şartı konamaz), şablona akarsa
 fabrikada karo belirir. `WEB_WAREHOUSE_SHIPPING`'e yalnız `warehouse:read` + `warehouse:transfer`.
+
+⚠️ **2026-09 güncellemesi —** Mal Kabul artık **yalnız izinle kapılı DEĞİL**: `goods-receipt.routes.ts:27` üzerinde `requireTicaretEnabled` modül kapısı var (`MODUL-BAYRAK-TASARIM.md` karar #4 — planın iki bilinçli statü değişikliğinden biri; ölçüm: fabrika dump'ında 0 mal kabul). Paragrafın gerekçesi ("`multiWarehouse` şartı konamaz") DOĞRU kalır — kapı çoklu depoya değil **ticaret modülüne** bağlandı; depo transferi ayrıca `requireDepoMultiEnabled` taşır (`warehouse-transfer.routes.ts:24`). İzin katmanı da yerinde durur: iki kapı, iki soru ("bu kurulum ticaret paketini kullanıyor mu" ≠ "bu kullanıcı yetkili mi").
 
 ## 9. Bekçiler
 

@@ -21,6 +21,8 @@ Yeni model bunu **sevk anına** erteler: çuval sadece bir **depo nesnesidir**; 
 karşılanması yalnızca sevkiyat kurulurken (seçilen siparişlere) ve stok düşüşü yalnızca
 **dispatch**'te olur. Mühür yok, rezerv yok, `rebalanceCustomerPool` yok.
 
+> ⚠️ Profil gerçeği — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md` karar #6. **ÇEKİRDEK olan:** tahsisin sevk ANINDA yazılması, stoğun yalnız DISPATCH'te düşmesi, PLANNED'ın tahsis sayılmaması — bunlar defter semantiğidir ve bayraklanmaz. **PROFİL olan:** "rezerv yok" — erken taahhüdü istemeyen bu fabrikanın seçimidir. Rezervasyon altyapısı ayrı bir dilimde gelecek ve **kendi append-only defterinde** yaşayacak; `SackAllocation`a DOKUNULMAZ (o sevk muhasebesidir). Yani buradaki "rezerv yok" cümlesi "bu kurulumda kapalı" diye okunur, "sistem rezerv tanımaz" diye değil.
+
 ## Model
 
 **Çuval (Sack) bir depo nesnesidir.** Açılır, içine top/kartela okutulur, opsiyonel brüt

@@ -36,6 +36,8 @@ Bu doküman backend'i (`Teks-Erp/`, Express 5 + Prisma 7 + PostgreSQL) bir
 
 ## SAHADAKİ KURULUM — yetkili değerler (SAHINSRV, 192.168.1.250)
 
+> ⚠️ Çok müşteri notu — bu tablo **bir kurulumun** yetkili değerleridir (referans fabrika: SAHINSRV). Sütunların kendisi (PG sürümü/portu · PG yolları · DB/kullanıcı · çalışan paket dizini · pm2 adı · build klonu · deploy script'leri · pm2 daemon hesabı · boot görevi · gece yedeği · backend scheduler durumu) **her kurulumda sorulması gereken çekirdek listedir**; değerler müşteriye göre değişir. Yeni fabrika devreye alınırken bu tablo kopyalanıp o kurulumun ölçülmüş değerleriyle doldurulur — tahminle değil, sunucuda ölçülerek (2026-08-25 dersi: dokümanlar `C:`'yi anlatıyordu, paket `D:`'den üretiliyordu).
+
 Bu belgedeki genel anlatım herhangi bir sunucu içindir; **fabrikadaki gerçek
 kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 
@@ -51,6 +53,8 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | Boot | Görev **`TeksERP-Backend-Boot`** → `pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
 | Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\Etkili-Yazilim\backups`, **30 gün** |
 | Backend scheduler | **KAPALI** (`BACKUP_SCHEDULE_ENABLED=false`) — gece yedeğini yukarıdaki görev alır |
+
+> ⚠️ **2026-09-02 —** `adnansahin` dalı **EMEKLİ**; build klonu `main` ucundadır ve paket `main`'den üretilir (`docs/design/MODUL-BAYRAK-TASARIM.md` §0: müşteri dalı/forku yasak). Yukarıdaki "Build klonu" satırındaki `adnansahin` ucu ifadesi tarihseldir. Sunucuda tek seferlik geçiş adımı ve `git branch -D adnansahin` temizliği `deploy/README.md`'dedir. `C:\Etkili-Yazilim\tekserp` klonunun dar refspec'i (`+refs/heads/main`) artık YETERLİDİR; onu paket için kullanmama gerekçesi yalnız sparse checkout'ta `deploy/` dizininin olmamasıdır.
 
 > **Neden gece yedeğini backend almıyor:** bağımsız görev, **backend çökmüş ya da
 > kapalıyken bile** yedek alır — backend'e bağlı bir zamanlayıcının veremeyeceği
@@ -101,9 +105,10 @@ JWT_SECRET="<en az 32 karakter güçlü rastgele>"
 
 - **`JWT_SECRET` ≥ 32 karakter ZORUNLU.** Backend açılışta **enforce eder**
   (`src/services/auth.service.ts`): kısa/eksik secret ile sunucu açılmaz.
-- **`DATABASE_URL`** — ortam başına farklı DB adı: dev = `adnansahin_db`,
+- **`DATABASE_URL`** — ortam başına farklı DB adı: dev = `tekserp_demo`,
   üretim = `tekserp`. **Yedekleme bu URL'yi kullanır** — `backup.service.ts`
   host/port/user/db/şifreyi buradan çözer. Bozuksa yedek alınmaz.
+  - ⚠️ **Bayat düzeltmesi (2026-09-03):** dev DB adı artık `tekserp_demo` (Docker `tekserp-local-db`, port 55433) — eski `adnansahin_db` düzeltildi; üretim `tekserp`. **Çok müşteride DB adı bir kurulum parametresidir** — dokümana müşteri adı gömmek yerine "ortam/müşteri başına farklı; yetkili değer o kurulumun `.env`indedir" demek doğru olanıdır. Yanlış ad geri yükleme tatbikatında hedefi ıskalatır.
 - Eski `secret.json` **artık yok** (installer üretiyordu). Tek yetkili sır
   kaynağı `.env`'dir — **yedekleyin**; kaybolursa mevcut DB'ye bağlanılamaz.
 

@@ -4,6 +4,8 @@ Her yayın turunda fabrikaya **operatör diliyle** bir not gider. Panel ve table
 güncelleme kurulduktan sonraki ilk açılışta bu notu **bir kez** gösterir; eski
 notlara Ayarlar'dan her zaman ulaşılır.
 
+> ⚠️ Çok müşteri notu — `surum-notlari.json` **TEK kaynaktır ve TÜM müşterilere aynı gider**; not kapsam etiketi ürün eksenindedir (`panel`/`tablet`/`her-ikisi`), müşteri ekseninde DEĞİL. Sonuç iki kural: (1) not, o müşteride **kapalı bir modülün** ekranını tarif ediyorsa okuyanın karşılığı yoktur — maddeyi ya modülden bağımsız yaz ya da hangi modülle geldiğini operatör diliyle söyle ("Ön muhasebe kullanan kurulumlarda: …"); (2) hiçbir maddede tek bir fabrikanın verisi/adı/vakası geçmez (not fabrikadan fabrikaya gider). Bekçi bugün yalnız notun VAR olduğunu ve teknik terim taşımadığını denetler, KAPSAMINI denetlemez.
+
 **Tek kaynak:** `surum-notlari.json` (repo kökü). Bu dosya düzenlenir, sonra:
 
 ```bash

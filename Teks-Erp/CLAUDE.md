@@ -129,11 +129,13 @@ Bu düzeltme *nereden* koşulduğunu değiştirmez, yalnız kök kullanımını 
 
 ```
 PORT=4000
-DATABASE_URL="postgresql://oad@localhost:5432/adnansahin_db?schema=public"
+DATABASE_URL="postgresql://tekserp:<parola>@localhost:55433/tekserp_demo?schema=public"
 JWT_SECRET="..."
 ```
 
-> Geliştirme tamamen **yerel** PostgreSQL ile çalışır (`localhost:5432/adnansahin_db`). Uzak/paylaşımlı DB yok.
+> Geliştirme tamamen **yerel** PostgreSQL ile çalışır (`localhost:55433/tekserp_demo`). Uzak/paylaşımlı DB yok.
+>
+> ⚠️ **Bayat (2026-09-03 ölçümü):** geliştirme DB'si artık `postgresql://tekserp:***@localhost:55433/tekserp_demo?schema=public` — Docker konteyneri `tekserp-local-db` (55433→5432); yukarıdaki eski örnek (`oad@localhost:5432/adnansahin_db`) geçerli DEĞİLDİR ve düzeltildi. Ayrıca **DB adı bir PROFİL değeridir**: müşteri adını taşıyan DB adını koda/dokümana sabitleme, ortam değişkeninden oku.
 
 ## Architecture (özet)
 
@@ -196,7 +198,7 @@ Yeni endpoint yazarken `requirePermission(code)`'daki `code` **DB'de olmalı** (
 
 | Parça | Dosya | İşi |
 |---|---|---|
-| 1. **Tek kaynak** | `src/constants/permission-catalog.ts` | 58 izin satırı. `category` Prisma `PermissionCategory` enum'una bağlı → yazım hatası **derlemede** düşer. |
+| 1. **Tek kaynak** | `src/constants/permission-catalog.ts` | 86 izin satırı (⚠️ 2026-09-03 ölçümü: `PERMISSION_CATALOG.length` = 86; **sayıyı dokümana sabitleme** — kanonik sayı bu dosyadadır). `category` Prisma `PermissionCategory` enum'una bağlı → yazım hatası **derlemede** düşer. |
 | 2. **Boot-time uzlaştırma** | `src/jobs/permission-catalog.job.ts` (`server.ts`'ten çağrılır) | Backend **her açılışta** katalogla DB'yi karşılaştırır, EKSİK satırları yazar. Denklem: **kodu deploy etmek = katalogu getirmek.** |
 | 3. **Mekanik bekçi** | `scripts/test_permission_catalog.ts` (`npm test`) | Route/controller/servislerdeki izin kodlarını TS AST ile tarar; katalogda olmayanı **geliştirme anında** düşürür. Ayrıca katalog ⊆ DB'yi doğrular (kırmızıysa "uzlaştırma bu DB'de koşmamış" sinyali). |
 
@@ -226,7 +228,7 @@ Yeni izin **kodunun** DB'ye gelmesi yetmiyordu; onu kullanıcıya götüren **pa
 
 | Parça | Dosya | İşi |
 |---|---|---|
-| 1. **Tek kaynak** | `src/constants/role-template-catalog.ts` | 26 rol (8 masaüstü + 17 mobil + tam yetki). `codes` alanı `PERMISSION_CATALOG`'a bağlı. |
+| 1. **Tek kaynak** | `src/constants/role-template-catalog.ts` | 29 rol (11 masaüstü + 17 mobil + tam yetki) (⚠️ 2026-09-03 ölçümü: `ROLE_TEMPLATE_CATALOG.length` = 29; **sayıyı sabitleme** — kanonik sayı bu dosyadadır). `codes` alanı `PERMISSION_CATALOG`'a bağlı. |
 | 2. **Boot-time uzlaştırma** | `src/jobs/role-template-catalog.job.ts` | İzin uzlaştırmasından **SONRA**, aynı zincirde koşar (şablon satırları izin satırlarına FK ile bağlı). |
 | 3. **Mekanik bekçi** | `scripts/test_role_template_catalog.ts` | Katalog tutarlılığı + **kapsam** + DB uzlaştırması + idempotentlik. |
 
@@ -269,8 +271,9 @@ Detay: ARCHITECTURE.md §6.
 
 ## Operasyonel Bakım
 
-- **`statement_timeout=50s`** aktif (uzun sorgu otomatik iptal; `pg_db_role_setting`'den 2026-06-12 doğrulandı). DB-level: `ALTER DATABASE <db> SET statement_timeout = '50s'` — migration ile değil, manuel uygulanır. DB adı ortama göre: dev=`adnansahin_db` (.env), sahadaki Windows sunucu=**`tekserp`** (PostgreSQL 16.9, `C:\Etkili-Yazilim\pgsql`; eski installer'ın `TeksErpDb` adı kullanılmadı). Detay: ARCHITECTURE.md §10.1 + `docs/ops/DEPLOY-RUNBOOK.md` "Sahadaki kurulum" tablosu.
-- **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer — **yalnız üretim kurulumunda** (`postgresql.conf` → `log_min_duration_statement=500`; değerlerin kaydı `docs/ops/DEPLOY-RUNBOOK.md §6`). Dev'de kapalı (`-1`); açmak istersen `ALTER DATABASE adnansahin_db SET log_min_duration_statement = 500` (D-16).
+- **`statement_timeout=50s`** aktif (uzun sorgu otomatik iptal; `pg_db_role_setting`'den 2026-06-12 doğrulandı). DB-level: `ALTER DATABASE <db> SET statement_timeout = '50s'` — migration ile değil, manuel uygulanır. DB adı ortama göre: dev=`tekserp_demo` (.env), sahadaki Windows sunucu=**`tekserp`** (PostgreSQL 16.9, `C:\Etkili-Yazilim\pgsql`; eski installer'ın `TeksErpDb` adı kullanılmadı). Detay: ARCHITECTURE.md §10.1 + `docs/ops/DEPLOY-RUNBOOK.md` "Sahadaki kurulum" tablosu.
+- **Slow query log** (`>500ms`) PostgreSQL log dosyasına düşer — **yalnız üretim kurulumunda** (`postgresql.conf` → `log_min_duration_statement=500`; değerlerin kaydı `docs/ops/DEPLOY-RUNBOOK.md §6`). Dev'de kapalı (`-1`); açmak istersen `ALTER DATABASE tekserp_demo SET log_min_duration_statement = 500` (D-16).
+    - ⚠️ **Bayat düzeltmesi (2026-09-03):** dev DB adı artık `tekserp_demo` (Docker `tekserp-local-db`, port **55433**) — yukarıdaki iki satırdaki eski `adnansahin_db` adı düzeltildi. Sahadaki Windows sunucuda ad **`tekserp`** olarak KALIR. Kural: DB adını dokümana sabitleme, `.env`'den doğrula (`\l` / `SELECT current_database()`). Operasyonel komut örneğinin bayatlığı doğrudan **var olmayan DB'ye `ALTER`** çalıştırtır.
 - **Yedekleme backend'e ait** (2026-07-30): `services/backup.service.ts` + `jobs/backup-scheduler.ts` — `pg_dump` ayrı child process'te koşar (backend bloklanmaz), sonra bütünlük doğrulama (`verifyBackupFile` → `pg_restore --list`) → 14'lük rotasyon → offsite kopya. `BACKUP_DIR` tanımsızsa **yedek alınmaz**. Yedek saati `SystemSetting backup.hour` (panelden ayarlanır, restart gerekmez). Eski `manage.ps1` + Görev Zamanlayıcı zinciri kaldırıldı.
 - **Gece yedeğinin sahibi ORTAMA GÖRE değişir (2026-07-31):** sahadaki sunucuda yedeği bağımsız bir Windows Görev Zamanlayıcı görevi alıyor (`TeksERP-DB-Backup` → `yedekle.ps1`, 02:00, 30 gün) — **backend çökmüşken bile yedek alınsın** diye bilinçli. Orada backend zamanlayıcısı `BACKUP_SCHEDULE_ENABLED=false` ile KAPALI; ikisi birden açık kalırsa her gece iki dump alınır. Saklama **GÜN bazlı** (`BACKUP_RETENTION_DAYS`, varsayılan 30) — eski "en yeni 14 dosya" politikası aynı klasöre yazan harici script'in 30 günlük geçmişini sessizce siliyordu. Yaşına bakılmaksızın en yeni 3 dosya korunur (sistem saati kayması sigortası).
 - **Yedek ön ekleri = yaşam döngüsü** (`services/helpers/backup-naming.helper.ts` TEK KAYNAK): `tekserp_` rotasyona **girer** (silinebilir) · `premigrate_` ve `pre-restore_` rotasyon **dışı**. Rotasyon filtresi yalnız `tekserp_`'e bakar — bu, geri yükleme güvenlik ağının dayandığı invariant. Cutoff çözümlemesi `min(ad damgası, mtime)`: ad damgası dump BAŞLANGICI (pg_dump snapshot'ı orada alır), mtime BİTİŞ; mtime tek başına kullanılırsa dump süresince oluşan kayıtlar "kaybolmayacak" sayılır.
@@ -309,6 +312,7 @@ Detay: ARCHITECTURE.md §6.
 - [ ] Service: transaction + `AuditService.log()` her CUD'de
 - [ ] Controller: Zod validate + service çağır
 - [ ] Route: `verifyToken` + `requirePermission(kod)` + Swagger JSDoc — kod `src/constants/permission-catalog.ts`'te **olmalı** (bekçi: `scripts/test_permission_catalog.ts`)
+- [ ] Uç bir modüle aitse router **adlandırılmış** modül kapısını taşıyor (`requireProductionEnabled` / `requireTicaretEnabled` / `requireIplikEnabled` / `requireDepoMultiEnabled` — `src/middlewares/module.middleware.ts`); jenerik `requireModule("x")` YASAK (bekçiler middleware ADINI metin arar). Kapı gerekmiyorsa gerekçesi muaf listesinde YAZILI. Kapalı modülde LAN'da 403 + `details.code = "MODULE_DISABLED"`, tünelde 404.
 - [ ] `app.ts`'e `app.use("/api/...", routes)` eklendi
 - [ ] Fiziksel DELETE değil `isActive: false` veya status değişikliği
 - [ ] `any` yok
