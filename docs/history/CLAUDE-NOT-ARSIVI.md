@@ -1985,3 +1985,45 @@ ile doğrulandı. **Yeni izin kodu YOK · APK YOK.**
 
 **Ek dersler:** ① "üç yazma yüzeyi" gibi ELLE sayılmış kapsam listeleri bir sonraki yüzeyde delinir — kapsamın yüklemi ekran değil YAZMA'dır ve tripwire ile ölçülür; ② sızıntı kapatan düzeltme kimliği de götürebilir (`originalUrl` → `path` query'yi kesti ama yolu da sildi) — bekçi "ne YAZILMAMALI" kadar "ne YAZILMALI"yı da ölçmeli; ③ iki taraflı sabit (backend↔panel) ayna bekçisi olmadan sessizce ayrışır; ④ bekçi harness'ı çerçevenin semantiğini (Express mount göreliliği) modellemezse gerçek regresyonu göremez.
 
+### 2026-09-03 — Kalite = istasyon YETENEĞİ (P4 Faz A): boğaz TEK DEĞİL İKİZ
+
+**Bağlam:** Tasarım §5.1 + karar #11. "Bu adım kalite kontrol yürütür mü" sorusuna eskiden `step.station.kind === StationKind.PROCESS_QC` diye cevap veriliyordu ve literal 19 karar noktasına ELLE kopyalanmıştı — yani kalite bir YETENEK değil bir TÜR ADIydı: ikinci bir KK istasyonu tanımlamak imkânsızdı, bir kopyanın atlanması sessiz davranış farkı üretirdi.
+
+**Ne yapıldı (davranış BİREBİR; fabrika dump'ında 23 uçta 0 statü kodu farkı, migration UPDATE 1 satır):**
+- `Station.appliesQuality` kolonu + backfill (`WHERE kind='PROCESS_QC'`). Yeni tek kaynak `services/helpers/quality-station.helper.ts`.
+- ⚠️ **BOĞAZ İKİZ:** saf yüklem `stepCanApplyQuality(station)` (bellek içi 11 nokta) + Prisma where parçası `QUALITY_STATION_WHERE` (13 nokta). Saf yüklem where'e GİREMEZ — sorgu DB'de koşuyor; özellikle `setQueueUrgent`in F167 atomik claim'ini "önce oku, sonra yüklemle kontrol et, sonra update" biçimine çevirmek check-then-act yarışını geri getirirdi. İkisi AYNI kuralı söyler ve BİRLİKTE değişir.
+- **Faz A köprüsü:** yüklem `kind === PROCESS_QC || appliesQuality` okur — backfill'e GÜVENMEZ. Seed migration'dan SONRA boş tabloda koşar (2026-08-10 `appliesColor` tuzağının birebir tekrarı olurdu), o yüzden seed'e de açıkça `appliesQuality: true` yazıldı; dal onun İKİNCİ sigortası. Faz B'de dal düşmeden önce seed + prod ölçümü yapılır.
+- `assertRollInStep(_, _, expectedKind)` → `assertRollInQualityStep` (argüman düştü); `hasBypassClosureOnProcessQcTx` → `hasBypassClosureOnQualityStepTx` (ad ↔ yüklem ayrışmasın). Kurşun bypass'ta makine LİSTESİ ile atama KABULÜ artık aynı ikizden besleniyor — ayrışsalardı listede görünen makine seçilince 400 alınır, dağıtımcı sebebi anlayamazdı.
+- ⚠️ `assertWoAtStepKind(PROCESS_QC)` (kursun-qc) **DOKUNULMADI**: `roll-step.helper` TAMBUR ile PAYLAŞILIYOR, imzasını yetenekleştirmek Tambur kart-okutma yolunu da değiştirirdi. Bekçide gerekçeli muaf, Faz B'ye bırakıldı.
+- `QUALITY_STATION_WHERE` `as const` DEĞİL `satisfies` ile yazılır (readonly literal `OR:` konumunda Prisma'nın mutable input tipine oturmaz — `fason-open-dispatch.helper` dersi); spread ile kullanılır ve aynı kapsamda ikinci bir `OR:` YAZILMAZ (biri sessizce kaybolur).
+- Panel: "Kalite kontrol uygular" kutusu HER istasyon türünde görünür (gizli kural icat edilmez; yüklem KK1'de zaten etkisiz). ÖNCE `buildStationPayload` drift'i onarıldı — mevcut renk/özellik kutuları payload'a hiç girmiyordu, yani ÖLÜYDÜ.
+- "KK1 WO adımı olamaz" kuralı **istemci sözleşmesi** olarak kaldı: backend `allowAsWorkOrderStep`ı HİÇ okumuyor (ölçüldü: 0 okuyucu), guard eklemek davranış değişikliği olurdu.
+
+**Bekçi `test_station_quality_capability` (22):** ikizin CANLI eşdeğerliği dört köşe fixture'ıyla (where sonucu ≡ yüklem sonucu), koddaki `PROCESS_QC` literalleri SAYIM bazlı muafla, `STEP_QUALITY_SELECT` kullanımına TABAN SAYIM. Beş negatif sonda kırmızı verdi.
+
+**Ders (bekçinin kendi kör noktası):** ilk yazımda İKİ kontrol de DOSYA bazlıydı ve sondalar bunu ölçtü — ① muaf dosya bazında olunca o dosyaya eklenen YENİ tür kontrolü sessizce kapsanıyordu; ② "dosyada `STEP_QUALITY_SELECT` geçiyor mu" kontrolü aynı dosyadaki İKİNCİ select'in alanı atlamasını gizliyordu. İkisi de sayım bazlıya çevrildi. Ayrıca "kind seçen her select yüklem içindir" varsayımı ölçümle çürüdü: `currentStepKind` gibi GÖRÜNTÜLEME select'leri de `kind` okur.
+
+### 2026-09-03 — Tamlık bekçisi + kurulum profilleri (P6): profil dosyası pakete HİÇ GİRMİYORDU
+
+**Bağlam:** Tasarım §3 ("her ekran bir modüle ya da çekirdek bloğa eşlenmek ZORUNDA") + §10 profiller.
+
+- `ScreenEntry.modul` **ZORUNLU** alan; 93 ekranın (78 masaüstü + 15 tablet) tamamı eşlendi. Değer kümesi üçlü: `ModulKey` (7 anahtar, bekçi `MODULE_FLAG_KEYS` ile birebirler) · `cekirdek:*` (5 blok, ön ek ZORUNLU ki bir yazım hatasıyla modül adı karışmasın) · `planlanan:fason|kartela` (tasarımda var, kod anahtarı yok → hiza aranmaz ama ölü de sayılmaz). Alan **AİDİYET beyanıdır, GÖRÜNÜRLÜK kuralı değil** — gizleme `visibleWhen`in işi.
+- ⚠️ Plandaki `MODULESIZ_EKRANLAR` muafı YAZILMADI: alan zorunlu olunca o liste doğduğu gün ölü olurdu ve "ölü muaf kırmızı" kuralı kendi listesine takılırdı. Muaflar KARO/KAPI eksenine taşındı.
+- ⚠️ **Profiller TS sabiti** (`constants/module-profiles.ts`), plandaki `deploy/profiller/*.json` REDDEDİLDİ: `deploy/paketle.ps1` kopya listesi `deploy/`yi pakete HİÇ almıyor (ölçüldü) → job üretimde dosyayı bulamaz ve sessiz no-op'a düşerdi; taze müşteri kurulumu profilsiz doğar, kimse fark etmezdi.
+- **Davranış bayrakları profile GİRMEZ:** `prisma/seed.ts` 27 davranış bayrağını `upsert.update` ile EZEREK yazıyor; profil de yazsaydı aynı anahtarın iki yazarı olur ve kazananı koşum sırası belirlerdi.
+- Job: `TEKSERP_PROFIL` env'i YOKSA **hiçbir şey yazmaz** (varsayılan profil yazmak, operatör env'i doldurmadan sunucuyu bir kez açtığında yanlış profili KALICI damgalardı — "satır varsa dokunma" ile birleşince geri dönüşü olmazdı). Eksikler tek `createMany skipDuplicates` ifadesiyle (yarış güvenli). Bağımlılık doğrulaması SAF yüklemle: `assertModuleDependencies` private ve DB okuyor, `setFeatureFlags` de `userId` istiyor — job ikisini de çağıramaz, o yüzden üç koruma (bağımlılık · audit · K7 reddi) job'da YENİDEN kuruldu.
+- `GET /api/admin/module-profile` salt okuma; fark SUNUCUDA hesaplanır (profil kaynağı istemciye sızmaz). YAZMA UCU YOK — profil uygulama mevcut `PATCH /feature-flags` kapısından geçer, yoksa süperadmin guard'ı + ayar şifresi zinciri ikinci kez kurulurdu (§12.5 kapı çoğaltma yasağı).
+
+### 2026-09-03 — Panel modül kapıları + Sistem Profili (P5): kilit GİZLEME DEĞİLDİR
+
+**Bağlam:** Tasarım §3.3 · §3.5 · §7.3.
+
+- **İki CANLI ayrışma** kapandı (fabrikada görünmüyordu, ilk ticaret müşterisinde patlardı): Mal Kabul karosu çiziliyordu ama uç `requireTicaretEnabled` 403 veriyordu; Kalem Fiyatları karosu `financeEnabled` okuyordu ama uç ticaret kapısındaydı (yön TERS).
+- ⚠️ **Ayar kategorilerinde modül = KİLİT, `regime` (gizleme) DEĞİL.** `regime`i modül anahtarlarına açmak §14'ün yasakladığı yol: ölçüldü, üretim/ticaret kategorilerine `regime` konsaydı dört+ okuyucu çekirdek route'lardan hâlâ ulaşılabilir olduğu için bekçi kırmızı verirdi. Yeni `moduleKey` alanı `superadminOnly` deseninin ikizi (o da KİLİTLER). `warehouse` kategorisi ikiye bölündü (ticaret / iplik) çünkü tek kategori iki modül taşıyordu.
+- ⚠️ **Kilit İSTEMCİ-TARAFLIDIR:** bant "bu ayarlar dondu" der ama API hâlâ yazar (canlı ölçüldü). Tasarım §3.6 tek resolver bu pakette UYGULANMADI ve bant "etkisiz" DEMİYOR — sözün karşılığı yoksa yazılmaz. §3.6 Dilim 2'de.
+- `finance` kategorisinin mevcut GİZLEME davranışı KORUNDU (Adnan'da finance kapalı → kategori bugün gizli; kilide çevirmek görünür fark olurdu). Tasarım §3.5 ile bu tutarsızlık sabah kararına bırakıldı.
+- **Süperadmin kapısı TEK KAYNAK** `lib/superadmin-gate.ts` — dört tüketici de ithal ediyor. Üç kopya ayrışsaydı `!systemAccountExists` supabı birinde unutulur ve süperadminsiz kurulumda ekran hiç açılmaz, modüller bir daha yapılandırılamazdı.
+- **Palet sızıntıları:** karo döngüsünün DIŞINDA kalan girdiler (`ops:work-order-new`, `def:station-capabilities`) üretim kapalıyken palette kalıyordu — form açılır, her istek 403. İkincisinin karosu hiç yok, yani palet ona giden TEK keşif yolu ve kapıyı ELLE taşımak zorunda. Karo hizası bekçisi bu yolu ölçemez (karo↔manifesto ekseninde çalışır).
+- **"Kapatırsan gizlenir" önizlemesi MASAÜSTÜ ile TABLETİ AYRI sayar:** eskisi `app === "desktop"` süzüyordu ve üretim için "gizlenen ekranlar (9)" yazıp beş TABLET ekranını (KK1 · Kurşun · Tambur · Hızlı İş Emri · Kurşun Dağıtım) hiç anmıyordu — oysa hepsi `requireProductionEnabled` arkasında. Satıcı, üretimi kapatınca tabletin DURACAĞINI bu ekrandan öğrenemiyordu. Kapatma kararının bedeli farklı olduğu için sayılar ayrı tutulur.
+- Manifesto okunamazsa liste HİÇ çizilmez (boş liste "hiçbir şey gizlenmeyecek" YALANI basardı).
+

@@ -252,12 +252,12 @@ audit: satır yazılır, takma ad basılır · negatif sonda: süzgeç kalkınca
 **P3 · Ayar şifresi:** ✅ UYGULANDI 2026-09-03 (`9f33d0e3` + `f948780f`; karar notu arşivde "Ayar şifresi P3"; planda OLMAYAN kapsam: `/admin/backups/offsite` — kapsam artık AST tripwire ile ölçülüyor). hash + doğrulama dalı + Electron diyaloğu (bayrak
 kaydetmeden önce sorar) + süperadmin ekranından üret/değiştir/iptal + audit.
 
-**P4 · Kalite-yetenek Faz A:** yukarıdaki bölüm (kolon + backfill + tek yüklem
+**P4 · ✅ UYGULANDI 2026-09-03 (`8ba7b3fb` + drift `f19f9864`) · Kalite-yetenek Faz A:** yukarıdaki bölüm (kolon + backfill + tek yüklem
 boğazı + panel UI + drift onarımları). Davranış birebir — mevcut bekçi seti
 yeşil kalmalı; yeni bekçi `test_station_quality_capability.ts` (backfill
 doğruluğu + boğazın tekliği AST taraması + negatif sonda).
 
-**P5 · Karo/ctx + Sistem Profili ekranı (Electron):** ⚠️ 2026-09-02 notu:
+**P5 · ✅ UYGULANDI 2026-09-03 (`ff6f847f`) · Karo/ctx + Sistem Profili ekranı (Electron):** ⚠️ 2026-09-02 notu:
 `depo.multiEnabled` artık ANLIK DAMGA, canlı türev değil — fabrika ikinci depoyu
 açınca yüzeyler eskisi gibi kendiliğinden BELİRMEZ. P5 iki uyarı ekler: Sistem
 Profili'nde "aktif depo >1 ama anahtar kapalı" amber bandı + Depolar ekranında ikinci
@@ -271,7 +271,7 @@ modül kartları, bağımlılık + "kapatırsan şunlar gizlenir" önizlemesi (s
 catalog `modul` alanından türetilir), alt bayraklar gruplu, profil uygula +
 fark göster, değişiklik geçmişi.
 
-**P6 · Tamlık bekçisi + profiller:** `ScreenEntry.modul` alanı + tüm ekranların
+**P6 · ✅ UYGULANDI 2026-09-03 (`874afd5a`) · Tamlık bekçisi + profiller:** `ScreenEntry.modul` alanı + tüm ekranların
 eşlenmesi + `test_screen_catalog` genişletmesi (gerekçeli `MODULESIZ_EKRANLAR`,
 ölü muaf kırmızı) · `deploy/profiller/{basit,tam}.json` +
 `src/jobs/module-profile.job.ts` ("satır varsa dokunma").
