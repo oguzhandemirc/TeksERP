@@ -29,6 +29,16 @@
    - `DATABASE_URL` set değilse açılışta throw (`src/lib/prisma.ts`).
    - `JWT_SECRET` yok veya <32 karakter ise **backend AÇILMAZ** (`auth.service.ts`, modül-yükleme anında throw). `example-env.txt`'teki demo değeri prod'da kullanma — rastgele ≥32 hex üret.
    - `PORT` (default 4000) ve `HOST` (default `0.0.0.0` = tüm LAN) opsiyonel.
+   - **`TEKSERP_PROFIL` — müşteri hangi profili aldı** (`basit | standart | perde | dokuma | tam`).
+     İlk açılışta modül anahtarlarını (Üretim / Ön muhasebe / Ticaret / İplik / Çoklu depo /
+     Kumaş teknik kartı / Tezgah izleme) bu profilden yazar. Profil tablosu:
+     `docs/design/MODUL-BAYRAK-TASARIM.md §10`.
+     - **Verilmezse hiçbir satır yazılmaz** ve kod varsayılanları geçerli olur
+       (üretim AÇIK, diğer altısı KAPALI). Bilinçli: profili yazmadan sunucuyu bir kez
+       açmak yanlış bir profili KALICI damgalamasın.
+     - **Sonradan değiştirmek mevcut anahtarları DEĞİŞTİRMEZ** — modül açıp kapatma
+       Sistem Profili ekranından (`PATCH /api/feature-flags`) yapılır.
+     - Yükseltilen (mevcut) kurulumda satırlar zaten var → job tam **no-op**.
 
 ### A2. Ortam ayarları (`Teks-Erp/ecosystem.config.js` — sır DEĞİL; git'te)
 5. Yedekleme ve port ayarları burada durur. **`BACKUP_DIR` tanımsızsa gece yedeği ÇALIŞMAZ** — deploy sonrası backend log'unda `[backup] BACKUP_DIR tanımsız` satırının **olmadığını** teyit et. Diğerleri: `BACKUP_OFFSITE_DIR` (makine dışı kopya; boşsa yedekler DB ile aynı diskte), `BACKUP_HOUR` (default 3), `PG_BIN_DIR` (`pg_dump`/`pg_restore` konumu — Windows'ta PATH'te olmaz).
@@ -59,6 +69,18 @@
       - (a) Seed çalıştır → demo satırlarını Tanımlar UI'sından veya SQL ile **elle sil**, gerçeklerini gir.
       - (b) Tam temiz: `DROP SCHEMA public CASCADE; CREATE SCHEMA public;` → `migrate deploy` → `seed` → demo temizle.
     - **Seed'i tamamen atlama önerilmez** — izin/kalite/etiket template gelmez, sistem açılmaz.
+
+> **A4b. İlk açılışta modül anahtarları (profil).** `pm2 start` sonrası açılıştan ~3 sn
+> sonra `pm2 logs tekserp-backend` çıktısında `[module-profile]` satırını doğrula:
+> - `"<profil>" profili uygulandı — N satır yazıldı` → taze kurulum, anahtarlar yazıldı.
+> - `Modül anahtarlarının 7/7 satırı zaten var — dokunulmadı` → yükseltilen kurulum (beklenen).
+> - `TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI` → `.env`de profil yok;
+>   taze kurulumda bu genelde bir UNUTMADIR (satırı ekle, pm2 restart et — satır
+>   olmadığı için job ikinci açılışta yazar).
+> - `JOB_FAILED:module-profile` → profil adı yanlış yazılmış; hiçbir satır yazılmadı.
+>
+> ⚠️ İlk birkaç saniyede (job koşmadan önce) ticaret/iplik uçları 403 dönebilir —
+> modül kapıları cache'siz okur ve satır henüz yoktur. Kendiliğinden geçer.
 
 ### A5. Derle + pm2 ile çalıştır (tek-process)
 9. `npm run build` (= `tsc` → `dist/`). `package.json`'da `start`/`prod` script'i **YOK**; süreci pm2 yönetir.

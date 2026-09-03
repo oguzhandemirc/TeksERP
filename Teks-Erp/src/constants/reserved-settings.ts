@@ -19,6 +19,12 @@
 //      başlayan HER satır listelerden düşer, yani yarın eklenecek ikinci bir sır
 //      satırı da doğduğu an korunmuş olur ("unutulmuş altıncı enum" sınıfı).
 //
+// ⚠️ KÜME ARTIK İKİ SINIF TAŞIYOR (2026-09-03 / P6): sır satırı
+// (`security.settingsPasswordHash`) ve AYAR OLMAYAN KAYIT satırı
+// (`system.profile` — kurulum profili damgası). İkisinin YAZMA reddi aynı,
+// OKUMA kuralı FARKLI: yalnız `security.` ön eki listelerden düşer, damga
+// görünür kalır (Sistem Profili ekranı onu okur ve sır taşımaz).
+//
 // ⚠️ NEDEN AYRI DOSYA: `system-setting.service.ts` bu kümeyi import eder;
 // `SETTING_KEYS`ten türetilmiş bir küme burada tanımlansaydı dairesel bağımlılık
 // kurulur ve CommonJS'te modül init sırasına göre `undefined` bir Set üretirdi —
@@ -36,6 +42,19 @@ export const SECURITY_SETTING_PREFIX = "security.";
 export const SETTINGS_PASSWORD_HASH_KEY = "security.settingsPasswordHash";
 
 /**
+ * Kurulum profili DAMGASI (`jobs/module-profile.job.ts` yazar).
+ *
+ * ⚠️ AYAR DEĞİL, KAYIT: "bu kurulum doğarken hangi profil uygulandı" sorusunun
+ * cevabı. Ham ayar ucundan yazılabilseydi `admin:settings` taşıyan bir fabrika
+ * admini damgayı değiştirip Sistem Profili ekranını yanıltabilirdi — modül
+ * anahtarlarının K7 reddiyle aynı sınıf (tek yazma yüzeyi bırakmak).
+ *
+ * ⚠️ OKUMASI SERBEST (ön ek `security.` DEĞİL): `GET /api/admin/settings`
+ * listesinde görünür ve Sistem Profili ekranı onu okur — sır taşımıyor.
+ */
+export const PROFILE_STAMP_SETTING_KEY = "system.profile";
+
+/**
  * `PUT /api/admin/settings/:key` ucunun REDDETTİĞİ anahtarlar.
  *
  * Kümeye ek olarak ön ek kuralı da uygulanır (`isReservedSettingKey`) — küme
@@ -44,6 +63,7 @@ export const SETTINGS_PASSWORD_HASH_KEY = "security.settingsPasswordHash";
  */
 export const RESERVED_SETTING_KEYS: ReadonlySet<string> = new Set([
   SETTINGS_PASSWORD_HASH_KEY,
+  PROFILE_STAMP_SETTING_KEY,
 ]);
 
 /** `security.` ile başlıyor mu — liste/dışa-aktarım süzgeçlerinin yüklemi. */

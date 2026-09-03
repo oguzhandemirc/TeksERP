@@ -33,10 +33,84 @@ export interface ScreenCapability {
   label: string;
 }
 
+/**
+ * Kapatılabilir modüller — TEK KAYNAK `constants/module-flags.ts` (`MODULE_FLAG_KEYS`).
+ * Union burada YENİDEN yazılır çünkü `MODULE_FLAG_KEYS` bir `Set<string>`tir (tip
+ * üretmez); ikilik `test_screen_catalog §7c` ile İKİ YÖNLÜ kilitlenir — liste
+ * kopyalanmaz, bekçi import edip karşılaştırır.
+ */
+export type ModulKey =
+  | "productionEnabled"
+  | "financeEnabled"
+  | "ticaretEnabled"
+  | "iplikEnabled"
+  | "depoMultiEnabled"
+  | "kumasTeknikEnabled"
+  | "tezgahEnabled";
+
+/**
+ * Kapatılamaz çekirdek bloklar (MODUL-BAYRAK-TASARIM §2).
+ *
+ * ⚠️ `cekirdek:` ÖN EKİ ZORUNLU: bir yazım hatasıyla ("ana-veri" ↔ "anaveri") bir
+ * modül adının karışmaması için değil sadece — bekçi ve Sistem Profili ekranı
+ * "bu ekran kapatılabilir bir modüle mi ait" sorusunu tek satırda
+ * (`startsWith("cekirdek:")`) cevaplayabilsin diye.
+ */
+export type CekirdekBlok =
+  | "cekirdek:ana-veri"
+  | "cekirdek:stok-giris"
+  | "cekirdek:siparis-musteri"
+  | "cekirdek:sevkiyat-depo"
+  | "cekirdek:sistem-kimlik-belge";
+
+/**
+ * Tasarımda VAR, kod anahtarı HENÜZ YOK (fason · kartela — tasarım §2 on modül
+ * sayıyor, `module-flags.ts` yedi anahtar taşıyor).
+ *
+ * Değer GEÇİCİ BİR YER TUTUCU DEĞİL, bilgi taşır: bekçi bu ekranlara karo/kapı
+ * hizası ARAMAZ (bağlanacak bayrak yok) ama "bilinmeyen değer" de saymaz. Gerçek
+ * anahtar doğduğu gün `MODULE_FLAG_KEYS` ↔ `ModulKey` birebirlemesi taşımayı
+ * görünür kılar — çekirdeğe konsalardı taşınmadıklarını hiçbir bekçi yakalamazdı.
+ */
+export type PlanlananModul = "planlanan:fason" | "planlanan:kartela";
+
+export type EkranModul = ModulKey | CekirdekBlok | PlanlananModul;
+
+/** Çalışma anında değer doğrulaması için (tip silinir, veri kalır). */
+export const EKRAN_MODUL_DEGERLERI: ReadonlySet<string> = new Set<EkranModul>([
+  "productionEnabled",
+  "financeEnabled",
+  "ticaretEnabled",
+  "iplikEnabled",
+  "depoMultiEnabled",
+  "kumasTeknikEnabled",
+  "tezgahEnabled",
+  "cekirdek:ana-veri",
+  "cekirdek:stok-giris",
+  "cekirdek:siparis-musteri",
+  "cekirdek:sevkiyat-depo",
+  "cekirdek:sistem-kimlik-belge",
+  "planlanan:fason",
+  "planlanan:kartela",
+]);
+
 export interface ScreenEntry {
   /** Mobilde ekran anahtarı (`KK1`), masaüstünde route yolu (`definitions/items`). */
   key: string;
   app: "mobile" | "desktop";
+  /**
+   * Bu ekran hangi modül kapanınca ANLAMSIZ kalır? (MODUL-BAYRAK-TASARIM §3)
+   *
+   * ZORUNLU alan — opsiyonel olsaydı yeni bir ekran hiç yazılmadan derlenir ve
+   * tamlık kapısı tamamen bekçiye kalırdı; zorunluyken İLK kapı derleyicidir.
+   *
+   * ⚠️ AİDİYET BEYANIDIR, GÖRÜNÜRLÜK KURALI DEĞİL. Gizleme `visibleWhen`in işi:
+   * `definitions/customers` çekirdek ana veridir ama karosu `!financeEnabled`
+   * ile çizilir. Bu alanı menü süzmek için kullanan biri o ekranı finans
+   * açıkken de gösterir. Alanın tüketicisi Sistem Profili ekranının
+   * "kapatırsan şunlar gizlenir" ÖNİZLEMESİ ve bekçinin tamlık kapısıdır.
+   */
+  modul: EkranModul;
   title: string;
   /** Ekranı AÇMAK için gereken izinler — HERHANGİ BİRİ yeterlidir. */
   requires: string[];
@@ -97,80 +171,85 @@ const CAP_LABEL: Record<string, string> = {
 export const capLabel = (code: string): string => CAP_LABEL[code] ?? code;
 
 const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[] }> = [
-  { key: "definitions/items", app: "desktop", title: "Kumaşlar", requires: ["item:read"], capabilities: ["item:write"] },
-  { key: "definitions/customers", app: "desktop", title: "Müşteriler", requires: ["customer:read"], capabilities: ["customer-alias:write", "customer:write", "label-template:write"] },
-  { key: "definitions/stations", app: "desktop", title: "Üretim İstasyonları", requires: ["station:read"], capabilities: ["station:write"] },
-  { key: "definitions/machines", app: "desktop", title: "Makineler", requires: ["station:read"], capabilities: ["station:write"] },
-  { key: "definitions/peripherals", app: "desktop", title: "Donanım", requires: ["station:read"], capabilities: ["station:write"] },
-  { key: "definitions/labels", app: "desktop", title: "Etiketler", requires: ["station:read"], capabilities: ["label-template:read", "label-template:write"] },
-  { key: "definitions/routes", app: "desktop", title: "Üretim Rotaları", requires: ["station:read"], capabilities: ["property:write", "station:write"] },
-  { key: "definitions/product-recipes", app: "desktop", title: "İş Emri Şablonları", requires: ["station:read"], capabilities: ["station:write"] },
+  { key: "definitions/items", app: "desktop", modul: "cekirdek:ana-veri", title: "Kumaşlar", requires: ["item:read"], capabilities: ["item:write"] },
+  { key: "definitions/customers", app: "desktop", modul: "cekirdek:ana-veri", title: "Müşteriler", requires: ["customer:read"], capabilities: ["customer-alias:write", "customer:write", "label-template:write"] },
+  { key: "definitions/stations", app: "desktop", modul: "cekirdek:ana-veri", title: "Üretim İstasyonları", requires: ["station:read"], capabilities: ["station:write"] },
+  { key: "definitions/machines", app: "desktop", modul: "cekirdek:ana-veri", title: "Makineler", requires: ["station:read"], capabilities: ["station:write"] },
+  { key: "definitions/peripherals", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Donanım", requires: ["station:read"], capabilities: ["station:write"] },
+  { key: "definitions/labels", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Etiketler", requires: ["station:read"], capabilities: ["label-template:read", "label-template:write"] },
+  { key: "definitions/routes", app: "desktop", modul: "productionEnabled", title: "Üretim Rotaları", requires: ["station:read"], capabilities: ["property:write", "station:write"] },
+  { key: "definitions/product-recipes", app: "desktop", modul: "productionEnabled", title: "İş Emri Şablonları", requires: ["station:read"], capabilities: ["station:write"] },
   // TEK EKRAN, DÖRT SEKME (fire · kayıt düzeltmesi · elle ekleme · iptal) —
   // düzenleme `roll:manual-adjust` YETENEĞİdir, ekranı görmek için gerekmez.
-  { key: "definitions/reason-presets", app: "desktop", title: "Hazır Sebepler", requires: ["roll:read"], capabilities: ["roll:manual-adjust"] },
-  { key: "definitions/defect-types", app: "desktop", title: "Hata Tipleri", requires: ["quality:read"], capabilities: ["quality:write"] },
-  { key: "definitions/quality-grades", app: "desktop", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
-  { key: "definitions/colors", app: "desktop", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },
-  { key: "definitions/return-reasons", app: "desktop", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
-  { key: "definitions/fabric-properties", app: "desktop", title: "Kumaş Özellikleri", requires: ["property:read"], capabilities: ["property:write"] },
-  { key: "definitions/subcontractor-categories", app: "desktop", title: "Fason Kategorileri", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
-  { key: "definitions/subcontractors", app: "desktop", title: "Fason Firmalar", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
-  { key: "definitions/station-capabilities", app: "desktop", title: "İstasyon Yetenekleri", requires: ["station:read"], capabilities: [] },
-  { key: "definitions/label-templates", app: "desktop", title: "Etiket Tasarımı", requires: ["label-template:read"], capabilities: ["label-template:write"] },
-  { key: "access/devices", app: "desktop", title: "Tabletler", requires: ["admin:settings"], capabilities: [] },
-  { key: "access", app: "desktop", title: "Yetkilendirme", requires: ["admin:users"], capabilities: [] },
-  { key: "access/users", app: "desktop", title: "Kullanıcılar", requires: ["admin:users"], capabilities: [] },
-  { key: "access/templates", app: "desktop", title: "Yetki Şablonları", requires: ["admin:users"], capabilities: [] },
-  { key: "access/permissions", app: "desktop", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
-  { key: "system", app: "desktop", title: "Sistem", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/activity", app: "desktop", title: "Aktivite Günlüğü", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/perf", app: "desktop", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/server-status", app: "desktop", title: "Sunucu Durumu", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/work-sessions", app: "desktop", title: "Çalışma Oturumları", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/backups", app: "desktop", title: "Yedekler", requires: ["admin:settings"], capabilities: [] },
+  { key: "definitions/reason-presets", app: "desktop", modul: "cekirdek:ana-veri", title: "Hazır Sebepler", requires: ["roll:read"], capabilities: ["roll:manual-adjust"] },
+  { key: "definitions/defect-types", app: "desktop", modul: "cekirdek:ana-veri", title: "Hata Tipleri", requires: ["quality:read"], capabilities: ["quality:write"] },
+  { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
+  { key: "definitions/colors", app: "desktop", modul: "cekirdek:ana-veri", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },
+  { key: "definitions/return-reasons", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Nedenleri", requires: ["return:read"], capabilities: ["return:write"] },
+  { key: "definitions/fabric-properties", app: "desktop", modul: "cekirdek:ana-veri", title: "Kumaş Özellikleri", requires: ["property:read"], capabilities: ["property:write"] },
+  { key: "definitions/subcontractor-categories", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Kategorileri", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
+  { key: "definitions/subcontractors", app: "desktop", modul: "cekirdek:ana-veri", title: "Fason Firmalar", requires: ["subcontractor:read"], capabilities: ["subcontractor:write"] },
+  { key: "definitions/station-capabilities", app: "desktop", modul: "productionEnabled", title: "İstasyon Yetenekleri", requires: ["station:read"], capabilities: [] },
+  { key: "definitions/label-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Etiket Tasarımı", requires: ["label-template:read"], capabilities: ["label-template:write"] },
+  { key: "access/devices", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Tabletler", requires: ["admin:settings"], capabilities: [] },
+  { key: "access", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetkilendirme", requires: ["admin:users"], capabilities: [] },
+  { key: "access/users", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Kullanıcılar", requires: ["admin:users"], capabilities: [] },
+  { key: "access/templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Şablonları", requires: ["admin:users"], capabilities: [] },
+  { key: "access/permissions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yetki Kataloğu", requires: ["admin:users"], capabilities: [] },
+  { key: "system", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/perf", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/work-sessions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Çalışma Oturumları", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/backups", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yedekler", requires: ["admin:settings"], capabilities: [] },
   // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
   // VERİ yönetimidir ve ayrı atanır. Ekranın kendisi `data:import` ile açılır;
   // hangi varlığa yazılabileceği ayrıca o varlığın write izniyle sınırlıdır
   // (uç guard'ı iki katmanlıdır — `import.routes.ts`).
-  { key: "system/data-import", app: "desktop", title: "Veri Aktarımı", requires: ["data:import"], capabilities: [] },
+  { key: "system/data-import", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Veri Aktarımı", requires: ["data:import"], capabilities: [] },
   // Mükerrer Kayıtlar — `admin:settings` DEĞİL: "bu iki müşteri aynı firma mı?"
   // sorusunun cevabını ana veriyi TANIYAN kişi (satış/planlama) bilir, sistem
   // yöneticisi bilmez. `capabilities` dört varlığın write iznidir: ekran
   // açılır ama birleştirme ikinci kapıyı da arar (`master-data-merge.routes`).
-  { key: "system/duplicates", app: "desktop", title: "Mükerrer Kayıtlar", requires: ["master-data:merge"], capabilities: ["customer:write", "item:write", "property:write", "subcontractor:write"] },
-  { key: "system/db-restore", app: "desktop", title: "Veritabanı Geri Yükleme", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/logs", app: "desktop", title: "Sistem Kayıtları", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/archive", app: "desktop", title: "Aktivite Arşivi", requires: ["admin:settings"], capabilities: [] },
-  { key: "system/roll-archive", app: "desktop", title: "Top Arşivi", requires: ["admin:settings"], capabilities: [] },
-  { key: "operations/orders", app: "desktop", title: "Siparişler", requires: ["order:read"], capabilities: ["customer-alias:read", "order:write", "shipping:read", "workorder:write"] },
-  { key: "operations/work-orders", app: "desktop", title: "İş Emirleri", requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
-  { key: "operations/rolls", app: "desktop", title: "Envanter", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
-  { key: "operations/kursun-dagitim", app: "desktop", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
-  { key: "operations/product-balance", app: "desktop", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
-  { key: "operations/shipments", app: "desktop", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
-  { key: "operations/sack-store", app: "desktop", title: "Sevk Kapısı", requires: ["shipping:read"], capabilities: ["shipping:write"] },
-  { key: "operations/sack-content-edit", app: "desktop", title: "Paketleme / Çuvallar", requires: ["shipping:write"], capabilities: ["label:print"] },
-  { key: "operations/relabel-station", app: "desktop", title: "Yeniden Etiketle", requires: ["label:edit", "roll:write"], capabilities: [] },
-  { key: "operations/accounting-dispatch", app: "desktop", title: "Sevkiyatlar (Muhasebe)", requires: ["report:sales", "shipping:read"], capabilities: ["shipping:invoice"] },
-  { key: "operations/kartela", app: "desktop", title: "Kartela Takibi", requires: ["kartela:read"], capabilities: ["kartela:write"] },
-  { key: "operations/returns", app: "desktop", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
-  { key: "reports/production", app: "desktop", title: "Üretim", requires: ["report:production"], capabilities: [] },
-  { key: "reports/sales", app: "desktop", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
-  { key: "reports/quality", app: "desktop", title: "Kalite", requires: ["report:quality"], capabilities: [] },
-  { key: "reports/inventory", app: "desktop", title: "Stok & Depo", requires: ["report:inventory"], capabilities: [] },
-  { key: "reports/subcontract", app: "desktop", title: "Fason", requires: ["report:subcontract"], capabilities: [] },
-  { key: "reports/customer", app: "desktop", title: "Müşteri", requires: ["report:customer"], capabilities: [] },
-  { key: "reports/audit", app: "desktop", title: "Denetim", requires: ["report:audit"], capabilities: [] },
+  { key: "system/duplicates", app: "desktop", modul: "cekirdek:ana-veri", title: "Mükerrer Kayıtlar", requires: ["master-data:merge"], capabilities: ["customer:write", "item:write", "property:write", "subcontractor:write"] },
+  { key: "system/db-restore", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Veritabanı Geri Yükleme", requires: ["admin:settings"], capabilities: [] },
+  // ⚠️ SATICI EKRANI ama modülü ÇEKİRDEK: modül anahtarlarının EVİ kendi
+  // kilidinin arkasına konamaz (ayar ekranındaki `modules` kategorisiyle aynı
+  // kural — kapılı olsaydı modüller bir daha yapılandırılamazdı). Keşfi kısan
+  // şey KİMLİKTİR (`SystemTile.superadminOnly`), modül değil. 2026-09-03 / P5.
+  { key: "system/module-profile", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Profili", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/logs", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Kayıtları", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Arşivi", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/roll-archive", app: "desktop", modul: "cekirdek:stok-giris", title: "Top Arşivi", requires: ["admin:settings"], capabilities: [] },
+  { key: "operations/orders", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Siparişler", requires: ["order:read"], capabilities: ["customer-alias:read", "order:write", "shipping:read", "workorder:write"] },
+  { key: "operations/work-orders", app: "desktop", modul: "productionEnabled", title: "İş Emirleri", requires: ["workorder:read"], capabilities: ["order:write", "property:write", "roll:manual-adjust", "workorder:write"] },
+  { key: "operations/rolls", app: "desktop", modul: "cekirdek:stok-giris", title: "Envanter", requires: ["roll:read"], capabilities: ["kartela:write", "label:print", "label:read", "roll:history", "roll:manual-adjust", "roll:write"] },
+  { key: "operations/kursun-dagitim", app: "desktop", modul: "productionEnabled", title: "Kurşun Planlama", requires: ["quality:write", "workorder:distribute"], capabilities: [] },
+  { key: "operations/product-balance", app: "desktop", modul: "productionEnabled", title: "Kumaş Dengesi", requires: ["workorder:read"], capabilities: ["workorder:write"] },
+  { key: "operations/shipments", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar", requires: ["shipping:read"], capabilities: ["return:write", "shipping:invoice", "shipping:undo-dispatch", "shipping:write"] },
+  { key: "operations/sack-store", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevk Kapısı", requires: ["shipping:read"], capabilities: ["shipping:write"] },
+  { key: "operations/sack-content-edit", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Paketleme / Çuvallar", requires: ["shipping:write"], capabilities: ["label:print"] },
+  { key: "operations/relabel-station", app: "desktop", modul: "cekirdek:stok-giris", title: "Yeniden Etiketle", requires: ["label:edit", "roll:write"], capabilities: [] },
+  { key: "operations/accounting-dispatch", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyatlar (Muhasebe)", requires: ["report:sales", "shipping:read"], capabilities: ["shipping:invoice"] },
+  { key: "operations/kartela", app: "desktop", modul: "planlanan:kartela", title: "Kartela Takibi", requires: ["kartela:read"], capabilities: ["kartela:write"] },
+  { key: "operations/returns", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "İade Takibi", requires: ["return:read"], capabilities: ["return:write"] },
+  { key: "reports/production", app: "desktop", modul: "productionEnabled", title: "Üretim", requires: ["report:production"], capabilities: [] },
+  { key: "reports/sales", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Sipariş & Sevkiyat", requires: ["report:sales"], capabilities: [] },
+  { key: "reports/quality", app: "desktop", modul: "productionEnabled", title: "Kalite", requires: ["report:quality"], capabilities: [] },
+  { key: "reports/inventory", app: "desktop", modul: "cekirdek:stok-giris", title: "Stok & Depo", requires: ["report:inventory"], capabilities: [] },
+  { key: "reports/subcontract", app: "desktop", modul: "planlanan:fason", title: "Fason", requires: ["report:subcontract"], capabilities: [] },
+  { key: "reports/customer", app: "desktop", modul: "cekirdek:siparis-musteri", title: "Müşteri", requires: ["report:customer"], capabilities: [] },
+  { key: "reports/audit", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Denetim", requires: ["report:audit"], capabilities: [] },
   // ⚠️ AŞAĞIDAKİ BEŞİ ELLE EKLENDİ — route tarayıcısı bunları GÖREMEZ:
   // dördü `requireAnyPermission={DOCUMENT_DESIGN_READ}` gibi SABİT REFERANSLA
   // korunuyor (satır içi dizi değil), beşincisi ise route değil Genel Ayarlar
   // İÇİNDEKİ bir sekme. Bekçi bu iki biçimi de çözer; yeni bir sabit-referanslı
   // route eklenirse test kırmızı verir.
-  { key: "definitions/document-templates", app: "desktop", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/traveler-card", app: "desktop", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/traveler-card-studio", app: "desktop", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "definitions/free-documents", app: "desktop", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
-  { key: "settings", app: "desktop", title: "Genel Ayarlar", requires: ["admin:settings", "settings:workstation"], capabilities: ["settings:workstation"] },
+  { key: "definitions/document-templates", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Belge Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  { key: "definitions/traveler-card", app: "desktop", modul: "productionEnabled", title: "Refakat Kartı", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  { key: "definitions/traveler-card-studio", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Refakat Kartı Şablonları", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  { key: "definitions/free-documents", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Serbest Belgeler", requires: ["admin:settings", "document-template:read", "document-template:write"], capabilities: ["document-template:write"] },
+  { key: "settings", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Genel Ayarlar", requires: ["admin:settings", "settings:workstation"], capabilities: ["settings:workstation"] },
 
   // ═══════════════════════════════════════════════════════════════════════════
   // DEPO MAL KABUL + ÖN MUHASEBE (2026-09-01, birleştirme onarımı)
@@ -187,48 +266,48 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // sayfa İÇİNDE `PermissionGate` ile ayrılır, route'a konmaz. Bu yüzden onlar
   // `requires` değil `capabilities`tir; kart listesiyle (Finance/tile-config)
   // birebir aynı olması gereken şey `requires` tarafıdır.
-  { key: "finance", app: "desktop", title: "Ön Muhasebe", requires: ["finance:read"], capabilities: [] },
-  { key: "finance/cari", app: "desktop", title: "Cari Hesaplar", requires: ["finance:read"], capabilities: ["finance:write"] },
-  { key: "finance/invoices", app: "desktop", title: "Faturalar", requires: ["finance:read"], capabilities: ["finance:invoice"] },
-  { key: "finance/payments", app: "desktop", title: "Tahsilat ve Ödemeler", requires: ["finance:read"], capabilities: ["finance:payment"] },
-  { key: "finance/accounts", app: "desktop", title: "Kasa ve Banka Hesapları", requires: ["finance:read"], capabilities: ["finance:write"] },
-  { key: "finance/cash-transactions", app: "desktop", title: "Kasa Hareketleri", requires: ["finance:read"], capabilities: ["finance:payment"] },
-  { key: "finance/rates", app: "desktop", title: "Döviz Kurları", requires: ["finance:read"], capabilities: ["finance:write"] },
-  { key: "finance/cheques", app: "desktop", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
-  { key: "finance/allocations", app: "desktop", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
-  { key: "finance/period-close", app: "desktop", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
-  { key: "reports/finance", app: "desktop", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
+  { key: "finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe", requires: ["finance:read"], capabilities: [] },
+  { key: "finance/cari", app: "desktop", modul: "financeEnabled", title: "Cari Hesaplar", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/invoices", app: "desktop", modul: "financeEnabled", title: "Faturalar", requires: ["finance:read"], capabilities: ["finance:invoice"] },
+  { key: "finance/payments", app: "desktop", modul: "financeEnabled", title: "Tahsilat ve Ödemeler", requires: ["finance:read"], capabilities: ["finance:payment"] },
+  { key: "finance/accounts", app: "desktop", modul: "financeEnabled", title: "Kasa ve Banka Hesapları", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/cash-transactions", app: "desktop", modul: "financeEnabled", title: "Kasa Hareketleri", requires: ["finance:read"], capabilities: ["finance:payment"] },
+  { key: "finance/rates", app: "desktop", modul: "financeEnabled", title: "Döviz Kurları", requires: ["finance:read"], capabilities: ["finance:write"] },
+  { key: "finance/cheques", app: "desktop", modul: "financeEnabled", title: "Çek ve Senetler", requires: ["finance:read"], capabilities: ["finance:cheque"] },
+  { key: "finance/allocations", app: "desktop", modul: "financeEnabled", title: "Tahsisler", requires: ["finance:read"], capabilities: ["finance:payment"] },
+  { key: "finance/period-close", app: "desktop", modul: "financeEnabled", title: "Dönem Kapanışı", requires: ["finance:read"], capabilities: ["finance:close"] },
+  { key: "reports/finance", app: "desktop", modul: "financeEnabled", title: "Ön Muhasebe Raporları", requires: ["report:finance"], capabilities: [] },
   // Depo tarafı. ⚠️ `operations/yarn-stock` ve `operations/stock-counts` giriş
   // izni `warehouse:read`tir (backend `yarn.routes`/`stock-count.routes` ile
   // birebir); `yarn:write`/`warehouse:write` ekran İÇİ yetenektir.
-  { key: "operations/goods-receipts", app: "desktop", title: "Mal Kabul", requires: ["goods-receipt:read"], capabilities: ["goods-receipt:write"] },
-  { key: "operations/purchase-orders", app: "desktop", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },
-  { key: "operations/yarn-stock", app: "desktop", title: "İplik Kg-Stok", requires: ["warehouse:read"], capabilities: ["yarn:write"] },
-  { key: "operations/stock-counts", app: "desktop", title: "Stok Sayımı", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
-  { key: "operations/warehouse-transfers", app: "desktop", title: "Depo Transferi", requires: ["warehouse:transfer"], capabilities: [] },
-  { key: "definitions/warehouses", app: "desktop", title: "Depolar", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
-  { key: "definitions/item-prices", app: "desktop", title: "Kalem Fiyatları", requires: ["item:read"], capabilities: ["price:write"] },
+  { key: "operations/goods-receipts", app: "desktop", modul: "ticaretEnabled", title: "Mal Kabul", requires: ["goods-receipt:read"], capabilities: ["goods-receipt:write"] },
+  { key: "operations/purchase-orders", app: "desktop", modul: "ticaretEnabled", title: "Alış Siparişleri", requires: ["purchase-order:read", "purchase-order:write"], capabilities: [] },
+  { key: "operations/yarn-stock", app: "desktop", modul: "iplikEnabled", title: "İplik Kg-Stok", requires: ["warehouse:read"], capabilities: ["yarn:write"] },
+  { key: "operations/stock-counts", app: "desktop", modul: "ticaretEnabled", title: "Stok Sayımı", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
+  { key: "operations/warehouse-transfers", app: "desktop", modul: "depoMultiEnabled", title: "Depo Transferi", requires: ["warehouse:transfer"], capabilities: [] },
+  { key: "definitions/warehouses", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Depolar", requires: ["warehouse:read"], capabilities: ["warehouse:write"] },
+  { key: "definitions/item-prices", app: "desktop", modul: "ticaretEnabled", title: "Kalem Fiyatları", requires: ["item:read"], capabilities: ["price:write"] },
   // Cariler = müşteri + fason firma TEK listede (satın alma tarafı da cari
   // gördüğü için). Giriş izni İKİSİNDEN BİRİ yeter — route `requireAnyPermission`.
-  { key: "definitions/cariler", app: "desktop", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },
+  { key: "definitions/cariler", app: "desktop", modul: "cekirdek:ana-veri", title: "Cariler", requires: ["customer:read", "subcontractor:read"], capabilities: ["customer:write", "subcontractor:write"] },
 ];
 
 const mobile: ScreenEntry[] = [
-  { key: "KK1", app: "mobile", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamul kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
-  { key: "KursunQc", app: "mobile", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [] },
-  { key: "Tambur", app: "mobile", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
-  { key: "Depo", app: "mobile", title: "Depo", requires: ["mobile:depo"], capabilities: [] },
-  { key: "TartiPaket", app: "mobile", title: "Sevkiyat", requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },
-  { key: "Sevkiyat", app: "mobile", title: "Sevk Çıkışı", requires: ["mobile:sevkiyat"], capabilities: [] },
-  { key: "FasonSevk", app: "mobile", title: "Fason Sevk", requires: ["mobile:fason-sevk"], capabilities: [] },
-  { key: "FasonKabul", app: "mobile", title: "Fason Mal Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
-  { key: "KartelaSevk", app: "mobile", title: "Kartela Sevk", requires: ["mobile:kartela-sevk"], capabilities: [] },
-  { key: "KartelaKabul", app: "mobile", title: "Kartela Kabul", requires: ["mobile:kartela-kabul"], capabilities: [] },
-  { key: "IadeGirisi", app: "mobile", title: "İade Girişi", requires: ["mobile:iade"], capabilities: [] },
-  { key: "HizliIsEmri", app: "mobile", title: "Hızlı İş Emri", requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
-  { key: "Siparis", app: "mobile", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
-  { key: "Kumas", app: "mobile", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
-  { key: "KursunDagitim", app: "mobile", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },
+  { key: "KK1", app: "mobile", modul: "productionEnabled", title: "Ham Giriş", requires: ["mobile:kk1"], capabilities: [{ code: "mobile:kk1-desen", label: "Yeni desen (kumaş) oluşturabilir" }, { code: "mobile:kk1-yari-mamul", label: "Dışarıdan yarı mamul kabul edebilir" }, { code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
+  { key: "KursunQc", app: "mobile", modul: "productionEnabled", title: "Kurşun", requires: ["mobile:kk2-kursun"], capabilities: [] },
+  { key: "Tambur", app: "mobile", modul: "productionEnabled", title: "Tambur", requires: ["mobile:tambur"], capabilities: [{ code: "mobile:tambur-duzelt", label: "Saha düzeltmesi: topu Tambur'a alma / manuel top" }, { code: "label:edit", label: "Etiketteki müşteri adını sipariş kalemi için düzeltebilir" }, { code: "customer-alias:write", label: "Müşterideki adı KALICI değiştirebilir" }, { code: "roll:manual-adjust", label: "Top metraj/kalite düzeltmesi" }] },
+  { key: "Depo", app: "mobile", modul: "cekirdek:stok-giris", title: "Depo", requires: ["mobile:depo"], capabilities: [] },
+  { key: "TartiPaket", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "Sevkiyat", requires: ["mobile:tarti-paket"], capabilities: [{ code: "mobile:sevkiyat", label: "Sevk çıkışı adımlarını da görebilir" }] },
+  { key: "Sevkiyat", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "Sevk Çıkışı", requires: ["mobile:sevkiyat"], capabilities: [] },
+  { key: "FasonSevk", app: "mobile", modul: "planlanan:fason", title: "Fason Sevk", requires: ["mobile:fason-sevk"], capabilities: [] },
+  { key: "FasonKabul", app: "mobile", modul: "planlanan:fason", title: "Fason Mal Kabul", requires: ["mobile:fason-kabul"], capabilities: [] },
+  { key: "KartelaSevk", app: "mobile", modul: "planlanan:kartela", title: "Kartela Sevk", requires: ["mobile:kartela-sevk"], capabilities: [] },
+  { key: "KartelaKabul", app: "mobile", modul: "planlanan:kartela", title: "Kartela Kabul", requires: ["mobile:kartela-kabul"], capabilities: [] },
+  { key: "IadeGirisi", app: "mobile", modul: "cekirdek:sevkiyat-depo", title: "İade Girişi", requires: ["mobile:iade"], capabilities: [] },
+  { key: "HizliIsEmri", app: "mobile", modul: "productionEnabled", title: "Hızlı İş Emri", requires: ["mobile:hizli-is-emri"], capabilities: [{ code: "mobile:kumas", label: "Kumaş tanımı ekleyebilir" }] },
+  { key: "Siparis", app: "mobile", modul: "cekirdek:siparis-musteri", title: "Sipariş", requires: ["mobile:siparis"], capabilities: [] },
+  { key: "Kumas", app: "mobile", modul: "cekirdek:ana-veri", title: "Kumaş Ekle", requires: ["mobile:kumas"], capabilities: [] },
+  { key: "KursunDagitim", app: "mobile", modul: "productionEnabled", title: "Kurşun Dağıtım", requires: ["mobile:kursun-dagitim"], capabilities: [] },
 ];
 
 /** Tüm ekranlar — masaüstü yetenek kodları etiketlenmiş hâlde. */
@@ -256,6 +335,46 @@ export function screensUsing(code: string): ScreenEntry[] {
     (s) => s.requires.includes(code) || s.capabilities.some((c) => c.code === code),
   );
 }
+
+/**
+ * Bir modül/blok kapanınca gizlenecek ekranlar — Sistem Profili önizlemesi + bekçi.
+ *
+ * ⚠️ "Gizlenecek" ifadesi ÖNİZLEME dilidir: gerçek gizleme kararı karonun
+ * `visibleWhen` yüklemindedir (bkz. `ScreenEntry.modul` notu).
+ */
+export function screensOfModul(m: EkranModul): ScreenEntry[] {
+  return SCREEN_CATALOG.filter((s) => s.modul === m);
+}
+
+/** Modül/blok → ekran sayısı (panel kartındaki "12 ekran gizlenecek" rozeti). */
+export function screenCountByModul(): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const s of SCREEN_CATALOG) out[s.modul] = (out[s.modul] ?? 0) + 1;
+  return out;
+}
+
+/**
+ * Ekranı OLMAYAN modüller — GEREKÇELİ (`SCREENLESS_PERMISSIONS` ikizi).
+ *
+ * Bekçi üç şeyi birden sorar: (a) her `ModulKey` ya ≥1 ekran taşır ya burada
+ * muaftır, (b) muaf bir modüle ekran eşlenmişse liste BAYATTIR (ölü muaf →
+ * kırmızı), (c) gerekçe yazılıdır. Ölü muaf kuralı, "Dilim 3'te yüzey doğunca
+ * burayı silmeyi unutma" hatırlatmasını mekanik hâle getirir.
+ */
+export const EKRANSIZ_MODULLER: ReadonlyArray<{ modul: ModulKey; reason: string }> = [
+  {
+    modul: "kumasTeknikEnabled",
+    reason:
+      "Kumaş teknik kartı = Kumaşlar ekranının İÇİNDEKİ alanlar (en · gramaj · " +
+      "kompozisyon); ayrı bir ekranı yok. Yüzey Dilim 3'te doğacak.",
+  },
+  {
+    modul: "tezgahEnabled",
+    reason:
+      "Dokuma tezgah izleme yer tutucu bir anahtar — arkasında henüz hiçbir " +
+      "yüzey (ne route ne karo) yok. Dilim 4.",
+  },
+];
 
 /** Katalog dışında kalan izinler — API-içi/altyapı yetkileri (bekçi muafı). */
 export const SCREENLESS_PERMISSIONS: ReadonlyArray<{ code: string; reason: string }> = [

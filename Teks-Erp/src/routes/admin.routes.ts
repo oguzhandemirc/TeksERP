@@ -13,7 +13,11 @@ import { PermissionManagementService } from "../services/permission-management.s
 import { TotpAccountService } from "../services/totp-account.service";
 import { systemSettingService, SETTING_KEYS } from "../services/system-setting.service";
 import { MODULE_SETTING_KEYS } from "../constants/module-flags";
-import { isReservedSettingKey } from "../constants/reserved-settings";
+import {
+  MODULE_PROFILES,
+  MODULE_PROFILE_IDS,
+} from "../constants/module-profiles";
+import { isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
 import { requireSystemAccountOr404 } from "../middlewares/system-account.middleware";
 import {
@@ -130,7 +134,12 @@ router.get(
 router.get(
   "/screens",
   verifyToken,
-  requirePermission("admin:users"),
+  // ⚠️ İZİN GENİŞLETİLDİ (2026-09-03 / P6): manifesto artık `modul` alanını da
+  // taşıyor ve Sistem Profili ekranının "kapatırsan şunlar gizlenir"
+  // önizlemesinin veri temeli. O ekranı SALT-OKUNUR gören fabrika admini
+  // (`admin:settings`) listeyi okuyabilmeli — katalog bir sır değil, ekran ↔
+  // yetki eşlemesinin beyanı.
+  requireAnyPermission("admin:users", "admin:settings"),
   (_req: Request, res: Response): void => {
     res.status(200).json({
       success: true,
@@ -141,6 +150,97 @@ router.get(
         withoutScreen: permissionsWithoutScreen(),
       },
     });
+  }
+);
+
+/**
+ * @openapi
+ * /api/admin/module-profile:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Kurulum profilleri + mevcut modül durumu + fark (salt-okuma)
+ *     description: |
+ *       Sistem Profili ekranının (tasarım §7.3) veri kaynağı. Profil KATALOĞU
+ *       sunucuda kalır ve fark SUNUCUDA hesaplanır — istemci profil tablosunun
+ *       ikinci bir kopyasını taşımaz.
+ *
+ *       YAZMA UCU YOKTUR: profil uygulamak = istemcinin `diffs` gövdesini
+ *       `PATCH /api/feature-flags`e göndermesi. Böylece bağımlılık doğrulaması,
+ *       süperadmin dalı ve ayar şifresi kapısı TEK yerde kalır.
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200: { description: Profiller · mevcut değerler · profil başına fark }
+ */
+router.get(
+  "/module-profile",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const anahtarlar = [...MODULE_SETTING_KEYS];
+      // ⚠️ Servisin `get`i tekil okur ve route katmanı bu dosyada Prisma'ya
+      // DOĞRUDAN gitmez (src/routes altında tek bir dosya bile `lib/prisma`
+      // import etmiyor — katman sınırı). Sekiz satır, süperadminin nadiren
+      // açtığı bir ekran için kabul edilebilir; toplu okuyucu gerektiğinde
+      // servise eklenir, buraya bir Prisma sızıntısı açılmaz.
+      const okunacak = [...anahtarlar, PROFILE_STAMP_SETTING_KEY];
+      const ham = new Map<string, unknown>();
+      await Promise.all(
+        okunacak.map(async (k) => {
+          const row = (await systemSettingService.get(k)).data as { value?: unknown } | null;
+          if (row && row.value !== undefined) ham.set(k, row.value);
+        }),
+      );
+
+      // ⚠️ ETKİN DEĞER ≠ HAM DEĞER: satırı olmayan anahtar kodun varsayılanına
+      // düşer ve o varsayılan `production.enabled` için TRUE'dur
+      // (`readProductionEnabled`ın satır-yok sigortası, K9). Fark hesabı etkin
+      // değerle yapılır — ham `null`la yapılsaydı damgasız bir kurulumda
+      // "üretimi aç" diye ölü bir fark satırı doğardı.
+      const etkin = (key: string): boolean => {
+        const v = ham.get(key);
+        if (v === undefined || v === null) return key === "production.enabled";
+        return v === true || v === "true";
+      };
+
+      const values: Record<string, unknown> = {};
+      for (const k of anahtarlar) values[k] = ham.get(k) ?? null;
+
+      const profiles = MODULE_PROFILE_IDS.map((id) => ({
+        id,
+        ad: MODULE_PROFILES[id].ad,
+        aciklama: MODULE_PROFILES[id].aciklama,
+        moduller: MODULE_PROFILES[id].moduller,
+      }));
+
+      const diffs: Record<string, Array<{ key: string; from: boolean; to: boolean }>> = {};
+      for (const id of MODULE_PROFILE_IDS) {
+        const p = MODULE_PROFILES[id].moduller;
+        diffs[id] = anahtarlar
+          .filter((k) => etkin(k) !== (p[k] === true))
+          .map((k) => ({ key: k, from: etkin(k), to: p[k] === true }));
+      }
+      // "En yakın" DEĞİL "TAM EŞLEŞEN": kısmi benzerliğe profil adı vermek
+      // ("neredeyse standart") ekranda bir yalan üretir. Eşleşme yoksa "ozel".
+      const closest = MODULE_PROFILE_IDS.find((id) => diffs[id]!.length === 0) ?? "ozel";
+
+      res.status(200).json({
+        success: true,
+        data: {
+          profiles,
+          current: {
+            values,
+            // Doğuş damgası — MEVCUT durumu DEĞİL, "kurulurken hangi profil
+            // uygulandı"yı söyler (fabrika sonradan panelden değiştirebilir).
+            appliedProfile: ham.get(PROFILE_STAMP_SETTING_KEY) ?? null,
+            closest,
+          },
+          diffs,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 );
 

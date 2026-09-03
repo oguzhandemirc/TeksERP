@@ -5,6 +5,7 @@ import prisma, { pool } from './lib/prisma';
 import { getLanAddresses } from './lib/lan-addresses';
 import { startInstallationIdentity } from './jobs/installation-identity.job';
 import { startSuperadminAccount } from './jobs/superadmin.job';
+import { startModuleProfileJob } from './jobs/module-profile.job';
 import { refreshDiscoveryCache } from './services/discovery.service';
 import { startMdnsAdvertiser, stopMdnsAdvertiser } from './jobs/mdns-advertiser.job';
 import { startArchiveScheduler } from './jobs/archive-scheduler';
@@ -169,6 +170,12 @@ const server = app.listen(Number(PORT), HOST, () => {
     // hesap YOKSA modül anahtarı kapısı devre dışı kalır (emniyet supabı), yani
     // bu satır olmadan yeni bir kurulumda modülleri KİMSE açamazdı.
     startSuperadminAccount();
+    // KURULUM PROFİLİ — taze kurulumda modül anahtarlarını `.env`deki
+    // `TEKSERP_PROFIL` profilinden yazar. Mevcut kurulumda grandfathering
+    // damgası (migration 20260902230000) zaten satırları getirdiği için TAM
+    // NO-OP; env verilmemişse HİÇBİR ŞEY yazılmaz (yanlış profili kalıcı
+    // damgalamamak için — bir kez yazıldı mı ikinci koşum dokunmaz).
+    startModuleProfileJob();
     // Keşif ucunun bellek kopyası (firma adı + port). İstek yolunda DB'ye
     // gidilmediği için burada bir kez doldurulur; firma adı sonradan değişirse
     // bir sonraki restart'ta tazelenir (keşif için yeterli hassasiyet).

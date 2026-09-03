@@ -1,0 +1,251 @@
+// =============================================================================
+// KURULUM PROFİLİ — modül anahtarlarını TAZE kurulumda bir kez yazar (2026-09-03)
+// =============================================================================
+// Grandfathering migration'ı (`20260902230000`) yalnız GEÇMİŞİ OLAN kurulumu
+// damgalar (`WHERE EXISTS (SELECT 1 FROM "rolls")`). Taze bir müşteri kurulumu
+// o koşuldan geçmez ve modül anahtarı satırları HİÇ doğmaz; davranış kod
+// varsayılanlarına düşer (üretim AÇIK, diğer altısı KAPALI). Bu job o boşluğu
+// `.env`deki `TEKSERP_PROFIL` seçimiyle doldurur.
+//
+// ÜÇ KURAL, ÜÇÜ DE ÖLÇÜLMÜŞ BİR ARIZA SINIFINI KAPATIR:
+//
+//   ① ENV YOKSA HİÇBİR ŞEY YAZILMAZ. "Verilmezse basit'i uygula" cazip ama
+//      yanlıştır: kurulumcu `.env`e profili yazmadan sunucuyu bir kez açarsa
+//      YANLIŞ profil KALICI damgalanır — ikinci koşum artık dokunmaz (aşağıdaki
+//      ② kuralı). `superadmin.job`ın `absent` kalıbı birebir uygulanır.
+//   ② SATIR VARSA DOKUNULMAZ. Eksik anahtarlar `createMany({skipDuplicates})`
+//      ile TEK ifadede yazılır — `upsert.update` yazılsaydı fabrikanın panelden
+//      verdiği karar her restart'ta sessizce geri alınırdı.
+//   ③ BAĞIMLILIK SAF YÜKLEMLE DOĞRULANIR. Job `setFeatureFlags`i ÇAĞIRAMAZ
+//      (imzası `userId` ister; `installation-identity.job` aynı sebeple
+//      doğrudan Prisma'ya yazıyor) — yani `assertModuleDependencies`, audit
+//      kaydı ve K7 reddi otomatik gelmez. Bağımlılığın SAF ikizi ve kendi audit
+//      olayı burada yeniden kurulur; yoksa tutarsız bir çift (iplik açık +
+//      ticaret kapalı) doğar, panel "açık" gösterirken uç 403 verir.
+//
+// ⚠️ DAMGA ≠ MEVCUT DURUM. `system.profile` yalnız "doğuşta hangi profil
+// uygulandı"yı söyler; fabrika sonradan panelden anahtar değiştirebilir. Sistem
+// Profili ekranı farkı damgadan DEĞİL CANLI değerlerden hesaplar
+// (`GET /api/admin/module-profile` — 2026-08-21 "türetilmiş alan / ayrışan
+// yüzey" sınıfının tekrarı olmasın).
+//
+// ⚠️ BOOT GECİKMESİ PENCERESİ: modül middleware'i CACHE'SİZ okur, job 3 sn
+// gecikmelidir. Taze "tam" profilli kurulumda ilk birkaç saniyede ticaret/iplik
+// uçları 403 döner. Zararsız; reçetede (`docs/ops/KURULUM.md`) yazılıdır.
+// =============================================================================
+
+import prisma from "../lib/prisma";
+import { MODULE_DEPENDENCIES, MODULE_SETTING_KEYS } from "../constants/module-flags";
+import {
+  MODULE_DESCRIPTIONS,
+  MODULE_FIELD_BY_SETTING_KEY,
+  MODULE_PROFILES,
+  MODULE_PROFILE_IDS,
+  ModuleProfileId,
+  isModuleProfileId,
+} from "../constants/module-profiles";
+import { PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
+import { AuditService } from "../services/audit.service";
+import { reportJobFailure } from "./job-failure";
+
+// superadmin/installation-identity ile aynı politika: mutlu yolda ~3 sn,
+// DB geç gelirse 3 + 4×15 = ~63 sn'lik pencere.
+const STARTUP_DELAY_MS = 3 * 1000;
+const RETRY_DELAY_MS = 15 * 1000;
+const MAX_ATTEMPTS = 5;
+
+export type ProfileEnvResult =
+  /** `TEKSERP_PROFIL` verilmemiş → profil istenmiyor, HİÇBİR yazma. */
+  | { kind: "absent" }
+  /** Verilmiş ama tanınmıyor → GÜRÜLTÜLÜ hata + HİÇBİR yazma. */
+  | { kind: "invalid"; reasons: string[] }
+  | { kind: "ok"; profil: ModuleProfileId };
+
+/**
+ * SAF okuyucu — yalnız verilen `env` kaydına bakar.
+ *
+ * ⚠️ `process.env` MUTASYONU YASAK (superadmin.job deseni): bekçi sahte bir env
+ * geçirir; global'i geçici değiştirip geri almak paralel koşumda sızdırır.
+ */
+export function readProfileEnv(env: NodeJS.ProcessEnv = process.env): ProfileEnvResult {
+  const raw = (env.TEKSERP_PROFIL ?? "").trim();
+  if (!raw) return { kind: "absent" };
+  if (!isModuleProfileId(raw)) {
+    return {
+      kind: "invalid",
+      reasons: [
+        `TEKSERP_PROFIL="${raw}" tanınmıyor — geçerli değerler: ${MODULE_PROFILE_IDS.join(" | ")}`,
+      ],
+    };
+  }
+  return { kind: "ok", profil: raw };
+}
+
+/**
+ * Profilin KENDİ değerleri üzerinde bağımlılık doğrulaması — SAF, DB'ye dokunmaz.
+ *
+ * `assertModuleDependencies` (system-setting.service) private'tır ve DB okur;
+ * job'dan çağrılamaz. Yüklem aynı haritadan (`MODULE_DEPENDENCIES`) beslenir —
+ * ikinci bir tablo yazmak, iki tablonun ayrışacağı gün demektir.
+ *
+ * @returns İhlal açıklamaları (boş dizi = temiz).
+ */
+export function assertProfileDependencies(moduller: Record<string, boolean>): string[] {
+  const alanDegeri = (alan: string): boolean => {
+    const dbKey = Object.keys(MODULE_FIELD_BY_SETTING_KEY).find(
+      (k) => MODULE_FIELD_BY_SETTING_KEY[k] === alan,
+    );
+    return dbKey ? moduller[dbKey] === true : false;
+  };
+  const ihlaller: string[] = [];
+  for (const [bagimli, onKosul] of Object.entries(MODULE_DEPENDENCIES)) {
+    if (alanDegeri(bagimli) && !alanDegeri(onKosul)) {
+      ihlaller.push(`${bagimli} açık ama ön koşulu ${onKosul} kapalı`);
+    }
+  }
+  return ihlaller;
+}
+
+export type ModuleProfileEnsureResult =
+  | { action: "absent" }
+  | { action: "invalid"; reasons: string[] }
+  /** Yedi anahtarın satırı zaten var → DOKUNULMADI. */
+  | { action: "exists" }
+  | { action: "applied"; profil: ModuleProfileId; yazilan: string[] };
+
+/** `system.profile` damgasının gövdesi (P5 Sistem Profili ekranı okur). */
+export interface ModuleProfileStamp {
+  profil: ModuleProfileId;
+  uygulandiAt: string;
+  yazilanAnahtarlar: string[];
+}
+
+/**
+ * Modül anahtarlarını profilden yazar. İdempotent — ikinci koşum hiçbir satıra
+ * dokunmaz.
+ */
+export async function ensureModuleProfile(
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<ModuleProfileEnsureResult> {
+  const parsed = readProfileEnv(env);
+
+  if (parsed.kind === "absent") {
+    console.log(
+      "[module-profile] TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI " +
+        "(kod varsayılanları geçerli: üretim açık, diğer altısı kapalı).",
+    );
+    return { action: "absent" };
+  }
+
+  if (parsed.kind === "invalid") {
+    // GÜRÜLTÜLÜ: kalıcı SystemLog izi + /health sayacı. HİÇBİR satır yazılmaz.
+    reportJobFailure(
+      "module-profile",
+      new Error(`Kurulum profili geçersiz: ${parsed.reasons.join(" · ")}`),
+    );
+    return { action: "invalid", reasons: parsed.reasons };
+  }
+
+  const profil = MODULE_PROFILES[parsed.profil];
+  const ihlaller = assertProfileDependencies(profil.moduller as Record<string, boolean>);
+  if (ihlaller.length) {
+    // Profil SABİTİ bozuk — sahaya çıkmadan yakalanması gereken bir kod hatası.
+    // Yine de fail-closed: yarım bir küme yazmaktansa hiç yazmamak doğrudur.
+    reportJobFailure(
+      "module-profile",
+      new Error(
+        `"${parsed.profil}" profili modül bağımlılığını ihlal ediyor: ${ihlaller.join(" · ")}`,
+      ),
+    );
+    return { action: "invalid", reasons: ihlaller };
+  }
+
+  const beklenen = [...MODULE_SETTING_KEYS];
+  const mevcut = await prisma.systemSetting.findMany({
+    where: { key: { in: beklenen } },
+    select: { key: true },
+  });
+  const varOlan = new Set(mevcut.map((r) => r.key));
+  const eksikler = beklenen.filter((k) => !varOlan.has(k));
+
+  if (eksikler.length === 0) {
+    console.log(
+      `[module-profile] Modül anahtarlarının ${beklenen.length}/${beklenen.length} satırı zaten var — ` +
+        "dokunulmadı (profil yalnız TAZE kuruluma uygulanır).",
+    );
+    return { action: "exists" };
+  }
+
+  // TEK İFADE + `skipDuplicates`: iki süreç aynı anda boot etse bile yarış
+  // P2002 üretmez ve "hangi sırayla yazılır" sorusu hiç doğmaz.
+  await prisma.systemSetting.createMany({
+    data: eksikler.map((key) => ({
+      key,
+      value: profil.moduller[key] === true,
+      description: MODULE_DESCRIPTIONS[key],
+    })),
+    skipDuplicates: true,
+  });
+
+  // ⚠️ DAMGA YALNIZ GERÇEKTEN SATIR YAZILDIYSA. Hiç yazılmadığı hâlde damga
+  // atılsaydı "profil uygulandı" yalanı doğar ve Sistem Profili ekranı olmayan
+  // bir kararı gösterirdi.
+  const damga: ModuleProfileStamp = {
+    profil: parsed.profil,
+    uygulandiAt: new Date().toISOString(),
+    yazilanAnahtarlar: eksikler,
+  };
+  await prisma.systemSetting.upsert({
+    where: { key: PROFILE_STAMP_SETTING_KEY },
+    create: {
+      key: PROFILE_STAMP_SETTING_KEY,
+      value: damga as unknown as object,
+      description: "Kurulumda uygulanan modül profili (doğuş damgası). Elle DEĞİŞTİRMEYİN.",
+    },
+    update: { value: damga as unknown as object },
+  });
+
+  await AuditService.logEvent({
+    category: "SYSTEM",
+    action: "MODULE_PROFILE_APPLIED",
+    tableName: "system_settings",
+    recordId: PROFILE_STAMP_SETTING_KEY,
+    payload: { profil: parsed.profil, yazilan: eksikler },
+  }).catch(() => undefined);
+
+  console.log(
+    `[module-profile] "${parsed.profil}" profili uygulandı — ${eksikler.length} satır yazıldı: ` +
+      eksikler.join(", "),
+  );
+  return { action: "applied", profil: parsed.profil, yazilan: eksikler };
+}
+
+let started = false;
+
+/** Açılışta BİR KEZ koşar. Hata sunucuyu DÜŞÜRMEZ; sınırlı sayıda dener. */
+export function startModuleProfileJob(): void {
+  if (started) return;
+  started = true;
+
+  const attempt = (n: number): void => {
+    void ensureModuleProfile().catch((err) => {
+      if (n < MAX_ATTEMPTS) {
+        console.warn(
+          `[module-profile] deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
+            `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
+          err instanceof Error ? err.message : err,
+        );
+        setTimeout(() => attempt(n + 1), RETRY_DELAY_MS).unref();
+        return;
+      }
+      reportJobFailure("module-profile", err);
+    });
+  };
+
+  setTimeout(() => attempt(1), STARTUP_DELAY_MS).unref();
+}
+
+/** Test-only: modül durumunu sıfırlar. */
+export function __resetModuleProfileJobForTests(): void {
+  started = false;
+}
