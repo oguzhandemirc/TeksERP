@@ -297,3 +297,12 @@ eşlenmesi + `test_screen_catalog` genişletmesi (gerekçeli `MODULESIZ_EKRANLAR
 6. Sürüm notu + `panel-v*/tablet-v*` etiketli yayın; Electron+APK gerekmiyor
    (yalnız panel yüzeyi değişti → panel sürümü yeter; tablet OTA yalnız
    görünmez süzgeçler için opsiyonel).
+
+## Kuyruk — küçük borçlar (Dilim 2 sonrası)
+
+| # | İş | Gözlenen | Neden bekletilmiyor |
+|---|---|---|---|
+| K-1 | **`test_audit_depth` FLAKY — kararsızlığı giderilecek.** Gözlenen kırılma biçimi: Dilim 1 kabul provasında aynı DB'de arka arkaya iki koşumdan biri **63/0 yeşil**, diğeri kırmızı. Zamanlamaya duyarlı (audit yazımı best-effort ve tx DIŞINDA — bekçi satırı, `AuditService.log` daha yazmadan sayıyor olabilir). Düzeltme yönü: sayım öncesi yazımın tamamlandığını BEKLE (deterministik senkron nokta), "biraz uyu" DEĞİL. | 2026-09-03 kabul provası | Flaky bekçi ilerideki GERÇEK regresyonu gürültüye gömer: kırmızıyı gören "yine o flaky" der ve bakmaz. |
+| K-2 | **P7'nin iki kod maddesi** (onaylandı, ayrı paket): ⑥ fason modülü kapalıyken rapor kovasının HİÇ çizilmemesi (bugün boş kova "fason yok" diye okunuyor, oysa "modül kapalı") · ⑦ Tambur en toleransının (`±10 cm`, bugün kodda SABİT) dört kapıdan geçen sayısal ayara çıkması. İkisi de kendi bekçisini alır. | P7 mercek turu | Kumaş tipine göre değişen bir eşik koda gömülü kaldıkça her yeni fabrikada kod değişikliği ister. |
+| K-3 | **Mobil ekranların modül koşulu** — `useVisibleScreens.conditional` boş; 15 tablet ekranı modül anahtarlarına bağlı değil (backend 403 verir, ekran görünmeye devam eder). P1'in açık kalanı; Sistem Profili'nin "kapatırsan tablette duran ekranlar" listesi bugün yalnız BİLGİLENDİRME. | P5/P6 | APK turu ister — sıradaki APK ile birlikte. |
+| K-4 | **Sidebar favorileri bayrak süzmüyor** — favori `NavItem`e çevrilirken `visibleWhen`/`featureFlag` DÜŞÜYOR, yani modül kapalıyken favorilenmiş ekran favorilerde kalır. Main'de de böyleydi (davranış değişmedi) ama artık daha fazla ekran bayraklı olduğu için yüzeyi büyüdü. | P5 doğrulaması | Küçük ama palet sızıntısıyla aynı sınıf. |
