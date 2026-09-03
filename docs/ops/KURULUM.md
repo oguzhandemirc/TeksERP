@@ -20,6 +20,25 @@
 2. Boş bir PostgreSQL veritabanı + login rolü oluştur. **Rol CREATEDB yetkili olmalı** — Prisma 7 `migrate deploy` bağlanınca DB'yi oluşturmayı dener; yetki yoksa "permission denied to create database" ile patlar.
 3. **`postgresql.conf` TeksERP ayarlarını uygula** — `listen_addresses='127.0.0.1'`, `statement_timeout='50s'`, `log_min_duration_statement=500`, timezone ve bellek tuning'i. Bu değerlerin **tek kalan kaydı** `DEPLOY-RUNBOOK.md §6`'dır (installer'dan taşındı); atlanırsa default `work_mem=4MB`/`shared_buffers=128MB` ile yıllık raporlar `statement_timeout`'a takılır.
 
+### A0b. İskeleti kur (SIFIRDAN kurulumda — `ilk-kurulum.ps1`)
+
+```powershell
+.\ilk-kurulum.ps1 -DbAdi tekserp -DbParola <postgres-parolası>
+```
+
+Klasör iskeletini (`app` · `backups` · `logs` · `pg-setup` · `pm2-home`), pg
+araçları bağlantısını (`pgsql\bin` → kurulu PostgreSQL), `db-credentials.json`
+dosyasını, `.env`i (JWT_SECRET makinede üretilir) ve yerel pm2 kurulumunu hazırlar.
+İDEMPOTENT: var olan hiçbir şeyi ezmez, `.env`e hiç dokunmaz.
+
+⚠️ **Neden ayrı bir script:** `kur.ps1` bir YÜKSELTME aracıdır — ilk satırlarında
+"Mevcut kurulum bulunamadı" ile durur ve `.env`i mevcut kurulumdan alır. Sahadaki
+iskelet bir kez, artık var olmayan bir installer'la kurulmuştu; sıfırdan kurulumun
+yazılı yolu yoktu ve adımlar hafızadan tekrarlanıyordu (2026-09-04 ölçümü).
+
+⚠️ Veritabanını **oluşturmaz ve dump yüklemez** — ikisi de veri işlemidir ve karar
+ister. Bağlanamazsa komutları yazar, siz koşarsınız.
+
 ### A1. ENV hazırla (`Teks-Erp/.env` — sırlar; git'e girmez)
 4. İki değişkeni yaz:
    ```
