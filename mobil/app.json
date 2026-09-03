@@ -2,7 +2,7 @@
   "expo": {
     "name": "TeksERP",
     "slug": "teks-erp-mobil",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -21,7 +21,7 @@
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
       "package": "com.teks.erp.mobil",
-      "versionCode": 57,
+      "versionCode": 58,
       "usesCleartextTraffic": true,
       "permissions": [
         "android.permission.CAMERA",

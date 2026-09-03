@@ -407,6 +407,7 @@ function onbellekleriTemizle() {
  * ------------------------------------------------------------------ */
 
 function gradleKos(adres) {
+  const ortam = derlemeOrtami();
   baslik('(2/4) DERLEME — ./gradlew assembleRelease');
   bilgi(`Gömülecek adres: ${adres}`);
   bilgi('(Bu adım birkaç dakika sürer; önbellek silindiği için bundle sıfırdan üretilir.)\n');
@@ -427,7 +428,17 @@ function gradleKos(adres) {
     shell: win,
     // Adres AÇIKÇA çocuk sürece geçiyor: @expo/env sistem ortamındaki
     // değişkenin üstüne YAZMAZ, dolayısıyla `.env.local` bunu ezemez.
-    env: { ...process.env, EXPO_PUBLIC_API_URL: adres },
+    // ⚠️ SDK ve JDK AÇIKÇA geçiyor: kabuk profilinde `export` olmasa da derleme
+    // koşar. Kullanıcının `.zshrc`ine bağımlı bir derleme, yeni makinede ve
+    // otomasyonda sessizce düşer.
+    env: {
+      ...process.env,
+      EXPO_PUBLIC_API_URL: adres,
+      ANDROID_HOME: ortam.sdk,
+      ANDROID_SDK_ROOT: ortam.sdk,
+      JAVA_HOME: ortam.jdk,
+      PATH: `${path.join(ortam.jdk, 'bin')}${path.delimiter}${process.env.PATH ?? ''}`,
+    },
   });
 
   if (sonuc.error) {
@@ -818,14 +829,8 @@ function imzaKapisi(apkYolu) {
    * `apksigner`dır (Android SDK build-tools). keytool yalnız yedek yoldur.
    */
   const apksignerBul = () => {
-    const kokler = [
-      process.env.ANDROID_HOME,
-      process.env.ANDROID_SDK_ROOT,
-      path.join(os.homedir(), 'Library/Android/sdk'),
-      path.join(os.homedir(), 'Android/Sdk'),
-      'C:\\Android\\Sdk',
-      path.join(os.homedir(), 'AppData/Local/Android/Sdk'),
-    ].filter(Boolean);
+    // Kök çözümü TEK KAYNAKTAN (`sdkKokBul`) — iki liste ayrışmasın.
+    const kokler = [sdkKokBul()].filter(Boolean);
     const ad = process.platform === 'win32' ? 'apksigner.bat' : 'apksigner';
     for (const kok of kokler) {
       const bt = path.join(kok, 'build-tools');
@@ -839,6 +844,15 @@ function imzaKapisi(apkYolu) {
     return null;
   };
 
+  // ⚠️ `keytool` JDK'DAN GELİR — Gradle'a JDK vermek YETMEZ, bu adım ayrı bir
+  // süreçtir ve PATH'ten arar. Kabuk profilinde JAVA_HOME yoksa derleme geçer
+  // ama doğrulama "Mühür okunamadı" ile düşer ve hata, sebebi (yanlış şifre mi,
+  // eksik JDK mi) AYIRT ETMEZ — 2026-09-04'te temiz kabukta birebir yaşandı.
+  const jdkKok = jdkKokBul();
+  const javaOrtam = jdkKok
+    ? { ...process.env, JAVA_HOME: jdkKok, PATH: `${path.join(jdkKok, 'bin')}${path.delimiter}${process.env.PATH ?? ''}` }
+    : process.env;
+
   const magaza = spawnSync(
     'keytool',
     [
@@ -847,7 +861,7 @@ function imzaKapisi(apkYolu) {
       '-alias', props.keyAlias,
       '-storepass', props.storePassword,
     ],
-    { encoding: 'utf8' },
+    { encoding: 'utf8', env: javaOrtam },
   );
   const beklenen = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(magaza.stdout ?? '')?.[1] ?? '');
 
@@ -855,7 +869,8 @@ function imzaKapisi(apkYolu) {
   let aracHatasi = '';
   const apksigner = apksignerBul();
   if (apksigner) {
-    const r = spawnSync(apksigner, ['verify', '--print-certs', apkYolu], { encoding: 'utf8' });
+    // apksigner bir kabuk betiğidir ve içeriden `java` çağırır → JDK ortamı ŞART.
+    const r = spawnSync(apksigner, ['verify', '--print-certs', apkYolu], { encoding: 'utf8', env: javaOrtam });
     // v1/v2/v3 imzacılarının HEPSİ aynı sertifikayı taşır; ilk eşleşme yeter.
     bulunan = duzHex(/certificate SHA-256 digest:\s*([0-9a-f]+)/i.exec(r.stdout ?? '')?.[1] ?? '');
     if (!bulunan) aracHatasi = (r.stderr || r.stdout || '').trim().split('\n')[0] ?? '';
@@ -864,7 +879,7 @@ function imzaKapisi(apkYolu) {
   }
   if (!bulunan) {
     // Yedek yol: v1 imzalı APK'lar için keytool.
-    const r = spawnSync('keytool', ['-printcert', '-jarfile', apkYolu], { encoding: 'utf8' });
+    const r = spawnSync('keytool', ['-printcert', '-jarfile', apkYolu], { encoding: 'utf8', env: javaOrtam });
     bulunan = duzHex(/SHA256:\s*([0-9A-F:]+)/i.exec(r.stdout ?? '')?.[1] ?? '');
   }
 
@@ -896,6 +911,87 @@ function imzaKapisi(apkYolu) {
     );
   }
   bilgi('✔ APK bizim mührümüzle imzalanmış.');
+}
+
+/**
+ * Android SDK kökü — ortam değişkeni YOKSA bilinen kurulum yerlerinden bulunur.
+ *
+ * ⚠️ NEDEN SCRIPT ÇÖZÜYOR: Gradle `ANDROID_HOME` ya da `android/local.properties`
+ * ister; ikisi de MAKİNEYE ÖZGÜdür ve git'te tutulmaz (`local.properties`
+ * .gitignore'da). Yani her yeni makinede — ve her yeni kabuk oturumunda — elle
+ * `export` yazmak gerekiyordu; unutulunca Gradle "SDK location not found" ile
+ * düşüyordu ve hata, sebebi (kurulum eksik mi, sadece değişken mi yok) ayırt
+ * etmiyordu. Aynı liste `apksignerBul`da zaten vardı; TEK KAYNAĞA alındı.
+ */
+function sdkKokBul() {
+  const adaylar = [
+    process.env.ANDROID_HOME,
+    process.env.ANDROID_SDK_ROOT,
+    path.join(os.homedir(), 'Library/Android/sdk'),
+    path.join(os.homedir(), 'Android/Sdk'),
+    path.join(os.homedir(), 'AppData/Local/Android/Sdk'),
+    'C:\\Android\\Sdk',
+  ].filter(Boolean);
+  // "Kök var" YETMEZ: boş bir klasör de var sayılır. `platform-tools` SDK'nın
+  // gerçekten kurulu olduğunun en ucuz kanıtı.
+  return adaylar.find((k) => fs.existsSync(path.join(k, 'platform-tools'))) ?? null;
+}
+
+/**
+ * JDK kökü — Gradle 8.x JDK 17+ ister.
+ *
+ * ⚠️ macOS'ta `java` KOMUTU HER ZAMAN VARDIR ama kurulu JDK yoksa çalıştırıldığında
+ * "Unable to locate a Java Runtime" der (sistem saplaması). Yani `which java` ile
+ * kontrol etmek YANILTICIDIR — 2026-09-03'te tam bu şekilde yanıldık. Bu yüzden
+ * kökler DOSYA SİSTEMİNDEN doğrulanır.
+ */
+function jdkKokBul() {
+  if (process.env.JAVA_HOME && fs.existsSync(path.join(process.env.JAVA_HOME, 'bin', 'java'))) {
+    return process.env.JAVA_HOME;
+  }
+  const adaylar = [
+    '/opt/homebrew/opt/openjdk@17',
+    '/opt/homebrew/opt/openjdk@21',
+    '/opt/homebrew/opt/openjdk',
+    '/usr/local/opt/openjdk@17',
+    '/usr/local/opt/openjdk@21',
+    '/Library/Java/JavaVirtualMachines/temurin-17.jdk/Contents/Home',
+    '/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home',
+  ];
+  const bulunan = adaylar.find((k) => fs.existsSync(path.join(k, 'bin', 'java')));
+  if (bulunan) return bulunan;
+  // macOS'un kendi çözücüsü — kurulu bir JDK varsa yolunu verir, yoksa hata döner.
+  if (process.platform === 'darwin') {
+    const r = spawnSync('/usr/libexec/java_home', ['-v', '17+'], { encoding: 'utf8' });
+    const yol = (r.stdout ?? '').trim();
+    if (r.status === 0 && yol && fs.existsSync(path.join(yol, 'bin', 'java'))) return yol;
+  }
+  return null;
+}
+
+/** Gradle'a geçirilecek ortam — eksikse KURULUM KOMUTUYLA BİRLİKTE durur. */
+function derlemeOrtami() {
+  const sdk = sdkKokBul();
+  if (!sdk) {
+    dur(
+      'Android SDK bulunamadı',
+      'Gradle SDK olmadan derleyemez. Android Studio kuruluysa SDK genelde şuradadır:',
+      '  macOS : ~/Library/Android/sdk',
+      '  Windows: %LOCALAPPDATA%\\Android\\Sdk',
+      'Kuruluysa yolu bildir:  export ANDROID_HOME=<yol>',
+    );
+  }
+  const jdk = jdkKokBul();
+  if (!jdk) {
+    dur(
+      'Java (JDK 17+) bulunamadı',
+      'Gradle 8.x JDK 17 ya da üstünü ister. Kurulum:',
+      '  macOS : brew install openjdk@17     (yönetici parolası İSTEMEZ)',
+      '  Windows: winget install EclipseAdoptium.Temurin.17.JDK',
+      'Kuruluysa yolu bildir:  export JAVA_HOME=<yol>',
+    );
+  }
+  return { sdk, jdk };
 }
 
 function androidVarMi() {
@@ -948,7 +1044,14 @@ async function main() {
     } else {
       uyari('android/ klasörü yok — uzaktan güncelleme yapılandırması denetlenemedi.');
     }
-    console.log('\n  ✔ Ön kontrol tamam (--check): adres, sürüm ve güncelleme yapılandırması tutarlı. Derleme YAPILMADI.\n');
+    // ⚠️ ORTAM DENETİMİ EN SONDA VE --check'İN PARÇASI: derleme ortamı eksikse
+    // bunu 6 dakikalık bir Gradle koşumunun ORTASINDA değil, ön kontrolde
+    // öğrenmek gerekir. `derlemeOrtami()` eksikte kurulum komutuyla DURDURUR.
+    baslik('DERLEME ORTAMI');
+    const ortamCheck = derlemeOrtami();
+    bilgi(`Android SDK : ${ortamCheck.sdk}`);
+    bilgi(`Java (JDK)  : ${ortamCheck.jdk}`);
+    console.log('\n  ✔ Ön kontrol tamam (--check): adres, sürüm, güncelleme yapılandırması ve derleme ortamı tutarlı. Derleme YAPILMADI.\n');
     return;
   }
 
