@@ -12,6 +12,7 @@ import { useSessionStore } from '../store/sessionStore';
 import { setUnauthorizedHandler, setWorkSessionRequiredHandler } from '../services/api';
 import { nudgeOutbox, clearUserScopedQueries } from '../offline/sessionSwitch';
 import { deviceService } from '../services/device.service';
+import { shouldShowPairingGate } from './pairingGate';
 import { getOrCreateDeviceId } from '../utils/deviceId';
 import { usePermissions } from '../hooks/usePermission';
 import LoginScreen from '../screens/Auth/LoginScreen';
@@ -65,13 +66,24 @@ export default function RootNavigator() {
     enabled: assignmentRequired,
     // Hata halinde 30sn'e geriler — ölü/boğulmuş sunucuda sık poll askıda soket
     // biriktirip yükü büyütmesin; sunucu toparlanınca normal tempoya döner.
+    // Sık poll'un TEK gerekçesi "onay anında hızlı geç"tir; sunucu kapının
+    // gerekmediğini söylediyse (pairingRequired=false) beklenecek bir onay da
+    // yoktur → APPROVED ile aynı seyrek tempoya düşülür.
     refetchInterval: (q) =>
       q.state.fetchFailureCount > 0
         ? 30_000
-        : q.state.data?.status === 'APPROVED'
+        : q.state.data?.status === 'APPROVED' || q.state.data?.pairingRequired === false
           ? 45_000
           : 5_000,
   }).data;
+
+  // Onay ekranı kararı TEK YÜKLEMDE (`pairingGate.ts`): sunucunun cevabında
+  // taşıdığı `pairingRequired` kazanır, ayrı uç yalnız taban. Ham `status`a
+  // bakan bir koşul, bayrak KAPALIYKEN PENDING doğan cihazı kilitliyordu.
+  const showPairingGate = shouldShowPairingGate({
+    flagFromEndpoint: assignmentRequired,
+    assignment,
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -189,7 +201,7 @@ export default function RootNavigator() {
   return (
     <NavigationContainer ref={rootNavigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
-        {assignmentRequired && assignment?.status !== 'APPROVED' ? (
+        {showPairingGate ? (
           <Stack.Screen name="Pairing" component={AwaitingAssignmentScreen} />
         ) : !user ? (
           <Stack.Screen name="Login" component={LoginScreen} />

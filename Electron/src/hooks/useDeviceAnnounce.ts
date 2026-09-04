@@ -3,8 +3,10 @@ import apiClient from "@/services/apiClient";
 import { getOrCreateDeviceId } from "@/lib/deviceId";
 
 /**
- * Açılışta bu PC'yi backend Device allowlist'ine bildirir (announce). Cihaz
- * PENDING olarak görünür; admin "Cihazlar" sayfasından sevkiyat makinesine atar.
+ * Açılışta bu PC'yi backend Device allowlist'ine bildirir (announce). Yeni kaydın
+ * doğuş durumu `devicePairingRequired` bayrağına bağlıdır (2026-09-04): bayrak
+ * AÇIK ise PENDING (admin onaylar), KAPALI ise APPROVED (onay adımı yok). Her iki
+ * durumda da makineye atama admin "Cihazlar" sayfasından yapılır.
  *
  * Electron GATE'lenmez (admin konsolu) — yalnız kendini tanıtır ki atanabilsin;
  * atanınca `x-device-id` → makine çözülür ve sevkiyat kantarı bulunur.

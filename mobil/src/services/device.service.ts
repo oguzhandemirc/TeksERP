@@ -3,6 +3,13 @@ import { apiClient } from './api';
 export type DeviceAssignmentStatus = 'PENDING' | 'APPROVED' | 'INACTIVE' | 'UNKNOWN';
 
 export interface DeviceAssignment {
+  /**
+   * Cihaz onayı ZORUNLU mu? Kararı sunucu taşır (2026-09-04) — onay ekranı
+   * koşulu `pairingRequired && status !== 'APPROVED'` (bkz.
+   * `navigation/pairingGate.ts`). Alanı taşımayan ESKİ backend'de undefined
+   * gelir; o durumda `/devices/pairing-required` ucu taban olur.
+   */
+  pairingRequired?: boolean;
   status: DeviceAssignmentStatus;
   machineId: string | null;
   machineCode: string | null;

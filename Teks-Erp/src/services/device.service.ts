@@ -12,6 +12,7 @@ import prisma from "../lib/prisma";
 import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
+import { readDevicePairingRequired } from "./system-setting.service";
 import { ACTOR_SELECT } from "./helpers/system-account.helper";
 
 /**
@@ -24,6 +25,21 @@ const MAX_PENDING_DEVICES = 200;
 
 /** Admin cihaz listesi okuma tavanı — tavansız `findMany` yasağı (perf kuralı 5). */
 const DEVICE_LIST_LIMIT = 500;
+
+/**
+ * Toplam cihaz satırı üst sınırı — `MAX_PENDING_DEVICES`in İKİZİ, eşleştirme
+ * KAPALI rejim için (2026-09-04).
+ *
+ * ⚠️ Neden ikinci bir tavan gerekti: bayrak kapalıyken yeni cihaz artık APPROVED
+ * doğuyor (aşağıdaki gerekçe), yani PENDING sayacı hiç artmıyor ve tek başına
+ * bırakılsaydı `MAX_PENDING_DEVICES` **sessizce etkisiz** kalırdı — kimlik
+ * doğrulamasız `announce` ucu sınırsız satır açabilirdi. İki zarar: (1) admin
+ * Cihazlar ekranı sahte kayıtlarla kullanılamaz hale gelir (tavanın asıl
+ * gerekçesi), (2) bayrak sonradan AÇILDIĞINDA o satırlar "onaylı" sayılır.
+ * Tavan bilinçli olarak liste tavanına eşit: onun ötesinde ekran zaten kırpıyor,
+ * yani sistem çoktan kullanılamaz durumda. Gerçek fabrikada 28 cihaz var.
+ */
+const MAX_DEVICE_ROWS = DEVICE_LIST_LIMIT;
 
 const DEVICE_INCLUDE = {
   machine: {
@@ -41,9 +57,20 @@ type DeviceWithMachine = {
   machine: { id: string; code: string; name: string; station: { id: string; name: string } | null } | null;
 };
 
-function toAssignment(d: DeviceWithMachine) {
+/**
+ * Cihazın istemciye dönen atama görünümü.
+ *
+ * ⚠️ `pairingRequired` KARARIN KENDİSİDİR, süs değil (2026-09-04). Eskiden bu
+ * cevap yalnız ham `status` taşıyordu ve istemciler onay ekranını `PENDING`e
+ * bağlıyordu — bayrak KAPALIYKEN bile. Karar iki uca (`/devices/status` +
+ * `/devices/pairing-required`) bölününce her istemci onu ayrı ayrı kurmak ve
+ * ayrı ayrı yanlış yapmak zorunda kalıyordu. Artık tek cevap kararı taşır:
+ * onay ekranı koşulu = `pairingRequired && status !== "APPROVED"`.
+ */
+function toAssignment(d: DeviceWithMachine, pairingRequired: boolean) {
   const station = d.machine?.station ?? null;
   return {
+    pairingRequired,
     status: d.isActive ? d.status : "INACTIVE",
     machineId: d.machineId,
     machineCode: d.machine?.code ?? null,
@@ -164,12 +191,41 @@ export class DeviceService {
   }
 
   /**
-   * Mobil (public): tablet boot'ta deviceId'sini bildirir. Bilinmiyorsa PENDING
-   * açılır (admin onaylar). Var olan → lastSeen güncellenir; mevcut atama döner.
+   * Mobil (public): tablet boot'ta deviceId'sini bildirir. Var olan → lastSeen
+   * güncellenir; mevcut atama döner. Bilinmeyen cihazın DOĞUŞ DURUMU bayrağa
+   * bağlıdır (2026-09-04):
+   *
+   * - `devicePairingRequired = true`  → **PENDING** (admin onaylar; eski davranış)
+   * - `devicePairingRequired = false` → **APPROVED** (kapı kapalı, onay diye bir
+   *   adım YOK)
+   *
+   * ⚠️ Neden APPROVED ve neden `DeviceStatus` enum'una üçüncü bir değer
+   * eklenmedi: enum iki değerlidir (`PENDING|APPROVED`) ve anlamı "bu cihaz
+   * kapıdan geçebilir mi"dir. Bayrak kapalıyken kapı YOKTUR — herkes geçer —
+   * yani doğru başlangıç, kapının açık karşılığı olan APPROVED'dır. Eski
+   * koşulsuz PENDING doğuşu iki şeyi birden bozuyordu: (1) istemci PENDING'i
+   * "onay bekleniyor" diye okuyup kilitleniyordu (saha bulgusu), (2) `resolveDevice`
+   * yalnız APPROVED cihaza atıf döndüğü için bayrak kapalı kurulumda tabletin
+   * `req.device`'ı HİÇ dolmuyor, yani makine atfı ve **cihaza bağlı donanım**
+   * (BT yazıcı) çözümü sessizce boşa düşüyordu. "Yeni bir durum değeri" bunların
+   * ikisini de çözmez, üçüncü bir dal daha açardı.
+   *
+   * ⚠️ Bayrak SONRADAN AÇILIRSA otomatik onaylananlar APPROVED KALIR. Bayrak
+   * ileriye dönük bir kapıdır ("bundan sonra yeni cihaz onay ister"), geriye
+   * dönük bir iptal değil: 28 cihazlık bir fabrikada retroaktif düşürme, ayarı
+   * açan yöneticinin vardiya ortasında tüm tabletleri kilitlemesi demekti
+   * (çıkışsız kapı). Otomatik onaylananların izi audit'te durur
+   * (`DEVICE_AUTO_APPROVED`); yönetici tek tek `revoke` ile gözden geçirebilir.
+   *
+   * ⚠️ Bayrak kapalıyken MEVCUT bir PENDING cihaz TERFİ ETTİRİLMEZ. "Hiç
+   * görülmemiş cihaz" ile "yönetici görüp PENDING'de BIRAKTIĞI (ya da `revoke`
+   * ettiği) cihaz" farklı şeylerdir; public bir uç bir yönetici kararını geri
+   * alamaz (F216'nın aynı gerekçesi).
    */
   static async announce(input: { deviceId: string; name?: string; kind?: string }) {
     const deviceId = (input.deviceId ?? "").trim();
     if (!deviceId) throw AppError.badRequest("deviceId zorunlu");
+    const pairingRequired = await readDevicePairingRequired();
     const kind = normalizeDeviceKind(input.kind);
     const kindLabel = kind === "PHONE" ? "Telefon" : kind === "DESKTOP" ? "Masaüstü" : "Tablet";
     const fallbackName = input.name?.trim() || `${kindLabel} ${deviceId.slice(0, 8)}`;
@@ -189,19 +245,39 @@ export class DeviceService {
       select: { id: true },
     });
     if (!existing) {
-      const pendingCount = await prisma.device.count({ where: { status: "PENDING" } });
-      if (pendingCount >= MAX_PENDING_DEVICES) {
+      // Rejimden BAĞIMSIZ satır tavanı (bkz. MAX_DEVICE_ROWS): bayrak kapalıyken
+      // PENDING sayacı hiç artmadığı için aşağıdaki tavan TEK BAŞINA yetmez.
+      const totalCount = await prisma.device.count();
+      if (totalCount >= MAX_DEVICE_ROWS) {
         throw AppError.tooManyRequests(
-          `Eşleşme bekleyen cihaz sayısı üst sınıra ulaştı (${MAX_PENDING_DEVICES}). ` +
-            `Yönetici panelinden bekleyen cihazları onaylayın veya kaldırın.`,
-          { code: "PENDING_DEVICE_LIMIT" },
+          `Kayıtlı cihaz sayısı üst sınıra ulaştı (${MAX_DEVICE_ROWS}). ` +
+            `Yönetici panelinden kullanılmayan cihazları kaldırın.`,
+          { code: "DEVICE_LIMIT" },
         );
+      }
+      if (pairingRequired) {
+        const pendingCount = await prisma.device.count({ where: { status: "PENDING" } });
+        if (pendingCount >= MAX_PENDING_DEVICES) {
+          throw AppError.tooManyRequests(
+            `Eşleşme bekleyen cihaz sayısı üst sınıra ulaştı (${MAX_PENDING_DEVICES}). ` +
+              `Yönetici panelinden bekleyen cihazları onaylayın veya kaldırın.`,
+            { code: "PENDING_DEVICE_LIMIT" },
+          );
+        }
       }
     }
 
     const device = await prisma.device.upsert({
       where: { deviceId },
-      create: { deviceId, name: fallbackName, kind, status: "PENDING", isActive: true, lastSeenAt: new Date() },
+      create: {
+        deviceId,
+        name: fallbackName,
+        kind,
+        // Kapı kapalıysa (bayrak false) onay diye bir adım yok → APPROVED doğar.
+        status: pairingRequired ? "PENDING" : "APPROVED",
+        isActive: true,
+        lastSeenAt: new Date(),
+      },
       // F216: Var olan cihazda announce SADECE canlılık (lastSeenAt) yazar — kind burada
       // DEĞİŞTİRİLMEZ. Aksi halde APPROVED bir cihaz public announce ile kind'ını DESKTOP'a
       // flip edip work-session zorunluluğunu bypass edebilirdi.
@@ -215,14 +291,49 @@ export class DeviceService {
     if (input.kind && device.status === "PENDING" && device.kind !== kind) {
       await prisma.device.updateMany({ where: { deviceId, status: "PENDING" }, data: { kind } });
     }
-    return toAssignment(device);
+    // Otomatik onayın İZİ (yalnız yeni doğan satırda). Bayrak sonradan açılırsa
+    // yöneticinin "bu cihazı hiç kimse onaylamadı" diyebileceği tek kayıt budur.
+    if (!existing && !pairingRequired && device.status === "APPROVED") {
+      await AuditService.log({
+        userId: undefined,
+        action: "CREATE",
+        tableName: "devices",
+        recordId: device.id,
+        newData: {
+          event: "DEVICE_AUTO_APPROVED",
+          deviceId,
+          name: device.name,
+          kind: device.kind,
+          status: "APPROVED",
+          reason: "devicePairingRequired=false",
+        },
+      }).catch(() => undefined);
+    }
+    return toAssignment(device, pairingRequired);
   }
 
-  /** Mobil (public): atama durumunu poll'la. Bilinmiyorsa UNKNOWN. */
+  /**
+   * Mobil (public): atama durumunu poll'la. Bilinmiyorsa UNKNOWN.
+   * Cevap `pairingRequired`i DE taşır — onay ekranı kararı sunucudadır
+   * (bkz. `toAssignment`); istemci iki ucu birleştirip mantığı kendi kurmaz.
+   */
   static async getStatus(deviceId: string) {
-    const device = await prisma.device.findUnique({ where: { deviceId }, include: DEVICE_INCLUDE });
-    if (!device) return { status: "UNKNOWN", machineId: null, machineCode: null, machineName: null, stationId: null, stationName: null };
-    return toAssignment(device);
+    const [device, pairingRequired] = await Promise.all([
+      prisma.device.findUnique({ where: { deviceId }, include: DEVICE_INCLUDE }),
+      readDevicePairingRequired(),
+    ]);
+    if (!device) {
+      return {
+        pairingRequired,
+        status: "UNKNOWN",
+        machineId: null,
+        machineCode: null,
+        machineName: null,
+        stationId: null,
+        stationName: null,
+      };
+    }
+    return toAssignment(device, pairingRequired);
   }
 
   /** Admin: cihazı onayla + (opsiyonel) makineye ata + opsiyonel takma ad. İstasyon makineden türetilir. */

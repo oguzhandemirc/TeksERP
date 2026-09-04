@@ -2339,3 +2339,81 @@ durumunda GÖRÜNÜR" iddiası artık `groupSettingsCategories` modül durumunu 
 **Migration / izin kodu / APK / backend değişikliği YOK** — kural tamamen Electron'da.
 Backend kapıları (`requireXEnabled`, `flagWriteGuard`) bu turda hiç ellenmedi; sözleşme
 78/78, modül anahtarları 72/72 yeşil.
+
+---
+
+## 2026-09-04 — Cihaz onay kapısı: bayrak kapalıyken de her cihaz PENDING doğuyordu [ÇEKİRDEK]
+
+**Saha ölçümü (çalışan kurulum, sıfırdan kurulmuş paket):** `devicePairingRequired`
+KAPALI olmasına rağmen yeni tablet "Cihaz Atama Bekliyor" ekranında kalıyordu.
+Backend üç yerden "gerek yok" diyordu (DB bayrağı false · `GET /devices/pairing-required`
+`{required:false}` · `device.middleware` yalnız bayrak TRUE iken 401/503) ama
+`DeviceService.announce` yeni kaydı **koşulsuz** `PENDING` yaratıyor,
+`DeviceService.getStatus` da ham `status` döndürüyordu. Yani kapı kapalıyken bile
+her yeni cihaz "onay bekliyor" damgasıyla doğuyordu.
+
+**Neden bugüne dek görünmedi:** sahadaki 28 cihazın hepsi çoktan APPROVED. Kusur
+yalnız YENİ cihaz eklenince görünür — yani **yeni müşteri kurulumunda** ve
+**arızalı tablet değişiminde** (vardiya ortası, en kötü zamanlama).
+
+**İKİNCİ, SESSİZ ZARAR (ilk raporda yoktu):** `resolveDevice` yalnız APPROVED + aktif
+cihaza atıf döner. Bayrak kapalı bir kurulumda tabletin `req.device`'ı bu yüzden HİÇ
+dolmuyordu → makine atfı (RollOperation/RollMovement) **ve cihaza bağlı donanım
+çözümü** (BT etiket yazıcısı `deviceId`-join'inden gelir) sessizce boşa düşüyordu.
+"Onay ekranı" belirtisinin altında duran asıl arıza buydu.
+
+**KARAR — doğuş durumu bayraktan türer:** bayrak AÇIK → `PENDING` (eski davranış),
+KAPALI → **`APPROVED`**. `DeviceStatus` enum'una ÜÇÜNCÜ değer eklenmedi ve bu bilinçli:
+enum'un anlamı "bu cihaz kapıdan geçebilir mi"dir, bayrak kapalıyken kapı YOKTUR, yani
+doğru başlangıç kapının açık karşılığıdır. Yeni bir durum değeri iki zararın hiçbirini
+çözmez, üçüncü bir dal daha açardı.
+
+**BAYRAK SONRADAN AÇILIRSA otomatik onaylananlar APPROVED KALIR.** Bayrak ileriye
+dönük bir kapıdır ("bundan sonra yeni cihaz onay ister"), geriye dönük bir iptal değil:
+28 cihazlık bir fabrikada retroaktif düşürme, ayarı açan yöneticinin vardiya ortasında
+TÜM tabletleri kilitlemesi demekti (çıkışsız kapı sınıfı — Dilim 2'nin üç ölçümüyle aynı
+gerekçe). Gözden geçirmenin yolu var: otomatik onayın audit izi `DEVICE_AUTO_APPROVED`
+(yeni satırda, `tableName="devices"`) + cihaz başına `revoke`.
+
+**MEVCUT PENDING CİHAZ TERFİ ETMEZ** (bayrak kapalıyken bile). "Hiç görülmemiş cihaz"
+ile "yöneticinin PENDING'de bıraktığı / `revoke` ettiği cihaz" farklı şeylerdir; public
+bir uç bir yönetici kararını geri alamaz (F216'nın aynı gerekçesi). Terfi ettirilseydi
+bayrağın bir anlık kapanması tüm revoke kararlarını sessizce siler.
+
+**KARAR SUNUCUDA (devir notunun (b) seçeneği):** `GET /devices/status` **ve**
+`POST /devices/announce` cevapları artık `pairingRequired` taşır — onay ekranı koşulu
+`pairingRequired && status !== "APPROVED"`. Karar iki uca bölününce her istemci onu
+ayrı ayrı kurmak ve ayrı ayrı yanlış yapmak zorunda kalıyordu. Mobil tarafta tek yüklem
+`mobil/src/navigation/pairingGate.ts`; içindeki **`??` load-bearing**: sunucunun taşıdığı
+karar 5 dk cache'lenen uç bayrağını EZER (`||` yazılsaydı bayat `true` sunucunun
+"gerekmiyor"unu yutar, `&&` yazılsaydı tersi olurdu), alan YOKSA (eski backend) davranış
+birebir eskisi gibi kalır.
+
+**⚠️ İKİNCİ TAVAN GEREKTİ — `MAX_PENDING_DEVICES` sessizce etkisizleşiyordu.** Bayrak
+kapalıyken PENDING sayacı hiç artmaz, yani kimlik doğrulamasız `announce` ucu SINIRSIZ
+satır açabilirdi (F-CORE-GUV-003'ün kapattığı zararın kapalı-rejim ikizi) — hem admin
+Cihazlar ekranını kullanılamaz kılar hem de bayrak AÇILDIĞINDA o satırlar "onaylı"
+sayılırdı. `MAX_DEVICE_ROWS` (= `DEVICE_LIST_LIMIT`, 500) rejimden BAĞIMSIZ koşar;
+PENDING tavanı yerinde ve yalnız bayrak açık dalında. Bir kapıyı bayrağa bağlarken
+sorulacak soru: *bu bayrak, komşu kapının saydığı şeyi sıfırlıyor mu?*
+
+**İSTEMCİ ÇIKARIMLARI (devir notu 4. bölüm) ÖLÇÜLDÜ — biri yanlıştı:** mobil
+`usePermission` global joker dalını (`hasGlobalWildcard`) zaten taşıyor ve bekçisi yeşil
+(`usePermission.test.ts` — "global * (satıcı hesabı) her izni açar" + tüm ekranların
+açıldığı ikinci kontrol). Yani BULGU A'nın önerdiği "`["*"]` kestirmesini kaldırın"
+UYGULANMADI: kestirme 2026-09-03 P2'nin bilinçli kararıdır. Aynı şekilde RootNavigator
+kapısı da ham `status`a değil `assignmentRequired && status !== 'APPROVED'`e bağlıydı.
+İkisinin de sebebi aynı: **ölçüm o tablette ESKİ BUNDLE'ın koşmasıydı.** Ders: derlenmiş
+paket üzerinden yapılan istemci çıkarımı, o paketin YAŞINI ölçmez.
+
+**Bekçiler:** `scripts/test_device_pairing_flag.ts` (18 — dört negatif sondayla kırmızı
+verdiği doğrulandı: koşulsuz PENDING doğuşu → 4 ❌ · cevaptan `pairingRequired` düşünce
+→ 4 ❌ · toplam tavan silinince → 1 ❌ · mevcut PENDING terfi edince → 1 ❌) +
+`mobil/src/navigation/pairingGate.test.ts` (9 — naif `status`-only uygulamada 4 ❌,
+`??`→`||` sondasında 1 ❌). `test_device_assignment.ts` artık bayrağı AÇIKÇA kurar:
+doğru sonucu ortamın varsayılanından alan örtük varsayım kırıldı.
+
+**Migration / izin kodu YOK; APK gerekir** (mobil kapı JS — uzaktan güncellemeyle de
+gider). Deploy sırası backend ÖNCE: eski istemci yeni alanı görmezden gelir, davranışı
+değişmez. Doküman: `docs/ops/KURULUM.md` E43 (vaadi artık gerçek) +
+`docs/ops/ISTEMCI-BULGULARI-2026-09-04.md` (devir notu + düzeltme başlığı).

@@ -19,9 +19,13 @@ export const devicePublicRouter = Router();
  *   post:
  *     tags: [Devices]
  *     summary: Tablet kendini bildirir (PUBLIC — JWT yok)
- *     description: Tablet boot'ta deviceId'sini gönderir. Bilinmiyorsa PENDING açılır (admin onaylar+atar).
+ *     description: |
+ *       Tablet boot'ta deviceId'sini gönderir. Bilinmeyen cihazın doğuş durumu
+ *       `devicePairingRequired` bayrağına bağlıdır: bayrak AÇIK ise PENDING
+ *       (admin onaylar+atar), KAPALI ise APPROVED (onay adımı yok).
+ *       Cevap `pairingRequired` alanını DA taşır — onay ekranı kararı sunucudadır.
  *     responses:
- *       200: { description: Atama durumu (status/machine) }
+ *       200: { description: "{ pairingRequired, status, machineId, machineName, stationName }" }
  */
 devicePublicRouter.post("/announce", DeviceController.announce);
 
@@ -31,8 +35,12 @@ devicePublicRouter.post("/announce", DeviceController.announce);
  *   get:
  *     tags: [Devices]
  *     summary: Atama durumunu sorgula (PUBLIC — x-device-id header)
+ *     description: |
+ *       `pairingRequired` cevabın parçasıdır: onay ekranı koşulu
+ *       `pairingRequired && status !== "APPROVED"` — istemci iki ucu birleştirip
+ *       mantığı kendi kurmaz.
  *     responses:
- *       200: { description: "{ status, machineId, machineName, stationName }" }
+ *       200: { description: "{ pairingRequired, status, machineId, machineName, stationName }" }
  */
 devicePublicRouter.get("/status", DeviceController.status);
 

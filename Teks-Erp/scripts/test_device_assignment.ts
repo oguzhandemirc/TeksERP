@@ -1,8 +1,14 @@
 // =============================================================================
 // Test: Cihaz allowlist + atama (DeviceService) — announce/approve/revoke/resolve
 // Çalıştır: npx tsx scripts/test_device_assignment.ts
+// ⚠️ Bu dosya ONAY AKIŞINI ölçer, yani `devicePairingRequired = true` rejimini —
+// bayrağı AÇIKÇA kurar (2026-09-04). Eskiden bayrağı hiç yazmıyordu ve doğru
+// sonucu ortamın varsayılanından alıyordu; bayrak kapalıyken yeni cihaz artık
+// APPROVED doğduğu için o örtük varsayım kırıldı. Kapalı rejimin bekçisi ayrı
+// dosyada: `test_device_pairing_flag.ts`.
+//
 // Doğrulananlar:
-//   1. announce → PENDING (bilinmeyen cihaz kaydı açılır)
+//   1. announce → PENDING (bilinmeyen cihaz kaydı açılır — bayrak AÇIK)
 //   2. PENDING iken resolveDevice null (atıf yok)
 //   3. pasif makineye atama reddedilir
 //   4. approveAndAssign → APPROVED + machineId; getStatus yansıtır
@@ -13,6 +19,7 @@
 // =============================================================================
 import prisma from "../src/lib/prisma";
 import { DeviceService } from "../src/services/device.service";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 
 let pass = 0, fail = 0;
 function check(label: string, ok: boolean, extra = "") {
@@ -36,6 +43,17 @@ async function main() {
   });
   const deviceLocalId = `test-device-${ts}`;
   let deviceRowId = "";
+
+  // Onay akışı = eşleştirme ZORUNLU rejimi. Bayrağı açıkça kur, sonunda geri koy.
+  const originalFlag = await prisma.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
+    select: { value: true, description: true },
+  });
+  await prisma.systemSetting.upsert({
+    where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
+    create: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED, value: true, description: "TEST" },
+    update: { value: true },
+  });
 
   try {
     // 1) announce → PENDING
@@ -79,6 +97,18 @@ async function main() {
   } finally {
     await prisma.device.deleteMany({ where: { deviceId: { startsWith: `test-device-${ts}` } } }).catch(() => {});
     await prisma.machine.deleteMany({ where: { id: { in: [machine.id, passiveMachine.id] } } }).catch(() => {});
+    if (originalFlag) {
+      await prisma.systemSetting
+        .update({
+          where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED },
+          data: { value: originalFlag.value ?? false, description: originalFlag.description },
+        })
+        .catch(() => {});
+    } else {
+      await prisma.systemSetting
+        .delete({ where: { key: SETTING_KEYS.DEVICE_PAIRING_REQUIRED } })
+        .catch(() => {});
+    }
   }
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
