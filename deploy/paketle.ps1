@@ -121,7 +121,9 @@ Write-Host "  yorum temizligi: dist\services icinde kalan // satiri = $kalanYoru
 #   BURADA ACIKCA tekrarlanir. 2026-09-04 ev provasi (BULGU-2): satici hesabi
 #   pakette kurulamiyordu; arac derlemesi eklendi ama ilk koşumda yine pakete
 #   girmedi - cunku `npm run build` hic cagrilmiyordu. Kapi (asagida) yakaladi.
-node "$proj\scripts\build-araclar.mjs"
+# ⚠ Join-Path: ters bolu macOS/Linux'ta yol ayirici DEGILDIR ve "$proj\scripts\x"
+#   tek parca bir dosya adi olur (`$env:TEMP` vakasiyla ayni sinif hata).
+node (Join-Path $proj "scripts" "build-araclar.mjs")
 if ($LASTEXITCODE -ne 0) { Fail "Arac derlemesi basarisiz - paket uretilmedi." }
 if (-not (Test-Path "$proj\dist\tools\superadmin-olustur.cjs")) {
   Fail "dist\tools\superadmin-olustur.cjs uretilmedi - bu paketle satici hesabi KURULAMAZ."
