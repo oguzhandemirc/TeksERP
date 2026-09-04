@@ -31,14 +31,12 @@ devam edecek. Bunun iki sonucu var, ikisi de aşağıda "Yarın" bölümünde.
 | `FABRIKA-KURULUM-2026-09-04.md` | Bu dosya |
 | `SUNUCU-CLAUDE-DEVIR-2026-09-04.md` | Sunucuda Claude oturumu açılacaksa **ona ilk okutulacak** dosya |
 
-İsteğe bağlı:
-- `olcum-musteri-adi.sql` — "müşterideki ürün adı" kapsam ölçümü (**salt okunur**,
-  hiçbir şey yazmaz). Bayrağı hangi değerde açacağınıza karar vermek için:
-  `psql -U tekserp -d tekserp_yeni -f olcum-musteri-adi.sql`
-- `uzak-erisim/` — Cloudflare tüneli. Kuruluma bağlı DEĞİL, sonraya bırakılabilir.
+| `istemciler/` | **Yalnız sıfırdan kurulum için** — panel setup + tablet APK. Sahadakiler bunlara ihtiyaç duymaz, kendileri güncellenir. `istemciler/OKU.md`'ye bakın |
+| `olcum-musteri-adi.sql` | İsteğe bağlı — "müşterideki ürün adı" kapsam ölçümü (**salt okunur**): `psql -U tekserp -d tekserp_yeni -f olcum-musteri-adi.sql` |
 
-Yalnız bir şey ters giderse: `KURULUM.md` (tam referans) ·
-`YAN-YANA-KURULUM.md` (yan yana modelin gerekçeleri).
+Bu klasörde başka doküman **bilerek yok**: sıfırdan-fabrika-kurma runbook'u ve
+yan-yana modelin genel referansı bu işle çelişen adımlar içeriyordu (farklı port,
+farklı kök, farklı iş) ve kaldırıldı. İhtiyacınız olan her şey bu dosyada.
 
 ---
 
@@ -281,6 +279,9 @@ Sunucudan sonra dağıtım gerekmez; ikisi de kendiliğinden gelir:
 ⚠️ **Sıra: backend ÖNCE.** Yeni panel yeni uçları çağırıyor; eski backend'de o
 uçlar yok ve panel 404 alır. Paneller güncellemeyi çoktan almış olabilir —
 **geçişi geciktirmeyin.**
+
+**Sıfırdan kurulum gerekiyorsa** (yeni bilgisayar / yeni tablet): `istemciler/`
+klasöründe doğrulanmış setup ve APK var — ayrıntı `istemciler/OKU.md`.
 
 ---
 
