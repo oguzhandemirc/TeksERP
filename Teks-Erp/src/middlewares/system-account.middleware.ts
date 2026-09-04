@@ -40,6 +40,77 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * EN YETKİLİ HESAP YAZMAYA KAPALI — başkası onu DEĞİŞTİREMEZ.
+ *
+ * ⚠️ 2026-09-04 (ikinci tur). Gizleme kaldırılırken eski `blockSystemAccountTarget`
+ * TAMAMEN silinmişti; oysa o kapı `/users/:id` altındaki **13 YAZMA UCUNU** da
+ * kapatıyordu ve o iş gizlilikle ilgili DEĞİLDİ. Silinince `admin:users` taşıyan
+ * biri en yetkili hesabın:
+ *   · parolasını sıfırlayabiliyordu (`reset-password`)
+ *   · PIN / kart jetonu atayabiliyordu (`quick-pin`, `card-token`) → o kimliğe
+ *     bürünmenin en kısa yolu (`login-quick-pin` PIN'i TEK BAŞINA kimlik sayar)
+ *   · 2FA'sını sıfırlayabiliyordu (`totp/reset`)
+ *   · hesabı pasifleştirebiliyor / SİLEBİLİYORDU
+ * Yetki LİSTESİ zaten dokunulmazdı (`getEffectivePermissions` grant satırlarını
+ * OKUMADAN `["*"]` döner), ama hesabı DEVRALMAK yetkiyi değiştirmekten kötüdür.
+ *
+ * OKUMA SERBEST: `GET` geçer. Karar buydu — hesap her yüzeyde görünür olacak.
+ * Tek istisna `GET /credentials` (düz PIN) ve onun kendi dar kapısı var.
+ *
+ * KENDİSİ MUAF: `req.isSystemAccount === true` ise geçer (kendi hesabını yönetir).
+ *
+ * 403, 404 DEĞİL: hesabın varlığı artık açık; yanlış bilgi vermenin anlamı yok.
+ */
+export async function protectSystemAccountTarget(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): Promise<void> {
+  try {
+    if (req.method === "GET") {
+      next();
+      return;
+    }
+    if (req.isSystemAccount === true) {
+      next();
+      return;
+    }
+    // Express 5: `req.params.id` tipi `string | string[]` (repo konvansiyonu: cast).
+    const id = req.params.id as string | undefined;
+    if (!id || !UUID_RE.test(id)) {
+      next();
+      return;
+    }
+    const target = await prisma.user.findUnique({
+      where: { id },
+      select: { isSystemAccount: true },
+    });
+    if (!target?.isSystemAccount) {
+      next();
+      return;
+    }
+    // BEST-EFFORT (audit sözleşmesi): yazım hatası isteği DÜŞÜRMEZ — ama istek
+    // zaten reddedilecek, yani sessiz kalmak bilgiyi kaybetmek demek.
+    await AuditService.logEvent({
+      category: "SYSTEM",
+      action: "SYSTEM_ACCOUNT_WRITE_BLOCKED",
+      userId: req.user?.userId ?? null,
+      tableName: "users",
+      recordId: id,
+      // ⚠️ SIR YOK: yalnız hedef id + hangi uç denendi.
+      payload: { targetUserId: id, method: req.method, path: req.originalUrl },
+    }).catch(() => undefined);
+    next(
+      AppError.forbidden(
+        "En yetkili hesap başka bir kullanıcı tarafından değiştirilemez.",
+      ),
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
  * EN YETKİLİ HESABA ÖZEL YÜZEY KAPISI: istek sahibi o hesap değilse **403**
  * (2026-09-03 / P3 — ayar şifresi yönetimi).
  *

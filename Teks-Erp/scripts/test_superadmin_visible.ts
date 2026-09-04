@@ -168,6 +168,41 @@ check(
 );
 
 // =============================================================================
+// =============================================================================
+console.log("\n=== §5b) EN YETKİLİ HESAP YAZMAYA KAPALI (başkası değiştiremez) ===");
+// ⚠️ Gizleme kaldırılırken eski 404 kapısı TAMAMEN silinmişti; oysa o kapı
+// `/users/:id` altındaki 13 YAZMA ucunu da kapatıyordu ve o iş gizlilikle ilgili
+// DEĞİLDİ. Silinince `admin:users` taşıyan biri hesabın parolasını/PIN'ini
+// sıfırlayıp KİMLİĞİNE BÜRÜNEBİLİYORDU. Yetki LİSTESİ zaten dokunulmazdı
+// (`getEffectivePermissions` grant satırlarını okumadan `["*"]` döner) — ama
+// hesabı DEVRALMAK yetkiyi değiştirmekten kötüdür.
+const mwSrc = GOVDE.get("middlewares/system-account.middleware.ts") ?? "";
+check(
+  "`protectSystemAccountTarget` tanımlı",
+  /export async function protectSystemAccountTarget/.test(mwSrc),
+);
+check(
+  "OKUMA serbest (GET erken geçer — görünürlük kararı)",
+  /req\.method\s*===\s*"GET"[\s\S]{0,80}next\(\)/.test(mwSrc),
+);
+check(
+  "hesabın KENDİSİ muaf (kendi hesabını yönetebilir)",
+  /req\.isSystemAccount\s*===\s*true[\s\S]{0,80}next\(\)/.test(mwSrc),
+);
+check("engel 403 (varlık zaten açık)", /AppError\.forbidden/.test(mwSrc));
+check(
+  "deneme audit'e yazılıyor (kim devralmaya çalıştı)",
+  /SYSTEM_ACCOUNT_WRITE_BLOCKED/.test(mwSrc),
+);
+check(
+  "kapı ÖNEK olarak bağlı (`/users/:id` — on dördüncü uç da kapalı doğar)",
+  /router\.use\(\s*\n?\s*"\/users\/:id"[\s\S]{0,420}protectSystemAccountTarget/.test(adminRoutes),
+);
+// Körlük zemini: gerçekten çok sayıda YAZMA ucu var mı?
+const yazanUc = [...adminRoutes.matchAll(/router\.(post|patch|put|delete)\(\s*\n?\s*"(\/users\/:id[^"]*)"/g)];
+check("körlük zemini — `/users/:id*` yazma ucu ≥ 10", yazanUc.length >= 10, `${yazanUc.length} uç`);
+
+// =============================================================================
 console.log("\n=== §6) YETKİ BOZULMADI (kaldırılan şey gizleme, yetki DEĞİL) ===");
 const auth = GOVDE.get("services/auth.service.ts") ?? "";
 check(

@@ -18,7 +18,10 @@ import {
 } from "../constants/module-profiles";
 import { isReservedSettingKey, PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
 import { requireSettingsPassword } from "../middlewares/settings-password.middleware";
-import { requireSystemAccountOr404 } from "../middlewares/system-account.middleware";
+import {
+  protectSystemAccountTarget,
+  requireSystemAccountOr404,
+} from "../middlewares/system-account.middleware";
 import {
   setSettingsPassword,
   revokeSettingsPassword,
@@ -83,6 +86,10 @@ router.use(
   "/users/:id",
   verifyToken,
   requireAnyPermission("admin:users", "admin:settings"),
+  // ⚠️ OKUMA SERBEST, YAZMA KAPALI: en yetkili hesabı başkası değiştiremez
+  // (parola/PIN/kart/TOTP sıfırlama · pasifleştirme · silme). Gerekçe ve
+  // "neden 403" → `middlewares/system-account.middleware.ts`.
+  protectSystemAccountTarget,
 );
 
 // =============================================================================

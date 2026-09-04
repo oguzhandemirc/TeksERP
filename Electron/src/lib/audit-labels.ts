@@ -197,6 +197,7 @@ export const EVENT_ACTION_LABELS: Record<string, string> = {
   SUPERADMIN_ACCOUNT_CREATED: "Satıcı hesabı oluşturuldu",
   SUPERADMIN_ABSENT_MODULE_WRITE: "Satıcı hesabı yokken modül anahtarı yazıldı",
   SYSTEM_ACCOUNT_ACCESS_BLOCKED: "Sistem hesabına erişim engellendi",
+  SYSTEM_ACCOUNT_WRITE_BLOCKED: "En yetkili hesabı değiştirme denemesi engellendi",
   LOGIN_CONFLICT: "Giriş engellendi (oturum açık)",
   LOGOUT: "Çıkış yapıldı",
 
