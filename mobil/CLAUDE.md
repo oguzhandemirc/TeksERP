@@ -289,6 +289,29 @@ export const API_URL = 'http://192.168.X.X:4000/api'; // Tablet ve sunucu aynı 
 - **`Card` + `onPress` KULLANMA** — iç `Card.Content` dokunmayı yutuyor; tüm alana tıklamak çalışmıyor. `Card`'ı yalnızca pasif görünüm olarak kullan; tıklanabilir olacaksa **`TouchableRipple` ile sar**.
 - Aynısı modal, picker ve grid hücreleri için de geçerli — operatör hücrenin neresine basarsa bassın seçim olmalı.
 
+### Modal içindeki DOLU metin kutusu — `ModalTextInput` (2026-09-04)
+
+Saha: Tambur → "Müşterideki kumaş adı" kutusuna yazınca karakterler metnin
+**başına ve ters sırada** gidiyordu; boş kutuda ya da içi silinip yazıldığında
+sorun yoktu.
+
+Sebep mimari: `AppModal` içeriği `SimplePortal` ile HOST ağacına taşınır ve
+host'a bildirim **bilerek bir mikrotask'a ertelenir** (SM-X230 çökme dersi —
+o erteleme kaldırılamaz). Sonuç: tuş vuruşunda dıştaki state güncellenir ama
+kutunun aldığı `value` prop'u **bir commit geç** tazelenir. RN TextInput tam o
+aradaki commit'te `props.value` ≠ `lastNativeText` görüp ESKİ metni native'e
+geri iter ve **seçim göndermez**; Android `ReactEditText.maybeSetText` bunu
+`replace(0, length(), …)` ile uygular → imleç 0'a çöker, sıradaki harf başa
+yazılır. Boş kutuda ısırmaz (saf ekleme dalı, imleç ilerler).
+
+**Kural:** `AppModal` içindeki bir metin kutusu ÖN-DOLDURULMUŞ açılıyorsa
+`components/ModalTextInput.tsx` kullan — taslak değeri portalın İÇİNDE tutar,
+dıştaki state yalnız yankıyı alır (kaydetme/doğrulama sözleşmesi değişmez).
+Sürekli boş açılan kutular (arama, not, yeni kayıt) etkilenmez.
+Bekçi: `components/ModalTextInput.test.tsx` (Android imleç modeli + üç negatif
+sonda). ⚠️ Eşitleme koşulu **`value` prop'unun değişmesidir**, "taslaktan farklı
+olması" değil — ikincisi hatanın aynadaki ikizini üretir (§2b/§2c kırmızı).
+
 ### Picker içi "yeni ekle" — `PickerModal.leadingAction` (2026-07-30)
 
 Bir picker'dan seçenek eklenebiliyorsa (ör. KK1 "Desen Seç" → yeni desen) tetik **listenin ilk hücresindeki mor aksiyon kartıdır** (`leadingAction`: diğer kartlarla aynı geometri, `colors.action` zemin + beyaz yazı). Sıralama/aramadan bağımsız her zaman ilk sıradadır, basılınca picker **kapanmaz** — asıl form `quickAddSlot`'ta açılır. Mor bilinçli: marka indigo'su "seçili kart" vurgusu olduğu için aksiyon indigo olamaz. Listenin üstüne ayrı outlined buton koyma.

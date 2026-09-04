@@ -159,6 +159,26 @@ describe('AppModal içindeki metin kutusu — imleç sözleşmesi', () => {
     expect(handleRef.current!.getText()).toBe('ABC');
   });
 
+  // §5 — sahadan gelen İKİ yüzey (Tambur kesim ekranı + etiket önizleme sheet'i)
+  // ön-doldurulmuş "müşterideki ad" kutusunu taşır; ikisi de portalın içindedir.
+  // Çıplak `<TextInput` geri gelirse hata da geri gelir ve davranış testi bunu
+  // görmez (o dosyaları render etmiyor) — bu yüzden yapısal kontrol.
+  it('§5 ön-doldurulmuş "müşterideki ad" yüzeyleri çıplak TextInput kullanmaz', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const fs = require('fs') as typeof import('fs');
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path') as typeof import('path');
+    const files = [
+      'src/screens/Modules/Tambur/LabelNamePreview.tsx',
+      'src/components/labels/LabelPreviewSheet.tsx',
+    ];
+    for (const rel of files) {
+      const src = fs.readFileSync(path.join(process.cwd(), rel), 'utf-8');
+      expect({ rel, bare: /<TextInput[\s/>]/.test(src) }).toEqual({ rel, bare: false });
+      expect({ rel, uses: src.includes('ModalTextInput') }).toEqual({ rel, uses: true });
+    }
+  });
+
   it('§4 dıştan ön-doldurma (modal açılışı) ModalTextInput`te de görünür', async () => {
     function Prefill() {
       const [v, setV] = useState('');
