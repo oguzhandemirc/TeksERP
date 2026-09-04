@@ -11,10 +11,10 @@
 // =============================================================================
 
 import React from 'react';
-import { StyleSheet, Platform } from 'react-native';
+import { StyleSheet, Platform, type StyleProp, type ViewStyle } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Appbar } from 'react-native-paper';
+import { Appbar, Button } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 
 export const SETTINGS_COLORS = {
@@ -30,6 +30,17 @@ export const SETTINGS_COLORS = {
   successBg: '#052e1a',
   error: '#ef4444',
   errorBg: '#3f1d1f',
+  // Dikkat çeken ama yıkıcı olmayan durum — tokens `colors.warning` (amber 500).
+  warning: '#f59e0b',
+  // Teşhis (salt-okunur, "dene/bak") aksiyonları — tokens `colors.info` (blue 500).
+  info: '#3b82f6',
+  infoBg: '#0b2545',
+  // Keşif/"yeni getir" aksiyonu — tokens `colors.action` (violet 600). Marka
+  // indigo'sundan bilinçli ayrı: yan yana durunca "aynı iş" gibi okunmasın.
+  action: '#7c3aed',
+  // Gerçekten kullanılamaz düğmenin GÖRÜNÜR hali (aşağıdaki uyarıya bak).
+  disabledBg: '#1b2540',
+  disabledText: '#64748b',
 } as const;
 
 const C = SETTINGS_COLORS;
@@ -115,4 +126,103 @@ export const settingsStyles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
     color: C.text,
   },
+});
+
+
+/* ===========================================================================
+ * Ayar aksiyon düğmesi — "kaybolmayan buton"
+ * ===========================================================================
+ * ⚠️ NEDEN KENDİ SARMALAYICIMIZ VAR (2026-09-04, sahadan ölçülen hata):
+ * Paper `Button`, `disabled` olduğu anda `buttonColor`/`textColor` proplarını
+ * YOK SAYAR (`components/Button/utils.tsx`: `if (customButtonColor && !disabled)`)
+ * ve MD3 **açık** temanın `surfaceDisabled` / `onSurfaceDisabled` değerlerine
+ * düşer. Ayarlar ekranları KOYU zeminli olduğu için sonuç, düğmenin fiilen
+ * GÖRÜNMEZ olmasıdır — sahadaki tarif birebir buydu: "denetle deyince buton
+ * kayboluyor". Üstelik `mode="outlined"` düğmenin zaten dolgusu olmadığı için
+ * kaybolma tam oluyordu.
+ *
+ * Bu yüzden burada:
+ *   • renk HER ZAMAN `style`/`labelStyle` ile verilir (ikisi Paper'ın hesapladığı
+ *     renklerden SONRA uygulanır, yani disabled dalında da geçerlidir),
+ *   • MEŞGULken `disabled` GÖNDERİLMEZ — tekrar basma `onPress` içinde yutulur;
+ *     böylece düğme dolu rengini ve etiketini korur, yalnız içine spinner girer,
+ *   • gerçekten kullanılamaz durumda düğme silikleşir ama OKUNUR kalır
+ *     (`disabledBg`/`disabledText`), çünkü kaybolan düğme "bozuldu" diye okunur.
+ *
+ * Dokunma hedefi 56 dp: mobil CLAUDE.md'nin taban dokunma hedefi (eldivenli el).
+ * =========================================================================== */
+
+export type SettingsButtonTone = 'primary' | 'success' | 'danger' | 'info' | 'action' | 'neutral';
+
+interface ToneSpec {
+  bg: string;
+  label: string;
+  border: string;
+}
+
+const TONES: Record<SettingsButtonTone, ToneSpec> = {
+  primary: { bg: C.accent, label: '#ffffff', border: C.accent },
+  success: { bg: C.success, label: '#052e1a', border: C.success },
+  danger: { bg: C.error, label: '#ffffff', border: C.error },
+  info: { bg: C.info, label: '#ffffff', border: C.info },
+  action: { bg: C.action, label: '#ffffff', border: C.action },
+  // Nötr = dolgusuz ama KENARLIKLI ve okunur etiketli; "sessiz" ikinci aksiyon.
+  neutral: { bg: C.bgDarker, label: C.text, border: C.border },
+};
+
+export interface SettingsActionButtonProps {
+  label: string;
+  /** Meşgulken gösterilecek metin (yoksa `label` kalır). */
+  busyLabel?: string;
+  tone?: SettingsButtonTone;
+  icon?: string;
+  busy?: boolean;
+  /** GERÇEKTEN kullanılamaz (yetki/kapalı özellik) — meşguliyet için KULLANMA. */
+  disabled?: boolean;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+}
+
+export function SettingsActionButton({
+  label,
+  busyLabel,
+  tone = 'primary',
+  icon,
+  busy = false,
+  disabled = false,
+  onPress,
+  style,
+  testID,
+}: SettingsActionButtonProps) {
+  const t = TONES[tone];
+  const bg = disabled ? C.disabledBg : t.bg;
+  const fg = disabled ? C.disabledText : t.label;
+
+  return (
+    <Button
+      mode="contained"
+      testID={testID}
+      // ⚠️ `busy` BURAYA GİRMEZ — bkz. dosya başındaki uyarı.
+      disabled={disabled}
+      loading={busy}
+      icon={busy ? undefined : icon}
+      onPress={() => {
+        if (busy || disabled) return;
+        onPress();
+      }}
+      accessibilityState={{ disabled: disabled || busy, busy }}
+      style={[buttonStyles.base, { backgroundColor: bg, borderColor: disabled ? C.border : t.border }, style]}
+      contentStyle={buttonStyles.content}
+      labelStyle={[buttonStyles.label, { color: fg }]}
+    >
+      {busy ? (busyLabel ?? label) : label}
+    </Button>
+  );
+}
+
+const buttonStyles = StyleSheet.create({
+  base: { borderRadius: 12, borderWidth: 1 },
+  content: { height: 56 },
+  label: { fontSize: 15, fontWeight: '700', letterSpacing: 0.2 },
 });

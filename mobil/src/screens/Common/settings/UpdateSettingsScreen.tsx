@@ -11,11 +11,17 @@
 // kalıcı olarak yanacaktı ve hep bağıran bir uyarı, bir süre sonra hiç
 // okunmayan bir uyarıdır — gerçek bir sapmada da susardı. Aynı ders bu depoda
 // `build-apk.mjs`'in runtimeVersion kapısında yazılı.
+//
+// ⚠️ AKSİYON BLOĞU AYRI DOSYADA (`UpdateActions.tsx`) ve bu bilinçlidir: orada
+// kilitlenen invariant "denetle düğmesi hiçbir durumda ağaçtan DÜŞMEZ" ve bu
+// ekranın tamamı (expo-updates + navigation + safe-area) testte ayağa
+// kaldırılamayacak kadar ağır. Sunum saf tutuldu ki ölçülebilsin.
 // =============================================================================
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, Icon } from 'react-native-paper';
+import { Icon } from 'react-native-paper';
+import Toast from 'react-native-toast-message';
 import * as Updates from 'expo-updates';
 
 import { useBaseUrlStore } from '../../../store/baseUrlStore';
@@ -32,7 +38,14 @@ import {
   type ApkDurum,
   type OtaKontrolSonuc,
 } from '../../../services/appUpdate.service';
-import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
+import { useBusyAction } from '../../../hooks/useBusyAction';
+import {
+  SETTINGS_COLORS as COLORS,
+  SettingsActionButton,
+  SettingsPage,
+  settingsStyles,
+} from './settingsUi';
+import { UpdateActions } from './UpdateActions';
 
 /**
  * `https://guncelleme.etkiliyazilim.com/mobil/ota/54.2/manifest`
@@ -46,17 +59,25 @@ function sunucuGoster(url: string | null): string {
   return url.replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
 }
 
+/** `14:07` — "denetledim ama hiçbir şey olmadı" hissine karşı zaman damgası. */
+function saatSimdi(): string {
+  const d = new Date();
+  const iki = (n: number) => String(n).padStart(2, '0');
+  return `${iki(d.getHours())}:${iki(d.getMinutes())}`;
+}
+
 export default function UpdateSettingsScreen() {
   const baseUrl = useBaseUrlStore((s) => s.baseUrl);
   const kimlik = otaKimlik();
   const { isUpdateAvailable, isUpdatePending, isDownloading } = Updates.useUpdates();
 
-  const [kontrolEdiliyor, setKontrolEdiliyor] = useState(false);
   const [otaSonuc, setOtaSonuc] = useState<OtaKontrolSonuc | null>(null);
+  const [sonDenetleme, setSonDenetleme] = useState<string | null>(null);
   const [apk, setApk] = useState<ApkDurum | null>(null);
   const [apkIsleniyor, setApkIsleniyor] = useState(false);
   const [apkOran, setApkOran] = useState(0);
   const [apkHata, setApkHata] = useState<string | null>(null);
+  const [yenileniyor, setYenileniyor] = useState(false);
 
   const apiSunucu = baseUrl.replace(/^https?:\/\//i, '').replace(/\/api\/?$/i, '');
   const otaSunucu = sunucuGoster(kimlik.sunucu);
@@ -65,12 +86,60 @@ export default function UpdateSettingsScreen() {
     void apkDurumu().then(setApk);
   }, []);
 
-  const otaDenetle = useCallback(async () => {
-    setKontrolEdiliyor(true);
-    setOtaSonuc(null);
-    const s = await otaKontrolEtVeIndir();
-    setOtaSonuc(s);
-    setKontrolEdiliyor(false);
+  // Denetleme: asgari 2 sn döner (`useBusyAction`) — sunucu 40 ms'de cevap
+  // verdiğinde düğme bir kare yanıp sönüyor ve operatör bastığından emin
+  // olamıyordu. Asgari süre TAVAN değildir; iş uzarsa spinner uzar.
+  const { busy: kontrolEdiliyor, tetikle: otaDenetle } = useBusyAction(
+    useCallback(async () => {
+      setOtaSonuc(null);
+      return otaKontrolEtVeIndir();
+    }, []),
+    {
+      bitince: (s) => {
+        setOtaSonuc(s);
+        setSonDenetleme(saatSimdi());
+        // Toast, kartı görmeyen (aşağı kaydırmış) operatör için ikinci yüzey;
+        // karttaki durum satırı KALICI olanıdır, ikisi aynı cümleyi söyler.
+        if (s.durum === 'indirildi') {
+          Toast.show({
+            type: 'success',
+            text1: 'Yeni sürüm indirildi',
+            text2: '"Şimdi yenile" ile uygulanır.',
+          });
+        } else if (s.durum === 'guncel') {
+          Toast.show({ type: 'info', text1: 'Uygulama güncel', text2: 'Yeni sürüm yok.' });
+        } else if (s.durum === 'kapali') {
+          Toast.show({
+            type: 'info',
+            text1: 'Uzaktan güncelleme kapalı',
+            text2: 'Bu bir geliştirme kurulumu.',
+          });
+        } else {
+          Toast.show({
+            type: 'error',
+            text1: 'Güncelleme sunucusuna ulaşılamadı',
+            text2: 'Tabletin interneti var mı? Bu bağlantı fabrika ağından AYRIDIR.',
+          });
+        }
+      },
+    },
+  );
+
+  // Yenileme başarılıysa süreç zaten yeniden başlar — buradaki dönüş yolu
+  // yalnız ERTELENDİ dalı içindir (kuyrukta gönderilmemiş kayıt varken tavan
+  // dolarsa yenileme atlanır). Eskiden spinner sonsuza kadar dönerdi.
+  const otaYenile = useCallback(() => {
+    setYenileniyor(true);
+    void guvenliYenile().then((sonuc) => {
+      setYenileniyor(false);
+      if (sonuc === 'ertelendi') {
+        Toast.show({
+          type: 'info',
+          text1: 'Yenileme ertelendi',
+          text2: 'Gönderilmemiş kayıt var. Kuyruk boşalınca ya da bir sonraki açılışta uygulanır.',
+        });
+      }
+    });
   }, []);
 
   const apkKur = useCallback(async () => {
@@ -82,6 +151,11 @@ export default function UpdateSettingsScreen() {
     const s = await apkIndirVeKur(url, setApkOran);
     if (s.durum === 'hata') {
       setApkHata(s.mesaj);
+      Toast.show({
+        type: 'error',
+        text1: 'Kurulum dosyası indirilemedi',
+        text2: s.mesaj,
+      });
       await apkTemizle();
     }
     setApkIsleniyor(false);
@@ -136,51 +210,19 @@ export default function UpdateSettingsScreen() {
           Ekran ve kural değişiklikleri. Kurulum gerekmez; uygulama kendini yeniler.
         </Text>
 
-        {isUpdatePending ? (
-          <>
-            <Text style={styles.durumIyi}>Yeni sürüm indirildi, uygulanmayı bekliyor.</Text>
-            {bekleyen > 0 && (
-              <Text style={settingsStyles.hint}>
-                {bekleyen} kayıt henüz sunucuya gönderilmedi — gönderilir gönderilmez
-                uygulanacak.
-              </Text>
-            )}
-            <Button
-              mode="contained"
-              onPress={() => void guvenliYenile()}
-              style={styles.dugme}
-              buttonColor={COLORS.accent}
-            >
-              Şimdi yenile
-            </Button>
-          </>
-        ) : (
-          <>
-            {otaSonuc?.durum === 'guncel' && <Text style={styles.durumIyi}>Güncel.</Text>}
-            {otaSonuc?.durum === 'indirildi' && (
-              <Text style={styles.durumIyi}>Yeni sürüm indirildi.</Text>
-            )}
-            {otaSonuc?.durum === 'kapali' && (
-              <Text style={settingsStyles.hint}>Bu kurulumda uzaktan güncelleme kapalı.</Text>
-            )}
-            {otaSonuc?.durum === 'hata' && (
-              <Text style={styles.durumKotu}>Sunucuya ulaşılamadı: {otaSonuc.mesaj}</Text>
-            )}
-            {isUpdateAvailable && !isDownloading && !otaSonuc && (
-              <Text style={styles.durumIyi}>Yeni sürüm var.</Text>
-            )}
-            <Button
-              mode="outlined"
-              onPress={() => void otaDenetle()}
-              loading={kontrolEdiliyor || isDownloading}
-              disabled={kontrolEdiliyor || isDownloading || !kimlik.etkin}
-              style={styles.dugme}
-              textColor={COLORS.text}
-            >
-              {isDownloading ? 'İndiriliyor…' : 'Güncellemeleri denetle'}
-            </Button>
-          </>
-        )}
+        <UpdateActions
+          etkin={kimlik.etkin}
+          denetleniyor={kontrolEdiliyor}
+          indiriliyor={isDownloading}
+          uygulamaBekliyor={isUpdatePending}
+          yeniVar={isUpdateAvailable}
+          sonuc={otaSonuc}
+          sonDenetlemeSaati={sonDenetleme}
+          bekleyenYazim={bekleyen}
+          yenileniyor={yenileniyor}
+          onDenetle={otaDenetle}
+          onYenile={otaYenile}
+        />
       </View>
 
       {/* ------------------------------------------------ Kurulum dosyası */}
@@ -204,18 +246,15 @@ export default function UpdateSettingsScreen() {
               <Text style={settingsStyles.hint}>{apk.kunye.notlar}</Text>
             )}
             {apkHata && <Text style={styles.durumKotu}>{apkHata}</Text>}
-            <Button
-              mode="contained"
+            <SettingsActionButton
+              tone="primary"
+              icon="download"
+              label="İndir ve kur"
+              busyLabel={`İndiriliyor… %${Math.round(apkOran * 100)}`}
+              busy={apkIsleniyor}
               onPress={() => void apkKur()}
-              loading={apkIsleniyor}
-              disabled={apkIsleniyor}
               style={styles.dugme}
-              buttonColor={COLORS.accent}
-            >
-              {apkIsleniyor
-                ? `İndiriliyor… %${Math.round(apkOran * 100)}`
-                : 'İndir ve kur'}
-            </Button>
+            />
           </>
         ) : (
           <Text style={styles.durumIyi}>

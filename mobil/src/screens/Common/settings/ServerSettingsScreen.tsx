@@ -5,17 +5,27 @@
 // dönüştüğünde (2026-07-30) kendi sayfasına taşındı. Davranış aynı: şema/host/
 // port ayrı alanlar, "Bağlantıyı Test Et", kaydetmede onay, otomatik adrese
 // dönüş.
+//
+// ⚠️ DÜĞME RENKLERİ ANLAM TAŞIR (2026-09-04) — süs değil, aynı satırda üç ayrı
+// iş var ve rengi olmayan üç düğme birbirinden ayırt edilemiyordu:
+//   · MOR   (`action`)  → Ağda Ara      — dışarıdan aday GETİRİR
+//   · MAVİ  (`info`)    → Bağlantıyı Test Et — sadece BAKAR, hiçbir şey yazmaz
+//   · İNDİGO(`primary`) → Kaydet        — cihazın adresini DEĞİŞTİRİR
+// Renk skalası `theme/tokens` ile hizalı (violet 600 / blue 500 / indigo 600);
+// yeni palet uydurulmadı.
+//
+// ⚠️ Sonuç İKİ yüzeyde: kartın içindeki durum kutusu KALICIDIR (operatör
+// yukarı kaydırınca hâlâ orada), toast ANLIKTIR (gözü alanlarda olan operatör
+// için). İkisi de aynı cümleyi söyler; biri diğerinin yerine geçmez.
 // =============================================================================
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { View, StyleSheet, Platform } from 'react-native';
 import {
   Text,
   TextInput,
-  Button,
   Icon,
   ActivityIndicator,
-  TouchableRipple,
   Chip,
 } from 'react-native-paper';
 import axios from 'axios';
@@ -33,7 +43,13 @@ import {
 } from '../../../store/baseUrlStore';
 import ConfirmDialog from '../../../components/ConfirmDialog';
 import { ServerDiscoveryList } from '../../../components/ServerDiscoveryList';
-import { SETTINGS_COLORS as COLORS, SettingsPage, settingsStyles } from './settingsUi';
+import { useBusyAction } from '../../../hooks/useBusyAction';
+import {
+  SETTINGS_COLORS as COLORS,
+  SettingsActionButton,
+  SettingsPage,
+  settingsStyles,
+} from './settingsUi';
 
 type TestResult =
   | { status: 'idle' }
@@ -65,6 +81,8 @@ export default function ServerSettingsScreen() {
 
   // Alanlardan ham URL (normalizeUrl `/api`'yi ekler). Host boşsa boş.
   const rawUrl = buildUrl(scheme, host, port);
+  /** Alanlardaki adres, uygulamanın GERÇEKTEN bağlı olduğu adresten farklı mı. */
+  const kaydedilmemis = host.trim().length > 0 && normalizeUrl(rawUrl) !== baseUrl;
 
   // Son-kullanılan çipi / otomatik adres → alanları doldur.
   const applyParts = (url: string) => {
@@ -79,40 +97,57 @@ export default function ServerSettingsScreen() {
     if (navigation.canGoBack()) navigation.goBack();
   };
 
-  const runTest = async () => {
-    if (!host.trim()) {
-      setTesting({ status: 'fail', message: 'IP / host boş olamaz' });
-      return;
-    }
-    const url = normalizeUrl(rawUrl);
-    setTesting({ status: 'testing' });
-    try {
-      // /auth/me token istemediğimiz için 401 dönecek — ama bağlantının
-      // kurulduğunu gösterir. Network error = sunucuya erişilemiyor.
-      const res = await axios.get(`${url}/auth/me`, {
-        timeout: 5000,
-        validateStatus: () => true,
-      });
-      if (res.status > 0) {
-        setTesting({
-          status: 'ok',
-          message: `Sunucuya ulaşıldı (HTTP ${res.status})`,
-        });
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      } else {
-        setTesting({ status: 'fail', message: 'Beklenmeyen yanıt' });
+  // Test: asgari 2 sn döner. Sunucu LAN'da 30 ms'de cevap verdiğinde düğme bir
+  // kare yanıp sönüyor, operatör bastığından emin olamayıp tekrar basıyordu.
+  const { busy: testEdiliyor, tetikle: runTest } = useBusyAction(
+    useCallback(async (): Promise<TestResult> => {
+      if (!host.trim()) {
+        return { status: 'fail', message: 'IP / host boş — önce adresi yazın.' };
       }
-    } catch (e) {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      const msg =
-        e instanceof Error
-          ? e.message.includes('timeout')
-            ? 'Zaman aşımı — IP doğru mu, sunucu açık mı?'
-            : e.message
-          : 'Bağlantı kurulamadı';
-      setTesting({ status: 'fail', message: msg });
-    }
-  };
+      const url = normalizeUrl(rawUrl);
+      setTesting({ status: 'testing' });
+      try {
+        // /auth/me token istemediğimiz için 401 dönecek — ama bağlantının
+        // kurulduğunu gösterir. Network error = sunucuya erişilemiyor.
+        const res = await axios.get(`${url}/auth/me`, {
+          timeout: 5000,
+          validateStatus: () => true,
+        });
+        if (res.status > 0) {
+          return { status: 'ok', message: `Sunucuya ulaşıldı (HTTP ${res.status})` };
+        }
+        return { status: 'fail', message: 'Beklenmeyen yanıt' };
+      } catch (e) {
+        const msg =
+          e instanceof Error
+            ? e.message.includes('timeout')
+              ? 'Zaman aşımı — IP doğru mu, sunucu açık mı?'
+              : e.message
+            : 'Bağlantı kurulamadı';
+        return { status: 'fail', message: msg };
+      }
+    }, [host, rawUrl]),
+    {
+      bitince: (sonuc) => {
+        setTesting(sonuc);
+        if (sonuc.status === 'ok') {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          Toast.show({
+            type: 'success',
+            text1: 'Bağlantı başarılı',
+            text2: `${displayUrl(normalizeUrl(rawUrl))} yanıt verdi.`,
+          });
+        } else {
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          Toast.show({
+            type: 'error',
+            text1: 'Bağlanılamadı',
+            text2: sonuc.status === 'fail' ? sonuc.message : 'Bağlantı kurulamadı',
+          });
+        }
+      },
+    },
+  );
 
   const doSave = async (url: string) => {
     setSaving(true);
@@ -197,7 +232,6 @@ export default function ServerSettingsScreen() {
             return (
               <Chip
                 key={s}
-                compact
                 selected={active}
                 onPress={() => {
                   setScheme(s);
@@ -262,6 +296,18 @@ export default function ServerSettingsScreen() {
           (<Text style={settingsStyles.mono}>/api</Text> otomatik eklenir)
         </Text>
 
+        {/* "Yazdım ama kaydetmedim" — sahada en sık karışan durum: alanlar yeni
+            adresi gösterirken uygulama HÂLÂ eskisine bağlıdır. */}
+        {kaydedilmemis && (
+          <View style={styles.dirtyRow}>
+            <Icon source="content-save-alert" size={18} color={COLORS.warning} />
+            <Text style={styles.dirtyText}>
+              Bu adres henüz kaydedilmedi — uygulama hâlâ{' '}
+              <Text style={settingsStyles.mono}>{displayUrl(baseUrl)}</Text> adresine bağlı.
+            </Text>
+          </View>
+        )}
+
         {/* Son kullanılan adresler — dokun, alanlar dolsun. */}
         {recentUrls.length > 0 && (
           <View style={styles.recentBlock}>
@@ -270,7 +316,6 @@ export default function ServerSettingsScreen() {
               {recentUrls.map((u) => (
                 <Chip
                   key={u}
-                  compact
                   icon="history"
                   onPress={() => applyParts(u)}
                   style={styles.recentChip}
@@ -288,7 +333,7 @@ export default function ServerSettingsScreen() {
         <ServerDiscoveryList
           currentUrl={rawUrl}
           recentUrls={recentUrls}
-          disabled={saving || testing.status === 'testing'}
+          disabled={saving || testEdiliyor}
           onPick={(srv) => {
             applyParts(srv.baseUrl);
             setTesting({
@@ -297,17 +342,39 @@ export default function ServerSettingsScreen() {
                 ? `Bulundu — ${srv.identity.companyName || srv.identity.serverName}`
                 : 'Bulundu (kimlik bilgisi yok — eski sürüm olabilir)',
             });
+            Toast.show({
+              type: 'success',
+              text1: 'Sunucu seçildi',
+              text2: `${displayUrl(srv.baseUrl)} — kaydetmek için "Kaydet"e basın.`,
+            });
+          }}
+          // ⚠️ Toast'ı ÇAĞIRAN basar: aynı bileşen kilit ekranında da var ve
+          // orada kilit katmanı Toast'ın üstünde çizilir (bildirim görünmez).
+          onResult={(adaylar) => {
+            if (adaylar.length === 0) {
+              Toast.show({
+                type: 'error',
+                text1: 'Ağda sunucu bulunamadı',
+                text2: 'Tablet fabrika Wi-Fi\'sinde mi? Adresi elle yazıp test edebilirsiniz.',
+              });
+            } else {
+              Toast.show({
+                type: 'success',
+                text1: `${adaylar.length} sunucu bulundu`,
+                text2: 'Listeden dokunarak seçin.',
+              });
+            }
           }}
         />
 
         <View style={styles.statusBlock}>
-          {testing.status === 'testing' && (
+          {testEdiliyor && (
             <View style={[styles.statusRow, styles.statusInfo]}>
               <ActivityIndicator size={18} color={COLORS.accentLight} />
               <Text style={styles.statusText}>Test ediliyor...</Text>
             </View>
           )}
-          {testing.status === 'ok' && (
+          {!testEdiliyor && testing.status === 'ok' && (
             <View style={[styles.statusRow, styles.statusOk]}>
               <Icon source="check-circle" size={20} color={COLORS.success} />
               <Text style={[styles.statusText, { color: COLORS.success }]}>
@@ -315,7 +382,7 @@ export default function ServerSettingsScreen() {
               </Text>
             </View>
           )}
-          {testing.status === 'fail' && (
+          {!testEdiliyor && testing.status === 'fail' && (
             <View style={[styles.statusRow, styles.statusFail]}>
               <Icon source="alert-circle" size={20} color={COLORS.error} />
               <Text style={[styles.statusText, { color: COLORS.error }]}>
@@ -326,31 +393,28 @@ export default function ServerSettingsScreen() {
         </View>
 
         <View style={styles.actions}>
-          <Button
-            mode="outlined"
-            onPress={runTest}
-            disabled={testing.status === 'testing' || saving}
+          <SettingsActionButton
+            testID="baglanti-test"
+            tone="info"
             icon="wifi-check"
-            style={styles.btnSecondary}
-            contentStyle={styles.btnContent}
-            labelStyle={styles.btnSecondaryLabel}
-            textColor={COLORS.accentLight}
-          >
-            Bağlantıyı Test Et
-          </Button>
-          <Button
-            mode="contained"
-            onPress={save}
-            loading={saving}
-            disabled={saving || testing.status === 'testing'}
+            label="Bağlantıyı Test Et"
+            busyLabel="Test ediliyor…"
+            busy={testEdiliyor}
+            disabled={saving}
+            onPress={runTest}
+            style={styles.btnHalf}
+          />
+          <SettingsActionButton
+            testID="adres-kaydet"
+            tone="primary"
             icon="content-save"
-            style={styles.btnPrimary}
-            contentStyle={styles.btnContent}
-            labelStyle={styles.btnPrimaryLabel}
-            buttonColor={COLORS.accent}
-          >
-            Kaydet
-          </Button>
+            label="Kaydet"
+            busyLabel="Kaydediliyor…"
+            busy={saving}
+            disabled={testEdiliyor}
+            onPress={save}
+            style={styles.btnHalf}
+          />
         </View>
       </View>
 
@@ -371,16 +435,15 @@ export default function ServerSettingsScreen() {
         {customUrl && (
           <>
             <View style={styles.infoDivider} />
-            <TouchableRipple
+            {/* Nötr ton bilinçli: bu bir GERİ ALMA, yıkıcı bir işlem değil —
+                ama yine de adresi değiştirir, o yüzden onay diyaloğu KALIR. */}
+            <SettingsActionButton
+              testID="varsayilana-don"
+              tone="neutral"
+              icon="restore"
+              label="Varsayılan adrese dön"
               onPress={resetToAuto}
-              rippleColor="rgba(99,102,241,0.2)"
-              style={styles.resetBtn}
-            >
-              <View style={styles.resetBtnInner}>
-                <Icon source="restore" size={18} color={COLORS.subtext} />
-                <Text style={styles.resetBtnText}>Varsayılana döndür</Text>
-              </View>
-            </TouchableRipple>
+            />
           </>
         )}
       </View>
@@ -405,14 +468,19 @@ const styles = StyleSheet.create({
   input: { backgroundColor: COLORS.bgDarker, fontSize: 16 },
 
   // Şema seçici (http/https) çipleri.
+  // ⚠️ `compact` KALDIRILDI: eldivenli elde 32 dp'lik çip ıskalanıyordu; bu
+  // ekranın tamamı zaten "bir şey ters gittiğinde" açılıyor, ıskalanan dokunuş
+  // orada en pahalı yerde.
   schemeRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   schemeChip: {
     backgroundColor: COLORS.bgDarker,
     borderColor: COLORS.border,
     borderWidth: 1,
+    minHeight: 48,
+    justifyContent: 'center',
   },
   schemeChipActive: { backgroundColor: COLORS.accent, borderColor: COLORS.accentLight },
-  schemeChipText: { color: COLORS.subtext, fontWeight: '700' },
+  schemeChipText: { color: COLORS.subtext, fontWeight: '700', fontSize: 15 },
   schemeChipTextActive: { color: '#fff' },
 
   // IP (esner) + Port (dar) yan yana.
@@ -427,8 +495,23 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.bgSoft,
     borderColor: COLORS.border,
     borderWidth: 1,
+    minHeight: 44,
+    justifyContent: 'center',
   },
-  recentChipText: { color: COLORS.text, fontSize: 12 },
+  recentChipText: { color: COLORS.text, fontSize: 13 },
+
+  dirtyRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.warning,
+    backgroundColor: '#2a1f05',
+  },
+  dirtyText: { flex: 1, minWidth: 0, color: COLORS.text, fontSize: 12, lineHeight: 17 },
 
   statusBlock: { marginTop: 14, minHeight: 0 },
   statusRow: {
@@ -444,17 +527,11 @@ const styles = StyleSheet.create({
   statusFail: { backgroundColor: COLORS.errorBg, borderColor: '#7f1d1d' },
   statusText: { color: COLORS.text, fontSize: 14, flex: 1, fontWeight: '500' },
 
+  // ⚠️ `flex: 1` çocuklar bir satırda: her ikisi de düz `View`, yani
+  // `SegmentedButtons`ın 2026-08-25 tuzağı burada YOK. Yine de yan yana duran
+  // iki düğmeden başka bir şey konmayacak (o kural bu satır için de geçerli).
   actions: { flexDirection: 'row', gap: 10, marginTop: 18 },
-  btnSecondary: {
-    flex: 1,
-    borderRadius: 10,
-    borderColor: COLORS.accentLight,
-    borderWidth: 1,
-  },
-  btnPrimary: { flex: 1, borderRadius: 10 },
-  btnContent: { height: 52 },
-  btnSecondaryLabel: { fontSize: 14, fontWeight: '700' },
-  btnPrimaryLabel: { fontSize: 15, fontWeight: '700', color: '#fff' },
+  btnHalf: { flex: 1 },
 
   infoCard: {
     backgroundColor: COLORS.bgSoft,
@@ -482,13 +559,4 @@ const styles = StyleSheet.create({
   },
   infoDivider: { height: 1, backgroundColor: COLORS.border, marginVertical: 12 },
 
-  resetBtn: { borderRadius: 8, marginTop: 4 },
-  resetBtnInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-  },
-  resetBtnText: { color: COLORS.subtext, fontSize: 13, fontWeight: '600' },
 });
