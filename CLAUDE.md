@@ -197,9 +197,11 @@ node scripts/check-surum-notlari.mjs        # şema + dil + kopya denetimi
 ./deploy/electron-yayinla.sh --dogrula           # yükleme YOK, yayını denetle
 
 # TABLET — değişikliğin cinsi kanalı belirler
-cd mobil && npm run yayinla -- --musteri=<müşteri>   # JS-only → OTA; sürüm de otomatik artar
-cd mobil && npm run yayinla -- --musteri=<müşteri> --surum=1.2.0   # haneyi elle ver
-cd mobil && npm run build:apk                        # native değişti → yeni APK (elle kurulur)
+# ⚠️ ERP ADRESİ AÇIKÇA VERİLİR — hem OTA hem APK onu İÇİNE gömer. Varsayılan
+#    YOKTUR ve bu bilinçlidir: yanlış adres sahadaki tableti bağlantısız bırakır.
+cd mobil && EXPO_PUBLIC_API_URL=<erp-adresi> npm run yayinla -- --musteri=<müşteri>
+cd mobil && EXPO_PUBLIC_API_URL=<erp-adresi> npm run yayinla -- --musteri=<müşteri> --surum=1.2.0
+cd mobil && EXPO_PUBLIC_API_URL=<erp-adresi> npm run build:apk   # native değişti → yeni APK
 node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
 ```
 
@@ -249,6 +251,14 @@ node deploy/mobil-yayinla.mjs --apk=<yol> --surum=X --vc=N --musteri=<müşteri>
    tablet KURULU APK sürümü sanar (`kuruluVersionCode()`); yükseltilirse gerçek
    APK güncellemesini bir daha teklif etmez. Yayın script'i yayındaki
    `apk/surum.json` ile kıyaslayıp durdurur. Bekçi: `scripts/test_surum.mjs`.
+   ⚠️ **`versionCode` YALNIZ YAYINLANACAK bir APK için artırılır** (2026-09-04'te
+   ısırdı). Elle dağıtılacak/deneme amaçlı bir APK için artırılıp o APK sunucuya
+   YÜKLENMEZSE `app.json` ile yayındaki `apk/surum.json` AYRIŞIR ve bir sonraki
+   OTA turu kapıda durur ("versionCode yayındaki APK ile UYUŞMUYOR"). O noktada
+   doğru soru **"native gerçekten değişti mi"**dir: değişmediyse `app.json`
+   değeri yayındaki değere GERİ ALINIR (sahaya APK kurdurmak bedava değildir),
+   değiştiyse ÖNCE APK yayınlanır. Ölçüm: `git log tablet-v<son>..HEAD --
+   mobil/android mobil/app.json mobil/package.json`.
 
 ⚠️ **Yeni müşteri:** sunucuda `mkdir <müşteri>/electron` + paketle + yayınla.
 DNS, sertifika, servis GEREKMEZ. Müşteri kodu tek kaynakta

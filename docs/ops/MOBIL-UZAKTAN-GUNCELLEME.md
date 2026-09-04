@@ -75,9 +75,10 @@ Artık `app.json > expo.version` her yayın turunda **yama hanesinden** artar
 yani native tarafa dokunmadan tablette görünen sürüm değişir.
 
 ```bash
-npm run yayinla -- --musteri=adnansahin                 # otomatik: 1.0.1
-npm run yayinla -- --musteri=adnansahin --surum=1.2.0   # haneyi elle ver
-npm run yayinla -- --musteri=adnansahin --surum-artirma # hiç dokunma
+# ⚠️ ADRES HER SATIRDA: script'in varsayılanı YOKTUR (yukarıdaki gerekçe).
+EXPO_PUBLIC_API_URL=<erp> npm run yayinla -- --musteri=adnansahin                 # otomatik: 1.0.1
+EXPO_PUBLIC_API_URL=<erp> npm run yayinla -- --musteri=adnansahin --surum=1.2.0   # haneyi elle ver
+EXPO_PUBLIC_API_URL=<erp> npm run yayinla -- --musteri=adnansahin --surum-artirma # hiç dokunma
 ```
 
 **Taban git etiketidir** (`tablet-v*`), yerel `app.json` ya da yayın sunucusu değil —
