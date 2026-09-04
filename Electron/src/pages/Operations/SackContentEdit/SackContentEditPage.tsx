@@ -7,7 +7,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { Button } from "@/components/ui/button";
 import { SacksListView } from "./SacksListView";
 import { SackEditorView } from "./SackEditorView";
-import { SackEntryGate, customerFilterValue, shouldShowEntryGate } from "./SackEntryGate";
+import { SackEntryGate, customerFilterValue, shouldShowEntryGate, type SackGateStep } from "./SackEntryGate";
 import { NewSackDialog } from "./NewSackDialog";
 import type { EditorTarget, SackSearchRow } from "./types";
 
@@ -38,7 +38,14 @@ export function SackContentEditPage() {
   const [newOpen, setNewOpen] = useState(false);
 
   // Kapı yalnız "çıplak" girişte çizilir — gerekçe `shouldShowEntryGate`te.
-  const [gateOpen, setGateOpen] = useState(() => shouldShowEntryGate(location.state, searchParams));
+  // ⚠️ ADIM BURADA YAŞAR (kapının içinde DEĞİL): "cari listesi" adımından çıkışın
+  // TEK yüzeyi PageHeader'ın geri okudur. Adım kapının kendi state'i olsaydı ok
+  // onu geri alamaz, kapı da kendi ikinci "Geri" düğmesini çizmek zorunda kalırdı
+  // (2026-09-04 saha turu: ekranda iki geri tuşu görünüyordu).
+  const [gateStep, setGateStep] = useState<SackGateStep | null>(() =>
+    shouldShowEntryGate(location.state, searchParams) ? "choice" : null,
+  );
+  const gateOpen = gateStep !== null;
 
   if (target) {
     return (
@@ -55,6 +62,10 @@ export function SackContentEditPage() {
     <PageShell>
       <PageHeader
         title="Paketleme / Çuvallar"
+        // TEK GERİ YÜZEYİ: cari listesi adımındayken başlıktaki ok bir adım geri
+        // alır (kapının seçim karolarına). Diğer durumlarda `undefined` — ok
+        // varsayılan davranışına (sekme geçmişi → breadcrumb üstü) düşer.
+        onBack={gateStep === "customers" ? () => setGateStep("choice") : undefined}
         actions={
           <>
             {!gateOpen && (
@@ -74,7 +85,7 @@ export function SackContentEditPage() {
                     },
                     { replace: true },
                   );
-                  setGateOpen(true);
+                  setGateStep("choice");
                 }}
               >
                 <Users className="h-4 w-4" /> Cari Seç
@@ -91,9 +102,11 @@ export function SackContentEditPage() {
           </>
         }
       />
-      {gateOpen ? (
+      {gateStep ? (
         <SackEntryGate
-          onPickAll={() => setGateOpen(false)}
+          step={gateStep}
+          onOpenCustomers={() => setGateStep("customers")}
+          onPickAll={() => setGateStep(null)}
           onPickCustomer={(bucket) => {
             setSearchParams(
               (prev) => {
@@ -103,7 +116,7 @@ export function SackContentEditPage() {
               },
               { replace: true },
             );
-            setGateOpen(false);
+            setGateStep(null);
           }}
         />
       ) : (

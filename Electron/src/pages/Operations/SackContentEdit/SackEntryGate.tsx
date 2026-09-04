@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Loader2, PackageOpen, Search, UserRound, Users } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { motion } from "framer-motion";
+import { ArrowRight, Loader2, PackageOpen, Search, UserRound, Users } from "lucide-react";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
+import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
 import { cn } from "@/lib/utils";
 import { sackHubService } from "./service";
 import { CUSTOMERLESS_FILTER_VALUE, type SackCustomerBucket } from "./types";
@@ -16,89 +18,103 @@ import { CUSTOMERLESS_FILTER_VALUE, type SackCustomerBucket } from "./types";
  * ⚠️ KAPI CARİ KATALOĞU DEĞİL, "elimde kimin malı var" LİSTESİDİR — uç
  * `GET /sack-search/customers` yalnız kapsamda ÇUVALI OLAN carileri döner
  * (ölçüm 2026-09-04: 43 aktif cari ↔ 4'ünün depoda çuvalı var).
+ * ⚠️ BU KARARI GERİ ÇEVİRME: tüm cari kataloğu konsaydı listedeki 39 seçenek
+ * "sonuç yok" verirdi — kapı soruyu cevaplamak yerine bir arama işi doğururdu.
+ * Katalogtan seçme ihtiyacı olan kullanıcı listedeki "Müşteri" süzgecini kullanır.
  *
  * ⚠️ MÜŞTERİSİZ ÇUVALLAR KAYBOLMAZ: `Sack.customerId` opsiyoneldir ve aynı
  * ölçümde depodaki 9 çuvalın 4'ü müşterisizdi. Bu küme listenin BAŞINDA kendi
  * satırıyla durur ve seçilince `filter[customerId]=none` süzgecine düşer —
  * "cariye göre" akışında sessizce düşen satır BIRAKILMAZ.
+ *
+ * ⚠️ ADIM DIŞARIDAN SÜRÜLÜR (2026-09-04, saha turu): "cari listesi" adımından
+ * çıkış yalnız PageHeader'ın geri okuyla olur — kapının kendi içinde İKİNCİ bir
+ * "Geri" düğmesi VARDI ve ekranda iki geri tuşu görünüyordu. Adım burada state
+ * olarak yaşasaydı sayfa üstündeki ok onu geri alamazdı.
  */
+export type SackGateStep = "choice" | "customers";
+
 export function SackEntryGate({
+  step,
+  onOpenCustomers,
   onPickAll,
   onPickCustomer,
 }: {
+  step: SackGateStep;
+  onOpenCustomers: () => void;
   onPickAll: () => void;
   /** `customerId === null` → müşterisiz (genel stok) kovası. */
   onPickCustomer: (bucket: SackCustomerBucket) => void;
 }) {
-  const [step, setStep] = useState<"choice" | "customers">("choice");
-
   if (step === "choice") {
     return (
-      <div className="flex min-h-0 flex-1 items-start justify-center p-8">
-        <div className="w-full max-w-3xl">
-          <h2 className="mb-1 text-lg font-semibold">Nasıl devam edelim?</h2>
-          <p className="mb-5 text-sm text-muted-foreground">
-            Depodaki tüm çuvalları listeleyebilir ya da önce cari seçip yalnız o carinin
-            çuvallarıyla çalışabilirsiniz.
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <GateCard
-              icon={PackageOpen}
-              title="Tüm Çuvallar"
-              description="Depodaki (sevk edilmemiş) bütün çuvallar — müşterisiz genel stok çuvalları dahil."
-              onClick={onPickAll}
-            />
-            <GateCard
-              icon={Users}
-              title="Tüm Cariler"
-              description="Çuvalı olan carileri listele, birini seç → yalnız o carinin çuvalları gelsin."
-              onClick={() => setStep("customers")}
-            />
-          </div>
-        </div>
-      </div>
+      // SOLA DAYALI (ortalanmaz) — programın geri kalanındaki hub/karo
+      // yerleşiminin aynısı; ekranda yönlendirme metni YOK (kartlar kendini
+      // anlatır, HubCard'ın "açıklama basılmaz" kuralıyla aynı gerekçe).
+      <motion.div
+        variants={staggerContainer}
+        initial="hidden"
+        animate="show"
+        className="grid w-full max-w-xl grid-cols-1 gap-3 p-6 sm:grid-cols-2"
+      >
+        <GateCard icon={PackageOpen} title="Tüm Çuvallar" tone="text-primary" onClick={onPickAll} />
+        <GateCard icon={Users} title="Tüm Cariler" tone="text-info" onClick={onOpenCustomers} />
+      </motion.div>
     );
   }
 
-  return <CustomerStep onBack={() => setStep("choice")} onPick={onPickCustomer} />;
+  return <CustomerStep onPick={onPickCustomer} />;
 }
 
+/**
+ * Kapı karosu — `components/hub/HubCard.tsx` ile AYNI görsel dil (gradient kart,
+ * tonlu ikon chip'i, dev filigran, hover'da sağa kayan ok, YALNIZ başlık).
+ * HubCard doğrudan kullanılamaz: o bir ROTAYA gider (`to`), buradaki karolar
+ * sayfa içi adım değiştirir. Görsel değişirse ikisi birlikte güncellenir.
+ */
 function GateCard({
   icon: Icon,
   title,
-  description,
+  tone,
   onClick,
 }: {
   icon: typeof PackageOpen;
   title: string;
-  description: string;
+  tone: string;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex h-full flex-col items-start gap-2 rounded-lg border bg-card p-5 text-left transition",
-        "hover:border-primary/60 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-      )}
-    >
-      <span className="rounded-md bg-primary/10 p-2 text-primary">
-        <Icon className="h-5 w-5" />
-      </span>
-      <span className="text-base font-semibold">{title}</span>
-      <span className="text-sm text-muted-foreground">{description}</span>
-    </button>
+    <motion.div variants={staggerItem} whileHover={{ y: -3 }} transition={springSnappy} className="relative h-full">
+      <button type="button" onClick={onClick} className="group block h-full w-full text-left">
+        <Card className="card-glow relative h-full overflow-hidden bg-gradient-to-br from-primary/5 to-transparent p-4">
+          <Icon
+            aria-hidden
+            className={cn(
+              "pointer-events-none absolute -bottom-4 -right-3 h-24 w-24 opacity-[0.06] transition-transform duration-300 group-hover:scale-110",
+              tone,
+            )}
+          />
+          <div className="relative flex items-start justify-between">
+            <div className={cn("flex h-11 w-11 items-center justify-center rounded-xl bg-current/10", tone)}>
+              <Icon className="h-5 w-5" />
+            </div>
+            <ArrowRight
+              className={cn(
+                "h-4 w-4 -translate-x-1 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100",
+                tone,
+              )}
+            />
+          </div>
+          <div className="relative mt-4">
+            <div className="font-medium">{title}</div>
+          </div>
+        </Card>
+      </button>
+    </motion.div>
   );
 }
 
-function CustomerStep({
-  onBack,
-  onPick,
-}: {
-  onBack: () => void;
-  onPick: (bucket: SackCustomerBucket) => void;
-}) {
+function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void }) {
   const [search, setSearch] = useState("");
   // Arama SUNUCUDA (liste ekranıyla aynı kural) — istemci süzmesi Türkçe
   // katlamada sessizce yanlış "sonuç yok" üretir.
@@ -114,10 +130,8 @@ function CustomerStep({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-6">
+      {/* Geri YOK — sayfa başlığındaki ok bir adım geri alır (tek geri yüzeyi). */}
       <div className="mb-3 flex items-center gap-2">
-        <Button variant="ghost" size="sm" className="gap-1" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4" /> Geri
-        </Button>
         <div className="relative w-72">
           <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input

@@ -19,10 +19,29 @@ import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
 import { isDailyCode, normalizeScanCode } from "../utils/code-format";
-import { buildTextSearch } from "../utils/query-parser";
+import { applyDateRange, buildTextSearch } from "../utils/query-parser";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
+
+/**
+ * "Çuvalda FİZİKSEL olarak duran top" yüklemi — TEK KAYNAK.
+ *
+ * ⚠️ Liste satırındaki `rollCount` bu süzgeçten geçer (hayalet top: kartelaya /
+ * tambura / fasona gitmiş ama `sackId` hâlâ dolu). "Boş çuval" filtresi de AYNI
+ * yüklemi kullanmak ZORUNDA: ayrı yazılsaydı yalnız hayalet taşıyan bir çuval
+ * listede "0 top" basar ama "Boş" filtresinde ÇIKMAZDI — bu depoda adı konmuş
+ * "türetilmiş alan / ayrışan yüzey" sınıfı (2026-08-21 taraması).
+ */
+const PRESENT_ROLL_WHERE = { status: { notIn: SACK_ABSENT_STATUSES } } satisfies Prisma.RollWhereInput;
+
+/**
+ * Tarih aralığı filtresinin kabul ettiği kolonlar (FilterBar `dateRange`).
+ * ⚠️ ALLOWLIST: liste dışı bir ad gelirse `applyDateRange` aralığı SESSİZCE yok
+ * sayar — bu yüzden controller `dateField` gelmediğinde `createdAt`e düşer
+ * (2026-08-12 "dateField gönderilmezse aralık sessizce yok sayılır" dersi).
+ */
+export const SACK_DATE_FIELDS = ["createdAt", "weighedAt"] as const;
 
 /** Çuval-seçimli salt-okunur dökümlerde (çeki listesi, içerik dökümü) üst sınır. */
 const MAX_SELECTED_SACKS = 200;
@@ -96,6 +115,30 @@ export interface SackSearchParams {
   widthMin?: number;
   widthMax?: number;
   customerId?: string | string[];
+  /** Müşteri ŞUBESİ (çoklu = VEYA). Liste "Şube" kolonunu basıyor ama süzülemiyordu. */
+  branchId?: string | string[];
+  /**
+   * Tartı durumu — `true`: tartılmış (`weightKg` dolu) · `false`: tartılmamış.
+   *
+   * Saha sorusu: *"hangi çuvallar hâlâ tartılmadı?"* (ölçüm tekserp_demo
+   * 2026-09-04: 33 çuvalın 32'si tartısız). `shipping.weighRequiredEnabled`
+   * bayrağı açık kurulumda bu liste doğrudan yapılacak işin kendisidir.
+   */
+  weighed?: boolean;
+  /** Çuval notu olan / olmayan. `hasNote` liste satırında zaten dönüyor. */
+  hasNote?: boolean;
+  /**
+   * Boş çuval (içinde fiziksel top DA kartela DA yok) / dolu çuval.
+   *
+   * ⚠️ Top ADEDİ aralığı ("2-5 top içerenler") bilinçli YOK: ilişki sayımına
+   * göre süzmek Prisma'da tek sorguda ifade edilemez; `some/none` ile ifade
+   * edilebilen tek soru "boş mu" ve o soru gerçek (boş çuval silinir).
+   */
+  empty?: boolean;
+  /** Tarih aralığı — `SACK_DATE_FIELDS` allowlist'i (createdAt | weighedAt). */
+  dateField?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
   /**
    * İÇİNDE bu kaliteden top OLAN çuvallar (kalite KODU: "1.KALITE" / "A1" / …).
    *
@@ -220,6 +263,36 @@ export class SackSearchService {
       if (customerless) customerOr.push({ customerId: null });
       andClauses.push({ OR: customerOr });
     }
+    // ŞUBE — cari süzgecinin çocuğu (panelde `dependent-lookup`). Sentinel YOK:
+    // şubesiz çuval "müşterisiz" kovasının içinde zaten görünür, ikinci bir
+    // "şubesiz" sentineli aynı kümeyi iki adla anlatırdı.
+    const branchIds = toIdList(params.branchId);
+    if (branchIds.length) andClauses.push({ branchId: { in: branchIds } });
+
+    // TARTI DURUMU — `weightKg` NULL/NOT NULL. (`weighedAt` DEĞİL: eski satırlarda
+    // kg var ama tartı izi kolonları yok — o topları "tartılmamış" saymak yalan olurdu.)
+    if (params.weighed != null)
+      andClauses.push(params.weighed ? { weightKg: { not: null } } : { weightKg: null });
+
+    // NOT — `setSackNotes` boş metni NULL'a çevirdiği için tek yüklem yeterli
+    // (liste satırındaki `hasNote: !!notes` ile birebir).
+    if (params.hasNote != null)
+      andClauses.push(params.hasNote ? { notes: { not: null } } : { notes: null });
+
+    // BOŞ / DOLU — hayalet top DIŞLANIR (PRESENT_ROLL_WHERE, listedeki rollCount ile aynı yüklem).
+    if (params.empty != null) {
+      const emptyWhere: Prisma.SackWhereInput = {
+        rolls: { none: PRESENT_ROLL_WHERE },
+        swatches: { none: {} },
+      };
+      andClauses.push(params.empty ? emptyWhere : { NOT: emptyWhere });
+    }
+
+    // TARİH ARALIĞI — ortak yardımcı (allowlist dışı alan sessizce düşer; bkz. SACK_DATE_FIELDS).
+    const dateWhere: Record<string, unknown> = {};
+    applyDateRange(dateWhere, params, SACK_DATE_FIELDS);
+    if (Object.keys(dateWhere).length) andClauses.push(dateWhere as Prisma.SackWhereInput);
+
     const shipmentNo = params.shipmentNo?.trim();
     if (shipmentNo)
       andClauses.push({
@@ -288,7 +361,7 @@ export class SackSearchService {
     // etiketi (label.service — aynı küme) ve irsaliye AYNI çuval için ÜÇ FARKLI top
     // adedi basardı. Filtre `matchAgg`'a da uygulanır; yoksa içerik filtresi seçili
     // ürünün hayaletini sayıp "eşleşen > toplam" absürtlüğü doğar.
-    const presentOnly = { status: { notIn: SACK_ABSENT_STATUSES } };
+    const presentOnly = PRESENT_ROLL_WHERE;
     const [allAgg, matchAgg, swatchAgg] = ids.length
       ? await Promise.all([
           prisma.roll.groupBy({

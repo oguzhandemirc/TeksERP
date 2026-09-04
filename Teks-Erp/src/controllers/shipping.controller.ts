@@ -584,6 +584,16 @@ export class ShippingController {
         const n = Number(v);
         return Number.isFinite(n) ? n : undefined;
       };
+      // Üç-durumlu bayrak süzgeci: "true"/"false" → boolean, yoksa undefined
+      // (= filtre YOK). `=== "true"` yazımı yasak: seçilmemiş filtreyi "false"
+      // sayıp listeyi sessizce daraltırdı.
+      const bool = (v: string | undefined): boolean | undefined =>
+        v === "true" ? true : v === "false" ? false : undefined;
+      const date = (v: unknown): Date | undefined => {
+        if (typeof v !== "string" || !v) return undefined;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? undefined : d;
+      };
       const scopeRaw = filt("scope");
       const scope = (["POOL", "PLANNED", "DISPATCHED", "ALL"] as const).includes(scopeRaw as SackSearchScope)
         ? (scopeRaw as SackSearchScope)
@@ -595,6 +605,17 @@ export class ShippingController {
         widthMin: num(filt("widthMin")),
         widthMax: num(filt("widthMax")),
         customerId: filtIds("customerId"),
+        branchId: filtIds("branchId"),
+        weighed: bool(filt("weighed")),
+        hasNote: bool(filt("hasNote")),
+        empty: bool(filt("empty")),
+        // ⚠️ `dateField` YOKSA createdAt: `applyDateRange` alan adı olmayan bir
+        // aralığı SESSİZCE yok sayar (2026-08-12 dersi). Panel alanı her zaman
+        // gönderir; bu varsayılan uçtan doğrudan çağıran yolları korur.
+        dateField:
+          typeof req.query.dateField === "string" && req.query.dateField ? req.query.dateField : "createdAt",
+        dateFrom: date(req.query.dateFrom),
+        dateTo: date(req.query.dateTo),
         // Kalite KODU taşır (uuid değil) — `filtIds` yalnız virgülle böler,
         // tip varsaymaz; servis kanonikleştirip OR'a çevirir.
         qualityGrade: filtIds("qualityGrade"),

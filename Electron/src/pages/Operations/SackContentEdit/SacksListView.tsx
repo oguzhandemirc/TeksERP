@@ -14,6 +14,9 @@ import { classifyBarcode } from "@/lib/scanner/barcode-kind";
 import { useScanSeed } from "@/hooks/useScanSeed";
 import { useDataTable } from "@/hooks/useDataTable";
 import { customerService } from "@/pages/Customers/service";
+import { branchLookupService } from "@/pages/Operations/Shipments/service";
+import type { BranchLookupItem } from "@/pages/Operations/Shipments/types";
+import { loadAllForPicker } from "@/lib/picker-loader";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
@@ -64,6 +67,39 @@ const SACK_FILTERS: FilterDef[] = [
     // SÜZÜLEMİYORDU; giriş kapısındaki "Müşterisiz" satırı da buraya düşer.
     sentinelOption: { value: CUSTOMERLESS_FILTER_VALUE, label: "Müşterisiz (genel stok)" },
   },
+  {
+    // ŞUBE — cariye BAĞLI (Siparişler/Sevkiyatlar ile aynı `dependent-lookup`
+    // kalıbı; yeni kalıp icat edilmedi). Liste "Şube" kolonunu zaten basıyordu,
+    // süzgeci yoktu.
+    kind: "dependent-lookup",
+    key: "branchId",
+    label: "Şube",
+    dependsOn: "customerId",
+    queryKey: "branch-lookup",
+    placeholderNoParent: "Şube (önce müşteri)",
+    fetchOptions: (customerCsv) => {
+      // ⚠️ "Müşterisiz" SENTİNELİ AYIKLANIR: `customerId` bu ekranda katalogda
+      // karşılığı olmayan bir değer (`none`) taşıyabilir (giriş kapısındaki
+      // "Müşterisiz (genel stok)" satırı). Ham gönderilse `/api/customer-branches`
+      // onu UUID sanar → P2007 → lookup 500. Sentinelden başka bir şey kalmazsa
+      // sorgu HİÇ yapılmaz (müşterisiz çuvalın şubesi de olamaz).
+      const ids = customerCsv
+        .split(",")
+        .map((v) => v.trim())
+        .filter((v) => v && v !== CUSTOMERLESS_FILTER_VALUE);
+      if (ids.length === 0) return Promise.resolve([]);
+      return loadAllForPicker(branchLookupService, {
+        sortBy: "name",
+        sortOrder: "asc",
+        filters: { isActive: "true", customerId: ids.join(",") },
+      }).then((r) => r.data);
+    },
+    getLabel: (it) => {
+      const b = it as Partial<BranchLookupItem> & { id: string };
+      if (!b.name) return b.id;
+      return b.city ? `${b.name} (${b.city})` : b.name;
+    },
+  },
   { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
   { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   // KALİTE (2026-08-13 saha isteği: "hangi çuvalda 2. kalite var?"). Semantik
@@ -79,6 +115,52 @@ const SACK_FILTERS: FilterDef[] = [
     queryKey: "quality-grades",
   },
   { kind: "numberRange", key: "width", label: "En", unit: "cm" },
+  {
+    // TARTI — "hangi çuvallar hâlâ tartılmadı?" (ölçüm 2026-09-04, tekserp_demo:
+    // 33 çuvalın 32'si tartısız). Liste "Kg" kolonunu basıyor ama süzemiyordu;
+    // `shipping.weighRequiredEnabled` açık kurulumda bu liste yapılacak işin kendisi.
+    kind: "select",
+    key: "weighed",
+    label: "Tartı",
+    options: [
+      { value: "true", label: "Tartıldı" },
+      { value: "false", label: "Tartılmadı" },
+    ],
+  },
+  {
+    // İÇERİK — yalnız "boş mu" sorulabilir (ilişki sayımına göre aralık süzmesi
+    // Prisma'da tek sorguda ifade edilemez); soru gerçek: boş çuval silinir.
+    // ⚠️ "Boş" sunucuda HAYALET TOPU dışlayan yüklemle çözülür (PRESENT_ROLL_WHERE)
+    // — listedeki "Top: 0" ile bu filtre aynı kümeyi göstermek zorunda.
+    kind: "select",
+    key: "empty",
+    label: "İçerik",
+    options: [
+      { value: "false", label: "Dolu" },
+      { value: "true", label: "Boş" },
+    ],
+  },
+  {
+    // NOT — liste "Not" kolonunu basıyor; "notu olanları göster" tarama sorusu.
+    kind: "select",
+    key: "hasNote",
+    label: "Not",
+    options: [
+      { value: "true", label: "Notu olanlar" },
+      { value: "false", label: "Notu olmayanlar" },
+    ],
+  },
+  {
+    // TARİH — `createdAt` sıralanabilir kolonun süzgeç ikizi. "Tartı" alanı
+    // seçilirse tartılmamış çuvallar (weighedAt NULL) tanım gereği düşer.
+    kind: "dateRange",
+    label: "Tarih",
+    defaultField: "createdAt",
+    fieldOptions: [
+      { value: "createdAt", label: "Oluşturma" },
+      { value: "weighedAt", label: "Tartı" },
+    ],
+  },
 ];
 
 interface Props {
@@ -166,7 +248,10 @@ export function SacksListView({ onEditSack }: Props) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* TEK satır: birleşik ara/okut kutusu + filtreler + Sütunlar/Görünümler. */}
+      {/* Üst satır: birleşik ara/okut kutusu + Sütunlar/Görünümler.
+          ⚠️ FİLTRELER AYRI SATIRDA (Toplar/Sevkiyatlar kalıbı): filtre sayısı
+          6'dan 11'e çıktı ve araç çubuğuna gömülü hâlleri "Sütunlar/Görünümler"i
+          ikinci satıra itip filtre şeridini araç çubuğu gibi göstermiyordu. */}
       <DataTableToolbar
         fetchAll={fetchAll}
         search={search}
@@ -186,10 +271,11 @@ export function SacksListView({ onEditSack }: Props) {
               widthClassName="w-72"
               clearable
             />
-            <FilterBar filters={SACK_FILTERS} inline size="md" />
           </>
         }
       />
+
+      <FilterBar filters={SACK_FILTERS} />
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
 
