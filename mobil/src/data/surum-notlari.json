@@ -16,6 +16,35 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04",
+      "baslik": "Programın kendi penceresi ve doğru sürüm bilgisi",
+      "surumler": {
+        "panel": "1.2.1"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Program penceresinin üst şeridi artık programın kendisine ait. Küçült, büyült ve kapat düğmeleri uygulamanın rengiyle çiziliyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Giriş ekranında iki ayrı sürüm yazısı vardı; soldaki her zaman \"v1.0\" yazıyor ve gerçek sürümü göstermiyordu. Kaldırıldı — gerçek sürüm artık sağ alt köşede."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "En yetkili hesap artık kullanıcı listesinde ve işlem kayıtlarında kendi adıyla görünüyor. Yetki sütununda \"Tüm yetkiler\" yazıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "En yetkili hesabın şifresi, PIN'i ve kart bilgisi başka bir yönetici tarafından değiştirilemiyor."
+        }
+      ]
+    },
+    {
       "id": "2026-09-03",
       "baslik": "Modüller, satıcı hesabı ve ayar güvenliği",
       "surumler": {
