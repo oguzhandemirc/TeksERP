@@ -25,11 +25,17 @@ export function useUpdater() {
     };
   }, []);
 
-  const check = useCallback(async () => {
+  /**
+   * Elle denetleme. Sonucu DÖNDÜRÜR: çağıran, bu tıkın sonucunu yayınlanan
+   * ortak durumdan ayırt edebilsin diye (topbar düğmesi baloncuğu buradan
+   * yazar). Yayın kanalı "kim sordu"yu taşımaz — o bilgi çağrı yerinde yaşar.
+   */
+  const check = useCallback(async (): Promise<UpdateStatus | null> => {
     const api = window.api?.updater;
-    if (!api) return;
+    if (!api) return null;
     const s = await api.check();
     setStatus(s);
+    return s;
   }, []);
 
   const install = useCallback(() => {

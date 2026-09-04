@@ -55,7 +55,25 @@ describe("güncelleme kontrol ritmi", () => {
       ["useUpdater", hook],
     ] as const) {
       expect(kod, `${ad} kendi zamanlayıcısını kurmamalı`).not.toMatch(/setInterval\(/);
-      expect(kod, `${ad} kendi zamanlayıcısını kurmamalı`).not.toMatch(/setTimeout\(/);
+      // ⚠️ KURAL DARALTILDI (2026-09-04): eskiden arayüzde HİÇ `setTimeout`
+      // yasaktı. Düğmeye animasyon tabanı (`ELLE_DENETIM_ASGARI_MS`) eklenince
+      // o yasak, kuralın gerçek iddiasından daha genişti — yasaklanan şey
+      // "arayüzün kendi KONTROL TAKVİMİNİ kurması"dır, tek atışlık bir görsel
+      // gecikme değil. Bu yüzden yasak artık ZAMANLANAN İŞE bakıyor: hiçbir
+      // arayüz dosyası gecikmeli/tekrarlı bir `check()` kuramaz.
+      expect(kod, `${ad} gecikmeli/tekrarlı check kurmamalı`).not.toMatch(
+        /set(?:Timeout|Interval)\([^;]*check\s*\(/,
+      );
+    }
+    // Düğmedeki TEK `setTimeout` animasyon tabanıdır ve süresini adlandırılmış
+    // sabitten alır (çıplak sayı literali = sessizce değişebilen ikinci kaynak).
+    expect(dugme.match(/setTimeout\(/g) ?? []).toHaveLength(1);
+    expect(dugme).toMatch(/setTimeout\([^)]*ELLE_DENETIM_ASGARI_MS\)/);
+    for (const [ad, kod] of [
+      ["useGirisGuncellemeKontrolu", girisHook],
+      ["useUpdater", hook],
+    ] as const) {
+      expect(kod, `${ad} hiç setTimeout kurmamalı`).not.toMatch(/setTimeout\(/);
     }
   });
 

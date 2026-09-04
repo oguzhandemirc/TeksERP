@@ -111,26 +111,42 @@ function applyFeedUrl(): void {
   publish({ feedUrl: url, feedUrlOverridden: overridden });
 }
 
-let checking = false;
+/**
+ * Devam eden kontrolün SÖZÜ (eskiden düz bir `checking` bayrağıydı).
+ *
+ * ⚠️ Fark, elle denetleme yüzeyi için load-bearing: bayrak varken ikinci çağrı
+ * ANINDA ve o anki (bayat) durumla dönüyordu. Kullanıcı düğmeye tam otomatik
+ * kontrolün üstüne bastığında bu, "bir saat önceki cevabı" bugünün sonucu diye
+ * baloncukla bastırırdı. Sözü paylaşmak, ikinci çağırana da AYNI kontrolün
+ * gerçek sonucunu verir; sunucuya yine tek istek gider.
+ */
+let inFlight: Promise<UpdateStatus> | null = null;
 
 async function check(): Promise<UpdateStatus> {
   if (!status.enabled) return status;
   // Zaten indirilmiş güncelleme varsa yeniden sormak, hazır paketi "checking"e
   // düşürüp kullanıcının gördüğü "Yeniden Başlat" bandını kaybettirir.
   if (status.state === "ready") return status;
-  if (checking) return status;
-  checking = true;
+  if (inFlight) return inFlight;
+
+  const calisan = (async () => {
+    try {
+      applyFeedUrl();
+      await updater().checkForUpdates();
+    } catch (err) {
+      // checkForUpdates hem reject eder hem "error" olayı yayar; ikisi de aynı
+      // duruma yazdığı için burada ekstra bir şey yapmaya gerek yok.
+      log.warn("[updater] kontrol başarısız", err);
+    }
+    return status;
+  })();
+  inFlight = calisan;
   try {
-    applyFeedUrl();
-    await updater().checkForUpdates();
-  } catch (err) {
-    // checkForUpdates hem reject eder hem "error" olayı yayar; ikisi de aynı
-    // duruma yazdığı için burada ekstra bir şey yapmaya gerek yok.
-    log.warn("[updater] kontrol başarısız", err);
+    return await calisan;
   } finally {
-    checking = false;
+    // Yalnız KENDİ sözünü temizle — arada yenisi kurulmuşsa ona dokunma.
+    if (inFlight === calisan) inFlight = null;
   }
-  return status;
 }
 
 export function registerUpdaterIpc(): void {
