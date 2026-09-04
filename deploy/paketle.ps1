@@ -115,6 +115,18 @@ if (-not (Test-Path "$proj\dist\server.js")) { Fail "dist\server.js yok. tsconfi
 $kalanYorum = (Select-String -Path "$proj\dist\services\*.js" -Pattern '^\s*//(?!#\s*sourceMappingURL)' -ErrorAction SilentlyContinue | Measure-Object).Count
 Write-Host "  yorum temizligi: dist\services icinde kalan // satiri = $kalanYorum (0 olmali)"
 
+# --- Sunucu araclari (dist\tools) -------------------------------------------
+# ⚠ Bu script `npm run build` DEGIL dogrudan `npx tsc --removeComments` kosar
+#   (yukaridaki yorum-temizleme gerekcesi), dolayisiyla `build`e bagli adimlar
+#   BURADA ACIKCA tekrarlanir. 2026-09-04 ev provasi (BULGU-2): satici hesabi
+#   pakette kurulamiyordu; arac derlemesi eklendi ama ilk koşumda yine pakete
+#   girmedi - cunku `npm run build` hic cagrilmiyordu. Kapi (asagida) yakaladi.
+node "$proj\scripts\build-araclar.mjs"
+if ($LASTEXITCODE -ne 0) { Fail "Arac derlemesi basarisiz - paket uretilmedi." }
+if (-not (Test-Path "$proj\dist\tools\superadmin-olustur.cjs")) {
+  Fail "dist\tools\superadmin-olustur.cjs uretilmedi - bu paketle satici hesabi KURULAMAZ."
+}
+
 # --- Web paneli (Electron/dist-web) -----------------------------------------
 # Ayni React kaynagi, Electron kabugu OLMADAN (Electron\vite.config.web.ts).
 # Backend onu `WEB_DIST_DIR` ile ayni origin'den servis eder -> CORS/karisik-icerik/
