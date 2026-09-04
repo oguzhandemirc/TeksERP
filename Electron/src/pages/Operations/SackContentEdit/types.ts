@@ -28,6 +28,30 @@ export const scopeLabels: Record<SackSearchScope, string> = {
  */
 export const CUSTOMERLESS_FILTER_VALUE = "none";
 
+/**
+ * "İzsiz (etiketsiz)" süzgeç sentineli — `filter[tagId]=none`.
+ * Backend aynasıdır (`sack-search.service.ts` UNTAGGED_FILTER_VALUE) ve
+ * `CUSTOMERLESS_FILTER_VALUE` ile AYNI ham değeri taşır ama AYRI sabittir:
+ * ikisi farklı alanların sentinelidir ve biri değişirse diğeri değişmemeli.
+ * ⚠️ Sunucu bu değeri UUID listesinden AYIRMAK ZORUNDA (`splitTagFilter`) —
+ * ham geçseydi `@db.Uuid` kolonda P2007 → 400.
+ */
+export const UNTAGGED_FILTER_VALUE = "none";
+
+/**
+ * Çuval izi rozeti (etiket) — liste satırı + çeki listesi ortak şekli.
+ * Backend `SackTagBadge` aynası (`helpers/sack-tag.helper.ts`).
+ * ⚠️ `isActive:false` = katalogdan çıkarılmış: rozet SOLUK çizilir ama
+ * GÖSTERİLİR (gizleme bir görünürlük kararıdır, geçmişi silme değil).
+ */
+export interface SackTagBadge {
+  id: string;
+  code: string;
+  name: string;
+  hex: string;
+  isActive: boolean;
+}
+
 /** Cari kapısı satırı — `customerId: null` = müşterisiz (genel stok) kovası. */
 export interface SackCustomerBucket {
   customerId: string | null;
@@ -115,6 +139,13 @@ export interface SackSearchRow {
   hasNote: boolean;
   /** Yorumun ilk 80 karakteri (satır ipucu); tam metin çuval dökümünde. */
   notePreview: string | null;
+  /**
+   * ETKİN izler (rozet). Sevkte temizlenen iz burada GÖRÜNMEZ — rozet ve
+   * `tagId` süzgeci sunucuda AYNI yüklemden (`ACTIVE_TAG_WHERE`) beslenir.
+   */
+  tags: SackTagBadge[];
+  /** `tags.length > 0` — süzgeçle aynı kümeden türer, ayrı hesaplanmaz. */
+  hasTag: boolean;
   /** İçerik filtresi (kumaş/renk/en) yokken null — eşleşme sütunu gizlenir. */
   matchRollCount: number | null;
   matchQty: number | null;
@@ -365,6 +396,13 @@ export interface PickListRow {
   weightKg: number | null;
   /** Çuval notu (TAM metin) — çeki listesi iç çalışma kağıdı; basılması opsiyonel. */
   notes: string | null;
+  /**
+   * ETKİN izler. Notla AYNI sözleşme: uç veriyi DÖNER, basılıp basılmayacağına
+   * istemci karar verir (`withTags`). ⚠️ `withNotes` ile TEK kutucuğa
+   * BİNDİRİLMEZ — ikisi farklı hassasiyette veri.
+   * Eski backend'e karşı `undefined` gelebilir (uç bu turda eklendi).
+   */
+  tags?: SackTagBadge[];
   customer?: SackCustomerRef | null;
   branch?: { id: string; code: string | null; name: string } | null;
   shipment: SackShipmentRef | null;

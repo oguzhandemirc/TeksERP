@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { Loader2, MessageSquareText, Printer } from "lucide-react";
+import { Bookmark, Loader2, MessageSquareText, Printer } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { printDocumentArea } from "@/lib/print";
+import { isDarkHex } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
 import { shipmentStatusLabels, type PickListRow } from "./types";
 
@@ -36,6 +37,10 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   // (irsaliye kolonu, etiket alanı) → burada da aynı davranış: operatör isterse açar.
   // Diyalog kapanınca sıfırlanır; hiçbir yere kaydedilmez.
   const [withNotes, setWithNotes] = useState(false);
+  // ÇUVAL İZLERİ — ayrı anahtar, ayrı varsayılan (KAPALI).
+  // ⚠️ `withNotes` ile TEK bayrağa BİNDİRİLMEZ: not ile iz farklı hassasiyette
+  // veridir ve "notu bas" diyen operatör sessizce izi de bastırmış olmamalı.
+  const [withTags, setWithTags] = useState(false);
 
   const fetchMut = useMutation({
     mutationFn: (ids: string[]) => sackHubService.pickList(ids),
@@ -54,6 +59,9 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
   const customers = [...new Set(rows.map((r) => r.customer?.name).filter((n): n is string => !!n))];
   // Notu OLAN çuval yoksa tuşu hiç göstermeyelim — boş bir seçenek kafa karıştırır.
   const notedCount = rows.filter((r) => r.notes).length;
+  // İzi OLAN çuval yoksa kutucuk hiç çizilmez (boş seçenek kafa karıştırır) —
+  // not kutucuğuyla aynı kural. Eski backend `tags` DÖNMEZ → sayı 0, kutu yok.
+  const taggedCount = rows.filter((r) => (r.tags?.length ?? 0) > 0).length;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -121,6 +129,22 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
                           Not: {r.notes}
                         </div>
                       )}
+                      {/* İz — nottan AYRI satır ve AYRI anahtar. Kağıt siyah-beyaz
+                          basılabilir → renk tek başına taşıyıcı değil, AD da yazılır. */}
+                      {withTags && (r.tags?.length ?? 0) > 0 && (
+                        <div className="mt-1 flex flex-wrap items-center gap-1">
+                          <span className="font-medium">İz:</span>
+                          {r.tags!.map((t) => (
+                            <span
+                              key={t.id}
+                              className="rounded px-1 py-0.5 text-[10px] font-semibold"
+                              style={{ backgroundColor: t.hex, color: isDarkHex(t.hex) ? "#fff" : "#000" }}
+                            >
+                              {t.name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{r.rollCount}</td>
                     <td className="py-1.5 pr-2 text-right tabular-nums">{fmtM(r.totalQty)}</td>
@@ -170,6 +194,33 @@ export function PickListPrintDialog({ sackIds, onOpenChange }: Props) {
               <span className="mt-0.5 block text-xs text-muted-foreground">
                 {notedCount} çuvalda not var — işaretlerseniz her çuvalın altına “Not: …”
                 satırı olarak basılır.
+              </span>
+            </span>
+          </label>
+        )}
+
+        {taggedCount > 0 && rows.length > 0 && (
+          <label
+            className={`flex cursor-pointer items-start gap-2.5 rounded-md border p-3 transition-colors ${
+              withTags
+                ? "border-sky-400 bg-sky-50 dark:border-sky-700 dark:bg-sky-950/30"
+                : "border-input bg-muted/40 hover:bg-muted/60"
+            }`}
+          >
+            <input
+              type="checkbox"
+              checked={withTags}
+              onChange={(e) => setWithTags(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="flex items-center gap-1.5 text-sm font-medium">
+                <Bookmark className="h-4 w-4 shrink-0" />
+                Çuval izlerini yazdır
+              </span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">
+                {taggedCount} çuvalda iz var — işaretlerseniz her çuvalın altına “İz: …”
+                satırı olarak basılır. Notlardan ayrı bir seçenektir.
               </span>
             </span>
           </label>

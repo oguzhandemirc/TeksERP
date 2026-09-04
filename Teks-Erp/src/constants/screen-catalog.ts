@@ -182,6 +182,9 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // TEK EKRAN, DÖRT SEKME (fire · kayıt düzeltmesi · elle ekleme · iptal) —
   // düzenleme `roll:manual-adjust` YETENEĞİdir, ekranı görmek için gerekmez.
   { key: "definitions/reason-presets", app: "desktop", modul: "cekirdek:ana-veri", title: "Hazır Sebepler", requires: ["roll:read"], capabilities: ["roll:manual-adjust"] },
+  // ÇUVAL İZLERİ — paketlemede çuvala bırakılan işaretlerin kataloğu; modül
+  // AİDİYETİ sevkiyat/depo (yeni izin kodu YOK: okuma READ, yazma WRITE).
+  { key: "definitions/sack-tags", app: "desktop", modul: "cekirdek:sevkiyat-depo", title: "Çuval İzleri", requires: ["shipping:read"], capabilities: ["shipping:write"] },
   { key: "definitions/defect-types", app: "desktop", modul: "cekirdek:ana-veri", title: "Hata Tipleri", requires: ["quality:read"], capabilities: ["quality:write"] },
   { key: "definitions/quality-grades", app: "desktop", modul: "cekirdek:ana-veri", title: "Kalite Sınıfları", requires: ["quality:read"], capabilities: [] },
   { key: "definitions/colors", app: "desktop", modul: "cekirdek:ana-veri", title: "Renkler", requires: ["property:read"], capabilities: ["property:write"] },

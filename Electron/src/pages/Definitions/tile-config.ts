@@ -13,6 +13,7 @@ import {
   Building2,
   Settings2,
   Tags,
+  Bookmark,
   Undo2,
   Warehouse,
   FileText,
@@ -247,6 +248,20 @@ export const definitionTiles: DefinitionTile[] = [
     // tıklar, /forbidden'a düşer. Düzenleme ayrıca `roll:manual-adjust` ister
     // ve o kontrol sayfanın İÇİNDE yapılır (tuşlar çizilmez).
     permission: "roll:read",
+  },
+  {
+    // ÇUVAL İZLERİ (2026-09-04) — paketlemede çuvala bırakılan işaretlerin
+    // kataloğu. "Depolar" ile aynı grupta: ikisi de sevkiyat/depo tarafının
+    // ana verisi ve ayrı bir Tanımlar grubu açmak tek kart için menüyü bölerdi.
+    // ⚠️ Karo ile route AYNI izni taşır (`content-routes.tsx` aynası);
+    // düzenleme `shipping:write` ve o kontrol sayfanın İÇİNDE.
+    key: "sack-tags",
+    title: "Çuval İzleri",
+    description: "Paketlemede çuvala bırakılan işaretler — “kontrol edilecek”, “eklenecek var”",
+    icon: Bookmark,
+    to: "/definitions/sack-tags",
+    group: "production",
+    permission: "shipping:read",
   },
   {
     key: "defect-types",

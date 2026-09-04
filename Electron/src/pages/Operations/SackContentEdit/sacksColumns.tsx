@@ -3,6 +3,7 @@ import { MessageSquareText } from "lucide-react";
 import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
+import { isDarkHex } from "@/pages/SackTags/service";
 import { sackStatusLabels, sackStatusOf, type SackSearchRow } from "./types";
 
 const fmtQty = (n: number) =>
@@ -165,6 +166,41 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
         >
           <MessageSquareText className="h-3 w-3 shrink-0" />
           <span className="truncate italic">{s.notePreview}</span>
+        </span>
+      );
+    },
+  },
+  {
+    // ÇUVAL İZİ (2026-09-04) — paketlemecinin bıraktığı işaretler.
+    // ⚠️ SIRALANMAZ ve `sortBy=tag` EKLENMEZ: bir çuvalda N iz var, tek skaler
+    // yok; cursor'lu sıralama skaler kolon üzerinden WHERE kurar ve ilişki
+    // sıralaması sessizce mükerrer/eksik satır üretirdi. Backend allowlist
+    // `sackNo|createdAt` KALIR.
+    // Rozet ile "Etiket" süzgeci sunucuda AYNI yüklemden (`ACTIVE_TAG_WHERE`)
+    // beslenir — sevkte temizlenen iz ikisinde de görünmez.
+    id: "tags",
+    header: "İz",
+    meta: { label: "İz", exportValue: (s) => s.tags.map((t) => t.name).join(", ") },
+    cell: ({ row }) => {
+      const tags = row.original.tags;
+      if (tags.length === 0) return <span className="text-muted-foreground">—</span>;
+      return (
+        <span className="flex max-w-[220px] flex-wrap gap-1">
+          {tags.map((t) => (
+            <span
+              key={t.id}
+              title={t.isActive ? t.name : `${t.name} (katalogdan çıkarıldı)`}
+              className={cn(
+                "inline-flex whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-semibold",
+                // Pasif etiketin ESKİ ataması SOLUK çizilir ama GÖSTERİLİR —
+                // gizleme bir görünürlük kararıdır, geçmişi silme değil.
+                !t.isActive && "opacity-50",
+              )}
+              style={{ backgroundColor: t.hex, color: isDarkHex(t.hex) ? "#fff" : "#000" }}
+            >
+              {t.name}
+            </span>
+          ))}
         </span>
       );
     },

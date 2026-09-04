@@ -20,6 +20,7 @@ import { loadAllForPicker } from "@/lib/picker-loader";
 import { itemService } from "@/pages/Items/service";
 import { colorService } from "@/pages/Colors/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
+import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
 import { sacksColumns } from "./sacksColumns";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
@@ -29,8 +30,10 @@ import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
+import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
 import {
   CUSTOMERLESS_FILTER_VALUE,
+  UNTAGGED_FILTER_VALUE,
   isWarehouseSack,
   scopeLabels,
   type LocatedRoll,
@@ -139,6 +142,22 @@ const SACK_FILTERS: FilterDef[] = [
       { value: "false", label: "Dolu" },
       { value: "true", label: "Boş" },
     ],
+  },
+  {
+    // ÇUVAL İZİ (2026-09-04) — "kontrol edilecek çuvallar hangileri?".
+    // ⚠️ ÇOKLU SEÇİM SEMANTİĞİ **VEYA**: seçilen izlerden EN AZ BİRİNİ taşıyan
+    // çuvallar gelir (alan içi OR standardı). Ekranda AÇIKÇA yazılı olması
+    // gerekiyor — "ikisi de olanlar" sanan operatör listeyi yanlış okur; etiket
+    // metni bu yüzden "Etiket" değil "İz (VEYA)".
+    // ⚠️ "İzsiz" katalogda KARŞILIĞI OLMAYAN bir kümedir → `sentinelOption`
+    // (müşterisiz kovasının birebir emsali); sunucu sentineli UUID listesinden
+    // AYIRIR (`splitTagFilter`), ham geçseydi `@db.Uuid` kolonda P2007 → 400.
+    kind: "multi-lookup",
+    key: "tagId",
+    label: "İz (VEYA)",
+    service: sackTagService,
+    queryKey: "sack-tags",
+    sentinelOption: { value: UNTAGGED_FILTER_VALUE, label: "İzsiz (etiketi olmayan)" },
   },
   {
     // NOT — liste "Not" kolonunu basıyor; "notu olanları göster" tarama sorusu.
@@ -354,6 +373,9 @@ export function SacksListView({ onEditSack }: Props) {
             {/* İçerik dökümü — top bazlı. Döküm YALNIZ aksiyon tıklanınca çekilir
                 (menü açılışı ağ çağrısı yapmaz). hasNote liste satırında zaten var →
                 not onay kutusunun görünürlüğü fetch beklemeden çözülür. */}
+            {/* İZ — tek popover (bırak + kaldır aynı hamlede; üç durumlu
+                kutucuklar). Sonuç PARÇALI olabilir; atlananlar uyarıyla söylenir. */}
+            <SackTagsBulkMenu rows={rows} onDone={() => table.resetRowSelection()} />
             <SackContentDumpMenu
               label={`İçerik Dökümü (${rows.length})`}
               disabled={rows.length === 0}

@@ -784,6 +784,13 @@ export class SackSearchService {
         // döner (liste uçlarındaki 80 karakter kırpması burada gereksiz; kapsam
         // seçili çuvallarla sınırlı, en fazla 200). Basılması İSTEMCİDE opsiyonel.
         notes: true,
+        // ÇUVAL İZLERİ (§F) — çeki listesi SAHADA ELE ALINAN kâğıt; "bunu kontrol
+        // et / buna bir şey daha eklenecek" izinin en çok gerektiği yüzey burası.
+        // Not ile AYNI sözleşme: uç veriyi DÖNER, basılıp basılmayacağına İSTEMCİ
+        // karar verir (opt-in) — ve `withNotes` ile TEK bayrağa bindirilmez, ikisi
+        // farklı hassasiyette veri. Yüklem yine `ACTIVE_TAG_SELECT` (sevkte
+        // temizlenen iz burada da GÖRÜNMEZ — rozet/filtre/kâğıt tek kümedir).
+        tags: ACTIVE_TAG_SELECT,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         shipment: {
@@ -835,6 +842,8 @@ export class SackSearchService {
         seq: s.seq,
         weightKg: s.weightKg === null ? null : Number(s.weightKg),
         notes: s.notes,
+        // Rozet dönüşümü TEK noktadan (`toTagBadges`) — liste satırıyla aynı şekil.
+        tags: toTagBadges(s.tags),
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment,

@@ -185,6 +185,33 @@ export const sackHubService = {
       .post<ApiResponse<{ sackId: string; notes: string | null }>>(`/api/shipping/sacks/${sackId}/notes`, { notes })
       .then((r) => r.data),
 
+  // ── Çuval izleri (etiket) ─────────────────────────────────────────────────
+  /**
+   * TOPLU iz bırak/kaldır.
+   *
+   * ⚠️ SONUÇ PARÇALI: sevk edilmiş çuval `skipped[]` içinde döner, 409
+   * ATILMAZ — çağıran bunu SESSİZCE YUTAMAZ (`summarizeBulkResult`).
+   * ⚠️ `removeAll` + `remove` birlikte gönderilirse sunucu 400 verir; gövdeyi
+   * kuran tek yer `buildBulkPayload` ve o ikisini birlikte üretmez.
+   */
+  bulkTags: (body: {
+    sackIds: string[];
+    add?: string[];
+    remove?: string[];
+    removeAll?: boolean;
+  }): Promise<ApiResponse<{ added: number; removed: number; skipped: { sackId: string; reason: string }[] }>> =>
+    apiClient
+      .post<ApiResponse<{ added: number; removed: number; skipped: { sackId: string; reason: string }[] }>>(
+        `/api/shipping/sacks/tags/bulk`,
+        body,
+      )
+      .then((r) => r.data),
+
+  // ⚠️ TEKİL uç (`POST /sacks/:id/tags`) için istemci BİLEREK YAZILMADI: tek
+  // satır seçilip aynı popover kullanıldığında hamle zaten tek çuvala iner.
+  // İkinci bir yazma yolu, üç durumlu kutucuk mantığını ikinci kez kurmak
+  // (ve ayrışmak) demekti.
+
   /** Depodaki çuvalın müşterisini/şubesini değiştir (sevkiyata girmemiş çuval; null=müşterisiz).
    *  Yanıt çözülmüş ad/kodu döner → istemci editör rozetini fetch'siz günceller. */
   reassignCustomer: (
