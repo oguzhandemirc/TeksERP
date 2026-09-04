@@ -1,5 +1,7 @@
-import { Radar, Server, Loader2, AlertTriangle } from "lucide-react";
+import { useState } from "react";
+import { Radar, Server, Loader2, AlertTriangle, Network } from "lucide-react";
 import type { DiscoveredServer, DiscoveryState } from "@shared/ipc-contract";
+import { groupByInstallation, bySourceRank } from "@shared/discovery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -11,6 +13,12 @@ import { Button } from "@/components/ui/button";
  * çıkmasının en olası sebebi saldırgan değil, unutulmuş bir demo/test
  * kurulumudur; operatörün "hangisi bizimki" sorusunu IP'ye bakarak
  * cevaplaması beklenemez.
+ *
+ * ⚠️ BİR SATIR = BİR SUNUCU, bir adres DEĞİL. Çok ağ arayüzlü sunucu aynı tek
+ * süreci birden çok adresten cevaplar (ölçüm: Wi-Fi + hotspot + Hyper-V sanal
+ * anahtarı + Tailscale = 7 IPv4, tek dinleyen süreç). Satır en iyi adresi
+ * kendiliğinden seçer; diğerleri "N adres" düğmesiyle açılır ve kullanıcı
+ * isterse ELLE seçebilir — otomatik seçim bir tercih sırasıdır, ELEME değil.
  */
 export interface ServerDiscoveryPanelProps {
   state: DiscoveryState | null;
@@ -40,8 +48,14 @@ export function ServerDiscoveryPanel({
   onRescan,
   busy,
 }: ServerDiscoveryPanelProps) {
+  const [openKey, setOpenKey] = useState<string | null>(null);
   const running = state?.status === "running" || busy;
-  const candidates = state?.candidates ?? [];
+  // `groups` ana kaynaktır; eski/kısmi bir durum nesnesi taşımıyorsa aday
+  // listesinden AYNI yüklemle türetilir (iki yerde iki kural olmasın).
+  const groups =
+    state?.groups && state.groups.length > 0
+      ? state.groups
+      : groupByInstallation(state?.candidates ?? [], bySourceRank);
 
   return (
     <div className="space-y-2">
@@ -59,19 +73,22 @@ export function ServerDiscoveryPanel({
         )}
       </div>
 
-      {running && candidates.length === 0 && (
+      {running && groups.length === 0 && (
         <p className="text-sm text-muted-foreground">Ağdaki sunucular aranıyor…</p>
       )}
 
-      {!running && candidates.length === 0 && (
+      {!running && groups.length === 0 && (
         <p className="text-sm text-muted-foreground">Ağda sunucu bulunamadı.</p>
       )}
 
       <ul className="space-y-1.5">
-        {candidates.map((c) => {
+        {groups.map((g) => {
+          const c = g.primary;
           const mismatch = c.matchesPinned === "mismatch";
+          const others = g.addresses.filter((a) => a !== c);
+          const open = openKey === g.key;
           return (
-            <li key={`${c.host}:${c.port}`}>
+            <li key={g.key} className="space-y-1">
               <button
                 type="button"
                 onClick={() => onPick(c)}
@@ -110,6 +127,42 @@ export function ServerDiscoveryPanel({
                   )}
                 </span>
               </button>
+
+              {others.length > 0 && (
+                <div className="pl-7">
+                  <button
+                    type="button"
+                    onClick={() => setOpenKey(open ? null : g.key)}
+                    className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    <Network className="h-3 w-3" />
+                    {open
+                      ? "adresleri gizle"
+                      : `bu sunucunun ${g.addresses.length} adresi var — başka adres seç`}
+                  </button>
+                  {open && (
+                    <ul className="mt-1 space-y-1">
+                      {others.map((a) => (
+                        <li key={`${a.host}:${a.port}`}>
+                          <button
+                            type="button"
+                            onClick={() => onPick(a)}
+                            className="flex w-full items-center gap-2 rounded-md border border-dashed px-2 py-1.5 text-left text-xs transition hover:bg-accent"
+                          >
+                            <span className="min-w-0 flex-1 truncate">
+                              {a.host}:{a.port}
+                              {` · ${a.rttMs} ms`}
+                            </span>
+                            <Badge variant="outline" className="text-[10px]">
+                              {sourceLabel(a.via)}
+                            </Badge>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}

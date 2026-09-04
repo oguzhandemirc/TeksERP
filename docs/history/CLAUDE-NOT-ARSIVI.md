@@ -2417,3 +2417,64 @@ doğru sonucu ortamın varsayılanından alan örtük varsayım kırıldı.
 gider). Deploy sırası backend ÖNCE: eski istemci yeni alanı görmezden gelir, davranışı
 değişmez. Doküman: `docs/ops/KURULUM.md` E43 (vaadi artık gerçek) +
 `docs/ops/ISTEMCI-BULGULARI-2026-09-04.md` (devir notu + düzeltme başlığı).
+
+---
+
+## 2026-09-04 — Keşif: bir satır = bir SUNUCU (BULGU C); sıralama var, ELEME yok
+
+**Belirti (çalışan kurulumda ölçüldü — `docs/ops/ISTEMCI-BULGULARI-2026-09-04.md` §4):**
+tablet ağı tarayınca **iki sunucu** görüyordu (`192.168.1.102` + `192.168.137.1`), aynı
+makinedeki Electron ise **üçüncü bir adresi** (`172.20.144.1`) seçiyordu. Dört adresten
+`/api/discovery/identity` soruldu, **dördü de aynı `installationId`** döndürdü: tek
+süreç (PID 6224, `HOST=0.0.0.0`), yedi IPv4 (Wi-Fi · hotspot · Hyper-V sanal anahtarı ·
+Tailscale · üç link-local). Operatöre üç ayrı sunucu varmış gibi görünüyordu.
+
+**① Tekilleştirme ölçütü ADRES DEĞİL KİMLİK.** `groupByInstallation` adayları
+`installationId`'ye göre gruplar; liste **sunucu başına tek satır** basar, adresler
+grubun içinde durur. Electron'da `dedupeCandidates` zaten vardı ama diğer adresleri
+**atıyordu** (kullanıcıya adres seçtirmek imkânsızdı) ve mobilde **hiç yoktu**.
+
+**② `installationId` NULL olan aday BAŞKA HİÇBİR ADAYLA BİRLEŞMEZ** — kendi
+`addr:<host>:<port>` anahtarında kalır. Kimliksiz sunucu eski sürüm ya da boot'ta DB'si
+hazır olmayan sunucudur (`compareIdentity`'nin `unknown` notuyla aynı gerekçe); iki
+kimliksiz adayı "aynı sunucu" saymak için elde kanıt yok ve birleştirmek gerçek ikinci
+bir sunucuyu listeden SİLERDİ. Eski (adres bazlı) davranış orada birebir korunur.
+
+**③ Adres tercihi SIRALAMADIR, ELEME DEĞİL.** `addressPreferenceRank`: LAN (192.168/16,
+10/8) → ad/sınıflandırılamayan → 172.16/12 (Hyper-V/Docker/WSL) → 100.64/10
+(CGNAT/Tailscale) → 127/8 + `localhost` → 169.254/16. Ölçülen kök sebep: Windows arayüz
+metriklerinde Hyper-V sanal anahtarı (15) gerçek Wi-Fi kartından (50) ÖNCELİKLİ, tarama
+da "ilk cevap verende" duruyordu — `172.20.144.1` yalnız o makineden erişilebilir, yani
+ağdaki hiçbir tablet oraya bağlanamaz. ⚠️ **Sanal/overlay aralıklar KÖRLEMESİNE
+ELENMEZ**: Docker'da koşan sunucu ya da Tailscale'le bağlı şube o adresten gerçekten
+hizmet veriyor olabilir; elemek, çalışan tek yolu olan kurulumu sunucusuz bırakır. Her
+aday listede KALIR, yalnız hangisinin önce denendiği değişir. Grup içi sıra: adres
+tercihi → `tieBreak` → gecikme → ad (son basamak DETERMİNİZM içindir — eşit adaylarda
+sıra turdan tura oynarsa "otomatik seçilen adres" de oynar).
+
+**④ Kural TEK METİNDE, iki dosyada.** Mobil `Electron/shared/discovery.ts`i import
+edemez (ayrı proje, `types/permissions.ts` ile aynı durum) ve *"iki istemci aynı hatayı
+ayrı ayrı yapar"* bu depoda tekrar eden bir sınıf. Blok `>>> KEŞİF-İKİZ BAŞLANGIÇ` /
+`<<< KEŞİF-İKİZ SON` işaretleri arasında ve iki bekçi metni **birebir** kıyaslar
+(`mobil/src/lib/discovery.contract.test.ts` + `Electron/src/test/discovery-logic.test.ts`)
+— her koşucu kendi tarafından bakar, tek bir CI adımına bağlı kalmayız. Bloğa PROJEYE
+ÖZGÜ hiçbir şey girmez: Electron'un kaynak güvenilirliği sırası (`bySourceRank`, mDNS ↔
+tarama) blok DIŞINDA yaşar ve `tieBreak` parametresiyle içeri verilir — mobilde `via`
+alanı yok.
+
+**⑤ Yan kazanç — otomatik adres uygulama kapısı düzeldi.** `startDiscoveryIfNeeded`
+"tek kullanılabilir aday varsa adresi yaz" diyor ama çok adresli sunucu **hiçbir zaman
+"tek" görünmüyordu**. Sıra artık ÖNCE tekilleştir, SONRA sırala.
+
+**Bekçiler:** `Electron/src/test/discovery-logic.test.ts` (33) +
+`mobil/src/lib/discovery.test.ts` · `discovery.contract.test.ts` (37) — **dört negatif
+sondayla** iki koşucuda birden kırmızı verdiği doğrulandı: adres tercihi düzleşince
+(172.16/12 → LAN) Electron 2 / mobil 2 ❌ · anahtar kimlik yerine adres olunca 3 / 2 ❌ ·
+kimliksiz adaylar tek kovaya birleşince 2 / 1 ❌ · YALNIZ Electron kopyası bir bayt
+kayınca ikiz kilidi 1 / 1 ❌.
+
+**Migration / izin / backend değişikliği YOK** (`installationId` cevapta zaten vardı).
+Electron + APK/OTA birlikte gider; ayrı gitmeleri de zararsız — kural iki tarafta
+bağımsız çalışır. Mobil `ServerDiscoveryList` DOKUNULMADI (başka ajanın işiyle
+çakışmasın): tablet artık tek satır görür, adres seçimi `DiscoveryResult.groups`ta
+hazır ama henüz yüzeyi yok — masaüstünde "bu sunucunun N adresi var" düğmesiyle açılır.

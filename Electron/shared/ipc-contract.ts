@@ -7,7 +7,7 @@
 
 // Keşif aday tipi saf mantık dosyasında yaşıyor (orada test edilebiliyor);
 // burada yeniden tanımlamak iki kopya demek olurdu.
-import type { DiscoveredServer } from "./discovery";
+import type { DiscoveredServer, ServerGroup } from "./discovery";
 
 export type { DiscoveredServer };
 
@@ -289,8 +289,18 @@ export interface DiscoveryState {
   status: DiscoveryStatus;
   startedAt: number | null;
   finishedAt: number | null;
-  /** Sıralı: en iyi aday ilk (bkz. shared/discovery.ts → rankCandidates). */
+  /**
+   * Sıralı: en iyi aday ilk (bkz. shared/discovery.ts → rankCandidates).
+   *
+   * ⚠️ SUNUCU başına TEK satır — adres başına DEĞİL. Çok ağ arayüzlü sunucu
+   * (Wi-Fi + hotspot + Hyper-V sanal anahtarı + Tailscale) aynı tek süreci
+   * birden çok adresten cevaplar; liste `installationId` ile tekilleştirilir
+   * (ölçüm: `docs/ops/ISTEMCI-BULGULARI-2026-09-04.md` §4). Kimliği OLMAYAN
+   * sunucuda eski davranış (adres bazlı) birebir korunur.
+   */
   candidates: DiscoveredServer[];
+  /** Aynı sunucular, TÜM adresleriyle — kullanıcı isterse adresi buradan seçer. */
+  groups: ServerGroup<DiscoveredServer>[];
   /** main otomatik uyguladıysa dolu — renderer bunu kullanıcıya bildirir. */
   applied: { baseUrl: string; reason: "single" | "pin-moved" } | null;
   mdns: { available: boolean; error: string | null; hits: number };

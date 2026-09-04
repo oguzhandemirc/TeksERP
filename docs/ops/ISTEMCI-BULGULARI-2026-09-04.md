@@ -306,6 +306,23 @@ de açılıyorsa karşınıza çıkar.
 bırakılsın; otomatik seçim yapılacaksa link-local (`169.254.*`) ve bilinen
 sanal aralıklar (`172.1x.*` Hyper-V/Docker) **son sıraya** alınsın.
 
+### ✅ DÜZELTİLDİ (2026-09-04, geliştirme ortamı)
+
+Sebep 1 ve 2 kapandı. Kural iki istemcide **tek metin** olarak yaşıyor
+(`>>> KEŞİF-İKİZ` bloğu — `Electron/shared/discovery.ts` ↔
+`mobil/src/lib/discovery.ts`, iki bekçi birebir kıyaslıyor):
+
+- `groupByInstallation` → **bir satır = bir SUNUCU**; adresler grubun içinde
+  durur, masaüstünde "bu sunucunun N adresi var" ile açılır ve elle seçilebilir.
+- `addressPreferenceRank` → LAN (192.168/10) · ad · **172.16/12** · **100.64/10**
+  · loopback · link-local. ⚠️ **SIRALAMA, ELEME DEĞİL** — sanal/overlay adresten
+  gerçekten hizmet veriliyor olabilir; hiçbir aday listeden düşmez.
+- `installationId` **null** dönen sunucuda (eski sürüm) eski davranış birebir
+  korunur: adres bazlı, birleştirme YOK.
+
+Ayrıntı ve negatif sondalar: `docs/history/CLAUDE-NOT-ARSIVI.md` → 2026-09-04.
+**Fabrika ağı topolojisi bölümü (aşağıda) hâlâ AÇIK** — ölçüm sahada yapılacak.
+
 ### Fabrika ağı — ayrı bir risk, ölçülemedi
 
 Sahada **birden çok Wi-Fi dağıtıcısı** var, hepsi aynı switch üzerinden

@@ -25,8 +25,28 @@ const BACKEND_APP = resolve(REPO, 'Teks-Erp/src/app.ts');
 const BACKEND_SERVICE = resolve(REPO, 'Teks-Erp/src/services/discovery.service.ts');
 const ELECTRON_SHARED = resolve(REPO, 'Electron/shared/discovery.ts');
 
+const MOBILE_LIB = resolve(__dirname, 'discovery.ts');
+
 const haveBackend = existsSync(BACKEND_ROUTES) && existsSync(BACKEND_APP);
 const haveElectron = existsSync(ELECTRON_SHARED);
+
+/**
+ * `>>> KEŞİF-İKİZ BAŞLANGIÇ` ile `<<< KEŞİF-İKİZ SON` arasındaki metni çıkarır.
+ * Satır sonu boşlukları kırpılır (editör farkı ayrışma sayılmasın), gerisi
+ * BİREBİR kıyaslanır.
+ */
+function twinBlock(file: string): string | null {
+  const src = readFileSync(file, 'utf8');
+  const a = src.indexOf('>>> KEŞİF-İKİZ BAŞLANGIÇ');
+  const b = src.indexOf('<<< KEŞİF-İKİZ SON');
+  if (a < 0 || b < 0 || b < a) return null;
+  return src
+    .slice(a, b)
+    .split('\n')
+    .map((l) => l.replace(/\s+$/, ''))
+    .join('\n')
+    .trim();
+}
 
 describe('keşif sözleşmesi — üç kopya', () => {
   it('körlük zemini: karşılaştırılacak kaynaklar BULUNDU', () => {
@@ -80,6 +100,20 @@ describe('keşif sözleşmesi — üç kopya', () => {
     void app;
     // Backend PORT env'inden okuyor; sözleşmedeki varsayılan 4000 olmalı.
     expect(DISCOVERY_DEFAULT_PORT).toBe(4000);
+  });
+
+  (haveElectron ? it : it.skip)('körlük zemini: KEŞİF-İKİZ bloğu İKİ dosyada da BULUNDU', () => {
+    expect(twinBlock(MOBILE_LIB)?.length ?? 0).toBeGreaterThan(500);
+    expect(twinBlock(ELECTRON_SHARED)?.length ?? 0).toBeGreaterThan(500);
+  });
+
+  // ⚠️ "İki istemci aynı hatayı ayrı ayrı yapar" bu depoda TEKRAR EDEN bir
+  // sınıftır. Tekilleştirme ve adres tercihi kuralı iki dosyada da yaşıyor;
+  // ayrışırsa arıza SESSİZDİR — tablet tek satır gösterirken panel üç satır
+  // gösterir, kimse "hangisi doğru" diye sormaz. İkiz bekçi Electron tarafında
+  // da var (`src/test/discovery-logic.test.ts`).
+  (haveElectron ? it : it.skip)('⭐ KEŞİF-İKİZ bloğu Electron kopyasıyla BİREBİR', () => {
+    expect(twinBlock(MOBILE_LIB)).toBe(twinBlock(ELECTRON_SHARED));
   });
 
   (haveElectron ? it : it.skip)('⭐ Electron kopyasıyla YOL ve PORT aynı', () => {

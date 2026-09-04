@@ -25,8 +25,10 @@ import {
   LAST_DISCOVERY_KEY,
   PINNED_IDENTITY_KEY,
   baseUrlOf,
+  bySourceRank,
   compareIdentity,
   dedupeCandidates,
+  groupByInstallation,
   rankCandidates,
   scanTargetsFor,
   type DiscoveredServer,
@@ -56,6 +58,7 @@ function emptyState(): DiscoveryState {
     startedAt: null,
     finishedAt: null,
     candidates: [],
+    groups: [],
     applied: null,
     mdns: { available: false, error: null, hits: 0 },
     scan: { ran: false, targets: 0, open: 0, skippedReason: null },
@@ -243,12 +246,17 @@ async function runDiscovery(timeoutMs: number): Promise<DiscoveryState> {
     new Promise((r) => setTimeout(r, Math.max(0, deadline - Date.now()))),
   ]);
 
-  const candidates = rankCandidates(dedupeCandidates(found));
+  // ⚠️ ÖNCE tekilleştir, SONRA sırala. Aynı sunucunun iki adresi iki ayrı aday
+  // gibi sıralanırsa "tek aday mı" sorusu da (otomatik adres uygulama kapısı)
+  // yanlış cevaplanır — çok adresli sunucu hiçbir zaman "tek" görünmezdi.
+  const groups = groupByInstallation(found, bySourceRank);
+  const candidates = rankCandidates(dedupeCandidates(found, bySourceRank));
   state = {
     ...state,
     status: "done",
     finishedAt: Date.now(),
     candidates,
+    groups,
   };
   log.info("[discovery] tur bitti", {
     adaylar: candidates.length,
@@ -291,7 +299,13 @@ export async function startDiscoveryIfNeeded(): Promise<void> {
       if (parts) {
         const ok = await verify(parts.host, parts.port, "stored", pinnedId, 1500);
         if (ok && ok.matchesPinned !== "mismatch") {
-          state = { ...emptyState(), status: "done", candidates: [ok], finishedAt: Date.now() };
+          state = {
+            ...emptyState(),
+            status: "done",
+            candidates: [ok],
+            groups: groupByInstallation([ok], bySourceRank),
+            finishedAt: Date.now(),
+          };
           log.info(`[discovery] kayıtlı adres cevap verdi, keşif gerekmedi: ${stored}`);
           return;
         }

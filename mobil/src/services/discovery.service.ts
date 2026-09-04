@@ -23,10 +23,13 @@ import {
   DISCOVERY_IDENTITY_PATH,
   baseUrlOf,
   compareIdentity,
+  dedupeCandidates,
+  groupByInstallation,
   parseIdentityPayload,
   rankCandidates,
   scanTargetsFor,
   type DiscoveredServer,
+  type ServerGroup,
 } from '../lib/discovery';
 
 /** Tek adres için bekleme. Wi-Fi'de çok kısası YANLIŞ "sunucu yok" üretir. */
@@ -58,7 +61,18 @@ export interface DiscoveryOptions {
 }
 
 export interface DiscoveryResult {
+  /**
+   * SUNUCU başına TEK satır — adres başına değil.
+   *
+   * ⚠️ Çok ağ arayüzlü sunucu (Wi-Fi + hotspot + sanal anahtar) aynı süreci
+   * birden çok adresten cevaplatır; adres bazlı liste operatöre "iki ayrı
+   * sunucu" gösteriyordu (ölçüm: `docs/ops/ISTEMCI-BULGULARI-2026-09-04.md` §4).
+   * Tekilleştirme ölçütü `installationId`; kimliği OLMAYAN sunucuda eski
+   * davranış (adres bazlı) birebir korunur.
+   */
   candidates: DiscoveredServer[];
+  /** Aynı liste, adresleri açık — kullanıcıya adres seçtirmek isteyen yüzey için. */
+  groups: ServerGroup<DiscoveredServer>[];
   /** Tarama gerçekten koştu mu — koşmadıysa sebebi. */
   scan: { ran: boolean; tried: number; skippedReason: string | null };
   /** Cihazın kendi ağ bilgisi okunabildi mi. */
@@ -253,8 +267,12 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
     tried = total;
   }
 
+  // Sıra: ÖNCE tekilleştir (sunucu başına en iyi adres), SONRA sırala. Tersi,
+  // aynı sunucunun iki adresini iki ayrı satır gibi sıralar.
+  const groups = groupByInstallation(found);
   return {
-    candidates: rankCandidates(found),
+    candidates: rankCandidates(dedupeCandidates(found)),
+    groups,
     scan: { ran: scanRan, tried, skippedReason },
     network: { address, subnet },
   };

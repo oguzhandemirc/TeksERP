@@ -25,6 +25,10 @@ import {
   parseIdentityPayload,
   rankCandidates,
   pickSelfHealTarget,
+  addressPreferenceRank,
+  ADDRESS_RANK,
+  dedupeCandidates,
+  groupByInstallation,
   SCAN_MAX_HOSTS,
   type DiscoveredServer,
 } from './discovery';
@@ -183,5 +187,101 @@ describe('pickSelfHealTarget — sessiz geçiş sınırı', () => {
 
   it('körlük zemini: boş liste null döner (mutlu yol yukarıda kanıtlandı)', () => {
     expect(pickSelfHealTarget([], 'http://192.168.1.50:4000', 'iid-1')).toBeNull();
+  });
+});
+
+
+// =============================================================================
+// ÖLÇÜLEN VAKA — `docs/ops/ISTEMCI-BULGULARI-2026-09-04.md` §4
+// Sunucu çok adresli (Wi-Fi + hotspot + Hyper-V + Tailscale = 7 IPv4), 4000'i
+// dinleyen TEK süreç. Tablet iki satır görüyordu; dördü de aynı installationId.
+// ⚠️ Kural Electron ikiziyle AYNI metinden gelir (KEŞİF-İKİZ bloğu) — kilidi
+// `discovery.contract.test.ts`. Buradaki testler DAVRANIŞI ölçer.
+// =============================================================================
+const IID = '94c955fe-f354-401b-83e0-6dd2ec12283c';
+const ident = (id: string | null): DiscoveredServer['identity'] => ({
+  product: 'TeksERP',
+  discoveryVersion: 1,
+  installationId: id,
+  serverName: 'ThinkPad',
+  companyName: 'Adnan Şahin',
+  version: '2.9.0',
+});
+
+describe('adres tercihi — sıralar, ELEMEZ', () => {
+  it('körlük zemini: gerçek LAN adresi en iyi sırada', () => {
+    expect(addressPreferenceRank('192.168.1.102')).toBe(ADDRESS_RANK.LAN);
+    expect(addressPreferenceRank('10.0.5.7')).toBe(ADDRESS_RANK.LAN);
+  });
+
+  it('⭐ Hyper-V/Docker (172.16/12) gerçek LANin ARDINDA', () => {
+    expect(addressPreferenceRank('172.20.144.1')).toBeGreaterThan(
+      addressPreferenceRank('192.168.1.102'),
+    );
+    expect(addressPreferenceRank('172.17.0.1')).toBe(ADDRESS_RANK.VIRTUAL);
+  });
+
+  it('Tailscale/CGNAT · loopback · link-local giderek geride', () => {
+    expect(addressPreferenceRank('100.70.47.46')).toBe(ADDRESS_RANK.OVERLAY);
+    expect(addressPreferenceRank('127.0.0.1')).toBe(ADDRESS_RANK.LOOPBACK);
+    expect(addressPreferenceRank('localhost')).toBe(ADDRESS_RANK.LOOPBACK);
+    expect(addressPreferenceRank('169.254.10.3')).toBe(ADDRESS_RANK.LINK_LOCAL);
+  });
+
+  it('ad (mDNS/DNS) ve sınıflandırılamayan adres ORTADA — dışlanmaz', () => {
+    expect(addressPreferenceRank('erp.local')).toBe(ADDRESS_RANK.OTHER);
+    expect(addressPreferenceRank('')).toBe(ADDRESS_RANK.OTHER);
+  });
+});
+
+describe('groupByInstallation / dedupeCandidates — bir satır = bir SUNUCU', () => {
+  const dortAdres = [
+    cand({ host: '172.20.144.1', rttMs: 1, identity: ident(IID) }),
+    cand({ host: '192.168.1.102', rttMs: 30, identity: ident(IID) }),
+    cand({ host: '192.168.137.1', rttMs: 40, identity: ident(IID) }),
+    cand({ host: '100.70.47.46', rttMs: 60, identity: ident(IID) }),
+  ];
+
+  it('⭐ dört adres TEK gruba iner ve HİÇBİRİ kaybolmaz', () => {
+    const g = groupByInstallation(dortAdres);
+    expect(g).toHaveLength(1);
+    expect(g[0]?.addresses).toHaveLength(4);
+    expect(dedupeCandidates(dortAdres)).toHaveLength(1);
+  });
+
+  it('⭐ ASIL İDDİA: host-only adres EN HIZLI olsa bile seçilmez, ama listede DURUR', () => {
+    const g = groupByInstallation(dortAdres);
+    expect(g[0]?.primary.host).toBe('192.168.1.102');
+    expect(g[0]?.addresses.map((a) => a.host)).toContain('172.20.144.1');
+  });
+
+  it('eşit tercihte gecikme, sonra ad kazanır (determinizm)', () => {
+    const g = groupByInstallation([
+      cand({ host: '192.168.1.9', rttMs: 5, identity: ident(IID) }),
+      cand({ host: '192.168.1.8', rttMs: 90, identity: ident(IID) }),
+    ]);
+    expect(g[0]?.primary.host).toBe('192.168.1.9');
+  });
+
+  it('⭐ KİMLİKSİZ sunucuda eski davranış korunur: adres bazlı, birleştirme YOK', () => {
+    const g = groupByInstallation([
+      cand({ host: '192.168.1.10', identity: null }),
+      cand({ host: '192.168.1.11', identity: null }),
+    ]);
+    expect(g).toHaveLength(2);
+    expect(g.every((x) => x.installationId === null)).toBe(true);
+  });
+
+  it('farklı kurulumlar birleşmez (ikinci fabrika / demo kurulumu)', () => {
+    const g = groupByInstallation([
+      cand({ host: '192.168.1.5', identity: ident(IID) }),
+      cand({ host: '192.168.1.6', identity: ident('baska-kurulum') }),
+    ]);
+    expect(g).toHaveLength(2);
+  });
+
+  it('körlük zemini: boş giriş boş çıkar, tek aday tek grup', () => {
+    expect(groupByInstallation([])).toHaveLength(0);
+    expect(groupByInstallation([cand({})])).toHaveLength(1);
   });
 });
