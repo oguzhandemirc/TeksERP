@@ -11,6 +11,7 @@ import type {
   OpenOrder,
   PickListRow,
   SackContentDumpSack,
+  SackCustomerBucket,
   SackContents,
   SackSearchRow,
   ScanResult,
@@ -51,6 +52,22 @@ export const sackHubService = {
     apiClient
       .get<CursorPaginatedResponse<SackSearchRow>>(`/api/shipping/sack-search${buildCursorQueryString(params)}`)
       .then((r) => r.data),
+
+  /**
+   * Cari kapısı — kapsamda ÇUVALI OLAN cariler + çuval adedi (cari KATALOĞU
+   * değil). `customerId: null` satırı müşterisiz (genel stok) kovasıdır.
+   * Kapsam varsayılanı liste ucuyla AYNI (POOL+PLANNED) — kapı ile liste aynı
+   * sayıyı basmak zorunda.
+   */
+  listSackCustomers: (params?: { search?: string; scope?: string }): Promise<ApiResponse<SackCustomerBucket[]>> => {
+    const q = new URLSearchParams();
+    if (params?.search?.trim()) q.set("search", params.search.trim());
+    if (params?.scope) q.set("scope", params.scope);
+    const qs = q.toString();
+    return apiClient
+      .get<ApiResponse<SackCustomerBucket[]>>(`/api/shipping/sack-search/customers${qs ? `?${qs}` : ""}`)
+      .then((r) => r.data);
+  },
 
   /** Tek çuvalın dökümü — arama detayı (lazy) + editör içerik kaynağı. */
   contents: (sackId: string): Promise<ApiResponse<SackContents>> =>

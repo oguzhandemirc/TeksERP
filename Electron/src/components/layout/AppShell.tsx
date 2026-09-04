@@ -82,7 +82,7 @@ export function AppShell() {
     });
 
   return (
-    <div className="app-bg app-viewport flex w-screen flex-col overflow-hidden text-foreground">
+    <div className="app-bg flex h-screen w-screen flex-col overflow-hidden text-foreground">
       <Topbar
         onToggleSidebar={toggleSidebar}
         onOpenCommand={() => setPaletteOpen(true)}

@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronDown, Keyboard, Layers, Loader2, Lock, MessageSquareText, PackageOpen, RefreshCw, Scale, Tag, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowLeft, ChevronDown, Keyboard, Layers, Loader2, Lock, MessageSquareText, PackageOpen, PackagePlus, RefreshCw, Scale, Tag, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,10 +44,13 @@ export function SackEditorView({
   target,
   onExit,
   onReassigned,
+  onSwitchSack,
 }: {
   target: EditorTarget;
   onExit: () => void;
   onReassigned: (patch: ReassignPatch) => void;
+  /** "Yeni Çuval" — editörü YENİ açılan çuvala geçirir (liste ekranına dönmeden). */
+  onSwitchSack: (target: EditorTarget) => void;
 }) {
   const qc = useQueryClient();
   // ELLE TARTI KISITI — bayrak açıkken yalnız `shipping:write` taşıyan kimlik
@@ -72,6 +76,52 @@ export function SackEditorView({
   const [noteOpen, setNoteOpen] = useState(false);
   // Tartı: tek dokunuş (oku → doğrudan kaydet). Elle giriş ⌄ menüsünde.
   const sackWeigh = useSackWeighAction();
+
+  // ── "Yeni Çuval" — aynı cariye ARDIŞIK çuval açma (2026-09-04 saha isteği) ──
+  // *"bir çuval açtın, içini doldurdun; hemen yeni çuval açmak için tuş koy, bu
+  // yeni çuval önceki çuvalın carisine açılsın."* Yeni uç GEREKMEDİ: `openSack`
+  // zaten `customerId`/`branchId` alıyor (ölçüldü) — eksik olan tek şey çıkıştı;
+  // bugüne kadar operatör "Listeye Dön → Yeni Çuval → cariyi tekrar seç"
+  // yapmak zorundaydı ve müşteri seçimini unutmak müşterisiz çuval üretiyordu.
+  //
+  // ⚠️ ŞUBE DE DEVREDİLİR: yalnız müşteriyi taşımak, şubeli (ihracat kodlu)
+  // carilerde ikinci çuvalı şubesiz doğururdu — sevk belgesinde "İhracat Kodu"
+  // satırı sessizce düşerdi.
+  //
+  // ⚠️ İdempotency (A4): token DENEME başına sabit — başarıda yenilenir, kesin
+  // 4xx'te de yenilenir (orada hiçbir şey yazılmadığı kesin), ağ/5xx'te YAPIŞIR
+  // (timeout "yazılmadı" demek DEĞİLDİR → aynı token replay'e düşer).
+  const nextSackToken = useRef(crypto.randomUUID());
+  const newSackMut = useMutation({
+    mutationFn: () =>
+      sackHubService.openSack({
+        customerId: target.customerId,
+        branchId: target.branchId,
+        clientToken: nextSackToken.current,
+      }),
+    onSuccess: (res) => {
+      nextSackToken.current = crypto.randomUUID();
+      invalidateSackHub(qc);
+      toast.success(
+        `Çuval açıldı: ${res.data.sackNo}` +
+          (res.data.customerName ? ` · ${res.data.customerName}` : " · müşterisiz (genel stok)"),
+      );
+      onSwitchSack({
+        sackId: res.data.id,
+        sackNo: res.data.sackNo,
+        customerId: res.data.customerId,
+        customerName: res.data.customerName,
+        branchId: res.data.branchId,
+        branchName: res.data.branchName,
+        branchCode: res.data.branchCode,
+        isNew: true,
+      });
+    },
+    onError: (e: unknown) => {
+      const status = (e as { response?: { status?: number } }).response?.status;
+      if (status && status >= 400 && status < 500) nextSackToken.current = crypto.randomUUID();
+    },
+  });
 
   const removeSwatchMut = useMutation({
     mutationFn: (swatchId: string) => sackHubService.removeSwatchFromSack(swatchId),
@@ -115,6 +165,23 @@ export function SackEditorView({
           </div>
         </div>
         <div className="flex items-center gap-1.5">
+          {/* Sıradaki çuval — kilitli çuvalda DA açılabilir: bu bir OKUMA değil,
+              yeni bir kayıt yaratma yolu; mevcut çuvalın sevkiyata atanmış olması
+              aynı cariye yeni çuval açmayı engellemez. */}
+          <Button
+            size="sm"
+            className="gap-1"
+            disabled={newSackMut.isPending}
+            title={
+              target.customerName
+                ? `Aynı cariye (${target.customerName}) yeni çuval aç ve doldurmaya devam et`
+                : "Müşterisiz (genel stok) yeni çuval aç ve doldurmaya devam et"
+            }
+            onClick={() => newSackMut.mutate()}
+          >
+            <PackagePlus className="h-4 w-4" />
+            {newSackMut.isPending ? "Açılıyor…" : "Yeni Çuval"}
+          </Button>
           <Button variant="outline" size="sm" onClick={() => void contentsQ.refetch()} disabled={contentsQ.isFetching}>
             <RefreshCw className={cn("mr-1 h-4 w-4", contentsQ.isFetching && "animate-spin")} /> Yenile
           </Button>

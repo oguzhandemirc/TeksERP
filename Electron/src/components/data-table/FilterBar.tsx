@@ -123,6 +123,16 @@ export type FilterDef =
       queryKey: string;
       getLabel?: LookupGetLabel;
       extraFilters?: Record<string, string>;
+      /**
+       * Katalogda KARŞILIĞI OLMAYAN sabit seçenek (örn. "Müşterisiz (genel
+       * stok)" = `customerId IS NULL`). Listenin BAŞINA sabitlenir ve seçilince
+       * CSV'ye o değer yazılır; backend değeri UUID listesinden ayrıştırmak
+       * ZORUNDADIR (aksi P2007).
+       *
+       * ⚠️ Etiket çözümü de buradan gelir: sentinel `items` içinde bulunmadığı
+       * için tetik yazısı ham değeri ("none") basardı.
+       */
+      sentinelOption?: { value: string; label: string };
     }
   | {
       kind: "dependent-lookup";
@@ -707,11 +717,20 @@ function MultiLookupFilter({
   const clearAll = () =>
     update((next) => next.delete(`filter[${def.key}]`));
 
+  // ⚠️ Arama YAZILINCA sentinel GİZLENİR — iki gerekçe: (a) sentinelin katalogda
+  // adı yok, "müşterisiz" satırını "ali" aramasında göstermek gürültüdür (backend
+  // `listSackCustomers` de aynısını yapar); (b) cmdk `shouldFilter={false}` ile
+  // çalıştığı için sabit satır listede kaldığı sürece "Sonuç yok." hiç çizilmez
+  // ve boş arama sessizce dolu görünür.
+  const sentinel = search.trim() ? undefined : def.sentinelOption;
+  const sentinelSelected = !!sentinel && selectedIds.includes(sentinel.value);
+  const labelOfSelected = (id: string) =>
+    sentinel && id === sentinel.value ? sentinel.label : labelOf(items.find((it) => it.id === id) ?? { id });
   const triggerLabel =
     selectedIds.length === 0
       ? def.label
       : selectedIds.length === 1
-        ? labelOf(items.find((it) => it.id === selectedIds[0]) ?? { id: selectedIds[0]! })
+        ? labelOfSelected(selectedIds[0]!)
         : `${def.label} (${selectedIds.length})`;
 
   return (
@@ -746,6 +765,12 @@ function MultiLookupFilter({
           <CommandList>
             {isError ? <LookupErrorRow onRetry={() => void refetch()} /> : <CommandEmpty>Sonuç yok.</CommandEmpty>}
             <CommandGroup>
+              {sentinel ? (
+                <CommandItem key={sentinel.value} value={sentinel.label} onSelect={() => toggle(sentinel.value)}>
+                  <Check className={cn("mr-2 h-3.5 w-3.5", sentinelSelected ? "opacity-100" : "opacity-0")} />
+                  {sentinel.label}
+                </CommandItem>
+              ) : null}
               {items.map((it) => {
                 const selected = selectedIds.includes(it.id);
                 return (

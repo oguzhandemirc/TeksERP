@@ -20,6 +20,22 @@ export const scopeLabels: Record<SackSearchScope, string> = {
   ALL: "Tümü",
 };
 
+/**
+ * "Müşterisiz (genel stok)" süzgeç sentineli — `filter[customerId]=none`.
+ * Backend aynasıdır (`sack-search.service.ts` CUSTOMERLESS_FILTER_VALUE);
+ * Electron backend'i import EDEMEZ (mobil `permissions.ts` ile aynı durum),
+ * bu yüzden değer iki yerde yaşar ve bekçi ikisini kıyaslar.
+ */
+export const CUSTOMERLESS_FILTER_VALUE = "none";
+
+/** Cari kapısı satırı — `customerId: null` = müşterisiz (genel stok) kovası. */
+export interface SackCustomerBucket {
+  customerId: string | null;
+  name: string;
+  code: string | null;
+  sackCount: number;
+}
+
 export type ShipmentDestination = "DOMESTIC" | "EXPORT";
 
 export const destinationLabels: Record<ShipmentDestination, string> = {

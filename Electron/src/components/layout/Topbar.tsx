@@ -1,4 +1,5 @@
 import { PanelLeft, Search, LogOut, RotateCw, Settings } from "lucide-react";
+import { PencereKontrolleri } from "./PencereKontrolleri";
 import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
@@ -115,6 +116,9 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* Pencere düğmeleri EN SAĞDA — uygulamanın kendi başlığı aynı zamanda
+            pencerenin başlığıdır; ayrı bir şerit yok. */}
+        <PencereKontrolleri />
       </div>
     </header>
   );

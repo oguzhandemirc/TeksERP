@@ -26,7 +26,14 @@ import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
-import { isWarehouseSack, scopeLabels, type LocatedRoll, type SackSearchRow, type SackSearchScope } from "./types";
+import {
+  CUSTOMERLESS_FILTER_VALUE,
+  isWarehouseSack,
+  scopeLabels,
+  type LocatedRoll,
+  type SackSearchRow,
+  type SackSearchScope,
+} from "./types";
 
 // Filtreler URL-driven (FilterBar → useSearchParams → useDataTable cursor reset).
 // Kapsam omit edilirse backend POOL+PLANNED (sevk edilmemiş) döner — sağlıklı varsayılan.
@@ -45,7 +52,18 @@ const SACK_FILTERS: FilterDef[] = [
     })),
   },
   // Çoklu seçim (VEYA): backend virgülle ayrılmış ID'leri IN'e çevirir (searchSacks).
-  { kind: "multi-lookup", key: "customerId", label: "Müşteri", service: customerService, queryKey: "customers" },
+  {
+    kind: "multi-lookup",
+    key: "customerId",
+    label: "Müşteri",
+    service: customerService,
+    queryKey: "customers",
+    // ⚠️ "Müşterisiz (genel stok)" KATALOGDA YOKTUR — `Sack.customerId` opsiyonel
+    // olduğu için gerçek ve büyük bir kümedir (ölçüm 2026-09-04: depodaki 9
+    // çuvalın 4'ü). Sentinel eklenene kadar bu küme hiçbir yüzeyden
+    // SÜZÜLEMİYORDU; giriş kapısındaki "Müşterisiz" satırı da buraya düşer.
+    sentinelOption: { value: CUSTOMERLESS_FILTER_VALUE, label: "Müşterisiz (genel stok)" },
+  },
   { kind: "multi-lookup", key: "itemId", label: "Kumaş", service: itemService, queryKey: "items" },
   { kind: "multi-lookup", key: "colorId", label: "Renk", service: colorService, queryKey: "colors" },
   // KALİTE (2026-08-13 saha isteği: "hangi çuvalda 2. kalite var?"). Semantik

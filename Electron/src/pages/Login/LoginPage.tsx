@@ -4,6 +4,7 @@ import { Moon, Settings, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { SurumRozeti } from "@/components/SurumRozeti";
+import { PencereKontrolleri } from "@/components/layout/PencereKontrolleri";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
 import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { useLoginFlow, type LoginFormValues } from "./useLoginFlow";
@@ -59,7 +60,7 @@ export function LoginPage() {
   const onSubmit = (values: LoginFormValues) => performLogin(values, false);
 
   return (
-    <div className="app-viewport flex w-screen overflow-hidden">
+    <div className="flex h-screen w-screen overflow-hidden">
       <LoginHero />
 
       <div className="relative flex w-full items-center justify-center bg-background p-10 md:w-[460px] md:shrink-0">
@@ -82,6 +83,8 @@ export function LoginPage() {
           >
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </button>
+          {/* Giriş ekranında `Topbar` yoktur; pencere düğmeleri buraya gelir. */}
+          <PencereKontrolleri />
         </div>
 
         {IS_ELECTRON && <ApiEndpointDialog open={apiDialogOpen} onOpenChange={setApiDialogOpen} />}

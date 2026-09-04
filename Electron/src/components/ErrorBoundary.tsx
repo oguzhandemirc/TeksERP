@@ -31,7 +31,7 @@ export function ErrorFallbackUI({ error, errorTime }: { error: Error; errorTime:
   };
 
   return (
-    <div className="app-viewport flex flex-col bg-background">
+    <div className="flex h-screen flex-col bg-background">
       {/* Header */}
       <div className="flex items-center justify-between border-b px-6 py-3">
         <span className="text-lg font-bold tracking-tight">TeksERP</span>

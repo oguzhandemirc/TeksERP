@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PencereKontrolleri } from "@/components/layout/PencereKontrolleri";
 import { RouterProvider } from "react-router-dom";
 import { LayoutGrid, LogOut, Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
@@ -41,13 +42,17 @@ export function BossShell() {
   const canOpenFullPanel = Boolean(user && canEnterApp(user.permissions));
 
   return (
-    <div className="app-viewport flex w-screen flex-col overflow-hidden bg-background">
-      <header className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="min-w-0">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
+      {/* Başlık AYNI ZAMANDA pencere sürükleme şeridi (uygulamanın kendi başlığı;
+          ayrı bir OS çubuğu yok). ⚠️ Yükseklik SINIRLI olmak zorunda — tam ekran
+          bir sürükleme bölgesi portal'lanan modalların tıklamasını yutar
+          (bekçi: src/test/app-drag-region.test.ts). */}
+      <header className="app-drag flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
+        <div className="app-no-drag min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">Fabrika Özeti</p>
           <p className="truncate text-[11px] text-muted-foreground">{user?.username}</p>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="app-no-drag flex shrink-0 items-center gap-1">
           {canOpenFullPanel && (
             <Button
               type="button"
@@ -80,6 +85,7 @@ export function BossShell() {
           >
             <LogOut className="h-4 w-4" />
           </Button>
+          <PencereKontrolleri />
         </div>
       </header>
 

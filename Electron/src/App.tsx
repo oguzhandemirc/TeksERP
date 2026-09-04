@@ -7,7 +7,6 @@ import { CopyContextMenu } from "@/components/CopyContextMenu";
 import { MotionProvider } from "@/components/motion";
 import { PreferencesProvider } from "@/providers/PreferencesProvider";
 import { AppShell } from "@/components/layout/AppShell";
-import { TitleBar } from "@/components/layout/TitleBar";
 import { BossShell } from "@/components/layout/BossShell";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SettingsPasswordDialog } from "@/components/settings/SettingsPasswordDialog";
@@ -124,11 +123,6 @@ export function App() {
         <QueryClientProvider client={queryClient}>
           <AuthHydrator />
           <CacheUserGuard />
-          {/* Kendi başlık çubuğumuz — pencere `frame: false` ile açılır.
-              ⚠️ `Root`tan ÖNCE ve provider'ların DIŞINDA değil İÇİNDE: tema
-              sınıfını (`ThemeProvider`) okur, yoksa açık/koyu geçişinde şerit
-              bir kare geride kalır. macOS ve tarayıcıda kendini çizmez. */}
-          <TitleBar />
           <PreferencesProvider>
             <MotionProvider>
               <Root />
