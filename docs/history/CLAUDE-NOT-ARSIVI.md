@@ -2273,3 +2273,69 @@ yüklemi elle kopyalandı → gate bekçisi 2 ❌.
 **Migration / izin kodu / APK YOK; backend'de yalnız `screen-catalog` üç satır** (yeni iki
 ekran + `system/module-profile` başlığı "Modüller"). Tamlık bekçisi 33/33, feature-flag
 sözleşmesi 78/78, modül anahtarları 72/72.
+
+### 2026-09-04 — [ÇEKİRDEK] Kapalı modülün bayrağı ÇİZİLMEZ: satış sınırı ekranda görünür olmalı
+
+**İSTEK (kullanıcının kendi cümlesi):** *"biz bu programın modüllerini parayla satacağız,
+fabrika sahibinin 'bu modül zaten içinde varmış' demesini istemiyoruz."* Somut vaka:
+`iplik.enabled` KAPALI bir kurulumda Özellik Anahtarları ekranında "İplik" sekmesi ve
+`yarnBlockNegativeBalanceEnabled` satırı duruyordu.
+
+**⚠️⚠️ BU, P5'İN (2026-09-03) "KİLİT ≠ GİZLEME" KARARININ BİLİNÇLİ TERSİDİR** ve geri
+almadan önce çürütülmesi gereken gerekçe şudur: o gün gizlemeye karşı TEK argüman
+*"modülü kapatınca ayarın değeri hiçbir yerde okunamaz, geri dönüş yolu kalmaz"* idi.
+Aynı gün (2026-09-04, bir önceki not) modül anahtarları **kendi ekranına** taşındı
+(Sistem → Modüller, `surface: "vendor"`) ve **o ekran bu kuraldan ETKİLENMEZ** — yani geri
+dönüş yolu artık başka bir sayfada duruyor. İkinci sigorta: **satıcı görünümünde hiçbir
+satır gizlenmez** (`isSuperadminGateOpen` — supap dahil: sistem hesabı HİÇ doğmamış bir
+kurulumda fabrika yöneticisi satıcı sayılır, yoksa süperadminsiz kurulum kendi kapattığı
+modülün ayarını bir daha göremezdi). Kilit BANDI kalkmadı, izleyicisi değişti: kapalı
+modülün satırı yalnız satıcıya, salt-okunur + bantlı çizilir.
+
+**GÖRÜNÜRLÜK SATIRDAN TÜRER, `moduleKey`den DEĞİL.** Kategori düzeyinde karar verilseydi
+karma kategori (bir kısmı çekirdek, bir kısmı modüle ait) ya tümden kaybolur ya hiç
+gizlenmezdi. Bugün karma kategori GERÇEK: "Üretim — Saha" sekmesinin KK1/Tambur satırları
+üretime, Fason satırları henüz anahtarı olmayan `planlanan:fason`a ait → üretim kapalıyken
+sekme AYAKTA kalır, yalnız üretim satırları düşer. Kategoriden geriye satır kalmazsa sekme
+de çizilmez (boş başlık "burada bir şey vardı" der).
+
+**TEK KAYNAK + DERLEME KAPISI:** `Electron/src/pages/GeneralSettings/flag-modules.ts` →
+`FLAG_MODULE: Record<FlagRowKey | SystemSettingKey, FlagOwner>`. Söz dağarcığı
+`screen-catalog.ts`ten (`ScreenEntry.modul`) alındı ve birebir aynı anlamda: modül anahtarı
+· `"cekirdek"` · `"planlanan:fason|kartela"`. `Record` tamlığı ölçüldü — bir satır
+silinince `tsc` **TS2741** verip eksik anahtarı ADIYLA söylüyor ("unutulmuş enum değeri"
+bu depoda tekrar eden arıza sınıfı). ⚠️ Küme BİLEREK geniş (yalnız bugün çizilen satırlar
+değil, TÜM skaler `FeatureFlags` alanları): daraltmanın tek yolu `SETTINGS_CATEGORIES`ten
+tip türetmekti ve o dizi `as const` olamaz (`icon`/`hint` bileşen taşır).
+
+**AİDİYET = SATIRIN YÖNETTİĞİ YÜZEY, ENFORCEMENT'IN KOŞTUĞU YER DEĞİL.** `kk1DuplicateGuardEnabled`
+KK1 ham girişini yönetir ve KK1 ekranı katalogda `productionEnabled`e aittir — oysa
+`/api/rolls` BİLİNÇLİ olarak üretim kapısının arkasında DEĞİLDİR. İkisini karıştırmak
+tabloyu route mount'larının kopyasına çevirirdi. Aynı ölçüt üç sınır kararını da verdi:
+`financeYarnOutOnInvoiceEnabled` → **finans** (kural fatura onayında koşar, iplik yalnız
+etkilenen taraf) · `pricingEnabled` → **çekirdek** (`financeEnabled`ten bağımsız olduğu
+alan yorumunda yazılı) · fason/kartela → **`planlanan:*`** (üretime asmak YANLIŞ modülü
+kapatırdı — `module.middleware.ts` başlığının kararı).
+
+**MODÜL ŞALTERİ KENDİNİ GİZLEYEMEZ:** yedi anahtar da `"cekirdek"`. Kendi modülüne ait
+sayılsaydı kapatıldığı an satırını gizler ve bir daha AÇILAMAZDI.
+
+**SÜZGEÇ ÇAĞIRANDA, BİLEŞENDE DEĞİL:** `SettingsSurfacePage` süzülmüş dizileri
+`FeatureFlagSection`a geçirir. Yalnız GÖRSEL saklama yapılsaydı taslak/Kaydet gövdesi hâlâ
+`flags` dizisinden türeyeceği için kapalı modülün bayrağı her Kaydet'te PATCH'e yazılmaya
+devam ederdi (görünmeyen satırı yazan ekran).
+
+**Bekçiler:** yeni `flag-modules.test.ts` (12 kontrol — tamlık · şalter · `moduleKey`↔satır
+hizası · kapanma · çekirdek · satıcı · karma · planlanan · fail-open · değer sözlüğü) +
+yeni `SettingsSurfacePage.modules.test.tsx` (3 kontrol, kabuğun GERÇEK turu: saf yüklem
+çağıranın yanlış listeyi geçmesini engelleyemez). **Negatif sondalar (üçü de kırmızı
+verdi, birebir geri alındı):** ① satır süzgeci `return true` → 3 ❌ · ② `kind !== "flags"`
+süzgeci kaldırıldı → 2 ❌ · ③ kabuk `rows.*` yerine `cat.*` geçirdi → 3 ❌ (bileşen turu 2 +
+rejim bekçisi 1). Güncellenen bekçiler: `settings-groups.test.ts` (eski "her modül
+durumunda GÖRÜNÜR" iddiası artık `groupSettingsCategories` modül durumunu OKUMAZ diye
+ölçüyor — iki semantiği tek imzada taşımak P5 karışıklığının kaynağıydı) ve
+`SettingsSurfacePage.search.test.tsx` rejim bölümü.
+
+**Migration / izin kodu / APK / backend değişikliği YOK** — kural tamamen Electron'da.
+Backend kapıları (`requireXEnabled`, `flagWriteGuard`) bu turda hiç ellenmedi; sözleşme
+78/78, modül anahtarları 72/72 yeşil.

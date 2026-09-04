@@ -8,12 +8,16 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
+import { useAuthStore } from "@/store/auth";
 import { visibleSettingsCategories, type SettingsSurface } from "./settings-config";
 import {
   emptySettingsHit,
+  filterCategoryByModules,
   flattenSettingsGroups,
   groupSettingsCategories,
   isCategoryModuleClosed,
+  isCategoryModuleVisible,
   resolveActiveSettingsCategory,
   resolveSettingsModuleState,
   resolveSettingsRegime,
@@ -60,6 +64,17 @@ export function SettingsSurfacePage({
   const { hasAnyPermission } = useRoleAccess();
   const permitted = visibleSettingsCategories(hasAnyPermission, surface);
 
+  // SATICI GÖRÜNÜMÜ — kapalı modülün satırları YALNIZ burada çizilmeye devam eder
+  // (salt-okunur + bant). Fabrika yöneticisi onları hiç görmez: modüller parayla
+  // satılıyor ve satılmamış bir modülün bayrağı "zaten içinde varmış" diye
+  // okunuyordu. ⚠️ SUPAP: sistem hesabı HİÇ doğmamış bir kurulumda fabrika
+  // yöneticisi satıcı sayılır — yoksa süperadminsiz kurulum, kapattığı modülün
+  // ayarını bir daha hiçbir yerde göremezdi. Aynı yüklem modül anahtarlarının
+  // ekranında da kullanılıyor (tek kaynak `lib/superadmin-gate`).
+  const isSystemAccount = useAuthStore((s) => s.isSystemAccount);
+  const systemAccountExists = useAuthStore((s) => s.systemAccountExists);
+  const vendorView = isSuperadminGateOpen({ isSystemAccount, systemAccountExists });
+
   // ...sonra REJİM ile — ama KATEGORİ bazında, bölüm bazında DEĞİL: fabrikada
   // yalnız "Muhasebe" sekmesi çizilmez, onunla aynı başlığı paylaşan "Depo &
   // Satın Alma" durur (Mal Kabul ekranı rejimden bağımsız çalışıyor, ayarları da
@@ -68,17 +83,24 @@ export function SettingsSurfacePage({
   // açılamazdı (bkz. settings-config `SettingsRegimeKey` gerekçesi).
   const flagsQ = useFeatureFlags();
   const regime = resolveSettingsRegime(flagsQ.data?.data);
-  // ⚠️ MODÜL DURUMU REJİMDEN AYRI OKUNUR ve gruplamaya GİRMEZ: rejim GİZLER,
-  // modül KİLİTLER. `groupSettingsCategories`e geçirilseydi kilit sessizce
-  // gizlemeye dönerdi — kullanıcı ayarın hangi değerde donduğunu göremezdi.
+  // ⚠️ MODÜL DURUMU REJİMDEN AYRI OKUNUR — iki soru, iki kural:
+  //   • rejim  → kategoriyi tümden gizler (`financeEnabled`)
+  //   • modül  → SATIR BAZINDA süzer; kategoriden geriye satır kalmazsa o da
+  //     çizilmez (boş başlık "burada bir şey vardı" der).
+  // Modül süzgeci `groupSettingsCategories`in İÇİNE konmadı: o fonksiyon rejim
+  // gruplamasının tek kaynağıdır ve iki farklı semantiği tek imzada taşımak,
+  // birini diğerinin yerine geçirmeye davettir (2026-09-03 "kilit ≠ gizleme"
+  // karışıklığının kaynağı buydu).
   const modules = resolveSettingsModuleState(flagsQ.data?.data);
+  const moduleVisible = permitted.filter((c) => isCategoryModuleVisible(c, modules, vendorView));
   const groups = useMemo(
-    () => groupSettingsCategories(permitted, regime),
+    () => groupSettingsCategories(moduleVisible, regime),
     // ⚠️ DİZİ ELLE GÜNCELLENİR (exhaustive-deps kapalı): alan eklenip burası
     // güncellenmezse gruplama SESSİZCE bayat kalır ve derleme DÜŞMEZ.
-    // `modules` bilerek YOK — gruplama onu okumuyor (kilit ≠ gizleme).
+    // Modül durumu ayrı bir bağımlılık İSTEMEZ — süzülmüş kimlik listesi onu
+    // zaten kodluyor (modül kapanınca kategori listeden düşer, dize değişir).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [permitted.map((c) => c.id).join(","), regime.productionEnabled, regime.financeEnabled],
+    [moduleVisible.map((c) => c.id).join(","), regime.productionEnabled, regime.financeEnabled],
   );
   const categories = flattenSettingsGroups(groups);
 
@@ -221,6 +243,10 @@ export function SettingsSurfacePage({
         <div className="min-w-0 flex-1 overflow-auto p-6">
           {categories.map((cat) => {
             const Icon = cat.icon;
+            // ⚠️ SÜZÜLMÜŞ DİZİLER GEÇİLİR, bileşende ikinci bir süzgeç YOK:
+            // taslak ve Kaydet gövdesi bu dizilerden türetiliyor — yalnız görsel
+            // saklama, görünmeyen satırı her Kaydet'te PATCH'e yazmaya devam ederdi.
+            const rows = filterCategoryByModules(cat, modules, vendorView);
             return (
               <TabsContent key={cat.id} value={cat.id} className="mt-0 max-w-3xl">
                 {/* Sade başlık + ayraç — sol ray zaten sekmeyi etiketliyor; kart/çifte
@@ -235,10 +261,10 @@ export function SettingsSurfacePage({
 
                 {cat.kind === "flags" && (
                   <FeatureFlagSection
-                    flags={cat.flags ?? []}
-                    numberFlags={cat.numberFlags}
-                    enumFlags={cat.enumFlags}
-                    settingFields={cat.settingFields}
+                    flags={rows.flags}
+                    numberFlags={rows.numberFlags}
+                    enumFlags={rows.enumFlags}
+                    settingFields={rows.settingFields}
                     superadminOnly={cat.superadminOnly}
                     moduleClosed={isCategoryModuleClosed(cat, modules)}
                     moduleLabel={cat.moduleKey ? settingsModuleLabel(cat.moduleKey) : undefined}

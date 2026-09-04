@@ -1,11 +1,15 @@
 // =============================================================================
-// BEKÇİ — MODÜL KİLİDİ (kategori GÖRÜNÜR kalır, satırlar donar)
+// BEKÇİ — MODÜL KİLİDİ (satır DONAR; satıcı görünümü)
 // =============================================================================
 // NEDEN VAR: modül kapalıyken o modüle ait ayar satırlarının düzenlenmesi
-// anlamsızdır (yazılan değerin uygulanacağı bir kayıt yolu yoktur), ama
-// GİZLEMEK yanlış çözümdür — fabrika ayarın hangi değerde donduğunu göremez ve
-// "menüde niye yok" sorusunun cevabı hiçbir yüzeyde yazmaz. `superadminOnly`
-// deseninin birebir ikizi.
+// anlamsızdır (yazılan değerin uygulanacağı bir kayıt yolu yoktur).
+//
+// ⚠️ 2026-09-04 — BU BANDIN İZLEYİCİSİ DEĞİŞTİ: fabrika yöneticisi artık kapalı
+// modülün satırlarını HİÇ GÖRMEZ (görünürlük süzgeci çağırandadır:
+// `SettingsSurfacePage` → `filterCategoryByModules`, bekçisi
+// `flag-modules.test.ts`). Buraya `moduleClosed` ile gelen bir kategori yalnız
+// SATICI görünümünde çizilir; aşağıdaki ölçümler o görünümün sözleşmesidir ve
+// olduğu gibi geçerli kalır (bant + salt-okunur + Kaydet yok).
 //
 // ÖLÇÜLENLER:
 //   §1 Modül KAPALI → toggle yok · modül bandı var · Kaydet çubuğu yok ·

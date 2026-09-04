@@ -60,8 +60,15 @@ export function FeatureFlagSection({
   superadminOnly?: boolean;
   /**
    * Bu kategorinin MODÜLÜ bu kurulumda kapalı → satırlar salt-okunur (bkz.
-   * `SettingsCategory.moduleKey`). Görünürlüğü ETKİLEMEZ: kategori çizilmeye
-   * devam eder ki fabrika ayarın hangi değerde donduğunu görsün.
+   * `SettingsCategory.moduleKey`).
+   *
+   * ⚠️ 2026-09-04 — BU BANDIN İZLEYİCİSİ ARTIK SATICIDIR. Fabrika yöneticisi
+   * kapalı modülün satırlarını hiç görmez: süzgeç ÇAĞIRANDA
+   * (`SettingsSurfacePage` → `filterCategoryByModules`) ve satırı olmayan
+   * kategori hiç çizilmez. Buraya `moduleClosed` ile gelen bir kategori, ancak
+   * satıcı görünümünde (`isSuperadminGateOpen`) çizilir — bant orada "dondu,
+   * Sistem → Modüller'den açılır" der. Bileşen İÇİNDE ikinci bir görünürlük
+   * süzgeci YOK: taslak/Kaydet gövdesi gelen dizilerden türetiliyor.
    */
   moduleClosed?: boolean;
   /** Bandın adıyla söyleyeceği modül ("Ticaret" · "Üretim" …). */

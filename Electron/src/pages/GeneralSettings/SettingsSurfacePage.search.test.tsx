@@ -214,13 +214,16 @@ describe("Özellik Anahtarları — rejim kapısı ekranda", () => {
     try {
       renderWithProviders(<FeatureFlagsPage />);
       expect(screen.queryByRole("tab", { name: /^Muhasebe$/i })).not.toBeInTheDocument();
-      // ⭐ Mal Kabul'ün ayarları ön muhasebe rejimiyle GİZLENMEZ. 2026-09-03'te
-      // kategoriye TİCARET KİLİDİ eklendi (`moduleKey`) ama kilit gizleme
-      // DEĞİLDİR: sekme her rejimde çizilmeye devam eder. (Etiket aynı turda
-      // "Depo & Satın Alma" → "Mal Kabul & Alış" oldu; iplik satırı kendi
-      // kategorisine ayrıldı, çünkü tek `moduleKey` iki modülü anlatamaz.)
-      expect(screen.getByRole("tab", { name: /Mal Kabul & Alış/i })).toBeInTheDocument();
-      expect(screen.getByRole("tab", { name: /^İplik$/i })).toBeInTheDocument();
+      // ⭐ 2026-09-04 — KURAL DEĞİŞTİ: "Mal Kabul & Alış" ve "İplik" sekmeleri
+      // artık ÖN MUHASEBE rejimi yüzünden değil, KENDİ MODÜLLERİ (ticaret ·
+      // iplik) bu kurulumda kapalı olduğu için çizilmiyor. Bu mock'ta ikisi de
+      // tanımsız → kapalı. Modüller parayla satılıyor; satılmamış modülün
+      // bayrağı fabrika yöneticisine "zaten içinde varmış" diye okunuyordu.
+      // Geri dönüş yolu KAPANMADI: anahtarlar Sistem → Modüller ekranında ve
+      // satıcı görünümünde satırlar çizilmeye devam ediyor
+      // (`flag-modules.test.ts` ikisini de ölçer).
+      expect(screen.queryByRole("tab", { name: /Mal Kabul & Alış/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: /^İplik$/i })).not.toBeInTheDocument();
       // Rejim anahtarlarının kendisi her zaman ulaşılabilir (geri açma yolu).
       expect(screen.getByRole("tab", { name: /^Müşteriler$/i })).toBeInTheDocument();
     } finally {

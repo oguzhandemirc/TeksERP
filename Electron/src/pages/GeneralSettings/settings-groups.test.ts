@@ -132,11 +132,12 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
     }
   });
 
-  // ⭐ Mal Kabul'ün ayarları HER REJİMDE ulaşılabilir. Ekranın kapısı
-  // `financeEnabled` DEĞİLDİR (2026-09-02'den beri `requireTicaretEnabled`) ve
-  // enforcement koşuyor; gizlenirlerse "açtım, kapatamıyorum" çıkmazı doğar.
-  // 2026-09-03'te kategoriye TİCARET KİLİDİ (`moduleKey`) eklendi — kilit
-  // GİZLEME DEĞİLDİR, bu yüzden aşağıdaki iddia aynen geçerli kalır.
+  // ⭐ Mal Kabul'ün ayarları REJİMDEN bağımsızdır: ekranın kapısı `financeEnabled`
+  // DEĞİLDİR (2026-09-02'den beri `requireTicaretEnabled`). Ölçülen şey burada
+  // YALNIZ rejim gruplamasıdır — modül süzgeci ayrı bir yüklemdir
+  // (`isCategoryModuleVisible`) ve 2026-09-04'ten beri TİCARET KAPALIYKEN bu
+  // kategoriyi fabrika görünümünden düşürür; aşağıdaki iddia o yüzden
+  // `groupSettingsCategories` hakkındadır, ekranın tamamı hakkında değil.
   it("depo/satın alma kategorisi rejimden BAĞIMSIZ (kapatılamaz ayar çıkmazı)", () => {
     const warehouse = SETTINGS_CATEGORIES.find((c) => c.id === "warehouse");
     expect(warehouse?.regime).toBeUndefined();
@@ -164,13 +165,18 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
   });
 
   // ===========================================================================
-  // ⭐ MODÜL KİLİDİ — GİZLEMEZ (2026-09-03, P5)
+  // ⭐ MODÜL KİLİDİ — YAZMA KAPISI (görünürlük ayrı yüklemdedir)
   // ===========================================================================
-  // `regime` GİZLER, `moduleKey` KİLİTLER. İkisi karışırsa arıza şudur: modül
-  // kapalı bir kurulumda kategori hiç çizilmez, kullanıcı ayarın hangi değerde
-  // donduğunu göremez ve modülü açtığında da geri gelene kadar bunu hiçbir
-  // yerde okuyamaz. Aşağıdaki üç kontrol o karışmayı imkânsız kılar.
-  it("⭐ moduleKey taşıyan kategori HER modül durumunda GÖRÜNÜR (kilit ≠ gizleme)", () => {
+  // 2026-09-03'te (P5) buradaki kural "kilit ≠ gizleme" idi ve tek gerekçesi
+  // "gizlersen geri dönüş yolu kalmaz" olmuştu. 2026-09-04'te modül anahtarları
+  // KENDİ ekranına taşındı (Sistem → Modüller) → gerekçe çürüdü ve kullanıcı
+  // kararıyla GİZLEME devreye girdi (modüller parayla satılıyor). Ayrım şudur:
+  //   • `moduleKey`               → YAZMA kilidi + bant (satıcı görünümü)
+  //   • `isCategoryModuleVisible` → GÖRÜNÜRLÜK (fabrika görünümü, satır bazlı)
+  // Aşağıdaki kontrol `groupSettingsCategories`in modül durumunu HÂLÂ OKUMADIĞINI
+  // ölçer: iki semantiği tek fonksiyona koymak, 2026-09-03'te birini diğerinin
+  // yerine geçirmişti. Ekran süzgeci `flag-modules.test.ts`te ölçülür.
+  it("⭐ groupSettingsCategories modül durumunu OKUMAZ (yalnız rejim gruplar)", () => {
     const locked = SETTINGS_CATEGORIES.filter((c) => c.moduleKey);
     // Zemin: liste boşalırsa "ihlal yok" ile "hiçbir şeye bakmadım" aynı yeşile
     // çıkardı.

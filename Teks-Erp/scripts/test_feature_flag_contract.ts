@@ -1073,10 +1073,18 @@ async function main() {
   // ---------------------------------------------------------------------------
   // ⚠️ §14'ÜN SIZINTI TARAMASI BURAYA UYGULANMAZ ve bu bilinçlidir. O tarama
   // "gizlenen ayarın enforcement'ı gerçekten ulaşılamaz mı" diye sorar; kilit
-  // ise hiçbir şeyi ulaşılamaz YAPMAZ — kategori görünür kalır, yalnız satırlar
-  // salt-okunur çizilir. Aynı yüklemi kilide uygulamak, panelde hiçbir modül
-  // kilidinin kurulamaması demekti (üretim/ticaret satırlarının enforcement'ı
-  // rejimsiz yollardan da koşuyor; somut zincirler §14'ün ölçümünde duruyor).
+  // ise hiçbir şeyi ulaşılamaz YAPMAZ — satır salt-okunur çizilir. Aynı yüklemi
+  // kilide uygulamak, panelde hiçbir modül kilidinin kurulamaması demekti
+  // (üretim/ticaret satırlarının enforcement'ı rejimsiz yollardan da koşuyor;
+  // somut zincirler §14'ün ölçümünde duruyor).
+  //
+  // ⚠️ 2026-09-04 — PANELDE GÖRÜNÜRLÜK ARTIK BU ALANDAN TÜRÜMÜYOR: kapalı
+  // modülün SATIRLARI fabrika görünümünde hiç çizilmiyor (tek kaynak
+  // `Electron/.../flag-modules.ts`, bekçisi `flag-modules.test.ts`) ve satırı
+  // kalmayan kategori de düşüyor. `moduleKey` yalnız YAZMA kilidinin + bandın
+  // kaynağı olarak kaldı; aşağıdaki üç kontrolün ölçtüğü şey değişmedi.
+  // ⚠️ Ayarın DEĞERİ hâlâ okunabilir kalıyor (satıcı görünümü + Sistem →
+  // Modüller ekranı) — "gizlemek geri dönüşü kapatır" itirazı o yüzden düştü.
   //
   // §14b ÜÇ ŞEY ölçer:
   //   ① `moduleKey` değeri REGIME_GATES anahtarlarından biri — yazım hatası

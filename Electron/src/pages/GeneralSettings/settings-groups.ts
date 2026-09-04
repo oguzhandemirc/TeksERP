@@ -13,8 +13,13 @@
 // =============================================================================
 
 import { MODULE_LABELS } from "@/lib/module-flags";
+import { flagOwnerModule } from "./flag-modules";
 import {
   SETTINGS_SECTIONS,
+  type EnumFlagDef,
+  type FlagDef,
+  type NumberFlagDef,
+  type SettingFieldDef,
   type SettingsCategory,
   type SettingsModuleKey,
   type SettingsSection,
@@ -128,6 +133,108 @@ export function isCategoryModuleClosed(
 /** Kilit bandında geçen Türkçe modül adı (backend `MODULE_LABELS` aynası). */
 export function settingsModuleLabel(key: SettingsModuleKey): string {
   return MODULE_LABELS[key];
+}
+
+// -----------------------------------------------------------------------------
+// MODÜL AİDİYETİ — SATIŞ SINIRI (2026-09-04): KAPALI MODÜLÜN SATIRI ÇİZİLMEZ
+// -----------------------------------------------------------------------------
+// Kullanıcı kararı: "biz bu programın modüllerini parayla satacağız, fabrika
+// sahibinin 'bu modül zaten içinde varmış' demesini istemiyoruz." Somut vaka:
+// `iplik.enabled` kapalıyken İplik sekmesi ve satırı duruyordu.
+//
+// ⚠️ 2026-09-03'ün (P5) "kilit ≠ gizleme" KARARI BU YÜZEYDE DEĞİŞTİ ve gerekçesi
+// ölçülmüş bir değişiklikle çürüdü: o gün gizlemeye karşı tek argüman "modülü
+// kapatınca ayara bir daha ULAŞILAMAZ, geri dönüş yolu kalmaz" idi. 2026-09-04'te
+// modül anahtarları KENDİ EKRANINA taşındı (Sistem → Modüller, `surface: "vendor"`)
+// ve o ekran bu kuraldan ETKİLENMEZ — yani geri dönüş yolu artık başka bir
+// sayfada duruyor. Kilit BANDI kalkmadı: satıcı görünümünde satır hâlâ çizilir,
+// salt-okunur + bantlıdır (`isCategoryModuleClosed`).
+//
+// ⚠️ İKİ AYRI SORU, KARIŞTIRMA:
+//   • `isCategoryModuleClosed` → "bu kategorinin satırları DONDU mu" (yazma)
+//   • buradaki yüklemler        → "bu satır/kategori ÇİZİLİR mi" (görünürlük)
+//
+// ⚠️ SATICI (süperadmin) HER ŞEYİ GÖRÜR ve bu load-bearing'dir: kapalı modülün
+// bayrağını hiç kimse göremeseydi, modül yeniden açılana kadar o ayarın değeri
+// hiçbir yüzeyde okunamazdı. Aynı supap modül anahtarlarının ekranında da var
+// (`isSuperadminGateOpen` — sistem hesabı HİÇ doğmamışsa fabrika yöneticisi
+// satıcı sayılır, yoksa süperadminsiz kurulum kendi modüllerine kilitlenirdi).
+
+/**
+ * Bu ayar satırı çizilsin mi?
+ *
+ * `vendorView` = `isSuperadminGateOpen(...)` — satıcı görünümünde HİÇBİR satır
+ * modül yüzünden gizlenmez.
+ */
+export function isSettingRowModuleVisible(
+  rowKey: string,
+  modules: SettingsModuleState,
+  vendorView: boolean,
+): boolean {
+  if (vendorView) return true;
+  const owner = flagOwnerModule(rowKey);
+  // Çekirdek (ya da anahtarı henüz doğmamış `planlanan:*`) satır → her zaman.
+  if (!owner) return true;
+  return modules[owner];
+}
+
+/** Bir kategorinin modül süzgecinden geçen satırları. */
+export interface ModuleFilteredRows {
+  flags: FlagDef[];
+  numberFlags: NumberFlagDef[];
+  enumFlags: EnumFlagDef[];
+  settingFields: SettingFieldDef[];
+  /** Toplam çizilecek satır — 0 ise kategori hiç çizilmez. */
+  rowCount: number;
+}
+
+/**
+ * Kategoriyi modül süzgecinden geçirir.
+ *
+ * ⚠️ SÜZÜLMÜŞ DİZİLER `FeatureFlagSection`A OLDUĞU GİBİ GEÇER — bileşen içinde
+ * ikinci bir süzgeç YOK. Sebep: taslak/Kaydet gövdesi `flags` dizisinden
+ * türetilir; satırı yalnız GÖRSEL olarak saklasaydık kapalı modülün bayrağı her
+ * Kaydet'te PATCH gövdesine kendi değeriyle yazılmaya devam ederdi (görünmeyen
+ * bir satırı yazan ekran).
+ */
+export function filterCategoryByModules(
+  category: SettingsCategory,
+  modules: SettingsModuleState,
+  vendorView: boolean,
+): ModuleFilteredRows {
+  const göster = (key: string) => isSettingRowModuleVisible(key, modules, vendorView);
+  const flags = (category.flags ?? []).filter((f) => göster(f.key));
+  const numberFlags = (category.numberFlags ?? []).filter((f) => göster(f.key));
+  const enumFlags = (category.enumFlags ?? []).filter((f) => göster(f.enumKey));
+  const settingFields = (category.settingFields ?? []).filter((f) => göster(f.key));
+  return {
+    flags,
+    numberFlags,
+    enumFlags,
+    settingFields,
+    rowCount: flags.length + numberFlags.length + enumFlags.length + settingFields.length,
+  };
+}
+
+/**
+ * Kategori çizilsin mi?
+ *
+ * ⚠️ KATEGORİ, SATIRLARINDAN TÜRETİLİR — `moduleKey` alanından DEĞİL. Karma
+ * kategori (bir kısmı çekirdek, bir kısmı modüle ait) bugün var: "Üretim — Saha"
+ * sekmesinin KK1/Tambur satırları üretime, Fason satırları henüz anahtarı olmayan
+ * `planlanan:fason`a ait. `moduleKey`e bakılsaydı ya kategori tümden kaybolur
+ * (çekirdek satırlar ulaşılamaz) ya da hiç gizlenmezdi.
+ *
+ * ⚠️ YALNIZ `kind === "flags"` süzülür: cihaz/oturum/şirket/etiket bölümleri
+ * satır listesi taşımaz, boş sayılıp yok olurlardı.
+ */
+export function isCategoryModuleVisible(
+  category: SettingsCategory,
+  modules: SettingsModuleState,
+  vendorView: boolean,
+): boolean {
+  if (category.kind !== "flags") return true;
+  return filterCategoryByModules(category, modules, vendorView).rowCount > 0;
 }
 
 export interface SettingsSectionGroup {

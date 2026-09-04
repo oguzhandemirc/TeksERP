@@ -416,13 +416,17 @@ export interface SettingsCategory {
    * Bu kategorinin satırlarını KİLİTLEYEN modül anahtarı (2026-09-03, P5).
    *
    * ⚠️ `regime`in İKİZİ DEĞİL, `superadminOnly`nin ikizidir:
-   *   · `regime`        → kategoriyi GİZLER (hiç çizilmez)
-   *   · `moduleKey`     → kategori GÖRÜNÜR kalır, satırlar salt-okunur + bant
+   *   · `regime`        → kategoriyi GİZLER (hiç çizilmez, herkese)
+   *   · `moduleKey`     → satırlar salt-okunur + bant (SATICI görünümünde)
    *   · `superadminOnly`→ aynı kilit, sebebi KİMLİK
-   * Modül kapalıyken gizlemek REDDEDİLDİ: fabrika hangi ayarın hangi değerde
-   * DONDUĞUNU görebilmeli, ve daha önemlisi "açtım, kapatamıyorum" çıkmazının
-   * ikizi burada doğardı — gizlenen bir kategori, modül yeniden açıldığında
-   * geri gelene kadar hiçbir yerde YAZMAZ.
+   *
+   * ⚠️ 2026-09-04 — GÖRÜNÜRLÜK ARTIK SATIRDAN TÜRÜYOR, BU ALANDAN DEĞİL. Kapalı
+   * modülün satırları fabrika yöneticisine hiç çizilmez (`flag-modules.ts` →
+   * `filterCategoryByModules`) ve kategoriden geriye satır kalmazsa sekme de
+   * düşer. Bu alan kilidin (yazma + bant) kaynağı olarak KALDI; iki soru ayrı
+   * kaldığı için karma kategori (çekirdek + modül satırı bir arada) hâlâ
+   * mümkün. P5'in "gizlemek geri dönüşü kapatır" itirazı, modül anahtarları
+   * kendi ekranına (Sistem → Modüller) taşındığı gün geçersizleşti.
    *
    * ⚠️ NEDEN `SettingsRegimeKey` GENİŞLETİLMEDİ: o union GİZLEME kapısıdır ve
    * `test_feature_flag_contract §14` onu ÖLÇER — üretim/ticaret/depo
