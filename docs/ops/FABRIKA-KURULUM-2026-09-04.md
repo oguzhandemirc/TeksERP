@@ -34,7 +34,6 @@ tabletler, gömülü adresler, ağa ilan — hepsi olduğu gibi çalışmaya dev
 | `istemciler/` | **Panel setup + tablet APK — bu turda ZORUNLU**, `istemciler/OKU.md` |
 | `FABRIKA-KURULUM-2026-09-04.md` | Bu dosya |
 | `SUNUCU-CLAUDE-DEVIR-2026-09-04.md` | Sunucuda Claude oturumu açılacaksa **ona ilk okutulacak** |
-| `olcum-musteri-adi.sql` | İsteğe bağlı — "müşterideki ürün adı" kapsam ölçümü (**salt okunur**) |
 
 Bu klasörde başka doküman **bilerek yok**: sıfırdan-fabrika-kurma runbook'u ve
 yan-yana modelin genel referansı bu işle çelişen adımlar içeriyordu (farklı port,
