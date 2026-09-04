@@ -30,6 +30,12 @@ devam edecek. Bunun iki sonucu var, ikisi de aşağıda "Yarın" bölümünde.
 | `ecosystem.yan-yana.js` | **Hazır yapılandırma** — port 5000 + ilan kapalı + ayrı pm2 adı |
 | `FABRIKA-KURULUM-2026-09-04.md` | Bu dosya |
 
+İsteğe bağlı:
+- `olcum-musteri-adi.sql` — "müşterideki ürün adı" kapsam ölçümü (**salt okunur**,
+  hiçbir şey yazmaz). Bayrağı hangi değerde açacağınıza karar vermek için:
+  `psql -U tekserp -d tekserp_yeni -f olcum-musteri-adi.sql`
+- `uzak-erisim/` — Cloudflare tüneli. Kuruluma bağlı DEĞİL, sonraya bırakılabilir.
+
 Yalnız bir şey ters giderse: `KURULUM.md` (tam referans) ·
 `YAN-YANA-KURULUM.md` (yan yana modelin gerekçeleri).
 
