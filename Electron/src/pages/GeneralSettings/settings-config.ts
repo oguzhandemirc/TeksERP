@@ -8,7 +8,10 @@ import {
   Factory,
   Truck,
   TabletSmartphone,
-  Monitor,
+  Printer,
+  Scale,
+  ScanLine,
+  Server,
   Clock,
   Tags,
   Layers,
@@ -24,6 +27,7 @@ import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
   SHIPPING_INVOICE_MODE_OPTIONS,
 } from "@/lib/shipping-flags";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 
 /** FeatureFlags'in yalnızca BOOLEAN değerli anahtarları (toggle edilebilenler).
  *  travelerCardConfig gibi nesne ayarları bu listeden hariçtir — kendi paneli var. */
@@ -207,15 +211,26 @@ export interface SettingFieldDef {
 
 /**
  * Kategori içeriğinin nasıl render edileceği:
- * - `flags`       → config'teki flag listesini generic toggle olarak çizer
- * - `device`      → mobil cihaz eşleştirme/onay (org düzeyi) özel section
- * - `workstation` → BU BİLGİSAYARA özel yerel ayarlar: etiket yazıcısı + kantar + sunucu adresi
- * - `session`     → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
+ * - `flags`     → config'teki flag listesini generic toggle olarak çizer
+ * - `device`    → mobil cihaz eşleştirme/onay (org düzeyi) özel section
+ * - `session`   → oturum süresi + hareketsizlik zaman aşımı (sayısal) özel section
+ * - `printer` / `scale` / `scanner` / `server` → BU BİLGİSAYARA özel yerel donanım
+ *
+ * ⚠️ TEK BİR `workstation` KİNDİ VARDI VE İÇİNDE DÖRT ALT SEKME ÇİZİYORDU
+ * (2026-09-04'te kaldırıldı, kullanıcı kararı: "bu bilgisayardaki yazıcı, kantar,
+ * sunucu vb bunları ayır; bir menü altında ayrı sekmeler olmasın, genel ayarlar
+ * içinde yandaki menüde yapabilirsin"). İç içe sekme İKİ ayrı kirli-taslak
+ * guard'ı, İKİ ayrı gezinme yüzeyi ve ADRESSİZ bir alt seçim demekti: `?tab=system`
+ * hangi cihazın açılacağını söylemiyordu, yani palet/derin bağlantı yazıcıya
+ * gidemiyordu. Dört ayrı kategori bu üçünü birden çözer — ray zaten bir menüdür.
  */
 export type CategoryKind =
   | "flags"
   | "device"
-  | "workstation"
+  | "printer"
+  | "scale"
+  | "scanner"
+  | "server"
   | "company"
   | "session"
   | "label";
@@ -249,6 +264,7 @@ export type SettingsSectionId =
   | "production"
   | "trade"
   | "printing"
+  | "workstation"
   | "system"
   | "demo";
 
@@ -292,6 +308,7 @@ export const SECTION_SURFACE: Record<SettingsSectionId, SettingsSurface> = {
   production: "flags",
   trade: "flags",
   printing: "settings",
+  workstation: "settings",
   system: "settings",
 };
 
@@ -389,6 +406,13 @@ export const SETTINGS_SECTIONS: SettingsSection[] = [
   { id: "production", label: "Üretim & Kalite" },
   { id: "trade", label: "Depo & Muhasebe" },
   { id: "printing", label: "Baskı & Cihazlar" },
+  // ⚠️ AYRI BÖLÜM, `printing` DEĞİL: buradaki dört kategori SUNUCUYA HİÇBİR ŞEY
+  // YAZMAZ (yerel `machine-config` + `localStorage`) ve tek makineyi etkiler; o
+  // yüzden dar izinle (`settings:workstation`) de görülebilirler. "Baskı &
+  // Cihazlar" başlığının altına konsalardı ray, org-geneli "Etiket Baskısı" ile
+  // yerel "Yazıcı"yı aynı kümede gösterir ve dar izinli personel yalnız bir
+  // kısmını görünce başlık yalan söylerdi.
+  { id: "workstation", label: "Bu Bilgisayar" },
   { id: "system", label: "Sistem" },
   // ⚠️ AYRI BÖLÜM, `modules` DEĞİL: `modules` rejim anahtarlarının (`SettingsRegimeKey`)
   // evidir ve oraya konsaydı `demoModeEnabled` de bir rejim anahtarı sanılırdı.
@@ -451,6 +475,21 @@ export interface SettingsCategory {
    * (izin unutulursa kategori gizlenir; ters kurgu sistem ayarını sızdırırdı).
    */
   permissionAny?: string[];
+  /**
+   * YALNIZ masaüstü (Electron) kurulumunda çizilir.
+   *
+   * ⚠️ İZİN DEĞİL ORTAM kapısıdır ve `visibleSettingsCategories` içinde durur —
+   * yani sayfa İLE komut paleti AYNI listeyi görür. Sayfada gizlenip palette
+   * bırakılsaydı web kullanıcısı Ctrl+K'dan "Sunucu Adresi"ni bulur, tıklar ve
+   * sessizce ilk sekmeye düşerdi (`?tab=` çözülemeyen kategoriye düşer).
+   *
+   * ⚠️ Donanım kategorileri (yazıcı/kantar/tabanca) bunu TAŞIMAZ: kendi
+   * `window.api?.<domain>` kontrolleriyle "yalnız masaüstünde" mesajı basarlar
+   * (bkz. `lib/runtime-env` — domain bazlı degrade, toptan gizleme değil). Tek
+   * istisna sunucu adresi: web'de API sayfanın origin'idir ve runtime ezmesi
+   * kullanıcıyı kendi açamayacağı yanlış adrese kilitler.
+   */
+  desktopOnly?: boolean;
   /**
    * Bu kategorinin satırlarını YALNIZ satıcı (süperadmin) hesabı yazabilir;
    * fabrika yöneticisi kategoriyi GÖRÜR ama salt-okunur çizilir + bant.
@@ -1196,23 +1235,72 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     kind: "device",
     section: "printing",
   },
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BU BİLGİSAYAR — dört YEREL kategori (2026-09-04: alt sekmeler raya taşındı)
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Dördünün ORTAK ölçütü: sunucuya HİÇBİR ŞEY yazmazlar. Yazıcı/kantar/tabanca
+  // `machine-config` taslağına (`useDeviceDraft`), sunucu adresi `localStorage`a
+  // yazar; etkisi tek makineyle sınırlıdır. Bu yüzden dördü de dar izinle
+  // (`settings:workstation`) görülebilir ve dördü de aynı kapıyı TAŞIMAK
+  // ZORUNDA — biri unutulursa yerel donanımını kuran personel o kategoriyi
+  // göremez ve `admin:settings` istemek zorunda kalır. Bekçi ölçüyor.
+  //
+  // ⚠️ Org-geneli "Etiket Baskısı" (`label`) ve "Cihazlar" (`devices`) BU KÜMEDE
+  // DEĞİL: onlar sunucuya yazar (`admin:settings`), yalnız adları benziyor.
   {
-    // id "system" tarihsel — komut paleti/derin linkler ?tab=system ile gelir, kırmayalım.
-    id: "system",
-    label: "Bu Bilgisayar",
-    icon: Monitor,
+    // ⚠️ id "printer" — eski `?tab=system` derin bağlantısı buraya YÖNLENİR
+    // (`SETTINGS_TAB_ALIASES`). Kimliği "system" bırakmak, dört kategoriden
+    // birine tarihsel bir ad yapıştırmak olurdu.
+    id: "printer",
+    label: "Yazıcı",
+    icon: Printer,
     description:
-      "Bu bilgisayara özel yerel donanım: etiket yazıcısı (seri/CUPS), sevkiyat kantarı, barkod tabancası ve sunucu adresi.",
+      "Bu bilgisayara bağlı etiket yazıcısı: taşıma (Windows kuyruğu / seri / CUPS), hedef ve diyalogsuz doğrudan baskı.",
     keywords:
-      "yazıcı etiket yazıcısı printer com cups kuyruk seri baud diyalogsuz doğrudan baskı cihaz kaydı " +
-      "kantar tartı scale sunucu adresi API backend bağlantı url endpoint bu bilgisayar yerel workstation " +
-      "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab hassasiyet test",
-    kind: "workstation",
-    section: "printing",
-    // Tek "geniş olmayan" kategori: yerel donanımını kendisi kuran personel
-    // `settings:workstation` ile YALNIZ bu sekmeyi görür (sayfadaki diğer
-    // kategoriler listeye bile girmez).
+      "yazıcı etiket yazıcısı printer com cups kuyruk seri baud winspool raw passthrough diyalogsuz doğrudan baskı " +
+      "argox bixolon zpl ppla pplb usb bu bilgisayar yerel workstation cihaz kaydı",
+    kind: "printer",
+    section: "workstation",
     permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
+  },
+  {
+    id: "scale",
+    label: "Kantar",
+    icon: Scale,
+    description:
+      "Bu bilgisayara bağlı sevkiyat kantarı (seri/COM) — çuval tartma ekranı buradaki tanımı okur.",
+    keywords:
+      "kantar tartı scale terazi seri com baud ağırlık kg tart deneme tartısı sevkiyat çuval bu bilgisayar yerel workstation",
+    kind: "scale",
+    section: "workstation",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
+  },
+  {
+    id: "scanner",
+    label: "Tabanca",
+    icon: ScanLine,
+    description:
+      "Barkod tabancası: “her yerde okut” davranışı, terminatör ve burst tespiti hassasiyeti.",
+    keywords:
+      "barkod qr tabanca okuyucu scanner wedge klavye usb bluetooth her yerde okut terminator enter tab " +
+      "hassasiyet burst test bu bilgisayar yerel workstation",
+    kind: "scanner",
+    section: "workstation",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
+  },
+  {
+    id: "server",
+    label: "Sunucu Adresi",
+    icon: Server,
+    description: "Uygulamanın bağlandığı backend (API) adresi — bu bilgisayara özeldir.",
+    keywords:
+      "sunucu adresi API backend bağlantı url endpoint ip port host adres bu bilgisayar yerel workstation",
+    kind: "server",
+    section: "workstation",
+    permissionAny: [SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION],
+    // Web'de API sayfanın origin'idir; runtime ezmesi kullanıcının kendi
+    // açamayacağı yanlış bir adrese kilitler (bkz. `desktopOnly` gerekçesi).
+    desktopOnly: true,
   },
   {
     id: "company",
@@ -1288,6 +1376,25 @@ export function settingsCategoryPath(cat: SettingsCategory): string {
 }
 
 /**
+ * "Bu Bilgisayar" bölümüne giren kategoriler — YEREL, sunucuya yazmayan ayarlar.
+ * Dar izin (`settings:workstation`) ve hub kartının hedefi buradan okunur.
+ */
+export const WORKSTATION_SECTION: SettingsSectionId = "workstation";
+
+/**
+ * Bölümün İLK kategorisi — "Bu Bilgisayar" kartı/kısayolu buraya götürür.
+ *
+ * ⚠️ SABİT KİMLİK YAZILMAZ, SIRADAN TÜRETİLİR: ray sırası değiştiğinde kart
+ * kullanıcıyı hâlâ o bölümün ilk sekmesine götürür. Elle yazılsaydı bir gün
+ * "Yazıcı" bölümden çıkar, kart ölü bir `?tab=` taşır ve sayfa SESSİZCE ilk
+ * sekmeye düşerdi.
+ */
+export function workstationEntryPath(): string {
+  const first = SETTINGS_CATEGORIES.find((c) => c.section === WORKSTATION_SECTION);
+  return first ? settingsCategoryPath(first) : SURFACE_PATH.settings;
+}
+
+/**
  * Kullanıcının izinlerine göre görünen kategoriler (sayfa + komut paleti ORTAK).
  *
  * `surface` verilirse YALNIZ o ekranın kategorileri döner. Vermemek "tüm
@@ -1297,10 +1404,31 @@ export function settingsCategoryPath(cat: SettingsCategory): string {
 export function visibleSettingsCategories(
   hasAnyPermission: (perms: string[]) => boolean,
   surface?: SettingsSurface,
+  /** Masaüstü mü? Varsayılan CANLI ortam; testler açıkça verir. */
+  isDesktop: boolean = IS_ELECTRON,
 ): SettingsCategory[] {
   return SETTINGS_CATEGORIES.filter(
     (cat) =>
       (surface === undefined || categorySurface(cat) === surface) &&
+      (isDesktop || !cat.desktopOnly) &&
       hasAnyPermission(cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION]),
   );
 }
+
+/**
+ * ESKİ `?tab=` KİMLİKLERİ → bugünkü kategori.
+ *
+ * ⚠️ SESSİZ DÜŞÜŞÜN TEK PANZEHİRİ. `resolveActiveSettingsCategory` tanımadığı
+ * bir `?tab=` değerinde İLK kategoriye düşer ve sebebini hiçbir yerde yazmaz;
+ * yani eski bir yer imi / kayıtlı bağlantı / dış doküman `?tab=system` derse
+ * kullanıcı "Yazıcı" yerine listedeki ilk sekmeyi görür ve bunun bir yönlendirme
+ * olduğunu anlamaz. Kimlik değiştiren HER kategori buraya bir satır bırakır.
+ *
+ * ⚠️ HEDEF, KATALOGDA GERÇEKTEN VAR OLMAK ZORUNDA (bekçi ölçüyor): silinmiş bir
+ * kimliğe yönlendiren takma ad, düzeltmek istediği sessiz düşüşün aynısını üretir.
+ */
+export const SETTINGS_TAB_ALIASES: Readonly<Record<string, string>> = {
+  // 2026-09-04: "Bu Bilgisayar" tek sekmeydi, dört kategoriye ayrıldı; ilk
+  // cihazı (yazıcı) açmak, eski sekmenin varsayılan alt sekmesiyle aynı yerdir.
+  system: "printer",
+};

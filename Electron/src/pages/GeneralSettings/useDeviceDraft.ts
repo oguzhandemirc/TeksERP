@@ -5,7 +5,7 @@ import type { MachineConfig } from "@/lib/machine-config";
 type DeviceKey = "scaleDevice" | "labelPrinter" | "scanner";
 
 /**
- * "Bu Bilgisayar" cihaz alt-sekmeleri için TASLAK sarmalayıcı. useMachineConfig
+ * "Bu Bilgisayar" bölümündeki cihaz kategorileri için TASLAK sarmalayıcı. useMachineConfig
  * her değişikliği anında yerel depoya yazar; bu hook değişiklikleri yerel taslakta
  * biriktirir ve yalnız `save()`'te commit eder (setConfig). Tara/Test aksiyonları
  * taslak değerini okur → önce dene, sonra kaydet (yarım/yanlış değer yazılmaz).

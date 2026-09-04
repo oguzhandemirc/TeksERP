@@ -321,9 +321,11 @@ describe("⭐ rejim kapısı — anahtarın kendisi asla kapının arkasında ol
   });
 
   it("izinle daralmış listede yalnız kalan kategorinin bölümü çizilir", () => {
-    const only = SETTINGS_CATEGORIES.filter((c) => c.id === "system");
+    // `settings:workstation` taşıyan (ama `admin:settings` taşımayan) personelin
+    // gördüğü liste: yalnız "Bu Bilgisayar" bölümünün kategorileri.
+    const only = SETTINGS_CATEGORIES.filter((c) => c.section === "workstation");
     const groups = groupSettingsCategories(only, BOTH);
-    expect(groups.map((g) => g.section.id)).toEqual(["printing"]);
+    expect(groups.map((g) => g.section.id)).toEqual(["workstation"]);
   });
 });
 
@@ -490,7 +492,7 @@ describe("arama — saf fonksiyon", () => {
   });
 
   it("arama izinle süzülmüş listeye uygulanır (görünmeyen kategori sonuçta çıkmaz)", () => {
-    const narrow: SettingsCategory[] = SETTINGS_CATEGORIES.filter((c) => c.id === "system");
+    const narrow: SettingsCategory[] = SETTINGS_CATEGORIES.filter((c) => c.id === "printer");
     const hits = searchSettings(narrow, "muhasebe");
     expect(hits).toEqual([]);
   });

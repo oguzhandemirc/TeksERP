@@ -186,7 +186,7 @@ export function PeripheralDeviceFormDialog({ open, onOpenChange, initial, onSubm
                 return (
                   <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
                     USB cihazda adres gerekmez — hangi bilgisayardan kullanılacaksa
-                    kuyruk/port orada seçilir (Genel Ayarlar → Bu Bilgisayar).
+                    kuyruk/port orada seçilir (Genel Ayarlar → Bu Bilgisayar → Yazıcı).
                   </p>
                 );
               }

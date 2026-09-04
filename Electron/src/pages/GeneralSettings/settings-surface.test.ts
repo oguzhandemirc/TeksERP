@@ -26,7 +26,7 @@
 // ⚠️ KÖRLÜK ZEMİNİ ÖNCE: bir refactor kategori listesini boşaltırsa "ihlal
 // bulunamadı" ile "hiçbir şeye bakmadım" AYNI YEŞİLE çıkardı.
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
@@ -90,12 +90,17 @@ describe("§1 üç yüzeyin dağılımı", () => {
   });
 
   it("“geri kalanlar durabilir” — Genel Ayarlar'da kalanlar", () => {
+    // ⚠️ 2026-09-04 (2. tur): tek "system" kategorisi (iç içe cihaz sekmeleri)
+    // DÖRDE ayrıldı — yazıcı · kantar · tabanca · sunucu adresi.
     expect(idsOf("settings")).toEqual([
       "company",
       "devices",
       "label",
+      "printer",
+      "scale",
+      "scanner",
+      "server",
       "session",
-      "system",
     ]);
   });
 
@@ -197,10 +202,16 @@ describe("§4 karolar — üç ayrı yer", () => {
     expect(block).toContain("WORKSTATION_PERMISSION");
   });
 
-  it("Güncelleme artık “Bu Bilgisayar” sekmelerinde DEĞİL (iki yer = iki gerçek)", () => {
-    const ws = readFileSync(resolve(__dirname, "WorkstationTabs.tsx"), "utf8");
-    expect(ws).not.toContain('id: "update"');
-    expect(ws).not.toContain("UpdateSection");
+  it("Güncelleme artık ayar kategorilerinde DEĞİL (iki yer = iki gerçek)", () => {
+    // ⚠️ Ölçüm dosyası DEĞİŞTİ: `WorkstationTabs.tsx` 2026-09-04'te silindi (dört
+    // cihaz kategorisi raya taşındı). Kural aynı: güncelleme denetimi TEK yerde
+    // (Sistem → Güncelleme) yaşar; ayar kabuğu `UpdateSection`ı çizmez.
+    const shell = readFileSync(resolve(__dirname, "SettingsSurfacePage.tsx"), "utf8");
+    expect(shell).not.toContain("UpdateSection");
+    expect(SETTINGS_CATEGORIES.map((c) => c.id)).not.toContain("update");
+    // Silinen dosya geri gelmesin: iç içe sekme kabuğu, iki ayrı kirli-taslak
+    // guard'ı demekti.
+    expect(existsSync(resolve(__dirname, "WorkstationTabs.tsx"))).toBe(false);
   });
 });
 

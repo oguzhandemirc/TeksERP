@@ -668,7 +668,8 @@ export const contentRoutes: RouteObject[] = [
   },
   {
     // Sayfanın kapısı GENİŞ, içerik DAR: `settings:workstation` taşıyan personel
-    // girer ama yalnız "Bu Bilgisayar" kategorisini görür (sayfa kategorileri
+    // girer ama yalnız "Bu Bilgisayar" bölümünün DÖRT yerel kategorisini görür
+    // (yazıcı · kantar · tabanca · sunucu adresi; sayfa kategorileri
     // `visibleSettingsCategories` ile süzer). Sistem geneli ayarlar hâlâ
     // `admin:settings` ister ve listeye bile girmez.
     path: "system/settings",
@@ -682,7 +683,7 @@ export const contentRoutes: RouteObject[] = [
     // Fabrikanın DAVRANIŞ bayrakları — modül anahtarlarından ayrı ekran
     // (2026-09-04). Kapı Genel Ayarlar'ınkinden DAR: `settings:workstation`
     // burada yeterli DEĞİL (bu satırlar sunucuya yazılır, tüm fabrikayı
-    // etkiler); "Bu Bilgisayar" kategorisinin gerekçesi buraya uzanmaz.
+    // etkiler); "Bu Bilgisayar" bölümünün gerekçesi buraya uzanmaz.
     path: "system/feature-flags",
     element: (
       <ProtectedRoute requirePermission="admin:settings">

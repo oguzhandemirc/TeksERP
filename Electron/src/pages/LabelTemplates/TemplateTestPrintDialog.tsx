@@ -57,7 +57,7 @@ export function TemplateTestPrintDialog({ open, onOpenChange, fetchNative }: Pro
           ok: false,
           text: lpCfg?.peripheralId
             ? `Aktif dil (${p.language}) HTML — seçili Cihaz Kaydı yazıcısının dili native değil (Tanımlar → Donanım'dan PPLA/PPLB/ZPL seçin).`
-            : `Aktif dil (${p.language}) HTML — Genel Ayarlar → Bu Bilgisayar → "Cihaz Kaydı yazıcısı" seçilmemiş; native baskı için seçin.`,
+            : `Aktif dil (${p.language}) HTML — Genel Ayarlar → Bu Bilgisayar → Yazıcı → "Cihaz Kaydı yazıcısı" seçilmemiş; native baskı için seçin.`,
         });
         return;
       }

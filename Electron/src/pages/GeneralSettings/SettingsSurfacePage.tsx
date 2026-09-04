@@ -30,7 +30,10 @@ import { DevicePairingSection } from "./DevicePairingSection";
 import { CompanySettingsSection } from "./CompanySettingsSection";
 import { SessionSettingsSection } from "./SessionSettingsSection";
 import { LabelSettingsSection } from "./LabelSettingsSection";
-import { WorkstationTabs } from "./WorkstationTabs";
+import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
+import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
+import { ScannerSettingsSection } from "./ScannerSettingsSection";
+import { ApiEndpointSection } from "./ApiEndpointSection";
 import { SettingsDirtyProvider } from "./settings-dirty";
 
 /**
@@ -59,8 +62,9 @@ export function SettingsSurfacePage({
 }) {
 
   // Kategoriler önce İZİNLE süzülür: `settings:workstation` taşıyan (ama
-  // `admin:settings` taşımayan) personel YALNIZ "Bu Bilgisayar"ı görür — sistem
-  // geneli kategoriler salt-okunur bile olsa listelenmez.
+  // `admin:settings` taşımayan) personel YALNIZ "Bu Bilgisayar" bölümünün dört
+  // yerel kategorisini görür — sistem geneli kategoriler salt-okunur bile olsa
+  // listelenmez.
   const { hasAnyPermission } = useRoleAccess();
   const permitted = visibleSettingsCategories(hasAnyPermission, surface);
 
@@ -277,8 +281,15 @@ export function SettingsSurfacePage({
                   />
                 )}
                 {cat.kind === "device" && <DevicePairingSection />}
-                {/* Bu bilgisayara özel donanım — iç içe (segment) sekmeler. */}
-                {cat.kind === "workstation" && <WorkstationTabs />}
+                {/* BU BİLGİSAYARA ÖZEL YEREL DONANIM — dördü de raydan seçilir.
+                    ⚠️ İç içe sekme (eski `WorkstationTabs`) 2026-09-04'te
+                    kaldırıldı: kendi `SettingsDirtyProvider`ını kurup üste de
+                    ilettiği için "kaydedilmemiş taslak" onayı İKİ yerde
+                    yaşıyordu. Artık tek guard var — sayfanın kendisi. */}
+                {cat.kind === "printer" && <LabelPrinterDeviceSettings />}
+                {cat.kind === "scale" && <ScaleDeviceSettings />}
+                {cat.kind === "scanner" && <ScannerSettingsSection />}
+                {cat.kind === "server" && <ApiEndpointSection />}
                 {cat.kind === "company" && <CompanySettingsSection />}
                 {cat.kind === "session" && <SessionSettingsSection />}
                 {cat.kind === "label" && <LabelSettingsSection />}

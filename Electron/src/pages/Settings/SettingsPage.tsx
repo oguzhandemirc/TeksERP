@@ -13,6 +13,7 @@ import { useRoleAccess } from "@/hooks/useRoleAccess";
 import {
   SETTINGS_ADMIN_PERMISSION,
   WORKSTATION_PERMISSION,
+  workstationEntryPath,
 } from "@/pages/GeneralSettings/settings-config";
 import { usePreferences } from "@/providers/PreferencesProvider";
 import { SURUM_NOTLARI } from "@/lib/surum-notlari";
@@ -196,7 +197,7 @@ export function SettingsPage() {
                 variant="outline"
                 size="sm"
                 className="gap-2"
-                onClick={() => navigate("/system/settings?tab=system")}
+                onClick={() => navigate(workstationEntryPath())}
               >
                 <Monitor className="h-4 w-4" />
                 Donanım Ayarlarını Aç

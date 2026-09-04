@@ -16,6 +16,7 @@ import { MODULE_LABELS } from "@/lib/module-flags";
 import { flagOwnerModule } from "./flag-modules";
 import {
   SETTINGS_SECTIONS,
+  SETTINGS_TAB_ALIASES,
   type EnumFlagDef,
   type FlagDef,
   type NumberFlagDef,
@@ -304,7 +305,13 @@ export function resolveActiveSettingsCategory(
   categories: SettingsCategory[],
   param: string | null,
 ): string | undefined {
-  return categories.some((c) => c.id === param) ? param! : categories[0]?.id;
+  if (categories.some((c) => c.id === param)) return param!;
+  // ESKİ KİMLİK → bugünkü kategori (`?tab=system` → "printer"). Takma ad ancak
+  // hedefi GÖRÜNÜR listede varsa uygulanır; yoksa normal düşüşe devam edilir
+  // (izin/rejim yüzünden gizlenmiş bir sekmeye zorla gitmek boş ekran demekti).
+  const alias = param ? SETTINGS_TAB_ALIASES[param] : undefined;
+  if (alias && categories.some((c) => c.id === alias)) return alias;
+  return categories[0]?.id;
 }
 
 // -----------------------------------------------------------------------------
