@@ -11,18 +11,30 @@ export interface CustomerRankRow {
   customerId: string;
   customerName: string;
   customerCode: string | null;
+  /** Sipariş BELGESİ adedi — giriş alışkanlığına duyarlı, tek başına sıralanmaz. */
   orderCount: number;
+  /** Aktif kalem adedi — "kaç ayrı mal istedi", belge sayısından bağımsız. */
   lineCount: number;
+  /** Kalem/sipariş — iki giriş alışkanlığını ayırt eden sayı. */
+  avgLinesPerOrder: number;
+  /** Sipariş verilen ayrı gün sayısı — "sıklık"ın dürüst ölçüsü. */
+  orderDayCount: number;
   totalQty: number;
   avgOrderQty: number;
   sharePct: number;
   cumulativePct: number;
   abcClass: AbcClass;
+  cancelledQty: number;
+  cancelRatePct: number;
+  /** Dönemde SEVK EDİLEN brüt metraj — aynı siparişlere ait değil. */
+  shippedQty: number;
   lifetimeOrderCount: number;
+  firstOrderDate: string | null;
   lastOrderDate: string | null;
   daysSinceLastOrder: number | null;
   avgIntervalDays: number | null;
   topItemName: string | null;
+  topColorName: string | null;
   prevQty?: number;
 }
 
@@ -41,7 +53,13 @@ export interface CustomerScorecard {
   summary: {
     customerCount: number;
     orderCount: number;
+    lineCount: number;
+    avgLinesPerOrder: number;
     totalQty: number;
+    cancelledQty: number;
+    cancelRatePct: number;
+    cancelledOrderCount: number;
+    shippedQty: number;
     aClassCount: number;
     bClassCount: number;
     cClassCount: number;
@@ -79,6 +97,17 @@ export function buildCustomerScorecardExport(opts: {
       "ABC sıralaması ve dönem metrikleri SEÇİLİ TARİH ARALIĞINA aittir.",
       "'Kaç gündür sessiz' ve 'ortalama sipariş aralığı' TÜM GEÇMİŞTEN hesaplanır — dönem içine hapsedilse herkes sessiz görünürdü.",
       "ABC: kümülatif payın %80'ine kadar A, %95'e kadar B, gerisi C.",
+      // Kullanıcının işaret ettiği gerçek problem dosyanın İÇİNDE de yazılı olmalı:
+      // Excel tablo bağlamından koparak dolaşır ve "Sipariş" sütunu tek başına
+      // okunduğunda giriş alışkanlığını müşteri davranışı sanmak çok kolaydır.
+      "⚠️ 'Sipariş' sütunu BELGE sayısıdır ve giriş alışkanlığına duyarlıdır: aynı işi 10 kaleme tek siparişte yazan müşteri 1, 10 ayrı siparişe yazan 10 görünür.",
+      "Bu yüzden sıklık ÜÇ sütunla okunur: 'Sipariş' (belge) · 'Kalem' (kaç ayrı mal) · 'Sipariş günü' (kaç ayrı gün — aynı gün girilen 5 sipariş 1 sayılır).",
+      "'Kalem/sipariş' bir sıralama ölçütü DEĞİL, okuma anahtarıdır: ~1 ise müşteri tek tek giriyor, yüksekse kalem kalem. Fabrika ortalaması " +
+        `${sc.summary.avgLinesPerOrder}.`,
+      "Metraj alışkanlıktan BAĞIMSIZDIR — ABC sıralaması bu yüzden metraja dayanır, sipariş adedine değil.",
+      `İptal: dönemde verilen siparişlerin %${sc.summary.cancelRatePct}'i (metraj) iptal edildi; ${sc.summary.cancelledOrderCount} sipariş belgesi tümüyle iptal.`,
+      "'Sevk (brüt)' dönemde müşteriye ÇIKAN maldır ve aynı siparişlere ait DEĞİLDİR (bugün sevk edilen mal eski siparişten gelmiş olabilir); iade ayrı belgeyle kapanır, rakam brüttür.",
+      `Dönemde sevk edilen toplam brüt metraj ${sc.summary.shippedQty} m — bu toplam, dönemde sipariş vermeyip yalnız mal alan müşterileri de kapsar, yani satır toplamından büyük olabilir.`,
       "RİSK ölçüsü mutlak gün değil ORANDIR: geçen süre / müşterinin kendi ortalama sipariş aralığı. Eşik 2×.",
       `Ritim en az 3 sipariş ister; ${sc.summary.insufficientHistoryCount} müşterinin geçmişi yetersiz olduğu için risk listesine GİRMEDİ (yok sayılmadı).`,
       `Dönemde ${sc.summary.aClassCount} A-sınıfı müşteri metrajın %${sc.summary.aClassQtyPct}'ini taşıdı.`,
@@ -94,6 +123,9 @@ export function buildCustomerScorecardExport(opts: {
           { header: "Müşteri", key: "customerName", width: 28 },
           { header: "Kod", key: "customerCode", width: 14 },
           { header: "Sipariş", key: "orderCount", width: 10, numFmt: "#,##0" },
+          { header: "Kalem", key: "lineCount", width: 10, numFmt: "#,##0" },
+          { header: "Kalem/sipariş", key: "avgLinesPerOrder", width: 14, numFmt: "#,##0.00" },
+          { header: "Sipariş günü", key: "orderDayCount", width: 13, numFmt: "#,##0" },
           { header: "Metraj (m)", key: "totalQty", width: 14, numFmt: "#,##0.#" },
           ...(hasCompare
             ? [{ header: "Önceki (m)", key: "prevQty", width: 14, numFmt: "#,##0.#" }]
@@ -102,23 +134,37 @@ export function buildCustomerScorecardExport(opts: {
           { header: "Pay %", key: "sharePct", width: 10, numFmt: "#,##0.#" },
           { header: "Kümülatif %", key: "cumulativePct", width: 14, numFmt: "#,##0.#" },
           { header: "Ort. aralık (gün)", key: "avgIntervalDays", width: 16, numFmt: "#,##0.#" },
+          { header: "İlk sipariş", key: "firstOrderText", width: 14 },
           { header: "Son sipariş", key: "lastOrderText", width: 14 },
           { header: "Sessiz (gün)", key: "daysSinceLastOrder", width: 12, numFmt: "#,##0" },
+          { header: "İptal (m)", key: "cancelledQty", width: 12, numFmt: "#,##0.#" },
+          { header: "İptal %", key: "cancelRatePct", width: 10, numFmt: "#,##0.#" },
+          { header: "Sevk brüt (m)", key: "shippedQty", width: 14, numFmt: "#,##0.#" },
           { header: "Favori kumaş", key: "topItemName", width: 22 },
+          { header: "Favori renk", key: "topColorName", width: 18 },
         ],
         rows: sc.ranking.map((r, i) => ({
           ...r,
           rank: i + 1,
           customerCode: r.customerCode ?? "—",
           avgIntervalDays: r.avgIntervalDays ?? "",
+          firstOrderText: dt(r.firstOrderDate),
           lastOrderText: dt(r.lastOrderDate),
           daysSinceLastOrder: r.daysSinceLastOrder ?? "",
           topItemName: r.topItemName ?? "—",
+          topColorName: r.topColorName ?? "—",
         })),
+        // ⚠️ TOPLAM SATIRINDA `shippedQty` YOK — bilinçli. Sevk toplamı dönemde
+        // sipariş VERMEYEN müşterileri de kapsıyor, yani sütun toplamıyla
+        // özet rakamı meşruen ayrışıyor. Toplam basmak, ayrışmayı "hata" gibi
+        // gösterip rapora olan güveni bitirirdi; fark meta satırında yazılı.
         totalRow: {
           customerName: "TOPLAM",
           orderCount: sc.summary.orderCount,
+          lineCount: sc.summary.lineCount,
+          avgLinesPerOrder: sc.summary.avgLinesPerOrder,
           totalQty: sc.summary.totalQty,
+          cancelledQty: sc.summary.cancelledQty,
         },
       },
       {

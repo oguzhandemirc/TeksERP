@@ -12,6 +12,14 @@
 //    müşteriyi aynı kefeye koyar.
 // ④ Ritim en az 3 sipariş ister ve aralık sayısı n−1'dir. n'e bölmek ritmi
 //    sistematik olarak KISA gösterir → herkes riskli görünür.
+// ⑤ (2026-09-04) GİRİŞ ALIŞKANLIĞI ile MÜŞTERİ DAVRANIŞI ayrı ölçülür.
+//    Fabrikada bazı siparişler kalem kalem, bazıları tek tek giriliyor. Aynı
+//    işi veren iki müşteri "sipariş adedi"nde 1'e 10 görünür. §7 tam bu iki
+//    müşteriyi yan yana kurar ve şunu kilitler: `orderCount` AYRIŞIR (öyle
+//    olmalı — belge sayısıdır), ama `lineCount` · `totalQty` · `orderDayCount`
+//    AYNI kalır (aynı iş, aynı gün, aynı metraj) ve `avgLinesPerOrder` ikisini
+//    AYIRT EDER. Bu bekçi düşerse rapor makul görünen ama yanlış bir sıralama
+//    basar — sessiz sınıf hata.
 //
 // İZOLASYON: dönem 2019'a kurulur — fabrika verisi 2026'da başlıyor, yani
 // dönem-kapsamlı iddialar yalnız bu testin fixture'ını görür. Risk listesi ve
@@ -159,9 +167,134 @@ async function main(): Promise<void> {
     check("önceki dönem müşteri sayısı = 2 (RISK+THIN)", sc2.summary.prevCustomerCount === 2, `${sc2.summary.prevCustomerCount}`);
     check("önceki dönem metrajı = 500", sc2.summary.prevTotalQty === 500, `${sc2.summary.prevTotalQty}`);
     check("dönemde olup öncekinde olmayan müşterinin prevQty = 0", sc2.ranking.find((r) => r.customerName === `${TAG} BIG`)?.prevQty === 0);
+
+    // =========================================================================
+    // 7) GİRİŞ ALIŞKANLIĞI — "1 sipariş 10 kalem" ile "10 sipariş 1 kalem"
+    // =========================================================================
+    // AYRI DÖNEM (2018) kurulur: bu müşterilerin metrajı 2019 fixture'ının ABC
+    // dengesini bozardı ve §2'nin sayıları sessizce kayardı.
+    console.log("\n── 7) Giriş alışkanlığı: belge sayısı ≠ verilen iş ──");
+    const H: DateRange = {
+      from: new Date("2018-06-01T00:00:00.000Z"),
+      to: new Date("2018-06-30T23:59:59.999Z"),
+    };
+    const color = await prisma.color.create({
+      data: { code: `${TAG}-C`, name: `${TAG} MAVI` },
+      select: { id: true },
+    });
+
+    const hMulti = await mkCustomer("HMULTI");
+    const hSingle = await mkCustomer("HSINGLE");
+    const hDays = await mkCustomer("HDAYS");
+    const hCancel = await mkCustomer("HCANCEL");
+
+    /** Tek siparişte N kalem — "kalem kalem giren" müşteri. */
+    await prisma.order.create({
+      data: {
+        orderNumber: `${TAG}-H1`,
+        customerId: hMulti.id,
+        status: "APPROVED",
+        orderDate: new Date("2018-06-10T09:00:00.000Z"),
+        lines: {
+          create: Array.from({ length: 10 }, () => ({
+            itemId: item.id,
+            colorId: color.id,
+            quantity: 100,
+          })),
+        },
+      },
+    });
+
+    /** AYNI GÜN 10 ayrı sipariş, her biri tek kalem — "tek tek giren" müşteri.
+     *  Metraj, kalem sayısı ve GÜN birebir aynı; ayrışan tek şey belge sayısı. */
+    for (let i = 0; i < 10; i++) {
+      await prisma.order.create({
+        data: {
+          orderNumber: `${TAG}-H2-${i}`,
+          customerId: hSingle.id,
+          status: "APPROVED",
+          orderDate: new Date(`2018-06-10T1${i}:00:00.000Z`),
+          lines: { create: [{ itemId: item.id, colorId: color.id, quantity: 100 }] },
+        },
+      });
+    }
+
+    /** ÜÇ AYRI GÜN — "sipariş günü" sayacının gerçekten gün saydığını ölçer. */
+    for (const d of ["2018-06-12", "2018-06-13", "2018-06-14"]) {
+      await mkOrder(hDays.id, `${d}T09:00:00.000Z`, 10);
+      // mkOrder tarih dışında aynı şablonu kullanır; müşterisi hDays.
+    }
+
+    /** İPTAL: bir kalem iptal (100), bir sipariş tümüyle iptal (300).
+     *  Aktif kalan 100 → iptal oranı 400/500 = %80. */
+    await prisma.order.create({
+      data: {
+        orderNumber: `${TAG}-H4`,
+        customerId: hCancel.id,
+        status: "APPROVED",
+        orderDate: new Date("2018-06-15T09:00:00.000Z"),
+        lines: {
+          create: [
+            { itemId: item.id, quantity: 100 },
+            { itemId: item.id, quantity: 100, cancelledAt: new Date("2018-06-16T09:00:00.000Z") },
+          ],
+        },
+      },
+    });
+    await mkOrder(hCancel.id, "2018-06-15T15:00:00.000Z", 300, "CANCELLED");
+
+    const hc = await getCustomerScorecard(H);
+    const hrow = (suffix: string) => hc.ranking.find((r) => r.customerName === `${TAG} ${suffix}`);
+    const M = hrow("HMULTI");
+    const S = hrow("HSINGLE");
+    const D = hrow("HDAYS");
+    const C = hrow("HCANCEL");
+
+    // ── Ayrışması GEREKEN tek sayı: belge adedi ──
+    check("belge adedi ayrışıyor (1 vs 10) — 'sipariş adedi' giriş alışkanlığını ölçer",
+      M?.orderCount === 1 && S?.orderCount === 10, `${M?.orderCount} vs ${S?.orderCount}`);
+
+    // ── AYNI olması GEREKEN üç sayı: aynı iş, aynı metraj, aynı gün ──
+    check("kalem adedi AYNI (10 = 10) — 'kaç ayrı mal istedi' belgeden bağımsız",
+      M?.lineCount === 10 && S?.lineCount === 10, `${M?.lineCount} vs ${S?.lineCount}`);
+    check("metraj AYNI (1000 = 1000)",
+      M?.totalQty === 1000 && S?.totalQty === 1000, `${M?.totalQty} vs ${S?.totalQty}`);
+    check("sipariş GÜNÜ AYNI (1 = 1) — aynı gün girilen 10 sipariş tek temas",
+      M?.orderDayCount === 1 && S?.orderDayCount === 1,
+      `${M?.orderDayCount} vs ${S?.orderDayCount} — 10 ise gün değil BELGE sayılıyor`);
+
+    // ── Ayırt edici sayı ──
+    check("kalem/sipariş iki alışkanlığı AYIRT EDİYOR (10 vs 1)",
+      M?.avgLinesPerOrder === 10 && S?.avgLinesPerOrder === 1,
+      `${M?.avgLinesPerOrder} vs ${S?.avgLinesPerOrder}`);
+
+    // ── ABC alışkanlıktan ETKİLENMEZ ──
+    check("eşit metrajlı iki müşteri eşit pay alıyor (ABC belge sayısına kaymıyor)",
+      M?.sharePct === S?.sharePct, `${M?.sharePct} vs ${S?.sharePct}`);
+
+    console.log("\n── 7b) Sipariş günü gerçekten GÜN sayıyor ──");
+    check("üç ayrı günde sipariş → 3 gün", D?.orderDayCount === 3, `${D?.orderDayCount}`);
+    check("üç ayrı günde sipariş → 3 belge", D?.orderCount === 3, `${D?.orderCount}`);
+
+    console.log("\n── 7c) İptal: aktif işe girmez, orana girer ──");
+    check("iptal kalem metraja girmedi (100, 200 değil)", C?.totalQty === 100, `${C?.totalQty}`);
+    check("iptal kalem kalem sayısına girmedi (1)", C?.lineCount === 1, `${C?.lineCount}`);
+    check("iptal sipariş belge sayısına girmedi (1)", C?.orderCount === 1, `${C?.orderCount}`);
+    check("iptal metrajı = 400 (kalem 100 + belge 300)", C?.cancelledQty === 400, `${C?.cancelledQty}`);
+    check("iptal oranı %80 (400 / 500)", C?.cancelRatePct === 80, `${C?.cancelRatePct}`);
+    check("iptal sipariş sipariş GÜNÜNE de girmedi (1 gün)", C?.orderDayCount === 1, `${C?.orderDayCount}`);
+    check("iptal belge sayacı = 1", hc.summary.cancelledOrderCount === 1, `${hc.summary.cancelledOrderCount}`);
+
+    console.log("\n── 7d) Zenginleştirmeler ──");
+    check("favori renk çözülüyor", M?.topColorName === `${TAG} MAVI`, `${M?.topColorName}`);
+    check("ilk sipariş tarihi dolu", Boolean(M?.firstOrderDate));
+    check("özet kalem adedi = 24 (10+10+3+1)", hc.summary.lineCount === 24, `${hc.summary.lineCount}`);
+    check("özet kalem/sipariş = 24/15 = 1.6", hc.summary.avgLinesPerOrder === 1.6, `${hc.summary.avgLinesPerOrder}`);
+    check("sevk sütunu var ve sayı (fixture'da sevk yok → 0)", M?.shippedQty === 0, `${M?.shippedQty}`);
   } finally {
     await prisma.order.deleteMany({ where: { orderNumber: { startsWith: TAG } } });
     await prisma.customer.deleteMany({ where: { code: { startsWith: TAG } } });
+    await prisma.color.deleteMany({ where: { code: { startsWith: TAG } } });
     await prisma.item.deleteMany({ where: { code: { startsWith: TAG } } });
   }
 

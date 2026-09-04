@@ -46,6 +46,16 @@ router.get("/order-profile", ...guard, async (_req: Request, res: Response, next
  *       Risk ölçüsü mutlak gün değil ORANDIR: geçen süre / o müşterinin kendi
  *       ortalama sipariş aralığı. Ritim en az 3 sipariş ister; daha az geçmişi
  *       olanlar risk listesine girmez ve sayıları ayrıca döner.
+ *
+ *       SIKLIK TEK SAYIYLA ÖLÇÜLMEZ. Fabrikada bazı siparişler kalem kalem,
+ *       bazıları tek tek giriliyor; bu yüzden orderCount (belge adedi) giriş
+ *       alışkanlığına duyarlıdır ve tek başına sıralama ölçütü DEĞİLDİR.
+ *       Yanında lineCount (kaç ayrı mal), orderDayCount (kaç ayrı gün sipariş
+ *       verdi) ve avgLinesPerOrder (iki alışkanlığı ayırt eden anahtar) döner.
+ *       ABC sıralaması metraja dayanır, çünkü metraj alışkanlıktan bağımsızdır.
+ *
+ *       shippedQty, dönemde sevk edilen BRÜT metrajdır ve tek tanımdan gelir
+ *       (reports/_shipped.ts); aynı siparişlere ait olmak zorunda değildir.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query

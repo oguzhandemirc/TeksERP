@@ -23,13 +23,36 @@
 // gözlemdir; onunla risk hesaplamak, tek veriden trend çıkarmaktır. Az geçmişli
 // müşteriler listeye GİRMEZ ve sayıları AYRICA döner (`insufficientHistory`) —
 // sessizce elenmeleri "riskli müşterim yok" yanılgısı üretirdi.
+//
+// ── "EN SIK VEREN" TEK SAYIYLA ÖLÇÜLEMEZ (2026-09-04, saha bulgusu) ────────
+// Fabrikada sipariş girişi TEK TİP DEĞİL: bazı siparişler kalem kalem (bir
+// sipariş, on satır), bazıları tek tek (on sipariş, birer satır) giriliyor.
+// Aynı işi veren iki müşteri bu yüzden "sipariş adedi"nde 1'e 10 görünür —
+// yani `orderCount`la yapılan HER sıralama giriş alışkanlığını ölçer, müşteriyi
+// değil. Bu sessiz bir hatadır: sayı makul görünür, sadece yanlıştır.
+//
+// Çözüm tek bir "doğru sayı" bulmak DEĞİL (yok); ölçüyü AYRIŞTIRMAK:
+//   • `orderCount`        — kaç sipariş BELGESİ. Giriş alışkanlığına duyarlı.
+//   • `lineCount`         — kaç KALEM. Aynı işin bir siparişe mi on siparişe mi
+//                           yazıldığından bağımsız; "kaç ayrı mal istedi".
+//   • `avgLinesPerOrder`  — İKİ ALIŞKANLIĞI AYIRT EDEN SAYI. ~1 ise tek tek
+//                           giriyor, yüksekse kalem kalem. Bir sıralama ölçütü
+//                           değil, diğer sütunların NASIL okunacağının anahtarı.
+//   • `orderDayCount`     — kaç ayrı GÜN sipariş verdi. "Sıklık"ın en dürüst
+//                           ölçüsü: aynı gün girilen 5 sipariş 1 temas eder ve
+//                           tek tek giren müşteriyi şişirmez.
+//   • `totalQty`          — kaç METRE. Alışkanlıktan TAMAMEN bağımsız; bu
+//                           yüzden ABC/Pareto sıralaması hâlâ metraja dayanır.
+// Ekranda beşi de yan yana durur; hiçbiri diğerinin yerine geçmez.
 // =============================================================================
 
 import prisma from "../../lib/prisma";
 import { Prisma } from "@prisma/client";
 import type { DateRange } from "./_shared";
 import { pctOf, round1 } from "./_breakdown";
-import { ACTIVE_LINE } from "../helpers/order-line-scope.helper";
+import { isActiveLine } from "../helpers/order-line-scope.helper";
+import { collectShipped } from "./_shipped";
+import { factoryYmd } from "../../constants/time";
 
 /** Kümülatif pay eşikleri — klasik ABC (Pareto) sınıflandırması. */
 const A_THRESHOLD = 80;
@@ -45,11 +68,20 @@ export interface CustomerRankRow {
   customerId: string;
   customerName: string;
   customerCode: string | null;
-  /** Dönemdeki sipariş adedi. */
+  /** Dönemdeki sipariş BELGESİ adedi. ⚠️ Giriş alışkanlığına duyarlı — tek
+   *  başına "en sık veren" sıralaması için KULLANILMAZ (başlıktaki gerekçe). */
   orderCount: number;
-  /** Dönemdeki kalem adedi. */
+  /** Dönemdeki aktif kalem adedi. "Kaç ayrı mal istedi" — belge sayısından
+   *  bağımsız; on kalemi tek siparişe yazan müşteride de on eder. */
   lineCount: number;
-  /** Dönemdeki istenen metraj (iptaller hariç). */
+  /** Kalem / sipariş. İKİ GİRİŞ ALIŞKANLIĞINI AYIRT EDEN SAYI: ~1 → tek tek
+   *  giriliyor, yüksek → kalem kalem. Sıralama ölçütü değil, okuma anahtarı. */
+  avgLinesPerOrder: number;
+  /** Dönemde sipariş verilen ayrı GÜN sayısı (fabrika takvimi). "Sıklık"ın
+   *  dürüst ölçüsü: aynı gün girilen 5 sipariş 1 temas sayılır. */
+  orderDayCount: number;
+  /** Dönemdeki istenen metraj (iptaller hariç). Alışkanlıktan BAĞIMSIZ ölçü —
+   *  ABC sıralaması bu yüzden buna dayanır. */
   totalQty: number;
   avgOrderQty: number;
   /** Dönem metrajındaki payı (%). */
@@ -57,14 +89,28 @@ export interface CustomerRankRow {
   /** Sıralamada bu satıra kadarki kümülatif pay (%). */
   cumulativePct: number;
   abcClass: AbcClass;
+  /** Dönemde verdiği siparişlerden İPTAL EDİLEN metraj (iptal sipariş +
+   *  iptal kalem). "Bu müşterinin işi ne kadar sağlam" sorusu. */
+  cancelledQty: number;
+  /** İptal / (aktif + iptal) — metraj üzerinden (%). Adet üzerinden olsaydı
+   *  1 metrelik numune iptali 5000 metrelik iptalle aynı ağırlıkta sayılırdı. */
+  cancelRatePct: number;
+  /** Dönemde bu müşteriye SEVK EDİLEN brüt metraj (`_shipped.ts` tek tanımı).
+   *  ⚠️ Aynı siparişlere ait DEĞİL — bugün sevk edilen mal eski siparişten
+   *  gelmiş olabilir. "Verdiği iş ↔ aldığı mal" karşılaştırmasıdır. */
+  shippedQty: number;
   /** TÜM GEÇMİŞ — dönemle sınırlı değil. */
   lifetimeOrderCount: number;
+  /** İlk siparişin tarihi (tüm geçmiş) — "ne zamandan beri müşterimiz". */
+  firstOrderDate: string | null;
   lastOrderDate: string | null;
   daysSinceLastOrder: number | null;
   /** Ortalama sipariş aralığı (gün) — en az 3 sipariş yoksa null. */
   avgIntervalDays: number | null;
   /** Dönemde en çok istediği kumaş. */
   topItemName: string | null;
+  /** Dönemde en çok istediği renk — kumaşla birlikte "ne alıyor" cevabı. */
+  topColorName: string | null;
   prevQty?: number;
 }
 
@@ -84,7 +130,21 @@ export interface CustomerScorecardSummary {
   /** Dönemde sipariş veren müşteri sayısı. */
   customerCount: number;
   orderCount: number;
+  /** Dönemdeki aktif kalem adedi — `orderCount`la BİRLİKTE okunur. */
+  lineCount: number;
+  /** Fabrika genelinde kalem/sipariş. Sütunun "yüksek mi" olduğu ancak bu
+   *  ortalamaya göre söylenebilir; mutlak bir eşik yoktur. */
+  avgLinesPerOrder: number;
   totalQty: number;
+  /** Dönemde verilen siparişlerden iptal edilen metraj + oranı. */
+  cancelledQty: number;
+  cancelRatePct: number;
+  /** Dönemde iptal edilen sipariş BELGESİ adedi. */
+  cancelledOrderCount: number;
+  /** Dönemde sevk edilen BRÜT metraj — TÜM müşteriler (`_shipped.ts`).
+   *  ⚠️ Satırların sevk sütunu bu toplamı vermeyebilir: bu dönemde sipariş
+   *  vermeyen ama mal alan müşteri sıralamada YOKTUR. Fark yalanmaz, yazılır. */
+  shippedQty: number;
   aClassCount: number;
   bClassCount: number;
   cClassCount: number;
@@ -111,21 +171,62 @@ interface PeriodAgg {
   orderCount: number;
   lineCount: number;
   qty: number;
+  /** Fabrika takvim günü anahtarları — `size` "kaç ayrı gün sipariş verdi". */
+  orderDays: Set<string>;
+  cancelledOrderCount: number;
+  cancelledQty: number;
   itemQty: Map<string, { name: string; qty: number }>;
+  colorQty: Map<string, { name: string; qty: number }>;
 }
 
-/** Dönemdeki sipariş/kalem toplamları — müşteri bazlı. İptaller HARİÇ. */
+/** Boş toplayıcı — tek yerde, alan eklenince tüm yollar birlikte güncellenir. */
+const emptyAgg = (): PeriodAgg => ({
+  orderCount: 0,
+  lineCount: 0,
+  qty: 0,
+  orderDays: new Set(),
+  cancelledOrderCount: 0,
+  cancelledQty: 0,
+  itemQty: new Map(),
+  colorQty: new Map(),
+});
+
+/**
+ * Dönemdeki sipariş/kalem toplamları — müşteri bazlı.
+ *
+ * ⚠️ SATIRLAR SÜZGEÇSİZ ÇEKİLİR, ayrım JS'te `isActiveLine` ikiziyle yapılır.
+ * Sebep: iptal ORANI için aynı sorgunun hem aktif hem iptal kalemi görmesi
+ * gerekiyor ve Prisma aynı ilişkiyi iki farklı süzgeçle bir kerede seçemiyor.
+ * İki ayrı sorgu atmak, aralarında bir yazma olduğunda payla paydayı farklı
+ * anlara bağlar ve "%103 iptal" gibi imkânsız bir oran üretebilirdi.
+ *
+ * ⚠️ TOMBSTONE: birleştirilmiş cari (`mergedIntoId != null`) kendi satırını
+ * AÇAMAZ. Birleştirme motoru siparişleri survivor'a TAŞIR (`MERGE_MAP.customer`
+ * → MOVE Order), yani bugün bu süzgeç sıfır satır eler (ölçüldü: 0) — ama
+ * taşınmamış tek bir sipariş, aynı müşteriyi listede İKİ KEZ gösterirdi ve
+ * ikincisinin adı `collectLifetime` tombstone'u dışladığı için "—" olurdu.
+ */
 async function collectPeriod(range: DateRange): Promise<Map<string, PeriodAgg>> {
   const orders = await prisma.order.findMany({
     where: {
       orderDate: { gte: range.from, lte: range.to },
-      status: { not: "CANCELLED" },
+      // İptal siparişler de gelir: iptal ORANININ payı onlardan doğar. Aktif
+      // metrajdan ayrılmaları aşağıda, `status` üzerinden yapılır.
+      customer: { mergedIntoId: null },
     },
     select: {
       customerId: true,
+      status: true,
+      orderDate: true,
       lines: {
-        where: ACTIVE_LINE, // iptal edilmiş kalem müşterinin verdiği işe sayılmaz
-        select: { quantity: true, itemId: true, item: { select: { name: true } } },
+        select: {
+          quantity: true,
+          cancelledAt: true,
+          itemId: true,
+          item: { select: { name: true } },
+          colorId: true,
+          color: { select: { name: true } },
+        },
       },
     },
   });
@@ -133,17 +234,42 @@ async function collectPeriod(range: DateRange): Promise<Map<string, PeriodAgg>> 
   for (const o of orders) {
     let a = map.get(o.customerId);
     if (!a) {
-      a = { orderCount: 0, lineCount: 0, qty: 0, itemQty: new Map() };
+      a = emptyAgg();
       map.set(o.customerId, a);
     }
+
+    // İPTAL EDİLMİŞ SİPARİŞ: metraja, kaleme, ritme ve GÜNE girmez — verilmemiş
+    // sayılır. Yalnız iptal oranının payına yazılır (kalemleri tek tek iptal
+    // işaretli olmayabilir; belge iptali hepsini kapsar).
+    if (o.status === "CANCELLED") {
+      a.cancelledOrderCount++;
+      for (const l of o.lines) a.cancelledQty += Number(l.quantity);
+      continue;
+    }
+
     a.orderCount++;
+    // "Sıklık" günü: aynı gün girilen N sipariş TEK temastır. Fabrika takvimi
+    // kullanılır (UTC değil) — gece 00:30'daki giriş bir önceki iş gününe ait
+    // olabilir ve iki gün gibi sayılması sıklığı yapay olarak şişirirdi.
+    a.orderDays.add(factoryYmd(o.orderDate));
+
     for (const l of o.lines) {
-      a.lineCount++;
       const q = Number(l.quantity);
+      if (!isActiveLine(l)) {
+        // İptal edilmiş kalem: aktif işe sayılmaz ama İPTAL oranına girer.
+        a.cancelledQty += q;
+        continue;
+      }
+      a.lineCount++;
       a.qty += q;
       const it = a.itemQty.get(l.itemId) ?? { name: l.item.name, qty: 0 };
       it.qty += q;
       a.itemQty.set(l.itemId, it);
+      if (l.colorId && l.color) {
+        const co = a.colorQty.get(l.colorId) ?? { name: l.color.name, qty: 0 };
+        co.qty += q;
+        a.colorQty.set(l.colorId, co);
+      }
     }
   }
   return map;
@@ -207,11 +333,19 @@ export async function getCustomerScorecard(
   range: DateRange,
   compareRange: DateRange | null = null,
 ): Promise<CustomerScorecard> {
-  const [period, lifetime, prevPeriod] = await Promise.all([
+  const [period, lifetime, prevPeriod, shippedCells] = await Promise.all([
     collectPeriod(range),
     collectLifetime(),
     compareRange ? collectPeriod(compareRange) : Promise.resolve(null),
+    // "Dönemde sevk edilen metraj" TEK TANIM (`_shipped.ts`) — brüt, doğrudan
+    // sevkler dahil, iade geri-eklemeli. İkinci bir tanım üretmiyoruz.
+    collectShipped(range),
   ]);
+
+  const shippedByCustomer = new Map<string, number>();
+  for (const c of shippedCells) {
+    shippedByCustomer.set(c.customerId, (shippedByCustomer.get(c.customerId) ?? 0) + c.qty);
+  }
 
   const byId = new Map(lifetime.map((l) => [l.customerId, l]));
   // tz-ok: "kaç gündür sessiz" iki AN arasındaki farktır, takvim günü değil.
@@ -230,29 +364,57 @@ export async function getCustomerScorecard(
     return round1(spanDays / (l.orderCount - 1));
   };
 
+  /**
+   * Kalem/sipariş oranı İKİ ONDALIK basar (diğer ölçüler bir). Sebep: bu sayı
+   * bir MİKTAR değil AYIRT EDİCİ; 1.0 ile 1.4 arasındaki fark "tek tek giriyor"
+   * ile "bazen ikili giriyor"u ayırır ve tek ondalığa yuvarlanınca komşu
+   * müşteriler aynı değere çöküp sütun bilgi taşımaz olur.
+   */
+  const round2 = (n: number): number => Math.round(n * 100) / 100;
+
   const totalQty = round1([...period.values()].reduce((s, a) => s + a.qty, 0));
   const orderCount = [...period.values()].reduce((s, a) => s + a.orderCount, 0);
+  const lineCount = [...period.values()].reduce((s, a) => s + a.lineCount, 0);
+  const cancelledQty = round1([...period.values()].reduce((s, a) => s + a.cancelledQty, 0));
+  const cancelledOrderCount = [...period.values()].reduce((s, a) => s + a.cancelledOrderCount, 0);
+  const shippedTotal = round1(shippedCells.reduce((s, c) => s + c.qty, 0));
 
   const rows: CustomerRankRow[] = [...period.entries()]
     .map(([customerId, agg]) => {
       const lt = byId.get(customerId);
-      const topItem = [...agg.itemQty.values()].sort((a, b) => b.qty - a.qty)[0] ?? null;
+      // Deterministik "favori": metraj DESC, eşitlikte ada göre. Sıralama
+      // anahtarı tek olsaydı eşit metrajlı iki kumaşta sonuç koşumdan koşuma
+      // değişir ve rapor kendini tekrar etmezdi.
+      const top = (m: PeriodAgg["itemQty"]) =>
+        [...m.values()].sort((a, b) => b.qty - a.qty || a.name.localeCompare(b.name, "tr"))[0] ??
+        null;
+      const topItem = top(agg.itemQty);
+      const topColor = top(agg.colorQty);
       return {
         customerId,
         customerName: lt?.customerName ?? "—",
         customerCode: lt?.customerCode ?? null,
         orderCount: agg.orderCount,
         lineCount: agg.lineCount,
+        avgLinesPerOrder: agg.orderCount > 0 ? round2(agg.lineCount / agg.orderCount) : 0,
+        orderDayCount: agg.orderDays.size,
         totalQty: round1(agg.qty),
         avgOrderQty: agg.orderCount > 0 ? round1(agg.qty / agg.orderCount) : 0,
         sharePct: pctOf(agg.qty, totalQty),
         cumulativePct: 0, // aşağıda doldurulur
         abcClass: "C" as AbcClass,
+        cancelledQty: round1(agg.cancelledQty),
+        // Payda AKTİF + İPTAL: "verdiği işin ne kadarını geri çekti". Paydaya
+        // yalnız aktifi koymak, her şeyi iptal eden müşteride %∞ üretirdi.
+        cancelRatePct: pctOf(agg.cancelledQty, agg.qty + agg.cancelledQty),
+        shippedQty: round1(shippedByCustomer.get(customerId) ?? 0),
         lifetimeOrderCount: lt?.orderCount ?? agg.orderCount,
+        firstOrderDate: lt ? lt.firstOrder.toISOString() : null,
         lastOrderDate: lt ? lt.lastOrder.toISOString() : null,
         daysSinceLastOrder: lt ? daysBetween(lt.lastOrder, now) : null,
         avgIntervalDays: lt ? rhythm(lt) : null,
         topItemName: topItem?.name ?? null,
+        topColorName: topColor?.name ?? null,
         ...(prevPeriod ? { prevQty: round1(prevPeriod.get(customerId)?.qty ?? 0) } : {}),
       };
     })
@@ -320,7 +482,13 @@ export async function getCustomerScorecard(
     summary: {
       customerCount: rows.length,
       orderCount,
+      lineCount,
+      avgLinesPerOrder: orderCount > 0 ? round2(lineCount / orderCount) : 0,
       totalQty,
+      cancelledQty,
+      cancelRatePct: pctOf(cancelledQty, totalQty + cancelledQty),
+      cancelledOrderCount,
+      shippedQty: shippedTotal,
       aClassCount: aRows.length,
       bClassCount: rows.filter((r) => r.abcClass === "B").length,
       cClassCount: rows.filter((r) => r.abcClass === "C").length,

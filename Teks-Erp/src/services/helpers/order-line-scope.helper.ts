@@ -26,6 +26,23 @@ import { Prisma } from "@prisma/client";
 export const ACTIVE_LINE = { cancelledAt: null } as const;
 
 /**
+ * `ACTIVE_LINE`in BELLEK-İÇİ İKİZİ — satırlar zaten çekilmişken kullanılır.
+ *
+ * NEDEN İKİZ GEREKTİ: bir sorgu hem AKTİF hem İPTAL kalemi aynı anda görmek
+ * zorunda kalabilir (Müşteri Karnesi'nin iptal oranı: "bu dönemde verilen
+ * siparişlerin ne kadarı iptal edildi"). Prisma'da aynı ilişkiyi iki farklı
+ * süzgeçle bir kerede seçmek yok; alternatif iki ayrı sorgu atıp aralarında
+ * bir yazma olma riskini almaktı. Bu yüzden satırlar SÜZGEÇSİZ çekilir ve
+ * ayrım burada, TEK yüklemle yapılır.
+ *
+ * ⚠️ Yüklem `ACTIVE_LINE` ile AYNI ŞEYİ söylemek ZORUNDA — ayrışırsa aynı
+ * sorunun iki cevabı olur. (`stepCanApplyQuality` ↔ `QUALITY_STATION_WHERE`
+ * boğaz-ikiz deseninin birebir emsali.)
+ */
+export const isActiveLine = (line: { cancelledAt: Date | null }): boolean =>
+  line.cancelledAt === null;
+
+/**
  * Aktif VE hâlâ açık kalem: istenen > sevk edilen.
  *
  * `quantity: { gt: <shippedQty alanı> }` alan-karşılaştırmasıdır ve Prisma'da
