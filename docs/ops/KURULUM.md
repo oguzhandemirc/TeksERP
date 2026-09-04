@@ -63,6 +63,24 @@ koşar; gömülü bir varsayılan oraya da gider ve "sonra değiştiririz" adım
 yazar, sahadaki eski dosya `superuser`/`superpass` taşır. `kur.ps1` ikisini de okur
 — çalışan bir sunucudaki dosyayı elle düzeltmek gerekmez.
 
+### A0c. Audit koruması (`audit_guard`) — AÇIK olmalı
+
+```sql
+ALTER DATABASE <db> SET teks.audit_guard = 'on';
+```
+sonra `pm2 restart tekserp-backend`.
+
+⚠️ **Kapalıyken audit kayıtları silinebilir/değiştirilebilir** — denetim izinin
+tamamı bu bayrağa dayanır. Backend açılışta `[audit-guard] ⚠️ KORUMA KAPALI`
+basar ama bu satır **hata log'unun içinde** kaybolur; 2026-09-04 ev provasında
+tam olarak öyle oldu ve adım yalnız log'dan fark edildi. Bu yüzden numaralı
+adımlar arasına alındı.
+
+Doğrula:
+```sql
+SHOW teks.audit_guard;   -- 'on' dönmeli
+```
+
 ### A1. ENV hazırla (`Teks-Erp/.env` — sırlar; git'e girmez)
 4. İki değişkeni yaz:
    ```

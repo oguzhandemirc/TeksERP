@@ -111,10 +111,24 @@ C:\TeksERP\pm2\node_modules\.bin\pm2.cmd kill
 $pg = "C:\Program Files\PostgreSQL\16\bin"
 & "$pg\dropdb.exe" -h localhost -p 5432 -U postgres tekserp
 
-# 3) Kök klasörü kaldır (yedeği SAKLA)
+# 3) YALNIZ KURULUM ÇIKTILARINI kaldır — KÖKÜ SİLME
+#    ⚠️ `Remove-Item C:\TeksERP -Recurse -Force` YAZMA. İkinci koşumda ölçüldü:
+#    paket, dump, script'ler ve bu not kurulum kökünün İÇİNDE duruyordu; kökü
+#    silmek provanın kendi girdilerini yok ederdi.
 Move-Item C:\TeksERP\backups\premigrate_*.dump C:\  -ErrorAction SilentlyContinue
-Remove-Item C:\TeksERP -Recurse -Force
+foreach ($d in "app","backups","logs","pg-setup","pgsql","pm2","pm2-home") {
+  Remove-Item "C:\TeksERP\$d" -Recurse -Force -ErrorAction SilentlyContinue
+}
+Get-ChildItem C:\TeksERP -Directory -Filter "app.*" | Remove-Item -Recurse -Force
 ```
+
+⚠️ **`app\` içinde açık terminal/pencere bırakma.** İkinci koşumda sıfırlama tam
+bu yüzden düştü ("Device or resource busy" — koşan oturumun çalışma dizini o
+klasörün içindeydi). `kur.ps1`'in bu uyarısı gerçektir, ölçüldü.
+
+⚠️ `pgsql\bin` bir **junction**'dır; silinirken hedefi (`C:\Program Files\
+PostgreSQL\16\bin`) takip ETMEZ — ikinci koşumda 74 dosyayla sağlam kaldığı
+doğrulandı.
 
 ⚠️ `tekserp` **rolünü de** düşür (`DROP ROLE tekserp`) — kalırsa parolası
 bilinmediği için `ilk-kurulum.ps1` `[3/8]`'de "bağlanılamıyor" ile durur.

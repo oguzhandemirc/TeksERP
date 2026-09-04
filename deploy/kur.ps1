@@ -5,6 +5,16 @@
 #   C:\Etkili-Yazilim\kur.ps1 -Paket D:\tekserp-backend-20260801_120000-abc1234.zip
 #   C:\Etkili-Yazilim\kur.ps1 -GeriAl          # son kuruluma geri don
 #
+# ⚠ PAKETLENMIS KURULUMDA `npm run <script>` KULLANMA - `node <tam yol>` kullan.
+#   Paket `node_modules\.bin` TASIMAZ ve bu BILINCLIDIR: npm o klasordeki
+#   shim'leri KURULUM ANINDA, kendi platformunda uretir (Windows'ta `.cmd`,
+#   macOS/Linux'ta sembolik bag). macOS'ta uretilen bir pakette `.bin` ya hic
+#   olmaz ya da Windows'ta calismayan sembolik baglar tasir - 2026-09-04 ev
+#   provasinda `npx prisma` tam bu yuzden `[7/9]`'da dustu.
+#   Bu script'in kendisi kurala uyar: prisma `node node_modules\prisma\build\
+#   index.js`, satici hesabi `node dist\tools\superadmin-olustur.cjs`.
+#   Yeni bir bakim komutu eklerken ayni sekilde yaz.
+#
 #   YAN YANA (guvenli gecis) - eskiye HIC dokunmadan yeni koke kur:
 #   C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket D:\tekserp-backend-....zip
 #     Eski kurulum yerinde kalir; devretme = eskiyi durdur, yeniyi baslat.
@@ -108,9 +118,39 @@ if (-not $admin) { Fail "YONETICI PowerShell gerekir (pm2 daemon SYSTEM olarak k
 # GERI ALMA MODU
 # =============================================================================
 if ($GeriAl) {
-  $adaylar = Get-ChildItem "$kok\app.eski-*" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending
-  if (-not $adaylar) { Fail "Geri donulecek kurulum yok ($kok\app.eski-* bulunamadi)." }
-  $hedef = $adaylar[0].FullName
+  # ⚠ ADAY DOGRULANIR (2026-09-04 ev provasi, BULGU-6). Eski kod EN YENI
+  #   `app.eski-*` klasorunu KOSULSUZ geri koyuyordu. Provada olculdu: ilk
+  #   kurulumda `ilk-kurulum.ps1`in biraktigi iskelet `app\` (icinde YALNIZ
+  #   `.env`) [5/9] tarafindan `app.eski-*` olarak kenara alinmisti; `-GeriAl`
+  #   onu "geri donulecek surum" sanip CALISAN kurulumu
+  #   `app.basarisiz-<damga>`ya tasir, bos iskeleti `app\` yapar ve pm2 hicbir
+  #   sey baslatamazdi -> fabrika kapali, saglam kurulum operatorun EN SON
+  #   bakacagi klasorde.
+  #   ⚠ Asimetri load-bearing'di: OTOMATIK kol (`GeriAlOtomatik`) bu kontrolu
+  #   yapiyordu, ELLE cagrilan kolda yoktu - "kontrolu iki koldan yalniz birine
+  #   koymak" sinifi (2026-08-24 vakasinin kardesi).
+  function AdayGecerliMi($yol) {
+    return (Test-Path (Join-Path $yol "ecosystem.config.js")) -and
+           (Test-Path (Join-Path $yol "dist\server.js"))
+  }
+  $tumAdaylar = @(Get-ChildItem "$kok\app.eski-*" -Directory -ErrorAction SilentlyContinue | Sort-Object Name -Descending)
+  if (-not $tumAdaylar) { Fail "Geri donulecek kurulum yok ($kok\app.eski-* bulunamadi)." }
+  $gecerli = @($tumAdaylar | Where-Object { AdayGecerliMi $_.FullName })
+  if (-not $gecerli) {
+    Write-Host ""
+    Write-Host "  Bulunan ama CALISTIRILAMAZ adaylar:" -ForegroundColor Yellow
+    foreach ($a in $tumAdaylar) {
+      $eksik = @()
+      if (-not (Test-Path (Join-Path $a.FullName "ecosystem.config.js"))) { $eksik += "ecosystem.config.js" }
+      if (-not (Test-Path (Join-Path $a.FullName "dist\server.js")))      { $eksik += "dist\server.js" }
+      Write-Host "    $($a.Name)  - eksik: $($eksik -join ', ')"
+    }
+    Fail "Gecerli geri donus adayi YOK. HICBIR SEYE DOKUNULMADI - calisan kurulum yerinde."
+  }
+  if ($gecerli.Count -lt $tumAdaylar.Count) {
+    Uyar "$($tumAdaylar.Count - $gecerli.Count) aday calistirilamaz oldugu icin ATLANDI."
+  }
+  $hedef = $gecerli[0].FullName
   Write-Host ""
   Write-Host "GERI ALMA: $hedef  ->  $appDir" -ForegroundColor Yellow
   if (-not $Zorla) { if ((Read-Host "Devam? (e/h)") -ne 'e') { Fail "Iptal." } }
@@ -263,7 +303,7 @@ if (-not $Zorla) {
   Write-Host ""
   Write-Host "  KURULACAK : $(Split-Path $Paket -Leaf)"
   Write-Host "  HEDEF     : $appDir"
-  Write-Host "  ESKISI    : app.eski-$damga olarak saklanacak (silinmeyecek)"
+  Write-Host "  ESKISI    : app.eski-/app.iskelet-$damga olarak saklanacak (silinmeyecek)"
   if ((Read-Host "  Devam? (e/h)") -ne 'e') { Fail "Iptal edildi - hicbir sey degismedi." }
 }
 
@@ -291,7 +331,14 @@ Adim "[4/9] pm2 uygulamasi durduruluyor..."
 Ok "durduruldu"
 
 # --- Buradan sonrasi icin otomatik geri alma --------------------------------
-$eskiAd = "$kok\app.eski-$damga"
+# ⚠ ISKELET ile CALISAN kurulum AYRI adlar alir (2026-09-04, BULGU-6'nin ikinci
+#   parcasi). `ilk-kurulum.ps1` yalnizca `.env` tasiyan bos bir `app\` birakir;
+#   o `app.eski-*` adiyla kenara alinirsa `-GeriAl` icin sahte bir "geri donus
+#   adayi" olur. Ayirt edici olcut CALISTIRILABILIRLIK: `dist\server.js`.
+#   ⚠ Olcum $mevcut uzerinde: [5/9] tasinan odur ($appDir DEGIL - ilk geciste
+#     $mevcut git klonu olabilir).
+$calisirdi = (Test-Path (Join-Path $mevcut "dist\server.js"))
+$eskiAd = if ($calisirdi) { "$kok\app.eski-$damga" } else { "$kok\app.iskelet-$damga" }
 function GeriAlOtomatik($sebep) {
   # [6/9]'dan gelen cagrilar cwd app\ icindeyken kosar (Set-Location $appDir):
   # Remove-Item $appDir kendi altini keser, tasima "kilitli" diye duser. Once cik.

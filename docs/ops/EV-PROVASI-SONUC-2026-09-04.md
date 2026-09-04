@@ -1,26 +1,29 @@
-# Ev Provası — Sonuç Notu (2026-09-04)
+# Ev Provası — Sonuç Notu (2026-09-04, iki koşum)
 
 > **Bu belge, `OKU-ONCE.md` ile Windows makineye devredilen ev provasının
-> cevabıdır.** Provayı koşan oturum Windows'taydı; bu notu okuyan oturum (macOS)
-> o konuşmayı görmüyor, ihtiyacı olan her şey burada.
+> cevabıdır.** Provayı koşan oturum Windows'taydı; bu notu okuyan oturum
+> (macOS) o konuşmayı görmüyor, ihtiyacı olan her şey burada.
 >
 > **Repo hedefi:** `docs/ops/EV-PROVASI-SONUC-2026-09-04.md`
-> (devir notunun kaynağı: `docs/ops/EV-PROVASI-DEVIR-2026-09-04.md`)
 
 ---
 
-## 0. Sonuç: PROVA GEÇMEDİ
+## 0. Sonuç
 
-`OKU-ONCE.md §6`'daki 8 maddenin ilki düştü: **`kur.ps1` dokuz adımı
-tamamlayamadı.** `[7/9]` migration adımında durdu ve sebebi kurulum mekaniği
-değil, **paketin kendisiydi**.
+| | 1. koşum (02:11–02:32) | 2. koşum (03:36–03:45) |
+|---|---|---|
+| Paket | `8ba92ca7` | `6d7f1209` |
+| `ilk-kurulum.ps1` | ✅ 8 adım | ✅ 8 adım |
+| `kur.ps1` | ❌ **`[7/9]`'da düştü** | ✅ **dokuz adım da tamam** |
+| Elle müdahale | **4** | **0** |
+| `/health` | UP (müdahalelerle) | UP (kendi başına) |
 
-Sunucu şu an ayakta (`/health` → `UP` / `db UP` / `v2.9.0`) — ama oraya
-**dört elle müdahaleyle** gelindi. Bu paket bugün fabrikaya götürülseydi
-kurulum aynı yerde dururdu.
+**Sunucu tarafı geçti.** İkinci koşumda `kur.ps1` hiç dokunulmadan
+`KURULUM TAMAM` verdi — provanın asıl sorusu buydu ve cevabı evet.
 
-Provanın amacı buydu ve amacına ulaştı: **ölçülmemiş olan kurulum mekaniği
-ölçüldü ve kırık çıktı.**
+**Prova tamamı geçmedi:** panel ve tablet iki koşumda da ölçülemedi
+(`.exe`/`.apk` makineye hiç gelmedi — kullanıcı bunları kendisi dağıtıyor,
+prova kapsamı dışı sayıldı) ve satıcı hesabı hâlâ kurulmadı.
 
 ---
 
@@ -29,21 +32,15 @@ Provanın amacı buydu ve amacına ulaştı: **ölçülmemiş olan kurulum mekan
 | | Değer | Runbook ne diyor |
 |---|---|---|
 | İşletim sistemi | Windows 11 Pro 10.0.26200 | — |
-| Node | **v26.4.0** | `KURULUM.md A0`: **22.x** ❌ |
+| Node | **v26.4.0** | `A0`: 22.x — artık `kur.ps1` ölçüyor: `zemin >=22` ✅ |
 | npm | 11.17.0 | — |
-| PostgreSQL | **16.14** (servis `postgresql-tekserp`, `NT AUTHORITY\NetworkService`, port 5432) | 16.x ✅ |
+| PostgreSQL | **16.14** (servis `postgresql-tekserp`, `NetworkService`, port 5432) | 16.x ✅ |
 | `pg_hba.conf` | tüm satırlar `scram-sha-256` | — |
-| Paketi üreten Node | **v26.8.1** (`PAKET.json`) | 22.x ❌ |
+| Paketi üreten Node | v26.8.1 | — |
 
-⚠ **Node sürümü, PostgreSQL 18 vakasının aynısı.** Runbook 22.x diyor; ne bu
-makine ne paketi üreten makine 22'ydi. Kurulum çalıştı, yani 26 fiilen sorun
-çıkarmadı — ama yazılı sürüm gerçeği göstermiyor. `package.json`'da `engines`
-olmadığı için hiçbir kapı bunu yakalamaz. **Ya doküman 26'ya çekilmeli ya da
-`engines` konup gerçekten 22'de kalınmalı; ikisinden biri seçilmeli.**
+Node sürümü artık bir kapıya bağlandı (`>=22`), doküman/gerçek ayrışması kapandı.
 
-### Makine temiz DEĞİLDİ
-
-Prova başlarken makinede önceki bir çalışmadan kalma veri vardı:
+### Makine temiz DEĞİLDİ (1. koşum başlangıcı)
 
 ```
 tekserp                92 tablo   195 migration   1752 top
@@ -52,27 +49,53 @@ tekserp_old_20260819   88 tablo   162 migration    815 top
 rol: tekserp (parolası bilinmiyordu)
 ```
 
-`C:\Etkili-Yazilim` yoktu (beklendiği gibi).
-
-⚠ **Kullanıcının talimatıyla üçü de ve `tekserp` rolü SİLİNDİ; güvenlik
-yedekleri de talimatla silindi — bu veri geri getirilemez.** Sıfırdan kurulum
-yolunun gerçekten sınanması için gerekliydi (rol dursaydı `ilk-kurulum.ps1`
-mevcut rolün parolasına bilinçli olarak dokunmadığı için `[3/8]` sonunda
-"bağlanılamıyor" ile düşerdi).
+⚠ Kullanıcının talimatıyla üçü de ve `tekserp` rolü **silindi**; güvenlik
+yedekleri de talimatla silindi — **bu veri geri getirilemez.**
 
 ---
 
-## 2. Adım adım ne oldu
+## 2. BİRİNCİ KOŞUM — neden düştü
 
-### 3.2 `ilk-kurulum.ps1` — ✅ KUSURSUZ
+`kur.ps1` `[7/9]`'da `'prisma' is not recognized` ile durdu. Sebep kurulum
+mekaniği değil **paketin kendisiydi**: zip'in 13.568 girdisinin hiçbiri nokta
+ile başlamıyordu, yani `node_modules/.bin` ve `node_modules/.prisma` komple
+düşmüştü (beyan 13.658 dosya, zip'te 13.518 → **140 dosya eksik**).
 
-```powershell
-.\ilk-kurulum.ps1 -Kok C:\TeksERP -DbParola 123123 -PostgresParola <p> `
-                  -Dump "C:\TeksERP\tekserp_20260904_011108.dump"
-```
+Sistemi ayağa kaldırmak için gereken dört müdahale:
 
-Sekiz adımın hepsi geçti. Çıktı `OKU-ONCE §3.2`'deki beklenen satırlarla
-**birebir** aynıydı:
+1. `node node_modules\prisma\build\index.js migrate deploy` (`.bin` yok)
+2. `ecosystem.config.js` yollarını `C:/Etkili-Yazilim` → `C:/TeksERP`
+3. `node node_modules\prisma\build\index.js generate` (`.prisma` yok)
+4. pm2'yi yükseltilmiş kabuktan başlatmak
+
+Ayrıntılı bulgular §4'te; hepsi ikinci koşumda tekrar ölçüldü.
+
+---
+
+## 3. İKİNCİ KOŞUM — ne yapıldı, ne çıktı
+
+### 3.1 Sıfırlama (zorunluydu)
+
+Birinci koşumun kurulumu dört müdahaleyle ayaktaydı; üzerine kurmak hiçbir şey
+kanıtlamazdı. Yapılan: pm2 `delete all` + `kill` (yönetici) · `DROP DATABASE
+tekserp` · `DROP ROLE tekserp` · kurulum klasörlerini kaldır.
+
+⚠️ **`OKU-ONCE §3.0`'daki sıfırlama komutu bu makinede YIKICI:**
+`Remove-Item C:\TeksERP -Recurse -Force`. Paket, dump, script'ler ve notlar
+**kurulum kökünün içinde** duruyor — komut birebir uygulansaydı provanın
+girdileri silinirdi. Yalnız kurulum çıktıları (`app` · `backups` · `logs` ·
+`pg-setup` · `pgsql` · `pm2` · `pm2-home`) kaldırıldı. **Notun o adımı
+düzeltilmeli** (kök ile dosya klasörünün ayrı olduğunu varsayıyor).
+
+⚠️ Sıfırlama sırasında `app\dist` "Device or resource busy" ile silinemedi.
+Sebep: **koşan oturumun kendi çalışma dizini o klasörün içindeydi.** Tam da
+`kur.ps1`'in uyardığı "app\ üzerinde açık terminal/pencere" kilidi — uyarının
+gerçek olduğu ölçülmüş oldu. Dizinden çıkınca sorun kalktı.
+
+⚠️ `pgsql\bin` bir junction'dır; silinirken **hedefi takip edilmedi**
+(`C:\Program Files\PostgreSQL\16\bin` 74 dosyayla sağlam kaldı). Doğrulandı.
+
+### 3.2 `ilk-kurulum.ps1` — ✅ kusursuz, iki koşumda da
 
 ```
 + rol olusturuldu: tekserp  (superuser DEGIL ...)
@@ -81,285 +104,273 @@ Sekiz adımın hepsi geçti. Çıktı `OKU-ONCE §3.2`'deki beklenen satırlarla
 + baglanti OK  |  uygulanmis migration: 191
 ```
 
-Bu script hakkında düzeltilecek bir şey **yok** — beklendiği gibi çalıştı.
-Tek eksiği §3'teki BULGU-3.
+### 3.3 `kur.ps1` — ✅ DOKUZ ADIM, SIFIR MÜDAHALE
 
-### 3.3 `kur.ps1` — ⚠ `[7/9]`'DA DÜŞTÜ
+`[1/9]`'daki iki yeni kapı çalıştı:
 
-```powershell
-.\kur.ps1 -Kok C:\TeksERP -Paket "...8ba92ca7.zip" -Zorla
+```
+OK dosya sayisi beyanla uyusuyor (13643)
+OK node 26.4.0 (zemin: >=22)
+OK paket saglam (231 migration klasoru)
 ```
 
-| Adım | Sonuç |
-|---|---|
-| `[1/9]` paket doğrulama | ✅ "paket saglam (231 migration klasoru)" — **kapı kusuru gördü ama geçirdi**, bkz. BULGU-1 |
-| `[2/9]` mevcut kurulum + `.env` | ✅ |
-| `[3/9]` premigrate yedek | ✅ `premigrate_20260904_022106.dump` (4 MB), doğrulandı |
-| `[4/9]` pm2 durdur | ✅ |
-| `[5/9]` yerleştirme | ✅ |
-| `[6/9]` bağımlılıklar | ✅ atlandı (pakette dahil) |
-| `[7/9]` **migration** | ❌ `'prisma' is not recognized as an internal or external command` |
-| `[8/9]` `[9/9]` | koşmadı |
+Kapılar `kur.ps1`'e şu hâliyle girmiş (ölçüldü):
+- satır ~195: `$zorunlu` listesine `node_modules\.prisma\client` ve
+  `node_modules\prisma\build\index.js` eklendi
+- satır 411/419/433: prisma artık `& node $prismaCli` ile çağrılıyor,
+  `.bin`'e ve `npx`'e bağımlı değil
 
-⚠ **DB'ye hiç dokunulmadı** — `prisma` hiç başlamadığı için geri alınamaz eşik
-fiilen geçilmedi. Script'in "DB kısmen değişmiş OLABİLİR" mesajı bu durumda
-doğru ama gereğinden karamsar; ayırt edemiyor.
+Son çıktı: `KURULUM TAMAM · API UP · DB UP · surum 2.9.0`.
 
-### Elle tamamlanan dört adım
-
-Provayı ilerletmek için (hiçbiri normal kurulumun parçası değildir):
-
-```powershell
-# 1. migration - .bin olmadigi icin CLI'yi dogrudan giris noktasindan cagir
-cd C:\TeksERP\app
-node node_modules\prisma\build\index.js migrate deploy      # 191 + 40 = 231 ✅
-
-# 2. ecosystem.config.js yollarini C:/TeksERP'e cevir (BULGU-3)
-
-# 3. Prisma client'i yerinde uret (BULGU-1)
-node node_modules\prisma\build\index.js generate
-
-# 4. pm2'yi YUKSELTILMIS kabukta baslat (BULGU-4)
-$env:PM2_HOME = "C:\TeksERP\pm2-home"
-C:\TeksERP\pm2\node_modules\.bin\pm2.cmd start ecosystem.config.js ; ... save
-```
-
-Sonuç: `/health` → `{"status":"UP","api":"UP","db":"UP","version":"2.9.0"}`
-
-### 3.4 satıcı hesabı — ❌ YAPILAMADI (BULGU-2)
-### 3.5 panel / 3.6 tablet — ❌ dosyalar makinede yok
-
-`TeksERP-1.2.0-Setup.exe` ve `TeksERP-1.0.1-vc58.apk` klasöre hiç taşınmamış.
-Yani provanın asıl kazancı sayılan iki şey **ölçülemedi**:
-- panelin macOS'ta derlenen `serialport`/`node-hid` ikililerinin Windows'ta
-  tutup tutmadığı (`OKU-ONCE §3.5` kritik kontrolü)
-- tabletin alt ağ taramasıyla sunucuyu bulup bulmadığı (§3.6 — "bu yol daha
-  önce hiç denenmedi")
+> `-Zorla` verildi (onay sorusu yazılamayan bir pencerede koşuyordu). Bu
+> script'in kendi desteklediği otomasyon bayrağıdır, müdahale sayılmaz.
 
 ---
 
-## 3. BULGULAR
+## 4. BULGULAR — durum tablosu
 
-### BULGU-1 — Paket, `node_modules` içindeki nokta ile başlayan HER klasörü kaybediyor · **KRİTİK**
-
-Ölçüm:
-
-```
-zip toplam girdi                     : 13568  (13518 dosya + 50 klasor)
-nokta ile baslayan girdi sayisi      : 0
-PAKET.json > dosyaSayisi (beyan)     : 13658
-FARK                                 : 140 dosya
-```
-
-`paketle.ps1` 13658 dosya saydığını yazıyor, zip'e 13518 dosya koymuş.
-**140 dosya sessizce düşmüş** ve hiçbir kapı bunu görmemiş.
-
-Düşenler ve sonuçları:
-
-| Düşen | Sonucu |
-|---|---|
-| `node_modules/.bin` | Hiçbir CLI shim yok → `npx prisma` bulunamaz → **`kur.ps1 [7/9]` her koşumda düşer** |
-| `node_modules/.prisma` | Üretilmiş Prisma client yok → backend `Cannot find module '.prisma/client/default'` ile **restart döngüsüne girer** |
-
-İkincisi birincisinden daha sinsi: `[7/9]` elle aşılsa bile backend açılmaz ve
-pm2 `online` gösterir (süreç doğar, saniyeler içinde ölür, tekrar doğar).
-`kur.ps1 [9/9]` bunu yakalar (120 sn `/health` beklemesi) — yani **son kapı
-çalışıyor**, kaçak yok. Ama bu noktada migration çoktan uygulanmıştır.
-
-**Nerede düzeltilir:** `deploy/paketle.ps1`. Muhtemel sebep: paketleyici gizli
-öznitelikli / dot-prefix girdileri atlıyor (paket `unknownbe85e6a5338c\demirci`
-üzerinde üretilmiş; kaynak makinede `.bin` girdileri sembolik bağ ise pek çok
-zip yazıcısı bunları sessizce atlar).
-
-⚠ **Düzeltmeye ek olarak bir KAPI gerekiyor.** Bu kusurun bedava yakalanacağı
-iki yer var, ikisi de boştu:
-1. `paketle.ps1` sonunda: `PAKET.json > dosyaSayisi` ile zip'in gerçek dosya
-   girdisi sayısını kıyasla; eşit değilse **paketi üretme**.
-2. `kur.ps1 [1/9]` `$zorunlu` listesine ekle:
-   `node_modules\.prisma\client` ve `node_modules\.bin\prisma`
-   (`$nmVar` doğruyken). Bugün `[1/9]` "paket saglam" dedi ve paket sağlam
-   değildi — kapı doğru soruyu sormuyor.
-
-### BULGU-2 — Satıcı (süperadmin) hesabı bu paketten kurulamıyor · **KRİTİK**
-
-```
-scripts\ klasoru       : YOK
-scripts\superadmin-olustur.ts : YOK
-node_modules\tsx       : YOK
-package.json > superadmin:kur = "tsx scripts/superadmin-olustur.ts"
-```
-
-`OKU-ONCE §3.4` bu adımı kurulumun parçası sayıyor ve atlanırsa "hesap **hiç
-doğmaz**" diyor. Paket ne script'i ne çalıştırıcısını taşıyor → **ADIM 3.4 bu
-paketle hiç çalıştırılamaz.**
-
-Emniyet supabı devrede (modül anahtarlarını `admin:settings` taşıyan yönetici
-değiştirebilir), yani sistem kilitlenmiyor — ama satıcı ekranı hiç açılmıyor
-ve "tek gövde, çok fabrika" hedefinin kilit mekanizması kurulamıyor.
-
-**Karar gerekiyor:** ya `scripts/` + `tsx` pakete girecek, ya bu adım pakete
-girmeyen ayrı bir yolla (derlenmiş `dist/` betiği?) koşacak. Bugünkü hâliyle
-runbook, paketin sağlayamadığı bir adımı zorunlu tutuyor.
-
-### BULGU-3 — `ilk-kurulum.ps1` `ecosystem.config.js` yazmıyor
-
-Taze kurulumda korunacak bir `ecosystem.config.js` yok; `kur.ps1 [5/9]` doğru
-davranıp paketinkini kullanıyor ("onceki ecosystem.config.js yoktu"). Ama
-paketinki **repo varsayılanıdır** ve tüm yolları sabit `C:/Etkili-Yazilim`:
-
-```
-out_file   : C:/Etkili-Yazilim/logs/backend-out.log     ← klasor YOK
-error_file : C:/Etkili-Yazilim/logs/backend-err.log     ← klasor YOK
-BACKUP_DIR : C:/Etkili-Yazilim/backups
-PG_BIN_DIR : C:/Etkili-Yazilim/pgsql/bin
-```
-
-Kök `C:\TeksERP` iken hepsi yanlış. `KURULUM.md` zaten "`BACKUP_DIR` tanımsızsa
-gece yedeği sessizce çalışmaz" diyor; burada tanımlı ama **var olmayan bir yeri**
-gösteriyor — daha kötüsü, çünkü hiçbir uyarı üretmez.
-
-⚠ Bu, `-Kok`'un parametre olmasının yarım kalmış tarafı: `kur.ps1` köke göre
-konumlanabiliyor, `ecosystem.config.js` konumlanamıyor.
-
-**Nerede düzeltilir:** `ilk-kurulum.ps1`'e 9. adım — `-Kok`'a göre
-`ecosystem.config.js` üret (veya paketinkini kopyalayıp yolları `-Kok` ile
-yeniden yaz). İdempotentlik kuralı aynen geçerli: **varsa dokunma.**
-
-Provada elle düzeltildi; paketin orijinali
-`C:\TeksERP\app\ecosystem.config.js.paket-varsayilani` olarak duruyor.
-
-### BULGU-4 — Windows'ta pm2 pipe'ı PM2_HOME'a göre ayrışmıyor · **yan yana modelini etkiler**
-
-`kur.ps1` başlığı şunu vaat ediyor:
-
-> ⚠ HER KOK KENDI PM2 DAEMON'INI TASIR ($kok\pm2-home). Ayni uygulama adi iki
-> kokte CAKISMAZ - listeler ayridir.
-
-**Windows'ta bu tutmuyor.** pm2 daemon'ı `\\.\pipe\rpc.sock` adını kullanıyor
-ve bu ad `PM2_HOME`'a göre isimlendirilmiyor — makinede **tek** pipe var.
-Ölçülen davranış:
-
-- Yükseltilmiş `kur.ps1` koşumu `[4/9]`'da bir **yönetici** daemon spawn etti
-- Sonraki yetkisiz `pm2 start` çağrıları `connect EPERM \\.\pipe\rpc.sock` aldı
-- Daemon'ları öldürüp temiz denemek işe yaramadı — sahiplik sorunu, bayat pipe değil
-- Çözüm: pm2'yi de yükseltilmiş koşmak (script zaten yönetici şartı koyuyor, tutarlı)
-
-Fabrikada tek kök olduğu için bugün görünmüyor. **Yan yana geçiş (eski kökü
-durdur / yeni kökü başlat) tam da bu mekanizmaya dayanıyor**, o yüzden geçiş
-gününden önce yazılı olması lazım: iki kök aynı daemon'ı paylaşır, ayrı
-`PM2_HOME` yalnız `dump.pm2`/log konumunu ayırır, süreç listesini AYIRMAZ.
-
-Ayrıca: her iki kökün pm2 komutları **aynı yükseltme seviyesinden** verilmeli;
-biri yönetici biri değilse ikincisi `EPERM` alır ve "uygulama yok" sanılır.
-
-### BULGU-5 — `[module-profile]` mevcut satırlara bakmadan çıkıyor · küçük
-
-Log:
-
-```
-[module-profile] TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI
-                 (kod varsayılanları geçerli: üretim açık, diğer altısı kapalı).
-```
-
-Oysa 7/7 anahtar **veritabanında zaten var** (`20260902230000_modul_anahtarlari_grandfathering`
-migration'ından geldi):
-
-```
-production.enabled = true      depo.multiEnabled      = false
-ticaret.enabled    = false     kumasTeknik.enabled    = false
-iplik.enabled      = false     tezgah.enabled         = false
-                               finance.pricingEnabled = false
-```
-
-`KURULUM.md A4b` yükseltilen kurulumda `"7/7 satır zaten var — dokunulmadı"`
-satırını bekliyor. Job, `TEKSERP_PROFIL` yokluğunda satırları hiç saymadan
-çıkıyor → operatör "anahtarlar yazılmadı" okuyup gereksiz yere `.env`e profil
-ekleyip restart ediyor (hiçbir şey değişmeyecek, çünkü satırlar zaten var).
-
-Sonuç doğru, mesaj yanıltıcı. Env kontrolünden **önce** satır sayımı yapılmalı.
-
----
-
-## 4. `OKU-ONCE §6` kontrol listesi
-
-| # | Madde | Sonuç |
+| # | Bulgu | Durum |
 |---|---|---|
-| 1 | `kur.ps1` dokuz adımı tamamladı, sağlık ok | ❌ `[7/9]` düştü |
-| 2 | Migration sayısı 231 | ✅ (elle) |
-| 3 | `GET /api/admin/health` yanıt veriyor | ✅ 401 döndü — uç mevcut, yetki isteniyor |
-| 4 | Panel açıldı, sunucuyu buldu, giriş yapıldı | ❌ `.exe` yok |
-| 5 | Yazıcı/Kantar sekmeleri "serialport yüklü değil" DEMİYOR | ❌ ölçülemedi |
-| 6 | Tablet açıldı, sunucuyu buldu, giriş yapıldı | ❌ `.apk` yok |
-| 7 | Genel Ayarlar → Modüller görünüyor | ⚠ DB'de 7/7 anahtar var, ekran ölçülemedi |
-| 8 | Fabrika verisi yerinde | ✅ 4306 top, 40 `system_settings` |
+| 1 | Paket nokta ile başlayan girdileri kaybediyor | ✅ **düzeldi** (`.prisma` 16 girdi geldi) + dosya sayısı kapısı kondu |
+| 2 | Satıcı hesabı paketten kurulamıyor | ✅ **düzeldi** — araç derlendi |
+| 3 | `ecosystem.config.js` yolları sabit | ✅ **düzeldi** — `${KOK}` ile türetiliyor |
+| 4 | Windows'ta `PM2_HOME` süreçleri ayırmıyor | ✅ yazıya geçti (`OKU-ONCE §5`) |
+| 5 | `[module-profile]` yanıltıcı mesaj | ✅ **düzeldi** — satırları sayıyor |
+| 6 | `kur.ps1 -GeriAl` adayı doğrulamıyor | ❌ **DÜZELMEDİ — tuzak şu an canlı** |
+
+### BULGU-1 · düzeldi, bir kalıntıyla
+
+Yeni pakette 124 nokta girdisi var ve `node_modules/.prisma` (16 girdi) geldi
+— ölümcül olan yarısı kapandı. Ama **`node_modules/.bin` hâlâ 0 girdi.**
+
+Artık zararsız: prisma `node <tam yol>` ile, satıcı aracı `node
+dist/tools/...` ile çağrılıyor; kimse `.bin`'e bakmıyor. **Kalan risk
+gelecekte:** `.bin` shim'ine dayanan yeni bir `npm run` script'i eklenirse
+sessizce kırılır. Ya `.bin` pakete alınmalı ya da "paketlenmiş kurulumda
+`npm run` kullanma, `node <yol>` kullan" kuralı yazıya geçmeli.
+
+### BULGU-2 · düzeldi
+
+`superadmin:kur` artık `node dist/tools/superadmin-olustur.cjs` — `tsx` ve
+`.bin` gerekmiyor. Ölçüldü: boru girdisiyle çağrıldığında **donmadan**,
+saniyeler içinde `❌ Bu script etkileşimli terminal ister` deyip `exit 1`
+veriyor. Fail-loud kapısı çalışıyor.
+
+⚠️ **Hesap hâlâ KURULMADI** — kurulması gerçek bir terminal ister ve
+parola/PIN/TOTP bir kez gösterilir; otomatik koşturmak sırları log'a dökerdi.
+Bu adım insan eliyle yapılacak:
+`cd C:\TeksERP\app ; npm run superadmin:kur`
+
+### BULGU-3 · düzeldi
+
+```
+out_file:   `${KOK}/logs/backend-out.log`
+error_file: `${KOK}/logs/backend-err.log`
+BACKUP_DIR: `${KOK}/backups`
+PG_BIN_DIR: `${KOK}/pgsql/bin`
+```
+
+Doğrulama kapısı: `C:\TeksERP\logs\` **gerçekten doldu**
+(`backend-out-0.log` 3.8 KB, `backend-err-0.log` 731 B). Boş klasör kök
+türetiminin bozuk olduğunu gösterirdi; öyle değil.
+
+### BULGU-5 · düzeldi
+
+```
+[module-profile] TEKSERP_PROFIL tanımlı değil; kurulumda 6/7 modül anahtarı
+ZATEN VAR — yapılacak bir şey yok.
+```
+
+**"6/7" doğrudur, eksik olan bir kusur değil.** `MODULE_SETTING_KEYS` yedi
+anahtar sayıyor; grandfathering migration'ı altısını yazıyor.
+Yazılmayan `finance.enabled`'ı migration'ın kendi başlığı **olumsuz emsal**
+olarak anıyor: o satır ne migration ne seed ile doğmuş, davranış yalnız
+`asBoolean(undefined) → false` kod sigortasından geliyor. Bilinen boşluk.
+
+DB'deki değerler: `production.enabled=true`, diğer altısı `false`.
+
+### BULGU-6 · DÜZELMEDİ — **şu an canlı tuzak**
+
+`-GeriAl` bloğu yeni `kur.ps1`'de **bayt bayt eskisiyle aynı**; aday
+doğrulaması yok. Muhtemelen sırayla kaçtı: bu bulgu 03:27'de yazıldı, paket
+03:24'te üretilmişti.
+
+Makinenin bugünkü hâli: `C:\TeksERP\app.eski-20260904_033846\` **içinde yalnız
+`.env` var** — `ilk-kurulum.ps1`'in bıraktığı boş iskeletin `kur.ps1 [5/9]`
+tarafından kenara alınmış hâli. Yani "geri dönülecek sürüm" değil.
+
+Bugün `kur.ps1 -GeriAl` çalıştırılırsa:
+
+```powershell
+& $pm2 delete $uygulama
+Move-Item $appDir "$kok\app.basarisiz-$damga"   # CALISAN kurulum buraya gider
+Move-Item $hedef $appDir                        # bos iskelet app\ olur
+& $pm2 start ecosystem.config.js                # dosya YOK -> baslamaz
+```
+
+→ **çalışan sistem kapanır** ve sağlam kurulum `app.basarisiz-<damga>` adlı,
+operatörün son bakacağı klasörde kalır.
+
+⚠️ Asimetri load-bearing: **otomatik** geri alma kolu (`GeriAlOtomatik`) bu
+kontrolü yapıyor (`if (-not (Test-Path ... "ecosystem.config.js")) { ... }`),
+elle çağrılan `-GeriAl` kolunda yok. 2026-08-24'te düzeltilen "kaynağa değil
+hedefe bakma" hatasının aynı sınıftan kardeşi: kontrol iki koldan yalnız
+birine eklenmiş.
+
+**Düzeltme (iki parça):**
+1. `-GeriAl`, adayı uygulamadan ÖNCE doğrulasın (`ecosystem.config.js` +
+   `dist\server.js`). Geçersizse **hiçbir şeye dokunmadan** dursun.
+2. `ilk-kurulum.ps1`'in bıraktığı iskelet `app\`, `kur.ps1 [5/9]`'da
+   `app.eski-*` yerine ayırt edilebilir bir ada taşınsın (ör.
+   `app.iskelet-<damga>`) ki geri dönüş adayı sayılmasın.
 
 ---
 
-## 5. Makinenin şu anki hâli
+## 5. İkinci koşumda çıkan YENİ gözlemler
+
+Hepsi `backend-err-0.log`'dan; kurulumu kesmiyorlar.
+
+| Gözlem | Sonucu | Karar |
+|---|---|---|
+| `[audit-guard] ⚠️ KORUMA KAPALI` | Audit kayıtları silinebilir/değiştirilebilir | Kullanıcı: **önemli değil** (bu prova için) |
+| `[offsite] BACKUP_RCLONE_REMOTE boş` | Yedekler DB ile aynı diskte | Kullanıcı: **önemli değil** |
+| Reboot kalıcılığı yok | Makine yeniden başlarsa backend kalkmaz | Kullanıcı: **önemli değil** |
+| `[swagger] OpenAPI spec BOŞ` | `/api-docs` boş görünür | Kullanıcı: **istenen davranış** — prod'da API dokümanı görünmesin |
+
+⚠️ `audit-guard` fabrikada başka bir hikâye olabilir. Açması tek komut ama
+**`KURULUM.md`'nin numaralı adımlarında yok**, yalnız hata log'unda görünüyor —
+sahada atlanması kolay:
+```sql
+ALTER DATABASE tekserp SET teks.audit_guard = 'on';   -- + pm2 restart
+```
+
+⚠️ `/api-docs` prod'da kapalı kalsın kararı alındı. Not: paketlenmiş kurulumda
+onu **açmak da mümkün değil** — swagger glob'u `src/*.ts` arıyor, o da pakete
+girmiyor. İleride istenirse ayrı iş.
+
+⚠️ Reboot: makinede `TeksERP-Backend-Boot` adlı bir Görev Zamanlayıcı görevi
+duruyor ama `C:\Etkili-Yazilim\pm2-boot.cmd`'yi çağırıyor — **o dosya bu
+makinede yok**, görev boşa çalışıyor. Birinci provadan kalma.
+
+---
+
+## 6. `OKU-ONCE §6` kontrol listesi
+
+| # | Madde | 1. koşum | 2. koşum |
+|---|---|---|---|
+| 1 | Dokuz adım, **elle müdahale olmadan** | ❌ | ✅ |
+| 2 | Migration 231 | ⚠ elle | ✅ |
+| 3 | `/api/admin/health` yanıt veriyor | ✅ 401 | ✅ 401 |
+| 4 | Panel açıldı, sunucuyu buldu | ❌ | ❌ dosya yok |
+| 5 | Yazıcı/Kantar "yüklü değil" demiyor | ❌ | ❌ ölçülemedi |
+| 6 | Tablet açıldı, sunucuyu buldu | ❌ | ❌ dosya yok |
+| 7 | Modüller bölümü | ⚠ DB'de var | ⚠ DB'de 6/7 (doğru), ekran ölçülemedi |
+| 8 | Fabrika verisi yerinde | ✅ 4306 | ✅ 4306 |
+| 9 | `superadmin:kur` koştu | ❌ araç yoktu | ✅ araç var, TTY kapısı çalışıyor |
+| 10 | `logs\` gerçekten doldu | — | ✅ |
+
+---
+
+## 7. Makinenin şu anki hâli
 
 ```
 C:\TeksERP\
-  app\                      calisan kurulum (v2.9.0, commit 8ba92ca7)
-    .env                    JWT_SECRET bu makinede uretildi
-    ecosystem.config.js     ELLE duzeltildi (yollar C:/TeksERP)
-    ecosystem.config.js.paket-varsayilani   paketin orijinali
-    node_modules\.prisma\   ELLE uretildi (pakette yoktu)
-  backups\premigrate_20260904_022106.dump   4 MB, dogrulandi
-  logs\ pg-setup\ pm2\ pm2-home\ pgsql\bin -> C:\Program Files\PostgreSQL\16\bin
+  app\                       calisan kurulum (v2.9.0, commit 6d7f1209)
+    .env                     JWT_SECRET bu makinede uretildi
+    ecosystem.config.js      paketten geldi, yollar ${KOK} ile turetiliyor
+  app.eski-20260904_033846\  ⚠ YALNIZ .env - bkz. BULGU-6, -GeriAl CALISTIRMA
+  backups\premigrate_20260904_033846.dump   4 MB, dogrulandi
+  logs\  pg-setup\  pm2\  pm2-home\
+  pgsql\bin -> C:\Program Files\PostgreSQL\16\bin   (junction)
 
 veritabani : tekserp @ localhost:5432, rol tekserp, 231 migration, 4306 top
+             admin.isSystemAccount = false  (1. koşumdaki elle yükseltme
+             sıfırlamayla gitti — fabrikaya taşınmadı)
 pm2        : tekserp-backend / fork / 1 instance / online
              PM2_HOME=C:\TeksERP\pm2-home, dump.pm2 kaydedildi
              ⚠ daemon YONETICI olarak kosuyor - komutlari yukseltilmis kabuktan ver
+saglik     : {"status":"UP","api":"UP","db":"UP","version":"2.9.0"}
 ```
+
+⚠ Klasörde **iki zip** duruyor: bozuk `8ba92ca7` ve iyi `6d7f1209`.
+`OKU-ONCE §1` "tek zip olmalı" diyor; eskisi kanıt olarak bilerek bırakıldı.
 
 ⚠ `postgres` rolünün parolası bu makinede ölçüldü; **bu nota bilerek
 yazılmadı** (`ilk-kurulum.ps1`'in "parola varsayılanı yoktur" kuralıyla aynı
 gerekçe — bu dosya repoya gidiyor).
 
-⚠ `pm2 startup` Windows'u desteklemiyor; **reboot kalıcılığı bu makinede
-kurulmadı.** Yeniden başlatmada backend kendiliğinden kalkmaz.
+---
+
+## 8. Sonraki oturum için — kalan işler
+
+Kullanıcı kararlarından sonra gerçekten açık kalan üç şey:
+
+1. **BULGU-6'yı düzelt** (`-GeriAl` aday doğrulaması + iskelet klasörün ayrı
+   adı). Kod kaybettirmiyor ama çalışan sistemi kapatıyor; fabrikada bir gece
+   vardiyasında bedeli yüksek. **Tek kalan gerçek kusur budur.**
+2. **Satıcı hesabını kur** — gerçek terminalde, insan eliyle. Kurulmadıkça
+   satıcı ekranı açılmaz ve modül anahtarlarını `admin:settings` taşıyan her
+   yönetici değiştirebilir.
+3. **`.bin` kararı** — pakete alınacak mı, yoksa "paketlenmiş kurulumda
+   `npm run` yok, `node <yol>` var" kuralı mı yazılacak?
+
+Ayrıca dokümantasyon:
+- `OKU-ONCE §3.0` sıfırlama komutu düzeltilmeli (§3.1'deki yıkıcı varsayım)
+- `KURULUM.md`'ye `audit_guard` adımı eklenmeli (bugün yalnız log'da)
+
+Kapsam dışı sayılanlar: panel/tablet dağıtımı (kullanıcı kendisi yapıyor),
+audit-guard · offsite yedek · reboot kalıcılığı (kullanıcı: bu prova için
+önemli değil), `/api-docs` boşluğu (istenen davranış).
 
 ---
 
-## 6. Sonraki oturum için — öncelik sırasıyla
+## 9. TASARIM KARARI — gizli hesap modeli geri alınıyor
 
-1. **BULGU-1'i düzelt ve KAPI koy** (`paketle.ps1` dosya sayısı doğrulaması +
-   `kur.ps1 [1/9]`'a `.prisma`/`.bin` kontrolü). Bu düzelmeden hiçbir paket
-   fabrikaya gitmemeli.
-2. **BULGU-2'yi karara bağla** — satıcı hesabı pakete mi girecek, başka yolla mı?
-3. **BULGU-3** — `ilk-kurulum.ps1` `ecosystem.config.js` üretsin.
-4. **BULGU-4 ve BULGU-5'i dokümana yaz** (`kur.ps1` başlık yorumu düzeltilmeli;
-   bugünkü hâli Windows'ta yanlış bilgi veriyor).
-5. **Node sürümü kararı** — doküman 26'ya mı çekilecek, `engines` mi konacak?
-6. **Yeni paketle provayı BAŞTAN koş.** Bugünkü kurulum elle müdahalelerle
-   ayakta; düzeltilmiş paketin `kur.ps1`'i **hiç dokunmadan** dokuz adımda
-   bitirdiği görülmeden prova geçmiş sayılmaz.
-7. `.exe` ve `.apk`'yı makineye taşı — provanın ölçemediği iki şey onlar.
+Birinci koşumda satıcı hesabının gizlilik tasarımı ölçüldü ve **kullanıcı bu
+modelden vazgeçme kararı aldı**: "bu kadar gizlilik iyi bir fikir değildi",
+kaynak kodda güncellenecek.
 
----
+Ölçülen yapı, tek bayrağa (`User.isSystemAccount`) asılı **iki bağımsız
+mekanizma** taşıyor. Biri sökülüp diğeri bırakılabilir:
 
-## 7. Geri dönüş noktaları
+**KİLİT (yetki) — kalabilir**
+- `services/helpers/system-account.registry.ts` — kilit defteri
+- `routes/feature-flag.routes.ts` → `flagWriteGuard` / `moduleLockedBranch`
+- `services/auth.service.ts` → `getEffectivePermissions` → `["*"]`
 
-```
-kod  : C:\TeksERP\app.eski-*  YOK - bu ILK kurulumdu, geri donulecek surum yok
-veri : C:\TeksERP\backups\premigrate_20260904_022106.dump
-       (231 migration ONCESI = fabrika dump'inin yuklenmis hali, 191 migration)
-```
+**GİZLİLİK (görünmezlik) — sökülecek**
 
-`kur.ps1 -GeriAl` bu makinede **çalışmaz** (`app.eski-*` yok). Sıfırlamak
-gerekirse: pm2'yi durdur, `tekserp` veritabanını düşür, `ilk-kurulum.ps1`'i
-baştan koş.
-
----
-
-## 8. Tekrarlanmaması gerekenler
-
-| Tuzak | Bu provada ne oldu |
+| Ne | Nerede |
 |---|---|
-| Paketin "sağlam" demesine güvenmek | `[1/9]` "paket saglam" dedi, paket 140 dosya eksikti. Kapı yanlış soruyu soruyordu. |
+| Liste filtreleri (`visibleUserWhere` · `VISIBLE_USER` · `VISIBLE_ACTOR` · `SQL_VISIBLE_USER`) | `auth.service` · `permission-management.service` (2) · `inventory.service` · `work-session.service` (2) · `system-log.service` · `reports/production.report.service` |
+| Audit maskeleme (`maskSystemActor` · `SQL_ACTOR_*`) | `reports/audit.report.service` (3 — `SELECT` + `GROUP BY` birlikte) · `system-log.service` · `device.service` |
+| 404 kapısı | `middlewares/system-account.middleware.ts` + `routes/admin.routes.ts` (`/users/:id` üzerindeki `blockSystemAccountTarget`) |
+| Ortak kaynak | `services/helpers/system-account.helper.ts` |
+
+⚠ **İki tuzak:**
+1. **`settings-password` uçları açıkta kalır.** `admin.routes.ts`'teki üç uç
+   (`GET`/`PUT`/`DELETE /settings-password`) `requireSystemAccountOr404` ile
+   korunuyor. Gizlilik sökülürken bunlara **yeni bir kapı** verilmezse
+   (ör. `admin:settings`) ayarlar parolasını kimse yönetemez.
+2. **`getEffectivePermissions` erken dönüyor** — sistem hesabı için izin
+   satırlarına hiç bakmadan `["*"]`. Hesap görünür olunca panelde izinleri boş
+   görünüp fiilen her şeyi yapabilecek. Ya UI'da "tüm yetkiler" olarak
+   gösterilmeli ya `["*"]` gerçek izin atamasıyla değiştirilmeli.
+
+> Yollar derlenmiş `dist/` üzerinden çıkarıldı; **dosya adları güvenilir,
+> satır numaraları `.ts` karşılıklarında kayar.**
+
+---
+
+## 10. Tekrarlanmaması gerekenler
+
+| Tuzak | Ne oldu |
+|---|---|
+| Paketin "sağlam" demesine güvenmek | 1. koşumda `[1/9]` "paket saglam" dedi, paket 140 dosya eksikti. Kapı yanlış soruyu soruyordu — 2. koşumda dosya sayısı kapısı kondu ve doğru soruyu sordu. |
 | `pm2 online` = çalışıyor sanmak | Backend restart döngüsündeyken de `online` görünür. Tek ölçüt `/health`. |
 | Windows'ta `PM2_HOME` süreçleri ayırır sanmak | Ayırmaz. Pipe tektir; ayrılan yalnız `dump.pm2` ve loglar. |
 | Yükseltme seviyesini karıştırmak | Yönetici daemon + yetkisiz istemci = `EPERM`, "uygulama yok" gibi okunur. |
-| Makinenin temiz olduğunu varsaymak | Makinede 3 eski veritabanı ve parolası bilinmeyen bir rol vardı. Ölç, varsayma. |
-| Doküman sürümlerine güvenmek | PostgreSQL 16 doğruydu, Node 22 yanlıştı. Ortam sürümleri dokümanın en hızlı bayatlayan kısmı. |
+| `app\` içinde terminal bırakmak | 2. koşumda sıfırlama tam bu yüzden düştü ("Device or resource busy"). `kur.ps1`'in uyarısı gerçek. |
+| Makinenin temiz olduğunu varsaymak | 1. koşumda makinede 3 eski veritabanı ve parolası bilinmeyen bir rol vardı. Ölç, varsayma. |
+| Kontrolü iki koldan yalnız birine koymak | `GeriAlOtomatik` doğruluyor, `-GeriAl` doğrulamıyor (BULGU-6). |
+| Sıfırlama komutunu okumadan koşmak | `OKU-ONCE §3.0` kurulum kökünü siliyor; bu makinede paket ve dump o kökün içindeydi. |
