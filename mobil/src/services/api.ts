@@ -1,4 +1,5 @@
 import axios from 'axios';
+import Constants from 'expo-constants';
 import Toast from 'react-native-toast-message';
 import { storage } from '../utils/storage';
 import { API_URL } from '../constants/api';
@@ -102,6 +103,16 @@ apiClient.interceptors.request.use(async (config) => {
   try {
     const deviceId = await getOrCreateDeviceId();
     if (deviceId) config.headers['x-device-id'] = deviceId;
+    // İSTEMCİ KÜNYESİ — Sistem → Bağlı İstemciler ekranını besler (hangi tablet,
+    // hangi sürüm, en son ne zaman). ⚠️ BİLGİLENDİRME, kimlik kanıtı DEĞİL:
+    // sunucuda hiçbir kapı bu başlıklara bakmaz (backend `constants/client-info.ts`).
+    // Kimlik için İKİNCİ bir değer üretilmez — `x-device-id` ile AYNI kalıcı id.
+    config.headers['X-Client-Kind'] = 'mobil';
+    // ⚠️ Paketten okunur (`Constants.expoConfig.version`), APK'dan değil: uzaktan
+    // güncelleme sürümü native'e dokunmadan değiştirir (CLAUDE.md, 5. kural).
+    const surum = Constants.expoConfig?.version;
+    if (typeof surum === 'string' && surum) config.headers['X-Client-Version'] = surum;
+    if (deviceId) config.headers['X-Client-Instance'] = deviceId;
   } catch {
     // header yoksa backend normal çalışmaya devam eder
   }

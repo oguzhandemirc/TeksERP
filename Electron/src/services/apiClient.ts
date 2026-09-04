@@ -4,6 +4,7 @@ import { tokenStore } from "@/lib/secure-token";
 import { useAuthStore } from "@/store/auth";
 import { useServerStatusStore } from "@/store/serverStatus";
 import { recordNetSample } from "@/services/netStats";
+import { applyClientInfoHeaders } from "@/lib/client-info";
 
 /** İstek süresi ölçümü için config'e damgalanan başlangıç zamanı. */
 interface TimedConfig {
@@ -54,6 +55,14 @@ apiClient.interceptors.request.use(async (config) => {
   if (token && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${token}`;
   }
+  // İSTEMCİ KÜNYESİ (`X-Client-*`) — Sistem → Bağlı İstemciler ekranını besler.
+  // BİLGİLENDİRME, kimlik kanıtı DEĞİL; sunucuda hiçbir kapı bu başlıklara
+  // bakmaz (bkz. `@/lib/client-info` ve backend `constants/client-info.ts`).
+  // `x-device-id`den AYRI bir başlıktır — aşağıdaki nottaki deadlock kapısına
+  // dokunmaz.
+  await applyClientInfoHeaders((name, value) => {
+    config.headers[name] = value;
+  });
   // NOT: Masaüstü panel BİLEREK `x-device-id` GÖNDERMEZ. Gönderdiğinde,
   // `devicePairingRequired` (cihaz-onay kapısı) açıkken backend'in device
   // middleware'i onaysız cihaz sayıp Electron'un TÜM isteklerini 401

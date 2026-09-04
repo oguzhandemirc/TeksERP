@@ -1,4 +1,4 @@
-import { Activity, Archive, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge } from "lucide-react";
+import { Activity, Archive, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge, MonitorSmartphone } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -166,6 +166,18 @@ export const systemTiles: SystemTile[] = [
     description: "Backend CPU/RAM kullanımı, çalışma süresi ve makine kaynakları",
     icon: Cpu,
     to: "/system/server-status",
+    group: "monitoring",
+  },
+  {
+    // Bağlı İstemciler — "hangi panel/tablet hangi sürümde, en son ne zaman
+    // görüldü, kim oturumdaydı". İzin: `admin:settings` (hub'ın varsayılanı;
+    // yeni izin kodu AÇILMADI — sahada atanması unutulacak bir adım daha
+    // olurdu, 2026-08-01 kurşun bypass dersi).
+    key: "clients",
+    title: "Bağlı İstemciler",
+    description: "Panel/tablet sürümleri, son görülme zamanı ve son kullanıcı",
+    icon: MonitorSmartphone,
+    to: "/system/clients",
     group: "monitoring",
   },
   {

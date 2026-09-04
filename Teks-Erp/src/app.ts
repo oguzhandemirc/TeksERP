@@ -105,6 +105,7 @@ import { devicePublicRouter, deviceAdminRouter } from "./routes/device.routes";
 import workSessionRoutes from "./routes/work-session.routes";
 import { resolveDevice } from "./middlewares/device.middleware";
 import { latencyMiddleware } from "./middlewares/latency.middleware";
+import { clientInfoMiddleware } from "./middlewares/client-info.middleware";
 import {
   readWebHardeningConfig,
   createRateLimiter,
@@ -258,6 +259,13 @@ app.use(morgan(isProd ? "combined" : "dev"));
 // flush günlük özet tablosuna yazar (GET /api/admin/perf/history — trend).
 // Bkz. docs/history/SAHA-DAYANIKLILIK-FAZ2.md §B + docs/history/SAHA-DAYANIKLILIK-FAZ3.md §P1.
 app.use(latencyMiddleware);
+
+// Bağlı istemci künyesi (`X-Client-*`) — Sistem → Bağlı İstemciler ekranını
+// besleyen SÜREÇ-İÇİ defter. FAIL-OPEN ve kapı DEĞİL: hiçbir isteği reddetmez,
+// hiçbir `req` alanı doldurmaz, taşıdığı bilgi hiçbir yetki kararına girmez
+// (gerekçe: `constants/client-info.ts`). latency'den sonra, resolveDevice'tan
+// önce: cihaz çözümüne bağımlı değil (masaüstü panel `x-device-id` GÖNDERMEZ).
+app.use(clientInfoMiddleware);
 
 // F16: 1MB limit — toplu uçlar (yüzlerce rollId) 100kb default'u aşınca generic
 // 500/İngilizce 'entity.too.large' yerine error.middleware net 413 Türkçe döner.

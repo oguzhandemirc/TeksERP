@@ -73,6 +73,7 @@ import { ActivityArchivePage } from "@/pages/System/Archive/ActivityArchivePage"
 import { ArchiveSearchPage } from "@/pages/System/Archive/ArchiveSearchPage";
 import RollArchivePage from "@/pages/System/RollArchivePage";
 import { ServerStatusPage } from "@/pages/System/ServerStatus/ServerStatusPage";
+import { ClientsPage } from "@/pages/System/Clients/ClientsPage";
 import { PerfPage } from "@/pages/System/Perf/PerfPage";
 import { WorkSessionsPage } from "@/pages/System/WorkSessions/WorkSessionsPage";
 import { DataImportPage } from "@/pages/System/DataImport/DataImportPage";
@@ -631,6 +632,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="admin:settings">
         <ServerStatusPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Bağlı İstemciler — karo ile AYNI izin (`tile-config.ts` → key "clients").
+    // Ayrışırsa kullanıcı kartı görür, tıklar, /forbidden'a düşer.
+    path: "system/clients",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <ClientsPage />
       </ProtectedRoute>
     ),
   },

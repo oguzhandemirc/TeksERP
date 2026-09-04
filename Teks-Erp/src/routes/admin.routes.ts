@@ -42,6 +42,7 @@ import { readOffsiteRemote, readOffsiteDir } from "../services/system-setting.se
 import { runOffsiteSweepNow } from "../jobs/offsite-sweeper";
 import { getRestoreImpact } from "../services/backup-impact.service";
 import { latencySnapshot, resetLatencyStats } from "../services/latency-stats.service";
+import { ClientRegistryService } from "../services/client-registry.service";
 import {
   getLatencyPersistHealth,
   latencyHistory,
@@ -1010,6 +1011,37 @@ router.get(
       next(error);
     }
   }
+);
+
+
+// =============================================================================
+// BAĞLI İSTEMCİLER — hangi kurulum, hangi sürüm, en son ne zaman, kim
+// =============================================================================
+/**
+ * @openapi
+ * /api/admin/clients:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Bağlı istemciler — tür / sürüm / son görülme / son kullanıcı
+ *     description: >
+ *       Süreç belleğindeki istemci defteri (`lib/client-registry`). Satırlar
+ *       `X-Client-*` künye başlıklarından doğar; başlık BİLGİLENDİRMEDİR,
+ *       hiçbir yetki kararına girmez. `activeWindowMs` "aktif" eşiğinin TEK
+ *       KAYNAĞIDIR — arayüz kendi eşiğini yazmaz, bu değeri basar.
+ *       `serverStartedAt`: defter süreçle birlikte doğar, restart'ta boşalır.
+ *     security: [{ bearerAuth: [] }]
+ */
+router.get(
+  "/clients",
+  verifyToken,
+  requirePermission("admin:settings"),
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json({ success: true, data: await ClientRegistryService.snapshot() });
+    } catch (error) {
+      next(error);
+    }
+  },
 );
 
 const perfHistoryQuerySchema = z.object({

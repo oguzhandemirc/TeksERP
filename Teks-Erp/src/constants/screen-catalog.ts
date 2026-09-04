@@ -203,6 +203,7 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   { key: "system/activity", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Günlüğü", requires: ["admin:settings"], capabilities: [] },
   { key: "system/perf", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Endpoint Performansı", requires: ["admin:settings"], capabilities: [] },
   { key: "system/server-status", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sunucu Durumu", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/clients", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Bağlı İstemciler", requires: ["admin:settings"], capabilities: [] },
   { key: "system/work-sessions", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Çalışma Oturumları", requires: ["admin:settings"], capabilities: [] },
   { key: "system/backups", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Yedekler", requires: ["admin:settings"], capabilities: [] },
   // Veri Aktarımı — `admin:settings` DEĞİL: toplu yükleme sistem yönetimi değil
