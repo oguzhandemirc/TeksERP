@@ -185,5 +185,5 @@ bir sürüm zaten yok.
 
 Backend **2.9.3**, 232 migration. Sevk belgesinde **müşterideki ürün adı**
 (bayrağa bağlı, **varsayılan "bizdeki" = bugünkü çıktı**) · belge kolon başlıkları
-düzenlenebilir · çuval izleri · `Sistem → Bağlı İstemciler` ekranı · panel 1.2.6 ·
-tablet 1.0.5.
+düzenlenebilir · çuval izleri · `Sistem → Bağlı İstemciler` ekranı · panel 1.2.7 ·
+tablet 1.0.6.

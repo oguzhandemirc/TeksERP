@@ -194,7 +194,7 @@ gösterilir; kaydedin.
 (o özellik bu sürümlerle geliyor). Bu yüzden **bir kereye mahsus** elden
 kurulum gerekiyor:
 
-- **Panel:** `istemciler/TeksERP-1.2.6-Setup.exe`
+- **Panel:** `istemciler/TeksERP-1.2.7-Setup.exe`
 - **Tablet:** `istemciler/TeksERP-1.0.0-vc57.apk`
 
 Ayrıntı, doğrulama kayıtları ve sürüm numarası kafa karışıklığı:
@@ -258,6 +258,6 @@ Backend **2.9.3**, 232 migration. Sevk belgesinde **müşterideki ürün adı**
 çıktı**; açmak `Sistem → Özellik Anahtarları → Sevkiyat & İade`'den bilinçli bir
 hamle) · belge kolon başlıkları düzenlenebilir (`Tanımlar → Çıktılar → Belge
 Şablonları → Belge Alanları`) · çuval izleri · `Sistem → Bağlı İstemciler`
-ekranı · panel 1.2.6 · tablet 1.0.5.
+ekranı · panel 1.2.7 · tablet 1.0.6.
 
 Operatöre gösterilen tam liste güncelleme sonrası panelde açılır.

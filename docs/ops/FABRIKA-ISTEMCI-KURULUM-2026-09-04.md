@@ -9,7 +9,7 @@ kendi indirecek.
 
 | Dosya | Nereye |
 |---|---|
-| `TeksERP-1.2.6-Setup.exe` | Sevkiyattaki / ofisteki her Windows bilgisayara |
+| `TeksERP-1.2.7-Setup.exe` | Sevkiyattaki / ofisteki her Windows bilgisayara |
 | `TeksERP-1.0.0-vc57.apk` | İstasyonlardaki her Android tablete |
 
 ⚠️ **Sıra: önce backend.** Yeni istemciler yeni uçları çağırıyor; eski backend'de
@@ -23,7 +23,7 @@ girmeniz gerekmiyor.
 
 ## Doğrulandı (2026-09-04)
 
-**Panel — `TeksERP-1.2.6-Setup.exe`**
+**Panel — `TeksERP-1.2.7-Setup.exe`**
 - Yayındaki `adnansahin/electron/latest.yml` ile **sha512 birebir aynı** →
   doğru müşteri derlemesi. ⚠️ Yanlış müşteri kodu taşıyan bir paket **başka bir
   fabrikanın güncellemesini** indirir ve hata SESSİZDİR — elinizdeki başka bir
@@ -37,13 +37,13 @@ girmeniz gerekmiyor.
 - Gömülü ERP adresi: `http://192.168.1.250:4000` = fabrika sunucusu.
 - OTA yapılandırması APK içinde doğrulandı (`expo.modules.updates.ENABLED`,
   `EXPO_UPDATE_URL`, kod imzalama sertifikası `expo-root.pem`).
-- OTA ucu **canlı** ve şu an **1.0.5** sunuyor (runtime 54.2, HTTP 200).
+- OTA ucu **canlı** ve şu an **1.0.6** sunuyor (runtime 54.2, HTTP 200).
 
 ## Tablette sürüm numarası kafa karıştırabilir — normaldir
 
 Dosya adı **1.0.0 (vc57)**, ama tablet kurulumdan sonra internetten OTA alıp
-**1.0.5**'e çıkar. İkisi de doğru: `vc57` native paketin sürümü, `1.0.5`
-içindeki JS'in sürümü. Tablette **1.0.5** görüyorsanız her şey yolunda.
+**1.0.6**'ya çıkar. İkisi de doğru: `vc57` native paketin sürümü, `1.0.6`
+içindeki JS'in sürümü. Tablette **1.0.6** görüyorsanız her şey yolunda.
 
 ```
 adb install -r TeksERP-1.0.0-vc57.apk
