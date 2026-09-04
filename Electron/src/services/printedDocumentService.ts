@@ -137,6 +137,8 @@ export const printedDocumentService = {
       currentTemplate?: boolean;
       printNote?: string;
       rowNotes?: boolean;
+      /** Tek seferlik "çuval izlerini (etiket) göster" — `rowNotes`ten AYRI bayrak. */
+      rowTags?: boolean;
       /** Tek seferlik liste seçimi (ör. ["cuval"]) — kalıcı bölüm ayarını EZER. */
       sections?: string[];
       /** Listeleri aynı sayfada akıt. Varsayılan: her liste kendi sayfasında. */
@@ -154,6 +156,10 @@ export const printedDocumentService = {
           // Tek seferlik "satır notlarını (çuval yorumu) göster" — kalıcı kolon
           // ayarını EZER (OR); ayara/snapshot'a YAZILMAZ, versiyon doğurmaz.
           ...(opts?.rowNotes ? { rowNotes: 1 } : {}),
+          // Tek seferlik "çuval İZLERİNİ (etiket) göster". ⚠️ `rowNotes`e
+          // BİNDİRİLMEZ — iz ile yorum farklı hassasiyette veridir; tek bayrak
+          // "notu bas" diyene sessizce izleri de bastırırdı (ve tersi).
+          ...(opts?.rowTags ? { rowTags: 1 } : {}),
           // Tek seferlik liste seçimi / sayfa birleştirme — ikisi de persist EDİLMEZ.
           ...(opts?.sections?.length ? { sections: opts.sections.join(",") } : {}),
           ...(opts?.merge ? { merge: 1 } : {}),

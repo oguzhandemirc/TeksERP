@@ -233,6 +233,11 @@ export interface DocDef {
   /** Satır-bazlı not (çuval yorumu) kolonu var → baskı diyaloğunda "bu baskıda
    *  göster" tek-seferlik seçeneği çıkar (?rowNotes=1). */
   supportsRowNotes?: boolean;
+  /** Satır-bazlı İZ (çuval etiketi) kolonu var → baskı diyaloğunda AYRI bir "bu
+   *  baskıda göster" seçeneği çıkar (?rowTags=1). ⚠️ `supportsRowNotes`e
+   *  BİNDİRİLMEZ: iz ile yorum farklı hassasiyette veridir ve tek kutucuk,
+   *  "notu bas" diyene sessizce izleri de bastırırdı. */
+  supportsRowTags?: boolean;
   /** Alan bazlı punto/kalınlık kataloğu — backend renderer'ının alan kataloğunun
    *  AYNASI (Electron backend'i import edemez, `permissions.ts` ile aynı durum).
    *  Verilmezse "Alan Ayarları" paneli hiç çizilmez. */
@@ -625,6 +630,7 @@ export const DOC_DEFS: DocDef[] = [
     supportsBlankWidths: true,
     supportsNotePlacement: true,
     supportsRowNotes: true,
+    supportsRowTags: true,
     // Bölüm key'leri renderer'ın sectionOn() anahtarlarıyla birebir aynı olmalı
     // (eski itemTable/sackBreakdown/totals anahtarları renderer'da karşılıksızdı).
     sections: [
@@ -664,6 +670,11 @@ export const DOC_DEFS: DocDef[] = [
           // de açılabilir (?rowNotes=1). Yorumu olmayan çuvalda hücre boş kalır;
           // hiç yorum yoksa kolon hiç basılmaz.
           { key: "note", label: "Açıklama (çuval notu)", defaultHidden: true },
+          // İÇ İZ (çuval etiketi) — varsayılan KAPALI (defaultHidden). ⚠️ BU BELGE
+          // MÜŞTERİYE GİDER: iz iç takip işaretidir ("kontrol et", "eksik"), açmak
+          // bilinçli bir karardır. Tek seferlik de açılabilir (?rowTags=1). İzi
+          // olmayan çuvalda hücre boş kalır; hiç iz yoksa kolon hiç basılmaz.
+          { key: "tag", label: "İz (çuval etiketi) — müşteriye gider", defaultHidden: true },
         ],
       },
       {

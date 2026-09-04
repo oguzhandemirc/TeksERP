@@ -127,6 +127,21 @@ export interface BuilderEntry {
    * okumak zorunda kalmaz.
    */
   resolveLiveRowNotes?: (db: Db, sourceId: string) => Promise<Record<string, string>>;
+  /**
+   * SATIR-BAZLI İZLER (çuval etiketi) — anahtar → etiket adları. `resolveLiveRowNotes`
+   * ile AYNI SINIF (annotation) ve aynı sözleşme: donmuş çekirdeğe GİRMEZ, her
+   * baskıda canlı çözülür, `schemaVersion` artmaz.
+   *
+   * ⚠️ NEDEN NOT KANALINA BİNDİRİLMEDİ: iz ile yorum FARKLI HASSASİYETTE veridir.
+   * Tek kanal olsaydı `?rowNotes=1` diyen operatöre sessizce izleri de bastırırdık
+   * (ve tersi) — kolon ayarı da tek anahtara düşerdi.
+   *
+   * ⚠️ Donmuş snapshot'a girmesi İKİ zarar verirdi: (a) etiketleme sonrası reissue
+   * yeni belge sürümü doğurur, (b) DISPATCH'teki iz temizliği (`clearedAt`) snapshot
+   * ile canlı listeyi KALICI çelişkiye sokar — `collectShipmentDocContent` sevkten
+   * SONRA da koşuyor (2026-08-05 dersi).
+   */
+  resolveLiveRowTags?: (db: Db, sourceId: string) => Promise<Record<string, string>>;
   /** Donmuş snapshot'tan baskı-hazır HTML üretir — TEK KAYNAK format (mobil +
    *  Electron aynı HTML'i basar). Verilmezse o belge tipi için `getHtml` 400 verir. */
   renderHtml?: (
@@ -153,6 +168,14 @@ export interface BuilderEntry {
        * efektif kolon ayarına çevirir.
        */
       forceRowNotes?: boolean;
+      /** Satır-bazlı izler (resolveLiveRowTags çıktısı) — ör. sackNo → "Kontrol Et, Eksik". */
+      rowTags?: Record<string, string>;
+      /**
+       * Tek seferlik "izleri bu baskıda göster" (?rowTags=1) — kalıcı kolon ayarını
+       * EZER (OR), hiçbir yere YAZILMAZ. `forceRowNotes` ile AYRI bayrak (bkz.
+       * `resolveLiveRowTags` notu).
+       */
+      forceRowTags?: boolean;
       /** Tek seferlik liste seçimi (?sections=) — tanımayan renderer yok sayar. */
       listSections?: string[];
       /** Listeleri aynı sayfada akıt (?merge=1) — varsayılan ayrı sayfalar. */
@@ -472,6 +495,11 @@ export class PrintedDocumentService {
        */
       forceRowNotes?: boolean;
       /**
+       * Tek seferlik "çuval izlerini bu baskıda göster" (?rowTags=1). `forceRowNotes`
+       * ile BİNDİRİLMEZ — ikisi farklı hassasiyette veri (bkz. `resolveLiveRowTags`).
+       */
+      forceRowTags?: boolean;
+      /**
        * Tek seferlik LİSTE seçimi (?sections=) — "sadece çuval listesi bas".
        * Kalıcı bölüm ayarını EZER, persist EDİLMEZ. Belge tipi tanımıyorsa
        * renderer bunu sessizce yok sayar.
@@ -505,9 +533,15 @@ export class PrintedDocumentService {
     const rowNotes = entry.resolveLiveRowNotes
       ? await entry.resolveLiveRowNotes(prisma, sourceId)
       : undefined;
+    // Satır-bazlı İZLER (çuval etiketi) — notlarla AYNI kanal disiplini, AYRI alan.
+    const rowTags = entry.resolveLiveRowTags
+      ? await entry.resolveLiveRowTags(prisma, sourceId)
+      : undefined;
     const noteMeta = {
       rowNotes,
       forceRowNotes: opts?.forceRowNotes ?? false,
+      rowTags,
+      forceRowTags: opts?.forceRowTags ?? false,
       listSections: opts?.listSections,
       mergeSections: opts?.mergeSections ?? false,
     };

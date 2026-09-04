@@ -80,7 +80,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
   // Hiçbiri Belge Kişiselleştirme ayarına ya da donmuş snapshot'a YAZILMAZ ve yeni
   // belge versiyonu doğurmaz; diyalog kapanınca sıfırlanır.
   const [printOpts, setPrintOpts] = useState<DispatchPrintOpts>(DEFAULT_DISPATCH_PRINT_OPTS);
-  const { sections, merge, rowNotes } = printOpts;
+  const { sections, merge, rowNotes, rowTags } = printOpts;
   // Üçü de seçiliyse "seçim yok" demektir → backend kalıcı ayarı uygular.
   const sectionParam = sections.length === DISPATCH_LISTS.length ? undefined : sections;
 
@@ -112,6 +112,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
       selectedVersion,
       currentTemplate,
       rowNotes,
+      rowTags,
       sections.join(","),
       merge,
     ],
@@ -120,6 +121,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
         ? printedDocumentService.getHtml(DOC_TYPE, shipmentId!, selectedVersion, {
             currentTemplate,
             rowNotes,
+            rowTags,
             sections: sectionParam,
             merge,
           })
@@ -127,6 +129,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
             draft: true,
             currentTemplate,
             rowNotes,
+            rowTags,
             sections: sectionParam,
             merge,
           }),
@@ -189,6 +192,7 @@ export function ShipmentDispatchNote({ shipmentId, open, onOpenChange, returns }
               onChange={setPrintOpts}
               /* Çuval notu tiki yalnız çuval listesi basılacaksa anlamlı. */
               showRowNotes={sections.includes("cuval")}
+              showRowTags={sections.includes("cuval")}
             />
             {!merge && sections.length > 1 && (
               <span className="text-[11px] text-muted-foreground">

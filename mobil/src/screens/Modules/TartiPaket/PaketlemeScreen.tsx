@@ -670,6 +670,28 @@ export default function PaketlemeScreen() {
                                     </Text>
                                   </View>
                                 ) : null}
+                                {/* İZ ÇİPLERİ — SALT-OKUNUR (bu tur): masaüstünde bırakılan
+                                    işaret tablette görünür, tabletten değiştirilmez.
+                                    ⚠️ Ayrı bir etiket SAYACI basılmaz — Sevk Kapısı ile
+                                    /pool zaten iki farklı rakam üretiyor, üçüncüsü olmasın.
+                                    ⚠️ Renk yalnız NOKTADADIR: hex'i çipin ZEMİNİ yapmak
+                                    koyu/açık etiketlerde okunmaz metin üretirdi (katalog
+                                    rengi serbest, kontrast garantisi yok). */}
+                                {(s.tags ?? []).length > 0 ? (
+                                  <View style={styles.tagRow}>
+                                    {(s.tags ?? []).map((t) => (
+                                      <View
+                                        key={t.id}
+                                        style={[styles.tagChip, !t.isActive && styles.tagChipInactive]}
+                                      >
+                                        <View style={[styles.tagDot, { backgroundColor: t.hex }]} />
+                                        <Text style={styles.tagChipText} numberOfLines={1}>
+                                          {t.name}
+                                        </Text>
+                                      </View>
+                                    ))}
+                                  </View>
+                                ) : null}
                               </View>
                             </View>
                           </TouchableRipple>
@@ -1156,6 +1178,23 @@ const styles = StyleSheet.create({
   kgOk: { color: colors.successDark, fontWeight: '700' },
   noteRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
   noteText: { flex: 1, color: colors.textSecondary, fontSize: 11, fontStyle: 'italic' },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 3 },
+  tagChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceMuted,
+  },
+  // Katalogdan çıkarılmış (pasif) etiketin ESKİ ataması görünmeye devam eder —
+  // soluk çizilir. Gizlemek, rafta duran fiziksel işaretle ekranı çelişkiye sokardı.
+  tagChipInactive: { opacity: 0.5 },
+  tagDot: { width: 7, height: 7, borderRadius: 4 },
+  tagChipText: { color: colors.textSecondary, fontSize: 10, maxWidth: 120 },
   sheet: { width: '100%', borderRadius: radius.lg, padding: spacing.lg, backgroundColor: colors.surface },
   sheetTitle: { fontWeight: '700', marginBottom: spacing.xs, color: colors.text },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.md },

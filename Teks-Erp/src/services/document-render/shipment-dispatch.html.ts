@@ -73,6 +73,7 @@ const LABELS = {
     kgToplami: "KG TOPLAMI",
     paketSayisi: "TOP ADEDİ",
     aciklama: "AÇIKLAMA",
+    iz: "İZ",
     cekiCaption: "ÇEKİ LİSTESİ",
     cuvalNo: "ÇUVAL NO",
     barkodNo: "BARKOD NO",
@@ -119,6 +120,7 @@ const LABELS = {
     kgToplami: "TOTAL KG",
     paketSayisi: "ROLL COUNT",
     aciklama: "REMARKS",
+    iz: "TAGS",
     cekiCaption: "PACKING LIST",
     cuvalNo: "PACKAGE NO",
     barkodNo: "BARCODE",
@@ -238,6 +240,16 @@ interface RenderMeta {
    * ayarını EZER (OR). Hiçbir yere yazılmaz.
    */
   forceRowNotes?: boolean;
+  /**
+   * Çuval İZLERİ (etiket, annotation) — `sackNo` → "Kontrol Et, Eksik". Donmuş
+   * snapshot'ta YOK, her baskıda canlı çözülür. Yorumdan AYRI kanal.
+   */
+  rowTags?: Record<string, string>;
+  /**
+   * Tek seferlik "izleri bu baskıda göster" (?rowTags=1) — kalıcı kolon ayarını
+   * EZER (OR). `forceRowNotes`e BİNDİRİLMEZ. Hiçbir yere yazılmaz.
+   */
+  forceRowTags?: boolean;
   /**
    * Tek seferlik LİSTE seçimi (?sections=urun,cuval,ceki) — "sadece çuval
    * listesi bas" gibi. Verilmezse kalıcı ayar geçerli. Hiçbir yere yazılmaz.
@@ -459,12 +471,24 @@ export function renderShipmentDispatchHtml(
   //   (a) kalıcı: Belge Kişiselleştirme → columns.cuval.shown içinde "note"
   //   (b) tek seferlik: ?rowNotes=1 → meta.forceRowNotes (hiçbir yere yazılmaz)
   // OR yalnız BURADA uygulanır (tek yer) — aşağıdaki efektif kolon ayarında.
+  //
+  // "İZ" (çuval etiketi) kolonu AYNI kalıptır ve AYNI gerekçeyle opt-in'dir; ama
+  // yorumdan AYRI anahtar taşır ("tag") ve AYRI tek-seferlik bayrak okur
+  // (?rowTags=1). Tek bayrak/tek anahtar olsaydı "notu bas" diyen operatöre
+  // sessizce izler de basılırdı (ve tersi) — ikisi farklı hassasiyette veri.
   const rowNotes = meta.rowNotes ?? {};
   const hasAnyRowNote = sacks.some((s) => !!rowNotes[s.code]);
-  const cuvalColCfg =
-    meta.forceRowNotes && hasAnyRowNote
-      ? { ...cfg.columns?.cuval, shown: [...(cfg.columns?.cuval?.shown ?? []), "note"] }
-      : cfg.columns?.cuval;
+  const rowTags = meta.rowTags ?? {};
+  const hasAnyRowTag = sacks.some((s) => !!rowTags[s.code]);
+  // İki tek-seferlik ezme AYNI `shown` allowlist'ine yazar (kolon motorunun tek
+  // sözleşmesi o) ama BAĞIMSIZ koşullardan geçer.
+  const forcedShown = [
+    ...(meta.forceRowNotes && hasAnyRowNote ? ["note"] : []),
+    ...(meta.forceRowTags && hasAnyRowTag ? ["tag"] : []),
+  ];
+  const cuvalColCfg = forcedShown.length
+    ? { ...cfg.columns?.cuval, shown: [...(cfg.columns?.cuval?.shown ?? []), ...forcedShown] }
+    : cfg.columns?.cuval;
 
   const cuvalSection = listSectionOn(cfg, meta, "cuval")
     ? buildDocTable<ShipmentDocSack>({
@@ -490,6 +514,22 @@ export function renderShipmentDispatchHtml(
                   cellClass: "wrap",
                   defaultHidden: true,
                   cell: (s: ShipmentDocSack) => esc(rowNotes[s.code] ?? ""),
+                },
+              ]
+            : []),
+          // İZ kolonu — aynı boş-sütun bastırması. ⚠️ `defaultHidden: true`
+          // LOAD-BEARING: naif (blocklist) yazımda kolon VARSAYILAN GÖRÜNÜR doğar
+          // ve iç iz müşteriye giden irsaliyeye sızar.
+          ...(hasAnyRowTag
+            ? [
+                {
+                  key: "tag",
+                  label: L.iz,
+                  align: "l" as const,
+                  width: "22%",
+                  cellClass: "wrap",
+                  defaultHidden: true,
+                  cell: (s: ShipmentDocSack) => esc(rowTags[s.code] ?? ""),
                 },
               ]
             : []),

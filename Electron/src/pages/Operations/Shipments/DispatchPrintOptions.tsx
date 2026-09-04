@@ -1,4 +1,4 @@
-import { FileStack, Layers, MessageSquareText, SlidersHorizontal } from "lucide-react";
+import { FileStack, Layers, MessageSquareText, SlidersHorizontal, Tag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -23,12 +23,19 @@ export interface DispatchPrintOpts {
   merge: boolean;
   /** Çuval yorumlarını bu baskıda göster (kalıcı kolon ayarını ezer). */
   rowNotes: boolean;
+  /**
+   * Çuval İZLERİNİ (etiket) bu baskıda göster. ⚠️ `rowNotes`e BİNDİRİLMEZ —
+   * iz ile yorum farklı hassasiyette veridir; tek anahtar "notu bas" diyene
+   * sessizce izleri de bastırırdı (ve tersi).
+   */
+  rowTags: boolean;
 }
 
 export const DEFAULT_DISPATCH_PRINT_OPTS: DispatchPrintOpts = {
   sections: ["urun", "cuval", "ceki"],
   merge: false,
   rowNotes: false,
+  rowTags: false,
 };
 
 interface Props {
@@ -36,6 +43,8 @@ interface Props {
   onChange: (next: DispatchPrintOpts) => void;
   /** Çuval yorumu tikini gizle (çuval listesi basılmıyorsa anlamsız). */
   showRowNotes?: boolean;
+  /** Çuval izi tikini gizle (çuval listesi basılmıyorsa anlamsız). */
+  showRowTags?: boolean;
 }
 
 /**
@@ -46,7 +55,12 @@ interface Props {
  * Bilinçli tercih — kalıcı ayar donmuş belgeye yazılsaydı eski irsaliyeler yeni
  * seçeneği hiç göremezdi (snapshot `docConfigOverride`'ı freeze anında dondurur).
  */
-export function DispatchPrintOptions({ value, onChange, showRowNotes = true }: Props) {
+export function DispatchPrintOptions({
+  value,
+  onChange,
+  showRowNotes = true,
+  showRowTags = true,
+}: Props) {
   const toggleSection = (key: DispatchListKey, on: boolean) => {
     const next = on
       ? DISPATCH_LISTS.filter((l) => l.key === key || value.sections.includes(l.key)).map((l) => l.key)
@@ -142,6 +156,28 @@ export function DispatchPrintOptions({ value, onChange, showRowNotes = true }: P
                 <div className="text-[10px] text-muted-foreground">
                   İç not — varsayılan basılmaz. Kalıcı ayar değişmez; notu olan çuval
                   yoksa etkisi olmaz.
+                </div>
+              </label>
+            </div>
+          </div>
+        )}
+
+        {showRowTags && (
+          <div className="border-t pt-2.5">
+            <div className="flex items-start gap-2">
+              <Checkbox
+                id="row-tags"
+                className="mt-0.5"
+                checked={value.rowTags}
+                onCheckedChange={(c) => onChange({ ...value, rowTags: Boolean(c) })}
+              />
+              <label htmlFor="row-tags" className="min-w-0 flex-1 cursor-pointer">
+                <div className="flex items-center gap-1.5 font-medium">
+                  <Tag className="h-3.5 w-3.5" /> Çuval izlerini (etiket) göster
+                </div>
+                <div className="text-[10px] text-muted-foreground">
+                  İç takip işareti — varsayılan basılmaz. ⚠️ Bu belge müşteriye gider.
+                  Kalıcı ayar değişmez; izi olan çuval yoksa etkisi olmaz.
                 </div>
               </label>
             </div>

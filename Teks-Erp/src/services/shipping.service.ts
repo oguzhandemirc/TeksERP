@@ -98,6 +98,7 @@ import {
 } from "./helpers/allocation.helper";
 import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
+import { ACTIVE_TAG_SELECT, ACTIVE_TAG_WHERE, toTagBadges } from "./helpers/sack-tag.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
 import { collectBoundKeys } from "./helpers/label-context-fit";
 import { ApiResponse } from "../types/api.types";
@@ -1298,6 +1299,12 @@ export class ShippingService {
         // operatör hangi çuvalın tartıldığını modal açmadan görmeli.
         id: true, sackNo: true, weightKg: true, weighedAt: true, branchId: true, notes: true,
         branch: { select: { id: true, code: true, name: true } },
+        // İZLER (çuval etiketi) — tablette SALT-OKUNUR çip. Tek kaynak
+        // `ACTIVE_TAG_SELECT`: rozet/filtre/belge ayrışmasın. Havuz çuvalı tanımı
+        // gereği sevk EDİLMEMİŞTİR (`shipmentId: null`), yani `clearedAt` yüklemi
+        // burada bugün ısırmaz — yine de ORTAK select'ten geçer, çünkü ayrı yazılan
+        // ikinci bir yüklem tam da bu depoda adı konmuş "ayrışan yüzey" sınıfıdır.
+        tags: ACTIVE_TAG_SELECT,
         // `status`: hayalet topu (çuvalda kayıtlı ama fiziksel olarak binada olmayan)
         // istemci işaretleyebilsin. Top ARRAY'İ filtrelenmez — filtrelenirse operatör
         // onu göremez ve çıkaramaz; sayaçlar aşağıda ayrıca dışlar.
@@ -1316,6 +1323,10 @@ export class ShippingService {
       return {
         id: sk.id, sackNo: sk.sackNo, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
         weighedAt: sk.weighedAt, notes: sk.notes,
+        // ⚠️ Yanına ayrı hesaplanmış bir etiket SAYACI EKLENMEZ: Sevk Kapısı ile
+        // `/pool` zaten iki farklı rakam üretiyor, üçüncüsü olmasın. Çip listesi
+        // rozetin KENDİSİDİR; sayı isteyen `tags.length` okur.
+        tags: toTagBadges(sk.tags),
         branch: sk.branch,
         rollCount: present.length, swatchCount: sk.swatches.length, totalQty: Number(totalQty),
         rolls: sk.rolls.map((r) => ({ id: r.id, barcode: r.barcode, status: r.status, width: r.width != null ? Number(r.width) : null, currentQty: Number(r.currentQty), item: r.item, color: r.color })),
@@ -4647,6 +4658,39 @@ registerPrintedDocBuilder(PrintedDocType.SHIPMENT_DISPATCH, {
     });
     const out: Record<string, string> = {};
     for (const r of rows) if (r.notes) out[r.sackNo] = r.notes;
+    return out;
+  },
+  // Çuval İZLERİ (etiket) — irsaliye ÇUVAL LİSTESİ'ndeki opsiyonel "İZ" kolonunu
+  // besler. Yorum kolonunun KARDEŞİ, ama AYRI kanal: iz ile yorum farklı
+  // hassasiyette veridir ve tek anahtar "notu bas" diyene sessizce izi de
+  // bastırırdı.
+  //
+  // ⚠️ Annotation: donmuş çekirdeğe (`collectShipmentDocContent`) GİRMEZ.
+  // Girseydi (a) etiketleme sonrası reissue yeni belge sürümü doğururdu,
+  // (b) DISPATCH'teki iz temizliği (`clearedAt`) snapshot ile canlı listeyi
+  // KALICI çelişkiye sokardı — üretici sevkten SONRA da koşuyor (2026-08-05).
+  //
+  // ⚠️ `ACTIVE_TAG_WHERE` TEK KAYNAK: rozet/filtre/belge ayrışmasın. Sevk ANINDA
+  // izler temizlendiği için DISPATCHED bir sevkiyatın çuvallarında bu sorgu
+  // normalde BOŞ döner ve kolon hiç basılmaz — dolu döndüğü tek meşru hal,
+  // sevkten SONRA yeni iz bırakılmış olmasıdır (bu da serbest).
+  resolveLiveRowTags: async (db, sourceId) => {
+    const rows = await db.sack.findMany({
+      where: { shipmentId: sourceId },
+      select: {
+        sackNo: true,
+        tags: {
+          where: ACTIVE_TAG_WHERE,
+          select: { tag: { select: { name: true, sortOrder: true } } },
+          orderBy: [{ tag: { sortOrder: "asc" } }, { tag: { name: "asc" } }],
+        },
+      },
+    });
+    const out: Record<string, string> = {};
+    for (const r of rows) {
+      const names = r.tags.map((t) => t.tag.name).filter(Boolean);
+      if (names.length) out[r.sackNo] = names.join(", ");
+    }
     return out;
   },
 });

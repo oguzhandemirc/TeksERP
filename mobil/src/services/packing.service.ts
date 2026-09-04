@@ -85,6 +85,21 @@ export interface PoolSackSwatch {
   item: { code: string; name: string };
   color: { code: string; name: string } | null;
 }
+/**
+ * Çuval izi (etiket) — SALT-OKUNUR çip. Tablette iz bırakılmaz/kaldırılmaz;
+ * yalnız masaüstünde bırakılan işaret görünür (bu tur).
+ *
+ * ⚠️ `isActive:false` → katalogdan çıkarılmış etiket; ESKİ atama görünmeye devam
+ * eder (çip soluk çizilir). Gizlemek, rafta duran fiziksel işaretle ekranı
+ * çelişkiye sokardı.
+ */
+export interface PoolSackTag {
+  id: string;
+  code: string;
+  name: string;
+  hex: string;
+  isActive: boolean;
+}
 export interface PoolSack {
   id: string;
   sackNo: string;  weightKg: number | null;
@@ -92,6 +107,13 @@ export interface PoolSack {
   weighedAt: string | null;
   /** Çuval yorumu — iç serbest not ("kendimiz için"). */
   notes: string | null;
+  /**
+   * Etkin izler (sevkte temizlenenler backend'de zaten süzülür).
+   * ⚠️ Ayrı bir etiket SAYACI YOK ve EKLENMEZ — Sevk Kapısı ile `/pool` zaten
+   * iki farklı rakam üretiyor, üçüncüsü olmasın. Sayı isteyen `tags.length` okur.
+   * Eski backend bu alanı GÖNDERMEZ → `?? []` ile okunmalı (opsiyonel).
+   */
+  tags?: PoolSackTag[];
   branch: { id: string; name: string } | null;
   rollCount: number;
   swatchCount: number;

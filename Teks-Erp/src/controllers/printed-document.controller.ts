@@ -177,6 +177,10 @@ export class PrintedDocumentController {
       // ?rowNotes=1 → satır notlarını (çuval yorumu) BU baskıda göster. Kalıcı kolon
       // ayarını EZER (OR); ayara da snapshot'a da YAZILMAZ, yeni versiyon doğurmaz.
       const forceRowNotes = req.query.rowNotes === "1" || req.query.rowNotes === "true";
+      // ?rowTags=1 → çuval İZLERİNİ (etiket) BU baskıda göster. Aynı sözleşme, AYRI
+      // bayrak: `?rowNotes=1`e BİNDİRİLMEZ — iz ile yorum farklı hassasiyette veridir
+      // ve tek bayrak, "notu bas" diyene sessizce izleri de bastırırdı (ve tersi).
+      const forceRowTags = req.query.rowTags === "1" || req.query.rowTags === "true";
       // ?sections=urun,cuval → yalnız seçili listeleri bas (tek seferlik; kalıcı
       // bölüm ayarını EZER, hiçbir yere yazılmaz). Boş/geçersiz → yok sayılır ve
       // kalıcı ayar geçerli kalır; "hiçbirini basma" bilinçli olarak MÜMKÜN DEĞİL
@@ -207,6 +211,7 @@ export class PrintedDocumentController {
         printedBy: req.user?.username ?? null,
         printNote,
         forceRowNotes,
+        forceRowTags,
         listSections,
         mergeSections,
         pageSize,
