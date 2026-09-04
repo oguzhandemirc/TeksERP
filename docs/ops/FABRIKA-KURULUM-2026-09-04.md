@@ -102,41 +102,33 @@ Hazır dosyanın şablondan üç farkı var, üçü de bilinçli:
 | | Değer | Atlanırsa |
 |---|---|---|
 | `PORT` | `5000` | yukarıdaki yalancı yeşil |
-| `DISCOVERY_MDNS_ENABLED` | `"false"` | aşağıdaki kutu |
+| ağa ilan | **açık** (varsayılan) | test cihazı yeni sürümü otomatik bulamaz, adres elle girilir |
 | `name` | `tekserp-backend-yeni` | `kur.ps1 [4/9]` `pm2 delete <ad>` ile **eski kurulumu pm2'den siler** — fabrika sessizce kapanır |
 
-> ### ⚠️ Ağa ilan neden kapatılıyor — ve "farklı sunucu" uyarısı neden gelmeyecek
+> ### ⚠️ Test sırasında keşifte İKİ sunucu çıkacak — ayırt edici PORT ve SÜRÜM
 >
-> **Fabrikanın ilanı KAYBOLMUYOR.** Kapattığımız şey yalnız TEST kurulumunun
-> ilanı; eski backend'e hiç dokunmuyoruz, o ilan etmeye devam ediyor. Her an tam
-> bir sunucu ilan eder:
+> Ağa ilan (`_teks-erp._tcp`) **açık bırakıldı**, bilinçli: test cihazı yeni
+> sürümü otomatik bulsun, kimse elle adres girmek zorunda kalmasın. mDNS portu
+> **ilanın içinde** taşır, o yüzden `:5000` otomatik bulunur.
 >
-> | An | İlan eden | Port |
-> |---|---|---|
-> | Şimdi | Eski backend (dokunulmuyor) | 4000 |
-> | 1 saatlik test | Yine eski backend — yeni olan susuyor | 4000 |
-> | Geçişten sonra | Yeni backend (`DISCOVERY_MDNS_ENABLED` satırı silinir) | 4000 |
+> ⚠️ **Bedeli:** yeni veritabanı canlının kopyası olduğu için **aynı
+> `installationId`'yi taşıyor** → panelin "bu senin sunucun değil" uyarısı
+> **tetiklenmez.** Yani iki sunucu birbirinden yalnız şuradan ayrılır:
 >
-> Servis ilanı (`_teks-erp._tcp`) **varsayılan olarak açık**. Açık kalırsa yeni
-> backend de kendini ağa ilan eder ve **otomatik bulma yapan bir panel ya da
-> tablet kopya veritabanına bağlanabilir.**
+> ```
+> 192.168.1.250:4000 · v<eski>     <- ESKI, fabrika buna bagli
+> 192.168.1.250:5000 · v2.9.3      <- YENI, test
+> ```
 >
-> ⚠️ **Alt ağ taraması bu deliği kapatmaz — mDNS ayrı bir yol.** İstemci ağı
-> tararken portu SABİT 4000 dener (`DISCOVERY_DEFAULT_PORT`), yani :5000'i asla
-> bulmaz. Ama mDNS'te port **ilanın kendi içinden** gelir
-> (`verify(h, hit.port || 4000, "mdns", …)`) → ilan açık olsaydı istemci
-> :5000'i BULURDU. Deliği kapatan tek şey ilanı kapatmaktı.
+> Panel adayları zaten `host:port · vSürüm` diye basıyor. **Test edeceğiniz
+> cihazda 5000/2.9.3 olanı seçin; diğer cihazlara dokunmayın.**
 >
-> Aynı sebeple, test edeceğiniz cihazda adresi **elle** girmeniz gerekiyor:
-> otomatik bulma :5000'i tasarım gereği görmüyor.
->
-> Normalde bunu "bu senin sunucun değil" uyarısı yakalar. **Burada yakalamaz:**
-> kurulum kimliği (`installationId`) veritabanında duruyor ve `tekserp_yeni`
-> canlının kopyası olduğu için **aynı kimliği taşıyor**. İki sunucu istemciye
-> birebir aynı görünür.
->
-> **Yani iki kurulumu ayırt eden tek şey port ve sürüm numarasıdır.** Bir ekranda
-> hangi veritabanına baktığınızdan emin değilseniz `/health`'in sürümüne bakın.
+> ⚠️ Alt ağ taraması (mDNS çalışmazsa devreye giren yedek yol) portu **sabit
+> 4000** dener → `:5000`'i YALNIZ mDNS bulur. Test cihazı yeni sürümü
+> göremiyorsa önce mDNS'in çalıştığını doğrulayın:
+> `GET /api/admin/health` → `discovery.mdns.reason === "ok"`.
+> (UDP 5353 gelen kuralı yoksa ya da portu Bonjour/Adobe tutuyorsa ilan sessizce
+> kapanır.) Çare olarak adres elle girilebilir: `192.168.1.250:5000`.
 
 ### 4) Sürümü kur
 
@@ -213,7 +205,9 @@ Yeni sürümü denemek için **tek bir cihazın** adresini elle verin:
 - **Panel:** Sistem → Bu Bilgisayar → Sunucu Adresi → `http://<sunucu-ip>:5000`
 - **Tablet:** giriş ekranı → ayar düğmesi → `http://<sunucu-ip>:5000`
 
-⚠️ Otomatik bulma 5000'i **bulmaz** (ilanı kapattık, bilerek) — adres elle girilir.
+⚠️ Keşifte **iki aday** çıkar (`:4000 · v<eski>` ve `:5000 · v2.9.3`) — sürüme
+bakıp 5000 olanı seçin. Kimlik uyarısı çıkmaz, ikisi aynı kurulum kimliğini
+taşıyor.
 
 > ### ⚠️ Bu testte girdiğiniz her kayıt YARIN CANLI VERİ OLACAK
 > Karar `tekserp_yeni`'yi üretime almak yönünde. Deneme amaçlı açtığınız
@@ -252,7 +246,6 @@ $env:PM2_HOME = "C:\Etkili-Yazilim\pm2-home"
 pm2 stop tekserp-backend                       # ESKIYI DURDUR (pm2 ise)
 
 notepad C:\TeksERP\app\ecosystem.config.js     # PORT: "5000" -> "4000"
-                                               # DISCOVERY_MDNS_ENABLED satirini SIL
 
 $env:PM2_HOME = "C:\TeksERP\pm2-home"
 cd C:\TeksERP\app
@@ -262,9 +255,9 @@ pm2 save                                       # reboot'ta geri gelsin
 curl http://localhost:4000/health              # surum YENI olmali
 ```
 
-İlan satırının silinmesi gerekiyor: geçişten sonra **yeni kurulum artık tek
-sunucu**, ağda görünmesi gerekiyor (yoksa yeni kurulan panel/tablet onu otomatik
-bulamaz, adres elle girilir).
+Geçişte ilanla ilgili yapılacak bir şey yok — zaten açık. Değişen tek şey port:
+yeni kurulum artık tek sunucu ve `:4000`'i ilan ediyor, yani keşif listesinde tek
+aday kalıyor.
 
 > ### ⚠️ KOPYA ALINDIKTAN SONRA ESKİ API'DE YAPILAN İŞ KAYBOLUR
 > `tekserp_yeni`, **bu akşam mesai bitiminde** alınmış bir fotoğraftır. Eski API

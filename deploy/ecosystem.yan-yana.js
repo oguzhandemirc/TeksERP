@@ -12,12 +12,17 @@
 //
 // Sablondan UC farki var, ucu de bilincli:
 //   1) PORT 5000        - eski kurulum 4000'i tutuyor
-//   2) DISCOVERY_MDNS_ENABLED "false"
-//      Ilan varsayilan ACIK. Acik kalirsa ikinci backend de kendini
-//      _teks-erp._tcp olarak ilan eder ve otomatik bulma yapan bir panel/tablet
-//      KOPYA veritabanina baglanabilir. Uyari da gelmez: yeni DB canlinin
-//      kopyasi oldugu icin AYNI installationId'yi tasir, "farkli sunucu"
-//      uyarisi sessiz kalir. Tek ayirt edici port ve surum numarasi.
+//   2) AGA ILAN ACIK BIRAKILDI (kullanici karari, 2026-09-04)
+//      Ilan varsayilan ACIK ve OYLE KALIYOR: test cihazi yeni surumu
+//      otomatik bulmali, elle adres girmek zorunda kalmamali. mDNS portu
+//      ILANIN ICINDE tasir (istemci: verify(h, hit.port || 4000, "mdns"))
+//      -> :5000 bulunur. Alt ag taramasi ise portu SABIT 4000 dener, yani
+//      :5000'i yalniz mDNS bulur.
+//      ⚠ BEDELI BILINCLI: yeni DB canlinin kopyasi oldugu icin AYNI
+//      installationId'yi tasir -> "farkli sunucu" uyarisi SESSIZ kalir.
+//      Test suresince kesif listesinde IKI aday cikar; ayirt edici
+//      port + surum numarasidir ve panel ikisini de basar
+//      (ServerDiscoveryPanel: "host:port . vX.Y.Z").
 //   3) name "tekserp-backend-yeni"
 //      Ayni isim olsaydi kur.ps1 [4/9] pm2 delete <ad> ile ESKI kurulumu
 //      pm2'den silerdi - fabrika sessizce kapanirdi.
@@ -139,7 +144,7 @@ module.exports = {
         // kapanır ve keşif yalnız istemcinin alt ağ taramasıyla çalışır.
         // Gerçekten çalışıp çalışmadığı TEK yerden ölçülür:
         //   GET /api/admin/health → discovery.mdns.reason === "ok"
-        DISCOVERY_MDNS_ENABLED: "false",
+        // DISCOVERY_MDNS_ENABLED: "false",
 
         // --- Yedekleme (services/backup.service.ts + jobs/backup-scheduler.ts)
         //

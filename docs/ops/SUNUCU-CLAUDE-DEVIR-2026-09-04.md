@@ -140,12 +140,15 @@ yazısı** okunması gereken tek satırdır.
 için **aynı kimliği taşır** → panelin "bu senin sunucun değil" uyarısı hiç
 tetiklenmez. Ayırt edici yalnız **port ve sürüm numarası**.
 
-**b) Bu yüzden yeni kurulumun ağ ilanı KAPALI**
-(`DISCOVERY_MDNS_ENABLED: "false"`, hazır dosyada var). Açarsan otomatik bulma
-yapan bir panel/tablet **test veritabanına** bağlanabilir ve kimse fark etmez.
-**Bu satırı silme.** (Geçişten sonra silinecek — ama o insanın kararı.)
+**b) Ağ ilanı AÇIK — ve öyle kalmalı** (kullanıcı kararı). Test cihazı yeni
+sürümü otomatik bulabilsin diye. mDNS portu ilanın içinde taşır, o yüzden
+`:5000` bulunur; alt ağ taraması ise portu sabit 4000 dener, yani `:5000`'i
+yalnız mDNS bulur.
 
----
+⚠️ (a) ile birleşince sonuç şu: **keşif listesinde iki aday çıkar ve kimlik
+uyarısı gelmez.** Ayırt edici port + sürüm (`:4000 · v<eski>` ↔
+`:5000 · v2.9.3`) ve panel ikisini de basar. Kullanıcıya bunu söyle;
+**cihaz ayarını sen değiştirme.**
 
 ## 6. Kurulumdan sonra
 
@@ -208,8 +211,6 @@ eski API'de yapılan iş yeni veritabanında yoktur). Adımlar
 söylemeden o bölüme geçme.**
 
 Geçiş yapılırsa unutulmaması gereken iki şey (kullanıcıya hatırlat):
-- `ecosystem.config.js`'te `DISCOVERY_MDNS_ENABLED` satırı **silinmeli** (artık
-  tek sunucu, ağda görünmeli).
 - Gece yedeğini alan bağımsız Görev Zamanlayıcı görevi (`yedekle.ps1`)
   **veritabanı adını kendi içinde taşıyor** ve `tekserp_yeni`'yi bilmez →
   güncellenmezse canlının gece yedeği **sessizce alınmaz**.
