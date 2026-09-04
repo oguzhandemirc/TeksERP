@@ -3,6 +3,10 @@ import electronUpdater from "electron-updater";
 import log from "electron-log/main.js";
 import type { UpdateStatus } from "@shared/ipc-contract";
 import { DEFAULT_UPDATE_FEED_URL, UPDATE_FEED_OVERRIDE_KEY } from "@shared/update-feed";
+import {
+  UPDATE_CHECK_INTERVAL_MS,
+  UPDATE_FIRST_CHECK_DELAY_MS,
+} from "@shared/update-schedule";
 import { deleteSecureValue, readSecureValue, writeSecureValue } from "./secure-store.ipc.js";
 
 // electron-updater CommonJS'tir; main ESM olarak derlendiği için named import
@@ -22,17 +26,11 @@ function updater(): AppUpdater {
 }
 
 /**
- * İlk kontrol gecikmesi. Açılışta splash 16 sn'ye kadar sürebiliyor
- * (`main.ts` finishSplash) — kontrolü onun üstüne bindirmek, ağ beklerken
- * açılışı ağırlaştırır. Panel ekrana geldikten sonra sorulsun.
+ * ⚠️ ZAMANLAYICI BU DOSYADA TEKTİR ve süreler `@shared/update-schedule`ten gelir
+ * (ilk kontrol 30 sn, sonra 15 dk). Arayüzdeki "güncelleme denetle" düğmesi
+ * kendi takvimini KURMAZ — yalnız `updater:check` çağırır; ikinci bir
+ * zamanlayıcı, pencere/mount sayısı kadar çoğalan bir yoklama demek olurdu.
  */
-const FIRST_CHECK_DELAY_MS = 30_000;
-
-/**
- * Periyodik kontrol aralığı. Fabrika makineleri günlerce açık kalıyor; vardiya
- * içinde birkaç kez bakmak yeterli, dakikalık yoklama sunucuya gereksiz yük.
- */
-const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 let status: UpdateStatus = {
   state: "idle",
@@ -214,6 +212,6 @@ export function registerUpdaterIpc(): void {
     publish({ state: "error", error: toTurkishError(err) });
   });
 
-  setTimeout(() => void check(), FIRST_CHECK_DELAY_MS);
-  setInterval(() => void check(), CHECK_INTERVAL_MS);
+  setTimeout(() => void check(), UPDATE_FIRST_CHECK_DELAY_MS);
+  setInterval(() => void check(), UPDATE_CHECK_INTERVAL_MS);
 }

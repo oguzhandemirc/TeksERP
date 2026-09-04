@@ -24,8 +24,10 @@ export interface ClientVersionPolicy {
  * eğiliminin bilinçli istisnasıdır: buradaki "kapalı" taraf, tek bir bozuk
  * yanıt yüzünden fabrikadaki TÜM panellerin çalışmaz hale gelmesi demektir.
  *
- * Yoklama aralığı güncelleyiciyle aynı ritimde (4 saat): politika, bir backend
- * deploy'uyla değişir; dakikalık yoklamanın kazandıracağı bir şey yok.
+ * Yoklama aralığı 4 saat ve güncelleyicinin ritminden BAĞIMSIZDIR (o 2026-09-04'te
+ * 15 dk'ya indi): politika bir backend deploy'uyla değişir, sık yoklamanın
+ * kazandıracağı bir şey yok. İki eksen ayrı — biri yayın kanalını, öteki
+ * sunucu sözleşmesini izler.
  */
 const POLICY_INTERVAL_MS = 4 * 60 * 60 * 1000;
 

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useUpdater } from "@/hooks/useUpdater";
+import { guncellemeRozeti } from "@/lib/updater-durum";
 
 /**
  * Giriş ekranının altındaki sürüm + güncellik satırı.
@@ -35,24 +36,10 @@ export function SurumRozeti() {
     };
   }, []);
 
-  let durum: { metin: string; sinif: string } | null = null;
-  switch (status?.state) {
-    case "checking":
-      durum = { metin: "kontrol ediliyor…", sinif: "text-muted-foreground" };
-      break;
-    case "available":
-    case "downloading":
-      durum = { metin: "güncelleme iniyor", sinif: "text-info" };
-      break;
-    case "ready":
-      durum = { metin: "yeniden başlatılacak", sinif: "text-info" };
-      break;
-    case "up-to-date":
-      durum = { metin: "güncel", sinif: "text-success" };
-      break;
-    default:
-      durum = null;
-  }
+  // ⚠️ Eşleme burada YAZILMAZ — tek kaynak `@/lib/updater-durum` (sidebar
+  // footer'ı ve topbar denetleme düğmesi de onu okur). `error`/`idle` `null`
+  // döner; kırmızı basmama kuralı orada gerekçesiyle yazılı.
+  const durum = guncellemeRozeti(status?.state);
 
   return (
     <div className="app-no-drag pointer-events-none absolute bottom-2 right-3">

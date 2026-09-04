@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DemoModeBadge } from "@/components/demo/DemoModeBadge";
 import { AppearanceMenu } from "./AppearanceMenu";
 import { NotificationBell } from "./NotificationBell";
+import { GuncellemeDugmesi } from "./GuncellemeDugmesi";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -79,6 +80,11 @@ export function Topbar({ onToggleSidebar, onOpenCommand }: Props) {
         >
           <RotateCw className="h-4 w-4" />
         </Button>
+
+        {/* Güncelleme denetleme — ritmi beklemek istemeyen kişi kendisi sorar.
+            Durum eşlemesi tek kaynaktan (`@/lib/updater-durum`); web panelinde
+            hiç çizilmez. */}
+        <GuncellemeDugmesi />
 
         <NotificationBell />
 

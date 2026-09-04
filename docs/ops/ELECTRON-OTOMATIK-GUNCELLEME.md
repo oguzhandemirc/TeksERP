@@ -15,7 +15,7 @@ doğrulandı** (§1). Kalan tek iş **§2 — bir kerelik son elle tur**.
 Sen (geliştirme)                 VPS (yayın)                Fabrika (N bilgisayar)
 ─────────────────                ───────────                ──────────────────────
 sürüm no'yu artır
-npm run build:win     ──►  3 dosya yüklenir   ──►  panel açılışta + 4 saatte bir
+npm run build:win     ──►  3 dosya yüklenir   ──►  panel açılışta + 15 dk'da bir
 release/<sürüm>/           latest.yml              latest.yml'e bakar
   TeksERP-x.y.z-Setup.exe  TeksERP-…-Setup.exe     yeni sürüm varsa arka planda
   TeksERP-…-Setup.exe.blockmap  …blockmap          indirir → ZORUNLU kapı
@@ -29,6 +29,20 @@ release/<sürüm>/           latest.yml              latest.yml'e bakar
   İkisinin eşitliği `src/test/update-feed-url.test.ts` bekçisiyle kilitli.
 - **İndirme farksal:** `.blockmap` sayesinde 150 MB'ın tamamı değil, yalnız değişen
   bloklar iner. Bu yüzden blockmap dosyasını yüklemeyi atlama.
+- **Kontrol ritmi 15 DAKİKA** (2026-09-04 kullanıcı kararı; eskiden 4 saat).
+  Tek kaynak `Electron/shared/update-schedule.ts`, tek zamanlayıcı
+  `electron/ipc/updater.ipc.ts`. Eski 4 saatlik pencerede sürüm çıktıktan sonra
+  sahaya "kapatıp aç" deniyordu — yani otomatik güncellemenin çözdüğü iş elle
+  yapılıyordu. Maliyet küçük: kontrol yalnız `latest.yml`i (birkaç yüz bayt)
+  okur, makine başına saatte 4 istek. ⚠️ Arayüzde İKİNCİ bir zamanlayıcı
+  kurulmaz (pencere/mount sayısı kadar çoğalır); topbar düğmesi yalnız
+  `updater:check` çağırır. Bekçi: `src/test/update-check-interval.test.ts`.
+- **Topbar'da "güncelleme denetle" düğmesi** (zilin solunda): durumu gösterir
+  (kontrol ediliyor / güncel / iniyor / yeniden başlatılacak). ⚠️ Hata KIRMIZI
+  BASMAZ — durum eşlemesinin tek kaynağı `src/lib/updater-durum.ts`, `error` ve
+  `idle` için `null` döner; internete çıkamayan makinede sürekli yanan kırmızı,
+  gerçek güncelleme geldiğinde de görmezden gelinir. Hata metni Sistem →
+  Güncelleme ekranındadır.
 - **Kurulum ZORUNLU:** indirme bitince kapatılamaz bir kapı açılır, 2 dakikalık
   geri sayımdan sonra kurulum kendiliğinden başlar (bkz. "Operatör ne görüyor").
 - **Kapanışta sessiz kurulum bilerek KAPALI** (`autoInstallOnAppQuit = false`):
@@ -306,8 +320,9 @@ curl -s https://guncelleme.etkiliyazilim.com/adnansahin/electron/latest.yml
 # version: <yeni sürüm>  ve  path: TeksERP-<sürüm>-Setup.exe  yazmalı
 ```
 
-Fabrikadaki paneller en geç 4 saat içinde görür; beklemek istemezsen bir makinede
-**Bu Bilgisayar → Güncelleme → Şimdi kontrol et**.
+Fabrikadaki paneller en geç **15 dakika** içinde görür; beklemek istemezsen
+herhangi bir makinede **topbar'daki güncelleme düğmesi** (zilin solunda) ya da
+Sistem → Güncelleme → **Şimdi kontrol et**.
 
 ---
 
@@ -325,7 +340,9 @@ GET /api/client-policy/:istemci      (PUBLIC — giriş öncesi sorulur)
   → { minVersion, currentVersion, message? }
 ```
 
-Panel açılışta ve 4 saatte bir okur; kendi sürümü `minVersion`'ın altındaysa
+Panel açılışta ve 4 saatte bir okur (politika ekseni güncelleyicinin 15 dk'lık
+ritminden AYRIDIR: politika bir backend deploy'uyla değişir); kendi sürümü
+`minVersion`'ın altındaysa
 **güncelleme henüz inmemiş olsa bile** kapatılamaz kapı açılır ("Bu sürüm
 sunucuyla uyumlu değil") ve kontrol tetiklenir.
 
@@ -551,6 +568,9 @@ Farklıysa önbellek, ikisi de 404 ise dosya gerçekten yok.
 | `Electron/shared/update-feed.ts` | Yayın adresi — TEK KAYNAK |
 | `Electron/electron/ipc/updater.ipc.ts` | Kontrol/indirme/kurulum + Türkçe hata çevirisi |
 | `Electron/src/hooks/useUpdater.ts` | Arayüzün durum aboneliği |
+| `Electron/shared/update-schedule.ts` | Kontrol ritmi (15 dk) — TEK KAYNAK |
+| `Electron/src/lib/updater-durum.ts` | Durum → kısa metin/renk eşlemesi — TEK KAYNAK |
+| `Electron/src/components/layout/GuncellemeDugmesi.tsx` | Topbar'daki denetleme düğmesi |
 | `Electron/src/components/layout/UpdateGate.tsx` | İnerken şerit + zorunlu kurulum kapısı |
 | `Electron/src/components/layout/SurumNotlariDialog.tsx` | "Neler değişti" penceresi |
 | `Electron/src/lib/surum-notlari.ts` | Gösterim kararı (saf, test edilir) |

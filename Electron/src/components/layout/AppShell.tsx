@@ -65,7 +65,7 @@ export function AppShell() {
   useServerHeartbeat();
   // Güncelleme sonrası "neler değişti" penceresi — kararı açılışta verir.
   const { kuruluSurum } = useSurumNotuAcilis();
-  // Her oturum açılışında güncelleme kontrolü (açılış + 4 saatlik ritme ek).
+  // Her oturum açılışında güncelleme kontrolü (açılış + 15 dk'lık ritme ek).
   useGirisGuncellemeKontrolu();
   useIdleLogout();
   useExpiryAutoLogout();

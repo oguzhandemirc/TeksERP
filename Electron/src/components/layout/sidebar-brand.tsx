@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 import logoUrl from "@/assets/teks-logo-fullsize.png";
 import { useCompanyName } from "@/hooks/usePricingEnabled";
 import { useUpdater } from "@/hooks/useUpdater";
+import { guncellemeRozeti } from "@/lib/updater-durum";
 import { useSurumNotuStore } from "@/store/surum-notu";
 import { useServerClock } from "@/hooks/useServerClock";
 
@@ -106,36 +107,16 @@ export function SidebarBrand({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-/**
- * Güncelleme durumunun tek satırlık karşılığı. `null` dönerse satır çizilmez —
- * bilgi vermeyen bir gösterge yer kaplamamalı.
- */
-function guncellikMetni(state: string | undefined): { metin: string; sinif: string } | null {
-  switch (state) {
-    case "up-to-date":
-      return { metin: "güncel", sinif: "text-success" };
-    case "checking":
-      return { metin: "kontrol ediliyor…", sinif: "text-muted-foreground" };
-    case "available":
-    case "downloading":
-      return { metin: "güncelleme iniyor", sinif: "text-info" };
-    case "ready":
-      return { metin: "yeniden başlatılacak", sinif: "text-info" };
-    default:
-      // `error` ve `idle` BİLEREK gösterilmez: internete çıkamayan bir makine
-      // her açılışta kırmızı bir şey görürse gösterge körleşir. Hata Genel
-      // Ayarlar → Bu Bilgisayar → Güncelleme'de yazılıdır.
-      return null;
-  }
-}
-
 /** Footer — ürün adı + sürüm ve güncellik durumu; tıklanınca sürüm notları açılır.
  *  Daraltılmışta "EY" (sürüm tooltip'te). */
 export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
   const version = useAppVersion();
   const { status } = useUpdater();
   const acSurumNotu = useSurumNotuStore((s) => s.ac);
-  const guncellik = guncellikMetni(status?.state);
+  // ⚠️ Eşleme tek kaynaktan (`@/lib/updater-durum`) — eskiden bu dosyada ve
+  // `SurumRozeti`de BİREBİR kopyalanmıştı; kopyalar ayrışsa aynı makine aynı
+  // anda iki farklı şey derdi.
+  const guncellik = guncellemeRozeti(status?.state);
   const handleClick = () => {
     void window.api?.system?.openExternal("https://etkiliyazilim.com");
   };
@@ -169,7 +150,7 @@ export function SidebarFooter({ collapsed }: { collapsed: boolean }) {
       >
         {PRODUCT_NAME}
         {version ? ` v${version}` : ""}
-        {guncellik ? <span className={` · ${guncellik.sinif}`}>· {guncellik.metin}</span> : null}
+        {guncellik ? <span className={guncellik.sinif}> · {guncellik.metin}</span> : null}
       </button>
       <button
         type="button"
