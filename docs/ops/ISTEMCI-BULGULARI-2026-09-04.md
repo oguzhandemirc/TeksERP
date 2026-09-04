@@ -1,57 +1,4 @@
-# İstemci-Taraflı İki Bulgu (2026-09-04) — geliştirme ortamına devir
-
----
-
-## ⚠️ DEVİR SONRASI DÜZELTME (2026-09-04, kaynakta ÖLÇÜLDÜ)
-
-Notun kendi 4. bölümü ("Bu notun ölçemedikleri") üç çıkarımı doğrulamaya
-bırakmıştı. Üçü de ölçüldü; **biri YANLIŞ çıktı**:
-
-### BULGU A'nın istemci çıkarımı YANLIŞ — `["*"]` kestirmesi KALDIRILMAYACAK
-
-`mobil/src/hooks/usePermission.ts` **global joker dalını zaten taşıyor**:
-
-```ts
-const hasGlobalWildcard = set.has('*');
-const has = (code: string): boolean => {
-  if (hasGlobalWildcard) return true;      // ← tablet "*"i anlıyor
-  ...
-```
-
-Bekçisi de yeşil (`usePermission.test.ts`). Yani tablet `["*"]` alan bir hesabı
-reddetmez. Ölçüm ortamında görülen "yetkin yok" ekranının sebebi **o tablette
-ESKİ BUNDLE koşmasıdır** (joker dalı henüz o pakette yoktu) — sunucu tarafında
-düzeltilecek bir şey değil, bir güncelleme meselesi.
-
-`["*"]` kestirmesi kök `CLAUDE.md`'de **bilinçli bir karardır** (2026-09-03 —
-süperadmin P2: "tam yetki `getEffectivePermissions` ilk ifadesi `["*"]`; grant
-satırı doğmaz, süperadmin ROL DEĞİL, katalogda `*` yok"). Kaldırmak, aynı notta
-sayılan `*` körlüklerinin (Electron `hasAdminAccess`, backend üç `includes
-("admin:*")`) kapatılma gerekçesini de ortadan kaldırırdı. **Aşağıdaki
-"Önerilen düzeltme" bloğu (2. bölüm) UYGULANMADI ve uygulanmayacak.**
-
-### BULGU B'nin istemci çıkarımı da (kısmen) yanlıştı — ama kök sebep gerçekti
-
-`mobil/src/navigation/RootNavigator.tsx` kapıyı ham `status`a değil
-`assignmentRequired && status !== 'APPROVED'` koşuluna bağlamıştı; yani
-"`/pairing-required` ucunu hiç sormuyor" çıkarımı da eski bundle etkisidir.
-**Backend kusurları ise birebir doğruydu** ve düzeltildi (aşağıdaki 3. bölümün
-(b) seçeneği uygulandı):
-
-- `announce` yeni cihazı artık bayrağa göre doğurur — bayrak KAPALI → `APPROVED`
-  (audit izi `DEVICE_AUTO_APPROVED`), AÇIK → `PENDING`.
-- `GET /devices/status` **ve** `POST /devices/announce` cevapları
-  `pairingRequired` taşır; onay ekranı kararı sunucudadır.
-- Mobil kapı tek yükleme alındı: `mobil/src/navigation/pairingGate.ts`
-  (`shouldShowPairingGate`) — sunucunun taşıdığı karar bayat uç bayrağını EZER.
-- Bekçiler: `Teks-Erp/scripts/test_device_pairing_flag.ts` (18) +
-  `mobil/src/navigation/pairingGate.test.ts` (9).
-
-**Ders (0. bölümün ortak köküne ek):** derlenmiş paket üzerinden yapılan istemci
-çıkarımı, **o paketin yaşını** ölçmez. "İstemci şunu yapmıyor" demeden önce
-sorulacak soru: *bu cihazda hangi bundle koşuyor?*
-
----
+# İstemci-Taraflı Bulgular (2026-09-04) — geliştirme ortamına devir
 
 > **Bu not, kaynak koda erişimi olan oturum içindir.** Bulgular çalışan bir
 > kurulumda ölçüldü; ölçen oturumda **yalnız derlenmiş paket vardı**, istemci
@@ -62,18 +9,37 @@ sorulacak soru: *bu cihazda hangi bundle koşuyor?*
 
 ---
 
-## 0. Ortak kök — iki bulgu da aynı sınıf
+> ### ⚠️ 2026-09-04 — BULGU A GERİ ÇEKİLDİ
+>
+> Bu notun ilk hâli A'yı bir backend kusuru sayıyordu. **Yanlıştı.**
+> Geliştirme ortamı kaynağı ölçtü: mobil istemci joker dalını **taşıyor**
+> (`hasGlobalWildcard`, testi yeşil) ve `["*"]` kestirmesi `CLAUDE.md`'de
+> **bilinçli bir karar**. Kodda hata yok; **tablette eski bundle koşuyor.**
+> Ayrıntı ve doğru eylem §2'de. **`["*"]` kestirmesini KALDIRMAYIN.**
+>
+> B bölümü geri çekilmedi ama aynı şüpheye açık — §3'teki uyarıya bakın.
 
-**Sunucu izin veriyor, istemci kendi kendini kapatıyor.**
+---
 
-İkisinde de backend doğru davranıyor: kapılar açık, uçlar doğru cevap veriyor.
-Ama istemci kararı kendi tarafında, backend'in söylediğine bakmadan veriyor.
-Bu yüzden ikisi de sunucu log'una hiçbir hata düşürmüyor — sunucuda arayan
-bulamaz.
+## 0. Ortak kök — ikisi de aynı yerden bakınca görünmüyor
 
-İkisi de **satıcı hesabının gizliliği söküldükten sonra** ortaya çıktı. Sebep:
-o hesap ilk kez gerçekten kullanılmaya başlandı (listelerde görünüyor, giriş
-yapılabiliyor, ekranlara giriliyor) ve daha önce hiç yürünmemiş yollar
+İlk hâlde ikisini "sunucu izin veriyor, istemci kendini kapatıyor" diye tek
+sınıfa koymuştum. A'nın düzeltilmesinden sonra ortak kök **başka bir şey**:
+
+**Sunucu tarafından bakınca istemcinin hangi sürümü koştuğu görünmüyor.**
+
+Backend `clientType`'ı (`electron` / `mobile` / `web`) alıyor ve oturuma
+yazıyor, ama **hiçbir yerde istemci sürümü/bundle damgası tutulmuyor**
+(ölçüldü: `devices` ve oturum tablolarında sürüm kolonu yok). Sonuç: bayat bir
+istemci, backend kusuru gibi okunuyor — bu notun ilk hâlinde tam olarak bu
+oldu.
+
+**Öneri (küçük, kalıcı):** login/announce isteğine bir `appVersion` alanı
+ekleyin, `devices` satırına yazın ve Cihazlar ekranında gösterin. "Hangi
+sürüm bağlı" sorusu bir kez bakılır hâle gelir ve bu sınıf karışıklık biter.
+
+Not: her iki belirti de **satıcı hesabının gizliliği söküldükten sonra**
+görüldü — o hesap ilk kez gerçekten kullanıldı ve daha önce yürünmemiş yollar
 yürünmüş oldu.
 
 ---
@@ -138,29 +104,35 @@ const matchesPermission = (userPermissions, required) => {
 };
 ```
 
-### Çıkarım (istemcide doğrulanmalı)
-Tablet ekran kapılarını **tam kod eşleşmesiyle** kuruyor (`mobile:kk1` gibi).
-Eline `["*"]` geçiyor, aradığı kodu listede bulamıyor, "yetkin yok" diyor.
-Sunucuya hiç sormadan, ya da sorsa bile izin verilen isteği kendi engelleyerek.
+### ❌ İlk çıkarım YANLIŞTI
 
-### Önerilen düzeltme
-**`["*"]` kestirmesini kaldırın.** Hiçbir istemci değişikliği gerekmez:
+İlk hâlde "tablet tam kod eşleşmesi yapıyor, `["*"]` kestirmesi kaldırılmalı"
+denmişti. Geliştirme ortamı kaynağı ölçtü ve çürüttü:
 
-```ts
-static async getEffectivePermissions(userId) {
-  // isSystemAccount kestirmesi KALDIRILDI - satirlar zaten eksiksiz yaziliyor
-  const now = new Date();
-  const grants = await prisma.userPermission.findMany({ ... });
-  ...
-}
-```
+- Mobil istemci **joker dalını taşıyor** (`hasGlobalWildcard`), testi **yeşil**
+- `["*"]` kestirmesi `CLAUDE.md`'de kayıtlı **bilinçli bir karar**
+- Yani `getEffectivePermissions` · `rbac.middleware` · mobil istemci — **üçü de
+  doğru ve birbiriyle tutarlı**
 
-Güvenli, çünkü ölçüldü: **86/86**. Satıcı hesabı katalogdaki her izne zaten
-sahip, joker gereksiz. Alternatif (iki istemciye birden `"*"` öğretmek) daha
-çok iş ve aynı hatayı tekrar üretmeye açık.
+⚠️ **`["*"]` kestirmesini KALDIRMAYIN.** Bu notun ilk hâline dayanıp
+kaldırmak, bilinçli bir kararı ölçülmemiş bir çıkarım uğruna bozmak olurdu.
 
-### ⚠️ Kaldırırken dikkat — aynı fonksiyonda ikinci bir kapı
-`issueToken` içinde masaüstü kapısı var:
+### Gerçek sebep: tablette BAYAT BUNDLE koşuyor
+
+`hasGlobalWildcard` dalı, tablete kurulu derlemeden **sonra** eklenmiş.
+Kurulu APK jokeri bilmiyor, `["*"]` listesinde `mobile:...` arıyor,
+bulamıyor, "yetkin yok" diyor. Backend'in bununla ilgisi yok.
+
+Bu ölçümle de tutarlı: `TeksERP-1.0.1-vc58.apk` prova makinesine hiç
+taşınmadı; tablette **daha eski, elle kurulmuş** bir derleme çalışıyor.
+
+### Doğru eylem
+1. Tablete **güncel APK'yı** kurun (`hasGlobalWildcard` içeren derleme).
+2. `sysadmin` ile tekrar deneyin — hata kalkmalı.
+3. Kalkmazsa **o zaman** kod aranmalı; o noktaya kadar backend'e dokunmayın.
+
+### Backend'de dokunulmaması gereken ikinci yer
+`issueToken` içindeki masaüstü kapısı:
 
 ```ts
 if (isDesktopClient(ctx?.clientType) &&
@@ -168,13 +140,22 @@ if (isDesktopClient(ctx?.clientType) &&
   throw AppError.forbidden("Bu hesabın masaüstü paneline erişimi yok.");
 ```
 
-Bugün bu kapıyı `["*"]` **tesadüfen** geçiyor (`"*"` `mobile:` ile başlamıyor).
-Kestirme kalkınca `sysadmin` yine geçer — 86 iznin çoğu `mobile:` değil — ama
-bunun tesadüf olduğunu bilerek değiştirin. Testi buraya yazmaya değer.
+`["*"]` bu kapıyı geçiyor (`"*"` `mobile:` ile başlamıyor). Kestirme
+korunduğu sürece sorun yok — yalnız **kestirmeyi ileride biri kaldırmaya
+kalkarsa bu satırın da gözden geçirilmesi gerektiğini** bilin. Bir test
+yazmaya değer.
 
 ---
 
 ## 3. BULGU B — Cihaz onayı bayrağı kapalıyken tablet yine onay istiyor
+
+> ⚠️ **ÖNCE BUNU OKUYUN — B de aynı şüpheye açık.** Bu belirti **A ile aynı
+> tablette, aynı bayat bundle'la** görüldü. Yani B'nin istemci yarısı da eski
+> derlemenin davranışı olabilir. **Güncel APK kurulmadan B'yi bir kod bulgusu
+> saymayın** — önce §2'deki eylemi yapın, sonra tekrar deneyin.
+>
+> Aşağıdaki **sunucu tarafı ölçümler bundle'dan bağımsız geçerlidir**;
+> istemcinin ne yaptığı ise doğrulanmamıştır.
 
 ### Belirti
 `devicePairingRequired` kapalı olmasına rağmen tablet "cihaz onayı bekleniyor"
@@ -263,26 +244,138 @@ Cihazı elle onaylayın: Electron → Cihazlar → ilgili tablet → "Onayla & A
 
 ---
 
-## 4. Bu notun ölçemedikleri
+## 4. BULGU C — Keşif aynı sunucuyu birden çok kez listeliyor
 
-Dürüstlük payı — aşağıdakiler **doğrulanmadı**, çıkarım:
+### Belirti
+Tablet "ağdakileri tara" dediğinde **iki sunucu** çıkıyor
+(`192.168.1.102:4000` ve `192.168.137.1:4000`); aynı makinedeki Electron ise
+**üçüncü bir adres** gösteriyor (`172.20.144.1:4000`). Operatöre üç farklı
+sunucu varmış gibi görünüyor.
 
-- Tabletin/Electron'un izin kontrolünü tam kod eşleşmesiyle yaptığı
-  (davranıştan çıkarıldı: sunucu izin verirken istemci reddediyor)
-- Tabletin onay ekranını hangi koşula bağladığı
-- `/api/devices/pairing-required` ucunun istemci tarafından çağrılıp
-  çağrılmadığı
+### Ölçülenler — tek sunucu, çok kapı
 
-Ölçen ortamda istemci kaynağı yoktu. Üçü de sizde tek `grep` ile kesinleşir.
+Dört adresten `/api/discovery/identity` soruldu, **dördü de aynı kimliği**
+döndürdü:
+
+```
+192.168.1.102  }
+192.168.137.1  }  installationId = 94c955fe-f354-401b-83e0-6dd2ec12283c
+172.20.144.1   }  serverName = ThinkPad · v2.9.0
+100.70.47.46   }
+```
+
+4000 portunu dinleyen **tek süreç** var (PID 6224, `HOST=0.0.0.0`). Makinede
+ise **yedi IPv4 adresi** var: Wi-Fi · mobil erişim noktası · Hyper-V sanal
+anahtarı · Tailscale · üç adet link-local.
+
+### Sebep 1 — tekilleştirme yok
+Keşif, sunucuya **ulaşılabilen her adresi ayrı bir kayıt** olarak listeliyor.
+Tablet dışarıdan iki adrese ulaşabiliyor (Wi-Fi + hotspot), o yüzden iki satır
+görüyor. Sunucu log'u bunu doğruluyor — aynı saniyede iki ağdan aynı istek:
+
+```
+13:12:24  192.168.1.102     "GET /api/discovery/identity" 200  "okhttp/4.12.0"
+13:12:24  192.168.137.124   "GET /api/discovery/identity" 200  "okhttp/4.12.0"
+```
+
+**Düzeltme:** tarama sonuçlarını `installationId`'ye göre tekilleştirin. Alan
+**cevapta zaten var** (`buildDiscoveryIdentity`, `src/services/discovery.service.ts`)
+ve tam bu iş için uygun. Çok adresli sunucu tek satır olur; kullanıcı isterse
+adres seçebilir.
+
+### Sebep 2 — "ilk cevap veren" seçiliyor, "en iyi yol" değil
+Electron'un neden `172.20.144.1`'i seçtiği ölçüldü — Windows arayüz metrikleri:
+
+```
+Tailscale                     metrik  5
+vEthernet (Default Switch)    metrik 15   ← 172.20.144.1  (Hyper-V, host-only)
+Wi-Fi                         metrik 50   ← 192.168.1.102 (gerçek LAN)
+Yerel Ağ Bağlantısı* 2        metrik 55   ← 192.168.137.1 (hotspot)
+```
+
+**Hyper-V'nin sanal anahtarı gerçek Wi-Fi kartından öncelikli** (15 < 50).
+Tarama sırayla deneyip ilk cevap verende duruyor.
+
+`172.20.144.1` yalnız o makineden erişilebilir — tablet onu hiç görmedi. Yani
+bu risk **sadece sunucuyla aynı makinede koşan panelde** var; farklı
+makinedeki istemciler host-only adrese zaten ulaşamaz. Fabrika sunucusunda
+Hyper-V/WSL/Docker sanal anahtarı olması muhtemel olduğundan, sunucuda panel
+de açılıyorsa karşınıza çıkar.
+
+**Öneri:** seçim `installationId` tekilleştirmesinden sonra kullanıcıya
+bırakılsın; otomatik seçim yapılacaksa link-local (`169.254.*`) ve bilinen
+sanal aralıklar (`172.1x.*` Hyper-V/Docker) **son sıraya** alınsın.
+
+### Fabrika ağı — ayrı bir risk, ölçülemedi
+
+Sahada **birden çok Wi-Fi dağıtıcısı** var, hepsi aynı switch üzerinden
+modeme gidiyor ve cihazlar farklı dağıtıcılara otomatik bağlanıyor. Keşif iki
+ayağa basıyor ve **ikisi de aynı alt ağ varsayar**:
+
+- mDNS ilanı (`_teks-erp._tcp`) — multicast, **TTL=1, router'ı aşmaz**
+- alt ağ taraması — istemci **kendi** alt ağını tarar
+
+| Dağıtıcılar | Sonuç |
+|---|---|
+| **Köprü / AP modu** (DHCP'yi modem verir, herkes `192.168.1.x`) | Sorun yok — hangi dağıtıcıya bağlandığı fark etmez |
+| **Router modu** (her biri kendi DHCP/NAT'ı) | mDNS geçmez, tarama boşa gider → cihaz **hangi dağıtıcıya düştüğüne göre** sunucuyu bulur ya da bulamaz |
+
+⚠️ Router modunda bile **gömülü sabit adres (`192.168.1.250`) çalışmaya devam
+edebilir** — NAT dışarı doğru izin verir. Yani **önce keşif bozulur, bağlantı
+ayakta kalır**; belirti "elle yazınca çalışıyor, taramada çıkmıyor" olur ve
+teşhisi zorlaştırır.
+
+⚠️ Üçüncü ihtimal: dağıtıcılarda **istemci izolasyonu** (AP isolation / misafir
+modu) açıksa aynı alt ağda bile cihazlar birbirini göremez; o durumda elle IP
+de çalışmaz.
+
+**Sahada yapılacak tek kontrol** — iki farklı dağıtıcıya bağlı iki tablette IP
+ve ağ geçidine bakın:
+
+| Görünen | Anlamı |
+|---|---|
+| İkisi de `192.168.1.x`, geçit `192.168.1.1` | Köprü — sorun yok |
+| Biri farklı alt ağ, geçit dağıtıcının kendisi | Router — keşif kırılacak, AP moduna alın |
+
+Bu bölüm **ölçülemedi** — fabrika ağına erişim yoktu. Yukarıdakiler koddan
+(mDNS + alt ağ taraması) çıkan mantıksal sonuçlar ve sahada tek bakışla
+doğrulanır.
 
 ---
 
-## 5. Öneri — bir bekçi yazın
+## 5. Neyin ölçüldüğü, neyin ölçülmediği
 
-İki bulgu da aynı boşluktan doğdu: **"sunucu izin veriyor mu" ile "istemci
-gösteriyor mu" ayrı ayrı doğru, birlikte yanlış.** Tekil düzeltmeler bunu
-kapatmaz; üçüncüsü başka bir yüzeyde çıkar.
+| | Durum |
+|---|---|
+| Backend davranışı (izinler, bayrak, uçlar, `announce`, `getStatus`) | ✅ **ölçüldü** — çalışan kurulumda, canlı sorgularla |
+| Mobil istemcinin joker desteği | ✅ geliştirme ortamında ölçüldü — **var**, test yeşil |
+| Tablette koşan bundle'ın sürümü | ❌ **ölçülemedi** — sunucu istemci sürümü tutmuyor (§0) |
+| B'de istemcinin onay ekranını hangi koşula bağladığı | ❌ **ölçülmedi** — çıkarım |
+| C'de tek sunucunun çok adresten göründüğü | ✅ **ölçüldü** — `installationId` dört adreste aynı, tek dinleyen süreç |
+| C'de Electron'un sanal adresi seçme sebebi | ✅ **ölçüldü** — Windows arayüz metrikleri (Hyper-V 15 < Wi-Fi 50) |
+| C'de fabrika Wi-Fi topolojisi (köprü mü router mı) | ❌ **ölçülemedi** — fabrika ağına erişim yoktu |
 
-Somut öneri: satıcı hesabıyla uçtan uca bir akış testi (giriş → tablet ekranı
-→ modül anahtarı yazma). Bugün her parça ayrı ayrı yeşil, birleşimi kırmızı ve
-bunu hiçbir test görmüyor.
+⚠️ **Bu notun ilk hâli, ölçülmemiş bir çıkarımı bulgu diye sundu ve yanlış bir
+düzeltme önerdi.** Ders, aşağıdaki bölümün konusu.
+
+---
+
+## 6. Asıl ders — ve bir öneri
+
+Bu notun ilk hâli şu zinciri kurdu: *sunucu izin veriyor → istemci reddediyor
+→ demek ki sözleşme kopuk → backend'i değiştir.* Zincirin ilk iki halkası
+ölçülmüştü, üçüncüsü **varsayımdı** ve yanlıştı. Doğrusu: *istemci bayattı.*
+
+Bu hata, sunucudan bakan birinin **kaçınamayacağı** bir hataydı — çünkü
+sunucu, karşısındaki istemcinin hangi sürüm olduğunu bilmiyor. Tek seferlik
+bir dikkat meselesi değil, ölçüm boşluğu.
+
+**Somut öneri 1 — istemci sürümünü görünür yapın.** Login/announce'a
+`appVersion` ekleyin, `devices` satırına yazın, Cihazlar ekranında gösterin.
+Bayat istemci o gün bir bakışta anlaşılır; bu notun yanlış yarısı hiç
+yazılmazdı.
+
+**Somut öneri 2 — satıcı hesabıyla uçtan uca akış testi.** Giriş → tablet
+ekranı → modül anahtarı yazma. Bugün her parça ayrı ayrı yeşil; birleşimini
+hiçbir test yürümüyor ve gizlilik söküldükten sonra ilk yürüyen gerçek
+kullanım oldu.
