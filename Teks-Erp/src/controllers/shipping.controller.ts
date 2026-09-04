@@ -610,6 +610,25 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  /**
+   * GET /api/shipping/sack-search/customers — cari kapısı (Paketleme/Çuvallar
+   * ekranının giriş adımı). Kapsam varsayılanı `searchSacks` ile AYNI kaynaktan
+   * (POOL+PLANNED) gelir; ayrışırsa kapı ile liste farklı sayı basar.
+   */
+  listSackCustomers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const scopeRaw = typeof req.query.scope === "string" ? req.query.scope : undefined;
+      const scope = (["POOL", "PLANNED", "DISPATCHED", "ALL"] as const).includes(scopeRaw as SackSearchScope)
+        ? (scopeRaw as SackSearchScope)
+        : undefined;
+      const result = await sackSearchService.listSackCustomers({
+        scope,
+        search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
+      });
+      res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
   getSackContents = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const result = await sackSearchService.getSackContents(req.params.id as string);

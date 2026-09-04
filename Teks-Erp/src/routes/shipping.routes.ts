@@ -144,6 +144,26 @@ router.post("/sacks/:id/split", verifyToken, WRITE, controller.splitSack);
 // ÇUVAL/TOP ARAMA + salt-okunur raporlar
 // ===========================================================================
 router.get("/sack-search", verifyToken, READ, controller.searchSacks);
+/**
+ * @openapi
+ * /api/shipping/sack-search/customers:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Cari kapısı — kapsamda çuvalı OLAN cariler + çuval adedi
+ *     description: >
+ *       Paketleme/Çuvallar ekranının giriş adımı ("Tüm Çuvallar / Cariye Göre").
+ *       Cari KATALOĞUNU değil, bugün elinde çuval OLAN carileri döner.
+ *       `customerId: null` satırı = müşterisiz (genel stok) kovası ve İLK sırada
+ *       gelir (arama terimi verilirse dönmez). Kapsam varsayılanı `/sack-search`
+ *       ile aynıdır (POOL+PLANNED). Salt-okunur, metraj/top adedi DÖNMEZ.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: scope, schema: { type: string, enum: [POOL, PLANNED, DISPATCHED, ALL] } }
+ *       - { in: query, name: search, schema: { type: string } }
+ *     responses:
+ *       200: { description: "customerId/name/code/sackCount listesi" }
+ */
+router.get("/sack-search/customers", verifyToken, READ, controller.listSackCustomers);
 router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);
 /**
  * @openapi

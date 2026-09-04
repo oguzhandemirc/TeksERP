@@ -32,6 +32,33 @@ function toIdList(v: string | string[] | undefined): string[] {
   return (Array.isArray(v) ? v : v ? [v] : []).map((s) => s.trim()).filter(Boolean);
 }
 
+/**
+ * "Müşterisiz (genel stok) çuvallar" süzgeç değeri — `filter[customerId]=none`.
+ *
+ * ⚠️ SENTİNEL SAYI DEĞİL, KAÇIŞ VALFİ: `Sack.customerId` OPSİYONELDİR (çuval bir
+ * depo nesnesidir) ve canlı ölçümde depodaki çuvalların **%44'ü** (9 çuvalın 4'ü,
+ * tekserp_demo 2026-09-04) müşterisizdi. Müşteri süzgeci yalnız UUID kabul ettiği
+ * sürece bu küme hiçbir yüzeyden SÜZÜLEMİYORDU — "cariye göre" bir giriş kapısı
+ * eklerken bu kümeyi adlandırmadan bırakmak, en büyük kovayı sessizce yutmak olurdu
+ * (bu depoda tekrar eden arıza sınıfı: "sessizce düşen satır").
+ *
+ * ⚠️ SENTİNEL `in:` DİZİSİNE GİREMEZ: kolon `@db.Uuid` — düz metin Prisma'da
+ * P2007 üretir (kök CLAUDE.md, 2026-08-06 "CSV de bir string'dir" notu). Bu yüzden
+ * değer `splitCustomerFilter` ile UUID listesinden AYRIŞTIRILIR ve ayrı bir
+ * `{ customerId: null }` OR dalı olarak eklenir.
+ */
+export const CUSTOMERLESS_FILTER_VALUE = "none";
+
+/**
+ * Müşteri süzgeci değerlerini ikiye ayırır: gerçek ID'ler + "müşterisiz" bayrağı.
+ * Aynı alan içinde VEYA semantiği korunur (`none,<uuid>` → müşterisiz VEYA o cari).
+ */
+function splitCustomerFilter(v: string | string[] | undefined): { ids: string[]; customerless: boolean } {
+  const raw = toIdList(v);
+  const customerless = raw.some((x) => x.toLowerCase() === CUSTOMERLESS_FILTER_VALUE);
+  return { ids: raw.filter((x) => x.toLowerCase() !== CUSTOMERLESS_FILTER_VALUE), customerless };
+}
+
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
@@ -109,6 +136,29 @@ function scopeWhere(scope: SackSearchScope): Prisma.SackWhereInput[] {
   }
 }
 
+/**
+ * Kapsam çözümü — TEK KAYNAK. Varsayılan (scope verilmezse) POOL+PLANNED, yani
+ * "sevk edilmemiş çuvallar". Liste (`searchSacks`) ile cari kapısı
+ * (`listSackCustomers`) AYNI yüklemden beslenmek ZORUNDA: ayrışırsa kapı "3 çuval"
+ * der, liste 5 satır basar ve operatör hangisinin doğru olduğunu bilemez.
+ */
+function resolveScopeOr(scope?: SackSearchScope, includeDispatched?: boolean): Prisma.SackWhereInput[] {
+  if (scope) return scopeWhere(scope);
+  if (includeDispatched) return scopeWhere("ALL");
+  return [{ shipmentId: null }, { shipment: { status: { in: PLANNED_STATUSES } } }];
+}
+
+/** Cari kapısında tek seferde dönen en fazla cari — aşılırsa arama kutusu istenir. */
+const MAX_SACK_CUSTOMERS = 500;
+
+/** Cari kapısı satırı — `customerId: null` = müşterisiz (genel stok) kovası. */
+export interface SackCustomerBucket {
+  customerId: string | null;
+  name: string;
+  code: string | null;
+  sackCount: number;
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -153,15 +203,18 @@ export class SackSearchService {
     const hasContentFilter = Object.keys(rollFilter).length > 0;
 
     // Kapsam: verilen scope; yoksa includeDispatched'e göre ALL, aksi POOL+PLANNED (varsayılan).
-    const scopeOr: Prisma.SackWhereInput[] = params.scope
-      ? scopeWhere(params.scope)
-      : params.includeDispatched
-        ? scopeWhere("ALL")
-        : [{ shipmentId: null }, { shipment: { status: { in: PLANNED_STATUSES } } }];
+    const scopeOr: Prisma.SackWhereInput[] = resolveScopeOr(params.scope, params.includeDispatched);
 
     const andClauses: Prisma.SackWhereInput[] = [{ OR: scopeOr }];
-    const customerIds = toIdList(params.customerId);
-    if (customerIds.length) andClauses.push({ customerId: { in: customerIds } });
+    // Müşteri süzgeci — "müşterisiz" sentineli UUID listesinden ayrışır (bkz.
+    // CUSTOMERLESS_FILTER_VALUE). İkisi birlikte gelirse tek OR dalı olur.
+    const { ids: customerIds, customerless } = splitCustomerFilter(params.customerId);
+    if (customerIds.length || customerless) {
+      const customerOr: Prisma.SackWhereInput[] = [];
+      if (customerIds.length) customerOr.push({ customerId: { in: customerIds } });
+      if (customerless) customerOr.push({ customerId: null });
+      andClauses.push({ OR: customerOr });
+    }
     const shipmentNo = params.shipmentNo?.trim();
     if (shipmentNo)
       andClauses.push({
@@ -287,6 +340,93 @@ export class SackSearchService {
       success: true,
       data,
       pagination: { nextCursor, hasMore, limit, ...(totalEstimate !== undefined ? { totalEstimate } : {}) },
+    };
+  }
+
+  /**
+   * Cari kapısı — kapsamda çuvalı OLAN carilerin listesi + çuval adedi.
+   *
+   * Saha isteği (2026-09-04): *"sevkiyat ekranına girerken önüme iki kutucuk
+   * gelsin — tüm çuvallar / tüm cariler; cariyi seçince o carinin çuvalları
+   * listelensin."*
+   *
+   * ⚠️ NEDEN AYRI UÇ (ölçüldü, tekserp_demo 2026-09-04): fabrikada **43 aktif
+   * cari** var ama depoda çuvalı olan **4** cari. Var olan `multi-lookup` müşteri
+   * süzgeci cari KATALOĞUNU listeler → operatör 43 adın içinden seçer, 39'u
+   * "sonuç yok" verir. Kapının işi katalog göstermek değil, "bugün elimde kimin
+   * malı var" sorusunu cevaplamak.
+   *
+   * ⚠️ MÜŞTERİSİZ KOVASI SATIR OLARAK DÖNER (`customerId: null`) — aynı ölçümde
+   * depodaki 9 çuvalın 4'ü müşterisizdi. Cari listesinde adı olmadığı için
+   * "sessizce" düşmesi en olası satırdır; `sackCount` ile birlikte İLK sırada
+   * döner. Arama terimi verilince DÖNMEZ: "ali" araması "Müşterisiz" satırı
+   * göstermez (adı yok, eşleşmiyor).
+   *
+   * ⚠️ METRAJ/TOP ADEDİ BİLEREK YOK: çuvaldaki "fiziksel olarak var" kümesi
+   * `SACK_ABSENT_STATUSES` ile süzülür (hayalet top) ve o kuralı burada İKİNCİ
+   * kez uygulamak, listeden/etiketten/irsaliyeden farklı bir dördüncü rakam
+   * üretme riski demektir. Kapı yalnız ÇUVAL SAYAR.
+   *
+   * Salt-okunur; yazma/audit yok.
+   */
+  async listSackCustomers(params: {
+    scope?: SackSearchScope;
+    search?: string;
+  }): Promise<ApiResponse<SackCustomerBucket[]>> {
+    const andClauses: Prisma.SackWhereInput[] = [{ OR: resolveScopeOr(params.scope) }];
+    const search = params.search?.trim();
+    if (search) {
+      andClauses.push({
+        OR: buildTextSearch<Prisma.SackWhereInput>(search, {
+          text: ["customer.name"],
+          code: ["customer.code"],
+        }),
+      });
+    }
+    const where: Prisma.SackWhereInput = { AND: andClauses };
+
+    const groups = await prisma.sack.groupBy({
+      by: ["customerId"],
+      where,
+      _count: { _all: true },
+    });
+
+    const ids = groups.map((g) => g.customerId).filter((v): v is string => v !== null);
+    // Tombstone (birleştirilmiş cari) SÜZÜLMEZ: çuval hâlâ o satırı gösteriyorsa
+    // operatörün onu bulması gerekir. Süzmek satırı yine sessizce yutardı.
+    const customers = ids.length
+      ? await prisma.customer.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, code: true } })
+      : [];
+    const byId = new Map(customers.map((c) => [c.id, c]));
+
+    const named: SackCustomerBucket[] = [];
+    let customerless: SackCustomerBucket | null = null;
+    for (const g of groups) {
+      const count = g._count._all;
+      if (g.customerId === null) {
+        // Arama terimi varken müşterisiz kovası gösterilmez (ada göre arıyoruz).
+        if (!search) customerless = { customerId: null, name: "Müşterisiz (genel stok)", code: null, sackCount: count };
+        continue;
+      }
+      const c = byId.get(g.customerId);
+      named.push({
+        customerId: g.customerId,
+        // FK var ama kayıt okunamadıysa (yarış/silinme) satır YİNE döner — id ile.
+        name: c?.name ?? "(bilinmeyen cari)",
+        code: c?.code ?? null,
+        sackCount: count,
+      });
+    }
+    named.sort((a, b) => a.name.localeCompare(b.name, "tr"));
+
+    const truncated = named.length > MAX_SACK_CUSTOMERS;
+    const data = [...(customerless ? [customerless] : []), ...named.slice(0, MAX_SACK_CUSTOMERS)];
+    return {
+      success: true,
+      data,
+      ...(truncated
+        ? { warnings: [`Çok fazla cari var — ilk ${MAX_SACK_CUSTOMERS} tanesi gösteriliyor. Arama kutusuyla daraltın.`] }
+        : {}),
     };
   }
 
