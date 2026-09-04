@@ -5,6 +5,31 @@
 >
 > **Amaç:** fabrikaya çıkmadan önce, evde bir Windows makinede sıfırdan kurulum
 > provası. Sunucu + panel + tablet. Fabrikaya HİÇBİR ŞEY yapılmayacak.
+>
+> ---
+>
+> ### ⚠️ BU PROVANIN İKİNCİ KOŞUMU (2026-09-04, akşam)
+>
+> Birinci koşum **geçmedi** — `kur.ps1` `[7/9]`'da düştü ve sebep kurulum
+> mekaniği değil **paketin kendisiydi**. Sonuçlar: `EV-PROVASI-SONUC-2026-09-04.md`.
+> Beş bulgunun hepsi düzeltildi ve yeni paket üretildi:
+>
+> | Bulgu | Neydi | Durum |
+> |---|---|---|
+> | 1 | Paket nokta ile başlayan her girdiyi kaybediyordu (140 dosya) | düzeltildi + **kapı** kondu |
+> | 2 | Satıcı hesabı bu paketten kurulamıyordu | araç pakete derleniyor |
+> | 3 | `ecosystem.config.js` yolları sabit `C:/Etkili-Yazilim` | kök **türetiliyor** |
+> | 4 | Windows'ta `PM2_HOME` süreçleri ayırmıyor | yazıya geçti (§5) |
+> | 5 | `[module-profile]` yanıltıcı mesaj | satırları sayıyor |
+> | 6 | Node sürümü belirsiz | `engines >=22` + `kur.ps1` ölçüyor |
+>
+> Yeni paket macOS'ta ölçüldü: 13643 dosya = beyan · 124 nokta girdisi ·
+> `.prisma/client/default` **çözülüyor ve yükleniyor** (Windows'ta bulunamayan
+> tam modül) · prisma CLI `.bin` olmadan koşuyor · satıcı aracı çalışıyor ve
+> TTY kapısı donmadan hata veriyor.
+>
+> **Bu koşumun sorusu tek:** `kur.ps1` dokuz adımı **hiç elle müdahale
+> olmadan** bitiriyor mu?
 
 ---
 
@@ -30,7 +55,7 @@ Kullanıcı bunları Windows'a taşıdı (Mac'te `~/Desktop/tekserp-kurulum`'day
 
 | Dosya | Ne | Not |
 |---|---|---|
-| `tekserp-backend-20260903_210124-8ba92ca7.zip` | Sunucu paketi, 116 MB | 231 migration + `node_modules` dahil → sunucuda internet GEREKMEZ |
+| `tekserp-backend-20260904_032424-6d7f1209.zip` | Sunucu paketi, 121 MB | 231 migration + `node_modules` + satıcı aracı → sunucuda internet GEREKMEZ. ⚠️ Klasörde TEK zip olmalı; bozuk olanlar silindi. |
 | `TeksERP-1.2.0-Setup.exe` | Panel, 141 MB | macOS'ta derlendi; Windows native ikilileri (`PE32+`) pakete girdiği DOĞRULANDI |
 | `TeksERP-1.0.1-vc58.apk` | Tablet, 50 MB | İmzası doğrulandı; gömülü adres `http://192.168.1.250:4000/api` |
 | `ilk-kurulum.ps1` | Veritabanı + iskelet kurar | ADIM 3.2'de koşar. Repo kaynağı `deploy/ilk-kurulum.ps1` |
@@ -68,6 +93,34 @@ kurulum zaten yok, sorun çıkmaz.
 
 Her adımın **beklenen çıktısı** yazılı. Görmediğin bir şey varsa DURMA ve sebebini
 ölç; tahminle ilerleme.
+
+### 3.0 ÖNCE SIFIRLA (makinede birinci provadan kalıntı var)
+
+Birinci koşumda kurulum **dört elle müdahaleyle** tamamlanmıştı (migration elle,
+`ecosystem.config.js` elle düzeltildi, prisma client elle üretildi, pm2 elle
+başlatıldı). O kurulumun üzerine kurmak hiçbir şey kanıtlamaz — düzeltmelerin
+kendisi kalıntıyla karışır.
+
+```powershell
+# 1) pm2'yi durdur (YÖNETİCİ kabuk — daemon yönetici olarak koşuyor, §5/BULGU-4)
+$env:PM2_HOME = "C:\TeksERP\pm2-home"
+C:\TeksERP\pm2\node_modules\.bin\pm2.cmd delete all
+C:\TeksERP\pm2\node_modules\.bin\pm2.cmd kill
+
+# 2) Veritabanını düşür
+$pg = "C:\Program Files\PostgreSQL\16\bin"
+& "$pg\dropdb.exe" -h localhost -p 5432 -U postgres tekserp
+
+# 3) Kök klasörü kaldır (yedeği SAKLA)
+Move-Item C:\TeksERP\backups\premigrate_*.dump C:\  -ErrorAction SilentlyContinue
+Remove-Item C:\TeksERP -Recurse -Force
+```
+
+⚠️ `tekserp` **rolünü de** düşür (`DROP ROLE tekserp`) — kalırsa parolası
+bilinmediği için `ilk-kurulum.ps1` `[3/8]`'de "bağlanılamıyor" ile durur.
+Script mevcut bir rolün parolasına BİLEREK dokunmaz.
+
+⚠️ Elinde fabrika dump'ı olduğundan emin ol; sıfırlama onu geri getirmez.
 
 ### 3.1 Ön koşullar
 
@@ -217,6 +270,9 @@ Açılışta güncelleme kontrolü otomatik (`checkAutomatically: ON_LOAD`).
 | Sürüm otomatik değil | `build-apk.mjs` sürümü artırmaz, yalnız raporlar. Küçük/büyük hane elle verilir. |
 | PostgreSQL sürümü | Doküman 18 diyordu, saha 16.9. Ortam sürümleri dokümanın en hızlı bayatlayan kısmı — ölç. |
 | Restore'u yanlış rolle yapmak | `postgres` ile restore edilen tablolar `postgres`'e ait olur; uygulama kendi veritabanında yazamaz. `-U tekserp --no-owner` ile yükle (script bunu kendisi yapar). |
+| Windows'ta `PM2_HOME` | Süreçleri AYIRMAZ — daemon `\\.\pipe\rpc.sock` kullanır, makinede tek pipe vardır. Ayrılan yalnız `dump.pm2` ve log konumu. Komutları AYNI yükseltme seviyesinden ver; yönetici daemon + yetkisiz istemci = `EPERM` ve bu "uygulama yok" gibi okunur. |
+| `pm2 online` = çalışıyor sanmak | Backend restart döngüsündeyken de `online` görünür. Tek ölçüt `/health`. |
+| Makinenin temiz olduğunu varsaymak | Birinci provada makinede 3 eski veritabanı ve parolası bilinmeyen bir rol vardı. Ölç, varsayma. |
 | `kur.ps1` yükseltme aracıdır | Mevcut kurulum yoksa durur, `.env`i mevcut kurulumdan alır. Sıfırdan kurulum için `ilk-kurulum.ps1` yazıldı. |
 
 ---
@@ -225,7 +281,7 @@ Açılışta güncelleme kontrolü otomatik (`checkAutomatically: ON_LOAD`).
 
 Hepsi doğrulanmadan geçti deme:
 
-1. `kur.ps1` dokuz adımı da tamamladı, sağlık `ok`
+1. `kur.ps1` dokuz adımı da **elle müdahale olmadan** tamamladı, sağlık `ok`
 2. Migration sayısı **231**
 3. `GET /api/admin/health` yanıt veriyor
 4. Panel açıldı, sunucuyu buldu, giriş yapıldı
@@ -233,5 +289,8 @@ Hepsi doğrulanmadan geçti deme:
 6. Tablet açıldı, sunucuyu buldu, giriş yapıldı
 7. Genel Ayarlar → **Modüller** bölümü görünüyor (bu turun ana yeniliği)
 8. Fabrika verisi yerinde: top sayısı dump'takiyle aynı
+9. `npm run superadmin:kur` **koştu** (birinci koşumda paket bu aracı taşımıyordu)
+10. `C:\TeksERP\logs\` altında pm2 log dosyaları GERÇEKTEN oluştu (BULGU-3:
+    yollar artık köke göre türetiliyor; boş klasör = kök türetimi bozuk)
 
 Takılırsan: hata metnini olduğu gibi al, sebebini ölç, tahminle ilerleme.
