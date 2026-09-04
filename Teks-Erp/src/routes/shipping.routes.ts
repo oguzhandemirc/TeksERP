@@ -32,6 +32,17 @@ const UNDO_DISPATCH = requireAnyPermission("shipping:undo-dispatch");
  *     tags: [Shipping]
  *     summary: Açık siparişler + depo karşılaması (paketleme rehberi)
  *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - in: query
+ *         name: customerId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: branchId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: search
+ *         description: Sipariş no / cari adı / kumaş adı / renk adı (SUNUCU tarafı süzme)
+ *         schema: { type: string }
  *     responses: { 200: { description: Açık siparişler + satır bazlı karşılama } }
  */
 router.get("/open-orders", verifyToken, READ, controller.openOrders);

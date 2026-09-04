@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Callout } from "@/components/ui/callout";
 import { ShipmentMismatchSummary } from "./ContentMismatchBanner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { loadAllForPicker } from "@/lib/picker-loader";
+import { ReferenceSelect } from "@/components/forms/ReferenceSelect";
 import { customerService } from "@/pages/Customers/service";
 import { BranchSelect } from "@/pages/Customers/BranchSelect";
 import {
@@ -29,9 +29,24 @@ import { ShipmentOrderSelect } from "./ShipmentOrderSelect";
 import { ShipmentPreviewPanel } from "./ShipmentPreviewPanel";
 import { destinationLabels, type SackSearchRow, type ShipmentDestination } from "./types";
 
+/**
+ * Diyaloğun GERÇEKTEN okuduğu çuval alanları.
+ *
+ * ⚠️ Bilerek `SackSearchRow`ın DAR bir alt kümesi: liste ekranı tam satırı
+ * verir (yapısal olarak atanabilir), çuval EDİTÖRÜ ise elindeki tek çuvaldan
+ * bu nesneyi kurar. Tam satır istenseydi editörün `createdAt`/`rollCount`/
+ * `matchQty` gibi LİSTEYE ait alanları UYDURMASI gerekirdi — bugün kullanılmadığı
+ * için zararsız görünen, yarın diyalog o alanı okuduğu gün sessizce yanlış
+ * rakam basacak bir dolgu. Tip, "bu diyalog neye bakar" sorusunun cevabıdır.
+ */
+export type ShipmentDialogSack = Pick<
+  SackSearchRow,
+  "id" | "sackNo" | "weightKg" | "customer" | "branch" | "hasNote" | "notePreview"
+>;
+
 interface Props {
   /** Sevk edilecek DEPO çuvalları (seçim); null = kapalı. */
-  sacks: SackSearchRow[] | null;
+  sacks: ShipmentDialogSack[] | null;
   onOpenChange: (open: boolean) => void;
   onCreated: () => void;
 }
@@ -88,14 +103,6 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
   const effCustomerId = lockedCustomerId ?? customerId;
   const effBranchId = lockedBranchId ?? branchId;
   const activeOrderIds = orderless ? [] : [...orderIds];
-
-  const customersQ = useQuery({
-    queryKey: ["customers", "picker"],
-    queryFn: () => loadAllForPicker(customerService),
-    staleTime: 60_000,
-    enabled: open && !lockedCustomerId,
-  });
-  const customers = (customersQ.data?.data ?? []) as Array<{ id: string; name?: string; code?: string }>;
 
   const previewQ = useQuery({
     queryKey: ["shipment-preview", sackKey, effCustomerId ?? null, effBranchId ?? null, orderless ? "none" : activeOrderIds.slice().sort().join(",")],
@@ -202,16 +209,27 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
                   <span className="ml-auto text-[10px] text-muted-foreground">çuvaldan</span>
                 </div>
               ) : (
-                <Select value={customerId} onValueChange={(v) => { setCustomerId(v); setBranchId(null); setOrderIds(new Set()); }}>
-                  <SelectTrigger className={!customerId ? "border-primary ring-2 ring-primary/30" : undefined}>
-                    <SelectValue placeholder="Hedef müşteri seç…" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name ?? c.code ?? c.id}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                /* ⚠️ ARAMALI picker (2026-09-04 saha isteği) — eski düz `Select`
+                   TÜM cariyi tek listede basıyordu ve arama kutusu YOKTU; operatör
+                   43 satırlık (bugün) bir açılır listede kaydırarak cari arıyordu.
+                   `ReferenceSelect` süzmeyi SUNUCUDA yapar (debounce'lı `search`),
+                   yani liste büyüdükçe bozulmaz — kardeşi `ReassignCustomerDialog`
+                   aynı çuval klasöründe bu deseni zaten kullanıyor.
+                   ⚠️ `nullable` VERİLMEZ: sevkiyatın müşterisi zorunludur
+                   (irsaliye/`SackAllocation` cari ister); çuvalın müşterisiz
+                   olabilmesi ÇUVALIN kuralı, sevkiyatın değil. */
+                <ReferenceSelect
+                  value={customerId ?? null}
+                  onChange={(v) => {
+                    setCustomerId(v ?? undefined);
+                    setBranchId(null);
+                    setOrderIds(new Set()); // cari değişti → eski siparişler geçersiz
+                  }}
+                  service={customerService}
+                  queryKey="customers"
+                  getLabel={(c) => (c.code ? `${c.code} — ${c.name}` : c.name)}
+                  placeholder="Hedef müşteri ara/seç…"
+                />
               )}
             </div>
             {(branchesEnabled || lockedBranchId) && (

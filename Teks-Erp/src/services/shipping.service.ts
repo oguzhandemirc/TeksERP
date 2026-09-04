@@ -4296,11 +4296,46 @@ export class ShippingService {
   /**
    * Açık siparişler + her satırda depo karşılaması. openQty = istenen − sevk (rezerv yok).
    * Depo serbest stoğu (shipmentId=null, sackId=null, WAREHOUSE) spec bazında gösterilir.
+   *
+   * ⚠️ ARAMA SUNUCUDA (2026-09-04) — istemci süzmesi DEĞİL. Sebep tek satırda:
+   * aşağıdaki `take: 300` bir KESMEDİR. İstemci elindeki (kesilmiş) diziyi
+   * süzseydi, 300'ü aşan bir cariye ait sipariş aranınca ekran "sonuç yok" der
+   * ve sipariş GERÇEKTEN varken siparişsiz sevke itilirdi — bu depoda adı konmuş
+   * "istemci süzmesi yanlış kayıt-yok üretir" sınıfı (2026-08-12 top listesi dersi).
+   * Süzgeç `where`e girince kesme süzülmüş kümeye uygulanır, yani sonuç doğru.
+   *
+   * Arama yolları sipariş listesinin (`order.service.listAvailableForPicker`)
+   * AYNISI + renk adı: aynı soruya iki ekranda iki farklı cevap çıkmasın.
    */
-  async listOpenOrdersWithCoverage(params: { customerId?: string; branchId?: string | null }): Promise<ApiResponse<unknown>> {
+  async listOpenOrdersWithCoverage(params: {
+    customerId?: string;
+    branchId?: string | null;
+    search?: string;
+  }): Promise<ApiResponse<unknown>> {
     const where: Prisma.OrderWhereInput = { status: { notIn: ["CANCELLED", "COMPLETED"] } };
     if (params.customerId) where.customerId = params.customerId;
     if (params.branchId !== undefined) where.branchId = params.branchId;
+
+    const search = params.search?.trim();
+    if (search) {
+      const or = buildTextSearch<Prisma.OrderWhereInput>(search, {
+        text: [
+          "customer.name",
+          "lines.some.item.name",
+          "lines.some.customerItemName",
+          "lines.some.color.name",
+        ],
+        code: ["orderNumber"],
+      });
+      // ⚠️ SÖZLEŞME KAPISI (gözlenmiş bir hatanın yaması DEĞİL — ayrım yazılı
+      // olsun): Prisma'da `OR: []` "hiçbir şey eşleşmesin" demektir, yani boş bir
+      // dizi süzgeci listeyi sessizce boşaltır. `buildTextSearch` BUGÜN yalnız
+      // BOŞ terimde `[]` döner ve o yol yukarıdaki `trim()` kontrolüyle zaten
+      // kapalı (ölçüldü 2026-09-04: "-", "...", "·", "€", "…" dahil denenen her
+      // boş-olmayan terim >=1 cümle üretti). Dal, helper'ın sözleşmesi değişirse
+      // sessiz boş listeye düşmemek için duruyor.
+      if (or.length > 0) where.OR = or;
+    }
 
     const orders = await prisma.order.findMany({
       where,

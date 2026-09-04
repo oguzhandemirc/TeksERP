@@ -94,11 +94,18 @@ export const sackHubService = {
       .then((r) => r.data),
 
   // ── Sipariş rehberi + müşteri havuzu ───────────────────────────────────────
-  /** Açık siparişler + depo karşılaması (sevkiyat sipariş seçimi rehberi). */
-  listOpenOrders: (params?: { customerId?: string; branchId?: string }): Promise<ApiResponse<OpenOrder[]>> => {
+  /**
+   * Açık siparişler + depo karşılaması (sevkiyat sipariş seçimi rehberi).
+   *
+   * ⚠️ `search` SUNUCUYA gider, istemcide süzülmez: uç `take: 300` ile keser ve
+   * kesilmiş diziyi istemcide süzmek "sonuç yok" YALANI üretir (2026-08-12 top
+   * listesi dersi). Terim sipariş no / cari adı / kumaş adı / renk adında aranır.
+   */
+  listOpenOrders: (params?: { customerId?: string; branchId?: string; search?: string }): Promise<ApiResponse<OpenOrder[]>> => {
     const q = new URLSearchParams();
     if (params?.customerId) q.set("customerId", params.customerId);
     if (params?.branchId) q.set("branchId", params.branchId);
+    if (params?.search) q.set("search", params.search);
     const qs = q.toString();
     return apiClient.get<ApiResponse<OpenOrder[]>>(`/api/shipping/open-orders${qs ? `?${qs}` : ""}`).then((r) => r.data);
   },

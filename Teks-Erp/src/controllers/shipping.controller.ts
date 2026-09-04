@@ -709,6 +709,9 @@ export class ShippingController {
       const result = await this.service.listOpenOrdersWithCoverage({
         customerId: (req.query.customerId as string | undefined) || undefined,
         branchId: branchRaw === undefined ? undefined : branchRaw || null,
+        // Sipariş arama — sevkiyat kur modalındaki kutu. Boş string `undefined`e
+        // düşer (süzgeç YOK); `?search=` yazan istemci tüm listeyi almalı.
+        search: (req.query.search as string | undefined) || undefined,
       });
       res.status(200).json(result);
     } catch (e) { next(e); }

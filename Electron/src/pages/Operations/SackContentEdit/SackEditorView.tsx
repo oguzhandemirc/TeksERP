@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { ArrowLeft, ChevronDown, Keyboard, Layers, Loader2, Lock, MessageSquareText, PackageOpen, PackagePlus, RefreshCw, Scale, Tag, Trash2, UserRound, UserRoundCog, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Keyboard, Layers, Loader2, Lock, MessageSquareText, PackageOpen, PackagePlus, RefreshCw, Scale, Tag, Trash2, Truck, UserRound, UserRoundCog, X } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +21,7 @@ import { AddKartelaDialog } from "./AddKartelaDialog";
 import { DeleteSackDialog } from "./DeleteSackDialog";
 import { DistributeSackDialog } from "./DistributeSackDialog";
 import { ReassignCustomerDialog, type ReassignPatch } from "./ReassignCustomerDialog";
+import { CreateShipmentDialog, type ShipmentDialogSack } from "./CreateShipmentDialog";
 import { SackContentsTable } from "./SackContentsTable";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { fromDumpRows } from "./sackDump";
@@ -74,6 +75,7 @@ export function SackEditorView({
   const [reassignOpen, setReassignOpen] = useState(false);
   const [labelOpen, setLabelOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [shipOpen, setShipOpen] = useState(false);
   // Tartı: tek dokunuş (oku → doğrudan kaydet). Elle giriş ⌄ menüsünde.
   const sackWeigh = useSackWeighAction();
 
@@ -286,6 +288,52 @@ export function SackEditorView({
                   <PackageOpen className="mr-1 h-4 w-4" /> Dağıt
                 </Button>
               )}
+              {/* ── TEK ÇUVAL SEVKİ (2026-09-04 saha isteği) ────────────────
+                  *"bir çuvalın içindeyken onu direkt sevk edebilirim, bazen tek
+                  çuval sevkiyatı yapılır; şu an çuvallar ekranına geri dönüp
+                  çuvalı seçip sevk et demem gerekiyor, bu pratik değil."*
+
+                  ⚠️ KISAYOL, BYPASS DEĞİL: listedeki "Sevkiyat Kur" ile AYNI
+                  `CreateShipmentDialog` açılır — yani müşteri/şube çözümü,
+                  sipariş seçimi, `shipping.orderRequirement` (`warn`/`block`)
+                  kapısı, tartı kuralı, içerik-uyuşmazlığı uyarısı, idempotency
+                  token'ı ve `shipping.confirmationEnabled` rejimi (PLANNED mı
+                  doğrudan sevk mi) HEPSİ aynı yerden gelir. Burada YAZILAN tek
+                  şey yok; defter (`SackAllocation`) yine sunucudaki tek yoldan
+                  yazılır. İkinci bir "hızlı sevk" ucu açmak, o kapıların
+                  ayrışacağı ilk yer olurdu.
+
+                  ⚠️ İZİN: ayrı bir yüklem YOK ve bilinçli — liste ekranındaki
+                  ikizi de izin sormaz, otorite sunucudadır (`POST /shipments`
+                  → `shipping:write`). Burada kapı koymak iki yüzeyi ayrıştırır.
+
+                  ⚠️ MÜŞTERİSİZ ÇUVAL — buton yine ÇİZİLİR. Karar: `Sack.customerId`
+                  opsiyoneldir ama SEVKİYAT müşterisizdir OLAMAZ (irsaliye ve
+                  `SackAllocation` cari ister). Diyalog bu durumda müşteri
+                  kilidini bulamaz ve aramalı cari seçicisini açar; "Sevk Et"
+                  cari seçilene kadar pasiftir (`canCreate`). Yani tek tık sevk
+                  ETMEZ, sevkiyatı KURAR — müşterisiz çuvalda butonu hiç
+                  göstermemek ise operatöre "bu çuval sevk edilemez" yalanını
+                  söylerdi (edilebilir; cari sevk anında atanır — çuval havuzu
+                  tasarımının kendi kuralı).
+
+                  ⚠️ Kilitli (sevkiyata atanmış) çuvalda ÇİZİLMEZ: `!locked`
+                  bloğunun içinde — mal zaten bir sevkiyatta. Boş çuvalda pasif:
+                  backend "Boş çuval sevk edilemez" ile 400 verir, kullanıcıyı
+                  oraya kadar götürmeyiz. */}
+              <Button
+                size="sm"
+                className="gap-1"
+                disabled={!data || !hasContents}
+                title={
+                  hasContents
+                    ? "Bu çuvaldan sevkiyat kur (listeye dönmeden)"
+                    : "Boş çuval sevk edilemez — önce içine top okutun"
+                }
+                onClick={() => setShipOpen(true)}
+              >
+                <Truck className="h-4 w-4" /> Sevk Et
+              </Button>
               <Button variant="outline" size="sm" className="text-destructive" onClick={() => setDeleteOpen(true)}>
                 <Trash2 className="mr-1 h-4 w-4" /> Sil
               </Button>
@@ -416,6 +464,40 @@ export function SackEditorView({
         initialCustomerId={target.customerId}
         initialBranchId={target.branchId}
         onReassigned={onReassigned}
+      />
+      {/* Liste ekranıyla AYNI diyalog, tek elemanlı seçimle. Satır `target`ten
+          kurulur çünkü `SackContents` (içerik ucu) sevke girmemiş çuvalda
+          müşteri/şube DÖNDÜRMEZ; `target` ise "Müşteri" düzenlemesinden sonra
+          `onReassigned` ile yamalandığı için TAZEdir.
+          ⚠️ `notePreview` 80 karaktere kırpılır — liste ucunun sözleşmesinin
+          aynası (types.ts); tam metni geçmek diyaloğun not şeridini listedekiyle
+          farklı uzunlukta basardı. */}
+      <CreateShipmentDialog
+        sacks={
+          shipOpen && data
+            ? [
+                {
+                  id: data.id,
+                  sackNo: data.sackNo,
+                  weightKg: data.weightKg,
+                  customer: target.customerId
+                    ? { id: target.customerId, name: target.customerName ?? "" }
+                    : null,
+                  branch: target.branchId
+                    ? { id: target.branchId, name: target.branchName ?? "", code: target.branchCode }
+                    : null,
+                  hasNote: !!data.notes,
+                  notePreview: data.notes ? data.notes.slice(0, 80) : null,
+                } satisfies ShipmentDialogSack,
+              ]
+            : null
+        }
+        onOpenChange={(o) => !o && setShipOpen(false)}
+        // Diyalog kapanır, editörde KALINIR: içerik sorgusu tazelenince çuval
+        // "sevkiyata atanmış" kilidine düşer ve üstteki şerit bunu yazar —
+        // operatör ne olduğunu görür. Listeye zorla döndürmek, tek çuval sevki
+        // yapıp aynı cariye devam etmek isteyen akışı bozardı.
+        onCreated={() => setShipOpen(false)}
       />
     </PageShell>
   );
