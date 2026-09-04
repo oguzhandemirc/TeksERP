@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { PermissionGate } from "@/components/PermissionGate";
+import { cn } from "@/lib/utils";
 import {
   labelKindLabels,
   type ContextDefaultRow,
@@ -74,19 +75,24 @@ export function ContextDefaultRowItem({
               )}
             </SelectContent>
           </Select>
-          {assigned && (
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              title="Atamayı kaldır"
-              className="h-8 w-8 text-muted-foreground"
-              disabled={pending}
-              onClick={() => onChange(null)}
-            >
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          )}
+          {/* Atama yoksa düğme ANLAMSIZDIR ama yeri KORUNUR: `invisible` yer
+              tutucu, atamalı/atamasız satırlarda seçicinin aynı sütunda
+              kalmasını sağlar (Düzenler sekmesindeki yuva kuralının ikizi —
+              `LabelTemplates/templateRowActions.ts`). Yetki yoksa düğme hiç
+              çizilmez; o dalı PermissionGate zaten kapsıyor. */}
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            title={assigned ? "Atamayı kaldır" : undefined}
+            className={cn("h-8 w-8 text-muted-foreground", !assigned && "invisible")}
+            aria-hidden={assigned ? undefined : true}
+            tabIndex={assigned ? undefined : -1}
+            disabled={pending || !assigned}
+            onClick={assigned ? () => onChange(null) : undefined}
+          >
+            <X className="h-3.5 w-3.5" />
+          </Button>
         </PermissionGate>
       </div>
       {!assigned && (
