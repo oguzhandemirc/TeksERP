@@ -437,9 +437,19 @@ if ($ecoYedek) {
       ([regex]::Matches($ham, '(?m)^\s{6,}([A-Z][A-Z0-9_]{2,})\s*:') | ForEach-Object { $_.Groups[1].Value }) | Sort-Object -Unique
     }
     $sunucu = & $anahtar $ecoHedef
-    $paket  = & $anahtar $ecoPaket
-    $yeni   = @($paket  | Where-Object { $sunucu -notcontains $_ })
-    $dusen  = @($sunucu | Where-Object { $paket  -notcontains $_ })
+    # ⚠ DEGISKEN ADI `$paket` OLAMAZ (2026-09-04 ev provasi, BULGU-7).
+    #   param() blogunda `[string]$Paket` var ve PowerShell HARF DUYARSIZDIR:
+    #   ikisi AYNI degiskendir. Tip kisiti yuzunden 13 elemanlik dizi ona
+    #   atanirken hata ATILMAZ - sessizce bosluklarla birlesip TEK STRING olur.
+    #   Sonuc: `$yeni` o dev string'i (hicbir anahtara esit degil) ve `$dusen`
+    #   sunucunun tum anahtarlarini icerir -> ayni 13 anahtar hem "YENI" hem
+    #   "ARTIK YOK" diye listelenir. Kapi duruyordu ama HICBIR SEY OLCMUYORDU:
+    #   paket gercekten yeni bir ayar getirse operator onu ayirt edemezdi.
+    #   (Belirti: ilk liste bosluklu, ikincisi virgullu basiliyordu - ayni
+    #   `-join ', '` iki farkli sonuc veremez; ilki zaten tek string'di.)
+    $paketAnahtar = & $anahtar $ecoPaket
+    $yeni   = @($paketAnahtar | Where-Object { $sunucu -notcontains $_ })
+    $dusen  = @($sunucu       | Where-Object { $paketAnahtar -notcontains $_ })
     if ($yeni.Count -or $dusen.Count) {
       Write-Host ""
       Write-Host "  ecosystem.config.js: sunucununki KORUNDU (paketinki: ecosystem.config.js.paket)" -ForegroundColor Yellow

@@ -1,4 +1,4 @@
-# Ev Provası — Sonuç Notu (2026-09-04, iki koşum)
+# Ev Provası — Sonuç Notu (2026-09-04, üç koşum)
 
 > **Bu belge, `OKU-ONCE.md` ile Windows makineye devredilen ev provasının
 > cevabıdır.** Provayı koşan oturum Windows'taydı; bu notu okuyan oturum
@@ -10,16 +10,18 @@
 
 ## 0. Sonuç
 
-| | 1. koşum (02:11–02:32) | 2. koşum (03:36–03:45) |
-|---|---|---|
-| Paket | `8ba92ca7` | `6d7f1209` |
-| `ilk-kurulum.ps1` | ✅ 8 adım | ✅ 8 adım |
-| `kur.ps1` | ❌ **`[7/9]`'da düştü** | ✅ **dokuz adım da tamam** |
-| Elle müdahale | **4** | **0** |
-| `/health` | UP (müdahalelerle) | UP (kendi başına) |
+| | 1. koşum (02:11–02:32) | 2. koşum (03:36–03:45) | 3. koşum (13:44–13:49) |
+|---|---|---|---|
+| Paket | `8ba92ca7` | `6d7f1209` | `ab4bf170` |
+| Senaryo | sıfırdan kurulum | sıfırdan kurulum | **gerçek yükseltme** |
+| `ilk-kurulum.ps1` | ✅ 8 adım | ✅ 8 adım | — (gerekmedi) |
+| `kur.ps1` | ❌ **`[7/9]`'da düştü** | ✅ **dokuz adım da tamam** | ✅ **dokuz adım da tamam** |
+| Elle müdahale | **4** | **0** | **0** |
+| `/health` | UP (müdahalelerle) | UP (kendi başına) | UP (kendi başına) |
 
 **Sunucu tarafı geçti.** İkinci koşumda `kur.ps1` hiç dokunulmadan
-`KURULUM TAMAM` verdi — provanın asıl sorusu buydu ve cevabı evet.
+`KURULUM TAMAM` verdi — provanın asıl sorusu buydu ve cevabı evet. Üçüncü
+koşum bunu **yükseltme yolunda da** doğruladı (çalışan bir kurulumun üzerine).
 
 **Prova tamamı geçmedi:** panel ve tablet iki koşumda da ölçülemedi
 (`.exe`/`.apk` makineye hiç gelmedi — kullanıcı bunları kendisi dağıtıyor,
@@ -127,6 +129,51 @@ Son çıktı: `KURULUM TAMAM · API UP · DB UP · surum 2.9.0`.
 
 ---
 
+## 3B. ÜÇÜNCÜ KOŞUM — ilk gerçek yükseltme
+
+İlk iki koşum sıfırdan kurulumdu; `kur.ps1` bir **yükseltme** aracı olduğu
+hâlde yükseltme yolu hiç ölçülmemişti. Üçüncü koşum onu ölçtü: çalışan
+`6d7f1209` üzerine `ab4bf170` kuruldu.
+
+```
+[1/9]  OK dosya sayisi beyanla uyusuyor (13643)
+       OK node 26.4.0 (zemin: >=22)
+       OK paket saglam (231 migration klasoru)
+[3/9]  OK premigrate_20260904_134416.dump (4.17 MB) - dogrulandi
+[5/9]  OK app\ olusturuldu, .env + ecosystem.config.js (SUNUCUNUNKI) tasindi
+[7/9]  No pending migrations to apply.
+[9/9]  API UP / DB UP / surum 2.9.0
+```
+
+**Sıfır elle müdahale.** Yükseltmeye özgü üç davranış da doğru çalıştı:
+
+| Davranış | Sonuç |
+|---|---|
+| `.env` korundu | ✅ |
+| **Sunucunun `ecosystem.config.js`'i korundu**, paketinki `.paket` olarak bırakıldı | ✅ (ama özet bozuk → BULGU-7) |
+| Migration idempotent — "No pending" | ✅ |
+| `app.eski-20260904_134416` **gerçek bir kurulum** (`ecosystem.config.js` + `dist/server.js` var) | ✅ |
+
+Son satır BULGU-6 açısından önemli: bu koşumdan sonra `-GeriAl` **geçerli bir
+adaya** bakıyor. Tuzak kapanmadı, yalnız şu an en yeni aday gerçek olduğu için
+maskelendi — `app.eski-20260904_033846` (boş iskelet) hâlâ duruyor ve en yeni
+aday silinirse yeniden en öne geçer.
+
+`sysadmin` hesabı yükseltmeden **etkilenmedi** (veritabanına dokunulmuyor).
+
+### Yanlış alarm — kayda geçsin
+`PAKET.json` 13642 dosya beyan ediyor, zip'te 13643 dosya var. Bu **kusur
+değil**: kapı bilerek `dosyaSayisi + 1` bekliyor, çünkü `PAKET.json` kendi
+sayımına dahil edilmiyor (`kur.ps1` satır 204). Ölçen oturum önce bunu şüpheli
+saydı, kodu okuyunca çürüttü.
+
+### Yeni kapı görüldü
+`[1/9]` artık satıcı aracını da kontrol ediyor:
+`dist\tools\superadmin-olustur.cjs YOK - ... satici hesabi kurulamaz.`
+Bu bir `Uyar` (kurulumu kesmiyor) — BULGU-2'nin tekrarını yakalar.
+
+---
+
 ## 4. BULGULAR — durum tablosu
 
 | # | Bulgu | Durum |
@@ -136,7 +183,8 @@ Son çıktı: `KURULUM TAMAM · API UP · DB UP · surum 2.9.0`.
 | 3 | `ecosystem.config.js` yolları sabit | ✅ **düzeldi** — `${KOK}` ile türetiliyor |
 | 4 | Windows'ta `PM2_HOME` süreçleri ayırmıyor | ✅ yazıya geçti (`OKU-ONCE §5`) |
 | 5 | `[module-profile]` yanıltıcı mesaj | ✅ **düzeldi** — satırları sayıyor |
-| 6 | `kur.ps1 -GeriAl` adayı doğrulamıyor | ❌ **DÜZELMEDİ — tuzak şu an canlı** |
+| 6 | `kur.ps1 -GeriAl` adayı doğrulamıyor | ❌ **DÜZELMEDİ** (3. koşumdan sonra maskelendi, kapanmadı) |
+| 7 | `[5/9]` ecosystem fark özeti kalıcı olarak kör | ❌ **YENİ — 3. koşumda bulundu** |
 
 ### BULGU-1 · düzeldi, bir kalıntıyla
 
@@ -226,6 +274,67 @@ birine eklenmiş.
 
 ---
 
+### BULGU-7 · `[5/9]` ecosystem fark özeti kalıcı olarak kör · **YENİ**
+
+### Belirti
+Yükseltmede `[5/9]` şunu bastı — **aynı 13 anahtarı hem "yeni" hem "artık yok"**
+diye listeliyor:
+
+```
+ecosystem.config.js: sunucununki KORUNDU (paketinki: ecosystem.config.js.paket)
+  pakette YENI ayar : APP_ENV BACKUP_DIR BACKUP_HOUR ... PORT   -> gerekiyorsa elle ekleyin
+  pakette ARTIK YOK : APP_ENV, BACKUP_DIR, BACKUP_HOUR, ... PORT -> sunucuda duruyor, gozden gecirin
+```
+
+Oysa iki dosya **birebir aynı** (aynı `Get-FileHash`, aynı 13 anahtar). Uyarı
+tamamen asılsız.
+
+### Kök sebep — değişken adı çakışması + tip kısıtı
+
+```powershell
+param([string]$Paket, ...)        # satır 43  — zip yolu, TIPLI
+...
+$paket  = & $anahtar $ecoPaket    # satır 393 — PowerShell harf duyarsız: AYNI degisken
+$yeni   = @($paket  | Where-Object { $sunucu -notcontains $_ })
+$dusen  = @($sunucu | Where-Object { $paket  -notcontains $_ })
+```
+
+`$Paket` `[string]` kısıtlı olduğu için 13 elemanlı dizi ona atanınca
+PowerShell **boşlukla birleştirip tek string'e çeviriyor** (`$OFS`).
+Sonuç:
+
+- `$paket` = tek eleman, `"APP_ENV BACKUP_DIR ... PORT"`
+- `$yeni` = o dev string (hiçbir anahtara eşit değil) → dolu
+- `$dusen` = sunucunun 13 anahtarı (hiçbiri dev string'e eşit değil) → dolu
+
+Çıktıdaki asimetri de bunu ele veriyor: **ilk liste boşlukla, ikincisi virgülle**
+ayrılmış — aynı `-join ', '` iki farklı sonuç veremez; ilki zaten tek string.
+
+Yalıtılmış test doğruladı:
+```
+tip: String · deger: [APP_ENV BACKUP_DIR HOST PORT] · eleman: 1 · yeni: 1 · dusen: 4
+```
+Aynı blok `[string]$Paket` parametresi olmadan koşturulunca doğru sonucu
+(`yeni: 0, dusen: 0`) veriyor.
+
+### Asıl zarar — gürültü değil, körlük
+Bu blok tam olarak şu vaka için yazılmıştı (denetim 2026-08-29, BULGU-T1-020):
+paketin `ecosystem.config.js`'i sahadakini eziyor ve **gece yedeği güncelleme
+gecesi sessizce kapanıyordu**. Bugün dosya doğru korunuyor, ama **fark özeti
+her koşumda aynı anlamsız çıktıyı** basıyor. Paket gerçekten yeni bir ayar
+getirse operatör onu **ayırt edemez**. Kapı duruyor, ölçmüyor.
+
+### Düzeltme
+Satır 393-395'teki yerel değişkeni yeniden adlandırın (`$paketAnahtar` gibi).
+Tek satırlık. `$Paket` parametresi fark özetinden **sonra kullanılmıyor**
+(satır 146 · 147 · 159 · 264 — hepsi önce), o yüzden başka yan etki yok.
+
+⚠️ Genel ders: `param()` içindeki tipli değişken adlarıyla çakışan yerel
+değişken kullanmayın. PowerShell harf duyarsızdır ve tip kısıtı hatayı
+**sessiz bir veri dönüşümüne** çevirir — istisna atılmaz.
+
+---
+
 ## 5. İkinci koşumda çıkan YENİ gözlemler
 
 Hepsi `backend-err-0.log`'dan; kurulumu kesmiyorlar.
@@ -256,18 +365,39 @@ makinede yok**, görev boşa çalışıyor. Birinci provadan kalma.
 
 ## 6. `OKU-ONCE §6` kontrol listesi
 
-| # | Madde | 1. koşum | 2. koşum |
-|---|---|---|---|
-| 1 | Dokuz adım, **elle müdahale olmadan** | ❌ | ✅ |
-| 2 | Migration 231 | ⚠ elle | ✅ |
-| 3 | `/api/admin/health` yanıt veriyor | ✅ 401 | ✅ 401 |
-| 4 | Panel açıldı, sunucuyu buldu | ❌ | ❌ dosya yok |
-| 5 | Yazıcı/Kantar "yüklü değil" demiyor | ❌ | ❌ ölçülemedi |
-| 6 | Tablet açıldı, sunucuyu buldu | ❌ | ❌ dosya yok |
-| 7 | Modüller bölümü | ⚠ DB'de var | ⚠ DB'de 6/7 (doğru), ekran ölçülemedi |
-| 8 | Fabrika verisi yerinde | ✅ 4306 | ✅ 4306 |
-| 9 | `superadmin:kur` koştu | ❌ araç yoktu | ✅ araç var, TTY kapısı çalışıyor |
-| 10 | `logs\` gerçekten doldu | — | ✅ |
+| # | Madde | 1. koşum | 2. koşum | 3. koşum |
+|---|---|---|---|---|
+| 1 | Dokuz adım, **elle müdahale olmadan** | ❌ | ✅ | ✅ (yükseltme) |
+| 2 | Migration 231 | ⚠ elle | ✅ | ✅ "No pending" |
+| 3 | `/api/admin/health` yanıt veriyor | ✅ 401 | ✅ 401 | ✅ |
+| 4 | Panel açıldı, sunucuyu buldu | ❌ | ❌ dosya yok | ✅ **kullanıcı bildirdi** |
+| 5 | Yazıcı/Kantar "yüklü değil" demiyor | ❌ | ❌ | ✅ **COM port taraması yapıyor** |
+| 6 | Tablet açıldı, sunucuyu buldu | ❌ | ❌ dosya yok | ✅ **kullanıcı bildirdi** (ama 2 sunucu listeledi → BULGU C) |
+| 7 | Modüller bölümü | ⚠ DB'de var | ⚠ DB'de 6/7 (doğru) | ⚠ ekran ölçülemedi |
+| 8 | Fabrika verisi yerinde | ✅ 4306 | ✅ 4306 | ✅ 4306 |
+| 9 | `superadmin:kur` koştu | ❌ araç yoktu | ✅ araç + TTY kapısı | ✅ **hesap gerçekten kuruldu** |
+| 10 | `logs\` gerçekten doldu | — | ✅ | ✅ |
+
+⚠️ 4, 5 ve 6 numaralı maddeler **kullanıcı beyanıdır, ölçen oturum
+doğrulamadı** — panel ve tablet o makinede değil, kullanıcının kendi
+cihazlarında.
+
+### ✅ Madde 5 — macOS derlemesi Windows'ta TUTTU
+
+Provanın asıl gerekçelerinden biriydi ve **geçti.** Panelde Yazıcı/Kantar
+sekmeleri **COM port taraması yapıyor**.
+
+`OKU-ONCE §3.5`'teki ayrım şuydu: modül yüklenemezse ekranda
+`"serialport yüklü değil (electron:rebuild gerekli)"` yazardı. Tarama yapması
+modülün **yüklendiği ve çalıştığı** anlamına gelir — yani macOS'ta derlenen
+`serialport` / `node-hid` Windows native ikilileri (`PE32+`) pakete doğru
+girmiş ve çalışıyor.
+
+**Sonucu:** panel paketini Windows'ta almak için bir zorunluluk yok;
+`KURULUM.md D35`'teki "Windows'ta üretilmeli" kısıtı **backend/Electron
+installer için** hâlâ geçerli olabilir ama bu paket özelinde macOS derlemesi
+sahada çalıştı. Bir sonraki turda cihaz takılıysa gerçek bir baskı denemesi
+bunu tamamlar.
 
 ---
 
@@ -275,16 +405,22 @@ makinede yok**, görev boşa çalışıyor. Birinci provadan kalma.
 
 ```
 C:\TeksERP\
-  app\                       calisan kurulum (v2.9.0, commit 6d7f1209)
+  app\                       calisan kurulum (v2.9.0, commit ab4bf170)
     .env                     JWT_SECRET bu makinede uretildi
-    ecosystem.config.js      paketten geldi, yollar ${KOK} ile turetiliyor
-  app.eski-20260904_033846\  ⚠ YALNIZ .env - bkz. BULGU-6, -GeriAl CALISTIRMA
-  backups\premigrate_20260904_033846.dump   4 MB, dogrulandi
+    ecosystem.config.js      SUNUCUNUNKI korundu, yollar ${KOK} ile turetiliyor
+    ecosystem.config.js.paket  paketinki (ikisi birebir ayni - bkz. BULGU-7)
+  app.eski-20260904_134416\  GERCEK kurulum (6d7f1209) - gecerli geri donus adayi
+  app.eski-20260904_033846\  ⚠ YALNIZ .env - bos iskelet, bkz. BULGU-6
+  backups\
+    premigrate_20260904_033846.dump   4 MB     (2. kosum)
+    premigrate_20260904_134416.dump   4.17 MB  (3. kosum, dogrulandi)
   logs\  pg-setup\  pm2\  pm2-home\
   pgsql\bin -> C:\Program Files\PostgreSQL\16\bin   (junction)
 
 veritabani : tekserp @ localhost:5432, rol tekserp, 231 migration, 4306 top
-             admin.isSystemAccount = false  (1. koşumdaki elle yükseltme
+             sysadmin.isSystemAccount = true   (04:10'da araçla kuruldu,
+             yükseltmeden etkilenmedi — modül kilidi ETKİN)
+             admin.isSystemAccount = false     (1. koşumdaki elle yükseltme
              sıfırlamayla gitti — fabrikaya taşınmadı)
 pm2        : tekserp-backend / fork / 1 instance / online
              PM2_HOME=C:\TeksERP\pm2-home, dump.pm2 kaydedildi
@@ -292,8 +428,9 @@ pm2        : tekserp-backend / fork / 1 instance / online
 saglik     : {"status":"UP","api":"UP","db":"UP","version":"2.9.0"}
 ```
 
-⚠ Klasörde **iki zip** duruyor: bozuk `8ba92ca7` ve iyi `6d7f1209`.
-`OKU-ONCE §1` "tek zip olmalı" diyor; eskisi kanıt olarak bilerek bırakıldı.
+⚠ Klasörde **üç zip** duruyor: bozuk `8ba92ca7`, `6d7f1209` ve kurulu olan
+`ab4bf170`. `OKU-ONCE §1` "tek zip olmalı" diyor; eskiler kanıt olarak
+bilerek bırakıldı. Fabrikaya giderken **yalnız sonuncusu** taşınmalı.
 
 ⚠ `postgres` rolünün parolası bu makinede ölçüldü; **bu nota bilerek
 yazılmadı** (`ilk-kurulum.ps1`'in "parola varsayılanı yoktur" kuralıyla aynı
@@ -307,12 +444,21 @@ Kullanıcı kararlarından sonra gerçekten açık kalan üç şey:
 
 1. **BULGU-6'yı düzelt** (`-GeriAl` aday doğrulaması + iskelet klasörün ayrı
    adı). Kod kaybettirmiyor ama çalışan sistemi kapatıyor; fabrikada bir gece
-   vardiyasında bedeli yüksek. **Tek kalan gerçek kusur budur.**
-2. **Satıcı hesabını kur** — gerçek terminalde, insan eliyle. Kurulmadıkça
-   satıcı ekranı açılmaz ve modül anahtarlarını `admin:settings` taşıyan her
-   yönetici değiştirebilir.
+   vardiyasında bedeli yüksek.
+2. **BULGU-7'yi düzelt** — tek satır (`$paket` → `$paketAnahtar`). Küçük ama
+   `ecosystem.config.js` koruma kapısı bugün hiçbir şey ölçmüyor.
 3. **`.bin` kararı** — pakete alınacak mı, yoksa "paketlenmiş kurulumda
    `npm run` yok, `node <yol>` var" kuralı mı yazılacak?
+
+✅ **Satıcı hesabı KURULDU** (3. koşumdan önce, 04:10). `sysadmin` /
+`isSystemAccount=true` / TOTP + PIN üretildi / audit'te tek satır
+`SUPERADMIN_PROVISIONED`. Modül kilidi artık etkin: anahtarları yalnız o hesap
+değiştirebilir.
+
+⚠️ Satıcı hesabı kullanılmaya başlanınca **iki istemci-taraflı belirti** çıktı
+(tablette "yetkin yok" ve cihaz onayı ekranı) — bunlar ayrı bir belgede:
+`ISTEMCI-BULGULARI-2026-09-04.md`. Birincisi geliştirme ortamınca çürütüldü
+(tablette bayat bundle), ikincisi hâlâ açık.
 
 Ayrıca dokümantasyon:
 - `OKU-ONCE §3.0` sıfırlama komutu düzeltilmeli (§3.1'deki yıkıcı varsayım)
