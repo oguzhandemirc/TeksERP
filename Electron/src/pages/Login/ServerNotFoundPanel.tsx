@@ -109,7 +109,7 @@ export function ServerNotFoundPanel({
           <div>
             Ağ taraması:{" "}
             {state?.scan.ran
-              ? `${state.scan.targets} adres denendi, ${state.scan.open} yanıt`
+              ? `${state.scan.targets} adres denendi (port ${(state.scan.ports ?? []).join(", ") || "—"}), ${state.scan.open} yanıt`
               : `koşmadı${state?.scan.skippedReason ? ` (${state.scan.skippedReason})` : ""}`}
           </div>
           <div>

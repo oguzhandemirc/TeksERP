@@ -24,9 +24,12 @@ import {
   baseUrlOf,
   compareIdentity,
   dedupeCandidates,
+  fallbackDiscoveryPorts,
   groupByInstallation,
+  identityRequiredForPort,
   parseIdentityPayload,
   rankCandidates,
+  runStagedPortScan,
   scanTargetsFor,
   type DiscoveredServer,
   type ServerGroup,
@@ -56,6 +59,18 @@ export interface DiscoveryOptions {
   preferredUrls?: string[];
   /** Tam süpürme yapılsın mı. Splash yolunda KAPALI tutulur (ekranı bekletmesin). */
   fullSweep?: boolean;
+  /**
+   * Varsayılan portta HİÇBİR aday çıkmazsa yedek portlar (5000/3000/8080) da
+   * denensin mi.
+   *
+   * ⚠️ VARSAYILAN KAPALI ve bu bilinçli: maliyet host × port ile doğrusal
+   * büyür. Yalnız kullanıcının AÇIKÇA "Ağda Ara" dediği yolda açılır. Kendi
+   * kendini onaran arka plan turu (`serverReachability.trySelfHeal`) bunu
+   * AÇMAZ — orada aranan şey sabitlenmiş kimliği taşıyan, DAHA ÖNCE bilinen
+   * bir portta bulunmuş sunucudur (adresi zaten `preferredUrls`te); port avı
+   * bir KURULUM sorunudur, kesinti sorunu değil.
+   */
+  extraPorts?: boolean;
   onProgress?: (p: DiscoveryProgress) => void;
   signal?: AbortSignal;
 }
@@ -73,8 +88,11 @@ export interface DiscoveryResult {
   candidates: DiscoveredServer[];
   /** Aynı liste, adresleri açık — kullanıcıya adres seçtirmek isteyen yüzey için. */
   groups: ServerGroup<DiscoveredServer>[];
-  /** Tarama gerçekten koştu mu — koşmadıysa sebebi. */
-  scan: { ran: boolean; tried: number; skippedReason: string | null };
+  /**
+   * Tarama gerçekten koştu mu — koşmadıysa sebebi.
+   * `ports` = gerçekten denenen portlar; tek eleman → yedeklere HİÇ inilmedi.
+   */
+  scan: { ran: boolean; tried: number; ports: number[]; skippedReason: string | null };
   /** Cihazın kendi ağ bilgisi okunabildi mi. */
   network: { address: string | null; subnet: string | null };
 }
@@ -87,9 +105,9 @@ function splitUrl(url: string): { host: string; port: number } | null {
 }
 
 /**
- * Tek adresi doğrular. Kimlik ucu 200 verirse kimlikli, 404 verirse `/health`
- * ile teyit edip KİMLİKSİZ aday döner (eski backend — uyuşmazlık DEĞİLDİR).
- * Asla throw etmez.
+ * Tek adresi doğrular. Kimlik ucu 200 verirse kimlikli; VARSAYILAN portta 404
+ * verirse `/health` ile teyit edip KİMLİKSİZ aday döner (eski backend —
+ * uyuşmazlık DEĞİLDİR). Yedek portlarda kimlik ŞART. Asla throw etmez.
  */
 export async function probeServer(
   host: string,
@@ -133,6 +151,11 @@ export async function probeServer(
     }
   }
 
+  // ⚠️ Yedek portta `/health` yolu KAPALI: `{"status":"UP"}` TeksERP'e özgü
+  // değildir (Spring Boot Actuator birebir aynısını basar). Varsayılan portta
+  // bu riski "kimlik ucu olmayan eski backend'i kaybetmemek" için alıyoruz;
+  // yedek portlarda öyle bir vaka yok, orada kimlik ŞART.
+  if (identityRequiredForPort(port)) return null;
   const health = await get('/health');
   if (!health || health.status !== 200) return null;
   try {
@@ -193,6 +216,10 @@ async function probeMany(
  * `fullSweep` KAPALIYKEN yalnız öncelikli adresler denenir (hızlı, açılış yolu
  * için); AÇIKKEN bulunamazsa tüm alt ağ süpürülür (kullanıcı "Sunucuyu Ara"
  * dediğinde).
+ *
+ * `extraPorts` AÇIKKEN ve varsayılan portta HİÇ kullanılabilir aday çıkmadıysa
+ * yedek portlar (`DISCOVERY_PORTS`) sırayla denenir; aday bulan İLK portta
+ * durulur. Aday varsa bu kademe HİÇ koşmaz — maliyet sıfır.
  */
 export async function discoverServers(opts: DiscoveryOptions = {}): Promise<DiscoveryResult> {
   const pinnedId = opts.pinnedInstallationId ?? null;
@@ -228,43 +255,95 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
     }
   }
 
+  // İlerleme tek sayaçtan akar: kademeler eklendikçe `total` büyür, `done`
+  // biten kademeleri taşır. Ayrı ayrı sayarsak çubuk her kademede sıfırlanır.
+  let done = 0;
+  let total = priority.length;
   let tried = 0;
   const bump = (n: number): void => {
-    tried = n;
-    opts.onProgress?.({ tried: n, total: priority.length });
+    tried = done + n;
+    opts.onProgress?.({ tried, total });
   };
   const early = await probeMany(priority, pinnedId, found, {
     signal: opts.signal,
     onProgress: bump,
   });
+  done += priority.length;
+  tried = done;
 
-  // --- 2) Tam süpürme (yalnız gerekiyorsa) ---------------------------------
+  /**
+   * ⚠️ "Aday bulundu" yetmez, KULLANILABİLİR aday bulunmuş olmalı. Kimliği
+   * sabitlenmişle UYUŞMAYAN bir sunucu bulmak, aramayı bitirmek için sebep
+   * değildir — doğrusu ağda başka bir yerde olabilir ve aramayı kesersek
+   * kullanıcıya yalnız yanlış sunucuyu göstermiş oluruz.
+   */
+  const hasUsable = (): boolean => found.some((c) => c.matchesPinned !== 'mismatch');
+
+  const sweepHosts = address ? scanTargetsFor(address, subnet) : [];
+
+  /** Bir kademeyi koşturur; bulunan YENİ adayları döner. */
+  const runStage = async (
+    targets: { host: string; port: number }[],
+  ): Promise<DiscoveredServer[]> => {
+    if (targets.length === 0) return [];
+    const before = found.length;
+    total += targets.length;
+    await probeMany(targets, pinnedId, found, { signal: opts.signal, onProgress: bump });
+    done += targets.length;
+    tried = done;
+    return found.slice(before);
+  };
+
+  // --- 2) Tam süpürme, VARSAYILAN portta (yalnız gerekiyorsa) ---------------
   let scanRan = false;
   let skippedReason: string | null = null;
-  // ⚠️ "Aday bulundu" yetmez, KULLANILABİLİR aday bulunmuş olmalı. Kimliği
-  // sabitlenmişle UYUŞMAYAN bir sunucu bulmak, aramayı bitirmek için sebep
-  // değildir — doğrusu ağda başka bir yerde olabilir ve süpürmezsek kullanıcıya
-  // yalnız yanlış sunucuyu göstermiş oluruz.
-  const usable = found.some((c) => c.matchesPinned !== 'mismatch');
   if (early) {
     skippedReason = 'sabitlenmiş sunucu öncelikli listede bulundu';
-  } else if (usable) {
+  } else if (hasUsable()) {
     skippedReason = 'öncelikli listede kullanılabilir sunucu bulundu';
   } else if (!opts.fullSweep) {
     skippedReason = 'hızlı arama (süpürme kapalı)';
   } else if (!address) {
     skippedReason = 'cihazın ağ adresi okunamadı';
   } else {
-    const sweep = scanTargetsFor(address, subnet)
-      .map((h) => push(h, DISCOVERY_DEFAULT_PORT))
-      .filter((t): t is { host: string; port: number } => t !== null);
     scanRan = true;
-    const total = priority.length + sweep.length;
-    await probeMany(sweep, pinnedId, found, {
-      signal: opts.signal,
-      onProgress: (n) => opts.onProgress?.({ tried: priority.length + n, total }),
-    });
-    tried = total;
+    await runStage(
+      sweepHosts
+        .map((h) => push(h, DISCOVERY_DEFAULT_PORT))
+        .filter((t): t is { host: string; port: number } => t !== null),
+    );
+  }
+
+  // --- 3) YEDEK PORTLAR (yalnız hiçbir kullanılabilir aday yokken) ----------
+  // Kademe kararı ORTAK helper'da (`runStagedPortScan`, KEŞİF-İKİZ bloğu) —
+  // masaüstü de birebir aynı kuralı uygular.
+  let ports: number[] = [DISCOVERY_DEFAULT_PORT];
+  if (opts.extraPorts) {
+    const staged = await runStagedPortScan<DiscoveredServer>(
+      async (port) => {
+        // Varsayılan portun turu YUKARIDA koştu; burada yalnız sonucunu
+        // bildiriyoruz ki "genişleyeyim mi" kararı TEK yerde kalsın.
+        if (port === DISCOVERY_DEFAULT_PORT) {
+          return found.filter((c) => c.matchesPinned !== 'mismatch');
+        }
+        // ⚠️ TABLET BÜTÇESİ (masaüstünden DAR — `SCAN_MAX_HOSTS` 512↔1022 ile
+        // aynı gerekçe: pil + Wi-Fi). Yedek portlarda TAM SÜPÜRME yalnız İLK
+        // yedekte (bugün 5000, açıkça istenen port) koşar; 3000/8080 yalnız
+        // öncelik listesini görür. Ölçüm: her tam süpürme turu tablette ~10 sn
+        // ve "alışılmadık IP + alışılmadık port" bileşik bir olasılıktır —
+        // 20 sn'lik bekleme karşılığında alınmaz.
+        const wideSweep = opts.fullSweep === true && port === fallbackDiscoveryPorts()[0];
+        const hosts = [...priority.map((t) => t.host)];
+        if (wideSweep) for (const h of sweepHosts) if (!hosts.includes(h)) hosts.push(h);
+        const targets = hosts
+          .map((h) => push(h, port))
+          .filter((t): t is { host: string; port: number } => t !== null);
+        if (targets.length > 0) scanRan = true;
+        return runStage(targets);
+      },
+      { aborted: () => opts.signal?.aborted === true },
+    );
+    ports = staged.ports;
   }
 
   // Sıra: ÖNCE tekilleştir (sunucu başına en iyi adres), SONRA sırala. Tersi,
@@ -273,7 +352,7 @@ export async function discoverServers(opts: DiscoveryOptions = {}): Promise<Disc
   return {
     candidates: rankCandidates(dedupeCandidates(found)),
     groups,
-    scan: { ran: scanRan, tried, skippedReason },
+    scan: { ran: scanRan, tried, ports, skippedReason },
     network: { address, subnet },
   };
 }

@@ -304,8 +304,17 @@ export interface DiscoveryState {
   /** main otomatik uyguladıysa dolu — renderer bunu kullanıcıya bildirir. */
   applied: { baseUrl: string; reason: "single" | "pin-moved" } | null;
   mdns: { available: boolean; error: string | null; hits: number };
-  /** `skippedReason` dolu = tarama BİLEREK koşmadı (gürültü emniyeti). */
-  scan: { ran: boolean; targets: number; open: number; skippedReason: string | null };
+  /**
+   * `skippedReason` dolu = tarama BİLEREK koşmadı (gürültü emniyeti).
+   * `ports` = gerçekten taranan portlar; tek eleman → yedeklere HİÇ inilmedi.
+   */
+  scan: {
+    ran: boolean;
+    targets: number;
+    open: number;
+    ports: number[];
+    skippedReason: string | null;
+  };
   pinnedInstallationId: string | null;
   error: string | null;
 }

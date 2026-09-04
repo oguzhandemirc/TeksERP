@@ -16,8 +16,7 @@ export const DISCOVERY_MDNS_TYPE = "teks-erp";
 /** Kimlik ucunun yolu (taban adresin ARDINA eklenir). */
 export const DISCOVERY_IDENTITY_PATH = "/api/discovery/identity";
 
-/** Backend'in varsayılan portu. */
-export const DISCOVERY_DEFAULT_PORT = 4000;
+/** Varsayılan port artık KEŞİF-İKİZ bloğunda, `DISCOVERY_PORTS`ten türer. */
 
 /** secure-store anahtarları. */
 export const PINNED_IDENTITY_KEY = "config.serverIdentity";
@@ -227,6 +226,80 @@ export function scanTargetsFor(
 // mekanik olarak karşılaştırır. Blok içine PROJEYE ÖZGÜ hiçbir şey yazılmaz —
 // farklılık gerekiyorsa `tieBreak` parametresiyle DIŞARIDAN verilir.
 // ---------------------------------------------------------------------------
+
+/**
+ * Keşifte denenecek portlar — SIRA ANLAMLI, İLK ELEMAN VARSAYILANDIR.
+ *
+ * ⚠️ TEK KAYNAK: `DISCOVERY_DEFAULT_PORT` bu listeden TÜRETİLİR, ayrıca
+ * yazılmaz. İki ayrı gerçek olsaydı biri değişip diğeri kalırdı ve arıza
+ * SESSİZ olurdu: mDNS ilanı portu kendi taşıdığı için o yol çalışmaya devam
+ * eder, yalnız TARAMA yanlış porta bakardı — yani "bazen buluyor, bazen
+ * bulmuyor".
+ *
+ * ⚠️ LİSTE KISA TUTULUR. Tarama maliyeti host × port ile DOĞRUSAL büyür; her
+ * yeni port, sunucunun hiç bulunamadığı turda saniyeler ekler. Buradaki üç
+ * yedek "kurulumu yapan kişi varsayılanı değiştirdiyse hangi sayıyı yazar"
+ * sorusunun cevabıdır:
+ *   • 5000 — kullanıcı tarafından açıkça istendi (2026-09-04)
+ *   • 3000 — Node/Express dünyasının klasik varsayılanı
+ *   • 8080 — "alternatif HTTP"nin evrensel karşılığı
+ *
+ * ⚠️ YEDEK PORTTA KİMLİK ZORUNLUDUR (`identityRequiredForPort`). Varsayılan
+ * portta `/health` UP diyen KİMLİKSİZ sunucu meşru adaydır (eski backend);
+ * yedek portta değildir. `{"status":"UP"}` TeksERP'e özgü bir gövde değil
+ * (Spring Boot Actuator birebir aynısını basar) ve yedek portlar kimlik
+ * ucuyla BİRLİKTE doğdu — yani orada "kimlik ucu olmayan eski backend" diye
+ * bir vaka YOKTUR. Gevşetirsen 8080'deki rastgele bir web sunucusu operatöre
+ * "sunucu bulundu" diye gösterilir.
+ */
+export const DISCOVERY_PORTS = [4000, 5000, 3000, 8080] as const;
+
+/** Backend'in varsayılan portu — listenin İLK elemanı, ayrı bir gerçek DEĞİL. */
+export const DISCOVERY_DEFAULT_PORT: number = DISCOVERY_PORTS[0];
+
+/** Varsayılan bulunamazsa denenecek portlar, SIRAYLA. */
+export function fallbackDiscoveryPorts(): number[] {
+  return DISCOVERY_PORTS.filter((p) => p !== DISCOVERY_DEFAULT_PORT);
+}
+
+/** Bu portta aday olabilmek için kimlik ucu ŞART mı? Yedek portlarda EVET. */
+export function identityRequiredForPort(port: number): boolean {
+  return port !== DISCOVERY_DEFAULT_PORT;
+}
+
+export interface StagedScanOutcome<T> {
+  results: T[];
+  /** Gerçekten taranan portlar — "yedeğe hiç inilmedi" bunun uzunluğundan okunur. */
+  ports: number[];
+}
+
+/**
+ * KADEMELİ PORT TARAMASI — önce varsayılan, bulamazsa yedekler.
+ *
+ * ⚠️ MALİYET SIFIR KURALI: varsayılan port (ya da başka bir keşif ayağı) tek
+ * bir aday üretmişse yedek portlara HİÇ BAKILMAZ. Normal fabrikada bu döngü
+ * tam olarak BİR kez koşar ve bugünkü davranışla birebir aynı maliyeti üretir.
+ * `hasCandidate` bu yüzden var: mDNS ya da kayıtlı adres zaten cevap verdiyse
+ * tarama kademesi hiç genişlemesin.
+ *
+ * ⚠️ ADAY BULAN İLK KADEMEDE DURULUR. "Hepsini tara, en iyisini seç" demek,
+ * sunucu 5000'de bulunduktan sonra 3000 ve 8080 için tam bir tur daha koşmak
+ * demektir — kullanıcı beklerken, hiçbir şey kazanmadan.
+ */
+export async function runStagedPortScan<T>(
+  scanPort: (port: number) => Promise<T[]>,
+  opts: { hasCandidate?: () => boolean; aborted?: () => boolean } = {},
+): Promise<StagedScanOutcome<T>> {
+  const ports: number[] = [];
+  const results: T[] = [];
+  for (const port of DISCOVERY_PORTS) {
+    if (opts.aborted?.()) break;
+    if (port !== DISCOVERY_DEFAULT_PORT && (results.length > 0 || opts.hasCandidate?.())) break;
+    ports.push(port);
+    results.push(...(await scanPort(port)));
+  }
+  return { results, ports };
+}
 
 /**
  * Adresin "başka bir makineden ne kadar işe yarar" sırası — KÜÇÜK daha iyidir.

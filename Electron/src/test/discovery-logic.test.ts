@@ -34,6 +34,11 @@ import {
   groupByInstallation,
   rankCandidates,
   SCAN_MAX_HOSTS,
+  DISCOVERY_PORTS,
+  DISCOVERY_DEFAULT_PORT,
+  fallbackDiscoveryPorts,
+  identityRequiredForPort,
+  runStagedPortScan,
   type DiscoveredServer,
 } from "@shared/discovery";
 import { readFileSync } from "node:fs";
@@ -328,6 +333,121 @@ describe("groupByInstallation — bir satır = bir SUNUCU", () => {
   it("körlük zemini: boş giriş boş çıkar, tek aday tek grup", () => {
     expect(groupByInstallation([], bySourceRank)).toHaveLength(0);
     expect(groupByInstallation([candidate({})], bySourceRank)).toHaveLength(1);
+  });
+});
+
+// =============================================================================
+// KADEMELİ PORT TARAMASI — "bulamazsa farklı portları da arar"
+// =============================================================================
+// NEDEN: bu kademenin İKİ ayrı arıza biçimi var ve ikisi de sessiz.
+//
+//  A) MALİYET. Yedek portlar koşulsuz taranırsa tarama süresi port sayısıyla
+//     ÇARPILIR (1022 host × 4 port = 4088 bağlantı denemesi) ve keşif her
+//     açılışta saniyeler yer. Kural: sunucu bulunduysa genişleme HİÇ koşmaz.
+//
+//  B) FAIL-OPEN. Yedek portta `/health` yoluna izin verilirse 8080'de duran
+//     rastgele bir web sunucusu operatöre "sunucu bulundu" diye gösterilir.
+//     `{"status":"UP"}` TeksERP'e özgü DEĞİLDİR.
+//
+// Ayrıca `DISCOVERY_DEFAULT_PORT` listenin İLK elemanıdır — iki ayrı gerçek
+// olursa mDNS çalışmaya devam eder (portu ilandan alır) ama tarama yanlış
+// porta bakar: "bazen buluyor, bazen bulmuyor".
+// =============================================================================
+describe("port listesi — tek kaynak", () => {
+  it("⭐ varsayılan port listenin İLK elemanı ve 4000", () => {
+    expect(DISCOVERY_PORTS[0]).toBe(DISCOVERY_DEFAULT_PORT);
+    expect(DISCOVERY_DEFAULT_PORT).toBe(4000);
+  });
+
+  it("5000 listede (kullanıcı isteği, 2026-09-04)", () => {
+    expect([...DISCOVERY_PORTS]).toContain(5000);
+  });
+
+  it("liste KISA — her ek port en kötü durumu doğrusal büyütür", () => {
+    expect(DISCOVERY_PORTS.length).toBeLessThanOrEqual(4);
+    expect(new Set(DISCOVERY_PORTS).size).toBe(DISCOVERY_PORTS.length);
+  });
+
+  it("yedekler = liste eksi varsayılan, SIRA korunur", () => {
+    expect(fallbackDiscoveryPorts()).toEqual([5000, 3000, 8080]);
+    expect(fallbackDiscoveryPorts()).not.toContain(DISCOVERY_DEFAULT_PORT);
+  });
+
+  it("⭐ FAIL-OPEN SINIRI: kimlik yalnız YEDEK portlarda zorunlu", () => {
+    // Varsayılan portta gevşeklik BİLİNÇLİ: kimlik ucu olmayan eski backend
+    // meşru adaydır (bkz. probe.ts). Yedek portta öyle bir vaka yok.
+    expect(identityRequiredForPort(DISCOVERY_DEFAULT_PORT)).toBe(false);
+    for (const p of fallbackDiscoveryPorts()) {
+      expect(identityRequiredForPort(p)).toBe(true);
+    }
+  });
+});
+
+describe("runStagedPortScan — önce varsayılan, bulamazsa yedekler", () => {
+  const hit = (port: number): DiscoveredServer => candidate({ port, baseUrl: `http://h:${port}` });
+
+  it("⭐ 1. KURAL: varsayılan portta bulunca GENİŞ TARAMA KOŞMAZ (maliyet sıfır)", async () => {
+    const seen: number[] = [];
+    const out = await runStagedPortScan<DiscoveredServer>(async (port) => {
+      seen.push(port);
+      return [hit(port)];
+    });
+    expect(seen).toEqual([DISCOVERY_DEFAULT_PORT]);
+    expect(out.ports).toEqual([DISCOVERY_DEFAULT_PORT]);
+  });
+
+  it("⭐ 1b. başka bir ayak (mDNS/kayıtlı adres) bulduysa da genişlemez", async () => {
+    const seen: number[] = [];
+    const out = await runStagedPortScan<DiscoveredServer>(
+      async (port) => {
+        seen.push(port);
+        return [];
+      },
+      { hasCandidate: () => true },
+    );
+    expect(seen).toEqual([DISCOVERY_DEFAULT_PORT]);
+    expect(out.results).toHaveLength(0);
+  });
+
+  it("⭐ 2. KURAL: hiç bulunamayınca TÜM yedek portlar SIRAYLA denenir", async () => {
+    const seen: number[] = [];
+    await runStagedPortScan<DiscoveredServer>(async (port) => {
+      seen.push(port);
+      return [];
+    });
+    expect(seen).toEqual([...DISCOVERY_PORTS]);
+  });
+
+  it("⭐ 3. KURAL: yedek portta bulunan aday DOĞRU PORTLA döner ve orada DURULUR", async () => {
+    const seen: number[] = [];
+    const out = await runStagedPortScan<DiscoveredServer>(async (port) => {
+      seen.push(port);
+      return port === 5000 ? [hit(5000)] : [];
+    });
+    expect(seen).toEqual([4000, 5000]); // 3000/8080 hiç denenmedi
+    expect(out.ports).toEqual([4000, 5000]);
+    expect(out.results).toHaveLength(1);
+    expect(out.results[0]?.port).toBe(5000);
+    expect(out.results[0]?.baseUrl).toBe("http://h:5000");
+  });
+
+  it("iptal edilirse kademe İLERLEMEZ", async () => {
+    const seen: number[] = [];
+    let calls = 0;
+    const out = await runStagedPortScan<DiscoveredServer>(
+      async (port) => {
+        seen.push(port);
+        calls++;
+        return [];
+      },
+      { aborted: () => calls >= 1 },
+    );
+    expect(seen).toEqual([DISCOVERY_DEFAULT_PORT]);
+    expect(out.ports).toEqual([DISCOVERY_DEFAULT_PORT]);
+  });
+
+  it("körlük zemini: yedek portlar gerçekten VAR (döngü vakumen geçmiyor)", () => {
+    expect(fallbackDiscoveryPorts().length).toBeGreaterThan(0);
   });
 });
 

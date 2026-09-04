@@ -29,7 +29,9 @@ import {
   compareIdentity,
   dedupeCandidates,
   groupByInstallation,
+  identityRequiredForPort,
   rankCandidates,
+  runStagedPortScan,
   scanTargetsFor,
   type DiscoveredServer,
   type DiscoverySource,
@@ -61,7 +63,7 @@ function emptyState(): DiscoveryState {
     groups: [],
     applied: null,
     mdns: { available: false, error: null, hits: 0 },
-    scan: { ran: false, targets: 0, open: 0, skippedReason: null },
+    scan: { ran: false, targets: 0, open: 0, ports: [], skippedReason: null },
     pinnedInstallationId: null,
     error: null,
   };
@@ -109,7 +111,10 @@ async function verify(
   timeoutMs = 2000,
 ): Promise<DiscoveredServer | null> {
   const baseUrl = baseUrlOf(host, port);
-  const res = await probeIdentity(baseUrl, timeoutMs);
+  // Yedek portta kimlik ŞART — `/health` UP diyen yabancı bir servis aday olamaz.
+  const res = await probeIdentity(baseUrl, timeoutMs, {
+    requireIdentity: identityRequiredForPort(port),
+  });
   if (!res) return null;
   return {
     baseUrl,
@@ -215,19 +220,42 @@ async function runDiscovery(timeoutMs: number): Promise<DiscoveryState> {
       return;
     }
     lastScanAt = Date.now();
-    const targets = scanTargetsFor(localInterfaces()).filter(
-      (h) => !seenAddr.has(`${h}:${DISCOVERY_DEFAULT_PORT}`),
-    );
+    const hosts = scanTargetsFor(localInterfaces());
     state.scan.ran = true;
-    state.scan.targets = targets.length;
-    const open = await scanSubnet(targets, DISCOVERY_DEFAULT_PORT, {
-      signal: controller.signal,
-      socketTimeoutMs: 300,
-    });
-    state.scan.open = open.length;
-    await Promise.all(
-      open.map((h) => verify(h, DISCOVERY_DEFAULT_PORT, "scan", pinnedId, 2000).then(collect)),
+
+    // ⚠️ KADEMELİ: önce YALNIZ varsayılan port (bugünkü davranış, bugünkü
+    // maliyet). Hiçbir aday çıkmazsa yedek portlar sırayla denenir; aday bulan
+    // ilk portta durulur. Sunucu bulunduğu anda genişleme HİÇ koşmaz.
+    const staged = await runStagedPortScan<DiscoveredServer>(
+      async (port) => {
+        const targets = hosts.filter((h) => !seenAddr.has(`${h}:${port}`));
+        for (const h of targets) seenAddr.add(`${h}:${port}`);
+        state.scan.targets += targets.length;
+        const open = await scanSubnet(targets, port, {
+          signal: controller.signal,
+          socketTimeoutMs: 300,
+        });
+        state.scan.open += open.length;
+        // Yedek portta `localhost` de denenir: kurulumu yapan kişi sunucuyu
+        // 5000'de açtıysa panel aynı makinededir ve tarama kendini atlar.
+        const probes = [...open.map((h) => verify(h, port, "scan", pinnedId, 2000))];
+        if (identityRequiredForPort(port) && !seenAddr.has(`localhost:${port}`)) {
+          seenAddr.add(`localhost:${port}`);
+          probes.push(verify("localhost", port, "localhost", pinnedId, 1000));
+        }
+        const hits = (await Promise.all(probes)).filter(
+          (c): c is DiscoveredServer => c !== null,
+        );
+        for (const c of hits) collect(c);
+        return hits;
+      },
+      {
+        aborted: () => controller.signal.aborted,
+        // Başka bir ayak (mDNS/kayıtlı adres) bu arada aday bulduysa genişleme.
+        hasCandidate: () => found.length > 0,
+      },
     );
+    state.scan.ports = staged.ports;
   })();
 
   // Turu bitiren üç şey: erken çıkış · tüm ayakların bitmesi · süre dolması.

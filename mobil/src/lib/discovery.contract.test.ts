@@ -17,7 +17,13 @@
 // ikiz bekçiden kopyalarken bu tuzağa bir kez düşüldü.
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { DISCOVERY_IDENTITY_PATH, DISCOVERY_DEFAULT_PORT } from './discovery';
+import {
+  DISCOVERY_IDENTITY_PATH,
+  DISCOVERY_DEFAULT_PORT,
+  DISCOVERY_PORTS,
+  fallbackDiscoveryPorts,
+  identityRequiredForPort,
+} from './discovery';
 
 const REPO = resolve(__dirname, '../../..');
 const BACKEND_ROUTES = resolve(REPO, 'Teks-Erp/src/routes/discovery.routes.ts');
@@ -116,12 +122,48 @@ describe('keşif sözleşmesi — üç kopya', () => {
     expect(twinBlock(MOBILE_LIB)).toBe(twinBlock(ELECTRON_SHARED));
   });
 
-  (haveElectron ? it : it.skip)('⭐ Electron kopyasıyla YOL ve PORT aynı', () => {
+  (haveElectron ? it : it.skip)('⭐ Electron kopyasıyla YOL ve PORT LİSTESİ aynı', () => {
     const el = readFileSync(ELECTRON_SHARED, 'utf8');
     const elPath = /DISCOVERY_IDENTITY_PATH\s*=\s*"([^"]+)"/.exec(el)?.[1];
-    const elPort = /DISCOVERY_DEFAULT_PORT\s*=\s*(\d+)/.exec(el)?.[1];
+    // ⚠️ Port artık TEK SAYI DEĞİL LİSTE ve varsayılan ondan türer. Eskiden
+    // burada `DISCOVERY_DEFAULT_PORT = (\d+)` aranıyordu; liste kaynaklı
+    // türetmede o regex hiçbir şey bulmaz ve kontrol SESSİZCE vakuma düşerdi.
+    const elPorts = /DISCOVERY_PORTS\s*=\s*\[([^\]]+)\]/.exec(el)?.[1];
     expect(elPath).toBeTruthy(); // Electron sabiti okunamadıysa burada düşer
     expect(elPath).toBe(DISCOVERY_IDENTITY_PATH);
-    expect(Number(elPort)).toBe(DISCOVERY_DEFAULT_PORT);
+    expect(elPorts).toBeTruthy(); // liste okunamadıysa burada düşer
+    expect((elPorts as string).split(',').map((x) => Number(x.trim()))).toEqual([
+      ...DISCOVERY_PORTS,
+    ]);
+  });
+});
+
+// =============================================================================
+// Bekçi: kademeli port taraması — liste TEK KAYNAK, kimlik yedekte ZORUNLU
+// =============================================================================
+// (Kademe mantığının kendisi ortak helper'da ve iki koşucu da onu ölçüyor:
+// Electron `src/test/discovery-logic.test.ts`. Burada mobilin AYNI sabitleri
+// gördüğü kilitlenir.)
+describe('port listesi — tek kaynak', () => {
+  it('⭐ varsayılan port listenin İLK elemanı ve 4000', () => {
+    expect(DISCOVERY_PORTS[0]).toBe(DISCOVERY_DEFAULT_PORT);
+    expect(DISCOVERY_DEFAULT_PORT).toBe(4000);
+  });
+
+  it('5000 listede (kullanıcı isteği, 2026-09-04)', () => {
+    expect([...DISCOVERY_PORTS]).toContain(5000);
+  });
+
+  it('liste KISA ve tekrarsız', () => {
+    expect(DISCOVERY_PORTS.length).toBeLessThanOrEqual(4);
+    expect(new Set(DISCOVERY_PORTS).size).toBe(DISCOVERY_PORTS.length);
+  });
+
+  it('⭐ kimlik YALNIZ yedek portlarda zorunlu', () => {
+    expect(identityRequiredForPort(DISCOVERY_DEFAULT_PORT)).toBe(false);
+    expect(fallbackDiscoveryPorts().length).toBeGreaterThan(0); // körlük zemini
+    for (const p of fallbackDiscoveryPorts()) {
+      expect(identityRequiredForPort(p)).toBe(true);
+    }
   });
 });

@@ -171,7 +171,7 @@ export function ServerDiscoveryPanel({
       {state && (state.scan.ran || state.mdns.error) && (
         <p className="text-[11px] text-muted-foreground">
           {state.scan.ran
-            ? `${state.scan.targets} adres tarandı, ${state.scan.open} yanıt.`
+            ? `${state.scan.targets} adres tarandı (port ${(state.scan.ports ?? []).join(", ") || "—"}), ${state.scan.open} yanıt.`
             : ""}
           {state.mdns.error ? ` Ağ ilanı dinlenemedi (${state.mdns.error}).` : ""}
         </p>

@@ -2569,3 +2569,67 @@ ile birebir geri alındı. Electron `docRows.test.ts` +9 kontrol (iki sonda).
 
 **Migration YOK · yeni izin kodu YOK · APK YOK.** Backend ÖNCE (eski panel bayrağı
 göndermez → varsayılan `bizdeki`, geriye uyumlu).
+
+---
+
+## 2026-09-04 — Keşif kademeli PORT taraması: mDNS portu ilandan alıyordu, TARAMA tek porta kilitliydi [ÇEKİRDEK]
+
+Kullanıcı isteği: *"test cihazında da mDNS ile gireceğim, elle girmek zorunlu değil. 5000
+portunu bulacak. **bulamazsa farklı portları da arar.**"*
+
+**ÖLÇÜM — açık tam olarak neredeydi.** Keşfin iki yolu var ve porta karşı davranışları
+FARKLIYDI: mDNS ayağı portu **ilanın içinden** okur (`verify(h, hit.port || …)`) → 5000'i
+zaten buluyordu; alt ağ taraması ise `scanSubnet(targets, DISCOVERY_DEFAULT_PORT, …)` ile
+**tek porta SABİTLENMİŞTİ** → mDNS'in süzüldüğü ağda (IGMP snooping / client isolation)
+sunucu 4000 dışında bir portta duruyorsa HİÇ bulunamıyordu. Eksik olan tek şey buydu.
+
+**KADEMELİ TARAMA — "maliyet sıfır" kuralı tasarımın merkezinde.** Sıra: ① mDNS
+(değişmedi, portu ilandan) → ② tarama YALNIZ varsayılan portta (bugünkü davranış, bugünkü
+süre) → ③ **yalnız ①+② SIFIR aday döndürdüyse** yedek portlar SIRAYLA, aday bulan İLK
+portta DURULARAK. Sunucu bulunduğu anda genişleme HİÇ koşmaz — ölçüldü: `/24` ağda tek
+port 1,2 sn ↔ dört port 4,9 sn (253 host, 300 ms soket, eşzamanlılık 64, RFC 5737 ölü ağ).
+
+**PORT LİSTESİ TEK KAYNAK ve varsayılan ONDAN TÜRER** (`DISCOVERY_PORTS = [4000, 5000,
+3000, 8080]`, `DISCOVERY_DEFAULT_PORT = DISCOVERY_PORTS[0]`). İki ayrı gerçek olsaydı
+arıza SESSİZ olurdu: mDNS portu ilandan aldığı için çalışmaya devam eder, yalnız tarama
+yanlış porta bakar — saha tarifi *"bazen buluyor, bazen bulmuyor"*. Liste KISA tutulur,
+maliyet host × port ile DOĞRUSAL büyür; üç yedeğin gerekçesi "kurulumu yapan kişi
+varsayılanı değiştirdiyse hangi sayıyı yazar": 5000 (açıkça istendi) · 3000 (Node/Express
+klasiği) · 8080 (alternatif HTTP).
+
+**FAIL-OPEN SINIRI — yedek portta KİMLİK ZORUNLU** (`identityRequiredForPort`). Varsayılan
+portta `/health` UP diyen KİMLİKSİZ sunucu meşru adaydır (kimlik ucu olmayan eski
+backend); yedek portta DEĞİLDİR. `{"status":"UP"}` TeksERP'e özgü bir gövde değil (Spring
+Boot Actuator birebir aynısını basar) ve yedek portlar kimlik ucuyla BİRLİKTE tarama
+kapsamına girdi — orada "eski backend" vakası YOKTUR. Gevşetirsen 8080'de duran rastgele
+bir web sunucusu operatöre "sunucu bulundu" diye gösterilir. Sıfır regresyon: tarama
+eskiden zaten yalnız 4000'e bakıyordu, yani 5000'deki eski bir backend hiç bulunmuyordu.
+
+**KEŞİF-İKİZ:** kademe kararı ortak `runStagedPortScan` (blok İÇİNDE, iki dosyada BİREBİR
+metin); projeye özgü olan her şey blok DIŞINDA kaldı. Masaüstü TCP ön-taramasıyla, mobil
+`fetch` ile besler.
+
+**TABLET BÜTÇESİ masaüstünden DAR** (`SCAN_MAX_HOSTS` 512↔1022 ile aynı gerekçe): yedek
+portlarda TAM SÜPÜRME yalnız İLK yedekte (5000) koşar, 3000/8080 yalnız öncelik listesini
+(tipik sunucu oktetleri) görür. Her tam süpürme turu tablette ~10 sn ve "alışılmadık IP +
+alışılmadık port" BİLEŞİK bir olasılıktır; 20 sn'lik bekleme karşılığında alınmaz.
+Ayrıca mobilde yedek portlar **opt-in** (`extraPorts`, varsayılan KAPALI) ve YALNIZ
+kullanıcının "Ağda Ara" dediği yolda açılır — arka plan kendi kendini onarma turu
+(`serverReachability.trySelfHeal`) bunu AÇMAZ: orada aranan sunucu daha önce BİLİNEN bir
+portta bulunmuştu (adresi zaten `preferredUrls`te), port avı bir KURULUM sorunudur,
+kesinti sorunu değil.
+
+**Aday PORTUNU taşır** — `baseUrl` `http://host:5000`; panel satırı `host:port · vX.Y.Z`
+zaten basıyordu, `DiscoveryState.scan.ports` ile hangi portların gerçekten tarandığı da
+tanı ekranlarında görünüyor.
+
+**Bekçiler:** Electron `src/test/discovery-logic.test.ts` (44) + mobil
+`services/discovery.service.test.ts` (15, gerçek uçtan uca `fetch` mock'u) +
+`lib/discovery.contract.test.ts` (11). **Altı negatif sondayla** kırmızı verdiği
+doğrulandı: maliyet-sıfır break'i kalkınca 3+2 · yedeklere hiç inilmeyince 11+18 · aday
+portu taşımayınca 18 · yedek portta `/health` açılınca 9+1 · ikiz ayrışınca 11+9 ·
+varsayılan port listenin ilki olmaktan çıkınca 11+9.
+
+**Migration YOK · yeni izin kodu YOK · backend DEĞİŞMEDİ** (ilan tarafı `mdns-advertiser`
+zaten portu ilan ediyordu). Sahaya inmesi için **yeni panel sürümü** + **tablet OTA**
+gerekir; mobil taraf tamamen saf JS, yeni native modül/izin YOK.

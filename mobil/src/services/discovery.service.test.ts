@@ -24,14 +24,28 @@ const IDENTITY = {
   version: '2.9.0',
 };
 
-/** Yalnız `aliveHosts` içindeki adresler cevap verir; kalanı ağ hatası. */
+/**
+ * Yalnız `aliveHosts` içindeki adresler cevap verir; kalanı ağ hatası.
+ *
+ * Anahtar iki biçimde yazılabilir: `host` (YALNIZ varsayılan port) ya da
+ * `host:port`. Host-only anahtarın varsayılan porta bağlı olması bilinçli —
+ * "her portta cevap veren" bir sunucu, port kademelerini ölçen sondaları
+ * sessizce vakuma düşürürdü.
+ */
 function mockNetwork(aliveHosts: Record<string, typeof IDENTITY | 'health-only'>) {
   const tried: string[] = [];
+  /** `host:port` — port kademelerini ölçen sondalar bunu okur. */
+  const triedFull: string[] = [];
   global.fetch = jest.fn(async (url: unknown) => {
     const u = String(url);
-    const host = /^https?:\/\/([^:/]+)/.exec(u)?.[1] ?? '';
-    if (u.includes('/api/discovery/identity')) tried.push(host);
-    const entry = aliveHosts[host];
+    const m = /^https?:\/\/([^:/]+):(\d+)/.exec(u);
+    const host = m?.[1] ?? '';
+    const port = Number(m?.[2] ?? 0);
+    if (u.includes('/api/discovery/identity')) {
+      tried.push(host);
+      triedFull.push(`${host}:${port}`);
+    }
+    const entry = aliveHosts[`${host}:${port}`] ?? (port === 4000 ? aliveHosts[host] : undefined);
     if (!entry) throw new Error('Network request failed');
     if (u.includes('/api/discovery/identity')) {
       if (entry === 'health-only') return { status: 404, text: async () => 'yok' } as never;
@@ -42,7 +56,7 @@ function mockNetwork(aliveHosts: Record<string, typeof IDENTITY | 'health-only'>
     }
     throw new Error('beklenmeyen istek');
   }) as never;
-  return { tried };
+  return { tried, triedFull };
 }
 
 function mockOwnIp(ipAddress: string | null, subnet = '255.255.255.0') {
@@ -149,5 +163,97 @@ describe('discoverServers — öncelik, sonra süpürme', () => {
     await discoverServers({ fullSweep: false });
     expect(tried.length).toBeGreaterThan(0);
     expect(tried).toContain('192.168.1.250');
+  });
+});
+
+// =============================================================================
+// Bekçi: KADEMELİ PORT TARAMASI — "bulamazsa farklı portları da arar"
+// =============================================================================
+// Dört kural, dördü de sessizce bozulabilir:
+//  4) Varsayılan portta bulunca yedek portlara HİÇ bakılmaz — yoksa her arama
+//     port sayısıyla ÇARPILIR ve keşif kullanılamaz hale gelir.
+//  5) Hiç bulunamayınca yedekler denenir ve aday KENDİ PORTUYLA döner
+//     (`baseUrl` yanlış porta işaret ederse "buldum" demek işe yaramaz).
+//  6) `extraPorts` kapalıyken davranış BUGÜNKÜYLE birebir (arka plan turları).
+//  7) FAIL-OPEN YASAK: yedek portta `/health` UP diyen yabancı servis aday DEĞİL.
+// =============================================================================
+describe('discoverServers — yedek portlar', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockOwnIp('192.168.1.42');
+  });
+
+  it('⭐ 4. KURAL: varsayılan portta bulununca YEDEK PORT DENENMEZ (maliyet sıfır)', async () => {
+    const { triedFull } = mockNetwork({ '192.168.1.250': IDENTITY });
+    const res = await discoverServers({ fullSweep: true, extraPorts: true });
+
+    expect(res.candidates).toHaveLength(1);
+    expect(res.scan.ports).toEqual([4000]);
+    // Tek bir 5000/3000/8080 isteği bile atılmamalı.
+    expect(triedFull.every((t) => t.endsWith(':4000'))).toBe(true);
+  });
+
+  it('⭐ 5. KURAL: 5000de duran sunucu BULUNUR ve aday PORTU taşır', async () => {
+    const { triedFull } = mockNetwork({ '192.168.1.250:5000': IDENTITY });
+    const res = await discoverServers({ fullSweep: true, extraPorts: true });
+
+    expect(res.candidates).toHaveLength(1);
+    expect(res.candidates[0]?.port).toBe(5000);
+    expect(res.candidates[0]?.host).toBe('192.168.1.250');
+    // ⚠️ `baseUrl` PORTU TAŞIMALI — panel/tablet bağlantıyı bundan kurar.
+    expect(res.candidates[0]?.baseUrl).toBe('http://192.168.1.250:5000');
+    expect(res.scan.ports).toEqual([4000, 5000]);
+    // Bulan portta DURULDU: 3000/8080 hiç denenmedi.
+    expect(triedFull.some((t) => t.endsWith(':3000'))).toBe(false);
+    expect(triedFull.some((t) => t.endsWith(':8080'))).toBe(false);
+  });
+
+  it('hiçbir portta yoksa TÜM yedekler sırayla denenir', async () => {
+    const { triedFull } = mockNetwork({});
+    const res = await discoverServers({ fullSweep: true, extraPorts: true });
+    expect(res.candidates).toHaveLength(0);
+    expect(res.scan.ports).toEqual([4000, 5000, 3000, 8080]);
+    for (const p of [5000, 3000, 8080]) {
+      expect(triedFull.some((t) => t.endsWith(`:${p}`))).toBe(true);
+    }
+  });
+
+  it('tablet bütçesi: TAM SÜPÜRME yalnız İLK yedek portta koşar', async () => {
+    // 3000/8080 yalnız öncelik listesini görür — her tam süpürme turu tablette
+    // ~10 sn ve "alışılmadık IP + alışılmadık port" bileşik bir olasılıktır.
+    const { triedFull } = mockNetwork({});
+    await discoverServers({ fullSweep: true, extraPorts: true });
+    const say = (p: number): number => triedFull.filter((t) => t.endsWith(`:${p}`)).length;
+    expect(say(4000)).toBeGreaterThan(200); // körlük zemini: süpürme gerçekten koştu
+    expect(say(5000)).toBeGreaterThan(200);
+    expect(say(3000)).toBeLessThan(20);
+    expect(say(8080)).toBeLessThan(20);
+    expect(say(8080)).toBeGreaterThan(0); // ...ama HİÇ denenmemiş de değil
+  });
+
+  it('⭐ 6. KURAL: extraPorts KAPALIYKEN yedek port HİÇ denenmez', async () => {
+    // Arka plan turu (`serverReachability.trySelfHeal`) bu yoldan geçer.
+    const { triedFull } = mockNetwork({ '192.168.1.250:5000': IDENTITY });
+    const res = await discoverServers({ fullSweep: true });
+    expect(res.candidates).toHaveLength(0);
+    expect(res.scan.ports).toEqual([4000]);
+    expect(triedFull.every((t) => t.endsWith(':4000'))).toBe(true);
+  });
+
+  it('⭐ 7. KURAL: yedek portta TeksERP OLMAYAN servis aday SAYILMAZ', async () => {
+    // 5000'de `/health` → {"status":"UP"} diyen yabancı bir servis (Spring Boot
+    // Actuator birebir bunu basar). Kimlik ucu yok → aday değil.
+    mockNetwork({ '192.168.1.250:5000': 'health-only' });
+    const res = await discoverServers({ fullSweep: true, extraPorts: true });
+    expect(res.candidates).toHaveLength(0);
+  });
+
+  it('körlük zemini: AYNI servis VARSAYILAN portta aday SAYILIR (eski backend)', async () => {
+    // 7. kuralın vakumen geçmediğini kanıtlar: kimliksiz sunucu 4000'de meşru.
+    mockNetwork({ '192.168.1.250': 'health-only' });
+    const res = await discoverServers({ fullSweep: true, extraPorts: true });
+    expect(res.candidates).toHaveLength(1);
+    expect(res.candidates[0]?.identity).toBeNull();
+    expect(res.candidates[0]?.port).toBe(4000);
   });
 });

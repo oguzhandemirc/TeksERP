@@ -72,6 +72,9 @@ export function ServerDiscoveryList({
         ),
         // Kullanıcı AÇIKÇA "ara" dedi → tam süpürme meşru.
         fullSweep: true,
+        // ...ve hiç bulunamazsa yedek portlar (5000/3000/8080). Bu, port avının
+        // TEK açık olduğu yol: arka plan turları bunu AÇMAZ (bkz. DiscoveryOptions).
+        extraPorts: true,
         onProgress: setProgress,
       });
       return res.candidates;

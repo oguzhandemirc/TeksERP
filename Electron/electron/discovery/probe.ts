@@ -73,10 +73,18 @@ function get(url: string, timeoutMs: number): Promise<RawResponse | null> {
  *  • kimlik ucu 200 → `{ identity }`
  *  • kimlik ucu 404 ama `/health` UP → `{ identity: null }` (ESKİ BACKEND, geçerli aday)
  *  • başka her şey → null (aday değil)
+ *
+ * ⚠️ `requireIdentity` — YEDEK PORTLARDA `/health` YOLU KAPALI. `{"status":"UP"}`
+ * TeksERP'e özgü bir gövde değildir (Spring Boot Actuator birebir aynısını
+ * basar); varsayılan portta bu riski "eski backend'i kaybetmemek" için
+ * alıyoruz, 5000/3000/8080'de almıyoruz — o portlar kimlik ucuyla BİRLİKTE
+ * tarama kapsamına girdi, orada eski backend vakası YOK. Kararı çağıran
+ * vermez, `identityRequiredForPort` verir (tek kaynak).
  */
 export async function probeIdentity(
   baseUrl: string,
   timeoutMs = 2000,
+  opts: { requireIdentity?: boolean } = {},
 ): Promise<ProbeResult | null> {
   const started = Date.now();
   const root = baseUrl.replace(/\/+$/, "");
@@ -92,6 +100,7 @@ export async function probeIdentity(
   }
 
   // Eski backend (uç yok) ya da yanıt bozuk: canlılık ucuyla teyit et.
+  if (opts.requireIdentity) return null;
   const health = await get(`${root}/health`, timeoutMs);
   if (!health || health.status !== 200) return null;
   try {
