@@ -29,6 +29,7 @@ devam edecek. Bunun iki sonucu var, ikisi de aşağıda "Yarın" bölümünde.
 | `ilk-kurulum.ps1` | Yeni kök için iskelet (klasör + pm2 + `.env`) |
 | `ecosystem.yan-yana.js` | **Hazır yapılandırma** — port 5000 + ilan kapalı + ayrı pm2 adı |
 | `FABRIKA-KURULUM-2026-09-04.md` | Bu dosya |
+| `SUNUCU-CLAUDE-DEVIR-2026-09-04.md` | Sunucuda Claude oturumu açılacaksa **ona ilk okutulacak** dosya |
 
 İsteğe bağlı:
 - `olcum-musteri-adi.sql` — "müşterideki ürün adı" kapsam ölçümü (**salt okunur**,
@@ -206,9 +207,32 @@ Yeni sürümü denemek için **tek bir cihazın** adresini elle verin:
 
 ## Yarın — geçiş
 
+> ### ⚠️ ÖNCE ÖLÇ: eski API NASIL koşuyor?
+> Bu notun `pm2 stop tekserp-backend` satırı bir **varsayımdır**. Backend eskiden
+> NSSM ile Windows servisi olarak koşuyordu; sahadaki kurulum o dönemden kalma
+> olabilir. Yanlış aracı kullanmak "durdurdum" sanıp fabrikayı ayakta bırakır
+> (iki backend, iki veritabanı, sessiz veri bölünmesi).
+>
+> ```powershell
+> # 4000'i kim dinliyor, hangi süreç?
+> Get-NetTCPConnection -LocalPort 4000 -State Listen |
+>   ForEach-Object { Get-Process -Id $_.OwningProcess } | Format-List Name,Id,Path
+>
+> # pm2 mi?
+> $env:PM2_HOME = "C:\Etkili-Yazilim\pm2-home"
+> C:\Etkili-Yazilim\pm2\node_modules\.bin\pm2.cmd list
+>
+> # Windows servisi mi (NSSM)?
+> Get-Service | Where-Object { $_.Name -match "teks|erp" } | Format-Table Name,Status
+> ```
+>
+> Çıkan sonuca göre durdurma komutu değişir: pm2 ise aşağıdaki satır, servis ise
+> `Stop-Service <ad>`. **Durdurduktan sonra `curl http://localhost:4000/health`
+> ile GERÇEKTEN sustuğunu doğrulayın.**
+
 ```powershell
 $env:PM2_HOME = "C:\Etkili-Yazilim\pm2-home"
-pm2 stop tekserp-backend                       # ESKIYI DURDUR
+pm2 stop tekserp-backend                       # ESKIYI DURDUR (pm2 ise)
 
 notepad C:\TeksERP\app\ecosystem.config.js     # PORT: "5000" -> "4000"
                                                # DISCOVERY_MDNS_ENABLED satirini SIL
