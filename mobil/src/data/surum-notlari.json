@@ -16,6 +16,81 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04f",
+      "baslik": "Çuval izleri, müşteri karnesi ve uzaktan özet görünümü",
+      "surumler": {
+        "panel": "1.2.6",
+        "tablet": "1.0.5"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çuvallara renkli iz bırakabiliyorsunuz. \"Eksik top\", \"Kontrol edilecek\" gibi etiketleri Tanımlar → Çuval İzleri'nden kendiniz oluşturuyorsunuz. Bir çuvala birden fazla iz konabilir ve iz herkese görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Birden çok çuval seçip hepsine birden iz bırakabilir ya da seçilenlerden iz kaldırabilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çuval listesinde ize göre süzme geldi (\"İzsiz\" seçeneği dahil)."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Çuval sevk edilince izi kendiliğinden temizleniyor; sevk geri alınırsa iz geri geliyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çeki listesi çıktısında ve sevk irsaliyesinin çuval tablosunda izi göstermeyi seçebiliyorsunuz. İkisi de varsayılan kapalı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Paketlemede cari seçerken artık TÜM cariler listeleniyor; çuvalı olanlar üstte. \"Yalnız çuvalı olanlar\" kutucuğu eski davranışı geri verir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Müşteri Karnesi'ne kalem adedi, ortalama kalem/sipariş, sipariş günü sayısı ve iptal oranı eklendi. Bazı müşteriler kalem kalem, bazıları tek tek sipariş girdiği için yalnız \"sipariş adedi\"ne bakmak yanıltıyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Uzaktan bağlanılan özet görünümüne menü geldi: yalnız Operasyonlar ve Raporlar açılıyor, gerisi çizilmiyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Uzaktan bağlanınca her girişte gereksiz bir hata bildirimi çıkıyordu; kaldırıldı. Oturum süresi dolduğunda \"yetkiniz yok\" diyordu, artık \"oturum doldu\" deyip yenileme sunuyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Kaydırma çubukları inceldi, tema rengini aldı ve üstüne gelmeden sönük duruyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Tanımlar → Etiketler'de satır düğmeleri satırdan satıra kayıyordu; hizalandı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Çıkış yapıp yeniden girince önceki kullanıcının açık sekmeleri kalıyordu; artık kapanıyor."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "yeni",
+          "metin": "Çuvalın üzerindeki izler tablette de görünüyor (salt okunur)."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04e",
       "baslik": "Ayarlar sadeleşti, sunucu bulma düzeldi",
       "surumler": {
