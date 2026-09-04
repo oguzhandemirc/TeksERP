@@ -47,6 +47,16 @@ async function createMainWindow(): Promise<void> {
     icon: iconPath,
     backgroundColor: "#000",
     show: false,
+    // ⚠️ WINDOWS/LINUX: CERCEVESIZ — baslik cubugunu uygulama kendisi cizer
+    //   (`components/layout/TitleBar.tsx`). macOS'ta `hiddenInset` KALIR: orada
+    //   trafik isiklarini isletim sistemi cizer ve kullanicilar onlarin yerini
+    //   kas hafizasiyla bilir; kendi dugmelerimizi koymak platform sozlesmesini
+    //   bozardi.
+    // ⚠️ Splash AYNI pencerede yuklenir (`loadFile(splashPath)`) ve React
+    //   baslik cubugu orada YOKTUR -> splash.html kendi surukleme seridini ve
+    //   kapatma dugmesini tasir, yoksa 16 saniye boyunca kapatilamayan bir
+    //   pencere kalirdi.
+    frame: process.platform === "darwin",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     webPreferences: {
       preload: path.join(__dirname, "../preload/preload.cjs"),

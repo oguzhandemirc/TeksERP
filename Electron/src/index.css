@@ -378,6 +378,32 @@
 }
 
 /* Pencere taşıma alanı (frameless macOS — traffic lights bölgesi) */
+/* =============================================================================
+   KENDI BASLIK CUBUGUMUZ (Windows/Linux) — yerlesim degiskeni
+   =============================================================================
+   Pencere `frame: false` ile acilir ve ust seridi biz cizeriz
+   (`components/layout/TitleBar.tsx`, 32px = h-8). Serit `fixed` oldugu icin
+   akistan cikar; tam-yukseklik kokleri `h-screen` (=100vh) kalsaydi tam da o
+   32px kadar tasar ve her ekranda dikey kaydirma cubugu belirirdi.
+
+   Kokler `h-screen` yerine `.app-viewport` kullanir. Degisken JS ile degil
+   CSS'te platforma gore ayarlanir: degeri `TitleBar` mount edilince
+   `data-titlebar` isareti uzerinden degil, `body`ye yazilan sinifla degil,
+   dogrudan burada 0'dir; `TitleBar` cizildiginde kendi yuksekligini kendisi
+   ayirir (asagidaki kural).
+   ⚠️ macOS ve tarayicida serit CIZILMEZ -> degisken 0 kalir ve yerlesim
+   degismez (sifir fark). */
+:root {
+  --titlebar-h: 0px;
+}
+:root:has([data-titlebar]) {
+  --titlebar-h: 32px;
+}
+.app-viewport {
+  height: calc(100vh - var(--titlebar-h));
+  margin-top: var(--titlebar-h);
+}
+
 .app-drag {
   -webkit-app-region: drag;
   app-region: drag;

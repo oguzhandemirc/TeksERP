@@ -41,7 +41,7 @@ export function BossShell() {
   const canOpenFullPanel = Boolean(user && canEnterApp(user.permissions));
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-background">
+    <div className="app-viewport flex w-screen flex-col overflow-hidden bg-background">
       <header className="flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold leading-tight">Fabrika Özeti</p>

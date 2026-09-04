@@ -19,9 +19,36 @@
       object-fit: cover;
       display: block;
     }
+    /* ⚠️ Pencere Windows/Linux'ta CERCEVESIZ acilir (main.ts `frame:false`) ve
+       React baslik cubugu bu sayfada YOKTUR. Serit olmasaydi splash ~16 saniye
+       boyunca TASINAMAZ ve KAPATILAMAZ bir pencere olurdu (video takilirsa
+       Gorev Yoneticisi tek cikis). Kucuk ve saydam; videoyu ortmez. */
+    #cubuk {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 32px;
+      -webkit-app-region: drag;
+      display: flex;
+      justify-content: flex-end;
+      z-index: 10;
+    }
+    #kapat {
+      -webkit-app-region: no-drag;
+      width: 44px;
+      height: 32px;
+      border: 0;
+      background: transparent;
+      color: rgba(255, 255, 255, 0.55);
+      font: 14px/1 system-ui, sans-serif;
+      cursor: pointer;
+    }
+    #kapat:hover { background: #c62828; color: #fff; }
   </style>
 </head>
 <body>
+  <div id="cubuk"><button id="kapat" type="button" title="Kapat" aria-label="Kapat">&#10005;</button></div>
   <video id="intro" autoplay playsinline preload="auto">
     <source src="TeksERP-INTRO.mp4" type="video/mp4" />
   </video>
@@ -36,6 +63,13 @@
     video.play().catch(done);
 
     setTimeout(done, 15000);
+
+    // Kapatma: `window.close()` kullanilir, `window.api.window.close()` DEGIL.
+    // Preload pencereye baglidir (splash ayni BrowserWindow'da yuklenir) yani
+    // API burada da vardir; ama bu dosya `resources/` altinda durur ve derleme
+    // hattina girmez — kopru sozlesmesi degisirse sessizce kirilirdi.
+    // `window.close()` platform ve surum bagimsiz calisir.
+    document.getElementById("kapat").addEventListener("click", () => window.close());
   </script>
 </body>
 </html>

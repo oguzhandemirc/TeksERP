@@ -44,7 +44,12 @@ export function LoginHero() {
           </p>
         </div>
 
-        <div className="flex items-center justify-between text-xs text-white/40">
+        {/* ⚠️ Eskiden burada sabit `v1.0` yazıyordu ve GERÇEK sürümle hiçbir
+            ilgisi yoktu (2026-09-04'te kaldırıldı): panel 1.2.0'dayken bile
+            "v1.0" gösteriyordu, yani sahadan "hangi sürümdesiniz" diye
+            sorulduğunda YANLIŞ cevap veriyordu. Gerçek sürüm sağ altta,
+            `SurumRozeti` ile — o `app.getVersion()`tan okur. */}
+        <div className="flex items-center text-xs text-white/40">
           <span>
             © {new Date().getFullYear()}{" "}
             <a
@@ -56,7 +61,6 @@ export function LoginHero() {
               Etkili Yazılım
             </a>
           </span>
-          <span className="tracking-wider">v1.0</span>
         </div>
       </div>
     </div>

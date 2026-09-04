@@ -16,6 +16,11 @@ import { useUpdater } from "@/hooks/useUpdater";
  * ⚠️ `app-no-drag`: giriş penceresinin kökü OS sürükleme bölgesidir; bunu beyan
  * etmeyen bir eleman üstte çizilse de tıklamayı pencere-taşımaya kaptırır.
  * Rozet tıklanabilir değil ama metin seçilebilir olsun diye yine de beyan edilir.
+ *
+ * ⚠️ Konum SAĞ ALT (2026-09-04). Eskiden ortalıydı ve giriş formunun altındaki
+ * boşlukta duruyordu; aynı satırın solunda `LoginHero`nun sabit `v1.0` yazısı
+ * vardı — iki ayrı "sürüm" göstergesi, biri yalan. Sabit olan kaldırıldı,
+ * gerçek olan köşeye alındı.
  */
 export function SurumRozeti() {
   const { status } = useUpdater();
@@ -50,7 +55,7 @@ export function SurumRozeti() {
   }
 
   return (
-    <div className="app-no-drag pointer-events-none absolute inset-x-0 bottom-2 text-center">
+    <div className="app-no-drag pointer-events-none absolute bottom-2 right-3">
       <span className="text-[11px] font-medium text-muted-foreground">
         TeksERP{surum ? ` v${surum}` : ""}
         {durum ? <span className={durum.sinif}> · {durum.metin}</span> : null}
