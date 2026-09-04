@@ -16,6 +16,46 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04e",
+      "baslik": "Ayarlar sadeleşti, sunucu bulma düzeldi",
+      "surumler": {
+        "panel": "1.2.5",
+        "tablet": "1.0.4"
+      },
+      "maddeler": [
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Ağ taramasında aynı sunucu birden çok kez listeleniyordu (sunucunun birden fazla ağ adresi olduğu için). Artık tek satır görünüyor; isterseniz adresini seçebiliyorsunuz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "\"Bu Bilgisayar\" ayarları ayrıldı: Yazıcı, Kantar, Tabanca ve Sunucu Adresi artık sol menüde kendi başlıkları."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Güncelleme denetleme düğmesine basınca dönen bir işaret çıkıyor ve sonunda \"Uygulama güncel\" gibi bir bildirim veriyor. Kendiliğinden yapılan denetlemelerde bildirim çıkmıyor."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Güncelleme ekranında \"Güncellemeleri denetle\" düğmesi basınca kayboluyordu; artık yerinde kalıyor ve rengi var."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Sunucu ayarları ekranı elden geçirildi: düğmelerin kendi renkleri var, \"Ağda Ara\" ilerlemesi düğmenin üstünde görünüyor, sonuç bildirim olarak çıkıyor."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "iyilestirme",
+          "metin": "Kaydedilmemiş adres uyarısı ve bağlantı hatalarında ne yapılacağını söyleyen açıklamalar eklendi."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04d",
       "baslik": "Paketlemede filtre ve tek tuşla sevk, cihaz onayı düzeltmesi",
       "surumler": {
