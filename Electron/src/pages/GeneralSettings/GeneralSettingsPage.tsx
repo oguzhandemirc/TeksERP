@@ -8,8 +8,9 @@ import { SettingsSurfacePage } from "./SettingsSurfacePage";
  * Anahtarları), modül anahtarları da (Sistem → Modüller).
  *
  * ⚠️ Sayfanın kapısı GENİŞ, içeriği DAR: `settings:workstation` taşıyan personel
- * girer ve yalnız "Bu Bilgisayar" kategorisini görür — bu davranış taşıma
- * sonrasında da aynen duruyor (kategori kendi `permissionAny`sini taşır).
+ * girer ve yalnız "Bu Bilgisayar" bölümünün dört yerel kategorisini görür
+ * (yazıcı · kantar · tabanca · sunucu adresi) — her biri kendi `permissionAny`sini
+ * taşır. Bekçi: `workstation-rail.test.ts`.
  */
 export function GeneralSettingsPage() {
   return <SettingsSurfacePage surface="settings" title="Genel Ayarlar" />;
