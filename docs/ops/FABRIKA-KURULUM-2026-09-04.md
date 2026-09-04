@@ -107,9 +107,28 @@ Hazır dosyanın şablondan üç farkı var, üçü de bilinçli:
 
 > ### ⚠️ Ağa ilan neden kapatılıyor — ve "farklı sunucu" uyarısı neden gelmeyecek
 >
+> **Fabrikanın ilanı KAYBOLMUYOR.** Kapattığımız şey yalnız TEST kurulumunun
+> ilanı; eski backend'e hiç dokunmuyoruz, o ilan etmeye devam ediyor. Her an tam
+> bir sunucu ilan eder:
+>
+> | An | İlan eden | Port |
+> |---|---|---|
+> | Şimdi | Eski backend (dokunulmuyor) | 4000 |
+> | 1 saatlik test | Yine eski backend — yeni olan susuyor | 4000 |
+> | Geçişten sonra | Yeni backend (`DISCOVERY_MDNS_ENABLED` satırı silinir) | 4000 |
+>
 > Servis ilanı (`_teks-erp._tcp`) **varsayılan olarak açık**. Açık kalırsa yeni
 > backend de kendini ağa ilan eder ve **otomatik bulma yapan bir panel ya da
 > tablet kopya veritabanına bağlanabilir.**
+>
+> ⚠️ **Alt ağ taraması bu deliği kapatmaz — mDNS ayrı bir yol.** İstemci ağı
+> tararken portu SABİT 4000 dener (`DISCOVERY_DEFAULT_PORT`), yani :5000'i asla
+> bulmaz. Ama mDNS'te port **ilanın kendi içinden** gelir
+> (`verify(h, hit.port || 4000, "mdns", …)`) → ilan açık olsaydı istemci
+> :5000'i BULURDU. Deliği kapatan tek şey ilanı kapatmaktı.
+>
+> Aynı sebeple, test edeceğiniz cihazda adresi **elle** girmeniz gerekiyor:
+> otomatik bulma :5000'i tasarım gereği görmüyor.
 >
 > Normalde bunu "bu senin sunucun değil" uyarısı yakalar. **Burada yakalamaz:**
 > kurulum kimliği (`installationId`) veritabanında duruyor ve `tekserp_yeni`
