@@ -36,6 +36,19 @@ export interface SackCustomerBucket {
   sackCount: number;
 }
 
+/**
+ * Cari kapısının SAYFALI yanıtı (2026-09-04).
+ *
+ * ⚠️ "Tüm cariler" modu kesilmez, sayfalanır — her şeyi göstermek için var olan
+ * bir modda sessiz kesme, kapının kapatmak için yazıldığı "sessizce düşen satır"
+ * sınıfını geri getirirdi. `withSacksOnly` modunda `nextCursor` daima null'dır
+ * (o küme yapı gereği küçük ve 500'de kesilir).
+ */
+export interface SackCustomerPage {
+  items: SackCustomerBucket[];
+  nextCursor: string | null;
+}
+
 export type ShipmentDestination = "DOMESTIC" | "EXPORT";
 
 export const destinationLabels: Record<ShipmentDestination, string> = {

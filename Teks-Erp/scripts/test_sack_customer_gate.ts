@@ -8,7 +8,7 @@
 // kova da hiçbir yüzeyden süzülemediği için (%44) sessizce kaybolur.
 //
 // Ölçülenler:
-//   §1 Kapı yalnız KAPSAMDA ÇUVALI OLAN carileri döner (katalog değil).
+//   §1 `withSacksOnly` modu: yalnız KAPSAMDA ÇUVALI OLAN cariler.
 //   §2 Müşterisiz kovası AYRI SATIR, İLK sırada, doğru sayıyla.
 //   §3 Arama ada/koda vurur; müşterisiz satır arama varken DÖNMEZ.
 //   §4 `filter[customerId]=none` → yalnız müşterisiz çuvallar (P2007 YOK).
@@ -17,6 +17,12 @@
 //   §7 Varsayılan kapsam DISPATCHED çuvalı iki yüzeyde de dışlar.
 //   §8 Sentinel değeri Electron aynasıyla BİREBİR (Electron backend'i import
 //      edemez → değer iki yerde yaşar; ayrışırsa süzgeç sessizce 0 satır döner).
+//   §9 VARSAYILAN mod TÜM cariler; çuvalsız cari 0 ile döner, çuvalı olan ÜSTTE.
+//
+// ⚠️ 2026-09-04 AKŞAM: kapı varsayılanı TERSİNE ÇEVRİLDİ (kullanıcı kararı).
+//    Eskiden yalnız çuvalı olanlar dönüyordu; artık o bir SÜZGEÇ
+//    (`withSacksOnly`). Ölçüm (43↔4) hâlâ doğru ama soru yanlıştı: kapının işi
+//    "elimde kimin malı var" değil "hangi cariye çuval açacağım".
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -37,12 +43,17 @@ async function main() {
   const svc = new SackSearchService();
 
   // A cari: 2 depo çuvalı · B cari: 1 depo çuvalı · C cari: HİÇ çuvalı yok
-  // (katalogda var — kapıda GÖRÜNMEMELİ) · müşterisiz: 3 depo çuvalı
+  // (§9'un öznesi: VARSAYILAN modda GÖRÜNÜR, `withSacksOnly` modunda GÖRÜNMEZ)
+  // · müşterisiz: 3 depo çuvalı
   // · A carinin 1 çuvalı DISPATCHED sevkiyatta (varsayılan kapsam dışı).
   const [cA, cB, cC] = await Promise.all([
     prisma.customer.create({ data: { code: `TST-GATE-A-${ts}`, name: `ZZKAPI ALFA ${ts}` }, select: { id: true, name: true } }),
     prisma.customer.create({ data: { code: `TST-GATE-B-${ts}`, name: `ZZKAPI BETA ${ts}` }, select: { id: true, name: true } }),
-    prisma.customer.create({ data: { code: `TST-GATE-C-${ts}`, name: `ZZKAPI CEVIZ ${ts}` }, select: { id: true, name: true } }),
+    // ⚠️ ADI BİLEREK "AAA": alfabetik olarak A carisinden ÖNCE gelir. §9d'nin
+    // ölçtüğü kural "çuvalı olan ÜSTTE"dir; ad "CEVIZ" olsaydı alfabetik sıra
+    // da aynı sonucu verir ve sonda KÖR kalırdı (ölçüldü: sıralama kuralını
+    // söküp test yine yeşil geçti).
+    prisma.customer.create({ data: { code: `TST-GATE-C-${ts}`, name: `ZZKAPI AAA ${ts}` }, select: { id: true, name: true } }),
   ]);
   const shipment = await prisma.shipment.create({
     data: { shipmentNo: `TEST-GATE-${ts}`, customerId: cA.id, status: "DISPATCHED" },
@@ -69,7 +80,7 @@ async function main() {
 
   try {
     // ── §1 Kapı: yalnız çuvalı olan cariler ────────────────────────────────
-    const gate = (await svc.listSackCustomers({})).data.filter(
+    const gate = (await svc.listSackCustomers({ withSacksOnly: true })).data.items.filter(
       (r) => r.customerId === null || [cA.id, cB.id, cC.id].includes(r.customerId),
     );
     const gA = gate.find((r) => r.customerId === cA.id);
@@ -81,7 +92,7 @@ async function main() {
     check("§1 A carisinin sayısı sevk edilmişi SAYMAZ (2, 3 değil)", gA?.sackCount === 2, String(gA?.sackCount));
 
     // ── §2 Müşterisiz kovası ───────────────────────────────────────────────
-    const full = (await svc.listSackCustomers({})).data;
+    const full = (await svc.listSackCustomers({ withSacksOnly: true })).data.items;
     const none = full.find((r) => r.customerId === null);
     check("⭐ §2 Müşterisiz kovası AYRI SATIR olarak dönüyor", !!none);
     check("§2 Müşterisiz satırı İLK sırada", full[0]?.customerId === null, full[0]?.name);
@@ -93,11 +104,11 @@ async function main() {
     check("§2 Müşterisiz satırın adı Türkçe ve açık", none?.name === "Müşterisiz (genel stok)", none?.name);
 
     // ── §3 Arama ───────────────────────────────────────────────────────────
-    const searched = (await svc.listSackCustomers({ search: `ZZKAPI ALFA ${ts}` })).data;
+    const searched = (await svc.listSackCustomers({ search: `ZZKAPI ALFA ${ts}`, withSacksOnly: true })).data.items;
     check("§3 Arama cariye vuruyor", searched.some((r) => r.customerId === cA.id), `${searched.length} satır`);
     check("§3 Arama diğer cariyi eliyor", !searched.some((r) => r.customerId === cB.id));
     check("⭐ §3 Arama varken müşterisiz satır DÖNMEZ (adı yok, eşleşmiyor)", !searched.some((r) => r.customerId === null));
-    const byCode = (await svc.listSackCustomers({ search: `TST-GATE-B-${ts}` })).data;
+    const byCode = (await svc.listSackCustomers({ search: `TST-GATE-B-${ts}`, withSacksOnly: true })).data.items;
     check("§3 Arama KODA da vuruyor", byCode.some((r) => r.customerId === cB.id));
 
     // ── §4 "none" sentineli ────────────────────────────────────────────────
@@ -140,8 +151,41 @@ async function main() {
 
     // ── §7 Varsayılan kapsam DISPATCHED'i iki yüzeyde de dışlar ────────────
     check("§7 Liste sevk edilmiş çuvalı varsayılan kapsamda göstermiyor", !listA.some((r) => r.id === sacks[6]!.id));
-    const gateAll = (await svc.listSackCustomers({ scope: "ALL" })).data.find((r) => r.customerId === cA.id);
+    const gateAll = (await svc.listSackCustomers({ scope: "ALL", withSacksOnly: true })).data.items.find((r) => r.customerId === cA.id);
     check("§7 scope=ALL verilince sevk edilmiş de sayılıyor (3)", gateAll?.sackCount === 3, String(gateAll?.sackCount));
+    // ── §9 VARSAYILAN mod: TÜM cariler (2026-09-04 akşam kararı) ──────────
+    // ⚠️ Bu bölüm §1'in TERSİNİ ölçer ve bu bilinçli: §1 artık "süzgeç açıkken"
+    //    kuralıdır, §9 "süzgeç kapalıyken" (varsayılan) kuralıdır.
+    const tumu = (await svc.listSackCustomers({})).data;
+    const tumIds = new Set(tumu.items.map((r) => r.customerId));
+    check(
+      "⭐ §9a Varsayılan mod ÇUVALSIZ cariyi de döndürüyor (kapı artık katalog kapısı)",
+      tumIds.has(cC.id),
+      `${tumu.items.length} satır`,
+    );
+    check(
+      "§9b Çuvalsız cari sackCount=0 ile döner (gizlenmez — kıyaslama düğmenin sebebi)",
+      tumu.items.find((r) => r.customerId === cC.id)?.sackCount === 0,
+    );
+    check(
+      "⭐ §9c Süzgeç AÇIKKEN aynı cari DÖNMEZ (eski davranış süzgeç olarak duruyor)",
+      !(await svc.listSackCustomers({ withSacksOnly: true })).data.items.some(
+        (r) => r.customerId === cC.id,
+      ),
+    );
+    // Çuvalı olanlar ÜSTTE — 39/43 tuzağını kesme yerine SIRALAMA kapatıyor.
+    const idxDolu = tumu.items.findIndex((r) => r.customerId === cA.id);
+    const idxBos = tumu.items.findIndex((r) => r.customerId === cC.id);
+    check(
+      "⭐ §9d Çuvalı olan cari, çuvalsız cariden ÖNCE geliyor",
+      idxDolu >= 0 && idxBos >= 0 && idxDolu < idxBos,
+      `dolu=${idxDolu} boş=${idxBos}`,
+    );
+    check(
+      "§9e Yanıt sayfalı (nextCursor alanı var — sessiz kesme yok)",
+      "nextCursor" in tumu,
+    );
+
     // ── §8 Electron aynası ────────────────────────────────────────────────
     // Electron backend'i import EDEMEZ (mobil `permissions.ts` ile aynı durum):
     // sentinel değeri iki dosyada yaşar. Ayrışırsa panel "none" yerine başka bir

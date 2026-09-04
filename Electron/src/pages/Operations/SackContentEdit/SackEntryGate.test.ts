@@ -7,7 +7,8 @@
 //   §3 Kapının YERLEŞİM sözleşmesi (saha turu düzeltmeleri) — METİN TARAR:
 //      tek geri yüzeyi · sola dayalı karolar · karo içinde açıklama YOK ·
 //      ekranda yönlendirme metni YOK · adım DIŞARIDAN sürülür.
-//   §4 Cari listesi kararı KALICI: kapı cari KATALOĞU değil, "çuvalı olan cari".
+//   §4 Cari listesi kararı (2026-09-04 akşam TERSİNE ÇEVRİLDİ): VARSAYILAN tüm
+//      cariler, eski davranış bir süzgeç. Tek uç, sayfalı, sayı gizlenmez.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -112,12 +113,41 @@ describe("giriş kapısı yerleşimi — §3", () => {
 });
 
 describe("cari listesi kararı — §4", () => {
-  it("⭐ kapı 'çuvalı olan cari' ucunu çağırır — cari KATALOĞUNU değil", () => {
-    // KESİN KARAR (ölçüm: 43 aktif cariden 4'ünün depoda çuvalı var; katalog
-    // konsaydı 39 seçenek "sonuç yok" verirdi). Gerekçe dosyanın başında yazılı;
-    // bu sonda kararın sessizce geri çevrilmesini engeller.
+  // ⚠️ BU BÖLÜM 2026-09-04 AKŞAMI TERSİNE ÇEVRİLDİ. Eskiden "kapı yalnız çuvalı
+  // olan carileri gösterir" kuralını kilitliyordu; kullanıcı kararı değişti:
+  // VARSAYILAN tüm cariler, eski davranış bir SÜZGEÇ. Ölçüm (43↔4) hâlâ doğru
+  // ama sorunun kendisi yanlıştı — kapının işi "elimde kimin malı var" değil
+  // "hangi cariye çuval açacağım". Bölüm silinmedi, YENİ kuralı kilitliyor.
+
+  it("⭐ kapı TEK uçtan beslenir — cari kataloğuna İKİNCİ bir yol açılmaz", () => {
+    // İki veri yolu iki farklı liste demektir (kapı ↔ /pool ayrışmasının aynı
+    // sınıfı). Tüm cariler de aynı uçtan, `withSacksOnly` parametresiyle gelir.
     expect(gateSource).toMatch(/listSackCustomers/);
     expect(gateSource).not.toMatch(/customerService/);
-    expect(gateSource).toMatch(/GERİ ÇEVİRME/);
+  });
+
+  it("⭐ VARSAYILAN tüm cariler — süzgeç kapalı doğar", () => {
+    // `useState(false)` load-bearing: `true` doğsaydı kullanıcı kararı sessizce
+    // geri alınmış olurdu ve kimse fark etmezdi (ekran eskisi gibi görünür).
+    expect(gateSource).toMatch(/useState\(false\)/);
+    expect(gateSource).toMatch(/Yalnız çuvalı olanlar/);
+  });
+
+  it("⭐ mod SORGU ANAHTARINDA — yoksa düğme 'çalışmıyor' görünür", () => {
+    // React Query mod değişince eski cevabı gösterirdi.
+    expect(gateSource).toMatch(/queryKey:\s*\["sack-search",\s*"customers",\s*terim,\s*withSacksOnly\]/);
+  });
+
+  it("⭐ tüm cari modu SAYFALI — sessiz kesme yok", () => {
+    // Her şeyi göstermek için var olan bir modda sessiz 500-kesme, kapının
+    // kapatmak için yazıldığı "sessizce düşen satır" sınıfını geri getirirdi.
+    expect(gateSource).toMatch(/useInfiniteQuery/);
+    expect(gateSource).toMatch(/getNextPageParam/);
+  });
+
+  it("⭐ çuvalsız caride sayı GİZLENMEZ (soluk basılır)", () => {
+    // Sayıyı gizlemek modu değiştiren düğmeyi 'bozuk' gösterirdi — kıyaslama
+    // düğmenin sebebi.
+    expect(gateSource).toMatch(/sackCount > 0/);
   });
 });

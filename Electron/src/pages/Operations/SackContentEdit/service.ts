@@ -59,13 +59,25 @@ export const sackHubService = {
    * Kapsam varsayılanı liste ucuyla AYNI (POOL+PLANNED) — kapı ile liste aynı
    * sayıyı basmak zorunda.
    */
-  listSackCustomers: (params?: { search?: string; scope?: string }): Promise<ApiResponse<SackCustomerBucket[]>> => {
+  listSackCustomers: (params?: {
+    search?: string;
+    scope?: string;
+    /** true → yalnız çuvalı olan cariler. Verilmezse TÜM cariler (varsayılan). */
+    withSacksOnly?: boolean;
+    cursor?: string;
+    limit?: number;
+  }): Promise<ApiResponse<SackCustomerPage>> => {
     const q = new URLSearchParams();
     if (params?.search?.trim()) q.set("search", params.search.trim());
     if (params?.scope) q.set("scope", params.scope);
+    // ⚠️ Yalnız AÇIKKEN gönderilir. Sunucu varsayılanı "tüm cariler"; burada
+    //    koşulsuz `"0"` yazmak sözleşmeyi iki yerde tanımlar.
+    if (params?.withSacksOnly) q.set("withSacksOnly", "1");
+    if (params?.cursor) q.set("cursor", params.cursor);
+    if (params?.limit) q.set("limit", String(params.limit));
     const qs = q.toString();
     return apiClient
-      .get<ApiResponse<SackCustomerBucket[]>>(`/api/shipping/sack-search/customers${qs ? `?${qs}` : ""}`)
+      .get<ApiResponse<SackCustomerPage>>(`/api/shipping/sack-search/customers${qs ? `?${qs}` : ""}`)
       .then((r) => r.data);
   },
 

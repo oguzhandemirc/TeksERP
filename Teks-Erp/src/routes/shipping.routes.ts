@@ -160,19 +160,25 @@ router.get("/sack-search", verifyToken, READ, controller.searchSacks);
  * /api/shipping/sack-search/customers:
  *   get:
  *     tags: [Shipping]
- *     summary: Cari kapısı — kapsamda çuvalı OLAN cariler + çuval adedi
+ *     summary: Cari kapısı — TÜM cariler (varsayılan) veya yalnız çuvalı olanlar
  *     description: >
  *       Paketleme/Çuvallar ekranının giriş adımı ("Tüm Çuvallar / Cariye Göre").
- *       Cari KATALOĞUNU değil, bugün elinde çuval OLAN carileri döner.
+ *       VARSAYILAN tüm aktif carileri döner (çuvalı olanlar ÜSTTE, `sackCount desc`
+ *       sonra ad); `withSacksOnly=1` eski davranışı süzgeç olarak verir.
  *       `customerId: null` satırı = müşterisiz (genel stok) kovası ve İLK sırada
  *       gelir (arama terimi verilirse dönmez). Kapsam varsayılanı `/sack-search`
  *       ile aynıdır (POOL+PLANNED). Salt-okunur, metraj/top adedi DÖNMEZ.
+ *       Tüm cari modunda yanıt SAYFALIDIR (`nextCursor`); `withSacksOnly` modunda
+ *       ilk 500 ile kesilir ve `warnings` döner.
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - { in: query, name: scope, schema: { type: string, enum: [POOL, PLANNED, DISPATCHED, ALL] } }
  *       - { in: query, name: search, schema: { type: string } }
+ *       - { in: query, name: withSacksOnly, schema: { type: string, enum: ["0", "1"] } }
+ *       - { in: query, name: cursor, schema: { type: string } }
+ *       - { in: query, name: limit, schema: { type: integer, minimum: 1, maximum: 200 } }
  *     responses:
- *       200: { description: "customerId/name/code/sackCount listesi" }
+ *       200: { description: "{ items: [{customerId,name,code,sackCount}], nextCursor }" }
  */
 router.get("/sack-search/customers", verifyToken, READ, controller.listSackCustomers);
 router.post("/sack-search/pick-list", verifyToken, READ, controller.getPickList);

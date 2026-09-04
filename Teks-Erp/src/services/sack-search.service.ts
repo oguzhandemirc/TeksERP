@@ -207,6 +207,30 @@ export interface SackCustomerBucket {
   sackCount: number;
 }
 
+/**
+ * Cari kapısının sayfalı yanıtı.
+ *
+ * ⚠️ "Tüm cariler" modu KESİLMEZ, SAYFALANIR (2026-09-04 kullanıcı kararı).
+ * Her şeyi göstermek için var olan bir modda sessiz 500-kesme, bu kapının
+ * kapatmak için yazıldığı "sessizce düşen satır" sınıfını geri getirirdi.
+ */
+/**
+ * Kova sırası: çuvalı OLANLAR üstte, sonra ad (tr).
+ *
+ * ⚠️ "Tüm cariler" isteğini karşılarken ölçülen 39/43 "sonuç yok" tuzağını
+ * kapatan şey budur — aradığı cari zaten üstte. Ad karşılaştırması `tr` locale
+ * ile: `localeCompare`siz sıralama İ/ı harflerini yanlış yere koyar.
+ */
+function siralaBucket(a: SackCustomerBucket, b: SackCustomerBucket): number {
+  if (a.sackCount !== b.sackCount) return b.sackCount - a.sackCount;
+  return a.name.localeCompare(b.name, "tr");
+}
+
+export interface SackCustomerPage {
+  items: SackCustomerBucket[];
+  nextCursor: string | null;
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -422,89 +446,150 @@ export class SackSearchService {
   }
 
   /**
-   * Cari kapısı — kapsamda çuvalı OLAN carilerin listesi + çuval adedi.
+   * Cari kapısı — İKİ MOD.
    *
    * Saha isteği (2026-09-04): *"sevkiyat ekranına girerken önüme iki kutucuk
    * gelsin — tüm çuvallar / tüm cariler; cariyi seçince o carinin çuvalları
    * listelensin."*
    *
-   * ⚠️ NEDEN AYRI UÇ (ölçüldü, tekserp_demo 2026-09-04): fabrikada **43 aktif
-   * cari** var ama depoda çuvalı olan **4** cari. Var olan `multi-lookup` müşteri
-   * süzgeci cari KATALOĞUNU listeler → operatör 43 adın içinden seçer, 39'u
-   * "sonuç yok" verir. Kapının işi katalog göstermek değil, "bugün elimde kimin
-   * malı var" sorusunu cevaplamak.
+   * ⚠️ VARSAYILAN "TÜM CARİLER" — 2026-09-04 KULLANICI KARARI, GERİ ÇEVİRME.
+   * Bu uç ilk yazıldığında YALNIZ çuvalı olan carileri döndürüyordu ve gerekçesi
+   * şu ölçümdü: 43 aktif cariden yalnız 4'ünün depoda çuvalı var, kalan 39 "sonuç
+   * yok" verirdi. Ölçüm doğruydu ama SORU yanlıştı: kapının işi "bugün elimde
+   * kimin malı var" değil, **"hangi cariye çuval açacağım"**. Yeni bir cariye ilk
+   * çuvalı açacak personel onu listede bulamıyordu — özelliğin var oluş sebebi de
+   * tam olarak "seçtiğin caride sürekli ve kolay çuval açabilmek"ti.
+   * Eski davranış `withSacksOnly=true` ile SÜZGEÇ olarak duruyor.
    *
-   * ⚠️ MÜŞTERİSİZ KOVASI SATIR OLARAK DÖNER (`customerId: null`) — aynı ölçümde
+   * ⚠️ ÇUVALI OLANLAR ÜSTTE. Kesme yerine sıralama: `sackCount desc`, sonra ad
+   * (tr). Böylece "tüm cariler" isteği karşılanırken 39/43 "sonuç yok" tuzağı da
+   * kapanır — aradığı cari zaten üstte.
+   *
+   * ⚠️ ROZET HER İKİ MODDA. Çuvalsız cari `sackCount: 0` alır. Sayıyı o modda
+   * gizlemek, modu değiştiren düğmeyi "bozuk" gösterirdi — kıyaslama düğmenin
+   * sebebi.
+   *
+   * ⚠️ TAVANLAR AYRI: `withSacksOnly` modunda küme yapı gereği küçük →
+   * `MAX_SACK_CUSTOMERS` kesmesi korunur. Tüm cari modunda KESME YOK, sayfalama
+   * var (`cursor` + `limit`).
+   *
+   * ⚠️ MÜŞTERİSİZ KOVASI SATIR OLARAK DÖNER (`customerId: null`) — ölçümde
    * depodaki 9 çuvalın 4'ü müşterisizdi. Cari listesinde adı olmadığı için
-   * "sessizce" düşmesi en olası satırdır; `sackCount` ile birlikte İLK sırada
-   * döner. Arama terimi verilince DÖNMEZ: "ali" araması "Müşterisiz" satırı
-   * göstermez (adı yok, eşleşmiyor).
+   * "sessizce" düşmesi en olası satırdır; İLK sırada döner. Arama terimi
+   * verilince DÖNMEZ (adı yok, eşleşmiyor).
    *
-   * ⚠️ METRAJ/TOP ADEDİ BİLEREK YOK: çuvaldaki "fiziksel olarak var" kümesi
-   * `SACK_ABSENT_STATUSES` ile süzülür (hayalet top) ve o kuralı burada İKİNCİ
-   * kez uygulamak, listeden/etiketten/irsaliyeden farklı bir dördüncü rakam
-   * üretme riski demektir. Kapı yalnız ÇUVAL SAYAR.
+   * ⚠️ METRAJ/TOP ADEDİ BİLEREK YOK: hayalet-top yüklemini burada İKİNCİ kez
+   * uygulamak listeden/etiketten/irsaliyeden farklı DÖRDÜNCÜ bir rakam üretme
+   * riski demektir. Kapı yalnız ÇUVAL SAYAR.
    *
    * Salt-okunur; yazma/audit yok.
    */
   async listSackCustomers(params: {
     scope?: SackSearchScope;
     search?: string;
-  }): Promise<ApiResponse<SackCustomerBucket[]>> {
-    const andClauses: Prisma.SackWhereInput[] = [{ OR: resolveScopeOr(params.scope) }];
+    /** true → yalnız kapsamda çuvalı olan cariler (eski davranış). */
+    withSacksOnly?: boolean;
+    /** Yalnız "tüm cariler" modunda anlamlı. */
+    cursor?: string;
+    limit?: number;
+  }): Promise<ApiResponse<SackCustomerPage>> {
     const search = params.search?.trim();
+
+    // ── Çuval sayıları: iki modda da AYNI sorgudan gelir ─────────────────────
+    // Ayrı hesaplasaydık iki mod iki farklı rakam üretirdi (kapı ↔ /pool
+    // ayrışmasının aynı sınıfı).
+    const sackAnd: Prisma.SackWhereInput[] = [{ OR: resolveScopeOr(params.scope) }];
     if (search) {
-      andClauses.push({
+      sackAnd.push({
         OR: buildTextSearch<Prisma.SackWhereInput>(search, {
           text: ["customer.name"],
           code: ["customer.code"],
         }),
       });
     }
-    const where: Prisma.SackWhereInput = { AND: andClauses };
-
     const groups = await prisma.sack.groupBy({
       by: ["customerId"],
-      where,
+      where: { AND: sackAnd },
       _count: { _all: true },
     });
-
-    const ids = groups.map((g) => g.customerId).filter((v): v is string => v !== null);
-    // Tombstone (birleştirilmiş cari) SÜZÜLMEZ: çuval hâlâ o satırı gösteriyorsa
-    // operatörün onu bulması gerekir. Süzmek satırı yine sessizce yutardı.
-    const customers = ids.length
-      ? await prisma.customer.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, code: true } })
-      : [];
-    const byId = new Map(customers.map((c) => [c.id, c]));
-
-    const named: SackCustomerBucket[] = [];
+    const sayac = new Map<string, number>();
     let customerless: SackCustomerBucket | null = null;
     for (const g of groups) {
-      const count = g._count._all;
       if (g.customerId === null) {
-        // Arama terimi varken müşterisiz kovası gösterilmez (ada göre arıyoruz).
-        if (!search) customerless = { customerId: null, name: "Müşterisiz (genel stok)", code: null, sackCount: count };
+        if (!search) {
+          customerless = { customerId: null, name: "Müşterisiz (genel stok)", code: null, sackCount: g._count._all };
+        }
         continue;
       }
-      const c = byId.get(g.customerId);
-      named.push({
-        customerId: g.customerId,
-        // FK var ama kayıt okunamadıysa (yarış/silinme) satır YİNE döner — id ile.
-        name: c?.name ?? "(bilinmeyen cari)",
-        code: c?.code ?? null,
-        sackCount: count,
-      });
+      sayac.set(g.customerId, g._count._all);
     }
-    named.sort((a, b) => a.name.localeCompare(b.name, "tr"));
 
-    const truncated = named.length > MAX_SACK_CUSTOMERS;
-    const data = [...(customerless ? [customerless] : []), ...named.slice(0, MAX_SACK_CUSTOMERS)];
+    // ── MOD 1: yalnız çuvalı olanlar (eski davranış, kesmeli) ────────────────
+    if (params.withSacksOnly === true) {
+      const ids = [...sayac.keys()];
+      // Tombstone (birleştirilmiş cari) SÜZÜLMEZ: çuval hâlâ o satırı
+      // gösteriyorsa operatörün onu bulması gerekir.
+      const customers = ids.length
+        ? await prisma.customer.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, code: true } })
+        : [];
+      const byId = new Map(customers.map((c) => [c.id, c]));
+      const named: SackCustomerBucket[] = ids.map((id) => ({
+        customerId: id,
+        // FK var ama kayıt okunamadıysa (yarış/silinme) satır YİNE döner — id ile.
+        name: byId.get(id)?.name ?? "(bilinmeyen cari)",
+        code: byId.get(id)?.code ?? null,
+        sackCount: sayac.get(id) ?? 0,
+      }));
+      named.sort(siralaBucket);
+      const truncated = named.length > MAX_SACK_CUSTOMERS;
+      return {
+        success: true,
+        data: {
+          items: [...(customerless ? [customerless] : []), ...named.slice(0, MAX_SACK_CUSTOMERS)],
+          nextCursor: null,
+        },
+        ...(truncated
+          ? { warnings: [`Çok fazla cari var — ilk ${MAX_SACK_CUSTOMERS} tanesi gösteriliyor. Arama kutusuyla daraltın.`] }
+          : {}),
+      };
+    }
+
+    // ── MOD 2: TÜM cariler (varsayılan) — kesme yok, sayfalama var ───────────
+    // ⚠️ Sıralama İKİ AŞAMALI ve bu bilinçli: DB'den ada göre (deterministik,
+    // cursor'la uyumlu) çekilir, çuvalı olanlar sayfa İÇİNDE öne alınır. Çuval
+    // sayısına göre DB sıralaması yapılamaz — sayı `sacks` tablosundan, liste
+    // `customers` tablosundan geliyor ve tek sorguda ifade edilemez. Bu yüzden
+    // "çuvalı olanlar üstte" garantisi SAYFA içindir; aranan cari zaten aramayla
+    // bulunur.
+    const limit = Math.min(Math.max(params.limit ?? 100, 1), 200);
+    const customers = await prisma.customer.findMany({
+      where: {
+        isActive: true,
+        ...(search
+          ? { OR: buildTextSearch<Prisma.CustomerWhereInput>(search, { text: ["name"], code: ["code", "taxNumber"] }) }
+          : {}),
+        ...(params.cursor ? { name: { gt: params.cursor } } : {}),
+      },
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+      take: limit + 1,
+    });
+    const hasMore = customers.length > limit;
+    const sayfa = hasMore ? customers.slice(0, limit) : customers;
+    const items: SackCustomerBucket[] = sayfa.map((c) => ({
+      customerId: c.id,
+      name: c.name,
+      code: c.code,
+      sackCount: sayac.get(c.id) ?? 0,
+    }));
+    items.sort(siralaBucket);
+
     return {
       success: true,
-      data,
-      ...(truncated
-        ? { warnings: [`Çok fazla cari var — ilk ${MAX_SACK_CUSTOMERS} tanesi gösteriliyor. Arama kutusuyla daraltın.`] }
-        : {}),
+      data: {
+        items: [...(customerless ? [customerless] : []), ...items],
+        nextCursor: hasMore ? (sayfa[sayfa.length - 1]?.name ?? null) : null,
+      },
     };
   }
 

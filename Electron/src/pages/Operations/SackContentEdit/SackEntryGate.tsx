@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { ArrowRight, Loader2, PackageOpen, Search, UserRound, Users } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { staggerContainer, staggerItem, springSnappy } from "@/lib/motion";
@@ -15,12 +17,16 @@ import { CUSTOMERLESS_FILTER_VALUE, type SackCustomerBucket } from "./types";
  * *"sevkiyat ekranına girerken önüme iki kutucuk gelsin — tüm çuvallar / tüm
  * cariler; cariyi seçince o carinin çuvalları listelensin."*
  *
- * ⚠️ KAPI CARİ KATALOĞU DEĞİL, "elimde kimin malı var" LİSTESİDİR — uç
- * `GET /sack-search/customers` yalnız kapsamda ÇUVALI OLAN carileri döner
- * (ölçüm 2026-09-04: 43 aktif cari ↔ 4'ünün depoda çuvalı var).
- * ⚠️ BU KARARI GERİ ÇEVİRME: tüm cari kataloğu konsaydı listedeki 39 seçenek
- * "sonuç yok" verirdi — kapı soruyu cevaplamak yerine bir arama işi doğururdu.
- * Katalogtan seçme ihtiyacı olan kullanıcı listedeki "Müşteri" süzgecini kullanır.
+ * ⚠️ KAPI TÜM CARİLERİ GÖSTERİR — 2026-09-04 (akşam) KULLANICI KARARI.
+ * İlk yazımda yalnız kapsamda ÇUVALI OLAN cariler dönüyordu ve gerekçe şu
+ * ölçümdü: 43 aktif cariden yalnız 4'ünün depoda çuvalı var, kalan 39 "sonuç
+ * yok" verirdi. **Ölçüm doğruydu ama SORU yanlıştı**: kapının işi "bugün elimde
+ * kimin malı var" değil, *"hangi cariye çuval açacağım"*. Yeni bir cariye ilk
+ * çuvalı açacak personel onu listede bulamıyordu — oysa özelliğin var oluş
+ * sebebi "seçtiğin caride sürekli ve kolay çuval açabilmek"ti.
+ * Eski davranış kaybolmadı: üstteki **"Yalnız çuvalı olanlar"** anahtarı.
+ * ⚠️ 39/43 tuzağı sıralamayla kapatıldı, kesmeyle değil: çuvalı olanlar ÜSTTE
+ * (`sackCount desc`, sonra ad) — aradığı cari zaten ilk sıralarda.
  *
  * ⚠️ MÜŞTERİSİZ ÇUVALLAR KAYBOLMAZ: `Sack.customerId` opsiyoneldir ve aynı
  * ölçümde depodaki 9 çuvalın 4'ü müşterisizdi. Bu küme listenin BAŞINDA kendi
@@ -116,22 +122,39 @@ function GateCard({
 
 function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void }) {
   const [search, setSearch] = useState("");
+  // Varsayılan KAPALI = tüm cariler (2026-09-04 kullanıcı kararı).
+  const [withSacksOnly, setWithSacksOnly] = useState(false);
   // Arama SUNUCUDA (liste ekranıyla aynı kural) — istemci süzmesi Türkçe
   // katlamada sessizce yanlış "sonuç yok" üretir.
   const debounced = useDebouncedValue(search, 300);
-  const q = useQuery({
-    queryKey: ["sack-search", "customers", debounced.trim()],
-    queryFn: () => sackHubService.listSackCustomers({ search: debounced.trim() || undefined }),
+  const terim = debounced.trim();
+
+  // ⚠️ `withSacksOnly` SORGU ANAHTARINDA: yoksa mod değiştiğinde React Query
+  // eski cevabı gösterir ve düğme "çalışmıyor" sanılır.
+  const q = useInfiniteQuery({
+    queryKey: ["sack-search", "customers", terim, withSacksOnly],
+    queryFn: ({ pageParam }) =>
+      sackHubService.listSackCustomers({
+        search: terim || undefined,
+        withSacksOnly: withSacksOnly || undefined,
+        cursor: pageParam as string | undefined,
+      }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (last) => last.data?.nextCursor ?? undefined,
     placeholderData: keepPreviousData,
     staleTime: 30_000,
   });
-  const rows = useMemo(() => q.data?.data ?? [], [q.data]);
-  const warning = q.data?.warnings?.[0];
+
+  const rows = useMemo(
+    () => (q.data?.pages ?? []).flatMap((s) => s.data?.items ?? []),
+    [q.data],
+  );
+  const warning = q.data?.pages?.[0]?.warnings?.[0];
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-6">
       {/* Geri YOK — sayfa başlığındaki ok bir adım geri alır (tek geri yüzeyi). */}
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex items-center gap-3">
         <div className="relative w-72">
           <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -142,6 +165,15 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
             autoFocus
           />
         </div>
+        {/* Eski davranış bir SÜZGEÇ olarak duruyor; varsayılan kapalı. */}
+        <label className="flex cursor-pointer select-none items-center gap-2 text-sm text-muted-foreground">
+          <Checkbox
+            checked={withSacksOnly}
+            onCheckedChange={(v) => setWithSacksOnly(v === true)}
+            aria-label="Yalnız çuvalı olan cariler"
+          />
+          Yalnız çuvalı olanlar
+        </label>
         {q.isFetching && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
       </div>
 
@@ -158,31 +190,66 @@ function CustomerStep({ onPick }: { onPick: (bucket: SackCustomerBucket) => void
           </div>
         ) : rows.length === 0 ? (
           <div className="p-6 text-sm text-muted-foreground">
-            {search.trim()
-              ? "Bu aramaya uyan, çuvalı olan cari yok."
-              : "Depoda çuvalı olan cari yok. 'Tüm Çuvallar' ile devam edebilirsiniz."}
+            {terim
+              ? withSacksOnly
+                ? "Bu aramaya uyan, çuvalı olan cari yok. Süzgeci kapatıp tekrar deneyin."
+                : "Bu aramaya uyan cari yok."
+              : withSacksOnly
+                ? "Depoda çuvalı olan cari yok. Süzgeci kapatıp tüm carileri görebilirsiniz."
+                : "Kayıtlı cari yok."}
           </div>
         ) : (
-          <ul className="divide-y">
-            {rows.map((r) => (
-              <li key={r.customerId ?? "__none__"}>
-                <button
+          <>
+            <ul className="divide-y">
+              {rows.map((r) => (
+                <li key={r.customerId ?? "__none__"}>
+                  <button
+                    type="button"
+                    onClick={() => onPick(r)}
+                    className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-accent/50"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <UserRound
+                        className={cn("h-4 w-4 shrink-0", r.customerId ? "text-muted-foreground" : "text-amber-600")}
+                      />
+                      <span className="truncate font-medium">{r.name}</span>
+                      {r.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{r.code}</span>}
+                    </span>
+                    {/* Çuvalsız cari SOLUK `0 çuval` — sayıyı gizlemek modu
+                        değiştiren düğmeyi "bozuk" gösterirdi; kıyaslama sebebi. */}
+                    <span
+                      className={cn(
+                        "shrink-0 text-xs",
+                        r.sackCount > 0 ? "text-muted-foreground" : "text-muted-foreground/50",
+                      )}
+                    >
+                      {r.sackCount} çuval
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+            {q.hasNextPage && (
+              <div className="p-3">
+                <Button
                   type="button"
-                  onClick={() => onPick(r)}
-                  className="flex w-full items-center justify-between gap-3 px-4 py-2.5 text-left text-sm hover:bg-accent/50"
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={q.isFetchingNextPage}
+                  onClick={() => void q.fetchNextPage()}
                 >
-                  <span className="flex min-w-0 items-center gap-2">
-                    <UserRound
-                      className={cn("h-4 w-4 shrink-0", r.customerId ? "text-muted-foreground" : "text-amber-600")}
-                    />
-                    <span className="truncate font-medium">{r.name}</span>
-                    {r.code && <span className="shrink-0 font-mono text-xs text-muted-foreground">{r.code}</span>}
-                  </span>
-                  <span className="shrink-0 text-xs text-muted-foreground">{r.sackCount} çuval</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                  {q.isFetchingNextPage ? (
+                    <>
+                      <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" /> Yükleniyor…
+                    </>
+                  ) : (
+                    "Daha fazla göster"
+                  )}
+                </Button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

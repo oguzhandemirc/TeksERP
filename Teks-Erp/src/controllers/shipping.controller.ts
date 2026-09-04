@@ -635,6 +635,9 @@ export class ShippingController {
    * GET /api/shipping/sack-search/customers — cari kapısı (Paketleme/Çuvallar
    * ekranının giriş adımı). Kapsam varsayılanı `searchSacks` ile AYNI kaynaktan
    * (POOL+PLANNED) gelir; ayrışırsa kapı ile liste farklı sayı basar.
+   *
+   * ⚠️ `withSacksOnly=1` → yalnız çuvalı olan cariler (eski davranış, kesmeli).
+   *    Verilmezse TÜM cariler döner, sayfalı (`cursor` + `limit`).
    */
   listSackCustomers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
@@ -642,9 +645,18 @@ export class ShippingController {
       const scope = (["POOL", "PLANNED", "DISPATCHED", "ALL"] as const).includes(scopeRaw as SackSearchScope)
         ? (scopeRaw as SackSearchScope)
         : undefined;
+      // ⚠️ ÜÇ DEĞERLİ DEĞİL, İKİ: bayrak yalnız "1"/"true" ile AÇILIR. Varsayılan
+      //    TÜM CARİLER (2026-09-04 kullanıcı kararı) — `!== "0"` yazımı, parametre
+      //    hiç gelmediğinde eski davranışı geri getirirdi.
+      const bayrak = req.query.withSacksOnly;
+      const withSacksOnly = bayrak === "1" || bayrak === "true";
+      const limitRaw = Number(req.query.limit);
       const result = await sackSearchService.listSackCustomers({
         scope,
         search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
+        withSacksOnly,
+        cursor: typeof req.query.cursor === "string" ? req.query.cursor : undefined,
+        limit: Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : undefined,
       });
       res.status(200).json(result);
     } catch (e) { next(e); }
