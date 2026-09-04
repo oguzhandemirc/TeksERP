@@ -22,7 +22,7 @@ export function UserFootprintHeaderCard({ user }: { user: AdminUserDetail }) {
           {user.isActive ? <Badge>Aktif</Badge> : <Badge variant="muted">Pasif</Badge>}
           <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
             <ShieldCheck className="h-3.5 w-3.5" />
-            {user._count.permissions} yetki
+            {user.isSystemAccount ? "Tüm yetkiler" : `${user._count.permissions} yetki`}
           </span>
         </div>
 

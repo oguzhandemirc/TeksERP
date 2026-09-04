@@ -8,6 +8,12 @@ export interface AdminUserListItem {
   fullName: string;
   isActive: boolean;
   createdAt: string;
+  /**
+   * En yetkili hesap mı (2026-09-04). Bu hesabın HİÇ `UserPermission` satırı
+   * YOKTUR — yetkisi sunucuda `["*"]` olarak verilir — yani `_count.permissions`
+   * onda 0 çıkar ve liste onu "0 yetki" gösterirdi. Rozet bu alandan çizilir.
+   */
+  isSystemAccount?: boolean;
   _count: { permissions: number };
 }
 

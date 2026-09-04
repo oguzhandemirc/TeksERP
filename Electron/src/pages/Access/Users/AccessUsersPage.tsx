@@ -36,7 +36,13 @@ const USER_EXPORT_COLUMNS: ExportColumn<AdminUserListItem>[] = [
   { label: "Kullanıcı Adı", value: (u) => u.username },
   { label: "Ad Soyad", value: (u) => u.fullName },
   { label: "Durum", value: (u) => (u.isActive ? "Aktif" : "Pasif") },
-  { label: "Yetki Sayısı", value: (u) => u._count.permissions, summable: true },
+  {
+    label: "Yetki Sayısı",
+    // En yetkili hesapta sayı 0'dır (yetki grant satırı olarak yazılmaz) — dışa
+    // aktarımda ham 0 basmak "yetkisiz" yalanı olurdu.
+    value: (u) => (u.isSystemAccount ? "Tüm yetkiler" : u._count.permissions),
+    summable: true,
+  },
   { label: "Oluşturma", value: (u) => safeFormat(u.createdAt, "dd.MM.yyyy HH:mm") },
 ];
 
@@ -240,8 +246,16 @@ export function AccessUsersPage() {
                   <TableCell className="font-mono text-xs">{user.username}</TableCell>
                   <TableCell>{user.fullName}</TableCell>
                   <TableCell>
-                    <Badge variant={user._count.permissions === 0 ? "secondary" : "muted"}>
-                      {user._count.permissions} yetki
+                    <Badge
+                      variant={
+                        user.isSystemAccount
+                          ? "default"
+                          : user._count.permissions === 0
+                            ? "secondary"
+                            : "muted"
+                      }
+                    >
+                      {user.isSystemAccount ? "Tüm yetkiler" : `${user._count.permissions} yetki`}
                     </Badge>
                   </TableCell>
                   <TableCell>

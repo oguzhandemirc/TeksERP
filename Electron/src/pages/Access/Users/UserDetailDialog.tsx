@@ -91,7 +91,7 @@ export function UserDetailDialog({ user, open, onOpenChange, initialTab = "permi
             <DialogDescription>
               <span className="font-mono">{user?.username}</span>
               {" · "}
-              {user?._count?.permissions ?? 0} yetki
+              {user?.isSystemAccount ? "Tüm yetkiler" : `${user?._count?.permissions ?? 0} yetki`}
             </DialogDescription>
           </div>
         </DialogHeader>
