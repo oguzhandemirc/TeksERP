@@ -16,6 +16,51 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04d",
+      "baslik": "Paketlemede filtre ve tek tuşla sevk, cihaz onayı düzeltmesi",
+      "surumler": {
+        "panel": "1.2.4",
+        "tablet": "1.0.3"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Paketleme listesine detaylı filtreler geldi: şube, tartı durumu, dolu/boş, not ve tarih aralığı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çuvalın içindeyken \"Sevk Et\" ile o çuval doğrudan sevk edilebiliyor; listeye geri dönmek gerekmiyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevkiyat kurma penceresine arama eklendi: cari ve sipariş arayarak bulunuyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Üst çubuğa güncelleme denetleme düğmesi eklendi; program ayrıca 15 dakikada bir kendisi kontrol ediyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Paketleme giriş ekranı sadeleşti ve fazladan duran ikinci geri tuşu kaldırıldı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Kapalı olan bir modülün ayarları Özellik Anahtarları'nda artık hiç görünmüyor."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "duzeltme",
+          "metin": "Cihaz onayı kapalıyken yeni tabletler yine \"onay bekleniyor\" ekranında kalıyordu. Artık beklemeden giriyor; makine ve yazıcı ataması da doğru çalışıyor."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04c",
       "baslik": "Sistem menüsü sadeleşti, paketlemede cari seçimi",
       "surumler": {
