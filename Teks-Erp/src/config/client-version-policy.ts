@@ -88,7 +88,7 @@ export interface ClientVersionPolicy {
  */
 export const ELECTRON_VERSION_POLICY: ClientVersionPolicy = {
   minVersion: "1.0.0",
-  currentVersion: "1.0.0",
+  currentVersion: "1.2.6",
 };
 
 /**
@@ -145,7 +145,7 @@ export const WEB_VERSION_POLICY: ClientVersionPolicy = {
  */
 export const MOBIL_VERSION_POLICY: ClientVersionPolicy = {
   minVersion: "1.0.0",
-  currentVersion: "1.0.0",
+  currentVersion: "1.0.5",
 };
 
 /**
