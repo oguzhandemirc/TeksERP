@@ -470,6 +470,7 @@ model User {
   directShipments            DirectShipment[]         @relation("DirectShipmentShippedBy")
   invoicedDirectShipments    DirectShipment[]         @relation("DirectShipmentInvoicedBy")
   weighedSacks               Sack[]                   @relation("SackWeighedBy")
+  sackTagAssignments         SackTagAssignment[]      @relation("SackTagAssignmentCreatedBy")
   swatchStockReductions      SwatchStockReduction[]   @relation("SwatchStockReductionCreatedBy")
   kursunBypassAssigned       KursunBypassAssignment[] @relation("KursunBypassAssignedBy")
   kursunBypassCompleted      KursunBypassAssignment[] @relation("KursunBypassCompletedBy")
@@ -4535,6 +4536,7 @@ model Sack {
   swatches           Swatch[] // Bu çuvaldaki kartelalar (içerik)
   allocations        SackAllocation[] // Sevkte yazılan sipariş-satırı tahsisi (hangi çuval → hangi satır)
   warehouseMovements WarehouseMovement[] // Çuval-bütün transfer izleri
+  tags               SackTagAssignment[] // Çuval izleri (annotation — bkz. SackTag)
 
   createdAt DateTime @default(now()) @db.Timestamptz
   updatedAt DateTime @updatedAt @db.Timestamptz
@@ -4554,6 +4556,102 @@ model Sack {
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([sackNo(ops: raw("gin_trgm_ops"))], map: "sacks_sackNo_trgm_idx", type: Gin)
   @@map("sacks")
+}
+
+// =============================================================================
+// ÇUVAL İZLERİ (ETİKET) — `SackTag` katalog + `SackTagAssignment` bağ (2026-09-04)
+// =============================================================================
+// Saha isteği: paketlemeci "buna sonra bir şey daha ekleyeceğim" / "bunu kontrol
+// edeceğim" demek istiyor. macOS Finder etiketleri gibi: nesnenin KENDİSİNİ
+// değiştirmeyen, yalnız iz bırakan bir işaret.
+//
+// ⚠️ İZ NE ÖLÇÜM NE İÇERİKTİR — `Sack.notes` (çuval yorumu) ile AYNI SINIF
+// (annotation). Bunun üç bağlayıcı sonucu var ve üçü de `sack-tag.service.ts`
+// içinde gerekçesiyle yazılıdır: `touchWarehouseSackTx` UYGULANMAZ ·
+// `markSackContentChangedTx` ÇAĞRILMAZ (o fonksiyon `weightKg`i SIFIRLAR) ·
+// `labelDirty`ye DOKUNULMAZ (iz fiziksel çuval etiketine BASILMIYOR).
+//
+// ⚠️ BAĞ TABLOSU, JSON DEĞİL: JSON "kimin bıraktığı" künyesini satır başına
+// taşıyamaz ve "etikete göre süz" sorgusunu indeksleyemez. Ev emsali:
+// `FabricProperty` katalog + `RollProperty` pivot.
+// =============================================================================
+
+/// Çuval izi KATALOĞU — panelden yönetilir ("Kontrol Et", "Eksik", "Bekliyor"…).
+model SackTag {
+  id String @id @default(uuid()) @db.Uuid
+  /// Rapor/entegrasyon anahtarı — addan türetilir, sonradan DEĞİŞMEZ
+  /// (`ReasonPreset.code` ile aynı gerekçe: adı düzelten operatör geçmiş
+  /// kırılımı ikiye bölmesin).
+  code String @unique @db.VarChar(64)
+  name String @db.VarChar(60)
+
+  /// Rozet rengi — `#RRGGBB`.
+  ///
+  /// ⚠️ KENDİ KOLONU, `Color` FK'sı DEĞİL (2026-09-04 kararı). `Color` BOYAHANE
+  /// kataloğudur; rafa yapıştırılan bir işaret oraya satır ekleseydi mükerrer
+  /// tespiti (`duplicate-detection.service`) bir boyayla bir post-it'i
+  /// birleştirmeyi önerirdi. "Hazır renkler" bir UI sabitidir, veri değil.
+  hex String @db.VarChar(9)
+
+  /// Listedeki sıra — en sık kullanılan üstte.
+  sortOrder Int @default(0)
+  /// false → listede ÇİZİLMEZ ama MEVCUT ATAMALAR DURUR (pasif etiket rozeti
+  /// soluk görünür, yeni atamaya kapalıdır). Katalogdan çıkarmanın yolu budur.
+  isActive Boolean @default(true)
+
+  assignments SackTagAssignment[]
+
+  createdById String? @db.Uuid
+  updatedById String? @db.Uuid
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // Ekran sorgusu: "aktif satırlar, sırasıyla" (eşitlik önce).
+  @@index([isActive, sortOrder])
+  @@map("sack_tags")
+}
+
+/// Çuval ↔ iz bağı. M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu).
+model SackTagAssignment {
+  id     String @id @default(uuid()) @db.Uuid
+  sackId String @db.Uuid
+  tagId  String @db.Uuid
+
+  /// İzi kim bıraktı — görünürlük ORTAK, künye kalıcı (kullanıcı kararı).
+  createdById String? @db.Uuid
+
+  /// SEVKTE TEMİZLİK — SOFT damga (2026-09-04). Sert silme, stornonun kendi
+  /// sözleşmesini ("mal HİÇ ÇIKMADI") sessizce bozardı: geri alınan sevkiyatta
+  /// çuval havuza döner, iz yoktur, hata da yoktur. Damga `performDispatchTx`te
+  /// basılır (üç sevk yolunun ORTAK boğazı), `undoDispatch` storno dalında geri
+  /// alınır. Kullanıcı açısından davranış aynı — iz sevkte kaybolur.
+  clearedAt DateTime? @db.Timestamptz
+
+  /// TERSLEMENİN ADRESİ (`RollVariance.sourceRefId` dersi): storno yalnız
+  /// `sackId` ile silseydi/geri alsaydı sevkten SONRA bırakılmış MEŞRU izi de
+  /// süpürürdü. FK DEĞİL, düz adres kolonu — `sourceRefId` ile aynı desen.
+  clearedShipmentId String? @db.Uuid
+
+  /// ⚠️ CASCADE ZORUNLU: `removeSack` gerçek `tx.sack.delete` yapıyor
+  /// (`shipping.service.ts`). Restrict bırakılsaydı ETİKETLİ BOŞ ÇUVAL BİR DAHA
+  /// SİLİNEMEZDİ ve hata operatöre ham FK mesajı olarak çıkardı.
+  sack Sack @relation(fields: [sackId], references: [id], onDelete: Cascade)
+  /// Restrict: kullanımdaki etiket SERT silinemez (DB seddi). Uygulama katmanı
+  /// 409'u Türkçe söyler; katalogdan çıkarma `isActive:false` iledir.
+  tag       SackTag @relation(fields: [tagId], references: [id], onDelete: Restrict)
+  createdBy User?   @relation("SackTagAssignmentCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  /// Toplu bırakma `createMany skipDuplicates` ile idempotent olsun (ağ-retry
+  /// mükerrer satır açmasın).
+  @@unique([sackId, tagId])
+  @@index([tagId])
+  /// "Etkin iz" yüklemi (`ACTIVE_TAG_WHERE = { clearedAt: null }`) her okuma
+  /// yüzeyinden geçer — rozet, filtre, belge.
+  @@index([clearedAt])
+  @@map("sack_tag_assignments")
 }
 
 /// Sevkiyat — çuval depo havuzundan seçilen çuvallarla kurulan "kamyon". Tek müşteri+şube.

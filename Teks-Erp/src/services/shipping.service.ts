@@ -87,6 +87,10 @@ import {
   sackBlockMessage,
 } from "./helpers/sack-invariants.helper";
 import {
+  clearSackTagsOnDispatchTx,
+  restoreSackTagsOnUndoDispatchTx,
+} from "./sack-tag.service";
+import {
   D0,
   distributeSacksToLines,
   type PoolSack,
@@ -956,6 +960,13 @@ export class ShippingService {
               data: { sackId: created.id },
             })
           ).count;
+        // ⚠️ ÇUVAL İZLERİ (ETİKET) MİRAS ALINMAZ — bilinçli, "eksik" DEĞİL.
+        // İz FİZİKSEL çuvala bırakılmış bir işarettir ("bunu ayır", "kontrol et");
+        // yeni çuval BAŞKA BİR NESNEDİR ve kopyalamak talimatı sessizce İKİZLERDİ
+        // (operatör bir "kontrol et" bırakır, ekranda iki tane belirir — hangisinin
+        // gerçek iş olduğu kaybolur). Yeni çuvala iz gerekiyorsa operatör bırakır.
+        // Buraya `sackTagAssignment.createMany` EKLEME.
+        //
         // İçerik değişti → iki çuvalın da bayat kg'si düşer (irsaliyeye gitmesin)
         // + etiketleri "bayat" işaretlenir (kâğıttaki top adedi/metraj değişti).
         await this.markSackContentChangedTx(tx, [data.sackId, created.id]);
@@ -2686,6 +2697,14 @@ export class ShippingService {
     }
 
     await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: false } });
+
+    // ÇUVAL İZLERİ (ETİKET) TEMİZLENİR — sevk ANINDA, SOFT damgayla (2026-09-04).
+    // İz depodaki işi anlatır ("kontrol et", "eksik"); mal çıktıktan sonra artık
+    // hiçbir şey söylemiyor. BURASI üç sevk yolunun (onaylı · onaysız doğrudan
+    // sevk · createShipmentFromRolls) ORTAK boğazı — tek satır üçünü de kapatır.
+    // Damga `undoDispatch` storno dalında `clearedShipmentId` adresiyle geri alınır.
+    await clearSackTagsOnDispatchTx(tx, shipmentId);
+
     // SEVK ÖNCESİ STATÜ SNAPSHOT'I (2026-08-05) — tek `updateMany` ile hepsini
     // SHIPPED yapmak, geri alma (storno) için gereken "bu top hangi raftan geldi"
     // bilgisini yok ediyordu. Çuvalda `WAREHOUSE` ve `A1_STOCK` (2. kalite) toplar
@@ -3120,6 +3139,15 @@ export class ShippingService {
 
       // `isActive` şemada "sevkiyat PLANNED mı" denormudur (dispatch/cancel false yapar).
       await tx.shipmentOrder.updateMany({ where: { shipmentId }, data: { isActive: true } });
+
+      // ÇUVAL İZLERİ GERİ GELİR — sevkte SOFT temizlenmişti (2026-09-04). Storno
+      // "mal HİÇ ÇIKMADI" der; çuval havuza dönerken "kontrol et" izi de dönmeli.
+      // Adres `clearedShipmentId` (RollVariance `sourceRefId` dersi) — sevkten
+      // SONRA bırakılmış meşru izler zaten etkin, bu sorgu onlara dokunmaz.
+      // ⚠️ `releaseSacks` (kapanış) dalından ÖNCE: o dal çuvalın `shipmentId`sini
+      // boşaltır, sonraya kalsaydı kapsam kümesi değil, adres yine doğru olurdu —
+      // ama sıra okunurluk için burada sabitlendi.
+      await restoreSackTagsOnUndoDispatchTx(tx, shipmentId);
 
       // Toplar sevk ÖNCESİ rafına — `preShipStatus` yoksa (bu karardan önce sevk
       // edilmiş sevkiyat) WAREHOUSE. Statü bazında gruplu yazım; `tx` içinde

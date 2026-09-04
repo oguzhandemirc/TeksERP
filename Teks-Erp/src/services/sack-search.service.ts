@@ -19,8 +19,9 @@ import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import { decodeDynamicCursor, dynamicCursorWhere, buildNextDynamicCursor } from "../utils/cursor";
 import { isDailyCode, normalizeScanCode } from "../utils/code-format";
-import { applyDateRange, buildTextSearch } from "../utils/query-parser";
+import { applyDateRange, buildTextSearch, readFilterList, readIdCondition } from "../utils/query-parser";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
+import { ACTIVE_TAG_WHERE, ACTIVE_TAG_SELECT, toTagBadges } from "./helpers/sack-tag.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -81,6 +82,29 @@ function splitCustomerFilter(v: string | string[] | undefined): { ids: string[];
   const raw = toIdList(v).flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
   const customerless = raw.some((x) => x.toLowerCase() === CUSTOMERLESS_FILTER_VALUE);
   return { ids: raw.filter((x) => x.toLowerCase() !== CUSTOMERLESS_FILTER_VALUE), customerless };
+}
+
+/**
+ * "İzi olmayan çuvallar" süzgeç değeri — `filter[tagId]=none`.
+ *
+ * ⚠️ `CUSTOMERLESS_FILTER_VALUE` ile AYNI SINIF ve aynı tuzak: sentinel `in:`
+ * dizisine GİREMEZ (`tagId` `@db.Uuid` — düz metin P2007 üretir). Ayrı bir OR
+ * dalı olarak eklenir. Panelde `sentinelOption` ile çizilir.
+ */
+export const UNTAGGED_FILTER_VALUE = "none";
+
+/**
+ * Etiket süzgeci değerlerini ikiye ayırır: gerçek ID'ler + "izsiz" bayrağı.
+ * Aynı alan içinde VEYA korunur (`none,<uuid>` → izsiz VEYA o izi taşıyanlar).
+ *
+ * ⚠️ Değerler `readFilterList`ten geçer — CSV DE BİR STRING'DİR (2026-08-06
+ * notu): servisi doğrudan çağıran her yol (script, bekçi, dahili çağrı) ham CSV
+ * gönderebilir ve o zaman "a,b" TEK değer olarak `in:`e girip P2007 verir.
+ */
+function splitTagFilter(v: string | string[] | undefined): { ids: string[]; untagged: boolean } {
+  const raw = readFilterList(v);
+  const untagged = raw.some((x) => x.toLowerCase() === UNTAGGED_FILTER_VALUE);
+  return { ids: raw.filter((x) => x.toLowerCase() !== UNTAGGED_FILTER_VALUE), untagged };
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -155,6 +179,24 @@ export interface SackSearchParams {
    * yazılmamış topu SESSİZCE atlardı.
    */
   qualityGrade?: string | string[];
+  /**
+   * ÇUVAL İZİ (ETİKET) — bu izlerden EN AZ BİRİNİ taşıyan çuvallar.
+   *
+   * ⚠️ Çoklu seçim **VEYA** (alan içi OR standardı — kumaş/renk/kalite ile aynı):
+   * "Kontrol Et VEYA Eksik". VE semantiği (ikisini birden taşıyanlar) bilinçli
+   * YOK; iz bir işarettir, kesişimi sormak sahanın sorusu değil.
+   *
+   * ⚠️ `UNTAGGED_FILTER_VALUE` ("none") sentineli listeye karışabilir →
+   * `splitTagFilter` onu UUID listesinden AYIRIR (kolon `@db.Uuid`, düz metin
+   * P2007 üretir — `CUSTOMERLESS_FILTER_VALUE` ile birebir aynı ders).
+   *
+   * ⚠️ YALNIZ ETKİN İZ SAYILIR (`ACTIVE_TAG_WHERE`): sevkte temizlenen iz
+   * rozette de görünmez, filtrede de dönmez. İkisi TEK yüklemden geçmek
+   * zorunda — ayrışırsa liste rozet basar ama filtre o satırı döndürmez.
+   */
+  tagId?: string | string[];
+  /** İzi olan / hiç izi olmayan çuvallar (`hasNote` kardeşi). */
+  hasTag?: boolean;
   scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
@@ -231,6 +273,146 @@ export interface SackCustomerPage {
   nextCursor: string | null;
 }
 
+/**
+ * ÇUVAL LİSTESİ `where` KURUCUSU — TEK KAYNAK.
+ *
+ * `searchSacks` ile aynı süzgeçleri kullanan her yeni yüzey (özet/gruplama ucu,
+ * dışa aktarma, sayaç) BURADAN geçmek zorunda: ikinci bir kopya yazıldığı gün
+ * liste 5 satır, özet 3 satır basar ve operatör hangisinin doğru olduğunu
+ * bilemez (bu depoda adı konmuş "türetilmiş alan / ayrışan yüzey" sınıfı).
+ *
+ * `async` — kalite süzgeci katalogdan KOD çözer (`resolveQualityCodes`).
+ * Döner: `where` + `rollFilter`/`hasContentFilter` (sayfa aggregate'leri aynı
+ * içerik yüklemini KULLANMAK ZORUNDA, yoksa "eşleşen > toplam" absürtlüğü doğar).
+ */
+export async function buildSackSearchWhere(params: SackSearchParams): Promise<{
+  where: Prisma.SackWhereInput;
+  rollFilter: Prisma.RollWhereInput;
+  hasContentFilter: boolean;
+}> {
+  // İçerik (rulo düzeyi) filtresi — ürün/renk/en (en tek değer VEYA min-max aralık).
+  // Çoklu ID = alan içinde VEYA (IN); farklı alanlar arasında VE (sektör standardı).
+  const rollFilter: Prisma.RollWhereInput = {};
+  const itemIds = toIdList(params.itemId);
+  const colorIds = toIdList(params.colorId);
+  if (itemIds.length) rollFilter.itemId = { in: itemIds };
+  if (colorIds.length) rollFilter.colorId = { in: colorIds };
+  if (params.widthMin != null || params.widthMax != null) {
+    rollFilter.width = {
+      ...(params.widthMin != null ? { gte: params.widthMin } : {}),
+      ...(params.widthMax != null ? { lte: params.widthMax } : {}),
+    };
+  } else if (params.width != null) {
+    rollFilter.width = params.width;
+  }
+  // KALİTE — kod VEYA statü (bkz. `qualityGrade` param dokümanı). Bu tek alan
+  // kendi içinde OR taşıdığı için `rollFilter`a doğrudan yazılamaz; ayrı OR
+  // bloğu olarak eklenir ve diğer içerik koşullarıyla VE'lenir.
+  //
+  // ⚠️ SÜZGEÇ FK'ya DEĞİL KOD SNAPSHOT'INA bakar: canlı veride 22 topun
+  // `qualityGrade` kodu dolu ama `qualityGradeId` NULL (kolon sonradan geldi).
+  // `qualityGradeId: { in }` yazmak o topları SESSİZCE atlardı — filtre "0
+  // sonuç" değil EKSİK sonuç verirdi ki bu daha tehlikelidir.
+  const qualityCodes = await resolveQualityCodes(toIdList(params.qualityGrade));
+  if (qualityCodes.length) {
+    rollFilter.OR = [
+      { qualityGrade: { in: qualityCodes } },
+      ...(qualityCodes.includes("A1") ? [{ status: RollStatus.A1_STOCK }] : []),
+    ];
+  }
+  const hasContentFilter = Object.keys(rollFilter).length > 0;
+
+  // Kapsam: verilen scope; yoksa includeDispatched'e göre ALL, aksi POOL+PLANNED (varsayılan).
+  const scopeOr: Prisma.SackWhereInput[] = resolveScopeOr(params.scope, params.includeDispatched);
+
+  const andClauses: Prisma.SackWhereInput[] = [{ OR: scopeOr }];
+  // Müşteri süzgeci — "müşterisiz" sentineli UUID listesinden ayrışır (bkz.
+  // CUSTOMERLESS_FILTER_VALUE). İkisi birlikte gelirse tek OR dalı olur.
+  const { ids: customerIds, customerless } = splitCustomerFilter(params.customerId);
+  if (customerIds.length || customerless) {
+    const customerOr: Prisma.SackWhereInput[] = [];
+    if (customerIds.length) customerOr.push({ customerId: { in: customerIds } });
+    if (customerless) customerOr.push({ customerId: null });
+    andClauses.push({ OR: customerOr });
+  }
+  // ŞUBE — cari süzgecinin çocuğu (panelde `dependent-lookup`). Sentinel YOK:
+  // şubesiz çuval "müşterisiz" kovasının içinde zaten görünür, ikinci bir
+  // "şubesiz" sentineli aynı kümeyi iki adla anlatırdı.
+  const branchIds = toIdList(params.branchId);
+  if (branchIds.length) andClauses.push({ branchId: { in: branchIds } });
+
+  // TARTI DURUMU — `weightKg` NULL/NOT NULL. (`weighedAt` DEĞİL: eski satırlarda
+  // kg var ama tartı izi kolonları yok — o topları "tartılmamış" saymak yalan olurdu.)
+  if (params.weighed != null)
+    andClauses.push(params.weighed ? { weightKg: { not: null } } : { weightKg: null });
+
+  // NOT — `setSackNotes` boş metni NULL'a çevirdiği için tek yüklem yeterli
+  // (liste satırındaki `hasNote: !!notes` ile birebir).
+  if (params.hasNote != null)
+    andClauses.push(params.hasNote ? { notes: { not: null } } : { notes: null });
+
+  // BOŞ / DOLU — hayalet top DIŞLANIR (PRESENT_ROLL_WHERE, listedeki rollCount ile aynı yüklem).
+  if (params.empty != null) {
+    const emptyWhere: Prisma.SackWhereInput = {
+      rolls: { none: PRESENT_ROLL_WHERE },
+      swatches: { none: {} },
+    };
+    andClauses.push(params.empty ? emptyWhere : { NOT: emptyWhere });
+  }
+
+  // TARİH ARALIĞI — ortak yardımcı (allowlist dışı alan sessizce düşer; bkz. SACK_DATE_FIELDS).
+  const dateWhere: Record<string, unknown> = {};
+  applyDateRange(dateWhere, params, SACK_DATE_FIELDS);
+  if (Object.keys(dateWhere).length) andClauses.push(dateWhere as Prisma.SackWhereInput);
+
+  const shipmentNo = params.shipmentNo?.trim();
+  if (shipmentNo)
+    andClauses.push({
+      shipment: { is: { OR: buildTextSearch<Prisma.ShipmentWhereInput>(shipmentNo, { code: ["shipmentNo"] }) } },
+    });
+  const sackCode = params.sackCode?.trim();
+  if (sackCode) andClauses.push({ OR: buildTextSearch<Prisma.SackWhereInput>(sackCode, { code: ["sackNo"] }) });
+  // Serbest arama (DataTable kutusu) — sackNo / müşteri adı-kodu / sevkiyat no.
+  const search = params.search?.trim();
+  if (search) {
+    andClauses.push({
+      OR: buildTextSearch<Prisma.SackWhereInput>(search, {
+        text: ["customer.name"],
+        code: ["sackNo", "customer.code", "shipment.shipmentNo"],
+      }),
+    });
+  }
+
+  // ÇUVAL İZİ (ETİKET) — etkin izler (`ACTIVE_TAG_WHERE`). Çoklu seçim VEYA.
+  //
+  // ⚠️ ROZET ↔ FİLTRE AYRIŞMASI YASAK: liste satırındaki rozet de bu yüklemden
+  // (`ACTIVE_TAG_SELECT` → aynı `ACTIVE_TAG_WHERE`) besleniyor. Ayrı yazılsaydı
+  // sevkte temizlenmiş iz birinde görünüp diğerinde görünmez, operatör hangisinin
+  // doğru olduğunu bilemezdi (`hasNote`/`PRESENT_ROLL_WHERE` aynı dersi).
+  //
+  // ⚠️ `readIdCondition`den GEÇER — CSV de bir string'dir; ham geçirilseydi
+  // uuid kolonda P2007 (→ HTTP 400) üretirdi.
+  const { ids: tagIds, untagged } = splitTagFilter(params.tagId);
+  if (tagIds.length || untagged) {
+    const tagOr: Prisma.SackWhereInput[] = [];
+    const idCond = readIdCondition(tagIds);
+    if (idCond) tagOr.push({ tags: { some: { tagId: idCond, ...ACTIVE_TAG_WHERE } } });
+    if (untagged) tagOr.push({ tags: { none: ACTIVE_TAG_WHERE } });
+    andClauses.push({ OR: tagOr });
+  }
+
+  // İZİ VAR / YOK — `hasNote` kardeşi. `tagId` sentineli ile aynı kümeyi iki
+  // adla anlatır; ikisi birlikte gelirse VE'lenir (daraltır, çelişmez).
+  if (params.hasTag != null)
+    andClauses.push(
+      params.hasTag ? { tags: { some: ACTIVE_TAG_WHERE } } : { tags: { none: ACTIVE_TAG_WHERE } },
+    );
+
+  if (hasContentFilter) andClauses.push({ rolls: { some: rollFilter } });
+
+  return { where: { AND: andClauses }, rollFilter, hasContentFilter };
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -242,101 +424,9 @@ export class SackSearchService {
     const sortField: "createdAt" | "sackNo" = params.sortBy === "sackNo" ? "sackNo" : "createdAt";
     const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
 
-    // İçerik (rulo düzeyi) filtresi — ürün/renk/en (en tek değer VEYA min-max aralık).
-    // Çoklu ID = alan içinde VEYA (IN); farklı alanlar arasında VE (sektör standardı).
-    const rollFilter: Prisma.RollWhereInput = {};
-    const itemIds = toIdList(params.itemId);
-    const colorIds = toIdList(params.colorId);
-    if (itemIds.length) rollFilter.itemId = { in: itemIds };
-    if (colorIds.length) rollFilter.colorId = { in: colorIds };
-    if (params.widthMin != null || params.widthMax != null) {
-      rollFilter.width = {
-        ...(params.widthMin != null ? { gte: params.widthMin } : {}),
-        ...(params.widthMax != null ? { lte: params.widthMax } : {}),
-      };
-    } else if (params.width != null) {
-      rollFilter.width = params.width;
-    }
-    // KALİTE — kod VEYA statü (bkz. `qualityGrade` param dokümanı). Bu tek alan
-    // kendi içinde OR taşıdığı için `rollFilter`a doğrudan yazılamaz; ayrı OR
-    // bloğu olarak eklenir ve diğer içerik koşullarıyla VE'lenir.
-    //
-    // ⚠️ SÜZGEÇ FK'ya DEĞİL KOD SNAPSHOT'INA bakar: canlı veride 22 topun
-    // `qualityGrade` kodu dolu ama `qualityGradeId` NULL (kolon sonradan geldi).
-    // `qualityGradeId: { in }` yazmak o topları SESSİZCE atlardı — filtre "0
-    // sonuç" değil EKSİK sonuç verirdi ki bu daha tehlikelidir.
-    const qualityCodes = await resolveQualityCodes(toIdList(params.qualityGrade));
-    if (qualityCodes.length) {
-      rollFilter.OR = [
-        { qualityGrade: { in: qualityCodes } },
-        ...(qualityCodes.includes("A1") ? [{ status: RollStatus.A1_STOCK }] : []),
-      ];
-    }
-    const hasContentFilter = Object.keys(rollFilter).length > 0;
-
-    // Kapsam: verilen scope; yoksa includeDispatched'e göre ALL, aksi POOL+PLANNED (varsayılan).
-    const scopeOr: Prisma.SackWhereInput[] = resolveScopeOr(params.scope, params.includeDispatched);
-
-    const andClauses: Prisma.SackWhereInput[] = [{ OR: scopeOr }];
-    // Müşteri süzgeci — "müşterisiz" sentineli UUID listesinden ayrışır (bkz.
-    // CUSTOMERLESS_FILTER_VALUE). İkisi birlikte gelirse tek OR dalı olur.
-    const { ids: customerIds, customerless } = splitCustomerFilter(params.customerId);
-    if (customerIds.length || customerless) {
-      const customerOr: Prisma.SackWhereInput[] = [];
-      if (customerIds.length) customerOr.push({ customerId: { in: customerIds } });
-      if (customerless) customerOr.push({ customerId: null });
-      andClauses.push({ OR: customerOr });
-    }
-    // ŞUBE — cari süzgecinin çocuğu (panelde `dependent-lookup`). Sentinel YOK:
-    // şubesiz çuval "müşterisiz" kovasının içinde zaten görünür, ikinci bir
-    // "şubesiz" sentineli aynı kümeyi iki adla anlatırdı.
-    const branchIds = toIdList(params.branchId);
-    if (branchIds.length) andClauses.push({ branchId: { in: branchIds } });
-
-    // TARTI DURUMU — `weightKg` NULL/NOT NULL. (`weighedAt` DEĞİL: eski satırlarda
-    // kg var ama tartı izi kolonları yok — o topları "tartılmamış" saymak yalan olurdu.)
-    if (params.weighed != null)
-      andClauses.push(params.weighed ? { weightKg: { not: null } } : { weightKg: null });
-
-    // NOT — `setSackNotes` boş metni NULL'a çevirdiği için tek yüklem yeterli
-    // (liste satırındaki `hasNote: !!notes` ile birebir).
-    if (params.hasNote != null)
-      andClauses.push(params.hasNote ? { notes: { not: null } } : { notes: null });
-
-    // BOŞ / DOLU — hayalet top DIŞLANIR (PRESENT_ROLL_WHERE, listedeki rollCount ile aynı yüklem).
-    if (params.empty != null) {
-      const emptyWhere: Prisma.SackWhereInput = {
-        rolls: { none: PRESENT_ROLL_WHERE },
-        swatches: { none: {} },
-      };
-      andClauses.push(params.empty ? emptyWhere : { NOT: emptyWhere });
-    }
-
-    // TARİH ARALIĞI — ortak yardımcı (allowlist dışı alan sessizce düşer; bkz. SACK_DATE_FIELDS).
-    const dateWhere: Record<string, unknown> = {};
-    applyDateRange(dateWhere, params, SACK_DATE_FIELDS);
-    if (Object.keys(dateWhere).length) andClauses.push(dateWhere as Prisma.SackWhereInput);
-
-    const shipmentNo = params.shipmentNo?.trim();
-    if (shipmentNo)
-      andClauses.push({
-        shipment: { is: { OR: buildTextSearch<Prisma.ShipmentWhereInput>(shipmentNo, { code: ["shipmentNo"] }) } },
-      });
-    const sackCode = params.sackCode?.trim();
-    if (sackCode) andClauses.push({ OR: buildTextSearch<Prisma.SackWhereInput>(sackCode, { code: ["sackNo"] }) });
-    // Serbest arama (DataTable kutusu) — sackNo / müşteri adı-kodu / sevkiyat no.
-    const search = params.search?.trim();
-    if (search) {
-      andClauses.push({
-        OR: buildTextSearch<Prisma.SackWhereInput>(search, {
-          text: ["customer.name"],
-          code: ["sackNo", "customer.code", "shipment.shipmentNo"],
-        }),
-      });
-    }
-    if (hasContentFilter) andClauses.push({ rolls: { some: rollFilter } });
-
-    const where: Prisma.SackWhereInput = { AND: andClauses };
+    // Süzgeç kurucusu ORTAK (`buildSackSearchWhere`) — ileride özet/gruplama
+    // ucu da onu çağıracak; ikinci bir kopya liste ile özeti ayrıştırırdı.
+    const { where, rollFilter, hasContentFilter } = await buildSackSearchWhere(params);
     const cursor = decodeDynamicCursor(params.cursor);
     const finalWhere: Prisma.SackWhereInput = cursor
       ? { AND: [where, dynamicCursorWhere(cursor, sortField, sortOrder) as Prisma.SackWhereInput] }
@@ -359,6 +449,11 @@ export class SackSearchService {
         // `$queryRaw` + `LEFT(notes, N)` ister — bu ölçekte (sayfa başına ≤100 satır)
         // değmez. Tam metin çuval detayında / `getSackNotes` ile alınır.
         notes: true,
+        // ÇUVAL İZLERİ (rozet) — `ACTIVE_TAG_SELECT` ile. Yüklem (`clearedAt: null`)
+        // filtreninkiyle AYNI kaynaktan gelir; ayrı yazılsaydı rozet ile "Etiket"
+        // süzgeci sessizce ayrışırdı (sevkte temizlenen iz birinde görünür,
+        // diğerinde görünmez).
+        tags: ACTIVE_TAG_SELECT,
         customer: { select: { id: true, name: true } },
         branch: { select: { id: true, code: true, name: true } },
         shipment: {
@@ -426,6 +521,11 @@ export class SackSearchService {
         // Yorum var mı (💬 göstergesi) + ilk 80 karakter (satır ipucu).
         hasNote: !!s.notes,
         notePreview: s.notes ? s.notes.slice(0, 80) : null,
+        // Etkin izler (rozet). ⚠️ `hasTag` DE bu diziden türer — ayrı hesaplanmış
+        // ikinci bir sayaç eklenirse rozet ile filtre ayrışır (`/pool`a ayrı
+        // etiket sayacı eklenmemesinin aynı gerekçesi).
+        tags: toTagBadges(s.tags),
+        hasTag: s.tags.length > 0,
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment, // null = havuzda; dolu = sevkiyatta

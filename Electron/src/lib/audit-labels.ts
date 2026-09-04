@@ -84,6 +84,10 @@ export const TABLE_LABELS: Record<string, string> = {
   // Paketleme & Sevkiyat
   SACK: "Çuval",
   SACK_SHIPMENT_ASSIGN: "Çuval → Sevkiyat",
+  // Çuval izi (etiket) KATALOĞU. ⚠️ Ayrı satır bilinçli: iz ATAMALARI `SACK`
+  // altına yazılır (çuvalın kendi geçmişi orada okunuyor — `SACK_NOTES` emsali),
+  // katalog düzenlemesi ise bir çuval olayı DEĞİLDİR.
+  sack_tags: "Çuval İzi Kataloğu",
   SHIPMENT: "Sevkiyat",
   // Sevk defteri — mali etkisi olan tek defter (sipariş karşılanması ondan
   // türer). 2026-08-29'a dek değişim geçmişi HİÇ yoktu (BULGU-T2-003).

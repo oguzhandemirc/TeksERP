@@ -112,6 +112,125 @@ router.post("/sacks/:id/remove", verifyToken, WRITE, controller.removeSack);
  */
 router.get("/sacks/:id/notes", verifyToken, READ, controller.getSackNotes);
 router.post("/sacks/:id/notes", verifyToken, WRITE, controller.setSackNotes);
+
+// ===========================================================================
+// ÇUVAL İZLERİ (ETİKET) — katalog + atama (2026-09-04)
+// ===========================================================================
+// YENİ İZİN KODU YOK (bilinçli): okuma `READ`, yazma `WRITE` — yani sevkiyat
+// yetkisi olan zaten iz bırakabiliyor. Ayrı bir kod, sahada ATANMASI UNUTULACAK
+// bir adım daha demekti (2026-08-01 kurşun bypass vakasının dersi).
+//
+// ⚠️ SIRA LOAD-BEARING: `/sacks/tags/...` yolları `/sacks/:id/...` KALIPLARINDAN
+// ÖNCE gelmeli. Bugün çakışma yok (üçüncü segment literal), ama `/sacks/:id/tags`
+// ile `/sacks/tags/bulk` bir yazım hatasında birbirine karışmaya açık — sıra
+// bunun sigortası (`/sacks/mismatch-check` ile aynı gerekçe).
+
+/**
+ * @openapi
+ * /api/shipping/sacks/tags/bulk:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Toplu iz bırak/kaldır (seçili çuvallara)
+ *     description: >
+ *       Sonuç PARÇALIDIR: sevk EDİLMİŞ çuval `skipped[]` içinde döner, 409 ATILMAZ —
+ *       karışık bir seçimde tek satır yüzünden tüm hamleyi düşürmek sahayı tıkar.
+ *       PLANNED çuval etiketlenir (mal hâlâ binada). `removeAll` ile `remove`
+ *       birlikte gönderilemez (400) — sunucu niyeti sessizce seçmez; `add` + `remove`
+ *       aynı çağrıda serbesttir (yeniden etiketleme tek hamledir).
+ *     security: [{ bearerAuth: [] }]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sackIds]
+ *             properties:
+ *               sackIds: { type: array, items: { type: string, format: uuid }, minItems: 1, maxItems: 200 }
+ *               add: { type: array, items: { type: string, format: uuid } }
+ *               remove: { type: array, items: { type: string, format: uuid } }
+ *               removeAll: { type: boolean }
+ *     responses:
+ *       200: { description: "added/removed/skipped" }
+ *       400: { description: "removeAll + remove birlikte, ya da boş seçim" }
+ */
+router.post("/sacks/tags/bulk", verifyToken, WRITE, controller.bulkSackTags);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/tags:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Çuval izi kataloğu
+ *     description: >
+ *       Varsayılan yalnız AKTİF satırları döner (operatör ekranı).
+ *       `?includeInactive=true` düzenleme yüzeyi içindir.
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Etiket listesi } }
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Yeni iz etiketi (kod addan türetilir, sonradan değişmez)
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 201: { description: Oluşturuldu }, 409: { description: Aynı adla etiket var } }
+ */
+router.get("/sacks/tags", verifyToken, READ, controller.listSackTags);
+router.post("/sacks/tags", verifyToken, WRITE, controller.createSackTag);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/tags/{id}:
+ *   patch:
+ *     tags: [Shipping]
+ *     summary: Etiket düzenle (ad/renk/sıra/aktiflik — kod DEĞİŞMEZ)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Güncellendi }, 404: { description: Etiket bulunamadı } }
+ *   delete:
+ *     tags: [Shipping]
+ *     summary: Etiketi sert sil (yalnız HİÇ kullanılmamışsa)
+ *     description: >
+ *       Kullanımdaki etiket silinemez (409) — listeden kaldırmanın yolu
+ *       `isActive:false`; mevcut atamalar KALIR, rozet soluk çizilir.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Silindi }, 409: { description: Kullanımda } }
+ */
+router.patch("/sacks/tags/:id", verifyToken, WRITE, controller.updateSackTag);
+router.delete("/sacks/tags/:id", verifyToken, WRITE, controller.deleteSackTag);
+
+/**
+ * @openapi
+ * /api/shipping/sacks/{id}/tags:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Çuvalın ETKİN izleri
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Rozet listesi }, 404: { description: Çuval bulunamadı } }
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalın iz kümesini değiştir (replace)
+ *     description: >
+ *       Çuvalın DURUMU fark etmez — sevkiyata atanmış / sevk edilmiş çuvala da iz
+ *       bırakılabilir (annotation; `Sack.notes` ile aynı gerekçe). Boş dizi tüm
+ *       izleri kaldırır. Tartıya, çuval içeriğine ve etiket bayatlığına DOKUNMAZ.
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               tagIds: { type: array, items: { type: string, format: uuid } }
+ *     responses: { 200: { description: Güncellendi }, 404: { description: Çuval bulunamadı } }
+ */
+router.get("/sacks/:id/tags", verifyToken, READ, controller.getSackTagsOfSack);
+router.post("/sacks/:id/tags", verifyToken, WRITE, controller.setSackTagsOfSack);
 // Çuval içeriği düzeltme (rol/kartela çıkar/taşı)
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
 router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollToSack);

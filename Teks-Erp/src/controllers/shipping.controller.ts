@@ -5,6 +5,8 @@ import { sackSearchService, type SackSearchScope } from "../services/sack-search
 import { buildDispatchAccountingExport } from "../services/accounting-export.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { detectMismatchesForSacks } from "../services/helpers/sack-content-mismatch.helper";
+import { SackTagService, MAX_BULK_TAG_SACKS } from "../services/sack-tag.service";
+import { HEX_RE } from "../services/helpers/sack-tag.helper";
 import "../types/express-augment";
 
 // ---- Zod şemaları ----------------------------------------------------------
@@ -19,6 +21,37 @@ const openSackSchema = z.object({
   clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
 });
 const scanSchema = z.object({ barcode: z.string().trim().min(1, "Barkod gerekli").max(64) });
+
+// ---- Çuval izleri (etiket) -------------------------------------------------
+const tagCreateSchema = z.object({
+  name: z.string().trim().min(2, "Etiket adı en az 2 karakter").max(60),
+  hex: z.string().trim().regex(HEX_RE, "Renk `#RRGGBB` biçiminde olmalı"),
+  sortOrder: z.number().int().min(0).max(9999).optional(),
+});
+const tagUpdateSchema = z
+  .object({
+    name: z.string().trim().min(2, "Etiket adı en az 2 karakter").max(60).optional(),
+    hex: z.string().trim().regex(HEX_RE, "Renk `#RRGGBB` biçiminde olmalı").optional(),
+    sortOrder: z.number().int().min(0).max(9999).optional(),
+    isActive: z.boolean().optional(),
+  })
+  .strict();
+/** Tekil: çuvalın iz kümesini DEĞİŞTİR (replace). Boş dizi = tüm izleri kaldır. */
+const sackTagsSchema = z.object({ tagIds: z.array(z.string().uuid("Geçersiz etiket ID")).max(50) });
+/**
+ * Toplu iz bırakma/kaldırma.
+ *
+ * ⚠️ `removeAll` + `remove` çelişkisini Zod DEĞİL SERVİS reddeder (400): kural
+ * bir iş kuralıdır ve tekil/toplu her çağıran için AYNI yerden söylenmeli;
+ * şemaya `refine` olarak yazılsaydı servisi doğrudan çağıran yol (script, bekçi,
+ * dahili çağrı) kapıyı ATLARDI.
+ */
+const bulkTagsSchema = z.object({
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmedi").max(MAX_BULK_TAG_SACKS),
+  add: z.array(z.string().uuid("Geçersiz etiket ID")).max(50).optional(),
+  remove: z.array(z.string().uuid("Geçersiz etiket ID")).max(50).optional(),
+  removeAll: z.boolean().optional(),
+});
 const addKartelaSchema = z.object({
   itemId: z.string().uuid("Geçersiz ürün ID"),
   colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
@@ -243,6 +276,58 @@ export class ShippingController {
     try {
       const result = await this.service.getSackNotes(req.params.id as string);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Çuval izleri (etiket) -----------------------------------------------
+
+  listSackTags = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(
+        await SackTagService.listTags({ includeInactive: req.query.includeInactive === "true" }),
+      );
+    } catch (e) { next(e); }
+  };
+
+  createSackTag = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = tagCreateSchema.parse(req.body);
+      res.status(201).json(await SackTagService.createTag(body, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  updateSackTag = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = tagUpdateSchema.parse(req.body);
+      res.status(200).json(await SackTagService.updateTag(req.params.id as string, body, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  deleteSackTag = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await SackTagService.deleteTag(req.params.id as string, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  getSackTagsOfSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await SackTagService.getSackTags(req.params.id as string));
+    } catch (e) { next(e); }
+  };
+
+  setSackTagsOfSack = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = sackTagsSchema.parse(req.body ?? {});
+      res.status(200).json(
+        await SackTagService.setSackTags(req.params.id as string, body.tagIds, req.user?.userId),
+      );
+    } catch (e) { next(e); }
+  };
+
+  bulkSackTags = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = bulkTagsSchema.parse(req.body ?? {});
+      res.status(200).json(await SackTagService.bulkTags(body, req.user?.userId));
     } catch (e) { next(e); }
   };
 
@@ -619,6 +704,11 @@ export class ShippingController {
         // Kalite KODU taşır (uuid değil) — `filtIds` yalnız virgülle böler,
         // tip varsaymaz; servis kanonikleştirip OR'a çevirir.
         qualityGrade: filtIds("qualityGrade"),
+        // ÇUVAL İZİ — `multi-lookup` + "izsiz" sentineli ("none"). Servis
+        // sentineli UUID listesinden AYIRIR (`splitTagFilter`); ham geçirilseydi
+        // `@db.Uuid` kolonda P2007 → 400 olurdu.
+        tagId: filtIds("tagId"),
+        hasTag: bool(filt("hasTag")),
         scope,
         search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
         sortBy: typeof req.query.sortBy === "string" ? req.query.sortBy : undefined,
