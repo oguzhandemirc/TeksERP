@@ -74,6 +74,19 @@ export interface OrdersStatsProps {
  * ⚠️ ADET ile METRAJ farklı kümeleri sayar (backend `getOrderStats` başlığı):
  * adet listenin aynasıdır, metraj iptalleri her zaman dışlar. Şeritte ikisi
  * ayrı bloklarda durur; aynı satıra karıştırma.
+ *
+ * ⚠️ YERLEŞİM SÖZLEŞMESİ (2026-09-04, kullanıcı kararı — bekçi
+ * `orders-layout.guard.test.tsx`):
+ *  - Şerit **her zaman tam genişlik** (`w-full`) ve sola dayalı; sayfada
+ *    filtre satırının ÜSTÜNDE durur. Eskiden `flex justify-end` içinde
+ *    içeriği kadar yer kaplıyordu, yani "geniş" moda geçince sağa doğru
+ *    büyüyüp sol yarıyı boş bırakıyordu.
+ *  - Ayar açılırı (`ml-auto`) satırın EN SAĞINDA kalır.
+ *  - İçerik İKİ EKSENDE çözülür: **görünüm modu TAVAN, pencere genişliği
+ *    TABAN.** Kullanıcı "Geniş" seçse de dar pencerede ayrıntı grupları
+ *    gizlenir (`lg` = metraj, `2xl` = tutar/termin/iş emri). Böylece şerit
+ *    dar pencerede üç satıra taşmaz. Gizlenen şey yalnız GÖRÜNÜM — sayılar
+ *    aynı sorgudan gelir, hiçbir rakamın tanımı değişmez.
  */
 export function OrdersStats({
   data,
@@ -95,7 +108,10 @@ export function OrdersStats({
   const currencies = Object.entries(data.amountByCurrency);
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-primary/25 bg-primary/5 px-3 py-1.5 shadow-sm">
+    <div
+      data-testid="orders-stats"
+      className="flex w-full flex-wrap items-center gap-x-2.5 gap-y-1 rounded-md border border-primary/25 bg-primary/5 px-3 py-1.5 shadow-sm"
+    >
       <span className="text-[10px] font-semibold uppercase tracking-wide text-primary">
         {scopeLabel}
       </span>
@@ -103,8 +119,14 @@ export function OrdersStats({
 
       <Stat icon={ClipboardList} value={NUM_FMT.format(data.totalCount)} unit="sipariş" />
 
+      {/* METRAJ kademesi — `lg` (≥1024px) altında gizli. Üç sayı + üç birim
+          etiketi tek başına ~330px yer kaplar; dar pencerede şeridi ikinci
+          satıra taşıyan ilk şey budur. */}
       {showQty && (
-        <>
+        <div
+          data-testid="orders-stats-qty"
+          className="hidden items-center gap-x-2.5 lg:flex"
+        >
           <Divider />
           <Stat icon={Ruler} value={DEC_FMT.format(data.totalOrderedQty)} unit="m istendi" />
           <Stat icon={Truck} value={DEC_FMT.format(data.totalShippedQty)} unit="m sevk" />
@@ -114,16 +136,21 @@ export function OrdersStats({
             unit="m açık"
             emphasis
           />
-        </>
+        </div>
       )}
 
+      {/* TUTAR kademesi — `2xl` (≥1536px). Para birimi başına bir blok doğar,
+          yani en oynak genişlikteki grup; en son o düşer. */}
       {showExtras && currencies.length > 0 && pricingEnabled && (
-        <>
+        <div
+          data-testid="orders-stats-money"
+          className="hidden items-center gap-x-2.5 2xl:flex"
+        >
           <Divider />
           {currencies.map(([cur, amount]) => (
             <Stat key={cur} value={MONEY_FMT.format(amount)} unit={cur} />
           ))}
-        </>
+        </div>
       )}
 
       <Divider />
@@ -157,8 +184,13 @@ export function OrdersStats({
         />
       )}
 
-      {showExtras && (
-        <>
+      {/* TERMİN + İŞ EMRİ kademesi — tutarla aynı eşik (`2xl`). Her iki sayaç
+          da 0 ise grup HİÇ doğmaz: boş bir flex çocuğu bile `gap` üretir. */}
+      {showExtras && (data.dueThisWeekCount > 0 || data.noWorkOrderCount > 0) && (
+        <div
+          data-testid="orders-stats-extra"
+          className="hidden items-center gap-x-2.5 2xl:flex"
+        >
           {data.dueThisWeekCount > 0 && (
             <Chip
               icon={CalendarClock}
@@ -184,35 +216,44 @@ export function OrdersStats({
               onClick={() => onApplyFilter({ "filter[woState]": "NONE" })}
             />
           )}
-        </>
+        </div>
       )}
 
-      <Divider />
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          disabled={viewLocked}
-          title={viewLocked ? "Tercihler yükleniyor…" : "Özet görünümü"}
-          className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-foreground disabled:opacity-50"
-        >
-          <SlidersHorizontal className="h-3.5 w-3.5" />
-          {ORDER_STATS_VIEWS.find((v) => v.key === view)?.label}
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuLabel>Özet görünümü</DropdownMenuLabel>
-          {ORDER_STATS_VIEWS.map((v) => (
-            <DropdownMenuCheckboxItem
-              key={v.key}
-              checked={view === v.key}
-              onCheckedChange={() => onViewChange(v.key)}
-            >
-              <span className="flex flex-col">
-                <span>{v.label}</span>
-                <span className="text-[10px] text-muted-foreground">{v.hint}</span>
-              </span>
-            </DropdownMenuCheckboxItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* Ayarlar HER ZAMAN en sağda — şerit tam genişlik olduğu için `ml-auto`
+          olmadan sola yapışıp rozetlerin arasında kaybolurdu. */}
+      <div data-testid="orders-stats-view" className="ml-auto flex items-center gap-x-2.5">
+        <Divider />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            disabled={viewLocked}
+            title={viewLocked ? "Tercihler yükleniyor…" : "Özet görünümü"}
+            className="flex items-center gap-1 rounded px-1 py-0.5 text-[10px] text-muted-foreground hover:bg-primary/10 hover:text-foreground disabled:opacity-50"
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5" />
+            {ORDER_STATS_VIEWS.find((v) => v.key === view)?.label}
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Özet görünümü</DropdownMenuLabel>
+            {ORDER_STATS_VIEWS.map((v) => (
+              <DropdownMenuCheckboxItem
+                key={v.key}
+                checked={view === v.key}
+                onCheckedChange={() => onViewChange(v.key)}
+              >
+                <span className="flex flex-col">
+                  <span>{v.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{v.hint}</span>
+                </span>
+              </DropdownMenuCheckboxItem>
+            ))}
+            {/* "Geniş seçtim ama tutar yok" sorusunun cevabı burada yazılı
+                durmalı — yoksa gizlenen grup hata gibi okunur. */}
+            <p className="px-2 pb-1 pt-1 text-[10px] text-muted-foreground">
+              Pencere daraldıkça ayrıntılar otomatik gizlenir.
+            </p>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </div>
   );
 }

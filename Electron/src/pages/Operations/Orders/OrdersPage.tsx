@@ -16,7 +16,8 @@ import { useDataTable } from "@/hooks/useDataTable";
 import { useHideCancelled } from "@/hooks/useHideCancelled";
 import { ToolbarToggle } from "@/components/data-table/ToolbarToggle";
 import { usePricingEnabled, useFeatureFlags } from "@/hooks/usePricingEnabled";
-import { FilterBar, type FilterDef } from "@/components/data-table/FilterBar";
+import { type FilterDef } from "@/components/data-table/FilterBar";
+import { OrdersFilterRow } from "./OrdersFilterRow";
 import { buildOrderColumns } from "./columns";
 import { resolveOrderFilters, canBulkCreateWorkOrder } from "./orders-regime";
 import { orderService } from "./service";
@@ -412,14 +413,12 @@ export function OrdersPage() {
           />
         }
       />
-      {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı):
-          "ABC Tekstil'in 200 siparişi" sorusu pencere açıkken cevaplanamıyordu.
-          Sıralama maliyeti `orders_active_createdAt_idx` ile karşılanıyor.
-          ⚠️ Liste `filters` (rejim-duyarlı) kullanır, ham `FILTERS` DEĞİL —
-          ticaret kurulumunda üretim filtreleri süzülür (`resolveOrderFilters`). */}
-      <FilterBar filters={filters} />
-
-      <div className="flex justify-end">
+      {/* ⚠️ SIRA SÖZLEŞMESİ (2026-09-04): özet şerit FİLTRELERİN ÜSTÜNDE.
+          Kullanıcı gerekçesi: şerit "hangi kümeyi süzüyorum"un cevabı; filtre
+          satırının altında kalınca listeye ait bir başlık gibi okunuyordu.
+          Şerit tam genişlik (`w-full`, sola dayalı) — kendi içinde pencere
+          genişliğine göre kademeleniyor (bkz. OrdersStats başlığı). */}
+      <div className="shrink-0 px-3 pt-2">
         <OrdersStats
           data={statsQuery.data?.data}
           isLoading={statsQuery.isLoading}
@@ -431,6 +430,14 @@ export function OrdersPage() {
           onApplyFilter={applyStatsFilter}
         />
       </div>
+
+      {/* 30 günlük varsayılan pencere KALDIRILDI (2026-08-26, kullanıcı kararı):
+          "ABC Tekstil'in 200 siparişi" sorusu pencere açıkken cevaplanamıyordu.
+          Sıralama maliyeti `orders_active_createdAt_idx` ile karşılanıyor.
+          ⚠️ Liste `filters` (rejim-duyarlı) kullanır, ham `FILTERS` DEĞİL —
+          ticaret kurulumunda üretim filtreleri süzülür (`resolveOrderFilters`).
+          Satır TEK SATIR + yatay kaydırma: `OrdersFilterRow`. */}
+      <OrdersFilterRow filters={filters} />
 
       <DataTable<Order>
         table={table}
