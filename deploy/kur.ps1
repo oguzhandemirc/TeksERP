@@ -72,9 +72,20 @@ param(
   #   Komut verirken DOGRU PM2_HOME'u
   #   kullan, yoksa "uygulama yok" dersin. Script bunu kendisi ayarlar.
   #
-  # ⚠ IKISI AYNI ANDA CALISAMAZ: ayni PORT (.env) ve ayni DB'ye baglanirlar.
+  # ⚠ IKISI AYNI ANDA CALISABILIR - AMA UC SEY BIRDEN AYRILMALI:
+  #     1. PORT          -> ikinci kurulumun ecosystem.config.js'inde
+  #     2. pm2 adi       -> -UygulamaAdi (yoksa ikincisi birinciyi pm2'den siler)
+  #     3. VERITABANI    -> ayri DB. Ayni DB'ye baglanirlarsa TEK-PROCESS
+  #        INVARIANTI kirilir: arsiv/yedek zamanlayicilari ve feature-flag
+  #        onbellegi process-local durum tutar, ikinci ornek SESSIZCE cift arsiv
+  #        ve cift gece yedegi uretir (ecosystem.config.js'de yazili).
   #   Devretmeden once eskisini durdur.
-  [string]$Kok = "C:\Etkili-Yazilim"
+  [string]$Kok = "C:\Etkili-Yazilim",
+  # ⚠ YAN YANA KURULUMDA ZORUNLU: pm2 uygulama adi. Iki kurulum ayni adi
+  #   tasirsa ikincisi birincisini pm2'den SILER (`pm2 delete` [4/9]) - eski
+  #   surum sessizce durur ve operator bunu ancak fabrika calismayinca anlar.
+  #   Ornek: -UygulamaAdi tekserp-backend-yeni
+  [string]$UygulamaAdi = "tekserp-backend"
 )
 $ErrorActionPreference = "Stop"
 
@@ -85,7 +96,7 @@ $pm2       = "$kok\pm2\node_modules\.bin\pm2.cmd"
 $pgbin     = "$kok\pgsql\bin"
 $backupDir = "$kok\backups"
 $credFile  = "$kok\pg-setup\db-credentials.json"
-$uygulama  = "tekserp-backend"
+$uygulama  = $UygulamaAdi
 $env:PM2_HOME = "$kok\pm2-home"
 
 # cwd app\ icinde BIRAKILMAZ: script [5/9] sonrasi Set-Location $appDir yapar; oradan
@@ -97,11 +108,25 @@ function Adim($m) { Write-Host ""; Write-Host $m -ForegroundColor Cyan }
 function Ok($m)   { Write-Host "  OK $m" -ForegroundColor Green }
 function Uyar($m) { Write-Host "  ! $m" -ForegroundColor Yellow }
 
+# Kurulumun GERCEK portu — `ecosystem.config.js`ten okunur, sabit DEGIL.
+# ⚠ YAN YANA KURULUMDA LOAD-BEARING: saglik kontrolu 4000'e sabitken ikinci
+#   kurulum (ornegin :4100) YANLIS backend'i sorgulayip "API UP" derdi - yani
+#   hic baslamamis bir kurulum BASARILI raporlanirdi. Sessiz yalanci gecis.
+$script:saglikPort = 4000
+function PortCoz {
+  $eco = Join-Path $appDir "ecosystem.config.js"
+  if (-not (Test-Path $eco)) { return }
+  try {
+    $p = & node -e "try{const c=require(process.argv[1]);process.stdout.write(String(c.apps?.[0]?.env?.PORT??''))}catch(e){}" $eco
+    if ($p -match '^\d+$') { $script:saglikPort = [int]$p }
+  } catch { }
+}
+
 function Saglik($saniye) {
   $bitis = (Get-Date).AddSeconds($saniye)
   while ((Get-Date) -lt $bitis) {
     try {
-      $h = Invoke-WebRequest "http://localhost:4000/health" -UseBasicParsing -TimeoutSec 5 | ConvertFrom-Json
+      $h = Invoke-WebRequest "http://localhost:$script:saglikPort/health" -UseBasicParsing -TimeoutSec 5 | ConvertFrom-Json
       if ($h.status -eq "UP" -and $h.db -eq "UP") { return $h }
     } catch { Start-Sleep -Milliseconds 800 }
   }
@@ -532,7 +557,8 @@ try {
 }
 
 # --- [9/9] Dogrulama --------------------------------------------------------
-Adim "[9/9] Saglik kontrolu..."
+PortCoz
+Adim "[9/9] Saglik kontrolu (port $script:saglikPort)..."
 $h = Saglik 120
 if (-not $h) {
   Write-Host "  X /health 120 sn icinde cevap vermedi." -ForegroundColor Red
