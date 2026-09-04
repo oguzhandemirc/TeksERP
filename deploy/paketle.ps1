@@ -39,7 +39,9 @@ param(
   [switch]$NodeModulesHaric,
   [switch]$WebPanelHaric,
   [string]$Cikti = "."
-)
+,
+  # Kucuk/buyuk hane bir KARARDIR - elle verilir (ornek: -Surum 3.0.0).
+  [string]$Surum)
 $ErrorActionPreference = "Stop"
 
 function Fail($m) { Write-Host ""; Write-Host "  X $m" -ForegroundColor Red; exit 1 }
@@ -68,6 +70,24 @@ if ($kirli) {
   if ($c -ne 'e') { Fail "Iptal edildi." }
 }
 Write-Host "  dal=$dal  commit=$commit"
+
+# --- Surum numarasi ---------------------------------------------------------
+# ⚠ YAMA hanesi OTOMATIK artar; taban GIT ETIKETI (`backend-v*`). Panel/tablet
+#   ile ayni gerekce: numara KODA aittir, yerel dosyaya degil. Aylarca 2.9.0'da
+#   sabit kaldigi icin "sunucuda hangi surum var" sorusunun tek cevabi commit
+#   kisaltmasiydi ve `/health` her kurulumda ayni sayiyi basiyordu.
+#   Kucuk/buyuk hane bir KARARDIR: `-Surum 3.0.0` ile elle verilir.
+#   Gerekce ve ilk-kosum tabani: scripts/backend-surum.mjs
+if ($Surum) {
+  $yeniSurum = $Surum
+  Write-Host "  surum=$yeniSurum (elle verildi)"
+} else {
+  $yeniSurum = (& node (Join-Path $repo "scripts/backend-surum.mjs")).Trim()
+  if ($LASTEXITCODE -ne 0 -or -not $yeniSurum) { Fail "Surum numarasi hesaplanamadi." }
+  Write-Host "  surum=$yeniSurum (yama hanesi otomatik)"
+}
+& node (Join-Path $repo "scripts/backend-surum.mjs") --uygula --surum $yeniSurum | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail "package.json > version yazilamadi." }
 
 $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
 $ad    = "tekserp-backend-$stamp-$commit"
@@ -320,6 +340,12 @@ if (-not $NodeModulesHaric) {
 }
 
 Remove-Item $stage -Recurse -Force
+
+# --- Surum etiketi ----------------------------------------------------------
+# ⚠ Paket DOGRULANDIKTAN sonra atilir: kapilardan gecmemis bir zip icin numara
+#   harcamak, bir sonraki turu bir sayi ileri kaydirirdi. Backend'in yayin
+#   sunucusu YOK - paket elden tasiniyor - o yuzden "yayin ani" budur.
+& node (Join-Path $repo "scripts/backend-surum.mjs") --etiketle $yeniSurum
 
 $zipMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 $sha   = (Get-FileHash $zip -Algorithm SHA256).Hash
