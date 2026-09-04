@@ -5,7 +5,7 @@
 
 ---
 
-## Üç şey BİRDEN ayrılmalı
+## Dört şey BİRDEN ayrılmalı
 
 Birini atlarsanız arıza **sessizdir** — hata vermez, log'a düşmez.
 
@@ -14,6 +14,7 @@ Birini atlarsanız arıza **sessizdir** — hata vermez, log'a düşmez.
 | 1 | **Port** | İkinci kurulum başlamaz (`EADDRINUSE`) — bu gürültülü, en zararsızı |
 | 2 | **pm2 uygulama adı** | `kur.ps1 [4/9]` `pm2 delete <ad>` yapıyor → ikinci kurulum **birincisini pm2'den siler**, eski sürüm sessizce durur |
 | 3 | **Veritabanı** | Tek-process invariantı kırılır: arşiv/yedek zamanlayıcıları ve feature-flag önbelleği process-local durum tutar → **çift arşiv, çift gece yedeği**, parçalanmış presence |
+| 4 | **Ağa ilan (mDNS)** | İkinci backend de kendini `_teks-erp._tcp` olarak ilan eder → **otomatik bulma yapan panel/tablet test veritabanına bağlanabilir.** Kimlik uyarısı da gelmez; aşağıdaki kutuya bak |
 
 ⚠️ 3. madde `ecosystem.config.js`'de yazılı ve pazarlık dışı. Aynı veritabanına
 iki backend bağlamak istiyorsanız ikincisinin zamanlayıcılarını kapatmanız
@@ -24,43 +25,52 @@ gerekir; **ayrı veritabanı çok daha temizdir.**
 ## Kurulum
 
 ```powershell
-# 1) Yeni kök için iskelet + veritabanı (fabrika yedeğinin KOPYASI)
+# 1) Yeni kök için iskelet + veritabanı
+#    ⚠ -PgBin: otomatik arama YALNIZ C:\Program Files\PostgreSQL altına bakar.
+#      PostgreSQL başka yerdeyse (örn. eski API'nin klasörünün içinde) bulunamaz.
 .\ilk-kurulum.ps1 -Kok C:\TeksERP `
                   -DbAdi tekserp_yeni `
-                  -DbParola <app-parolasi> `
-                  -PostgresParola <postgres-parolasi> `
-                  -Dump "C:\...\son-yedek.dump"
+                  -DbParola (Read-Host "DB parolasi") `
+                  -PgBin "<pg_dump.exe'nin bulundugu bin klasoru>"
+#    (Veritabanı zaten VARSA -PostgresParola ve -Dump gerekmez: [3/8] önce
+#     bağlanmayı dener, başarırsa hiçbir şey yaratmaz.)
 
-# 2) Portu değiştir — C:\TeksERP\app\ecosystem.config.js
-#    (henüz yok; 3. adımdan sonra düzenlenecek. Sıra aşağıda.)
+# 2) ⚠ YAPILANDIRMAYI KURULUMDAN ÖNCE KOY
+Copy-Item .\ecosystem.yan-yana.js C:\TeksERP\app\ecosystem.config.js
 
-# 3) Sürümü kur — pm2 adı FARKLI olmak zorunda
+# 3) Sürümü kur
 .\kur.ps1 -Kok C:\TeksERP `
           -Paket "C:\...\tekserp-backend-....zip" `
           -UygulamaAdi tekserp-backend-yeni
 ```
 
-⚠️ **Sıra tuzağı:** `ecosystem.config.js` ilk kurulumda paketten gelir, yani
-`kur.ps1`ten SONRA düzenlenir. Adımlar:
+### ⚠ 2. adım neden kurulumdan ÖNCE (eski "kur → düşsün → düzelt" tarifi YANLIŞTI)
 
-```powershell
-# kur.ps1 bitti, yeni kurulum :4000'i almaya çalışacak ve DÜŞECEK — normal.
-# Portu düzelt:
-notepad C:\TeksERP\app\ecosystem.config.js     # env.PORT: "4100"
+`kur.ps1 [5/9]` sunucunun mevcut `ecosystem.config.js`'ini **KORUR** ve paketinkini
+`.paket` uzantısıyla yanına bırakır. Dosyayı önceden koyarsak port, ilan ve pm2
+adı **baştan doğru** olur.
 
-# pm2'yi yeniden kaldır (YÖNETİCİ kabuk)
-$env:PM2_HOME = "C:\TeksERP\pm2-home"
-C:\TeksERP\pm2\node_modules\.bin\pm2.cmd delete tekserp-backend-yeni
-cd C:\TeksERP\app
-C:\TeksERP\pm2\node_modules\.bin\pm2.cmd start ecosystem.config.js
-C:\TeksERP\pm2\node_modules\.bin\pm2.cmd save
-```
+Koymazsak paketinki gelir (`PORT: "4000"`) ve şu zincir işler:
 
-⚠️ `kur.ps1` sağlık kontrolünü artık `ecosystem.config.js`teki **gerçek porttan**
-okur; port 4100 ise 4100'ü sorgular. (Eskiden 4000'e sabitti ve ikinci kurulumda
-YANLIŞ backend'i sorgulayıp "başarılı" diyordu.)
+1. yeni kurulum 4000'i almaya çalışır → `EADDRINUSE`, düşer
+2. `[9/9]` sağlık kontrolü `ecosystem.config.js`ten portu okur → **4000**
+3. 4000'e cevabı **ESKİ API** verir → `status: UP, db: UP`
+4. script **"KURULUM TAMAM — surum \<eski\>"** der
 
----
+Sürüm paketinkiyle karşılaştırılmıyor → **sessiz yalancı yeşil**: hiç başlamamış
+bir kurulum başarılı raporlanır. `[9/9]` satırındaki port yazısı bu yüzden
+okunması gereken tek satırdır.
+
+### ⚠ Aynı veritabanının KOPYASI ile kuruyorsanız: kimlik uyarısı SESSİZ kalır
+
+Kurulum kimliği (`installationId`) `SystemSetting` satırında, yani **veritabanında**
+durur. Yeni veritabanı canlının kopyasıysa **aynı kimliği taşır** ve istemcinin
+"bu senin sunucun değil" uyarısı hiç tetiklenmez — iki sunucu panele birebir aynı
+görünür.
+
+Bu yüzden **ilan (`DISCOVERY_MDNS_ENABLED: "false"`) kapatılır**: otomatik bulmayı
+devre dışı bırakmak, kimlik korumasının çalışmadığı bu durumda tek gerçek settir.
+Ayırt edici olarak geriye **port ve sürüm numarası** kalır.
 
 ## Doğrulama
 
@@ -93,7 +103,10 @@ Yeni sürümü denemek için tek bir cihazın adresini elle verin:
 - **Panel:** Sistem → Bu Bilgisayar → Sunucu Adresi → `http://<sunucu-ip>:4100`
 - **Tablet:** giriş ekranı → ayar düğmesi → `http://<sunucu-ip>:4100`
 
-⚠️ Keşif (otomatik bulma) 4000'i bulur; 4100 için adres **elle** girilir.
+⚠️ Keşif (otomatik bulma) yalnız 4000'i bulur — çünkü yeni kurulumda ilanı
+BİLEREK kapattık (yukarıdaki 4. madde). 4100 için adres **elle** girilir ve
+bu bir eksiklik değil, koruma: otomatik bulma açık olsaydı rastgele bir
+cihaz test veritabanına bağlanabilirdi.
 
 ---
 
