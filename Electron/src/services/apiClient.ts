@@ -65,6 +65,8 @@ apiClient.interceptors.request.use(async (config) => {
 });
 
 let lastSessionExpiredToastAt = 0;
+/** Access 403 yağmurunda tek toast (401 dalındaki tekilleştirmenin ikizi). */
+let lastAccessToastAt = 0;
 
 interface ApiErrorBody {
   message?: string;
@@ -160,6 +162,32 @@ apiClient.interceptors.response.use(
       }
 
       if (status === 403) {
+        // UZAK ERİŞİM OTURUMU (Cloudflare Access) DÜŞTÜ — yetki sorunu DEĞİL.
+        //
+        // ⚠️ 2026-09-04'te ölçüldü: bu 403 aşağıdaki genel dala düşüyor ve
+        // **"Bu işlem için yetkiniz bulunmuyor"** basıyordu. Patronun gördüğü
+        // tablo iki YANLIŞ teşhisten oluşuyordu — burada "yetkin yok", aynı anda
+        // `BossPage`in sorgu hatasında "fabrika sunucusuna ulaşılamıyor" — ve
+        // DOĞRU eylem (sayfayı yenile, Cloudflare girişini tekrarla) hiçbir
+        // yerde yazmıyordu. Kod artık `details.code`ta geliyor
+        // (`remote-access.middleware.accessDenied`).
+        //
+        // Oturum TEMİZLENMEZ: ERP oturumu geçerli, düşen şey KENARDAKİ Access
+        // oturumudur. Çıkış yaptırmak, yeniden giriş yaptırıp aynı duvara
+        // toslatırdı. Yenileme kullanıcının kararı — tam ekran bir kapı basmak
+        // yarım doldurulmuş formu kaybettirir (şerit/modal ayrımı).
+        if (
+          typeof body?.details?.code === "string" &&
+          body.details.code.startsWith("ACCESS_ASSERTION")
+        ) {
+          if (Date.now() - lastAccessToastAt > 5000) {
+            lastAccessToastAt = Date.now();
+            toast.error(buildErrorMessage(body), {
+              action: { label: "Yenile", onClick: () => window.location.reload() },
+            });
+          }
+          return Promise.reject(error);
+        }
         const isLoginRequest = error.config?.url?.includes("/api/auth/login");
         if (isLoginRequest) {
           // Login-403 (ör. yalnız-mobil hesap masaüstü paneline giremez) →

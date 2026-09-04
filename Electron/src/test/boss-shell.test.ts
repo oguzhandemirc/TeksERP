@@ -78,10 +78,35 @@ describe("kapı ↔ rota hizası", () => {
     // `content-routes` sayfaları useTabId / TabPortalProvider / geçmiş defterine
     // bağlı; kendi memory router'ını kurmak `PageHeader`ın geri okunu sessizce
     // öldürür ve modalleri yanlış yere portallar.
-    expect(shell).toContain("getTabRouter");
+    //
+    // ⚠️ 2026-09-04 — İDDİA AYNI, ÖLÇÜM YERİ DEĞİŞTİ VE GENİŞLEDİ. Özet
+    // görünümü kapılı bir kök layout kullanmaya başlayınca router fabrikası
+    // `getTabRouter` → `getBossTabRouter` oldu. Eski yazım TEK bir sembol adına
+    // bakıyordu ve bunun bir KÖR NOKTASI vardı: adı denetlemek, o fabrikanın
+    // paylaşılan `build()`ten geçtiğini KANITLAMAZ — biri `tab-routers.tsx`
+    // içinde `createMemoryRouter`ı doğrudan çağıran ikinci bir fabrika yazsaydı
+    // bekçi yeşil kalır, geri oku yine sessizce ölürdü. Artık ZİNCİR ölçülüyor.
+    expect(shell).toMatch(/from ["']\.\/tabs\/tab-routers["']/);
+    expect(shell).toMatch(/get(Boss)?TabRouter\(/);
     expect(shell).toContain("TabIdProvider");
     expect(shell).toContain("TabPortalProvider");
     expect(shell).not.toContain("createMemoryRouter");
+  });
+
+  it("⚠️ router fabrikaları TEK `build()` yolundan geçiyor (rota hafızası + geçmiş defteri)", () => {
+    // Geri okunun TEK doğru kaynağı `history-depth` defteridir ve o defter
+    // yalnız `build()` içinde besleniyor (`trackTabLocation` + `rememberRoute`).
+    // `createMemoryRouter` bu dosyada TEK KEZ, `build()` içinde çağrılmalı.
+    const factory = stripComments(read("src/components/layout/tabs/tab-routers.tsx"));
+    expect(factory.length).toBeGreaterThan(500); // körlük zemini
+    expect(factory.match(/createMemoryRouter\(/g) ?? []).toHaveLength(1);
+    expect(factory).toMatch(/function build\([\s\S]*?createMemoryRouter\(/);
+    // Özet görünümünün fabrikası da aynı yoldan: kendi router'ını kurmuyor.
+    expect(factory).toMatch(/export function getBossTabRouter[\s\S]*?build\(/);
+    // Kapılı kök layout bir ROUTER kurmaz, yalnız `Outlet`in önünde durur.
+    const bossRoot = stripComments(read("src/components/layout/BossRootLayout.tsx"));
+    expect(bossRoot.length).toBeGreaterThan(200); // körlük zemini
+    expect(bossRoot).not.toContain("createMemoryRouter");
   });
 
   it("BossShell AppShell'i sarmıyor (sekme şeridi bypass)", () => {

@@ -78,6 +78,38 @@ kattı, tek kat değil.
 sessizce düşüremez. Kapalıyken açılış log'u her restart'ta uyarır — duvarsız bir
 kurulum, duvarlı sanılan bir kurulumdan ayırt edilebilir olmalı.
 
+### 1c) Hata sayfası — "Error 1033" yerine kendi sayfamız (önerilir)
+
+Fabrika sunucusu ya da fabrikanın interneti kapalıyken kenar, ziyaretçiye
+**"Error 1033 — Argo Tunnel error"** basar. Patron için bu cümle hiçbir şey
+ifade etmez ve her seferinde bir telefon üretir.
+
+⚠️ **Bu bir tünel ayarıyla ÇÖZÜLEMEZ.** `config.yml` yalnız `cloudflared`
+koşarken okunur; sorunun tanımı zaten "cloudflared koşmuyor"dur. Sayfayı basacak
+tek katman, fabrikadan bağımsız çalışan Cloudflare kenarıdır.
+
+1. Zero Trust'ta değil, **Cloudflare ana panelinde**: Workers & Pages →
+   **Create Worker** (ad: `<musteri>-erp-hata`).
+2. İçeriği `deploy/uzak-erisim/cf-worker-hata-sayfasi.js` ile **değiştir** → Deploy.
+3. Worker → Settings → **Domains & Routes** → Add route:
+   `<musteri>-erp.etkiliyazilim.com/*` (zone: `etkiliyazilim.com`).
+
+Doğrulama: fabrika sunucusunda `Stop-Service cloudflared` → adresi aç →
+Türkçe **"Fabrika sunucusuna şu anda ulaşılamıyor"** sayfası çıkmalı →
+`Start-Service cloudflared` → sayfa kendiliğinden geri gelmeli.
+
+> ⚠️ **Access'i ETKİLEMEZ** — Access, isteği Worker'a vermeden ÖNCE koşar; kimlik
+> duvarı yerinde kalır.
+> ⚠️ `/api/*` isteklerine HTML DEĞİL **JSON** döner (503 +
+> `details.code=ORIGIN_UNREACHABLE`). HTML dönseydi panel JSON ayrıştırma
+> hatasına düşer ve kullanıcı yine "beklenmeyen hata" görürdü.
+> ⚠️ Sayfa `no-store` ile döner. Aksi hâlde fabrika 2 dakika sonra açıldığında
+> ziyaretçi hâlâ "kapalı" sayfasını görürdü — `always` başlığının 404'ü bir hafta
+> önbelleklediği vakanın (Electron yayın sunucusu) birebir sınıfı.
+> **Alternatif:** zone'un plânı **Custom Error Pages**'i (5xx/1xxx) destekliyorsa
+> Worker yerine o da kullanılabilir; Worker plândan bağımsız çalıştığı için
+> önerilen yol budur.
+
 ### 2) Fabrika sunucusu — cloudflared
 
 ```powershell
@@ -262,6 +294,16 @@ Bu adımlar atlanırsa yanlış yapılandırma **sessiz** kalır.
 | 6 | Dışarıdan `…/api/auth/login-quick-pin` | **404** |
 | 7 | Dışarıdan `…/api/devices/status` | **404** |
 | 8 | Uzak yanıtta `Strict-Transport-Security` | **VAR** |
+| 9 | Uzakta menü (☰) yalnız **Operasyonlar + Raporlar** taşır | Tanımlar/Sistem/Yetkilendirme YOK |
+
+> ⚠️ **#6 ve #7 NASIL ÖLÇÜLÜR — `curl` ile ölçme (2026-09-04'te düzeltildi).**
+> Access AÇIKKEN kimliksiz bir istek bizim sunucumuza HİÇ ULAŞMAZ: Cloudflare
+> kendi giriş sayfasına **302** ile yönlendirir. Yani ham `curl` 404 yerine 302
+> görür ve ölçüm "başarısız" sanılır — oysa hiçbir şey ölçülmemiştir.
+> **Doğru yöntem:** Access'ten geçip panele girdikten SONRA aynı tarayıcıda F12 →
+> Console → `fetch('/api/auth/login-quick-pin',{method:'POST'}).then(r=>r.status)`
+> (beklenen `404`) ve `fetch('/api/devices/status').then(r=>r.status)` (`404`).
+> Access KAPALI kurulumda (`CF_ACCESS_ENABLED=false`) düz `curl` de yeterlidir.
 
 **En kritik yanlış yapılandırma:** `config.yml`de port yanlış yazılırsa (örn.
 4000) tünel LAN dinleyicisine bağlanır ve **her uzak istek "LAN" sayılır** —
@@ -274,25 +316,64 @@ politikayı geçici kaldır → uzak `/api` istekleri **403** dönmeli. Dönmüy
 
 ---
 
+## Uzaktan ne GÖRÜNÜR — özet görünümü (2026-09-04)
+
+Uzaktaki panel, LAN'daki panelin **aynı derlemesidir** (`dist-web`) — ikinci bir
+uygulama yoktur (ikizlemek "iki kopya, biri bayat" sınıfını doğururdu). Fark
+KABUKTADIR: `#/boss` **özet görünümünü** açar ve orada sol üstteki **☰** menüsü
+yalnız **Operasyonlar** ve **Raporlar** yüzeylerini çizer. Tanımlar, Sistem,
+Yetkilendirme, Ön Muhasebe ve kişisel Ayarlar menüde YOKTUR; hash ile doğrudan
+gidilirse *"Bu ekran özet görünümünde yok"* sayfası çıkar (boş ekran değil).
+
+- ⚠️ **Bu bir GÖRÜNÜRLÜK kararıdır, izin kapısı DEĞİL.** Backend kapıları (izin,
+  modül anahtarı, uzak denylist) aynen yerinde. "Menüde yok" ile "yetkisi yok"
+  ayrı cümlelerdir — karıştırılırsa özet görünümü bir güvenlik yüzeyi sanılır ve
+  gerçek kapılar gevşetilir. Yüzeyi gerçekten kapatmak isteyen kullanıcıya o
+  izni VERMEZ.
+- Liste TEK KAYNAKTAN türetilir: `Electron/src/lib/boss-menu.ts`. Menü ile kapı
+  aynı yüklemden beslenir; yarın eklenen bir operasyon karosu burada
+  kendiliğinden belirir. Bekçi: `Electron/src/lib/boss-menu.test.ts`.
+- Tam yetkili bir kullanıcı özet görünümünde de fazlalık yüzey görmez; tam panele
+  geçmek için başlıktaki düğmeyi kullanır (`#/` — kabuk değişir).
+
 ## Bilinen sınırlar
 
-- **Fabrika sunucusu ya da interneti kapalıyken patron veri göremez** —
-  Cloudflare "Error 1033" sayfası çıkar. Bilinçli: tünel yaklaşımının kabul
-  edilen bedeli. Kalıcı çözüm bir okuma replikasıdır ve AYRI bir iştir
-  (WireGuard taşıyıcısı ister; CF Tunnel PostgreSQL replikasyonunu taşımaz).
+- **Fabrika sunucusu ya da interneti kapalıyken patron veri göremez.** Bilinçli:
+  tünel yaklaşımının kabul edilen bedeli. **Ama artık "Error 1033" görmez** —
+  Adım 1c'deki Worker kurulduysa Türkçe, ne yapması gerektiğini yazan bir sayfa
+  çıkar. Verinin kendisini uzaktan ayakta tutmak ayrı bir iştir (okuma replikası;
+  WireGuard taşıyıcısı ister, CF Tunnel PostgreSQL replikasyonunu taşımaz).
 - **Kimlik zinciri üç adımlı** (Access OTP → parola → TOTP). Pratikte Access 24
   saat, ERP 8 saat sürer; rahatlama Access session süresinden gelir, katman
-  azaltmaktan değil.
-- **Mobil uygulama (Faz 2) Access ile sürtüşecek** — Access tarayıcı odaklıdır;
-  native istemci servis token'ı ister ve o token APK'ya gömülü paylaşılan bir
-  sır demektir. O gün ya `/api/*` Access dışına alınıp yalnız SPA gatelenir, ya
-  mobil için ayrı bir yol kurulur. **Açık madde.**
+  azaltmaktan değil. **Oturum düşünce ne olur (2026-09-04'te ölçüldü):**
+  ERP oturumu bitince tek toast + oturum-dışı ekrana geçiş olur ve `#/boss`
+  korunduğu için giriş sonrası patron kendi ekranına döner. **Access** oturumu
+  bitince `/api` istekleri 403 döner; eskiden panel buna *"Bu işlem için
+  yetkiniz bulunmuyor"* diyordu — yetkiyle ilgisi olmayan, tamamen yanlış bir
+  teşhis. Artık *"Uzaktan erişim oturumu doğrulanamadı. Sayfayı yenileyip
+  Cloudflare girişini tekrarlayın."* + **Yenile** düğmesi gösterilir
+  (`ACCESS_ASSERTION_*` kodu `details.code`te taşınır; bekçi
+  `test_remote_access_guard` §5b2).
+- **Mobil uygulama Access ile sürtüşür — AÇIK MADDE. Bugünkü ölçülen durum:**
+  tabletler tünelden HİÇ geçmez (`EXPO_PUBLIC_API_URL` fabrika LAN adresidir),
+  yani sahada bir sürtüşme YAŞANMIYOR. Bir tablet bilerek tünel adresine
+  çevrilirse iki ayrı duvara toslar ve **ikisi de anlaşılır bir mesaj vermez**:
+  ① Access açıksa her istek CF'in HTML giriş sayfasına yönlenir, uygulama JSON
+  bekler → "beklenmeyen hata"; ② Access kapalı olsa bile `login-quick-pin`,
+  `login-card`, `mobile-users` ve `/api/mobile/*` uzakta **404**'tür, yani
+  yalnız kullanıcı adı + parola + TOTP ile girilebilir.
+  ⚠️ **Bilinen ayrışma:** `GET /api/auth/login-methods` uzakta da `pin`/`card`
+  yöntemlerini bildirir (uç `isRemote`e bakmaz) → giriş ekranı çalışmayacak
+  düğmeler çizer. Bugün etkisi YOK (o yol kullanılmıyor); mobil gerçekten uzağa
+  açılacaksa **ilk iş** bu ucun uzakta yöntemleri süzmesidir. Çözüm yönü: `/api/*`
+  Access dışına alınıp yalnız SPA gatelenir ya da mobil için ayrı yol kurulur.
 
 ---
 
 ## İlgili
 
-- `deploy/uzak-erisim/` — cloudflared şablonu
+- `deploy/uzak-erisim/` — cloudflared şablonu + `cf-worker-hata-sayfasi.js`
 - `deploy/.env.production.example` §2b — ortam değişkenleri
 - `docs/ops/SUNUCU-ENVANTERI.md` — makine/port envanteri
-- Bekçiler: `Teks-Erp/scripts/test_remote_access_guard.ts` · `test_totp.ts`
+- Bekçiler: `Teks-Erp/scripts/test_remote_access_guard.ts` · `test_totp.ts` ·
+  `Electron/src/lib/boss-menu.test.ts` · `Electron/src/test/boss-shell.test.ts`

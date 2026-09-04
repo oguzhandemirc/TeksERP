@@ -340,9 +340,17 @@ async function probe(
   port: number,
   path: string,
   init: RequestInit = {},
-): Promise<{ status: number; headers: Headers }> {
+): Promise<{ status: number; headers: Headers; body: Record<string, unknown> }> {
   const res = await fetch(`http://127.0.0.1:${port}${path}`, init);
-  return { status: res.status, headers: res.headers };
+  // Gövde BEST-EFFORT okunur: statik/başlık sondaları JSON döndürmek zorunda
+  // değil ve orada gövdeyi ayrıştıramamak bir arıza değildir.
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await res.clone().json()) as Record<string, unknown>;
+  } catch {
+    /* JSON değil — sonda gövdeye bakmıyorsa sorun yok */
+  }
+  return { status: res.status, headers: res.headers, body };
 }
 
 async function sectionEndToEnd(): Promise<void> {
@@ -403,6 +411,39 @@ async function sectionEndToEnd(): Promise<void> {
       "UZAK: geçersiz Access JWT → 403",
       remoteBadJwt.status === 403,
       `status=${remoteBadJwt.status}`,
+    );
+
+    // ── 5b2) REDDİN ŞEKLİ — kod `details.code` ALTINDA olmalı ──────────────
+    // ⭐ 2026-09-04'te ÖLÇÜLEN GERÇEK ARIZA: kod yalnız gövde KÖKÜNDE yazılıyordu
+    // ama panelin kod okuduğu tek yer `body.details.code` (`AppError` sözleşmesi,
+    // `apiClient` orayı okur). Sonuç: Access oturumu düşen patrona **"Bu işlem
+    // için yetkiniz bulunmuyor"** basılıyordu — yetkisiyle hiç ilgisi olmayan bir
+    // durum için tamamen yanlış teşhis ve yanlış eylem (yöneticiden yetki istemek,
+    // oysa doğrusu sayfayı yenilemek). Bu bekçi ŞEKLİ kilitler; 403 olması yetmez.
+    const detailsCode = (remoteBadJwt.body.details as { code?: string } | undefined)?.code;
+    check(
+      "UZAK: red yükü `details.code` taşıyor (istemcinin OKUDUĞU yer)",
+      detailsCode === "ACCESS_ASSERTION_INVALID",
+      `details.code=${String(detailsCode)}`,
+    );
+    check(
+      "UZAK: kök `code` geriye uyum için DURUYOR",
+      remoteBadJwt.body.code === "ACCESS_ASSERTION_INVALID",
+      String(remoteBadJwt.body.code),
+    );
+    const missingCode = (remoteApi.body.details as { code?: string } | undefined)?.code;
+    check(
+      "UZAK: başlık YOKKEN de `details.code` (ACCESS_ASSERTION_MISSING)",
+      missingCode === "ACCESS_ASSERTION_MISSING",
+      String(missingCode),
+    );
+    // Kullanıcıya NE YAPACAĞINI söyleyen cümle — "doğrulanamadı" tek başına
+    // eylem içermiyor; toast'ta görünen metin budur.
+    check(
+      "UZAK: mesaj eylemi söylüyor (yenile / Cloudflare girişi)",
+      typeof remoteApi.body.message === "string" &&
+        /yenile/i.test(remoteApi.body.message as string),
+      String(remoteApi.body.message),
     );
     // ⭐ NEGATİF TARAF: aynı uç LAN'da Access başlığı OLMADAN çalışmaya devam eder.
     const lanApi = await probe(lan, "/api/auth/login-methods");

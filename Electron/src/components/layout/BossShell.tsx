@@ -6,10 +6,13 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/auth";
 import { canEnterApp } from "@/types/auth";
-import { getTabRouter } from "./tabs/tab-routers";
+import { getBossTabRouter, navigateTabRouter } from "./tabs/tab-routers";
 import { TabActiveProvider, TabIdProvider } from "./tabs/tab-active";
 import { TabPortalProvider } from "./tabs/tab-portal";
 import { ServerOfflineBanner } from "./ServerOfflineBanner";
+import { BossMenu } from "./BossMenu";
+import { useServerHeartbeat } from "@/hooks/useServerClock";
+import { useExpiryAutoLogout } from "@/hooks/useExpiryAutoLogout";
 import { BOSS_PATH } from "@/lib/boss-path";
 
 /**
@@ -35,7 +38,18 @@ export function BossShell() {
   const logout = useAuthStore((s) => s.logout);
   const { theme, setTheme } = useTheme();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
-  const router = getTabRouter(BOSS_TAB_ID, BOSS_PATH);
+  // ⚠️ KAPILI ROUTER (`getBossTabRouter`): menüde çizilmeyen yollar hash ile de
+  // açılmasın. Menü ile kapı AYNI yüklemden beslenir (`lib/boss-menu.ts`).
+  const router = getBossTabRouter(BOSS_TAB_ID, BOSS_PATH);
+  // ⚠️ Bu iki hook `AppShell`de VARDI, burada YOKTU — ölçüldü (2026-09-04):
+  //  • Nabız olmadan `ServerOfflineBanner` bu kabukta kendi kendine ne AÇILIR
+  //    ne KAPANIR; durum yalnız gerçek trafikle güncellendiği için bağlantı geri
+  //    geldiğinde şerit ekranda asılı kalırdı.
+  //  • Süre dolumu izlenmeden token sessizce ölür ve kullanıcı sebebi yazmayan
+  //    bir 401 dalgası görür. Özet görünümü telefonda saatlerce açık kalan
+  //    kabuktur; ikisinin de en çok gerektiği yer burasıdır.
+  useServerHeartbeat();
+  useExpiryAutoLogout();
 
   // Tam panele geçiş yalnız ORAYA GİREBİLENE gösterilir. Yalnız patron yetkisi
   // olan biri için o düğme, tıklayınca boş bir kabuk açan bir tuzak olurdu.
@@ -48,9 +62,12 @@ export function BossShell() {
           bir sürükleme bölgesi portal'lanan modalların tıklamasını yutar
           (bekçi: src/test/app-drag-region.test.ts). */}
       <header className="app-drag flex shrink-0 items-center justify-between gap-2 border-b px-3 py-2">
-        <div className="app-no-drag min-w-0">
-          <p className="truncate text-sm font-semibold leading-tight">Fabrika Özeti</p>
-          <p className="truncate text-[11px] text-muted-foreground">{user?.username}</p>
+        <div className="app-no-drag flex min-w-0 items-center gap-1">
+          <BossMenu onNavigate={(to) => navigateTabRouter(BOSS_TAB_ID, to)} />
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold leading-tight">Fabrika Özeti</p>
+            <p className="truncate text-[11px] text-muted-foreground">{user?.username}</p>
+          </div>
         </div>
         <div className="app-no-drag flex shrink-0 items-center gap-1">
           {canOpenFullPanel && (

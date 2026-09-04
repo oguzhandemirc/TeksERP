@@ -1,6 +1,8 @@
+import type { ReactElement } from "react";
 import { createMemoryRouter } from "react-router-dom";
 import { contentRoutes } from "@/routes/content-routes";
 import { TabRootLayout } from "./TabRootLayout";
+import { BossRootLayout } from "@/components/layout/BossRootLayout";
 import { RouteErrorFallback } from "@/components/RouteErrorFallback";
 import { rememberRoute } from "./route-memory";
 import { canGoBackTab, forgetTab, trackTabLocation } from "./history-depth";
@@ -17,9 +19,9 @@ function toEntry(path: string, state?: unknown) {
   return search ? `${pathname}${search}` : pathname || "/";
 }
 
-function build(id: string, path: string, state?: unknown): TabRouter {
+function build(id: string, path: string, state?: unknown, root?: ReactElement): TabRouter {
   const router = createMemoryRouter(
-    [{ path: "/", element: <TabRootLayout />, errorElement: <RouteErrorFallback />, children: contentRoutes }],
+    [{ path: "/", element: root ?? <TabRootLayout />, errorElement: <RouteErrorFallback />, children: contentRoutes }],
     { initialEntries: [toEntry(path, state)], initialIndex: 0 },
   );
   // Sekmenin her konum değişimini (a) rota hafızasına yaz — aynı sayfaya sonradan
@@ -43,6 +45,26 @@ export function getTabRouter(id: string, path: string, state?: unknown): TabRout
   let router = registry.get(id);
   if (!router) {
     router = build(id, path, state);
+    registry.set(id, router);
+  }
+  return router;
+}
+
+/**
+ * ÖZET GÖRÜNÜMÜNÜN (BossShell) router'ı — aynı altyapı, KAPILI kök layout.
+ *
+ * ⚠️ Ayrı bir `createMemoryRouter` YAZILMAZ, `build` kullanılır: rota hafızası
+ * (`rememberRoute`) ve geçmiş derinliği defteri (`trackTabLocation`) burada
+ * kuruluyor ve `PageHeader`ın geri oku ONLARA bağlı. Kendi router'ını kuran bir
+ * kabuk, geri okunu sessizce öldürür (BossShell başlığında yazılı ders).
+ *
+ * ⚠️ Kabuk farkı TEK YERDE: kök eleman. Kapının kendisi `BossRootLayout`ta,
+ * yüklem `lib/boss-menu.ts`te — bu fonksiyon yalnız ikisini birbirine bağlar.
+ */
+export function getBossTabRouter(id: string, path: string): TabRouter {
+  let router = registry.get(id);
+  if (!router) {
+    router = build(id, path, undefined, <BossRootLayout />);
     registry.set(id, router);
   }
   return router;

@@ -294,6 +294,27 @@ export function expireAccessJwksCacheForTest(): void {
 const ACCESS_HEADER = "cf-access-jwt-assertion";
 
 /**
+ * Access reddi yükü — kod **`details.code`** ALTINDA.
+ *
+ * ⚠️ 2026-09-04'te ÖLÇÜLDÜ ve düzeltildi: kod yalnız GÖVDE KÖKÜNDE (`code`)
+ * yazılıyordu, oysa istemcinin kod okuduğu TEK yer `body.details.code`
+ * (`apiClient` — `AppError` sözleşmesi, `error.middleware` onu `details` altında
+ * serileştirir). Yani panel bu 403'ü hiçbir zaman tanıyamıyor ve genel dala
+ * düşüp **"Bu işlem için yetkiniz bulunmuyor"** basıyordu — kullanıcının
+ * yetkisiyle ilgisi olmayan, süresi dolmuş bir Cloudflare Access oturumu için
+ * TAMAMEN YANLIŞ bir teşhis (doğru eylem sayfayı yenilemek, yöneticiden yetki
+ * istemek değil). Bu middleware `AppError` yolunu bilerek kullanmıyor (hata
+ * zincirine çıkmadan, kimlik duvarı olarak burada bitiriyor) — o yüzden
+ * sözleşmeyi ELLE kurmak zorunda.
+ *
+ * Kök `code` alanı GERİYE UYUM için KALIR: sahadaki eski panel sürümleri onu
+ * okumuyor ama silmek, okuyan bir istemci varsa sessizce kırardı.
+ */
+function accessDenied(res: Parameters<RequestHandler>[1], code: string, message: string): void {
+  res.status(403).json({ success: false, message, code, details: { code } });
+}
+
+/**
  * Uzak isteklerde Cloudflare Access JWT'sini doğrular. **Fail-closed.**
  *
  * Yalnız `/api/*` altında koşar: statik SPA dosyaları (JS/CSS) zaten kamuya
@@ -312,11 +333,11 @@ export function verifyAccessJwt(cfg: RemoteAccessConfig): RequestHandler {
     const raw = req.headers[ACCESS_HEADER];
     const token = (Array.isArray(raw) ? raw[0] : raw)?.trim();
     if (!token) {
-      res.status(403).json({
-        success: false,
-        message: "Uzaktan erişim doğrulanamadı (Cloudflare Access başlığı yok).",
-        code: "ACCESS_ASSERTION_MISSING",
-      });
+      accessDenied(
+        res,
+        "ACCESS_ASSERTION_MISSING",
+        "Uzaktan erişim oturumu doğrulanamadı. Sayfayı yenileyip Cloudflare girişini tekrarlayın.",
+      );
       return;
     }
 
@@ -341,11 +362,11 @@ export function verifyAccessJwt(cfg: RemoteAccessConfig): RequestHandler {
         console.warn(
           `[remote-access] Access JWT reddedildi: ${err instanceof Error ? err.message : String(err)}`,
         );
-        res.status(403).json({
-          success: false,
-          message: "Uzaktan erişim doğrulanamadı.",
-          code: "ACCESS_ASSERTION_INVALID",
-        });
+        accessDenied(
+          res,
+          "ACCESS_ASSERTION_INVALID",
+          "Uzaktan erişim oturumu doğrulanamadı. Sayfayı yenileyip Cloudflare girişini tekrarlayın.",
+        );
       }
     })();
   };

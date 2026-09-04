@@ -7,6 +7,7 @@ import { getActiveApiBaseUrl } from "@/lib/api-config";
 import { connectToDiscoveredServer } from "@/lib/server-identity";
 import { Button } from "@/components/ui/button";
 import { ApiEndpointDialog } from "@/components/settings/ApiEndpointDialog";
+import { IS_ELECTRON } from "@/lib/runtime-env";
 
 /**
  * "Sunucuya ulaşılamıyor" şeridi + KENDİ KENDİNİ ONARMA.
@@ -81,22 +82,46 @@ export function ServerOfflineBanner() {
       <div className="flex items-center gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
         <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
         <span className="min-w-0 flex-1">
-          Sunucuya ulaşılamıyor. Kayıtlar gönderilemiyor.
+          {IS_ELECTRON
+            ? "Sunucuya ulaşılamıyor. Kayıtlar gönderilemiyor."
+            : "Fabrika sunucusuna ulaşılamıyor. Bağlantı geri gelince sayfa kendiliğinden çalışır."}
         </span>
-        <Button size="sm" variant="outline" onClick={() => void handleSearch()} disabled={searching}>
-          {searching ? (
-            <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Radar className="mr-2 h-3.5 w-3.5" />
-          )}
-          {searching ? "Aranıyor…" : "Sunucuyu Ara"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={() => setDialogOpen(true)}>
-          <Settings2 className="mr-2 h-3.5 w-3.5" />
-          Adresi Değiştir
-        </Button>
+        {/*
+          ⚠️ İKİ DÜĞME DE YALNIZ MASAÜSTÜNDE (2026-09-04, ölçüldü). Tarayıcıda
+          (uzaktan erişim / `dist-web`) ikisi de ZARARLI:
+           • "Sunucuyu Ara" mDNS/alt ağ taramasıdır ve `window.api` olmadan HİÇ
+             çalışmaz — her tıkta "Ağda sunucu bulunamadı" + *"bu bilgisayar farklı
+             bir ağda olabilir"* der. Telefonda, tünelin arkasındaki birine
+             verilen bu tavsiye yalnızca yanlış değil, teşhisi de saptırır.
+           • "Adresi Değiştir" API adresini `localStorage`a yazar; web'de API
+             zaten sayfanın origin'idir. Yanlış bir adres yazan uzak kullanıcı
+             KENDİ PANELİNİ kilitler ve bir daha açamaz (`runtime-env.ts`te
+             yazılı tuzak) — üstelik tam da bir şeylerin bozuk olduğu anda.
+          `LoginPage` bu kapıyı zaten uyguluyordu; şerit atlanmıştı.
+        */}
+        {IS_ELECTRON && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void handleSearch()}
+              disabled={searching}
+            >
+              {searching ? (
+                <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Radar className="mr-2 h-3.5 w-3.5" />
+              )}
+              {searching ? "Aranıyor…" : "Sunucuyu Ara"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setDialogOpen(true)}>
+              <Settings2 className="mr-2 h-3.5 w-3.5" />
+              Adresi Değiştir
+            </Button>
+          </>
+        )}
       </div>
-      <ApiEndpointDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      {IS_ELECTRON && <ApiEndpointDialog open={dialogOpen} onOpenChange={setDialogOpen} />}
     </>
   );
 }
