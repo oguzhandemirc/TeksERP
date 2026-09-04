@@ -16,6 +16,41 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04g",
+      "baslik": "Belgelerde müşterideki ürün adı, bağlı cihazlar ekranı ve sunucu bulmada iyileştirme",
+      "surumler": {
+        "panel": "1.2.7",
+        "tablet": "1.0.6"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevk irsaliyesine müşterinin kullandığı ürün adı da basılabiliyor. Sistem → Özellik Anahtarları → Sevkiyat & İade'den seçiyorsunuz: yalnız bizim adımız (varsayılan), yalnız müşterinin adı, ya da ikisi yan yana. Müşterinin karşılığı girilmemişse bizim adımız basılır, sütun boş kalmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Ürün adı sipariş satırında bir seferliğine değiştirildiyse belgede o ad kullanılır; değiştirilmemişse müşteri kartındaki karşılık yazılır. Ad sevk anında belgeye işlenir, sonradan kartı düzeltmek eski irsaliyeyi değiştirmez."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Belge sütun başlıklarını artık kendiniz yazabiliyorsunuz: Tanımlar → Çıktılar → Belge Şablonları → Belge Alanları. Boş bıraktığınız başlık varsayılana döner."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem → Bağlı İstemciler ekranı geldi: hangi bilgisayar ve tablet hangi sürümü kullanıyor, en son ne zaman bağlandı ve o an kimin oturumu açık görüyorsunuz."
+        },
+        {
+          "kapsam": "her-ikisi",
+          "tip": "iyilestirme",
+          "metin": "Sunucu otomatik bulunamazsa program alışılmadık bağlantı noktalarını da deniyor. Sunucu normal yerinde bulunduğunda ek arama hiç çalışmaz, yani açılış yavaşlamaz."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04f",
       "baslik": "Çuval izleri, müşteri karnesi ve uzaktan özet görünümü",
       "surumler": {
