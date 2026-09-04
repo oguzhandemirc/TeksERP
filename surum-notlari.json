@@ -16,6 +16,56 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04c",
+      "baslik": "Sistem menüsü sadeleşti, paketlemede cari seçimi",
+      "surumler": {
+        "panel": "1.2.3",
+        "tablet": "1.0.2"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sistem menüsü üçe ayrıldı: Modüller, Özellik Anahtarları ve Güncelleme. Fabrikanın kendi tercihleri (sipariş zorunluluğu, tartı, kalite notu gibi) artık Özellik Anahtarları'nda toplu duruyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Satın alınan modüller ve demo modu yalnız satıcı hesabına görünüyor; fabrika yöneticisinin ayar ekranı sadeleşti."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Güncelleme durumu kendi sayfasına taşındı; \"Bu Bilgisayar\" sekmesinin altında aramaya gerek yok."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sipariş listesinde özet şerit filtrelerin üstüne alındı ve satırın tamamını kaplıyor. Filtreler tek satırda; pencere daraldıkça şeritteki ayrıntılar otomatik gizleniyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Paketleme ekranı açılışında \"Tüm Çuvallar / Tüm Cariler\" seçimi geliyor; cari seçilince yalnız o carinin çuvalları listeleniyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çuvalı doldurunca \"Yeni Çuval\" tuşuyla aynı cariye hemen yeni çuval açılıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Müşterisi olmayan çuvallar hiçbir yerden süzülemiyordu; artık \"Müşterisiz (genel stok)\" olarak listeleniyor."
+        },
+        {
+          "kapsam": "tablet",
+          "tip": "duzeltme",
+          "metin": "Tamburda \"müşterideki ad\" kutusunda, dolu bir alana yazınca harfler başa ve ters sırada gidiyordu; düzeltildi."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04b",
       "baslik": "Pencerenin üstü tamamen programa ait",
       "surumler": {
