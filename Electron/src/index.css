@@ -428,6 +428,95 @@ html[data-density="compact"] {
   padding-left: 78px;
 }
 
+/* ── KAYDIRMA ÇUBUĞU (yatay + dikey) — ince, tema renginde, hover'da belirginleşen ──
+   Kural TEK YERDE yaşar: evrensel seçici tüm kaydırılabilir kaplara uygular,
+   bileşen bileşen kopyalanmaz. Renk `--primary`den okunur — kişiselleştirmede
+   accent runtime'da tam bu değişkene yazıldığı için (`PreferencesProvider`)
+   çubuk da SEÇİLEN TEMA RENGİNİ alır; açık/koyu temada ayrı token gerekmez,
+   ikisi de kendi `--primary`sini tanımlar.
+
+   ⚠️ ÖLÇÜLDÜ (Chromium 13x, Electron ile aynı motor ailesi): `kap:hover::
+   -webkit-scrollbar-thumb` kuralı HİÇ BOYAMAZ. Chromium kaydırma çubuğunun
+   özel stilini yalnız elemanın KENDİ hesaplanmış stili değişince yeniden
+   kurar; salt `:hover` geçersizleştirmesi çubuğa ulaşmaz (sonda: çığlık
+   kırmızısı kural yazıldı, piksel DEĞİŞMEDİ). Değişen tek şey CSS DEĞİŞKENİ
+   olduğunda ise yeniden boyuyor — bu yüzden hover rengi doğrudan `thumb`a
+   değil, elemanın `--scrollbar-thumb` değişkenine yazılır. Kuralı "sadeleştirip"
+   doğrudan hover'a çevirme: sessizce ölür, hata vermez.
+
+   ⚠️ Taban değer `*` üzerinde (`:root` DEĞİL): custom property MİRAS ALINIR ve
+   fare pencerede olduğu sürece `html`/`body` de :hover'dır → `:root`a yazılan
+   güçlü ton TÜM çubuklara iner, "yalnız üstüne gelince" vaadi çöker. `*`
+   tabanı her elemanda mirası keser, güçlü tonu yalnız gerçekten hover'lanan
+   eleman alır. (Kökte zaten evrensel bir bildirim var — `* { border-color }`.)
+
+   ⚠️ ERİŞİLEBİLİRLİK KARARI — çubuk hover'da "yok→var" DEĞİL, "sönük→belirgin"
+   olur. Tamamen kaybolan çubuk, içeriğin devamı olduğunu hiç fark etmeyen
+   kullanıcı üretir (kaydırılabilirliğin tek kalıcı görsel işareti odur; fare
+   tekerleği olmayan / dokunmatik panelde keşfin tek yolu). Hover'ı olmayan
+   cihazda (`hover: none`) iz kalıcı olarak BELİRGİN tonda kalır.
+
+   ⚠️ Performans: yalnız `background-color` geçişi — uzun/sanallaştırılmış
+   listelerin overflow kabına gölge/blur/filter KONMAZ. Yazdırmada scrollbar
+   pseudo-element'leri hiç çizilmez, `@media print` kuralı gerekmez. */
+* {
+  --scrollbar-thumb: hsl(var(--primary) / 0.18);
+}
+@media (hover: hover) {
+  *:hover {
+    --scrollbar-thumb: hsl(var(--primary) / 0.55);
+  }
+}
+/* Hover'ı olmayan cihaz (dokunmatik panel): iz kalıcı olarak belirgin. */
+@media (hover: none) {
+  * {
+    --scrollbar-thumb: hsl(var(--primary) / 0.55);
+  }
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+/* Ok düğmeleri (Windows klasik çubuğu) — kibar görünüm için kapalı. */
+*::-webkit-scrollbar-button {
+  display: none;
+}
+/* Şeffaf kenarlık + padding-box: rayın içinde duran ince hap. */
+*::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+  background-color: var(--scrollbar-thumb);
+  transition: background-color 160ms ease;
+}
+/* Çubuğun KENDİ hover/aktif durumu — bunlar çubuk parçasının kendi durumları
+   olduğu için Chromium'da doğrudan çalışır (yukarıdaki kap-hover tuzağı yok). */
+*::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--primary) / 0.7);
+}
+*::-webkit-scrollbar-thumb:active {
+  background-color: hsl(var(--primary) / 0.85);
+}
+@media (prefers-reduced-motion: reduce) {
+  *::-webkit-scrollbar-thumb {
+    transition: none;
+  }
+}
+/* Pseudo-element'i tanımayan motorlar (Firefox) — standart karşılık.
+   Chromium'da bu blok KOŞULU SAĞLAMAZ; sağlasaydı yukarıdaki kuralları
+   sessizce iptal ederdi (scrollbar-width/color tanımlıysa Chromium
+   ::-webkit-scrollbar kurallarını TAMAMEN yok sayar). */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--primary) / 0.5) transparent;
+  }
+}
+
 /* Kaydırma çubuğunu gizle — sekme şeridi gibi yatay kaydırılan dar alanlarda
    native bar yükseklik tüketip çirkin durmasın. Kaydırma fare tekerleği
    (deltaY→scrollLeft) + sürükleme ile yapılır. */
