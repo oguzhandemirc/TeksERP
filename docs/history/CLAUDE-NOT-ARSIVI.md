@@ -2633,3 +2633,48 @@ varsayılan port listenin ilki olmaktan çıkınca 11+9.
 **Migration YOK · yeni izin kodu YOK · backend DEĞİŞMEDİ** (ilan tarafı `mdns-advertiser`
 zaten portu ilan ediyordu). Sahaya inmesi için **yeni panel sürümü** + **tablet OTA**
 gerekir; mobil taraf tamamen saf JS, yeni native modül/izin YOK.
+
+---
+
+## 2026-09-04 — [ÇEKİRDEK] Prisma'nın İKİ motoru var ve yalnız biri platformdan bağımsız
+
+**Saha bulgusu (fabrika sunucusundaki oturum yakaladı, paketleyen oturum kaçırdı).**
+macOS'ta üretilen fabrika paketine `@prisma/engines/` altında **yalnız
+`schema-engine-darwin-arm64`** girmişti. `prisma migrate deploy` o ikiliyi
+kullanır ve Windows'ta çalışmaz.
+
+**Kök neden bir GENELLEME hatası.** Doğru olan cümle: *Prisma 7'nin **sorgu**
+motoru WASM'dir* (`query_compiler_fast_bg.*.wasm` — pakette ölçüldü, hepsi
+`.wasm`), dolayısıyla macOS'ta üretilen **istemci** Windows'ta çalışır. Bu cümle
+**şema motoruna uzanmaz**: o hâlâ `schema-engine-<platform>` biçiminde NATIVE
+bir ikilidir. "Prisma 7'de platform motoru yok" diye genellenince paketleme
+kapıları bu boyutu hiç ölçmedi (kapılar dosya sayısı · `.prisma/client` ·
+prisma CLI · Node tabanına bakıyordu).
+
+⚠️ **ARIZANIN ÇIKACAĞI YER EN KÖTÜ YER:** `kur.ps1 [7/9]` — geri alınamaz eşik,
+ve tek-sunucu geçiş modelinde fabrika o anda **zaten kapalıdır** (eski API 4.
+adımda durduruldu).
+
+⚠️ **PROVA BU ARIZAYI GÖRMEZ — ölçüldü.** Ev provasında `migrate deploy` geçti
+çünkü Prisma eksik motoru o makinenin `%LOCALAPPDATA%` önbelleğinden sessizce
+tamamladı (indirilen ikilinin hash'i canlıdakiyle bayt-bayt aynı çıktı). Yani
+**yeşil prova "paket kendi kendine yeter" DEMEK DEĞİLDİR**; önbelleği boş ve
+internetsiz bir sunucuda aynı paket düşerdi. Bu yüzden kapı **pakette ve
+kurulumda**, provada değil.
+
+**Kurulan üç kapı (üçü de negatif sondayla kırmızı gösterildi):**
+1. `paketle.ps1` — `PRISMA_CLI_BINARY_TARGETS=windows` ile `prisma generate`
+   (ölçüldü: `schema-engine-windows.exe`, 21 MB, `file` → *PE32+ executable, for
+   MS Windows*), sonra **varlık** kapısı.
+2. `paketle.ps1` — **MZ imza** kapısı: yarım/boş inen dosya da "var" görünür,
+   ilk iki bayt `4D 5A` okunur.
+3. `kur.ps1 [1/9]` — pakette Windows motoru yoksa **eşikten ÖNCE** durur ve
+   bulduğu motorların adını yazar (eski paketle gelen kurulumu yakalar).
+
+Ayrıca yabancı platform motorları paketten atılır: 24 MB ölü ağırlık ve "bu
+paket hangi platform için" sorusunu bulanıklaştırıyordu.
+
+**Ders (sınıf: "doğru cümlenin yanlış genellemesi"):** bir bileşenin bir
+boyutta platformdan bağımsız olması, TÜM alt bileşenlerinin öyle olduğunu
+göstermez. Yeni bir "bu artık platformdan bağımsız" notu yazarken soru: *bu
+iddia hangi ikiliyi kapsıyor, ve aynı paketin başka hangi ikilileri var?*

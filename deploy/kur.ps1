@@ -257,6 +257,32 @@ if ($nmVar) {
   # `.bin` BILEREK aranmaz: macOS/Linux'ta uretilen pakette orada sembolik baglar
   # olur (Windows'ta ise yaramaz) ve bu script prisma'yi `.bin` uzerinden DEGIL
   # dogrudan node ile cagirir. bkz. [7/9].
+  # ⚠⚠ SEMA MOTORU (2026-09-04, sahada yakalandi): `migrate deploy` NATIVE bir
+  #   ikili kullanir - `schema-engine-<platform>`. Sorgu motoru WASM oldugu icin
+  #   "Prisma 7'de platform motoru yok" sanilip macOS'ta paketlenen bir pakete
+  #   yalnizca `schema-engine-darwin-arm64` girdi. Windows'ta o ikili
+  #   CALISMAZ ve arizanin cikacagi yer [7/9] - GERI ALINAMAZ ESIK, ustelik
+  #   fabrika o anda ZATEN KAPALI (eski API durdurulmus olur).
+  #   ⚠ Prisma eksik motoru %LOCALAPPDATA% onbelleginden ya da internetten
+  #   sessizce tamamlayabilir; yani bu arizanin bir kez "kendiliginden gecmis"
+  #   olmasi paketin saglam oldugunu GOSTERMEZ. Kapi burada, esikten ONCE.
+  $motorDizin = Join-Path $temp "node_modules\@prisma\engines"
+  if (Test-Path $motorDizin) {
+    $winMotor = Join-Path $motorDizin "schema-engine-windows.exe"
+    if (-not (Test-Path $winMotor)) {
+      $bulunan = (Get-ChildItem $motorDizin -Filter "schema-engine-*" -File -ErrorAction SilentlyContinue |
+                  ForEach-Object { $_.Name }) -join ", "
+      if (-not $bulunan) { $bulunan = "(hic yok)" }
+      Fail @"
+Pakette WINDOWS sema motoru yok: schema-engine-windows.exe
+       Bulunan: $bulunan
+       Bu paket baska bir platformda uretilmis. `migrate deploy` [7/9]'da
+       duser ve orasi GERI ALINAMAZ ESIK.
+       Cozum: paketi PRISMA_CLI_BINARY_TARGETS=windows ile yeniden uret
+       (guncel deploy\paketle.ps1 bunu zaten yapiyor ve kendi kapisi var).
+"@
+    }
+  }
   foreach ($z in @("node_modules\.prisma\client", "node_modules\prisma\build\index.js")) {
     if (-not (Test-Path (Join-Path $temp $z))) { Fail "Paket BOZUK - eksik: $z  (backend acilamaz)" }
   }

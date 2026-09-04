@@ -227,9 +227,53 @@ if ($NodeModulesHaric) {
   if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "npm ci --omit=dev basarisiz." }
   # Prisma istemcisi + sorgu motorlari: npm 11 install-script'leri blokladigi icin
   # motorlari postinstall DEGIL, `generate` ceker. Paket kendi kendine yetsin.
+  #
+  # ⚠⚠ IKI FARKLI MOTOR VAR VE YALNIZ BIRI PLATFORMDAN BAGIMSIZ (2026-09-04):
+  #   * SORGU motoru  -> WASM (`query_compiler_fast_bg.*.wasm`). Platformdan
+  #     BAGIMSIZ; macOS'ta uretilen istemci Windows'ta calisir.
+  #   * SEMA motoru   -> NATIVE ikili (`schema-engine-<platform>`), `migrate
+  #     deploy`in kullandigi sey. macOS'ta paketlenirse pakete YALNIZ
+  #     `schema-engine-darwin-arm64` girer ve Windows'ta `kur.ps1 [7/9]` -
+  #     yani GERI ALINAMAZ ESIK - duser.
+  #   "Prisma 7 WASM kullaniyor, platform motoru yok" cumlesi YALNIZ sorgu
+  #   motoru icin dogrudur; tum zincire genellenirse bu tuzak dogar.
+  #
+  # ⚠ PROVA BU ARIZAYI GORMEZ: Windows makinede Prisma, eksik motoru kendi
+  #   onbelleginden (%LOCALAPPDATA%) sessizce tamamlayabilir. Yani yesil prova
+  #   "paket saglam" DEMEK DEGILDIR - onbellegi bos VE internetsiz bir sunucuda
+  #   ayni paket duser. Kapi bu yuzden PAKETTE, provada degil.
+  $env:PRISMA_CLI_BINARY_TARGETS = "windows"
   npx prisma generate
-  if ($LASTEXITCODE -ne 0) { Pop-Location; Fail "prisma generate basarisiz." }
+  $prismaKod = $LASTEXITCODE
+  Remove-Item Env:\PRISMA_CLI_BINARY_TARGETS -ErrorAction SilentlyContinue
+  if ($prismaKod -ne 0) { Pop-Location; Fail "prisma generate basarisiz." }
   Pop-Location
+
+  # --- KAPI: sema motoru WINDOWS ikilisi olmak ZORUNDA ---
+  $motorDizin = Join-Path $stage "node_modules/@prisma/engines"
+  $winMotor   = Join-Path $motorDizin "schema-engine-windows.exe"
+  if (-not (Test-Path $winMotor)) {
+    Fail @"
+Windows sema motoru pakete girmedi: schema-engine-windows.exe
+       `migrate deploy` bu ikiliyi kullanir; onsuz kur.ps1 [7/9] (geri
+       alinamaz esik) fabrikada duser.
+       Beklenen yol: $winMotor
+       Cozum: PRISMA_CLI_BINARY_TARGETS=windows ile `prisma generate` kosmali
+       (bu script zaten kosuyor - internet yoksa indirme dusmustur).
+"@
+  }
+  # ⚠ MZ imzasi: bos/yarim inen dosya da "var" gorunur. Ikili gercekten
+  #   Windows PE mi, onu okuyoruz.
+  $imza = [System.IO.File]::ReadAllBytes($winMotor)[0..1]
+  if ($imza[0] -ne 0x4D -or $imza[1] -ne 0x5A) {
+    Fail "schema-engine-windows.exe Windows ikilisi DEGIL (MZ imzasi yok) - indirme yarim kalmis olabilir."
+  }
+  # Yabanci platform motorlari pakette ISE YARAMAZ (24 MB olu agirlik) ve
+  # "bu paket hangi platform icin" sorusunu bulanik birakir.
+  Get-ChildItem $motorDizin -Filter "schema-engine-*" -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -ne "schema-engine-windows.exe" } |
+    ForEach-Object { Write-Host "  - yabanci motor atildi: $($_.Name)"; Remove-Item $_.FullName -Force }
+  Write-Host "  + sema motoru: schema-engine-windows.exe ($([math]::Round((Get-Item $winMotor).Length/1MB,1)) MB, MZ dogrulandi)"
   $nmMB = [math]::Round((Get-ChildItem "$stage\node_modules" -Recurse -Force | Measure-Object Length -Sum).Sum / 1MB, 1)
   Write-Host "  node_modules: $nmMB MB (uretim-only, Prisma istemcisi uretilmis)"
 }
