@@ -138,7 +138,7 @@ import {
   __resetSystemAccountRegistryForTests,
 } from "../src/services/helpers/system-account.registry";
 import { SYSTEM_ACCOUNT_FULLNAME } from "../src/jobs/superadmin.job";
-import { blockSystemAccountTarget } from "../src/middlewares/system-account.middleware";
+import { PermissionManagementService } from "../src/services/permission-management.service";
 import { verifyToken } from "../src/middlewares/auth.middleware";
 import jwt from "jsonwebtoken";
 import { AuthService } from "../src/services/auth.service";
@@ -642,162 +642,78 @@ async function main(): Promise<void> {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n=== J) id → PIN zinciri KAPALI (`/users/:id*` → 404) ===");
+  console.log("\n=== J) GÖRÜNÜRLÜK AÇIK — ama DÜZ PIN korunuyor ===");
   {
-    // (a) ÖNEK KAPISI kaynak sözleşmesi — route başına eklenirse on sekizinci uç
-    //     kapısız doğar (bu repoda "unutulmuş yüzey" sınıfı defalarca ısırdı).
+    // ⚠️ 2026-09-04 KARAR DEĞİŞİKLİĞİ. Bu bölüm eskiden bunun TERSİNİ ölçüyordu:
+    // en yetkili hesabı hedefleyen `/users/:id*` isteği 404 dönmek ZORUNDAYDI.
+    // Karar: en yetkili kişi DB'den görevlendirilen GERÇEK bir kullanıcıdır ve
+    // her yüzeyde görünür olur. Bölüm, gizlemenin GERİ GELMEDİĞİNİ ölçer.
+    //
+    // ⚠️ AMA eski kapının bir işi obscurity DEĞİLDİ ve o iş sürüyor:
+    // `/users/:id/credentials` hedefin 6 haneli DÜZ PIN'ini döner ve
+    // `login-quick-pin` PIN'i TEK BAŞINA kimlik sayar. `admin:users` +
+    // `admin:settings` taşıyan biri (sahada DÖRT hesap) en yetkili kişinin
+    // PIN'ini okuyabilseydi onun kimliğine bürünür ve modül anahtarı kilidi
+    // dahil her şey düşerdi. GÖRÜNÜRLÜK ≠ KİMLİK BİLGİSİNİ TESLİM ETMEK.
     const adminSrc = fs.readFileSync(path.join(SRC, "routes", "admin.routes.ts"), "utf8");
-    const kapiIdx = adminSrc.indexOf("blockSystemAccountTarget");
-    const kapiKullanimIdx = adminSrc.indexOf('"/users/:id",\n  verifyToken');
-    check("`blockSystemAccountTarget` admin.routes'ta bağlı", kapiIdx > 0);
+
     check(
-      "kapı ÖNEK olarak bağlı (`router.use(\"/users/:id\", …)`)",
-      /router\.use\(\s*\n?\s*"\/users\/:id",[\s\S]{0,200}blockSystemAccountTarget/.test(adminSrc),
+      "önek 404 kapısı KALDIRILDI (`blockSystemAccountTarget` bağlı değil)",
+      !/router\.use\(\s*\n?\s*"\/users\/:id",[\s\S]{0,220}blockSystemAccountTarget/.test(adminSrc),
     );
-    // Kapı, `/users/:id` ile başlayan HER uç tanımından ÖNCE gelmeli.
-    const ilkUcIdx = adminSrc.search(/router\.(get|post|patch|put|delete)\(\s*\n?\s*"\/users\/:id/);
-    const kapiUseIdx = adminSrc.search(/router\.use\(\s*\n?\s*"\/users\/:id"/);
     check(
-      "kapı, ilk `/users/:id` ucundan ÖNCE tanımlı",
-      kapiUseIdx >= 0 && ilkUcIdx > kapiUseIdx,
-      `use@${kapiUseIdx} < uç@${ilkUcIdx}`,
+      "middleware'de de kalmadı (ölü kod bırakılmadı)",
+      !fs
+        .readFileSync(path.join(SRC, "middlewares", "system-account.middleware.ts"), "utf8")
+        .includes("export async function blockSystemAccountTarget"),
     );
+
+    // Körlük zemini: ölçüm gerçek bir yüzeye kurulu mu?
     const ucSayisi = (adminSrc.match(/"\/users\/:id[^"]*"/g) ?? []).length;
     check("körlük zemini — `/users/:id*` uç sayısı ≥ 10", ucSayisi >= 10, `${ucSayisi} yol`);
-    void kapiKullanimIdx;
 
-    // (b) MIDDLEWARE davranışı — sistem hesabı hedefinde 404 + audit denemesi.
+    // DÜZ PIN kapısı: credentials ucunun GÖVDESİNDE olmak zorunda.
+    const credIdx = adminSrc.indexOf('"/users/:id/credentials"');
+    const credBlok = credIdx > 0 ? adminSrc.slice(credIdx, credIdx + 2600) : "";
+    check("`/users/:id/credentials` ucu bulundu (körlük zemini)", credIdx > 0);
+    check(
+      "DÜZ PIN ucu en yetkili hesabı KORUYOR (isSystemAccount + req.isSystemAccount)",
+      /isSystemAccount\s*===\s*true[\s\S]{0,200}req\.isSystemAccount\s*!==\s*true/.test(credBlok),
+    );
+    check(
+      "korumanın cevabı 403 (hesabın varlığı zaten açık — 404 yanlış bilgi olurdu)",
+      /AppError\.forbidden/.test(credBlok),
+    );
+
+    // Davranış: hesap ARTIK bulunabilir olmalı.
     const hedef =
       fixtureId ??
       (await prisma.user.findFirst({ where: { isSystemAccount: true }, select: { id: true } }))?.id ??
       null;
-    const normal = await prisma.user.findFirst({
-      where: { isSystemAccount: false },
-      select: { id: true },
-    });
-    if (!hedef || !normal) {
-      atla("404 kapısı davranış ölçümü", "fixture yok");
-      atlanan += 4;
+    if (!hedef) {
+      atla("görünürlük davranış ölçümü", "fixture yok");
+      atlanan += 2;
     } else {
-      const cagir = async (id: string): Promise<unknown> => {
-        const req = {
-          params: { id },
-          user: { userId: normal.id },
-          method: "GET",
-          originalUrl: `/api/admin/users/${id}/credentials`,
-        } as unknown as Request;
-        return new Promise((resolve) => {
-          void blockSystemAccountTarget(req, {} as Response, ((e?: unknown) => resolve(e)) as NextFunction);
-        });
-      };
-
-      const oncekiDeneme = await prisma.systemLog.count({
-        where: { action: "SYSTEM_ACCOUNT_ACCESS_BLOCKED" },
-      });
-      const sistemHatasi = await cagir(hedef);
+      const kunye = await PermissionManagementService.getUserById(hedef).catch((e: unknown) => e);
       check(
-        "sistem hesabı hedefi → 404 (403 DEĞİL: 403 varlığı doğrular)",
-        sistemHatasi instanceof AppError && sistemHatasi.statusCode === 404,
-        sistemHatasi instanceof AppError ? `${sistemHatasi.statusCode}` : String(sistemHatasi),
+        "künye okunabiliyor (eskiden 404 idi)",
+        typeof kunye === "object" && kunye !== null && "id" in (kunye as Record<string, unknown>),
+        kunye instanceof Error ? kunye.message : "künye döndü",
       );
-      const sonrakiDeneme = await prisma.systemLog.count({
-        where: { action: "SYSTEM_ACCOUNT_ACCESS_BLOCKED" },
-      });
+      const liste = await PermissionManagementService.listUsers();
       check(
-        "deneme audit'e yazıldı (kim satıcının PIN'ini aradı)",
-        sonrakiDeneme > oncekiDeneme,
-        `${oncekiDeneme} → ${sonrakiDeneme}`,
+        "kullanıcı LİSTESİNDE görünüyor (masaüstü + tablet aynı ucu okur)",
+        liste.some((u: { id: string }) => u.id === hedef),
+        `${liste.length} kullanıcı`,
       );
-      const sonIz = await prisma.systemLog.findFirst({
-        where: { action: "SYSTEM_ACCOUNT_ACCESS_BLOCKED" },
-        orderBy: { createdAt: "desc" },
-        select: { newData: true },
-      });
-      const yuk = JSON.stringify(sonIz?.newData ?? {});
       check(
-        "audit izi SIR taşımıyor (yalnız hedef id + method + path)",
-        !/\$2[aby]\$/.test(yuk) && !/\bquickPin\b/.test(yuk) && !/passwordHash/.test(yuk),
-        yuk.slice(0, 120),
+        "listede `isSystemAccount` alanı taşınıyor (arayüz 'Tüm yetkiler' rozetini ondan çizer)",
+        liste.some((u: { id: string; isSystemAccount?: boolean }) => u.id === hedef && u.isSystemAccount === true),
       );
-
-      const normalHatasi = await cagir(normal.id);
-      check("normal kullanıcı hedefi DOKUNULMADAN geçer (regresyon)", normalHatasi === undefined);
-
-      const uuidDegil = await cagir("bu-bir-uuid-degil");
-      check(
-        "UUID olmayan `:id` dokunulmadan geçer (bugünkü hata yolu korunur)",
-        uuidDegil === undefined,
-      );
-    }
-
-    // (c) OTURUM ↔ KULLANICI BAĞI (2026-09-03 / P3 düzeltme turu — D2 NOT'u).
-    // ⚠️ `verifyToken` eskiden yalnız "bu jti canlı mı" soruyordu, "bu jti BU
-    //    KULLANICIYA mı ait" sorusunu SORMUYORDU. Sonuç ölçüldü: JWT_SECRET'ı
-    //    bilen biri BAŞKA bir oturumun geçerli jti'sini alıp payload'a satıcı
-    //    hesabının userId'sini yazıyor ve `/auth/me`den 200 `isSystemAccount:true`
-    //    alıyordu — yani süperadmin kimliği, hesabın parolasına HİÇ dokunmadan
-    //    üretilebiliyordu. Ön koşul (sunucu sırrının sızması) ağırdır, ama
-    //    `Session.userId` kolonu ELDEYKEN bağı kontrol etmemek bedava bir
-    //    savunma katmanını boşa bırakmaktı. Bu sonda tam o katmanı ölçer.
-    {
-      const sistem = await prisma.user.findFirst({
-        where: { isSystemAccount: true },
-        select: { id: true, username: true, tokenVersion: true },
-      });
-      const canliOturum = await prisma.session.findFirst({
-        where: { revokedAt: null, user: { isSystemAccount: false, isActive: true } },
-        orderBy: { createdAt: "desc" },
-        select: { jti: true, userId: true },
-      });
-      if (!sistem || !canliOturum) {
-        atla("oturum ↔ kullanıcı bağı", "sistem hesabı ya da canlı oturum yok — 3 kontrol ölçülmedi");
-        atlanan += 3;
-      } else {
-        const sahibi = await prisma.user.findUnique({
-          where: { id: canliOturum.userId },
-          select: { id: true, username: true, tokenVersion: true, isActive: true },
-        });
-        const imzala = (u: { id: string; username: string; tokenVersion: number }): string =>
-          jwt.sign(
-            { userId: u.id, username: u.username, permissions: [], tokenVersion: u.tokenVersion },
-            process.env.JWT_SECRET as string,
-            { jwtid: canliOturum.jti },
-          );
-        const kosVerify = (token: string): Promise<unknown> => {
-          const req = { headers: { authorization: `Bearer ${token}` } } as unknown as Request;
-          return new Promise((resolve) => {
-            void verifyToken(req, {} as Response, ((e?: unknown) => resolve(e)) as NextFunction);
-          });
-        };
-
-        // ZEMİN: aynı jti KENDİ sahibiyle imzalanınca GEÇER. Bu kontrol olmadan
-        // aşağıdaki "401" vakumen yeşil olurdu (her token 401 alıyor olabilirdi).
-        const zemin = sahibi ? await kosVerify(imzala(sahibi)) : "sahip yok";
-        check(
-          "zemin: jti KENDİ kullanıcısıyla imzalanınca verifyToken GEÇER",
-          zemin === undefined,
-          zemin instanceof AppError ? `${zemin.statusCode} ${zemin.message}` : String(zemin),
-        );
-
-        const yabanci = await kosVerify(imzala(sistem));
-        check(
-          "YABANCI jti + süperadmin userId → 401 (oturum başkasının)",
-          yabanci instanceof AppError && yabanci.statusCode === 401,
-          yabanci instanceof AppError ? `${yabanci.statusCode}` : String(yabanci),
-        );
-        check(
-          "kod `SESSION_INVALID` — mesaj 'jti geçerli ama sahibi başka'yı SIZDIRMAZ",
-          yabanci instanceof AppError &&
-            (yabanci as unknown as { details?: { code?: string } }).details?.code === "SESSION_INVALID",
-          yabanci instanceof AppError
-            ? String((yabanci as unknown as { details?: { code?: string } }).details?.code)
-            : String(yabanci),
-        );
-      }
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
+
   console.log("\n=== K) `/api/auth/me` sözleşmesi (panelin salt-okunur kararı) ===");
   {
     // Panel "Modüller" kategorisini bu İKİ alandan çizer. Ayrışırlarsa panel
@@ -1010,15 +926,13 @@ async function main(): Promise<void> {
     check("HTTP: süperadmin modül anahtarını YAZAR → 200", yaz.status === 200, `${yaz.status}`);
 
     // ═════════════════════════════════════════════════════════════════════════
-    // (5) AKTÖR MASKESİ — audit LİSTESİ + DETAYI (B1 / D2 major #1 ve #2)
+    // (5) AKTÖR GÖRÜNÜR — audit LİSTESİ + DETAYI (2026-09-04: maske KALDIRILDI)
     // ═════════════════════════════════════════════════════════════════════════
-    // NE KORUYOR: satıcı hesabının GERÇEK giriş adı bir SIRDIR (helper'ın kendi
-    // gerekçesi) ve audit yüzeylerinde takma adla ("sistem" / "Sistem Bakımı")
-    // gösterilir. Bu maskenin TEK uygulaması `system-log.service`teki
-    // `withMaskedActor`tı ve HİÇBİR BEKÇİ ONU ÖLÇMÜYORDU — sonda ölçüldü:
-    // maskeyi silmek 99/0'ı hiç bozmuyordu. Ayrıca maske SATIR düzeyinde eksikti:
-    // `AUTH` satırlarının `recordId`'si giriş adıdır ve aynı JSON satırında
-    // `{"recordId":"<gerçek ad>","user":{"username":"sistem"}}` yan yana duruyordu.
+    // ⚠️ KARAR DEĞİŞİKLİĞİ (2026-09-04). Bu blok eskiden bunun TERSİNİ ölçüyordu:
+    // aktör "sistem" / "Sistem Bakımı" takma adıyla basılmak ZORUNDAYDI ve `AUTH`
+    // satırlarının `recordId`'si de nötrleniyordu. Artık en yetkili kişi gerçek
+    // adıyla görünür — ayak izi tam da yetki en genişken okunabilir olmalı.
+    // Blok, maskenin GERİ GELMEDİĞİNİ ölçer.
     //
     // ⚠️ ÖLÇÜM SÜPERADMİNİN KENDİ TOKEN'IYLA YAPILIR. Maske BAKAN KİŞİYE göre
     // değişmez (servis her okuyucuya aynı nesneyi verir), ve fabrika admininin
@@ -1043,11 +957,9 @@ async function main(): Promise<void> {
       `${satirlar2.length} satır`,
     );
     check(
-      "HTTP: audit aktörü takma adla basılıyor (`sistem` / `Sistem Bakımı`)",
+      "HTTP: audit aktörü GERÇEK adıyla basılıyor (takma ad YOK)",
       satirlar2.length > 0 &&
-        satirlar2.every(
-          (r) => r.user?.username === "sistem" && r.user?.fullName === "Sistem Bakımı",
-        ),
+        satirlar2.every((r) => r.user?.username !== "sistem" && r.user?.fullName !== "Sistem Bakımı"),
       JSON.stringify(satirlar2[0]?.user ?? null),
     );
     const authSatirlari = satirlar2.filter((r) => r.tableName === "AUTH");
@@ -1057,21 +969,20 @@ async function main(): Promise<void> {
       `${authSatirlari.length} AUTH satırı`,
     );
     check(
-      "HTTP: `AUTH` satırının `recordId`'si de NÖTRLENMİŞ (giriş adı sızmıyor)",
-      authSatirlari.length > 0 && authSatirlari.every((r) => r.recordId === "sistem"),
+      "HTTP: `AUTH` satırının `recordId`'si GERÇEK giriş adı (nötrleme kaldırıldı)",
+      authSatirlari.length > 0 && authSatirlari.every((r) => r.recordId !== "sistem"),
       authSatirlari.map((r) => r.recordId).join(", "),
     );
     check(
-      "HTTP: liste GÖVDESİNDE gerçek kullanıcı adı 0 kez geçiyor",
-      !logGovde.includes(FIXTURE_USERNAME),
-      "aksi halde takma ad aynı satırda çürütülür",
+      "HTTP: liste gövdesinde gerçek kullanıcı adı GEÇİYOR (ayak izi okunabilir)",
+      logGovde.includes(FIXTURE_USERNAME),
     );
     check(
-      "HTTP: yanıtta `isSystemAccount` anahtarı YOK (maske kendini ilan etmez)",
-      !logGovde.includes("isSystemAccount"),
+      "HTTP: yanıt `isSystemAccount` taşıyor (arayüz 'en yetkili' rozetini ondan çizer)",
+      logGovde.includes("isSystemAccount"),
     );
 
-    // Detay yolu (`findById`) AYNI sarmalayıcıdan geçmeli — ayrı yazım ayrışır.
+    // Detay yolu (`findById`) da aynı sözleşmeyi taşımalı.
     const detayId = authSatirlari[0]?.id ?? satirlar2[0]?.id ?? null;
     if (!detayId) {
       atla("audit DETAY maskesi", "listede satır yok");
@@ -1084,23 +995,22 @@ async function main(): Promise<void> {
         data?: { tableName?: string; recordId?: string; user?: Record<string, unknown> | null };
       };
       check(
-        "HTTP: audit DETAYI da maskeli (aktör + AUTH `recordId`)",
-        detay.data?.user?.username === "sistem" &&
-          (detay.data?.tableName !== "AUTH" || detay.data?.recordId === "sistem"),
+        "HTTP: audit DETAYI da maskesiz (gerçek aktör + gerçek `recordId`)",
+        detay.data?.user?.username !== "sistem" && detay.data?.recordId !== "sistem",
         JSON.stringify({ recordId: detay.data?.recordId, user: detay.data?.user }),
       );
       check(
-        "HTTP: detay GÖVDESİNDE gerçek kullanıcı adı 0 kez geçiyor",
-        !detayGovde.includes(FIXTURE_USERNAME),
+        "HTTP: detay gövdesinde gerçek kullanıcı adı GEÇİYOR",
+        detayGovde.includes(FIXTURE_USERNAME),
       );
     }
 
     // ═════════════════════════════════════════════════════════════════════════
     // (6) ARŞİV KOLU — canlı kolun BİR ADIM GERİSİNDE kalmasın
     // ═════════════════════════════════════════════════════════════════════════
-    // Arşiv 6 ayda bir dolar, yani bu yol yıllarca ölçülmeden kalabilir; maskesi
-    // canlı koldan ayrışırsa fark ancak eski bir kaydı açan denetçi tarafından
-    // görülür. SENTETİK satır yazılır ve `finally`de silinir.
+    // Arşiv 6 ayda bir dolar, yani bu yol yıllarca ölçülmeden kalabilir; canlı
+    // koldan ayrışırsa fark ancak eski bir kaydı açan denetçi tarafından görülür.
+    // SENTETİK satır yazılır ve `finally`de silinir.
     const arsivId = randomUUID();
     arsivSondaId = arsivId;
     await prisma.systemLogArchive.create({
@@ -1125,11 +1035,11 @@ async function main(): Promise<void> {
     };
     const arsivSatir = (arsivListe.data ?? []).find((r) => r.id === arsivId);
     check(
-      "HTTP: ARŞİV listesi maskeli (aktör + `recordId`) ve gerçek ad geçmiyor",
+      "HTTP: ARŞİV listesi de maskesiz (gerçek aktör + gerçek `recordId`)",
       !!arsivSatir &&
-        arsivSatir.user?.username === "sistem" &&
-        arsivSatir.recordId === "sistem" &&
-        !arsivListeGovde.includes(FIXTURE_USERNAME),
+        arsivSatir.user?.username !== "sistem" &&
+        arsivSatir.recordId !== "sistem" &&
+        arsivListeGovde.includes(FIXTURE_USERNAME),
       JSON.stringify(arsivSatir ?? null),
     );
     const arsivDetayGovde = await (
@@ -1139,10 +1049,10 @@ async function main(): Promise<void> {
       data?: { recordId?: string; user?: Record<string, unknown> | null };
     };
     check(
-      "HTTP: ARŞİV detayı maskeli (aktör + `recordId`) ve gerçek ad geçmiyor",
-      arsivDetay.data?.user?.username === "sistem" &&
-        arsivDetay.data?.recordId === "sistem" &&
-        !arsivDetayGovde.includes(FIXTURE_USERNAME),
+      "HTTP: ARŞİV detayı da maskesiz (gerçek aktör + gerçek `recordId`)",
+      arsivDetay.data?.user?.username !== "sistem" &&
+        arsivDetay.data?.recordId !== "sistem" &&
+        arsivDetayGovde.includes(FIXTURE_USERNAME),
       JSON.stringify({ recordId: arsivDetay.data?.recordId, user: arsivDetay.data?.user }),
     );
   }

@@ -40,57 +40,15 @@ const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Hedef kullanıcı bir SİSTEM hesabıysa isteği 404'e düşürür ve denemeyi audit'e
- * yazar ("kim satıcı hesabının künyesini/PIN'ini aradı" sorusunun cevabı).
- */
-export async function blockSystemAccountTarget(
-  req: Request,
-  _res: Response,
-  next: NextFunction,
-): Promise<void> {
-  try {
-    // Express 5: `req.params.id` tipi `string | string[]` (repo konvansiyonu: cast).
-    const id = req.params.id as string | undefined;
-    if (!id || !UUID_RE.test(id)) {
-      next();
-      return;
-    }
-    const target = await prisma.user.findUnique({
-      where: { id },
-      select: { isSystemAccount: true },
-    });
-    if (!target?.isSystemAccount) {
-      next();
-      return;
-    }
-    // BEST-EFFORT (audit sözleşmesi): yazım hatası isteği DÜŞÜRMEZ — ama istek
-    // zaten reddedilecek, yani sessiz kalmak bilgiyi kaybetmek demek.
-    await AuditService.logEvent({
-      category: "SYSTEM",
-      action: "SYSTEM_ACCOUNT_ACCESS_BLOCKED",
-      userId: req.user?.userId ?? null,
-      tableName: "users",
-      recordId: id,
-      // ⚠️ SIR YOK: yalnız hedef id + hangi uç denendi.
-      payload: { targetUserId: id, method: req.method, path: req.originalUrl },
-    }).catch(() => undefined);
-    next(AppError.notFound("Kullanıcı bulunamadı"));
-  } catch (error) {
-    next(error);
-  }
-}
-
-/**
- * SÜPERADMİN-ONLY YÜZEY KAPISI: istek sahibi sistem hesabı DEĞİLSE **404**
+ * EN YETKİLİ HESABA ÖZEL YÜZEY KAPISI: istek sahibi o hesap değilse **403**
  * (2026-09-03 / P3 — ayar şifresi yönetimi).
  *
- * ⚠️ 403 DEĞİL, aynı gerekçeyle: 403 "böyle bir uç var ve sen yetkisizsin"
- * der, yani satıcı hesabının VARLIĞINI ve yönettiği yüzeyi doğrular. Fabrika
- * yöneticisi için bu uç hiç YOKTUR.
+ * ⚠️ 2026-09-04: eskiden **404** dönüyordu. Gerekçe "403 hesabın VARLIĞINI
+ * doğrular" idi; hesap artık her yüzeyde GÖRÜNÜR olduğu için o gerekçe çürüdü
+ * ve 404 yalnızca yetkisiz kullanıcıya yanlış bilgi veren bir gürültü olarak
+ * kalmıştı ("böyle bir uç yok" — oysa var).
  *
- * ⚠️ `verifyToken`DAN SONRA takılır: kimliksiz istek 401 almalıdır. Kimliksiz
- * bir istek burada 404 alsaydı, "kimlik olmadan da 404" gözlemi ucun varlığını
- * ele veren ikinci bir orakül olurdu.
+ * ⚠️ `verifyToken`DAN SONRA takılır: kimliksiz istek 401 almalıdır.
  *
  * ⚠️ Kimlik `req.isSystemAccount`tır — istek başına DB'den TAZE okunur
  * (`verifyToken`), JWT claim'i DEĞİL: istemci seçemez.
@@ -101,7 +59,7 @@ export function requireSystemAccountOr404(
   next: NextFunction,
 ): void {
   if (req.isSystemAccount !== true) {
-    next(AppError.notFound("Kayıt bulunamadı"));
+    next(AppError.forbidden("Bu işlem için en yetkili hesap gerekir"));
     return;
   }
   next();

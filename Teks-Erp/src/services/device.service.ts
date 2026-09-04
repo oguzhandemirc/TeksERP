@@ -12,7 +12,7 @@ import prisma from "../lib/prisma";
 import { DeviceKind } from "@prisma/client";
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
-import { ACTOR_SELECT, maskSystemActor } from "./helpers/system-account.helper";
+import { ACTOR_SELECT } from "./helpers/system-account.helper";
 
 /**
  * Eşleşme bekleyen cihaz üst sınırı (F-CORE-GUV-003). Kimlik doğrulamasız
@@ -141,7 +141,7 @@ export class DeviceService {
     // ÖLÇÜLDÜ (D1): satıcı tablete PIN'le girince — tasarımın KENDİ akışı —
     // oturum o cihaza yazılıyor ve `admin:settings` taşıyan her yönetici Cihazlar
     // ekranında gerçek giriş adını görüyordu. Doğru çözüm audit yüzeyleriyle
-    // AYNI: `ACTOR_SELECT` + `maskSystemActor` (satır kalır, kimlik nötrlenir).
+    // Aktör GERÇEK adıyla döner (2026-09-04: kimlik maskesi kaldırıldı).
     const lastSession = await prisma.workSession.findFirst({
       where: { deviceId: id },
       orderBy: { startedAt: "desc" },
@@ -159,7 +159,7 @@ export class DeviceService {
     return {
       ...rest,
       hardware: [...hardware.values()],
-      lastSession: lastSession ? { ...lastSession, user: maskSystemActor(lastSession.user) } : null,
+      lastSession,
     };
   }
 

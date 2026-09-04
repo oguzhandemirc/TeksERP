@@ -9,7 +9,6 @@ import jwt from "jsonwebtoken";
 import { randomBytes, randomInt, randomUUID } from "crypto";
 import { JwtPayload } from "../types/api.types";
 import { AppError } from "../utils/app-error";
-import { visibleUserWhere } from "./helpers/system-account.helper";
 import { AuditService } from "./audit.service";
 import {
   readSessionDurationMinutes,
@@ -503,7 +502,7 @@ export class AuthService {
       // (mobil GRANT satırı doğmuyor, `["*"]` koddan geliyor) — ama kural
       // "grant'ı yok" değil "sistem hesabı" olmalı: teşhis için tek bir mobil
       // izin verilse liste anında sızardı.
-      where: visibleUserWhere({
+      where: ({
         isActive: true,
         permissions: {
           some: {

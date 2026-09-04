@@ -41,7 +41,7 @@
 //     `payload`ı HAM yazar (maskeleme yalnız `changes` kolonuna uygulanır) — yani
 //     temizlik ÇAĞIRANIN sorumluluğudur (`setQuickPin` emsali: `rotated: boolean`).
 //   • Log satırlarında sır YOK ve KULLANICI ADI DA YOK (2026-09-03): ad audit
-//     yüzeylerinde bilerek gizleniyor (`SYSTEM_ACTOR_USERNAME`), pm2 log'u ise
+//     yüzeylerinde 2026-09-04'e kadar gizleniyordu (artık görünür), pm2 log'u ise
 //     fabrika sunucusunda okunabilir — iki yüzey ayrışmamalı.
 // =============================================================================
 

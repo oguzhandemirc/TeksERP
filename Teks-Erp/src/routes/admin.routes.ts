@@ -5,7 +5,6 @@
 import { Router, Request, Response, NextFunction } from "express";
 import { SCREEN_CATALOG, permissionsWithoutScreen } from "../constants/screen-catalog";
 import { verifyToken } from "../middlewares/auth.middleware";
-import { blockSystemAccountTarget } from "../middlewares/system-account.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
 import { AuditService } from "../services/audit.service";
 import { AuthService } from "../services/auth.service";
@@ -47,6 +46,7 @@ import {
 } from "../services/latency-persist.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
+import prisma from "../lib/prisma";
 import { z } from "zod";
 import "../types/express-augment";
 
@@ -55,36 +55,34 @@ const router = Router();
 // =============================================================================
 // SATICI (SİSTEM) HESABI — HEDEF ALINAMAZ
 // =============================================================================
-// `/api/admin/users/:id` ile başlayan HER uç (künye · yetki · PIN · kart ·
-// parola · TOTP · pasifleştir · kalıcı sil) sistem hesabında **404** verir.
-// Önek kapısı bilinçlidir: on sekizinci uç yazıldığında da kapalı doğar.
-// Gerekçe, bedel ve "neden 403 değil" → `middlewares/system-account.middleware.ts`.
-// ⚠️ `verifyToken` burada TEKRAR koşar; kimliksiz bir DB okuması hesabın varlığını
-// sızdıran bir orakül açardı.
+// ⚠️ 2026-09-04 — SATICI HESABI ÖNEK KAPISI (`blockSystemAccountTarget`) KALDIRILDI
+// =============================================================================
+// Kapı, en yetkili hesabı hedefleyen `/users/:id*` isteklerini 404'e düşürüyordu.
+// Karar değişti: en yetkili kişi DB'den görevlendirilen GERÇEK bir kullanıcıdır
+// ve her yüzeyde görünür olacaktır (kullanıcı listesi, audit, masaüstü, tablet).
 //
-// ⚠️ ÖNEK KAPISI ALT ROTADAN DAHA DAR OLAMAZ (2026-09-03, D1 bulgusu).
-// Önek `requirePermission("admin:users")` idi; altındaki `GET /users/:id/credentials`
-// ise `admin:settings` + `admin:users` İKİLİSİNİ ilan ediyor. Bugün davranışsal fark
-// YOK (o rota zaten `admin:users` da istiyor — main'de de öyleydi, yani D1'in
-// "regresyon" teşhisi bu noktada yanlıştı), ama önekin izin kümesi alt rotaların
-// BİRLEŞİMİNDEN dar kaldığı an fark GERÇEK olur: on sekizinci uç `admin:settings`
-// ile yazıldığında kullanıcı kartı görür, tıklar ve rotanın HİÇ İSTEMEDİĞİ bir
-// izni suçlayan 403 alır ("kart görür, tıklar, /forbidden" sınıfı).
-// Bu yüzden önek BİRLEŞİMİ taşır; DARALTMAYI alt rotanın kendi zinciri yapar.
+// ⚠️ AMA KAPININ BİR İŞİ GİZLEMEKTEN İBARET DEĞİLDİ ve o iş DEVAM EDİYOR:
+// `GET /users/:id/credentials` hedefin 6 haneli DÜZ PIN'ini döner ve
+// `login-quick-pin` PIN'i TEK BAŞINA kimlik sayar. Yani `admin:users` +
+// `admin:settings` taşıyan biri (sahada DÖRT hesap) en yetkili kişinin PIN'ini
+// okuyup onun kimliğine bürünebilir — modül anahtarı kilidi dahil her şey düşer.
+// GÖRÜNÜRLÜK ≠ KİMLİK BİLGİSİNİ TESLİM ETMEK: o kapı aşağıda, TEK ucun üstünde
+// ve DAR olarak yeniden kuruldu (`credentials`).
+//
+// ⚠️ ÖNEK KAPISININ KENDİSİ KALIYOR — kaldırılan yalnız `blockSystemAccountTarget`.
+// Önek, `/users/:id` ile başlayan HER uca kimlik + izin şartı koyar: bugün 10+ uç
+// var ve on birincisi yarın yazılacak; route başına eklemek "unutulmuş yüzey"
+// sınıfının tam olarak tekrar ettiği yerdir. Bu kapı gizlilikle ilgili DEĞİLDİ.
+//
+// ⚠️ ÖNEK, ALT ROTALARIN İZİN BİRLEŞİMİNİ taşır (2026-09-03, D1). Dar kalırsa
+// kullanıcı kartı görür, tıklar ve rotanın HİÇ İSTEMEDİĞİ bir izni suçlayan 403
+// alır. Daraltmayı alt rotanın kendi zinciri yapar.
 // Bekçi: `scripts/test_superadmin.ts` §M (AST — önek kümesi ⊇ her alt rota kümesi).
-//
-// ⚠️ KABUL EDİLEN BEDEL: yalnız `admin:settings` taşıyan (bugün 0 kullanıcı) biri
-// artık öneği geçip `blockSystemAccountTarget`e ulaşır → sistem hesabı id'sinde
-// 404, normal id'de alt rotanın 403'ü. Yani "bu id özel" ayrımı o dar kümeye
-// görünür. Yeni bir sızıntı DEĞİL: aynı kişi audit listesinde aktörün id'sini
-// zaten görüyor (karar #8 — id KORUNUR). Sır olan PIN/parola her iki yolda da
-// kapalı kalır.
 // =============================================================================
 router.use(
   "/users/:id",
   verifyToken,
   requireAnyPermission("admin:users", "admin:settings"),
-  blockSystemAccountTarget,
 );
 
 // =============================================================================
@@ -767,6 +765,25 @@ router.get(
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const hedefId = req.params.id as string;
+      // ⚠️ EN YETKİLİ HESABIN DÜZ PIN'İ BAŞKASINA VERİLMEZ (2026-09-04).
+      // Hesap artık her yüzeyde GÖRÜNÜR; görünürlük onu okunur yapar, ele
+      // geçirilebilir değil. Bu kapı olmasaydı `admin:users`+`admin:settings`
+      // taşıyan herkes PIN'i okuyup o kimliğe bürünür ve modül anahtarı kilidi
+      // (yalnız o hesap yazabilir) tamamen anlamsızlaşırdı.
+      // 403, 404 DEĞİL: hesabın varlığı zaten açık — yanlış bilgi vermenin
+      // anlamı yok, kısıtın kendisi söylenir.
+      const hedef = await prisma.user.findUnique({
+        where: { id: hedefId },
+        select: { isSystemAccount: true },
+      });
+      if (hedef?.isSystemAccount === true && req.isSystemAccount !== true) {
+        next(
+          AppError.forbidden(
+            "En yetkili hesabın PIN/kart bilgisi başka bir kullanıcıya gösterilmez.",
+          ),
+        );
+        return;
+      }
       const data = await AuthService.getUserCredentials(hedefId);
       // ⚠️ ASIL KUSUR İZSİZLİKTİ: okuma hiçbir yere yazılmıyordu, yani "kim kimin
       // PIN'ini gördü" sorusu sistemde CEVAPSIZDI. Best-effort (tx dışında,
@@ -1453,9 +1470,9 @@ router.put(
 // =============================================================================
 // AYAR ŞİFRESİ (ikinci kapı) — YALNIZ SÜPERADMİN
 // =============================================================================
-// Tasarım §7.2: "Süperadmin üretir/dağıtır/değiştirir/iptal eder." Fabrika
-// yöneticisi bu ucu GÖREMEZ bile: kimlik tutmuyorsa 404 (403 özelliğin ve
-// hesabın VARLIĞINI doğrulardı — `blockSystemAccountTarget` ile aynı gerekçe).
+// Tasarım §7.2: "En yetkili hesap üretir/dağıtır/değiştirir/iptal eder."
+// Kimlik tutmuyorsa 403 (2026-09-04'e kadar 404'tü; gerekçe hesabın varlığını
+// gizlemekti, hesap artık görünür olduğu için o gerekçe çürüdü).
 //
 // ⚠️ SÜPERADMİN YOKSA ÖZELLİK ERİŞİLEMEZ ve bu BİLİNÇLİDİR: şifreyi fabrika
 //    admininin kendisi tanımlayabilseydi, kapı "açık kalmış admin oturumuna"

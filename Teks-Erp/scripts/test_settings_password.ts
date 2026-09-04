@@ -421,7 +421,11 @@ async function main(): Promise<void> {
       body: { password: DOGRU_SIFRE },
       handler: true,
     });
-    check(`${etiket} /admin/settings-password: fabrika admini → 404`, statu(r) === 404, `${statu(r)}`);
+    // ⚠️ 2026-09-04: eskiden 404 bekleniyordu. Gerekçe "403 hesabın VARLIĞINI
+    // doğrular" idi; en yetkili hesap artık her yüzeyde GÖRÜNÜR olduğu için o
+    // gerekçe çürüdü ve 404, yetkisiz kullanıcıya "böyle bir uç yok" diyen bir
+    // yalan olarak kalmıştı. Kısıt aynen duruyor, yalnız dürüstçe söyleniyor.
+    check(`${etiket} /admin/settings-password: fabrika admini → 403`, statu(r) === 403, `${statu(r)}`);
   }
   const bSet = await kostur(adminRouter, "put", "/settings-password", {
     isSystemAccount: true,
