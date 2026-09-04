@@ -51,6 +51,15 @@ interface TabsState {
   closeOthers: (id: string) => void;
   /** Sekme başlığını güncelle (detay sayfaları entity adını öğrendikten sonra çağırır). */
   updateTabTitle: (id: string, title: string) => void;
+  /**
+   * TÜM sekmeleri kapat — çıkışta çağrılır (`store/auth.logout`).
+   *
+   * ⚠️ Defter KALICI (`persist`): temizlenmezse bir sonraki kullanıcı, önceki
+   * kişinin açtığı sekmeleri (ve başlıklarındaki müşteri/sipariş adlarını)
+   * hazır bulurdu. Ortak kullanılan fabrika bilgisayarında bu hem karıştırıcı
+   * hem sızıntıdır. `set` ile boşaltmak persist'i de günceller.
+   */
+  resetTabs: () => void;
 }
 
 let counter = 0;
@@ -67,6 +76,8 @@ export const useTabsStore = create<TabsState>()(
     (set, get) => ({
       tabs: [],
       activeId: null,
+
+      resetTabs: () => set({ tabs: [], activeId: null }),
 
       openTab: (rawPath, opts = {}) => {
         const { state, forceNew, background } = opts;

@@ -77,6 +77,12 @@ export const useAuthStore = create<AuthState>((set) => ({
     // Sistem-hesabı bayrakları da SIFIRLANIR: aynı makinede nöbetleşen bir
     // sonraki kullanıcı, öncekinin kimliğiyle çizilmiş bir ekran görmemeli.
     set({ user: null, isSystemAccount: false, systemAccountExists: true });
+    // Sekme defteri de kapanır: kalıcı olduğu için temizlenmezse bir sonraki
+    // kullanıcı öncekinin sekmelerini (ve başlıklarındaki müşteri/sipariş
+    // adlarını) hazır bulurdu. Dinamik import: store döngüsünü kırar.
+    void import("@/store/tabs")
+      .then((m) => m.useTabsStore.getState().resetTabs())
+      .catch(() => undefined);
     if (token) {
       // Dinamik import: apiClient ↔ auth store döngüsünü kır (eski desen korunur).
       void (async () => {
