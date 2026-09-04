@@ -102,9 +102,9 @@ export function FeatureFlagSection({
   // ⚠️ SUPAP DEVREDE — bilgi bandı (kilit DEĞİL, tersine: kilidin AÇIK olma
   //    sebebi). Sistem hesabı hiç kurulmamışsa satıcıya ait anahtarları
   //    fabrika yöneticisi yönetebilir; yoksa kurulum modülleri bir daha
-  //    açamazdı. Kullanıcı 2026-09-03 kararı: Sistem Profili EKRANI bu
-  //    durumda da gizli kalır, ama YAZMA yolu burada açık durur — yazma ile
-  //    görünürlük ayrı sorulardır (`lib/superadmin-gate.ts`).
+  //    açamazdı. 2026-09-04'te modül anahtarları TEK ekrana taşındı (Sistem →
+  //    Modüller) ve o ekranın GÖRÜNÜRLÜK kapısı da supaplı oldu — yani supap
+  //    açıkken fabrika yöneticisi hem sayfayı görür hem yazar.
   if (superadminOnly && hasSettingsPermission && !isSystemAccount && !systemAccountExists) {
     lockNotes.push(
       "Sistem yöneticisi hesabı bu kurulumda henüz tanımlı değil — o güne kadar bu anahtarları yönetici değiştirebilir.",
@@ -117,7 +117,7 @@ export function FeatureFlagSection({
     // `/api/rolls` üzerinden koşuyor. "Bu ayarın etkisi yok" cümlesi bugün bir
     // YALAN olurdu; bandın söylediği şey yalnız DONDUĞU ve nasıl çözüleceğidir.
     lockNotes.push(
-      `${moduleLabel ?? "Bu"} modülü bu kurulumda kapalı — bu ayarlar dondu; modül açılınca yeniden düzenlenebilir. Modüller sekmesinden açılabilir.`,
+      `${moduleLabel ?? "Bu"} modülü bu kurulumda kapalı — bu ayarlar dondu; modül açılınca yeniden düzenlenebilir. Sistem → Modüller ekranından açılır.`,
     );
   }
 

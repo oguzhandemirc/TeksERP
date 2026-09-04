@@ -1,26 +1,42 @@
 // =============================================================================
-// BEKÇİ — SİSTEM HUB'INDA SATICI KAROSU (ÜÇÜNCÜ KAPI: KİMLİK)
+// BEKÇİ — SATICI YÜZEYLERİNİN GÖRÜNÜRLÜĞÜ (ÜÇÜNCÜ KAPI: KİMLİK + SUPAP)
 // =============================================================================
-// "Sistem Profili" karosu fabrika yöneticisine ÇİZİLMEZ: satıcı ekranıdır ve
-// keşfe davet etmemesi gerekir. Ama kapı İZNİN YERİNE GEÇMEZ — karo hâlâ
-// `admin:settings` taşır ve route ile birebir kalır (`tile-route-permission`).
+// 2026-09-04 kullanıcı kararı: "modül flaglarını ayrı bir yere taşıyalım …
+// modüller menüsü de sadece süperadmine gözüksün · demo menüsü de sadece
+// süperadmine gözüksün". Modül anahtarları Genel Ayarlar'dan ÇIKTI ve tek evi
+// Sistem → **Modüller** karosu oldu; kurulum beyanı (demo) da oraya taşındı.
 //
-// ⚠️ SUPAP BU KARODA YOK (kullanıcı kararı 2026-09-03): sistem hesabı hiç
-// doğmamış olsa BİLE karo çizilmez — satıcı ekranı fabrikaya görünmez.
-// Kilitlenme riski YOK çünkü YAZMA yolu ayrı ve supaplı: o kurulumda
-// Genel Ayarlar → Modüller sekmesi fabrika yöneticisine açık kalır
-// (`FeatureFlagSection`, bandıyla birlikte). Görünürlük ile yazma AYRI
-// sorulardır — `lib/superadmin-gate.ts` ikisini iki ayrı yüklemle söyler.
+// ⚠️⚠️ BU TAŞIMA GÖRÜNÜRLÜK YÜKLEMİNİ DE DEĞİŞTİRDİ. 2026-09-03'te karo
+// SUPAPSIZ gizleniyordu ve bu MEŞRUYDU: modül anahtarlarının İKİNCİ bir yazma
+// yolu vardı (Genel Ayarlar → Modüller sekmesi), yani satıcı ekranını tamamen
+// gizlemek kimseyi kilitlemiyordu. O sekme kaldırılınca supapsız gizleme bir
+// KİLİTLENME hâline geldi: süperadmin hesabı doğmamış bir kurulumda karo
+// çizilmez + route 403 verir + geriye yazacak yüzey KALMAZ → modüller bir daha
+// AÇILAMAZ. Bu yüzden yüklem artık tek ve SUPAPLI (`isSuperadminGateOpen`).
+//
+// Ölçülen üç durum (üçü de aşağıda ve üçü de gerekli):
+//   ① satıcı hesabı              → karo VAR
+//   ② fabrika yöneticisi + hesap VAR → karo YOK   (kullanıcının istediği kural)
+//   ③ fabrika yöneticisi + hesap YOK → karo VAR   (EMNİYET SUPABI)
+//
+// NEGATİF SONDA (2026-09-04, geri alındı): `SystemHubPage`in yüklemi
+// `isSystemAccountIdentity` benzeri supapsız bir kurala çevrildi (yani
+// `isSystemAccount` tek başına) → §③ kırmızı (1 kontrol) ve raporda "supap
+// kapandı" olarak okunur.
 // =============================================================================
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
 import { systemTiles } from "./tile-config";
-import { isSuperadminGateOpen, isSystemAccountIdentity } from "@/lib/superadmin-gate";
+import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 
 vi.mock("@/hooks/useRoleAccess", () => ({
-  useRoleAccess: () => ({ isAdmin: true, hasPermission: () => true }),
+  useRoleAccess: () => ({
+    isAdmin: true,
+    hasPermission: () => true,
+    hasAnyPermission: () => true,
+  }),
 }));
 // Sayfa kabuğunun (PageHeader → favoriler/yoğunluk) provider bağımlılıkları —
 // bu bekçinin konusu değil.
@@ -38,48 +54,50 @@ vi.mock("@/providers/PreferencesProvider", () => ({
 
 import { SystemHubPage } from "./SystemHubPage";
 
-const KARO = /Sistem Profili/;
+const MODUL_KAROSU = "Modüller";
 
 beforeEach(() => {
   useAuthStore.setState({ isSystemAccount: false, systemAccountExists: true });
 });
 
-describe("Sistem Profili karosu", () => {
+describe("Modüller karosu (satıcı yüzeyi)", () => {
   it("karo kendi iznini TAŞIR (kimlik onun yerine geçmez)", () => {
     const tile = systemTiles.find((t) => t.key === "module-profile");
+    expect(tile?.title).toBe(MODUL_KAROSU);
     expect(tile?.permission).toBe("admin:settings");
     expect(tile?.superadminOnly).toBe(true);
     expect(tile?.to).toBe("/system/module-profile");
   });
 
-  it("⭐ fabrika yöneticisinde ÇİZİLMEZ (tam yetkili admin olsa bile)", () => {
+  it("⭐ ② fabrika yöneticisinde ÇİZİLMEZ (tam yetkili admin olsa bile)", () => {
     renderWithProviders(<SystemHubPage />);
-    expect(screen.queryByText(KARO)).toBeNull();
-    // Regresyon: diğer yapılandırma karoları yerinde.
+    expect(screen.queryByText(MODUL_KAROSU)).toBeNull();
+    // Regresyon: fabrikanın KENDİ ekranları yerinde.
     expect(screen.getByText("Genel Ayarlar")).toBeTruthy();
+    expect(screen.getByText("Özellik Anahtarları")).toBeTruthy();
+    expect(screen.getByText("Güncelleme")).toBeTruthy();
   });
 
-  it("satıcı hesabında çizilir", () => {
+  it("① satıcı hesabında çizilir", () => {
     useAuthStore.setState({ isSystemAccount: true, systemAccountExists: true });
     renderWithProviders(<SystemHubPage />);
-    expect(screen.getByText(KARO)).toBeTruthy();
+    expect(screen.getByText(MODUL_KAROSU)).toBeTruthy();
   });
 
-  it("⭐ SUPAP KAROYU AÇMAZ: sistem hesabı hiç doğmamışsa da çizilmez", () => {
-    // Bu testin ESKİ hâli tam tersini ölçüyordu. Karar değişti: satıcı ekranı
-    // her durumda gizli; kilitlenmeyi önleyen şey Genel Ayarlar'daki yazma
-    // yolunun açık kalması (aşağıdaki ikinci beklenti onun ikizi).
+  it("⭐ ③ EMNİYET SUPABI: sistem hesabı HİÇ doğmamışsa fabrika yöneticisine de çizilir", () => {
+    // ⚠️ Bu beklenti 2026-09-03'te TAM TERSİYDİ ve o gün doğruydu — modül
+    // anahtarlarının Genel Ayarlar'da ikinci bir yazma yolu vardı. O yol
+    // 2026-09-04'te kaldırıldığı için burada gizlemek, kurulumu modülsüz
+    // bırakır. Kuralı geri çevirmeden önce ikinci bir yazma yüzeyi kur.
     useAuthStore.setState({ isSystemAccount: false, systemAccountExists: false });
     renderWithProviders(<SystemHubPage />);
-    expect(screen.queryByText(KARO)).toBeNull();
+    expect(screen.getByText(MODUL_KAROSU)).toBeTruthy();
   });
 
-  it("⭐ KİLİTLENME YOK: supap açıkken modül anahtarları Genel Ayarlar'dan YAZILABİLİR", () => {
-    // Görünürlük kapısı supapsız, YAZMA kapısı supaplı — ikisi birlikte her
-    // kurulumda en az bir yazıcı bırakır (kilitlenme ihtimali sıfır).
+  it("⭐ KİLİTLENME YOK: yüklemin doğruluk tablosu karonun çizimiyle AYNI", () => {
     expect(isSuperadminGateOpen({ isSystemAccount: false, systemAccountExists: false })).toBe(true);
-    expect(isSystemAccountIdentity({ isSystemAccount: false, systemAccountExists: false })).toBe(false);
-    // Hesap doğduğu an yazma satıcıya geçer, sekme salt-okunur olur.
+    expect(isSuperadminGateOpen({ isSystemAccount: true, systemAccountExists: true })).toBe(true);
+    // Hesap doğduğu an satıcı yüzeyi fabrikaya kapanır.
     expect(isSuperadminGateOpen({ isSystemAccount: false, systemAccountExists: true })).toBe(false);
   });
 });

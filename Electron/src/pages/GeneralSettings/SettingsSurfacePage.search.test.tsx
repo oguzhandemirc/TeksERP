@@ -12,6 +12,13 @@
 // `value` prop'unun TÜRETİLMİŞ olarak değişmesi onu hiç çağırmaz. Yani sorun
 // "uyarı çıkmıyor" değil, uyarının devreye girebileceği bir yol olmamasıydı.
 //
+// ⚠️ 2026-09-04: bekçi "Genel Ayarlar" yerine ÖZELLİK ANAHTARLARI ekranını
+// sürüyor. Sebep taşınma: davranış bayrakları o turda kendi yüzeyine ayrıldı
+// (`SettingsSurface`) ve Genel Ayarlar'da artık TEK BİR flag satırı yok —
+// ölçülen kural (arama ↔ taslak) bir flag toggle'ı gerektiriyor. Kabuk ikisinde
+// de AYNI bileşendir (`SettingsSurfacePage`), yani kural her iki ekranda da
+// kilitli kalıyor.
+//
 // NEDEN BİLEŞEN TESTİ: kural saf katmanda da kilitli
 // (`settings-groups.test.ts` → `resolveActiveSettingsCategory`), ama saf
 // fonksiyon ÇAĞIRANIN yanlış listeyi geçmesini engelleyemez — hatanın tamamı
@@ -23,7 +30,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { renderWithProviders } from "@/test/render";
 import { useAuthStore } from "@/store/auth";
 import type { FeatureFlags } from "@/services/featureFlagService";
-import { GeneralSettingsPage } from "./GeneralSettingsPage";
+import { FeatureFlagsPage } from "./FeatureFlagsPage";
 
 let permissions: string[] = ["admin:settings"];
 vi.mock("@/hooks/useRoleAccess", () => ({
@@ -41,7 +48,14 @@ vi.mock("@/hooks/useRoleAccess", () => ({
 // Muhasebe kategorisini eşleştiriyor ve o kategori fabrikada zaten gizli olurdu
 // — kapalı rejimde şerit boşalır, aktif sekme de zaten değişmezdi, yani bekçi
 // ölçmek istediği şeyi ölçemez (KÖR SONDA).
-const flags = { productionEnabled: true, financeEnabled: true } as unknown as FeatureFlags;
+const flags = {
+  productionEnabled: true,
+  financeEnabled: true,
+  // Kirletilecek satırın SUNUCU değeri — açık başlar ki tıklama onu kapatsın
+  // (taslak ≠ sunucu olsun). Eksik bırakılırsa `?? false` ile zaten kapalı
+  // gelir ve "taslak oluştu" ölçümü sahte yeşile düşerdi.
+  customerBranchesEnabled: true,
+} as unknown as FeatureFlags;
 vi.mock("@/hooks/usePricingEnabled", async () => {
   const actual = await vi.importActual<typeof import("@/hooks/usePricingEnabled")>(
     "@/hooks/usePricingEnabled",
@@ -81,19 +95,16 @@ const search = () => screen.getByPlaceholderText("Ayar ara…");
 const type = (text: string) => fireEvent.change(search(), { target: { value: text } });
 const DIRTY_BADGE = "• Kaydedilmemiş değişiklik";
 
-describe("Genel Ayarlar — arama süzer, gezinmez", () => {
+describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
   beforeEach(() => {
     permissions = ["admin:settings"];
-    // ⚠️ 2026-09-03: "Modüller" kategorisi artık `superadminOnly` — satıcı
-    // (süperadmin) hesabı YOKSA fabrika yöneticisi yazmaya devam eder (emniyet
-    // supabı). Bu bekçinin konusu ARAMA ↔ TASLAK ilişkisi; kilit ölçümü ayrı
-    // dosyada (`FeatureFlagSection.superadmin.test.tsx`). Burada fabrikanın
-    // BUGÜNKÜ hâli kurulur: sistem hesabı henüz doğmamış → toggle yazılabilir.
-    useAuthStore.setState({ isSystemAccount: false, systemAccountExists: false });
+    // Bu ekranda satıcı kilidi YOK (davranış bayrakları fabrikanındır); kimlik
+    // yine de kurulur, çünkü `FeatureFlagSection` onu her satırda okuyor.
+    useAuthStore.setState({ isSystemAccount: false, systemAccountExists: true });
   });
 
   /**
-   * İlk sekme "Modüller"; oradaki üretim anahtarını çevirip taslak kirlet.
+   * İlk sekme "Müşteriler"; oradaki şube anahtarını çevirip taslak kirlet.
    *
    * ⚠️ Kutu BAŞLIK METNİNDEN bulunur, erişilebilir addan değil: `FlagToggle`
    * `<label>`ı `htmlFor`/`id` ile bağlamıyor ve sarmalayıcı etiketin metni
@@ -101,9 +112,9 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
    * burada boş döner.
    */
   const makeDirty = () => {
-    renderWithProviders(<GeneralSettingsPage />);
+    renderWithProviders(<FeatureFlagsPage />);
     const toggle = screen
-      .getByText("Üretim modülünü aç")
+      .getByText("Müşteri şubeleri (sevk noktaları) özelliğini göster")
       .closest("label")!
       .querySelector("input[type=checkbox]") as HTMLInputElement;
     expect(toggle.checked).toBe(true);
@@ -119,13 +130,13 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
     // "kdv" YALNIZ Muhasebe'yi eşleştirir — Modüller şeritten düşer.
     type("kdv");
     expect(screen.getByRole("tab", { name: /Muhasebe/i })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /^Modüller$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: /^Müşteriler$/i })).not.toBeInTheDocument();
 
     // ...ama İÇERİK hâlâ Modüller ve taslak duruyor. Eski davranışta bu iki
     // satır kırmızıydı: bölüm unmount olur, başlık ve rozet birlikte kaybolurdu.
     // ⚠️ Satırın KENDİSİ görünmez, çünkü arama SÜZMEYE devam ediyor — "taslak
     // yaşıyor mu" sorusunun kanıtı rozet ve aramayı temizleyince dönen kutudur.
-    expect(screen.getByRole("heading", { name: "Modüller" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Müşteriler" })).toBeInTheDocument();
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
 
     // Aramayı temizle → satır geri gelir ve TASLAK DEĞERİYLE gelir.
@@ -136,7 +147,7 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
     expect(
       (
         screen
-          .getByText("Üretim modülünü aç")
+          .getByText("Müşteri şubeleri (sevk noktaları) özelliğini göster")
           .closest("label")!
           .querySelector("input[type=checkbox]") as HTMLInputElement
       ).checked,
@@ -168,13 +179,13 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
     makeDirty();
     type("kdv");
     fireEvent.click(screen.getByLabelText("Aramayı temizle"));
-    expect(screen.getByRole("tab", { name: /^Modüller$/i })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /^Müşteriler$/i })).toBeInTheDocument();
     // ⚠️ DOM YENİDEN SORGULANIR, `makeDirty`in döndürdüğü düğüm KULLANILMAZ:
     // sekme unmount olsa o düğüm koparılmış (detached) hâlde `checked=false`
     // taşımaya devam eder ve kontrol regresyonda da YEŞİL kalırdı (bu bekçi
     // yazılırken negatif sondayla ölçüldü).
     const again = screen
-      .getByText("Üretim modülünü aç")
+      .getByText("Müşteri şubeleri (sevk noktaları) özelliğini göster")
       .closest("label")!
       .querySelector("input[type=checkbox]") as HTMLInputElement;
     expect(again.checked).toBe(false);
@@ -185,8 +196,8 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
   it("sekmeye TIKLAMAK taslak varken onay sorar; iptal edilirse sekme değişmez", () => {
     const toggle = makeDirty();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Müşteriler/i }));
-    fireEvent.click(screen.getByRole("tab", { name: /Müşteriler/i }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /^Siparişler$/i }));
+    fireEvent.click(screen.getByRole("tab", { name: /^Siparişler$/i }));
     expect(confirmSpy).toHaveBeenCalled();
     expect(toggle.checked).toBe(false);
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
@@ -197,11 +208,11 @@ describe("Genel Ayarlar — arama süzer, gezinmez", () => {
 // =============================================================================
 // REJİM — kategori kapısı (bölüm kapısı DEĞİL)
 // =============================================================================
-describe("Genel Ayarlar — rejim kapısı ekranda", () => {
+describe("Özellik Anahtarları — rejim kapısı ekranda", () => {
   it("fabrikada (finance kapalı) Muhasebe gizlenir ama Mal Kabul & Alış DURUR", () => {
     (flags as unknown as Record<string, boolean>).financeEnabled = false;
     try {
-      renderWithProviders(<GeneralSettingsPage />);
+      renderWithProviders(<FeatureFlagsPage />);
       expect(screen.queryByRole("tab", { name: /^Muhasebe$/i })).not.toBeInTheDocument();
       // ⭐ Mal Kabul'ün ayarları ön muhasebe rejimiyle GİZLENMEZ. 2026-09-03'te
       // kategoriye TİCARET KİLİDİ eklendi (`moduleKey`) ama kilit gizleme
@@ -211,7 +222,7 @@ describe("Genel Ayarlar — rejim kapısı ekranda", () => {
       expect(screen.getByRole("tab", { name: /Mal Kabul & Alış/i })).toBeInTheDocument();
       expect(screen.getByRole("tab", { name: /^İplik$/i })).toBeInTheDocument();
       // Rejim anahtarlarının kendisi her zaman ulaşılabilir (geri açma yolu).
-      expect(screen.getByRole("tab", { name: /^Modüller$/i })).toBeInTheDocument();
+      expect(screen.getByRole("tab", { name: /^Müşteriler$/i })).toBeInTheDocument();
     } finally {
       (flags as unknown as Record<string, boolean>).financeEnabled = true;
     }

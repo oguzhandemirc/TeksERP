@@ -9,6 +9,9 @@ import { systemTiles } from "@/pages/System/tile-config";
 import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
+  categorySurface,
+  settingsCategoryPath,
+  SURFACE_LABEL,
 } from "@/pages/GeneralSettings/settings-config";
 import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { regimePredicate } from "@/lib/regime-predicate";
@@ -140,7 +143,8 @@ export const commandSections: CommandSection[] = [
       // Karo kendi iznini taşıyorsa O geçerli (ör. Veri Aktarımı → data:import);
       // yoksa Sistem hub'ının varsayılan kapısı. Palet ile karo/route ayrışırsa
       // kullanıcı paletten tıklayıp /forbidden'a düşer.
-      permission: tile.permission ?? "admin:settings",
+      permission: tile.permissionAny ? undefined : (tile.permission ?? "admin:settings"),
+      permissionAny: tile.permissionAny,
       // ⚠️ KİMLİK KAPISI DA TAŞINIR: karo hub'da gizlenip palette kalsaydı
       // fabrika yöneticisi satıcı ekranını Ctrl+K'dan bulurdu — hub karosunun
       // gizlenme SEBEBİ (keşfe davet etmemek) o üçüncü kapıdan sızardı.
@@ -148,14 +152,23 @@ export const commandSections: CommandSection[] = [
     })),
   },
   {
-    // Genel Ayarlar'ın domain kategorileri — her biri ilgili sekmeyi derin bağlantıyla açar.
-    heading: "Genel Ayarlar",
+    // Ayar kategorileri — her biri KENDİ EKRANINDA ilgili sekmeyi açar.
+    // ⚠️ ADRES `settingsCategoryPath`TEN GELİR (2026-09-04): kategoriler üç
+    // ekrana bölündü ve elle yazılmış `/system/settings?tab=` bir kısmını
+    // artık OLMAYAN bir sekmeye götürürdü — sayfa sessizce ilk sekmeye düşer.
+    // ⚠️ BAŞLIK DA YÜZEYDEN: "Genel Ayarlar · Muhasebe" yazan bir palet girişi
+    // kullanıcıyı Özellik Anahtarları'na atsaydı arama sonucu yalan söylerdi.
+    heading: "Ayarlar",
     entries: SETTINGS_CATEGORIES.map((cat) => ({
       key: `setting:${cat.id}`,
-      label: `Genel Ayarlar · ${cat.label}`,
+      label: `${SURFACE_LABEL[categorySurface(cat)]} · ${cat.label}`,
       description: cat.description,
       icon: cat.icon,
-      to: `/system/settings?tab=${cat.id}`,
+      to: settingsCategoryPath(cat),
+      // Satıcı yüzeyi paletten de gizlenir — hub karosunun gizlenme SEBEBİ
+      // (keşfe davet etmemek) üçüncü kapıdan sızmasın. Yüklem supaplı:
+      // süperadminsiz kurulumda giriş görünür kalır (bkz. superadmin-gate).
+      superadminOnly: categorySurface(cat) === "vendor",
       // Karo/route ile AYNI kapı — paletten görünüp tıklanınca /forbidden'a
       // atan bir giriş, izni olmayan kullanıcıya "yetkim varmış ama bozuk"
       // dedirtir ("Kurşun Sırası" dersi, `visibleWhen` notu).

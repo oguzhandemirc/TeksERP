@@ -217,7 +217,17 @@ const desktop: Array<Omit<ScreenEntry, "capabilities"> & { capabilities: string[
   // kilidinin arkasına konamaz (ayar ekranındaki `modules` kategorisiyle aynı
   // kural — kapılı olsaydı modüller bir daha yapılandırılamazdı). Keşfi kısan
   // şey KİMLİKTİR (`SystemTile.superadminOnly`), modül değil. 2026-09-03 / P5.
-  { key: "system/module-profile", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Profili", requires: ["admin:settings"], capabilities: [] },
+  { key: "system/module-profile", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Modüller", requires: ["admin:settings"], capabilities: [] },
+  // Özellik Anahtarları — fabrikanın DAVRANIŞ bayrakları (2026-09-04'te Genel
+  // Ayarlar'dan ayrıldı). ⚠️ Modülü ÇEKİRDEK ve bu bilinçli: ekran bir modüle
+  // ait değil, modüllerin ÜSTÜNDE duran ayar yüzeyidir — satırları üretim,
+  // ticaret, iplik ve muhasebe kategorilerine dağılır ve kategori bazında
+  // KİLİTLENİR (`SettingsCategory.moduleKey`), gizlenmez.
+  { key: "system/feature-flags", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Özellik Anahtarları", requires: ["admin:settings"], capabilities: [] },
+  // Güncelleme — bu bilgisayardaki sürüm/güncelleme durumu. `settings:workstation`
+  // DE yeter (yerel donanımını kuran personel); route çoklu kapılı olduğu için
+  // bekçinin route çözücüsü bu satırı zaten göremez, giriş TAMLIK için var.
+  { key: "system/update", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Güncelleme", requires: ["admin:settings", "settings:workstation"], capabilities: [] },
   { key: "system/logs", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Sistem Kayıtları", requires: ["admin:settings"], capabilities: [] },
   { key: "system/archive", app: "desktop", modul: "cekirdek:sistem-kimlik-belge", title: "Aktivite Arşivi", requires: ["admin:settings"], capabilities: [] },
   { key: "system/roll-archive", app: "desktop", modul: "cekirdek:stok-giris", title: "Top Arşivi", requires: ["admin:settings"], capabilities: [] },

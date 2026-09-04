@@ -17,7 +17,7 @@ export function DemoModeBadge() {
   return (
     <span
       data-demo-helper="badge"
-      title="Bu kurulum DEMO modunda: ekranlarda örnek veri üreten yardımcılar görünür. Genel Ayarlar → Demo'dan kapatılır."
+      title="Bu kurulum DEMO modunda: ekranlarda örnek veri üreten yardımcılar görünür. Sistem → Modüller ekranından (sistem yöneticisi) kapatılır."
       className="flex items-center gap-1 rounded-md border border-amber-500/50 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400"
     >
       <FlaskConical className="h-3 w-3" />

@@ -5,6 +5,9 @@ import { ETIKET_TABS } from "@/pages/Labels/tabs-config";
 import {
   SETTINGS_ADMIN_PERMISSION,
   SETTINGS_CATEGORIES,
+  categorySurface,
+  settingsCategoryPath,
+  SURFACE_LABEL,
 } from "@/pages/GeneralSettings/settings-config";
 import { settingsCategoryVisibleWhen } from "@/pages/GeneralSettings/settings-groups";
 import { definitionGroups } from "@/pages/Definitions/groups-config";
@@ -48,18 +51,23 @@ const labelTabEntries: CommandEntry[] = ETIKET_TABS.map((t) => ({
 }));
 
 /**
- * Genel Ayarlar'ın TEK TEK ayar satırları — hepsi kendi kategorisinin sekmesini
- * açar. Kategori girişinin `keywords`'ü zaten geniş ama ayarın KENDİ adıyla
- * aranması ("mükerrer", "parti no kısa", "sevk onayı") en doğal davranış.
+ * TEK TEK ayar satırları — hepsi kendi kategorisinin sekmesini açar. Kategori
+ * girişinin `keywords`'ü zaten geniş ama ayarın KENDİ adıyla aranması
+ * ("mükerrer", "parti no kısa", "sevk onayı") en doğal davranış.
+ *
+ * ⚠️ Adres `settingsCategoryPath`ten (2026-09-04 üç-ekran ayrımı); elle yazılan
+ * `/system/settings?tab=` artık kategorilerin yarısı için YANLIŞ sayfadır.
  */
 const settingsFlagEntries: CommandEntry[] = SETTINGS_CATEGORIES.flatMap((cat) =>
   (cat.flags ?? []).map((flag) => ({
     key: `setting-flag:${flag.key}`,
     label: flag.title,
-    description: `Genel Ayarlar · ${cat.label}`,
+    description: `${SURFACE_LABEL[categorySurface(cat)]} · ${cat.label}`,
     icon: cat.icon,
-    to: `/system/settings?tab=${cat.id}`,
+    to: settingsCategoryPath(cat),
     permissionAny: cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION],
+    // Satıcı yüzeyinin satırları paletten de gizlenir (kategori girişiyle aynı).
+    superadminOnly: categorySurface(cat) === "vendor",
     // Kategori girişiyle AYNI rejim yüklemi — fabrikada gizli olan bir bölümün
     // TEK TEK ayar satırları da paletten düşer (aksi halde palet, sayfada
     // olmayan bir sekmeye götürürdü).

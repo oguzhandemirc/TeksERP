@@ -141,7 +141,7 @@ export function ItemPricesPanel({ itemId, itemLabel, unit, hideResolveCheck }: P
 
   if (!access.ticaretEnabled) {
     // Backend'in cümlesiyle aynı yönü gösterir (403: "Ticaret modülü bu
-    // kurulumda kapalı — Genel Ayarlar → Modüller").
+    // kurulumda kapalı — Sistem → Modüller").
     return (
       <Callout tone="muted" title="Fiyat tanımları bu kurulumda kapalı">
         Kalem fiyatı TİCARET modülünün bir parçasıdır (ön muhasebeden bağımsız). Genel Ayarlar →

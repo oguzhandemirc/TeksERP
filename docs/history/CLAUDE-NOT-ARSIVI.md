@@ -2213,3 +2213,63 @@ ile doğrulandı. **Yeni izin kodu YOK · APK YOK.**
 
 **Süreç dersi (ikisi de bu turda yaşandı):** ① Bir doğrulayıcı ölçümlerin TAMAMINI yapıp yapılandırılmış çıktıyı beş denemede veremeden düştü — bulgu transcript'ten kurtarıldı; şema alanlarına sınır koymak (findings ≤ 12, kanıt ≤ 2500 karakter) bunu önlüyor. ② Düzeltme turu API 500/529 ile iki kez düştü ama ajanlar işi BİTİRMİŞTİ; "rapor gelmedi" ile "iş yapılmadı" ayrı şeylerdir — ağacın durumu ölçülerek anlaşıldı (kapı takılı mı, bekçi ne diyor), rapora güvenilmedi.
 
+
+### 2026-09-04 — [PROFİL] Sistem hub'ı üçe bölündü: satıcı anahtarı ≠ fabrika tercihi ≠ makine bakımı
+
+**İSTEK (kullanıcının kendi cümleleri):** *"modül flaglarını ayrı bir yere taşıyalım sistem menüsüne tıklayınca açılan yerde bir yerde olsun. firmadaki yetkilinin düzenleyebileceği flaglar ayrı bir yerde olsun. güncelleme denetleme ayrı bir yerde olsun. geri kalanlar durabilir. demo menüsü de sadece süperadmine gözüksün. ayrıca modüller menüsü de sadece süperadmine gözüksün."*
+
+**Yapılan — Sistem hub'ında üç ayrı karo, kategoriler TEK katalogda kaldı:**
+`SettingsCategory`ye ayrı bir `surface` ALANI EKLENMEDİ; yüzey **bölümden türetilir**
+(`SECTION_SURFACE`, `categorySurface`). İki yazar olsaydı bir bölümün altındaki
+kategorilerden biri başka sayfaya kayar ve sol raydaki başlık yalan söylerdi.
+- **Sistem → Modüller** (`/system/module-profile`, eski adı "Sistem Profili"; **route path DEĞİŞMEDİ** — derin bağlantılar ve satıcının telefonda tarif ettiği adres yaşıyor): modül anahtarları + **kurulum beyanı (demo)** + **ayar şifresi kartı**. Karo `superadminOnly`.
+- **Sistem → Özellik Anahtarları** (`/system/feature-flags`): fabrikanın DAVRANIŞ bayrakları — 9 kategori (müşteriler · siparişler · sevkiyat · iş emirleri · üretim-saha · kartela · mal kabul · iplik · muhasebe). Kapı `admin:settings`.
+- **Sistem → Güncelleme** (`/system/update`): eski "Bu Bilgisayar → Güncelleme" alt-sekmesi. Kapı ÇOKLU (`admin:settings` ∨ `settings:workstation`) — yazıcısını/kantarını kuran personel `admin:settings` taşımaz ve hub'ı göremez, oraya PALETTEN gelir; kapıyı daraltmak onu güncelleme durumundan koparırdı.
+- **Genel Ayarlar** = "geri kalanlar": şirket · oturum & güvenlik · cihazlar · etiket baskısı · bu bilgisayar.
+Kabuk TEK bileşen (`SettingsSurfacePage`, `surface` parametreli): arama/aktif sekme/kirli taslak onayı gibi ölçülmüş dört kural iki kopyada yaşamaz.
+
+**⚠️⚠️ ASIL BULGU — TAŞIMA GÖRÜNÜRLÜK YÜKLEMİNİ DE DEĞİŞTİRDİ (kilitlenme sınıfı).**
+2026-09-03'te satıcı kapısı bilerek İKİ yüklemdi: yazma supaplı (`isSuperadminGateOpen`),
+görünürlük supapsız (`isSystemAccountIdentity`) — *"satıcı ekranı hesap yokken de
+fabrikaya görünmez"*. O ayrım MEŞRUYDU çünkü modül anahtarlarının **İKİNCİ bir yazma
+yolu** vardı: Genel Ayarlar → Modüller sekmesi. Bu turda o sekme kaldırıldı; supapsız
+görünürlük o anda bir KİLİTLENME hâline geldi — süperadmin hesabı doğmamış bir
+kurulumda karo çizilmez + route 403 verir + geriye yazacak yüzey KALMAZ → **modüller
+bir daha AÇILAMAZ.** Karar: `isSystemAccountIdentity` KALDIRILDI, tek yüklem
+`isSuperadminGateOpen` (supaplı) ve karo · route (`ProtectedRoute.requireSystemAccount`) ·
+palet · `FeatureFlagSection` hepsi ondan besleniyor. Kural tek cümle: **satıcı yüzeyi
+satıcıya görünür; satıcı hesabı hiç doğmamışsa (yalnız o zaman) fabrika yöneticisine de
+görünür ve yazılabilir** — backend `flagWriteGuard`ın üçüncü dalıyla birebir.
+⚠️ Kuralı geri çevirmeden önce modül anahtarlarına İKİNCİ bir yazma yüzeyi kur.
+
+**Demo `superadminOnly` BAYRAĞI ALMADI (bilinçli):** o bayrak bir KİLİT iddiasıdır ve
+backend `flagWriteGuard`ın süperadmin dalı YALNIZ `MODULE_FLAG_KEYS`i kapsar —
+`demoModeEnabled` onda değil. Kilit çizseydik panel, sunucuda olmayan bir kapıyı varmış
+gibi anlatırdı. Demo'yu fabrikadan uzak tutan şey SAYFANIN kimlik kapısıdır.
+
+**Güncelleme karosu WEB'DE DE ÇİZİLİR** (`desktopOnly` denendi, geri alındı): sayfa
+tarayıcıda kendi "yalnız masaüstünde çalışır" metnini basıyor, yani başlığın gövdesi VAR
+(WorkstationTabs'ın "başlık ile gövdenin kapısı aynı koşuldan beslenir" kuralı). Kabuğa
+göre gizlemek ayrıca *"her statik route'un bir palet girişi var"* invariantını
+(`command-entries.test`) muafiyet listesine zorluyordu. Emsal: yazıcı/kantar/tabanca
+sekmeleri de web'de duruyor.
+
+**Adres TEK KAYNAK `settingsCategoryPath`:** kategoriler üç ekrana bölününce elle yazılmış
+`/system/settings?tab=` girişlerinin yarısı OLMAYAN bir sekmeye gidiyordu ve sayfa sessizce
+ilk sekmeye düşerdi ("Kurşun Sırası" dersinin ayar ekranındaki ikizi). Palet başlığı da
+yüzeyden (`SURFACE_LABEL`) — "Genel Ayarlar · Muhasebe" yazıp başka ekrana atan bir arama
+sonucu yalan söyler. Karo başlıkları ↔ `SURFACE_LABEL` ↔ route bekçide birebir.
+
+**Bekçi:** yeni `Electron/src/pages/GeneralSettings/settings-surface.test.ts` (19 kontrol:
+üç yüzeyin dağılımı · sızıntı · derin bağlantı · karolar · kilitlenme) +
+`SystemHubPage.superadmin.test.tsx` yeniden yazıldı (③ supap artık karoyu AÇAR — beklenti
+2026-09-03'ün TAM TERSİ) + `superadmin-gate.test.ts` tüketici listesine `ProtectedRoute`
+eklendi (negatif sonda: route supapsız bir kurala çevrildiğinde §2 YEŞİL kalıyordu).
+**Negatif sondalar (dördü de kırmızı verdi, birebir geri alındı):** ① `SECTION_SURFACE`te
+modül/demo `flags`a çevrildi → 6 ❌ · ② supap kaldırıldı (route + hub) → 2 ❌ ·
+③ `settingsCategoryPath` elle `/system/settings`e sabitlendi → 2 ❌ · ④ `ProtectedRoute`
+yüklemi elle kopyalandı → gate bekçisi 2 ❌.
+
+**Migration / izin kodu / APK YOK; backend'de yalnız `screen-catalog` üç satır** (yeni iki
+ekran + `system/module-profile` başlığı "Modüller"). Tamlık bekçisi 33/33, feature-flag
+sözleşmesi 78/78, modül anahtarları 72/72.

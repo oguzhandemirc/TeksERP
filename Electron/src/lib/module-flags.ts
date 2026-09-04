@@ -78,7 +78,7 @@ export const MODULE_FIELD_BY_SETTING_KEY: Readonly<Record<string, ModuleFlagKey>
 /**
  * Panelde HENÜZ YÜZEYİ OLMAYAN modüller.
  *
- * Genel Ayarlar → Modüller kategorisi bunları BİLEREK listelemez ("açtım,
+ * Modüller ekranındaki anahtar listesi bunları BİLEREK içermez ("açtım,
  * hiçbir şey olmadı" üretirlerdi). Sistem Profili ekranı ise KURULUMUN TAM
  * FOTOĞRAFIDIR ve onları "yüzeyi yok" rozetiyle GÖSTERİR: profil tablosunda
  * yedi sütun var, panelde beşini göstermek satıcıyı yanıltırdı.

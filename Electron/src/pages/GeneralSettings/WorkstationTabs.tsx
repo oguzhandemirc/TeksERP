@@ -1,11 +1,10 @@
 import { useCallback, useRef, useState } from "react";
-import { Download, Printer, Scale, ScanLine, Server, type LucideIcon } from "lucide-react";
+import { Printer, Scale, ScanLine, Server, type LucideIcon } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LabelPrinterDeviceSettings } from "./LabelPrinterDeviceSettings";
 import { ScaleDeviceSettings } from "./ScaleDeviceSettings";
 import { ScannerSettingsSection } from "./ScannerSettingsSection";
 import { ApiEndpointSection } from "./ApiEndpointSection";
-import { UpdateSection } from "./UpdateSection";
 import { SettingsDirtyProvider, useSettingsDirtyRegister } from "./settings-dirty";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
@@ -19,7 +18,6 @@ const DEVICE_TABS: Array<{ id: string; label: string; icon: LucideIcon }> = [
   { id: "scale", label: "Kantar", icon: Scale },
   { id: "scanner", label: "Tabanca", icon: ScanLine },
   { id: "server", label: "Sunucu", icon: Server },
-  { id: "update", label: "Güncelleme", icon: Download },
 ];
 
 /* Web'de "Sunucu" sekmesi çizilmez: API adresi sayfanın origin'idir; runtime
@@ -27,13 +25,11 @@ const DEVICE_TABS: Array<{ id: string; label: string; icon: LucideIcon }> = [
    (bkz. lib/runtime-env). Donanım sekmeleri kalır — kendi "yalnız masaüstünde"
    mesajlarını basıyorlar.
 
-   ⚠️ "Güncelleme" de web'de ÇİZİLMEZ (merge, 2026-09-01): otomatik güncelleyici
-   `electron-updater`dır ve `window.api.updater` üzerinden konuşur — tarayıcıda
-   karşılığı YOKTUR. Sekme listede kalsaydı web kullanıcısı tıklayıp BOŞ bir
-   panel görürdü; üstelik "güncelleme" tarayıcıda zaten sayfayı yenilemektir.
-   Sekme başlığı ile içeriğin kapısı AYNI koşuldan beslenmeli — ayrışırsa
-   başlığı olan ama gövdesi olmayan bir sekme kalır. */
-const WEB_HIDDEN_TABS = new Set(["server", "update"]);
+   ⚠️ "Güncelleme" sekmesi 2026-09-04'te BURADAN ÇIKTI → Sistem → Güncelleme
+   (`pages/System/UpdatePage.tsx`). Kural aynı yerde yaşamaya devam ediyor:
+   sekme başlığı ile içeriğin kapısı AYNI koşuldan beslenir — ayrışırsa başlığı
+   olan ama gövdesi olmayan bir sekme kalır. */
+const WEB_HIDDEN_TABS = new Set(["server"]);
 const VISIBLE_TABS = IS_ELECTRON ? DEVICE_TABS : DEVICE_TABS.filter((t) => !WEB_HIDDEN_TABS.has(t.id));
 
 export function WorkstationTabs() {
@@ -86,14 +82,9 @@ export function WorkstationTabs() {
         <ScannerSettingsSection />
       </TabsContent>
       {IS_ELECTRON && (
-        <>
-          <TabsContent value="server" className="mt-0">
-            <ApiEndpointSection />
-          </TabsContent>
-          <TabsContent value="update" className="mt-0">
-            <UpdateSection />
-          </TabsContent>
-        </>
+        <TabsContent value="server" className="mt-0">
+          <ApiEndpointSection />
+        </TabsContent>
       )}
     </Tabs>
     </SettingsDirtyProvider>

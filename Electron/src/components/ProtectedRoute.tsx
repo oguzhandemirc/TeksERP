@@ -2,7 +2,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/store/auth";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { canEnterApp } from "@/types/auth";
-import { isSystemAccountIdentity } from "@/lib/superadmin-gate";
+import { isSuperadminGateOpen } from "@/lib/superadmin-gate";
 
 interface Props {
   children: React.ReactNode;
@@ -12,10 +12,10 @@ interface Props {
   /**
    * SATICI (süperadmin) kimliği şart mı? — izin DEĞİL KİMLİK kapısı.
    *
-   * ⚠️ SUPAP TAŞIMAZ (kullanıcı kararı 2026-09-03): satıcı ekranı, sistem
-   * hesabı hiç kurulmamış bir kurulumda da fabrikaya görünmez. Kilitlenme
-   * riski yok çünkü modül anahtarlarının YAZMA yolu ayrı ve supaplı
-   * (Genel Ayarlar → Modüller; bkz. `lib/superadmin-gate.ts`).
+   * ⚠️ SUPAP TAŞIR (2026-09-04): modül anahtarlarının İKİNCİ yazma yolu
+   * (Genel Ayarlar → Modüller sekmesi) kaldırıldığı için supapsız bir kapı
+   * artık KİLİTLENME üretir — süperadmin hesabı doğmamış kurulum modülleri bir
+   * daha açamaz. Yüklem tek kaynaktan: `lib/superadmin-gate.ts`.
    */
   requireSystemAccount?: boolean;
 }
@@ -53,8 +53,8 @@ export function ProtectedRoute({
 
   // Kimlik kapısı izinlerden SONRA: yetkisiz kullanıcı zaten yukarıda elendi,
   // buraya gelen `admin:settings` sahibi fabrika yöneticisidir ve satıcı
-  // ekranını adres çubuğundan da açamaz.
-  if (requireSystemAccount && !isSystemAccountIdentity({ isSystemAccount, systemAccountExists })) {
+  // ekranını adres çubuğundan da açamaz — süperadmin hesabı DOĞMUŞSA.
+  if (requireSystemAccount && !isSuperadminGateOpen({ isSystemAccount, systemAccountExists })) {
     return <Navigate to="/forbidden" replace />;
   }
 

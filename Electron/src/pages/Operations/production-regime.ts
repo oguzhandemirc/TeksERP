@@ -33,7 +33,7 @@
 // (`?? true`); burada yalnız bayrak okunur.
 //
 // ⚠️ MODÜL KAPANDIĞINDA KİLİTLENME YOK: bu karolar gizlense de üretim modülü
-// Sistem Profili / Genel Ayarlar → Modüller'den her zaman yeniden açılabilir
+// Sistem → Modüller ekranından her zaman yeniden açılabilir
 // (o kategori hiçbir modül kapısının arkasında değildir). "Kapattım, geri
 // açamıyorum" tuzağı bu yüzden burada doğmaz.
 // =============================================================================

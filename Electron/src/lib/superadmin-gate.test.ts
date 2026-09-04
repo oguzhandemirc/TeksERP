@@ -1,8 +1,13 @@
 // =============================================================================
 // BEKÇİ — SATICI KAPISI TEK KAYNAK
 // =============================================================================
-// ⭐ ASIL RİSK DAVRANIŞ DEĞİL, KOPYADIR. Yüklem üç yerde (Sistem hub karosu ·
-// `FeatureFlagSection` · Sistem Profili sayfası · komut paleti) ayrı ayrı
+// ⚠️ 2026-09-04: yüklem TEKE indi. Eskiden ikinci bir supapsız yüklem vardı
+// (`isSystemAccountIdentity`, GÖRÜNÜRLÜK için) ve meşruydu — modül anahtarları
+// Genel Ayarlar'dan da yazılabiliyordu. O sekme kaldırılınca supapsız kural bir
+// kilitlenme kaynağı hâline geldi; gerekçe `superadmin-gate.ts` başlığında.
+//
+// ⭐ ASIL RİSK DAVRANIŞ DEĞİL, KOPYADIR. Yüklem beş yerde (Sistem hub karosu ·
+// `FeatureFlagSection` · Modüller sayfası · komut paleti · route kapısı) ayrı ayrı
 // yazılsaydı EMNİYET SUPABI (`!systemAccountExists`) birinde unutulurdu ve
 // unutulduğu yerin bedeli şudur: sistem hesabı hiç doğmamış bir kurulumda modül
 // anahtarları BİR DAHA açılamaz. Bu yüzden test iki şeyi birden ölçer:
@@ -25,6 +30,10 @@ const TUKETICILER = [
   "../pages/System/SystemHubPage.tsx",
   "../pages/System/ModuleProfile/ModuleProfilePage.tsx",
   "../components/layout/CommandPalette.tsx",
+  // 2026-09-04: satıcı ekranının ROUTE kapısı da bu yüklemi kullanıyor. Liste
+  // dışında kalması ölçüldü (negatif sonda: route supapsız bir kurala
+  // çevrildiğinde §2 yeşil kaldı, kırmızıyı yalnız ekran bekçisi verdi).
+  "../components/ProtectedRoute.tsx",
 ] as const;
 
 describe("§1 doğruluk tablosu", () => {

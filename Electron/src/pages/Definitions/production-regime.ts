@@ -30,7 +30,7 @@
 // bozardı.
 //
 // ⚠️ GERİ DÖNÜŞ KAPALI DEĞİL: rota/şablon karoları gizlense de üretim modülü
-// Genel Ayarlar → Modüller (ve Sistem Profili) ekranından her zaman yeniden
+// Sistem → Modüller ekranından her zaman yeniden
 // açılabilir; o kategori hiçbir modül kapısının arkasında değildir. Keşif
 // raporunun "modülü yeniden açan kullanıcı rota kuramaz" riski tam olarak
 // buradan kapanıyor — kapatma kararı geri alınabilir olduğu sürece gizleme

@@ -1,4 +1,4 @@
-import { Activity, Archive, Blocks, Cpu, DatabaseBackup, DatabaseZap, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, Upload, type LucideIcon, Merge } from "lucide-react";
+import { Activity, Archive, Blocks, Cpu, DatabaseBackup, DatabaseZap, Download, FileCode2, Gauge, MapPin, Search, Settings as SettingsIcon, SlidersHorizontal, Upload, type LucideIcon, Merge } from "lucide-react";
 
 export type SystemTileGroup = "activity" | "monitoring" | "archive" | "config";
 
@@ -17,20 +17,28 @@ export interface SystemTile {
    */
   permission?: string;
   /**
+   * `permission`ın çoklu hâli: bunlardan HERHANGİ biri yeterli. Route
+   * `requireAnyPermission` ile eşleşir (`tile-route-permission.test` çok izinli
+   * route'u "ANY" sayıp tek-izin karşılaştırmasını atlar; hizayı o dosyadaki
+   * adı geçen ayrı kural ölçer).
+   *
+   * ⚠️ `permission` ile BİRLİKTE VERİLMEZ — iki kapıdan hangisinin geçerli
+   * olduğu okuyucuya kalırdı.
+   */
+  permissionAny?: string[];
+  /**
    * Karo YALNIZ satıcı (süperadmin) hesabına çizilir — ÜÇÜNCÜ kapı.
    *
    * ⚠️ İZNİN YERİNE GEÇMEZ, ÜSTÜNE EKLENİR: karo `permission`ını taşımaya devam
    * eder ve route ile birebir kalır (`tile-route-permission.test`). İzni bırakıp
    * yalnız kimliğe dayanmak o bekçinin kapsamını daraltırdı.
    *
-   * ⚠️ ROUTE'A KİMLİK KAPISI KONULMAZ ve bu bilinçli: fabrika yöneticisi
-   * adresten (ya da satıcının telefonda tarifiyle) sayfayı açtığında SALT-OKUNUR
-   * görmeli — "hangi modüller açık" sorusunun cevabı bir yerde yazmalı. Karonun
-   * gizlenmesi bir keşif kararıdır, bir yetki duvarı değil.
-   *
-   * ⚠️ Yüklem tek kaynaktan gelir (`lib/superadmin-gate.ts`) — supap
-   * (`!systemAccountExists`) üç tüketicinin birinde unutulursa süperadminsiz
-   * kurulum modüllerini bir daha yapılandıramaz.
+   * ⚠️ 2026-09-04'ten beri ROUTE DA aynı kapıyı taşır (`requireSystemAccount`)
+   * ve yüklem SUPAPLIDIR: modül anahtarlarının Genel Ayarlar'daki ikinci yazma
+   * yolu kaldırıldı, yani supapsız bir kapı süperadminsiz kurulumu modülsüz
+   * bırakırdı. Yüklem tek kaynaktan gelir (`lib/superadmin-gate.ts`) — supap
+   * (`!systemAccountExists`) tüketicilerin birinde unutulursa o kurulum
+   * modüllerini bir daha yapılandıramaz.
    */
   superadminOnly?: boolean;
 }
@@ -177,12 +185,19 @@ export const systemTiles: SystemTile[] = [
     group: "config",
   },
   {
-    // Satıcı ekranı: kurulumun modül fotoğrafı + profil uygulama. Genel Ayarlar →
-    // Modüller sekmesiyle AYNI anahtarları yazar (aynı bileşen gömülü), farkı
-    // profil karşılaştırması · bağımlılık okları · "kapatırsan gizlenir"
-    // önizlemesi · tutarsızlık bantlarıdır.
+    // SATICI EKRANI — modül anahtarlarının TEK evi (2026-09-04). Eskiden aynı
+    // anahtarlar Genel Ayarlar → Modüller sekmesinde de yazılabiliyordu; o
+    // sekme kullanıcı isteğiyle kaldırıldı ("modül flaglarını ayrı bir yere
+    // taşıyalım"). Sayfa ayrıca kurulum fotoğrafıdır: profil karşılaştırması ·
+    // bağımlılık okları · "kapatırsan gizlenir" önizlemesi · tutarsızlık
+    // bantları · kurulum beyanı (demo) · ayar şifresi.
+    //
+    // ⚠️ ROUTE PATH DEĞİŞMEDİ (`/system/module-profile`): derin bağlantılar,
+    // sekme başlıkları ve satıcının telefonda tarif ettiği adres yaşıyor.
+    // Değişen şey BAŞLIK ("Sistem Profili" → "Modüller", kullanıcının kendi
+    // kelimesi).
     key: "module-profile",
-    title: "Sistem Profili",
+    title: "Modüller",
     description: "Bu kurulumda hangi modüller açık — profil uygula, bağımlılıkları ve kapatma etkisini gör",
     icon: Blocks,
     to: "/system/module-profile",
@@ -192,11 +207,43 @@ export const systemTiles: SystemTile[] = [
     superadminOnly: true,
   },
   {
+    // FABRİKANIN kendi tercihleri — modül anahtarlarından AYRI ekran
+    // (2026-09-04): "firmadaki yetkilinin düzenleyebileceği flaglar ayrı bir
+    // yerde olsun". Aynı kabuk, farklı yüzey (`SettingsSurface`).
+    key: "feature-flags",
+    title: "Özellik Anahtarları",
+    description: "Sipariş/sevkiyat, üretim, kalite ve muhasebe davranışını belirleyen ayarlar",
+    icon: SlidersHorizontal,
+    to: "/system/feature-flags",
+    group: "config",
+  },
+  {
+    // Eskiden Genel Ayarlar → Bu Bilgisayar → Güncelleme alt-sekmesiydi.
+    // ⚠️ İZİN GENİŞ ve bu bilinçli: yazıcısını/kantarını kendisi kuran personel
+    // `settings:workstation` taşır ve `admin:settings` taşımaz — güncelleme
+    // durumuna bakması gereken kişi çoğu zaman odur. Hub'ın kendisi
+    // `admin:settings` arkasında olduğu için o personel buraya PALETTEN gelir.
+    //
+    // ⚠️ WEB'DE DE ÇİZİLİR ve bu bilinçli: sayfa tarayıcıda kendi "yalnız
+    // masaüstünde çalışır" metnini basıyor, yani başlığın gövdesi VAR. Karoyu
+    // kabuğa göre gizlemek "her statik route'un bir palet girişi var"
+    // invariantını da (`command-entries.test`) muafiyet listesine zorlardı.
+    // Emsal: yazıcı/kantar/tabanca sekmeleri de web'de duruyor.
+    key: "update",
+    title: "Güncelleme",
+    description: "Bu bilgisayardaki sürüm, güncelleme durumu ve yayın adresi",
+    icon: Download,
+    to: "/system/update",
+    group: "config",
+    permissionAny: ["admin:settings", "settings:workstation"],
+  },
+  {
     key: "settings",
     title: "Genel Ayarlar",
-    description: "Özellik anahtarları, cihaz eşleştirme, termin varsayılanları ve API adresi",
+    description: "Şirket bilgileri, oturum & güvenlik, cihaz eşleştirme, etiket baskısı ve bu bilgisayar",
     icon: SettingsIcon,
     to: "/system/settings",
     group: "config",
   },
 ];
+

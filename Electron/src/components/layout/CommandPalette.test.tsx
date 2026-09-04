@@ -98,7 +98,11 @@ describe("CommandPalette", () => {
     type("mükerrer");
 
     fireEvent.click(await screen.findByText(/mükerrer top uyarısı/i));
-    expect(openTab).toHaveBeenCalledWith("/system/settings?tab=production");
+    // ⚠️ 2026-09-04: DAVRANIŞ bayrakları Genel Ayarlar'dan ayrıldı → adres artık
+    // `/system/feature-flags`. Palet adresi ELLE YAZMAZ, `settingsCategoryPath`ten
+    // alır; bu satır o köprünün ekrandaki kanıtıdır (elle yazım geri gelirse
+    // kategorilerin yarısı olmayan bir sekmeye giderdi).
+    expect(openTab).toHaveBeenCalledWith("/system/feature-flags?tab=production");
   });
 
   /**

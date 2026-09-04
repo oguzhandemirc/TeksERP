@@ -61,6 +61,8 @@ import { SystemHubPage } from "@/pages/System/SystemHubPage";
 import { ModuleProfilePage } from "@/pages/System/ModuleProfile/ModuleProfilePage";
 import { ActivityPage } from "@/pages/System/Activity/ActivityPage";
 import { GeneralSettingsPage } from "@/pages/GeneralSettings/GeneralSettingsPage";
+import { FeatureFlagsPage } from "@/pages/GeneralSettings/FeatureFlagsPage";
+import { UpdatePage } from "@/pages/System/UpdatePage";
 import {
   SETTINGS_ADMIN_PERMISSION,
   WORKSTATION_PERMISSION,
@@ -677,11 +679,34 @@ export const contentRoutes: RouteObject[] = [
     ),
   },
   {
-    // Sistem Profili — satıcı ekranı. ⚠️ ROUTE KAPISI `admin:settings` ve KİMLİK
-    // KAPISI BURADA YOK, bilinçli: fabrika yöneticisi sayfayı SALT-OKUNUR
-    // görmeli ("hangi modüller açık" sorusunun cevabı bir yerde yazmalı).
-    // Keşfi kısan şey hub KAROSUDUR (`SystemTile.superadminOnly`) ve palet
-    // girişidir; yazma yüzeyini kapatan şey de kimliktir (sayfa içinde).
+    // Fabrikanın DAVRANIŞ bayrakları — modül anahtarlarından ayrı ekran
+    // (2026-09-04). Kapı Genel Ayarlar'ınkinden DAR: `settings:workstation`
+    // burada yeterli DEĞİL (bu satırlar sunucuya yazılır, tüm fabrikayı
+    // etkiler); "Bu Bilgisayar" kategorisinin gerekçesi buraya uzanmaz.
+    path: "system/feature-flags",
+    element: (
+      <ProtectedRoute requirePermission="admin:settings">
+        <FeatureFlagsPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Güncelleme denetleme — kendi ekranı (2026-09-04). Kapı KARO ile aynı ve
+    // GENİŞ: yerel donanımını kuran personel (`settings:workstation`) sürüm
+    // durumuna bakabilmeli — o kişi hub'ı göremez, buraya paletten gelir.
+    path: "system/update",
+    element: (
+      <ProtectedRoute requireAnyPermission={[SETTINGS_ADMIN_PERMISSION, WORKSTATION_PERMISSION]}>
+        <UpdatePage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Modüller (Sistem Profili) — satıcı ekranı ve modül anahtarlarının TEK evi.
+    // ⚠️ KİMLİK KAPISI SUPAPLI (`isSuperadminGateOpen`): süperadmin hesabı
+    // doğmamış bir kurulumda fabrika yöneticisi buraya GİRER ve yazar — yoksa
+    // modüller bir daha açılamazdı (Genel Ayarlar'daki ikinci yazma yolu
+    // 2026-09-04'te kaldırıldı). Hesap doğduğu an sayfa fabrikaya kapanır.
     // ⚠️ Karo `permission`ı ile AYNI kod — `tile-route-permission.test`.
     path: "system/module-profile",
     element: (

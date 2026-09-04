@@ -33,6 +33,7 @@ import { moduleProfileService, type ModuleProfileDiffRow } from "@/services/modu
 import { screenCatalogService } from "@/services/screenCatalogService";
 import { SETTINGS_CATEGORIES } from "@/pages/GeneralSettings/settings-config";
 import { FeatureFlagSection } from "@/pages/GeneralSettings/FeatureFlagSection";
+import { SettingsPasswordCard } from "@/pages/GeneralSettings/SettingsPasswordCard";
 import {
   describeDiffRow,
   diffToFlagPatch,
@@ -43,19 +44,26 @@ import {
 } from "./moduleProfile.helpers";
 
 // =============================================================================
-// SİSTEM PROFİLİ — "bu kurulum hangi ürünü aldı"
+// MODÜLLER (Sistem Profili) — "bu kurulum hangi ürünü aldı"
 // =============================================================================
-// Satıcının (süperadmin) ekranı. Genel Ayarlar → Modüller sekmesi bir AYAR
-// yüzeyidir; bu sayfa aynı anahtarların KURULUM FOTOĞRAFIDIR: profil karşılaştırması,
-// bağımlılık okları, "kapatırsan şu ekranlar gizlenir" önizlemesi ve tutarsızlık
-// bantları.
+// Satıcının (süperadmin) ekranı ve modül anahtarlarının TEK EVİ. 2026-09-04'te
+// Genel Ayarlar → Modüller sekmesi KALDIRILDI (kullanıcı isteği: "modül
+// flaglarını ayrı bir yere taşıyalım … modüller menüsü de sadece süperadmine
+// gözüksün"); aynı turda kurulum beyanı (demo) ve ayar şifresi de buraya taşındı.
+// Sayfa yalnız bir ayar yüzeyi değil KURULUM FOTOĞRAFIDIR: profil
+// karşılaştırması, bağımlılık okları, "kapatırsan şu ekranlar gizlenir"
+// önizlemesi ve tutarsızlık bantları.
 //
-// ⚠️ İKİ KAPI, ÜÇÜNCÜSÜ YOK: sayfanın route kapısı `admin:settings`tir (karo ile
-// birebir — `tile-route-permission.test`), KİMLİK ise yalnız YAZMAYI kapatır.
-// Fabrika yöneticisi sayfayı SALT-OKUNUR görür ve bu bilinçli: "menüde niye yok"
-// sorusunun cevabı bir yerde YAZMALI. Hub karosu yine de yalnız satıcıya
-// çizilir (`SystemTile.superadminOnly`) — fabrika bu sayfayı aramaz, satıcı
-// telefonda tarif ettiğinde açılır.
+// ⚠️ KAPI ARTIK ÜÇ KATMANLI ve KİMLİK KATMANI SUPAPLI: route `admin:settings`
+// (karo ile birebir — `tile-route-permission.test`) + `requireSystemAccount`
+// (`isSuperadminGateOpen`, yani supap DAHİL) + sayfa içi yazma kapısı.
+// Süperadmin hesabı DOĞMUŞSA fabrika yöneticisi bu sayfayı hiç açamaz; hesap
+// HİÇ DOĞMAMIŞSA açar ve yazar — yoksa o kurulumda modül anahtarlarına
+// dokunacak hiçbir yüzey kalmazdı (ikinci yazma yolu bu turda kaldırıldı).
+// Aşağıdaki `canWrite` salt-okunur bandı bu yüzden bugün yalnız teorik bir
+// dal: kapıdan geçen herkes zaten yazabiliyor. Bant BİLEREK duruyor — kimlik
+// kapısı bir gün gevşetilirse (ör. "fabrika salt-okunur görsün") sebebi
+// ekranda yazılı olmalı.
 //
 // ⚠️ YAZMA YÜZEYİ GÖMÜLÜ, KOPYALANMADI: modül toggle'ları `FeatureFlagSection`
 // ile çizilir (taslak + tek Kaydet + süperadmin bandı + ayar şifresi haberi
@@ -70,6 +78,15 @@ import {
 // =============================================================================
 
 const MODULES_CATEGORY = SETTINGS_CATEGORIES.find((c) => c.id === "modules");
+/**
+ * "Demo" kategorisi de SATICI yüzeyine taşındı (2026-09-04 kullanıcı isteği:
+ * "demo menüsü de sadece süperadmine gözüksün").
+ *
+ * Gerekçe zaten `settings-config`te yazılıydı: demo modu bir TERCİH değil,
+ * kurulumun NE OLDUĞUNA dair bir BEYANDIR — yani modül anahtarlarıyla aynı
+ * sınıftan bir cümle, fabrikanın davranış ayarı değil.
+ */
+const DEMO_CATEGORY = SETTINGS_CATEGORIES.find((c) => c.id === "demo");
 
 function Section({
   title,
@@ -171,7 +188,7 @@ export function ModuleProfilePage() {
   return (
     <PageShell>
       <PageHeader
-        title="Sistem Profili"
+        title="Modüller"
         actions={<RefreshButton queryKey={["module-profile"]} successMessage="Profil yenilendi" />}
       />
       <PageBody className="max-w-4xl space-y-8 p-6">
@@ -356,6 +373,24 @@ export function ModuleProfilePage() {
             </>
           )}
         </Section>
+
+        {/* ── ④ KURULUM BEYANI (demo) ───────────────────────────────────── */}
+        {DEMO_CATEGORY?.flags ? (
+          <Section title={DEMO_CATEGORY.label} description={DEMO_CATEGORY.description}>
+            {/* ⚠️ `superadminOnly` BİLEREK YOK: o bayrak bir KİLİT iddiasıdır ve
+                backend `flagWriteGuard`ın süperadmin dalı YALNIZ modül
+                anahtarlarını kapsar (`MODULE_FLAG_KEYS`) — `demoModeEnabled`
+                onda değil. Kilit çizseydik panel, sunucuda olmayan bir kapıyı
+                varmış gibi anlatırdı. Demo'yu fabrikadan uzak tutan şey bu
+                SAYFANIN kimlik kapısıdır. */}
+            <FeatureFlagSection flags={DEMO_CATEGORY.flags} />
+          </Section>
+        ) : null}
+
+        {/* ── ⑤ AYAR ŞİFRESİ ────────────────────────────────────────────── */}
+        {/* Kart kendi kimlik kapısını uygular (backend uçları başka kimlikte 404
+            döner); Genel Ayarlar → Modüller sekmesiyle birlikte buraya taşındı. */}
+        <SettingsPasswordCard />
       </PageBody>
 
       {/* Onay — "N kayıt etkilenecek" gibi SOYUT bir sayı yetmez; her satır

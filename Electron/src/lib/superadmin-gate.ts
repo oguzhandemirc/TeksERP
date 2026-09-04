@@ -40,20 +40,22 @@ export function isSuperadminGateOpen(state: SuperadminGateState): boolean {
 }
 
 /**
- * Bu oturum SATICI hesabı mı? — SATICI YÜZEYLERİNİN GÖRÜNÜRLÜK kapısı.
+ * ⚠️ `isSystemAccountIdentity` (supapsız GÖRÜNÜRLÜK yüklemi) 2026-09-04'te
+ * KALDIRILDI — geri getirmeden önce aşağıdaki gerekçeyi çürüt.
  *
- * ⚠️ `isSuperadminGateOpen`in İKİZİ DEĞİL, farklı bir soru sorar ve SUPAP
- * TAŞIMAZ (kullanıcı kararı 2026-09-03): "Sistem Profili satıcı ekranıdır,
- * süperadmin hesabı yokken de fabrikaya GÖRÜNMEZ."
- *   • YAZMA sorusu  → `isSuperadminGateOpen` (supaplı; kilitlenmeyi önler)
- *   • GÖRÜNÜRLÜK    → bu yüklem (supapsız; satıcı yüzeyi keşfe davet etmez)
+ * 2026-09-03'te İKİ yüklem vardı: yazma supaplı (`isSuperadminGateOpen`),
+ * görünürlük supapsız. O ayrım MEŞRUYDU çünkü modül anahtarlarının İKİNCİ bir
+ * yazma yolu vardı: Genel Ayarlar → Modüller sekmesi. Yani satıcı ekranını
+ * tamamen gizlemek kimseyi kilitlemiyordu.
  *
- * ⚠️ KİLİTLENME NEDEN İMKÂNSIZ: iki yüklem birlikte her durumda EN AZ BİR
- * yazıcı bırakır. Sistem hesabı YOKSA Sistem Profili ekranı gizlidir ama
- * Genel Ayarlar → Modüller fabrika yöneticisine AÇIKTIR (bant onu söyler);
- * hesap VARSA o sekme salt-okunur olur ve yazma satıcıya geçer. Bu ikisinden
- * birini supaplı/supapsız yaparken diğerini de gözden geçir.
+ * 2026-09-04'te kullanıcı isteğiyle o sekme KALDIRILDI (modül anahtarları tek
+ * bir ekrana taşındı: Sistem → Modüller). O anda supapsız görünürlük yüklemi
+ * bir KİLİTLENME üretir hâle geldi: süperadmin hesabı doğmamış bir kurulumda
+ * karo çizilmez + route 403 verir + geriye yazacak başka yüzey yoktur → modüller
+ * bir daha AÇILAMAZ. Tek yazma yolu kalınca yüklem de tek kalmalı ve SUPAP
+ * TAŞIMALIDIR.
+ *
+ * Bugünkü kural tek cümle: **satıcı yüzeyi satıcıya görünür; satıcı hesabı hiç
+ * doğmamışsa (yalnız o zaman) fabrika yöneticisine de görünür ve yazılabilir.**
+ * Backend `flagWriteGuard`ın üçüncü dalı da tam olarak budur.
  */
-export function isSystemAccountIdentity(state: SuperadminGateState): boolean {
-  return state.isSystemAccount;
-}

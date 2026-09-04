@@ -253,6 +253,67 @@ export type SettingsSectionId =
   | "demo";
 
 /**
+ * BİRİNCİ SEVİYE — kategorinin hangi EKRANDA çizildiği (2026-09-04, kullanıcı
+ * isteği: "modül flaglarını ayrı bir yere taşıyalım · firmadaki yetkilinin
+ * düzenleyebileceği flaglar ayrı bir yerde olsun · güncelleme denetleme ayrı
+ * bir yerde olsun · geri kalanlar durabilir").
+ *
+ *   • `"flags"`    → Sistem → **Özellik Anahtarları** (fabrika yetkilisinin
+ *                    düzenlediği DAVRANIŞ bayrakları)
+ *   • `"vendor"`   → Sistem → **Modüller** (satın alınan modül anahtarları +
+ *                    kurulum beyanı; satıcı ekranı)
+ *   • `"settings"` → Sistem → **Genel Ayarlar** ("geri kalanlar": şirket,
+ *                    oturum, cihaz, etiket baskısı, bu bilgisayar)
+ *
+ * ⚠️ AYRIM `kind`İN İKİZİ DEĞİL: `kind` satırların NASIL çizildiğini söyler
+ * (flags/device/session/…), `surface` HANGİ EKRANDA çizildiklerini. İkisini
+ * birleştirmek "yeni bir flags kategorisi eklemek onu otomatik olarak fabrika
+ * ekranına koyar" demek olurdu — modül anahtarları da `kind: "flags"`tır.
+ *
+ * ⚠️ TEK KAYNAK: kategori HANGİ ekranda çiziliyorsa palet/derin bağlantı da
+ * ORAYA gitmek zorunda (`settingsCategoryPath`). Ayrışırsa kullanıcı Ctrl+K'dan
+ * tıklar, açılan sayfa o sekmeyi bulamaz ve SESSİZCE ilk sekmeye düşer
+ * ("Kurşun Sırası" dersinin ayar ekranındaki ikizi). Bekçi:
+ * `settings-surface.test.ts`.
+ */
+export type SettingsSurface = "settings" | "flags" | "vendor";
+
+/**
+ * Bölüm → yüzey. **Kategorinin yüzeyi BÖLÜMÜNDEN TÜRETİLİR** (`categorySurface`);
+ * kategoriye ayrı bir `surface` alanı BİLEREK eklenmedi — iki yazar olsaydı bir
+ * bölümün altındaki kategorilerden biri başka sayfaya kayar ve ray başlığı
+ * yalan söylerdi ("Satış & Sevkiyat" başlığı altında, o sayfada olmayan bir
+ * sekme). Yeni bölüm eklerken bu tablo ZORUNLU (Record → derleme düşer).
+ */
+export const SECTION_SURFACE: Record<SettingsSectionId, SettingsSurface> = {
+  modules: "vendor",
+  demo: "vendor",
+  sales: "flags",
+  production: "flags",
+  trade: "flags",
+  printing: "settings",
+  system: "settings",
+};
+
+/** Yüzeyin adresi — palet/derin bağlantı ve route TEK yerden okur. */
+export const SURFACE_PATH: Record<SettingsSurface, string> = {
+  settings: "/system/settings",
+  flags: "/system/feature-flags",
+  vendor: "/system/module-profile",
+};
+
+/**
+ * Yüzeyin EKRAN ADI — sayfa başlığı, Sistem karosu ve palet girişleri aynı
+ * kelimeyi kullanmak zorunda. Palet "Genel Ayarlar · Muhasebe" derken kullanıcıyı
+ * başka bir ekrana atarsa arama sonucu yalan söyler. Bekçi: `settings-surface.test.ts`.
+ */
+export const SURFACE_LABEL: Record<SettingsSurface, string> = {
+  settings: "Genel Ayarlar",
+  flags: "Özellik Anahtarları",
+  vendor: "Modüller",
+};
+
+/**
  * REJİM kapısı — bir KATEGORİNİN tamamı bu bayrağa bağlıdır. `undefined` → her
  * zaman görünür.
  *
@@ -965,7 +1026,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
     // kabul fişi HİÇ oluşturulamaz, yani bu iki katılık ayarının uygulanacağı
     // bir kayıt yoktur. Kategori GÖRÜNÜR kalır — "açtım, kapatamıyorum"
     // çıkmazının panel ikizi gizlemekle doğardı, kilitlemekle değil (modül her
-    // zaman Modüller sekmesinden geri açılabilir).
+    // zaman Sistem → Modüller ekranından geri açılabilir).
     moduleKey: "ticaretEnabled",
     flags: [
       {
@@ -1204,11 +1265,38 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
   },
 ];
 
-/** Kullanıcının izinlerine göre görünen kategoriler (sayfa + komut paleti ORTAK). */
+/** Kategorinin çizildiği ekran — BÖLÜMÜNDEN türetilir (tek yazar). */
+export function categorySurface(cat: SettingsCategory): SettingsSurface {
+  return SECTION_SURFACE[cat.section];
+}
+
+/**
+ * Bu kategoriye giden adres — palet, derin bağlantı ve "şuradan açılır"
+ * metinleri BURADAN okur.
+ *
+ * ⚠️ Satıcı yüzeyi (`vendor`) `?tab=` TAŞIMAZ: Modüller ekranı bir sekme şeridi
+ * değil tek sayfadır. Sekme parametresi verilseydi sayfa onu yok sayar ve palet
+ * "gittim ama bir şey açılmadı" hissi üretirdi.
+ */
+export function settingsCategoryPath(cat: SettingsCategory): string {
+  const surface = categorySurface(cat);
+  return surface === "vendor" ? SURFACE_PATH.vendor : `${SURFACE_PATH[surface]}?tab=${cat.id}`;
+}
+
+/**
+ * Kullanıcının izinlerine göre görünen kategoriler (sayfa + komut paleti ORTAK).
+ *
+ * `surface` verilirse YALNIZ o ekranın kategorileri döner. Vermemek "tüm
+ * kategoriler" demektir ve yalnız palet/bekçi için anlamlıdır — bir SAYFA
+ * yüzeyini daima belirtir, yoksa Genel Ayarlar modül anahtarlarını da çizerdi.
+ */
 export function visibleSettingsCategories(
   hasAnyPermission: (perms: string[]) => boolean,
+  surface?: SettingsSurface,
 ): SettingsCategory[] {
-  return SETTINGS_CATEGORIES.filter((cat) =>
-    hasAnyPermission(cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION]),
+  return SETTINGS_CATEGORIES.filter(
+    (cat) =>
+      (surface === undefined || categorySurface(cat) === surface) &&
+      hasAnyPermission(cat.permissionAny ?? [SETTINGS_ADMIN_PERMISSION]),
   );
 }
