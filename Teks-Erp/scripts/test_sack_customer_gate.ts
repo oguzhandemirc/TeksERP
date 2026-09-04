@@ -15,7 +15,11 @@
 //   §5 `none,<uuid>` → aynı alan içinde VEYA.
 //   §6 Kapı sayısı ile liste satır sayısı AYNI (tek kaynak `resolveScopeOr`).
 //   §7 Varsayılan kapsam DISPATCHED çuvalı iki yüzeyde de dışlar.
+//   §8 Sentinel değeri Electron aynasıyla BİREBİR (Electron backend'i import
+//      edemez → değer iki yerde yaşar; ayrışırsa süzgeç sessizce 0 satır döner).
 // =============================================================================
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import prisma from "../src/lib/prisma";
 import { SackSearchService, CUSTOMERLESS_FILTER_VALUE } from "../src/services/sack-search.service";
 
@@ -109,12 +113,21 @@ async function main() {
     check("§4 `none` yalnız müşterisiz çuvalları döner", noneRows.length === 3 && noneRows.every((r) => r.customer === null), `${noneRows.length} satır`);
 
     // ── §5 none + uuid → VEYA ──────────────────────────────────────────────
-    const mixed = ((await svc.searchSacks({ customerId: `${CUSTOMERLESS_FILTER_VALUE},${cB.id}`, limit: 100 })).data as Row[])
-      .filter((r) => mine.has(r.id));
+    // ⚠️ try/catch ŞART: sentinel ayrıştırması düşerse burada P2007 FIRLAR ve
+    // yakalanmazsa script "Sonuç" satırını hiç basmadan ölür — bu depoda kayıtlı
+    // en sessiz kırmızı. Hata da bir ölçümdür, ❌ olarak raporlanır.
+    let mixed: Row[] = [];
+    let mixedErr = "";
+    try {
+      mixed = ((await svc.searchSacks({ customerId: `${CUSTOMERLESS_FILTER_VALUE},${cB.id}`, limit: 100 })).data as Row[])
+        .filter((r) => mine.has(r.id));
+    } catch (e) {
+      mixedErr = String((e as { code?: string }).code ?? (e as Error).message);
+    }
     check(
       "⭐ §5 `none,<uuid>` aynı alan içinde VEYA (3 müşterisiz + 1 B)",
       mixed.length === 4 && mixed.some((r) => r.customer?.id === cB.id) && mixed.filter((r) => r.customer === null).length === 3,
-      `${mixed.length} satır`,
+      mixedErr ? `HATA: ${mixedErr}` : `${mixed.length} satır`,
     );
 
     // ── §6 Kapı sayısı ↔ liste satır sayısı ────────────────────────────────
@@ -129,6 +142,19 @@ async function main() {
     check("§7 Liste sevk edilmiş çuvalı varsayılan kapsamda göstermiyor", !listA.some((r) => r.id === sacks[6]!.id));
     const gateAll = (await svc.listSackCustomers({ scope: "ALL" })).data.find((r) => r.customerId === cA.id);
     check("§7 scope=ALL verilince sevk edilmiş de sayılıyor (3)", gateAll?.sackCount === 3, String(gateAll?.sackCount));
+    // ── §8 Electron aynası ────────────────────────────────────────────────
+    // Electron backend'i import EDEMEZ (mobil `permissions.ts` ile aynı durum):
+    // sentinel değeri iki dosyada yaşar. Ayrışırsa panel "none" yerine başka bir
+    // metin gönderir, backend onu UUID sanıp P2007 verir ya da (daha kötüsü)
+    // sessizce filtreyi düşürür ve YANLIŞ liste basar.
+    const mirrorPath = resolve(__dirname, "../../Electron/src/pages/Operations/SackContentEdit/types.ts");
+    let mirror = "";
+    try { mirror = readFileSync(mirrorPath, "utf-8"); } catch { /* Electron yoksa aşağıda kırmızı */ }
+    check(
+      "⭐ §8 Electron aynası backend sentineliyle BİREBİR",
+      new RegExp(`CUSTOMERLESS_FILTER_VALUE\\s*=\\s*"${CUSTOMERLESS_FILTER_VALUE}"`).test(mirror),
+      mirrorPath,
+    );
   } finally {
     await prisma.sack.deleteMany({ where: { id: { in: sackIds } } });
     await prisma.shipment.delete({ where: { id: shipment.id } }).catch(() => {});

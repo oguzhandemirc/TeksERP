@@ -16,6 +16,25 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-04b",
+      "baslik": "Pencerenin üstü tamamen programa ait",
+      "surumler": {
+        "panel": "1.2.2"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Pencerenin ayrı üst şeridi kaldırıldı. Küçült, büyült ve kapat düğmeleri programın kendi üst çubuğuna taşındı; ekranın üstünde boşa giden şerit kalmadı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Patron ekranında pencere başlığından tutup taşınamıyordu; düzeltildi."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04",
       "baslik": "Programın kendi penceresi ve doğru sürüm bilgisi",
       "surumler": {

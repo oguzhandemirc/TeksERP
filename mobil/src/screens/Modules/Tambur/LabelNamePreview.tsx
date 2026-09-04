@@ -23,11 +23,12 @@
 // =============================================================================
 import React, { useEffect, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
-import { Text, TouchableRipple, TextInput, Button, ActivityIndicator } from 'react-native-paper';
+import { Text, TouchableRipple, Button, ActivityIndicator } from 'react-native-paper';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Toast from 'react-native-toast-message';
 
 import AppModal from '../../../components/AppModal';
+import ModalTextInput from '../../../components/ModalTextInput';
 import { labelService, type LabelNamePreview as Preview } from '../../../services/label.service';
 import { usePermissions } from '../../../hooks/usePermission';
 import { shouldShowOriginalName } from './labelNameCompare';
@@ -176,7 +177,7 @@ export function LabelNamePreview({
           </Text>
 
           <Text style={s.fieldLabel}>Müşterideki kumaş adı</Text>
-          <TextInput
+          <ModalTextInput
             mode="outlined"
             dense
             value={itemName}
@@ -186,7 +187,7 @@ export function LabelNamePreview({
           {p.colorId ? (
             <>
               <Text style={s.fieldLabel}>Müşterideki renk adı</Text>
-              <TextInput
+              <ModalTextInput
                 mode="outlined"
                 dense
                 value={colorName}

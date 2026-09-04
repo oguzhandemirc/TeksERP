@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { View, StyleSheet, useWindowDimensions, ScrollView } from 'react-native';
 import AppModal from '../AppModal';
+import ModalTextInput from '../ModalTextInput';
 import {
   Text,
   Surface,
   IconButton,
   Button,
-  TextInput,
   Icon,
   ActivityIndicator,
   TouchableRipple,
@@ -270,7 +270,7 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
               Boş gönderirseniz override silinir, master/default ad geri döner.
             </Text>
             <Text style={styles.label}>Müşterideki Ürün Adı</Text>
-            <TextInput
+            <ModalTextInput
               mode="outlined"
               value={editItemName}
               onChangeText={setEditItemName}
@@ -283,7 +283,7 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
               style={styles.input}
             />
             <Text style={styles.label}>Müşterideki Renk Adı</Text>
-            <TextInput
+            <ModalTextInput
               mode="outlined"
               value={editColorName}
               onChangeText={setEditColorName}

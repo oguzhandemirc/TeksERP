@@ -54,7 +54,12 @@ export const CUSTOMERLESS_FILTER_VALUE = "none";
  * Aynı alan içinde VEYA semantiği korunur (`none,<uuid>` → müşterisiz VEYA o cari).
  */
 function splitCustomerFilter(v: string | string[] | undefined): { ids: string[]; customerless: boolean } {
-  const raw = toIdList(v);
+  // ⚠️ VİRGÜLE DE BÖLER: `toIdList` bölmez (CSV'yi controller `filtIds` ayırır),
+  // ama servisi doğrudan çağıran her yol (script, bekçi, dahili çağrı) ham CSV
+  // gönderebilir ve o zaman "none,<uuid>" TEK değer olarak `in:`e girip P2007
+  // verir — ölçüldü (2026-09-04, bekçinin ilk koşumu). Kök CLAUDE.md: "CSV de
+  // bir string'dir".
+  const raw = toIdList(v).flatMap((x) => x.split(",")).map((x) => x.trim()).filter(Boolean);
   const customerless = raw.some((x) => x.toLowerCase() === CUSTOMERLESS_FILTER_VALUE);
   return { ids: raw.filter((x) => x.toLowerCase() !== CUSTOMERLESS_FILTER_VALUE), customerless };
 }
