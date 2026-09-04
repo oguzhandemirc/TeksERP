@@ -1,35 +1,33 @@
 // =============================================================================
-// YAN YANA KURULUM ICIN HAZIR ecosystem.config.js  (2026-09-04)
+// FABRIKA GECISI ICIN HAZIR ecosystem.config.js  (2026-09-04)
 // =============================================================================
-// Fabrikada :4000'de ESKI backend calisirken yeni surumu ayni makinede denemek
-// icin. Bu dosya kurulumdan ONCE <KOK>\app\ecosystem.config.js olarak konur;
-// kur.ps1 [5/9] "sunucununki KORUNUR" kuralini uygular ve paketinkini
+// Yeni surum ESKISININ YERINE gecer: eski pm2 uygulamasi DURDURULUR, yenisi
+// AYNI PORTTA (4000) ama AYRI KOKTE (C:\TeksERP) ve AYRI VERITABANINDA
+// (tekserp_yeni - canlinin kopyasi) kosar.
+//
+// Bu dosya kurulumdan ONCE <KOK>\app\ecosystem.config.js olarak konur; kur.ps1
+// [5/9] "sunucununki KORUNUR" kuralini uygular ve paketinkini
 // ecosystem.config.js.paket olarak yanina birakir.
 //
-// NEDEN ONCEDEN: dosya yoksa paketinki gelir (PORT 4000). O zaman ikinci
-// kurulum EADDRINUSE ile duser, kur.ps1 [9/9] 4000'i sorgular, ESKI API'yi
-// bulur ve "KURULUM TAMAM - surum <eski>" der. Yalanci yesil.
+// SABLONDAN TEK FARKI: pm2 uygulama adi.
+//   name: "tekserp-backend-yeni"
+//   ⚠ kur.ps1 [4/9] `pm2 delete <ad>` yapiyor. Ayni adi kullansaydik ESKI
+//     kurulumun pm2 kaydini silerdi - geri donus icin elimizde duran hazir
+//     tanim yok olurdu. Ad FARKLI olunca eski kayit "stopped" olarak durur ve
+//     geri donus tek komut.
+//   ⚠ `pm2 delete` adi -UygulamaAdi'ndan, `pm2 start ecosystem.config.js` ise
+//     BU DOSYADAN okur -> ikisi ayni yazilmak ZORUNDA:
+//        kur.ps1 -UygulamaAdi tekserp-backend-yeni
 //
-// Sablondan UC farki var, ucu de bilincli:
-//   1) PORT 5000        - eski kurulum 4000'i tutuyor
-//   2) AGA ILAN ACIK BIRAKILDI (kullanici karari, 2026-09-04)
-//      Ilan varsayilan ACIK ve OYLE KALIYOR: test cihazi yeni surumu
-//      otomatik bulmali, elle adres girmek zorunda kalmamali. mDNS portu
-//      ILANIN ICINDE tasir (istemci: verify(h, hit.port || 4000, "mdns"))
-//      -> :5000 bulunur. Alt ag taramasi ise portu SABIT 4000 dener, yani
-//      :5000'i yalniz mDNS bulur.
-//      ⚠ BEDELI BILINCLI: yeni DB canlinin kopyasi oldugu icin AYNI
-//      installationId'yi tasir -> "farkli sunucu" uyarisi SESSIZ kalir.
-//      Test suresince kesif listesinde IKI aday cikar; ayirt edici
-//      port + surum numarasidir ve panel ikisini de basar
-//      (ServerDiscoveryPanel: "host:port . vX.Y.Z").
-//   3) name "tekserp-backend-yeni"
-//      Ayni isim olsaydi kur.ps1 [4/9] pm2 delete <ad> ile ESKI kurulumu
-//      pm2'den silerdi - fabrika sessizce kapanirdi.
+// PORT 4000: eski kurulum durdurulmus olacak. ⚠ Durdurmadan kurmayin -
+// EADDRINUSE ile duser ve kur.ps1 [9/9] 4000'i sorgulayip ESKI API'yi bulur,
+// "KURULUM TAMAM - surum <eski>" der (surum karsilastirmasi yok). Yalanci yesil.
+//
+// AGA ILAN varsayilan ACIK ve oyle kaliyor: tabletler/paneller yeni sunucuyu
+// kendiliginden bulmali. Tek sunucu kosacagi icin kesif listesinde tek aday
+// cikar, kimlik karisikligi olmaz.
 //
 // KOK dosyanin kendi konumundan turer; ayrica duzenleme gerekmez.
-// GECISTE (yarin): PORT'u 4000 yap, DISCOVERY_MDNS_ENABLED satirini SIL,
-// eskiyi durdur, bu uygulamayi yeniden baslat.
 // =============================================================================
 
 // =============================================================================
@@ -127,7 +125,7 @@ module.exports = {
       env: {
         NODE_ENV: "production",
         APP_ENV: "production",
-        PORT: "5000",
+        PORT: "4000",
         // 0.0.0.0 = fabrika ağındaki tabletler/istemciler erişebilsin.
         HOST: "0.0.0.0",
 

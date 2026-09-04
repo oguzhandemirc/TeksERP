@@ -1,54 +1,50 @@
 # OKU-ÖNCE — fabrika sunucusundaki Claude oturumu için devir notu
 
 > Bu dosyayı okuyan sen, **fabrika sunucusunda** açılmış yeni bir Claude
-> oturumusun. Bu işi planlayan oturumun bağlamı sende YOK. İhtiyacın olan her
-> şey bu dosyada ve `FABRIKA-KURULUM-2026-09-04.md`'de.
+> oturumusun. Bu işi planlayan oturumun bağlamı sende YOK. İhtiyacın olan her şey
+> bu dosyada ve `FABRIKA-KURULUM-2026-09-04.md`'de.
 
 ## 0. Neredesin
 
-**BURASI CANLI ÜRETİM.** Gerçek bir tekstil fabrikasının ERP sunucusu; gerçek
-siparişler, gerçek stok, gerçek sevkiyat. Yanlış bir komut vardiyayı durdurur.
+**BURASI CANLI ÜRETİM.** Gerçek bir tekstil fabrikasının ERP sunucusu. Yanlış bir
+komut vardiyayı durdurur.
 
 | | |
 |---|---|
-| Çalışan sistem | Eski API, **`:4000`** — fabrikanın bağlandığı yer |
-| PostgreSQL | **Eski API'nin klasörünün İÇİNDE** (`C:\Program Files\PostgreSQL` DEĞİL), `:5432` |
-| Kuracağın şey | Yeni sürüm — **ayrı kök** `C:\TeksERP`, **ayrı port 5000**, **ayrı veritabanı** |
-| Yeni veritabanı | `tekserp_yeni` — canlının bu akşamki kopyası, **kullanıcı zaten oluşturdu** |
-| Amaç | İki backend bir saat **yan yana** koşacak; geçiş kararı insanın |
+| Eski API | `:4000`, **pm2** ile koşuyor — planlı olarak **durdurulacak** |
+| PostgreSQL | **eski API'nin klasörünün İÇİNDE** (Program Files DEĞİL), `:5432` |
+| Kuracağın şey | Yeni sürüm — **ayrı kök** `C:\TeksERP`, **AYNI port 4000**, **ayrı veritabanı** `tekserp_yeni` |
+| Yeni veritabanı | Canlının bu akşamki kopyası, **kullanıcı zaten oluşturdu** |
 
-Yapacağın şey bir **yükseltme değil**. Çalışan kuruluma dokunmadan, yanına
-ikinci bir kurulum koyuyorsun.
+Yeni sürüm eskisinin **yerine** geçiyor. Eski kurulumun **dosyalarına ve
+veritabanına dokunulmuyor** — orası geri dönüş yolu.
 
 ---
 
 ## 1. Yasaklar — istisnasız
 
-1. **`C:\Etkili-Yazilim` altında hiçbir şeyi değiştirme, silme, taşıma.**
-   Orası çalışan sistem. Yalnız *okuyabilirsin*.
-2. **Eski API'yi DURDURMA.** `pm2 stop/delete/restart tekserp-backend`,
-   `Stop-Service`, süreç öldürme — hiçbiri. Durdurma kararı bu gece testten
-   sonra **insanın** vereceği ayrı bir karar.
+1. **`C:\Etkili-Yazilim` altında hiçbir dosyayı değiştirme, silme, taşıma.**
+   Yalnız *okuyabilirsin*. Tek istisna: notun söylediği pm2 `stop`/`delete`
+   komutları (uygulama kaydı, dosya değil).
+2. **Eski veritabanına yazma.** Yeni kurulum `tekserp_yeni`'yi kullanır; eskisi
+   dokunulmadan durur, geri dönüşün tamamı ona dayanıyor.
 3. **Toplu süreç öldürme YASAK**: `taskkill /F /IM node.exe`,
-   `Get-Process node | Stop-Process`, `pkill` benzeri hiçbir şey. Bu komutlar
-   çalışan backend'i de öldürür ve hangisini öldürdüğünü söylemez.
+   `Get-Process node | Stop-Process`, `pkill` benzeri hiçbir şey. Hangi süreci
+   öldürdüğünü söylemez.
 4. **`prisma migrate reset` · reseed · toplu `DELETE`/`TRUNCATE` YASAK.**
-   Migration'lar geri alınamaz kabul edilir.
-5. **`kur.ps1 -Zorla` KULLANMA.** Script'in sorduğu onaylar insan içindir;
-   çıktıyı kullanıcıya göster, cevabı ondan al.
+5. **`kur.ps1 -Zorla` KULLANMA.** Onaylar insan içindir; çıktıyı kullanıcıya
+   göster, cevabı ondan al.
 6. **Parolayı hiçbir yere yazma** — ekrana basma, dosyaya kaydetme, komut
-   satırına düz yazma. `(Read-Host "DB parolasi")` kalıbını kullan; düz yazılan
-   parola PowerShell geçmişine kalıcı düşer.
-7. **Panel/tablet yayını yapma** (`electron-yayinla`, `mobil-yayinla`). Bu
-   makinede işin yok; yayın geliştirme makinesinden yapıldı.
+   satırına düz yazma. `(Read-Host "DB parolasi")` kalıbını kullan.
+7. **Panel/tablet yayını yapma** (`electron-yayinla`, `mobil-yayinla`).
 
 ---
 
-## 2. Başlamadan önce doğrula
+## 2. Başlamadan doğrula
 
-**a) Kabuk YÖNETİCİ mi?** `kur.ps1` yönetici olmayan kabukta durur ve sen
-kendini yükseltemezsin. Değilse kullanıcıdan terminali **"Yönetici olarak
-çalıştır"** ile yeniden açmasını iste.
+**a) Kabuk YÖNETİCİ mi?** `kur.ps1` yönetici olmayan kabukta durur ve sen kendini
+yükseltemezsin. Değilse kullanıcıdan terminali "Yönetici olarak çalıştır" ile
+yeniden açmasını iste.
 
 ```powershell
 (New-Object Security.Principal.WindowsPrincipal(
@@ -56,13 +52,12 @@ kendini yükseltemezsin. Değilse kullanıcıdan terminali **"Yönetici olarak
 ).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 ```
 
-**b) Node 22+ var mı?** `node -v` — paket Node 22 tabanı bekliyor.
+**b) Node 22+ var mı?** `node -v`
 
 **c) İnternet var mı?** `ilk-kurulum.ps1 [7/8]` yeni kök için **pm2'yi npm ile
-indirir**. İnternet yoksa orada durur (paketin geri kalanı internetsiz kurulur,
-yalnız bu adım ister). Önce dene: `npm ping`.
+indirir**. `npm ping` ile önce dene.
 
-**d) Eski API gerçekten `:4000`'de mi ve NASIL koşuyor?** Ölç, varsayma:
+**d) 4000'i kim dinliyor?** Ölç, varsayma — durdurma adımında lazım olacak:
 
 ```powershell
 Get-NetTCPConnection -LocalPort 4000 -State Listen |
@@ -70,119 +65,92 @@ Get-NetTCPConnection -LocalPort 4000 -State Listen |
 Get-Service | Where-Object { $_.Name -match "teks|erp" } | Format-Table Name,Status
 ```
 
-Bu bilgi bu gece geçiş anında lazım olacak (pm2 mi, Windows servisi mi).
-**Öğren ve kullanıcıya söyle** — ama durdurma.
-
-**e) `:5000` boş mu?**
-
-```powershell
-Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
-```
-Doluysa dur ve kullanıcıya sor; portu kendi başına değiştirme.
-
 ---
 
 ## 3. Kurulum
 
-`FABRIKA-KURULUM-2026-09-04.md`'deki **beş adımı sırayla** uygula. Sırayı
-değiştirme; özellikle **3. adım (yapılandırmayı kurulumdan ÖNCE kopyalama)**
-atlanamaz.
+`FABRIKA-KURULUM-2026-09-04.md`'deki **yedi adımı sırayla** uygula.
 
 ### Kullanıcıdan almak zorunda olduğun iki bilgi
 
-1. **`tekserp_yeni` veritabanının parolası** — sende yok, sorman gerek.
-2. **`-PgBin` yolu.** Otomatik arama yalnız `C:\Program Files\PostgreSQL`
-   altına bakar; buradaki PostgreSQL orada değil. Bul, sonra **kullanıcıya
-   doğrulat** (yanlış `bin` yanlış major sürüm demek olabilir; `pg_dump`
-   sunucudan eski bir majorse çalışmayı reddeder):
+1. **`tekserp_yeni` parolası** — sende yok.
+2. **`-PgBin` yolu** — bul, sonra kullanıcıya doğrulat.
 
-```powershell
-Get-ChildItem C:\ -Recurse -Filter pg_dump.exe -ErrorAction SilentlyContinue |
-  Select-Object -First 5 FullName
-```
+### En kritik iki nokta
+
+**① 3. adım (yapılandırmayı kurulumdan ÖNCE kopyalama) atlanamaz.** pm2 adının
+farklı olmasını sağlıyor; aynı ad `kur.ps1 [4/9]`'un `pm2 delete`'i ile **eski
+kurulumun pm2 kaydını siler** ve hazır geri dönüş yolu kaybolur.
+
+**② 4. adım (eskiyi durdurma) 5'ten ÖNCE gelmek zorunda.** Port doluyken kurulum
+`EADDRINUSE` ile düşer, `[9/9]` 4000'i sorgular, cevabı **ESKİ API** verir ve
+script **"KURULUM TAMAM — surum \<eski\>"** der (sürüm karşılaştırması yok).
+Sessiz yalancı yeşil. Durdurduktan sonra `curl http://localhost:4000/health`
+**cevapsız kalmalı**; kalmıyorsa DUR ve kullanıcıya söyle.
+
+⚠️ 4. adımdan sonra **fabrika kapalıdır**; kalan adımlar kesintisiz ilerlemeli.
+Buraya gelmeden kullanıcıya haber ver.
 
 ### Nerede DURUP soracaksın
 
 | Nokta | Neden |
 |---|---|
-| `[3/9]` yedek alınamazsa | Kurulum kendini iptal eder. **Zorlama.** Sebebini bildir. |
-| `[7/9]` öncesi | **Geri alınamaz eşik.** Buraya gelmeden kullanıcıya "migration'lar uygulanacak" de ve onay al. |
-| `[7/9]` sonrası herhangi bir hata | Script otomatik geri almaz, komutları yazar. **Sen de uygulama** — çıktıyı göster, kararı kullanıcı versin. |
-| `[9/9]` portu **4000** yazıyorsa | 3. adım atlanmış. **Devam etme**, aşağıya bak. |
+| 4. adım öncesi | Fabrikayı kapatıyorsun. Onay al. |
+| `[3/9]` yedek alınamazsa | Kurulum kendini iptal eder. **Zorlama.** |
+| `[7/9]` öncesi | **Geri alınamaz eşik.** Onay al. |
+| `[7/9]` sonrası hata | Script komutları yazar, uygulamaz. **Sen de uygulama.** |
+| 6. adımda sürüm eskisiyle AYNI çıkarsa | 4. adım tam olmamış. **Devam etme.** |
 
 ---
 
-## 4. "Başarılı" nasıl görünür — ve yalancı yeşil nasıl görünür
+## 4. Kurulumdan sonra
 
-**Doğru:**
-```
-[9/9] Saglik kontrolu (port 5000)        <- 5000 YAZMALI
-      API UP / DB UP / surum 2.9.3
-```
-```powershell
-curl http://localhost:4000/health    # ESKI - surum ESKI olmali
-curl http://localhost:5000/health    # YENI - surum 2.9.3 olmali
-```
-⚠️ **İki sürüm FARKLI olmalı.** Aynıysa aynı backend'i iki kez sorguluyorsun.
-
-**Yalancı yeşil (bunu tanı):** 3. adım atlanırsa paketin `ecosystem.config.js`'i
-gelir (`PORT: "4000"`) → yeni kurulum `EADDRINUSE` ile düşer → `[9/9]` 4000'i
-sorgular → cevabı **ESKİ API** verir → script **"KURULUM TAMAM — surum \<eski\>"**
-der. Sürüm karşılaştırması yapılmıyor. Bu yüzden `[9/9]` satırındaki **port
-yazısı** okunması gereken tek satırdır.
-
----
-
-## 5. Kuruluma özgü iki sessizlik (bunları bil)
-
-**a) İki sunucu istemciye BİREBİR AYNI görünür.** Kurulum kimliği
-(`installationId`) veritabanında durur ve `tekserp_yeni` canlının kopyası olduğu
-için **aynı kimliği taşır** → panelin "bu senin sunucun değil" uyarısı hiç
-tetiklenmez. Ayırt edici yalnız **port ve sürüm numarası**.
-
-**b) Ağ ilanı AÇIK — ve öyle kalmalı** (kullanıcı kararı). Test cihazı yeni
-sürümü otomatik bulabilsin diye. mDNS portu ilanın içinde taşır, o yüzden
-`:5000` bulunur; alt ağ taraması ise portu sabit 4000 dener, yani `:5000`'i
-yalnız mDNS bulur.
-
-⚠️ (a) ile birleşince sonuç şu: **keşif listesinde iki aday çıkar ve kimlik
-uyarısı gelmez.** Ayırt edici port + sürüm (`:4000 · v<eski>` ↔
-`:5000 · v2.9.3`) ve panel ikisini de basar. Kullanıcıya bunu söyle;
-**cihaz ayarını sen değiştirme.**
-
-## 6. Kurulumdan sonra
-
-**Satıcı (süperadmin) hesabı** — kopya veritabanında büyük ihtimalle yok:
+**Satıcı hesabı** (kopya veritabanında büyük ihtimalle yok):
 
 ```powershell
 cd C:\TeksERP\app
 npm run superadmin:kur
 ```
-⚠️ **GERÇEK TTY ister.** Senin çalıştırdığın boru/otomasyon içinde koşarsa
-gürültülü hata verip çıkar (bilerek — eskiden sessizce sonsuza kadar donuyordu).
-**Bunu sen koşturmaya çalışma**; kullanıcıya "sunucunun kendi konsolunda şu
-komutu çalıştırın" de. Parola/PIN/TOTP bir kez gösterilir; **sen o çıktıyı
-kaydetme, tekrarlama, loglamaya alma.**
+⚠️ **GERÇEK TTY ister** — boru/otomasyon içinde gürültülü hata verip çıkar.
+**Sen koşturmaya çalışma**; kullanıcıya "sunucunun kendi konsolunda çalıştırın"
+de. Parola/PIN/TOTP bir kez gösterilir; **kaydetme, tekrarlama, loglama.**
 
-**Bir saatlik test:** paneller/tabletler `:4000`'i arar, yani kendiliğinden eski
-sürüme bağlanır. Yeni sürümü denemek için **tek bir cihazın** adresi elle
-`http://<sunucu-ip>:5000` yapılır (Panel: Sistem → Bu Bilgisayar → Sunucu
-Adresi). Bu bir insan işi — sen cihaz ayarı değiştirme.
+**İstemciler:** sahadaki panel ve tabletlerde kendini güncelleme yeteneği YOK —
+bu turda **elden kurulum zorunlu** (`istemciler/` klasörü). Bu bir insan işi;
+sen cihazlara dokunma, kullanıcıya `istemciler/OKU.md`'yi göster.
 
-⚠️ **Testte girilen her kayıt yarın canlı veri olacak** (karar `tekserp_yeni`'yi
-üretime almak yönünde). Kullanıcıya hatırlat.
+Adres ayarı **gerekmiyor**: sunucu yine `:4000`'de, ağa ilan açık.
 
 ---
 
-## 7. Ters giderse
+## 5. Bilmen gereken bir sessizlik
 
-Yan yana kurulumun güvenliği şu: **eski kurulum çalışmaya devam ediyor.**
-Yenisi bozulursa fabrika etkilenmez. Yapılacak tek şey yeniyi durdurmak:
+Yeni veritabanı canlının kopyası olduğu için **aynı `installationId`'yi taşıyor**.
+Tek sunucu koşacağı için bu bugün sorun değil (keşifte tek aday çıkar), ama
+şunu bil: bir istemci "bu senin sunucun değil" uyarısı **vermez** — kimlik
+değişmedi. Yani bir cihazın hangi veritabanına baktığını kimlik üzerinden
+anlayamazsın; ölçüt **`/health` sürümü**.
+
+---
+
+## 6. Ters giderse
+
+Eski kod ve eski veritabanı hiç değişmedi:
 
 ```powershell
 $env:PM2_HOME = "C:\TeksERP\pm2-home"
 C:\TeksERP\pm2\node_modules\.bin\pm2.cmd stop tekserp-backend-yeni
+
+$env:PM2_HOME = "C:\Etkili-Yazilim\pm2-home"
+cd C:\Etkili-Yazilim\app
+C:\Etkili-Yazilim\pm2\node_modules\.bin\pm2.cmd start ecosystem.config.js
+C:\Etkili-Yazilim\pm2\node_modules\.bin\pm2.cmd save
+curl http://localhost:4000/health
 ```
+
+⚠️ **Ne kadar geç dönülürse o kadar pahalı** — yeni sürümde `tekserp_yeni`'ye
+yazılan işler eski veritabanında YOKTUR. Dönüş bir **iş kararıdır**; sen kendi
+başına verme, kullanıcıya durumu söyle.
 
 Loglar:
 ```powershell
@@ -192,36 +160,30 @@ C:\TeksERP\pm2\node_modules\.bin\pm2.cmd logs tekserp-backend-yeni --lines 80
 
 ⚠️ pm2 komutlarını **hep aynı yükseltme seviyesinden** ver; yönetici daemon +
 yetkisiz istemci `EPERM` verir ve bu "uygulama yok" gibi okunur.
+⚠️ Windows'ta `PM2_HOME` süreçleri **ayırmaz** (tek pipe) — `pm2 list` iki kaydı
+birden gösterebilir. Ayıran şey **isim**: `tekserp-backend` (eski) ↔
+`tekserp-backend-yeni` (senin kurduğun).
 
-⚠️ Windows'ta `PM2_HOME` süreçleri **ayırmaz** (tek pipe) — `pm2 list` iki
-kurulumu birden gösterebilir. Ayıran şey **isim**: `tekserp-backend` (eski,
-DOKUNMA) ↔ `tekserp-backend-yeni` (senin kurduğun).
-
-**`kur.ps1 -GeriAl`'ı kendi başına çalıştırma.** İlk kurulumda geri dönülecek
-bir sürüm zaten yok; gerçekten gerekirse kullanıcıyla konuş.
-
----
-
-## 8. Geçiş SENİN İŞİN DEĞİL
-
-Eski API'yi kapatıp yeniyi 4000'e almak bu gece/yarın **insanın vereceği bir
-karardır** ve geri dönüşü pahalıdır (iki ayrı veritabanı; kopya alındıktan sonra
-eski API'de yapılan iş yeni veritabanında yoktur). Adımlar
-`FABRIKA-KURULUM-2026-09-04.md` → "Yarın — geçiş" bölümünde. **Kullanıcı açıkça
-söylemeden o bölüme geçme.**
-
-Geçiş yapılırsa unutulmaması gereken iki şey (kullanıcıya hatırlat):
-- Gece yedeğini alan bağımsız Görev Zamanlayıcı görevi (`yedekle.ps1`)
-  **veritabanı adını kendi içinde taşıyor** ve `tekserp_yeni`'yi bilmez →
-  güncellenmezse canlının gece yedeği **sessizce alınmaz**.
+**`kur.ps1 -GeriAl`'ı kendi başına çalıştırma** — ilk kurulumda geri dönülecek
+bir sürüm zaten yok.
 
 ---
 
-## 9. Bu sürümde ne var (kullanıcı sorarsa)
+## 7. Kullanıcıya hatırlatman gereken iki şey
+
+1. **Gece yedeği hâlâ ESKİ veritabanını alıyor.** Bağımsız bir Görev Zamanlayıcı
+   görevi (`TeksERP-DB-Backup` → `C:\Etkili-Yazilim\yedekle.ps1`, 02:00) DB adını
+   kendi içinde taşıyor ve `tekserp_yeni`'yi bilmiyor → güncellenmezse canlının
+   gece yedeği **sessizce alınmaz**.
+2. **7. adım (eski pm2 kaydını silme) atlanmamalı.** İki kayıt da 4000'i istiyor;
+   sunucu yeniden başlarsa ikisi birden ayağa kalkmaya çalışır ve hangisinin
+   kazandığı belli olmaz.
+
+---
+
+## 8. Bu sürümde ne var (kullanıcı sorarsa)
 
 Backend **2.9.3**, 232 migration. Sevk belgesinde **müşterideki ürün adı**
-(bayrağa bağlı: bizdeki / müşterideki / ikisi — **varsayılan "bizdeki" = bugünkü
-çıktı**, açmak Sistem → Özellik Anahtarları → Sevkiyat & İade'den bilinçli bir
-hamle) · kolon başlıkları düzenlenebilir · çuval izleri · Sistem → Bağlı
-İstemciler ekranı · panel 1.2.6 / tablet 1.0.5 (ikisi de yayında, internetten
-kendiliğinden gelir, elden kurulum yok).
+(bayrağa bağlı, **varsayılan "bizdeki" = bugünkü çıktı**) · belge kolon başlıkları
+düzenlenebilir · çuval izleri · `Sistem → Bağlı İstemciler` ekranı · panel 1.2.6 ·
+tablet 1.0.5.
