@@ -20,6 +20,31 @@ export interface DocColumnCfg {
    * `shown` içermiyorsa basılmaz, `hidden` onlarda YOK SAYILIR.
    */
   shown?: string[];
+  /**
+   * KOLON BAŞLIĞI ÖZELLEŞTİRME (2026-09-04) — `{ kolonKey: "Yeni Başlık" }`.
+   *
+   * Fabrika müşteriye giden belgede kendi dilini kullanabilsin diye ("STOK ADI"
+   * yerine "ÜRÜN", "MÜŞTERİ STOK ADI" yerine "SİZDEKİ AD"). Verilmeyen kolon
+   * yerleşik başlığını korur; **boş dize / yalnız boşluk = VARSAYILANA DÖN**
+   * (silinmiş sayılır), çünkü kullanıcı kutuyu boşaltınca niyeti "başlıksız
+   * kolon" değil "eski hâline dön"dür — belge kolonu başlıksız basmak, sütunun
+   * ne olduğunu okunamaz kılardı.
+   *
+   * ⚠️ DEĞER KULLANICI GİRDİSİDİR ve yerleşik `label`ların aksine HTML olarak
+   * güvenli DEĞİLDİR → `applyColumnCfg` onu kaçırır (tek nokta). Yeni bir tablo
+   * motoru yazan biri bu kaçırmayı da taşımak zorunda.
+   */
+  labels?: Record<string, string>;
+}
+
+/** Başlık override'ı HTML'e gömülür — yerleşik etiketler sabit literal, bu DEĞİL. */
+function escLabel(v: string): string {
+  return v
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 export interface DocCol<R> {
@@ -57,6 +82,17 @@ export function applyColumnCfg<R>(cols: DocCol<R>[], cfg?: DocColumnCfg): DocCol
     const pos = new Map(order.map((k, i) => [k, i]));
     // Bilinmeyen/eski kolon adları sona düşer (kayıt sırası korunur — stable sort).
     out = [...out].sort((a, b) => (pos.get(a.key) ?? 999) - (pos.get(b.key) ?? 999));
+  }
+  // Başlık override'ı EN SONDA ve YALNIZ GÖRÜNÜR kolonlara — gizli kolonun
+  // başlığını hesaplamak boşuna, ve sıralamadan sonra uygulamak override'ın
+  // sıralamaya karışmadığını yapısal olarak garanti eder.
+  const labels = cfg?.labels;
+  if (labels) {
+    out = out.map((c) => {
+      const raw = labels[c.key];
+      const t = typeof raw === "string" ? raw.trim() : "";
+      return t ? { ...c, label: escLabel(t) } : c;
+    });
   }
   return out;
 }

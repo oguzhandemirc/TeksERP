@@ -65,6 +65,7 @@ const LABELS = {
     carrier: "Taşıyıcı",
     urunCaption: "ÜRÜN LİSTESİ",
     stokAdi: "STOK ADI",
+    musteriStokAdi: "MÜŞTERİ STOK ADI",
     topAdedi: "TOP ADEDİ",
     toplamMetre: "TOPLAM METRE",
     cuvalCaption: "ÇUVAL LİSTESİ",
@@ -80,6 +81,8 @@ const LABELS = {
     parti: "PARTİ NO",
     desen: "DESEN",
     varyant: "VARYANT",
+    musteriDesen: "MÜŞTERİ DESEN",
+    musteriVaryant: "MÜŞTERİ VARYANT",
     en: "EN",
     metre: "METRE",
     kg: "KG",
@@ -112,6 +115,7 @@ const LABELS = {
     carrier: "Carrier",
     urunCaption: "PRODUCT LIST",
     stokAdi: "ITEM NAME",
+    musteriStokAdi: "CUSTOMER ITEM NAME",
     topAdedi: "ROLL COUNT",
     toplamMetre: "TOTAL METERS",
     cuvalCaption: "PACKAGE LIST",
@@ -127,6 +131,8 @@ const LABELS = {
     parti: "LOT NO",
     desen: "PATTERN",
     varyant: "VARIANT",
+    musteriDesen: "CUSTOMER PATTERN",
+    musteriVaryant: "CUSTOMER VARIANT",
     en: "WIDTH",
     metre: "METERS",
     kg: "KG",
@@ -142,6 +148,18 @@ const LABELS = {
 
 interface ShipmentDocProduct {
   name: string;
+  /**
+   * MÜŞTERİDEKİ AD (2026-09-04) — "İsim Renk Encm." biçiminde, bizim `name` ile
+   * AYNI kalıpta kurulur. Kaynak zinciri `shipment-customer-name.helper`:
+   * `OrderLine.customerItemName` (bir-seferlik override) > `CustomerItemAlias`
+   * (master) > yok.
+   *
+   * ⚠️ `null`/`undefined` AYNI ANLAMA GELMEZ ama AYNI DAVRANIR: `undefined` =
+   * eski donmuş snapshot (alan hiç yoktu), `null` = bu müşteride bu ürünün
+   * karşılığı yok. İkisinde de belgeye BİZİM adımız basılır — geriye dönük
+   * doldurma YAPILMAZ (donmuş belge kuralı).
+   */
+  customerName?: string | null;
   rollCount: number;
   totalMeters: number;
 }
@@ -159,6 +177,10 @@ interface ShipmentDocCeki {
   barcode: string | null;
   desen: string;
   varyant: string;
+  /** Müşterideki desen/varyant adı (2026-09-04) — ürün satırıyla AYNI zincir.
+   *  Eski snapshot'larda YOK; yoksa bizim adımız basılır. */
+  customerDesen?: string | null;
+  customerVaryant?: string | null;
   /** En (cm) — eski donmuş snapshot'larda yok (opsiyonel); kolonu açık-kapatılabilir. */
   width?: number | null;
   meters: number;
@@ -220,6 +242,12 @@ interface RenderMeta {
   voidReason?: string | null;
   /** Kaynak henüz donmamış (canlı önizleme) → TASLAK filigranı. */
   draft?: boolean;
+  /**
+   * ÜRÜN ADI REJİMİ (`shipping.docItemNameMode`, 2026-09-04) — HER baskıda canlı
+   * okunur, donmuş snapshot'a GİRMEZ. Verilmezse `bizdeki`: eski çağrı yolları
+   * ve örnek/taslak render'lar bugünkü çıktıyı bayt-bayt korur.
+   */
+  itemNameMode?: "bizdeki" | "musterideki" | "ikisi";
   /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
   logoDataUrl?: string | null;
   /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
@@ -447,6 +475,24 @@ export function renderShipmentDispatchHtml(
     return cls;
   };
 
+  // ── ÜRÜN ADI REJİMİ (`shipping.docItemNameMode`, 2026-09-04) ───────────────
+  // Varsayılan `bizdeki` → aşağıdaki üç dalın hiçbiri bugünkü çıktıya dokunmaz
+  // (kolon kümesi ve etiketleri birebir eski hâlinde kalır).
+  //
+  // ⚠️ `musterideki` FAIL-OPEN: karşılığı olmayan üründe BİZİM adımız basılır.
+  // Boş ürün adı taşıyan bir irsaliye hukuken sakattır; "ayar açık ama alias yok"
+  // diye hücreyi boş bırakmak sahayı kâğıtsız bırakmaktan beterdi.
+  //
+  // ⚠️ Kolon ANAHTARLARI ayrı (`name` ↔ `customerName`): tek anahtarla iki farklı
+  // içerik basılsaydı Belge Kişiselleştirme'de "Stok adı"nı gizleyen fabrika,
+  // ayarı değiştirdiği an müşteri adını da gizlemiş olurdu.
+  const nameMode = meta.itemNameMode ?? "bizdeki";
+  const showOurName = nameMode !== "musterideki";
+  const showCustName = nameMode !== "bizdeki";
+  /** Müşteri adı yoksa bizimkine düş — tek kaynak (üç hücre de bunu çağırır). */
+  const custOr = (cust: string | null | undefined, ours: string): string =>
+    (cust ?? "").trim() || ours;
+
   // 1) ÜRÜN LİSTESİ — kolonlar cfg.columns.urun ile aç/kapa + sıralanır.
   const urunSection = listSectionOn(cfg, meta, "urun")
     ? buildDocTable<ShipmentDocProduct>({
@@ -456,7 +502,12 @@ export function renderShipmentDispatchHtml(
         footLabel: L.toplam,
         rows: products,
         cols: [
-          { key: "name", label: L.stokAdi, align: "l", cell: (p) => esc(p.name) },
+          ...(showOurName
+            ? [{ key: "name", label: L.stokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(p.name) }]
+            : []),
+          ...(showCustName
+            ? [{ key: "customerName", label: L.musteriStokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(custOr(p.customerName, p.name)) }]
+            : []),
           { key: "rollCount", label: L.topAdedi, align: "r", cell: (p) => esc(fmtCount(p.rollCount)), foot: esc(fmtCount(t.totalRolls)) },
           { key: "totalMeters", label: L.toplamMetre, align: "r", cell: (p) => esc(fmtQty(p.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
         ],
@@ -551,8 +602,18 @@ export function renderShipmentDispatchHtml(
           // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
           // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
           { key: "batchNumber", label: L.parti, align: "l", cell: (c) => esc(c.batchNumber ?? "—") },
-          { key: "desen", label: L.desen, align: "l", cell: (c) => esc(c.desen) },
-          { key: "varyant", label: L.varyant, align: "l", cell: (c) => esc(c.varyant) },
+          ...(showOurName
+            ? [
+                { key: "desen", label: L.desen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.desen) },
+                { key: "varyant", label: L.varyant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.varyant) },
+              ]
+            : []),
+          ...(showCustName
+            ? [
+                { key: "customerDesen", label: L.musteriDesen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerDesen, c.desen)) },
+                { key: "customerVaryant", label: L.musteriVaryant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerVaryant, c.varyant)) },
+              ]
+            : []),
           { key: "width", label: L.en, align: "c", cell: (c) => (blankWidths ? "" : c.width != null ? `${esc(Math.round(c.width))} cm` : "—") },
           { key: "meters", label: L.metre, align: "r", cell: (c) => esc(fmtQty(c.meters)), foot: esc(fmtQty(t.totalMeters)) },
           { key: "kg", label: L.kg, align: "r", cell: (c) => (c.kg > 0 ? esc(fmtQty(c.kg)) : ""), foot: esc(fmtQty(t.totalKg)) },

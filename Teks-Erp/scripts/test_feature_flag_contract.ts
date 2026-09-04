@@ -66,12 +66,15 @@ import {
   readSameTypeSessionPolicy,
   readShippingOrderRequirement,
   readShippingInvoiceMode,
+  readShippingDocItemNameMode,
   SAME_TYPE_SESSION_POLICIES,
   SHIPMENT_ORDER_REQUIREMENTS,
   SHIPPING_INVOICE_MODES,
+  SHIPPING_DOC_ITEM_NAME_MODES,
   DEFAULT_SAME_TYPE_SESSION_POLICY,
   DEFAULT_SHIPMENT_ORDER_REQUIREMENT,
   DEFAULT_SHIPPING_INVOICE_MODE,
+  DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE,
 } from "../src/services/system-setting.service";
 import prisma from "../src/lib/prisma";
 import { yorumlariSok } from "./lib/regime-gate-scan";
@@ -1422,6 +1425,11 @@ async function main() {
     ["sameTypeSessionPolicy", await readSameTypeSessionPolicy(junkClient), DEFAULT_SAME_TYPE_SESSION_POLICY],
     ["shippingOrderRequirement", await readShippingOrderRequirement(junkClient), DEFAULT_SHIPMENT_ORDER_REQUIREMENT],
     ["shippingInvoiceMode", await readShippingInvoiceMode(junkClient), DEFAULT_SHIPPING_INVOICE_MODE],
+    [
+      "shippingDocItemNameMode",
+      await readShippingDocItemNameMode(junkClient),
+      DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE,
+    ],
   ];
   const junkGaps = junkFallbacks.filter(([, got, want]) => got !== want);
   check(
@@ -1437,6 +1445,7 @@ async function main() {
     "sameTypeSessionPolicy",
     "shippingOrderRequirement",
     "shippingInvoiceMode",
+    "shippingDocItemNameMode",
   ] as const;
   const enumGaps = ENUM_FLAGS.flatMap((k) => {
     const missing = [
@@ -1461,6 +1470,7 @@ async function main() {
     ["sameTypeSessionPolicy", SAME_TYPE_SESSION_POLICIES],
     ["shippingOrderRequirement", SHIPMENT_ORDER_REQUIREMENTS],
     ["shippingInvoiceMode", SHIPPING_INVOICE_MODES],
+    ["shippingDocItemNameMode", SHIPPING_DOC_ITEM_NAME_MODES],
   ];
   const valueSetGaps = VALUE_SETS.flatMap(([k, values]) =>
     values.filter((v) => !updateSchema.safeParse({ [k]: v }).success).map((v) => `${k}:${v}`),

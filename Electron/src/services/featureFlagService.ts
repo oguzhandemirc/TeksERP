@@ -2,7 +2,11 @@ import apiClient from "./apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
 import type { ApiResponse } from "@/types/api";
 import type { SameTypeSessionPolicy } from "@/types/auth";
-import type { ShipmentOrderRequirement, ShippingInvoiceMode } from "@/lib/shipping-flags";
+import type {
+  ShipmentOrderRequirement,
+  ShippingDocItemNameMode,
+  ShippingInvoiceMode,
+} from "@/lib/shipping-flags";
 import {
   type CompanyLetterhead,
   type DocumentsConfig,
@@ -343,6 +347,12 @@ export interface FeatureFlags {
    *  'ic' (yalnız ERP faturası damgalar, elle iz 400) | 'ikisi' (serbest, iç
    *  faturası varsa uyarır). Backend ENFORCE eder. İz KALDIRMA her modda açık. */
   shippingInvoiceMode: ShippingInvoiceMode;
+  /** Sevk belgesinde ürün adı: 'bizdeki' (default — bugünkü çıktı) |
+   *  'musterideki' (müşterinin verdiği ad; karşılığı yoksa bizimki basılır) |
+   *  'ikisi' (iki ayrı kolon). Backend UYGULAR (belge renderer'ı okur) —
+   *  ad zaten donmuş belgede durur, bu ayar yalnız HANGİSİNİN basılacağını
+   *  söyler; eski belgeleri değiştirmez, yeni versiyon doğurmaz. */
+  shippingDocItemNameMode: ShippingDocItemNameMode;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */

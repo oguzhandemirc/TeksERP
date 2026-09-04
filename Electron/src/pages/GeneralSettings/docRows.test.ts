@@ -282,3 +282,72 @@ describe("parseDocSize", () => {
     expect(parseDocSize("10,5", 5, 48)).toBe(10.5);
   });
 });
+
+// =============================================================================
+// KOLON BAŞLIĞI ÖZELLEŞTİRME (2026-09-04) — `columns[tablo].labels`
+// =============================================================================
+// Fabrika müşteriye giden belgede kendi dilini kullanabilsin diye ("STOK ADI"
+// yerine "ÜRÜN"). Panel tarafındaki iki tuzak:
+//   1. Boş kutu = "varsayılana dön" (anahtar SİLİNİR) — punto kutusuyla AYNI
+//      sözleşme. Boş dize saklanırsa belge BAŞLIKSIZ kolon basar.
+//   2. Görünürlük ve başlık AYNI `columns[tablo]` girdisine yazar → aynı yamada
+//      ikisi de gelirse ikincisi birincisini EZMEMELİ.
+describe("kolon başlığı override", () => {
+  const nameRow = (): DocRow => rowById(SEVK, "c:urun:name");
+
+  it("kolon satırında başlık düzenlenebilir, bölüm satırında DEĞİL", () => {
+    expect(read("shipmentDispatch", {}, nameRow()).canLabel).toBe(true);
+    const secOnly = allRows(SEVK).find((r) => r.section && !r.column);
+    expect(secOnly).toBeDefined();
+    expect(read("shipmentDispatch", {}, secOnly!).canLabel).toBe(false);
+  });
+
+  it("kayıtlı başlık okunur; yoksa undefined (yerleşik başlık geçerli)", () => {
+    const cfg: DocumentConfig = { columns: { urun: { labels: { name: "ÜRÜN" } } } };
+    expect(read("shipmentDispatch", cfg, nameRow()).labelOverride).toBe("ÜRÜN");
+    expect(read("shipmentDispatch", {}, nameRow()).labelOverride).toBeUndefined();
+  });
+
+  it("başlık yazılır (trim'li)", () => {
+    const out = write("shipmentDispatch", {}, nameRow(), { label: "  ÜRÜN  " });
+    expect(out.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
+  });
+
+  it("⭐ BOŞ kutu anahtarı SİLER (varsayılana dön), boş dize saklamaz", () => {
+    const cfg: DocumentConfig = { columns: { urun: { labels: { name: "ÜRÜN" } } } };
+    const out = write("shipmentDispatch", cfg, nameRow(), { label: "   " });
+    expect(out.columns?.urun?.labels).toBeUndefined();
+  });
+
+  it("başlık yazmak GÖRÜNÜRLÜK ayarını ezmez", () => {
+    const cfg: DocumentConfig = { columns: { urun: { hidden: ["rollCount"] } } };
+    const out = write("shipmentDispatch", cfg, nameRow(), { label: "ÜRÜN" });
+    expect(out.columns?.urun?.hidden).toEqual(["rollCount"]);
+    expect(out.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
+  });
+
+  it("⭐ aynı yamada görünürlük + başlık birlikte gelirse İKİSİ de yazılır", () => {
+    const out = write("shipmentDispatch", {}, nameRow(), { visible: false, label: "ÜRÜN" });
+    expect(out.columns?.urun?.hidden).toEqual(["name"]);
+    expect(out.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
+  });
+
+  it("başka tablonun başlıklarına dokunmaz", () => {
+    const cfg: DocumentConfig = { columns: { ceki: { labels: { desen: "MOTİF" } } } };
+    const out = write("shipmentDispatch", cfg, nameRow(), { label: "ÜRÜN" });
+    expect(out.columns?.ceki?.labels).toEqual({ desen: "MOTİF" });
+  });
+
+  it("kaynağı MUTATE etmez (React state güvenliği)", () => {
+    const cfg: DocumentConfig = { columns: { urun: { labels: { name: "ÜRÜN" } } } };
+    write("shipmentDispatch", cfg, nameRow(), { label: "KOD" });
+    expect(cfg.columns?.urun?.labels).toEqual({ name: "ÜRÜN" });
+  });
+
+  it("müşteri adı kolonları panelde satır olarak GÖRÜNÜR (başlık yazılabilsin)", () => {
+    const ids = allRows(SEVK).map((r) => r.id);
+    expect(ids).toContain("c:urun:customerName");
+    expect(ids).toContain("c:ceki:customerDesen");
+    expect(ids).toContain("c:ceki:customerVaryant");
+  });
+});

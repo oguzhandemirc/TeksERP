@@ -60,6 +60,11 @@ export const docConfigSchema = z
           // OPT-IN kolon allowlist'i (çuval notu gibi iç veri). Eksikti: panelde
           // açılan opt-in kolon ÖNİZLEMEDE görünmüyordu — bkz. aşağıdaki uyarı.
           shown: z.array(z.string()).optional(),
+          // KOLON BAŞLIĞI override'ı (2026-09-04) — aynı sessiz-ayrışma kapısı:
+          // yazılmazsa fabrika başlığı düzenler, GERÇEK baskıda görür, canlı
+          // önizlemede GÖREMEZ ("önizleme = baskı" sözleşmesi tam ayarı yapan
+          // kişinin gözü önünde bozulur).
+          labels: z.record(z.string(), z.string()).optional(),
         }),
       )
       .optional(),

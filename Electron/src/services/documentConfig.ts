@@ -53,7 +53,21 @@ export interface DocumentConfig {
    *            ör. çuval yorumu): listede YOKSA basılmaz ve o kolonda `hidden`
    *            YOK SAYILIR. Yeni kolon eklemek mevcut belgeleri kirletmesin diye.
    */
-  columns?: Record<string, { hidden?: string[]; order?: string[]; shown?: string[] }>;
+  columns?: Record<
+    string,
+    {
+      hidden?: string[];
+      order?: string[];
+      shown?: string[];
+      /**
+       * KOLON BAŞLIĞI override'ı (2026-09-04) — `{ kolonKey: "Yeni Başlık" }`.
+       * Boş dize / yalnız boşluk = VARSAYILANA DÖN (anahtar saklanmaz); backend
+       * `sanitizeDocumentsConfig` aynı yorumu yapar ve değeri 40 karakterde
+       * kırpar. Renderer HTML kaçırır (değer kullanıcı girdisidir).
+       */
+      labels?: Record<string, string>;
+    }
+  >;
   /** Belge doğrulama karekodu (belge no + versiyon) — default kapalı. */
   qr?: boolean;
   /** Sayfa altı damgaları: basım zamanı / basan kullanıcı / nüsha etiketi. */
@@ -654,6 +668,10 @@ export const DOC_DEFS: DocDef[] = [
         label: "Ürün Listesi",
         columns: [
           { key: "name", label: "Stok adı" },
+          // MÜŞTERİDEKİ AD (2026-09-04) — kolonun BASILIP basılmayacağını
+          // "Sevk belgesinde ürün adı" ayarı belirler; buradaki satır kolonun
+          // başlığını yazmak ve (rejim açıkken) gizlemek içindir.
+          { key: "customerName", label: "Müşteri stok adı" },
           { key: "rollCount", label: "Top adedi" },
           { key: "totalMeters", label: "Toplam metre" },
         ],
@@ -686,6 +704,8 @@ export const DOC_DEFS: DocDef[] = [
           { key: "batchNumber", label: "Parti no" },
           { key: "desen", label: "Desen" },
           { key: "varyant", label: "Varyant" },
+          { key: "customerDesen", label: "Müşteri desen" },
+          { key: "customerVaryant", label: "Müşteri varyant" },
           { key: "width", label: "En" },
           { key: "meters", label: "Metre" },
           { key: "kg", label: "Kg" },

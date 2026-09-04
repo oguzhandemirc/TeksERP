@@ -24,9 +24,11 @@ import {
   readCompanyLetterhead,
   readDocumentsConfig,
   readDocumentsLogo,
+  readShippingDocItemNameMode,
   sanitizeDocumentsConfig,
   type CompanyLetterhead,
   type DocumentConfig,
+  type ShippingDocItemNameMode,
 } from "./system-setting.service";
 import { ApiResponse } from "../types/api.types";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
@@ -180,6 +182,12 @@ export interface BuilderEntry {
       listSections?: string[];
       /** Listeleri aynı sayfada akıt (?merge=1) — varsayılan ayrı sayfalar. */
       mergeSections?: boolean;
+      /**
+       * Ürün adı rejimi (`shipping.docItemNameMode`) — HER baskıda canlı okunur,
+       * snapshot'a girmez. Tanımayan renderer sessizce yok sayar; bugün yalnız
+       * sevk irsaliyesi uygular.
+       */
+      itemNameMode?: ShippingDocItemNameMode;
     },
   ) => string;
 }
@@ -329,6 +337,7 @@ async function buildRenderExtras(
   printedAtText: string;
   printedBy: string | null;
   printNote: string | null;
+  itemNameMode: ShippingDocItemNameMode;
 }> {
   let qrDataUrl: string | null = null;
   if (snapshot.docConfigOverride?.qr) {
@@ -344,6 +353,13 @@ async function buildRenderExtras(
     printedAtText: fmtStampNow(),
     printedBy: info.printedBy ?? null,
     printNote: info.printNote?.trim().slice(0, 300) || null,
+    // "Müşterideki ad" SUNUM kararıdır — HER baskıda canlı okunur, snapshot'a
+    // girmez. Donmuş belgeyi bugünün ayarıyla basmak, refakat kartındaki
+    // "içerik donuk, sunum canlı" kuralının birebir aynısıdır (2026-08-06):
+    // ayarı değiştirmenin sebebi genelde "müşteri okuyamıyor"dur ve düzeltme
+    // tam da eski belgelerin yeniden baskısına ulaşmalıdır. Ad zaten
+    // snapshot'ta donmuştur — değişen yalnız hangi kolonun basıldığıdır.
+    itemNameMode: await readShippingDocItemNameMode(),
   };
 }
 

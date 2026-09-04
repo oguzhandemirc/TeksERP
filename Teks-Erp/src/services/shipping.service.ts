@@ -68,6 +68,8 @@ import {
   assertManualWeightAllowed,
   assertSacksWeighed,
 } from "./helpers/shipping-weigh-gate.helper";
+// "Müşterideki ad" zinciri (2026-09-04) — etiketle AYNI cascade, tek kaynak.
+import { loadShipmentCustomerNames } from "./helpers/shipment-customer-name.helper";
 import {
   assertInvoiceTraceAllowed,
   invoiceTraceWarning,
@@ -4485,9 +4487,13 @@ async function collectShipmentDocContent(
       shipmentNo: true, status: true, procedureCode: true, destination: true, dispatchedAt: true, createdAt: true,
       manualSackCount: true,
       plateNumber: true, driverName: true, carrier: true,
+      // `customerId` + `orders.orderId` (2026-09-04) — "müşterideki ad" zinciri
+      // müşteri×ürün master alias'ı ve sipariş satırı override'ını bu ikisiyle
+      // çözer (bkz. `loadShipmentCustomerNames`).
+      customerId: true,
       customer: { select: { code: true, name: true, taxNumber: true, exportCode: true } },
       branch: { select: { code: true, name: true } },
-      orders: { select: { order: { select: { orderNumber: true } } } },
+      orders: { select: { orderId: true, order: { select: { orderNumber: true } } } },
       sacks: {
         orderBy: { seq: "asc" },
         // ⚠️ RESMİ BELGE — hayalet toplar DIŞLANIR (`SACK_ABSENT_STATUSES`; `SHIPPED`
@@ -4503,7 +4509,11 @@ async function collectShipmentDocContent(
         // belgesinin yerleşimi sormadan değişmesin.
         // `id` ŞART: iade satırları `RollReturn.prevSackId` ile bu id'ye eşlenir
         // (brütleştirme). Onsuz iade edilen top hangi çuvala döneceğini bilemez.
-        select: { id: true, seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
+        // `itemId`/`colorId` (2026-09-04) — "müşterideki ad" zincirinin ANAHTARI.
+        // İlişkinin `name`i yetmez: override `OrderLine`da, master alias
+        // `CustomerItemAlias`ta ve ikisi de KİMLİKLE eşlenir (ada göre eşleme,
+        // aynı adı taşıyan iki kartı sessizce birleştirirdi).
+        select: { id: true, seq: true, sackNo: true, weightKg: true, rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, orderBy: { createdAt: "asc" }, select: { id: true, barcode: true, currentQty: true, width: true, itemId: true, colorId: true, item: { select: { name: true } }, color: { select: { name: true } }, batch: { select: { batchNumber: true } } } } },
       },
     },
   });
@@ -4519,6 +4529,11 @@ async function collectShipmentDocContent(
       prevSackId: true,
       qty: true,
       width: true,
+      // Kimlikler ŞART: brütleştirmeyle geri eklenen top da "müşterideki ad"
+      // zincirinden geçer; yalnız `name` taşınırsa iade satırı belgede BİZİM
+      // adımızla, kardeşleri müşterinin adıyla basılırdı.
+      itemId: true,
+      colorId: true,
       item: { select: { name: true } },
       color: { select: { name: true } },
       // Barkod + parti CANLI toptan okunur: iade ikisini de DEĞİŞTİRMEZ
@@ -4546,6 +4561,8 @@ async function collectShipmentDocContent(
       barcode: rr.roll.barcode,
       currentQty: rr.qty,
       width: rr.width,
+      itemId: rr.itemId,
+      colorId: rr.colorId,
       item: { name: rr.item?.name ?? "" },
       color: rr.color ? { name: rr.color.name } : null,
       batch: rr.roll.batch ? { batchNumber: rr.roll.batch.batchNumber } : null,
@@ -4564,14 +4581,46 @@ async function collectShipmentDocContent(
     rolls: [...sk.rolls, ...(returnsBySack.get(sk.id) ?? [])],
   }));
 
-  const productMap = new Map<string, { name: string; rollCount: number; totalMeters: Prisma.Decimal }>();
+  // ── MÜŞTERİDEKİ AD (2026-09-04) ────────────────────────────────────────────
+  // Donmuş çekirdeğe GİRER (annotation DEĞİL): irsaliye hukuki kayıttır ve
+  // "sevk anındaki ad" doğru olandır; master alias sonradan düzeltilirse eski
+  // belge DEĞİŞMEMELİ. Bu yüzden ad snapshot'a YAZILIR, hangi adın basılacağı
+  // (`shipping.docItemNameMode`) ise render anında CANLI okunur — içerik donuk,
+  // sunum canlı (refakat kartının 2026-08-06 kuralıyla aynı ayrım).
+  //
+  // ⚠️ Sevkten SONRA da koşar (reissue / lazy-init) — 2026-08-05 dersi. Zincir
+  // o yollarda da doğrudur: override sipariş satırında kalıcıdır, master alias
+  // canlı okunur (o gün geçerli olan ad reissue'de basılır; reissue zaten
+  // "bugünkü doğruyu yeniden dondur" demektir).
+  const customerNames = await loadShipmentCustomerNames(db, {
+    customerId: sh.customerId,
+    sackIds: sh.sacks.map((s) => s.id),
+    orderIds: sh.orders.map((o) => o.orderId),
+    itemIds: sacksGross.flatMap((sk) => sk.rolls.map((r) => r.itemId)),
+    colorIds: sacksGross.flatMap((sk) => sk.rolls.map((r) => r.colorId ?? "")),
+  });
+  const productMap = new Map<
+    string,
+    { name: string; customerName: string | null; rollCount: number; totalMeters: Prisma.Decimal }
+  >();
   const sackRows = sacksGross.map((sk) => {
     let sackMeters = D0();
     for (const r of sk.rolls) {
       sackMeters = sackMeters.plus(r.currentQty);
       const widthStr = r.width != null ? `${Number(r.width)}cm.` : "";
       const stokAdi = [r.item.name, r.color?.name ?? "", widthStr].filter(Boolean).join(" ");
-      const g = productMap.get(stokAdi) ?? { name: stokAdi, rollCount: 0, totalMeters: D0() };
+      // GRUPLAMA ANAHTARI BİZİM ADIMIZDIR ve öyle KALIR: müşteri adına göre
+      // gruplasaydık iki farklı ürün aynı alias altında birleşir, adet/metraj
+      // sessizce toplanırdı. Müşteri adı gruba TAŞINIR, grubu belirlemez.
+      const ci = customerNames.itemName(r.itemId, r.colorId);
+      const cc = customerNames.colorName(r.colorId);
+      const custName =
+        ci || cc
+          ? [ci ?? r.item.name, cc ?? r.color?.name ?? "", widthStr].filter(Boolean).join(" ")
+          : null;
+      const g =
+        productMap.get(stokAdi) ??
+        { name: stokAdi, customerName: custName, rollCount: 0, totalMeters: D0() };
       g.rollCount += 1;
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);
@@ -4580,10 +4629,10 @@ async function collectShipmentDocContent(
   });
 
   const cekiRows = sacksGross.flatMap((sk) =>
-    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null }))
+    sk.rolls.map((r, idx) => ({ rollId: r.id, sackCode: sk.sackNo ?? `#${sk.seq}`, barcode: r.barcode, desen: r.item.name, varyant: r.color?.name ?? "", customerDesen: customerNames.itemName(r.itemId, r.colorId), customerVaryant: customerNames.colorName(r.colorId), width: r.width != null ? Number(r.width) : null, meters: Number(r.currentQty), kg: idx === 0 && sk.weightKg != null ? Number(sk.weightKg) : 0, batchNumber: r.batch?.batchNumber ?? null }))
   );
 
-  const products = [...productMap.values()].map((p) => ({ name: p.name, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
+  const products = [...productMap.values()].map((p) => ({ name: p.name, customerName: p.customerName, rollCount: p.rollCount, totalMeters: Number(p.totalMeters) }));
   const totalRolls = products.reduce((s, p) => s + p.rollCount, 0);
   const totalMeters = Number(sackRows.reduce((s, r) => s.plus(r.totalMeters), D0()));
   const totalKg = Number(sackRows.reduce((s, r) => s.plus(r.totalKg), D0()));

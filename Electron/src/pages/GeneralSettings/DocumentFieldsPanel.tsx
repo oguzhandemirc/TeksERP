@@ -73,7 +73,23 @@ function Row({
         {row.hint && <div className="truncate text-[11px] text-muted-foreground">{row.hint}</div>}
       </div>
 
-      {v.canStyle ? (
+      {v.canLabel ? (
+        // KOLON BAŞLIĞI — punto + kalınlık hücrelerinin yerine geçer (kolon
+        // satırında ikisi de anlamsız: kolonun puntosu tablo başlığı alanından
+        // ayarlanır). Boş bırakmak "varsayılan başlığa dön" demektir; placeholder
+        // yerleşik başlığı gösterir ki kullanıcı neye döneceğini bilsin.
+        <input
+          type="text"
+          maxLength={40}
+          value={v.labelOverride ?? ""}
+          disabled={disabled || !v.visible}
+          placeholder={row.label}
+          title="Kolon başlığı — boş bırakılırsa varsayılan başlık basılır"
+          aria-label={`${row.label} — kolon başlığı`}
+          onChange={(e) => onPatch({ label: e.target.value })}
+          className={cn(NUM_CLS, "col-span-2 text-left")}
+        />
+      ) : v.canStyle ? (
         <input
           type="number"
           min={DOC_FIELD_SIZE_MIN}
@@ -94,7 +110,7 @@ function Row({
         <span aria-hidden="true" />
       )}
 
-      {v.canStyle ? (
+      {v.canStyle && !v.canLabel ? (
         <select
           value={v.weight ?? ""}
           disabled={styleDisabled}
@@ -165,8 +181,16 @@ function Group({
           {group.title}
           {group.toggleSection && !sectionOn && " — kapalı"}
         </div>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Punto</span>
-        <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Kalınlık</span>
+        {group.reorderTable ? (
+          <span className="col-span-2 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+            Kolon başlığı
+          </span>
+        ) : (
+          <>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Punto</span>
+            <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Kalınlık</span>
+          </>
+        )}
         <span aria-hidden="true" />
       </div>
       <div className={cn(!sectionOn && "pointer-events-none opacity-40")}>
@@ -237,7 +261,9 @@ export function DocumentFieldsPanel({
             boyutuna göre değişir. Üstteki genel “Yazı ölçeği” bunların üstüne biner
           </>
         )}
-        . Grup başlığındaki kutu o bölümün tamamını kapatır.
+        . Grup başlığındaki kutu o bölümün tamamını kapatır. <strong>Kolon</strong>{" "}
+        satırlarında punto yerine <strong>kolon başlığı</strong> yazılır — boş bırakılırsa
+        belgedeki varsayılan başlık basılır.
       </p>
       <div className="mt-2 space-y-3">
         {groups.map((g) => (

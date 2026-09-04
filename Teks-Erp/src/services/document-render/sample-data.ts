@@ -34,15 +34,18 @@ export const SAMPLE_PRINTED_DOCS: Record<PrintedDocType, Record<string, unknown>
       orderNos: "SIP-2026-0107",
     },
     products: [
-      { name: "Pamuklu Astar · Bej", rollCount: 3, totalMeters: 480 },
-      { name: "Süet Kumaş · Antrasit", rollCount: 2, totalMeters: 200 },
+      // `customerName` = müşterideki ad (2026-09-04). İkinci satırda BİLEREK YOK:
+      // "Müşteri adıyla bas" rejimini seçen kişi, karşılığı olmayan üründe
+      // BİZİM adımızın basıldığını (fail-open) önizlemede görmeli.
+      { name: "Pamuklu Astar · Bej", customerName: "AKTOS · SAND", rollCount: 3, totalMeters: 480 },
+      { name: "Süet Kumaş · Antrasit", customerName: null, rollCount: 2, totalMeters: 200 },
     ],
     sacks: [
       { code: "Ç-01", seq: 1, totalMeters: 480, totalKg: 42.5, packageCount: 3 },
       { code: "Ç-02", seq: 2, totalMeters: 200, totalKg: 31, packageCount: 2 },
     ],
     cekiRows: [
-      { sackCode: "Ç-01", barcode: "TR-260607-R0200", desen: "Pamuklu Astar", varyant: "Bej", width: 150, meters: 480, kg: 42.5, batchNumber: "P1207261" },
+      { sackCode: "Ç-01", barcode: "TR-260607-R0200", desen: "Pamuklu Astar", varyant: "Bej", customerDesen: "AKTOS", customerVaryant: "SAND", width: 150, meters: 480, kg: 42.5, batchNumber: "P1207261" },
       // Bilerek FARKLI parti: çuval karışık içerikli olabilir — kolonu açan kişi
       // partinin çuval değil TOP başına taşındığını önizlemede görsün.
       { sackCode: "Ç-02", barcode: "TR-260607-R0201", desen: "Süet Kumaş", varyant: "Antrasit", width: 140, meters: 200, kg: 31, batchNumber: "P1207262" },

@@ -25,6 +25,7 @@ import { SETTING_KEYS as RAW_SETTING_KEYS } from "@/services/systemSettingServic
 import { BatchNumberHint } from "./BatchNumberHint";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
+  SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
   SHIPPING_INVOICE_MODE_OPTIONS,
 } from "@/lib/shipping-flags";
 import { IS_ELECTRON } from "@/lib/runtime-env";
@@ -786,6 +787,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: SHIPPING_INVOICE_MODE_OPTIONS,
         audience: ["Muhasebeci", "Sevkiyat"],
         desc: "“Dış programdan” (varsayılan): fatura başka bir muhasebe programında kesilir, buraya yalnız numarası + tarihi elle işaretlenir (bugünkü davranış). “Yalnız ERP faturası”: elle işaretleme kapanır (400) ve numara yalnız Muhasebe → Faturalar'da onaylanan faturadan gelir; yanlış girilmiş bir izi KALDIRMAK her modda mümkün kalır. “İkisi de”: elle işaret serbesttir ama sevkin ERP faturası varsa uyarı çıkar (engel yok) — geçiş dönemi için. Fasondan doğrudan sevk de aynı kurala tabidir. NOT: sevk sonrası otomatik fatura taslağı bu ayardan etkilenmez, kendi ön muhasebe anahtarına bağlıdır.",
+      },
+      {
+        enumKey: "shippingDocItemNameMode",
+        title: "Sevk belgesinde ürün adı",
+        summary:
+          "İrsaliyede kendi ürün adımız mı, müşterinin kullandığı ad mı, yoksa ikisi de mi yazsın.",
+        defaultValue: "bizdeki",
+        options: SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
+        audience: ["Sevkiyat", "Muhasebeci"],
+        desc: "Müşterinin bizim üründe kullandığı ad iki yerden gelir: sipariş satırına bir SEFERLİĞİNE yazılan ad (varsa O kazanır) ve müşteri kartındaki kalıcı karşılık (Müşteri Adları). İkisi de yoksa bizim adımız basılır — “Müşterideki ad” seçiliyken bile hücre boş kalmaz. Ad, sevk anında belgeye DONAR: müşteri kartındaki karşılığı sonradan değiştirmek eski irsaliyeyi değiştirmez. Bu ayar yalnız HANGİ adın basıldığını belirler; ayarı değiştirmek belgenin içeriğini değiştirmez, yeni revizyon doğurmaz, eski belgeler de yeni ayarla basılır. Kolon başlıklarını “Belge Alanları” tablosundan kendiniz yazabilirsiniz. NOT: kapsam sevk irsaliyesi + muhasebe fişidir; fasondan DOĞRUDAN sevk irsaliyesi bu ayarın dışındadır.",
       },
     ],
   },

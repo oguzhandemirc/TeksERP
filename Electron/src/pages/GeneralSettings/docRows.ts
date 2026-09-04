@@ -216,6 +216,10 @@ export interface DocRowValue {
   canStyle: boolean;
   size?: number;
   weight?: DocFieldWeight;
+  /** Kolon satırı — başlığı özelleştirilebilir (yalnız `row.column` satırlarında). */
+  canLabel: boolean;
+  /** Kayıtlı başlık override'ı; yoksa undefined (yerleşik başlık geçerli). */
+  labelOverride?: string;
 }
 
 export function readDocRow(
@@ -233,14 +237,20 @@ export function readDocRow(
     const visible = row.column.defaultHidden
       ? (entry.shown ?? []).includes(row.column.key)
       : !(entry.hidden ?? []).includes(row.column.key);
-    return { ...base, visible, canHide: true };
+    return {
+      ...base,
+      visible,
+      canHide: true,
+      canLabel: true,
+      labelOverride: entry.labels?.[row.column.key],
+    };
   }
   if (row.section) {
     const raw = resolved.sections[row.section];
     const visible = row.sectionOptIn ? raw === true : raw !== false;
-    return { ...base, visible, canHide: true };
+    return { ...base, visible, canHide: true, canLabel: false };
   }
-  return { ...base, visible: true, canHide: false };
+  return { ...base, visible: true, canHide: false, canLabel: false };
 }
 
 // ─── yazma ───────────────────────────────────────────────────────────────────
@@ -251,6 +261,9 @@ export interface DocRowPatch {
   size?: number | null;
   /** null → kalınlığı temizle (varsayılana dön). */
   weight?: DocFieldWeight | null;
+  /** Kolon başlığı override'ı. Boş dize = anahtarı SİL (yerleşik başlığa dön) —
+   *  punto kutusundaki "boş = varsayılan" sözleşmesinin birebir aynısı. */
+  label?: string;
 }
 
 /**
@@ -305,6 +318,27 @@ export function writeDocRow(
     } else if (row.section) {
       out.sections = { ...resolved.sections, [row.section]: patch.visible };
     }
+  }
+
+  // Kolon başlığı override'ı — görünürlükle AYNI `columns[tablo]` girdisine yazar.
+  // ⚠️ Aynı yamada ikisi de gelirse `out.columns`taki girdiyi temel al: iki dal
+  // da `cfg`den okusaydı ikincisi birincisini sessizce EZERDİ.
+  if (row.column && patch.label !== undefined) {
+    const table = row.column.table;
+    const base = (out.columns?.[table] ?? cfg?.columns?.[table] ?? {}) as {
+      hidden?: string[];
+      order?: string[];
+      shown?: string[];
+      labels?: Record<string, string>;
+    };
+    const entry = { ...base };
+    const labels = { ...(entry.labels ?? {}) };
+    const t = patch.label.trim();
+    if (t) labels[row.column.key] = t;
+    else delete labels[row.column.key];
+    if (Object.keys(labels).length) entry.labels = labels;
+    else delete entry.labels;
+    out.columns = { ...cfg?.columns, ...out.columns, [table]: entry };
   }
   return out;
 }

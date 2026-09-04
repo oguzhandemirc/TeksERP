@@ -371,6 +371,23 @@ export const SETTING_KEYS = {
    *  ⚠️ `maybeAutoDraftInvoiceAfterDispatch` bu bayraktan ETKİLENMEZ (finans
    *  kancası, kendi çift kapısı var). ENFORCE edilir (backend). */
   SHIPPING_INVOICE_MODE: "shipping.invoiceMode",
+  /** Sevk belgelerinde ürün adı hangi dilden basılsın — `bizdeki` (default) |
+   *  `musterideki` | `ikisi`.
+   *
+   *  Fabrika talebi (2026-09-04): müşteri kendi kumaş adını görsün; sipariş
+   *  satırında bir seferliğine değiştirilmişse O ad basılsın. Ad zaten donmuş
+   *  belgede duruyor (`products[].customerName`, `cekiRows[].customerDesen`);
+   *  bu ayar SUNUM kararıdır — hangi kolonun basılacağını söyler, snapshot'ı
+   *  değiştirmez, yeni belge versiyonu doğurmaz.
+   *
+   *  ⚠️ `musterideki` FAIL-OPEN: müşteride karşılığı olmayan üründe BİZİM adımız
+   *  basılır. Boş ürün adı taşıyan irsaliye hukuken sakattır; "ayar açık, ad yok"
+   *  diye hücreyi boş bırakmak sahayı kâğıtsız bırakmaktan beterdi.
+   *  ⚠️ Kapsam YALNIZ sevk irsaliyesi ailesidir (`SHIPMENT_DISPATCH` + aynı
+   *  snapshot'tan beslenen muhasebe fişi). Fasondan DOĞRUDAN sevk irsaliyesi
+   *  (`SUBCONTRACTOR_DIRECT_SHIP`) AYRI payload/renderer taşır ve bu ayarın
+   *  DIŞINDADIR — kardeş yüzey, ayrı karar. */
+  SHIPPING_DOC_ITEM_NAME_MODE: "shipping.docItemNameMode",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -656,6 +673,28 @@ export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
 export const SHIPPING_INVOICE_MODES: ShippingInvoiceMode[] = ["dis", "ic", "ikisi"];
 /** Varsayılan `dis` — BUGÜNKÜ davranış (elle fatura işareti serbest). */
 export const DEFAULT_SHIPPING_INVOICE_MODE: ShippingInvoiceMode = "dis";
+
+/**
+ * Sevk belgesinde ürün adı hangi dilden basılır (2026-09-04).
+ *
+ * `bizdeki`     = yalnız `Item.name` (+ renk + en) — BUGÜNKÜ davranış.
+ * `musterideki` = yalnız müşterinin verdiği ad; karşılığı yoksa bizimki basılır
+ *                 (fail-open: boş ürün adı taşıyan bir irsaliye hukuken sakat).
+ * `ikisi`       = iki ayrı kolon (bizimki + müşterideki).
+ *
+ * ⚠️ SUNUM kararıdır, içerik değil: ad zaten donmuş snapshot'ta durur (sevk
+ * anındaki hâliyle), bayrak yalnız HANGİSİNİN basılacağını söyler. Bu yüzden
+ * bayrağı değiştirmek eski belgelerin İÇERİĞİNİ değiştirmez, yeni versiyon
+ * doğurmaz — refakat kartının "içerik donuk, sunum canlı" kuralıyla aynı.
+ */
+export type ShippingDocItemNameMode = "bizdeki" | "musterideki" | "ikisi";
+export const SHIPPING_DOC_ITEM_NAME_MODES: ShippingDocItemNameMode[] = [
+  "bizdeki",
+  "musterideki",
+  "ikisi",
+];
+/** Varsayılan `bizdeki` — BUGÜNKÜ çıktı bayt-bayt korunur. */
+export const DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE: ShippingDocItemNameMode = "bizdeki";
 /** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
 export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
 /** Mobil idle ekran kilidi varsayılanı — açık. */
@@ -1065,11 +1104,16 @@ export interface DocumentConfig {
   showLogo?: boolean;
   /** Logo konumu: başlık sol bloğu (default) veya sağ blok. */
   logoPosition?: "left" | "right";
-  /** Tablo kolonu aç/kapa + sıralama: { [tabloKey]: { hidden, order, shown } } —
-   *  renderer document-render/doc-table.ts ile uygular. `hidden` blocklist (normal
-   *  kolonlar), `shown` allowlist (yalnız `defaultHidden` opt-in kolonlar — çuval
-   *  yorumu gibi iç veri; onlarda `hidden` yok sayılır). */
-  columns?: Record<string, { hidden?: string[]; order?: string[]; shown?: string[] }>;
+  /** Tablo kolonu aç/kapa + sıralama + BAŞLIK: { [tabloKey]: { hidden, order,
+   *  shown, labels } } — renderer document-render/doc-table.ts ile uygular.
+   *  `hidden` blocklist (normal kolonlar), `shown` allowlist (yalnız
+   *  `defaultHidden` opt-in kolonlar — çuval yorumu gibi iç veri; onlarda
+   *  `hidden` yok sayılır), `labels` kolon başlığı override'ı (boş dize =
+   *  varsayılana dön; değer kullanıcı girdisidir → renderer HTML kaçırır). */
+  columns?: Record<
+    string,
+    { hidden?: string[]; order?: string[]; shown?: string[]; labels?: Record<string, string> }
+  >;
   /** Belge doğrulama karekodu (belge no + versiyon) basılsın mı (default false). */
   qr?: boolean;
   /** Sayfa altı damgaları: basım zamanı / basan kullanıcı / nüsha etiketi (ASIL, KOPYA...). */
@@ -1247,6 +1291,9 @@ export interface FeatureFlags {
   shippingManualWeightRestrictedEnabled: boolean;
   /** Fatura izi rejimi: 'dis' (default) | 'ic' | 'ikisi'. Backend ENFORCE eder. */
   shippingInvoiceMode: ShippingInvoiceMode;
+  /** Sevk belgesinde ürün adı: 'bizdeki' (default) | 'musterideki' | 'ikisi'.
+   *  Backend UYGULAR (renderer okur) — istemci rehberi DEĞİL. */
+  shippingDocItemNameMode: ShippingDocItemNameMode;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -1603,6 +1650,7 @@ export class SystemSettingService {
       shippingManualWeightRestrictedEnabled:
         await readShippingManualWeightRestrictedEnabled(cacheClient),
       shippingInvoiceMode: await readShippingInvoiceMode(cacheClient),
+      shippingDocItemNameMode: await readShippingDocItemNameMode(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -2251,6 +2299,24 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_INVOICE_MODE,
         v,
         "Sevkin fatura izi: dis (dış programdan elle) / ic (yalnız ERP faturası) / ikisi (serbest, uyarır)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingDocItemNameMode")) {
+      const v = input.shippingDocItemNameMode;
+      if (
+        typeof v !== "string" ||
+        !SHIPPING_DOC_ITEM_NAME_MODES.includes(v as ShippingDocItemNameMode)
+      ) {
+        throw AppError.badRequest(
+          "Sevk belgesi ürün adı rejimi 'bizdeki', 'musterideki' veya 'ikisi' olmalı"
+        );
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE,
+        v,
+        "Sevk belgesinde ürün adı: bizdeki (kendi adımız) / musterideki (müşterinin adı) / ikisi (iki kolon)",
         userId
       );
     }
@@ -3643,6 +3709,31 @@ export async function readShippingInvoiceMode(
 }
 
 /**
+ * Sevk belgesinde ürün adı hangi dilden basılır? Default `bizdeki` = BUGÜNKÜ çıktı.
+ *
+ * Satır YOKSA **veya değer kümede DEĞİLSE** varsayılana düşer — elle SQL / eski
+ * dump / yarım migration bir gün "MUSTERIDEKI" yazarsa müşteri irsaliyesinin
+ * kolon düzeni sessizce değişmesin (kod sigortası; §16 çöp-değer sondası ölçer).
+ */
+export async function readShippingDocItemNameMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ShippingDocItemNameMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (
+    typeof v === "string" &&
+    SHIPPING_DOC_ITEM_NAME_MODES.includes(v as ShippingDocItemNameMode)
+  ) {
+    return v as ShippingDocItemNameMode;
+  }
+  return DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE;
+}
+
+/**
  * Kurşun bypass düzeni açık mı? Default FALSE (KAPALI). Fabrika kurşun istasyonlarına
  * tablet koymuyorsa açılır: kurşun fiziksel olarak yapılır, dijital izlenmez (hatalar
  * kâğıtta) ve yetkili personel kurşun adımındaki iş emrini fiziksel bir kurşun
@@ -4200,7 +4291,12 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
       for (const [tk, tv] of Object.entries(o.columns as Record<string, unknown>)) {
         if (!tv || typeof tv !== "object" || Array.isArray(tv)) continue;
         const tvo = tv as Record<string, unknown>;
-        const entry: { hidden?: string[]; order?: string[]; shown?: string[] } = {};
+        const entry: {
+          hidden?: string[];
+          order?: string[];
+          shown?: string[];
+          labels?: Record<string, string>;
+        } = {};
         if (Array.isArray(tvo.hidden)) {
           entry.hidden = tvo.hidden
             .filter((x): x is string => typeof x === "string")
@@ -4216,10 +4312,31 @@ export function sanitizeDocumentsConfig(raw: Record<string, unknown>): Documents
             .filter((x): x is string => typeof x === "string")
             .slice(0, 20);
         }
+        // KOLON BAŞLIĞI ÖZELLEŞTİRME (2026-09-04). Boş dize SAKLANMAZ =
+        // "varsayılana dön" (renderer da aynı yorumu yapar; ikisi ayrışırsa
+        // kullanıcı kutuyu boşaltır, ayar kaydolur, başlık geri gelmez).
+        if (tvo.labels && typeof tvo.labels === "object" && !Array.isArray(tvo.labels)) {
+          const labels: Record<string, string> = {};
+          for (const [ck, cv] of Object.entries(tvo.labels as Record<string, unknown>)) {
+            if (typeof cv !== "string") continue;
+            const t = cv.trim().slice(0, 40);
+            if (t) labels[ck.slice(0, 40)] = t;
+          }
+          // Tablo başına kolon sayısı sınırı `hidden`/`order` ile aynı (20).
+          const keys = Object.keys(labels).slice(0, 20);
+          if (keys.length) {
+            entry.labels = Object.fromEntries(keys.map((k) => [k, labels[k] as string]));
+          }
+        }
         // ⚠️ `shown` bu kapıya EKLENMELİ — yoksa yalnız opt-in kolon açılmış bir satır
         // (hidden/order boş) sessizce atılır: kullanıcı kolonu açar, ayar kaydolmaz,
-        // sebebi hiçbir yerde görünmez.
-        if (entry.hidden?.length || entry.order?.length || entry.shown?.length) {
+        // sebebi hiçbir yerde görünmez. (`labels` aynı sebeple burada.)
+        if (
+          entry.hidden?.length ||
+          entry.order?.length ||
+          entry.shown?.length ||
+          entry.labels
+        ) {
           columns[tk.slice(0, 40)] = entry;
         }
       }

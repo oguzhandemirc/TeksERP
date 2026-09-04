@@ -18,6 +18,9 @@ export type ShipmentOrderRequirement = "off" | "warn" | "block";
 /** Sevkin fatura izi nereden yazılır. `dis` = bugünkü davranış. */
 export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
 
+/** Sevk belgesinde ürün adı hangi dilden basılır. `bizdeki` = bugünkü çıktı. */
+export type ShippingDocItemNameMode = "bizdeki" | "musterideki" | "ikisi";
+
 export const SHIPMENT_ORDER_REQUIREMENT_OPTIONS: ReadonlyArray<{
   value: ShipmentOrderRequirement;
   label: string;
@@ -67,6 +70,30 @@ export const SHIPPING_INVOICE_MODE_OPTIONS: ReadonlyArray<{
 
 export const DEFAULT_SHIPPING_INVOICE_MODE: ShippingInvoiceMode = "dis";
 
+export const SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS: ReadonlyArray<{
+  value: ShippingDocItemNameMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "bizdeki",
+    label: "Bizdeki ad (varsayılan)",
+    hint: "Belgede yalnız kendi ürün adımız basılır. Bugünkü çıktı.",
+  },
+  {
+    value: "musterideki",
+    label: "Müşterideki ad",
+    hint: "Müşterinin bu ürüne verdiği ad basılır; o müşteride karşılığı yoksa bizim adımız basılır.",
+  },
+  {
+    value: "ikisi",
+    label: "İkisi de (iki kolon)",
+    hint: "Ürün ve çeki listesine ayrı bir “müşteri adı” sütunu eklenir.",
+  },
+] as const;
+
+export const DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE: ShippingDocItemNameMode = "bizdeki";
+
 /** Değer geçerli mi (sunucudan gelen bilinmeyen metni sağlamlaştırır). */
 export function isShipmentOrderRequirement(v: unknown): v is ShipmentOrderRequirement {
   return v === "off" || v === "warn" || v === "block";
@@ -74,4 +101,8 @@ export function isShipmentOrderRequirement(v: unknown): v is ShipmentOrderRequir
 
 export function isShippingInvoiceMode(v: unknown): v is ShippingInvoiceMode {
   return v === "dis" || v === "ic" || v === "ikisi";
+}
+
+export function isShippingDocItemNameMode(v: unknown): v is ShippingDocItemNameMode {
+  return v === "bizdeki" || v === "musterideki" || v === "ikisi";
 }
