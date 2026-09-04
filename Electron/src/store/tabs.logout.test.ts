@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 // =============================================================================
 // Bekçi: ÇIKIŞTA sekme defteri temizlenir
 // =============================================================================
@@ -6,28 +7,42 @@
 // müşteri / sipariş adları taşıyorlar, yani ortak kullanılan fabrika
 // bilgisayarında hem karıştırıcı hem sızıntı.
 //
-// ⚠️ `localStorage` bu test ortamında YOK (jsdom açık ama depolama kapalı) —
-// ölçüldü: `typeof localStorage === "undefined"`. Store `persist` ile sarılı
-// olduğu için import ANINDA depolamaya yazar ve stub olmadan `setItem`
-// undefined hatası verir. Bu yüzden stub import'tan ÖNCE kurulur ve store
-// dinamik import edilir.
+// ⚠️ İKİ KURULUM AYRINTISI, İKİSİ DE ÖLÇÜLDÜ:
+//
+// 1. `localStorage` bu ortamda YOK (jsdom açık ama depolama kapalı; ölçüldü:
+//    `typeof localStorage === "undefined"`). Store `persist` ile sarılı olduğu
+//    için import ANINDA depolamaya yazar → stub, import'lardan ÖNCE kurulmalı.
+//    `beforeAll` içinde kurmak YETMEZ: import statement'ları hoist edilir.
+//    `vi.hoisted` tam bu iş için var.
+//
+// 2. `tab-routers` MOCKLANIR (`tabs.back.test.ts` ile aynı gerekçe): gerçek
+//    registry tüm sayfa ağacını (content-routes) import eder. Mocklanmazsa
+//    dosya TEK BAŞINA geçer ama TÜM TAKIMDA yükleme 10 sn'de zaman aşımına
+//    düşer — ölçüldü: "Hook timed out in 10000ms". Tek dosya koşumu bu hatayı
+//    GÖSTERMEZ; suite koşumu gösterir.
 // =============================================================================
-import { describe, it, expect, beforeEach, beforeAll, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-let useTabsStore: typeof import("./tabs").useTabsStore;
-
-beforeAll(async () => {
+vi.hoisted(() => {
   const kutu = new Map<string, string>();
-  vi.stubGlobal("localStorage", {
+  (globalThis as unknown as { localStorage: Storage }).localStorage = {
     getItem: (k: string) => kutu.get(k) ?? null,
     setItem: (k: string, v: string) => void kutu.set(k, v),
     removeItem: (k: string) => void kutu.delete(k),
     clear: () => kutu.clear(),
     key: () => null,
     length: 0,
-  });
-  ({ useTabsStore } = await import("./tabs"));
+  } as Storage;
 });
+
+vi.mock("@/components/layout/tabs/tab-routers", () => ({
+  getTabRouter: vi.fn(),
+  navigateTabRouter: vi.fn(() => true),
+  goBackTabRouter: vi.fn(() => true),
+  disposeTabRouter: vi.fn(),
+}));
+
+const { useTabsStore } = await import("./tabs");
 
 describe("çıkışta sekmeler kapanır", () => {
   beforeEach(() => useTabsStore.getState().resetTabs());
