@@ -2478,3 +2478,94 @@ Electron + APK/OTA birlikte gider; ayrı gitmeleri de zararsız — kural iki ta
 bağımsız çalışır. Mobil `ServerDiscoveryList` DOKUNULMADI (başka ajanın işiyle
 çakışmasın): tablet artık tek satır görür, adres seçimi `DiscoveryResult.groups`ta
 hazır ama henüz yüzeyi yok — masaüstünde "bu sunucunun N adresi var" düğmesiyle açılır.
+
+---
+
+## 2026-09-04 — Sevk belgesinde MÜŞTERİDEKİ ürün adı: veri vardı, belge yolu yoktu [PROFİL/ÇEKİRDEK karma]
+
+**Talep (fabrikadan):** *"sevkiyat yapılınca oluşan belgelerde ürünlerin müşterideki adı
+da yazsın. bazen bir seferliğine değişmiş oluyor; eğer bir seferliğine bile değiştiyse o
+ismi kullanırız. ve bu flag'e bağlı olsun: istersek sadece bizdeki adı, sadece
+müşterideki adı, veya ikisi de basılabilsin. bunların sütun isimlerini de biz
+girebilelim."*
+
+**Ölçüm: veri modeli talebi BİREBİR karşılıyordu, eksik olan tek şey belge yoluydu.**
+`OrderLine.customerItemName` (sipariş satırı bazlı bir-seferlik override, şema yorumu:
+*"dolu ise KİLİT"*) + `CustomerItemAlias` (`@@unique([customerId,itemId])`, müşteri×ürün
+master) etiket basımında (`label.service` → `customer-name.helper`) uzun süredir
+kullanılıyordu; `collectShipmentDocContent` ise düz `Item.name` basıyordu. Zincir
+**ETİKETLE AYNI** tutuldu (`helpers/shipment-customer-name.helper.ts`) — ikinci bir
+semantik açmak, aynı topun etiketinde ve irsaliyesinde farklı ad demekti.
+
+**⚠️ TOP → SİPARİŞ SATIRI BAĞI YOK — zincirin anahtarı bu boşlukta.** Çuval tahsisi
+(`SackAllocation`) çuval başınadır ve çuval karışık içerikli olabilir; "bu topun order
+line'ı" diye bir kayıt yok. Bu yüzden override kümesi **sevkiyat kapsamında** toplanır ve
+`(itemId, colorId)` ile eşlenir. Adaylar iki kaynaktan: (a) çuvallara yazılmış tahsisler —
+sevkin GERÇEKTEN beslediği satırlar, ama yalnız DISPATCH'ten sonra vardır; (b) sevkiyata
+bağlı siparişlerin satırları — **PLANNED taslak önizlemenin TEK kaynağı**; (b) olmasaydı
+taslak fiş ile donmuş belge ayrışırdı. (a) önceliklidir. **Sıra DETERMİNİSTİK** (tahsisli
+→ `createdAt` asc → `id` asc): sabitlenmezse aynı sevkiyat iki baskıda farklı ad basar ve
+`reissue` sahte bir "içerik değişti" üretir. İkinci kademe (`byItem`, renk eşleşmeden)
+BİLİNÇLİ GENİŞ — kullanıcının kuralı "bir seferliğine bile değiştiyse o ismi kullanırız".
+
+**⚠️ AD DONAR, REJİM DONMAZ — paketin en kolay karıştırılan ayrımı.** Ad
+(`products[].customerName`, `cekiRows[].customerDesen/customerVaryant`) **snapshot'a
+yazılır**: irsaliye hukuki kayıttır ve sevk anındaki ad doğru olandır; müşteri kartındaki
+karşılığı sonradan düzeltmek eski belgeyi DEĞİŞTİRMEMELİ. Hangi adın basılacağı ise **her
+baskıda canlı okunur** (`buildRenderExtras` → `meta.itemNameMode`), çünkü ayarı açtıran
+şikâyet ("müşteri okuyamıyor") tam da sahadaki ESKİ belgelere ulaşmak zorundadır —
+refakat kartının 2026-08-06 *"içerik donuk, sunum canlı"* kuralının aynısı. İkisi
+karışırsa iki ayrı arıza doğar: rejim de donarsa ayar hiçbir mevcut belgeye ulaşmaz; ad
+da canlı okunursa alias düzeltmesi geçmiş irsaliyeleri değiştirir. Bekçi §3 **ikisini
+birden** ölçer (donmuş belge sonradan değişen alias'tan etkilenmiyor **ve** aynı belge
+ayar değişince farklı kolonla basılıyor).
+
+**⚠️ Sevkten SONRA da koşar** (`reissue` + lazy-init, 2026-08-05 dersi) — brütleştirmeyle
+geri eklenen iade satırları da `RollReturn.itemId/colorId` üzerinden aynı zincirden
+geçer; yalnız `item.name` taşınsaydı iade satırı belgede BİZİM adımızla, kardeşleri
+müşterinin adıyla basılırdı.
+
+**⚠️ GRUPLAMA ANAHTARI BİZİM ADIMIZ OLARAK KALDI.** Müşteri adına göre gruplasaydık iki
+farklı ürün aynı alias altında birleşir, adet/metraj sessizce toplanırdı. Müşteri adı
+gruba TAŞINIR, grubu belirlemez.
+
+**Bayrak `shipping.docItemNameMode`** — `bizdeki` (VARSAYILAN) | `musterideki` | `ikisi`.
+Varsayılan rejimde belgeye **tek bayt eklenmez**: rejim verilmeyen render ile `bizdeki`
+render BİREBİR aynı bayt (bekçi §1'de ölçülü — "varsayılan = bugünkü davranış" bir
+temenni değil, ölçüm). `musterideki` **FAIL-OPEN**: karşılığı olmayan üründe BİZİM adımız
+basılır; boş ürün adı taşıyan bir irsaliye hukuken sakattır ve "ayar açık, alias yok" diye
+hücreyi boş bırakmak sahayı kâğıtsız bırakmaktan beterdi. Dört kapı + `test_feature_flag_
+contract` §16 (`aEnum`) + panel `enumFlags` satırı + Electron değer kümesi aynası.
+Kolon ANAHTARLARI ayrı (`name` ↔ `customerName`): tek anahtarla iki içerik basılsaydı
+"Stok adı"nı gizleyen fabrika, ayarı değiştirdiği an müşteri adını da gizlemiş olurdu.
+
+**Kolon başlığı özelleştirme** — `DocumentConfig.columns[tablo].labels` (dört kapı: tip ·
+`sanitizeDocumentsConfig` · `docConfigSchema` · Electron aynası; `columns.shown`
+2026-07-30'da tam bu kapılardan birini atlamıştı). ⚠️ Değer **kullanıcı girdisidir** ve
+yerleşik `label`ların aksine HTML olarak güvenli değildir → `applyColumnCfg` **tek
+noktada** kaçırır; yeni bir tablo motoru yazan bu kaçırmayı taşımak zorunda. Boş dize =
+"varsayılana dön" (punto kutusuyla aynı sözleşme — başlıksız kolon üretilmez), 40
+karakterde kırpılır. Panelde kolon satırlarında punto/kalınlık hücrelerinin yerini başlık
+kutusu alır (kolonun puntosu zaten tablo başlığı alanından ayarlanıyor).
+
+**RENK DE YAPILDI** (kullanıcı yalnız ürün demişti): belgedeki "stok adı" zaten
+`ürün + renk + en` birleşimidir — renk çevrilmeseydi *"AKTOS ANTRASİT 150cm."* gibi yarı
+çevrilmiş bir ad basılırdı. `customerColorName` / `CustomerColorAlias` ikizi aynı
+zincirden geçer.
+
+**KAPSAM ve BİLİNÇLİ DIŞARIDA BIRAKILANLAR:** sevk irsaliyesi (`SHIPMENT_DISPATCH`) +
+aynı snapshot'tan beslenen muhasebe fişi. Fasondan **DOĞRUDAN sevk** irsaliyesi
+(`SUBCONTRACTOR_DIRECT_SHIP`) ayrı payload + ayrı renderer taşır → kapsam dışı ve bu ayarın
+panel metninde YAZILI (kardeş yüzey, ayrı karar — 2026-09-03 "kapı takarken bu malın
+çıktığı BAŞKA yol var mı" dersinin bilinçli cevabı: burada kapı değil GÖRÜNÜM eklendi,
+yanlış ad basma riski yok). Muhasebe fişinin **Excel dışa aktarımı** (`accounting-export`)
+da dokunulmadı — kendi kolon listesi olan ayrı bir sunum yüzeyi.
+
+**Bekçi:** `scripts/test_shipment_doc_customer_name.ts` (37 kontrol) — **yedi negatif
+sondayla** kırmızı verdiği doğrulandı (varsayılan rejim değişince 2 · fail-open kalkınca 1
+· override kademesi atlanınca 5 · rejim sabitlenince 2 · başlık kaçırılmayınca 1 ·
+`updateSchema` satırı silinince 3 · `docConfigSchema.labels` silinince 1); her sonda md5
+ile birebir geri alındı. Electron `docRows.test.ts` +9 kontrol (iki sonda).
+
+**Migration YOK · yeni izin kodu YOK · APK YOK.** Backend ÖNCE (eski panel bayrağı
+göndermez → varsayılan `bizdeki`, geriye uyumlu).
