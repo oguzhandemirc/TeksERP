@@ -1,6 +1,7 @@
 # Yetki Mimarisi — endüstri ölçeğine hazırlık
 
-> **Durum:** Katman 2 (Ekran Manifestosu) uygulanıyor. Diğer katmanlar yol
+> **Durum:** ✅ Katman 2 (Ekran Manifestosu) TAMAMLANDI — `ScreenEntry.modul` zorunlu, tamlık bekçisi `test_screen_catalog.ts` (2026-09-03 P6).
+> ⚠️ **Modül ekseni Tenant ile kurulmadı:** `Tenant.planFlags` tasarlandığı gibi gelmedi; `Tenant` modeli YOK. Modül açık/kapalı `SystemSetting` anahtarlarıyla (`constants/module-flags.ts`) çözüldü — bkz. `docs/design/MODUL-BAYRAK-TASARIM.md`. Diğer katmanlar yol
 > haritasında; bu belge KARARI kaydeder, tamamlanmış işi değil.
 
 ## Neden

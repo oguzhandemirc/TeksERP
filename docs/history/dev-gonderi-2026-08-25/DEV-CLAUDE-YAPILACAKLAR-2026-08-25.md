@@ -20,7 +20,7 @@
 
 ## 0) Sahada ne oldu (bağlam — değişiklik istemiyor)
 
-`docs/ops/SURUM-2026-08-25-DEPLOY.md` reçetesinin **1. adımı (BACKEND) uygulandı.**
+`docs/history/SURUM-2026-08-25-DEPLOY.md` reçetesinin **1. adımı (BACKEND) uygulandı.**
 
 | | |
 |---|---|
@@ -118,7 +118,7 @@ Windows koşucusu yazdım ve `deploy/README.md`'deki 12/12 ↔ 8/12 iddiasını 
 
 ### F. Reçetenin "UYGULANDI" kutusu
 
-`docs/ops/SURUM-2026-08-25-DEPLOY.md` sonundaki liste — 0 ve 1 işaretlenebilir:
+`docs/history/SURUM-2026-08-25-DEPLOY.md` sonundaki liste — 0 ve 1 işaretlenebilir:
 
 ```markdown
 - [x] 0) kur.ps1 güncel        (2026-08-25, sunucu Claude oturumu — hash eşit doğrulandı)

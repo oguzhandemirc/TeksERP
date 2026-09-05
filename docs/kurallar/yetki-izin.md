@@ -1,0 +1,136 @@
+# Yetki · İzin · Rol
+
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+
+> Hakem notu: 64 üye; ~24'ü gerçek yetki/izin/rol notu, gerisi anahtar-kelime sızıntısı (layout, OTA, çuval, keşif) → archiveOnly. En riskli çelişki: arşiv P2 (2026-09-03) gizleme süzgeçlerini 'AYNEN geçerli' diye şerh ediyor; kod ve kök dizin (2026-09-04) tersini uyguluyor — arşive ikinci ⛔ şerhi şart. Bayat sayımlar: muaf listesi 3→4, katalog 67→86 (rbac.middleware.ts:30 yorumu da bayat); rol sayısı 29 doğru. Alt-CLAUDE RBAC tablosu FINANCE (6 kod), data:import ve 4 mobil kodu taşımıyor. Ad↔davranış tuzağı: requireSystemAccountOr404 artık 403; test_superadmin.ts:36-37 başlık yorumu hâlâ '404 ZORUNDA', §J gövdesi çevrildi. Kök dizinde P8 notu iki satır (105 ve 107) — tek satıra indirilmeli. Electron/CLAUDE.md 'yetkisiz başlar' kodla çelişiyor (varsayılan 3 mobil izin, opt-out).
+
+
+## Ortak (backend + panel + tablet)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** İzin doğrudan kullanıcıya bağlanır (`UserPermission`), rol modeli YOK (`PermissionTemplate` yalnız paket; `hasRole` yok). Eşleşmenin TEK yüklemi `matchesPermission` (global `*` + `<domain>:*`) — backend/Electron/mobil ikiz; düz `includes("admin:*")` YASAK (`["*"]` süperadmini tanımaz). · bekçi: `scripts/test_superadmin_visible.ts (`*` körlüğü kolu) + Electron/src/types/auth.` <sub>(CLAUDE.md:172, CLAUDE.md:117, arşiv:2057)</sub>
+- **[ÇEKİRDEK]** Yeni izin eklemenin TEK adımı `permission-catalog.ts` → `PERMISSION_CATALOG`'a bir satır (`category` Prisma enum'u — yazım hatası derlemede düşer). Boot uzlaştırması her açılışta EKSİK satırı yazar: kodu deploy etmek = katalogu getirmek. Sayı dokümana sabitlenmez (bugün 86). · bekçi: `scripts/test_permission_catalog.ts (TS AST; katalog ⊇ kod, DB ⊇ katalog)` <sub>(CLAUDE.md:191, CLAUDE.md:172, CLAUDE.md:314)</sub>
+- **[ÇEKİRDEK]** Katalog/uzlaştırma ATAMA İÇERMEZ: izin ve rol DB'ye gelir, KİMSEYE verilmez (katalog koda, atama panele ya da `scripts/sync-*-permissions.ts`). Atanmamış iznin tek görünürlüğü Yetki Kataloğu'ndaki 'N yetki hiçbir kullanıcıda yok' bandı (`userCount`/`templateCount`) — yeni izinde bandı kontrol et. · bekçi: `yok (panel bandı görsel; arşiv ölçümü: 7 izin hiçbir kullanıcıda yoktu)` <sub>(CLAUDE.md:240, CLAUDE.md:66, CLAUDE.md:130)</sub>
+- **[ÇEKİRDEK]** Rol şablonları tek kaynak `constants/role-template-catalog.ts` (29 rol; sayı sabitlenmez) + boot uzlaştırma (izinlerden SONRA, aynı zincir — FK) + bekçi `test_role_template_catalog`. İzin kodunun DB'ye gelmesi yetmez; onu kullanıcıya götüren PAKET (şablon) de kodda gelir. · bekçi: `scripts/test_role_template_catalog.ts (§1 tutarlılık + DB uzlaştırma + idempoten` <sub>(CLAUDE.md:66, CLAUDE.md:225)</sub>
+- **[ÇEKİRDEK]** Mobil ekranın dokunduğu her uç `requireAnyPermission('<web-izni>', ...MOBILE_X)`; yalnız `requirePermission` saha kullanıcısını 403'ler. Yeni saha özelliğinde 'yeni izin kodu' refleksi YOK — mevcut çift yeter (`roll:manual-adjust` ∨ `mobile:tambur-duzelt`; rework: `workorder:write`). · bekçi: `scripts/test_permission_catalog.ts (kod katalogda) — any/permission ayrımını ölç` <sub>(CLAUDE.md:323, CLAUDE.md:73, CLAUDE.md:86)</sub>
+- **[ÇEKİRDEK]** Kart ile route AYNI izin listesini taşır (`tile-config.permissionAny` ↔ `content-routes.requireAnyPermission`); ayrışırsa kullanıcı kartı görür, tıklar, `/forbidden`a düşer. Etiketler kartı 2026-08-14'ten beri `[station:read, label-template:read]` — eski 'hiza sorunu' KAPANDI. · bekçi: `scripts/test_document_template_permission.ts (kart/route hizası)` <sub>(CLAUDE.md:130, CLAUDE.md:117)</sub>
+- **[ÇEKİRDEK]** Dar izin çiftinde READ kümesi WRITE kodunu DA içerir (yazabilen okuyabilir); `label-template:read/write` bu tuzağı hâlâ taşır — yalnız write işaretlenen kullanıcı ekranı hiç açamaz, sebep yazmaz. Kümeler saf string literal dizi kalır (AST bekçisi okur). · bekçi: `scripts/test_document_template_permission.ts (yol 4)` <sub>(CLAUDE.md:130, CLAUDE.md:117)</sub>
+- **[ÇEKİRDEK]** `PATCH /api/feature-flags` guard'ı ANAHTAR-KAPSAMLI ÜÇ DAL, FAIL-CLOSED: ① bir modül anahtarı bile varsa (`.some`, EN ÖNDE, senkron) → sistem hesabı (supaplı) ② YALNIZ belge anahtarları (`.every`) → `document-template:write` ③ gerisi/boş → `admin:settings`. Düz OR YASAK; ayar şifresi bundan SONRA. · bekçi: `scripts/test_document_template_permission.ts (guard düz OR → 7 ❌) + test_superad` <sub>(CLAUDE.md:130, arşiv:2057, arşiv:2096)</sub>
+- **[ÇEKİRDEK]** `settings:workstation` ve `document-template:read/write` kategorisi WEB: `hasAdminAccess` saymaz, `admin:*` VERMEZ; taşıyan Yönetim menüsünü görmez. `/system/settings` ve `/system/update` GENİŞ kapı DAR içerik (`admin:settings` ∨ `settings:workstation`; `visibleSettingsCategories` süzer). · bekçi: `scripts/test_workstation_permission.ts + Electron settings-surface.test.ts` <sub>(CLAUDE.md:172, CLAUDE.md:117, CLAUDE.md:130)</sub>
+- **[ÇEKİRDEK]** Masaüstüne kabul `canEnterApp`: kullanıcının en az bir MOBİL-OLMAYAN izni olmalı; yalnız `mobile:*` izinli hesap panele giremez — backend `login` `isDesktopClient` (electron VE web) iken 403 döner, token bile üretmez; `!== "mobile"` YAZILMAZ. · bekçi: `yok (Electron auth.test.ts kapsamı doğrulanmadı — BELİRSİZ)` <sub>(CLAUDE.md:117, CLAUDE.md:369)</sub>
+- **[ÇEKİRDEK]** Süperadmin ROL DEĞİL: `getEffectivePermissions` ilk ifadesi `isSystemAccount → ["*"]` (grant satırı DOĞMAZ; katalogda `code:"*"` YOK → panelden atanamaz). `isSystemAccount` panelden ATANAMAZ (tek yazar `superadmin-olustur.ts`). Kimlik JWT'ye GİRMEZ — `req.isSystemAccount` istek başına taze okunur. · bekçi: `scripts/test_superadmin.ts (['*'] + grant 0, katalogda '*' yok) + test_superadmi` <sub>(arşiv:2057, CLAUDE.md:105)</sub>
+- **[ÇEKİRDEK]** En yetkili hesap GÖRÜNÜR (2026-09-04): kullanıcı listesi/audit/tablet gerçek ad, 'Tüm yetkiler' rozeti (hesabın hiç `UserPermission` satırı yok, sayaç 0 gösterirdi); gizleme süzgeci, takma ad ve `/users/:id*` 404 kapısı geri GELMEZ. · bekçi: `scripts/test_superadmin_visible.ts (30 kontrol) + test_superadmin.ts §J (2026-09` <sub>(arşiv:2057)</sub>
+- **[ÇEKİRDEK]** GÖRÜNÜRLÜK ≠ KİMLİK TESLİMİ: `/users/:id/credentials` düz PIN döner ve `login-quick-pin` PIN'i tek başına kimlik sayar → o ucun üstünde dar 403 kapısı; `/users/:id` öneki KALIR (`protectSystemAccountTarget`: GET serbest, yazma 403 + audit, kendisi muaf) ve önek izni alt rotaların BİRLEŞİMİ. · bekçi: `scripts/test_superadmin_visible.ts §5/§5b + test_superadmin.ts §M (önek ⊇ alt ro` <sub>(arşiv:2057)</sub>
+- **[ÇEKİRDEK]** Modül anahtarı kilidi + emniyet supabı: sistem hesabı VARSA modül anahtarlarını yalnız o yazar (403 `details.code=MODULE_FLAG_SUPERADMIN_ONLY`); hesap HİÇ doğmamışsa `admin:settings` yeter + audit `SUPERADMIN_ABSENT_MODULE_WRITE`; bilinmiyor = VAR (fail-closed); defter TEK YÖNDE tazelenir. · bekçi: `scripts/test_superadmin.ts (supap 4 durum, senkronluk + dal sırası)` <sub>(arşiv:2057, CLAUDE.md:96)</sub>
+- **[ÇEKİRDEK]** Ayar şifresi bir NİYET kapısıdır (yetki değil; izin zincirinin ARDINA takılır, asenkron): süperadmin MUAF, belge-only gövde MUAF (`.every`), hash yoksa kapı UYUR (sıfır fark), kilit `bcrypt.compare`den ÖNCE; başlık yok → 403 REQUIRED (audit yok), yanlış → 403 INVALID + audit, doğru → USED audit. · bekçi: `scripts/test_settings_password.ts §A–§L` <sub>(arşiv:2096)</sub>
+- **[ÇEKİRDEK]** Süperadmin TEK doğuş/rotasyon yolu `npm run superadmin:kur` (`--rotate`, sunucuda interaktif): İDEMPOTENT (hesap varsa DOKUNMAZ), MEVCUT kullanıcı YÜKSELTİLMEZ, TTY yoksa FAIL-LOUD, saf `provisionSuperadmin` yazdırmaz. `.env` tohumlaması YASAK; kalan `SUPERADMIN_*` için yalnız ANAHTAR ADI. · bekçi: `scripts/test_superadmin_provision.ts (§7 non-TTY zaman aşımlı sonda, §8 sentinel` <sub>(CLAUDE.md:105, arşiv:2057)</sub>
+- **[ÇEKİRDEK]** Dev/test kimliği yalnız seed `admin / 123123` (katalogdaki TÜM izinler; sayı sabitlenmez — '~55' bayat, bugün 86). 'Admin dışı tüm kullanıcılar test123' ÖLÜ (2026-07-03). HTTP testleri kendi kullanıcısını `ensureTestAdmin()` ile üretip temizler; 'admin/123123 için hâlâ AÇIK' listesi bayat. <sub>(CLAUDE.md:301, CLAUDE.md:369, CLAUDE.md:357)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** `admin:settings` DOCUMENT_DESIGN_READ/WRITE kümelerinden DÜŞÜRÜLMEZ: uzlaştırma yeni izni getirir ama atamaz, sıkı ayrım deploy anında admin dahil herkesi dışarıda bırakır — o kod geriye uyum değil, kilitlenmeye karşı tek emniyet supabıdır. · bekçi: `scripts/test_document_template_permission.ts (admin:settings READ'ten düşünce 4 ` <sub>(CLAUDE.md:130, CLAUDE.md:117)</sub>
+- **[ÇEKİRDEK]** Şifre YALNIZ `X-Settings-Password` başlığında — gövde/query/cookie fallback YASAK (ölçülmüş sızıntı: erişim logu URL'i, audit yükü yolu basar). ASCII `^[\x21-\x7E]+$`, 8–72 (HTTP başlığı non-ASCII taşımaz; bcrypt 72 baytta sessiz kırpar); `.trim()` yerine RED; backend↔Electron ayna bekçili. · bekçi: `scripts/test_settings_password.ts §C (gövde/query/cookie/benzer başlık → 403 dav` <sub>(arşiv:2096)</sub>
+
+## Backend
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Şablon kimliği `permission_templates.code`, AD DEĞİL (fabrika yeniden adlandırır; ada bakan uzlaştırma ikiz doğurur). `code=null` fabrikanın şablonu, dokunulmaz. Sahiplenme YALNIZ `LEGACY_TEMPLATE_NAME_TO_CODE` — `entry.name`e açmak fabrika şablonunu yutar; ad çakışmasında oluşturma ATLANIR. · bekçi: `scripts/test_role_template_catalog.ts (legacy eşleme bayat mı)` <sub>(CLAUDE.md:236, CLAUDE.md:238, CLAUDE.md:66)</sub>
+- **[ÇEKİRDEK]** `mode:"all"` YALNIZ 'Admin (Tam Yetki)' şablonundadır — tanımı liste değil KURAL ('her şey'), her boot katalogla eşitlenir, bayatlayamaz (bekçi: tam bir tane). Diğer rollerde eksik izin EKLENİR, fazlalar KORUNUR, hiçbir izin çıkarılmaz. · bekçi: `scripts/test_role_template_catalog.ts §1` <sub>(CLAUDE.md:235)</sub>
+- **[ÇEKİRDEK]** Ayar şifresi KAPSAMI elle sayılmaz: yüklem 'ayar ekranı' değil '`system_settings`e YAZIYOR mu' — `src/routes/**` (özyineli) içinde `systemSettingService.set(`/`setFeatureFlags(`/`systemSetting.upsert(` çağıran her zincir `requireSettingsPassword` taşır (AST tripwire, iki yönlü muaf). · bekçi: `scripts/test_settings_password.ts §J tripwire` <sub>(arşiv:2096)</sub>
+- **[ÇEKİRDEK]** Hash `security.settingsPasswordHash` `systemSettingService.set()` ÜZERİNDEN DEĞİL (audit oldData/newData'yı HAM yazar) — doğrudan upsert + ayrı olay (`SETTINGS_PASSWORD_SET/ROTATED/REVOKED`); `security.*` ön eki listeden/config-bundle'dan dışlanır, `PUT /admin/settings/:key` reddeder. · bekçi: `scripts/test_settings_password.ts (config-bundle/system_logs'da hash 0)` <sub>(arşiv:2096)</sub>
+- **[ÇEKİRDEK]** Oturum jti'si KULLANICIYA bağlıdır: `verifyToken` 'canlı mı' yanında 'KİMİN' diye sorar (`session.userId !== payload.userId` → 401 `SESSION_INVALID`, aynı kod/mesaj — orakül yok); yoksa JWT_SECRET'ı bilen biri başkasının jti'siyle süperadmin kimliği üretir. · bekçi: `scripts/test_superadmin.ts §J(c) (yabancı jti 401 + kendi jti geçer zemini)` <sub>(arşiv:2096)</sub>
+- **[ÇEKİRDEK]** Yeni kullanıcı `POST /api/admin/users` (`admin:users`) ile açılır ve VARSAYILAN `grantOperatorDefaults=true` ile üç mobil istasyon izni (`mobile:kk1/kk2-kursun/tambur`) + PIN/QR alır; web kullanıcısı için panel `false` gönderir. 'Yetkisiz başlar' YANLIŞ; masaüstü izinsiz panele giremez doğru. <sub>(CLAUDE.md:369, CLAUDE.md:301)</sub>
+- **[ÇEKİRDEK]** Kimliksiz (PUBLIC) uç yalnız GEREKÇEYLE: login, cihaz el sıkışması, `/api/mobile/updates/*`, `/api/client-policy/*` gibi giriş-öncesi kurtarma yolları `test_route_auth_coverage` muaf listesinde gerekçeyle kayıtlı; beyansız public uç bekçiyi kırmızıya düşürür. Koruma kimlik değil imza/salt-okunurluk. · bekçi: `scripts/test_route_auth_coverage.ts` <sub>(CLAUDE.md:328, CLAUDE.md:66)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** Uzlaştırma YALNIZ EKLER — silmez, `description`/`module` ezmez; katalogdan kod çıkarmak DB'den kaldırmaz, kaldırma/yeniden adlandırma bilinçli veri migration'ı ister. İzin için ayrı veri migration'ı YAZMA (`20260801020000` emsal değil); canlı DB'ye elle INSERT yok. · bekçi: `scripts/test_permission_catalog.ts (DB \ katalog fazlası hata değil, bilgi)` <sub>(CLAUDE.md:191)</sub>
+- **[ÇEKİRDEK]** Sistem rolü SİLİNMEZ, PASİFLEŞTİRİLİR (`deleteTemplate` → isActive=false): sert silme sonraki restart'ta DİRİLİŞ; pasif satır 'kullanmıyorum' kararını kalıcı kılar. `applyTemplate` pasif şablonu 400 ile reddeder, panel gizler; geri açma `PATCH … {isActive:true}`. <sub>(CLAUDE.md:237, CLAUDE.md:66)</sub>
+- **[ÇEKİRDEK]** `DOCUMENT_DESIGN_FLAG_KEYS` bilerek DAR: `companyName`/`companyLetterhead`/belge logosu firmanın KİMLİĞİDİR, şablon değil — dar kümeye EKLENMEZ. Yeni anahtar eklerken soru 'belge ekranında görünüyor mu' değil, 'yanlış girilirse etkisi belge çıktısıyla SINIRLI mı'. <sub>(CLAUDE.md:130)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** Kapsam bekçisi ('her izin dar bir rolde mi') 'Admin (Tam Yetki)' DIŞINDAKİ roller üzerinde koşar — hariç tutulmazsa vakumen yeşil. Muaflar `ROLE_COVERAGE_EXEMPT`'te GEREKÇEYLE (bugün 4: admin:*, mobile:tambur-duzelt/kk1-desen/kk1-yari-mamul) ve iki yönlü denetlenir (ölü muaf da düşürür). · bekçi: `scripts/test_role_template_catalog.ts §2` <sub>(CLAUDE.md:239)</sub>
+- **[ÇEKİRDEK]** Ayar şifresi yönetim uçları (`GET/PUT/DELETE /admin/settings-password`) yalnız süperadmin; aksi 2026-09-04'ten beri 403 (404 değil). ⚠️ Middleware'in adı hâlâ `requireSystemAccountOr404` — ada bakıp 404 varsayma, gövde `AppError.forbidden`. `verifyToken`dan SONRA takılır (kimliksiz 401). · bekçi: `scripts/test_settings_password.ts (404→403, 134/0)` <sub>(arşiv:2096)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Görev ayrılığı (SoD) üçlüsü `shipping:invoice` / `shipping:undo-dispatch` / `roll:manual-adjust` yalnız Muhasebe ve Üretim Süpervizörü şablonlarında; günlük iş rollerine dağıtılmaz. `shipping:invoice` fatura İŞARETİ koyar (ERP fatura kesmez) ve `shipping:write` VERMEDEN atanır. · bekçi: `scripts/test_role_template_catalog.ts §2 (kapsam) — dağılımı ölçmez` <sub>(CLAUDE.md:66, CLAUDE.md:46, CLAUDE.md:172)</sub>
+- **[ÇEKİRDEK]** `admin:*` kısayolu KORUNUR: `tambur-undo`/`import`/`demo` kapıları `matchesPermission(p, X) || matchesPermission(p, "admin:*")` yazımındadır — 3 kullanıcı `admin:*` taşıyor, düz `matchesPermission(p, X)`e çevirmek yetki DÜŞÜRÜR; düz `includes("admin:*")` ise `["*"]`ı tanımaz, yasak. · bekçi: `scripts/test_superadmin_visible.ts (`includes("admin:*")` yasağı kolu)` <sub>(arşiv:2057)</sub>
+
+## Panel (Electron)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Panelde satıcı kapısı TEK yüklem `isSuperadminGateOpen` (supaplı: `isSystemAccount || !systemAccountExists`) — karo·route (`ProtectedRoute.requireSystemAccount`)·palet·FeatureFlagSection ondan beslenir; supapsız görünürlük yüklemi (`isSystemAccountIdentity`) geri getirilmez (kilitlenme). · bekçi: `Electron superadmin-gate.test.ts (tüketiciler bu dosyadan ithal eder) + SystemHu` <sub>(arşiv:2217, arşiv:2057)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** Yeni ayar kategorisinde varsayılan DARdır (`permissionAny` verilmezse `admin:settings`) — izni unutmak gizler, SIZDIRMAZ. 'İzni verdim ama yolu vermedim': dar izinli kullanıcı ekrana kişisel Ayarlar'daki 'Bu Bilgisayar' kartından ya da paletten ulaşır; karo dışı palet girdisi kapıyı ELLE taşır. · bekçi: `Electron settings-surface.test.ts` <sub>(CLAUDE.md:117, arşiv:2217)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** Electron'da ayar YAZAN her istek `withSettingsPassword` sarmalayıcısından geçer: önce şifresiz; 403 REQUIRED/INVALID → `SettingsPasswordDialog` (App'te tek mount) → başlıkla tekrar; LOCKED → kalan süre. Her kayıtta sorulur, oturumda hatırlanmaz; feature-flag/logo/settings/backup offsite hepsi ondan. · bekçi: `yok (ayna bekçisi yalnız şifre kuralını ölçer)` <sub>(arşiv:2096)</sub>
+- **[ÇEKİRDEK]** UI yetki kontrolü `useRoleAccess` + `<PermissionGate>`; `isAdmin` yalnız adminOnly nav/tile GÖRÜNÜRLÜĞÜDÜR, yetki kısayolu DEĞİL (Y6: 'isAdmin ise her şey true' kısmi admine 403 yağdırıyordu); `DefinitionsHubPage` kısa devresi korunur. Admin route'ları `admin:settings`/`admin:users` ister. · bekçi: `Electron/src/types/auth.test.ts` <sub>(CLAUDE.md:117)</sub>
+- **[ÇEKİRDEK]** Salt-okuma GERÇEK olmalı: ekran READ ile açılır (`PermissionGate anyOf={DOCUMENT_DESIGN_READ}`), canlı önizleme çalışır, Kaydet `canWrite` ile kapanır, stüdyodaki yazma aksiyonları `readOnly` ile ÇİZİLMEZ — gri buton olmayan bir yolu vaat eder. <sub>(CLAUDE.md:117, CLAUDE.md:130)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Panelde `superadminOnly`/kilit bandı yalnız backend'de karşılığı OLAN kapı için çizilir: `flagWriteGuard`ın süperadmin dalı yalnız `MODULE_FLAG_KEYS`i kapsar → demo beyanı `superadminOnly` ALMADI (sayfanın kimlik kapısı yeter). Modül kilidi istemci-taraflı: bant 'dondu' der, 'etkisiz' DEMEZ. · bekçi: `Electron SystemHubPage.superadmin.test.tsx` <sub>(arşiv:2217)</sub>
+
+## Tablet (mobil)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Mobil `usePermissions().has()` üç jokeri tanır: global `*` (süperadmin, backend'den `["*"]`), `mobile:*`, `admin:*`; `allowedScreens` `MOBILE_SCREENS.filter(has)` — joker dalı olmadan giriş başarılı görünür, ekran yoktur ('yetkin yok'). Saf JS → OTA ile gider, APK gerekmez. · bekçi: `mobil/src/hooks/usePermission.test.ts` <sub>(arşiv:2057, CLAUDE.md:240)</sub>
+
+## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **KISMI** `A:2026-09-03__2026-09-03-superadmin-p2-gizli` → `KÖK CLAUDE.md:104 — 2026-09-04 'En yetkili hesap GÖRÜNÜR' (bundle dışı, kök dizin satırı)`: P2'nin GİZLİLİK kısmı geri alındı: VISIBLE_USER/visibleUserWhere/maskSystemActor/SQL_ACTOR_* ve /users/:id* üzerindeki blockSystemAccountTarget 404 kapısı SİLİNDİ; hesap liste/audit/tablet'te gerçek adıyla görünür. YETKİ kısmı (['*'], modül kilidi, supap, sır hijyeni) yürürlükte. Yerine: /users/:id/credentials üstünde dar 403 + protectSystemAccountTarget (GET serbest, yazma 403). ✅ çürütmeden geçti
+- **KISMI** `A:2026-09-03__2026-09-03-ayar-sifresi-p3` → `KÖK CLAUDE.md:104 — 2026-09-04 'En yetkili hesap GÖRÜNÜR'`: Ayar şifresi yönetim uçları (GET/PUT/DELETE /admin/settings-password) süperadmin dışına artık 404 DEĞİL 403 döner. Middleware'in ADI hâlâ requireSystemAccountOr404 ama gövdesi AppError.forbidden — ada bakan yanılır. ✅ çürütmeden geçti
+- **KISMI** `A:2026-09-03__2026-09-03-superadmin-p2-gizli` → `R:2026-09-03__2026-09-03-superadmin-dogusu-p8`: Hesap DOĞUŞU değişti: .env tohumlaması (readSuperadminEnv, SUPERADMIN_USERNAME/PASSWORD_HASH/PIN/TOTP_SECRET, FORCE_SYNC rotasyonu) kaldırıldı; tek yol sunucuda interaktif `npm run superadmin:kur` (--rotate). Boot job hesap yaratmaz, kilit defterini tazeler ve kalan SUPERADMIN_* için yalnız anahtar adını basar. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-03__refakat-karti-sablonu-uc-kademe-2026` → `R:2026-08-05__belge-tasarimi-ayri-bir-yetkidir-sistem`: 'İzin AÇILMADI: stüdyo admin:settings ile korunur' kararı 2026-08-05'te tersine döndü: document-template:read/write çifti açıldı (kategori web), admin:settings OR'da kilitlenme supabı olarak kaldı. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-05__belge-tasarimi-ayri-bir-yetkidir-sistem` → `KOD 2026-08-14 — Electron tile-config.ts:210-215 (bundle'da not yok)`: Parantez 'Etiketler kartı hâlâ station:read ile süzülüyor; bilinen hiza sorunu' BAYAT: kart artık permissionAny [station:read, label-template:read] taşıyor ve route ile aynı liste. ✅ çürütmeden geçti
+- **KISMI** `E:undated__rbac` → `A:2026-09-03__2026-09-03-superadmin-p2-gizli`: Gövdedeki 'isAdmin = admin:users | admin:settings | admin:* varsa true' düz-liste anlatımı ezildi: hasAdminAccess artık matchesPermission ile ölçer, global '*' de admin sayılır (süperadmin). Notun 2026-09-03 uyarı bloğu bunu söylüyor; gövde metni güncellenmedi. ✅ çürütmeden geçti
+- **KISMI** `E:undated__rbac` → `KOD — Electron/src/routes/content-routes.tsx:549-687 (bundle'da not yok)`: 'Admin-only sayfalar <ProtectedRoute requirePermission="admin:*"> ile kilitli' cümlesi kodla uyuşmuyor: admin route'ları admin:settings ya da admin:users ister; admin:* wildcard'ı bunları matchesPermission üzerinden karşılar. git -S bu dizeyi Electron/src geçmişinde HİÇ bulmadı. ✅ çürütmeden geçti
+- **KISMI** `B:undated__bekcinin-en-kolay-kaybedilen-kurali` → `KOD — role-template-catalog.ts:591-598 (2026-08-17 mobile:kk1-yari-mamul)`: Muaf listesi notta ÜÇ kayıt (admin:*, mobile:tambur-duzelt, mobile:kk1-desen); kodda DÖRT — mobile:kk1-yari-mamul gerekçeyle eklendi. Kural (gerekçeli muaf, iki yönlü denetim) aynen geçerli, sayım bayat. ✅ çürütmeden geçti
+- **KISMI** `R:undated__test-kullanicilari` → `E:undated__test-kullanicilari`: 'Admin dışı tüm kullanıcılar test123 şifresini kullanır' cümlesi ÖLÜ: seed yalnız admin üretir (2026-07-03'te ek test kullanıcıları kaldırıldı). Kök notun kendi 2026-09-03 düzeltme bloğu da bunu söylüyor; ana cümle silinmedi. ✅ çürütmeden geçti
+- **KISMI** `B:undated__fixture-seed-master-data-si-business` → `KOD — scripts/fixture-test-user.ts ensureTestAdmin (bundle'da not yok)`: 'Aynı sınıf kırılganlık admin/123123 için hâlâ AÇIK: test_direct_ship_api, test_quickstart_dispatch_api, test_http_api, smoke_fason_http' cümlesi bayat — dördü de kendi geçici admin kullanıcısını ensureTestAdmin() ile üretiyor. ✅ çürütmeden geçti
+- **KISMI** `A:2026-09-03 P5 'Panel modül kapıları' (arşiv 2145-2158; kök CLAUDE.md:102 — bundle dışı)` → `A:2026-09-04__2026-09-04-profil-sistem-hub`: P5'in iki yüklemi (yazma supaplı isSuperadminGateOpen · görünürlük supapsız isSystemAccountIdentity) TEK yükleme indi: karo·route·palet·FeatureFlagSection hepsi supaplı isSuperadminGateOpen'dan beslenir. Sebep: modül anahtarlarının ikinci yazma yolu kalkınca supapsız gizleme kilitlenme üretiyordu. ✅ çürütmeden geçti
+
+## Çözülmüş çelişkiler
+
+- `E:undated__test-kullanicilari` ↔ `KOD permission-management.service.ts:25-33,495-498 + ARCHITECTURE.md:1029 (bundle dışı)`: Kod: yeni kullanıcı VARSAYILAN olarak üç mobil istasyon izni + mobil kimlik (PIN/QR) ile doğar; web kullanıcısı için panel grantOperatorDefaults:false gönderir. 'Yetkisiz başlar' yanlış, 'masaüstü izni olmadan panele giremez' (canEnterApp, login 403) doğru — cümle 'yalnız mobil izinlerle başlar' diye düzeltilmeli.
+- `A:2026-09-03__2026-09-03-superadmin-p2-gizli` ↔ `KÖK CLAUDE.md:104 — 2026-09-04 'En yetkili hesap GÖRÜNÜR' (bundle dışı)`: Kod 2026-09-04 kararını uyguluyor (gizleme yok, VISIBLE_*/mask yok, test_superadmin_hidden_single_source silinmiş). Arşiv P2 notuna ikinci bir ⛔ şerhi ('gizli satır · tek-kaynak süzgeç · takma adlı audit 2026-09-04'te kaldırıldı') eklenmeli; yalnız yetki kısmı canlı.
+
+## Açık sorular
+
+- E:undated__rbac 'Admin-only sayfalar <ProtectedRoute requirePermission="admin:*">' cümlesi: git -S dizeyi Electron/src geçmişinde hiç bulmadı — hiç var olmadı mı, farklı yazımla mı vardı BELİRSİZ; bugünkü durum (admin:settings/admin:users) koddan kesin.
+- Electron `withSettingsPassword` sarmalayıcısının kod yeri bu turda doğrulanmadı (yalnız arşiv 2096 metni) — kural BELİRSİZ kanıtla listelendi.
+- E:undated__rbac canEnterApp kuralı için Electron auth.test.ts'nin bu senaryoyu ölçüp ölçmediği doğrulanmadı (mechanicalGuard 'yok/BELİRSİZ').
+
+## Doğrulama turu ekleri — 2026-09-05 (ESLint turu)
+
+- **[ÇEKİRDEK]** `/users/:id/credentials` kapısının hedef yüklemi SERVİSTEDİR (`AuthService.isSystemAccountUser`), kapının kendisi route'ta kalır — route/controller `lib/prisma`ya inmez (ESLint `no-restricted-imports`). ⚠️ İki bekçi bu kapıyı METİN tarayarak ölçüyor (`test_superadmin.ts`, `test_superadmin_visible.ts` §5) ve her iki yazımı da kabul eder; kapının şeklini değiştirirsen İKİSİNİ birlikte güncelle.
+
+## Bekçiler — bu alana dokununca koş (61 backend · 36 istemci)
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
+
+**Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
+
+Backend: `test_admin_guard_race`, `test_audit_followups`, `test_boss_overview`, `test_card_login`, `test_config_bundle`, `test_data_integrity_gaps`, `test_demo_mode`, `test_denetim_s2_paketi`, `test_depo_roll_cancel_permission`⚠️, `test_device_activity`, `test_direct_ship_api`⚠️, `test_document_template_permission`, `test_field_address`⚠️, `test_finance_documents`, `test_finance_flag_off`, `test_finance_regime_gate`, `test_finance_reports`, `test_global_search`, `test_http_api`, `test_import_framework`, `test_import_permissions`, `test_item_price`, `test_login_access`, `test_login_lockout`, `test_login_lockout_coverage`, `test_login_methods`, `test_master_data_merge`, `test_mobile_item_permission`, `test_mobile_order_permission`, `test_mobile_screen_permissions`, `test_p2_api`, `test_p2_auth`, `test_p2_infra`, `test_permission_catalog`, `test_permission_grant_source`, `test_permission_management`, `test_production_regime_gate`, `test_quickstart_dispatch_api`, `test_remote_access_guard`, `test_role_template_catalog`, `test_roll_edit_unified`, `test_route_auth_coverage`, `test_screen_catalog`, `test_session_duration_minutes`, `test_session_purge`, `test_session_registry`, `test_settings_password`, `test_setup_ticaret`, `test_single_warehouse_parity`, `test_superadmin`⚠️, `test_superadmin_visible`, `test_tambur_manual_produce`, `test_tambur_manual_roll`, `test_timed_permissions`, `test_totp`, `test_user_credentials_guard`, `test_user_default_perms`, `test_user_lifecycle`, `test_work_session`, `test_workorder_documents`, `test_workstation_permission`
+
+İstemci: `PermissionGrid.scope.test.ts`⚠️, `screen-view.test.ts`⚠️, `CommandPalette.test.tsx`⚠️, `command-entries.test.ts`⚠️, `boss-menu.test.ts`⚠️, `jwt.test.ts`⚠️, `secure-token.test.ts`⚠️, `session-auth.test.ts`⚠️, `invoiceDetailPermission.test.tsx`, `SettingsPasswordCard.test.tsx`⚠️, `workstation-rail.test.ts`, `templateRowActions.test.tsx`, `OrderShipmentsCard.test.tsx`, `SackStorePage.test.tsx`, `shipmentDetailError.test.tsx`, `StockCountDetailPage.test.tsx`, `WorkOrderCompleteDialog.test.tsx`, `tile-visibility.test.ts`, `SackTagsPage.test.tsx`, `SystemHubPage.superadmin.test.tsx`, `tile-route-permission.test.ts`, `apiClient.test.ts`, `auth.logout.test.ts`, `tabs.logout.test.ts`, `login-totp.test.ts`, `auth.test.ts`, `stationScreens.test.ts`, `useIdleLock.test.ts`, `usePermission.test.ts`, `useVisibleScreens.test.ts`, `flushThenLogout.test.ts`, `sessionSwitch.test.ts`, `authActions.test.ts`, `lockStore.test.ts`, `idleLock.test.ts`, `jwtExpiry.test.ts`
+
+## Arşiv notları (tam metin, gerekçe ve ölçüm)
+
+- 2026-08-06 · 2026-08-06 — YETKİ DENETİMİ: rol şablonları da KODA taşındı; "izin DB'ye gelir ama kimseye ATANMAZ" boşluğu ar — `CLAUDE-NOT-ARSIVI.md:287-295`
+- 2026-08-26 · 2026-08-26 (akşam) — Sebep listesi büyüyünce Kaydet ekran dışında kalıyordu + sıra artık sürüklenerek KALICI — `CLAUDE-NOT-ARSIVI.md:1377-1444`
+- 2026-09-03 · 2026-09-03 — Ayar şifresi P3: ikinci kapı BAŞLIKTA, hash `set()` dışında, kilit kovası girişten AYRI, kapsam " — `CLAUDE-NOT-ARSIVI.md:2096-2115`

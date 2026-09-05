@@ -1,6 +1,8 @@
 # TeksERP — Veritabanı Mimari Denetim Raporu
 
-> **Tarih:** 2026-07-08 · **Kapsam:** `Teks-Erp/` backend — PostgreSQL 18 (dev) / 16 (üretim) + Prisma 7 + Express 5
+> **Tarih:** 2026-07-08 · **Kapsam:** `Teks-Erp/` backend — PostgreSQL (dev 18 / saha 16.9, `docs/ops/DEPLOY-RUNBOOK.md`) + Prisma 7 + Express 5
+>
+> ⚠️ **TARİHSEL ÖLÇÜM (2026-09-05 gözden geçirmesi):** bu rapor 2026-07-08 fotoğrafıdır; sayıları ve "açık" işaretleri bayattır. Kalıcı kuralları `Teks-Erp/CLAUDE.md` § Veritabanı kuralları ile `docs/kurallar/deploy-kurulum.md`'de yaşıyor.
 > **Yöntem:** 8 boyutlu çok-ajanlı tarama + kuşkucu çapraz doğrulama + elle teyit
 > **Genel sonuç:** Mimari olgun ve disiplinli. **Kritik bulgu yok.** 5 yüksek, 22 orta, 22 düşük, 11 bilgi düzeyinde bulgu. En acil iki başlık: **(1)** yedeklerin makine dışına çıkmaması (felaket kurtarma), **(2)** üretimin C locale'inde Türkçe aramanın sessizce eksik sonuç dönmesi.
 
@@ -49,7 +51,9 @@ Bu raporun bulguları **2026-07-08 anına aittir.** Sonraki hafta gelen dört b�
 
 **Not — `PRODUCED` enum'u kaldırıldı:** "her rota final üretir" redesign'ında `RollStatus.PRODUCED` limbosu enum'dan düştü (migration `20260713092000_drop_produced_roll_status`). Aşağıda O-18'de "PRODUCED'a düşer" ifadesi artık geçersiz — son adım toplarını `finalizeRollsAtLastStep` → `WAREHOUSE` çeker; O-18'in **çekirdek endişesi (Tambur'suz rotada açık-hata guard'ı) hâlâ açık** (aşağıda güncellendi).
 
-**Hâlâ açık (kod-teyitli):** Y-2/Y-3 (collation — 34 elle-arama sahası), Y-4 (offsite yedek + PITR yok), Y-5 (geçmiş DDL'de `statement_timeout=0` eksik), O-15/O-16/O-17 (installer bellek/sürüm/restore), O-18 (Tambur'suz açık-hata guard'ı), D-9 (`consistency-check.sql`) vb. — bunlar operasyonel/collation eksenli, redesign'lar dokunmadı.
+**Hâlâ açık (kod-teyitli):** Y-4 (PITR yok — offsite kopya `offsite-backup.helper.ts` ile kapandı), Y-5 (geçmiş DDL'de `statement_timeout=0` eksik), O-18 (Tambur'suz açık-hata guard'ı) — operasyonel eksenli.
+
+**2026-09-05'te KAPANMIŞ sayılanlar:** Y-2/Y-3 (arama katlaması uygulandı — `src/utils/search-fold.ts` + `public.tr_fold` gölge kolonları + `nameFold` DB seddi) · O-15/O-16/O-17 (konusuz kaldı: `installer/windows` 2026-07-30'da silindi, fabrika kurulumu artık `deploy/kur.ps1` paketi) · D-9 (`consistency-check.sql` + `test_consistency.ts` `npm test`te koşuyor).
 
 ---
 

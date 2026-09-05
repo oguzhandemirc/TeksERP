@@ -1,6 +1,8 @@
 # Etiket Stüdyosu — Tasarım Referansı (v2, 2026-07)
 
-Branch: `feat/label-studio`. Üç büyük değişiklik: **tek şablon havuzu**, **müşteriye
+> ⚠️ Tarihsel: `feat/label-studio` dalı `main`'e alındı; bugün dallanma `feature/* → main` ve özellik dalları emekli. Satır numaraları o günün fotoğrafıdır — `LabelKind` genişletme kuralının kanonik hâli `docs/kurallar/belge-etiket.md`'de.
+
+Üç büyük değişiklik: **tek şablon havuzu**, **müşteriye
 özel şablon**, **serbest kanvas editör + 4 dile otomatik derleme**.
 
 ## 1. Model

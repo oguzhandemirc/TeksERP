@@ -183,7 +183,7 @@
 - **Eski:** "Mal Kabul karosu yalnız izinle kapılı (tek depolu ticaret firması da kullanacağı için `multiWarehouse` şartı konamaz)"
 - **Eklenecek metin:** *"⚠️ 2026-09 güncellemesi — Mal Kabul artık **yalnız izinle kapılı DEĞİL**: `goods-receipt.routes.ts:27` üzerinde `requireTicaretEnabled` modül kapısı var (`MODUL-BAYRAK-TASARIM.md` karar #4 — planın iki bilinçli statü değişikliğinden biri; ölçüm: fabrika dump'ında 0 mal kabul). Paragrafın gerekçesi (\"`multiWarehouse` şartı konamaz\") DOĞRU kalır — kapı çoklu depoya değil **ticaret modülüne** bağlandı; depo transferi ayrıca `requireDepoMultiEnabled` taşır (`warehouse-transfer.routes.ts:24`). İzin katmanı da yerinde durur: iki kapı, iki soru (\"bu kurulum ticaret paketini kullanıyor mu\" ≠ \"bu kullanıcı yetkili mi\")."*
 
-### B26 — `docs/ops/DEVIR-2026-08-17-FABRIKA-TALEP.md:3` · dal adı · `[ÇEKİRDEK]` · ⚠️ *biçim tartışmalı*
+### B26 — `docs/history/DEVIR-2026-08-17-FABRIKA-TALEP.md:3` · dal adı · `[ÇEKİRDEK]` · ⚠️ *biçim tartışmalı*
 - **Öneri:** *"**Dal:** `adnansahin` *(2026-09-02'de EMEKLİ — bu satır tarihsel; iş bugün `main` üzerindedir, bkz. `deploy/README.md` ve `docs/design/MODUL-BAYRAK-TASARIM.md` §0)*"*
 - **Tartışmalı olan:** belge tarihsel bir devir notudur; düzeltme mi parantez içi şerh mi olacağı karar ister. Öneri: **parantez içi şerh** (içerik yeniden yazılmasın, ama okuyucu var olmayan dala checkout denemesin).
 

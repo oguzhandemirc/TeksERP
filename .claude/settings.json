@@ -8,7 +8,22 @@
       "Bash(npx prisma validate)",
       "Bash(npx prisma generate)",
       "Bash(npx prisma migrate status)",
-      "Bash(npx prisma migrate diff *)"
+      "Bash(npx prisma migrate diff *)",
+      "Bash(node scripts/check-docs.mjs)",
+      "Bash(npx tsx scripts/run-all-tests.ts *)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/claude-hooks/bash-guard.mjs"
+          }
+        ]
+      }
     ]
   },
   "enabledPlugins": {

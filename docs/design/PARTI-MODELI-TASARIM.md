@@ -24,6 +24,8 @@
 Bugünkü model iki kavramı tek kimliğe sıkıştırıyor:
 
 - `WorkOrder.batchNumber` (P+GGAAYY+NNNN) hem **iş emri numarası** hem **parti numarası** gibi davranıyor.
+
+> ⚠️ **Parti numarası biçimi 2026-08-05'te DEĞİŞTİ (bu belge orijinal tasarımdır):** varsayılan artık `P01…P99`, P99'dan sonra körlemesine `P01`'e sarar (`batch.shortNumberEnabled`, açık). `batchNumber` üzerindeki `@unique` KALDIRILDI (migration `20260805120000_batch_short_number`) — partinin kimliği yalnız `Batch.id`'dir, yarış `pg_advisory_xact_lock(8022)` ile çözülür ve `orderBy: { batchNumber }` YASAKTIR. Aşağıdaki günlük kalıp (`P+GGAAYY+sıra`) bayrak kapalıyken üretilir. Canlı kural: `docs/kurallar/parti.md`.
 - Aynı WO'nun kumaşı fasona parça parça gidince her sevk bir **"dal"** oluyor (`batchSplitId = dispatch.id`).
   "Dal" sektörel bir kavram değil — top etiketi/kesimhane dilinde karşılığı yok.
 

@@ -18,9 +18,9 @@ Her push/PR'da GitHub Actions (`.github/workflows/ci.yml`) 3 projede **lint + ti
 
 | Proje | Test komutu | Altyapı | Kapsam |
 |---|---|---|---|
-| Backend | `cd Teks-Erp && npm test` | server'sız entegrasyon (`scripts/test_*.ts` runner; PostgreSQL gerekir) | ~160 script |
-| Electron | `cd Electron && npm test` | Vitest + Testing Library (jsdom) | ~40 dosya |
-| mobil | `cd mobil && npm test` | jest-expo + RNTL | ~30 dosya |
+| Backend | `cd Teks-Erp && npm test` | server'sız entegrasyon (`scripts/test_*.ts` runner; PostgreSQL gerekir) | 453 bekçi (kanonik: `ls Teks-Erp/scripts/test_*.ts`) |
+| Electron | `cd Electron && npm test` | Vitest + Testing Library (jsdom) | 208 dosya |
+| mobil | `cd mobil && npm test` | jest-expo + RNTL | 84 dosya · alan→bekçi haritası `Teks-Erp/docs/BEKCI-HARITASI.md` |
 
 Tümünü tek komutta: **`bash run-tests.sh`** (tip kontrolü dahil: `bash run-tests.sh --tsc`).
 
@@ -32,7 +32,7 @@ Tümünü tek komutta: **`bash run-tests.sh`** (tip kontrolü dahil: `bash run-t
 
 ```bash
 # Backend
-cd Teks-Erp && npm install && npm run prisma:generate && npx prisma migrate dev && npm run seed && npm run dev
+cd Teks-Erp && npm install && npm run prisma:generate && npm run prisma:migrate   # migrate deploy — `migrate dev` DEFERRABLE FK'ları düşürür, kullanma && npm run seed && npm run dev
 # Electron
 cd Electron && npm install && npm run dev
 # mobil

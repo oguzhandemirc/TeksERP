@@ -175,6 +175,23 @@ if (advisories.length) {
   console.log("");
 }
 
+
+// --- GATE: CLAUDE.md boyut tavanı (2026-09-05 — kök 42k token'dan ~6k'ya indi; geri şişmesin) ---
+// Ölçü BAYT (token ≈ bayt/3). Tavanlar bilinçli gevşek: kök 36 KB (~12k tok), alt dosyalar 24 KB.
+const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 36 * 1024, "Teks-Erp/CLAUDE.md": 24 * 1024, "Electron/CLAUDE.md": 24 * 1024, "mobil/CLAUDE.md": 24 * 1024 };
+const sizeFails = [];
+for (const [rel, cap] of Object.entries(CLAUDE_MD_SIZE_CAPS)) {
+  const p = join(REPO_ROOT, rel);
+  if (!existsSync(p)) continue;
+  const size = statSync(p).size;
+  if (size > cap) sizeFails.push({ rel, size, cap });
+}
+if (sizeFails.length) {
+  console.error(`❌ CLAUDE.md boyut tavanı aşıldı (${sizeFails.length}): yeni karar notu ARŞİVE, kural docs/kurallar/<alan>.md'ye yazılır.`);
+  for (const f of sizeFails) console.error(`    ${f.rel}: ${(f.size / 1024).toFixed(1)} KB > ${(f.cap / 1024).toFixed(0)} KB`);
+  process.exit(1);
+}
+
 // --- GATE: ölü-link (CI FAIL) ---
 if (deadLinks.length === 0) {
   console.log(`✅ Doküman bekçisi: ölü doküman-link yok (${mdFiles.length} .md tarandı).`);

@@ -1,0 +1,170 @@
+# Belge · Etiket · Şablon
+
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+
+> Hakem notu: 51 üye, ~31'i gerçekten belge/etiket/şablon; 19'u anahtar-kelime yanlış pozitifi (rota/rol şablonu, sürüm, DB, zaman, mükerrer — unresolved'da). Sekiz ezilme kanıtlı; odak refakat kartı: N30 'şablon karta donar' + 'izin açılmadı' ve N29 'donmuş sayfa boyutu' gerekçesi N37 (08-06 eki) ve N36 ile düştü — kod her yolda (arşiv sürümü dahil) sunumu canlı çözüyor, resolveFrozenPageSize yalnız renderer varsayılanı. N37'nin 'buildSnapshot baskı yolunda çağrılmaz' cümlesi kodla çelişiyor (fallback'te çağrılıyor, zararsız). N22'nin '4 literal z.enum' ayağı 08-01'de nativeEnum'a döndü; resetSackWeightsTx→markSackContentChangedTx. En riskli: mobil BLE satırı (N18) — servis importsuz ölü, yazıcı BT-Classic + oturum; silinmeli. Açık: resolveForPrint(templateId) dalının canlı çağıranı yok.
+
+
+## Ortak (backend + panel + tablet)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** ACTIVE refakat kartının önizlemesi VE baskısı iş emrinin GÜNCEL planından üretilir; TEK karar noktası resolvePrintPlan (önizleme + baskı + sürüm no). GET yan etkisiz; print-event basılan planı kaydeder, içerik değiştiyse version++ — aynı içeriğin kopyası sürüm artırmaz. · bekçi: `scripts/test_traveler_card_stale.ts §6 + test_traveler_template.ts E2/E4` <sub>(CLAUDE.md:144)</sub>
+- **[ÇEKİRDEK]** İÇERİK ≠ SUNUM, ikisi de CANLI: planKey config/template'i DIŞLAR (tasarım değişikliği sürüm artırmaz, kartı bayat işaretlemez); şablon + config + sayfa boyutu HER baskıda canlı — arşiv sürümü (?version=N) ve geçersiz kart dahil, onlarda yalnız İÇERİK donuk. 'Şablon karta donar' KALKTI (2026-08-06). · bekçi: `test_traveler_template.ts:186-196 E2 (sunum donmaz)` <sub>(CLAUDE.md:144, CLAUDE.md:152, CLAUDE.md:137)</sub>
+- **[ÇEKİRDEK]** Şablon güvenliği İKİ katman, ikisi gerekli: ① sanitizeTemplateHtml HEM kayıtta HEM render'da (script / iframe-object-embed / link-meta / on* / javascript: / data:text/html kesilir; aşırı kesme güvenli yön; dış <img>/<a> BİLEREK serbest); ② değerler escapeHtml (yalnız sunucu QR SVG'si ham). · bekçi: `scripts/test_traveler_template.ts (sanitize kontrolleri)` <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** İÇ VERİ TAŞIYAN kolon OPT-IN doğar: columns[tablo].hidden BLOCKLIST'tir (anahtar yoksa AÇIK → yeni kolon varsayılan GÖRÜNÜR doğar, çuval notu müşteri irsaliyesine sızar). Opt-in kolon = DocCol.defaultHidden + columns[tablo].shown allowlist (hidden orada yok sayılır); sıra columns[tablo].order. · bekçi: `scripts/test_sack_note_document.ts` <sub>(CLAUDE.md:43, CLAUDE.md:247, CLAUDE.md:61)</sub>
+- **[ÇEKİRDEK]** Sevk belgesinde müşterideki ad: AD DONAR (snapshot products[].customerName, cekiRows[].customerDesen/Varyant — sonraki alias düzeltmesi eski irsaliyeyi değiştirmez), REJİM DONMAZ (shipping.docItemNameMode her baskıda canlı, buildRenderExtras → meta.itemNameMode). İkisi karışırsa iki ayrı arıza. · bekçi: `scripts/test_shipment_doc_customer_name.ts §3` <sub>(CLAUDE.md:111)</sub>
+- **[ÇEKİRDEK]** Müşteri adı zinciri ETİKETLE AYNI (shipment-customer-name.helper: OrderLine.customerItemName > CustomerItemAlias > yok; renk ikizi customerColorName/CustomerColorAlias — yarı çevrilmiş ad basılmasın). İkinci semantik açmak aynı topun etiketi ile irsaliyesinde farklı ad demektir. · bekçi: `scripts/test_shipment_doc_customer_name.ts` <sub>(CLAUDE.md:111)</sub>
+- **[ÇEKİRDEK]** SEVK RAKAMI BRÜT: getDispatchReport (fiş) DONMUŞ snapshot'tan okur (PLANNED taslakta collectShipmentDocContent); snapshot'ı ÜRETEN collectShipmentDocContent de brüt kurar — iptal edilmemiş RollReturn prevSackId ile çuvala geri eklenir — çünkü reissue + lazy-init sevkten SONRA da onu çağırır. · bekçi: `BELİRSİZ — bu turda bekçi adı doğrulanmadı` <sub>(CLAUDE.md:45, arşiv:72)</sub>
+- **[ÇEKİRDEK]** İade sevk belgesini geriye dönük DEĞİŞTİRMEZ; AYRI belgeyle kapanır (RETURN_DISPATCH iade ANINDA donar, iptalde VOIDED). Belgedeki 'Güncel' rozeti = son VERSİYON demektir, 'içerik güncel' DEĞİL. · bekçi: `BELİRSİZ` <sub>(CLAUDE.md:45)</sub>
+- **[ÇEKİRDEK]** SACK etiketi: barkod + QR = Sack.sackNo (CV+GGAAYY+NNNN) — Sack'e ayrı barcode kolonu EKLENMEZ (tek kod kuralı). Katalogda ürün/renk/kat alanı YOK (çuval karışık içerikli → tek değer sessizce yanlış). Çuval kodu top alanına okutulursa anlamlı 400; mobil Paketleme kodu tanıyıp çuvalı aktif yapar. · bekçi: `scripts/test_label_context_fit.ts` <sub>(CLAUDE.md:43, CLAUDE.md:57)</sub>
+- **[ÇEKİRDEK]** SACK baskısı FAIL-CLOSED: şablon çözülemez ya da bağlama UYMAZSA 400, roll/swatch etiketine SAPMAZ. Uyum LabelTemplate.kind'a BAKMAZ (kolon DEPRECATED + nullable — 'tek havuz': şablon türden bağımsız), şablonun BAĞLADIĞI alanlardan türer: kanvas varyantı + sackNo bind ŞART (analyzeContextFit). · bekçi: `scripts/test_label_context_fit.ts` <sub>(CLAUDE.md:43)</sub>
+- **[ÇEKİRDEK]** Koşullu etiket elemanı (showIf): koşul ELEMANDA, değeri QualityGrade.code (ad DEĞİL); toLocaleUpperCase("tr") YASAK; kalitesiz topta koşullu eleman BASILMAZ (fail-closed); tek uygulama noktası prepareElements — yeni emitter expandMultilineText'i çağırmaz; koşullu alan bağlam kimliği SAYILMAZ. · bekçi: `scripts/test_label_element_condition.ts` <sub>(CLAUDE.md:44)</sub>
+- **[ÇEKİRDEK]** Etikete katalog KODU basılır ('6-KAT'), görünen ad DEĞİL — kod topun kimliğidir, ad değişirse geçmiş baskıyla ayrışır; ada çevirmek her etikete DB okuması ekler. Değeri olmayan alan present:false → şablonda dursa da ATLANIR (eski şablonlar bayt-bayt, sackNote emsali). · bekçi: `scripts/test_fold_edit_and_label.ts (16)` <sub>(CLAUDE.md:57)</sub>
+- **[ÇEKİRDEK]** Belge tasarımı ayrı yetkidir: Tanımlar → Çıktılar'ın dört ekranı (Belge Şablonları · Refakat Kartı · Refakat Kartı Şablonları · Serbest Belgeler) document-template:read/write ile korunur; kategori web — hasAdminAccess saymaz, taşıyan Yönetim menüsünü/Sistem hub'ını görmez. · bekçi: `scripts/test_document_template_permission.ts (81)` <sub>(CLAUDE.md:130, CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Belge tasarım izin kümeleri TEK kaynak constants/document-design.ts (saf string literal — AST bekçisi okur); Electron backend'i import edemez, lib/permissions.ts'te AYNALAR; kart tile-config.permissionAny ↔ route content-routes.requireAnyPermission BİREBİR (ayrışma = görünen kart + /forbidden). · bekçi: `scripts/test_document_template_permission.ts (kart/route hizası bozulunca 1)` <sub>(CLAUDE.md:130)</sub>
+- **[ÇEKİRDEK]** PATCH /api/feature-flags guard'ı ANAHTAR-KAPSAMLI, düz OR'a ÇEVRİLMEZ: gövde YALNIZ DOCUMENT_DESIGN_FLAG_KEYS (documentsConfig, travelerCardConfig) taşıyorsa DOCUMENT_DESIGN_WRITE yeter; tek yabancı anahtar / boş gövde → admin:settings (FAIL-CLOSED). Aynı yüklem ayar-şifresi belge muafiyeti. · bekçi: `scripts/test_document_template_permission.ts + test_settings_password.ts` <sub>(CLAUDE.md:130, CLAUDE.md:98)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** Baskı + önizleme iframe'leri sandbox="allow-same-origin allow-modals" taşır (doc.write + win.print için ikisi load-bearing); allow-scripts YOK — kırpma. Ölçüldü: sandbox'sız iframe'de gömülü script Electron renderer'ında çalışıyordu. <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Sack.notes ANNOTATION'dır (her an yazılır, sevk edilmiş çuvala da; donmuş belgeye girmez): setSackNotes touchWarehouseSackTx guard'ını UYGULAMAZ, markSackContentChangedTx nota DOKUNMAZ — guard'ı 'eksik' sanıp EKLEME, eklersen özellik sessizce 409'a düşer. · bekçi: `scripts/test_sack_notes.ts (8b/9)` <sub>(CLAUDE.md:43, CLAUDE.md:325)</sub>
+- **[ÇEKİRDEK]** admin:settings DOCUMENT_DESIGN kümelerinden DÜŞÜRÜLMEZ (dört ekranı açmaya devam eder): boot uzlaştırması yeni izin satırını getirir ama kimseye ATAMAZ — sıkı ayrım deploy anında admin dahil herkesi dışarıda bırakır. READ kümesi WRITE kodunu da içerir (yazabilen okuyabilir). Atama elle. · bekçi: `scripts/test_document_template_permission.ts (negatif sonda: admin:settings READ` <sub>(CLAUDE.md:130)</sub>
+- **[ÇEKİRDEK]** DOCUMENT_DESIGN_FLAG_KEYS bilerek DAR: companyName / companyLetterhead / belge logosu firmanın KİMLİĞİDİR, şablon değil — kümeye EKLENMEZ (onları yazan ekran zaten admin:settings arkasında). Yeni anahtar sorusu: 'yanlış girilirse etkisi belge çıktısıyla SINIRLI mı'. <sub>(CLAUDE.md:130)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** Belge BÖLÜMLERİNDE aynı üçlü: sections BLOCKLIST (anahtar yoksa AÇIK); iç veri bölümü DocSectionDef.defaultHidden ile ALLOWLIST ve HEM renderer HEM panelde işaretlenir (tek taraf 'panel açık der, belge boş çıkar' yalanı üretir). · bekçi: `scripts/test_sack_note_document.ts` <sub>(CLAUDE.md:61)</sub>
+- **[ÇEKİRDEK]** Top↔sipariş satırı bağı YOK → override kümesi sevkiyat kapsamında (çuval tahsisi + sipariş bağı) toplanır, (itemId,colorId) ile eşlenir, sıra DETERMİNİSTİK (tahsisli→createdAt→id). Gruplama anahtarı BİZİM adımız; kolon anahtarları ayrı (name↔customerName); iade satırları aynı zincir. · bekçi: `scripts/test_shipment_doc_customer_name.ts (override kademesi sondası)` <sub>(CLAUDE.md:111)</sub>
+- **[ÇEKİRDEK]** Brüt belge üreticisinin üç tuzağı: çuval satırı + ürün özeti + çeki satırları TEK sacksGross kaynağından (ayrı toplamak çift sayar); iade sorgusu ayrı (tx yok) → canlı id kümesiyle DEDUP; totalKg DEĞİŞMEZ (iade Sack.weightKg'a dokunmaz). Yeni sevk-içeriği yüzeyinde soru: 'sevkten SONRA da koşar mı?' · bekçi: `BELİRSİZ — bu turda bekçi adı doğrulanmadı` <sub>(arşiv:72, arşiv:62)</sub>
+- **[ÇEKİRDEK]** label-template:read/write çiftinde READ WRITE'ı KAPSAMAZ (okuma uçları salt requirePermission('label-template:read')): yalnız 'düzenleme' işaretlenen kullanıcı Etiketler ekranını HİÇ açamaz, sebep hiçbir yerde yazmaz — yeni çiftte tekrarlama. Etiketler ekranı document-template kapsamı DIŞINDA. <sub>(CLAUDE.md:130)</sub>
+
+### Kararlar
+
+- **[PROFİL]** [PROFİL] Kart varsayılan A5 (DEFAULT_TRAVELER_CARD_CONFIG.pageSize); A4 panelden ya da baskı diyaloğundan — sayfa boyutu kurulum ayarıdır, kod kararı değil (daha yoğun kartı olan kurulum A4 seçer). <sub>(CLAUDE.md:137)</sub>
+- **[PROFİL]** [PROFİL] docItemNameMode: bizdeki (VARSAYILAN — belgeye tek bayt eklenmez, ölçülü) | musterideki (FAIL-OPEN: karşılığı yoksa BİZİM adımız; boş ad taşıyan irsaliye hukuken sakat) | ikisi. Dört kapı + test_feature_flag_contract §16 aEnum + panel enumFlags + Electron değer aynası. · bekçi: `test_shipment_doc_customer_name §1 + test_feature_flag_contract §16` <sub>(CLAUDE.md:111)</sub>
+- **[PROFİL]** [PROFİL] docItemNameMode kapsamı yalnız sevk irsaliyesi ailesi (SHIPMENT_DISPATCH + aynı snapshot'ın muhasebe fişi). Fasondan DOĞRUDAN sevk irsaliyesi (SUBCONTRACTOR_DIRECT_SHIP, ayrı payload/renderer) ve muhasebe Excel dışa aktarımı BİLİNÇLİ dışarıda — panel metninde yazılı. <sub>(CLAUDE.md:111)</sub>
+- **[ÇEKİRDEK]** Çek teslim bordrosu ANLIK çıktıdır: bordro grubunu sahiplenen kaynak model yok → donmuş PrintedDocument üretilmez, belge no/sürüm yok (kâğıtta yazılı); bordro basmak çekin DURUMUNU değiştirmez. Donmuş sürüm istenirse ÖNCE ChequeBatch benzeri kaynak modeli (J kararı). <sub>(CLAUDE.md:286)</sub>
+- **[PROFİL]** [PROFİL] Fason çekisi yerleşimi panelden: placements.batchInfo (sol/sağ), sections.accountNo OPT-IN (varsayılan KAPALI — eski donmuş çekiler de artık basmaz, bilinçli), sections.fabricHeader OPT-IN, gridGroups 3/4/5 × gridRows 1-40 = sayfa başına top (varsayılan 5×10=50, kullanıcı kararı 08-06). · bekçi: `scripts/test_fason_ceki_html.ts §18` <sub>(CLAUDE.md:64)</sub>
+
+## Backend
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Üç sınır: ACTIVE olmayan kart (VOIDED/COMPLETED/REPRINTED) revize EDİLMEZ; iş emri okunamazsa eldeki snapshot'a düşülür (baskı yolu düşürülmez); snapshot NULL eski kartta sürüm ARTMAZ — buildSnapshot yalnız bu fallback + doğuş/reprint'te çağrılır, sonucu canlı sunumla giydirilir. · bekçi: `scripts/test_traveler_card_stale.ts §6` <sub>(CLAUDE.md:144)</sub>
+- **[ÇEKİRDEK]** Partiler kart snapshot'ına YAZILMAZ; baskıda resolveLiveBatches ile canlı (kart WO açılışında, parti attachRolls'ta doğar). Üç süzgeç: mergedIntoId!=null basılmaz, sayım/metrajda K18_DEAD_STATUSES dışlanır, sevk yalnız iptal edilmemişlerden. 'Sevk brüt/donmuş' kuralı karta UZANMAZ. · bekçi: `scripts/test_traveler_card_a5_batches.ts §C` <sub>(CLAUDE.md:137)</sub>
+- **[ÇEKİRDEK]** Sayfaya bağlı HER ölçü tek kaynakta traveler-card.density.ts; tek transform:scale() YASAK — genişlik ~0.68 (132/194mm) ve yazı ~0.85 (okunabilirlik) iki ayrı oran; A4 sütunu eski sabitlerin aynısı, çıktı bayt-bayt; kapalı blokta tek bayt basılmaz (${…} kendi satırına konmaz). · bekçi: `scripts/test_traveler_card_a5_batches.ts §A/§E` <sub>(CLAUDE.md:137)</sub>
+- **[ÇEKİRDEK]** Tek seferlik baskı bayrakları — kart ?pageSize=A4|A5, belge ?rowNotes=1 / ?rowTags=1 / ?sections= — kalıcı ayarı EZER (pure OR), hiçbir yere yazılmaz, yeni sürüm doğurmaz; OR yalnız renderer'da TEK noktada; geçersiz değer sessizce yok sayılır (baskı yolu 400'e düşmez). rowNotes ≠ rowTags. · bekçi: `scripts/test_sack_note_document.ts; test_traveler_card_a5_batches D1` <sub>(CLAUDE.md:137, CLAUDE.md:261, CLAUDE.md:43)</sub>
+- **[ÇEKİRDEK]** TravelerCard.contentDirty'nin tek yazarı markTravelerCardDirtyTx (fazla işaretlemek güvenli, eksik hata). K18'in 'ilk parti ataması bayraklanmaz' kuralı karta KOPYALANMAZ — kart parti doğmadan basılabilir, ilk doğuş bayatlatır. · bekçi: `scripts/test_label_dirty_sources.ts + test_order_cancel_card_dirty.ts` <sub>(CLAUDE.md:61, CLAUDE.md:75)</sub>
+- **[ÇEKİRDEK]** GET /traveler-cards/:id/html bayrağı TEMİZLEMEZ (önizlemeyi de besler, GET yan etkisiz); temizleyen POST /print-event (istemci yalnız baskı BAŞARIYLA bitince çağırır, iptal temizlemez) ve reprint. Rozet yüzeyi kaldırıldı (08-06), backend mekanizması DURUR; geri istenirse planKey karşılaştırması. · bekçi: `scripts/test_traveler_card_stale.ts` <sub>(CLAUDE.md:61, CLAUDE.md:144)</sub>
+- **[ÇEKİRDEK]** Kart şablonu üç kademe: BUILTIN · SECTIONS (stüdyoda bölüm sırası/aç-kapa) · RAW_HTML (tüm HTML kullanıcıda, yerleşik CSS yüklenmez). Çözüm: açık seçim > varsayılan şablon > sistem ayarı; tablo boşken Faz 2 öncesiyle birebir (şablon oluşturmak aktif karar); tek giriş renderTravelerCard. · bekçi: `scripts/test_traveler_template.ts` <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Şablon çözümü FAIL-CLOSED: açık templateId çözülemez/pasifse 404, yerleşiğe SAPMAZ; varsayılanın kaldırılması sapma DEĞİL, yerleşiğe dönüş. Gövdesi boş RAW_HTML yerleşiğe düşer (boş kâğıt basmak en kötü sonuç). ⚠️ Bugün üç baskı çağıranı da null geçer — açık seçim dalının canlı çağıranı YOK. · bekçi: `scripts/test_traveler_template.ts §F (F1/F2 — resolveForPrint(id) doğrudan)` <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** traveler_card_templates_isDefault_key partial unique WHERE isDefault=true OLMAK ZORUNDA (düz unique sistemde toplam iki şablona izin verirdi); test_db_invariants envanterinde. · bekçi: `scripts/test_db_invariants.ts` <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Belge A4→A5 ölçeklemesi tek scale() DEĞİL, iki oran: genişlik ~0.68 (geometrik), yazı ~0.85 (okunabilirlik). İki yoğunluk profili: doc-density.ts (altı belge ORTAK) + fason-ceki.density.ts (grid) + traveler-card.density.ts; belge kendi A4 sayısını verir, scaleW/scaleF uygular. · bekçi: `scripts/test_doc_density_fields.ts + test_fason_ceki_html.ts` <sub>(CLAUDE.md:64, CLAUDE.md:137)</sub>
+- **[ÇEKİRDEK]** Fason çekisinde parti TEKİL batchNumber, kabul makbuzunda ÇOĞUL batchNumbers (bir kabul birden çok sevki kapsar); çeki tablosunda parti ÇUVAL değil TOP başına. Eski donmuş belge geriye dönük DOLDURULMAZ — alan yoksa satır/kolon basılmaz, tazeleme yalnız reissue ile. · bekçi: `scripts/test_fason_ceki_html.ts` <sub>(CLAUDE.md:61)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** Toplu iade: N RollReturn satırı + TEK irsaliye (returnGroupId = grup liderinin id'si); belge üye satırın id'siyle ÇÖZÜLMEZ, yanıttaki documentSourceId (returnGroupId ?? id) kullanılır — aksi hâlde lazy-init aynı grubun ikinci resmi kopyasını dondurur. · bekçi: `BELİRSİZ` <sub>(CLAUDE.md:63)</sub>
+- **[ÇEKİRDEK]** Snapshot JSON'ları (PrintedDocument.snapshot, Manifest.snapshot) liste sorgusunda ÇEKİLMEZ — yalnız detay/print select'ine alınır. <sub>(CLAUDE.md:248)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** Belge dondurma sürümü freezeForSource'ta max+1 hesaplanır — sabit 1 yazmak storno sonrası yeniden sevkte docType_sourceId_version unique'ine çarpıp 500 verir. · bekçi: `BELİRSİZ — bekçi adı bu turda doğrulanmadı` <sub>(CLAUDE.md:63)</sub>
+- **[ÇEKİRDEK]** gridRows sözleşmesi: sayı aralığa KIRPILIR, sayı olmayan varsayılana düşer — baskı yolu düşmez. Eski donmuş çekiler (anahtarsız snapshot) 50'ye düşer — bilinçli; geçmiş görünüm isteniyorsa o belgeye gridRows:20. Slot kontrolü hasSlot ile KESİN (düz includes('>100<') metraj hücresine de uyuyordu). · bekçi: `scripts/test_fason_ceki_html.ts` <sub>(CLAUDE.md:64)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** Belgeye özel CSS kuralı ortak katmandan SONRA basılır (eşit özgüllükte sonra gelen kazanır; sıra bozulursa belgeler sessizce birbirine benzer). DOC_PAGINATION_CSS ortak katmanda (çok sayfalı tabloda 2. sayfa başlıksız kalmasın). totRow:false iade irsaliyesine özeldir. · bekçi: `scripts/test_doc_density_fields.ts` <sub>(CLAUDE.md:64)</sub>
+- **[ÇEKİRDEK]** Çuval notu labelDirty'yi YALNIZ etkin çuval şablonu sackNote basıyorsa işaretler (sackNoteAppearsOnLabel — şablon-koşullu); belgedeki satır notları her baskıda canlı çözülür (resolveLiveRowNotes). · bekçi: `scripts/test_label_dirty_sources.ts` <sub>(CLAUDE.md:75, CLAUDE.md:43)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Etiket fontu raster: opentype.js (DejaVu TTF → 1bpp glif, fontlar assets/fonts/); barkod bwip-js — izinli paket listesinin etiket kalemleri. <sub>(CLAUDE.md:152)</sub>
+
+## Panel (Electron)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Toplu belge ('Belgeleri Çıkar'): liste TEK KAYNAKTAN GET /work-orders/:id/documents — ekran belgeleri VARSAYMAZ, tür kutuları bulunanlardan doğar; Yazdır = tek baskı işi (print-merge.ts), PDF Kaydet = klasöre her belge AYRI dosya. Saf Electron: backend/migration/izin YOK. · bekçi: `Electron/src/lib/print-merge.test.ts (kısmi)` <sub>(CLAUDE.md:266)</sub>
+- **[ÇEKİRDEK]** Toplu belgede atlanan hiçbir şey sessiz değil: belgesi olmayan iş emri, listesi alınamayan iş emri, HTML'i alınamayan belge, birleştirilemeyen belge AYRI AYRI raporlanır (failed listesi). <sub>(CLAUDE.md:298, CLAUDE.md:266)</sub>
+- **[ÇEKİRDEK]** Birleştirmede position:fixed → absolute: sabit filigran (İPTAL/TASLAK) görüntü alanına göre yerleşip gölge kökten TAŞAR ve işteki YABANCI belgelerin sayfalarına basardı. Bedel bilinçli: filigran her sayfada değil, belgede bir kez. · bekçi: `Electron/src/lib/print-merge.test.ts` <sub>(CLAUDE.md:289)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** Belge birleştirmede getBulkRollLabelsHtml paterni (ilk <head> + gövdeler) YANLIŞTIR — etiketlerde doğru (CSS birebir aynı), belgelerde generik sınıflar (.sheet/.company/.cell/table) birbirini ezer, resmi belge sessizce yanlış basılır. Her belge kendi GÖLGE KÖKÜNE: <template shadowrootmode="open">. · bekçi: `Electron/src/lib/print-merge.test.ts` <sub>(CLAUDE.md:274)</sub>
+- **[ÇEKİRDEK]** Birleştirme kabı iframe DEĞİL (iframe içeriği sayfalara BÖLÜNMEZ, taşan kırpılır; gölge kök doğal akar). TEK belgede birleştirme YAPILMAZ — HTML aynen döner (tekil baskı bayt-bayt korunur). Gövdesinde </template> geçen belge unmergeable olarak DIŞARIDA bırakılır ve kullanıcıya söylenir. · bekçi: `Electron/src/lib/print-merge.test.ts` <sub>(CLAUDE.md:274)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** @page gövde CSS'inde KALAMAZ (belge geneline uygulanır, son yazan kazanır → A5 kart A4'e basılır) → adlandırılmış sayfaya taşınır: @page wdocN {…} + sarmalayıcıda page:wdocN (ölçüm: 2×A5 + 1×A4 → 420/420/595pt). · bekçi: `Electron/src/lib/print-merge.test.ts` <sub>(CLAUDE.md:281)</sub>
+- **[ÇEKİRDEK]** CSS YORUMLARI ÖNCE silinir (stripCssComments) — SIRA ZORUNLU: tarayıcılar düz metne bakar, yorumdaki '@page' blok sayacını kaydırıp komşu @media screen'i yutuyordu → kart A5'te 1 yerine 2 sayfa (hata yok, log yok). pageSizeOf'ta da yorum silinir. · bekçi: `Electron/src/lib/print-merge.test.ts 'YORUM içindeki @page tuzağına düşmez'` <sub>(CLAUDE.md:284)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** Salt-okuma yüzeyi GERÇEK çizilir: document-template:read ile ekran + canlı önizleme çalışır, Kaydet kapalıdır, stüdyoda yazma aksiyonları HİÇ ÇİZİLMEZ (gri buton olmayan bir yolu vaat eder). <sub>(CLAUDE.md:130)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Etiketler kartı ve route aynı ikiliyi taşır ["station:read","label-template:read"] (2026-08-14 hizalandı — ticaret kullanıcısı istasyon kavramı olmadan kartı göremiyordu); notlardaki 'kart hâlâ station:read ile süzülüyor, bilinen hiza sorunu' BAYAT. <sub>(CLAUDE.md:130)</sub>
+
+## Tablet (mobil)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Mobil etiket yazıcısı OTURUMDAN çözülür: LabelPrinter peripheralService.getForSession('LABEL_PRINTER') (oturum yoksa BOŞ — fail-closed); taşıma BT-Classic/SPP (hal/btClassic.transport; Argox + HC-05/06), yalnız BLUETOOTH_SPP device-direct; manuel yazıcı seçimi/btPrinterStore KALDIRILDI. <sub>(CLAUDE.md:220)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** Mobil çuval kartında yalnız sık kullanılan kalır; 'elle gir / etiket bas / not ekle / sil' SackActionsSheet ⋮ menüsünde (AppModal position=bottom, satır ≥56dp); yıkıcı aksiyon menüye taşınsa da ONAY DİYALOĞU korunur. Tartı tek dokunuş: ⚖ → kantardan oku → doğrudan kaydet. <sub>(CLAUDE.md:331, CLAUDE.md:43)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Çuval kg'si sevk irsaliyesi ve çeki listesine BASILIR (müşteri/gümrük belgesi) → uydurulmuş değer canlı veriye GİRMEZ: istemci source:'SIMULATED' beyan eder, backend shipping.simulatedWeightEnabled kapalıyken 400; METER simüle doğar, SCALE doğmaz; MANUAL muaf (kantarsız kaçış). · bekçi: `scripts/test_sack_weigh_source.ts + useSackWeigh.test.tsx` <sub>(CLAUDE.md:329)</sub>
+
+## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **KISMI** `R:2026-08-03__refakat-karti-sablonu-uc-kademe-2026` → `R:2026-08-05__refakat-karti-plan-canli-sunum-donmus`: 'Şablon KARTA DONAR (snapshot.template); değişiklik ancak reprint ile' kuralı kalktı: şablon + config + sayfa boyutu HER baskıda canlı çözülür (arşiv sürümü dahil). Üç kademe, çözüm zinciri, sanitize, bölüm sırası KALIR. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-03__refakat-karti-sablonu-uc-kademe-2026` → `R:2026-08-05__belge-tasarimi-ayri-bir-yetkidir-sistem`: 'İzin AÇILMADI: stüdyo admin:settings ile korunur' düştü — 2026-08-05'te document-template:read/write ayrıldı; admin:settings OR'da kaldı. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-03__refakat-karti-a5-varsayilan-parti-blogu` → `R:2026-08-05__refakat-karti-plan-canli-sunum-donmus`: 'Donmuş snapshot'ın sayfa boyutu korunur (resolveFrozenPageSize→A4, geçmiş belge yeniden ölçeklenmez)' gerekçesi düştü: sunum sayfa boyutu dahil her baskıda canlı ayardan gelir; canlı hiçbir yol donmuş config'i renderer'a vermez. A5 varsayılanı, density tek kaynağı, tek-seferlik ?pageSize, canlı parti bloğu KALIR. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-05__belge-tasarimi-ayri-bir-yetkidir-sistem` → `KOD (Electron tile-config.ts:210-215, 2026-08-14 — bundle'da notu yok)`: Parantez içi 'Etiketler kartı hâlâ station:read ile süzülüyor; bilinen hiza sorunu' bayat: kart ve route aynı ikiliyi taşır ["station:read","label-template:read"]. ✅ çürütmeden geçti
+- **KISMI** `R:2026-07-30__2026-07-30-cuval-notu-sack` → `KOD (commit 96de7f80, 2026-08-01 — bundle'da notu yok)`: 'LabelKind genişletirken 4 literal z.enum elle güncellenir' ayağı düştü: backend Zod z.nativeEnum(LabelKind) (Prisma enum'unu otomatik izler). Elle kalanlar Electron (labelTemplateService LabelKind+labelKindLabels, KINDS, ROUTE_KINDS) + mobil types/models.ts union. ✅ çürütmeden geçti
+- **KISMI** `R:2026-07-30__2026-07-30-cuval-notu-sack` → `R:2026-08-21__2026-08-21-aksam-tutarlilik-taramasi`: Çuval içerik guard'ının adı/kapsamı değişti: resetSackWeightsTx → markSackContentChangedTx (kg sıfırlama + labelDirty ayrı updateMany). Sack.notes istisnası aynen KALIR. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-05__2026-08-05-parti-no-k` → `R:2026-08-05__refakat-karti-plan-canli-sunum-donmus`: 'contentDirty bayat rozeti' yüzeyleri 2026-08-06'da kalktı; bayatlığın gerçek ölçüsü planKey. Backend mekanizması (kolon, markTravelerCardDirtyTx, print-event temizliği, audit wasDirty) DURUYOR. ⚠️ çürütücü itiraz etti — ihtiyatla
+- **KISMI** `R:2026-08-02__2026-08-02-sevk-rakami-brut` → `A:2026-08-05__2026-08-05-belge-yolu-da`: 'Donmuş snapshot tek koruma' varsayımı düştü: üretici collectShipmentDocContent de RollReturn.prevSackId ile brüt kurar — reissue + lazy-init sevkten SONRA da onu çağırır. 'Fiş donmuş snapshot'tan okur' KALIR. ✅ çürütmeden geçti
+
+## Çözülmüş çelişkiler
+
+- `R:2026-08-05__refakat-karti-plan-canli-sunum-donmus` ↔ `R:2026-08-05__refakat-karti-plan-canli-sunum-donmus`: Not kendi içinde: yasağın gerekçesi (donmuş şablon) aynı notun 08-06 ekiyle geçersiz. Kod buildSnapshot'ı baskı yolunda YALNIZ snapshot NULL fallback'inde çağırır, sonucu canlı sunumla giydirir; zarar yok. Cümle 'buildSnapshot doğuş/reprint/snapshot-NULL fallback'i; sunum zaten canlı' diye düzeltilmeli.
+- `M:undated__kullanim__2` ↔ `M:undated__cozumleme-oturum-kapsamli`: Kod B'yi uygular, BLE yolu ölü: yazıcı oturumdan (getForSession('LABEL_PRINTER')) çözülür, taşıma BT-Classic/SPP (hal/btClassic.transport); BleManager kullanan bluetooth.service.ts'i mobil/src içinde hiçbir dosya import etmiyor. A satırı silinmeli (paket app.json'da durur; kaldırmak APK ister).
+
+## Açık sorular
+
+- N30 'FAIL-CLOSED 404' kuralı: resolveForPrint(templateId) dalı kodda var ve bekçili (test_traveler_template §F) ama üç baskı çağıranı da null geçer (traveler-card.service.ts:942,969,1230), TravelerCard templateId taşımaz → dal ölü mü, gelecek sözleşme mi? Karar gerekir; kural metni 'açık seçim' ibaresiyle daraltıldı.
+- N28/N38/N34 brüt-sevk ve belge-sürüm kuralları için bekçi adı bu turda doğrulanmadı (mechanicalGuard BELİRSİZ) — sevkiyat kümesi hakemi doğrulamalı.
+- KÜME DIŞI (anahtar kelime yanlış pozitifi — 'şablon'/'etiket'/'belge'): karar bu hakemde VERİLMEDİ, kendi kümesinde hakemlenmeli: R:undated__karar-notlari-dizini, R:undated__surum-yayinlama-sahaya-guncelleme-cikarma, B:undated__yalniz-admin-tam-yetki-icindir, B:undated__kimlik-dur-ad-degil-migration-fabrik, B:undated__sistem-rolu-silinmez-pasiflestirilir-sert-silme, B:undated__sahiplenme-yalniz-uzerinden-kodsuz-eski-seed, B:undated__bekcinin-en-kolay-kaybedilen-kurali, B:undated__katalog-yine-atama-icermez, B:undated__database-performance-rules-her-zaman-uygula, M:undated__ekran-onceligi-implementasyon-sirasi, B:2026-07-30__kopyaya-geri-yukleme, B:2026-08-01__fabrika-gunu-takvim-gunu-tek-kaynak, A:2026-08-04__2026-08-04-giris-noktasi-kurali, R:2026-08-06__2026-08-06-rota-sablonu-hedef, R:2026-08-06__2026-08-06-rol-sablonlari-koda, A:2026-08-06__2026-08-06-sayfa-ici-arama, B:2026-08-06__rol-yetki-sablonu-katalogu-ayni-uc, A:2026-08-22__2026-08-22-mukerrer-paneli-v2, A:2026-08-25__2026-08-25-saha-deploy-sonrasi (N10 yalnız kural 13, N45 yalnız bordro cümlesi, N49 yalnız belge muafiyeti, N34 yalnız belge sürümü bu kümeye alındı).
+
+## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
+
+- **[ÇEKİRDEK]** Toplu belgede PDF Kaydet yolu birleştirme motorunu HİÇ kullanmaz — `pdf:saveBatch` her belgeyi kendi gizli penceresinde render eder; arşiv çıktısı tekil baskıyla birebirdir. <sub>(eski Electron/CLAUDE.md toplu belge)</sub>
+
+## Bekçiler — bu alana dokununca koş (112 backend · 31 istemci)
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
+
+**Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
+
+Backend: `test_accounting_direct_ship`, `test_accounting_export`, `test_audit_followups`, `test_barcode_free_flow`, `test_barcode_reservation`, `test_batch_k15_merge`, `test_batch_k16_split_move`, `test_blank_grid`, `test_branch_code_docs`, `test_bulk_label_batched`, `test_bulk_labels`, `test_canvas_preview_peripheral_lang`, `test_consistency_derived`, `test_customer_standalone_label`⚠️, `test_customer_template_route`, `test_direct_ship_api`⚠️, `test_direct_ship_fason`, `test_direct_ship_scenarios`, `test_dispatch_print_options`, `test_dispatch_report`, `test_dispatch_report_gross`, `test_dispatch_without_color`, `test_doc_density_fields`, `test_doc_pagesize_override`, `test_doc_render_html`, `test_doc_sample_html`, `test_document_customization`, `test_document_style`, `test_document_template_permission`, `test_fason_ceki_draft`, `test_fason_ceki_html`, `test_fason_step_note_flow`, `test_finalize_last_step`⚠️, `test_finance_documents`, `test_fold_edit_and_label`, `test_goods_receipt`, `test_label_bulk_seed`, `test_label_canvas_equivalence`⚠️, `test_label_canvas_human_bold`, `test_label_canvas_renderer`, `test_label_context_default`, `test_label_context_fit`, `test_label_copies`, `test_label_defs_lifecycle`, `test_label_dirty_sources`, `test_label_element_condition`, `test_label_format_resolver`, `test_label_html_format`, `test_label_icons`, `test_label_native_languages`, `test_label_ppla`, `test_label_preview_single_copy`, `test_label_rawcode`, `test_label_routing_resolver`, `test_label_snapshot_audit_split`, `test_label_template_io`, `test_label_template_layout`, `test_label_variant_selection`, `test_manual_sack_count`, `test_native_preview`, `test_native_template_honoring`, `test_new_documents`, `test_official_finance_docs`, `test_peripheral_registry_crud`, `test_printed_doc_builders`, `test_printed_documents`, `test_printer_transport`, `test_purchase_order`, `test_quickstart_dispatch`, `test_quickstart_dispatch_api`, `test_raster_bitmap`, `test_raster_canvas`, `test_raster_contract`, `test_raster_envelope`, `test_raster_text`, `test_raw_tambur_cut`, `test_recent_output_filters`, `test_rescue_stuck`, `test_return_bulk_group`, `test_roll_barcode`, `test_roll_cancel_undo`⚠️, `test_roll_label_cut_seed_snapshot`, `test_roll_relabel`, `test_roll_relabel_context`, `test_roll_search_barcode`, `test_sack_label`, `test_sack_mismatch`, `test_sack_note_document`, `test_sack_split_and_relabel`, `test_sack_status_invariant`, `test_sack_tag_document`, `test_sack_tags`, `test_scan_code_case`, `test_scrap_grade_label`, `test_shipment_dispatch_document`, `test_shipment_doc_batch_column`, `test_shipment_doc_customer_name`, `test_shipment_list_gross`, `test_shipment_undo_dispatch`, `test_standalone_label`, `test_status_labels`, `test_stock_count`, `test_stock_label_no_customer_inference`, `test_tambur_manual_produce`, `test_tambur_recent_output_filter`, `test_traveler_card_a5_batches`, `test_traveler_card_fields`, `test_traveler_card_stale`, `test_traveler_card_versions`, `test_traveler_template`⚠️, `test_warehouse_transfer`, `test_workorder_documents`
+
+İstemci: `ScanField.test.tsx`⚠️, `useContinuousScan.test.tsx`⚠️, `print-merge.test.ts`⚠️, `barcode-kind.test.ts`⚠️, `scan-framer.test.ts`⚠️, `wedge-detector.test.ts`⚠️, `chequeBordro.test.ts`, `chequeDeliveryNote.test.ts`, `chequeExport.test.ts`, `officialDocs.test.ts`, `reconciliationLetter.test.ts`, `DocumentConfigSection.regime.test.tsx`⚠️, `docRows.test.ts`, `canvas-model.test.ts`, `condition-edit.test.ts`, `useCanvasLint.test.ts`, `templateRowActions.test.tsx`, `contextDefaultRow.align.test.tsx`, `RelabelStation.test.tsx`, `dumpSheets.test.ts`, `sackTagBulk.test.ts`, `schema.test.ts`, `chequeDueExport.test.ts`, `reportExport.test.ts`, `print-event-toast.test.ts`, `RollCancelModal.test.tsx`, `printQueue.test.ts`, `LabelNamePreview.logic.test.ts`, `btPrinter.service.test.ts`, `tambur.service.test.ts`, `docPageSize.test.ts`⚠️
+
+## Arşiv notları (tam metin, gerekçe ve ölçüm)
+
+- 2026-07-30 · 2026-07-30 — çuval notu + çuval etiketi + tek dokunuş tartı — `CLAUDE-NOT-ARSIVI.md:28-35`
+- 2026-08-05 · 2026-08-05 — BELGE YERLEŞİMİ: A5 yoğunluk profili + ALAN BAZLI punto/kalınlık — `CLAUDE-NOT-ARSIVI.md:267-284`
+- 2026-08-13 · 2026-08-13 — KESİMDE KAT SESSİZCE DÜŞÜYORDU: mutationFn gövdesi alanı geçirmiyordu — `CLAUDE-NOT-ARSIVI.md:192-202`
+- 2026-09-04 · 2026-09-04 — Sevk belgesinde MÜŞTERİDEKİ ürün adı: veri vardı, belge yolu yoktu [PROFİL/ÇEKİRDEK karma] — `CLAUDE-NOT-ARSIVI.md:2484-2574`

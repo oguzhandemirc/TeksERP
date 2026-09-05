@@ -1,0 +1,81 @@
+# Finans · Sağlamlık sınıfları
+
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+
+> Hakem notu: 16 üye; yalnız 6'sı gerçekten finans/sağlamlık (M8 brüt liste, M9 arşiv brüt, M10 beş sınıf, M11 TR-only, M3 ItemPrice parçası, M2 başlık). Kalan 10 üye kümeleme gürültüsü — hepsi başka kümede primary, burada hakemlenmedi. Bayat: 1 (M8'in 'ERP fatura KESMEZ' cümlesi — finans modülü 2026-08-13'te geldi, arşiv 2026-09-03'te düzeltti, kök dizin satırı 46 düzeltilmedi). En riskli çelişki: kök:46 'ERP fatura KESMEZ' ↔ kök:106 `invoiceMode` + Invoice modeli; kod ikisini de uyguluyor (iz dış belgenin, iç onay her modda damgalar, elle iz `ic`de 400) — kural metni daraltılmalı. İkincil: 'tamamı ÇEKİRDEK' başlığı altında iki PROFİL bayrağı. Beş sınıf kodda canlı (advisory envanteri, CHECK seddi, explain*BumpZeroTx ×3, createdAt kronolojisi ölçüldü); Sınıf 1/2/5 için adlı bekçi belirsiz.
+
+
+## Ortak (backend + panel + tablet)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Sevk rakamı HER yüzeyde BRÜT: fiş/irsaliye donmuş snapshot'tan; liste (`attachTotals`), muhasebe Excel'i ve detay canlı + iptal edilmemiş `RollReturn` geri-eklemesi (snapshot OKUNMAZ); kg geri-ekleme İSTEMEZ; iade AYRI belgeyle kapanır, çıkış belgesi düzeltilmez. · bekçi: `test_shipment_list_gross.ts · test_dispatch_report_gross.ts` <sub>(CLAUDE.md:46, arşiv:45)</sub>
+- **[ÇEKİRDEK]** `Shipment/DirectShipment.invoiceNo+invoicedAt+invoicedById` DIŞ muhasebe belgesinin izidir (tutar/KDV yok); yalnız DISPATCHED işaretlenir (atomik claim); `invoiceNo:null` izi VE tarihi birlikte temizler; storno kapısı yalnız `invoiceNo`ya bakar → iç fatura onayı damgayı HER modda yazar. · bekçi: `test_shipment_invoice.ts` <sub>(CLAUDE.md:46)</sub>
+- **[ÇEKİRDEK]** SINIF 2 — Ters yol: deftere yazan her ileri kaynak tipinin tipli `*_CANCEL` ters yolu olmalı (`reversesTxnId` self-FK @unique); enum'a ileri değer eklerken ters değeri de ekle. Ters kayıt DAİMA bugüne (`txnDate = now`) yazılır — kapanmış dönem fotoğrafı değişmez, dönem guard'ına takılmaz. · bekçi: `test_finance_opening.ts (reversesTxnId) · test_db_invariants.ts` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** SINIF 3 — Kilit sırası: tek tx'te birden çok advisory/satır kilidi DETERMİNİSTİK sırada (`assertPeriodsOpenTx` anahtara göre; tekil guard'ı bir tx'te İKİ KEZ çağırmak YASAK — canlı deadlock); uzaylar arası uzay no ARTAN; envanter `period-guard.helper.ts` başlığı; PG 40P01/40001 → 409. · bekçi: `error.middleware TRANSIENT_SQLSTATES (kod); adlı sıra bekçisi BELİRSİZ` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** SINIF 4 — Çift yüklem: durum ↔ sayaç çifti olan modelde İKİ yazar da karşı tarafın koşulunu kendi atomik WHERE'ine koyar (`claimTx allocatedTotal:0` ↔ `bumpChequeAllocated status NOT IN no-money`) + DB CHECK seddi (`cheques_terminal_not_allocated`). Tek yönlü CAS YASAK — yarışta sessiz tutarsızlık. · bekçi: `test_payment_allocation.ts · test_db_invariants.ts` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** SINIF 5 — Tek kaynak satır: çok-tipli çocukları olan belge satırları TEK assembler'dan verilir (`assembleReceiptLines` FABRIC|YARN; `_shipped.ts`; `producedOutputWhere`); tüketici tabloya doğrudan gitmez — beşinci tüketici yazıldığı gün sınıf yeniden açılır. · bekçi: `test_goods_receipt.ts (assembleReceiptLines); AST bekçisi BELİRSİZ` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** Ortak Konvansiyonlar bölümü (UUID/zaman damgası, soft delete, audit, beş sağlamlık sınıfı, yıkıcı işlemde detaylı onay) ÇEKİRDEK'tir — bayrakla açılıp kapanmaz; 'bizde böyle olmasın' talebinin cevabı bayrak değil süreç/eğitimdir (red gerekçesi MODUL-BAYRAK-TASARIM §11). <sub>(CLAUDE.md:279)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** Olay defterinde kronoloji `createdAt`'tir, `eventDate` DEĞİL — eventDate kullanıcı girdisidir ve geriye tarihlenebilir; 'en son olay' araması `createdAt desc` ile yapılır (cheque cancelCollect: yanlış hesaptan geri çekme canlı ölçüldü). Append-only defterde yazım sırası = gerçek kronoloji. · bekçi: `çek bekçisi §19n (cheque.service.ts:1049 yorumu; dosya adı doğrulanmadı)` <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** TR-only BİLİNÇLİ (2026-08-15 kullanıcı kararı): arayüz ve backend mesajları Türkçe; i18n/sözlük altyapısı KURULMAZ. Yabancı müşteri gerçekten doğarsa yalnız ticaret yüzeyleri (cari/fatura/çek/kasa/mal kabul) sınırlı sözlüğe alınır — o gün planlanır, bugünden hazırlık yapılmaz. <sub>(CLAUDE.md:298)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** SINIF 1 — İki tarih: yeni mali belge tipi eklerken sor 'kâğıdın tarihi = işlem tarihimiz mi?'; değilse İKİ alan (`Cheque.issueDate` ↔ `postingDate`); defter/kilit/belge-no/kur DÖRDÜ `postingDate`ten. Payment/Invoice tek tarihli MEŞRU — çift tarihi her tabloya yaymak reddedildi. · bekçi: `postingDate okuyan bekçiler: test_cheque_portfolio.ts · test_cash_period_close.t` <sub>(CLAUDE.md:286)</sub>
+
+### Kararlar
+
+- **[PROFİL]** Fatura rejimi `shipping.invoiceMode` (varsayılan `dis` = bugünkü elle iz; `ic` = elle iz 400 INVOICE_TRACE_DISABLED, numara yalnız iç onaydan; `ikisi` = serbest + amber uyarı). İz KALDIRMA her modda açık. Kapı SERVİSTE (`assertInvoiceTraceAllowed`), route'ta değil. · bekçi: `BELİRSİZ (Dilim 2 bekçisi test_feature_flag_contract §16 enum ayağı; rejim bekçi` <sub>(CLAUDE.md:46)</sub>
+- **[ÇEKİRDEK]** `shipping:invoice` ayrı izin kodudur; muhasebeciye `shipping:write` VERİLMEZ (sevkiyat iptal edebilir yapardı). Route `requireAnyPermission('shipping:invoice','shipping:write')` — yazma izni işareti de kapsar. · bekçi: `test_shipment_invoice.ts` <sub>(CLAUDE.md:46)</sub>
+- **[ÇEKİRDEK]** Çek teslim bordrosu ANLIK çıktıdır: grubu sahiplenen kaynak model yok → donmuş `PrintedDocument` üretilmez, belge no/sürüm yok (kâğıtta yazılı); bordro basmak çekin DURUMUNU değiştirmez. Donmuş sürüm istenirse önce `ChequeBatch` benzeri kaynak modeli (J kararı). <sub>(CLAUDE.md:286)</sub>
+- **[PROFİL]** Ticaret bayrakları: `finance.blockNegativeCashEnabled` varsayılan KAPALI (satır yoksa false) — açıkken kasa eksiye düşürecek 4 İLERİ yol 409, BANKA ve TERS/storno yolları MUAF; `finance.defaultVatRate` varsayılan 20, panel `emptyLine` + mal-kabulden alış taslağı TEK kaynaktan. · bekçi: `test_cash_negative_guard.ts (muafiyet asıl negatif sonda) · test_feature_flag_co` <sub>(CLAUDE.md:286)</sub>
+
+## Backend
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Ekstre satırı ters-kayıt bağını KENDİSİ taşır (`reversedByTxnId`, `reverses` ilişkisinden türer) — panel yüklemleri kesin bilgiyle çalışır; sezgisel sayım yalnız eski-backend fallback'idir. <sub>(CLAUDE.md:286)</sub>
+- **[ÇEKİRDEK]** Negatif kasa guard'ında asıl serileştirici 8028 advisory kilididir (kasa/banka dönem kilidi uzayı); `FOR UPDATE` yalnız derinlik savunmasıdır. Storno/ters yollar guard'dan MUAF — muafiyet bekçinin asıl negatif sondasıdır. · bekçi: `test_cash_negative_guard.ts` <sub>(CLAUDE.md:286)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** `dispatchedAt` sıralamasında union'ın iki tarafında alan adı FARKLI (`Shipment.dispatchedAt` ↔ `DirectShipment.shippedAt`): direct dalı için orderBy VE cursor where AYRI kurulur, aynı `cw` nesnesi paylaşılmaz; DirectShipment.shippedAt NON-NULL → sortNullable yok. · bekçi: `test_shipment_list_sort.ts` <sub>(CLAUDE.md:46)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** `ItemPrice` satırı fiziksel SİLİNİR (soft-delete'in bilinçli istisnası); şemada `isActive` YOK ve EKLENMEZ — pasif satır `resolveItemPrice` sırasına ('müşteri istisnası > kart varsayılanı > null') üçüncü durum ekler. Geçmiş `InvoiceLine.unitPrice`/`Roll.purchasePrice` ile DONMUŞ. <sub>(CLAUDE.md:284)</sub>
+
+## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **KISMI** `R:2026-08-02__2026-08-02-brut-kurali-liste` → `A:2026-08-02__2026-08-02-brut-kurali-liste (2026-09-03 GÜNCELLEME paragrafı, arşiv satır 58) + R:2026-09-03 Dilim 2 (CLAUDE.md:106 `invoiceMode`)`: "ERP fatura KESMEZ" cümlesi artık yalnız finans modülü KAPALI kurulumda doğru. `finance.enabled` açıkken iç fatura ERP içinde kesilir (Invoice modeli, sevk sonrası taslak kancası) ve iç onay `invoiceNo`yu damgalar; elle iz ↔ iç fatura çakışması `shipping.invoiceMode` (dis|ic|ikisi) ile yönetilir. Kök dizin satırı 46 hâlâ niteliksiz. ✅ çürütmeden geçti
+
+## Çözülmüş çelişkiler
+
+- `R:2026-08-02__2026-08-02-brut-kurali-liste` ↔ `R:2026-09-03 Dilim 2 (CLAUDE.md:106) + R:2026-08-14__bes-saglamlik-sinifi-2026-08-14 (Sınıf 1: 'fatura = tahakkuk tarihi')`: Kod ikisini birden uygular: `invoiceNo` dış muhasebe izi olarak KALIR (default `dis`), finans açıkken iç fatura onayı aynı kolonu HER modda damgalar, elle iz `ic` modunda 400 (iz KALDIRMA her modda açık). Kural metni 'ERP fatura KESMEZ' → 'finans modülü kapalı kurulumda ERP fatura kesmez; iz dış belgenindir' diye daraltılmalı.
+- `R:undated__ortak-konvansiyonlar` ↔ `R:2026-08-14__bes-saglamlik-sinifi-2026-08-14`: Beş SINIF ve guard mekaniği (8028 serileştirici, storno muafiyeti) ÇEKİRDEK; iki bayrağın DEĞERİ kuruluma göre değişir → o alt madde [PROFİL] etiketi almalı ya da Konvansiyonlar bölümünden bayrak dizinine taşınmalı. Başlıktaki 'tamamı' fazla geniş.
+
+## Açık sorular
+
+- Kök CLAUDE.md:46 'ERP fatura KESMEZ' niteliksiz duruyor — kodla çözüldü (kısmi ezilme) ama dizin satırı henüz düzeltilmedi; bu kümenin önerdiği ikinci indexLine onu değiştirir.
+- Sınıf 1/2/5 için adlı AST/mekanik bekçi BELİRSİZ: postingDate'i okuyan (test_cheque_portfolio, test_cash_period_close), reversesTxnId (test_finance_opening) ve assembleReceiptLines (test_goods_receipt) dosyaları var, ancak sınıf invariantını doğrudan ölçtükleri doğrulanmadı.
+- Küme dışı üyeler burada HAKEMLENMEDİ (başka kümede primary): R:undated__phase-1, M:undated__simulasyon__3, kesif ×2 → kesif-cihaz-ag; Sürüm Yayınlama, mobil güncelleme, APK → surum-yayin; ortak-konvansiyonlar, kapalı-modül → modul-bayraklari-profiller; soft-delete (kök+mobil) → top-duzeltme; tık hedefi → refakat-karti. Bu kümede yalnız ItemPrice ve bölüm başlığı parçası alındı.
+- M2 başlığı 'tamamı ÇEKİRDEK' ↔ M10 içindeki PROFİL bayrakları: kod bayrak olduğunu doğruluyor; etiket/taşıma kararı orkestratöre (modul-bayraklari kümesiyle çakışabilir).
+
+## Bekçiler — bu alana dokununca koş (34 backend · 47 istemci)
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
+
+**Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
+
+Backend: `test_auto_draft_shipment`, `test_cash_negative_guard`, `test_cash_period_close`, `test_cheque_portfolio`, `test_consistency`, `test_dispatch_report_gross`, `test_exchange_rate_fetch`, `test_finance_documents`, `test_finance_flag_off`, `test_finance_invoice`, `test_finance_opening`, `test_finance_regime_gate`, `test_finance_reports`, `test_finance_vat`, `test_fx_diff_report`, `test_goods_receipt`, `test_goods_receipt_invoice`, `test_gr_order_price_currency`, `test_iplik_regime_gate`, `test_item_price`, `test_official_finance_docs`, `test_payment_allocation`, `test_period_close`, `test_purchase_order`, `test_roll_po_line_trace`, `test_setup_ticaret`, `test_shipment_invoice`, `test_shipping_flags`, `test_status_labels`, `test_stock_count`, `test_ticaret_links_and_filters`, `test_ticaret_regime_gate`, `test_ticaret_turkish_search`, `test_yarn_stock`
+
+İstemci: `supplierParty.test.ts`⚠️, `useItemPriceSuggestion.test.ts`⚠️, `audit-labels.trade.test.ts`⚠️, `prices.test.ts`⚠️, `regime.test.ts`⚠️, `carilerPaging.test.ts`⚠️, `CariEditDialog.test.ts`⚠️, `cashTxnRules.test.ts`⚠️, `chequeBordro.test.ts`, `chequeDeliveryNote.test.ts`, `chequeExport.test.ts`, `transitions.test.ts`, `InvoiceFormDialog.test.tsx`, `cashService.test.ts`, `invoiceDetail.test.ts`, `invoiceDetailPermission.test.tsx`, `invoiceForm.test.ts`, `invoicesList.test.ts`, `officialDocs.test.ts`, `paymentFilters.test.ts`, `reconciliationLetter.test.ts`, `settlement.test.ts`, `statementDevir.test.ts`, `statementLink.test.ts`, `ShipmentInvoiceDraft.test.tsx`, `accounting-export.test.ts`, `invoiceDraftLines.test.ts`, `invoiceDraftVisibility.test.ts`, `GoodsReceiptDetailSheet.test.tsx`, `GoodsReceiptFormDialog.test.tsx`, `GoodsReceiptsPage.test.tsx`, `goodsReceipt-regime.test.ts`, `receiptFeedback.test.ts`, `receiptImport.test.ts`, `receiptLineRows.test.ts`, `service.test.ts`, `filterScope.test.ts`, `fulfillment.test.ts`, `po-regime.test.ts`, `receiptOrderFields.test.ts`, `receiptSync.test.ts`, `returnInvoice.test.ts`, `qty.test.ts`, `yarn-regime.test.ts`, `chequeDueExport.test.ts`, `fxDiffExport.test.ts`, `statementExport.test.ts`
+
+## Arşiv notları (tam metin, gerekçe ve ölçüm)
+
+- 2026-08-02 · 2026-08-02 — brüt kuralı LİSTE yüzeyine de uzandı + muhasebe ekranı tamamlandı — `CLAUDE-NOT-ARSIVI.md:53-61`

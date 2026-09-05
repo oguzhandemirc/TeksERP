@@ -1,6 +1,6 @@
 # Ön Muhasebe Sağlamlık Tasarımı — 5 bulgu, 5 sınıf, sektör standardı kapanış
 
-> **Durum:** TASARIM — kullanıcı onayı bekliyor (2026-08-14).
+> **Durum:** ✅ ONAYLANDI ve UYGULANDI (2026-08-14/15) — "beş sağlamlık sınıfı" yürürlükteki kuraldır (`docs/kurallar/finans.md`, kök `CLAUDE.md`). "Finans hiçbir kuruluma çıkmadı, tek penceredeyiz" ölçümü 2026-08-14'e aittir; o pencere kapandı.
 > **Kaynak:** Paket C+D çapraz denetimi (4 mercek + 20 çürütücü ajan) → AYAKTA kalan
 > 5 bulgu → bu belge için 5 derin-analiz ajanı (kök neden + sınıf taraması +
 > çözüm seçenekleri; her iddia dosya:satır ile ölçüldü, canlı DB sorgulandı).

@@ -69,7 +69,7 @@ const path = await window.api.file.saveDialog({ defaultName: "rapor.xlsx" });
 
 - Sadece HTTP backend çağrısı yapacaksan → `apiClient` üzerinden git, IPC eklemeye gerek yok.
 - Renderer içinde halledilebilen şey için (storage, navigasyon, UI state) → IPC ekleme.
-- Saha cihazı (COM/Bluetooth) — bu uygulama yönetim aracı, saha entegrasyonu yok. Reddet, kullanıcıya hatırlat.
+- ⚠️ Saha cihazı kanalı (COM/Bluetooth) BU KALIBIN İÇİNDEDİR ama serbest değildir: `electron/ipc/{scale,scanner,printer}.ipc.ts` zaten var ve native modüller (`serialport`, `node-hid`) `npm run electron:rebuild` ister. Yeni bir donanım kanalı açmadan önce `docs/kurallar/kesif-cihaz.md` (cihaz = VERİ, fail-closed, simülasyon bayrağı) okunur.
 
 ## Doğrulama
 

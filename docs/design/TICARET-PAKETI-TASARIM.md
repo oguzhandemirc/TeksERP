@@ -1,6 +1,6 @@
 # Ticaret Paketi — Çoklu Depo + Mal Kabul + Ön Muhasebe (2026-08)
 
-> **Durum:** Paket 1 (Çoklu Depo + Mal Kabul) UYGULANIYOR · Paket 2 (Ön Muhasebe) TASARLANDI, henüz yazılmadı.
+> **Durum:** ✅ Paket 1 (Çoklu Depo + Mal Kabul) ve Paket 2 (Ön Muhasebe) UYGULANDI — cari/fatura/çek/kasa servisleri, sağlamlık paketi migration'ları ve bekçileri canlı. "Para tarafı yok" ölçümü 2026-08 başına aittir. Canlı kural özeti: `docs/kurallar/finans.md`.
 > Kanonik referanslar: `Teks-Erp/prisma/schema.prisma`, `Teks-Erp/src/services/inventory.service.ts`
 > (`createInitialEntry`), `Teks-Erp/src/services/helpers/roll-entry-station.helper.ts` (12 giriş yolu envanteri),
 > `Teks-Erp/src/services/printed-document.service.ts` (donmuş belge zinciri).

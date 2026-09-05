@@ -45,7 +45,7 @@ değil. Origin CA'ya **yalnız Cloudflare Edge güvenir** — kayıt DNS-only'ye
 
 ## Mobil
 
-Mobil APK/OTA yayını da buraya taşınıyor: **`html/adnansahin/mobil/`** (`ota/`,
+Mobil APK/OTA yayını da buradadır (taşındı, 2026-08-26): **`html/adnansahin/mobil/`** (`ota/`,
 `apk/`) — aynı servise, ayrı konteyner veya alan adı gerekmez. Mobil tarafın
 cache kuralı için `nginx/default.conf`'a uzantı eklenmesi gerekir: **manifest
 uzantısı `no-cache` tarafına**, paket (`.apk`) uzun cache tarafına.

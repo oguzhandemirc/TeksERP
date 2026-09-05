@@ -1,9 +1,9 @@
 # Mobil Uzaktan Güncelleme — Kurulum ve Kullanım Reçetesi
 
 **Durum:** 2026-08-27 — **yayın sunucusu KURULDU ve doğrulandı**; sahadaki tabletlere
-henüz kurulmadı (son elle APK turu bekliyor).
+2026-09-04'te elden kuruldu (APK 1.0.0-vc57); sonraki JS turları OTA ile gider.
 
-Yayında olan: OTA paketi (runtimeVersion **54.2**) + kurulum dosyası **2.9.7/vc54** (arm64,
+Yayında olan (2026-09-05 ölçümü — sayıyı sabitleme, kanonik `mobil/app.json` + yayındaki `apk/surum.json`): kurulum dosyası **1.0.6 / vc57** (arm64,
 49,6 MB). İstemcinin yaptığı iş birebir taklit edilerek ölçüldü: manifest 200 + doğru
 başlıklar, imza APK'ya gömülü sertifikayla **geçerli**, 43 varlığın 43'ü hash uyumlu indi.
 

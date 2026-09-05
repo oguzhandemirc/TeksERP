@@ -1,11 +1,11 @@
 # TeksERP — Docker ile Kurulum (Alternatif)
 
-Bu, `installer/windows/` altındaki **native (setup.exe) kuruluma ALTERNATİF** yoldur.
+Bu, konteynerli kurulum yoludur ve fiilen **demo/VPS** ortamı içindir (`docs/ops/DEMO-YAYIN-RUNBOOK.md`). Fabrikanın kurulum yolu `deploy/kur.ps1` paketidir; eski `installer/windows/` (setup.exe) dizini 2026-07-30'da silindi.
 Burada PostgreSQL + backend **Docker container'ları** olarak çalışır. Tek script:
 `yonet.ps1` (Windows) veya kökteki `baslat.sh` (Mac/Linux/Git Bash).
 
 > **Hangisini seçmeli?**
-> - **Sunucu Windows ise → `installer/windows/` (setup.exe) önerilir.** Docker
+> - **Fabrika (Windows sunucu) → `deploy/kur.ps1` paketi** (`deploy/README.md`). Docker
 >   Desktop headless Windows sunucuda kırılgan + lisans derdi olabilir; native
 >   kurulumda Postgres/backend gerçek Windows servisi (oturumsuz boot).
 > - **Sunucu Linux ise veya Docker'a zaten hakimsen → bu yol** çok temiz:

@@ -1,38 +1,48 @@
 # Doküman Haritası
 
-Kanonik kaynak her zaman **kod + `CLAUDE.md` dosyaları**dır. Bu klasör onları tamamlayan
-tasarım/operasyon/tarihçe dokümanlarını tasnif eder.
+Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılandırmasıyla belge katmanı üç kata ayrıldı: her oturumda yüklenen ÇEKİRDEK (kök `CLAUDE.md`, ~6k token), alana dokununca okunan kural dosyaları (`docs/kurallar/`), istenince okunan hikâye/gerekçe (`docs/history/`).
 
-## Yapı
+## Nereye bakılır
+
+| İhtiyaç | Dosya |
+|---|---|
+| Her alanda geçerli değişmezler, yasaklar, alan dizini | kök `CLAUDE.md` |
+| Bir alanın bugün geçerli kuralları + bekçileri + arşiv tarihleri | `docs/kurallar/<alan>.md` (dizin: `docs/kurallar/README.md`) |
+| Teknik desenler (F221, atomik claim, Zod↔mutationFn, `details.code`…), yorum politikası, tam yasak listesi | `docs/KOD-KURALLARI.md` |
+| "X eklerken şu yerleri güncelle" (bayrak, enum, route+izin, migration, bekçi, Electron sayfası, mobil ekran, sürüm) | `docs/RECETELER.md` |
+| Yerel geliştirme (env, DB, tek bekçi, sunucu) | `docs/GELISTIRME-DONGUSU.md` |
+| Alan → bekçi (test) haritası | `Teks-Erp/docs/BEKCI-HARITASI.md` |
+| Domain terimleri | `docs/SOZLUK.md` |
+| Alt proje çalışma düzeni | `Teks-Erp/CLAUDE.md` · `Electron/CLAUDE.md` · `mobil/CLAUDE.md` |
+| Karar notlarının TAM metni, gerekçe, ölçüm | `docs/history/CLAUDE-NOT-ARSIVI.md` (ezilen notlar `⚠️ GEÇERSİZ/KISMEN` bloğu taşır) |
+| Derin mimari referans | `Teks-Erp/ARCHITECTURE.md` (§7–§10 canlı; envanter sayıları bayat) |
+
+## Klasörler
 
 | Klasör | İçerik | Güncellik |
 |---|---|---|
-| `design/` | **Canlı** domain tasarımları — çuval havuzu, parti modeli, etiket stüdyosu, kartela, iade | Koda karşı güncel (nokta bayatlıklar için dosya başı banner'lara bak) |
-| `ops/` | Deploy/runbook — kurulum, deploy runbook, üretim kontrol listesi, raster fiziksel checklist | Operasyonel, bakımlı |
-| `qa/` | Manuel kabul testi senaryoları (UAT — gerçek cihaz/UI) | Bakımlı |
-| `history/` | **Arşiv (salt-okunur, tarihsel)** — kapanmış kod incelemeleri, eski risk raporları, tamamlanmış plan/faz dokümanları, superseded tasarımlar | Donmuş; envanter sayıları/satır referansları bayat — referans SANMA |
+| `kurallar/` | Alan kural dosyaları (24 + README) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
+| `design/` | Domain tasarımları (18) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı | Canlı |
+| `ops/` | Deploy/runbook/kurulum reçeteleri (24) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
+| `qa/` | Manuel kabul senaryoları | Bakımlı |
+| `history/` | Arşiv (salt-okunur): karar notları tam metni, harcanmış tek-seferlik deploy/devir notları, tamamlanmış planlar, eski incelemeler, `denetim-2026-08/` (kök `audit/` kampanyası), `anlama-turu-2026-09-05/` | Donmuş; sayılar/satır referansları bayat |
 
-## Kanonik referanslar (bu klasörde DEĞİL)
+> **Kural:** Tek seferlik bir belge (sürüm deploy notu, devir notu, tamamlanmış plan, harcanmış prompt) işi bitince `history/`e taşınır — `design/` ve `ops/` yalnız bugün okunacak belgeleri taşır. 2026-09-05'te 24 belge taşındı, 13 belge silindi (12'si komşu `PLAN.md §7`'den birebir üretilebilen denetim promptu, biri yanlış bilgi veren eski `TICARET-KURULUM` kopyası).
 
-- Kök `CLAUDE.md` — üretim akışı + domain kuralları (harness'e yüklenir)
-- `Teks-Erp/CLAUDE.md`, `Teks-Erp/ARCHITECTURE.md` — backend derin referans
-- `Electron/CLAUDE.md`, `mobil/CLAUDE.md` — alt-proje talimatları
-- `Teks-Erp/MIGRATION-DEPLOY.md`, `Teks-Erp/DB-MIMARI-DENETIM.md` — DB operasyon otoritesi
-- `Teks-Erp/API_TEST_GUIDE.md`, `Teks-Erp/INSTALL-HARDWARE.md`
+## Yeni karar notu nasıl yazılır
 
-> **Not:** `history/` altındaki dosyalar yazıldıkları anın fotoğrafıdır. Model/enum/migration
-> sayıları ve dosya:satır referansları o günden bu yana bayatlamıştır — güncel gerçek için
-> her zaman `schema.prisma` + kanonik `CLAUDE.md`'lere bak.
+1. Tam metin `docs/history/CLAUDE-NOT-ARSIVI.md`'ye (tarih + `[ÇEKİRDEK]`/`[PROFİL]`).
+2. İlgili `docs/kurallar/<alan>.md`'ye TEK kural satırı (emir kipi, kanıt anchor'ı).
+3. Her alanda geçerli bir değişmezse kök `CLAUDE.md` § Çekirdek değişmezler'e tek satır.
+4. Bir kural iptal edilince eski cümle silinir, arşivdeki nota `⚠️ GEÇERSİZ` bloğu konur.
+
+## `.claude/` harness
+
+- `.claude/rules/<alan>.md` — yol kapsamlı (`paths:`) İNCE işaretçiler: eşleşen dosyaya dokunulunca "önce `docs/kurallar/<alan>.md` oku" der (~100 token). Kural buraya YAZILMAZ; `paths` olmayan bir rules dosyası her oturumda yüklenir ve sadeleştirmeyi boşa çıkarır.
+- `.claude/skills/` — `surum-cikar` · `bekci-kos` · `karar-notu` (alt projelerin kendi skill'leri `Electron/.claude/skills/`).
+- `scripts/claude-hooks/bash-guard.mjs` — PreToolUse kapısı: yasak komutları (sunucu süreçlerini toplu öldürme, `migrate reset|dev`, `db push`, WHERE'siz `DELETE`, `TRUNCATE/DROP`, `push --force`, ham `build:win`, elle `gradlew`) engeller; `git commit`te staged alt projelerde tip kontrolü koşar. Kaçış yalnız kullanıcı kararıyla `TEKSERP_HOOK_SKIP=1`. ⚠️ Kapı komut METNİNE bakar: yasak dizeyi içeren bir açıklama/heredoc bile engellenir — böyle metni Edit/Write ile yaz.
+- Anlama turu raporu ve ekleri: `docs/history/anlama-turu-2026-09-05/`.
 
 ## Bayatlık bekçisi (CI)
 
-`scripts/check-docs.mjs` (zero-dep Node) her push/PR'da CI'da koşar (`docs` job'ı) +
-elle `cd Teks-Erp && npm run check:docs`:
-
-- **GATE (fail):** ölü doküman-link — bir doküman taşınmış/silinmiş bir repo dosyasına
-  atıf yaparsa CI kırılır (bu oturumda dosya taşındığında referanslar kırıldı — tam bu senaryoyu yakalar).
-- **ADVISORY (fail etmez):** kaldırılmış-sembol atıfları (`batchSplitId`, `MachineLog`,
-  `packedQty`...) — tasarım dokümanları tarihsel bağlamı meşru anlattığı için yalnız listelenir.
-
-Yeni bir sembol/model kaldırıldığında `REMOVED_SYMBOLS`'e ekle; geri gelirse çıkar. Sayı
-bayatlığı ayrıca kanonik-kaynak yönlendirmesiyle azaltıldı (docs "~N (kanonik: schema.prisma)" der).
+`scripts/check-docs.mjs` (`cd Teks-Erp && npm run check:docs`): ölü doküman-link **GATE**; kaldırılmış-sembol atfı advisory; **`CLAUDE.md` boyut tavanı GATE** (kök ≤ 36 KB, alt dosyalar ≤ 24 KB — sadeleştirmenin geri şişmemesi için). Yeni sembol kaldırıldığında `REMOVED_SYMBOLS`'e ekle.
