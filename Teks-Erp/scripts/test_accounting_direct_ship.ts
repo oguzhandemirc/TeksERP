@@ -65,7 +65,9 @@ async function main(): Promise<void> {
     data: { code: `TST-ADS-${ts}`, name: `TEST DIRECT MUHASEBE ${ts}`, taxNumber: "9998887776" },
     select: { id: true },
   });
-  const color = await prisma.color.create({ data: { code: `TST-ADS-C-${ts}`, name: "LACIVERT-TEST" }, select: { id: true } });
+  // AD da damgalı: `colors_nameFoldColor_key` ifade-UNIQUE'i ad üzerindedir —
+  // damgasız ad ikinci koşumu P2002'ye düşürür.
+  const color = await prisma.color.create({ data: { code: `TST-ADS-C-${ts}`, name: `LACIVERT-TEST ${ts}` }, select: { id: true } });
   // İhracat şubesi (kod'lu) — şube kodunun export/fiş/belgeye aktığını doğrulamak için.
   const branch = await prisma.customerBranch.create({
     data: { customerId: customer.id, code: "IHR-01", name: "İhracat Şubesi" },

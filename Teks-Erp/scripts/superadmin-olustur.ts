@@ -154,11 +154,11 @@ function parolaKusuru(password: string): string | null {
 async function pinCoz(
   istenen: string | null,
   deps: ProvisionDeps,
-  hariçUserId: string | null,
+  haricUserId: string | null,
 ): Promise<{ pin: string } | { code: ProvisionErrorCode; message: string }> {
   const kullanimda = async (pin: string): Promise<boolean> => {
     const row = await prisma.user.findFirst({
-      where: { quickPin: pin, ...(hariçUserId ? { id: { not: hariçUserId } } : {}) },
+      where: { quickPin: pin, ...(haricUserId ? { id: { not: haricUserId } } : {}) },
       select: { id: true },
     });
     return row !== null;

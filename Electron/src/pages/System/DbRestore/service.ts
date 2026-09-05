@@ -1,105 +1,62 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
-import { useIsTabActive } from "@/components/layout/tabs/tab-active";
-import {
-  pollIntervalFor,
-  type DbCopyListing,
-  type SwapCommands,
-  type VerificationReport,
-} from "./types";
+import type { DbCopyListing, SwapCommands, VerificationReport } from "./types";
 
-const KEY = ["db-copies"];
+/** React-query anahtarı — hook'lar ve invalidate eden yüzeyler tek kaynaktan okur. */
+export const DB_COPIES_QUERY_KEY = ["db-copies"];
 
 /**
- * Kopya listesi + canlı iş durumu.
+ * Saf veri erişimi (React'e bağlı değil) — hook'lar `hooks.ts`te.
  *
- * **Dinamik `refetchInterval`** (repoda ilk): iş koşarken 2sn, bitince durur.
- * İki tuzak:
- *  1. TanStack v5'te fonksiyon-formuna gelen argüman **Query nesnesidir**, `data`
- *     DEĞİL — `query.state.data` yazılmazsa `undefined` döner ve SESSİZCE hiç
- *     poll etmez.
- *  2. `useIsTabActive()` gating'i ZORUNLU (K-A8) — pasif sekmeler mount kalıyor.
+ * ⚠️ Tüm uçlar `suppressErrorToast: true` taşır: ekran hatayı KENDİ şeridinde
+ * gösterir, interceptor'ın ikinci toast'ı gerekmez ([EL-18]).
  */
-export function useDbCopies() {
-  const isTabActive = useIsTabActive();
-  return useQuery({
-    queryKey: KEY,
-    queryFn: async (): Promise<DbCopyListing> => {
-      const res = await apiClient.get<{ success: boolean; data: DbCopyListing }>(
-        "/api/admin/db-copies",
-        { suppressErrorToast: true },
-      );
-      return res.data.data;
-    },
-    refetchInterval: (query) => pollIntervalFor(query.state.data?.job?.phase, isTabActive),
-    refetchIntervalInBackground: false,
-    retry: false,
-  });
+export async function fetchDbCopies(): Promise<DbCopyListing> {
+  const res = await apiClient.get<{ success: boolean; data: DbCopyListing }>(
+    "/api/admin/db-copies",
+    { suppressErrorToast: true },
+  );
+  return res.data.data;
 }
 
-export function useStartCopy() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (backupName: string) => {
-      const res = await apiClient.post<{ success: boolean; message: string; copyName?: string }>(
-        "/api/admin/db-copies",
-        { backupName },
-        { suppressErrorToast: true },
-      );
-      return res.data;
-    },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
-  });
+export async function startCopy(
+  backupName: string,
+): Promise<{ success: boolean; message: string; copyName?: string }> {
+  const res = await apiClient.post<{ success: boolean; message: string; copyName?: string }>(
+    "/api/admin/db-copies",
+    { backupName },
+    { suppressErrorToast: true },
+  );
+  return res.data;
 }
 
-export function useVerifyCopy() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (name: string) => {
-      const res = await apiClient.post<{ success: boolean; data: VerificationReport }>(
-        `/api/admin/db-copies/${encodeURIComponent(name)}/verify`,
-        {},
-        { suppressErrorToast: true },
-      );
-      return res.data.data;
-    },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
-  });
+export async function verifyCopy(name: string): Promise<VerificationReport> {
+  const res = await apiClient.post<{ success: boolean; data: VerificationReport }>(
+    `/api/admin/db-copies/${encodeURIComponent(name)}/verify`,
+    {},
+    { suppressErrorToast: true },
+  );
+  return res.data.data;
 }
 
-export function useDropCopy() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (input: { name: string; force?: boolean }) => {
-      const res = await apiClient.delete<{ success: boolean; message: string }>(
-        `/api/admin/db-copies/${encodeURIComponent(input.name)}${input.force ? "?force=1" : ""}`,
-        { suppressErrorToast: true },
-      );
-      return res.data;
-    },
-    onSuccess: () => void qc.invalidateQueries({ queryKey: KEY }),
-  });
+export async function dropCopy(input: {
+  name: string;
+  force?: boolean;
+}): Promise<{ success: boolean; message: string }> {
+  const res = await apiClient.delete<{ success: boolean; message: string }>(
+    `/api/admin/db-copies/${encodeURIComponent(input.name)}${input.force ? "?force=1" : ""}`,
+    { suppressErrorToast: true },
+  );
+  return res.data;
 }
 
 /**
  * Takas + geri alma komut blokları. Kopya `ready` değilse backend 409 döner ve
  * komut ÜRETİLMEZ — yarım bir kopyaya geçiş felakettir.
  */
-export function useSwapCommands(name: string | null) {
-  return useQuery({
-    queryKey: ["db-copy-swap", name],
-    queryFn: async (): Promise<SwapCommands> => {
-      const res = await apiClient.get<{ success: boolean; data: SwapCommands }>(
-        `/api/admin/db-copies/${encodeURIComponent(name!)}/swap-command`,
-        { suppressErrorToast: true },
-      );
-      return res.data.data;
-    },
-    enabled: !!name,
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-  });
+export async function fetchSwapCommands(name: string): Promise<SwapCommands> {
+  const res = await apiClient.get<{ success: boolean; data: SwapCommands }>(
+    `/api/admin/db-copies/${encodeURIComponent(name)}/swap-command`,
+    { suppressErrorToast: true },
+  );
+  return res.data.data;
 }
-
-export const DB_COPIES_QUERY_KEY = KEY;

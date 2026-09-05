@@ -85,7 +85,6 @@ export default function KartelaSevkScreen() {
       }
       draftRestoredRef.current = true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

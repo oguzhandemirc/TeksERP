@@ -20,7 +20,7 @@
 //   §2 PAYLAŞIMLI KİLİT — taze okuma TEK BAŞINA YETMEZ: yazma tx'i açıldığında
 //      birleştirme henüz COMMIT ETMEMİŞTİR, yani okunacak bir mezar taşı da
 //      yoktur. İki işlem birbirini beklemek zorundadır. Birleştirme
-//      `pg_advisory_xact_lock(8027,1)` EXCLUSIVE alır; yazma yolu aynı anahtarı
+//      `pg_advisory_xact_lock(8030,1)` EXCLUSIVE alır; yazma yolu aynı anahtarı
 //      SHARED alır (yazıcılar birbirini engellemez, yalnız birleştirmeyle
 //      serileşirler).
 //      ⚠️ Ölçüldü: yalnız taze okumayla repro §2'de 12 turun 3'ü hâlâ mezar

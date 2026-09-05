@@ -13,7 +13,7 @@ npm run seed                    # temiz fabrika (yalnız admin/123123)  ·  npm 
 npm run prisma:generate         # şema değişince ZORUNLU
 npm run prisma:migrate          # migrate deploy — pull'lanmış migration'ı BU uygular (dev DEĞİL)
 npm run typecheck               # yalnız src/ · typecheck:scripts = scripts/+prisma/+src/ · *:plain = grep'lenebilir
-npm test                        # run-all-tests.ts — productionDbGate (yerel olmayan DATABASE_URL → DUR; kaçış ALLOW_NONLOCAL_TEST_DB=1) + tip kapısı (~28 sn) + TÜM bekçiler sıralı (saatler)
+npm test                        # run-all-tests.ts — productionDbGate (yerel olmayan DATABASE_URL → DUR; kaçış ALLOW_NONLOCAL_TEST_DB=1) + tip kapısı (~28 sn) + migration durumu kapısı + TÜM bekçiler sıralı (6,5 dk, ölçüldü)
 npx tsx scripts/run-all-tests.ts <ad-parçası>   # tek bekçi (tip kapısı atlanır; acil: SKIP_TYPECHECK=1)
 npm run check:migrations · check:docs
 ```
@@ -26,7 +26,7 @@ npm run check:migrations · check:docs
 
 ## Katmanlar
 
-**Routes → Controllers → Services → Prisma**, alt katman atlanmaz. Bilinçli istisna: ince read/ayar uçları controller'sız (route içinde Zod parse + servise delege) — iş mantığı yine serviste; **route/controller'da `prisma` import YASAK** — mekanik: ESLint `no-restricted-imports` (2026-09-05'te son ihlal `admin.routes.ts` giderildi, kapı yeşil).
+**Routes → Controllers → Services → Prisma**, alt katman atlanmaz. ⚠️ Controller'sız inline handler İSTİSNA DEĞİL NORMDUR (80 route dosyasının 45'i, 672 handler'ın 323'ü; ölçüldü 2026-09-05): route içinde Zod parse + servise delege, iş mantığı yine serviste. Controller yalnız master-data CRUD (`new BaseController`) ya da ≥4 uçlu aile için açılır — ölçüt ve katman içerikleri `docs/standart/BACKEND.md`. **route/controller'da `prisma` import YASAK** — mekanik: ESLint `no-restricted-imports`. Lint kapsamı `src` + `scripts` + `prisma` (2026-09-05'te açıldı; `scripts/` 554 dosya hiç lint edilmiyordu). Kurallar ve ölçüm gerekçeleri `eslint.config.mjs` başlığında.
 
 - `controllers/` HTTP + Zod · `services/` (+`helpers/`, `reports/`) iş mantığı, transaction, `AuditService.log()` · `routes/` Swagger JSDoc + `verifyToken` + `requirePermission` · `middlewares/` (auth, rbac, error, device, uuid-param, latency, login-lockout, module, system-account, settings-password… — dizin kanonik) · `prisma/schema.prisma` (`@prisma/adapter-pg`; `clientToken @unique @db.Uuid` 15+ modelde).
 - Master data CRUD için `BaseController` + `BaseService` (`searchFields`); liste/cursor/özet tek where `buildListWhere`.
@@ -40,7 +40,7 @@ npm run check:migrations · check:docs
 
 ## Veritabanı kuralları (her zaman)
 
-1. Her `@relation` kolonuna `@@index` (düşük trafik "kim yaptı" FK'ları hariç). 2. Composite sıra: eşitlik önce, range/order sonra; sık birlikte süzülen kolonlar tek composite. 3. Partial index ham SQL migration ile; şemada `@@index` bırak (predicate drift sayılmaz, index↔unique farkı SAYILIR → partial unique için `@@unique`). 4. Şema-dışı nesneler (partial index, CHECK, DEFERRABLE FK, statistics, `EXPRESSION_UNIQUES`) `scripts/test_db_invariants.ts` envanterinde; yeni nesne → envantere yaz, kırmızıya tepki silmek değil. 5. Yüksek hacim tablolar (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`) cursor pagination; `MAX_OFFSET=10000`. 6. JSON alan sorgulanacaksa GIN önce. 7. `select`, `include` değil. 8. Karmaşık aggregation `$queryRaw`. 9. `createMany`. 10. Tx kısa, dış I/O tx içinde yok (`idle_in_transaction_session_timeout=5min`). 11. `tx.*` + `Promise.all` YASAK (ESLint). 12. Yeni uç büyük tabloya değiyorsa `EXPLAIN ANALYZE`. 13. Snapshot JSON'ları listede çekme. 14. Canlıda index migration vardiya dışında; büyük tabloda `SET statement_timeout = 0;` migration başına (DB `statement_timeout=50s`).
+1. Her `@relation` kolonuna `@@index` (düşük trafik "kim yaptı" FK'ları hariç). 2. Composite sıra: eşitlik önce, range/order sonra; sık birlikte süzülen kolonlar tek composite. 3. Partial index ham SQL migration ile; şemada `@@index` bırak (predicate drift sayılmaz, index↔unique farkı SAYILIR → partial unique için `@@unique`). 4. Şema-dışı nesneler `scripts/test_db_invariants.ts` envanterinde — **DOKUZ liste** (partial index · CHECK · DEFERRABLE FK · genişletilmiş istatistik · `EXPRESSION_UNIQUES` · trigger · eklenti · fonksiyon · collation); yeni nesne → envantere yaz, kırmızıya tepki silmek değil. 5. Yüksek hacim tablolar (`Roll`, `RollMovement`, `RollOperation`, `SystemLog`, `TravelerCardScan`) cursor pagination; `MAX_OFFSET=10000`. 6. JSON alan sorgulanacaksa GIN önce. 7. `select`, `include` değil. 8. Karmaşık aggregation `$queryRaw`. 9. `createMany`. 10. Tx kısa, dış I/O tx içinde yok (`idle_in_transaction_session_timeout=5min`). 11. `tx.*` + `Promise.all` YASAK (ESLint). 12. Yeni uç büyük tabloya değiyorsa `EXPLAIN ANALYZE`. 13. Snapshot JSON'ları listede çekme. 14. Canlıda index migration vardiya dışında; büyük tabloda `SET statement_timeout = 0;` migration başına (DB `statement_timeout=50s`).
 - **Elle migration:** `npx tsx scripts/apply-migration.ts <ad> [--apply]` (git add → db execute → resolve → doğrula tek komutta). `migrate resolve --applied` SQL'in koştuğunu doğrulamaz; commit edilmemiş migration prod'da sessiz eksiktir. Bekçiler: `check-migrations.mjs` · `test_migration_hygiene.ts` · `test_schema_drift.ts` (üç ayrı soru). Ayrıntı: `docs/kurallar/deploy-kurulum.md`.
 - **Zaman:** her `DateTime` `@db.Timestamptz` (bekçi `test_timestamptz_contract.ts`, tek bekçi — ikincisini yazma); `PG_SESSION_OPTIONS` (`-c timezone=UTC`) silinmez, `new Pool(` kuran her dosya geçirir; ham SQL'de çıplak `now()` tercih (gerekçeli `-- tz-ok:`; `test_raw_sql_hygiene.ts`); fabrika günü `src/constants/time.ts` (`factoryDaySql/…`, `test_report_day_boundary.ts`). Ayrıntı: `docs/kurallar/raporlar.md`.
 - **Decimal** kolonda JS float yok — DB-side increment/decrement ya da `Prisma.Decimal`.
@@ -56,7 +56,7 @@ npm run check:migrations · check:docs
 
 - [ ] Yeni FK için `@@index` · `prisma generate` koştu
 - [ ] Service: transaction + `AuditService.log()` (tx dışında) · Controller: Zod + servis · Route: `verifyToken` + `requirePermission(kod)` + Swagger JSDoc (kod katalogda)
-- [ ] Modüle aitse ADLANDIRILMIŞ kapı (`requireProductionEnabled` / `requireTicaretEnabled` / `requireIplikEnabled` / `requireDepoMultiEnabled`, `module.middleware.ts`); jenerik `requireModule("x")` YASAK; kapı gerekmiyorsa muaf listesinde gerekçeli
+- [ ] Modüle aitse ADLANDIRILMIŞ kapı (`requireProductionEnabled` / `requireTicaretEnabled` / `requireIplikEnabled` / `requireDepoMultiEnabled` — `module.middleware.ts`; `requireFinanceEnabled` — `finance.middleware.ts`, 30 mount); jenerik `requireModule("x")` YASAK; kapı gerekmiyorsa muaf listesinde gerekçeli
 - [ ] `app.ts`'e `app.use("/api/...", routes)` · fiziksel DELETE yok · `any` yok · `tx` içinde `Promise.all` yok
 - [ ] Dış referans ID'leri var-mı + `isActive` · `@unique` numara/barkod → `withBarcodeRetry` + sequence okuma tx İÇİNDE
 - [ ] Durum geçişi → atomik claim (`updateMany WHERE {id, durum}` + `count===0 → 409`; claim'den SONRA içerik tx İÇİNDE taze okunur)
@@ -76,7 +76,7 @@ Test altyapısı `scripts/test_*.ts` — jest/vitest YOK, kurma. Server'sız ent
 
 ## Paketler
 
-Sadece izinli liste; alternatif tanıtma, yenisi için onay: `express dotenv cors helmet compression` · `prisma @prisma/client pg @prisma/adapter-pg` · `jsonwebtoken bcryptjs` · `zod` · `swagger-ui-express swagger-jsdoc` · `morgan` · `uuid` · `bwip-js` · `bonjour-service` (**1.4.4 SABİT**, tembel `require` + try/catch, tek dosya `jobs/mdns-advertiser.job.ts`) · `opentype.js` · `@faker-js/faker` (dev). Paket `deploy/` ve `scripts/`yi TAŞIMAZ; sunucu araçları `dist/tools/*.cjs`'e derlenir.
+Politika **kayıtlı kararla açıktır** (yasak liste değil): yeni kütüphane `docs/standart/KUTUPHANELER.md`'ye 6 satırlık karar kaydıyla girer. Bugünkü küme: `express dotenv cors helmet compression` · `prisma @prisma/client pg @prisma/adapter-pg` · `jsonwebtoken bcryptjs` · `zod` · `swagger-ui-express swagger-jsdoc` · `morgan` · `uuid` · `bwip-js` · `bonjour-service` (**1.4.4 SABİT**, tembel `require` + try/catch, tek dosya `jobs/mdns-advertiser.job.ts`) · `opentype.js`. Paket `deploy/` ve `scripts/`yi TAŞIMAZ; sunucu araçları `dist/tools/*.cjs`'e derlenir.
 
 ## Sürüm gotcha'ları
 

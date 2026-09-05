@@ -1,0 +1,58 @@
+{
+  "tarih": "2026-09-05",
+  "gorev": "main dalinda KIRMIZI olan dort backend bekcisini teshis et ve yesile cek",
+  "kosucu": "cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parcasi>",
+  "temizlikYapildi": false,
+  "temizlikNotu": "Hicbir satir silinmedi. Tespit edilen 140 deposuz top BASKA bekcilerin TEST-/TST- on ekli artiklari; bu bekcinin kendi on eki degil, bu yuzden silinmedi — olcum kapsami duzeltildi.",
+  "bekciler": [
+    {
+      "bekci": "test_masterdata_guards",
+      "sinif": "bayat-bekci",
+      "kokNeden": "Fixture 'ilk iki aktif FabricProperty'yi valueType suzmeden aliyordu. DB'nin fiziksel sirasi degisip ikinci sıraya SECIM (CHOICE) tipli 'KAT' gelince applyManualProperties o id'yi partitionTargetableIds ile SESSIZCE AYIRDI (400 atmadi) — docs/kurallar/rota-renk.md satir 30: 'echo uclari sessiz ayirma' (2026-08-11 denetim F1/F1b). Ayrica Teks-Erp/CLAUDE.md 'ortamdaki veriye BAGIMLI OLMA' kuralinin ihlali.",
+      "yapilan": "Fixture FLAG evrenine sabitlendi (where valueType FLAG + orderBy code asc, deterministik) + korluk zemini eklendi ('fixture ozellikleri FLAG'). Kod DEGISMEDI.",
+      "degisenDosyalar": ["Teks-Erp/scripts/test_masterdata_guards.ts"],
+      "silinenSatir": "yok",
+      "negatifSonda": "inventory.service.ts allowed-property throw'u gecici korlestirildi -> '✗ FAIL: liste-disi ozellik -> 400' (2 gecti, 1 basarisiz). Sonda geri alindi, git diff temiz.",
+      "sonKosum": "✅ test_masterdata_guards.ts                  3 gecti, 0 basarisiz     0.6s",
+      "yesilMi": true,
+      "not": "Onceki hali 1 gecti/1 basarisizdi; kontrol sayisi 2 -> 3 (korluk zemini)."
+    },
+    {
+      "bekci": "test_label_canvas_equivalence",
+      "sinif": "kod-hatasi",
+      "kokNeden": "mockPayload(ROLL_FINISHED) iki katalog alanini hic doldurmuyordu: foldType ve workOrderNumber. flowTemplateToCanvas layout'u payload-kor kurar (her gorunur alana satir ayirir) ama native akis emitter'i present=false alani ATLAR. Bu yuzden kanvas foldType'a satir harcayip customerName'i disarida biraktu, akis ise customerName'i basti -> 'donusturucu DUSURDU ama akis basiyordu: customerName'. Ayni dosyanin kendi yorumu (label-rawcode.ts:106-108) mockPayload'in eksiksiz olmasini ZATEN sart kosuyor: 'alanlar doldurulmazsa tasarimci alani surukler, onizlemede bos gorur ve alan calismiyor sanir'. Yani sadece bekci degil, Etiket Studyosu onizlemesi de eksikti.",
+      "yapilan": "src/services/helpers/label-rawcode.ts mockPayload base'ine foldType: '2-KAT' (katalog KODU; DB'de gecerli: 2-KAT/4-KAT/TUP) ve workOrderNumber: 'IE1207260001' eklendi. Bekci DEGISMEDI.",
+      "degisenDosyalar": ["Teks-Erp/src/services/helpers/label-rawcode.ts"],
+      "silinenSatir": "yok",
+      "negatifSonda": "label-flow-to-canvas.ts kesme esigi bcTop-d(1) -> bcTop-d(12) yapildi -> SWATCH satirinda 'donusturucu DUSURDU ama akis basiyordu: lengthCm, weightKg, customerName, batchNumber' (18 gecti, 2 basarisiz). Sonda geri alindi.",
+      "sonKosum": "✅ test_label_canvas_equivalence.ts           20 gecti, 0 basarisiz    0.5s",
+      "yesilMi": true,
+      "not": "Yan etki taramasi: 'label' ailesinin 36 dosyasi kosuldu, 35 yesil. Tek kirmizi test_scrap_grade_label.ts (20/2) BENIM DEGISIKLIGIMDEN ONCE de ayni sayilarla kirmiziydi (mockPayload geri alinip dogrulandi) — devralinan, benim dordumun disinda. test_native_preview + test_sack_label yesil. tsc --noEmit temiz."
+    },
+    {
+      "bekci": "test_record_provenance",
+      "sinif": "bayat-bekci",
+      "kokNeden": "'kunyeli kayit KOLONDAN okunur' kontrolu ortamdan fixture devsiriyordu: customer.findFirst({ createdById: { not: null } }). tekserp_demo (fabrikanin gercek veri kopyasi) hicbir musteri satirinda createdById tasimiyor (backfill'in eslesecek audit satiri yok) -> KOD saglamken bekci kirmizi. Teks-Erp/CLAUDE.md bekci sozlesmesi: 'Ortamdaki veriye BAGIMLI OLMA (findFirst ile herhangi bir kayit ustune test kurma)'. Ayni mekanizmanin calistigini WORK_ORDER dali zaten yesil olarak kanitliyordu.",
+      "yapilan": "Bekci kendi kunyeli musterisini yaratiyor (code TEST-PRV-C-<ts>, ad da damgali — customers nameFold seddi), kolon yolunu olcuyor, finally'de kendi satirini siliyor.",
+      "degisenDosyalar": ["Teks-Erp/scripts/test_record_provenance.ts"],
+      "silinenSatir": "yok",
+      "negatifSonda": "record-info.service.ts kolon dali korlestirildi (early return null) -> 3 kirmizi: 'kunyeli kayit KOLONDAN okunur — none', 'kolon yolunda olusturan adi cozulur', 'is emri kunyesi KOLONDAN gelir (A2) — none' (17 gecti, 3 basarisiz). Sonda geri alindi, git diff temiz.",
+      "sonKosum": "✅ test_record_provenance.ts                  20 gecti, 0 basarisiz    0.5s",
+      "yesilMi": true,
+      "not": "Onceki hali 18 gecti/1 basarisizdi; else dalinda tek kontrol vardi, simdi iki kontrol de kosuyor (18+2=20)."
+    },
+    {
+      "bekci": "test_roll_warehouse_stamp",
+      "sinif": "kalinti-fixture",
+      "kokNeden": "Son kontrolun ETIKETI 'Bu kosumda deposuz top dogmadi' ama OLCUSU DB GENELINDE roll.count({warehouseId:null}) === 0 idi. Olculdu: 140 deposuz topun 140'i da TEST-/TST- on ekli, yani BASKA bekcilerin temizligi eksik kalan artiklari (TST-T3016 130 adet, TEST-S 4, TEST-M 2, TST-AD 2, TSTREP 1, TEST-I 1; en yenisi bugun 09:52). Gercek (test on eki olmayan) hicbir topta damga eksik degil. Yani bu bekci KOD saglamken tam paket kosumundan sonra sonsuza dek kirmizi kaliyordu.",
+      "yapilan": "Artiklar SILINMEDI (temizlik kurali: yalniz bekcinin KENDI on eki; bunlar baska bekcilerin ve silmek kalici cozum degil — sonraki tam kosum yeniden uretir). Bunun yerine olcu etiketiyle hizalandi ve ikiye bolundu: (1) 'Bu kosumda dogan her top damgali' (createdAt >= runStart) + korluk zemini 'bu kosumda top dogdu (dogan>=3)'; (2) 'Test-disi deposuz top yok (canli veri damgali)' — TEST/TST on ekleri sayimdan cikarilir ama GIZLENMEZ, artik adedi ciktiya basilir.",
+      "degisenDosyalar": ["Teks-Erp/scripts/test_roll_warehouse_stamp.ts"],
+      "silinenSatir": "yok — 140 kalinti satir bilerek korundu (baska bekcilerin on eki; genis silme YASAK)",
+      "negatifSonda": "inventory.service.ts createInitialEntry'de warehouseId: targetWarehouseId -> null yapildi -> yeni iki kontrol de kirmizi: 'Bu kosumda dogan her top damgali — T050926H0097, T050926H0096, T050926F0505' ve 'Test-disi deposuz top yok — deposuz(test-disi)=3 · test artigi=140' (5 gecti, 5 basarisiz). Sonda geri alindi, git diff temiz.",
+      "sonKosum": "✅ test_roll_warehouse_stamp.ts               10 gecti, 0 basarisiz    0.6s",
+      "yesilMi": true,
+      "not": "Onceki hali 7 gecti/1 basarisizdi; kontrol sayisi 8 -> 10."
+    }
+  ],
+  "ortakBulgu": "Dort kirmizinin UCU ayni sinifin ornegi: bekcinin fixture'i ya da olcu kapsami ORTAMDAKI VERIYE yaslanmis (test_masterdata_guards 'ilk iki aktif ozellik', test_record_provenance 'kunyesi dolu herhangi bir musteri', test_roll_warehouse_stamp 'DB genelinde deposuz top yok'). Teks-Erp/CLAUDE.md bekci sozlesmesi bunu zaten yasakliyor ama kural yalniz `findFirst` ornegini aniyor. Standarda girecek ders, kurali UC BICIME birden genisletmek: (1) `findFirst`/`take:N` ile secilen fixture — daima ayirt edici WHERE + deterministik orderBy, ve secimin dogru sinifta oldugu KORLUK ZEMINI ile dogrulanir; (2) 'ortamda su nitelikte bir kayit VARDIR' varsayimi — fixture'i bekci kendi yaratir, backfill/seed'e guvenmez; (3) DB-GENELI sayim iddiasi — sayimin kapsami etiketiyle birebir olmali, ve baska bekcilerin `TEST-`/`TST-` artiklarina karsi bagisik olmali (artik adedi gizlenmez, basilir). Dorduncu kirmizi (test_label_canvas_equivalence) ayni koke farkli yuzden bagli: mock/onizleme payload'i EKSIK oldugu icin iki kod yolu ayni girdiyi farkli yorumladi — 'mock payload katalogdaki HER surüklenebilir alani doldurur' kurali label-rawcode.ts'nin kendi yorumunda var ama mekanik kapisi yok; katalog<->mockPayload eksiksizligi AST/bekci ile olculmeli."
+}

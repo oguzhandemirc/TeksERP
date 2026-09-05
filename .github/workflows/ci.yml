@@ -7,14 +7,13 @@ name: CI
 
 on:
   push:
-    # ⚠️ `adnansahin` SAHAYA ÇIKAN daldır (fabrikanın sürümü oradan paketlenir) —
-    # `main` ise entegrasyon dalı. CI 2026-08-29'a kadar YALNIZ `main`e bağlıydı;
-    # ölçüldü (BULGU-T1-015): o tarihte `adnansahin`de 140 commit, 33 migration ve
-    # 67 yeni bekçi vardı ve HİÇBİRİ otomatik koşmamıştı. Yani "testler yeşil"
-    # cümlesi fabrikaya giden kod için hiçbir zaman doğrulanmamıştı.
-    branches: [main, adnansahin]
+    # Müşteri dalı YOK: fabrika paketi ve demo derlemesi `main`den üretilir, müşteri
+    # farkı yalnız bayrak profilinde yaşar (kök CLAUDE.md § Dallanma). `adnansahin`
+    # 2026-09-02'de emekli oldu — tetikleyicide bırakmak "o dalda da koşuyor"
+    # yanılsaması üretir ve emekli dalı yaşıyor gösterirdi.
+    branches: [main]
   pull_request:
-    branches: [main, adnansahin]
+    branches: [main]
   workflow_dispatch:
 
 # Teşhis adımının PR'a yorum yazabilmesi için (yeni repolarda varsayılan token
@@ -106,6 +105,12 @@ jobs:
       - name: Lint
         run: set -o pipefail; npm run lint 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
+      # Lint UYARILARI kapı değildir (eslint uyarıyla 0 döner) — tavan onları sayar
+      # ve yalnız DÜŞMESİNE izin verir; yoksa `warn` kuralları sessizce birikir.
+      - name: Lint tavanı (baseline)
+        run: set -o pipefail; node scripts/check-lint-baseline.mjs --proje=backend 2>&1 | tee -a /tmp/ci-backend.log
+        shell: bash
+        working-directory: .
       - name: Type-check (yalnız src)
         run: set -o pipefail; npx tsc --noEmit 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
@@ -212,8 +217,14 @@ jobs:
       - run: npm ci
       - name: Lint
         run: npm run lint
+      - name: Lint tavanı (baseline)
+        run: node scripts/check-lint-baseline.mjs --proje=electron
+        working-directory: .
+      # ⚠️ ÇIPLAK `npx tsc --noEmit` BURADA HİÇBİR DOSYAYI DERLEMEZ: kök tsconfig
+      # `files: []` + `references` taşır ve `-b` olmadan referanslara girilmez. Adım
+      # 2026-09-05'e kadar no-op'tu; 9 tip hatası main'de bir gün durdu.
       - name: Type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
       - name: Test (Vitest)
         run: npm test
 
@@ -234,12 +245,18 @@ jobs:
           cache: npm
           cache-dependency-path: mobil/package-lock.json
       - run: npm ci
-      - name: Lint (expo lint)
+      # `eslint .` (expo lint DEĞİL): expo lint yol verilmezse App.tsx/index.ts/
+      # config/plugins/scripts dizinlerini görmez — kapı ile baseline aynı kümeyi
+      # ölçmezse "tavan aşılmadı" cümlesi anlamını yitirir (MOBIL.md [MO-37]).
+      - name: Lint
         run: npm run lint
+      - name: Lint tavanı (baseline)
+        run: node scripts/check-lint-baseline.mjs --proje=mobil
+        working-directory: .
       - name: Type-check
         run: npx tsc --noEmit
       - name: Test (jest-expo)
-        run: npm test
+        run: npx jest --runInBand
 
   # ===========================================================================
   # E2E — Electron uygulaması gerçekten açılıp Login render oluyor mu (Playwright

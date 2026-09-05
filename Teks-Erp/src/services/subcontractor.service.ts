@@ -2086,9 +2086,8 @@ export class SubcontractorService {
       const cancelTag = `CANCEL:${dispatch.dispatchNo}`;
       await tx.$executeRaw`
         UPDATE "roll_movements"
-        -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-        -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-        SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+        -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+        SET "exitedAt" = now(),
             "notes" = CASE
               WHEN "notes" IS NULL OR "notes" = '' THEN ${cancelTag}
               ELSE "notes" || ' | ' || ${cancelTag}
@@ -2941,9 +2940,8 @@ export class SubcontractorService {
           UPDATE "roll_movements" rm
           SET "qtyOut"   = COALESCE(rm."qtyIn", r."currentQty"),
               "weightOut" = r."weightKg",
-              -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-              -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-              "exitedAt"  = (now() AT TIME ZONE 'UTC'),
+              -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+              "exitedAt"  = now(),
               "notes"     = ${`RETURNED_VIA_RECEIPT:${receiptNo}`}
           FROM "rolls" r
           WHERE rm."rollId" = r."id"
@@ -3699,8 +3697,8 @@ export class SubcontractorService {
         UPDATE "roll_movements" rm
         SET "qtyOut"   = COALESCE(rm."qtyIn", r."currentQty"),
             "weightOut" = r."weightKg",
-            -- O-11: tz'siz kolona UTC yaz (receive'daki yazımla birebir aynı gerekçe).
-            "exitedAt"  = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            "exitedAt"  = now(),
             "notes"     = ${`REMAINDER_CLOSED:${data.reasonCode}`}
         FROM "rolls" r
         WHERE rm."rollId" = r."id"
@@ -4750,42 +4748,47 @@ export class SubcontractorService {
     instruction: string | null,
     userId?: string
   ): Promise<ApiResponse<{ id: string; dispatchNo: string; instruction: string | null }>> {
-    const dispatch = await prisma.subcontractorDispatch.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        cancelledAt: true,
-        instruction: true,
-        // P4: bu sevkin (iptal edilmemiş) bir kabulü var mı? Varsa fason firma
-        // malı zaten işledi — talimatı değiştirmek anlamsız/yanıltıcı, kilitle.
-        items: {
-          select: {
-            receiptItems: {
-              where: { receipt: { cancelledAt: null } },
-              select: { id: true },
-              take: 1,
-            },
-          },
-        },
-      },
-    });
-    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
-    if (dispatch.cancelledAt) {
-      throw AppError.conflict("İptal edilmiş sevkin fason talimatı düzenlenemez");
-    }
-    if (dispatch.items.some((it) => it.receiptItems.length > 0)) {
-      throw AppError.conflict(
-        "Mal kabul edilmiş — fason talimatı artık düzenlenemez.",
-      );
-    }
-
     // Boş/whitespace → null (talimatı temizle).
     const next = instruction && instruction.trim() ? instruction.trim() : null;
 
-    const updated = await prisma.subcontractorDispatch.update({
-      where: { id },
-      data: { instruction: next },
-      select: { id: true, dispatchNo: true, instruction: true },
+    // Kilit koşulları (iptal edilmemiş + kabulsüz) claim'in WHERE'ine konur:
+    // eskiden okuma ile yazma tx dışında ayrıydı ve o pencerede gelen bir iptal
+    // ya da mal kabulü, kilitlenmiş bir sevkin talimatını değiştirtiyordu.
+    const { updated, oldInstruction } = await prisma.$transaction(async (tx) => {
+      const dispatch = await tx.subcontractorDispatch.findUnique({
+        where: { id },
+        select: { id: true, instruction: true },
+      });
+      if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+
+      const claimed = await tx.subcontractorDispatch.updateMany({
+        where: {
+          id,
+          cancelledAt: null,
+          // P4: bu sevkin (iptal edilmemiş) bir kabulü varsa fason firma malı
+          // zaten işledi — talimatı değiştirmek anlamsız/yanıltıcı, kilitle.
+          items: { none: { receiptItems: { some: { receipt: { cancelledAt: null } } } } },
+        },
+        data: { instruction: next },
+      });
+      if (claimed.count === 0) {
+        // Tanı tx İÇİNDE taze okumayla — iki sebebin hangisi olduğu söylenmeli.
+        const fresh = await tx.subcontractorDispatch.findUnique({
+          where: { id },
+          select: { cancelledAt: true },
+        });
+        throw AppError.conflict(
+          fresh?.cancelledAt
+            ? "İptal edilmiş sevkin fason talimatı düzenlenemez"
+            : "Mal kabul edilmiş — fason talimatı artık düzenlenemez.",
+        );
+      }
+
+      const row = await tx.subcontractorDispatch.findUniqueOrThrow({
+        where: { id },
+        select: { id: true, dispatchNo: true, instruction: true },
+      });
+      return { updated: row, oldInstruction: dispatch.instruction };
     });
 
     await AuditService.log({
@@ -4793,7 +4796,7 @@ export class SubcontractorService {
       action: "UPDATE",
       tableName: "SUBCONTRACTOR_DISPATCH",
       recordId: id,
-      oldData: { instruction: dispatch.instruction },
+      oldData: { instruction: oldInstruction },
       newData: { instruction: next },
     });
 
@@ -6418,9 +6421,8 @@ export class SubcontractorService {
         UPDATE "roll_movements" rm
         SET "qtyOut" = r."currentQty",
             "weightOut" = r."weightKg",
-            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-            "exitedAt" = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            "exitedAt" = now(),
             "notes" = CASE
               WHEN rm."notes" IS NULL OR rm."notes" = '' THEN ${tag}
               ELSE rm."notes" || ' | ' || ${tag}
@@ -6508,9 +6510,8 @@ export class SubcontractorService {
         if (completeWorkOrder) {
           await tx.$executeRaw`
             UPDATE "roll_movements"
-            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-            SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            SET "exitedAt" = now(),
                 "notes" = CASE WHEN "notes" IS NULL OR "notes" = '' THEN 'FASON_DIRECT_SHIP'
                                ELSE "notes" || ' | FASON_DIRECT_SHIP' END
             WHERE "workOrderStepId" IN (

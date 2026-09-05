@@ -3,9 +3,11 @@ import { View, StyleSheet } from 'react-native';
 import { Text, Chip } from 'react-native-paper';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import ScreenChrome from '../../components/ScreenChrome';
 import { useVisibleScreens } from '../../hooks/useVisibleScreens';
 import { SCREEN_BY_KEY, MobileScreenKey } from '../../types/permissions';
+import type { MainStackParamList } from '../../navigation/types';
 
 interface ModulePlaceholderProps {
   screenKey: MobileScreenKey;
@@ -14,7 +16,7 @@ interface ModulePlaceholderProps {
 function ModulePlaceholder({ screenKey }: ModulePlaceholderProps) {
   const meta = SCREEN_BY_KEY[screenKey];
   const { hasMultipleVisibleScreens } = useVisibleScreens();
-  const nav = useNavigation<any>();
+  const nav = useNavigation<NativeStackNavigationProp<MainStackParamList>>();
 
   const canGoBack = hasMultipleVisibleScreens && nav.canGoBack();
 
@@ -26,7 +28,11 @@ function ModulePlaceholder({ screenKey }: ModulePlaceholderProps) {
     >
       <View style={styles.content}>
         <View style={styles.iconBox}>
-          <MaterialCommunityIcons name={meta.icon as any} size={96} color="#4f46e5" />
+          <MaterialCommunityIcons
+            name={meta.icon as React.ComponentProps<typeof MaterialCommunityIcons>['name']}
+            size={96}
+            color="#4f46e5"
+          />
         </View>
         <Text variant="headlineMedium" style={styles.title}>
           {meta.label}

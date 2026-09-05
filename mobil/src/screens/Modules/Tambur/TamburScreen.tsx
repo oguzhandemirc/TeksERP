@@ -1195,6 +1195,9 @@ export default function TamburScreen() {
   };
 
   // ── Mutations ──
+  // Online-only (kuyruğa GİRMEZ): doğan parça toplarının barkodunu SUNUCU üretir
+  // ve etiket aynı dokunuşta yanıttan basılır — kuyrukta yanıt yoktur, operatör
+  // hangi topların doğduğunu göremez; istek de idempotent değil (token yok).
   const finalizeMutation = useMutation({
     mutationFn: (data: TamburFinalizeRequest) => tamburService.finalize(data),
     onSuccess: async (res) => {
@@ -1242,6 +1245,8 @@ export default function TamburScreen() {
 
   // Gerçek saha akışı: operatör kesimi yapar, anında sisteme girer + etiket
   // basılır. Bulk submit değil, her "Top Oluştur" anında backend'e gider.
+  // Online-only: çocuk topun barkodu sunucudan gelir ve etiket o an basılır;
+  // `clientToken` yalnız AĞ retry'ı içindir, çevrimdışı kuyruk için değil.
   const cutOpenFabricMutation = useMutation({
     mutationFn: (data: {
       rollId: string;
@@ -1522,6 +1527,8 @@ export default function TamburScreen() {
 
   // Top Kesme — multi-cut: her kesim child Roll doğurur, parent currentQty
   // düşer, etiket otomatik basılır. Operatör istediği kadar tekrarlar.
+  // Online-only: çocuğun barkodu sunucu üretimi ve etiket aynı anda basılıyor —
+  // kuyruğa alınan kesimin etiketi saatler sonra, sıra karışmışken çıkardı.
   const cutWarehouseRollMutation = useMutation({
     mutationFn: ({
       rollId,
@@ -1632,6 +1639,8 @@ export default function TamburScreen() {
   // Eski recutSwatchMutation / handleRecutKartela kaldırıldı. Bkz. docs/design/KARTELA-TASARIM.md.
 
   // Top Kesme'yi bitir — parent retire (TAMBUR_CONSUMED), kalan için karar
+  // Online-only: yanıttaki `remainingChild` (sunucunun yarattığı kalan top)
+  // doğrudan etiket kuyruğuna giriyor — kuyruklanmış çağrının yanıtı yoktur.
   const finalizeWarehouseCutMutation = useMutation({
     mutationFn: ({
       rollId,
@@ -7165,6 +7174,9 @@ function FinalizeRemainingModal({
   const canReorder =
     !!canEditPresets && !loading && orderedPresets.every((r) => !isBuiltinPreset(r));
 
+  // Online-only: bu bir KATALOG yazımı, istasyon üretim yazması değil; hata
+  // anında yerel sıra hemen geri alınır (`setLocalOrder(null)`) — kuyrukta o
+  // geri alma saatler sonra olur ve ekran o süre boyunca yalan söyler.
   const reorder = useMutation({
     mutationFn: async (visibleIdsInNewOrder: string[]) => {
       // ⚠️ Sunucu o kind'ın TÜM id'lerini ister (gizlenmiş satırlar dahil) ve
@@ -7931,6 +7943,9 @@ function TamburUndoConfirmModal({
   const needsReason =
     preview?.options?.find((o) => o.mode === effectiveMode)?.requiresReason ?? false;
 
+  // Online-only (`bypassComplete` ile aynı sınıf): geri alma, sunucudan TAZE
+  // çekilmiş önizlemenin kapsamına uygulanır; kuyruklanan yıkıcı işlem saatler
+  // önce görülmüş bir kapsamı yazardı. Hata anında önizleme yeniden çekilir.
   const applyMut = useMutation({
     mutationFn: () =>
       tamburService.applyUndo(rollId!, {

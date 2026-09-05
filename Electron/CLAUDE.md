@@ -10,7 +10,9 @@ Electron 42 + React 19 + TypeScript + Vite. Yönetim paneli; saha akışı yok; 
 npm run dev          # electron-vite dev (renderer 5174 + main + preload)
 npm run dev:web / build:web   # web paneli (dist-web → backend paketine girer; BossShell / patron modülü)
 npm run build · build:mac · build:win   # ⚠️ ham build:win KULLANMA — deploy/electron-paketle.sh <müşteri>
-npm run typecheck · lint · test (vitest) · test:mutation (stryker) · e2e (playwright) · electron:rebuild (serialport, node-hid)
+npm run typecheck · lint · test (vitest, 208 dosya/23 sn — commit kapısında)
+# test:mutation (stryker) ve e2e (playwright) KAPI DEĞİLDİR: stryker CI'da hiç koşmaz, e2e continue-on-error.
+npm run electron:rebuild   # serialport, node-hid
 ```
 `VITE_API_BASE_URL=http://localhost:4000`, `APP_ENV=development`. Skill'ler: `.claude/skills/electron-admin-page`, `electron-ipc-handler`.
 
@@ -27,7 +29,7 @@ JWT yalnız `permissions[]`; `useRoleAccess` → `isAdmin`/`hasPermission`/…; 
 
 ## Sayfa kalıpları
 
-- **Yeni master data sayfası 5 dosya:** `pages/<Module>/` → `types.ts` · `service.ts` (`createCrudService`) · `schema.ts` (zod, `Partial<T>` backend'le uyumlu) · `columns.tsx` · `<Module>FormDialog.tsx` + `<Module>Page.tsx` (`useDataTable` + `useCrudMutations` + `DataTable` + `EntityFormDialog`). Route `content-routes.tsx` (`ProtectedRoute requirePermission`) + backend `screen-catalog.ts` girdisi (HER route için, `modul` zorunlu); ekranın hub'ı varsa ilgili `tile-config.ts`e karo (izin listesi route ile birebir), karosuzsa `command-entries.ts`e palet girişi; **Sidebar'a satır EKLENMEZ**. Reçete: `docs/RECETELER.md` § Electron sayfası.
+- **Yeni master data sayfası 5 dosya:** `pages/<Module>/` → `types.ts` · `service.ts` (`createCrudService`) · `schema.ts` (zod; ⚠️ backend master-data CRUD'da Zod YOKTUR — `BaseController` gövdeyi doğrudan servise geçirir, yani panel şeması TEK KAPIDIR ve `max(n)` Prisma `@db.VarChar(n)` ile birebir olmalıdır) · `columns.tsx` · `<Module>FormDialog.tsx` + `<Module>Page.tsx` (`useDataTable` + `useCrudMutations` + `DataTable` + `EntityFormDialog`). Route `content-routes.tsx` (`ProtectedRoute requirePermission`) + backend `screen-catalog.ts` girdisi (HER route için, `modul` zorunlu); ekranın hub'ı varsa ilgili `tile-config.ts`e karo (izin listesi route ile birebir), karosuzsa `command-entries.ts`e palet girişi; **Sidebar'a satır EKLENMEZ**. Reçete: `docs/RECETELER.md` § Electron sayfası.
 - **Sayfa iskeleti (KRİTİK):** `TabHost` her sayfayı `absolute inset-0` sarar → `<PageShell>` (flex h-full min-h-0) · sabit `PageHeader`/toolbar · TEK kaydırıcı `<PageBody min-h-0>` · `<PageFooter>` sabit butonlar. `DataTable`/`CrudPage` kendi kaydırıcısını yönetir. Sonsuz kaydırma otomatik (`useInfiniteScroll` + `<AutoLoadMore>`); "Daha Fazla Yükle" YOK.
 - **Gezinme:** her sekme kendi memory router'ında; `navigate(-1)` garanti değil — geri daima yedeğe düşer ve tek yer `PageHeader` (`onBack` > sekme geçmişi > breadcrumb); derinlik `tabs/history-depth.ts` (PUSH+1/POP−1/REPLACE değişmez), `location.key` ile çözülmez; `TabRouter` `syncTabLocation` ile defteri eşitler; kenar menüsü `useTabTarget`, hub kartı `useDrillTarget`; `Alt+←`/fare yan tuşları `preventDefault` + `backActive()`. Bekçiler `tabs/history-depth.test.ts`, `PageHeader.test.tsx`, `store/tabs.back.test.ts`, `HubCard.test.tsx`.
 - Ayrıntı alan dosyalarında: iskelet/gezinme `docs/kurallar/filtre-liste.md`, süreç sınırı `docs/kurallar/kesif-cihaz.md`, belge/baskı `docs/kurallar/belge-etiket.md`.
@@ -35,7 +37,7 @@ JWT yalnız `permissions[]`; `useRoleAccess` → `isAdmin`/`hasPermission`/…; 
 - **Belge/etiket/baskı:** baskı iframe'leri `sandbox="allow-same-origin allow-modals"` (`allow-scripts` YOK); iç veri kolonu OPT-IN (`defaultHidden` + `shown` allowlist, `sanitizeDocumentsConfig` aynası zorunlu); toplu belge her belgeyi kendi shadow DOM köküne koyar, `@page` adlandırılmış, CSS yorumları önce silinir; `print-event` yalnız kâğıt baskısında. Ayrıntı: `docs/kurallar/belge-etiket.md`, `refakat-karti.md`.
 - **Filtre/liste:** çoklu seçim CSV; süzme sunucuda; `dateField` gönderilmezse aralık yok sayılır; NumpadHost `autoActivate` tek alanda; Ctrl+F sayfa içi arama YOK. `docs/kurallar/filtre-liste.md`.
 - **Bayrak paneli:** `FlagDef.numberField` iç adı `numberKey:` ZORUNLU; kapalı modülün bayrak satırı fabrika yöneticisine çizilmez (`flag-modules.ts`, satırdan türer). `docs/kurallar/modul-bayrak.md`.
-- Dosya boyutu: tek dosya ≤300, Page ≤200 satır ZORUNLU (yeni ve dokunduğun dosyada); devralınan 134/1385 ve 55/131 ihlal bu sınırın dışında, bekçi yok; `columns/schema/service/types` ayrı.
+- Dosya boyutu: tek dosya ≤300, Page ≤200, FormDialog ≤200 satır ZORUNLU (yeni ve dokunduğun dosyada); devralınan ihlaller `lint-baseline.json`'da donar ve tavan yalnız düşer (ESLint `max-lines` + `node scripts/check-lint-baseline.mjs`). Katalog/registry dosyaları ADLI muafiyet listesindedir. Ayrıntı: `docs/standart/ELECTRON.md`.
 
 ## Otomatik güncelleme (özet)
 
@@ -43,7 +45,7 @@ JWT yalnız `permissions[]`; `useRoleAccess` → `isAdmin`/`hasPermission`/…; 
 
 ## Paketler
 
-Yenisi için onay al. Core `electron electron-vite electron-builder` · native `electron-log electron-store electron-window-state electron-updater serialport node-hid` (`@electron/rebuild`) · keşif `bonjour-service` (**1.4.4 sabit, `dependencies`'te kalmak ZORUNDA**, tembel yükleme) · UI `react react-dom react-router-dom react-hook-form @hookform/resolvers zod` shadcn/ui `cmdk sonner lucide-react next-themes framer-motion react-day-picker` · style `tailwindcss @tailwindcss/vite class-variance-authority tailwind-merge clsx @fontsource/*` · state `zustand @tanstack/react-query` · tablo `@tanstack/react-table @tanstack/react-virtual` · `axios date-fns recharts @dnd-kit/* qrcode.react react-colorful exceljs @react-pdf/renderer buffer` · test `vitest @testing-library/react @stryker-mutator/core @playwright/test`. Liste `package.json` ile kıyaslanarak okunur.
+Yenisi için onay al. Core `electron electron-vite electron-builder` · native `electron-log electron-store electron-updater serialport node-hid` (`@electron/rebuild`) · keşif `bonjour-service` (**1.4.4 sabit, `dependencies`'te kalmak ZORUNDA**, tembel yükleme) · UI `react react-dom react-router-dom react-hook-form @hookform/resolvers zod` shadcn/ui `cmdk sonner lucide-react next-themes framer-motion react-day-picker` · style `tailwindcss @tailwindcss/vite class-variance-authority tailwind-merge clsx @fontsource/plus-jakarta-sans` · state `zustand @tanstack/react-query` · tablo `@tanstack/react-table @tanstack/react-virtual` · `axios date-fns recharts @dnd-kit/* qrcode.react react-colorful exceljs buffer` (PDF paketi YOK — baskı HTML + iframe) · test `vitest @testing-library/react @stryker-mutator/core @playwright/test`. Karar kaydı ve katman × ihtiyaç tablosu: `docs/standart/KUTUPHANELER.md` §2.2 (bekçi `test_dependency_contract`).
 
 ## Test kullanıcıları ve gotcha'lar
 

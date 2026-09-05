@@ -45,6 +45,7 @@ import {
   type ReopenPreview,
 } from '../../../services/kursunQc.service';
 import { isWorkSessionLost } from '../../../services/api';
+import { signalScan } from '../../../services/scanFeedback';
 import { defectTypeService } from '../../../services/defectType.service';
 import { rollService } from '../../../services/roll.service';
 import { STATION_MUT } from '../../../offline/mutations';
@@ -372,6 +373,9 @@ export default function KursunQcScreen() {
     // Aynı kart zaten açıksa o sekmeye geç
     const existing = openJobs.find((j) => j.cardBarcode === barcode);
     if (existing) {
+      // Mükerrer okutma: kart zaten sekmede. Sessiz kalırsa operatör "okumadı"
+      // sanıp tekrar okutur, `accept` verilirse kartı yeniden açtığını sanır.
+      signalScan('duplicate');
       setActiveCardId(existing.cardId);
       if (fromInput) setCardBarcode('');
       Toast.show({
@@ -393,7 +397,7 @@ export default function KursunQcScreen() {
       const res = await kursunQcService.getByCardBarcode(barcode);
       const step = res.data as KursunStepSummary | undefined;
       if (!step) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         setCardError(`Kart bulunamadı: ${barcode}`);
         Toast.show({ type: 'error', text1: 'Kart bulunamadı', text2: barcode });
         return;
@@ -403,7 +407,9 @@ export default function KursunQcScreen() {
       // çekilir). Önce önizleme çek, onay modalını aç; reopen kullanıcı onayıyla.
       if (step.status === 'COMPLETED') {
         const prev = await kursunQcService.reopenPreview(step.workOrderStepId);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        // Okutma sonucu HENÜZ yok: bu bir SORU (onay modalı). Sonuç sinyalini
+        // onay sonrası `openResolvedStep` (accept) ya da catch (reject) verir —
+        // önce ret sonra kabul basmak birbirini yalanlardı.
         setReopenPrompt({
           barcode,
           fromInput,
@@ -416,7 +422,7 @@ export default function KursunQcScreen() {
 
       openResolvedStep(barcode, step, fromInput, false);
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       setCardError((err as Error).message);
       Toast.show({
         type: 'error',
@@ -443,7 +449,7 @@ export default function KursunQcScreen() {
       stepSummary: step,
       selectedRollId: null,
     };
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    signalScan('accept');
     setOpenJobs((prev) => [...prev, newJob]);
     setActiveCardId(newJob.cardId);
     if (fromInput) setCardBarcode('');
@@ -474,7 +480,7 @@ export default function KursunQcScreen() {
       openResolvedStep(reopenPrompt.barcode, step, reopenPrompt.fromInput, true);
       setReopenPrompt(null);
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({
         type: 'error',
         text1: 'Adım yeniden açılamadı',

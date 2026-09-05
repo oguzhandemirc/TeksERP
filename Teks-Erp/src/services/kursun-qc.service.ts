@@ -898,9 +898,8 @@ export class KursunQcService {
         UPDATE "roll_movements"
         SET "qtyOut" = "qtyIn",
             "weightOut" = "weightIn",
-            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-            "exitedAt" = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            "exitedAt" = now(),
             "machineId" = COALESCE(${machineId ?? null}::uuid, "machineId"),
             "notes" = ${finishMarker}
         WHERE "workOrderStepId" = ${step.id}::uuid
@@ -1744,5 +1743,4 @@ export class KursunQcService {
 }
 
 // Satisfy strict unused-locals for import Prisma (type-only usage).
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 type _PrismaKeep = Prisma.TransactionClient;

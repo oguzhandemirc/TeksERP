@@ -70,7 +70,7 @@ export function SackTagsPage() {
           : "Bu etiketi taşıyan çuvallar etkilenmedi — rozet soluk görünür, yeni iz bırakılamaz.",
       });
     },
-    onError: (err: Error) => toast.error("İşlem yapılamadı", { description: err.message }),
+    // onError YOK ([EL-17]): interceptor 4xx'te backend mesajını basar.
   });
 
   /**
@@ -95,7 +95,7 @@ export function SackTagsPage() {
       await sackTagService.update(b.id, { sortOrder: a.sortOrder });
     },
     onSuccess: () => invalidate(),
-    onError: (err: Error) => toast.error("Sıra kaydedilemedi", { description: err.message }),
+    // onError YOK ([EL-17]): interceptor 4xx'te backend mesajını basar.
   });
 
   const remove = useMutation({
@@ -105,9 +105,9 @@ export function SackTagsPage() {
       setConfirmDelete(null);
       toast.success("Etiket silindi");
     },
-    // ⚠️ Kullanımdaki etikette sunucu 409 + "… çuvalda kullanılmış" der.
-    // Mesajı AYNEN göster: operatörün bir sonraki adımı ("Pasif yap") onda yazılı.
-    onError: (err: Error) => toast.error("Silinemedi", { description: err.message }),
+    // onError YOK ([EL-17]): kullanımdaki etikette sunucu 409 + "… çuvalda
+    // kullanılmış" der ve interceptor o mesajı AYNEN basar — operatörün bir
+    // sonraki adımı ("Pasif yap") onda yazılı.
   });
 
   /** Bir yukarı/aşağı taşı — komşuyla `sortOrder` takası. */

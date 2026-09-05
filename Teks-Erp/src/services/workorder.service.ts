@@ -3701,9 +3701,8 @@ export class WorkOrderService {
       if (stepIds.length > 0) {
         await tx.$executeRaw`
           UPDATE roll_movements m
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          SET "exitedAt" = now(),
               "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
               "weightOut" = COALESCE(m."weightOut", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_CANCELLED'
@@ -4225,9 +4224,8 @@ export class WorkOrderService {
         // Bayat açık movement kalmışsa kapat (defansif — WIP yok ama iz temiz olsun).
         await tx.$executeRaw`
           UPDATE roll_movements m
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          SET "exitedAt" = now(),
               -- qtyIn ÖNCE (istasyon iş-hacmi paritesi — yukarıdaki dispozisyon
               -- kapanışıyla aynı gerekçe): kesilmiş topta currentQty ile kapatmak
               -- üretim raporunda hayalet kayıp yaratır. qtyIn 0/null ise kalan metraj.
@@ -4517,9 +4515,8 @@ export class WorkOrderService {
         // terminal duruma çek (softDelete ile aynı gerekçe).
         await tx.$executeRaw`
           UPDATE roll_movements m
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          SET "exitedAt" = now(),
               "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
               "weightOut" = COALESCE(m."weightOut", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_ARCHIVED'
@@ -6246,9 +6243,8 @@ export class WorkOrderService {
       //    Tek sorgu = O(1) (eski per-roll updateMany yerine).
       await tx.$executeRaw`
         UPDATE roll_movements m
-        -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-        -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-        SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+        -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+        SET "exitedAt" = now(),
             "qtyOut" = r."currentQty",
             "weightOut" = r."weightKg",
             notes = 'DETACHED_FROM_WO'

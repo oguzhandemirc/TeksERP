@@ -99,9 +99,9 @@ function svgBarcode(
   if (human) out += svgText(x + ww / 2, y + heightDots + 4, 18, data, { anchor: "middle" });
   return out;
 }
-function wrapSvg(W: number, H: number, els: string[]): string | null {
-  if (!W || !H) return null;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#fff"/>${els.join("")}</svg>`;
+function wrapSvg(widthDots: number, heightDots: number, els: string[]): string | null {
+  if (!widthDots || !heightDots) return null;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${widthDots} ${heightDots}" width="${widthDots}" height="${heightDots}"><rect width="${widthDots}" height="${heightDots}" fill="#fff"/>${els.join("")}</svg>`;
 }
 
 /** Ham PPLB string'inden GW (inline 1bpp grafik) bloklarını ÇIKAR → her biri BMP <image>'e

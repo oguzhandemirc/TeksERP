@@ -586,7 +586,7 @@ function SearchControls({
     return (
       <View style={[styles.searchGroup, isPhone && styles.searchGroupPhone]}>
         <TextInput
-          ref={searchRef as React.Ref<any>}
+          ref={searchRef as React.ComponentProps<typeof TextInput>['ref']}
           mode="outlined"
           dense
           placeholder="Ara..."
@@ -624,7 +624,7 @@ function SearchControls({
   }
   return (
     <TextInput
-      ref={searchRef as React.Ref<any>}
+      ref={searchRef as React.ComponentProps<typeof TextInput>['ref']}
       mode="outlined"
       dense
       placeholder="Ara..."

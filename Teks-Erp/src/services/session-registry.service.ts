@@ -23,10 +23,9 @@ import type { SameTypeSessionPolicy } from "./system-setting.service";
 
 /**
  * Oturum kaydı advisory lock namespace'i (2026-08-09, F-KIM-GUV-003).
- * ENVANTER (tek yer burada değil — audit/surface/12-tx-global-gercekler.md §4.2):
- *   8021 KK1 mükerrer giriş · 8022 parti no · 8023 sevkiyat kapsamı
- *   8024 oturum kaydı (bu) · 8025 yetki (son-admin) guard'ı
- * Yeni bir kilit eklerken 2 ARGÜMANLI formu kullan ve buraya satır ekle;
+ * Uzay envanteri TEK KAYNAK: `helpers/period-guard.helper.ts` başlığı — kopya
+ * liste tutulmaz. Bu uzay **8024 oturum kayıt defteri**dir.
+ * Yeni bir kilit eklerken 2 ARGÜMANLI formu kullan ve satırı ENVANTERE yaz;
  * 1-argümanlı uzay AYRI bir uzaydır ve paylaşımı sessiz serileşme üretir.
  */
 export const SESSION_REGISTRY_LOCK_NS: number = 8024;

@@ -252,7 +252,6 @@ export default function KartelaKabulScreen() {
       }
       draftRestoredRef.current = true;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

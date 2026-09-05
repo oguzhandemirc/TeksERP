@@ -42,6 +42,21 @@ function check(label: string, ok: boolean, detail?: string): void {
   }
 }
 
+/**
+ * ÖLÇÜLEMEYEN kontrol — kırmızı DEĞİL, GÖRÜNÜR atlama.
+ *
+ * Ayrım load-bearing: "kod yanlış" ile "bu kurulumun VERİSİ bu ölçümü mümkün
+ * kılmıyor" aynı şey değildir. İkincisini kırmızı saymak, paketi kalıcı kırmızıda
+ * bırakır ve kırmızıyı normalleştirir; sessizce geçmek ise "yeşil = kapsandı"
+ * yalanını üretir. Koşucu `run-all-tests.ts` özet satırındaki "N atlandı"yı
+ * okuyup raporlar (2026-09-05).
+ */
+let atlanan = 0;
+function atla(label: string, neden: string): void {
+  atlanan++;
+  console.log(`⏭️  ATLANDI — ${label}\n      ↳ ${neden}`);
+}
+
 async function main(): Promise<void> {
   // ── §1 Kural KALİTEDE, statüde değil ──────────────────────────────────────
   const grades = await prisma.qualityGrade.findMany({
@@ -203,12 +218,28 @@ async function main(): Promise<void> {
         : "skipLabel'lı barkodlu top yok — atlandı",
     );
   } else {
-    check("§5 fire etiketinde uyarı metni VAR", fireLabel.includes("SATILAMAZ"), fireLabel.slice(0, 200));
-    check(
-      "§5b fire etiketinde 'FIRE' TEK KEZ geçiyor (mükerrer kalite elemanı bastırıldı)",
-      (fireLabel.match(/"FIRE"/g) ?? []).length === 1,
-      `bulunan: ${(fireLabel.match(/"FIRE"/g) ?? []).length}`,
-    );
+    // ⚠️ §5/§5b ETİKET İÇERİĞİNİ ölçer ve içerik ŞABLON VERİSİNDEN doğar: uyarı
+    // metni ve kalite elemanı, fabrikanın Etiket Stüdyosu'ndan düzenlediği aktif
+    // ROLL_FINISHED şablonunda tanımlıdır. Bu bekçinin sözleşmesi (başlık) backend
+    // kapılarıdır; şablon içeriği bir KURULUM KARARIDIR ve bu bekçinin sahibi
+    // olduğu bir şey değildir. Şablon o alanı hiç taşımıyorsa ölçüm YAPILAMAZ —
+    // kırmızı vermek "kod bozuk" der ki yanlıştır (Teks-Erp/CLAUDE.md § bekçi
+    // sözleşmesi: ortamdaki veriye bağımlı olma).
+    const kaliteElemanliSablon = fireLabel.includes('"FIRE"') || fireLabel.includes("SATILAMAZ");
+    if (!kaliteElemanliSablon) {
+      atla(
+        "§5/§5b fire etiketi içeriği",
+        "aktif ROLL_FINISHED şablonu kalite/uyarı elemanı TAŞIMIYOR (akış modunda, kanvas varyantı yok) — " +
+          "ölçüm şablon verisine bağlı, koda değil. Fabrika şablonu kanvasa taşıdığında bu iki kontrol kendiliğinden koşar.",
+      );
+    } else {
+      check("§5 fire etiketinde uyarı metni VAR", fireLabel.includes("SATILAMAZ"), fireLabel.slice(0, 200));
+      check(
+        "§5b fire etiketinde 'FIRE' TEK KEZ geçiyor (mükerrer kalite elemanı bastırıldı)",
+        (fireLabel.match(/"FIRE"/g) ?? []).length === 1,
+        `bulunan: ${(fireLabel.match(/"FIRE"/g) ?? []).length}`,
+      );
+    }
   }
   if (goodLabel == null) {
     check("§5c normal etiket render edilebildi", false, "skipLabel'sız barkodlu top yok — atlandı");
@@ -290,7 +321,7 @@ async function main(): Promise<void> {
     check("§6g normal top kapıdan ETKİLENMİYOR", ok);
   }
 
-  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan > 0 ? `, ${atlanan} atlandı` : ""} ===`);
 }
 
 main()

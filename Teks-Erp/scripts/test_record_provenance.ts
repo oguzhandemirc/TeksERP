@@ -150,15 +150,32 @@ async function main(): Promise<void> {
   // sessizce boş dönüyordu. Bu bölüm iki yolun da canlıda çalıştığını ölçer.
   const { recordInfoService } = await import("../src/services/record-info.service");
 
-  const withCol = await prisma.customer.findFirst({
-    where: { createdById: { not: null } }, select: { id: true },
-  });
-  if (withCol) {
-    const r = await recordInfoService.get("CUSTOMER", withCol.id);
+  // ⚠️ FIXTURE KENDİ KURULUR, ORTAMDAN DEVŞİRİLMEZ (2026-09-05 yeşile-çekme).
+  // Eskiden burada `customer.findFirst({ createdById: { not: null } })` vardı:
+  // künyeli müşteri satırı OLMAYAN bir DB'de (backfill'in eşleşecek audit
+  // satırı bulamadığı canlı kopya dahil) bekçi KOD sağlamken kırmızı veriyordu
+  // — Teks-Erp/CLAUDE.md "ortamdaki veriye BAĞIMLI OLMA" kuralının ihlali.
+  // Kolon yolu ölçülecekse künyeli satırı bekçi kendisi doğurur.
+  let prvCustomerId = "";
+  try {
+    const c = await prisma.customer.create({
+      data: {
+        code: `TEST-PRV-C-${ts}`,
+        // Ad da damgalı — customers nameFold seddi (2026-08-21).
+        name: `TEST KUNYE MUSTERI ${ts}`,
+        createdById: u1!.id,
+        updatedById: u1!.id,
+      },
+      select: { id: true },
+    });
+    prvCustomerId = c.id;
+    const r = await recordInfoService.get("CUSTOMER", prvCustomerId);
     check("künyeli kayıt KOLONDAN okunur", r.data.source === "column", r.data.source);
     check("kolon yolunda oluşturan adı çözülür", Boolean(r.data.created?.userName));
-  } else {
-    check("künyeli kayıt KOLONDAN okunur", false, "fixture yok — backfill koşmamış olabilir");
+  } finally {
+    if (prvCustomerId) {
+      await prisma.customer.deleteMany({ where: { id: prvCustomerId } }).catch(() => {});
+    }
   }
 
   // A2 KABUL ÖLÇÜTÜ: iş emrinde "kim açtı" artık KOLONDAN gelir.

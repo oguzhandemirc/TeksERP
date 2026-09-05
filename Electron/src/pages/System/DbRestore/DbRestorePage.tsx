@@ -9,7 +9,7 @@ import { Callout } from "@/components/ui/callout";
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { safeFormat } from "@/lib/format";
 import { fmtBytes } from "../ServerStatus/serverHealth";
-import { useDbCopies, useDropCopy, useVerifyCopy } from "./service";
+import { useDbCopies, useDropCopy, useVerifyCopy } from "./hooks";
 import { StartCopyCard } from "./StartCopyCard";
 import { CopyPhaseSteps } from "./CopyPhaseSteps";
 import { CopiesTable } from "./CopiesTable";

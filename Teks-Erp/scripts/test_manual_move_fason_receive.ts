@@ -183,7 +183,8 @@ main()
     } catch (e) {
       console.error("cleanup hata:", e instanceof Error ? e.message : e);
     }
-    console.log(`\n== ${pass} passed, ${fail} failed ==`);
+    // Sözleşme formatı — koşucu (`run-all-tests.ts`) sayıları BU satırdan okur.
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
     await p.$disconnect();
     await pool.end();
     process.exit(fail > 0 ? 1 : 0);

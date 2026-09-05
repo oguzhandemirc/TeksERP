@@ -1,0 +1,116 @@
+{
+  "proje": "Electron (yönetim paneli) — eslint 9.39, @typescript-eslint 8.59, typescript 5.6.2. Lint kapsamı `eslint . --ext .ts,.tsx` = 1390 dosya (package.json > scripts.lint ile scripts/check-lint-baseline.mjs PROJELER.electron argv'si BİREBİR aynı, değişiklik gerekmedi).",
+  "tarih": "2026-09-05",
+  "yazilanKurallar": [
+    {
+      "kural": "no-restricted-syntax — Türkçe karakterli tanımlayıcı (DAR selector, backend ile birebir)",
+      "seviye": "error",
+      "ihlal": 7,
+      "duzeltilen": "2 gerçek tanımlayıcı (7 isabet = tanım + kullanımlar): settings-groups.ts:206 `göster` → `isRowVisible` (5 satır), scrollbar-theme.test.ts:36 `interface Ölçüm` → `CssRuleMeasurement` (2 satır). Anlam değişmedi, typecheck+vitest yeşil.",
+      "sonda": "kırmızı verdi (src/__probe.tsx:4 ve :11 — `const çıktı`; `localStorage.setItem(\"sidebar.collapsed\")` ve `{ Müşteri: … }` veri anahtarı yakalanmadı)",
+      "not": "HAM selector 24 ihlal / 22 yanlış pozitif veriyordu; DAR sürüm (`:not(Property > .key):not(MemberExpression > .property):not(TSPropertySignature > .key)`) yeniden ölçüldü → 7 isabet, 0 yanlış pozitif, düzeltme sonrası 0."
+    },
+    {
+      "kural": "no-restricted-syntax — localStorage/sessionStorage'a token/JWT yazımı (iki selector: düz + window. önekli)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:7 `localStorage.setItem(\"accessToken\")` ve :8 `window.sessionStorage.setItem(\"jwt\")`; :9 `sidebar.collapsed` ve secure-store.ts'in değişken anahtarlı web fallback'i yakalanmadı)"
+    },
+    {
+      "kural": "@typescript-eslint/naming-convention (format; TR kısmı ayrı selector'de)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:5 `const My_Bad_Name`)"
+    },
+    {
+      "kural": "no-console (allow: warn, error)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:11 `console.log`; :12 `console.warn` yakalanmadı)"
+    },
+    {
+      "kural": "linterOptions.reportUnusedDisableDirectives",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:23 — ölü `eslint-disable-next-line @typescript-eslint/no-explicit-any`)"
+    },
+    {
+      "kural": "max-lines 300 (skipComments + skipBlankLines)",
+      "seviye": "warn",
+      "ihlal": 107,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe-long.ts:301 — 311 satır)",
+      "not": "107 = genel 300 sınırını aşan dosyalar + *Page/*FormDialog override'ının 200'ünü aşanlar; ESLint tek ruleId altında sayar, tavan tek sayaçtır."
+    },
+    {
+      "kural": "max-lines 200 — src/pages/**/*Page.tsx ve src/pages/**/*FormDialog.tsx override",
+      "seviye": "warn",
+      "ihlal": 41,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/pages/__Probe/ProbePage.tsx:201 ve ProbeFormDialog.tsx:201 — 210 satır, yani 300'ün ALTINDA ama 200'ün üstünde → override'ın kendisi ateşledi)",
+      "not": "Desen `src/**` değil `src/pages/**`: components/layout/CrudPage.tsx ve components/forms/EntityFormDialog.tsx bir sayfa/dialog DEĞİL, ortak sarmalayıcıdır ve genel 300'e tabidir."
+    },
+    {
+      "kural": "max-lines: off — ADLI katalog/registry muafiyeti (settings-config.ts, documentConfig.ts, WorkOrders/service.ts, content-routes.tsx)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "ters sonda koşuldu: muafiyet bloğu geçici olarak kaldırıldı → dört dosya da kırmızı (content-routes.tsx 1098, settings-config.ts 958, documentConfig.ts 957, WorkOrders/service.ts 894); blok geri konunca dördü de sessiz"
+    },
+    {
+      "kural": "max-lines-per-function 80 (skipComments, skipBlankLines, IIFEs)",
+      "seviye": "warn",
+      "ihlal": 454,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe-fn.ts:1 — 89 satırlık fonksiyon)"
+    },
+    {
+      "kural": "max-params 4",
+      "seviye": "warn",
+      "ihlal": 10,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:14 — 5 parametreli fonksiyon)",
+      "not": "⚠️ ÖLÇÜM DÜZELTMESİ: eslint-electron.json bunu '0 ihlal, bedelsiz error' diye kaydetmişti; üretim config'iyle yeniden ölçüldü → 10 ihlal. 10 ≤ 15 ama düzeltme ~30 çağrı noktasında konumsal→obje parametre imza refactor'u (verify 6, typeString 6, dispatch 10 çağrı; ikisinde konumsal varsayılan) → warn + tavan."
+    },
+    {
+      "kural": "yerel/mutation-onerror-toast — mutation onError içinde ikinci toast.error",
+      "seviye": "warn",
+      "ihlal": 26,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:28 `onError: () => toast.error(...)`; `onSuccess: () => toast.success(...)` ve serbest `toast.error(...)` yakalanmadı)",
+      "not": "BAĞIMLILIKSIZ yerel plugin olarak yazıldı, yeni paket YOK. Gerekçe: ESLint bir kurala TEK yapılandırma kabul eder → TR/token yasakları (error, 0 ihlal) ile bu kural (warn, 26 ihlal) aynı `no-restricted-syntax` girdisine sığmıyordu; yerel kural kendi severity'sini ve kendi baseline sayacını taşır."
+    },
+    {
+      "kural": "@typescript-eslint/no-floating-promises (TİP BİLGİLİ — projectService, ayrı blok)",
+      "seviye": "warn",
+      "ihlal": 35,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__probe.tsx:21 — `fireAndForget();` void'siz)",
+      "not": "Lint süresi 6,5 sn → 13,4 sn (ölçüldü). Tavan sıfırlanınca error'a yükseltilir."
+    }
+  ],
+  "yazilmayanlar": [
+    "import/no-cycle — KÜTÜPHANE KARARI: eslint-plugin-import kurulu değil, eslint-import-resolver-typescript peer'ı gerekir ve TS alias'ları (@/*, @shared/*) çözülmezse kural SESSİZCE 0 döner. Ayrıca varsayılan maxDepth ile kullanılamaz: 1888 döngüsel kenar / 634 dosya (content-routes.tsx registry topolojisi kasıtlı). maxDepth=2'deki 3 kenar tek gerçek döngü: store/auth.ts → services/authService.ts → services/apiClient.ts → store/auth.ts. Açık iş: bağımlılıksız bekçi (src/test/import-cycles.test.ts idiomu).",
+    "Türkçe tanımlayıcı HAM selector (Identifier[name=/[çğıöşü…]/]) — 24 isabetin 22'si yanlış pozitif (TR etiketli VERİ anahtarı: { Müşteri: \"CUSTOMER\" }, slug harf haritası). Yerine backend ile birebir DAR selector yazıldı.",
+    "Çıplak no-console — 3 isabetin üçü de meşru tanı çıktısı (ErrorBoundary componentDidCatch, useIdleLogout fallback, netStats yavaş istek ölçümü). allow:[warn,error] ile yazıldı.",
+    "Renderer'da electron/fs/path/child_process/os no-restricted-imports — ZATEN VARDI, tekrar yazılmadı (tek kaynak)."
+  ],
+  "baseline": "Electron/lint-baseline.json — 7 kural / 670 ihlal (1390 dosya). @typescript-eslint/no-floating-promises 35 · @typescript-eslint/no-unused-vars 20 · max-lines 107 · max-lines-per-function 454 · max-params 10 · react-hooks/exhaustive-deps 18 · yerel/mutation-onerror-toast 26. `node scripts/check-lint-baseline.mjs --proje=electron` → '✅ electron: tavan aşılmadı (1390 dosya, 0 error)', çıkış kodu 0.",
+  "dogrulama": "npm run lint → rc 0 (670 problems, 0 errors, 670 warnings) · npm run typecheck → rc 0 (tsconfig.node.json + tsconfig.web.json) · npx vitest run → rc 0 (208 test dosyası / 2266 test geçti, 32,5 sn)",
+  "kapsamHizalamasi": "Electron/package.json > scripts.lint = 'eslint . --ext .ts,.tsx'; scripts/check-lint-baseline.mjs PROJELER.electron.argv = ['eslint','.','--ext','.ts,.tsx'] → zaten BİREBİR, değişiklik gerekmedi. Körlük zemini EN_AZ_DOSYA.electron=600, ölçülen 1390.",
+  "temizlik": "Geçici ölçüm config'i Electron/eslint.olcum.mjs ve sonda dosyaları (src/__probe.tsx, src/__probe-long.ts, src/__probe-fn.ts, src/pages/__Probe/) yazıldı, kullanıldı ve SİLİNDİ (ls ile doğrulandı). Hiçbir paket kurulmadı. Electron/ altında kalan değişiklik: eslint.config.mjs (yeniden yazıldı), lint-baseline.json (yeni), settings-groups.ts + scrollbar-theme.test.ts (TR tanımlayıcı düzeltmesi).",
+  "belgeDuzeltmesi": [
+    "docs/standart/ELECTRON.md [EL-17] ve [EL-18]: zorlama etiketi `eslint:no-restricted-syntax` DEĞİL, `eslint:yerel/mutation-onerror-toast` (bağımlılıksız yerel plugin kuralı). Gerekçe: ESLint bir kurala tek yapılandırma kabul eder, TR/token yasakları error iken bu kural warn olmalıydı.",
+    "docs/standart/ELECTRON.md [EL-34]: zorlama `@typescript-eslint/naming-convention custom girdisi` değil, `eslint:no-restricted-syntax` DAR selector (backend ile ortak); 'devralınan: 2 (düzeltilerek error)' → 'devralınan: yok' (iki ihlal bu turda düzeltildi: settings-groups.ts `göster`→`isRowVisible`, scrollbar-theme.test.ts `Ölçüm`→`CssRuleMeasurement`).",
+    "docs/standart/ELECTRON.md [EL-35]: 'devralınan: 74 / 42 / 12 / 454' → ESLint tavanı kural ADI bazındadır; max-lines TEK sayaçtır ve bugünkü değeri 107 (genel 300 + Page/FormDialog 200 birlikte), max-lines-per-function 454. Page sayısı 42 değil 41 (desen `src/pages/**/*Page.tsx`; CrudPage.tsx ortak sarmalayıcı olduğu için dışarıda).",
+    "docs/standart/ELECTRON.md [EL-37]: 'max-params (error, 0 ihlal) · devralınan: yok' YANLIŞ — üretim config'iyle ölçüm 10 ihlal verdi (discovery.ipc.ts `verify` · overrides.ts `replaceCellValue` · AccountingDispatch/columns.tsx `buildDispatchColumns` · roll-search.ts `rollMatchesFacets` · PeripheralDevices/schema.ts `range` · scorecardExport.ts `breakdownTable` · orderIntake.ts `table` + 3 test yardımcısı). Doğrusu: 'zorlama: eslint:max-params (warn + tavan) · devralınan: 10 (baseline)'.",
+    "docs/standart/ELECTRON.md: iki YENİ kapı belgede yok — no-console (allow: warn/error; unutulmuş console.log yasağı) ve linterOptions.reportUnusedDisableDirectives (ölü eslint-disable yasağı). Birer EL-xx satırı gerekiyor.",
+    "docs/standart/README.md § 'Kural yazma ölçütü': '≤15 → ihlaller düzeltilir ve error olur' ölçütü SAYIYI ölçüyor, MALİYETİ değil. Bu turda iki kez çürüdü (FormDialog 12 ihlal = ~3.500 satır form bölme; max-params 10 ihlal = ~30 çağrı noktasında imza refactor'u). Öneri: '≤15 VE düzeltme ucuzsa (tek isim/tek satır) → error; düzeltme dosya bölme ya da imza değişikliği gerektiriyorsa → warn + tavan, gerekçe config başlığına'.",
+    "docs/standart/ILKELER.md [IL-16]: zorlama 'no-restricted-syntax + naming-convention' yazıyor; Electron'da TR yasağı YALNIZ no-restricted-syntax dar selector'ünde (naming-convention format kurallarını taşıyor). Backend ile aynı — cümle 'no-restricted-syntax (dar selector, üç projede ortak)' olmalı."
+  ],
+  "not": "İKİ SÜRPRİZ: (1) ölçüm dosyası max-params'ı '0 ihlal' diye kaydetmiş; üretim config'iyle 10 çıktı — ölçümü doğrulamak zorunluluğu kendini kanıtladı. (2) onError toast'ı ile TR/token yasaklarının aynı `no-restricted-syntax` girdisinde iki farklı severity taşıyamaması, bağımlılıksız yerel plugin çözümünü gerektirdi (yan fayda: ayrı baseline sayacı)."
+}

@@ -69,6 +69,10 @@ async function resolveMaster(): Promise<void> {
 
   const st = await prisma.station.findMany({ select: { id: true, name: true, kind: true } });
   M.kk1 = req(st.find((s) => s.kind === "RAW_QC"), "KK1 istasyonu").id;
+  // Boğaz-ikiz DEĞİL: burada sorulan "bu adım KK yürütür mü" değil, "seed'in
+  // kurduğu istasyonlardan HANGİSİ Kurşun+KK2" — yani kimlik çözümü. Fixture
+  // kurulumu `kind` literalini bilerek kullanır (quality-station.helper.ts başlığı).
+  // eslint-disable-next-line no-restricted-syntax
   M.kursun = req(st.find((s) => s.kind === "PROCESS_QC"), "Kurşun+KK2 istasyonu").id;
   M.tambur = req(st.find((s) => s.kind === "TAMBUR"), "Tambur istasyonu").id;
   M.boya = req(st.find((s) => s.name.includes("Boyahane")), "Boyahane (Fason) istasyonu").id;

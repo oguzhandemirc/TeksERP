@@ -39,9 +39,29 @@ let ITEM = "",
   PROP_B = "";
 
 async function main(): Promise<void> {
-  const props = await prisma.fabricProperty.findMany({ where: { isActive: true }, select: { id: true }, take: 2 });
-  PROP_A = need(props[0], "aktif FabricProperty #1").id;
-  PROP_B = need(props[1], "aktif FabricProperty #2").id;
+  // ⚠️ FIXTURE **FLAG** SEÇMEK ZORUNDA (2026-09-05 yeşile-çekme):
+  // `applyManualProperties` bir ECHO ucudur — SEÇİM (CHOICE) tipli id'yi
+  // `partitionTargetableIds` ile SESSİZCE AYIRIR, 400 ATMAZ (docs/kurallar/
+  // rota-renk.md: "echo uçları sessiz ayırma"). Eski fixture `valueType`
+  // süzmeden "ilk iki aktif özellik"i alıyordu; DB'nin fiziksel sırası
+  // değişip ikinci sıraya CHOICE olan "KAT" gelince liste-dışı özellik
+  // sessizce ayrıldı ve beklenen 400 hiç doğmadı. Allowed-list paritesi
+  // FLAG evreninde yaşar → fixture da FLAG seçer.
+  const props = await prisma.fabricProperty.findMany({
+    where: { isActive: true, valueType: "FLAG" },
+    orderBy: { code: "asc" },
+    select: { id: true, valueType: true },
+    take: 2,
+  });
+  PROP_A = need(props[0], "aktif FLAG FabricProperty #1").id;
+  PROP_B = need(props[1], "aktif FLAG FabricProperty #2").id;
+  // Körlük zemini: fixture gerçekten FLAG mi — CHOICE'a kayarsa aşağıdaki
+  // negatif kontrol vakumen yeşile döner (sessiz ayırma 400 üretmez).
+  check(
+    "körlük zemini: fixture özellikleri FLAG",
+    props.every((p) => p.valueType === "FLAG"),
+    props.map((p) => p.valueType).join(", "),
+  );
 
   // Allowed listesi DOLU bir item (yalnız PROP_A izinli) + bir top.
   const item = await prisma.item.create({

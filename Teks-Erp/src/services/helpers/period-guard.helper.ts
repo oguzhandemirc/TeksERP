@@ -35,21 +35,30 @@
 // Yeni bir defter yazarı doğarsa listeye eklenir; guard'ı ATLAYAN bir yazar,
 // kilidin tamamını sessizce delik yapar.
 //
-// ── ADVISORY KİLİT UZAYI ENVANTERİ (2026-08-14 sağlamlık paketi, Sınıf 3) ───
-// Repo genelindeki `pg_advisory_xact_lock(UZAY, anahtar)` uzayları:
-//   8021  KK1 mükerrer-top tuzağı        (inventory.service)
-//   8022  parti numarası sayacı          (batch.service)
-//   8024  oturum kayıt defteri           (session-registry.service)
-//   8025  izin yönetimi                  (permission-management.service)
-//   8026  CARİ dönem kilidi              (BU DOSYA — hashtext(cariId|currency))
-//   8027  alış siparişi karşılanma       (purchase-order / goods-receipt)
-//   8028  KASA/BANKA dönem kilidi        (cash-period-guard.helper — hashtext(hesapId))
+// ── ADVISORY KİLİT UZAYI ENVANTERİ — TEK KAYNAK ─────────────────────────────
+// Repo genelindeki `pg_advisory_xact_lock(UZAY, anahtar)` uzaylarının TEK
+// kaydı burasıdır; başka dosyada kopya liste TUTULMAZ (kopya sessizce bayatlar
+// ve iki alt sistem aynı numaraya oturur). Satır biçimi MAKİNE OKUR — bekçi
+// `scripts/test_advisory_lock_namespaces.ts` bu bloğu ayrıştırıp koddaki
+// `*_LOCK_NS` sabitleriyle İKİ YÖNLÜ karşılaştırır:
+//   `//   <numara>  <SABİT_ADI>  <src-göreli dosya>  <amaç>`
+// ENVANTER:
+//   8021  DUPLICATE_GUARD_LOCK_NS    services/helpers/duplicate-guard.helper.ts    KK1 mükerrer-top tuzağı
+//   8022  BATCH_NUMBER_LOCK_NS       services/batch.service.ts                     parti numarası sayacı
+//   8023  SHIPMENT_LOCK_NS           services/helpers/shipment-locks.helper.ts     sevkiyat kapsamı
+//   8024  SESSION_REGISTRY_LOCK_NS   services/session-registry.service.ts          oturum kayıt defteri
+//   8025  PERM_ADMIN_LOCK_NS         services/permission-management.service.ts     yetki (son-admin) guard'ı
+//   8026  PERIOD_CLOSE_LOCK_NS       services/helpers/period-guard.helper.ts       cari dönem kapanışı
+//   8027  PURCHASE_ORDER_LOCK_NS     services/purchase-order.service.ts            alış siparişi karşılanma
+//   8028  CASH_PERIOD_CLOSE_LOCK_NS  services/helpers/cash-period-guard.helper.ts  kasa/banka dönem kapanışı
+//   8029  CODE_UNIQUE_LOCK_NS        services/helpers/code-unique.helper.ts        kod tekilliği (harf-duyarsız)
+//   8030  MERGE_LOCK_NS              services/master-data-merge.service.ts         master-data birleştirme
 // İKİ KURAL: ① Aynı uzaydan birden çok kilit alan tx anahtarları SIRALI alır
 // (aşağıdaki `assertPeriodsOpenTx` bunun tek meşru kapısıdır — tekil guard'ı
 // bir tx'te İKİ KEZ elle çağırmak YASAK ve `cheque.bounce` vakasında canlı
 // deadlock üretti). ② Bir tx birden çok UZAYDAN kilit alacaksa uzay numarası
-// ARTAN sırada alınır — bugün çapraz-uzay çifti yok (ölçüldü); doğduğu gün bu
-// satır kuralın adresidir.
+// ARTAN sırada alınır — bugünkü tek çapraz-uzay çifti `inventory.service`
+// (8021 mükerrer tuzağı → 8030 birleştirme) ve ARTAN.
 // =============================================================================
 
 import { Prisma, Currency } from "@prisma/client";
@@ -59,13 +68,12 @@ import { factoryDayKeyUtcMidnight, factoryDayStart } from "../../constants/time"
 /**
  * Cari-dönem kapsamlı advisory lock namespace'i (2 ARGÜMANLI form).
  *
- * Uzay envanteri: 8021 KK1 mükerrer giriş · 8022 parti no üreteci ·
- * 8023 sevkiyat kapsamı · 8024 oturum kaydı · 8025 yetki (son-admin) ·
- * **8026 cari dönem kapanışı**.
+ * Uzay envanteri TEK KAYNAK: bu dosyanın başlığı (§ ADVISORY KİLİT UZAYI
+ * ENVANTERİ). Bu uzay **8026 cari dönem kapanışı**dır.
  *
- * ⚠️ 1-argümanlı uzay AYRI bir uzaydır (`session-registry`,
- * `permission-management` onu paylaşıyor); yeni alt sistemi oraya sokmak
- * birbirini görmeyen iki alt sistemi sessizce serileştirir.
+ * ⚠️ 1-argümanlı `pg_advisory_xact_lock(bigint)` AYRI bir uzaydır ve bu kod
+ * tabanında HİÇ kullanılmaz; yeni alt sistemi oraya sokmak birbirini görmeyen
+ * iki alt sistemi sessizce serileştirir.
  *
  * `: number` BİLEREK — literal tipe daralırsa bekçideki "namespace'ler farklı"
  * karşılaştırması TS2367 ile derlenmez (SHIPMENT_LOCK_NS emsali).

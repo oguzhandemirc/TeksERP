@@ -33,14 +33,14 @@ import postcss, { type Declaration, type Rule } from "postcss";
 const cssPath = resolve(process.cwd(), "src/index.css");
 const root = postcss.parse(readFileSync(cssPath, "utf-8"), { from: cssPath });
 
-interface Ölçüm {
+interface CssRuleMeasurement {
   selector: string;
   decls: Record<string, string>;
   /** Kuralı saran at-kural zinciri: ["media (hover: hover)", …] */
   context: string[];
 }
 
-const kurallar: Ölçüm[] = [];
+const kurallar: CssRuleMeasurement[] = [];
 root.walkRules((rule: Rule) => {
   const decls: Record<string, string> = {};
   rule.each((node) => {

@@ -1,0 +1,14 @@
+{
+  "_not": "ESLint uyarı TAVANI — yalnız DÜŞER. Ölçüm: node scripts/check-lint-baseline.mjs --yaz",
+  "_kapsam": "eslint . --ext .ts,.tsx",
+  "_dosyaSayisi": 1396,
+  "kurallar": {
+    "@typescript-eslint/no-floating-promises": 35,
+    "@typescript-eslint/no-unused-vars": 20,
+    "max-lines": 107,
+    "max-lines-per-function": 454,
+    "max-params": 10,
+    "react-hooks/exhaustive-deps": 18,
+    "yerel/mutation-onerror-toast": 22
+  }
+}

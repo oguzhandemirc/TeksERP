@@ -23,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { RefreshButton } from "@/components/RefreshButton";
+import { PermissionGate } from "@/components/PermissionGate";
 import { ListExportMenu } from "@/components/data-table/ListExportMenu";
 import type { ExportColumn } from "@/lib/list-export";
 import { stationKindLabels } from "@/types/enums";
@@ -44,7 +45,27 @@ function disabledHint(cap: StationCapabilitySummary): string {
   return `Bu istasyon "özellik uygular" olarak işaretli değil${suffix} — Tanımlar → İstasyonlar → Yetenekler'den açın.`;
 }
 
+/** Salt-okunur (`station:read`) kullanıcıya butonun neden kapalı olduğunu söyler. */
+const NO_WRITE_HINT =
+  "Yetenekleri değiştirmek için \"İstasyon tanımlama/düzenleme\" (station:write) yetkisi gerekir.";
+
 const QUERY_KEY = "station-capabilities";
+
+/** Kapalı buton + gerekçe balonu — hem yetki hem veri koşulu bu kabı kullanır. */
+function DisabledEditButton({ hint }: { hint: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0}>
+          <Button size="sm" variant="outline" className="gap-1.5" disabled>
+            <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
+          </Button>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 /**
  * Dışa aktarım satırı — ekran MATRİS, dosya UZUN BİÇİM: bir satır = AÇIK olan tek
@@ -276,32 +297,26 @@ export function StationCapabilitiesPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end">
-                          {editable ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="gap-1.5"
-                              onClick={() => setEditing(cap)}
-                            >
-                              <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
-                            </Button>
-                          ) : (
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span tabIndex={0}>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="gap-1.5"
-                                    disabled
-                                  >
-                                    <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
-                                  </Button>
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent>{disabledHint(cap)}</TooltipContent>
-                            </Tooltip>
-                          )}
+                          {/* Rota yalnız `station:read` ister (liste okunabilir);
+                              yazma yüzeyinin kapısı BURADA. `canApplyProperty`
+                              bir VERİ koşuludur, izin yerine geçmez. */}
+                          <PermissionGate
+                            permission="station:write"
+                            fallback={<DisabledEditButton hint={NO_WRITE_HINT} />}
+                          >
+                            {editable ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="gap-1.5"
+                                onClick={() => setEditing(cap)}
+                              >
+                                <Settings2 className="h-3.5 w-3.5" /> Yetenekleri Düzenle
+                              </Button>
+                            ) : (
+                              <DisabledEditButton hint={disabledHint(cap)} />
+                            )}
+                          </PermissionGate>
                         </div>
                       </TableCell>
                     </TableRow>

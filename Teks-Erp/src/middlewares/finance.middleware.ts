@@ -24,8 +24,14 @@ export async function requireFinanceEnabled(req: Request, res: Response, next: N
     if (!enabled) {
       // 403 (404 değil): kaynak VAR, bu kurulumda kapalı. 404 dönmek destek
       // ekibini "uç deploy edilmemiş" diye yanlış yöne gönderirdi.
+      //
+      // ⚠️ `details.code` KARDEŞ KAPILARLA AYNI SÖZLEŞME (`module.middleware`
+      // `modulKapali`): istemci "modül kapalı"yı metinden değil koddan ayırt
+      // eder. `code` TOP-LEVEL DEĞİL — `error.middleware` onu `details` altına
+      // basar; `body.code` arayan istemci sessizce hep `undefined` okur.
       throw AppError.forbidden(
         "Ön muhasebe modülü bu kurulumda kapalı. Genel Ayarlar → Muhasebe bölümünden açılabilir.",
+        { code: "MODULE_DISABLED", modul: "finance" },
       );
     }
     next();

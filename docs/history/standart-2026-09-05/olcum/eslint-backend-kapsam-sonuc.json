@@ -1,0 +1,181 @@
+{
+  "_not": "Backend ESLint KAPSAM AÇILIŞI sonucu — 2026-09-05. Kapsam `eslint src` → `eslint src scripts prisma`.",
+  "tarih": "2026-09-05",
+  "proje": "Teks-Erp (backend)",
+  "kapsam": {
+    "once": "eslint src",
+    "sonra": "eslint src scripts prisma",
+    "dosyaSayisi": {
+      "toplam": 1024,
+      "src": 456,
+      "scripts": 551,
+      "prisma": 17,
+      "not": "5 dosya kapsam DIŞI (yasağın KONUSUNU ölçen bekçiler, ignores): test_migration_hygiene · test_raw_sql_hygiene · test_station_quality_capability · test_timestamptz_contract · test_report_day_boundary"
+    },
+    "hizalama": [
+      "Teks-Erp/package.json > scripts.lint = \"eslint src scripts prisma\"",
+      "scripts/check-lint-baseline.mjs > PROJELER.backend.argv = [\"eslint\",\"src\",\"scripts\",\"prisma\"]"
+    ]
+  },
+  "korlukZemini": {
+    "once": 400,
+    "sonra": 900,
+    "gerekce": "Zemin 'bugünkü sayının yarısı' değil, EN BÜYÜK DALI KAYBETMEYİ yakalayan sayıdır: scripts düşerse 473<900, src düşerse 570<900; ~126 dosyalık normal silinme payı bırakır."
+  },
+  "olculenIhlal": {
+    "acilistaErrorToplam": 35,
+    "kapanistaError": 0,
+    "warn": 442,
+    "warnDagilimi": {
+      "max-lines": 90,
+      "max-lines-per-function": 305,
+      "max-params": 47
+    },
+    "_not": "25 ihlal kapsam açılışından, 10 ihlal ilk kez koşturulan BARE_DATE_TRUNC kuralından."
+  },
+  "hukumler": [
+    {
+      "sinif": "'Europe/Istanbul' literali (FACTORY_TZ_LITERAL)",
+      "adet": 4,
+      "hukum": "DÜZELTİLDİ",
+      "yerler": [
+        "prisma/seed-ticaret-demo.ts:168",
+        "scripts/audit_repro_E-1-02.ts:46",
+        "scripts/audit_repro_E-1-03.ts:46",
+        "scripts/test_import_framework.ts:68"
+      ],
+      "nasil": "FACTORY_TIMEZONE (src/constants/time.ts) import edildi; değer birebir aynı, anlam değişmedi. Emsal zaten vardı: find_dead_labels.ts, fix_fire_rolls_to_scrap.ts, fix_workorder_type_from_links.ts."
+    },
+    {
+      "sinif": "Türkçe tanımlayıcı (TURKISH_IDENTIFIER)",
+      "adet": 8,
+      "hukum": "DÜZELTİLDİ (yeniden adlandırma)",
+      "yerler": [
+        "scripts/superadmin-olustur.ts:157,161×2",
+        "scripts/test_superadmin_provision.ts:101,194,202,203,800"
+      ],
+      "nasil": "hariçUserId → haricUserId (3 nokta) · pasifleşenler → pasiflesenler (5 nokta). superadmin-olustur.ts'te SIR ÜRETİMİNE ve ÇIKTIYA dokunulmadı — yalnız yerel parametre adı. Bekçi test_superadmin_provision 79/79 yeşil."
+    },
+    {
+      "sinif": "kind === PROCESS_QC (PROCESS_QC_COMPARE)",
+      "adet": 2,
+      "hukum": "GEREKÇELİ SATIR-İÇİ DISABLE",
+      "yerler": [
+        "scripts/seed-test-full.ts:72",
+        "scripts/test_e2e_full_flow.ts:228"
+      ],
+      "nasil": "İkisi de boğaz-ikizin sorduğu soruyu SORMUYOR. seed-test-full: 'seed'in kurduğu istasyonlardan hangisi Kurşun+KK2' — kimlik çözümü. test_e2e_full_flow: 'fixture rotasının 1. adımı hangi istasyon TÜRÜ' — topoloji iddiası. stepCanApplyQuality yeteneği okur, türü değil; ikisinde de yanlış cevap verirdi. quality-station.helper.ts başlığı bekçi fixture'larının literal kullandığını zaten yazıyor."
+    },
+    {
+      "sinif": "now() AT TIME ZONE (NOW_AT_TIME_ZONE)",
+      "adet": 3,
+      "hukum": "2 × DOSYA BAZLI ignores · 1 × GEREKÇELİ DISABLE",
+      "yerler": [
+        "scripts/test_timestamptz_contract.ts:216,221 → ignores",
+        "scripts/test_module_grandfathering.ts:159 → disable"
+      ],
+      "nasil": "test_timestamptz_contract yasağın KONUSUNU ölçer: kalıbı ÇALIŞTIRARAK (SHOW TimeZone + sapma=0) kimlik dönüşümü olduğunu kanıtlar — mevcut üç 'konu bekçisi' ignores'ına dördüncü olarak eklendi. test_module_grandfathering'de kalıp yalnız bir check'in başarısızlık METNİNDE geçiyor; dosyanın konusu tz değil → satır-içi disable. Ölçüt config'e yazıldı: dosyanın KONUSU yasağın kendisiyse ignores, tek satır değiyorsa disable."
+    },
+    {
+      "sinif": "body.code (RESPONSE_BODY_CODE)",
+      "adet": 2,
+      "hukum": "GEREKÇELİ SATIR-İÇİ DISABLE (tek noktaya çekilerek)",
+      "yerler": [
+        "scripts/test_remote_access_guard.ts:431,432"
+      ],
+      "nasil": "İki okuma tek `const rootCode = remoteBadJwt.body.code;` satırına indirildi, disable oraya kondu. Bu bekçi 'kök code geriye uyum için HÂLÂ doldurulur' iddiasını ölçen tek yerdir — yasağın dayandığı önermeyi ölçüyor. Bekçi 66/66 yeşil."
+    },
+    {
+      "sinif": "Ölü eslint-disable (reportUnusedDisableDirectives)",
+      "adet": 6,
+      "hukum": "SİLİNDİ, bilgi DÜZ YORUMA çevrildi",
+      "yerler": [
+        "scripts/audit_repro_BULGU-T1-020.ts:98",
+        "scripts/test_fason_parti_grouping.ts:82",
+        "scripts/test_split_card_lineage.ts:73",
+        "scripts/test_split_per_roll.ts:51",
+        "scripts/test_wo_branch_redye.ts:58",
+        "scripts/test_wo_branch_split.ts:61"
+      ],
+      "nasil": "Kapatmaya çalıştıkları kurallar (no-explicit-any, no-var-requires) bekçi bloğunda AÇIK DEĞİL — direktif bir yalan taşıyordu ('burada bilinçli istisna var'). Taşıdıkları bilgi kaybolmasın diye düz yoruma çevrildi: `type Any = any` fixture kaçış kapısıdır; pm2 taklidinde tembel `require` bilinçlidir."
+    },
+    {
+      "sinif": "Çıplak DATE_TRUNC (BARE_DATE_TRUNC) — KURAL BU TURDA İLK KEZ KOŞTU",
+      "adet": 10,
+      "hukum": "1 × DOSYA BAZLI ignores · 6 × GEREKÇELİ DISABLE (3'ü blok)",
+      "bulgu": "Kural eslint.config.mjs'te TANIMLIYDI ama `ORTAK_YASAKLAR` dizisine hiç eklenmemişti; adı yalnız src/constants/time.ts bloğunun `filter((k) => k !== BARE_DATE_TRUNC ...)` ifadesinde geçiyordu — yani OLMAYAN bir üyeyi eleyen filtre. CLAUDE.md 'çıplak DATE_TRUNC yasak' diyor, mekanik kapı ÖLÜYDÜ.",
+      "olcum": "src 0 · prisma 0 · scripts 10 → karar tablosunun ≤15 dalı.",
+      "yerler": [
+        "scripts/test_report_day_boundary.ts:111,119,220,238 → ignores",
+        "scripts/test_demand_analysis.ts:148 → blok disable",
+        "scripts/test_db_invariants.ts:775 → satır disable",
+        "scripts/bench_audit_summary.ts:71 → blok disable",
+        "scripts/bench_audit_probe.ts:32 → blok disable",
+        "scripts/bench_audit_final.ts:31,53 → satır disable"
+      ],
+      "nasil": "test_report_day_boundary yasağın KONUSUNU ölçer (çıplak kesmenin günü UTC'ye kaydırdığını fabrika ifadesiyle YAN YANA koşturarak kanıtlar, ayrıca src/ ağacını aynı kalıba karşı tarar) → ignores. bench_audit_* üçlüsü 2026-08-01 tz dönüşümü ÖNCESİNİN sorgu şeklini DONMUŞ taşıyan Faz C2 A/B bench'leridir; `factoryDaySql`e çevirmek ölçtükleri şeyi değiştirir ve kayıtlı sayıları karşılaştırılamaz kılar → DÜZELTME DEĞİL, gerekçeli disable. test_db_invariants'taki isabet SQL değil, istatistik nesnesini tarif eden envanter ETİKETİ.",
+      "tuzak": "ÇOK SATIRLI template literal içindeki isabete `// eslint-disable-next-line` ULAŞMAZ — yorum SQL metnine karışır ve parse'ı bozar (ölçüldü: 2 parse hatası). Çare: ifadeyi saran `/* eslint-disable no-restricted-syntax */` … `/* eslint-enable no-restricted-syntax */` bloğu."
+    }
+  ],
+  "negatifSonda": {
+    "yontem": "scripts/__lint_sonda_gecici.ts + prisma/__lint_sonda_gecici.ts geçici dosyaları, kasıtlı ihlallerle; ölçümden sonra SİLİNDİ.",
+    "eslintCikisKodu": 1,
+    "olculenler": [
+      "PROCESS_QC → scripts/__lint_sonda_gecici.ts:3:27 ERROR",
+      "Türkçe tanımlayıcı → scripts/__lint_sonda_gecici.ts:4:14 ERROR · prisma/__lint_sonda_gecici.ts:4:14 ERROR",
+      "now() AT TIME ZONE → scripts/__lint_sonda_gecici.ts:5:20 ERROR · prisma/__lint_sonda_gecici.ts:3:20 ERROR",
+      "'Europe/Istanbul' → scripts/__lint_sonda_gecici.ts:6:19 ERROR · prisma/__lint_sonda_gecici.ts:2:19 ERROR",
+      "body.code → scripts/__lint_sonda_gecici.ts:8:18 ERROR",
+      "notIn: [] → scripts/__lint_sonda_gecici.ts:9:31 ERROR",
+      "ölü disable → scripts/__lint_sonda_gecici.ts:10:1 ERROR",
+      "Çıplak DATE_TRUNC → scripts/__lint_sonda_gecici.ts:2:18 ve 3:19 ERROR · src/__lint_sonda_gecici.ts:2:18 ERROR (hem src hem scripts dalında kırmızı)"
+    ],
+    "not": "Sonda hem scripts/ hem prisma/ dalında koştu — kapsam açılışının GERÇEKTEN ısırdığını iki dalda da kanıtlar."
+  },
+  "baseline": {
+    "dosya": "Teks-Erp/lint-baseline.json",
+    "kapsam": "eslint src scripts prisma",
+    "dosyaSayisi": 1024,
+    "kural": 3,
+    "ihlal": 442,
+    "kurallar": {
+      "max-lines": 90,
+      "max-lines-per-function": 305,
+      "max-params": 47
+    },
+    "kontrolCikisKodu": 0,
+    "not": "Bekçi bloğunda boyut kuralları AÇIK DEĞİL → 442 uyarının tamamı src'den geliyor; kapsam açılışı tavanı yükseltmedi."
+  },
+  "dogrulama": {
+    "npm run lint": "0 error / 442 warn (çıkış kodu 0)",
+    "npm run typecheck:plain": 0,
+    "npm run typecheck:scripts:plain": 0,
+    "check-lint-baseline --proje=backend": 0,
+    "bekciler": {
+      "test_superadmin_provision": "79/79",
+      "test_import_framework": "51/51",
+      "test_timestamptz_contract": "13/13",
+      "test_remote_access_guard": "66/66",
+      "test_module_grandfathering": "21/21",
+      "test_e2e_full_flow": "61/61",
+      "test_fason_parti_grouping": "26/26",
+      "test_split_card_lineage": "25/25",
+      "test_split_per_roll": "27/27",
+      "test_wo_branch_redye": "22/22",
+      "test_wo_branch_split": "26/26",
+      "test_demand_analysis": "20/20",
+      "test_db_invariants": "157/157",
+      "test_report_day_boundary": "15/15"
+    },
+    "kosulamayanlar": "scripts/bench_audit_{summary,probe,final}.ts — `teks_loadtest` DB'si ister ve DATABASE_URL kontrolüyle kendini durdurur. Değişiklik YALNIZ yorum/direktif; tsconfig.scripts.json tip kapısı (çıkış 0) parse'ı doğruluyor."
+  },
+  "belgeDuzeltmesi": [
+    "docs/standart/TEST-VE-DERLEME.md [TD-23]: 'Backend lint kapsamı `src` + `scripts`' → `src` + `scripts` + `prisma` olmalı (prisma/ 17 dosya, seed'ler dahil).",
+    "docs/KOD-KURALLARI.md / kök CLAUDE.md § Yasaklar: 'çıplak `DATE_TRUNC` yasak' cümlesinin zorlaması artık GERÇEKTEN eslint:`no-restricted-syntax` (2026-09-05'e dek kural tanımlıydı ama ORTAK_YASAKLAR'a girmediği için hiç koşmuyordu)."
+  ],
+  "yazilmayanlar": [
+    "`@typescript-eslint/no-explicit-any` bekçi kapsamında (scripts/+prisma/) — ÖLÇÜLDÜ: 28 ihlal / 9 dosya. Karar tablosu '>15 → warn + tavan' derdi ama §5 bloğunun YAZILI politikası bekçi kapsamını bilerek dar tutuyor ve scripts/ bugün 0 uyarıyla yeşil: kural korunacak bir tavan değil YENİ BİR BORÇ KAYDI açardı. Politikayı çevirmek ayrı bir karar; ölçüm config başlığına yazıldı ki ucuz olsun. (5 ölü direktif tam bu kuralı hedefliyordu — niyet vardı.)",
+    "Boyut kuralları (max-lines / max-lines-per-function / max-params) scripts+prisma'ya AÇILMADI — §5'in mevcut kararı korundu (bekçiler uzun ve konuşkandır; ölçüm scripts'te 341 fonksiyon / 4700 console).",
+    "Yeni ESLint plugin'i gerektiren hiçbir kural yazılmadı (paket kurmak yasak; gerekmedi de)."
+  ]
+}

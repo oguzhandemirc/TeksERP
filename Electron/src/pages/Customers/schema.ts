@@ -56,11 +56,13 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const TAX_NUMBER_REGEX = /^\d{10,15}$/;
 
 export const customerFormSchema = z.object({
+  // Sınır DB kolonuyla birebir (Customer.name @db.VarChar(100)) — 101-200
+  // karakterlik ad panelden geçip DB'de sessiz P2000 alıyordu.
   name: z
     .string()
     .trim()
     .min(1, "Müşteri adı boş bırakılamaz")
-    .max(200, "Müşteri adı en fazla 200 karakter olabilir"),
+    .max(100, "Müşteri adı en fazla 100 karakter olabilir"),
   taxNumber: z
     .string()
     .max(32, "Vergi numarası en fazla 32 karakter olabilir")

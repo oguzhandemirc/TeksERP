@@ -88,7 +88,7 @@ export default function SackContentsModal({ shipment, onDismiss, onRemoveSack, r
                     </View>
 
                     {sk.rolls.length === 0 && sk.swatches.length === 0 ? (
-                      <Text style={styles.boş}>Boş çuval.</Text>
+                      <Text style={styles.emptyText}>Boş çuval.</Text>
                     ) : (
                       <View style={styles.rollList}>
                         {sk.rolls.map((r) => (
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   },
   sackChipText: { fontSize: 11, fontWeight: '700', color: '#4338ca', fontFamily: 'monospace' },
   sackMeta: { fontSize: 12, color: '#64748b' },
-  boş: { fontSize: 12, color: '#94a3b8', marginLeft: 4 },
+  emptyText: { fontSize: 12, color: '#94a3b8', marginLeft: 4 },
   rollList: { gap: 4 },
   rollRow: {
     flexDirection: 'row',

@@ -64,8 +64,10 @@ export function SackTagDialog({
       toast.success(tag ? "Etiket güncellendi" : "Etiket eklendi");
       onOpenChange(false);
     },
-    // Sunucu "bu adla bir etiket zaten var" diyebilir — mesajı AYNEN göster.
-    onError: (err: Error) => toast.error("Kaydedilemedi", { description: err.message }),
+    // onError YOK ([EL-17]): `apiClient` interceptor'ı 4xx'te backend'in Türkçe
+    // mesajını ("bu adla bir etiket zaten var") zaten basıyor. İkinci toast
+    // aynı hatayı iki kez gösteriyor, üstelik `err.message` axios'un İngilizce
+    // "Request failed with status code 409" metniydi.
   });
 
   return (

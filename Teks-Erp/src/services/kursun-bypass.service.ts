@@ -2351,9 +2351,8 @@ export class KursunBypassService {
       UPDATE "roll_movements"
       SET "qtyOut" = "qtyIn",
           "weightOut" = "weightIn",
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          "exitedAt" = now(),
           "machineId" = ${machineId}::uuid,
           "notes" = ${marker}
       WHERE "workOrderStepId" = ${stepId}::uuid

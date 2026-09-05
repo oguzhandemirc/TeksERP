@@ -8,7 +8,7 @@
 // yarış (repro `audit_repro_S-1-03`, 4 kırmızı):
 //
 //   T1 KK1 (tablet): `item.findUnique` → aktif ✓, mezar taşı değil ✓  (tx DIŞI)
-//   T2 Panel:        birleştirme başlar, `pg_advisory_xact_lock(8027)` alınır
+//   T2 Panel:        birleştirme başlar, `pg_advisory_xact_lock(8030)` alınır
 //   T3 Panel:        `UPDATE rolls SET itemId=SURVIVOR WHERE itemId=LOSER`
 //   T4 Panel:        `UPDATE items SET mergedIntoId=SURVIVOR, isActive=false`
 //   T5 Panel:        COMMIT — "38 top taşındı"
@@ -51,7 +51,7 @@ export interface CanliAnaVeriRefs {
  * taze okuma da onu göremez. Görülemeyen bir şeye karşı kontrol yazılamaz —
  * iki işlemin BİRBİRİNİ BEKLEMESİ gerekir.
  *
- * Birleştirme `pg_advisory_xact_lock(8027, 1)` ile EXCLUSIVE alır. Yazma yolları
+ * Birleştirme `pg_advisory_xact_lock(8030, 1)` ile EXCLUSIVE alır. Yazma yolları
  * aynı anahtarı SHARED alır:
  *   • yazıcılar birbirini ENGELLEMEZ (paylaşımlı ↔ paylaşımlı uyumlu) → KK1
  *     hacmi etkilenmez,

@@ -176,9 +176,20 @@ if (advisories.length) {
 }
 
 
-// --- GATE: CLAUDE.md boyut tavanı (2026-09-05 — kök 42k token'dan ~6k'ya indi; geri şişmesin) ---
+// --- GATE: belge boyut tavanı (2026-09-05 — kök 42k token'dan ~6k'ya indi; geri şişmesin) ---
 // Ölçü BAYT (token ≈ bayt/3). Tavanlar bilinçli gevşek: kök 36 KB (~12k tok), alt dosyalar 24 KB.
 const CLAUDE_MD_SIZE_CAPS = { "CLAUDE.md": 36 * 1024, "Teks-Erp/CLAUDE.md": 24 * 1024, "Electron/CLAUDE.md": 24 * 1024, "mobil/CLAUDE.md": 24 * 1024 };
+
+// `docs/standart/*.md` aynı tavana bağlanır: standart dosyaları da "her yeni
+// bulguyu buraya da yazayım" baskısı altındadır ve şişince okunmaz olurlar.
+// Dosya listesi SABİT DEĞİL taranır — yeni bir standart dosyası tavansız doğmasın.
+const STANDART_DIR = "docs/standart";
+if (existsSync(join(REPO_ROOT, STANDART_DIR))) {
+  for (const name of readdirSync(join(REPO_ROOT, STANDART_DIR))) {
+    if (name.endsWith(".md")) CLAUDE_MD_SIZE_CAPS[`${STANDART_DIR}/${name}`] = 24 * 1024;
+  }
+}
+
 const sizeFails = [];
 for (const [rel, cap] of Object.entries(CLAUDE_MD_SIZE_CAPS)) {
   const p = join(REPO_ROOT, rel);
@@ -187,7 +198,7 @@ for (const [rel, cap] of Object.entries(CLAUDE_MD_SIZE_CAPS)) {
   if (size > cap) sizeFails.push({ rel, size, cap });
 }
 if (sizeFails.length) {
-  console.error(`❌ CLAUDE.md boyut tavanı aşıldı (${sizeFails.length}): yeni karar notu ARŞİVE, kural docs/kurallar/<alan>.md'ye yazılır.`);
+  console.error(`❌ Belge boyut tavanı aşıldı (${sizeFails.length}): yeni karar notu ARŞİVE, kural docs/kurallar/<alan>.md'ye yazılır; standart dosyası büyüyorsa kanıt ölçüm dosyasına iner.`);
   for (const f of sizeFails) console.error(`    ${f.rel}: ${(f.size / 1024).toFixed(1)} KB > ${(f.cap / 1024).toFixed(0)} KB`);
   process.exit(1);
 }

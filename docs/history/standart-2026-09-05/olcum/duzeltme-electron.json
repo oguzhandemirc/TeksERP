@@ -1,0 +1,128 @@
+{
+  "ajan": "Electron/src düzeltme turu",
+  "tarih": "2026-09-05",
+  "alan": "Electron/src",
+  "kimlikler": [
+    {
+      "kimlik": "İ-14",
+      "durum": "yapildi",
+      "oncelik": "GÜVENLİK 1",
+      "yapilan": "Yazma yüzeyi station:write ile kapatıldı — İKİ kapı: ① StationCapabilitiesPage listedeki 'Yetenekleri Düzenle' butonu <PermissionGate permission=\"station:write\"> arkasına alındı (fallback: gerekçeli kapalı buton + balon); ② CapabilitiesEditSheet KENDİ kapısını taşıyor (useRoleAccess → canWrite), çünkü sheet iki sayfadan açılıyor (StationCapabilities + Üretim İstasyonları). Rota izni station:read OLARAK KALDI (liste okunabilir bir yüzey; okuma yetkisini kaldırmak ayrı bir karar olurdu) — karo↔route aynası [EL-21] bu yüzden bozulmadı. Ortak kapalı-buton kabı DisabledEditButton'a çıkarıldı (veri koşulu ve yetki koşulu aynı görünümü paylaşır).",
+      "dosyalar": [
+        "Electron/src/pages/StationCapabilities/StationCapabilitiesPage.tsx",
+        "Electron/src/pages/StationCapabilities/CapabilitiesEditSheet.tsx",
+        "Electron/src/pages/StationCapabilities/write-permission.test.tsx (YENİ bekçi)"
+      ],
+      "olcum": {
+        "izin_kodu_var_mi": "EVET — Teks-Erp/src/constants/permission-catalog.ts:67 `station:write` (module PRODUCTION, category web)",
+        "backend_kapisi": "SAĞLAM — Teks-Erp/src/routes/station-capability.routes.ts:190-193 `router.put('/:stationId', verifyToken, requirePermission('station:write'), …)` ile ÖLÇÜLDÜ. Backend açığı YOK; açık yalnız paneldeydi (kapısız çıkış)."
+      },
+      "bekci": "npx vitest run src/pages/StationCapabilities/write-permission.test.tsx → rc=0, 4 passed",
+      "negatifSonda": "Kapılar kasten zayıflatıldı (page: permission=\"station:read\", sheet: canWrite=true) → 2 failed / 2 passed (§'yalnız station:read olan kullanıcı basamaz' + §'sheet KENDİ kapısını taşır'). Geri alındı → 4 passed.",
+      "sonda": "4 ölçüm: ① zemin (station:write olan kullanıcıda buton AÇIK — kapı her koşulda kapalı olsaydı test vakumen yeşil kalırdı) ② station:read tek başına → buton disabled ③ station:* domain wildcard yazma sayılır (matchesPermission semantiği) ④ sheet yetkisiz açılışta 'Değişiklik yetkiniz yok' + Kaydet YOK"
+    },
+    {
+      "kimlik": "İ-16",
+      "durum": "yapildi",
+      "yapilan": "Bulgunun ADRESİ yanlıştı, SINIFI doğruydu. Customers/schema.ts:21 `code.max(50)` bir YANLIŞ POZİTİF: aynası Customer.code (VarChar 32) DEĞİL, CustomerBranch.code (prisma/schema.prisma:2178 `String? @db.VarChar(50)`) — dosyanın kendi yorumu da bunu yazıyor ve Customer.code panelde HİÇ düzenlenmiyor. Bu satıra DOKUNULMADI. Bunun yerine 16 panel schema.ts dosyasındaki 65 `z.string()…max(n)` alanı Prisma modeliyle ELLE eşlenip tarandı; panelin DB'den GENİŞ olduğu 7 gerçek sapma bulundu ve düzeltildi.",
+      "sapmalar": [
+        "Customers/schema.ts customerFormSchema.name max(200) → 100 (Customer.name VarChar(100)) — keşifte de işaretliydi, İ-16'nın olması gereken satırı",
+        "DefectTypes/schema.ts name max(120) → 100 (DefectType.name VarChar(100))",
+        "Machines/schema.ts name max(120) → 100 (Machine.name VarChar(100))",
+        "Routes/schema.ts name max(120) → 100 (Route.name VarChar(100))",
+        "Stations/schema.ts name max(120) → 100 (Station.name VarChar(100))",
+        "Stations/schema.ts department max(60) → 32 (Station.department VarChar(32))",
+        "Subcontractors/schema.ts name max(120) → 100 (Subcontractor.name VarChar(100))"
+      ],
+      "sapmaDegil": [
+        "Colors/schema.ts name max(80) < Color.name VarChar(100) — panel DAHA DAR; güvenli yön (P2000 üretmez). Genişletmek bir UX kararıdır, düzeltme değil → bekçide `darGerekce` beyanıyla kayda geçti, koda dokunulmadı.",
+        "FabricProperties name max(80) · SubcontractorCategories name max(80) · Orders orderNumber max(40) — aynı sınıf (panel daha dar)",
+        "Customers/Subcontractors address/notes/taxNumber · Items unit · Routes defaultNotes · Orders currency — Prisma ucu sınırsız (Text); VarChar aynası YOK"
+      ],
+      "dosyalar": [
+        "Electron/src/pages/Customers/schema.ts",
+        "Electron/src/pages/DefectTypes/schema.ts",
+        "Electron/src/pages/Machines/schema.ts",
+        "Electron/src/pages/Routes/schema.ts",
+        "Electron/src/pages/Stations/schema.ts",
+        "Electron/src/pages/Subcontractors/schema.ts",
+        "Electron/src/pages/schema-varchar-mirror.test.ts (YENİ bekçi)"
+      ],
+      "bekci": "npx vitest run src/pages/schema-varchar-mirror.test.ts → rc=0, 10 passed",
+      "negatifSonda": "Stations/schema.ts name geçici olarak max(120)'ye döndürüldü → 1 failed ('panel sınırı DB kolonundan GENİŞ — P2000 riski: expected 120 to be less than or equal to 100'). Geri alındı → 10 passed.",
+      "not": "Bekçi eşlemeyi UYDURMAZ: çiftler (dosya·alan ↔ model·kolon) elle beyan edilir — İ-16'nın yanlış pozitifi tam da ad benzerliğine güvenmenin sonucuydu. Körlük zemini: prisma şeması okunabildi + >50k karakter + çift sayısı >5. İki uç da okunamazsa (beyan bayatladıysa) bekçi kırmızı verir, sessizce kör kalmaz."
+    },
+    {
+      "kimlik": "İ-17",
+      "durum": "yapildi",
+      "yapilan": "ReportHubGrid'in elle yazılmış `flex h-full flex-col` kabı PageShell'e, iç `<div className=\"p-6\">` PageBody'ye çevrildi. Tek dosya değişti, 8 rapor hub'ı (Audit · Customer · Finance · Inventory · Production · Quality · Sales · Subcontract) birden iskelete girdi.",
+      "kaydirmaDogrulamasi": "Değişiklik kaydırmayı BOZMUYOR, DÜZELTİYOR ve bu ölçüldü (yeni bekçi): kabuk artık `min-h-0` taşıyor (TabHost'un `absolute inset-0` sarmalında kap içeriğe göre büyümez), kaydırıcı sayısı TAM 1 (PageBody: flex-1 + min-h-0 + overflow-auto) ve PageHeader gövdenin DIŞINDA (kaydırınca yukarı gitmez). Eski hâlde kaydırıcı sayısı 0'dı — kaydırma dışarı, TabHost'a taşıyordu ve başlık da onunla kayıyordu.",
+      "dosyalar": [
+        "Electron/src/pages/Reports/_components/ReportHubGrid.tsx",
+        "Electron/src/pages/Reports/_components/ReportHubGrid.test.tsx (YENİ bekçi)"
+      ],
+      "bekci": "npx vitest run src/pages/Reports/_components/ReportHubGrid.test.tsx → rc=0, 3 passed",
+      "negatifSonda": "Kap eski hâline (`flex h-full flex-col` + düz `p-6` div) döndürüldü → 2 failed ('kabukta min-h-0 yok' + 'birden çok kaydırıcı…: expected +0 to be 1'). Geri alındı → 3 passed."
+    },
+    {
+      "kimlik": "İ-18",
+      "durum": "yapildi",
+      "yapilan": "Üç dizinde de hook'lar `hooks.ts`e taşındı; `service.ts` saf veri erişimi (React'e bağlı olmayan async fonksiyonlar + tipler + sabitler) olarak kaldı. Clients: useConnectedClients → hooks.ts, service.ts'te fetchConnectedClients. DbRestore: 5 hook (useDbCopies/useStartCopy/useVerifyCopy/useDropCopy/useSwapCommands) → hooks.ts; service.ts'te fetchDbCopies/startCopy/verifyCopy/dropCopy/fetchSwapCommands + DB_COPIES_QUERY_KEY. Backups: 3 hook (useBackups/useRestoreImpact/useOffsiteStatus) → hooks.ts; service.ts'te fetchBackups/fetchRestoreImpact/fetchOffsiteStatus (saf `restoreCommand`, `downloadBackup`, offsite yazma uçları YERİNDE KALDI — zaten saf).",
+      "dosyalar": [
+        "Electron/src/pages/System/Clients/service.ts + hooks.ts (YENİ) + ClientsPage.tsx",
+        "Electron/src/pages/System/DbRestore/service.ts + hooks.ts (YENİ) + DbRestorePage.tsx + SwapCommandDialog.tsx + StartCopyCard.tsx + DbRestorePage.test.tsx",
+        "Electron/src/pages/System/Backups/service.ts + hooks.ts (YENİ) + BackupsPage.tsx + OffsiteBackupCard.tsx + RestoreDialog.tsx + RestoreDialog.test.tsx"
+      ],
+      "bekci": "npx vitest run src/pages/System → rc=0, 11 dosya / 159 passed (DbRestorePage.test.tsx 12 · RestoreDialog.test.tsx 11 · clients-utils.test.ts 14 dahil)",
+      "not": "İki bekçinin `vi.mock` hedefi './service' → './hooks' olarak taşındı; `restoreCommand` bilinçli olarak service.ts'te bırakıldı (saf fonksiyon, restoreCommand.test.ts ve RestoreDialog.test.tsx §7 gerçek hâlini ölçüyor)."
+    },
+    {
+      "kimlik": "İ-19",
+      "durum": "yapildi",
+      "yapilan": "`as any` ve gerekçesiz `eslint-disable` KALDIRILDI, tip düzeltildi: OrderLinesEditor artık `OrderLineErrors` tipini export ediyor (bileşenin gerçekten OKUDUĞU dar biçim) ve OrderFormDialog RHF'in geniş `FieldErrors` birleşimini `as unknown as OrderLineErrors` ile ADI OLAN bir hedefe daraltıyor, 3 satır NEDEN yorumuyla. Kalan 8 `as any` zodResolver↔RHF sürtünmesidir ve [EL-33]'ün tanıdığı gerekçeli sınıftır — dokunulmadı.",
+      "dosyalar": [
+        "Electron/src/pages/Operations/Orders/OrderFormDialog.tsx",
+        "Electron/src/pages/Operations/Orders/OrderLinesEditor.tsx"
+      ],
+      "bekci": "npm run typecheck → rc=0 (tip daraltması derleyiciyle doğrulandı); npx vitest run → rc=0, 2283 passed"
+    },
+    {
+      "kimlik": "İ-15",
+      "durum": "yapildi",
+      "kapsam": "kısmi (istenen örnek küme)",
+      "yapilan": "En yeni 4 ihlal (SackTags, 2026-09-04) düzeltildi: SackTagsPage.tsx:73/98/110 ve SackTagDialog.tsx:68'deki `onError → toast.error` kaldırıldı, yerine [EL-19] uyarınca 'onError YOK' gerekçe yorumu yazıldı. `suppressErrorToast` KULLANILMADI çünkü ekran kendi mesajını üretmiyordu — sildiğimiz toast'ın `description`'ı `err.message`, yani axios'un İngilizce 'Request failed with status code 409' metniydi; backend'in Türkçe mesajını basan zaten interceptor'dır (apiClient.ts:212 `toast.error(buildErrorMessage(body))`). Yani ikinci toast bilgi EKLEMİYOR, İngilizce gürültü ekliyordu.",
+      "dosyalar": [
+        "Electron/src/pages/SackTags/SackTagsPage.tsx",
+        "Electron/src/pages/SackTags/SackTagDialog.tsx"
+      ],
+      "bekci": "npx vitest run src/pages/SackTags → rc=0, 2 passed; node scripts/check-lint-baseline.mjs --proje=electron → rc=0, `yerel/mutation-onerror-toast` 26 → 22 (tavan --yaz ile 22'ye SIKIŞTIRILDI; tavan yalnız düşer)",
+      "kalan": "22 ihlal / 15 dosya baseline'da donuk kalıyor — toplu kampanya [IL-22]/[EL-21] gereği bu turda YAPILMADI."
+    }
+  ],
+  "dogrulama": {
+    "typecheck": "cd Electron && npm run typecheck → rc=0",
+    "lint": "cd Electron && npm run lint → rc=0, 666 problems (0 errors, 666 warnings)",
+    "vitest": "cd Electron && npx vitest run → rc=0, 211 dosya / 2283 test passed (turdan önce 208/2266 → +3 bekçi dosyası, +17 ölçüm)",
+    "lintTavani": "node scripts/check-lint-baseline.mjs --proje=electron → rc=0 (1396 dosya, 0 error). `--yaz` ile mutation-onerror-toast tavanı 26→22 düşürüldü; başka hiçbir kural tavanı DEĞİŞMEDİ (yazımdan önce koşan kontrol 'tavan aşılmadı' diyordu, yani hiçbir sayı tavanın üstünde değildi → --yaz yalnız düşürebilirdi)."
+  },
+  "yeniBekciler": [
+    "Electron/src/pages/StationCapabilities/write-permission.test.tsx — 4 ölçüm, negatif sonda koşuldu",
+    "Electron/src/pages/schema-varchar-mirror.test.ts — 10 ölçüm (körlük zemini + 9 beyanlı çift), negatif sonda koşuldu",
+    "Electron/src/pages/Reports/_components/ReportHubGrid.test.tsx — 3 ölçüm, negatif sonda koşuldu"
+  ],
+  "acikKarar": [
+    "BACKEND (başka ajanın alanı) — Teks-Erp/src/constants/screen-catalog.ts:195 `definitions/station-capabilities` satırı `capabilities: []` diyor; kardeş satırlar (:190-195) yazma iznini taşıyor (ör. defect-types → ['quality:write'], subcontractors → ['subcontractor:write']). İ-14 düzeltildikten sonra bu satır da `capabilities: [\"station:write\"]` olmalı. Panel tarafında bu dosyanın TÜKETİCİSİ YOK (grep: Electron/src'te sıfır kullanım), yani panel açığı buradan doğmuyor — ama katalog bayat kalıyor.",
+    "Colors/schema.ts `name.max(80)` ↔ `Color.name @db.VarChar(100)`: panel DB'den DAR. Güvenli yön olduğu için düzeltilmedi. 80→100 genişletmek bir UX kararıdır (renk adı rozet/etikete sığmalı) — kullanıcı onayı ister; şimdilik bekçide `darGerekce` ile beyan edildi.",
+    "StationCapabilities rota izni `station:read` olarak BIRAKILDI. Yalnız yazma yüzeyi kapatıldı. Rotayı `station:write`e çekmek salt-okunur kullanıcıdan LİSTEYİ de alırdı ve karo/palet aynasını ([EL-21]) da değiştirirdi — bu bir kapsam kararıdır, düzeltme değil."
+  ],
+  "belgeDuzeltmesi": [
+    "PROMPT.md §2.6 İ-16 satırı YANLIŞ ADRES veriyor: '`Customers/schema.ts:21 max(50)` ↔ Prisma `Customer.code VarChar(32)` → 32'. :21 satırı `branchDraftSchema.code`tur ve aynası `CustomerBranch.code @db.VarChar(50)`; yani max(50) DOĞRU. `Customer.code` panelde hiç düzenlenmiyor. Gerçek sapma :63 `name.max(200)` ↔ `Customer.name @db.VarChar(100)` idi. (olcum/faz0-acik-olcumler.json bunu zaten 'gecersiz' diye işaretlemiş ve doğru satırı vermiş; PROMPT.md o düzeltmeyi yansıtmıyor.) ELECTRON.md [EL-25] kanıt satırı DOĞRU adresi veriyor — düzeltilmesi gereken PROMPT.md.",
+    "docs/standart/ELECTRON.md [EL-25] 'devralınan: 1' BAYAT — ölçüm 7 sapma buldu (Customers.name · DefectTypes.name · Machines.name · Routes.name · Stations.name · Stations.department · Subcontractors.name). Hepsi bu turda kapandı → 'devralınan: yok'. Zorlama etiketi de artık `insan` değil `bekçi:src/pages/schema-varchar-mirror.test.ts` olabilir (eşleme beyanı hâlâ insan işi, ama beyanın iki ucu mekanik ölçülüyor).",
+    "docs/standart/ELECTRON.md [EL-22] kanıtındaki `constants/screen-catalog.ts:195` yolu BACKEND'dedir (Teks-Erp/src/constants/screen-catalog.ts); Electron dosyası sanılıp aranıyor (Electron/src/constants dizini YOK). Yol tam yazılmalı. Ayrıca borç kapandı: 'devralınan: 1 (İ-14, düzeltilecek)' → 'devralınan: yok', zorlama `insan` → `bekçi:src/pages/StationCapabilities/write-permission.test.tsx`.",
+    "docs/standart/ELECTRON.md [EL-08] 'devralınan: 8 (düzeltilecek borç)' → 'devralınan: yok'; zorlama `insan` → `bekçi:src/pages/Reports/_components/ReportHubGrid.test.tsx`.",
+    "docs/standart/ELECTRON.md [EL-31] 'devralınan: 3 (borç)' → 'devralınan: yok' (Clients · DbRestore · Backups hook'ları hooks.ts'e taşındı).",
+    "docs/standart/ELECTRON.md [EL-33] 'devralınan: 1' → 'devralınan: yok' (gerekçesiz `as any` kalmadı; 8 zodResolver kullanımı gerekçeli sınıfta).",
+    "docs/standart/ELECTRON.md [EL-17] 'devralınan: 26 (baseline, ARTMAZ)' → 22 (tavan sıkıştırıldı).",
+    "docs/standart/ELECTRON.md §12 'Bilinen borç' listesi güncellenmeli: '8 rapor hub'ı iskeletsiz · 26 çift hata toast'ı · 3 service.ts hook export'u · 1 kapısız yazma butonu · 1 zod↔VarChar sapması' → kalan yalnız '22 çift hata toast'ı (baseline)'."
+  ]
+}

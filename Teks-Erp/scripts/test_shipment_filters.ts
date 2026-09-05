@@ -79,16 +79,19 @@ async function main() {
     data: { code: `TST-SFL-B-${ts}`, name: `TEST ÜRÜN B ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
+  // AD da damgalı: renk (`colors_nameFoldColor_key`) ve iade nedeni
+  // (`return_reasons_nameFold_key`) ad üzerinde UNIQUE taşır — damgasız ad
+  // ikinci koşumu P2002'ye düşürür.
   const colorX = await prisma.color.create({
-    data: { code: `TST-SFL-X-${ts}`, name: "TEST MAVI" },
+    data: { code: `TST-SFL-X-${ts}`, name: `TEST MAVI ${ts}` },
     select: { id: true },
   });
   const colorY = await prisma.color.create({
-    data: { code: `TST-SFL-Y-${ts}`, name: "TEST RENK Y" },
+    data: { code: `TST-SFL-Y-${ts}`, name: `TEST RENK Y ${ts}` },
     select: { id: true },
   });
   const reason = await prisma.returnReason.create({
-    data: { code: `TEST-SFL-RSN-${ts}`, name: "TEST İADE NEDENİ" },
+    data: { code: `TEST-SFL-RSN-${ts}`, name: `TEST İADE NEDENİ ${ts}` },
     select: { id: true, name: true },
   });
 

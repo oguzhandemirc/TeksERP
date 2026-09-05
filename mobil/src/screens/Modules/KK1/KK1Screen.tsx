@@ -185,6 +185,9 @@ function QuickAddDesenRow({
 }) {
   const [name, setName] = useState('');
 
+  // Online-only: yaratılan desenin ID'si ANINDA tüketiliyor (`onCreated` picker'a
+  // seçili kayıt olarak veriyor). Kuyruklanan çağrının yanıtı — dolayısıyla ID'si
+  // — yoktur; operatör az önce eklediği deseni seçemezdi.
   const mutation = useMutation({
     mutationFn: (n: string) => itemService.quickCreateFabric(n),
     onSuccess: (res) => {

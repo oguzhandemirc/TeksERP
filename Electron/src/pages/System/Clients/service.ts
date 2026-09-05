@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 
 /** Backend sözleşmesi — `GET /api/admin/clients` (Teks-Erp admin.routes.ts). */
@@ -43,24 +42,10 @@ export interface ConnectedClientsSnapshot {
   clients: ConnectedClient[];
 }
 
-/**
- * Sayfa açılışında BİR KEZ çeker, sonrası "Yenile" düğmesiyle.
- *
- * ⚠️ OTOMATİK YOKLAMA YOK (kullanıcı kararı): liste bir envanterdir, canlı bir
- * gösterge değil. Sürekli yoklama fabrika ağına ve sunucuya bedel bindirir ve
- * ekranın iddiasını ("son N dakikada istek gönderdi") değiştirmez.
- */
-export function useConnectedClients() {
-  return useQuery({
-    queryKey: ["connected-clients"],
-    queryFn: async (): Promise<ConnectedClientsSnapshot> =>
-      (
-        await apiClient.get<{ success: boolean; data: ConnectedClientsSnapshot }>(
-          "/api/admin/clients",
-        )
-      ).data.data,
-    // Açılışta taze veri: sekmeye her dönüldüğünde eski bir fotoğraf değil.
-    staleTime: 0,
-    refetchOnMount: "always",
-  });
+/** Bağlı istemci envanteri — saf veri erişimi (React'e bağlı değil). */
+export async function fetchConnectedClients(): Promise<ConnectedClientsSnapshot> {
+  const res = await apiClient.get<{ success: boolean; data: ConnectedClientsSnapshot }>(
+    "/api/admin/clients",
+  );
+  return res.data.data;
 }

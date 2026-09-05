@@ -426,10 +426,14 @@ async function sectionEndToEnd(): Promise<void> {
       detailsCode === "ACCESS_ASSERTION_INVALID",
       `details.code=${String(detailsCode)}`,
     );
+    // Yasağın KONUSU burada ölçülüyor: "kök `code` okunmaz" kuralı, kökün geriye
+    // uyum için HÂLÂ DOLDURULDUĞU iddiasına dayanır — o iddiayı ölçen tek yer burası.
+    // eslint-disable-next-line no-restricted-syntax
+    const rootCode = remoteBadJwt.body.code;
     check(
       "UZAK: kök `code` geriye uyum için DURUYOR",
-      remoteBadJwt.body.code === "ACCESS_ASSERTION_INVALID",
-      String(remoteBadJwt.body.code),
+      rootCode === "ACCESS_ASSERTION_INVALID",
+      String(rootCode),
     );
     const missingCode = (remoteApi.body.details as { code?: string } | undefined)?.code;
     check(

@@ -19,7 +19,7 @@
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate deploy",
     "prisma:studio": "npx prisma studio",
-    "lint": "eslint src",
+    "lint": "eslint src scripts prisma",
     "typecheck": "tsc --noEmit",
     "typecheck:plain": "tsc --noEmit --pretty false",
     "typecheck:scripts:plain": "tsc --noEmit --pretty false -p tsconfig.scripts.json",
@@ -51,7 +51,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@faker-js/faker": "^10.4.0",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",

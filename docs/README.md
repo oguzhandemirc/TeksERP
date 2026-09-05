@@ -9,6 +9,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Her alanda geçerli değişmezler, yasaklar, alan dizini | kök `CLAUDE.md` |
 | Bir alanın bugün geçerli kuralları + bekçileri + arşiv tarihleri | `docs/kurallar/<alan>.md` (dizin: `docs/kurallar/README.md`) |
 | Teknik desenler (F221, atomik claim, Zod↔mutationFn, `details.code`…), yorum politikası, tam yasak listesi | `docs/KOD-KURALLARI.md` |
+| Rutin yazım konvansiyonları (servis metodu, model, sayfa, ekran nasıl yazılır; boyut tavanı, kütüphane seçimi, test kadansı) | `docs/standart/` (giriş: `docs/standart/README.md`) |
 | "X eklerken şu yerleri güncelle" (bayrak, enum, route+izin, migration, bekçi, Electron sayfası, mobil ekran, sürüm) | `docs/RECETELER.md` |
 | Yerel geliştirme (env, DB, tek bekçi, sunucu) | `docs/GELISTIRME-DONGUSU.md` |
 | Alan → bekçi (test) haritası | `Teks-Erp/docs/BEKCI-HARITASI.md` |
@@ -22,6 +23,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 | Klasör | İçerik | Güncellik |
 |---|---|---|
 | `kurallar/` | Alan kural dosyaları (24 + README) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
+| `standart/` | Kod yazım standardı (8 + README): `ILKELER` · `BACKEND` · `VERITABANI` · `ESZAMANLILIK` · `ELECTRON` · `MOBIL` · `KUTUPHANELER` · `TEST-VE-DERLEME`. Olay-türevi kural değil, RUTİN konvansiyon; her kural `[kimlik] · zorlama · kanıt · devralınan` taşır | Canlı |
 | `design/` | Domain tasarımları (18) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı | Canlı |
 | `ops/` | Deploy/runbook/kurulum reçeteleri (24) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
 | `qa/` | Manuel kabul senaryoları | Bakımlı |
@@ -39,10 +41,11 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 ## `.claude/` harness
 
 - `.claude/rules/<alan>.md` — yol kapsamlı (`paths:`) İNCE işaretçiler: eşleşen dosyaya dokunulunca "önce `docs/kurallar/<alan>.md` oku" der (~100 token). Kural buraya YAZILMAZ; `paths` olmayan bir rules dosyası her oturumda yüklenir ve sadeleştirmeyi boşa çıkarır.
+- Katman işaretçileri aynı biçimde standarda bağlanır: `backend-standart.md` (`Teks-Erp/src/**`) · `electron-standart.md` (`Electron/src/**`) · `mobil-standart.md` (`mobil/src/**`) · `kutuphane.md` (`**/package.json`).
 - `.claude/skills/` — `surum-cikar` · `bekci-kos` · `karar-notu` (alt projelerin kendi skill'leri `Electron/.claude/skills/`).
-- `scripts/claude-hooks/bash-guard.mjs` — PreToolUse kapısı: yasak komutları (sunucu süreçlerini toplu öldürme, `migrate reset|dev`, `db push`, WHERE'siz `DELETE`, `TRUNCATE/DROP`, `push --force`, ham `build:win`, elle `gradlew`) engeller; `git commit`te staged alt projelerde tip kontrolü koşar. Kaçış yalnız kullanıcı kararıyla `TEKSERP_HOOK_SKIP=1`. ⚠️ Kapı komut METNİNE bakar: yasak dizeyi içeren bir açıklama/heredoc bile engellenir — böyle metni Edit/Write ile yaz.
+- `scripts/claude-hooks/bash-guard.mjs` — PreToolUse kapısı: yasak komutları (sunucu süreçlerini toplu öldürme, `migrate reset|dev`, `db push`, WHERE'siz `DELETE`, `TRUNCATE/DROP`, `push --force`, ham `build:win`, elle `gradlew`) engeller; `git commit`te commit kapısını KENDİ ÇALIŞTIRMAZ, `scripts/hooks/pre-commit.mjs`i çağırır (adım listesi tek yerde: tip · lint · lint tavanı · o projenin hızlı testi). Git'in kendi kapısı kuruluysa (`node scripts/hooks-kur.mjs`) susar — aynı adımlar iki kez koşmaz. Kaçış yalnız kullanıcı kararıyla `TEKSERP_HOOK_SKIP=1` ya da `--no-verify`. ⚠️ Kapı komut METNİNE bakar: yasak dizeyi içeren bir açıklama/heredoc bile engellenir — böyle metni Edit/Write ile yaz.
 - Anlama turu raporu ve ekleri: `docs/history/anlama-turu-2026-09-05/`.
 
 ## Bayatlık bekçisi (CI)
 
-`scripts/check-docs.mjs` (`cd Teks-Erp && npm run check:docs`): ölü doküman-link **GATE**; kaldırılmış-sembol atfı advisory; **`CLAUDE.md` boyut tavanı GATE** (kök ≤ 36 KB, alt dosyalar ≤ 24 KB — sadeleştirmenin geri şişmemesi için). Yeni sembol kaldırıldığında `REMOVED_SYMBOLS`'e ekle.
+`scripts/check-docs.mjs` (`cd Teks-Erp && npm run check:docs`): ölü doküman-link **GATE**; kaldırılmış-sembol atfı advisory; **belge boyut tavanı GATE** (kök `CLAUDE.md` ≤ 36 KB, alt `CLAUDE.md`'ler ve `docs/standart/*.md` ≤ 24 KB — sadeleştirmenin geri şişmemesi için; standart dosyaları taranarak bulunur, yeni dosya tavansız doğmaz). Yeni sembol kaldırıldığında `REMOVED_SYMBOLS`'e ekle.

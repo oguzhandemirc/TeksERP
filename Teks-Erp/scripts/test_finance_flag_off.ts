@@ -15,6 +15,7 @@
 // ÖLÇÜLENLER:
 //   §1 Varsayılan KAPALI (yeni kurulumda modül sessizdir)
 //   §2 Kapalıyken /api/finance altındaki HER uç 403 — izinli kullanıcıyla bile
+//   §2b 403 gövdesi `details.code = MODULE_DISABLED` (kardeş kapılarla aynı sözleşme)
 //   §3 Kapı `verifyToken`'dan SONRA (kimliksiz istek 401 almalı, 403 değil)
 //   §4 Router'daki HER uç bayrak kapısının ARKASINDA (kaynak taraması —
 //      `router.use` atlanıp uçlar tek tek yazılırsa biri unutulur)
@@ -159,14 +160,38 @@ async function main(): Promise<void> {
   // ── §2 KAPALIYKEN 403 ────────────────────────────────────────────────────
   await systemSettingService.setFeatureFlags({ financeEnabled: false }, testUserId ?? undefined);
   const closed: string[] = [];
+  // §2b sözleşmesi: 403 gövdesi kardeş kapılarla AYNI `details.code`u taşır —
+  // istemci "modül kapalı"yı metinden değil koddan ayırt eder.
+  const kodsuz: string[] = [];
+  const ustSeviyeKod: string[] = [];
   for (const [method, path] of PROBES) {
     const r = await fetch(`${BASE}${path}`, { method, headers: auth });
     if (r.status !== 403) closed.push(`${path}→${r.status}`);
+    const body = (await r.json().catch(() => ({}))) as {
+      code?: unknown;
+      details?: { code?: unknown; modul?: unknown };
+    };
+    if (body?.details?.code !== "MODULE_DISABLED") {
+      kodsuz.push(`${path}→${JSON.stringify(body?.details?.code)}`);
+    }
+    // `body.code` HEP undefined olmalı: kod `details` altındadır ve üst seviyeye
+    // taşınırsa istemcilerin bugünkü okuma kalıbı sessizce ikiye ayrılır.
+    if (body?.code !== undefined) ustSeviyeKod.push(path);
   }
   check(
     "§2 Bayrak KAPALIYKEN tüm uçlar 403 (izinli kullanıcıyla)",
     closed.length === 0,
     closed.length > 0 ? closed.join(", ") : `${PROBES.length} uç kapalı`,
+  );
+  check(
+    "§2b 403 gövdesi `details.code = MODULE_DISABLED` taşıyor (kardeş kapı sözleşmesi)",
+    kodsuz.length === 0,
+    kodsuz.length > 0 ? kodsuz.join(", ") : `${PROBES.length} uç kodlu`,
+  );
+  check(
+    "§2b `body.code` TOP-LEVEL YOK (kod `details` altında)",
+    ustSeviyeKod.length === 0,
+    ustSeviyeKod.join(", ") || "temiz",
   );
 
   // ── §3 KİMLİKSİZ İSTEK 401 ───────────────────────────────────────────────

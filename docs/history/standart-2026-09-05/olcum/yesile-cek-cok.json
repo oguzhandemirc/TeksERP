@@ -1,0 +1,40 @@
+{
+  "tarih": "2026-09-05",
+  "kapsam": ["test_plan_deviation_scorecard", "test_scrap_grade_label", "test_single_warehouse_parity"],
+  "ortakBulgu": "Üç kırmızının ikisi aynı kök nedenden: bekçi ORTAMDAKİ VERİYİ ölçüyor. Karne bekçisi tüm DB'yi (servisin tek süzgeci tarih), etiket bekçisi fabrikanın canlı şablonunu okuyor. Ders: bir okuma katmanının bekçisinde TARİH PENCERESİ de fixture damgasıdır — servis filtre parametresi sunmuyorsa kapsam pencereyle daraltılır ve pencerenin boş olduğu ölçülür (körlük zemini). Üçüncü kırmızı ise klasik bayat bekçi: 2026-09-02'de karar veriden bayrağa taşındı, kaynak taraması eski literali arıyordu.",
+  "bekciler": [
+    {
+      "bekci": "test_plan_deviation_scorecard",
+      "sinif": "bayat-bekci",
+      "kokNeden": "Bekçi kendi fixture'ını İZOLE ETMİYORDU. `getPlanDeviationScorecard(range, compareRange)` servisinin TEK süzgeci tarihtir (kırılım/filtre parametresi yok) ve fixture satırlarını BUGÜNE yazıyordu → karne DB'deki tüm satırları sayıyor, mutlak beklentiler (2 imza / 140 m / renk=2) ortam verisiyle karışıyordu. Kirleten satırlar: `fixture-manual-move.ts` (TEST-MM-) artığı iki `roll_plan_deviation` (2026-09-05 09:04 ve 09:50, her biri 100 m / field=color) — o fixture'ın cleanup'ında `rollPlanDeviation.deleteMany` YOK, `roll.deleteMany` RESTRICT FK'ya çarpıp catch'e düşüyor ve her koşum bir imza daha bırakıyor (ölçüldü: konu açılırken renk=3/qty=240, bir koşum sonra renk=4/qty=340).",
+      "yapilan": "Kapsam DARALTILDI, sayı büyütülmedi: fixture artık rastgele seçilen GEÇMİŞ bir 10 günlük dilime yazılıyor (2000-01-01 + slot) — karne özelliği 2026-08-19'da doğduğu için o dilimde başka veri olamaz. Fixture'dan ÖNCE §0 körlük zemini penceresi boş mu diye ölçüyor (imza=0, detay=0, önceki=0), böylece çakışma sessiz kalmıyor. §7c eklendi: detay TAM 3 satır — §7b'nin 'hepsi' ifadesi boş kümede vakumen yeşil kalamaz. Mutlak beklentiler (2 imza / 140 m / renk=2 en=1 / 999 m compare) AYNEN korundu.",
+      "degisenDosyalar": ["Teks-Erp/scripts/test_plan_deviation_scorecard.ts"],
+      "silinenSatir": "roll_plan_deviations 2 satır (WHERE: workOrder.workOrderNumber startsWith 'TEST-MM-' AND createdAt < now-15dk; dry-run önce listelendi, sonra --apply). Tablo 2 → 0. TEST-MM- topları/iş emirleri kendi bekçilerinin sorumluluğunda, DOKUNULMADI.",
+      "sonKosum": "✅ test_plan_deviation_scorecard.ts           14 geçti, 0 başarısız    0.5s",
+      "yesilMi": true,
+      "not": "Negatif sonda İKİ YÖNLÜ ölçüldü: (1) pencere 'bugün'e çevrilince 6 geçti / 8 başarısız, §7c 5 satır gösterdi (3 fixture + 2 artık) → izolasyon load-bearing; (2) §2 beklentisi 140→240 yapılınca (naif SUM) 13/1 kırmızı → çift sayım kilidi hâlâ ölçülüyor. AÇIK İŞ (benim kapsamım dışı): `scripts/fixture-manual-move.ts` cleanup'ına `rollPlanDeviation.deleteMany` eklenmeli (RESTRICT FK dersi, test_tambur_plan_gate.ts:496 emsali) — yoksa TEST-MM- artığı üretmeye devam eder."
+    },
+    {
+      "bekci": "test_single_warehouse_parity",
+      "sinif": "bayat-bekci",
+      "kokNeden": "§4b Electron kaynak taramasında `warehouses.length > 1` literalini arıyordu. 2026-09-02 kararıyla (arşiv: modül anahtarları grandfathering notu; `docs/kurallar/modul-bayrak.md`) karar VERİDEN değil BAYRAKTAN okunuyor: `useMultiWarehouse` artık `depoMultiEnabled` modül anahtarını okuyor, transfer uçlarındaki `requireDepoMultiEnabled` ile TEK KAYNAK. Eski türev kaldırıldığı için bekçi bilinçli bir kararı kırmızı sayıyordu.",
+      "yapilan": "§4b bugünkü karara göre yeniden yazıldı: hook bayrağı okuyor mu (`useFeatureFlags` + `depoMultiEnabled`). §4b2 EKLENDİ — tek kaynak seddi: Electron `src/` ağacında hiçbir dosya kararı depo listesinden yeniden türetmiyor (yorumlar elenerek taranır, körlük zemini olarak taranan dosya sayısı basılır). §4f de bayat ölçüyordu (`q.data ?? []` — depo listesi varsayılanı); artık belirsizlik kapısını doğru yerden ölçüyor: `depoMultiEnabled ?? false`. Başlık yorumundaki (c) maddesi bugünkü kaynağı söyleyecek şekilde güncellendi.",
+      "degisenDosyalar": ["Teks-Erp/scripts/test_single_warehouse_parity.ts"],
+      "silinenSatir": "yok",
+      "sonKosum": "✅ test_single_warehouse_parity.ts            22 geçti, 0 başarısız    0.8s",
+      "yesilMi": true,
+      "not": "Üç negatif sonda ölçüldü: bayrak adı bozulunca §4b kırmızı; tarayıcıya var olan bir desen (`useFeatureFlags`) verilince §4b2 36 dosyayı ihlal diye listeledi (tarayıcı gerçekten ağacı yürüyor, vakumen yeşil değil); `?? false` → `?? true` yapılınca §4f kırmızı. Electron kaynağına DOKUNULMADI, yalnız bekçi güncellendi."
+    },
+    {
+      "bekci": "test_scrap_grade_label",
+      "sinif": "is-karari",
+      "kokNeden": "§5/§5b, fabrikanın CANLI etiket şablonunun çıktısını ölçüyor (bekçi bunu bilerek 'çıktı testi' diye yazmış). Bu DB'de aktif ROLL_FINISHED şablonunun (`7ad93309…`) HİÇ kanvas varyantı yok — akış (flow) modunda, yani `fields` listesinden otomatik yerleşim üretiyor. 2026-08-20'nin `20260820040000_fire_label_marking` migration'ı fire işaretini (kutulu FIRE + SATILAMAZ, `showIf`) YALNIZ `label_template_variants` satırlarına yazar → bu şablonda SESSİZ NO-OP oldu. Ölçüldü: fire topun (DF000020) etiketi 'Kalite: FIRE' satırını basıyor ama kutulu 'SATILAMAZ' uyarısı YOK; §5b'nin `\"FIRE\"` (tırnaklı) regex'i de kanvas çıktısının şekline göre yazılmış, akış çıktısında karşılığı yok.",
+      "yapilan": "KOD/BEKÇİ DEĞİŞTİRİLMEDİ (sınıf gereği). Fire işareti kodda gömülü değil ŞABLON VERİSİDİR ve fabrika Etiket Stüdyosu'ndan düzenler (migration başlığının kendi ifadesi) — düzeltmek iki ayrı insan kararından biri: (a) şablonu kanvasa taşı (`scripts/migrate_label_templates_to_canvas.ts --only=7ad93309-d002-4d00-923d-b114ec29a046`) ve fire bloğunu yeniden uygula, ya da (b) akış modu render'ına da fire işaretini ekle (kod + yerleşim kararı). İkisi de bekçi tamiri değil; ayrıca üretim kopyası şablon verisine ve migration yazmaya yetkim yok.",
+      "degisenDosyalar": [],
+      "silinenSatir": "yok",
+      "sonKosum": "❌ test_scrap_grade_label.ts                  20 geçti, 2 başarısız    0.7s",
+      "yesilMi": false,
+      "not": "KABUL EDİLEN KIRMIZI (2/22). Kırmızı olan iki kontrol GERÇEK bir boşluğu gösteriyor: fabrikada fire etiketi 'satılamaz' vurgusunu ALMIYOR. Kapı tarafı sapasağlam — §6a-§6g (dört kâğıt yüzeyi 409 SCRAP_LABEL_BLOCKED, açık geçiş, payload ucu kapı dışında) yeşil. ⚠️ Ayrıca §5c ('normal etikete fire işareti SIZMIYOR') akış modunda VAKUMEN yeşil: hiçbir etiket 'SATILAMAZ' basmadığı için sızıntı da ölçülemiyor — kullanıcı (a) ya da (b) kararını verince o kontrolün de körlük zemini kazanması gerekir."
+    }
+  ]
+}

@@ -1,0 +1,104 @@
+{
+  "label": "duzeltme-migration",
+  "tarih": "2026-09-05",
+  "alan": "Teks-Erp/prisma (şema + migration) ve migration'ın gerektirdiği kod",
+  "kapsam": ["M-01", "M-05", "M-02"],
+  "notlar": "Üç migration ELLE yazıldı, `apply-migration.ts <ad> --apply` ile dev DB'ye (tekserp_demo) uygulandı. Hepsi ADDITIVE. Hiçbir satır silinmedi, hiçbir kolon düşürülmedi. Host'ta psql kurulu olmadığı için apply-migration'ın psql çağrısı geçici bir shim ile tekserp-local-db konteynerine köprülendi (repo DIŞINDA, scratchpad).",
+
+  "kimlikler": [
+    {
+      "kimlik": "M-01",
+      "durum": "yapildi",
+      "migration": "prisma/migrations/20260905140000_indexsiz_domain_fk/migration.sql",
+      "yapilan": "5 index'siz domain FK kapatıldı. dispatchId NOT NULL → DÜZ index; kalan 4 kolon nullable + null-yoğun → KISMİ index (`IS NOT NULL`), ev emsali warehouse_movements_transferId_idx / sacks_warehouseId_idx. Şemaya düz `@@index` + `///` gerekçe eklendi ([DB-14]); 4 kısmi index test_db_invariants §1 envanterine yazıldı.",
+      "nesneler": [
+        "subcontractor_direct_ship_allocations_dispatchId_idx (düz)",
+        "direct_shipments_branchId_idx (kısmi)",
+        "sacks_branchId_idx (kısmi)",
+        "warehouse_movements_shipmentId_idx (kısmi)",
+        "warehouse_movements_rollReturnId_idx (kısmi)"
+      ],
+      "canliMaliyet": "ÖLÇÜLMEDİ. Migration başlığında [DB-29] provası ZORUNLU olarak yazıldı; `SET statement_timeout = 0` konuldu; CONCURRENTLY YAZILMADI ([DB-26])."
+    },
+    {
+      "kimlik": "M-05",
+      "durum": "yapildi",
+      "migration": "prisma/migrations/20260905150000_sack_tag_ad_seddi/migration.sql",
+      "yapilan": "SackTag.name için `sack_tags_name_key` UNIQUE index, nameFold emsalinin YUMUŞAK KAPISI ile (DO $sed$ → mükerrer sayar → varsa RAISE NOTICE + ATLA, yoksa CREATE UNIQUE INDEX IF NOT EXISTS). Şemada `name String @unique @db.VarChar(60)` + gerekçe. Uygulama guard'ı (sack-tag.service.ts:132,164) KALDI — Türkçe 409'u o veriyor.",
+      "sapma": "Emsalin aksine PARTIAL DEĞİL, DÜZ ve harf-duyarlı. Gerekçe: sed uygulama guard'ının BİREBİR ikizi olmalı; guard `findFirst({where:{name}})` yazıyor — isActive süzmüyor, katlama yapmıyor. Predicate/`lower()` eklemek seddi guard'dan ayırırdı (biri 'var' derken diğeri 'yok' derdi).",
+      "envanter": "Düz (partial olmayan, ifade olmayan) UNIQUE Prisma'nın MODELLEDİĞİ bir nesnedir → dokuz şema-dışı listeye GİRMEZ (§1 karşı-envanteri `indpred IS NOT NULL` tarar). Doğru kayıt yeri `test_schema_drift.ts` TOLERATED_DRIFT'tir (yumuşak kapı atlarsa 'enforce bekliyor' sinyali) — nameFold emsaliyle simetrik olarak oraya yazıldı."
+    },
+    {
+      "kimlik": "M-02",
+      "durum": "yapildi",
+      "migration": "prisma/migrations/20260905160000_import_run_updated_at/migration.sql",
+      "yapilan": "10 modelin her biri şemadaki gerekçesi okunarak ve KOD'daki update siteleri ölçülerek sınıflandırıldı. 1 model 'gerçek unutulma' çıktı (ImportRun) → `updatedAt` eklendi. Kalan 9'un 7'sine TEK SATIR `///` gerekçe yazıldı; 2'sinde gerekçe ZATEN vardı.",
+      "sayilar": { "kolonEklenen": 1, "gerekceEklenen": 7, "gerekceZatenVardi": 2 },
+      "siniflandirma": [
+        { "model": "importRun", "sinif": "GERÇEK UNUTULMA (durum taşıyan master-data)", "kanit": "import.service.ts:618 upsert — token'lı koşumun satırı BAŞTA yazılır, bitince status/finishedAt/durationMs/stoppedAtRowNo/errorReport ile güncellenir; finishedAt NULL = hâlâ koşuyor", "aksiyon": "updatedAt eklendi (nullable ekle → COALESCE(finishedAt, createdAt) backfill → SET NOT NULL; DB DEFAULT YOK — drift üretirdi)" },
+        { "model": "rollOperation", "sinif": "DEFTER (append-only işlem log'u)", "kanit": "tambur.service.ts:1251/3547 · kursun-qc.service.ts:459/479 upsert'lerinin HEPSİ `update: {}` (no-op); tek gerçek yazım workorder-clone.helper.ts:220 `workOrderStepId` taşıması (yapısal, içerik değil)", "aksiyon": "/// gerekçe" },
+        { "model": "subcontractorDispatchItem", "sinif": "DEFTER (sevk kalemi)", "kanit": "subcontractor.service.ts:3542/3685 `remainderClosedAt` DAMGASI; batch.service.ts:740 + batch-dispatch-surgery.helper.ts:253/344 `dispatchId` taşıması (parti cerrahisi, atomik claim'li)", "aksiyon": "/// gerekçe" },
+        { "model": "rollVariance", "sinif": "DEFTER (append-only sapma defteri)", "kanit": "4 updateMany'nin hepsi `reversedAt`/`reversedById` TERS DAMGASI (subcontractor.service.ts:3530/5288 · tambur-undo.service.ts:1718/1735); kod yorumu birebir 'Sapma satırını TERSLE (silme — append-only defter)'", "aksiyon": "/// gerekçe" },
+        { "model": "userRecoveryCode", "sinif": "DEFTER", "kanit": "totp-account.service.ts:263 tek yazım — `usedAt` tek-seferlik ATOMİK CLAIM damgası; model başlığı zaten 'Satır SİLİNMEZ, usedAt damgalanır' diyor", "aksiyon": "/// gerekçe (updatedAt cümlesi eklendi)" },
+        { "model": "itemAllowedProperty", "sinif": "PİVOT", "kanit": "item.service.ts:591 upsert `update: {}` (F214 — eşzamanlı çift-istekte P2002 yerine idempotent dönüş); satır hiç GÜNCELLENMİYOR", "aksiyon": "/// gerekçe" },
+        { "model": "itemAllowedColor", "sinif": "PİVOT", "kanit": "item.service.ts:535 upsert `update: {}` — aynı desen", "aksiyon": "/// gerekçe" },
+        { "model": "rollProperty", "sinif": "PİVOT", "kanit": "station-capability-transfer.helper.ts:211 upsert — yalnız `valueId` tazelenir, bağ (rollId, propertyId) aynı kalır", "aksiyon": "/// gerekçe" },
+        { "model": "sackTagAssignment", "sinif": "PİVOT", "kanit": "schema.prisma başlığı ZATEN 'M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu)' diyor; updateMany'ler `clearedAt`/`clearedShipmentId` soft damgası", "aksiyon": "değişiklik yok — gerekçe zaten yazılı" },
+        { "model": "yarnMovement", "sinif": "DEFTER (append-only)", "kanit": "schema.prisma başlığı ZATEN 'APPEND-ONLY (bu yüzden `updatedAt` YOK, konvansiyon)' diyor; tek update goods-receipt.service.ts:1205 — AYNI tx içinde yeni doğan satırın `unitPrice` tamamlaması", "aksiyon": "değişiklik yok — gerekçe zaten yazılı" }
+      ]
+    }
+  ],
+
+  "negatifSondalar": [
+    {
+      "hedef": "M-05 · sack_tags_name_key gerçekten ısırıyor mu",
+      "yontem": "BEGIN → aynı `name` ile iki INSERT → ROLLBACK (psql, dev DB)",
+      "sonuc": "KIRMIZI alındı: `ERROR: duplicate key value violates unique constraint \"sack_tags_name_key\"` · DETAIL: Key (name)=(SONDA IZ) already exists. ROLLBACK sonrası sack_tags 0 satır (veri değişmedi)."
+    },
+    {
+      "hedef": "M-01 · yeni envanter satırları gerçekten ısırıyor mu",
+      "yontem": "`DROP INDEX warehouse_movements_shipmentId_idx` → test_db_invariants → index geri kuruldu → tekrar koşuldu",
+      "sonuc": "KIRMIZI: exit 1, satır 37 '❌ warehouse_movements_shipmentId_idx — index HİÇ YOK (warehouse_movements)', Sonuç 160 geçti / 1 başarısız. Geri kurulduktan sonra YEŞİL: exit 0, 161 geçti / 0 başarısız."
+    }
+  ],
+
+  "dogrulama": {
+    "npx prisma validate": "exit 0 — 'The schema at prisma/schema.prisma is valid'",
+    "npm run prisma:generate": "exit 0 — Prisma Client v7.9.1 üretildi",
+    "apply-migration 20260905140000_indexsiz_domain_fk --apply": "exit 0 — 5× CREATE INDEX; drift 4/0, hijyen 4/0",
+    "apply-migration 20260905150000_sack_tag_ad_seddi --apply": "exit 0 — NOTICE 'sack_tags_name_key kuruldu/zaten vardı'; drift 4/0, hijyen 4/0",
+    "apply-migration 20260905160000_import_run_updated_at --apply": "exit 0 — ADD COLUMN + UPDATE 85 + SET NOT NULL; drift 4/0, hijyen 4/0",
+    "run-all-tests test_db_invariants": "exit 0 — 161 geçti, 0 başarısız",
+    "run-all-tests test_schema_drift": "exit 0 — 4 geçti, 0 başarısız",
+    "run-all-tests test_sack_tag": "exit 0 — test_sack_tags 55/0, test_sack_tag_document 30/0",
+    "run-all-tests test_timestamptz": "exit 0 — 13 geçti, 0 başarısız (yeni updatedAt kolonu Timestamptz)",
+    "run-all-tests test_import": "exit 0 — 5 dosya, 103 geçti, 0 başarısız",
+    "npm run typecheck:plain": "exit 0",
+    "npm run lint (backend)": "exit 0 — 442 problem, 0 error (hepsi baseline uyarısı)",
+    "node scripts/check-lint-baseline.mjs --proje=backend": "exit 0 — 'tavan aşılmadı (1025 dosya, 0 error)'",
+    "node scripts/check-migrations.mjs": "exit 1 — İHLALLER BENİM ALANIMDA DEĞİL: GATE 4 `Teks-Erp/scripts/test_advisory_lock_namespaces.ts` untracked (eşzamanlılık ajanı / İ-10) · GATE 5 `Teks-Erp/dist/tools/superadmin-olustur.cjs` untracked (derleme çıktısı, önceden var). Migration kapıları (GATE 1-3) TEMİZ: üç migration da git'te izleniyor ve şema ile tutarlı.",
+    "npx prisma migrate status": "exit 0 — 235 migration bulundu, 'Database schema is up to date!'"
+  },
+
+  "acikKarar": [
+    "Katlamalı (harf/Türkçe-karakter duyarsız) SackTag ad seddi: bugünkü sed harf-DUYARLI çünkü uygulama guard'ı öyle. 'Kontrol Et' ≡ 'kontrol et' istenirse ÖNCE guard değişir (davranış değişikliği: bugün kabul edilen adlar reddedilir), SONRA nameFold/tr_fold desenli ifade index'i gelir. Karar kullanıcınındır — yapılmadı.",
+    "`error.middleware.ts` UNIQUE_COLUMN_LABELS'a `name: \"ad\"` eklenmedi. Yarışta P2002 mesajı bugün \"Bu 'name' değeri zaten mevcut (unique constraint).\" oluyor. Eklemek TÜM tabloların `name` unique mesajını değiştirir → ayrı karar; ayrıca normal yolda guard 409'u önce veriyor.",
+    "M-03 (`system_logs.newData ->> 'event'` GIN index'i) bu turda YAPILMADI — görev kapsamında değil ve tablo 24.482 satır + CONCURRENTLY yasak: vardiya dışı iş olarak açık kalıyor (VERITABANI.md §12 satırı geçerli)."
+  ],
+
+  "belgeDuzeltmesi": [
+    "docs/standart/VERITABANI.md §12 'Bilinen boşluklar': '5 index'siz domain FK' ve '10 model updatedAt'siz' maddeleri ARTIK KAPALI. Birincisi migration 20260905140000 ile kapandı; ikincisi 1 kolon + 9 gerekçe ile kapandı ve ihlal DEĞİL, konvansiyon olduğu ölçülerek belgelendi. İki madde silinip yerlerine 'kapandı → migration' satırı ya da §12'den çıkarma gerekiyor (docs/standart yeniden yazılmadı — kural gereği).",
+    "docs/standart/VERITABANI.md §8 kanıt satırındaki sayılar bayatladı: `PARTIAL_INDEXES` artık 72 satır ve DB'de 74 kısmi index var (68 → +4 bu turda; fark EXPRESSION_UNIQUES'in §1 muafiyetli kayıtlarından). Satır numaraları da (100/317/444/457/469/501/544/554/576) bu turun eklemeleriyle kaydı.",
+    "Teks-Erp/scripts/test_db_invariants.ts §1 başlığı '(38)' diyor, gerçek 72 — ZATEN bayattı, bu turda dokunulmadı (aynı dosyayı düzenleyen başka ajanla çakışmamak için). §5 başlığı da '(3)' diyor, gerçek 4. Kanonik sayı bekçinin kendisidir ([DB-30] notu); başlık yorumlarının sayı taşıması yanıltıcı — ya güncellensin ya kaldırılsın.",
+    "docs/standart/VERITABANI.md §7 [DB-24] 'partial UNIQUE' kalıbını yumuşak kapının ayrılmaz parçası gibi okutuyor. Ölçüldü: yumuşak kapı (DO bloğu + say + NOTICE + IF NOT EXISTS) ile PARTIAL'lık BAĞIMSIZ iki karardır — predicate seddin uygulama guard'ıyla eşitliğinden gelir, yumuşak kapıdan değil. Ayrıca düz UNIQUE dokuz envanter listesine girmez; kaydı TOLERATED_DRIFT'tir. Bu ayrım [DB-24]'e bir cümle olarak eklenmeli."
+  ],
+
+  "degisenDosyalar": [
+    "Teks-Erp/prisma/migrations/20260905140000_indexsiz_domain_fk/migration.sql (YENİ)",
+    "Teks-Erp/prisma/migrations/20260905150000_sack_tag_ad_seddi/migration.sql (YENİ)",
+    "Teks-Erp/prisma/migrations/20260905160000_import_run_updated_at/migration.sql (YENİ)",
+    "Teks-Erp/prisma/schema.prisma",
+    "Teks-Erp/scripts/test_db_invariants.ts",
+    "Teks-Erp/scripts/test_schema_drift.ts"
+  ]
+}

@@ -39,6 +39,7 @@ import { useManualRefresh } from '../../../hooks/useManualRefresh';
 import { useKartelaMeasurementEnabled } from '../../../hooks/useFeatureFlags';
 import { useIsOnline } from '../../../offline/hooks';
 import { STATION_MUT } from '../../../offline/mutations';
+import { signalScan } from '../../../services/scanFeedback';
 import { rollService, type RollCancelPreview } from '../../../services/roll.service';
 import { kartelaService } from '../../../services/kartela.service';
 import {
@@ -293,10 +294,10 @@ export default function DepoScreen() {
         const res = await swatchService.getByBarcode(barcode);
         const s = res.data;
         if (!s) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          signalScan('reject');
           Toast.show({ type: 'error', text1: 'Kartela bulunamadı', text2: barcode });
         } else {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          signalScan('accept');
           pendingDetailRef.current = {
             kind: 'swatch',
             data: s as unknown as SwatchListItem,
@@ -306,21 +307,26 @@ export default function DepoScreen() {
         const res = await rollService.getByBarcode(barcode);
         const r = res.data;
         if (!r) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          signalScan('reject');
           Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: barcode });
         } else if (r.status === 'CANCELLED') {
           // İptalli barkod düz detay olarak açılırsa ekran yalnız "İptal" yazıp
           // SUSAR — 2026-08-05'te operatörü ikinci bir kayıt açmaya iten sessizlik
           // tam buydu. Teşhis paneli kimin/neden iptal ettiğini söyler ve
           // (kapsamdaysa) geri alma yolunu verir.
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          // Sinyal `reject`: top KABUL EDİLMEDİ (depo işine giremez); sözleşmede
+          // dördüncü bir "uyarı" sonucu yok, "kabul edilmedi" sınıfının tamamı ret.
+          signalScan('reject');
           pendingDetailRef.current = { kind: 'cancelled', data: r };
         } else {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          signalScan('accept');
           pendingDetailRef.current = { kind: 'roll', data: r as RollListItem };
         }
       }
     } catch (err) {
+      // Sorgu düştüğünde de sonuç RET'tir: eskiden bu dal tek sessiz yoldu ve
+      // operatör "okumadı" sanıp aynı topu tekrar okutuyordu.
+      signalScan('reject');
       Toast.show({
         type: 'error',
         text1: 'Sorgulanamadı',

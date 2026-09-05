@@ -545,15 +545,20 @@ function main(): void {
         ? " — sarmalayıcı adı değişmiş olabilir, SQL_ETIKETLERI/SQL_FONKSIYONLARI'nı güncelle"
         : ""),
   );
-  // Tarayıcının SQL'i gerçekten OKUDUĞUNU kanıtlayan zemin: repoda `AT TIME ZONE
-  // 'UTC'` yazımları var; hiç görünmüyorsa maskeleme bozulmuştur.
-  // NOT: sayaç sıfıra düşerse bu kontrol düşer — ama o gün SEBEP muhtemelen
-  // "tarayıcı bozuldu" değil, "10 tarihsel yazma noktası temizlendi" olacaktır.
-  // Öyleyse doğru tepki tarayıcıyı onarmak değil, bu zemini KALDIRMAKTIR.
+  // ⚠️ 2026-09-05: BU ZEMİN KALDIRILDI, tam da başlığın öngördüğü sebeple.
+  // Eski zemin "repoda `AT TIME ZONE 'UTC'` yazımı görülüyor mu" diye soruyordu ve
+  // amacı tarayıcının SQL'i gerçekten okuduğunu kanıtlamaktı. O gün geldi: 11
+  // tarihsel yazma noktasının hepsi düz `now()` + gerekçeli `-- tz-ok:` işaretine
+  // çevrildi (kolon timestamptz, oturum tz UTC; eşdeğerlik DB'de ölçüldü). Sayaç
+  // artık 0 ve zemin YALNIZCA kendi kendini tatmin eder olurdu.
+  // Tarayıcı canlılığının zemini yukarıdaki "ham SQL bölgeleri ayrıştırıldı"
+  // kontrolüdür (ASGARI_SQL_BOLGESI) — o hâlâ gerçek bir körlük ölçüsüdür.
   check(
-    "tarihsel `AT TIME ZONE 'UTC'` yazımı tarayıcı tarafından görülüyor",
-    utcDuzeltmeSayisi >= 1,
-    `${utcDuzeltmeSayisi} yer (temizlenmeyi bekleyen tarihsel artık)`,
+    "tarihsel `AT TIME ZONE 'UTC'` yazımı KALMADI",
+    utcDuzeltmeSayisi === 0,
+    utcDuzeltmeSayisi === 0
+      ? "0 (11 nokta 2026-09-05'te temizlendi)"
+      : `${utcDuzeltmeSayisi} yer — yeni kod bu sarmalı YAZMAZ (kolonlar timestamptz)`,
   );
 
   console.log("\n── 3) Çıplak NOW() / CURRENT_TIMESTAMP ──");
@@ -570,17 +575,18 @@ function main(): void {
     }
     console.log(
       "\n   YAPILACAK:\n" +
-        "     a) Hedef/karşılaştırılan kolon `timestamp WITHOUT time zone` ise (şemadaki\n" +
-        "        NEREDEYSE HEPSİ öyle) → `(now() AT TIME ZONE 'UTC')` kullan.\n" +
-        "     b) Kolon gerçekten `timestamptz` ise (pg katalog görünümleri, O-11 sonrası\n" +
-        "        açılan kolonlar) → SQL'in içine gerekçeli işaret koy:\n" +
+        "     a) Kolon `timestamptz` ise (şemadaki 315 DateTime alanının 311'i öyle;\n" +
+        "        muaf olan 4'ü `@db.Date`) → düz `now()` DOĞRUDUR; SQL'in içine\n" +
+        "        gerekçeli işaret koy:\n" +
+        "     b) Kolon gerçekten tz'siz ise (dış tablo, geçici sonuç kümesi) → önce\n" +
+        "        kolonu timestamptz'e taşımayı değerlendir; taşınamıyorsa gerekçeyi yaz:\n" +
         "        `-- tz-ok: <neden doğru>` (aynı satır ya da bir üst satır).\n" +
         "     Kolon tipini DOĞRULA:\n" +
         "        SELECT column_name, data_type FROM information_schema.columns\n" +
         "         WHERE table_name = '<tablo>' AND data_type LIKE 'timestamp%';\n" +
-        "   NEDEN ÖNEMLİ: Prisma tz'siz kolona UTC yazar, çıplak NOW() ise oturum\n" +
-        "   TimeZone'una (Europe/Istanbul) göre YEREL saat yazar. Aynı kolonda iki saat\n" +
-        "   oluşur; istasyon süresi raporları +3 saat şişer ve HİÇBİR HATA VERMEZ.",
+        "   NEDEN ÖNEMLİ: kolon tipini SQL metninden okuyamayız. İşaret, o satırı yazan\n" +
+        "   kişinin kolon tipini DOĞRULADIĞININ kaydıdır — sessiz varsayım bırakmaz.\n" +
+        "   Yapısal güvence `test_timestamptz_contract.ts`tedir (kolonlar timestamptz).",
     );
   }
 

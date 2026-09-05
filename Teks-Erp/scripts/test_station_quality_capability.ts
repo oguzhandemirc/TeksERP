@@ -17,6 +17,7 @@
 //   §5 ⭐ select sözleşmesi — yüklemi çağıran her yer `appliesQuality` okur
 //   §6 Helper hijyeni (`satisfies`, spread, tek hata metni)
 //   §7 Backfill + seed (canlı DB ölçümü)
+//   §8 ⭐ AST — boğaz ikiz TEK dosyada + yan yana + `satisfies`; `=== PROCESS_QC` yok
 //
 // SONDA TABLOSU (hepsi ölçüldü; cp+md5 ile birebir geri alındı). Taban 22/0.
 //   S1 `QUALITY_STATION_WHERE`den `appliesQuality` dalı silinir → §3 kırmızı (3)
@@ -34,6 +35,8 @@
 //   "Kind seçen her select yüklem içindir" varsayımı da ölçümle çürüdü:
 //   `currentStepKind` gibi GÖRÜNTÜLEME select'leri de `kind` okur.
 // =============================================================================
+// `ts` adı main() içinde zaman damgasına ayrılmış — derleyici API'si `tsc` diye alınır.
+import * as tsc from "typescript";
 import prisma from "../src/lib/prisma";
 import { StationKind } from "@prisma/client";
 import {
@@ -284,6 +287,86 @@ async function main() {
     );
     check("§7 seed KURSUN_KK2 `appliesQuality: true` YAZAR (migration boş tabloda koşar)",
       /appliesQuality:\s*true/.test(kk2Blok), kk2Blok.includes("KURSUN_KK2") ? "blok bulundu" : "blok YOK");
+
+    // ── §8 ⭐ AST — boğaz ikizin YAPISI (İ-26, 2026-09-05) ───────────────────
+    // §3–§6 davranışı ve metni ölçüyordu; ikizin YAPISI (aynı dosya, yan yana,
+    // `satisfies`) yalnız metinle korunuyordu ve metin yanıltır. Burası
+    // derleyicinin kendi ağacına bakar. `=== PROCESS_QC` taraması ESLint'in
+    // ikinci hattıdır: kural devre dışı bırakılırsa bekçi hâlâ görür.
+    const helperYol = "src/services/helpers/quality-station.helper.ts";
+    const helperAst = tsc.createSourceFile(
+      helperYol,
+      helperSrc,
+      tsc.ScriptTarget.Latest,
+      true,
+    );
+    const ustBildirimler = helperAst.statements;
+    const yuklemIdx = ustBildirimler.findIndex(
+      (st) => tsc.isFunctionDeclaration(st) && st.name?.text === "stepCanApplyQuality",
+    );
+    const whereIdx = ustBildirimler.findIndex(
+      (st) =>
+        tsc.isVariableStatement(st) &&
+        st.declarationList.declarations.some(
+          (d) => tsc.isIdentifier(d.name) && d.name.text === "QUALITY_STATION_WHERE",
+        ),
+    );
+    check("§8 ⭐ ikizin İKİ ucu da AYNI dosyada tanımlı (IL-02)",
+      yuklemIdx !== -1 && whereIdx !== -1, `yüklem@${yuklemIdx} where@${whereIdx}`);
+    check("§8 ⭐ ikiz YAN YANA duruyor (araya üçüncü bildirim girmemiş)",
+      yuklemIdx !== -1 && whereIdx !== -1 && Math.abs(whereIdx - yuklemIdx) === 1,
+      `mesafe ${Math.abs(whereIdx - yuklemIdx)}`);
+
+    // `satisfies` AST'de ayrı bir düğümdür; `as const` ile karıştırılamaz.
+    let whereInit: tsc.Expression | undefined;
+    const whereStmt = ustBildirimler[whereIdx];
+    if (whereStmt && tsc.isVariableStatement(whereStmt)) {
+      whereInit = whereStmt.declarationList.declarations.find(
+        (d) => tsc.isIdentifier(d.name) && d.name.text === "QUALITY_STATION_WHERE",
+      )?.initializer;
+    }
+    check("§8 ⭐ where parçası `satisfies` düğümü (AST) — `as const` DEĞİL",
+      !!whereInit && tsc.isSatisfiesExpression(whereInit),
+      whereInit ? tsc.SyntaxKind[whereInit.kind] : "initializer YOK");
+    check("§8 `satisfies` hedefi `Prisma.StationWhereInput`",
+      !!whereInit &&
+        tsc.isSatisfiesExpression(whereInit) &&
+        whereInit.type.getText(helperAst) === "Prisma.StationWhereInput",
+      whereInit && tsc.isSatisfiesExpression(whereInit) ? whereInit.type.getText(helperAst) : "-");
+
+    // `kind === "PROCESS_QC"` / `!==` karşılaştırması helper DIŞINDA 0 olmalı.
+    const pqcMi = (n: tsc.Node): boolean =>
+      (tsc.isStringLiteralLike(n) && n.text === "PROCESS_QC") ||
+      (tsc.isPropertyAccessExpression(n) && n.name.text === "PROCESS_QC");
+    let esitlikSayisi = 0;
+    const astIhlal: string[] = [];
+    for (const [ad, ham] of kaynaklar) {
+      const sf = tsc.createSourceFile(ad, ham, tsc.ScriptTarget.Latest, true);
+      const gez = (n: tsc.Node): void => {
+        if (tsc.isBinaryExpression(n)) {
+          const op = n.operatorToken.kind;
+          if (
+            op === tsc.SyntaxKind.EqualsEqualsEqualsToken ||
+            op === tsc.SyntaxKind.ExclamationEqualsEqualsToken
+          ) {
+            esitlikSayisi++;
+            if (
+              !ad.startsWith("services/helpers/quality-station.helper") &&
+              (pqcMi(n.left) || pqcMi(n.right))
+            ) {
+              astIhlal.push(`${ad}:${sf.getLineAndCharacterOfPosition(n.getStart(sf)).line + 1}`);
+            }
+          }
+        }
+        tsc.forEachChild(n, gez);
+      };
+      gez(sf);
+    }
+    // Körlük zemini: ağaç gerçekten gezildi mi (0 ihlal ≠ hiç bakılmadı).
+    check("§8 zemin: AST gezildi (`===`/`!==` düğümü bulundu)",
+      esitlikSayisi > 1000, `${esitlikSayisi} karşılaştırma`);
+    check("§8 ⭐ helper DIŞINDA `=== PROCESS_QC` karşılaştırması YOK (ESLint'in 2. hattı)",
+      astIhlal.length === 0, astIhlal.join(", ") || "0 ihlal");
   } finally {
     await prisma.station.deleteMany({ where: { id: { in: cleanupStationIds } } }).catch(() => {});
   }

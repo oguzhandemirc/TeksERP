@@ -1,6 +1,6 @@
 // =============================================================================
 // AUDIT REPRO — KYY-1-03: Ana veri KOD tekilliği (harf-duyarsız) yarışı.
-// `lockCodeScopeTx` (8026) YALNIZ `item.service.ts:237`te alınıyor; diğer üç
+// `lockCodeScopeTx` (8029) YALNIZ `item.service.ts:237`te alınıyor; diğer üç
 // `decideCodeUniqueness` çağıranı (`subcontractor-management.service.ts:202`
 // kategori, `:512` firma, `base.service.ts:1052` generic) KİLİTSİZ ve katlanmış
 // kod için DB'de karşılık gelen bir UNIQUE YOK → iki eşzamanlı `sefa`/`SEFA`
@@ -82,7 +82,7 @@ async function main(): Promise<void> {
 
   try {
     // ── A) SubcontractorCategory — KİLİTSİZ yol (kontrol grubu değil, asıl vaka)
-    console.log("\n── A) SubcontractorCategory.create — 8026 kilidi YOK ──");
+    console.log("\n── A) SubcontractorCategory.create — 8029 kilidi YOK ──");
     for (let i = 1; i <= ROUNDS; i++) {
       const lower = `${STAMP}k${i}`.toLowerCase().slice(0, 30);
       const upper = lower.toUpperCase();
@@ -108,8 +108,8 @@ async function main(): Promise<void> {
       }
     }
 
-    // ── B) Item — 8026 kilidi VAR (kontrol grubu: doğru desen ölçülüyor)
-    console.log("\n── B) ItemService.create — 8026 kilidi VAR (kontrol grubu) ──");
+    // ── B) Item — 8029 kilidi VAR (kontrol grubu: doğru desen ölçülüyor)
+    console.log("\n── B) ItemService.create — 8029 kilidi VAR (kontrol grubu) ──");
     for (let i = 1; i <= ROUNDS; i++) {
       const lower = `${STAMP}i${i}`.toLowerCase().slice(0, 30);
       const upper = lower.toUpperCase();
@@ -135,8 +135,8 @@ async function main(): Promise<void> {
       }
     }
 
-    // ── C) BaseService (QualityGrade) — 8026 kilidi YOK
-    console.log("\n── C) BaseService.create (QualityGrade) — 8026 kilidi YOK ──");
+    // ── C) BaseService (QualityGrade) — 8029 kilidi YOK
+    console.log("\n── C) BaseService.create (QualityGrade) — 8029 kilidi YOK ──");
     for (let i = 1; i <= ROUNDS; i++) {
       const lower = `${STAMP}g${i}`.toLowerCase().slice(0, 30);
       const upper = lower.toUpperCase();

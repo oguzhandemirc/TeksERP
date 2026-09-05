@@ -122,7 +122,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
     return (
       <TextInput
         {...rest}
-        ref={ref as React.Ref<any>}
+        ref={ref as React.ComponentProps<typeof TextInput>['ref']}
         value={value}
         onChangeText={handleNativeChange}
         keyboardType={allowDecimal ? 'decimal-pad' : 'number-pad'}
@@ -134,7 +134,7 @@ const NumpadInput = forwardRef<RNTextInput, NumpadInputProps>(function NumpadInp
   return (
     <TextInput
       {...rest}
-      ref={ref as React.Ref<any>}
+      ref={ref as React.ComponentProps<typeof TextInput>['ref']}
       value={value}
       onChangeText={onChangeText}
       onFocus={handleFocus}

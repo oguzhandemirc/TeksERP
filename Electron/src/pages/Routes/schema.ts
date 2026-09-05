@@ -23,11 +23,13 @@ export const routeStepSchema = z.object({
 });
 
 export const routeFormSchema = z.object({
+  // Sınır DB kolonuyla birebir (Route.name @db.VarChar(100)) — panel şeması
+  // tek doğrulama kapısı; gevşek sınır sessiz P2000 üretirdi.
   name: z
     .string()
     .trim()
     .min(1, "Rota adı boş bırakılamaz")
-    .max(120, "Rota adı en fazla 120 karakter olabilir"),
+    .max(100, "Rota adı en fazla 100 karakter olabilir"),
   description: z
     .string()
     .max(500, "Açıklama en fazla 500 karakter olabilir")

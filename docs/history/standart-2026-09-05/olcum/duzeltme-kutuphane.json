@@ -1,0 +1,171 @@
+{
+  "label": "duzeltme-kutuphane",
+  "tarih": "2026-09-05",
+  "kimlikler": ["K-01", "K-03"],
+  "kaynak": "olcum/k01-olu-paket-uc-kanal.json + docs/standart/KUTUPHANELER.md §6/§7",
+  "yontem": "Her paket icin uc kanal (dinamik import · createRequire/tembel require · config referansi: app.json plugins / jest / babel / metro / vite / CSS / peer / package.json script) BIR KEZ DAHA kosuldu; ayrica uc projenin node_modules'unde dependents grafi tarandi (Electron 1029, mobil 1414 paket). Kaldirma `npm uninstall` ile DEGIL, package.json duzenlenip `npm install` ile yapildi (lock dosyasi tutarli kalsin).",
+
+  "tabanOlcusu": {
+    "hukum": "KU-25 geregi kaldirmadan ONCE alindi; kaldirmanin kirdigi ile devralinan kirmizi karismasin.",
+    "electron_typecheck": "npm run typecheck → exit 0",
+    "electron_vitest": "npx vitest run → exit 0 (208 dosya / 2266 test)",
+    "mobil_test": "npm test → exit 0 (84 suite / 850 test)",
+    "mobil_typecheck": "npx tsc --noEmit → exit 0",
+    "backend_test": "npx tsx scripts/run-all-tests.ts → exit 1, 452/453 · TEK kirmizi test_boss_overview.ts (59 gecti, 1 basarisiz). Yalniz kosuldugunda YESIL (60 gecti, 0 basarisiz) → sira/durum bagimli titrek, kaldirma ile ilgisi yok, alanim disinda.",
+    "expo_doctor": "npx expo-doctor → exit 1 (14/18). Dort kirmizi DEVRALINAN: app.json semasi (usesCleartextTraffic), eksik peer expo-font, RN Directory metadata, SDK surum sapmalari. KU-13: expo-doctor uyarir, KAPI DEGILDIR."
+  },
+
+  "kaldirilanlar": [
+    {
+      "adim": 1,
+      "proje": "Electron",
+      "paketler": ["@radix-ui/react-avatar", "@radix-ui/react-scroll-area", "@radix-ui/react-switch", "@fontsource/roboto", "electron-window-state"],
+      "ucKanal": "a) dinamik import 0 · b) createRequire/require 0 · c) config 0. grep -rn -F <paket> Electron (node_modules/out/release/dist-web haric) → yalniz package.json satiri (+ CLAUDE.md paket listesi). Sembol taramasi: <Avatar / <ScrollArea / <Switch → 0; src/components/ui/ altinda avatar.tsx / scroll-area.tsx / switch.tsx YOK (26 dosya listelendi). windowState/window-state → 0 (pencere olcusu sabit kodlu electron/main.ts:39-41). Roboto → 2 satir, ikisi de CSS font-family YEDEGI (src/index.css:64, WorkOrders/detail-v3/work-order-detail-v3.css:18), npm paketi degil.",
+      "dependents": "Electron/node_modules 1029 paket tarandi (dependencies+peerDependencies+optionalDependencies) → bes paketi isteyen HICBIR paket yok.",
+      "durum": "yapildi"
+    },
+    {
+      "adim": 2,
+      "proje": "Electron",
+      "paketler": ["@react-pdf/renderer"],
+      "ucKanal": "a) 0 · b) 0 · c) 0. Kodda tek iz IKI YORUM: src/main.tsx:13 ve pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx:13 — yerini backend renderTravelerCardHtml + sandbox'li iframe aldi.",
+      "yanEtki": "`buffer` KALDI (KU-22, hukum BELIRSIZ): exceljs'in tarayici bundle'i da Buffer'a referans veriyor. src/main.tsx:13-15 yorumunun gerekcesi react-pdf'ten exceljs'e cekildi — aksi halde sahipsiz bir polyfill kalirdi.",
+      "durum": "yapildi"
+    },
+    {
+      "adim": 3,
+      "proje": "Teks-Erp",
+      "paketler": ["@faker-js/faker"],
+      "ucKanal": "a) 0 · b) 0 · c) tek config izi knip.json:24 ignoreDependencies (yani 'kullanilmiyor' bilgisi biliniyor, KALDIRMAK yerine susturulmus). src/ + scripts/ + prisma/ altinda 0 import.",
+      "bayatReferansTemizligi": "KU-23: knip.json ignoreDependencies blogu KALDIRILDI (tek girdiydi) + Teks-Erp/CLAUDE.md § Paketler listesinden '@faker-js/faker (dev)' cikarildi.",
+      "durum": "yapildi"
+    },
+    {
+      "adim": 4,
+      "proje": "mobil",
+      "paketler": ["@react-navigation/bottom-tabs"],
+      "ucKanal": "a) 0 · b) 0 · c) 0 (app.json/jest.config.js/plugins/scripts). createBottomTabNavigator|BottomTab → 0. Dependents: 1414 paket tarandi, isteyen yok.",
+      "dagitim": "Saf JS (android/ ve ios/ dizini YOK) → OTA-guvenli.",
+      "durum": "yapildi"
+    },
+    {
+      "adim": 5,
+      "proje": "mobil",
+      "paketler": ["react-native-web", "react-dom"],
+      "ucKanal": "a) 0 · b) 0 · c) app.json'da web platformu YOK (expo.platforms tanimsiz, expo.web tanimsiz — python3 ile okundu); tek config izi package.json:9 \"web\": \"expo start --web\" script'iydi ve AYNI adimda silindi. react-dom'un tek isteyeni react-native-web (o da kaldirildi); jest-expo@54.0.17 dependencies/peerDependencies'inde react-dom YOK (node_modules'ten okundu), testler react-test-renderer + @testing-library/react-native ile kosuyor. expo-camera'nin react-native-web peer'i peerDependenciesMeta.optional = true.",
+      "olcum": "npm install sonrasi peer/ERESOLVE uyarisi CIKMADI (beklendigi gibi).",
+      "durum": "yapildi"
+    },
+    {
+      "adim": 6,
+      "proje": "mobil",
+      "paketler": ["react-native-qrcode-svg", "react-native-svg", "expo-sharing", "react-native-vector-icons"],
+      "ucKanal": "a) 0 · b) 0 · c) tek config izi jest.config.js:12 transformIgnorePatterns'teki 'react-native-svg' (transform IZIN listesi, calisma-zamani kullanimini kanitlamaz — bayat satirdi) ve AYNI adimda silindi. QRCode|<Svg|shareAsync|Sharing.|from 'expo-sharing' → 0. vector-icons: react-native-paper@5.15.1 peerDependencies = {react, react-native, react-native-safe-area-context} — icinde YOK; jest-expo/jest-preset.js:14-15 moduleNameMapper '^react-native-vector-icons$' → '@expo/vector-icons' ALIAS'liyor.",
+      "bayatReferansTemizligi": "KU-23: jest.config.js:12 regex'inden 'react-native-svg|' ve 4. satir yorumundan 'svg' cikarildi; mobil/CLAUDE.md:51 paket listesi KUTUPHANELER.md §2.3'e isaret edecek sekilde duzeltildi.",
+      "dagitim": "NATIVE — OTA ile GITMEZ, SONRAKI APK turunda saha etkisi gorunur. APK URETILMEDI.",
+      "izinDiffOlcumu": "KU-24'un sordugu soru prebuild'siz ve KESIN olarak yanitlandi: kaldirilan dort paketin KENDI AndroidManifest.xml'i taranidi → hicbiri `uses-permission` BILDIRMIYOR (react-native-svg: izin yok · expo-sharing: izin yok · react-native-vector-icons: izin yok · react-native-qrcode-svg: android/ dizini yok, tek eslesme kendi Example/ uygulamasinin INTERNET izni, autolink kapsaminda degil). Yani mevcut android/app/src/main/AndroidManifest.xml'deki 17 izin satirinin HICBIRININ kaynagi bu dort paket degil — kaynak app.json config plugin'leri ve CANLI paketler (react-native-ble-plx, react-native-bluetooth-classic, expo-camera, expo-audio, expo-updates). ⚠️ Yine de sonraki APK turunda `npx expo prebuild --clean` sonrasi manifest diff'i teyit edilmelidir; bu ajan prebuild KOSMADI, APK URETMEDI.",
+      "durum": "yapildi"
+    }
+  ],
+
+  "kaldirilmayanlar": [
+    {
+      "paket": "react-native-ble-plx",
+      "proje": "mobil",
+      "hukum": "CANLI — kaldirilmadi",
+      "gerekce": "Statik import canli: mobil/src/services/bluetooth.service.ts:1 `import { BleManager, Device } from 'react-native-ble-plx'`. Config kanali da canli: app.json plugins[1] = 'react-native-ble-plx' (config plugin; AndroidManifest'e BLUETOOTH_SCAN/CONNECT/ADMIN + ACCESS_FINE/COARSE_LOCATION getiriyor). Kaldirmak PREBUILD ister ve etkisi SONRAKI APK'da gorunur. Onunde bir KARAR var: bluetooth.service.ts'in tuketicisi yok (mobil/CLAUDE.md:28 'BLE yolu bugun canli kullanicisiz'), yani once 'sahipsiz BLE yolu kapansin mi' sorusu cevaplanmali. AYRI IS."
+    },
+    {
+      "paket": "buffer",
+      "proje": "Electron",
+      "hukum": "BELIRSIZ — kaldirilmadi (KU-22)",
+      "gerekce": "src/main.tsx:1 statik import + :16 window.Buffer atamasi CANLI. exceljs'in tarayici bundle'i da Buffer'a referans veriyor; ustelik `bl` ve `crc` (exceljs zinciri) buffer'i dependency olarak istiyor → package.json'dan cikarilsa bile hoisted kalir ve main.tsx hayalet bagimliliga doner. Yalniz yorum gerekcesi duzeltildi."
+    }
+  ],
+
+  "yeniBekci": {
+    "dosya": "Teks-Erp/scripts/test_dependency_contract.ts",
+    "satir": 232,
+    "kosum": "cd Teks-Erp && npx tsx scripts/run-all-tests.ts test_dependency_contract → exit 0 (27 gecti, 0 basarisiz, 0.3s). DB gerektirmez.",
+    "bolumler": {
+      "a": "[KU-12] PIN_KAYDI: bonjour-service backend + Electron'da TAM SABIT (^/~ yok, /^\\d+\\.\\d+\\.\\d+$/) ve IKI PROJEDE AYNI surum (1.4.4 ↔ 1.4.4). Bugune kadar yalniz Electron/src/test/discovery-ipc-contract.test.ts bakiyordu; backend ikizi artik var.",
+      "b": "[KU-18] Backend'in 19 dependency'sinin her biri AYRI SURECTE gercek `require()` ile denenir (require.resolve DEGIL — ESM-only paket cozulur ama CJS govdede yuklenemez). `prisma` BEYANLI MUAF (CLI paketi, giris noktasi yayinlamiyor) ve muafiyet BAYATLAMAZ: paket cozulur hale gelirse bekci kirmizi acar. Ayrica ESM-only kume BEYAN LISTESIYLE birebir esitlenir (bugun {uuid}); beyansiz yeni ESM-only paket kirmizi.",
+      "c": "[KU-04/KU-08] Uc projenin `dependencies`i ile KUTUPHANELER.md §2.1/2.2/2.3 tablolari karsilastirilir — iki yonlu. Ileri: package.json'da olup tabloda anilmayan paket kirmizi. Geri: tablonun 'kurulu' dedigi (parantez disi, **YOK** olmayan hucre) paket package.json'da yoksa kirmizi."
+    },
+    "kapsamDaraltmasi": {
+      "karar": "devDependencies MUAF, kapsam yalniz `dependencies`.",
+      "gerekce": "Olculdu: §2 tablolari arac zincirini duzyaziyla aniyor — backend 'Arac (dev)' hucresi tek satirda `tsx nodemon ts-node typescript eslint @typescript-eslint/* @types/*`, Electron style hucresi paket adi yerine kisaltma yaziyor (`cva` ↔ class-variance-authority). devDep karsilastirmasi kurali degil YAZIM BICIMINI olcerdi. Uretimde MODULE_NOT_FOUND ureten sinif zaten `dependencies`tir ([KU-15])."
+    },
+    "korlukZemini": [
+      "backend dependencies ≥ 15 (bugun 19) · electron ≥ 35 (47) · mobil ≥ 30 (40)",
+      "her §2.x alt bolumu ≥ 15 tablo jetonu uretmeli (bugun 35 / 56 / 51)",
+      "uc alt bolumun UCU DE bulunmali (ayristirici bozulursa bos kume dondurup yesil gecerdi)",
+      "require sondasi her dependency'yi denemeli (19/19) ve alt surec exit 0 vermeli",
+      "muafiyet + donmus liste iki yonlu denetlenir: olu muaf da kirmizi"
+    ],
+    "donmusListe": {
+      "ne": "KAYIT_BEKLEYEN — devralinan kayitsizlar baseline'i (IL-21 kalibi: yalniz KUCULUR).",
+      "mobil": ["expo-asset", "expo-build-properties", "expo-constants", "expo-screen-orientation", "expo-status-bar", "react-native-gesture-handler", "react-native-safe-area-context", "react-native-screens"],
+      "gerekce": "Bu sekiz calisma-zamani bagimliligi KUTUPHANELER.md §2.3 tablosunda HIC ANILMIYOR (olculdu). docs/standart/ yeniden yazilamayacagi icin bekci bugun kirmizi acmasin diye donduruldu; liste bayatlamaz — bir girdi kayda gecince ya da paket kaldirilinca bekci 'listeden cikar' diye kirmizi verir. Belge duzeltmesi olarak raporlandi.",
+      "backend": [],
+      "electron": []
+    },
+    "negatifSondalar": [
+      { "sonda": "(a) Teks-Erp bonjour-service \"1.4.4\" → \"^1.4.4\"", "sonuc": "KIRMIZI — 25 gecti, 2 basarisiz: 'TAM SABIT' ve 'iki projede AYNI surum'", "geriAlindi": true },
+      { "sonda": "(b) backend dependencies += \"tekserp-yok-boyle-paket\": \"^1.0.0\" (kurulu degil)", "sonuc": "KIRMIZI — 'her dependency gercek require() ile cozuluyor — tekserp-yok-boyle-paket: MODULE_NOT_FOUND'", "geriAlindi": true },
+      { "sonda": "(b-ESM) ESM_ONLY_BEYAN listesinden uuid cikarildi", "sonuc": "KIRMIZI — 'beyan edilmemis ESM-only paket YOK — uuid'", "geriAlindi": true },
+      { "sonda": "(c-ileri) mobil dependencies += \"left-pad\": \"^1.3.0\"", "sonuc": "KIRMIZI — 'mobil: kaydi olmayan YENI bagimlilik yok — left-pad'", "geriAlindi": true },
+      { "sonda": "(c-bayat) donmus listeye kayitli bir paket (expo-camera) eklendi", "sonuc": "KIRMIZI — 'donmus kayitsiz listesi bayat degil — artik kayitli/kaldirilmis, listeden cikar: expo-camera'", "geriAlindi": true },
+      { "sonda": "ILK DENEME GECERSIZ SAYILDI: (b) icin \"is-promise\" secilmisti — hoisted olarak kurulu cikti (`require` BASARILI oldu), yani sonda (b)'yi degil (c)'yi tetikledi. Gercekten kurulu olmayan bir adla tekrarlandi.", "sonuc": "yontem notu", "geriAlindi": true }
+    ],
+    "sondaSonrasi": "Her sondadan sonra geri alindi ve bekci yeniden YESIL (27 gecti, 0 basarisiz, exit 0); package.json/mobil package.json diff'i yalniz mesru kaldirmalari gosteriyor."
+  },
+
+  "bitirmeOlcusu": {
+    "backend_typecheck_src": "npm run typecheck → exit 0",
+    "backend_typecheck_scripts": "npm run typecheck:scripts → exit 0",
+    "backend_lint": "npm run lint → exit 0 (442 warning, 0 error)",
+    "backend_test": "npx tsx scripts/run-all-tests.ts → SON_BACKEND_SONUC",
+    "electron_typecheck": "npm run typecheck → exit 0",
+    "electron_lint": "npm run lint → exit 0 (666 warning, 0 error)",
+    "electron_test": "npx vitest run → exit 0 (209 dosya / 2270 test)",
+    "electron_build": "npm run build (electron-vite) → exit 0; exceljs ayri chunk (1.446 MB) yerinde",
+    "mobil_test": "npm test → exit 0 (85 suite / 854 test)",
+    "mobil_typecheck": "npx tsc --noEmit → exit 0",
+    "mobil_lint": "npm run lint → exit 0 (2791 warning, 0 error)",
+    "mobil_expo_doctor": "npx expo-doctor → exit 1, ayni DORT devralinan kirmizi; kaldirmaya bagli YENI uyari yok. Tersine bir kirmizi KUCULDU: 'No metadata available: react-native-vector-icons' satiri kayboldu.",
+    "lint_tavani": "node scripts/check-lint-baseline.mjs --proje=backend|electron|mobil → uc de exit 0 (1026 / 1396 / 399 dosya)",
+    "belge_kapisi": "node scripts/check-docs.mjs → exit 0 (139 .md, olu link yok)"
+  },
+
+  "paketSayilari": {
+    "Teks-Erp": { "dependencies": 19, "devDependencies": 16, "oncekiDev": 17 },
+    "Electron": { "dependencies": 47, "devDependencies": 28, "oncekiDeps": 53 },
+    "mobil": { "dependencies": 40, "devDependencies": 8, "oncekiDeps": 47 }
+  },
+
+  "dokunulanDosyalar": [
+    "Teks-Erp/package.json", "Teks-Erp/knip.json", "Teks-Erp/CLAUDE.md",
+    "Teks-Erp/scripts/test_dependency_contract.ts (YENI)",
+    "Electron/package.json", "Electron/src/main.tsx", "Electron/CLAUDE.md",
+    "mobil/package.json", "mobil/jest.config.js", "mobil/CLAUDE.md",
+    "Teks-Erp/package-lock.json", "Electron/package-lock.json", "mobil/package-lock.json"
+  ],
+
+  "acikKararlar": [
+    "engines.node tabani ([KU-19]): Teks-Erp/package.json:5 \"node\": \">=22\" diyor ama uuid@13 ESM-only (type=module, exports'ta `require` kosulu YOK, main YOK — olculdu) ve derlenmis CJS cikti gercekten `require(\"uuid\")` ediyor → uretim yalniz Node ≥ 22.12'de calisir, 22.0–22.11'de kirilir. Iki secenek var (tabani >=22.12'ye cekmek ya da uuid'i CJS'e dusurmek) ve bu bir DAGITIM SOZLESMESI kararidir (deploy/ilk-kurulum.ps1:237 sahaya 'Node.js 22 kur' diyor) → yapilmadi. Bekci bugun bunu KAPI YAPMIYOR; bunun yerine ESM-only kumeyi beyan listesiyle kilitliyor, yani yeni bir ESM-only paket sessizce giremiyor. Karar verilince bekciye engines esigi eklenmeli.",
+    "react-native-ble-plx: 'sahipsiz BLE yolu kapansin mi' karari (bluetooth.service.ts + app.json plugins[1] + paket = 3 dosya, NATIVE + IZIN degisikligi, APK turu).",
+    "Electron `buffer`: window.Buffer polyfill'inin exceljs icin GERCEKTEN gerekli olup olmadigi olculmedi (olcum = polyfill'i kaldirip Excel ice/disa aktarma yolunu tarayicida kosmak). Paket kaldi."
+  ],
+
+  "belgeDuzeltmeleri": [
+    "KUTUPHANELER.md §7 'Durum' sutunu: adim 1-6'nin 14 satiri artik 'kaldirildi' (bu ajan docs/standart/'i yeniden yazmadi).",
+    "KUTUPHANELER.md §2.3 EKSIK: sekiz calisma-zamani bagimliligi tabloda hic anilmiyor — expo-asset, expo-build-properties, expo-constants, expo-screen-orientation, expo-status-bar, react-native-gesture-handler, react-native-safe-area-context, react-native-screens. [KU-04] geregi her birine satir gerekiyor; bekcide KAYIT_BEKLEYEN olarak donduruldu.",
+    "KUTUPHANELER.md §2.2 Electron: `buffer` yalniz Excel satirinin 'Not' sutununda geciyor, kendi 'Paket' satiri yok — calisma-zamani dependency'si oldugu icin kendi satirini hak ediyor (bugun bekci tam satiri tarayarak kabul ediyor).",
+    "KUTUPHANELER.md §2.2 Electron style satiri paketi `cva` diye aniyor; gercek ad `class-variance-authority` (bekcide KISALTMA esleme tablosuyla kopruldu).",
+    "KUTUPHANELER.md §2.3 mobil HTTP satirindaki ham `fetch` bir paket degil, yerlesik API (bekcide DUZYAZI listesinde muaf).",
+    "KUTUPHANELER.md §2.1 'Arac (dev)' satiri `@faker-js/faker` olu diyor — paket ARTIK KALDIRILDI, cumle gecmis zamana cevrilmeli.",
+    "Teks-Erp/docs/BEKCI-HARITASI.md uretilmis dosya; yeni `test_dependency_contract.ts` icin bir `kutuphane` alani satiri gerekiyor (uretici yeniden kosulmali; bu ajan uretilmis dosyaya elle satir eklemedi).",
+    "olcum/k01-olu-paket-uc-kanal.json § cjsInvarianti 'K-03 bekcisi ... engines.node tabani >=22.12'ye cekilmeli' diyor; bu tur o karar VERILMEDI (yukarida acikKararlar)."
+  ]
+}

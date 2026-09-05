@@ -20,8 +20,5 @@
     "scratch/**",
     "src/generated/**"
   ],
-  "ignoreDependencies": [
-    "@faker-js/faker"
-  ],
   "ignoreExportsUsedInFile": true
 }

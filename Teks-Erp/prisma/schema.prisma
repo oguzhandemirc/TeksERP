@@ -668,6 +668,8 @@ model UserRecoveryCode {
   codeHash String    @db.VarChar(72)
   usedAt   DateTime? @db.Timestamptz
 
+  /// Append-only → `updatedAt` YOK (konvansiyon). Tek güncelleme `usedAt`
+  /// tek-seferlik atomik claim damgasıdır (bkz. başlık: satır SİLİNMEZ).
   createdAt DateTime @default(now()) @db.Timestamptz
 
   user User @relation("UserRecoveryCodeUser", fields: [userId], references: [id], onDelete: Cascade)
@@ -3103,6 +3105,9 @@ model RollOperation {
   machine             Machine?      @relation(fields: [machineId], references: [id])
   inheritedFromParent Roll?         @relation("RollOperationInherited", fields: [inheritedFromParentRollId], references: [id])
 
+  /// Append-only işlem log'u → `updatedAt` YOK (konvansiyon). İki güncelleme
+  /// yolu var, ikisi de satırın İÇERİĞİNİ değiştirmez: idempotent `upsert`
+  /// (`update: {}` — no-op) ve WO klonunda `workOrderStepId` taşıması.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([rollId, workOrderStepId, operationType])
@@ -3197,6 +3202,8 @@ model RollVariance {
   reversedBy User?          @relation("RollVarianceReversedBy", fields: [reversedById], references: [id])
 
   // Append-only log → `updatedAt` YOK (kök CLAUDE.md konvansiyonu).
+  /// Append-only sapma defteri → `updatedAt` YOK (konvansiyon). Satır SİLİNMEZ,
+  /// düzeltme `reversedAt`/`reversedById` TERS DAMGASIYLA gelir.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@index([rollId])
@@ -3671,6 +3678,9 @@ model SubcontractorDispatchItem {
   roll         Roll                       @relation(fields: [rollId], references: [id])
   receiptItems SubcontractorReceiptItem[] @relation("ReceiptItemSource")
 
+  /// Sevk kalemi defteri → `updatedAt` YOK (konvansiyon). Güncellemeler DAMGA
+  /// (`remainderClosedAt`) ya da parti cerrahisinde kalemin `dispatchId`
+  /// taşınmasıdır; ikisi de ölçüm/metraj satırını yeniden yazmaz.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   // Derinlemesine savunma: aynı top aynı sevke iki kez yazılamaz (uygulama
@@ -3713,6 +3723,9 @@ model SubcontractorDirectShipAllocation {
   @@unique([directShipmentId, orderLineId], map: "subcontractor_direct_ship_allocations_dsId_orderLineId_key")
   @@index([orderLineId])
   @@index([directShipmentId])
+  /// "Bu fason sevkinin tahsisleri" okuması + Cascade silme yolu (migration
+  /// 20260905140000). NOT NULL → DB'de DÜZ index.
+  @@index([dispatchId])
   @@map("subcontractor_direct_ship_allocations")
 }
 
@@ -3767,6 +3780,9 @@ model DirectShipment {
   @@index([customerId])
   @@index([shippedAt])
   @@index([reasonFold])
+  /// Şube-kırılımlı sevk listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) — şube
+  /// opsiyonel, satırların çoğu NULL (migration 20260905140000).
+  @@index([branchId])
   @@map("direct_shipments")
 }
 
@@ -4553,6 +4569,9 @@ model Sack {
   // Havuz/liste sorguları: müşteri + oluşturma sırası (FIFO = createdAt).
   @@index([customerId, createdAt])
   @@index([warehouseId])
+  /// Şube-kırılımlı çuval listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) —
+  /// `sacks_warehouseId_idx` emsali (migration 20260905140000).
+  @@index([branchId])
   /// KOD kolonu KATLANMAZ (ASCII, BÜYÜK saklanır) — trigram doğrudan kolona.
   @@index([sackNo(ops: raw("gin_trgm_ops"))], map: "sacks_sackNo_trgm_idx", type: Gin)
   @@map("sacks")
@@ -4583,7 +4602,10 @@ model SackTag {
   /// (`ReasonPreset.code` ile aynı gerekçe: adı düzelten operatör geçmiş
   /// kırılımı ikiye bölmesin).
   code String @unique @db.VarChar(64)
-  name String @db.VarChar(60)
+  /// DB SEDDİ (migration 20260905150000): ad tekilliği uygulamada check-then-act
+  /// idi — yarış ve servisi atlayan yazımlar açıktı. Sed guard'ın BİREBİR ikizi:
+  /// düz, harf-duyarlı, `isActive` süzmesiz (katlamalı sed ayrı bir karardır).
+  name String @unique @db.VarChar(60)
 
   /// Rozet rengi — `#RRGGBB`.
   ///
@@ -5188,6 +5210,8 @@ model ItemAllowedProperty {
   item     Item           @relation(fields: [itemId], references: [id], onDelete: Cascade)
   property FabricProperty @relation(fields: [propertyId], references: [id])
 
+  /// M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu). Yazma yolu
+  /// idempotent `upsert` (`update: {}` — no-op); bağın kendisi değişmez.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([itemId, propertyId])
@@ -5206,6 +5230,8 @@ model ItemAllowedColor {
   item  Item  @relation(fields: [itemId], references: [id], onDelete: Cascade)
   color Color @relation(fields: [colorId], references: [id])
 
+  /// M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu). Yazma yolu
+  /// idempotent `upsert` (`update: {}` — no-op); bağın kendisi değişmez.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([itemId, colorId])
@@ -5519,6 +5545,8 @@ model RollProperty {
   property FabricProperty       @relation(fields: [propertyId], references: [id])
   value    FabricPropertyValue? @relation(fields: [valueId], references: [id], onDelete: Restrict)
 
+  /// M:N pivot → `updatedAt` YOK (kök CLAUDE.md konvansiyonu). `valueId`
+  /// upsert ile tazelenir (istasyon yeteneği kopyalaması) — bağ aynı kalır.
   createdAt DateTime @default(now()) @db.Timestamptz
 
   @@unique([rollId, propertyId])
@@ -5834,6 +5862,10 @@ model ImportRun {
   errorReport Json?
 
   createdAt DateTime @default(now()) @db.Timestamptz
+  /// DURUM TAŞIYAN kayıt (defter değil): token'lı koşumun satırı BAŞTA yazılır,
+  /// koşum bitince status/finishedAt/errorReport ile GÜNCELLENİR — "en son ne
+  /// zaman değişti" sorusunun cevabı `createdAt` değildir (migration 20260905160000).
+  updatedAt DateTime @updatedAt @db.Timestamptz
 
   @@index([entity, createdAt])
   @@index([userId])
@@ -5994,6 +6026,10 @@ model WarehouseMovement {
   @@index([transferId])
   @@index([goodsReceiptId])
   @@index([sackId])
+  /// Belge bağı kardeşleriyle simetrik — DB'de KISMİ (`IS NOT NULL`): yalnız
+  /// SHIPMENT*/RETURN olayları bu kolonları doldurur (migration 20260905140000).
+  @@index([shipmentId])
+  @@index([rollReturnId])
   @@map("warehouse_movements")
 }
 

@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { MainStackParamList } from './types';
 import { useVisibleScreens } from '../hooks/useVisibleScreens';
 import { useSessionStore } from '../store/sessionStore';
-import { withWorkSession } from '../components/session/SessionGate';
+import { withWorkSession, type GatedScreen } from '../components/session/SessionGate';
 import {
   SCREEN_BY_STATION_KIND,
   isSessionScreen,
@@ -17,7 +17,7 @@ const Stack = createNativeStackNavigator<MainStackParamList>();
 
 // Her modül ekranı yalnızca o ekrana navigate edildiğinde require ediliyor.
 // Operatörün yetkisi olmayan ekranların modül-level kodu hiç parse edilmez.
-const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = {
+const SCREEN_LOADERS: Record<MobileScreenKey, () => GatedScreen> = {
   KK1: () => require('../screens/Modules/KK1/KK1Screen').default,
   KursunQc: () => require('../screens/Modules/KursunQc/KursunQcScreen').default,
   Tambur: () => require('../screens/Modules/Tambur/TamburScreen').default,
@@ -38,8 +38,8 @@ const SCREEN_LOADERS: Record<MobileScreenKey, () => React.ComponentType<any>> = 
 // Oturumlu ekranlar (KK1/KursunQc/Tambur/TartiPaket) SessionGate ile sarılır —
 // yer onayı olmadan ekran render edilmez (fail-closed). Sarılmış bileşen modül
 // kapsamında BİR KEZ üretilir (her render'da yeni tip → remount olmasın).
-const GATED_COMPONENTS: Partial<Record<MobileScreenKey, React.ComponentType<any>>> = {};
-function componentLoaderFor(key: MobileScreenKey): () => React.ComponentType<any> {
+const GATED_COMPONENTS: Partial<Record<MobileScreenKey, GatedScreen>> = {};
+function componentLoaderFor(key: MobileScreenKey): () => GatedScreen {
   if (!isSessionScreen(key)) return SCREEN_LOADERS[key];
   return () => {
     if (!GATED_COMPONENTS[key]) {

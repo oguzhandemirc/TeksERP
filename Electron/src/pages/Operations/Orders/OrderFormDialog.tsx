@@ -25,7 +25,7 @@ import { customerCardPayload, type CustomerFormValues } from "@/pages/Customers/
 import { usePricingEnabled, useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { usePulseSync } from "@/hooks/usePulseSync";
 import { currencyService } from "@/services/featureFlagService";
-import { OrderLinesEditor } from "./OrderLinesEditor";
+import { OrderLinesEditor, type OrderLineErrors } from "./OrderLinesEditor";
 import type { Order } from "./types";
 import {
   newLineClientId,
@@ -293,8 +293,10 @@ export function OrderFormDialog({ open, onOpenChange, order, onSubmit, isSubmitt
                     value={field.value}
                     onChange={field.onChange}
                     error={fieldState.error?.message}
-                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                    lineErrors={form.formState.errors.lines as any}
+                    // RHF dizi alanının hata tipi `Merge<FieldError, …>[]`
+                    // birleşimidir; editör yalnız `itemId`/`quantity` mesajını
+                    // okur. Daraltma `any` değil ADI OLAN bir tipe yapılır.
+                    lineErrors={form.formState.errors.lines as unknown as OrderLineErrors}
                     customerId={form.watch("customerId") || null}
                     // SALE fiyat önerisinin para birimi bağlamı (F2 dikişi 2026-08-14).
                     currency={form.watch("currency")}

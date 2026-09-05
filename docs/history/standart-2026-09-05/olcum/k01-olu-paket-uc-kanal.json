@@ -1,0 +1,175 @@
+{
+  "paketler": [
+    {
+      "paket": "@react-pdf/renderer",
+      "proje": "Electron",
+      "hukum": "OLU",
+      "kanal": "a) dinamik import: 0 · b) createRequire/require: 0 · c) config (electron.vite.config.ts, vite.config.web.ts, vitest.config.ts, stryker.conf.json, playwright.config.ts, tsconfig*, index.html, package.json script): 0 — uc kanalin ucu de bos",
+      "kanit": "grep -rn -F '@react-pdf/renderer' Electron (node_modules/out/release/dist-web haric) -> yalnizca 2 satir: package.json:57 ve CLAUDE.md:46 (paket listesi). Kodda tek iz iki YORUM: Electron/src/main.tsx:13 ('react-pdf'in browser bundle'i ... Buffer bekliyor') ve Electron/src/pages/Definitions/DocumentTemplates/TravelerCardPreview.tsx:13 ('Eskiden @react-pdf belgesiydi ... artik mobil + masaustu baskinin birebir aynisi') -> yerini backend renderTravelerCardHtml + iframe aldi. Electron/node_modules taramasi: hicbir paket dependency/peer olarak istemiyor.",
+      "kaldirmaEtkisi": "Yalniz JS, native yok, APK/native yeniden derleme gerekmez. DIKKAT: birlikte olen SANILAN 'buffer' paketi BELIRSIZ - Electron/src/main.tsx:1+16 window.Buffer polyfill'i react-pdf gerekcesiyle yazilmis ama exceljs'in tarayici bundle'i da Buffer'a referans veriyor (grep -c Buffer Electron/node_modules/exceljs/dist/exceljs.min.js = 4). 'buffer' KALIR; main.tsx:13-15 yorumu 'exceljs' gerekcesiyle guncellenir. CLAUDE.md:46 paket listesinden cikarilir."
+    },
+    {
+      "paket": "electron-window-state",
+      "proje": "Electron",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 (createRequire kullanan 3 dosya var - mdns-browser.ts, printer.ipc.ts, scale.ipc.ts, scanner.ipc.ts - hicbiri bu paketi istemiyor) · c) 0",
+      "kanit": "grep -rn -E 'window-state|windowState' Electron (ayni haricler) -> yalnizca package.json:71 + CLAUDE.md:46. Pencere olculeri SABIT KODLU: Electron/electron/main.ts:39-41 'new BrowserWindow({ width: 1280, height: 720' - kaydedilmis bounds okuma/yazma yok.",
+      "kaldirmaEtkisi": "Etkisi YOK: pencere durumu zaten hic kalici degil. Native degil (saf JS), APK/rebuild gerekmez. CLAUDE.md:46'daki 'native ... electron-window-state' ibaresi yanlis - hem olu hem native degil, iki yerden duzeltilir."
+    },
+    {
+      "paket": "@radix-ui/react-avatar",
+      "proje": "Electron",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0",
+      "kanit": "grep -rn -F '@radix-ui/react-avatar' Electron -> yalnizca package.json:43. Sarmalayici shadcn dosyasi YOK: ls Electron/src/components/ui/ ciktisinda avatar.tsx yok (26 dosya listelendi). grep -rln '<Avatar' Electron/src -> 0. Electron/node_modules taramasi: hicbir paket bagimli degil.",
+      "kaldirmaEtkisi": "Saf JS, native yok. Diger Radix paketleri bu ucunu istemiyor (node_modules dependents taramasi bos) - bundle kucululur, davranis degismez."
+    },
+    {
+      "paket": "@radix-ui/react-scroll-area",
+      "proje": "Electron",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0",
+      "kanit": "grep -rn -F '@radix-ui/react-scroll-area' Electron -> yalnizca package.json:50. ui/ altinda scroll-area.tsx yok; grep -rln '<ScrollArea' Electron/src -> 0. Dependents taramasi bos.",
+      "kaldirmaEtkisi": "Saf JS, native yok, etkisiz."
+    },
+    {
+      "paket": "@radix-ui/react-switch",
+      "proje": "Electron",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0",
+      "kanit": "Kesif metnindeki '(varsa 3. Radix primitifi)' = @radix-ui/react-switch (bagimlilik-envanteri.json Electron icinde importFiles=0 olan ucuncu Radix). grep -rn -F '@radix-ui/react-switch' Electron -> yalnizca package.json:54. ui/ altinda switch.tsx yok; grep -rln '<Switch' Electron/src -> 0. Dependents taramasi bos.",
+      "kaldirmaEtkisi": "Saf JS, native yok, etkisiz."
+    },
+    {
+      "paket": "@fontsource/roboto",
+      "proje": "Electron",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) CSS @import / subpath import 0 - kardes paket @fontsource/plus-jakarta-sans AYNI kanaldan CANLI (Electron/src/main.tsx:6-10, bes agirlik icin '@fontsource/plus-jakarta-sans/NNN.css'), yani tarama bu kanali gorebiliyor; roboto icin sifir",
+      "kanit": "grep -rn -F '@fontsource/roboto' Electron -> yalnizca package.json:41. grep -rn -i roboto Electron/src Electron/electron Electron/shared Electron/index.html -> 2 satir, ikisi de SISTEM font yedegi: src/index.css:64 '--font-sans: \"Plus Jakarta Sans\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", Roboto, sans-serif' ve WorkOrders/detail-v3/work-order-detail-v3.css:18 - bunlar CSS font-family adi, npm paketi degil.",
+      "kaldirmaEtkisi": "Etkisiz: CSS'teki 'Roboto' isletim sistemi font adidir, paket kaldirilinca yedek zincir aynen calisir. Saf varlik paketi, native yok. CLAUDE.md:46'daki '@fontsource/*' cogul ifadesi tekile ceker."
+    },
+    {
+      "paket": "@faker-js/faker",
+      "proje": "Teks-Erp (devDependencies)",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0 kod referansi; TEK config izi knip.json:24 ignoreDependencies - yani 'kullanilmiyor' bilgisi zaten biliniyor ve KALDIRMAK yerine susturulmus",
+      "kanit": "grep -rn -F faker Teks-Erp (node_modules/dist/package-lock haric) -> 3 satir: package.json:54, knip.json:24 (\"ignoreDependencies\": [\"@faker-js/faker\"]), CLAUDE.md:79 (izinli paket listesi, '(dev)' notuyla). src/, prisma/ (seed.ts, seed-fixtures.ts, seed-demo-stations.ts, seed-shipping-scenario.ts, seed-ticaret-demo.ts, demo/_kit.ts) ve scripts/ altinda tek import yok - fixture'lar is-anahtarli sabit veri kullaniyor.",
+      "kaldirmaEtkisi": "devDependency; uretim paketine zaten girmiyor. Kaldirilirken knip.json:22-25 ignoreDependencies bloğu ve Teks-Erp/CLAUDE.md:79 listesi AYNI commit'te temizlenir (bayat susturma birakma). Dogrulama: npx tsc --noEmit -p tsconfig.scripts.json + npx tsx scripts/run-all-tests.ts."
+    },
+    {
+      "paket": "react-native-ble-plx",
+      "proje": "mobil",
+      "hukum": "CANLI",
+      "kanal": "a/b) statik import CANLI: mobil/src/services/bluetooth.service.ts:1 `import { BleManager, Device } from 'react-native-ble-plx'` (bagimlilik-envanteri.json zaten importFiles=1 diyor) · c) config CANLI: mobil/app.json plugins[1] = \"react-native-ble-plx\" (config plugin; android/app/src/main/AndroidManifest.xml'de BLUETOOTH_SCAN/CONNECT/ADMIN + ACCESS_FINE/COARSE_LOCATION)",
+      "kanit": "KESIF YANLIS - bu paket olu DEGIL. grep -rn -F 'react-native-ble-plx' mobil -> app.json:58, package.json:52, CLAUDE.md:28 ('BLE ... yolu bugun canli kullanicisiz - saha yolu BT-Classic; BLE'yi yeni ise secme'), src/services/bluetooth.service.ts:1. AMA bluetooth.service.ts'i (27 satir) hicbir dosya import etmiyor: grep -rn -E \"from ['\\\"].*bluetooth\" mobil/src mobil/App.tsx mobil/index.ts mobil/scripts -> 0. node_modules/react-native-ble-plx/android + app.plugin.js VAR (native).",
+      "kaldirmaEtkisi": "BU TURDA KALDIRMA. Paket canli bir import tasiyor; once ONUN sahipsiz oldugu karari verilmeli (bluetooth.service.ts'in tuketicisi yok, CLAUDE.md 'canli kullanicisiz' diyor). Kaldirmak = 3 dosya degisikligi (paket + app.json plugins[1] + bluetooth.service.ts) ve NATIVE + IZIN degisikligi -> OTA ile GITMEZ, yeni APK sart; prebuild sonrasi AndroidManifest diff'i react-native-bluetooth-classic'in (CANLI, 3 dosya) hala istedigi BLUETOOTH_CONNECT/SCAN izinlerini dusurmedigi dogrulanmali."
+    },
+    {
+      "paket": "react-native-vector-icons",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 (repo kodunda) · c) 0 (app.json/jest.config.js/app.config.js/eslint.config.js/plugins/scripts'te yok). Paper'in tembel require zinciri OLCULDU ve BU PAKETE ULASMIYOR.",
+      "kanit": "1) grep -rn -F 'react-native-vector-icons' mobil (node_modules/android/ota-cikti haric) -> package.json:64 + CLAUDE.md:51. 2) PEER DOGRULAMASI (node_modules'ten okundu): react-native-paper@5.15.1 peerDependencies = {react, react-native, react-native-safe-area-context} -> vector-icons PEER DEGIL; @expo/vector-icons@15.1.1 peer = {expo-font, react, react-native}. mobil/node_modules'te 1399 paket tarandi: HICBIRI vector-icons'i dependency/peer/optional olarak istemiyor. 3) MEKANIZMA: react-native-paper/src/components/MaterialCommunityIcon.tsx:40-53 sirayla dener -> '@react-native-vector-icons/material-design-icons' (KURULU DEGIL) -> '@expo/vector-icons/MaterialCommunityIcons' (KURULU, burada basarili) -> 'react-native-vector-icons/...' (hic ulasilmaz). 4) Ustelik Expo Metro paketi ALIAS'liyor: node_modules/expo/node_modules/@expo/cli/build/src/start/server/metro/withMetroMultiPlatform.js:202-207 '@expo/vector-icons kuruluysa /^react-native-vector-icons(\\/.*)?/ -> @expo/vector-icons$1'. Ayni alias testte de var: node_modules/jest-expo/jest-preset.js:12-16 moduleNameMapper.",
+      "kaldirmaEtkisi": "Paket bundle'a ZATEN girmiyor (alias). node_modules/react-native-vector-icons/android VAR (autolink adayi, font varliklari) -> kaldirma yine de native cikti degisikligidir, OTA ile gitmez, sonraki APK turunda. mobil/CLAUDE.md:51'deki '(react-native-vector-icons yalniz peer artigi)' cumlesi OLCUMLE YANLIS - peer degil, sahipsiz artik: silinir."
+    },
+    {
+      "paket": "react-native-qrcode-svg",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0 (app.json/jest.config.js/app.config.js'te yok)",
+      "kanit": "grep -rn -F 'react-native-qrcode-svg' mobil -> package.json:57 + CLAUDE.md:51. Sembol taramasi: grep -rn -E 'QRCode|<Svg' mobil/src mobil/App.tsx -> 0. Tabletlerde barkod OKUNUR (expo-camera), URETILMEZ (etiket/QR uretimi backend bwip-js + expo-print HTML tarafinda).",
+      "kaldirmaEtkisi": "Saf JS (node_modules/react-native-qrcode-svg altinda android/ ve ios/ YOK) -> tek basina OTA-guvenli. Ama tek peer'i react-native-svg oldugu icin ikisi AYNI adimda kaldirilir (yoksa svg oksuz kalir)."
+    },
+    {
+      "paket": "react-native-svg",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) TEK config izi mobil/jest.config.js:12 transformIgnorePatterns listesi + 4. satirdaki yorum ('kullanilan native modulleri (paper, reanimated, flash-list, svg, ...) transform kapsamina alir') - bu bir TRANSFORM izin listesidir, calisma-zamani kullanimi kanitlamaz; bugun BAYAT bir satirdir",
+      "kanit": "grep -rn -F 'react-native-svg' mobil -> jest.config.js:12, package.json:62, CLAUDE.md:51. grep -rn -E \"from ['\\\"]react-native-svg|<Svg\" mobil/src mobil/App.tsx -> 0. node_modules dependents taramasi: react-native-svg'yi isteyen TEK paket react-native-qrcode-svg (peerDependencies >=14.0.0) - o da olu. react-native-paper peer'inde YOK.",
+      "kaldirmaEtkisi": "NATIVE (node_modules/react-native-svg/android VAR, autolink) -> OTA ile GITMEZ, sonraki APK turunda. Ayni commit'te jest.config.js:12 regex'inden 'react-native-svg|' cikarilir ve 4. satirdaki yorumdan 'svg' silinir (yoksa bayat referans kalir). Surum SABIT (15.12.1, Expo SDK 54 pini) - kaldirinca pin de gider."
+    },
+    {
+      "paket": "expo-sharing",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0 - app.json plugins listesinde YOK (plugins = expo-camera, react-native-ble-plx, expo-build-properties, expo-audio, expo-asset, ./plugins/withReleaseKeystore); autolinking expo-module.config.json ile olur, config referansi degil",
+      "kanit": "grep -rn -F 'expo-sharing' mobil -> package.json:45 + CLAUDE.md:51. Sembol taramasi: grep -rn -E \"shareAsync|from ['\\\"]expo-sharing|Sharing\\.\" mobil/src mobil/App.tsx mobil/scripts mobil/plugins -> 0. Dosya paylasimi yolu expo-print + expo-intent-launcher + expo-file-system uzerinden yurutuluyor (bunlarin importFiles>0).",
+      "kaldirmaEtkisi": "NATIVE Expo modulu (node_modules/expo-sharing/expo-module.config.json -> android modules: expo.modules.sharing.SharingModule; android/ + ios/ + local-maven-repo VAR) -> autolink kapsamindan cikar, OTA ile GITMEZ, sonraki APK turunda."
+    },
+    {
+      "paket": "@react-navigation/bottom-tabs",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0",
+      "kanit": "grep -rn -F '@react-navigation/bottom-tabs' mobil -> package.json:24 + CLAUDE.md:51. Sembol taramasi: grep -rn -E 'createBottomTabNavigator|BottomTab' mobil/src mobil/App.tsx -> 0. Navigasyon yalniz @react-navigation/native + native-stack ile kuruluyor. node_modules dependents taramasi: hicbir paket istemiyor.",
+      "kaldirmaEtkisi": "Saf JS (android/ ve ios/ dizini YOK) -> OTA-guvenli, APK gerekmez. En dusuk riskli mobil kaldirma."
+    },
+    {
+      "paket": "react-native-web",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) app.json'da web platformu YOK (expo.platforms tanimsiz, expo.web null); TEK config izi package.json:9 \"web\": \"expo start --web\" script'i",
+      "kanit": "grep -rn -F 'react-native-web' mobil -> package.json:65 + CLAUDE.md:51. app.json: platforms=None, web=null. Bagimli tek paket expo-camera'nin peerDependencies'i - AMA peerDependenciesMeta.react-native-web.optional = TRUE (node_modules/expo-camera/package.json'dan okundu), yani kaldirma peer uyarisi uretmez. jest-expo@54.0.17 peerDependencies = {expo, react-native, react-server-dom-webpack(optional)} -> react-native-web ISTEMIYOR; jest-preset.js react-native/jest-preset'ten tureyor (native), web projesi kosmuyor.",
+      "kaldirmaEtkisi": "Saf JS. package.json:9 'web' script'i AYNI commit'te silinir (script kalirsa kirik komut birakilir). CLAUDE.md:51'deki 'react-native-web' + 'react-dom' listeden cikar. OTA/APK'yi etkilemez (web hedefi zaten uretilmiyor)."
+    },
+    {
+      "paket": "react-dom",
+      "proje": "mobil",
+      "hukum": "OLU",
+      "kanal": "a) 0 · b) 0 · c) 0 (jest-expo preset'i react-dom ISTEMIYOR - olculdu)",
+      "kanit": "grep -rn -F 'react-dom' mobil -> package.json:50 + CLAUDE.md:51. mobil/node_modules'te 1399 paket tarandi: react-dom'u isteyen TEK paket react-native-web (peerDependencies ^18.0.0 || ^19.0.0). jest-expo@54.0.17 dependencies = {@expo/config, @expo/json-file, @jest/*, babel-jest, jest-environment-jsdom, jest-snapshot, jest-watch-*, json5, lodash, react-test-renderer, server-only, stacktrace-js} - react-dom YOK; peerDependencies'inde de YOK. Testler react-test-renderer + @testing-library/react-native ile kosuyor.",
+      "kaldirmaEtkisi": "react-native-web ile BIRLIKTE ve ondan SONRA kaldirilir (tek sebebi onun peer'i). Surum SABIT (19.1.0). OTA/APK etkisi yok; dogrulama npm test (jest --runInBand) + npx expo-doctor."
+    },
+    {
+      "paket": "buffer",
+      "proje": "Electron",
+      "hukum": "BELIRSIZ",
+      "kanal": "a) 0 · b) 0 · c) 0 config; AMA statik import CANLI: Electron/src/main.tsx:1 `import { Buffer } from \"buffer\"` + :16 `(window as ...).Buffer = Buffer`",
+      "kanit": "Aday listesinde YOKTU - @react-pdf/renderer'in yan urunu olarak ortaya cikti. main.tsx:13-15 yorumu polyfill'in gerekcesini react-pdf'e baglıyor; react-pdf olu oldugu icin 'birlikte olur' sanilabilir. OLCUM aksini gosteriyor: exceljs'in tarayici bundle'i da Buffer'a referans veriyor -> `grep -c Buffer Electron/node_modules/exceljs/dist/exceljs.min.js` = 4; exceljs renderer'da CANLI (src/lib/xlsx-export.ts:39 `await import(\"exceljs\")`, src/lib/import/parse.ts:133, GoodsReceipts/ReceiptImportButton.tsx:74). Ayrica Electron/node_modules taramasi: `bl` ve `crc` (exceljs zinciri) buffer'i dependency olarak istiyor - package.json'dan cikarilsa bile hoisted olarak kalir ve main.tsx hayalet bagimliliga (phantom dependency) doner.",
+      "kaldirmaEtkisi": "KALDIRMA. window.Buffer polyfill'inin exceljs icin gerekli olup olmadigi OLCULMEDI (olcum = polyfill'i kaldirip Excel ice/disa aktarma yolunu tarayicida kosmak). Yapilacak tek sey: main.tsx:13-15 yorumunun gerekcesini react-pdf'ten exceljs'e cekmek; aksi halde react-pdf kaldirilinca kodda sahibi olmayan bir polyfill kalir."
+    }
+  ],
+  "sabitSurumler": [
+    "Teks-Erp/package.json:12 bonjour-service = 1.4.4 -> GEREKCE KODDA YAZILI: Teks-Erp/src/jobs/mdns-advertiser.job.ts:12-17 ('BIND HATASI (EADDRINUSE) ... ⚠️ Olculdu (bonjour-service 1.4.4, ...) function (err) { throw err; }') + Teks-Erp/CLAUDE.md:79 ('1.4.4 SABIT, tembel require + try/catch, tek dosya jobs/mdns-advertiser.job.ts'). EMSAL.",
+    "Electron/package.json:66 bonjour-service = 1.4.4 -> GEREKCE YAZILI: Electron/electron/discovery/mdns-browser.ts:8 ('Backend tarafindaki ders burada da gecerli: bonjour-service'in constructor'i ...') + Electron/CLAUDE.md:46 ('1.4.4 sabit, dependencies'te kalmak ZORUNDA, tembel yukleme').",
+    "mobil/package.json:22 @react-native-community/netinfo = 11.4.1 -> GEREKCE YAZILI DEGIL (Expo SDK 54 hizalamasi varsayiliyor ama hicbir yerde yazmiyor).",
+    "mobil/package.json:29 @shopify/flash-list = 2.0.2 -> GEREKCE YAZILI DEGIL.",
+    "mobil/package.json:49 react = 19.1.0 -> GEREKCE YAZILI DEGIL (Expo SDK 54 pini).",
+    "mobil/package.json:50 react-dom = 19.1.0 -> GEREKCE YAZILI DEGIL; ustelik OLU (bu turda kaldirilacak).",
+    "mobil/package.json:51 react-native = 0.81.5 -> GEREKCE YAZILI DEGIL (Expo SDK 54 pini).",
+    "mobil/package.json:62 react-native-svg = 15.12.1 -> GEREKCE YAZILI DEGIL; ustelik OLU (bu turda kaldirilacak).",
+    "mobil/package.json:66 react-native-worklets = 0.5.1 -> GEREKCE YAZILI DEGIL (reanimated 4 esi).",
+    "mobil/package.json:79-81 overrides { expo-font: ~14.0.11 } -> GEREKCE YAZILI DEGIL; en yakin ipucu iki TEST yorumu (src/components/BarcodeScannerView.test.tsx:19, ScannerRollStrip.test.tsx:22 '@expo/vector-icons -> expo-font -> expo-asset zinciri testte kurulu degil'), ama override'in kendi sebebi hicbir yerde yazili degil.",
+    "OLCUM: uc projede ^/~ SUZ toplam 10 giris (backend 1, Electron 1, mobil 8 - 7 dependency + 1 overrides). Yalniz 2'sinin (bonjour-service x2) gerekcesi kodda YAZILI; 8'i gerekcesiz. Komut: package.json'larda ^ ya da ~ ile baslamayan surum degerleri suzuldu."
+  ],
+  "cjsInvarianti": "OLCUM (Teks-Erp/ icinde `node -e` ile kosuldu, Node v26.8.1): 19 dependency'nin 18'i require.resolve ile cozuluyor, 1'i COZULMUYOR. BASARISIZ: `prisma` -> MODULE_NOT_FOUND \"Cannot find module '.../node_modules/prisma/build/types.js'\" (CLI paketi; giris noktasi yayinlanmiyor). Bu, K-03 bekcisi icin ZORUNLU muafiyet: naif 'her dependency require.resolve edilebilmeli' bekcisi bugun main'de KIRMIZI acar. ESM-ONLY VAR: uuid@13.0.0 type=module ve exports'unda `require` kosulu YOK (exports = { \".\": { node: ./dist-node/index.js, default: ./dist/index.js } }). Backend CommonJS'e derleniyor (Teks-Erp/tsconfig.json module=\"commonjs\") ve derlenmis cikti gercekten require ediyor: dist/services/order.service.js:51 ve dist/services/subcontractor.service.js:17 `require(\"uuid\")`. Bu bugun yalniz Node'un require(esm) destegi sayesinde calisiyor (Node >= 22.12); package.json engines yalniz \">=22\" diyor -> Node 22.0-22.11'de uretim kirilir. K-03 bekcisi bunu olcmeli: (1) her dependency icin gercek `require()` denemesi (require.resolve degil), (2) `prisma` beyanli muaf, (3) engines.node tabani >=22.12'ye cekilmeli ya da uuid CJS'e dusurulmeli. Kalan iki type:module paketi CIFT (dual) yayinliyor, sorun degil: bcryptjs@3.0.3 ve zod@4.3.6 exports'unda `require` kosulu var. Calisma-zamani dogrulamasi: require('uuid'|'zod'|'bcryptjs'|'@prisma/client'|'opentype.js'|'bonjour-service') -> hepsi OK; require('prisma') -> MODULE_NOT_FOUND.",
+  "lisans": "DOGRUDAN BAGIMLILIKLAR: copyleft 0 - kesif dogrulandi. Teks-Erp 36 paket (MIT 30, Apache-2.0 4, BSD-3-Clause 1, BSD-2-Clause 1); Electron 81 paket (MIT 71, Apache-2.0 5, ISC 2, OFL-1.1 2 [@fontsource/* font varliklari], '(MIT OR X11)' 1); mobil 55 paket (MIT 54, Apache-2.0 1). Okunamayan lisans: 0. GECISLI (node_modules tam taramasi, kesifte OLCULMEMIS): guclu copyleft (GPL/AGPL/SSPL tek secenek olarak) 0; ZAYIF/CIFT lisans 6 paket var ve kayda gecmeli: Teks-Erp -> elkjs@0.11.1 EPL-2.0 (kaynagi @prisma/studio-core, yani `prisma` CLI; yalniz gelistirme, musteri paketine girmiyor). Electron -> axe-core@4.12.1 MPL-2.0 (devDep, vitest-axe), lightningcss@1.32.0 + lightningcss-darwin-arm64 MPL-2.0 (tailwindcss v4 derleme araci), jszip@3.10.1 '(MIT OR GPL-3.0-or-later)' -> MIT secilir. mobil -> node-forge@1.4.0 '(BSD-3-Clause OR GPL-2.0)' -> BSD-3 secilir, lightningcss MPL-2.0. MPL-2.0 ve EPL-2.0 DOSYA duzeyinde zayif copyleft'tir: degistirilmeden kutuphane olarak kullanmak kapali kaynak dagitimi engellemez. HUKUM: bugun lisans riski YOK; ama KUTUPHANELER.md'ye 'gecisli tarama da yapilir, cift lisansta permissive secenek yazili beyan edilir' satiri girer. Komut: uc projenin node_modules'inde 2858 paket package.json'i tarandi (436 + 1023 + 1399), license/licenses alanlari GPL|AGPL|LGPL|MPL|EPL|CDDL|OSL|EUPL|SSPL|CC-BY-SA icin suzuldu; lisans alani bos olan 10 paket (3+2+5) elle bakilacak artik.",
+  "aracZinciri": "OLCULDU (her projede `npx --no-install tsc -v` ve `npx --no-install eslint -v`): TypeScript -> Teks-Erp 6.0.2 (package.json ^6.0.2) · Electron 5.6.3 (~5.6.2) · mobil 5.9.3 (~5.9.2). ESLint -> Teks-Erp 10.2.1 (^10.2.1) · Electron 9.39.4 (^9.39.0) · mobil 9.39.4 (^9.0.0). Kesif dogru: TS 6.0/5.6/5.9, ESLint 10/9/9. Ek olcum: @typescript-eslint backend ^8.58.2, Electron ^8.59.0, mobil'de yok (eslint-config-expo ~10.0.0). Not: Electron TS'i CARET DEGIL TILDE ile (~5.6.2) sabitli, yani ana surum atlamasi bilincli engellenmis; backend ^6.0.2 ile serbest. K-04 karari (bu turda hizalama yok) bu olcumle desteklenir; hizalama yapilacaksa once Electron'un tilde gerekcesi yazilmali (bugun yazili degil).",
+  "kaldirmaSirasi": [
+    "0) HICBIRI KALDIRILMADAN ONCE: uc projede yesil taban olcusu alinir (Electron `npm run typecheck` + `npx vitest run`, backend `npx tsx scripts/run-all-tests.ts` + `npm run typecheck`, mobil `npm test`). Kirmiziysa once Y-01/Y-02 kapatilir - kaldirmanin kirdigi ile devralinan kirmizi karismasin.",
+    "1) Electron - risksiz saf JS besli, TEK commit: @radix-ui/react-avatar + @radix-ui/react-scroll-area + @radix-ui/react-switch + @fontsource/roboto + electron-window-state. Dogrulama: npm run typecheck (exit 0) + npx vitest run + npm run build (electron-vite). Ayni commit'te Electron/CLAUDE.md:46 paket listesi duzeltilir.",
+    "2) Electron - @react-pdf/renderer (ayri commit, cunku yorum dokunusu var): paketi kaldir, Electron/src/main.tsx:13-15 yorumunu 'exceljs'in tarayici bundle'i Buffer bekliyor' diye guncelle, `buffer` paketine DOKUNMA. Dogrulama: npm run typecheck + npx vitest run + npm run build + Excel disa aktarim yolunun elle denenmesi (xlsx-export.ts dinamik import).",
+    "3) Backend - @faker-js/faker (devDep) + knip.json ignoreDependencies temizligi + Teks-Erp/CLAUDE.md:79 listesi. Dogrulama: npm run typecheck + npm run typecheck:scripts + npx tsx scripts/run-all-tests.ts (453 bekci).",
+    "4) mobil - OTA-guvenli saf JS: @react-navigation/bottom-tabs. Dogrulama: npm test + npx expo-doctor. (Tek basina, cunku en dusuk riskli ve mobil zincirinin dogrulama duzenini burada sinariz.)",
+    "5) mobil - web ayagi TEK adimda: react-native-web + react-dom + package.json:9 \"web\": \"expo start --web\" script'i + mobil/CLAUDE.md:51 satiri. Dogrulama: npm test + npx expo-doctor (expo-camera peer'i optional oldugu icin uyari beklenmiyor - beklenmedik uyari cikarsa DUR).",
+    "6) mobil - NATIVE ucluyu TEK commit'te, sonraki APK turuna baglı: react-native-qrcode-svg + react-native-svg (+ jest.config.js:12 transformIgnorePatterns'ten 'react-native-svg|' ve 4. satir yorumundan 'svg') + expo-sharing + react-native-vector-icons. Dogrulama: npm test + npx expo-doctor + `npx expo prebuild --clean` sonrasi android/app/src/main/AndroidManifest.xml DIFF'i (izin kaybi olmamali) + `npm run build:apk -- --musteri=adnansahin`. Rapora 'sonraki APK'da gider, OTA ile GITMEZ' notu.",
+    "7) react-native-ble-plx: KALDIRILMAZ - CANLI import var (bluetooth.service.ts:1) ve app.json plugins[1] native+izin tasiyor. AYRI IS olarak acilir: once 'sahipsiz BLE yolu kapatilsin mi' karari (bluetooth.service.ts'in tuketicisi yok, mobil/CLAUDE.md:28 'canli kullanicisiz' diyor), sonra 3 dosya birlikte + APK + manifest izin diff'i.",
+    "8) Kaldirma bitince K-03 bekcisi (`test_dependency_contract.ts`) yazilir: (a) bonjour-service pin sabiti, (b) her backend dependency icin gercek require() - `prisma` beyanli muaf, (c) uc projede package.json dependencies ile KUTUPHANELER.md tablosu farki bos. Negatif sonda: kasitli olarak bir paketi tabloya yazmadan ekle -> kirmizi -> geri al."
+  ],
+  "meta": {
+    "tarih": "2026-09-05",
+    "kimlik": "K-01 / K-02 / K-03 / K-04",
+    "kapsam": "Kesifte 'olu' isaretlenen 13 aday + react-native-web/react-dom cifti = 15 paket, uc yanlis-pozitif kanalindan dogrulandi",
+    "duzeltme": "Kesif 13 paketten 1'ini YANLIS isaretlemis: react-native-ble-plx CANLI (src/services/bluetooth.service.ts:1). Geri kalan 14'u OLU dogrulandi. Ayrica 'buffer' BELIRSIZ cikti (react-pdf ile birlikte olmez). (buffer 16. satir olarak BELIRSIZ kaydedildi.)",
+    "grepKalibi": "grep -rn -F \"<paket>\" <proje> --exclude-dir=node_modules --exclude-dir=out --exclude-dir=release --exclude-dir=dist-web --exclude-dir=android --exclude-dir=ota-cikti --exclude=package-lock.json",
+    "kosulanKomutlar": [
+      "grep -rn --binary-files=without-match -F '<paket>' <proje> --exclude-dir=node_modules --exclude-dir=out --exclude-dir=release --exclude-dir=dist-web --exclude-dir=android --exclude-dir=ota-cikti --exclude=package-lock.json",
+      "grep -rn -E \"from ['\\\"]<sembol>|require\\(['\\\"]<paket>\" <proje>/src",
+      "python3: mobil/node_modules + Electron/node_modules tam taramasi -> dependencies/peerDependencies/optionalDependencies icinde aday paket arandi (dependents grafi)",
+      "python3: react-native-paper / jest-expo / expo-camera / react-native-qrcode-svg package.json peerDependencies + peerDependenciesMeta okundu",
+      "cd Teks-Erp && node -e '...require.resolve + require dongusu...'  (19 dependency)",
+      "python3: uc projede node_modules tam lisans taramasi (2858 paket)",
+      "cd <proje> && npx --no-install tsc -v ; npx --no-install eslint -v"
+    ]
+  }
+}

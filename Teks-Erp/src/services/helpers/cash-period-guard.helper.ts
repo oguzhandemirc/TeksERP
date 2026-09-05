@@ -40,10 +40,8 @@ import { periodDayKey, formatDayKeyTr } from "./period-guard.helper";
 /**
  * Kasa/banka dönem kapanışı advisory lock namespace'i (2 ARGÜMANLI form).
  *
- * Uzay envanteri: 8021 KK1 mükerrer giriş · 8022 parti no üreteci ·
- * 8023 sevkiyat kapsamı · 8024 oturum kaydı · 8025 yetki (son-admin) ·
- * 8026 cari dönem kapanışı · 8027 alış siparişi karşılanma ·
- * **8028 kasa/banka dönem kapanışı**.
+ * Uzay envanteri TEK KAYNAK: `period-guard.helper.ts` başlığı — kopya liste
+ * tutulmaz. Bu uzay **8028 kasa/banka dönem kapanışı**dır.
  *
  * ⚠️ 8026'DAN AYRI uzay: aynı uzay kullanılsaydı `hashtext` çakışması bir kasa
  * kapanışını ilgisiz bir CARİ yazarıyla sessizce serileştirebilirdi (ve tersi).

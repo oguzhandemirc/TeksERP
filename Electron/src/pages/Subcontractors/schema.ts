@@ -1,11 +1,13 @@
 import { z } from "zod";
 
 export const subcontractorFormSchema = z.object({
+  // Sınır DB kolonuyla birebir (Subcontractor.name @db.VarChar(100)) — panel
+  // şeması tek doğrulama kapısı; gevşek sınır sessiz P2000 üretirdi.
   name: z
     .string()
     .trim()
     .min(1, "Fason firma adı boş bırakılamaz")
-    .max(120, "Fason firma adı en fazla 120 karakter olabilir"),
+    .max(100, "Fason firma adı en fazla 100 karakter olabilir"),
   taxNumber: z
     .string()
     .max(32, "Vergi numarası en fazla 32 karakter olabilir")

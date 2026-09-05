@@ -10,9 +10,9 @@ import "@fontsource/plus-jakarta-sans/700.css";
 import "@fontsource/plus-jakarta-sans/800.css";
 import "./index.css";
 
-/* react-pdf'in browser bundle'ı data: URL'leri okurken Node `Buffer` global'ini
-   bekliyor (warning fırlatıp catch ile devam ediyor ama console'u dolduruyor).
-   Buffer polyfill'i global'e bağlayınca temiz çalışıyor. */
+/* exceljs'in tarayıcı bundle'ı Node `Buffer` global'ini bekliyor; yokken
+   uyarı fırlatıp devam ediyor ama console'u dolduruyor. Polyfill'i global'e
+   bağlayınca Excel içe/dışa aktarma yolu temiz çalışıyor. */
 (window as unknown as { Buffer: typeof Buffer }).Buffer = Buffer;
 
 const platform = window.api?.appInfo.platform();

@@ -1,0 +1,4 @@
+#!/bin/sh
+# TeksERP commit kapısı — gövde scripts/hooks/pre-commit.mjs'te (zero-dep Node).
+# Kurulum: node scripts/hooks-kur.mjs   ·   Kaçış: TEKSERP_HOOK_SKIP=1 git commit
+exec node "$(git rev-parse --show-toplevel)/scripts/hooks/pre-commit.mjs"

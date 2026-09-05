@@ -1,0 +1,157 @@
+{
+  "label": "Faz — reçete / CI / harness düzeltmeleri (standart turu 2026-09-05)",
+  "alan": [
+    "docs/RECETELER.md",
+    ".github/workflows/ci.yml",
+    ".claude/rules/",
+    "docs/README.md",
+    "scripts/claude-hooks/bash-guard.mjs",
+    "scripts/check-docs.mjs"
+  ],
+  "kimlikler": [
+    {
+      "kimlik": "B-01 · Yeni servis metodu reçetesi",
+      "durum": "yapildi",
+      "yapilan": "kesif/backend-servis.json § recete_yeni_servis_metodu (12 adım) RECETELER biçimine uyarlandı ve 13 adım olarak yazıldı (advisory kilit adımı eklendi); her adım kanıt + 'atlanırsa' sonucu taşıyor, sonda boyut tavanı notu var.",
+      "dosya": "docs/RECETELER.md:40",
+      "bekci": "node scripts/check-docs.mjs → rc 0 (139 .md, ölü link yok)"
+    },
+    {
+      "kimlik": "B-03 · Yeni Prisma modeli reçetesi (en büyük boşluk)",
+      "durum": "yapildi",
+      "yapilan": "VERITABANI.md §1 model şablonu + §2 üç model sınıfı (KATALOG/DEFTER/PİVOT) + DB-01…DB-30'dan 15 adımlık reçete; künye FK muafiyeti, composite index sırası, enum-mü-VarChar, clientToken yazımı, yumuşak kapı, dokuz liste envanteri ve kapı adımı dahil.",
+      "dosya": "docs/RECETELER.md:128",
+      "bekci": "node scripts/check-docs.mjs → rc 0"
+    },
+    {
+      "kimlik": "K-02/K-03 · Yeni bağımlılık + Ölü paket kaldırma reçeteleri",
+      "durum": "yapildi",
+      "yapilan": "KUTUPHANELER.md §3 altı satırlık karar kaydı → 13 adımlık 'Yeni bağımlılık' reçetesi; §6 üç kanal (dinamik import · createRequire · config referansı) + §7 hüküm tablosu → 10 adımlık 'Ölü paket kaldırma' reçetesi. Native = APK turu ve 'importFiles:0 kanıt değil' adım olarak yazıldı.",
+      "dosya": "docs/RECETELER.md:317, docs/RECETELER.md:335",
+      "bekci": "node scripts/check-docs.mjs → rc 0"
+    },
+    {
+      "kimlik": "E-05 · Yeni ESLint kuralı reçetesi",
+      "durum": "yapildi",
+      "yapilan": "ölç → karar tablosu (4 kova) → doğru config dosyası → kapsam tek kaynak → tip bilgili parser maliyeti → NEGATİF SONDA → baseline yaz → körlük zemini → adlı muafiyet → ölü disable → standart dosyasına kural satırı: 11 adım.",
+      "dosya": "docs/RECETELER.md:228",
+      "bekci": "node scripts/check-lint-baseline.mjs --proje={backend,electron,mobil} → rc 0/0/0"
+    },
+    {
+      "kimlik": "B-09/K2 · Electron + mobil reçetelerinin boyut ve standart atfı",
+      "durum": "yapildi",
+      "yapilan": "Mevcut iki reçete YENİDEN YAZILMADI; sonlarına iki adım eklendi. Electron 15/16: boyut sınırları (300/200/200/80/4) + adlı muafiyet + 'npm run typecheck' (çıplak tsc no-op). Mobil 20/21: boyut sınırları (250/500/400/300+12 useState/200+test/400) + ham hex 0 + 'eslint .' kapsamı (expo lint dar).",
+      "dosya": "docs/RECETELER.md:244, docs/RECETELER.md:278",
+      "bekci": "node scripts/check-docs.mjs → rc 0"
+    },
+    {
+      "kimlik": "CI-1 · adnansahin dalı tetikleyiciden kaldırıldı",
+      "durum": "yapildi",
+      "yapilan": "push + pull_request 'branches: [main]'. Eski açıklama bloğu (BULGU-T1-015 anlatısı) yerine 'müşteri dalı YOK, adnansahin 2026-09-02'de emekli' gerekçesi yazıldı.",
+      "dosya": ".github/workflows/ci.yml",
+      "bekci": "YAML parse (yaml paketi) → rc 0; on.push.branches == [\"main\"]"
+    },
+    {
+      "kimlik": "Y-01/CI-2 · Electron Type-check no-op'tan çıkarıldı",
+      "durum": "yapildi",
+      "yapilan": "'npx tsc --noEmit' → 'npm run typecheck' (tsconfig.node.json + tsconfig.web.json); adımın üstüne no-op gerekçesi 3 satır yorum.",
+      "dosya": ".github/workflows/ci.yml",
+      "bekci": "cd Electron && npm run typecheck → rc 0"
+    },
+    {
+      "kimlik": "CI-3 · Üç job'a lint tavanı adımı",
+      "durum": "yapildi",
+      "yapilan": "backend/electron/mobile job'larında 'Lint'ten SONRA 'Lint tavanı (baseline)' adımı: node scripts/check-lint-baseline.mjs --proje=<p>, working-directory '.' (job varsayılanı alt proje).",
+      "dosya": ".github/workflows/ci.yml",
+      "bekci": "üç komut yerelde koşuldu → backend rc 0 (1025 dosya) · electron rc 0 (1396) · mobil rc 0 (399)"
+    },
+    {
+      "kimlik": "CI-4 · mobil job üçlüsü",
+      "durum": "yapildi",
+      "yapilan": "Job zaten vardı (install → lint → tsc → test). Tamamlandı: lint tavanı adımı eklendi, test adımı 'npm test' yerine açıkça 'npx jest --runInBand' yazıldı, lint adımının başına 'eslint . / expo lint kapsam farkı' gerekçesi kondu.",
+      "dosya": ".github/workflows/ci.yml",
+      "bekci": "YAML parse → rc 0 (mobile job 7 adım)"
+    },
+    {
+      "kimlik": "CI-5 · backend'e prisma migrate status EKLENMEDİ",
+      "durum": "reddedildi",
+      "yapilan": "Talimat gereği eklenmedi: 'npm test' (run-all-tests.ts) migration durumu geçidini zaten fail-closed olarak içeriyor (TD-09). İkinci kapı aynı şeyi iki kez ölçer ve ayrışma yüzeyi açar.",
+      "dosya": ".github/workflows/ci.yml"
+    },
+    {
+      "kimlik": "H-1 · .claude/rules ince işaretçileri",
+      "durum": "yapildi",
+      "yapilan": "Dört yeni dosya, superadmin.md biçimi birebir (paths frontmatter + 2-3 cümle): backend-standart (Teks-Erp/src/**) · electron-standart (Electron/src/**) · mobil-standart (mobil/src/**) · kutuphane (**/package.json).",
+      "dosya": ".claude/rules/backend-standart.md, .claude/rules/electron-standart.md, .claude/rules/mobil-standart.md, .claude/rules/kutuphane.md",
+      "bekci": "26 rules dosyasının tamamında 'paths:' var — paths'siz dosya yok (her oturumda yüklenme yasağı korunuyor)"
+    },
+    {
+      "kimlik": "H-2 · docs/README.md dizinine standart/ satırı",
+      "durum": "yapildi",
+      "yapilan": "'Nereye bakılır' tablosuna rutin konvansiyon satırı · 'Klasörler' tablosuna standart/ satırı (8+README, kural biçimi) · harness bölümüne dört yeni rules dosyası · bayatlık bekçisi paragrafı yeni tavanla güncellendi · bash-guard cümlesi yeni davranışa çekildi.",
+      "dosya": "docs/README.md",
+      "bekci": "node scripts/check-docs.mjs → rc 0"
+    },
+    {
+      "kimlik": "H-3 · commit kapısı entegrasyonu (iki kapı ayrışmasın)",
+      "durum": "yapildi",
+      "yapilan": "bash-guard.mjs artık adım listesini KOPYALAMIYOR: scripts/hooks/lib/staged.mjs'ten stagedFiles/etkilenenProjeler kullanıyor ve gerçek kapıyı scripts/hooks/pre-commit.mjs'i çağırarak koşuyor (tip · lint · lint tavanı · hızlı test · migration/doküman hijyeni). core.hooksPath=.githooks kuruluysa SUSUYOR (çift koşum yok). REPO kökü process.cwd() yerine dosya konumundan çözülüyor.",
+      "dosya": "scripts/claude-hooks/bash-guard.mjs",
+      "bekci": "kuru koşum: yasak komut rc=2 · izinli rc=0 · git commit (hook kurulu değil) → pre-commit.mjs koştu, gerçek adım listesi göründü, kırmızıda rc=2 · git commit (GIT_CONFIG ile hook KURULU) rc=0 sessiz · --no-verify rc=0"
+    },
+    {
+      "kimlik": "H-4 · scripts/claude-hooks/hook-cases.json",
+      "durum": "listeye-alindi",
+      "yapilan": "Dosya ve test harness'ı bu repoda YOK ('varsa' şartı sağlanmadı); yeni bir harness yüzeyi icat etmek yerine dört durum elle kuru koşuldu ve çıkış kodları bu dosyaya yazıldı. Harness yazılırsa bu dört durum ilk vakalardır.",
+      "dosya": "scripts/claude-hooks/"
+    },
+    {
+      "kimlik": "H-5 · check-docs.mjs boyut tavanı docs/standart/*.md",
+      "durum": "yapildi",
+      "yapilan": "CLAUDE_MD_SIZE_CAPS'e docs/standart dizini TARANARAK ekleniyor (sabit liste değil — yeni standart dosyası tavansız doğmasın), tavan 24 KB. Hata mesajı 'CLAUDE.md boyut tavanı' → 'Belge boyut tavanı'.",
+      "dosya": "scripts/check-docs.mjs",
+      "bekci": "NEGATİF SONDA: tavan geçici 1 KB → rc=1 ve 9 docs/standart dosyası listelendi → geri alındı → rc=0. Bugünkü en büyük dosya KUTUPHANELER.md 22,9 KB (tavan 24 KB, pay 1,1 KB)."
+    }
+  ],
+  "dogrulama": {
+    "node scripts/check-docs.mjs": "rc 0 (139 .md tarandı, ölü link yok)",
+    "YAML parse (Teks-Erp/node_modules/yaml)": "rc 0 · on.push.branches=[main] · on.pull_request.branches=[main] · 6 job",
+    "hook kuru koşum": "yasak=2 · izinli=0 · commit(hook yok)=2 (gerçek kapı koştu) · commit(hook kurulu)=0 · --no-verify=0",
+    "node scripts/hooks-kur.mjs --durum": "rc 0 — kapı KURULU DEĞİL (core.hooksPath varsayılan); kurulum kullanıcı kararı, bu turda kurulmadı",
+    "node scripts/check-lint-baseline.mjs": "backend rc 0 (1025 dosya) · electron rc 0 (1396) · mobil rc 0 (399, 3 kural tavanın altında)",
+    "cd Electron && npm run typecheck": "rc 0",
+    "node --check": "scripts/check-docs.mjs · scripts/claude-hooks/bash-guard.mjs → temiz"
+  },
+  "belgeDuzeltmesi": [
+    {
+      "dosya": "docs/standart/TEST-VE-DERLEME.md [TD-05]",
+      "gozlem": "'Claude'un Bash hook'u da aynı modülü kullanır' cümlesi yazıldığı anda KODA UYMUYORDU: bash-guard.mjs kendi staged/tip-kontrolü kopyasını taşıyordu. H-3 ile kod cümleye getirildi; metin artık doğru, düzeltme gerekmiyor — kayıt sırf 'belge koddan önce yazılmıştı' diye tutuluyor."
+    },
+    {
+      "dosya": "docs/standart/TEST-VE-DERLEME.md §1 kadans tablosu",
+      "gozlem": "CI satırı 'lint + tavan + tip + paket' diyordu; tavan adımı bu tura kadar ci.yml'de YOKTU. CI-3 ile eşitlendi."
+    },
+    {
+      "dosya": "docs/standart/KUTUPHANELER.md [KU-08]/[KU-12]/[KU-18]/[KU-20]",
+      "gozlem": "Dördü de zorlama olarak 'test_dependency_contract.ts' bekçisine atıf yapıyor; bekçi bugün YOK (K-03 ayrı ajanın işi). Reçeteler bekçiye YOL VERMEDEN (Teks-Erp/scripts/ öneki olmadan) atıf yapıyor ki doküman bekçisi ölü link üretmesin; bekçi yazılınca reçetedeki 'Mekanik kapı' satırları tam yola çevrilmeli."
+    }
+  ],
+  "acikKarar": [
+    {
+      "konu": "Commit kapısının Claude tarafında koşulup koşulmayacağı",
+      "karar": "bash-guard, git'in kendi kapısı kuruluysa SUSAR; kurulu değilse pre-commit.mjs'i kendisi çağırır.",
+      "neden": "Alternatif her koşulda çalıştırmaktı; o zaman kapı kurulu makinede aynı adımlar iki kez koşar (Electron 23 sn + mobil 29 sn commit başına ikiye katlanır). Bu bir DAVRANIŞ kararıdır ve kullanıcı isterse 'her zaman koş'a çevrilebilir.",
+      "etki": "Kapıyı kurmayan geliştirici/oturum yine korunur; kuran hiç ceza ödemez."
+    },
+    {
+      "konu": "node scripts/hooks-kur.mjs KOŞULMADI (kapı kurulmadı)",
+      "karar": "core.hooksPath'e dokunulmadı; yalnız --durum çalıştırıldı.",
+      "neden": "Git yapılandırmasını değiştirmek kullanıcının deposunda kalıcı bir karardır ve aynı anda çalışan başka ajanların commit'lerini de etkiler. Kurulum komutu README/TEST-VE-DERLEME'de duruyor; kullanıcı bir komutla kurar."
+    },
+    {
+      "konu": "scripts/claude-hooks/hook-cases.json + test harness'ı",
+      "karar": "Yazılmadı, listeye alındı.",
+      "neden": "Talimat 'varsa' diyordu; dosya yok. Yeni bir bekçi yüzeyi icat etmek negatif sonda + bakım borcu getirir ve aynı turda başka bir ajanın açtığı harness'la çakışabilir."
+    }
+  ]
+}

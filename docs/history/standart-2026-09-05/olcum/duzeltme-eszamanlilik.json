@@ -1,0 +1,95 @@
+{
+  "label": "Backend eşzamanlılık düzeltmeleri — İ-10 · İ-11 · İ-12 · İ-13 · İ-26 · İ-04",
+  "tarih": "2026-09-05",
+  "kapsam": "Teks-Erp/src (+ ilgili scripts/ bekçileri). Migration YAZILMADI.",
+  "dogrulama": {
+    "typecheck": "npm run typecheck → 0",
+    "typecheck_scripts": "npm run typecheck:scripts → 0",
+    "lint": "npm run lint → 0 (442 warning, 0 error)",
+    "lint_tavani": "node scripts/check-lint-baseline.mjs --proje=backend → 0 (1026 dosya, tavan aşılmadı)",
+    "check_docs": "npm run check:docs → 0 (2 tarihsel ADVISORY, bu turla ilgisiz)"
+  },
+  "kimlikler": [
+    {
+      "kimlik": "İ-10",
+      "durum": "yapildi",
+      "yapilan": "CODE_UNIQUE_LOCK_NS 8026→8029, MERGE_LOCK_NS 8027→8030 (+`: number`). master-data-live.helper yorumdaki 8027 atıfları 8030. Envanter period-guard.helper.ts başlığında 10 satıra tamamlandı ve MAKİNE OKUNUR biçime çevrildi. Diğer 7 dosyadaki kopya envanter listeleri tek-kaynak işaretçisine indirildi (IL-01/IL-04). DUPLICATE_GUARD_LOCK_NS `: number` ile tiplendi (ES-16 baseline kapandı → 10/10).",
+      "dosyalar": [
+        "Teks-Erp/src/services/helpers/period-guard.helper.ts",
+        "Teks-Erp/src/services/helpers/code-unique.helper.ts",
+        "Teks-Erp/src/services/master-data-merge.service.ts",
+        "Teks-Erp/src/services/helpers/master-data-live.helper.ts",
+        "Teks-Erp/src/services/helpers/duplicate-guard.helper.ts",
+        "Teks-Erp/src/services/helpers/shipment-locks.helper.ts",
+        "Teks-Erp/src/services/helpers/cash-period-guard.helper.ts",
+        "Teks-Erp/src/services/session-registry.service.ts",
+        "Teks-Erp/src/services/purchase-order.service.ts",
+        "Teks-Erp/scripts/test_advisory_lock_namespaces.ts",
+        "Teks-Erp/scripts/test_master_data_merge_race.ts",
+        "Teks-Erp/scripts/audit_repro_KYY-1-03.ts"
+      ],
+      "kilit_sirasi": "Tek çapraz-uzay çifti inventory.service.ts:988 (8021) → :1060 (merge, artık 8030). ARTAN korundu; başka çapraz-uzay tx'i ölçümde YOK. CODE_UNIQUE (8029) yalnız item.service.ts:237 tx'inde ve tek kilit.",
+      "bekci": "npx tsx scripts/run-all-tests.ts advisory_lock_namespaces → 14 geçti, 0 başarısız (exit 0); test_shipment_scope_lock 13/0; test_master_data_merge_race 4/0; test_cash_period_close 61/0; test_batch_number_format 42/0; test_kk1_duplicate_guard 24/0; test_purchase_order 122/0; test_goods_receipt 86/0; test_goods_receipt_invoice 38/0; test_masterdata_guards 3/0; test_session_registry 25/0",
+      "sonda": "6 negatif sonda, hepsi KIRMIZI ölçüldü ve geri alındı: (1) 8029→8026 çift sahiplik → §3+§4 kırmızı; (2) envanterde hayalet FOO_LOCK_NS → §4 iki yönlü kırmızı; (3) envanter satırı silindi → §4 kırmızı; (4) `pg_advisory_xact_lock(8022::int` çıplak sayı → §5 kırmızı; (5) başka dosyaya kopya envanter satırı → §6 kırmızı; (6) envanter 10→7 satır → körlük zemini kırmızı."
+    },
+    {
+      "kimlik": "İ-11",
+      "durum": "yapildi",
+      "yapilan": "traveler-card.service `reprint` (:269-291) check-then-act → atomik claim `updateMany where {id, status:ACTIVE, version: existing.version}` + count===0 → 409 (tanı tx İÇİNDE taze okumayla). `recordPrintEvent` claim'i plana temel olan (status, version) çiftini WHERE'e koyar; plan çözümü (şablon + WO okumaları) BİLEREK tx dışında kalır (ES-11 — tx kısa), pencere WHERE ile kapanır.",
+      "dosyalar": [
+        "Teks-Erp/src/services/traveler-card.service.ts",
+        "Teks-Erp/scripts/test_traveler_card_versions.ts"
+      ],
+      "bekci": "test_traveler_card_versions 28/0 (24→28, §6 yarış sondası eklendi) · test_traveler_card_stale 26/0 · test_traveler_template 30/0 · test_traveler_card_fields 61/0 · test_traveler_card_a5_batches 45/0 · test_traveler_print_active_card 16/0 · test_traveler_scan_dedup 6/0",
+      "sonda": "Yarış sondası ELLE AÇIK TUTULAN tx ile (ES-17/18/19): kart satırı `FOR NO KEY UPDATE` ile kilitlenir, sonda tx'i sürümü artırır, baskı olayı başlatılır (no-op `.catch` ile), sonda commit eder. Negatif sonda: claim WHERE'inden `status`+`version` düşürüldü → §6'nın 3 kontrolü KIRMIZI (defter v3 bayat satırı yazdı), geri alındı → 28/0."
+    },
+    {
+      "kimlik": "İ-12",
+      "durum": "yapildi",
+      "yapilan": "reconcileRoleTemplates ikiye ayrıldı: yazan kısım `reconcileRoleTemplatesTx(tx)` (üç model tek $transaction'da — permissionTemplate update/create + permissionTemplateItem createMany), rapor/console + AuditService.logEvent tx DIŞINDA. Tx bütçesi ÖLÇÜLDÜ: 29 şablon / 298 izin bağı; en kötü hâl 29 create + 29 createMany — varsayılan 20 sn tavanının çok altında.",
+      "dosyalar": ["Teks-Erp/src/jobs/role-template-catalog.job.ts"],
+      "bekci": "test_role_template_catalog 21/0 · test_permission_catalog 21/0",
+      "sonda": "Yeni bekçi yazılmadı (mevcut bekçi uzlaştırmayı iki kez koşup idempotanlığı ve 'ezme yok' sözleşmesini ölçüyor). Negatif sonda gerektirmedi — davranış değişmedi, atomiklik eklendi."
+    },
+    {
+      "kimlik": "İ-13",
+      "durum": "yapildi",
+      "yapilan": "subcontractor.service `updateInstruction` (ölçülen güncel satır 4746-4800) tek $transaction + atomik claim: P4 kilit koşulları (`cancelledAt: null` + `items: { none: { receiptItems: { some: { receipt: { cancelledAt: null } } } } }`) artık claim'in WHERE'inde; count===0 → tx içinde taze okumayla ayrışan 409 (iptal mi, kabul mü). Audit tx dışında kaldı.",
+      "dosyalar": [
+        "Teks-Erp/src/services/subcontractor.service.ts",
+        "Teks-Erp/scripts/test_fason_step_note_flow.ts"
+      ],
+      "bekci": "26/26 fason bekçisi geçti (test_fason_* + test_wo_fason_* + test_manual_move_fason_receive + test_phase4_fason_hardening + test_route_template_fason + test_wo_cancel_fason) · test_fason_step_note_flow 15/0 (10→15, §7 P4 kilit sondası eklendi)",
+      "sonda": "Negatif sonda: claim WHERE'inden P4 kilit koşulları düşürüldü → §7'nin 4 kontrolü KIRMIZI (kabul edilmiş VE iptal edilmiş sevkin talimatı sessizce değişti), geri alındı → 15/0."
+    },
+    {
+      "kimlik": "İ-26",
+      "durum": "yapildi",
+      "yapilan": "test_station_quality_capability'ye §8 AST bölümü eklendi (TypeScript derleyici API'si): (a) `stepCanApplyQuality` + `QUALITY_STATION_WHERE` AYNI dosyada, (b) YAN YANA (üst-seviye bildirim mesafesi 1 — IL-02), (c) where parçası AST'de `SatisfiesExpression` ve hedefi `Prisma.StationWhereInput` (`as const` DEĞİL), (d) src genelinde helper DIŞINDA `=== / !== PROCESS_QC` karşılaştırması 0 (ESLint'in ikinci hattı) + körlük zemini (3938 karşılaştırma düğümü gezildi). Not: `ts` adı main() içinde zaman damgasına ayrılmış olduğu için derleyici API'si `tsc` diye alındı.",
+      "dosyalar": ["Teks-Erp/scripts/test_station_quality_capability.ts"],
+      "bekci": "test_station_quality_capability 28/0 (22→28)",
+      "sonda": "3 negatif sonda, hepsi KIRMIZI: (1) `satisfies` → `as const` → §6 + §8 (3 kontrol) kırmızı; (2) ikiz arasına üçüncü bildirim → §8 'yan yana' kırmızı; (3) kursun-qc.service'e `k === \"PROCESS_QC\"` eklendi → §4 muaf sayımı + §8 AST kırmızı. Hepsi geri alındı."
+    },
+    {
+      "kimlik": "İ-04",
+      "durum": "yapildi",
+      "yapilan": "`requireFinanceEnabled` 403'ü kardeş kapıların sözleşmesini taşıyor: `{ code: \"MODULE_DISABLED\", modul: \"finance\" }` (module.middleware `modulKapali` emsali). Kod `details` altında — `body.code` top-level DEĞİL. Geriye uyumlu: yalnız yeni alan eklendi, statü/metin değişmedi.",
+      "dosyalar": [
+        "Teks-Erp/src/middlewares/finance.middleware.ts",
+        "Teks-Erp/scripts/test_finance_flag_off.ts"
+      ],
+      "bekci": "test_finance_flag_off 10/0 (8→10, §2b eklendi; HTTP bölümü GERÇEKTEN koştu — PORT=4100 sunucu ayağa kaldırıldı) · test_module_flag_off 90/0 (sunucusuz 76/0 + 14 atlanmıştı, PORT=4101 ile tam koşuldu) · test_module_flags 72/0 · 8/8 finans bekçisi geçti (test_finance_regime_gate dahil)",
+      "sonda": "Negatif sonda: middleware'den `details.code` kaldırıldı → §2b altı ucun hepsinde KIRMIZI (`undefined`), geri alındı → 10/0."
+    }
+  ],
+  "acikKarar": [],
+  "belgeDuzeltmesi": [
+    "docs/standart/ESZAMANLILIK.md §3 tablosu ARTIK BAYAT: 8026/8027 çakışması KAPANDI (8029 kod tekilliği · 8030 master-data birleştirme). [ES-14] 'tam küme eşsizliğini ölçen bekçi bugün YOK' cümlesi ve [ES-16] 'devralınan: 2' baseline'ı da geçersiz — bekçi `scripts/test_advisory_lock_namespaces.ts` ile kuruldu, 10/10 sabit `: number` tiplendi.",
+    "docs/standart/ESZAMANLILIK.md §6 AÇIK-4 (traveler-card), AÇIK-5 (role-template job) ve AÇIK-8 (uzay çakışması) KAPANDI; AÇIK-6 (fason talimatı) da bu turda kapandı — tabloda '—' işaretli, 'bu turda düzeltiliyor' notu eklenmeli.",
+    "docs/standart/ESZAMANLILIK.md [ES-10] kanıt satırı 'bugünkü tek çapraz-uzay çifti 8021→8027 ARTAN (inventory.service.ts:988 → :1060)' → yeni numara 8021→8030 (hâlâ ARTAN).",
+    "docs/standart/ESZAMANLILIK.md [ES-01]/[ES-11] kanıtı 'tx dışında ≥2 model yazan TEK fonksiyon jobs/role-template-catalog.job.ts:57' artık geçersiz (devralınan: 1 → 0).",
+    "Teks-Erp/docs/BEKCI-HARITASI.md yeni bekçiyi (`Teks-Erp/scripts/test_advisory_lock_namespaces.ts`) TAŞIMIYOR; ayrıca `test_master_data_merge_race.ts` satırının açıklaması hâlâ `pg_advisory_xact_lock(8027,1)` diyor → 8030. Harita üretilmiş bir belge olduğu için elle satır eklemedim (bu turun harita sahibi başka bir ajan).",
+    "Teks-Erp/CLAUDE.md 'Yeni endpoint kontrol listesi' → `requireFinanceEnabled` satırı artık kardeş kapılarla aynı `details.code` sözleşmesini taşıyor; 'finance.middleware.ts, 30 mount' notunun yanına MODULE_DISABLED eklenebilir.",
+    "docs/standart/ESZAMANLILIK.md §3 'Envanterin tek kaynağı period-guard.helper.ts başlığıdır' cümlesi artık MEKANİK: kopya listeler 7 dosyadan kaldırıldı ve bekçi §6 ile kopya listeyi kırmızı veriyor — kural satırına zorlama etiketi 'bekçi:test_advisory_lock_namespaces' yazılmalı."
+  ]
+}

@@ -22,11 +22,18 @@ import { cn } from "@/lib/utils";
 type LineFieldError = { message?: string } | undefined;
 type LineError = { itemId?: LineFieldError; quantity?: LineFieldError } | undefined;
 
+/**
+ * Satır hatalarının bu bileşenin OKUDUĞU dar biçimi. Dışa açık, çünkü çağıran
+ * (`OrderFormDialog`) RHF'in geniş `FieldErrors` birleşimini buna daraltır —
+ * `any` yerine adı olan bir hedef tipe.
+ */
+export type OrderLineErrors = (LineError | undefined)[] | undefined;
+
 interface Props {
   value: OrderLineFormValues[];
   onChange: (next: OrderLineFormValues[]) => void;
   error?: string;
-  lineErrors?: (LineError | undefined)[];
+  lineErrors?: OrderLineErrors;
   /** Müşterinin aliası — alias suggest için; fiyat önerisinde müşteri istisnası. */
   customerId: string | null;
   /**

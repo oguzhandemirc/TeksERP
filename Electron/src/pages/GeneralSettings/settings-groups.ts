@@ -203,11 +203,11 @@ export function filterCategoryByModules(
   modules: SettingsModuleState,
   vendorView: boolean,
 ): ModuleFilteredRows {
-  const göster = (key: string) => isSettingRowModuleVisible(key, modules, vendorView);
-  const flags = (category.flags ?? []).filter((f) => göster(f.key));
-  const numberFlags = (category.numberFlags ?? []).filter((f) => göster(f.key));
-  const enumFlags = (category.enumFlags ?? []).filter((f) => göster(f.enumKey));
-  const settingFields = (category.settingFields ?? []).filter((f) => göster(f.key));
+  const isRowVisible = (key: string) => isSettingRowModuleVisible(key, modules, vendorView);
+  const flags = (category.flags ?? []).filter((f) => isRowVisible(f.key));
+  const numberFlags = (category.numberFlags ?? []).filter((f) => isRowVisible(f.key));
+  const enumFlags = (category.enumFlags ?? []).filter((f) => isRowVisible(f.enumKey));
+  const settingFields = (category.settingFields ?? []).filter((f) => isRowVisible(f.key));
   return {
     flags,
     numberFlags,

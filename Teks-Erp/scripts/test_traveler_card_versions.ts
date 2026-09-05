@@ -239,6 +239,75 @@ async function testSelfManagedGuard(cardId: string): Promise<void> {
   check("listVersions AÇIK (geçmiş buradan okunur)", versions.length === 2, `${versions.length} sürüm`);
 }
 
+// ── 6) YARIŞ: sürüm artırımı ATOMİK CLAIM ile korunur ───────────────────────
+// Eskiden `recordPrintEvent`/`reprint` sürümü "oku → +1 → yaz" ile artırıyordu.
+// İki eşzamanlı baskı AYNI numarayı hesaplar, arşiv `upsert`'i (tek
+// `[docType,sourceId,version]` satırı) ikisini TEK kopyaya çökertir ve birincinin
+// içeriği sessizce kaybolurdu.
+//
+// Pencere `Promise.allSettled` ile YAKALANMAZ (ES-17) — sonda pencereyi ELLE
+// açık tutulan bir tx ile kurar: kart satırı `FOR NO KEY UPDATE` ile kilitlenir
+// (ES-18: `FOR UPDATE` FK'nın KEY SHARE kilidini de bloklar), sürüm sonda tx'i
+// içinde artırılır, sonra commit edilir. Baskı olayının claim'i o anda taze
+// WHERE'i görür ve count=0 → 409 verir.
+async function testVersionRace(woId: string, cardId: string): Promise<void> {
+  console.log("\n── 6) Eşzamanlı sürüm artırımı (atomik claim) ──");
+  // Plan REVİZYON olsun ki sürüm gerçekten artsın (aynı içerik sürüm artırmaz).
+  await prisma.workOrder.update({ where: { id: woId }, data: { width: 170 } });
+  const before = await prisma.travelerCard.findUnique({
+    where: { id: cardId },
+    select: { version: true },
+  });
+  const baseVersion = before?.version ?? 0;
+
+  const gate = await pool.connect();
+  let err = "";
+  try {
+    await gate.query("BEGIN");
+    await gate.query("SELECT id FROM traveler_cards WHERE id = $1 FOR NO KEY UPDATE", [cardId]);
+    // Rakip baskı: kart bu sırada bir sürüm ilerledi.
+    await gate.query("UPDATE traveler_cards SET version = version + 1 WHERE id = $1", [cardId]);
+
+    // Baskı olayı BAŞLAR: planı (v+1) tx dışında kurar, sonra claim'de bloklanır.
+    // ⚠️ no-op `.catch` (ES-19): erken red sahipsiz rejection olur ve süreç
+    // "Sonuç" satırı basılmadan ölürdü — en sessiz kırmızı.
+    const printing = cardService.recordPrintEvent(cardId);
+    printing.catch(() => {});
+    // Planın tx dışı okuması bitsin, claim kilide dayansın.
+    await new Promise((r) => setTimeout(r, 400));
+    await gate.query("COMMIT");
+
+    try {
+      await printing;
+    } catch (e) {
+      err = (e as Error).message;
+    }
+  } finally {
+    await gate.query("ROLLBACK").catch(() => {});
+    gate.release();
+  }
+
+  check("rakip sürüm artışında baskı olayı 409 verir", err.length > 0, err || "hata YOK (claim delik)");
+  check("409 mesajı sebebi söylüyor", /bu sırada değişti/.test(err), err);
+
+  const rows = await ledger(cardId);
+  const raceVersion = baseVersion + 1;
+  check(
+    "kaybeden baskı deftere BAYAT sürüm yazmadı",
+    !rows.some((r) => r.version === raceVersion),
+    `defter: ${rows.map((r) => "v" + r.version).join(", ")}`,
+  );
+  const after = await prisma.travelerCard.findUnique({
+    where: { id: cardId },
+    select: { version: true },
+  });
+  check(
+    "kart sürümü YALNIZ rakibin artışını taşır (çift artış yok)",
+    after?.version === raceVersion,
+    `v${after?.version} (beklenen v${raceVersion})`,
+  );
+}
+
 async function main(): Promise<void> {
   console.log("=== Refakat kartı versiyon geçmişi bekçisi ===");
   let ctx: { woId: string; cardId: string } | null = null;
@@ -249,6 +318,7 @@ async function main(): Promise<void> {
     await testRevision(ctx.woId, ctx.cardId);
     await testHistoricalRender(ctx.cardId);
     await testSelfManagedGuard(ctx.cardId);
+    await testVersionRace(ctx.woId, ctx.cardId);
   } catch (err) {
     fail++;
     console.error("Beklenmeyen hata:", err);

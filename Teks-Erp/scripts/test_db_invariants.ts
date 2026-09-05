@@ -173,7 +173,12 @@ const PARTIAL_INDEXES: Array<{
   { table: "warehouse_movements", index: "warehouse_movements_goodsReceiptId_idx", uniq: false, predicate: `("goodsReceiptId" IS NOT NULL)`, why: "null-yoğun belge bağı" },
   // ticaret paketi — çuval-bütün transfer (migration 20260813212341)
   { table: "warehouse_movements", index: "warehouse_movements_sackId_idx", uniq: false, predicate: `("sackId" IS NOT NULL)`, why: "null-yoğun: yalnız çuval-bütün transfer satırları taşır" },
+  // index'siz domain FK kapanışı (migration 20260905140000) — kardeşleriyle simetrik
+  { table: "warehouse_movements", index: "warehouse_movements_shipmentId_idx", uniq: false, predicate: `("shipmentId" IS NOT NULL)`, why: "null-yoğun belge bağı: yalnız SHIPMENT* olayları taşır" },
+  { table: "warehouse_movements", index: "warehouse_movements_rollReturnId_idx", uniq: false, predicate: `("rollReturnId" IS NOT NULL)`, why: "null-yoğun belge bağı: yalnız RETURN olayları taşır" },
   { table: "sacks", index: "sacks_warehouseId_idx", uniq: false, predicate: `("warehouseId" IS NOT NULL)`, why: "eski çuvallar NULL (lazy adoption) — dolu satırlar 'bu depoda hangi çuvallar' sorgusunun yolu" },
+  { table: "sacks", index: "sacks_branchId_idx", uniq: false, predicate: `("branchId" IS NOT NULL)`, why: "null-yoğun: müşteri şubesi opsiyonel (migration 20260905140000)" },
+  { table: "direct_shipments", index: "direct_shipments_branchId_idx", uniq: false, predicate: `("branchId" IS NOT NULL)`, why: "null-yoğun: müşteri şubesi opsiyonel (migration 20260905140000)" },
   // ticaret paketi — ön muhasebe (migration 20260813201311)
   // ⚠️ "BİR KAYNAK → EN ÇOK BİR AKTİF FATURA". Uygulama katmanındaki
   // findFirst→if→create yarışa açıktır; yapısal engel partial unique'tir. Aynı
@@ -772,6 +777,9 @@ async function main(): Promise<void> {
       exp.name,
       live != null,
       live != null
+        // Envanter etiketi: istatistik NESNESİNİN tanımını (migration'da yaşıyor)
+        // adıyla anar — sorgu yazmıyor, nesneyi tarif ediyor.
+        // eslint-disable-next-line no-restricted-syntax
         ? `${live.table_name} — DATE_TRUNC('day') planner tahmini`
         : `statistics nesnesi YOK (${exp.table}) — günlük audit sorgusu yanlış plan seçebilir`
     );

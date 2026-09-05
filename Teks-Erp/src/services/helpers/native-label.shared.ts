@@ -255,7 +255,7 @@ export function asciiFold(s: string): string {
   return mapped
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
-    // eslint-disable-next-line no-control-regex
+    // ASCII dışı her kod noktası düşer (ZPL/PPLB tek bayt bekler).
     .replace(/[^\x00-\x7f]/g, "");
 }
 
@@ -265,7 +265,7 @@ export function asciiFold(s: string): string {
  * yalnız text/barkod veri alanlarına uygulanır.
  */
 export function cleanCtl(s: string | number | null | undefined): string {
-  // eslint-disable-next-line no-control-regex
+  // Kontrol/ASCII-dışı kod noktaları ayıklanır (yazıcı tek bayt bekler).
   return asciiFold(String(s ?? "").replace(/[\x00-\x1f]/g, " ")).trim();
 }
 
@@ -290,7 +290,7 @@ export const CP1254_TO_UNICODE: Record<string, string> = {
  * baytları ayıklanır (frame güvenliği). Önizleme (esc) baytları geri Türkçe'ye eşler → =çıktı.
  */
 export function cleanCtlCp1254(s: string | number | null | undefined): string {
-  // eslint-disable-next-line no-control-regex
+  // Kontrol/ASCII-dışı kod noktaları ayıklanır (yazıcı tek bayt bekler).
   const stripped = String(s ?? "").replace(/[\x00-\x1f]/g, " ").trim();
   let out = "";
   for (const ch of stripped) {

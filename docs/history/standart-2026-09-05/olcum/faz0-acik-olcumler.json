@@ -1,0 +1,241 @@
+{
+  "label": "faz0-acik-olcumler",
+  "tarih": "2026-09-05",
+  "kapsam": "BELİRSİZ-01 · M-01 · İ-listesi doğrulaması · mobil İ-20",
+  "notlar": "Her sayı gerçekten koşulmuş komuttan. Repo kaynak dosyası DEĞİŞTİRİLMEDİ; DB'ye yalnız SELECT count(*) atıldı.",
+
+  "BELIRSIZ_01_electron_istemci_suzmesi": {
+    "hukum": "İHLAL YOK — cursor'lu hiçbir listede istemci süzmesi bulunmadı.",
+    "olcum_komutlari": [
+      "grep -rn '\\.filter(' --include='*.tsx' Electron/src/pages | wc -l  → 296 (PROMPT'taki sayı doğrulandı; .ts dahil edilirse 464)",
+      "grep -rl 'useDataTable' --include='*.tsx' Electron/src/pages | wc -l → 13",
+      "grep -rl '<CrudPage' --include='*.tsx' Electron/src/pages | wc -l → 13",
+      "grep -rn 'useInfiniteQuery' Electron/src/pages → 7 sayfa (+1 test)",
+      "scratchpad/an2.mjs: 296 çağrının HER BİRİ için alıcı ifade (receiver) çok satırlı geri-yürüyüşle çıkarıldı; scratchpad/an3.mjs alıcısı sorgu sonucu olanları süzdü → 30 aday"
+    ],
+    "yontem": "Örnekleme YAPILMADI. (a) 296 çağrının tamamı makineyle sınıflandırıldı (alıcı ifade + dosyadaki useQuery/useInfiniteQuery/useDataTable bağlamaları). (b) Cursor'lu liste yüzeylerinin TAMAMI elle okundu: 13 useDataTable + 13 CrudPage + 7 useInfiniteQuery = 33 dosya. (c) Sorgu sonucu üstünde koşan 30 çağrının her biri elle okundu.",
+    "cursorlu_yuzeylerde_bulunan_filter": [
+      "Operations/Shipments/ShipmentsPage.tsx:175,232 — SEÇİLİ satırlar (bulkActions argümanı) üstünde; görünen satır kümesini daraltmaz, toplu işlem hedefini süzer. Kodda 5 satırlık gerekçe yorumu var. İHLAL DEĞİL.",
+      "Operations/Rolls/RollsTableBody.tsx:215 — FilterDef.options (filtre açılır listesi) süzülüyor, veri değil. İHLAL DEĞİL.",
+      "Operations/Rolls/RollsPage.tsx:89 — TABS sabiti. İHLAL DEĞİL.",
+      "Operations/SackContentEdit/SacksListView.tsx:92 — CSV filtre değerlerinden sentinel ayıklama. İHLAL DEĞİL.",
+      "Operations/SackStore/SackStorePage.tsx:119 — useInfiniteQuery sayfalarına okutulmuş sevkiyatları EKLER (dedupe); daraltmaz, genişletir. İHLAL DEĞİL.",
+      "Customers/CustomersPage.tsx:27 — form taslağı (v.branches), liste değil. İHLAL DEĞİL."
+    ],
+    "tam_yuklu_listede_istemci_suzmesi_ihlal_degil": {
+      "aciklama": "Kural 'cursor'lu listede süzme SUNUCUDA' der. Aşağıdakiler cursor'suz, TEK istekte tamamı gelen katalog/master listeleri (düz useQuery ya da loadAllForPicker). loadAllForPicker (Electron/src/lib/picker-loader.ts:74-82) veri seti PICKER_MAX_PAGE_SIZE'ı aşarsa SESSİZ KESMEK yerine hata fırlatır — yani 'tamamı elde' garantisi mekanik.",
+      "siteler": [
+        "Access/Users/AccessUsersPage.tsx:98,104 (adminUserService.list — tam yük; Türkçe katlama yorumu var)",
+        "Access/Templates/TemplatesPage.tsx:59",
+        "Access/Permissions/PermissionsCatalogPage.tsx:50,84",
+        "StationCapabilities/StationCapabilitiesPage.tsx:104",
+        "Devices/DevicesPage.tsx:76,82",
+        "Stations/ProductionStationsPage.tsx:164,195 (loadAllForPicker)",
+        "ReasonPresets/ReasonPresetsPage.tsx:61 (reasonPresetService.list(true))",
+        "Customers/CustomerColorAliasesPanel.tsx:100 (müşteri başına alias listesi)",
+        "Reports/Finance/CashBookPage.tsx:117 (para birimi bölümlemesi — sunum)",
+        "Operations/SackContentEdit/SackContentsReadonlyTable.tsx:42 (çuval içi toplar — detay, tam yük)"
+      ]
+    },
+    "standarda_yazilacak_cumle": "İstemci süzmesi YALNIZ tamamı tek istekte gelen listede meşrudur (loadAllForPicker ya da sayfasız useQuery); useDataTable / CrudPage / useInfiniteQuery sonucu üstünde `.filter(` ile satır daraltmak yasaktır — seçili-satır ve filtre-seçeneği süzmeleri bu yasağın dışındadır."
+  },
+
+  "M_01_tablo_buyuklukleri": {
+    "kaynak": "tekserp_demo @ localhost:55433 (GELİŞTİRME DB'si — canlı fabrika DEĞİL)",
+    "komut": "cd Teks-Erp && npx tsx <geçici script> — src/lib/prisma üzerinden `SELECT count(*)::int FROM \"<tablo>\"` (Prisma 7 adapter gerektirdiği için proje istemcisi kullanıldı); script koşum sonrası silindi",
+    "index_siz_5_domain_fk": {
+      "subcontractor_direct_ship_allocations": 0,
+      "direct_shipments": 0,
+      "sacks": 41,
+      "warehouse_movements": 213
+    },
+    "updatedAt_siz_10_model": {
+      "roll_operations": 222,
+      "subcontractor_dispatch_items": 117,
+      "roll_variances": 0,
+      "sack_tag_assignments": 0,
+      "user_recovery_codes": 10,
+      "item_allowed_properties": 0,
+      "item_allowed_colors": 0,
+      "roll_properties": 0,
+      "import_runs": 60,
+      "yarn_movements": 16
+    },
+    "olcek_referansi": { "rolls": 523, "system_logs": 24482 },
+    "hukum": "Dev DB'de HİÇBİR tablo 250 satırı geçmiyor → index migration'ı burada anlık. ⚠️ Bu sayı CANLI maliyeti ÖLÇMEZ: canlı kurulumda `sacks`/`warehouse_movements` yüz binlere çıkabilir. `CREATE INDEX CONCURRENTLY` bu repoda YASAK (Prisma tx'i içinde çalışmaz) → index migration'ı tabloyu kilitler. Karar: migration şema provası en eski canlı dump'ta koşulup süre ÖLÇÜLMELİ; ölçülmeden canlıya gitmez. system_logs 24.482 satır — M-03'ün GIN index'i asıl maliyet kalemi, o da CONCURRENTLY'siz."
+  },
+
+  "I_listesi_dogrulamasi": [
+    {
+      "kimlik": "İ-10",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "Teks-Erp/src/services/helpers/code-unique.helper.ts:57 (CODE_UNIQUE_LOCK_NS=8026) ↔ Teks-Erp/src/services/helpers/period-guard.helper.ts:73 (PERIOD_CLOSE_LOCK_NS=8026)",
+      "not": "Çakışma DOĞRULANDI, satır numaraları birebir. İKİNCİ, keşifte GEÇMEYEN çakışma da var: purchase-order.service.ts:110 (PURCHASE_ORDER_LOCK_NS=8027) ↔ master-data-merge.service.ts:50 (MERGE_LOCK_NS=8027) — kök CLAUDE.md bunu 'açık iş' diye biliyor ama envanterde yok. Ayrıca envanter METİNLERİ de ayrışmış: period-guard başlığı 8026'yı 'cari dönem kapanışı', code-unique ve master-data-merge 'kod tekilliği' diye yazıyor.",
+      "tam_liste_10_sabit": [
+        "DUPLICATE_GUARD_LOCK_NS · src/services/helpers/duplicate-guard.helper.ts:28 · 8021 · KK1 mükerrer giriş tuzağı",
+        "BATCH_NUMBER_LOCK_NS · src/services/batch.service.ts:96 · 8022 · parti numarası üreteci (tek global anahtar)",
+        "SHIPMENT_LOCK_NS · src/services/helpers/shipment-locks.helper.ts:28 · 8023 · sevkiyat kapsamı",
+        "SESSION_REGISTRY_LOCK_NS · src/services/session-registry.service.ts:32 · 8024 · oturum kaydı",
+        "PERM_ADMIN_LOCK_NS · src/services/permission-management.service.ts:21 · 8025 · yetki (son-admin) guard'ı",
+        "CODE_UNIQUE_LOCK_NS · src/services/helpers/code-unique.helper.ts:57 · 8026 · kod tekilliği (ÇAKIŞMA)",
+        "PERIOD_CLOSE_LOCK_NS · src/services/helpers/period-guard.helper.ts:73 · 8026 · cari dönem kapanışı (ÇAKIŞMA)",
+        "PURCHASE_ORDER_LOCK_NS · src/services/purchase-order.service.ts:110 · 8027 · alış siparişi senkronu (ÇAKIŞMA)",
+        "MERGE_LOCK_NS · src/services/master-data-merge.service.ts:50 · 8027 · master-data birleştirme, tek global anahtar (ÇAKIŞMA)",
+        "CASH_PERIOD_CLOSE_LOCK_NS · src/services/helpers/cash-period-guard.helper.ts:55 · 8028 · kasa/banka dönem kapanışı"
+      ],
+      "ciplak_sayi_taramasi": "grep 'pg_advisory' src → sabit dışı ÇIPLAK sayı ile alınan kilit YOK; tüm çağrılar sabit üzerinden (kalan eşleşmeler yalnız yorum satırı). master-data-live.helper.ts:68 MERGE_LOCK_NS'i _shared formuyla alır (aynı uzay, bilinçli)."
+    },
+    {
+      "kimlik": "İ-11",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "Teks-Erp/src/services/traveler-card.service.ts:269 (findUnique) → :275 (status !== ACTIVE kontrolü) → :281-291 (update, version: existing.version + 1 :284)",
+      "not": "Claim DEĞİL, dürtme: tx içinde ama `updateMany WHERE {id, status, version}` + count===0 yok. `reprint` metodu :258'de. İkinci bulgu da yerinde: `recordPrintEvent` :349, tx içindeki update :369."
+    },
+    {
+      "kimlik": "İ-12",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "Teks-Erp/src/jobs/role-template-catalog.job.ts:57 (reconcileRoleTemplates)",
+      "not": "Dosyada `$transaction` HİÇ YOK. Çok-model yazımlar: :118 permissionTemplate.update · :147 permissionTemplate.create · :172 permissionTemplateItem.createMany. Yarıda kalan boot uzlaştırması şablonu izinsiz bırakır."
+    },
+    {
+      "kimlik": "İ-13",
+      "gecerliMi": "satir-kaydi",
+      "guncelKonum": "Teks-Erp/src/services/subcontractor.service.ts:4748 (updateInstruction) · :4753 findUnique · :4774-4782 iki guard · :4785 update",
+      "not": "Yazma satırı 4784 değil 4785 (bir satır kaymış). Desen aynen duruyor: tx YOK, check-then-act; cancelledAt ve 'kabul edilmiş mi' kontrolleri ile update arasında yarış penceresi var."
+    },
+    {
+      "kimlik": "İ-14",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "Electron/src/pages/StationCapabilities/StationCapabilitiesPage.tsx:250 (const editable = cap.canApplyProperty) · :279-286 ('Yetkinlikleri Düzenle' butonu, PermissionGate YOK) · route izni Electron/src/routes/content-routes.tsx:486 requirePermission=\"station:read\"",
+      "not": "DOĞRU İZİN KODU: `station:write`. Backend zaten onu istiyor — Teks-Erp/src/routes/station-capability.routes.ts:190-193 `router.put('/:stationId', ..., requirePermission('station:write'))`; katalogda kayıtlı: src/constants/permission-catalog.ts:67. Panel yazma kapısını HİÇ koymuyor: buton tek koşulu `cap.canApplyProperty` (bir VERİ özelliği, izin değil). Sonuç: yalnız `station:read` olan kullanıcı sheet'i açıp Kaydet'e basar, 403'ü sunucudan yer — 'çıkışsız kapı' değil, 'kapısız çıkış'. Ek: src/constants/screen-catalog.ts:195 bu ekran için `capabilities: []` diyor; kardeş satırlar (:176-181) `capabilities: [\"station:write\"]` taşıyor → katalog da düzeltilmeli."
+    },
+    {
+      "kimlik": "İ-16",
+      "gecerliMi": "gecersiz",
+      "guncelKonum": "Electron/src/pages/Customers/schema.ts:21",
+      "not": "YANLIŞ POZİTİF. :21 `branchDraftSchema.code` — aynası `Customer.code` DEĞİL, `CustomerBranch.code` ve o kolon prisma/schema.prisma:2178'de `String? @db.VarChar(50)`. Yani max(50) DOĞRU; dosyanın kendi yorumu da (satır 12-14) bunu söylüyor. `Customer.code` (schema.prisma:2069, VarChar(32)) panelde HİÇ düzenlenmiyor (customerFormSchema'da `code` alanı yok). ⚠️ AMA aynı dosyada GERÇEK bir sapma var: Customers/schema.ts:63 `name ... .max(200)` ↔ prisma/schema.prisma:2070 `Customer.name @db.VarChar(100)` → 101-200 karakterlik ad panelden geçer, DB'de P2000 olur. İ-16 bu satırla DEĞİŞTİRİLMELİ."
+    },
+    {
+      "kimlik": "İ-25",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "Electron/src/components/layout/NotificationBell.tsx:28-31",
+      "not": "Birebir: `const canSee = permissions.includes(\"*\") || permissions.includes(\"admin:*\") || permissions.includes(\"admin:settings\")`. Doğru yazım `matchesPermission(permissions, \"admin:settings\")` — helper `@/types/auth`'ta, hook aynası `useRoleAccess.hasPermission` (src/hooks/useRoleAccess.ts:18)."
+    },
+    {
+      "kimlik": "İ-02",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "Teks-Erp/src — 48 tx alan export fonksiyon, 33'ü *Tx sonekli, 15'i soneksiz (keşif sayısı doğrulandı)",
+      "not": "İkisi ESNEK İSTEMCİ alıyor (tx VEYA prisma) — bunlara *Tx soneki YANLIŞ olur, ayrı sınıf: customer-name.helper.ts:77 ve supplier-party.helper.ts:89."
+    },
+    {
+      "kimlik": "M-04",
+      "gecerliMi": "gecerli",
+      "guncelKonum": "7+1 hard delete'in TAMAMI belirtilen satırlarda doğrulandı",
+      "not": "Hükümler ayrı alanda; özet: 8'in 8'i de MEŞRU istisna, hiçbiri soft'a çevrilmemeli — eksik olan tek şey kök CLAUDE.md'deki istisna listesinin dar olması."
+    }
+  ],
+
+  "M_04_hard_delete_hukumleri": [
+    "customer-alias.service.ts:94 · customerItemAlias.delete · MEŞRU İSTİSNA. Satırın TEK içeriği alias'ın kendisi (CustomerItemAlias'ta isActive/assigned kolonu yok, schema.prisma:5221-5243); 'sil' = 'müşterideki adı kaldır'. FK'lar Cascade, bağımlı kayıt yok, AuditService.log DELETE ile iz bırakıyor. → Listeye eklenir, koda dokunulmaz.",
+    "customer-alias.service.ts:198 · customerColorAlias.delete · MEŞRU İSTİSNA ve zaten KOŞULLU: assigned=true satır soft temizlenir (alias:null, :184-194), yalnız 'sadece ad taşıyan' (assigned=false) satır fiziksel silinir. Kodda gerekçe yorumu var. → Listeye eklenir.",
+    "duplicate-review.service.ts:151 · duplicateReview.delete · MEŞRU İSTİSNA. Satır bir KARAR işaretidir, domain kaydı değil; silme = 'kararı geri aç' (çift bir sonraki taramada yine kuyruğa düşer). Guard var: MERGED kararı geri açılamaz (409). Audit yazılıyor. → Listeye eklenir.",
+    "sack-tag.service.ts:218 · sackTag.delete · MEŞRU İSTİSNA — kök CLAUDE.md'de zaten adı geçen 'bağımlılık-guard'lı DELETE' sınıfının tam örneği: :212-216 sackTagAssignment.count > 0 → 409 (Türkçe mesaj + 'Pasif yapın' yönlendirmesi), DB'de ayrıca FK onDelete:Restrict seddi. → Listeye eklenir (sınıf zaten var, örnek eksik).",
+    "permission-management.service.ts:1041 · permissionTemplate.delete · MEŞRU İSTİSNA ve DALLI: sistem rolü (code != null) SERT SİLİNMEZ, isActive:false yapılır (:1039); yalnız fabrikanın kendi şablonu (code = null) fiziksel silinir. Gerekçe kodda 8 satır (boot uzlaştırması sert silineni diriltirdi). Kök CLAUDE.md'deki 'sistem rolünü sert silmek' yasağıyla tutarlı. → Listeye eklenir.",
+    "batch.service.ts:337 · tx.batch.delete · MEŞRU İSTİSNA — 'boş çuval silme' emsalinin kardeşi. deleteIfEmptyAndTraceless BEŞ iz kapısı geçmeden silmez: top / fason sevki / çocuk parti (splitFromId) / mergedIntoId / mergedChildren. → Listeye eklenir.",
+    "label-template.service.ts:886 · labelTemplateVariant.delete · MEŞRU İSTİSNA (pivot/çocuk satır replace sınıfı). Primary varyant kardeşi varken silinemez (:883 400); şemada LabelTemplateVariant'a gelen FK YOK (yalnız LabelTemplate.variants) → bağımlılık guard'ı zaten konusuz. Audit yazılıyor. → Listeye eklenir.",
+    "invoice.service.ts:883 · invoice.deleteMany({id, status: DRAFT}) · MEŞRU İSTİSNA ve ÖRNEK ALINACAK: taslak deftere hiçbir şey yazmadı; silme ATOMİK CLAIM ile yapılıyor (count===0 → taze okuma → 409). Kodda Sınıf-4 gerekçesi yazılı. → Listeye eklenir ve finans.md'de 'çift yüklem/claim' örneği olarak anılır."
+  ],
+
+  "I_02_tx_soneksiz_fonksiyonlar": [
+    "src/services/batch.service.ts:291 assertBatchInWorkOrder(tx, batchId, workOrderId) → assertBatchInWorkOrderTx",
+    "src/services/batch.service.ts:313 deleteIfEmptyAndTraceless(tx, batchId) → deleteIfEmptyAndTracelessTx",
+    "src/services/helpers/customer-name.helper.ts:77 batchLoadAliases(client: tx | {…}) → ESNEK İSTEMCİ, *Tx soneki YANLIŞ olur (ayrı sınıf)",
+    "src/services/helpers/finance.helper.ts:38 nextInvoiceNo(tx, type, date) → nextInvoiceNoTx",
+    "src/services/helpers/finance.helper.ts:52 nextPaymentNo(tx, direction, date) → nextPaymentNoTx",
+    "src/services/helpers/finance.helper.ts:210 resolveExchangeRate(tx, currency, onDate) → resolveExchangeRateTx",
+    "src/services/helpers/order-status.helper.ts:48 computeLineLedger(tx, lineIds) → computeLineLedgerTx",
+    "src/services/helpers/order-status.helper.ts:96 recomputeOrderStatus(tx, orderId, toleranceMeters?) → recomputeOrderStatusTx",
+    "src/services/helpers/order-status.helper.ts:212 recomputeOrderStatusForOrders(tx, orderIds) → recomputeOrderStatusForOrdersTx",
+    "src/services/helpers/roll-barcode.helper.ts:39 generateRollBarcode(db, type, date) → generateRollBarcodeTx (parametre adı `db`, tipi TransactionClient)",
+    "src/services/helpers/roll-barcode.helper.ts:74 reserveRollBarcodes(db, type, count, date) → reserveRollBarcodesTx",
+    "src/services/helpers/roll-barcode.helper.ts:109 reserveRollBarcodesInOrder(db, types, date) → reserveRollBarcodesInOrderTx",
+    "src/services/helpers/supplier-party.helper.ts:89 resolveSupplierParty(input, opts, db = prisma) → ESNEK İSTEMCİ (varsayılan prisma), *Tx soneki YANLIŞ olur (ayrı sınıf)",
+    "src/services/helpers/traveler-card-fanout.helper.ts:18 setWorkOrderCardStatuses(tx, workOrderId, from, to) → setWorkOrderCardStatusesTx",
+    "src/services/subcontractor.service.ts:113 nextPrefixedSequence(tx, table, prefix, date) → nextPrefixedSequenceTx"
+  ],
+
+  "I_20_mobil_haptics": {
+    "signalScan_sozlesmesi": {
+      "dosya": "mobil/src/services/scanFeedback.ts",
+      "imza": "signalScan(outcome: 'accept' | 'duplicate' | 'reject'): void",
+      "davranis": "vibrate(outcome) HER ZAMAN (kapatılamaz — son geri bildirim hattı) + play(outcome) yalnız useDeviceSettingsStore.scanSoundEnabled açıkken. accept=NotificationFeedbackType.Success, reject=Error, duplicate=110 ms arayla İKİ Light impact (kabulün tek darbesinden ve retin uzun uyarısından elde ayırt edilebilir). Ses tembel kurulur, her hata yutulur.",
+      "duplicate_neden_ayri": "Aynı sinyal verilirse operatör topu iki kez saydığını sanır; hiç sinyal verilmezse 'okumadı' sanıp tekrar okutur — ikisi de yanlış."
+    },
+    "uc_atif_dogrulandi": [
+      {
+        "dosya": "mobil/src/screens/Modules/Depo/DepoScreen.tsx",
+        "handler": "handleBarcodeScanned (:281)",
+        "guncel_satirlar": "296, 299, 309, 316, 319 (iddia 296-319 — BİREBİR)",
+        "cevrim": [
+          ":296 kartela bulunamadı (Error) → signalScan('reject')",
+          ":299 kartela bulundu (Light impact) → signalScan('accept')",
+          ":309 top bulunamadı (Error) → signalScan('reject')",
+          ":316 top CANCELLED, teşhis paneli açılıyor (Warning) → signalScan('reject') — 'kabul edilmedi' sınıfı; sözleşmede dördüncü sonuç YOK, uydurulmaz",
+          ":319 top bulundu (Light impact) → signalScan('accept')"
+        ],
+        "ek_bulgu": "catch bloğu (:322-328) Toast basıyor ama HİÇ haptic yok → signalScan('reject') eklenmeli. 'duplicate' vakası bu ekranda yok (okutma nokta-sorgu, listeye ekleme değil)."
+      },
+      {
+        "dosya": "mobil/src/screens/Modules/KursunQc/KursunQcScreen.tsx",
+        "handler": "resolveCard (:366) + openResolvedStep (:431) + confirmReopen (:463)",
+        "guncel_satirlar": "396, 406, 419, 446, 477 (iddia 446/477 — BİREBİR; aynı yolda 3 site daha var)",
+        "cevrim": [
+          ":396 kart bulunamadı (Error) → signalScan('reject')",
+          ":406 adım COMPLETED, reopen onayı isteniyor (Warning) → SİNYAL VERİLMEZ; bu bir soru, okutmanın sonucu değil (onay sonrası :446 accept ya da :477 reject konuşur)",
+          ":419 kart çözülemedi / yanlış istasyon (Error) → signalScan('reject')",
+          ":446 kart açıldı, sekme eklendi (Success) → signalScan('accept')",
+          ":477 reopen başarısız (Error) → signalScan('reject')"
+        ],
+        "ek_bulgu": "EN ÖNEMLİSİ: :373-383 'Kart zaten açık' dalı — mükerrer okutma, Toast var, HAPTIC/SES HİÇ YOK. İ-20'nin sahadaki zararı tam burası: → signalScan('duplicate')."
+      },
+      {
+        "dosya": "mobil/src/screens/Modules/TartiPaket/PaketlemeScreen.tsx",
+        "handler": "drainScans (:343) + handleScan (:395)",
+        "guncel_satirlar": "361, 364, 376, 384 (iddia 361-384 — BİREBİR)",
+        "cevrim": [
+          ":361 çuval barkodu havuzda bulundu, aktif yapıldı (Success) → signalScan('accept')",
+          ":364 çuval bu havuzda değil (Error) → signalScan('reject')",
+          ":376 top/kartela çuvala eklendi (Success) → signalScan('accept')",
+          ":384 eklenemedi — catch (Error) → signalScan('reject')"
+        ],
+        "ek_bulgu": "handleScan :398 — aynı kod işlenmekte ya da kuyrukta ise SESSİZ return. Mükerrer okutmanın ta kendisi: → signalScan('duplicate'). Ayrıca :384 tek kova; backend 'zaten bu çuvalda' derse duplicate'e ayrılmalı (details.code ile)."
+      }
+    ],
+    "kalan_8_dosya": {
+      "okutma_yolu_EVET_donusturulmeli": [
+        "mobil/src/screens/Modules/FasonKabul/FasonKabulScreen.tsx — handleResolveCard (:958); Haptics :968 (kart yok→reject) :973 (kart pasif→reject) :993 (pendingReturns hatası→reject) :1030 (tek sevk bulundu→accept) :1045 (catch→reject). Sessiz dallar: :1013 NEEDS_DISPATCH / :1018 MAYBE_WRONG_RECEIPT kalıcı karta düşüyor (sinyal yok) ve :1020 'Bekleyen sevk yok' toast'unda haptic yok.",
+        "mobil/src/screens/Modules/FasonSevk/FasonSevkScreen.tsx — KARMA dosya: TOP okutma yolu ZATEN signalScan/useScanFeedback kullanıyor (:792 accept, :52-53 import). Dönüştürülmemiş olan KART okutma yolu handleCardScan (:449): Haptics :454 (top barkodu kart alanına→reject) :467 (kart yok) :472 (kart pasif) :482 (WO yüklenemedi) :487 (WO sevke uygun değil) :506 (açık fason adımı yok) :514 (accept) :529 (catch). Ayrıca :811 notifyReject ve :837 looksLikeCardBarcode dallarının tarayıcı-kapalı kolu ham Haptics.",
+        "mobil/src/screens/Modules/Tambur/TamburScreen.tsx — kart çözümleme yolu (:960 civarı); Haptics :983 (kart yok→reject) :1000 (accept) :1016 (bypass sonrası accept) :1050 (reject) :1084 (alan-düzeltme kartı accept) :1094 (reject). :967 'Kart zaten açık' dalı SESSİZ → duplicate.",
+        "mobil/src/screens/Modules/KartelaSevk/KartelaSevkScreen.tsx — addRoll (:124); Haptics :137 (top WAREHOUSE değil→reject) :148 (top çuvalda→reject) :169 (accept) :172 (catch→reject). :127-131 'Bu top zaten eklendi' SESSİZ → duplicate. Ayrıca addRollFromList :200 (liste seçimi — okutma değil; accept sinyali vermek tartışmalı, olduğu gibi bırakılabilir).",
+        "mobil/src/screens/Modules/IadeGirisi/IadeGirisiScreen.tsx — lookup (:159); Haptics :162 (çevrimdışı→reject) :181 (accept) :183 (catch→reject).",
+        "mobil/src/screens/Auth/LoginScreen.tsx — submitCard (:276), QR personel kartı okutması; Haptics :282 (accept) :287 (reject). Okutma yolu ama KİMLİK yolu — istasyon okutmasıyla aynı sözlük kullanılabilir, öncelik DÜŞÜK (ses ayarı burada anlamsız olabilir; kararı ayrı ver)."
+      ],
+      "okutma_yolu_AMA_baska_amac_donusturulmez": [
+        "mobil/src/screens/Modules/HizliIsEmri/useQuickWorkOrder.ts:657 — `Haptics.selectionAsync()` YAKALAMA TIKI ('kabul/ret sonra' yorumu satırın kendisinde). Dosya sonuç sinyalini zaten signalScan/flashDuplicate ile veriyor (:604 accept, :625 duplicate). Sözleşmede 'yakalandı' sonucu YOK → dönüştürülmez; bekçi bu çağrıyı beyaz listeye almalı ya da sözleşmeye dördüncü, sesSİZ bir 'capture' eklenmeli (ayrı karar).",
+        "mobil/src/components/BarcodeScannerView.tsx:286 — `captureHaptic` opt-in YAKALAMA ONAYI; bileşenin kendi yorumu (:122) 'sonucu ÇAĞIRAN yönetir' diyor ve FasonSevk `captureHaptic={false}` ile kapatıyor (:1516). Paylaşılan tarayıcı bileşeni, ekran değil → dönüştürülmez."
+      ],
+      "okutma_yolu_HAYIR_liste_ic_dokunus": [
+        "mobil/src/screens/Modules/KartelaKabul/KartelaKabulScreen.tsx:382 openJob / :394 saveEntry — liste dokunuşu ve ölçü kaydetme, okutma değil.",
+        "mobil/src/screens/Modules/KK1/KK1Screen.tsx:296 handlePress — buton basış tıkı. KK1'in GERÇEK okutma yolu zaten signalScan (:607 accept, :615 reject) — bu dosya İ-20 listesinde DEĞİL.",
+        "mobil/src/components/session/PlaceConfirmView.tsx:157 — oturum açma başarısı, okutma değil.",
+        "Kalan ~32 dosya (RefreshButton, LabelPrinter, useSackWeigh, PressableScale, LockScreen, tüm *Mutation onSuccess/onError'ları …) mutasyon/etkileşim geri bildirimi — okutma yolu değil, kapsam dışı."
+      ]
+    },
+    "olcum_komutlari": [
+      "grep -rl 'expo-haptics' mobil/src → 47 dosya (2 test + scanFeedback.ts dahil)",
+      "scratchpad/hap.mjs — her `Haptics.*` çağrısı için en yakın üst bildirim adı çıkarıldı; 43 üretim dosyası tarandı",
+      "grep -rn 'signalScan|useScanFeedback' mobil/src → tüketiciler: FasonSevkScreen, useQuickWorkOrder, KK1Screen (+ hooks/useScanFeedback, testler)"
+    ],
+    "hukum": "İ-20 GEÇERLİ ve üç atıf da satır satır doğru. Okutma yolunda ham Haptics taşıyan dosya sayısı 11 (keşif sayısıyla birebir): 3 atıflı + 6 dönüştürülecek + 2 bilinçli 'yakalama' istisnası. Bekçi (AST) yazılırken beyaz liste ŞART: BarcodeScannerView.tsx ve useQuickWorkOrder.ts:657 meşrudur."
+  }
+}

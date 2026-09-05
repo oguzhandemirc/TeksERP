@@ -98,11 +98,10 @@ import type { ApiResponse } from "../types/api.types";
 /**
  * Alış siparişi senkronunun `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
  *
- * ⚠️ Kullanımdaki namespace'ler: 8021 KK1 mükerrer tuzağı · 8022 parti no ·
- * 8023 sevkiyat kapsamı · 8024 oturum kaydı · 8025 izin yönetimi · 8026 dönem
- * kapanışı. Yeni bir alt sistem eklerken BU LİSTEYE BAK: aynı namespace + aynı
- * hashtext çakışması iki alakasız alt sistemi sessizce serileştirir (hata yok,
- * yalnız yavaşlama).
+ * Uzay envanteri TEK KAYNAK: `helpers/period-guard.helper.ts` başlığı — kopya
+ * liste tutulmaz. Bu uzay **8027 alış siparişi karşılanma**dır. Yeni bir alt
+ * sistem eklerken ENVANTERE BAK: aynı namespace + aynı hashtext çakışması iki
+ * alakasız alt sistemi sessizce serileştirir (hata yok, yalnız yavaşlama).
  *
  * Açıkça `number` tiplenmiş: literal tip çıkarımı, ileride başka bir sabitle
  * karşılaştırma yazıldığında TS2367 ile derlemeyi kırardı (SHIPMENT_LOCK_NS emsali).
