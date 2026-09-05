@@ -1,0 +1,110 @@
+{
+  "label": "kutuphane-politikasi",
+  "olcumTarihi": "2026-09-05",
+  "yontem": "bagimlilik-envanteri.json baslangic; 'importFiles: 0' olan 40 paket grep + node_modules peer taramasi + app.json/jest.config/vite config ile TEK TEK dogrulandi. Lisanslar node_modules/<paket>/package.json'dan okundu. Backend CJS uyumu require.resolve ile olculdu.",
+
+  "yanlisPozitifler_import0_amaCANLI": [
+    {"paket": "exceljs", "proje": "Electron", "kanit": "src/lib/xlsx-export.ts:39 `const { default: ExcelJS } = await import(\"exceljs\")` + src/lib/import/parse.ts:129", "sebep": "dinamik import (Vite ayri chunk, ~1MB acilista yuklenmesin)"},
+    {"paket": "serialport", "proje": "Electron", "kanit": "electron/ipc/printer.ipc.ts:42 `req(\"serialport\")`, scale.ipc.ts", "sebep": "ESM main -> CJS native, createRequire + try/catch"},
+    {"paket": "node-hid", "proje": "Electron", "kanit": "electron/ipc/scanner.ipc.ts:70 `req(\"node-hid\")`", "sebep": "ayni (native, electron-rebuild ile)"},
+    {"paket": "bonjour-service", "proje": "Electron", "kanit": "electron/discovery/mdns-browser.ts:57 `req(\"bonjour-service\")`", "sebep": "lazy require; ayrica bekci src/test/discovery-ipc-contract.test.ts:126-132"},
+    {"paket": "@fontsource/plus-jakarta-sans", "proje": "Electron", "kanit": "src/main.tsx:6-9 CSS import (400/500/600/700)", "sebep": "CSS import, JS import degil"},
+    {"paket": "prisma", "proje": "Teks-Erp", "kanit": "package.json:19-20 prisma:generate/migrate; deploy/kur.ps1 [7/9] migrate deploy; paketle.ps1:245 PRISMA_CLI_BINARY_TARGETS", "sebep": "CLI-only; dependencies'te olmasi ZORUNLU (npm ci --omit=dev devDep'i elerdi -> fabrika kurulumunda migrate calismaz)"},
+    {"paket": "expo-build-properties", "proje": "mobil", "kanit": "app.json plugins[2]", "sebep": "config plugin"},
+    {"paket": "expo-asset", "proje": "mobil", "kanit": "app.json plugins[4]", "sebep": "config plugin (expo-audio peer'i kok cekme vakasi, docs/kurallar/filtre-liste.md:84)"},
+    {"paket": "jest-expo", "proje": "mobil", "kanit": "jest.config.js `preset: \"jest-expo\"`", "sebep": "jest preset"},
+    {"paket": "react-native-screens", "proje": "mobil", "kanit": "@react-navigation/native-stack peer", "sebep": "peer"},
+    {"paket": "react-native-worklets", "proje": "mobil", "kanit": "react-native-reanimated 4.x peer", "sebep": "peer"},
+    {"paket": "@playwright/test / @stryker-mutator/*", "proje": "Electron", "kanit": "playwright.config.ts, stryker.conf.json, e2e/*.smoke.spec.ts", "sebep": "config dosyasi ile kosar"},
+    {"paket": "@testing-library/dom + jest-dom + tailwindcss + vite + electron-builder + eslint*", "proje": "hepsi", "kanit": "peer / config / CLI", "sebep": "arac zinciri"}
+  ],
+
+  "silmeAdaylari_dogrulanmis": [
+    {"paket": "@react-pdf/renderer", "proje": "Electron", "surum": "^4.5.1", "kanit": "grep tum repo (node_modules/dist/release haric): YALNIZ package.json:57 + package-lock", "not": "fiili PDF yolu YOK - baski HTML+iframe, disa aktarim exceljs. Buyuk paket."},
+    {"paket": "electron-window-state", "proje": "Electron", "surum": "^5.0.3", "kanit": "yalniz package.json:71", "not": "pencere durumu elle yonetiliyor olmali"},
+    {"paket": "@radix-ui/react-avatar", "proje": "Electron", "surum": "^1.1.10", "kanit": "yalniz package.json:43", "not": "shadcn primitifi hic sarmalanmamis"},
+    {"paket": "@radix-ui/react-scroll-area", "proje": "Electron", "surum": "^1.2.10", "kanit": "yalniz package.json:50", "not": "ayni"},
+    {"paket": "@radix-ui/react-switch", "proje": "Electron", "surum": "^1.2.6", "kanit": "yalniz package.json:54", "not": "ayni"},
+    {"paket": "@fontsource/roboto", "proje": "Electron", "surum": "^5.2.10", "kanit": "yalniz package.json:41", "not": "CIFT font - canli olan plus-jakarta-sans"},
+    {"paket": "@faker-js/faker", "proje": "Teks-Erp", "surum": "^10.4.0", "kanit": "grep src+scripts+prisma: 0 eslesme", "not": "devDep; seed/fixture'lar faker kullanmiyor"},
+    {"paket": "react-native-ble-plx", "proje": "mobil", "surum": "^3.5.1", "kanit": "yalniz src/services/bluetooth.service.ts (27 satir); o dosyayi import eden YOK (grep 'bluetooth.service|BleManager|bluetoothService' -> 3 satir, hepsi kendi icinde). app.json plugins[1]'de -> APK'ya native + izin tasiyor", "not": "CIFT BT: canli yol BT-Classic"},
+    {"paket": "react-native-vector-icons", "proje": "mobil", "surum": "^10.3.0", "kanit": "grep src+app.json+babel.config: 0; react-native-paper 5 peerDependencies olculdu = {react, react-native, react-native-safe-area-context} - ICINDE YOK", "not": "CIFT ikon: canli olan @expo/vector-icons (3 dosya)"},
+    {"paket": "react-native-qrcode-svg", "proje": "mobil", "surum": "^6.3.21", "kanit": "yalniz package.json:57", "not": "QR ekranda gerekmiyor; etiket QR'i backend uretir"},
+    {"paket": "react-native-svg", "proje": "mobil", "surum": "15.12.1 (SABIT)", "kanit": "src'de 0 import; node_modules tam taramasi: react-native-svg'yi peer/dep isteyen TEK paket react-native-qrcode-svg", "not": "qrcode-svg ile CIFT olarak dusler"},
+    {"paket": "expo-sharing", "proje": "mobil", "surum": "^14.0.8", "kanit": "yalniz package.json:45", "not": "expo-file-system + expo-intent-launcher canli (APK kurulumu), sharing degil"},
+    {"paket": "@react-navigation/bottom-tabs", "proje": "mobil", "surum": "^7.15.11", "kanit": "yalniz package.json:24", "not": "navigasyon native-stack ile kuruluyor (23 dosya)"}
+  ],
+
+  "kararGerektiren_belirsiz": [
+    {"paket": "react-native-web + react-dom", "proje": "mobil", "durum": "src'de 0 import; app.json'da platforms/web ALANI YOK; ama package.json:10 `\"web\": \"expo start --web\"` script'i var", "karar": "urun web hedefi yoksa script + iki paket birlikte duser; hedef varsa yazili kalsin. TEK BASINA silinmez."},
+    {"paket": "uuid ^13.0.0", "proje": "Teks-Erp", "durum": "src'de 2 dosya (subcontractor.service.ts:25 v4, order.service.ts:35 validate); ayni repoda crypto.randomUUID 20 yerde", "karar": "IKI id yolu. `validate` icin yerlesik karsilik yok (regex gerekir) -> paket tek basina meshru, ama v4 kullanimi randomUUID'ye tasinabilir."}
+  ],
+
+  "ciftPaketler": [
+    {"ihtiyac": "Bluetooth", "proje": "mobil", "canli": "react-native-bluetooth-classic (3 dosya, lazy require, hal/btClassic.transport.ts:54)", "olu": "react-native-ble-plx", "karar": "BT-Classic KALIR; BLE olu servisle birlikte duser"},
+    {"ihtiyac": "Ikon", "proje": "mobil", "canli": "@expo/vector-icons (3)", "olu": "react-native-vector-icons (0, paper peer'i degil - olculdu)", "karar": "@expo/vector-icons KALIR"},
+    {"ihtiyac": "Ikon", "proje": "Electron", "canli": "lucide-react (490 dosya)", "olu": "-", "karar": "TEK; ikinci ikon paketi eklenmez"},
+    {"ihtiyac": "Toast", "proje": "Electron", "canli": "sonner (219)", "olu": "-", "karar": "TEK"},
+    {"ihtiyac": "Toast", "proje": "mobil", "canli": "react-native-toast-message (64)", "olu": "-", "karar": "TEK (Paper Snackbar'a kacilmaz)"},
+    {"ihtiyac": "Font", "proje": "Electron", "canli": "@fontsource/plus-jakarta-sans (CSS)", "olu": "@fontsource/roboto", "karar": "plus-jakarta-sans KALIR"},
+    {"ihtiyac": "PDF", "proje": "Electron", "canli": "YOK (HTML + sandbox'li iframe baski)", "olu": "@react-pdf/renderer", "karar": "PDF paketi EKLENMEZ"},
+    {"ihtiyac": "Excel", "proje": "Electron", "canli": "exceljs (dinamik import)", "olu": "-", "karar": "TEK; ikinci xlsx paketi (sheetjs vb.) eklenmez"},
+    {"ihtiyac": "HTTP", "proje": "Electron", "canli": "axios (14 dosya); fetch kullanimi 0 (olculdu)", "olu": "-", "karar": "axios TEK"},
+    {"ihtiyac": "HTTP", "proje": "mobil", "canli": "axios (api.ts + 2) ERP API icin; fetch 3 dosyada (appUpdate.service, discovery.service, serverReachability)", "olu": "-", "karar": "CIFT ama BILINCLI AYRIM: interceptor/oturum tasiyan cagrilar axios, kimliksiz sonda/manifest fetch. Yazili kural yok -> yazilmali."},
+    {"ihtiyac": "Barkod/etiket render", "proje": "Teks-Erp", "canli": "bwip-js (7 dosya, sembol geometrisi) + opentype.js (2, raster/raster-font.ts:12 DejaVu glif)", "olu": "-", "karar": "CIFT DEGIL - farkli isler: bwip sembol, opentype Turkce glif rasteri (native yolun asciiFold kisitini kaldirir)"},
+    {"ihtiyac": "Tarih", "proje": "Electron/mobil", "canli": "Electron date-fns (17), mobil dayjs (27)", "olu": "-", "karar": "IKI PROJEDE IKI FARKLI kutuphane. Tek basina zararsiz (paylasilan kod yok) ama yeni ortak yardimci yazilirsa carpisir - kayit altina alinmali."}
+  ],
+
+  "surumPolitikasi_olculen": {
+    "sabitlenenler": [
+      {"paket": "bonjour-service", "surum": "1.4.4", "proje": "Teks-Erp + Electron", "gerekce": "Electron/src/test/discovery-ipc-contract.test.ts:132 'surum SABIT - ^/~ yok (sonraki ana surum ESM-only olabilir)'", "bekci": "YALNIZ Electron'da. Backend'de ayni pin var, bekci YOK (scripts/test_discovery_advertiser.ts package.json'a bakmiyor)"},
+      {"paket": "react 19.1.0, react-native 0.81.5, react-native-svg 15.12.1, react-native-worklets 0.5.1, @react-native-community/netinfo 11.4.1, @shopify/flash-list 2.0.2", "proje": "mobil", "gerekce": "Expo SDK 54 hizasi (expo install yazimi); ~ olanlar da SDK-yonetimli", "bekci": "yok (expo-doctor disinda)"}
+    ],
+    "genelKalip": "Sabit olanlar disinda HEPSI caret (^). Toplam 3 projede yalnizca 8 paket pinli.",
+    "esmRiski": "Backend package.json'da `type` YOK = CommonJS. 19 dependency'nin 18'i require.resolve ile cozuldu (olculdu); tek istisna `prisma` (CLI, main export'u yok - beklenen). Bir bagimliligin ESM-only ana surume gecmesi backend'i DOGRUDAN kirar -> backend'de major yukseltme bir SOZLESME degisikligidir. Electron `type: module` (risk ters yonde: CJS native modul -> createRequire, 4 dosyada kalip mevcut).",
+    "aracZinciriDrift": "typescript UC farkli ana surum: Teks-Erp ^6.0.2 / Electron ~5.6.2 / mobil ~5.9.2. eslint IKI ana surum: backend ^10.2.1 / Electron ^9.39.0 / mobil ^9.0.0. Zod her iki TS projede ^4.3.6 (hizali)."
+  },
+
+  "lisans": {
+    "yontem": "node_modules/<paket>/package.json license alani, ucu de tarandi",
+    "sonuc": "Copyleft (GPL/LGPL/AGPL/SSPL) YOK. Teks-Erp: Apache-2.0 x4 (prisma ucusu + typescript), BSD-3 (bcryptjs), BSD-2 (dotenv), MIT 30. Electron: MIT 71, Apache-2.0 x5 (cva, playwright, stryker x2, typescript), ISC x2 (lucide-react, qrcode.react), OFL-1.1 x2 (fontsource - FONT lisansi, gomuluye uygun), node-hid '(MIT OR X11)'. mobil: MIT 54, Apache-2.0 (typescript).",
+    "supheli": "YOK. Tek dikkat: OFL-1.1 font dosyalarinin lisans metni dagitim paketine girmeli (kontrol EDILMEDI - ayri is)."
+  },
+
+  "mevcutYaziliKurallar_dogrulandi": [
+    {"kural": "Mobil tarih secici icin YENI PAKET EKLENMEZ - takvim izgarasi elle yazildi", "kaynak": "docs/kurallar/filtre-liste.md:84 + docs/KOD-KURALLARI.md:154", "kodGercegi": "mobil package.json'da tarih secici paketi YOK (dogrulandi); Electron'da react-day-picker VAR (1 dosya) - kural yalniz mobil icin", "verdict": "uyumlu"},
+    {"kural": "bonjour-service dependencies'te + surum SABIT", "kaynak": "Electron/src/test/discovery-ipc-contract.test.ts:117-133", "kodGercegi": "iki projede de 1.4.4 pinli; bekci yalniz Electron'da", "verdict": "kod ihlal DEGIL, bekci EKSIK (backend)"},
+    {"kural": "Paket deploy/ ve scripts/ ALMAZ; npm ci --omit=dev tsx'i eler", "kaynak": "docs/KOD-KURALLARI.md:9", "kodGercegi": "prisma CLI'in dependencies'te olmasi tam bu sebeple (kur.ps1 migrate deploy kosar); paketle.ps1:245 PRISMA_CLI_BINARY_TARGETS=windows", "verdict": "uyumlu"}
+  ],
+
+  "boslugular": [
+    {"ne": "Yeni bagimlilik eklemenin YAZILI recetesi yok", "kanit": "grep 'kutuphane|paket ekle|bagimlilik' -> docs/KOD-KURALLARI.md ve docs/kurallar/*.md icinde YALNIZ 1 ozel yasak (mobil tarih secici, filtre-liste.md:84). Genel bir kural YOK.", "siddet": "orta"},
+    {"ne": "Olu bagimlilik bekcisi yok", "kanit": "package.json'i denetleyen TEK bekci Electron/src/test/discovery-ipc-contract.test.ts (yalniz bonjour-service). 13 dogrulanmis olu paket birikmis.", "siddet": "orta"},
+    {"ne": "Backend'de bonjour-service pin bekcisi yok", "kanit": "scripts/test_discovery_advertiser.ts package.json okumuyor (grep '1.4.4|package.json' -> yalniz yorum satiri:7)", "siddet": "dusuk"},
+    {"ne": "mobil axios/fetch ayrimi yazili degil", "kanit": "api.ts axios; appUpdate/discovery/serverReachability fetch. Hicbir CLAUDE.md/kurallar dosyasinda bu ayrim gecmiyor.", "siddet": "dusuk"},
+    {"ne": "Uc projede uc TypeScript ana surumu", "kanit": "^6.0.2 / ~5.6.2 / ~5.9.2", "siddet": "dusuk"}
+  ],
+
+  "receteTaslagi_yeniKutuphane": {
+    "felsefe": "YASAK DEGIL, KAYITLI KARAR. Yenilige acik: bir paket 'yok' diye degil 'bu ihtiyaci Y zaten karsiliyor' diye reddedilir; Y yoksa ekleme normal istir.",
+    "adimlar": [
+      "1) IHTIYAC: katman x ihtiyac tablosuna bak. O satirda zaten bir paket varsa yeni paket EKLENMEZ - o paket degistirilir (ikisi birden asla).",
+      "2) GEREKCE (1-2 cumle): ne yapiyor, elle yazilsa kac satir. 'Elle yazildi' mesru bir cevaptir (emsal: mobil takvim izgarasi).",
+      "3) BOYUT: kuruluma/bundle'a katkisi. >200KB ise dinamik import zorunlu (emsal: exceljs, src/lib/xlsx-export.ts:39).",
+      "4) NATIVE MI: mobilde native/config-plugin ise -> APK gerekir, OTA YETMEZ; app.json plugin satiri + izin etkisi yazilir. Electron'da native ise -> electron:rebuild + createRequire lazy + try/catch kalibi (printer.ipc.ts:17).",
+      "5) MODUL BICIMI: backend CommonJS - paket CJS require ile cozulmeli (`node -e \"require.resolve('x')\"`). ESM-only paket backend'e GIRMEZ.",
+      "6) SURUM: ana surumunde ESM-only/native ABI riski varsa TAM SABIT yazilir (^ yok) + gerekce yorumda + bekci (emsal: bonjour-service 1.4.4).",
+      "7) YER: Electron'da calisma zamaninda main'de kullanilan her sey dependencies'te (externalizeDepsPlugin yalniz dependencies'i okur; devDep'e dusen paket kurulu uygulamada MODULE_NOT_FOUND). Backend'de pakete girmesi gereken CLI de dependencies'te (prisma emsali).",
+      "8) LISANS: permissive (MIT/ISC/BSD/Apache-2.0/OFL) olmali. Copyleft (GPL/LGPL/AGPL/SSPL) -> RED, istisna kullanici karari.",
+      "9) BAKIM: son yayin tarihi + acik kritik issue + tek-bakimci riski bir cumleyle. Terk edilmis paket icin cikis plani yazilir.",
+      "10) KAYIT: karar docs/kurallar/ altina bir satir olarak duser (etiket [CEKIRDEK]/[PROFIL]); reddedilen alternatif de yazilir ('Z KULLANILMAZ cunku...') - yoksa ayni tartisma 6 ay sonra yeniden acilir."
+    ],
+    "cikarmaRecetesi": "Silmeden once UC yanlis-pozitif kanali kontrol: (a) dinamik `await import(...)`, (b) createRequire/lazy require, (c) config referansi (app.json plugins, jest preset, vite/eslint config, CSS import, peer). Ucu de temizse sil; native paketse mobilde APK, Electron'da rebuild gerekir."
+  },
+
+  "onerilenBekciler": [
+    {"ad": "olu-bagimlilik bekcisi", "ne": "Her projede package.json dependencies'i tarar; kaynak agacinda (import + dinamik import + require + createRequire + CSS import + app.json/jest/vite config) referansi olmayan paketi listeler. Bilinen istisnalar ADI ve GEREKCESIYLE allowlist'te (prisma CLI, peer'ler).", "neden": "13 olu paket bugun birikmis; el yordamiyla bulundular"},
+    {"ad": "pin bekcisi (backend)", "ne": "bonjour-service = '1.4.4' (^/~ yok) - Electron'daki ikizin backend kopyasi", "neden": "ayni gerekce, tek tarafta bekci"},
+    {"ad": "CJS cozunurluk bekcisi (backend)", "ne": "package.json dependencies'in her biri icin require.resolve; prisma muaf (gerekceli)", "neden": "ESM-only major yukseltmesi backend'i sessizce kirar"}
+  ]
+}

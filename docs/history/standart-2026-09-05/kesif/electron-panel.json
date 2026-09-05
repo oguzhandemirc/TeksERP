@@ -1,0 +1,55 @@
+{
+  "label": "electron-panel",
+  "kapsam": "Electron/ — src 1151 kaynak + 208 test dosyasi (toplam src+electron+shared 1385 ts/tsx); 131 Page.tsx",
+  "olcum_komutlari": {
+    "typecheck": "./node_modules/.bin/tsc --noEmit -p tsconfig.json -> rc=0",
+    "eslint": "./node_modules/.bin/eslint src electron shared --format json -> 0 error, 37 warn (19 no-unused-vars, 18 exhaustive-deps)",
+    "guard": "vitest run src/services/api-path-prefix.test.ts -> 3 passed"
+  },
+  "conventions": [
+    {"rule":"Sayfa iskeleti PageShell+PageHeader+PageBody (veya CrudPage / ReportPageLayout)","observedIn":"115/131 Page.tsx","deviations":"ReportHubGrid.tsx:21 elle 'flex h-full flex-col' -> 8 rapor hub sayfasi PageShell'siz","deviationCount":8,"enforce":"insan","referenceExample":"Electron/src/pages/System/Clients/ClientsPage.tsx:45-60"},
+    {"rule":"Route = ProtectedRoute + requirePermission/requireAnyPermission","observedIn":"100/106 route blogu","deviations":"settings, forbidden + 3 hub redirect + '*' (gerekcelendirilmis)","deviationCount":6,"enforce":"insan","referenceExample":"content-routes.tsx:241-247"},
+    {"rule":"Servis tek gecit apiClient; ham fetch/axios yasak","observedIn":"235 apiClient cagrisi, 0 ham fetch(","deviations":"ApiEndpointDialog.tsx:124 axios.get /health (aday sunucu yoklamasi, gerekceli)","deviationCount":1,"enforce":"insan","referenceExample":"services/crudService.ts:24-44"},
+    {"rule":"Servis yolu TAM /api/ oneki","observedIn":"src/services/api-path-prefix.test.ts (3 test, yesil)","deviations":"0","deviationCount":0,"enforce":"bekçi","referenceExample":"services/api-path-prefix.test.ts:23"},
+    {"rule":"query-key ilk elemani kebab-case string literal","observedIn":"532/569 dogrudan literal, 37 sabit (QUERY_KEY vb, hepsi kebab)","deviations":"camelCase/PascalCase 0","deviationCount":0,"enforce":"insan","referenceExample":"pages/Operations/Shipments/ShipmentsPage.tsx:37"},
+    {"rule":"Master-data CRUD servisi createCrudService<T>(basePath)","observedIn":"23/52 pages service.ts; kalan 29 rapor/finans/operasyon ozel uc","deviations":"master-data olup elle yazan yok","deviationCount":0,"enforce":"insan","referenceExample":"pages/DefectTypes/service.ts:1-4"},
+    {"rule":"any yasak (eslint no-explicit-any: error)","observedIn":"0 ': any', 0 '<any>', 9 'as any' — 8'i zodResolver/RHF tip surtunmesi ve HEPSI eslint-disable + gerekce tasiyor","deviations":"OrderFormDialog.tsx:297 lineErrors as any (gerekcesiz)","deviationCount":1,"enforce":"eslint","referenceExample":"components/forms/EntityFormDialog.tsx:42-43"},
+    {"rule":"Named export (default export yok)","observedIn":"130/131 Page.tsx","deviations":"pages/System/RollArchivePage.tsx:44 export default","deviationCount":1,"enforce":"insan","referenceExample":"content-routes.tsx:36 yorumu 'hepsi NAMED export'"},
+    {"rule":"mutation onError'da ikinci toast YOK (apiClient interceptor 4xx/5xx basiyor); istisna suppressErrorToast ile opt-in","observedIn":"226 useMutation / pages; 10 dosyada gerekceli 'onError YOK' yorumu; suppressErrorToast 12 yerde","deviations":"17 kosulsuz 'onError: e => toast.error' (10 dosya) suppressErrorToast'siz -> cift toast","deviationCount":17,"enforce":"insan","referenceExample":"pages/Operations/Rolls/RollQtyAdjustDialog.tsx:77"},
+    {"rule":"zod max() = Prisma VarChar(n)","observedIn":"12 modul ornekleminde 21 eslesen alanin 20'si birebir","deviations":"pages/Customers/schema.ts:21 code max(50) vs Prisma VarChar(32)","deviationCount":1,"enforce":"insan","referenceExample":"pages/Warehouses/schema.ts:4-6 vs schema.prisma Warehouse"},
+    {"rule":"Renderer'da electron/fs/path/child_process/os import edilmez","observedIn":"eslint no-restricted-imports: error, 0 ihlal","deviations":"0","deviationCount":0,"enforce":"eslint","referenceExample":"eslint.config.mjs:31-43"},
+    {"rule":"Sonsuz kaydirma (AutoLoadMore/useInfiniteScroll); 'Daha Fazla Yukle' butonu yok","observedIn":"1 gecis, o da DataTable.tsx:154 yorumu","deviations":"0","deviationCount":0,"enforce":"insan","referenceExample":"components/data-table/AutoLoadMore.tsx:22"},
+    {"rule":"Basit master-data formu EntityFormDialog sarmalayicisi","observedIn":"12/26 FormDialog","deviations":"14 dosya kendi useForm'unu kurar; hepsi >=118, ortalama ~340 satir (satir kalemli/karma formlar)","deviationCount":14,"enforce":"insan","referenceExample":"pages/DefectTypes/DefectTypeFormDialog.tsx"}
+  ],
+  "boyut": {
+    ">300_satir_src+electron+shared": 134,
+    "toplam_dosya": 1385,
+    "Page.tsx_>200": 55,
+    "Page.tsx_toplam": 131,
+    ">300_kirilimi_pages": {"Dialog":30,"bilesen":25,"Page":20,"kural/yardimci":13,"test":8,"service":7,"Sheet":5,"columns":2,"Modal":2},
+    "en_buyuk_5": [
+      {"dosya":"pages/GeneralSettings/settings-config.ts","satir":1445,"tur":"katalog","yorum_orani":"%31","hook":0},
+      {"dosya":"pages/Operations/WorkOrders/service.ts","satir":1266,"tur":"servis haritasi","yorum_orani":"%22","hook":0},
+      {"dosya":"routes/content-routes.tsx","satir":1218,"tur":"route tablosu","yorum_orani":"%9","hook":0},
+      {"dosya":"services/documentConfig.ts","satir":1216,"tur":"katalog","yorum_orani":"%19","hook":0},
+      {"dosya":"components/data-table/FilterBar.tsx","satir":1049,"tur":"GERCEK monolit bilesen","yorum_orani":"%11","hook":19}
+    ],
+    "hook_yogun_>300_dosya (>=10 hook cagrisi)": 28,
+    "fonksiyon": {"p50":17,"p90":98,"p99":271,">80":479,">200":80}
+  },
+  "en_yeni_5_sayfa": [
+    {"dosya":"pages/System/Clients/ClientsPage.tsx","tarih":"2026-09-04","satir":165,"iskelet":"PageShell+PageHeader+PageBody","dosyalar":"service.ts (elle apiClient + hook), clients-utils.ts + .test.ts","not":"saf yardimcilar ayri dosyada ve testli — referans ornek"},
+    {"dosya":"pages/SackTags/SackTagsPage.tsx","tarih":"2026-09-04","satir":257,"iskelet":"PageShell+PageHeader+PageBody","dosyalar":"service.ts (createCrudService), SackTagDialog.tsx, SackTagsPage.test.tsx","not":"Page>200 ihlali; 4 kosulsuz onError toast (cift toast)"},
+    {"dosya":"pages/GeneralSettings/FeatureFlagsPage.tsx","tarih":"2026-09-04","satir":27,"iskelet":"delege (SettingsSurfacePage)","dosyalar":"-","not":"sarmalayici; iskelet alt katmanda"},
+    {"dosya":"pages/GeneralSettings/SettingsSurfacePage.tsx","tarih":"2026-09-04","satir":304,"iskelet":"PageShell+PageHeader (PageBody YOK)","dosyalar":"3 test dosyasi","not":">300 ihlali"},
+    {"dosya":"pages/System/UpdatePage.tsx","tarih":"2026-09-04","satir":41,"iskelet":"PageShell+PageHeader+PageBody","dosyalar":"-","not":"temiz"},
+    {"dosya":"pages/System/ModuleProfile/ModuleProfilePage.tsx","tarih":"2026-09-03","satir":442,"iskelet":"PageShell+PageHeader+PageBody","dosyalar":"moduleProfile.helpers.ts + 2 test","not":"Page>200 ve >300 ihlali; onError kosullu (dogru desen)"}
+  ],
+  "5_dosya_CRUD_uyumu": {
+    "tam_TSZCF": 14,
+    "liste": ["Colors","Customers","DefectTypes","FabricProperties","Items","Machines","Operations/Orders","PeripheralDevices","ProductRecipes","ReturnReasons","Routes","SubcontractorCategories","Subcontractors","Warehouses"],
+    "not": "Kural yalniz master-data icin; 131 Page.tsx'in cogu rapor/operasyon/hub — 5 dosya kalibi onlara uygulanamaz. CrudPage kullanan 13 sayfa."
+  },
+  "izin": {"yazma_mutationi_olan_sayfa_dizini":69,"sayfa_ici_izin_kapisi_yok":11,"gercek_acik":1,
+    "gercek_acik_detay":"StationCapabilities: route requirePermission='station:read' (content-routes.tsx:486) ama CapabilitiesEditSheet.tsx:122 PUT /api/station-capabilities -> backend station-capability.routes.ts:193 requirePermission('station:write'); 'Yetkinlikleri Duzenle' butonu (StationCapabilitiesPage.tsx:280-287) PermissionGate'siz -> read-only kullanici 403 aliyor"}
+}

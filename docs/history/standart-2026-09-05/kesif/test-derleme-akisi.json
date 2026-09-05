@@ -1,0 +1,141 @@
+{
+  "label": "test-derleme-akisi",
+  "olcum_tarihi": "2026-09-05",
+  "olcum_ortami": "macOS, HEAD=89226e73 (main, calisma agaci temiz), dev DB tekserp_demo @ localhost:55433 (Docker tekserp-local-db)",
+
+  "ci": {
+    "dosya": ".github/workflows/ci.yml",
+    "tetik": "push + PR, dallar: main, adnansahin (ci.yml:16-18)",
+    "joblar": [
+      {"ad": "docs", "db": false, "kapi": true, "kosar": "check-docs.mjs, check-migrations.mjs, test_surum.mjs"},
+      {"ad": "backend", "db": "postgres:16 service + migrate deploy + seed + seed:fixtures", "kapi": true, "kosar": "npm run lint; npx tsc --noEmit; npm run typecheck:scripts; npm test"},
+      {"ad": "load-test", "db": true, "kapi": false, "not": "continue-on-error: true (ci.yml:150)"},
+      {"ad": "electron", "db": false, "kapi": true, "kosar": "npm run lint; npx tsc --noEmit; npm test"},
+      {"ad": "mobile", "db": false, "kapi": true, "kosar": "npm run lint; npx tsc --noEmit; npm test"},
+      {"ad": "e2e", "db": false, "kapi": false, "not": "continue-on-error: true (ci.yml:249); xvfb + playwright"}
+    ],
+    "ci_disinda_kalan": ["stryker (test:mutation) — ci.yml'de 'stryker|mutation' grep sonucu 0"]
+  },
+
+  "olculen_sureler_sn": {
+    "backend_tsc_src": 10.0,
+    "backend_typecheck_scripts_gate": 28,
+    "backend_lint": 3.0,
+    "backend_npm_test_tam": 388,
+    "backend_npm_test_wall": "6:28",
+    "backend_tek_bekci": "0.2-2.4 (18 dosyalik alt kume 11s; 36 dosyalik 19s)",
+    "electron_lint": 6.2,
+    "electron_typecheck_script": 12.5,
+    "electron_npx_tsc_noEmit_CI": 0.8,
+    "electron_vitest": 33,
+    "mobil_tsc": 4.9,
+    "mobil_jest": 29
+  },
+
+  "test_envanteri": {
+    "backend_test_dosyasi": 453,
+    "backend_kod_satiri_p50": 217,
+    "backend_kod_satiri_max": 1914,
+    "electron_test_dosyasi": 208,
+    "electron_test_sayisi": 2266,
+    "mobil_test_suite": 84,
+    "mobil_test_sayisi": 850,
+    "e2e_spec": 2
+  },
+
+  "HEAD_durumu": {
+    "backend_tsc_src": "TEMIZ (0 hata)",
+    "backend_npm_test": "319/453 dosya gecti, 134 KIRMIZI",
+    "134_kirmizinin_sebebi": "dev DB 2 migration geride (20260903020000_station_applies_quality, 20260904120442_cuval_izleri_etiket) -> stations.appliesQuality yok, sack_tags tablosu yok. npx prisma migrate status ile dogrulandi. KOD REGRESYONU DEGIL.",
+    "electron_typecheck_script": "9 HATA / 3 dosya (SackContentEdit/service.ts SackCustomerPage import edilmemis; SackTags/SackTagsPage.tsx:253 tip uyusmazligi; SackEditorView.ship.test.tsx:143)",
+    "electron_npx_tsc_noEmit": "0 hata — CI'in kostugu komut HICBIR SEYI derlemiyor (tsconfig.json files:[] + references, -b YOK)",
+    "electron_vitest": "2 dosya / 7 test KIRMIZI (src/store/tabs.back.test.ts 4, src/components/layout/PageHeader.test.tsx 3)",
+    "electron_lint": "0 hata, 37 uyari",
+    "mobil_tsc": "TEMIZ",
+    "mobil_jest": "84/84 suite, 850/850 test YESIL"
+  },
+
+  "commit_olcumu": {
+    "kapsam": "son 40 commit (2026-09-04 x38, 2026-09-05 x2)",
+    "test_dosyasina_dokunan": 14,
+    "src_degistiren": 18,
+    "src_degistirip_test_de_degistiren": 14,
+    "oran": "src'ye dokunan 18 commit'in 14'u (%78) ayni commit'te bir test dosyasina da dokunuyor"
+  },
+
+  "tip_hatasi_ornekleme": {
+    "yontem": "HEAD'de uc projede tsc; hatali dosyanin son commit'i git log ile",
+    "bulgu": "Electron'da 9 tip hatasi 2026-09-04 tarihli 20d2f967 ('cuval izleri: katalog ekrani') ile girdi ve 1 gundur main'de duruyor",
+    "neden_yakalanmadi": [
+      "CI Electron adimi 'npx tsc --noEmit' kosuyor; Electron/tsconfig.json files:[] + references iceriyor, -b olmadan hicbir dosya derlenmiyor (olculdu: 0 hata)",
+      "bash-guard.mjs commit kapisi 'npm run typecheck:plain' kosar ve YAKALARDI, ama hook 2026-09-05'te (773f0d07) eklendi — hatali commit ondan onceki gun",
+      "git pre-commit hook YOK (.git/hooks'ta ornek disi dosya yok) -> terminal/IDE'den atilan commit hicbir kapidan gecmiyor"
+    ]
+  },
+
+  "electron_bekci_kirmizisinin_zinciri": {
+    "kiran_commit": "22bbe617 (2026-09-04) 'feat(panel): cikista sekmeler kapanir' — tabs store'a zustand persist eklendi",
+    "kirilanlar": "src/store/tabs.back.test.ts (4), src/components/layout/PageHeader.test.tsx (3) — jsdom'da localStorage kapali, persist setItem patliyor",
+    "ironi": "Ayni commit YENI bir bekci yazdi (tabs.logout.test.ts, localStorage stub'i ile) ama MEVCUT iki bekciyi kosmadi; ikisi de Electron/CLAUDE.md:32'de adiyla listeli",
+    "maliyet": "Electron npm test 33 saniye"
+  },
+
+  "kapilar": {
+    "run_all_tests_ts": {
+      "productionDbGate": "FAIL-CLOSED, DATABASE_URL host'u localhost/127.0.0.1/::1/0.0.0.0 degilse durur; NODE_ENV/APP_ENV=production hic gecmez; kacis ALLOW_NONLOCAL_TEST_DB=1 (run-all-tests.ts:102-165)",
+      "typecheckGate": "tsconfig.scripts.json ile ~28s; filtre verilirse ATLANIR; SKIP_TYPECHECK=1 ile kapatilir (run-all-tests.ts:56-79)",
+      "migrate_status_gate": "YOK — olculen en buyuk bosluk",
+      "seri_kosum_sebebi": "run-all-tests.ts:6-8 — 'testler ayni dev DB'sini paylasir; her biri kendi business-key fixture'ini yaratip finally'de temizler'",
+      "timeout": "180s/dosya; anormal bitis error.code'dan (ETIMEDOUT/ENOBUFS/ENOENT); maxBuffer 32MiB",
+      "retry": "yalnizca altyapi hatasinda (ECONNREFUSED / too many clients / connect timeout) 1 kez; assertion hatasi ASLA yeniden denenmez"
+    },
+    "bash_guard_mjs": {
+      "tur": "Claude Code PreToolUse hook (.claude/settings.json), git hook DEGIL",
+      "yas": "1 gun (773f0d07, 2026-09-05)",
+      "kapsam": "10 yasak komut regex'i + git commit'te staged alt projelerde typecheck:plain (Teks-Erp, Electron) / npx tsc (mobil)",
+      "kacis": "TEKSERP_HOOK_SKIP=1, --no-verify, ya da Bash tool disindan commit"
+    },
+    "check_docs_mjs": "olu dokuman-linki + CLAUDE.md boyut tavani -> exit 1; kaldirilmis-sembol atiflari ADVISORY",
+    "check_migrations_mjs": "GATE 1-5 (untracked/modified migration, eksik migration.sql, untracked test_*.ts, package.json'in andigi eksik dosya); kendi basligina gore degeri YERELDE, CI'da temiz checkout yuzunden hep yesil"
+  },
+
+  "bosluklar": [
+    {"ne": "git pre-commit hook yok", "kanit": ".git/hooks'ta ornek disi dosya 0; husky/lefthook yok; tek kapi Claude'un Bash hook'u"},
+    {"ne": "CI Electron tip kontrolu no-op", "kanit": "ci.yml:216 'npx tsc --noEmit'; Electron/tsconfig.json = {files:[], references:[...]}; olculdu 0 hata, oysa npm run typecheck 9 hata"},
+    {"ne": "run-all-tests migration durumunu olcmuyor", "kanit": "453 dosyanin 134'u (%30) 2 uygulanmamis migration yuzunden kirmizi; 6.5 dakika sonra ogreniliyor; kirmizi metni TableDoesNotExist stack'i, teshis okuyucuya birakilmis"},
+    {"ne": "stryker (mutation) hic kosmuyor", "kanit": "ci.yml'de stryker/mutation grep = 0; stryker.conf.json'a son dokunus 2026-06-14 (f46c254e)"},
+    {"ne": "e2e ve load-test kapi degil", "kanit": "ci.yml:150 ve :249 continue-on-error: true"},
+    {"ne": "lint uyarilari kapi degil", "kanit": "Electron lint: 0 error / 37 warning -> CI yesil"},
+    {"ne": "CLAUDE.md:116 'tam paket npm test saatler surer' YANLIS", "kanit": "olculdu: 6:28 (388s). Bu yanlis cumle 'tam paketi kosmama' aliskanliginin beyan edilmis gerekcesi"},
+    {"ne": "13 kural bekcisiz", "kanit": "docs/KOD-KURALLARI.md: 242 kural satiri, 13'unde 'bekçi: yok' / 'test yok'"},
+    {"ne": "5 HTTP bekcisi sunucu yoksa SESSIZCE atliyor", "kanit": "test_finance_flag_off, test_module_flag_off, test_module_profile, test_settings_password, test_superadmin — portlar 4100/4101/4122/4112/4104 (docs/GELISTIRME-DONGUSU.md:25)"}
+  ],
+
+  "kadans_onerisi": [
+    {"an": "duzenleme", "komut": "cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parcasi>  |  Electron: npx vitest run <dosya>", "sure": "0.5-3 sn / 2-5 sn", "kapi": "hayir (geri bildirim)"},
+    {"an": "commit", "komut": "npx prisma migrate status  +  degisen projede: npm run typecheck (Electron'da BARE npx tsc DEGIL) + npm run lint  +  Electron/mobil src degistiyse npm test", "sure": "13-45 sn", "kapi": "EVET — git pre-commit hook'a tasinmali (bugun yalniz Claude'un Bash hook'unda)"},
+    {"an": "PR / push", "komut": "CI (ci.yml)", "sure": "backend job dominant; yerel esdegeri ~7 dk", "kapi": "EVET; Electron tip adimi 'npm run typecheck' olarak duzeltilmeli, e2e continue-on-error kaldirilmali"},
+    {"an": "surum", "komut": "npx prisma migrate deploy && bash run-tests.sh --tsc && node scripts/check-surum-notlari.mjs", "sure": "~8 dk", "kapi": "EVET"}
+  ],
+
+  "paralellestirme": {
+    "bugunku": "seri, 453 dosya, 388 sn; dosya basi 0.61-0.86 sn (buyuk kismi npx tsx surec baslatma)",
+    "tavan_tahmini": "4 worker ile ~110-150 sn (BELIRSIZ — olculmedi, dosya basi sabit maliyet baskin)",
+    "sema_per_worker_COZER": [
+      "65 dosya systemSetting/feature-flag yaziyor (global ayar cakismasi)",
+      "46 dosya paylasilan seed fixture'ina bagli (PATOS/MAVI/MUS-001)",
+      "122 dosya global sayac ureten yollari tetikliyor (parti no P01..P99, gunluk kod dizileri)",
+      "2758 deleteMany cagrisi (temizlik cakismasi)"
+    ],
+    "sema_per_worker_COZMEZ": [
+      "pg_advisory_xact_lock VERITABANI kapsamlidir, sema kapsamli DEGIL: sabit anahtarli kilitler (parti no, izin yonetimi, merge 8027) worker'lari serilestirir — dogruluk korunur, hiz kaybi kucuk",
+      "5 HTTP bekcisi ayri port ister (4100/4101/4104/4112/4122); port tahsisi olmadan paralellesmez"
+    ],
+    "sema_adini_sabitleyen_bekci": {
+      "sayi": 5,
+      "dosyalar": ["test_audit_depth.ts", "test_master_data_name_dup.ts", "test_record_provenance.ts", "test_timestamptz_contract.ts (table_schema='public', 6 gecis)", "test_fold_contract.ts (nspname='public')"],
+      "not": "src + migration'larda 51 adet 'public.tr_fold' niteleme var ama TAM NITELIKLI oldugu icin baska bir semadan da cozulur — engel degil"
+    },
+    "daha_ucuz_alternatif": "worker basina VERITABANI (CREATE DATABASE ... TEMPLATE <seedli sablon>): advisory kilitleri de izole eder, 232 migration'i worker basina kosma maliyetini de kaldirir. Sema izolasyonundan daha az kod degisikligi ister (yalniz DATABASE_URL)."
+  }
+}
