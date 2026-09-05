@@ -21,6 +21,47 @@
 
 ---
 
+## 2026-09-06 — Test ortamı: paralelleştirme ölçüldü ve ERTELENDİ, kapsam görünürlüğü onarıldı [ÇEKİRDEK]
+
+**Soru:** "test ortamımız nasıl olmalı." Yöntem reponun kendi ölçütü: ölç, sonra karar ver.
+
+**İki deney.** ① Tam paket, sıfırdan kurulmuş temiz DB'de: `migrate deploy` 4 sn, paket 333 sn,
+**446/457**. Yani bekçilerin %97,6'sı gerçekten veriden bağımsız. ② DB-per-worker paralel koşum:
+6 işçi DB'si paralel 15 sn'de kuruldu, paket **144 sn (2,3×)**; ikinci koşum aynı 12 kırmızıyı
+verdi → deterministik.
+
+**Hüküm: paralelleştirme ŞİMDİ DEĞİL.** Kazanç gerçek (~3 dk) ama (a) tam paket PR/push başına
+koşuyor, kimseyi bekletmiyor; (b) koşucu bizim olduğu için işçi havuzu / çıktı tamponlama /
+N+1 kapı doğrulaması ~150-200 satır ELLE yazılır; (c) **kalıntı sorununu çözmez** — 458/6 ≈ 76
+bekçi hâlâ aynı DB'de ardışık koşar, `TEST-` damgası ve `finally` temizliği aynen gerekir;
+(d) önce 12 ortam-bağımlı bekçi düzelmeli. "Paralelleştirirsek temizlikten kurtuluruz" ÖLÇÜMLE yanlış.
+
+**Deneyin asıl ürünü iki ölçüm.** ① Temiz DB'de kırmızı veren 12 bekçi ADIYLA listelendi
+(`docs/standart/TEST-VE-DERLEME.md` §7) — bu `[TD-17]`'nin ölçülmüş hâli: kırmızı/yeşil ayrımı
+koddan değil ortamdan doğuyor. ② İşçi/test DB adı `_test` ile BİTMELİ: `db-guard.ts` izin listesini
+`endsWith` ile eşliyor, `tekserp_test_w1` reddedildi / `tekserp_w1_test` geçti.
+
+**Onarılan kapsam körlüğü.** Koşucunun "N atlandı" sayacı serbest regex'ti ve üç dosyada HAYALET
+sayı üretiyordu (`test_label_bulk_seed` hiçbir şey atlamadan "3"); `Sonuç:` satırına demirlendi,
+iki dosyaya gerçek sayaç kondu. Üç bekçi koşucunun tanımadığı özet formatını basıyordu
+(iki tanesi İngilizce `N passed, M failed`, biri "düştü") ve **46 kontrol görünmüyordu**;
+düzeltildi ve sözleşmenin kapısı kuruldu (`test_bekci_sozlesmesi.ts`, negatif sonda ✓).
+
+**Kural boşluğu kapatıldı.** 457 bekçinin 173'ü hiçbir kural dosyası yüklemiyordu (istemci tarafında
+bu boşluk yoktu: 213/213 ve 86/86). `.claude/rules/bekci-standart.md` eklendi.
+
+**`[TD-07]`'nin gerekçesi düzeltildi (karar DEĞİŞMEDİ).** "vitest bunu koşamaz" doğru değil —
+koşardı (`fileParallelism:false` + `globalSetup` + `pool:'forks'`). Doğru gerekçe dönüşüm bedeli:
+458 dosya / ~134k satır ve mock kültürü riski. Kazancın kaynağı framework'süzlük değil MOCK YOKLUĞU;
+test edilen şeylerin ağırlığı (DEFERRABLE FK, partial UNIQUE sed, advisory kilit, DB CHECK, trigger
+damgası) mock'lanamaz.
+
+**Ölçüm çürüttü, kural YAZILMADI:** "kontrol atlayan bekçi sayıyı özet satırında beyan etmeli"
+metinden ölçülemiyor — aday yüklem 458 dosyanın 52'sini işaretledi, çoğu bir check ETİKETİNDE geçen
+kelimeydi. Gerekçe bekçinin başlığına yazıldı.
+
+Ölçümlerin tamamı: `docs/history/test-ortami-2026-09-06/` (PLAN.md + üç ham JSON).
+
 > ⚠️ **PROFİL GERÇEĞİ:** "Rezerv YOK" · "mühür YOK" · `Sack.customerId` opsiyonel · tek depo — dördü de referans profilin (adnansahin, basit usul işlemeci) seçimidir; rezervasyon altyapısı `shipping.reservationEnabled` ile ayrı dilimde gelecek, çoklu depo `depo.multiEnabled` arkasında. Notun **stok yalnız DISPATCH'te düşer / `SackAllocation` sevk ANINDA yazılır / PLANNED tahsis sayılmaz** kısmı ÇEKİRDEK defter semantiğidir ve bayraklanmaz — bkz. MODUL-BAYRAK-TASARIM §4 karar #6, §9, §11.
 
 > **NOT:** Tartı / paket / sevkiyat modülü **2026-07'de çuval depo modeline** geçti (`/api/shipping`, Shipment / Sack / **SackAllocation** / ShipmentOrder). Çuval bir **depo nesnesidir**; `Sack.customerId` **opsiyonel** (açılışta atanabilir, yoksa sevkte atanır), **mühür yok**. Akış: aç→okut→(opsiyonel tart) → çuval DEPODA (`shipmentId=null`, her an düzenlenebilir). **Rezerv yok** — `OrderLine.packedQty`/`Order.packedQty` ve `rebalanceCustomerPool` kaldırıldı; sipariş görünümü **İstenen | Sevk | Açık** (`Açık = quantity − shippedQty`). Sevkiyat depodan **çuval seçilerek** kurulur (`createShipment({ sackIds, customerId, orderIds? })`); sevk onayı (`shipping.confirmationEnabled`, varsayılan **kapalı**) → çuvallar **doğrudan sevk** edilir (`DISPATCHED`, yanıtta `dispatched=true`), onay **açık** → sevkiyat `PLANNED` kalır ve çıkış ayrıca `dispatchShipment` ile onaylanır — kapı önü ara adımı YOK (`PLANNED → DISPATCHED`). `SackAllocation` **sevk anında** seçilen siparişlere spec+şube FIFO ile yazılır (`distributeSacksToLines`). Stok yalnız DISPATCH'te `SHIPPED` düşer ve tahsis **dispatch'te** `shippedQty`'ye terfi eder (PLANNED tahsis sayılmaz). İptalde tahsis silinir, çuval depoya döner. Top→sipariş bağı yok. Tasarım: `docs/design/CUVAL-HAVUZU-TASARIM.md` (eski `docs/history/SEVKIYAT-LOOSE-TASARIM.md` superseded).

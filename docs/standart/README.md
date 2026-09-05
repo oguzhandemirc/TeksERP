@@ -37,7 +37,7 @@ Her kural tek satır ve şu şablondadır:
 - **[BE-07]** <emir kipi, tek cümle> · zorlama: <etiket> · kanıt: <dosya:satır | ölçüm> [· devralınan: <N (tavan) | yok>]
 ```
 
-`devralınan:` **opsiyoneldir** ve yalnız kuralın SAYILABİLİR bir kod yüzeyi varsa yazılır: `N` ölçülmüş devralınan ihlaldir (mekanik kuralda `lint-baseline.json` tavanı), `yok` ise "ölçüldü, sıfır" beyanıdır. Alanın hiç yazılmaması "sayılacak bir yüzey yok" demektir — katman-üstü ilkeler (`ILKELER.md`) ve kadans kuralları (`TEST-VE-DERLEME.md`) bir dosya kümesini değil bir DAVRANIŞI tarif eder, orada `devralınan: yok` yazmak ölçülmemiş bir sayıyı ölçülmüş gibi gösterirdi. Bugünkü dağılım (ölçüm 2026-09-05): 267 kuralın 215'i alanı taşır; taşımayan 52'nin tamamı `ILKELER.md` (28) ve `TEST-VE-DERLEME.md`'dedir (24).
+`devralınan:` **opsiyoneldir** ve yalnız kuralın SAYILABİLİR bir kod yüzeyi varsa yazılır: `N` ölçülmüş devralınan ihlaldir (mekanik kuralda `lint-baseline.json` tavanı), `yok` ise "ölçüldü, sıfır" beyanıdır. Alanın hiç yazılmaması "sayılacak bir yüzey yok" demektir — katman-üstü ilkeler (`ILKELER.md`) ve kadans kuralları (`TEST-VE-DERLEME.md`) bir dosya kümesini değil bir DAVRANIŞI tarif eder, orada `devralınan: yok` yazmak ölçülmemiş bir sayıyı ölçülmüş gibi gösterirdi. Bugünkü dağılım (ölçüm 2026-09-06): 278 kuralın 218'i alanı taşır; taşımayan 60 kural `ILKELER.md` (28), `TEST-VE-DERLEME.md` (31) ve `VERITABANI.md` (1) içindedir.
 
 **Zorlama etiketi** kuralın nasıl korunduğunu söyler. Etiketsiz kural yazılmaz:
 

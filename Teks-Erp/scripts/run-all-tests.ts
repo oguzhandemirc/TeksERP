@@ -304,7 +304,14 @@ function main() {
     // yoksa atlıyor ve bunu özet satırında ", N atlandı" olarak yazıyordu; koşucu
     // o kısmı REGEX'İN DIŞINDA bırakıp yutuyordu. Sonuç: "✅ 82 geçti, 0 başarısız"
     // satırı, o koşumda 34 kontrolün HİÇ ölçülmediğini gizliyordu → yeşil ≠ kapsandı.
-    const skippedM = out.match(/(\d+)\s*atlandı/i);
+    // ⚠️ ÖZET SATIRINA DEMİRLİ (2026-09-06): serbest regex çıktının HERHANGİ bir
+    // yerindeki ilk "N atlandı"yı alıyordu ve üç dosyada HAYALET sayı üretiyordu —
+    // test_label_bulk_seed bir check MESAJINDA "3 atlandı" yazar (hiçbir şey
+    // atlamaz), test_finance_flag_off "§2/§3/§5 atlandı" der (regex 5'i yakalar,
+    // gerçek 6), test_label_dirty_sources "D2-7 atlandı" der. Gerçek sayaç DAİMA
+    // `Sonuç:` satırındadır (`, N atlandı ===`). Kapsam kaybını görünür kılan
+    // mekanizmanın kendisi ölçülmemiş sayı basamaz.
+    const skippedM = out.match(/(?:Sonuç|SONUÇ):[^\n]*?,\s*(\d+)\s*atlandı/i);
     const skipped = skippedM ? Number(skippedM[1]) : 0;
     // ANORMAL BİTİŞTE KAZINAN ÖZET YALAN SÖYLER — kullanma.
     // 188/214 test `Sonuç:` satırını `await prisma.$disconnect()`'ten ÖNCE basar.

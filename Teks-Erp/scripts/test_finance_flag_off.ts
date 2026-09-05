@@ -111,9 +111,15 @@ async function main(): Promise<void> {
   check("§6 Finance izinleri MOBİL rollere sızmadı", mobileLeak.length === 0, mobileLeak.join(", ") || "temiz");
 
   // ── HTTP BÖLÜMLERİ ───────────────────────────────────────────────────────
+  // §2/§3/§5 içindeki check() sayısı. Sunucu yoksa bu kadar kontrol ÖLÇÜLMEZ;
+  // sayı özet satırında beyan edilir ki "yeşil ≠ kapsandı" görünür kalsın.
+  const HTTP_KONTROL = 6;
   if (!(await serverUp())) {
+    // Atlanan sayısı ÖZET SATIRINA yazılır: koşucu kapsam kaybını yalnız oradan
+    // okur (run-all-tests.ts, `Sonuç:` satırına demirli regex). Serbest metindeki
+    // "§2/§3/§5 atlandı" bir sayı DEĞİLDİR.
     console.log(`\n   ⏭️  §2/§3/§5 atlandı — ${BASE} ayakta değil (TEST_API_URL ile değiştirilebilir)\n`);
-    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız, ${HTTP_KONTROL} atlandı ===`);
     return;
   }
 

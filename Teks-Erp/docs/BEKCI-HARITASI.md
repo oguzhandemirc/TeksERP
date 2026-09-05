@@ -1,8 +1,8 @@
 # Bekçi haritası — alan → test dosyası
 
-> Üretilmiş (anlama turu 2026-09-05; 455 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
+> Üretilmiş (anlama turu 2026-09-05, +1 bekçi 2026-09-06; 456 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (87), `sevkiyat` (84), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (54), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (20), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (88), `sevkiyat` (84), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (54), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (20), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -401,10 +401,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/screens/Modules/FasonKabul/receivePayload.helper.test.ts` | Kabul yükü: parseNewRolls/buildReceivePayload, uygulanan en, tüketilen toplam, resolveReturns (büyük toptan dağıtım), çekme toleransı (shrinkExceedsTo |  |  |  |
 | `mobil/src/test/segmented-buttons-row.guard.test.ts` | TS AST taraması: her <SegmentedButtons> için en yakın sarmalayan JSX elemanının style'ı çözülür (StyleSheet anahtarı ya da satır içi nesne); flexDirec |  | ✓ |  |
 
-## diger (87)
+## diger (88)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_bekci_sozlesmesi.ts` | Bekçi ÇIKTI SÖZLEŞMESİ: her `test_*.ts` koşucunun tanıdığı özet formatını basıyor mu (tanınmayan format kontrol sayısını gizler, "geçti (exit 0)"); İngilizce `N passed, M failed` yok; körlük zemini 400 dosya; muafiyet listesi iki yönlü |  | ✓ | 2026-09-06 |
 | `Electron/src/components/import/ImportDialog.test.tsx` | İçe aktarım sihirbazı: hücre düzenlenince UYGULA pasif + bayat bandı; tuş başına önizleme ATILMAZ; eksik kayıt yaratma düğmesi ipucu/yetki koşullu; ya |  | ✓ | ⚠️ yok |
 | `Electron/src/lib/code-generator.test.ts` | Kod üreteci: PREFIX-YYMMDD-XXXX biçimi, ardışık çağrılar farklı kod, CODE_PREFIXES bilinen anahtarları (RNK/MAK/MUS) taşır. |  |  | ⚠️ yok |
 | `Electron/src/lib/collate.test.ts` | Türkçe sıralama: Ç tüm C'lerden sonra, I ile İ ayrı harf, sayısal parçalar sayı gibi (SIP-2 < SIP-10), null/undefined çökmez; SIRALAMA ile ARAMA (katl |  |  | ⚠️ yok |

@@ -67,6 +67,9 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     await p.$disconnect();
   }
 
-  console.log(`\n== ${pass} passed, ${fail} failed ==`);
+  // Koşucunun tanıdığı TEK özet formatı (run-all-tests.ts). İngilizce
+  // `== N passed, M failed ==` hiçbir regex'e uymuyordu ve dosya özet tablosunda
+  // "geçti (exit 0)" görünüyordu — kaç kontrolün koştuğu gizliydi.
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 })();
