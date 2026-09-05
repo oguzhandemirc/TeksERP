@@ -83,7 +83,7 @@ Mobil değişikliklerin tamamı saf JS → **OTA ile gider, APK gerekmez**.
 
 | Kimlik | Yapılan |
 |---|---|
-| **M-01** | 5 index'siz domain FK kapatıldı; `NOT NULL` olan düz index, nullable ve null-yoğun 4 kolon **kısmi** index aldı (ev emsali korundu). Migration başlığında "en eski canlı dump'ta prova + süre ölçümü zorunlu" notu var — canlı maliyet ölçülmedi |
+| **M-01** | 5 index'siz domain FK kapatıldı; `NOT NULL` olan düz index, nullable ve null-yoğun 4 kolon **kısmi** index aldı (ev emsali korundu). Migration başlığında prova notu var. ⚠️ 2026-09-05 düzeltmesi: migration'lar `kur.ps1`'de pm2 durdurulduktan SONRA koşar ([4/9] → [7/9]), yani kilit kimseyi bloklamaz; ölçülmeyen şey saha kesintisi değil kurulum penceresinin uzaması |
 | **M-05** | `SackTag.name` için yumuşak kapılı UNIQUE sed (`nameFold` emsali: mükerrer varsa NOTICE + atla); uygulama guard'ı kalır, mesajı o verir |
 | **M-02** | 10 model tek tek sınıflandırıldı. Yalnız **1'i** gerçek unutulmaydı (`ImportRun` → `updatedAt` eklendi); kalan 9 append-only/pivot olarak `///` gerekçesiyle şemaya yazıldı. **Karar: 10 tabloya kolon eklemek yerine istisnayı belgelemek** |
 
@@ -146,7 +146,7 @@ Mobil değişikliklerin tamamı saf JS → **OTA ile gider, APK gerekmez**.
 | 4 | Kimliklerin akıbeti raporda | ✅ | Kapatma turunda eklendi: §10 altmış kimliğin tamamını (İ/M/B/K/E/Y/ES/BELİRSİZ) durum + tek cümleyle listeler. **İlk hâlde ❌ idi**: §4 ve §7 kimliklerin ~yarısını anıyordu. |
 | 5 | Reçeteler + `.claude/rules` + CLAUDE.md bağları | ⚠ | Reçeteler ve dört `.claude/rules` işaretçisi yerinde. **K-05 açık**: `docs/KOD-KURALLARI.md` "mekanik zorlananlar" listesi hâlâ kütüphane sınıfından kural/bekçi taşımıyor (`test_dependency_contract` o dosyada 0 vuruş) — plan bunu "K-03 ile kapanır" saymıştı, kapanmamış. |
 | 6 | CI YAML geçerli, `adnansahin` yok, mobil job var | ✅ | `on.push.branches: [main]` (gerekçe yorumuyla); job'lar: docs · backend · load-test · electron · mobile. |
-| 7 | Migration'lar dev'de uygulandı, kapılar yeşil | ⚠ | Üç additive migration dev'e uygulandı, `test_db_invariants` · `test_schema_drift` · `check-migrations` yeşil. Ama **[DB-29] provası koşulmadı**: M-01'in kendi notu "canlı maliyet ölçülmedi" diyor ve `CREATE INDEX CONCURRENTLY` yasak olduğu için index migration'ı canlıda tabloyu kilitler. |
+| 7 | Migration'lar dev'de uygulandı, kapılar yeşil | ⚠ | Üç additive migration dev'e uygulandı, `test_db_invariants` · `test_schema_drift` · `check-migrations` yeşil. Ama **[DB-29b] süre ölçümü koşulmadı** — ama bu bir engel değil: dağıtım sırası ölçüldü, migration uygulama DURMUŞKEN koşuyor. Ölçülmeyen şey kurulum penceresinin kaç saniye uzadığıdır. |
 | 8 | Paket kaldırma sonrası üç proje yeşil | ⚠ | Taban ölçümü kaldırmadan ÖNCE alındı, üç proje kaldırma sonrası yeşil. Ama kaldırma **tam değil**: 3 mobil ölü paket native değişiklik olduğu için sonraki APK'ya bırakıldı, `react-native-ble-plx` ise ölçümle CANLI çıktı (keşif iddiası çürüdü). |
 | 9 | Dokunulan alanların bekçileri yeşil | ⚠ | §4'teki her satırın bekçisi ve negatif sondası var. Ama §4 iki kimliği "yapıldı" sayıyordu, ölçüm dosyası "kismen-yapildi" diyor: **İ-21** (13 istasyon mutasyonunun 8'ine gerekçe yazıldı) ve **İ-23** (iki elle çizilen seçiciden biri çevrildi, `TamburScreen` ReasonStep açık). |
 | 10 | Faz başına commit + `UYGULAMA-OZETI.md` | ❌ | Plan sekiz faz tanımlıyordu; git'te iki commit var: `6afa188c` (kapılar) + `cdcb73f4` (turun tamamı). Faz başına commit yapılmadı; geri alma birimi tek dev commit. |
@@ -332,5 +332,5 @@ Plan altmış kimlik tanımladı. Durum sözlüğü: **yapıldı** (kod/şema de
 3. **`MOBIL.md` borç satırı bayat** — "11 gerekçesiz kuyruksuz mutasyon (İ-21)" düzeltmeden önceki sayı; bugünkü açık 3.
 4. **İ-21 / İ-23 kalanı** — 3 istasyon mutasyonuna online-only gerekçesi, `TamburScreen` ReasonStep'in `ReasonPresetPicker`e geçişi.
 5. **Swagger toplu belgeleme** — 117 belgesiz uç donduruldu; yoğunlaştığı yerler `shipping` 33 · `finance` 24 · `reports` 13 · `admin` 10.
-6. **[DB-29] provası** — M-01'in index migration'ı en eski canlı dump'ta prova edilip SÜRESİ ölçülmedi; `CREATE INDEX CONCURRENTLY` yasak olduğu için canlıda tablo kilitlenir.
+6. **[DB-29b] süre ölçümü** — M-01'in index migration'ının kurulum penceresini ne kadar uzattığı ölçülmedi. Kullanıcı kararı (2026-09-05): süre engel değil, kazanç yeterli. Dump eldeyken ölçülür.
 7. **Faz başına commit** — bu tur iki commit'le kapandı; geri alma birimi tek dev commit (§8 ölçüt 10).

@@ -1,0 +1,171 @@
+{
+  "alan": "SIRALI TARAMA (seq scan) yaptiran sorgu sekilleri",
+  "tarih": "2026-09-05",
+  "db": "tekserp_demo @ localhost:55433 (docker: tekserp-local-db)",
+  "yontem": "SALT-OKUNUR. Yalniz SELECT + EXPLAIN (ANALYZE, BUFFERS). Hicbir index kurulmadi, hicbir dosya degistirilmedi.",
+  "zemin": {
+    "sunucu": {
+      "shared_buffers": "128MB",
+      "work_mem": "4MB",
+      "effective_cache_size": "4GB",
+      "statement_timeout": "50s",
+      "db_boyu": "80 MB"
+    },
+    "kritik_not": "Tum DB (80 MB) shared_buffers'a (128 MB) SIGIYOR. Olculen her sure 'Buffers: shared hit=..., read=0', yani SIFIR disk I/O. 10x'te system_logs tek basina 190 MB, 100x'te 1,9 GB heap + 1,4 GB index -> shared_buffers'a sigmaz. Bu yuzden asagidaki 10x/100x tahminleri ALT SINIRDIR; gercek maliyet disk I/O ile daha yuksektir.",
+    "system_logs_buyume_esigi": "6 ayda arsivleniyor (audit.service.archiveOlderThan). 10x (511.640 satir) = 2.842 audit satiri/gun surdurulurse; 100x (5,1M) = 28.333 satiri/gun. 2.842/gun ~ 16 saatlik vardiyada 20 saniyede bir CUD - fabrikada MAKUL. Yani 10x yakin, 100x uzak.",
+    "pg_stat_user_tables": [
+      { "tablo": "system_logs", "n_live_tup": 51164, "seq_scan": 2094, "seq_tup_read": 52331866, "idx_scan": 10322, "tur_basi_satir": 24991.3, "heap": "19 MB", "index_toplam": "14 MB", "index_sayi": 6 },
+      { "tablo": "work_orders", "n_live_tup": 373, "seq_scan": 120425, "seq_tup_read": 13837258, "idx_scan": 54602, "tur_basi_satir": 114.9, "heap": "64 kB", "index_toplam": "496 kB", "index_sayi": 11 },
+      { "tablo": "work_order_steps", "n_live_tup": 592, "seq_scan": 77300, "seq_tup_read": 9000202, "idx_scan": 158941, "tur_basi_satir": 116.4, "heap": "88 kB", "index_toplam": "272 kB", "index_sayi": 6 },
+      { "tablo": "roll_operations", "n_live_tup": 518, "seq_scan": 85943, "seq_tup_read": 5009414, "idx_scan": 267865, "tur_basi_satir": 58.3, "heap": "128 kB", "index_toplam": "304 kB", "index_sayi": 8 },
+      { "tablo": "rolls", "n_live_tup": 832, "seq_scan": 13704, "seq_tup_read": 4019142, "idx_scan": 638732, "tur_basi_satir": 293.3, "heap": "1072 kB", "index_toplam": "4344 kB", "index_sayi": 28 },
+      { "tablo": "traveler_card_scans", "n_live_tup": 518, "seq_scan": 10150, "seq_tup_read": 1114413, "idx_scan": 17237, "tur_basi_satir": 109.8, "heap": "96 kB", "index_toplam": "264 kB", "index_sayi": 5 },
+      { "tablo": "duplicate_reviews", "n_live_tup": 873, "seq_scan": 1730, "seq_tup_read": 711859, "idx_scan": 1391, "tur_basi_satir": 411.5, "heap": "344 kB", "index_sayi": 3 }
+    ],
+    "yazma_istatistikleri": [
+      { "tablo": "rolls", "ins": 146948, "upd": 54625, "hot_upd": 450, "hot_yuzde": 0.8, "index_sayi": 28 },
+      { "tablo": "work_orders", "ins": 9421, "upd": 17512, "hot_upd": 14288, "hot_yuzde": 81.6, "index_sayi": 11 },
+      { "tablo": "work_order_steps", "ins": 15952, "upd": 11881, "hot_upd": 87, "hot_yuzde": 0.7, "index_sayi": 6 },
+      { "tablo": "system_logs", "ins": 68800, "upd": 0, "hot_upd": 0, "index_sayi": 6 }
+    ],
+    "system_logs_icerik": {
+      "toplam": 51164,
+      "TAMBUR_UNDO_event_tasiyan": 276,
+      "TAMBUR_UNDO_FULL_cocuk_dizisi": 92,
+      "TAMBUR_UNDO_SINGLE_tekil": 161,
+      "TAMBUR_UNDO_RESTORE_tekil": 23,
+      "AUTH_SYSTEM_altkume": 1285,
+      "DOMAIN": 49879
+    },
+    "olcum_uyarisi": "pg_stat sayaclari HIC sifirlanmamis (stats_reset NULL) ve dev DB'de npm test kosumlari var. seq_scan SAYISI test trafigidir, uretim trafigi degil. Buradaki hukum sayidan degil PLAN SEKLINDEN cikarilmistir. pg_stat_statements kurulu degil ve kurmak yazma oldugundan sorgu-basi atif yapilamadi."
+  },
+  "bulgular": [
+    {
+      "id": "S1",
+      "baslik": "isUndoSourcedByAudit her cagrida system_logs'u BASTAN SONA tariyor",
+      "nerede": "Teks-Erp/src/services/inventory.service.ts:2505-2515 (cagiranlar: :2540 buildCancelDiagnostics -> findRollById :2474, :2591 findRollByBarcode; ayrica :3718 restoreRoll)",
+      "bugun": "11,608 ms - Seq Scan - Buffers: shared hit=2499 (19 MB) - 51.164 satir okundu, 0 satir dondu (Rows Removed by Filter: 51164). Sorgunun aradigi kume tabloda 276 satir (%0,54).",
+      "olcekte": "Maliyet tablo boyutuyla DOGRUSAL: 10x (511.640 satir, 190 MB) ~116 ms; 100x (5,1M, 1,9 GB) ~1,2 s ve shared_buffers'a (128 MB) sigmadigi icin gercek disk I/O eklenir. Kisa devre iki katmanlidir (roll.status !== CANCELLED -> null; cancelReasonCode dolu -> false), ama dev DB'deki 44 CANCELLED topun 44'unun de cancelReasonCode'u NULL - yani bu topun her detay acilisinda ve her BARKOD OKUTMASINDA tam tarama kosuyor. Tablet okutma yolu.",
+      "kanit": "EXPLAIN (ANALYZE, BUFFERS): 'Seq Scan on system_logs (actual time=11.588..11.588 rows=0) Rows Removed by Filter: 51164, Buffers: shared hit=2499'",
+      "oneri": "Index DEGIL, TARIH SEDDI. Sorguya damganin devreye girdigi tarihten kucuk bir createdAt sinirlamasi ekle (ya da topun kendi statusChangedAt'ini +/- pencere olarak kullan). OLCULDU: ayni sorgu 'AND \"createdAt\" < TIMESTAMPTZ 2026-08-29' ile 11,608 ms -> 0,031 ms, 2.499 -> 2 buffer (374x), plan 'Index Scan using system_logs_createdAt_idx'. Maliyeti ZAMANLA AZALIR: 6 aylik arsivleme kesim tarihinden onceki satirlari bosaltir, sorgu bos aralik tarar. Cancelled toplarda cancelledAt 44/44 NULL, statusChangedAt 44/44 DOLU - capa olarak statusChangedAt kullanilabilir.",
+      "index_adaylari_neden_reddedildi": [
+        "GIN (newData jsonb_ops) tam kolon: (a) '->> LIKE ON EK' dalini HIC desteklemez; (b) ikinci dal ('newData' -> 'cancelledChildIds') @> ... da desteklenmez cunku indexlenen ifade KOLONUN KENDISI, sorgudaki sol taraf ise 'newData->cancelledChildIds' ALT NESNESI - GIN yalniz 'newData @> ...' butun-kolon kapsama sorusuna cevap verir. Yani GIN once sorgunun jsonb_build_object ile yeniden yazilmasini sart kosar. (c) Tam GIN her audit INSERT'inde her anahtar+deger icin giris yazar; system_logs 68.800 INSERT / 0 UPDATE alan en yuksek yazma tablosudur - butun secenekler icinde EN PAHALI yazma maliyeti.",
+        "((newData->>'cancelledChildId')) btree ifade index'i: yalniz BIRINCI dali kapatir (161+23=184 satir); TAMBUR_UNDO_FULL'un 92 satirlik dizi dali acikta kalir ve OR yuzunden planlayici yine tam tarama secer.",
+        "Kismi GIN (WHERE newData->>'event' LIKE 'TAMBUR_UNDO%'): boyu onemsiz (276/51.164 = %0,54) ve yazma maliyeti dusuk, AMA yine sorgunun @> bicimine yeniden yazilmasini gerektirir VE her INSERT'te bir jsonb cikarimi + LIKE degerlendirmesi ekler. Tarih seddi bunun tamamini bedava yapiyor - index gerekmiyor.",
+        "[DB-27] uyarisi: jsonb ->> ve ~~ IMMUTABLE'dir, yani ifade/kismi index yazilabilirdi; reddin sebebi yasallik degil, tarih seddinin daha ucuz olmasi."
+      ],
+      "bedel": "Bir WHERE satiri + bir sabit (ya da statusChangedAt okumasi). Index yok, migration yok. RISK: kesim tarihi YANLIS-ERKEN secilirse eski bir geri-alma tanninmaz ve top 'geri alinabilir' gorunur. Bunu bertaraf etmenin yolu sabit tarih yerine topun statusChangedAt'ini capa yapmak. Kesim tarihi bir DEPLOY tarihidir (damgayi yazan kod tambur-undo.service.ts:1147), migration'a bagli degil - dogrulanmasi gerekir.",
+      "oncelik": "yuksek"
+    },
+    {
+      "id": "S2",
+      "baslik": "ImportService.getRunRecords json-path yuklemi indexlenemez, tam tarama",
+      "nerede": "Teks-Erp/src/services/import/import.service.ts:740-748",
+      "bugun": "12,061 ms - Seq Scan - Buffers: shared hit=2494 - 51.164 satir suzuldu, 0 dondu. Yuklem: category='DOMAIN' AND newData#>'{importRunId}' = to_jsonb($1). take:10000.",
+      "olcekte": "Dogrusal. 10x ~120 ms, 100x ~1,2 s (+ disk). Ice aktarim detay ekrani her acildiginda kosar. Ustelik 'take: 10000' tavani var - ice aktarim buyudukce hem tarama hem sonuc kumesi buyur.",
+      "kanit": "EXPLAIN: 'Seq Scan on system_logs (actual time=12.031..12.032 rows=0) Rows Removed by Filter: 51164, Buffers: shared hit=2494'. system_logs'ta jsonb GIN index'i YOK (\\d system_logs: 6 index, hepsi btree).",
+      "oneri": "Ayni tarih seddi. Fonksiyon zaten `prisma.importRun.findUnique` cagiriyor (:738) ama yalniz `{id:true}` seciyor - select'i genislet ve run'in startedAt/finishedAt degerlerini createdAt alt/ust siniri olarak WHERE'e koy. Olculen emsal (S1): tarih siniri eklenince ayni tabloda 11,6 ms -> 0,031 ms, 2.499 -> 2 buffer. Alternatif kalici cozum: importRunId'yi system_logs'ta GERCEK KOLON yapmak - ama bu migration + audit yazma yolu degisikligidir, tarih seddi once denenir.",
+      "bedel": "findUnique select genisletme + iki WHERE siniri. Index yok. RISK dusuk: ImportRun.finishedAt NULL olabilir (kosan run - schema.prisma:5803 'finishedAt IS NULL = kosuyor'), o durumda ust sinir now() olur.",
+      "oncelik": "yuksek"
+    },
+    {
+      "id": "S3",
+      "baslik": "recordId, tableName olmadan gonderilebiliyor - index'in ilk kolonu bos, TAM INDEX taramasi",
+      "nerede": "Teks-Erp/src/routes/admin.routes.ts:1218-1225 (systemLogListQuerySchema) + Teks-Erp/src/services/system-log.service.ts:136",
+      "bugun": "3,152 ms - Buffers: shared hit=471 - 'Index Scan using system_logs_tableName_recordId_idx, Index Cond: (recordId = ...)'. Plan 'Index Scan' YAZIYOR ama ilk kolon (tableName) bos oldugu icin INDEX'IN TAMAMI okunuyor. Ikisi birlikte verildiginde ayni sorgu 0,029 ms / 3 buffer.",
+      "olcekte": "471 buffer index boyutuyla dogrusal (system_logs index toplami bugun 14 MB). 100x'te ~47.000 buffer / ~370 MB, tek istek icin. 'Seq Scan' kelimesi planda gecmedigi icin bu tuzak gozden kacar - asil olcut plan dugumunun ADI degil Buffers'tir.",
+      "kanit": "EXPLAIN S5 (recordId tek basina): Buffers: shared hit=471, Execution Time 3,152 ms. EXPLAIN S6 (tableName+recordId): Buffers: shared hit=3, Execution Time 0,029 ms. Kodda uyari VAR (admin.routes.ts:1223 'yalniz recordId gondermek seq scan uretir'; system-log.service.ts:26-28 ayni uyari) ama Zod semasi ZORLAMIYOR - iki alan da bagimsiz optional.",
+      "oneri": "Semaya .superRefine ekle: recordId varsa tableName ZORUNLU, yoksa 400. FAIL-CLOSED varsayilani (kok CLAUDE.md 'Kapilar ve sozlesme') zaten bunu emrediyor; kural belgede yaziyor, kapisi yok. ISTEMCI KIRILMAZ: paneldeki tek cagiran Electron/src/components/RecordHistoryDialog.tsx:52 ve o zaten ikisini birlikte gonderiyor (grep ile dogrulandi).",
+      "bedel": "3 satir Zod + Turkce validation mesaji. Index yok, migration yok. Sozlesme kirici sayilmaz (var olan tek istemci uyumlu) ama yine de 'eski istemci ne yapar' sorusu cevaplanmali: uc yalniz-recordId istegine 400 doner.",
+      "oncelik": "orta"
+    },
+    {
+      "id": "S4",
+      "baslik": "category IN (...) + action filtresi: LIMIT budamiyor, eslesen TUM satirlar okunup siralaniyor",
+      "nerede": "Teks-Erp/src/services/system-log.service.ts:136 (list) - cagiran Electron/src/pages/System/Events/SystemEventsPage.tsx:34 ('ALL' sekmesi category='AUTH,SYSTEM' gonderiyor)",
+      "bugun": "action filtresi YOKKEN 0,699 ms / 606 buffer (Index Scan Backward on createdAt, Rows Removed 1876) - bu SABIT maliyettir, olcekle buyumez cunku AUTH+SYSTEM orani (%2,5) sabit kalir. action='ERROR' EKLENINCE 1,313 ms / 974 buffer: 'Index Scan using system_logs_category_createdAt_idx, Index Cond: (category = ANY({AUTH,SYSTEM}))' + 'Sort Method: top-N heapsort' -> ScalarArrayOp index'in SIRA garantisini bozuyor, LIMIT 51 budayamiyor, eslesen 230 satirin tamami okunup siralaniyor.",
+      "olcekte": "action'li dal AUTH+SYSTEM alt kumesiyle dogrusal buyur (bugun 1.285 satir). 100x'te ~128.500 satir okunup siralanir; kaba tahmin ~97.000 buffer (~760 MB) tek sayfa icin. action'siz dal (P1) olcekle buyumez - ayirt edilmesi gereken nokta budur.",
+      "kanit": "P2 (category ANY + action): 974 buffer / 1,313 ms, top-N heapsort. P2b (TEK category + action, index sirayi verebiliyor): 109 buffer / 0,372 ms. P3 (tek category + tableName): 49 buffer / 0,064 ms. Mekanizma boylece OLCULDU: index sirayi verebildiginde LIMIT budar, ANY girdiginde budayamaz.",
+      "oneri": "Iki secenek, ikisi de bugun ACILI DEGIL: (a) '(category, action, \"createdAt\" DESC)' composite - [DB-13] esitlik-once kuralina uyar; KAZANCI OLCULMEDI (CREATE INDEX bu turda yasak), ama P2b/P2 karsilastirmasi mekanizmayi kanitliyor. Yazma bedeli: system_logs'un 7. index'i; mevcut 6 index 51k satir icin 14 MB, yani index basi ~48 B/satir -> 68.800 INSERT'te ~%17 ek index yazma hacmi. (b) Panelin 'ALL' sekmesinde action secildiginde iki kategoriyi UNION ALL ile ayirmak: OLCULDU 672 buffer / 0,782 ms (974/1,313'ten iyi ama tam cozum degil - eslesmeyen AUTH bolmesi yine 664 satir gezildi). ONERI: bugun DOKUNMA, olcum tripwire olarak kalsin; system_logs 500k satiri gectiginde (a) yeniden olculsun.",
+      "bedel": "(a) 1 index migration + kalici yazma maliyeti. (b) sorgu yeniden yazimi, orta kod riski, kismi kazanc. Bugun ikisinin de kazanci acili degil.",
+      "oncelik": "dusuk"
+    },
+    {
+      "id": "S5",
+      "baslik": "Denetim karnesi dort sorgu ile tam tablo tariyor - PLAN DOGRU, olcek notu ayri",
+      "nerede": "Teks-Erp/src/services/reports/audit.report.service.ts:57, :64, :78 (byAction / byTable / daily) ve :136 (getUserActivity)",
+      "bugun": "byAction 16,723 ms / 2.470 buffer (HashAggregate <- Seq Scan 51.164) - byTable 14,016 ms / 2.467 - daily 14,593 ms / 2.475 (Parallel Seq Scan + Partial HashAggregate, 2 worker) - userActivity 24,021 ms / 2.476 (Seq Scan + Hash Left Join users). Toplam ~24 ms cunku Promise.all ile paralel (dosyadaki yorumun anlattigi tasarim).",
+      "olcekte": "Dogrusal: 100x'te tek basina 1,6-2,4 s ve 246.000 buffer (~1,9 GB) - shared_buffers'a sigmaz, disk I/O eklenir. AMA 6 aylik arsivleme tavani var: 365 gunluk aralik istense bile tablo en fazla 6 ay tasir. Aralik tablonun tamamini kapsadiginda SEQ SCAN DOGRU PLANDIR - hicbir index bunu duzeltmez, cunku sorgu her satiri okumak zorunda.",
+      "kanit": "daily sorgusunda 'Parallel Seq Scan + Partial HashAggregate' gorundu - dosyadaki yorumun anlattigi genisletilmis istatistik (sl_day_exact, \\d system_logs'ta gorunuyor) HALA CALISIYOR; sorgu diske-tasan Sort+GroupAggregate'e dusmuyor.",
+      "oneri": "INDEX YAZMA - seq scan burada dogru secim. Tek gercek kaldirac gunluk rollup tablosudur (endpoint_latency_daily emsali gibi) ve bu bir tasarim isidir, bir index degil; kazanci olculmedi, bu turda ONERILMIYOR. Korunacak sey: sl_day_exact ifade istatistiginin GROUP BY ifadesiyle BIREBIR eslesmesi - ifade degisirse plan sessizce yavaslar (dosyadaki yorum bunu zaten yaziyor).",
+      "bedel": "Yok - oneri 'dokunma'.",
+      "oncelik": "yapma"
+    },
+    {
+      "id": "S6",
+      "baslik": "rolls: 28 index, HOT update orani %0,8 - her top guncellemesi 28 index agacina yaziyor",
+      "nerede": "prisma/schema.prisma (Roll modeli) + Teks-Erp/src/services/inventory.service.ts, tambur.service.ts, subcontractor.service.ts (atomik claim updateMany'leri)",
+      "bugun": "pg_stat_user_tables: rolls n_tup_upd=54.625, n_tup_hot_upd=450 -> HOT orani %0,8. Yani guncellemelerin %99,2'si 28 index'in tamamina yazim uretiyor. Karsilastirma: work_orders %81,6 HOT (11 index ama guncellenen kolonlar indexli degil). rolls index toplami 4.344 kB / heap 1.072 kB = 4,05x.",
+      "olcekte": "Yazma maliyeti satir sayisiyla degil GUNCELLEME sayisiyla buyur; her uretim adimi (status degisimi, currentQty decrement) bir UPDATE'tir. status 7 ayri index'te, updatedAt 1'de, currentQty 1'de - status degisen her guncelleme HOT'u zaten olduruyor. 100x uretimde index yazma hacmi 100x.",
+      "kanit": "pg_stat_user_indexes (rolls): rolls_status_currentQty_idx idx_scan=5, boyut 416 kB - tablonun PK disindaki EN BUYUK index'i, 304.394 pkey taramasina karsilik 5 tarama. Kod taramasi: currentQty gecen her yuklem bir ATOMIK CLAIM icinde ('updateMany WHERE {id, status, currentQty: {gte}}' - tambur.service.ts:2352, :3123, subcontractor.service.ts:598, :2993) ve bunlar PK aramasidir, index'i KULLANMAZ. status+currentQty araligini okuyan tek yer demo.service.ts:106.",
+      "oneri": "rolls_status_currentQty_idx'i DUSURMEYI degerlendir - ama once CANLI kurulumda 'SELECT indexrelname, idx_scan FROM pg_stat_user_indexes WHERE relname=''rolls''' ile dogrula. Dev DB sayaclari test trafigidir, uretim trafigi degil; bu bulgunun kanit tarafi KOD TARAMASIDIR (okuyan yuklem yok), sayac degil. Dusurulurse: 28 -> 27 index, 54.625 guncellemede index basi ~48 B/satir yazma tasarrufu ve 416 kB yer.",
+      "bedel": "DROP INDEX migration - GERI ALINAMAZ ([DB-26] CONCURRENTLY yasak oldugundan CREATE geri kurulurken tabloyu kilitler; vardiya disi is, DB kurali 14). Yanlissa geri kurmak pahali. Bu yuzden CANLI idx_scan dogrulamasi ON KOSUL. Diger 27 index icin bu turda hukum YOK.",
+      "oncelik": "orta"
+    },
+    {
+      "id": "S7",
+      "baslik": "rolls statusIn + createdAt DESC + LIMIT: LIMIT budamiyor, eslesen tum toplar okunup siralaniyor",
+      "nerede": "Teks-Erp/src/services/inventory.service.ts:1283 (where.status = { in: statusIn }) + :1724 findMany (orderBy [sortBy, id], take limit+1, tavan 500)",
+      "bugun": "0,332 ms - Seq Scan + top-N heapsort - Buffers: shared hit=140 - eslesen 385 satirin TAMAMI okundu, 51 satir donmek icin. Tek status ile ayni sorgu: 0,069 ms / 20 buffer (Bitmap on rolls_status_updatedAt_idx).",
+      "olcekte": "Bu bir 'kucuk tabloda seq scan dogru' vakasi DEGIL - index acik olsa bile plan degismiyor. enable_seqscan=off ile olculdu: 'Bitmap Heap Scan on rolls + top-N heapsort', 72 buffer, yine 385 satirin tamami okundu. Sebep: (status, createdAt) index'i ScalarArrayOp (status = ANY) altinda SIRA garantisi vermiyor, LIMIT budayamiyor. 100x'te ~%46'lik bir sekme ~38.500 satir okur; sayfa basina, sekme degisimi basina, ve 'tumunu indir' 500'luk sayfalarda.",
+      "kanit": "R3 (seq): 140 buffer / 0,332 ms, 385 satir. R3b (enable_seqscan=off): 72 buffer / 0,208 ms, yine 385 satir, 'Bitmap Index Scan Index Cond: (status = ANY (...))' + top-N heapsort. R4 (tek status): 20 buffer / 0,069 ms.",
+      "oneri": "BUGUN DOKUNMA - bu bir olcum tripwire'idir. Iki secenegin de kazanci bu turda OLCULMEDI: (a) sekme basina kismi index ('WHERE status IN (...)' + createdAt DESC siralanmis) - status kumesini index'e SABITLER ve o kume [PROFIL] degeridir, ayrica yeni bir enum degeri sessizce kapsam disi kalir ([DB-17] recete alani); (b) UNION ALL + Merge Append yeniden yazimi (ham SQL, Prisma disi, gercek kod riski). Karar esigi: rolls 50k satiri gectiginde bu EXPLAIN yeniden kosulsun.",
+      "bedel": "(a) sekme sayisi kadar kismi index + profil kirilganligi. (b) yuksek kod riski. Ikisi de bugun bedelini cikarmiyor.",
+      "oncelik": "dusuk"
+    },
+    {
+      "id": "S8",
+      "baslik": "Alti tablonun seq scan'i (work_orders, work_order_steps, roll_operations, traveler_card_scans, duplicate_reviews): PostgreSQL'in DOGRU secimi",
+      "nerede": "-",
+      "bugun": "Bu tablolarin heap'i 64-344 kB. Tam tarama 8-43 buffer. Olculen: work_orders isActive -> Seq Scan 8 buffer / 0,112 ms - work_orders type (index YOK) -> Seq Scan 8 buffer / 0,076 ms - work_order_steps status<>COMPLETED -> Seq Scan 11 buffer / 0,079 ms - duplicate_reviews entity -> Bitmap Index Scan 39 buffer / 0,175 ms - traveler_card_scans cardId -> Bitmap Index Scan 5 buffer / 0,063 ms - roll_operations rollId -> Bitmap Index Scan 2 buffer / 0,033 ms.",
+      "olcekte": "GERCEK BOSLUK YOK. Bu tablolarin index'leri VAR ve olcek buyudugunde planlayici onlara geciyor - kanit: work_orders status='IN_PROGRESS' + createdAt DESC sorgusu ZATEN 'Index Scan using work_orders_status_createdAt_idx' (39 buffer / 0,081 ms) seciyor, cunku o sorguda index sira da veriyor. seq_tup_read'in 13,8M olmasi 120.425 CAGRI x 115 satirdir; plan sorunu degil, cagri SAYISI sorunudur ve o sayi npm test trafiginden gelir.",
+      "kanit": "W1..W6 EXPLAIN kumesi (yukarida). work_orders'in 11, work_order_steps'in 6, roll_operations'in 8 index'i var ve hepsi ilgili yuklemleri kapsiyor (\\d ciktilari).",
+      "oneri": "DOKUNMA. work_orders.type'in index'i yok ama work_orders liste servisinde type filtresi de yok (grep ile dogrulandi) - 'olmayan sorgu icin index yazma'.",
+      "bedel": "Yok.",
+      "oncelik": "yapma"
+    },
+    {
+      "id": "S9",
+      "baslik": "Dropdown sorgulari (listActiveTables / listActiveUsers) tam tarama - onbellegin arkasinda",
+      "nerede": "Teks-Erp/src/services/system-log.service.ts:304, :321",
+      "bugun": "8,478 ms - HashAggregate <- Seq Scan - Buffers: shared hit=2467 - 49.879 satirdan 78 distinct tableName.",
+      "olcekte": "Dogrusal (100x ~850 ms), AMA dropdownCache TTL'inin arkasinda; frekans dusuk. Kok CLAUDE.md'nin 'onbellekte TTL tazeliktir gecerlilik degil' kurali geregi bayat deger donup tazelendigi icin kullaniciya carpmaz.",
+      "kanit": "EXPLAIN I3: 'HashAggregate <- Seq Scan on system_logs, Buffers: shared hit=2467, Execution Time 8,478 ms'.",
+      "oneri": "Bugun dokunma; S1/S2 cozuldukten sonra system_logs'un seq scan sayaci yeniden olculsun - bu sorgu geriye kalan tam taramalarin bir kismini aciklar. Alternatif (olculmedi): dropdown'i sabit katalogtan beslemek.",
+      "bedel": "Yok - oneri 'olcumu tekrarla'.",
+      "oncelik": "dusuk"
+    },
+    {
+      "id": "S10",
+      "baslik": "Indexlenmis oldugu dogrulanan system_logs okuma noktalari (negatif sonda - korluk zemini)",
+      "nerede": "grep -rn 'systemLog\\.|FROM system_logs' src/ ile 34 vurus tarandi",
+      "bugun": "record-info.service.ts:193/:197 (tableName+recordId) -> Index Scan, 3 buffer / 0,035 ms. work-session-activity.service.ts:308 (tableName+userId+createdAt penceresi+json status) -> Index Scan using system_logs_userId_createdAt_idx, 344 buffer / 0,245 ms - json yuklemi index-daraltilmis kucuk kumede recheck olarak kosuyor (dosyadaki yorum dogru). backup-impact.service.ts:326 (count createdAt>=cutoff) -> Index Only Scan, 5.268 buffer / 3,034 ms. backup-impact.service.ts:399 (min createdAt) -> Index Only Scan, 3 buffer / 0,021 ms. backup-impact.service.ts:418 (category=DOMAIN + createdAt>=cutoff, GROUP BY) -> Index Scan on createdAt, 12.429 buffer / 6,457 ms. audit.service.ts:208 (arsivleme, createdAt<cutoff, take 5000) -> createdAt index. system-log.service.ts:136 tek-kategori/tableName/userId dallari -> Index Scan Backward, 23-49 buffer.",
+      "olcekte": "backup-impact.service.ts:418 dikkat ceker: 12.429 buffer okuyor, ayni satirlari SEQ SCAN 2.467 buffer'da okurdu (sorgu tablonun %56'sini kapsiyor). Planlayici index'i seciyor cunku satir sayisini az tahmin ediyor; rastgele heap erisimi 5x pahaliya geliyor. Bugun 6,457 ms - acil degil. Cutoff yakin (yedek zamani) olduginda kapsam kucultur ve index dogru secim olur; bu olcum en kotu haldir (cutoff 2 gun).",
+      "kanit": "B1 EXPLAIN: 'Index Scan using system_logs_createdAt_idx (rows=28779) Buffers: shared hit=12429' vs ayni tabloda tam seq scan 2.467 buffer.",
+      "oneri": "Dokunma; kayit olarak durur. Bu satirin amaci 0-bulgu koruludur: system_logs'un 34 okuma noktasindan 3'u (S1, S2, S9) tam tarama, geri kalani indexli.",
+      "bedel": "Yok.",
+      "oncelik": "yapma"
+    }
+  ],
+  "olculmeyen": [
+    "Uretim (fabrika) veri buyuklugu ve gercek sorgu frekansi. Dev DB fabrikanin KUCUK kopyasi; sonuclar plan SEKLI icin gecerli, mutlak sureler icin degil.",
+    "pg_stat_statements kurulu degil (kurmak yazma islemi - yasak). Bu yuzden system_logs'un 2.094 seq scan'inin S1/S2/S9 arasinda nasil dagildigi ATFEDILEMEDI; ucunun de plan sekli tam tarama.",
+    "Aday index'lerin gercek kazanci OLCULEMEDI - CREATE INDEX yasakti. S4(a) ve S7(a) icin yalniz mekanizma kanitlanabildi (index sirayi verdiginde LIMIT budar: P2b 109 buffer vs P2 974 buffer), kazancin kendisi degil.",
+    "GIN index'inin gercek boyu ve yazma maliyeti OLCULEMEDI (kurmak yasak) - S1'deki GIN reddi olcume degil isleç semantigine dayaniyor (jsonb_ops '->> LIKE' ve alt-nesne '@>' desteklemez).",
+    "Soguk onbellek davranisi. Butun olcumler 'Buffers: shared hit=..., read=0'; DB (80 MB) shared_buffers'a (128 MB) tamamen sigiyor. Uretimde disk I/O olacagi kesin ama BU KURULUMDA olculemedi.",
+    "system_logs'un gercek gunluk buyume hizi. Dev DB'de 12.164 satir/gun cikiyor ama gunluk dagilim iki ithalat patlamasi (2026-09-01: 21.622, 2026-09-05: 29.525) ve arada 6-11 satir - bu bir SEED/IMPORT profilidir, uretim profili degil.",
+    "isUndoSourcedByAudit icin kesim tarihinin (2026-08-29) DOGRULUGU. Kod yorumundan alindi; damgayi yazan kod tambur-undo.service.ts:1147 ve bu bir DEPLOY tarihidir, migration damgasina bagli degil - git gecmisinden dogrulanmadi.",
+    "rolls'un diger 27 index'inin gerekliligi. Yalniz rolls_status_currentQty_idx icin kod taramasi yapildi; kalanlar icin hukum YOK.",
+    "Endpoint duzeyinde uctan uca sure. Yalniz SQL plan dugumleri olculdu; Prisma'nin iliski basina actigi ek sorgular (roll list `include`) ve JSON serilestirme bu turun disinda."
+  ]
+}

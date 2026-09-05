@@ -122,6 +122,25 @@ const PARTIAL_INDEXES: Array<{
     predicate: `("finalizedAt" IS NOT NULL)`,
     why: "kalite/fire/fason karnelerinin dönem taraması; yalnız üretimi bitmiş toplar damgalı (migration 20260809090000)",
   },
+  // Envanter sekmelerinin VARSAYILAN SIRALAMASI (perf turu 2026-09-05, migration
+  // 20260905171000). Predicate'lerdeki statü kümelerinin TEK KAYNAĞI
+  // `inventory.service.ts` → buildRollWhere rollScope dalları; küme orada değişirse
+  // bu satırlar da yeni bir migration'la güncellenmeli (sonuç yanlış olmaz, kazanç
+  // kaybolur — sorgu index'i tutmaz ve seq scan'e döner).
+  {
+    table: "rolls",
+    index: "rolls_depo_updatedAt_idx",
+    uniq: false,
+    predicate: `(status = ANY (ARRAY['WAREHOUSE'::"RollStatus", 'A1_STOCK'::"RollStatus"]))`,
+    why: "Envanter 'Bitmiş Depo' sekmesi: iki değerli ScalarArrayOp btree'de sıralı sayılmaz → (status, updatedAt) ordering veremiyordu (ÖLÇÜM: 140 → 15 buffer)",
+  },
+  {
+    table: "rolls",
+    index: "rolls_uretim_updatedAt_idx",
+    uniq: false,
+    predicate: `(("currentStepId" IS NOT NULL) AND (status <> ALL (ARRAY['WAREHOUSE'::"RollStatus", 'A1_STOCK'::"RollStatus", 'SCRAP'::"RollStatus", 'CANCELLED'::"RollStatus", 'TAMBUR_CONSUMED'::"RollStatus", 'SUBCONTRACTOR_CONSUMED'::"RollStatus", 'RETURNED_FROM_SUBCONTRACTOR'::"RollStatus"])))`,
+    why: "Envanter 'Üretimde' sekmesi: kapsam bir NEGASYON, hiçbir düz btree karşılayamaz (ÖLÇÜM: 134 → 46 buffer, plan Seq Scan+Sort → Index Scan Backward)",
+  },
   // swatches
   { table: "swatches", index: "swatches_createdAt_idx", uniq: false, predicate: `("cancelledAt" IS NULL)`, why: "iptal edilmemiş kartela listesi" },
   { table: "swatches", index: "swatches_parentReceiptId_idx", uniq: false, predicate: `("parentReceiptId" IS NOT NULL)`, why: "null-yoğun FK" },
@@ -275,6 +294,14 @@ const PARTIAL_INDEXES: Array<{
   },
   // orders
   { table: "orders", index: "orders_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "idempotency" },
+  // system_logs — audit defterinin en çok yazılan tablosu (n_tup_ins=68.800).
+  // Perf turu 2026-09-05 (migration 20260905170000): index (category, createdAt)
+  // olarak KALDI, yalnız PARTIAL'a daraltıldı. DOMAIN satırları toplamın %97,5'i
+  // ve o yolda index ZATEN seçilmiyordu (createdAt index'i kazanıyor) → 3.600 kB
+  // → 56 kB ve DOMAIN insert'leri artık bu ağaca hiç yazmıyor.
+  // ⚠️ `SystemLogCategory` KAPALI enum (DOMAIN/AUTH/SYSTEM); dördüncü bir değer
+  // eklenirse predicate onu dışarıda bırakır — enum reçetesi buraya da uğramalı.
+  { table: "system_logs", index: "system_logs_category_createdAt_idx", uniq: false, predicate: `(category = ANY (ARRAY['AUTH'::"SystemLogCategory", 'SYSTEM'::"SystemLogCategory"]))`, why: "Sistem Kayıtları sayfası yalnız AUTH/SYSTEM sorar; DOMAIN %97,5'lik ölü ağırlıktı (ÖLÇÜM: 3.600 kB → 56 kB, AUTH sorgusu 57 → 47 buffer)" },
   { table: "orders", index: "orders_active_createdAt_idx", uniq: false, predicate: `(status <> 'CANCELLED'::"OrderStatus")`, why: "varsayılan liste sıralaması: panel iptalleri gizler (hideCancelled), o yüzden (status, createdAt) bileşiği ordering veremez — 30 günlük tarih penceresi kaldırıldıktan sonra tek koruma bu" },
   // swatch_stock_reductions
   { table: "swatch_stock_reductions", index: "swatch_stock_reductions_clientToken_key", uniq: true, predicate: `("clientToken" IS NOT NULL)`, why: "kartela stok-düşüm idempotency" },

@@ -1,0 +1,77 @@
+{
+  "alan": "Electron/src (panel istemcisi)",
+  "tarih": "2026-09-05",
+  "kaynak_olcum": "docs/history/perf-2026-09-05/istemci.json",
+  "temel_kural": "Kazancı ölçülmeyen değişiklik yapılmadı; iki düzeltmenin de öncesi/sonrası istek sayısı vitest içinde spy ile sayıldı, ikisi de kalıcı bekçiye bağlandı ve negatif sonda ile kırmızı verdiği doğrulandı.",
+  "duzeltmeler": [
+    {
+      "no": 1,
+      "baslik": "FilterBar lookup katalogları dropdown açılmadan çekiliyordu",
+      "durum": "yapildi",
+      "dosyalar": [
+        "Electron/src/components/data-table/FilterBar.tsx"
+      ],
+      "degisiklik": "LookupFilter (satır ~467) `enabled: open || value !== \"\"`; MultiLookupFilter (satır ~704) `enabled: open || selectedIds.length > 0`.",
+      "neden_dus_enabled_open_degil": "Düz `enabled: open` tetik yazısını bozardı: seçili filtrenin etiketi `items` listesinden çözülüyor, katalog gelmezse düğme ham UUID basar. Kayıtlı görünüm / route-memory ile dönüşte filtre DOLU gelir, yani bu gerçek bir yol. `open || seçim var` görünen sonucu birebir korur.",
+      "olcum_yontemi": "vitest + jsdom: gerçek `buildRollFilterDefs(tab, [], multiWarehouse=true)` çıktısıyla FilterBar render edildi, 9 lookup servisinin `getAll`'ı vi.spyOn ile sayıldı; mount + 150 ms sonrası çağrı sayısı okundu.",
+      "once": "Envanter sekmesi başına mount'ta lookup isteği — PRODUCTION 7 (items, colors, fabric-properties, entry-stations, warehouses, entry-users, stations) · SUBCONTRACTOR 8 (+subcontractors, subcontractor-categories) · RAW_STOCK / FINISHED_STOCK / ARCHIVE 6",
+      "sonra": "Hepsinde 0. Sayfa toplamı: PRODUCTION 1 liste + 1 stats + 7 lookup = 9 istek → 2 istek (%78 düşüş); SUBCONTRACTOR 10 → 2.",
+      "kazanc": "Envanter açılışında atılan istek: 9 → 2 (PRODUCTION), 10 → 2 (Fasonda). Katalog isteği ilk dropdown açılışına ertelendi, staleTime 60 sn ikinci açılışı bedava tutuyor.",
+      "yan_urun": "Ölçüm dosyası bulgu 6 kendiliğinden kapandı: `/rolls/entry-users` (Index Only Scan, 559 girdi → 2 grup) ve `/rolls/entry-stations` (245 girdi → 1 grup) artık her Envanter açılışında değil, yalnız o dropdown açılınca koşuyor. Ayrı bir index/migration ÖNERİLMEDİ.",
+      "gorunur_davranis": "Değişmedi. Seçimsiz filtre düğmesi zaten etiketini `def.label`'dan alıyordu; seçili filtre hâlâ mount'ta çözülüyor. Tek fark: `useTruncationWarning` toast'ı (>200 satırlık katalog uyarısı) artık sayfa açılışında değil dropdown açılışında basar — bugünkü veride (items 138, colors 126) hiç tetiklenmiyor.",
+      "bekci": "Electron/src/components/data-table/FilterBar.lazy-lookup.test.tsx (YENİ, 4 vaka)",
+      "negatif_sonda": "İki `enabled` satırı silindi → \"SEÇİMSİZ mount: hiçbir katalog isteği atılmaz\" kırmızı (`expected spy to be called +0 times, but got 2 times`); satırlar geri kondu, yeşil."
+    },
+    {
+      "no": 2,
+      "baslik": "useDataTable her mount'ta yüklü TÜM sayfaları seri yeniden çekiyordu",
+      "durum": "yapildi",
+      "dosyalar": [
+        "Electron/src/hooks/useDataTable.ts"
+      ],
+      "degisiklik": "`refetchOnMount: \"always\"` + `staleTime: 0` → `staleTime: 15_000` (refetchOnMount React Query varsayılanı `true`'da kalır).",
+      "karar_gerekcesi": "İki seçenekten `maxPages: 5` REDDEDİLDİ: yüklü sayfaları düşürür, yani ÇİZİLEN SATIR KÜMESİNİ değiştirir; üstelik backend'de geriye cursor sözleşmesi yok (`getPreviousPageParam` kurulamaz), yani yukarı kaydıran operatör sayfayı kalıcı kaybederdi. Görev tanımındaki \"satır kümesini değiştiren düzeltme yapma\" kuralına takılıyor. Seçilen yol tazelik penceresidir: satır kümesi, sıralaması ve yetkisi birebir aynı kalır.",
+      "olcum_yontemi": "vitest: sahte cursor fetchFn ile 9 sayfa yüklendi (9 istek), sayaç sıfırlandı, bileşen unmount → aynı QueryClient ile remount edildi, 200 ms sonrası fetchFn çağrı sayısı okundu.",
+      "once": "9 sayfa yüklüyken unmount → remount = 9 seri istek (her biri 100 satır)",
+      "sonra": "0 istek; `pagination.loaded` 9 satırda kalıyor (liste boşalmıyor, cache'ten geliyor)",
+      "kazanc": "Sekme içi git-gel (Sidebar → navigateActive, sayfayı unmount eder) 15 sn içinde tekrarlanırsa 9 → 0 istek. Ölçekte oran korunur: 8.320 topta dibe inen operatör için 83 → 0.",
+      "korunanlar": "(a) 27 ayrı `invalidateQueries([\"rolls\"])` çağrısının tazelemesi aynen sürüyor — invalidate staleTime'dan bağımsız refetch tetikler, ölçüldü: 9 istek. (b) 15 sn penceresi dolduktan sonra remount yine tüm sayfaları çekiyor, ölçüldü: 9 istek. (c) Filtre/arama/sıralama değişimi queryKey'i değiştirdiği için etkilenmiyor.",
+      "gorunur_davranis": "TEK fark ve açıkça söylenmeli: bir listeden çıkıp 15 saniye İÇİNDE geri dönülürse liste sunucudan yeniden çekilmez, cache'teki satırlar çizilir. Kendi yaptığın hiçbir işlem etkilenmez (mutasyonlar invalidate ediyor); yalnız BAŞKA bir kullanıcının son 15 sn içinde yaptığı değişiklik o dönüşte görünmeyebilir, 15 sn sonraki ilk dönüşte görünür. Sayfada elle yenileme düğmesi zaten yok; bugüne kadarki tek yenileme jesti olan 'çık-gir' 15 sn'lik bir gecikme kazandı.",
+      "bekci": "Electron/src/hooks/useDataTable.remount.test.tsx (YENİ, 3 vaka)",
+      "negatif_sonda": "Eski `refetchOnMount:\"always\"` + `staleTime:0` geri kondu → vaka 1 kırmızı (`expected 9 to be +0`); düzeltme geri alındı, yeşil."
+    },
+    {
+      "no": 3,
+      "baslik": "Etiket şablonu havuz listesi tasarımcı JSON'unu (`fields`) çekiyor",
+      "durum": "ertelendi",
+      "gerekce": "BACKEND bulgusu — sorgu `Teks-Erp/src/services/label-template.service.ts:207` (`findAll`, `include: { variants }`, `omit` YOK → tüm LabelTemplate skaler kolonları, `fields` dahil). Panel tarafında kesilecek bir şey yok; `labelTemplateService` yalnız ucu çağırıyor. Alanım Electron/src, backend'e başka ajan çalışıyor.",
+      "backend_icin_not": "Emsal `traveler-card.service.ts:751` `omit: { snapshot: true }`. Ölçülen pay: label_templates ort. satır 1.398 B, `fields` tek başına 1.271 B (~%91). Havuz listesi `fields`i KULLANMIYOR (rozetler `variants`ten geliyor); tekil okuma `findById` ayrı uçtan geliyor, o dokunulmamalı."
+    },
+    {
+      "no": 4,
+      "baslik": "Mükerrer-karar listesinde `evidence`siz dar select",
+      "durum": "ertelendi",
+      "gerekce": "BACKEND bulgusu — `mapByPairKey` yalnız `Teks-Erp/src/services/duplicate-review.service.ts:82`de var, Electron/src'de karşılığı YOK (grep 0 sonuç). Alan dışı.",
+      "backend_icin_not": "`DuplicateReview.evidence` şemada `Json?` ve yorumu 'snapshot, sorgulanmaz' diyor; pairKey→karar haritası için `select: { pairKey: true, decision: true }` yeter. Ölçülen pay: 873 satır × ort. 111 B evidence."
+    }
+  ],
+  "dogrulama": {
+    "npm run typecheck": "0 (tsconfig.node + tsconfig.web, hata yok)",
+    "npm run lint": "0 (666 uyarı, 0 error — değişiklik öncesiyle aynı sınıf)",
+    "npx vitest run": "0 — 213 dosya / 2290 vaka (önce 211 / 2283; +2 bekçi dosyası, +7 vaka)",
+    "node ../scripts/check-lint-baseline.mjs --proje=electron": "0 — 'electron: tavan aşılmadı (1398 dosya, 0 error)'",
+    "alan_bekcileri": "src/components/data-table/ (18 vaka, FilterBar.sentinel + FilterBar.error + DataTable.error) yeşil — özellikle 'seçili sentinel tetik yazısında ETİKETİYLE görünür' vakası etiket korumasını bağımsız doğruluyor."
+  },
+  "acik_karar": [
+    "loadAllForPicker 500 tavanı (items 138 · colors 126 · customers 77 → 3,6×–6,5× başlık payı) BU TURDA YAPILMADI, sıradaki iş. Sıra: itemService → colorService → customerService, aramalı combobox'a taşı; kalan 11 katalog (45×+ pay) tek atışta kalsın. Mobil KK1 picker'ı (mobil/src/screens/Modules/KK1/KK1Screen.tsx:685) aynı işin saha yüzü ve daha kötü kırılıyor (throw değil sessiz kesme) — o benim alanım değil.",
+    "Bulgu 3 (label_templates `fields`) ve bulgu 4 (`evidence`siz select) BACKEND'de; ikisi de ölçülmüş ve hazır ama Teks-Erp/src'e dokunulmadı (başka ajan çalışıyor). Yukarıdaki 'backend_icin_not' alanlarında dosya + satır + emsal duruyor.",
+    "maxPages REDDEDİLDİ (gerekçe düzeltme 2'de): satır kümesini değiştirir ve backend'de geriye cursor yok. Bu yüzden ölçüm dosyasının bulgu 4'ü (DataTable sanallaştırması) da kapanmadı — DOM düğüm sayısı hâlâ yüklü satırla doğrusal. Sanallaştırma ayrı ve YÜKSEK riskli bir iş (DndContext kolon sırası + bağlam menüsü + satır seçimi); React Profiler koşulmadan 'bugün yavaş' denemez, bu turda açılmadı.",
+    "Anasayfa 5 KPI → tek uç birleştirmesi YAPILMADI: yeni uç BACKEND işi ve KPI başına izin kapısı gerektiriyor (düz OR'a çevrilmesi fail-closed kuralını kırar). Ölçülen DB kazancı ~0 (count'lar Index Only Scan, 0,093 ms); kazanç yalnız LAN RTT'sinde ve o ölçülmedi.",
+    "15 sn'lik tazelik penceresi bir SAYI kararıdır, ölçümle değil yargıyla seçildi (ölçüm dosyası 10-15 sn öneriyordu). Sahadan 'çıkıp girdim güncellenmedi' şikâyeti gelirse önce bu sayı düşürülür; sıfırlamak eski 9-istek davranışını geri getirir."
+  ],
+  "olculmeyen": [
+    "GERÇEK AĞ SÜRESİ: backend bu turda da çalıştırılmadı. 'İstek 9 → 2' bir SAYIM; kazanılan milisaniye LAN RTT'sine bağlı ve ölçülmedi.",
+    "REACT RENDER SÜRESİ: iki düzeltme de istek sayısını düşürüyor, render maliyetine dokunmuyor. Profiler koşulmadı.",
+    "15 sn penceresinin SAHADA kaç kez ıskalanan tazelemeye denk geldiği: iki operatörün aynı topa 15 sn içinde dokunma sıklığı bilinmiyor."
+  ]
+}

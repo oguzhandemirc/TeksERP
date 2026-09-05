@@ -1,0 +1,118 @@
+{
+  "alan": "INDEX MIGRATION",
+  "tarih": "2026-09-05",
+  "db": "tekserp_demo @ localhost:55433 (PostgreSQL 16.15, docker tekserp-local-db)",
+  "girdi_olcum": "docs/history/perf-2026-09-05/index-envanteri.json (BULGU 1, 2, 4)",
+  "davranis_degisikligi": "YOK. Uc migration da yalnizca index nesnesi ekler/daraltir/dusurur. Hicbir sorgu metni, satir kumesi, siralama ya da yetki degismedi; servis kodu ELLENMEDI.",
+  "uygulanan_migrationlar": [
+    "Teks-Erp/prisma/migrations/20260905170000_sistem_log_kategori_kismi_index/migration.sql",
+    "Teks-Erp/prisma/migrations/20260905171000_envanter_sekme_kismi_index/migration.sql",
+    "Teks-Erp/prisma/migrations/20260905172000_kapsanan_fazla_indexler/migration.sql"
+  ],
+  "degisen_diger_dosyalar": [
+    "Teks-Erp/prisma/schema.prisma (iki yeni @@index + on adet kapsanan @@index satiri silindi)",
+    "Teks-Erp/scripts/test_db_invariants.ts (PARTIAL_INDEXES envanteri: 3 yeni satir - [DB-30])"
+  ],
+  "duzeltmeler": [
+    {
+      "no": 1,
+      "baslik": "system_logs_category_createdAt_idx -> KISMI (WHERE category IN ('AUTH','SYSTEM'))",
+      "durum": "yapildi",
+      "kapsama_dogrulamasi_once": "category suzen TUM yuzeyler kodda tarandi: ActivityPage.tsx:51 / NotificationBell.tsx:36 / ArchiveSearchPage.tsx:27 -> 'DOMAIN'; SystemEventsPage.tsx:28 -> 'AUTH,SYSTEM' | 'AUTH' | 'SYSTEM'. Servis tarafi parseCategories() yalnizca SystemLogCategory enum degerlerini kabul ediyor ve enum KAPALI (DOMAIN/AUTH/SYSTEM) -> predicate 'DOMAIN olmayan her sey'i tam kapsiyor. Index'in tek gercek kullanicisi olan AUTH ve SYSTEM sorgulari predicate'in ICINDE.",
+      "once": {
+        "index_boyutu": "3.600 kB",
+        "category='AUTH'": "Index Scan Backward using system_logs_category_createdAt_idx (Index Cond) + Incremental Sort · Buffers shared hit=57 · Execution 0,214 ms",
+        "category='SYSTEM'": "ayni index, Index Cond · Buffers shared hit=34 · Execution 0,106 ms",
+        "category IN ('AUTH','SYSTEM')": "Index Scan Backward using system_logs_createdAt_idx + Filter · Rows Removed by Filter 1876 · Buffers shared hit=597 · Execution 0,507 ms",
+        "category='DOMAIN'": "Index Scan Backward using system_logs_createdAt_idx + Filter · Buffers shared hit=23 · Execution 0,047 ms",
+        "yazma_bakimi": "51.164 satirin tamami index'te; n_tup_ins=68.800 (DB'nin en cok yazilan tablosu), her INSERT bu agaca girdi yaziyor"
+      },
+      "sonra": {
+        "index_boyutu": "56 kB",
+        "category='AUTH'": "AYNI PLAN - Index Scan Backward using system_logs_category_createdAt_idx (Index Cond: category='AUTH') · Buffers shared hit=49 · Execution 0,066 ms",
+        "category='SYSTEM'": "AYNI PLAN, Index Cond · Buffers shared hit=31 · Execution 0,075 ms",
+        "category IN ('AUTH','SYSTEM')": "PLAN DEGISMEDI (system_logs_createdAt_idx + Filter) · Buffers shared hit=511 · Execution 0,282 ms - regresyon YOK, kazanc da YOK",
+        "category='DOMAIN'": "PLAN DEGISMEDI · Buffers shared hit=18 · Execution 0,033 ms - regresyon YOK",
+        "yazma_bakimi": "index satir sayisi 51.164 -> 1.285; DOMAIN insert'leri (%97,5) predicate'i tutmadigi icin bu agaca HIC yazilmiyor"
+      },
+      "kazanc": "Index boyutu 3.600 kB -> 56 kB (%98,4). Asil kazanc YAZMA tarafinda: en cok yazilan tablonun insert'lerinin %97,5'i bu index'in bakimini artik odemiyor. Okuma tarafinda regresyon YOK - PG16'nin predicate ispati hem `category='AUTH'` hem `category='SYSTEM'` icin TUTTU (Index Cond korundu, olculdu).",
+      "uyari": "SystemLogCategory'ye DORDUNCU bir deger eklenirse predicate onu disarida birakir ve o kategorinin liste sorgusu sessizce createdAt index'ine duser. Migration basligina ve test_db_invariants satirina yazildi; enum recetesi (docs/RECETELER.md) bu dosyaya da ugramali.",
+      "geri_alinamaz": "EVET - migration DROP INDEX iceriyor. Basliga yazildi ([DB-31]: dosya bir daha degistirilmez, duzeltme yeni migration ile gelir)."
+    },
+    {
+      "no": 2,
+      "baslik": "Envanter 'Bitmis Depo' + 'Uretimde' sekmeleri icin iki PARTIAL index",
+      "durum": "yapildi",
+      "statu_kumesi_kaynagi": "src/services/inventory.service.ts -> buildRollWhere, rollScope==='FINISHED_STOCK' (~1520) ve rollScope==='PRODUCTION_ACTIVE' (~1502). ADLANDIRILMIS SABIT YOK - kume orada dizi literali olarak duruyor, o yuzden migration yorumunda dalin ADI ve satiri yazildi. Predicate elle yazilmadi: buildRollWhere gecici bir script'le calistirilip urettigi where nesnesi (status:'ALL' + rollScope, panelin buildRollForceFilters'inin gonderdigi taban) JSON olarak alindi, SQL ondan turetildi.",
+      "once": {
+        "Depo (FINISHED_STOCK, 93 satir)": "Seq Scan on rolls + Sort (quicksort) · Rows Removed by Filter 739 · Buffers shared hit=140 · Execution 0,386 ms",
+        "Uretimde (PRODUCTION_ACTIVE, 273 satir)": "Seq Scan on rolls + top-N heapsort · Rows Removed by Filter 559 · Buffers shared hit=134 · Execution 0,169 ms",
+        "not": "rolls 832 satir / 134 sayfa; iki sekmenin siralamasini karsilayan HICBIR index yoktu"
+      },
+      "sonra": {
+        "Depo": "Bitmap Index Scan on rolls_depo_updatedAt_idx -> Bitmap Heap Scan + Sort · Buffers shared hit=16 · Execution 0,064 ms (index 16 kB)",
+        "Uretimde": "Index Scan using rolls_uretim_updatedAt_idx + Incremental Sort (Presorted Key: updatedAt), LIMIT'te duruyor · Buffers shared hit=47 · Execution 0,048 ms (index 16 kB)"
+      },
+      "kazanc": "Depo: 140 -> 16 buffer (-%89), 0,386 -> 0,064 ms. Uretimde: 134 -> 47 buffer (-%66), 0,169 -> 0,048 ms. Planlayici 832 satirlik tabloda BILE iki index'i de SECTI - bugunku kazanc gercek, sifir degil.",
+      "olcek_notu": "Depo'da plan bugun BITMAP+Sort (93 satir 15 heap sayfasina sigiyor). SIRALI yol da mevcut ve olculdu: enable_bitmapscan=off ile 'Index Scan Backward using rolls_depo_updatedAt_idx', 29 buffer / 0,033 ms, LIMIT'te duruyor. Depo buyudukce bitmap+sort maliyeti sirali yolu gecer ve planlayici kendiliginden ona doner - o yonuyle ayrica bir OLCEK yatirimi. Uretimde zaten sirali plana gecti, yani orada olcek kazanci logaritmik.",
+      "yazma_bedeli": "rolls index sayisi 28 -> 30. rolls'ta HOT-update orani %0,8 (n_tup_upd=54.625 / n_tup_hot_upd=450), yani her guncelleme tum index'lere yazar. Iki index PARTIAL oldugu icin ek yazim yalniz predicate'i tutan satirlarda: bugun %11 (depo, 93/832) ve %33 (uretimde, 273/832). Migration basligina yazildi."
+    },
+    {
+      "no": 3,
+      "baslik": "Non-partial UNIQUE tarafindan TAM kapsanan 10 gereksiz index DROP ([DB-12] ihlali)",
+      "durum": "yapildi",
+      "dogrulama_yontemi": "pg_index + pg_attribute sorgusu depoda tekrar kosuldu (14 aday dondu). 4'u *_trgm_ (GIN) idi ve LISTEDEN CIKARILDI: ayni kolonda dursalar da opclass farkli, btree unique onlarin isini gormez (orders/sacks/shipments/work_orders numara trigram'lari). Kalan 10'un her birinde kapsayan index'in UNIQUE + NON-PARTIAL oldugu ve kolon on ekinin birebir estigi dogrulandi; ardindan her biri icin DROP oncesi/sonrasi EXPLAIN cekildi (enable_seqscan=off - tablolar 0-11 satir, aksi halde planlayici zaten seq scan secip iki index'i de gorunmez kilardi).",
+      "dusurulenler": [
+        "customer_standalone_labels_customerId_idx  -> kapsayan customer_standalone_labels_customerId_templateId_key (idx_scan=597)",
+        "machines_stationId_idx                     -> machines_stationId_nameFold_key",
+        "subcontractor_direct_ship_allocations_directShipmentId_idx -> ..._dsId_orderLineId_key",
+        "defect_types_nameFold_idx                  -> defect_types_nameFold_key",
+        "fabric_properties_nameFold_idx             -> fabric_properties_nameFold_key",
+        "peripheral_devices_nameFold_idx            -> peripheral_devices_nameFold_key",
+        "product_recipes_nameFold_idx               -> product_recipes_nameFold_key",
+        "quality_grades_nameFold_idx                -> quality_grades_nameFold_key",
+        "return_reasons_nameFold_idx                -> return_reasons_nameFold_key",
+        "routes_nameFold_idx                        -> routes_nameFold_key"
+      ],
+      "dokunulmayanlar": "*_trgm_ (11 GIN) ve customers/items/subcontractors/colors _nameFold duz btree'leri. Sonuncular BULGU 8'in kumesi: onlarin unique'i PARTIAL (WHERE mergedIntoId IS NULL) ve findSimilarNames tombstone'lari BILEREK gosterdigi icin o partial'i kullanamaz - 'unique kapsiyor' hukmu orada GECERSIZ. Bu tur onlara dokunmadi.",
+      "once": {
+        "customer_standalone_labels.customerId": "Index Scan using customer_standalone_labels_customerId_idx (cost 0.47..8.49, Index Cond: customerId = $0)",
+        "machines.stationId": "Index Scan using machines_stationId_nameFold_key - planlayici dusurulecek index'i ZATEN secmiyordu",
+        "sdsa.directShipmentId": "Index Scan using ..._dsId_orderLineId_key (cost 8.26..16.28)",
+        "defect_types.nameFold": "Index Scan using defect_types_nameFold_key - burada da kapsayan unique zaten seciliyordu"
+      },
+      "sonra": {
+        "customer_standalone_labels.customerId": "Index Scan using customer_standalone_labels_customerId_templateId_key (cost 0.47..8.49 - AYNI maliyet, AYNI Index Cond). 597 scan alan index'in dusurulmesinin planlayiciyi unique'e dusurdugu DOGRULANDI.",
+        "machines.stationId": "degismedi (machines_stationId_nameFold_key)",
+        "sdsa.directShipmentId": "degismedi (..._dsId_orderLineId_key, cost 8.26..16.28)",
+        "yedi *_nameFold_idx": "her birinde <tablo>_nameFold_key secildi, Index Cond aynen korundu (defect_types 0.13..12.18 · fabric_properties 1.01..9.03 · peripheral_devices 1.28..9.30 · product_recipes 8.26..16.28 · quality_grades 4.27..12.29 · return_reasons 2.28..10.30 · routes 6.27..14.29)"
+      },
+      "kazanc": "160 kB disk + on agaclik INSERT/UPDATE bakimi. KUCUKTUR ve kucuk oldugu olculdu (dokuzu 0-11 satirlik master-data). Asil deger [DB-12] kuralinin DB'de fiilen tutuyor olmasi. public semasindaki toplam index sayisi 663 -> 655 (10 dustu, 2 eklendi).",
+      "geri_alinamaz": "EVET - DROP INDEX. Basliga yazildi."
+    }
+  ],
+  "bekci_cikis_kodlari": {
+    "apply-migration 20260905170000 --apply": "SQL exit=0, resolve OK; script sonu drift KIRMIZI (o an sema'daki iki rolls index'i DB'de henuz yoktu - 2. migration'dan sonra yesillendi)",
+    "apply-migration 20260905171000 --apply": "SQL exit=0, resolve OK; script sonu drift hala KIRMIZI (10 kapsanan @@index sema'dan silinmisti, DB'de duruyordu - 3. migration'dan sonra yesillendi)",
+    "apply-migration 20260905172000 --apply": "0 (SQL exit=0, resolve OK, drift 4 gecti / 0 basarisiz, hijyen 4 gecti / 0 basarisiz)",
+    "test_db_invariants.ts": "0 (164 gecti, 0 basarisiz)",
+    "test_schema_drift.ts": "0",
+    "test_migration_hygiene.ts": "0",
+    "test_timestamptz_contract.ts": "0",
+    "npm run typecheck:plain": "0",
+    "run-all-tests test_similar_names": "0 (13 gecti)",
+    "run-all-tests test_duplicate_detection": "0 (63 gecti)",
+    "run-all-tests system_log": "0 (test_system_log 17 + test_system_log_query_gate 9)",
+    "run-all-tests p2_inventory": "0 (7 gecti)",
+    "run-all-tests inventory_shipment_scope": "0 (11 gecti)",
+    "scripts/check-migrations.mjs": "1 - AMA IHLAL BU TURUN DEGIL: tek bulgu GATE 4 ve iki commit edilmemis test dosyasi (Teks-Erp/scripts/test_kanban_card_projection.ts, Teks-Erp/scripts/test_system_log_query_gate.ts) BASKA bir ajanin urunu. Uc migration da GATE 1/2/3'ten (git izleme, checksum, defter) temiz gecti."
+  },
+  "negatif_sonda": "Yeni bekci yazilmadi; mevcut test_db_invariants PARTIAL_INDEXES envanterine uc satir eklendi ve envanterin bu satirlari GERCEKTEN koruyup korumadigi sondayla olculdu: rolls_depo_updatedAt_idx predicate'siz yeniden yaratildi -> test_db_invariants EXIT=1 ('PREDICATE DUSMUS - index TAM index'e donmus', 163 gecti / 1 basarisiz). Predicate geri konunca EXIT=0 (164 gecti / 0 basarisiz).",
+  "acik_karar": [
+    "BULGU 0 (rolls'ta 28 index / HOT-update %0,8): bu turda index SAYISI dusurulmedi, tersine iki partial index eklendi. Gerekce olculdu ve migration basligina yazildi (ek yazim yalniz satirlarin %11 ve %33'unde dogar; karsiliginda iki sekmenin tam tablo taramasi kalkiyor). rolls_status_currentQty_idx (5 scan) ve rolls_status_itemId_colorId_width_idx (249 scan) canli kod yolu tasidiklari icin ELLENMEDI - kaldirmadan once 'tek kullanicisini ispatlama' isi ayri bir tur.",
+    "BULGU 5 (work_order_steps_stationId_status_isUrgent_priority_started_idx'in son uc kolonu): DARALTILMADI. Index'i daraltmak PARTIAL_INDEXES envanterinde kolon listesini degistirir ve dogru olcum tabletin 5 saniyelik yoklama sorgusunun GERCEK plani uzerinden yapilmali; bu tur gorevin kapsaminda degil (gorev 1/2/3 ile sinirli).",
+    "BULGU 6 (system_logs.newData ->> 'event' GIN'siz) ve BULGU 7 (DISTINCT dropdown'lari): ikisi de SERVIS/SORGU degisikligi ister ve olcum dosyasi 'once sahada olc' diyor. Bu turun alani index migration'lari; dokunulmadi.",
+    "BULGU 9 (VERITABANI.md §12'deki '5 index'siz domain FK' listesi BAYAT): belge dokunusu, olcum dosyasinin kendisi 'bu tur'un ciktisi degil' diyor. YAPILMADI - ayri bir belge isi olarak duruyor.",
+    "system_logs 'category IN (AUTH,SYSTEM)' sorgusu (Sistem Kayitlari sayfasinin VARSAYILAN yuku) hala createdAt index'i + Filter ile kosuyor (511 buffer). Kismi index bunu iyilestirmedi ve iyilestirmesi de beklenmiyordu: PG16'da iki degerli ScalarArrayOp btree'de sirali sayilmiyor, LIMIT 51 varken planlayici erken duran taramayi tercih ediyor. Bunu duzeltmek ('createdAt' anahtarli ayri bir kismi index) UCUNCU bir index demek ve en cok yazilan tabloya yeni bir agac eklemek olurdu; olculmemis bir kazanc icin yapilmadi. Olcekte planlayici zaten kismi index'i full-scan+sort ile secmeye kendiliginden gececek (maliyet esigi asilinca)."
+  ]
+}

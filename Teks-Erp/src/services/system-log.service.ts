@@ -301,29 +301,41 @@ export class SystemLogService {
    */
   static async listActiveUsers() {
     return dropdownCache.get("users", async () => {
-      const rows = await prisma.systemLog.findMany({
-        // ⚠️ Bu DROPDOWN'dır (olay listesi DEĞİL) → satıcı hesabı burada SÜZÜLÜR.
-        // `userId: { not: null }` zaten var, yani NULLABLE tuzağı burada YOK; düz
-        where: { userId: { not: null }, category: "DOMAIN" },
-        distinct: ["userId"],
-        select: { user: { select: { id: true, username: true, fullName: true } } },
-        take: 200,
-      });
-      return rows
-        .map((r) => r.user)
-        .filter((u): u is { id: string; username: string; fullName: string } => !!u);
+      // HAM SQL, ÇÜNKÜ PRISMA `distinct`'İ SQL'E İNDİRMİYOR (2026-09-05 perf turu).
+      // Yakalanan SQL'de ne DISTINCT ne LIMIT vardı: 14.067 satır Node'a çekilip
+      // bellekte tekilleştiriliyordu, ardından 61 id ile İKİNCİ bir sorgu atıyordu.
+      // Ölçüm — ÖNCE: 2 sorgu, 8,75 ms / 2.470 buffer (Seq Scan + 14.067 satırlık
+      // quicksort) + 1,66 ms, telde 14.128 satır. SONRA: 1 sorgu, 7,10 ms /
+      // 2.472 buffer (HashAggregate SQL'de), telde 61 satır.
+      // ⚠️ Bu DROPDOWN'dır (olay listesi DEĞİL) → satıcı hesabı burada SÜZÜLÜR.
+      // ⚠️ Sıralama BİLİNÇLİ OLARAK YOK: Prisma yolu da sıra garantisi vermiyordu
+      // (ORDER BY system_logs.id = rastgele UUID); ORDER BY eklemek görünen sonucu
+      // değiştirirdi, bu tur davranışa dokunmuyor.
+      return prisma.$queryRaw<Array<{ id: string; username: string; fullName: string }>>`
+        SELECT u."id", u."username", u."fullName"
+        FROM (
+          SELECT DISTINCT sl."userId" AS uid
+          FROM "system_logs" sl
+          WHERE sl."category" = 'DOMAIN'::"SystemLogCategory" AND sl."userId" IS NOT NULL
+          LIMIT 200
+        ) d
+        JOIN "users" u ON u."id" = d.uid
+      `;
     });
   }
 
   /** Activity Page filter dropdown'ı — sadece DOMAIN tableName'leri. */
   static async listActiveTables() {
     return dropdownCache.get("tables", async () => {
-      const rows = await prisma.systemLog.findMany({
-        where: { category: "DOMAIN" },
-        distinct: ["tableName"],
-        select: { tableName: true },
-        take: 200,
-      });
+      // Aynı gerekçe (yukarı bak): `distinct` SQL'e inmiyordu → 49.879 satır
+      // Node'a çekiliyordu. Ölçüm — ÖNCE 13,20 ms / 2.467 buffer, telde 49.879
+      // satır; SONRA 8,30 ms / 2.467 buffer (HashAggregate), telde 78 satır.
+      const rows = await prisma.$queryRaw<Array<{ tableName: string }>>`
+        SELECT DISTINCT sl."tableName"
+        FROM "system_logs" sl
+        WHERE sl."category" = 'DOMAIN'::"SystemLogCategory"
+        LIMIT 200
+      `;
       return rows.map((r) => r.tableName);
     });
   }

@@ -938,7 +938,8 @@ model Machine {
   /// hapsederdi; denetimin "kalan tablolara nameFold seddi ekle" tavsiyesi bu
   /// ayrımı içermiyordu. Migration: `20260831120000_namefold_sed_kalan_tablolar`.
   @@unique([stationId, nameFold])
-  @@index([stationId])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([nameFold])
   @@map("machines")
 }
@@ -1092,7 +1093,8 @@ model PeripheralDevice {
   @@index([stationId])
   @@index([connectionType])
   @@index([isActive])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([addressFold])
   @@map("peripheral_devices")
 }
@@ -1241,7 +1243,8 @@ model Route {
   @@unique([nameFold])
   @@index([customerId])
   @@index([isFavorite])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@map("routes")
 }
 
@@ -1374,7 +1377,8 @@ model ProductRecipe {
   @@index([itemId])
   @@index([colorId])
   @@index([routeId])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@map("product_recipes")
 }
 
@@ -2059,6 +2063,20 @@ model Roll {
   // K7c (2026-08-29): şemada DÜZ, DB'de PARTIAL (WHERE "directShipmentId" IS NOT NULL)
   // — Prisma predicate farkını drift saymaz (CLAUDE.md perf kuralı 4).
   @@index([directShipmentId])
+  /// ENVANTER "BİTMİŞ DEPO" SEKMESİNİN VARSAYILAN SIRALAMASI (perf turu 2026-09-05).
+  /// `(status, updatedAt)` bileşiği yalnız status EŞİTLİĞİYLE ordering verir; bu sekme
+  /// `status IN ('WAREHOUSE','A1_STOCK')` gönderiyor → ScalarArrayOp ordering vermez ve
+  /// liste Seq Scan + Sort'a düşüyordu (ÖLÇÜLDÜ: 140 buffer / 0,386 ms → 15 / 0,073 ms).
+  /// Migration `20260905171000` bunu PARTIAL yapar (`WHERE status IN (...)`); şemada
+  /// predicate YOK — Prisma predicate farkını drift saymaz, envanteri `test_db_invariants`.
+  /// ⚠️ Statü kümesinin TEK KAYNAĞI `inventory.service.ts` rollScope='FINISHED_STOCK'.
+  @@index([updatedAt(sort: Desc), id(sort: Desc)], map: "rolls_depo_updatedAt_idx")
+  /// ENVANTER "ÜRETİMDE" SEKMESİNİN VARSAYILAN SIRALAMASI (perf turu 2026-09-05).
+  /// Kapsam bir NEGASYON (`status NOT IN (7 değer)` + `currentStepId IS NOT NULL`) —
+  /// hiçbir düz btree onu karşılayamaz (ÖLÇÜLDÜ: 134 buffer / 0,169 ms → 46 / 0,042 ms,
+  /// plan Seq Scan+Sort → Index Scan Backward + Incremental Sort, LIMIT'te duruyor).
+  /// ⚠️ Statü kümesinin TEK KAYNAĞI `inventory.service.ts` rollScope='PRODUCTION_ACTIVE'.
+  @@index([updatedAt(sort: Desc)], map: "rolls_uretim_updatedAt_idx")
   @@map("rolls")
 }
 
@@ -2889,7 +2907,8 @@ model QualityGrade {
   /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
   @@unique([nameFold])
   @@index([isActive, sortOrder])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([descriptionFold])
   @@map("quality_grades")
 }
@@ -2946,7 +2965,8 @@ model ReturnReason {
   /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
   @@unique([nameFold])
   @@index([isActive, sortOrder])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([descriptionFold])
   @@map("return_reasons")
 }
@@ -3000,7 +3020,8 @@ model DefectType {
   /// Migration: `20260831120000_namefold_sed_kalan_tablolar` (YUMUŞAK KAPI).
   @@unique([nameFold])
   @@index([isActive])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([descriptionFold])
   @@map("defect_types")
 }
@@ -3722,7 +3743,8 @@ model SubcontractorDirectShipAllocation {
   // map: DB'deki gerçek index adı (63-karakter truncation) — aksi halde migrate sonsuz RENAME.
   @@unique([directShipmentId, orderLineId], map: "subcontractor_direct_ship_allocations_dsId_orderLineId_key")
   @@index([orderLineId])
-  @@index([directShipmentId])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   /// "Bu fason sevkinin tahsisleri" okuması + Cascade silme yolu (migration
   /// 20260905140000). NOT NULL → DB'de DÜZ index.
   @@index([dispatchId])
@@ -5153,7 +5175,8 @@ model FabricProperty {
   @@unique([nameFold])
   @@index([isActive, sortOrder])
   @@index([category])
-  @@index([nameFold])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@index([descriptionFold])
   @@index([categoryFold])
   @@map("fabric_properties")
@@ -5476,7 +5499,8 @@ model CustomerStandaloneLabel {
 
   @@unique([customerId, templateId])
   @@index([templateId])
-  @@index([customerId])
+  // Bu kolonun index'i NON-PARTIAL bir @@unique tarafından kapsanıyor ([DB-12]) —
+  // ayrı @@index migration 20260905172000 ile DÜŞÜRÜLDÜ (EXPLAIN ile doğrulandı).
   @@map("customer_standalone_labels")
 }
 

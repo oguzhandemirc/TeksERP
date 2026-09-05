@@ -189,8 +189,11 @@ export function useDataTable<T>({
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.pagination.nextCursor,
     enabled,
-    refetchOnMount: "always",
-    staleTime: 0,
+    // ⚠️ `refetchOnMount:"always"` + `staleTime:0` DEĞİL (2026-09-05 ölçümü): infinite
+    // query remount'ta YÜKLÜ TÜM SAYFALARI seri çeker — 9 sayfalık Envanter'de sekme
+    // içi her git-gel 9 istek. 15 sn'lik tazelik penceresi bunu 0'a indirir; mutasyon
+    // tazeliği etkilenmez (invalidate staleTime'dan bağımsız olarak refetch tetikler).
+    staleTime: 15_000,
   });
 
   const flatRows = useMemo<T[]>(

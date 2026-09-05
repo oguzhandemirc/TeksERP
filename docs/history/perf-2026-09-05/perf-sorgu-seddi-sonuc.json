@@ -1,0 +1,157 @@
+{
+  "alan": "Sorgu seviyesinde dort duzeltme (Teks-Erp/src) - 2026-09-05 perf turu",
+  "tarih": "2026-09-05",
+  "db": "tekserp_demo @ localhost:55433 (docker: tekserp-local-db)",
+  "yontem": "Her duzeltme icin EXPLAIN (ANALYZE, BUFFERS) ONCE/SONRA; sorgu sayisi degisiyorsa Prisma query event ile yakalanan SQL sayisi; davranis esitligi tum veri kumesi uzerinde SQL ile karsilastirildi. Migration YAZILMADI, index KURULMADI.",
+  "olcum_uyarisi": "Dev DB'de system_logs YALNIZ 4 gunluk log tasiyor (2026-09-01 08:12 - 2026-09-05 13:08). Tarih seddi kazanci PENCERE/TABLO oranina baglidir; uretimde tablo 6 aylik oldugu icin ayni sed BURADA OLCULENDEN cok daha buyuk kazanc verir (20 dk / 6 ay = %0,008; burada 20 dk / 4 gun = %0,35). Asagidaki sayilar ALT SINIRDIR.",
+
+  "duzeltmeler": [
+    {
+      "id": "D1",
+      "baslik": "isUndoSourcedByAudit - audit sorgusuna topun kendi damgasindan turetilen tarih seddi",
+      "dosyalar": ["Teks-Erp/src/services/inventory.service.ts"],
+      "durum": "yapildi",
+      "ne_yapildi": "isUndoSourcedByAudit(rollId, cancelReasonCode) -> (rollId, cancelReasonCode, statusChangedAt). Sorguya `\"createdAt\" BETWEEN statusChangedAt -/+ INTERVAL '10 minutes'` eklendi. buildCancelDiagnostics parametre tipine ve restoreCancelledRoll select'ine statusChangedAt eklendi.",
+      "capa_secimi": "Sabit tarih DEGIL topun KENDI statusChangedAt damgasi. Olculdu: 23 TAMBUR_UNDO audit satirinin hepsi topun statusChangedAt damgasindan 2-9 ms SONRA yazilmis (min delta 0,002 sn, max 0,009 sn). Simetrik pencere secildi cunku geriye doldurulmus damgalarda (backfill_roll_production_timestamps) statusChangedAt bir BASKA audit satirinin createdAt'idir ve TAMBUR_UNDO satiri ondan once de olabilir. +-10 dk pay: audit tx DISINDA yazilir (commit gecikmesi) ve backfill'de iki audit satiri arasi saniyeler olabilir.",
+      "fail_safe": "statusChangedAt NULL ise (2026-08-09 migration'indan once dogup geriye doldurulmamis kayit) ESKI tam tarama korunur - sessizce 'geri alinabilir' demek yerine yavas ama dogru cevap.",
+      "once": {
+        "plan": "Aggregate <- Seq Scan on system_logs",
+        "sure_ms": 7.952,
+        "buffers": 2499,
+        "taranan_satir": 51164,
+        "rows_removed_by_filter": 51163
+      },
+      "sonra": {
+        "plan": "Aggregate <- Index Scan using system_logs_createdAt_idx",
+        "sure_ms": 0.561,
+        "buffers": 713,
+        "rows_removed_by_filter": 2058
+      },
+      "kazanc": "sure 14,2x (7,952 -> 0,561 ms), buffer 3,5x (2.499 -> 713). Uretim olceginde (6 aylik tablo) oran cok daha buyuk: pencere ZAMANDA sabit, tablo buyur.",
+      "davranis_esitligi": "44 CANCELLED topun 44'unde eski ve yeni yuklem AYNI karari verdi (eski_true=23, yeni_true=23, ayni_karar=44/44). Ayrica audit_repro_BULGU-T1-011 ONCE ve SONRA birebir ayni sonucu verdi (14 gecti / 2 'basarisiz' - o script BUGU repro eder, guard calisinca kirmizi yazar; cikis kodu 1 HER IKI HALDE de).",
+      "bekci": "test_roll_cancel_undo (66/66, exit 0) - test_tambur_undo (57/57, exit 0) - audit_repro_BULGU-T1-011 (once=sonra)"
+    },
+    {
+      "id": "D2",
+      "baslik": "ImportService.getRunRecords - kosumun kendi penceresi createdAt alt/ust siniri oldu",
+      "dosyalar": ["Teks-Erp/src/services/import/import.service.ts"],
+      "durum": "yapildi",
+      "ne_yapildi": "importRun.findUnique select'i {id} -> {id, createdAt, finishedAt}. systemLog.findMany where'ine createdAt gte = run.createdAt - 10 dk, lte = (run.finishedAt ?? simdi) + 10 dk eklendi.",
+      "not_startedAt": "Semada `startedAt` KOLONU YOK - kosum baslangici `import_runs.createdAt`. Token'li kosumda satir BASTA yazilir (import.service.ts:511), token'siz kosumda SONDA (upsert create dali).",
+      "pay_gerekcesi": "ZORUNLU: finishedAt Node saatinden (`new Date()`), createdAt DB saatinden (CURRENT_TIMESTAMP) gelir - olculdu, token'siz kosumda finishedAt createdAt'ten 1-2 ms ONCE. Ayrica AuditService.logMany damgadan SONRA kosar (audit satirlari finishedAt'ten 2-5 ms sonra).",
+      "once": {
+        "plan": "Limit <- Sort (quicksort) <- Seq Scan on system_logs",
+        "sure_ms": 11.476,
+        "buffers": 2497,
+        "rows_removed_by_filter": 51163
+      },
+      "sonra": {
+        "plan": "Limit <- Index Scan using system_logs_createdAt_idx (Sort dugumu KAYBOLDU - ORDER BY createdAt index'ten geliyor)",
+        "sure_ms": 1.331,
+        "buffers": 1529,
+        "rows_removed_by_filter": 3267
+      },
+      "kazanc": "sure 8,6x (11,476 -> 1,331 ms), buffer 1,63x (2.497 -> 1.529), Sort dugumu tamamen kalkti.",
+      "davranis_esitligi": "SQL ile tum veri: 75 audit satirinin 75'i pencerede. Calisma zamani dogrulamasi: 130 kosumun tamami icin eski ve yeni sorgu AYNI kayit sayisini dondu (toplam 78 kayit, FARKLI 0).",
+      "bekci": "test_import_framework (51/51, exit 0)"
+    },
+    {
+      "id": "D3",
+      "baslik": "recordId tek basina gonderilemez - fail-closed Zod kapisi",
+      "dosyalar": [
+        "Teks-Erp/src/routes/admin.routes.ts",
+        "Teks-Erp/scripts/test_system_log_query_gate.ts"
+      ],
+      "durum": "yapildi",
+      "ne_yapildi": "systemLogListQuerySchema'ya .superRefine: recordId varsa tableName ZORUNLU, yoksa Turkce mesajli 400 (path: tableName). Sema bekci icin export edildi. YENI BEKCI yazildi (negatif sonda dahil).",
+      "once": {
+        "senaryo": "yalniz recordId",
+        "plan": "Index Scan using system_logs_tableName_recordId_idx (ilk kolon bos - index'in TAMAMI okunuyor; plan 'Index Scan' yazdigi icin tuzak gozden kaciyor)",
+        "sure_ms": 1.793,
+        "buffers": 478
+      },
+      "sonra": {
+        "senaryo": "tableName + recordId (kapi artik bunu ZORLUYOR)",
+        "plan": "Index Scan using system_logs_tableName_recordId_idx",
+        "sure_ms": 0.025,
+        "buffers": 4
+      },
+      "kazanc": "buffer 120x (478 -> 4), sure 72x (1,793 -> 0,025 ms). Kapi pahali sekli UCA HIC ULASTIRMIYOR - 400 doner.",
+      "istemci_dogrulamasi": "grep: recordId gonderen TEK yuzey Electron/src/components/RecordHistoryDialog.tsx:52 ve tableName'i zaten birlikte gonderiyor. ActivityFilterState'te recordId ALANI YOK (ActivityPage ...filters yayiyor - risk yok). NotificationBell, SystemEventsPage, ActivityDetailSheet, ArchiveSearchPage: recordId gondermiyor. Ayni sema /system-logs/archive ucunda da kullaniliyor; oradaki cagiranlar da gondermiyor. KIRILAN ISTEMCI YOK.",
+      "eski_istemci_ne_yapar": "Yalniz-recordId gonderen (bugun var olmayan) bir istemci 400 alir; mesaj Turkce ve eksik alani soyler.",
+      "bekci": "test_system_log_query_gate (YENI, 9/9, exit 0) + test_system_log (17/17, exit 0)",
+      "negatif_sonda": "superRefine blogu gecici olarak kaldirildi -> bekci KIRMIZI (6 gecti, 1 basarisiz, 'yalniz recordId reddedilir' dustu); blok geri konunca YESIL (9/9). Ayrica bekcinin icinde kalici bir sonda var: kapisiz kontrol semasi ayni girdiyi KABUL ediyor (iddia bos degil)."
+    },
+    {
+      "id": "D4",
+      "baslik": "listActiveUsers / listActiveTables - Prisma distinct SQL'e inmiyordu, $queryRaw + SELECT DISTINCT",
+      "dosyalar": ["Teks-Erp/src/services/system-log.service.ts"],
+      "durum": "yapildi",
+      "yakalanan_eski_sql": [
+        "SELECT id, \"userId\" FROM system_logs WHERE \"userId\" IS NOT NULL AND category = $1 ORDER BY id ASC OFFSET $2   (ne DISTINCT ne LIMIT)",
+        "SELECT id, username, \"fullName\" FROM users WHERE id IN ($1..$61) OFFSET $62   (ikinci sorgu)",
+        "SELECT id, \"tableName\" FROM system_logs WHERE category = $1 ORDER BY id ASC OFFSET $2   (ne DISTINCT ne LIMIT)"
+      ],
+      "once": {
+        "listActiveUsers": {
+          "sorgu_sayisi": 2,
+          "plan": "Sort (quicksort 1154kB) <- Seq Scan on system_logs",
+          "sure_ms": 8.75,
+          "buffers": 2470,
+          "ikinci_sorgu_ms": 1.657,
+          "telde_satir": 14128
+        },
+        "listActiveTables": {
+          "sorgu_sayisi": 1,
+          "plan": "Sort (quicksort 3859kB) <- Seq Scan on system_logs",
+          "sure_ms": 13.204,
+          "buffers": 2467,
+          "telde_satir": 49879
+        }
+      },
+      "sonra": {
+        "listActiveUsers": {
+          "sorgu_sayisi": 1,
+          "plan": "Hash Join <- (Limit <- HashAggregate <- Seq Scan) + Seq Scan on users",
+          "sure_ms": 7.1,
+          "buffers": 2472,
+          "telde_satir": 61
+        },
+        "listActiveTables": {
+          "sorgu_sayisi": 1,
+          "plan": "Limit <- HashAggregate <- Seq Scan on system_logs",
+          "sure_ms": 8.298,
+          "buffers": 2467,
+          "telde_satir": 78
+        }
+      },
+      "kazanc": "Sorgu sayisi 3 -> 2. Telde satir 63.946 -> 139 (460x). Sure: users 10,41 ms (8,75+1,66) -> 7,10 ms; tables 13,20 -> 8,30 ms. Buffer degismedi (Seq Scan zaten dogru plan; kazanc SIRALAMA + TEL + Node bellek tarafinda).",
+      "reddedilen_varyant": "Once denenen 'JOIN users, sonra SELECT DISTINCT u.*': 12,87 ms / 5.345 buffer - ONCEKINDEN KOTU (Merge Join system_logs_userId_createdAt_idx uzerinden 5.210 buffer okuyor). OLCULDU ve TERK EDILDI; secilen varyant DISTINCT'i alt sorguda yapip sonra users'a katiliyor.",
+      "davranis_esitligi": "Calisma zamaninda eski Prisma yolu ile yeni raw yol karsilastirildi: users AYNI KUME true (61 = 61), tables AYNI KUME true (78 = 78), donus anahtarlari fullName,id,username (degismedi), tables elemanlari string (degismedi).",
+      "bekci": "test_raw_sql_hygiene (17/17, exit 0 - yeni SQL'de zaman fonksiyonu yok, muafiyet gerekmedi) + test_system_log (17/17, exit 0)"
+    }
+  ],
+
+  "bekci_cikis_kodlari": {
+    "npm run typecheck:plain": 0,
+    "npm run lint": 0,
+    "node ../scripts/check-lint-baseline.mjs --proje=backend": 0,
+    "run-all-tests roll_cancel_undo": 0,
+    "run-all-tests tambur_undo": 0,
+    "run-all-tests import_framework": 0,
+    "run-all-tests test_audit (4 dosya)": 0,
+    "run-all-tests system_log (2 dosya, biri YENI)": 0,
+    "run-all-tests raw_sql_hygiene": 0,
+    "audit_repro_BULGU-T1-011": "1 (ONCE de 1 - bu bir BUG REPRO betigi, bekci degil; 14 gecti / 2 'basarisiz' degeri degismedi)"
+  },
+
+  "acik_kararlar": [
+    "D4: dropdown'lara ALFABETIK SIRALAMA EKLENMEDI. Bugunku Prisma yolu da sira garantisi vermiyordu (ORDER BY system_logs.id = rastgele UUID); ORDER BY eklemek GORUNEN sonucu degistirirdi ve bu tur davranisa dokunmuyor. Ayri bir UX isi olarak durur.",
+    "D1: +-10 dk pay bir YARGIDIR. Olculen delta 2-9 ms; pay 10 dk. Bir TAMBUR_UNDO transaction'i 10 dakikadan uzun surerse sed o satiri kacirir. Uretimde undo tx suresi OLCULMEDI.",
+    "D1 kenar durumu: 2026-08-29'DAN ONCE undo ile iptal edilmis + (guard yokken) geri alinmis + tekrar sebep kodsuz iptal edilmis bir top, pencere SON iptale capalandigi icin eski undo satirini gormez. Bugun ULASILAMAZ (guard geri almayi engelliyor) ve dev veride 44/44 karar ayni; uretim verisinde OLCULMEDI.",
+    "D3: sema /api/admin/system-logs ve /api/admin/system-logs/archive uclarinin IKISINDE de kullaniliyor - kapi ikisine birden geldi. Iki ucun de bugunku cagiranlari yalniz-recordId gondermiyor (grep ile dogrulandi).",
+    "D3: systemLogListQuerySchema bekci icin `export` edildi - davranis degisikligi degil.",
+    "Teks-Erp/docs/BEKCI-HARITASI.md GUNCELLENMEDI: dosya URETILMIS (baslikta yaziyor) ve ayni turda baska ajanlar docs altinda calisiyor; yeni bekci bir sonraki uretimde haritaya girer.",
+    "seq-scan.json S4 / S5 / S6 / S7 / S9 / S10 bulgularina DOKUNULMADI (index/migration isi ya da 'dokunma' hukmu - bu turun kapsami disinda)."
+  ]
+}
