@@ -12,6 +12,7 @@ import type {
   PickListRow,
   SackContentDumpSack,
   SackCustomerBucket,
+  SackCustomerPage,
   SackContents,
   SackSearchRow,
   ScanResult,

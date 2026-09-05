@@ -59,8 +59,9 @@ vi.mock("./CreateShipmentDialog", () => ({
 }));
 
 import { SackEditorView } from "./SackEditorView";
+import type { EditorTarget } from "./types";
 
-const target = {
+const target: EditorTarget = {
   sackId: "sk1",
   sackNo: "CV-260904-001",
   customerId: "c1",
@@ -117,9 +118,11 @@ describe("Çuval editörü — tek çuval sevki", () => {
 
     const sacks = shipDialogProps.mock.calls.at(-1)?.[0] as Array<Record<string, unknown>>;
     expect(sacks).toHaveLength(1);
-    expect(sacks[0].id).toBe("sk1");
-    expect(sacks[0].sackNo).toBe("CV-260904-001");
-    expect(sacks[0].customer).toEqual({ id: "c1", name: "ACME Tekstil" });
+    expect(sacks[0]).toMatchObject({
+      id: "sk1",
+      sackNo: "CV-260904-001",
+      customer: { id: "c1", name: "ACME Tekstil" },
+    });
   });
 
   it("§2 kilitli çuvalda (sevkiyata atanmış) 'Sevk Et' ÇİZİLMEZ", () => {
@@ -140,6 +143,6 @@ describe("Çuval editörü — tek çuval sevki", () => {
     const sacks = shipDialogProps.mock.calls.at(-1)?.[0] as Array<Record<string, unknown>>;
     // Cari SEVK ANINDA atanır — çuvalın müşterisiz olması sevki engellemez,
     // yalnız diyalogdaki cari seçicisini zorunlu kılar.
-    expect(sacks[0].customer).toBeNull();
+    expect(sacks[0]).toMatchObject({ customer: null });
   });
 });

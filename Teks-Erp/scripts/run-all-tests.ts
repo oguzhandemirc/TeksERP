@@ -75,6 +75,45 @@ function typecheckGate(): boolean {
 }
 
 /**
+ * MİGRATION DURUMU GEÇİDİ — tip kontrolünden SONRA, paketten ÖNCE (~3sn).
+ *
+ * NEDEN GEÇİT (2026-09-05 ölçümü): dev DB iki migration geride olduğunda 453
+ * bekçinin 134'ü kırmızı verdi ve teşhis, kullanıcının okuması gereken şey
+ * "şemanız eski" iken, `TableDoesNotExist` stack'i olarak bırakıldı. Kırmızının
+ * sebebi 6,5 dakika sonra ve 134 ayrı hata bloğu içinde anlaşılıyordu.
+ *
+ * Kapı tam da bu yüzden ÖNDE: eksik migration bir test arızası değil, ORTAM
+ * arızasıdır ve paketi koşmak zaman kaybıdır.
+ *
+ * Tek test koşarken (filtre argümanı) ATLANIR — iterasyon hızlı kalsın (kapı
+ * ~3sn, tek bekçi ~2sn; her koşuma eklemek döngüyü ikiye katlardı).
+ * Acil durumda: `SKIP_MIGRATION_GATE=1 npm test`.
+ */
+function migrationGate(): boolean {
+  const started = Date.now();
+  console.log("→ Migration durumu …");
+  const res = spawnSync("npx", ["prisma", "migrate", "status"], {
+    encoding: "utf8",
+    cwd: join(SCRIPTS_DIR, ".."),
+    env: process.env,
+    shell: IS_WIN,
+    maxBuffer: MAX_OUTPUT_BYTES,
+  });
+  const secs = ((Date.now() - started) / 1000).toFixed(1);
+  const out = `${res.stdout ?? ""}\n${res.stderr ?? ""}`;
+  if (res.status === 0 && !res.error) {
+    console.log(`✅ Migration durumu güncel (${secs}s)\n`);
+    return true;
+  }
+  console.log(`❌ MİGRATION DURUMU GERİDE ya da BOZUK (${secs}s) — test paketi KOŞULMADI.`);
+  console.log("   Eksik migration'la koşan paket, ilgisiz onlarca testte");
+  console.log("   'TableDoesNotExist' olarak görünür (2026-09-05: 134/453).\n");
+  console.log(out.trimEnd().replace(/^/gm, "   | "));
+  console.log("\n   Çözüm: npm run prisma:migrate   (uygulanmamışları uygular)");
+  return false;
+}
+
+/**
  * ÜRETİM VERİTABANI GEÇİDİ — HER ŞEYDEN ÖNCE koşar, FAIL-CLOSED.
  *
  * NEDEN: bu paket mock KULLANMAZ. 273 testin 235'i `src/lib/prisma`'yı doğrudan
@@ -174,6 +213,7 @@ function main() {
   productionDbGate();
 
   if (!filter && !process.env.SKIP_TYPECHECK && !typecheckGate()) process.exit(1);
+  if (!filter && !process.env.SKIP_MIGRATION_GATE && !migrationGate()) process.exit(1);
 
   const files = readdirSync(SCRIPTS_DIR)
     .filter((f) => /^test_.*\.ts$/.test(f))
@@ -187,7 +227,7 @@ function main() {
 
   console.log(`\n=== Backend test suite — ${files.length} dosya ===\n`);
 
-  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean }[] = [];
+  const results: { file: string; ok: boolean; summary: string; ms: number; flaky: boolean; skipped: number }[] = [];
 
   /**
    * Süreç anormal mi bitti ve neden? Tek ayırt edici `res.error.code` — ÖLÇÜLDÜ
@@ -239,6 +279,7 @@ function main() {
     summary: string;
     out: string;
     killed: string | null;
+    skipped: number;
   } {
     const res = spawnSync("npx", ["tsx", join(SCRIPTS_DIR, file)], {
       encoding: "utf8",
@@ -259,6 +300,12 @@ function main() {
       out.match(/(?:Sonuç|SONUÇ):\s*(\d+)\s*geçti,\s*(\d+)\s*(?:başarısız|kaldı)/i) ||
       out.match(/(\d+)\s*geçti,\s*(\d+)\s*(?:başarısız|kaldı)/i);
     const slash = out.match(/(\d+)\/(\d+)\s*geçti/);
+    // ATLANAN KONTROL SAYISI (2026-09-05) — beş bekçi kendi HTTP bölümünü sunucu
+    // yoksa atlıyor ve bunu özet satırında ", N atlandı" olarak yazıyordu; koşucu
+    // o kısmı REGEX'İN DIŞINDA bırakıp yutuyordu. Sonuç: "✅ 82 geçti, 0 başarısız"
+    // satırı, o koşumda 34 kontrolün HİÇ ölçülmediğini gizliyordu → yeşil ≠ kapsandı.
+    const skippedM = out.match(/(\d+)\s*atlandı/i);
+    const skipped = skippedM ? Number(skippedM[1]) : 0;
     // ANORMAL BİTİŞTE KAZINAN ÖZET YALAN SÖYLER — kullanma.
     // 188/214 test `Sonuç:` satırını `await prisma.$disconnect()`'ten ÖNCE basar.
     // `$disconnect()` asılırsa (havuz drenajı / iptal edilmiş statement) süreç
@@ -274,7 +321,7 @@ function main() {
           : ok
             ? "geçti (exit 0)"
             : "BAŞARISIZ";
-    return { ok, status: res.status, summary, out, killed };
+    return { ok, status: res.status, summary, out, killed, skipped };
   }
 
   /** Başarısız çıktı ALTYAPI arızası mı (DB bağlantısı) yoksa gerçek assertion mı? */
@@ -309,9 +356,12 @@ function main() {
     // NOT: retry olduysa `ms` İKİ denemenin toplamıdır (bu yüzden aşağıda "2 deneme"
     // etiketi basılıyor — 360sn'lik bir satır sessizce şaşırtmasın).
     const retryNote = retried ? (flaky ? " (2. denemede)" : ` (2 deneme de düştü; 1.: ${firstSummary})`) : "";
-    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky });
+    results.push({ file, ok: r.ok, summary: r.summary + retryNote, ms, flaky, skipped: r.skipped });
     const icon = r.ok ? (flaky ? "⚠️" : "✅") : "❌";
-    console.log(`${icon} ${file.padEnd(42)} ${(r.summary + retryNote).padEnd(24)} ${(ms / 1000).toFixed(1)}s`);
+    const skipNote = r.skipped > 0 ? ` ⚠️ ${r.skipped} atlandı` : "";
+    console.log(
+      `${icon} ${file.padEnd(42)} ${(r.summary + retryNote).padEnd(24)} ${(ms / 1000).toFixed(1)}s${skipNote}`,
+    );
     if (!r.ok) {
       // Başarısız testin son satırlarını göster (teşhis). 16 satır: hata mesajı
       // ("Error: <mesaj>" ilk satırda) + stack + {statusCode} objesi sığsın —
@@ -332,6 +382,19 @@ function main() {
   if (failed.length > 0) {
     console.log("Başarısız:");
     for (const f of failed) console.log(`  ❌ ${f.file} — ${f.summary}`);
+  }
+  // ATLANAN KONTROLLER exit kodunu düşürmez ama GİZLENMEZ: beş bekçi (finance /
+  // module_flag_off / module_profile / settings_password / superadmin) HTTP
+  // bölümünü ayrı bir sunucu ister ve sunucu yoksa SESSİZCE atlar. Toplamı burada
+  // basılır ki "hepsi yeşil" cümlesi "hepsi ölçüldü" sanılmasın.
+  const skippedFiles = results.filter((r) => r.skipped > 0);
+  if (skippedFiles.length > 0) {
+    const total = skippedFiles.reduce((sum, r) => sum + r.skipped, 0);
+    console.log(
+      `⚠️  ATLANAN KONTROL: ${skippedFiles.length} dosyada toplam ${total} — yeşil ≠ kapsandı`,
+    );
+    for (const f of skippedFiles) console.log(`  ⚠️  ${f.file} — ${f.skipped} atlandı`);
+    console.log("     (HTTP ayaklı bekçiler kendi portunda sunucu ister: 4100/4101/4104/4112/4122)");
   }
   // Flake'ler exit kodunu düşürmez ama GİZLENMEZ — hangi test kaç kez koştu görünsün.
   if (flakes.length > 0) {

@@ -250,7 +250,9 @@ export function SackTagsPage() {
         confirmLabel="Sil"
         destructive
         isPending={remove.isPending}
-        onConfirm={() => confirmDelete && remove.mutateAsync(confirmDelete).catch(() => {})}
+        onConfirm={() => {
+          if (confirmDelete) void remove.mutateAsync(confirmDelete).catch(() => {});
+        }}
       />
     </PageShell>
   );
