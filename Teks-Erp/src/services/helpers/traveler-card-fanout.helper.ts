@@ -15,7 +15,7 @@ import { Prisma, TravelerCardStatus } from "@prisma/client";
  * `voidMeta` verilirse (VOIDED geçişleri) `voidedAt` + `voidReason` de yazılır.
  * Etkilenen kart sayısını döner.
  */
-export async function setWorkOrderCardStatuses(
+export async function setWorkOrderCardStatusesTx(
   tx: Prisma.TransactionClient,
   workOrderId: string,
   from: TravelerCardStatus | TravelerCardStatus[],

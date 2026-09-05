@@ -95,7 +95,7 @@ import { factoryDayStart } from "../constants/time";
 import { AuditService } from "./audit.service";
 import { ApiResponse } from "../types/api.types";
 import { recomputeStepStatus } from "./helpers/roll-step.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { InventoryService } from "./inventory.service";
 
 /**
@@ -1470,7 +1470,7 @@ export class TamburUndoService {
         });
         woRevivedCount = woRevived.count;
         if (woRevived.count > 0) {
-          await setWorkOrderCardStatuses(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
+          await setWorkOrderCardStatusesTx(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
         }
       }
 
@@ -1780,7 +1780,7 @@ export class TamburUndoService {
         });
         woRevivedCount = woRevived.count;
         if (woRevived.count > 0) {
-          await setWorkOrderCardStatuses(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
+          await setWorkOrderCardStatusesTx(tx, step.workOrder.id, "COMPLETED", "ACTIVE");
         }
       }
 

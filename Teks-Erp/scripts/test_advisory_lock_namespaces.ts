@@ -133,14 +133,14 @@ function main(): void {
   const kodAnahtar = new Map(kod.map((k) => [k.sabit, k]));
   const envAnahtar = new Map(envanter.map((e) => [e.sabit, e]));
 
-  const kodda_yok = envanter.filter((e) => !kodAnahtar.has(e.sabit)).map((e) => e.sabit);
-  check("envanterdeki her satırın kodda karşılığı var", kodda_yok.length === 0, kodda_yok.join(", "));
+  const koddaYok = envanter.filter((e) => !kodAnahtar.has(e.sabit)).map((e) => e.sabit);
+  check("envanterdeki her satırın kodda karşılığı var", koddaYok.length === 0, koddaYok.join(", "));
 
-  const envanterde_yok = kod.filter((k) => !envAnahtar.has(k.sabit)).map((k) => `${k.sabit} (${k.dosya})`);
+  const envanterdeYok = kod.filter((k) => !envAnahtar.has(k.sabit)).map((k) => `${k.sabit} (${k.dosya})`);
   check(
     "koddaki her uzay envanterde yazılı",
-    envanterde_yok.length === 0,
-    envanterde_yok.join(", "),
+    envanterdeYok.length === 0,
+    envanterdeYok.join(", "),
   );
 
   const numaraSapmasi = envanter

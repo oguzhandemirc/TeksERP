@@ -30,9 +30,9 @@ import prisma, { pool } from "../src/lib/prisma";
 import {
   MAX_ROLL_SEQ,
   ROLL_BARCODE_RE,
-  reserveRollBarcodes,
-  reserveRollBarcodesInOrder,
-  generateRollBarcode,
+  reserveRollBarcodesTx,
+  reserveRollBarcodesInOrderTx,
+  generateRollBarcodeTx,
 } from "../src/services/helpers/roll-barcode.helper";
 
 const SRC = resolve(__dirname, "../src");
@@ -57,7 +57,7 @@ const KNOWN_TX_INTERNAL: Record<string, number> = {
 };
 
 /**
- * TX İÇİNDE **TEKİL** (`generateRollBarcode`) çağıran yollar — yani N top için N
+ * TX İÇİNDE **TEKİL** (`generateRollBarcodeTx`) çağıran yollar — yani N top için N
  * sayaç turu atma riski taşıyanlar. 2026-08-10'da dört yol toplu ifadeye çevrildi
  * (roll-finalize · roll-disposition · batch-drop · fason kabul); bu liste o
  * kazancın geri alınmasını yakalar.
@@ -115,7 +115,7 @@ function walk(dir: string): string[] {
 
 /**
  * Yorumları söker — YAPISAL TARAMANIN ÖN KOŞULU. `tambur.service.ts`'teki
- * taşıma gerekçesi eski çağrıyı ALINTILIYOR (`generateRollBarcode(tx, …)`);
+ * taşıma gerekçesi eski çağrıyı ALINTILIYOR (`generateRollBarcodeTx(tx, …)`);
  * sökülmezse bekçi kendi düzelttiği dosyayı ihlal sanır. (Aynı sınıf hata
  * `test_import_cycles`te de yaşandı — bir bekçi kodu ölçmeli, yanındaki
  * cümleyi değil.)
@@ -166,12 +166,18 @@ function structural(): void {
   let total = 0;
   for (const f of files) {
     const src = stripComments(readFileSync(f, "utf8"));
-    const hits = src.match(/(?:generateRollBarcode|reserveRollBarcodes\w*)\s*\(\s*tx\b/g);
+    // ⚠️ Yüklem 2026-09-05'te GENİŞLETİLDİ: `*Tx` soneki kuralı gelince toplu
+    // rezervasyon `reserveRollBarcodesInOrder` → `reserveRollBarcodesInOrderTx`
+    // oldu ve eski `reserveRollBarcodesTx\w*` kalıbı onu ARTIK GÖRMÜYORDU
+    // (sessiz körlük: bekçi yeşil, tarama boş). Metin tarayan her bekçi kod
+    // ŞEKLİNE bağlıdır — meşru bir yeniden adlandırma yüklemi genişletmeyi
+    // ve negatif sondayı ZORUNLU kılar.
+    const hits = src.match(/(?:generateRollBarcodeTx|reserveRollBarcodes\w*Tx)\s*\(\s*tx\b/g);
     if (hits?.length) {
       found[relative(SRC, f)] = hits.length;
       total += hits.length;
     }
-    const singular = src.match(/generateRollBarcode\s*\(\s*tx\b/g);
+    const singular = src.match(/generateRollBarcodeTx\s*\(\s*tx\b/g);
     if (singular?.length) foundSingular[relative(SRC, f)] = singular.length;
   }
 
@@ -237,7 +243,7 @@ function structural(): void {
 async function behaviour(): Promise<void> {
   console.log("\n--- §2 Toplu rezervasyon: ardışık + biçimli ---");
   await setCounter("H", 0);
-  const five = await reserveRollBarcodes(prisma, "H", 5, TEST_DATE);
+  const five = await reserveRollBarcodesTx(prisma, "H", 5, TEST_DATE);
   check("5 barkod döndü", five.length === 5, `${five.length}`);
   check("hepsi biçim sözleşmesine uyuyor", five.every((b) => ROLL_BARCODE_RE.test(b)), five.join(","));
   check(
@@ -248,14 +254,14 @@ async function behaviour(): Promise<void> {
   check("sayaç tam olarak 5 arttı", (await readCounter("H")) === 5, String(await readCounter("H")));
 
   // TEK ifade sözleşmesi: 5 barkod için sayaç 5 artmalı, 5 ayrı tur değil.
-  const next = await reserveRollBarcodes(prisma, "H", 3, TEST_DATE);
+  const next = await reserveRollBarcodesTx(prisma, "H", 3, TEST_DATE);
   check("ikinci parti kaldığı yerden devam ediyor", next.map(seqOf).join(",") === "6,7,8", next.map(seqOf).join(","));
 
   console.log("\n--- §3 Sıra koruması (karışık tip) ---");
   await setCounter("H", 100);
   await setCounter("F", 200);
   const types = ["H", "F", "H", "F", "F", "H"] as const;
-  const ordered = await reserveRollBarcodesInOrder(prisma, [...types], TEST_DATE);
+  const ordered = await reserveRollBarcodesInOrderTx(prisma, [...types], TEST_DATE);
   check("dizi uzunluğu korunuyor", ordered.length === types.length, `${ordered.length}`);
   // ⚠️ ASIL KONTROL: barkodun tipi, istenen SLOT'un tipiyle aynı olmalı. Tip
   // bazında gruplayıp düz döndüren bir uygulama burada kırmızı verir — ve o hata
@@ -275,17 +281,17 @@ async function behaviour(): Promise<void> {
 
   console.log("\n--- §4 Sıfır/negatif: sayaca DOKUNULMAZ ---");
   await setCounter("H", 500);
-  const zero = await reserveRollBarcodes(prisma, "H", 0, TEST_DATE);
+  const zero = await reserveRollBarcodesTx(prisma, "H", 0, TEST_DATE);
   check("count=0 → boş dizi", zero.length === 0);
   check("count=0 sayacı ARTIRMADI", (await readCounter("H")) === 500, String(await readCounter("H")));
-  const emptyOrder = await reserveRollBarcodesInOrder(prisma, [], TEST_DATE);
+  const emptyOrder = await reserveRollBarcodesInOrderTx(prisma, [], TEST_DATE);
   check("boş tip listesi → boş dizi, sayaç sabit", emptyOrder.length === 0 && (await readCounter("H")) === 500);
 
   console.log("\n--- §5 Eşzamanlılık: mükerrer barkod YOK ---");
   await setCounter("F", 0);
   const N = 20;
   const batches = await Promise.all(
-    Array.from({ length: N }, () => reserveRollBarcodes(prisma, "F", 3, TEST_DATE)),
+    Array.from({ length: N }, () => reserveRollBarcodesTx(prisma, "F", 3, TEST_DATE)),
   );
   const all = batches.flat();
   check(`${N} paralel × 3 = ${N * 3} barkod üretildi`, all.length === N * 3, `${all.length}`);
@@ -306,7 +312,7 @@ async function behaviour(): Promise<void> {
   await setCounter("H", MAX_ROLL_SEQ - 2);
   let overflowed = false;
   try {
-    await reserveRollBarcodes(prisma, "H", 5, TEST_DATE);
+    await reserveRollBarcodesTx(prisma, "H", 5, TEST_DATE);
   } catch {
     overflowed = true;
   }
@@ -315,17 +321,17 @@ async function behaviour(): Promise<void> {
   await setCounter("F", MAX_ROLL_SEQ);
   let singleOverflowed = false;
   try {
-    await generateRollBarcode(prisma, "F", TEST_DATE);
+    await generateRollBarcodeTx(prisma, "F", TEST_DATE);
   } catch {
     singleOverflowed = true;
   }
-  check("tekil generateRollBarcode da tavanda reddediyor", singleOverflowed);
+  check("tekil generateRollBarcodeTx da tavanda reddediyor", singleOverflowed);
 }
 
 // ── §6/§7 ÖLÇÜM: kabul kriterinin İKİ koşulu ────────────────────────────────
 /** Üretim deseni: rezervasyon tx AÇILMADAN ÖNCE, sonra uzun tx. */
 async function productionFlow(workMs: number): Promise<void> {
-  await reserveRollBarcodes(prisma, "H", 3, TEST_DATE);
+  await reserveRollBarcodesTx(prisma, "H", 3, TEST_DATE);
   await prisma.$transaction(
     async () => {
       await new Promise((r) => setTimeout(r, workMs));
@@ -343,7 +349,7 @@ async function measure(): Promise<void> {
   const busy = productionFlow(1500);
   await new Promise((r) => setTimeout(r, 200)); // tx'in açılmasını bekle
   const t0 = Date.now();
-  await reserveRollBarcodes(prisma, "H", 1, TEST_DATE);
+  await reserveRollBarcodesTx(prisma, "H", 1, TEST_DATE);
   const waited = Date.now() - t0;
   await busy;
   check(

@@ -2,7 +2,7 @@
 // Çalıştırma:  npx tsx scripts/test_order_shipments.ts
 //
 // Sözleşme: çuval sevki (DISPATCHED + PLANNED, CANCELLED hariç) + fason direkt sevk
-// birleşir; dispatchedTotal = order.shippedQty ile MUTABIK (computeLineLedger de
+// birleşir; dispatchedTotal = order.shippedQty ile MUTABIK (computeLineLedgerTx de
 // DISPATCHED çuval + direkt toplar). Bilgilendirici snapshot.
 //
 // Veri: müşteri + item + order(2 kalem) + 3 çuval-sevki (DISPATCHED/PLANNED/CANCELLED)
@@ -14,13 +14,13 @@
 //   2. CANCELLED sevk (SC) listede YOK
 //   3. dispatchedTotal = DISPATCHED çuval (60) + direkt (30) = 90
 //   4. plannedTotal = PLANNED çuval (40)
-//   5. recomputeOrderStatus sonrası dispatchedTotal === Σ line.shippedQty (mutabakat)
+//   5. recomputeOrderStatusTx sonrası dispatchedTotal === Σ line.shippedQty (mutabakat)
 //   6. Dönüş tipleri number
 
 import { ShipmentStatus, StationType, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
-import { recomputeOrderStatus } from "../src/services/helpers/order-status.helper";
+import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
 
 // Koşum damgası MODÜL kapsamında: temizlik hem `finally`den hem de kurulum
 // ortasında düşen koşumun `catch`inden çağrılabilsin diye.
@@ -204,7 +204,7 @@ async function main(): Promise<void> {
       res.plannedTotal === 40, `plannedTotal=${res.plannedTotal}`);
 
     // 5. Mutabakat: recompute sonrası dispatchedTotal === Σ line.shippedQty
-    await prisma.$transaction((tx) => recomputeOrderStatus(tx, order.id));
+    await prisma.$transaction((tx) => recomputeOrderStatusTx(tx, order.id));
     const lines = await prisma.orderLine.findMany({
       where: { orderId: order.id }, select: { shippedQty: true },
     });

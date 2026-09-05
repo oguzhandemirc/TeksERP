@@ -14,7 +14,7 @@
 //     version++ eder. Ayrı satır/REPRINTED durumu YOK.
 //   - Scan (tarama) ACTIVE olmayan kart ile reddedilir.
 //   - WO COMPLETED / CANCELLED olunca kart COMPLETED / VOIDED'a çekilir
-//     (setWorkOrderCardStatuses fan-out helper).
+//     (setWorkOrderCardStatusesTx fan-out helper).
 //
 // ⚠️ PLAN CANLI, SUNUM DONMUŞ (2026-08-05 — otomatik revizyon):
 //   Kart kontrollü bir belgedir (ISO 9001 §7.5.3) ve sahaya inen kâğıt HER ZAMAN

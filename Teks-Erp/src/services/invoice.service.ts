@@ -33,8 +33,8 @@ import {
   computeLineAmounts,
   computeInvoiceTotals,
   invoiceLedgerSide,
-  nextInvoiceNo,
-  resolveExchangeRate,
+  nextInvoiceNoTx,
+  resolveExchangeRateTx,
   ensureCariAccountTx,
   applyCariBalanceTx,
   deriveInvoiceDueDate,
@@ -320,7 +320,7 @@ export class InvoiceService {
     // ── İLERİ TARİHLİ BELGE ENGELİ (finance.futureDatedDocumentBlockEnabled) ─
     // ⚠️ KAPI BURASIDIR, `confirm` DEĞİL — ve bu bilinçli:
     //  • `issueDate` yalnız burada belirlenir (`updateDraft` onu KABUL ETMEZ) ve
-    //    belge numarası da ondan türer (`nextInvoiceNo(tx, type, issueDate)`).
+    //    belge numarası da ondan türer (`nextInvoiceNoTx(tx, type, issueDate)`).
     //    Yanlış tarih daha numara sarf edilmeden reddedilir.
     //  • Onayda kilitlemek ÇIKMAZ üretirdi: bayrak açılmadan ÖNCE doğmuş ileri
     //    tarihli bir taslağın tarihi düzeltilemez (düzenleme ucu tarih almıyor),
@@ -350,7 +350,7 @@ export class InvoiceService {
         // KUR: açıkça verildiyse o, verilmediyse tablodan çözülür.
         // ⚠️ Çözülemezse 400 — sessizce 1'e düşmek 1000 USD'lik faturayı
         // 1000 TL olarak deftere yazardı (bakiye ~30 kat yanlış, hata yok).
-        let rate = input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, issueDate);
+        let rate = input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, issueDate);
         if (rate == null) {
           throw AppError.badRequest(
             `${currency} için ${issueDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya faturada elle belirtin.`,
@@ -360,7 +360,7 @@ export class InvoiceService {
 
         await this.assertSourceFree(tx, input);
 
-        const docNo = await nextInvoiceNo(tx, input.type, issueDate);
+        const docNo = await nextInvoiceNoTx(tx, input.type, issueDate);
         const totals = computeInvoiceTotals(input.lines);
 
         const invoice = await tx.invoice.create({

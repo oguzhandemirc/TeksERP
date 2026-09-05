@@ -8,7 +8,7 @@
 // topları son adımda finalize eder.
 // =============================================================================
 import { Prisma, RollStatus, RollForm, type PrismaClient } from "@prisma/client";
-import { reserveRollBarcodesInOrder, type RollBarcodeType } from "./roll-barcode.helper";
+import { reserveRollBarcodesInOrderTx, type RollBarcodeType } from "./roll-barcode.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -169,7 +169,7 @@ export async function finalizeRollsAtLastStep(
   // tx geri sararsa sayaç artışı da geri sarılır, boşluk doğmaz.
   const statusOf = new Map(rolls.map((r) => [r.id, resolveFinalStatus(r.qualityGrade, statusByCode)]));
   const needBarcode = rolls.filter((r) => !r.barcode);
-  const reserved = await reserveRollBarcodesInOrder(
+  const reserved = await reserveRollBarcodesInOrderTx(
     tx,
     needBarcode.map((r) => finalBarcodeType(statusOf.get(r.id)!)),
   );

@@ -43,7 +43,7 @@
 // 1000 USD alacak ile 30.000 TL alacak toplanamaz. Her para birimi kendi
 // bloğunda yaşar; TL karşılığı **rapor günü kuruyla** ve DİPNOTLU verilir. Kur
 // bulunamazsa TL kolonu `null` döner — uydurma kur, 30 kat yanlış bir toplamı
-// sessizce doğru gösterirdi (`resolveExchangeRate`'in "sessizce 1'e düşme"
+// sessizce doğru gösterirdi (`resolveExchangeRateTx`'in "sessizce 1'e düşme"
 // yasağıyla aynı gerekçe).
 //
 // ── İŞARET SÖZLEŞMESİ ────────────────────────────────────────────────────────
@@ -756,7 +756,7 @@ export async function getAgingReport(params: AgingParams): Promise<AgingReport> 
     }
 
     // TL karşılığı: TRY bloğunda kur 1'dir ve kur tablosuna BAKILMAZ
-    // (`resolveExchangeRate` ile aynı sözleşme).
+    // (`resolveExchangeRateTx` ile aynı sözleşme).
     const rate = cur === Currency.TRY ? D(1) : rateByCurrency.has(cur) ? D(rateByCurrency.get(cur)!.rate) : null;
     const rateDate =
       cur === Currency.TRY ? null : rateByCurrency.get(cur)?.rateDate.toISOString().slice(0, 10) ?? null;

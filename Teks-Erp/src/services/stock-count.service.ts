@@ -111,7 +111,7 @@ const D = (v: Prisma.Decimal.Value): Prisma.Decimal => new Prisma.Decimal(v);
 
 /**
  * Günlük sıralı belge numarası — `orderBy` ile DEĞİL, JS'te sayısal max ile
- * (`nextInvoiceNo`/`nextLetterNo` kanıtlı deseni: glibc collation 9→10
+ * (`nextInvoiceNoTx`/`nextLetterNo` kanıtlı deseni: glibc collation 9→10
  * geçişinde sözlüksel sıralamayı bozar). Çağıran `withBarcodeRetry` ile
  * sarmalar — yarışta P2002 hâlâ mümkündür ve doğru cevap tekrar denemektir.
  */

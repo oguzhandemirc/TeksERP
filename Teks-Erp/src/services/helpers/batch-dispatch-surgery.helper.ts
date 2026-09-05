@@ -27,7 +27,7 @@
 // retarget edilen / yeni doğan) targetByStep ile takip edilir, aynı adımdaki
 // sonraki kaynak kalemleri ona birleşir.
 //
-// NOT: FS numarası üreteci subcontractor.service.nextPrefixedSequence ile AYNI
+// NOT: FS numarası üreteci subcontractor.service.nextPrefixedSequenceTx ile AYNI
 // desen/kaynaktır (aynı tablo taraması, collation-güvenli gte+startsWith) —
 // import EDİLMEZ çünkü subcontractor.service → batch.service → bu helper yönlü
 // zincir var; ters import modül döngüsü kurardı.

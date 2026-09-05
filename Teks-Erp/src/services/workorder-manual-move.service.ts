@@ -24,11 +24,11 @@ import { Prisma, RollStatus, WorkOrderStatus, TravelerCardStatus, RollOperationT
 import { AppError } from "../utils/app-error";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
-import { createBatchTx, deleteIfEmptyAndTraceless, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
+import { createBatchTx, deleteIfEmptyAndTracelessTx, isBatchLockedTx, K18_DEAD_STATUSES } from "./batch.service";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { ApiResponse } from "../types/api.types";
 import { OPEN_OUTSTANDING } from "./helpers/fason-open-dispatch.helper";
 
@@ -785,7 +785,7 @@ export class WorkOrderManualMoveService {
         // Kaynak partiler boşaldıysa (izsiz) sil (new/join'de olabilir).
         if (partyMode !== "keep") {
           for (const bid of ctx.sourceBatchIds) {
-            if (await deleteIfEmptyAndTraceless(tx, bid)) deletedSourceBatches.push(bid);
+            if (await deleteIfEmptyAndTracelessTx(tx, bid)) deletedSourceBatches.push(bid);
           }
         }
 
@@ -858,7 +858,7 @@ export class WorkOrderManualMoveService {
           data: { status: WorkOrderStatus.IN_PROGRESS },
         });
         if (res.count > 0) {
-          await setWorkOrderCardStatuses(tx, workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
+          await setWorkOrderCardStatusesTx(tx, workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
           reopened = true;
         }
 

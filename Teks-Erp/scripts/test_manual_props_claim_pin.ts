@@ -81,12 +81,12 @@ async function main(): Promise<void> {
     type FindUniqueFn = (args: unknown) => Promise<unknown>;
     const delege = prisma.roll as unknown as { findUnique: FindUniqueFn };
     const orijinal = delege.findUnique.bind(prisma.roll) as FindUniqueFn;
-    let araya_girildi = false;
+    let arayaGirildi = false;
     delege.findUnique = async (args: unknown) => {
       const res = await orijinal(args);
       const id = (args as { where?: { id?: string } })?.where?.id;
-      if (!araya_girildi && id === t2.id) {
-        araya_girildi = true;
+      if (!arayaGirildi && id === t2.id) {
+        arayaGirildi = true;
         await prisma.roll.update({ where: { id: t2.id }, data: { currentQty: 59.5, initialQty: 59.5 } });
       }
       return res;
@@ -103,7 +103,7 @@ async function main(): Promise<void> {
     delege.findUnique = orijinal;
 
     const sonra2 = await prisma.roll.findUnique({ where: { id: t2.id }, select: { currentQty: true, initialQty: true } });
-    check("§2 araya giren kesim gerçekten uygulandı (sonda kuruldu)", araya_girildi);
+    check("§2 araya giren kesim gerçekten uygulandı (sonda kuruldu)", arayaGirildi);
     check("§2b bayat metrajla gelen düzeltme 409 ile REDDEDİLİR", ok2?.status === 409, ok2 ? ok2.message.slice(0, 120) : "hata alınmadı — yazım geçti");
     check("§2c kesimin yazdığı metraj KORUNDU (lost update yok)", sonra2?.currentQty.equals(59.5) === true,
       `currentQty=${sonra2?.currentQty.toString()} (beklenen 59.5)`);

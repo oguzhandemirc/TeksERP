@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { systemLogService } from "@/services/systemLogService";
 import { actionLabel, tableLabel } from "@/pages/System/Activity/labels";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
+import { matchesPermission } from "@/types/auth";
 import { useTabsStore } from "@/store/tabs";
 
 const SEEN_KEY = "notifications.lastSeen";
@@ -25,10 +26,10 @@ export function NotificationBell() {
   const navigateActive = useTabsStore((s) => s.navigateActive);
   const [lastSeen, setLastSeen] = useState<string>(() => localStorage.getItem(SEEN_KEY) ?? "");
 
-  const canSee =
-    permissions.includes("*") ||
-    permissions.includes("admin:*") ||
-    permissions.includes("admin:settings");
+  // İzin ölçümü TEK YÜKLEMDEN geçer (`matchesPermission`): düz `includes` zinciri
+  // global `"*"` ve alan jokerini elle taklit eder ve semantik ilk sapmada ayrışır
+  // (docs/standart/ELECTRON.md [EL-23]). Burada üç dallı zincir tam da o kopyaydı.
+  const canSee = matchesPermission(permissions, "admin:settings");
 
   const { data } = useQuery({
     queryKey: ["notifications", "recent"],

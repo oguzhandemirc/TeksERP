@@ -512,7 +512,7 @@ async function main() {
   //
   // ÖLÇÜLDÜ (2026-08-15 envanteri): `shipping.toleranceMeters` tam bu
   // durumdaydı — sipariş kaleminin "TAMAMLANDI" eşiğini belirliyor
-  // (`order-status.helper.recomputeOrderStatus`, varsayılan 5 m) ve panelde
+  // (`order-status.helper.recomputeOrderStatusTx`, varsayılan 5 m) ve panelde
   // hiçbir ekrandan değiştirilemiyordu; tek yol ham `PUT /api/admin/settings/:key`
   // ucuydu ve onu çağıran bir yüzey yoktu.
   //

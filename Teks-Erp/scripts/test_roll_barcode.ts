@@ -7,7 +7,7 @@ import {
   ROLL_BARCODE_RE,
   MAX_ROLL_SEQ,
   rollBarcodePrefix,
-  generateRollBarcode,
+  generateRollBarcodeTx,
 } from "../src/services/helpers/roll-barcode.helper";
 
 let pass = 0, fail = 0;
@@ -32,33 +32,33 @@ async function main() {
   check("prefix F", rollBarcodePrefix("F", DATE) === "T311299F", rollBarcodePrefix("F", DATE));
 
   // --- üretim: ilk çağrı 0001, sonra sıralı artar (atomik sayaç) ---
-  const b1 = await generateRollBarcode(prisma, "H", DATE);
-  const b2 = await generateRollBarcode(prisma, "H", DATE);
-  const b3 = await generateRollBarcode(prisma, "H", DATE);
+  const b1 = await generateRollBarcodeTx(prisma, "H", DATE);
+  const b2 = await generateRollBarcodeTx(prisma, "H", DATE);
+  const b3 = await generateRollBarcodeTx(prisma, "H", DATE);
   check("ilk → T311299H0001", b1 === "T311299H0001", b1);
   check("ikinci → 0002", b2 === "T311299H0002", b2);
   check("üçüncü → 0003", b3 === "T311299H0003", b3);
   check("üretilen barkod regex'e uyar", ROLL_BARCODE_RE.test(b1));
 
   // --- tip ayrımı: F kendi sayacından 0001'den başlar ---
-  const f1 = await generateRollBarcode(prisma, "F", DATE);
+  const f1 = await generateRollBarcodeTx(prisma, "F", DATE);
   check("F tipi bağımsız → T311299F0001", f1 === "T311299F0001", f1);
 
   // --- eşzamanlı (paralel) üretim → hepsi BENZERSİZ (çakışma yok) ---
   const many = await Promise.all(
-    Array.from({ length: 20 }, () => generateRollBarcode(prisma, "H", DATE)),
+    Array.from({ length: 20 }, () => generateRollBarcodeTx(prisma, "H", DATE)),
   );
   check("20 paralel üretim hepsi benzersiz", new Set(many).size === 20);
 
   // --- sayaç ardışık: n=9998 sonrası → 9999 ---
   await prisma.rollBarcodeCounter.update({ where: { day_type: { day: DAY, type: "H" } }, data: { n: 9998 } });
-  const near = await generateRollBarcode(prisma, "H", DATE);
+  const near = await generateRollBarcodeTx(prisma, "H", DATE);
   check("n=9998 sonrası → 9999", near === "T311299H9999", near);
 
   // --- kapasite: sayaç MAX'ta → hata ---
   await prisma.rollBarcodeCounter.update({ where: { day_type: { day: DAY, type: "H" } }, data: { n: MAX_ROLL_SEQ } });
   let capErr = false;
-  try { await generateRollBarcode(prisma, "H", DATE); } catch { capErr = true; }
+  try { await generateRollBarcodeTx(prisma, "H", DATE); } catch { capErr = true; }
   check("MAX aşımı → kapasite hatası", capErr);
 
   // --- eski/yeni format ayrımı: eski TEKS… yeni T311299H prefix'iyle EŞLEŞMEZ ---

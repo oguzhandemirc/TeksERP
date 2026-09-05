@@ -1,0 +1,90 @@
+{
+  "label": "kapatma-dusen-is",
+  "tarih": "2026-09-05",
+  "kapsam": "Tamlik elestirmeninin bulduklarindan 'plandan dusen isler + rapor eksikleri' kolu",
+  "girdi": "docs/history/standart-2026-09-05/PROMPT.md §2 · olcum/*.json · docs/standart/*.md",
+  "kapatilanlar": [
+    {
+      "bulgu": "İ-09 · Swagger kapsam bekçisi (DÜŞTÜ) — PATH_COUNT_FLOOR=120 zemini 502 yol karşısında ısırmıyordu",
+      "hukum": "kapatildi",
+      "dogrulama": "İddia DOĞRULANDI ve genişledi: zemin ısırmıyor + gerçek belgesiz uç sayısı ~60 değil 117 (spec 609 işlem / Express 726 uç). Ayrıca üç HAYALET @openapi bloğu bulundu (spec'te var, kodda yok).",
+      "yapilan": "test_swagger_spec.ts uç↔blok eşlemesine çevrildi. Uç listesi Express'in CANLI router ağacından çıkar: bekçi src/app.ts'i import eder ve Router.prototype.use'u geçici yamalar (Express 5 Layer mount yolunu SAKLAMAZ — router/lib/layer.js `this.path = undefined`; ağacı gezmek yetmiyor). Yedi kontrol: YAML geçerliliği · spec yol zemini (120) · işlem kümesi boş değil · Express uç zemini (ENDPOINT_COUNT_FLOOR=500, yama ölürse kırmızı) · baseline dışı belgesiz uç YOK · baseline'da bayat satır YOK (tavan yalnız düşer) · hayalet blok YOK. 117 devralınan belgesiz uç Teks-Erp/swagger-belgesiz-baseline.json'a donduruldu (--yaz ile tazelenir). Üç hayalet blok silindi: reports/production.routes.ts station-efficiency · machine-usage · scrap (Swagger UI'da 404 veren uç ilan ediyorlardı); aynı dosyada yanlış rotanın üstünde kalmış 'NEREDE TAKILDI (WIP)' yorumu /wip route'unun üstüne taşındı.",
+      "kanit": "Teks-Erp/scripts/test_swagger_spec.ts:1-180 · Teks-Erp/swagger-belgesiz-baseline.json (117 uç) · Teks-Erp/src/routes/reports/production.routes.ts",
+      "kapi": "npx tsx scripts/run-all-tests.ts swagger → '7 geçti, 0 başarısız', rc 0 · npx eslint scripts/test_swagger_spec.ts src/routes/reports/production.routes.ts rc 0 · npx tsc --noEmit rc 0",
+      "negatifSondalar": [
+        "(1) reports/production'a belgesiz GET /sonda-negatif eklendi → 'yeni uç belgesiz olamaz' KIRMIZI (1 yeni: GET /api/reports/production/sonda-negatif). Geri alındı.",
+        "(2) Karşılıksız bir @openapi bloğu eklendi (/api/reports/production/hayalet-sonda) → 'hayalet @openapi bloğu yok' KIRMIZI. Geri alındı.",
+        "(3) baseline'a hiç var olmayan bir uç satırı eklendi → 'tavan yalnız düşer' KIRMIZI (1 satır silinmeli). --yaz ile geri alındı.",
+        "(4) patchRouterUse() çağrısı yorumlandı (yama ölürse) → uç sayısı 726→1, körlük zemini KIRMIZI + iki kontrol daha kırmızı (4 geçti / 3 başarısız). Geri alındı.",
+        "Geri alma sonrası 7/7 yeşil, rc 0."
+      ],
+      "belgeGuncellemesi": "docs/standart/BACKEND.md [BE-40] zorlama etiketi GERÇEĞE çekildi (eski etiket 'uç ↔ blok eşlemesini ÖLÇMEZ' diyordu) ve yeni [BE-41] yazıldı (uç kalkınca @openapi bloğu da kalkar); 'Bilinen borç' paragrafı devralınan tavan + bilinen sınır olarak yeniden yazıldı. Teks-Erp/docs/BEKCI-HARITASI.md satırı güncellendi."
+    },
+    {
+      "bulgu": "B-03/2 · Migration reçetesi 23 adım (DÜŞTÜ) — çekirdek 13 adıma inecekti",
+      "hukum": "kapatildi",
+      "dogrulama": "İddia DOĞRULANDI: docs/RECETELER.md § 'Yeni migration ve canlıya çıkarma' 23 numaralı adım taşıyordu.",
+      "yapilan": "13 ÇEKİRDEK adım (her migration'da koşan) + 'Koşula bağlı ek adımlar' tablosu (8 tetik). Hiçbir adım kaybolmadı: eski 4+5+6 tek 'apply-migration.ts' adımında birleşti (VERITABANI.md [DB-28] ile aynı cümle), 16+17 paketleme adımında, 18+19+21 kur.ps1 adımında; koşula bağlı olanlar (yumuşak kapı · IMMUTABLE ifade index'i · statement_timeout · CONCURRENTLY · NOT VALID · taslak dizini · premigrate_ ön eki · ops ikizi · db-copy-verify bağımlılığı) tabloya taşındı. Eklenen iki ÇEKİRDEK adım: [DB-23] idempotent SQL (3.) ve [DB-29] en eski canlı dump'ta prova (10.) — ikisi de reçetede hiç yoktu.",
+      "kanit": "docs/RECETELER.md § Yeni migration ve canlıya çıkarma (13 adım + tablo)",
+      "kapi": "node scripts/check-docs.mjs rc 0",
+      "ekTemizlik": "Reçetenin sonundaki '⚠️ Belgesiz kalan adımlar' bloğu (9 madde) ÖLÇÜLDÜ ve budandı: 8'i artık bayat — idempotent SQL [DB-23]'te · dokuz envanter listesi [DB-30]'da · notValid ve db-copy-verify reçetenin kendisinde · yumuşak kapı [DB-24] · IMMUTABLE/\\s [DB-27] · ops ikizi bu turda reçeteye girdi · CI'daki emekli adnansahin dalı kaldırılmış · atıf yapılan 'kanonik MIGRATION-DEPLOY.md' zaten TARİHSEL banner'lı ve apply-migration.ts beş belgede geçiyor. Kalan tek gerçek boşluk (apply-migration.ts ön koşulları: PATH'te psql + .env'de ÇİFT TIRNAKLI DATABASE_URL) 5. adıma yazıldı."
+    },
+    {
+      "bulgu": "M-04 · Soft-delete istisna listesi (YARIM) — kök CLAUDE.md hâlâ 5 kalemlik eski listeyi taşıyor",
+      "hukum": "kapatildi",
+      "dogrulama": "İddia DOĞRULANDI: CLAUDE.md:31 'bağımlılık-guard'lı DELETE /:id/permanent, boş çuval silme, cihaz unpair, pivot replace, ItemPrice satırı' diyordu; ölçüm (faz0-acik-olcumler.json › M_04_hard_delete_hukumleri) sekiz sitenin sekizini de meşru bulmuş ve DÖRT sınıfa ayırmıştı.",
+      "yapilan": "Kök CLAUDE.md § Veri ve defter satırı ölçülen dört sınıfa göre yeniden yazıldı: ① bağımlılık-guard'lı silme (master-data DELETE /:id/permanent, boş çuval, cihaz unpair) · ② alias/karar satırı · ③ pivot/çocuk satır replace (ItemPrice burada, isActive EKLENMEZ) · ④ deftere hiç yazmamış taslak (atomik claim'li). Sınıf tablosu ve sekiz sitenin tamamı için docs/standart/VERITABANI.md §9'a İŞARET EDİLDİ (o dosya DEĞİŞTİRİLMEDİ); alan emsalleri için docs/kurallar/top-duzeltme.md atfı korundu. Eski listedeki üç somut emsal (boş çuval, cihaz unpair, ItemPrice) sınıfların içine yerleştirildi — bilgi kaybı yok.",
+      "kanit": "CLAUDE.md:31 · docs/standart/VERITABANI.md §9 (DB-31/DB-32, değiştirilmedi)",
+      "kapi": "node scripts/check-docs.mjs rc 0 · ls -la CLAUDE.md → 19.433 bayt (tavan 36 KB, %53)"
+    },
+    {
+      "bulgu": "İ-15 · 26 çift toast (YARIM) — 4'ü düzeltildi, 22'si tavanda",
+      "hukum": "kapatildi",
+      "dogrulama": "İddia DOĞRULANDI ve TAVAN MEŞRU çıktı. Planın kendi ölçütü (docs/standart/README.md § Kural yazma ölçütü; Teks-Erp/eslint.config.mjs başlığının aynası): ihlal 0 → error · ≤15 → düzelt ve error · >15 → warn + tavan. Ölçülen ihlal 26 > 15 olduğu için kural warn + baseline kovasına girer; 'düzelt ve error' kovası bu sayıda uygulanamaz. En yeni 4 ihlal (SackTags, 2026-09-04) yine de düzeltildi — devralınan kod sınır dışıdır ama YENİ kod kuralı taşımalıydı.",
+      "yapilan": "EKSTRA DÜZELTME YAPILMADI (talimat gereği). Gerekçe bu dosyaya ve rapor §10'a yazıldı.",
+      "kanit": "Electron/lint-baseline.json › kurallar['yerel/mutation-onerror-toast'] = 22 (ölçüm 26, düzeltilen 4) · docs/standart/README.md § Kural yazma ölçütü"
+    },
+    {
+      "bulgu": "RAPOR §4.7 · UYGULAMA-OZETI.md'de kimlik akıbet tablosu, ESLint karar tablosu ve sonraki adımlar yok; §8 kabul tablosu 10/10 ✅ diyor",
+      "hukum": "kapatildi",
+      "dogrulama": "İddia DOĞRULANDI. §4 ve §7 altmış kimliğin ~30'unu anıyordu; §8'in on ölçütünün onu da ✅ idi.",
+      "yapilan": "§8 kabul tablosu YENİDEN ÖLÇÜLDÜ ve düşürüldü: 3 ✅ / 6 ⚠ / 1 ❌ (her satırda tek cümle gerekçe). §10 KİMLİK AKIBET TABLOSU eklendi — plan §2'deki 60 kimliğin (İ-01…İ-26 · M-01…M-05 · B-01…B-11 · K-01…K-05 · E-01…E-05 · Y-01…Y-04 · ES-01…ES-03 · BELİRSİZ-01) tamamı durum + tek cümle; 'ÖLÇÜLMEDİ' yazmak gerekmedi, hepsinin akıbeti olcum/*.json, docs/standart/*.md ya da çalışma ağacından doğrulandı. §11 ESLint karar tablosu (kural × proje × ihlal × karar × sonda, 25 satır). §12 sonraki adımlar (kapananlar + 7 kapanmayan).",
+      "kanit": "docs/history/standart-2026-09-05/UYGULAMA-OZETI.md §8, §10, §11, §12",
+      "dusurulen_kabul_olcutleri": {
+        "2": "⚠ — 267 kuralın hepsi etiketli ve bekçi dosyalarının hepsi mevcut, ama etiket doğruluğu tek tek denetlenmedi; iki sapma bulundu (BE-40 kapısızdı, MO-40 kanıtı bayat).",
+        "4": "❌ → ✅ (bu turda §10 ile kapandı)",
+        "5": "⚠ — K-05 açık: KOD-KURALLARI mekanik listesinde kütüphane sınıfı kural yok.",
+        "7": "⚠ — [DB-29] provası koşulmadı, M-01'in canlı maliyeti ölçülmedi.",
+        "8": "⚠ — 3 mobil ölü paket sonraki APK'ya bırakıldı; react-native-ble-plx iddiası çürüdü.",
+        "9": "⚠ — İ-21 ve İ-23 ölçüm dosyasında 'kismen-yapildi', §4 tablosu 'yapıldı' diyordu.",
+        "10": "❌ — sekiz faz planlandı, iki commit var (6afa188c + cdcb73f4)."
+      }
+    }
+  ],
+  "yeniBulgular": [
+    "HAYALET @openapi BLOĞU YENİ BİR SINIF: reports/production.routes.ts'te üç blok (station-efficiency · machine-usage · scrap) uçları kaldırıldıktan sonra kalmış; Swagger UI bugüne dek 404 veren üç uç ilan ediyordu. Bekçi artık bu yönü de ölçüyor ([BE-41]).",
+    "Belgesiz uç sayısı keşifte '~60' sanılıyordu, gerçek 117 (Express 726 uç / spec 609 işlem). Fark, BaseController CRUD uçlarının router ağacında görünüp handler sayımında görünmemesinden.",
+    "K-05 KAPANMAMIŞ: docs/KOD-KURALLARI.md 'mekanik zorlananlar' listesinde kütüphane sınıfından kural/bekçi atfı yok (test_dependency_contract o dosyada 0 vuruş); plan bunu 'K-03 ile kapanır' saymıştı.",
+    "[MO-40] kanıtı bayat: kural metni '`console` çıkış kanalı değildir' diyor ama config allow:[warn,error] ile yazıldı ve src altındaki 11 çağrının hepsi console.warn; kanıttaki '8 ihlal / 6 dosya' karar ÖNCESİ sayı. (mobil alanı — dokunulmadı, raporlandı.)",
+    "docs/standart/MOBIL.md borç satırındaki 'İ-21: 11 gerekçesiz kuyruksuz mutasyon' bayat; düzeltmeden sonra açık sayısı 3 (TamburScreen reportErrorMutation · deleteErrorMutation · DepoScreen unmarkKartela). (mobil alanı — dokunulmadı, raporlandı.)",
+    "test_swagger_spec.ts artık src/app.ts'i import ediyor: uygulama boot'u kırılırsa bu bekçi de kırmızı verir (istenen davranış) ve koşum süresi 0,8 sn."
+  ],
+  "dokunulanDosyalar": [
+    "Teks-Erp/scripts/test_swagger_spec.ts (56 → 180 satır)",
+    "Teks-Erp/swagger-belgesiz-baseline.json (YENİ, 117 uç)",
+    "Teks-Erp/src/routes/reports/production.routes.ts (3 hayalet @openapi bloğu silindi, WIP yorumu doğru route'a taşındı)",
+    "docs/standart/BACKEND.md (§10: BE-40 etiketi düzeltildi, BE-41 eklendi, borç paragrafı yeniden yazıldı)",
+    "Teks-Erp/docs/BEKCI-HARITASI.md (test_swagger_spec satırı)",
+    "docs/RECETELER.md (§ Yeni migration ve canlıya çıkarma: 23 → 13 + koşula bağlı tablo)",
+    "CLAUDE.md (soft-delete dört sınıf + VERITABANI.md §9 bağı)",
+    "docs/history/standart-2026-09-05/UYGULAMA-OZETI.md (§7 swagger borcu, §8 dürüst kabul tablosu, §10/§11/§12)"
+  ],
+  "bitirmeKapilari": {
+    "node scripts/check-docs.mjs": "rc 0",
+    "npx tsx scripts/run-all-tests.ts swagger": "7 geçti / 0 başarısız, rc 0",
+    "ls -la CLAUDE.md": "19.433 bayt (tavan 36 KB)",
+    "npx tsc --noEmit (Teks-Erp)": "rc 0",
+    "npx eslint (dokunulan iki TS dosyası)": "rc 0"
+  },
+  "not": "Bu tur PRODUCTION verisine, migration'a ve başka ajanın dosyalarına dokunmadı; git commit/push yapılmadı."
+}

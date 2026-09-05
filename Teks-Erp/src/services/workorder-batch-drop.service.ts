@@ -24,8 +24,8 @@ import { ApiResponse } from "../types/api.types";
 import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import {
-  assertBatchInWorkOrder,
-  deleteIfEmptyAndTraceless,
+  assertBatchInWorkOrderTx,
+  deleteIfEmptyAndTracelessTx,
   K18_DEAD_STATUSES,
   NO_LIVE_MATERIAL_STATUSES,
 } from "./batch.service";
@@ -36,7 +36,7 @@ import {
   resolveFinalStatus,
   finalBarcodeType,
 } from "./helpers/roll-finalize.helper";
-import { reserveRollBarcodes } from "./helpers/roll-barcode.helper";
+import { reserveRollBarcodesTx } from "./helpers/roll-barcode.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import {
   applyRollDispositionsTx,
@@ -288,7 +288,7 @@ class WorkOrderBatchDropService {
         if (!wo) throw AppError.notFound("İş emri bulunamadı");
         const stepIds = wo.steps.map((s) => s.id);
 
-        await assertBatchInWorkOrder(tx, batchId, workOrderId);
+        await assertBatchInWorkOrderTx(tx, batchId, workOrderId);
         const batch = await tx.batch.findUnique({
           where: { id: batchId },
           select: { batchNumber: true, mergedInto: { select: { batchNumber: true } } },
@@ -415,7 +415,7 @@ class WorkOrderBatchDropService {
         for (const [target, ids] of idsByTarget) {
           if (!SELLABLE_DISPOSITION_STATUSES.includes(target)) continue;
           const unbarcoded = ids.filter((rid) => residualById.get(rid)?.barcode == null);
-          const reserved = await reserveRollBarcodes(tx, finalBarcodeType(target), unbarcoded.length);
+          const reserved = await reserveRollBarcodesTx(tx, finalBarcodeType(target), unbarcoded.length);
           for (const [i, rid] of unbarcoded.entries()) {
             await tx.roll.update({ where: { id: rid }, data: { barcode: reserved[i]! } });
           }
@@ -464,7 +464,7 @@ class WorkOrderBatchDropService {
         // 6) Boşalan izsiz parti silinir. ⚠️ `CANCELLED` top partide KALDIĞI için
         //    silme `false` döner — bu BEKLENEN sonuçtur, çalışılacak bir hata değil:
         //    parti, iptal edilmiş topların kabı olarak durur.
-        const batchDeleted = await deleteIfEmptyAndTraceless(tx, batchId);
+        const batchDeleted = await deleteIfEmptyAndTracelessTx(tx, batchId);
 
         // 7) İş emrinde canlı malzeme kaldı mı — BAYRAK, aksiyon değil.
         //    ⚠️ Küme K18 DEĞİL: K18 "lane'de gösterme" sorusunu yanıtlar, buradaki

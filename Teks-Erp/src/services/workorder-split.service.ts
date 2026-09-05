@@ -23,13 +23,13 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import {
   createBatchTx,
-  deleteIfEmptyAndTraceless,
+  deleteIfEmptyAndTracelessTx,
   NO_LIVE_MATERIAL_STATUSES,
 } from "./batch.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { recomputeStepStatus, ensureWorkOrderInProgress } from "./helpers/roll-step.helper";
 import { stepCanApplyColor } from "./helpers/step-capability.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { cloneWorkOrderTx, repointRollsTx } from "./helpers/workorder-clone.helper";
 import { voidStalePendingBypassAssignmentsTx } from "./helpers/kursun-bypass-guard.helper";
 import { ApiResponse } from "../types/api.types";
@@ -285,7 +285,7 @@ export class WorkOrderSplitService {
       data: { status: WorkOrderStatus.SUPERSEDED },
     });
     if (res.count === 0) return false;
-    await setWorkOrderCardStatuses(
+    await setWorkOrderCardStatusesTx(
       tx,
       workOrderId,
       [TravelerCardStatus.ACTIVE],
@@ -396,11 +396,11 @@ export class WorkOrderSplitService {
           data: { status: WorkOrderStatus.IN_PROGRESS },
         });
         if (reopened.count > 0) {
-          await setWorkOrderCardStatuses(tx, ctx.workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
+          await setWorkOrderCardStatusesTx(tx, ctx.workOrderId, TravelerCardStatus.COMPLETED, TravelerCardStatus.ACTIVE);
         }
 
         // 6) Kaynak parti boşaldıysa (izsiz) sil.
-        const sourceDeleted = await deleteIfEmptyAndTraceless(tx, ctx.batchId);
+        const sourceDeleted = await deleteIfEmptyAndTracelessTx(tx, ctx.batchId);
 
         return { newBatch: created.batch, sourceDeleted };
       }),
@@ -528,7 +528,7 @@ export class WorkOrderSplitService {
         await voidStalePendingBypassAssignmentsTx(tx, ctx.workOrderId, "SPLIT_SOURCE");
 
         // 8) Kaynak parti boşaldıysa (izsiz) sil.
-        const sourceDeleted = await deleteIfEmptyAndTraceless(tx, ctx.batchId);
+        const sourceDeleted = await deleteIfEmptyAndTracelessTx(tx, ctx.batchId);
 
         // 9) Kaynak WO tümüyle boşaldıysa (tam-parti ayırma) iptal et (B1 — zombi WO).
         const sourceWorkOrderCancelled = await this.supersedeEmptiedSourceWorkOrderTx(tx, ctx.workOrderId);

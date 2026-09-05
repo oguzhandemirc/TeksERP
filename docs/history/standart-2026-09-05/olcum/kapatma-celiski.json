@@ -1,0 +1,62 @@
+{
+  "ajan": "celiski-temizligi",
+  "alan": "standart DISINDAKI belgelerin standarda gore guncellenmesi",
+  "tarih": "2026-09-05",
+  "olcumler": {
+    "toLocaleUpperCase_backend_src": {
+      "komut": "grep -rn toLocaleUpperCase Teks-Erp/src | wc -l",
+      "sonuc": 59,
+      "ek": "grep -rl ... | wc -l -> 29 dosya; grep -ro ... | wc -l -> 60 gecis",
+      "belgedeki_eski": ["KOD-KURALLARI.md: 62", "eslint.config.mjs basligi: 56", "docs/standart/ILKELER.md [IL-12]: 56"]
+    },
+    "backend_bekci_dosyasi": { "komut": "ls Teks-Erp/scripts/test_*.ts | wc -l", "sonuc": 455, "eski": 453 },
+    "backend_scripts_ts_toplam": { "komut": "ls Teks-Erp/scripts/*.ts | wc -l", "sonuc": 555, "eski": 554 },
+    "electron_test": { "komut": "cd Electron && npx vitest run", "sonuc": "211 dosya / 2283 vaka / 27,10 sn / rc=0", "eski": "208 dosya / 2266 vaka / 23 sn" },
+    "mobil_test": { "komut": "cd mobil && npx jest", "sonuc": "85 suite / 854 vaka / 16,49 sn / rc=0", "eski": "84 / 820 / 29 sn" },
+    "backend_lint_kapsami": { "komut": "grep '\"lint\"' Teks-Erp/package.json", "sonuc": "eslint src scripts prisma", "eski": "eslint src" },
+    "eslint_error_desenleri": { "komut": "eslint.config.mjs ORTAK_YASAKLAR + FACTORY_TZ_LITERAL", "sonuc": "12 no-restricted-syntax deseni (error) + route/controller lib/prisma no-restricted-imports", "eski": "belgede elle sayilan 6 desen" },
+    "npm_test_suresi": { "kaynak": "docs/standart/TEST-VE-DERLEME.md [TD-02] + kok CLAUDE.md:116", "sonuc": "369 sn kosum + 28 sn tip gecidi ~= 6,5 dk", "not": "elestirmenin '~7,5 dk' rakami hicbir olcumde yok; kosum yeniden yapilmadi (canli DB'ye yazan paket)" }
+  },
+  "degisen_dosyalar": [
+    "CLAUDE.md",
+    "docs/KOD-KURALLARI.md",
+    "docs/GELISTIRME-DONGUSU.md",
+    "docs/SOZLUK.md",
+    "docs/qa/TEST-SENARYOLARI.md",
+    "docs/ops/URETIM-KONTROL-LISTESI.md",
+    "docs/kurallar/deploy-kurulum.md",
+    "Teks-Erp/docs/BEKCI-HARITASI.md",
+    "Teks-Erp/eslint.config.mjs",
+    "Electron/CLAUDE.md",
+    "mobil/CLAUDE.md",
+    "docs/standart/ILKELER.md (YALNIZ [IL-12] sayisi 56->59; gorev metninde acikca istendi)"
+  ],
+  "kapatilanlar": [
+    { "bulgu": "C-1a KOD-KURALLARI:149 ESLint olcutu yeni dort kademeli olcutle zit", "hukum": "kapatildi", "yapilan": "Cumle dort kademeye cevrildi (0 -> error / <=15 -> duzelt+error / >15 -> warn+tavan lint-baseline.json / olcum curutuyorsa yazilmaz) ve tek kaynak olarak docs/standart/README.md § Kural yazma olcutu'ne baglandi.", "kanit": "docs/KOD-KURALLARI.md:149" },
+    { "bulgu": "C-1b 'mekanik zorlananlar' listesi 6 desen sayiyor", "hukum": "kapatildi", "yapilan": "Elle sayim kaldirildi; tek kaynak Teks-Erp/eslint.config.mjs'e isaret edildi (ORTAK_YASAKLAR + FACTORY_TZ_LITERAL = 12 error deseni + lib/prisma import yasagi + naming-convention/no-explicit-any/no-floating-promises/no-require-imports/olu direktif kapisi).", "kanit": "docs/KOD-KURALLARI.md:147" },
+    { "bulgu": "C-1c KOD-KURALLARI 'standart' katmanindan habersiz", "hukum": "kapatildi", "yapilan": "Basliga tek satirlik uc-katman isaretcisi eklendi (standart / kod kurallari / alan kurallari; baglanir kopyalanmaz).", "kanit": "docs/KOD-KURALLARI.md:3" },
+    { "bulgu": "C-1d toLocaleUpperCase sayisi uc yerde uc farkli (62 / 56 / 56)", "hukum": "kapatildi", "yapilan": "Olculdu: 59. Uc yer de 59'a cekildi.", "kanit": "docs/KOD-KURALLARI.md:151 · Teks-Erp/eslint.config.mjs:18 · docs/standart/ILKELER.md:33" },
+    { "bulgu": "C-2a BEKCI-HARITASI:3 'tam paket npm test (sirali, saatler)'", "hukum": "kapatildi", "yapilan": "'saatler' cumlesi silindi; yerine 455 dosya / ~6,5 dk (369 sn kosum + 28 sn tip gecidi) yazildi ve TD-02'ye baglandi. Elestirmenin onerdigi '~7,5 dk' rakami KULLANILMADI - kanonik olcum 6,5 dk.", "kanit": "Teks-Erp/docs/BEKCI-HARITASI.md:3" },
+    { "bulgu": "C-2b Bu turda dogan 6 bekci haritada yok", "hukum": "kapatildi", "yapilan": "Altisi da haritanin kendi bicimiyle eklendi: test_advisory_lock_namespaces -> tutarlilik · test_dependency_contract -> surum-deploy · scan-haptics.guard -> ui-bilesen · StationCapabilities/write-permission -> yetki-izin · schema-varchar-mirror -> db-invariant · ReportHubGrid -> rapor. Bolum sayaclari ve 'Alanlar' satiri guncellendi; 39 bolumun tamaminda baslik sayisi = satir sayisi dogrulandi. DB ve 'negatif sonda' sutunlari BOS birakildi (alti dosyada da DB baglantisi ve negatif sonda beyani yok).", "kanit": "Teks-Erp/docs/BEKCI-HARITASI.md:5 (Alanlar) + ilgili bolumler" },
+    { "bulgu": "C-2c BEKCI-HARITASI dosya sayisi 453", "hukum": "kapatildi", "yapilan": "455 backend bekcisi + 296 istemci testi (Electron 211, mobil 85) olarak olculup yazildi.", "kanit": "Teks-Erp/docs/BEKCI-HARITASI.md:3" },
+    { "bulgu": "C-3 backend bekci dosyasi 453 (CLAUDE.md, GELISTIRME-DONGUSU)", "hukum": "kapatildi", "yapilan": "455'e cekildi; ayni bayat sayi uc belgede daha bulundu ve duzeltildi: docs/SOZLUK.md:15, docs/qa/TEST-SENARYOLARI.md:3+139, docs/ops/URETIM-KONTROL-LISTESI.md:19. GELISTIRME-DONGUSU:20'deki yarim kalan kanit etiketi ('wc -l ->') de sayiyla tamamlandi.", "kanit": "CLAUDE.md:116 · docs/GELISTIRME-DONGUSU.md:20" },
+    { "bulgu": "C-4 Electron 208/2266", "hukum": "kapatildi", "yapilan": "Electron/CLAUDE.md:13 '211 dosya / 2.283 vaka / ~27 sn' olarak olculup yazildi.", "kanit": "Electron/CLAUDE.md:13" },
+    { "bulgu": "C-4 mobil 84/820 (mobil/CLAUDE.md)", "hukum": "iddia-curudu", "yapilan": "mobil/CLAUDE.md'de 84 da 820 de HIC GECMIYORDU (grep 0 isabet) - orada duzeltilecek bayat sayi yoktu. O sayilar yalniz docs/standart/MOBIL.md:7/109/110'da (baska ajan). Yerine simetri icin olculmus sayi eklendi: 'npm test (jest --runInBand, 85 dosya / 854 vaka / ~17 sn - commit kapisinda)'.", "kanit": "mobil/CLAUDE.md:9" },
+    { "bulgu": "C-5 deploy-kurulum.md:44 'lint de eslint src'", "hukum": "kapatildi", "yapilan": "'lint kapsami 2026-09-05'te GENISLEDI: eslint src scripts prisma' olarak duzeltildi (package.json:22 ile birebir).", "kanit": "docs/kurallar/deploy-kurulum.md:44" },
+    { "bulgu": "C-8 GELISTIRME-DONGUSU'nde commit kapisi hic gecmiyor", "hukum": "kapatildi", "yapilan": "Dosyanin kendi bicimiyle (numara + <sub>kanit</sub> + 'atlanirsa') 24. adim eklendi: node scripts/hooks-kur.mjs (bir kez), kapinin degisene orantili adimlari (tip + lint + lint tavani + o projenin hizli test paketi; prisma|scripts -> check-migrations, .md -> check-docs), kacis TEKSERP_HOOK_SKIP=1 / --no-verify. Eski 24-26 -> 25-27 kaydirildi.", "kanit": "docs/GELISTIRME-DONGUSU.md:24" }
+  ],
+  "yeniBulgu": [
+    "Teks-Erp/eslint.config.mjs:344 yorumu '554 dosya ve 453 bekci' diyordu; olculdu 555/455 ve duzeltildi (gorevde yoktu, ayni bayatlik sinifi).",
+    "docs/standart/TEST-VE-DERLEME.md kendi icinde tutarsiz: :16 tablosu '6 dk 28 sn' der, [TD-02] kaniti '369 sn kosum + 28 sn tip gecidi' (= 6 dk 37 sn) der; ayrica TD-02/TD-07/TD-09 hala '453 dosya' diyor -> 455. BASKA AJANIN ALANI, dokunulmadi.",
+    "docs/standart/ELECTRON.md:99 [EL-39] kaniti bayat: '208 test dosyasi / 2266 test / 23 sn' -> olculen 211 / 2283 / 27,1 sn. BASKA AJANIN ALANI, dokunulmadi.",
+    "docs/standart/MOBIL.md:7 ve [MO-34]/[MO-35] kanitlari bayat: '84 test dosyasi / 820 vaka / 29 sn' -> olculen 85 / 854 / 16,5 sn. BASKA AJANIN ALANI, dokunulmadi.",
+    "check-lint-baseline.mjs ilk kosumda 'Teks-Erp/src/__lint_sonda_gecici_direktif.ts' yuzunden rc=2 verdi; dosya bir sonraki saniyede yoktu (paralel bir ajanin negatif sonda artigi). Yeniden kosumda rc=0. Bilgi amacli."
+  ],
+  "dogrulama": {
+    "node scripts/check-docs.mjs": "rc=0 (139 .md tarandi, olu link yok; 2 advisory kaldirilmis-sembol atfi - ikisi de bu turdan onceki tarihsel baglam)",
+    "node scripts/check-lint-baseline.mjs": "rc=0 (backend/electron/mobil tavan asilmadi, 0 error)",
+    "cd Teks-Erp && npx eslint src scripts prisma": "rc=0 (442 problem, 0 error, 442 warning)",
+    "node -e import eslint.config.mjs": "rc=0, 6 blok - config duzenlemesi sonrasi hala parse ediliyor",
+    "BEKCI-HARITASI butunlugu": "39 bolumun tamaminda '## alan (N)' basligindaki N = bolumun tablo satiri sayisi (python dogrulamasi: uyumsuz yok)"
+  }
+}

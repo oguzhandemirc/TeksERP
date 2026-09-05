@@ -1,11 +1,11 @@
 # Bekçi haritası — alan → test dosyası
 
-> Üretilmiş (anlama turu 2026-09-05; 453 backend bekçisi + 292 istemci testi). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı, saatler). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
+> Üretilmiş (anlama turu 2026-09-05; 455 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `diger` (87), `sevkiyat` (84), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (54), `rapor` (50), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (29), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (26), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (19), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (87), `sevkiyat` (84), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (54), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (20), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
-## yetki-izin (97)
+## yetki-izin (98)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -28,6 +28,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Electron/src/pages/Operations/WorkOrders/WorkOrderCompleteDialog.test.tsx` | WO kapanis dispozisyonu diyalogu: karar verilmeden kapatma pasif, karar+sebep payload'a girer, fason donusu topta 'Stoga geri' kapali, roll:manual-adj |  |  |  |
 | `Electron/src/pages/Operations/tile-visibility.test.ts` | Karo/palet gorunurluk matrisi: Kursun Planlama kapisi URETIM modulu (kursun bayragi degil), Sevk Kapisi yalniz confirmationEnabled, Depo Transferi cok |  |  |  |
 | `Electron/src/pages/SackTags/SackTagsPage.test.tsx` | Cuval izi katalogu ekrani: pasif satir GIZLENMEZ (soluk + 'Gizli' rozeti — katalogdan cikarma gorunurluk karari, silme degil); yazma yetkisi yoksa duz |  |  |  |
+| `Electron/src/pages/StationCapabilities/write-permission.test.tsx` | 'Yetenekleri Düzenle' YAZMA yüzeyi `station:write` ister (rota `station:read` ile açık kalır); butonun tek koşulu `cap.canApplyProperty` VERİ özelliği olamaz. Sheet iki sayfadan açıldığı için iki kapı da ölçülür. |  |  |  |
 | `Electron/src/pages/System/SystemHubPage.superadmin.test.tsx` | Satici yuzeylerinin gorunurlugu TEK ve SUPAPLI yuklemden (`isSuperadminGateOpen`): satici hesabinda karo VAR, fabrika yoneticisi + hesap VARSA karo YO |  | ✓ |  |
 | `Electron/src/pages/System/tile-route-permission.test.ts` | Sistem karolari ile route izinlerinin hizasi: karo `permission` tasiyorsa route AYNI kodu istemeli, tasimiyorsa hub varsayilani (admin:settings); ayri |  | ✓ |  |
 | `Electron/src/services/apiClient.test.ts` | apiClient interceptor sozlesmesi: onceden set edilmis Authorization EZILMEZ (logout revoke'u yakalanan token'la gider), Date header'dan sunucu saati o |  |  |  |
@@ -207,7 +208,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `mobil/src/screens/Modules/HizliIsEmri/scanClassify.test.ts` | Okutma kararı saf: ATTACHABLE_STATUSES = STOCK/WAREHOUSE/A1_STOCK (backend quickStart.attachable aynası), isReworkStatus rozeti, statü kontrolü çuvald |  |  |  |
 | `mobil/src/screens/Modules/Tambur/canUnlinkOrderLine.test.ts` | Backend son-bağ kuralının istemci aynası: ORDER_PRODUCTION + tek bağ + hedef kumaş varsa kaldırılabilir (becomesStock uyarısı); hedef kumaş yoksa enge |  |  |  |
 
-## ui-bilesen (93)
+## ui-bilesen (94)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -298,6 +299,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `mobil/src/services/scanFeedback.test.ts` | Üç okutma sonucunun sinyali AYRI: duplicate hem sessizlikten hem accept'ten ayrışır (ses+titreşim). expo-haptics mock'lu, cihaz ayarları store'undan o |  | ✓ |  |
 | `mobil/src/store/lockStore.test.ts` | withSystemDialog penceresi üç parçalı: pending sayaç + settle sonrası KUYRUK (Android'de 'background' sonradan gelir) + askıda kalan promise'e karşı T |  |  |  |
 | `mobil/src/store/sessionEntriesStore.test.ts` | 'Bu oturumda girilenler' kovası: addPending sayacı, confirmRoll pending→onaylı geçişi, başarısızlık akışı ve logout temizliği; liste ekran değil GİRİŞ |  |  |  |
+| `mobil/src/test/scan-haptics.guard.test.ts` | TS AST taraması: okutma handler'ında doğrudan `Haptics.*` çağrısı yasak — tek kapı `signalScan`/`useScanFeedback`; ham çağrı 'mükerrer' desenini ve `scanSoundEnabled` ayarını kaybettirir. Muafiyet ve devralınan liste İKİ YÖNLÜ (ölü kayıt da kırmızı). |  |  |  |
 | `mobil/src/test/segmented-buttons-row.guard.test.ts` | TS AST taraması: her <SegmentedButtons> için en yakın sarmalayan JSX elemanının style'ı çözülür (StyleSheet anahtarı ya da satır içi nesne); flexDirec |  | ✓ |  |
 | `mobil/src/utils/labels.test.ts` | trLabel: bilinen enum → Türkçe etiket, boş/null/undefined → '—', bilinmeyen kod AYNEN döner (sessiz düşmez); RETIRED_ROLL_STATUSES ile isRetiredRoll. |  |  |  |
 | `mobil/src/utils/operatorColor.test.ts` | operatorColor deterministik (aynı userId → aynı renk) ve daima paletten; operatorInitials üretimi; kimliksizde OPERATOR_NEUTRAL. |  |  |  |
@@ -480,7 +482,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Teks-Erp/scripts/test_search_field_config.ts` | `searchFields`/`codeSearchFields`/`buildTextSearch` kovalarını TS AST ile tarayıp her yolu Prisma DMMF üzerinden çözer: metin alanı KOD kovasında (ses |  |  |  |
 | `Teks-Erp/scripts/test_session_purge.ts` | Ölü oturum temizliğinde aktif oturumun (revokedAt null + expiresAt gelecekte) ASLA silinmemesini, yalnız eşikten eski revoked/expired satırların gitme | ✓ |  |  |
 | `Teks-Erp/scripts/test_shipment_filters.ts` | `listShipments` filtreleri (itemId/colorId/hasReturns/destination), TEK TOP eşleşme ayrımı, eşleşme rozeti (`matchRollCount` filtresizken hiç yok), sh | ✓ |  |  |
-| `Teks-Erp/scripts/test_swagger_spec.ts` | Tüm @openapi bloklarının geçerli YAML olmasını (failOnErrors) ve taranan yol sayısının körlük zemininin üstünde kalmasını. |  |  |  |
+| `Teks-Erp/scripts/test_swagger_spec.ts` | Tüm @openapi bloklarının geçerli YAML olmasını (failOnErrors), taranan yol sayısının körlük zemininin üstünde kalmasını ve uç ↔ blok EŞLEMESİNİ: yeni uç belgesiz olamaz (devralınan 117 `swagger-belgesiz-baseline.json`da donuk, tavan yalnız düşer), spec'te olup kodda olmayan hayalet blok kırmızıdır. |  |  |  |
 | `Teks-Erp/scripts/test_ticaret_turkish_search.ts` | Sekiz ticaret servisinin aramasının `buildTurkishSearch`'ten geçtiğini ve i/İ/ı/I ailesinin gerçekten eşleştiğini (yarn + cari işlevsel, kalan altısı  | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_turkish_search_fold.ts` | Katlamanın sorgu yoluna doğru bağlandığını uçtan uca ölçer: gerçek müşteri/ürün satırı yazıp operatörün hangi yazımla ararsa arasın kaydı bulduğunu do | ✓ |  |  |
 | `mobil/src/components/session/SessionGate.test.tsx` | Odak invariantı: PlaceConfirmView(autoOpen) YALNIZ odaktaki ekranda mount edilir — arka planda mount kalan gate 'oturum kapma savaşı' doğuruyordu. Pla |  |  |  |
@@ -1093,7 +1095,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Teks-Erp/scripts/test_wo_warehouse_attach.ts` | WAREHOUSE/STOCK topu iş emrine bağlanır ve detach'te kendi statüsüne döner; çuvaldaki WAREHOUSE topun attach'i reddedilir. | ✓ |  |  |
 | `mobil/src/hooks/useSackWeigh.test.tsx` | Çuval tartısı akışı: kantar okuması, weighSack/setSackNotes çağrıları ve peripheral seçimi (packing.service + useMachinePeripherals + usePeripheralIO  |  |  | ⚠️ 2026-09-03 tartı bayrakları (weighRequired / manualWeightRestricted) mobil tarafta hiç yok |
 
-## rapor (50)
+## rapor (51)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1108,6 +1110,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Electron/src/pages/Reports/Finance/chequeDueExport.test.ts` | Cek vade takvimi disa aktarimi: Excel ile PDF kolonlari tek spec'ten birebir, EKRAN ⊆ SPEC (thead KAYNAKTAN okunur), foldCalendar para birimlerini TOP |  | ✓ |  |
 | `Electron/src/pages/Reports/Finance/fxDiffExport.test.ts` | Kur farki raporu: Excel↔PDF kolon esitligi, EKRAN ⊆ SPEC, isaret→rozet eslemesi (fxTone: 0 ve '-0.00' notr, okunamayan da notr), satirda tutar/kur SAY |  | ✓ |  |
 | `Electron/src/pages/Reports/Finance/statementExport.test.ts` | Cari ekstre disa aktarimi: Excel↔PDF kolon esitligi (§1 tek basina yetmez, olculdu), EKRAN↔SPEC esitligi iki ekstre yuzeyinin thead'inden, devir satir |  | ✓ |  |
+| `Electron/src/pages/Reports/_components/ReportHubGrid.test.tsx` | Rapor hub'ı iskeleti: kabuk `min-h-0` taşır ve kaydırma TEK yerdedir (gövdede) — `TabHost`'un `absolute inset-0 overflow-auto` kabında sayfa kendini kısıtlamazsa kaydırma dışarı taşar, başlık yukarı kayar. |  |  |  |
 | `Electron/src/pages/Reports/_components/reportExport.test.ts` | Rapor disa aktarim altyapisi (tek spec, iki cikti): Excel kolonlari ile PDF basliklari birebir, her satir iki ciktida (PDF tr-TR bicimli), numFmt'siz  |  |  |  |
 | `Electron/src/pages/Warehouses/movements.test.ts` | Depo hareket dokumu saf katmani: YON sunucudan gelir (row.direction — eventType'tan turetilirse TRANSFER iki depoda ayni yone basar), belgesiz hareket |  |  |  |
 | `Teks-Erp/scripts/test_accounting_direct_ship.ts` | Fasondan doğrudan sevkin (DirectShipment) muhasebe dökümünde ve sevk fişinde çuvallı sevkiyatlarla AYNI yapıyla (sackCount=0, kg=0) çıkmasını kilitler | ✓ |  |  |
@@ -1372,10 +1375,11 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Teks-Erp/scripts/test_wo_target_color_guard.ts` | Üretim rengi değişikliğinin TEK bekçisi: COMPLETED kilidi, izinli renk listesi, kısmi-boya onayı (409 COLOR_PARTIAL_CONFIRM), COLOR_DYED_BLOCKED, faso | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_workorder_order_link.ts` | Sipariş bağlama MİRAS ALMAZ (hedef renk/en siparişten yazılmaz), uyuşmazsa bağlanmaz; renk/en değişimi izli, applyAttributeToRolls BAYRAK özelliklerin | ✓ | ✓ |  |
 
-## db-invariant (29)
+## db-invariant (30)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Electron/src/pages/schema-varchar-mirror.test.ts` | Panel zod `max(n)` ↔ Prisma `@db.VarChar(n)` aynası: master-data CRUD'da doğrulayan TEK kapı paneldir, sınır DB kolonundan genişse kullanıcı Türkçe 400 yerine P2000 alır. Çiftler elle beyan edilir (ad benzerliğinden çıkarılamaz). |  |  |  |
 | `Teks-Erp/scripts/test_audit_depth.ts` | Audit'in kayıt-bazlı sorgulanabilirliğini (recordId filtresi), satırın değiştirilemezliğini (canlı tabloda updatedAt yok, arşivde durur) ve her okuma  | ✓ |  |  |
 | `Teks-Erp/scripts/test_audit_followups.ts` | Beş denetim follow-up'ını kilitler: AMB çuval kodu partial unique, label-template tek-default unique, kursun-qc deleteError atomikliği, cihaz pair ato | ✓ |  |  |
 | `Teks-Erp/scripts/test_barcode_reservation.ts` | Top barkod sayacının TX ÖNCESİ toplu rezerve edilmesini kilitler (T1<100ms VE T2=30/30 iki koşullu) + sıralı rezervasyonda her barkodun kendi slot tip | ✓ |  |  |
@@ -1507,10 +1511,11 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Teks-Erp/scripts/test_work_session_close_all.ts` | Kalıntı oturum öz-onarımı: başka kullanıcının açık oturumu BENİMSENMEZ (NEW_LOGIN ile kapanır), closeForDevice idempotent ve cihaz kapsamlı. | ✓ |  |  |
 | `Teks-Erp/scripts/test_work_session_stamping.ts` | Üretim atfı: oturum makinesi Roll.createdMachineId / RollOperation / movement'a akar, oturumsuz mobil 409 WORK_SESSION_REQUIRED, web'de null ile işlem | ✓ |  |  |
 
-## tutarlilik (26)
+## tutarlilik (27)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_advisory_lock_namespaces.ts` | Advisory kilit uzaylarının TEK sahipli olduğunu ve `period-guard.helper.ts` başlığındaki envanterin kodla İKİ YÖNLÜ örtüştüğünü (kodda var-envanterde yok da, tersi de kırmızı); ayrıca çağrıda çıplak sayı ve kopya envanter listesi yasağı. |  |  |  |
 | `Teks-Erp/scripts/test_consistency.ts` | consistency-check.sql'in mekanik ikizi: denormalize defter alanları + 24 bölümlük drift taraması (§20 WorkOrderStep.status ve §21-24 ön muhasebe SQL'd | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_consistency_derived.ts` | §21-§26: türetilmiş alanların kaynağından kopmadığını ölçer (WO.type←bağ, WO.status←adımlar, bypass açıklığı←WO canlılığı, fason kalem açıklığı, label | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_fason_open_dispatch_single_source.ts` | AST/metin bekçisi: 'receiptItems→none→isPartial' koşulunun elle kopyası src/ içinde yasak; muafiyet iki yönlü (helper'da kalıp yoksa da düşer). |  | ✓ |  |
@@ -1676,7 +1681,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Teks-Erp/scripts/test_wo_manual_complete.ts` | Manuel kapatmada kapanış dispozisyonu: beş statü uygulanır, dispozisyonsuz kapatma 400, fasondaki top 409 (rollback), TRANSFER klon üretir, kaynak COM | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts` | Kısa kesim → otomatik A1 kuralı tek dosyada: shortCutOverride/shortCutRevert sınırları (eşik altı uzunluk, mevcut/varsayılan kalite kodu, katalogdan A |  |  |  |
 
-## surum-deploy (19)
+## surum-deploy (20)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1691,6 +1696,7 @@ Alanlar: `yetki-izin` (97), `is-emri` (95), `ui-bilesen` (93), `fason` (89), `di
 | `Teks-Erp/scripts/test_client_policy.ts` | İstemci sürüm politikasının biçim tutarlılığı ve en kritik invariant: minVersion sahaya çıkan panel sürümünden BÜYÜK olamaz (kendini kurtaramayan kili |  |  |  |
 | `Teks-Erp/scripts/test_client_registry.ts` | X-Client-* künye başlıkları KAPI olamaz (izinli üç dosya dışında geçmemeli), yazma kısıtı gerçekten tutuyor, 'aktif' eşiği tek kaynak, fail-open + uyd |  | ✓ |  |
 | `Teks-Erp/scripts/test_db_copy.ts` | Kopyaya geri yükleme zinciri: ad/allowlist, doğrulama karar fonksiyonu, disk guard, durum uzlaştırma, takas komutu — Katman 1 DB'siz saf mantık, Katma |  |  |  |
+| `Teks-Erp/scripts/test_dependency_contract.ts` | Bağımlılık sözleşmesi: `bonjour-service` backend↔Electron aynı TAM SABİT sürüm, backend'in her `dependencies` girdisi gerçek `require()` ile çözülür (ESM-only kümesi beyanla birebir), üç projenin `dependencies`i ile KUTUPHANELER.md §2 tablosu arasındaki fark boş. |  |  |  |
 | `Teks-Erp/scripts/test_migration_hygiene.ts` | _prisma_migrations defteri ile prisma/migrations dizini arasındaki mutabakat: DB'de var-dizinde yok FAIL, dizinde var-DB'de yok UYARI, applied_steps_c | ✓ |  |  |
 | `Teks-Erp/scripts/test_mobile_update.ts` | expo-updates sözleşmesi: donmuş manifest baytlarının bozulmadan servisi, multipart sınırlayıcı/başlıklar, imza, yol kaçışının reddi ve nginx yapılandı |  | ✓ |  |
 | `Teks-Erp/scripts/test_offsite_sweep.ts` | Offsite yedek süpürücüsü sözleşmesi: yalnız `copy` (asla `sync`), BACKUP_SCHEDULE_ENABLED'a bağlı olmama, kapsamın listeleme ile doğrulanması ve uzak  |  |  |  |

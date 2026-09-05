@@ -98,7 +98,7 @@ firması kullanmıyor); **backfill** (açılış durumu `Roll.warehouseId`'dedir
 
 ## 4. Transfer belgesi (`WarehouseTransfer`)
 
-- `transferNo` = `DT`+GGAAYY+NNNN (`nextPrefixedSequence` + `withBarcodeRetry` deseni).
+- `transferNo` = `DT`+GGAAYY+NNNN (`nextPrefixedSequenceTx` + `withBarcodeRetry` deseni).
 - **Tek adımlı commit** — "yolda" (in-transit) durumu YOK: yerel depolar arası taşımada araç takibi
   ihtiyacı yok. Gerekirse `status` enum'una SONA `IN_TRANSIT` eklenerek açılır.
 - **Satır tablosu yok** — kalemler `WarehouseMovement` satırlarıdır (`transferId`); belge içeriği

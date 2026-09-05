@@ -45,7 +45,7 @@ export async function touchOrderLinesTx(
  * groupBy — @@index([orderLineId]) sürer; sack.shipment.status join'i indexli.
  * NOT: packedQty/rezerv YOK — havuz/planlı çuvallar hiçbir satıra sayılmaz (düşüş sevkte).
  */
-export async function computeLineLedger(
+export async function computeLineLedgerTx(
   tx: Prisma.TransactionClient,
   lineIds: string[]
 ): Promise<Map<string, { shipped: Prisma.Decimal }>> {
@@ -93,7 +93,7 @@ export async function computeLineLedger(
  * status'u değişmez ama denormları yine de güncel tutulur. Otomatik COMPLETED re-open
  * olabilir (sevk geri alınınca). Tx kabul eder.
  */
-export async function recomputeOrderStatus(
+export async function recomputeOrderStatusTx(
   tx: Prisma.TransactionClient,
   orderId: string,
   toleranceMeters?: number
@@ -110,7 +110,7 @@ export async function recomputeOrderStatus(
   });
   if (!order) return null;
 
-  const ledger = await computeLineLedger(tx, order.lines.map((l) => l.id));
+  const ledger = await computeLineLedgerTx(tx, order.lines.map((l) => l.id));
 
   // Satır denormunu yaz + header toplamını biriktir.
   //
@@ -209,7 +209,7 @@ export async function recomputeOrderStatus(
  * eşzamanlı terminal olaylarda lost-update). Uygulayanlar: performDispatchTx,
  * cancelShipment, subcontractor directShip.
  */
-export async function recomputeOrderStatusForOrders(
+export async function recomputeOrderStatusForOrdersTx(
   tx: Prisma.TransactionClient,
   orderIds: string[]
 ): Promise<void> {
@@ -217,6 +217,6 @@ export async function recomputeOrderStatusForOrders(
   if (unique.length === 0) return;
   const toleranceMeters = await readShippingToleranceMeters(tx);
   for (const id of unique) {
-    await recomputeOrderStatus(tx, id, toleranceMeters);
+    await recomputeOrderStatusTx(tx, id, toleranceMeters);
   }
 }

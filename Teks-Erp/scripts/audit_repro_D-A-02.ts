@@ -1,5 +1,5 @@
 // =============================================================================
-// AUDIT REPRO — D-A-02: `recomputeOrderStatus`u `touchOrderLinesTx` OLMADAN çağıran
+// AUDIT REPRO — D-A-02: `recomputeOrderStatusTx`u `touchOrderLinesTx` OLMADAN çağıran
 // yollar (order.service.ts:2537 `update`, :3411 `reopen`) eşzamanlı sevk onayının
 // yazdığı `shippedQty`yi SESSİZCE SIFIRLIYOR (lost update).
 // Ortam: SADECE dev DB. Prod/uzak hedefte çalışmayı REDDEDER.
@@ -10,7 +10,7 @@
 // Çalıştır: cd Teks-Erp && npx tsx scripts/audit_repro_D-A-02.ts
 // =============================================================================
 // MEKANİZMA:
-//   `recomputeOrderStatus` defteri KİLİTSİZ okur (computeLineLedger) ve denormu
+//   `recomputeOrderStatusTx` defteri KİLİTSİZ okur (computeLineLedgerTx) ve denormu
 //   (OrderLine.shippedQty + Order.shippedQty + Order.status) yazar. READ COMMITTED
 //   altında T2'nin okuması T1'in COMMIT'inden ÖNCE, yazımı SONRA gerçekleşebilir:
 //   T2 satır kilidinde bekler, uyanır ve BAYAT değeri yazar. Helper docstring'i
@@ -41,7 +41,7 @@ devDbGuard();
 
 import { ItemType, ShipmentStatus, OrderStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
-import { touchOrderLinesTx, recomputeOrderStatus } from "../src/services/helpers/order-status.helper";
+import { touchOrderLinesTx, recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
 
 const RAND = Math.random().toString(36).slice(2, 8);
 const STAMP = `AUDITREPRO-D-A-02-${RAND}`;
@@ -66,14 +66,14 @@ async function dispatchLikeTx(holdMs: number): Promise<void> {
       data: { status: ShipmentStatus.DISPATCHED, dispatchedAt: new Date() },
     });
     await sleep(holdMs);                                              // rakip tx araya girsin
-    await recomputeOrderStatus(tx, ids.orderId);
+    await recomputeOrderStatusTx(tx, ids.orderId);
   }, { timeout: 30_000, maxWait: 20_000 });
 }
 
 /** `order.service.update`/`reopen` yolu: recompute, ÖNCE touchOrderLinesTx YOK. */
 async function orderEditTxWithoutTouch(): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await recomputeOrderStatus(tx, ids.orderId);
+    await recomputeOrderStatusTx(tx, ids.orderId);
   }, { timeout: 30_000, maxWait: 20_000 });
 }
 
@@ -82,7 +82,7 @@ async function orderEditTxWithTouch(): Promise<void> {
   await prisma.$transaction(async (tx) => {
     const lines = await tx.orderLine.findMany({ where: { orderId: ids.orderId }, select: { id: true } });
     await touchOrderLinesTx(tx, lines.map((l) => l.id));
-    await recomputeOrderStatus(tx, ids.orderId);
+    await recomputeOrderStatusTx(tx, ids.orderId);
   }, { timeout: 30_000, maxWait: 20_000 });
 }
 

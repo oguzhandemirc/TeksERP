@@ -1,5 +1,7 @@
 # Kod Kuralları — teknik desenler (backend · panel · tablet)
 
+> **Üç belge katmanının ortadakidir:** "Bu tuzak neden var?" — olaydan doğan desen ve yasaklar. Rutin "nasıl yazılır" sorularının cevabı `docs/standart/` altındadır (`docs/standart/README.md` § Üç belge katmanı); alan kararları `docs/kurallar/<alan>.md`. Üçü birbirine **bağlanır, kopyalanmaz** — bir cümle iki yerde yaşıyorsa biri bayatlar.
+
 > Anlama turu 2026-09-05'te 24 karar hikâyesinin içinden ayrıştırıldı. Her madde tek cümle, emir kipi; gerekçe arşivde. Yeni desen eklerken: kural buraya, hikâye `docs/history/CLAUDE-NOT-ARSIVI.md`'ye. Alan-özgü kurallar `docs/kurallar/`, yasaklar aşağıda ve kök `CLAUDE.md`'de.
 
 
@@ -144,9 +146,9 @@
 
 > Kök `CLAUDE.md`'deki kısa liste bunun özetidir.
 >
-> **Mekanik olarak zorlananlar (ESLint, `Teks-Erp/eslint.config.mjs`):** `tx.*` + `Promise.all` · `notIn: []` · `orderBy: { batchNumber }` · jenerik `requireModule("x")` · `'Europe/Istanbul'` literali (yalnız `src/constants/time.ts` muaf) · route/controller'da `lib/prisma` import. Bunlar için "hatırlamak" gerekmez, `npm run lint` düşer.
+> **Mekanik olarak zorlananlar (ESLint):** liste burada ELLE SAYILMAZ — tek kaynak `Teks-Erp/eslint.config.mjs`'dir (bugün `ORTAK_YASAKLAR` + `FACTORY_TZ_LITERAL` = 12 `no-restricted-syntax` deseni `error` seviyesinde, artı route/controller'da `lib/prisma` import yasağı; ayrıca `naming-convention`, `no-explicit-any`, `no-floating-promises`, `no-require-imports` ve ölü direktif kapısı). Bunlar için "hatırlamak" gerekmez, `npm run lint` düşer.
 >
-> **Yeni kural eklerken ölçüt:** kural buraya değil önce ESLint'e girer — ama YALNIZ AST'den kesin yakalanabiliyorsa ve mevcut kodda ölçülen ihlal SIFIRSA. Kırmızı veren bir kural, kuralın değil kapsamın yanlış okunduğunun işaretidir. Ölçülüp REDDEDİLEN emsal: `toLocaleUpperCase("tr")` yasağı DARDIR (yalnız koşullu etiket elemanı ↔ `QualityGrade.code`); `src/`de 62 meşru kullanım var, bazıları ZORUNLU — kural yazılmadı. Kaynak: B5 yasak toplayıcı (100) + Faz C hakemlerinin `keepIn=yasaklar` kuralları, tekilleştirilmiş. `stillValid=HAYIR` olanlar bilerek dışarıda.
+> **Yeni kural eklerken ölçüt** (tek kaynak `docs/standart/README.md` § Kural yazma ölçütü; aynası `Teks-Erp/eslint.config.mjs` başlığı): kural buraya değil önce ESLint'e girer — ama YALNIZ AST'den kesin yakalanabiliyorsa, ve seviyeyi ÖLÇÜM belirler: ölçülen ihlal **0 → `error`** · **≤15 → ihlaller düzeltilir, sonra `error`** · **>15 → `warn` + tavan** (`lint-baseline.json`; tavan yalnız DÜŞER) · **ölçüm kuralı çürütüyorsa kural YAZILMAZ** ve gerekçe config başlığına yazılır. Kırmızı veren bir kural, kuralın değil kapsamın yanlış okunduğunun işaretidir. Ölçülüp REDDEDİLEN emsal: `toLocaleUpperCase("tr")` yasağı DARDIR (yalnız koşullu etiket elemanı ↔ `QualityGrade.code`); `Teks-Erp/src`te 59 meşru kullanım var, bazıları ZORUNLU — kural yazılmadı. Kaynak: B5 yasak toplayıcı (100) + Faz C hakemlerinin `keepIn=yasaklar` kuralları, tekilleştirilmiş. `stillValid=HAYIR` olanlar bilerek dışarıda.
 
 - **[PROFİL]** Cihaz üzerinde `simulate` işaretliyken uydurulmuş ölçüm CANLI VERİYE YAZILMAZ; simülasyon per-cihaz veri bayrağıdır, koda gömülü 'ASLA' değil. <sub>(mobil, electron · CLAUDE.md:329, CLAUDE.md:224)</sub>
 - **[PROFİL]** Fason kabul modunu değiştirirken (`switchReceiveMode`) ön-dolu satır EKLEME; tek→parça yalnız dokunulmamışsa açılır. <sub>(mobil · arşiv:437)</sub>

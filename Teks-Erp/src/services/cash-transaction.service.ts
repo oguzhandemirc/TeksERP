@@ -21,7 +21,7 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
-import { D, resolveExchangeRate } from "./helpers/finance.helper";
+import { D, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertCashPeriodOpenTx, assertCashPeriodsOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
 import { buildTurkishSearch } from "../utils/query-parser";
@@ -256,7 +256,7 @@ export class CashTransactionService {
         });
 
         const rate =
-          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, acc.currency, txnDate);
+          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, acc.currency, txnDate);
         if (rate == null) {
           throw AppError.badRequest(
             `${acc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,
@@ -406,7 +406,7 @@ export class CashTransactionService {
           );
         }
 
-        const rate = await resolveExchangeRate(tx, fromAcc.currency, txnDate);
+        const rate = await resolveExchangeRateTx(tx, fromAcc.currency, txnDate);
         if (rate == null) {
           throw AppError.badRequest(
             `${fromAcc.currency} için ${txnDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin.`,

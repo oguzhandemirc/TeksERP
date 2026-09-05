@@ -23,25 +23,6 @@ const router = Router();
 const guard = [verifyToken, requirePermission("report:production")];
 
 /**
- * @openapi
- * /api/reports/production/station-efficiency:
- *   get:
- *     tags: [Reports]
- *     summary: İstasyon verimliliği (rulo sayısı, metraj, ort. süre)
- *     security: [{ bearerAuth: [] }]
- *     parameters:
- *       - in: query
- *         name: dateFrom
- *         schema: { type: string, format: date-time }
- *       - in: query
- *         name: dateTo
- *         schema: { type: string, format: date-time }
- */
-/**
- * NEREDE TAKILDI (WIP) — anlık bekleyen + dönemsel geçen.
- * Tarih aralığı YALNIZ "geçen" bölümünü etkiler; bekleyen kısım snapshot'tır.
- */
-/**
  * PARTİ ARAMA — parti no ya da top barkodu ile ADAY listesi.
  * ⚠️ Daima liste döner: parti numarası P01…P99 arasında DÖNER ve benzersiz
  * DEĞİLDİR (kök CLAUDE.md). Tek sonuç varsaymak, aynı numarayı taşıyan başka
@@ -70,6 +51,10 @@ router.get("/batch-trace/:batchId", ...guard, async (req: Request, res: Response
   }
 });
 
+/**
+ * NEREDE TAKILDI (WIP) — anlık bekleyen + dönemsel geçen.
+ * Tarih aralığı YALNIZ "geçen" bölümünü etkiler; bekleyen kısım snapshot'tır.
+ */
 router.get("/wip", ...guard, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const range = resolveDateRange(dateRangeSchema.parse(req.query));
@@ -100,14 +85,6 @@ router.get("/operator-performance", ...guard, async (req: Request, res: Response
   }
 });
 
-/**
- * @openapi
- * /api/reports/production/machine-usage:
- *   get:
- *     tags: [Reports]
- *     summary: Makine başına işlem ve rulo sayısı
- *     security: [{ bearerAuth: [] }]
- */
 const traceSchema = z.object({
   rollId: z.string().uuid("Geçersiz rulo id"),
 });
@@ -136,12 +113,4 @@ router.get("/traveler-trace", ...guard, async (req: Request, res: Response, next
   }
 });
 
-/**
- * @openapi
- * /api/reports/production/scrap:
- *   get:
- *     tags: [Reports]
- *     summary: Fire & hurda özeti (günlük seri + defect kırılımı)
- *     security: [{ bearerAuth: [] }]
- */
 export default router;

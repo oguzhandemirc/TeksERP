@@ -39,7 +39,7 @@ import { dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 // body); muhasebe/kimlik alanları (status, shippedQty, completedAt,
 // manualClosedById, orderNumber, orderId) istemciden YAZILAMAZ. Statü
 // geçişleri yalnız özel endpoint'lerden (cancel, manual-close) ve
-// recomputeOrderStatus'tan akar (şemadaki "tek yazma noktası" notları).
+// recomputeOrderStatusTx'tan akar (şemadaki "tek yazma noktası" notları).
 const ORDER_HEADER_WRITABLE = new Set([
   "customerId",
   "branchId",
@@ -61,7 +61,7 @@ const ORDER_LINE_WRITABLE = new Set([
 ]);
 import { readOrderDefaultDeadlineDays } from "./system-setting.service";
 import { CURRENCIES } from "../config/currencies";
-import { recomputeOrderStatus, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { recomputeOrderStatusTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { markTravelerCardDirtyTx } from "./helpers/traveler-card-dirty.helper";
 import { computeLineCoverage, computeWoMaterial } from "./helpers/coverage.helper";
@@ -347,7 +347,7 @@ export class OrderService extends BaseService {
   //   • Kısmi sevk görmüş kalem iptal EDİLEBİLİR ("kalanı iptal"): sevk edilen
   //     geçerli sayılır, kalan düşer.
   //   • Son aktif kalem iptal edilirse sipariş: sevk varsa COMPLETED, yoksa
-  //     CANCELLED (kural `recomputeOrderStatus`'ta — tek yazma noktası).
+  //     CANCELLED (kural `recomputeOrderStatusTx`'ta — tek yazma noktası).
 
   /** Kalem iptalinde etkilenecek iş emri. */
   private async loadLineForCancel(orderId: string, lineId: string) {
@@ -535,7 +535,7 @@ export class OrderService extends BaseService {
         await tx.orderLine.findMany({ where: { orderId }, select: { id: true } })
       ).map((l) => l.id);
       await touchOrderLinesTx(tx, lineIds);
-      await recomputeOrderStatus(tx, orderId);
+      await recomputeOrderStatusTx(tx, orderId);
     });
 
     await AuditService.log({
@@ -1672,7 +1672,7 @@ export class OrderService extends BaseService {
   /**
    * Sipariş detayında "hangi sevkiyatlarla sevk edildi" drill-down'ı. İKİ kaynağı
    * birleştirir — `shippedQty` de bu ikisinin toplamıdır (order-status.helper
-   * computeLineLedger), o yüzden `dispatchedTotal` `order.shippedQty` ile MUTABIK olmalı:
+   * computeLineLedgerTx), o yüzden `dispatchedTotal` `order.shippedQty` ile MUTABIK olmalı:
    *   - Çuval sevki (SHIPMENT): SackAllocation → sack → shipment (CANCELLED hariç;
    *     DISPATCHED sevk edilen, PLANNED bekleyen).
    *   - Fason direkt sevk (DIRECT): SubcontractorDirectShipAllocation → directShipment
@@ -2296,7 +2296,7 @@ export class OrderService extends BaseService {
     // istemci gövdesinden YAZILAMAZ. PATCH {"status":"CANCELLED"} cancel
     // kaskadını (WO-unbind matrisi), {"status":"COMPLETED"} manuel kapatma
     // gerekçesini atlardı; shippedQty "tek yazma noktası: sevkiyat akışı +
-    // recomputeOrderStatus" invariant'ını (şema notu) bozardı. Statü/kapatma
+    // recomputeOrderStatusTx" invariant'ını (şema notu) bozardı. Statü/kapatma
     // için özel endpoint'ler var (cancel, manual-close).
     for (const key of Object.keys(cleanData)) {
       if (!ORDER_HEADER_WRITABLE.has(key)) delete cleanData[key];
@@ -2576,11 +2576,11 @@ export class OrderService extends BaseService {
       }
 
       // Satırlar değiştiyse denormalize sevk toplamı + durumu YENİDEN HESAPLA.
-      // recomputeOrderStatus = Order.shippedQty + status tek yazma noktası (şema notu).
+      // recomputeOrderStatusTx = Order.shippedQty + status tek yazma noktası (şema notu).
       // Satır ekleme/silme/quantity düzenlemesi sonrası çağrılmazsa Order.shippedQty
       // ve status, satırların gerçeğinden bayatlar (Σline.shippedQty ile drift).
       if (incomingLines) {
-        await recomputeOrderStatus(tx, id);
+        await recomputeOrderStatusTx(tx, id);
       }
 
       return tx.order.findUnique({
@@ -3445,7 +3445,7 @@ export class OrderService extends BaseService {
       );
     }
 
-    // Manuel iz silinir; sonra recomputeOrderStatus sevk sayaçlarına göre
+    // Manuel iz silinir; sonra recomputeOrderStatusTx sevk sayaçlarına göre
     // status (APPROVED/PARTIAL_SHIPPED) ve shippedQty'yi senkronize eder.
     const updated = await prisma.$transaction(async (tx) => {
       // ATOMİK CLAIM (check-then-act DEĞİL — manualComplete/cancelWithActions paritesi):
@@ -3466,7 +3466,7 @@ export class OrderService extends BaseService {
           "Sipariş bu sırada durum değiştirdi — yeniden açılamadı, sayfayı yenileyin"
         );
       }
-      await recomputeOrderStatus(tx, id);
+      await recomputeOrderStatusTx(tx, id);
       return tx.order.findUniqueOrThrow({ where: { id } });
     });
 

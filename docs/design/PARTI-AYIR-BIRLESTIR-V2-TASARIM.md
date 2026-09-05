@@ -101,7 +101,7 @@ da taşır ve aynı (adım, firma) çiftindeki açık sevkleri tek kayıtta birl
 - `Batch.mergedIntoId String?` (self-FK, `splitFromId` simetriği) + index.
 - Merge'de boşalan kaynak partiler **silinmez**; `mergedIntoId = survivor` ile
   tarihçe satırı olarak kalır (sektör: "kaynak lot sıfırlanır ama kaydı yaşar").
-  `deleteIfEmptyAndTraceless` yalnız hiç iz görmemiş (sevksiz + soy bağsız +
+  `deleteIfEmptyAndTracelessTx` yalnız hiç iz görmemiş (sevksiz + soy bağsız +
   merge görmemiş) partileri silmeye devam eder.
 - Lane görünümü: birleşmiş kaynak partiler "boş parti" toggle'ının altında
   "→ P… altına birleşti" rozetiyle listelenir; timeline sorgusu değişmez
@@ -139,7 +139,7 @@ Envanter denetiminin bulduğu, bugün bile duran üç mayın:
 3. **Yorum-kod uyumsuzluğu + sızıntı riski:** sevk iptali (`subcontractor.service.ts:1597-1616`)
    yorumu "batchId temizlenir" diyor, kod temizlemiyor; iptal sonrası STOCK top
    eski batchId'siyle başka WO'nun sevk auto-attach'ine girerse cross-WO parti
-   sızıntısı mümkün (`dispatch()` bu dalda `assertBatchInWorkOrder` çağırmıyor).
+   sızıntısı mümkün (`dispatch()` bu dalda `assertBatchInWorkOrderTx` çağırmıyor).
 
 ## 6. Uygulama planı (fazlı)
 

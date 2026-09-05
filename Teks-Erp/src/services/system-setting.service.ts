@@ -2991,7 +2991,7 @@ export const systemSettingService = new SystemSettingService();
 
 /**
  * Transaction içinden çağrılabilen tolerance okuma. tx verilirse aynı tx'i
- * kullanır (recomputeOrderStatus için kritik). tx yoksa dış prisma client.
+ * kullanır (recomputeOrderStatusTx için kritik). tx yoksa dış prisma client.
  */
 export async function readShippingToleranceMeters(
   tx?: Pick<typeof prisma, "systemSetting">

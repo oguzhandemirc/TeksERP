@@ -1,0 +1,109 @@
+{
+  "_not": "KAPI (script) negatif sondaları — 2026-09-05. ESLint KURALLARININ sondaları ayrı dosyalarda (eslint-backend-sonuc.json, eslint-electron-sonuc.json, eslint-mobil-sonuc.json). Burada kapıların KENDİSİ ölçülür: check-migrations GATE 5, check-lint-baseline, commit kapısı.",
+  "tarih": "2026-09-05",
+  "gerekce": "cdcb73f4 commit mesajı 'iki negatif sonda ile ölçüldü' diyordu ama sonuç hiçbir yere KAYDEDİLMEMİŞTİ; check-lint-baseline.mjs ise üç CI job'ının ve commit kapısının kapısı olmasına rağmen HİÇ KIRMIZI GÖRÜLMEMİŞTİ. Kaydı olmayan ölçüm, ölçülmemiş sayılır.",
+  "calismaAgaciDisiplini": "Her sonda GEÇİCİ bir düzenlemedir: dosya sonda öncesi shasum'a geri alınmış, `git status --short` ile temizliği doğrulanmıştır. Değiştirilen üretim dosyası kalmadı.",
+
+  "kapilar": [
+    {
+      "kapi": "scripts/check-migrations.mjs — GATE 5 (package.json'un andığı yerel dosya)",
+      "kontrol": { "komut": "node scripts/check-migrations.mjs", "cikti": "✅ Migration bekçisi: 235 migration izleniyor, commit edilmemiş/değiştirilmiş dosya yok.", "cikisKodu": 0 },
+      "sondalar": [
+        {
+          "no": 1,
+          "iddia": "`isIgnored` muafiyeti kapatılırsa GATE 5 kırmızı verir (yani muafiyet gerçekten bir kapıyı yumuşatıyor, süs değil).",
+          "yontem": "scripts/check-migrations.mjs → `function isIgnored(repoRelPath) { return false; ... }` (muafiyet dalı hiç alınmaz).",
+          "sonuc": "KIRMIZI",
+          "cikisKodu": 1,
+          "cikti": "[GATE 5] • Teks-Erp/dist/tools/superadmin-olustur.cjs  (UNTRACKED — Teks-Erp/package.json → \"superadmin:kur\")",
+          "yorum": "Muafiyet CANLI: kapatılınca tam da 2026-09-05'te muafiyetin doğduğu nokta (`superadmin:kur` → `dist/tools/*.cjs`) kırmızıya döndü. Dosya diskte VAR (dist derlenmiş) → hüküm EKSİK değil UNTRACKED oldu; temiz klonda aynı satır EKSİK olarak çıkardı.",
+          "geriAlma": "shasum 62063220d54a8d75548d549987c70dcff34222a9 (sonda öncesiyle birebir) · yeniden koşum ✅ çıkış kodu 0"
+        },
+        {
+          "no": 2,
+          "iddia": "Yok sayılan bir yola atıf yapan ama `build*` script'i OLMAYAN bir package.json kırmızı verir (muafiyet KOŞULLUDUR).",
+          "yontem": "Teks-Erp/package.json → `\"build\"` anahtarı geçici olarak `\"derle\"` yapıldı (komut aynı, yalnız ad `build*` desenine uymuyor). Aynı package.json `superadmin:kur` ile `dist/tools/superadmin-olustur.cjs`e atıf yapmaya devam etti.",
+          "sonuc": "KIRMIZI",
+          "cikisKodu": 1,
+          "cikti": "[GATE 5] • Teks-Erp/dist/tools/superadmin-olustur.cjs  (YOK SAYILIYOR ama ÜRETEN build script'i YOK — Teks-Erp/package.json → \"superadmin:kur\")",
+          "yorum": "İki sonda birlikte muafiyetin İKİ AYAĞINI da kanıtlar: ① yok sayma tek başına muaf etmiyor (sonda 1 muafiyeti kapatınca kapı ısırdı) ② muafiyet üreten script'e BAĞLI (sonda 2 script'i kaldırınca kapı ayrı bir mesajla ısırdı). Mesajlar da AYRIŞIYOR — hangi ayağın düştüğü çıktıdan okunuyor.",
+          "geriAlma": "shasum 420e1493f38d765408f4e6f6b7df59dfbe4333e3 (sonda öncesiyle birebir) · yeniden koşum ✅ çıkış kodu 0 · `git status --short -- Teks-Erp/package.json` boş"
+        }
+      ]
+    },
+    {
+      "kapi": "scripts/check-lint-baseline.mjs — üç CI job'ının ve commit kapısının tavan bekçisi",
+      "kontrol": { "komut": "node scripts/check-lint-baseline.mjs --proje=backend", "cikti": "✅ backend: tavan aşılmadı (1028 dosya, 0 error)", "cikisKodu": 0 },
+      "sondalar": [
+        {
+          "no": 1,
+          "iddia": "Bir tavan elle 1 düşürülürse kapı 'TAVANI AŞTI' der ve çıkış kodu 1 verir.",
+          "yontem": "Teks-Erp/lint-baseline.json → `max-params` tavanı 47 → 46.",
+          "sonuc": "KIRMIZI",
+          "cikisKodu": 1,
+          "cikti": "❌ backend: 1 kural TAVANI AŞTI (1028 dosya, 0 error)\n   max-params: 47 > 46",
+          "geriAlma": "shasum c69883bfa656fb4928a1bbd54b2363463bbcca19 (sonda öncesiyle birebir) · yeniden koşum ✅ çıkış kodu 0 · `git status --short -- Teks-Erp/lint-baseline.json Electron/lint-baseline.json mobil/lint-baseline.json` boş"
+        },
+        {
+          "no": 2,
+          "iddia": "Kapsam daralırsa `EN_AZ_DOSYA` körlük zemini 'kapsam sinyali' diye kırmızı verir — yani 'sıfır ihlal' cümlesi boş kümeden gelemez.",
+          "yontem": "scripts/check-lint-baseline.mjs → `PROJELER.backend.argv` geçici olarak `[\"eslint\", \"src\", \"scripts\", \"prisma\"]` → `[\"eslint\", \"prisma\"]` (en büyük iki dal düşürüldü).",
+          "sonuc": "KIRMIZI",
+          "cikisKodu": 1,
+          "cikti": "❌ backend: yalnız 17 dosya lint edildi (zemin 900).\n   Bu bir \"temiz kod\" sinyali DEĞİL, kapsam sinyalidir: lint argv'si ya da\n   ignore listesi kümeyi daraltmış olabilir. Önce kapsamı doğrula.",
+          "yorum": "Zeminin kalibrasyonu da doğrulandı: config başlığı 'scripts düşerse 473<900, src düşerse 570<900' diyor; sonda daha sert bir daralmayı (17) ölçtü ve kapı ısırdı. Zemin 900 bu üç sayının hepsinin üstünde, yani en büyük dalın kaybı yakalanıyor.",
+          "geriAlma": "shasum c142a1dc3c0d8b41fc89121e4c5a45fc0a4ef868 (sonda öncesiyle birebir) · `git status --short -- scripts/check-lint-baseline.mjs` boş"
+        },
+        {
+          "no": 3,
+          "iddia": "(bonus, planlanmamış) `warn` seviyeli boyut kuralları da bu kapıda ısırır — ESLint'in kendi çıkış kodu onları KORUMAZ.",
+          "yontem": "src/ altına üç geçici ihlal dosyası kondu (bkz. eslint-backend-sonuc.json § yontem) ve kapı koşuldu.",
+          "sonuc": "KIRMIZI — 8 ruleId / 9 kural",
+          "cikti": "❌ backend: 8 kural TAVANI AŞTI (1030 dosya, 7 error) — no-restricted-syntax 2>0 · naming-convention 1>0 · no-explicit-any 2>0 · no-require-imports 1>0 · max-params 48>47 · no-floating-promises 1>0 · max-lines-per-function 306>305 · max-lines 91>90",
+          "yorum": "Düz `npx eslint` bu üç boyut kuralında ÇIKIŞ KODU 0 verir (ölçüldü). 'zorlama: eslint:max-lines' etiketi TEK BAŞINA yanıltıcıdır; kuralın gerçek kapısı `+ scripts/check-lint-baseline.mjs` ekidir. [IL-21] ve [EL-35]/[MO-30]/[MO-31] etiketleri bu eki ZATEN taşıyor — etiketler doğru, sonda bunu doğruladı."
+        }
+      ]
+    },
+    {
+      "kapi": "Commit kapısı — .githooks/pre-commit → scripts/hooks/pre-commit.mjs (+ lib/staged.mjs, hooks-kur.mjs)",
+      "kontrolOncesi": { "komut": "node scripts/hooks-kur.mjs --durum", "cikti": "✅ commit kapısı KURULU (core.hooksPath=.githooks)" },
+      "sondalar": [
+        {
+          "no": 1,
+          "iddia": "Staged bir dosyada kasıtlı tip hatası varsa kapı KIRMIZI verir ve commit ENGELLENİR.",
+          "yontem": "Teks-Erp/src/__hook_sonda_gecici.ts (`export const sondaSayi: number = \"…\"`) → `git add` → GERÇEK `git commit -m …` denemesi.",
+          "sonuc": "KIRMIZI — commit ATILMADI",
+          "cikti": "⏳ commit kapısı: 3 adım (Teks-Erp · tip · Teks-Erp · lint · Teks-Erp · lint tavanı)\n   ❌ Teks-Erp · tip KIRMIZI (8.5s, çıkış 2)\n      | src/__hook_sonda_gecici.ts(2,14): error TS2322: Type 'string' is not assignable to type 'number'.\n⛔ Commit atılmadı. Bilerek geçmek gerekiyorsa: TEKSERP_HOOK_SKIP=1 git commit …",
+          "dogrulama": "`git rev-parse --short HEAD` = cdcb73f4 (sonda öncesiyle AYNI) — yeni commit oluşmadı. Kapı ilk adımda durdu, kalan iki adım hiç koşmadı (fail-fast).",
+          "geriAlma": "`git reset -- <yol>` + dosya silindi; `git diff --cached --name-only` boş."
+        },
+        {
+          "no": 2,
+          "iddia": "`TEKSERP_HOOK_SKIP=1` ile AYNI kırmızı durumda kapı ATLANIR.",
+          "yontem": "Aynı hatalı dosya staged'ken `.githooks/pre-commit` (git'in çağırdığı gerçek betik) doğrudan koşuldu — biri skip'li, biri skip'siz. GERÇEK commit atılmadı (bilerek: sonda commit üretmemeli).",
+          "sonuc": "ATLANDI",
+          "cikti": "TEKSERP_HOOK_SKIP=1 → \"⚠️  commit kapısı ATLANDI (TEKSERP_HOOK_SKIP=1)\", çıkış kodu 0\nskip'siz  → çıkış kodu 1",
+          "yorum": "Aynı çalışma ağacı durumunda 0 ↔ 1 farkı yalnız ortam değişkeninden geliyor: kaçış yolu canlı ve TEK anahtara bağlı. `--no-verify` dalı git'in kendi davranışıdır, ayrı ölçüm istemez."
+        },
+        {
+          "no": 3,
+          "iddia": "Yalnız `.md` staged iken adım listesi ORANTILI kalır — sadece doküman kapısı koşar.",
+          "yontem": "docs/history/standart-2026-09-05/olcum/__sonda_gecici.md staged → `.githooks/pre-commit`.",
+          "sonuc": "YEŞİL, 1 ADIM",
+          "cikti": "⏳ commit kapısı: 1 adım (doküman kapısı)\n   ✅ doküman kapısı (0.1s)\n✅ commit kapısı temiz (0.1s)",
+          "yorum": "Karşılaştırma sonda 1 ile yapılır: backend `.ts` staged iken 3 adım (tip · lint · lint tavanı), `.md` staged iken 1 adım. `lib/staged.mjs § codeFile` + `etkilenenProjeler` orantıyı gerçekten kuruyor; 0.1 sn ↔ 8.5 sn bedel farkı ölçüldü.",
+          "geriAlma": "`git reset -- <yol>` + dosya silindi."
+        },
+        {
+          "no": 4,
+          "iddia": "`hooks-kur.mjs --kaldir` sonrası `--durum` 'kurulu değil' der; tekrar kurulunca 'KURULU' der.",
+          "yontem": "--kaldir → --durum → (kur) → --durum, arada `git config --get core.hooksPath` doğrudan okundu.",
+          "sonuc": "GEÇTİ",
+          "cikti": "--kaldir → \"🔓 commit kapısı kaldırıldı\" · core.hooksPath=<yok>\n--durum → \"⚠️  kapı kurulu değil (core.hooksPath=<varsayılan>) → node scripts/hooks-kur.mjs\"\n(kur) → \"✅ commit kapısı kuruldu: core.hooksPath=.githooks\"\n--durum → \"✅ commit kapısı KURULU (core.hooksPath=.githooks)\"",
+          "bulgu": "⚠️ `--durum` HER İKİ HÂLDE de ÇIKIŞ KODU 0 verir (ölçüldü). Yani `--durum` bir RAPORDUR, KAPI DEĞİL: bir CI adımı ya da kurulum betiği `hooks-kur.mjs --durum` koşarak 'kapı var mı' diye sorarsa, kapı KALDIRILMIŞ olsa bile YEŞİL alır. Ayrıntı ve öneri: kapatma-sondalar.json § yeniBulgu.",
+          "sonDurum": "node scripts/hooks-kur.mjs --durum → ✅ KURULU (core.hooksPath=.githooks) — kapı sonda sonrası KURULU bırakıldı."
+        }
+      ]
+    }
+  ]
+}

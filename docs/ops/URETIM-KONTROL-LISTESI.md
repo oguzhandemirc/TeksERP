@@ -16,7 +16,7 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 
 - [ ] **Backend testleri yeşil** — `Teks-Erp/` içinde `npm test`
       (= `tsx scripts/run-all-tests.ts`, tüm `scripts/test_*.ts` dosyalarını
-      toplar — kanonik sayı `scripts/test_*.ts`, 2026-09-05 itibarıyla 453) exit 0.
+      toplar — kanonik sayı `scripts/test_*.ts`, 2026-09-05 itibarıyla 455) exit 0.
 - [ ] **Electron testleri yeşil** — `Electron/` Vitest (`npm test`) hatasız.
 - [ ] **Mobil testleri yeşil** — `mobil/` jest-expo (`npm test`) hatasız.
 - [ ] (Hepsi tek seferde: kök `./run-tests.sh`.)

@@ -14,8 +14,8 @@
 //
 // ⚠️ NEREDE KULLANILMAZ: DEFTER ve TARİHÇE yüzeyleri. İptal edilmiş kalemin
 // SEVK EDİLMİŞ metrajı gerçektir ve kaybolmamalıdır —
-//   • `computeLineLedger` (sevk toplamı) iptal kalemi de okur,
-//   • `recomputeOrderStatus` iptal kalemin İSTENEN'ini değil SEVK EDİLEN'ini sayar,
+//   • `computeLineLedgerTx` (sevk toplamı) iptal kalemi de okur,
+//   • `recomputeOrderStatusTx` iptal kalemin İSTENEN'ini değil SEVK EDİLEN'ini sayar,
 //   • sevkiyat detayı / irsaliye / muhasebe export'u geçmişi olduğu gibi basar.
 // Kural tek cümleyle: **GELECEK sorusu süzer, GEÇMİŞ sorusu süzmez.**
 // =============================================================================

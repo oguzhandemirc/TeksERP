@@ -10,7 +10,7 @@ import prisma from "../src/lib/prisma";
 import { ensureTestSander } from "./fixture-subcontractor";
 import { WorkOrderService } from "../src/services/workorder.service";
 import { SubcontractorService } from "../src/services/subcontractor.service";
-import { moveRolls, mergeBatches, splitBatch, deleteIfEmptyAndTraceless } from "../src/services/batch.service";
+import { moveRolls, mergeBatches, splitBatch, deleteIfEmptyAndTracelessTx } from "../src/services/batch.service";
 import { RollStatus } from "@prisma/client";
 
 const WIDTH = 250;
@@ -155,14 +155,14 @@ async function main(): Promise<void> {
   const p1row = await prisma.batch.findUnique({ where: { id: p1.batchId }, select: { mergedChildren: { select: { id: true } } } });
   check("K17 smoke: survivor mergedChildren'ı görür", p1row?.mergedChildren.some((c) => c.id === p2.batchId) === true);
 
-  // ── K17 hazırlık: merge izi taşıyan BOŞ parti silinmez (deleteIfEmptyAndTraceless) ──
+  // ── K17 hazırlık: merge izi taşıyan BOŞ parti silinmez (deleteIfEmptyAndTracelessTx) ──
   const stamp2 = `${Date.now()}`.slice(-6);
   const tgt = await prisma.batch.create({ data: { batchNumber: `TSTK17A${stamp2}`, workOrderId: woId } });
   const src = await prisma.batch.create({ data: { batchNumber: `TSTK17B${stamp2}`, workOrderId: woId, mergedIntoId: tgt.id } });
-  check("K17: mergedIntoId izli boş parti silinMEZ", (await prisma.$transaction((tx) => deleteIfEmptyAndTraceless(tx, src.id))) === false);
-  check("K17: içine birleşme almış boş parti silinMEZ", (await prisma.$transaction((tx) => deleteIfEmptyAndTraceless(tx, tgt.id))) === false);
+  check("K17: mergedIntoId izli boş parti silinMEZ", (await prisma.$transaction((tx) => deleteIfEmptyAndTracelessTx(tx, src.id))) === false);
+  check("K17: içine birleşme almış boş parti silinMEZ", (await prisma.$transaction((tx) => deleteIfEmptyAndTracelessTx(tx, tgt.id))) === false);
   await prisma.batch.update({ where: { id: src.id }, data: { mergedIntoId: null } });
-  check("K17: iz kalkınca boş parti silinir", (await prisma.$transaction((tx) => deleteIfEmptyAndTraceless(tx, src.id))) === true);
+  check("K17: iz kalkınca boş parti silinir", (await prisma.$transaction((tx) => deleteIfEmptyAndTracelessTx(tx, src.id))) === true);
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 }

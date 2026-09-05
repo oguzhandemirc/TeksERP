@@ -55,7 +55,7 @@ WAREHOUSE serbest top (sackId = null)
   - Çuval PLANNED sevkiyatta → tahsis bekler, `shippedQty`'ye **sayılmaz**.
   - Çuval DISPATCHED → tahsis `OrderLine.shippedQty`'ye sayılır (sevk defteri, kalıcı).
 - **Denorm defter-otoritatif:** `shippedQty` increment/decrement DEĞİL, her tetikte defterden
-  yeniden hesaplanır (`recomputeOrderStatusForOrders` → `computeLineLedger`, drift-free).
+  yeniden hesaplanır (`recomputeOrderStatusForOrdersTx` → `computeLineLedgerTx`, drift-free).
   `shippedQty = Σ SackAllocation(çuval DISPATCHED) + Σ DirectShipAllocation`.
 - **Sipariş görünümü:** **İstenen | Sevk | Açık** — `Açık = quantity − shippedQty`.
   (Rezerv/`packedQty` sütunu yok; düşüş yalnız sevkte.)

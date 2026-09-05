@@ -98,7 +98,7 @@ import {
   type PoolSack,
   type SackAllocLine,
 } from "./helpers/allocation.helper";
-import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { ACTIVE_TAG_SELECT, ACTIVE_TAG_WHERE, toTagBadges } from "./helpers/sack-tag.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
@@ -181,7 +181,7 @@ const SHIPPABLE_ROLL_WHERE = {
 // ignorable olduğundan yasak). Sayısal max+1 → gün içi monotonik.
 //
 // ⚠️ `tx` ZORUNLU ve İLK parametre (emsaller: `subcontractor.service.nextDirectShipmentNo`,
-// `nextPrefixedSequence`, `kartela.service.nextKartelaDocSequence`/`nextSwatchSequence`).
+// `nextPrefixedSequenceTx`, `kartela.service.nextKartelaDocSequence`/`nextSwatchSequence`).
 // Üç çağrı yerinin ÜÇÜ DE bir `prisma.$transaction` callback'inin içinde; eskiden global
 // `prisma` client'ından okunuyordu ve bunun iki sonucu vardı:
 //   1) HAVUZ: interaktif tx bir pg bağlantısını TUTARKEN ikinci bir bağlantı ödünç
@@ -2262,7 +2262,7 @@ export class ShippingService {
       if (etkilenen.length > 0) {
         const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: etkilenen } }, select: { id: true } });
         await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
-        await recomputeOrderStatusForOrders(tx, etkilenen);
+        await recomputeOrderStatusForOrdersTx(tx, etkilenen);
       }
 
       // ② Yeni kümeyi yaz + tahsisleri hesapla (iptal kontrolü orada, kilit altında).
@@ -2278,7 +2278,7 @@ export class ShippingService {
 
       // ④ Defteri yeni tahsislerle tekrar hesapla.
       if (etkilenen.length > 0) {
-        await recomputeOrderStatusForOrders(tx, etkilenen);
+        await recomputeOrderStatusForOrdersTx(tx, etkilenen);
       }
 
       // ⑤ İrsaliye yeni sipariş kümesiyle yeniden donar (v+1). Yalnız sevk
@@ -2797,7 +2797,7 @@ export class ShippingService {
       const fark = Math.round((cikan - yazilanToplam) * 1000) / 1000;
       tazeTahsisIzi.tahsissizMetraj = fark > 0 ? fark : 0;
     }
-    await recomputeOrderStatusForOrders(tx, orderIds);
+    await recomputeOrderStatusForOrdersTx(tx, orderIds);
     // Resmi belge — sevk irsaliyesi v1 burada donar.
     await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
     return { flipped, iz: tazeTahsisIzi };
@@ -2947,7 +2947,7 @@ export class ShippingService {
     await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
     await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
     await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
-    await recomputeOrderStatusForOrders(tx, orderIds);
+    await recomputeOrderStatusForOrdersTx(tx, orderIds);
   }
 
   /**
@@ -3207,7 +3207,7 @@ export class ShippingService {
       const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
       const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
       await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
-      await recomputeOrderStatusForOrders(tx, orderIds);
+      await recomputeOrderStatusForOrdersTx(tx, orderIds);
 
       // Resmi belge İPTAL — silinmez. Yeniden sevkte `freezeForSource` v2 üretir.
       const voidedDocs = await printedDocumentService.voidForSource(

@@ -46,7 +46,7 @@ import {
   loadStationPropertyCaps,
 } from "./helpers/station-capability-transfer.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
 import {
   assertKursunTabletMayWrite,
@@ -1151,7 +1151,7 @@ export class KursunQcService {
           where: { id: step.workOrderId, status: WorkOrderStatus.COMPLETED },
           data: { status: WorkOrderStatus.IN_PROGRESS },
         });
-        await setWorkOrderCardStatuses(tx, step.workOrderId, "COMPLETED", "ACTIVE");
+        await setWorkOrderCardStatusesTx(tx, step.workOrderId, "COMPLETED", "ACTIVE");
       }
 
       // Bu step'in kapatılmış movement'lerini geri aç

@@ -35,7 +35,7 @@ export const INVOICE_PREFIX: Record<InvoiceType, string> = {
  * kanıtlı deseni). Çağıran `withBarcodeRetry` ile sarmalar — unique çakışması
  * yarışta hâlâ mümkündür ve doğru cevap tekrar denemektir.
  */
-export async function nextInvoiceNo(
+export async function nextInvoiceNoTx(
   tx: Prisma.TransactionClient,
   type: InvoiceType,
   date: Date,
@@ -49,7 +49,7 @@ export async function nextInvoiceNo(
 }
 
 /** Tahsilat "TH", ödeme "OD". */
-export async function nextPaymentNo(
+export async function nextPaymentNoTx(
   tx: Prisma.TransactionClient,
   direction: "IN" | "OUT",
   date: Date,
@@ -207,7 +207,7 @@ export function deriveInvoiceDueDate(
  * 1000 USD'lik faturayı 1000 TL olarak deftere yazardı — hata da log da
  * çıkmadan, ve ay sonunda bakiye 30 kat yanlış olurdu.
  */
-export async function resolveExchangeRate(
+export async function resolveExchangeRateTx(
   tx: Prisma.TransactionClient,
   currency: Currency,
   onDate: Date,

@@ -219,7 +219,7 @@ function sahteRes() {
   };
   res.json = (b: unknown) => {
     kayit.body = b;
-    (res as { __bitti?: () => void }).__bitti?.();
+    (res as { onBitti?: () => void }).onBitti?.();
     return res;
   };
   res.send = res.json;
@@ -248,7 +248,7 @@ function tekKatman(
       resolve({ ilerledi, hata });
     };
     // Yanıt gönderildiyse zincir orada BİTER (handler dalı).
-    (res as unknown as { __bitti?: () => void }).__bitti = () => kapat(false, null);
+    (res as unknown as { onBitti?: () => void }).onBitti = () => kapat(false, null);
     const next: NextFunction = ((e?: unknown) => kapat(true, e)) as NextFunction;
     try {
       const r = handle(req, res, next);
@@ -803,12 +803,12 @@ async function main(): Promise<void> {
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n=== L) HTTP turu (sunucu yoksa ATLANIR) ===");
-  const HTTP_KONTROL = 12;
+  const httpKontrol = 12;
   if (!(await sunucuAyakta())) {
-    atla("HTTP turu", `${BASE} ayakta değil — ${HTTP_KONTROL} kontrol ölçülmedi`);
-    atlanan += HTTP_KONTROL;
+    atla("HTTP turu", `${BASE} ayakta değil — ${httpKontrol} kontrol ölçülmedi`);
+    atlanan += httpKontrol;
   } else {
-    await httpTuru(hashDegeri, HTTP_KONTROL);
+    await httpTuru(hashDegeri, httpKontrol);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -1179,14 +1179,14 @@ async function sunucuAyakta(): Promise<boolean> {
  *    görülünce kalan kontroller ATLANIR ve bant sebebi yazar. Sessizce
  *    "başarısız" saymak, doğru çalışan bir kapıyı kırmızı gösterirdi.
  */
-async function httpTuru(hashDegeri: string, HTTP_KONTROL: number): Promise<void> {
+async function httpTuru(hashDegeri: string, httpKontrol: number): Promise<void> {
   let basilan = 0;
   const hcheck = (label: string, ok: boolean, detail = ""): void => {
     basilan++;
     check(label, ok, detail);
   };
   const kilitliAtla = (nerede: string): void => {
-    const kalan = HTTP_KONTROL - basilan;
+    const kalan = httpKontrol - basilan;
     atla(
       "HTTP turu (kilit)",
       `${nerede} 429 SETTINGS_PASSWORD_LOCKED — ardışık koşum kovayı doldurdu, ` +
@@ -1203,8 +1203,8 @@ async function httpTuru(hashDegeri: string, HTTP_KONTROL: number): Promise<void>
     body: JSON.stringify({ username: "p2test", password: "test123", clientType: "electron" }),
   });
   if (!giris.ok) {
-    atla("HTTP turu", `p2test giriş yapamadı (${giris.status}) — ${HTTP_KONTROL} kontrol ölçülmedi`);
-    atlanan += HTTP_KONTROL;
+    atla("HTTP turu", `p2test giriş yapamadı (${giris.status}) — ${httpKontrol} kontrol ölçülmedi`);
+    atlanan += httpKontrol;
     return;
   }
   const token = ((await giris.json()) as { data: { token: string } }).data.token;

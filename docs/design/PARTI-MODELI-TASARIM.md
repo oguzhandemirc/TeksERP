@@ -195,7 +195,7 @@ doğrulamasının batch-bazlı uyarlamasını kullanır):
 |---|---|---|---|
 | **Aynı renge yeniden boyama** (`REDYE_SAME_COLOR`, ton tutmadı) | Seçilen toplar **yeni parti** (`splitFromId` izi), boyahane adımına geri sarılır | **Aynı WO** — WO çoğalmaz | **Kart değişmez** — WO aynı; kart WO başına (İE), yeni parti kart üretmez |
 | **Farklı renge ayırma** (`NEW_COLOR`, boyandıktan sonra) | **Yeni parti**, yeni WO'da doğar | **Yeni WO** (`WorkOrder.splitFromId` izi — renk WO seviyesinde kaldığından zorunlu) | **Yeni WO kendi kartını alır** (`cloneWorkOrderTx → createForWorkOrder`; İE = yeni WO no); eski WO'nun kartı kendi WO'sunda kalır |
-| **Boyanmadan ayırma** (`UNDYED_MOVE`, mal fasonda bekliyor, kazan görmedi) | **Parti korunur** (`batchNumber` değişmez), `batch.workOrderId` yeni WO'ya güncellenir; açık sevk yeni WO'ya taşınır | Yeni WO (`cloneWorkOrderTx`) | **Yeni WO kendi kartını alır** (yeni İE) — kart WO'ya bağlı olduğundan taşınan parti yeni WO'nun kartını taşır; eski WO boşalıp kapanırsa kartı `setWorkOrderCardStatuses` ile COMPLETED/VOID |
+| **Boyanmadan ayırma** (`UNDYED_MOVE`, mal fasonda bekliyor, kazan görmedi) | **Parti korunur** (`batchNumber` değişmez), `batch.workOrderId` yeni WO'ya güncellenir; açık sevk yeni WO'ya taşınır | Yeni WO (`cloneWorkOrderTx`) | **Yeni WO kendi kartını alır** (yeni İE) — kart WO'ya bağlı olduğundan taşınan parti yeni WO'nun kartını taşır; eski WO boşalıp kapanırsa kartı `setWorkOrderCardStatusesTx` ile COMPLETED/VOID |
 
 Eski parti (ilk iki satırda) tüm toplarını kaybederse **silinmez** — sevk/kart/operasyon izi
 taşıyan boş parti tarihçedir, Partiler panelinde "→ P-YYY olarak yeniden boyandı / ayrıldı" satırı olur.
@@ -211,7 +211,7 @@ ekleme hemen geri alındı) **hard-delete edilir** — "boş çuval silme" bilin
 | Araç | Kural |
 |---|---|
 | **Top taşı** | Aynı WO içindeki iki parti arasında; iki parti de sevksiz. Kaynak boşalırsa §5.6. |
-| **Parti birleştir** | İki sevksiz parti → **en eski (önce doğan) partinin numarası yaşar**, diğerinin topları taşınır, boşalan parti §5.6'ya düşer. **Karta dokunmaz** (2026-07-14): kart iş emri başınadır; birleşen partiler zaten aynı WO içindedir → o WO'nun tek kartı değişmeden kalır (VOID/reprint yok — `deleteIfEmptyAndTraceless` de karta dokunmaz). Audit log'a iki numara da yazılır. Sevk kurulumundaki çok-parti uyarısı (K11, §7.2) bu aracın bağlamsal tetikleyicisidir. |
+| **Parti birleştir** | İki sevksiz parti → **en eski (önce doğan) partinin numarası yaşar**, diğerinin topları taşınır, boşalan parti §5.6'ya düşer. **Karta dokunmaz** (2026-07-14): kart iş emri başınadır; birleşen partiler zaten aynı WO içindedir → o WO'nun tek kartı değişmeden kalır (VOID/reprint yok — `deleteIfEmptyAndTracelessTx` de karta dokunmaz). Audit log'a iki numara da yazılır. Sevk kurulumundaki çok-parti uyarısı (K11, §7.2) bu aracın bağlamsal tetikleyicisidir. |
 | **Elle böl** | Sevksiz partiden seçilen toplar yeni partiye (`splitFromId` izi) — kısmi sevk otomatiğinin (§5.3) elle tetiklenen hali. |
 
 Hepsi `AuditService.log()` + atomik claim (`updateMany` + count) ile.
@@ -236,7 +236,7 @@ Hepsi `AuditService.log()` + atomik claim (`updateMany` + count) ile.
 - **Invariant:** **iş emri başına en fazla 1 kart** (`TravelerCard.workOrderId @unique` — partial
   değil, sert unique). **Reprint AYNI satırda:** snapshot güncel WO'dan tazelenir + `version++`,
   **kod değişmez, VOID YOK** (ayrı REPRINTED durumu yok). VOID yalnız **WO CANCELLED** olunca gelir
-  (`setWorkOrderCardStatuses` fan-out); VOIDED kart okutulursa açık red.
+  (`setWorkOrderCardStatusesTx` fan-out); VOIDED kart okutulursa açık red.
 - **Tarama akışı:** `scan()` kartı çözer → `card.workOrder` → adım eşleşmesi (WO-seviyesi). Kartın
   taşıdığı topların partisi `roll.batch` üzerinden ayrıca izlenir; kart tek başına "hangi parti"yi
   değil "hangi iş emri"ni taşır — parti bilgisi top/scan bağlamından türetilir.

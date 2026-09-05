@@ -23,7 +23,7 @@
 import { Prisma, RollStatus } from "@prisma/client";
 import { AppError } from "../../utils/app-error";
 import { finalBarcodeType } from "./roll-finalize.helper";
-import { reserveRollBarcodes } from "./roll-barcode.helper";
+import { reserveRollBarcodesTx } from "./roll-barcode.helper";
 import { collectRollStepScopeTx } from "./roll-step-scope.helper";
 import { recomputeStepStatus } from "./roll-step.helper";
 
@@ -304,7 +304,7 @@ export async function applyRollDispositionsTx(
       // ⚠️ Tx'in İÇİNDE kaldı, dışarı taşınmadı: `unbarcoded` kümesi claim'den
       // SONRA okunan `byId`den çözülüyor — tx öncesi okuma bayat olurdu. Tx içi
       // kalmanın kazancı: geri sarmada sayaç da geri sarılır, boşluk doğmaz.
-      const reserved = await reserveRollBarcodes(tx, finalBarcodeType(target), unbarcoded.length);
+      const reserved = await reserveRollBarcodesTx(tx, finalBarcodeType(target), unbarcoded.length);
       for (const [i, id] of unbarcoded.entries()) {
         const barcode = reserved[i]!;
         await tx.roll.update({ where: { id }, data: { barcode } });

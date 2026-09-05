@@ -9,8 +9,8 @@
 // Bu servis parti YAŞAM DÖNGÜSÜNÜN tx-içi çekirdeğini sağlar:
 //   - createBatchTx            : P kodu üret + Batch + roll üyeliği + refakat kartı (tek tx)
 //   - isBatchLockedTx          : parti kilitli mi (fasonda topu var mı — türetilmiş kilit, K14)
-//   - assertBatchInWorkOrder   : parti gerçekten bu WO'ya mı ait
-//   - deleteIfEmptyAndTraceless: boşalan + izsiz partiyi sil (soft-delete istisnası)
+//   - assertBatchInWorkOrderTx   : parti gerçekten bu WO'ya mı ait
+//   - deleteIfEmptyAndTracelessTx: boşalan + izsiz partiyi sil (soft-delete istisnası)
 //
 // Kod üretimi (P + GGAAYY + NNNN) tx İÇİNDE, sequence okuması closure içinde —
 // çağıran `withBarcodeRetry(() => prisma.$transaction(...))` ile sarmalı (P2002 → retry).
@@ -146,7 +146,7 @@ export async function generateBatchNumberTx(
  * Sayacın KAYNAĞI: en son doğan kısa parti numarası (yoksa `null` → P01'den başlar).
  *
  * Neden saklanan bir sayaç DEĞİL de veriden türetme: bu repo tüm sıra üretimini
- * veriden türetiyor (`nextDailySeq`, `nextPrefixedSequence`) ve saklanan sayaç
+ * veriden türetiyor (`nextDailySeq`, `nextPrefixedSequenceTx`) ve saklanan sayaç
  * "ayar ne diyor" ile "veri ne diyor" diye ikinci bir doğruluk kaynağı açardı.
  * Türetilmiş sayaç kendi kendini onarır ve yedekten geri yüklemede tutarlı gelir.
  *
@@ -288,7 +288,7 @@ export async function isBatchLockedTx(
  * Partinin gerçekten bu iş emrine ait olduğunu doğrular (cross-WO manipülasyon
  * koruması). Parti yoksa 404, başka WO'ya aitse 400.
  */
-export async function assertBatchInWorkOrder(
+export async function assertBatchInWorkOrderTx(
   tx: Prisma.TransactionClient,
   batchId: string,
   workOrderId: string,
@@ -310,7 +310,7 @@ export async function assertBatchInWorkOrder(
  * birleşmiş ya da içine birleşme almış). İz varsa parti KALIR (izlenebilirlik).
  * İzsizse: (taranmamış) kart(lar) fiziksel silinir + parti silinir. Döner: silindiyse true.
  */
-export async function deleteIfEmptyAndTraceless(
+export async function deleteIfEmptyAndTracelessTx(
   tx: Prisma.TransactionClient,
   batchId: string,
 ): Promise<boolean> {
@@ -504,7 +504,7 @@ export async function moveRolls(
         }
         continue;
       }
-      if (await deleteIfEmptyAndTraceless(tx, sb)) deletedBatchIds.push(sb);
+      if (await deleteIfEmptyAndTracelessTx(tx, sb)) deletedBatchIds.push(sb);
     }
     return {
       movedCount: rollIds.length,
@@ -560,7 +560,7 @@ export async function moveRolls(
  *      ReceiptItem.sourceDispatchItemId üzerindendir ve kalem taşınınca bağ
  *      kendiliğinden yaşayan sevke geçer; ayrıca retarget gerekmez.)
  *   4. K17 soy bağı: boşalan kaynak partiler SİLİNMEZ — mergedIntoId = survivor
- *      ile tarihçe satırı kalır (deleteIfEmptyAndTraceless çağrılmaz).
+ *      ile tarihçe satırı kalır (deleteIfEmptyAndTracelessTx çağrılmaz).
  * Toplar (CONSUMED tarihçe topları DAHİL — where yalnız batchId) survivor'a
  * taşınır; böylece cancelReceipt parti-tutarlılık guard'ı (roll.batchId ===
  * dispatch.batchId) merge sonrası doğal geçer. Kart WO başına — karta dokunulmaz.
@@ -804,7 +804,7 @@ export async function mergeBatches(
     }
 
     // ── K17 madde 4 — SOY BAĞI: kaynaklar silinmez, mergedIntoId=survivor ile
-    // tarihçe satırı kalır (deleteIfEmptyAndTraceless BİLEREK çağrılmaz).
+    // tarihçe satırı kalır (deleteIfEmptyAndTracelessTx BİLEREK çağrılmaz).
     // ATOMİK CLAIM (MAJOR-3b): mergedIntoId=null koşulu — eşzamanlı ikinci merge
     // aynı kaynağı kapmışsa soy bağı EZİLMEZ, kaybeden 409 alır.
     const setMerged = await tx.batch.updateMany({

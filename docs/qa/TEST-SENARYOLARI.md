@@ -1,6 +1,6 @@
 # TeksERP — Kullanıcı Kabul Test Senaryoları (UAT)
 
-Bu doküman, otomatik testlerin (backend 453 bekçi · Electron 208 · mobil 84 — kanonik
+Bu doküman, otomatik testlerin (backend 455 bekçi · Electron 211 · mobil 85 — kanonik
 sayı için ilgili proje test dizinleri) KAPSAMADIĞI
 **kullanıcı/UI ve fiziksel akışlar** için adım-adım manuel test senaryolarıdır.
 Otomatik testler iş mantığını doğrular; bu senaryolar gerçek ekran + gerçek cihazla
@@ -136,7 +136,7 @@ doğrulanır.
 ---
 
 ## Otomatik test kapsamı (referans — bunlar zaten yeşil)
-- **Backend** `cd Teks-Erp && npm test` → 453 `test_*.ts` bekçisi (alan haritası `Teks-Erp/docs/BEKCI-HARITASI.md`; jest/vitest YOK; `tsx
+- **Backend** `cd Teks-Erp && npm test` → 455 `test_*.ts` bekçisi (alan haritası `Teks-Erp/docs/BEKCI-HARITASI.md`; jest/vitest YOK; `tsx
   scripts/run-all-tests.ts` hepsini sırayla koşar — sevk yaşam döngüsü, durum geçişleri,
   çuval işlemleri, kapsama, fason, tambur, izin/cihaz/dashboard, vb.).
 - **Electron** `cd Electron && npm test` → 208 vitest dosyası (RBAC, util'ler, zod şema, fiş bileşeni).

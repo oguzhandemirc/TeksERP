@@ -95,10 +95,10 @@ import {
   HIDE_CANCELLED_FILTER,
   HIDE_COMPLETED_FILTER,
 } from "./helpers/hidden-status.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import {
   createBatchTx,
-  deleteIfEmptyAndTraceless,
+  deleteIfEmptyAndTracelessTx,
   K18_DEAD_STATUSES,
   type CreateBatchResult,
 } from "./batch.service";
@@ -128,7 +128,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from "../utils/code-format";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
-import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
+import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
 
 import { diffFields } from "./helpers/audit-diff.helper";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
@@ -3730,7 +3730,7 @@ export class WorkOrderService {
       await voidStalePendingBypassAssignmentsTx(tx, id, "WO_CANCELLED", { force: true });
 
       // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
-      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
+      await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
 
       const cancelledWO = await tx.workOrder.findUnique({ where: { id } });
       return { updated: cancelledWO!, applied };
@@ -4254,7 +4254,7 @@ export class WorkOrderService {
         await voidStalePendingBypassAssignmentsTx(tx, id, "WO_CLOSE", { force: true });
 
         // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
-        await setWorkOrderCardStatuses(tx, id, "ACTIVE", "COMPLETED");
+        await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "COMPLETED");
 
         const done = await tx.workOrder.findUnique({ where: { id } });
         return {
@@ -4429,7 +4429,7 @@ export class WorkOrderService {
       userId,
     });
     for (const batchId of sourceBatchIds) {
-      await deleteIfEmptyAndTraceless(tx, batchId);
+      await deleteIfEmptyAndTracelessTx(tx, batchId);
     }
 
     await recomputeStepStatus(tx, newReEntryStepId);
@@ -4535,7 +4535,7 @@ export class WorkOrderService {
       // ACTIVE refakat kartı VOID edilir — quickStart zero-attach telafisi ve
       // planlamacı arşivi DB'de arşivli WO'ya bağlı hayalet ACTIVE kart
       // bırakmasın (softDelete'teki bloğun simetriği).
-      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
+      await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
 
       return tx.workOrder.update({
         where: { id },

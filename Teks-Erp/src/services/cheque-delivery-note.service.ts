@@ -69,7 +69,7 @@ export const BORDRO_KIND_LABEL: Record<ChequeKind, string> = {
 };
 
 /**
- * Günlük sıralı belge numarası — `nextInvoiceNo`/`nextChequeNo` kanıtlı deseni
+ * Günlük sıralı belge numarası — `nextInvoiceNoTx`/`nextChequeNo` kanıtlı deseni
  * (JS'te sayısal max; `orderBy` glibc collation'da 9→10 geçişinde bozulur).
  * Çağıran `withBarcodeRetry` ile sarmalar.
  */

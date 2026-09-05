@@ -166,7 +166,7 @@ import {
   assertTargetablePropertyIds,
   partitionTargetableIds,
 } from "./helpers/targetable-property.helper";
-import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
+import { generateRollBarcodeTx, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
@@ -920,7 +920,7 @@ export class InventoryService {
     const initialStatus =
       opts?.forcedStatus ?? (data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK);
 
-    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcode) — offline istemci
+    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcodeTx) — offline istemci
     // sırayı bilemez. Tip damgası STATÜDEN türer ("F" = final/depoya inen, "H" = ham):
     // `finalBarcodeType` zaten bu eşlemenin tek kaynağı ve KK1 yolunda eski
     // renk-sezgisiyle BİREBİR aynı sonucu verir (renkli→WAREHOUSE→"F", renksiz→
@@ -961,7 +961,7 @@ export class InventoryService {
         // verilmemişse (fabrika yolları) tek ifade bile eklenmez.
         if (opts?.txGate) await opts.txGate(tx);
         if (guardActive) {
-          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcode`'dan da ÖNCE.
+          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcodeTx`'dan da ÖNCE.
           //
           //  · Kilit SONRA alınırsa guard hiçbir şey kazanmaz: READ COMMITTED'da her
           //    ifade taze snapshot alır, yani kilidi bekleyen tx uyandığında öndekinin
@@ -1061,7 +1061,7 @@ export class InventoryService {
         await assertMasterDataLiveTx(tx, { itemId: data.itemId, colorId: data.colorId ?? null });
 
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
-        const barcode = await generateRollBarcode(tx, rollType);
+        const barcode = await generateRollBarcodeTx(tx, rollType);
         // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
         // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
         const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
@@ -3565,7 +3565,7 @@ export class InventoryService {
       // "bekleyen"iydi) ve o durumda iş emri "tüm adımları bitmiş ama kendisi
       // IN_PROGRESS" kalır. Bunu otomatik kapatmak *"bir topu iptal etmek iş
       // emrini kapatabilir"* demektir — refakat kartlarını da COMPLETED'a çeker
-      // (`setWorkOrderCardStatuses`) ve bu bir ÜRÜN KARARIDIR, refactor yan
+      // (`setWorkOrderCardStatusesTx`) ve bu bir ÜRÜN KARARIDIR, refactor yan
       // etkisi değil. Planlamacı isterse eklenecek tek satır:
       //   for (const woId of scope.workOrderIds) await completeWorkOrderIfStepsDone(tx, woId);
       // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
@@ -5006,7 +5006,7 @@ export class InventoryService {
 
       // "her kumaşa etiket" (F4) — barkodsuzsa final (WAREHOUSE) barkod üret.
       if (roll.barcode == null) {
-        const bc = await generateRollBarcode(tx, finalBarcodeType(RollStatus.WAREHOUSE));
+        const bc = await generateRollBarcodeTx(tx, finalBarcodeType(RollStatus.WAREHOUSE));
         await tx.roll.update({ where: { id: rollId }, data: { barcode: bc } });
       }
 

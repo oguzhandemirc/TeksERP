@@ -18,7 +18,7 @@
 import { Prisma, RollStatus, StationKind, StepStatus, WorkOrderStatus } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
-import { setWorkOrderCardStatuses } from "./traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./traveler-card-fanout.helper";
 
 export type TxClient = Prisma.TransactionClient;
 
@@ -209,7 +209,7 @@ export async function completeWorkOrderIfStepsDone(
     },
     data: { status: WorkOrderStatus.COMPLETED },
   });
-  await setWorkOrderCardStatuses(tx, workOrderId, "ACTIVE", "COMPLETED");
+  await setWorkOrderCardStatusesTx(tx, workOrderId, "ACTIVE", "COMPLETED");
 }
 
 /**

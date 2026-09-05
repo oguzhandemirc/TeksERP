@@ -15,7 +15,7 @@
 //
 // ── ÖLÇÜLÜP REDDEDİLENLER (yeniden denemeden önce buraya bak) ────────────────
 //  · `toLocaleUpperCase("tr")` yasağı — DAR kapsamlıdır (yalnız koşullu etiket
-//    elemanı ↔ QualityGrade.code). src'de 56 meşru kullanım, bazıları ZORUNLU
+//    elemanı ↔ QualityGrade.code). src'de 59 meşru kullanım, bazıları ZORUNLU
 //    (query-parser.ts Türkçe büyük/küçük harf) → kural YAZILMADI.
 //  · `z.enum([...])` literalinin Prisma enum aynası olduğu kuralı — 110 isabet ve
 //    yazılabilen en dar selector meşru literal listeleriyle ayırt EDİLEMİYOR
@@ -341,12 +341,21 @@ export default [
   },
 
   // ── 5) KAPSAM: bekçiler ve seed (2026-09-05'te açıldı) ─────────────────────
-  // `scripts/` 554 dosya ve 453 bekçi taşıyor, `prisma/` seed'leri var; ikisi de
+  // `scripts/` 555 dosya ve 455 bekçi taşıyor, `prisma/` seed'leri var; ikisi de
   // bugüne dek HİÇ lint edilmiyordu. Aynı boşluk tsc'de yaşanmış ve 87 tip hatası
   // birikmişti — kapsam dışı kod sessizce bayatlar.
-  // Kural seti DAR ve bilinçli: yasaklar + adlandırma. Boyut kuralları ve
-  // `no-console` bu bloğa GİRMEZ (bekçiler uzun ve konuşkandır: ölçüm
-  // scripts/'te 341 fonksiyon / 4700 console — orada kural gürültüdür, sinyal değil).
+  // Kural seti DAR ve bilinçli: yasaklar (`no-restricted-syntax`) + adlandırma
+  // (`@typescript-eslint/naming-convention`). Boyut kuralları ve `no-console` bu
+  // bloğa GİRMEZ (bekçiler uzun ve konuşkandır: ölçüm scripts/'te 341 fonksiyon /
+  // 4700 console — orada kural gürültüdür, sinyal değil).
+  //
+  // ⚠️ `naming-convention` 2026-09-05'te EKLENDİ: başlık bu cümleyi zaten
+  // söylüyordu ama kural bu blokta YOKTU (`--print-config scripts/test_helpers.ts`
+  // → undefined) — belge ile kapı ayrışmıştı. Ölçüm 6 ihlal / 3 dosya (≤15 →
+  // "düzelt, sonra error"): `test_advisory_lock_namespaces` kodda_yok /
+  // envanterde_yok · `test_manual_props_claim_pin` araya_girildi (snake_case) ·
+  // `test_settings_password` __bitti (type method) + HTTP_KONTROL (parametre).
+  // Hepsi camelCase'e çevrildi; ölçüm 0.
   //
   // KAPSAM AÇILDIĞINDA ÖLÇÜLEN 25 İHLAL — hükümleri (hepsi kapatıldı, 0 error):
   //   · 4 × `'Europe/Istanbul'` → DÜZELTİLDİ (`FACTORY_TIMEZONE` import edildi;
@@ -398,6 +407,7 @@ export default [
     linterOptions: { reportUnusedDisableDirectives: "error" },
     rules: {
       "no-restricted-syntax": ["error", ...ORTAK_YASAKLAR, FACTORY_TZ_LITERAL],
+      "@typescript-eslint/naming-convention": NAMING_CONVENTION,
     },
   },
 ];

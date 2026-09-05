@@ -6,7 +6,7 @@ React Native + Expo 54, Android tablet (yatay) + telefon (dikey), yön kilidi yo
 
 ```bash
 npx expo start · npx expo start --android · npx expo run:android   # native build (BT/BLE Expo Go'da çalışmaz)
-npx tsc --noEmit · npm test (jest)
+npx tsc --noEmit · npm test (jest --runInBand, 85 dosya / 854 vaka / ~17 sn — commit kapısında)
 npm run yayinla:check -- --musteri=<kod>        # OTA mı APK mı? (native parmak izi)
 EXPO_PUBLIC_API_URL=<erp-adresi> npm run yayinla -- --musteri=<kod>      # OTA (JS-only, ~%90)
 EXPO_PUBLIC_API_URL=<erp-adresi> npm run build:apk -- --musteri=<kod>    # native değişti → APK; ./gradlew ELLE ÇAĞIRMA
