@@ -110,12 +110,21 @@ async function main() {
 
   // ---------------------------------------------------------------------------
   // MÜŞTERİLER + ŞUBELER — senaryo seed'i MUS-001=arda (IST/ANK),
-  // MUS-002=moda (IZM) bekliyor.
+  // MUS-002=moda (IZM) bekliyor. Bekçiler bunları KODLA çözer (12 dosya), adla değil.
+  //
+  // ⚠️ AD DA DAMGALI ([TD-16]) — 2026-09-06'da ölçüldü: fabrikanın 2026-09-05
+  // yedeği restore edilip `seed:fixtures` koşulduğunda "Moda Tekstil" fabrikanın
+  // GERÇEK "MODA TEKSTİL" müşterisiyle (MUS1707260010, 2026-07-17) `nameFold`
+  // seddine çarpıp UniqueConstraintViolation veriyordu. Yani reponun kendi zorunlu
+  // provası (restore → migrate deploy → bekçiler) bu adımda kırılıyordu.
+  // Çakışma öngörülebilirdi: `name-normalize.helper.ts:73` zaten "canlı veride
+  // 'Moda Tekstil' + 'MODA TEKSTİL'" diye ölçüm taşıyor. Damgasız fixture adı,
+  // fabrikanın yarın açacağı bir müşteriyle de çarpar.
   // ---------------------------------------------------------------------------
   const customers = [
     {
       code: "MUS-001",
-      name: "Arda Tekstil",
+      name: "FIXTURE Arda Tekstil",
       branches: [
         { code: "IST", name: "İstanbul Şubesi", city: "İstanbul" },
         { code: "ANK", name: "Ankara Şubesi", city: "Ankara" },
@@ -123,7 +132,7 @@ async function main() {
     },
     {
       code: "MUS-002",
-      name: "Moda Tekstil",
+      name: "FIXTURE Moda Tekstil",
       branches: [{ code: "IZM", name: "İzmir Şubesi", city: "İzmir" }],
     },
   ];

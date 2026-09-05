@@ -21,6 +21,47 @@
 
 ---
 
+## 2026-09-06 — Fabrika yedeği üzerinde prova: defterde büyüyen boşluk, index kararı, fixture çarpışması [ÇEKİRDEK]
+
+Kullanıcı fabrikanın 2026-09-05 yedeğini getirdi. Reponun zorunlu ritüeli (restore → `migrate deploy`
+→ bekçiler) ilk kez sonuna kadar koştu ve üç şey çıktı. Ölçümlerin tamamı
+`docs/history/test-ortami-2026-09-06/FABRIKA-KOPYASI.md`.
+
+**① Yedek `idx_scan` TAŞIMAZ.** Tarama sayaçları çalışma zamanı istatistiğidir, dump'a girmez;
+restore sonrası sıfırlanır. "Fabrikada hangi index kullanılıyor" sorusu yedekle cevaplanamaz —
+sunucuda tek satırlık salt-okunur sorgu ister. Yedeğin verdiği şey gerçek VERİ HACMİ (4.556 top).
+
+**② `rolls` index kararı: HİÇBİRİ DÜŞMÜYOR — ve "0 tarama" ölü demek değil.**
+458 bekçi fabrika verisinde koşturuldu, sonra sıfır/az taramalı her index kendi hedef sorgusuyla
+EXPLAIN'lendi. `rolls_status_currentQty_idx` bekçi koşumunda **0 tarama** aldı ama panelin top
+listesindeki "Metre" sütunu sıralanabilir (`columns.tsx:222`) ve planlayıcı o sorguda index'i
+SEÇİYOR. Aynısı benim perf turunda eklediğim iki kısmi index için de geçerli (0 ve 2 tarama, ama
+ikisi de kendi sekmesinde seçiliyor). **Ders: bekçi paketi bir KOD YOLU ENVANTERİDİR, kullanım
+profili değildir** — UI sıralamasını hiç denemez. Yazma maliyeti gerçek (HOT %0,5) ama çaresi index
+silmek değil: `updatedAt` dört index'te ve her güncellemede değişiyor, HOT hiçbir `fillfactor` ile
+mümkün değil. Bedel ölçüldü ve küçük (tablo 4,7 MB / index 2,2 MB) → aksiyon yok.
+
+**③ En değerli bulgu — canlı defterde BÜYÜYEN boşluk.** `test_consistency` bozulmamış fabrika
+kopyasında (test artığı: 0) dört bölümde düştü. En ağırı §1d: **42 sevkiyat · 11.384,7 m** çıkmış
+ama sipariş defterine yazılmamış (17 Ağu – 4 Eyl). 2026-08-31 ölçümü 23 sevkiyat / 7.200,6 m'ydi —
+beş günde neredeyse iki katına çıktı. Mal çıktı, irsaliye basıldı, brüt rapor görüyor; görünmeyen
+tek şey sipariş defteri, o yüzden planlamacı aynı metrajı yeniden üretime verebilir. Ayrıca §1c
+5 satır, §20 bir iş emri `COMPLETED` ama hiç adımı yok. §13'ün 2 satırı bilinen ve bilerek bırakılmış.
+⚠️ Onarım toplu UPDATE ile YAPILMAZ — hangi kaleme yazılacağı İŞ KARARIDIR.
+
+**④ Provayı kıran hata düzeltildi.** `seed:fixtures` fabrika verisinde `nameFold` seddine çarpıp
+düşüyordu: fixture müşterisi "Moda Tekstil" ↔ fabrikanın gerçek "MODA TEKSTİL" (`MUS1707260010`).
+Bu `[TD-16]`'nın seed'in KENDİSİNDE ihlaliydi ve öngörülebilirdi (`name-normalize.helper.ts:73`
+zaten o ölçümü taşıyor). Fixture adları damgalandı; 12 bekçi bu müşterileri kodla çözüyor, adı
+kimse aramıyor. Yeni kural `[DB-29d]`. **`[DB-29b]` de kapandı:** 6 migration <1 sn.
+
+**⑤ Fabrika verisinde 13 bekçi kırmızı** (445/458) ve küme temiz-DB koşumundan FARKLI — ortak
+yalnız üç dosya. Sınıflar: `seed` koşulmadığı için seed makine kodlarını sabitleyenler · katalog
+varsayımı (`'TUP'` kat değeri fabrikada yok) · altyapı. **Fabrika verisinde test artığı: 0** —
+çöp tamamen dev DB'ye özgü.
+
+---
+
 ## 2026-09-06 — Test ortamı: paralelleştirme ölçüldü ve ERTELENDİ, kapsam görünürlüğü onarıldı [ÇEKİRDEK]
 
 **Soru:** "test ortamımız nasıl olmalı." Yöntem reponun kendi ölçütü: ölç, sonra karar ver.
