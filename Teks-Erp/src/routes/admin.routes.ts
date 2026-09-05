@@ -50,7 +50,6 @@ import {
 } from "../services/latency-persist.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
-import prisma from "../lib/prisma";
 import { z } from "zod";
 import "../types/express-augment";
 
@@ -780,11 +779,8 @@ router.get(
       // (yalnız o hesap yazabilir) tamamen anlamsızlaşırdı.
       // 403, 404 DEĞİL: hesabın varlığı zaten açık — yanlış bilgi vermenin
       // anlamı yok, kısıtın kendisi söylenir.
-      const hedef = await prisma.user.findUnique({
-        where: { id: hedefId },
-        select: { isSystemAccount: true },
-      });
-      if (hedef?.isSystemAccount === true && req.isSystemAccount !== true) {
+      const hedefSistemHesabi = await AuthService.isSystemAccountUser(hedefId);
+      if (hedefSistemHesabi && req.isSystemAccount !== true) {
         next(
           AppError.forbidden(
             "En yetkili hesabın PIN/kart bilgisi başka bir kullanıcıya gösterilmez.",

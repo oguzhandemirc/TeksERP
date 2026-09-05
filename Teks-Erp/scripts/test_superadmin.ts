@@ -676,9 +676,17 @@ async function main(): Promise<void> {
     const credIdx = adminSrc.indexOf('"/users/:id/credentials"');
     const credBlok = credIdx > 0 ? adminSrc.slice(credIdx, credIdx + 2600) : "";
     check("`/users/:id/credentials` ucu bulundu (körlük zemini)", credIdx > 0);
+    // ⚠️ İki yazım da kabul (2026-09-05) — ikizi `test_superadmin_visible.ts` §5'te,
+    // ikisi birlikte güncellenir. Hedefin sistem hesabı olup olmadığı eskiden route
+    // içinde `prisma.user.findUnique` ile okunuyordu; katman kuralı (route'ta
+    // `lib/prisma` yasak) sorguyu `AuthService.isSystemAccountUser`a taşıdı. Kapının
+    // KENDİSİ route'ta kalır — bu yüzden tarama hâlâ route dosyasında ve istek sahibi
+    // karşılaştırması her iki dalda da aranıyor (kapı silinirse KIRMIZI; sondayla ölçüldü).
     check(
       "DÜZ PIN ucu en yetkili hesabı KORUYOR (isSystemAccount + req.isSystemAccount)",
-      /isSystemAccount\s*===\s*true[\s\S]{0,200}req\.isSystemAccount\s*!==\s*true/.test(credBlok),
+      /(isSystemAccount\s*===\s*true|isSystemAccountUser\s*\()[\s\S]{0,200}req\.isSystemAccount\s*!==\s*true/.test(
+        credBlok,
+      ),
     );
     check(
       "korumanın cevabı 403 (hesabın varlığı zaten açık — 404 yanlış bilgi olurdu)",

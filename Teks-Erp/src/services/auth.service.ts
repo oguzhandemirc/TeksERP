@@ -268,6 +268,20 @@ export class AuthService {
   }
 
   /**
+   * Hedef kullanıcı EN YETKİLİ HESAP mı? (kimlik-bilgisi kapısının yüklemi)
+   * NEDEN SERVİSTE: route/controller katmanı `lib/prisma`ya inmez (katman kuralı,
+   * ESLint `no-restricted-imports`). Kapının kendisi çağıranda kalır — bu yalnız
+   * tek alanlık okumadır; kullanıcı yoksa `false` (varlık kararını çağıran verir).
+   */
+  static async isSystemAccountUser(userId: string): Promise<boolean> {
+    const row = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { isSystemAccount: true },
+    });
+    return row?.isSystemAccount === true;
+  }
+
+  /**
    * Admin: kullanıcının mobil kimlik bilgilerini OKU — hızlı PIN + QR kart kodu.
    * Panel bunları HER ZAMAN gösterir (kart QR sürekli görünür, mevcut PIN görünür).
    * GÜVENLİK: her ikisi de düz saklandığından geri okunabilir; bu uç yalnız
