@@ -8,6 +8,7 @@ import PickerModal, { type PickerOption } from '../../../components/PickerModal'
 import { customerService } from '../../../services/customer.service';
 import { itemService } from '../../../services/item.service';
 import { colorService } from '../../../services/color.service';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { colors, spacing, radius } from '../../../theme';
 
 export interface OrderLineFilters {
@@ -82,6 +83,12 @@ export default function OrderLineFilterSheet({
     enabled: visible,
     staleTime: 10 * 60 * 1000,
   });
+
+  // Üç katalog da tek atış (pageSize 300) — tavan aşılırsa liste sessizce kırpılır
+  // ve operatör "müşterim/kumaşım listede yok" der; uyarı kırpmayı görünür yapar.
+  useTruncationWarning(customersQuery.data?.pagination, 'Müşteri');
+  useTruncationWarning(itemsQuery.data?.pagination, 'Kumaş');
+  useTruncationWarning(colorsQuery.data?.pagination, 'Renk');
 
   const customerOptions: PickerOption[] = useMemo(
     () => (customersQuery.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code ?? undefined })),

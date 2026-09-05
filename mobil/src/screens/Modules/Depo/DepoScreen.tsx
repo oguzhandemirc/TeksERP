@@ -926,6 +926,9 @@ function RollDetailModal({
    * çare topu yeniden kesmekti. Uç (`POST /kartela/rolls/:id/mark`) ve servis
    * sarmalayıcısı zaten vardı; eksik olan yalnız bu düğmeydi.
    */
+  // Online-only (kuyruğa GİRMEZ): sunucu idempotent (atomik claim + no-op cevabı) ama
+  // onay kuyrukta gelmez — modal `onSuccess`te kapanıyor ve liste + `kartela` sayaçları
+  // birlikte tazeleniyor; optimistic düşürme ikisini ayrıştırırdı (cancelMutation emsali).
   const unmarkKartela = useMutation({
     mutationFn: (rollId: string) => kartelaService.setRollMarked(rollId, false),
     onSuccess: () => {

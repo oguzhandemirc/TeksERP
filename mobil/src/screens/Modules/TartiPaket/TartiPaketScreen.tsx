@@ -24,6 +24,7 @@ import { usePermissions } from '../../../hooks/usePermission';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
 import { useManualRefresh } from '../../../hooks/useManualRefresh';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { useSessionStore } from '../../../store/sessionStore';
 import type { MainStackParamList } from '../../../navigation/types';
 import { foldSearchText } from '../../../utils/searchFold';
@@ -128,6 +129,7 @@ export default function TartiPaketScreen() {
     enabled: custPickerOpen,
     staleTime: 60_000,
   });
+  useTruncationWarning(custQ.data?.pagination, 'Müşteri');
   const custOptions: PickerOption[] = (custQ.data?.data ?? []).map((c) => ({
     value: c.id,
     label: c.name,

@@ -1,0 +1,117 @@
+{
+  "alan": "loadAllForPicker 500 tavanı (istemci.json bulgu 3 + bulgu 9) · etiket şablonu havuz listesi (kod-desenleri.json)",
+  "tarih": "2026-09-05",
+  "db": "tekserp_demo @ localhost:55433 — yalnız SELECT ve Prisma okuma; hiçbir yazma yapılmadı",
+  "ozet": "İki madde de UYGULANDI, ama madde 1'in gerekçesi ölçümle DEĞİŞTİ. Bulgu 9'un 'mobil sessizce kesiyor' cümlesi KK1 kumaş picker'ı için ÇÜRÜK — o sorgu 2026-08-19'dan beri `useTruncationWarning` ile toast basıyor (bulgunun kendi kanıt satırı bunu yazıyor). Gerçek arıza kapsamdır: mobilde items/colors/customers üstünde 12 tek-atış picker sorgusu UYARISIZDI, aralarında bulgu 9'un adını verdiği KK1 RENK picker'ı ve 'Tüm Girişler' kumaş filtresi de var. Görevdeki (b) yolunun LAFZI ('panelin yaptığı gibi hata fırlat') ölçümle reddedildi: mobilde throw, 501. kumaşta KK1 girişini tamamen durdurur — toast'tan daha kötü, çünkü panelin kırılma yüzeyi ofis, mobilinki saha. Uygulanan: uyarı kapsamı kapatıldı (8 → 20 çağrı) + kapsamı AST ile ölçen bekçi yazıldı. (a) sunucu aramalı picker'a geçiş bu turda YAPILMADI ve karar-bekliyor: pay 2,2–3,9× ve dönüşüm cihaz üstünde ölçüm ister.",
+  "madde_1": {
+    "baslik": "Mobil tek-atış katalog picker'larında kırpma uyarısı kapsamı",
+    "durum": "uygulandi",
+    "olculen_asimetri": {
+      "panel": "Electron/src/lib/picker-loader.ts:78-86 — `total > 500` → throw; picker açılmaz, operatör hata görür (bilinçli)",
+      "mobil_once": "hooks/useTruncationWarning.ts — `total > pageSize` → 6 sn'lik info toast (mount başına bir kez). SESSİZ DEĞİL; ama yalnız 8 çağrı yerinde bağlıydı",
+      "gercek_bosluk": "items/colors/customers üstünde 12 tek-atış sorgu HİÇ uyarı taşımıyordu"
+    },
+    "satir_sayilari_2026_09_05": {
+      "items_aktif": 138,
+      "items_FABRIC_aktif": 134,
+      "colors_aktif": 130,
+      "customers_aktif": 79,
+      "not": "colors 126→130, customers 77→79 (ölçüm gününden bu yana büyüdü); pay 2,2×–3,9×"
+    },
+    "alternatifler": {
+      "a_sunucu_aramali_picker": "REDDEDİLDİ (bu tur) — emsal mobilde VAR (screens/Modules/Siparis/StepCustomer.tsx: useDebouncedValue + pageSize 50 + server `search`; TartiPaket/HizliSiparisScreen.tsx:81 aynı kalıp). Ama KK1/Tambur picker'ları barkod + numpad odak akışına bağlı ve yerleşim doğrulaması cihazda ölçüm ister ([IL-14] adb screencap/uiautomator). 2,2–3,9× pay varken acele etmenin bedeli riskten büyük değil.",
+      "b_lafzi_throw": "REDDEDİLDİ — ÖLÇÜMLE. Mobilde panelin throw'unu taklit etmek 501. kumaşta KK1 girişini tamamen durdurur. Panelin kırılma yüzeyi ofis (yönetici başka yoldan girer), mobilinki saha (vardiya durur). Toast + eksik liste, hiç giriş yapamamaktan iyidir.",
+      "b_duzeltilmis": "SEÇİLDİ — uyarı KAPSAMINI kapat: uyarısız kalan 12 tek-atış sorguya `useTruncationWarning` bağlandı + kapsamı AST ile ölçen bekçi yazıldı. Ucuz, davranışı yalnız GÖRÜNÜRLÜK yönünde değiştirir, (a)'yı gereksiz kılmaz — tersine tetikleyicisidir.",
+      "c_hicbir_sey": "REDDEDİLDİ — [IL-08]/[IL-10] 'sessiz düşme yasağı' yazılı ilke; 12 yer bu yasağın dışındaydı."
+    },
+    "uygulanan_degisiklikler": [
+      "mobil/src/screens/Modules/KK1/KK1Screen.tsx:439 — yarı mamul RENK picker'ı (bulgu 9'un adını verdiği ikinci sorgu)",
+      "mobil/src/screens/Modules/KK1/KK1Screen.tsx:2676 — 'Tüm Girişler' kumaş filtresi",
+      "mobil/src/screens/Modules/HizliIsEmri/OrderLineFilterSheet.tsx:89-91 — müşteri + kumaş + renk (pageSize 300)",
+      "mobil/src/screens/Modules/Tambur/TamburScreen.tsx:863-864 — manuel mod kumaş + renk katalogları",
+      "mobil/src/screens/Modules/Tambur/TamburScreen.tsx:6231 — çıktı geçmişi kumaş filtresi",
+      "mobil/src/screens/Modules/TartiPaket/TartiPaketScreen.tsx:132 — 'Müşteriye Çuvalla' müşteri picker'ı",
+      "mobil/src/screens/Modules/TartiPaket/CuvalDuzeltScreen.tsx:120 — yeniden etiketleme renk picker'ı",
+      "mobil/src/components/LabelTargetSheet.tsx:105 — manuel müşteri seçimi",
+      "mobil/src/screens/Modules/Siparis/OrderLineSheet.tsx:126 — müşteriye atanmış renkler (pinnedOptions)"
+    ],
+    "yeni_bekci": {
+      "dosya": "mobil/src/test/picker-truncation.guard.test.ts",
+      "olctugu": "AST (typescript): `itemService|colorService|customerService` çağrısı + argümanda sayısal `pageSize` + `search` YOK → tek-atış picker. Dosya başına tek-atış sorgu sayısı, aynı dosyadaki `useTruncationWarning` sayısını AŞAMAZ.",
+      "muafiyet": "`search:` taşıyan çağrı (sunucu aramalı picker) — orada kırpma bir arama sonucudur",
+      "korluk_zemini": "en az 150 dosya taranmalı ve en az 8 tek-atış sorgu bulunmalı (bugün 400 dosya / 15 sorgu)",
+      "negatif_sonda": "iki sentetik sonda (uyarısız sorgu YAKALANIR · aramalı sorgu MUAF) + CANLI ağaçta doğrulama: KK1'deki 'Renk' uyarısı silinince bekçi KIRMIZI verdi ('3 tek-atış sorgu, 2 useTruncationWarning'), geri konunca yeşil"
+    },
+    "oncesi_sonrasi": {
+      "uyari_cagri_yeri": "8 → 20",
+      "kapsamli_uyarisiz_tek_atis_sorgu": "12 → 0",
+      "ag_trafigi": "DEĞİŞMEDİ — hiçbir sorgunun pageSize'ı, enabled'ı, queryKey'i değişmedi. Kazanç bayt değil, YANLIŞ KAYIT önleme."
+    },
+    "davranis_degisikligi": "Yalnız tavan AŞILDIĞINDA: eskiden hiçbir şey olmuyordu, artık 6 sn'lik Türkçe toast ('… listesi eksik gösteriliyor · N/M kayıt yüklendi'). Bugünkü satır sayılarında (134/130/79 vs 200-500) hiçbir toast tetiklenmez — yani sahada BUGÜN görünen değişiklik YOK."
+  },
+  "madde_2": {
+    "baslik": "Etiket şablonu havuz listesi — `fields` + `rawCode` omit",
+    "durum": "uygulandi",
+    "on_dogrulama": {
+      "soru": "Liste yanıtını tüketen istemci `fields`/`rawCode` OKUYOR MU?",
+      "cevap": "HAYIR",
+      "kanit": [
+        "Backend: `LabelTemplateService.findAll` TEK tüketici — label-template.controller.ts:155 → HTTP. Başka servis çağırmıyor.",
+        "Electron: `labelTemplateService.list()` 5 çağrı yeri (LabelTemplatesPage:130 · LabelAssignmentsPage:44 · PrinterSettingsFields:39 · CustomerStandaloneLabelsPanel:28 · CustomerTemplateRoutesPanel:48). Beşinde de `fields`/`rawCode` geçmiyor; satırı alan alt bileşenlerde (TemplateRow/PoolRow, templateRowActions, TemplatePrintDialog, ContextDefaultRowItem) de geçmiyor.",
+        "`grep -rn 'rawCode' Electron/src` → yalnız editör (RawCodePanel, getById yolu), servis tipleri ve audit etiketleri.",
+        "Mobil: `/api/label-templates` ucunu HİÇ çağırmıyor (grep 0 sonuç).",
+        "Bekçiler: `findAll` okuyan tek bekçi test_standalone_label.ts — yalnız `id`/`standalone` okuyor."
+      ]
+    },
+    "olcum": {
+      "canli_satir": 4,
+      "once_bayt": 5644,
+      "sonra_bayt": 1693,
+      "kazanc": "-3.951 B (-%70,0)",
+      "yontem": "Prisma Client ile aynı where/include/orderBy iki kez koşuldu, JSON.stringify({success,data}) baytı ölçüldü; geçici script koşumdan sonra SİLİNDİ",
+      "anahtar_dogrulamasi": "`fields` ve `rawCode` düştü; kalan 16 anahtar (variants dahil) BİREBİR aynı sırada",
+      "pg_column_size": "label_templates canlı satırların toplamı 5.593 B; `fields` tek başına 5.084 B (%91)"
+    },
+    "sozlesme": {
+      "tetik": "[IL-27] alan kaldırma",
+      "eski_istemci_ne_yapar": "Sahadaki panel (1.2.7) bu iki alanı liste yanıtından zaten okumuyor (kod aynı beş çağrı yeri) → kırılma yok. Etiket Stüdyosu tasarım gövdesini `getById` ile çekiyor, o uç DEĞİŞMEDİ.",
+      "sira": "Backend ÖNCE, panel sonra ([IL-26]); minVersion'a dokunulmadı"
+    },
+    "tip_daraltmasi": {
+      "neden": "Tip 'fields var' demeye devam etseydi ileride biri `row.fields` yazıp sessizce `undefined` alırdı — tam da [IL-08] sınıfı arıza.",
+      "backend": "Teks-Erp/src/services/label-template.service.ts — `export type LabelTemplateListRow = Omit<LabelTemplate, \"fields\" | \"rawCode\">`; findAll dönüşü bu tip",
+      "electron": "Electron/src/services/labelTemplateService.ts — aynı adla tip; `list()` dönüşü daraltıldı; taşıyan bileşenler de daraltıldı (TemplateRow/PoolRow + ActionRail, TemplatePrintDialog, ContextDefaultRowItem, CustomerTemplateRoutesPanel/RouteRow, LabelTemplatesPage `printing`/`onHardDelete`/`onPrint`/`handleExport`)",
+      "emsal": "traveler-card.service.ts:787 `omit: { snapshot: true }` + `Omit<TravelerCard,\"snapshot\">`"
+    }
+  },
+  "bekciler": {
+    "mobil_tsc": "npx tsc --noEmit → 0",
+    "mobil_eslint": "0 error (yalnız devralınan warning)",
+    "mobil_test": "npm test → 86/86 dosya, 859/859 vaka, exit 0",
+    "yeni_bekci_negatif_sonda": "sentetik iki sonda + canlı ağaçta kırmızı doğrulaması → geçti",
+    "backend_tsc": "npx tsc --noEmit → 0",
+    "backend_bekci": "npx tsx scripts/run-all-tests.ts label_ → 26/26 dosya, exit 0 (2 dosyada 10 HTTP-ayaklı kontrol atlandı, sunucu koşmuyor) · run-all-tests.ts standalone_label → 2/2",
+    "electron_typecheck": "npm run typecheck → 0",
+    "electron_test": "npx vitest run (LabelTemplates + Labels + useTruncationWarning) → 6 dosya / 58 vaka",
+    "lint_baseline": "node scripts/check-lint-baseline.mjs → backend/electron/mobil üçü de tavan altında"
+  },
+  "acik_isler": [
+    {
+      "is": "(a) items/colors/customers picker'larını sunucu aramalı moda taşı — ÖNCE MOBİL",
+      "durum": "karar-bekliyor",
+      "gerekce": "Pay 2,2–3,9×; emsal var (StepCustomer.tsx) ama KK1/Tambur odak+numpad+barkod akışı cihazda ölçüm ister",
+      "tetikleyici": "Yeni eklenen toast sahada görülmeye başladığı gün — bekçi ve uyarı bunun sinyalidir",
+      "cevaplanmasi_gereken_soru": "KK1'de `PickerModal` sunucu aramalı moda geçerken barkod okutma odağı ve NumpadHost autoActivate ile çakışıyor mu? (cihazda `adb exec-out screencap` + `uiautomator dump` ile ölçülmeli)"
+    },
+    {
+      "is": "Kalan uyarısız tek-atış katalog sorguları (kapsam DIŞI bırakıldı)",
+      "durum": "gerek-yok",
+      "olcum": "subcontractors 6 satır/pageSize 500 → 83× pay (FasonSevkScreen:570, FasonSevkGecmisiScreen:88, useQuickWorkOrder:359) · subcontractor kategorileri 3/200 → 66× · routes 2/200 → 100× · fabric_properties 11/200 → 18×. Bu kataloglara uyarı bağlamak yükü artırmaz ama bugün bir şey de ölçmez; kapsam bilinçli olarak en dar üç kataloğa çekildi (bekçi de bu üçünü ölçer)."
+    },
+    {
+      "is": "mobil/CLAUDE.md'deki 'npm test 85 dosya / 854 vaka' satırı artık 86/859",
+      "durum": "karar-bekliyor",
+      "gerekce": "mobil/CLAUDE.md bu oturumda paralel çalışan başka bir ajan tarafından da düzenlendi; çakışmamak için dokunulmadı"
+    }
+  ]
+}

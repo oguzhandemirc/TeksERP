@@ -73,6 +73,13 @@ export interface LabelTemplate {
   updatedAt: string;
 }
 
+/**
+ * Havuz LİSTESİ satırı — backend `fields`/`rawCode` göndermez (tasarım gövdesi
+ * yalnız `getById` ile gelir; ölçüm 2026-09-05: liste yanıtının ~%72'si `fields`).
+ * Tip bunu söyler ki `row.fields` yazan biri sessizce `undefined` almasın.
+ */
+export type LabelTemplateListRow = Omit<LabelTemplate, "fields" | "rawCode">;
+
 /** Boyut varyantı — tuval (mm) + kanvas eleman yerleşimi. Prisma Decimal JSON'da
  *  string gelir → normalizeVariant Number()'a çevirir. */
 export interface LabelTemplateVariant {
@@ -155,14 +162,14 @@ export const labelTemplateService = {
     kind?: LabelKind;
     assignable?: boolean;
     standalone?: boolean;
-  }): Promise<ApiResponse<LabelTemplate[]>> => {
+  }): Promise<ApiResponse<LabelTemplateListRow[]>> => {
     const params = new URLSearchParams();
     if (opts?.kind) params.set("kind", opts.kind);
     if (opts?.assignable) params.set("assignable", "true");
     if (opts?.standalone) params.set("standalone", "true");
     const q = params.toString();
     return apiClient
-      .get<ApiResponse<LabelTemplate[]>>(`/api/label-templates${q ? `?${q}` : ""}`)
+      .get<ApiResponse<LabelTemplateListRow[]>>(`/api/label-templates${q ? `?${q}` : ""}`)
       .then((r) => r.data);
   },
 

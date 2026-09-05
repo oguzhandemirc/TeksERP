@@ -15,9 +15,14 @@
  * bakmak ölçüldü ve reddedildi — `ScannerSettingsScreen` içindeki `toggle`
  * gibi ayar fonksiyonlarını yanlış pozitif yapıyordu.
  *
- * İki liste de İKİ YÖNLÜDÜR: bir kayıt artık hiçbir çağrıyı karşılamıyorsa
- * bekçi KIRMIZI verir — bayat muafiyet sessizce koruma boşluğu açmasın,
- * devralınan liste de yalnız KISALSIN.
+ * MUAFİYET listeleri (`MUAF` · `DEVRALINAN`) İKİ YÖNLÜDÜR: bir kayıt artık
+ * hiçbir çağrıyı karşılamıyorsa bekçi KIRMIZI verir — bayat muafiyet sessizce
+ * koruma boşluğu açmasın, devralınan liste de yalnız KISALSIN. `DEVRALINAN`
+ * 2026-09-05'te (İ-20) boşaldı; okutma yolunda ham `Haptics` yalnız üç
+ * gerekçeli muafiyette kaldı.
+ *
+ * `EK_OKUTMA_HANDLERLARI` bir muafiyet DEĞİL, kapsam genişleticidir; tazeliği
+ * "handler hâlâ duruyor mu" diye ayrı ölçülür (aşağıdaki sonda).
  */
 import fs from 'fs';
 import path from 'path';
@@ -47,22 +52,13 @@ const MUAF: Record<string, string> = {
     'YAKALAMA onayı (opt-in `captureHaptic`): "gördüm" der, kabul/ret demez. Paylaşılan tarayıcı bileşeni; sonucu ÇAĞIRAN yönetir (bileşenin kendi notu).',
   'screens/Modules/HizliIsEmri/useQuickWorkOrder.ts#handleScan':
     'yakalama tıkı; sonucu aynı dosya `signalScan`/`flashDuplicate` ile ayrıca veriyor. Sözleşmede "yakalandı" sonucu YOK — dördüncüsü uydurulmaz.',
+  'screens/Auth/LoginScreen.tsx#submitCard':
+    'KİMLİK yolu, istasyon okutması DEĞİL: sonucu bir giriş denemesidir ve üç sonuçluk sözlük karşılık bulmuyor ("mükerrer giriş" diye bir şey yok). Aynı ekranda PIN ve şifre kolları birebir aynı geri bildirimi veriyor; yalnız kart kolunu çevirmek giriş ekranını kendi içinde ayrıştırırdı. `scanSoundEnabled` istasyon okutması ayarıdır, giriş bipini yönetmez. Adı `card` içerdiği için OKUTMA_ADI regexine takılıyor.',
 };
 
 /** DEVRALINAN — okutma yolunda ham `Haptics` taşıyan, henüz çevrilmemiş
- *  handler'lar (2026-09-05 ölçümü). Bu liste yalnız KISALIR. */
-const DEVRALINAN: Record<string, string> = {
-  'screens/Modules/FasonKabul/FasonKabulScreen.tsx#handleResolveCard': 'İ-20 kalan iş',
-  'screens/Modules/FasonSevk/FasonSevkScreen.tsx#handleCardScan': 'İ-20 kalan iş (top yolu çevrildi, KART yolu bekliyor)',
-  'screens/Modules/FasonSevk/FasonSevkScreen.tsx#addBarcodeFromString': 'İ-20 kalan iş',
-  'screens/Modules/FasonSevk/FasonSevkScreen.tsx#notifyReject': 'İ-20 kalan iş',
-  'screens/Modules/FasonSevk/FasonSevkScreen.tsx#addRollToList': 'İ-20 kalan iş',
-  'screens/Modules/Tambur/TamburScreen.tsx#resolveCard': 'İ-20 kalan iş',
-  'screens/Modules/Tambur/TamburScreen.tsx#resolveScanned': 'İ-20 kalan iş',
-  'screens/Modules/KartelaSevk/KartelaSevkScreen.tsx#addRoll': 'İ-20 kalan iş',
-  'screens/Modules/IadeGirisi/IadeGirisiScreen.tsx#lookup': 'İ-20 kalan iş',
-  'screens/Auth/LoginScreen.tsx#submitCard': 'KİMLİK yolu (personel QR kartı) — istasyon sözlüğü uygulanacak mı, AÇIK KARAR',
-};
+ *  handler'lar. Bu liste yalnız KISALIR; 2026-09-05'te (İ-20) BOŞALDI. */
+const DEVRALINAN: Record<string, string> = {};
 
 /** Sinyalin KENDİSİ burada üretilir — tek meşru `Haptics` sahibi. */
 const SINYAL_KAYNAGI = 'services/scanFeedback.ts';
@@ -138,7 +134,10 @@ describe('Okutma handler’ında doğrudan Haptics çağrılmaz (signalScan tek 
     // "0 ihlal" ile "hiçbir şeye bakılmadı" aynı yeşile çıkmasın (bekçi konvansiyonu).
     expect(hapticsCalls).toBeGreaterThanOrEqual(150);
     expect(filesWithHaptics).toBeGreaterThanOrEqual(30);
-    expect(scanSites).toBeGreaterThanOrEqual(10);
+    // İ-20 bitince okutma yolunda ham `Haptics` YALNIZ üç MUAF kaydında kaldı
+    // (4 çağrı). Zemin bu yüzden 10'dan 4'e indi: sayı düşerse bir muafiyet
+    // kaybolmuş demektir ve onu zaten aşağıdaki iki yönlü sonda yakalar.
+    expect(scanSites).toBeGreaterThanOrEqual(4);
   });
 
   it('okutma handler’ında listelenmemiş ham Haptics çağrısı yok', () => {
@@ -146,17 +145,39 @@ describe('Okutma handler’ında doğrudan Haptics çağrılmaz (signalScan tek 
   });
 
   it('muafiyet ve devralınan kayıtlar bayat değil (iki yönlü)', () => {
-    const stale = [...Object.keys(MUAF), ...Object.keys(DEVRALINAN), ...Object.keys(EK_OKUTMA_HANDLERLARI)]
-      .filter((k) => !hits.has(k));
+    const stale = [...Object.keys(MUAF), ...Object.keys(DEVRALINAN)].filter((k) => !hits.has(k));
     // Kayıt karşılıksız kaldıysa handler çevrildi ya da adı değişti → kaydı SİL.
+    // MUAF ve DEVRALINAN birer MUAFİYETtir: bayat kalanı sessiz bir koruma
+    // boşluğudur. `EK_OKUTMA_HANDLERLARI` ise TERSİ — kapsamı GENİŞLETİR
+    // (adı okutma-biçimli olmayan handler'ı tarar), o yüzden burada ölçülmez:
+    // handler çevrilince kaydı silmek, aynı yere yarın konacak ham `Haptics`i
+    // görünmez yapardı. Onun tazeliği bir sonraki sondada ölçülür.
     expect(stale).toEqual([]);
   });
 
-  it('çevrilen üç ekran okutma yolunda signalScan kullanır', () => {
+  it('EK_OKUTMA_HANDLERLARI kayıtları hâlâ var olan handler’ları gösterir', () => {
+    // Genişletici liste `hits`le ölçülemez (çevrilmiş handler hiç `Haptics`
+    // çağırmaz). Ölçülen şey ADIN yaşıyor olması: dosya duruyor mu, handler o
+    // dosyada hâlâ tanımlı mı — yeniden adlandırılmış/silinmiş kayıt ölüdür.
+    const dead = Object.keys(EK_OKUTMA_HANDLERLARI).filter((k) => {
+      const [rel, name] = k.split('#');
+      const file = path.join(SRC, rel);
+      if (!fs.existsSync(file)) return true;
+      return !new RegExp(`\\b${name}\\b`).test(fs.readFileSync(file, 'utf8'));
+    });
+    expect(dead).toEqual([]);
+  });
+
+  it('çevrilen ekranların hepsi okutma yolunda signalScan kullanır', () => {
     for (const f of [
       'screens/Modules/Depo/DepoScreen.tsx',
       'screens/Modules/KursunQc/KursunQcScreen.tsx',
       'screens/Modules/TartiPaket/PaketlemeScreen.tsx',
+      'screens/Modules/FasonKabul/FasonKabulScreen.tsx',
+      'screens/Modules/FasonSevk/FasonSevkScreen.tsx',
+      'screens/Modules/Tambur/TamburScreen.tsx',
+      'screens/Modules/KartelaSevk/KartelaSevkScreen.tsx',
+      'screens/Modules/IadeGirisi/IadeGirisiScreen.tsx',
     ]) {
       expect(fs.readFileSync(path.join(SRC, f), 'utf8')).toContain("signalScan(");
     }

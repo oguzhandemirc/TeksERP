@@ -436,6 +436,7 @@ export default function KK1Screen() {
     enabled: semiMode,
     staleTime: 5 * 60_000,
   });
+  useTruncationWarning(colorsQuery.data?.pagination, 'Renk');
   const colorOptions = useMemo(
     () => (colorsQuery.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code })),
     [colorsQuery.data],
@@ -2672,6 +2673,7 @@ function RollHistoryModal({
       }),
     enabled: visible,
   });
+  useTruncationWarning(itemsQuery.data?.pagination, 'Kumaş');
   // Personel seçenekleri yalnız bayrak açıkken çekilir (kapalıyken çip yok).
   const operatorsQuery = useQuery({
     queryKey: ['rolls', 'entry-users'],

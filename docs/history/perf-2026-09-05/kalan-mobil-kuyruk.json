@@ -1,0 +1,75 @@
+{
+  "tarih": "2026-09-05",
+  "alan": "mobil/src",
+  "kapsam": "İ-21 kalan 3 kuyruksuz mutasyon kararı + İ-23 kalan 1 iş (TamburScreen ReasonStep)",
+  "kural": "[MO-08] kuyruksuz (online-only) yazma bir KARARDIR ve tek satırlık gerekçesi mutasyonun üstünde durur",
+
+  "I_21": {
+    "durum": "uygulandi",
+    "sonuc": "Üçü de (1) GEREKÇE — kuyruğa ALINMADI. Kod değişikliği YALNIZ yorumdur; davranış birebir aynı.",
+    "kararlar": [
+      {
+        "mutasyon": "TamburScreen reportErrorMutation",
+        "dosya": "mobil/src/screens/Modules/Tambur/TamburScreen.tsx",
+        "uc": "POST /api/tambur/report-error",
+        "sunucu_idempotent": "KISMEN — clientToken YOK, clientErrorId YOK. Mükerrer koruması var (rollId+startMeter+defectTypeId findFirst + partial unique roll_errors_roll_meter_defect_uq → 409 DUPLICATE_ROLL_ERROR). Yani replay çoğaltmaz ama idempotent 'aynı sonucu döner' de değil: 409 alır.",
+        "ayni_dokunusta_yanit": "EVET — eklenen hata listeye yalnız `refetchActiveJob()` ile, SUNUCUDAN düşer. Yerel iyimser liste yok.",
+        "kayip": "Çevrimdışı operatör Tambur'da yeni hata giremez. Veri kaybı YOK: hiçbir şey yerelde tutulup atılmıyor, anlık Türkçe toast basılıyor.",
+        "alternatifler": "(1) gerekçe yaz · (2) STATION_MUT.TAMBUR_REPORT_ERROR + setMutationDefaults ile kuyruğa al (KursunQc QC2_REPORT_ERROR emsali)",
+        "secilen": "(1) gerekçe yaz",
+        "neden": "Tambur KARAR istasyonudur: eklenen hatayı tüketen `finalizeMutation` zaten online-only (kendi gerekçesi yazılı). Kuyruğa alınan hata, ait olduğu karardan SONRA sunucuya varırdı. Kurşun'un kuyruklu ikizi `clientErrorId` sözleşmesine dayanıyor (kursun-qc.controller.ts:43, kursun-qc.service.ts:580-663) ve `/tambur/report-error` o alanı TANIMIYOR — kuyruğa almak backend sözleşme değişikliği + iyimser liste + rollback + 'gönderilmemiş kaydı iptal et' mantığı (KursunQcScreen.tsx:1027-1046) ister. Yarım uygulanmış hâli bugünkünden kötüdür."
+      },
+      {
+        "mutasyon": "TamburScreen deleteErrorMutation",
+        "dosya": "mobil/src/screens/Modules/Tambur/TamburScreen.tsx",
+        "uc": "DELETE /api/kursun-qc/error (Tambur'un ayrı ucu yok)",
+        "sunucu_idempotent": "EVET — kayıt yoksa success döner (kursun-qc.service.ts:719-724), silme atomik `deleteMany WHERE {id, isProcessed:false}` + count===0 tanısı taze okumayla.",
+        "ayni_dokunusta_yanit": "Yanıt gövdesi gerekmiyor ama silinecek `errorId` SUNUCU üretimidir; Tambur'da client-üretimi kimlik (clientErrorId) yok.",
+        "kayip": "Çevrimdışı hata satırı silinemez. Kayıp yok — satır sunucuda duruyor, online olunca silinir.",
+        "alternatifler": "(1) gerekçe yaz · (2) kuyruğa al",
+        "secilen": "(1) gerekçe yaz",
+        "neden": "Kuyruk yalnız reportError da kuyruklu olsa anlam kazanır (çevrimdışı eklenen hatanın silinecek kimliği olmaz) — o ise yukarıdaki gerekçeyle online-only kalıyor. Ayrıca guard `isProcessed=false`: kuyrukta bekleyen silme, arada finalize kararı verilirse saatler sonra 400 ile ve operatör ekranda değilken düşerdi."
+      },
+      {
+        "mutasyon": "DepoScreen unmarkKartela",
+        "dosya": "mobil/src/screens/Modules/Depo/DepoScreen.tsx",
+        "uc": "POST /api/kartela/rolls/:id/mark {value:false}",
+        "sunucu_idempotent": "EVET — `setRollMarkedForKartela` atomik claim (`updateMany WHERE {id, markedForKartela: !value}`), count===0 → 'Değişiklik yok' başarı cevabı (kartela.service.ts:1204-1214).",
+        "ayni_dokunusta_yanit": "Sunucu-üretimi barkod/numara YOK; ama onay şekli sunucu gidiş-dönüşüne bağlı: `onSuccess` modalı KAPATIYOR ve ['rolls'] + ['kartela'] sorgularını birlikte tazeliyor.",
+        "kayip": "Çevrimdışı yanlış kartela işareti kaldırılamaz; net Türkçe hata basılır ve aynı ekrandan tekrar denenir. Veri kaybı YOK (mevcut kaydın tek bayrağı, her an yeniden basılabilir bir düğme).",
+        "alternatifler": "(1) gerekçe yaz · (2) kuyruğa al (sunucu idempotent olduğu için teknik olarak mümkün)",
+        "secilen": "(1) gerekçe yaz",
+        "neden": "Kuyruğa almak ancak iyimser satır düşürmesiyle anlamlı olurdu; DepoScreen'de bu BİLİNÇLİ olarak reddedilmiş bir kalıptır — listenin yanındaki sayaçlar ayrı bir aggregate ucundan geliyor ve elle düşürmek ikisini ayrıştırır (aynı dosyadaki `cancelMutation` onSettled yorumu). İyimserlik olmadan kuyruk: modal `onSuccess` gelmediği için AÇIK ve spinner'da kalır, liste KARTELALIK göstermeye devam eder — operatör işlemin olup olmadığını bilemez; bugünkü net hata toast'ından kötü."
+      }
+    ],
+    "kod_degisikligi": "3 blok yorum (2 TamburScreen + 1 DepoScreen). Çalıştırılabilir tek satır değişmedi.",
+    "eminlik_dayanagi": "git diff: DepoScreen +3 satır, tamamı yorum. TamburScreen'deki 6 satırlık eklemem de yalnız yorum (aynı dosyadaki diğer değişiklikler İ-20 signalScan ajanına ait). tsc 0, eslint 0 error."
+  },
+
+  "I_23": {
+    "durum": "karar-bekliyor",
+    "sonuc": "TamburScreen ReasonStep `ReasonPresetPicker`e ÇEVRİLMEDİ. Bileşen bugünkü hâliyle sahada ısıran bir gerileme üretirdi.",
+    "olcum": "ReasonPresetPicker 139 satır / 2 tüketici (HizliIsEmri/wizard/StepConfirm.tsx:152, FasonKabul/FasonKabulScreen.tsx:3450). Tambur ReasonStep: TamburScreen.tsx ~7150-7500.",
+    "eksik_yetenekler": [
+      "ÜÇ BÖLGE yerleşimi: picker TEK `View` döndürüyor (serbest metin + chip'ler bitişik). Tambur'da başlık+serbest metin SABİT, liste KAYAR (`Animated.ScrollView` `flexShrink:1`), footer SABİT olmak ZORUNDA (2026-08-26: 7. satırda Geri/Kaydet `maxHeight:%85` sheet'in dışında kalıyordu). Picker'ı olduğu gibi koymak serbest metni de kayan bölgeye sokar.",
+      "SÜRÜKLE-SIRALA: `Sortable.Grid` (columns=1) + `Sortable.Touchable` (tap=seç, basılı tut=sürükle), `onDragStart` tek titreşim, `hapticsEnabled:false`, `autoScrollEnabled` + `scrollableRef`. Picker'da hiçbiri yok.",
+      "`mergeVisibleOrder` köprüsü: gizli satırlar KENDİ YUVASINDA kalacak şekilde tam id listesi yazma anında sunucudan çekiliyor (reasonPreset.service.ts:109). Picker sıra yazmıyor.",
+      "`localOrder` + reorder mutasyonu + hata anında `setLocalOrder(null)` geri alma.",
+      "`canReorder` fail-closed kapısı: `canEditPresets` izni YOK ya da listede `builtin:` zemin satırı VARSA sürükleme kapalı (sunucuda olmayan satırın sırası yazılamaz).",
+      "Satır başına KATALOG CRUD: düzenle / çoğalt `IconButton`'ları + 'Yeni sebep ekle' butonu.",
+      "Satır biçimi: Tambur tam genişlik dikey liste (minHeight 52); picker sarmalayan chip bulutu — 8+ sebeple okunabilirlik farklı.",
+      "`requiresText` asgari uzunluk kapısı: Kaydet `VARIANCE_MIN_REASON_TEXT` ile kilitleniyor; picker seçili preset nesnesini dışarı vermiyor (yalnız `{code, text}`)."
+    ],
+    "alternatifler": "(A) olduğu gibi çevir — REDDEDİLDİ, yukarıdaki 8 yetenek düşer · (B) ReasonPresetPicker'ı bu 8 yetenekle genişlet (sürüklenebilir + kayan liste + katalog CRUD varyantı) ve üç tüketiciyi de ona taşı · (C) İ-23'ü 3/4'te kapat: ortak bileşen 'basit sebep seçimi' olarak kalsın, Tambur'un zengin ReasonStep'i kendi dosyasına (`Tambur/ReasonStepPanel.tsx`) çıkarılsın — [MO-33] fırsatçı bölme.",
+    "secilen": "karar-bekliyor — (B) ile (C) arasındaki seçim ÜRÜN kararıdır, ölçümle tek başına çözülmüyor.",
+    "soru": "ReasonPresetPicker sürüklenebilir + kayan liste + katalog CRUD taşıyan TEK bileşen mi olsun (o zaman iki basit tüketici de bu ağırlığı taşır), yoksa İ-23 3/4'te kapanıp Tambur'un zengin sebep adımı ayrı bir `Tambur/ReasonStepPanel.tsx` bileşenine mi çıkarılsın?"
+  },
+
+  "bekciler": {
+    "npx tsc --noEmit": 0,
+    "npx eslint . --no-cache": 0,
+    "node ../scripts/check-lint-baseline.mjs --proje=mobil": 0,
+    "npx jest (src/screens src/offline src/components)": "0 — 40 suite / 453 vaka geçti",
+    "npx jest (tam paket)": "1 — TEK kırmızı `src/test/scan-haptics.guard.test.ts`; BENİM DEĞİL: İ-20 ajanının uçuştaki signalScan çevirileri (FasonKabul/FasonSevk/Tambur/KartelaSevk/IadeGirisi handler'ları) bekçinin DEVRALINAN listesini bayatlattı. Bu turdan ÖNCE de kırmızıydı; düzeltmesi o ajanın alanında (listeden çevrilen 9 kaydı silmek)."
+  }
+}

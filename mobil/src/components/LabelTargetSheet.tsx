@@ -15,6 +15,7 @@ import { useQuery } from '@tanstack/react-query';
 import { orderService } from '../services/order.service';
 import { customerService } from '../services/customer.service';
 import { foldSearchText } from '../utils/searchFold';
+import { useTruncationWarning } from '../hooks/useTruncationWarning';
 
 // =============================================================================
 // Etiket Kime? — bir topun etiketi BASKI ANINDA kime basılacak (gevşek model:
@@ -101,6 +102,7 @@ export default function LabelTargetSheet({
     enabled: roll !== null && mode === 'manual',
     staleTime: 60_000,
   });
+  useTruncationWarning(custQ.data?.pagination, 'Müşteri');
   const customers = custQ.data?.data ?? [];
   const filteredCustomers = customers.filter((c) => {
     const q = foldSearchText(custSearch);

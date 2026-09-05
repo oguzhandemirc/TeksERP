@@ -29,8 +29,9 @@
 // ayrı bir tx açmak demektir: dışarıdaki `DRAFT → COMPLETED` claim'i o tx'e
 // GÖRÜNMEZ ve dış tx geri sarılırsa "iptal edilmiş top + sayım kaydı yok"
 // durumu kalıcı olur. Bu yüzden softDelete'in semantiği PARÇA PARÇA yeniden
-// KULLANILIR (aynı helper'lar: `closeOpenMovementsTx` · `writeWarehouseMovement`
-// · `recordVarianceTx`), yeniden YAZILMAZ.
+// KULLANILIR (aynı helper'lar: `closeOpenMovementsTx` · `writeWarehouseMovements`
+// · `recordVariancesTx` — çoğul kardeşler; semantik tekil ile birebir aynıdır),
+// yeniden YAZILMAZ.
 //
 // ⚠️ SAYIM METRAJA DOKUNMAZ. `countedQty` ROLL satırında BİLGİ NOTUDUR: metraj
 // düzeltmesi G4'ün işidir (`inventory.adjustRollQty` — kendi sapma kaydı, kendi
@@ -52,8 +53,8 @@ import { AuditService } from "./audit.service";
 import { withBarcodeRetry } from "../utils/barcode-retry";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { closeOpenMovementsTx } from "./helpers/roll-disposition.helper";
-import { writeWarehouseMovement } from "./helpers/warehouse-ledger.helper";
-import { recordVarianceTx } from "./helpers/roll-variance.helper";
+import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
+import { recordVariancesTx } from "./helpers/roll-variance.helper";
 import { applyYarnMovementTx } from "./yarn.service";
 import { syncPurchaseOrderSafely } from "./purchase-order.service";
 import { RollVarianceKind } from "@prisma/client";
@@ -607,19 +608,27 @@ export class StockCountService {
           reason: `${count.countNo} sayım farkı`,
         });
 
-        for (const a of applied) {
-          // DEPO DEFTERİ — mal depodan DÜŞTÜ (softDelete ile aynı olay tipi).
-          await writeWarehouseMovement(tx, {
+        // İKİ DEFTER, İKİ TOPLU YAZIM (perf kuralı 9). Döngü 1'in per-top CAS'ı
+        // SEMANTİKTİR (kaybedeni taze okumayla ayırt eder) ve orada kalır; buradaki
+        // yazımlar ise koşulsuzdur — `applied` kümesi zaten kazananların listesi.
+        // Tavanda (200 eksik top) 400 insert yerine 2 sorgu.
+        // DEPO DEFTERİ — mal depodan DÜŞTÜ (softDelete ile aynı olay tipi).
+        await writeWarehouseMovements(
+          tx,
+          applied.map((a) => ({
             rollId: a.rollId,
             eventType: WarehouseEventType.CANCEL,
             qty: a.qty,
             fromWarehouseId: count.warehouseId,
             userId: userId ?? null,
             notes: `${count.countNo} sayım farkı`,
-          });
+          })),
+        );
 
-          // SAPMA DEFTERİ — "bu metraj fiziksel olarak yoktu" (fire DEĞİL).
-          await recordVarianceTx(tx, {
+        // SAPMA DEFTERİ — "bu metraj fiziksel olarak yoktu" (fire DEĞİL).
+        await recordVariancesTx(
+          tx,
+          applied.map((a) => ({
             rollId: a.rollId,
             kind: RollVarianceKind.RECORD_CORRECTION,
             qty: a.qty,
@@ -627,8 +636,8 @@ export class StockCountService {
             reasonCode: STOCK_COUNT_REASON_CODE,
             reasonText: `${count.countNo} sayımında bulunamadı`,
             userId: userId ?? null,
-          });
-        }
+          })),
+        );
       }
 
       // ── 3) İPLİK FARKLARI ───────────────────────────────────────────────
@@ -674,11 +683,32 @@ export class StockCountService {
       // ── 4) KAPSAM DIŞI İŞARETLERİ ───────────────────────────────────────
       // Sessiz atlama yok: her atlanan satır SEBEBİYLE kaydedilir ve donmuş
       // belgede basılır.
+      // Satırlar SEBEBE göre gruplanır: `blockReason` KAPALI bir küme döner, yani
+      // tavanda (200 satır) 200 UPDATE yerine bir avuç `updateMany`.
+      // ⚠️ Sessiz atlama YOK — yazılan satır sayısı beklenenle karşılaştırılır.
+      // Tekil `update` eksik satırda P2025 fırlatıyordu; kural aynı kalır, yalnız
+      // mesaj okunur olur (`outOfScope` içinde aynı satır iki kez GEÇMEZ: ROLL ve
+      // YARN dalları ayrık kümeler üstünde koşar).
+      const byReason = new Map<string, string[]>();
       for (const o of outOfScope) {
-        await tx.stockCountLine.update({
-          where: { id: o.lineId },
-          data: { outOfScopeReason: o.reason.slice(0, 200) },
+        const reason = o.reason.slice(0, 200);
+        const bucket = byReason.get(reason);
+        if (bucket) bucket.push(o.lineId);
+        else byReason.set(reason, [o.lineId]);
+      }
+      let markedOutOfScope = 0;
+      for (const [reason, lineIds] of byReason) {
+        const res = await tx.stockCountLine.updateMany({
+          where: { id: { in: lineIds } },
+          data: { outOfScopeReason: reason },
         });
+        markedOutOfScope += res.count;
+      }
+      if (markedOutOfScope !== outOfScope.length) {
+        throw AppError.conflict(
+          `Kapsam dışı satırlar işaretlenemedi (${markedOutOfScope}/${outOfScope.length}) — ` +
+            "sayım satırları bu sırada değişti, tekrar deneyin.",
+        );
       }
 
       // ── 5) BELGE DONAR (tx İÇİNDE) ──────────────────────────────────────

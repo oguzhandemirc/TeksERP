@@ -16,6 +16,7 @@ import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
 import { rollService } from '../../../services/roll.service';
+import { signalScan } from '../../../services/scanFeedback';
 import { useKartelaFirms } from '../../../hooks/useKartelaFirms';
 import { useRefetchOnOpen } from '../../../hooks/useRefetchOnOpen';
 import { useDeviceSettingsStore } from '../../../store/deviceSettingsStore';
@@ -124,6 +125,9 @@ export default function KartelaSevkScreen() {
       const trimmed = normalizeScanCode(code);
       if (!trimmed) return;
       if (rolls.some((r) => r.barcode === trimmed)) {
+        // Mükerrer okutma: sessiz kalırsa operatör "okumadı" sanıp tekrar
+        // okutur, `accept` verilirse topu iki kez saydığını sanır.
+        signalScan('duplicate');
         Toast.show({ type: 'info', text1: 'Bu top zaten eklendi' });
         setBarcode('');
         return;
@@ -133,7 +137,7 @@ export default function KartelaSevkScreen() {
         const res = await rollService.getByBarcode(trimmed);
         const roll = res.data as Roll & { markedForKartela?: boolean };
         if (roll.status !== 'WAREHOUSE') {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          signalScan('reject');
           Toast.show({
             type: 'error',
             text1: 'Top kartelaya gönderilemez',
@@ -144,7 +148,7 @@ export default function KartelaSevkScreen() {
         // Çuvala/sevkiyata rezerve top serbest stok DEĞİL — kartelaya alınamaz
         // (backend zaten reddeder; burada operatöre net sebep gösteririz).
         if (roll.shipmentId) {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          signalScan('reject');
           Toast.show({
             type: 'error',
             text1: 'Top çuvalda — kullanılamaz',
@@ -165,10 +169,10 @@ export default function KartelaSevkScreen() {
             markedForKartela: Boolean(roll.markedForKartela),
           },
         ]);
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        signalScan('accept');
         setBarcode('');
       } catch (err) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: (err as Error).message });
       } finally {
         setResolving(false);

@@ -24,13 +24,13 @@ import {
   LabelKind,
   RawCodeLang,
   labelTemplateService,
-  type LabelTemplate,
+  type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
 import { CopiesInput } from "./CopiesInput";
 import { TemplatePrintPreview } from "./TemplatePrintPreview";
 
 interface Props {
-  template: LabelTemplate;
+  template: LabelTemplateListRow;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   /** Serbest etiket bağlamı — açıklama metnini "rulo verisi" yerine statik/örnek

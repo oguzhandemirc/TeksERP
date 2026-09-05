@@ -87,6 +87,7 @@ import {
   type TamburUndoMode,
 } from '../../../services/tambur.service';
 import { rollService } from '../../../services/roll.service';
+import { signalScan } from '../../../services/scanFeedback';
 import { customerService } from '../../../services/customer.service';
 import { itemService } from '../../../services/item.service';
 import { colorService } from '../../../services/color.service';
@@ -860,6 +861,8 @@ export default function TamburScreen() {
     retry: false,
     staleTime: 10 * 60 * 1000,
   });
+  useTruncationWarning(manualItemsQuery.data?.pagination, 'Kumaş');
+  useTruncationWarning(manualColorsQuery.data?.pagination, 'Renk');
 
   const manualItemOptions = useMemo<PickerOption[]>(
     () =>
@@ -962,6 +965,9 @@ export default function TamburScreen() {
     if (resolveInFlightRef.current) return;
     const existing = openJobs.find((j) => j.cardBarcode === barcode);
     if (existing) {
+      // Mükerrer okutma: kart zaten sekmede. Sessiz kalırsa operatör "okumadı"
+      // sanıp tekrar okutur, `accept` verilirse kartı yeniden açtığını sanır.
+      signalScan('duplicate');
       setActiveCardId(existing.cardId);
       if (fromInput) setCardBarcode('');
       Toast.show({ type: 'info', text1: 'Kart zaten açık' });
@@ -980,7 +986,7 @@ export default function TamburScreen() {
       const res = await tamburService.getByCardBarcode(barcode);
       const step = res.data as TamburStepSummary | undefined;
       if (!step) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'Kart bulunamadı', text2: barcode });
         return;
       }
@@ -997,7 +1003,7 @@ export default function TamburScreen() {
         context,
         selectedRollId: null,
       };
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      signalScan('accept');
       setOpenJobs((prev) => [...prev, newJob]);
       setActiveCardId(newJob.cardId);
       if (fromInput) setCardBarcode('');
@@ -1013,7 +1019,9 @@ export default function TamburScreen() {
       // yolla yeniden açılır. Bekleyen dağıtım yoksa davranış AYNEN eskisi.
       const bypass = await completeKursunBypassSilently(barcode);
       if (bypass.kind === 'done') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Sinyal YOK: bypass bir ARA adım, okutmanın sonucu değil. Kart hemen
+        // aşağıda yeniden çözülüyor ve sonucu (accept/reject) orası veriyor —
+        // burada da basmak tek okutmaya iki sinyal bindirirdi.
         // Onay DEĞİL, bilgi: operatör kurşun adımının ne zaman kapandığını
         // görmezse kartın neden birden açıldığını da anlamaz. Dağıtımsız
         // kapanışta metin AÇIKÇA farklıdır — "dağıtım yapılmadı ama iş yürüdü"
@@ -1047,7 +1055,7 @@ export default function TamburScreen() {
         reopenAfterBypass = true;
         if (fromInput) setCardBarcode('');
       } else if (bypass.kind === 'error') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: 'Kurşun bypass tamamlanamadı',
@@ -1081,7 +1089,8 @@ export default function TamburScreen() {
             context: emptyCtx,
             selectedRollId: null,
           };
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          // Kart AÇILDI (boş da olsa iş yüzeyi doğdu) → kabul.
+          signalScan('accept');
           setOpenJobs((prev) => [...prev, newJob]);
           setActiveCardId(newJob.cardId);
           if (fromInput) setCardBarcode('');
@@ -1091,7 +1100,7 @@ export default function TamburScreen() {
             text2: 'Saha düzeltmesi yapabilirsiniz (Topu Buraya Al / Manuel Top Ekle)',
           });
         } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          signalScan('reject');
           Toast.show({
             type: 'error',
             text1: 'Kart çözülemedi',
@@ -1494,6 +1503,9 @@ export default function TamburScreen() {
     },
   });
 
+  // Online-only (kuyruğa GİRMEZ): eklenen hata listeye yalnız sunucudan düşer
+  // (`refetchActiveJob`) ve onu tüketen finalize da online-only — kuyruktaki kayıt
+  // ait olduğu karardan SONRA gelirdi; `/tambur/report-error`te `clientErrorId` de yok.
   const reportErrorMutation = useMutation({
     mutationFn: tamburService.reportError,
     onSuccess: async () => {
@@ -1512,6 +1524,9 @@ export default function TamburScreen() {
     },
   });
 
+  // Online-only (kuyruğa GİRMEZ): silinecek `errorId` SUNUCU üretimidir (Kurşun'un
+  // `clientErrorId` sözleşmesi burada yok) — çevrimdışı eklenen hatanın silinecek
+  // kimliği olmaz; guard `isProcessed=false`, kuyruktaki silme finalize sonrası düşerdi.
   const deleteErrorMutation = useMutation({
     mutationFn: tamburService.deleteError,
     onSuccess: async () => {
@@ -6220,6 +6235,7 @@ function RecentOutputModal({
       }),
     enabled: visible,
   });
+  useTruncationWarning(itemsQuery.data?.pagination, 'Kumaş');
   const itemOptions = useMemo<PickerOption[]>(
     () =>
       (itemsQuery.data?.data ?? []).map((i) => ({
@@ -6376,6 +6392,7 @@ function RecentOutputModal({
       const res = await rollService.getByBarcode(trimmed);
       const roll = res.data as Roll | null;
       if (!roll) {
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'Top bulunamadı', text2: trimmed });
         return;
       }
@@ -6384,7 +6401,7 @@ function RecentOutputModal({
       // geçmiyordu: arşivdeki topun önizlemesi açılıyor ve ETİKETİ BASILABİLİYORDU
       // — fiziksel olarak var olmayan topun etiketi kumaşa yapıştırılabilirdi.
       if (ARCHIVED_ROLL_STATUSES.includes(roll.status)) {
-        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: 'Bu top arşivde',
@@ -6393,8 +6410,12 @@ function RecentOutputModal({
         });
         return;
       }
+      // Sessiz dallardı: sinyalsiz okutmada operatör "okumadı" sanıp tekrar
+      // okutuyordu (İ-20).
+      signalScan('accept');
       setPreviewRoll(roll);
     } catch (e) {
+      signalScan('reject');
       Toast.show({ type: 'error', text1: 'Okunamadı', text2: (e as Error).message });
     } finally {
       setScanResolving(false);

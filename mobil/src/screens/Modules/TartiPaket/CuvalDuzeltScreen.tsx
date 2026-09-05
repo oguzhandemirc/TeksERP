@@ -26,6 +26,7 @@ import { LabelPrinter } from '../../../components/LabelPrinter';
 import type { Roll } from '../../../types/models';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 
 // =============================================================================
 // Çuval Düzeltme (saha #3) — top okutarak yerini bul, HAVUZ çuvalında düzelt:
@@ -116,6 +117,7 @@ export default function CuvalDuzeltScreen() {
     queryFn: () => colorService.listPublicForPicker({ page: 1, pageSize: 300, sortBy: 'name', sortOrder: 'asc' }),
     enabled: colorPickOpen,
   });
+  useTruncationWarning(colorsQ.data?.pagination, 'Renk');
   const colorOptions: PickerOption[] = (colorsQ.data?.data ?? []).map((c) => ({
     value: c.id,
     label: c.name,

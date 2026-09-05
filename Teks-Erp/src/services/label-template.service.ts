@@ -129,6 +129,14 @@ export async function assertTemplateAssignable(
 /** Uzman raw-code override (dil→kod). Boş string'ler temizlenir = o dilde otomatik. */
 export type RawCodeMap = Partial<Record<"PPLA" | "PPLB" | "ZPL" | "RASTER_HTML", string>>;
 
+/**
+ * Havuz LİSTESİ satırı — tasarım gövdesi (`fields`, `rawCode`) yok. Liste hiçbir
+ * yüzeyde bu ikisini okumaz (Etiket Stüdyosu `getById` ile tam satırı çeker);
+ * tip de bunu söyler ki ileride biri `row.fields` yazıp sessizce `undefined`
+ * almasın.
+ */
+export type LabelTemplateListRow = Omit<LabelTemplate, "fields" | "rawCode">;
+
 export interface LabelTemplateInput {
   name: string;
   /** Türlü şablonda zorunlu; serbest (statik) şablonda verilmez/null → kind null doğar. */
@@ -196,6 +204,13 @@ export class LabelTemplateService {
   // READS
   // ---------------------------------------------------------------------------
 
+  /**
+   * Havuz listesi. `fields` + `rawCode` KASITLI olarak dışarıda: ikisi de yalnız
+   * Etiket Stüdyosu'nun (getById) okuduğu tasarım gövdesidir, listede hiçbir
+   * yüzey onları okumaz — ama satırın ~%72'sini onlar kaplıyor (ölçüm
+   * 2026-09-05: 4 canlı şablon = 5.869 B JSON, `fields` 4.233 B).
+   * `traveler-card.service.ts` `omit: { snapshot: true }` ile aynı kalıp.
+   */
   async findAll(opts?: {
     kind?: LabelKind;
     includeInactive?: boolean;
@@ -203,7 +218,7 @@ export class LabelTemplateService {
     standalone?: boolean;
     /** true → yalnız atanabilir şablonlar (serbest OLMAYAN — atama seçicileri). */
     assignable?: boolean;
-  }): Promise<ApiResponse<LabelTemplate[]>> {
+  }): Promise<ApiResponse<LabelTemplateListRow[]>> {
     const rows = await prisma.labelTemplate.findMany({
       where: {
         deletedAt: null, // KALICI silinenler hiçbir listede görünmez (pasifler görünür)
@@ -216,6 +231,7 @@ export class LabelTemplateService {
             ? { NOT: { standalone: true } } // null-safe "serbest değil"
             : {}),
       },
+      omit: { fields: true, rawCode: true },
       // Havuz listesi varyant boyutlarını rozet olarak gösterir — minimal select.
       include: {
         variants: {

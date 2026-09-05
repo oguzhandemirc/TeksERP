@@ -83,6 +83,7 @@ import {
   type MaybeWrongReceiptDetails,
 } from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
+import { signalScan } from '../../../services/scanFeedback';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useReasonPresets } from '../../../hooks/useReasonPresets';
 import ReasonPresetPicker, {
@@ -970,12 +971,14 @@ export default function FasonKabulScreen() {
       const res = await travelerCardService.findByBarcode(barcode);
       const card = res.data as TravelerCardLookup | null;
       if (!card) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'Refakat kartı bulunamadı', text2: barcode });
         return;
       }
       if (card.status !== 'ACTIVE') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        // "Kabul edilmedi" sınıfının tamamı `reject`; sözleşmede dördüncü bir
+        // "uyarı" sonucu yok (services/scanFeedback).
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: `Kart geçersiz: ${card.status}`,
@@ -995,7 +998,9 @@ export default function FasonKabulScreen() {
       } catch (err) {
         const e = err as Error & { details?: PendingReturnErrorDetails };
         const details = e.details;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        // Üç dalın üçünde de kart kabul edilmedi (teşhis kartı da bir REDdir —
+        // Depo'daki iptalli top emsali).
+        signalScan('reject');
         if (details?.code === 'NEEDS_DISPATCH') {
           setCardBarcode('');
           setScanAction({ kind: 'NEEDS_DISPATCH', message: e.message, details });
@@ -1019,6 +1024,9 @@ export default function FasonKabulScreen() {
       }
 
       if (matching.length === 0) {
+        // Sessiz kalırsa operatör "okumadı" sanıp aynı kartı tekrar okutur;
+        // kart geçerli ama iş doğmadı → sonuç RET.
+        signalScan('reject');
         Toast.show({
           type: 'info',
           text1: 'Bekleyen sevk yok',
@@ -1032,7 +1040,7 @@ export default function FasonKabulScreen() {
       setRightTab('pending');
 
       if (matching.length === 1) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        signalScan('accept');
         Toast.show({
           type: 'success',
           text1: 'Sevk bulundu',
@@ -1040,6 +1048,8 @@ export default function FasonKabulScreen() {
         });
         selectGroup(matching[0]);
       } else {
+        // Çoklu adım: bu bir SORU (hangisi?), okutmanın sonucu değil — sonuç
+        // seçimden sonra doğar, o yüzden burada sinyal yok (KursunQc emsali).
         Toast.show({
           type: 'info',
           text1: `${matching.length} fason adımı bulundu`,
@@ -1047,7 +1057,7 @@ export default function FasonKabulScreen() {
         });
       }
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({
         type: 'error',
         text1: 'Kart sorgulanamadı',
