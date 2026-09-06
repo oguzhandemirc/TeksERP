@@ -11,24 +11,45 @@
 //   2. `TEST-SINV-*` toplar WAREHOUSE/AT_KARTELA statüsünde kalır → Envanter
 //      ekranlarında hayalet stok olarak görünür.
 //
-// ⚠️ GÜVENLİK — SADECE KOD/BARKOD ÖNEKİ: silme kararı yalnız aşağıdaki test
-// öneklerine bakar. AD'a göre HİÇBİR silme yapılmaz (ad eşleşmesi fabrika kaydını
-// da yakalardı). Fabrika verisinin kodları bu önekleri taşımaz.
+// ⚠️ GÜVENLİK — SADECE KİMLİK ALANI: silme kararı yalnız kod/barkod/sipariş no
+// üzerindeki `TEST-`/`TST-` damgasına bakar. AD'a göre HİÇBİR silme yapılmaz
+// (ad eşleşmesi fabrika kaydını da yakalardı). Damganın fabrika verisinde SIFIR
+// satır eşlediği 2026-09-05 yedeği üzerinde ölçüldü — bkz. `TEST_DAMGALARI`.
 //
 // Silinemeyen satır SESSİZCE ATLANMAZ, raporlanır: bir fixture'ın neden
 // silinemediği ("şu top hâlâ o rengi kullanıyor") testin temizlik sırasındaki
 // gerçek bir hatasına işaret edebilir.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
+import { assertGelistirmeVeritabani } from "./db-guard";
+
+// ⚠️ İLK İFADE — bu betik geri alınamaz silme yapar ve hedefini `DATABASE_URL`den
+// okur. Kapı 2026-09-06'da eklendi: betik silmeyi Prisma `deleteMany` ile yaptığı
+// için `test_script_guards`ın ham-SQL izleri onu yıkıcı olarak GÖRMÜYORDU; yani
+// kapısız kaldığı fark edilmemişti.
+assertGelistirmeVeritabani("clean_test_residue");
 
 const APPLY = process.argv.includes("--apply");
 
-/** Test fixture önekleri — TEK KAYNAK. Yeni bir test öneki doğarsa buraya ekle. */
-const ROLL_BARCODE_PREFIXES = ["TEST-SINV-R", "TST-ADS-R", "TEST-AEX-R", "TST-AR-R"];
-const ORDER_NO_PREFIXES = ["TST-ADS-ORD"];
-const ITEM_CODE_PREFIXES = ["TST-NRM-", "TEST-SINV-I-", "TST-AEX-"];
-const COLOR_CODE_PREFIXES = ["TST-ADS-C-", "TST-NRM-C-", "TST-AR-C-", "TST-AEX-C-"];
-const CUSTOMER_CODE_PREFIXES = ["TST-ADS-", "TST-AEX-"];
+/**
+ * Test fixture damgası — ENVANTER DEĞİL DESEN (2026-09-06).
+ *
+ * ÖNCE ne vardı: elle tutulan 14 önekli bir liste ("yeni bir önek doğarsa buraya
+ * ekle"). ÖLÇÜLDÜ: o liste dev veritabanındaki 313 artık topun SIFIRINI eşliyordu;
+ * bekçi dosyalarında geçen farklı `TEST-`/`TST-` öneki sayısı 406'ydı. Elle sayılan
+ * kapsam listesi bu repoda zaten yasak (kök CLAUDE.md § Yasaklar) — envanter
+ * tutulmaz, desen tutulur.
+ *
+ * ⚠️ GÜVENLİK SONDASI (2026-09-06, fabrikanın 2026-09-05 yedeği üzerinde):
+ * bu desen FABRİKA verisinde rolls/work_orders/orders/items/colors/customers/sacks
+ * tablolarının hiçbirinde tek satır bile eşlemedi (0). Aynı desen dev veritabanında
+ * 328 top + 5 ürün + 7 müşteri yakalıyor.
+ *
+ * ⚠️ YALNIZ KİMLİK ALANI: eşleşme yalnız kod/barkod/sipariş no üzerinde yapılır.
+ * AD'a göre HİÇBİR silme yoktur — ad eşleşmesi fabrika kaydını da yakalardı ve
+ * fixture adlarının damgasız olabildiği ölçüldü ([DB-29d]).
+ */
+const TEST_DAMGALARI = ["TEST-", "TST-"];
 
 const orPrefix = (field: string, prefixes: string[]) =>
   prefixes.map((p) => ({ [field]: { startsWith: p } }));
@@ -53,10 +74,10 @@ async function main() {
 
   // ── 1) TOPLAR — bağımlı satırlar önce, FK sırası test teardown'larıyla aynı ──
   const rolls = await prisma.roll.findMany({
-    where: { OR: orPrefix("barcode", ROLL_BARCODE_PREFIXES) },
+    where: { OR: orPrefix("barcode", TEST_DAMGALARI) },
     select: { id: true, barcode: true, status: true },
   });
-  console.log(`\n── TOPLAR — ${rolls.length} artık (${ROLL_BARCODE_PREFIXES.join(", ")}) ──`);
+  console.log(`\n── TOPLAR — ${rolls.length} artık (${TEST_DAMGALARI.join(", ")}) ──`);
   planned += rolls.length;
   if (!APPLY) for (const r of rolls) console.log(`  • ${r.barcode} [${r.status}]`);
   const rollIds = rolls.map((r) => r.id);
@@ -116,10 +137,10 @@ async function main() {
 
   // ── 2) SİPARİŞLER ──
   const orders = await prisma.order.findMany({
-    where: { OR: orPrefix("orderNumber", ORDER_NO_PREFIXES) },
+    where: { OR: orPrefix("orderNumber", TEST_DAMGALARI) },
     select: { id: true, orderNumber: true },
   });
-  console.log(`\n── SİPARİŞLER — ${orders.length} artık (${ORDER_NO_PREFIXES.join(", ")}) ──`);
+  console.log(`\n── SİPARİŞLER — ${orders.length} artık (${TEST_DAMGALARI.join(", ")}) ──`);
   planned += orders.length;
   if (!APPLY) for (const o of orders) console.log(`  • ${o.orderNumber}`);
   const orderIds = orders.map((o) => o.id);
@@ -136,10 +157,10 @@ async function main() {
 
   // ── 3) MASTER DATA — şubeler müşteriden ÖNCE ──
   const targets = [
-    { label: "ŞUBE", model: "customerBranch" as const, where: { customer: { OR: orPrefix("code", CUSTOMER_CODE_PREFIXES) } } },
-    { label: "MÜŞTERİ", model: "customer" as const, where: { OR: orPrefix("code", CUSTOMER_CODE_PREFIXES) } },
-    { label: "RENK", model: "color" as const, where: { OR: orPrefix("code", COLOR_CODE_PREFIXES) } },
-    { label: "ÜRÜN", model: "item" as const, where: { OR: orPrefix("code", ITEM_CODE_PREFIXES) } },
+    { label: "ŞUBE", model: "customerBranch" as const, where: { customer: { OR: orPrefix("code", TEST_DAMGALARI) } } },
+    { label: "MÜŞTERİ", model: "customer" as const, where: { OR: orPrefix("code", TEST_DAMGALARI) } },
+    { label: "RENK", model: "color" as const, where: { OR: orPrefix("code", TEST_DAMGALARI) } },
+    { label: "ÜRÜN", model: "item" as const, where: { OR: orPrefix("code", TEST_DAMGALARI) } },
   ];
 
   for (const t of targets) {
