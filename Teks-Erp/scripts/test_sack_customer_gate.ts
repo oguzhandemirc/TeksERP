@@ -156,7 +156,13 @@ async function main() {
     // ── §9 VARSAYILAN mod: TÜM cariler (2026-09-04 akşam kararı) ──────────
     // ⚠️ Bu bölüm §1'in TERSİNİ ölçer ve bu bilinçli: §1 artık "süzgeç açıkken"
     //    kuralıdır, §9 "süzgeç kapalıyken" (varsayılan) kuralıdır.
-    const tumu = (await svc.listSackCustomers({})).data;
+    // ⚠️ SÜZGEÇ LOAD-BEARING (2026-09-06): eskiden `listSackCustomers({})` ile TÜM
+    // liste isteniyordu ve §9d fixture'ın sayfada olduğunu VARSAYIYORDU. Sayfa
+    // ~101 satırla sınırlı; dev veritabanı 99 aktif cariye çıkınca "ZZKAPI ALFA"
+    // sayfanın DIŞINA düştü ve kontrol `dolu=-1` ile kırmızı verdi — ölçtüğü kural
+    // (çuvallı üstte) bozulmadığı hâlde. Bekçi ortamdaki kayıt SAYISINA bağımlı
+    // olamaz ([TD-17]); fixture'ını kendi öneğiyle SÜZER.
+    const tumu = (await svc.listSackCustomers({ search: `ZZKAPI` })).data;
     const tumIds = new Set(tumu.items.map((r) => r.customerId));
     check(
       "⭐ §9a Varsayılan mod ÇUVALSIZ cariyi de döndürüyor (kapı artık katalog kapısı)",

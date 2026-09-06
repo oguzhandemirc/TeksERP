@@ -905,20 +905,33 @@ async function main(): Promise<void> {
     check("HTTP: /auth/me `permissions` = ['*']", JSON.stringify(meData.permissions) === '["*"]', JSON.stringify(meData.permissions));
     check("HTTP: /auth/me `systemAccountExists: true`", meData.systemAccountExists === true);
 
-    // (2) Süperadmin kendini LİSTEDE GÖRMEZ (gizlilik uçtan uca)
+    // (2) SÜPERADMİN LİSTEDE GÖRÜNÜR — 2026-09-04 kararı.
+    // ⚠️ BU BÖLÜM 2026-09-06'DA DÜZELTİLDİ ve düzeltme kendi başına bir bulgudur:
+    // buradaki dört kontrol GERİ ALINMIŞ bir davranışı ("gizle") ölçüyordu ve
+    // `docs/kurallar/superadmin.md`:14 ile açıkça çelişiyordu ("En yetkili hesap
+    // GİZLENMEZ … maskSystemActor geri getirilmez"), üstelik `test_superadmin_visible`
+    // tam TERSİNİ ölçüp yeşil veriyordu. İki bekçi iki gün boyunca birbirine zıt
+    // hüküm verdi ve KİMSE GÖRMEDİ — çünkü bu bölüm sunucu olmadan ATLANIYOR ve
+    // atlanan kontrol yeşil sayılıyordu. "Yeşil ≠ kapsandı" bunun için var.
     const liste = await (await fetch(`${BASE}/api/admin/users`, { headers: auth })).json();
     const satirlar = ((liste as { data?: Array<{ username?: string }> }).data ?? []);
     check(
-      "HTTP: kullanıcı listesinde sistem hesabı YOK (kendini bile görmez)",
-      satirlar.length > 0 && !satirlar.some((u) => u.username === FIXTURE_USERNAME),
+      "HTTP: ⭐ kullanıcı listesinde sistem hesabı GÖRÜNÜR (gizleme geri gelmedi)",
+      satirlar.some((u) => u.username === FIXTURE_USERNAME),
       `${satirlar.length} satır`,
     );
 
-    // (3) id → PIN zinciri: kendi id'siyle bile 404
+    // (3) OKUMA SERBEST, yazma dar kapılı. `protectSystemAccountTarget` GET'i
+    //     geçirir; 404 değil 403 rejimi (superadmin.md:52 — "varlık açık,
+    //     yanlış bilgi vermenin anlamı yok").
     const kunye = await fetch(`${BASE}/api/admin/users/${fixtureId}`, { headers: auth });
-    check("HTTP: /admin/users/:id (sistem hesabı) → 404", kunye.status === 404, `${kunye.status}`);
+    check("HTTP: /admin/users/:id (sistem hesabı) OKUNABİLİR — 404 rejimi geri gelmedi", kunye.status === 200, `${kunye.status}`);
     const kimlik = await fetch(`${BASE}/api/admin/users/${fixtureId}/credentials`, { headers: auth });
-    check("HTTP: /credentials (sistem hesabı) → 404 (DÜZ PIN sızmaz)", kimlik.status === 404, `${kimlik.status}`);
+    check(
+      "HTTP: /credentials hesabın KENDİSİNE açık (kendi hesabını yönetir); fabrika admini için ayrı dar kapı var",
+      kimlik.status === 200,
+      `${kimlik.status}`,
+    );
 
     // (4) Modül anahtarı: süperadmin YAZAR — gerçek değeri DEĞİŞTİRMEDEN
     //     (mevcut değeri okuyup AYNISINI yazarız; bekçi durum bozmaz).
@@ -964,10 +977,20 @@ async function main(): Promise<void> {
       satirlar2.length > 0,
       `${satirlar2.length} satır`,
     );
+    // ⚠️ YÜKLEM DÜZELTİLDİ (2026-09-06): eskiden `fullName !== "Sistem Bakımı"`
+    // aranıyordu ve bu KENDİ FIXTURE'IYLA ÇELİŞİYORDU — fixture hesabı tam o adla
+    // yaratıyor (`SYSTEM_ACCOUNT_FULLNAME`, :578) ve provisioning betiği de canlıda
+    // aynı adı yazıyor (`superadmin-olustur.ts`). Yani kontrol "maskeleme var mı"yı
+    // değil BİR METNİ ölçüyordu ve maskeleme olmasa da kırmızı verirdi.
+    // Ölçülmesi gereken değişmez: audit aktörü hesabın GERÇEK kimliğidir —
+    // `maskSystemActor` gibi bir İKAME yok (kaldırıldı, geri gelmemeli).
+    // Bu hata iki gün görülmedi çünkü bölüm sunucusuz ATLANIYORDU.
     check(
-      "HTTP: audit aktörü GERÇEK adıyla basılıyor (takma ad YOK)",
+      "HTTP: ⭐ audit aktörü hesabın GERÇEK kimliği (ikame/maske YOK)",
       satirlar2.length > 0 &&
-        satirlar2.every((r) => r.user?.username !== "sistem" && r.user?.fullName !== "Sistem Bakımı"),
+        satirlar2.every(
+          (r) => r.user?.username === FIXTURE_USERNAME && r.user?.fullName === SYSTEM_ACCOUNT_FULLNAME,
+        ),
       JSON.stringify(satirlar2[0]?.user ?? null),
     );
     const authSatirlari = satirlar2.filter((r) => r.tableName === "AUTH");

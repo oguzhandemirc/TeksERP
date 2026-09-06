@@ -124,8 +124,50 @@ jobs:
       - name: Type-check (scripts + prisma)
         run: set -o pipefail; npm run typecheck:scripts 2>&1 | tee -a /tmp/ci-backend.log
         shell: bash
+      # HTTP AYAKLI BEKÇİLER (2026-09-06) — beş bekçi kendi portunda bir sunucu
+      # bekler; yoksa o bölümleri SESSİZCE atlar. Ölçüldü: CI'da 53 kontrol hiç
+      # koşmuyordu ve içlerinde İKİ GERÇEK ARIZA saklıydı (`test_superadmin`in
+      # HTTP bölümü geri alınmış bir davranışı ölçüyordu ve kendi fixture'ıyla
+      # çelişen bir yüklem taşıyordu — iki gün görülmedi).
+      #
+      # ⚠️ YALNIZ CI'DA. Yerel koşucuya süreç yönetimi SOKULMAZ: kök CLAUDE.md
+      # "ikinci Node süreci yasak" ve `pkill -f tsx` yasağı orada geçerli. Burada
+      # ortam zaten sıfırdan kuruluyor ve job bitince kendi kendine gidiyor.
+      #
+      # ⚠️ Portlar bekçilerin VARSAYILANLARIDIR (`TEST_API_URL` verilmezse bunlar
+      # kullanılır): finance 4100 · module_flag_off 4101 · superadmin 4104 ·
+      # settings_password 4112 · module_profile 4122.
+      - name: HTTP ayaklı bekçiler için sunucuları başlat
+        run: |
+          set -o pipefail
+          for port in 4100 4101 4104 4112 4122; do
+            PORT=$port npx tsx src/server.ts > "/tmp/ci-srv-$port.log" 2>&1 &
+            echo "$!" >> /tmp/ci-srv-pids.txt
+          done
+          # Sağlık kapısı: hepsi ayağa kalkana kadar bekle. Kalkmayan varsa
+          # SESSİZCE devam etme — atlanan kontrol yeşil sayılır ve kapsam kaybı
+          # yine görünmez olurdu.
+          for port in 4100 4101 4104 4112 4122; do
+            for i in $(seq 1 60); do
+              if curl -sf "http://localhost:$port/health" > /dev/null; then break; fi
+              if [ "$i" = "60" ]; then
+                echo "❌ Sunucu ayağa kalkmadı: $port"; tail -30 "/tmp/ci-srv-$port.log"; exit 1
+              fi
+              sleep 1
+            done
+            echo "✅ $port hazır"
+          done
+
       - name: Test suite (scripts/test_*.ts runner)
         run: set -o pipefail; npm test 2>&1 | tee -a /tmp/ci-backend.log
+
+      # Kendi başlattığımız PID'ler — `pkill` YOK (kök CLAUDE.md yasağı).
+      - name: Sunucuları durdur
+        if: always()
+        run: |
+          if [ -f /tmp/ci-srv-pids.txt ]; then
+            while read -r pid; do kill "$pid" 2>/dev/null || true; done < /tmp/ci-srv-pids.txt
+          fi
         shell: bash
       # TEŞHİS: backend job'ı başarısız olursa logun sonunu PR'a yorum olarak yaz
       # (GitHub MCP'de Actions log erişimi yok → gerçek hatayı buradan okuruz).
