@@ -61,7 +61,7 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 > garanti. İkisi birden açık kalırsa her gece iki dump alınır.
 
 Deploy akışı: **§3 (paket tabanlı)** + `deploy/README.md`. Yedek/geri yükleme denetimi:
-`docs/ops/PM2-GECIS-DEVIR-NOTU.md` (deploy adımları orada tarihseldir).
+`docs/history/PM2-GECIS-DEVIR-NOTU.md` (deploy adımları orada tarihseldir).
 
 ---
 

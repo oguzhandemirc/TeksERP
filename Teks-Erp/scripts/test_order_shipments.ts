@@ -2,7 +2,7 @@
 // Çalıştırma:  npx tsx scripts/test_order_shipments.ts
 //
 // Sözleşme: çuval sevki (DISPATCHED + PLANNED, CANCELLED hariç) + fason direkt sevk
-// birleşir; dispatchedTotal = order.shippedQty ile MUTABIK (computeLineLedger de
+// birleşir; dispatchedTotal = order.shippedQty ile MUTABIK (computeLineLedgerTx de
 // DISPATCHED çuval + direkt toplar). Bilgilendirici snapshot.
 //
 // Veri: müşteri + item + order(2 kalem) + 3 çuval-sevki (DISPATCHED/PLANNED/CANCELLED)
@@ -14,13 +14,17 @@
 //   2. CANCELLED sevk (SC) listede YOK
 //   3. dispatchedTotal = DISPATCHED çuval (60) + direkt (30) = 90
 //   4. plannedTotal = PLANNED çuval (40)
-//   5. recomputeOrderStatus sonrası dispatchedTotal === Σ line.shippedQty (mutabakat)
+//   5. recomputeOrderStatusTx sonrası dispatchedTotal === Σ line.shippedQty (mutabakat)
 //   6. Dönüş tipleri number
 
 import { ShipmentStatus, StationType, WorkOrderStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { OrderService } from "../src/services/order.service";
-import { recomputeOrderStatus } from "../src/services/helpers/order-status.helper";
+import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
+
+// Koşum damgası MODÜL kapsamında: temizlik hem `finally`den hem de kurulum
+// ortasında düşen koşumun `catch`inden çağrılabilsin diye.
+const ts = Date.now();
 
 let pass = 0;
 let fail = 0;
@@ -34,6 +38,43 @@ function check(label: string, ok: boolean, detail = ""): void {
   }
 }
 
+/**
+ * Ters FK sırasıyla temizlik — anahtar ID DEĞİL, ts DAMGALI İŞ ANAHTARI.
+ * Fixture kurulumu `try`den ÖNCE koşuyor: ortada bir `create` düşerse ID
+ * değişkenleri hiç doğmaz, ID'ye dayanan `finally`ye de girilmez ve artık dev
+ * DB'sinde kalır. ÖLÇÜLDÜ (2026-09-05): yarım kalmış bir koşumun `TEST-OSH-…`
+ * sipariş/çuval/sevkiyat artığı `test_consistency` §1 ve §6'yı kırmızıya
+ * düşürdü. Bu yüzden temizlik iş anahtarından türer ve `catch`ten de çağrılır.
+ */
+async function cleanup(): Promise<void> {
+  const kuyruk = `-${ts}`;
+  await prisma.subcontractorDirectShipAllocation.deleteMany({
+    where: { orderLine: { order: { orderNumber: `TEST-OSH-${ts}` } } },
+  });
+  await prisma.directShipment.deleteMany({ where: { shipmentNo: `TST-OSH-DSK-${ts}` } });
+  await prisma.subcontractorDispatch.deleteMany({ where: { dispatchNo: `TST-OSH-SD-${ts}` } });
+  await prisma.batch.deleteMany({ where: { batchNumber: `TST-OSH-BATCH-${ts}` } });
+  await prisma.workOrderStep.deleteMany({
+    where: { workOrder: { workOrderNumber: `TEST-OSH-WO-${ts}` } },
+  });
+  await prisma.workOrder.deleteMany({ where: { workOrderNumber: `TEST-OSH-WO-${ts}` } });
+  await prisma.sackAllocation.deleteMany({
+    where: { sack: { sackNo: { startsWith: "TST-OSH-SACK-", endsWith: kuyruk } } },
+  });
+  await prisma.sack.deleteMany({
+    where: { sackNo: { startsWith: "TST-OSH-SACK-", endsWith: kuyruk } },
+  });
+  await prisma.shipment.deleteMany({
+    where: { shipmentNo: { startsWith: "TST-OSH-S", endsWith: kuyruk } },
+  });
+  await prisma.orderLine.deleteMany({ where: { order: { orderNumber: `TEST-OSH-${ts}` } } });
+  await prisma.order.deleteMany({ where: { orderNumber: `TEST-OSH-${ts}` } });
+  await prisma.subcontractor.deleteMany({ where: { code: `TST-OSH-SUB-${ts}` } });
+  await prisma.station.deleteMany({ where: { code: `TST-OSH-STN-${ts}` } });
+  await prisma.item.deleteMany({ where: { code: `TST-OSH-ITM-${ts}` } });
+  await prisma.customer.deleteMany({ where: { code: `TST-OSH-CUS-${ts}` } });
+}
+
 async function main(): Promise<void> {
   const svc = new OrderService({
     modelName: "order",
@@ -44,7 +85,6 @@ async function main(): Promise<void> {
     nestedCreateFields: ["lines"],
   });
 
-  const ts = Date.now();
   const created: { table: string; id: string }[] = [];
   const track = <T extends { id: string }>(table: string, row: T): T => {
     created.push({ table, id: row.id });
@@ -164,7 +204,7 @@ async function main(): Promise<void> {
       res.plannedTotal === 40, `plannedTotal=${res.plannedTotal}`);
 
     // 5. Mutabakat: recompute sonrası dispatchedTotal === Σ line.shippedQty
-    await prisma.$transaction((tx) => recomputeOrderStatus(tx, order.id));
+    await prisma.$transaction((tx) => recomputeOrderStatusTx(tx, order.id));
     const lines = await prisma.orderLine.findMany({
       where: { orderId: order.id }, select: { shippedQty: true },
     });
@@ -176,21 +216,7 @@ async function main(): Promise<void> {
       typeof res.dispatchedTotal === "number" && typeof res.plannedTotal === "number" &&
       res.shipments.every((s) => typeof s.qty === "number"));
   } finally {
-    // Ters bağımlılık sırası ile temizle.
-    await prisma.subcontractorDirectShipAllocation.deleteMany({ where: { orderLine: { orderId: order.id } } });
-    await prisma.directShipment.deleteMany({ where: { id: directShip.id } });
-    await prisma.subcontractorDispatch.deleteMany({ where: { id: dispatch.id } });
-    await prisma.batch.deleteMany({ where: { id: batch.id } });
-    await prisma.workOrderStep.deleteMany({ where: { id: step.id } });
-    await prisma.workOrder.deleteMany({ where: { id: wo.id } });
-    await prisma.sackAllocation.deleteMany({ where: { orderLine: { orderId: order.id } } });
-    await prisma.sack.deleteMany({ where: { id: { in: [skD.id, skP.id, skC.id] } } });
-    await prisma.shipment.deleteMany({ where: { id: { in: [sd.id, sp.id, sc.id] } } });
-    await prisma.order.deleteMany({ where: { id: order.id } });
-    await prisma.subcontractor.deleteMany({ where: { id: sub.id } });
-    await prisma.station.deleteMany({ where: { id: station.id } });
-    await prisma.item.deleteMany({ where: { id: item.id } });
-    await prisma.customer.deleteMany({ where: { id: customer.id } });
+    await cleanup();
     await prisma.$disconnect();
   }
 
@@ -198,7 +224,10 @@ async function main(): Promise<void> {
   process.exit(fail > 0 ? 1 : 0);
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("Beklenmeyen hata:", err);
+  // Kurulum ortasında düşen koşum `finally`ye hiç giremez — artığı burada al.
+  await cleanup().catch(() => {});
+  await prisma.$disconnect().catch(() => {});
   process.exit(1);
 });

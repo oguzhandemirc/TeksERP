@@ -11,7 +11,7 @@
 //   - quality-grade.helper       resolveQualityGradeId (lenient) +
 //                                resolveQualityGradeIdStrict (400 katalog/pasif)
 //   - customer-name.helper       resolveName cascade + normalizeOverride
-//   - order-status.helper        recomputeOrderStatus (APPROVED/PARTIAL/COMPLETED,
+//   - order-status.helper        recomputeOrderStatusTx (APPROVED/PARTIAL/COMPLETED,
 //                                CANCELLED & manuel terminal, re-open, tolerans)
 //   - roll-step.helper           recomputeStepStatus (PENDING/ACTIVE/COMPLETED,
 //                                SKIPPED terminal), canRollGoBackFromStep,
@@ -34,7 +34,7 @@ import {
   normalizeItemName,
   normalizeColorName,
 } from "../src/services/helpers/name-normalize.helper";
-import { recomputeOrderStatus } from "../src/services/helpers/order-status.helper";
+import { recomputeOrderStatusTx } from "../src/services/helpers/order-status.helper";
 import {
   recomputeStepStatus,
   canRollGoBackFromStep,
@@ -194,7 +194,7 @@ function makeOrderTx(order: OrderRow | null, tolerance = 5) {
     systemSetting: {
       findUnique: async () => ({ value: String(tolerance) }),
     },
-  } as unknown as Parameters<typeof recomputeOrderStatus>[0];
+  } as unknown as Parameters<typeof recomputeOrderStatusTx>[0];
   return { tx, updates };
 }
 
@@ -202,33 +202,33 @@ async function testOrderStatus() {
   // shipped 0 → APPROVED
   {
     const { tx } = makeOrderTx({ id: "o1", status: "PENDING", completedAt: null, manualClosedById: null, lines: [{ quantity: 100, shippedQty: 0 }] });
-    const r = await recomputeOrderStatus(tx, "o1");
+    const r = await recomputeOrderStatusTx(tx, "o1");
     check("order: shipped 0 → APPROVED", r?.newStatus === "APPROVED" && r?.changed === true, r?.newStatus);
   }
   // kısmi → PARTIAL_SHIPPED
   {
     const { tx } = makeOrderTx({ id: "o2", status: "APPROVED", completedAt: null, manualClosedById: null, lines: [{ quantity: 100, shippedQty: 40 }] });
-    const r = await recomputeOrderStatus(tx, "o2");
+    const r = await recomputeOrderStatusTx(tx, "o2");
     check("order: kısmi sevk → PARTIAL_SHIPPED", r?.newStatus === "PARTIAL_SHIPPED", r?.newStatus);
   }
   // tolerans içinde → COMPLETED + completedAt yazılır
   {
     const order: OrderRow = { id: "o3", status: "PARTIAL_SHIPPED", completedAt: null, manualClosedById: null, lines: [{ quantity: 100, shippedQty: 96 }] };
     const { tx, updates } = makeOrderTx(order, 5);
-    const r = await recomputeOrderStatus(tx, "o3");
+    const r = await recomputeOrderStatusTx(tx, "o3");
     check("order: kalan ≤ tolerans → COMPLETED", r?.newStatus === "COMPLETED", r?.newStatus);
     check("order: COMPLETED'de completedAt damgalandı", updates.some((u) => u.completedAt instanceof Date));
   }
   // tolerans tam sınırda (kalan == tolerans) → COMPLETED
   {
     const { tx } = makeOrderTx({ id: "o3b", status: "APPROVED", completedAt: null, manualClosedById: null, lines: [{ quantity: 100, shippedQty: 95 }] }, 5);
-    const r = await recomputeOrderStatus(tx, "o3b");
+    const r = await recomputeOrderStatusTx(tx, "o3b");
     check("order: kalan == tolerans sınırı → COMPLETED", r?.newStatus === "COMPLETED", r?.newStatus);
   }
   // CANCELLED terminal — değişmez
   {
     const { tx, updates } = makeOrderTx({ id: "o4", status: "CANCELLED", completedAt: null, manualClosedById: null, lines: [{ quantity: 100, shippedQty: 100 }] });
-    const r = await recomputeOrderStatus(tx, "o4");
+    const r = await recomputeOrderStatusTx(tx, "o4");
     check("order: CANCELLED terminal — değişmez", r?.changed === false && r?.newStatus === "CANCELLED");
     // Ledger modeli: denorm shippedQty her zaman senkronlanır (update çağrılır) ama
     // terminal siparişin status'u ASLA yazılmaz.
@@ -237,21 +237,21 @@ async function testOrderStatus() {
   // Manuel kapatılmış COMPLETED terminal
   {
     const { tx } = makeOrderTx({ id: "o5", status: "COMPLETED", completedAt: new Date(), manualClosedById: "user-1", lines: [{ quantity: 100, shippedQty: 10 }] });
-    const r = await recomputeOrderStatus(tx, "o5");
+    const r = await recomputeOrderStatusTx(tx, "o5");
     check("order: manuel kapatılmış COMPLETED terminal", r?.changed === false && r?.newStatus === "COMPLETED");
   }
   // Otomatik COMPLETED → re-open (sevk düşünce) + completedAt temizlenir
   {
     const order: OrderRow = { id: "o6", status: "COMPLETED", completedAt: new Date(), manualClosedById: null, lines: [{ quantity: 100, shippedQty: 40 }] };
     const { tx, updates } = makeOrderTx(order, 5);
-    const r = await recomputeOrderStatus(tx, "o6");
+    const r = await recomputeOrderStatusTx(tx, "o6");
     check("order: oto-COMPLETED → re-open PARTIAL", r?.newStatus === "PARTIAL_SHIPPED", r?.newStatus);
     check("order: re-open'da completedAt null'landı", updates.some((u) => "completedAt" in u && u.completedAt === null));
   }
   // Bilinmeyen sipariş → null
   {
     const { tx } = makeOrderTx(null);
-    const r = await recomputeOrderStatus(tx, "yok");
+    const r = await recomputeOrderStatusTx(tx, "yok");
     check("order: bulunamayan sipariş → null", r === null);
   }
 }

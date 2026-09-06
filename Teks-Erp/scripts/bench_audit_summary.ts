@@ -66,6 +66,9 @@ async function summaryOld(range: DateRange): Promise<SystemLogSummary> {
     WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
     GROUP BY "tableName" ORDER BY count DESC LIMIT 30
   `);
+  // Faz C2 bench'i 2026-08-01 tz dönüşümü ÖNCESİNİN sorgu şeklini DONMUŞ taşır;
+  // `factoryDaySql`e çevirmek ölçtüğü şeyi değiştirir (kayıtlı sayılar geçersizleşir).
+  /* eslint-disable no-restricted-syntax */
   const dailyRows = await prisma.$queryRaw<
     Array<{ day: Date; createCount: bigint; updateCount: bigint; deleteCount: bigint }>
   >(Prisma.sql`
@@ -77,6 +80,7 @@ async function summaryOld(range: DateRange): Promise<SystemLogSummary> {
     WHERE "createdAt" >= ${range.from} AND "createdAt" <= ${range.to}
     GROUP BY 1 ORDER BY 1
   `);
+  /* eslint-enable no-restricted-syntax */
   return {
     totalLogs: Number(totalRow[0]?.total ?? 0),
     byAction: actionRows.map((r) => ({ action: r.action, count: Number(r.count) })),

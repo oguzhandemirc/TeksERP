@@ -6,6 +6,7 @@ bağlanır; fabrika güvenlik duvarında **tek bir gelen port açılmaz**.
 | Dosya | Ne |
 |---|---|
 | `config.yml.ornek` | `cloudflared` ingress şablonu (müşteriye göre doldurulur) |
+| `cf-worker-hata-sayfasi.js` | Cloudflare Worker — tünel kapalıyken kullanıcıya Türkçe hata sayfası |
 
 **Kurulum reçetesi:** [`../../docs/ops/UZAK-ERISIM-KURULUM.md`](../../docs/ops/UZAK-ERISIM-KURULUM.md)
 

@@ -383,7 +383,7 @@ async function main(): Promise<void> {
       check("kaynak WO COMPLETED (SUPERSEDED DEĞİL)", src?.status === WorkOrderStatus.COMPLETED, String(src?.status));
 
       // Kaynak parti KORUNUR: yeni parti ona splitFromId ile bağlı, yani
-      // deleteIfEmptyAndTraceless için "izsiz" değil — ayrılma izi kaybolmasın.
+      // deleteIfEmptyAndTracelessTx için "izsiz" değil — ayrılma izi kaybolmasın.
       if (srcBatchId) {
         const srcBatch = await prisma.batch.findUnique({
           where: { id: srcBatchId },

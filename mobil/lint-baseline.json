@@ -1,0 +1,19 @@
+{
+  "_not": "ESLint uyarı TAVANI — yalnız DÜŞER. Ölçüm: node scripts/check-lint-baseline.mjs --yaz",
+  "_kapsam": "eslint .",
+  "_dosyaSayisi": 400,
+  "kurallar": {
+    "@typescript-eslint/array-type": 29,
+    "@typescript-eslint/no-floating-promises": 277,
+    "@typescript-eslint/no-require-imports": 25,
+    "@typescript-eslint/no-unused-vars": 27,
+    "import/first": 25,
+    "import/no-named-as-default-member": 1,
+    "max-lines": 44,
+    "max-lines-per-function": 162,
+    "no-restricted-syntax": 2166,
+    "no-unused-vars": 1,
+    "react-hooks/exhaustive-deps": 27
+  },
+  "_karar_2026_09_06": "import/no-named-as-default-member: 1 — BİZİM KODUMUZ DEĞİŞMEDİ. axios 1.20.0 yükseltmesi (güvenlik yaması, CVE turu) `create`i NAMED export olarak da yayınlayınca kural `mobil/src/services/api.ts:16`teki standart `axios.create(...)` çağrısını uyarır oldu. Kod doğru ve axios'un belgelediği kullanım; tavan bu yüzden 1'e çekildi. Yalnız DÜŞER: axios ileride bunu geri alırsa satır sıfırlanmalı."
+}

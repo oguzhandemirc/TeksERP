@@ -18,14 +18,19 @@ export const DUPLICATE_ENTRY_WINDOW_MS = 90_000;
 /**
  * `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
  *
+ * Uzay envanteri TEK KAYNAK: `period-guard.helper.ts` başlığı — kopya liste
+ * tutulmaz. Bu uzay **8021 KK1 mükerrer-top tuzağı**dır.
+ *
  * 1-argümanlı `pg_advisory_xact_lock(bigint)` ile 2-argümanlı `(int,int)` formu
- * PostgreSQL'de **ayrı anahtar uzaylarıdır**. Repodaki diğer iki advisory kullanıcısı
- * (`session-registry`, `permission-management`) 1-arg formunu kullanıyor; KK1 anahtarı
- * binlerce farklı değer ürettiği için aynı uzayda `hashtext` çakışması olasıdır ve
- * sonucu "sessiz cross-subsystem serileşme" olurdu — yanlış sonuç değil, teşhisi
- * imkânsız bir gecikme. Ayrı uzay bunu sıfırlar, maliyeti yok.
+ * PostgreSQL'de **ayrı anahtar uzaylarıdır**; bu kod tabanında yalnız 2-argümanlı
+ * form kullanılır. KK1 anahtarı binlerce farklı değer ürettiği için uzayı
+ * paylaşmak `hashtext` çakışmasında "sessiz cross-subsystem serileşme" üretirdi —
+ * yanlış sonuç değil, teşhisi imkânsız bir gecikme. Ayrı uzay bunu sıfırlar.
+ *
+ * `: number` BİLEREK — literal tipe daralırsa bekçideki "uzaylar farklı"
+ * karşılaştırması TS2367 ile derlenmez (SHIPMENT_LOCK_NS emsali).
  */
-export const DUPLICATE_GUARD_LOCK_NS = 8021;
+export const DUPLICATE_GUARD_LOCK_NS: number = 8021;
 
 /**
  * Damganın MAKUL kabul edildiği geçmiş sınırı.

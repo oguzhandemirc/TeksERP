@@ -24,7 +24,7 @@ export interface TextRasterOpts {
 /** Yalnız kontrol karakteri temizliği + trim. asciiFold YOK — Türkçe glifler
  *  (İ/Ş/Ğ/ç…) gerçek konturla basılır (native yolun asciiFold'u burada uygulanmaz). */
 export function rasterCleanText(s: string | number | null | undefined): string {
-  // eslint-disable-next-line no-control-regex
+  // Kontrol karakterleri boşluğa çevrilir — yazıcı akışını bozmasın.
   return String(s ?? "").replace(/[\x00-\x1f]/g, " ").trim();
 }
 

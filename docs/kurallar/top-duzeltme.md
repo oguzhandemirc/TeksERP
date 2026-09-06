@@ -1,0 +1,133 @@
+# Top düzeltme · İptal · Fire · Geri alma
+
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+
+> Hakem notu: 50 üye; konuya ait 14 primary + 3 arşiv. Bayat/ezilmiş: ölü etiket kapısı (08-05 kod → 08-25 kaldırıldı), parti engeli, arşiv 4→6 statü, sebep kataloğu kod→DB, 'kod saklanmaz'→sunucu türetir, 'Stoktan kaldır' tek tuş → İptal/Fire, kalite opsiyonel → bayrakla zorunlu, 'Ham stok'→'Stoğa geri', PROCESS_QC kalite yazmaz. EN RİSKLİ: (1) 2026-08-29 altıncı geri-alma sinyali (TAMBUR_GERI_ALMA + 6 aylık audit penceresi) hiçbir notta yok, 08-25 'beş kural' bayat; (2) 'sebep KOLONDAN okunur' ↔ restore kolonları temizler (açık iş kararı); (3) 'fire geri alınamaz' cümlesi Tambur SCRAP çocuğunun kesimle geri alınabilmesini örtüyor. Kod yorumlarında iki bayat blok. 30 ikincil + 5 yedek/restore üyesi küme dışı (anahtar eşleşmesi); mobil soft-delete satırı kökün ikizi, silinebilir.
+
+
+## Ortak (backend + panel + tablet)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Silme yalnız soft'tur: isActive:false ya da RollStatus.CANCELLED; fiziksel DELETE ASLA. Bilinçli istisnalar: bağımlılık-guard'lı master-data DELETE /:id/permanent, boş çuval, cihaz unpair, pivot replace, ItemPrice satırı (isActive EKLENMEZ). <sub>(CLAUDE.md:284, CLAUDE.md:456)</sub>
+- **[ÇEKİRDEK]** İptal ≠ Fire (defter semantiği): İptal=CANCELLED 'hiç olmamalıydı' — stok DÜŞMEZ, açık hareket qtyOut=0 (storno), fire raporuna girmez. Fire=SCRAP 'vardı, gitti' — stok DÜŞER, qtyOut=qtyIn, fire oranına girer; uç POST /rolls/:id/scrap, izin roll:manual-adjust (roll:write yetmez). · bekçi: `test_roll_cancel_undo §7 · test_manual_roll_undo · BulkCancelRollsDialog.test.ts` <sub>(CLAUDE.md:82, CLAUDE.md:284, CLAUDE.md:53)</sub>
+- **[ÇEKİRDEK]** İptal edilmiş topun clientToken'ı REPLAY EDİLEMEZ → 409 ENTRY_CANCELLED (assertRollReplayAlive); 'success:true + iptal edilmiş barkod' sessizce yanlış cevaptır. Mantıksal deneme iptalle kapanır, yeni top yeni token ister. · bekçi: `test_manual_roll_undo (ENTRY_CANCELLED guard'ı kaldırılınca 2 kırmızı)` <sub>(CLAUDE.md:53)</sub>
+- **[ÇEKİRDEK]** İptali geri alma TEK yüklem resolveRollRestoreBlockReason (ekran+uç aynı fonksiyon, sebep hep söylenir). Sinyaller: CANCELLED · hareket yok · istasyon işlemi yok · çocuk yok · adıma bağlı değil · çuval/sevk yok · fason/kartela sevki yok · Tambur geri almasının ürünü değil. batchId ENGEL DEĞİL. · bekçi: `test_roll_cancel_undo (TAMBUR_UNDO_CANCEL_CODE :505 dahil)` <sub>(CLAUDE.md:82, kod:94b937c0 (2026-08-29, BULGU-T1-011 —)</sub>
+- **[ÇEKİRDEK]** Yıkıcı işlemde (iptal/sil/fire) backend cancel-preview döner, arayüz etkilenen HER kaydı adıyla listeler ve kayıt bazlı seçim sunar; 'X kayıt etkilenecek' yetmez. Engelli top denenmez, engel backend'in kendi cümlesiyle basılır; izinsiz şık (fire) ÇİZİLMEZ (kart↔route hizası). · bekçi: `BulkCancelRollsDialog.test.tsx (5)` <sub>(CLAUDE.md:299, CLAUDE.md:82, CLAUDE.md:58)</sub>
+- **[ÇEKİRDEK]** Giriş/iptal sebebi KOLONDAN okunur (Roll.entryReason/entryReasonCode, cancelReason/cancelReasonCode — metin GÖRÜNEN kayıt, kod RAPOR ANAHTARI); audit 6 ayda arşivlenir, tek kaynak olamaz. Audit yazımı KALIR; okuma kolonu tercih eder, boşsa eski kayıt için audit'e düşer. <sub>(CLAUDE.md:49, kök CLAUDE.md:78 (2026-08-21 nameFold + , CLAUDE.md:53)</sub>
+- **[ÇEKİRDEK]** Tambur geri alma DÖRT mod: SINGLE (tek parça) · SINGLE_RESTORE 'İş Emrine Geri Al' (tek topun metrajıyla dirilme; kardeşlere dokunulmaz; kapanış sapmaları TERSLENMEZ; RollError açılmaz; TAMBUR_PROCESSED silinir; ek izin/sebep yok; aynı-gün ayarı yok) · FULL (roll:manual-adjust + sebep) · MANUAL. · bekçi: `test_tambur_undo §9` <sub>(CLAUDE.md:58, CLAUDE.md:53)</sub>
+- **[ÇEKİRDEK]** Metraj geri koyma İKİ DALDA FARKLI: üretim (cutOpenFabric) yalnız currentQty, depo (cutWarehouseRoll) currentQty+initialQty birlikte (tek taraf → sahte AŞIM). ÜRETİM dalı da aşımı korur: initialQty bump + OVERAGE/TAMBUR_UNDO_RESTORE — canlı dal ↔ arşiv ikizi ayrışamaz (08-22'ye dek ayrışmıştı). · bekçi: `test_tambur_undo §5 + §11 (§11 üretim dalını ölçer)` <sub>(CLAUDE.md:58, CLAUDE.md:81)</sub>
+- **[ÇEKİRDEK]** SENKRON SÖZLEŞMESİ: restore-toplamına giren HER kaynak (computeRestoredQty; çocuk-kapsamlı TAMBUR_UNDO_SINGLE düzeltmeleri dahil, satırlar ÇOCUĞUN rollId'sinde) applyFull 5b terslemesine de eklenir — yoksa dönem raporu aynı metrajı İKİ KEZ görür. Sıfır-çocuk + restored>0 → FULL çalışır (F0402). · bekçi: `test_tambur_undo §10 (F0402; tersleme koparılınca 1 kırmızı)` <sub>(CLAUDE.md:58)</sub>
+- **[ÇEKİRDEK]** WO kapatma = kapanış dispozisyonu: 'işlemde top var' diye REDDETMEZ; kalan her top için altı karar — STOCK ('Stoğa geri') · WAREHOUSE · A1_STOCK · SCRAP (mal vardı) · CANCELLED (mal yoktu) · TRANSFER (yeni WO klonu; kaynak COMPLETED kalır, SUPERSEDED OLMAZ). Roll.form'a dokunulmaz. <sub>(CLAUDE.md:124, CLAUDE.md:90)</sub>
+- **[ÇEKİRDEK]** Kapanış kapıları: hard-block yalnız FASON (AT_SUBCONTRACTOR/RETURNED_FROM_SUBCONTRACTOR ya da açık fason sevki; fason dönüşü STOCK'a çekilemez); kapsam BİREBİR (tx içinde taze in-flight küme ≠ gönderilen liste → 400); dispozisyon varsa workorder:write + roll:manual-adjust. · bekçi: `yok (fazA: test dosyası bulunamadı)` <sub>(CLAUDE.md:124)</sub>
+- **[ÇEKİRDEK]** Kapanışta kalite yalnız WAREHOUSE/A1_STOCK dispozisyonunda sorulur; VARSAYILAN opsiyonel, quality.gradeRequiredEnabled açıkken kalitesiz top 400 GRADE_REQUIRED (dar kapsam). Satılabilir statüye çekilen barkodsuz top barkod alır. <sub>(CLAUDE.md:124, kök CLAUDE.md:106 (2026-09-03 Dilim 2 da)</sub>
+- **[ÇEKİRDEK]** Kapanış izi: movement notes='WO_CLOSE_<ACTION>' + audit event='WO_CLOSE_DISPOSITION'; RollOperationType'a yeni değer EKLENMEZ. 'Kurtar' (rescueStuckRoll, roll:manual-adjust): IN_PRODUCTION-stuck topu WAREHOUSE'a çeker (qtyOut=qtyIn, barkod üretir). 'Durum Düzelt'/recover-to-production KALKTI. · bekçi: `test_rescue_stuck (1a: rescue → WAREHOUSE)` <sub>(CLAUDE.md:124, CLAUDE.md:113)</sub>
+- **[ÇEKİRDEK]** Top düzeltme TEK sözleşme, kapsam topun DURUMUNDAN: ALWAYS_BLOCKED (fason/kartela/emekli/sevk) her yolla red · FREE_STOCK (STOCK/WAREHOUSE/A1_STOCK) sebep opsiyonel, ek yetki yok · gerisi sebep ZORUNLU + roll:manual-adjust. Kapsam Boolean(reason) ile GENİŞLETİLMEZ. · bekçi: `test_roll_edit_unified` <sub>(CLAUDE.md:126)</sub>
+- **[ÇEKİRDEK]** Manuel taşıma ('Konumu Düzelt') = saha sürekliliği: top IN_PRODUCTION + currentStepId=hedef, hedef adım ACTIVE, COMPLETED WO IN_PROGRESS'e dirilir, kart yeniden aktif. Geri taşımada hedef-sonrası kalite/kurşun VOID (grade → Belirsiz), hayalet movement silinir, SKIPPED→PENDING. · bekçi: `test_manual_move.ts` <sub>(CLAUDE.md:127)</sub>
+- **[ÇEKİRDEK]** Fason adımına manuel taşıma AT_SUBCONTRACTOR YAPMAZ — mal içeride bekler, çıkış Fason Sevk ile (kabul doğrudan yapılamaz; önizleme uyarır). Fason dönüşü top (entrySource=SUBCONTRACTOR_RETURN) geri boyahaneye alınıp yeniden sevk+kabul edilebilir — ek engel yok. · bekçi: `test_manual_move.ts` <sub>(CLAUDE.md:127)</sub>
+- **[ÇEKİRDEK]** Kat (Roll.foldType) KALICI kolondur ve MİRAS ALINMAZ: kesimde SEÇİLEN yazılır; alan hiç gönderilmezse parent→plan fallback'i sözleşme boşluğudur, miras değil. Kanoniklik ZORUNLU (normalizeFoldType — ham değer filtrede sessizce 0 satır). Beş yazma yolu aynı kural. <sub>(CLAUDE.md:49)</sub>
+
+### Yasaklar
+
+- **[ÇEKİRDEK]** İKİNCİ BİR İPTAL MOTORU YAZILMAZ: tüm iptal/fire yolları InventoryService.softDelete(mode CANCEL|SCRAP)'ten geçer; TamburUndoService.MANUAL da onu çağırır. Hareket notu EZİLMEZ: 'CANCELLED (<eski not>)' / 'SCRAPPED (…)'. · bekçi: `test_manual_roll_undo (negatif sonda: MANUAL dalı kapatılınca exit 1)` <sub>(CLAUDE.md:53, CLAUDE.md:82)</sub>
+- **[ÇEKİRDEK]** CANCELLED/SUPERSEDED iş emrinde manuel taşıma REDDEDİLİR (409 + önizlemede woBlocked): kartlar VOIDED, ensureWorkOrderInProgress yalnız PLANNED'ı diriltir → top 'canlı ama okutulamaz' çıkmaza düşerdi. Doğru yol topu yeni iş emrine bağlamak. Tek kaynak manualMoveWoBlockReason. · bekçi: `test_manual_move.ts` <sub>(CLAUDE.md:127)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** Toplu veri düzeltmesi yapan script DRY-RUN varsayılandır ve --apply öncesi etkilenecek her kaydı somut listeler (backfill_roll_fold_and_reason · fix_tambur_undo_cancel_marker emsalleri); prod canlı, geri alma yolu raporda basılır. <sub>(CLAUDE.md:119, CLAUDE.md:49, kod:94b937c0 (2026-08-29, BULGU-T1-011 —)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Tambur geri alması iptal ettiği parçanın SATIRINA iz yazar: cancelReasonCode=TAMBUR_GERI_ALMA (sistem kodu: seçicide çıkmaz, doğrulama kabul eder) + currentQty=0 (initialQty korunur). 08-29 öncesi kayıtlar audit kapısıyla tanınır; audit 6 ayda arşivlenince pencere KAPANIR. · bekçi: `test_roll_cancel_undo :286,:430,:505` <sub>(kod:94b937c0 (2026-08-29, BULGU-T1-011 —)</sub>
+- **[ÇEKİRDEK]** fix_tambur_undo_cancel_marker.ts (dry-run varsayılan) eski parçalara izi satıra taşır — 'pencere kapanmadan' seçeneği; KULLANICI KARARIYLA BEKLİYOR, metrajı sıfırlamaz (kaynak topun iadesi doğrulanamaz). Zorunlu değil, kalıcılık tercihi. <sub>(kod:94b937c0 (2026-08-29, BULGU-T1-011 —)</sub>
+- **[ÇEKİRDEK]** Ölü etiket onayı KAPI DEĞİL (2026-08-25): confirmLabelPrinted kabul edilir ama hiçbir yolu açmaz; labelPrintedAt baskıda otomatik yazılır (kaldırılan şey SORU). Geri koyarken yalnız 409'u koymak bayrağı göndermeyen istemcileri kilitler. Yeniden-üretime-al'daki ölü etiket UYARISI ayrıdır. · bekçi: `test_roll_cancel_undo §2/§2b (tersine çevrildi)` <sub>(CLAUDE.md:82)</sub>
+- **[ÇEKİRDEK]** Mutabakat kırmızısı ÜÇ ayrı şey olabilir — kod hatası (§13) · iş kararı bekleyen veri (§18) · sorgunun kör noktası (§20: adımın tek topu sonradan iptal → COMPLETED adım PENDING'e çöker; adım durumu TARİHSEL, düzeltme SORGUYA süzgeç). Eski sapma toplu UPDATE ile düzeltilmez, §13 DARALTILMAZ. · bekçi: `test_consistency §13/§20 (§20 süzgeci EKLENMEDİ — hâlâ sorgu körlüğü)` <sub>(CLAUDE.md:81, CLAUDE.md:119)</sub>
+
+## Backend
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Elle eklenen topun geri alınması (MANUAL) DAR: yalnız elle eklenmiş + hiç işlem görmemiş top (MANUAL_UNDOABLE_STATUSES; kesilmemiş, RollOperation yok, tek hareket, çuval/sevk yok); ihlalde çıkmaz bırakmayan blockReason. Parti bağı topta KALIR. Ekleyen kendisi geri alır (mobile:tambur-duzelt). · bekçi: `test_manual_roll_undo (24)` <sub>(CLAUDE.md:53)</sub>
+- **[ÇEKİRDEK]** Elle eklenen top PARTİSİZ doğmaz: tek açık parti → sormadan bağla · çok → 400 BATCH_REQUIRED + seçenek listesi (reddeden tarafın ağzından; mobil önden yüklemez) · hiç yok → NULL. 'Açık' = veride canlı top (K18_DEAD_STATUSES); SCRAP partiyi KAPATMAZ. Sıra: payload tutarlılığı ÖNCE, parti SONRA. · bekçi: `yok (fazA: bekçi adı verilmemiş)` <sub>(CLAUDE.md:49)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** Geri alma rafı preCancelStatus'tan (resolveRestoreTargetStatus); NULL/eski kayıt → STOCK (en kısıtsız raf; bloklamak 42 topta regresyon olurdu). Geri alma iptal izi kolonlarını TEMİZLER, geçmiş audit CANCEL_RESTORED'da — açık iş kararı. Mesaj entrySource'a bakar ('yarı mamul stoğunda'). · bekçi: `test_roll_cancel_undo` <sub>(CLAUDE.md:82, CLAUDE.md:90)</sub>
+- **[ÇEKİRDEK]** restoreCancelledRoll tx AÇMAZ ve adım recompute KOŞMAZ — guard hareketli topu reddettiği için (hareketsiz top hiçbir adım sayacına girmez; recomputeStepStatus partiye HİÇ bakmaz). Guard gevşetilirse (hareketli top da geri alınsın) recompute EKLENMEK ZORUNDA. <sub>(CLAUDE.md:82)</sub>
+
+## Panel (Electron)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** roll:history izni yoksa top detayındaki yaşam döngüsü bölümü HİÇ çizilmez (boş kutu = 'geçmiş yok' yalanı). RollOperation yaşam döngüsü günlüğü DEĞİL, istasyon işlem log'udur — geçmiş GET /rolls/:id/history'den okunur. İzin boot'ta gelir, atama elle. <sub>(CLAUDE.md:53)</sub>
+
+### Tuzaklar
+
+- **[PROFİL]** Sayfa içi arama (Ctrl+F / findInPage) KALDIRILDI — listenin sunucu araması kullanılır. Yeniden denenirse: Electron findInPage seçeneğindeki findNext 'sonraki eşleşme' DEĞİL 'YENİ OTURUM BAŞLAT' demektir; ters yazım sessiz 0/0 üretir. <sub>(arşiv:285)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Top Arşivi (Sistem → /system/roll-archive, admin:settings — depo/üretim personeli göremez, bilinçli) CANCELLED+SCRAP'ı da listeler; barkodsuz iptal top ancak buradan bulunur. 'Kayıt Türü' daraltması statusIn anahtarı (status DEĞİL: backend önceliği statusIn>status). · bekçi: `Electron Rolls/service.test.ts` <sub>(CLAUDE.md:53, CLAUDE.md:82)</sub>
+- **[ÇEKİRDEK]** Arayüzde iki buton ('veriyi mi değiştiriyorum, kâğıt mı basıyorum'): 'Düzelt' (RollEditDialog — rollId + GET /api/rolls/:id/relabel-context, barkodsuz açık kumaş da düzeltilebilsin) · 'Etiket' (önizle/bas/farklı müşteri için bas). RelabelDialog ve ManualAttributesDialog silindi, geri gelmez. <sub>(CLAUDE.md:126)</sub>
+
+## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **TAM** `kod:b041712c (2026-08-05 ölü etiket koruması — kök/arşiv notu YOK)` → `R:2026-08-25__2026-08-25-saha-deploy-sonrasi`: Etiketli topun iptalinde 409 LABEL_PRINTED + confirmLabelPrinted onay kapısı KALDIRILDI; bayrak sözleşme uyumu için kabul edilir ama kapı açmaz, labelPrintedAt kolonu durur. Kapının kendisi hiçbir kök/arşiv notunda yazılmamıştı (yalnız commit + test başlığı). ✅ çürütmeden geçti
+- **KISMI** `kod:b041712c (2026-08-05 ölü etiket koruması — kök/arşiv notu YOK)` → `R:2026-08-25__2026-08-25-saha-deploy-sonrasi`: İptali geri alma yükleminde 'partiye kayıtlı (batchId) → red' kuralı KALDIRILDI; kalan sinyaller (hareket·işlem·çocuk·adım·çuval/sevk·fason/kartela) duruyor. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-05__2026-08-05-manuel-top-geri` → `R:2026-08-25__2026-08-25-saha-deploy-sonrasi`: Top Arşivi statü kümesi DÖRT tüketilmiş statüden ALTIya çıktı (CANCELLED + SCRAP eklendi) + sayfaya arama + 'Kayıt Türü' (statusIn). 'Sistem → Top Arşivi, admin:settings' kararı ve STATUS_GROUPS.ARCHIVE anahtarı duruyor. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-12__2026-08-12-gece-single-restore` → `R:2026-08-25__2026-08-25-saha-deploy-sonrasi`: 08-12 'Depo Stoktan Kaldır tek tipli çıkış yeterli, eksik olan adlandırmaydı' → 08-25 o tuş İKİYE ayrıldı: İptal (CANCELLED, qtyOut=0) · Fire (SCRAP, qtyOut=qtyIn, POST /rolls/:id/scrap, roll:manual-adjust). 'Genel X tuşu YASAK' ilkesi aynen duruyor. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-04__2026-08-04-roll-foldtype-entryreason` → `R:2026-08-19__2026-08-19-hazir-sebep-kataloglari`: Elle top ekleme sebebi 08-04'te KOD kataloğu (manualReasons.ts) + 'Diğer'in altında serbest yazım, liste büyütülmez' idi → 08-19'da katalog DB'ye (ReasonPreset) geçti, fabrika kendi düzenler, serbest metin kutusu listenin ÜSTÜNDE. manualReasons.ts yalnız APK zemini (3. kademe) olarak kaldı. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-19__2026-08-19-hazir-sebep-kataloglari` → `kök CLAUDE.md:78 (2026-08-21 nameFold + sebep KODU)`: 08-19 'metin saklayan iki kind (elle ekleme, iptal) kayda kod DEĞİL metin yazar; kolonu Roll'a eklemek ertelendi' → 08-21 Roll.entryReasonCode/cancelReasonCode eklendi, kodu SUNUCU türetir (resolveReasonCode). KIND_STORES_TEXT bayrağı kalır, 'kod saklanmaz' anlamı düştü. ✅ çürütmeden geçti
+- **KISMI** `R:2026-07-30__wo-kapatma-kapanis-dispozisyonu-2026-07` → `kök CLAUDE.md:106 (2026-09-03 Dilim 2 davranış bayrakları)`: Kapanış dispozisyonunda kalite 'opsiyoneldir' → artık VARSAYILAN opsiyonel; quality.gradeRequiredEnabled AÇIKKEN WAREHOUSE/A1_STOCK dispozisyonunda kalitesiz top 400 GRADE_REQUIRED (dar kapsam: yalnız satılabilir dispozisyonlar). ✅ çürütmeden geçti
+- **KISMI** `R:2026-07-30__wo-kapatma-kapanis-dispozisyonu-2026-07` → `R:2026-08-27__2026-08-27-3-tur-yari`: Dispozisyon STOCK'un etiketi 'Ham stok' → 'Stoğa geri'; STOCK bir STATÜdür, topun sekmesini entrySource belirler (yarı mamul de STOCK'a döner). Altı karar kümesi değişmedi. ✅ çürütmeden geçti
+- **KISMI** `R:2026-07-13__2026-07-13-her-rota-final` → `R:2026-07-13__2026-07-13-her-rota-final (arşiv 2026-09-03 DÜZELTMESİ)`: 07-13 'kaliteyi yalnız kalite istasyonları (KK1, KK2/Kurşun, Tambur) belirler' → PROCESS_QC kalite NOTU YAZMAZ; kalite iki kapıda doğar: KK1 girişi + Tambur finalize. Kalan cümleler (son adım finalize, form otomatik, qualityGrade nullable) geçerli. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-25__2026-08-25-saha-deploy-sonrasi` → `kod:94b937c0 (2026-08-29, BULGU-T1-011 — NOTU YOK)`: 08-25 'kalan BEŞ kural' → 2026-08-29'da ALTINCI sinyal: Tambur geri almasıyla iptal edilen parça (cancelReasonCode=TAMBUR_GERI_ALMA ∨ audit izi) diriltilemez — metrajı kaynak topa iade edildiği için dirilme çift sayım üretiyordu. Parça satırına iz + currentQty=0 yazılır. HİÇBİR NOTA GİRMEMİŞ. ✅ çürütmeden geçti
+
+## Çözülmüş çelişkiler
+
+- `R:2026-08-04__2026-08-04-roll-foldtype-entryreason` ↔ `R:2026-08-25__2026-08-25-saha-deploy-sonrasi`: Kod bugün kolonları TEMİZLİYOR (audit CANCEL_RESTORED kalır). 08-25 notu bunu 'iş kararı bekleyen açık nokta' diye kendisi işaretler; 08-29 commit'i de 'iz SATIRIN KENDİSİNDE olmak zorunda, audit 6 ayda arşivlenir' gerekçesini yineler. Kural çelişkisi karar verilene dek açık — unresolved.
+- `R:2026-08-25__2026-08-25-saha-deploy-sonrasi` ↔ `R:2026-08-12__2026-08-12-gece-single-restore`: İki ayrı motor, iki kapsam: 'fire geri alınamaz' yalnız restoreCancelledRoll / POST /rolls/:id/scrap (elle fire) yolunun kuralıdır; Tambur KALİTE kararıyla SCRAP olan çocuk, kesimin geri alınmasıyla (SINGLE/FULL; FULL roll:manual-adjust + sebep) iptal edilip metrajı kaynağa döner. Dizin cümlesi 'elle fire geri alınamaz' diye daraltılmalı.
+
+## Açık sorular
+
+- 2026-08-29 altıncı geri-alma sinyali (commit 94b937c0, BULGU-T1-011: cancelReasonCode=TAMBUR_GERI_ALMA ∨ audit izi → dirilme red; parça currentQty=0) HİÇBİR CLAUDE.md/arşiv notunda yok — 08-25 'kalan beş kural' bayat; not + dizin satırı yazılmalı. fix_tambur_undo_cancel_marker.ts (dry-run) kullanıcı kararı bekliyor; audit 6 ayda arşivlenince eski kayıt koruması SESSİZCE açılır.
+- İz temizliği iş kararı: restoreCancelledRoll cancelledAt/Reason/Code/preCancelStatus kolonlarını NULL'lar (geçmiş yalnız audit) — 'sebep KOLONDAN okunur' kuralıyla gerilim; 08-25 notu 'yeniden değerlendirilebilir' diyor, karar yok.
+- Eski kayıt rafı: preCancelStatus NULL olan 05.08 öncesi iptallerde geri alma STOCK'a döner (bitmiş depo malı Ham Stok'a); kalite targetStatus'tan türetme ayrı karar bekliyor (08-25 açık nokta ①).
+- Bayat kod yorumları (kural değil, temizlik): inventory.service.ts:3337-3339 'ONAY (confirmLabelPrinted) KALDIRILMADI … fail-closed tutan şey odur' ↔ :3389-3404 kapı kaldırıldı; roll-cancel-restore.helper.ts:11-12 'partiye girmiş … geri almak riskli' ↔ :100 batchId engeli kaldırıldı.
+- Dizin cümlesi 'fire geri alınamaz' fazla geniş: Tambur kalite kararıyla SCRAP olan çocuk CHILD_CANCELABLE (tambur-undo.service.ts:120-125) — kesim geri alınınca iptal edilir; cümle 'elle fire (POST /rolls/:id/scrap) geri alınamaz' diye daraltılmalı.
+- test_consistency §20 için 08-22'nin 'gerekirse eklenir' dediği 'adımın tüm topları ölüyse COMPLETED meşru' süzgeci EKLENMEMİŞ (SQL yalnız r.status<>'CANCELLED'); bölüm hâlâ tarihsel COMPLETED adımı kırmızı basar — bilinçli mi, unutulmuş mu belirsiz.
+- KÜME DIŞI üyeler (bu hakemlik kapsam dışı bıraktı, kendi kümelerinde hakemlenmeli): yedek/geri YÜKLEME B:undated__yedek-on-ekleri, B:undated__geri-yukleme, B:2026-06-12__x, B:2026-07-30__yedekleme, B:2026-07-30__kopyaya-geri-yukleme (fazA: 'yedekleme' KISMEN — '14'lük rotasyon' bayat, backup.service.ts:64 gün bazlı 30); A:2026-08-21 fason çekme (R), A:2026-08-21 iş emri tipi, A:2026-08-21 tutarlılık taraması; 30 ikincil üye (superadmin, cihaz onayı, Prisma motoru, sevk, mükerrer…) anahtar-eşleşmesiyle girmiş.
+- WO kapanış dispozisyonu ve elle-top parti bağı için adı verilmiş bekçi yok (fazA da vermemiş; scripts/ altında test_wo_close_* / test_batch_manual_* bulunamadı) — mekanik koruma BELİRSİZ.
+
+## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
+
+- **[ÇEKİRDEK]** Barkod topun KİMLİĞİdir, statü işareti değil — erken doğması (KK1 ham giriş, manuel top) sorun değildir, statüyü korur. <sub>(arşiv 2026-08-05 manuel top geri alma)</sub>
+- **[ÇEKİRDEK]** Top düzeltme audit ayrımı korunur: `reason` varsa olay `MANUAL_ATTRIBUTE`, yoksa `RELABEL`; tablo `ROLL_MANUAL_OVERRIDE`. <sub>(arşiv 2026-07-30 top düzeltme tek sözleşme)</sub>
+- **[ÇEKİRDEK]** Soft delete'in bilinçli istisnaları: bağımlılık-guard'lı master-data `DELETE /:id/permanent`, boş çuval silme, cihaz unpair, pivot replace, `ItemPrice` satırı silme (şemada `isActive` yok — pasif fiyat üçüncü durum üretirdi; geçmiş belgeler donmuş). <sub>(kök 2026-08-14)</sub>
+
+## Bekçiler — bu alana dokununca koş (43 backend · 10 istemci)
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
+
+**Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
+
+Backend: `test_audit_p0`⚠️, `test_batch_drop`, `test_depo_roll_cancel_permission`⚠️, `test_duplicate_rolls`, `test_fason_partial_receive`, `test_fason_receive_cancel_rereceive`, `test_fason_undo_transfer`⚠️, `test_fason_wrong_station_guidance`, `test_fold_catalog`, `test_fold_edit_and_label`, `test_hide_cancelled_lists`, `test_iade_enhancements`, `test_manual_attributes_reason`⚠️, `test_manual_props_claim_pin`, `test_manual_roll_undo`, `test_masterdata_guards`, `test_order_cancellation`, `test_order_line_cancel`, `test_p2_inventory`, `test_phase3_stok_hardening`, `test_property_value_selection`, `test_reason_presets`, `test_rescue_stuck`, `test_roll_cancel_step_recompute`, `test_roll_cancel_undo`⚠️, `test_roll_edit_unified`, `test_roll_fold_and_reason`, `test_roll_qty_adjust`, `test_roll_relabel`, `test_roll_relabel_context`, `test_roll_variance`, `test_scrap_grade_label`, `test_scrap_scorecard`, `test_shipment_undo_dispatch`, `test_stock_count`, `test_tambur_cut_barcoded`, `test_tambur_manual_field`, `test_tambur_undo`, `test_token_replay_cancelled`, `test_warehouse_ledger`, `test_wo_cancel_disposition`, `test_wo_cancel_fason`, `test_wo_manual_complete`
+
+İstemci: `RelabelStation.test.tsx`, `BulkCancelRollsDialog.test.tsx`, `ReworkRollsDialog.test.tsx`, `qtyAdjust.test.ts`, `service.test.ts`, `tabs-regime.test.ts`, `WorkOrderCompleteDialog.test.tsx`, `cancelDecisions.test.ts`, `activity-utils.test.ts`, `RollCancelModal.test.tsx`
+
+## Arşiv notları (tam metin, gerekçe ve ölçüm)
+
+- 2026-07-13 · 2026-07-13 — "her rota final üretir" — `CLAUDE-NOT-ARSIVI.md:361-364`
+- 2026-08-05 · 2026-08-05 — elle eklenen topu GERİ ALMA + topun izlenebilirlik yüzeyleri — `CLAUDE-NOT-ARSIVI.md:134-150`
+- 2026-08-06 · 2026-08-06 — SAYFA İÇİ ARAMA (Ctrl+F) KALDIRILDI — `CLAUDE-NOT-ARSIVI.md:285-286`
+- 2026-08-12 · 2026-08-12 gece — TEKİL CANLANDIRMA (`SINGLE_RESTORE`) + F0402 sıfır-çocuk düzeltmesi + geri alma modalı sadel — `CLAUDE-NOT-ARSIVI.md:203-213`
+- 2026-08-19 · 2026-08-19 — "Top başı" + hazır sebep katalogları KODDAN DB'ye — `CLAUDE-NOT-ARSIVI.md:375-388`
+- 2026-08-21 · 2026-08-21 — FASON KABULÜ: "çekme" bir HATA DEĞİL, ÖLÇÜLEN BİR GERÇEK; kısmi kabul TEK soruya indi — `CLAUDE-NOT-ARSIVI.md:437-451`
+- 2026-08-21 · 2026-08-21 — İş emri TİPİ bağın AYNASIDIR: "Sipariş Bağla" STOK → SİPARİŞE ÖZEL çevirir — `CLAUDE-NOT-ARSIVI.md:414-422`
+- 2026-08-21 · 2026-08-21 akşam — Tutarlılık taraması: "türetilmiş alan / ayrışan yüzey" sınıfı kapatıldı):** `WorkOrder.type — `CLAUDE-NOT-ARSIVI.md:464-468`
+- 2026-08-22 · 2026-08-22 — §13 kök nedeni: tekil geri almada AŞIM KORUMASI canlı dalda yoktu (ayna kırıktı) — `CLAUDE-NOT-ARSIVI.md:485-551`
+- 2026-08-25 · 2026-08-25 — Saha deploy sonrası üç arıza: "kutu var, uç yok" · "soru var, süreç yok" · "ölçek var, sınır yok" — `CLAUDE-NOT-ARSIVI.md:552-755`
+- 2026-08-27 · 2026-08-27 (üçüncü tur) — Yarı mamul ayrımı: kalan dört yüzey. AYRIM GÖSTERİMDE, ARZDA DEĞİL — `CLAUDE-NOT-ARSIVI.md:1730-1790`

@@ -1,6 +1,6 @@
 # İçe / Dışa Aktarım (Import/Export) — Sistem Geneli Tasarım
 
-> Tarih: 2026-08-19 · Durum: **UYGULANDI (2026-08-19) — F0–F4 tamam, deploy bekliyor**
+> Tarih: 2026-08-19 · Durum: **✅ UYGULANDI ve SAHAYA ÇIKTI** (SURUM-2.9.0, 2026-08-24). §0 tablosundaki "bizde bugün YOK" satırları 2026-08-19 envanteridir.
 > Deploy reçetesi: [`docs/ops/SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md`](../ops/SURUM-2.9.0-VERI-AKTARIMI-DEPLOY.md)
 > Kararlar (hepsi §5'teki ÖNERİLEN şık): D1 XLSX+CSV · D2 ya hep ya hiç (atla opsiyon) · D3 boş=dokunma, `NULL`=temizle · D4 mevcut servis yolu · D5 `ImportRun` tablosu · D6 export ek izin YOK · D7 Route/Recipe F2'de kompozit satır · D8 sipariş import EVET, açılış stoğu ayrı tur · D9 F0→F1→F2→F3→F4
 > Kapsam: Teks-Erp (backend) + Electron (panel). Mobil kapsam DIŞI (sektörde de saha uygulamasında toplu içe/dışa aktarım yoktur; paylaşım/print zaten var).

@@ -160,6 +160,9 @@ interface ShipmentDocProduct {
    * doldurma YAPILMAZ (donmuş belge kuralı).
    */
   customerName?: string | null;
+  /** Ayrıştırılmış ikizler — `shipping.docProductColorSplit` açıkken kullanılır. */
+  customerItemOnly?: string | null;
+  customerColorOnly?: string | null;
   rollCount: number;
   totalMeters: number;
 }
@@ -248,6 +251,14 @@ interface RenderMeta {
    * ve örnek/taslak render'lar bugünkü çıktıyı bayt-bayt korur.
    */
   itemNameMode?: "bizdeki" | "musterideki" | "ikisi";
+  /**
+   * ÇEKİ BÖLÜMÜNÜN REJİMİ (`shipping.docCekiNameMode`, 2026-09-06) — yalnız çeki
+   * listesini çevirir, ürün listesine dokunmaz. `devral` (varsayılan, ve alan hiç
+   * verilmediğinde) `itemNameMode`u izler → bugünkü çıktı bayt-bayt korunur.
+   */
+  cekiNameMode?: "devral" | "bizdeki" | "musterideki" | "ikisi";
+  /** `shipping.docProductColorSplit` — ürün listesinde müşteri rengi ayrı sütun. */
+  productColorSplit?: boolean;
   /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
   logoDataUrl?: string | null;
   /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
@@ -489,6 +500,22 @@ export function renderShipmentDispatchHtml(
   const nameMode = meta.itemNameMode ?? "bizdeki";
   const showOurName = nameMode !== "musterideki";
   const showCustName = nameMode !== "bizdeki";
+  // ÇEKİ BÖLÜMÜ AYRI REJİM (2026-09-06). Çeki listesi tek başına da basılabiliyor
+  // (`DispatchPrintOptions`) ve ambar elemanının kontrol listesi olarak kullanılıyor;
+  // orada "hem bizdeki hem müşterideki ad" anlamlı, müşteriye giden ÜRÜN LİSTESİNDE
+  // değil. Tek global rejim ikisini birden çeviriyordu.
+  // `devral` (varsayılan) → genel rejim; yani bayrak yazılmadıkça TEK BAYT değişmez.
+  const cekiRaw = meta.cekiNameMode ?? "devral";
+  const cekiMode = cekiRaw === "devral" ? nameMode : cekiRaw;
+  const cekiShowOurName = cekiMode !== "musterideki";
+  const cekiShowCustName = cekiMode !== "bizdeki";
+  // ÜRÜN LİSTESİNDE MÜŞTERİ RENGİ AYRI SÜTUN MU (`shipping.docProductColorSplit`).
+  // Kapalı (varsayılan) = bugünkü birleşik dize; ölçüldü: sevk edilen 1.778 topun
+  // 690'ında (%39) müşterinin renk karşılığı yok ve BİZİM renk adımız müşteri kumaş
+  // adının yanına yapışıyor — `belge-etiket.md`'nin "yarı çevrilmiş ad basılmasın"
+  // kuralının fiilî ihlali. Açıkken renk kendi sütununa çıkar ve hangi yarının kimin
+  // olduğu görünür. Bayrak kullanıcı kararıyla eklendi (2026-09-06).
+  const colorSplit = meta.productColorSplit === true;
   /** Müşteri adı yoksa bizimkine düş — tek kaynak (üç hücre de bunu çağırır). */
   const custOr = (cust: string | null | undefined, ours: string): string =>
     (cust ?? "").trim() || ours;
@@ -506,7 +533,14 @@ export function renderShipmentDispatchHtml(
             ? [{ key: "name", label: L.stokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(p.name) }]
             : []),
           ...(showCustName
-            ? [{ key: "customerName", label: L.musteriStokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(custOr(p.customerName, p.name)) }]
+            ? colorSplit
+              ? [
+                  // AYRIK KİPTE iki kolon: yarı çevrilmiş ad basılmaz, okuyucu hangi
+                  // yarının kimin olduğunu görür (çeki listesindeki düzenin aynısı).
+                  { key: "customerName", label: L.musteriStokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(custOr(p.customerItemOnly ?? p.customerName, p.name)) },
+                  { key: "customerColor", label: L.musteriVaryant, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(p.customerColorOnly ?? "") },
+                ]
+              : [{ key: "customerName", label: L.musteriStokAdi, align: "l" as const, cell: (p: ShipmentDocProduct) => esc(custOr(p.customerName, p.name)) }]
             : []),
           { key: "rollCount", label: L.topAdedi, align: "r", cell: (p) => esc(fmtCount(p.rollCount)), foot: esc(fmtCount(t.totalRolls)) },
           { key: "totalMeters", label: L.toplamMetre, align: "r", cell: (p) => esc(fmtQty(p.totalMeters)), foot: esc(fmtQty(t.totalMeters)) },
@@ -602,13 +636,13 @@ export function renderShipmentDispatchHtml(
           // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
           // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
           { key: "batchNumber", label: L.parti, align: "l", cell: (c) => esc(c.batchNumber ?? "—") },
-          ...(showOurName
+          ...(cekiShowOurName
             ? [
                 { key: "desen", label: L.desen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.desen) },
                 { key: "varyant", label: L.varyant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.varyant) },
               ]
             : []),
-          ...(showCustName
+          ...(cekiShowCustName
             ? [
                 { key: "customerDesen", label: L.musteriDesen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerDesen, c.desen)) },
                 { key: "customerVaryant", label: L.musteriVaryant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerVaryant, c.varyant)) },

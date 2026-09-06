@@ -1,0 +1,225 @@
+{
+  "proje": "Electron (yönetim paneli) — eslint 9.39.4, @typescript-eslint 8.59, typescript 5.6.2. Ölçüm kapsamı: `src electron shared` = 1385 dosya (`eslint .` ile aynı sonuç, +5 kök config dosyası).",
+  "mevcutDurum": "npx eslint src electron shared → 1385 dosya, 0 error, 38 warning (20 @typescript-eslint/no-unused-vars + 18 react-hooks/exhaustive-deps). Bastırılmış (eslint-disable) yorum: 63 satır — 46 react-hooks/exhaustive-deps, 9 @typescript-eslint/no-explicit-any, 2 no-unused-vars, 1 no-control-regex; 7'si gerekçe (`--`) taşıyor. Ölü (kullanılmayan) disable direktifi: 0. Süre: 5.2 sn.",
+  "tipBilgisiMaliyeti": "projectService KAPALI: 5.22 / 6.00 / 5.23 sn (3 koşum, medyan 5.23). projectService AÇIK + no-floating-promises: 11.36 / 11.89 / 10.77 sn (medyan 11.36). Fark: +6.1 sn, ~2.2x. 1385 dosyada kabul edilebilir; CI'da tek koşum.",
+  "kurallar": [
+    {
+      "kural": "max-lines (genel, 300)",
+      "yapilandirma": "\"max-lines\": [\"error\", { \"max\": 300, \"skipComments\": true, \"skipBlankLines\": true }]",
+      "ihlal": 74,
+      "dosyaSayisi": 74,
+      "karar": "warn-baseline",
+      "gerekce": "skipComments AÇIK 74 ihlal, KAPALI 134 ihlal — yani 60 dosya (ihlallerin %45'i) yalnızca YORUM yüzünden sınırı aşıyor. Bu repoda karar kaydı kodun yanında yaşadığı için skipComments zorunlu; keşifteki 134 rakamı skipsiz ölçümdür ve standardın kendi kalıbını cezalandırır. 74 > 15 → baseline sayacı (ARTMAZ kapısı) ile warn. En büyük 5: content-routes.tsx 1098, settings-config.ts 958, documentConfig.ts 957, BranchLanes.tsx 923, WorkOrderFormView.tsx 912.",
+      "ornekler": [
+        "src/routes/content-routes.tsx:1 (1098 satır)",
+        "src/pages/GeneralSettings/settings-config.ts:1 (958)",
+        "src/services/documentConfig.ts:1 (957)",
+        "src/pages/Operations/WorkOrders/BranchLanes.tsx:1 (923)",
+        "src/pages/Operations/WorkOrders/WorkOrderFormView.tsx:1 (912)"
+      ],
+      "olcumKomutu": "OLCUM_RULES='{\"max-lines\":[\"error\",{\"max\":300,\"skipComments\":true,\"skipBlankLines\":true}]}' npx eslint src electron shared -c eslint.olcum.mjs -f json | jq '[.[].messages[]|select(.ruleId==\"max-lines\")]|length'  → 74 (skipComments:false ile → 134)"
+    },
+    {
+      "kural": "max-lines — katalog/registry MUAFİYETİ (adlı override; heuristik DEĞİL)",
+      "yapilandirma": "{ files: [\"src/pages/GeneralSettings/settings-config.ts\", \"src/services/documentConfig.ts\", \"src/pages/Operations/WorkOrders/service.ts\", \"src/routes/content-routes.tsx\"], rules: { \"max-lines\": \"off\" } }",
+      "ihlal": 4,
+      "dosyaSayisi": 4,
+      "karar": "error",
+      "gerekce": "Ölçülen katalog nitelikleri (0 hook çağrısı / yorum oranı): settings-config.ts 1446 ham, 0 hook, %31.7 yorum · documentConfig.ts 1217, 0 hook, %19.1 · WorkOrders/service.ts 1267, 0 hook, %22.1 · content-routes.tsx 1219, 0 hook, %9.3 yorum ama 365 JSX etiketi (rota kayıt defteri). Bölmek zarar verir: hepsi tek veri/registry ifadesidir, parçalanınca 'tek kaynak satır' bozulur. ⚠️ Prompt'taki heuristik ölçüt (0 hook + yorum>%15) content-routes.tsx'i KAÇIRIR (%9.3) ve 74 ihlalin 10'unu süpürür — içinde katalog OLMAYAN iş mantığı da var (stockCountRules.ts %39.3, Finance/service.ts %30.0). Bu yüzden heuristik değil ADLI override öner. Bu override ile max-lines ihlali 74 → 70'e düşer (ölçüldü).",
+      "ornekler": [
+        "src/pages/GeneralSettings/settings-config.ts (0 hook, %31.7 yorum)",
+        "src/services/documentConfig.ts (0 hook, %19.1 yorum)",
+        "src/pages/Operations/WorkOrders/service.ts (0 hook, %22.1 yorum)",
+        "src/routes/content-routes.tsx (0 hook, 365 JSX etiketi, %9.3 yorum — heuristik ölçütü GEÇMEZ)"
+      ],
+      "olcumKomutu": "npx eslint src electron shared -c eslint.olcum2.mjs -f json | jq '[.[].messages[]|select(.ruleId==\"max-lines\")]|length' → 70 (override'sız 74)"
+    },
+    {
+      "kural": "max-lines — *Page.tsx ≤ 200 (özel override)",
+      "yapilandirma": "{ files: [\"src/**/*Page.tsx\"], rules: { \"max-lines\": [\"error\", { \"max\": 200, \"skipComments\": true, \"skipBlankLines\": true }] } }",
+      "ihlal": 42,
+      "dosyaSayisi": 42,
+      "karar": "warn-baseline",
+      "gerekce": "132 Page.tsx tarandı, 42'si (>%31) 200 satırı aşıyor — devralınan yüzey çok geniş. Electron/CLAUDE.md kuralı ('Page ≤200 ZORUNLU') fiilen tutmuyor. 42 > 15 → warn + baseline sayacı ARTMAZ. Not: CrudPage.tsx (330) bir Page.tsx değil, ortak sarmalayıcıdır; `src/**/*Page.tsx` deseni onu da yakalar — istenmiyorsa desen `src/pages/**/*Page.tsx` olmalı (o zaman 41).",
+      "ornekler": [
+        "src/pages/System/Duplicates/DuplicatesPage.tsx:1 (502 satır)",
+        "src/pages/Operations/Orders/OrdersPage.tsx:1 (443)",
+        "src/pages/Finance/InvoicesPage.tsx:1 (432)",
+        "src/pages/Reports/Customer/CustomerScorecardPage.tsx:1 (383)",
+        "src/pages/System/ModuleProfile/ModuleProfilePage.tsx:1 (370)"
+      ],
+      "olcumKomutu": "OLCUM_FILES='[\"src/**/*Page.tsx\"]' OLCUM_RULES='{\"max-lines\":[\"error\",{\"max\":200,\"skipComments\":true,\"skipBlankLines\":true}]}' npx eslint 'src/**/*Page.tsx' -c eslint.olcum.mjs -f json → taranan 132, ihlal 42"
+    },
+    {
+      "kural": "max-lines — *FormDialog.tsx ≤ 200 (özel override)",
+      "yapilandirma": "{ files: [\"src/**/*FormDialog.tsx\"], rules: { \"max-lines\": [\"error\", { \"max\": 200, \"skipComments\": true, \"skipBlankLines\": true }] } }",
+      "ihlal": 12,
+      "dosyaSayisi": 12,
+      "karar": "error-duzeltilerek",
+      "gerekce": "27 FormDialog.tsx tarandı, 12'si sınırı aşıyor (12 ≤ 15 → düzeltilerek error). ⚠️ MALİYET UYARISI: düzeltme ~3.500 satırlık form bölme işidir (InvoiceFormDialog 647, PeripheralDeviceFormDialog 414, ItemFormDialog 393). Ölçüt sayıya göre 'error-duzeltilerek' diyor; iş yükü kabul edilmezse alternatif warn-baseline'dır (sayaç 12, ARTMAZ). Alt sınır 15'e yakın olduğu için tek yeni dialog kuralı sınıf değiştirmez.",
+      "ornekler": [
+        "src/pages/Finance/InvoiceFormDialog.tsx:1 (647 satır)",
+        "src/pages/PeripheralDevices/PeripheralDeviceFormDialog.tsx:1 (414)",
+        "src/pages/Items/ItemFormDialog.tsx:1 (393)",
+        "src/pages/Operations/Orders/OrderFormDialog.tsx:1 (320)",
+        "src/pages/Customers/CustomerFormDialog.tsx:1 (314)"
+      ],
+      "olcumKomutu": "OLCUM_FILES='[\"src/**/*FormDialog.tsx\"]' OLCUM_RULES='{\"max-lines\":[\"error\",{\"max\":200,\"skipComments\":true,\"skipBlankLines\":true}]}' npx eslint 'src/**/*FormDialog.tsx' -c eslint.olcum.mjs -f json → taranan 27, ihlal 12 (tam liste: +ChequeFormDialog 292, ProductRecipeFormDialog 285, ItemPriceFormDialog 276, PurchaseOrderFormDialog 273, TransferFormDialog 264, RouteFormDialog 239, GoodsReceiptFormDialog 237)"
+    },
+    {
+      "kural": "max-lines-per-function (80)",
+      "yapilandirma": "\"max-lines-per-function\": [\"error\", { \"max\": 80, \"skipComments\": true, \"skipBlankLines\": true, \"IIFEs\": true }]",
+      "ihlal": 454,
+      "dosyaSayisi": 406,
+      "karar": "warn-baseline",
+      "gerekce": "454 ihlal / 406 dosya — 1385 dosyanın %29'u. 423'ü .tsx (React bileşen gövdesi = bir fonksiyon; JSX satırı ucuz), yalnız 31'i .ts, onun da 17'si test dosyası (`describe` gövdesi fonksiyon sayılır) → gerçek 'mantık fonksiyonu' ihlali 14. Eşik duyarlılığı ölçüldü: 100→326, 120→248, 150→178, 200→100, 250→49, 300→24. ÖNERİ: tek 80 eşiği yerine iki override — `**/*.ts` (test hariç) 80 → 14 ihlal (error-duzeltilerek sınırına yakın), `**/*.tsx` 200 → 100 ihlal (warn-baseline). Tek eşik yazılacaksa warn + baseline.",
+      "ornekler": [
+        "src/pages/Operations/WorkOrders/WorkOrderFormView.tsx:117 (787 satır)",
+        "src/pages/Operations/Rolls/RollDetailSheet.tsx:32 (592)",
+        "src/pages/Operations/WorkOrders/DirectShipModal.tsx:43 (498)",
+        "src/pages/LabelTemplates/editor/useEditorState.ts:79 (273 — .ts, test değil)",
+        "src/pages/GeneralSettings/useSessionSettingsForm.ts:43 (268 — .ts, test değil)"
+      ],
+      "olcumKomutu": "OLCUM_RULES='{\"max-lines-per-function\":[\"error\",{\"max\":80,\"skipComments\":true,\"skipBlankLines\":true,\"IIFEs\":true}]}' npx eslint src electron shared -c eslint.olcum.mjs -f json → 454 ihlal / 406 dosya; OLCUM_FILES='[\"src/**/*.ts\",\"electron/**/*.ts\",\"shared/**/*.ts\"]' aynı kural → 31 (17'si *.test.ts)"
+    },
+    {
+      "kural": "max-params (4)",
+      "yapilandirma": "\"max-params\": [\"error\", 4]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "1385 dosyada 0 ihlal. Panel zaten obje-parametre kalıbında yazılmış; kural bugünkü davranışı dondurur, hiçbir dosyaya dokunmadan error olarak yazılabilir.",
+      "ornekler": [],
+      "olcumKomutu": "OLCUM_RULES='{\"max-params\":[\"error\",4]}' npx eslint src electron shared -c eslint.olcum.mjs -f json | jq '[.[].messages[]|select(.ruleId==\"max-params\")]|length' → 0"
+    },
+    {
+      "kural": "@typescript-eslint/naming-convention (sabit UPPER_SNAKE / tip-sınıf PascalCase / kalan camelCase + TR karakter yasağı, TEK kural girdisinde birleşik)",
+      "yapilandirma": "\"@typescript-eslint/naming-convention\": [\"error\", { \"selector\": [\"variable\",\"function\",\"parameter\",\"typeLike\",\"enumMember\",\"classProperty\",\"typeProperty\",\"classMethod\",\"typeMethod\",\"objectLiteralMethod\"], \"format\": null, \"custom\": { \"regex\": \"[çğıöşüÇĞİÖŞÜİ]\", \"match\": false } }, { \"selector\": [\"variable\",\"function\"], \"filter\": { \"regex\": \"^(__dirname|__filename|__[A-Za-z0-9]+ForTests)$\", \"match\": true }, \"format\": null }, { \"selector\": \"default\", \"format\": [\"camelCase\"], \"leadingUnderscore\": \"allow\", \"trailingUnderscore\": \"allow\" }, { \"selector\": \"variable\", \"format\": [\"camelCase\",\"UPPER_CASE\",\"PascalCase\"], \"leadingUnderscore\": \"allow\" }, { \"selector\": \"function\", \"format\": [\"camelCase\",\"PascalCase\"] }, { \"selector\": \"parameter\", \"format\": [\"camelCase\",\"PascalCase\"], \"leadingUnderscore\": \"allow\" }, { \"selector\": \"typeLike\", \"format\": [\"PascalCase\"] }, { \"selector\": \"enumMember\", \"format\": [\"UPPER_CASE\",\"PascalCase\"] }, { \"selector\": \"import\", \"format\": [\"camelCase\",\"PascalCase\"] }, { \"selector\": [\"objectLiteralProperty\",\"typeProperty\",\"classProperty\",\"typeMethod\",\"objectLiteralMethod\",\"classMethod\"], \"format\": null }]",
+      "ihlal": 2,
+      "dosyaSayisi": 2,
+      "karar": "error-duzeltilerek",
+      "gerekce": "Birleşik kural 2 ihlal veriyor; ikisi de TR karakterli TANIMLAYICI, format ihlali 0. Yol ölçüldü: React'e kör ilk taslak (function→camelCase) 955 ihlal verdi — bileşen adları PascalCase olduğu için. `function: [camelCase, PascalCase]` + `parameter: [camelCase, PascalCase]` (bileşen-prop `Icon`) + property'lerde `format: null` (API alan adları) ile 0'a indi. `__…ForTests` kaçışı Electron'da HİÇ YOK (grep 0) ama ileriye dönük filter olarak duruyor; `__dirname` (electron/main.ts:9) gerçek ve filter'a alındı. ⚠️ ESLint bir kurala TEK yapılandırma kabul eder — TR kuralı ile format kuralları AYNI dizide olmalı, iki ayrı girdi yazılırsa ikincisi birincisini ezer.",
+      "ornekler": [
+        "src/pages/GeneralSettings/settings-groups.ts:206 — `const göster` (+207,208,209,210 kullanım = 5 satır dokunulur)",
+        "src/test/scrollbar-theme.test.ts:36 — `interface Ölçüm` (+43 kullanım = 2 satır)"
+      ],
+      "olcumKomutu": "OLCUM_RULES=\"$(tr -d '\\n' < naming_final.cfg)\" npx eslint src electron shared -c eslint.olcum.mjs -f json → 2 ihlal (yalnız format kısmı → 0; yalnız TR kısmı → 2)"
+    },
+    {
+      "kural": "Türkçe karakterli tanımlayıcı yasağı — HAM SELECTOR (no-restricted-syntax `Identifier[name=/[çğıöşüÇĞİÖŞÜİ]/]`)",
+      "yapilandirma": "// YAZMA — bunun yerine yukarıdaki naming-convention `custom` girdisini kullan.\n\"no-restricted-syntax\": [\"error\", { \"selector\": \"Identifier[name=/[çğıöşüÇĞİÖŞÜİ]/]\", \"message\": \"…\" }]",
+      "ihlal": 24,
+      "dosyaSayisi": 6,
+      "karar": "yazma",
+      "gerekce": "Keşif '0 bekleniyor' diyordu; ölçüm 24 verdi ve 24'ün 22'si YANLIŞ POZİTİF: selector Identifier düğümünü ayırmadan yakaladığı için nesne literali ANAHTARLARINI da vuruyor — bunlar tanımlayıcı değil VERİ: `{ Müşteri: 'CUSTOMER', Tedarikçi: 'SUPPLIER' }` (rol→kod eşleme, carilerPaging.ts + CarilerPage.tsx, 4), `{ ş:'s', Ş:'S', ı:'i', … }` (slugifyFileName TR harf haritası, reportExport.ts:177, 12), `{ Dönem: [...] }` (chequeDueExport.test.ts, 1), `göster(...)` kullanımları (settings-groups.ts 207-210, 4). Gerçek ihlal 2. TR etiketli veri anahtarını yasaklamak TR-only ürün kararıyla çelişir. Doğru kapı naming-convention `custom` girdisidir (yukarıda, 2 ihlal, negatif sondayla doğrulandı: `göster`/`Ölçüm` yakalanıyor, `{ Müşteri: … }` / `m.ş` yakalanmıyor).",
+      "ornekler": [
+        "YANLIŞ POZİTİF src/pages/Definitions/carilerPaging.ts:25 — `{ Müşteri: \"CUSTOMER\" }` veri anahtarı",
+        "YANLIŞ POZİTİF src/pages/Reports/_components/reportExport.ts:177 — TR harf haritası, 12 isabet",
+        "YANLIŞ POZİTİF src/pages/Definitions/CarilerPage.tsx:56 — ROLE_BADGE anahtarları",
+        "GERÇEK src/pages/GeneralSettings/settings-groups.ts:206 — `const göster`",
+        "GERÇEK src/test/scrollbar-theme.test.ts:36 — `interface Ölçüm`"
+      ],
+      "olcumKomutu": "OLCUM_RULES='{\"no-restricted-syntax\":[\"error\",{\"selector\":\"Identifier[name=/[çğıöşüÇĞİÖŞÜİ]/]\",\"message\":\"…\"}]}' npx eslint src electron shared -c eslint.olcum.mjs -f json → 24 ihlal / 6 dosya (dar naming-convention sürümü → 2)"
+    },
+    {
+      "kural": "no-console",
+      "yapilandirma": "\"no-console\": [\"error\", { \"allow\": [\"warn\", \"error\"] }]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "Çıplak `no-console` 3 ihlal verir; üçü de meşru tanı çıktısı: ErrorBoundary.tsx:129 `console.error` (componentDidCatch), useIdleLogout.ts:112 `console.warn` (window.api.power yok → fallback moduna düşüldü), netStats.ts:31 `console.warn` (YAVAŞ İSTEK ölçümü). `allow:[warn,error]` ile 0 — yani kural bugünkü davranışı dondurur ve gerçek hedefi (`console.log`/`debug`/`info` unutulması) yasaklar. electron/ ana süreçte `console.` kullanımı 0 (grep).",
+      "ornekler": [
+        "allow'suz yakalanan (meşru): src/components/ErrorBoundary.tsx:129",
+        "allow'suz yakalanan (meşru): src/hooks/useIdleLogout.ts:112",
+        "allow'suz yakalanan (meşru): src/services/netStats.ts:31"
+      ],
+      "olcumKomutu": "OLCUM_RULES='{\"no-console\":\"error\"}' … → 3;  OLCUM_RULES='{\"no-console\":[\"error\",{\"allow\":[\"warn\",\"error\"]}]}' npx eslint src electron shared -c eslint.olcum.mjs -f json → 0"
+    },
+    {
+      "kural": "localStorage/sessionStorage'a token/JWT yazımı yasak (dar selector)",
+      "yapilandirma": "\"no-restricted-syntax\": [\"error\", { \"selector\": \"CallExpression[callee.object.name=/^(localStorage|sessionStorage)$/][callee.property.name='setItem'] > Literal[value=/(token|jwt|refresh|bearer)/i]\", \"message\": \"Token/JWT localStorage'a yazılmaz — lib/secure-store.ts (Electron: safeStorage) tek geçittir.\" }, { \"selector\": \"CallExpression[callee.object.property.name=/^(localStorage|sessionStorage)$/][callee.property.name='setItem'] > Literal[value=/(token|jwt|refresh|bearer)/i]\", \"message\": \"Token/JWT localStorage'a yazılmaz — lib/secure-store.ts (Electron: safeStorage) tek geçittir.\" }]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "0 ihlal — keşifle uyumlu. NEGATİF SONDA KOŞULDU (kural sessiz değil): `--stdin` ile `localStorage.setItem(\"accessToken\", t)` ve `window.localStorage.setItem(\"jwt\", t)` YAKALANDI, `localStorage.setItem(\"sidebar.collapsed\", t)` yakalanmadı. İki selector şart: `window.localStorage.…` biçimini ilki görmez. Kapsamdaki 5 setItem çağrısının hiçbiri token yazmıyor; `src/lib/secure-store.ts:31`'deki BİLİNÇLİ web-fallback anahtarı değişken olduğu için (literal değil) doğru biçimde yakalanmıyor — kural o belgeli istisnayı bozmuyor.",
+      "ornekler": [
+        "sonda: localStorage.setItem(\"accessToken\", t) → yakalandı",
+        "sonda: window.localStorage.setItem(\"jwt\", t) → yakalandı",
+        "sonda: localStorage.setItem(\"sidebar.collapsed\", t) → yakalanmadı (doğru)",
+        "kapsam: src/lib/secure-store.ts:31 → yakalanmadı (belgeli web istisnası korunuyor)"
+      ],
+      "olcumKomutu": "OLCUM_RULES=\"$(tr -d '\\n' < ls.cfg)\" npx eslint src electron shared -c eslint.olcum.mjs -f json → 0;  negatif sonda: printf '…' | npx eslint --stdin --stdin-filename src/__probe.ts -c eslint.olcum.mjs -f json → satır 2 ve 3 ateşlendi"
+    },
+    {
+      "kural": "Mutation onError içinde toast.error (çift hata toast'ı)",
+      "yapilandirma": "\"no-restricted-syntax\": [\"error\", { \"selector\": \"Property[key.name='onError'] CallExpression[callee.object.name='toast'][callee.property.name='error']\", \"message\": \"Mutation onError'da ikinci hata toast'ı YOK — apiClient interceptor 4xx/5xx'i zaten basar. İstisna: istek suppressErrorToast:true taşıyorsa gerekçeli eslint-disable yaz.\" }]",
+      "ihlal": 26,
+      "dosyaSayisi": 19,
+      "karar": "warn-baseline",
+      "gerekce": "AST ölçümü keşifteki grep'ten (17/10) FAZLA buldu: 26 ihlal / 19 dosya — grep yalnız tek satırlık `onError: (e) => toast.error` biçimini görüyordu, AST çok satırlı gövdeleri de yakalıyor. `suppressErrorToast` grep'i ile çapraz kontrol edildi: 26 noktanın hiçbirinin isteği bu bayrağı taşımıyor (bayrağın 6 meşru kullanımı var: useServerClock, useDeviceAnnounce, scan-resolvers, WorkOrders/service.ts:256 ve :543), yani hepsi gerçek çift toast. 26 > 15 → warn + baseline (İ-15 düzeltmesi bu listeyi tüketir; hepsi düzeltilirse error'a yükselt). Negatif sonda koşuldu: `onError: () => toast.error(...)` yakalandı, `onSuccess: () => toast.success(...)` ve serbest `toast.error(...)` yakalanmadı.",
+      "ornekler": [
+        "src/pages/SackTags/SackTagsPage.tsx:73 · :98 · :110",
+        "src/pages/System/Duplicates/DuplicatesPage.tsx:166 · :175 · :184",
+        "src/pages/System/DbRestore/DbRestorePage.tsx:52 · :73",
+        "src/pages/Operations/WorkOrders/FasonReceiveDialog.tsx:236 · :483",
+        "src/pages/ReasonPresets/ReasonPresetsPage.tsx:76 · :82"
+      ],
+      "olcumKomutu": "OLCUM_RULES=\"$(tr -d '\\n' < toast.cfg)\" npx eslint src electron shared -c eslint.olcum.mjs -f json → 26 ihlal / 19 dosya. TAM LİSTE: QuickCreateLookup.tsx:64 · MergeDialog.tsx:123 · BulkRollLabelButton.tsx:73 · SackTagsBulkMenu.tsx:76 · ChangeTargetDialog.tsx:291 · FasonQuickReceivePanel.tsx:93 · FasonReceiveDialog.tsx:236,483 · FasonStepActions.tsx:86 · LinkOrderDialog.tsx:133 · ReasonPresetDialog.tsx:82 · ReasonPresetsPage.tsx:76,82 · SackTagDialog.tsx:68 · SackTagsPage.tsx:73,98,110 · DbRestorePage.tsx:52,73 · StartCopyCard.tsx:58 · DuplicatesPage.tsx:166,175,184 · RollDuplicatesTab.tsx:94 · ModuleProfilePage.tsx:158 · BackupButton.tsx:38"
+    },
+    {
+      "kural": "import/no-cycle (ya da eşdeğeri) — döngüsel import",
+      "yapilandirma": "// ESLint kuralı olarak YAZMA. Yerine bekçi: Teks-Erp idiomunda `src/test/import-cycles.test.ts` — kendi grafik tarayıcısı, döngü sayısını 1'e (auth üçlüsü düzeltilirse 0) sabitler, ARTMAZ kapısı. Plugin yolu ısrar edilirse: \"import/no-cycle\": [\"error\", { \"maxDepth\": 2, \"ignoreExternal\": true }]",
+      "ihlal": 3,
+      "dosyaSayisi": 3,
+      "karar": "yazma",
+      "gerekce": "PLUGIN KARARI: eslint-plugin-import üç projenin HİÇBİRİNDE kurulu değil (Electron/kök/backend node_modules'te yok) ve CLAUDE.md 'yeni paket eklemeden önce onay' diyor. Paket ~1.5 MB + `eslint-import-resolver-typescript` peer'ı gerektirir (TS path alias `@/*`, `@shared/*` çözülmezse kural SESSİZCE 0 döner — en kötü sınıf). Ayrıca no-cycle varsayılan maxDepth=Infinity ile bu kod tabanında KULLANILAMAZ: kendi grafik ölçümüm 1888 döngüsel import kenarı / 634 dosya buluyor, çünkü `routes/content-routes.tsx` her sayfayı import ediyor ve sayfalar `store/tabs`e geri dönüyor (kasıtlı registry topolojisi). Derinlik duyarlılığı ölçüldü: maxDepth 1→0, 2→3, 3→23, 4→64, 5→149 ihlal. maxDepth:2'deki 3 kenar TEK gerçek döngüdür: store/auth.ts → services/authService.ts → services/apiClient.ts → store/auth.ts. Toplam runtime (type-only hariç) döngü: 40; type dahil 44. Yani plugin eklemenin bedeli, bağımlılıksız 60 satırlık bir bekçinin verdiği bilgiden fazlasını vermiyor.",
+      "ornekler": [
+        "src/store/auth.ts:47 → src/services/authService.ts",
+        "src/services/authService.ts:2 → src/services/apiClient.ts",
+        "src/services/apiClient.ts:4 → src/store/auth.ts",
+        "yapısal (maxDepth 3'te girer, kasıtlı): src/store/tabs.ts:4 → components/layout/tabs/tab-routers.tsx:3 → routes/content-routes.tsx → 9 sayfa → store/tabs.ts"
+      ],
+      "olcumKomutu": "node scratchpad/cyc3.mjs (kendi yazdığım grafik tarayıcı, 1386 dosya, tsconfig alias'ları çözülmüş) → 'maxDepth:1 → 0 · maxDepth:2 → 3 · maxDepth:3 → 23 · maxDepth:4 → 64 · maxDepth:5 → 149' ve 'maxDepth:Infinity ihlal edecek import satırı: 1888 | dosya: 634'"
+    },
+    {
+      "kural": "@typescript-eslint/no-floating-promises (TİP BİLGİLİ)",
+      "yapilandirma": "languageOptions.parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname }  +  \"@typescript-eslint/no-floating-promises\": \"error\"",
+      "ihlal": 35,
+      "dosyaSayisi": 18,
+      "karar": "warn-baseline",
+      "gerekce": "35 > 15 → warn + baseline. Keşifteki 35 rakamı DOĞRULANDI. İhlallerin çoğu tek kalıp: `invalidate()` / `qc.invalidateQueries(...)` çağrısının başına `void` konmamış (useCrudMutations.ts tek başına 6 tanesini üretiyor ve o dosya panelin ortak CRUD hook'u). Düzeltme mekanik ve tek kelimelik (`void invalidate();`) — 35'i bir turda kapatılabilir, o zaman kural doğrudan error yazılabilir; kural autofix DEĞİL, yalnız 'öneri' sunar. Tip bilgisi maliyeti kabul edilebilir: 5.2 → 11.4 sn.",
+      "ornekler": [
+        "src/hooks/useCrudMutations.ts:19 · :27 · :40 · :45 · :53 · :63 (ortak CRUD hook, 6 ihlal)",
+        "src/pages/Access/Templates/TemplatesPage.tsx:71 · :80 · :89 · :97",
+        "src/pages/Access/Users/AccessUsersPage.tsx:118 · :133 · :141 · :150",
+        "src/pages/Customers/CustomerBranchesPanel.tsx:52 · :61 · :69",
+        "electron/main.ts:95 — `app.whenReady().then(async () => …)`"
+      ],
+      "olcumKomutu": "OLCUM_TYPED=1 OLCUM_RULES='{\"@typescript-eslint/no-floating-promises\":\"error\"}' npx eslint src electron shared -c eslint.olcum.mjs -f json → 35 ihlal / 18 dosya. Süre: /usr/bin/time -p ile 3'er koşum — kapalı 5.22/6.00/5.23 sn, açık 11.36/11.89/10.77 sn"
+    },
+    {
+      "kural": "linterOptions.reportUnusedDisableDirectives",
+      "yapilandirma": "{ linterOptions: { reportUnusedDisableDirectives: \"error\" } }",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "63 eslint-disable direktifinin 0'ı ölü. Hem mevcut kural setiyle hem de tip bilgisi + no-floating-promises açıkken 0 ölçüldü. Bedelsiz error. Not: direktiflerin 46'sı react-hooks/exhaustive-deps, yalnız 7'si `-- gerekçe` taşıyor; ayrı bir kural olarak `eslint-comments/require-description` düşünülebilir ama o da yeni plugin demektir.",
+      "ornekler": [],
+      "olcumKomutu": "OLCUM_UNUSED=1 npx eslint src electron shared -c eslint.olcum.mjs -f json | jq '[.[].messages[]|select(.ruleId==null)]|length' → 0 (OLCUM_TYPED=1 ile de 0). Direktif sayımı: grep -rn 'eslint-disable' src electron shared --include='*.ts' --include='*.tsx' | wc -l → 63"
+    },
+    {
+      "kural": "Renderer'da electron/fs/path/child_process/os importu (no-restricted-imports)",
+      "yapilandirma": "// ZATEN VAR — Electron/eslint.config.mjs:32-43, `files: [\"src/**/*.{ts,tsx}\"]` bloğunda. TEKRAR EKLEME.",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "yazma",
+      "gerekce": "Doğrulandı: kural kurulu ve ÇALIŞIYOR. Negatif sonda `--stdin` ile koşuldu — `import { app } from \"electron\"` ve `import fs from \"fs\"` src/ dosyasında iki ihlal bastı, TR gerekçe mesajları da doğru. Kapsamda 0 gerçek ihlal. Aynı kuralı standart dosyasına ikinci kez yazmak (kopya) 'tek kaynak' kuralını bozar; yapılacak tek iş bunu belgede VAR olarak bağlamak.",
+      "ornekler": [
+        "sonda src/__probe.ts:1 — 'electron' import is restricted (TR mesaj basıldı)",
+        "sonda src/__probe.ts:2 — 'fs' import is restricted"
+      ],
+      "olcumKomutu": "printf 'import { app } from \"electron\";\\nimport fs from \"fs\";\\nconsole.log(app, fs);\\n' | npx eslint --stdin --stdin-filename src/__probe.ts -f json → 2 no-restricted-imports ihlali (kural canlı)"
+    }
+  ],
+  "notlar": "GEÇİCİ DOSYA TEMİZLİĞİ: Electron/eslint.olcum.mjs yazıldı, kullanıldı, `rm` ile silindi ve `ls` ile doğrulandı (No such file or directory). Ayrıca kısa ömürlü Electron/eslint.olcum2.mjs (katalog override ölçümü) da silindi. `git status --porcelain` → Electron/ altında HİÇBİR değişiklik yok; repo kaynak dosyası değiştirilmedi. Hiçbir paket kurulmadı.\n\nKAPSAM NOTU: `npx eslint .` 1390 dosya tarar (kök config'ler dahil), `npx eslint src electron shared` 1385 tarar; kural ölçümleri ikincisiyle yapıldı, error/warning sayısı ikisinde de aynı (0/38).\n\nKARAR ÖZETİ — hemen error yazılabilir (0 ihlal): max-params 4 · no-console {allow:[warn,error]} · localStorage token selector · reportUnusedDisableDirectives · max-lines katalog override. Küçük düzeltmeyle error: naming-convention (2 yeniden adlandırma) · max-lines *FormDialog ≤200 (12 dosya, ağır). Baseline ile warn: max-lines 300 (74) · max-lines *Page ≤200 (42) · max-lines-per-function 80 (454) · onError toast.error (26) · no-floating-promises (35). Yazma: ham TR selector (24 ihlalin 22'si veri anahtarı) · import/no-cycle (plugin kararı + 1888 kenar gürültüsü) · renderer restricted-imports (zaten var).\n\nİKİ SÜRPRİZ: (1) keşifin '0 bekleniyor' dediği TR selector 24 ihlal verdi ve neredeyse tamamı yanlış pozitif — selector düğüm tipini ayırmadığı için TR etiketli VERİ anahtarlarını vuruyor; dar sürüm 2. (2) keşifin grep'le bulduğu 17 çift-toast, AST ile 26 çıktı (çok satırlı onError gövdeleri).\n\nİKİ KONFİG TUZAĞI: (a) ESLint bir kurala tek yapılandırma kabul eder — naming-convention'ın TR `custom` girdisi ile format girdileri AYNI dizide olmalı; (b) no-restricted-syntax da tek girdidir, toast/localStorage/başka selector'lar tek dizide toplanmalı, ayrı bloklara yazılırsa sonraki öncekini ezer."
+}

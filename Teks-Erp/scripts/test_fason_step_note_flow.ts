@@ -209,6 +209,53 @@ async function main(): Promise<void> {
   );
   check("Zımpara talimatı, Boyahane talimatından FARKLI (global tek not yok)", d3.instruction !== BOYA_NOTE);
 
+  // ── 7) P4 TALİMAT KİLİDİ — claim'in WHERE'i gerçekten ısırıyor mu ─────────
+  // `updateInstruction` kilit koşullarını (iptal edilmemiş + kabulsüz) artık
+  // atomik claim'in WHERE'inde taşıyor (tx dışı check-then-act kaldırıldı).
+  // Yüklem WHERE'e taşınırken sessizce delinirse yalnız bu iki sonda görür.
+  console.log("\nADIM 6: P4 talimat kilidi (kabul edilmiş + iptal edilmiş sevk)");
+  const ovLocked = (await sub.getDispatchDyeOverlay(d1.id)).data as { instructionLocked: boolean };
+  check("kabul sonrası overlay.instructionLocked = true", ovLocked.instructionLocked === true);
+
+  let kabulErr = "";
+  try {
+    await sub.updateInstruction(d1.id, "OLMAMALI: kabul sonrası düzenleme", ADMIN);
+  } catch (e) {
+    kabulErr = (e as Error).message;
+  }
+  check("kabul edilmiş sevkin talimatı REDDEDİLİR", /Mal kabul edilmiş/.test(kabulErr), kabulErr || "hata YOK");
+  const d1After = await prisma.subcontractorDispatch.findUnique({
+    where: { id: d1.id },
+    select: { instruction: true },
+  });
+  check(
+    "reddedilen düzenleme satırı DEĞİŞTİRMEDİ",
+    d1After?.instruction === FIX_NOTE,
+    JSON.stringify(d1After?.instruction),
+  );
+
+  // İptal dalı: kabulü olmayan ama iptal edilmiş sevk (d3, Zımpara).
+  await prisma.subcontractorDispatch.update({
+    where: { id: d3.id },
+    data: { cancelledAt: new Date() },
+  });
+  let iptalErr = "";
+  try {
+    await sub.updateInstruction(d3.id, "OLMAMALI: iptal sonrası düzenleme", ADMIN);
+  } catch (e) {
+    iptalErr = (e as Error).message;
+  }
+  check("iptal edilmiş sevkin talimatı REDDEDİLİR", /İptal edilmiş/.test(iptalErr), iptalErr || "hata YOK");
+  const d3After = await prisma.subcontractorDispatch.findUnique({
+    where: { id: d3.id },
+    select: { instruction: true },
+  });
+  check(
+    "iptal edilmiş sevkin talimatı DEĞİŞMEDİ",
+    d3After?.instruction === ZIMPARA_NOTE,
+    JSON.stringify(d3After?.instruction),
+  );
+
   console.log(`\n──────────────────────────────────────────`);
   console.log(`SONUÇ: ${pass} geçti, ${fail} başarısız`);
 }

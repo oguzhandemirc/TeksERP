@@ -1,5 +1,7 @@
 # İki backend'i YAN YANA koşturma (geçiş provası)
 
+> ⚠️ **Bayatlık notu (anlama turu 2026-09-05):** Bu belge ile `docs/ops/FABRIKA-KURULUM-2026-09-04.md` aynı işi farklı portlarla anlatıyor; fabrikanın kanonik yolu FABRIKA-KURULUM'dur. Bu dosya yan-yana (eski+yeni birlikte) senaryosunun referansıdır.
+
 > Amaç: yeni sürümü fabrikada **eskisini durdurmadan** ayağa kaldırıp denemek.
 > Hata çıkarsa eski sürüm zaten çalışıyor; geri dönüş bir `pm2` komutu.
 
@@ -36,7 +38,9 @@ gerekir; **ayrı veritabanı çok daha temizdir.**
 #     bağlanmayı dener, başarırsa hiçbir şey yaratmaz.)
 
 # 2) ⚠ YAPILANDIRMAYI KURULUMDAN ÖNCE KOY
-Copy-Item .\ecosystem.yan-yana.js C:\TeksERP\app\ecosystem.config.js
+# ⚠️ `ecosystem.yan-yana.js` repoda YOK — `deploy/ecosystem.fabrika.js`'i kopyalayıp
+#    port/ad alanlarını elle düzenle (aşağıdaki tabloya göre).
+Copy-Item .\ecosystem.fabrika.js C:\TeksERP\app\ecosystem.config.js
 
 # 3) Sürümü kur
 .\kur.ps1 -Kok C:\TeksERP `

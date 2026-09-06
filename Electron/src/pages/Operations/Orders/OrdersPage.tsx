@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Ban, PanelRight, Pencil, Plus } from "lucide-react";
+import { Ban, PanelRight, Pencil, Plus, Wrench } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
@@ -383,6 +383,22 @@ export function OrdersPage() {
         actions={
           <>
             <RefreshButton queryKey={QUERY_KEY} />
+            {/* DEFTER ONARIMI — buradan kısa yol. Siparişin "Açık" görünmesinin
+                sebebi çoğu zaman sevkiyatın deftere yazılamamış olmasıdır; o
+                ekrana giden yolun sipariş listesinde durması bilinçli.
+                Karo YALNIZ `shipping:repair-allocation` taşıyana çizilir. */}
+            <PermissionGate permission="shipping:repair-allocation">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                title="Mal çıkmış ama sipariş defterine işlenmemiş sevkiyatlar"
+                onClick={() => openTab("/operations/allocation-repair")}
+              >
+                <Wrench className="h-4 w-4" />
+                Yazılamayanlar
+              </Button>
+            </PermissionGate>
             <PermissionGate permission="order:write">
               <Button
                 size="sm"

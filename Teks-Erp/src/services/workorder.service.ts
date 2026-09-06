@@ -95,10 +95,10 @@ import {
   HIDE_CANCELLED_FILTER,
   HIDE_COMPLETED_FILTER,
 } from "./helpers/hidden-status.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import {
   createBatchTx,
-  deleteIfEmptyAndTraceless,
+  deleteIfEmptyAndTracelessTx,
   K18_DEAD_STATUSES,
   type CreateBatchResult,
 } from "./batch.service";
@@ -128,7 +128,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002, p2002Mentions } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq, normalizeScanCode } from "../utils/code-format";
 // Per-roll split'te taşınan toplar için yeni SD dispatch numarası (aynı sequence).
-import { nextPrefixedSequence, SubcontractorService } from "./subcontractor.service";
+import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.service";
 
 import { diffFields } from "./helpers/audit-diff.helper";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
@@ -1747,7 +1747,14 @@ export class WorkOrderService {
    * metrajı ve bağlı SİPARİŞ TOPLAMINI (talep) ekler.
    */
   private async withProductionMeters<
-    T extends { id: string; steps: { id: string; stepSequence: number }[] },
+    T extends {
+      id: string;
+      // `station` ve `orderLinks` OPSİYONEL: liste select'i ikisini de getirir ve
+      // aşağıdaki rollup geçişleri onları BELLEKTEN okur (aynı satırı ikinci kez
+      // sorgulamamak için). Gelmezlerse geçişler DB turuna düşer — davranış aynı.
+      steps: { id: string; stepSequence: number; station?: { name: string } | null }[];
+      orderLinks?: { orderLineId: string }[];
+    },
   >(
     wos: T[]
   ): Promise<
@@ -1771,18 +1778,37 @@ export class WorkOrderService {
     // toplamı; üretim çıktısını/girişini sipariş talebiyle kıyaslamak için. STOK
     // üretiminde bağ yok → 0 (frontend "—" gösterir). Pivot PK (workOrderId,...)
     // lider kolonuyla indeksli, sayfa başına tek sorgu.
+    //
+    // ÖLÇÜM 2026-09-05: bu geçiş `work_order_to_order_lines`ı İKİNCİ kez
+    // okuyordu — liste select'i `orderLinks.orderLineId`i zaten getiriyor.
+    // Bağ satırları bellekten okunur, DB'ye yalnız `order_lines.quantity` turu
+    // kalır (istek başına 2 → 1 sorgu). Satır KÜMESİ birebir aynı: liste
+    // select'inde `orderLinks` üzerinde where/take yok.
     const orderedByWo = new Map<string, number>();
     const woIds = wos.map((w) => w.id);
     if (woIds.length > 0) {
-      const links = await prisma.workOrderToOrderLine.findMany({
-        where: { workOrderId: { in: woIds } },
-        select: { workOrderId: true, orderLine: { select: { quantity: true } } },
-      });
-      for (const l of links) {
-        orderedByWo.set(
-          l.workOrderId,
-          (orderedByWo.get(l.workOrderId) ?? 0) + Number(l.orderLine.quantity)
-        );
+      const preloaded = wos.every((w) => Array.isArray(w.orderLinks));
+      const links = preloaded
+        ? wos.flatMap((w) =>
+            (w.orderLinks ?? []).map((l) => ({ workOrderId: w.id, orderLineId: l.orderLineId }))
+          )
+        : await prisma.workOrderToOrderLine.findMany({
+            where: { workOrderId: { in: woIds } },
+            select: { workOrderId: true, orderLineId: true },
+          });
+      const lineIds = [...new Set(links.map((l) => l.orderLineId))];
+      if (lineIds.length > 0) {
+        const lines = await prisma.orderLine.findMany({
+          where: { id: { in: lineIds } },
+          select: { id: true, quantity: true },
+        });
+        const qtyByLine = new Map(lines.map((l) => [l.id, Number(l.quantity)]));
+        for (const l of links) {
+          orderedByWo.set(
+            l.workOrderId,
+            (orderedByWo.get(l.workOrderId) ?? 0) + (qtyByLine.get(l.orderLineId) ?? 0)
+          );
+        }
       }
     }
 
@@ -1801,18 +1827,30 @@ export class WorkOrderService {
     // ŞU AN FASONDA — bu sayfadaki WO'lardan hangisi şu an bir fasonda mal tutuyor
     // (AT_SUBCONTRACTOR top'un currentStepId'si o EXTERNAL adım). WO başına distinct
     // istasyon adı (liste rozeti). Tek batched sorgu — currentStepId partial-indexli.
+    //
+    // ÖLÇÜM 2026-09-05: nested `currentStep:{workOrderId, station:{name}}` select'i
+    // AYNI adım+istasyon satırlarını iki ek turda tekrar okuyordu; oysa liste
+    // select'i her adımın `station.name`ini zaten getirmiş oluyor. Adım→WO ve
+    // adım→istasyon haritası BELLEKTEN kurulur (3 → 1 sorgu). Küme aynı: WHERE
+    // `currentStepId ∈ stepIds` olduğu için her satırın adımı bellekte VAR.
+    const stepWoById = new Map<string, string>();
+    const stepStationById = new Map<string, string>();
+    for (const w of wos) {
+      for (const st of w.steps) {
+        stepWoById.set(st.id, w.id);
+        if (st.station?.name) stepStationById.set(st.id, st.station.name);
+      }
+    }
     const fasonStationsByWo = new Map<string, Set<string>>();
     const atSubRows = await prisma.roll.findMany({
       where: { currentStepId: { in: stepIds }, status: RollStatus.AT_SUBCONTRACTOR },
-      select: {
-        currentStep: {
-          select: { workOrderId: true, station: { select: { name: true } } },
-        },
-      },
+      select: { currentStepId: true },
     });
     for (const r of atSubRows) {
-      const woId = r.currentStep?.workOrderId;
-      const name = r.currentStep?.station?.name;
+      const stepId = r.currentStepId;
+      if (!stepId) continue;
+      const woId = stepWoById.get(stepId);
+      const name = stepStationById.get(stepId);
       if (!woId || !name) continue;
       let set = fasonStationsByWo.get(woId);
       if (!set) {
@@ -1824,16 +1862,34 @@ export class WorkOrderService {
 
     // KİME GİTTİ — iptal edilmemiş TÜM fason sevkleri (adım geçmiş olsa bile).
     // Tek batched sorgu; `workOrderId` FK indeksli.
+    //
+    // ÖLÇÜM 2026-09-05: `step:{station:{name}}` nested select'i work_order_steps +
+    // stations turlarını ÜÇÜNCÜ kez atıyordu. Adım→istasyon adı yukarıdaki
+    // bellek haritasından okunur (3 → 1 sorgu). Sevkin adımı normalde aynı
+    // WO'nundur; sayfa dışı bir adıma işaret eden anomali sevk varsa YALNIZ o
+    // adımlar için tek ek tur atılır → `current` işareti eski davranışla aynı.
     const firmsByWo = new Map<string, Map<string, boolean>>();
     const dispatchRows = await prisma.subcontractorDispatch.findMany({
       where: { workOrderId: { in: woIds }, cancelledAt: null },
       select: {
         workOrderId: true,
+        stepId: true,
         subcontractor: { select: { name: true } },
-        step: { select: { station: { select: { name: true } } } },
       },
       orderBy: { createdAt: "asc" },
     });
+    const unknownStepIds = [
+      ...new Set(dispatchRows.map((d) => d.stepId).filter((id) => !stepStationById.has(id))),
+    ];
+    if (unknownStepIds.length > 0) {
+      const extraSteps = await prisma.workOrderStep.findMany({
+        where: { id: { in: unknownStepIds } },
+        select: { id: true, station: { select: { name: true } } },
+      });
+      for (const st of extraSteps) {
+        if (st.station?.name) stepStationById.set(st.id, st.station.name);
+      }
+    }
     for (const d of dispatchRows) {
       const name = d.subcontractor?.name;
       if (!name) continue;
@@ -1843,7 +1899,7 @@ export class WorkOrderService {
         firmsByWo.set(d.workOrderId, m);
       }
       // "Şu an orada mı" — o WO'nun fasonda tuttuğu istasyon adıyla eşleşiyorsa.
-      const stationName = d.step?.station?.name;
+      const stationName = stepStationById.get(d.stepId);
       const isCurrent = Boolean(stationName && fasonStationsByWo.get(d.workOrderId)?.has(stationName));
       m.set(name, (m.get(name) ?? false) || isCurrent);
     }
@@ -3701,9 +3757,8 @@ export class WorkOrderService {
       if (stepIds.length > 0) {
         await tx.$executeRaw`
           UPDATE roll_movements m
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          SET "exitedAt" = now(),
               "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
               "weightOut" = COALESCE(m."weightOut", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_CANCELLED'
@@ -3731,7 +3786,7 @@ export class WorkOrderService {
       await voidStalePendingBypassAssignmentsTx(tx, id, "WO_CANCELLED", { force: true });
 
       // WO iptal olunca tüm ACTIVE refakat kartlarını VOIDED'a çek
-      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
+      await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_CANCELLED" });
 
       const cancelledWO = await tx.workOrder.findUnique({ where: { id } });
       return { updated: cancelledWO!, applied };
@@ -4225,9 +4280,8 @@ export class WorkOrderService {
         // Bayat açık movement kalmışsa kapat (defansif — WIP yok ama iz temiz olsun).
         await tx.$executeRaw`
           UPDATE roll_movements m
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          SET "exitedAt" = now(),
               -- qtyIn ÖNCE (istasyon iş-hacmi paritesi — yukarıdaki dispozisyon
               -- kapanışıyla aynı gerekçe): kesilmiş topta currentQty ile kapatmak
               -- üretim raporunda hayalet kayıp yaratır. qtyIn 0/null ise kalan metraj.
@@ -4256,7 +4310,7 @@ export class WorkOrderService {
         await voidStalePendingBypassAssignmentsTx(tx, id, "WO_CLOSE", { force: true });
 
         // ACTIVE refakat kartları COMPLETED (otomatik-tamamlama yollarıyla aynı).
-        await setWorkOrderCardStatuses(tx, id, "ACTIVE", "COMPLETED");
+        await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "COMPLETED");
 
         const done = await tx.workOrder.findUnique({ where: { id } });
         return {
@@ -4431,7 +4485,7 @@ export class WorkOrderService {
       userId,
     });
     for (const batchId of sourceBatchIds) {
-      await deleteIfEmptyAndTraceless(tx, batchId);
+      await deleteIfEmptyAndTracelessTx(tx, batchId);
     }
 
     await recomputeStepStatus(tx, newReEntryStepId);
@@ -4517,9 +4571,8 @@ export class WorkOrderService {
         // terminal duruma çek (softDelete ile aynı gerekçe).
         await tx.$executeRaw`
           UPDATE roll_movements m
-          -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-          -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-          SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+          -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+          SET "exitedAt" = now(),
               "qtyOut" = COALESCE(m."qtyOut", r."currentQty"),
               "weightOut" = COALESCE(m."weightOut", r."weightKg"),
               notes = CASE WHEN m.notes IS NULL OR m.notes = '' THEN 'WO_ARCHIVED'
@@ -4538,7 +4591,7 @@ export class WorkOrderService {
       // ACTIVE refakat kartı VOID edilir — quickStart zero-attach telafisi ve
       // planlamacı arşivi DB'de arşivli WO'ya bağlı hayalet ACTIVE kart
       // bırakmasın (softDelete'teki bloğun simetriği).
-      await setWorkOrderCardStatuses(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
+      await setWorkOrderCardStatusesTx(tx, id, "ACTIVE", "VOIDED", { voidReason: "WO_ARCHIVED" });
 
       return tx.workOrder.update({
         where: { id },
@@ -6246,9 +6299,8 @@ export class WorkOrderService {
       //    Tek sorgu = O(1) (eski per-roll updateMany yerine).
       await tx.$executeRaw`
         UPDATE roll_movements m
-        -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-        -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-        SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+        -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+        SET "exitedAt" = now(),
             "qtyOut" = r."currentQty",
             "weightOut" = r."weightKg",
             notes = 'DETACHED_FROM_WO'

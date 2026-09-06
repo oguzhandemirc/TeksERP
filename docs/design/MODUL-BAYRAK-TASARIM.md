@@ -1,6 +1,7 @@
 # Modül & Bayrak Stratejisi — Tek Koddan Çok Fabrikaya
 
-> **Tarih:** 2026-09-02 · **Durum:** TASARIM ONAYLANDI, kod başlamadı
+> **Tarih:** 2026-09-02 · **Durum:** ✅ P1–P8 UYGULANDI (2026-09-02/04) — `constants/module-flags.ts`, `module.middleware.ts`, `constants/module-profiles.ts`, `User.isSystemAccount`, `npm run superadmin:kur`, ayar şifresi.
+> ⚠️ **Adlandırma:** tasarımdaki `modul.*` KAVRAMSAL addır ve koda GİRMEZ; DB anahtarları `finance.enabled` kalıbındadır (`ticaret.enabled`, `iplik.enabled`, `depo.multiEnabled`, `kumasTeknik.enabled`, `tezgah.enabled`). Profiller `deploy/profiller/*.json` değil TS sabitidir. `adnansahin` dalı emekli edildi. Canlı kural özeti: `docs/kurallar/modul-bayrak.md`.
 > **Karar sahibi:** kullanıcı (bu belgedeki her karar soru-cevapla tek tek onaylandı)
 > **Kaynak analiz:** 7 ajanlık tarama — 77 mevcut ayar anahtarı, tüm route/ekran
 > envanteri, 8 sıkı/gevşek bağ, 5 sektör segmenti, ERP standartları.
@@ -162,7 +163,7 @@ yazılabilmesi → **`shipping.invoiceMode`**: `dis` (varsayılan — bugünkü)
 
 ## 7. Süperadmin (satıcı hesabı)
 
-DB'de **gizli GERÇEK satır** (audit/FK gerçek kullanıcı ister; sanal kullanıcı
+DB'de **gizli GERÇEK satır** (docs/history/denetim-2026-08/FK gerçek kullanıcı ister; sanal kullanıcı
 olmaz). Tüm listelerden süzülür: kullanıcı yönetimi, PIN listesi,
 `mobile-users`, oturum listeleri. Tam yetki (izin denetiminden muaf değil —
 tüm izinler atanmış). Şifresi/PIN'i fabrikaya asla verilmez.

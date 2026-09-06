@@ -25,9 +25,9 @@ import { writeWarehouseMovements } from "./helpers/warehouse-ledger.helper";
 import { v4 as uuidv4 } from "uuid";
 import { ApiResponse } from "../types/api.types";
 import {
-  assertBatchInWorkOrder,
+  assertBatchInWorkOrderTx,
   createBatchTx,
-  deleteIfEmptyAndTraceless,
+  deleteIfEmptyAndTracelessTx,
   K18_DEAD_STATUSES,
   type CreateBatchResult,
 } from "./batch.service";
@@ -73,8 +73,8 @@ import {
   // elle yazıyordu ve üçünde de guard yoktu (denetim 2026-08-09, F-FAS-ESZ-001).
   completeWorkOrderIfStepsDone,
 } from "./helpers/roll-step.helper";
-import { generateRollBarcode, reserveRollBarcodes } from "./helpers/roll-barcode.helper";
-import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { generateRollBarcodeTx, reserveRollBarcodesTx } from "./helpers/roll-barcode.helper";
+import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { assertTargetablePropertyIds } from "./helpers/targetable-property.helper";
 import {
@@ -110,7 +110,7 @@ import { p2002Mentions } from "../utils/p2002";
 
 // Export: workorder.service per-roll split'te taşınan toplar için yeni FS dispatch
 // numarası üretirken yeniden kullanır (aynı sequence kaynağı).
-export async function nextPrefixedSequence(
+export async function nextPrefixedSequenceTx(
   tx: Prisma.TransactionClient,
   table: "subcontractorDispatch" | "subcontractorReceipt",
   prefix: string,
@@ -524,7 +524,7 @@ async function createFasonShipChild(
    */
   stepStationId?: string | null,
 ): Promise<string> {
-  const barcode = await generateRollBarcode(tx, "H");
+  const barcode = await generateRollBarcodeTx(tx, "H");
   const props = await tx.rollProperty.findMany({
     where: { rollId: parent.id },
     // valueId: kısmi-sevk çocuğu ebeveynin değer seçimini de devralır (denetim F6).
@@ -1045,7 +1045,7 @@ export class SubcontractorService {
       new Prisma.Decimal(0)
     );
 
-    // withBarcodeRetry: dispatchNo (@unique) tx içinde nextPrefixedSequence ile
+    // withBarcodeRetry: dispatchNo (@unique) tx içinde nextPrefixedSequenceTx ile
     // üretiliyor; eşzamanlı iki sevk aynı FS+GGAAYY+NNNN'i hesaplarsa P2002
     // çakışmasında tx baştan denenir → sıra yeniden okunur (kartela/shipping deseni).
     const result = await withBarcodeRetry(() =>
@@ -1212,13 +1212,13 @@ export class SubcontractorService {
         for (const b of batchRows) await splitRemainder(b.id);
         // Kart WO başına — sevk-birleştirmede karta dokunulmaz; boş izsiz kaynaklar silinir.
         for (const b of batchRows.slice(1)) {
-          await deleteIfEmptyAndTraceless(tx, b.id);
+          await deleteIfEmptyAndTracelessTx(tx, b.id);
         }
       } else if (existingBatchIds.length === 1) {
         dispatchBatchId = existingBatchIds[0];
         // WO-scope tazelemesi (woFresh deseni): cross-WO guard tx DIŞINDA koştu;
         // tx içinde taze doğrula — yabancı parti bu sevkin batchId'si OLAMAZ.
-        await assertBatchInWorkOrder(tx, dispatchBatchId, data.workOrderId);
+        await assertBatchInWorkOrderTx(tx, dispatchBatchId, data.workOrderId);
         // K17 reddi tx-İÇİNDE de (MAJOR-2): ön-guard (~:694) tx DIŞINDA koştu —
         // pencerede parti bir K15 merge'ine kaynak olmuş olabilir; birleşmiş
         // tarihçe satırı yeni sevk ALAMAZ (toplar/sevkler survivor'a taşındı).
@@ -1254,7 +1254,7 @@ export class SubcontractorService {
 
       // Dispatch numarası
       const now = new Date();
-      const seq = await nextPrefixedSequence(tx, "subcontractorDispatch", "FS", now);
+      const seq = await nextPrefixedSequenceTx(tx, "subcontractorDispatch", "FS", now);
       const dispatchNo = buildDailyCode("FS", seq, now);
 
       const dispatch = await tx.subcontractorDispatch.create({
@@ -2086,9 +2086,8 @@ export class SubcontractorService {
       const cancelTag = `CANCEL:${dispatch.dispatchNo}`;
       await tx.$executeRaw`
         UPDATE "roll_movements"
-        -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-        -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-        SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+        -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+        SET "exitedAt" = now(),
             "notes" = CASE
               WHEN "notes" IS NULL OR "notes" = '' THEN ${cancelTag}
               ELSE "notes" || ' | ' || ${cancelTag}
@@ -2739,7 +2738,7 @@ export class SubcontractorService {
         ? allSteps.slice(currentIndex + 1).find((s) => s.status !== StepStatus.SKIPPED) ?? null
         : null;
 
-    // withBarcodeRetry: receiptNo (@unique) tx içinde nextPrefixedSequence ile
+    // withBarcodeRetry: receiptNo (@unique) tx içinde nextPrefixedSequenceTx ile
     // üretiliyor; eşzamanlı kabullerde P2002 çakışmasında tx baştan denenir.
     // Takip teslimatında doğan yeni parti numarası — mesaj/audit için (retry'da
     // tx başında sıfırlanır, bayat değer taşımaz).
@@ -2893,7 +2892,7 @@ export class SubcontractorService {
         })) > 0;
 
       const now = new Date();
-      const seq = await nextPrefixedSequence(tx, "subcontractorReceipt", "FK", now);
+      const seq = await nextPrefixedSequenceTx(tx, "subcontractorReceipt", "FK", now);
       const receiptNo = buildDailyCode("FK", seq, now);
 
       const receipt = await tx.subcontractorReceipt.create({
@@ -2941,9 +2940,8 @@ export class SubcontractorService {
           UPDATE "roll_movements" rm
           SET "qtyOut"   = COALESCE(rm."qtyIn", r."currentQty"),
               "weightOut" = r."weightKg",
-              -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-              -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-              "exitedAt"  = (now() AT TIME ZONE 'UTC'),
+              -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+              "exitedAt"  = now(),
               "notes"     = ${`RETURNED_VIA_RECEIPT:${receiptNo}`}
           FROM "rolls" r
           WHERE rm."rollId" = r."id"
@@ -3155,7 +3153,7 @@ export class SubcontractorService {
         // itibaren zaten tutulduğu için araya giren her tur kilidi o kadar
         // uzatıyordu. Ara adımda (nextStep var) barkod HİÇ üretilmez → sayaca
         // dokunulmaz (`count = 0` sayaç satırına hiç yazmaz).
-        const reservedBorn = await reserveRollBarcodes(
+        const reservedBorn = await reserveRollBarcodesTx(
           tx,
           "F",
           nextStep ? 0 : bornRollInputs.length,
@@ -3699,8 +3697,8 @@ export class SubcontractorService {
         UPDATE "roll_movements" rm
         SET "qtyOut"   = COALESCE(rm."qtyIn", r."currentQty"),
             "weightOut" = r."weightKg",
-            -- O-11: tz'siz kolona UTC yaz (receive'daki yazımla birebir aynı gerekçe).
-            "exitedAt"  = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            "exitedAt"  = now(),
             "notes"     = ${`REMAINDER_CLOSED:${data.reasonCode}`}
         FROM "rolls" r
         WHERE rm."rollId" = r."id"
@@ -4750,42 +4748,47 @@ export class SubcontractorService {
     instruction: string | null,
     userId?: string
   ): Promise<ApiResponse<{ id: string; dispatchNo: string; instruction: string | null }>> {
-    const dispatch = await prisma.subcontractorDispatch.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        cancelledAt: true,
-        instruction: true,
-        // P4: bu sevkin (iptal edilmemiş) bir kabulü var mı? Varsa fason firma
-        // malı zaten işledi — talimatı değiştirmek anlamsız/yanıltıcı, kilitle.
-        items: {
-          select: {
-            receiptItems: {
-              where: { receipt: { cancelledAt: null } },
-              select: { id: true },
-              take: 1,
-            },
-          },
-        },
-      },
-    });
-    if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
-    if (dispatch.cancelledAt) {
-      throw AppError.conflict("İptal edilmiş sevkin fason talimatı düzenlenemez");
-    }
-    if (dispatch.items.some((it) => it.receiptItems.length > 0)) {
-      throw AppError.conflict(
-        "Mal kabul edilmiş — fason talimatı artık düzenlenemez.",
-      );
-    }
-
     // Boş/whitespace → null (talimatı temizle).
     const next = instruction && instruction.trim() ? instruction.trim() : null;
 
-    const updated = await prisma.subcontractorDispatch.update({
-      where: { id },
-      data: { instruction: next },
-      select: { id: true, dispatchNo: true, instruction: true },
+    // Kilit koşulları (iptal edilmemiş + kabulsüz) claim'in WHERE'ine konur:
+    // eskiden okuma ile yazma tx dışında ayrıydı ve o pencerede gelen bir iptal
+    // ya da mal kabulü, kilitlenmiş bir sevkin talimatını değiştirtiyordu.
+    const { updated, oldInstruction } = await prisma.$transaction(async (tx) => {
+      const dispatch = await tx.subcontractorDispatch.findUnique({
+        where: { id },
+        select: { id: true, instruction: true },
+      });
+      if (!dispatch) throw AppError.notFound("Sevk belgesi bulunamadı");
+
+      const claimed = await tx.subcontractorDispatch.updateMany({
+        where: {
+          id,
+          cancelledAt: null,
+          // P4: bu sevkin (iptal edilmemiş) bir kabulü varsa fason firma malı
+          // zaten işledi — talimatı değiştirmek anlamsız/yanıltıcı, kilitle.
+          items: { none: { receiptItems: { some: { receipt: { cancelledAt: null } } } } },
+        },
+        data: { instruction: next },
+      });
+      if (claimed.count === 0) {
+        // Tanı tx İÇİNDE taze okumayla — iki sebebin hangisi olduğu söylenmeli.
+        const fresh = await tx.subcontractorDispatch.findUnique({
+          where: { id },
+          select: { cancelledAt: true },
+        });
+        throw AppError.conflict(
+          fresh?.cancelledAt
+            ? "İptal edilmiş sevkin fason talimatı düzenlenemez"
+            : "Mal kabul edilmiş — fason talimatı artık düzenlenemez.",
+        );
+      }
+
+      const row = await tx.subcontractorDispatch.findUniqueOrThrow({
+        where: { id },
+        select: { id: true, dispatchNo: true, instruction: true },
+      });
+      return { updated: row, oldInstruction: dispatch.instruction };
     });
 
     await AuditService.log({
@@ -4793,7 +4796,7 @@ export class SubcontractorService {
       action: "UPDATE",
       tableName: "SUBCONTRACTOR_DISPATCH",
       recordId: id,
-      oldData: { instruction: dispatch.instruction },
+      oldData: { instruction: oldInstruction },
       newData: { instruction: next },
     });
 
@@ -6418,9 +6421,8 @@ export class SubcontractorService {
         UPDATE "roll_movements" rm
         SET "qtyOut" = r."currentQty",
             "weightOut" = r."weightKg",
-            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-            "exitedAt" = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            "exitedAt" = now(),
             "notes" = CASE
               WHEN rm."notes" IS NULL OR rm."notes" = '' THEN ${tag}
               ELSE rm."notes" || ' | ' || ${tag}
@@ -6508,9 +6510,8 @@ export class SubcontractorService {
         if (completeWorkOrder) {
           await tx.$executeRaw`
             UPDATE "roll_movements"
-            -- O-11: tz'siz kolona UTC yaz (çıplak NOW() yerel saat yazar → Prisma'nın
-            -- UTC'siyle aynı tabloda iki saat olur, süre raporu +3sa şişer).
-            SET "exitedAt" = (now() AT TIME ZONE 'UTC'),
+            -- tz-ok: "exitedAt" timestamptz — düz now() doğru anı yazar (eski sarmal yazım doğruluğu oturum tz'sine bağlıyordu).
+            SET "exitedAt" = now(),
                 "notes" = CASE WHEN "notes" IS NULL OR "notes" = '' THEN 'FASON_DIRECT_SHIP'
                                ELSE "notes" || ' | FASON_DIRECT_SHIP' END
             WHERE "workOrderStepId" IN (
@@ -6619,7 +6620,7 @@ export class SubcontractorService {
           });
           orderIds.add(line.order.id);
         }
-        await recomputeOrderStatusForOrders(tx, [...orderIds]);
+        await recomputeOrderStatusForOrdersTx(tx, [...orderIds]);
       }
 
       // 7) Donmuş resmi belge — her doğrudan sevk OLAYI (tam VEYA kısmi) kendi

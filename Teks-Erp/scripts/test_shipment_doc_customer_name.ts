@@ -45,6 +45,9 @@ import {
   SHIPPING_DOC_ITEM_NAME_MODES,
   DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE,
   readShippingDocItemNameMode,
+  DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE,
+  readShippingDocCekiNameMode,
+  readShippingDocProductColorSplit,
   sanitizeDocumentsConfig,
 } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
@@ -76,6 +79,8 @@ const rollIds: string[] = [];
 
 /** Bayrağın önceki değeri — teardown birebir geri yükler. */
 let prevFlag: { value: Prisma.JsonValue } | null = null;
+/** Çeki rejimi satırının koşum ÖNCESİ hâli — finally'de BİREBİR geri yüklenir. */
+let prevCekiFlag: { value: unknown } | null = null;
 
 async function setMode(v: string | null): Promise<void> {
   if (v === null) {
@@ -95,8 +100,30 @@ async function setMode(v: string | null): Promise<void> {
   });
 }
 
-/** Sample doc'u verilen rejimle bas — snapshot zarfı elle kurulur (DB'siz). */
-function renderSample(mode: "bizdeki" | "musterideki" | "ikisi" | undefined): string {
+/** Çeki rejimi ayarını yaz/sil (null = satırı kaldır). */
+async function setCekiMode(v: string | null): Promise<void> {
+  if (v === null) {
+    await prisma.systemSetting
+      .delete({ where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE } })
+      .catch(() => {});
+    return;
+  }
+  await prisma.systemSetting.upsert({
+    where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+    create: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE, value: v, description: "test" },
+    update: { value: v },
+  });
+}
+
+/**
+ * Sample doc'u verilen rejimle bas — snapshot zarfı elle kurulur (DB'siz).
+ * `ceki` verilmezse meta'ya HİÇ yazılmaz: eski çağrı yollarının bayt eşitliği korunur.
+ */
+function renderSample(
+  mode: "bizdeki" | "musterideki" | "ikisi" | undefined,
+  ceki?: "devral" | "bizdeki" | "musterideki" | "ikisi",
+  colorSplit?: boolean,
+): string {
   const doc = SAMPLE_PRINTED_DOCS[PrintedDocType.SHIPMENT_DISPATCH] as unknown as ShipmentDispatchDoc;
   return renderShipmentDispatchHtml(
     {
@@ -106,7 +133,11 @@ function renderSample(mode: "bizdeki" | "musterideki" | "ikisi" | undefined): st
       docConfigOverride: null,
       doc: doc as unknown as Record<string, unknown>,
     },
-    mode === undefined ? {} : { itemNameMode: mode },
+    {
+      ...(mode === undefined ? {} : { itemNameMode: mode }),
+      ...(ceki === undefined ? {} : { cekiNameMode: ceki }),
+      ...(colorSplit === undefined ? {} : { productColorSplit: colorSplit }),
+    },
   );
 }
 
@@ -473,6 +504,176 @@ async function run(): Promise<void> {
     "⭐ uçtan uca: özel başlık sevk irsaliyesinde basılıyor",
     htmlRenamed.includes("ÜRÜN KODU") && !htmlRenamed.includes(">STOK ADI<"),
   );
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§7 — ÇEKİ BÖLÜMÜ AYRI REJİM (`shipping.docCekiNameMode`, 2026-09-06)");
+  // ---------------------------------------------------------------------------
+  // NEDEN VAR: çeki listesi sevk irsaliyesinin bir BÖLÜMÜ ama tek başına da
+  // basılabiliyor ve ambar elemanının kontrol listesi olarak kullanılıyor; orada
+  // "hem bizdeki hem müşterideki ad" anlamlı, müşteriye giden ÜRÜN LİSTESİNDE değil.
+  // Tek global rejim ikisini birden çeviriyordu.
+  await setCekiMode(null);
+  check(
+    "kayıt YOKKEN çeki okuyucusu 'devral' döner",
+    (await readShippingDocCekiNameMode()) === "devral",
+    `DEFAULT=${DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE}`,
+  );
+  await setCekiMode("__hicboylebirdegeryok__");
+  check(
+    "⭐ DB'de ÇÖP değer varken de 'devral' (kod sigortası)",
+    (await readShippingDocCekiNameMode()) === "devral",
+  );
+  await setCekiMode(null);
+
+  // ⭐ EN ÖNEMLİ: bayrak yazılmadıkça ÇIKTI DEĞİŞMEZ.
+  check(
+    "⭐ çeki rejimi HİÇ verilmeyen render = `devral` verilen render (BİREBİR bayt)",
+    renderSample("bizdeki") === renderSample("bizdeki", "devral"),
+  );
+  check(
+    "⭐ `devral` genel rejimi izler: genel `musterideki` iken de bayt eşitliği",
+    renderSample("musterideki") === renderSample("musterideki", "devral"),
+  );
+
+  // ⭐ İKİNCİ EN ÖNEMLİ: çeki değişirken ÜRÜN LİSTESİ sabit kalmalı.
+  const cekiIkisi = renderSample("bizdeki", "ikisi");
+  check("⭐ çeki `ikisi` çıktıyı DEĞİŞTİRİYOR (bayrak gerçekten bağlı)", renderSample("bizdeki") !== cekiIkisi);
+  check(
+    "⭐ çeki `ikisi` müşteri DESEN/VARYANT kolonlarını getiriyor",
+    cekiIkisi.includes("MÜŞTERİ DESEN") && cekiIkisi.includes("MÜŞTERİ VARYANT"),
+  );
+  check(
+    "⭐ …ama ÜRÜN LİSTESİ kolonu GELMİYOR (müşteriye giden yüzey korunuyor)",
+    !cekiIkisi.includes("MÜŞTERİ STOK ADI"),
+  );
+
+  // Ters yön: genel `musterideki` iken çeki `bizdeki` YALNIZ çekiyi geri çevirir.
+  const cekiBiz = renderSample("musterideki", "bizdeki");
+  check(
+    "⭐ genel `musterideki` + çeki `bizdeki` → ürün listesinde müşteri adı DURUYOR",
+    cekiBiz.includes("MÜŞTERİ STOK ADI"),
+  );
+  check(
+    "⭐ …ve çeki bölümünde müşteri kolonları YOK",
+    !cekiBiz.includes("MÜŞTERİ DESEN") && !cekiBiz.includes("MÜŞTERİ VARYANT"),
+  );
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§8 — EKRAN İLE KÂĞIT AYNI ADI VERİR (ayrışan yüzey, 2026-09-06)");
+  // ---------------------------------------------------------------------------
+  // Sipariş seçim ekranı (`listOpenOrdersWithCoverage`) ve sevkiyat detayı
+  // (`getShipmentById`) eskiden YALNIZ `OrderLine` override'ını taşıyordu; belge
+  // ise master alias kademesini de çözüyordu. Ölçüldü (fabrika yedeği): sevk
+  // edilmiş 1.778 topun 424'ünde (%24) master alias VAR ama override YOK →
+  // irsaliyede müşteri adı basılıyor, ekranda hiç görünmüyordu.
+  const line = await prisma.orderLine.findFirst({
+    where: { orderId: ORDER },
+    select: { id: true, customerItemName: true, customerColorName: true },
+  });
+  const lineIdY = line?.id as string;
+  const onceki = { i: line?.customerItemName ?? null, c: line?.customerColorName ?? null };
+
+  // (a) override YOK → ekran MASTER alias'ı göstermeli (eski davranışta null'dı).
+  await prisma.orderLine.update({
+    where: { id: lineIdY },
+    data: { customerItemName: null, customerColorName: null },
+  });
+  const acikRes = (await shippingService.listOpenOrdersWithCoverage({ customerId: CUSTOMER })) as {
+    data: { order: { id: string }; lines: { customerItemName: string | null; customerColorName: string | null }[] }[];
+  };
+  const acikSatir = acikRes.data.find((o) => o.order.id === ORDER)?.lines[0];
+  // ⚠️ Beklenti SABİT YAZILMAZ: §3 master alias'ı bilerek değiştiriyor ("ad donar,
+  // rejim donmaz"). Beklenen değer DB'den okunur — yoksa bu kontrol §3'ün yan
+  // etkisiyle kırmızı verir ve ölçtüğünü sandığı şeyi ölçmez.
+  const canliAlias = await prisma.customerItemAlias.findFirst({
+    where: { customerId: CUSTOMER, itemId: ITEM },
+    select: { alias: true },
+  });
+  const canliRenkAlias = await prisma.customerColorAlias.findFirst({
+    where: { customerId: CUSTOMER, colorId: COLOR },
+    select: { alias: true },
+  });
+  check(
+    "⭐ override YOKKEN sipariş seçim ekranı MASTER alias'ı taşıyor",
+    !!canliAlias?.alias &&
+      acikSatir?.customerItemName === canliAlias.alias &&
+      acikSatir?.customerColorName === canliRenkAlias?.alias,
+    `${acikSatir?.customerItemName} (beklenen ${canliAlias?.alias}) / ${acikSatir?.customerColorName}`,
+  );
+
+  // (b) override VARSA override kazanır — kademe sırası ekranda da aynı.
+  await prisma.orderLine.update({
+    where: { id: lineIdY },
+    data: { customerItemName: "EKRAN-OVERRIDE", customerColorName: null },
+  });
+  const acikRes2 = (await shippingService.listOpenOrdersWithCoverage({ customerId: CUSTOMER })) as {
+    data: { order: { id: string }; lines: { customerItemName: string | null; customerColorName: string | null }[] }[];
+  };
+  const acikSatir2 = acikRes2.data.find((o) => o.order.id === ORDER)?.lines[0];
+  check(
+    "⭐ override VARSA ekranda override kazanır (kademe sırası kâğıtla aynı)",
+    acikSatir2?.customerItemName === "EKRAN-OVERRIDE",
+    String(acikSatir2?.customerItemName),
+  );
+  check(
+    "…renk tarafı override'sız kaldığı için hâlâ MASTER",
+    acikSatir2?.customerColorName === "MASTER-RENK",
+    String(acikSatir2?.customerColorName),
+  );
+
+  // (c) KÖRLÜK/UYDURMA ZEMİNİ: karşılığı OLMAYAN üründe alan NULL kalmalı —
+  // arayüz bizim adımızı "müşterideki ad" diye basmasın.
+  const kararsizItem = await prisma.item.create({
+    data: { code: `${P}-I2`, name: `${P} KARSILIKSIZ`, itemType: ItemType.FABRIC },
+    select: { id: true },
+  });
+  await prisma.orderLine.create({
+    data: { orderId: ORDER, itemId: kararsizItem.id, quantity: new Prisma.Decimal(10) },
+  });
+  const acikRes3 = (await shippingService.listOpenOrdersWithCoverage({ customerId: CUSTOMER })) as {
+    data: { order: { id: string }; lines: { item: { id: string }; customerItemName: string | null }[] }[];
+  };
+  const karsiliksiz = acikRes3.data
+    .find((o) => o.order.id === ORDER)
+    ?.lines.find((l) => l.item.id === kararsizItem.id);
+  check(
+    "⭐ müşteri karşılığı YOKSA alan NULL (bizim adımız 'müşterideki ad' diye basılmaz)",
+    karsiliksiz !== undefined && karsiliksiz.customerItemName === null,
+    `bulundu=${karsiliksiz !== undefined} deger=${String(karsiliksiz?.customerItemName)}`,
+  );
+
+  await prisma.orderLine.update({
+    where: { id: lineIdY },
+    data: { customerItemName: onceki.i, customerColorName: onceki.c },
+  });
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§9 — ÜRÜN LİSTESİNDE MÜŞTERİ RENGİ AYRI SÜTUN (`docProductColorSplit`)");
+  // ---------------------------------------------------------------------------
+  // NEDEN VAR: birleşik dizede müşterinin renk karşılığı YOKSA bizim renk adımız
+  // müşteri kumaş adının yanına yapışıyor — ölçüldü: sevk edilen 1.778 topun
+  // 690'ında (%39). `belge-etiket.md` "yarı çevrilmiş ad basılmasın" diyor.
+  // Kullanıcı kararı (2026-09-06): bayrakla yap, VARSAYILAN BUGÜNKÜ olsun.
+  check(
+    "kayıt YOKKEN okuyucu false döner (bugünkü birleşik dize)",
+    (await readShippingDocProductColorSplit()) === false,
+  );
+  check(
+    "⭐ bayrak HİÇ verilmeyen render = false verilen render (BİREBİR bayt)",
+    renderSample("musterideki") === renderSample("musterideki", undefined, false),
+  );
+  const ayrik = renderSample("musterideki", undefined, true);
+  check("⭐ bayrak AÇIKKEN çıktı değişiyor", renderSample("musterideki") !== ayrik);
+  check(
+    "⭐ ayrık kipte ürün listesine MÜŞTERİ VARYANT sütunu geliyor",
+    ayrik.includes("MÜŞTERİ VARYANT"),
+  );
+  check(
+    "⭐ `bizdeki` rejiminde bayrak AÇIK olsa da müşteri sütunu ÇIKMAZ (rejim üstte)",
+    !renderSample("bizdeki", undefined, true).includes("MÜŞTERİ VARYANT") ||
+      renderSample("bizdeki", undefined, true) === renderSample("bizdeki"),
+    "rejim `bizdeki` iken müşteri kolonları hiç doğmaz",
+  );
 }
 
 async function teardown(): Promise<void> {
@@ -517,6 +718,22 @@ async function teardown(): Promise<void> {
   } else {
     await setMode(null);
   }
+  // Çeki rejimi de BİREBİR geri yüklenir (bayrak yazan bekçi kuralı).
+  if (prevCekiFlag) {
+    await prisma.systemSetting
+      .upsert({
+        where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+        create: {
+          key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE,
+          value: prevCekiFlag.value as Prisma.InputJsonValue,
+          description: "restore",
+        },
+        update: { value: prevCekiFlag.value as Prisma.InputJsonValue },
+      })
+      .catch(() => {});
+  } else {
+    await setCekiMode(null);
+  }
 }
 
 prisma.systemSetting
@@ -524,8 +741,12 @@ prisma.systemSetting
     where: { key: SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE },
     select: { value: true },
   })
-  .then((r) => {
+  .then(async (r) => {
     prevFlag = r;
+    prevCekiFlag = await prisma.systemSetting.findUnique({
+      where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+      select: { value: true },
+    });
     return run();
   })
   .catch((e) => {

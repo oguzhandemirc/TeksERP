@@ -1,5 +1,7 @@
 # Production Migration Deploy Notu
 
+> ⚠️ Fabrikada bu akış artık uygulanmıyor: kurulum `deploy/kur.ps1` paketiyle yapılır (`deploy/README.md`). Aşağıdaki sıra kaynak-üstünde çalışan ortamlar (dev, demo VPS) içindir; migration disiplini (`git add` → `db execute` → `resolve` → doğrula) her ikisinde de aynıdır.' başlığı — banner aynı akışın fabrikada uygulanmadığını söylüyor; 'KANONİK' etiketi kaldırılmalı ya da 'TARİHSEL SIRA' olmalı. — kanonik kaynak kod/`schema.prisma`; bu belge gerekçe için okunur.
+
 > ⚠️ **TARİHSEL — deploy yolu 2026-08-24'te değişti.** Aşağıdaki `git pull → build →
 > migrate` akışı fabrikada **artık uygulanmıyor**: çalışan kurulum `C:\Etkili-Yazilim\app\`
 > altındaki hazır pakettir ve `kur.ps1` ile kurulur (yedek + migrate + pm2 sırasını script
@@ -36,7 +38,7 @@ pm2 save
 > sildiği için ardından `prisma:generate` zorunludur (yukarıdaki sırada zaten var).
 
 > **Sürüme özel adımlar** (veri göçü, izin atama, duyuru) ayrı dosyalarda:
-> `docs/ops/DEPLOY-2.7.0.md`. Migration'a ek olarak koşulması gereken bir veri göçü varsa
+> `docs/history/DEPLOY-2.7.0.md`. Migration'a ek olarak koşulması gereken bir veri göçü varsa
 > onu ATLAMAK sessiz gerileme üretir — sürüm notunu okumadan deploy etme.
 
 > **⚠️ `build`, `migrate`'ten ÖNCE (2026-07-30 kararı — sıra DÜZELTİLDİ).**

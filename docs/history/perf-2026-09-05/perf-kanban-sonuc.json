@@ -1,0 +1,108 @@
+{
+  "alan": "Kanban ucu (GET /api/rolls/production-flow) + WO liste rollup geçişleri",
+  "tarih": "2026-09-05",
+  "olcum_ortami": {
+    "db": "tekserp_demo @ localhost:55433 (docker tekserp-local-db)",
+    "yontem": "pg Pool 'connect' olayında client.query sarmalandı; servis metotları HTTP'siz çağrılıp istek başına SELECT sayıldı. Isıtma 3 koşu + ölçüm 10 koşu, medyan raporlandı. Yazma YOK.",
+    "neden_HTTP_degil": "Baseline (kod-desenleri.json) da servis düzeyinde ölçüldü — elma-elma karşılaştırması için aynı enstrüman kullanıldı; HTTP tam yolu giriş yapmayı, o da sessions tablosuna YAZMAYI gerektiriyor. Sunucu ayrıca PORT=4198 ile ayağa kaldırılıp uç doğrulandı (HTTP 401, fail-closed) ve KENDİ PID'i ile durduruldu (pkill kullanılmadı).",
+    "neden_EXPLAIN_yok": "Hiçbir sorgunun WHERE/ORDER BY/satır kümesi değişmedi — değişen şey Prisma'nın attığı ROUND-TRIP sayısı. Doğru enstrüman EXPLAIN değil sorgu sayımı; ölçüm dosyasının kendi cümlesi de bunu söylüyor (Bulgu 7: 'bedel bayt değil round-trip')."
+  },
+  "duzeltmeler": [
+    {
+      "baslik": "Kanban kartı için dar ilişki kümesi (ROLL_CARD_INCLUDE) — kart artık liste include'unu ödünç almıyor",
+      "durum": "yapildi",
+      "dosyalar": [
+        "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/src/services/inventory.service.ts"
+      ],
+      "once": "GET /api/rolls/production-flow = 115 sorgu · medyan 12,8 ms (min 10,2 / max 14,3). Tablo dağılımı: work_order_steps 12 · rolls 11 · stations 8 · subcontractor_categories 8 · shipments 6 · items 6 · colors 6 · work_orders 6 · sacks 5 · roll_operations 4 · users 4 · machines 4 · warehouses 4 · roll_properties 4 · subcontractor_dispatch_items 4 · fabric_properties 4 · fabric_property_values 4 · subcontractor_dispatches 4 · subcontractors 4 · subcontractor_category_links 4 · roll_movements 1 · customers 1 · customer_branches 1. Dört rulo kolonu da ROLL_LIST_INCLUDE (11 ilişki, kolon başına 24 sorgu) kullanıyordu.",
+      "sonra": "66 sorgu (−49 sorgu, −%43) · medyan 10,7 ms (min 7,0 / max 14,4). Tablo dağılımı: rolls 11 · work_order_steps 9 · shipments 6 · items 6 · colors 6 · sacks 5 · roll_properties 4 · fabric_properties 4 · fabric_property_values 4 · work_orders 2 · subcontractor_categories 2 · subcontractor_dispatch_items 1 · subcontractor_dispatches 1 · subcontractors 1 · subcontractor_category_links 1 · customers 1 · customer_branches 1 · roll_movements 1. roll_operations / users / machines / warehouses / stations turları SIFIRLANDI.",
+      "kazanc": "İstek başına 115 → 66 sorgu (−%43). Ölçüm dosyasının kaygısı olan eşzamanlılık tarafında: 10 açık panel × 30 sn staleTime tabanı ~38 sorgu/sn iken ~22 sorgu/sn'ye düşer (pg havuz tavanı 30). Süre kazancı bu veri hacminde gürültü sınırında (12,8 → 10,7 ms medyan); asıl kazanç round-trip sayısıdır ve veri büyüdükçe de sabit kalır.",
+      "bekci": "Teks-Erp/scripts/test_kanban_card_projection.ts (YENİ, 17 kontrol) — `npx tsx scripts/run-all-tests.ts kanban_card`, çıkış kodu 0"
+    },
+    {
+      "baslik": "Fason kolonu dışında dispatchItems zinciri çekilmiyor (7 sorgu × 3 kolon)",
+      "durum": "yapildi",
+      "dosyalar": [
+        "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/src/services/inventory.service.ts"
+      ],
+      "once": "Dört rulo kolonunun dördü de `dispatchItems` (→ dispatch → subcontractor → categories → category, + step → requiredCategory) zincirini çekiyordu: kolon başına 7 sorgu, toplam 28.",
+      "sonra": "Zincir yalnız fason kolonunda (ROLL_CARD_INCLUDE_FASON). Toplam 7 sorgu. Gerekçe: detay panelinin bu veriyi çizdiği tek dal `r.status === 'AT_SUBCONTRACTOR'`, o statü ise diğer üç kolonun WHERE'i (STOCK / WAREHOUSE) tarafından zaten dışlanıyor.",
+      "kazanc": "−21 sorgu (yukarıdaki 115 → 66 rakamının içinde). Ham stok kolonunda dispatchItems'ın DÖNMEDİĞİ ve fason kolonunda DÖNDÜĞÜ bekçide iki ayrı kontrol.",
+      "bekci": "test_kanban_card_projection.ts § 'fason kolonu dispatchItems TAŞIYOR' / 'ham stok kolonu dispatchItems TAŞIMIYOR'"
+    },
+    {
+      "baslik": "WO liste rollup'ı: aynı satırların 2-3 kez okunması kaldırıldı (bağ satırları, adım→WO, adım→istasyon bellekten)",
+      "durum": "yapildi",
+      "dosyalar": [
+        "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/src/services/workorder.service.ts"
+      ],
+      "once": "GET /api/work-orders (pageSize=50) = 24 sorgu · medyan 12,2 ms (min 10,5 / max 14,5). Tekrar eden okumalar: work_order_to_order_lines ×2 (liste select'i + orderedMeters geçişi) · work_order_steps ×4 · stations ×3. `atSubRows` nested `currentStep:{workOrderId, station:{name}}` ile 3 tur, `dispatchRows` nested `step:{station:{name}}` ile 3 tur atıyordu — oysa liste select'i her adımın id + station.name'ini ZATEN belleğe almış oluyor.",
+      "sonra": "18 sorgu (−6, −%25) · medyan 8,1 ms (min 7,9 / max 10,2). orderedMeters bağ satırlarını `w.orderLinks`ten okur (yalnız order_lines.quantity turu kalır); adım→WO ve adım→istasyon haritaları `wos[].steps[]`ten kurulur. Sevkin adımı sayfa dışıysa YALNIZ o adımlar için tek ek tur atılır → eski davranış korunur.",
+      "kazanc": "İstek başına 24 → 18 sorgu (−%25). Rollup DEĞERLERİ birebir aynı: 50 satırlık sayfanın (workOrderNumber, producedMeters, inputMeters, orderedMeters, currentFasonStations, fasonFirms) parmak izi değişiklikten önce ve sonra KARAKTER KARAKTER aynı (3.702 bayt). Ayrıca 373 WO'nun tamamı SQL gerçeğiyle karşılaştırıldı: currentFasonStations sapma 0 (28 dolu), fasonFirms sapma 0 (273 dolu).",
+      "bekci": "test_kanban_card_projection.ts § currentFasonStations / fasonFirms / orderedMeters + mevcut test_workorder_* ve test_boss_overview"
+    },
+    {
+      "baslik": "computeWoInput'un adım tekrar-okuması (coverage.helper.ts:177)",
+      "durum": "ertelendi",
+      "dosyalar": [
+        "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/src/services/helpers/coverage.helper.ts"
+      ],
+      "once": "work_order_steps için 1 ek tur (WO liste isteğindeki 18 sorgunun 1'i); adım→WO haritası çağıranın belleğinde ZATEN var.",
+      "sonra": "Değişiklik YAPILMADI.",
+      "kazanc": "Beklenen kazanç 1 sorgu (~0,4 ms). `computeWoInput` paylaşılan bir helper (detay + kapsama yüzeyleri de çağırıyor) ve bu perf turunda başka ajanların alanına giriyor; 1 sorguluk kazanç, paylaşılan imzayı değiştirmenin çakışma riskini karşılamıyor."
+    }
+  ],
+  "davranis_kaniti": {
+    "kart_alanlari_koddan_cikarildi": "Electron/src/pages/Operations/Rolls/RollsKanban.tsx `RollCard` beş alan basıyor: item.name · color.name · color.hex · barcode · currentQty · qualityGrade. Kart tıklanınca `RollDetailSheet` açılıyor ve `const r = detail ?? roll` fallback'i ile çiziliyor — bu yüzden kartın select'i yalnız kartın bastığı alanlarla sınırlandırılmadı.",
+    "skaler_kume": "`select` DEĞİL dar `include` seçildi: böylece skaler kümesi liste ile BİREBİR kalıyor (bekçi ölçtü: 'yalnız listede []' / 'yalnız kartta []'). Elle yazılmış bir `select` Roll'a eklenecek yeni bir skaleri karta sessizce ulaştırmaz ve liste ile kart ayrışırdı — bu repoda 'ayrışan yüzey' sınıfı. Ölçüm dosyası Bulgu 7 zaten 'include→select bu şemada kazanç getirmiyor, bedel bayt değil round-trip' diyor.",
+    "detay_panelinin_fallback_okumalari": "Sheet'in `roll` prop'undan (detay gelmeden) okuduğu ilişkiler: item · color · properties · shipment · sack · dispatchItems (yalnız AT_SUBCONTRACTOR dalında). Hepsi kartta KORUNDU. `entryStation` · `createdBy` · `createdMachine` · `manualReason` · `currentStep.station` sheet'te `detail?.` ile okunuyor (liste satırından DEĞİL) → düşürülmeleri görünen davranışı değiştirmiyor.",
+    "yetki_yuzeyi": "`currentStep` tümden atılmadı, `{ select: { id: true } }`e daraltıldı: `canAdjustRollQty` kararını `roll.currentStep == null` ile veriyor ve ilişki hiç dönmeseydi `undefined == null` true olup 'Metraj Düzelt' düğmesi YANLIŞ açılırdı. id'li hâl kararı doğru tutuyor, station+workOrder turlarını (kolon başına 2 sorgu) düşürüyor.",
+    "sayi_ureten_alanlar": "Kart hiçbir türetilmiş sayı taşımıyor: metraj/kalite topun kendi skaleri, kolon toplamı `count()` ile önizleme `findMany`'sinin AYNI `where`inden doğuyor. Alt select'ler (item/color/properties/shipment/sack) kopyalanmadı, ROLL_LIST_INCLUDE'un kendi alanlarına REFERANS verildi → şekil ayrışamaz."
+  },
+  "yeni_bekci": {
+    "dosya": "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/scripts/test_kanban_card_projection.ts",
+    "kontrol_sayisi": 17,
+    "ne_olcuyor": [
+      "production-flow roll_operations / users / machines / warehouses / stations tablolarına SIFIR sorgu atıyor (veriden bağımsız kontrol)",
+      "production-flow sorgu bütçesi ≤ 90 (ölçülen 66; kuyruk kolonları dolduğunda ~+10 tur payı bırakıldı, liste include'una dönüş 115+ olduğu için yakalanır)",
+      "kart ile liste AYNI skaler kümeyi döndürüyor (ayrışan yüzey seddi)",
+      "dört kolonun da item/color/properties/shipment/sack/currentStep ilişkilerini taşıdığı; dispatchItems'ın yalnız fason kolonunda olduğu",
+      "currentFasonStations ve fasonFirms 373 WO için SQL gerçeğiyle birebir",
+      "orderedMeters bellek yolu gerçek sipariş satırı quantity toplamına eşit + orderLinks yokken DB yoluna düşüyor"
+    ],
+    "negatif_sonda": [
+      "A) rollColumn include'u ROLL_LIST_INCLUDE'a geri alındı → 7 ❌ (10 geçti / 7 başarısız)",
+      "B) ROLL_CARD_INCLUDE'dan `properties` düşürüldü → 4 ❌ (13 geçti / 4 başarısız)",
+      "C) WO rollup'ında adım→istasyon haritası bozuldu → 2 ❌ (15 geçti / 2 başarısız)",
+      "Üç sondadan sonra dosyalar md5 ile geri yüklendi (inventory 65aa7e03ff8d4f507f0d1a11cb5adc11, workorder bf0e23ad6344f07dacc6551c77e71391)"
+    ]
+  },
+  "kapilar": {
+    "npm run typecheck:plain": 0,
+    "npm run lint": "0 (442 uyarı, 0 hata)",
+    "node scripts/check-lint-baseline.mjs --proje=backend": "0 (tavan aşılmadı, 1027 dosya)",
+    "run-all-tests.ts kanban_card": "0 — 17 geçti / 0 başarısız",
+    "run-all-tests.ts production_flow": "0 — 7 geçti / 0 başarısız",
+    "run-all-tests.ts workorder": "0 — 3/3 dosya (92 kontrol)",
+    "run-all-tests.ts tambur": "0 — 15/15 dosya (419 kontrol)",
+    "run-all-tests.ts roll": "0 — 24/24 dosya",
+    "run-all-tests.ts inventory": "0 — 2/2 dosya",
+    "run-all-tests.ts boss_overview": "0 — 60 geçti / 0 başarısız",
+    "run-all-tests.ts produced_buckets": "0 — 19 geçti / 0 başarısız",
+    "run-all-tests.ts wo_input": "0 — 2/2 dosya",
+    "run-all-tests.ts coverage": "0 — 6/6 dosya",
+    "PORT=4198 npx tsx src/server.ts": "açıldı, GET /api/rolls/production-flow → 401 (fail-closed), KENDİ PID'i (16432) ile durduruldu"
+  },
+  "acik_kararlar": [
+    "properties zinciri (roll_properties + fabric_properties + fabric_property_values = kolon başına 3, toplam 12 sorgu) KARTTA BIRAKILDI. Kart bunu basmıyor ama detay paneli `r.properties`i liste satırından çiziyor; düşürmek panel açılışında 'Özellikler' bloğunun sonradan belirmesi demekti — görünen davranış değişikliği, bu turda yasak.",
+    "shipment + sack (kolon başına 2, toplam 8 sorgu) DÖRT KOLONDA DA BIRAKILDI. Rezerve topun pratikte yalnız depo kolonunda olması beklenir ama bu bir invariant DEĞİL, veri gözlemi; kanıtlanmadan daraltmak 'Sevkiyat Rezervasyonu' kartını sonradan belirtirdi.",
+    "computeWoInput'un adım tekrar-okuması (1 sorgu) ERTELENDİ — paylaşılan helper, bu turda başka ajanların dokunduğu dosya sınıfında; kazanç riski karşılamıyor.",
+    "Auth ara katmanının iki sorgusuna DOKUNULMADI (ölçüm 'tazelik okuması, bilinçli' diyor).",
+    "Yeni bekçi docs/BEKCI-HARITASI.md'ye YAZILMADI: dosya 'üretilmiş' bir harita, aynı bekçi üç alan bölümünde birden listeleniyor ve bu perf turunda birden çok ajan aynı belgelere dokunuyor. Elle satır eklemek yerine haritanın bir sonraki üretiminde doğması bırakıldı; bekçi `run-all-tests.ts kanban_card` ile bulunabilir durumda."
+  ],
+  "olculmeyen": [
+    "Gerçek fabrika hacmi: bu ölçüm 832 top / 373 WO üzerinde. Sorgu SAYISI veriden bağımsız (kolon başına take:10) olduğu için kazanç hacimden bağımsızdır; süre farkı ise bu hacimde gürültü sınırında ve büyük veride ROUND-TRIP payı arttıkça büyümesi beklenir — ama ölçülmedi.",
+    "orderedMeters gerçek veriyle sınanamadı: bu DB'de work_order_to_order_lines 0 satır. Bellek yolu sentetik girdiyle (gerçek order_line id'leri, yazma yok) sondalandı ve quantity toplamıyla eşleşti.",
+    "Detay panelinin gerçek görsel davranışı UI'da koşturularak değil, `RollDetailSheet.tsx`in `roll` prop'undan okuduğu alanların kod okumasıyla doğrulandı."
+  ]
+}

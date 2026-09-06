@@ -49,16 +49,18 @@ async function main(): Promise<void> {
     data: { code: `TST-SPEC-ITM-${ts}`, name: `Test Spec Ürün ${ts}`, itemType: "FABRIC", unit: "MT" },
     select: { id: true },
   });
+  // AD da damgalı: renk adında ifade-UNIQUE sed var (`colors_nameFoldColor_key`,
+  // `tr_fold_color(name)`), damgasız ad ikinci koşumu P2002'ye düşürür.
   const colorA = await prisma.color.create({
-    data: { code: `TST-SPEC-CLRA-${ts}`, name: "Test Spec Renk A" },
+    data: { code: `TST-SPEC-CLRA-${ts}`, name: `Test Spec Renk A ${ts}` },
     select: { id: true },
   });
   const colorB = await prisma.color.create({
-    data: { code: `TST-SPEC-CLRB-${ts}`, name: "Test Spec Renk B" },
+    data: { code: `TST-SPEC-CLRB-${ts}`, name: `Test Spec Renk B ${ts}` },
     select: { id: true },
   });
   const station = await prisma.station.create({
-    data: { code: `TST-SPEC-STN-${ts}`, name: "Test Spec İstasyon", type: StationType.INTERNAL },
+    data: { code: `TST-SPEC-STN-${ts}`, name: `Test Spec İstasyon ${ts}`, type: StationType.INTERNAL },
     select: { id: true },
   });
   const sack = await prisma.sack.create({

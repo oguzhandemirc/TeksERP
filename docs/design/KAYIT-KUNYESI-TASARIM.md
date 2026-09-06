@@ -1,6 +1,6 @@
 # Plan A — Kayıt Künyesi (kim oluşturdu / kim değiştirdi)
 
-> **Durum:** TASARIM. Uygulanmadı. Plan B (audit derinleştirme) ile birlikte
+> **Durum:** ✅ UYGULANDI (2026-08-19) — migration `20260819023127_record_provenance`, `scripts/backfill-record-provenance.ts`, bekçi `test_record_provenance.ts`; `record-info.service.ts` arşivi de sorgular. Aşağıdaki ölçümler (86 model / 6 kolon) 2026-08-19 fotoğrafıdır — bugün 93 `createdById` / 58 `updatedById`. Plan B (audit derinleştirme) ile birlikte
 > okunmalı ama ondan BAĞIMSIZ uygulanabilir ve önce gelmelidir.
 
 ## Bağlam — neden

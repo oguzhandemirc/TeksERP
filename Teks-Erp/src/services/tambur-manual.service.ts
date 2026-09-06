@@ -91,7 +91,7 @@ import {
   manualMoveWoBlockReason,
 } from "./workorder-manual-move.service";
 import { ensureWorkOrderInProgress, recomputeStepStatus } from "./helpers/roll-step.helper";
-import { setWorkOrderCardStatuses } from "./helpers/traveler-card-fanout.helper";
+import { setWorkOrderCardStatusesTx } from "./helpers/traveler-card-fanout.helper";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { resolveLabelIntent } from "./helpers/label-intent.helper";
 import { resolveFoldTypeForWrite } from "./helpers/fold-type";
@@ -861,7 +861,7 @@ export class TamburManualService {
    * (operatör hemen kesebilsin). İki fazlıdır ve **her iki faz da idempotenttir**:
    *
    *   FAZ 1 — `InventoryService.createInitialEntry` (yeniden kullanım; barkod
-   *     SUNUCUDA `generateRollBarcode` ile, `entrySource=MANUAL_ENTRY`, mükerrer
+   *     SUNUCUDA `generateRollBarcodeTx` ile, `entrySource=MANUAL_ENTRY`, mükerrer
    *     koruması `clientToken @unique` ile). Kendi transaction'ını açtığı için
    *     FAZ 2 ile tek tx'te birleştirilemez.
    *   FAZ 2 — atomik claim + giriş hareketi + adım/WO recompute.
@@ -1222,7 +1222,7 @@ export class TamburManualService {
         data: { status: WorkOrderStatus.IN_PROGRESS },
       });
       if (reopen.count > 0) {
-        await setWorkOrderCardStatuses(
+        await setWorkOrderCardStatusesTx(
           tx,
           step.workOrderId,
           TravelerCardStatus.COMPLETED,

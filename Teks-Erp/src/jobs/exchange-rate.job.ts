@@ -22,7 +22,7 @@
 //     saat tekrar denenir. `reportJobFailure` BİLİNÇLİ kullanılmıyor: dış ağ
 //     hatası beklenen bir durumdur (internet kesintisi), her saat SystemLog'a
 //     satır yazmak defteri şişirir; kullanıcı yüzeyi zaten korunuyor —
-//     `resolveExchangeRate` kur bulamazsa 400 + "elle girin" der.
+//     `resolveExchangeRateTx` kur bulamazsa 400 + "elle girin" der.
 //
 // Kur kaynağı ve yazma kuralı:
 //   - VUK md. 280 gereği dövizli işlemlerin TL çevrimi TCMB DÖVİZ ALIŞ
@@ -317,7 +317,7 @@ export async function runExchangeRateJobOnce(
   } catch (err) {
     // Başarısız fetch üretimi DURDURMAZ; bir sonraki saat tekrar denenir.
     // SystemLog'a yazılmaz (bilinçli — reportJobFailure değil): dış ağ hatası
-    // beklenen durumdur ve resolveExchangeRate "kur yoksa 400 + elle gir" der.
+    // beklenen durumdur ve resolveExchangeRateTx "kur yoksa 400 + elle gir" der.
     console.error("[exchange-rate] TCMB kur çekme başarısız (bir sonraki saatte tekrar denenecek):", err);
     return "failed";
   }

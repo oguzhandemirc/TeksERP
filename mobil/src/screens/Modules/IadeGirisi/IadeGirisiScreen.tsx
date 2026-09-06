@@ -13,6 +13,7 @@ import ScreenChrome from '../../../components/ScreenChrome';
 import { BarcodeScannerModal } from '../../../components/BarcodeScannerModal';
 import PickerModal, { PickerOption } from '../../../components/PickerModal';
 import RollPickerModal from '../../../components/RollPickerModal';
+import { signalScan } from '../../../services/scanFeedback';
 import { returnService, type ReturnLookupResult } from '../../../services/return.service';
 import { qualityGradeService } from '../../../services/qualityGrade.service';
 import { useReturnGradingEnabled } from '../../../hooks/useFeatureFlags';
@@ -159,7 +160,7 @@ export default function IadeGirisiScreen() {
     const trimmed = code.trim();
     if (!trimmed) return;
     if (!onlineManager.isOnline()) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({ type: 'error', text1: 'Çevrimdışı', text2: 'İade için bağlantı gerekli — top sorgulanamıyor.' });
       return;
     }
@@ -178,9 +179,9 @@ export default function IadeGirisiScreen() {
             ? data.candidateOrders[0].id
             : null,
       );
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      signalScan('accept');
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({ type: 'error', text1: 'İade alınamaz', text2: (err as Error).message });
     } finally {
       setResolving(false);

@@ -6,15 +6,16 @@ import { RestoreDialog } from "./RestoreDialog";
 import type { BackupListing } from "./service";
 import type { RestoreImpact } from "./restore-impact.types";
 
-// `restoreCommand` GERÇEK kalır — 7. test kopyalanan metnin içeriğini doğruluyor.
-vi.mock("./service", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./service")>()),
+// `restoreCommand` GERÇEK kalır (service.ts'te, saf) — 7. test kopyalanan
+// metnin içeriğini doğruluyor; yalnız hook mock'lanır.
+vi.mock("./hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./hooks")>()),
   useRestoreImpact: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/clipboard", () => ({ copyText: vi.fn().mockResolvedValue(undefined) }));
 
-const { useRestoreImpact } = await import("./service");
+const { useRestoreImpact } = await import("./hooks");
 const { copyText } = await import("@/lib/clipboard");
 
 const DB = "TeksErpDb";

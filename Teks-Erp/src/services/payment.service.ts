@@ -14,8 +14,8 @@ import { isClientTokenP2002 } from "../utils/p2002";
 import {
   D,
   D0,
-  nextPaymentNo,
-  resolveExchangeRate,
+  nextPaymentNoTx,
+  resolveExchangeRateTx,
   ensureCariAccountTx,
   applyCariBalanceTx,
 } from "./helpers/finance.helper";
@@ -232,7 +232,7 @@ export class PaymentService {
         }
 
         const rate =
-          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, paymentDate);
+          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, paymentDate);
         if (rate == null) {
           throw AppError.badRequest(
             `${currency} için ${paymentDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,
@@ -241,7 +241,7 @@ export class PaymentService {
         if (rate.lte(0)) throw AppError.badRequest("Kur sıfır veya negatif olamaz.");
 
         const amountTry = amount.mul(rate).toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP);
-        const docNo = await nextPaymentNo(tx, input.direction, paymentDate);
+        const docNo = await nextPaymentNoTx(tx, input.direction, paymentDate);
 
         const payment = await tx.payment.create({
           data: {

@@ -1,0 +1,212 @@
+{
+ "backend-services": {
+  "dosya": 269,
+  "dosya_p50": 236,
+  "dosya_p90": 1001,
+  "dosya_max": 7143,
+  ">300": 103,
+  "fn_sayisi": 4379,
+  "fn_p50": 14,
+  "fn_p90": 59,
+  "fn_p99": 160,
+  ">80": 269,
+  ">200": 28,
+  "en_buyuk_5": [
+   [
+    7143,
+    "Teks-Erp/src/services/subcontractor.service.ts"
+   ],
+   [
+    6847,
+    "Teks-Erp/src/services/workorder.service.ts"
+   ],
+   [
+    5421,
+    "Teks-Erp/src/services/inventory.service.ts"
+   ],
+   [
+    5022,
+    "Teks-Erp/src/services/system-setting.service.ts"
+   ],
+   [
+    4861,
+    "Teks-Erp/src/services/shipping.service.ts"
+   ]
+  ]
+ },
+ "backend-routes": {
+  "dosya": 80,
+  "dosya_p50": 208,
+  "dosya_p90": 749,
+  "dosya_max": 1983,
+  ">300": 22,
+  "fn_sayisi": 29,
+  "fn_p50": 41,
+  "fn_p90": 561,
+  "fn_p99": 952,
+  ">80": 12,
+  ">200": 5,
+  "en_buyuk_5": [
+   [
+    1983,
+    "Teks-Erp/src/routes/admin.routes.ts"
+   ],
+   [
+    1129,
+    "Teks-Erp/src/routes/workorder.routes.ts"
+   ],
+   [
+    1017,
+    "Teks-Erp/src/routes/inventory.routes.ts"
+   ],
+   [
+    931,
+    "Teks-Erp/src/routes/order.routes.ts"
+   ],
+   [
+    853,
+    "Teks-Erp/src/routes/tambur.routes.ts"
+   ]
+  ]
+ },
+ "backend-controllers": {
+  "dosya": 22,
+  "dosya_p50": 280,
+  "dosya_p90": 787,
+  "dosya_max": 1099,
+  ">300": 8,
+  "fn_sayisi": 265,
+  "fn_p50": 14,
+  "fn_p90": 29,
+  "fn_p99": 158,
+  ">80": 7,
+  ">200": 0,
+  "en_buyuk_5": [
+   [
+    1099,
+    "Teks-Erp/src/controllers/workorder.controller.ts"
+   ],
+   [
+    822,
+    "Teks-Erp/src/controllers/shipping.controller.ts"
+   ],
+   [
+    787,
+    "Teks-Erp/src/controllers/inventory.controller.ts"
+   ],
+   [
+    676,
+    "Teks-Erp/src/controllers/label.controller.ts"
+   ],
+   [
+    608,
+    "Teks-Erp/src/controllers/auth.controller.ts"
+   ]
+  ]
+ },
+ "electron-src": {
+  "dosya": 1356,
+  "dosya_p50": 113,
+  "dosya_p90": 299,
+  "dosya_max": 1446,
+  ">300": 133,
+  "fn_sayisi": 3551,
+  "fn_p50": 17,
+  "fn_p90": 98,
+  "fn_p99": 271,
+  ">80": 479,
+  ">200": 80,
+  "en_buyuk_5": [
+   [
+    1446,
+    "Electron/src/pages/GeneralSettings/settings-config.ts"
+   ],
+   [
+    1267,
+    "Electron/src/pages/Operations/WorkOrders/service.ts"
+   ],
+   [
+    1219,
+    "Electron/src/routes/content-routes.tsx"
+   ],
+   [
+    1217,
+    "Electron/src/services/documentConfig.ts"
+   ],
+   [
+    1050,
+    "Electron/src/components/data-table/FilterBar.tsx"
+   ]
+  ]
+ },
+ "mobil-src": {
+  "dosya": 386,
+  "dosya_p50": 119,
+  "dosya_p90": 436,
+  "dosya_max": 9387,
+  ">300": 70,
+  "fn_sayisi": 1372,
+  "fn_p50": 17,
+  "fn_p90": 117,
+  "fn_p99": 428,
+  ">80": 208,
+  ">200": 63,
+  "en_buyuk_5": [
+   [
+    9387,
+    "mobil/src/screens/Modules/Tambur/TamburScreen.tsx"
+   ],
+   [
+    4680,
+    "mobil/src/screens/Modules/FasonKabul/FasonKabulScreen.tsx"
+   ],
+   [
+    4205,
+    "mobil/src/screens/Modules/KK1/KK1Screen.tsx"
+   ],
+   [
+    3193,
+    "mobil/src/screens/Modules/KursunQc/KursunQcScreen.tsx"
+   ],
+   [
+    2402,
+    "mobil/src/screens/Modules/FasonSevk/FasonSevkScreen.tsx"
+   ]
+  ]
+ },
+ "backend-scripts": {
+  "dosya": 554,
+  "dosya_p50": 217,
+  "dosya_p90": 524,
+  "dosya_max": 1914,
+  ">300": 153,
+  "fn_sayisi": 4460,
+  "fn_p50": 14,
+  "fn_p90": 69,
+  "fn_p99": 274,
+  ">80": 377,
+  ">200": 81,
+  "en_buyuk_5": [
+   [
+    1914,
+    "Teks-Erp/scripts/test_payment_allocation.ts"
+   ],
+   [
+    1519,
+    "Teks-Erp/scripts/test_feature_flag_contract.ts"
+   ],
+   [
+    1394,
+    "Teks-Erp/scripts/test_settings_password.ts"
+   ],
+   [
+    1388,
+    "Teks-Erp/scripts/test_cheque_portfolio.ts"
+   ],
+   [
+    1277,
+    "Teks-Erp/scripts/test_goods_receipt.ts"
+   ]
+  ]
+ }
+}

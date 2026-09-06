@@ -86,6 +86,12 @@ const distributeSackSchema = z.object({
   rollIds: z.array(z.string().uuid()).optional(),
   swatchIds: z.array(z.string().uuid()).optional(),
 });
+// Toplu dağıtma — listeden seçilen çuvalların İÇERİĞİ depoya çıkar (çuval SİLİNMEZ).
+// Tavan 200: yıkıcı bir işlemin tek istekte sınırsız kayda dokunması, önizlemenin
+// "etkilenen HER kaydı listele" sözünü de kullanışsız kılardı.
+const bulkSackIdsSchema = z.object({
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçilmeli").max(200),
+});
 const moveRollsSchema = z.object({
   rollIds: z.array(z.string().uuid()).min(1, "En az bir top seçilmeli"),
   targetSackId: z.string().uuid(),
@@ -370,6 +376,38 @@ export class ShippingController {
         req.user?.userId,
       );
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  /** Onarılabilir sevkiyatlar — yazma yok. */
+  listRepairableShipments = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.listRepairableShipments());
+    } catch (e) { next(e); }
+  };
+
+  /** Tek sevkiyatın defterini onar — irsaliye v+1 doğurur. */
+  repairShipmentAllocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(
+        await this.service.repairShipmentAllocation(req.params.id as string, req.user?.userId),
+      );
+    } catch (e) { next(e); }
+  };
+
+  /** Toplu dağıtma ÖNİZLEME — yazma yok; etkilenen her top listelenir. */
+  previewDistributeSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = bulkSackIdsSchema.parse(req.body);
+      res.status(200).json(await this.service.previewDistributeSacks(body.sackIds));
+    } catch (e) { next(e); }
+  };
+
+  /** Toplu dağıtma UYGULA — engelli çuval atlanır ve sebebi yanıtta döner. */
+  distributeSacksBulk = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = bulkSackIdsSchema.parse(req.body);
+      res.status(200).json(await this.service.distributeSacksBulk({ sackIds: body.sackIds }, req.user?.userId));
     } catch (e) { next(e); }
   };
 

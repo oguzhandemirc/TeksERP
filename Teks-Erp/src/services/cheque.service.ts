@@ -50,7 +50,7 @@ import { withBarcodeRetry } from "../utils/barcode-retry";
 import { isClientTokenP2002 } from "../utils/p2002";
 import { buildDailyCode, dailyCodePrefix, nextDailySeq } from "../utils/code-format";
 import { factoryDaySql, factoryYmd } from "../constants/time";
-import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRate } from "./helpers/finance.helper";
+import { D, D0, applyCariBalanceTx, ensureCariAccountTx, resolveExchangeRateTx } from "./helpers/finance.helper";
 import { assertPeriodOpenTx, assertPeriodsOpenTx } from "./helpers/period-guard.helper";
 import { assertCashPeriodOpenTx } from "./helpers/cash-period-guard.helper";
 import { assertCashBalanceCoversTx } from "./helpers/cash-balance-guard.helper";
@@ -78,7 +78,7 @@ const DOC_PREFIX: Record<ChequeKind, Record<ChequeDocType, string>> = {
  * Günlük sıralı belge numarası — PREFIX + GGAAYY + NNNN.
  *
  * ⚠️ `orderBy` ile DEĞİL, JS'te sayısal max ile (glibc collation lexicographic
- * ve sıra 9→10 geçişinde bozulur — `nextInvoiceNo` kanıtlı deseni). Çağıran
+ * ve sıra 9→10 geçişinde bozulur — `nextInvoiceNoTx` kanıtlı deseni). Çağıran
  * `withBarcodeRetry` ile sarmalar: yarışta P2002 hâlâ mümkündür ve doğru cevap
  * tekrar denemektir.
  */
@@ -668,7 +668,7 @@ export class ChequeService {
             const cari = await resolveCariTx(tx, input, "Çek/senet");
 
         const rate =
-          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRate(tx, currency, postingDate);
+          input.exchangeRate != null ? D(input.exchangeRate) : await resolveExchangeRateTx(tx, currency, postingDate);
         if (rate == null) {
           throw AppError.badRequest(
             `${currency} için ${postingDate.toLocaleDateString("tr-TR")} tarihli kur bulunamadı — Kurlar ekranından girin veya elle belirtin.`,

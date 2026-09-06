@@ -50,7 +50,6 @@ import {
 } from "../services/latency-persist.service";
 import { SessionRegistryService } from "../services/session-registry.service";
 import { AppError } from "../utils/app-error";
-import prisma from "../lib/prisma";
 import { z } from "zod";
 import "../types/express-augment";
 
@@ -780,11 +779,8 @@ router.get(
       // (yalnız o hesap yazabilir) tamamen anlamsızlaşırdı.
       // 403, 404 DEĞİL: hesabın varlığı zaten açık — yanlış bilgi vermenin
       // anlamı yok, kısıtın kendisi söylenir.
-      const hedef = await prisma.user.findUnique({
-        where: { id: hedefId },
-        select: { isSystemAccount: true },
-      });
-      if (hedef?.isSystemAccount === true && req.isSystemAccount !== true) {
+      const hedefSistemHesabi = await AuthService.isSystemAccountUser(hedefId);
+      if (hedefSistemHesabi && req.isSystemAccount !== true) {
         next(
           AppError.forbidden(
             "En yetkili hesabın PIN/kart bilgisi başka bir kullanıcıya gösterilmez.",
@@ -1219,7 +1215,7 @@ router.get(
 // Yüksek hacimli tablo — cursor pagination, count yok, payload listede yok.
 // =============================================================================
 
-const systemLogListQuerySchema = z.object({
+export const systemLogListQuerySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).optional(),
   userId: z.string().uuid().optional(),
@@ -1246,7 +1242,22 @@ const systemLogListQuerySchema = z.object({
   action: z.string().min(1).max(40).optional(),
   dateFrom: z.string().datetime().optional(),
   dateTo: z.string().datetime().optional(),
-});
+})
+  // FAIL-CLOSED KAPI (2026-09-05 perf turu): `recordId` composite index'in İKİNCİ
+  // kolonudur; ilk kolon (`tableName`) boş gelirse plan "Index Scan" YAZAR ama
+  // index'in TAMAMINI okur — ölçüldü: yalnız recordId 478 buffer / 1,793 ms,
+  // ikisi birlikte 4 buffer / 0,025 ms (120x). Kural belgede yazılıydı, kapısı
+  // yoktu. Tek çağıran (Electron RecordHistoryDialog) ikisini zaten birlikte
+  // gönderiyor → eski istemci kırılmaz; yalnız-recordId isteği 400 alır.
+  .superRefine((v, ctx) => {
+    if (v.recordId && !v.tableName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["tableName"],
+        message: "Kayıt geçmişi için 'tableName' de gönderilmelidir (yalnız 'recordId' yetmez).",
+      });
+    }
+  });
 
 /**
  * @openapi

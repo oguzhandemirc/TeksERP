@@ -95,7 +95,8 @@ function pm2Env(dosya: string): Env {
   // pm2 `start ecosystem.config.js` derken dosyayı Node ile değerlendirir ve
   // apps[0].env'i sürecin ortamına enjekte eder. Burada aynısını yapıyoruz.
   delete require.cache[require.resolve(dosya)];
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  // Tembel `require` BİLİNÇLİ: pm2'nin davranışını taklit etmek için dosya
+  // ÇALIŞMA ANINDA değerlendirilmeli. (`no-require-imports` bekçi kapsamında açık değil.)
   const cfg = require(dosya) as { apps: Array<{ env?: Env }> };
   return cfg.apps[0].env ?? {};
 }

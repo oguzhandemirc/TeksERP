@@ -451,7 +451,8 @@ export default function FasonSevkScreen() {
     if (!barcode) return;
     // Yanlış tip: top barkodu (T...) kart alanına okutulduysa anında net hata.
     if (looksLikeRollBarcode(barcode)) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      // Yanlış tipteki barkod da bir REDdir; sözleşmede dördüncü sonuç yok.
+      signalScan('reject');
       Toast.show({
         type: 'error',
         text1: 'Bu bir top barkodu',
@@ -464,12 +465,12 @@ export default function FasonSevkScreen() {
       const res = await travelerCardService.findByBarcode(barcode);
       const card = res.data;
       if (!card) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'Kart bulunamadı', text2: barcode });
         return;
       }
       if (card.status !== 'ACTIVE') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: 'Kart aktif değil',
@@ -479,12 +480,12 @@ export default function FasonSevkScreen() {
       }
       const wo = card.workOrder;
       if (!wo) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'İş emri yüklenemedi' });
         return;
       }
       if (wo.status !== 'PLANNED' && wo.status !== 'IN_PROGRESS') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: 'Bu iş emri sevke uygun değil',
@@ -503,7 +504,7 @@ export default function FasonSevkScreen() {
         (s) => s.station?.type === 'EXTERNAL' && s.status !== 'SKIPPED',
       );
       if (!hasOpenExternal) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: 'Sevke uygun fason adımı yok',
@@ -511,7 +512,7 @@ export default function FasonSevkScreen() {
         });
         return;
       }
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      signalScan('accept');
       setWorkOrderId(wo.id);
       setWorkOrderLabel(`${wo.workOrderNumber} · ${trLabel(WORK_ORDER_STATUS_LABEL, wo.status)}`);
       setStepId('');
@@ -526,7 +527,7 @@ export default function FasonSevkScreen() {
         text2: wo.workOrderNumber,
       });
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({
         type: 'error',
         text1: 'Kart okuma hatası',
@@ -764,7 +765,9 @@ export default function FasonSevkScreen() {
       rollItemId &&
       rollItemId !== selectedWo.targetItemId
     ) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      // Okutma sonucu HENÜZ yok: bu bir SORU ("Yine de Ekle?" onayı). Sonucu
+      // onaydan sonra bu fonksiyonun kendi `accept`i verir; vazgeçilirse top
+      // hiç eklenmez. Burada ret basmak cevabı önden söylerdi.
       setPendingMismatch({
         roll: r,
         expectedLabel: selectedWo.targetItem?.name ?? '—',
@@ -808,7 +811,9 @@ export default function FasonSevkScreen() {
       scanFb.pushRejects([{ barcode, reason }]);
       return;
     }
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    // Tarayıcı açık kolda sinyali `pushRejects` veriyor; kapalı kol da AYNI
+    // kapıdan geçsin ki ses ayarı ve ret deseni iki kolda ayrışmasın.
+    signalScan('reject');
     Toast.show({ type: 'error', text1: 'Top eklenmedi', text2: `${barcode} · ${reason}` });
   };
 
@@ -834,7 +839,7 @@ export default function FasonSevkScreen() {
       if (rollScannerOpenRef.current) {
         scanFb.pushRejects([{ barcode, reason: 'Bu bir refakat kartı — top barkodu okutun' }]);
       } else {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: 'Bu bir refakat kartı',

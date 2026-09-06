@@ -8,6 +8,7 @@ import PickerModal, { type PickerOption } from '../../../components/PickerModal'
 import { customerService } from '../../../services/customer.service';
 import { itemService } from '../../../services/item.service';
 import { colorService } from '../../../services/color.service';
+import { useTruncationWarning } from '../../../hooks/useTruncationWarning';
 import { colors, spacing, radius } from '../../../theme';
 
 export interface OrderLineFilters {
@@ -83,6 +84,12 @@ export default function OrderLineFilterSheet({
     staleTime: 10 * 60 * 1000,
   });
 
+  // Üç katalog da tek atış (pageSize 300) — tavan aşılırsa liste sessizce kırpılır
+  // ve operatör "müşterim/kumaşım listede yok" der; uyarı kırpmayı görünür yapar.
+  useTruncationWarning(customersQuery.data?.pagination, 'Müşteri');
+  useTruncationWarning(itemsQuery.data?.pagination, 'Kumaş');
+  useTruncationWarning(colorsQuery.data?.pagination, 'Renk');
+
   const customerOptions: PickerOption[] = useMemo(
     () => (customersQuery.data?.data ?? []).map((c) => ({ value: c.id, label: c.name, sublabel: c.code ?? undefined })),
     [customersQuery.data],
@@ -105,14 +112,23 @@ export default function OrderLineFilterSheet({
   const labelOf = (opts: PickerOption[], id: string | null) =>
     id ? (opts.find((o) => o.value === id)?.label ?? '—') : null;
 
-  const row = (
-    key: 'customer' | 'item' | 'color',
-    label: string,
-    icon: string,
-    selected: string | null,
-    opts: PickerOption[],
-    clear: () => void,
-  ) => (
+  // Tek nesne parametresi: çağrı yerinde altı konumlu argümanın hangisinin ne
+  // olduğu okunmuyordu (`max-params` kapısı da bunu ölçer).
+  const row = ({
+    key,
+    label,
+    icon,
+    selected,
+    opts,
+    clear,
+  }: {
+    key: 'customer' | 'item' | 'color';
+    label: string;
+    icon: string;
+    selected: string | null;
+    opts: PickerOption[];
+    clear: () => void;
+  }) => (
     <View>
       <Text style={styles.label}>{label}</Text>
       <View style={styles.rowGap}>
@@ -148,9 +164,14 @@ export default function OrderLineFilterSheet({
       </View>
 
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
-        {row('customer', 'Müşteri', 'account-tie', draft.customerId, customerOptions, () =>
-          setDraft((d) => ({ ...d, customerId: null })),
-        )}
+        {row({
+          key: 'customer',
+          label: 'Müşteri',
+          icon: 'account-tie',
+          selected: draft.customerId,
+          opts: customerOptions,
+          clear: () => setDraft((d) => ({ ...d, customerId: null })),
+        })}
         {itemLocked ? (
           <View style={styles.lockedNote}>
             <Icon source="lock" size={14} color={colors.textMuted} />
@@ -159,13 +180,23 @@ export default function OrderLineFilterSheet({
             </Text>
           </View>
         ) : (
-          row('item', 'Kumaş', 'cube-outline', draft.itemId, itemOptions, () =>
-            setDraft((d) => ({ ...d, itemId: null })),
-          )
+          row({
+            key: 'item',
+            label: 'Kumaş',
+            icon: 'cube-outline',
+            selected: draft.itemId,
+            opts: itemOptions,
+            clear: () => setDraft((d) => ({ ...d, itemId: null })),
+          })
         )}
-        {row('color', 'Renk', 'palette', draft.colorId, colorOptions, () =>
-          setDraft((d) => ({ ...d, colorId: null })),
-        )}
+        {row({
+          key: 'color',
+          label: 'Renk',
+          icon: 'palette',
+          selected: draft.colorId,
+          opts: colorOptions,
+          clear: () => setDraft((d) => ({ ...d, colorId: null })),
+        })}
       </ScrollView>
 
       <View style={styles.footer}>

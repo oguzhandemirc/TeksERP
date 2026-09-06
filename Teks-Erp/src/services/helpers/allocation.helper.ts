@@ -35,16 +35,30 @@ export interface LineForAlloc {
 // item kesin; renk/en ikisi de doluysa eşit olmalı, biri null ise gevşek eşleşir.
 export function specMatch(
   a: { itemId: string; colorId: string | null; width: Prisma.Decimal | null },
-  b: { itemId: string; colorId: string | null; width: Prisma.Decimal | null }
+  b: { itemId: string; colorId: string | null; width: Prisma.Decimal | null },
+  /**
+   * EN TOLERANSI (cm) — `shipping.allocationWidthToleranceCm`. Varsayılan 0 =
+   * TAM EŞİTLİK, yani bugünkü davranış bayt-bayt korunur.
+   *
+   * ⚠️ TOLERANS YALNIZ ENE UYGULANIR. Kumaş ve renk KESİN eşleşmek zorundadır ve
+   * bu pazarlık dışıdır: yanlış rengi bir siparişe yazmak defteri sessizce
+   * bozar, yanlış eni yazmak ise sahada zaten kabul edilen bir sapmadır
+   * (kullanıcı beyanı 2026-09-06: "desen-renk kesin eşleşmeli, en değeri bazen
+   * değişiklik gösterebilir").
+   *
+   * ÖLÇÜM (fabrika yedeği 2026-09-05): en yüzünden yazılamayan 950 m / 25 top ve
+   * gözlenen iki fark 0,1 cm ile 5 cm. Yani küçük bir tolerans o kümenin
+   * tamamını kurtarır; büyük bir tolerans ise farklı ürünleri birbirine yazar.
+   */
+  enToleransCm: number = 0
 ): boolean {
   if (a.itemId !== b.itemId) return false;
   if (a.colorId != null && b.colorId != null && a.colorId !== b.colorId) return false;
-  if (
-    a.width != null &&
-    b.width != null &&
-    !new Prisma.Decimal(a.width).equals(new Prisma.Decimal(b.width))
-  ) {
-    return false;
+  if (a.width != null && b.width != null) {
+    const fark = new Prisma.Decimal(a.width).minus(new Prisma.Decimal(b.width)).abs();
+    // `enToleransCm <= 0` dalında `greaterThan(0)` tam eşitlik demektir — eski
+    // `!equals(...)` ile birebir aynı hüküm, kayan nokta payı EKLENMEZ.
+    if (fark.greaterThan(enToleransCm > 0 ? enToleransCm : 0)) return false;
   }
   return true;
 }
@@ -210,7 +224,16 @@ function branchMatch(sackBranchId: string | null, lineBranchId: string | null): 
  */
 export function distributeSacksToLines(
   sacks: PoolSack[], // FIFO sırasında (createdAt asc, id)
-  lines: SackAllocLine[]
+  lines: SackAllocLine[],
+  /** EN toleransı (cm) — `shipping.allocWidthToleranceCm`. 0 = tam eşitlik (varsayılan). */
+  enToleransCm: number = 0,
+  /**
+   * FAZLA SEVK deftere yazılsın mı (`shipping.allowOverAllocation`). false =
+   * bugünkü davranış: tahsis kalemin kalan ihtiyacını AŞAMAZ ve aşan mal hiçbir
+   * satıra yazılmaz. true = normal tur bittikten sonra ARTAN mal, spec'i tutan
+   * satırlara dağıtılır; `shippedQty` ısmarlananı geçebilir.
+   */
+  fazlaSevkYazilsin: boolean = false
 ): { sackId: string; orderLineId: string; qty: Prisma.Decimal }[] {
   const sortedLines = [...lines].sort(lineFifoCmp);
   const result: { sackId: string; orderLineId: string; qty: Prisma.Decimal }[] = [];
@@ -224,7 +247,7 @@ export function distributeSacksToLines(
       for (const e of specRemaining) {
         if (line.need.lessThanOrEqualTo(0)) break;
         if (e.remaining.lessThanOrEqualTo(0)) continue;
-        if (!specMatch(e, line)) continue;
+        if (!specMatch(e, line, enToleransCm)) continue;
         const take = Prisma.Decimal.min(line.need, e.remaining);
         e.remaining = e.remaining.minus(take);
         line.need = line.need.minus(take);
@@ -232,6 +255,25 @@ export function distributeSacksToLines(
       }
       if (allocForLine.greaterThan(0)) {
         result.push({ sackId: sack.sackId, orderLineId: line.id, qty: allocForLine });
+      }
+    }
+
+    // FAZLA SEVK TURU — yalnız bayrak açıkken. Normal turdan ARTAN mal (kalemler
+    // dolduğu için yazılamayan), spec'i ve şubesi tutan satırlara dağıtılır.
+    // ⚠️ TEK SATIRA yığılır (spec'i tutan İLK uygun satır): fazlalığı satırlara
+    // oranlamak, hangi kaleme ne kadar fazla gittiğini UYDURMAK olurdu. FIFO
+    // sırası zaten termin önceliğini taşıyor.
+    if (fazlaSevkYazilsin) {
+      for (const e of specRemaining) {
+        if (e.remaining.lessThanOrEqualTo(0)) continue;
+        const hedef = sortedLines.find(
+          (l) => branchMatch(sack.branchId, l.branchId) && specMatch(e, l, enToleransCm),
+        );
+        if (!hedef) continue; // spec'i tutan satır yoksa mal gerçekten sipariş dışı
+        const mevcut = result.find((r) => r.sackId === sack.sackId && r.orderLineId === hedef.id);
+        if (mevcut) mevcut.qty = mevcut.qty.plus(e.remaining);
+        else result.push({ sackId: sack.sackId, orderLineId: hedef.id, qty: e.remaining });
+        e.remaining = D0();
       }
     }
   }

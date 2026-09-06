@@ -13,7 +13,8 @@
 //   (b) SORGU: depo filtresi GÖNDERİLMEDİĞİNDE `where`e tek koşul eklenmez —
 //       yani mevcut listeler bayt bayt aynı sonucu döner.
 //   (c) ARAYÜZ: her yeni yüzey `multiWarehouse` kapısının arkasındadır ve o
-//       karar TEK kaynaktan (`useMultiWarehouse`) gelir.
+//       karar TEK kaynaktan (`useMultiWarehouse`) gelir — 2026-09-02'den beri
+//       kaynak `depo.multiEnabled` modül anahtarıdır, depo sayısı DEĞİL.
 //
 // ⚠️ (c) Electron tarafında yaşıyor ve backend onu import EDEMEZ → kaynak
 // taramasıyla kilitlenir (emsal: `test_document_template_permission.ts`
@@ -29,7 +30,7 @@
 //   §6 Yeni tablolar mevcut akışların yanıt şeklini DEĞİŞTİRMEDİ (RollMovement
 //      sayısı sabit — depo defteri ayrı tabloda)
 // =============================================================================
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
 import type { Request } from "express";
 import prisma, { pool } from "../src/lib/prisma";
@@ -55,6 +56,34 @@ const ELECTRON = join(__dirname, "..", "..", "Electron", "src");
 function readSrc(rel: string): string {
   const p = join(ELECTRON, rel);
   return existsSync(p) ? readFileSync(p, "utf8") : "";
+}
+
+/**
+ * Electron kaynağında bir DESEN arar; yorum satırları/blokları ELENİR (karar
+ * kaydı "eskiden şöyleydi" diye deseni yazar, ihlal saymamalı). Dönüş: eşleşen
+ * dosyalar + taranan dosya sayısı (körlük zemini: 0 dosya taranmışsa "temiz"
+ * demek yanlış olur).
+ */
+function scanSrc(pattern: RegExp): { hits: string[]; scanned: number } {
+  const hits: string[] = [];
+  let scanned = 0;
+  const walk = (dir: string): void => {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      if (statSync(full).isDirectory()) {
+        walk(full);
+        continue;
+      }
+      if (!/\.tsx?$/.test(name)) continue;
+      scanned++;
+      const code = readFileSync(full, "utf8")
+        .replace(/\/\*[\s\S]*?\*\//g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      if (pattern.test(code)) hits.push(full.slice(ELECTRON.length + 1));
+    }
+  };
+  if (existsSync(ELECTRON)) walk(ELECTRON);
+  return { hits, scanned };
 }
 
 const fakeReq = (query: Record<string, unknown>) => ({ query }) as unknown as Request;
@@ -151,10 +180,24 @@ async function main(): Promise<void> {
   const hook = readSrc("hooks/useWarehouses.ts");
 
   check("§4a useWarehouses hook'u var", hook.includes("export function useMultiWarehouse"));
+  // ⚠️ 2026-09-02 — KARAR VERİDEN DEĞİL BAYRAKTAN: eski türev `warehouses.length
+  // > 1` idi; ikinci depo açan herkes yüzeyleri de açmış oluyordu ve backend'de
+  // karşılığı yoktu. Bugünkü tek kaynak `depo.multiEnabled` modül anahtarıdır ve
+  // transfer uçlarındaki `requireDepoMultiEnabled` AYNI değeri okur — "karo var
+  // ama uç 403" ayrışması imkânsız (docs/kurallar/modul-bayrak.md).
   check(
-    "§4b multiWarehouse kararı TEK yerde hesaplanıyor",
-    hook.includes("warehouses.length > 1"),
-    "kopyalanırsa biri 'aktif' süzgecini unutur",
+    "§4b multiWarehouse kararı modül BAYRAĞINDAN okunuyor (uçla tek kaynak)",
+    hook.includes("useFeatureFlags") && hook.includes("depoMultiEnabled"),
+    "hook bayrağı okumuyor — karar veriden türetiliyor olabilir",
+  );
+  // Tek kaynak seddi: hiçbir ekran kararı depo LİSTESİNDEN yeniden türetmemeli.
+  const derived = scanSrc(/warehouses\s*\.\s*length\s*>\s*1/);
+  check(
+    "§4b2 karar hiçbir ekranda listeden yeniden TÜRETİLMİYOR",
+    derived.scanned > 0 && derived.hits.length === 0,
+    derived.hits.length > 0
+      ? `türev bulundu: ${derived.hits.join(", ")}`
+      : `${derived.scanned} dosya tarandı (körlük zemini)`,
   );
   check(
     "§4c Rolls 'Depo' kolonu multiWarehouse kapılı",
@@ -172,8 +215,8 @@ async function main(): Promise<void> {
   // çizmek, fabrikada depo kolonunun bir an belirip kaybolması demekti.
   check(
     "§4f Belirsizken (yükleniyor) kapı KAPALI",
-    hook.includes("q.data ?? []"),
-    "veri yokken boş dizi → length>1 false",
+    /depoMultiEnabled\s*\?\?\s*false/.test(hook),
+    "bayrak yüklenene kadar false → belirsizken yüzey çizilmez",
   );
 
   // ── §5 İZİN SIZINTISI ───────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 # Plan B — Audit derinleştirme (ne değişti, nereden, ne kadar süre)
 
-> **Durum:** TASARIM. Uygulanmadı. Plan A (kayıt künyesi) ile birlikte okunmalı;
+> **Durum:** ✅ UYGULANDI (2026-08-19) — `audit-diff.helper.ts`, `request-context.ts`, migration `20260819035418_systemlog_device` + `20260819160000_audit_requestid_devicefix`, bekçi `test_audit_depth.ts`. Aşağıdaki metin ORİJİNAL TASARIMDIR (gerekçe için); "bugün yok" biçimindeki ölçümler 2026-08-19 fotoğrafıdır. Plan A (kayıt künyesi) ile birlikte okunmalı;
 > A önce gelir çünkü "kim/ne zaman" sorusunu tek başına çözer ve daha ucuzdur.
 
 ## Bağlam — ölçülmüş boşluklar

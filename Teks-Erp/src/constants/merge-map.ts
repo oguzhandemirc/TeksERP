@@ -133,6 +133,39 @@ export const MERGE_MAP: Record<MergeEntity, MoveRule[]> = {
       policy: "UNION",
       why: "Saf M:N kolaylık bağı — birleşim kayıpsız ve doğru anlam.",
     },
+    // —— Ticaret / ön muhasebe bacağı ——————————————————————————————————————
+    // Bu dört FK ana veri birleştirmesinden SONRA main'e girdi (finans + satın
+    // alma paketleri) ve haritaya hiç yazılmamıştı: birleştirme onları sessizce
+    // atlıyor, satırlar tombstone bir müşteriye bakmaya devam ediyordu.
+    { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "supplierId", label: "Mal kabul fişi (tedarikçi)" },
+    { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "supplierId", label: "Alış siparişi (tedarikçi)" },
+    {
+      kind: "CONFLICT",
+      model: "CariAccount",
+      table: "cari_accounts",
+      column: "customerId",
+      label: "Cari hesap",
+      uniqueOn: ["customerId"],
+      policy: "BLOCK",
+      why:
+        "İki cari hesabın birleşmesi DEFTER kararıdır, taşıma değil: bakiye, para birimi ve " +
+        "hareket geçmişi iki ayrı hesapta yaşıyor ve doğru kapanış yalnız muhasebenin bileceği " +
+        "bir mahsup/virman belgesidir. Kısıt kolonun KENDİSİNDE (`customerId @unique`), yani " +
+        "çakışma ancak İKİ tarafın da hesabı varsa doğar; tek taraflıysa satır serbestçe taşınır.",
+    },
+    {
+      kind: "CONFLICT",
+      model: "ItemPrice",
+      table: "item_prices",
+      column: "customerId",
+      label: "Müşteri fiyat istisnası",
+      uniqueOn: ["itemId", "customerId", "kind", "currency"],
+      policy: "BLOCK",
+      why:
+        "Hangi fiyatın geçerli olduğunu yalnız operatör bilir — biri sessizce silinirse fatura " +
+        "yanlış tutarla kesilir. Anahtar `item_price_customer_uq` ile birebir; kart varsayılanı " +
+        "(customerId IS NULL) bu kolonun kaynak kümesine zaten girmez.",
+    },
   ],
 
   item: [
@@ -172,6 +205,49 @@ export const MERGE_MAP: Record<MergeEntity, MoveRule[]> = {
       uniqueOn: ["customerId", "itemId"],
       policy: "SKIP",
       why: "Müşteri tarafındakiyle aynı gerekçe — alias etikete basılıyor.",
+    },
+    // —— Ticaret / iplik / fatura bacağı ————————————————————————————————————
+    { kind: "MOVE", model: "InvoiceLine", table: "invoice_lines", column: "itemId", label: "Fatura kalemi" },
+    { kind: "MOVE", model: "YarnMovement", table: "yarn_movements", column: "itemId", label: "İplik hareketi" },
+    { kind: "MOVE", model: "PurchaseOrderLine", table: "purchase_order_lines", column: "itemId", label: "Alış siparişi kalemi" },
+    {
+      kind: "CONFLICT",
+      model: "YarnStock",
+      table: "yarn_stocks",
+      column: "itemId",
+      label: "İplik stok bakiyesi",
+      uniqueOn: ["itemId", "warehouseId"],
+      policy: "BLOCK",
+      why:
+        "Aynı depoda iki bakiye satırı DEFTERDİR: doğru sonuç toplama değil, hareket üreten bir " +
+        "sayım/düzeltme belgesidir (kg sessizce toplanırsa `YarnMovement` toplamıyla drift eder " +
+        "ve mutabakat §27 kırmızı yanar). Çakışma yalnız AYNI depoda doğar; farklı depolar taşınır.",
+    },
+    {
+      kind: "CONFLICT",
+      model: "ItemPrice",
+      table: "item_prices",
+      column: "itemId",
+      label: "Fiyat kartı",
+      uniqueOn: ["itemId", "kind", "currency"],
+      policy: "BLOCK",
+      why:
+        "Hangi fiyatın geçerli olduğunu yalnız operatör bilir. Anahtar BİLEREK iki partial " +
+        "UNIQUE'in GENİŞ olanı: dar anahtar (`itemId, customerId, kind, currency`) kart " +
+        "varsayılanlarını NULLS DISTINCT yüzünden çakışma saymaz ve düz UPDATE P2002 ile " +
+        "patlardı — geniş anahtar bazı ayrılabilir satırları da bloklar, bu bilinçli fail-closed.",
+    },
+    {
+      kind: "CONFLICT",
+      model: "StockCountLine",
+      table: "stock_count_lines",
+      column: "itemId",
+      label: "Sayım kalemi",
+      uniqueOn: ["stockCountId", "itemId"],
+      policy: "BLOCK",
+      why:
+        "Aynı sayım fişinde iki kalem birleşirse sayılan miktar sessizce kaybolur; sayım " +
+        "tutanağı geçmiş bir ölçümün kaydıdır, yeniden yazılmaz. Çakışma yalnız AYNI fişte doğar.",
     },
   ],
 
@@ -249,6 +325,21 @@ export const MERGE_MAP: Record<MergeEntity, MoveRule[]> = {
         "⚠️ Composite PK (`@@id([subcontractorId, categoryId])`), surrogate `id` YOK. " +
         "`updateMany` ile PK'nın yarısını değiştirmek çakışan satırda P2002 verir ve " +
         "`skipDuplicates` bir UPDATE'te yoktur → çakışmayanı taşı, çakışanı SİL.",
+    },
+    // —— Ticaret / ön muhasebe bacağı (fason firma = tedarikçi bacağı) ————————
+    { kind: "MOVE", model: "GoodsReceipt", table: "goods_receipts", column: "subcontractorId", label: "Mal kabul fişi (fason tedarikçi)" },
+    { kind: "MOVE", model: "PurchaseOrder", table: "purchase_orders", column: "subcontractorId", label: "Alış siparişi (fason tedarikçi)" },
+    {
+      kind: "CONFLICT",
+      model: "CariAccount",
+      table: "cari_accounts",
+      column: "subcontractorId",
+      label: "Cari hesap",
+      uniqueOn: ["subcontractorId"],
+      policy: "BLOCK",
+      why:
+        "Müşteri tarafındakiyle aynı gerekçe: iki cari hesabın kapanışı defter kararıdır. " +
+        "Kısıt kolonun KENDİSİNDE, yani çakışma ancak iki tarafın da hesabı varsa doğar.",
     },
   ],
 };

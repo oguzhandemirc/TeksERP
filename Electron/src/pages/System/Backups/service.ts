@@ -1,4 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
 import apiClient from "@/services/apiClient";
 import { withSettingsPassword } from "@/lib/settings-password";
 import type { RestoreImpact, RestoreImpactResponse } from "./restore-impact.types";
@@ -40,38 +39,20 @@ export interface BackupListing {
   lastResult: BackupRunResult | null; // son yedek işinin sonucu
 }
 
-export function useBackups() {
-  return useQuery({
-    queryKey: ["admin-backups"],
-    queryFn: async () => {
-      const res = await apiClient.get<BackupListing>("/api/admin/backups", {
-        suppressErrorToast: true,
-      });
-      return res.data;
-    },
+/** Saf veri erişimi (React'e bağlı değil) — hook'lar `hooks.ts`te. */
+export async function fetchBackups(): Promise<BackupListing> {
+  const res = await apiClient.get<BackupListing>("/api/admin/backups", {
+    suppressErrorToast: true,
   });
+  return res.data;
 }
 
-/**
- * Geri yükleme etki önizlemesi. `staleTime: 0` + `gcTime: 0`: bu veri yıkıcı bir
- * karara temel oluşturuyor, bayat gösterilmesi kabul edilemez (kayıp sayıları
- * saniyeler içinde değişir). Dialog kapalıyken sorgu koşmaz.
- */
-export function useRestoreImpact(name: string | null) {
-  return useQuery({
-    queryKey: ["backup-restore-impact", name],
-    queryFn: async (): Promise<RestoreImpact> => {
-      const res = await apiClient.get<RestoreImpactResponse>(
-        `/api/admin/backups/${encodeURIComponent(name!)}/restore-impact`,
-        { suppressErrorToast: true },
-      );
-      return res.data.data;
-    },
-    enabled: !!name,
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-  });
+export async function fetchRestoreImpact(name: string): Promise<RestoreImpact> {
+  const res = await apiClient.get<RestoreImpactResponse>(
+    `/api/admin/backups/${encodeURIComponent(name)}/restore-impact`,
+    { suppressErrorToast: true },
+  );
+  return res.data.data;
 }
 
 /** Yedeği indirir (blob → kaydet) — admin'in yerel makinesine off-site kopya. */
@@ -209,16 +190,9 @@ export interface OffsiteStatus {
 
 export const OFFSITE_QUERY_KEY = ["admin", "backups", "offsite"] as const;
 
-export function useOffsiteStatus() {
-  return useQuery({
-    queryKey: OFFSITE_QUERY_KEY,
-    queryFn: async (): Promise<OffsiteStatus> => {
-      const { data } = await apiClient.get("/api/admin/backups/offsite");
-      return data.data as OffsiteStatus;
-    },
-    // Süpürme saatte bir koşuyor; bu ekran açıkken dakikada bir tazelemek yeter.
-    refetchInterval: 60_000,
-  });
+export async function fetchOffsiteStatus(): Promise<OffsiteStatus> {
+  const { data } = await apiClient.get("/api/admin/backups/offsite");
+  return data.data as OffsiteStatus;
 }
 
 /**

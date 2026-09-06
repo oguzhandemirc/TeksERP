@@ -225,6 +225,12 @@ export interface ShipmentDetail {
   id: string;
   shipmentNo: string;
   status: ShipmentStatus;
+  /**
+   * Çıkan mal ↔ sipariş defterine yazılan farkı (m). `null` = sevkiyatın siparişi
+   * yok, soru anlamsız. Sıfırdan büyükse o metraj sipariş defterine İŞLENMEDİ ve
+   * sipariş "Açık" kalmıştır.
+   */
+  defterBoslugu: number | null;
   destination: ShipmentDestination;
   procedureCode: string | null;
   /** İrsaliye açıklaması — sevkiyata kayıtlı serbest not (annotation). */

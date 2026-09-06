@@ -71,7 +71,7 @@ import {
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "./helpers/label-intent.helper";
-import { generateRollBarcode, reserveRollBarcodesInOrder } from "./helpers/roll-barcode.helper";
+import { generateRollBarcodeTx, reserveRollBarcodesInOrderTx } from "./helpers/roll-barcode.helper";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
 // import etmez — ortak guard'lar `helpers/kursun-bypass-guard.helper.ts`'te
@@ -846,7 +846,7 @@ export class TamburService {
 
     // ── SEGMENT KURULUMU + BARKOD REZERVASYONU — tx AÇILMADAN ÖNCE ────────────
     // (2026-08-10 denetimi, F-CORE-VER-001) Bu blok eskiden transaction'ın
-    // İÇİNDEYDİ ve her segment için ayrı ayrı `generateRollBarcode(tx, …)`
+    // İÇİNDEYDİ ve her segment için ayrı ayrı `generateRollBarcodeTx(tx, …)`
     // çağırıyordu. Sayaç satırının kilidi artışı yapan tx COMMIT edene kadar
     // tutulduğu için, İLK segmentin barkodu kalan tüm segmentler + 225 satır
     // kuyruk (8 yazma + 3 tx-helper) boyunca tutuluyordu; o süre boyunca
@@ -933,7 +933,7 @@ export class TamburService {
     // eski `parent+KS+suffix` biçimi hem uzundu hem hiçbir yerde parse edilmiyordu).
     // Tip başına TEK ifade; dönen dizi segment SIRASINI korur (yer değiştirirse
     // fiziksel toplara yanlış etiket basılır — bkz. helper'daki uyarı).
-    const segmentBarcodes = await reserveRollBarcodesInOrder(
+    const segmentBarcodes = await reserveRollBarcodesInOrderTx(
       prisma,
       segments.map((seg) => (seg.status === RollStatus.WAREHOUSE ? "F" : "H")),
     );
@@ -2169,7 +2169,7 @@ export class TamburService {
       valueId: p.valueId ?? null,
     }));
     // Barkod SUNUCU'da sıralı atanır (atomik sayaç). WAREHOUSE child → "F", raw→STOCK → "H".
-    const childBarcode = await generateRollBarcode(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
+    const childBarcode = await generateRollBarcodeTx(prisma, childStatus === RollStatus.WAREHOUSE ? "F" : "H");
     // Etiket niyeti (pre-tx çözüm) — yalnız WAREHOUSE child anlamlı; raw→STOCK
     // (üretime devam) child stok etiketle doğar.
     // Niyeti BİR KEZ çöz, hem snapshot'a hem sorgulanabilir aynaya kullan —
@@ -2616,7 +2616,7 @@ export class TamburService {
     const reservedChildBarcode =
       action === "discard"
         ? null
-        : (await reserveRollBarcodesInOrder(prisma, [
+        : (await reserveRollBarcodesInOrderTx(prisma, [
             childStatus === RollStatus.WAREHOUSE ? "F" : "H",
           ]))[0]!;
 
@@ -2933,7 +2933,7 @@ export class TamburService {
       valueId: p.valueId ?? null,
     }));
     // Açık kumaş child her zaman WAREHOUSE → "F" (final). Barkod sunucudan (atomik sayaç).
-    const childBarcode = await generateRollBarcode(prisma, "F");
+    const childBarcode = await generateRollBarcodeTx(prisma, "F");
     // Etiket niyeti (pre-tx çözüm) — açık kumaş child her zaman WAREHOUSE.
     const cutIntent = await resolveLabelIntent(data);
     const cutIntentSnapshot = buildIntentSnapshot(cutIntent);
@@ -3376,7 +3376,7 @@ export class TamburService {
     // açıklamasına bak (idempotency mekanizması burada da P2002 tabanlı).
     // Tip her zaman "F" (hepsi depoya iner).
     const reservedChildBarcode =
-      action === "discard" ? null : (await reserveRollBarcodesInOrder(prisma, ["F"]))[0]!;
+      action === "discard" ? null : (await reserveRollBarcodesInOrderTx(prisma, ["F"]))[0]!;
 
     const result = await prisma.$transaction(async (tx) => {
       // O-2 write-skew guard: WO satırını kilitle → son-top tamamlama sayımı

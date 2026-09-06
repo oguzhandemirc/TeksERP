@@ -83,8 +83,12 @@ import {
   type MaybeWrongReceiptDetails,
 } from '../../../services/subcontractor.service';
 import { travelerCardService } from '../../../services/travelerCard.service';
+import { signalScan } from '../../../services/scanFeedback';
 import { STATION_MUT } from '../../../offline/mutations';
 import { useReasonPresets } from '../../../hooks/useReasonPresets';
+import ReasonPresetPicker, {
+  type ReasonPresetValue,
+} from '../../../components/reasonPresets/ReasonPresetPicker';
 import { useFasonShrinkWarn } from '../../../hooks/useFeatureFlags';
 import SyncStatusChip from '../../../components/SyncStatusChip';
 import { SkeletonList } from '../../../components/motion';
@@ -439,7 +443,6 @@ export default function FasonKabulScreen() {
       }
       draftRestoredRef.current = true;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -683,6 +686,9 @@ export default function FasonKabulScreen() {
   const cancelPreview: ReceiptCancelPreview | null =
     cancelPreviewQuery.data?.data ?? null;
 
+  // Online-only: iptal, sunucudan TAZE çekilen önizlemenin `cascadeRollIds`
+  // kapsamına uygulanır (yıkıcı işlem). Kuyruklanan iptal, operatörün saatler
+  // önce onayladığı bir kapsamı yazardı — araya giren kayıtlar görülmeden.
   const cancelReceiptMutation = useMutation({
     mutationFn: ({
       id,
@@ -965,12 +971,14 @@ export default function FasonKabulScreen() {
       const res = await travelerCardService.findByBarcode(barcode);
       const card = res.data as TravelerCardLookup | null;
       if (!card) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        signalScan('reject');
         Toast.show({ type: 'error', text1: 'Refakat kartı bulunamadı', text2: barcode });
         return;
       }
       if (card.status !== 'ACTIVE') {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        // "Kabul edilmedi" sınıfının tamamı `reject`; sözleşmede dördüncü bir
+        // "uyarı" sonucu yok (services/scanFeedback).
+        signalScan('reject');
         Toast.show({
           type: 'error',
           text1: `Kart geçersiz: ${card.status}`,
@@ -990,7 +998,9 @@ export default function FasonKabulScreen() {
       } catch (err) {
         const e = err as Error & { details?: PendingReturnErrorDetails };
         const details = e.details;
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        // Üç dalın üçünde de kart kabul edilmedi (teşhis kartı da bir REDdir —
+        // Depo'daki iptalli top emsali).
+        signalScan('reject');
         if (details?.code === 'NEEDS_DISPATCH') {
           setCardBarcode('');
           setScanAction({ kind: 'NEEDS_DISPATCH', message: e.message, details });
@@ -1014,6 +1024,9 @@ export default function FasonKabulScreen() {
       }
 
       if (matching.length === 0) {
+        // Sessiz kalırsa operatör "okumadı" sanıp aynı kartı tekrar okutur;
+        // kart geçerli ama iş doğmadı → sonuç RET.
+        signalScan('reject');
         Toast.show({
           type: 'info',
           text1: 'Bekleyen sevk yok',
@@ -1027,7 +1040,7 @@ export default function FasonKabulScreen() {
       setRightTab('pending');
 
       if (matching.length === 1) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        signalScan('accept');
         Toast.show({
           type: 'success',
           text1: 'Sevk bulundu',
@@ -1035,6 +1048,8 @@ export default function FasonKabulScreen() {
         });
         selectGroup(matching[0]);
       } else {
+        // Çoklu adım: bu bir SORU (hangisi?), okutmanın sonucu değil — sonuç
+        // seçimden sonra doğar, o yüzden burada sinyal yok (KursunQc emsali).
         Toast.show({
           type: 'info',
           text1: `${matching.length} fason adımı bulundu`,
@@ -1042,7 +1057,7 @@ export default function FasonKabulScreen() {
         });
       }
     } catch (err) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({
         type: 'error',
         text1: 'Kart sorgulanamadı',
@@ -3380,7 +3395,8 @@ function Tab({
  * "Kalan gelmeyecek" onay modalı — fasondaki kalan metrajı FİRE kararıyla kapatır.
  * Sebep ZORUNLU ve fire kataloğundan gelir (fabrika panelden düzenler; Tambur
  * kalan-karar modalıyla aynı desen: serbest metin EN ÜSTTE, yazmaya başlamak
- * "Diğer"i kendiliğinden seçer). ONLINE aksiyondur — kuyruklanmaz.
+ * "Diğer"i kendiliğinden seçer — seçici ortak `ReasonPresetPicker`).
+ * ONLINE aksiyondur — kuyruklanmaz.
  */
 function CloseRemainderModal({
   target,
@@ -3395,20 +3411,19 @@ function CloseRemainderModal({
   onDismiss: () => void;
   onConfirm: (reasonCode: string, reasonText: string | null) => void;
 }) {
-  const [reasonCode, setReasonCode] = useState<string | null>(null);
-  const [reasonText, setReasonText] = useState('');
+  // Seçici ORTAK bileşendir (`ReasonPresetPicker`): serbest metin ÜSTTE kuralı
+  // ve "yazmaya başlamak Diğer'i seçer" davranışı tek yerde yaşasın — bu ekran
+  // aynı düzeni elle çiziyordu ve kural iki kopyada ayrışmaya açıktı.
+  const [reason, setReason] = useState<ReasonPresetValue>({ code: null, text: '' });
   const { presets } = useReasonPresets('ROLL_SCRAP');
   const freeTextPreset = presets.find((r) => r.requiresText) ?? null;
-  const selected = presets.find((r) => r.code === reasonCode) ?? null;
+  const selected = presets.find((r) => r.code === reason.code) ?? null;
   // Her açılışta temiz başla — önceki topun sebebi yenisine yapışmasın.
   useEffect(() => {
-    if (!target) {
-      setReasonCode(null);
-      setReasonText('');
-    }
+    if (!target) setReason({ code: null, text: '' });
   }, [target]);
   const canConfirm =
-    !!reasonCode && !loading && (!selected?.requiresText || reasonText.trim().length >= 3);
+    !!reason.code && !loading && (!selected?.requiresText || reason.text.trim().length >= 3);
   const kalan = target ? Number(target.dispatchedQty ?? 0) : 0;
 
   return (
@@ -3433,7 +3448,7 @@ function CloseRemainderModal({
           });
           return;
         }
-        onConfirm(reasonCode!, reasonText.trim() || null);
+        onConfirm(reason.code!, reason.text.trim() || null);
       }}
       description={
         <View style={{ gap: 8 }}>
@@ -3442,55 +3457,17 @@ function CloseRemainderModal({
             kapatılacak ve FİRE olarak sapma defterine yazılacak. Bu işlem kabul
             DEĞİLDİR ve geri alınamaz; mal sonradan gelirse yönetici düzeltmesi gerekir.
           </Text>
-          <TextInput
-            mode="outlined"
-            dense
+          <ReasonPresetPicker
+            kind="ROLL_SCRAP"
+            value={reason}
+            onChange={setReason}
+            disabled={loading}
             placeholder={
               freeTextPreset
                 ? 'Kendin yaz (en az 3 karakter) — ya da aşağıdan seç'
                 : 'Açıklama (isteğe bağlı)'
             }
-            value={reasonText}
-            onChangeText={(t) => {
-              setReasonText(t);
-              if (freeTextPreset) {
-                if (t.trim() && reasonCode !== freeTextPreset.code) setReasonCode(freeTextPreset.code);
-                else if (!t.trim() && reasonCode === freeTextPreset.code) setReasonCode(null);
-              }
-            }}
-            disabled={loading}
-            style={{ backgroundColor: '#fff' }}
-            left={<TextInput.Icon icon="pencil-outline" />}
           />
-          {presets.map((r) => {
-            const active = reasonCode === r.code;
-            return (
-              <TouchableRipple
-                key={r.code}
-                onPress={() => setReasonCode(r.code)}
-                disabled={loading}
-                style={{
-                  minHeight: 48,
-                  justifyContent: 'center',
-                  paddingHorizontal: 14,
-                  borderRadius: 10,
-                  borderWidth: active ? 2 : 1,
-                  borderColor: active ? '#b45309' : '#cbd5e1',
-                  backgroundColor: active ? '#fffbeb' : '#fff',
-                }}
-              >
-                <Text
-                  style={{
-                    fontSize: 14,
-                    fontWeight: active ? '700' : '500',
-                    color: active ? '#b45309' : '#334155',
-                  }}
-                >
-                  {r.label}
-                </Text>
-              </TouchableRipple>
-            );
-          })}
         </View>
       }
     />

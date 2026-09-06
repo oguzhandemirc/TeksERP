@@ -322,6 +322,21 @@ export const updateSchema = z.strictObject({
   // shipping.docItemNameMode — sevk belgesinde ürün adı (default bizdeki = bugünkü
   // çıktı, bayt-bayt). `musterideki` karşılığı olmayan üründe bizim adımıza düşer.
   shippingDocItemNameMode: z.enum(["bizdeki", "musterideki", "ikisi"]).optional(),
+  // shipping.docCekiNameMode — YALNIZ çeki bölümü (default devral = genel rejimi
+  // izler, yani bugünkü davranış). Ürün listesine dokunmaz.
+  shippingDocCekiNameMode: z.enum(["devral", "bizdeki", "musterideki", "ikisi"]).optional(),
+  // shipping.orderCoverage — İKİNCİ EKSEN: mal seçili siparişlere yazılabildi mi
+  // (default off = bugünkü davranış). `orderRequirement` niyeti, bu SONUCU ölçer.
+  shippingOrderCoverage: z.enum(["off", "warn", "block"]).optional(),
+  // shipping.docProductColorSplit — ürün listesinde müşteri rengi ayrı sütun
+  // (default false = bugünkü birleşik dize, bayt-bayt aynı).
+  shippingDocProductColorSplit: z.boolean().optional(),
+  // shipping.allocWidthTolerance* — tahsiste EN toleransı (default kapalı = tam eşitlik).
+  // ⚠️ Kumaş ve renk toleranstan ETKİLENMEZ.
+  shippingAllocWidthToleranceEnabled: z.boolean().optional(),
+  shippingAllocWidthToleranceCm: z.number().positive().max(10).nullable().optional(),
+  // shipping.allowOverAllocation — fazla sevk deftere yazilsin mi (default false).
+  shippingAllowOverAllocation: z.boolean().optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).

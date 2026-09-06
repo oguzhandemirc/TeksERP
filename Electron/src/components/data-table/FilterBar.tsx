@@ -464,6 +464,10 @@ function LookupFilter({ def, sp, update, h }: SubProps<Extract<FilterDef, { kind
         filters: { isActive: "true", ...def.extraFilters },
         ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       }),
+    // Katalog YALNIZ liste açıkken ya da seçili değerin ETİKETİ gerektiğinde çekilir:
+    // kapısız hâlde Envanter açılışı 7 lookup isteği atıyordu (ölçüm 2026-09-05), hiçbiri
+    // dropdown açılmadan gerekmiyor. `value` koşulu tetik yazısını korur (id görünmez).
+    enabled: open || value !== "",
     staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
@@ -697,6 +701,9 @@ function MultiLookupFilter({
         filters: { isActive: "true", ...def.extraFilters },
         ...(debouncedSearch.trim() ? { search: debouncedSearch.trim() } : {}),
       }),
+    // Aynı kapı — bkz. `LookupFilter`. Seçim VARSA açılmadan da çekilir, yoksa tetik
+    // yazısı ham id'ye düşerdi (sentinel dahil etiket çözümü `items` listesine bağlı).
+    enabled: open || selectedIds.length > 0,
     staleTime: 60_000,
     placeholderData: keepPreviousData,
   });

@@ -1,0 +1,117 @@
+# İş emri · Sipariş bağı
+
+> Alan kural dosyası — bu alana dokunmadan ÖNCE okunur. Kaynak: anlama turu 2026-09-05 (kök `CLAUDE.md` + `docs/history/CLAUDE-NOT-ARSIVI.md` notlarından ayrıştırıldı). Hikâye, ölçüm ve gerekçe arşivde; burada yalnız bugün geçerli kural. Sınıf: **[ÇEKİRDEK]** her kurulumda aynı · **[PROFİL]** bu fabrikanın seçimi.
+
+> Hakem notu: 35 üye (10 asıl + 25 ikincil; ikincillerin çoğu başka kümelerin asıl notu — burada yalnız iş emri↔sipariş bağına değen dilimleri alındı). Bayat/ezilen: 2026-08-19 M4 'son bağ 400' (2026-08-21'de STOK'a dönüşe çevrildi, kod doğruluyor); 2026-08-25 sabah notunun iki kalemi (Ham Stok'ta gizli buton → 2026-08-26 üç sekme; tablet elemesi → aynı akşam); 2026-08-21 rota-kapsaması uyarısı yalnız Rengi Değiştir'deydi → 2026-08-27 create/replace'e genişledi; alt CLAUDE şema sayıları (78/35/3) ölçümle 124/68/16. En riskli gerilim gerçek çelişki değil, iki bağ yolunun farklı sözleşmesi: create/replace siparişten hedef TÜRETİR, sonradan order-links MİRAS ALMAZ — birini diğerine 'düzeltmek' 2026-08-17 EKRU vakasını geri getirir. §20 kırmızısı üç anlama gelebilir; bekçi kör noktayı süzmüyor (açık). [doğrulandı: 35 üye, 3 kanıt kontrolü, 3 düzeltme]
+
+
+## Ortak (backend + panel + tablet)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Bir iş emri N sipariş satırına bağlanabilir ya da hiçbirine (STOCK_PRODUCTION). `WorkOrder.type` beyan DEĞİL bağın aynasıdır: ilk bağda STOK→ORDER, son bağ kalkınca ORDER→STOK; create/replace/quickStart da gövdedeki satırdan türetir ("STOK + satır" sunucuda ORDER — istemci disiplinine bırakılmaz). · bekçi: `Teks-Erp/scripts/test_workorder_order_link.ts (§2c create/replace, §5b simetri, ` <sub>(CLAUDE.md:122, CLAUDE.md:76, arşiv:404)</sub>
+- **[ÇEKİRDEK]** Bağ işlemlerine (bağla/kaldır/toplara uygula) KAPALI statüler yalnız CANCELLED+SUPERSEDED — COMPLETED iş emrine uyumlu 'Sipariş Bağla' AÇIK. Plan değişikliği (renk/en/uyumsuz-bağ override) `PLAN_CHANGE_FROZEN_STATUSES` ile COMPLETED'da da kapalı (409 WO_PLAN_FROZEN). İki liste ayrıdır, birleştirme. · bekçi: `test_wo_target_color_guard.ts (59) + test_workorder_order_link.ts` <sub>(CLAUDE.md:74, CLAUDE.md:76)</sub>
+- **[ÇEKİRDEK]** İKİ BAĞ YOLU, İKİ SÖZLEŞME: create/replace/quickStart gövdesindeki sipariş satırından hedef kumaş/renk/özellik TÜRETİLİR (`onlyColorId`); sonradan `POST /:id/order-links` HİÇBİR ŞEY MİRAS ALMAZ — kumaş/renk uyuşmazsa 400, en farkı `warnings`; uyumsuz bağ yalnız süpervizör `order-links/override`. · bekçi: `test_workorder_order_link.ts (2026-08-17 'miras almaz' invariantı)` <sub>(CLAUDE.md:89, CLAUDE.md:74, CLAUDE.md:76)</sub>
+- **[ÇEKİRDEK]** Rota şablonunun hedefi ÖNERİDİR, kilit değil; sipariş bağlı iş emrinde şablon rengi SİPARİŞİN ŞARTINI EZEMEZ — Electron `applyRouteTarget` `pickedLines.length>0` ise dokunmaz, mobil `chooseRoute` `orderLinked` ise rengi düşürmez. <sub>(arşiv:92)</sub>
+- **[ÇEKİRDEK]** Sipariş: liste/cursor/özet TEK where (`BaseService.buildListWhere`); kalem iptali SOFT, `recomputeOrderStatus` iptal kalemi `shipped` ile sayar; 'açık talep' süzgeci TEK KAYNAK `order-line-scope.helper` (`cancelledAt == null` GEVŞEK); karşılanma raporu `getCoverageForLines` KULLANMAZ (çift sayım). · bekçi: `test_order_line_scope_single_source.ts (AST)` <sub>(CLAUDE.md:94)</sub>
+- **[ÇEKİRDEK]** Yarı mamul ARZDIR: Ürün Dengesi `malzemeAcigi` ham+yariMamul'ü BİRLİKTE düşer, ayrım yalnız gösterimde; sipariş karşılamada `netGap` DEĞİŞMEZ, `freeSemiFinished` ayrı alan (Electron `?? 0`, backend ÖNCE). `STOCK` statüdür, sekmeyi `entrySource` belirler; `RAW_STOCK` kapsamı BİLEREK geniş. · bekçi: `test_semi_finished_surfaces.ts (10; §4 toplam korunuyor)` <sub>(CLAUDE.md:90, arşiv:1011)</sub>
+- **[ÇEKİRDEK]** GİRİŞ NOKTASI: `recomputeStepStatus`ta top, iş emrine GİRDİĞİ adımdan ÖNCEKİ adımlar için bekleyen DEĞİLDİR (giriş noktası = bu WO'daki en erken hareketin `stepSequence`i); çözülemezse bekleyen say (erken COMPLETED geç olandan kötü). Bekçi §20 SQL ürün kodunun aynasıdır — biri değişince diğeri de. · bekçi: `test_consistency §20 + test_fason_wrong_station_guidance S1c (:257-284) + test_h` <sub>(arşiv:226, CLAUDE.md:284)</sub>
+- **[ÇEKİRDEK]** Depo/ham/yarı mamul top yeni iş emrine YALNIZ `quick-start` ile girer; kabul listesi `STOCK/WAREHOUSE/A1_STOCK` backend tek kaynak (`quickStart.attachable`), mobil `ATTACHABLE_STATUSES` BİREBİR. Mevcut iş emrine top EKLEME YOK (`attach-rolls` 2026-06-12'de kaldırıldı) — rework ayrı emirdir. · bekçi: `scanClassify.test.ts (12) · ReworkRollsDialog.test.tsx (7)` <sub>(arşiv:756, arşiv:840, arşiv:1011)</sub>
+- **[ÇEKİRDEK]** Refakat kartı iş emriyle DOĞAR (WO = tek kart, `TravelerCard.workOrderId @unique`, karekod = İş Emri No; parti kart üretmez). Kart `type` + sipariş bloğu basar → bağ ekleme, bağ kaldırma ve sipariş iptali `markTravelerCardDirtyTx` ile kartı bayat işaretler. <sub>(CLAUDE.md:136, CLAUDE.md:76)</sub>
+- **[ÇEKİRDEK]** WO kapsamı yalnız üretim; tartı/paket/sevkiyat ayrı domain (`shipping.service.ts`) ve depoya/çuvala bağlanır. Top→sipariş bağı YOKTUR — sipariş karşılama `SackAllocation` ile sevk ANINDA yazılır, stok yalnız DISPATCH'te `SHIPPED` düşer (PLANNED tahsis sayılmaz). <sub>(CLAUDE.md:123, CLAUDE.md:41, arşiv:24)</sub>
+- **[ÇEKİRDEK]** Manuel taşıma ('Konumu Düzelt'): CANCELLED/SUPERSEDED iş emrinde 409 (`manualMoveWoBlockReason` tek kaynak, önizlemede `woBlocked`); doğru yol topu yeni iş emrine almak — iptalde toplar STOCK'a çekildiği için `quick-start` alır. Fason adımına taşıma `AT_SUBCONTRACTOR` yapmaz; çıkış Fason Sevk'ten. <sub>(CLAUDE.md:127, arşiv:756)</sub>
+- **[ÇEKİRDEK]** Yıkıcı işlemde (iptal/sil/scrap) backend preview ucu döner, arayüz etkilenen HER kaydı (WO, top, sipariş) somut listeler ve per-record seçim sunar; 'X kayıt etkilenecek' soyut sayısı YETMEZ. <sub>(CLAUDE.md:299)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Rota kapsaması REDDETMEZ, UYARIR: create · replace · 'Rengi Değiştir' tek kural `collectRouteCoverageWarnings` → `ApiResponse.warnings`; uyarı NE eksik + SONUÇ der. Goods muafiyeti `every` (`some` kapıyı sessizce açar); malsız muafiyet yok, hedef renk silinmez. · bekçi: `test_wo_route_coverage_goods.ts (7, iki negatif sonda)` <sub>(CLAUDE.md:89, CLAUDE.md:74)</sub>
+- **[ÇEKİRDEK]** Bir yeteneğin 'VAR' sayılması için üçü birden gerekir: motor + en az bir çıkış yüzeyi + izin ataması. 'Backend destekliyordu ama hiçbir istemci kullanamıyordu' (rework: masaüstünde ekran yok, tablette `status !== 'STOCK'` elemesi) — 2026-08-25 dersi; ölçüm 980 topun 4'ü, dördü ham. <sub>(arşiv:756, arşiv:840)</sub>
+- **[ÇEKİRDEK]** Ölü etiket uyarısı yalnız DAR koşulda: etiketli top VE ilk adım fason (fason kabulünde top `SUBCONTRACTOR_CONSUMED`, mal YENİ barkodla döner → geçersizleşme KESİN). Engel değil bilgi; genel iptal etiket-onayı aynı gün KALDIRILDI, ikisini karıştırma. İki istemcide de aynı koşul. · bekçi: `ReworkRollsDialog.test.tsx (dar uyarı koşulu)` <sub>(arşiv:756, arşiv:840)</sub>
+- **[ÇEKİRDEK]** Şema uzun vadeli doğruluk için tasarlanır; seed satırlarıyla geriye uyum ARANMAZ (seed yalnız ilk kurulumda koşar). Bu canlı veriye dokunma izni DEĞİLDİR — seed fixture'ı serbestçe değişir, fabrikanın topları/siparişleri korunur. <sub>(CLAUDE.md:121)</sub>
+
+## Backend
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** `Order.branchId` opsiyoneldir (eski kayıtlar null; Zod `.optional().nullable()`), zorunlu varsayan sorgu/tip yazma; bir sipariş TEK şubeye gider. <sub>(CLAUDE.md:135)</sub>
+- **[ÇEKİRDEK]** WO kapaması YALNIZ terminal-guard'lı `completeWorkOrderIfStepsDone` ile (CANCELLED/SUPERSEDED asla COMPLETED'a dirilmez — `notIn`). Üretim çıktısı kümesi TEK KAYNAK `producedOutputWhere`: liste ÇIKAN metriği ile detay `producedRolls` aynı kümeden, elle kopyalanmaz. <sub>(CLAUDE.md:180)</sub>
+- **[ÇEKİRDEK]** Ölü stok TEK tanım: eşikten ESKİ **ve** spec'i SİPARİŞSİZ (kesişim). Top→sipariş bağı olmadığı için siparişsizlik SPEC düzeyinde ölçülür (talebi aşan metraj), fiziksel top eşlenmez; iptal edilmiş sipariş kalemi talep SAYILMAZ → spec siparişsize düşer. <sub>(CLAUDE.md:69)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** `WorkOrderStep.status` türetilmiş, sedsiz alan; §20 mutabakatı yalnız `test_consistency.ts`te (SQL dosyasında YOK). §20 kırmızısı otomatik drift değildir: tek topu sonradan iptal edilen COMPLETED adım beklenen PENDING'e çöker — tarihsel olgu; test bu istisnayı süzmez, satır elle yorumlanır. · bekçi: `test_consistency §20 (kör nokta dahil ölçer, süzmez)` <sub>(CLAUDE.md:284, arşiv:485, arşiv:226)</sub>
+
+### Reçeteler
+
+- **[ÇEKİRDEK]** Son bağ kaldırmada tek 400: hedef kumaşı NULL olan ORDER iş emri (STOK'un değişmezi). Sipariş iptali `UNLINK_ONLY` da kalan bağ 0 ise STOK'a döndürür (CANCELLED/SUPERSEDED hariç, `targetItemId NOT NULL`). Geçmiş tutarsızlık migration DEĞİL, dry-run `fix_workorder_type_from_links.ts --apply`. · bekçi: `test_workorder_order_link.ts §5b (hedef-kumaşsız red) + §9 (:483-528)` <sub>(CLAUDE.md:76)</sub>
+- **[ÇEKİRDEK]** Mutabakat takvime bağlı DEĞİL: `npm test` (`run-all-tests.ts`, tüm `test_*.ts`) `test_consistency`i koşar, drift KIRMIZI (psql hep exit 0). `consistency-check.sql` operatör satırları GÖRSÜN diye durur; mantık ÖNCE orada değişir. §10.2 hâlâ 3 aylık elle. · bekçi: `run-all-tests.ts (test_* keşfi) → test_consistency` <sub>(CLAUDE.md:284)</sub>
+- **[ÇEKİRDEK]** Sipariş kalemi rengi genel update ile DEĞİL dar uç `PATCH /orders/:id/lines/:lineId/color` ile değişir (order:write + sebep + audit). <sub>(CLAUDE.md:74)</sub>
+
+## Panel (Electron)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** `ApiResponse.warnings?: string[]` engel olmayan nottur ve üç tipte de var (backend api.types.ts, Electron/mobil api.ts) — istemci toast basar, akışı durdurmaz. Electron CLAUDE 'API Kontratı' bloğu `warnings` ve `CursorPaginatedResponse`'u yazmıyor: BAYAT, güncellenmeli. <sub>(CLAUDE.md:99, CLAUDE.md:74)</sub>
+- **[ÇEKİRDEK]** Toplu belge: liste TEK KAYNAKTAN (`GET /work-orders/:id/documents`), ekran belge türlerini VARSAYMAZ; atlanan hiçbir şey sessiz değil (belgesiz WO · listesi alınamayan WO · HTML'i alınamayan · birleştirilemeyen belge AYRI raporlanır). Saf Electron, backend/izin yok. <sub>(CLAUDE.md:266, CLAUDE.md:298)</sub>
+
+### Tuzaklar
+
+- **[ÇEKİRDEK]** `ReworkRollsDialog`'da fason firma seçicisi LOAD-BEARING: backend adımın firmasını çözemezse sevki SESSİZCE atlar ('Fasona gönder' no-op). Firma `stepPlanning` overlay'iyle gider; buton metni de aynı yüklemden (`willDispatch`) beslenir. Fason modülüne bağımlı uyarı. · bekçi: `ReworkRollsDialog.test.tsx (firmasız sevk vaadi yasağı)` <sub>(arşiv:756)</sub>
+
+### Kararlar
+
+- **[ÇEKİRDEK]** Masaüstü 'Üretime Al / Yeniden Üretime Al' ÜÇ sekmede (RAW_STOCK · SEMI_FINISHED · FINISHED_STOCK; fark yalnız başlık/toast, `reworkMode`). 'Ham Stok'ta gösterilmez' kararı 2026-08-26'da DÖNDÜ — gizlenen buton olmayan bir yolu taklit ediyordu (form top almaz, attach ucu yok). · bekçi: `ReworkRollsDialog.test.tsx (7)` <sub>(arşiv:756, arşiv:1011)</sub>
+
+## Tablet (mobil)
+
+
+### Değişmezler
+
+- **[ÇEKİRDEK]** Mobil ayna `canUnlinkOrderLine(type, linkCount, hasTargetItem=true)` → `{allowed, reason, becomesStock}`; ikinci kural kümesi DEĞİLDİR, son söz backend (yarışta 400 toast). `hasTargetItem` bilinmiyorsa engellemez. Backend ÖNCE deploy güvenli — eski APK yalnız fazladan engeller. · bekçi: `mobil canUnlinkOrderLine.test.ts (6)` <sub>(CLAUDE.md:76, arşiv:404)</sub>
+- **[ÇEKİRDEK]** Mobil Hızlı İş Emri okutma kararı SAF yüklem `scanClassify` (DB'siz sınanır); SIRA load-bearing: iptal → statü → çuval/sevkiyat → kumaş kilidi — `SHIPPED` topa 'çuvaldan çıkarın' demek malın müşteride olduğunu gizler. `RollPickerModal.scopeTabs` sekme anahtarı sorgu anahtarına GİRMELİ. · bekçi: `scanClassify.test.ts (12)` <sub>(arşiv:840)</sub>
+
+### Kararlar
+
+- **[PROFİL]** Kamera kullanım yerleri: Refakat Kartı, top barkodu, iş emri QR (`expo-camera` CameraView; `expo-barcode-scanner` kullanma). <sub>(CLAUDE.md:194)</sub>
+
+## Geçersiz kılınan kurallar — bunlara UYMA
+
+- **TAM** `A:2026-08-19__2026-08-19-tambur-paketi-2` → `R:2026-08-21__2026-08-21-is-emri-tipi`: M4 tabletten bağ sökmedeki 'ORDER_PRODUCTION son bağ 400' kuralı kalktı: siparişe özel iş emrinin son bağı kalkınca iş emri STOK'a döner; tek 400 hedef kumaşsız WO. Aynı notun 2. turundaki 'Tersi BİLİNÇLİ OLARAK YOK' cümlesi de 3. turda geri alındı; mobil ayna `canUnlinkOrderLine` artık `becomesStock` üretir. ✅ çürütmeden geçti
+- **KISMI** `A:2026-08-25__2026-08-25-bitmis-kumas-tekrar` → `A:2026-08-26__2026-08-26-yari-mamul-filtre`: 'Yeniden Üretime Al' yalnız Bitmiş Depo'da, 'Ham Stok'ta GÖSTERİLMEZ' kararı döndü: buton Ham Stok + Yarı Mamul + Bitmiş Depo üç sekmede (ham/yarı mamulde 'Üretime Al' başlığıyla, `reworkMode`). Diyalog, quick-start yolu, fason firma kuralı ve ölü etiket uyarısı değişmedi. ✅ çürütmeden geçti
+- **KISMI** `A:2026-08-25__2026-08-25-bitmis-kumas-tekrar` → `A:2026-08-25__2026-08-25-aksam-mobil-yeniden`: Sabah notunun 'AÇIK: tablet hâlâ bitmiş topu okutamıyor' kalemi aynı akşam kapandı: `status !== 'STOCK'` elemesi kaldırıldı, karar saf yüklem `scanClassify`a taşındı; `ATTACHABLE_STATUSES` backend `quickStart.attachable` ile birebir. Sabah notunun diğer kuralları yürürlükte. ✅ çürütmeden geçti
+- **KISMI** `R:2026-08-21__2026-08-21-uretim-rengi-tek` → `R:2026-08-27__2026-08-27-rota-kapsamasi-hedef`: 2026-08-21 'rota kapsaması UYARI' yalnız 'Rengi Değiştir' yolundaydı; create/replace hâlâ 400 (`assertRouteCoversTargets`) veriyordu. 2026-08-27 üç yolu tek kurala aldı: `collectRouteCoverageWarnings` → `ApiResponse.warnings`; `assertRouteCoversTargets` koddan kalktı (yalnız yorumlarda), goods muafiyeti eklendi. ✅ çürütmeden geçti
+- **KISMI** `B:undated__3-ayda-bir` → `B:undated__3-ayda-bir`: Aynı notun içinde ezilme: 'psql consistency-check.sql 3 ayda bir' → 'Artık takvime bağlı DEĞİL: test_consistency.ts npm test'te koşar, drift KIRMIZI'. ARCHITECTURE §10.2 (tablo boyutu vb.) ve consistency-check.sql:19 hâlâ '3 ayda bir' der — o kısım elle kalır; mutabakat sorguları her npm test'te otomatik. ✅ çürütmeden geçti
+
+## Çözülmüş çelişkiler
+
+- `A:2026-08-04__2026-08-04-giris-noktasi-kurali` ↔ `A:2026-08-22__2026-08-22-13-kok-nedeni`: Görünüşte çelişki: ayna bozulmadı, kör nokta İKİSİNDE ORTAK — hem roll-step.helper hem §20 SQL CANCELLED topu dışlar, dolayısıyla tek topu iptal edilen COMPLETED adım için ikisi de PENDING der. §20 kırmızısı bu senaryoda drift değil tarihsel olgudur; test kodu bu istisnayı SÜZMÜYOR (test_consistency'de 2026-08-22 notu yalnız §13 için var) → kırmızı satır elle yorumlanır.
+
+## Açık sorular
+
+- 2026-08-27 rota kapsaması notu 'oluşturma↔düzenleme asimetrisi tam kapanmadı (AÇIK)' der; hangi alanda kaldığı ne notta ne kodda somut (workorder.service.ts:170-172 yalnız 2026-08-02 emsaline gönderir) — koddan çözülemedi.
+- §20 kör noktası (tek topu iptal edilen COMPLETED adım → beklenen PENDING) test_consistency'de süzülmüyor; bilinçli bırakıldı mı, bekleyen iş mi — 2026-08-22 notu 'tarihsel olgu' der, testte açıklama yok.
+- Electron/CLAUDE.md 'API Kontratı' bloğu `ApiResponse.warnings` ve `CursorPaginatedResponse`'u taşımıyor — doküman borcu, kod tarafı tutarlı (api.ts:5-6, :20).
+
+## Doğrulama turu ekleri (eski CLAUDE.md ↔ yeni yapı karşılaştırması, 2026-09-05)
+
+- **[ÇEKİRDEK]** Türetilmiş alan mutabakatı ikiz çift: `consistency-check-derived.sql` + `test_consistency_derived.ts` §21–§26 (`--probe`; §26 bilgi, §26b `PLAN_GATE_SINCE`). <sub>(arşiv 2026-08-21 akşam)</sub>
+
+## Bekçiler — bu alana dokununca koş (114 backend · 26 istemci)
+
+`cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
+
+**Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
+
+Backend: `test_attached_rolls_select`, `test_batch_drop`, `test_batch_redye_three_paths`, `test_batch_split_new_wo_modes`, `test_branch_no_empty`, `test_client_token_idempotency`, `test_consecutive_fason`⚠️, `test_consistency`, `test_consistency_derived`, `test_customer_branch`, `test_customer_scorecard`, `test_data_integrity_gaps`, `test_deactivate_impact`, `test_demand_analysis`, `test_denetim_s2_paketi`, `test_direct_ship_fason`, `test_direct_ship_scenarios`, `test_dispatch_allocation_fresh`, `test_dispatch_claim_step_match`, `test_dispatch_cross_wo_batch_guard`, `test_dispatch_without_color`, `test_e2e_full_flow`, `test_fason_desk_dispatch`, `test_fason_open_dispatch_semantics`, `test_fason_step_note_flow`, `test_fason_wrong_station_guidance`, `test_filter_multi_select`, `test_finalize_last_step`⚠️, `test_helpers`, `test_hide_cancelled_lists`, `test_import_idempotency`, `test_input_rolls_directship`, `test_kursun_bypass`, `test_kursun_bypass_repoint`, `test_manual_move`, `test_manual_move_backflush`, `test_manual_move_fason_receive`, `test_manual_move_field_continuity`, `test_manual_move_qc_reversal`, `test_mobile_order_permission`, `test_open_order_coverage`, `test_open_orders_search`, `test_order_alias_promote`, `test_order_cancel_card_dirty`⚠️, `test_order_cancel_reason`, `test_order_cancellation`, `test_order_filter_batch_check`⚠️, `test_order_filter_wostate`, `test_order_intake`, `test_order_leadtime`, `test_order_line_cancel`, `test_order_line_scope_single_source`, `test_order_lines_available`⚠️, `test_order_number_override`, `test_order_shipments`, `test_order_stats`, `test_p2_api`, `test_p2_kk2reopen`, `test_p2_order`, `test_phase0_quickwins`, `test_phase1_uretim_hardening`, `test_phase3_stok_hardening`, `test_phase4_fason_hardening`, `test_phase5_kartela_hardening`, `test_produced_buckets`, `test_property_targetable`, `test_quick_start_wo`, `test_quickstart_dispatch`, `test_quickstart_dispatch_api`, `test_race_conditions`, `test_raw_sale_quick_order`, `test_reports`, `test_rescue_stuck`, `test_roll_cancel_step_recompute`, `test_roll_label_cut_seed_snapshot`, `test_roll_po_line_trace`, `test_route_skip_warning`, `test_route_template_fason`, `test_sack_pool_lifecycle`, `test_semi_finished_surfaces`, `test_shipment_doc_customer_name`, `test_shipment_order_ledger`, `test_shipment_scorecard`, `test_shipment_undo_dispatch`, `test_spec_availability`, `test_split_card_lineage`, `test_split_per_roll`, `test_station_capability_flags`, `test_stock_label_no_customer_inference`, `test_stock_scorecard`, `test_tambur_finalize_wo_guard`, `test_tambur_manual_batch`, `test_tambur_manual_field`, `test_tambur_manual_roll`, `test_tambur_plan_gate`, `test_tambur_undo`, `test_token_replay_cancelled`, `test_wo_branch_redye`⚠️, `test_wo_branch_split`⚠️, `test_wo_cancel_disposition`, `test_wo_cancel_fason`, `test_wo_color_change_lock`, `test_wo_fason_quick_receive`, `test_wo_input_attach_window`, `test_wo_input_detach_reattach`, `test_wo_manual_complete`, `test_wo_route_coverage_goods`, `test_wo_target_color_guard`, `test_wo_terminal_guard`, `test_wo_terminal_race`, `test_wo_warehouse_attach`, `test_workorder_documents`, `test_workorder_order_link`, `test_workorder_search`
+
+İstemci: `StatusBadge.snapshot.test.tsx`⚠️, `LinkedWorkOrdersCard.test.tsx`, `OrderLineAtpHint.test.tsx`, `OrderLineWoChips.test.tsx`, `OrderShipmentsCard.test.tsx`, `deadline-risk.test.ts`, `orders-layout.guard.test.tsx`, `orders-regime.test.ts`, `work-order-rollup.test.ts`, `ReworkRollsDialog.test.tsx`, `ShipmentOrderSelect.test.tsx`, `DirectShipModal.test.tsx`, `WorkOrderCompleteDialog.test.tsx`, `batch-merge-confirm.test.ts`, `cancelDecisions.test.ts`, `OrderLinksV3.test.tsx`, `order-fulfillment.test.ts`, `subcontractorDefault.test.ts`, `useTebdilWizard.test.tsx`, `workOrderPrefill.test.ts`, `production-regime.test.ts`, `BarcodeScannerView.test.tsx`, `ScannerRollStrip.test.tsx`, `reworkPayload.test.ts`, `scanClassify.test.ts`, `canUnlinkOrderLine.test.ts`
+
+## Arşiv notları (tam metin, gerekçe ve ölçüm)
+
+- 2026-08-04 · 2026-08-04 — "GİRİŞ NOKTASI" kuralı: iş emrine AŞAĞIDAN katılan top yukarıdaki adımları bekletemez — `CLAUDE-NOT-ARSIVI.md:226-229`
+- 2026-08-21 · 2026-08-21 — İş emri TİPİ bağın AYNASIDIR: "Sipariş Bağla" STOK → SİPARİŞE ÖZEL çevirir — `CLAUDE-NOT-ARSIVI.md:414-422`
+- 2026-08-25 · 2026-08-25 — "Bitmiş kumaş tekrar iş emrine bağlanabiliyor mu?" — evet, ama HİÇBİR istemciden yapılamıyordu — `CLAUDE-NOT-ARSIVI.md:756-809`
+- 2026-08-25 · 2026-08-25 (akşam) — Mobil "Yeniden Üretime Al" + Fason Kabul boşluğunun GERÇEK sebebi — `CLAUDE-NOT-ARSIVI.md:840-891`

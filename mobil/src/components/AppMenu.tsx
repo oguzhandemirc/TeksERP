@@ -19,6 +19,12 @@
 // Yani geri besleme kenarı fiziksel olarak yoktur; "derinliği artırdık" değil,
 // "kenarı kaldırdık".
 //
+// NEDEN `AppModal` DEĞİL (modal kuralının gerekçeli muafı): bu bir menü, dialog
+// değil — kart TETİĞİN ölçülen dikdörtgenine çivilenir, perde karartmaz ve
+// aşağı-sürükleyerek kapanmaz; AppModal'ın üç yerleşimi (center/bottom/right) de
+// çapa konumunu ifade edemez. Tetik ile kart AYNI ağaçta durmak zorunda
+// (`measureInWindow` çapayı buradan okur); portal içeriği host'a taşırdı.
+//
 // KAPSAM: yalnız paper `Menu`/`Menu.Item` değiştirildi. `Divider`, `Icon`,
 // `TouchableRipple`, `Text`, `Appbar` paper'dan gelmeye DEVAM EDER (sorunsuz).
 // Yeni paket EKLENMEDİ (Expo peer tuzağı).

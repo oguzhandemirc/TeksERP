@@ -8,7 +8,7 @@
 //                 `metadata` JSON'unda kalıyordu → indekslenemez, raporlanamaz
 //   • aşım      → HİÇBİR yere yazılmıyordu → sapmanın ARTI yönü kayıptı
 //
-// Bu bekçi ALTI cepheyi kilitler:
+// Bu bekçi SEKİZ cepheyi kilitler:
 //   §1 Sebep doğrulaması FAIL-CLOSED (bilinmeyen kod sessizce kabul edilmez)
 //   §2 ESKİ İSTEMCİ dalı — sebepsiz çağrı REDDEDİLMEZ, görünür kovaya yazılır.
 //      Bu dal olmasaydı backend deploy edildiği an sahadaki her tablette
@@ -18,6 +18,9 @@
 //   §5 MOBİL AYNA birebir mi (ayrışma derleme hatası VERMEZ → mekanik kontrol)
 //   §6 Uçtan uca: depo kesimi kapanışı `discard` → RECORD_CORRECTION satırı +
 //      `preTamburCloseQty`/`preTamburCloseStatus` yazıldı mı
+//   §7 Zod KAPISI — şema sebep kodunu/metnini sessizce silmiyor
+//   §8 ÇOĞUL KARDEŞ `recordVariancesTx` tekille BİREBİR (qty<=0 elemesi · alan
+//      alan aynı satır · fail-closed sebep · boş dizi no-op · kolon paritesi)
 //
 // Fixture kendi verisini üretir (ortam verisine bağımlı DEĞİL), finally'de siler.
 // =============================================================================
@@ -35,7 +38,11 @@ import {
   reasonsForKind,
   varianceKindForRemainingAction,
 } from "../src/constants/variance-reasons";
-import { overageOf, recordVarianceTx } from "../src/services/helpers/roll-variance.helper";
+import {
+  overageOf,
+  recordVarianceTx,
+  recordVariancesTx,
+} from "../src/services/helpers/roll-variance.helper";
 import { TamburService } from "../src/services/tambur.service";
 import {
   finalizeOpenFabricSchema,
@@ -360,6 +367,150 @@ async function main(): Promise<void> {
     check(
       "finalizeWarehouseCut şeması sebep METNİNİ taşıyor",
       whParsed.varianceReasonText === "sayım",
+    );
+    // ── §8 ÇOĞUL KARDEŞ (recordVariancesTx) ─────────────────────────────────
+    // NEDEN: `createMany`in `data` map'i bir ALLOWLIST'tir. Tekile eklenen bir
+    // alan çoğula yazılmazsa satır o alanı SESSİZCE düşürür — depo defterinde
+    // birebir bu yaşandı (`sackId`, 2026-08-14). İki ikiz burada karşılaştırılır.
+    console.log("\n── §8 Çoğul sapma yazımı (recordVariancesTx) ──");
+
+    const bulkRollA = await prisma.roll.create({
+      data: {
+        barcode: `TEST-VAR-BA-${ts}`,
+        itemId: item.id,
+        status: "WAREHOUSE",
+        initialQty: 10,
+        currentQty: 10,
+        entrySource: "MANUAL_ENTRY",
+      },
+      select: { id: true },
+    });
+    const bulkRollB = await prisma.roll.create({
+      data: {
+        barcode: `TEST-VAR-BB-${ts}`,
+        itemId: item.id,
+        status: "WAREHOUSE",
+        initialQty: 10,
+        currentQty: 10,
+        entrySource: "MANUAL_ENTRY",
+      },
+      select: { id: true },
+    });
+    cleanupRollIds.push(bulkRollA.id, bulkRollB.id);
+
+    const twinInput = {
+      kind: RollVarianceKind.RECORD_CORRECTION,
+      qty: new Prisma.Decimal("7.250"),
+      source: VARIANCE_SOURCES.TAMBUR_FINALIZE,
+      reasonCode: "DIGER",
+      reasonText: "ikiz karşılaştırma",
+      sourceRefId: zeroRoll.id, // FK'sız uuid kolonu — ikizin taşıdığı alanlardan
+    };
+
+    // §8a Sıfır metrajlı girdi ELENİR, kalanlar yazılır (tekilin qty<=0 kuralı).
+    const written = await prisma.$transaction((tx) =>
+      recordVariancesTx(tx, [
+        { rollId: bulkRollB.id, ...twinInput },
+        { rollId: bulkRollB.id, ...twinInput, qty: 0 },
+      ]),
+    );
+    check(
+      "§8a qty=0 girdi ELENİR, kalan yazılır (tekil ile aynı kural)",
+      written === 1,
+      `yazılan=${written}`,
+    );
+
+    // §8b Aynı girdi tekille de yazılır; İKİ SATIR ALAN ALAN AYNI OLMALI.
+    await prisma.$transaction((tx) => recordVarianceTx(tx, { rollId: bulkRollA.id, ...twinInput }));
+    const [rowSingle, rowBulk] = await Promise.all([
+      prisma.rollVariance.findFirst({ where: { rollId: bulkRollA.id } }),
+      prisma.rollVariance.findFirst({ where: { rollId: bulkRollB.id } }),
+    ]);
+    const shape = (r: Record<string, unknown> | null): string =>
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(r ?? {})
+            .filter(([k]) => k !== "id" && k !== "rollId" && k !== "createdAt")
+            .sort(([a], [b]) => a.localeCompare(b))
+            .map(([k, v]) => [k, v == null ? null : String(v)]),
+        ),
+      );
+    check(
+      "§8b tekil ile çoğul AYNI satırı yazar (alan alan)",
+      rowSingle !== null && rowBulk !== null && shape(rowSingle) === shape(rowBulk),
+      `tekil=${shape(rowSingle)} çoğul=${shape(rowBulk)}`,
+    );
+
+    // §8c Geçersiz sebep ÇAĞRIYI DÜŞÜRÜR ve tx geri sardığı için HİÇ satır kalmaz.
+    let bulkRejected = false;
+    try {
+      await prisma.$transaction((tx) =>
+        recordVariancesTx(tx, [
+          { rollId: bulkRollA.id, ...twinInput, reasonCode: "OLCUM_HATASI" },
+          { rollId: bulkRollA.id, ...twinInput, reasonCode: "UYDURMA_KOD" },
+        ]),
+      );
+    } catch {
+      bulkRejected = true;
+    }
+    const afterReject = await prisma.rollVariance.count({ where: { rollId: bulkRollA.id } });
+    check(
+      "§8c geçersiz sebep partiyi DÜŞÜRÜR (fail-closed, yarım parti kalmaz)",
+      bulkRejected && afterReject === 1,
+      `red=${bulkRejected} satır=${afterReject}`,
+    );
+
+    // §8d Boş dizi → sorgu YOK, 0 döner (çağıran `if` yazmak zorunda kalmasın).
+    const emptyWritten = await prisma.$transaction((tx) => recordVariancesTx(tx, []));
+    check("§8d boş dizi no-op (0 döner)", emptyWritten === 0);
+
+    // §8e MEKANİK: tekilin yazdığı HER kolon çoğulda da yazılıyor mu? DB
+    // karşılaştırması null-null eşleşmesini yakalayamaz (ör. workOrderStepId
+    // ikisinde de null); bu yüzden kaynak metni de taranır.
+    const helperSrc = readFileSync(
+      join(__dirname, "../src/services/helpers/roll-variance.helper.ts"),
+      "utf8",
+    );
+    /** Fonksiyonun `rollId`i taşıyan satır nesnesindeki ÜST DÜZEY anahtarlar.
+     *  Süslü parantez eşlemesiyle ayrılır (regex `select:` gibi kardeş alanları
+     *  da yutuyordu) ve `reasonCode,` gibi KISA YAZIMLAR da sayılır. */
+    const dataKeys = (fnName: string): string[] => {
+      const at = helperSrc.indexOf(`export async function ${fnName}`);
+      const anchor = helperSrc.indexOf("rollId:", at);
+      const open = helperSrc.lastIndexOf("{", anchor);
+      let depth = 0;
+      let close = open;
+      for (let i = open; i < helperSrc.length; i++) {
+        const ch = helperSrc[i];
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+          depth--;
+          if (depth === 0) {
+            close = i;
+            break;
+          }
+        }
+      }
+      const block = helperSrc.slice(open + 1, close);
+      const keys: string[] = [];
+      let d = 0;
+      for (const rawLine of block.split("\n")) {
+        const line = rawLine.trim();
+        if (d === 0) {
+          const m = /^([A-Za-z_$][\w$]*)\s*[:,]/.exec(line);
+          if (m) keys.push(m[1]!);
+        }
+        d += (line.match(/[{[]/g)?.length ?? 0) - (line.match(/[}\]]/g)?.length ?? 0);
+      }
+      return keys.sort();
+    };
+    const singleKeys = dataKeys("recordVarianceTx");
+    const bulkKeys = dataKeys("recordVariancesTx");
+    const missingKeys = singleKeys.filter((k) => !bulkKeys.includes(k));
+    check(
+      "§8e tekilin yazdığı her kolon çoğulda da var (sessiz alan düşmesi yok)",
+      singleKeys.length >= 9 && missingKeys.length === 0,
+      `tekil=${singleKeys.length} çoğul=${bulkKeys.length} eksik=[${missingKeys.join(",")}]`,
     );
   } finally {
     if (cleanupRollIds.length) {

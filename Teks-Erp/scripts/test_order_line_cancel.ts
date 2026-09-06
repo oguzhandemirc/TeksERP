@@ -9,7 +9,7 @@
 // ② İŞ EMRİ BAĞI OTOMATİK KOPAR; son bağsa iş emri STOK üretimine döner
 //    ("tip = bağın aynası" invariantı, 2026-08-21).
 // ③ KISMİ SEVK GÖRMÜŞ KALEM İPTAL EDİLEBİLİR ("kalanı iptal"): sevk edilen
-//    geçerli sayılır, kalan düşer ve sipariş KAPANABİLİR. `recomputeOrderStatus`
+//    geçerli sayılır, kalan düşer ve sipariş KAPANABİLİR. `recomputeOrderStatusTx`
 //    iptal kalemin `quantity`sini değil `shipped`ini toplama katar — aksi halde
 //    sipariş o farkı asla kapatamaz ve sonsuza dek "kısmi sevk" görünürdü.
 // ④ SON AKTİF KALEM: sevk varsa sipariş COMPLETED, yoksa CANCELLED.
@@ -130,7 +130,7 @@ async function main(): Promise<void> {
     const o3 = await mkOrder([{ quantity: 100 }]);
     const line3 = o3.lines[0]!.id;
     // ⚠️ Denormu ELLE yazmak İŞE YARAMAZ: `shippedQty` defter-otoritatiftir ve
-    // `recomputeOrderStatus` onu her çağrıda SackAllocation'lardan yeniden
+    // `recomputeOrderStatusTx` onu her çağrıda SackAllocation'lardan yeniden
     // hesaplar (şemadaki "tek yazma noktası" notu). Gerçek sevk zinciri kurulur.
     const shipment = await prisma.shipment.create({
       data: { shipmentNo: `${TAG}-SHP`, customerId: customer.id, status: "DISPATCHED", dispatchedAt: new Date() },

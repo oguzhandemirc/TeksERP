@@ -37,7 +37,7 @@ alan-bazlı birleştirme · kapsam · SQL/çevrimdışı köprü**.
 | Önleme | Kayıt anında gerçek-zamanlı uyarı/engel | ✅ mevcut; temizlik sonrası DB seddi enforce (contract) |
 | Malzeme (stok) birleştirme | SAP: yok — "takip malzemesi" + bloke | bizimki daha güçlü (tombstone + repoint); **kesim/üretim geçmişi TAŞINIR, kopyalanmaz** |
 | İşlem kaydı (top) mükerreri | "birleştirme" değil **hayaleti iptal** (sebep kodu) | `MUKERRER` koduyla iptal; metraj/hareket taşımak YOK (fiziksel tek top) |
-| Bulanık eşleştirme altyapısı | DB-tarafı trigram (pg_trgm) / dedicated MDM | ⚠️ canlıda `pg_trgm` **yok** → JS tarafında (Jaro-Winkler + token-set) — tablolar yüzlerce satır, O(n²) kabul |
+| Bulanık eşleştirme altyapısı | DB-tarafı trigram (pg_trgm) / dedicated MDM | JS tarafında, **sıralı kelime hizalaması** (`pg_trgm` 2026-08-19'da kuruldu ama panel onu kullanmaz) — tablolar yüzlerce satır, O(n²) kabul. ⚠️ Jaro-Winkler ve `token_set_ratio` KALDIRILDI, bkz. §6. |
 
 ## 2) Mimari
 
@@ -45,7 +45,7 @@ alan-bazlı birleştirme · kapsam · SQL/çevrimdışı köprü**.
 - Varlık başına **kural seti** (tek kaynak `constants/duplicate-rules.ts`):
   - **EXACT_NAME** — `nameFold` eşitliği (mevcut; renk için `foldColorNameForCompare`).
   - **IDENTITY** — müşteri: `taxNumber`, `phone`, `email`, `exportCode`; fason: `taxNumber`, `phone`; kumaş: `code` harf-ikizi (`foldCodeForCompare`), müşteri alias'ı ≠ kendi ama ad = başka kumaş; renk: `hex` eşit; şube (müşteri içinde): `nameFold`/`code`; istasyon/makine/kategori: `nameFold` (makine istasyon içinde).
-  - **FUZZY_NAME** — katlanmış ad üzerinde Jaro-Winkler ≥ 0.90 **veya** token-set oranı ≥ 0.85 (JS); gürültü kelimeleri ("tekstil", "ltd", "şti", "a.ş.", "san.", "tic.") **düşük ağırlık**; skor + gerekçe.
+  - **FUZZY_NAME** — ⚠️ Bu eşik kümesi §6'da DEĞİŞTİ: birim KELİMEdir (karakter değil), skor sıralı kelime hizalamasıyla hesaplanır ve eşik okunabilir ölçektedir (%100 yazım/boşluk · %90 neredeyse aynı · %80 tek harf); "fazladan anlamlı kelime" hiçbir eşikte aday olmaz. ~~Jaro-Winkler ≥ 0.90 veya token-set ≥ 0.85~~; gürültü kelimeleri ("tekstil", "ltd", "şti", "a.ş.", "san.", "tic.") **düşük ağırlık**; skor + gerekçe.
 - Çıktı: **aday çift** `{ entity, aId, bId, rules: [{rule, score, evidence}], refCountA, refCountB }`; gruplar çiftlerden türetilir (bağlı bileşen).
 - Tarama **isteğe bağlı** (panelde "Tara") — sonuç `duplicate_scan_runs` (kim/ne zaman/kaç aday) ile saklanır; ağır değil (n≈yüzler).
 

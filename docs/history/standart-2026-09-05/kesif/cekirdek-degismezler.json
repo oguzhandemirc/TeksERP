@@ -1,0 +1,313 @@
+{
+  "label": "cekirdek-degismezler",
+  "kapsam": "Kök CLAUDE.md § 'Çekirdek değişmezler' — 40 madde koda karşı doğrulandı. Tüm sayılar bu oturumda çalıştırılan grep/AST/bekçi koşumlarından.",
+  "kosulan_bekciler": [
+    "npx tsx scripts/test_timestamptz_contract.ts → 13 geçti / 0 başarısız",
+    "npx eslint src --max-warnings=0 → exit 0",
+    "node scripts/check-surum-notlari.mjs → 13 geçti / 0 kaldı",
+    "node scripts/check-docs.mjs → 126 .md, ölü link yok, 2 advisory"
+  ],
+  "docVsCode": [
+    {
+      "docRule": "Her DateTime @db.Timestamptz; UUID kolon @db.Uuid; PG_SESSION_OPTIONS '-c timezone=UTC'.",
+      "codeReality": "Bekçi 13/13 yeşil: 307 timestamptz kolon, 311 DateTime alanı taranmış, tz'siz kolon YOK; 4 bilinçli @db.Date muafı canlı; 6/6 new Pool() PG_SESSION_OPTIONS taşıyor. Şema taramamda @db.Uuid taşımayan UUID kolon 0.",
+      "source": "scripts/test_timestamptz_contract.ts (koşuldu); prisma/schema.prisma",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Her modelde UUID PK + createdAt/updatedAt; M:N pivot ve append-only log yalnız createdAt.",
+      "codeReality": "124 model. UUID PK yok: 7 (6'sı composite-PK pivot + SystemSetting key PK). createdAt yok: 2. updatedAt yok: 36 — ama bunların 10'u kodda GERÇEKTEN update ediliyor (userRecoveryCode, rollOperation:5, rollVariance:4, subcontractorDispatchItem:5, sackTagAssignment:3, itemAllowedProperty, itemAllowedColor, rollProperty, importRun, yarnMovement), yani pivot/append-only muafiyetine girmiyorlar.",
+      "source": "prisma/schema.prisma (124 model ayrıştırıldı); grep '.<model>.update(' src",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "Fabrika günü Europe/Istanbul, tek kaynak src/constants/time.ts; çıplak DATE_TRUNC yasak.",
+      "codeReality": "DATE_TRUNC yalnız src/constants/time.ts:71 ve :90'da (ikisi de AT TIME ZONE ile); kalan 3 hit yorum. 'Europe/Istanbul' literali ESLint ile yasak, yalnız time.ts muaf — lint exit 0.",
+      "source": "src/constants/time.ts:71,90; eslint.config.mjs:59; npx eslint exit 0",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Yalnız soft delete (isActive:false / RollStatus.CANCELLED); bilinçli istisnalar: guard'lı /permanent, boş çuval, cihaz unpair, pivot replace, ItemPrice.",
+      "codeReality": "18 .delete({} + 70 .deleteMany({}). 18'in 11'i sayılı istisna (guarded-hard-remove 5, base.service:1291 permanent, shipping:1147 boş çuval, device:466 unpair, 2 pivot replace, item-price:471). Listede OLMAYAN 7: customer-alias:94,198 · duplicate-review:151 · sack-tag:218 · permission-management:1041 · batch.service:337 · label-template:886. deleteMany'de entity düzeyi tek gerçek hit: invoice.service:883 (DRAFT fatura).",
+      "source": "grep '.delete({' src (18); grep '.deleteMany({' src (70); src/services/invoice.service.ts:883",
+      "verdict": "belge yanlış"
+    },
+    {
+      "docRule": "Her CUD → AuditService.log(); tek istisna UserPreference.",
+      "codeReality": "367 audit çağrısı; CUD yapan 75 servis dosyasının 71'i doğrudan audit çağırıyor. Çağırmayan 21 dosyanın 16'sı helpers/ (audit'i çağıran servisten çağrılıyor), 1'i audit.service'in kendisi, 1'i user-preference (beyan edilen istisna), 3'ü altyapı (session-registry, latency-persist retention, fabric-property → BaseService üzerinden audit'li).",
+      "source": "grep 'AuditService.log' src → 367; dosya taraması src/services",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Audit best-effort ve tx DIŞINDA; sayaç /api/admin/health'te.",
+      "codeReality": "log/logMany/logEvent üçü de try/catch ile yutuyor (audit.service.ts:110,153,193) ve prisma (tx değil) kullanıyor. $transaction bloğu içinde AuditService.log çağrısı: 0 (AST taraması). Sayaç app.ts:686 → AuditService.getHealth().",
+      "source": "src/services/audit.service.ts:84,110,137,179; src/app.ts:686; tx-içi tarama 0 hit",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Kalıcı sayaç/rapor SystemLog'tan değil KALICI kolondan okunur.",
+      "codeReality": "src/services/reports/ altında prisma.systemLog kullanımı 0. Tek istisna audit.report.service.ts — o zaten audit defterinin KENDİ raporu, kalıcı sayaç değil.",
+      "source": "grep -i systemlog src/services/reports → yalnız audit.report.service.ts (kendi defteri)",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Sevk rakamı HER yüzeyde BRÜT; iade ayrı belgeyle kapanır; brüt tek kaynak RollReturn.",
+      "codeReality": "RollReturn 45 yerde; shipping.service.ts:3650 brütü `liveMeters + returnedMeters` olarak tek noktada hesaplıyor; :3597 sevk anındaki tartının donduğunu, :2976 ayrı iade irsaliyesi kesildiğini yazıyor. Karşı örnek bulunamadı.",
+      "source": "src/services/shipping.service.ts:2976,3597,3650; grep RollReturn → 45",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Deftere yazan her ileri kaynağın *_CANCEL ters yolu olmalı.",
+      "codeReality": "CariTxnSource 11 değer; INVOICE/PAYMENT/ADJUSTMENT üçünün birebir *_CANCEL'ı var. Dört CHEQUE_* ileri kaynağın birebir soneki yok ama hepsinin ters yolu tek CHEQUE_CANCEL değeri (cheque.service:1344,1482). Ad-soneki heuristiği yanlış alarm; semantik olarak eksik ters yol yok.",
+      "source": "prisma/schema.prisma enum CariTxnSource; src/services/cheque.service.ts:719,1170,1254,1344,1482",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Ölü top kümesi tek kaynak K18_DEAD_STATUSES.",
+      "codeReality": "batch.service.ts:55'te tek tanım; 40 kullanım, 5 ayrı servis import ediyor (workorder, traveler-card, workorder-manual-move, tambur, batch). Elle kopyalanmış statü listesi bulunamadı.",
+      "source": "src/services/batch.service.ts:55; grep K18_DEAD_STATUSES → 40",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "finalizedAt/statusChangedAt damgasını DB trigger'ı yazar, elle yazılmaz.",
+      "codeReality": "Trigger: migrations/20260809090000_roll_production_timestamps/migration.sql:93 'rolls_stamp_production_timestamps'. Kodda finalizedAt: yazımı yalnız tambur.service.ts:3562,3609 — ikisi de RollOperation.metadata JSON'u içinde (kolon değil). statusChangedAt kodda yalnız orderBy'da.",
+      "source": "prisma/migrations/20260809090000_.../migration.sql:16,93; src/services/tambur.service.ts:3555-3566",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Yıkıcı işlemde backend preview ucu döner, arayüz etkilenen HER kaydı listeler.",
+      "codeReality": "9 preview/impact ucu var: order:181, order:790, inventory:570, shipping:530, subcontractor:697, kartela:251, workorder:820 (cancel-impact), workorder:1087, admin:1778 (restore-impact). Bekçi olarak BulkCancelRollsDialog.test.tsx (5 sonda) top-duzeltme.md:17'de anılıyor.",
+      "source": "grep cancel-preview|impact src/routes → 9 uç",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Validation mesajları Türkçe; TR-only bilinçli, i18n kurulmaz.",
+      "codeReality": "Üç package.json'da i18n/i18next/react-intl bağımlılığı 0. src/lib/zod-locale.ts Zod global locale'i tr'ye bağlıyor (config({ localeError: tr().localeError })). İngilizce message: kalıntısı 0.",
+      "source": "src/lib/zod-locale.ts:17-20; grep i18n */package.json → 0",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Durum geçişi ATOMİK CLAIM: updateMany WHERE {id, beklenen-durum} + count===0 → 409; findUnique→if→update YASAK.",
+      "codeReality": "303 updateMany, 120 'count === 0 / count !== 1' kontrolü. findUnique→if→update aday: 31 — çoğu master-data alan düzenlemesi (durum geçişi değil). Gerçek aday: traveler-card.service.ts:269-285 — tx içinde findUnique → status kontrolü → update ile `version: existing.version + 1` (atomik WHERE yok, kayıp güncelleme yarışı açık).",
+      "source": "grep updateMany → 303; count===0 → 120; AST taraması 31 aday; src/services/traveler-card.service.ts:269-285",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "tx.* çağrıları Promise.all ile paralelleştirilmez.",
+      "codeReality": "AST taraması (Promise.all argümanını parantez dengeleyerek ayrıştırdım): 124 Promise.all'ın 86'sı prisma.<model> içeriyor, tx.<model>/tx.$ içeren 0. ESLint kuralı TX_PROMISE_ALL (eslint.config.mjs:23-31) mekanik zorluyor; lint exit 0.",
+      "source": "AST tarama → 0/124; eslint.config.mjs:23-31; npx eslint src exit 0",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Advisory kilit tx'in İLK ifadesidir.",
+      "codeReality": "26 pg_advisory_xact_lock çağrı yeri. Doğrudan $transaction içinde olanların hepsinde kilit ilk DB ifadesi; aradaki satırlar saf JS anahtar hesabı (inventory:988'de 11 satır = lockKey nesnesi + yorum, öncesinde hiç sorgu yok). goods-receipt:682'de önce yalnız opts.txGate (kapının kendisi). Helper'lar tx'i parametre alıyor; batch.service:126 kendi fonksiyonunun ilk ifadesi.",
+      "source": "src/services/inventory.service.ts:958-988; goods-receipt:672-682; batch.service:120-126; purchase-order 5 çağrı arada 0 satır",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Kilit uzayı envanteri helpers/period-guard.helper.ts başlığında (8021…8028); master-data merge 8027'yi paylaşıyor ve envanterde yok.",
+      "codeReality": "Kodda 10 NS sabiti var, başlık (period-guard.helper.ts:40-46) YALNIZ 7'sini listeliyor. Eksik: 8023 SHIPMENT_LOCK_NS (shipment-locks.helper:28) · 8026 CODE_UNIQUE_LOCK_NS (code-unique.helper:57) · 8027 MERGE_LOCK_NS (master-data-merge:50). Yani ÇAKIŞMA İKİ TANE: 8027 (merge ↔ purchase-order) ve 8026 (code-unique ↔ cari dönem kilidi) — ikincisi hiçbir belgede yok.",
+      "source": "src/services/helpers/period-guard.helper.ts:40-46 vs code-unique.helper.ts:57 + period-guard.helper.ts:73 (ikisi de 8026); master-data-merge.service.ts:50 + purchase-order.service.ts:110 (ikisi de 8027)",
+      "verdict": "belge yanlış"
+    },
+    {
+      "docRule": "PG 40P01/40001 → 409 'tekrar deneyin'.",
+      "codeReality": "error.middleware.ts:330 TRANSIENT_SQLSTATES = {40P01, 40001}; :369 mesajdaki açık `Code: \\`40P01\\`` kalıbını eşliyor, genel regex bilinçli olarak yasaklanmış (:341-342).",
+      "source": "src/middlewares/error.middleware.ts:322-369",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Durum ↔ sayaç çifti olan modelde iki yazar da karşı koşulu kendi atomik WHERE'ine koyar + DB CHECK seddi.",
+      "codeReality": "Emsal birebir kurulu: cheque.service.ts:854 `allocatedTotal: 0` atomik WHERE'de; payment-allocation.service.ts:284 bumpChequeAllocated karşı süzgeci taşıyor (:147 yorumu ikisini bağlıyor); sed migrations/20260814110200/migration.sql:96-97 CHECK (NOT (status IN ('BOUNCED','RETURNED','CANCELLED') AND allocatedTotal > 0)). Migration'larda toplam 12 adlı CHECK constraint.",
+      "source": "src/services/cheque.service.ts:833,854; payment-allocation.service.ts:147,284; migration 20260814110200:96",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Kayıt yaratan uçlar clientToken @unique taşır (16 model).",
+      "codeReality": "Şemada clientToken @unique taşıyan model 15, 16 değil: Roll, Order, WorkOrder, SubcontractorReceipt, SwatchStockReduction, Sack, Shipment, ImportRun, WarehouseTransfer, GoodsReceipt, Invoice, Payment, CashTransaction, Cheque, PurchaseOrder. Ayrıca schema.prisma:7465 ReconciliationLetter/ChequeDeliveryNote için token'ın BİLİNÇLİ yokluğunu gerekçesiyle yazıyor.",
+      "source": "prisma/schema.prisma — 15 alan (satır 1516,2241,2436,3781,4123,4471,4667,5814,6023,6101,6334,6567,6780,6976,7374); :7465 bilinçli istisna",
+      "verdict": "belge yanlış"
+    },
+    {
+      "docRule": "Replay dört durumlu (helpers/token-replay.helper.ts).",
+      "codeReality": "token-replay.helper.ts başlığı dört durumu sayıyor ve REPLAY_DEAD_ROLL_STATUSES (CANCELLED, SCRAP) tanımlıyor; 4 servis import ediyor (inventory, shipping, order, tambur-manual). CLIENT_TOKEN_COLLISION 8 dosyada. clientToken okuyan servis 25.",
+      "source": "src/services/helpers/token-replay.helper.ts:1-45; grep token-replay → 4 dosya; CLIENT_TOKEN_COLLISION → 8 dosya",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Aynı soruyu cevaplayan koşul TEK helper'da yaşar ve AST bekçisiyle korunur.",
+      "codeReality": "AST tabanlı bekçi 8 tane: test_search_field_config, test_permission_catalog, test_period_close, test_raw_sql_hygiene, test_fason_open_dispatch_single_source, test_route_mount_reachability, lib/regime-gate-scan, audit_repro_BULGU-T1-024. Ayrıca ESLint 5 AST deseni + bash-guard.mjs 9 komut kapısı. Kural gerçek ama kapsam kısmi: 'ikiz boğaz'ın (quality-station) kendi AST bekçisi YOK, yalnız davranış testi var.",
+      "source": "grep 'ts-morph|from \"typescript\"' scripts → 8; eslint.config.mjs; scripts/claude-hooks/bash-guard.mjs (9 YASAK kapısı)",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "Bellek-içi yüklem ile Prisma parçası boğaz-ikizdir (stepCanApplyQuality ↔ QUALITY_STATION_WHERE); saf yüklem WHERE'e giremez.",
+      "codeReality": "helpers/quality-station.helper.ts:88 ve :97 ikisini yan yana tanımlıyor, başlık (satır 2-37) ikizliği ve `AND:` sarma kuralını yazıyor. Kullanım: 3 serviste ikisi birlikte (inventory:1820/4657/5122/5127, kursun-bypass:145, station-capability:155). Ayrışan kopya bulunamadı.",
+      "source": "src/services/helpers/quality-station.helper.ts:2-37,88,97; kullanım 3 servis",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Elle okunan her id filtresi readIdCondition/readFilterList'ten geçer; cursor'lu listede süzme SUNUCUDA.",
+      "codeReality": "İkisi query-parser.ts:149 ve :185'te tek tanım, 61 kullanım. Ancak Electron/src/pages altında 296 .filter( çağrısı var — cursor'lu listede istemci süzmesi yapan var mı ayrıca ayrıştırılmadı (bu ajanın kapsamı dışı).",
+      "source": "src/utils/query-parser.ts:149,185; grep → 61 kullanım; Electron/src/pages .filter( → 296",
+      "verdict": "BELİRSİZ"
+    },
+    {
+      "docRule": "Enum'a değer eklemek, bayrak eklemek, route+izin eklemek reçeteli iştir (docs/RECETELER.md).",
+      "codeReality": "Reçetelerin arkasında çalışan bekçi var: test_permission_catalog (AST), test_route_mount_reachability (AST), test_feature_flag_contract, test_module_flags, test_module_flag_off. check-docs.mjs 126 .md tarayıp ölü link bulmuyor. Reçetenin kendisi mekanik zorlanmıyor, bekçi sonradan yakalıyor.",
+      "source": "scripts/test_permission_catalog.ts, test_route_mount_reachability.ts (ts-morph); node scripts/check-docs.mjs koşuldu",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Zod tanımadığı anahtarı sessizce siler — alan iki uçta da sözleşmeye eklenir; istek gövdesini elle kuran istemci sessiz bir allowlist'tir.",
+      "codeReality": "Backend 252 z.object, yalnız 55 .strict() (%22). strict() dağılımı KÜMELENMİŞ: finance.routes 10, cheque.routes 10, finance.report.routes 6 (yeni finans ailesi) — buna karşılık shipping.controller 31 z.object / 3 strict, workorder.controller 26 z.object / 0 strict. Electron 26 z.object / 39 strict. mobil'de zod bağımlılığı ve z.object HİÇ YOK (386 dosya) — tablet gövdeleri tamamen elle kuruluyor.",
+      "source": "grep z.object → backend 252 / Electron 26 / mobil 0; .strict() → 55 / 39 / 0; mobil/package.json'da zod yok",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "FAIL-CLOSED varsayılan: tanınmayan kapsam 400.",
+      "codeReality": "rollScope: inventory.service.ts:1547 `throw AppError.badRequest('Bilinmeyen liste kapsamı: ...')` — switch'in default'u atmakla bitiyor. AppError'un 1995 çağrısının 1009'u badRequest, 537'si conflict, 374'ü notFound; sessizce true dönen bilinen kapsam kontrolü bulunamadı.",
+      "source": "src/services/inventory.service.ts:1547; AppError statik dağılımı (1995 çağrı)",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Önbellekte TTL tazeliktir geçerlilik değil (bayat döner + tazeler; hiç dolmadıysa fail-closed kalır).",
+      "codeReality": "reason-preset.service.ts:19 ve :180 kuralı birebir uyguluyor (TTL dolması önbelleği düşürmez, bayat liste döner, arka planda tazelenir). remote-access.middleware.ts:212 aynı dersi ikinci yüzeyde tekrarlıyor.",
+      "source": "src/services/reason-preset.service.ts:19,180; src/middlewares/remote-access.middleware.ts:212",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Hata kodu details.code altında; body.code hep undefined.",
+      "codeReality": "error.middleware.ts:433 gövdeyi {success, message, ...(details ? {details} : {})} olarak kuruyor — üst düzey code ASLA basılmıyor. 1995 AppError çağrısının 223'ü details taşıyor, 134'ünde code var (89'unda details var ama code yok — sözleşme code'u zorunlu kılmıyor, app-error.ts:13 'opsiyonel ama önerilir' diyor). İstemcide details?.code okuması 41; üst düzey error body.code okuması 0 (bulunan 4 .code hit'i ürün/cari kodu).",
+      "source": "src/middlewares/error.middleware.ts:433; AST tarama 1995/223/134; Electron+mobil details.code → 41",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Kapalı modül 403 MODULE_DISABLED; uzakta kapalı yol 404; jenerik requireModule('x') yasak.",
+      "codeReality": "module.middleware.ts:81 ve :122, yarn.service.ts:175 → details {code:'MODULE_DISABLED'}. Uzak 404: remote-access.middleware.ts:200 res.status(404) + :175-176 gerekçesi. requireModule( yalnız module.middleware.ts:19'da — kuralı ANLATAN yorumda; ESLint selector'ü (eslint.config.mjs:51) mekanik yasaklıyor, lint exit 0.",
+      "source": "src/middlewares/module.middleware.ts:19,81,122; remote-access.middleware.ts:175,200; eslint.config.mjs:51",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Uzak/LAN ayrımı soketten; clientType güvenlik sınırı değil; tünel dinleyicisi yalnız 127.0.0.1.",
+      "codeReality": "remote-access.middleware.ts:10-11 ayrımın clientType ile YAPILAMAYACAĞINI yazıyor (gövdeden gelir, uydurulabilir). server.ts:214 'TÜNEL DİNLEYİCİSİ — YALNIZ 127.0.0.1', :227 app.listen(remotePort, '127.0.0.1'). `!== \"mobile\"` kodda 1 hit, o da auth.service.ts:49'daki yasağı anlatan yorum.",
+      "source": "src/middlewares/remote-access.middleware.ts:10-11; src/server.ts:214,227; src/services/auth.service.ts:49",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "SoD üçlüsü (shipping:invoice, shipping:undo-dispatch, roll:manual-adjust) yalnız Muhasebe/Süpervizör; süperadmin rol değil (['*']), panelden atanamaz.",
+      "codeReality": "permission-catalog.ts:57,87,90 üçünü tanımlıyor. role-template-catalog.ts: WEB_ACCOUNTING(158) shipping:invoice(165), WEB_PRODUCTION_SUPERVISOR(292) roll:manual-adjust(301)+shipping:undo-dispatch(303); WEB_BOSS(330) için :322-323 üçlünün BİLİNÇLİ yokluğunu yazıyor. Süperadmin: rbac.middleware.ts:39 includes('*'); helpers/system-account.helper.ts:18 getEffectivePermissions → ['*'].",
+      "source": "src/constants/permission-catalog.ts:57,87,90; role-template-catalog.ts:158,165,292,301,303,322; rbac.middleware.ts:39",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "İzin guard'ı anahtar-kapsamlı ve düz OR'a çevrilmez; matchesPermission üç istemcide.",
+      "codeReality": "Üç istemcide de var: Teks-Erp/src/middlewares/rbac.middleware.ts, Electron/src/types/auth.ts (+auth.test.ts negatif sonda), mobil/src/hooks/usePermission.ts. Backend'de 19 dosya kullanıyor. SAPMA: Electron/src/components/layout/NotificationBell.tsx:28-31 matchesPermission yerine düz `permissions.includes('*') || includes('admin:*') || includes('admin:settings')` OR zinciri yazıyor.",
+      "source": "grep matchesPermission → 19 backend + 3 istemci dosyası; Electron/src/components/layout/NotificationBell.tsx:28-31",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "Rota kapsaması KATEGORİ düzeyinde reddetmez, UYARIR (ApiResponse.warnings); özellik-başına kapsama sert kalır (create 400 / replace 409).",
+      "codeReality": "workorder.service.ts:174 collectRouteCoverageWarnings → Promise<string[]> (atmıyor), :140-172 gerekçe. Özellik başına: :965 bloğu, :988 AppError.badRequest. ApiResponse.warnings alanı api.types.ts:15'te tanımlı, kodda 50 kullanım.",
+      "source": "src/services/workorder.service.ts:140-174,965,988; src/types/api.types.ts:15",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Top↔sipariş satırı bağı YOKTUR; karşılama SackAllocation ile sevk anında; WorkOrder.type beyan değil bağın aynasıdır.",
+      "codeReality": "Roll modelinde satış OrderLine bağı yok — yalnız purchaseOrderLineId (ALIŞ siparişi, farklı domain). SackAllocation 15 kullanım. workorder-link.service.ts:385-388 bağ yazılırken type'ı ATOMİK CLAIM ile çeviriyor: updateMany where {id, type: STOCK_PRODUCTION} → data {type: ORDER_PRODUCTION}.",
+      "source": "prisma/schema.prisma model Roll; src/services/workorder-link.service.ts:385-388,404",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "minVersion yalnız gerçek kırılmada ve sahadakinden BÜYÜK OLAMAZ.",
+      "codeReality": "src/config/client-version-policy.ts:90 minVersion: '1.0.0' — yani en düşük değerde duruyor (:106 'minVersion en düşük değerde duruyor' diye açıkça yazıyor). Kural bugün pasif ama ihlal edilmiş değil.",
+      "source": "src/config/client-version-policy.ts:54,74,85,90,106",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Sürüm notu yazılmadan sürüm çıkmaz; paketleme kapısı durdurur (surum-notlari.json).",
+      "codeReality": "node scripts/check-surum-notlari.mjs koşuldu → 13 geçti / 0 kaldı (Electron ve mobil kopyaları kaynakla aynı). deploy/electron-paketle.sh:143 bu betiği --panel=<sürüm> ile ÇAĞIRIYOR, yani kapı paketleme yolunda gerçekten duruyor.",
+      "source": "node scripts/check-surum-notlari.mjs (koşuldu); deploy/electron-paketle.sh:143",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Prisma'nın iki motoru var; Windows paketi PRISMA_CLI_BINARY_TARGETS=windows + MZ kapısı.",
+      "codeReality": "deploy/paketle.ps1:245 env set, :248 temizlik, :261 hata mesajında çözüm; deploy/kur.ps1:281 kurulum tarafında ikinci kapı. En son commit (56ab3f8e) 'dort kapi eklendi' diyor ve dördü de dosyada görünüyor.",
+      "source": "deploy/paketle.ps1:245,248,261; deploy/kur.ps1:281",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Backend TEK process; pkill -f tsx YASAK; ikinci Node süreci yasak; seri port/donanım polling backend'e girmez.",
+      "codeReality": "server.ts:94 ve :227 AYNI `app` nesnesini iki kez listen ediyor (tek process, iki dinleyici) — :42 invariantı yazıyor. Backend package.json ve src'de serialport/node-hid bağımlılığı 0. pkill yasağı sadece belge değil: scripts/claude-hooks/bash-guard.mjs mekanik kapı (bu oturumda gerçekten tetiklendi ve komutumu durdurdu).",
+      "source": "src/server.ts:42,94,227; grep serialport|node-hid Teks-Erp → 0; scripts/claude-hooks/bash-guard.mjs:26-34 (canlı tetiklendi)",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "quickPin düz metin ve tek başına kimliktir — hiçbir yüzeyden sızdırılmaz; simülasyon source:'SIMULATED' beyanıyla gider.",
+      "codeReality": "quickPin 24 hit; select: yalnız auth.service.ts:193 ve :295'te (kimlik doğrulama). Route/controller'da yalnız yorum + admin.routes.ts:808 quickPinSchema (yazma). db-copy.routes.ts:10 ve admin.routes.ts:1695,1821,1882 yedek indirmenin iki izin istemesini quickPin sızıntısıyla gerekçelendiriyor. SIMULATED üç projede 30 hit.",
+      "source": "src/services/auth.service.ts:193,295; src/routes/admin.routes.ts:808,1695,1821,1882; grep SIMULATED → 30",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "Koddaki yorum 1–3 satır NEDEN söyler, tarih ve ölçüm anlatısı taşımaz.",
+      "codeReality": "10.803 yorum bloğu: %61'i (6.685) 1-3 satır, 4.118'i >3, 1.442'si >10, 182'si >30, max 111 satır; 1.008 blok 20xx-xx-xx tarihi taşıyor. AMA docs/KOD-KURALLARI.md:140 kuralın İLERİYE DÖNÜK olduğunu ve toplu temizlik yapılmayacağını kendi ölçümüyle ('%31 yorum satırı, 1.143 tarihli yorum') zaten yazıyor. Ölçümüm o beyanı doğruluyor.",
+      "source": "AST yorum bloğu taraması src (10.803 blok); docs/KOD-KURALLARI.md:136-141",
+      "verdict": "uyumlu"
+    }
+  ],
+  "kod_ihlalleri_duzeltme_boyutuyla": [
+    {
+      "ihlal": "updatedAt taşımayan 10 model kodda gerçekten update ediliyor",
+      "kanit": "rollOperation(5 update), rollVariance(4), subcontractorDispatchItem(5), sackTagAssignment(3), userRecoveryCode, itemAllowedProperty, itemAllowedColor, rollProperty, importRun, yarnMovement",
+      "boyut": "orta — 10 model × (@updatedAt kolon + migration); canlı DB'de DEFAULT now() backfill gerekir"
+    },
+    {
+      "ihlal": "8026 kilit uzayı çakışması belgesiz (CODE_UNIQUE_LOCK_NS ↔ PERIOD_CLOSE_LOCK_NS)",
+      "kanit": "code-unique.helper.ts:57 = 8026; period-guard.helper.ts:73 = 8026; period-guard başlığı (40-46) 8023/8026/8027 çakışmalarının hiçbirini listelemiyor",
+      "boyut": "küçük — envanter başlığını 10 uzaya tamamla; ayrıştırma isteniyorsa code-unique'e yeni NS ver (orta)"
+    },
+    {
+      "ihlal": "traveler-card.service.ts:269-285 read-check-update (atomik claim yok)",
+      "kanit": "tx.travelerCard.findUnique → status !== ACTIVE kontrolü → update { version: existing.version + 1 }; WHERE'de ne status ne version var",
+      "boyut": "küçük — updateMany where {id, status: ACTIVE, version: existing.version} + count===0 → 409"
+    },
+    {
+      "ihlal": "mobil'de şema doğrulama katmanı hiç yok",
+      "kanit": "mobil/package.json'da zod bağımlılığı yok; 386 .ts/.tsx dosyada z.object 0",
+      "boyut": "büyük — kuralın 'iki uçta sözleşme' yarısı tablette hiç kurulmamış"
+    },
+    {
+      "ihlal": "Backend Zod şemalarının %78'i strict() değil",
+      "kanit": "252 z.object / 55 .strict(); shipping.controller 31/3, workorder.controller 26/0; buna karşılık finance.routes 10 strict, cheque.routes 10",
+      "boyut": "orta — yeni kodda zorunlu kıl (ESLint'e girmez, ölçülen ihlal sıfır değil); devralınan controller'lar sınır dışı"
+    },
+    {
+      "ihlal": "Soft-delete istisna listesi kod gerçeğinden dar",
+      "kanit": "18 hard .delete({) çağrısının 7'si beyan edilen 5 istisnadan hiçbirine girmiyor: customer-alias:94,198 · duplicate-review:151 · sack-tag:218 · permission-management:1041 · batch.service:337 · label-template:886. Ayrıca invoice.service:883 DRAFT fatura deleteMany",
+      "boyut": "küçük — belge tarafı: istisna listesini 5'ten gerçek kümeye genişlet ve her birine gerekçe çapası koy"
+    },
+    {
+      "ihlal": "NotificationBell izin kontrolünü düz OR'a çevirmiş",
+      "kanit": "Electron/src/components/layout/NotificationBell.tsx:28-31 permissions.includes('*') || includes('admin:*') || includes('admin:settings')",
+      "boyut": "küçük — matchesPermission('admin:settings') tek satır"
+    },
+    {
+      "ihlal": "clientToken model sayısı belgede 16, kodda 15",
+      "kanit": "prisma/schema.prisma'da clientToken @unique alanı 15 (15 model listelendi)",
+      "boyut": "küçük — kök CLAUDE.md'de sayıyı düzelt ya da sayıyı belgeden çıkar (Teks-Erp/CLAUDE.md zaten 'sayıyı dokümana sabitleme' diyor)"
+    }
+  ],
+  "mekanik_zorlama_haritasi": {
+    "eslint": ["tx.*+Promise.all/allSettled", "notIn: []", "orderBy batchNumber", "jenerik requireModule()", "'Europe/Istanbul' literali (time.ts muaf)", "route/controller'da lib/prisma import"],
+    "eslint_durum": "npx eslint src --max-warnings=0 exit 0; 8 eslint-disable var, hiçbiri no-restricted-syntax/imports için değil",
+    "bash_hook": "scripts/claude-hooks/bash-guard.mjs — 9 komut kapısı (pkill, migrate reset, migrate dev, toplu DELETE, force push, canlı DB, ham build:win…); bu oturumda gerçekten tetiklendi",
+    "ast_bekci": ["test_search_field_config", "test_permission_catalog", "test_period_close", "test_raw_sql_hygiene", "test_fason_open_dispatch_single_source", "test_route_mount_reachability", "lib/regime-gate-scan", "audit_repro_BULGU-T1-024"],
+    "sozlesme_bekcisi": ["test_timestamptz_contract (13/13)", "check-surum-notlari.mjs (13/13)", "check-docs.mjs (126 .md)"]
+  },
+  "boyut_olcumu": {
+    "backend-services": "269 dosya, p50 236 / p90 1001 / max 7143 satır; 103 dosya >300; 4379 fonksiyon, p50 14 / p90 59 / p99 160; 28 fonksiyon >200",
+    "backend-routes": "80 dosya, p50 208 / p90 749 / max 1983",
+    "electron-src": "1356 dosya, p50 113 / p90 299 / max 1446; 80 fonksiyon >200",
+    "mobil-src": "386 dosya, p50 119 / p90 436 / max 9387; 63 fonksiyon >200"
+  }
+}

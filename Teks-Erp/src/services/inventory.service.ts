@@ -166,7 +166,7 @@ import {
   assertTargetablePropertyIds,
   partitionTargetableIds,
 } from "./helpers/targetable-property.helper";
-import { generateRollBarcode, type RollBarcodeType } from "./helpers/roll-barcode.helper";
+import { generateRollBarcodeTx, type RollBarcodeType } from "./helpers/roll-barcode.helper";
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
@@ -541,6 +541,53 @@ const ROLL_LIST_INCLUDE = {
     },
   },
 } as const;
+
+// KANBAN KARTI'nın ilişki kümesi — LİSTE'nin (ROLL_LIST_INCLUDE) DAR alt kümesi.
+//
+// NEDEN AYRI: Üretim Akışı kartı ekranda 5 alan basar (kumaş adı · renk+hex ·
+// barkod · metraj · kalite) ama kolon başına ROLL_LIST_INCLUDE'un 11 ilişkisini
+// çekiyordu. ÖLÇÜLDÜ (2026-09-05, tekserp_demo): tek istek 115 sorgu / 13-20 ms;
+// bu dar küme ile 66 sorgu (−43%). Kazanç BAYT değil ROUND-TRIP'tir — satır
+// boyutu (rolls ort. 218 B) ihmal edilebilir, bedel ilişki SAYISI.
+//
+// NEDEN `select` DEĞİL `include`: skaler kümesi liste ile BİREBİR kalmalı.
+// Detay paneli (RollDetailSheet) kart tıklanınca `detail ?? roll` fallback'iyle
+// çizilir; skalerlerin biri eksik olsa panel açılışında boş hücre çıkardı. Ayrıca
+// `select` yazılsaydı Roll'a eklenen yeni bir skaler karta SESSİZCE ulaşmaz,
+// liste ile kart ayrışırdı ("ayrışan yüzey" sınıfı). Kart SAYI üreten hiçbir
+// türetilmiş alanı taşımaz: metraj/kalite topun kendi skaleri, kolon toplamı
+// `count()` ile AYNI `where`den doğar → kart ile liste ayrışamaz.
+//
+// ALT SELECT'LER PAYLAŞILIR (kopya değil ROLL_LIST_INCLUDE referansı): kartla
+// liste aynı `item`/`color`/… şeklini döndürsün, biri değişince ikisi değişsin.
+//
+// DIŞARIDA BIRAKILANLAR ve gerekçesi (hepsi detay panelinde `detail?.` ile
+// okunur, liste satırından DEĞİL → görünen davranış değişmez):
+//   operations · createdBy · createdMachine · entryStation · warehouse
+// `currentStep` id'ye daraltıldı: panelin "Bulunduğu İstasyon" satırı `detail`den
+// gelir, ama panel `canAdjustRollQty` kararını `roll.currentStep == null` ile
+// verir — ilişkiyi tümden atmak `undefined == null` üzerinden butonu YANLIŞ
+// açardı (yetki yüzeyi). id'li hâli kararı doğru tutar, station+workOrder
+// turlarını (kolon başına 2 sorgu) düşürür.
+const ROLL_CARD_INCLUDE = {
+  item: ROLL_LIST_INCLUDE.item,
+  color: ROLL_LIST_INCLUDE.color,
+  // Panel fallback'i `r.properties`i doğrudan liste satırından çizer.
+  properties: ROLL_LIST_INCLUDE.properties,
+  // Panel fallback'i `roll.shipment`/`roll.sack`ı çizer (Sevkiyat Rezervasyonu kartı).
+  shipment: ROLL_LIST_INCLUDE.shipment,
+  sack: ROLL_LIST_INCLUDE.sack,
+  currentStep: { select: { id: true } },
+} satisfies Prisma.RollInclude;
+
+// FASON kolonu — kartın tek FARKI: panelin "Fason bilgisi" kartı `r.status ===
+// "AT_SUBCONTRACTOR"` iken `roll.dispatchItems` fallback'ini çizer. Bu koşul
+// YALNIZ fason kolonunda doğru olabilir (diğer üç kolon STOCK/WAREHOUSE süzer),
+// bu yüzden 7 sorgu tutan `dispatchItems` zinciri yalnız burada taşınır.
+const ROLL_CARD_INCLUDE_FASON = {
+  ...ROLL_CARD_INCLUDE,
+  dispatchItems: ROLL_LIST_INCLUDE.dispatchItems,
+} satisfies Prisma.RollInclude;
 
 // --- Üretim Akışı (Kanban) panosu — tek-istek aggregate şekli --------------
 /** Kurşun/Tambur kolonları için parti (refakat kartı) kartı. */
@@ -920,7 +967,7 @@ export class InventoryService {
     const initialStatus =
       opts?.forcedStatus ?? (data.colorId != null ? RollStatus.WAREHOUSE : RollStatus.STOCK);
 
-    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcode) — offline istemci
+    // Barkod SUNUCU'da sıralı atanır (tx içinde generateRollBarcodeTx) — offline istemci
     // sırayı bilemez. Tip damgası STATÜDEN türer ("F" = final/depoya inen, "H" = ham):
     // `finalBarcodeType` zaten bu eşlemenin tek kaynağı ve KK1 yolunda eski
     // renk-sezgisiyle BİREBİR aynı sonucu verir (renkli→WAREHOUSE→"F", renksiz→
@@ -961,7 +1008,7 @@ export class InventoryService {
         // verilmemişse (fabrika yolları) tek ifade bile eklenmez.
         if (opts?.txGate) await opts.txGate(tx);
         if (guardActive) {
-          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcode`'dan da ÖNCE.
+          // ⚠️ SIRA LOAD-BEARING — kilit `findFirst`'ten ÖNCE, `generateRollBarcodeTx`'dan da ÖNCE.
           //
           //  · Kilit SONRA alınırsa guard hiçbir şey kazanmaz: READ COMMITTED'da her
           //    ifade taze snapshot alır, yani kilidi bekleyen tx uyandığında öndekinin
@@ -1061,7 +1108,7 @@ export class InventoryService {
         await assertMasterDataLiveTx(tx, { itemId: data.itemId, colorId: data.colorId ?? null });
 
         // Barkod atomik sayaçtan (tx içinde) → sıra çakışmasız, retry gerekmez.
-        const barcode = await generateRollBarcode(tx, rollType);
+        const barcode = await generateRollBarcodeTx(tx, rollType);
         // DEPO: çağıran açıkça verdiyse o (var+aktif doğrulanır), yoksa varsayılan.
         // Fabrika yolları parametre vermez → varsayılan depo → davranış aynı.
         const targetWarehouseId = await resolveTargetWarehouseId(tx, opts?.warehouseId ?? null);
@@ -1797,14 +1844,20 @@ export class InventoryService {
   }): Promise<ApiResponse<ProductionFlowData>> {
     const PREVIEW = 10;
 
-    const rollColumn = async (status: RollStatus, extra: Prisma.RollWhereInput = {}) => {
+    // ÖLÇÜM 2026-09-05: kolon include'u ROLL_LIST_INCLUDE iken uç 115 sorgu
+    // atıyordu; ROLL_CARD_INCLUDE ile 66 (kolon başına 24 → 9, fason 16).
+    const rollColumn = async (
+      status: RollStatus,
+      extra: Prisma.RollWhereInput = {},
+      include: Prisma.RollInclude = ROLL_CARD_INCLUDE,
+    ) => {
       const where: Prisma.RollWhereInput = { status, ...extra };
       const [rolls, total] = await Promise.all([
         prisma.roll.findMany({
           where,
           orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           take: PREVIEW,
-          include: ROLL_LIST_INCLUDE,
+          include,
         }),
         prisma.roll.count({ where }),
       ]);
@@ -1976,7 +2029,7 @@ export class InventoryService {
         ...RAW_ON_SHELF,
         entrySource: RollEntrySource.SEMI_FINISHED,
       }),
-      rollColumn(RollStatus.AT_SUBCONTRACTOR),
+      rollColumn(RollStatus.AT_SUBCONTRACTOR, {}, ROLL_CARD_INCLUDE_FASON),
       rollColumn(RollStatus.WAREHOUSE),
       kursunColumn(),
       tamburColumn(),
@@ -2502,21 +2555,48 @@ export class InventoryService {
    * kayıtlar için bedel sıfır. Sorgu yalnız damgasız iptallerde koşar.
    * ⚠️ Kalıcı değil (audit 6 ayda arşivlenir) — bkz. helper'daki not.
    */
-  private async isUndoSourcedByAudit(rollId: string, cancelReasonCode: string | null): Promise<boolean> {
+  private async isUndoSourcedByAudit(
+    rollId: string,
+    cancelReasonCode: string | null,
+    statusChangedAt: Date | null,
+  ): Promise<boolean> {
     if (cancelReasonCode) return false;
-    const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
-      SELECT count(*) AS n FROM system_logs
-      WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
-        AND (
-          ("newData" ->> 'cancelledChildId') = ${rollId}
-          OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
-        )
-    `;
+    // TARİH SEDDİ (2026-09-05 perf turu). jsonb yüklemi indexlenemez → sorgu
+    // system_logs'u BAŞTAN SONA tarıyordu: ölçüldü 7,95 ms / 2.499 buffer, 51.163
+    // satır elendi. Çıpa topun KENDİ `statusChangedAt`i: geri alma satırı, topun
+    // CANCELLED'a geçtiği anla aynı olaydan doğar (ölçüm: 23 geri alma satırının
+    // hepsi damgadan 2–9 ms SONRA yazılmış). ±10 dk pay iki kaynağı da kapsar —
+    // audit tx DIŞINDA yazıldığı için commit gecikmesi, geriye doldurulmuş
+    // damgalar içinse (backfill_roll_production_timestamps) iki audit satırı
+    // arasındaki saniyeler. Ölçüm: 0,56 ms / 713 buffer, Index Scan
+    // (system_logs_createdAt_idx); 44 iptal topun 44'ünde karar DEĞİŞMEDİ.
+    // ⚠️ Damga yoksa (2026-08-09 migration'ından önce doğup geriye doldurulmamış
+    // kayıt) çıpa da yok → eski tam tarama korunur; sessizce "geri alınabilir"
+    // demek yerine yavaş ama doğru cevap verilir.
+    const rows = statusChangedAt
+      ? await prisma.$queryRaw<Array<{ n: bigint }>>`
+          SELECT count(*) AS n FROM system_logs
+          WHERE "createdAt" >= ${statusChangedAt}::timestamptz - INTERVAL '10 minutes'
+            AND "createdAt" <= ${statusChangedAt}::timestamptz + INTERVAL '10 minutes'
+            AND "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
+            AND (
+              ("newData" ->> 'cancelledChildId') = ${rollId}
+              OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
+            )
+        `
+      : await prisma.$queryRaw<Array<{ n: bigint }>>`
+          SELECT count(*) AS n FROM system_logs
+          WHERE "newData" ->> 'event' LIKE 'TAMBUR_UNDO%'
+            AND (
+              ("newData" ->> 'cancelledChildId') = ${rollId}
+              OR ("newData" -> 'cancelledChildIds') @> to_jsonb(${rollId}::text)
+            )
+        `;
     return Number(rows[0]?.n ?? 0) > 0;
   }
 
   private async buildCancelDiagnostics(
-    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null },
+    roll: { id: string; status: RollStatus; preCancelStatus: RollStatus | null; batchId: string | null; sackId: string | null; shipmentId: string | null; currentStepId: string | null; cancelReasonCode: string | null; statusChangedAt: Date | null },
   ): Promise<{ canRestore: boolean; restoreBlockReason: string | null } | null> {
     if (roll.status !== RollStatus.CANCELLED) return null;
     const [movementCount, operationCount, childCount, dispatchItemCount, kartelaItemCount] =
@@ -2537,7 +2617,11 @@ export class InventoryService {
       shipmentId: roll.shipmentId,
       currentStepId: roll.currentStepId,
       cancelReasonCode: roll.cancelReasonCode,
-      undoSourcedByAudit: await this.isUndoSourcedByAudit(roll.id, roll.cancelReasonCode),
+      undoSourcedByAudit: await this.isUndoSourcedByAudit(
+        roll.id,
+        roll.cancelReasonCode,
+        roll.statusChangedAt,
+      ),
       movementCount,
       operationCount,
       childCount,
@@ -3565,7 +3649,7 @@ export class InventoryService {
       // "bekleyen"iydi) ve o durumda iş emri "tüm adımları bitmiş ama kendisi
       // IN_PROGRESS" kalır. Bunu otomatik kapatmak *"bir topu iptal etmek iş
       // emrini kapatabilir"* demektir — refakat kartlarını da COMPLETED'a çeker
-      // (`setWorkOrderCardStatuses`) ve bu bir ÜRÜN KARARIDIR, refactor yan
+      // (`setWorkOrderCardStatusesTx`) ve bu bir ÜRÜN KARARIDIR, refactor yan
       // etkisi değil. Planlamacı isterse eklenecek tek satır:
       //   for (const woId of scope.workOrderIds) await completeWorkOrderIfStepsDone(tx, woId);
       // (fonksiyon zaten terminal-guard'lı; emsal `rescueStuckRoll`.)
@@ -3693,6 +3777,9 @@ export class InventoryService {
         currentStepId: true,
         cancelReason: true,
         cancelReasonCode: true,
+        // Audit tarih seddinin çıpası (isUndoSourcedByAudit) — bu alan olmadan
+        // sorgu system_logs'u baştan sona tarar (2.499 buffer → 713).
+        statusChangedAt: true,
       },
     });
     if (!existing) throw AppError.notFound("Top bulunamadı");
@@ -3715,7 +3802,11 @@ export class InventoryService {
       shipmentId: existing.shipmentId,
       currentStepId: existing.currentStepId,
       cancelReasonCode: existing.cancelReasonCode,
-      undoSourcedByAudit: await this.isUndoSourcedByAudit(existing.id, existing.cancelReasonCode),
+      undoSourcedByAudit: await this.isUndoSourcedByAudit(
+        existing.id,
+        existing.cancelReasonCode,
+        existing.statusChangedAt,
+      ),
       movementCount,
       operationCount,
       childCount,
@@ -5006,7 +5097,7 @@ export class InventoryService {
 
       // "her kumaşa etiket" (F4) — barkodsuzsa final (WAREHOUSE) barkod üret.
       if (roll.barcode == null) {
-        const bc = await generateRollBarcode(tx, finalBarcodeType(RollStatus.WAREHOUSE));
+        const bc = await generateRollBarcodeTx(tx, finalBarcodeType(RollStatus.WAREHOUSE));
         await tx.roll.update({ where: { id: rollId }, data: { barcode: bc } });
       }
 

@@ -1,0 +1,363 @@
+{
+ "label": "sema-migration",
+ "kapsam": "Teks-Erp/prisma/schema.prisma (7749 satır, 124 model, 68 enum) + prisma/migrations (232 dosya) + scripts/test_db_invariants.ts",
+ "olcum": {
+  "model": 124,
+  "enum": 68,
+  "id_kalibi_uniform": "116/117 (`id String @id @default(uuid()) @db.Uuid`); tek istisna SystemLogArchive `@id @db.Uuid` (default yok — arşivde orijinal UUID korunur)",
+  "composite_pk": 6,
+  "map_model": "124/124 @@map; kolon @map: 0",
+  "map_cogul_disi": "1 (endpoint_latency_daily)",
+  "datetime_alan": 315,
+  "timestamptz": 311,
+  "db_date_muaf": 4,
+  "db_uuid": 545,
+  "isActive_model": 31,
+  "createdById": 49,
+  "updatedById": 30,
+  "clientToken": "15 model, 15/15 `String? @unique @db.Uuid`",
+  "json_kolon": 25,
+  "decimal_kolon": 97,
+  "decimal_en_yaygin": "(12,3)=40, (14,2)=28, (14,3)=7, (18,6)=6",
+  "index_toplam": 382,
+  "unique_toplam": 78,
+  "relation_toplam": 529,
+  "adlandirilmis_relation": 322,
+  "onDelete": {
+   "Cascade": 51,
+   "Restrict": 71,
+   "SetNull": 5,
+   "belirtilmemis": 246
+  },
+  "fk_alan": 368,
+  "fk_on_ek_index_kapsaminda": 272,
+  "fk_kapsamsiz": 96,
+  "fk_kapsamsiz_kim_yapti": 91,
+  "fk_kapsamsiz_gercek_bosluk": [
+   "SubcontractorDirectShipAllocation.dispatchId:3702",
+   "DirectShipment.branchId:3747",
+   "Sack.branchId:4529",
+   "WarehouseMovement.shipmentId:5983",
+   "WarehouseMovement.rollReturnId:5984"
+  ],
+  "composite_index": 106,
+  "composite_tarihle_baslayan": 0,
+  "composite_tarihle_biten": 68,
+  "yorum_yogunlugu": "3378/7749 satır (%43,6); 87/124 model başlığında `///`",
+  "model_govde_satir": "p50=34, p90=93, max=554 (Roll)"
+ },
+ "migration": {
+  "toplam": 232,
+  "ad_kalibi": "232/232 `^[0-9]{14}_[a-z0-9_]+$` — 0 sapma",
+  "satir_dagilimi": "p50=20, p90=91, p99=431, max=2254; >200 satır: 6",
+  "prisma_baslikli": 97,
+  "prisma_baslikli_elle_ekli": 17,
+  "tamamen_elle": "135 (%58)",
+  "IF_NOT_EXISTS_dosya": 34,
+  "IF_EXISTS_dosya": 29,
+  "DO_blok_dosya": 6,
+  "SET_statement_timeout_0": 42,
+  "CHECK_ddl": 60,
+  "partial_index_ddl": "34 (CREATE INDEX ... WHERE) + 17 (CREATE UNIQUE INDEX ... WHERE)",
+  "DEFERRABLE_gercek_ddl": 2,
+  "trigger": 3,
+  "fonksiyon": "CREATE OR REPLACE FUNCTION 4 satır → envanterde 2 kalıcı fonksiyon (tr_fold, tr_fold_color)",
+  "CONCURRENTLY": "0 gerçek kullanım (yalnız 2 dosyada 'kullanılmıyor' gerekçe yorumu)",
+  "yumusak_kapi": "5 dosya RAISE NOTICE; kanonik emsal 20260821150000_name_fold_unique_live/migration.sql:52-73 (DO $sed$ + mükerrer say → RAISE NOTICE + ATLA, yoksa CREATE UNIQUE INDEX IF NOT EXISTS)"
+ },
+ "test_db_invariants_envanteri": {
+  "PARTIAL_INDEXES": "68 (37 uniq:true, 31 uniq:false)",
+  "CHECK_CONSTRAINTS": 59,
+  "DEFERRABLE_FKS": 2,
+  "EXT_STATS": 1,
+  "EXPRESSION_UNIQUES": 4,
+  "TRIGGERS": 3,
+  "REQUIRED_EXTENSIONS": 2,
+  "EXPECTED_FUNCTIONS": 2,
+  "EXPECTED_COLLATIONS": 1
+ },
+ "en_yeni_10_model": [
+  {
+   "ad": "SackTag",
+   "tarih": "2026-09-04",
+   "satir": 4580,
+   "id": "uuid/db.Uuid",
+   "ca_ua": "ikisi de",
+   "isActive": true,
+   "kunye": "createdById+updatedById",
+   "idx": 1,
+   "uq": "code @unique",
+   "not": "katalog kalıbı: code+name+sortOrder+isActive; hex kendi kolonu (FK değil)"
+  },
+  {
+   "ad": "SackTagAssignment",
+   "tarih": "2026-09-04",
+   "satir": 4616,
+   "ca_ua": "yalnız createdAt",
+   "kunye": "createdById",
+   "idx": 2,
+   "uq": "[sackId,tagId]",
+   "not": "bağ tablosu; soft-clear (clearedAt + clearedShipmentId adres kolonu, FK değil)"
+  },
+  {
+   "ad": "TotpEnrollment",
+   "tarih": "2026-09-01",
+   "satir": 633,
+   "ca_ua": "ikisi de",
+   "idx": 1,
+   "uq": "token @unique @db.Uuid",
+   "not": "kısa ömürlü; expiresAt/consumedAt"
+  },
+  {
+   "ad": "UserRecoveryCode",
+   "tarih": "2026-09-01",
+   "satir": 665,
+   "ca_ua": "yalnız createdAt",
+   "idx": 1,
+   "not": "append-only; codeHash VarChar(72) (bcrypt)"
+  },
+  {
+   "ad": "DuplicateReview",
+   "tarih": "2026-08-22",
+   "satir": 3411,
+   "ca_ua": "ikisi de",
+   "idx": 1,
+   "uq": "[entity,pairKey]",
+   "json": "evidence (snapshot, sorgulanmaz)"
+  },
+  {
+   "ad": "RollPlanDeviation",
+   "tarih": "2026-08-19",
+   "satir": 3249,
+   "ca_ua": "yalnız createdAt",
+   "idx": 8,
+   "decimal": "qtyM (12,3)",
+   "not": "append-only defter; field/source pg enum DEĞİL VarChar (ALTER TYPE + client churn kaçınma)"
+  },
+  {
+   "ad": "ReasonPreset",
+   "tarih": "2026-08-19",
+   "satir": 3339,
+   "ca_ua": "ikisi de",
+   "isActive": true,
+   "kunye": "createdById+updatedById",
+   "uq": "[kind,code]",
+   "idx": "[kind,isActive,sortOrder]",
+   "not": "String[] legacyTexts (eski-ad sözlüğü)"
+  },
+  {
+   "ad": "ImportRun",
+   "tarih": "2026-08-19",
+   "satir": 5803,
+   "ca_ua": "yalnız createdAt",
+   "idx": 3,
+   "uq": "clientToken",
+   "json": "options + errorReport",
+   "not": "finishedAt NULL = koşuyor (enum'a RUNNING eklenmedi — geri alınamaz)"
+  },
+  {
+   "ad": "StockCount",
+   "tarih": "2026-08-15",
+   "satir": 7660,
+   "ca_ua": "ikisi de",
+   "uq": "countNo",
+   "idx": "[warehouseId,status]",
+   "kunye": "createdById (FK YOK, index YOK — bilinçli)"
+  },
+  {
+   "ad": "StockCountLine",
+   "tarih": "2026-08-15",
+   "satir": 7705,
+   "ca_ua": "ikisi de",
+   "idx": 3,
+   "uq": "[stockCountId,rollId] + [stockCountId,itemId]",
+   "decimal": "expectedQty/countedQty (14,3)",
+   "not": "FK index'i composite unique ÖN EKİNDEN geliyor (4. ağaç yazılmadı)"
+  }
+ ],
+ "receteler": {
+  "yeni_model": [
+   "1. Model adı PascalCase tekil; `@@map(\"snake_case_çoğul\")` ZORUNLU (124/124).",
+   "2. PK: `id String @id @default(uuid()) @db.Uuid` (116/117 emsal). Pivot/agregat tabloda `@@id([a,b])` (6 emsal).",
+   "3. Her DateTime `@db.Timestamptz`; yalnız takvim-günü alanı `@db.Date` (4 emsal) ve o zaman test_timestamptz_contract muaf listesine yazılır.",
+   "4. Zaman damgası: `createdAt DateTime @default(now()) @db.Timestamptz`; mutasyona uğrayan modelde ayrıca `updatedAt DateTime @updatedAt @db.Timestamptz`. Append-only defter/pivot yalnız createdAt (SackTagAssignment, UserRecoveryCode, RollPlanDeviation, ImportRun emsali).",
+   "5. Her UUID kolon `@db.Uuid` (545 emsal); metin kolonları `@db.VarChar(n)` ile sınırlı (serbest String neredeyse yok).",
+   "6. Katalog/master-data ise `isActive Boolean @default(true)` (31 emsal) + `sortOrder Int @default(0)` + değişmez `code` (@unique ya da @@unique([kind,code])).",
+   "7. Künye: katalog/master-data'da `createdById`/`updatedById String? @db.Uuid`; defter tablosunda yalnız aktör alanı (confirmedById/decidedById/createdById). FK bağı OPSİYONEL — 91 künye FK'sı index'siz ve bu KURAL GEREĞİ.",
+   "8. İdempotency gereken yaratma ucunda `clientToken String? @unique @db.Uuid` (15/15 birebir bu yazım).",
+   "9. Her domain FK'sına `@@index([fk])` — künye FK'ları hariç. Composite unique ÖN EKİ index sayılır (StockCountLine emsali), 4. ağaç yazılmaz.",
+   "10. Composite index sırası: eşitlik önce, tarih/range sonra (106 composite'te 0 tarih-önce, 68 tarih-sonra).",
+   "11. Enum adı PascalCase, değerleri SCREAMING_SNAKE (tek istisna PermissionCategory). Değer kümesi büyümeye açıksa pg enum yerine `String @db.VarChar(n)` (RollPlanDeviation.field/source gerekçesi: ALTER TYPE geri alınamaz).",
+   "12. İlişki adı `<Model><Rol>` PascalCase (322 emsal); aynı hedefe ikinci ilişki varsa ad ZORUNLU. `onDelete` yalnız karar verildiğinde yazılır ve gerekçesi `///` ile (Cascade 51 / Restrict 71 / SetNull 5).",
+   "13. Json yalnız snapshot/config/audit yükü için (25 kolon); Prisma JSON filtresi kullanılmaz (0), listede `omit: { snapshot: true }`.",
+   "14. Para/metraj `Decimal` + `@db.Decimal(p,s)` — metraj (12,3), tutar (14,2), kur (18,6). JS float yok: `Prisma.Decimal` (662) ya da increment/decrement (34).",
+   "15. Model başlığına `///` gerekçe; sıra dışı her karar (FK yok, index yok, enum yok, CASCADE) satırın üstünde `///` ile yazılır (şemanın %43,6'sı yorum).",
+   "16. Migration'ı ELLE yaz (`--create-only` ile üret, DropForeignKey satırlarını sil) — aşağıdaki reçete."
+  ],
+  "yeni_migration": [
+   "1. Dizin `prisma/migrations/<14 hane>_<snake_slug>/migration.sql` (232/232 uyumlu).",
+   "2. `prisma migrate dev` KULLANMA; `--create-only` ile üret, iki DEFERRABLE composite FK'nın DropForeignKey satırlarını SİL (emsal başlık: 20260904120442_cuval_izleri_etiket/migration.sql:6-16).",
+   "3. Dosya başına gerekçe bloğu: ne yapıyor, ADDITIVE mi, hangi tuzak elle düzeltildi.",
+   "4. Büyük tabloya index/DDL varsa EN BAŞA `SET statement_timeout = 0;` (42/232 emsal; DB'de statement_timeout=50s — Teks-Erp/docker-compose.yml:26).",
+   "5. Şema-dışı nesne kuruyorsan (partial index / CHECK / DEFERRABLE FK / ext-stats / expression unique / trigger / fonksiyon / collation) test_db_invariants.ts envanterine YAZ — dokuz liste, iki yönlü kapı.",
+   "6. Partial index: şemada düz `@@index([col])` BIRAK, SQL'de DROP + CREATE ... WHERE (emsal rolls_sackId_idx; schema.prisma:2035). Partial UNIQUE için şemada `@@unique` (index↔unique farkı drift sayılır).",
+   "7. Canlı veriye tekillik/sed eklerken YUMUŞAK KAPI: DO $etiket$ + mükerrer say → varsa RAISE NOTICE + ATLA, yoksa `CREATE UNIQUE INDEX IF NOT EXISTS` (20260821150000_name_fold_unique_live:52-73). Sert RAISE EXCEPTION prod deploy'unu kilitler.",
+   "8. `CREATE INDEX CONCURRENTLY` YAZMA — Prisma migration tx'i içinde çalışmaz (repoda 0 gerçek kullanım, 2 dosyada gerekçe yorumu).",
+   "9. İfade index'inin fonksiyonu IMMUTABLE (+STRICT) ve karakter sınıfı AÇIK (`\\s` yasak — locale bağımlı).",
+   "10. Uygulama sırası tek komut: `npx tsx scripts/apply-migration.ts <ad> [--apply]` (git add → psql -v ON_ERROR_STOP=1 → resolve --applied → schema_drift + migration_hygiene doğrulaması).",
+   "11. Elle koşulan SQL idempotent yazılır (apply-migration defterde satır varsa resolve'u atlar ama SQL'i yine koşar).",
+   "12. Uygulanmış dosyaya BİR DAHA DOKUNMA — düzeltme yeni migration ile (checksum kapısı deploy'u kilitler).",
+   "13. Migration bir ops adımı gerektiriyorsa (ALTER DATABASE ... SET, GUC) sürüm reçetesine yaz — migration DEĞİL."
+  ]
+ },
+ "docVsCode_14_madde": [
+  {
+   "m": 1,
+   "kural": "Her @relation kolonuna @@index (düşük trafik 'kim yaptı' FK hariç)",
+   "kod": "368 FK alanının 272'si ön-ek index/unique/pk kapsamında; 96 kapsamsızın 91'i *ById/userId (kuralın muafı). 5 gerçek boşluk: SubcontractorDirectShipAllocation.dispatchId:3702, DirectShipment.branchId:3747, Sack.branchId:4529, WarehouseMovement.shipmentId:5983, WarehouseMovement.rollReturnId:5984",
+   "hukum": "kod ihlal (5)"
+  },
+  {
+   "m": 2,
+   "kural": "Composite sıra: eşitlik önce, range/order sonra",
+   "kod": "106 composite @@index; 0'ı tarih kolonuyla BAŞLIYOR, 68'i tarih kolonuyla BİTİYOR",
+   "hukum": "uyumlu"
+  },
+  {
+   "m": 3,
+   "kural": "Partial index ham SQL migration ile; şemada @@index bırak; partial unique için @@unique",
+   "kod": "schema.prisma:2035 `@@index([sackId])` düz dururken DB'de rolls_sackId_idx PARTIAL (test_db_invariants PARTIAL_INDEXES). 68 partial (37 unique).",
+   "hukum": "uyumlu"
+  },
+  {
+   "m": 4,
+   "kural": "Şema-dışı nesneler test_db_invariants envanterinde (partial index, CHECK, DEFERRABLE FK, statistics, EXPRESSION_UNIQUES)",
+   "kod": "Envanterde DOKUZ liste var: PARTIAL_INDEXES 68 · CHECK 59 · DEFERRABLE_FKS 2 · EXT_STATS 1 · EXPRESSION_UNIQUES 4 · TRIGGERS 3 · REQUIRED_EXTENSIONS 2 · EXPECTED_FUNCTIONS 2 · EXPECTED_COLLATIONS 1",
+   "hukum": "kod daha geniş — belge eksik (5 sayıyor, 9 var)"
+  },
+  {
+   "m": 5,
+   "kural": "Yüksek hacim tablolar cursor pagination; MAX_OFFSET=10000",
+   "kod": "src/utils/query-parser.ts:23 MAX_OFFSET=10000, :385 skip>MAX → 400. 'Cursor ZORUNLU' tarafının mekanik kapısı yok (KOD-KURALLARI:10 'test yok' diyor)",
+   "hukum": "kısmen uyumlu / kapı BELİRSİZ"
+  },
+  {
+   "m": 6,
+   "kural": "JSON alan sorgulanacaksa GIN önce",
+   "kod": "jsonb GIN index: 0. 11 GIN'in hepsi gin_trgm_ops (metin). Tek JSON sorgusu ham SQL: src/services/inventory.service.ts:2509 `\"newData\" ->> 'event' LIKE 'TAMBUR_UNDO%'` (system_logs) — index YOK. Prisma JSON filtresi: 0",
+   "hukum": "kod ihlal (1 nokta)"
+  },
+  {
+   "m": 7,
+   "kural": "select, include değil",
+   "kod": "src/ içinde `select:` 2651, `include:` 276 (%90,6 select)",
+   "hukum": "uyumlu (276 sapma)"
+  },
+  {
+   "m": 8,
+   "kural": "Karmaşık aggregation $queryRaw",
+   "kod": "$queryRaw 104 kullanım",
+   "hukum": "uyumlu"
+  },
+  {
+   "m": 9,
+   "kural": "createMany",
+   "kod": "createMany 100 kullanım",
+   "hukum": "uyumlu"
+  },
+  {
+   "m": 10,
+   "kural": "Tx kısa, dış I/O tx içinde yok (idle_in_transaction_session_timeout=5min)",
+   "kod": "Ayar doğrulandı: Teks-Erp/docker-compose.yml:28 idle_in_transaction_session_timeout=300000. 196 $transaction; 'dış I/O yok' için mekanik kapı YOK",
+   "hukum": "ayar uyumlu / kural BELİRSİZ (kapısız)"
+  },
+  {
+   "m": 11,
+   "kural": "tx.* + Promise.all YASAK (ESLint)",
+   "kod": "Teks-Erp/eslint.config.mjs:24-29 ORTAK_YASAKLAR (Promise.all VE allSettled, isim tabanlı), :88/:97 no-restricted-syntax",
+   "hukum": "uyumlu"
+  },
+  {
+   "m": 12,
+   "kural": "Yeni uç büyük tabloya değiyorsa EXPLAIN ANALYZE",
+   "kod": "Mekanik kapı yok; EXPLAIN ANALYZE yalnız 4 dosyada (query-parser, order.routes, backup-impact.service, scripts/scale_report)",
+   "hukum": "BELİRSİZ (süreç kuralı, kapısız)"
+  },
+  {
+   "m": 13,
+   "kural": "Snapshot JSON'ları listede çekme",
+   "kod": "Tek emsal src/services/traveler-card.service.ts:751 `omit: { snapshot: true }`; kalan 4 `snapshot: true` seçimi tekil okuma. Kapı yok",
+   "hukum": "uyumlu (kapısız)"
+  },
+  {
+   "m": 14,
+   "kural": "Canlıda index migration vardiya dışında; büyük tabloda SET statement_timeout = 0 (DB 50s)",
+   "kod": "42/232 migration'da `SET statement_timeout = 0`; DB ayarı Teks-Erp/docker-compose.yml:26 statement_timeout=50s. 'Vardiya dışında' ölçülemez",
+   "hukum": "teknik yarısı uyumlu / süreç yarısı BELİRSİZ"
+  },
+  {
+   "m": "ek-A",
+   "kural": "Her DateTime @db.Timestamptz (bekçi test_timestamptz_contract, TEK bekçi)",
+   "kod": "315 DateTime alanının 311'i Timestamptz; 4 muaf hepsi @db.Date (schema:5724,6684,6810,7161). Bekçi scripts/test_timestamptz_contract.ts:146-194 iki yönlü (bayat muaf da kırmızı)",
+   "hukum": "uyumlu"
+  },
+  {
+   "m": "ek-B",
+   "kural": "Decimal kolonda JS float yok — DB-side increment/decrement ya da Prisma.Decimal",
+   "kod": "97 @db.Decimal kolon; Prisma.Decimal 662 kullanım, increment/decrement 34. Karşı sinyal: `Number(<qty|amount|price|total|weight>...)` 95 vuruş (çoğu sunum/serileştirme olabilir, tek tek doğrulanmadı)",
+   "hukum": "kısmen uyumlu / 95 vuruş BELİRSİZ"
+  }
+ ],
+ "bosluklar": [
+  {
+   "ne": "'Yeni Prisma modeli' reçetesi HİÇBİR yerde yok",
+   "kanit": "grep 'yeni model|yeni tablo|Yeni Prisma' docs/*.md docs/kurallar/*.md → 0 ilgili vuruş; docs/RECETELER.md başlıkları: route+izin, feature flag, enum'a değer, migration, bekçi, Electron, mobil, sürüm — model yok",
+   "siddet": "yüksek",
+   "boyut": "küçük"
+  },
+  {
+   "ne": "5 domain FK index'siz (kural 1 ihlali, künye muafiyetine girmiyor)",
+   "kanit": "schema.prisma:3702 dispatchId, :3747 + :4529 branchId, :5983 shipmentId, :5984 rollReturnId — model bloklarında karşılık gelen @@index/@@unique ön eki yok",
+   "siddet": "orta",
+   "boyut": "küçük"
+  },
+  {
+   "ne": "system_logs JSON sorgusu index'siz (kural 6)",
+   "kanit": "src/services/inventory.service.ts:2509 `\"newData\" ->> 'event' LIKE 'TAMBUR_UNDO%'`; jsonb GIN sayısı 0; migration yorumu 'USING gin (changes jsonb_path_ops) eklenir' diyor ama eklenmemiş",
+   "siddet": "orta",
+   "boyut": "küçük"
+  },
+  {
+   "ne": "Teks-Erp/CLAUDE.md:43 madde 4 envanteri EKSİK sayıyor",
+   "kanit": "Belge 5 liste sayıyor (partial index, CHECK, DEFERRABLE FK, statistics, EXPRESSION_UNIQUES); test_db_invariants.ts'de 9 liste var (TRIGGERS:501, REQUIRED_EXTENSIONS:544, EXPECTED_FUNCTIONS:554, EXPECTED_COLLATIONS:576 belgede yok)",
+   "siddet": "orta",
+   "boyut": "küçük"
+  },
+  {
+   "ne": "Kural 10/12/13 için mekanik kapı yok (tx dış I/O · EXPLAIN ANALYZE · snapshot listede)",
+   "kanit": "grep ile ESLint/bekçi karşılığı bulunamadı; kural 11'in ESLint karşılığı VAR (eslint.config.mjs:24-29) — asimetri",
+   "siddet": "düşük",
+   "boyut": "orta"
+  },
+  {
+   "ne": "CI hâlâ emekli `adnansahin` dalına bağlı",
+   "kanit": ".github/workflows/ci.yml:15-17 `branches: [main, adnansahin]`; kök CLAUDE.md 2026-09-02 'adnansahin emekli edildi'",
+   "siddet": "düşük",
+   "boyut": "küçük"
+  },
+  {
+   "ne": "Enum değer konvansiyonunda tek istisna belgesiz",
+   "kanit": "schema.prisma:333-337 PermissionCategory { web mobile admin } — 68 enum'un tek küçük-harf değer kümesi; hiçbir kural dosyası istisnayı anmıyor",
+   "siddet": "düşük",
+   "boyut": "küçük"
+  },
+  {
+   "ne": "@@map çoğullaştırma istisnası belgesiz",
+   "kanit": "124 @@map'in 123'ü 's' ile biter; endpoint_latency_daily tek istisna",
+   "siddet": "düşük",
+   "boyut": "küçük"
+  }
+ ],
+ "boyut_onerisi": "Şemada dosya boyutu tavanı ANLAMSIZ (tek dosya 7749 satır, bilinçli). Ölçülen fiili sınırlar: model gövdesi p50=34 / p90=93 satır; tek aşkın Roll (554). Migration p50=20 / p90=91 / p99=431 satır, yalnız 6 dosya >200. Öneri: YENİ model ≤ 120 satır (yorum hariç ≈ 60 alan satırı); aşarsa alt-tablo/pivot ayrımı sorulur — Roll ve User (187) devralınan, sınır dışı. YENİ migration ≤ 200 satır; aşan 6 dosyanın hepsi çok-nesneli sertleştirme turu (20260708 faz4, 20260819 search_fold) — çok nesneli tur bilinçli istisna, gerekçe dosya başlığında.",
+ "hukum": "Şema ve migration disiplini bu repoda ÖLÇÜLEBİLİR şekilde tutarlı: id kalıbı 116/117, @@map 124/124, Timestamptz 311/315 (4 muaf @db.Date, iki yönlü bekçili), clientToken 15/15 birebir, migration adlandırması 232/232, composite sıra 106/106. Standardı UYDURMAYA GEREK YOK — koddan birebir çıkarılabilir. Üç şey standarda yazılmalı: (a) künye FK'sının index ALMAMASI bir KURAL (91 emsal), bu yazılmazsa yeni gelen 'eksik' sanıp ekler; (b) şema-dışı nesne → test_db_invariants envanteri iki yönlü kapıdır, dokuz liste; (c) 'yeni model' reçetesi hiç yok, 'yeni migration' reçetesi (RECETELER.md:108, 23 adım) var ve ağır — yeni kodda zorunlu çekirdek 13 adıma indirilebilir. Devralınan sınır dışı: Roll (554 satır), 5 index'siz domain FK, PermissionCategory enum, endpoint_latency_daily adı — bunlar 'yeni kodda tekrarlanmaz' notuyla kayda geçer, geriye dönük düzeltilmez."
+}

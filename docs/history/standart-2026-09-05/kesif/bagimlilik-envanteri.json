@@ -1,0 +1,1040 @@
+{
+ "Teks-Erp": [
+  {
+   "name": "@prisma/adapter-pg",
+   "version": "^7.7.0",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@prisma/client",
+   "version": "^7.7.0",
+   "kind": "dependencies",
+   "importFiles": 193
+  },
+  {
+   "name": "bcryptjs",
+   "version": "^3.0.3",
+   "kind": "dependencies",
+   "importFiles": 4
+  },
+  {
+   "name": "bonjour-service",
+   "version": "1.4.4",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "bwip-js",
+   "version": "^4.10.1",
+   "kind": "dependencies",
+   "importFiles": 7
+  },
+  {
+   "name": "compression",
+   "version": "^1.8.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "cors",
+   "version": "^2.8.6",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "dotenv",
+   "version": "^17.4.2",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "express",
+   "version": "^5.2.1",
+   "kind": "dependencies",
+   "importFiles": 131
+  },
+  {
+   "name": "helmet",
+   "version": "^8.1.0",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "jsonwebtoken",
+   "version": "^9.0.3",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "morgan",
+   "version": "^1.10.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "opentype.js",
+   "version": "^2.0.0",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "pg",
+   "version": "^8.20.0",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "prisma",
+   "version": "^7.7.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "swagger-jsdoc",
+   "version": "^6.2.8",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "swagger-ui-express",
+   "version": "^5.0.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "uuid",
+   "version": "^13.0.0",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "zod",
+   "version": "^4.3.6",
+   "kind": "dependencies",
+   "importFiles": 63
+  },
+  {
+   "name": "@faker-js/faker",
+   "version": "^10.4.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/bcryptjs",
+   "version": "^2.4.6",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/compression",
+   "version": "^1.8.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/cors",
+   "version": "^2.8.19",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/express",
+   "version": "^5.0.6",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/jsonwebtoken",
+   "version": "^9.0.10",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/morgan",
+   "version": "^1.9.10",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/node",
+   "version": "^25.6.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/swagger-jsdoc",
+   "version": "^6.0.4",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/swagger-ui-express",
+   "version": "^4.1.8",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@typescript-eslint/eslint-plugin",
+   "version": "^8.58.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@typescript-eslint/parser",
+   "version": "^8.58.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "eslint",
+   "version": "^10.2.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "nodemon",
+   "version": "^3.1.14",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "ts-node",
+   "version": "^10.9.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "tsx",
+   "version": "^4.22.4",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "typescript",
+   "version": "^6.0.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  }
+ ],
+ "Electron": [
+  {
+   "name": "@dnd-kit/core",
+   "version": "^6.3.1",
+   "kind": "dependencies",
+   "importFiles": 13
+  },
+  {
+   "name": "@dnd-kit/sortable",
+   "version": "^10.0.0",
+   "kind": "dependencies",
+   "importFiles": 18
+  },
+  {
+   "name": "@dnd-kit/utilities",
+   "version": "^3.2.2",
+   "kind": "dependencies",
+   "importFiles": 12
+  },
+  {
+   "name": "@fontsource/plus-jakarta-sans",
+   "version": "^5.2.8",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@fontsource/roboto",
+   "version": "^5.2.10",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@hookform/resolvers",
+   "version": "^5.2.2",
+   "kind": "dependencies",
+   "importFiles": 11
+  },
+  {
+   "name": "@radix-ui/react-avatar",
+   "version": "^1.1.10",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@radix-ui/react-checkbox",
+   "version": "^1.3.3",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-context-menu",
+   "version": "^2.2.16",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-dialog",
+   "version": "^1.1.15",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "@radix-ui/react-dropdown-menu",
+   "version": "^2.1.16",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-label",
+   "version": "^2.1.7",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-popover",
+   "version": "^1.1.15",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-scroll-area",
+   "version": "^1.2.10",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@radix-ui/react-select",
+   "version": "^2.2.6",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-separator",
+   "version": "^1.1.7",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-slot",
+   "version": "^1.2.3",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-switch",
+   "version": "^1.2.6",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@radix-ui/react-tabs",
+   "version": "^1.1.13",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@radix-ui/react-tooltip",
+   "version": "^1.2.8",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@react-pdf/renderer",
+   "version": "^4.5.1",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@tanstack/react-query",
+   "version": "^5.99.0",
+   "kind": "dependencies",
+   "importFiles": 371
+  },
+  {
+   "name": "@tanstack/react-table",
+   "version": "^8.21.3",
+   "kind": "dependencies",
+   "importFiles": 53
+  },
+  {
+   "name": "@tanstack/react-virtual",
+   "version": "^3.13.10",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "axios",
+   "version": "^1.15.0",
+   "kind": "dependencies",
+   "importFiles": 14
+  },
+  {
+   "name": "bonjour-service",
+   "version": "1.4.4",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "buffer",
+   "version": "^6.0.3",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "class-variance-authority",
+   "version": "^0.7.1",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "clsx",
+   "version": "^2.1.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "cmdk",
+   "version": "^1.1.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "date-fns",
+   "version": "^4.1.0",
+   "kind": "dependencies",
+   "importFiles": 17
+  },
+  {
+   "name": "electron-log",
+   "version": "^5.4.3",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "electron-store",
+   "version": "^11.0.2",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "electron-updater",
+   "version": "^6.8.3",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "electron-window-state",
+   "version": "^5.0.3",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "exceljs",
+   "version": "^4.4.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "framer-motion",
+   "version": "^12.40.0",
+   "kind": "dependencies",
+   "importFiles": 16
+  },
+  {
+   "name": "lucide-react",
+   "version": "^1.8.0",
+   "kind": "dependencies",
+   "importFiles": 490
+  },
+  {
+   "name": "next-themes",
+   "version": "^0.4.6",
+   "kind": "dependencies",
+   "importFiles": 7
+  },
+  {
+   "name": "node-hid",
+   "version": "^3.3.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "qrcode.react",
+   "version": "^4.2.0",
+   "kind": "dependencies",
+   "importFiles": 6
+  },
+  {
+   "name": "react",
+   "version": "^19.2.4",
+   "kind": "dependencies",
+   "importFiles": 510
+  },
+  {
+   "name": "react-colorful",
+   "version": "^5.6.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "react-day-picker",
+   "version": "^10.0.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "react-dom",
+   "version": "^19.2.4",
+   "kind": "dependencies",
+   "importFiles": 7
+  },
+  {
+   "name": "react-hook-form",
+   "version": "^7.72.1",
+   "kind": "dependencies",
+   "importFiles": 26
+  },
+  {
+   "name": "react-router-dom",
+   "version": "^7.14.1",
+   "kind": "dependencies",
+   "importFiles": 69
+  },
+  {
+   "name": "recharts",
+   "version": "^3.8.1",
+   "kind": "dependencies",
+   "importFiles": 4
+  },
+  {
+   "name": "serialport",
+   "version": "^13.0.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "sonner",
+   "version": "^2.0.7",
+   "kind": "dependencies",
+   "importFiles": 219
+  },
+  {
+   "name": "tailwind-merge",
+   "version": "^3.5.0",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "zod",
+   "version": "^4.3.6",
+   "kind": "dependencies",
+   "importFiles": 23
+  },
+  {
+   "name": "zustand",
+   "version": "^5.0.12",
+   "kind": "dependencies",
+   "importFiles": 5
+  },
+  {
+   "name": "@electron/rebuild",
+   "version": "^4.0.4",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@playwright/test",
+   "version": "^1.60.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@stryker-mutator/core",
+   "version": "^9.6.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@stryker-mutator/vitest-runner",
+   "version": "^9.6.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@tailwindcss/vite",
+   "version": "^4.2.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@testing-library/dom",
+   "version": "^10.4.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@testing-library/jest-dom",
+   "version": "^6.9.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@testing-library/react",
+   "version": "^16.3.2",
+   "kind": "devDependencies",
+   "importFiles": 62
+  },
+  {
+   "name": "@testing-library/user-event",
+   "version": "^14.6.1",
+   "kind": "devDependencies",
+   "importFiles": 25
+  },
+  {
+   "name": "@types/node",
+   "version": "^24.12.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/react",
+   "version": "^19.2.14",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/react-dom",
+   "version": "^19.2.3",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@typescript-eslint/eslint-plugin",
+   "version": "^8.59.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@typescript-eslint/parser",
+   "version": "^8.59.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@vitejs/plugin-react",
+   "version": "^5.2.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "electron",
+   "version": "^42.7.0",
+   "kind": "devDependencies",
+   "importFiles": 16
+  },
+  {
+   "name": "electron-builder",
+   "version": "^26.0.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "electron-vite",
+   "version": "^5.0.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "eslint",
+   "version": "^9.39.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "eslint-plugin-react-hooks",
+   "version": "^7.1.1",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "globals",
+   "version": "^17.6.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "jsdom",
+   "version": "^26.1.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "prettier",
+   "version": "^3.4.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "tailwindcss",
+   "version": "^4.2.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "typescript",
+   "version": "~5.6.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "vite",
+   "version": "^7.3.2",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "vitest",
+   "version": "^3.2.6",
+   "kind": "devDependencies",
+   "importFiles": 209
+  },
+  {
+   "name": "vitest-axe",
+   "version": "^0.1.0",
+   "kind": "devDependencies",
+   "importFiles": 4
+  }
+ ],
+ "mobil": [
+  {
+   "name": "@expo/vector-icons",
+   "version": "^15.1.1",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "@react-native-async-storage/async-storage",
+   "version": "^2.2.0",
+   "kind": "dependencies",
+   "importFiles": 12
+  },
+  {
+   "name": "@react-native-community/netinfo",
+   "version": "11.4.1",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "@react-navigation/bottom-tabs",
+   "version": "^7.15.11",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@react-navigation/native",
+   "version": "^7.2.2",
+   "kind": "dependencies",
+   "importFiles": 30
+  },
+  {
+   "name": "@react-navigation/native-stack",
+   "version": "^7.14.12",
+   "kind": "dependencies",
+   "importFiles": 23
+  },
+  {
+   "name": "@shopify/flash-list",
+   "version": "2.0.2",
+   "kind": "dependencies",
+   "importFiles": 23
+  },
+  {
+   "name": "@tanstack/query-async-storage-persister",
+   "version": "^5.100.14",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "@tanstack/react-query",
+   "version": "^5.100.7",
+   "kind": "dependencies",
+   "importFiles": 83
+  },
+  {
+   "name": "@tanstack/react-query-persist-client",
+   "version": "^5.100.14",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "axios",
+   "version": "^1.15.2",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "dayjs",
+   "version": "^1.11.20",
+   "kind": "dependencies",
+   "importFiles": 27
+  },
+  {
+   "name": "expo",
+   "version": "~54.0.33",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "expo-asset",
+   "version": "~12.0.13",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "expo-audio",
+   "version": "~1.1.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "expo-build-properties",
+   "version": "~1.0.10",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "expo-camera",
+   "version": "~17.0.10",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "expo-constants",
+   "version": "~18.0.13",
+   "kind": "dependencies",
+   "importFiles": 4
+  },
+  {
+   "name": "expo-file-system",
+   "version": "~19.0.24",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "expo-haptics",
+   "version": "~15.0.8",
+   "kind": "dependencies",
+   "importFiles": 44
+  },
+  {
+   "name": "expo-intent-launcher",
+   "version": "~13.0.8",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "expo-print",
+   "version": "^15.0.8",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "expo-screen-orientation",
+   "version": "~9.0.9",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "expo-secure-store",
+   "version": "^15.0.8",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "expo-sharing",
+   "version": "^14.0.8",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "expo-status-bar",
+   "version": "~3.0.9",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "expo-updates",
+   "version": "~29.0.20",
+   "kind": "dependencies",
+   "importFiles": 4
+  },
+  {
+   "name": "jest-expo",
+   "version": "~54.0.17",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react",
+   "version": "19.1.0",
+   "kind": "dependencies",
+   "importFiles": 194
+  },
+  {
+   "name": "react-dom",
+   "version": "19.1.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-native",
+   "version": "0.81.5",
+   "kind": "dependencies",
+   "importFiles": 161
+  },
+  {
+   "name": "react-native-ble-plx",
+   "version": "^3.5.1",
+   "kind": "dependencies",
+   "importFiles": 1
+  },
+  {
+   "name": "react-native-bluetooth-classic",
+   "version": "^1.73.0-rc.17",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "react-native-gesture-handler",
+   "version": "^2.28.0",
+   "kind": "dependencies",
+   "importFiles": 3
+  },
+  {
+   "name": "react-native-keyboard-controller",
+   "version": "^1.22.2",
+   "kind": "dependencies",
+   "importFiles": 14
+  },
+  {
+   "name": "react-native-paper",
+   "version": "^5.15.1",
+   "kind": "dependencies",
+   "importFiles": 132
+  },
+  {
+   "name": "react-native-qrcode-svg",
+   "version": "^6.3.21",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-native-reanimated",
+   "version": "~4.1.1",
+   "kind": "dependencies",
+   "importFiles": 22
+  },
+  {
+   "name": "react-native-safe-area-context",
+   "version": "~5.6.0",
+   "kind": "dependencies",
+   "importFiles": 22
+  },
+  {
+   "name": "react-native-screens",
+   "version": "~4.16.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-native-sortables",
+   "version": "^1.9.4",
+   "kind": "dependencies",
+   "importFiles": 2
+  },
+  {
+   "name": "react-native-svg",
+   "version": "15.12.1",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-native-toast-message",
+   "version": "^2.3.3",
+   "kind": "dependencies",
+   "importFiles": 64
+  },
+  {
+   "name": "react-native-vector-icons",
+   "version": "^10.3.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-native-web",
+   "version": "^0.21.0",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-native-worklets",
+   "version": "0.5.1",
+   "kind": "dependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "zustand",
+   "version": "^5.0.12",
+   "kind": "dependencies",
+   "importFiles": 9
+  },
+  {
+   "name": "@testing-library/react-native",
+   "version": "^13.3.3",
+   "kind": "devDependencies",
+   "importFiles": 22
+  },
+  {
+   "name": "@types/jest",
+   "version": "^30.0.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "@types/react",
+   "version": "~19.1.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "eslint",
+   "version": "^9.0.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "eslint-config-expo",
+   "version": "~10.0.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "jest",
+   "version": "^29.7.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "react-test-renderer",
+   "version": "^19.1.0",
+   "kind": "devDependencies",
+   "importFiles": 0
+  },
+  {
+   "name": "typescript",
+   "version": "~5.9.2",
+   "kind": "devDependencies",
+   "importFiles": 1
+  }
+ ]
+}

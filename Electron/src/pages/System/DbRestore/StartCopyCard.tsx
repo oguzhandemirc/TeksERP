@@ -10,8 +10,8 @@ import {
 import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { safeFormat } from "@/lib/format";
 import { fmtBytes } from "../ServerStatus/serverHealth";
-import { useBackups } from "../Backups/service";
-import { useStartCopy } from "./service";
+import { useBackups } from "../Backups/hooks";
+import { useStartCopy } from "./hooks";
 import type { DbCopyListing } from "./types";
 
 /**

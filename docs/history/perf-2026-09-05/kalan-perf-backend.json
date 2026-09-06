@@ -1,0 +1,120 @@
+{
+  "alan": "Teks-Erp/src — kalan iki ölçülü perf maddesi",
+  "tarih": "2026-09-05",
+  "db": "tekserp_demo @ localhost:55433 (docker tekserp-local-db, postgres:16-alpine)",
+  "yontem": {
+    "sorguSayimi": "pg Pool 'connect' olayında client.query sarmalandı; sayaç yalnız complete() çağrısı boyunca açık (kod-desenleri.json ile aynı yöntem). Fikstür: yeni depo + N adet WAREHOUSE topu → stockCountService.create → her satır found=false → complete().",
+    "httpTuru": "PORT=4131 ile KENDİ backend süreci (PID izlenip kill edildi; pkill YOK). Token fixture-test-user.ensureTestAdmin ile alındı. KPI URL'leri Electron/src/pages/Dashboard/dashboardService.ts:9-46 ile birebir.",
+    "gecici": "İki ölçüm betiği scratch/ altında yazıldı ve ölçüm bitince SİLİNDİ — depoda kalmadı."
+  },
+
+  "maddeler": [
+    {
+      "id": "A",
+      "baslik": "Sayım uygulama toplu yazım (kod-desenleri.json bulgu 5)",
+      "durum": "uygulandi",
+      "dosyalar": [
+        "Teks-Erp/src/services/helpers/roll-variance.helper.ts (yeni recordVariancesTx)",
+        "Teks-Erp/src/services/stock-count.service.ts (döngü 2 + kapsam dışı döngüsü)",
+        "Teks-Erp/scripts/test_roll_variance.ts (yeni §8)"
+      ],
+
+      "kararOncesiUcSoru": {
+        "sira": {
+          "soru": "Döngü içinde yazılan satırların SIRASI önemli mi (defter kronolojisi, FK bağımlılığı)?",
+          "cevap": "HAYIR. warehouse_movements ile roll_variances arasında FK YOK; ikisi de yalnız Roll'a bağlı ve Roll döngü 1'de zaten güncellenmiş. İki tablo arası yazım sırası anlamsız, tablo İÇİ sıra createMany'de dizi sırasıyla korunuyor. createdAt her iki modelde de @default(now()) ve now() PG'de TX BAŞLANGIÇ anını döndürür — yani bugün de tek tek create'lerde bu 200 satır ZATEN aynı damgayı taşıyor; kronolojiye dayanan bir ayrım hiç yoktu. LIFO tersleme yalnız SUBCONTRACTOR_RETURN kaynağında var (sourceRefId adresli); STOCK_COUNT sapmasını LIFO ile açan hiçbir yol yok (reversedAt yazan üç dosya tarandı: subcontractor.service, tambur-undo.service, scorecard raporu)."
+        },
+        "cogulImza": {
+          "soru": "writeWarehouseMovements çoğul girdi kabul ediyor mu?",
+          "cevap": "EVET, imza değişikliği GEREKMEDİ. helpers/warehouse-ledger.helper.ts:74 zaten createMany ile yazıyor ve beş yerde kullanılıyor; eleme kuralı (qty>=0 ve en az bir depo alanı dolu) tekil ile birebir aynı. recordVarianceTx'in çoğul kardeşi ise YOKTU — yazıldı (recordVariancesTx)."
+        },
+        "kismiBasari": {
+          "soru": "Toplu yazımda tek satırın hatası TÜM partiyi düşürür — bugün kısmi başarı var mı?",
+          "cevap": "YOK. Döngü 2 zaten prisma.$transaction'ın İÇİNDE; bugün de 137. satırdaki bir hata ilk 136 insert'i geri sarıyor. Yani 'hep ya da hiç' DEĞİŞMEDİ. Ek olarak bu çağrıda sebep doğrulaması hiç fırlatmıyor: kind=RECORD_CORRECTION + reasonCode=SAYIM_FARKI, variance-reasons.ts:280'de erken dönüşle geçiyor. Kısmi başarı DÖNGÜ 1'de var (kaybeden top hata fırlatmaz, kapsam dışına düşer) ve döngü 1'e DOKUNULMADI."
+        }
+      },
+
+      "alternatifler": [
+        "(1) Hiçbir şey yapma — tavan var (STOCK_COUNT_MAX_MISSING=200), ölçekle büyümüyor.",
+        "(2) Yalnız döngü 2'yi toplu yazıma çevir (ölçüm dosyasının önerisi).",
+        "(3) Döngü 1'i de topluya çevir (findUnique+CAS+pin → tek updateMany).",
+        "(4) Döngü 2 + kapsam dışı işaretlemesini de sebep bazlı grupla."
+      ],
+      "secilen": "(4) = (2) + kapsam dışı gruplaması. NEDEN: (3) REDDEDİLDİ — döngü 1'in per-top CAS'ı perf değil SEMANTİKTİR: kaybeden satırın sebebini tx içinde TAZE okuyarak söylüyor ve kapsam kontrolü ile CAS bilinçli olarak AYRI (servis içi not, bekçi bulgusu). Toplu updateMany 'hangi top neden düştü'yü kaybederdi ve outOfScope sebepleri jenerikleşirdi — bu repoda 'sessiz atlama' yasak. (1) REDDEDİLDİ çünkü kazanç ölçüldü ve bedeli iki satır. (4) seçildi çünkü blockReason KAPALI bir küme döner (7 dal), gruplama tavanda 200 UPDATE'i bir avuca indiriyor ve fail-loud korunabiliyor.",
+
+      "yapilan": [
+        "roll-variance.helper.ts: recordVariancesTx(tx, inputs[]) eklendi — tekilin qty<=0 elemesi ve validateVarianceReason fail-closed davranışı BİREBİR korunarak createMany ile tek sorgu. Tekil DOKUNULMADI (id döndüren çağıranlar için duruyor).",
+        "stock-count.service.ts döngü 2: per-top writeWarehouseMovement + recordVarianceTx → writeWarehouseMovements + recordVariancesTx (2N sorgu → 2 sorgu).",
+        "stock-count.service.ts kapsam dışı döngüsü: per-satır update → sebebe göre gruplanmış updateMany; yazılan satır sayısı beklenenle karşılaştırılıyor, tutmazsa 409 (tekil update'in P2025'i ile aynı sonuç, okunur mesajla). outOfScope'ta aynı satır iki kez geçemez (ROLL ve YARN dalları ayrık kümeler).",
+        "Servis başlığındaki 'aynı helper'lar' cümlesi çoğul adlarla güncellendi (belge ile kod ayrışmasın)."
+      ],
+
+      "olcum": {
+        "birim": "complete() çağrısı boyunca sarmalanan SQL ifadesi sayısı",
+        "N25_hepsiUygulanir": { "once": 146, "sonra": 98, "not": "top başına 5 → 3; histogramda 25 warehouse_movements INSERT + 25 roll_variances INSERT yerine 1+1" },
+        "N200_tavan_hepsiUygulanir": { "once": 1021, "sonra": 623, "sureOnce_ms": 276.4, "sureSonra_ms": 224.2, "not": "ÖNCE değeri, iki dosya geçici olarak HEAD sürümüne alınıp ölçüldü ve hemen geri yüklendi (türetme değil, gerçek koşum)." },
+        "N25_hepsiKapsamDisi": { "once": 69, "sonra": 45, "not": "25 stock_count_lines UPDATE → 1 (hepsi aynı sebep: 'Bu sırada başka depoya taşındı')" },
+        "N25_karisik_15uygulandi_10kapsamDisi": { "sonra": 78 },
+        "formul": "kazanç = 2×(uygulanan top) + (kapsam dışı satır − farklı sebep sayısı) sorgu"
+      },
+
+      "eminlikDayanagi": "Davranış DEĞİŞMEDİ, üç ayrı kanıtla: (a) test_stock_count.ts 98/98 geçti — §4 fark fişi içeriğini (CANCELLED + RECORD_CORRECTION/SAYIM_FARKI + qtyOut=0 storno + preCancelStatus + CANCEL defter satırı), §7 sevk edilmiş topun kapsam dışı SEBEBİYLE işaretlenmesini, §9 paralel tamamlama claim'ini, §13 metraj pinlemesini ölçüyor ve hepsi yeşil. (b) Yeni §8b tekil ile çoğulun AYNI satırı alan alan yazdığını DB'den okuyup karşılaştırıyor (id/rollId/createdAt hariç 9 kolon birebir). (c) Sorgu sayısı düştü, yazılan satır sayısı ve içeriği aynı kaldı. TEK gözlenebilir fark, kapsam dışı satırı ARADA SİLİNMİŞ olsaydı çıkan hata tipidir: P2025 yerine 409 'tekrar deneyin' — ikisi de tx'i düşürür, ikincisi okunur.",
+
+      "yeniBekci": {
+        "yer": "Teks-Erp/scripts/test_roll_variance.ts §8 (5 kontrol)",
+        "olcuyor": "§8a qty=0 girdi elenir · §8b tekil↔çoğul alan alan aynı satır · §8c geçersiz sebep partiyi düşürür, yarım parti kalmaz · §8d boş dizi no-op · §8e MEKANİK kolon paritesi (kaynak metninde süslü parantez eşlemesiyle; tekilin yazdığı 9 kolonun hepsi çoğulda var mı)",
+        "negatifSonda": [
+          "Çoğuldan `createdById` satırı silindi → §8e KIRMIZI ('eksik=[createdById]', 42 geçti 1 başarısız). Bu, warehouse-ledger'ın 2026-08-14 `sackId` dersinin sapma defterindeki ikizidir.",
+          "Çoğulda validateVarianceReason atlandı (sebep düz geçirildi) → §8c KIRMIZI (red=false, satır=3 — geçersiz kod sessizce yazıldı).",
+          "Her iki sondadan sonra dosya geri yüklendi ve 43/43 yeşile döndü."
+        ]
+      }
+    },
+
+    {
+      "id": "B",
+      "baslik": "Anasayfa 5 KPI için 5 ayrı istek (istemci.json bulgu 5)",
+      "durum": "gerek-yok",
+      "secilen": "(iii) HİÇ YAPMA. NEDEN: ölçüm, bulgunun dayandığı varsayımı çürüttü — 'tur sayısı' burada gecikmeyi ÇARPMIYOR, çünkü istekler useQueries ile PARALEL gidiyor. Beş isteğin duvar saati toplamı 13,6-19,6 ms; tek uçta toplamanın kazanabileceği ÜST SINIR, tasarruf edilen 4 sabit istek maliyeti = 4 × 5,3 ms, ve bu ancak beş sayaç tek handler içinde de PARALEL koşarsa elde edilir. Sıralı koşarsa tek uç BUGÜNKÜNDEN YAVAŞ olur (~25 ms > ~15 ms). Yani en iyi hâlde sayfa açılışında ~4-5 ms; bedeli yeni uç + KPI başına izin sözleşmesi + Electron servis katmanı + yeni 'hangi KPI atlandı' sözleşmesi.",
+
+      "alternatifler": [
+        "(i) Tek uç, yanıt yalnız izinli KPI'leri taşır ve atlananları BEYAN eder.",
+        "(ii) Tek uç, her KPI kendi durumunu taşır ({value} ya da {denied:true}).",
+        "(iii) Hiç yapma — 5 istek sabit maliyet, ölçekle büyümüyor.",
+        "(iv) Backend ucu yaz, istemci bağlanmasın."
+      ],
+      "redGerekcesi": {
+        "(i)/(ii)": "Ölçümle gerekçesi kalmadı: kazanç ~4-5 ms, üstelik yalnız handler içi paralellikle. İzin modelini yeniden sözleşmeye bağlamanın bedeli bu kazancın çok üstünde.",
+        "(iv)": "Çıkışsız kapı olurdu — kök CLAUDE.md'nin 'bir yetenek VAR sayılmak için motor + çıkış yüzeyi + izin ataması' kuralına aykırı. Ayrıca Electron başka ajanın alanı; tek taraflı uç ölü Swagger + ölü izin yüzeyi bırakırdı."
+      },
+      "olcum": {
+        "kosul": "PORT=4131 kendi backend sürecim, loopback (RTT ~0), tekserp_demo canlı hacmi; her tur öncesi ısınma yapıldı.",
+        "sabitIstekMaliyeti_authMe_ms": 5.3,
+        "kpiUcuTekTek_ms": [8.3, 8.2, 10.9, 8.7, 9.1],
+        "kpiSirali_toplam_ms": 45.1,
+        "kpiParalel_duvarSaati_ms": [15.5, 17.3, 13.6],
+        "dondurulenSayilar": { "openOrders": 35, "openWorkOrders": 394, "warehouse": 73, "atSubcontractor": 29, "productionActive": 286 },
+        "yorum": "Liste ucunun KPI'ye özgü işi istek başına yalnız ~3-6 ms (8-11 ms toplam − 5,3 ms sabit). Beş bağlantı 30'luk havuzun altıda biri; doygunluk riski yok. LAN'da RTT eklenir ama istekler ÖRTÜŞTÜĞÜ için duvar saatine BİR KEZ girer — turu 5'ten 1'e indirmenin LAN'daki kazancı da 4×RTT değil, ~RTT mertebesindedir."
+      },
+      "eminlikDayanagi": "Kod DEĞİŞMEDİ (Teks-Erp/src'de B için tek satır yazılmadı), dolayısıyla davranış da değişmedi. Karar ölçüme dayanıyor ve ölçüm tekrarlanabilir.",
+      "ilerideYapilirsaSozlesme": "Eğer bir gün (ör. yavaş VPN/tünel ölçümüyle) gerekçe doğarsa doğru sözleşme (ii)'dir: yanıt HER KPI için bir giriş taşır, izinsizi { key, denied: true } ile AÇIKÇA söyler (sessizce atlamaz), uç bütünüyle 403 DÖNMEZ (yoksa izni kısıtlı kullanıcıda tüm anasayfa düşer). Kapı KPI başına kurulur, düz OR'a çevrilmez."
+    }
+  ],
+
+  "dogrulama": {
+    "typecheck:plain": 0,
+    "typecheck:scripts": 0,
+    "lint": 0,
+    "check-lint-baseline --proje=backend": 0,
+    "test_stock_count.ts": "98 geçti, 0 başarısız (exit 0)",
+    "test_roll_variance.ts": "43 geçti, 0 başarısız (exit 0) — 38'den 43'e, yeni §8",
+    "test_warehouse_ledger.ts": "12 geçti, 0 başarısız (exit 0)",
+    "test_warehouse_movements.ts": "26 geçti, 0 başarısız (exit 0)",
+    "not": "Ölçüm için açılan backend süreci (PID 85590, port 4131) kendi PID'iyle durduruldu; pkill KULLANILMADI. Geçici ölçüm betikleri silindi. Migration YAZILMADI."
+  },
+
+  "acikIsler": [
+    "recordVariancesTx bugün TEK çağıranlı (stock-count). Aynı deseni taşıyan iki yer daha var ama ÖLÇÜLMEDEN dokunulmamalı: iade yolu (kod-desenleri bulgu 6, iade edilen top başına 3 sorgu) ve sevkiyat çuval claim döngüsü (bulgu 12 — ölçüm dosyası açıkça 'ölçüm olmadan dokunulmamalı' diyor).",
+    "stock-count.service.ts `complete` metodu zaten max-lines-per-function tavanının üstündeydi (baseline'da donmuş uyarı); bu değişiklik onu ~14 satır daha uzattı. Uyarı SAYISI artmadığı için kapı yeşil, ama kapsam dışı işaretlemesini modül düzeyi bir yardımcıya (blockReason emsali) taşımak ayrı ve güvenli bir sadeleştirme olarak duruyor — bu turda kapsam dışı bırakıldı."
+  ]
+}

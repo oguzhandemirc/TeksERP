@@ -1,6 +1,6 @@
 # TeksERP — Kullanıcı Kabul Test Senaryoları (UAT)
 
-Bu doküman, otomatik testlerin (backend ~160 dosya · Electron ~40 · mobil ~30 — kanonik
+Bu doküman, otomatik testlerin (backend 455 bekçi · Electron 211 · mobil 85 — kanonik
 sayı için ilgili proje test dizinleri) KAPSAMADIĞI
 **kullanıcı/UI ve fiziksel akışlar** için adım-adım manuel test senaryolarıdır.
 Otomatik testler iş mantığını doğrular; bu senaryolar gerçek ekran + gerçek cihazla
@@ -68,7 +68,7 @@ doğrulanır.
 | 7.1 | Çuvaldan çıkar | TartıPaket → Çuval Düzeltme → top okut → "Çuvaldan Çıkar" | Top serbest depoya döner; çuvalın brüt tartısı sıfırlanır (içerik değişti) | |
 | 7.2 | Başka çuvala taşı | Top okut → "Başka Çuvala Taşı" → hedef çuvaldan top okut | Top hedefe taşınır; her iki çuvalın tartısı sıfırlanır | |
 | 7.3 | Çuvalı tart | İçerik değişiminden sonra "Çuvalı Tart" → kg | Yeni brüt tartı kaydedilir | |
-| 7.4 | Etiket değiştir (#4) | Top okut → "Etiket Değiştir" → renk/en/kalite → kaydet | Etiket güncellenir + yeni etiket basılır (yazıcı); sevkiyata atanmış çuvalda engel | |
+| 7.4 | Top düzelt + etiket (#4) | Top okut → **"Düzelt"** (renk/en/kalite/metraj) → kaydet → **"Etiket"** → bas | Veri güncellenir, etiket ayrı adımda basılır; sevkiyata atanmış çuvalda engel. ⚠️ Eski tek "Etiket Değiştir" akışı 2026-07-30'da ikiye ayrıldı (`RelabelDialog` silindi) | |
 
 ## 8. 300-Çuval UX — mobil (#8) 🟡
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
@@ -106,7 +106,7 @@ doğrulanır.
 | # | Senaryo | Adımlar | Beklenen | Sonuç |
 |---|---|---|---|---|
 | 12.1 | Etiket kopya adedi (#6) 🖨️ | Genel Ayarlar → Etiket Baskısı = 2 → bir top etiketi bas | 2 kopya çıkar (üst+alt) | |
-| 12.2 | Top adı şablonu (#20) | Etiket Baskısı → şablon değiştir → önizleme | Önizleme anında güncellenir; listelerde birleşik ad uyar | |
+| ~~12.2~~ | ~~Top adı şablonu (#20)~~ | — | ⛔ Özellik kaldırıldı (624f7d9c); senaryo geçersiz | |
 | 12.3 | KK2 genel hata (#18) | Mobil KK2 → hata ekle | "GENEL" butonu en başta; tip seçmeden hata girilebilir | |
 
 ## 13. Rota Fason Firma (#14) 🟡
@@ -136,9 +136,9 @@ doğrulanır.
 ---
 
 ## Otomatik test kapsamı (referans — bunlar zaten yeşil)
-- **Backend** `cd Teks-Erp && npm test` → ~160 `test_*.ts` dosyası (jest/vitest YOK; `tsx
+- **Backend** `cd Teks-Erp && npm test` → 455 `test_*.ts` bekçisi (alan haritası `Teks-Erp/docs/BEKCI-HARITASI.md`; jest/vitest YOK; `tsx
   scripts/run-all-tests.ts` hepsini sırayla koşar — sevk yaşam döngüsü, durum geçişleri,
   çuval işlemleri, kapsama, fason, tambur, izin/cihaz/dashboard, vb.).
-- **Electron** `cd Electron && npm test` → ~40 vitest dosyası (RBAC, util'ler, zod şema, fiş bileşeni).
-- **mobil** `cd mobil && npm test` → ~30 jest dosyası (RBAC hook, barkod, query, zaman).
+- **Electron** `cd Electron && npm test` → 208 vitest dosyası (RBAC, util'ler, zod şema, fiş bileşeni).
+- **mobil** `cd mobil && npm test` → 84 jest dosyası (RBAC hook, barkod, query, zaman).
 - Tümü: `bash run-tests.sh` (+ `--tsc`). CI: `.github/workflows/ci.yml` (her push/PR).

@@ -144,11 +144,15 @@ async function main(): Promise<void> {
     // Ayın ilk gecesi yerel 00:30 → UTC'de bir önceki ayın son günü 21:30.
     // Fabrika ayı AĞUSTOS olmalı; çıplak (UTC) kesme TEMMUZ derdi.
     const probe = new Date("2026-07-31T21:30:00.000Z");
+    // Yasağın KONUSU: çıplak kesme fabrika ifadesiyle YAN YANA koşuyor ki bekçi
+    // aradaki farkı (2026-08 ↔ 2026-07) ÖLÇEREK kanıtlasın.
+    /* eslint-disable no-restricted-syntax */
     const rows = await prisma.$queryRaw<Array<{ fabrika: Date; utc: Date }>>(Prisma.sql`
       SELECT ${factoryMonthSql("t.ts")} AS fabrika,
              DATE_TRUNC('month', t.ts)::date AS utc
       FROM (SELECT ${probe}::timestamptz AS ts) t
     `);
+    /* eslint-enable no-restricted-syntax */
     const fabrika = rows[0]?.fabrika.toISOString().slice(0, 7);
     const utc = rows[0]?.utc.toISOString().slice(0, 7);
     check("fabrika ayı = 2026-08", fabrika === "2026-08", `${fabrika}`);

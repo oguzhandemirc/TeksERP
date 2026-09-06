@@ -66,6 +66,8 @@ const ok = (c: boolean, m: string) => { console.log(`${c ? "  ✓" : "  ✗ FAIL
     await p.$disconnect();
   }
 
-  console.log(`\n== ${pass} passed, ${fail} failed ==`);
+  // Koşucunun tanıdığı özet formatı (run-all-tests.ts) — İngilizce biçim hiçbir
+  // regex'e uymaz ve kontrol sayısını gizler.
+  console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   process.exit(fail > 0 ? 1 : 0);
 })();

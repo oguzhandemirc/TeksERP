@@ -44,10 +44,16 @@ import {
  * GLOBAL advisory kilit. Kaynak/survivor id'lerine göre değil TEK anahtarla
  * alınır: birleştirme ayda bir yapılan bir işlemdir, iki eşzamanlı merge'in
  * kilitlenme muhakemesini (A→B ile B→C aynı anda) tamamen ortadan kaldırmak,
- * kaybedilen paralelliğe fazlasıyla değer. Namespace'ler dolu: 8021 KK1 ·
- * 8022 parti · 8023 sevkiyat · 8024 oturum · 8025 izin · 8026 kod-tekilliği.
+ * kaybedilen paralelliğe fazlasıyla değer.
+ *
+ * Uzay envanteri TEK KAYNAK: `helpers/period-guard.helper.ts` başlığı — kopya
+ * liste tutulmaz. Bu uzay **8030 master-data birleştirme**dir.
+ * ⚠️ 8027'DEN TAŞINDI: birleştirme ile ALIŞ SİPARİŞİ senkronu aynı numarayı
+ * paylaşıyordu; ikisi birbirini sessizce serileştiriyordu.
+ * `: number` BİLEREK — literal tipe daralırsa bekçideki "uzaylar farklı"
+ * karşılaştırması TS2367 ile derlenmez (SHIPMENT_LOCK_NS emsali).
  */
-const MERGE_LOCK_NS = 8027;
+const MERGE_LOCK_NS: number = 8030;
 const MERGE_LOCK_KEY = 1;
 
 /** Tek çağrıda birleştirilebilecek kaynak sayısı. */
@@ -808,13 +814,16 @@ async function describeConflictTx(
   sourceIds: string[],
 ): Promise<number> {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  if (other.length === 0) return 0;
+  // Kısıt KOLONUN KENDİSİNDE ise (`CariAccount.customerId @unique`) "diğer
+  // anahtar kolonu" yoktur: çakışma, İKİ tarafın da satırı olduğunda doğar.
+  // Bu dalın önizleme ikizi (`describeConflict`) ile AYNI yüklemi kurması
+  // load-bearing — ayrışırsa önizleme bloklar, işlem sessizce geçerdi.
+  const matchOther = other.length > 0 ? ` AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")})` : "";
   const rows = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
     `SELECT count(*)::bigint AS n FROM "${rule.table}" s
       WHERE s."${rule.column}" = ANY($1::uuid[])
         AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                     WHERE t."${rule.column}" = $2::uuid
-                       AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")}))`,
+                     WHERE t."${rule.column}" = $2::uuid${matchOther})`,
     sourceIds,
     survivorId,
   );
@@ -832,12 +841,12 @@ async function resolveConflictTx(
   sourceIds: string[],
 ): Promise<number> {
   const other = rule.uniqueOn.filter((c) => c !== rule.column);
-  if (other.length === 0) return 0;
   const matchOther = other.map((c) => `t."${c}" = s."${c}"`).join(" AND ");
+  // Sayım ikiziyle aynı yüklem — tek kolonlu kısıtta "diğer kolon" yoktur.
   const conflictWhere =
     `s."${rule.column}" = ANY($1::uuid[])
        AND EXISTS (SELECT 1 FROM "${rule.table}" t
-                    WHERE t."${rule.column}" = $2::uuid AND (${matchOther}))`;
+                    WHERE t."${rule.column}" = $2::uuid${other.length > 0 ? ` AND (${matchOther})` : ""})`;
 
   switch (rule.policy) {
     case "BLOCK":
@@ -1057,6 +1066,9 @@ async function describeConflict(
   let rows: Array<Record<string, unknown>> = [];
   try {
     // Çakışma = kaynak satırın (diğer anahtar kolonları) survivor'da ZATEN var.
+    // ⚠️ Tek kolonlu kısıt (`CariAccount.customerId @unique`) da survivor'da
+    // satır ARAR — koşulsuz "kaynağın her satırı çakışma" saymak, hedefin hiç
+    // cari hesabı yokken bile birleştirmeyi bloklardı (işlem ikiziyle ayrışma).
     const sql =
       other.length > 0
         ? `SELECT s.* FROM "${rule.table}" s
@@ -1065,7 +1077,9 @@ async function describeConflict(
                           WHERE t."${rule.column}" = $2::uuid
                             AND (${other.map((c) => `t."${c}" = s."${c}"`).join(" AND ")}))
            ORDER BY ${otherCols}`
-        : `SELECT s.* FROM "${rule.table}" s WHERE s."${rule.column}" = ANY($1::uuid[])`;
+        : `SELECT s.* FROM "${rule.table}" s
+           WHERE s."${rule.column}" = ANY($1::uuid[])
+             AND EXISTS (SELECT 1 FROM "${rule.table}" t WHERE t."${rule.column}" = $2::uuid)`;
     const all = await prisma.$queryRawUnsafe<Array<Record<string, unknown>>>(sql, sourceIds, survivorId);
     count = all.length;
     rows = all.slice(0, sample);

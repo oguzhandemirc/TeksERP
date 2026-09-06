@@ -1,5 +1,6 @@
 import { type LucideIcon } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageShell, PageBody } from "@/components/layout/PageShell";
 import { HubCard, HubGrid } from "@/components/hub/HubCard";
 
 export interface HubTile {
@@ -19,9 +20,12 @@ interface Props {
 /** Domain alt-rapor hub'ı — tile grid layout, izin filtresi parent'ta yapılır. */
 export function ReportHubGrid({ title, description, tiles }: Props) {
   return (
-    <div className="flex h-full flex-col">
+    // TabHost sayfayı `absolute inset-0` sarar: `min-h-0` olmadan kap içeriğe
+    // göre büyür ve BAŞLIK dahil tüm panel kayar. PageShell/PageBody bunu
+    // kapatır — tek kaydırıcı gövdedir, başlık sabit kalır.
+    <PageShell>
       <PageHeader title={title} description={description} />
-      <div className="p-6">
+      <PageBody className="p-6">
         <HubGrid>
           {tiles.map((tile, i) => (
             <HubCard
@@ -34,7 +38,7 @@ export function ReportHubGrid({ title, description, tiles }: Props) {
             />
           ))}
         </HubGrid>
-      </div>
-    </div>
+      </PageBody>
+    </PageShell>
   );
 }

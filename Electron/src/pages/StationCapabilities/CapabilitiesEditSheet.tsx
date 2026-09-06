@@ -10,6 +10,7 @@ import { MultiSelectCheckboxList, type MultiSelectItem } from "@/components/form
 import { fabricPropertyService } from "@/pages/FabricProperties/service";
 import { stationCapabilityService } from "./service";
 import { loadAllForPicker } from "@/lib/picker-loader";
+import { useRoleAccess } from "@/hooks/useRoleAccess";
 import {
   STATION_PROPERTY_MODE_HINTS,
   STATION_PROPERTY_MODE_LABELS,
@@ -33,7 +34,12 @@ interface Props {
  */
 export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
   const qc = useQueryClient();
-  const editable = !!station?.canApplyProperty;
+  // İKİNCİ KAPI: bu sheet iki sayfadan açılıyor (İstasyon Yetenekleri ·
+  // Üretim İstasyonları). Yazma yüzeyinin kapısı çağıranın insafına
+  // bırakılmaz — backend de PUT'ta `station:write` ister.
+  const { hasPermission } = useRoleAccess();
+  const canWrite = hasPermission("station:write");
+  const editable = canWrite && !!station?.canApplyProperty;
 
   const detail = useQuery({
     queryKey: [QUERY_KEY, station?.stationId],
@@ -147,7 +153,16 @@ export function CapabilitiesEditSheet({ station, open, onOpenChange }: Props) {
           </SheetDescription>
         </SheetHeader>
 
-        {!editable ? (
+        {!canWrite ? (
+          <div className="mt-8 flex flex-col items-center justify-center gap-3 rounded-md border border-dashed p-8 text-center">
+            <Lock className="h-8 w-8 text-muted-foreground" />
+            <div className="text-sm font-medium">Değişiklik yetkiniz yok</div>
+            <div className="max-w-sm text-xs text-muted-foreground">
+              Yetenekleri düzenlemek için "İstasyon tanımlama/düzenleme"
+              (station:write) yetkisi gerekir. Yetkilendirme ekranından isteyin.
+            </div>
+          </div>
+        ) : !editable ? (
           <div className="mt-8 flex flex-col items-center justify-center gap-3 rounded-md border border-dashed p-8 text-center">
             <Lock className="h-8 w-8 text-muted-foreground" />
             <div className="text-sm font-medium">Bu istasyon özellik kazandırmaz</div>

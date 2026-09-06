@@ -45,7 +45,7 @@ Tablet kendi cihazlarını **atandığı makineden** çözer: `GET /api/peripher
 
 ## Tablet kimliği: allowlist + atama (eşleştirme kodu YOK)
 
-1. Tablet ilk açılışta kendini bildirir (`POST /api/devices/announce`) → **PENDING**.
+1. Tablet ilk açılışta kendini bildirir (`POST /api/devices/announce`). Doğuş durumu `device.pairingRequired` bayrağından TÜRER: bayrak **açıksa** `PENDING` (yönetici onayı bekler), **kapalıysa** doğrudan `APPROVED` (iz: audit `DEVICE_AUTO_APPROVED`).
 2. Admin **Cihazlar** ekranında onaylar + bir makineye atar → **APPROVED**.
 3. Tablet otomatik devam eder; `req.device.machineId` üretim atfı + cihaz çözümü sağlar.
 
@@ -59,7 +59,7 @@ Yeni bir fabrikada `npm run seed` ile gelen güvenli defaultlar — gerçek I/O 
 | Ayar | Default | Anlamı |
 |---|---|---|
 | `label.nativeSendEnabled` | `false` | Yazıcıya gerçek TCP gönderim KAPALI (HTML+OS fallback) |
-| `device.pairingRequired` | `false` | Onaysız tablet de çalışır |
+| `device.pairingRequired` | `false` | Cihaz APPROVED doğar; makine atfı ve cihaza bağlı yazıcı çözümü ÇALIŞIR (2026-09-04 düzeltmesi — eskiden koşulsuz PENDING doğuyor ve atıf sessizce boşa düşüyordu). Bayrak sonradan açılırsa otomatik onaylananlar APPROVED KALIR. |
 | `PeripheralDevice.simulate` | seed'de METER/SCALE için `true` | Metre/kantar SAHTE okur (donanımsız test) |
 
 Gerçek donanıma geçiş: ilgili `PeripheralDevice.simulate`'i kapat + `address`/protokolü gir

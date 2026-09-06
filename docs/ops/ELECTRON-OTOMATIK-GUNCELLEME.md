@@ -5,7 +5,7 @@ bir kez yayınlanır, kurulu paneller kendiliğinden indirir ve **zorunlu olarak
 kurar.
 
 **Durum (2026-08-27):** kod tarafı **uygulandı**, yayın sunucusu **kuruldu ve
-doğrulandı** (§1). Kalan tek iş **§2 — bir kerelik son elle tur**.
+doğrulandı** (§1). §2'deki bir kerelik son elle tur **2026-09-04'te yapıldı** (`docs/ops/FABRIKA-ISTEMCI-KURULUM-2026-09-04.md`); panel bugün kendi kendini günceller.
 
 ---
 
@@ -14,8 +14,8 @@ doğrulandı** (§1). Kalan tek iş **§2 — bir kerelik son elle tur**.
 ```
 Sen (geliştirme)                 VPS (yayın)                Fabrika (N bilgisayar)
 ─────────────────                ───────────                ──────────────────────
-sürüm no'yu artır
-npm run build:win     ──►  3 dosya yüklenir   ──►  panel açılışta + 15 dk'da bir
+sürüm notunu yaz (kapı)
+./deploy/electron-paketle.sh <müşteri>  ──►  3 dosya yüklenir  ──►  panel açılışta + 15 dk'da bir
 release/<sürüm>/           latest.yml              latest.yml'e bakar
   TeksERP-x.y.z-Setup.exe  TeksERP-…-Setup.exe     yeni sürüm varsa arka planda
   TeksERP-…-Setup.exe.blockmap  …blockmap          indirir → ZORUNLU kapı

@@ -1,0 +1,224 @@
+{
+  "tur": "yalan-zorlama-etiketi + yanlış-kanıt kapatma",
+  "tarih": "2026-09-05",
+  "alan": "docs/standart/*.md (+ Teks-Erp/eslint.config.mjs §5)",
+  "kapiCikislari": {
+    "node scripts/check-docs.mjs": 0,
+    "node scripts/check-lint-baseline.mjs": 0,
+    "cd Teks-Erp && npx eslint scripts prisma": 0,
+    "cd Teks-Erp && npm run typecheck": 0,
+    "run-all-tests test_advisory_lock_namespaces": "14/14 geçti",
+    "run-all-tests test_manual_props_claim_pin": "7/7 geçti",
+    "run-all-tests test_settings_password": "134/134 geçti (13 atlandı — HTTP portu yok)"
+  },
+  "kapatilanlar": [
+    {
+      "id": "Y-1",
+      "kural": "ELECTRON.md [EL-37]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "Electron/eslint.config.mjs:228 → max-params: [\"warn\", 4]; Electron/lint-baseline.json → max-params: 10",
+      "yapilan": "zorlama 'eslint:max-params (error, 0 ihlal)' → 'eslint:max-params ([\"warn\", 4]) + check-lint-baseline.mjs'; devralınan yok → 10 (tavan)"
+    },
+    {
+      "id": "Y-2",
+      "kural": "MOBIL.md [MO-25]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "mobil/eslint.config.js:231 no-restricted-syntax = ['warn', HAM_HEX_RENK]; Türkçe yasağı ASCII_TANIMLAYICI custom regex, naming-convention (error) altında",
+      "yapilan": "etiket '@typescript-eslint/naming-convention (error) — custom regex' olarak düzeltildi, config satırları (105-112, 190-202) eklendi"
+    },
+    {
+      "id": "Y-3",
+      "kural": "MOBIL.md [MO-02] · [MO-30]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "karar": "CONFIG DOĞRU, BELGE YANLIŞ — belge 300'e çekildi",
+      "gerekce": "max-lines tek sayıdır; MOBIL §12'deki 250/500/400/200/400 birim-başına İNSAN hedefidir. Kapıyı 400'e çıkarmak devralınan 44 dosyalık tavanı gevşetir ve üç projedeki tek ortak sayıyı (300) bozardı.",
+      "yapilan": "MO-02 ve MO-30 'warn 400' → 'warn 300' (mobil/eslint.config.js:237); §12 tablosunun altına hedef↔kapı ayrımı notu; MO-30 devralınan 46 → 44 (lint-baseline.json tavanı)"
+    },
+    {
+      "id": "Y-4",
+      "kural": "ILKELER.md §6 boyut tablosu",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "npx eslint --print-config: backend src 300 · Electron src 300 (Page/FormDialog bloğu 200) · mobil 300 — üçünde de warn",
+      "yapilan": "backend ve mobil satırlarının 'Uyarı' sütunu 400 → 300; max-params satırı severity farkıyla yazıldı (mobil error, backend/Electron warn+tavan); tablonun altına --print-config çapası eklendi",
+      "yanEtki": "BACKEND.md §11 aynı sapmayı 'Hedef' sütununda taşıyordu — mekanik kapının 300/80 olduğu ve tavanların lint-baseline.json'da durduğu tablonun üstüne yazıldı. RECETELER.md:58 aynı sapmayı taşıyor (bkz. yeniBulgu)."
+    },
+    {
+      "id": "Y-5",
+      "kural": "Teks-Erp/eslint.config.mjs §5 başlığı",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "--print-config scripts/test_helpers.ts → naming-convention undefined; probe config ile scripts/+prisma/ üzerinde ölçüm: 6 ihlal / 3 dosya",
+      "karar": "SEÇENEK (a) — 6 ≤ 15 olduğu için ihlaller düzeltildi ve kural gerçekten eklendi (error)",
+      "duzeltilenIhlaller": [
+        "scripts/test_advisory_lock_namespaces.ts: kodda_yok → koddaYok, envanterde_yok → envanterdeYok",
+        "scripts/test_manual_props_claim_pin.ts: araya_girildi → arayaGirildi",
+        "scripts/test_settings_password.ts: __bitti → onBitti (type method), HTTP_KONTROL → httpKontrol (parametre)"
+      ],
+      "yapilan": "§5 bloğuna '@typescript-eslint/naming-convention': NAMING_CONVENTION eklendi; başlığa ölçüm + gerekçe yazıldı. Doğrulama: --print-config artık [2, ...] veriyor, eslint scripts prisma rc=0, üç bekçi de yeşil."
+    },
+    {
+      "id": "Y-6",
+      "kural": "BACKEND.md [BE-25]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "tsc Promise<ApiResponse<unknown>> yazımını engellemez (derlenir); böyle bir bekçi de yok",
+      "yapilan": "zorlama 'tsc' → 'insan:<neden>' (unknown jeneriği derlenir; adlandırılmış DTO mu tembellik mi ancak dönen nesne okunarak bilinir)"
+    },
+    {
+      "id": "Y-7a",
+      "kural": "KUTUPHANELER.md [KU-20]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "test_dependency_contract.ts yalnız bolumA (pin) / bolumB (CommonJS require) / bolumC (§2 tablo farkı) taşır; ölü-paket bölümü YOK",
+      "yapilan": "zorlama 'bekçi:…ölü-paket bölümü' → 'insan:üç kanal taraması mekanik değil'; bekçinin gerçek üç bölümü adıyla yazıldı"
+    },
+    {
+      "id": "Y-7b",
+      "kural": "KUTUPHANELER.md [KU-19]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "engines.node hiçbir kapıda okunmuyor — test_dependency_contract.ts:95 yalnız YORUMDA anıyor; bolumB require() + ESM_ONLY_BEYAN kümesini ölçer",
+      "yapilan": "zorlama 'bekçi:… (engines tabanı + gerçek require)' → 'bekçi:§(b) yalnız require + ESM beyanı' + 'insan:engines tabanı okunmuyor'; açık iş olarak kaydedildi"
+    },
+    {
+      "id": "Y-7c",
+      "kural": "KUTUPHANELER.md [KU-06]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "'bekçi:ELECTRON.md § apiClient bekçisi' bir BELGE BÖLÜMÜ; ham fetch yasağının kapısı yok (api-path-prefix.test.ts yol önekini ölçer)",
+      "yapilan": "zorlama 'insan:kapı yok; kimliksiz sunucu yoklaması meşru istisna ([EL-10])' oldu; kanıt 'fetch( 0' ölçümü korundu"
+    },
+    {
+      "id": "Y-7d",
+      "kural": "ELECTRON.md [EL-20]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "tile-route-permission.test.ts 72 satır ve yalnız systemTiles karo↔route izin eşleşmesini ölçer; 106 route bloğunu gezmez",
+      "yapilan": "zorlama 'bekçi:…' → 'insan:route ağacının tamamını gezen kapı YOK' (bekçinin gerçek kapsamı cümle içinde yazılı)"
+    },
+    {
+      "id": "Y-7e",
+      "kural": "BACKEND.md [BE-33]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "middlewares/finance.middleware.ts:34 bugün { code: 'MODULE_DISABLED', modul: 'finance' } TAŞIYOR — kanıt kendi turunda bayatlamış; test_module_flag_off.ts hâlâ finans kapısını kapsamıyor (30 mount)",
+      "yapilan": "kanıt 'kod YOK' → 'ikisi de kodu taşır'; devralınan '1 kapı / 30 mount' → 'yok'; açık iş yalnız BEKÇİ KAPSAMI olarak yeniden yazıldı"
+    },
+    {
+      "id": "Y-7f",
+      "kural": "VERITABANI.md [DB-30]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "dokuz listenin sekizi BEŞER satır kaymıştı (PARTIAL_INDEXES:100 doğru; CHECK_CONSTRAINTS 317→322 · DEFERRABLE_FKS 444→449 · EXT_STATS 457→462 · EXPRESSION_UNIQUES 469→474 · TRIGGERS 501→506 · REQUIRED_EXTENSIONS 544→549 · EXPECTED_FUNCTIONS 554→559 · EXPECTED_COLLATIONS 576→581)",
+      "yapilan": "dokuz satır numarası güncellendi; küme boyları belgeden çıkarılıp bekçinin kendi özet satırına (test_db_invariants.ts:594) bağlandı — sayı bayatlamasın"
+    },
+    {
+      "id": "Y-7g",
+      "kural": "TEST-VE-DERLEME.md [TD-16]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "test_master_data_name_dup'ta §9 YOK (§10, §10a-d var) ve o bölüm DB seddini ölçer, bekçilerin fixture adlandırmasını değil",
+      "yapilan": "zorlama 'bekçi:§9' → 'insan:fixture adının damgalı olduğunu ölçen kapı yok'; kanıt §10 sed envanteri (:418-499) ve ısırma ispatı (:499-568) olarak yazıldı"
+    },
+    {
+      "id": "Y-7h",
+      "kural": "MOBIL.md [MO-12]",
+      "hukum": "kapatildi",
+      "iddiaDogru": "kısmen",
+      "olcum": "EntryConflictModal.test.tsx modalın DÖRT DURUMDA ÇİZİLDİĞİNİ ölçer ('tek yüzey / toast basmaz' iddiasını değil); asıl 'toast basmaz' kontrolü mobil/src/offline/mutations.test.ts:359'da",
+      "yapilan": "zorlama iki bekçiye bölündü ve her birinin NE ölçtüğü yazıldı"
+    },
+    {
+      "id": "Y-7i",
+      "kural": "ESZAMANLILIK.md [ES-24]",
+      "hukum": "iddia-curudu",
+      "iddiaDogru": false,
+      "olcum": "mutations.test.ts:220 'TAMBUR_FINALIZE_OPEN_FABRIC kuyruk gövdesi vars'ın HER alanını taşır' — elle kurulan gövdeyi GERÇEKTEN ölçüyor; bekçi bağı yalan değil, DAR",
+      "yapilan": "kural silinmedi; etiket 'tek emsal ölçülüyor' diye daraltıldı + Zod↔gövde eşlemesi için insan: gerekçesi eklendi, kanıta satır numarası yazıldı"
+    },
+    {
+      "id": "Y-7j",
+      "kural": "ESZAMANLILIK.md [ES-10]",
+      "hukum": "kapatildi",
+      "iddiaDogru": "kısmen",
+      "olcum": "test_cash_period_close.ts §10 kilit SIRASINI (AST) ve §8a uzay ayrıklığını GERÇEKTEN ölçüyor; ama etiketteki 'middlewares/error.middleware.ts dalları' ÜRÜN KODU, bekçi değil. 40P01/40001 → 409 çevrimini ölçen bekçi test_payment_allocation.ts §15a",
+      "yapilan": "ürün kodu etiketten çıkarıldı, yerine gerçek bekçiler (test_cash_period_close §10/§8a + test_payment_allocation §15a) yazıldı; kanıt satırı :46-52 → :56-61"
+    },
+    {
+      "id": "Y-7k",
+      "kural": "ILKELER.md [IL-29]",
+      "hukum": "kapatildi",
+      "iddiaDogru": "kısmen",
+      "olcum": "test_superadmin_provision §8 VAR ama yalnız kuralın ikinci yarısını (.env uyarısı anahtar adı) ölçer; sır sızıntısını ölçen bölüm §5 (audit · DB · dosya sistemi, körlük zeminiyle :457)",
+      "yapilan": "etiket §5 + §8 olarak ikiye ayrıldı, her birinin ne ölçtüğü ve satır numaraları yazıldı"
+    },
+    {
+      "id": "Y-7l",
+      "kural": "ILKELER.md [IL-04]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "test_permission_catalog.ts içinde 'module-flags' ve 'document-design' HİÇ geçmiyor; kanıttaki iki sabit dosyasını ölçen bekçiler test_module_flags.ts (:54,139,143) ve test_document_template_permission.ts (:38-41,313)",
+      "yapilan": "etiket üç gerçek bekçiye çevrildi (module_flags §1a · document_template_permission · advisory_lock_namespaces); repoda karşılığı olmayan 'AST tripwire' terimi 'körlük zeminli bekçi' ile değiştirildi"
+    },
+    {
+      "id": "Y-7m",
+      "kural": "TEST-VE-DERLEME.md:63/64 (TD-23 · TD-24)",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "check-lint-baseline.mjs depo KÖKÜNDE (scripts/check-lint-baseline.mjs); Teks-Erp/scripts/ altında YOK",
+      "yapilan": "iki etikete '(depo KÖKÜ — Teks-Erp/scripts/ altında DEĞİL)' çapası eklendi; TD-23'teki belirsiz 'src + scripts + prisma' → 'Teks-Erp/src + Teks-Erp/scripts + Teks-Erp/prisma'"
+    },
+    {
+      "id": "Y-8",
+      "kural": "bayat dosya:satır atıfları",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "yapilan": "BE-01 eslint.config.mjs:107-121 → :306-327 (no-restricted-imports :313) · EL-27 :33-45 → :267-278 · EL-33 :31 → :264 (+:304) · EL-03 crudService.ts:24-44 → :24-41 (dosya 42 satır) · DB-21 bash-guard.mjs:29 → depo kökü :36 · ESZAMANLILIK kilit envanteri: 8021 :28→:33, 8023 :28→:27, 8024 :32→:31 ve satırsız beş uzaya (8026:81 · 8027:109 · 8028:53 · 8029:55 · 8030:56) satır yazıldı · ES-06 :79-88 → :94"
+    },
+    {
+      "id": "K-4",
+      "kural": "ELECTRON.md [EL-31]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "grep -rnE \"export (const|function|async function) use[A-Z]\" Electron/src/pages --include='service.ts' → 0 satır; belgedeki üç dosyanın hiçbirinde eşleşme yok",
+      "yapilan": "kanıt '3 ihlal + üç dosya' → '0 ihlal (ölçüm komutuyla birlikte)'; devralınan 3 → yok; §12 borç listesinden EL-31 çıkarıldı"
+    },
+    {
+      "id": "K-5",
+      "kural": "BACKEND.md [BE-25]",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "Teks-Erp/lint-baseline.json yalnız üç kural taşıyor (max-lines 90 · max-lines-per-function 305 · max-params 47) — ApiResponse için tavan YOK. Bugünkü ölçüm: ApiResponse<unknown> 199 (192'si Promise<…>), Record<string,unknown> 13, ApiResponse<any> 0",
+      "yapilan": "'devralınan: 211 imza (baseline)' → 'devralınan: 199 imza (ÖLÇÜM; baseline bu kural için tavan TAŞIMAZ)'; hangi üç kuralın tavanı olduğu açıkça yazıldı"
+    },
+    {
+      "id": "K-3",
+      "kural": "52 kuralda devralınan: alanı yok",
+      "hukum": "kapatildi",
+      "iddiaDogru": true,
+      "olcum": "267 kuralın 52'si alanı taşımıyor: ILKELER.md 28/31 · TEST-VE-DERLEME.md 24/24",
+      "karar": "SEÇENEK B — README şablonunda alan OPSİYONEL ilan edildi",
+      "gerekce": "ILKELER ve TEST-VE-DERLEME bir dosya kümesini değil bir DAVRANIŞI tarif eder; oraya 52 kez 'devralınan: yok' yazmak ÖLÇÜLMEMİŞ bir sıfırı ölçülmüş gibi gösterirdi. README artık üç durumu ayırıyor: N (ölçülmüş ihlal/tavan) · yok (ölçüldü, sıfır) · alan yok (sayılacak yüzey yok).",
+      "yapilan": "README.md § Kural biçimi şablonu köşeli parantezle opsiyonel yazıldı + üç durumun anlamı ve bugünkü dağılım (267/215/52) eklendi"
+    },
+    {
+      "id": "EK-1",
+      "kural": "ELECTRON.md [EL-17] · [EL-18]",
+      "hukum": "kapatildi",
+      "iddiaDogru": "eleştirmen listelemedi — süpürmede bulundu",
+      "olcum": "kural `no-restricted-syntax` DEĞİL, YEREL plugin kuralı `yerel/mutation-onerror-toast` (warn); config gerekçesi :57-62 'aynı kural adı altında iki severity olamaz'. Tavan lint-baseline.json'da 22, belge 26 diyordu",
+      "yapilan": "iki kuralın etiketi gerçek kural adına çevrildi, config satırları (132-147, 284) eklendi, devralınan 26 → 22 (tavan); §12 borç satırı da düzeltildi"
+    }
+  ],
+  "yeniBulgu": [
+    "docs/standart/BACKEND.md'de [BE-41] İKİ KEZ tanımlı: :128 (swagger, bu turda paralel bir ajan tarafından eklendi) ve :146 (boyut tavanları, mevcut). check-docs.mjs mükerrer kural kimliğini ÖLÇMÜYOR (rc 0 verdi). Yazma yarışı riski nedeniyle DOKUNULMADI — numaralandırma o bloğun sahibine ait.",
+    "check-docs.mjs mükerrer [XX-NN] kural kimliği için kapı taşımıyor; iki satırlık bir kontrol bu sınıfı kapatır (README § Kural biçimi zaten tek-kimlik varsayıyor).",
+    "docs/RECETELER.md:58 aynı 300/400 sapmasını taşıyor: 'servis/route/controller dosyası ≤ 400 … Kapı eslint max-lines' — hedefi kapının değeri gibi okutuyor; gerçek warn 300. Dosya benim alanımda olmadığı için dokunulmadı.",
+    "Teks-Erp/scripts/test_module_flag_off.ts dört modül kapısını gezer ama requireFinanceEnabled'ın 30 mount'unu kapsamıyor (BE-33 açık işi; kod hizalandı, bekçi kapsamı hâlâ dar).",
+    "KU-19'un asıl borcu belgede değil kodda: Teks-Erp/package.json engines.node '>=22' iken uuid@13 gerçek taban ≥22.12 — hiçbir kapı bunu okumuyor, Node 22.0–22.11'de üretim sessizce kırılır."
+  ]
+}

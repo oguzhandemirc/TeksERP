@@ -1,0 +1,123 @@
+{
+  "alan": "INDEX ENVANTERI",
+  "tarih": "2026-09-05",
+  "db": "tekserp_demo @ localhost:55433 (PostgreSQL 16, docker tekserp-local-db)",
+  "olcum_penceresi": {
+    "stats_reset": null,
+    "not": "pg_stat_database.stats_reset NULL = sayaclar HIC sifirlanmamis. postmaster 2026-09-02 14:02 UTC'de basladi, xact_commit=1.215.346. Ancak bu trafik BEKCI (test) trafigidir: rolls'ta 146.948 insert / 146.207 delete varken canli satir 832. idx_scan sayaclari SAHA kullanimini DEGIL kod yolu kapsamini olcer.",
+    "toplam_index": 663,
+    "idx_scan_sifir": 154,
+    "db_boyutu": "80 MB"
+  },
+  "ozet": "Bugun yanan bir sey yok; en pahali olculen sorgu 10,4 ms. Iki gercek olcek riski var: (1) rolls'ta HOT-update orani %0,8 - indexli `updatedAt` yuzunden her guncelleme 28 index'in hepsine yeni girdi yaziyor; (2) Envanter 'Depo' ve 'Uretimde' sekmelerinin siralamasini karsilayan HICBIR index yok, ikisi de Seq Scan + top-N sort. `idx_scan=0` listesinin buyuk cogunlugu OLU DEGIL: 11 trigram index'in hepsi canli arama yolunda (EXPLAIN ile dogrulandi, planci sadece 138-146 satirlik tabloda seq scan'i seciyor). Gercekten fazla olan 10 index var ve hepsi non-partial UNIQUE tarafindan tam kapsaniyor ([DB-12]/[DB-15] ihlali). Yan bulgu: VERITABANI.md §12'deki '5 index'siz domain FK' listesi BAYAT - besi de artik mevcut.",
+  "bulgular": [
+    {
+      "baslik": "rolls: HOT-update orani %0,8 - her status degisimi 28 index'in HEPSINE yaziyor",
+      "nerede": "prisma/schema.prisma:1508 (model Roll, 28 index) + @@index([status, updatedAt])",
+      "bugun": "n_tup_upd=54.625, n_tup_hot_upd=450 (%0,8). Yani 54.175 guncelleme non-HOT: her biri yeni heap tuple + 28 index girdisi = ~1,52M index yazimi. Karsilastirma ayni pencerede: work_orders %81,6 HOT (11 index, updatedAt indexsiz), sacks %73,9, order_lines %98,7. Ayni tuzak: work_order_steps %0,7 (exitedAt/startedAt indexli), roll_movements %0,0 (@@index([exitedAt]) her cikista degisiyor).",
+      "olcekte": "Oran yapisaldir, olcekle DEGISMEZ: Prisma @updatedAt her guncellemede kolonu degistirir, kolon rolls_status_updatedAt_idx'te oldugu icin HOT hicbir zaman mumkun degil. 10x/100x veride her index 10x/100x buyur -> ayni non-HOT guncelleme daha derin agacta daha cok sayfa bolunmesi ve daha cok WAL uretir. Saha olcegi (kod yorumlarinda gecen 30k-300k top) x gunde binlerce statu degisimi = index bakimi yazma maliyetinin ana kalemi.",
+      "oneri": "Index SAYISINI dusur (her dusen index non-HOT guncelleme basina bir yazim eksiltir, ~%3,6). rolls_status_updatedAt_idx KALMALI (Envanter sekmelerinin siralamasi, sema:1512'de gerekcesi ve olcumu yazili). Once en dusuk kullanimlilari sorgula: rolls_status_currentQty_idx (5 scan) ve rolls_status_itemId_colorId_width_idx (249 scan / 215 satir okundu). Ikisi de canli kod yolu tasiyor -> KALDIRMA, ama 29'uncu index'i eklemeden once bu olcum tekrar cekilsin. Ayrica rolls icin fillfactor dusurmek non-HOT'u cozmez (HOT zaten imkansiz) - o yola girme.",
+      "oncelik": "orta",
+      "bedel": "Index dusurmek = kod riski sifir, ama once o index'in tek kullanicisini ispatlamak gerek. Yeni index eklemek = her yeni index tum rolls guncellemelerine ek yazim.",
+      "kanit": "SELECT relname,n_tup_upd,n_tup_hot_upd FROM pg_stat_user_tables -> rolls | 54625 | 450 (%0,8); pg_index count(indrelid='rolls')=28"
+    },
+    {
+      "baslik": "Envanter 'Depo' (FINISHED_STOCK) ve 'Uretimde' (PRODUCTION_ACTIVE) sekmeleri: sirali index yolu YOK - Seq Scan + top-N sort",
+      "nerede": "src/services/inventory.service.ts:1503 (rollScope FINISHED_STOCK) ve :1503-1520 (PRODUCTION_ACTIVE); siralama Electron/src/pages/Operations/Rolls/service.ts:352 -> updatedAt desc",
+      "bugun": "FINISHED_STOCK: Seq Scan on rolls, 832 satirin 739'u filtreyle atiliyor, 134 buffer, 0,127 ms. PRODUCTION_ACTIVE: Seq Scan, 559 satir atiliyor, 134 buffer + top-N heapsort, 0,240 ms. Kontrol: ayni tablodaki tek-statu sekmesi (status='STOCK') mevcut rolls_status_updatedAt_idx ile karsilanabiliyor - yani sorun sekmeye ozgu.",
+      "olcekte": "Olculdu: rolls 1319 bayt/satir, 832 satir = 134 sayfa. 10x (8.320 top) -> ~1.340 sayfa = 11 MB tam tarama; 100x (83.200 top) -> ~13.400 sayfa = 110 MB; kod yorumlarindaki saha olcegi 300k top -> ~48.000 sayfa = ~395 MB, HER sayfa yuklemesinde ve HER filtre degisiminde. Mevcut index'lerin hicbiri bu sekli karsilamiyor: (a) FINISHED_STOCK'ta `status IN ('WAREHOUSE','A1_STOCK')` - PG16'da ScalarArrayOp btree taramasi ORDER BY updatedAt icin SIRALI sayilmaz (enable_seqscan=off ile teshis edildi: index seciliyor ama yine Bitmap + Sort); (b) PRODUCTION_ACTIVE'de `status NOT IN (7 deger)` negasyondur, hicbir btree kullanamaz - ayni kumeyi IN olarak yazmak da fayda etmedi (ikinci EXPLAIN, plan aynen Bitmap+Sort).",
+      "oneri": "Iki PARTIAL index, [DB-14] deseniyle (semada duz @@index, migration'da predicate): (1) rolls (\"updatedAt\" DESC) WHERE status IN ('WAREHOUSE','A1_STOCK'); (2) rolls (\"updatedAt\" DESC) WHERE \"currentStepId\" IS NOT NULL AND status NOT IN (WAREHOUSE,A1_STOCK,SCRAP,CANCELLED,TAMBUR_CONSUMED,SUBCONTRACTOR_CONSUMED,RETURNED_FROM_SUBCONTRACTOR). Ikisi de LIMIT 51'de duran sirali tarama verir; kalan filtreler (qualityGrade<>FIRE, colorId, itemId) recheck olarak kalir. Yazma bedeli partial oldugu icin dar: bugun satirlarin %11'i (1) ve %33'u (2). ONCE olc: EXPLAIN'i kurduktan SONRA tekrar cek - PG16'nin partial predicate ispatinin `status NOT IN` ile tuttugunu dogrulamadan migration commit etme. [DB-26] geregi CONCURRENTLY YASAK -> [DB-29] provasi + vardiya disi.",
+      "oncelik": "orta",
+      "bedel": "Iki yeni index = rolls'un 28'i 30 olur; BULGU 1'e gore her non-HOT guncellemeye 2 yazim daha ekler (partial oldugu icin yalnizca predicate'i tutan satirlarda). Migration tabloyu kilitler (CONCURRENTLY yasak). Kod riski sifir (sorgu degismiyor).",
+      "kanit": "EXPLAIN (ANALYZE,BUFFERS): 'Seq Scan on rolls ... Rows Removed by Filter: 739 ... Buffers: shared hit=134' (FINISHED_STOCK) ve 'Seq Scan on rolls ... Rows Removed by Filter: 559 ... top-N heapsort' (PRODUCTION_ACTIVE). enable_seqscan=off teshisi: her ikisinde de Bitmap Heap Scan + Sort - sirali index yolu YOK."
+    },
+    {
+      "baslik": "system_logs_category_createdAt_idx (3,6 MB): Activity Page yolunda HIC secilmiyor - DOMAIN satirlarin %97,5'i",
+      "nerede": "prisma/schema.prisma model SystemLog @@index([category, createdAt]); okuyan uc src/services/system-log.service.ts:136; panel Electron/src/pages/System/Activity/ActivityPage.tsx:51 (category:'DOMAIN' sabit)",
+      "bugun": "idx_scan=0, 3.686.400 bayt (3,6 MB) - dev'deki EN PAHALI olu-gorunumlu index ve tablosu en cok yazilan tablo (n_tup_ins=68.800). EXPLAIN kaniti: category='DOMAIN' sorgusu system_logs_createdAt_idx'i seciyor (Index Scan Backward + Filter), composite'i DEGIL. Sebep: DOMAIN 49.879/51.164 = %97,5, yani category kolonu bu deger icin hicbir seciciligi yok. Index YALNIZ tek-nadir-kategori sorgusunda seciliyor (category='AUTH' -> Index Cond ile composite secildi, 63 buffer). Sistem Kayitlari sayfasi varsayilanda category=AUTH,SYSTEM gonderiyor (SystemEventsPage.tsx:28) ve o sorgu da createdAt index'ini seciyor.",
+      "olcekte": "DOMAIN hakimiyeti yapisaldir (her CUD bir DOMAIN satiri yazar, AUTH/SYSTEM seyrek), yani 10x ve 100x'te oran degismez - index DOMAIN yolunda hicbir zaman secilmeyecek. 100x'te index ~360 MB olur ve her audit satirinda bakim gorur. Karsi taraf: audit 6 ayda arsivleniyor (AuditService), yani tablo sinirsiz buyumez - bu ustteki riski YUMUSATIR.",
+      "oneri": "Index'i PARTIAL yap: WHERE category IN ('AUTH','SYSTEM'). Aritmetik olculdu: index satir sayisi 49.879+1.285 -> 1.285 (%97,5 azalma, 3,6 MB -> ~112 kB) ve DOMAIN insert'leri partial predicate'i tutmadigi icin index bakimi SIFIR olur. Kaldirmak DEGIL daraltmak: tek-kategori sorgusunda index'in secildigi olculdu. ONCE dogrula: partial'i kurduktan sonra hem category='AUTH' hem category IN ('AUTH','SYSTEM') planlarini tekrar cek - PG'nin predicate ispatinin IN-listesi ile tuttugu dogrulanmadan kapatma. [DB-14] deseni: semada duz @@index kalir, predicate migration'da; [DB-30] geregi PARTIAL_INDEXES envanterine satir yazilir.",
+      "oncelik": "orta",
+      "bedel": "Bir migration (DROP + CREATE partial). [DB-26] CONCURRENTLY yasak -> 51k satirlik tabloda kisa kilit, canlida 6 aylik hacimde [DB-29] provasi sart, [DB-25] geregi SET statement_timeout=0.",
+      "kanit": "EXPLAIN: category='DOMAIN' -> 'Index Scan Backward using system_logs_createdAt_idx ... Filter: (category = DOMAIN)'; category='AUTH' -> 'Index Scan Backward using system_logs_category_createdAt_idx ... Index Cond: (category = AUTH)'. Dagilim: DOMAIN 49879 / AUTH 664 / SYSTEM 621."
+    },
+    {
+      "baslik": "11 trigram (GIN) index'in hepsi idx_scan=0 ama OLU DEGIL - canli arama yolu var",
+      "nerede": "customers/items/colors/order_lines/customer_*_aliases nameFold_trgm + work_orders/orders/shipments/sacks/batches numara_trgm; okuyan yollar src/utils/query-parser.ts:329 (buildTextSearch -> contains) ve src/services/base.service.ts:915 (findSimilarNames -> `%` operatoru)",
+      "bugun": "Toplam 1,58 MB (en buyugu work_orders_workOrderNumber_trgm_idx 248 kB). idx_scan=0'in sebebi kod yolunun yoklugu DEGIL tablo boyutu: customers 146 satir / 4 sayfa - planci seq scan'i seciyor (0,057 ms). Kullanilabilirlik dogrulandi: enable_seqscan=off ile ayni sorgu 'Bitmap Index Scan on customers_nameFold_trgm_idx, Index Cond: nameFold ~~ %tekstil%' veriyor; work_orders_workOrderNumber_trgm_idx ayni sekilde secildi.",
+      "olcekte": "Tersine doner: kod zaten olcmus (query-parser.ts:265 yorumu) - 200 bin satirda eski yol 583 ms, katlanmis kolon + trigram GIN ile 6,3 ms. Yani bu index'ler tam olarak 10x/100x icin vardir. Ek not: GIN'in yazma maliyeti fastupdate sayesinde ertelenir; 138-373 satirlik master-data tablolarinda bugun olculebilir bir bedel yok.",
+      "oneri": "DOKUNMA. Bu satiri buraya, 'idx_scan=0 gorunce silme' kaydi olarak yaz. Ayni tuzak *Fold DUZ btree'lerde de var (asagidaki ayri bulgu).",
+      "oncelik": "yapma",
+      "bedel": "Silinirse saha aramasi 200k satirda 583 ms'e geri doner (olcum kodda kayitli).",
+      "kanit": "enable_seqscan=off + EXPLAIN -> 'Bitmap Index Scan on customers_nameFold_trgm_idx (Index Cond: nameFold ~~ %tekstil%)'; buildTextSearch contains -> LIKE '%x%' uretiyor (query-parser.ts:329)"
+    },
+    {
+      "baslik": "10 GERCEKTEN fazla index: her biri non-partial bir UNIQUE tarafindan tam kapsaniyor ([DB-12]/[DB-15] ihlali)",
+      "nerede": "machines_stationId_idx (kapsayan machines_stationId_nameFold_key, 846 scan) - subcontractor_direct_ship_allocations_directShipmentId_idx (kapsayan _dsId_orderLineId_key, 162) - customer_standalone_labels_customerId_idx (kapsayan _customerId_templateId_key) - defect_types/fabric_properties/peripheral_devices/product_recipes/quality_grades/return_reasons/routes _nameFold_idx (her birinin kapsayani ayni kolonda TAM unique)",
+      "bugun": "Onunun da boyutu 16 kB (toplam 160 kB); 9'unun idx_scan=0, biri (customer_standalone_labels_customerId_idx) 597 scan aliyor ama kapsayan unique ayni isi gorur. Kural zaten yazili: [DB-12] 'composite unique/index'in ON EKI index sayilir ve dorduncu bir agac yazilmaz'.",
+      "olcekte": "Kazanc kucuk kalir: dokuzu master-data (8-350 satir, seyrek yazilan). Tek gercek yazma bedeli subcontractor_direct_ship_allocations - sevkiyatla birlikte buyur. 100x'te bile toplam ~16 MB ve saniyede birkac yazim.",
+      "oneri": "Tek migration'da onunu de DROP et - bedeli dusuk, degeri kuralin YENIDEN ihlal edilmemesi. Asil is: bu sorguyu (pg_index + pg_attribute, non-partial unique'in on ekiyle ortusen non-unique index) `test_db_invariants.ts` yanina bir BEKCI olarak koy; boylece [DB-12] 'insan:' zorlamasindan 'bekci:' zorlamasina gecer ([DB-35] anlaminda 'bu kural tutuyor' demek mumkun olur). Bekci once kirmizi verdigi dogrulanarak yazilir (RECETELER.md § bekci).",
+      "oncelik": "dusuk",
+      "bedel": "Bir migration + bir bekci. Kod riski sifir (sorgular degismez, planci unique'e duser). DIKKAT: yalnizca kapsayan unique NON-PARTIAL oldugunda gecerli - bu listede oyle secildi.",
+      "kanit": "pg_index/pg_attribute sorgusu: 'b.cols = a.cols OR b.cols LIKE a.cols||\\',%\\'' ve NOT a.uq AND NOT a.partial AND NOT b.partial -> 10 satir."
+    },
+    {
+      "baslik": "work_order_steps_stationId_status_isUrgent_priority_started_idx: son 3 kolonu HICBIR sorgu kullanamiyor (ORDER BY'a urgentMarkedAt eklendi, index guncellenmedi)",
+      "nerede": "prisma/schema.prisma model WorkOrderStep @@index([stationId, status, isUrgent, priority, startedAt]) WHERE status<>'COMPLETED'; okuyan uclar src/services/kursun-qc.service.ts:346, kursun-bypass.service.ts:588, inventory.service.ts:1828 - ucu de ayni sirayi kullaniyor",
+      "bugun": "idx_scan=0, 64 kB. Iki ayri sebep: (a) sorgular stationId'yi ESITLIKLE degil station iliskisiyle suzuyor (station:{kind:PROCESS_QC OR appliesQuality}) - kucuk tabloda planci Hash Join + Seq Scan seciyor (0,297 ms); enable_seqscan=off ile index KULLANILABILIYOR (Nested Loop, Index Cond: stationId = st.id), yani olcekte secilecek. (b) Ama ORDER BY [isUrgent desc, urgentMarkedAt asc nulls last, priority asc, startedAt asc nulls last] - index'te `urgentMarkedAt` YOK, dolayisiyla ikinci anahtardan itibaren siralama index'ten GELEMEZ; her iki plan da Sort dugumu tasiyor.",
+      "olcekte": "Bu uc, kursun-qc.service.ts:308 yorumuna gore TABLETTEN 5 SANIYEDE BIR yoklaniyor (saha ~10 tablet -> ~2 sorgu/sn). 100x'te (60k adim) index'in ON EKI (stationId + partial status) hala degerli - o secilecek. Son uc kolon (isUrgent, priority, startedAt) ise siralamaya asla katkida bulunmayacak: nested-loop istasyon-basina tarama zaten global sirali sonuc uretemez. Yani o uc kolon olcekte de saf yazma bedeli - work_order_steps'te HOT orani %0,7 (11.881 upd / 87 HOT), yani her adim guncellemesi bu index'e de yeni girdi yaziyor.",
+      "oneri": "Index'i (stationId) WHERE status <> 'COMPLETED' ya da (stationId, status) partial'a DARALT - kaldirma. Once dogrula: daraltmadan sonra ayni EXPLAIN'de Nested Loop + Index Cond korunuyor mu. `urgentMarkedAt`'i index'e EKLEME - global siralamayi zaten kurtarmaz, sadece dorduncu kolonu buyutur.",
+      "oncelik": "dusuk",
+      "bedel": "Bir migration; [DB-30] partial envanterinde satiri zaten var, kolonlari guncellenir. Kod riski sifir.",
+      "kanit": "EXPLAIN (seqscan off): 'Bitmap Index Scan on work_order_steps_stationId_status_isUrgent_priority_started_idx, Index Cond: (stationId = st.id)' - Index Cond'da yalnizca stationId var, ust dugumde her zaman 'Sort Key: isUrgent DESC, urgentMarkedAt, priority, startedAt'."
+    },
+    {
+      "baslik": "isUndoSourcedByAudit: system_logs'ta jsonb LIKE - GIN yok, her cagride TAM TARAMA",
+      "nerede": "src/services/inventory.service.ts:2507 ($queryRaw: \"newData\" ->> 'event' LIKE 'TAMBUR_UNDO%')",
+      "bugun": "8,183 ms / 2.499 buffer (19 MB tablonun tamami), 51.164 satirin 51.164'u filtreyle atiliyor. Cagri basina BIR kez (top detay sayfasi / barkod okutma), dongude DEGIL - N+1 yok. Kisa devre var: cancelReasonCode dolu ise hic kosmuyor, yani yalniz 2026-08-29 oncesi damgasiz iptallerde.",
+      "olcekte": "Lineer: 10x (512k satir) -> ~82 ms, 100x (5,1M satir) -> ~820 ms tek bir detay acilisinda. Ust sinir var: audit 6 ayda arsivleniyor, yani system_logs 6 aylik hacimle sinirli - gercek risk 'fabrikanin 6 ayda kac audit satiri yazdigi' ve bu OLCULMEDI (dev'deki 51k satir 4 gunluk BEKCI trafigidir, saha degil).",
+      "oneri": "Bu VERITABANI.md §12'de zaten kayitli bir bosluk ('system_logs.newData ->> event sorgusu GIN'siz'). Cozmeden once SAHADA olc: 6 aylik gercek system_logs satir sayisi. 200k'nin altindaysa (=~30 ms) dokunma. Ustundeyse iki secenek: (a) jsonb_path_ops GIN - ama `->> 'event' LIKE 'X%'` GIN'den yararlanamaz, once sorgu `newData @> '{\"event\":...}'` esitligine cevrilmeli (kod degisikligi); (b) daha ucuzu: iptal satirina KALICI kolon (kok CLAUDE.md 'kalici sayac/rapor SystemLog'tan degil KALICI kolondan okunur' kurali zaten bunu soyluyor) - 2026-08-29 sonrasi zaten oyle yapiliyor, eksik olan eski satirlarin backfill'i.",
+      "oncelik": "dusuk",
+      "bedel": "(a) sorgu semantigini degistirir - LIKE 'TAMBUR_UNDO%' prefix'i tam esitlik kumesine cevrilmeli, davranis riski var. (b) backfill script'i (dry-run + --apply, kok CLAUDE.md kurali).",
+      "kanit": "EXPLAIN (ANALYZE,BUFFERS): 'Seq Scan on system_logs (cost=0.00..3897.30) actual time=8.156..8.157, Rows Removed by Filter: 51164, Buffers: shared hit=2499'"
+    },
+    {
+      "baslik": "Activity Page dropdown'lari (listActiveTables/listActiveUsers): DISTINCT tam tarama - 5 dk TTL cache ile korunuyor",
+      "nerede": "src/services/system-log.service.ts:304 ve :321 (distinct: ['tableName'] / ['userId'], where category:'DOMAIN')",
+      "bugun": "10,406 ms / 2.467 buffer, HashAggregate uzerinde Seq Scan (49.879 satir tarandi, 78 farkli tableName cikti). dropdownCache 5 dk TTL ile sariyor, yani islem basina en fazla 12 kez/saat.",
+      "olcekte": "Lineer: 100x -> ~1 s. Cache TTL'i sayesinde kullanici bunu gormez, ama sorgu 1 s surdugunde audit yazan istekler ayni sayfalar icin I/O yarisir. Kod bunu zaten biliyor (system-log.service.ts:330 yorumu: 'distinct sorgulari milyon satirda pahali').",
+      "oneri": "Simdilik BIR SEY YAPMA - TTL yeterli kalkan ve olcum 10 ms. Eger saha 6 aylik hacmi 1M satiri gecerse, kalici cozum tabloyu her seferinde taramak degil: `tableName` listesi zaten kod tarafinda bilinen bir kume (Prisma model adlari) - DB'ye sormak yerine katalogdan uretmek maliyeti sifirlar.",
+      "oncelik": "yapma",
+      "bedel": "Bugun degisiklik yapmanin bedeli var (kod riski), kazanci yok (cache zaten kapsiyor).",
+      "kanit": "EXPLAIN (ANALYZE,BUFFERS): 'HashAggregate ... -> Seq Scan on system_logs (rows=49879), Buffers: shared hit=2467, Execution Time: 10.406 ms'"
+    },
+    {
+      "baslik": "*Fold DUZ btree'ler (yaklasik 30 adet, idx_scan=0): BELIRSIZ - findSimilarNames'in tombstone dali icin canli olabilir, DOKUNMA",
+      "nerede": "customers_nameFold_idx, colors_nameFold_idx, machines_nameFold_idx, shipments_driverNameFold_idx, roll_returns_noteFold_idx ... ; okuyan yol src/services/base.service.ts:914 (`t.\"nameFold\" = $1` esitlik dali)",
+      "bugun": "Her biri 16-40 kB, cogunda idx_scan=0. TUZAK: bu kolonlarin uzerinde bir de PARTIAL unique var (ornek: customers_nameFold_key ... WHERE \"mergedIntoId\" IS NULL). findSimilarNames tombstone'lari BILEREK gosteriyor (base.service.ts:862 yorumu), yani sorgusu partial predicate'i saglamiyor -> planci partial unique'i KULLANAMAZ, duz index'e duser. Bu yuzden 'duz index unique tarafindan kapsaniyor' HUKMU BU TABLOLARDA GECERSIZ.",
+      "olcekte": "Master-data tablolari (8-350 satir), olcekte de kucuk kalirlar; yazma bedeli ihmal edilebilir. Karsi tarafta silmenin riski gercek: findSimilarNames'in esitlik dali her 'kaydet'te kosuyor.",
+      "oneri": "DOKUNMA. Ustteki '10 fazla index' bulgusundan bunlar BILEREK ayri tutuldu (orada kapsayan unique NON-PARTIAL). Eger bir gun temizlenecekse once findSimilarNames'in EXPLAIN'i 200+ satirli bir tabloda cekilmeli.",
+      "oncelik": "yapma",
+      "bedel": "Yanlis silinirse mukerrer-uyari yolu (base.service.ts findSimilarNames) her kayitta seq scan'e duser - sessiz yavaslama, hata yok.",
+      "kanit": "pg_indexes: 'CREATE UNIQUE INDEX customers_nameFold_key ... WHERE (\"mergedIntoId\" IS NULL)' <-> base.service.ts:862 'burada tombstone'lar BILEREK GOSTERILIR'"
+    },
+    {
+      "baslik": "BELGE SAPMASI: VERITABANI.md §12'deki '5 index'siz domain FK' listesi BAYAT - besi de artik mevcut",
+      "nerede": "docs/standart/VERITABANI.md:140",
+      "bugun": "DB'de olculdu: subcontractor_direct_ship_allocations_dispatchId_idx VAR, direct_shipments_branchId_idx VAR, sacks_branchId_idx VAR, warehouse_movements'ta hem shipmentId hem rollReturnId indexli. Yani [DB-12]'nin '5 gercek bosluk' devralinanı kapanmis.",
+      "olcekte": "Ilgisiz - bu bir olcum degil belge sorunu. Ama zarari var: bir sonraki 'index eksigi' turu bu bes satiri 'acik is' sanip gereksiz migration yazabilir.",
+      "oneri": "VERITABANI.md §12'nin ilk maddesini sil ve arsivdeki notuna 'GECERSIZ -> 2026-09-05' basligi koy (kok CLAUDE.md § Belge ve not disiplini). Bu is BU turun ciktisi degil, ayri bir belge dokunusu.",
+      "oncelik": "dusuk",
+      "bedel": "Iki satir belge duzenlemesi.",
+      "kanit": "pg_index/pg_attribute: warehouse_movements index kolonlari = {createdAt x3, eventType x2, fromWarehouseId, goodsReceiptId, id, rollId, rollReturnId, sackId, shipmentId, toWarehouseId, transferId}"
+    }
+  ],
+  "olculmeyen": [
+    "INDEX BLOAT: pgstattuple/pgstatindex eklentisi kurulu degil ve CREATE EXTENSION bir YAZMA islemi (gorev salt-okunur). Bu yuzden dev'deki index BAYT degerleri olcek maliyeti olarak OKUNAMAZ: rolls'a 146.948 insert + 146.207 delete yapilmis, canli satir 832 - yani rolls_status_itemId_colorId_width_idx'in 768 kB'i (tablonun kendisi 1072 kB) buyuk olcude sisme. Raporda index boyutlari yalnizca SIRALAMA icin kullanildi, mutlak maliyet olarak degil.",
+    "10x/100x GERCEK OLCUM: veri uretmek yazma gerektirir (yasak). Tum olcek cumleleri EXPLAIN'in plan SEKLINDEN (Seq Scan mi Index Scan mi, Sort var mi) ve olculen satir/sayfa aritmetiginden (rolls: 1319 bayt/satir, 0,161 sayfa/satir) turetildi - sentetik olcum degil.",
+    "SAHA TRAFIGI: idx_scan sayaclari BEKCI (test) trafigidir, operator davranisi degil. Bir index'in idx_scan'i yuksek olmasi sahada sik kullanildigini GOSTERMEZ; dusuk olmasi da kullanilmadigini gostermez. Gercek hukum icin index-health.sql basligindaki (a) yolu gerekli: staging/canlida birkac gun gercek trafik.",
+    "SAHADAKI HACIM: fabrikada kac top ve 6 ayda kac audit satiri oldugu bilinmiyor. Kod yorumlarinda 30k ve 300k top gecuyor (inventory.service.ts:1704, query-parser.ts:265) ama bunlar olcum degil emsal. BULGU 2 ve BULGU 7'nin onceligi bu sayi olculmeden kesinlesmez.",
+    "ONERILEN INDEX'LERIN KAZANCI: index kurmak yasak oldugu icin 'kurulunca ne olur' EXPLAIN'i cekilemedi. Ozellikle iki nokta migration'dan ONCE dogrulanmali: (a) PG16'nin partial predicate ispatinin `status NOT IN (...)` ve `category IN ('AUTH','SYSTEM')` ile tutup tutmadigi; (b) `(\"updatedAt\" DESC) WHERE status IN (...)` partial'inin gercekten LIMIT'te duran sirali tarama uretip uretmedigi.",
+    "GIN YAZMA MALIYETI: trigram index'lerin fastupdate/pending-list davranisi olculmedi (gin_pending_list_limit, pg_stat'ta ayri sayaci yok). Master-data tablolarinda bugun onemsiz, ama sacks/work_orders/orders buyudukce olculmeli."
+  ]
+}

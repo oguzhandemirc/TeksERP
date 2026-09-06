@@ -74,7 +74,7 @@ const DOC_PREFIX = "MBT";
  * Günlük sıralı belge numarası.
  *
  * ⚠️ `orderBy` ile DEĞİL, JS'te sayısal max ile (glibc collation lexicographic
- * ve sıra 9→10 geçişinde bozulur — `nextInvoiceNo` kanıtlı deseni). Çağıran
+ * ve sıra 9→10 geçişinde bozulur — `nextInvoiceNoTx` kanıtlı deseni). Çağıran
  * `withBarcodeRetry` ile sarmalar: yarışta P2002 hâlâ mümkündür ve doğru cevap
  * tekrar denemektir.
  *

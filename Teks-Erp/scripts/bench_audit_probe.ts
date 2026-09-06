@@ -29,6 +29,9 @@ const qAction = () => prisma.$queryRaw(Prisma.sql`
 const qTable = () => prisma.$queryRaw(Prisma.sql`
   SELECT "tableName", COUNT(*) AS count FROM system_logs WHERE "createdAt" >= ${from} AND "createdAt" <= ${to}
   GROUP BY "tableName" ORDER BY count DESC LIMIT 30`);
+// Faz C2 bench'i 2026-08-01 tz dönüşümü ÖNCESİNİN sorgu şeklini DONMUŞ taşır;
+// `factoryDaySql`e çevirmek ölçtüğü şeyi değiştirir (kayıtlı sayılar geçersizleşir).
+/* eslint-disable no-restricted-syntax */
 const qDaily = () => prisma.$queryRaw(Prisma.sql`
   SELECT DATE_TRUNC('day', "createdAt")::date AS day,
     COUNT(*) FILTER (WHERE action = 'CREATE') AS "createCount",
@@ -36,6 +39,7 @@ const qDaily = () => prisma.$queryRaw(Prisma.sql`
     COUNT(*) FILTER (WHERE action = 'DELETE') AS "deleteCount"
   FROM system_logs WHERE "createdAt" >= ${from} AND "createdAt" <= ${to}
   GROUP BY 1 ORDER BY 1`);
+/* eslint-enable no-restricted-syntax */
 
 function pct(s: number[], p: number): number {
   return s[Math.min(s.length - 1, Math.floor((p / 100) * s.length))];

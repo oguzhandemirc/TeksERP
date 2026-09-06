@@ -21,10 +21,20 @@
 // koşmadı" (dakikalar), diğer tarafın bedeli "fabrikanın verisi gitti".
 // =============================================================================
 
-/** Adı BİREBİR bu olan veritabanı geliştirme hedefi sayılır (kök CLAUDE.md). */
-const IZINLI_DB_ADLARI = new Set(["adnansahin_db"]);
-/** Bu son eklerle biten adlar da geliştirme/test hedefi sayılır. */
-const IZINLI_SON_EKLER = ["_dev", "_test", "_local"];
+/**
+ * Adı BİREBİR bu olan veritabanı geliştirme hedefi sayılır.
+ * ⚠️ BOŞ BIRAKILDI ve öyle kalmalı: DB adı bir PROFİL değeridir, koda sabitlenmez
+ * (kök CLAUDE.md). Hedef, ADIN SON EKİNDEN tanınır.
+ */
+const IZINLI_DB_ADLARI = new Set<string>([]);
+/**
+ * Bu son eklerle biten adlar geliştirme/test hedefi sayılır.
+ * `_demo` 2026-09-05'te eklendi: geliştirme DB'si `adnansahin_db` → `tekserp_demo`
+ * olarak yeniden adlandırıldığında bu liste güncellenmemişti; `adnansahin_db` ise
+ * `lib/hedef-db-kapisi.ts`te artık ÜRETİM adı sayıldığı için buradan kaldırıldı
+ * (iki kapı aynı adı zıt sınıflandırıyordu).
+ */
+const IZINLI_SON_EKLER = ["_dev", "_test", "_local", "_demo"];
 /** Yalnız bu makinedeki PostgreSQL. Uzak host = üretim varsayılır. */
 const IZINLI_HOSTLAR = new Set(["localhost", "127.0.0.1", "::1", ""]);
 
@@ -77,7 +87,8 @@ export function assertGelistirmeVeritabani(
     if (prodOrtam) console.error(`   ortam: production   ← NODE_ENV/APP_ENV`);
     console.error(
       `\n   Bu betik geri alınamaz veri kaybı yapar. İzinli hedefler: ` +
-        `${[...IZINLI_DB_ADLARI].join(", ")} ya da ${IZINLI_SON_EKLER.join("/")} ile biten adlar,\n` +
+        `${IZINLI_SON_EKLER.join("/")} ile biten adlar` +
+        `${IZINLI_DB_ADLARI.size ? ` ya da ${[...IZINLI_DB_ADLARI].join(", ")}` : ""},\n` +
         `   yalnız yerel PostgreSQL üzerinde.\n`,
     );
     console.error(

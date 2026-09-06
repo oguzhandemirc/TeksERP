@@ -672,6 +672,7 @@ export const DOC_DEFS: DocDef[] = [
           // "Sevk belgesinde ürün adı" ayarı belirler; buradaki satır kolonun
           // başlığını yazmak ve (rejim açıkken) gizlemek içindir.
           { key: "customerName", label: "Müşteri stok adı" },
+          { key: "customerColor", label: "Müşteri varyant" },
           { key: "rollCount", label: "Top adedi" },
           { key: "totalMeters", label: "Toplam metre" },
         ],

@@ -1,0 +1,126 @@
+{
+  "is": "İ-20 — mobil okutma yolunda ham Haptics → signalScan (kalan 10 handler / 6 dosya)",
+  "tarih": "2026-09-05",
+  "alan": "mobil/src",
+  "olcum_zemini": {
+    "kaynak": "docs/history/standart-2026-09-05/olcum/faz0-acik-olcumler.json → I_20_mobil_haptics",
+    "sozlesme": "mobil/src/services/scanFeedback.ts — ScanOutcome = accept | duplicate | reject (dördüncüsü uydurulmaz)",
+    "bekci": "mobil/src/test/scan-haptics.guard.test.ts",
+    "tarama_oncesi": { "hapticsCagrisi": 208, "okutmaSitesi": 34, "hapticsliDosya": 44 },
+    "tarama_sonrasi": { "hapticsCagrisi": 174, "okutmaSitesi": 4, "hapticsliDosya": 43 },
+    "kalan_4_site": "MUAF listesinin kendisi: BarcodeScannerView#handleScanned (1) · useQuickWorkOrder#handleScan (1) · LoginScreen#submitCard (2)"
+  },
+  "karar_olcutu": "Her dal için 'okutmanın SONUCU ne?' sorusu soruldu. Üç cevap dışında bir şey uydurulmadı. SORU (onay modalı) ve ARA ADIM sonuç değildir → sinyal verilmez; sonucu cevaptan/ara adımdan sonra gelen dal söyler (KursunQc reopen emsali).",
+  "handlerlar": [
+    {
+      "anahtar": "screens/Modules/FasonKabul/FasonKabulScreen.tsx#handleResolveCard",
+      "durum": "uygulandi",
+      "cevrim": [
+        "kart bulunamadı (Error) → reject",
+        "kart ACTIVE değil (Warning) → reject",
+        "pendingReturns hatası, üç dal (Warning) → reject — NEEDS_DISPATCH/MAYBE_WRONG_RECEIPT teşhis kartı da REDdir (Depo'daki iptalli top emsali)",
+        "bekleyen sevk yok (SESSİZDİ) → reject (yeni sinyal)",
+        "tek sevk bulundu (Success) → accept",
+        "çoklu adım listesi (sessizdi) → SİNYAL YOK, bu bir SORU (davranış değişmedi)",
+        "catch (Error) → reject"
+      ],
+      "davranis_degisimi": "Warning titreşimleri artık ret deseni + (ayar açıksa) ret sesi veriyor; 'Bekleyen sevk yok' dalı ilk kez sinyal veriyor."
+    },
+    {
+      "anahtar": "screens/Modules/FasonSevk/FasonSevkScreen.tsx#handleCardScan",
+      "durum": "uygulandi",
+      "cevrim": ["top barkodu kart alanına → reject", "kart yok → reject", "kart pasif → reject", "WO yüklenemedi → reject", "WO sevke uygun değil → reject", "açık fason adımı yok → reject", "iş emri seçildi → accept", "catch → reject"],
+      "davranis_degisimi": "Yalnız sinyal kanalı değişti (7 ret + 1 kabul); dal başına sonuç birebir aynı."
+    },
+    {
+      "anahtar": "screens/Modules/FasonSevk/FasonSevkScreen.tsx#addBarcodeFromString",
+      "durum": "uygulandi",
+      "cevrim": ["refakat kartı top alanına okutuldu, tarayıcı KAPALI kolu (Warning) → reject (açık kol zaten pushRejects ile ret veriyordu)"],
+      "davranis_degisimi": "İki kol artık aynı sinyali veriyor; kapalı kolda ses ayarı ilk kez işliyor."
+    },
+    {
+      "anahtar": "screens/Modules/FasonSevk/FasonSevkScreen.tsx#notifyReject",
+      "durum": "uygulandi",
+      "cevrim": ["tarayıcı kapalı kolu (Error) → reject"],
+      "davranis_degisimi": "Aynı sonuç, tek kapıdan."
+    },
+    {
+      "anahtar": "screens/Modules/FasonSevk/FasonSevkScreen.tsx#addRollToList",
+      "durum": "uygulandi",
+      "cevrim": ["kumaş uyuşmazlığı (Warning) → SİNYAL YOK: 'Yine de Ekle?' onayı bir SORUdur; onaydan sonra aynı fonksiyonun accept'i konuşur, vazgeçilirse top hiç eklenmez", "listeye eklendi → accept (zaten vardı)", "mükerrer → flashDuplicate zaten duplicate veriyor"],
+      "davranis_degisimi": "Uyuşmazlık modalı açılırken artık titreşim YOK. İyileştirme: eski Warning titreşimi retten ayırt edilemiyordu, operatör topun eklenmediğini sanıyordu; karar modalda görünür ve sonuç cevaptan sonra tek kez sinyalleniyor."
+    },
+    {
+      "anahtar": "screens/Modules/Tambur/TamburScreen.tsx#resolveCard",
+      "durum": "uygulandi",
+      "cevrim": [
+        "kart zaten açık (SESSİZDİ) → duplicate (yeni sinyal)",
+        "kart bulunamadı → reject",
+        "kart açıldı → accept",
+        "kurşun bypass tamamlandı (Success) → SİNYAL YOK: ARA adım; kart hemen ardından yeniden çözülüyor ve sonucu orası veriyor",
+        "bypass hatası → reject",
+        "boş adım kartı açıldı (saha düzeltmesi) → accept",
+        "kart çözülemedi → reject"
+      ],
+      "davranis_degisimi": "'Kart zaten açık' ilk kez konuşuyor (mükerrer deseni). Kurşun bypass'ında tek okutma için iki titreşim basılıyordu, artık tek sinyal — sonucu kartın gerçekten açıldığı (ya da açılamadığı) an söylüyor."
+    },
+    {
+      "anahtar": "screens/Modules/Tambur/TamburScreen.tsx#resolveScanned",
+      "durum": "uygulandi",
+      "cevrim": ["top bulunamadı (SESSİZDİ) → reject", "top arşivde, etiket basılamaz (Error) → reject", "önizleme açıldı (SESSİZDİ) → accept", "catch (SESSİZDİ) → reject"],
+      "davranis_degisimi": "Dört daldan üçü sessizdi; etiket okutmasında operatör 'okumadı' sanıp tekrar okutuyordu. Artık her dal konuşuyor."
+    },
+    {
+      "anahtar": "screens/Modules/KartelaSevk/KartelaSevkScreen.tsx#addRoll",
+      "durum": "uygulandi",
+      "cevrim": ["top zaten eklendi (SESSİZDİ) → duplicate (yeni sinyal)", "top WAREHOUSE değil (Warning) → reject", "top çuvalda/sevkiyatta (Warning) → reject", "listeye eklendi (Light) → accept", "catch (Error) → reject"],
+      "davranis_degisimi": "Mükerrer okutma ilk kez ayrı hissediliyor. addRollFromList (liste dokunuşu) okutma DEĞİL, dokunulmadı."
+    },
+    {
+      "anahtar": "screens/Modules/IadeGirisi/IadeGirisiScreen.tsx#lookup",
+      "durum": "uygulandi",
+      "soruya_cevap": "OKUTMA — BarcodeScannerModal.onScan doğrudan lookup'ı çağırıyor (IadeGirisiScreen.tsx:499-501); elle giriş ve liste seçimi aynı handler'ı paylaşıyor (Depo'daki nokta-sorgu emsali).",
+      "cevrim": ["çevrimdışı (Error) → reject", "top çözüldü (Light) → accept", "catch (Error) → reject"],
+      "davranis_degisimi": "Yalnız sinyal kanalı; ses ayarı ilk kez işliyor."
+    },
+    {
+      "anahtar": "screens/Auth/LoginScreen.tsx#submitCard",
+      "durum": "gerek-yok",
+      "karar": "ÇEVRİLMEDİ — MUAF listesine gerekçeyle alındı.",
+      "gerekce": "KİMLİK yolu, istasyon okutması değil: sonucu bir giriş denemesidir ve üç sonuçluk sözlük karşılık bulmuyor ('mükerrer giriş' yok). Aynı ekranda PIN (LoginScreen.tsx:214,219) ve şifre (:254,259) kolları BİREBİR aynı Success/Error geri bildirimini veriyor; yalnız kart kolunu çevirmek giriş ekranını kendi içinde ayrıştırırdı. `scanSoundEnabled` istasyon okutması ayarıdır. Bekçinin OKUTMA_ADI regexine adındaki 'card' yüzünden takılmıştı.",
+      "davranis_degisimi": "YOK — kod değişmedi, yalnız bekçi listesi."
+    }
+  ],
+  "bekci_degisikligi": {
+    "dosya": "mobil/src/test/scan-haptics.guard.test.ts",
+    "DEVRALINAN": "BOŞALDI (10 kayıt → 0)",
+    "MUAF": "3 kayıt (LoginScreen#submitCard eklendi)",
+    "EK_OKUTMA_HANDLERLARI": "4 kayıt KORUNDU — bu liste bir muafiyet değil kapsam GENİŞLETİCİsidir (notifyReject/addRollToList/addRoll/lookup adları OKUTMA_ADI regexine uymuyor). Çevrilen handler'ın kaydını silmek, aynı yere yarın konacak ham Haptics'i görünmez yapardı; bu yüzden iki yönlü bayatlık sondasından ÇIKARILDI ve yerine 'handler hâlâ tanımlı mı' sondası yazıldı.",
+    "korluk_zemini": "scanSites eşiği 10 → 4 (kalan 4 site = üç MUAF kaydının kendisi); hapticsCalls ≥150 ve filesWithHaptics ≥30 aynen duruyor (ölçüm 174 / 43).",
+    "negatif_sondalar": [
+      "notifyReject'e ham Haptics geri konuldu → 'listelenmemiş ham Haptics yok' KIRMIZI (EK listesinin koruma değeri kanıtlandı)",
+      "MUAF'a karşılıksız kayıt eklendi → iki yönlü sonda KIRMIZI",
+      "EK kaydı var olmayan handler adına çevrildi → yeni 'kayıtlar hâlâ var olan handler'ları gösterir' sondası KIRMIZI"
+    ]
+  },
+  "kapilar": {
+    "npx jest src/test/scan-haptics.guard.test.ts": "5 passed / 0 failed",
+    "npx jest --runInBand": "86 suite / 859 vaka — hepsi yeşil",
+    "npx tsc --noEmit": "exit 0",
+    "npm run lint": "0 error / 2754 warning (tavanın altında)",
+    "node ../scripts/check-lint-baseline.mjs --proje=mobil": "exit 0 — tavan aşılmadı; @typescript-eslint/no-floating-promises 277 → 248 (voidsuz Haptics çağrıları kalktı)",
+    "node scripts/check-docs.mjs": "exit 0"
+  },
+  "dagitim": {
+    "kanal": "OTA",
+    "gerekce": "Değişiklik saf JS/TS: yeni native modül / izin / ikon / SDK / config-plugin yok; expo-haptics zaten kurulu, yeni paket eklenmedi.",
+    "not": "Kesin kararı sürüm turunda parmak izi kapısı verir: `EXPO_PUBLIC_API_URL=<erp-adresi> npm run yayinla:check -- --musteri=adnansahin`. Bu turda ÇALIŞTIRILAMADI — komut sunucu adresi olmadan durur ve adres uydurulmaz (mobil/CLAUDE.md: varsayılan YOK)."
+  },
+  "belge": [
+    "docs/standart/MOBIL.md §5 — [MO-13] devralınan 11 dosya → yok; yeni [MO-13a] ('soru' ve 'ara adım' sonuç değildir); 'Borç (ölçülü)' paragrafı 'Kapandı (İ-20)' ile değişti; §14 Bilinen borç listesinden İ-20 çıkarıldı",
+    "mobil/CLAUDE.md § Okutma — '11 dosya hâlâ doğrudan çağırıyor' uyarısı kalktı, yerine bekçi atfı + soru/ara adım kuralı"
+  ],
+  "acik_kalan": [
+    "FasonKabul çoklu fason adımı dalı (matching.length > 1): kart çözüldü ve iş bulundu ama seçim bekliyor. Bugün SESSİZ bırakıldı (davranış değişmedi) — 'soru' saydık. Ölçüm dosyası bu dala sonuç atamamıştı; sahada operatör listeyi görüp seçtiği için sinyalsizlik zarar vermiyor gibi duruyor, ama accept saymak da savunulabilir. Karar isterse tek satırlık iş."
+  ]
+}

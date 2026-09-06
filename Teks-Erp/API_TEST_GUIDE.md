@@ -1,5 +1,8 @@
 # TeksERP — API Test Rehberi (Swagger / Postman)
 
+# reseed / toplu DELETE HER canlı kurulumda YASAK — DATABASE_URL'i çalıştırmadan önce doğrula.
+npx prisma migrate reset --force' hiçbir üretim uyarısı taşımıyor; kök CLAUDE.md 'migrate reset / reseed / toplu DELETE yasak' diyor. · Banner'daki '/api/production/step-action' ucu kodda yok (git grep step-action -- Teks-Erp/src → 0 sonuç); banner bunu 'jenerik yerine istasyon-özel' diye anlatıyor ama uç adı hiç var olmamış gibi okunmalı. — kanonik kaynak kod/`schema.prisma`; bu belge gerekçe için okunur.
+
 > **⚠️ Kanonik uç listesi için her zaman canlı Swagger (`/api-docs`) + `src/routes/` referans alınmalı.**
 > Bu rehber 2026-07 redesign'larına göre güncellendi (çuval-havuzu / parti / kart-iş-emriyle-doğar / kod-format /
 > "her rota final üretir"), fakat Senaryo D'nin üretim akışı **jenerik `/api/production/step-action` yerine**
@@ -50,7 +53,7 @@ npm run dev
 
 | Kullanıcı | Şifre | Rol | Seed Sonrası Yetki Durumu |
 |-----------|-------|-----|--------|
-| `admin` | `123123` | Admin | ✅ **Tam yetki** — tüm ~55 permission seed'de atanıyor |
+| `admin` | `123123` | Admin | ✅ **Tam yetki** — katalogdaki TÜM izinler seed'de atanıyor (bugün 86; kanonik `src/constants/permission-catalog.ts`) |
 
 > ⚠️ **ÖNEMLİ (2026-07-03):** Seed artık **yalnızca `admin` kullanıcısını** oluşturur — ek test kullanıcıları (`mehmet.planlama`, `ali.operator` vb.) seed'den kaldırıldı. RBAC/permission testleri için önce `admin` ile login olup admin UI'sından (`/admin/users` + `POST /api/admin/users/:id/permissions`) yeni kullanıcı + izin atayın. Bu bilinçli tasarım: production'da roller runtime atanır. Kaynak: `prisma/seed.ts` başlık bloğu.
 >
@@ -738,7 +741,7 @@ Test verilerini sıfırdan başlatmak için:
 npx prisma migrate reset --force
 ```
 
-`migrate reset` mevcut DB'yi düşürür, `prisma/migrations/` altındaki **tüm** migration'ları (~114 adet) sırayla uygular ve `npm run seed`'i otomatik çalıştırır. Sonuç (kanonik: `prisma/seed.ts` içindeki create çağrıları / seed çıktısı — başlık yorum bloğu bayat sayılar taşıyabilir): ~55 permission + 15 permission template + **1 kullanıcı (yalnız `admin`)** + 3 kalite sınıfı (1.KALITE / A1 / FIRE) + 4 müşteri + 6 renk + 7 kumaş özelliği (KURSUN dahil) + 3 fason kategori (BOYA/ZIMPARA/KARTELA) + 3 fason firma (Boyer/Kestel/Kartela A.Ş.).
+`migrate reset` mevcut DB'yi düşürür, `prisma/migrations/` altındaki **tüm** migration'ları (bugün 232; kanonik `ls prisma/migrations`) sırayla uygular ve `npm run seed`'i otomatik çalıştırır. Sonuç (kanonik: `prisma/seed.ts` içindeki create çağrıları / seed çıktısı — sayıları buraya sabitleme): 86 permission + 18 rol şablonu + **1 kullanıcı (yalnız `admin`)** + 3 kalite sınıfı (1.KALITE / A1 / FIRE) + 4 müşteri + 6 renk + 7 kumaş özelliği (KURSUN dahil) + 3 fason kategori (BOYA/ZIMPARA/KARTELA) + 3 fason firma (Boyer/Kestel/Kartela A.Ş.).
 
 ---
 

@@ -78,6 +78,49 @@ export async function recordVarianceTx(
 }
 
 /**
+ * ÇOK SATIRLI sapma yazımı — `createMany` ile TEK sorgu (`writeWarehouseMovements`
+ * emsali; perf kuralı 9). Yazılan satır sayısını döner.
+ *
+ * ⚠️ TEKİLİN SEMANTİĞİ BİREBİR KORUNUR ve ayrışırsa iki defter iki kural uygular:
+ * `qty <= 0` satırı ATLANIR (sıfır metrajlık "kayıt düzeltmesi" defteri kirletir
+ * ve `roll_variances_qty_positive` CHECK'ine çarpar), sebep doğrulaması HER satır
+ * için ayrı koşar ve geçersiz kod ÇAĞRIYI DÜŞÜRÜR (fail-closed).
+ *
+ * ⚠️ Doğrulama insert'ten ÖNCE toplu koşar; tekilde satır satır dönüşümlüydü.
+ * Gözlenebilir fark YOKTUR: her iki yol da çağıranın tx'i içindedir, hata tüm
+ * tx'i geri sarar. Satır ID'sine ihtiyaç duyan çağıran TEKİLİ kullanır —
+ * `createMany` id döndürmez.
+ */
+export async function recordVariancesTx(
+  tx: Tx,
+  inputs: RecordVarianceInput[],
+): Promise<number> {
+  const rows = inputs
+    .map((input) => {
+      const qtyD =
+        input.qty instanceof Prisma.Decimal ? input.qty : new Prisma.Decimal(input.qty);
+      if (!qtyD.greaterThan(0)) return null;
+      const { reasonCode, reasonText } = validateVarianceReason(input.kind, input);
+      return {
+        rollId: input.rollId,
+        workOrderStepId: input.workOrderStepId ?? null,
+        kind: input.kind,
+        qty: qtyD,
+        reasonCode,
+        reasonText,
+        source: input.source,
+        sourceRefId: input.sourceRefId ?? null,
+        createdById: input.userId ?? null,
+      };
+    })
+    .filter((r): r is NonNullable<typeof r> => r !== null);
+
+  if (rows.length === 0) return 0;
+  const res = await tx.rollVariance.createMany({ data: rows });
+  return res.count;
+}
+
+/**
  * AŞIM tespiti — kesimlerin toplamı kayıtlı metrajı geçtiyse farkı döner.
  *
  * Tek satırlık iş gibi görünüyor ama TEK KAYNAK olması önemli: aşım üç ayrı

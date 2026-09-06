@@ -24,6 +24,7 @@ import { ImportService } from "../src/services/import/import.service";
 import { listAdapters, getImportAdapter } from "../src/services/import/import-registry";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";
 import { parseLocaleNumber, parseBool, parseDateCell, isClearLiteral } from "../src/services/import/import-coerce";
+import { FACTORY_TIMEZONE } from "../src/constants/time";
 
 let pass = 0;
 let fail = 0;
@@ -65,7 +66,7 @@ async function main(): Promise<void> {
   const istHour = d
     ? Number(
         new Intl.DateTimeFormat("en-US", {
-          timeZone: "Europe/Istanbul",
+          timeZone: FACTORY_TIMEZONE,
           hour: "2-digit",
           hour12: false,
         }).format(d),

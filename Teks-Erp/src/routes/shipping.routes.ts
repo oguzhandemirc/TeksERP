@@ -16,6 +16,9 @@ const ACCOUNTING_READ = requireAnyPermission("shipping:read", "shipping:write", 
 // açardı) → ayrı, dar kapsamlı izin. `shipping:write` de kabul edilir: sevkiyatçının
 // mevcut yetkisi daralmasın.
 const INVOICE_WRITE = requireAnyPermission("shipping:invoice", "shipping:write");
+// Defter onarımı — `shipping:write` YETMEZ (geçmiş sevkiyatın defterini değiştirir
+// ve irsaliyenin yeni sürümünü doğurur); `shipping:undo-dispatch` ile aynı aile.
+const REPAIR = requireAnyPermission("shipping:repair-allocation");
 // Sevki geri alma (storno): `shipping:write`ten AYRI ve onu KAPSAMAZ. Sevk eden
 // herkesin resmi çıkış belgesini iptal edip stok/karşılanma defterini geri
 // sarabilmesi istenmiyor. Önizleme de aynı izinle kapılı — göremeyeceği işlemin
@@ -237,6 +240,48 @@ router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollT
 router.post("/swatches/:swatchId/remove-from-sack", verifyToken, WRITE, controller.removeSwatchFromSack);
 // Toplu: çuvalı dağıt (seçili/tüm içerik → depo) + seçili topları başka çuvala taşı
 router.post("/sacks/:id/distribute", verifyToken, WRITE, controller.distributeSack);
+/**
+ * @swagger
+ * /api/shipping/sacks/distribute/preview:
+ *   post:
+ *     summary: Toplu dağıtma önizlemesi (yazma yok) — etkilenen her top listelenir
+ *     tags: [Shipping]
+ */
+/**
+ * @swagger
+ * /api/shipping/repair/allocations:
+ *   get:
+ *     summary: Siparişe yazılamamış sevkiyatlar (yazma yok) — onarım adayları
+ *     tags: [Shipping]
+ */
+router.get(
+  "/repair/allocations",
+  verifyToken,
+  REPAIR,
+  controller.listRepairableShipments,
+);
+/**
+ * @swagger
+ * /api/shipping/repair/allocations/{id}:
+ *   post:
+ *     summary: Tek sevkiyatın sipariş defterini onar (irsaliye v+1 doğurur)
+ *     tags: [Shipping]
+ */
+router.post(
+  "/repair/allocations/:id",
+  verifyToken,
+  REPAIR,
+  controller.repairShipmentAllocation,
+);
+router.post("/sacks/distribute/preview", verifyToken, WRITE, controller.previewDistributeSacks);
+/**
+ * @swagger
+ * /api/shipping/sacks/distribute/bulk:
+ *   post:
+ *     summary: Seçili çuvalların içeriğini TOPLU depoya çıkar (çuval silinmez)
+ *     tags: [Shipping]
+ */
+router.post("/sacks/distribute/bulk", verifyToken, WRITE, controller.distributeSacksBulk);
 router.post("/sacks/:id/move-rolls", verifyToken, WRITE, controller.moveRollsToSack);
 
 /**

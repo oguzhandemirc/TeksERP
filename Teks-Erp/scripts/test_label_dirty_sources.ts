@@ -35,6 +35,7 @@ const ship = new ShippingService();
 
 let pass = 0;
 let fail = 0;
+let atlanan = 0;
 function check(label: string, ok: boolean, detail = ""): void {
   if (ok) { pass++; console.log(`✅ ${label}${detail ? ` — ${detail}` : ""}`); }
   else { fail++; console.error(`❌ ${label}${detail ? ` — ${detail}` : ""}`); }
@@ -221,6 +222,7 @@ async function main(): Promise<void> {
       await ship.setSackNotes(sackNoTpl.id, "Müşterisiz çuval notu", undefined);
       check("D2-7) ⭐ şablon çözülemedi → bayrak YAZILMADI", (await sackDirty(sackNoTpl.id)) === false);
     } else {
+      atlanan += 1;
       console.log("ℹ️  D2-7 atlandı: DB'de SACK bağlam varsayılanı var (global atamaya dokunulmaz).");
     }
 
@@ -246,7 +248,9 @@ async function main(): Promise<void> {
     await prisma.item.deleteMany({ where: { id: item.id } });
   }
 
-  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+  // Atlanan sayısı ÖZET SATIRINDA beyan edilir — koşucu kapsam kaybını yalnız
+  // oradan okur (`Sonuç:` satırına demirli regex).
+  console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan ? `, ${atlanan} atlandı` : ""} ===`);
   await prisma.$disconnect();
   process.exit(fail > 0 ? 1 : 0);
 }

@@ -3,7 +3,7 @@
 ⚠️ **Buradaki dosyalar migration DEĞİLDİR.** `prisma migrate deploy` yalnız
 `prisma/migrations/` altını çalıştırır; bu klasör bilerek onun DIŞINDADIR.
 
-Denetimin (bkz. `audit/RAPOR-2026-08-29.md` §12.1) veritabanı seviyesinde
+Denetimin (bkz. `docs/history/denetim-2026-08/RAPOR-2026-08-29.md` §12.1) veritabanı seviyesinde
 önerdiği kısıtların hazır SQL'i. Her dosya kendi gerekçesini, kilit/etki
 analizini ve geri alma yolunu taşır.
 

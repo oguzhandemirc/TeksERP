@@ -36,18 +36,18 @@ export function rollBarcodePrefix(type: RollBarcodeType, date: Date = new Date()
  * tx'e bağlıdır (rollback'te geri alınır, boşluk yok — kilit tx boyunca tutulur), taban
  * prisma verilirse anında commit (boşluk olabilir; barkod ID'dir, boşluk zararsız).
  */
-export async function generateRollBarcode(
+export async function generateRollBarcodeTx(
   db: Prisma.TransactionClient,
   type: RollBarcodeType,
   date: Date = new Date(),
 ): Promise<string> {
-  const [barcode] = await reserveRollBarcodes(db, type, 1, date);
+  const [barcode] = await reserveRollBarcodesTx(db, type, 1, date);
   return barcode!;
 }
 
 /**
  * N barkodu **TEK ifadede** rezerve eder (`n = n + :count RETURNING n` → aralık
- * `[n-count+1, n]`). Döngüde `generateRollBarcode` çağırmanın yerine geçer.
+ * `[n-count+1, n]`). Döngüde `generateRollBarcodeTx` çağırmanın yerine geçer.
  *
  * ⚠️ **BU FONKSİYON TX DIŞINDA, tx AÇILMADAN ÖNCE ÇAĞRILMAK İÇİNDİR.** Sayaç
  * satırının kilidi, artışı yapan transaction COMMIT edene kadar tutulur; çağrı
@@ -71,7 +71,7 @@ export async function generateRollBarcode(
  * kendi sözleşmesi bunu zaten söylüyordu; `tambur.service.ts:1990` ve `:2578`
  * 2026-07'den beri aynı şeyi yapıyor). Kapasite 9.999/gün/tip, boşluk payı bol.
  */
-export async function reserveRollBarcodes(
+export async function reserveRollBarcodesTx(
   db: Prisma.TransactionClient,
   type: RollBarcodeType,
   count: number,
@@ -106,7 +106,7 @@ export async function reserveRollBarcodes(
  *
  * Tip başına TEK ifade koşar (en fazla iki), gereksiz sayaç satırına dokunmaz.
  */
-export async function reserveRollBarcodesInOrder(
+export async function reserveRollBarcodesInOrderTx(
   db: Prisma.TransactionClient,
   types: RollBarcodeType[],
   date: Date = new Date(),
@@ -118,7 +118,7 @@ export async function reserveRollBarcodesInOrder(
       if (t === type) slots.push(i);
     });
     if (slots.length === 0) continue;
-    const codes = await reserveRollBarcodes(db, type, slots.length, date);
+    const codes = await reserveRollBarcodesTx(db, type, slots.length, date);
     slots.forEach((slot, i) => {
       out[slot] = codes[i]!;
     });

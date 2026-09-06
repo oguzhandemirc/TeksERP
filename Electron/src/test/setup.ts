@@ -60,6 +60,73 @@ if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
+// jsdom (Node 22+ altında) `localStorage` SAĞLAMAZ — Node'un kendi deneysel
+// localStorage'ı `--localstorage-file` olmadan `undefined` döner ve jsdom'unkini
+// gölgeler. zustand `persist` deposu bu yüzden `undefined` olur ve store'a yazan
+// HER test "Cannot read properties of undefined (reading 'setItem')" ile düşer
+// (2026-09-05: sekme defteri persist'e alınınca 4 bekçi bu yüzden kırmızıydı).
+// Bellek-içi stub davranışı değiştirmez: gerçek renderer'da Chromium'un
+// localStorage'ı vardır; testte kalıcılık zaten istenmez ve dosyalar arası
+// sızıntı olmaması TERCİH EDİLİR.
+if (typeof globalThis.localStorage === "undefined") {
+  const mem = new Map<string, string>();
+  const stub: Storage = {
+    get length() {
+      return mem.size;
+    },
+    key: (i: number) => [...mem.keys()][i] ?? null,
+    getItem: (k: string) => mem.get(k) ?? null,
+    setItem: (k: string, v: string) => void mem.set(k, String(v)),
+    removeItem: (k: string) => void mem.delete(k),
+    clear: () => mem.clear(),
+  };
+  Object.defineProperty(globalThis, "localStorage", {
+    writable: true,
+    configurable: true,
+    value: stub,
+  });
+  Object.defineProperty(globalThis, "sessionStorage", {
+    writable: true,
+    configurable: true,
+    value: stub,
+  });
+}
+
+// jsdom'un `AbortSignal`'i ile global `Request` (Node/undici) AYRI SINIFLARDIR:
+// undici marka kontrolünü kendi sınıfıyla yapar ve jsdom sinyali gelince
+// "RequestInit: Expected signal to be an instance of AbortSignal" fırlatır.
+// react-router her gezinmede `new Request(url, { signal })` kurar → gezinme
+// SESSİZCE iptal olur ve test "yol değişmedi" der (2026-09-05: PageHeader geri
+// oku bekçisinin 3 testi bu yüzden kırmızıydı; kod doğruydu).
+// Çözüm: yalnız uyumsuzluk ÖLÇÜLDÜYSE sinyali düşüren ince bir sarmalayıcı.
+// İptal semantiği bu bekçilerde ölçülmüyor; gerçek Chromium'da tek sınıf var.
+{
+  const OriginalRequest = globalThis.Request;
+  let signalRejected = false;
+  try {
+    new OriginalRequest("http://localhost/__probe", { signal: new AbortController().signal });
+  } catch {
+    signalRejected = true;
+  }
+  if (signalRejected) {
+    class TestRequest extends OriginalRequest {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        if (init?.signal) {
+          const { signal: _signal, ...rest } = init;
+          super(input, rest);
+          return;
+        }
+        super(input, init);
+      }
+    }
+    Object.defineProperty(globalThis, "Request", {
+      writable: true,
+      configurable: true,
+      value: TestRequest,
+    });
+  }
+}
+
 afterEach(() => {
   cleanup();
 });

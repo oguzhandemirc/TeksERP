@@ -5,16 +5,17 @@ import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
 import { pollIntervalFor, type DbCopyListing } from "./types";
 
-vi.mock("./service", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./service")>()),
+// Hook'lar `hooks.ts`te (service.ts saf veri erişimi) — mock oraya kurulur.
+vi.mock("./hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./hooks")>()),
   useDbCopies: vi.fn(),
   useStartCopy: vi.fn(),
   useVerifyCopy: vi.fn(),
   useDropCopy: vi.fn(),
   useSwapCommands: vi.fn(),
 }));
-vi.mock("../Backups/service", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../Backups/service")>()),
+vi.mock("../Backups/hooks", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../Backups/hooks")>()),
   useBackups: vi.fn(),
 }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -30,8 +31,8 @@ vi.mock("@/components/layout/PageHeader", () => ({
   ),
 }));
 
-const svc = await import("./service");
-const backupsSvc = await import("../Backups/service");
+const svc = await import("./hooks");
+const backupsSvc = await import("../Backups/hooks");
 const { DbRestorePage } = await import("./DbRestorePage");
 
 const LIVE = "TeksErpDb";

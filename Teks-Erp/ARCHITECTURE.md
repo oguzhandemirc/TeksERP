@@ -29,7 +29,7 @@ Teks-Erp/
 ├── prisma/
 │   ├── schema.prisma          # ~78 model, ~35 enum (kanonik kaynak — sayı yaklaşık)
 │   ├── seed.ts                # Tek dosya: 86 permission (2026-09-03 ölçümü; katalog src/constants/permission-catalog.ts'ten) + 16 template + 1 kullanıcı (admin) + 3 kalite + master demo
-│   └── migrations/            # ~114 migration (son: 20260714151000_dispatch_item_unique_dispatch_roll)
+│   └── migrations/            # 232 migration (son: 20260904120442_cuval_izleri_etiket) — sayı bayatlar, kanonik: dizinin kendisi
 │
 ├── src/
 │   ├── server.ts              # Entry point
@@ -92,9 +92,9 @@ Prisma    → src/lib/prisma.ts (singleton, pg adapter)
 
 ---
 
-## 4. Schema — ~78 Model + ~35 Enum
+## 4. Schema — 124 Model + 68 Enum
 
-> **⚠️ Güncellik notu:** Aşağıdaki model/enum tabloları bir NOKTA-ANI SNAPSHOT'tır ve bayatlar — **kanonik kaynak her zaman `prisma/schema.prisma`** (`grep '^model'` / `'^enum'`). Bu bölümdeki sayı/tablo eksik olabilir; bu dokümanın asıl değeri §7-§10 pattern/iş-kuralı/performans gerekçelerindedir. Tablolarda eksik olan başlıca modeller: `Sack`/`Shipment`/`ShipmentOrder`/`SackAllocation`, `Batch` (parti modeli), `SwatchStockReduction` + `clientToken` idempotency alanları, `SubcontractorDirectShipAllocation`, `PeripheralDevice`/`DevicePeripheral`, `LabelTemplateVariant`/`LabelContextDefault`/`CustomerTemplateRoute`, `EndpointLatencyDaily`, `PrintedDocument`, `RollReturn`/`ReturnReason`, `KartelaDispatch(+Item)`/`KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `WorkSession`, `Session`, `UserPreference`; enum'larda `RollForm`, `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity`, `ShipmentDestination`, `ClientType`, `PeripheralKind`/`DeviceKind` vb.
+> **⚠️ Güncellik notu:** Başlıktaki sayılar 2026-09-05 ölçümüdür; aşağıdaki model/enum tabloları bir NOKTA-ANI SNAPSHOT'tır ve bayatlar — **kanonik kaynak her zaman `prisma/schema.prisma`** (`grep -c '^model'` / `'^enum'`). Tablo TAM DEĞİL (model listesi 53 satırla kapanır); bu bölümün değeri model gruplarının gerekçesidir, envanteri değil ve bu dokümanın asıl değeri §7-§10 pattern/iş-kuralı/performans gerekçelerindedir. Tablolarda eksik olan başlıca modeller: `Sack`/`Shipment`/`ShipmentOrder`/`SackAllocation`, `Batch` (parti modeli), `SwatchStockReduction` + `clientToken` idempotency alanları, `SubcontractorDirectShipAllocation`, `PeripheralDevice`/`DevicePeripheral`, `LabelTemplateVariant`/`LabelContextDefault`/`CustomerTemplateRoute`, `EndpointLatencyDaily`, `PrintedDocument`, `RollReturn`/`ReturnReason`, `KartelaDispatch(+Item)`/`KartelaReceipt(+Item)`, `ProductRecipe(+Property)`, `WorkSession`, `Session`, `UserPreference`; enum'larda `RollForm`, `ShipmentStatus`, `PrintedDocType/Status`, `RollErrorAction`, `DefectSeverity`, `ShipmentDestination`, `ClientType`, `PeripheralKind`/`DeviceKind` vb.
 
 ### Modeller (gruplandırılmış)
 
@@ -174,7 +174,7 @@ Enum sayısı ~**35** (kanonik: `grep '^enum' schema.prisma`; aşağıdaki tablo
 | `StationKind` | RAW_QC, PROCESS_QC, TAMBUR, SHIPPING, SUBCONTRACTOR, OTHER |
 | `RollOperationType` | KURSUN_APPLIED, QC2_COMPLETED, TAMBUR_PROCESSED, SUBCONTRACTOR_SENT, SUBCONTRACTOR_RETURNED |
 | `ItemType` | YARN, FABRIC, CONSUMABLE (WARP kaldırıldı — fabrika çözgü/dokuma yapmaz) |
-| `RollEntrySource` | SUPPLIER_RECEIPT (mobil KK1 istasyon taraması), MANUAL_ENTRY (Electron admin "Manuel Top Ekle" — 2026-07-15 SUPPLIER_RECEIPT'ten ayrıştırıldı), TAMBUR_SPLIT, SUBCONTRACTOR_RETURN |
+| `RollEntrySource` | SUPPLIER_RECEIPT (mobil KK1 istasyon taraması), MANUAL_ENTRY (Electron admin "Manuel Top Ekle" — 2026-07-15 SUPPLIER_RECEIPT'ten ayrıştırıldı), TAMBUR_MANUAL, TAMBUR_SPLIT, SUBCONTRACTOR_RETURN, PURCHASE_RECEIPT, SEMI_FINISHED — **7 değer**; yeni değer eklerken `docs/RECETELER.md` § enum |
 | `RollStatus` | STOCK, IN_PRODUCTION, SCRAP, CANCELLED, AT_SUBCONTRACTOR, A1_STOCK, RETURNED_FROM_SUBCONTRACTOR, WAREHOUSE, SHIPPED, TAMBUR_CONSUMED, SUBCONTRACTOR_CONSUMED, AT_KARTELA, KARTELA_CONSUMED (PRODUCED 2026-07-13 KALDIRILDI) |
 | `CompanyType` | CUSTOMER, SUPPLIER (fason/boyahane ayrı `Subcontractor` modeline taşındı — SUBCONTRACTOR/DYEHOUSE kaldırıldı) |
 | `OrderStatus` | PENDING, APPROVED, PARTIAL_SHIPPED, COMPLETED, CANCELLED (IN_PRODUCTION yok — durum defter-otoritatif shippedQty'den türer) |

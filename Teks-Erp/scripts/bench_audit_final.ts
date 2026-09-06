@@ -28,6 +28,9 @@ async function old4seq(r: DateRange): Promise<unknown> {
   const t = await prisma.$queryRaw(Prisma.sql`SELECT COUNT(*) AS total FROM system_logs WHERE "createdAt" >= ${r.from} AND "createdAt" <= ${r.to}`);
   const a = await prisma.$queryRaw(Prisma.sql`SELECT action, COUNT(*) AS count FROM system_logs WHERE "createdAt" >= ${r.from} AND "createdAt" <= ${r.to} GROUP BY action ORDER BY count DESC`);
   const b = await prisma.$queryRaw(Prisma.sql`SELECT "tableName", COUNT(*) AS count FROM system_logs WHERE "createdAt" >= ${r.from} AND "createdAt" <= ${r.to} GROUP BY "tableName" ORDER BY count DESC LIMIT 30`);
+  // Faz C2 bench'i 2026-08-01 tz dönüşümü ÖNCESİNİN sorgu şeklini DONMUŞ taşır;
+  // `factoryDaySql`e çevirmek ölçtüğü şeyi değiştirir (kayıtlı sayılar geçersizleşir).
+  // eslint-disable-next-line no-restricted-syntax
   const d = await prisma.$queryRaw(Prisma.sql`SELECT DATE_TRUNC('day',"createdAt")::date AS day, COUNT(*) FILTER (WHERE action='CREATE') AS c, COUNT(*) FILTER (WHERE action='UPDATE') AS u, COUNT(*) FILTER (WHERE action='DELETE') AS dd FROM system_logs WHERE "createdAt" >= ${r.from} AND "createdAt" <= ${r.to} GROUP BY 1 ORDER BY 1`);
   return [t, a, b, d];
 }
@@ -50,6 +53,9 @@ async function bench(label: string, fn: () => Promise<unknown>): Promise<{ p50: 
 
 async function setStats(on: boolean): Promise<void> {
   if (on) {
+    // Bench, istatistiği 20260801050000 ÖNCESİNİN ifadesiyle kurar — A/B'nin
+    // ölçtüğü tam olarak o eski plan. Canlı tanım migration'da, burada değil.
+    // eslint-disable-next-line no-restricted-syntax
     await prisma.$executeRawUnsafe(`CREATE STATISTICS IF NOT EXISTS sl_day_exact ON ((DATE_TRUNC('day', "createdAt")::date)) FROM system_logs`);
   } else {
     await prisma.$executeRawUnsafe(`DROP STATISTICS IF EXISTS sl_day_exact`);

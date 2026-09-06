@@ -28,17 +28,23 @@ import { STATION_KIND_BY_SCREEN } from '../../constants/stationScreens';
 import type { MobileScreenKey } from '../../types/permissions';
 import PlaceConfirmView from './PlaceConfirmView';
 
+/**
+ * Kapının taşıdığı ekran bileşeninin sözleşmesi. Props'u navigator verir ve kapı
+ * onları OKUMADAN geçirir — bu yüzden anahtarlar bilinmez, tip `any` değildir.
+ */
+export type GatedScreen = React.ComponentType<Record<string, unknown>>;
+
 export function withWorkSession(
   screenKey: MobileScreenKey,
-  load: () => React.ComponentType<any>,
-): React.ComponentType<any> {
+  load: () => GatedScreen,
+): GatedScreen {
   const expectedKind = STATION_KIND_BY_SCREEN[screenKey];
   if (!expectedKind) {
     // Gezici ekran yanlışlıkla sarılırsa kapı yok — doğrudan ekran.
     return load();
   }
 
-  let Loaded: React.ComponentType<any> | null = null;
+  let Loaded: GatedScreen | null = null;
 
   return function SessionGate(props: Record<string, unknown>) {
     const active = useSessionStore((s) => s.active);

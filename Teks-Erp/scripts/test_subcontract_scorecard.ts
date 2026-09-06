@@ -21,6 +21,16 @@ function check(label: string, ok: boolean, extra = ""): void {
   else { fail++; console.log(`❌ ${label}${extra ? " — " + extra : ""}`); }
 }
 
+/**
+ * ÖLÇÜLEMEYEN kontrol — kırmızı DEĞİL, GÖRÜNÜR atlama.
+ * (Koşucu özet satırındaki "N atlandı"yı okuyup raporlar.)
+ */
+let atlanan = 0;
+function atla(label: string, neden: string): void {
+  atlanan++;
+  console.log(`⏭️  ATLANDI — ${label}\n      ↳ ${neden}`);
+}
+
 const TAG = `TEST-FSC-${Date.now()}`;
 const RANGE: DateRange = {
   from: new Date("2096-04-01T00:00:00.000Z"),
@@ -180,13 +190,37 @@ async function main(): Promise<void> {
 
   // ── 5) AÇIK SEVK LİSTESİ ──────────────────────────────────────────────────
   console.log("\n── 5) Açık sevk takip listesi ──");
+  // ⚠️ `oldestOpen` DÖNEM SÜZGECİNDEN GEÇMEZ ve BİLEREK: açık sevk takibi "şu an
+  // fasonda ne var" sorusudur; rapor aralığından önce çıkmış bir sevk tam da
+  // görülmek istenendir. Liste EN ESKİ 25 satırdır (report service `LIMIT 25`).
+  // Bu bekçinin fixture'ı 2096 tarihli, yani mümkün olan EN YENİ sevk → veritabanında
+  // 25'ten fazla açık sevk varken listeye ASLA giremez. Kontrol o yüzden koşula bağlı:
+  // ölçülebiliyorsa ölçülür, ölçülemiyorsa SESSİZCE GEÇMEZ, görünür şekilde ATLANIR.
+  // (2026-09-05: dev DB'de 260 açık sevk vardı ve kontrol kırmızıya düştü — kod
+  // doğruydu, bekçinin varsayımı ortamdaki veriye yaslanmıştı.)
+  const acikSevkSayisi = sc.oldestOpen.length;
   const openRow = sc.oldestOpen.find((r) => r.subcontractorName === `Boyahane A ${TAG}`);
-  check("açık sevk listede", openRow !== undefined && openRow.openQty === 200,
-    `gelen: ${openRow?.openQty}`);
+  if (openRow === undefined && acikSevkSayisi >= 25) {
+    atla(
+      "açık sevk listede",
+      `liste EN ESKİ 25 ile sınırlı ve dolu (${acikSevkSayisi} satır); 2096 tarihli fixture ` +
+        `sevki listeye giremez. Ölçüm ancak açık sevk sayısı 25'in altındayken yapılabilir.`,
+    );
+  } else {
+    check("açık sevk listede", openRow !== undefined && openRow.openQty === 200,
+      `gelen: ${openRow?.openQty}`);
+  }
+  // Bu kontrol HER ZAMAN anlamlıdır: iptal/doğrudan sevkin listede OLMAMASI,
+  // listenin dolu olmasından bağımsız bir invariant.
   check(
     "iptal/doğrudan sevkler açık listesine girmez",
     !sc.oldestOpen.some((r) => r.subcontractorName === `Boyahane B ${TAG}`),
   );
+  // Listenin kendi sözleşmesi — fixture'dan bağımsız, her koşumda ölçülür.
+  check("açık liste EN ESKİDEN yeniye sıralı", 
+    sc.oldestOpen.every((r, i) => i === 0 || sc.oldestOpen[i - 1]!.daysOpen >= r.daysOpen),
+    `ilk 3: ${sc.oldestOpen.slice(0, 3).map((r) => r.daysOpen).join(", ")}`);
+  check("açık liste 25 satırı aşmaz", sc.oldestOpen.length <= 25, `${sc.oldestOpen.length}`);
 
   // ── 6) KARŞILAŞTIRMA ──────────────────────────────────────────────────────
   console.log("\n── 6) Dönem karşılaştırma ──");
@@ -208,7 +242,7 @@ main()
     if (ids.wos.length) await prisma.workOrder.deleteMany({ where: { id: { in: ids.wos } } });
     if (ids.subs.length) await prisma.subcontractor.deleteMany({ where: { id: { in: ids.subs } } });
     if (ids.stations.length) await prisma.station.deleteMany({ where: { id: { in: ids.stations } } });
-    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
+    console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan > 0 ? `, ${atlanan} atlandı` : ""} ===`);
     await prisma.$disconnect();
     await pool.end();
     process.exitCode = fail > 0 ? 1 : 0;

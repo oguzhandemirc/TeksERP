@@ -1,0 +1,78 @@
+{
+  "label": "duzeltme-mobil",
+  "tarih": "2026-09-05",
+  "alan": "mobil/src",
+  "dagitim": "OTA — tüm değişiklikler saf JS/TS (src altı + yeni jest dosyası). Yeni native modül / izin / ikon / SDK / config-plugin YOK, app.config.js ve plugins/ dosyalarına dokunulmadı → `npm run yayinla` yeter, APK gerekmez ([MO-28]).",
+  "kapilar": {
+    "npx tsc --noEmit": "rc 0",
+    "npm run lint": "0 error / 2783 warning (tavan altı)",
+    "npx jest --runInBand": "85 suite / 854 test, 0 fail",
+    "node ../scripts/check-lint-baseline.mjs --proje=mobil": "rc 0 — 399 dosya, 0 error; 3 kural tavanın ALTINDA (no-floating-promises 277<291, max-lines-per-function 162<163, no-restricted-syntax 2166<2173). `--yaz` ile tavan sıkıştırılabilir; bu turda YAZILMADI (paylaşılan baseline dosyası)."
+  },
+  "I_20": {
+    "durum": "yapildi",
+    "cevrilen_uc_ekran": [
+      "DepoScreen.tsx handleBarcodeScanned — :296 reject (kartela yok) · :299 accept · :309 reject (top yok) · :316 reject (CANCELLED; 'kabul edilmedi' sınıfı, dördüncü sonuç uydurulmaz [MO-14]) · :319 accept + catch dalına signalScan('reject') EKLENDİ (eskiden tek sessiz yoldu).",
+      "KursunQcScreen.tsx — :373-383 'Kart zaten açık' dalına signalScan('duplicate') EKLENDİ (bugüne kadar hem sessiz hem sinyalsizdi; İ-20'nin sahadaki asıl zararı buydu) · :396 reject · :419 reject · :446 accept (openResolvedStep; normal + reopen ortak) · :477 reject.",
+      "PaketlemeScreen.tsx — :361 accept (çuval aktif) · :364 reject (çuval havuzda değil) · :376 accept (top/kartela eklendi) · :384 reject (catch) · handleScan'in sessiz erken dönüşüne signalScan('duplicate') EKLENDİ (aynı kod işlenmekte/kuyrukta)."
+    ],
+    "davranis_degisikligi_dikkat": "KursunQcScreen :406 (adım COMPLETED → reopen onay modalı) artık HİÇ sinyal vermiyor; eskiden Haptics.Warning basıyordu. Gerekçe: bu dal okutmanın SONUCU değil bir SORU; sonucu onay sonrası :446 accept ya da :477 reject veriyor. Önce reject sonra accept basmak birbirini yalanlardı ve sözleşmede dördüncü sonuç yok.",
+    "kalan_8_dosya_siniflandirma": {
+      "okutma_yolu_EVET_cevrilmeli_6": [
+        "FasonKabul/FasonKabulScreen.tsx#handleResolveCard (5 ham çağrı)",
+        "FasonSevk/FasonSevkScreen.tsx#handleCardScan (8) + #addBarcodeFromString (1) + #notifyReject (1) + #addRollToList (1) — TOP yolu zaten signalScan, KART yolu bekliyor",
+        "Tambur/TamburScreen.tsx#resolveCard (6) + #resolveScanned (1)",
+        "KartelaSevk/KartelaSevkScreen.tsx#addRoll (4)",
+        "IadeGirisi/IadeGirisiScreen.tsx#lookup (3)",
+        "Auth/LoginScreen.tsx#submitCard (2) — okutma yolu ama KİMLİK yolu; ses ayarının burada anlamlı olup olmadığı AÇIK KARAR"
+      ],
+      "okutma_yolu_AMA_baska_amac_muaf_2": [
+        "components/BarcodeScannerView.tsx#handleScanned — opt-in `captureHaptic`, YAKALAMA onayı; sonucu çağıran yönetir",
+        "HizliIsEmri/useQuickWorkOrder.ts#handleScan — yakalama tıkı; sonuç sinyalini aynı dosya signalScan/flashDuplicate ile veriyor"
+      ],
+      "okutma_yolu_HAYIR": "KartelaKabulScreen#openJob/#saveEntry (liste dokunuşu + ölçü kaydı) · KK1Screen#handlePress (buton tıkı; KK1'in gerçek okutma yolu zaten signalScan) · PlaceConfirmView#open (oturum) · kalan ~32 dosya mutasyon onSuccess/onError geri bildirimi — kapsam dışı."
+    },
+    "bekci": {
+      "dosya": "mobil/src/test/scan-haptics.guard.test.ts",
+      "yontem": "TS AST — her `Haptics.*` çağrısının EN YAKIN adlı bildirimi çözülür; adı /scan|barcode|okut|card/i ise ya da EK_OKUTMA_HANDLERLARI'nda ise ihlal. Regex ölçümle seçildi (208 çağrı / 44 dosya): yalnız okutma yollarını yakalıyor. Bir üst halkaya bakmak ÖLÇÜLDÜ ve reddedildi (ScannerSettingsScreen#toggle yanlış pozitifi).",
+      "listeler": "MUAF (2, gerekçeli) + DEVRALINAN (10 handler / 6 dosya, 'İ-20 kalan iş') — her ikisi de İKİ YÖNLÜ: bir kayıt artık hiçbir çağrıyı karşılamıyorsa bekçi kırmızı verir (bayat muafiyet koruma boşluğu açmasın, devralınan liste yalnız kısalsın).",
+      "korluk_zemini": "hapticsCalls>=150, filesWithHaptics>=30, scanSites>=10",
+      "negatif_sonda": [
+        "(1) DepoScreen#handleBarcodeScanned içine Haptics.selectionAsync() eklendi → 'okutma handler'ında listelenmemiş ham Haptics çağrısı yok' KIRMIZI (offenders: DepoScreen.tsx:292). Geri alındı.",
+        "(2) DEVRALINAN listesine karşılıksız bir kayıt eklendi → 'muafiyet ve devralınan kayıtlar bayat değil (iki yönlü)' KIRMIZI. Geri alındı.",
+        "Geri alma sonrası 4/4 yeşil (rc 0)."
+      ]
+    }
+  },
+  "I_21": {
+    "durum": "kismen-yapildi",
+    "olcum": "AST: `mobil/src/screens/Modules` altında 66 useMutation, 53'ü mutationKey'siz. İ-21'in kapsamı 4 dosya (Tambur/KK1/FasonKabul/Depo) = 13 istasyon mutasyonu; 2'sinde emsal gerekçe vardı (TamburScreen produceManualRollMutation, FasonKabulScreen closeRemainderMutation).",
+    "gerekce_yazilan_8": [
+      "TamburScreen finalizeMutation — doğan parça toplarının barkodunu SUNUCU üretir, etiket aynı dokunuşta yanıttan basılır; kuyrukta yanıt yok, istek idempotent değil (token yok).",
+      "TamburScreen cutOpenFabricMutation — çocuğun barkodu sunucudan gelir ve etiket o an basılır; `clientToken` yalnız AĞ retry'ı için.",
+      "TamburScreen cutWarehouseRollMutation — aynı sınıf: sunucu-üretimi barkod + anlık etiket.",
+      "TamburScreen finalizeWarehouseCutMutation — yanıttaki `remainingChild` doğrudan etiket kuyruğuna giriyor.",
+      "TamburScreen reorder (sebep sırası) — KATALOG yazımı, istasyon üretim yazması değil; hata anında yerel sıra hemen geri alınır, kuyrukta o geri alma saatler sonra olurdu.",
+      "TamburScreen applyMut (geri alma) — taze önizlemenin kapsamına uygulanan yıkıcı işlem; `bypassComplete` ile aynı sınıf (tambur.service.ts:413 emsali).",
+      "KK1Screen QuickAddDesenRow mutation — yaratılan desenin ID'si anında picker'a veriliyor; kuyruklanan çağrının ID'si yok.",
+      "FasonKabulScreen cancelReceiptMutation — sunucudan taze çekilen önizlemenin `cascadeRollIds` kapsamına uygulanan yıkıcı iptal."
+    ],
+    "kod_degistirilmedi_karar_bekliyor_3": [
+      "TamburScreen reportErrorMutation",
+      "TamburScreen deleteErrorMutation",
+      "DepoScreen unmarkKartela"
+    ]
+  },
+  "I_22": {
+    "durum": "yapildi",
+    "olcum_duzeltmesi": "Bulgudaki 3 dosyanın 2'si YANLIŞ POZİTİF: `Tambur/LabelNamePreview.tsx` ve `components/labels/LabelPreviewSheet.tsx` ham `<Modal` KULLANMIYOR — ikisi de `AppModal` import edip kullanıyor; grep `<Modal` deseni `<ModalTextInput` alt dizisine takılmış. Gerçek ham `<Modal` TEK yerde: `components/AppMenu.tsx:168`.",
+    "yapilan": "AppMenu'ye gerekçeli muafiyet notu yazıldı: bu bir MENÜ, dialog değil — kart tetiğin ölçülen dikdörtgenine çivilenir, perde karartmaz, sürükleyerek kapanmaz; AppModal'ın üç yerleşimi (center/bottom/right) çapa konumunu ifade edemez ve tetik ile kart `measureInWindow` için AYNI ağaçta durmak zorunda (portal içeriği host'a taşırdı).",
+    "dogrulama": "`grep -rn '<Modal' src | grep -v AppModal` → yalnız AppMenu.tsx:168 + `<ModalTextInput` satırları."
+  },
+  "I_23": {
+    "durum": "kismen-yapildi",
+    "olcum": "`ReasonPresetPicker` tüketicisi 1 (HizliIsEmri/wizard/StepConfirm.tsx). Kendi 'serbest metin ÜSTTE + chip' arayüzünü çizen 2 yer: FasonKabulScreen CloseRemainderModal ve TamburScreen kalan-karar modalı (ReasonStep). `components/RollCancelModal.tsx` bu sınıfa GİRMEZ — orada sebep kapalı başlar ve chip DOKUNUNCA topu iptal eder (tek-dokunuş kararı); ayrı desen, belgesi ReasonPresetManagerSheet.tsx başlığında.",
+    "yapilan": "FasonKabulScreen CloseRemainderModal ortak `ReasonPresetPicker`e çevrildi (serbest metin ÜSTTE kuralı bileşenin sözleşmesinde korunuyor; `requiresText` satırı chip olarak çizilmez, yazmaya başlamak onu seçer). Elle çizilen TextInput + presets.map bloğu (≈40 satır) düştü.",
+    "kod_degistirilmedi_karar_bekliyor": "TamburScreen ReasonStep."
+  }
+}

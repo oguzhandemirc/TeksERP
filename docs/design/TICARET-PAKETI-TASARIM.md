@@ -1,6 +1,6 @@
 # Ticaret Paketi — Çoklu Depo + Mal Kabul + Ön Muhasebe (2026-08)
 
-> **Durum:** Paket 1 (Çoklu Depo + Mal Kabul) UYGULANIYOR · Paket 2 (Ön Muhasebe) TASARLANDI, henüz yazılmadı.
+> **Durum:** ✅ Paket 1 (Çoklu Depo + Mal Kabul) ve Paket 2 (Ön Muhasebe) UYGULANDI — cari/fatura/çek/kasa servisleri, sağlamlık paketi migration'ları ve bekçileri canlı. "Para tarafı yok" ölçümü 2026-08 başına aittir. Canlı kural özeti: `docs/kurallar/finans.md`.
 > Kanonik referanslar: `Teks-Erp/prisma/schema.prisma`, `Teks-Erp/src/services/inventory.service.ts`
 > (`createInitialEntry`), `Teks-Erp/src/services/helpers/roll-entry-station.helper.ts` (12 giriş yolu envanteri),
 > `Teks-Erp/src/services/printed-document.service.ts` (donmuş belge zinciri).
@@ -98,7 +98,7 @@ firması kullanmıyor); **backfill** (açılış durumu `Roll.warehouseId`'dedir
 
 ## 4. Transfer belgesi (`WarehouseTransfer`)
 
-- `transferNo` = `DT`+GGAAYY+NNNN (`nextPrefixedSequence` + `withBarcodeRetry` deseni).
+- `transferNo` = `DT`+GGAAYY+NNNN (`nextPrefixedSequenceTx` + `withBarcodeRetry` deseni).
 - **Tek adımlı commit** — "yolda" (in-transit) durumu YOK: yerel depolar arası taşımada araç takibi
   ihtiyacı yok. Gerekirse `status` enum'una SONA `IN_TRANSIT` eklenerek açılır.
 - **Satır tablosu yok** — kalemler `WarehouseMovement` satırlarıdır (`transferId`); belge içeriği

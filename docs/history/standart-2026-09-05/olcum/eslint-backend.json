@@ -1,0 +1,245 @@
+{
+  "proje": "Teks-Erp (backend, Express 5 + Prisma 7)",
+  "mevcutDurum": "npx eslint src -f json → 456 dosya lintlendi, 0 error / 0 warning (çıkış kodu 0, süre 2.89 s). Kapsam yalnız `src` (npm run lint = \"eslint src\"): scripts/ 554 .ts ve prisma/ 17 .ts HİÇ lint edilmiyor. src'de 8 eslint-disable yorumu var; reportUnusedDisableDirectives:\"error\" ile 8'i de ÖLÜ çıkıyor (no-explicit-any da açılırsa 7). scripts/'te 6 disable → 6'sı ölü; prisma/'da 0 disable.",
+  "tipBilgisiMaliyeti": "src (456 dosya): tip bilgisiz 2.85 / 3.25 / 4.63 s (3 koşum) → tip bilgili (parserOptions.projectService:true) 14.43 / 11.67 s. Yaklaşık 4x, mutlak +9 s. scripts (554 dosya): tipsiz 2.82 s, projectService ile 26.58 s AMA 554 dosyanın 554'ü \"Parsing error: … was not found by the project service\" verdi (tsconfig.json include:[\"src/**/*\"]) — yani scripts'te tip bilgili kural bugün ÖLÇÜLEMİYOR, önce tsconfig.scripts.json / allowDefaultProject kararı gerekir.",
+  "kurallar": [
+    {
+      "kural": "E-01 · kapsam genişletme: scripts/**/*.ts + prisma/**/*.ts lint'e alınsın (dar set: 6 mevcut yasak + 5 syntax yasağı + TR-tanımlayıcı)",
+      "yapilandirma": "{ files: [\"scripts/**/*.ts\", \"prisma/**/*.ts\"], ignores: [\"scripts/test_migration_hygiene.ts\", \"scripts/test_raw_sql_hygiene.ts\", \"scripts/test_station_quality_capability.ts\"], languageOptions: { parser: tsParser, parserOptions: { ecmaVersion: 2022, sourceType: \"module\" } }, plugins: { \"@typescript-eslint\": tsPlugin }, rules: { \"no-restricted-syntax\": [\"error\", ...ORTAK_YASAKLAR, FACTORY_TZ_LITERAL, PROCESS_QC, NOT_MOBILE, BODY_CODE, APPLIED_STEPS, DATE_TRUNC, NOW_AT_TIME_ZONE, TR_IDENT] } }",
+      "ihlal": 39,
+      "dosyaSayisi": 20,
+      "karar": "warn-baseline",
+      "gerekce": "scripts/ (556 dosya lintlendi) dar sette 38 ihlal, prisma/ (17 dosya) 1 ihlal veriyor. Kural bazında dağılım: Europe/Istanbul literali 3 (scripts) + 1 (prisma/seed-ticaret-demo.ts:168) · kind===PROCESS_QC 3 · res.body.code 2 · applied_steps_count 5 (hepsi tek dosya) · DATE_TRUNC 10 · now() AT TIME ZONE 5+3 · Türkçe tanımlayıcı 8. 39>15 olduğu için kapsam açılışı warn+baseline ile yapılır; ancak isabetlerin 15'i KURALIN KONUSUNU ÖLÇEN üç bekçidedir (test_migration_hygiene.ts 5 · test_raw_sql_hygiene.ts 4 · test_station_quality_capability.ts 1 · bench_audit_* 4) — bu dosyalar ignore edilirse kalan 24 ihlalin hiçbir kuralı 10'u geçmez ve tek tek 'error-duzeltilerek' olur. Diğer 5 mevcut yasak (tx+Promise.all, notIn:[], orderBy batchNumber, requireModule, route/controller prisma import) scripts+prisma'da 0 ihlal — bunlar hemen 'error'. BOYUT ve no-console kuralları bu bloğa GİRMEZ (bekçi doğası: scripts'te max-lines-per-function 341, max-lines 90, max-params 22, no-console 4700 ihlal; prisma'da 15/3/2/131). floating-promises de giremez: tsconfig scripts'i içermiyor (554 parsing error).",
+      "olcumKomutu": "OLCUM_KURAL=<K> OLCUM_KAPSAM=scripts npx eslint scripts -c eslint.olcum.mjs -f json  # ve OLCUM_KAPSAM=prisma npx eslint prisma …",
+      "ornekler": [
+        "scripts/audit_repro_E-1-02.ts:46 (Europe/Istanbul)",
+        "scripts/test_import_framework.ts:68 (Europe/Istanbul)",
+        "prisma/seed-ticaret-demo.ts:168 (Europe/Istanbul)",
+        "scripts/superadmin-olustur.ts:157 (hariçUserId — Türkçe tanımlayıcı)",
+        "scripts/test_superadmin_provision.ts:101 (pasifleşenler — Türkçe tanımlayıcı)"
+      ]
+    },
+    {
+      "kural": "`kind === \"PROCESS_QC\"` karşılaştırması (quality-station.helper.ts DIŞINDA) — boğaz-ikiz",
+      "yapilandirma": "{ selector: \"BinaryExpression[operator=/^[!=]==$/] MemberExpression[property.name='PROCESS_QC'], BinaryExpression[operator=/^[!=]==$/] Literal[value='PROCESS_QC']\", message: \"`kind === PROCESS_QC` YASAK — soruyu `stepCanApplyQuality` / `QUALITY_STATION_WHERE` cevaplar (boğaz-ikiz). bkz. docs/kurallar/kalite.md.\" }  // blok ignores: [\"src/services/helpers/quality-station.helper.ts\"]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "Ham selector src'de 1 isabet verdi: src/services/helpers/quality-station.helper.ts:90 — kuralın TEK meşru yeri (FAZ A köprüsü, dosya başlığında gerekçesi yazılı). Bloğa `ignores` konunca 0. Diğer 85 PROCESS_QC geçişi Swagger JSDoc / yorum (AST görmez). scripts'te 3 isabet: test_station_quality_capability.ts:124 (değişmezi bizzat ölçen bekçi → ignore), seed-test-full.ts:72 ve test_e2e_full_flow.ts:228 (fixture kurulumu → satır disable ya da helper kullanımı).",
+      "olcumKomutu": "OLCUM_KURAL=PROCESS_QC2 npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'",
+      "ornekler": []
+    },
+    {
+      "kural": "`!== \"mobile\"` (clientType güvenlik sınırı değil)",
+      "yapilandirma": "{ selector: \"BinaryExpression[operator='!=='] Literal[value='mobile']\", message: \"`!== \\\"mobile\\\"` YASAK — `clientType` opsiyoneldir ve güvenlik sınırı DEĞİL; ayrım soketten yapılır. bkz. docs/kurallar/genel.md.\" }",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "src'de 0, scripts'te 0, prisma'da 0. Metinde tek isabet src/services/auth.service.ts:49 — kuralı ANLATAN yorum satırı; AST yorumu görmez. Bedava kural.",
+      "olcumKomutu": "OLCUM_KURAL=NOT_MOBILE npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 0",
+      "ornekler": []
+    },
+    {
+      "kural": "`X.body.code` okuma (hata kodu `details.code` altında)",
+      "yapilandirma": "{ selector: \"MemberExpression[object.property.name='body'][property.name='code']\", message: \"`body.code` okuma YASAK — hata kodu `details.code` altındadır, kök `code` hep undefined döner (sahte yeşil). bkz. src/middlewares/module.middleware.ts.\" }",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "DAR selector ŞART: geniş yazım (`MemberExpression[object.name='body'][property.name='code']` da dahil) src'de 1 YANLIŞ POZİTİF verdi — src/controllers/auth.controller.ts:594 `body.code`, Zod ile parse edilmiş TOTP gövdesinin `code` alanı, hata koduyla ilgisi yok. `object.property.name='body'` (yani `res.body.code` / `remoteX.body.code`) ile src 0. scripts'te 2 isabet var (test_remote_access_guard.ts:431-432) ve bunlar BİLİNÇLİ: 'UZAK: kök `code` geriye uyum için DURUYOR' testi — o iki satır `eslint-disable-next-line` + gerekçe alır.",
+      "olcumKomutu": "OLCUM_KURAL=BODY_CODE2 npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 0 (geniş selector: 1)",
+      "ornekler": []
+    },
+    {
+      "kural": "`applied_steps_count` ile migration doğrulama",
+      "yapilandirma": "{ selector: \"Literal[value=/applied_steps_count/], TemplateElement[value.raw=/applied_steps_count/], Identifier[name='applied_steps_count'], Property[key.name='applied_steps_count']\", message: \"`applied_steps_count` ile migration doğrulama YASAK — elle resolve edilmiş migration 0 taşır, SQL'in koştuğunu KANITLAMAZ. bkz. docs/kurallar/deploy-kurulum.md.\" }  // ignores: [\"scripts/test_migration_hygiene.ts\"]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "src'de 0 (tek metin isabeti src/services/db-copy-verify.service.ts:181, kuralı anlatan yorum). scripts'te 5 isabet ve HEPSİ tek dosyada: test_migration_hygiene.ts:63,67,94,97,109 — bu bekçinin İŞİ zaten `applied_steps_count=0` satırlarını bulup UYARMAK, yani kuralın konusu. O dosya blok ignore'una girer; kural src+scripts'in kalanında bedava error.",
+      "olcumKomutu": "OLCUM_KURAL=APPLIED_STEPS npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 0; scripts → 5 (tek dosya)",
+      "ornekler": []
+    },
+    {
+      "kural": "çıplak `DATE_TRUNC` (src/constants/time.ts DIŞINDA)",
+      "yapilandirma": "{ selector: \"Literal[value=/DATE_TRUNC/i], TemplateElement[value.raw=/DATE_TRUNC/i]\", message: \"Çıplak `DATE_TRUNC` YASAK — fabrika günü tek kaynak `src/constants/time.ts` (factoryDayTrunc/factoryMonthTrunc). bkz. docs/kurallar/raporlar.md.\" }  // ignores: [\"src/constants/time.ts\"]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "src'de ham selector 2 isabet verdi (src/constants/time.ts:71 ve :90) — ikisi de tek kaynağın KENDİ tanımı; dosya ignore edilince 0. src/services/reports/audit.report.service.ts:25'teki isabet yorum satırı, AST görmez. scripts'te 10 isabet / 6 dosya (bench_audit_final 2, bench_audit_probe 1, bench_audit_summary 1, test_db_invariants 1, test_demand_analysis 1, test_report_day_boundary 4) — bunlar ham SQL planı ve gün sınırı ÖLÇEN bekçiler; scripts kapsamına alınırsa baseline'a yazılır ya da dosya ignore'u verilir.",
+      "olcumKomutu": "OLCUM_KURAL=DATE_TRUNC2 npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 0",
+      "ornekler": []
+    },
+    {
+      "kural": "`now() AT TIME ZONE 'UTC'` yeni yazımı (ham SQL'de)",
+      "yapilandirma": "{ selector: \"Literal[value=/now\\\\(\\\\)\\\\s*AT TIME ZONE/i], TemplateElement[value.raw=/now\\\\(\\\\)\\\\s*AT TIME ZONE/i]\", message: \"`now() AT TIME ZONE 'UTC'` YENİ yazımı YASAK — kolon timestamptz, düz `now()` doğru değeri yazar; sarmal Europe/Istanbul'da 3 saat kaydırır. bkz. CLAUDE.md § Yasaklar.\" }",
+      "ihlal": 11,
+      "dosyaSayisi": 4,
+      "karar": "error-duzeltilerek",
+      "gerekce": "Keşifteki 11 sayısı BİREBİR doğrulandı ve hepsi aynı desen: `SET \"exitedAt\" = (now() AT TIME ZONE 'UTC')`. Dört dosyada toplanmış (subcontractor 5, workorder 4, kursun-bypass 1, kursun-qc 1), tek `$executeRaw` kalıbının kopyası — 11 satırlık mekanik düzeltme (`now()` ya da `CURRENT_TIMESTAMP`). Prisma migration SQL'lerindeki isabetler (.sql) ESLint kapsamına girmez, oradaki tarihi kullanım korunur. scripts'te 8 isabet / 3 dosya; test_raw_sql_hygiene.ts:420,421,428,574'teki 4'ü deseni ARAYAN bekçinin kendi metni → dosya ignore.",
+      "olcumKomutu": "OLCUM_KURAL=NOW_UTC npx eslint src -c eslint.olcum.mjs -f json | jq -r '.[].messages[] as $m | \"\\(.filePath):\\($m.line)\"'",
+      "ornekler": [
+        "src/services/subcontractor.service.ts:2087",
+        "src/services/subcontractor.service.ts:2940",
+        "src/services/workorder.service.ts:3702",
+        "src/services/workorder.service.ts:4226",
+        "src/services/kursun-bypass.service.ts:2350"
+      ]
+    },
+    {
+      "kural": "Türkçe karakterli tanımlayıcı yasağı (K1: tanımlayıcı ASCII)",
+      "yapilandirma": "{ selector: \"Identifier[name=/[çğıöşüÇĞİÖŞÜİ]/]:not(Property > .key):not(MemberExpression > .property):not(TSPropertySignature > .key)\", message: \"Tanımlayıcı ASCII/İngilizce olmalı — Türkçe karakter YASAK (UI metni ve yorum Türkçe kalır). bkz. docs/KOD-KURALLARI.md § İsimlendirme.\" }",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "Keşifteki '0 bekleniyor' DOĞRULANDI ama YALNIZ daraltılmış selector ile. Ham `Identifier[name=/[çğıöşüÇĞİÖŞÜ]/]` src'de 24 ihlal verdi ve 24'ü de YANLIŞ POZİTİF: iki harf-çevirim haritasının anahtarları (src/constants/reason-presets.ts:188-189 ve src/services/helpers/sack-tag.helper.ts:69-70 → `{ ç: \"C\", Ç: \"C\", ğ: \"G\", … }` — Property key'leri). `:not(Property > .key)` + `:not(MemberExpression > .property)` eklenince 0. prisma/ 0. scripts/ 8 ihlal / 2 dosya ve bunlar GERÇEK: superadmin-olustur.ts `hariçUserId`, test_superadmin_provision.ts `pasifleşenler` → yeniden adlandırılır.",
+      "olcumKomutu": "OLCUM_KURAL=TR_IDENT2 npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 0 (ham selector: 24)",
+      "ornekler": []
+    },
+    {
+      "kural": "`z.enum([...])` literal'i bir Prisma enum'unun aynası",
+      "yapilandirma": "— (config satırı YOK; ESLint no-restricted-syntax ile yazılamaz)",
+      "ihlal": 110,
+      "dosyaSayisi": 44,
+      "karar": "yazma",
+      "gerekce": "AST'den GÜVENİLİR yakalanamaz. Yazılabilen en dar selector `CallExpression[callee.object.name='z'][callee.property.name='enum'] > ArrayExpression` src'de 110 ihlal veriyor — yani AYNA olsun olmasın HER z.enum literali. Ayna olanı ayırmak schema.prisma'yı okuyup literal kümesini 68 enum'la karşılaştırmayı gerektirir; ESLint selector'ü dosya-dışı veri okuyamaz. Python ile bu karşılaştırmayı yaptım: 41 aday (38'i tam ayna) — ama içinde tambur.controller.ts:56 `z.enum([\"CUT\",\"NO_CUT\"])` gibi RollErrorAction'a tesadüfen denk düşen alt-küme isabetleri var, yani schema karşılaştırması bile yanlış pozitif üretiyor. Bunun yerine bekçi: `scripts/test_zod_prisma_enum_mirror.ts` — schema.prisma enumlarını okur, `z.enum([...])` literallerini karşılaştırır, TAM eşleşmeleri (38) listeler; yeni kodda `z.enum(PrismaEnum)` zorunlu, devralınan liste baseline JSON'da donar.",
+      "olcumKomutu": "OLCUM_KURAL=Z_ENUM npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 110 (ayrım yapamıyor); python3 ile şema karşılaştırması → 41 aday / 38 tam ayna",
+      "ornekler": [
+        "src/routes/cheque.routes.ts:37 (ChequeStatus, 9/9 tam ayna)",
+        "src/routes/finance-allocation.routes.ts:30 (Currency, 5/5)",
+        "src/controllers/device.controller.ts:12 (DeviceKind, 3/3)",
+        "src/controllers/label.controller.ts:83 (PrinterLanguage, 4/4)",
+        "src/controllers/tambur.controller.ts:56 (RollErrorAction 2/2 — TESADÜFİ eşleşme, yanlış pozitif)"
+      ]
+    },
+    {
+      "kural": "`findUnique → if → update` deseni (atomik claim yerine)",
+      "yapilandirma": "— (config satırı YOK; AST'den güvenilir değil)",
+      "ihlal": 53,
+      "dosyaSayisi": 24,
+      "karar": "yazma",
+      "gerekce": "Denenen en dar makul selector `IfStatement > * CallExpression[callee.property.name='update']` src'de 53 isabet verdi. Desenin özü 'AYNI kaydı önce oku, koşulu bellekte sına, sonra güncelle' — bu üç adımın AYNI id'ye bağlı olduğunu doğrulamak veri-akışı analizi ister; ESLint selector'ü yalnız sözdizimsel komşuluk görür. 53 isabetin ezici çoğunluğu 'if içinde herhangi bir update çağrısı' (upsert dalı, koşullu yan-etki güncellemesi, farklı model) — keşfin 5 adayından incelediği 2'sinin yanlış pozitif çıkması aynı sınıfı doğruluyor. Yerine bekçi: `scripts/test_atomic_claim_coverage.ts` — durum-geçişi yapan servis metodlarını (RollStatus/WorkOrderStatus/ShipmentStatus yazan updateMany/update çağrıları) tarayıp `count === 0 → 409` kontrolünün varlığını arar; kapsamı liste-tabanlı (yeni durum yazarı listeye eklenmezse bekçi kırmızı).",
+      "olcumKomutu": "OLCUM_KURAL=FIND_UNIQUE npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 53, çoğu yanlış pozitif",
+      "ornekler": [
+        "src/jobs/exchange-rate.job.ts:182 (yanlış pozitif — koşullu upsert)",
+        "src/services/auth.service.ts:198",
+        "src/services/cash-transaction.service.ts:146",
+        "src/jobs/default-warehouse.job.ts:50",
+        "src/jobs/role-template-catalog.job.ts:118"
+      ]
+    },
+    {
+      "kural": "`no-console` (backend)",
+      "yapilandirma": "— (backend'e YAZILMAZ; Electron/mobil kararı ayrı)",
+      "ihlal": 137,
+      "dosyaSayisi": 38,
+      "karar": "yazma",
+      "gerekce": "Ölçüm keşfi doğruladı: src'de tam 137 çağrı / 38 dosya. Backend'de yapılandırılmış logger YOK — `console` fiilen TEK log kanalı ve yoğunluğu da bunu gösteriyor: server.ts 30, error.middleware.ts 11, jobs/permission-catalog.job.ts 8, jobs/role-template-catalog.job.ts 8, jobs/backup-scheduler.ts 6, jobs/offsite-sweeper.ts 6 — hepsi süreç yaşam döngüsü, iş/hata kaydı ve zamanlanmış iş çıktısı. Kuralı yazmak 137 disable ya da hiç var olmayan bir logger'a taşıma demektir; ikisi de kuralın değil kapsamın yanlış okunduğunun işareti. prisma/ 131, scripts/ 4700 (bekçi çıktısı — orada da yazılmaz). ES-BOŞLUK olarak kaydedilir: 'yapılandırılmış logger kararı' verildiğinde kural yeniden ölçülür.",
+      "olcumKomutu": "OLCUM_KURAL=NO_CONSOLE npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 137",
+      "ornekler": [
+        "src/server.ts (30 çağrı)",
+        "src/middlewares/error.middleware.ts (11)",
+        "src/jobs/permission-catalog.job.ts (8)",
+        "src/jobs/role-template-catalog.job.ts (8)",
+        "src/jobs/backup-scheduler.ts (6)"
+      ]
+    },
+    {
+      "kural": "`max-lines` 300 (skipComments + skipBlankLines)",
+      "yapilandirma": "\"max-lines\": [\"warn\", { max: 300, skipComments: true, skipBlankLines: true }]",
+      "ihlal": 90,
+      "dosyaSayisi": 90,
+      "karar": "warn-baseline",
+      "gerekce": "skipComments/skipBlankLines AÇIK ölçüm: 90 dosya. Aynı kapsamda skipsiz ölçüm 145 dosya verdi — keşifteki 145 sayısı skipsizdi, yani yorum+boş satır sayılınca 55 dosya HAKSIZ yere ihlal ediyordu (%38 fazla ceza). Bu, 'yorum bir değerdir' kuralının ölçüyle doğrulanması. 90>15 → warn + baseline; devralınan liste donar, tavan yalnız düşer. En büyükler tek başına devralınan: subcontractor.service.ts 5292 kod satırı, workorder 4985, inventory 3575, shipping 3323, system-setting 3151. prisma/ 3 dosya, scripts/ 90 dosya (bekçide boyut kuralı ÖNERİLMİYOR).",
+      "olcumKomutu": "OLCUM_KURAL=MAX_LINES npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 90 (skipsiz: MAX_LINES_RAW → 145)",
+      "ornekler": [
+        "src/services/subcontractor.service.ts (5292)",
+        "src/services/workorder.service.ts (4985)",
+        "src/services/inventory.service.ts (3575)",
+        "src/services/shipping.service.ts (3323)",
+        "src/services/system-setting.service.ts (3151)"
+      ]
+    },
+    {
+      "kural": "`max-lines-per-function` 80 (skipComments + skipBlankLines + IIFEs)",
+      "yapilandirma": "\"max-lines-per-function\": [\"warn\", { max: 80, skipComments: true, skipBlankLines: true, IIFEs: true }]",
+      "ihlal": 305,
+      "dosyaSayisi": 107,
+      "karar": "warn-baseline",
+      "gerekce": "skip'ler açıkken 305 fonksiyon / 107 dosya (keşifteki 391 skipsizdi — 86 fonksiyon farkı yine yorum cezası). 305>15 → warn + baseline. Uç değerler kuralın gerekliliğini gösteriyor: system-setting.service.ts:1789 tek fonksiyonda 1075 kod satırı, subcontractor.service.ts:2355 723, :672 574, workorder.service.ts:5100 572, tambur.service.ts:545 555. K2 tablosundaki 'sert 150' eşiği bu dağılımla tutarlı. scripts/ 341 ihlal → bekçi dosyalarında bu kural KOŞULMAZ (bekçi doğası tek uzun `main()`).",
+      "olcumKomutu": "OLCUM_KURAL=MAX_LINES_FN npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 305",
+      "ornekler": [
+        "src/services/system-setting.service.ts:1789 (1075 satır)",
+        "src/services/subcontractor.service.ts:2355 (723)",
+        "src/services/subcontractor.service.ts:672 (574)",
+        "src/services/workorder.service.ts:5100 (572)",
+        "src/services/tambur.service.ts:545 (555)"
+      ]
+    },
+    {
+      "kural": "`max-params` 4",
+      "yapilandirma": "\"max-params\": [\"warn\", 4]",
+      "ihlal": 47,
+      "dosyaSayisi": 28,
+      "karar": "warn-baseline",
+      "gerekce": "47 ihlal / 28 dosya (5-6 parametreli fonksiyonlar). 47>15 → warn + baseline. Devralınan ihlaller dağınık (dosya başına 1-3), tek noktada toplanmadığı için toplu düzeltme yerine baseline doğru araç; yeni kodda 4 sınırı sert. scripts/ 22, prisma/ 2 — kapsam genişletilirse bu kural yine warn.",
+      "olcumKomutu": "OLCUM_KURAL=MAX_PARAMS npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 47",
+      "ornekler": [
+        "src/middlewares/web-hardening.ts:181 (6 parametre)",
+        "src/services/cheque.service.ts:786 (5)",
+        "src/services/cheque.service.ts:843 (5)",
+        "src/services/document-render/fason-ceki.html.ts:221 (5)",
+        "src/services/duplicate-review.service.ts:166 (5)"
+      ]
+    },
+    {
+      "kural": "`@typescript-eslint/naming-convention` (UPPER_SNAKE sabit · PascalCase tip · camelCase kalan · `__…ForTests` kaçışı)",
+      "yapilandirma": "\"@typescript-eslint/naming-convention\": [\"error\", { selector: \"default\", format: [\"camelCase\"], leadingUnderscore: \"allow\", trailingUnderscore: \"allow\", filter: { regex: \"^__.*(ForTests|__)$\", match: false } }, { selector: \"variable\", format: [\"camelCase\",\"UPPER_CASE\",\"PascalCase\"], leadingUnderscore: \"allow\", trailingUnderscore: \"allow\", filter: { regex: \"^__.*(ForTests|__)$\", match: false } }, { selector: \"function\", format: [\"camelCase\",\"PascalCase\"], leadingUnderscore: \"allow\", filter: { regex: \"^__.*ForTests$\", match: false } }, { selector: \"parameter\", format: [\"camelCase\"], leadingUnderscore: \"allow\" }, { selector: \"typeLike\", format: [\"PascalCase\"], leadingUnderscore: \"allow\" }, { selector: \"enumMember\", format: [\"UPPER_CASE\",\"PascalCase\"] }, { selector: [\"classProperty\",\"classMethod\"], format: [\"camelCase\",\"UPPER_CASE\"], leadingUnderscore: \"allow\" }, { selector: [\"objectLiteralProperty\",\"objectLiteralMethod\",\"typeProperty\"], format: null }, { selector: \"import\", format: [\"camelCase\",\"PascalCase\",\"UPPER_CASE\"] }]",
+      "ihlal": 2,
+      "dosyaSayisi": 1,
+      "karar": "error-duzeltilerek",
+      "gerekce": "Üç kademeli ölçüm: (1) düz kural 43 ihlal / 14 dosya; (2) yalnız `filter: {regex:\"^__.*ForTests$\", match:false}` eklenince 37 / 8 — keşfin 7 `__…ForTests` isabeti böyle kapandı; (3) kalan 35'in tamamı MEŞRU UPPER_SNAKE olduğu için classProperty/classMethod'a UPPER_CASE, objectLiteral*/typeProperty'ye `format: null` verildi (record-info.service.ts'te 24 dispatch anahtarı Prisma model adları: CUSTOMER/ITEM/ORDER…, label-renderer.registry.ts'te ZPL/PPLA/PPLB yazıcı dilleri, device.service.ts LAST_SEEN_THROTTLE_MS, route.service.ts ALLOWED_STEP_KEYS, permission-management.service.ts ADMIN_CODES) → 2 ihlal kaldı. Kalan 2 GERÇEK: src/services/helpers/native-preview.ts:102 `W` ve `H` parametreleri → `width`/`height` olarak adlandırılır, sonra kural `error`. `__test__` (order.service.ts:150) ve `_PrismaKeep` (kursun-qc.service.ts:1748) filter/leadingUnderscore ile kapandı. scripts/ 4 ihlal (araya_girildi, __bitti ×2, HTTP_KONTROL), prisma/ 0.",
+      "olcumKomutu": "OLCUM_KURAL=NAMING_ALLOW2 npx eslint src -c eslint.olcum.mjs -f json  # → 2 (düz: NAMING → 43, yalnız ForTests filtresi: NAMING_ALLOW → 37)",
+      "ornekler": [
+        "src/services/helpers/native-preview.ts:102 (parametre `W`)",
+        "src/services/helpers/native-preview.ts:102 (parametre `H`)"
+      ]
+    },
+    {
+      "kural": "`@typescript-eslint/no-floating-promises` (tip bilgili)",
+      "yapilandirma": "{ files: [\"src/**/*.ts\"], languageOptions: { parser: tsParser, parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } }, rules: { \"@typescript-eslint/no-floating-promises\": \"error\" } }",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "src'de 0 ihlal — keşifle birebir. Bedava error; `void AuditService.log(...)` kalıbı (finans paketinin bilinçli ateşle-unut istisnası) `void` operatörü taşıdığı için kural tarafından zaten kabul ediliyor, ek `ignoreVoid` ayarı gerekmedi. MALİYET: src lint süresi 2.85-4.63 s'den 11.67-14.43 s'ye çıkıyor (~4x, +9 s) — bu blok YALNIZ src'e verilir. scripts/ için ÖLÇÜLEMEDİ: tsconfig.json `include:[\"src/**/*\"]` olduğu için projectService 554 dosyanın 554'ünde 'was not found by the project service' parse hatası verdi (26.58 s harcandı, sıfır kural sonucu). scripts'te tip bilgili kural istenirse önce `tsconfig.scripts.json` ya da `allowDefaultProject` kararı gerekir — ayrı iş.",
+      "olcumKomutu": "OLCUM_KURAL=FLOATING /usr/bin/time -p npx eslint src -c eslint.olcum.mjs -f json  # → 0 ihlal, real 14.43 s / 11.67 s (tipsiz baseline 2.85 s)",
+      "ornekler": []
+    },
+    {
+      "kural": "`linterOptions.reportUnusedDisableDirectives: \"error\"` (ölü disable)",
+      "yapilandirma": "linterOptions: { reportUnusedDisableDirectives: \"error\" }",
+      "ihlal": 8,
+      "dosyaSayisi": 6,
+      "karar": "error-duzeltilerek",
+      "gerekce": "src'de 8 `eslint-disable` yorumunun 8'i de ÖLÜ (grep ile bulunan disable sayısı da 8 — yani src'de yaşayan tek bir disable yok). NÜANS ölçüldü: bu 8'in 7'si config'in AÇMADIĞI kurallar için savunma amaçlı yazılmış (no-control-regex ×4, no-require-imports, no-unused-vars, no-empty-interface); `@typescript-eslint/no-explicit-any` da AÇILIRSA search.service.ts:133'teki disable canlanır ve sayı 7'ye düşer (ayrı koşumla doğrulandı). Karar: no-explicit-any'yi error yap (src'de 0 ihlal, ölçüldü) + kalan 7 ölü direktifi sil → sonra reportUnusedDisableDirectives:\"error\". scripts/ 6 ölü / 6 dosya, prisma/ 0.",
+      "olcumKomutu": "OLCUM_KURAL=UNUSED_DISABLE npx eslint src -c eslint.olcum.mjs -f json  # → 8; OLCUM_KURAL=ANY_PLUS_UNUSED (no-explicit-any da açık) → 7",
+      "ornekler": [
+        "src/types/express-augment.ts:7 (no-empty-interface)",
+        "src/services/helpers/native-label.shared.ts:258 (no-control-regex)",
+        "src/services/helpers/native-label.shared.ts:268 (no-control-regex)",
+        "src/services/helpers/raster/raster-text.ts:27 (no-control-regex)",
+        "src/jobs/mdns-advertiser.job.ts:90 (no-require-imports)"
+      ]
+    },
+    {
+      "kural": "`@typescript-eslint/no-explicit-any` (ölçüm sırasında bedava çıktı — bonus)",
+      "yapilandirma": "\"@typescript-eslint/no-explicit-any\": \"error\"",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "src'de 0 ihlal (tek gerçek `any` olan src/services/search.service.ts:133 zaten dosya-üstü gerekçeli disable taşıyor — kural açılınca o disable ÖLÜ olmaktan çıkar, yukarıdaki reportUnusedDisableDirectives kararıyla birlikte alınmalı). prisma/ 0. scripts/ 23 ihlal / 4 dosya (smoke_fason_http.ts, test_fason_visibility.ts…) — kapsam genişletilirse scripts bloğuna bu kural konmaz ya da baseline'a yazılır.",
+      "olcumKomutu": "OLCUM_KURAL=NO_ANY npx eslint src -c eslint.olcum.mjs -f json | jq '[.[].messages[]]|length'  # → 0; scripts → 23",
+      "ornekler": []
+    }
+  ],
+  "notlar": "YÖNTEM: ölçüm için Teks-Erp/eslint.olcum.mjs geçici config'i yazıldı (mevcut eslint.config.mjs'i import eder, üstüne TEK aday kuralı 'error' olarak ekler; kural seçimi OLCUM_KURAL, kapsam OLCUM_KAPSAM=src|scripts|prisma env değişkeniyle). Her aday AYRI koşuldu — no-restricted-syntax tek ruleId altında toplandığı için bir arada ölçmek hangi selector'ün kaç ihlal verdiğini gizlerdi. Ölçüm bitiminde dosya silindi ve doğrulandı (`rm Teks-Erp/eslint.olcum.mjs` → `ls: eslint.olcum.mjs: No such file or directory`; `git status --porcelain` içinde Teks-Erp/eslint.olcum.mjs YOK). Repo kaynak dosyalarına hiç dokunulmadı.\n\nÜÇ ANA BULGU: (1) Beş 'bedava' syntax yasağının HİÇBİRİ ham haliyle bedava değil — PROCESS_QC 1, body.code 1, DATE_TRUNC 2, Türkçe tanımlayıcı 24 yanlış pozitif veriyor; hepsi selector daraltma ya da dosya-ignore ile 0'a iniyor. Selector'ler bu raporda daraltılmış haliyle yazılıdır, config'e OLDUĞU GİBİ kopyalanmalı. (2) skipComments farkı ölçüldü ve büyük: max-lines 145→90 dosya, max-lines-per-function 391→305 fonksiyon; keşif sayıları skipsizdi. (3) scripts/ kapsamına tip bilgili kural BUGÜN alınamaz (tsconfig include yalnız src; 554/554 parse hatası) — E-01 kapsam genişletmesi yalnız sözdizimsel kurallarla yapılır.\n\nBEKÇİ DOSYALARINA ÖNERİLEN DAR SET (scripts/**/*.ts): 6 mevcut yasak + 5 syntax yasağı + Türkçe tanımlayıcı yasağı; boyut kuralları (max-lines 90, max-lines-per-function 341, max-params 22) ve no-console (4700) bekçi doğasına aykırı olduğu için KOŞULMAZ; floating-promises tsconfig kararına bağlı. Kuralın KONUSUNU ölçen üç bekçi blok ignore'una alınır: test_migration_hygiene.ts (applied_steps_count), test_raw_sql_hygiene.ts (now() AT TIME ZONE), test_station_quality_capability.ts (kind===PROCESS_QC).\n\nKARAR ÖZETİ: error → 7 kural (PROCESS_QC, !==\"mobile\", body.code, applied_steps_count, DATE_TRUNC, TR-tanımlayıcı, no-floating-promises, no-explicit-any) · error-duzeltilerek → 3 (now() AT TIME ZONE 11, naming-convention 2, reportUnusedDisableDirectives 8→7) · warn-baseline → 4 (max-lines 90, max-lines-per-function 305, max-params 47, E-01 kapsam 39) · yazma → 3 (z.enum aynası, findUnique→if→update, backend no-console)."
+}

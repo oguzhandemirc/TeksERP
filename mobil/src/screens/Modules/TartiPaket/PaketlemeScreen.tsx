@@ -32,6 +32,7 @@ import {
   type ShipmentDestination,
 } from '../../../services/packing.service';
 import { isWorkSessionLost } from '../../../services/api';
+import { signalScan } from '../../../services/scanFeedback';
 import { generateClientUuid } from '../../../offline/barcode';
 import { usePortraitLock } from '../../../hooks/usePortraitLock';
 import { useDeviceType } from '../../../hooks/useDeviceType';
@@ -358,10 +359,10 @@ export default function PaketlemeScreen() {
         );
         if (target) {
           setActiveSack(target.id);
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          signalScan('accept');
           Toast.show({ type: 'success', text1: 'Çuval seçildi', text2: `${target.sackNo} artık aktif` });
         } else {
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          signalScan('reject');
           Toast.show({
             type: 'error',
             text1: 'Çuval bu havuzda değil',
@@ -373,7 +374,7 @@ export default function PaketlemeScreen() {
       }
       const sackId = await ensureActiveSack();
       const res = await packingService.scanIntoSack(sackId, code);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      signalScan('accept');
       Toast.show({
         type: 'success',
         text1: res.data?.kind === 'SWATCH' ? 'Kartela eklendi' : 'Top eklendi',
@@ -381,7 +382,7 @@ export default function PaketlemeScreen() {
       });
       refreshPool();
     } catch (e) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      signalScan('reject');
       Toast.show({ type: 'error', text1: 'Eklenemedi', text2: (e as Error).message });
     } finally {
       setTimeout(() => {
@@ -395,7 +396,12 @@ export default function PaketlemeScreen() {
   const handleScan = (barcode: string) => {
     const code = barcode.trim();
     if (!code) return;
-    if (processingCodeRef.current === code || pendingScansRef.current.includes(code)) return;
+    // Aynı kod işlenmekte ya da kuyrukta: MÜKERRER okutma. Sessiz dönmek
+    // "okumadı" izlenimi verip operatörü üçüncü kez okutmaya itiyordu.
+    if (processingCodeRef.current === code || pendingScansRef.current.includes(code)) {
+      signalScan('duplicate');
+      return;
+    }
     pendingScansRef.current.push(code);
     void drainScans();
   };

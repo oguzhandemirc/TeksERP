@@ -48,6 +48,9 @@ const TAG = `TEST-WH-${Date.now()}`;
 async function main(): Promise<void> {
   console.log("=== Topun deposu: damga bekçisi ===\n");
 
+  // Koşum başlangıcı — "bu koşumda doğan top" ölçüsünün sınırı (aşağıya bak).
+  const runStart = new Date();
+
   const def = await ensureDefaultWarehouse();
   console.log(`Varsayılan depo: ${def.name} (${def.action})\n`);
 
@@ -157,8 +160,48 @@ async function main(): Promise<void> {
     "Körlük zemini: ikinci depo varsayılandan FARKLI (E anlamlı)",
     alt.id !== def.id,
   );
-  const nullCount = await prisma.roll.count({ where: { warehouseId: null } });
-  check("Bu koşumda deposuz top doğmadı (DB genelinde)", nullCount === 0, `deposuz=${nullCount}`);
+  // ── Damga kapsaması ─────────────────────────────────────────────────────
+  // ⚠️ KAPSAM DÜZELTMESİ (2026-09-05 yeşile-çekme). Burası eskiden DB GENELİNDE
+  // `warehouseId: null` sayıyor ve 0 bekliyordu; etiketi ise "bu koşumda" idi.
+  // İki ölçü uyuşmuyordu: tam paket koşumunda BAŞKA bekçilerin temizliği eksik
+  // kalan `TEST-`/`TST-` ön ekli topları (ölçüldü: 140, hepsi test ön ekli)
+  // burada birikiyor ve bu bekçi KOD sağlamken sonsuza dek kırmızı kalıyordu.
+  // Bekçinin sorusu iki ayrı ölçüye bölündü:
+  //   1) BU KOŞUMDA doğan her top damgalı mı (etiketin gerçekten söylediği şey),
+  //   2) CANLI/gerçek veride (test ön eki DIŞINDA) deposuz top var mı.
+  const bornThisRun = await prisma.roll.count({ where: { createdAt: { gte: runStart } } });
+  check(
+    "Körlük zemini: bu koşumda top doğdu (damga ölçümü anlamlı)",
+    bornThisRun >= 3,
+    `doğan=${bornThisRun}`,
+  );
+  const unstampedThisRun = await prisma.roll.findMany({
+    where: { createdAt: { gte: runStart }, warehouseId: null },
+    select: { barcode: true },
+    take: 10,
+  });
+  check(
+    "Bu koşumda doğan her top damgalı",
+    unstampedThisRun.length === 0,
+    unstampedThisRun.map((r) => r.barcode ?? "(barkodsuz)").join(", ") || `doğan=${bornThisRun}`,
+  );
+
+  // Gerçek (test ön eki olmayan) veride deposuz top KALMAMALI — backfill + 9
+  // create noktasının kapsaması buradan görünür. Test artıkları sayımdan
+  // ÇIKARILIR ama gizlenmez: adedi basılır ki "0 çıktı çünkü hiç bakılmadı"
+  // ile "0 çıktı çünkü temiz" ayırt edilebilsin.
+  const nullTotal = await prisma.roll.count({ where: { warehouseId: null } });
+  const nullReal = await prisma.roll.count({
+    where: {
+      warehouseId: null,
+      NOT: [{ barcode: { startsWith: "TEST" } }, { barcode: { startsWith: "TST" } }],
+    },
+  });
+  check(
+    "Test-dışı deposuz top yok (canlı veri damgalı)",
+    nullReal === 0,
+    `deposuz(test-dışı)=${nullReal} · test artığı=${nullTotal - nullReal}`,
+  );
 }
 
 main()

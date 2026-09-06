@@ -9,7 +9,7 @@ import { Callout } from "@/components/ui/callout";
 import { PreviewErrorBlock } from "@/components/forms/PreviewErrorBlock";
 import { TypeToConfirm, matchesConfirmation } from "@/components/forms/TypeToConfirm";
 import { copyText } from "@/lib/clipboard";
-import { useSwapCommands } from "./service";
+import { useSwapCommands } from "./hooks";
 
 /**
  * Takas komut bloğu.

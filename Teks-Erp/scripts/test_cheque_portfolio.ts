@@ -65,7 +65,7 @@
 import { ChequeStatus, Prisma } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { chequeService } from "../src/services/cheque.service";
-import { D, resolveExchangeRate } from "../src/services/helpers/finance.helper";
+import { D, resolveExchangeRateTx } from "../src/services/helpers/finance.helper";
 import { periodDayKey } from "../src/services/helpers/period-guard.helper";
 import { dailyCodePrefix } from "../src/utils/code-format";
 import { factoryDayStart, factoryYmd } from "../src/constants/time";
@@ -560,7 +560,7 @@ async function main(): Promise<void> {
   // ── §15 POSTING TARİHİ ÇIPASI (SINIF 1) ─────────────────────────────────
   // Keşide GEÇMİŞ, posting BUGÜN olan çekte dört tüketici (kur · belge no ·
   // defter txnDate · doğuş olayı) İŞLEM tarihinden okumalı. Kur beklentileri
-  // MUTLAK değer değil, `resolveExchangeRate`'in kendisiyle kurulur: paylaşımlı
+  // MUTLAK değer değil, `resolveExchangeRateTx`'in kendisiyle kurulur: paylaşımlı
   // dev DB'de GBP kuru zaten olabilir; helper-bazlı beklenti ortam verisinden
   // etkilenmez, ıraksama olmazsa da §15-zemin AÇIKÇA kırmızı verir (sessiz
   // vakum-yeşili yerine).
@@ -580,8 +580,8 @@ async function main(): Promise<void> {
   const issueOld = new Date(Date.now() - 33 * 86400000);
   await ensureRate(utcDay(issueOld), "31.1234");
   await ensureRate(utcDay(new Date(Date.now() - 86400000)), "39.5678");
-  const rateAtPosting = await resolveExchangeRate(prisma, "GBP", new Date());
-  const rateAtIssue = await resolveExchangeRate(prisma, "GBP", issueOld);
+  const rateAtPosting = await resolveExchangeRateTx(prisma, "GBP", new Date());
+  const rateAtIssue = await resolveExchangeRateTx(prisma, "GBP", issueOld);
   check(
     "§15-zemin KÖRLÜK: kur fixture'ı ıraksadı (posting kuru ≠ keşide kuru)",
     rateAtPosting != null && rateAtIssue != null && !rateAtPosting.equals(rateAtIssue),

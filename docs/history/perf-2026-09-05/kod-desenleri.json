@@ -1,0 +1,149 @@
+{
+  "olcum": {
+    "tarih": "2026-09-05",
+    "db": "tekserp_demo @ localhost:55433 (docker tekserp-local-db, postgres:16-alpine)",
+    "hacim": { "system_logs": 51164, "printed_documents": 3500, "duplicate_reviews": 873, "rolls": 832, "work_order_steps": 592, "work_orders": 373, "warehouse_movements": 353 },
+    "yontem": "pg Pool 'connect' olayında client.query sarmalandı; servis metotları HTTP'siz çağrılıp istek başına SQL sayıldı ve ham SQL yakalandı. Ayrıca EXPLAIN (ANALYZE, BUFFERS) ve pg_column_size. Yalnız SELECT/EXPLAIN; hiçbir yazma yapılmadı. Geçici script Teks-Erp/scripts/_perf_desen.ts olarak yazıldı ve SİLİNDİ.",
+    "istek_basina_sorgu": {
+      "GET /api/rolls (offset, pageSize=50)": 24,
+      "GET /api/rolls (cursor, limit=100)": 23,
+      "GET /api/rolls (cursor, limit=500)": 23,
+      "GET /api/rolls/production-flow (Kanban)": 115,
+      "POST /api/rolls/stats-batch (8 kalem)": 8,
+      "GET /api/work-orders (pageSize=50)": 24,
+      "GET /api/orders (pageSize=50)": 13,
+      "GET /api/system-logs (limit=50)": 2,
+      "system-log listActiveUsers": 2,
+      "auth ara katmanı (her korumalı istek)": 2
+    },
+    "satir_boyutlari_bayt": { "rolls": 218, "items": 117, "colors": 123, "work_orders": 130, "work_order_steps": 124, "stations": 138, "label_templates": 1398, "traveler_cards": 1318, "printed_documents": 1501, "system_logs": 350 },
+    "kolon_boyutlari_bayt": { "rolls.lastLabelSnapshot": 20, "label_templates.fields": 1271, "traveler_cards.snapshot": 1165, "printed_documents.snapshot": 1374, "system_logs.newData": 165, "duplicate_reviews.evidence": 111 }
+  },
+  "ozet": "Bu kurulumda ölçekle büyüyen TEK gerçek kod deseni Prisma'nın `distinct` alanının SQL'e İNMEMESİ: system_logs dropdown'ları bugün 14.067 ve 49.879 satırı Node'a çekiyor (yakalanan SQL'de ne DISTINCT ne LIMIT var) ve maliyet log sayısıyla doğrusal. İkinci sırada Kanban ucu: tek istekte 115 sorgu (sabit sayı, ama 30 sn tazelikte 10 panelde ~38 sorgu/sn, havuz tavanı 30). Klasik N+1 avı büyük ölçüde BOŞ çıktı — döngü içi prisma çağrılarının çoğu atomik claim (semantik olarak per-satır) ve set-bazlı yardımcılar (writeWarehouseMovements, createMany) zaten yazılmış; tek gerçek kaçak stock-count uygula (eksik top başına 5 sorgu, tavanda ~1.000 sorgu/tx). 'include yerine select' ölçüldü ve bu şemada KAZANÇ GETİRMİYOR: rolls satırı 218 bayt, master data 117-138 bayt, rulo listesinde ağır JSON yok (kural 13 ihlal edilmiyor); include'un bedeli bayt değil ROUND-TRIP. MAX_OFFSET=10.000 kapısı ölçüldü ve işini yapıyor (OFFSET 10K = 4,2 ms, 50K = 15,4 ms; doğrusal).",
+  "bulgular": [
+    {
+      "baslik": "Prisma `distinct` SQL'e inmiyor — system_logs dropdown'ları tabloyu Node'a çekiyor",
+      "nerede": "Teks-Erp/src/services/system-log.service.ts:304-311 (listActiveUsers) · :319-325 (listActiveTables)",
+      "bugun": "listActiveUsers: 14.067 satır Node'a, DB 11,1 ms, Seq Scan, Buffers shared hit=2470 (~19 MB), servis toplamı 16-27 ms. listActiveTables: 49.879 satır Node'a, 18,9 ms, 4.011 kB quicksort. Her ikisi 5 dk TTL cache arkasında.",
+      "olcekte": "Doğrusal. `take:200` SQL'e İNMİYOR — yani süzülen satırların TAMAMI çekiliyor. 10× (510k log) → ~140k / ~500k satır, ~110/190 ms DB ve on MB'larca tel trafiği; 100× → ~1,4M / ~5M satır, ~1,1/1,9 s ve Node heap'inde yüzlerce MB. Arşivleme yalnız 6 aydan eskisini alıyor, yani tavan 6 aylık log hacmi.",
+      "oneri": "İki dropdown'ı `$queryRaw` `SELECT DISTINCT` ile yaz. ÖLÇÜLDÜ: aynı where + SQL DISTINCT = 8,6 ms ve tel üzerinden 14.067 yerine 61 satır (tableName tarafında 49.879 yerine ~30). Seq scan kalır ama Node'a giden veri 230× / 1.600× küçülür.",
+      "oncelik": "yuksek",
+      "kanit": "Yakalanan SQL: SELECT \"system_logs\".\"id\", \"system_logs\".\"userId\" FROM \"system_logs\" WHERE (\"userId\" IS NOT NULL AND \"category\" = CAST($1::text AS \"SystemLogCategory\")) ORDER BY \"id\" ASC OFFSET $2  — DISTINCT yok, LIMIT yok. EXPLAIN: Seq Scan rows=14067, Rows Removed by Filter: 37097, Buffers: shared hit=2467.",
+      "bedel": "İki fonksiyonluk raw SQL. Index yok, migration yok, sözleşme değişmiyor (dönüş tipi aynı). Ham SQL hijyen bekçisi (`test_raw_sql_hygiene.ts`) kapsamına girer."
+    },
+    {
+      "baslik": "Aynı `distinct` tuzağı dört yerde daha — kod yorumu yanlış güven veriyor",
+      "nerede": "Teks-Erp/src/services/helpers/kursun-bypass-eligibility.helper.ts:111-139 (üç sorgu) · helpers/coverage.helper.ts:196-200 · order.service.ts:1241-1250 · latency-persist.service.ts:253-259",
+      "bugun": "Hepsi `stepIds`/`orderLineId` ile sınırlı. Demo'da adım/iş emri ort. 2,1 (max 4), top/parti 1,9 → sorgu başına birkaç satır; ölçülebilir maliyet yok.",
+      "olcekte": "Toplam DB büyüklüğüyle DEĞİL, tek iş emrinin büyüklüğüyle büyür: çekilen satır = o WO adımlarındaki hareket sayısı ≈ top × adım. 500 toplu 5 adımlı bir WO'da ~2.500 satır Node'a çekilip 5 değere indirgenir. `latency-persist` `endpoint_latency_daily` (151 satır) üstünde — büyümez.",
+      "oneri": "Öncelik kod değil YORUM: kursun-bypass-eligibility.helper.ts:110 'Üç sorgu da indexli ve `distinct`' diyor — okuyucuya DB'de distinct yapıldığını söylüyor, oysa Prisma bunu bellekte yapıyor (Bulgu 1'in kanıtı aynı client). Yorumu düzelt; büyük WO'da ölçüm alındıktan sonra gerekirse `$queryRaw SELECT DISTINCT`.",
+      "oncelik": "orta",
+      "kanit": "Bulgu 1'de yakalanan SQL, aynı Prisma sürümünde `distinct`in SQL'e inmediğini kanıtlıyor."
+    },
+    {
+      "baslik": "Kanban ucu tek istekte 115 sorgu — kart, liste include'unu ödünç alıyor",
+      "nerede": "Teks-Erp/src/services/inventory.service.ts:1793-1810 `getProductionFlow`/`rollColumn` → `include: ROLL_LIST_INCLUDE` (11 ilişki), 4 rulo kolonu",
+      "bugun": "ÖLÇÜLDÜ: 115 sorgu / 45 ms. Tekrar eden tablolar: work_order_steps×9, stations×7, subcontractor_categories×6, items×6, colors×6, work_orders×5, geri kalanı ×3-4.",
+      "olcekte": "Sorgu SAYISI sabit kalır (kolon başına take:10) — bu iyi haber. Büyüyen iki şey: (a) kolon başına `count()` sorguları tablo büyüdükçe pahalılaşır, (b) eşzamanlılık: Electron/src/pages/Operations/Rolls/RollsKanban.tsx:73 staleTime 30 sn → 10 açık panelde ~38 sorgu/sn taban yük, pg havuzu tavanı 30 (src/lib/prisma.ts:69). 100× veride count'lar index'li kalır ama 115 round-trip aynı kalır.",
+      "oneri": "Kanban kartı için DAR bir `ROLL_CARD_SELECT` (kart 6-8 alan gösteriyor) — kolon başına 22 sorgu yerine ~3, toplam 115 → ~20. Liste yüzeyiyle ayrışmasın diye kart şekli AYRI ve YAZILI bir sözleşme olmalı.",
+      "oncelik": "orta",
+      "kanit": "115 sorgu ölçümü + tablo tekrar dağılımı (yakalanan SQL sayımı). ROLL_LIST_INCLUDE'un 11 ilişkisi inventory.service.ts:450-543."
+    },
+    {
+      "baslik": "`filter[status]=ALL` rulo listesi: rolls'ta düz `createdAt` index'i yok → tam tablo tarama + sıralama",
+      "nerede": "Teks-Erp/src/services/inventory.service.ts:1232+ `buildRollWhere` (status 'ALL' ise `where.status` SİLİNİR) · varsayılan sıralama `createdAt desc` (src/utils/query-parser.ts:56)",
+      "bugun": "EXPLAIN (ANALYZE, BUFFERS) SELECT id FROM rolls ORDER BY \"createdAt\" DESC LIMIT 50 → Seq Scan on rolls (rows=832) + top-N heapsort, Buffers: shared hit=140, 0,384 ms. Status filtresi VARSA sorun yok: Bitmap Index Scan (rolls_status_updatedAt_idx), Buffers: shared hit=20, 0,086 ms.",
+      "olcekte": "rolls'un 28 index'inin HİÇBİRİ `createdAt` ile başlamıyor (`(status,createdAt)` ve `(entrySource,createdAt)` var, ön ek uymuyor). Maliyet satır sayısıyla doğrusal: 10× (8.320 satır) ≈ 1.340 buffer/sayfa, 100× (83.200) ≈ 13.400 buffer ≈ 105 MB tarama HER SAYFADA — offset'li gezinmede her sayfa yeniden.",
+      "oneri": "Önce ölç: 'Tümü' sekmesi sahada gerçekten kullanılıyor mu (frontend TABS'ta var). Kullanılıyorsa `@@index([createdAt])`; kullanılmıyorsa sunucuda status'suz sıralamayı reddet.",
+      "oncelik": "orta",
+      "kanit": "EXPLAIN çıktısı (Seq Scan + top-N heapsort vs Bitmap Index Scan). `\\d rolls` → 28 index, hiçbiri `btree (\"createdAt\")` değil.",
+      "bedel": "rolls'ta index yükü ZATEN tablonun 4,43 katı (tablo 1.072 kB, index 4.752 kB, 28 ağaç; 8'i `status` kolonunu içeriyor — yani her atomik durum geçişi 8 ağaç yazıyor). 29. ağaç her top INSERT'ünde ve her durum değişiminde ek yazma demek. [DB-26] CONCURRENTLY yasak → canlıda tablo kilidi; [DB-29] en eski dump üstünde prova + `SET statement_timeout = 0` şart."
+    },
+    {
+      "baslik": "Sayım uygula: eksik top başına 5 sorgu, tavanda ~1.000 sorgu tek transaction'da",
+      "nerede": "Teks-Erp/src/services/stock-count.service.ts:494-600 (döngü 1) · :610-631 (döngü 2) · :674-679 (kapsam dışı döngüsü)",
+      "bugun": "Demo'da eksik işaretli satır yok → 0 sorgu. Sayım satırı/sayım ÖLÇÜLDÜ: ort. 115, max 191 (stock_count_lines 230 satır).",
+      "olcekte": "N = EKSİK işaretli top; tavan `STOCK_COUNT_MAX_MISSING = 200` (stock-count.service.ts:108). Tavanda: döngü 1 = 200×3 (findUnique + updateMany-CAS + findUniqueOrThrow), döngü 2 = 200×2 (warehouseMovement.create + rollVariance.create), kapsam dışı ≤200×1 → 1.000-1.200 sorgu TEK tx içinde. Ölçülen round-trip ~0,4-0,7 ms → 0,4-0,8 sn yalnız gidiş-geliş; tx tavanı 20 sn (src/lib/prisma.ts:89) ve bu süre boyunca 200 top satırı kilitli. Veri 100× olsa N değişmez (tavan var) ama sayım sıklığı artar.",
+      "oneri": "Yalnız döngü 2'yi toplu yazıma çevir: `writeWarehouseMovements(tx, applied.map(...))` (1 sorgu) + `tx.rollVariance.createMany` (1 sorgu) + kapsam dışı için sebep-bazlı gruplanmış `updateMany`. 1.000-1.200 → ~620. Döngü 1'in per-top CAS'ı SEMANTİKTİR (kaybedeni taze okumayla ayırt ediyor) — DOKUNMA.",
+      "oncelik": "orta",
+      "kanit": "Toplu yardımcı ZATEN VAR ve beş yerde kullanılıyor: `helpers/warehouse-ledger.helper.ts:74` `writeWarehouseMovements` (createMany) ← warehouse-transfer.service.ts:281,541 · subcontractor.service.ts:3213 · shipping.service.ts:2747,3190. stock-count.service.ts:612 tekilini (`:47`) döngüde çağırıyor.",
+      "bedel": "İki satır + `recordVarianceTx`in çoğul kardeşinin yazılması (bugün yok). Emsal aynı helper dosyasında; `rollVariance` FK'ları RESTRICT olduğu için cleanup sırası bekçilerde zaten kurulu."
+    },
+    {
+      "baslik": "İade: iade edilen top başına 3 sorgu",
+      "nerede": "Teks-Erp/src/services/return.service.ts:521-583",
+      "bugun": "Demo verisinde çoklu iade grubu yok — sorgu sayısı ÖLÇÜLEMEDİ. Statik sayım: top başına `roll.updateMany` (CAS) + `rollReturn.create` + `writeWarehouseMovement` = 3N.",
+      "olcekte": "N = tek belgede iade alınan top. Toplam DB büyüklüğüyle değil, iade belgesi büyüklüğüyle büyür; bir kamyon iadesi 100-200 top ise 300-600 sorgu tek tx'te (~0,2-0,4 sn round-trip).",
+      "oneri": "`rollReturn` id'lerini istemci tarafında (`crypto.randomUUID`) üretip `createMany` + `writeWarehouseMovements` çoğulu → 3N yerine N+2. CAS döngüsü per-top hata mesajı için KALIR.",
+      "oncelik": "dusuk",
+      "kanit": "return.service.ts:527 (updateMany), :547 (rollReturn.create), :576 (writeWarehouseMovement) — üçü de aynı `for (const r of orderedRolls)` gövdesinde.",
+      "bedel": "Orta kod riski: `rollReturn.id` warehouse movement'a bağlanıyor, uuid'yi öne almak gerekiyor. Kazanç ölçülmedi (gerçek iade büyüklüğü bilinmiyor) — önce sahadan iade/belge dağılımı istenmeli."
+    },
+    {
+      "baslik": "`include` yerine `select` bu şemada ölçülebilir kazanç GETİRMİYOR — bedel bayt değil round-trip",
+      "nerede": "Teks-Erp/src/services/inventory.service.ts:450-543 (ROLL_LIST_INCLUDE, 11 ilişki) · repo genelinde 26 `findMany` + top-level `include` (select'siz)",
+      "bugun": "Sorgu sayısı sayfa boyutundan BAĞIMSIZ ölçüldü: /api/rolls offset-50 → 24, cursor-100 → 23, cursor-500 → 23. Bayt tarafı: rolls ort. satır 218 B (max 309), items 117 B, colors 123 B, work_orders 130 B, work_order_steps 124 B, stations 138 B. `rolls.lastLabelSnapshot` jsonb ort. 20 B / max 59 B (832 satırın 24'ü dolu, içerik `{\"stock\": true}`).",
+      "olcekte": "50 satırlık sayfada `include`→`select` çevirisinin tasarrufu en iyi ihtimalle 50×(218−120) ≈ 5 kB — ölçülebilir değil. Büyüyen tek şey her ilişki sorgusunun `IN ($1..$N)` liste uzunluğu. Bu veri setinde 8 ilişki sorgusu `IN (NULL)` ile boşa gidiyor (gerçek veride dolar).",
+      "oneri": "[DB-34] / kural 13 'snapshot listede çekilmez' RULO LİSTESİNDE İHLAL EDİLMİYOR — ölçüldü, düzeltme YAZMA. Kazanç ilişki SAYISINI azaltmakta (Bulgu 3).",
+      "oncelik": "yapma",
+      "kanit": "pg_column_size ölçümleri + üç farklı sayfa boyutunda sabit sorgu sayısı."
+    },
+    {
+      "baslik": "Etiket şablonu havuz listesi tasarımcı JSON'unu çekiyor (kural 13'ün gerçek hedefi)",
+      "nerede": "Teks-Erp/src/services/label-template.service.ts:207-227 — top-level `include: { variants: {...} }`, `select`/`omit` YOK → LabelTemplate'in TÜM skalerleri (`fields` jsonb, `rawCode` jsonb) dönüyor",
+      "bugun": "ÖLÇÜLDÜ: label_templates ort. satır 1.398 B / max 1.909 B; `fields` tek başına ort. 1.271 B / max 1.776 B. Bugün 4 şablon → ~5,6 kB. `take` yok, sayfalama yok.",
+      "olcekte": "Doğrusal: 200 şablonlu bir kurulumda ~280 kB, her havuz açılışında. Varyant `elements` (937 B) zaten dar select ile dışarıda bırakılmış — ama şablonun kendi `fields`i değil.",
+      "oneri": "`omit: { fields: true, rawCode: true }` (emsal: traveler-card.service.ts:751 `omit: { snapshot: true }`) ya da açık `select`.",
+      "oncelik": "dusuk",
+      "kanit": "pg_column_size(label_templates.fields) avg 1271 / max 1776; sorgu gövdesinde `select` yok, `include` var.",
+      "bedel": "Tek sorgu; dönüş tipi `LabelTemplate[]` daralır → çağıranların tipi güncellenir (tsc yakalar)."
+    },
+    {
+      "baslik": "Mükerrer-karar listesi sayfalamasız ve `evidence` ile — satır sayısı ürünle büyüyor",
+      "nerede": "Teks-Erp/src/services/duplicate-review.service.ts:74-79 `list` (take/cursor YOK) · :82-85 `mapByPairKey` aynı listeyi çağırıyor",
+      "bugun": "ÖLÇÜLDÜ: 2 sorgu / 13 ms. duplicate_reviews 873 satır (ITEM 773 · CUSTOMER 75 · COLOR 25); `evidence` ort. 111 B. `mapByPairKey` yalnız `pairKey`+`decision` kullanıyor ama tüm DTO'yu çekiyor.",
+      "olcekte": "Bugün 138 ürüne 773 ITEM kararı ≈ 5,6 satır/ürün. Aynı oranla 10× ürün → ~7.700 satır, 100× → ~77.000 satır; hepsi tek seferde Node'da Map'e giriyor, take yok.",
+      "oneri": "`mapByPairKey` için `evidence`siz dar select (2 kolon); panel listesine sayfalama ya da en azından `take` tavanı.",
+      "oncelik": "dusuk",
+      "kanit": "duplicate_reviews entity dağılımı + SELECT sabitinin `evidence: true` içermesi (duplicate-review.service.ts:48-59)."
+    },
+    {
+      "baslik": "Offset sayfalama kapısı ölçüldü ve İŞİNİ YAPIYOR — değişiklik gerekmiyor",
+      "nerede": "Teks-Erp/src/utils/query-parser.ts:23 (MAX_OFFSET=10000) · :383-390 `buildPagination`",
+      "bugun": "EXPLAIN (ANALYZE, BUFFERS), system_logs 51.164 satır, ORDER BY \"createdAt\" DESC, id DESC LIMIT 50: OFFSET 0 → 0,143 ms / 33 buffer · OFFSET 10.000 → 4,211 ms / 4.250 buffer (129×) · OFFSET 50.000 → 15,376 ms / 21.674 buffer (657×). Maliyet offset'te DOĞRUSAL, plan hep Index Scan Backward + Incremental Sort.",
+      "olcekte": "MAX_OFFSET=10.000 bu maliyeti sayfa başına ~4 ms'de sabitliyor ve veri 100× olsa da bu tavan değişmez (offset başına maliyet satır sayısından bağımsız). Yüksek hacim tablolarda cursor modu mevcut.",
+      "oneri": "Değişiklik yok. TEK açık uç: `findAllRolls`ta varsayılan hâlâ offset (cursor yalnız `?mode=cursor`), Electron rulo servisi iki yolu da taşıyor (Electron/src/pages/Operations/Rolls/service.ts:182 offset, :186 cursor) — hangisinin canlıda kullanıldığı doğrulanmalı.",
+      "oncelik": "yapma",
+      "kanit": "Üç EXPLAIN çıktısı (33 → 4.250 → 21.674 buffer)."
+    },
+    {
+      "baslik": "Tekrarlayan okuma: istek başına 2 sabit kimlik sorgusu + servis içinde aynı satırların 3-9 kez okunması",
+      "nerede": "Teks-Erp/src/middlewares/auth.middleware.ts:75 (`user.findUnique`) · :91 (`session.findUnique`) — rbac.middleware.ts 0 sorgu (izinler JWT'de) · zenginleştirme geçişleri: workorder.service.ts findAll (1499+), inventory.service.ts getProductionFlow",
+      "bugun": "Ara katman sabiti ÖLÇÜLDÜ = 2 sorgu (ikisi de PK/unique lookup). Servis içi tekrar ÖLÇÜLDÜ: GET /api/work-orders'ta work_order_steps 4 kez, rolls 4 kez, stations 3 kez, work_order_to_order_lines 2 kez — hepsi FARKLI kolon kümeleriyle. production-flow'da work_order_steps 9, stations 7 kez. GET /api/rolls'ta stations 2, work_order_steps 2 kez.",
+      "olcekte": "Sabit sayı; veriyle büyümez. Her tekrar ~0,4 ms round-trip; work-orders listesinde ~9 gereksiz tur ≈ 4 ms, Kanban'da ~14 tur ≈ 6 ms.",
+      "oneri": "workorder.service.findAll'daki rollup geçişlerini tek `stepIds` turunda birleştir (satırlar zaten bellekte). Auth'taki iki sorguya DOKUNMA — `Session.userId` kontrolü savunma derinliği (auth.middleware.ts:91 gerekçesi).",
+      "oncelik": "dusuk",
+      "kanit": "İstek başına yakalanan SQL'lerin tablo bazında sayımı (work_order_steps×4, rolls×4, stations×3 …).",
+      "bedel": "workorder.service.findAll'da orta ölçekli refactor; rollup alanlarının sessizce ayrışma riski var → değişiklikle birlikte bekçi yazılmalı."
+    },
+    {
+      "baslik": "Sevkiyat çuval claim döngüsü — ölçüm olmadan dokunulmamalı",
+      "nerede": "Teks-Erp/src/services/shipping.service.ts:1828-1834 (`createShipmentTx`) · :2325-2331 (`addSacksToShipment`)",
+      "bugun": "Demo'da çuval/sevkiyat ÖLÇÜLDÜ = 1,0 (max 1) → sevkiyat başına 1 sorgu. Gerçek maliyet ÖLÇÜLEMEDİ.",
+      "olcekte": "N = sevkiyattaki çuval sayısı; sorgu = N. Toplu tek `updateMany` YAZILAMAZ çünkü `seq` her satırda farklı — toplu yol tek ham `UPDATE ... FROM (VALUES ...)`tır.",
+      "oneri": "Sahadan gerçek çuval/sevkiyat dağılımı ölçülmeden değiştirme. Demo verisi (1 çuval/sevkiyat) bu maliyeti ÖLÇMÜYOR.",
+      "oncelik": "yapma",
+      "kanit": "sacks group by shipmentId → max 1, ort 1,0.",
+      "bedel": "Ham SQL + per-çuval 409 mesajının kaybı; kazanç bilinmiyor."
+    }
+  ],
+  "olculmeyen": [
+    "GERÇEK N DEĞERLERİ: demo verisinde çuval/sevkiyat = 1, top/iş emri = 1, sevk kalemi/sevk = 1, sipariş satırı/sipariş = 1,9, fatura satırı/fatura = 2,1. Yani döngü-içi yazımların çoğunun gerçek maliyeti bu DB'de ÖLÇÜLEMEZ. Anlamlı tek N sayım satırı/sayım (ort. 115, max 191).",
+    "HTTP tam istek yolu ölçülmedi: giriş yapmak `sessions` tablosuna YAZMAK demekti (görev SALT-OKUNUR). Ara katman sorguları koddan sayıldı (auth 2, rbac 0) ve servis çağrıları HTTP'siz ölçüldü.",
+    "Canlı fabrika hacmi: system_logs burada 51.164 satır; sahadaki gerçek büyüklük bilinmiyor, 10×/100× projeksiyonları doğrusallık varsayımına dayanıyor (EXPLAIN planları Seq Scan olduğu için doğrusallık makul, ama sabit çarpan ölçülmedi).",
+    "`label-template.service.list` sorgu sayısı ölçülemedi (servis örneği script'ten kurulamadı); bulgu satır boyutu ölçümü + kod okumasına dayanıyor.",
+    "Electron/mobil'in canlıda rulo listesini hangi modda (offset mi cursor mı) çağırdığı doğrulanmadı — servis iki yolu da taşıyor.",
+    "İade belgesi başına top dağılımı sahada ölçülmedi; return.service döngüsünün gerçek N'i bilinmiyor.",
+    "Yazma maliyeti yalnız index sayısı/boyutu üzerinden tahmin edildi (rolls: 28 index, index/tablo oranı 4,43, 8 index `status` içeriyor). Gerçek INSERT/UPDATE gecikmesi ölçülmedi — bunun için yazma gerekirdi."
+  ]
+}

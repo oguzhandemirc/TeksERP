@@ -158,9 +158,19 @@ check("`admin.routes.ts` okundu (körlük zemini)", adminRoutes.length > 0);
 const credIdx = adminRoutes.indexOf('"/users/:id/credentials"');
 check("`/users/:id/credentials` ucu bulundu", credIdx > 0);
 const credBlok = credIdx > 0 ? adminRoutes.slice(credIdx, credIdx + 2600) : "";
+// ⚠️ İKİ YAZIM DA KABUL (2026-09-05): hedefin sistem hesabı olup olmadığı eskiden
+// route içinde `prisma.user.findUnique` ile okunuyordu; katman kuralı (ESLint
+// `no-restricted-imports` — route'ta `lib/prisma` yasak) o sorguyu servise taşıdı
+// (`AuthService.isSystemAccountUser`). Kapının KENDİSİ çağıranda kalır, bu yüzden
+// bekçi hâlâ ROUTE dosyasında arar. Alternatiflerden biri YETMEZ: her iki dalda da
+// istek sahibi karşılaştırması (`req.isSystemAccount !== true`) 240 karakter içinde
+// aranır — kapı silinirse iki desen de düşer ve kontrol KIRMIZI olur (negatif
+// sondayla doğrulandı: kapı bloğu kaldırılınca ❌ verdi).
 check(
   "uç, en yetkili hesabı KORUYOR (hedef `isSystemAccount` + istek sahibi kontrolü)",
-  /isSystemAccount\s*===\s*true[\s\S]{0,240}req\.isSystemAccount\s*!==\s*true/.test(credBlok),
+  /(isSystemAccount\s*===\s*true|isSystemAccountUser\s*\()[\s\S]{0,240}req\.isSystemAccount\s*!==\s*true/.test(
+    credBlok,
+  ),
 );
 check(
   "cevap 403 (hesabın varlığı zaten açık — 404 yanlış bilgi olurdu)",

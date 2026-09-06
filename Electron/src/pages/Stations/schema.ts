@@ -2,11 +2,14 @@ import { z } from "zod";
 import { StationKind, StationType } from "@/types/enums";
 
 export const stationFormSchema = z.object({
+  // Sınırlar DB kolonlarıyla birebir (Station.name @db.VarChar(100),
+  // department @db.VarChar(32)) — panel şeması tek doğrulama kapısı; gevşek
+  // sınır net 400 yerine sessiz P2000 üretirdi.
   name: z
     .string()
     .trim()
     .min(1, "İstasyon adı boş bırakılamaz")
-    .max(120, "İstasyon adı en fazla 120 karakter olabilir"),
+    .max(100, "İstasyon adı en fazla 100 karakter olabilir"),
   type: z.enum([StationType.INTERNAL, StationType.EXTERNAL], {
     message: "İstasyon tipi seçilmeli",
   }),
@@ -23,7 +26,7 @@ export const stationFormSchema = z.object({
   ),
   department: z
     .string()
-    .max(60, "Bölüm adı en fazla 60 karakter olabilir")
+    .max(32, "Bölüm adı en fazla 32 karakter olabilir")
     .optional()
     .or(z.literal("")),
   isActive: z.boolean(),

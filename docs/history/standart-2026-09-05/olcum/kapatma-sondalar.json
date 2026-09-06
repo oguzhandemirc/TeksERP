@@ -1,0 +1,94 @@
+{
+  "_not": "TAMLIK ELEŞTİRMENİ kapatma turu — ALAN: negatif sondalar + sonda KAYITLARI. 2026-09-05.",
+  "tarih": "2026-09-05",
+  "alan": "S-1 · S-2 · S-3 · S-4 — dokuz backend ESLint kuralının sonda kaydı, check-migrations GATE 5, check-lint-baseline, commit kapısı",
+  "ihlalEdilenKendiKuralimiz": "docs/standart/README.md: 'Her yeni ESLint kuralı negatif sondayla doğrulanır … koşulmamış bir kural, kapsamı yanlış okuduğunu ancak sahada gösterir.' — Electron ve mobil sonda kayıtları vardı, backend'inki HİÇ yazılmamıştı; iki kapı sondası iddia edilip kaydedilmemişti; üçüncü kapı hiç kırmızı görülmemişti.",
+
+  "kapatilanlar": [
+    {
+      "bulgu": "S-1 · 9 backend ESLint kuralının negatif sonda kaydı YOK (eslint-backend-sonuc.json hiç yazılmamış)",
+      "hukum": "kapatildi",
+      "yapilan": "Dokuzunun DA gerçek negatif sondası koşuldu (geçici üç dosya, kasıtlı ihlaller, ölçüm, silme, yeşil doğrulaması). Sonuç eslint-backend-sonuc.json'a Electron ikizinin biçiminde (kural · seviye · ihlal · sonda) yazıldı. Sondasız kalmasın diye ÜÇ kural daha eklendi: no-restricted-imports (BE-01), reportUnusedDisableDirectives (src dalı), ve hiç sondalanmamış üç ORTAK_YASAK (TX_PROMISE_ALL · ORDER_BY_BATCH_NUMBER · GENERIC_REQUIRE_MODULE). Backend'de sondasız ESLint kuralı KALMADI.",
+      "kanit": "docs/history/standart-2026-09-05/olcum/eslint-backend-sonuc.json — 12 kayıt. Örnekler: CLIENT_TYPE_MOBILE → src/__lint_sonda_gecici.ts:3:41 ERROR · APPLIED_STEPS_COUNT → :4:22 ERROR · naming-convention → :5:14 ERROR · no-explicit-any → :6:27 ve :6:33 ERROR · no-require-imports → :9:16 ERROR · no-floating-promises → :18:3 ERROR · max-params → :11:8 WARN · max-lines-per-function → __lint_sonda_gecici_fn.ts:2:8 WARN (93>80) · max-lines → __lint_sonda_gecici_uzun.ts:302:1 WARN (311>300). eslint çıkış kodu 1."
+    },
+    {
+      "bulgu": "S-1 ek · `warn` seviyeli üç boyut kuralının 'kırmızı verdi' cümlesi tek başına eksikti",
+      "hukum": "kapatildi",
+      "yapilan": "ÖLÇÜLDÜ: düz `npx eslint` yalnız-uyarılı dosyalarda ÇIKIŞ KODU 0 veriyor. Yani max-lines / max-lines-per-function / max-params için ESLint TEK BAŞINA kapı DEĞİL. Sonda dosyaları yerindeyken gerçek kapı (`check-lint-baseline.mjs`) koşuldu ve dokuz kuralın DOKUZU DA orada kırmızı verdi.",
+      "kanit": "eslint-backend-sonuc.json § cikisKodu ve § tavanKapisiSondasi: '❌ backend: 8 kural TAVANI AŞTI (1030 dosya, 7 error) — max-params 48>47 · max-lines-per-function 306>305 · max-lines 91>90 …'. 8 satır / 9 kural, çünkü CLIENT_TYPE_MOBILE ve APPLIED_STEPS_COUNT aynı `no-restricted-syntax` ruleId'si altında sayılır (tavan kapısı ruleId bazlıdır, selector bazlı değil)."
+    },
+    {
+      "bulgu": "S-2 · check-migrations.mjs GATE 5 sondası iddia edildi, kaydedilmedi",
+      "hukum": "kapatildi",
+      "yapilan": "İki sonda YENİDEN koşuldu ve kaydedildi. ① `isIgnored` muafiyeti kapatıldı (`return false`) → GATE 5 kırmızı, çıkış 1. ② Teks-Erp/package.json'da `\"build\"` → `\"derle\"` (yok sayılan yola atıf var, üreten `build*` script'i yok) → GATE 5 farklı mesajla kırmızı, çıkış 1. Her ikisi de shasum ile geri alındı.",
+      "kanit": "docs/history/standart-2026-09-05/olcum/kapi-sondalari.json § kapilar[0]. Sonda 1 çıktısı: 'Teks-Erp/dist/tools/superadmin-olustur.cjs (UNTRACKED — Teks-Erp/package.json → \"superadmin:kur\")'. Sonda 2 çıktısı: 'aynı dosya (YOK SAYILIYOR ama ÜRETEN build script'i YOK)'. İki sonda muafiyetin İKİ AYAĞINI ayrı ayrı kanıtlar ve mesajları ayrışır. Geri alma sonrası: ✅ 235 migration izleniyor, çıkış kodu 0."
+    },
+    {
+      "bulgu": "S-3 · check-lint-baseline.mjs HİÇ KIRMIZI GÖRÜLMEMİŞ (üç CI job'ının ve commit kapısının kapısı)",
+      "hukum": "kapatildi",
+      "yapilan": "İki sonda koşuldu. ① Teks-Erp/lint-baseline.json'da `max-params` tavanı 47→46 → '❌ backend: 1 kural TAVANI AŞTI … max-params: 47 > 46', çıkış kodu 1. ② `PROJELER.backend.argv` geçici olarak `[\"eslint\",\"prisma\"]`a daraltıldı → '❌ backend: yalnız 17 dosya lint edildi (zemin 900) … kapsam sinyalidir', çıkış kodu 1. İkisi de geri alındı; üç lint-baseline.json'ın hiçbiri değişmedi.",
+      "kanit": "kapi-sondalari.json § kapilar[1]. Geri alma shasum'ları: lint-baseline.json c69883bf… · check-lint-baseline.mjs c142a1dc… (ikisi de sonda öncesiyle birebir). `git status --short -- Teks-Erp/lint-baseline.json Electron/lint-baseline.json mobil/lint-baseline.json scripts/check-lint-baseline.mjs` BOŞ. Kontrol koşumu: '✅ backend: tavan aşılmadı (1026 dosya, 0 error)', çıkış kodu 0."
+    },
+    {
+      "bulgu": "S-4 · Commit kapısı sondasız (pre-commit.mjs · lib/staged.mjs · hooks-kur.mjs · .githooks/pre-commit)",
+      "hukum": "kapatildi",
+      "yapilan": "Dört sonda koşuldu. ① Staged tip hatası + GERÇEK `git commit` denemesi → kapı kırmızı, commit ENGELLENDİ. ② Aynı durumda `TEKSERP_HOOK_SKIP=1` ile `.githooks/pre-commit` → çıkış 0 (ATLANDI), skip'siz → çıkış 1. ③ Yalnız `.md` staged → adım listesi 1'e düştü (yalnız doküman kapısı), backend `.ts` staged iken 3 adımdı. ④ `--kaldir` → `--durum` 'kurulu değil' → yeniden kur → `--durum` 'KURULU'.",
+      "kanit": "kapi-sondalari.json § kapilar[2]. Sonda 1: 'Teks-Erp · tip KIRMIZI (8.5s, çıkış 2) … ⛔ Commit atılmadı'; `git rev-parse --short HEAD` = cdcb73f4, yani sonda öncesiyle AYNI — hiçbir commit atılmadı. Sonda 3: '⏳ commit kapısı: 1 adım (doküman kapısı) … ✅ temiz (0.1s)' (8.5 sn ↔ 0.1 sn orantı farkı). Sonda 4 sonrası kapı KURULU bırakıldı: 'node scripts/hooks-kur.mjs --durum → ✅ commit kapısı KURULU (core.hooksPath=.githooks)'.",
+      "not": "Sonda ② bilerek GERÇEK commit ile koşulmadı: skip yolu commit'i BAŞARIYLA atardı ve görev 'commit ATMA' diyor. Bunun yerine git'in çağırdığı betiğin (.githooks/pre-commit) KENDİSİ aynı çalışma ağacı durumunda iki kez koşuldu; 0 ↔ 1 farkı yalnız ortam değişkeninden geliyor. Sonda ① zaten git'in bu betiği gerçekten çağırdığını uçtan uca kanıtlıyor."
+    }
+  ],
+
+  "yeniBulgu": [
+    {
+      "id": "YB-1",
+      "baslik": "`hooks-kur.mjs --durum` KAPI DEĞİL, RAPOR — kapı kaldırılmışken de çıkış kodu 0",
+      "olcum": "`node scripts/hooks-kur.mjs --kaldir` sonrası `--durum` '⚠️ kapı kurulu değil' YAZIYOR ama process.exit(0) ile bitiyor (scripts/hooks-kur.mjs: `--durum` dalı koşulsuz `process.exit(0)`). Kurulu hâlde de 0.",
+      "risk": "Bir kurulum betiği, CI adımı ya da onboarding kontrolü 'kapı var mı' diye `--durum` koşarsa, kapı KALDIRILMIŞ olsa bile YEŞİL alır. Tam olarak hooks-kur.mjs'in doğduğu arıza sınıfı bu: '.git/hooks versiyonlanmaz, her klon kapısız başlar ve bunu kimse fark etmez'.",
+      "oneri": "`--durum` kurulu değilken çıkış kodu 1 versin (ya da ayrı bir `--kontrol` bayrağı fail-closed olsun). Bugün hiçbir yer `--durum`u kapı olarak KULLANMIYOR (ölçüldü: repoda tek referans belgelerde), yani değişiklik bugün hiçbir şeyi kırmaz — ama kullanılmadan önce düzeltilmeli.",
+      "alan": "commit kapısı / harness — bu turda DEĞİŞTİRİLMEDİ (davranış değişikliği ayrı karardır)."
+    },
+    {
+      "id": "YB-2",
+      "baslik": "`check-lint-baseline.mjs` ölü `eslint-disable` direktifini PARSE HATASI sanıyor — fail-closed ama TEŞHİS YANLIŞ",
+      "olcum": "Ölü direktif ihlalinin `ruleId`si NULL'dur (ESLint bunu bir kurala değil linter'a atfeder). Betik `if (!m.ruleId) { … 'parse hatası' … process.exit(2) }` diyor. Ölçüldü: src'ye tek ölü direktif kondu → '❌ backend: …/__lint_sonda_gecici_direktif.ts:2 — parse hatası: Unused eslint-disable directive (no problems were reported from …)', ÇIKIŞ KODU 2.",
+      "risk": "Kapı DURUYOR (fail-closed, doğru) ama mesaj yanlış yere bakmaya sevk ediyor: 'parse hatası' diyen bir çıktıda okuyan config/sözdizimi arar, oysa dosya gayet parse edilmiştir ve düzeltme tek satır silmektir. Ayrıca ölü direktif baseline'a hiç GİREMEZ — `--yaz` da aynı dala düşüp exit 2 verir, yani bu ihlal sınıfı için tavan mekanizması yoktur (bugün doğru: sayısı 0 ve `error`).",
+      "oneri": "`!m.ruleId` dalını ikiye ayır: mesaj metni 'Unused eslint-disable directive' ile başlıyorsa ölü direktif olarak raporla (dosya:satır + 'direktifi sil'), aksi hâlde parse hatası. Çıkış kodu iki dalda da ≥1 kalsın.",
+      "alan": "harness / lint tavanı — bu turda DEĞİŞTİRİLMEDİ."
+    },
+    {
+      "id": "YB-3",
+      "baslik": "İki `error` seviyeli backend ESLint kapısının docs/standart'ta KURAL SATIRI YOK",
+      "olcum": "`grep -rn --include='*.md' 'no-require-imports' docs/standart/` → 0 isabet. `no-floating-promises` → yalnız ELECTRON.md:111 (bilinen sınırlar paragrafı) ve MOBIL.md:118 ([MO-38]); BACKEND.md ve ILKELER.md'de YOK. Oysa backend config'inde ikisi de AÇIK ve `error` (sonda ile doğrulandı: src/__lint_sonda_gecici.ts:9:16 ve :18:3).",
+      "risk": "Kural kitabı, kodu okumadan bilinemeyecek iki kapıyı saklıyor. Backend'de `require()` yazan ya da promise'i `void`süz bırakan biri kırmızıyı ancak commit anında görüyor; belgede karşılığı olmadığı için 'bu neden yasak, meşru istisnası ne' sorusunun yazılı cevabı yok (mdns reklamcısı istisnası yalnız config yorumunda).",
+      "oneri": "BACKEND.md'ye iki satır: `no-require-imports` (zorlama: eslint, error; kanıt: 0 ihlal + tek gerekçeli disable — mdns fail-open) ve `no-floating-promises` (zorlama: eslint tip bilgili, error; kanıt: 0 ihlal, `void AuditService.log(...)` kalıbı).",
+      "alan": "docs/standart/BACKEND.md — BAŞKA AJANIN ALANI, bu turda DOKUNULMADI."
+    },
+    {
+      "id": "YB-4",
+      "baslik": "TX_PROMISE_ALL guard'ının körlüğü sondayla GÖRÜNÜR oldu (kural doğru, kapsamı dar)",
+      "olcum": "Sonda `Promise.all([tx, tx])` ile İKİ ayrı isabet verdi (8:24 ve 8:28) — selector `Identifier[name='tx']` arıyor, yani ihlali DEĞİL, `tx` GEÇİŞLERİNİ sayıyor. Closure parametresi `tx` dışında adlandırılırsa kural tamamen kör kalır.",
+      "risk": "Yok sayılabilir ama kayda değer: [IL-19] ('$transaction closure parametresi DAİMA tx') bu kuralın SÜSÜ değil ÖN KOŞULUdur, ve [IL-19]'un kendi zorlaması 'eslint:no-restricted-syntax (dolaylı)' — yani daireseldir. 196 `$transaction`ın 13'ü açık `(tx)` biçiminde DEĞİL (ILKELER.md:43 ölçümü); o 13 nokta bugün kapı dışıdır.",
+      "oneri": "Ayrı bir kural: `CallExpression[callee.property.name='$transaction'] > ArrowFunctionExpression > Identifier.params[name!='tx']` — 13 ihlal ölçülür, karar tablosunun ≤15 dalına düşer. Bu turda ÖNERİ; ölçüm ve kural yazımı ayrı iştir.",
+      "alan": "eslint.config.mjs — bu turda DEĞİŞTİRİLMEDİ."
+    }
+  ],
+
+  "iddiaCuruyen": [],
+
+  "dogrulama": {
+    "kosulanKapilar": [
+      "node scripts/check-docs.mjs → çıkış kodu 0",
+      "node scripts/check-migrations.mjs → çıkış kodu 0 (235 migration izleniyor)",
+      "node scripts/check-lint-baseline.mjs --proje=backend → çıkış kodu 0 (✅ tavan aşılmadı, 1026 dosya, 0 error)",
+      "node scripts/hooks-kur.mjs --durum → ✅ commit kapısı KURULU (core.hooksPath=.githooks)"
+    ],
+    "gecikDosyaTemizligi": "Sonda için yaratılan 7 geçici dosyanın 7'si de SİLİNDİ: Teks-Erp/src/__lint_sonda_gecici.ts · _uzun.ts · _fn.ts · _direktif.ts · __lint_sonda_gecici3.ts · src/routes/__lint_sonda_gecici.routes.ts · Teks-Erp/src/__hook_sonda_gecici.ts · docs/history/.../__sonda_gecici.md. Geçici DÜZENLEMELER shasum ile geri alındı: scripts/check-migrations.mjs (62063220…) · Teks-Erp/package.json (420e1493…) · scripts/check-lint-baseline.mjs (c142a1dc…) · Teks-Erp/lint-baseline.json (c69883bf…).",
+    "gitIndex": "`git diff --cached --name-only` BOŞ — sonda sırasında staged edilen iki dosya `git reset -- <yol>` ile geri alındı. HEAD = cdcb73f4 (değişmedi), hiçbir commit atılmadı.",
+    "buTurunEklediği": [
+      "docs/history/standart-2026-09-05/olcum/eslint-backend-sonuc.json (YENİ)",
+      "docs/history/standart-2026-09-05/olcum/kapi-sondalari.json (YENİ)",
+      "docs/history/standart-2026-09-05/olcum/kapatma-sondalar.json (YENİ, bu dosya)"
+    ],
+    "not": "Çalışma ağacında bu turun DIŞINDA kalan çok sayıda değişiklik var — paralel koşan diğer kapatma ajanlarının dosyaları (docs/standart/*, Teks-Erp/eslint.config.mjs, bekçiler, kapatma-celiski.json, swagger-belgesiz-baseline.json …). Bu tur ÜRETİM DOSYASI DEĞİŞTİRMEDİ; yalnız üç ölçüm kaydı ekledi."
+  }
+}

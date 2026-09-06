@@ -142,7 +142,7 @@ async function main(): Promise<void> {
   // ⚠️ KUR FİXTURE'I TESTİN KENDİSİNE AİT. Bekçi ilk yazımda ortamda BUGÜNE
   // ait bir USD kuru bulunmasına güveniyordu (CLAUDE.md'nin açıkça yasakladığı
   // "ortamdaki veriye bağımlı olma" hatası): yazıldığı gün geçti, ertesi gün
-  // `resolveExchangeRate` null döndü ve fatura onayı 400 verdi. Ürün davranışı
+  // `resolveExchangeRateTx` null döndü ve fatura onayı 400 verdi. Ürün davranışı
   // DOĞRU — kur uydurmuyor; kırılan şey fixture'dı.
   // Bugünün TARİHİ (saat değil) anahtar: kolon `@db.Date`.
   const rateDay = new Date();

@@ -17,7 +17,7 @@ import {
   labelKindLabels,
   type CustomerTemplateRouteRow,
   type LabelKind,
-  type LabelTemplate,
+  type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
 
 interface Props {
@@ -101,7 +101,7 @@ function RouteRow({
 }: {
   kind: LabelKind;
   route: CustomerTemplateRouteRow | null;
-  activeTemplates: LabelTemplate[];
+  activeTemplates: LabelTemplateListRow[];
   isPending: boolean;
   onSet: (templateId: string | null) => void;
 }) {

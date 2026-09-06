@@ -818,7 +818,7 @@ router.get(
  *       kumaşı tanımlı olmayan iş emri stok üretimine dönemez.
  *
  *       Son aktif kalem iptal edilirse sipariş, sevk varsa COMPLETED, yoksa
- *       CANCELLED olur (kural `recomputeOrderStatus`'ta).
+ *       CANCELLED olur (kural `recomputeOrderStatusTx`'ta).
  *
  *       Sebep İSTEĞE BAĞLIDIR ve `ReasonPresetKind.ORDER_CANCEL` kataloğundan
  *       gelir; kodu sunucu türetir.

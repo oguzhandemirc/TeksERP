@@ -1,0 +1,302 @@
+{
+  "olcum_ortami": {
+    "kok": "/Users/demirci/Documents/Projeler/Teks-Erp/mobil",
+    "tarih": "2026-09-05",
+    "dosya_sayisi_src": 386,
+    "test_dosyasi": 84,
+    "test_vakasi": 820,
+    "tsc_noEmit": "TEMIZ (cikti yok, exit 0)",
+    "jest_calistirilmadi": "npx jest --listTests bos dondu; sayimlar grep ile"
+  },
+  "conventions": [
+    {
+      "rule": "Ekran = ince kabuk + View bilesenleri + ekran-hook + saf mantik modulu",
+      "observedIn": "HizliIsEmriScreen.tsx 140 satir + useQuickWorkOrder.ts 1022 + NewWorkOrderView.tsx 523 + scanClassify.ts 66 + reworkPayload.ts 72; SiparisScreen.tsx 134 + useNewOrder.ts + Step*.tsx",
+      "referenceExample": "src/screens/Modules/HizliIsEmri/ (15 dosya, 4167 satir, en buyugu hook)",
+      "deviations": "screens/ p90=1125, max=9386; 10 dosya >1000 satir. TamburScreen.tsx tek fonksiyon L374-5107 = 4734 satir, 81 useState, 11 StyleSheet.create, 1 export. 5 dev ekranin hepsi 2026-05-11 dogumlu (55/46/31/26/21 commit ile buyudu); 2026-06 sonrasi acilan HizliIsEmri/Siparis/settings ayrisik.",
+      "deviationCount": 10,
+      "enforce": "insan",
+      "enforceHow": "Hicbir bekci yok: eslint.config.js'te max-lines/max-lines-per-function KURALI YOK; tsc temiz geciyor."
+    },
+    {
+      "rule": "Katmanlama: ekran -> <domain>.service.ts -> apiClient (ekran HTTP kurmaz)",
+      "observedIn": "services/api'yi import eden 9 ekranin HEPSI yalniz yuklem aliyor (isWorkSessionLost / isLoginLocked); ornek KK1Screen.tsx:76, TamburScreen.tsx:82, LoginScreen.tsx:14",
+      "referenceExample": "src/services/tambur.service.ts (581 satir, apiClient sarmalayici + tip)",
+      "deviations": "components/LabelPrinter.tsx:6,212 apiClient'i DOGRUDAN cagiriyor (tek ihlal). axios ham import 3 dosya: services/api.ts (mesru) + ServerSettingsScreen.tsx:31 + ServerAddressSheet.tsx:14 (sunucu kesfi/yoklama, baseURL'siz — gerekcelendirilebilir).",
+      "deviationCount": 1,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Test edilebilir mantik ekrandan cikip <ad>.ts / <ad>.helper.ts kardes dosyaya alinir, yaninda .test.ts durur",
+      "observedIn": "screens/ altindaki 11 test dosyasinin 9'u boyle bir cifti test ediyor: scanClassify(66) reworkPayload(72) canUnlinkOrderLine(40) resolveShortCutConfig(38) shortCutQuality(86) receiveAttempt(168) receivePayload.helper(351) newRolls.helper(113) UpdateActions(182)",
+      "referenceExample": "src/screens/Modules/FasonKabul/receivePayload.helper.ts (351) + .test.ts (468)",
+      "deviations": "Ekran BILESENININ kendisini render eden test 2 tane: EntryConflictModal.test.tsx, UpdateActions.test.tsx. 5 dev ekranin (23.862 satir) hicbirinin bilesen testi yok.",
+      "deviationCount": 5,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Cevrimdisi kuyruga girecek yazma mutationKey: STATION_MUT.* ile tanimlanir (mutationFn offline/mutations.ts'te setMutationDefaults ile baglidir)",
+      "observedIn": "offline/mutations.ts:44-58 12 anahtar; 13 cagri yeri / 8 ekran (KK1 2, KursunQc 5, Tambur 1, FasonKabul 1, FasonSevk 1, KartelaSevk 1, KartelaKabul 1, Depo 1)",
+      "referenceExample": "src/screens/Modules/KursunQc/KursunQcScreen.tsx (5 mutasyonun 5'i de kuyruklu)",
+      "deviations": "Istasyon ekranlarinda 13 kuyruksuz useMutation var, yalnizca 2'sinde 'online-only' gerekcesi yaziyor (TamburScreen.tsx:1706, FasonKabulScreen.tsx:650). Gerekcesiz 11: TamburScreen 1198/1245/1492/1510/1525/1635/7168/7934, KK1Screen 188, FasonKabul 686, Depo 923.",
+      "deviationCount": 11,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Okutma geri bildirimi services/scanFeedback.signalScan ya da hooks/useScanFeedback uzerinden verilir; ekran Haptics'i okutma yolunda DOGRUDAN cagirmaz",
+      "observedIn": "signalScan/useScanFeedback yalniz 3 tuketicide: KK1Screen.tsx:607,615 · FasonSevkScreen.tsx:792 · useQuickWorkOrder.ts:604",
+      "referenceExample": "src/services/scanFeedback.ts (accept|duplicate|reject uc sinyal + scanSoundEnabled)",
+      "deviations": "Okutma yolu olan 14 ekran/bilesenin 11'i dogrudan Haptics kullaniyor. Somut: DepoScreen.tsx:281 handleBarcodeScanned -> 296/299/309/316/319; KursunQcScreen.tsx:366 resolveCard -> 446/477; PaketlemeScreen.tsx:344 drainScans -> 361/364/376/384; TamburScreen.tsx:2127. Bu ekranlarda 'duplicate' sinyali ve ses kanali HIC yok.",
+      "deviationCount": 11,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Tiklanabilir her alan react-native-paper TouchableRipple/Button/IconButton/List.Item; Card + onPress YASAK",
+      "observedIn": "TouchableRipple 233 kullanim / 81 dosya",
+      "referenceExample": "src/components/PickerModal.tsx",
+      "deviations": "<Card hic kullanilmiyor (0) — kural %100 tutuyor. Ham RN dokunma 9: Pressable 7 (AppModal, RemoteListSheet, AppMenu backdrop'lari + KartelaKabul, FasonKabul), TouchableOpacity 1 (ToastConfig.tsx), TouchableWithoutFeedback 1.",
+      "deviationCount": 9,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Modallar components/AppModal.tsx uzerinden (Portal + Reanimated)",
+      "observedIn": "AppModal 54 dosyadan import, 79 JSX kullanim",
+      "referenceExample": "src/components/AppModal.tsx",
+      "deviations": "Ham <Modal 3 dosya / 7 kullanim: Tambur/LabelNamePreview.tsx, components/AppMenu.tsx, components/labels/LabelPreviewSheet.tsx. <Portal dogrudan yalniz components/SimplePortal.tsx'te. Paper <Dialog: 0.",
+      "deviationCount": 3,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Liste = FlashList + useInfiniteQuery (onEndReached); pager YOK",
+      "observedIn": "FlashList 37 kullanim / 23 dosya; useInfiniteQuery 36 cagri",
+      "referenceExample": "src/components/RemoteListSheet.tsx",
+      "deviations": "<FlatList kullanimi 0 — kural %100 tutuyor.",
+      "deviationCount": 0,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Oturum kapisi tek registry'den dayatilir (constants/stationScreens.ts) ve navigator'da withWorkSession ile sarilir",
+      "observedIn": "navigation/MainNavigator.tsx:7,38-50 componentLoaderFor -> withWorkSession; STATION_KIND_BY_SCREEN 4 ekran (KK1/KursunQc/Tambur/TartiPaket)",
+      "referenceExample": "src/constants/stationScreens.ts",
+      "deviations": "Ekran icinde elle SessionGate saran yer YOK; 4/4 kayit registry'den. Sapma 0.",
+      "deviationCount": 0,
+      "enforce": "insan"
+    },
+    {
+      "rule": "HAL: cevre birimi oturumdan cozulur (useMachinePeripherals), cihaz-yerel secim yok",
+      "observedIn": "3 tuketici: TamburScreen.tsx:611 METER, KK1Screen.tsx:388 METER, hooks/useSackWeigh.ts:41 SCALE; usePeripheralIO 4 dosya",
+      "referenceExample": "src/hooks/useMachinePeripherals.ts (74 satir)",
+      "deviations": "Ekranlarin dogrudan bluetooth.service/hal'e indigi yer yok. Sapma 0.",
+      "deviationCount": 0,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Tip disiplini: strict TS, kacis kapisi yok",
+      "observedIn": "tsconfig strict:true; npx tsc --noEmit TEMIZ; @ts-ignore 0, @ts-expect-error 0",
+      "referenceExample": "src/types/models.ts (1372 satir, backend aynasi)",
+      "deviations": "any 12 kullanim, hepsi React tip erozyonu: MainNavigator.tsx:20,41,42 (ComponentType<any> lazy loader), SessionGate.tsx:33,34,41, PickerModal.tsx:589,627 + NumpadInput.tsx:125,137 (React.Ref<any>), PlaceholderScreens.tsx:17,29. Domain tipinde any YOK.",
+      "deviationCount": 0,
+      "enforce": "tsc"
+    },
+    {
+      "rule": "Renk/spacing theme/tokens.ts'ten alinir; ham hex yazilmaz",
+      "observedIn": "theme/tokens.ts:1-11 kurali metin olarak tasiyor ('Yeni ekran/komponent yazarken ham hex YAZMA'); 64 dosya theme import ediyor",
+      "referenceExample": "src/screens/Modules/Tambur/TamburSendToDyeModal.tsx (350 satir, 0 ham hex, theme import)",
+      "deviations": "1931 ham hex / 88 dosya. Yigin 5 dev ekranda: TamburScreen 380, FasonKabul 246, KursunQc 143, KK1 112, FasonSevk 81 (toplam 962 = %50). En yeni 5 ekran: 0/0/0/2/9 — kural yeni kodda TUTUYOR.",
+      "deviationCount": 88,
+      "enforce": "insan",
+      "enforceHow": "Kural yalniz tokens.ts yorumunda; ne lint ne bekci var."
+    },
+    {
+      "rule": "Adlandirma: hooks use*, store <ad>Store.ts, servis <domain>.service.ts, bilesen PascalCase.tsx",
+      "observedIn": "hooks 27/27 use*; store 7/8; services 37 adet .service.ts; components 49/50 PascalCase",
+      "referenceExample": "src/hooks/useMachinePeripherals.ts",
+      "deviations": "store: shippingSession.store.ts (nokta ayirici, digerleri camelCase+Store). components: androidEditText.model.tsx. services/: 12 dosya .service.ts suffiksi tasimiyor ama bunlar API sarmalayici degil (api.ts, printHtml.ts, netStats.ts, scanFeedback.ts, authActions.ts, serverIdentity.ts, documentConfig.ts, surumNotlari.ts, 3 print yardimcisi) — bilincli.",
+      "deviationCount": 2,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Sebep secimi tek bilesen ReasonPresetPicker (serbest metin USTTE)",
+      "observedIn": "hooks/useReasonPresets.ts 6 tuketici (Tambur x3, FasonKabul, RollCancelModal, useQuickWorkOrder)",
+      "referenceExample": "src/components/reasonPresets/ReasonPresetPicker.tsx (139 satir)",
+      "deviations": "ReasonPresetPicker YALNIZ 1 yerden kullaniliyor (HizliIsEmri/wizard/StepConfirm.tsx:152). FasonKabulScreen.tsx:3465 kendi presets.map cip listesini ciziyor; TamburScreen.tsx:4967 presetleri generic PickerModal options'ina donusturuyor; RollCancelModal.tsx:134 hook'u ayri kullaniyor. Birlestirme 1/4.",
+      "deviationCount": 3,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Ortak bilesen once aranir (components/ paylasimli kabuk)",
+      "observedIn": "components/*.tsx 70 dosyanin 32'si >=2 dosyadan import ediliyor; AppModal 54, ScreenChrome 26, PickerModal 21, RefreshButton 20, BarcodeScannerModal 15, ConfirmDialog 11",
+      "referenceExample": "src/components/ScreenChrome.tsx",
+      "deviations": "38 bilesen tek kullanimlik (bir kismi mesru: SessionGate, IdleLockGate, ToastConfig, LockScreen gibi tekil altyapi). Gercek kopya adaylari: DetailSheet / ReceiptDetailModal / WorkOrderDetailPanel / DispatchDetailPanel ayri ayri yazilmis (her biri 37-40 ham hex tasiyor).",
+      "deviationCount": 38,
+      "enforce": "insan"
+    },
+    {
+      "rule": "Import: goreli yol (tsconfig alias'lari fiilen olu)",
+      "observedIn": "993 goreli import, 587'si uc seviye (../../../); alias (@components, @services...) yalniz 2 kullanim",
+      "referenceExample": "src/screens/Modules/Tambur/TamburSendToDyeModal.tsx:26-29",
+      "deviations": "tsconfig.json 9 alias tanimliyor, kod 2 tanesini kullaniyor — tanim ile fiili kalip AYRISIK. Yeni kodun hangisini kullanacagi belirsiz.",
+      "deviationCount": 9,
+      "enforce": "insan"
+    }
+  ],
+  "docVsCode": [
+    {
+      "docRule": "mobil/CLAUDE.md UI/UX: 'font >=16sp, kritik 20sp+'",
+      "codeReality": "1163 fontSize bildiriminin 970'i (%83) 16'nin ALTINDA; en yogun degerler 12 (268) ve 13 (268), 9px bile var (8 adet).",
+      "source": "grep -rhoE 'fontSize: [0-9]+' src",
+      "verdict": "belge yanlis"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'Dokunma hedefi >=56dp'",
+      "codeReality": "minHeight bildirimlerinin 41/88'i 56'nin altinda; ancak minHeight her zaman dokunma hedefi degil (bant/etiket kutulari da sayiliyor) ve Paper bilesenleri kendi hit-slop'unu tasiyor.",
+      "source": "grep -rhoE 'minHeight: [0-9]+' src",
+      "verdict": "BELIRSIZ"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'Card + onPress KULLANMA'",
+      "codeReality": "<Card kullanimi 0. TouchableRipple 233.",
+      "source": "grep -rn '<Card' src -> 0",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'ekranlar Haptics'i dogrudan cagirmaz' (okutma geri bildirimi signalScan'den)",
+      "codeReality": "expo-haptics 44 dosyada, 230 cagri; bunlarin 40'i ekran/bilesen. Okutma yolunda dogrudan cagri en az 3 ekranda kanitli (Depo:296-319, KursunQc:446/477, Paketleme:361-384).",
+      "source": "grep -rn 'Haptics\\.' src (230) + okutma isleyici govde okumasi",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'ReasonPresetPicker tek bilesen'",
+      "codeReality": "Bilesen 1 yerde; 2 ekran kendi secici UI'sini ciziyor, 1 modal hook'u ayri tuketiyor.",
+      "source": "grep -rn 'ReasonPresetPicker' src",
+      "verdict": "kod ihlal"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md Paketler listesi (bottom-tabs, expo-sharing, react-native-qrcode-svg dahil)",
+      "codeReality": "Bu uc pakete src/ + App.tsx icinde SIFIR kod referansi var (yalniz package.json). react-native-vector-icons 'peer artigi' notu dogru. react-native-screens/worklets/web/react-dom RN/Expo peer'i, mesru.",
+      "source": "grep -rn '<paket>' --include='*.ts*' . (node_modules haric) -> yalniz package.json",
+      "verdict": "belge yanlis"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'modalda NumpadInput + useNativeKeyboard (modalda NumpadHost yok)'",
+      "codeReality": "NumpadHost 3 JSX kullanim (KursunQc:1624, Tambur:4299, KK1:2290) — ucu de ekran govdesinde, modal icinde degil; SackManualWeightSheet.tsx:13 ve TamburManualRollModal.tsx:277 kurali yorumla teyit ediyor.",
+      "source": "grep -rn 'NumpadHost' src",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'NumpadHost autoActivate yalniz tek alanda'",
+      "codeReality": "6 autoActivate kullanimi; KK1'de iki tane ama karsilikli disliyan kosullarla (1737 !manualMode / 1998 manualMode) ve gerekce satir ici yazili (KK1:1993).",
+      "source": "grep -rn 'autoActivate' src",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'Liste: FlashList onEndReached; Onceki/Sonraki pager YOK'",
+      "codeReality": "<FlatList 0, <FlashList 37.",
+      "source": "grep -rn '<FlatList' src -> 0",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md klasor yapisi: \"test/ (guard testleri)\"",
+      "codeReality": "src/test/ yalniz 4 dosya (segmented-buttons-row.guard, update-feed-url, smoke, setup/render). 84 test dosyasinin 80'i kaynagin YANINDA (offline 12, components 13, services 10, hooks 9, utils 8, screens 11...). Fiili kalip 'yan yana test', belge onu soylemiyor.",
+      "source": "find src -name '*.test.*' | sed 's|/[^/]*$||' | sort | uniq -c",
+      "verdict": "belge yanlis"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'SegmentedButtons flexDirection:row kabinin dogrudan cocugu OLAMAZ (bekci var)'",
+      "codeReality": "Bekci gercek ve AST tabanli: src/test/segmented-buttons-row.guard.test.ts (6077 bayt, TS AST ile en yakin sarmalayici stilini cozuyor).",
+      "source": "src/test/segmented-buttons-row.guard.test.ts:1-30",
+      "verdict": "uyumlu"
+    },
+    {
+      "docRule": "mobil/CLAUDE.md: 'Modallar components/AppModal.tsx'",
+      "codeReality": "54 dosya AppModal; 3 dosya ham RN <Modal kullaniyor (LabelNamePreview, AppMenu, LabelPreviewSheet).",
+      "source": "grep -rl '<Modal' src",
+      "verdict": "kod ihlal"
+    }
+  ],
+  "gaps": [
+    {
+      "what": "Dosya/fonksiyon boyutu icin HICBIR mekanik kapi yok",
+      "evidence": "eslint.config.js (24 satir) yalniz react/no-unescaped-entities kapatiyor; max-lines / max-lines-per-function yok. Sonuc: TamburScreen.tsx 9386 satir, tek React fonksiyonu 4734 satir (L374-5107), 81 useState — tsc + lint temiz geciyor.",
+      "severity": "yuksek",
+      "fixSize": "kucuk"
+    },
+    {
+      "what": "signalScan kapisinin bekcisi yok; okutma geri bildirimi ekran ekran ayrisiyor",
+      "evidence": "Kural mobil/CLAUDE.md + scanFeedback.ts:75-85 yorumunda; 3 tuketici vs 11 dogrudan-Haptics ekran. 'duplicate' sonucu ve scanSoundEnabled ayari o 11 ekranda hic calismiyor (Depo/KursunQc/Paketleme govdeleri okundu).",
+      "severity": "yuksek",
+      "fixSize": "orta"
+    },
+    {
+      "what": "Kuyruksuz (online-only) istasyon yazmasi bir KARAR olmali ama 13'un 11'i gerekcesiz",
+      "evidence": "Gerekce yorumu tasiyanlar: TamburScreen.tsx:1706, FasonKabulScreen.tsx:650. Tasimayanlar arasinda finalizeMutation(1198), cutOpenFabricMutation(1245), cutWarehouseRollMutation(1525), finalizeWarehouseCutMutation(1635) gibi saha yazmalari var; offline/mutations.ts:187 yalniz cutOpenFabric icin gerekce veriyor.",
+      "severity": "yuksek",
+      "fixSize": "kucuk"
+    },
+    {
+      "what": "Ekran bileseni testi yok denecek kadar az",
+      "evidence": "84 test dosyasinin 2'si ekran/modal render ediyor (EntryConflictModal.test.tsx, UpdateActions.test.tsx). 5 dev ekran (23.862 satir) icin 0 bilesen testi; 820 test vakasinin tamami saf modul/servis/hook duzeyinde.",
+      "severity": "orta",
+      "fixSize": "buyuk"
+    },
+    {
+      "what": "Ham hex icin bekci yok; kural yalniz tokens.ts yorumunda yasiyor",
+      "evidence": "theme/tokens.ts:7 'Yeni ekran/komponent yazarken ham hex YAZMA' diyor; kodda 1931 ham hex / 88 dosya. Ayrica ikinci bir yerel token modulu var (screens/Common/settings/settingsUi.tsx:20 SETTINGS_COLORS) — iki palet kaynagi.",
+      "severity": "orta",
+      "fixSize": "orta"
+    },
+    {
+      "what": "queryKey merkezi kayit YOK — 238 satir ici anahtar",
+      "evidence": "grep 'queryKey:' src -> 238 (test haric); QUERY_KEYS/queryKeys sabiti yalniz offline/persistPolicy.ts'te gecici olarak var. invalidateQueries ile listeleme anahtarinin ayrismasi derleme zamaninda yakalanamaz.",
+      "severity": "orta",
+      "fixSize": "orta"
+    },
+    {
+      "what": "tsconfig alias'lari fiilen olu",
+      "evidence": "9 path alias tanimli, 2 kullanim; 587 uc-seviye goreli import (../../../). Dosya tasindiginda kirilma yuzeyi ve yeni kodda hangi bicimin dogru oldugu belirsiz.",
+      "severity": "dusuk",
+      "fixSize": "orta"
+    },
+    {
+      "what": "Kullanilmayan uc paket paket boyutunu ve belgeyi kirletiyor",
+      "evidence": "@react-navigation/bottom-tabs, expo-sharing, react-native-qrcode-svg: src/ + App.tsx + jest.config.js icinde SIFIR referans; ucu de mobil/CLAUDE.md Paketler listesinde 'kullanimda' gibi duruyor.",
+      "severity": "dusuk",
+      "fixSize": "kucuk"
+    },
+    {
+      "what": "react-hooks/exhaustive-deps 26 yerde bastirilmis",
+      "evidence": "grep 'eslint-disable' src -> 45; 26'si exhaustive-deps (RootNavigator:183, KartelaSevk:88, KartelaKabul:255/790, TartiPaket:179/203, KursunQc:1053 ...), 19'u no-require-imports (MainNavigator tembel yukleme — mesru).",
+      "severity": "dusuk",
+      "fixSize": "orta"
+    }
+  ],
+  "sizeProposal": {
+    "yeni_ekran_siniri": {
+      "dayanak": "test haric olculen dagilim: components p50=162 p90=399; hooks p90=173 max=214; services p90=347 max=658; offline p90=287 max=439; screens p50=245 p75=491 p90=1125 max=9386. Yani screens DISINDAKI her katman zaten <=450'de duruyor.",
+      "kurallar": [
+        "Ekran kabugu (*Screen.tsx) <= 250 satir: navigasyon, layout, alt gorunumlerin baglanmasi. Emsal HizliIsEmriScreen 140, SiparisScreen 134, UpdateSettingsScreen 305 (ust sinir).",
+        "Gorunum/panel/sheet bileseni <= 500 satir. Emsal NewWorkOrderView 523, OrderLinkPicker 508, TamburSendToDyeModal 350.",
+        "Ekran-hook (use<Ekran>.ts) <= 400 satir; asarsa sorumluluga gore bolunur (veri / mutasyon / okutma). Emsal: useQuickWorkOrder.ts 1022 BUGUN sinir disi ve tek kalan ornek.",
+        "Tek React bileseni fonksiyonu <= 300 satir, <= 12 useState. Bugunku ihlaller: TamburScreen 4734/81, FasonKabul, KK1, KursunQc, FasonSevk.",
+        "Saf mantik dosyasi (<ad>.ts / <ad>.helper.ts) <= 200 satir ve .test.ts ZORUNLU.",
+        "Servis <= 400 satir (packing.service 658 ve tambur.service 581 devralinan).",
+        "Yeni ekranda ham hex 0; renk theme/tokens.ts'ten."
+      ],
+      "kapsam": "Bu sinirlar YENI dosyalar ve mevcut dosyaya eklenen YENI bolumler icin zorunlu. Devralinanlar (2026-05-11 dogumlu 5 dev ekran + LoginScreen + DepoScreen + PaketlemeScreen + KartelaKabulScreen) sinir disi; dokunulan bolum cikarilirken sinira cekilir ('dokundugun yeri kucult').",
+      "kapi_onerisi": "eslint max-lines(400, skipBlankLines+skipComments) + max-lines-per-function(300) yalniz src/screens/Common, src/screens/Modules/HizliIsEmri, src/screens/Modules/Siparis, src/components, src/hooks, src/services, src/offline, src/utils uzerinde; dev ekranlar override ile muaf listede (muafiyet listesi kisalttikca kisalir)."
+    },
+    "tambur_bolme_plani": {
+      "bugun": "9387 satir tek dosya. Butce: L1-373 import+tip (373) · L374-3240 mantik (2867) · L3241-5107 JSX (1867) · L5108-9387 alt bilesenler+stil (4280; bunun 1648'i StyleSheet.create). Klasorde zaten 8 ayrisik dosya var (TamburOrderLinkSheet 742, TamburManualRollModal 658, TamburBringRollModal 500, CutActionBar 388, TamburSendToDyeModal 350, LabelNamePreview 319, WorkOrderOutputPanel 280, TamburFieldFix 228) — kalip MEVCUT, sadece uygulanmamis.",
+      "adimlar": [
+        "1. ONCE stil: 1648 satirlik 6 StyleSheet blogu (styles L8295-9208=914, ordersModal 155, relabel 148, helper 106, camera 73, errorsModal 72, noteModal, branch, undo, overCut, resplit) tasinacaklari bilesenle birlikte gider. Tek basina ~%18 kazanc, davranis riski sifir.",
+        "2. Hazir alt bilesenleri dosyaya cikar (dosya adi = fonksiyon adi): RecentOutputModal(519 L6127) · FinalizeRemainingModal(461 L7072) · TamburUndoConfirmModal(325 L7893) · OrdersDetailModal(191 L5276) · RelabelRollRow(173 L5765) · TamburErrorsModal(155 L7688) · DefectRuler(138 L7550) · CameraScanModal(110 L6685) · RollLabelCard(109 L5108) · RollListItem(96 L6840) · HeaderChip(82 L237) · BranchGroupedRollList+buildBranchGroups(69+33 L6936) · LabelPrintModal(L5217) · TamburNoteModal(L7843). ~2600 satir, cagri yerleri degismez.",
+        "3. Mantigi hook'lara al: (a) useTamburCards — openCardsQuery(L512)+aktif is/sekme state'i; (b) useTamburCatalogs — defectTypes(424)/qualityGrades(431)/manualItems(462)/manualColors(477)/customers(2172); (c) useTamburMutations — 8 mutasyon L1198-1810 (bu adimda her kuyruksuz mutasyona gerekce yorumu yazilir); (d) useTamburMeter — usePeripheralIO/useMachinePeripherals(611) + olcum; (e) useTamburCut — recutLines(330), kesim taslagi, shortCutQuality/resolveShortCutConfig baglanti. Hedef her biri <=400.",
+        "4. JSX'i ucе bol: TamburHeader (L3247-3354) · TamburWorkPanel (L3355-4310, form sutunu ~950 -> kendi icinde kesim/hata/not sekmelerine ayrilir) · TamburModals (L4310-5107, ~800 satir salt baglanti: 30 modal/sheet prop'u).",
+        "5. Saf mantigi cikar + test yaz: silentBypass karari (SilentBypassResult L319), formatOutputDate(6086), archivedStatusText(6109), rulerMaxForErrors(7533), fmtMeter(7543), buildBranchGroups(6946). Emsal: shortCutQuality.ts + .test.ts.",
+        "6. Kalan TamburScreen.tsx hedefi <= 250 satir kabuk."
+      ],
+      "beklenen_sonuc": "9387 -> kabuk ~250 + 5 hook (~1600) + 3 gorunum (~1900) + 14 bilesen dosyasi (~2600, stilleriyle ~4200) + 6 saf modul+test (~400). Hicbir dosya 550'yi asmaz.",
+      "sira_gerekcesi": "1 ve 2 mekanik ve geri alinabilir (davranis degismez, tsc kapi); 3-5 davranis riski tasir ve tablette olculmeli (adb exec-out screencap + uiautomator dump). 4 numarada 81 useState'in hangi hook'a ait oldugu tek tek cozulecegi icin en riskli adim odur — once 3'un (a)+(b) parcalari, sonra JSX."
+    }
+  }
+}

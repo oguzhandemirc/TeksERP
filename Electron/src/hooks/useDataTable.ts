@@ -121,10 +121,23 @@ export function useDataTable<T>({
     setPreference({ tableVisibility: { ...(prefs.tableVisibility ?? {}), [queryKey]: next } });
   };
 
+  // ⚠️ TAZE URL — LOAD-BEARING (2026-09-06). Effect'in bağımlılığı yalnız [search]
+  // olduğu için kapanışındaki `searchParams` MOUNT anındaki değerde DONAR. Zamanlayıcı
+  // 300 ms sonra o BAYAT kopyayı `replace` ile geri yazınca arada eklenmiş her parametre
+  // URL'den DÜŞER. Sahadaki belirti: Paketleme/Çuvallar kapısından cari seçmek
+  // `filter[customerId]`i yazar ve AYNI tıkta listeyi mount eder; filtre siliniyor ve
+  // liste O CARİNİN değil TÜM müşterilerin çuvallarını gösteriyordu. Sunucu temizdi.
+  // ⚠️ `setSearchParams`ın fonksiyonel biçimi bunu ÇÖZMEZ: react-router'da setter
+  // [navigate, searchParams] bağımlı bir useCallback'tir ve `prev`i kendi kapanışından
+  // verir — mount anındaki setter örneği yine bayat prev üretir.
+  // Bekçi: useDataTable.urlFilter.test.tsx §2 (negatif sonda ölçüldü).
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+
   // Search debounce → URL'e yaz (cursor stack reset).
   useEffect(() => {
     const handle = setTimeout(() => {
-      const next = new URLSearchParams(searchParams);
+      const next = new URLSearchParams(searchParamsRef.current);
       if (search) next.set("search", search);
       else next.delete("search");
       next.delete("page"); // legacy
@@ -189,8 +202,11 @@ export function useDataTable<T>({
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.pagination.nextCursor,
     enabled,
-    refetchOnMount: "always",
-    staleTime: 0,
+    // ⚠️ `refetchOnMount:"always"` + `staleTime:0` DEĞİL (2026-09-05 ölçümü): infinite
+    // query remount'ta YÜKLÜ TÜM SAYFALARI seri çeker — 9 sayfalık Envanter'de sekme
+    // içi her git-gel 9 istek. 15 sn'lik tazelik penceresi bunu 0'a indirir; mutasyon
+    // tazeliği etkilenmez (invalidate staleTime'dan bağımsız olarak refetch tetikler).
+    staleTime: 15_000,
   });
 
   const flatRows = useMemo<T[]>(

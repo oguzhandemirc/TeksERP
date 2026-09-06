@@ -123,6 +123,7 @@ export default function OrderLineSheet({ target, customerId, onDismiss, onSave, 
     enabled: open && !!customerId,
     staleTime: 10 * 60 * 1000,
   });
+  useTruncationWarning(customerColorsQuery.data?.pagination, 'Müşteri rengi');
 
   const toColorOption = (c: { id: string; name: string; code?: string | null; hex?: string | null }): PickerOption => ({
     value: c.id,

@@ -1,0 +1,124 @@
+{
+  "label": "katman-sozlesmesi",
+  "kapsam": "Teks-Erp/src (backend) — routes/controllers/services/middlewares/app.ts",
+  "olcum_tarihi": "2026-09-05",
+  "temel_sayilar": {
+    "route_dosyasi": 80,
+    "route_handler": 672,
+    "controller_dosyasi": 22,
+    "servis_dosyasi": 269,
+    "middleware_dosyasi": 15,
+    "app_ts_api_mount": 72,
+    "router_use_kapi_satiri": 26,
+    "router_use_alt_mount": 16
+  },
+  "katman_dagilimi": {
+    "controller_import_eden_route_dosyasi": 35,
+    "bunlardan_generic_BaseController": 15,
+    "ozel_controller_kullanan": 20,
+    "controller_SIZ_route_dosyasi": 45,
+    "handler_controller_a_delege": 349,
+    "handler_route_icinde_inline": 323,
+    "BaseController_a_giden_handler_yaklasik": 71,
+    "extends_BaseController": 0,
+    "new_BaseController_ornegi": 18,
+    "extends_BaseService": 14
+  },
+  "zod": {
+    "z_object_routes": 83,
+    "z_object_controllers": 169,
+    "z_object_services": 0,
+    "adlandirilmis_z_object_routes": 66,
+    "adlandirilmis_z_object_controllers": 142,
+    "Schema_soneki_orani": "191/208 = %91.8 (controllers 139/142, routes 52/66)",
+    "ayri_schema_dosyasi": "YOK — tek istisna src/config/label-kind.schema.ts",
+    "sema_modul_duzeyinde": "routes'ta 70 şema modül düzeyinde, 0'ı handler içinde",
+    "strict_kullanimi": "50/208 (routes 43, controllers 7) = %24",
+    "parse_req_body": 205,
+    "Zod_suz_gövde": ["routes/peripheral.routes.ts:133", "routes/peripheral.routes.ts:184", "controllers/base.controller.ts:97", "controllers/base.controller.ts:109"],
+    "inline_yazma_handler_zodsuz": 0
+  },
+  "kapi_sirasi": {
+    "verifyToken_kullanimi": "24 dosyada router.use(verifyToken,...) toplu; 53 dosyada handler başına tekrar (fail-open desen)",
+    "handler_argumaninda_verifyToken": 244,
+    "requirePermission": 377,
+    "requireAnyPermission": 247,
+    "requireAnyPermission_mobile_iceren": 120,
+    "modul_kapisi": {"requireFinanceEnabled": 30, "requireProductionEnabled": 20, "requireTicaretEnabled": 12, "requireIplikEnabled": 4, "requireDepoMultiEnabled": 3},
+    "kanonik_sira": "router.use(verifyToken, requireXEnabled) EN ÜSTTE → handler'da requirePermission/requireAnyPermission",
+    "sira_ihlali": "0 — kapı satırından ÖNCE tanımlanmış uç bulunamadı (80 dosya tarandı)",
+    "kimliksiz_route_dosyasi": ["client-policy.routes.ts", "discovery.routes.ts", "reports.routes.ts (saf mount)", "auth.routes.ts", "currency.routes.ts (verifyToken var, izin yok)", "record-info.routes.ts (verifyToken var, izin matchesPermission ile route içinde)"],
+    "bekci": "scripts/test_route_auth_coverage.ts (EXEMPT sözlüğü gerekçeli, iki yönlü denetim)"
+  },
+  "zarf": {
+    "tip": "src/types/api.types.ts:6 ApiResponse<T>, :19 PaginatedResponse<T>; CursorPaginatedResponse services/base.service.ts'te",
+    "kim_uretiyor": "SERVİS — 429 metot Promise<ApiResponse<...>>, 20 PaginatedResponse; services'te 597 'success: true'",
+    "controller_rolu": "yalnız res.status(N).json(result) — controllers'ta 360 res.status, 12 res.json, 36 'success: true'",
+    "inline_route_kendi_zarfini_kuran": 106,
+    "ucuncu_zarf": "reportEnvelope() services/reports/_shared.ts:157 — {success,data,range,compareRange}, 21 çağrı",
+    "sapma": "Zarf ÜÇ yerde üretiliyor (servis · inline route · reportEnvelope); hiçbir kural kaynağı 'zarfı kim kurar' demiyor"
+  },
+  "hata": {
+    "AppError": "src/utils/app-error.ts — badRequest 1006, conflict 535, notFound 374, unauthorized 33, forbidden 32, tooManyRequests 7, internal 6 (toplam 1993 + 24 new AppError)",
+    "details_code_orani": "120/1977 = %6 (perl ile çok satırlı çağrı taraması)",
+    "AppError_govde": "{success:false, message, details?} + 429'da Retry-After başlığı details.retryAfterSec'ten (error.middleware.ts:426)",
+    "ZodError_govde": "{success:false, message:'Validasyon hatası', errors:[{field,message}]} — AppError'dan FARKLI şekil (error.middleware.ts:789)",
+    "eslesen_tipler": ["AppError (417)", "SyntaxError/JSON 400 (439)", "entity.too.large 413 (449)", "PG 23514 CHECK 409 (542)", "PG sınıf-40 40001/40P01 409 (566)", "P2002 409 (575)", "P2025 404 (597)", "P2003 400 (614)", "P2007 400 (634)", "P2023 400 (644)", "P2020 400 (654)", "P2014 400 (693)", "P2034 409 (704)", "P2024/P2028 503 (720)", "PrismaClientValidationError 400 (776)", "ZodError 400 (789)", "fallback 500 + SystemLog SYSTEM/ERROR (821)"],
+    "sapma": "Prisma ve Zod dallarının HİÇBİRİ details.code taşımaz; kod yalnız açık AppError(...,{code}) çağrılarında var"
+  },
+  "swagger": {
+    "openapi_blok": 581,
+    "swagger_blok": 10,
+    "controllers_blok": 9,
+    "uretilen_spec": "502 yol / 612 yol×metot (swagger-jsdoc ile canlı üretildi)",
+    "kapsam": "612/672 ≈ %91 — yaklaşık 60 uç belgesiz",
+    "sifir_jsdoc_dosya": ["free-document.routes.ts (6 uç)", "auth.routes.ts (11 uç; 7 blok auth.controller'da)", "reports/quality.routes.ts (3)", "reports/audit.routes.ts (2)", "reports/inventory.routes.ts (1)", "reports/subcontract.routes.ts (1)"],
+    "en_buyuk_bosluk": ["shipping.routes.ts 58 uç / 20 blok", "finance.routes.ts 33 uç / 10 blok", "admin.routes.ts 54 uç / 45 blok"],
+    "bekci": "scripts/test_swagger_spec.ts — YAML geçerliliği + PATH_COUNT_FLOOR=120 körlük zemini; uç↔blok KAPSAMINI ÖLÇMEZ"
+  },
+  "middlewares": {
+    "auth.middleware.ts": "verifyToken — JWT doğrular, tokenVersion + Session.revokedAt tazeliğini her istekte DB'den kontrol eder (132 satır)",
+    "rbac.middleware.ts": "requirePermission / requireAnyPermission / matchesPermission — izin kodu eşleştirme, req.user yoksa 401 (94)",
+    "error.middleware.ts": "errorHandler — tüm hata tiplerini HTTP sözleşmesine çevirir, 5xx'i SystemLog'a yazar; app.ts'te EN SON (825)",
+    "module.middleware.ts": "requireTicaret/Iplik/DepoMulti/ProductionEnabled — modül rejim kapıları, cache'siz DB okuma, 403 details.code=MODULE_DISABLED (175)",
+    "finance.middleware.ts": "requireFinanceEnabled — ön muhasebe modül kapısı; MODULE_DISABLED kodu YAZMAZ (35)",
+    "device.middleware.ts": "resolveDevice — x-device-id'yi APPROVED cihaza çözer, makine/yazıcı atfını req'e koyar (105)",
+    "client-info.middleware.ts": "clientInfoMiddleware — istemci tipi/sürümü başlıklarını req'e yazar (63)",
+    "latency.middleware.ts": "latencyMiddleware — istek süresi metriği + CLIENT_ABORTED_STATUS ayrımı (112)",
+    "login-lockout.ts": "reserve/reset/releaseLoginAttempt + resolveLoginLockoutKeys — giriş ve ayar şifresi kilit kovaları (267)",
+    "settings-password.middleware.ts": "requireSettingsPassword — X-Settings-Password başlığıyla ikinci kapı, süperadmin muaf (266)",
+    "system-account.middleware.ts": "protectSystemAccountTarget / requireSystemAccountOr404 — süperadmin hedefli uçların dar kapısı (137)",
+    "remote-access.middleware.ts": "markRemote / remoteDenylist / verifyAccessJwt — soket portundan uzaklık + Cloudflare Access JWT fail-closed (373)",
+    "web-hardening.ts": "createRateLimiter + resolveClientIp + readWebHardeningConfig — hız sınırı, proxy/IP çözümü, helmet ayarları (483)",
+    "uuid-param.middleware.ts": "assertValidUuid — :id parametresini UUID olarak doğrular, P2007 yerine 400 (25)",
+    "demo.middleware.ts": "requireDemoMode — demo kurulum dışında 403 (39)"
+  },
+  "app_ts_mount_duzeni": [
+    "markRemote(remotePort) → remoteDenylist (169,172)",
+    "helmetMiddleware dispatcher (228) → cors (244) → compression (250) → morgan (254)",
+    "latencyMiddleware (261) → clientInfoMiddleware (268)",
+    "express.json/static (287,324,328)",
+    "resolveDevice (339) → runWithRequestContext (345)",
+    "rate limiter /api (785)",
+    "verifyAccessJwt /api (810) — TÜM /api mount'larından ÖNCE",
+    "72 adet app.use('/api/...', routes) (815-948); önek çakışmaları dar-önce sıralı: /api/finance/cheques..(882-895) < /api/finance (896), /api/admin/db-copies (916) < /api/admin (929)",
+    "/api 404 JSON (959) → SPA fallback (973) → errorHandler (987, EN SON)"
+  ],
+  "sapmalar": [
+    {"ne": "Route dosyalarının %56'sı (45/80) controller'sız; handler'ların %48'i (323/672) route içinde inline", "kanit": "grep -L controllers/ src/routes/**/*.ts → 45; python AST-benzeri sayım 323/672", "not": "Belge bunu 'bilinçli istisna' diye anlatıyor; fiilen ÇOĞUNLUK. Gerekçeyi yazan tek dosya: record-info.routes.ts:4"},
+    {"ne": "Route katmanında AuditService çağrısı", "kanit": "10 çağrı / 3 dosya: admin.routes.ts (8), db-copy.routes.ts:191, feature-flag.routes.ts:101", "not": "Kural 'audit servis katmanında' diyor"},
+    {"ne": "Servis katmanında Express Request/Response", "kanit": "20 imza / 11 dosya; services/helpers/guarded-hard-remove.ts 5 route-handler fabrikası üretir ve res.status().json() yazar (58,65,87,286,300)", "not": "base.service.ts:390 findAll(req: Request) — jenerik liste sözleşmesi buna dayanıyor"},
+    {"ne": "requireFinanceEnabled 403'ü details.code taşımaz", "kanit": "finance.middleware.ts:22-27 vs module.middleware.ts:81", "not": "30 mount etkileniyor; belge 'kapalı modül 403 MODULE_DISABLED' diyor"},
+    {"ne": "Swagger kapsam boşluğu ~60 uç", "kanit": "swagger-jsdoc canlı: 612 yol×metot ↔ 672 handler; 6 dosyada sıfır blok (24 uç)", "not": "Bekçi kapsamı ölçmüyor (yalnız YAML + 120 yol zemini)"},
+    {"ne": "Zod'suz gövde", "kanit": "peripheral.routes.ts:133,184 ham cast; base.controller.ts:97,109 req.body'yi doğrudan servise verir", "not": "base.controller yolu BaseService.sanitizeWriteData (DMMF allowlist) ile kapalı — ikinci meşru desen"},
+    {"ne": ".strict() sistematik değil", "kanit": "50/208 adlandırılmış z.object (%24)", "not": "shipping.controller.ts:71-77 '.strict() LOAD-BEARING' gerekçesini yazıyor ama kural hiçbir yerde yok"},
+    {"ne": "Route dosya boyutu sınırsız", "kanit": "admin.routes.ts 1982 satır, workorder 1128, inventory 1016, order 930, tambur 852; 22 route dosyası >300 satır", "not": "boyut-dagilimi.json backend-routes"}
+  ],
+  "sapma_OLMAYANLAR": [
+    {"ne": "route/controller'da prisma import", "olcum": "0 gerçek ihlal (2 eşleşme yorum satırı) — ESLint no-restricted-imports, eslint.config.mjs:100-121"},
+    {"ne": "route içinde iş mantığı", "olcum": "323 inline handler'ın satır dağılımı: ≤10 → 76, 11-25 → 180, 26-50 → 33, 51-100 → 2, >100 → 0; 60+ satır olan TEK handler admin.routes.ts:179 ve gerekçesi yorumda yazılı"},
+    {"ne": "controller'da iş mantığı", "olcum": "controller fonksiyon p50 14 / p90 29 satır (boyut-dagilimi.json); routes+controllers'ta 0 $transaction"},
+    {"ne": "any", "olcum": "routes 0, controllers 0, middlewares 0, services 2"},
+    {"ne": "kapı sırası", "olcum": "router.use(verifyToken,...) satırından ÖNCE tanımlanmış uç: 0"}
+  ]
+}

@@ -1,0 +1,137 @@
+{
+  "_not": "Backend ESLint kurallarının NEGATİF SONDA kaydı — 2026-09-05. Bu dosya `eslint-backend-kapsam-sonuc.json`ın TAMAMLAYICISIDIR: orası KAPSAM AÇILIŞINDA (src → src+scripts+prisma) ölçülen 35 ihlalin hükümlerini ve o turda koşulan sondaları taşır; burada, kapsam açılışında sondası KAYDEDİLMEMİŞ 9 kuralın sondaları var. Electron ikizi: eslint-electron-sonuc.json.",
+  "tarih": "2026-09-05",
+  "proje": "Teks-Erp (backend) — eslint 9.39, @typescript-eslint 8.59. Lint kapsamı `eslint src scripts prisma` = 1026 dosya (package.json > scripts.lint ile scripts/check-lint-baseline.mjs PROJELER.backend.argv BİREBİR aynı).",
+  "nedenBuDosya": "Turun kendi kuralı ihlal edilmişti: docs/standart/README.md 'Her yeni ESLint kuralı negatif sondayla doğrulanır … Sonda koşulmadan kural yazılmaz; koşulmamış bir kural, kapsamı yanlış okuduğunu ancak sahada gösterir.' Electron ve mobil ikizleri yazılmış, backend'inki hiç yazılmamıştı — 9 kural sondasızdı.",
+  "yontem": {
+    "gecici": [
+      "Teks-Erp/src/__lint_sonda_gecici.ts (nokta ihlaller)",
+      "Teks-Erp/src/__lint_sonda_gecici_uzun.ts (311 kod satırı)",
+      "Teks-Erp/src/__lint_sonda_gecici_fn.ts (93 satırlık tek fonksiyon)"
+    ],
+    "kosulan": "npx eslint src/__lint_sonda_gecici*.ts -f json",
+    "temizlik": "Üç dosya da SİLİNDİ; `git status --short` sonda öncesi durumla birebir aynı (yalnız başka ajanların dosyaları kaldı).",
+    "kapsamNotu": "Sonda dosyaları `src/**/*.ts` bloğuna düşer — yani üretim kodunun tabi olduğu kural setinin TAMAMINA (ORTAK_YASAKLAR + FACTORY_TZ_LITERAL + naming-convention + no-explicit-any + no-require-imports + boyut kuralları), artı tip bilgili 4. blok (no-floating-promises)."
+  },
+  "cikisKodu": {
+    "hataliDosya": "npx eslint src/__lint_sonda_gecici.ts → 1",
+    "yalnizUyariliDosyalar": "npx eslint src/__lint_sonda_gecici_uzun.ts src/__lint_sonda_gecici_fn.ts → 0",
+    "yalnizUyariliMaxWarnings0": "aynı iki dosya + --max-warnings=0 → 1",
+    "hukum": "⚠️ LOAD-BEARING: üç boyut kuralı `warn` olduğu için düz `npx eslint` onlarda YEŞİL geçer. Bu kuralların gerçek kapısı ESLint DEĞİL, `scripts/check-lint-baseline.mjs` tavanıdır — aşağıda ayrıca ölçüldü."
+  },
+  "yazilanKurallar": [
+    {
+      "kural": "no-restricted-syntax — CLIENT_TYPE_MOBILE (`!== \"mobile\"`)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici.ts:3:41 — `clientType !== \"mobile\"`)",
+      "not": "Selector `BinaryExpression[operator='!=='] Literal[value='mobile']` — YALNIZ `!==`. `=== \"mobile\"` ve `!= \"mobile\"` YAKALANMAZ; kapının kapsamı bilinçli olarak 'güvenlik kapısı gibi okunan negatif karşılaştırma'dır."
+    },
+    {
+      "kural": "no-restricted-syntax — APPLIED_STEPS_COUNT",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici.ts:4:22 — `\"select applied_steps_count from _prisma_migrations\"` düz string literali)",
+      "not": "Selector dört biçimi birden tarar: Literal · TemplateElement · Identifier · Property key. Sonda düz literalle koştu; template literal dalı kapsam açılışında (bench_audit_*) zaten saha ölçümüyle doğrulanmıştı."
+    },
+    {
+      "kural": "@typescript-eslint/naming-convention (NAMING_CONVENTION, 10 selector)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici.ts:5:14 — `export const My_Bad_Name`; mesaj: \"must match one of the following formats: camelCase, UPPER_CASE, PascalCase\")",
+      "not": "`variable` selector'ı üç biçime birden izin verir; sonda üçünün DE dışına düşen bir ad (`My_Bad_Name`) kullanır — yoksa kural sessiz kalırdı. `objectLiteralProperty`/`typeProperty` `format: null` olduğundan sözlük anahtarları bilinçli olarak sonda dışıdır."
+    },
+    {
+      "kural": "@typescript-eslint/no-explicit-any — src bloğu",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi, 2 isabet (src/__lint_sonda_gecici.ts:6:27 parametre tipi · 6:33 dönüş tipi)",
+      "not": "⚠️ Sondanın kapsamı `src` — `scripts/` + `prisma/` bloğunda bu kural AÇIK DEĞİL (28 ihlal / 9 dosya ölçüldü, kural yazılmadı; gerekçe eslint.config.mjs başlığında). Sonda bunu doğrular: aynı içerik scripts/ altına konsa sessiz kalırdı."
+    },
+    {
+      "kural": "@typescript-eslint/no-require-imports",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici.ts:9:16 — `const nodeFs = require(\"fs\")`)",
+      "not": "Tek meşru kullanım (mdns reklamcısı, paket yüklenemezse fail-open) satır bazlı `eslint-disable` taşır; kural AÇIK olduğu için o direktif CANLIDIR ve `reportUnusedDisableDirectives: \"error\"` onu ölü saymaz."
+    },
+    {
+      "kural": "@typescript-eslint/no-floating-promises (TİP BİLGİLİ — projectService, 4. blok)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici.ts:18:3 — `fireAndForget();` void'siz)",
+      "not": "Sonda ayrıca 4. bloğun TİP ÇÖZÜMÜNÜN çalıştığını kanıtlar: tsconfig `include: [\"src/**/*\"]` olduğu için src'ye yeni düşen dosya projeye girer. Kural scripts/ altında koşmaz (o ağaç hiçbir tsconfig'in include'unda değil) — orada konsaydı SESSİZ kalırdı; kuralın kapsamı `src`tir."
+    },
+    {
+      "kural": "max-lines 300 (skipComments + skipBlankLines)",
+      "seviye": "warn",
+      "ihlal": 90,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici_uzun.ts:302:1 — 311 satır); düz eslint çıkış kodu 0, TAVAN kapısı 91 > 90 ile kırmızı"
+    },
+    {
+      "kural": "max-lines-per-function 80 (skipComments, skipBlankLines, IIFEs)",
+      "seviye": "warn",
+      "ihlal": 305,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici_fn.ts:2:8 — 93 satırlık fonksiyon); TAVAN kapısı 306 > 305 ile kırmızı"
+    },
+    {
+      "kural": "max-params 4",
+      "seviye": "warn",
+      "ihlal": 47,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici.ts:11:8 — 5 parametreli fonksiyon); TAVAN kapısı 48 > 47 ile kırmızı"
+    },
+    {
+      "kural": "no-restricted-imports — route/controller katmanında `**/lib/prisma` (BE-01, 3. blok)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/routes/__lint_sonda_gecici.routes.ts:2:1 — `import prisma from \"../lib/prisma\"`; çıkış kodu 1)",
+      "not": "Bu kural kapsam açılışı turunda da sondasızdı, bu turda İLK KEZ koşturuldu. Kapsam `src/routes/**` + `src/controllers/**`; aynı import `src/services/` altında MEŞRUDUR ve sessiz kalır."
+    },
+    {
+      "kural": "linterOptions.reportUnusedDisableDirectives",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi (src/__lint_sonda_gecici_direktif.ts:2:1 — ölü `eslint-disable-next-line @typescript-eslint/no-unsafe-assignment`; çıkış kodu 1)",
+      "not": "⚠️ BULGU: bu ihlalin `ruleId`si NULL'dur. `scripts/check-lint-baseline.mjs` ruleId'siz mesajı PARSE HATASI sayıp çıkış kodu 2 ile durur — ölçüldü. Kapı FAIL-CLOSED (durdurma doğru) ama TEŞHİS YANLIŞ: mesaj 'parse hatası' der, oysa dosya gayet parse edilmiştir. Ayrıntı: kapatma-sondalar.json § yeniBulgu."
+    },
+    {
+      "kural": "no-restricted-syntax — kalan üç ORTAK_YASAK: TX_PROMISE_ALL · ORDER_BY_BATCH_NUMBER · GENERIC_REQUIRE_MODULE (+ NOT_IN_EMPTY src dalında yeniden)",
+      "seviye": "error",
+      "ihlal": 0,
+      "duzeltilen": "-",
+      "sonda": "kırmızı verdi, 5 isabet / çıkış kodu 1 (src/__lint_sonda_gecici3.ts:8:24 ve 8:28 `Promise.all([tx, tx])` — İKİ `tx` identifier'ı ayrı ayrı sayılır · 12:42 `orderBy: { batchNumber: \"desc\" }` · 13:27 `requireModule(\"uretim\")` · 14:72 `notIn: []`)",
+      "not": "Bu üç yasak ne kapsam açılışı turunda ne öncesinde sondalanmıştı; bu turda İLK KEZ koşturuldular. TX_PROMISE_ALL'ın isim tabanlı olduğu sondayla görünür oldu: guard `Identifier[name='tx']` arar, yani closure parametresi `tx` DIŞINDA adlandırılırsa kural KÖR kalır — [IL-19]'un 'DAİMA tx' cümlesi bu kuralın ön koşuludur, süs değil."
+    }
+  ],
+  "tavanKapisiSondasi": {
+    "_not": "Üç boyut kuralı `warn` olduğu için ESLint'in kendi çıkış kodu onları KORUMAZ. Sonda dosyaları YERİNDEYKEN gerçek kapı koşuldu — dokuz kuralın DOKUZU DA tavan kapısında kırmızı verdi.",
+    "komut": "node scripts/check-lint-baseline.mjs --proje=backend",
+    "cikti": [
+      "❌ backend: 8 kural TAVANI AŞTI (1030 dosya, 7 error)",
+      "no-restricted-syntax: 2 > 0",
+      "@typescript-eslint/naming-convention: 1 > 0",
+      "@typescript-eslint/no-explicit-any: 2 > 0",
+      "@typescript-eslint/no-require-imports: 1 > 0",
+      "max-params: 48 > 47",
+      "@typescript-eslint/no-floating-promises: 1 > 0",
+      "max-lines-per-function: 306 > 305",
+      "max-lines: 91 > 90"
+    ],
+    "hukum": "8 SATIR / 9 KURAL: CLIENT_TYPE_MOBILE ve APPLIED_STEPS_COUNT aynı `no-restricted-syntax` ruleId'si altında sayılır (2 > 0), ayrı satır almazlar. Tavan kapısı ruleId bazlıdır, selector bazlı DEĞİL — bu bilinen ve kabul edilen granülerlik sınırıdır.",
+    "geriAlmaKontrolu": "Sonda dosyaları silindikten sonra: ✅ backend: tavan aşılmadı (1028 dosya, 0 error) — çıkış kodu 0."
+  },
+  "sondasizKalan": [
+    "YOK — backend ESLint config'indeki her kural artık en az bir negatif sondayla ölçülmüştür. Kayıt iki dosyada: ORTAK_YASAKLAR'ın 8'i + kapsam açılışı `eslint-backend-kapsam-sonuc.json § negatifSonda`, kalan 3 yasak + 9 hedef kural + no-restricted-imports + reportUnusedDisableDirectives bu dosyada."
+  ]
+}

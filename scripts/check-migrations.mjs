@@ -159,6 +159,29 @@ function isTracked(repoRelPath) {
   return git(["ls-files", "--", repoRelPath]).trim().length > 0;
 }
 
+/**
+ * `.gitignore` bu yolu dışlıyor mu?
+ *
+ * ⚠️ 2026-09-05'te bu ayrım eklendi: DERLEME ÇIKTISI meşruen izlenmez. Backend
+ * sunucu araçlarını `dist/tools/*.cjs`e derler (`npm run build`) ve package.json
+ * onları oradan çağırır (`superadmin:kur`). Kapı bunu "commit edilmemiş dosya"
+ * sanıp kırmızı veriyordu — kuralın konusu ise "bu makinede var, temiz klonda
+ * yok" sınıfıdır ve derleme çıktısı o sınıfa GİRMEZ: temiz klonda `npm run build`
+ * onu üretir.
+ *
+ * Ama muafiyet KOŞULLUDUR: yok sayılan bir yola atıf, ancak aynı package.json
+ * onu ÜRETEN bir `build*` script'i taşıyorsa meşrudur. Yoksa dosya ne izlenir ne
+ * üretilir — tam da kapının aradığı sessiz kopukluk.
+ */
+function isIgnored(repoRelPath) {
+  try {
+    execFileSync("git", ["check-ignore", "-q", "--", repoRelPath], { cwd: REPO_ROOT });
+    return true;
+  } catch {
+    return false; // çıkış kodu 1 = yok sayılmıyor
+  }
+}
+
 const scriptRefProblems = [];
 for (const pkgRel of PKG_JSONS) {
   const pkgAbs = join(REPO_ROOT, pkgRel);
@@ -178,6 +201,17 @@ for (const pkgRel of PKG_JSONS) {
       const repoRel = normalize(join(pkgDir, token)).replace(/\\/g, "/");
       if (repoRel.startsWith("..")) continue; // repo dışına çıkan referans (yok ama güvenli)
       const abs = join(REPO_ROOT, repoRel);
+      // Derleme çıktısı: yok sayılan yol + aynı package.json'da onu üreten bir
+      // `build*` script'i varsa muaf (yukarıdaki isIgnored notu).
+      if (isIgnored(repoRel)) {
+        const uretiliyor = Object.keys(scripts).some((s) => /^build/i.test(s));
+        if (!uretiliyor) {
+          scriptRefProblems.push(
+            `${repoRel}  (YOK SAYILIYOR ama ÜRETEN build script'i YOK — ${pkgRel} → "${name}")`,
+          );
+        }
+        continue;
+      }
       if (!existsSync(abs)) {
         scriptRefProblems.push(`${repoRel}  (EKSİK — ${pkgRel} → "${name}")`);
       } else if (!isTracked(repoRel)) {

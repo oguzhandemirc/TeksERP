@@ -58,7 +58,7 @@ import {
 } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
-import { factoryDayKeyUtcMidnight } from "../src/constants/time";
+import { factoryDayKeyUtcMidnight, FACTORY_TIMEZONE } from "../src/constants/time";
 import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { shippingService } from "../src/services/shipping.service";
 import { invoiceService } from "../src/services/invoice.service";
@@ -165,7 +165,7 @@ function daysBefore(base: Date, n: number): Date {
 
 /** Türkçe kısa tarih — ekrandaki rapor satırları için. */
 function trDate(d: Date): string {
-  return d.toLocaleDateString("tr-TR", { timeZone: "Europe/Istanbul" });
+  return d.toLocaleDateString("tr-TR", { timeZone: FACTORY_TIMEZONE });
 }
 
 /**

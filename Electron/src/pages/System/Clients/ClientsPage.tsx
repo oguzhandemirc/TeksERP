@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { useConnectedClients } from "./service";
+import { useConnectedClients } from "./hooks";
 import {
   activeWindowLabel,
   agoLabel,

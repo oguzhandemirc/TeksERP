@@ -16,6 +16,21 @@ import { MOBILE_SESSION_PERMS } from "../services/work-session.service";
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requirePermission, requireAnyPermission } from "../middlewares/rbac.middleware";
+import { z } from "zod";
+import { labelKindSchema } from "../config/label-kind.schema";
+
+// Gövde sözleşmeleri — 2026-09-05'te eklendi: iki yazma ucu gövdeyi HAM CAST ile
+// okuyordu (`as { kind?: string }`, `body.kind as never`), yani tip güvencesi yoktu
+// ve sözleşme yalnız servisin içindeki kontrollerde yaşıyordu.
+// ⚠️ `.strict()` BİLEREK YOK: bu uçlar sahadaki tablet ve panel tarafından zaten
+// çağrılıyor; bilinmeyen anahtarı 400'e çevirmek eski istemciyi kırardı
+// (backend ÖNCE kuralı). Yeni uçlarda `.strict()` zorunludur — docs/standart/BACKEND.md.
+// `kind` tek kaynaktan (`labelKindSchema`) türer; elle string listesi YAZILMAZ.
+const templateRouteSchema = z.object({
+  kind: labelKindSchema,
+  templateId: z.string().uuid().nullable().optional(),
+});
+const fieldAddressSchema = z.object({ address: z.string() });
 
 const MOBILE_LABEL_PRINTERS = ["mobile:kk1", "mobile:tambur", "mobile:tarti-paket"] as const;
 
@@ -130,10 +145,10 @@ peripheralRouter.delete("/:id/permanent", verifyToken, requirePermission("statio
  */
 peripheralRouter.post("/:id/template-routes", verifyToken, requirePermission("station:write"), async (req, res, next) => {
   try {
-    const body = (req.body ?? {}) as { kind?: string; templateId?: string | null };
+    const body = templateRouteSchema.parse(req.body ?? {});
     const result = await service.setTemplateRoute(
       req.params.id as string,
-      body.kind as never,
+      body.kind,
       body.templateId ?? null,
       req.user?.userId,
     );
@@ -181,11 +196,11 @@ peripheralRouter.patch(
   requireAnyPermission("station:write", ...MOBILE_SESSION_PERMS),
   async (req, res, next) => {
     try {
-      const body = (req.body ?? {}) as { address?: string };
+      const body = fieldAddressSchema.parse(req.body ?? {});
       const stamp = await getStampContext(req, { enforceForMobile: true }); // oturum yoksa 409
       const result = await service.setFieldAddress(
         req.params.id as string,
-        body.address ?? "",
+        body.address,
         stamp,
         req.user?.userId,
       );

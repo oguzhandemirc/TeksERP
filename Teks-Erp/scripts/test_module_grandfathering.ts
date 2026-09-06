@@ -156,6 +156,9 @@ async function main(): Promise<void> {
   check(
     "§1d ⭐ `AT TIME ZONE` YOK — kolonlar timestamptz, kalıp damgayı 3 saat GERİYE yazardı",
     !/AT TIME ZONE/i.test(sql),
+    // Bu satır yasağın KENDİSİNİ anlatan teşhis metnidir (migration SQL'inde
+    // kalıbı ARAYAN check'in başarısızlık cümlesi) — kalıbı kullanmıyor, adını koyuyor.
+    // eslint-disable-next-line no-restricted-syntax
     "20260801040000 dönüşümünden sonra `now() AT TIME ZONE 'UTC'` kalıbı YANLIŞTIR",
   );
   check(

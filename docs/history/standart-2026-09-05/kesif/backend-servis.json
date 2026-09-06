@@ -1,0 +1,209 @@
+{
+ "label": "backend-servis",
+ "orneklem": {
+  "en_yeni_5_servis": [
+   "sack-tag.service.ts (2026-09-04)",
+   "client-registry.service.ts (2026-09-04)",
+   "settings-password.service.ts (2026-09-03)",
+   "boss/overview.service.ts (2026-09-01)",
+   "totp.service.ts (2026-09-01)"
+  ],
+  "en_yeni_helperlar": [
+   "helpers/shipment-customer-name.helper.ts",
+   "helpers/sack-tag.helper.ts",
+   "helpers/quality-station.helper.ts",
+   "helpers/shipping-weigh-gate.helper.ts",
+   "helpers/shipment-order-requirement.helper.ts"
+  ],
+  "en_cok_degisen_5": [
+   "inventory.service.ts (101 commit)",
+   "workorder.service.ts (94)",
+   "shipping.service.ts (86)",
+   "subcontractor.service.ts (82)",
+   "tambur.service.ts (76)"
+  ],
+  "en_buyuk_3": [
+   "subcontractor.service.ts (7142)",
+   "workorder.service.ts (6846)",
+   "inventory.service.ts (5420)"
+  ],
+  "komut": "git log --diff-filter=A --name-only -- 'Teks-Erp/src/services/*.ts' ; git log --name-only | uniq -c | sort -rn"
+ },
+ "olcumler": {
+  "dosya_sayisi": 269,
+  "servis_dosyasi": 113,
+  "helper_dosyasi": 106,
+  "export_class": 77,
+  "static_only_class": 13,
+  "singleton_new": 49,
+  "export_function": 630,
+  "export_const_service_nesnesi": 6,
+  "en_yeni_30_dosya": {
+   "FUNC": 27,
+   "CLASS": 2,
+   "silinmis": 1
+  },
+  "eklenme_tarihine_gore": {
+   "2026-08-01_sonrasi": {
+    "class": 27,
+    "func": 114
+   },
+   "oncesi": {
+    "class": 51,
+    "func": 78
+   }
+  },
+  "apiresponse": {
+   "promise_imzasi": 429,
+   "kullanan_servis_dosyasi": 62,
+   "kullanmayan": 51,
+   "helperda": 0,
+   "success_true_serviste": 597,
+   "routes": 107,
+   "controllers": 36,
+   "unknown_veya_any": 211,
+   "Record_string_unknown": 17,
+   "adli_Dto": 7,
+   "Dto_arayuz_tanimi": 4
+  },
+  "transaction": {
+   "services": 196,
+   "controllers": 0,
+   "routes": 0,
+   "tx_adli_closure": 183,
+   "audit_tx_icinde": 0,
+   "audit_toplam": 323,
+   "await_audit": 251,
+   "void_audit": 72,
+   "dis_IO_tx_icinde": 0,
+   "per_call_timeout": 2,
+   "global_timeout": "lib/prisma.ts:89 maxWait 5s / timeout 20s",
+   "TransactionClient_parametresi": 173,
+   "Pick_typeof_prisma": 104,
+   "export_txfn_Tx_sonekli": 33,
+   "export_txfn_soneksiz": 15,
+   "advisory_lock": 26,
+   "atomik_claim_count0": 100,
+   "withBarcodeRetry": 99,
+   "clientToken": 212
+  },
+  "hata": {
+   "AppError_toplam": 1922,
+   "badRequest": 976,
+   "conflict": 534,
+   "notFound": 371,
+   "forbidden": 11,
+   "unauthorized": 20,
+   "internal": 6,
+   "tooManyRequests": 2,
+   "throw_new_Error": 17,
+   "conflict_details_code": 54,
+   "badRequest_details_code": 44,
+   "istemci_details_code_okuma": {
+    "Electron": 18,
+    "mobil": 23
+   }
+  },
+  "sorgu": {
+   "okuma_cagrisi": 1549,
+   "projeksiyonsuz": 117,
+   "oran": "%93 select/include var",
+   "select_satiri": 2601,
+   "include_satiri": 269,
+   "X_SELECT_sabiti": 34,
+   "satisfies_Prisma": 18,
+   "queryRaw": 98,
+   "executeRaw": 48
+  },
+  "decimal": {
+   "new_Prisma_Decimal": 229,
+   "plus_minus": 339,
+   "db_side_increment": 34,
+   "float_aritmetigi": 0
+  },
+  "tip_hijyeni": {
+   "as_any": 1,
+   "any_gercek": 1,
+   "ts_ignore": 0,
+   "zod_serviste": 2
+  },
+  "adlandirma": {
+   "assert*": 61,
+   "resolve*": 74,
+   "build*": 40,
+   "load*": 20,
+   "collect*": 18,
+   "normalize*": 17,
+   "apply*": 13,
+   "compute*": 13,
+   "helper_sonekli": 76,
+   "helper_soneksiz": 18,
+   "userId_optional": 334,
+   "userId_zorunlu": 49,
+   "banner_ile_baslayan": "251/269"
+  },
+  "yorum": {
+   "servis_satiri": 131907,
+   "yorum_satiri": 34126,
+   "oran": "%25",
+   "tarihli_yorum": 793,
+   "uyari_isareti": 1613,
+   "jsdoc_blogu": 3408,
+   "export_fn_yorumlu": "349/630 (%55)",
+   "en_yorum_yogun": "helpers/roll-entry-station.helper.ts %86, helpers/quality-station.helper.ts %80"
+  },
+  "boyut": {
+   "dosya_p50": 235,
+   "dosya_p75": 463,
+   "dosya_p90": 1000,
+   "dosya_p95": 1740,
+   "dosya_max": 7142,
+   "helper_p50": 135,
+   "helper_p90": 306,
+   "helper_max": 626,
+   "helper_disi_p50": 354,
+   "helper_disi_p90": 1328,
+   "fn_p50_boyutdosyasi": 14,
+   "fn_p90_boyutdosyasi": 59,
+   "fn_p99_boyutdosyasi": 160,
+   "fn_80_ustu": 269,
+   "fn_200_ustu": 28,
+   "ust_seviye_fn_olcumu": {
+    "n": 1325,
+    "p50": 10,
+    "p90": 72,
+    "p95": 112,
+    "p99": 244,
+    ">80": 109,
+    ">120": 59,
+    ">200": 17
+   },
+   "ihlal_sayilari": {
+    "helper>300": 11,
+    "helper>400": 3,
+    "servis>400": 78,
+    "servis>600": 49
+   }
+  }
+ },
+ "zorlama": {
+  "eslint": "Teks-Erp/eslint.config.mjs — tx+Promise.all · notIn:[] · orderBy:{batchNumber} · requireModule() · 'Europe/Istanbul' · route/controller'da lib/prisma import",
+  "tsc": "npm run typecheck (forceConsistentCasingInFileNames); ölçüm birimi ÇIKIŞ KODU, grep değil",
+  "bekci": "scripts/test_*.ts 453 dosya, jest/vitest YOK; check(label, ok) + '=== Sonuç: N geçti ==='; negatif sonda zorunlu",
+  "boyut_kapisi": "YOK — ne ESLint ne bekçi dosya/fonksiyon uzunluğu ölçüyor"
+ },
+ "recete_yeni_servis_metodu": [
+  "1. Yeri seç: yeni yüzey → yeni `<konu>.service.ts` (düz `export async function`, class AÇMA). Mevcut büyük servise metod eklemek varsayılan DEĞİL.",
+  "2. Dosya başına `// ===` banner + 3-8 satır NEDEN (emsal sack-tag.service.ts:1-18). Tarih/ölçüm anlatısı yazma (KOD-KURALLARI yorum politikası 2026-09-05).",
+  "3. Projeksiyonu sabitle: `const X_SELECT = {...} satisfies Prisma.XSelect` + `export interface XDto`. `include` kullanma (DB kuralı 7); dönüş tipini `unknown` BIRAKMA.",
+  "4. İmza: `(input: {...} | id, ..., userId?: string)`. Zod BURAYA GİRMEZ — controller/route'ta parse edilir (serviste 2/269).",
+  "5. Doğrulama/normalizasyon saf yardımcılara: `normalizeX` (biçim) + `assertX` (geçerlilik, void+throw). Kullanıcıya dönen her hata `AppError.badRequest/conflict/notFound` ve mesaj TÜRKÇE.",
+  "6. İstemcinin dallanması gereken hata → `AppError.conflict(msg, { code: 'X' })`. Kod uydurma: yalnız Electron/mobil o kodu okuyacaksa yaz (üretim 98, tüketim 41).",
+  "7. Yazma tek `prisma.$transaction(async (tx) => …)` içinde. Closure parametresi DAİMA `tx` (ESLint selector'ı ada dayanır); tx içinde `Promise.all` YOK, dış I/O YOK, audit YOK.",
+  "8. Durum geçişi varsa atomik claim: `tx.x.updateMany({ where: { id, beklenenDurum } })` + `count===0 → AppError.conflict`. `findUnique→if→update` YASAK. Sayaç/benzersiz no okuması tx İÇİNDE + `withBarcodeRetry`.",
+  "9. tx isteyen ortak parça helper'a: `helpers/<konu>.helper.ts`, adı `*Tx` ve ilk parametresi `tx: Prisma.TransactionClient`. Helper `ApiResponse` KURMAZ (0/106).",
+  "10. tx BİTTİKTEN sonra `await AuditService.log({ userId, action, tableName, recordId, oldData?, newData })`. `void` yalnız finans emsalinde.",
+  "11. Dönüş: `{ success: true, data, message? }` (`ApiResponse<XDto>`); engel olmayan not `warnings[]`. Controller `res.json(await XService.m(...))` ile geçirir.",
+  "12. Bekçi: `scripts/test_<konu>.ts` — `check(label, ok)` + '=== Sonuç: N geçti, M başarısız ===' + `$disconnect()`+`pool.end()`; negatif sonda ile KIRMIZI verdiği ÖLÇÜLÜR."
+ ]
+}

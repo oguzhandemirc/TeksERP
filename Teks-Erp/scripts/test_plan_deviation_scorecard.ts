@@ -34,13 +34,22 @@ const userIds: string[] = [];
 
 (async () => {
   const ts = `${process.pid}${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
-  // Dönem: fixture satırları BUGÜNE yazılır; aralık dünden yarına.
-  const now = new Date();
-  const from = new Date(now.getTime() - 24 * 3600 * 1000);
-  const to = new Date(now.getTime() + 24 * 3600 * 1000);
-  // Karşılaştırma dönemi: önceki 2 gün (fixture'da 1 imza var).
-  const prevFrom = new Date(now.getTime() - 72 * 3600 * 1000);
-  const prevTo = new Date(now.getTime() - 48 * 3600 * 1000);
+  // ⚠️ TARİH PENCERESİ DE FIXTURE'IN DAMGASIDIR (2026-09-05) ─────────────────
+  // Karne servisinin TEK süzgeci tarihtir — kırılım/filtre parametresi YOKTUR,
+  // yani "bugün" penceresinde ölçmek DB'deki HER satırı sayıma sokar. Bekçi
+  // önce böyle yazılmıştı ve başka bir fixture'ın artığı (kendi WO'suyla, kendi
+  // metrajıyla) altı kontrolü birden düşürdü: §1/§2/§2b/§3/§6/§7b. Sayıları
+  // büyütmek çözüm DEĞİL — kapsam daraltılır: fixture satırları rastgele
+  // seçilen GEÇMİŞ bir dilime yazılır, o dilimde başka veri olamaz (karne
+  // özelliği 2026-08-19'da doğdu). Dilimin gerçekten boş olduğu §0'da ölçülür,
+  // yani çakışma olursa bekçi sessiz kalmaz.
+  const slot = Math.floor(Math.random() * 400);
+  const anchor = new Date(Date.UTC(2000, 0, 1) + (slot * 10 + 5) * 24 * 3600 * 1000);
+  const from = new Date(anchor.getTime() - 24 * 3600 * 1000);
+  const to = new Date(anchor.getTime() + 24 * 3600 * 1000);
+  // Karşılaştırma dönemi: dilimin önceki 2 günü (fixture'da 1 imza var).
+  const prevFrom = new Date(anchor.getTime() - 72 * 3600 * 1000);
+  const prevTo = new Date(anchor.getTime() - 48 * 3600 * 1000);
 
   try {
     const color = await prisma.color.create({
@@ -115,16 +124,28 @@ const userIds: string[] = [];
       return confirmationId;
     };
 
+    // ── §0 KÖRLÜK ZEMİNİ ─────────────────────────────────────────────────────
+    // Fixture'dan ÖNCE pencere boş olmalı; değilse aşağıdaki mutlak sayılar
+    // (2 imza / 140 m) ortam verisiyle karışır ve bekçi yanlış şey ölçer.
+    const baseline = await getPlanDeviationScorecard({ from, to }, { from: prevFrom, to: prevTo });
+    ok(
+      baseline.summary.confirmations === 0 &&
+        baseline.detail.length === 0 &&
+        baseline.previous?.confirmations === 0,
+      "§0 izole tarih penceresi fixture ÖNCESİ boş (ortam verisi sayıma girmiyor)",
+      `imza=${baseline.summary.confirmations} detay=${baseline.detail.length} önceki=${String(baseline.previous?.confirmations)}`,
+    );
+
     // ① renk+en birlikte sapan TEK imza, 100 m
-    await writeConfirmation({ rollId: rollA, fields: ["color", "width"], qtyM: 100 });
+    await writeConfirmation({ rollId: rollA, fields: ["color", "width"], qtyM: 100, when: anchor });
     // ② yalnız renk sapan imza, 40 m
-    await writeConfirmation({ rollId: rollB, fields: ["color"], qtyM: 40 });
+    await writeConfirmation({ rollId: rollB, fields: ["color"], qtyM: 40, when: anchor });
     // ③ ÖNCEKİ dönemde bir imza (dönem süzgeci + compare kanıtı), 999 m
     await writeConfirmation({
       rollId: rollOld,
       fields: ["color"],
       qtyM: 999,
-      when: new Date(now.getTime() - 60 * 3600 * 1000),
+      when: new Date(anchor.getTime() - 60 * 3600 * 1000),
     });
 
     const card = await getPlanDeviationScorecard({ from, to }, { from: prevFrom, to: prevTo });
@@ -197,6 +218,13 @@ const userIds: string[] = [];
     ok(
       card.detail.every((d) => d.confirmedBy?.includes("TEST PDS OPERATOR")),
       "§7b onaylayan adı çözüldü",
+    );
+    // İzolasyon kanıtı: pencerede fixture'ın ÜÇ satırından başkası yok — §7b'nin
+    // "hepsi" ifadesi boş kümede vakumen yeşil kalamaz.
+    ok(
+      card.detail.length === 3,
+      "§7c detay TAM 3 satır (2 imza · 3 alan) — pencere yalnız fixture'ı taşıyor",
+      String(card.detail.length),
     );
 
     // ── §8. Compare istenmezse ikinci sorgu koşmaz ───────────────────────────

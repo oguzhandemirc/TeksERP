@@ -1,0 +1,68 @@
+{
+  "olcum_tarihi": "2026-09-05",
+  "yontem": "Gercek ESLint kosumu (proje node_modules'undaki eslint + @typescript-eslint), scratchpad'te gecici flat config; tip-bilgili kurallarda parserOptions.projectService. Tip bilgisinin GERCEKTEN cozuldugu no-unnecessary-type-assertion ile dogrulandi (backend 97 / Electron 170 / mobil 118 bulgu). Grep sayilari ayrica verildi; AST yorumlari gormez, grep gorur - fark aciklandi.",
+
+  "mevcut_config_durumu": {
+    "Teks-Erp/eslint.config.mjs": {
+      "kapsam": "src/**/*.ts (scripts/ ve prisma/ LINT DISI - package.json:22 'eslint src')",
+      "aktif_kural": "no-restricted-syntax (5 selector: tx+Promise.all, notIn:[], orderBy batchNumber, requireModule(, 'Europe/Istanbul') + no-restricted-imports (**/lib/prisma, yalniz routes/controllers)",
+      "typescript_eslint": "plugin KAYITLI ama HICBIR kural aktif degil (disable yorumlari gecerli olsun diye)",
+      "kosum_sonucu": "eslint src -> 0 hata, 0 uyari, 0 bastirilmis (456 dosya)"
+    },
+    "Electron/eslint.config.mjs": {
+      "kapsam": "src/**/*.{ts,tsx} + electron/**/*.ts + shared/**/*.ts + e2e; ignore: out,release,dist,dist-web,vite.config.web.ts,electron.vite.config.ts",
+      "aktif_kural": "js.configs.recommended + @typescript-eslint/no-explicit-any=error + no-unused-vars=warn + no-restricted-imports(electron,fs,path,child_process,os) + react-hooks/rules-of-hooks=error + exhaustive-deps=warn",
+      "kosum_sonucu": "eslint . --ext .ts,.tsx -> 0 ERROR, 37 WARN (exhaustive-deps 18, no-unused-vars 19), 65 BASTIRILMIS (exhaustive-deps 54, no-explicit-any 8, no-unused-vars 2, no-control-regex 1)"
+    },
+    "mobil/eslint.config.js": {
+      "kapsam": "eslint-config-expo/flat; ignore: dist,node_modules,coverage",
+      "aktif_kural": "expo preset (react/no-unescaped-entities kapatilmis) - proje kendi kurali YOK",
+      "kosum_sonucu": "expo lint -> 0 error, 136 WARN (array-type 29, no-unused-vars 27, exhaustive-deps 27, import/first 25, no-require-imports 25); 42 BASTIRILMIS. Cıplak 'eslint .' ayrica scripts/lib/feed.cjs:36 no-undef __dirname (1 error) - expo lint bu dosyayi kapsamiyor"
+    }
+  },
+
+  "adaylar": [
+    { "aday": "@typescript-eslint/no-explicit-any", "backend": "0 aktif (2 disable ile bastirilmis)", "electron": "0 aktif (ZATEN error; 8 bastirilmis - hepsi zodResolver cast'i)", "mobil": "12 (11 React.ComponentType<any>/Ref<any>)", "karar": "backend+Electron BEDAVA; mobil 12 -> BEDAVA-yakin (tek oturumda temizlenir)" },
+    { "aday": "naming-convention (variable/function/parameter/typeLike; camelCase|UPPER_CASE|PascalCase)", "backend": "7 - hepsi __xxxForTests / __test__", "electron": "3 - __dirname + 2", "mobil": "4 - isBonded_ + 3x __resetXForTests", "karar": "BEDAVA (leadingUnderscore:'allowDouble' ile ~0)" },
+    { "aday": "Turkce karakterli tanimlayici (custom ASCII regex, variable/function/parameter/typeLike/classProperty)", "backend": "0", "electron": "0", "mobil": "0", "karar": "BEDAVA - grep'in verdigi 141/116/67 isabetin TAMAMI yorum satiri (ornek: server.ts:170 'var mi')" },
+    { "aday": "max-lines 300", "backend": "145 / 456 dosya (%32); p50=206 p90=748 p95=1175 max=7142; >600:68 >1000:30", "electron": "134 / 1385 (%10); p50=112 p90=298 p95=380 max=1445; >600:15 >1000:8", "mobil": "70 / 386 (%18); p50=118 p90=427 p95=581 max=9386 (TamburScreen.tsx); >600:20 >1000:11", "karar": "BASELINE SART - yeni dosyada zorunlu, devralinan sinir disi" },
+    { "aday": "max-lines-per-function 80", "backend": "391", "electron": "505", "mobil": "188", "karar": "BASELINE SART" },
+    { "aday": "no-console (src)", "backend": "137 (jobs 58, services 31, server.ts 30, middlewares 16, lib+config 2); 38 dosya; log 54/warn 44/error 44; LOGGER MODULU YOK (import .../logger = 0)", "electron": "3", "mobil": "8", "karar": "backend: YASAK DAR OKUNMUS - console fiilen TEK log kanali; once logger, sonra kural. Electron+mobil BEDAVA" },
+    { "aday": "dongusel import (kendi Tarjan SCC tarayicim, madge yok)", "backend": "1 dongu / 2 dosya (document-render/traveler-card.html.ts <-> traveler-card-raw.ts)", "electron": "2 dongu / 5 dosya (WorkOrders/useDesignerSteps+RouteDesignerStepRow+RouteDesignerDialog; CashTransactions/service+cashTxnRules)", "mobil": "0", "karar": "BEDAVA-yakin (7 dosya elle cozulur, sonra import/no-cycle=error)" },
+    { "aday": "@typescript-eslint/no-floating-promises (TIP BILGILI, dogrulandi)", "backend": "0 / 456 dosya (kod zaten 125 'void x()' + 78 '.catch(' kullaniyor)", "electron": "35 (pages 28, hooks 6, main.ts 1) - hepsi messageId=floatingVoid", "mobil": "291 (screens 275, components 6, hooks 5, services 4, navigation 1)", "karar": "backend BEDAVA (hemen error yaz); Electron kucuk baseline; mobil BASELINE + kademeli 'void' ekleme" },
+    { "aday": "z.enum([literal]) ile Prisma enum aynalama (LabelKind sinifi)", "backend": "108 z.enum([ toplam; 47'si bir Prisma enum'unun TAM aynasi (DeviceKind, PrinterLanguage, ShipmentDestination, WorkOrderType, Currency, ChequeKind...); 9'u bilincli ALT KUME (RollStatus'un 2-3 degeri)", "electron": "-", "mobil": "-", "karar": "BASELINE ISTER ama EN YUKSEK GETIRI - 47 mekanik codemod'la z.enum(PrismaEnum)'a cevrilebilir; alt kumeler allowlist" }
+  ],
+
+  "no_restricted_syntax_adaylari": [
+    { "desen": "notIn: []", "proje": "backend", "ihlal": 0, "not": "2 grep isabeti yorum; kural ZATEN aktif", "karar": "aktif/bedava" },
+    { "desen": "orderBy: { batchNumber }", "proje": "backend", "ihlal": 0, "not": "3 grep isabetinin 2'si yorum, 1'i uzun satir yanlis pozitifi", "karar": "aktif/bedava" },
+    { "desen": "requireModule(\"x\")", "proje": "backend", "ihlal": 0, "not": "1 isabet module.middleware.ts:19 yorumu", "karar": "aktif/bedava" },
+    { "desen": "'Europe/Istanbul' literali", "proje": "backend", "ihlal": 0, "not": "4 isabet yorum (time.ts x3, period-guard.helper.ts x1)", "karar": "aktif/bedava" },
+    { "desen": "tx.* + Promise.all/allSettled", "proje": "backend", "ihlal": 0, "karar": "aktif/bedava" },
+    { "desen": "route/controller'da lib/prisma import", "proje": "backend", "ihlal": 0, "not": "src genelinde 162 prisma import ama hicbiri routes/controllers'ta", "karar": "aktif/bedava" },
+    { "desen": "kind === \"PROCESS_QC\"", "proje": "backend", "ihlal": 0, "karar": "BEDAVA - yeni kural yaz" },
+    { "desen": "!== \"mobile\"", "proje": "backend", "ihlal": 0, "not": "1 isabet auth.service.ts:49 yorumu", "karar": "BEDAVA - yeni kural yaz" },
+    { "desen": ".body.code okuma", "proje": "backend", "ihlal": 0, "karar": "BEDAVA" },
+    { "desen": "applied_steps_count", "proje": "backend", "ihlal": 0, "not": "1 grep isabeti yorum", "karar": "BEDAVA" },
+    { "desen": "artifactName icinde ${productName}", "proje": "Electron", "ihlal": 0, "karar": "BEDAVA" },
+    { "desen": "ciplak DATE_TRUNC (tz'siz)", "proje": "backend", "ihlal": 0, "not": "5 isabetin 4'u constants/time.ts TEK KAYNAK (AT TIME ZONE ile), 1'i yorum; 35 adet 'tz-ok' isaretleyici var", "karar": "BEDAVA - time.ts muaf blokla" },
+    { "desen": "Card + onPress", "proje": "mobil", "ihlal": 0, "not": "'<Card' JSX'i mobil/src'de HIC yok (0 isabet)", "karar": "BEDAVA (ama degeri dusuk - ihlal yuzeyi yok)" },
+    { "desen": "renderer localStorage'a TOKEN", "proje": "Electron", "ihlal": 0, "not": "35 localStorage isabeti var ama anahtarlar UI tercihi (sidebar.collapsed, teks.tabs, dashboard.layout.v2); token gecen tek satir secure-store.ts:10 BELGELI web-fallback istisnasinin yorumu", "karar": "BEDAVA - dar kural (token/auth/jwt anahtar adi) yazilabilir" },
+    { "desen": "now() AT TIME ZONE 'UTC' (yeni yazim)", "proje": "backend", "ihlal": 11, "not": "workorder.service x4, subcontractor.service x5, kursun-bypass x1, kursun-qc x1; hepsi 'exitedAt' SET ifadesi, GERCEK kod", "karar": "BASELINE ISTER (yasak zaten 'yeni yazim' diyor -> yalniz-yeni-kod modeli tam oturuyor)" },
+    { "desen": "toLocaleUpperCase(\"tr\")", "proje": "backend", "ihlal": 56, "not": "config yorumu 62 diyor, bugun 56 olctum; yasak yalniz kosullu etiket elemani <-> QualityGrade.code icin", "karar": "YASAK DAR OKUNMUS - kural YAZILMAZ (config'te zaten reddedilmis, dogrulandi)" },
+    { "desen": "Haptics dogrudan cagri", "proje": "mobil", "ihlal": 230, "not": "44 dosya expo-haptics import ediyor (28'i screens/, 16'si components+hooks+services); scanFeedback.signalScan var ve 38 yerde cagriliyor", "karar": "YASAK DAR OKUNMUS - kural 'okutma geri bildirimi' icin; genel titresim mesru. Dar kural: screens/ altinda notificationAsync yasak, impactAsync serbest -> once niyet netlesmeli (BELIRSIZ)" },
+    { "desen": "inline pageSize: N", "proje": "Electron", "ihlal": 22, "not": "test/yorum disi 22; buyuk kismi 'pageSize: 1' (sayac sorgusu) ve dashboard/finans listeleri; loadAllForPicker 111 yerde DOGRU kullanilmis", "karar": "YASAK DAR OKUNMUS - blanket kural 22 yanlis pozitif. Dar hali: >=100 sabit + picker cagrisi (mekanik ayirt edilemez)" },
+    { "desen": "findUnique -> if -> update (check-then-act)", "proje": "backend", "ihlal": "BELIRSIZ", "not": "730 findUnique satiri; 20-satir pencerede if+update+status kesisimi 5 aday; incelenen 2'si (device.service.ts:345, traveler-card.service.ts:269) YANLIS POZITIF (varlik kontrolu / tx icinde)", "karar": "MEKANIK KURAL YAZILAMAZ - insan/review kurali kalsin" },
+    { "desen": "new Date() rapor kodunda", "proje": "backend", "ihlal": "BELIRSIZ", "not": "src genelinde 274 kullanim; 'rapor kodu' kapsami kodda mekanik tanimli degil (services/reports/ dizini var ama tarih hesabi baska yerlerde de)", "karar": "BELIRSIZ - once kapsam tanimi (services/reports/**) sonra olcum" },
+    { "desen": "add_header ... always (uzun-cache nginx)", "proje": "-", "ihlal": 22, "not": "deploy/ + docs/ altinda nginx conf ve belge; ESLint kapsami DISI", "karar": "ESLint'e girmez - ayri metin bekcisi" }
+  ],
+
+  "baseline_mekanizmasi": {
+    "onerilen": "A) Sifir bagimlilikli sayim tavani",
+    "nasil": "1) Yeni kural CI'da 'warn' olarak acilir. 2) scripts/check-lint-baseline.mjs (check-docs.mjs / check-surum-notlari.mjs ile ayni zero-dep desen) 'eslint -f json' ciktisini kural bazinda sayar ve repodaki lint-baseline.json tavaniyla karsilastirir; asarsa exit 1. 3) Tavan MONOTON: script --guncelle yalniz DUSURUR; artirma elle commit + gerekce ister. 4) Sifir ihlalli kural baseline'a hic girmez, dogrudan 'error'.",
+    "yeni_kod_zorunlu": "B) --diff modu: 'git diff --name-only origin/main...HEAD' ile degisen .ts/.tsx dosyalari AYRI sert config'le (ayni kurallar 'error') lint edilir. Devralinan dosya yalniz sayim tavanina girer, sert config'e girmez.",
+    "ci_baglantisi": ".github/workflows/ci.yml: backend job 'Lint' adimi (satir ~'npm run lint'), electron job 'Lint', mobile job 'Lint (expo lint)' - her ucunun HEMEN ARDINA 'Lint baseline tavani' adimi. docs job'i zaten zero-dep node script kosuyor (check-docs.mjs, check-migrations.mjs, test_surum.mjs) -> ayni kalip.",
+    "reddedilen": "eslint-plugin-baseline / @rushstack/eslint-config gibi paketler: kok CLAUDE.md 'Yeni paket eklemeden once onay' + 'deploy/ altina paket-disi bagimlilik' disiplini nedeniyle ek bagimlilik tercih edilmedi; ayrica dosya-hash tabanli baseline dosyalari her refactor'da gurultu uretir.",
+    "ek": "reportUnusedDisableDirectives her uc projede kapali/varsayilan; acilirsa Electron'daki 54 + mobil'deki 23 exhaustive-deps disable yorumu da sayilabilir hale gelir (su an olcum disinda)."
+  }
+}

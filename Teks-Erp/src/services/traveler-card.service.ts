@@ -14,7 +14,7 @@
 //     version++ eder. Ayrı satır/REPRINTED durumu YOK.
 //   - Scan (tarama) ACTIVE olmayan kart ile reddedilir.
 //   - WO COMPLETED / CANCELLED olunca kart COMPLETED / VOIDED'a çekilir
-//     (setWorkOrderCardStatuses fan-out helper).
+//     (setWorkOrderCardStatusesTx fan-out helper).
 //
 // ⚠️ PLAN CANLI, SUNUM DONMUŞ (2026-08-05 — otomatik revizyon):
 //   Kart kontrollü bir belgedir (ISO 9001 §7.5.3) ve sahaya inen kâğıt HER ZAMAN
@@ -278,8 +278,16 @@ export class TravelerCardService {
           );
         }
         const snapshot = await this.buildSnapshot(tx, workOrderId);
-        return tx.travelerCard.update({
-          where: { id: existing.id },
+        // ATOMİK CLAIM: sürüm artırımı "oku → +1 → yaz"dı ve iki eşzamanlı
+        // yeniden basım AYNI numarayı yazıyordu — arşiv upsert'i (tek
+        // `[docType,sourceId,version]` satırı) ikisini tek kopyaya çökertip
+        // birincinin içeriğini sessizce siliyordu. WHERE'e okunan sürüm konur.
+        const claimed = await tx.travelerCard.updateMany({
+          where: {
+            id: existing.id,
+            status: TravelerCardStatus.ACTIVE,
+            version: existing.version,
+          },
           data: {
             version: existing.version + 1,
             snapshot,
@@ -289,6 +297,20 @@ export class TravelerCardService {
             contentDirty: false,
           },
         });
+        if (claimed.count === 0) {
+          // Tanı tx İÇİNDE taze okumayla — "neden 409" sorusu operatöre
+          // cevaplanabilir olmalı (başka baskı mı, iptal mi).
+          const fresh = await tx.travelerCard.findUnique({
+            where: { id: existing.id },
+            select: { status: true, version: true },
+          });
+          throw AppError.conflict(
+            fresh && fresh.status !== TravelerCardStatus.ACTIVE
+              ? `Kart aktif değil (${fresh.status}) — yeniden basılamaz.`
+              : `Kart bu sırada başka bir baskıyla güncellendi (v${fresh?.version ?? "?"}) — sayfayı tazeleyip tekrar deneyin.`,
+          );
+        }
+        return tx.travelerCard.findUniqueOrThrow({ where: { id: existing.id } });
       });
     let card: TravelerCard;
     try {
@@ -365,9 +387,13 @@ export class TravelerCardService {
 
     // Kart satırı ve belge defteri AYNI transaction'da yazılır: kâğıda basılan
     // sürüm numarası (kart) ile o sürümün arşiv kopyası (defter) ayrışamamalı.
+    // ATOMİK CLAIM: plan çözümü (şablon + iş emri okumaları) BİLEREK tx dışında
+    // kalır — tx kısa tutulur. Açılan pencere WHERE ile kapanır: plana temel olan
+    // (status, version) çifti tutmuyorsa kart bu sırada oynamıştır ve arşiv
+    // upsert'i iki farklı içeriği tek satıra çökertirdi.
     await prisma.$transaction(async (tx) => {
-      await tx.travelerCard.update({
-        where: { id: cardId },
+      const claimed = await tx.travelerCard.updateMany({
+        where: { id: cardId, status: card.status, version: card.version },
         data: {
           contentDirty: false,
           printedAt: new Date(),
@@ -376,6 +402,16 @@ export class TravelerCardService {
           version: plan.version,
         },
       });
+      if (claimed.count === 0) {
+        // Tanı tx İÇİNDE taze okumayla — sayı tek başına "neden" demiyor.
+        const fresh = await tx.travelerCard.findUnique({
+          where: { id: cardId },
+          select: { status: true, version: true },
+        });
+        throw AppError.conflict(
+          `Refakat kartı bu sırada değişti (durum ${fresh?.status ?? "?"}, v${fresh?.version ?? "?"}) — baskı kaydı yazılmadı, kartı yeniden basın.`,
+        );
+      }
       await this.archivePrintedVersionTx(tx, {
         cardId,
         cardNumber: card.cardNumber,

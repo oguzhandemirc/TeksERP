@@ -1,0 +1,142 @@
+{
+  "proje": "mobil (Expo 54 / React Native, eslint 9.39.4, eslint-config-expo/flat 10)",
+  "tarih": "2026-09-05",
+  "olcumKaynagi": "docs/history/standart-2026-09-05/olcum/eslint-mobil.json",
+  "config": "mobil/eslint.config.js (ilk gerçek proje config'i — önceki hâli 24 satır, yalnız expo preset)",
+  "kapsamBirligi": {
+    "karar": "TEK KOMUT `eslint .` — 398 dosya.",
+    "package.json": "\"lint\": \"eslint .\"  (eski: \"expo lint\") + \"typecheck\": \"tsc --noEmit\" (yeni)",
+    "baselineArgv": "scripts/check-lint-baseline.mjs PROJELER.mobil.argv = [\"eslint\", \".\"] — BİREBİR hizalı",
+    "e04Duzeltmesi": "scripts/lib/feed.cjs:36 `no-undef '__dirname'` → config'e `{ files: ['**/*.cjs','**/*.config.js','plugins/**/*.js'], languageOptions: { sourceType: 'commonjs', globals: { __dirname, __filename } } }` bloğu eklendi. Blok eklenmeden ÖNCE 1 error, sonra 0 error. eslint.config.js'in kendisi de aynı zeminde (ölçüldü: blok kapatılınca eslint.config.js:260 de kırmızı veriyor).",
+    "dosyaSayisi": 398,
+    "korlukZemini": "EN_AZ_DOSYA.mobil = 200 — 398 ≫ 200"
+  },
+  "yazilanKurallar": [
+    {
+      "kural": "@typescript-eslint/no-explicit-any",
+      "seviye": "error",
+      "olculenIhlal": 12,
+      "duzeltilen": "12/12 — NumpadInput.tsx:125,137 + PickerModal.tsx:589,627 `React.Ref<any>` → `React.ComponentProps<typeof TextInput>['ref']`; SessionGate.tsx:33,34,41 + MainNavigator.tsx:20,41,42 `React.ComponentType<any>` → yeni ve dışa açılan `GatedScreen` tipi (tek kaynak, MainNavigator oradan import eder); PlaceholderScreens.tsx:17 `useNavigation<any>()` → `NativeStackNavigationProp<MainStackParamList>` (repo konvansiyonu), :29 `meta.icon as any` → `React.ComponentProps<typeof MaterialCommunityIcons>['name']`. Hepsi tip düzeyi; `tsc --noEmit` her adımdan sonra rc=0.",
+      "sonda": "kırmızı verdi (src/__lintProbe.tsx:4 `export const probeAny: any = 1;` → error; sonda dosyası silindi)",
+      "yanEtki": "App.tsx:44,46,48,50'deki 4 `no-explicit-any` disable direktifi ÖLÜ olmaktan çıkıp CANLI bastırmaya döndü (RN `(RNText as any).defaultProps` yaması — meşru, gerekçesi yorumda)."
+    },
+    {
+      "kural": "@typescript-eslint/naming-convention (biçim + ASCII tanımlayıcı `custom` regex)",
+      "seviye": "error",
+      "olculenIhlal": 2,
+      "duzeltilen": "2/2 — Sevkiyat/SackContentsModal.tsx `styles.boş` → `styles.emptyText` (tanım :165 + kullanım :91). Biçim ayağı (variable/function/parameter/typeLike) ölçümdeki gevşek varyantla 0 ihlal.",
+      "sonda": "kırmızı verdi (src/__lintProbe.tsx:5 `kağıtSayısı`, :6 `şablonUret`, :7 `type Şablon`, :16 `{ boşluk: 1 }` → dördü de error)",
+      "sondaninBulgusu": "İLK SONDA KURALI ÇÜRÜTTÜ: `custom` regex yalnız `default` kaydında dururken 5/6/7 SESSİZCE GEÇTİ, yalnız 16 yakalandı. Sebep: naming-convention bir tanımlayıcıya YALNIZ TEK kayıt uygular (önce özgüllük, sonra dizi sırası) — `variable`/`function`/`typeLike` kayıtları `default`ı gölgeliyordu; `camelCase` biçim denetimi de Türkçe harfi reddetmiyor. Düzeltme: `custom` HER kayıtta tekrarlandı (`ASCII_TANIMLAYICI` sabiti), sonda tekrar koşuldu ve dördü de kırmızı verdi. Bu, sondasız yazılsaydı sahada yıllarca sessiz kalacak bir kuraldı."
+    },
+    {
+      "kural": "no-console  ·  { allow: [\"warn\", \"error\"] }",
+      "seviye": "error",
+      "olculenIhlal": 0,
+      "duzeltilen": "yok — düzeltme YAPILMADI, kuralın KAPSAMI daraltıldı (aşağı bak)",
+      "sonda": "kırmızı verdi (src/__lintProbe.tsx:10 `console.log('probe')` → error, mesaj: \"Only these console methods are allowed: warn, error\")",
+      "kapsamGerekcesi": "Ölçüm dosyası \"8 ihlali düzelt, sonra error\" diyordu. YENİDEN ÖLÇÜLDÜ: `src/` altındaki console çağrılarının TAMAMI `console.warn` (11 çağrı; `console.log/info/debug/error` = 0). Hepsi bilinçli teşhis kanalı — best-effort audit hatası (LabelPrinter, LabelPreviewSheet, StandaloneLabelPrinter), SimplePortal geri-besleme uyarısı, netStats yavaş istek eşiği, discovery bekçisinin körlük zemini. Mobilde yapılandırılmış logger YOK; bunları silmek kodun ANLAMINI (teşhis yeteneğini) değiştirirdi ve CLAUDE.md'nin \"düzeltme anlamı değiştirmemeli\" kuralına çarpardı. Yasak `console.log` sınıfı hata ayıklama artığına daraltıldı: bugün 0 ihlal, bedava, ve gelecekteki artığı yakalar."
+    },
+    {
+      "kural": "max-params: 4",
+      "seviye": "error",
+      "olculenIhlal": 1,
+      "duzeltilen": "1/1 — HizliIsEmri/OrderLineFilterSheet.tsx `row(key, label, icon, selected, opts, clear)` tek nesne parametresine çevrildi; üç çağrı yeri de adlandırılmış alanlara geçti. Davranış aynı.",
+      "sonda": "kırmızı verdi (src/__lintProbe.tsx:8 beş parametreli `withParams` → error)"
+    },
+    {
+      "kural": "react/forbid-component-props  ·  onPress disallowedFor: [Card, Card.Content]",
+      "seviye": "error",
+      "olculenIhlal": 0,
+      "duzeltilen": "yok (ihlal yok)",
+      "sonda": "kırmızı verdi (src/__lintProbe.tsx:11 `<Card onPress={() => {}} />` → error)",
+      "kararGerekcesi": "Ölçüm dosyası \"yazma\" diyordu; KARAR GÖZDEN GEÇİRİLDİ VE KURAL YAZILDI. Ölçümün iki gerekçesinden biri hatalıydı: yasak zaten mobil/CLAUDE.md § UI/UX'te yazılı ve gerekçesi somut (`Card.Content` dokunmayı yutar), alternatifi de var (`TouchableRipple`/`Button`/`IconButton`/`List.Item`) — ölçümün aradığı `TouchableCard` bu repoda hiç yoktu, kuralın gerçek alternatifi o değil. İkinci gerekçe (severity yuvası) ise DOĞRU ve kuralı `no-restricted-syntax`tan uzaklaştırdı: o kural TEK severity taşır ve yuvayı ham hex (2173, warn+tavan) tutuyor; Card oraya girseydi ya hex'i error'a çıkarıp kampanya dayatırdı ya da kendi ihlali 2173'lük tavanın altında görünmez kalırdı. Çözüm: aynı yasak `react/forbid-component-props` + `disallowedFor` ile KENDİ ruleId'sinde error olarak yazıldı. YENİ PAKET KURULMADI — eslint-plugin-react 7.37.5 expo preset'iyle zaten geliyor ve `disallowedFor` desteği şemadan doğrulandı."
+    },
+    {
+      "kural": "linterOptions.reportUnusedDisableDirectives",
+      "seviye": "error",
+      "olculenIhlal": 3,
+      "duzeltilen": "3/3 ölü direktif silindi — FasonKabulScreen.tsx:442, KartelaKabulScreen.tsx:255, KartelaSevkScreen.tsx:88 (üçü de `react-hooks/exhaustive-deps` `-next-line`, `}, []);` satırına bakıyordu ve o satırda rapor yok; silmeden önce bu üç dosyadaki CANLI exhaustive-deps raporlarının başka satırlarda olduğu doğrulandı).",
+      "sonda": "kırmızı verdi (src/__lintProbe.tsx:14 uydurma `// eslint-disable-next-line no-undef` → error \"Unused eslint-disable directive\")",
+      "not": "Bu kuralın mesajları `ruleId: null` taşır; check-lint-baseline.mjs onları PARSE HATASI sayıp exit 2 veriyor. Yani ölü direktif bırakmak baseline kapısını ARIZA'ya düşürür — üçü temizlenmeden tavan yazılamazdı."
+    },
+    {
+      "kural": "no-restricted-syntax — ham hex renk literali (`Literal[value=/^#[0-9a-fA-F]{3,8}$/]`)",
+      "seviye": "warn",
+      "olculenIhlal": 2173,
+      "duzeltilen": "yok — tavan (baseline). `src/theme/tokens.ts` ADLI muafiyet bloğuyla kapalı (tek kaynağın tanım yeri; doğrulandı: 0 mesaj).",
+      "sonda": "kırmızı (warn) verdi (src/__lintProbe.tsx:9 `const HEX = '#ff00aa'` → warning, proje mesajıyla)"
+    },
+    {
+      "kural": "max-lines: 300 { skipComments, skipBlankLines }",
+      "seviye": "warn",
+      "olculenIhlal": 44,
+      "duzeltilen": "yok — tavan. Beş dev ekran ADLI `files` muafiyetinde (Tambur/FasonKabul/KK1/KursunQc/FasonSevk; doğrulandı: beşinde de 0 max-lines mesajı). Liste yalnız KISALIR.",
+      "sonda": "kırmızı (warn) verdi (src/__lintProbeSize.ts:302 → \"File has too many lines (357). Maximum allowed is 300\")",
+      "olcumdenSapma": "Ölçüm 46 diyordu; bu turdaki düzeltmeler (3 ölü direktif satırı silindi, OrderLineFilterSheet nesne parametresine geçti) sayıyı 44'e indirdi."
+    },
+    {
+      "kural": "max-lines-per-function: 80 { skipComments, skipBlankLines, IIFEs }",
+      "seviye": "warn",
+      "olculenIhlal": 163,
+      "duzeltilen": "yok — tavan. Dev ekranlarda BİLEREK AÇIK (dosya muafiyeti fonksiyonu muaf etmez).",
+      "sonda": "kırmızı (warn) verdi (src/__lintProbeSize.ts:1 → \"Function 'bigFunction' has too many lines (98). Maximum allowed is 80\")",
+      "olcumdenSapma": "Ölçüm 166 diyordu; aynı düzeltmeler sonrası 163."
+    },
+    {
+      "kural": "@typescript-eslint/no-floating-promises (TİP BİLGİLİ — projectService)",
+      "seviye": "warn",
+      "olculenIhlal": 291,
+      "duzeltilen": "yok — tavan. Ayrı config bloğunda, çünkü tip bilgisi lint süresini ~%25 artırıyor (ölçüm: 13,0 sn → 16,3 sn; bu turda tam koşum 14,8 sn ölçüldü).",
+      "sonda": "kırmızı (warn) verdi (src/__lintProbe.tsx:13 `slow();` çağrısı → \"Promises must be awaited…\")"
+    }
+  ],
+  "yazilmayanlar": [
+    "Card+onPress'in `no-restricted-syntax` yazımı — `no-restricted-syntax` TEK severity taşır ve o yuva ham hex'e (warn+2173 tavan) ait. Kural aynı yuvaya girseydi ya hex'i error'a çıkarıp kampanya dayatırdı ya da ihlali 2173'lük tavanın altında görünmez kalırdı. Yasağın kendisi YAZILDI, `react/forbid-component-props` altında.",
+    "Türkçe tanımlayıcı yasağının backend'deki `no-restricted-syntax` yazımı — aynı severity yuvası çakışması. Yasak `@typescript-eslint/naming-convention` `custom` regex'i olarak yazıldı; kapsam aynı, severity ayrı tutulabiliyor. Backend'den TEK farkı: orada selector nesne anahtarlarını HARİÇ tutuyor (24 yanlış pozitif ölçülmüştü), mobilde Türkçe sözlük anahtarı yok, bu yüzden nesne özelliği de kapsamda.",
+    "Düz `no-console` (warn dahil tam yasak) — `src/` altındaki 11 çağrının tamamı bilinçli `console.warn` teşhis kanalı ve mobilde logger yok; silmek kodun anlamını değiştirirdi. Yapılandırılmış logger kararı ayrı bir iştir (docs/standart/KUTUPHANELER.md § açık kararlar).",
+    "`scripts/**` · `plugins/**` · kök `*.config.js` için boyut ve no-console kuralı — onlar Node CLI araçlarıdır, `console` orada tek çıkış kanalıdır ve boyut disiplini sinyal üretmez (aynı ayrım backend'de `scripts/` için yapılmıştı). Kural kümesi `**/*.ts` + `**/*.tsx` ile sınırlandı; bu dosyalar zaten .js/.mjs.",
+    "Yeni ESLint plugin'i gerektiren hiçbir kural yazılmadı ve hiçbir paket kurulmadı — Card kuralı için gereken eslint-plugin-react (7.37.5) expo preset'iyle zaten geliyordu."
+  ],
+  "baseline": {
+    "dosya": "mobil/lint-baseline.json (YENİ)",
+    "kapsam": "eslint .",
+    "dosyaSayisi": 398,
+    "kuralSayisi": 10,
+    "toplamIhlal": 2805,
+    "kurallar": {
+      "@typescript-eslint/array-type": 29,
+      "@typescript-eslint/no-floating-promises": 291,
+      "@typescript-eslint/no-require-imports": 25,
+      "@typescript-eslint/no-unused-vars": 27,
+      "import/first": 25,
+      "max-lines": 44,
+      "max-lines-per-function": 163,
+      "no-restricted-syntax": 2173,
+      "no-unused-vars": 1,
+      "react-hooks/exhaustive-deps": 27
+    },
+    "kontrol": "node scripts/check-lint-baseline.mjs --proje=mobil → \"✅ mobil: tavan aşılmadı (398 dosya, 0 error)\", çıkış kodu 0"
+  },
+  "dogrulama": {
+    "npm run lint": "rc=0 — 2805 problem, 0 ERROR, 2805 warning",
+    "npm run typecheck (tsc --noEmit)": "rc=0",
+    "npx jest --runInBand": "rc=0 — 84 suite / 850 test, hepsi geçti",
+    "node scripts/check-lint-baseline.mjs --proje=mobil": "rc=0"
+  },
+  "dokunulanKaynakDosyalar": [
+    "mobil/eslint.config.js (yeniden yazıldı)",
+    "mobil/package.json (lint → `eslint .`, yeni `typecheck`)",
+    "mobil/lint-baseline.json (yeni)",
+    "mobil/src/components/NumpadInput.tsx",
+    "mobil/src/components/PickerModal.tsx",
+    "mobil/src/components/session/SessionGate.tsx",
+    "mobil/src/navigation/MainNavigator.tsx",
+    "mobil/src/screens/Modules/PlaceholderScreens.tsx",
+    "mobil/src/screens/Modules/HizliIsEmri/OrderLineFilterSheet.tsx",
+    "mobil/src/screens/Modules/Sevkiyat/SackContentsModal.tsx",
+    "mobil/src/screens/Modules/FasonKabul/FasonKabulScreen.tsx",
+    "mobil/src/screens/Modules/KartelaKabul/KartelaKabulScreen.tsx",
+    "mobil/src/screens/Modules/KartelaSevk/KartelaSevkScreen.tsx"
+  ],
+  "sondaHijyeni": "İki geçici sonda dosyası (src/__lintProbe.tsx, src/__lintProbeSize.ts) yazıldı, ölçüldü ve SİLİNDİ; `git status` mobil/ altında yalnız yukarıdaki dosyaları ve yeni lint-baseline.json'ı gösteriyor. CommonJS bloğunun sondası config'in kendisi geçici olarak bozularak koşuldu ve config yedekten birebir geri yüklendi."
+}

@@ -16,11 +16,10 @@ import { AppError } from "../../utils/app-error";
 
 /**
  * Sevkiyat-kapsamlı advisory lock namespace'i (2026-08-09, denetim F-SEV-ESZ-001).
- * Uzay envanteri (audit/surface/12-tx-global-gercekler.md §4.2):
- *   8021 KK1 mükerrer giriş guard'ı · 8022 parti no üreteci · **8023 sevkiyat kapsamı**
- * ⚠️ 2 ARGÜMANLI form kullanılır. 1-argümanlı uzay AYRI bir uzaydır ve onu
- * `session-registry` + `permission-management` paylaşıyor; yeni bir alt sistemi
- * oraya sokmak, birbirini görmeyen iki alt sistemi sessizce serileştirir.
+ * Uzay envanteri TEK KAYNAK: `period-guard.helper.ts` başlığı — kopya liste
+ * tutulmaz. Bu uzay **8023 sevkiyat kapsamı**dır.
+ * ⚠️ 2 ARGÜMANLI form kullanılır; 1-argümanlı `pg_advisory_xact_lock(bigint)`
+ * AYRI bir uzaydır ve bu kod tabanında hiç kullanılmaz.
  */
 // `: number` BİLEREK — literal tipe daralırsa bekçideki "namespace'ler farklı"
 // karşılaştırması TS2367 ("bu iki literal hiç örtüşmez") ile derlenmez.

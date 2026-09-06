@@ -1,0 +1,166 @@
+{
+  "proje": "mobil (Expo/React Native, eslint 9.39.4, eslint-config-expo/flat)",
+  "olcumTarihi": "2026-09-05",
+  "mevcutDurum": "Kapsam ikiye ayrılıyor. (a) `npx expo lint`: 386 dosya, 0 error, 136 warning, 42 bastırılmış (suppressed), 3 ölü disable direktifi. (b) `./node_modules/.bin/eslint .`: 398 dosya, 1 ERROR (scripts/lib/feed.cjs:36 no-undef '__dirname'), 141 warning, 42 bastırılmış, 7 ölü disable direktifi. Warning dağılımı (çıplak): array-type 29, no-unused-vars 27+1, react-hooks/exhaustive-deps 27, import/first 25, no-require-imports 25, ölü-direktif 7. Bastırılmış: exhaustive-deps 23, no-require-imports 19. FARK NEDENİ ÖLÇÜLDÜ: expo lint hiçbir yol verilmezse `DEFAULT_INPUTS = ['src','app','components']` dizinlerini lint eder (kaynak: mobil/node_modules/expo/node_modules/@expo/cli/build/src/lint/lintAsync.js); bu projede yalnız `src/` var, dolayısıyla App.tsx · index.ts · app.config.js · jest.config.js · eslint.config.js · plugins/withReleaseKeystore.js · scripts/*.mjs · scripts/lib/*.{mjs,cjs} (12 dosya) LİNT DIŞI kalıyor. Ayrıca expo lint varsayılan `--cache` ile .expo/cache/eslint/ kullanıyor (1s'de dönüyor, bayat sonuç riski). TEK KOMUT ÖNERİSİ: package.json `\"lint\": \"eslint .\"` (expo lint kaldırılır); CI + pre-commit hook aynı komutu koşar. Bunun ön koşulu: scripts/lib/feed.cjs:36 `__dirname` için config'e `{ files: ['**/*.cjs'], languageOptions: { sourceType: 'commonjs', globals: { __dirname: 'readonly', require: 'readonly', module: 'writable' } } }` bloğu (E-04).",
+  "tipBilgisiMaliyeti": "Aynı kapsam (`eslint .`, 398 dosya, --no-cache) üzerinde ölçüldü. TİPSİZ: 13.03s / 13.09s / 11.90s (medyan 13.03s). TİPLİ (parserOptions.projectService:true, yalnız **/*.ts,**/*.tsx bloğunda): 16.33s / 16.77s / 15.35s (medyan 16.33s). FARK: +3.3s (+%25). Kabul edilebilir — mobil'de tip bilgisi bir kez açılınca no-floating-promises dışındaki tip-bilgili kurallar da bedavaya gelir. Karşılaştırma: `expo lint` cache'li koşum 1.06s ama 12 dosyayı hiç görmüyor.",
+  "kurallar": [
+    {
+      "kural": "@typescript-eslint/no-explicit-any",
+      "yapilandirma": "{ files: [\"**/*.ts\", \"**/*.tsx\"], plugins: { \"@typescript-eslint\": tsPlugin }, rules: { \"@typescript-eslint/no-explicit-any\": \"error\" } }",
+      "ihlal": 12,
+      "dosyaSayisi": 5,
+      "karar": "error-duzeltilerek",
+      "gerekce": "12 ihlal / 5 dosya — keşifle birebir aynı. Tamamı React tip köşesi: NumpadInput 2, PickerModal 2, SessionGate 3, MainNavigator 3 (React.ComponentType<any>/Ref<any>), PlaceholderScreens 2. Tek oturumda temizlenir. NOT: kural açılınca App.tsx:45/47/49/51'deki 4 `no-explicit-any` disable'ı ÖLÜ olmaktan çıkıp CANLI bastırmaya döner (RN `(RNText as any).defaultProps` — meşru, gerekçesi yorumda dursun). Tam liste (dosya:satır:sütun): src/components/NumpadInput.tsx:125:31, :137:29 · src/components/PickerModal.tsx:589:39, :627:35 · src/components/session/SessionGate.tsx:33:35, :34:24, :41:35 · src/navigation/MainNavigator.tsx:20:73, :41:77, :42:78 · src/screens/Modules/PlaceholderScreens.tsx:17:29, :29:54.",
+      "ornekler": [
+        "src/components/NumpadInput.tsx:125",
+        "src/components/PickerModal.tsx:589",
+        "src/components/session/SessionGate.tsx:33",
+        "src/navigation/MainNavigator.tsx:20",
+        "src/screens/Modules/PlaceholderScreens.tsx:17"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=no-explicit-any ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='@typescript-eslint/no-explicit-any'))\""
+    },
+    {
+      "kural": "@typescript-eslint/no-floating-promises (TİP BİLGİLİ)",
+      "yapilandirma": "{ files: [\"**/*.ts\",\"**/*.tsx\"], languageOptions: { parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname } }, plugins: { \"@typescript-eslint\": tsPlugin }, rules: { \"@typescript-eslint/no-floating-promises\": \"warn\" } }",
+      "ihlal": 291,
+      "dosyaSayisi": 36,
+      "karar": "warn-baseline",
+      "gerekce": "291 ihlal / 36 dosya — keşifle BİREBİR aynı (291). Dizin dağılımı: src/screens 275 · src/components 6 · src/hooks 5 · src/services 4 · src/navigation 1. Yoğunluk 5 dev ekranda: Tambur 55, FasonKabul 44, FasonSevk 29, KursunQc 28, KartelaSevk 14, IadeGirisi 12 → 5 dev ekran 168 ihlal; onlar hariç 123 ihlal / 31 dosya. >15 olduğu için baseline şart. Kademeli plan: yeni/dokunulan dosyada sert (diff modu), devralınanda sayım tavanı; `void x()` ekleyerek düşürülür. Tip bilgisi maliyeti +3.3s (bkz. tipBilgisiMaliyeti).",
+      "ornekler": [
+        "src/screens/Modules/Tambur/TamburScreen.tsx (55 ihlal)",
+        "src/screens/Modules/FasonKabul/FasonKabulScreen.tsx (44 ihlal)",
+        "src/components/PickerModal.tsx:292",
+        "src/hooks/useSackWeigh.ts:156",
+        "src/components/SurumNotuGate.tsx:37"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=no-floating-promises ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='@typescript-eslint/no-floating-promises'))\""
+    },
+    {
+      "kural": "Ham hex renk literali yasağı (no-restricted-syntax)",
+      "yapilandirma": "\"no-restricted-syntax\": [\"warn\", { selector: \"Literal[value=/^#[0-9a-fA-F]{3,8}$/]\", message: \"Ham hex renk literali yasak — src/theme/tokens.ts'teki jetonu kullan.\" }]  +  ayrı blok: { files: [\"src/theme/tokens.ts\"], rules: { \"no-restricted-syntax\": \"off\" } }",
+      "ihlal": 2173,
+      "dosyaSayisi": 100,
+      "karar": "warn-baseline",
+      "gerekce": "AST ölçümü: muafiyetsiz 2252 ihlal / 101 dosya; src/theme/tokens.ts (79 ihlal — TEK KAYNAK, meşru) muaf tutulunca 2173 ihlal / 100 dosya. Keşifteki 1931/88 grep sayısıydı ve dar kapsamdı; gerçek AST sayısı daha yüksek. Tamamı src/ altında (scripts/ ve kök dosyalarda 0). Yoğunluk 5 dev ekranda: Tambur 443, FasonKabul 280, KursunQc 160, KK1 129, FasonSevk 91 = 1103 (%51); onlar hariç 1070 ihlal / 95 dosya. Repodaki en büyük tek kalem — baseline + yalnız-yeni-kod sert modu şart; toplu codemod ancak jeton sözlüğü eşleşmesiyle yapılabilir, bu ayrı iş.",
+      "ornekler": [
+        "src/screens/Modules/Tambur/TamburScreen.tsx (443 ihlal)",
+        "src/screens/Modules/FasonKabul/FasonKabulScreen.tsx (280 ihlal)",
+        "src/components/AppMenu.tsx:226",
+        "src/components/AppModal.tsx:375",
+        "src/components/BarcodeScannerView.tsx:393"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=hex-muaf ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='no-restricted-syntax'))\""
+    },
+    {
+      "kural": "no-console",
+      "yapilandirma": "\"no-console\": \"error\"  +  ayrı blok: { files: [\"scripts/**\", \"plugins/**\", \"*.config.js\"], rules: { \"no-console\": \"off\" } }",
+      "ihlal": 8,
+      "dosyaSayisi": 6,
+      "karar": "error-duzeltilerek",
+      "gerekce": "Çıplak `eslint .` toplam 37 ihlal buluyor ama 29'u scripts/ altındaki CLI araçlarında (build-apk.mjs 14, yayinla-ota.mjs 13, generate-scan-sounds.mjs 2) ve orada console TEK çıkış kanalı — meşru, muaf tutulur. src/ altında 8 ihlal / 6 dosya (keşifle birebir). Hepsi tek oturumda temizlenir. Tam liste: src/components/LabelPrinter.tsx:143,:248,:260 · src/components/SimplePortal.tsx:124 · src/components/labels/LabelPreviewSheet.tsx:108 · src/components/labels/StandaloneLabelPrinter.tsx:147 · src/lib/discovery.contract.test.ts:61 · src/services/netStats.ts:31.",
+      "ornekler": [
+        "src/components/LabelPrinter.tsx:143",
+        "src/components/SimplePortal.tsx:124",
+        "src/components/labels/LabelPreviewSheet.tsx:108",
+        "src/components/labels/StandaloneLabelPrinter.tsx:147",
+        "src/services/netStats.ts:31"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=no-console ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print([ (f['filePath'],m['line']) for f in d for m in f['messages'] if m.get('ruleId')=='no-console' and '/src/' in f['filePath']])\""
+    },
+    {
+      "kural": "Card + onPress JSX yasağı (no-restricted-syntax)",
+      "yapilandirma": "\"no-restricted-syntax\": [\"error\", { selector: \"JSXOpeningElement[name.name='Card'] > JSXAttribute[name.name='onPress']\", message: \"Card'a onPress verme — dokunulur kart için TouchableCard kullan.\" }]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "yazma",
+      "gerekce": "0 ihlal — DOĞRULANDI. Ama sebebi 'temiz kod' değil, ihlal yüzeyinin hiç olmaması: `grep -rn \"<Card\" src/` = 0 isabet; mobil react-native-paper'dan yalnız Text/Button/ActivityIndicator/Icon/IconButton import ediyor, Card bileşeni bu projede HİÇ kullanılmıyor. Bugün bedava ama sıfır koruma değeri üretir ve ileride Card kullanmaya karar verilirse kuralın gerekçesi (hangi alternatif?) yazılı değil. KARAR: yazma; Card ilk kez kullanıldığında niyet netleşince yazılır. (İstenirse 'bedava' kovasına error olarak konabilir — maliyeti sıfır, ama config gürültüsü.)",
+      "ornekler": [],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=card-onpress ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='no-restricted-syntax'))\"   # + grep -rn '<Card' mobil/src | wc -l"
+    },
+    {
+      "kural": "react-hooks/exhaustive-deps bastırma sayısı + ölü disable (reportUnusedDisableDirectives)",
+      "yapilandirma": "linterOptions: { reportUnusedDisableDirectives: \"error\" }",
+      "ihlal": 3,
+      "dosyaSayisi": 3,
+      "karar": "error-duzeltilerek",
+      "gerekce": "Toplam 26 `exhaustive-deps` disable yorumu var (24 `-next-line` + 2 `-line`; keşifle birebir). Bunların 23'ü CANLI bastırma (suppressedMessages), 3'ü ÖLÜ: src/screens/Modules/FasonKabul/FasonKabulScreen.tsx:442 · src/screens/Modules/KartelaKabul/KartelaKabulScreen.tsx:255 · src/screens/Modules/KartelaSevk/KartelaSevkScreen.tsx:88 → silinecek. ESLint 9 varsayılanı zaten \"warn\" olduğu için bunlar BUGÜN de raporlanıyor; \"error\"a çekmek maliyet üretmiyor. Çıplak koşumda 7 ölü direktif görünüyor; 4'ü App.tsx:45/47/49/51 `no-explicit-any` disable'ı ve o kural AÇILINCA canlıya döner (ölü değil) — yani gerçek ölü sayısı 3. UYARI: `expo lint` App.tsx'i görmediği için bugün yalnız 3'ü raporluyor; tek komuta geçilince 7 görünür, 4'ü kural açılınca kaybolur.",
+      "ornekler": [
+        "src/screens/Modules/FasonKabul/FasonKabulScreen.tsx:442",
+        "src/screens/Modules/KartelaKabul/KartelaKabulScreen.tsx:255",
+        "src/screens/Modules/KartelaSevk/KartelaSevkScreen.tsx:88",
+        "App.tsx:45 (yalancı ölü — no-explicit-any açılınca canlı bastırmaya döner)",
+        "App.tsx:47 (yalancı ölü — aynı)"
+      ],
+      "olcumKomutu": "cd mobil && ./node_modules/.bin/eslint . -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);[print(f['filePath'],m['line'],m['message']) for f in d for m in f['messages'] if m.get('ruleId') is None]\"   # + grep -rn 'eslint-disable.*exhaustive-deps' mobil/src | wc -l  -> 26"
+    },
+    {
+      "kural": "max-lines { max: 300, skipComments: true, skipBlankLines: true }",
+      "yapilandirma": "\"max-lines\": [\"warn\", { max: 300, skipComments: true, skipBlankLines: true }]  +  muafiyet bloğu: { files: [\"src/screens/Modules/Tambur/TamburScreen.tsx\",\"src/screens/Modules/FasonKabul/FasonKabulScreen.tsx\",\"src/screens/Modules/KK1/KK1Screen.tsx\",\"src/screens/Modules/KursunQc/KursunQcScreen.tsx\",\"src/screens/Modules/FasonSevk/FasonSevkScreen.tsx\"], rules: { \"max-lines\": \"off\" } }",
+      "ihlal": 46,
+      "dosyaSayisi": 46,
+      "karar": "warn-baseline",
+      "gerekce": "YENİDEN ÖLÇÜLDÜ. skipComments+skipBlankLines AÇIK: 51 dosya. KAPALI (keşifteki ölçüm): 72 dosya. Fark 21 dosya (%29) — 'yorum bir değerdir' argümanı SAYIYLA doğrulandı: skipComments olmadan 21 dosya sırf karar kaydı yüzünden cezalanıyordu. 5 dev ekran muafiyet listesine alınınca kalan İHLAL: 46 dosya. Muaf 5'in skip'li satır sayıları: Tambur 7829 (ham 9386), FasonKabul 3994, KK1 3322, KursunQc 2709, FasonSevk 2055. Kalan 46'nın tepesi: LoginScreen 1223, DepoScreen 1113, PaketlemeScreen 1046, KartelaKabul 994, types/models.ts 870, PickerModal 780. >15 olduğu için baseline şart; yeni dosyada sert.",
+      "ornekler": [
+        "src/screens/Auth/LoginScreen.tsx (1223 satır)",
+        "src/screens/Modules/Depo/DepoScreen.tsx (1113)",
+        "src/screens/Modules/TartiPaket/PaketlemeScreen.tsx (1046)",
+        "src/screens/Modules/KartelaKabul/KartelaKabulScreen.tsx (994)",
+        "src/types/models.ts (870)"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=max-lines ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='max-lines'))\"   # skipsiz karşılaştırma: OLCUM_KURAL=max-lines-ham"
+    },
+    {
+      "kural": "max-lines-per-function { max: 80, skipComments: true, skipBlankLines: true, IIFEs: true }",
+      "yapilandirma": "\"max-lines-per-function\": [\"warn\", { max: 80, skipComments: true, skipBlankLines: true, IIFEs: true }]",
+      "ihlal": 166,
+      "dosyaSayisi": 115,
+      "karar": "warn-baseline",
+      "gerekce": "166 ihlal / 115 dosya (keşifteki 188 skipsiz ölçümdü; skip'li 166). 162'si src/ altında, 4'ü scripts/ + App.tsx. 5 dev ekran 42 ihlal taşıyor; onlar max-lines muafiyetinde olsa bile bu kural onlarda AÇIK kalmalı (fonksiyon boyu dosya boyundan bağımsız disiplin) — hariç tutulursa 124 ihlal / 110 dosya. >15 olduğu için baseline şart.",
+      "ornekler": [
+        "App.tsx:62",
+        "src/components/AppModal.tsx:97",
+        "src/components/BarcodeScannerModal.tsx:64",
+        "src/components/BarcodeScannerView.tsx:154",
+        "src/components/CancelledRollSheet.tsx:41"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=max-lines-per-function ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='max-lines-per-function'))\""
+    },
+    {
+      "kural": "max-params: 4",
+      "yapilandirma": "\"max-params\": [\"error\", 4]",
+      "ihlal": 1,
+      "dosyaSayisi": 1,
+      "karar": "error-duzeltilerek",
+      "gerekce": "Tek ihlal: src/screens/Modules/HizliIsEmri/OrderLineFilterSheet.tsx:115. Nesne parametresine çevrilip kural doğrudan error yazılır.",
+      "ornekler": [
+        "src/screens/Modules/HizliIsEmri/OrderLineFilterSheet.tsx:115"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=max-params ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);[print(f['filePath'],m['line']) for f in d for m in f['messages'] if m.get('ruleId')=='max-params']\""
+    },
+    {
+      "kural": "@typescript-eslint/naming-convention",
+      "yapilandirma": "\"@typescript-eslint/naming-convention\": [\"error\", { selector: \"variable\", format: [\"camelCase\",\"UPPER_CASE\",\"PascalCase\"], leadingUnderscore: \"allow\", trailingUnderscore: \"allow\" }, { selector: \"function\", format: [\"camelCase\",\"PascalCase\"], leadingUnderscore: \"allowDouble\" }, { selector: \"parameter\", format: [\"camelCase\"], leadingUnderscore: \"allow\" }, { selector: \"typeLike\", format: [\"PascalCase\"] }]",
+      "ihlal": 0,
+      "dosyaSayisi": 0,
+      "karar": "error",
+      "gerekce": "Üç varyant ölçüldü. (a) Kaçış deseni YOK (leadingUnderscore yalnız parameter'da allow): 5 ihlal / 4 dosya — `__resetRequeueArmForTests` (printQueue.ts:437), `__resetSelfHealForTests` + `__resetOnlineSignalForTests` (serverReachability.ts:276,280), `isBonded_` (SessionHardwareCard.tsx:274), `_drop` (deviceSettingsStore.ts:336). (b) function'da leadingUnderscore:'allowDouble' + variable'da allowDouble/trailingUnderscore:'allow': 1 ihlal (kalan tek isabet `_drop` — destructuring'de 'bunu at' işareti, tek alt çizgi). (c) ÖNERİLEN yapılandırma (variable'da leadingUnderscore:'allow'): 0 İHLAL. Yani `__xForTests` bilinçli kaçışı `allowDouble` ile, `_drop` atma-işareti `allow` ile, `isBonded_` trailingUnderscore ile karşılanıyor — ek filter/allow listesi GEREKMİYOR. Doğrudan error yazılır.",
+      "ornekler": [],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=naming-convention-gevsek ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);print(sum(1 for f in d for m in f['messages'] if m.get('ruleId')=='@typescript-eslint/naming-convention'))\"   # katı varyant: OLCUM_KURAL=naming-convention-katı -> 5"
+    },
+    {
+      "kural": "Türkçe karakterli tanımlayıcı yasağı (no-restricted-syntax)",
+      "yapilandirma": "\"no-restricted-syntax\": [\"error\", { selector: \"Identifier[name=/[çğıöşüÇĞİÖŞÜ]/]\", message: \"Tanımlayıcı ASCII/İngilizce olmalı — Türkçe yalnız UI metni, hata mesajı ve yorumda.\" }]",
+      "ihlal": 2,
+      "dosyaSayisi": 1,
+      "karar": "error-duzeltilerek",
+      "gerekce": "KEŞİF YANLIŞ — 'mobil 0' bekleniyordu, GERÇEKTE 2 ihlal var. Keşif yalnız variable/function/parameter/typeLike selector'larına bakmıştı; çıplak `Identifier[name=/…/]` selector'ı nesne ÖZELLİK adlarını da yakalıyor ve `styles.boş` StyleSheet anahtarı iki yerde geçiyor: src/screens/Modules/Sevkiyat/SackContentsModal.tsx:165 (tanım: `boş: { fontSize: 12, … }`) ve :91 (kullanım: `style={styles.boş}`). `emptyText` gibi bir ada çevrilir, sonra kural error yazılır. Backend/Electron'da 0 beklentisi bu geniş selector'la yeniden doğrulanmalı — dar selector 0 diyor olabilir.",
+      "ornekler": [
+        "src/screens/Modules/Sevkiyat/SackContentsModal.tsx:165 (styles tanımı: boş)",
+        "src/screens/Modules/Sevkiyat/SackContentsModal.tsx:91 (kullanım: styles.boş)"
+      ],
+      "olcumKomutu": "cd mobil && OLCUM_KURAL=tr-identifier ./node_modules/.bin/eslint . -c eslint.olcum.mjs -f json --no-cache | python3 -c \"import json,sys;d=json.load(sys.stdin);[print(f['filePath'],m['line']) for f in d for m in f['messages'] if m.get('ruleId')=='no-restricted-syntax']\""
+    }
+  ],
+  "notlar": "GEÇİCİ CONFIG SİLİNDİ: mobil/eslint.olcum.mjs yazıldı, her kural ayrı ayrı (OLCUM_KURAL env değişkeniyle tek kural aktif) koşuldu, sonra `rm mobil/eslint.olcum.mjs` + `ls` ile silindiği doğrulandı; `git status --porcelain` mobil/ altında hiçbir yeni dosya göstermiyor. Repo kaynak dosyalarına DOKUNULMADI. || KAPSAM KARARI (E-04, en önemli bulgu): bugün `npm run lint` = `expo lint` ve bu komut App.tsx dahil 12 dosyayı HİÇ lint etmiyor (expo CLI DEFAULT_INPUTS=['src','app','components']); ayrıca varsayılan cache açık. Tek komuta (`eslint .`) geçilmeli; ön koşul scripts/lib/feed.cjs:36 için CommonJS globals bloğu (tek gerçek error). || KOVA ÖZETİ — BEDAVA/error (0 ihlal): naming-convention (önerilen gevşetmeyle). error-duzeltilerek (toplam 25 dokunuş): no-explicit-any 12 · no-console 8 (src) · ölü disable 3 · max-params 1 · Türkçe tanımlayıcı 2 (1 dosya). warn+baseline: hex 2173 · no-floating-promises 291 · max-lines-per-function 166 · max-lines 46 (5 dev ekran muaf). YAZMA: Card+onPress (ihlal yüzeyi yok, gerekçe belirsiz). || KEŞİFTEN SAPMALAR: hex 1931→2173 (grep değil AST, tokens.ts muaf) · max-lines 70→51 (skipComments etkisi; muafiyetle 46) · max-lines-per-function 188→166 (skip etkisi) · Türkçe tanımlayıcı 0→2 (geniş selector) · naming-convention 4→0 (leadingUnderscore:'allow' ile) · no-explicit-any 12 ve no-floating-promises 291 keşifle birebir. || 5 DEV EKRAN AĞIRLIĞI (Tambur/FasonKabul/KK1/KursunQc/FasonSevk): hex'in %51'i (1103/2173), floating-promises'in %58'i (168/291), mlpf'nin %25'i (42/166) bu beş dosyada. Baseline tavanı bu beş dosya yüzünden şişiyor; bölme işi ayrı bir kalem."
+}

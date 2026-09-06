@@ -35,7 +35,8 @@ src/pages/<Module>/
 ```
 
 Ardından şunları **güncelle**:
-- `src/router.tsx` — yeni route eklemesi `<ProtectedRoute requirePermission="...">` ile
+- `src/routes/content-routes.tsx` — yeni route eklemesi `<ProtectedRoute requirePermission="...">` ile (`src/router.tsx` yalnız oturum-dışı router'dır)
+- Backend `src/constants/screen-catalog.ts` — HER route için manifesto girdisi (`modul` zorunlu; bekçi `test_screen_catalog.ts`)
 - (Tanım modülüyse) `src/pages/Definitions/tile-config.ts` — yeni kart girişi
 
 ## Kurallar

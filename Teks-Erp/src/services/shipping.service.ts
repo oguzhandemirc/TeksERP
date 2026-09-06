@@ -70,6 +70,16 @@ import {
 } from "./helpers/shipping-weigh-gate.helper";
 // "Müşterideki ad" zinciri (2026-09-04) — etiketle AYNI cascade, tek kaynak.
 import { loadShipmentCustomerNames } from "./helpers/shipment-customer-name.helper";
+import { batchLoadAliases, batchLoadAliasesMulti, resolveName } from "./helpers/customer-name.helper";
+import { specMatch } from "./helpers/allocation.helper";
+import {
+  resolveOrderCoverage,
+  assertCoverageAllowed,
+} from "./helpers/shipment-coverage.helper";
+import {
+  readShippingAllocWidthToleranceCm,
+  readShippingAllowOverAllocation,
+} from "./system-setting.service";
 import {
   assertInvoiceTraceAllowed,
   invoiceTraceWarning,
@@ -98,7 +108,7 @@ import {
   type PoolSack,
   type SackAllocLine,
 } from "./helpers/allocation.helper";
-import { recomputeOrderStatusForOrders, touchOrderLinesTx } from "./helpers/order-status.helper";
+import { recomputeOrderStatusForOrdersTx, touchOrderLinesTx } from "./helpers/order-status.helper";
 import { ACTIVE_LINE } from "./helpers/order-line-scope.helper";
 import { ACTIVE_TAG_SELECT, ACTIVE_TAG_WHERE, toTagBadges } from "./helpers/sack-tag.helper";
 import { buildHideCancelledWhere } from "./helpers/hidden-status.helper";
@@ -181,7 +191,7 @@ const SHIPPABLE_ROLL_WHERE = {
 // ignorable olduğundan yasak). Sayısal max+1 → gün içi monotonik.
 //
 // ⚠️ `tx` ZORUNLU ve İLK parametre (emsaller: `subcontractor.service.nextDirectShipmentNo`,
-// `nextPrefixedSequence`, `kartela.service.nextKartelaDocSequence`/`nextSwatchSequence`).
+// `nextPrefixedSequenceTx`, `kartela.service.nextKartelaDocSequence`/`nextSwatchSequence`).
 // Üç çağrı yerinin ÜÇÜ DE bir `prisma.$transaction` callback'inin içinde; eskiden global
 // `prisma` client'ından okunuyordu ve bunun iki sonucu vardı:
 //   1) HAVUZ: interaktif tx bir pg bağlantısını TUTARKEN ikinci bir bağlantı ödünç
@@ -850,6 +860,260 @@ export class ShippingService {
     });
     const n = removedRolls + removedSwatches;
     return { success: true, data: { removedRolls, removedSwatches }, message: n > 0 ? `${n} top/kartela depoya çıkarıldı` : "Çıkarılacak içerik yok" };
+  }
+
+  /**
+   * DEFTER ONARIMI — SİPARİŞE YAZILAMAMIŞ SEVKİYATLAR (2026-09-06).
+   *
+   * PROBLEM (ölçüldü, fabrika yedeği 2026-09-05): sevk edilmiş 89 sevkiyatın
+   * 42'sinde çuval içeriği sipariş defterine tam yazılmamış — 11.384,7 m. Bunların
+   * 42'sinde de sipariş SEÇİLİYDİ; sorun seçim değil YAZILAMAMA.
+   * `scripts/tahsis_teshis.ts` sebepleri sınıflandırdı ve en büyük küme
+   * "bugün YAZILABİLİRDİ" (15.905 m / 407 top) — yani spec de kapasite de bugün
+   * uygun; sevk anında değildi (kapasite doluydu ya da sipariş sonradan büyüdü).
+   *
+   * BU LİSTE O KÜMEYİ BULUR. Yazma YOK.
+   *
+   * ⚠️ Onarımın kendisi `setShipmentOrders` ile yapılır — defteri sıfırdan kurar,
+   * sipariş toplamlarını yeniden hesaplar ve irsaliyeyi v+1 olarak dondurur.
+   * Bu yüzden onarım AYRI BİR YETKİ ister (`shipping:repair-allocation`).
+   */
+  async listRepairableShipments(): Promise<ApiResponse<unknown>> {
+    const sevkiyatlar = await prisma.shipment.findMany({
+      where: { status: ShipmentStatus.DISPATCHED, orders: { some: {} } },
+      select: {
+        id: true, shipmentNo: true, dispatchedAt: true,
+        customer: { select: { id: true, name: true } },
+        sacks: {
+          select: {
+            branchId: true,
+            rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, select: { itemId: true, colorId: true, width: true, currentQty: true } },
+            allocations: { select: { qty: true } },
+          },
+        },
+        orders: {
+          select: {
+            order: {
+              select: {
+                orderNumber: true, branchId: true,
+                lines: { select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { dispatchedAt: "desc" },
+    });
+
+    const enTolerans = await readShippingAllocWidthToleranceCm();
+    const satirlar: unknown[] = [];
+    for (const sh of sevkiyatlar) {
+      const icerik = sh.sacks.reduce((a2, sk) => a2 + sk.rolls.reduce((b2, r) => b2 + Number(r.currentQty), 0), 0);
+      const yazilan = sh.sacks.reduce((a2, sk) => a2 + sk.allocations.reduce((b2, x) => b2 + Number(x.qty), 0), 0);
+      const bosluk = Math.round((icerik - yazilan) * 1000) / 1000;
+      if (bosluk <= 0.001) continue;
+
+      const kalemler = sh.orders.flatMap((so) =>
+        so.order.lines.map((l) => ({
+          itemId: l.itemId, colorId: l.colorId, width: l.width,
+          branchId: so.order.branchId,
+          kalan: Number(l.quantity) - Number(l.shippedQty),
+        })),
+      );
+      // "Bugün yazılabilir mi" — motorun kendi yüklemleri: spec + şube + kapasite.
+      let onarilabilir = 0;
+      for (const sk of sh.sacks) {
+        for (const r of sk.rolls) {
+          const uygun = kalemler.some(
+            (l) =>
+              specMatch(r, l, enTolerans) &&
+              (sk.branchId ?? null) === (l.branchId ?? null) &&
+              l.kalan > 0.001,
+          );
+          if (uygun) onarilabilir += Number(r.currentQty);
+        }
+      }
+      satirlar.push({
+        shipmentId: sh.id,
+        shipmentNo: sh.shipmentNo,
+        dispatchedAt: sh.dispatchedAt,
+        customer: sh.customer,
+        orderNumbers: sh.orders.map((so) => so.order.orderNumber),
+        icerikMetraj: Math.round(icerik * 1000) / 1000,
+        yazilanMetraj: Math.round(yazilan * 1000) / 1000,
+        bosluk,
+        /** Bugün yeniden denense yazılabilecek metraj — onarımın beklenen kazancı. */
+        onarilabilirMetraj: Math.round(Math.min(onarilabilir, bosluk) * 1000) / 1000,
+      });
+    }
+    return { success: true, data: satirlar };
+  }
+
+  /**
+   * TEK SEVKİYATIN DEFTERİNİ ONAR — mevcut `setShipmentOrders` motoruyla.
+   *
+   * ⚠️ Sipariş kümesi DEĞİŞTİRİLMEZ: sevkiyatın bugünkü siparişleri aynen geri
+   * verilir. Yaptığı tek şey tahsisi BUGÜNÜN verisiyle yeniden kurmaktır.
+   * Yeni bir sipariş eklemek ayrı bir karardır ve bu uçtan yapılmaz.
+   */
+  async repairShipmentAllocation(shipmentId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const sh = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { id: true, shipmentNo: true, status: true, orders: { select: { orderId: true } } },
+    });
+    if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (sh.status !== ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Yalnız sevk EDİLMİŞ sevkiyatın defteri onarılır");
+    }
+    if (sh.orders.length === 0) {
+      throw AppError.conflict("Sevkiyata bağlı sipariş yok — onarılacak defter yok");
+    }
+    const oncesi = await this.olcTahsis(shipmentId);
+    await this.setShipmentOrders(shipmentId, sh.orders.map((o) => o.orderId), userId);
+    const sonrasi = await this.olcTahsis(shipmentId);
+    const kazanc = Math.round((sonrasi - oncesi) * 1000) / 1000;
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId,
+      newData: { kind: "ALLOCATION_REPAIR", shipmentNo: sh.shipmentNo, oncesi, sonrasi, kazanc },
+    });
+    return {
+      success: true,
+      data: { shipmentNo: sh.shipmentNo, oncesi, sonrasi, kazanc },
+      message: kazanc > 0.001
+        ? `${sh.shipmentNo}: ${Math.round(kazanc)} m sipariş defterine yazıldı`
+        : `${sh.shipmentNo}: yazılabilecek yeni metraj bulunamadı (defter değişmedi)`,
+    };
+  }
+
+  /** Sevkiyatın toplam tahsis metrajı — onarım öncesi/sonrası ölçümü için. */
+  private async olcTahsis(shipmentId: string): Promise<number> {
+    const rows = await prisma.sackAllocation.aggregate({
+      where: { sack: { shipmentId } },
+      _sum: { qty: true },
+    });
+    return Math.round(Number(rows._sum.qty ?? 0) * 1000) / 1000;
+  }
+
+  /**
+   * TOPLU DAĞITMA — ÖNİZLEME (2026-09-06).
+   *
+   * Kök CLAUDE.md: "Yıkıcı işlemde backend preview ucu döner, arayüz etkilenen HER
+   * kaydı listeler ve per-record seçim sunar; soyut sayı yetmez." Toplu dağıtma
+   * tam bu sınıfa girer: kullanıcı listeden N çuval seçiyor ve içindeki topların
+   * hepsi depoya düşüyor.
+   *
+   * ⚠️ SİLME DEĞİL DAĞITMA: çuval kaydı korunur, yalnız içerik boşalır. Adı
+   * "silme" olan bir düğmenin arkasında bu durur — önizleme metni bunu söyler.
+   *
+   * Yazma YOK; her çuval için engel varsa GEREKÇESİYLE döner (sevkiyata atanmış
+   * çuval dağıtılamaz — sevk defterini bozardı).
+   */
+  async previewDistributeSacks(sackIds: string[]): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(sackIds)].filter(Boolean);
+    if (ids.length === 0) throw AppError.badRequest("Çuval seçilmedi");
+    const sacks = await prisma.sack.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true, sackNo: true, shipmentId: true, weightKg: true,
+        shipment: { select: { shipmentNo: true, status: true } },
+        customer: { select: { id: true, name: true } },
+        rolls: {
+          where: { status: { notIn: SACK_ABSENT_STATUSES } },
+          select: { id: true, barcode: true, currentQty: true, item: { select: { name: true } }, color: { select: { name: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+        _count: { select: { swatches: true } },
+      },
+      orderBy: { sackNo: "asc" },
+    });
+    const bulunanIds = new Set(sacks.map((s2) => s2.id));
+    const kayip = ids.filter((i) => !bulunanIds.has(i));
+
+    const satirlar = sacks.map((sk) => {
+      const metraj = sk.rolls.reduce((a2, r) => a2 + Number(r.currentQty), 0);
+      // Tek engel sınıfı: sevkiyata atanmış çuval. Aynı kural tekil dağıtmada da
+      // var (`distributeSackContents`) — iki yüzey aynı hükmü versin.
+      const engel = sk.shipmentId
+        ? `${sk.shipment?.shipmentNo ?? "Bir"} sevkiyatına atanmış — önce sevkiyattan çıkarın`
+        : null;
+      return {
+        sackId: sk.id,
+        sackNo: sk.sackNo,
+        customer: sk.customer,
+        weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        rollCount: sk.rolls.length,
+        swatchCount: sk._count.swatches,
+        totalMeters: Math.round(metraj * 1000) / 1000,
+        engel,
+        // Etkilenen HER kayıt — arayüz sayı değil satır gösterir.
+        rolls: sk.rolls.map((r) => ({
+          id: r.id, barcode: r.barcode,
+          item: r.item?.name ?? null, color: r.color?.name ?? null,
+          meters: Number(r.currentQty),
+        })),
+      };
+    });
+    const uygun = satirlar.filter((r) => !r.engel);
+    return {
+      success: true,
+      data: {
+        sacks: satirlar,
+        bulunamayan: kayip,
+        ozet: {
+          secilen: ids.length,
+          dagitilacak: uygun.length,
+          engelli: satirlar.length - uygun.length,
+          toplamTop: uygun.reduce((a2, r) => a2 + r.rollCount, 0),
+          toplamMetraj: Math.round(uygun.reduce((a2, r) => a2 + r.totalMeters, 0) * 1000) / 1000,
+        },
+      },
+    };
+  }
+
+  /**
+   * TOPLU DAĞITMA — UYGULA (2026-09-06).
+   *
+   * Her çuval için tekil `distributeSackContents` yolunu kullanır: kural, kilit ve
+   * audit satırı TEK KAYNAKTAN gelir. Toplu yol kendi SQL'ini yazsaydı
+   * `touchWarehouseSackTx` / `markSackContentChangedTx` çiftini ikinci kez
+   * uygulamak gerekirdi ve biri unutulunca tartı sessizce bayat kalırdı.
+   *
+   * ⚠️ HEPSİ-YA-HİÇBİRİ DEĞİL: engelli çuval atlanır, sebebi RAPORLANIR. Tek bir
+   * sevkiyattaki çuval yüzünden 20 çuvallık işi düşürmek sahada işe yaramaz;
+   * sessizce atlamak ise "yeşil ≠ yapıldı" olurdu.
+   */
+  async distributeSacksBulk(
+    data: { sackIds: string[] },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(data.sackIds)].filter(Boolean);
+    if (ids.length === 0) throw AppError.badRequest("Çuval seçilmedi");
+    const on = (await this.previewDistributeSacks(ids)).data as {
+      sacks: { sackId: string; sackNo: string; engel: string | null }[];
+      bulunamayan: string[];
+    };
+    const dagitilan: { sackId: string; sackNo: string; removedRolls: number; removedSwatches: number }[] = [];
+    const atlanan: { sackId: string; sackNo: string; sebep: string }[] = [];
+    for (const sk of on.sacks) {
+      if (sk.engel) {
+        atlanan.push({ sackId: sk.sackId, sackNo: sk.sackNo, sebep: sk.engel });
+        continue;
+      }
+      const r = (await this.distributeSackContents({ sackId: sk.sackId }, userId)).data as {
+        removedRolls: number; removedSwatches: number;
+      };
+      dagitilan.push({ sackId: sk.sackId, sackNo: sk.sackNo, ...r });
+    }
+    for (const id of on.bulunamayan) atlanan.push({ sackId: id, sackNo: "?", sebep: "Çuval bulunamadı" });
+    const topToplam = dagitilan.reduce((a2, d) => a2 + d.removedRolls + d.removedSwatches, 0);
+    return {
+      success: true,
+      data: { dagitilan, atlanan },
+      message:
+        atlanan.length === 0
+          ? `${dagitilan.length} çuval dağıtıldı (${topToplam} top/kartela depoya çıktı)`
+          : `${dagitilan.length} çuval dağıtıldı, ${atlanan.length} çuval atlandı`,
+    };
   }
 
   /**
@@ -1527,7 +1791,13 @@ export class ShippingService {
         });
       }
     }
-    const allocations = distributeSacksToLines(poolSacks, allocLines);
+    // EN TOLERANSI (`shipping.allocWidthToleranceCm`, 2026-09-06) — 0 = tam eşitlik
+    // ve bu VARSAYILAN, yani bayrak açılmadıkça tahsis bugünküyle bayt-bayt aynı.
+    // Kumaş ve renk toleranstan ETKİLENMEZ (`specMatch` yalnız eni gevşetir).
+    const enTolerans = await readShippingAllocWidthToleranceCm();
+    // FAZLA SEVK (`shipping.allowOverAllocation`) — kapalı = bugünkü davranış.
+    const fazlaSevk = await readShippingAllowOverAllocation();
+    const allocations = distributeSacksToLines(poolSacks, allocLines, enTolerans, fazlaSevk);
     return { allocations, lineNeeds };
   }
 
@@ -1708,6 +1978,8 @@ export class ShippingService {
 
     let result: { id: string; shipmentNo: string };
     let tahsisIzi: AllocationAuditTrail | null = null;
+    /** Kapsama kapısının `warn` metni — tx içinde üretilir, yanıtta taşınır. */
+    let kapsamaNotu: string | null = null;
     try {
       result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
@@ -1723,11 +1995,13 @@ export class ShippingService {
           carrier: data.carrier,
           clientToken: data.clientToken,
           confirmationEnabled,
+          orderless: data.orderless,
           userId,
         });
         // Tahsis izi çekirdekten TAŞINIR (tx dışında `flushAllocationAudit`e
         // gider). Çekirdek onu döndürmeseydi audit sessizce boş kalırdı.
         tahsisIzi = core.iz;
+        kapsamaNotu = core.kapsamaUyarisi;
         return { id: core.id, shipmentNo: core.shipmentNo };
       }),
       undefined,
@@ -1766,6 +2040,10 @@ export class ShippingService {
       orderless: data.orderless,
     });
     if (orderlessNote) warnings.push(orderlessNote);
+    // Kapsama uyarısı (`shipping.orderCoverage=warn`). Bugün bu bilgi YALNIZ
+    // önizlemede vardı; tablet Paketleme `orderIds: undefined` gönderdiği için
+    // sahadaki asıl yol onu hiç görmüyordu.
+    if (kapsamaNotu) warnings.push(kapsamaNotu);
     await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, orderless: data.orderless === true, destination, dispatched } });
     // Otomatik fatura taslağı — YALNIZ gerçekten sevk edildiyse. PLANNED bir
     // sevkiyat "mal çıktı" demez; onay açıkken taslak `dispatchShipment`'te doğar.
@@ -1803,9 +2081,17 @@ export class ShippingService {
       carrier?: string | null;
       clientToken?: string | null;
       confirmationEnabled: boolean;
+      /** Kullanıcının "siparişsiz / fazla mal" beyanı — kapsama kapısının kaçışı. */
+      orderless?: boolean;
       userId?: string;
     },
-  ): Promise<{ id: string; shipmentNo: string; iz: AllocationAuditTrail | null }> {
+  ): Promise<{
+    id: string;
+    shipmentNo: string;
+    iz: AllocationAuditTrail | null;
+    /** `shipping.orderCoverage` `warn` iken üretilen metin; yoksa null. */
+    kapsamaUyarisi: string | null;
+  }> {
     const shipmentNo = await nextShipmentNo(tx);
     const created = await tx.shipment.create({
       // ⚠️ Künye (Faz A2) `dispatchedById`den FARKLI bilgidir: sevkiyat
@@ -1855,7 +2141,24 @@ export class ShippingService {
       // ikincisi birincisini siler ve GEÇERLİ olan odur → iz de o olmalı.
       if (dp.iz) iz = dp.iz;
     }
-    return { ...created, iz };
+
+    // KAPSAMA KAPISI (`shipping.orderCoverage`, 2026-09-06) — İKİNCİ EKSEN.
+    // Burada, tahsis YAZILDIKTAN sonra çalışır: "sipariş seçildi mi" değil
+    // "mal deftere yazıldı mı" sorusunu ölçer. Varsayılan `off` → hiçbir şey olmaz.
+    // ⚠️ tx İÇİNDE: `block` rejiminde atılan hata sevkiyatı geri alır; yarım
+    // kurulmuş bir sevkiyat bırakmak, kapının kendisinden daha kötü olurdu.
+    const kapsamaRejimi = await resolveOrderCoverage();
+    let kapsamaUyarisi: string | null = null;
+    if (kapsamaRejimi !== "off" && p.orderIds.length > 0) {
+      const mal = await tx.roll.aggregate({ where: { shipmentId: created.id }, _sum: { currentQty: true } });
+      const cikan = Number(mal._sum.currentQty ?? 0);
+      const yazilan = (iz?.yazilan ?? []).reduce((a2, y) => a2 + y.qty, 0);
+      kapsamaUyarisi = assertCoverageAllowed(kapsamaRejimi, cikan - yazilan, {
+        orderIds: p.orderIds,
+        orderless: p.orderless,
+      });
+    }
+    return { ...created, iz, kapsamaUyarisi };
   }
 
   /**
@@ -2262,7 +2565,7 @@ export class ShippingService {
       if (etkilenen.length > 0) {
         const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: etkilenen } }, select: { id: true } });
         await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
-        await recomputeOrderStatusForOrders(tx, etkilenen);
+        await recomputeOrderStatusForOrdersTx(tx, etkilenen);
       }
 
       // ② Yeni kümeyi yaz + tahsisleri hesapla (iptal kontrolü orada, kilit altında).
@@ -2278,7 +2581,7 @@ export class ShippingService {
 
       // ④ Defteri yeni tahsislerle tekrar hesapla.
       if (etkilenen.length > 0) {
-        await recomputeOrderStatusForOrders(tx, etkilenen);
+        await recomputeOrderStatusForOrdersTx(tx, etkilenen);
       }
 
       // ⑤ İrsaliye yeni sipariş kümesiyle yeniden donar (v+1). Yalnız sevk
@@ -2797,7 +3100,7 @@ export class ShippingService {
       const fark = Math.round((cikan - yazilanToplam) * 1000) / 1000;
       tazeTahsisIzi.tahsissizMetraj = fark > 0 ? fark : 0;
     }
-    await recomputeOrderStatusForOrders(tx, orderIds);
+    await recomputeOrderStatusForOrdersTx(tx, orderIds);
     // Resmi belge — sevk irsaliyesi v1 burada donar.
     await printedDocumentService.freezeForSource(tx, PrintedDocType.SHIPMENT_DISPATCH, shipmentId, userId);
     return { flipped, iz: tazeTahsisIzi };
@@ -2947,7 +3250,7 @@ export class ShippingService {
     await tx.roll.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
     await tx.swatch.updateMany({ where: { shipmentId }, data: { shipmentId: null } });
     await tx.sack.updateMany({ where: { shipmentId }, data: { shipmentId: null, seq: null } });
-    await recomputeOrderStatusForOrders(tx, orderIds);
+    await recomputeOrderStatusForOrdersTx(tx, orderIds);
   }
 
   /**
@@ -3207,7 +3510,7 @@ export class ShippingService {
       const orderIds = [...new Set(orderRows.map((o) => o.orderId))];
       const lineRows = await tx.orderLine.findMany({ where: { orderId: { in: orderIds } }, select: { id: true } });
       await touchOrderLinesTx(tx, lineRows.map((l) => l.id));
-      await recomputeOrderStatusForOrders(tx, orderIds);
+      await recomputeOrderStatusForOrdersTx(tx, orderIds);
 
       // Resmi belge İPTAL — silinmez. Yeniden sevkte `freezeForSource` v2 üretir.
       const voidedDocs = await printedDocumentService.voidForSource(
@@ -3899,6 +4202,23 @@ export class ShippingService {
       }
     }
 
+    // MÜŞTERİDEKİ AD — EKRAN İLE KÂĞIT AYNI YÜKLEMİ KULLANIR (2026-09-06).
+    // Bu projeksiyon eskiden YALNIZ `OrderLine` override'ını taşıyordu; belge ise
+    // `override > CustomerItemAlias/CustomerColorAlias (master) > bizim ad`
+    // kademesini çözüyordu. Sonuç ölçüldü: sevk edilmiş 1.778 topun 424'ünde (%24)
+    // kumaş için master alias VARDI ama override YOKTU → irsaliyede müşteri adı
+    // basılıyor, elemanın ekranında hiç görünmüyordu (renk için 152 top / %9).
+    // Aynı soruyu iki yüzeyin iki farklı yüklemle cevaplaması kök CLAUDE.md'nin
+    // "türetilmiş alan / ayrışan yüzey" sınıfıdır; tek kaynak `customer-name.helper`.
+    // Maliyet: müşteri başına 2 sorgu (`batchLoadAliases`), satır başına DEĞİL.
+    const siparisKalemleri = shipment.orders.flatMap((so) => so.order.lines);
+    const { itemAliasByItemId, colorAliasByColorId } = await batchLoadAliases(
+      prisma,
+      shipment.customer.id,
+      siparisKalemleri.map((l) => l.itemId),
+      siparisKalemleri.map((l) => l.colorId).filter((c): c is string => !!c),
+    );
+
     const orders = shipment.orders.map((so) => ({
       id: so.order.id,
       orderNumber: so.order.orderNumber,
@@ -3907,13 +4227,22 @@ export class ShippingService {
       lines: so.order.lines.map((l) => {
         const requested = new Prisma.Decimal(l.quantity);
         const shipped = new Prisma.Decimal(l.shippedQty);
+        // ⚠️ Yalnız GERÇEKTEN bir müşteri karşılığı varsa dolu döner: `resolveName`
+        // DEFAULT'a düşerse (bizim adımız) alan null kalır — arayüz "(Müşteride: X)"
+        // etiketini bizim adımızla basıp kullanıcıya sahte bir karşılık göstermesin.
+        const musteriKumas = resolveName(l.customerItemName, itemAliasByItemId.get(l.itemId), "");
+        const musteriRenk = resolveName(
+          l.customerColorName,
+          l.colorId ? colorAliasByColorId.get(l.colorId) : null,
+          "",
+        );
         return {
           lineId: l.id,
           item: l.item,
           color: l.color,
           width: l.width,
-          customerItemName: l.customerItemName,
-          customerColorName: l.customerColorName,
+          customerItemName: musteriKumas.source === "DEFAULT" ? null : musteriKumas.name,
+          customerColorName: musteriRenk.source === "DEFAULT" ? null : musteriRenk.name,
           requested,
           shipped,
           openQty: requested.minus(shipped),
@@ -4059,12 +4388,30 @@ export class ShippingService {
     ];
     const totalMeters = grossShipmentRolls.reduce((s, r) => s.plus(r.currentQty), D0());
 
+    // DEFTER BOŞLUĞU (2026-09-06) — "çıkan mal ↔ siparişe yazılan" farkı.
+    // Bugüne kadar bu sayı YALNIZ audit izinde vardı (`tahsissizMetraj`), yani
+    // hiçbir ekranda görünmüyordu. Ölçüldü: sevk edilmiş 89 sevkiyatın 42'sinde
+    // fark var (11.384,7 m) ve sipariş "Açık" kaldığı için aynı mal yeniden
+    // üretime verilebiliyordu. Sayı, siparişi OLAN sevkiyatlarda anlamlıdır.
+    const defterYazilan = shipment.sacks.reduce(
+      (a2, sk) => a2 + sk.allocations.reduce((b2, x) => b2 + Number(x.qty), 0),
+      0,
+    );
+    const defterCikan = shipment.sacks.reduce(
+      (a2, sk) => a2 + sk.rolls.reduce((b2, r) => b2 + Number(r.currentQty), 0),
+      0,
+    );
+    const defterBoslugu =
+      shipment.orders.length === 0 ? null : Math.max(0, Math.round((defterCikan - defterYazilan) * 1000) / 1000);
+
     return {
       success: true,
       data: {
         id: shipment.id,
         shipmentNo: shipment.shipmentNo,
         status: shipment.status,
+        /** Siparişe yazılamayan metraj; `null` = sevkiyatın siparişi yok (soru anlamsız). */
+        defterBoslugu,
         destination: shipment.destination,
         procedureCode: shipment.procedureCode,
         dispatchNote: shipment.dispatchNote,
@@ -4409,6 +4756,17 @@ export class ShippingService {
         return sum.plus(g._sum.currentQty ?? 0);
       }, D0());
 
+    // MÜŞTERİDEKİ AD — `getShipmentById` ile AYNI kademe (2026-09-06): override >
+    // master alias > yok. Bu uç `customerId`siz de çağrılabildiği için alias'lar
+    // müşteri BAŞINA döngüyle değil, (customerId, itemId) çiftleriyle TEK sorgu
+    // çiftinde çekilir — kaç müşteri olursa olsun 2 gidiş-dönüş.
+    const { itemAlias: kumasAlias, colorAlias: renkAlias } = await batchLoadAliasesMulti(
+      prisma,
+      orders.map((o) => o.customer.id),
+      orders.flatMap((o) => o.lines.map((l) => l.itemId)),
+      orders.flatMap((o) => o.lines.map((l) => l.colorId)).filter((c): c is string => !!c),
+    );
+
     const data = orders.map((o) => ({
       order: { id: o.id, orderNumber: o.orderNumber, status: o.status, deadline: o.deadline, customer: o.customer, branch: o.branch },
       lines: o.lines.map((l) => {
@@ -4416,9 +4774,17 @@ export class ShippingService {
         const shipped = new Prisma.Decimal(l.shippedQty);
         const openQty = requested.minus(shipped);
         const fromWarehouse = specAvail(l);
+        // DEFAULT'a düşerse null — arayüz bizim adımızı "müşterideki ad" diye basmasın.
+        const musteriKumas = resolveName(l.customerItemName, kumasAlias.get(`${o.customer.id}:${l.itemId}`), "");
+        const musteriRenk = resolveName(
+          l.customerColorName,
+          l.colorId ? renkAlias.get(`${o.customer.id}:${l.colorId}`) : null,
+          "",
+        );
         return {
           lineId: l.id, item: l.item, color: l.color, width: l.width,
-          customerItemName: l.customerItemName, customerColorName: l.customerColorName,
+          customerItemName: musteriKumas.source === "DEFAULT" ? null : musteriKumas.name,
+          customerColorName: musteriRenk.source === "DEFAULT" ? null : musteriRenk.name,
           requested, shipped, openQty, warehouseAvailable: fromWarehouse,
           covered: openQty.lessThanOrEqualTo(0) || fromWarehouse.greaterThanOrEqualTo(openQty),
         };
@@ -4618,9 +4984,27 @@ async function collectShipmentDocContent(
         ci || cc
           ? [ci ?? r.item.name, cc ?? r.color?.name ?? "", widthStr].filter(Boolean).join(" ")
           : null;
+      // AYRIŞTIRILMIŞ İKİZLER (2026-09-06) — `shipping.docProductColorSplit` açıkken
+      // renderer bunları KULLANIR, kapalıyken birleşik `customerName`i basar.
+      // ⚠️ Birleşik dize AYNEN kalıyor: bayrak kapalıyken çıktı bayt-bayt aynı olsun
+      // ve donmuş eski belgeler yeni alan olmadan da doğru basılabilsin.
+      const custItemOnly = ci || cc ? [ci ?? r.item.name, widthStr].filter(Boolean).join(" ") : null;
+      // ⚠️ FALLBACK YOK ve bu BİLİNÇLİ (kullanıcı düzeltmesi 2026-09-06):
+      // "çoğu müşteri bizim renk adımızı kullanır." Yani renk karşılığının olmaması
+      // eksik veri DEĞİL, normal hâldir. Ayrık kipte bizim adımızı "MÜŞTERİ VARYANT"
+      // başlığı altında basmak onu müşterinin adıymış gibi gösterirdi — yanlış
+      // etiketleme. Karşılığı olmayan satırda sütun BOŞ kalır.
+      const custColorOnly = cc ?? null;
       const g =
         productMap.get(stokAdi) ??
-        { name: stokAdi, customerName: custName, rollCount: 0, totalMeters: D0() };
+        {
+          name: stokAdi,
+          customerName: custName,
+          customerItemOnly: custItemOnly,
+          customerColorOnly: custColorOnly,
+          rollCount: 0,
+          totalMeters: D0(),
+        };
       g.rollCount += 1;
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);

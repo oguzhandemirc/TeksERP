@@ -88,6 +88,10 @@ export const PERMISSION_CATALOG = [
   // Sevk geri alma (storno) — `shipping:write`ten AYRI: sevk eden herkesin resmi
   // çıkış belgesini iptal edip stok/karşılanma defterini geri sarabilmesi istenmiyor.
   { code: "shipping:undo-dispatch", module: "LOGISTICS", category: "web", description: "Sevk edilmiş sevkiyatı geri alma (irsaliye iptal + stok depoya)" },
+  // Defter onarımı — `shipping:write`ten AYRI (aynı gerekçe: sevk eden herkes
+  // GEÇMİŞ bir sevkiyatın sipariş defterini değiştirmemeli). Onarım irsaliyenin
+  // yeni bir sürümünü doğurur; sahadaki yöneticiye bilinçli olarak atanır.
+  { code: "shipping:repair-allocation", module: "LOGISTICS", category: "web", description: "Siparişe yazılamamış sevkiyatların defterini onarma (irsaliye v+1 doğurur)" },
   { code: "return:read", module: "LOGISTICS", category: "web", description: "İade takibi raporu görüntüleme" },
   { code: "return:write", module: "LOGISTICS", category: "web", description: "İade alma + iade nedeni kataloğu oluşturma/düzenleme/silme" },
   // ── Ticaret paketi: çoklu depo + mal kabul (2026-08-13) ────────────────────

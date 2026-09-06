@@ -1,0 +1,55 @@
+{
+  "tarih": "2026-09-05",
+  "gorev": "main dalinda KIRMIZI olan dort backend bekcisini teshis et ve yesile cek (P2002 kumesi)",
+  "kosucu": "cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parcasi>",
+  "hedefDb": "tekserp_demo @ localhost (yerel)",
+  "bekciler": [
+    {
+      "bekci": "test_spec_availability",
+      "sinif": "kalinti-fixture",
+      "kokNeden": "Renk fixture'i KODU damgaliyor (TST-SPEC-CLRA-${ts}) ama ADI damgalamiyordu (\"Test Spec Renk A\"). Renk adinda ifade-UNIQUE sed var: colors_nameFoldColor_key = UNIQUE(tr_fold_color(name)) WHERE mergedIntoId IS NULL (migration 20260825120000_color_name_unique_live). Fixture create'leri try blogunun DISINDA oldugu icin ilk yarim kosum renkleri DB'de birakti; ikinci kosum ayni adla P2002 aldi ve tek kontrol bile kosamadi.",
+      "yapilan": "colorA/colorB/station adlari ${ts} ile damgalandi; damganin NEDENI 2 satirlik yorum olarak yazildi.",
+      "degisenDosyalar": ["/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/scripts/test_spec_availability.ts"],
+      "silinenSatir": "items 5 (TST-SPEC-ITM-*), colors 2 (TST-SPEC-CLR*), stations 0, sacks 0, customers 0, shipments 0, rolls 0, work_orders 0 — toplam 7 satir (paylasilan temizlik kosumunun icinde)",
+      "sonKosum": "✅ test_spec_availability.ts                  10 gecti, 0 basarisiz    0.5s",
+      "yesilMi": true,
+      "not": "P2002 sondasi: ust uste UC kosum yesil (kalinti artik ikinci kosumu dusurmuyor)."
+    },
+    {
+      "bekci": "test_shipment_filters",
+      "sinif": "kalinti-fixture",
+      "kokNeden": "Ayni sinif: colorX \"TEST MAVI\", colorY \"TEST RENK Y\" ve returnReason \"TEST IADE NEDENI\" adlari DAMGASIZDI. Renk colors_nameFoldColor_key ifade-UNIQUE'ine, iade nedeni return_reasons_nameFold_key partial UNIQUE'ine takiliyor. Kodlar damgaliydi, adlar degildi.",
+      "yapilan": "colorX/colorY/reason adlari ${ts} ile damgalandi + gerekce yorumu.",
+      "degisenDosyalar": ["/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/scripts/test_shipment_filters.ts"],
+      "silinenSatir": "customers 6 (TEST-SFL-*, TEST-SFL-X-*), items 6 (TST-SFL-A/B-*), colors 2 (TST-SFL-X/Y-*), return_reasons 1 (TEST-SFL-RSN-*), rolls 4 (TEST-SFL-R1..R4-*), sacks 1 (CV0509260001 — sackNo damgasiz ama customerId'si TEST-SFL musterisi ve icindeki tek top TEST-SFL-R; provenans bekcinin kendi on ekinden zincirle kuruldu, bugun 09:05'te dogmus)",
+      "sonKosum": "✅ test_shipment_filters.ts                   11 gecti, 0 basarisiz    0.8s",
+      "yesilMi": true
+    },
+    {
+      "bekci": "test_accounting_direct_ship",
+      "sinif": "kalinti-fixture",
+      "kokNeden": "Ayni sinif: renk adi \"LACIVERT-TEST\" damgasizdi (kod TST-ADS-C-${ts} damgaliydi) → colors_nameFoldColor_key.",
+      "yapilan": "Renk adi ${ts} ile damgalandi + gerekce yorumu. customerBranch code \"IHR-01\" bilerek SABIT birakildi: belge cikti kontrolu (htmlStr.includes(\"IHR-01\")) ona bagli ve customer_branches'te ad/kod UNIQUE'i YOK (olculdu, pg_indexes).",
+      "degisenDosyalar": ["/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/scripts/test_accounting_direct_ship.ts"],
+      "silinenSatir": "customers 3 (TST-ADS-*), colors 1 (TST-ADS-C-*), rolls 2 (TST-ADS-R100/R150-*), work_orders 1 (TST-ADS-*), orders 1 + orderLine 1 (TST-ADS-ORD-*), customer_branches 1 (TST-ADS musterisine bagli)",
+      "sonKosum": "✅ test_accounting_direct_ship.ts             21 gecti, 0 basarisiz    0.8s",
+      "yesilMi": true
+    },
+    {
+      "bekci": "test_manual_move_fason_receive",
+      "sinif": "bayat-bekci",
+      "kokNeden": "P2002 DEGIL — yanlis teshis edilmisti. Bekci ilk ifadesinde assertGelistirmeVeritabani() (scripts/db-guard.ts) cagiriyor ve kapi 'tekserp_demo   ← TANINMAYAN AD' diyerek process.exit(1) yapiyordu. Kapinin izin listesi ESKI gelistirme DB adini tasiyordu (adnansahin_db). Gelistirme DB'si 2026-09-03'te tekserp_demo olarak yeniden adlandirildi (docs/GELISTIRME-DONGUSU.md:9,44 · docs/design/DOKUMAN-MERCEK-RAPORU-2026-09-03.md:65-67,173-179) ama db-guard guncellenmedi. Ustelik iki kapi ayni adi ZIT siniflandiriyordu: scripts/lib/hedef-db-kapisi.ts adnansahin_db'yi YAZILMASI_YASAK_DB (uretim) sayiyor, db-guard.ts ise TEK izinli gelistirme hedefi sayiyordu.",
+      "yapilan": "db-guard.ts izin listesi ada degil SON EKE dayandirildi: IZINLI_SON_EKLER'e '_demo' eklendi, IZINLI_DB_ADLARI bosaltildi (adnansahin_db kaldirildi — diger kapida uretim adi). Gerekce ve tarih kolon basligina 4 satir yorum olarak yazildi; hata metni bos kume ile de dogru basiyor. Kapinin KENDISI korundu — test_script_guards.ts KAPI_ZORUNLU_TESTLER listesi bu dosyanin kapiyi kaybetmesini kirmizi verir (yeniden kosuldu: 9 gecti). Ayrica ozet satiri sozlesme formatina cevrildi ('== N passed ==' → '=== Sonuc: N gecti, M basarisiz ==='), boylece kosucu sayilari okuyor: 'gecti (exit 0)' yerine '7 gecti, 0 basarisiz' — yesil ≠ kapsandi korlugu kapandi.",
+      "degisenDosyalar": [
+        "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/scripts/db-guard.ts",
+        "/Users/demirci/Documents/Projeler/Teks-Erp/Teks-Erp/scripts/test_manual_move_fason_receive.ts"
+      ],
+      "silinenSatir": "yok (bu bekcinin kendi damgasi TSTMMF* ve kalintisi yoktu)",
+      "sonKosum": "✅ test_manual_move_fason_receive.ts          7 gecti, 0 basarisiz    0.7s",
+      "yesilMi": true,
+      "not": "Kapiyi genisletmek bir GUVENLIK karari; fail-closed kalmaya devam ediyor (uzak host + NODE_ENV=production hala reddediliyor, kacis anahtari yok)."
+    }
+  ],
+  "ortakBulgu": "Dordunden UCU ayni sinif: 'kodu damgali, ADI damgasiz master-data fixture'i'. Bu repoda ad uzerinde ONBIR canli UNIQUE sed var (olculdu, pg_indexes): colors_nameFoldColor_key (ifade: tr_fold_color(name), predicate mergedIntoId IS NULL) · customers/items/subcontractors_nameFold_key (partial) · return_reasons · defect_types · quality_grades · routes · product_recipes · fabric_properties · peripheral_devices · cash_boxes · bank_accounts · machines(stationId,nameFold) + document_profiles/label_templates/traveler_card_templates duz name UNIQUE. Standart cumlesi: 'Fixture'da damga KODA degil KAYDIN TAMAMINA konur — ad da damgalanir; cunku sed adin uzerindedir ve kod damgasi onu kurtarmaz.' Ikinci ders: fixture create'leri try blogunun DISINDA kalirsa ilk yarim kosum kalinti birakir; damgalama bu kalintiyi ZARARSIZ hale getirir (asil savunma budur). Ucuncu ders: DB adi PROFIL degeridir — izin listesi ada degil SON EKE dayanmali, yoksa DB yeniden adlandirilinca kapi bayatlar ve bekciyi hic kosturmadan dusurur.",
+  "kapsamDisiUyari": "TEMIZLIK KOSUMUMDA KAPSAM ASIMI OLDU, ana oturum bilsin: temizlik betigine 'TEST-MM-' on ekini de koydum. Bu on ek BENIM bekcime ait DEGIL — scripts/fixture-manual-move.ts uretiyor ve ONU 10 baska bekci paylasiyor (test_manual_move_backflush, test_manual_move_qc_reversal, test_manual_move_field_continuity, test_manual_roll_undo, test_tambur_manual_field/batch/roll, test_quality_batch_flags, test_sack_status_invariant, test_fason_wrong_station_guidance). Silinen: 4 work_order + 4 roll + 13 workOrderStep + 3 batch + 1 travelerCard + 1 rollPlanDeviation. Bunlarin ikisi oturumumdan ONCE de duran bayat kalintiydi, ikisi olcum sirasinda BELIREN satirlardi (paralel kosan baska bir ajan olmali). Ayrica test_consistency.ts:312 TEST-MM-* kalintisini BILINEN/KABUL EDILEN gurultu olarak muaf tutuyor — yani silinmemeliydi. Etki: fixture satirlaridir, her kosum yenisini uretir; ama o an kosan bir bekci FK/kayit-yok hatasi almis olabilir. ONERI: yukaridaki 10 bekciden o sirada kosanlar yeniden kosulsun."
+}

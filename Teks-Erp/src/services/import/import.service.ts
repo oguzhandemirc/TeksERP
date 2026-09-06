@@ -735,11 +735,31 @@ export class ImportService {
     records: Array<{ action: string; tableName: string; recordId: string; createdAt: Date }>;
     archivedAfterMonths: number;
   }> {
-    const run = await prisma.importRun.findUnique({ where: { id }, select: { id: true } });
+    const run = await prisma.importRun.findUnique({
+      where: { id },
+      // TARİH SEDDİ için okunuyor (aşağıya bak) — `id` tek başına yetmiyordu.
+      select: { id: true, createdAt: true, finishedAt: true },
+    });
     if (!run) throw AppError.notFound("İçe aktarım kaydı bulunamadı");
+    // TARİH SEDDİ (2026-09-05 perf turu). jsonb path yüklemi indexlenemez →
+    // sorgu system_logs'u baştan sona tarayıp sonucu ayrıca SIRALIYORDU:
+    // ölçüldü 11,48 ms / 2.497 buffer (Seq Scan + Sort, 51.163 satır elendi).
+    // Koşumun kendi penceresi doğal sınırdır: satır audit'i koşum başlamadan
+    // yazılamaz, bittikten sonra da yalnız `logMany` gecikmesi kadar sürer.
+    // ⚠️ ±10 dk pay ZORUNLU: `finishedAt` Node saatinden, `createdAt` DB
+    // saatinden gelir (ölçüldü: token'sız koşumda finishedAt createdAt'ten 1-2 ms
+    // ÖNCE) ve `logMany` damgadan SONRA koşar. `finishedAt` NULL = koşum sürüyor
+    // → üst sınır bugün. Ölçüm: 1,33 ms / 1.529 buffer, Index Scan
+    // (system_logs_createdAt_idx), Sort düğümü kayboldu; 75 audit satırının
+    // 75'i pencerede kaldı (sonuç kümesi DEĞİŞMEDİ).
+    const WINDOW_MS = 10 * 60_000;
     const rows = await prisma.systemLog.findMany({
       where: {
         category: "DOMAIN",
+        createdAt: {
+          gte: new Date(run.createdAt.getTime() - WINDOW_MS),
+          lte: new Date((run.finishedAt ?? new Date()).getTime() + WINDOW_MS),
+        },
         newData: { path: ["importRunId"], equals: id },
       },
       select: { action: true, tableName: true, recordId: true, createdAt: true },

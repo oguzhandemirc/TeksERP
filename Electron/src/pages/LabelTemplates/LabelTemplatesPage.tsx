@@ -20,7 +20,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { PermissionGate } from "@/components/PermissionGate";
 import {
   labelTemplateService,
-  type LabelTemplate,
+  type LabelTemplateListRow,
   type TemplateEnvelope,
 } from "@/services/labelTemplateService";
 import { PoolRow } from "./TemplateRow";
@@ -39,7 +39,7 @@ export function LabelTemplatesPage({
   const [newOpen, setNewOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [hardDeleting, setHardDeleting] = useState<{ id: string; name: string } | null>(null);
-  const [printing, setPrinting] = useState<LabelTemplate | null>(null);
+  const [printing, setPrinting] = useState<LabelTemplateListRow | null>(null);
 
   const importMut = useMutation({
     mutationFn: (env: TemplateEnvelope) => labelTemplateService.importTemplate(env),
@@ -121,8 +121,8 @@ export function LabelTemplatesPage({
 function PoolList({ onEdit, onDelete, onHardDelete, onPrint }: {
   onEdit: (id: string) => void;
   onDelete: (id: string) => void;
-  onHardDelete: (t: LabelTemplate) => void;
-  onPrint: (t: LabelTemplate) => void;
+  onHardDelete: (t: LabelTemplateListRow) => void;
+  onPrint: (t: LabelTemplateListRow) => void;
 }) {
   const qc = useQueryClient();
   const query = useQuery({
@@ -150,7 +150,7 @@ function PoolList({ onEdit, onDelete, onHardDelete, onPrint }: {
     },
   });
 
-  const handleExport = async (t: LabelTemplate) => {
+  const handleExport = async (t: LabelTemplateListRow) => {
     try {
       const env = await labelTemplateService.exportTemplate(t.id);
       const json = JSON.stringify(env, null, 2);

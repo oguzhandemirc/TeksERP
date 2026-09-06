@@ -79,7 +79,8 @@ async function stockRoll(qty: number): Promise<string> {
 let woId = "";
 const stepIds: string[] = [];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// Fixture kaçış kapısı: `no-explicit-any` bekçi kapsamında AÇIK DEĞİL
+// (eslint.config.mjs § KAPSAM) — bu takma ad, `any`yi tek noktada görünür tutar.
 type Any = any;
 
 async function main(): Promise<void> {

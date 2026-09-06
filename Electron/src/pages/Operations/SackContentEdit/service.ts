@@ -2,6 +2,8 @@ import apiClient from "@/services/apiClient";
 import type { ApiResponse, CursorPaginatedResponse, CursorParams } from "@/types/api";
 import { buildCursorQueryString } from "@/lib/query-builder";
 import type {
+  BulkDistributePreview,
+  BulkDistributeResult,
   AddKartelaResult,
   CreatedShipment,
   CreateShipmentPreview,
@@ -12,6 +14,7 @@ import type {
   PickListRow,
   SackContentDumpSack,
   SackCustomerBucket,
+  SackCustomerPage,
   SackContents,
   SackSearchRow,
   ScanResult,
@@ -253,6 +256,21 @@ export const sackHubService = {
         ...(body?.rollIds?.length ? { rollIds: body.rollIds } : {}),
         ...(body?.swatchIds?.length ? { swatchIds: body.swatchIds } : {}),
       })
+      .then((r) => r.data),
+
+  /**
+   * TOPLU DAĞITMA — ÖNİZLEME. Yazma YOK: yıkıcı işlem önce etkilenen HER kaydı
+   * gösterir (kök CLAUDE.md), soyut sayı yetmez.
+   */
+  previewDistributeSacks: (sackIds: string[]): Promise<ApiResponse<BulkDistributePreview>> =>
+    apiClient
+      .post<ApiResponse<BulkDistributePreview>>("/api/shipping/sacks/distribute/preview", { sackIds })
+      .then((r) => r.data),
+
+  /** TOPLU DAĞITMA — uygula. Engelli çuval ATLANIR ve sebebi yanıtta döner. */
+  distributeSacksBulk: (sackIds: string[]): Promise<ApiResponse<BulkDistributeResult>> =>
+    apiClient
+      .post<ApiResponse<BulkDistributeResult>>("/api/shipping/sacks/distribute/bulk", { sackIds })
       .then((r) => r.data),
 
   /** Seçili topları başka depo çuvalına TOPLU taşı. */

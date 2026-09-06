@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   labelKindLabels,
   type ContextDefaultRow,
-  type LabelTemplate,
+  type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
 import {
   resolveTemplateRowActions,
@@ -38,7 +38,7 @@ export function PoolRow({
   template: t,
   defaults,
   ...handlers
-}: { template: LabelTemplate; defaults: ContextDefaultRow[] } & RowHandlers) {
+}: { template: LabelTemplateListRow; defaults: ContextDefaultRow[] } & RowHandlers) {
   const defaultFor = defaults.filter((d) => d.templateId === t.id);
   const isAnyDefault = defaultFor.length > 0;
   return (
@@ -83,7 +83,7 @@ function RowActions({
   onPrint,
   onExport,
   onDuplicate,
-}: { template: LabelTemplate; isAnyDefault: boolean } & RowHandlers) {
+}: { template: LabelTemplateListRow; isAnyDefault: boolean } & RowHandlers) {
   const slots = resolveTemplateRowActions({ isActive: t.isActive, isAnyDefault });
   const can = (key: TemplateRowActionKey) => slots.find((s) => s.key === key)?.applicable ?? false;
   const toggleDir = resolveToggleDirection({ isActive: t.isActive, isAnyDefault });

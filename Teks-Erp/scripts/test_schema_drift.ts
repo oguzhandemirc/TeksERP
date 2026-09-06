@@ -94,13 +94,17 @@ const EXPECTED_DRIFT: Array<{ sql: string; why: string }> = [
 // (test_db_invariants §1 aynı index'leri "eksikse kırmızı" ile zaten izliyor —
 // yani sed kaybı sessiz kalmaz; bu tolerans yalnız drift kapısını susturur).
 const TOLERATED_DRIFT: Array<{ sql: string; why: string }> = [
-  "customers",
-  "items",
-  "subcontractors",
-].map((t) => ({
-  sql: `CREATE UNIQUE INDEX "${t}_nameFold_key" ON "${t}"("nameFold")`,
-  why: "yumuşak kapı (mükerrer varken atlandı) — temizlik + enforce bekliyor",
-}));
+  ...["customers", "items", "subcontractors"].map((t) => ({
+    sql: `CREATE UNIQUE INDEX "${t}_nameFold_key" ON "${t}"("nameFold")`,
+    why: "yumuşak kapı (mükerrer varken atlandı) — temizlik + enforce bekliyor",
+  })),
+  // 20260905150000_sack_tag_ad_seddi — AYNI yumuşak kapı deseni (mükerrer ad
+  // varsa index ATLANIR, deploy geçer). Dev/CI'da tablo temiz → hiç görünmez.
+  {
+    sql: `CREATE UNIQUE INDEX "sack_tags_name_key" ON "sack_tags"("name")`,
+    why: "yumuşak kapı (mükerrer çuval izi adı varken atlandı) — temizlik + enforce bekliyor",
+  },
+];
 
 /** Boşluk/satır sonu farklarına dayanıklı normalize (tek boşluk, sondaki ; yok). */
 function norm(sql: string): string {

@@ -9,13 +9,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PermissionGate } from "@/components/PermissionGate";
 import {
-  useOffsiteStatus,
   updateOffsiteConfig,
   testOffsiteConnection,
   sweepOffsiteNow,
   authorizeOffsiteDrive,
   OFFSITE_QUERY_KEY,
 } from "./service";
+import { useOffsiteStatus } from "./hooks";
 
 /**
  * OFFSITE YEDEK KARTI — "yedeklerim başka bir yerde mi" sorusunun tek yüzeyi.

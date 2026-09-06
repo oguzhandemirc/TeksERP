@@ -98,7 +98,7 @@ const PAROLA_2 = "bekci-p8-parola-2";
 
 /** `finally` için: geri alınacak durum. */
 let fixtureId: string | null = null;
-let pasifleşenler: Array<{ id: string; fullName: string }> = [];
+let pasiflesenler: Array<{ id: string; fullName: string }> = [];
 /** Sızıntı taramasının arayacağı sırlar (ölçüm sonunda dolar). */
 const sirlar: string[] = [];
 
@@ -191,7 +191,7 @@ async function main(): Promise<void> {
     where: { isSystemAccount: true },
     select: { id: true, username: true, fullName: true },
   });
-  pasifleşenler = mevcutlar.map((m) => ({ id: m.id, fullName: m.fullName }));
+  pasiflesenler = mevcutlar.map((m) => ({ id: m.id, fullName: m.fullName }));
   for (const m of mevcutlar) {
     await prisma.user.update({
       where: { id: m.id },
@@ -199,8 +199,8 @@ async function main(): Promise<void> {
     });
   }
   console.log(
-    pasifleşenler.length
-      ? `   ${pasifleşenler.length} hesap geçici pasifleştirildi (${mevcutlar.map((m) => m.username).join(", ")}) — finally'de geri alınacak`
+    pasiflesenler.length
+      ? `   ${pasiflesenler.length} hesap geçici pasifleştirildi (${mevcutlar.map((m) => m.username).join(", ")}) — finally'de geri alınacak`
       : "   DB'de satıcı hesabı yoktu — doğum yolu doğrudan ölçülüyor",
   );
   check(
@@ -797,7 +797,7 @@ main()
         await prisma.userPermission.deleteMany({ where: { userId: fixtureId } });
         await prisma.user.delete({ where: { id: fixtureId } });
       }
-      for (const p of pasifleşenler) {
+      for (const p of pasiflesenler) {
         await prisma.user.update({
           where: { id: p.id },
           data: { isSystemAccount: true, fullName: p.fullName },

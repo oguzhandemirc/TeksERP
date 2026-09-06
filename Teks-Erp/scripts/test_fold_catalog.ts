@@ -124,11 +124,20 @@ async function main() {
     // ⚠️ `safe` ile sarılı: sonda koşarken (regex `[24]`e geri alınınca) bu
     // çağrı FIRLATIR. Sarmazsak test çöker ve hangi kontrolün düştüğü
     // görünmez — bekçi kırmızı verir ama NEDENİNİ söylemez.
+    // ⚠️ HATA METNİ YUTULMAZ (2026-09-05): sabit `__THROWN__` döndürmek, geçici
+    // bir altyapı arızasını ("too many clients" / bağlantı zaman aşımı) sıradan
+    // bir assertion kırmızısına çeviriyordu. Koşucunun ALTYAPI YENİDEN DENEMESİ
+    // çıktıdaki imzaya bakar (`looksInfrastructural`) — imza yutulunca hiç
+    // tetiklenmez ve kırmızı teşhissiz kalır (ölçüldü: tam pakette 24/1, aynı
+    // sırayla tekrarında 25/0; §12-25 çıktısı yeşil koşumla BİREBİR aynıydı).
+    // Ayrıca sonuç TEK KEZ okunur: iki ayrı çağrı iki farklı cevap verebilir ve
+    // kontrolün düştüğü değer ile basılan değer ayrışırdı.
     const safe = async (v: string) => {
-      try { return await resolveFoldTypeForWrite(v); } catch { return `__THROWN__`; }
+      try { return await resolveFoldTypeForWrite(v); }
+      catch (e) { return `__THROWN__: ${e instanceof Error ? e.message : String(e)}`; }
     };
-    check("değer eklendikten SONRA aynı kod KABUL edilir", (await safe(NEW_FOLD)) === NEW_FOLD,
-      String(await safe(NEW_FOLD)));
+    const alinan6 = await safe(NEW_FOLD);
+    check("değer eklendikten SONRA aynı kod KABUL edilir", alinan6 === NEW_FOLD, String(alinan6));
     // Biçim + katalog BİRLİKTE: rakamlı yazım normalleşip katalogla eşleşmeli.
     // (Bu kontrol gerçek bir rakam kodu ister → kataloğa geçici "7-KAT" eklenir.)
     const v7 = await prisma.fabricPropertyValue.create({
@@ -136,8 +145,8 @@ async function main() {
       select: { id: true },
     });
     probeValueIds.push(v7.id);
-    check('"7 kat" yazımı da kabul (biçim + katalog birlikte)', (await safe("7 kat")) === "7-KAT",
-      String(await safe("7 kat")));
+    const alinan7 = await safe("7 kat");
+    check('"7 kat" yazımı da kabul (biçim + katalog birlikte)', alinan7 === "7-KAT", String(alinan7));
 
     // ── 5) Pasif değer: yazmada kabul, listede görünmez ─────────────────────
     const vOld = await prisma.fabricPropertyValue.create({

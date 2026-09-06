@@ -42,19 +42,17 @@ import { foldCodeForCompare } from "../../utils/code-format";
 
 /**
  * Kod tekilliği advisory lock namespace'i (2 argümanlı form).
- * Uzay envanteri (hepsi 2 ARGÜMANLI form): 8021 KK1 mükerrer giriş · 8022 parti no ·
- * 8023 sevkiyat kapsamı · 8024 oturum kaydı (`session-registry`) · 8025 izin yönetimi
- * (`permission-management`) · **8026 kod tekilliği**.
+ * Uzay envanteri TEK KAYNAK: `helpers/period-guard.helper.ts` başlığı — kopya
+ * liste tutulmaz. Bu uzay **8029 kod tekilliği**dir.
+ * ⚠️ 8026'DAN TAŞINDI: kod tekilliği ile CARİ dönem kapanışı aynı numarayı
+ * paylaşıyordu ve iki alakasız alt sistemi `hashtext` çakışmasında sessizce
+ * serileştiriyordu (yanlış sonuç değil, teşhisi imkânsız gecikme).
  * ⚠️ 1-argümanlı `pg_advisory_xact_lock(bigint)` formu bu kod tabanında HİÇ
- * KULLANILMIYOR (2026-08-15'te grep ile doğrulandı) — `shipment-locks.helper`'dan
- * kopyalanan "o uzayı session-registry + permission-management paylaşıyor" cümlesi
- * YANLIŞTI ve buradan silindi; ikisi de yukarıdaki 2-argümanlı numaraları taşıyor.
- * Yeni alt sistem eklerken bu listeden BOŞ bir numara seç (aynı numarayı paylaşmak
- * iki alakasız akışı sessizce serileştirir).
+ * KULLANILMIYOR (2026-08-15'te grep ile doğrulandı).
  */
 // `: number` BİLEREK — literal tipe daralırsa bekçideki "namespace'ler farklı"
 // karşılaştırması TS2367 ile derlenmez (SHIPMENT_LOCK_NS ile aynı gerekçe).
-export const CODE_UNIQUE_LOCK_NS: number = 8026;
+export const CODE_UNIQUE_LOCK_NS: number = 8029;
 
 /**
  * Kod anahtarını tx ömrü boyunca kilitle — aynı katlanmış kodu yazmaya çalışan

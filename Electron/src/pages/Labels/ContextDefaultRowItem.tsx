@@ -13,7 +13,7 @@ import {
   labelKindLabels,
   type ContextDefaultRow,
   type LabelKind,
-  type LabelTemplate,
+  type LabelTemplateListRow,
 } from "@/services/labelTemplateService";
 
 /**
@@ -29,7 +29,7 @@ export function ContextDefaultRowItem({
 }: {
   kind: LabelKind;
   assigned: ContextDefaultRow | undefined;
-  activeTemplates: LabelTemplate[];
+  activeTemplates: LabelTemplateListRow[];
   pending: boolean;
   onChange: (templateId: string | null) => void;
 }) {

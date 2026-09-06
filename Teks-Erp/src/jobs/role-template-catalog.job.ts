@@ -28,6 +28,7 @@
 // BEST-EFFORT: hata sunucuyu DÜŞÜRMEZ ama sessizce de yutulmaz.
 // =============================================================================
 
+import { Prisma } from "@prisma/client";
 import prisma from "../lib/prisma";
 import {
   ROLE_TEMPLATE_CATALOG,
@@ -51,14 +52,21 @@ export type RoleTemplateReconcileResult = {
 };
 
 /**
- * Katalogdaki rolleri DB ile uzlaştırır. Var olanı EZMEZ, hiçbir şeyi SİLMEZ.
- * Doğrudan çağrılabilir (test/script) — sunucuya bağımlılığı yoktur.
+ * Uzlaştırmanın YAZAN kısmı — üç modele dokunur (`permissionTemplate` update +
+ * create, `permissionTemplateItem` createMany) ve hepsi TEK tx'te olmalı: yarım
+ * kalan bir boot, kodu yazılmış ama izinleri eklenmemiş bir şablon bırakırdı ve
+ * o şablonla açılan yönetici eksik yetkiyle çalışırdı.
+ *
+ * Tx bütçesi ÖLÇÜLDÜ (2026-09-05): katalog 29 şablon / 298 izin bağı — en kötü
+ * hâl (boş DB) 29 create + 29 createMany; varsayılan 20 sn tavanının çok altında.
  */
-export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileResult> {
-  const permissions = await prisma.permission.findMany({ select: { id: true, code: true } });
+async function reconcileRoleTemplatesTx(
+  tx: Prisma.TransactionClient,
+): Promise<RoleTemplateReconcileResult> {
+  const permissions = await tx.permission.findMany({ select: { id: true, code: true } });
   const permIdByCode = new Map(permissions.map((p) => [p.code, p.id]));
 
-  const existing = await prisma.permissionTemplate.findMany({
+  const existing = await tx.permissionTemplate.findMany({
     select: {
       id: true,
       code: true,
@@ -115,7 +123,7 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
       const legacyName = legacyNameByCode.get(entry.code);
       const aday = legacyName ? codelessByFoldedName.get(foldNameForCompare(legacyName)) : undefined;
       if (aday) {
-        await prisma.permissionTemplate.update({
+        await tx.permissionTemplate.update({
           where: { id: aday.id },
           data: { code: entry.code },
         });
@@ -144,7 +152,7 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
         console.warn(`[role-templates] '${entry.code}' atlandı — hiçbir izni çözülemedi.`);
         continue;
       }
-      const yeni = await prisma.permissionTemplate.create({
+      const yeni = await tx.permissionTemplate.create({
         data: {
           code: entry.code,
           name: entry.name,
@@ -169,7 +177,7 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
     const mevcut = new Set(hedef.permissions.map((p) => p.permissionId));
     const eksik = wantedIds.filter((id) => !mevcut.has(id));
     if (eksik.length > 0) {
-      const res = await prisma.permissionTemplateItem.createMany({
+      const res = await tx.permissionTemplateItem.createMany({
         data: eksik.map((permissionId) => ({ templateId: hedef.id, permissionId })),
         skipDuplicates: true, // eşzamanlı boot yarışında güvenli (@@id bileşik)
       });
@@ -187,6 +195,19 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
     .filter((t) => !adoptedIds.has(t.id) && (!t.code || !katalogKodlari.has(t.code)))
     .map((t) => t.name)
     .sort();
+
+  return { total: ROLE_TEMPLATE_CATALOG.length, created, adopted, itemsAdded, custom };
+}
+
+/**
+ * Katalogdaki rolleri DB ile uzlaştırır. Var olanı EZMEZ, hiçbir şeyi SİLMEZ.
+ * Doğrudan çağrılabilir (test/script) — sunucuya bağımlılığı yoktur.
+ */
+export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileResult> {
+  // Çok-modelli yazım TEK tx'te; rapor/audit tx DIŞINDA (audit best-effort'tur,
+  // tx'e girerse kendi hatasıyla uzlaştırmayı geri sarardı).
+  const result = await prisma.$transaction((tx) => reconcileRoleTemplatesTx(tx));
+  const { created, adopted, itemsAdded, custom } = result;
 
   const eklenenIzinSayisi = Object.values(itemsAdded).reduce((a, l) => a + l.length, 0);
   if (created.length === 0 && adopted.length === 0 && eklenenIzinSayisi === 0) {
