@@ -83,7 +83,7 @@ check("körlük zemini: adlandırılmış logrotate bloğu bulundu", bas >= 0 &&
   `${komutlar.length} komut satırı`);
 check(
   "⭐ `pm2 install pm2-logrotate` GERÇEKTEN çağrılıyor (uyarı metninde geçmesi sayılmaz)",
-  komutVar(/^&\s+\$pm2\s+install\s+pm2-logrotate\b/),
+  komutVar(/^(?:&\s+\$pm2|\$\w+\s*=\s*Pm2Kos|Pm2Kos)\s+install\s+pm2-logrotate\b/),
 );
 
 // ── §2 ÜÇ AYAR DA VERİLİYOR ─────────────────────────────────────────────────
@@ -93,7 +93,7 @@ console.log("\n§2 — üç ayar da veriliyor");
 for (const ayar of ["max_size", "retain", "compress"]) {
   check(
     `⭐ \`pm2 set pm2-logrotate:${ayar}\` veriliyor`,
-    komutVar(new RegExp(`^&\\s+\\$pm2\\s+set\\s+pm2-logrotate:${ayar}\\s+\\S`)),
+    komutVar(new RegExp(`(?:&\\s+\\$pm2|Pm2Kos)\\s+set\\s+pm2-logrotate:${ayar}\\s+\\S`)),
   );
 }
 
@@ -155,6 +155,29 @@ check(
   "⭐ `kur.ps1` pakete giriyor (paket ile onu kuran script ayrışamaz)",
   readFileSync(join(KOK, "deploy", "paketle.ps1"), "utf8")
     .split("\n").some((l) => /^\s*Copy-Item\s+"\$repo\\deploy\\kur\.ps1"/.test(l)),
+);
+
+// ── §6 NATIVE ÇAĞRIDA YÖNLENDİRME YOK ────────────────────────────────────────
+// ⭐ Fabrika sunucusunda ÖLÇÜLDÜ (2026-09-07, PowerShell 5.1): `$ErrorActionPreference
+//    = "Stop"` yürürlükteyken bir native komutun stderr'ini YÖNLENDİRMEK
+//    (`2>$null` / `2>&1`) o satırı ÖLÜMCÜL yapar — komut BAŞARILI olsa bile,
+//    stderr'e tek satır yazması yeter. `pm2 delete <olmayan>` tam bunu yapıyor
+//    ve o çağrı GERİ ALMA yolunun ilk adımı: güncelleme yarıda kalınca
+//    çalıştırılacak araç, tam o anda hiçbir şey yapmadan ölüyordu.
+//    Çağrılar `Pm2Kos` yardımcısına taşındı (yönlendirme yok + EAP=Continue).
+console.log("\n§6 — native çağrılarda stderr yönlendirmesi yok");
+const yonlendiren = kur
+  .split("\n")
+  .map((l, i) => ({ n: i + 1, t: l.trim() }))
+  .filter((x) => !x.t.startsWith("#") && /(?:^|\s)2>(?:&1|\$null)/.test(x.t));
+check(
+  "⭐ `kur.ps1`te yönlendirilmiş native çağrı YOK (EAP=Stop altında ölümcül)",
+  yonlendiren.length === 0,
+  yonlendiren.length ? `satır ${yonlendiren.map((x) => x.n).join(", ")}` : "temiz",
+);
+check(
+  "⭐ `Pm2Kos` yardımcısı tanımlı ve EAP'yi geri koyuyor",
+  /function\s+Pm2Kos\b/.test(kur) && /finally\s*\{\s*\$ErrorActionPreference\s*=\s*\$eskiEAP/.test(kur),
 );
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

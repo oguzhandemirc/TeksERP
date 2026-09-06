@@ -95,6 +95,39 @@ param(
 )
 $ErrorActionPreference = "Stop"
 
+# =============================================================================
+# NATIVE KOMUTU "OLDURMEDEN" KOS  (2026-09-07, sahada olculdu)
+# =============================================================================
+# ⚠ PowerShell 5.1'de `$ErrorActionPreference = "Stop"` YURURLUKTEYKEN bir native
+#   komutun stderr'ini YONLENDIRMEK (`2>$null` ya da `2>&1`) o satiri OLUMCUL
+#   yapar: stderr satirlari ErrorRecord'a cevrilir ve NativeCommandError firlar.
+#   Komutun BASARILI olmasi fark etmez - stderr'e tek satir yazmasi yeter.
+#
+#   FABRIKA SUNUCUSUNDA OLCULDU (SAHINSRV, PowerShell 5.1, 2026-09-07):
+#     $ErrorActionPreference = "Stop"
+#     cmd /c "echo x 1>&2" 2>$null | Out-Null   -> PATLADI (NativeCommandError)
+#     cmd /c "echo x 1>&2" 2>&1    | Out-Null   -> PATLADI
+#     cmd /c "echo x 1>&2"         | Out-Null   -> GECTI
+#   Yani sorun stderr'in KENDISI degil, YONLENDIRILMESI.
+#
+# ⚠ NEDEN CIDDI: `pm2 delete <olmayan-uygulama>` stderr'e "Process or Namespace
+#   not found" yazar. Bu, GERI ALMA yolunun (`-GeriAl`) ilk adimidir ve orada
+#   uygulama zaten SILINMIS olur ([4/9] silmisti). Yani guncelleme yarida
+#   kalinca calistirilacak arac, tam o anda hicbir sey yapmadan oluyordu.
+#
+# ⚠ BU DOSYA macOS'ta YAZILIYOR ve PowerShell 7 5.1 gibi davranmiyor - bu yuzden
+#   duzeltme IKI KATLI: yonlendirme HIC yapilmaz (stderr ekrana duser, zararsiz)
+#   VE cagri suresince EAP "Continue"ya cekilir. Hangi mekanizma tetiklerse
+#   tetiklesin satir olumcul olamaz.
+function Pm2Kos {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$Arg)
+  $eskiEAP = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try   { & $pm2 @Arg | Out-Null }
+  finally { $ErrorActionPreference = $eskiEAP }
+  return $LASTEXITCODE
+}
+
 $kok       = $Kok
 $appDir    = "$kok\app"
 $eskiKlon  = "$kok\tekserp\Teks-Erp"      # ilk gecis: git klonundan gelen kurulum
@@ -186,7 +219,7 @@ if ($GeriAl) {
   Write-Host "GERI ALMA: $hedef  ->  $appDir" -ForegroundColor Yellow
   if (-not $Zorla) { if ((Read-Host "Devam? (e/h)") -ne 'e') { Fail "Iptal." } }
 
-  & $pm2 delete $uygulama 2>$null | Out-Null
+  Pm2Kos delete $uygulama | Out-Null
   $damga = Get-Date -Format "yyyyMMdd_HHmmss"
   try {
     if (Test-Path $appDir) { Move-Item $appDir "$kok\app.basarisiz-$damga" -Force -ErrorAction Stop }
@@ -384,7 +417,7 @@ Ok "$([System.IO.Path]::GetFileName($dump))  ($([math]::Round((Get-Item $dump).L
 
 # --- [4/9] Uygulamayi durdur ------------------------------------------------
 Adim "[4/9] pm2 uygulamasi durduruluyor..."
-& $pm2 delete $uygulama 2>$null | Out-Null   # delete: ecosystem env blogu degismis olabilir
+Pm2Kos delete $uygulama | Out-Null   # delete: ecosystem env blogu degismis olabilir
 Ok "durduruldu"
 
 # --- Buradan sonrasi icin otomatik geri alma --------------------------------
@@ -586,14 +619,23 @@ Ok "baslatildi ve kaydedildi (pm2 save)"
 # Fail DEGIL: internet yoksa surum yine cikmali - rotasyonsuz calismak hic
 # calismamaktan iyidir (mDNS firewall kuralindaki ayni gerekce).
 try {
-  & $pm2 install pm2-logrotate 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) {
+  $rotKod = Pm2Kos install pm2-logrotate
+  if ($rotKod -eq 0) {
     # 10M x 14 dosya ~ bir aylik gecmis (olculen ~5 MB/gun hizinda).
     # Donen dosyalar sikistirilir; CANLI dosya sikistirilmaz, dogrudan okunur.
-    & $pm2 set pm2-logrotate:max_size 10M   2>&1 | Out-Null
-    & $pm2 set pm2-logrotate:retain   14    2>&1 | Out-Null
-    & $pm2 set pm2-logrotate:compress  true 2>&1 | Out-Null
-    Ok "log rotasyonu ayarlandi (10M x 14 dosya, eskiler sikistirilir)"
+    # ⚠ AYARLAR AYRI RAPORLANIR: modul kurulup ayarlar yazilamazsa rotasyon
+    #   pm2 VARSAYILANLARIYLA kalir (retain 30, sikistirma yok) ve eskiden
+    #   ekranda yine "kuruldu" yazardi - mesaj gercegi soylemezdi.
+    $ayarKod = 0
+    $ayarKod += Pm2Kos set pm2-logrotate:max_size 10M
+    $ayarKod += Pm2Kos set pm2-logrotate:retain   14
+    $ayarKod += Pm2Kos set pm2-logrotate:compress true
+    if ($ayarKod -eq 0) {
+      Ok "log rotasyonu ayarlandi (10M x 14 dosya, eskiler sikistirilir)"
+    } else {
+      Uyar "pm2-logrotate KURULDU ama ayarlar yazilamadi - rotasyon pm2 varsayilanlariyla kosuyor."
+      Uyar "  -> elle: $pm2 set pm2-logrotate:max_size 10M ; retain 14 ; compress true"
+    }
   } else {
     Uyar "pm2-logrotate kurulamadi (internet yok?) - log dosyasi DONMEYECEK, sinirsiz buyur."
     Uyar "  -> internet gelince elle: $pm2 install pm2-logrotate"
