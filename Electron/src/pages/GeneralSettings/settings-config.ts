@@ -25,6 +25,7 @@ import { SETTING_KEYS as RAW_SETTING_KEYS } from "@/services/systemSettingServic
 import { BatchNumberHint } from "./BatchNumberHint";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
+  SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
   SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
   SHIPPING_INVOICE_MODE_OPTIONS,
 } from "@/lib/shipping-flags";
@@ -797,6 +798,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
         audience: ["Sevkiyat", "Muhasebeci"],
         desc: "Müşterinin bizim üründe kullandığı ad iki yerden gelir: sipariş satırına bir SEFERLİĞİNE yazılan ad (varsa O kazanır) ve müşteri kartındaki kalıcı karşılık (Müşteri Adları). İkisi de yoksa bizim adımız basılır — “Müşterideki ad” seçiliyken bile hücre boş kalmaz. Ad, sevk anında belgeye DONAR: müşteri kartındaki karşılığı sonradan değiştirmek eski irsaliyeyi değiştirmez. Bu ayar yalnız HANGİ adın basıldığını belirler; ayarı değiştirmek belgenin içeriğini değiştirmez, yeni revizyon doğurmaz, eski belgeler de yeni ayarla basılır. Kolon başlıklarını “Belge Alanları” tablosundan kendiniz yazabilirsiniz. NOT: kapsam sevk irsaliyesi + muhasebe fişidir; fasondan DOĞRUDAN sevk irsaliyesi bu ayarın dışındadır.",
+      },
+      {
+        enumKey: "shippingDocCekiNameMode",
+        title: "Çeki listesinde ad",
+        summary:
+          "Çeki listesi üstteki ayarı mı izlesin, yoksa kendi kuralı mı olsun (ör. hem bizim hem müşterinin adı).",
+        defaultValue: "devral",
+        options: SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
+        audience: ["Sevkiyat", "Depocu"],
+        desc: "Çeki listesi sevk irsaliyesinin bir bölümüdür ama TEK BAŞINA da basılabilir (Sevkiyat → Yazdır → Çeki Listesi) ve ambarda kontrol listesi olarak kullanılır. Bu yüzden orada “hem bizdeki hem müşterideki ad” istemek anlamlıdır — oysa müşteriye giden ürün listesinde iki ad birden istenmez. Varsayılan “Genel ayarı izle”: çeki listesi üstteki “Sevk belgesinde ürün adı” ayarının dediğini yapar, yani bugünkü çıktı tek bayt değişmez. Diğer üç seçenek YALNIZ çeki bölümünü çevirir; ürün listesine ve muhasebe fişine dokunmaz. Müşterideki ad karşılığı olmayan satırda bizim adımız basılır (hücre boş kalmaz).",
       },
     ],
   },

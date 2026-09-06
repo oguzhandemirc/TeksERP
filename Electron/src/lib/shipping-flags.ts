@@ -20,6 +20,8 @@ export type ShippingInvoiceMode = "dis" | "ic" | "ikisi";
 
 /** Sevk belgesinde ürün adı hangi dilden basılır. `bizdeki` = bugünkü çıktı. */
 export type ShippingDocItemNameMode = "bizdeki" | "musterideki" | "ikisi";
+/** Çeki listesi bölümünün ad rejimi. `devral` = genel rejimi izle (bugünkü davranış). */
+export type ShippingDocCekiNameMode = "devral" | "bizdeki" | "musterideki" | "ikisi";
 
 export const SHIPMENT_ORDER_REQUIREMENT_OPTIONS: ReadonlyArray<{
   value: ShipmentOrderRequirement;
@@ -94,6 +96,35 @@ export const SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS: ReadonlyArray<{
 
 export const DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE: ShippingDocItemNameMode = "bizdeki";
 
+export const SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS: ReadonlyArray<{
+  value: ShippingDocCekiNameMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "devral",
+    label: "Genel ayarı izle (varsayılan)",
+    hint: "Çeki listesi, üstteki “Sevk belgesinde ürün adı” ayarının dediğini yapar. Bugünkü davranış.",
+  },
+  {
+    value: "bizdeki",
+    label: "Bizdeki ad",
+    hint: "Çeki listesinde yalnız kendi desen/renk adımız yazar — genel ayar ne olursa olsun.",
+  },
+  {
+    value: "musterideki",
+    label: "Müşterideki ad",
+    hint: "Çeki listesinde müşterinin verdiği ad yazar; karşılığı yoksa bizim adımız basılır.",
+  },
+  {
+    value: "ikisi",
+    label: "İkisi de (iki kolon)",
+    hint: "Çeki listesinde hem bizim hem müşterinin adı yan yana yazar — ambar kontrolü için.",
+  },
+] as const;
+
+export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "devral";
+
 /** Değer geçerli mi (sunucudan gelen bilinmeyen metni sağlamlaştırır). */
 export function isShipmentOrderRequirement(v: unknown): v is ShipmentOrderRequirement {
   return v === "off" || v === "warn" || v === "block";
@@ -105,4 +136,8 @@ export function isShippingInvoiceMode(v: unknown): v is ShippingInvoiceMode {
 
 export function isShippingDocItemNameMode(v: unknown): v is ShippingDocItemNameMode {
   return v === "bizdeki" || v === "musterideki" || v === "ikisi";
+}
+
+export function isShippingDocCekiNameMode(v: unknown): v is ShippingDocCekiNameMode {
+  return v === "devral" || v === "bizdeki" || v === "musterideki" || v === "ikisi";
 }

@@ -25,10 +25,12 @@ import {
   readDocumentsConfig,
   readDocumentsLogo,
   readShippingDocItemNameMode,
+  readShippingDocCekiNameMode,
   sanitizeDocumentsConfig,
   type CompanyLetterhead,
   type DocumentConfig,
   type ShippingDocItemNameMode,
+  type ShippingDocCekiNameMode,
 } from "./system-setting.service";
 import { ApiResponse } from "../types/api.types";
 import { SAMPLE_PRINTED_DOCS } from "./document-render/sample-data";
@@ -188,6 +190,8 @@ export interface BuilderEntry {
        * sevk irsaliyesi uygular.
        */
       itemNameMode?: ShippingDocItemNameMode;
+      /** Çeki bölümünün rejimi; `devral` ise `itemNameMode` geçerlidir. */
+      cekiNameMode?: ShippingDocCekiNameMode;
     },
   ) => string;
 }
@@ -338,6 +342,7 @@ async function buildRenderExtras(
   printedBy: string | null;
   printNote: string | null;
   itemNameMode: ShippingDocItemNameMode;
+  cekiNameMode: ShippingDocCekiNameMode;
 }> {
   let qrDataUrl: string | null = null;
   if (snapshot.docConfigOverride?.qr) {
@@ -360,6 +365,7 @@ async function buildRenderExtras(
     // tam da eski belgelerin yeniden baskısına ulaşmalıdır. Ad zaten
     // snapshot'ta donmuştur — değişen yalnız hangi kolonun basıldığıdır.
     itemNameMode: await readShippingDocItemNameMode(),
+    cekiNameMode: await readShippingDocCekiNameMode(),
   };
 }
 

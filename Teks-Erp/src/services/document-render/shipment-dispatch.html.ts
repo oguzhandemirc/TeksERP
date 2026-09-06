@@ -248,6 +248,12 @@ interface RenderMeta {
    * ve örnek/taslak render'lar bugünkü çıktıyı bayt-bayt korur.
    */
   itemNameMode?: "bizdeki" | "musterideki" | "ikisi";
+  /**
+   * ÇEKİ BÖLÜMÜNÜN REJİMİ (`shipping.docCekiNameMode`, 2026-09-06) — yalnız çeki
+   * listesini çevirir, ürün listesine dokunmaz. `devral` (varsayılan, ve alan hiç
+   * verilmediğinde) `itemNameMode`u izler → bugünkü çıktı bayt-bayt korunur.
+   */
+  cekiNameMode?: "devral" | "bizdeki" | "musterideki" | "ikisi";
   /** Snapshot logoHash'inin çözülmüş görseli (servis katmanı çözer). */
   logoDataUrl?: string | null;
   /** cfg.qr açıksa belge doğrulama karekodu (servis üretir). */
@@ -489,6 +495,15 @@ export function renderShipmentDispatchHtml(
   const nameMode = meta.itemNameMode ?? "bizdeki";
   const showOurName = nameMode !== "musterideki";
   const showCustName = nameMode !== "bizdeki";
+  // ÇEKİ BÖLÜMÜ AYRI REJİM (2026-09-06). Çeki listesi tek başına da basılabiliyor
+  // (`DispatchPrintOptions`) ve ambar elemanının kontrol listesi olarak kullanılıyor;
+  // orada "hem bizdeki hem müşterideki ad" anlamlı, müşteriye giden ÜRÜN LİSTESİNDE
+  // değil. Tek global rejim ikisini birden çeviriyordu.
+  // `devral` (varsayılan) → genel rejim; yani bayrak yazılmadıkça TEK BAYT değişmez.
+  const cekiRaw = meta.cekiNameMode ?? "devral";
+  const cekiMode = cekiRaw === "devral" ? nameMode : cekiRaw;
+  const cekiShowOurName = cekiMode !== "musterideki";
+  const cekiShowCustName = cekiMode !== "bizdeki";
   /** Müşteri adı yoksa bizimkine düş — tek kaynak (üç hücre de bunu çağırır). */
   const custOr = (cust: string | null | undefined, ours: string): string =>
     (cust ?? "").trim() || ours;
@@ -602,13 +617,13 @@ export function renderShipmentDispatchHtml(
           // Varsayılan GÖRÜNÜR (2026-08-05 ürün kararı — lot no müşterinin de
           // sorduğu bilgi). Normal blocklist: `columns.ceki.hidden` ile kapatılır.
           { key: "batchNumber", label: L.parti, align: "l", cell: (c) => esc(c.batchNumber ?? "—") },
-          ...(showOurName
+          ...(cekiShowOurName
             ? [
                 { key: "desen", label: L.desen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.desen) },
                 { key: "varyant", label: L.varyant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(c.varyant) },
               ]
             : []),
-          ...(showCustName
+          ...(cekiShowCustName
             ? [
                 { key: "customerDesen", label: L.musteriDesen, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerDesen, c.desen)) },
                 { key: "customerVaryant", label: L.musteriVaryant, align: "l" as const, cell: (c: ShipmentDocCeki) => esc(custOr(c.customerVaryant, c.varyant)) },

@@ -322,6 +322,9 @@ export const updateSchema = z.strictObject({
   // shipping.docItemNameMode — sevk belgesinde ürün adı (default bizdeki = bugünkü
   // çıktı, bayt-bayt). `musterideki` karşılığı olmayan üründe bizim adımıza düşer.
   shippingDocItemNameMode: z.enum(["bizdeki", "musterideki", "ikisi"]).optional(),
+  // shipping.docCekiNameMode — YALNIZ çeki bölümü (default devral = genel rejimi
+  // izler, yani bugünkü davranış). Ürün listesine dokunmaz.
+  shippingDocCekiNameMode: z.enum(["devral", "bizdeki", "musterideki", "ikisi"]).optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).

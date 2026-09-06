@@ -45,6 +45,8 @@ import {
   SHIPPING_DOC_ITEM_NAME_MODES,
   DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE,
   readShippingDocItemNameMode,
+  DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE,
+  readShippingDocCekiNameMode,
   sanitizeDocumentsConfig,
 } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
@@ -76,6 +78,8 @@ const rollIds: string[] = [];
 
 /** Bayrağın önceki değeri — teardown birebir geri yükler. */
 let prevFlag: { value: Prisma.JsonValue } | null = null;
+/** Çeki rejimi satırının koşum ÖNCESİ hâli — finally'de BİREBİR geri yüklenir. */
+let prevCekiFlag: { value: unknown } | null = null;
 
 async function setMode(v: string | null): Promise<void> {
   if (v === null) {
@@ -95,8 +99,29 @@ async function setMode(v: string | null): Promise<void> {
   });
 }
 
-/** Sample doc'u verilen rejimle bas — snapshot zarfı elle kurulur (DB'siz). */
-function renderSample(mode: "bizdeki" | "musterideki" | "ikisi" | undefined): string {
+/** Çeki rejimi ayarını yaz/sil (null = satırı kaldır). */
+async function setCekiMode(v: string | null): Promise<void> {
+  if (v === null) {
+    await prisma.systemSetting
+      .delete({ where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE } })
+      .catch(() => {});
+    return;
+  }
+  await prisma.systemSetting.upsert({
+    where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+    create: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE, value: v, description: "test" },
+    update: { value: v },
+  });
+}
+
+/**
+ * Sample doc'u verilen rejimle bas — snapshot zarfı elle kurulur (DB'siz).
+ * `ceki` verilmezse meta'ya HİÇ yazılmaz: eski çağrı yollarının bayt eşitliği korunur.
+ */
+function renderSample(
+  mode: "bizdeki" | "musterideki" | "ikisi" | undefined,
+  ceki?: "devral" | "bizdeki" | "musterideki" | "ikisi",
+): string {
   const doc = SAMPLE_PRINTED_DOCS[PrintedDocType.SHIPMENT_DISPATCH] as unknown as ShipmentDispatchDoc;
   return renderShipmentDispatchHtml(
     {
@@ -106,7 +131,10 @@ function renderSample(mode: "bizdeki" | "musterideki" | "ikisi" | undefined): st
       docConfigOverride: null,
       doc: doc as unknown as Record<string, unknown>,
     },
-    mode === undefined ? {} : { itemNameMode: mode },
+    {
+      ...(mode === undefined ? {} : { itemNameMode: mode }),
+      ...(ceki === undefined ? {} : { cekiNameMode: ceki }),
+    },
   );
 }
 
@@ -473,6 +501,59 @@ async function run(): Promise<void> {
     "⭐ uçtan uca: özel başlık sevk irsaliyesinde basılıyor",
     htmlRenamed.includes("ÜRÜN KODU") && !htmlRenamed.includes(">STOK ADI<"),
   );
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§7 — ÇEKİ BÖLÜMÜ AYRI REJİM (`shipping.docCekiNameMode`, 2026-09-06)");
+  // ---------------------------------------------------------------------------
+  // NEDEN VAR: çeki listesi sevk irsaliyesinin bir BÖLÜMÜ ama tek başına da
+  // basılabiliyor ve ambar elemanının kontrol listesi olarak kullanılıyor; orada
+  // "hem bizdeki hem müşterideki ad" anlamlı, müşteriye giden ÜRÜN LİSTESİNDE değil.
+  // Tek global rejim ikisini birden çeviriyordu.
+  await setCekiMode(null);
+  check(
+    "kayıt YOKKEN çeki okuyucusu 'devral' döner",
+    (await readShippingDocCekiNameMode()) === "devral",
+    `DEFAULT=${DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE}`,
+  );
+  await setCekiMode("__hicboylebirdegeryok__");
+  check(
+    "⭐ DB'de ÇÖP değer varken de 'devral' (kod sigortası)",
+    (await readShippingDocCekiNameMode()) === "devral",
+  );
+  await setCekiMode(null);
+
+  // ⭐ EN ÖNEMLİ: bayrak yazılmadıkça ÇIKTI DEĞİŞMEZ.
+  check(
+    "⭐ çeki rejimi HİÇ verilmeyen render = `devral` verilen render (BİREBİR bayt)",
+    renderSample("bizdeki") === renderSample("bizdeki", "devral"),
+  );
+  check(
+    "⭐ `devral` genel rejimi izler: genel `musterideki` iken de bayt eşitliği",
+    renderSample("musterideki") === renderSample("musterideki", "devral"),
+  );
+
+  // ⭐ İKİNCİ EN ÖNEMLİ: çeki değişirken ÜRÜN LİSTESİ sabit kalmalı.
+  const cekiIkisi = renderSample("bizdeki", "ikisi");
+  check("⭐ çeki `ikisi` çıktıyı DEĞİŞTİRİYOR (bayrak gerçekten bağlı)", renderSample("bizdeki") !== cekiIkisi);
+  check(
+    "⭐ çeki `ikisi` müşteri DESEN/VARYANT kolonlarını getiriyor",
+    cekiIkisi.includes("MÜŞTERİ DESEN") && cekiIkisi.includes("MÜŞTERİ VARYANT"),
+  );
+  check(
+    "⭐ …ama ÜRÜN LİSTESİ kolonu GELMİYOR (müşteriye giden yüzey korunuyor)",
+    !cekiIkisi.includes("MÜŞTERİ STOK ADI"),
+  );
+
+  // Ters yön: genel `musterideki` iken çeki `bizdeki` YALNIZ çekiyi geri çevirir.
+  const cekiBiz = renderSample("musterideki", "bizdeki");
+  check(
+    "⭐ genel `musterideki` + çeki `bizdeki` → ürün listesinde müşteri adı DURUYOR",
+    cekiBiz.includes("MÜŞTERİ STOK ADI"),
+  );
+  check(
+    "⭐ …ve çeki bölümünde müşteri kolonları YOK",
+    !cekiBiz.includes("MÜŞTERİ DESEN") && !cekiBiz.includes("MÜŞTERİ VARYANT"),
+  );
 }
 
 async function teardown(): Promise<void> {
@@ -517,6 +598,22 @@ async function teardown(): Promise<void> {
   } else {
     await setMode(null);
   }
+  // Çeki rejimi de BİREBİR geri yüklenir (bayrak yazan bekçi kuralı).
+  if (prevCekiFlag) {
+    await prisma.systemSetting
+      .upsert({
+        where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+        create: {
+          key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE,
+          value: prevCekiFlag.value as Prisma.InputJsonValue,
+          description: "restore",
+        },
+        update: { value: prevCekiFlag.value as Prisma.InputJsonValue },
+      })
+      .catch(() => {});
+  } else {
+    await setCekiMode(null);
+  }
 }
 
 prisma.systemSetting
@@ -524,8 +621,12 @@ prisma.systemSetting
     where: { key: SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE },
     select: { value: true },
   })
-  .then((r) => {
+  .then(async (r) => {
     prevFlag = r;
+    prevCekiFlag = await prisma.systemSetting.findUnique({
+      where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+      select: { value: true },
+    });
     return run();
   })
   .catch((e) => {

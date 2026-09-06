@@ -388,6 +388,14 @@ export const SETTING_KEYS = {
    *  (`SUBCONTRACTOR_DIRECT_SHIP`) AYRI payload/renderer taşır ve bu ayarın
    *  DIŞINDADIR — kardeş yüzey, ayrı karar. */
   SHIPPING_DOC_ITEM_NAME_MODE: "shipping.docItemNameMode",
+  /** Çeki listesi bölümünde ürün/renk adı rejimi. `devral` (default) =
+   *  `SHIPPING_DOC_ITEM_NAME_MODE` ne diyorsa o — yani bugünkü davranış, bayt-bayt.
+   *  ⚠️ NEDEN AYRI BAYRAK: çeki listesi sevk irsaliyesinin bir BÖLÜMÜ ve bugün tek
+   *  global rejime bağlı. Fabrika "çekide hem bizdeki hem müşterideki ad görsün"
+   *  isteyince tek bayrağı `ikisi` yapmak, AYNI ANDA müşteriye giden ürün listesine
+   *  de "Stok adı" kolonunu geri koyardı — fabrika onu bilerek kapatmıştı.
+   *  İki yüzeyin iki farklı okuyucusu var, tek bayrak ikisini birden çeviriyordu. */
+  SHIPPING_DOC_CEKI_NAME_MODE: "shipping.docCekiNameMode",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -695,6 +703,24 @@ export const SHIPPING_DOC_ITEM_NAME_MODES: ShippingDocItemNameMode[] = [
 ];
 /** Varsayılan `bizdeki` — BUGÜNKÜ çıktı bayt-bayt korunur. */
 export const DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE: ShippingDocItemNameMode = "bizdeki";
+
+/**
+ * Çeki listesi bölümünün ad rejimi. `devral` genel rejime (`shipping.docItemNameMode`)
+ * uyar; diğer üç değer YALNIZ çeki bölümünü çevirir, ürün listesine dokunmaz.
+ *
+ * ⚠️ Bu bir İÇ belge kararıdır: çeki listesi ambar elemanının kontrol listesi olarak
+ * da basılıyor (`DispatchPrintOptions` tek başına seçebiliyor), o yüzden "hem bizdeki
+ * hem müşterideki" orada anlamlı, müşteriye giden ürün listesinde değil.
+ */
+export type ShippingDocCekiNameMode = "devral" | "bizdeki" | "musterideki" | "ikisi";
+export const SHIPPING_DOC_CEKI_NAME_MODES: ShippingDocCekiNameMode[] = [
+  "devral",
+  "bizdeki",
+  "musterideki",
+  "ikisi",
+];
+/** Varsayılan `devral` — bayrak yazılana kadar TEK BAYT değişmez. */
+export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "devral";
 /** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
 export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
 /** Mobil idle ekran kilidi varsayılanı — açık. */
@@ -1294,6 +1320,9 @@ export interface FeatureFlags {
   /** Sevk belgesinde ürün adı: 'bizdeki' (default) | 'musterideki' | 'ikisi'.
    *  Backend UYGULAR (renderer okur) — istemci rehberi DEĞİL. */
   shippingDocItemNameMode: ShippingDocItemNameMode;
+  /** Çeki listesi bölümünde ad: 'devral' (default, genel rejimi izler) | 'bizdeki'
+   *  | 'musterideki' | 'ikisi'. Yalnız çeki bölümünü çevirir. */
+  shippingDocCekiNameMode: ShippingDocCekiNameMode;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -1651,6 +1680,7 @@ export class SystemSettingService {
         await readShippingManualWeightRestrictedEnabled(cacheClient),
       shippingInvoiceMode: await readShippingInvoiceMode(cacheClient),
       shippingDocItemNameMode: await readShippingDocItemNameMode(cacheClient),
+      shippingDocCekiNameMode: await readShippingDocCekiNameMode(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -2317,6 +2347,24 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE,
         v,
         "Sevk belgesinde ürün adı: bizdeki (kendi adımız) / musterideki (müşterinin adı) / ikisi (iki kolon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingDocCekiNameMode")) {
+      const v = input.shippingDocCekiNameMode;
+      if (
+        typeof v !== "string" ||
+        !SHIPPING_DOC_CEKI_NAME_MODES.includes(v as ShippingDocCekiNameMode)
+      ) {
+        throw AppError.badRequest(
+          "Çeki listesi ad rejimi 'devral', 'bizdeki', 'musterideki' veya 'ikisi' olmalı"
+        );
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE,
+        v,
+        "Çeki listesinde ad: devral (genel rejim) / bizdeki / musterideki / ikisi (iki kolon)",
         userId
       );
     }
@@ -3731,6 +3779,29 @@ export async function readShippingDocItemNameMode(
     return v as ShippingDocItemNameMode;
   }
   return DEFAULT_SHIPPING_DOC_ITEM_NAME_MODE;
+}
+
+/**
+ * Çeki bölümünün ad rejimi. Satır YOKSA veya değer kümede DEĞİLSE `devral`e düşer —
+ * yani genel rejim ne diyorsa o. Kod sigortası: elle SQL / eski dump bir gün çöp
+ * yazarsa çeki bölümü sessizce değişmesin.
+ */
+export async function readShippingDocCekiNameMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ShippingDocCekiNameMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (
+    typeof v === "string" &&
+    SHIPPING_DOC_CEKI_NAME_MODES.includes(v as ShippingDocCekiNameMode)
+  ) {
+    return v as ShippingDocCekiNameMode;
+  }
+  return DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE;
 }
 
 /**
