@@ -161,6 +161,7 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shippingInvoiceMode: "cekirdek",
   shippingDocItemNameMode: "cekirdek",
   shippingDocCekiNameMode: "cekirdek",
+  shippingOrderCoverage: "cekirdek",
   shippingSimulatedWeightEnabled: "cekirdek",
   returnGradingEnabled: "cekirdek",
   [SETTING_KEYS.SHIPPING_TOLERANCE_METERS]: "cekirdek",

@@ -237,6 +237,22 @@ router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollT
 router.post("/swatches/:swatchId/remove-from-sack", verifyToken, WRITE, controller.removeSwatchFromSack);
 // Toplu: çuvalı dağıt (seçili/tüm içerik → depo) + seçili topları başka çuvala taşı
 router.post("/sacks/:id/distribute", verifyToken, WRITE, controller.distributeSack);
+/**
+ * @swagger
+ * /api/shipping/sacks/distribute/preview:
+ *   post:
+ *     summary: Toplu dağıtma önizlemesi (yazma yok) — etkilenen her top listelenir
+ *     tags: [Shipping]
+ */
+router.post("/sacks/distribute/preview", verifyToken, WRITE, controller.previewDistributeSacks);
+/**
+ * @swagger
+ * /api/shipping/sacks/distribute/bulk:
+ *   post:
+ *     summary: Seçili çuvalların içeriğini TOPLU depoya çıkar (çuval silinmez)
+ *     tags: [Shipping]
+ */
+router.post("/sacks/distribute/bulk", verifyToken, WRITE, controller.distributeSacksBulk);
 router.post("/sacks/:id/move-rolls", verifyToken, WRITE, controller.moveRollsToSack);
 
 /**

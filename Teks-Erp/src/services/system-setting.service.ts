@@ -396,6 +396,9 @@ export const SETTING_KEYS = {
    *  de "Stok adı" kolonunu geri koyardı — fabrika onu bilerek kapatmıştı.
    *  İki yüzeyin iki farklı okuyucusu var, tek bayrak ikisini birden çeviriyordu. */
   SHIPPING_DOC_CEKI_NAME_MODE: "shipping.docCekiNameMode",
+  /** Kapsama rejimi — İKİNCİ EKSEN. `orderRequirement` "sipariş seçildi mi" (niyet),
+   *  bu "mal deftere yazıldı mı" (sonuç) sorusunu ölçer. `off` = bugünkü davranış. */
+  SHIPPING_ORDER_COVERAGE: "shipping.orderCoverage",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -721,6 +724,16 @@ export const SHIPPING_DOC_CEKI_NAME_MODES: ShippingDocCekiNameMode[] = [
 ];
 /** Varsayılan `devral` — bayrak yazılana kadar TEK BAYT değişmez. */
 export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "devral";
+
+/**
+ * Sevkiyat KAPSAMA rejimi: çuvaldaki mal seçili sipariş satırlarına yazılabildi mi.
+ * `shipping.orderRequirement` ile DİK bir eksendir — gerekçe ve ölçüm
+ * `helpers/shipment-coverage.helper.ts` başlığında.
+ */
+export type ShippingOrderCoverage = "off" | "warn" | "block";
+export const SHIPPING_ORDER_COVERAGES: ShippingOrderCoverage[] = ["off", "warn", "block"];
+/** Varsayılan `off` — BUGÜNKÜ davranış; bayrak açılmadıkça hiçbir yeni kapı doğmaz. */
+export const DEFAULT_SHIPPING_ORDER_COVERAGE: ShippingOrderCoverage = "off";
 /** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
 export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
 /** Mobil idle ekran kilidi varsayılanı — açık. */
@@ -1323,6 +1336,9 @@ export interface FeatureFlags {
   /** Çeki listesi bölümünde ad: 'devral' (default, genel rejimi izler) | 'bizdeki'
    *  | 'musterideki' | 'ikisi'. Yalnız çeki bölümünü çevirir. */
   shippingDocCekiNameMode: ShippingDocCekiNameMode;
+  /** Kapsama rejimi: 'off' (default — bugünkü davranış) | 'warn' | 'block'.
+   *  Çuvaldaki malın seçili siparişlere YAZILABİLDİĞİNİ ölçer. */
+  shippingOrderCoverage: ShippingOrderCoverage;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -1681,6 +1697,7 @@ export class SystemSettingService {
       shippingInvoiceMode: await readShippingInvoiceMode(cacheClient),
       shippingDocItemNameMode: await readShippingDocItemNameMode(cacheClient),
       shippingDocCekiNameMode: await readShippingDocCekiNameMode(cacheClient),
+      shippingOrderCoverage: await readShippingOrderCoverage(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -2347,6 +2364,19 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE,
         v,
         "Sevk belgesinde ürün adı: bizdeki (kendi adımız) / musterideki (müşterinin adı) / ikisi (iki kolon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingOrderCoverage")) {
+      const v = input.shippingOrderCoverage;
+      if (typeof v !== "string" || !SHIPPING_ORDER_COVERAGES.includes(v as ShippingOrderCoverage)) {
+        throw AppError.badRequest("Kapsama rejimi 'off', 'warn' veya 'block' olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.SHIPPING_ORDER_COVERAGE,
+        v,
+        "Kapsama: off (sessiz) / warn (uyar) / block (siparişe yazılamayan mal varsa kurulumu durdur)",
         userId
       );
     }
@@ -3802,6 +3832,22 @@ export async function readShippingDocCekiNameMode(
     return v as ShippingDocCekiNameMode;
   }
   return DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE;
+}
+
+/** Kapsama rejimi. Satır yoksa / değer kümede değilse `off` (bugünkü davranış). */
+export async function readShippingOrderCoverage(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<ShippingOrderCoverage> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_ORDER_COVERAGE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && SHIPPING_ORDER_COVERAGES.includes(v as ShippingOrderCoverage)) {
+    return v as ShippingOrderCoverage;
+  }
+  return DEFAULT_SHIPPING_ORDER_COVERAGE;
 }
 
 /**

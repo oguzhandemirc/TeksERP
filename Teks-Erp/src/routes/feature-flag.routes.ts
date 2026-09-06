@@ -325,6 +325,9 @@ export const updateSchema = z.strictObject({
   // shipping.docCekiNameMode — YALNIZ çeki bölümü (default devral = genel rejimi
   // izler, yani bugünkü davranış). Ürün listesine dokunmaz.
   shippingDocCekiNameMode: z.enum(["devral", "bizdeki", "musterideki", "ikisi"]).optional(),
+  // shipping.orderCoverage — İKİNCİ EKSEN: mal seçili siparişlere yazılabildi mi
+  // (default off = bugünkü davranış). `orderRequirement` niyeti, bu SONUCU ölçer.
+  shippingOrderCoverage: z.enum(["off", "warn", "block"]).optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).

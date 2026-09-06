@@ -21,6 +21,58 @@
 
 ---
 
+## 2026-09-06 — Sevkiyat turu: kapsama ekseni, çeki rejimi, ekran↔kâğıt hizası, toplu dağıtma [ÇEKİRDEK]
+
+Kullanıcı iş gerçeğini söyledi: *"fabrika düzensiz çalışıyor; elemanlar sipariş OLSA BİLE
+siparişi işaretlemeden sevk ediyor."* Bu, §1d'yi (42 sevkiyat / 11.384,7 m deftere girmeyen
+metraj) bir KOD HATASI olmaktan çıkarıp bir İŞ AKIŞI gerçeği yapıyor — çözüm "kapıyı sıkılaştır"
+değil, "rejimi bayrakla seç, serbest rejimde teşvik et". Beş ajanlı salt-okunur keşif:
+`docs/history/sevkiyat-2026-09-06/`.
+
+**① Kademeli rejim ZATEN VARDI ama yanlış yarımı ölçüyordu.** `shipping.orderRequirement`
+(off/warn/block) 2026-09-03'te yazılmış. Ölçüm: 89 sevk edilmiş sevkiyatın **88'inde sipariş
+zaten seçilmişti** — yani `block` açık olsaydı 42 boşluklu sevkiyatın **hiçbirini** durdurmazdı.
+Helper'ın kendi başlığı bunu itiraf ediyor: *"kapı NİYETİ ölçer, SONUCU değil."*
+Çözüm: İKİNCİ VE DİK EKSEN `shipping.orderCoverage` (off/warn/block, varsayılan `off`).
+Tek merdivene indirmek "bağ sıkılığı arttıkça kapsama da sıkılaşır" diye yanlış bir sözleşme
+kurar ve bugün meşru olan "sipariş seçilsin ama fazla mal serbest kalsın" düzenini ifade
+edilemez kılardı. Kapı YALNIZ kurulumda; `dispatchShipment`e KONMAZ — sevk anında `throw`
+malı bina içinde kilitler (aynı gerekçe `orderRequirement` için de yazılı).
+
+**② Çeki listesine ayrı ad rejimi** (`shipping.docCekiNameMode`, varsayılan `devral`). Tek global
+rejimi `ikisi` yapmak çekiye iki adı getirirdi AMA aynı anda müşteriye giden ürün listesine de
+"Stok adı" kolonunu geri koyardı — fabrika onu bilerek kapatmış. Çeki listesi tek başına da
+basılıyor ve ambar kontrol listesi olarak kullanılıyor; iki ad ORADA anlamlı.
+
+**③ Ekran ile kâğıt AYRIŞIYORDU** — kök CLAUDE.md'nin "türetilmiş alan / ayrışan yüzey" sınıfı.
+Sevkiyat detayı ve sipariş seçim ekranı yalnız `OrderLine` override'ını taşıyordu; belge master
+alias kademesini de çözüyordu. Ölçüm: 1.778 topun **424'ünde (%24)** master alias var, override
+yok → irsaliyede müşteri adı basılıyor, elemanın ekranında hiç görünmüyordu (renkte 152 top).
+İki projeksiyon da artık `customer-name.helper` kademesini kullanıyor; karşılığı yoksa `null`
+döner (bizim adımız "müşterideki ad" diye basılmaz). Tablet aynı ucu kullandığı için düzeltmeyi
+BEDAVA alıyor — APK gerekmedi.
+
+**④ (D) zaten yapılmıştı.** Kullanıcı "müşteri RENK sütununu yapmadık sanırım" dedi; ölçüm
+sütunun dört katmanda da VAR olduğunu gösterdi. Sorun kod değil VERİ: fabrikada 8 renk alias'ı
+var (62 kumaş alias'ına karşı), sevk edilen 1.778 topun yalnız %12'sinde müşteri renk adı
+çözülüyor; kalanında sistem fail-open davranıp bizim adımızı basıyor.
+
+**⑤ Çuval filtre hatası — sunucuda değil, bayat kapanışta.** `useDataTable`'ın arama debounce'u
+mount anındaki FİLTRESİZ URL kopyasını 300 ms sonra geri yazıp `filter[customerId]`i siliyordu.
+Kapıdan cari seçmek filtreyi yazıp AYNI tıkta listeyi mount ettiği için tam o akışta ısırıyordu.
+⚠️ `setSearchParams`ın fonksiyonel biçimi bunu ÇÖZMEZ (setter `prev`i kendi kapanışından verir).
+
+**⑥ Toplu çuval dağıtma** — yıkıcı işlem olduğu için önizleme ucu ZORUNLU: etkilenen HER top
+satır satır dönüyor, engelli çuval (sevkiyata atanmış) sebebiyle gösteriliyor ve uygulamada
+ATLANIYOR. "Silme" fiili DAĞITMADIR: çuval kaydı korunur.
+
+⚠️ ÖLÇÜM İKİ KEZ KENDİ YÜKLEMİMİ ÇÜRÜTTÜ: (a) `useDataTable` için yazdığım "mount'ta hiç yazma"
+koruması sondada ısırmadı → ölçülmemiş davranış değişikliği bırakılmadı, çıkarıldı;
+(b) negatif sonda ölçümünde `grep "^❌"` kullandım, bekçinin kırmızı satırları GİRİNTİLİ olduğu
+için üç sonda da "ısırmıyor" göründü — yüklem yanlıştı, bekçi değil.
+
+---
+
 ## 2026-09-06 — Fabrika yedeği üzerinde prova: defterde büyüyen boşluk, index kararı, fixture çarpışması [ÇEKİRDEK]
 
 Kullanıcı fabrikanın 2026-09-05 yedeğini getirdi. Reponun zorunlu ritüeli (restore → `migrate deploy`

@@ -26,6 +26,7 @@ import { BatchNumberHint } from "./BatchNumberHint";
 import {
   SHIPMENT_ORDER_REQUIREMENT_OPTIONS,
   SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS,
+  SHIPPING_ORDER_COVERAGE_OPTIONS,
   SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
   SHIPPING_INVOICE_MODE_OPTIONS,
 } from "@/lib/shipping-flags";
@@ -798,6 +799,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
         audience: ["Sevkiyat", "Muhasebeci"],
         desc: "Müşterinin bizim üründe kullandığı ad iki yerden gelir: sipariş satırına bir SEFERLİĞİNE yazılan ad (varsa O kazanır) ve müşteri kartındaki kalıcı karşılık (Müşteri Adları). İkisi de yoksa bizim adımız basılır — “Müşterideki ad” seçiliyken bile hücre boş kalmaz. Ad, sevk anında belgeye DONAR: müşteri kartındaki karşılığı sonradan değiştirmek eski irsaliyeyi değiştirmez. Bu ayar yalnız HANGİ adın basıldığını belirler; ayarı değiştirmek belgenin içeriğini değiştirmez, yeni revizyon doğurmaz, eski belgeler de yeni ayarla basılır. Kolon başlıklarını “Belge Alanları” tablosundan kendiniz yazabilirsiniz. NOT: kapsam sevk irsaliyesi + muhasebe fişidir; fasondan DOĞRUDAN sevk irsaliyesi bu ayarın dışındadır.",
+      },
+      {
+        enumKey: "shippingOrderCoverage",
+        title: "Siparişe yazılamayan mal",
+        summary:
+          "Çuvaldaki mal seçili siparişlere yazılamıyorsa ne olsun — sessiz mi, uyarı mı, engel mi.",
+        defaultValue: "off",
+        options: SHIPPING_ORDER_COVERAGE_OPTIONS,
+        audience: ["Sevkiyat", "Planlamacı"],
+        desc: "Bu ayar üstteki “sipariş seçme zorunluluğu” ayarından FARKLI bir soruyu sorar. O ayar “sipariş seçildi mi” diye bakar (niyet); bu ayar “seçilen siparişe kaç metre yazılabildi” diye bakar (sonuç). İkisi ayrı olduğu için ikisini ayrı ayarlayabilirsiniz. Neden gerekli: sevkiyat kurulurken sipariş seçilmiş olsa bile, çuvaldaki malın rengi/eni sipariş satırıyla tutmuyorsa ya da sipariş zaten dolmuşsa o metraj sipariş defterine İŞLENMEZ — mal çıkar, irsaliye basılır, ama sipariş “Açık” kalır ve planlamacı aynı metrajı yeniden üretime verebilir. “Uyar” seçilirse sevkiyat kurulur ve uyarı hem panelde hem tablette görünür. “Zorunlu tut” seçilirse kurulum durur; bilinçli fazla/numune sevki için “Siparişsiz/fazla mal” kutusu işaretlenir. Kapı YALNIZ kurulumda çalışır, “Sevk Et” adımında değil — aksi hâlde kamyon kapıdayken mal bina içinde kilitlenirdi.",
       },
       {
         enumKey: "shippingDocCekiNameMode",

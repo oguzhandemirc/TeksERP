@@ -6,6 +6,7 @@ import type {
   ShipmentOrderRequirement,
   ShippingDocItemNameMode,
   ShippingDocCekiNameMode,
+  ShippingOrderCoverage,
   ShippingInvoiceMode,
 } from "@/lib/shipping-flags";
 import {
@@ -358,6 +359,9 @@ export interface FeatureFlags {
    *  davranış) | 'bizdeki' | 'musterideki' | 'ikisi'. YALNIZ çeki bölümünü çevirir;
    *  müşteriye giden ürün listesine dokunmaz. */
   shippingDocCekiNameMode: ShippingDocCekiNameMode;
+  /** Kapsama rejimi: 'off' (default — bugünkü davranış) | 'warn' | 'block'.
+   *  `shippingOrderRequirement` NİYETİ, bu SONUCU ölçer — iki ayrı eksen. */
+  shippingOrderCoverage: ShippingOrderCoverage;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */

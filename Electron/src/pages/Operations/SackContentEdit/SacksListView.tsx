@@ -31,6 +31,7 @@ import { CreateShipmentDialog } from "./CreateShipmentDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
 import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
+import { BulkDistributeSacksDialog } from "./BulkDistributeSacksDialog";
 import {
   CUSTOMERLESS_FILTER_VALUE,
   UNTAGGED_FILTER_VALUE,
@@ -196,6 +197,8 @@ export function SacksListView({ onEditSack }: Props) {
   const [located, setLocated] = useState<LocatedRoll | null>(null);
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
+  /** Toplu dağıtma diyaloğu — seçili çuval id'leri; null = kapalı. */
+  const [bulkDistribute, setBulkDistribute] = useState<string[] | null>(null);
   const [detail, setDetail] = useState<SackSearchRow | null>(null);
   const [weighSack, setWeighSack] = useState<SackSearchRow | null>(null);
   const [labelSack, setLabelSack] = useState<SackSearchRow | null>(null);
@@ -376,6 +379,19 @@ export function SacksListView({ onEditSack }: Props) {
             {/* İZ — tek popover (bırak + kaldır aynı hamlede; üç durumlu
                 kutucuklar). Sonuç PARÇALI olabilir; atlananlar uyarıyla söylenir. */}
             <SackTagsBulkMenu rows={rows} onDone={() => table.resetRowSelection()} />
+            {/* DAĞIT — kullanıcının kafasındaki "listeden çuval sil" işi. Gerçekte
+                çuval SİLİNMEZ, içeriği depoya çıkar; diyalog bunu söyler ve
+                etkilenen HER topu listeler (yıkıcı işlem kuralı). */}
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={rows.length === 0}
+              title="Seçili çuvalların içindeki topları serbest depoya çıkarır — çuval kaydı silinmez"
+              onClick={() => setBulkDistribute(rows.map((r) => r.id))}
+            >
+              <PackageOpen className="h-4 w-4" /> Dağıt ({rows.length})
+            </Button>
             <SackContentDumpMenu
               label={`İçerik Dökümü (${rows.length})`}
               disabled={rows.length === 0}
@@ -387,6 +403,15 @@ export function SacksListView({ onEditSack }: Props) {
       />
 
       <PickListPrintDialog sackIds={pickListIds} onOpenChange={(o) => !o && setPickListIds(null)} />
+      {/* Toplu dağıtma — önizlemeli, engelli çuvalları sebebiyle gösterir. */}
+      <BulkDistributeSacksDialog
+        sackIds={bulkDistribute}
+        onOpenChange={(o) => !o && setBulkDistribute(null)}
+        onDone={() => {
+          setBulkDistribute(null);
+          table.resetRowSelection();
+        }}
+      />
       <CreateShipmentDialog
         sacks={shipSacks}
         onOpenChange={(o) => !o && setShipSacks(null)}

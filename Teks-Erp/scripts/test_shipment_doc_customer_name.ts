@@ -554,6 +554,95 @@ async function run(): Promise<void> {
     "⭐ …ve çeki bölümünde müşteri kolonları YOK",
     !cekiBiz.includes("MÜŞTERİ DESEN") && !cekiBiz.includes("MÜŞTERİ VARYANT"),
   );
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§8 — EKRAN İLE KÂĞIT AYNI ADI VERİR (ayrışan yüzey, 2026-09-06)");
+  // ---------------------------------------------------------------------------
+  // Sipariş seçim ekranı (`listOpenOrdersWithCoverage`) ve sevkiyat detayı
+  // (`getShipmentById`) eskiden YALNIZ `OrderLine` override'ını taşıyordu; belge
+  // ise master alias kademesini de çözüyordu. Ölçüldü (fabrika yedeği): sevk
+  // edilmiş 1.778 topun 424'ünde (%24) master alias VAR ama override YOK →
+  // irsaliyede müşteri adı basılıyor, ekranda hiç görünmüyordu.
+  const line = await prisma.orderLine.findFirst({
+    where: { orderId: ORDER },
+    select: { id: true, customerItemName: true, customerColorName: true },
+  });
+  const lineIdY = line?.id as string;
+  const onceki = { i: line?.customerItemName ?? null, c: line?.customerColorName ?? null };
+
+  // (a) override YOK → ekran MASTER alias'ı göstermeli (eski davranışta null'dı).
+  await prisma.orderLine.update({
+    where: { id: lineIdY },
+    data: { customerItemName: null, customerColorName: null },
+  });
+  const acikRes = (await shippingService.listOpenOrdersWithCoverage({ customerId: CUSTOMER })) as {
+    data: { order: { id: string }; lines: { customerItemName: string | null; customerColorName: string | null }[] }[];
+  };
+  const acikSatir = acikRes.data.find((o) => o.order.id === ORDER)?.lines[0];
+  // ⚠️ Beklenti SABİT YAZILMAZ: §3 master alias'ı bilerek değiştiriyor ("ad donar,
+  // rejim donmaz"). Beklenen değer DB'den okunur — yoksa bu kontrol §3'ün yan
+  // etkisiyle kırmızı verir ve ölçtüğünü sandığı şeyi ölçmez.
+  const canliAlias = await prisma.customerItemAlias.findFirst({
+    where: { customerId: CUSTOMER, itemId: ITEM },
+    select: { alias: true },
+  });
+  const canliRenkAlias = await prisma.customerColorAlias.findFirst({
+    where: { customerId: CUSTOMER, colorId: COLOR },
+    select: { alias: true },
+  });
+  check(
+    "⭐ override YOKKEN sipariş seçim ekranı MASTER alias'ı taşıyor",
+    !!canliAlias?.alias &&
+      acikSatir?.customerItemName === canliAlias.alias &&
+      acikSatir?.customerColorName === canliRenkAlias?.alias,
+    `${acikSatir?.customerItemName} (beklenen ${canliAlias?.alias}) / ${acikSatir?.customerColorName}`,
+  );
+
+  // (b) override VARSA override kazanır — kademe sırası ekranda da aynı.
+  await prisma.orderLine.update({
+    where: { id: lineIdY },
+    data: { customerItemName: "EKRAN-OVERRIDE", customerColorName: null },
+  });
+  const acikRes2 = (await shippingService.listOpenOrdersWithCoverage({ customerId: CUSTOMER })) as {
+    data: { order: { id: string }; lines: { customerItemName: string | null; customerColorName: string | null }[] }[];
+  };
+  const acikSatir2 = acikRes2.data.find((o) => o.order.id === ORDER)?.lines[0];
+  check(
+    "⭐ override VARSA ekranda override kazanır (kademe sırası kâğıtla aynı)",
+    acikSatir2?.customerItemName === "EKRAN-OVERRIDE",
+    String(acikSatir2?.customerItemName),
+  );
+  check(
+    "…renk tarafı override'sız kaldığı için hâlâ MASTER",
+    acikSatir2?.customerColorName === "MASTER-RENK",
+    String(acikSatir2?.customerColorName),
+  );
+
+  // (c) KÖRLÜK/UYDURMA ZEMİNİ: karşılığı OLMAYAN üründe alan NULL kalmalı —
+  // arayüz bizim adımızı "müşterideki ad" diye basmasın.
+  const kararsizItem = await prisma.item.create({
+    data: { code: `${P}-I2`, name: `${P} KARSILIKSIZ`, itemType: ItemType.FABRIC },
+    select: { id: true },
+  });
+  await prisma.orderLine.create({
+    data: { orderId: ORDER, itemId: kararsizItem.id, quantity: new Prisma.Decimal(10) },
+  });
+  const acikRes3 = (await shippingService.listOpenOrdersWithCoverage({ customerId: CUSTOMER })) as {
+    data: { order: { id: string }; lines: { item: { id: string }; customerItemName: string | null }[] }[];
+  };
+  const karsiliksiz = acikRes3.data
+    .find((o) => o.order.id === ORDER)
+    ?.lines.find((l) => l.item.id === kararsizItem.id);
+  check(
+    "⭐ müşteri karşılığı YOKSA alan NULL (bizim adımız 'müşterideki ad' diye basılmaz)",
+    karsiliksiz !== undefined && karsiliksiz.customerItemName === null,
+    `bulundu=${karsiliksiz !== undefined} deger=${String(karsiliksiz?.customerItemName)}`,
+  );
+
+  await prisma.orderLine.update({
+    where: { id: lineIdY },
+    data: { customerItemName: onceki.i, customerColorName: onceki.c },
+  });
 }
 
 async function teardown(): Promise<void> {

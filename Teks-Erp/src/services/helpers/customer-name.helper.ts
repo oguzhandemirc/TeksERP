@@ -105,3 +105,43 @@ export async function batchLoadAliases(
 
   return { itemAliasByItemId, colorAliasByColorId };
 }
+
+/**
+ * ÇOK MÜŞTERİLİ toplu alias — `batchLoadAliases`in N müşterili ikizi.
+ *
+ * Neden ayrı: müşteri başına döngü kurmak N müşteride 2N sorgu demekti ve bu
+ * repoda `tx.*` + `Promise.all` yasak (seri koşardı). Burada (customerId, itemId)
+ * çiftleri tek `in` sorgusuna giriyor → kaç müşteri olursa olsun 2 gidiş-dönüş.
+ *
+ * Anahtar biçimi `${customerId}:${id}`.
+ */
+export async function batchLoadAliasesMulti(
+  client: { customerItemAlias: Prisma.TransactionClient["customerItemAlias"]; customerColorAlias: Prisma.TransactionClient["customerColorAlias"] },
+  customerIds: string[],
+  itemIds: string[],
+  colorIds: string[],
+): Promise<{ itemAlias: Map<string, string>; colorAlias: Map<string, string> }> {
+  const musteriler = [...new Set(customerIds)];
+  const urunler = [...new Set(itemIds)];
+  const renkler = [...new Set(colorIds.filter(Boolean))];
+  const itemAlias = new Map<string, string>();
+  const colorAlias = new Map<string, string>();
+  if (musteriler.length === 0) return { itemAlias, colorAlias };
+
+  if (urunler.length > 0) {
+    const rows = await client.customerItemAlias.findMany({
+      where: { customerId: { in: musteriler }, itemId: { in: urunler } },
+      select: { customerId: true, itemId: true, alias: true },
+    });
+    for (const r of rows) itemAlias.set(`${r.customerId}:${r.itemId}`, r.alias);
+  }
+  if (renkler.length > 0) {
+    const rows = await client.customerColorAlias.findMany({
+      where: { customerId: { in: musteriler }, colorId: { in: renkler } },
+      select: { customerId: true, colorId: true, alias: true },
+    });
+    // `alias` null = yalnız atama, özel ad yok → bizim adımız geçerli.
+    for (const r of rows) if (r.alias) colorAlias.set(`${r.customerId}:${r.colorId}`, r.alias);
+  }
+  return { itemAlias, colorAlias };
+}

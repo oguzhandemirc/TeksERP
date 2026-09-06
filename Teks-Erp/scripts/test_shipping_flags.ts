@@ -48,6 +48,7 @@ import {
   readShippingWeighRequiredEnabled,
   readShippingManualWeightRestrictedEnabled,
   readShippingInvoiceMode,
+  readShippingOrderCoverage,
 } from "../src/services/system-setting.service";
 import {
   assertInvoiceTraceAllowed,
@@ -104,6 +105,8 @@ let ITEM = "";
 const rollIds: string[] = [];
 const sackIds: string[] = [];
 const shipmentIds: string[] = [];
+/** §7 kapsama bölümünün yarattığı siparişler — teardown FK sırasına göre siler. */
+const orderIdsToClean: string[] = [];
 /** §2.12 (fason doğrudan sevk ikizi) fixture izleri — teardown bunları toplar. */
 const fasonWoIds: string[] = [];
 const fasonDispatchIds: string[] = [];
@@ -877,6 +880,96 @@ async function run(): Promise<void> {
     /SIFIRLANIR|sıfırlan/i.test(descOf("shippingWeighRequiredEnabled")),
     descOf("shippingWeighRequiredEnabled").slice(-70),
   );
+
+  // ===========================================================================
+  console.log("\n§7 — shipping.orderCoverage (KAPSAMA: İKİNCİ EKSEN, 2026-09-06)");
+  // ===========================================================================
+  // ⚠️ NEDEN AYRI EKSEN — ölçüm (fabrika yedeği 2026-09-05): 89 sevk edilmiş
+  // sevkiyatın 88'inde sipariş ZATEN seçilmişti, yani `orderRequirement=block`
+  // 42 boşluklu sevkiyatın (11.384,7 m) HİÇBİRİNİ durdurmazdı. Bu bölüm tam o
+  // kör noktayı ölçer: sipariş SEÇİLİ ama mal deftere YAZILMIYOR.
+  //
+  // Kurgu: 100 m'lik çuval, 10 m'lik tek kalemli sipariş.
+  // ⚠️ Beklenen yazılamayan metraj 90 DEĞİL 100'dür: tahsis TOP BAZLIDIR, top
+  // bölünmez. 100 m'lik tek top 10 m'lik kaleme SIĞMAZ, dolayısıyla o kaleme
+  // hiç yazılmaz. Bu bir hata değil, alanın kuralı — §7.6 aynı kurgu 100 m'lik
+  // kalemle kurulduğunda tahsisin YAZILDIĞINI ölçerek bunu ispatlar.
+  const kapsamaSiparis = await prisma.order.create({
+    data: {
+      orderNumber: `TEST-SFLG-COV-${TS}`,
+      customerId: CUSTOMER,
+      orderDate: new Date(),
+      lines: { create: [{ itemId: ITEM, quantity: new Prisma.Decimal(10), width: 150 }] },
+    },
+    select: { id: true },
+  });
+  orderIdsToClean.push(kapsamaSiparis.id);
+
+  // (a) VARSAYILAN `off` → bugünkü davranış: kurulur, kapsama uyarısı YOK.
+  await setFlag(SETTING_KEYS.SHIPPING_ORDER_COVERAGE, null);
+  check(
+    "§7.1: kayıt YOKKEN kapsama okuyucusu 'off' döner (bugünkü davranış)",
+    (await readShippingOrderCoverage()) === "off",
+  );
+  const covOff = await kurSevkiyat(await makeSack(100), { orderIds: [kapsamaSiparis.id] });
+  check(
+    "⭐ §7.2: `off` → sevkiyat kurulur ve KAPSAMA uyarısı ÇIKMAZ",
+    !covOff.warnings.some((w) => /yazılamayan/i.test(w)),
+    covOff.warnings.join(" | ") || "(uyarı yok)",
+  );
+
+  // (b) `warn` → kurulur AMA uyarı çıkar. Bugün bu bilgi yalnız önizlemede vardı.
+  await setFlag(SETTING_KEYS.SHIPPING_ORDER_COVERAGE, "warn");
+  const covWarn = await kurSevkiyat(await makeSack(100), { orderIds: [kapsamaSiparis.id] });
+  check(
+    "⭐ §7.3: `warn` → sevkiyat KURULUR ve 'yazılamayan ~N m' uyarısı yanıtta",
+    covWarn.warnings.some((w) => /yazılamayan/i.test(w)),
+    covWarn.warnings.join(" | ") || "(uyarı yok)",
+  );
+
+  // (c) `block` → kurulum 409. Kaçış `orderless` beyanı.
+  await setFlag(SETTING_KEYS.SHIPPING_ORDER_COVERAGE, "block");
+  const covSack = await makeSack(100);
+  const covErr = await hataOf(() => kurSevkiyat(covSack, { orderIds: [kapsamaSiparis.id] }));
+  check(
+    "⭐ §7.4: `block` → kurulum DURUR (409 ORDER_COVERAGE)",
+    covErr !== null && (covErr as { statusCode?: number }).statusCode === 409 && /ORDER_COVERAGE/.test(JSON.stringify(covErr)),
+    covErr ? `${(covErr as { statusCode?: number }).statusCode} ${JSON.stringify(covErr).slice(0, 90)}` : "hata YOK",
+  );
+  const covBypass = await kurSevkiyat(covSack, { orderIds: [kapsamaSiparis.id], orderless: true });
+  check(
+    "⭐ §7.5: `block` iken 'orderless' beyanı KAÇIŞTIR (numune/fazla mal meşru)",
+    !!covBypass.id,
+  );
+
+  // (d) TAM KAPSANAN sevkiyat hiçbir rejimde durdurulmaz — kapı yalnız EKSİK
+  //     kapsamada ısırır (körlük zemini: kapı her şeyi reddetmiyor).
+  const tamSiparis = await prisma.order.create({
+    data: {
+      orderNumber: `TEST-SFLG-COV2-${TS}`,
+      customerId: CUSTOMER,
+      orderDate: new Date(),
+      lines: { create: [{ itemId: ITEM, quantity: new Prisma.Decimal(100), width: 150 }] },
+    },
+    select: { id: true },
+  });
+  orderIdsToClean.push(tamSiparis.id);
+  const covTam = await kurSevkiyat(await makeSack(100), { orderIds: [tamSiparis.id] });
+  check(
+    "⭐ §7.6: mal TAM yazılabiliyorsa `block` rejiminde bile kurulur (kapı kör değil)",
+    !!covTam.id,
+  );
+
+  // (e) Sipariş HİÇ seçilmediyse kapsama SUSAR — o soruyu `orderRequirement`
+  //     cevaplar; iki eksen aynı sevkiyat için çift uyarı basmamalı.
+  await setFlag(SETTING_KEYS.SHIPPING_ORDER_REQUIREMENT, "off");
+  const covBos = await kurSevkiyat(await makeSack(100), { orderless: true });
+  check(
+    "⭐ §7.7: sipariş seçilmemişse kapsama ekseni SUSAR (çift uyarı yok)",
+    !covBos.warnings.some((w) => /yazılamayan/i.test(w)),
+    covBos.warnings.join(" | ") || "(uyarı yok)",
+  );
+  await setFlag(SETTING_KEYS.SHIPPING_ORDER_COVERAGE, null);
 }
 
 async function teardown(): Promise<void> {
@@ -966,6 +1059,11 @@ async function teardown(): Promise<void> {
     .deleteMany({ where: { order: { orderNumber: { startsWith: `TEST-SFLG-O-${TS}` } } } })
     .catch(() => {});
   await prisma.order.deleteMany({ where: { orderNumber: { startsWith: `TEST-SFLG-O-${TS}` } } }).catch(() => {});
+  // §7 kapsama siparişleri — ayrı önek (`TEST-SFLG-COV`), FK sırası: kalem → sipariş.
+  if (orderIdsToClean.length > 0) {
+    await prisma.orderLine.deleteMany({ where: { orderId: { in: orderIdsToClean } } }).catch(() => {});
+    await prisma.order.deleteMany({ where: { id: { in: orderIdsToClean } } }).catch(() => {});
+  }
   if (ITEM) await prisma.item.deleteMany({ where: { id: ITEM } }).catch(() => {});
   if (CUSTOMER) await prisma.customer.deleteMany({ where: { id: CUSTOMER } }).catch(() => {});
 }

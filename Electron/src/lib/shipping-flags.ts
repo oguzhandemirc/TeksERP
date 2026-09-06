@@ -23,6 +23,13 @@ export type ShippingDocItemNameMode = "bizdeki" | "musterideki" | "ikisi";
 /** Çeki listesi bölümünün ad rejimi. `devral` = genel rejimi izle (bugünkü davranış). */
 export type ShippingDocCekiNameMode = "devral" | "bizdeki" | "musterideki" | "ikisi";
 
+/**
+ * KAPSAMA rejimi — `ShipmentOrderRequirement` ile DİK eksen.
+ * `orderRequirement` "sipariş seçildi mi" (niyet), bu "mal deftere yazıldı mı" (sonuç).
+ * `off` = bugünkü davranış.
+ */
+export type ShippingOrderCoverage = "off" | "warn" | "block";
+
 export const SHIPMENT_ORDER_REQUIREMENT_OPTIONS: ReadonlyArray<{
   value: ShipmentOrderRequirement;
   label: string;
@@ -125,6 +132,30 @@ export const SHIPPING_DOC_CEKI_NAME_MODE_OPTIONS: ReadonlyArray<{
 
 export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "devral";
 
+export const SHIPPING_ORDER_COVERAGE_OPTIONS: ReadonlyArray<{
+  value: ShippingOrderCoverage;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "off",
+    label: "Sorma (varsayılan)",
+    hint: "Siparişe yazılamayan mal olsa da sevkiyat sessizce kurulur. Bugünkü davranış.",
+  },
+  {
+    value: "warn",
+    label: "Uyar",
+    hint: "Sevkiyat kurulur ama “siparişe yazılamayan ~N m mal var” uyarısı çıkar — tablette de.",
+  },
+  {
+    value: "block",
+    label: "Zorunlu tut",
+    hint: 'Siparişe yazılamayan mal varsa sevkiyat kurulamaz; "Siparişsiz/fazla mal" işaretlenirse geçer.',
+  },
+] as const;
+
+export const DEFAULT_SHIPPING_ORDER_COVERAGE: ShippingOrderCoverage = "off";
+
 /** Değer geçerli mi (sunucudan gelen bilinmeyen metni sağlamlaştırır). */
 export function isShipmentOrderRequirement(v: unknown): v is ShipmentOrderRequirement {
   return v === "off" || v === "warn" || v === "block";
@@ -140,4 +171,8 @@ export function isShippingDocItemNameMode(v: unknown): v is ShippingDocItemNameM
 
 export function isShippingDocCekiNameMode(v: unknown): v is ShippingDocCekiNameMode {
   return v === "devral" || v === "bizdeki" || v === "musterideki" || v === "ikisi";
+}
+
+export function isShippingOrderCoverage(v: unknown): v is ShippingOrderCoverage {
+  return v === "off" || v === "warn" || v === "block";
 }

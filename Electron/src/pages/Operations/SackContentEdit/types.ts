@@ -469,3 +469,33 @@ export interface EditorTarget {
   /** true = "Yeni Çuval" ile az önce açıldı (boş başlar). */
   isNew?: boolean;
 }
+
+/** Toplu dağıtma önizlemesi — etkilenen HER top satır olarak gelir. */
+export interface BulkDistributePreview {
+  sacks: {
+    sackId: string;
+    sackNo: string;
+    customer: { id: string; name: string } | null;
+    weightKg: number | null;
+    rollCount: number;
+    swatchCount: number;
+    totalMeters: number;
+    /** Dolu ise bu çuval dağıtılamaz (sevkiyata atanmış) ve sebebi budur. */
+    engel: string | null;
+    rolls: { id: string; barcode: string | null; item: string | null; color: string | null; meters: number }[];
+  }[];
+  bulunamayan: string[];
+  ozet: {
+    secilen: number;
+    dagitilacak: number;
+    engelli: number;
+    toplamTop: number;
+    toplamMetraj: number;
+  };
+}
+
+/** Toplu dağıtma sonucu — kısmi başarı SESSİZ değildir. */
+export interface BulkDistributeResult {
+  dagitilan: { sackId: string; sackNo: string; removedRolls: number; removedSwatches: number }[];
+  atlanan: { sackId: string; sackNo: string; sebep: string }[];
+}

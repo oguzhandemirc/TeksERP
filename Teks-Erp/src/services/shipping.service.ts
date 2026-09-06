@@ -70,6 +70,11 @@ import {
 } from "./helpers/shipping-weigh-gate.helper";
 // "Müşterideki ad" zinciri (2026-09-04) — etiketle AYNI cascade, tek kaynak.
 import { loadShipmentCustomerNames } from "./helpers/shipment-customer-name.helper";
+import { batchLoadAliases, batchLoadAliasesMulti, resolveName } from "./helpers/customer-name.helper";
+import {
+  resolveOrderCoverage,
+  assertCoverageAllowed,
+} from "./helpers/shipment-coverage.helper";
 import {
   assertInvoiceTraceAllowed,
   invoiceTraceWarning,
@@ -850,6 +855,128 @@ export class ShippingService {
     });
     const n = removedRolls + removedSwatches;
     return { success: true, data: { removedRolls, removedSwatches }, message: n > 0 ? `${n} top/kartela depoya çıkarıldı` : "Çıkarılacak içerik yok" };
+  }
+
+  /**
+   * TOPLU DAĞITMA — ÖNİZLEME (2026-09-06).
+   *
+   * Kök CLAUDE.md: "Yıkıcı işlemde backend preview ucu döner, arayüz etkilenen HER
+   * kaydı listeler ve per-record seçim sunar; soyut sayı yetmez." Toplu dağıtma
+   * tam bu sınıfa girer: kullanıcı listeden N çuval seçiyor ve içindeki topların
+   * hepsi depoya düşüyor.
+   *
+   * ⚠️ SİLME DEĞİL DAĞITMA: çuval kaydı korunur, yalnız içerik boşalır. Adı
+   * "silme" olan bir düğmenin arkasında bu durur — önizleme metni bunu söyler.
+   *
+   * Yazma YOK; her çuval için engel varsa GEREKÇESİYLE döner (sevkiyata atanmış
+   * çuval dağıtılamaz — sevk defterini bozardı).
+   */
+  async previewDistributeSacks(sackIds: string[]): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(sackIds)].filter(Boolean);
+    if (ids.length === 0) throw AppError.badRequest("Çuval seçilmedi");
+    const sacks = await prisma.sack.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true, sackNo: true, shipmentId: true, weightKg: true,
+        shipment: { select: { shipmentNo: true, status: true } },
+        customer: { select: { id: true, name: true } },
+        rolls: {
+          where: { status: { notIn: SACK_ABSENT_STATUSES } },
+          select: { id: true, barcode: true, currentQty: true, item: { select: { name: true } }, color: { select: { name: true } } },
+          orderBy: { createdAt: "asc" },
+        },
+        _count: { select: { swatches: true } },
+      },
+      orderBy: { sackNo: "asc" },
+    });
+    const bulunanIds = new Set(sacks.map((s2) => s2.id));
+    const kayip = ids.filter((i) => !bulunanIds.has(i));
+
+    const satirlar = sacks.map((sk) => {
+      const metraj = sk.rolls.reduce((a2, r) => a2 + Number(r.currentQty), 0);
+      // Tek engel sınıfı: sevkiyata atanmış çuval. Aynı kural tekil dağıtmada da
+      // var (`distributeSackContents`) — iki yüzey aynı hükmü versin.
+      const engel = sk.shipmentId
+        ? `${sk.shipment?.shipmentNo ?? "Bir"} sevkiyatına atanmış — önce sevkiyattan çıkarın`
+        : null;
+      return {
+        sackId: sk.id,
+        sackNo: sk.sackNo,
+        customer: sk.customer,
+        weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        rollCount: sk.rolls.length,
+        swatchCount: sk._count.swatches,
+        totalMeters: Math.round(metraj * 1000) / 1000,
+        engel,
+        // Etkilenen HER kayıt — arayüz sayı değil satır gösterir.
+        rolls: sk.rolls.map((r) => ({
+          id: r.id, barcode: r.barcode,
+          item: r.item?.name ?? null, color: r.color?.name ?? null,
+          meters: Number(r.currentQty),
+        })),
+      };
+    });
+    const uygun = satirlar.filter((r) => !r.engel);
+    return {
+      success: true,
+      data: {
+        sacks: satirlar,
+        bulunamayan: kayip,
+        ozet: {
+          secilen: ids.length,
+          dagitilacak: uygun.length,
+          engelli: satirlar.length - uygun.length,
+          toplamTop: uygun.reduce((a2, r) => a2 + r.rollCount, 0),
+          toplamMetraj: Math.round(uygun.reduce((a2, r) => a2 + r.totalMeters, 0) * 1000) / 1000,
+        },
+      },
+    };
+  }
+
+  /**
+   * TOPLU DAĞITMA — UYGULA (2026-09-06).
+   *
+   * Her çuval için tekil `distributeSackContents` yolunu kullanır: kural, kilit ve
+   * audit satırı TEK KAYNAKTAN gelir. Toplu yol kendi SQL'ini yazsaydı
+   * `touchWarehouseSackTx` / `markSackContentChangedTx` çiftini ikinci kez
+   * uygulamak gerekirdi ve biri unutulunca tartı sessizce bayat kalırdı.
+   *
+   * ⚠️ HEPSİ-YA-HİÇBİRİ DEĞİL: engelli çuval atlanır, sebebi RAPORLANIR. Tek bir
+   * sevkiyattaki çuval yüzünden 20 çuvallık işi düşürmek sahada işe yaramaz;
+   * sessizce atlamak ise "yeşil ≠ yapıldı" olurdu.
+   */
+  async distributeSacksBulk(
+    data: { sackIds: string[] },
+    userId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    const ids = [...new Set(data.sackIds)].filter(Boolean);
+    if (ids.length === 0) throw AppError.badRequest("Çuval seçilmedi");
+    const on = (await this.previewDistributeSacks(ids)).data as {
+      sacks: { sackId: string; sackNo: string; engel: string | null }[];
+      bulunamayan: string[];
+    };
+    const dagitilan: { sackId: string; sackNo: string; removedRolls: number; removedSwatches: number }[] = [];
+    const atlanan: { sackId: string; sackNo: string; sebep: string }[] = [];
+    for (const sk of on.sacks) {
+      if (sk.engel) {
+        atlanan.push({ sackId: sk.sackId, sackNo: sk.sackNo, sebep: sk.engel });
+        continue;
+      }
+      const r = (await this.distributeSackContents({ sackId: sk.sackId }, userId)).data as {
+        removedRolls: number; removedSwatches: number;
+      };
+      dagitilan.push({ sackId: sk.sackId, sackNo: sk.sackNo, ...r });
+    }
+    for (const id of on.bulunamayan) atlanan.push({ sackId: id, sackNo: "?", sebep: "Çuval bulunamadı" });
+    const topToplam = dagitilan.reduce((a2, d) => a2 + d.removedRolls + d.removedSwatches, 0);
+    return {
+      success: true,
+      data: { dagitilan, atlanan },
+      message:
+        atlanan.length === 0
+          ? `${dagitilan.length} çuval dağıtıldı (${topToplam} top/kartela depoya çıktı)`
+          : `${dagitilan.length} çuval dağıtıldı, ${atlanan.length} çuval atlandı`,
+    };
   }
 
   /**
@@ -1708,6 +1835,8 @@ export class ShippingService {
 
     let result: { id: string; shipmentNo: string };
     let tahsisIzi: AllocationAuditTrail | null = null;
+    /** Kapsama kapısının `warn` metni — tx içinde üretilir, yanıtta taşınır. */
+    let kapsamaNotu: string | null = null;
     try {
       result = await withBarcodeRetry(() =>
       prisma.$transaction(async (tx) => {
@@ -1723,11 +1852,13 @@ export class ShippingService {
           carrier: data.carrier,
           clientToken: data.clientToken,
           confirmationEnabled,
+          orderless: data.orderless,
           userId,
         });
         // Tahsis izi çekirdekten TAŞINIR (tx dışında `flushAllocationAudit`e
         // gider). Çekirdek onu döndürmeseydi audit sessizce boş kalırdı.
         tahsisIzi = core.iz;
+        kapsamaNotu = core.kapsamaUyarisi;
         return { id: core.id, shipmentNo: core.shipmentNo };
       }),
       undefined,
@@ -1766,6 +1897,10 @@ export class ShippingService {
       orderless: data.orderless,
     });
     if (orderlessNote) warnings.push(orderlessNote);
+    // Kapsama uyarısı (`shipping.orderCoverage=warn`). Bugün bu bilgi YALNIZ
+    // önizlemede vardı; tablet Paketleme `orderIds: undefined` gönderdiği için
+    // sahadaki asıl yol onu hiç görmüyordu.
+    if (kapsamaNotu) warnings.push(kapsamaNotu);
     await AuditService.log({ userId, action: "CREATE", tableName: "SHIPMENT", recordId: result.id, newData: { shipmentNo: result.shipmentNo, customerId: data.customerId, branchId, sackIds, orderIds, orderless: data.orderless === true, destination, dispatched } });
     // Otomatik fatura taslağı — YALNIZ gerçekten sevk edildiyse. PLANNED bir
     // sevkiyat "mal çıktı" demez; onay açıkken taslak `dispatchShipment`'te doğar.
@@ -1803,9 +1938,17 @@ export class ShippingService {
       carrier?: string | null;
       clientToken?: string | null;
       confirmationEnabled: boolean;
+      /** Kullanıcının "siparişsiz / fazla mal" beyanı — kapsama kapısının kaçışı. */
+      orderless?: boolean;
       userId?: string;
     },
-  ): Promise<{ id: string; shipmentNo: string; iz: AllocationAuditTrail | null }> {
+  ): Promise<{
+    id: string;
+    shipmentNo: string;
+    iz: AllocationAuditTrail | null;
+    /** `shipping.orderCoverage` `warn` iken üretilen metin; yoksa null. */
+    kapsamaUyarisi: string | null;
+  }> {
     const shipmentNo = await nextShipmentNo(tx);
     const created = await tx.shipment.create({
       // ⚠️ Künye (Faz A2) `dispatchedById`den FARKLI bilgidir: sevkiyat
@@ -1855,7 +1998,24 @@ export class ShippingService {
       // ikincisi birincisini siler ve GEÇERLİ olan odur → iz de o olmalı.
       if (dp.iz) iz = dp.iz;
     }
-    return { ...created, iz };
+
+    // KAPSAMA KAPISI (`shipping.orderCoverage`, 2026-09-06) — İKİNCİ EKSEN.
+    // Burada, tahsis YAZILDIKTAN sonra çalışır: "sipariş seçildi mi" değil
+    // "mal deftere yazıldı mı" sorusunu ölçer. Varsayılan `off` → hiçbir şey olmaz.
+    // ⚠️ tx İÇİNDE: `block` rejiminde atılan hata sevkiyatı geri alır; yarım
+    // kurulmuş bir sevkiyat bırakmak, kapının kendisinden daha kötü olurdu.
+    const kapsamaRejimi = await resolveOrderCoverage();
+    let kapsamaUyarisi: string | null = null;
+    if (kapsamaRejimi !== "off" && p.orderIds.length > 0) {
+      const mal = await tx.roll.aggregate({ where: { shipmentId: created.id }, _sum: { currentQty: true } });
+      const cikan = Number(mal._sum.currentQty ?? 0);
+      const yazilan = (iz?.yazilan ?? []).reduce((a2, y) => a2 + y.qty, 0);
+      kapsamaUyarisi = assertCoverageAllowed(kapsamaRejimi, cikan - yazilan, {
+        orderIds: p.orderIds,
+        orderless: p.orderless,
+      });
+    }
+    return { ...created, iz, kapsamaUyarisi };
   }
 
   /**
@@ -3899,6 +4059,23 @@ export class ShippingService {
       }
     }
 
+    // MÜŞTERİDEKİ AD — EKRAN İLE KÂĞIT AYNI YÜKLEMİ KULLANIR (2026-09-06).
+    // Bu projeksiyon eskiden YALNIZ `OrderLine` override'ını taşıyordu; belge ise
+    // `override > CustomerItemAlias/CustomerColorAlias (master) > bizim ad`
+    // kademesini çözüyordu. Sonuç ölçüldü: sevk edilmiş 1.778 topun 424'ünde (%24)
+    // kumaş için master alias VARDI ama override YOKTU → irsaliyede müşteri adı
+    // basılıyor, elemanın ekranında hiç görünmüyordu (renk için 152 top / %9).
+    // Aynı soruyu iki yüzeyin iki farklı yüklemle cevaplaması kök CLAUDE.md'nin
+    // "türetilmiş alan / ayrışan yüzey" sınıfıdır; tek kaynak `customer-name.helper`.
+    // Maliyet: müşteri başına 2 sorgu (`batchLoadAliases`), satır başına DEĞİL.
+    const siparisKalemleri = shipment.orders.flatMap((so) => so.order.lines);
+    const { itemAliasByItemId, colorAliasByColorId } = await batchLoadAliases(
+      prisma,
+      shipment.customer.id,
+      siparisKalemleri.map((l) => l.itemId),
+      siparisKalemleri.map((l) => l.colorId).filter((c): c is string => !!c),
+    );
+
     const orders = shipment.orders.map((so) => ({
       id: so.order.id,
       orderNumber: so.order.orderNumber,
@@ -3907,13 +4084,22 @@ export class ShippingService {
       lines: so.order.lines.map((l) => {
         const requested = new Prisma.Decimal(l.quantity);
         const shipped = new Prisma.Decimal(l.shippedQty);
+        // ⚠️ Yalnız GERÇEKTEN bir müşteri karşılığı varsa dolu döner: `resolveName`
+        // DEFAULT'a düşerse (bizim adımız) alan null kalır — arayüz "(Müşteride: X)"
+        // etiketini bizim adımızla basıp kullanıcıya sahte bir karşılık göstermesin.
+        const musteriKumas = resolveName(l.customerItemName, itemAliasByItemId.get(l.itemId), "");
+        const musteriRenk = resolveName(
+          l.customerColorName,
+          l.colorId ? colorAliasByColorId.get(l.colorId) : null,
+          "",
+        );
         return {
           lineId: l.id,
           item: l.item,
           color: l.color,
           width: l.width,
-          customerItemName: l.customerItemName,
-          customerColorName: l.customerColorName,
+          customerItemName: musteriKumas.source === "DEFAULT" ? null : musteriKumas.name,
+          customerColorName: musteriRenk.source === "DEFAULT" ? null : musteriRenk.name,
           requested,
           shipped,
           openQty: requested.minus(shipped),
@@ -4409,6 +4595,17 @@ export class ShippingService {
         return sum.plus(g._sum.currentQty ?? 0);
       }, D0());
 
+    // MÜŞTERİDEKİ AD — `getShipmentById` ile AYNI kademe (2026-09-06): override >
+    // master alias > yok. Bu uç `customerId`siz de çağrılabildiği için alias'lar
+    // müşteri BAŞINA döngüyle değil, (customerId, itemId) çiftleriyle TEK sorgu
+    // çiftinde çekilir — kaç müşteri olursa olsun 2 gidiş-dönüş.
+    const { itemAlias: kumasAlias, colorAlias: renkAlias } = await batchLoadAliasesMulti(
+      prisma,
+      orders.map((o) => o.customer.id),
+      orders.flatMap((o) => o.lines.map((l) => l.itemId)),
+      orders.flatMap((o) => o.lines.map((l) => l.colorId)).filter((c): c is string => !!c),
+    );
+
     const data = orders.map((o) => ({
       order: { id: o.id, orderNumber: o.orderNumber, status: o.status, deadline: o.deadline, customer: o.customer, branch: o.branch },
       lines: o.lines.map((l) => {
@@ -4416,9 +4613,17 @@ export class ShippingService {
         const shipped = new Prisma.Decimal(l.shippedQty);
         const openQty = requested.minus(shipped);
         const fromWarehouse = specAvail(l);
+        // DEFAULT'a düşerse null — arayüz bizim adımızı "müşterideki ad" diye basmasın.
+        const musteriKumas = resolveName(l.customerItemName, kumasAlias.get(`${o.customer.id}:${l.itemId}`), "");
+        const musteriRenk = resolveName(
+          l.customerColorName,
+          l.colorId ? renkAlias.get(`${o.customer.id}:${l.colorId}`) : null,
+          "",
+        );
         return {
           lineId: l.id, item: l.item, color: l.color, width: l.width,
-          customerItemName: l.customerItemName, customerColorName: l.customerColorName,
+          customerItemName: musteriKumas.source === "DEFAULT" ? null : musteriKumas.name,
+          customerColorName: musteriRenk.source === "DEFAULT" ? null : musteriRenk.name,
           requested, shipped, openQty, warehouseAvailable: fromWarehouse,
           covered: openQty.lessThanOrEqualTo(0) || fromWarehouse.greaterThanOrEqualTo(openQty),
         };
