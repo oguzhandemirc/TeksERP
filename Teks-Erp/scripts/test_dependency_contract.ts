@@ -163,6 +163,16 @@ const KISALTMA: Record<string, string> = {
 // Paket sütununda geçen ama paket OLMAYAN düzyazı jetonları.
 const DUZYAZI = new Set(["fetch"]);
 
+/**
+ * REPO İÇİ DOSYA YOLU mu? Tabloda backtick'li her jeton paket adı sayılır; ama
+ * §2 satırları bazen "paket YOK, kendi kodumuz şurada" der ve o yolu backtick
+ * içinde yazar (`src/lib/logger.ts`, 2026-09-07). Ölçüt DAR tutuldu — yalnız
+ * `/` İÇEREN ve kod uzantısıyla biten jeton: `opentype.js` gerçek bir pakettir
+ * ve `/` taşımadığı için buraya düşmez, `@prisma/client` ise `/` taşır ama kod
+ * uzantısıyla bitmez.
+ */
+const dosyaYolu = (ad: string): boolean => ad.includes("/") && /\.(ts|js|mjs|cjs)$/.test(ad);
+
 // DEVRALINAN KAYITSIZLAR — [KU-04] baseline'ı: bu paketler §2.3'te hiç
 // anılmıyor. Liste YALNIZ KÜÇÜLÜR; yeni bir kayıtsız bağımlılık kırmızıdır.
 const KAYIT_BEKLEYEN: Record<string, string[]> = {
@@ -199,7 +209,7 @@ function tabloOku(): Record<string, Tablo> {
       const sade = cols[1].replace(/\([^)]*\)/g, "");
       for (const t of sade.match(/`[^`]+`/g) ?? []) {
         const ad = KISALTMA[t.slice(1, -1)] ?? t.slice(1, -1);
-        if (!DUZYAZI.has(ad)) iddia.add(ad);
+        if (!DUZYAZI.has(ad) && !dosyaYolu(ad)) iddia.add(ad);
       }
     }
     out[proje] = { tum, iddia };

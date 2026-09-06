@@ -1,12 +1,12 @@
 # `deploy/` — sunucu kurulum script'leri
 
-Fabrika sunucusundaki (SAHINSRV, `C:\Etkili-Yazilim`) **paket tabanlı** deploy'un
+Fabrika sunucusundaki (SAHINSRV, `C:\TeksERP`) **paket tabanlı** deploy'un
 kaynağı. Akış ve gerekçe: [`docs/ops/DEPLOY-RUNBOOK.md §3`](../docs/ops/DEPLOY-RUNBOOK.md).
 
 | Dosya | Sunucudaki yeri | Ne yapar |
 |---|---|---|
-| `kur.ps1` | `C:\Etkili-Yazilim\kur.ps1` | Paketi doğrular → `premigrate_` yedeği (pg_restore ile doğrulanır) → pm2 delete → çalışanı `app.eski-<damga>` olarak kenara alır → yeni sürümü `app\`'a yerleştirir → `migrate deploy` → pm2 start + save → `/health`. `-GeriAl` ile son kuruluma döner. |
-| `paketle.ps1` | build klonunun kökünden koşulur: `D:\tekserp-build\tekserp` → `.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim` | Repo kökünde (`Teks-Erp`'nin üstünde) koşar: `npm ci` → `prisma generate` → `tsc --removeComments` → dist (`.js.map`siz) + `prisma/{schema,migrations}` (seed YOK) + `public` + `assets` + `package*.json` + `ecosystem.config.js` + `Teks-Erp/deploy/prisma.config.prod.js` → `prisma.config.js` + (varsayılan) üretim `node_modules` + `PAKET.json` → `tekserp-backend-<damga>-<commit>.zip`. Windows **şema motoru** kapıları: `PRISMA_CLI_BINARY_TARGETS=windows` + varlık + MZ imzası (yabancı platform motoru paketten atılır). Sunucudaki kopyayla bayt-bayt aynı olmalıdır — md5'i sabitleme, `Get-FileHash` ile karşılaştır. |
+| `kur.ps1` | `C:\TeksERP\kur.ps1` | Paketi doğrular → `premigrate_` yedeği (pg_restore ile doğrulanır) → pm2 delete → çalışanı `app.eski-<damga>` olarak kenara alır → yeni sürümü `app\`'a yerleştirir → `migrate deploy` → pm2 start + save → `/health`. `-GeriAl` ile son kuruluma döner. |
+| `paketle.ps1` | **GELİŞTİRME MAKİNESİNDE** repo kökünden koşulur (sunucuda build klonu YOK — düzeltildi 2026-09-07). Windows şart değil: `pwsh -NoProfile -File deploy/paketle.ps1 -Cikti <klasor>` | Repo kökünde (`Teks-Erp`'nin üstünde) koşar: `npm ci` → `prisma generate` → `tsc --removeComments` → dist (`.js.map`siz) + `prisma/{schema,migrations}` (seed YOK) + `public` + `assets` + `package*.json` + `ecosystem.config.js` + `Teks-Erp/deploy/prisma.config.prod.js` → `prisma.config.js` + (varsayılan) üretim `node_modules` + `PAKET.json` → `tekserp-backend-<damga>-<commit>.zip`. Windows **şema motoru** kapıları: `PRISMA_CLI_BINARY_TARGETS=windows` + varlık + MZ imzası (yabancı platform motoru paketten atılır). Sunucudaki kopyayla bayt-bayt aynı olmalıdır — md5'i sabitleme, `Get-FileHash` ile karşılaştır. |
 
 > **`paketle.ps1` sunucuda klon KÖKÜNDE untracked duruyordu.** Repoya `deploy/` altına alındı —
 > kökte olsaydı `git pull` untracked dosyanın üstüne yazmayı reddederdi. Kök kopyası istenirse
@@ -16,7 +16,7 @@ kaynağı. Akış ve gerekçe: [`docs/ops/DEPLOY-RUNBOOK.md §3`](../docs/ops/DE
 
 ### ⚠️ Sunucuda İKİ klon var — paket `D:`'den üretilir (2026-08-25 sunucu ölçümü)
 
-| | `D:\tekserp-build\tekserp` | `C:\Etkili-Yazilim\tekserp` |
+| | *(sunucuda build klonu yok — paket geliştirme makinesinde üretilir)* | |
 |---|---|---|
 | checkout | **tam**, `main` dalının ucu (2026-09-02'ye dek `adnansahin`) | sparse — yalnız `Teks-Erp/`, **`deploy/` diskte YOK** |
 | refspec | `+refs/heads/*` | `+refs/heads/main` — yalnız `main`'i görür (2026-09-02'den sonra bu yeterli; eskiden `adnansahin`'i görmediği için 7 commit geride kalmıştı) |
@@ -31,7 +31,7 @@ Build klonu hâlâ `adnansahin`'deyse `git pull` "upstream yok" diye düşer —
 
 ```powershell
 # SUNUCUDA — BUILD klonu (D:)
-cd D:\tekserp-build\tekserp
+cd <repo kökü>   # geliştirme makinesi
 git fetch --prune origin
 git checkout main
 git pull
@@ -57,17 +57,17 @@ beri sunucudaki sparse klondan koşuyor. `Fail` yollarında cwd `Teks-Erp\` içi
 
 ## ⚠️ `kur.ps1` KENDİNİ GÜNCELLEYEMEZ — elle kopyalanır
 
-Script paketi `app\` altına açar; `kur.ps1` ise bir üst dizinde (`C:\Etkili-Yazilim\`)
+Script paketi `app\` altına açar; `kur.ps1` ise bir üst dizinde (`C:\TeksERP\`)
 yaşar. Bu dosyayı pakete koymak onu **`app\kur.ps1`** olarak indirir ve çalışan kopyaya
 dokunmaz. Repodaki sürüm değiştiğinde:
 
 ```powershell
 # SUNUCUDA (Claude Code oturumu yapabilir) — yönetici PowerShell, BUILD klonu (D:)
-cd D:\tekserp-build\tekserp
+cd <repo kökü>   # geliştirme makinesi
 git pull
-Get-FileHash .\deploy\kur.ps1, C:\Etkili-Yazilim\kur.ps1 | Format-Table Path,Hash
+Get-FileHash .\deploy\kur.ps1, C:\TeksERP\kur.ps1 | Format-Table Path,Hash
 # Hash'ler FARKLIYSA:
-Copy-Item .\deploy\kur.ps1 C:\Etkili-Yazilim\kur.ps1 -Force
+Copy-Item .\deploy\kur.ps1 C:\TeksERP\kur.ps1 -Force
 ```
 
 > Hash karşılaştırması `.gitattributes` (`*.ps1 eol=crlf`) sayesinde `core.autocrlf`

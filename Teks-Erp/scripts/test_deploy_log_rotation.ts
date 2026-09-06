@@ -18,7 +18,7 @@
 //   §2 üç ayarın üçü de veriliyor (max_size · retain · compress)
 //   §3 kurulum FAIL DEĞİL — internetsiz makinede sürüm çıkışını kesmiyor
 //   §4 rotasyonun hedefi duruyor: PAKETE GİREN `Teks-Erp/ecosystem.config.js`
-//      hâlâ dosyaya yazıyor (+ elle kurulum varyantı da)
+//   §5 ecosystem TEK KAYNAK; pm2 adı `-UygulamaAdi` → env → dosya zinciriyle gelir
 //
 // ⭐ NEGATİF SONDA (2026-09-06/07, BEŞİ DE ölçüldü — her biri ayrı koşum):
 //    ① `& $pm2 install pm2-logrotate` satırı yorumlandı            → §1 KIRMIZI
@@ -26,6 +26,10 @@
 //    ③ `Uyar` → `Fail` (blok sürüm çıkışını keser hâle geldi)      → §3 KIRMIZI
 //    ④ `Teks-Erp/ecosystem.config.js`te `out_file:` yorumlandı     → §4 KIRMIZI
 //    ⑤ `time: true` → `time: false`                                → §4 KIRMIZI
+//    ⑥ pm2 adı dosyaya sabitlendi                                 → §5 KIRMIZI
+//    ⑦ `kur.ps1`ten env yazımı kaldırıldı                          → §5 KIRMIZI
+//    ⑧ `kur.ps1` paketten çıkarıldı                                → §5 KIRMIZI
+//    ⑨ ikinci ecosystem dosyası geri kondu                         → §5 KIRMIZI
 //    Hepsi geri alındığında yeşil.
 //
 //    ⚠️ SONDANIN KENDİSİ DÖRT KEZ BEKÇİYİ DÜZELTTİ: ①, ③ ve ④ İLK yazımda
@@ -35,7 +39,7 @@
 //    dosyayı `Teks-Erp/ecosystem.config.js`ten kopyalar). "Bekçi yeşil" ile
 //    "kural korunuyor" arasındaki fark tam burası.
 // =============================================================================
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const KOK = join(__dirname, "..", "..");
@@ -52,7 +56,6 @@ const kur = readFileSync(join(KOK, "deploy", "kur.ps1"), "utf8");
 // onu pakete koymaz (`Copy-Item "$proj\ecosystem.config.js"`). Bekçi ilk yazımda
 // yanlış dosyayı ölçüyordu: paketlenen dosyadan `out_file` silinse YEŞİL kalırdı.
 const eco = readFileSync(join(KOK, "Teks-Erp", "ecosystem.config.js"), "utf8");
-const ecoFabrika = readFileSync(join(KOK, "deploy", "ecosystem.fabrika.js"), "utf8");
 
 // ── BLOK SINIRI ─────────────────────────────────────────────────────────────
 // Aramalar SERBEST METİNDE değil, bloğun KOMUT SATIRLARINDA yapılır.
@@ -125,16 +128,33 @@ check("⭐ `out_file` GERÇEKTEN tanımlı (yorum satırı sayılmaz)", ecoVar(/
 check("⭐ `error_file` GERÇEKTEN tanımlı", ecoVar(/^error_file:\s*\S/));
 check("zaman damgası açık (`time: true`) — rotasyon sonrası satır tarihi kaybolmasın", ecoVar(/^time:\s*true/));
 
-// Elle kurulumda kullanılan varyant da aynı üç alanı taşımalı — yoksa yan yana
-// kurulan makinede rotasyon başka bir dosyayı döndürür.
-const fabKomutlari = ecoFabrika
-  .split("\n")
-  .map((l) => l.trim())
-  .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("*") && !l.startsWith("/*"));
-const fabVar = (re: RegExp): boolean => fabKomutlari.some((l) => re.test(l));
+// ── §5 TEK KAYNAK ────────────────────────────────────────────────────────────
+// ⭐ `deploy/ecosystem.fabrika.js` 2026-09-07'de SİLİNDİ. Yorumlar hariç
+//    paketlenen dosyayla birebir aynıydı; TEK farkı pm2 adıydı ve o ad ayrıştığı
+//    için bir sonraki güncelleme aynı porta İKİNCİ uygulama kaldıracaktı
+//    ([4/9] yanlış adı arar → hiçbir şey silmez, [8/9] ikincisini başlatır).
+//    İkinci bir ecosystem dosyası geri gelirse aynı sınıf yeniden doğar.
+console.log("\n§5 — ecosystem TEK KAYNAK, pm2 adı `-UygulamaAdi`dan gelir");
 check(
-  "elle kurulum varyantı (`deploy/ecosystem.fabrika.js`) da üç alanı taşıyor",
-  fabVar(/^out_file:\s*\S/) && fabVar(/^error_file:\s*\S/) && fabVar(/^time:\s*true/),
+  "⭐ ikinci bir ecosystem dosyası YOK (`deploy/` altında)",
+  !existsSync(join(KOK, "deploy", "ecosystem.fabrika.js")) &&
+    !existsSync(join(KOK, "deploy", "ecosystem.yan-yana.js")),
+);
+check(
+  "⭐ pm2 adı env'den okunuyor (dosyaya sabitlenmemiş)",
+  ecoVar(/^name:\s*process\.env\.TEKSERP_PM2_AD\s*\|\|/),
+);
+const kurKomut = kur
+  .split("\n").map((l) => l.trim())
+  .filter((l) => l.length > 0 && !l.startsWith("#"));
+check(
+  "⭐ `kur.ps1` başlatmadan ÖNCE o adı env'e yazıyor ([4/9] sildiği ile [8/9] başlattığı aynı olsun)",
+  kurKomut.some((l) => /^\$env:TEKSERP_PM2_AD\s*=\s*\$uygulama/.test(l)),
+);
+check(
+  "⭐ `kur.ps1` pakete giriyor (paket ile onu kuran script ayrışamaz)",
+  readFileSync(join(KOK, "deploy", "paketle.ps1"), "utf8")
+    .split("\n").some((l) => /^\s*Copy-Item\s+"\$repo\\deploy\\kur\.ps1"/.test(l)),
 );
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -1,7 +1,7 @@
 # =============================================================================
 # cloudflared — FABRİKA SUNUCUSU TÜNEL YAPILANDIRMASI (şablon)
 # =============================================================================
-# Kurulum yeri (Windows):  C:\Etkili-Yazilim\cloudflared\config.yml
+# Kurulum yeri (Windows):  C:\TeksERP\cloudflared\config.yml
 # Reçete:                  docs/ops/UZAK-ERISIM-KURULUM.md
 #
 # ⚠️ BU DOSYA ŞABLONDUR. Gerçek `<tünel-id>` ve kimlik dosyası MÜŞTERİYE ÖZELDİR
@@ -9,7 +9,7 @@
 # =============================================================================
 
 tunnel: <tünel-id>
-credentials-file: C:\Etkili-Yazilim\cloudflared\<tünel-id>.json
+credentials-file: C:\TeksERP\cloudflared\<tünel-id>.json
 
 # Bağlantı dayanıklılığı — fabrika internetinin kısa kesintilerinde tünel
 # kendini toparlasın. Varsayılanlar zaten makul; burada AÇIKÇA yazılıyorlar ki

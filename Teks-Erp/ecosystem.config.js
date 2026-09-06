@@ -45,7 +45,15 @@ const KOK = path.resolve(__dirname, "..").replace(/\\/g, "/");
 module.exports = {
   apps: [
     {
-      name: "tekserp-backend",
+      // ⚠ İSİM TEK KAYNAK: `kur.ps1 -UygulamaAdi` bu env'i yazar. Eskiden ad
+      // BURAYA sabit yazılıydı ve `-UygulamaAdi` yalnız "hangi uygulamayı
+      // SİLECEĞİMİ" belirliyordu — başlatılan ad dosyadan geliyordu. İkisi
+      // ayrıştığı an [4/9] yanlış uygulamayı arar (hiçbir şey silmez), [8/9]
+      // aynı porta İKİNCİ bir uygulama kaldırır ve [9/9] health düşer.
+      // Ölçüldü 2026-09-07: sahada koşan ad `tekserp-backend-yeni`, pakete giren
+      // dosyada `tekserp-backend` yazıyordu — bir sonraki güncelleme bu tuzağa
+      // düşecekti. Varsayılan sahadaki adla AYNI: env verilmese de kırılmaz.
+      name: process.env.TEKSERP_PM2_AD || "tekserp-backend-yeni",
       // tsconfig: rootDir=./src, outDir=./dist → çıktı `dist/server.js`
       // (`dist/src/server.js` DEĞİL — yanlış yol pm2'yi hiç başlatmaz).
       script: "dist/server.js",

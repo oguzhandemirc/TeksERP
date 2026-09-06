@@ -37,10 +37,12 @@ gerekir; **ayrı veritabanı çok daha temizdir.**
 #    (Veritabanı zaten VARSA -PostgresParola ve -Dump gerekmez: [3/8] önce
 #     bağlanmayı dener, başarırsa hiçbir şey yaratmaz.)
 
-# 2) ⚠ YAPILANDIRMAYI KURULUMDAN ÖNCE KOY
-# ⚠️ `ecosystem.yan-yana.js` repoda YOK — `deploy/ecosystem.fabrika.js`'i kopyalayıp
-#    port/ad alanlarını elle düzenle (aşağıdaki tabloya göre).
-Copy-Item .\ecosystem.fabrika.js C:\TeksERP\app\ecosystem.config.js
+# 2) ⚠ ADIM KALKTI (2026-09-07) — elle yapılandırma kopyalamak GEREKMİYOR.
+#    Eskiden ikinci kurulum için ayrı bir `ecosystem` dosyası kopyalanıyordu
+#    (`ecosystem.yan-yana.js` hiç var olmadı, `ecosystem.fabrika.js` ise pakete
+#    GİRMEYEN bir kopyaydı ve paketlenen dosyadan ayrışmıştı). pm2 uygulama adı
+#    artık `-UygulamaAdi`dan geliyor; PORT ayrımı için `app\ecosystem.config.js`
+#    içindeki `PORT` satırı kurulum SONRASI düzenlenir ve `pm2 restart` edilir.
 
 # 3) Sürümü kur
 .\kur.ps1 -Kok C:\TeksERP `
@@ -87,7 +89,7 @@ curl http://localhost:4100/health    # YENİ  — surum yeni olmalı
 kez sorguluyorsunuzdur.
 
 ```powershell
-$env:PM2_HOME = "C:\Etkili-Yazilim\pm2-home"; pm2 list   # tekserp-backend
+$env:PM2_HOME = "C:\TeksERP\pm2-home"; pm2 list
 $env:PM2_HOME = "C:\TeksERP\pm2-home";        pm2 list   # tekserp-backend-yeni
 ```
 
@@ -124,7 +126,7 @@ pm2 delete tekserp-backend-yeni ; cd C:\TeksERP\app ; pm2 start ecosystem.config
 
 # GERİ DÖNÜŞ: simetrik
 pm2 stop tekserp-backend-yeni
-cd C:\Etkili-Yazilim\app ; pm2 start ecosystem.config.js ; pm2 save
+cd <ESKI-KOK>\app ; pm2 start ecosystem.config.js ; pm2 save
 ```
 
 ⚠️ **Veri geri gelmez.** İki kurulum AYRI veritabanı kullandığı için yeni sürümde
@@ -132,4 +134,4 @@ geçen sürede yapılan işler eski veritabanında YOKTUR. Geçiş kararını ve
 "hangi veritabanı gerçek" sorusunun tek bir cevabı olmalı; iki tarafta da iş
 yapılmışsa birleştirme elle ve pahalıdır.
 
-⚠️ Eski kurulum `C:\Etkili-Yazilim`de **olduğu gibi durur** — silinmez.
+⚠️ Eski kurulum kendi kökünde **olduğu gibi durur** — silinmez.

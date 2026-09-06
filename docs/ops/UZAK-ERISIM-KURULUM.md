@@ -117,7 +117,7 @@ Türkçe **"Fabrika sunucusuna şu anda ulaşılamıyor"** sayfası çıkmalı �
 winget install --id Cloudflare.cloudflared
 
 # Kimlik dosyası ve config'i yerleştir
-mkdir C:\Etkili-Yazilim\cloudflared
+mkdir C:\TeksERP\cloudflared
 # → <tünel-id>.json  ve  config.yml  (şablon: deploy/uzak-erisim/config.yml.ornek)
 
 # SERVİS olarak kur — oturum açmadan, yeniden başlatmada kendi kalkar
@@ -133,7 +133,7 @@ REMOTE_PORT="4001"
 CF_ACCESS_TEAM_DOMAIN="firma.cloudflareaccess.com"
 CF_ACCESS_AUD="<Access uygulamasının AUD etiketi>"
 RATE_LIMIT_ENABLED="true"
-WEB_DIST_DIR="C:\Etkili-Yazilim\app\dist-web"
+WEB_DIST_DIR="C:\TeksERP\app\dist-web"
 ```
 
 > `dist-web` backend paketiyle BİRLİKTE gelir (`deploy/paketle.ps1`), yani
@@ -179,7 +179,7 @@ hesabı** değiştirebilir. Hesap **sunucuda elle koşulan bir script'le** doğa
 > adım gerektiriyordu.
 
 ```powershell
-cd C:\Etkili-Yazilim\app
+cd C:\TeksERP\app
 npm run superadmin:kur                # kurulum (idempotent — hesap varsa DOKUNMAZ)
 npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
 ```
@@ -187,7 +187,7 @@ npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
 > ⚠️ **GERÇEK TERMİNAL ŞART — uzaktan koşuyorsan `-t` VER.** Script parolayı
 > maskeleyerek sorar; girdi boru/dosya olduğunda hiçbir soru cevaplanamaz ve
 > **süreç hata vermeden, zaman aşımına düşmeden bekler**. Doğrusu:
-> `ssh -t sunucu 'cd C:\Etkili-Yazilim\app && npm run superadmin:kur'`,
+> `ssh -t sunucu 'cd C:\TeksERP\app && npm run superadmin:kur'`,
 > `docker exec -it <konteyner> npm run superadmin:kur` ya da doğrudan sunucu
 > konsolu. `-t` unutulursa script artık **gürültülü hata verip çıkar**
 > ("etkileşimli terminal ister") — eskiden sessizce donuyordu, yani kurulum

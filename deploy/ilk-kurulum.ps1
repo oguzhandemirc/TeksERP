@@ -41,7 +41,7 @@ param(
   [string]$Dump,                                     # opsiyonel: BOS veritabanina yukle
   [int]$DbPort = 5432,
   [string]$PgBin,
-  [string]$Kok = "C:\Etkili-Yazilim"
+  [string]$Kok = "C:\TeksERP"
 )
 $ErrorActionPreference = "Stop"
 

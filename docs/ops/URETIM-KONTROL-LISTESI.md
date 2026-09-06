@@ -1,7 +1,7 @@
 # TeksERP — Üretim Deploy Öncesi Kontrol Listesi
 
 > ⚠️ **TARİHSEL — deploy yolu 2026-08-24'te değişti.** Aşağıdaki `git pull → build →
-> migrate` akışı fabrikada **artık uygulanmıyor**: çalışan kurulum `C:\Etkili-Yazilim\app\`
+> migrate` akışı fabrikada **artık uygulanmıyor**: çalışan kurulum `C:\TeksERP\app\`
 > altındaki hazır pakettir ve `kur.ps1` ile kurulur (yedek + migrate + pm2 sırasını script
 > yapar). Güncel akış **`docs/ops/DEPLOY-RUNBOOK.md §3`** + `deploy/README.md`. Bu dosyanın
 > geri kalanı (gerekçeler, sıra teyidi, kontrol maddeleri) bilgi olarak duruyor.
@@ -95,7 +95,7 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
 - [ ] **Yedekleme canlı:** `GET /api/admin/health` (token + `admin:settings`) →
       `lastBackup` **null DEĞİL** — ⚠️ `/health`'te bu alan YOK (2026-08-09'da beş
       alana donduruldu; `lastBackup` yetkili uca taşındı, eski madde mekanik olarak hep
-      kırmızıydı). Token'sız alternatif: `C:\Etkili-Yazilim\backups` içinde bugünün
+      kırmızıydı). Token'sız alternatif: `C:\TeksERP\backups` içinde bugünün
       `tekserp_*.dump`'ı var mı (`kur.ps1` sonunda "Son gece yedegi:" satırı da bunu basar);
       backend log'unda `[backup] BACKUP_DIR tanımsız` satırı YOK; Panel → Sistem →
       Yedekler'de kırmızı "Yedekleme kapalı" kutusu YOK.

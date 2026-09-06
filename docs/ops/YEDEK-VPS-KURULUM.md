@@ -188,7 +188,7 @@ Script beş adımı sırayla yapar: rclone (yoksa indirir) → yapılandırma + 
 sırada, çalışmayan bir hedefle pm2 yeniden başlar ve gece yedeği sessizce
 hiçbir yere gitmez. Okuma sınaması da yetmez — yazma izni ayrıca kanıtlanır.
 
-⚠️ **Ayarlar `.env`de DEĞİL, `ecosystem.config.js`te yaşar** (`C:\Etkili-Yazilim\app\`).
+⚠️ **Ayarlar `.env`de DEĞİL, `ecosystem.config.js`te yaşar** (`C:\TeksERP\app\`).
 O dosya **sunucunundur, paketin değil** (denetim 2026-08-29, BULGU-T1-020): paketteki
 kopya repo varsayılanlarını taşır ve her kurulum sahadaki ayarı sessizce geri
 alıyordu — gece yedeği ve makine dışı kopya, güncelleme yapılan gece kapanıyordu.

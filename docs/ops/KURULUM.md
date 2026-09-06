@@ -126,7 +126,7 @@ SHOW teks.audit_guard;   -- 'on' dönmeli
 > adıyla yazılır. Panelden ne atanabilir ne silinebilir.
 
 ```powershell
-cd C:\Etkili-Yazilim\app
+cd C:\TeksERP\app
 npm run superadmin:kur                # kurulum (idempotent)
 npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
 ```
@@ -134,7 +134,7 @@ npm run superadmin:kur -- --rotate    # parola + PIN + TOTP yenile
 > ⚠️ **GERÇEK TERMİNAL ŞART — uzaktan koşuyorsan `-t` VER.** Script parolayı
 > maskeleyerek sorar; girdi boru/dosya olduğunda hiçbir soru cevaplanamaz ve
 > **süreç hata vermeden, zaman aşımına düşmeden bekler**. Doğrusu:
-> `ssh -t sunucu 'cd C:\Etkili-Yazilim\app && npm run superadmin:kur'`,
+> `ssh -t sunucu 'cd C:\TeksERP\app && npm run superadmin:kur'`,
 > `docker exec -it <konteyner> npm run superadmin:kur` ya da doğrudan sunucu
 > konsolu. `-t` unutulursa script artık **gürültülü hata verip çıkar**
 > ("etkileşimli terminal ister") — eskiden sessizce donuyordu, yani kurulum

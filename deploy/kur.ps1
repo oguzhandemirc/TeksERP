@@ -2,8 +2,8 @@
 # TeksERP Backend - SURUM KURULUMU (paket tabanli)
 # =============================================================================
 # NEREDE CALISIR: SUNUCUDA, YONETICI PowerShell'de.
-#   C:\Etkili-Yazilim\kur.ps1 -Paket D:\tekserp-backend-20260801_120000-abc1234.zip
-#   C:\Etkili-Yazilim\kur.ps1 -GeriAl          # son kuruluma geri don
+#   C:\TeksERP\kur.ps1 -Paket D:\tekserp-backend-20260801_120000-abc1234.zip
+#   C:\TeksERP\kur.ps1 -GeriAl          # son kuruluma geri don
 #
 # ⚠ PAKETLENMIS KURULUMDA `npm run <script>` KULLANMA - `node <tam yol>` kullan.
 #   Paket `node_modules\.bin` TASIMAZ ve bu BILINCLIDIR: npm o klasordeki
@@ -23,16 +23,22 @@
 #
 # NEDEN guncelle.ps1'IN YERINI ALDI:
 #   CALISAN kurulum (app\) bir git klonu DEGIL, hazir pakettir; "pull et + derle"
-#   orada yapilamaz. Paket sunucudaki BUILD klonundan uretilir
-#   (D:\tekserp-build\tekserp - tam klon, dalin ucu; klon kokunde
-#   .\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim). C:\Etkili-Yazilim\tekserp
-#   klonu sparse + dar refspec'tir (yalnizca main) - paket icin KULLANMA. Dal artik
-#   her iki klonda da main (2026-09-02: musteri dali adnansahin emekli edildi).
+#   orada yapilamaz.
+#   ⚠ DUZELTILDI 2026-09-07: bu baslik "paket sunucudaki BUILD klonundan uretilir
+#   (D:\tekserp-build\tekserp)" diyordu. SUNUCUDA BOYLE BIR KLON YOK ve olmasi da
+#   gerekmiyor. Paket GELISTIRME MAKINESINDE uretilir (macOS dahil - `pwsh` ile;
+#   bkz. deploy/paketle.ps1 basligi), zip sunucuya kopyalanir, bu script kosar.
 #   (bkz. deploy/README.md). Calisan kod hicbir zaman klondan kosmaz.
 #
-# BU DOSYANIN REPODAKI KOPYASI: <repo>/deploy/kur.ps1 - kaynak orasidir. Script
-#   KENDINI GUNCELLEYEMEZ (paket app\ altina iner, bu dosya bir ust dizindedir):
-#   repodaki surum degisince C:\Etkili-Yazilim\kur.ps1 uzerine ELLE kopyalanir.
+# BU DOSYANIN REPODAKI KOPYASI: <repo>/deploy/kur.ps1 - kaynak orasidir.
+#
+# ⚠ NEREDEN KOSULUR (2026-09-07 sadelestirmesi): script KONUMUNDAN BAGIMSIZDIR -
+#   `$PSScriptRoot` kullanmaz, her yolu `-Kok`tan turetir. Bu yuzden zip ile
+#   BIRLIKTE herhangi bir klasore konur ve ORADAN kosulur:
+#       D:\indirilenler\kur.ps1 -Kok C:\TeksERP -Paket D:\indirilenler\<zip>
+#   Script 2026-09-07'den beri PAKETIN ICINDE de gelir (paketle.ps1 koyar), yani
+#   paket ile onu kuran script ayni turdan cikar ve AYRISAMAZ.
+#   `C:\<kok>\kur.ps1` bir KOLAYLIK kopyasidir; bayatlayabilir, guvenme.
 #
 # GERI DONUS MODELI (load-bearing):
 #   Calisan kurulum SILINMEZ, `app.eski-<damga>` olarak YENIDEN ADLANDIRILIR.
@@ -80,12 +86,12 @@ param(
   #        onbellegi process-local durum tutar, ikinci ornek SESSIZCE cift arsiv
   #        ve cift gece yedegi uretir (ecosystem.config.js'de yazili).
   #   Devretmeden once eskisini durdur.
-  [string]$Kok = "C:\Etkili-Yazilim",
+  [string]$Kok = "C:\TeksERP",
   # ⚠ YAN YANA KURULUMDA ZORUNLU: pm2 uygulama adi. Iki kurulum ayni adi
   #   tasirsa ikincisi birincisini pm2'den SILER (`pm2 delete` [4/9]) - eski
   #   surum sessizce durur ve operator bunu ancak fabrika calismayinca anlar.
   #   Ornek: -UygulamaAdi tekserp-backend-yeni
-  [string]$UygulamaAdi = "tekserp-backend"
+  [string]$UygulamaAdi = "tekserp-backend-yeni"
 )
 $ErrorActionPreference = "Stop"
 
@@ -554,6 +560,11 @@ Ok "migration'lar uygulandi"
 
 # --- [8/9] pm2 --------------------------------------------------------------
 Adim "[8/9] pm2 baslatiliyor..."
+# ⚠ ADI BURADA VERIYORUZ (2026-09-07). `ecosystem.config.js` adi bu env'den okur;
+#   verilmezse dosyadaki varsayilan gecerli olur. Boylece [4/9]'un SILDIGI ad ile
+#   [8/9]'un BASLATTIGI ad YAPISAL OLARAK ayni olur — eskiden ad dosyada sabitti
+#   ve ikisi ayrisinca ayni porta ikinci uygulama kalkiyordu.
+$env:TEKSERP_PM2_AD = $uygulama
 & $pm2 start ecosystem.config.js
 if ($LASTEXITCODE -ne 0) { Fail "pm2 start basarisiz. Geri donus: $kok\kur.ps1 -GeriAl" }
 & $pm2 save    # ZORUNLU: reboot'ta dogru klasor kalksin (dump.pm2 tazelenir)

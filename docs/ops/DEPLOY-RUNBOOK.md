@@ -44,17 +44,17 @@ kurulum** şudur. Çelişki görürseniz bu tablo geçerlidir.
 | Ne | Değer |
 |---|---|
 | PostgreSQL | **16.9**, servis `postgresql-tekserp`, port **5432**, initdb UTF8 / **C locale** |
-| PG yolları | `C:\Etkili-Yazilim\pgsql\bin` · veri `C:\Etkili-Yazilim\pgdata` |
-| Veritabanı / kullanıcı | **`tekserp`** / `tekserp` · superuser `postgres` |
-| Backend (ÇALIŞAN) | **`C:\Etkili-Yazilim\app`** — `kur.ps1` ile kurulan PAKET (git klonu DEĞİL) · pm2 adı **`tekserp-backend`** · önceki sürüm `app.eski-<damga>` |
-| Build klonu (yalnız paket üretmek için) | **`D:\tekserp-build\tekserp`** — tam checkout, geniş refspec, `adnansahin` ucu. ⚠️ `C:\Etkili-Yazilim\tekserp` klonu sparse (`deploy/` yok) + dar refspec (`adnansahin`'i fetch etmez) → paket için KULLANMA (`deploy/README.md`). Çalışan kod klondan KOŞMAZ |
-| Deploy script'leri | `C:\Etkili-Yazilim\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**) · `deploy/paketle.ps1` (klon kökünden `.\deploy\paketle.ps1`; kökteki eski untracked kopya aynı dosya) |
+| PG yolları | `C:\TeksERP\pgsql\bin` · veri `C:\TeksERP\pgdata` |
+| Veritabanı / kullanıcı | **`app\.env` → `DATABASE_URL`den okunur** (yan yana kurulumda iki kurulum AYRI DB kullanır — adı buraya sabitleme) · superuser `postgres` |
+| Backend (ÇALIŞAN) | **`C:\TeksERP\app`** — `kur.ps1` ile kurulan PAKET (git klonu DEĞİL) · pm2 adı **`tekserp-backend-yeni`** (`kur.ps1 -UygulamaAdi` belirler; `ecosystem.config.js` onu env'den okur) · önceki sürüm `app.eski-<damga>` |
+| Paketin üretildiği yer | **GELİŞTİRME MAKİNESİ** — sunucuda build klonu YOK ve gerekmiyor (düzeltildi 2026-09-07; bu satır eskiden `D:\tekserp-build\tekserp` diyordu). Windows şart değil: macOS/Linux'ta `pwsh` ile koşar, üretilen paket Windows içindir (`deploy/paketle.ps1` başlığı). Çalışan kod klondan KOŞMAZ |
+| Deploy script'leri | `C:\TeksERP\kur.ps1` (repo kaynağı `deploy/kur.ps1` — **elle kopyalanır**; script kendini güncelleyemez, paket `app\` altına iner) · `deploy/paketle.ps1` geliştirme makinesinde |
 | pm2 daemon | **SYSTEM** hesabı → **pm2 komutları YÖNETİCİ shell ister** (`EPERM \\.\pipe\rpc.sock` alıyorsanız sebebi budur) |
 | Boot | Görev **`TeksERP-Backend-Boot`** → `pm2-boot.cmd` → `pm2 resurrect` (sistem açılışında, SYSTEM) |
-| Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\Etkili-Yazilim\backups`, **30 gün** |
+| Gece yedeği | Görev **`TeksERP-DB-Backup`**, **02:00**, `yedekle.ps1` → `C:\TeksERP\backups`, **30 gün** |
 | Backend scheduler | **KAPALI** (`BACKUP_SCHEDULE_ENABLED=false`) — gece yedeğini yukarıdaki görev alır |
 
-> ⚠️ **2026-09-02 —** `adnansahin` dalı **EMEKLİ**; build klonu `main` ucundadır ve paket `main`'den üretilir (`docs/design/MODUL-BAYRAK-TASARIM.md` §0: müşteri dalı/forku yasak). Yukarıdaki "Build klonu" satırındaki `adnansahin` ucu ifadesi tarihseldir. Sunucuda tek seferlik geçiş adımı ve `git branch -D adnansahin` temizliği `deploy/README.md`'dedir. `C:\Etkili-Yazilim\tekserp` klonunun dar refspec'i (`+refs/heads/main`) artık YETERLİDİR; onu paket için kullanmama gerekçesi yalnız sparse checkout'ta `deploy/` dizininin olmamasıdır.
+> ⚠️ **2026-09-02 —** `adnansahin` dalı **EMEKLİ**; build klonu `main` ucundadır ve paket `main`'den üretilir (`docs/design/MODUL-BAYRAK-TASARIM.md` §0: müşteri dalı/forku yasak). ⚠️ 2026-09-07: sunucudaki build klonu tartışması tamamen KAPANDI — sunucuda klon yok, paket geliştirme makinesinde üretiliyor.
 
 > **Neden gece yedeğini backend almıyor:** bağımsız görev, **backend çökmüş ya da
 > kapalıyken bile** yedek alır — backend'e bağlı bir zamanlayıcının veremeyeceği
@@ -81,7 +81,7 @@ Deploy akışı: **§3 (paket tabanlı)** + `deploy/README.md`. Yedek/geri yükl
 > **⚠ PG major sürümü ve `PG_BIN_DIR` aynı majoru göstermeli.** Yedekleme
 > `PG_BIN_DIR` altındaki `pg_dump`/`pg_restore`'u çalıştırır; bu ikili sunucudaki
 > PostgreSQL'den **eski** bir majorsa dump alınamaz. Sahada ikisi de 16.9
-> (`C:\Etkili-Yazilim\pgsql\bin`).
+> (`C:\TeksERP\pgsql\bin`).
 
 > **Dev (18.4) ↔ üretim (16.9) sürüm farkı — bilinçli olarak kabul edildi.**
 > Riskli yön yalnızca "dev dump'ını üretimde açmak"; öyle bir akış yok (üretim
@@ -206,7 +206,7 @@ cd C:\...\Teks-Erp
 
 # Log klasörü — pm2 out_file/error_file dizinini KENDİSİ OLUŞTURMAZ.
 # Yoksa süreç kalkar ama log yazamaz (sessiz teşhis kaybı).
-mkdir C:\Etkili-Yazilim\logs -Force
+mkdir C:\TeksERP\logs -Force
 
 npm ci                          # tüm bağımlılıklar
 npm run prisma:generate         # client üret
@@ -265,7 +265,7 @@ Erişim: `http://localhost:4000` / `http://<ip>:4000`, giriş `admin / 123123`.
 ## 3) GÜNCELLEME (yeni sürüm — seed YOK) — PAKET TABANLI
 
 > **2026-08-24'ten beri fabrika böyle güncelleniyor.** Çalışan kurulum
-> `C:\Etkili-Yazilim\app\` bir git klonu değil, `kur.ps1`'in yerleştirdiği hazır
+> `C:\TeksERP\app\` bir git klonu değil, `kur.ps1`'in yerleştirdiği hazır
 > pakettir; klon yalnız paketi üretmek içindir. Bu bölümün eski hâli (`git pull →
 > build → migrate → restart`) **sunucuda uygulanamaz** — o akış `MIGRATION-DEPLOY.md`,
 > `URETIM-KONTROL-LISTESI.md` ve `PM2-GECIS-DEVIR-NOTU.md`'de tarihseldir. Script
@@ -275,13 +275,17 @@ Veriler korunur; sadece kod + bekleyen migration uygulanır. **Yönetici PowerSh
 (pm2 daemon SYSTEM'dir).
 
 ```powershell
-# 1) Paketi üret — BUILD klonunun kökünde (D:, tam klon); ağaç TEMİZ olsun (kirliyse Read-Host'ta asılır)
-cd D:\tekserp-build\tekserp
+# 1) Paketi üret — GELİŞTİRME MAKİNESİNDE, repo kökünde; ağaç TEMİZ olsun
+#    (kirliyse Read-Host'ta onay sorar). Windows: .\deploy\paketle.ps1
+#    macOS/Linux: pwsh -NoProfile -File deploy/paketle.ps1
 git pull
-.\deploy\paketle.ps1 -Cikti C:\Etkili-Yazilim     # → tekserp-backend-<damga>-<commit>.zip
+pwsh -NoProfile -File deploy/paketle.ps1 -Cikti <cikti-klasoru>   # → tekserp-backend-<damga>-<commit>.zip
 
-# 2) Kur — sırayı script yapar (aşağıda)
-C:\Etkili-Yazilim\kur.ps1 -Paket C:\Etkili-Yazilim\tekserp-backend-<damga>-<commit>.zip -Zorla
+# 2) kur.ps1 DEĞİŞTİYSE önce onu kopyala (script kendini güncelleyemez)
+#    repo deploy\kur.ps1  →  C:\TeksERP\kur.ps1
+
+# 3) Zip'i sunucuya kopyala, sonra kur — sırayı script yapar (aşağıda)
+C:\TeksERP\kur.ps1 -Kok C:\TeksERP -Paket <zip yolu>
 
 # 3) Sürüme özel notta yazan tek seferlik adımlar (backfill, izin, ayar) — SURUM-*-DEPLOY.md
 ```
@@ -375,7 +379,7 @@ yani arıza sessiz değil, ama kurulum yapılmadan hiçbir kopya çıkmaz.
 **Kurulum (sunucuda, bir kez):**
 
 1. `https://rclone.org/downloads/` → **Windows AMD64** zip'ini indirin.
-2. İçindeki `rclone.exe` dosyasını **`C:\Etkili-Yazilim\rclone\rclone.exe`**
+2. İçindeki `rclone.exe` dosyasını **`C:\TeksERP\rclone\rclone.exe`**
    yoluna koyun. (Başka bir yere koyacaksanız `ecosystem.config.js` →
    `BACKUP_RCLONE_BIN` değerini o yola çevirin ve `pm2 restart` yapın.)
 3. Gerisi **panelden**: Sistem → **Yedekler** → *Makine dışı kopya* kartı.
@@ -515,7 +519,7 @@ pm2 stop tekserp-backend
 $env:PGPASSWORD = "<veritabani-sifresi>"      # .env icindeki DATABASE_URL'den
 
 # 2) GUVENLIK YEDEGI - yanlis yedege donulurse geri donus noktasi
-$safe = "C:\Etkili-Yazilim\backups\pre-restore_20260730_142312.dump"
+$safe = "C:\TeksERP\backups\pre-restore_20260730_142312.dump"
 $LASTEXITCODE = 1
 pg_dump -h 127.0.0.1 -p 5432 -U postgres -d tekserp -Fc -f "$safe"
 $ok = ($LASTEXITCODE -eq 0) -and (Test-Path "$safe")
@@ -642,7 +646,7 @@ süreç listesini geri yükler.
 
 | Ortam | Backend log | DB / slow query log |
 |---|---|---|
-| Windows (pm2) | `ecosystem.config.js` → `out_file` / `error_file` (`C:\Etkili-Yazilim\logs\`); ayrıca `pm2 logs` | `<pgdata>\log\` |
+| Windows (pm2) | `ecosystem.config.js` → `out_file` / `error_file` (`C:\TeksERP\logs\`); ayrıca `pm2 logs` | `<pgdata>\log\` |
 | Linux (pm2) | `~/.pm2/logs/` veya `out_file`/`error_file`; `pm2 logs` | PostgreSQL `log_directory` |
 
 > **⚠ pm2 log rotasyonu YAPMAZ.** NSSM 10MB'da dosyayı döndürüyordu; pm2'de bu
@@ -663,7 +667,7 @@ süreç listesini geri yükler.
 > **`prisma migrate deploy` GERİ ALINMAZ.** Prisma down-migration üretmez.
 > Tek güvenli geri dönüş = **migration öncesi yedeğinden restore**.
 
-**Kod:** `C:\Etkili-Yazilim\kur.ps1 -GeriAl` — en yeni `app.eski-<damga>`'yı `app\`'a
+**Kod:** `C:\TeksERP\kur.ps1 -GeriAl` — en yeni `app.eski-<damga>`'yı `app\`'a
 geri koyar (mevcut `app\` → `app.basarisiz-<damga>`), pm2'yi başlatır, `/health`'i bekler.
 Taşıma takılırsa (açık kilit) mevcut kurulumu yeniden başlatıp durur. **DB'ye dokunmaz**
 ve bunu ekrana yazar: eski kod yeni şemayla koşuyor olur.

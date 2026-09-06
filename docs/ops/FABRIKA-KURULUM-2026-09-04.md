@@ -81,6 +81,10 @@ Get-ChildItem C:\ -Recurse -Filter pg_dump.exe -ErrorAction SilentlyContinue |
 
 ```powershell
 Copy-Item .\ecosystem.fabrika.js C:\TeksERP\app\ecosystem.config.js
+# ⚠️ GEÇERSİZ → 2026-09-07: `ecosystem.fabrika.js` SİLİNDİ (pakete giren
+#    `Teks-Erp/ecosystem.config.js` ile yorumlar hariç aynıydı, yalnız pm2 adı
+#    ayrışmıştı). Ad artık `kur.ps1 -UygulamaAdi`dan geliyor; bu satır o günün
+#    kaydıdır, bugün UYGULANMAZ.
 ```
 
 `kur.ps1 [5/9]` "sunucunun `ecosystem.config.js`'i KORUNUR" kuralını uygular.

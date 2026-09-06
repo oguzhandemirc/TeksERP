@@ -2,7 +2,17 @@
 # TeksERP Backend - SURUM PAKETI URETICI
 # =============================================================================
 # NEREDE CALISIR: GELISTIRME MAKINENDE, repo kokunde (Teks-Erp klasorunun ustu).
-#                 Sunucuda CALISMAZ - sunucuda kaynak kod yoktur.
+#                 Sunucuda CALISMAZ - sunucuda kaynak kod yoktur (build klonu da YOK).
+#
+# ⚠ WINDOWS SART DEGIL. macOS/Linux'ta PowerShell 7 (`pwsh`) ile kosar ve
+#   URETILEN PAKET WINDOWS ICINDIR - script bunu ozel olarak sagliyor:
+#   `PRISMA_CLI_BINARY_TARGETS=windows` ile sema motorunu indirir, MZ imzasini
+#   dogrular, yabanci platform motorlarini ATAR, `node_modules/.bin`i bilerek
+#   disarida birakir (macOS sembolik baglari Windows'ta ise yaramaz; `kur.ps1`
+#   prisma'yi `.bin` uzerinden DEGIL dogrudan cagirir).
+#   Olculdu 2026-09-07: macOS'ta uretilen paket 117,4 MB, schema-engine-windows.exe
+#   19,8 MB MZ-dogrulanmis, 13723 girdi = beyan.
+#   Kullanim: pwsh -NoProfile -File deploy/paketle.ps1 -Cikti <klasor>
 #
 # NE URETIR: tekserp-backend-<tarih>-<commit>.zip
 #            Sunucudaki kur.ps1 bu paketi bekler.
@@ -211,6 +221,15 @@ Copy-Item "$proj\package.json"        "$stage\"
 Copy-Item "$proj\package-lock.json"   "$stage\"
 Copy-Item "$proj\ecosystem.config.js" "$stage\"
 
+# KURULUM SCRIPT'I PAKETE GIRER (2026-09-07). Iki sebep:
+#   ① Paket ile onu kuran script AYNI TURDAN cikar - surum ayrismasi imkansiz.
+#     Bu ayrisma 2026-09-07'de olculdu: sahadaki kur.ps1 pm2 adini yanlis
+#     yonetiyordu ve guncelleme ikinci bir uygulama kaldiracakti.
+#   ② `kur.ps1` KONUMUNDAN BAGIMSIZDIR ($PSScriptRoot kullanmaz, her seyi -Kok'tan
+#     alir) - yani operator zip ile script'i ayni klasore koyup ORADAN kosar.
+#     `C:\<kok>\kur.ps1` artik zorunlu degil, yalnizca kolaylik kopyasi.
+Copy-Item "$repo\deploy\kur.ps1" "$stage\"
+
 # Prisma yapilandirmasi: TS DEGIL, seed kancasi OLMAYAN JS surumu
 $prodCfg = "$proj\deploy\prisma.config.prod.js"
 if (-not (Test-Path $prodCfg)) { Fail "deploy\prisma.config.prod.js yok - uretim prisma config'i olmadan paket uretilmez." }
@@ -403,6 +422,6 @@ Write-Host "  $zipMB MB  |  commit $commit  |  $migSayi migration"
 Write-Host "  SHA256: $sha"
 Write-Host ""
 Write-Host "  Sunucuya kopyala, sonra YONETICI PowerShell'de:"
-Write-Host "    C:\Etkili-Yazilim\kur.ps1 -Paket <zip yolu>"
+Write-Host "    C:\TeksERP\kur.ps1 -Paket <zip yolu>"
 Write-Host "================================================================"
 Write-Host ""
