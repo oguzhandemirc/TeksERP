@@ -54,6 +54,7 @@ import {
 import { D0 } from "./allocation.helper";
 import { deriveInvoiceDueDate } from "./finance.helper";
 import { SACK_ABSENT_STATUSES } from "./sack-invariants.helper";
+import { uyari } from "../../lib/logger";
 
 /**
  * Sevk edilmiş bir sevkiyattan SATIŞ faturası taslağı satırları.
@@ -366,8 +367,7 @@ export async function autoDraftInvoiceAfterDispatch(
     // muhasebecinin taslağı bekleyip hiç gelmediğini fark etmemesi demekti).
     const status = err instanceof AppError ? err.statusCode : 0;
     if (status === 409) return null;
-    console.warn(
-      `[auto-draft] Sevkiyat ${shipmentId} için fatura taslağı üretilemedi:`,
+    uyari("auto-draft", `Sevkiyat ${shipmentId} için fatura taslağı üretilemedi:`,
       err instanceof Error ? err.message : err,
     );
     return "otomatik fatura taslağı üretilemedi — Muhasebe > Faturalar'dan elle oluşturun";

@@ -16,6 +16,7 @@
 import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { reportJobFailure } from "./job-failure";
+import { bilgi, hata } from "../lib/logger";
 
 const SETTING_KEY = "audit.lastArchiveAt";
 const MONTHS_TO_KEEP = 6;
@@ -53,8 +54,7 @@ async function setLastRun(at: Date): Promise<void> {
 async function runIfDue(): Promise<void> {
   if (running) {
     if (runningSince !== null && Date.now() - runningSince > WATCHDOG_MS) {
-      console.error(
-        `[audit-archive] WATCHDOG: önceki koşum ${Math.round((Date.now() - runningSince) / 60000)} dk'dır ` +
+      hata("audit-archive", `WATCHDOG: önceki koşum ${Math.round((Date.now() - runningSince) / 60000)} dk'dır ` +
           "bitmedi — bayrak zorla bırakılıyor, elle kontrol edin.",
       );
       running = false;
@@ -84,8 +84,7 @@ async function runIfDue(): Promise<void> {
     await setLastRun(new Date());
 
     if (totalArchived > 0) {
-      console.log(
-        `[audit-archive] ${totalArchived} kayıt arşivlendi (${batches} batch, monthsToKeep=${MONTHS_TO_KEEP})`,
+      bilgi("audit-archive", `${totalArchived} kayıt arşivlendi (${batches} batch, monthsToKeep=${MONTHS_TO_KEEP})`,
       );
     }
   } catch (err) {
@@ -103,7 +102,6 @@ export function startArchiveScheduler(): void {
     void runIfDue();
     timer = setInterval(() => void runIfDue(), CHECK_INTERVAL_MS);
   }, STARTUP_DELAY_MS);
-  console.log(
-    `[audit-archive] scheduler aktif — her ${INTERVAL_DAYS} günde bir ${MONTHS_TO_KEEP} aydan eski log'ları arşivleyecek`,
+  bilgi("audit-archive", `scheduler aktif — her ${INTERVAL_DAYS} günde bir ${MONTHS_TO_KEEP} aydan eski log'ları arşivleyecek`,
   );
 }

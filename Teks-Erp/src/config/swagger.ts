@@ -2,6 +2,7 @@ import swaggerJSDoc from 'swagger-jsdoc';
 import swaggerUi from 'swagger-ui-express';
 import { Express } from 'express';
 import path from 'path';
+import { uyari } from '../lib/logger';
 
 // F11: apis glob'unu __dirname'e göre kur — CWD'den bağımsız + özyinelemeli
 // (routes/reports/*.ts alt dizini eskiden taranmıyordu) + hem .ts (dev/ts-node)
@@ -77,8 +78,9 @@ export const setupSwagger = (app: Express): void => {
     // eyleme dönüşebilir (üretimde beklenen durum boş spec'tir).
     const swaggerPaths = (swaggerSpec as { paths?: Record<string, unknown> }).paths;
     if (!swaggerPaths || Object.keys(swaggerPaths).length === 0) {
-        console.warn(
-            '[swagger] UYARI: OpenAPI spec BOŞ — hiçbir route/controller taranamadı ' +
+        uyari(
+            'swagger',
+            'OpenAPI spec BOŞ — hiçbir route/controller taranamadı ' +
             '(apis glob CWD/uzantı uyuşmazlığı olabilir). /api-docs boş görünecek.',
         );
     }

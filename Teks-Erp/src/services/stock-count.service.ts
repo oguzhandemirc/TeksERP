@@ -69,6 +69,7 @@ import {
 } from "./document-render/warehouse-doc.html";
 import type { PrintedDocDb } from "./printed-document.service";
 import type { ApiResponse } from "../types/api.types";
+import { uyari } from "../lib/logger";
 
 type Tx = Prisma.TransactionClient;
 
@@ -764,8 +765,7 @@ export class StockCountService {
         const poIds = [...new Set(receipts.map((r) => r.purchaseOrderId).filter(Boolean))] as string[];
         for (const poId of poIds) await syncPurchaseOrderSafely(poId);
       } catch (e) {
-        console.warn(
-          `[stock-count] ${outcome.countNo} PO senkronu başarısız:`,
+        uyari("stock-count", `${outcome.countNo} PO senkronu başarısız:`,
           (e as Error).message,
         );
       }

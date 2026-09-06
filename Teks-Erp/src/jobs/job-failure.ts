@@ -24,6 +24,7 @@
 
 import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout } from "../lib/pool-health";
+import { hata } from "../lib/logger";
 
 /**
  * Bir zamanlanmış işin başarısızlığını konsola + SystemLog'a yazar; hata bir
@@ -38,7 +39,7 @@ export function reportJobFailure(job: string, err: unknown): void {
   const kind = classifyPoolTimeout(err);
   if (kind) recordPoolTimeout(kind, `${job}: ${message}`);
 
-  console.error(`[${job}] çalışma başarısız${kind ? ` (havuz zaman aşımı: ${kind})` : ""}:`, err);
+  hata(job, `çalışma başarısız${kind ? ` (havuz zaman aşımı: ${kind})` : ""}`, err);
 
   void AuditService.logEvent({
     category: "SYSTEM",

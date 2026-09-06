@@ -1,8 +1,8 @@
 # Bekçi haritası — alan → test dosyası
 
-> Üretilmiş (anlama turu 2026-09-05, +8 bekçi 2026-09-06/07; 465 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
+> Üretilmiş (anlama turu 2026-09-05, +9 bekçi 2026-09-06/07; 466 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (90), `sevkiyat` (86), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (56), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (86), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (56), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -401,10 +401,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/screens/Modules/FasonKabul/receivePayload.helper.test.ts` | Kabul yükü: parseNewRolls/buildReceivePayload, uygulanan en, tüketilen toplam, resolveReturns (büyük toptan dağıtım), çekme toleransı (shrinkExceedsTo |  |  |  |
 | `mobil/src/test/segmented-buttons-row.guard.test.ts` | TS AST taraması: her <SegmentedButtons> için en yakın sarmalayan JSX elemanının style'ı çözülür (StyleSheet anahtarı ya da satır içi nesne); flexDirec |  | ✓ |  |
 
-## diger (90)
+## diger (91)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_logger_kanali.ts` | Backend log kanalı sözleşmesi: `SEVIYE [alan] mesaj` biçimi · akış ayrımı (bilgi→stdout, hata/uyarı→stderr) · bir hata = TEK etiketli satır (sayılabilirlik) · `src/` içinde çıplak `console` yok · ESLint `no-console` açık | | ✓ | 2026-09-07 |
 | `Teks-Erp/scripts/test_ortam_bagimliligi_tavani.ts` | [TD-17] TAVANI (yalnız düşer): "herhangi bir aktif kayıt" 109 dosya · ham `username: "admin"` 129 dosya; körlük zemini 400. ⚠️ İhlal demiyor, BAĞIMLILIK TAŞIYAN DOSYA SAYISI diyor — yönü zorlar | | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_negatif_sonda_kapsami.ts` | Kayıtlı negatif sonda TABANI (yalnız yükselir) — bugün 79/461 (%17,1); körlük zemini 400 dosya. ⚠️ Kapsam CIRCIRI, ispat değil: metinle kandırılabilir, ölçtüğü şey gerilemenin durması | | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_bekci_sozlesmesi.ts` | Bekçi ÇIKTI SÖZLEŞMESİ: her `test_*.ts` koşucunun tanıdığı özet formatını basıyor mu (tanınmayan format kontrol sayısını gizler, "geçti (exit 0)"); İngilizce `N passed, M failed` yok; körlük zemini 400 dosya; muafiyet listesi iki yönlü |  | ✓ | 2026-09-06 |

@@ -79,6 +79,7 @@ import {
   readIdCondition,
 } from "../utils/query-parser";
 import { Request } from "express";
+import { hata } from "../lib/logger";
 
 // ─── Cancel Akışı Karar Matrisi ─────────────────────────────────────────────
 //
@@ -736,7 +737,7 @@ export class OrderService extends BaseService {
       }
     } catch (e) {
       // best-effort: varlık okunamazsa terfi atlanır, sipariş etkilenmez.
-      console.error("[order] müşteri alias varlık-okuması başarısız:", e);
+      hata("order", "müşteri alias varlık-okuması başarısız:", e);
       return;
     }
 
@@ -745,7 +746,7 @@ export class OrderService extends BaseService {
       try {
         await this.aliasService.upsertItemAlias(customerId, itemId, itemName, userId);
       } catch (e) {
-        console.error("[order] müşteri-ürün alias terfisi başarısız:", e);
+        hata("order", "müşteri-ürün alias terfisi başarısız:", e);
       }
     }
     for (const [colorId, colorName] of colorNameById) {
@@ -753,7 +754,7 @@ export class OrderService extends BaseService {
       try {
         await this.aliasService.upsertColorAlias(customerId, colorId, colorName, userId);
       } catch (e) {
-        console.error("[order] müşteri-renk alias terfisi başarısız:", e);
+        hata("order", "müşteri-renk alias terfisi başarısız:", e);
       }
     }
   }

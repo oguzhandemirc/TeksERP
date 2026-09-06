@@ -32,6 +32,7 @@ import {
   type BackupVerifyResult,
 } from "./backup.service";
 import { resolveBackupCutoff, safetyBackupName } from "./helpers/backup-naming.helper";
+import { hata } from "../lib/logger";
 
 // =============================================================================
 // Tipler
@@ -362,7 +363,7 @@ async function countAll(cutoff: Date): Promise<Map<string, number | null>> {
       try {
         out.set(spec.key, await spec.run(cutoff));
       } catch (err) {
-        console.error(`[backup-impact] ${spec.key} sayılamadı:`, err);
+        hata("backup-impact", `${spec.key} sayılamadı:`, err);
         out.set(spec.key, null);
       }
     }
@@ -399,7 +400,7 @@ async function auditRollup(cutoff: Date): Promise<AuditRollup> {
     const agg = await prisma.systemLog.aggregate({ _min: { createdAt: true } });
     oldest = agg._min.createdAt ?? null;
   } catch (err) {
-    console.error("[backup-impact] audit kapsamı okunamadı:", err);
+    hata("backup-impact", "audit kapsamı okunamadı:", err);
     return empty;
   }
 
@@ -451,7 +452,7 @@ async function auditRollup(cutoff: Date): Promise<AuditRollup> {
       byTable: list,
     };
   } catch (err) {
-    console.error("[backup-impact] audit rollup başarısız:", err);
+    hata("backup-impact", "audit rollup başarısız:", err);
     return { ...empty, oldestLogAt: oldest.toISOString() };
   }
 }

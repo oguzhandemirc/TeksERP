@@ -53,6 +53,7 @@ import {
   resolveStepBypassEligibility,
 } from "./helpers/kursun-bypass-eligibility.helper";
 import { resolveKursunBypassEnabled } from "./system-setting.service";
+import { uyari } from "../lib/logger";
 
 /**
  * "Açık (pending) bypass ataması" yüklemi — `kursun-bypass-guard.helper`
@@ -352,8 +353,7 @@ export class KursunQcService {
       take: OPEN_CARDS_CAP,
     });
     if (steps.length === OPEN_CARDS_CAP) {
-      console.warn(
-        `[kursun-qc] listOpenCards: ${OPEN_CARDS_CAP} açık-kart tavanına ulaşıldı — liste kırpılmış olabilir.`
+      uyari("kursun-qc", `listOpenCards: ${OPEN_CARDS_CAP} açık-kart tavanına ulaşıldı — liste kırpılmış olabilir.`
       );
     }
 
@@ -1604,7 +1604,7 @@ export class KursunQcService {
       take: 500,
     });
     if (steps.length === 500) {
-      console.warn("[kursun-qc] listQueue: 500 açık-adım tavanına ulaşıldı — liste kırpılmış olabilir.");
+      uyari("kursun-qc", "listQueue: 500 açık-adım tavanına ulaşıldı — liste kırpılmış olabilir.");
     }
 
     const data: KursunQueueItem[] = steps.map((s) => {

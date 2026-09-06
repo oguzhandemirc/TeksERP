@@ -49,6 +49,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "../services/audit.service";
 import { setSystemAccountExists } from "../services/helpers/system-account.registry";
 import { reportJobFailure } from "./job-failure";
+import { bilgi, uyari } from "../lib/logger";
 
 // installation-identity ile aynı politika: mutlu yolda ~3sn, DB geç gelirse
 // 3 + 4x15 = ~63sn'lik pencere.
@@ -83,8 +84,7 @@ function uyarOluOrtamSatirlari(): void {
     .filter((k) => k.startsWith(OLU_ORTAM_ONEKI))
     .sort();
   if (kalanlar.length === 0) return;
-  console.warn(
-    `[superadmin] ⚠️ Ortamda ARTIK KULLANILMAYAN ${kalanlar.length} satır var: ` +
+  uyari("superadmin", `⚠️ Ortamda ARTIK KULLANILMAYAN ${kalanlar.length} satır var: ` +
       `${kalanlar.join(", ")} — 2026-09-03'ten (P8) beri OKUNMUYOR, ama ` +
       "CANLI kimlik bilgisi olabilirler (parola hash'i / PIN / TOTP sırrı diskte " +
       "durur, yedeğe ve kurulum paketine girer). `.env`den SİLİN; satıcı hesabı " +
@@ -116,8 +116,7 @@ export async function ensureSuperadminAccount(): Promise<SuperadminRegistryResul
   setSystemAccountExists(existing !== null);
 
   if (!existing) {
-    console.log(
-      "[superadmin] Satıcı hesabı yok — emniyet supabı devrede " +
+    bilgi("superadmin", "Satıcı hesabı yok — emniyet supabı devrede " +
         "(modül anahtarları bu kurulumda admin:settings ile yazılır). " +
         "Kurmak için sunucuda: npm run superadmin:kur",
     );
@@ -169,8 +168,7 @@ export function startSuperadminAccount(): void {
   const attempt = (n: number): void => {
     void ensureSuperadminAccount().catch((err) => {
       if (n < MAX_ATTEMPTS) {
-        console.warn(
-          `[superadmin] deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
+        uyari("superadmin", `deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
             `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
           err instanceof Error ? err.message : err,
         );

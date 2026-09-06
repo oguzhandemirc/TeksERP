@@ -10,6 +10,7 @@ import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import dotenv from "dotenv";
 import { PG_SESSION_OPTIONS } from "./pg-session";
+import { hata } from "./logger";
 
 dotenv.config();
 
@@ -77,7 +78,7 @@ const pool = new Pool({
 // çevirir → süreç çöker. Logla ama DÜŞÜRME — Pool hatalı client'ı havuzdan çıkarır,
 // bir sonraki sorgu yeni bağlantı açar (LAN-only tek-process'te gereksiz restart yok).
 pool.on("error", (err) => {
-  console.error("[prisma pool]: idle client hatası (bağlantı düştü, havuz kendini onaracak):", err);
+  hata("prisma-pool", "idle client hatası (bağlantı düştü, havuz kendini onaracak)", err);
 });
 
 const adapter = new PrismaPg(pool);

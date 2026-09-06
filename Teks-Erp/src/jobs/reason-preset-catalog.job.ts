@@ -25,6 +25,7 @@ import { ReasonPresetKind } from "@prisma/client";
 import prisma from "../lib/prisma";
 import { REASON_PRESET_CATALOG, REASON_PRESET_KINDS, KIND_STORES_TEXT } from "../constants/reason-presets";
 import { refreshReasonPresetCache } from "../services/reason-preset.service";
+import { bilgi, hata } from "../lib/logger";
 
 export type ReasonPresetReconcileResult = {
   total: number;
@@ -78,11 +79,11 @@ export async function runReasonPresetReconciliation(): Promise<void> {
   try {
     const r = await reconcileReasonPresets();
     if (r.created.length > 0) {
-      console.log(`[reason-presets] ${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`);
+      bilgi("reason-presets", `${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`);
     } else {
-      console.log(`[reason-presets] katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`);
+      bilgi("reason-presets", `katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`);
     }
   } catch (err) {
-    console.error("[reason-presets] uzlaştırma başarısız:", err);
+    hata("reason-presets", "uzlaştırma başarısız:", err);
   }
 }

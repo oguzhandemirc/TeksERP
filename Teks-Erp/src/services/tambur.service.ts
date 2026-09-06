@@ -72,6 +72,7 @@ import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { buildIntentSnapshot } from "./label.service";
 import { resolveLabelIntent, labelCustomerIdOf } from "./helpers/label-intent.helper";
 import { generateRollBarcodeTx, reserveRollBarcodesInOrderTx } from "./helpers/roll-barcode.helper";
+import { uyari } from "../lib/logger";
 // ⚠️ TEK YÖNLÜ BAĞIMLILIK: tambur.service → kursun-bypass.service.
 // `kursun-bypass.service` bu dosyayı (ya da onu import eden bir modülü) ASLA
 // import etmez — ortak guard'lar `helpers/kursun-bypass-guard.helper.ts`'te
@@ -248,7 +249,7 @@ export class TamburService {
       take: 500,
     });
     if (rolls.length === 500) {
-      console.warn("[tambur] getPendingRolls: 500 tavanına ulaşıldı — liste kırpılmış olabilir.");
+      uyari("tambur", "getPendingRolls: 500 tavanına ulaşıldı — liste kırpılmış olabilir.");
     }
 
     return { success: true, data: rolls };
@@ -1983,7 +1984,7 @@ export class TamburService {
       take: 500,
     });
     if (steps.length === 500) {
-      console.warn("[tambur] listOpenCards: 500 açık-adım tavanına ulaşıldı — liste kırpılmış olabilir.");
+      uyari("tambur", "listOpenCards: 500 açık-adım tavanına ulaşıldı — liste kırpılmış olabilir.");
     }
 
     const data = steps

@@ -31,6 +31,7 @@ import { createPublicKey, type KeyObject } from "crypto";
 import jwt from "jsonwebtoken";
 import { normalizeRequestPath, type WarnFn } from "./web-hardening";
 import "../types/express-augment";
+import { uyari } from "../lib/logger";
 
 // -----------------------------------------------------------------------------
 // Yapılandırma
@@ -70,7 +71,7 @@ const PORT_MAX = 65_535;
  */
 export function readRemoteAccessConfig(
   env: NodeJS.ProcessEnv = process.env,
-  onWarn: WarnFn = (m) => console.warn(m),
+  onWarn: WarnFn = (m) => uyari("remote-access", m),
 ): RemoteAccessConfig {
   const off: RemoteAccessConfig = {
     remotePort: null,
@@ -251,8 +252,7 @@ function refreshJwksInBackground(teamDomain: string): void {
   if (jwksInFlight) return;
   jwksInFlight = fetchJwks(teamDomain)
     .catch((err: unknown) => {
-      console.warn(
-        `[remote-access] JWKS tazelenemedi: ${err instanceof Error ? err.message : String(err)}`,
+      uyari("remote-access", `JWKS tazelenemedi: ${err instanceof Error ? err.message : String(err)}`,
       );
     })
     .finally(() => {
@@ -359,8 +359,7 @@ export function verifyAccessJwt(cfg: RemoteAccessConfig): RequestHandler {
         req.accessIdentity = { email: claims.email ?? null, sub: claims.sub ?? null };
         next();
       } catch (err) {
-        console.warn(
-          `[remote-access] Access JWT reddedildi: ${err instanceof Error ? err.message : String(err)}`,
+        uyari("remote-access", `Access JWT reddedildi: ${err instanceof Error ? err.message : String(err)}`,
         );
         accessDenied(
           res,

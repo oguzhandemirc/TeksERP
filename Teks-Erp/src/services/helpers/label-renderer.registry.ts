@@ -20,6 +20,7 @@ import { emitCanvasNative } from "./label-canvas-native.helper";
 import { buildCanvasLabelHtml } from "./label-canvas-html.helper";
 import { readCanvasLayout } from "../../config/label-elements";
 import { isRasterLanguage, renderCanvasRaster, type RasterLanguage } from "./raster/raster-render";
+import { hata } from "../../lib/logger";
 
 export interface LabelRenderInput {
   payload: LabelPayload;
@@ -117,7 +118,7 @@ export async function renderLabel(language: PrinterLanguage, input: LabelRenderI
         });
         return { language: effective, content: "", bytes, encoding: "binary", contentType: "application/octet-stream" };
       } catch (e) {
-        console.error(`[raster] ${effective} rasterize başarısız, komut moduna düşülüyor:`, (e as Error).message);
+        hata("raster", `${effective} rasterize başarısız, komut moduna düşülüyor:`, (e as Error).message);
       }
     }
     const content =

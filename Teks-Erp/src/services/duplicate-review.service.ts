@@ -15,6 +15,7 @@ import prisma from "../lib/prisma";
 import { AuditService } from "./audit.service";
 import { AppError } from "../utils/app-error";
 import type { MergeEntity } from "../constants/merge-map";
+import { uyari } from "../lib/logger";
 
 /** Birleştirme varlığı → kuyruk enum'u (tek yönlü eşleme, her ikisi de 4'lü). */
 const ENTITY_TO_ENUM: Record<MergeEntity, DuplicateReviewEntity> = {
@@ -196,7 +197,7 @@ export const DuplicateReviewService = {
           select: { id: true },
         });
       } catch (e) {
-        console.warn(`[duplicate-review] MERGED izi yazılamadı (${entity} ${pairKey}):`, (e as Error).message);
+        uyari("duplicate-review", `MERGED izi yazılamadı (${entity} ${pairKey}):`, (e as Error).message);
       }
     }
   },

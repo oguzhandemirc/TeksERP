@@ -23,6 +23,7 @@ import { DeviceService } from "../services/device.service";
 import { readDevicePairingRequired } from "../services/system-setting.service";
 import { touchDevice } from "../lib/presence";
 import "../types/express-augment";
+import { uyari } from "../lib/logger";
 
 const EXEMPT_PATHS = new Set([
   "/api/devices/announce",
@@ -52,8 +53,7 @@ export const resolveDevice = async (
   try {
     device = await DeviceService.resolveDevice(deviceId);
   } catch (err) {
-    console.warn(
-      "[device.middleware] resolveDevice hatası:",
+    uyari("device.middleware", "resolveDevice hatası:",
       err instanceof Error ? err.message : err,
     );
     let pairingRequired = false;

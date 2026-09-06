@@ -13,6 +13,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "../../lib/prisma";
 import { AppError } from "../../utils/app-error";
+import { hata } from "../../lib/logger";
 
 type Db = Prisma.TransactionClient | typeof prisma;
 
@@ -61,8 +62,7 @@ export async function resolveTargetWarehouseId(
 
   const fallback = await getDefaultWarehouseId(db);
   if (!fallback) {
-    console.error(
-      "[warehouse] VARSAYILAN DEPO YOK — top deposuz yazılıyor. " +
+    hata("warehouse", "VARSAYILAN DEPO YOK — top deposuz yazılıyor. " +
         "Boot uzlaştırması (ensureDefaultWarehouse) koşmamış olabilir; " +
         "Tanımlar → Depolar'dan bir depoyu varsayılan yapın.",
     );

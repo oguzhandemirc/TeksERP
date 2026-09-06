@@ -40,6 +40,7 @@ import { readFinanceEnabled } from "../services/system-setting.service";
 import { factoryDayKeyUtcMidnight } from "../constants/time";
 import { AuditService } from "../services/audit.service";
 import { AppError } from "../utils/app-error";
+import { bilgi, hata } from "../lib/logger";
 
 export const TCMB_TODAY_XML_URL = "https://www.tcmb.gov.tr/kurlar/today.xml";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -304,8 +305,7 @@ export async function runExchangeRateJobOnce(
   try {
     const summary = await fetchImpl();
     if (summary.written.length > 0) {
-      console.log(
-        `[exchange-rate] TCMB ${summary.fetched} bülteni: ${summary.written
+      bilgi("exchange-rate", `TCMB ${summary.fetched} bülteni: ${summary.written
           .map((w) => `${w.currency}=${w.rate}`)
           .join(", ")} yazıldı` +
           (summary.skippedManual.length > 0
@@ -318,7 +318,7 @@ export async function runExchangeRateJobOnce(
     // Başarısız fetch üretimi DURDURMAZ; bir sonraki saat tekrar denenir.
     // SystemLog'a yazılmaz (bilinçli — reportJobFailure değil): dış ağ hatası
     // beklenen durumdur ve resolveExchangeRateTx "kur yoksa 400 + elle gir" der.
-    console.error("[exchange-rate] TCMB kur çekme başarısız (bir sonraki saatte tekrar denenecek):", err);
+    hata("exchange-rate", "TCMB kur çekme başarısız (bir sonraki saatte tekrar denenecek):", err);
     return "failed";
   }
 }
@@ -336,5 +336,5 @@ export function startExchangeRateScheduler(): void {
     tick();
     timer = setInterval(tick, CHECK_INTERVAL_MS);
   }, STARTUP_DELAY_MS);
-  console.log("[exchange-rate] scheduler aktif — finance.enabled açıkken saatte bir TCMB kuru kontrol edilecek");
+  bilgi("exchange-rate", "scheduler aktif — finance.enabled açıkken saatte bir TCMB kuru kontrol edilecek");
 }

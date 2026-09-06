@@ -103,6 +103,7 @@ import {
   resolveOrderRequirement,
 } from "./helpers/shipment-order-requirement.helper";
 import { p2002Mentions } from "../utils/p2002";
+import { hata, uyari } from "../lib/logger";
 
 // -----------------------------------------------------------------------------
 // Helpers
@@ -863,8 +864,7 @@ export class SubcontractorService {
         }
         // Override aktif — audit log için bilgi sakla (assign ilerde dispatch
         // metadata'ya eklenecek)
-        console.warn(
-          `[dispatch] Item mismatch override by user ${userId ?? "?"}: ` +
+        uyari("dispatch", `Item mismatch override by user ${userId ?? "?"}: ` +
             `WO ${data.workOrderId} expects ${wo.targetItemId}, ` +
             `${mismatchedRolls.length} mismatched rolls accepted`,
         );
@@ -3412,8 +3412,7 @@ export class SubcontractorService {
           "FASON_RECEIPT",
         );
       } catch (err) {
-        console.warn(
-          `[fason-kabul] İş emri eni güncellenemedi (WO ${data.workOrderId}):`,
+        uyari("fason-kabul", `İş emri eni güncellenemedi (WO ${data.workOrderId}):`,
           err instanceof Error ? err.message : err,
         );
       }
@@ -6078,7 +6077,7 @@ export class SubcontractorService {
           }).catch((e) => {
             // Önizleme degrade etsin (öneri yine de WO'nun kendi satırlarıyla
             // dönsün) AMA hata SESSİZ kalmasın — DB/timeout hatası loglanır.
-            console.error("[previewDirectShip] otherOpenLines sorgusu başarısız:", e);
+            hata("previewDirectShip", "otherOpenLines sorgusu başarısız:", e);
             return [];
           })
         : [];

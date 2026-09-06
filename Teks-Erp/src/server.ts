@@ -19,6 +19,7 @@ import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
 import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
 import { readRemoteAccessConfig } from './middlewares/remote-access.middleware';
+import { hata, uyari, bilgi, satir } from "./lib/logger";
 
 const PORT = process.env.PORT || 4000;
 // 0.0.0.0 = tüm ağ arayüzlerinden dinle (tablet/diğer cihazlar LAN üzerinden erişebilsin).
@@ -53,7 +54,7 @@ const remoteAccess = readRemoteAccessConfig();
 try {
     assertBaseServiceGuards();
 } catch (err) {
-    console.error(err instanceof Error ? err.message : err);
+    hata("boot", "BaseController koruma kapısı doğrulanamadı", err);
     process.exit(1);
 }
 
@@ -77,33 +78,34 @@ async function warnIfAuditGuardDisabled(): Promise<void> {
         const rows = await prisma.$queryRaw<Array<{ guard: string | null }>>`
             SELECT coalesce(current_setting('teks.audit_guard', true), '') AS guard`;
         if (rows[0]?.guard !== "on") {
-            console.warn(
-                "[audit-guard] ⚠️ KORUMA KAPALI — audit kayıtları silinebilir/değiştirilebilir durumda.\n" +
+            uyari(
+                "audit-guard",
+                "⚠️ KORUMA KAPALI — audit kayıtları silinebilir/değiştirilebilir durumda.\n" +
                 "             Açmak için (bir kez, sonra restart):\n" +
                 "               ALTER DATABASE <db> SET teks.audit_guard = 'on';"
             );
         } else {
-            console.log("[audit-guard] koruma AÇIK — audit kayıtları salt-yazılır.");
+            bilgi("audit-guard", "koruma AÇIK — audit kayıtları salt-yazılır.");
         }
     } catch (err) {
         // Best-effort: bu kontrol yüzünden sunucu açılışı düşmez.
-        console.warn("[audit-guard] durum okunamadı:", err instanceof Error ? err.message : err);
+        uyari("audit-guard", "durum okunamadı", err);
     }
 }
 
 const server = app.listen(Number(PORT), HOST, () => {
     const lan = getLanAddresses();
 
-    console.log("");
-    console.log("========================================================");
-    console.log(`  TeksERP Backend ayakta  (port ${PORT}, host ${HOST})`);
-    console.log("--------------------------------------------------------");
-    console.log(`  Yerel  : http://localhost:${PORT}`);
+    satir("");
+    satir("========================================================");
+    satir(`  TeksERP Backend ayakta  (port ${PORT}, host ${HOST})`);
+    satir("--------------------------------------------------------");
+    satir(`  Yerel  : http://localhost:${PORT}`);
     if (lan.length === 0) {
-        console.log("  Ağ     : (aktif LAN IPv4 adresi bulunamadı)");
+        satir("  Ağ     : (aktif LAN IPv4 adresi bulunamadı)");
     } else {
         for (const { iface, address } of lan) {
-            console.log(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
+            satir(`  Ağ     : http://${address}:${PORT}   [${iface}]`);
         }
     }
     // ⚠️ Swagger satırı artık app.ts ile AYNI kaynaktan çözülür. Eskiden burada
@@ -112,7 +114,7 @@ const server = app.listen(Number(PORT), HOST, () => {
     // teşhisi zaman yiyen bir yalan. Değişken yokken ifade birebir aynı sonucu verir.
     const hardening = readWebHardeningConfig();
     if (hardening.swaggerEnabled) {
-        console.log(`  Swagger: http://localhost:${PORT}/api-docs`);
+        satir(`  Swagger: http://localhost:${PORT}/api-docs`);
     }
     // Sertleştirme yalnız BEYAN EDİLDİĞİNDE basılır — fabrika konsolu birebir
     // bugünkü gibi kalsın diye. Basıldığında da sessiz varsayım bırakmaz:
@@ -120,32 +122,32 @@ const server = app.listen(Number(PORT), HOST, () => {
     // "trust proxy" — yanlış ayarı ancak burada fark edilir).
     if (isWebHardeningDeclared()) {
         const rl = hardening.rateLimit;
-        console.log("--------------------------------------------------------");
-        console.log(`  Sertleştirme: trustProxy=${String(hardening.trustProxy ?? "(yok)")}`
+        satir("--------------------------------------------------------");
+        satir(`  Sertleştirme: trustProxy=${String(hardening.trustProxy ?? "(yok)")}`
             + ` · cors=${hardening.corsOrigins ? hardening.corsOrigins.join(",") : "(kısıtsız)"}`);
-        console.log(`                swagger=${hardening.swaggerEnabled ? "açık" : "kapalı"}`
+        satir(`                swagger=${hardening.swaggerEnabled ? "açık" : "kapalı"}`
             + ` · hsts=${hardening.httpsEnabled ? "açık" : "kapalı"}`
             + ` · girişKilidiKapsamı=${hardening.loginLockoutScope}`);
-        console.log(`                hızSınırı=${rl.enabled
+        satir(`                hızSınırı=${rl.enabled
             ? `açık (${rl.windowMs / 1000}sn · yazma ${rl.writeMax} · giriş ${rl.loginMax})`
             : "kapalı"}`);
     }
     if (remoteAccess.remotePort !== null) {
-        console.log("--------------------------------------------------------");
-        console.log(`  Uzaktan erişim: 127.0.0.1:${remoteAccess.remotePort} (cloudflared)`);
+        satir("--------------------------------------------------------");
+        satir(`  Uzaktan erişim: 127.0.0.1:${remoteAccess.remotePort} (cloudflared)`);
         if (remoteAccess.accessWallDisabled) {
             // ⚠️ Kapalı bir kimlik duvarı SESSİZ KALMAZ. Bu satır, "acaba Access
             // çalışıyor mu" sorusunun pm2 log'undan tek bakışta cevaplanabildiği
             // yerdir; aksi halde duvarın olmadığı bir kurulum, olduğu sanılan bir
             // kurulumdan ayırt edilemezdi.
-            console.log("                  Access: ⚠️ KAPALI (CF_ACCESS_ENABLED=false)");
-            console.log("                  → uzak girişi koruyan tek katman: parola + TOTP");
+            satir("                  Access: ⚠️ KAPALI (CF_ACCESS_ENABLED=false)");
+            satir("                  → uzak girişi koruyan tek katman: parola + TOTP");
         } else {
-            console.log(`                  Access: ${remoteAccess.accessTeamDomain}`);
+            satir(`                  Access: ${remoteAccess.accessTeamDomain}`);
         }
     }
-    console.log("========================================================");
-    console.log("");
+    satir("========================================================");
+    satir("");
 
     startArchiveScheduler();
     startBackupScheduler();
@@ -225,8 +227,9 @@ const remoteServer =
   remoteAccess.remotePort === null
     ? null
     : app.listen(remoteAccess.remotePort, "127.0.0.1", () => {
-        console.log(
-          `[remote-access] tünel dinleyicisi hazır: 127.0.0.1:${remoteAccess.remotePort}`,
+        bilgi(
+          "remote-access",
+          `tünel dinleyicisi hazır: 127.0.0.1:${remoteAccess.remotePort}`,
         );
       });
 
@@ -238,9 +241,10 @@ let shuttingDown = false;
 function gracefulShutdown(signal: string, exitCode = 0): void {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log(`\n${signal} alındı — sunucu kapatılıyor (uçuştaki istekler bitiriliyor)...`);
+    satir("");
+    bilgi("shutdown", `${signal} alındı — sunucu kapatılıyor (uçuştaki istekler bitiriliyor)...`);
     const forceTimer = setTimeout(() => {
-        console.warn("Kapanış 5s'de tamamlanmadı — zorla çıkılıyor.");
+        uyari("shutdown", "Kapanış 5s'de tamamlanmadı — zorla çıkılıyor.");
         process.exit(1);
     }, 5000);
     forceTimer.unref();
@@ -259,7 +263,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
         // LAN'daki uçuştaki istekler normal akışında bitsin.
         remoteServer?.close();
         server.close(() => {
-            console.log("Sunucu kapandı.");
+            bilgi("shutdown", "Sunucu kapandı.");
             // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından
             // TAŞINDI — çift handler F10 graceful shutdown'ı boşa çıkarıyordu). Sıra önemli:
             // önce $disconnect, sonra pool.end. Best-effort; üstteki 5s forceTimer güvenlik ağı korur.
@@ -268,7 +272,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
                     await prisma.$disconnect();
                     await pool.end();
                 } catch (err) {
-                    console.error("[shutdown]: DB kapanış hatası:", err);
+                    hata("shutdown", "DB kapanış hatası", err);
                 }
                 process.exit(exitCode);
             })();
@@ -296,7 +300,7 @@ process.on("message", (msg) => {
 //   - uncaughtException: süreç tanımsız/bozuk durumda olabilir → logla + temiz
 //     kapan; süreç yöneticisi (pm2) otomatik yeniden başlatır.
 process.on("unhandledRejection", (reason) => {
-    console.error("UnhandledRejection:", reason);
+    hata("unhandled-rejection", "Yakalanmamış promise reddi", reason);
     void AuditService.logEvent({
         category: "SYSTEM",
         action: "UNHANDLED_REJECTION",
@@ -307,7 +311,7 @@ process.on("unhandledRejection", (reason) => {
     });
 });
 process.on("uncaughtException", (err) => {
-    console.error("UncaughtException:", err);
+    hata("uncaught-exception", "Yakalanmamış istisna — süreç kapanıyor", err);
     // F12: crash izini (kim/ne patlattı) boşta senaryoda bile kaydet — audit
     // yazımını ~2sn tavanla BEKLE, sonra exitCode=1 ile kapan (pm2 crash'i
     // normal restart'tan ayırt edebilsin; forceTimer'ın

@@ -33,7 +33,7 @@ Bu tablo **kayıtlı kararın kendisidir**: `package.json > dependencies` ile bu
 | mDNS ilanı | `bonjour-service` **1.4.4 SABİT** | [KU-11]; tembel `require` + try/catch, tek dosya `jobs/mdns-advertiser.job.ts` |
 | Ortam | `dotenv` | — |
 | UUID | `uuid` (2 dosya: v4 + `validate`) | `crypto.randomUUID` 20 dosyada — ikilik, §8 |
-| Yapılandırılmış log | **YOK** — 137 `console` | §8 açık karar |
+| Yapılandırılmış log | **PAKETSİZ** — `src/lib/logger.ts` (`hata`/`uyari`/`bilgi`/`satir`) | §9 (2026-09-07); `console` YALNIZ o dosyada, `no-console` açık |
 | Araç (dev) | `tsx` `nodemon` `ts-node` `typescript` `eslint` `@typescript-eslint/*` `@types/*` | `@faker-js/faker` ölü (§7) |
 
 Paket `deploy/` ve `scripts/`yi TAŞIMAZ (`docs/KOD-KURALLARI.md` § deploy) — bu yüzden çalışma zamanı CLI'ı `dependencies`te durur.
@@ -168,12 +168,19 @@ Reçete — sırayla, üçü de temiz çıkmadan silme yok:
 | Konu | Ölçüm | Neden ertelendi |
 |---|---|---|
 | **Araç zinciri drift** | TypeScript üç ana sürüm: backend 6.0.2 · Electron 5.6.3 (`~`, bilinçli tilde) · mobil 5.9.3 (SDK); ESLint iki ana sürüm: 10.2.1 / 9.39.4 / 9.39.4 | Hizalama üç projede eşzamanlı lint+tip kırılması demek; Electron'un tilde gerekçesi bugün YAZILI DEĞİL, önce o yazılmalı |
-| **Backend'de yapılandırılmış logger yok** | 137 `console` çağrısı fiilen tek kanal; bu yüzden backend `no-console` ESLint kuralı dışında | Logger seçimi bir bağımlılık kararıdır ve §3 kaydını hak eder; kural önce kanal ister |
 | **mobilde şema doğrulama katmanı yok** | `zod` bağımlılığı YOK; 386 dosyada 0 `z.object` | Tasarım kaydı (`ESZAMANLILIK.md` § Bilinen boşluklar); yeni bağımlılık + istemci sözleşmesi turu |
 | **`uuid` ↔ `crypto.randomUUID` ikiliği** | backend `uuid` 2 dosya (v4 + `validate`), `randomUUID` 20 dosya | `validate`in yerleşik karşılığı yok → paket meşru; v4 kullanımı taşınabilir, ESM-only riski ([KU-19]) bunu ödüllendirir |
+
+> **KAPANDI (2026-09-07):** backend logger → §9 (`src/lib/logger.ts`, paket eklenmedi).
 
 Ayrıca kayıtta duran iki küçük borç: OFL-1.1 font lisans metninin dağıtım paketine girip girmediği KONTROL EDİLMEDİ (k01 § `lisans`); mobil `overrides.expo-font` pininin gerekçesi hiçbir yerde yazılı değil ([KU-13] kanıtı).
 
 ## 9 · Kayıt defteri
 
-Bu turda yeni bağımlılık EKLENMEDİ; defter boş. Yeni paket eklenince §3'teki blok buraya, §2'ye bir satır yazılır.
+Yeni **paket** eklenmedi. Bir karar var ve sonucu da "paket YOK"tur:
+**backend log kanalı** (2026-09-07) — `pino`/`winston` yerine **elle yazmak**
+seçildi ([KU-07]), çünkü taşımayı pm2 ve rotasyonu `pm2-logrotate` zaten
+yapıyordu; kalan tek eksik seviye + alan etiketiydi. Altı satırlık kayıt, ölçüm
+ve sonuç arşivde: `docs/history/CLAUDE-NOT-ARSIVI.md` (2026-09-07) ve
+`Teks-Erp/src/lib/logger.ts` başlığı. Yeni paket eklenince §3'teki blok buraya,
+§2'ye bir satır yazılır.

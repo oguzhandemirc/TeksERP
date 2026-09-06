@@ -14,6 +14,7 @@ import {
 import { AuditService } from "../services/audit.service";
 import { classifyPoolTimeout, recordPoolTimeout, getPoolHealth } from "../lib/pool-health";
 import "../types/express-augment";
+import { hata, uyari } from "../lib/logger";
 
 /**
  * Prisma P2003 FK kolonunu farklı versiyon formatlarından çıkarır.
@@ -404,9 +405,9 @@ export const errorHandler = (
   // hatasını (ERR_HTTP_HEADERS_SENT) kaydediyordu ve teşhis yanlış yöne gidiyordu.
   // Şimdi asıl hata konsola kendi bağlamıyla düşüyor, sahte audit satırı doğmuyor.
   if (res.headersSent) {
-    console.error(
-      `[error.middleware] Yanıt zaten başlamıştı (${req.method} ${req.originalUrl}) — ` +
-        `bağlantı kesiliyor. Asıl hata:`,
+    hata(
+      "error.middleware",
+      `Yanıt zaten başlamıştı (${req.method} ${req.originalUrl}) — bağlantı kesiliyor`,
       err,
     );
     _next(err); // Express finalhandler: başlıklar gönderilmişse soketi yok eder.
@@ -479,8 +480,9 @@ export const errorHandler = (
   if (poolTimeoutKind) {
     recordPoolTimeout(poolTimeoutKind, err.message);
     const p = getPoolHealth();
-    console.error(
-      `[error.middleware] Havuz zaman aşımı (${poolTimeoutKind}): ${err.message} — ` +
+    hata(
+      "error.middleware",
+      `Havuz zaman aşımı (${poolTimeoutKind}): ${err.message} — ` +
         `total=${p.poolTotalCount} idle=${p.poolIdleCount} waiting=${p.poolWaitingCount}/${p.poolMax}`
     );
     void AuditService.logEvent({
@@ -522,7 +524,7 @@ export const errorHandler = (
       ? `${friendly} İşlem tamamlanmadı.`
       : `Veri bütünlüğü kuralı engelledi (${checkConstraint || "bilinmeyen kural"}) — işlem tamamlanmadı. ` +
         "Kayıt beklenmeyen bir durumda; yöneticinize bu kuralın adını iletin.";
-    console.error(`[error.middleware] CHECK ihlali (23514): ${checkConstraint} — ${err.message}`);
+    hata("error.middleware", `CHECK ihlali (23514): ${checkConstraint} — ${err.message}`);
     void AuditService.logEvent({
       category: "SYSTEM",
       action: "ERROR",
@@ -549,7 +551,7 @@ export const errorHandler = (
   // çakışma için doğru sözleşme 409 + tekrar-dene (P2034 dalıyla aynı ruh).
   const transientState = extractTransientSqlState(err);
   if (transientState !== null) {
-    console.error(`[error.middleware] Geçici PG çakışması (${transientState}): ${err.message}`);
+    hata("error.middleware", `Geçici PG çakışması (${transientState}): ${err.message}`);
     void AuditService.logEvent({
       category: "SYSTEM",
       action: "ERROR",
@@ -576,10 +578,7 @@ export const errorHandler = (
       const col = extractUniqueColumn(prismaErr.meta);
       if (!col) {
         // Bilinmeyen format — debug için audit log
-        console.warn(
-          `[error.middleware] P2002 column extract failed. meta=`,
-          prismaErr.meta
-        );
+        uyari("error.middleware", "P2002 column extract failed", prismaErr.meta);
       }
       const label = col ?? "field";
       res.status(409).json({
@@ -616,10 +615,7 @@ export const errorHandler = (
       const fieldLabel = field ?? "ilişkili alan";
       if (!field) {
         // Prisma versiyonu bilinmeyen bir format gönderdi — debug için logla.
-        console.warn(
-          `[error.middleware] P2003 field extract failed. meta=`,
-          prismaErr.meta
-        );
+        uyari("error.middleware", "P2003 field extract failed", prismaErr.meta);
       }
       res.status(400).json({
         success: false,
@@ -669,10 +665,7 @@ export const errorHandler = (
     // Bunlar İSTEMCİ VERİSİ HATASI DEĞİLDİR; 400 dönmek operatörü kendi girdisini
     // kontrol etmeye gönderir ve gerçek sebep (drift) hiçbir deftere düşmez.
     if (SERVER_FAULT_PRISMA_CODES.has(prismaErr.code)) {
-      console.error(
-        `[error.middleware] Sunucu/şema arızası (${prismaErr.code}):`,
-        prismaErr.meta,
-      );
+      hata("error.middleware", `Sunucu/şema arızası (${prismaErr.code})`, prismaErr.meta);
       // F21: 5xx'e eşlenen şema-drift incident'i de SYSTEM/ERROR audit'e/metriğe düşsün.
       void AuditService.logEvent({
         category: "SYSTEM",
@@ -718,7 +711,7 @@ export const errorHandler = (
     // dönülürse çalışsın). GERÇEK havuz zaman aşımı yukarıdaki classifyPoolTimeout
     // dalında yakalanır — ÇIPLAK Error olarak gelir, buraya hiç uğramaz.
     if (prismaErr.code === "P2024" || prismaErr.code === "P2028") {
-      console.error(`[error.middleware] Prisma ${prismaErr.code} (sunucu tıkanıklık):`, prismaErr.meta);
+      hata("error.middleware", `Prisma ${prismaErr.code} (sunucu tıkanıklık)`, prismaErr.meta);
       void AuditService.logEvent({
         category: "SYSTEM",
         action: "ERROR",
@@ -733,7 +726,7 @@ export const errorHandler = (
 
     // İstemci verisinden kaynaklanabilecek KALAN kodlar → 400 (davranış korunur).
     if (CLIENT_DATA_PRISMA_CODES.has(prismaErr.code)) {
-      console.error(`[error.middleware] İstemci verisi hatası ${prismaErr.code}:`, prismaErr.meta);
+      hata("error.middleware", `İstemci verisi hatası ${prismaErr.code}`, prismaErr.meta);
       res.status(400).json({
         success: false,
         message: "İstek işlenemedi. Gönderilen veriyi kontrol edin.",
@@ -747,9 +740,10 @@ export const errorHandler = (
     // kalıyordu. Varsayılanı sunucu tarafına almak bilinçli: yanlışlıkla 500 demek,
     // gerçek bir drift'i 400 olarak yutmaktan ucuzdur. Yeni bir Prisma kodu
     // görüldüğünde yukarıdaki iki kümeden birine YAZILMALI — bu dal bir uyarıdır.
-    console.error(
-      `[error.middleware] SINIFLANDIRILMAMIŞ Prisma kodu ${prismaErr.code} ` +
-        `(sunucu arızası varsayıldı — kodu error.middleware'deki iki kümeden birine ekleyin):`,
+    hata(
+      "error.middleware",
+      `SINIFLANDIRILMAMIŞ Prisma kodu ${prismaErr.code} ` +
+        `(sunucu arızası varsayıldı — kodu error.middleware'deki iki kümeden birine ekleyin)`,
       prismaErr.meta,
     );
     void AuditService.logEvent({
@@ -802,7 +796,10 @@ export const errorHandler = (
   // Unknown / unexpected errors → SystemLog'a SYSTEM/ERROR yaz.
   // AppError ve bilinen validation/Prisma error'ları yukarıda 4xx olarak
   // dönmüş; buraya düşen her şey gerçek 5xx olarak değerlendirilir.
-  console.error("Unhandled Exception:", err);
+  // ⭐ ETİKET LOAD-BEARING: fabrikanın beş haftalık log'unda bu satır 79 kez
+  // düştü (64 sebep-kodu reddi + 15 controller bind hatası) ve ETİKETSİZ
+  // olduğu için ancak yığın izleri elle okunarak sınıflanabildi.
+  hata("uncaught", `Beklenmeyen hata: ${req.method} ${req.originalUrl}`, err);
 
   void AuditService.logEvent({
     category: "SYSTEM",

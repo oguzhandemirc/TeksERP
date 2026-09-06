@@ -23,6 +23,7 @@
 import prisma from "../lib/prisma";
 import { DEFAULT_WAREHOUSE_CODE, DEFAULT_WAREHOUSE_NAME } from "../services/helpers/warehouse.helper";
 import { p2002Mentions } from "../utils/p2002";
+import { bilgi, hata, uyari } from "../lib/logger";
 
 export type DefaultWarehouseResult = {
   action: "exists" | "promoted" | "created";
@@ -48,8 +49,7 @@ export async function ensureDefaultWarehouse(): Promise<DefaultWarehouseResult> 
   });
   if (oldest) {
     await prisma.warehouse.update({ where: { id: oldest.id }, data: { isDefault: true } });
-    console.warn(
-      `[warehouse] Varsayılan depo işaretli değildi — en eski depo ("${oldest.name}") varsayılan yapıldı.`,
+    uyari("warehouse", `Varsayılan depo işaretli değildi — en eski depo ("${oldest.name}") varsayılan yapıldı.`,
     );
     return { action: "promoted", id: oldest.id, name: oldest.name };
   }
@@ -59,7 +59,7 @@ export async function ensureDefaultWarehouse(): Promise<DefaultWarehouseResult> 
       data: { code: DEFAULT_WAREHOUSE_CODE, name: DEFAULT_WAREHOUSE_NAME, isDefault: true },
       select: { id: true, name: true },
     });
-    console.log(`[warehouse] Varsayılan depo oluşturuldu: ${created.name} (${DEFAULT_WAREHOUSE_CODE})`);
+    bilgi("warehouse", `Varsayılan depo oluşturuldu: ${created.name} (${DEFAULT_WAREHOUSE_CODE})`);
     return { action: "created", id: created.id, name: created.name };
   } catch (err) {
     // Yarış: başka bir süreç aynı anda yarattı (kod unique VEYA isDefault partial
@@ -88,8 +88,7 @@ export function startDefaultWarehouseReconciler(): void {
     void ensureDefaultWarehouse().catch((err) => {
       // Buraya düşmek = yeni topların `warehouseId`'si NULL doğacak demektir.
       // Veri kaybı değil (geri doldurulabilir) ama sessiz kalmamalı.
-      console.error(
-        "[warehouse] VARSAYILAN DEPO UZLAŞTIRMASI BAŞARISIZ — yeni toplar deposuz yazılabilir. " +
+      hata("warehouse", "VARSAYILAN DEPO UZLAŞTIRMASI BAŞARISIZ — yeni toplar deposuz yazılabilir. " +
           "Tanımlar → Depolar'dan elle bir depo açıp varsayılan yapın.",
         err,
       );

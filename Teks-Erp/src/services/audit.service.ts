@@ -10,6 +10,7 @@ import { Prisma } from "@prisma/client";
 
 import { currentOrigin } from "../lib/request-context";
 import { diffCommonFields } from "./helpers/audit-diff.helper";
+import { hata } from "../lib/logger";
 type JsonValue = Prisma.InputJsonValue | typeof Prisma.JsonNull;
 
 const ARCHIVE_BATCH_SIZE = 5000;
@@ -111,7 +112,7 @@ export class AuditService {
       // Audit logging should never crash the main operation — but don't lose it
       // silently: sayacı artır ki /health audit kaybını görsün.
       recordAuditFailure(error);
-      console.error("[audit]: Failed to write SystemLog:", error);
+      hata("audit", "SystemLog yazılamadı", error);
     }
   }
 
@@ -152,7 +153,7 @@ export class AuditService {
       });
     } catch (error) {
       recordAuditFailure(error);
-      console.error("[audit]: Failed to write SystemLog batch:", error);
+      hata("audit", "SystemLog toplu yazımı başarısız", error);
     }
   }
 
@@ -192,7 +193,7 @@ export class AuditService {
       });
     } catch (error) {
       recordAuditFailure(error);
-      console.error("[audit]: Failed to write event SystemLog:", error);
+      hata("audit", "Olay SystemLog yazılamadı", error);
     }
   }
 

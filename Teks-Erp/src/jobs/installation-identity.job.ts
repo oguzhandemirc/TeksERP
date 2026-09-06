@@ -31,6 +31,7 @@ import { randomUUID } from "crypto";
 import prisma from "../lib/prisma";
 import { SETTING_KEYS } from "../services/system-setting.service";
 import { AuditService } from "../services/audit.service";
+import { bilgi, hata, uyari } from "../lib/logger";
 
 // permission-catalog.job.ts ile aynı politika: mutlu yolda ~3sn, DB geç gelirse
 // 3 + 4x15 = ~63sn'lik pencere.
@@ -93,8 +94,7 @@ export async function ensureInstallationIdentity(): Promise<InstallationIdentity
         // ve İZ BIRAK — istemciler bunu "farklı kurulum" olarak görecek ve
         // kullanıcıya soracak; sebebi hiçbir yerde yazmıyorsa o soru gizemli kalır.
         const regenerated = await writeFresh(key);
-        console.warn(
-            `[installation-identity] kayıtlı değer BOZUKTU, yeni kimlik üretildi: ${regenerated.installationId}. ` +
+        uyari("installation-identity", `kayıtlı değer BOZUKTU, yeni kimlik üretildi: ${regenerated.installationId}. ` +
             "İstemciler bunu farklı bir kurulum sanıp onay soracak.",
         );
         void AuditService.logEvent({
@@ -109,7 +109,7 @@ export async function ensureInstallationIdentity(): Promise<InstallationIdentity
 
     try {
         const created = await writeFresh(key);
-        console.log(`[installation-identity] kurulum kimliği üretildi: ${created.installationId}`);
+        bilgi("installation-identity", `kurulum kimliği üretildi: ${created.installationId}`);
         void AuditService.logEvent({
             category: "SYSTEM",
             action: "INSTALLATION_ID_CREATED",
@@ -191,16 +191,14 @@ export function startInstallationIdentity(): void {
     const attempt = (n: number): void => {
         void ensureInstallationIdentity().catch((err) => {
             if (n < MAX_ATTEMPTS) {
-                console.warn(
-                    `[installation-identity] deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
+                uyari("installation-identity", `deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
                     `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
                     err instanceof Error ? err.message : err,
                 );
                 setTimeout(() => attempt(n + 1), RETRY_DELAY_MS).unref();
                 return;
             }
-            console.error(
-                `[installation-identity] KİMLİK ÜRETİLEMEDİ (${MAX_ATTEMPTS} deneme). ` +
+            hata("installation-identity", `KİMLİK ÜRETİLEMEDİ (${MAX_ATTEMPTS} deneme). ` +
                 "Servis keşfi çalışmaya devam eder ama istemciler sunucunun kimliğini " +
                 "doğrulayamaz (farklı kurulum tespiti devre dışı).",
                 err,

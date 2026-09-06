@@ -47,6 +47,7 @@ import {
 import { PROFILE_STAMP_SETTING_KEY } from "../constants/reserved-settings";
 import { AuditService } from "../services/audit.service";
 import { reportJobFailure } from "./job-failure";
+import { bilgi, uyari } from "../lib/logger";
 
 // superadmin/installation-identity ile aynı politika: mutlu yolda ~3 sn,
 // DB geç gelirse 3 + 4×15 = ~63 sn'lik pencere.
@@ -153,15 +154,13 @@ export async function ensureModuleProfile(
       mevcutSayi = null;
     }
     if (mevcutSayi !== null && mevcutSayi > 0) {
-      console.log(
-        `[module-profile] TEKSERP_PROFIL tanımlı değil; kurulumda ${mevcutSayi}/${MODULE_SETTING_KEYS.size} ` +
+      bilgi("module-profile", `TEKSERP_PROFIL tanımlı değil; kurulumda ${mevcutSayi}/${MODULE_SETTING_KEYS.size} ` +
           "modül anahtarı ZATEN VAR — yapılacak bir şey yok. " +
           "(Profil yalnız HİÇ anahtarı olmayan TAZE kuruluma uygulanır; " +
           "`.env`e profil eklemek mevcut anahtarları DEĞİŞTİRMEZ.)",
       );
     } else {
-      console.log(
-        "[module-profile] TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI " +
+      bilgi("module-profile", "TEKSERP_PROFIL tanımlı değil — modül anahtarları YAZILMADI " +
           "(kod varsayılanları geçerli: üretim açık, diğer altısı kapalı).",
       );
     }
@@ -215,8 +214,7 @@ export async function ensureModuleProfile(
   // Bu yüklem sınıfı kalıcı olarak kapatır: yarın sekizinci bir modül anahtarı
   // eklendiğinde migration yedi yazsa bile job "kurulmuş" der ve dokunmaz.
   if (varOlan.size > 0) {
-    console.log(
-      `[module-profile] Kurulumda ${varOlan.size}/${beklenen.length} modül anahtarı zaten var — ` +
+    bilgi("module-profile", `Kurulumda ${varOlan.size}/${beklenen.length} modül anahtarı zaten var — ` +
         "dokunulmadı (profil yalnız HİÇ anahtarı olmayan TAZE kuruluma uygulanır)." +
         (eksikler.length > 0
           ? ` Yazılmayanlar bilinçli kabul edildi: ${eksikler.join(", ")}.`
@@ -262,8 +260,7 @@ export async function ensureModuleProfile(
     payload: { profil: parsed.profil, yazilan: eksikler },
   }).catch(() => undefined);
 
-  console.log(
-    `[module-profile] "${parsed.profil}" profili uygulandı — ${eksikler.length} satır yazıldı: ` +
+  bilgi("module-profile", `"${parsed.profil}" profili uygulandı — ${eksikler.length} satır yazıldı: ` +
       eksikler.join(", "),
   );
   return { action: "applied", profil: parsed.profil, yazilan: eksikler };
@@ -279,8 +276,7 @@ export function startModuleProfileJob(): void {
   const attempt = (n: number): void => {
     void ensureModuleProfile().catch((err) => {
       if (n < MAX_ATTEMPTS) {
-        console.warn(
-          `[module-profile] deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
+        uyari("module-profile", `deneme ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
             `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
           err instanceof Error ? err.message : err,
         );

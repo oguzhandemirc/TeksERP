@@ -37,6 +37,7 @@ import {
 } from "../constants/role-template-catalog";
 import { AuditService } from "../services/audit.service";
 import { foldNameForCompare } from "../services/helpers/name-normalize.helper";
+import { bilgi, uyari } from "../lib/logger";
 
 export type RoleTemplateReconcileResult = {
   /** Katalogdaki rol sayısı. */
@@ -107,8 +108,7 @@ async function reconcileRoleTemplatesTx(
       // Katalogda olup DB'de olmayan izin — Faz 1 (permission-catalog) koşmadıysa
       // olur. Şablonu eksik kurmaktansa iz bırakıp devam et; bir sonraki boot
       // eksikleri tamamlar (bekçi bu durumu geliştirme anında zaten düşürür).
-      console.warn(
-        `[role-templates] '${entry.code}' için ${unknown.length} izin DB'de yok, atlandı: ${unknown.join(", ")}`,
+      uyari("role-templates", `'${entry.code}' için ${unknown.length} izin DB'de yok, atlandı: ${unknown.join(", ")}`,
       );
     }
 
@@ -143,13 +143,12 @@ async function reconcileRoleTemplatesTx(
         (t) => foldNameForCompare(t.name) === foldNameForCompare(entry.name) && !adoptedIds.has(t.id),
       );
       if (adCakismasi) {
-        console.warn(
-          `[role-templates] '${entry.code}' oluşturulamadı — '${entry.name}' adı zaten kullanılıyor.`,
+        uyari("role-templates", `'${entry.code}' oluşturulamadı — '${entry.name}' adı zaten kullanılıyor.`,
         );
         continue;
       }
       if (wantedIds.length === 0) {
-        console.warn(`[role-templates] '${entry.code}' atlandı — hiçbir izni çözülemedi.`);
+        uyari("role-templates", `'${entry.code}' atlandı — hiçbir izni çözülemedi.`);
         continue;
       }
       const yeni = await tx.permissionTemplate.create({
@@ -211,14 +210,14 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
 
   const eklenenIzinSayisi = Object.values(itemsAdded).reduce((a, l) => a + l.length, 0);
   if (created.length === 0 && adopted.length === 0 && eklenenIzinSayisi === 0) {
-    console.log(`[role-templates] ${ROLE_TEMPLATE_CATALOG.length} rol güncel — değişiklik yok.`);
+    bilgi("role-templates", `${ROLE_TEMPLATE_CATALOG.length} rol güncel — değişiklik yok.`);
   } else {
     if (adopted.length > 0)
-      console.log(`[role-templates] ${adopted.length} eski şablon kodlandı: ${adopted.join(", ")}`);
+      bilgi("role-templates", `${adopted.length} eski şablon kodlandı: ${adopted.join(", ")}`);
     if (created.length > 0)
-      console.log(`[role-templates] ${created.length} YENİ rol oluşturuldu: ${created.join(", ")}`);
+      bilgi("role-templates", `${created.length} YENİ rol oluşturuldu: ${created.join(", ")}`);
     for (const [code, izinler] of Object.entries(itemsAdded))
-      console.log(`[role-templates] '${code}' şablonuna ${izinler.length} eksik izin eklendi: ${izinler.join(", ")}`);
+      bilgi("role-templates", `'${code}' şablonuna ${izinler.length} eksik izin eklendi: ${izinler.join(", ")}`);
 
     await AuditService.logEvent({
       category: "SYSTEM",
@@ -233,7 +232,7 @@ export async function reconcileRoleTemplates(): Promise<RoleTemplateReconcileRes
     });
   }
   if (custom.length > 0)
-    console.log(`[role-templates] Fabrikanın kendi ${custom.length} şablonu korunuyor: ${custom.join(", ")}`);
+    bilgi("role-templates", `Fabrikanın kendi ${custom.length} şablonu korunuyor: ${custom.join(", ")}`);
 
   return { total: ROLE_TEMPLATE_CATALOG.length, created, adopted, itemsAdded, custom };
 }

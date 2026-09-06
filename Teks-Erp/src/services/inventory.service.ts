@@ -170,6 +170,7 @@ import { generateRollBarcodeTx, type RollBarcodeType } from "./helpers/roll-barc
 import { finalizeRollsAtLastStep, finalBarcodeType } from "./helpers/roll-finalize.helper";
 import { matchesPermission } from "../middlewares/rbac.middleware";
 import { outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { uyari } from "../lib/logger";
 
 export interface RollStats {
   totalCount: number;
@@ -3712,7 +3713,7 @@ export class InventoryService {
         }
       } catch (e) {
         // Fiş okuması da best-effort: iptal tamamlandı, rakam drift bandında görünür.
-        console.warn(`[inventory] top iptali PO senkronu başarısız (${id}):`, (e as Error).message);
+        uyari("inventory", `top iptali PO senkronu başarısız (${id}):`, (e as Error).message);
       }
     }
 

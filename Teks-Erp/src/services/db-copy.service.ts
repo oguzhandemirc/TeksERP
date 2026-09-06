@@ -41,6 +41,7 @@ import {
 } from "./helpers/pg-admin-client";
 import { pgToolArgs, quoteIdent, quoteLiteral, withDatabase } from "./helpers/pg-conn.helper";
 import { pgTool, runTool } from "./helpers/pg-tool.helper";
+import { hata } from "../lib/logger";
 import {
   readDbGuc,
   readLocaleProps,
@@ -477,7 +478,7 @@ async function persistRecord(name: string, rec: CopyRecord): Promise<void> {
     const existing = await listExistingDbNames();
     await writeCopyRecords(records, existing);
   } catch (err) {
-    console.error("[db-copy] kayıt yazılamadı:", err);
+    hata("db-copy", "kayıt yazılamadı:", err);
   }
 }
 
@@ -623,7 +624,7 @@ async function runCopyJob(
         { statementTimeoutMs: 0 },
       );
     } catch (err) {
-      console.error("[db-copy] GUC replay başarısız:", err);
+      hata("db-copy", "GUC replay başarısız:", err);
       // Bloklamıyoruz — doğrulama bunu `fail` olarak zaten yakalayacak.
     }
   }

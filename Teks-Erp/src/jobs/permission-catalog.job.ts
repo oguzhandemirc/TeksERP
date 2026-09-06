@@ -34,6 +34,7 @@ import { PERMISSION_CATALOG, type PermissionCatalogEntry } from "../constants/pe
 import { AuditService } from "../services/audit.service";
 import { reconcileRoleTemplates } from "./role-template-catalog.job";
 import { reconcileReasonPresets } from "./reason-preset-catalog.job";
+import { bilgi, hata, uyari } from "../lib/logger";
 
 // Soğuk açılışta DB (özellikle Windows sunucuda PostgreSQL servisi) backend'den
 // sonra hazır olabiliyor. Emsal job'lar bunu 60sn sabit gecikmeyle çözüyor; bu iş
@@ -80,12 +81,11 @@ export async function reconcilePermissionCatalog(): Promise<PermissionReconcileR
   const extra = [...existingCodes].filter((code) => !catalogByCode.has(code)).sort();
 
   if (missing.length === 0) {
-    console.log(`[permission-catalog] ${total} izin kodu güncel — eklenecek satır yok.`);
+    bilgi("permission-catalog", `${total} izin kodu güncel — eklenecek satır yok.`);
     if (extra.length > 0) {
       // Katalogdan çıkarılmış / elle eklenmiş kodlar. KORUNUR (atamaları koparmamak
       // için); yalnız görünür olsun diye yazılır.
-      console.log(
-        `[permission-catalog] DB'de katalog dışı ${extra.length} izin var (korunuyor): ${extra.join(", ")}`,
+      bilgi("permission-catalog", `DB'de katalog dışı ${extra.length} izin var (korunuyor): ${extra.join(", ")}`,
       );
     }
     return { total, added: [], extra };
@@ -102,19 +102,16 @@ export async function reconcilePermissionCatalog(): Promise<PermissionReconcileR
   });
 
   const codes = missing.map((p) => p.code);
-  console.log(
-    `[permission-catalog] ${result.count} EKSİK izin DB'ye yazıldı: ${codes.join(", ")}`,
+  bilgi("permission-catalog", `${result.count} EKSİK izin DB'ye yazıldı: ${codes.join(", ")}`,
   );
   if (result.count !== codes.length) {
     // Aradaki fark = başka bir process (paralel boot / seed) aynı anda yazmış.
     // Sonuç yine doğru; yalnız iz bırakılır.
-    console.log(
-      `[permission-catalog] ${codes.length - result.count} satır bu arada başka bir süreç tarafından yazılmış (yarış — sorun değil).`,
+    bilgi("permission-catalog", `${codes.length - result.count} satır bu arada başka bir süreç tarafından yazılmış (yarış — sorun değil).`,
     );
   }
   if (extra.length > 0) {
-    console.log(
-      `[permission-catalog] DB'de katalog dışı ${extra.length} izin var (korunuyor): ${extra.join(", ")}`,
+    bilgi("permission-catalog", `DB'de katalog dışı ${extra.length} izin var (korunuyor): ${extra.join(", ")}`,
     );
   }
 
@@ -158,17 +155,17 @@ export function startPermissionCatalogReconciler(): void {
       // farklı yerde ele almak demekti.
       .then(async () => {
         const r = await reconcileReasonPresets();
-        console.log(
+        bilgi(
+          "reason-presets",
           r.created.length > 0
-            ? `[reason-presets] ${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`
-            : `[reason-presets] katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`,
+            ? `${r.created.length} yeni sistem sebebi eklendi: ${r.created.join(", ")}`
+            : `katalog güncel (${r.existing} sistem + ${r.custom} fabrika satırı)`,
         );
       })
       .catch((err) => {
         if (n < MAX_ATTEMPTS) {
           // Soğuk açılışta DB henüz ayakta olmayabilir — uyarı, hata değil.
-          console.warn(
-            `[permission-catalog] uzlaştırma denemesi ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
+          uyari("permission-catalog", `uzlaştırma denemesi ${n}/${MAX_ATTEMPTS} başarısız (DB hazır olmayabilir), ` +
               `${RETRY_DELAY_MS / 1000}sn sonra tekrar denenecek:`,
             err instanceof Error ? err.message : err,
           );
@@ -177,8 +174,7 @@ export function startPermissionCatalogReconciler(): void {
         }
         // Buraya düşmek = yeni izinler DB'de YOK demektir → Admin dışı kullanıcılar
         // ilgili ekranlarda 403 alır. Sessiz yutma YOK.
-        console.error(
-          `[permission-catalog] UZLAŞTIRMA BAŞARISIZ (${MAX_ATTEMPTS} deneme). ` +
+        hata("permission-catalog", `UZLAŞTIRMA BAŞARISIZ (${MAX_ATTEMPTS} deneme). ` +
             "Yeni izinler ve/veya rol şablonları DB'ye YAZILAMADI — Admin dışı kullanıcılar " +
             "yeni ekranlarda 403 alabilir. Sunucuyu yeniden başlatın ya da elle kontrol edin.",
           err,

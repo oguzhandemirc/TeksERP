@@ -35,6 +35,7 @@ import { APP_VERSION } from "../lib/app-version";
 import { buildAdvertisedTxt, type AdvertisedTxt } from "../lib/discovery-txt";
 import { whenIdentityReady } from "./installation-identity.job";
 import { DISCOVERY_VERSION, buildDiscoveryIdentity } from "../services/discovery.service";
+import { bilgi, uyari } from "../lib/logger";
 
 /** İlan edilen servis tipi → ağda `_teks-erp._tcp.local` olarak görünür. */
 export const MDNS_SERVICE_TYPE = "teks-erp";
@@ -105,7 +106,7 @@ export interface StartMdnsOptions {
 export async function startMdnsAdvertiser(opts: StartMdnsOptions = {}): Promise<MdnsState> {
     if (process.env.DISCOVERY_MDNS_ENABLED === "false") {
         setState({ active: false, reason: "disabled", error: null });
-        console.log("[mdns] servis ilanı KAPALI (DISCOVERY_MDNS_ENABLED=false)");
+        bilgi("mdns", "servis ilanı KAPALI (DISCOVERY_MDNS_ENABLED=false)");
         return getMdnsState();
     }
     if (state.active) return getMdnsState();
@@ -130,7 +131,7 @@ export async function startMdnsAdvertiser(opts: StartMdnsOptions = {}): Promise<
             reason: "module-missing",
             error: err instanceof Error ? err.message : String(err),
         });
-        console.warn("[mdns] servis ilanı yüklenemedi, keşif yalnız tarama ile çalışacak:", state.error);
+        uyari("mdns", "servis ilanı yüklenemedi, keşif yalnız tarama ile çalışacak:", state.error);
         return getMdnsState();
     }
 
@@ -154,8 +155,7 @@ export async function startMdnsAdvertiser(opts: StartMdnsOptions = {}): Promise<
                 reason: "bind-error",
                 error: err instanceof Error ? err.message : String(err),
             });
-            console.warn(
-                "[mdns] servis ilanı durdu (port 5353 başka bir uygulamada olabilir — " +
+            uyari("mdns", "servis ilanı durdu (port 5353 başka bir uygulamada olabilir — " +
                 "Windows'ta Apple Bonjour Service / Adobe). Keşif yalnız tarama ile çalışacak:",
                 state.error,
             );
@@ -176,7 +176,7 @@ export async function startMdnsAdvertiser(opts: StartMdnsOptions = {}): Promise<
             serviceName,
             startedAt: new Date().toISOString(),
         });
-        console.log(`[mdns] servis ilan edildi: ${serviceName} → _${MDNS_SERVICE_TYPE}._tcp:${port}`);
+        bilgi("mdns", `servis ilan edildi: ${serviceName} → _${MDNS_SERVICE_TYPE}._tcp:${port}`);
 
         // Kimlik geç geldiyse TXT'yi bir kez tazele — ilanı yeniden kurmaya değmez.
         if (!identity) void refreshTxtWhenIdentityArrives();
@@ -186,7 +186,7 @@ export async function startMdnsAdvertiser(opts: StartMdnsOptions = {}): Promise<
             reason: "bind-error",
             error: err instanceof Error ? err.message : String(err),
         });
-        console.warn("[mdns] servis ilanı kurulamadı, keşif yalnız tarama ile çalışacak:", state.error);
+        uyari("mdns", "servis ilanı kurulamadı, keşif yalnız tarama ile çalışacak:", state.error);
     }
 
     return getMdnsState();

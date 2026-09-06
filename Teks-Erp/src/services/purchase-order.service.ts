@@ -94,6 +94,7 @@ import {
 } from "./helpers/supplier-party.helper";
 import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import type { ApiResponse } from "../types/api.types";
+import { uyari } from "../lib/logger";
 
 /**
  * Alış siparişi senkronunun `pg_advisory_xact_lock` NAMESPACE'i (2 argümanlı form).
@@ -431,7 +432,7 @@ export async function syncPurchaseOrderSafely(
   try {
     return await syncPurchaseOrder(purchaseOrderId);
   } catch (e) {
-    console.warn(`[purchase-order] senkron başarısız (${purchaseOrderId}):`, (e as Error).message);
+    uyari("purchase-order", `senkron başarısız (${purchaseOrderId}):`, (e as Error).message);
     return null;
   }
 }

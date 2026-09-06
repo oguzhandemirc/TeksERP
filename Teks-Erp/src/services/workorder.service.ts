@@ -132,6 +132,7 @@ import { nextPrefixedSequenceTx, SubcontractorService } from "./subcontractor.se
 
 import { diffFields } from "./helpers/audit-diff.helper";
 import { OPEN_OUTSTANDING, outstandingItemOfOpenDispatch } from "./helpers/fason-open-dispatch.helper";
+import { hata } from "../lib/logger";
 // Prisma.Decimal | number | null | undefined → number | null (karşılaştırma için)
 function normNum(v: Prisma.Decimal | number | null | undefined): number | null {
   if (v === null || v === undefined) return null;
@@ -1385,8 +1386,7 @@ export class WorkOrderService {
     // canlı yetim PLANNED WO + ACTIVE refakat kartı kalır — bunu loglayıp iz bırak
     // (audit best-effort sayacı felsefesi; operatör/log yetim WO'yu görebilsin).
     const logOrphanCleanupFailure = (cleanupErr: unknown): void => {
-      console.error(
-        `[quickStart] telafi hardDelete başarısız — yetim WO kaldı (${workOrder.id}), manuel iptal gerekebilir:`,
+      hata("quickStart", `telafi hardDelete başarısız — yetim WO kaldı (${workOrder.id}), manuel iptal gerekebilir:`,
         cleanupErr,
       );
     };

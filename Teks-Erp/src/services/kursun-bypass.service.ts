@@ -63,6 +63,7 @@ import { resolveKursunBypassEnabled } from "./system-setting.service";
 import { touchWorkOrderTx } from "./helpers/workorder-locks.helper";
 import { copyStationCapabilitiesToRoll } from "./helpers/station-capability-transfer.helper";
 import { finalizeRollsAtLastStep } from "./helpers/roll-finalize.helper";
+import { uyari } from "../lib/logger";
 import {
   completeWorkOrderIfStepsDone,
   recomputeStepStatus,
@@ -562,8 +563,7 @@ export class KursunBypassService {
       take: LIST_CAP,
     });
     if (pendingRows.length === LIST_CAP) {
-      console.warn(
-        `[kursun-bypass] listDistribution: ${LIST_CAP} açık atama tavanına ulaşıldı — liste kırpılmış olabilir.`,
+      uyari("kursun-bypass", `listDistribution: ${LIST_CAP} açık atama tavanına ulaşıldı — liste kırpılmış olabilir.`,
       );
     }
     const pendingStepIds = pendingRows.map((r) => r.workOrderStepId);
@@ -592,8 +592,7 @@ export class KursunBypassService {
       ],
     );
     if (waitingSteps.length === LIST_CAP) {
-      console.warn(
-        `[kursun-bypass] listDistribution: ${LIST_CAP} bekleyen adım tavanına ulaşıldı — liste kırpılmış olabilir.`,
+      uyari("kursun-bypass", `listDistribution: ${LIST_CAP} bekleyen adım tavanına ulaşıldı — liste kırpılmış olabilir.`,
       );
     }
 

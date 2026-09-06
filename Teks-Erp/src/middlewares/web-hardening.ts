@@ -28,6 +28,7 @@
 import type { Request, RequestHandler, Response, NextFunction } from "express";
 import { AppError } from "../utils/app-error";
 import "../types/express-augment";
+import { uyari } from "../lib/logger";
 
 // -----------------------------------------------------------------------------
 // Çözülmüş yapılandırma
@@ -202,7 +203,7 @@ function readCount(
  */
 export function readWebHardeningConfig(
   env: NodeJS.ProcessEnv = process.env,
-  onWarn: WarnFn = (m) => console.warn(m),
+  onWarn: WarnFn = (m) => uyari("web-hardening", m),
 ): WebHardeningConfig {
   const trustProxy = parseTrustProxy(env.TRUST_PROXY, onWarn);
 

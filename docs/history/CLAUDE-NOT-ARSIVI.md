@@ -3230,3 +3230,57 @@ iddia hangi ikiliyi kapsıyor, ve aynı paketin başka hangi ikilileri var?*
 <sub>eski kök `CLAUDE.md:299-300` · bölüm: Ortak Konvansiyonlar</sub>
 
 - **Yıkıcı işlemlerde detaylı onay zorunlu** (iptal/sil/scrap): confirm dialog'unda etkilenen her kaydı (WO, rulo, sipariş vb.) somut olarak listele. Backend tarafında preview endpoint döner, frontend per-record seçim sunar — "X kayıt etkilenecek" gibi soyut sayı yetmez.
+
+---
+
+## 2026-09-07 — Backend log kanalı: paket DEĞİL, `src/lib/logger.ts` [ÇEKİRDEK]
+
+**Karar:** Backend'in log kanalı `src/lib/logger.ts`tir (`hata` / `uyari` /
+`bilgi` + banner için `satir`). Yeni **paket eklenmedi**. 142 çıplak `console`
+çağrısının tamamı taşındı; ESLint `no-console` `src/` blokunda `"error"` olarak
+açıldı ve tek istisna kanalın kendi dosyasıdır (adlı blok).
+
+**Neden şimdi:** `eslint.config.mjs` başlığı bu kuralı bilerek AÇMAMIŞTI —
+"backend'de yapılandırılmış logger YOK, kural yazmak logger kararını dayatırdı;
+karar ayrı bir iştir". `docs/standart/KUTUPHANELER.md` §8 de aynı maddeyi açık
+tutuyordu. Bu not o maddeyi kapatır.
+
+**Kararın dayanağı ÖLÇÜMDÜR.** Fabrika sunucusunun beş haftalık hata log'u
+(31.07 → 04.09, 5648 satır) elle ayrıştırıldı:
+
+| | |
+|---|---|
+| `[etiket]` taşıyan satır | 531 — saniyeler içinde gruplandı (`[offsite]` 505 · `[swagger]` 23 · `[audit]` 3) |
+| etiketsiz satır | ~5100 — yığın izleri ve pg bağlantı nesnesi dökümleri; ancak OKUNARAK sınıflandı |
+
+Somut bedel: 64 kez tekrarlayan bir sebep-kodu reddi (`TOP_BASI_MAKAS_PAYI`) ve
+15 kez tekrarlayan bir controller-bind hatası, `error.middleware`in ETİKETSİZ
+`console.error("Unhandled Exception:", err)` satırından geçtiği için `grep -c`
+ile sayılamadı; sayım elle yapıldı.
+
+**Paket neden reddedildi (`pino` / `winston`):** ikisi de bir bağımlılık, bir
+yapılandırma ve bir TAŞIMA katmanı getirir. Bu kurulumda taşımayı pm2 yapıyor
+(`out_file` / `error_file`, `time: true` ile satır başına zaman damgası),
+rotasyonu `pm2-logrotate` (2026-09-07'de `kur.ps1`e eklendi). Kütüphanenin
+çözdüğü iki sorun zaten çözülmüştü; geriye kalan tek eksik SEVİYE + ALAN ETİKETİ
+disiplini ve o ~30 satırlık bir iş. [KU-07] ("elle yazmak her kayıtta gerçek bir
+alternatiftir") burada uygulandı.
+
+**Sözleşmenin üç değişmezi** (bekçi: `scripts/test_logger_kanali.ts`, 16 kontrol,
+altı negatif sondayla ısırtıldı):
+1. **Biçim** `SEVIYE [alan] mesaj` — tek satır, greplenebilir.
+2. **Akış ayrımı** `bilgi` → stdout, `hata`/`uyari` → stderr. pm2 bu iki akışı
+   AYRI dosyaya yazar; birleştirmek `backend-err.log`u işe yaramaz hale
+   getirirdi (bugün orada 5 haftada 383 KB var, out'ta 57 MB).
+3. **Sayılabilirlik** bir hata = TEK etiketli satır; yığın izi ALTINA etiketsiz
+   basılır. Yukarıdaki 64/15 vakası tam da bu ayrım olmadığı için sayılamamıştı.
+
+**Zaman damgası logger'da BASILMAZ** — pm2 `time: true` ile koyar; ikinci damga
+her satırı iki kez tarihlerdi.
+
+**Banner istisnası:** `satir()` etiket almaz. `server.ts`in açılış kutusu insan
+okuru içindir; her satırına `BILGI [server]` eklemek kutuyu okunamaz yapardı.
+Kaçış ADIYLA taşınır ve nerede kullanıldığı greplenebilir kalır.
+
+**Kayıt:** `docs/standart/KUTUPHANELER.md` §2 satırı + §9 (altı satırlık karar
+kaydı, sonuç "paket YOK").

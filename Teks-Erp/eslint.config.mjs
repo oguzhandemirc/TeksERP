@@ -32,9 +32,12 @@
 //    yeşil — kural, korunacak bir tavan değil YENİ BİR BORÇ KAYDI açardı.
 //    Politikayı çevirmek ayrı bir karardır; ölçüm burada duruyor ki ucuz olsun.
 //    (İpucu: 5 ölü direktif tam bu kuralı kapatmaya çalışıyordu — niyet vardı.)
-//  · `no-console` (backend) — 137 çağrı / 38 dosya. Backend'de yapılandırılmış
-//    logger YOK, `console` fiilen TEK log kanalı → kural yazmak logger kararını
-//    dayatırdı. Karar ayrı bir iştir (docs/standart/KUTUPHANELER.md § açık kararlar).
+//  · `no-console` (backend) — ⚠️ BU MADDE ARTIK GEÇERSİZ (2026-09-07). O gün
+//    verilen karar `src/lib/logger.ts`tir: 142 çağrının tamamı `hata/uyari/bilgi`
+//    (+ banner için `satir`) ile seviye ve alan etiketi taşır hâle geldi ve kural
+//    `src/` blokunda "error" olarak AÇILDI (tek istisna kanalın kendi dosyası).
+//    Kararın gerekçesi ölçümdür: fabrikanın 5 haftalık hata log'unda etiketli 531
+//    satır saniyede gruplanabildi, etiketsiz ~5100 satır elle okundu.
 //
 // Ölçüm tarihi ve tam sayılar: docs/history/standart-2026-09-05/olcum/eslint-backend.json
 // =============================================================================
@@ -255,6 +258,33 @@ export default [
       // paket yüklenemezse yol fail-open kapanır) ve orada satır bazlı disable
       // TAŞIR. Kural açık olduğu için o disable CANLIDIR — ölü direktif kalmaz.
       "@typescript-eslint/no-require-imports": "error",
+      // 2026-09-07: AÇILDI. Başlıktaki eski gerekçe ("logger kararı ayrı bir
+      // iştir") artık geçersiz — `src/lib/logger.ts` var ve 142 çağrının
+      // TAMAMI oraya taşındı. Kural tavan değil SIFIR: yeni çıplak `console`
+      // sessizce kanala karışmasın (seviye + alan etiketi kaybolur).
+      "no-console": "error",
+      ...BOYUT_KURALLARI,
+    },
+  },
+
+  // ── 1b) Log kanalının KENDİ tanım yeri ─────────────────────────────────────
+  // `console`u saran TEK dosya. Kanalın kendisi burada yazılır; başka her yerde
+  // `no-console` hata verir (yukarıdaki blok). Dar ve ADLI istisna.
+  {
+    files: ["src/lib/logger.ts"],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: { ecmaVersion: 2022, sourceType: "module" },
+    },
+    plugins: { "@typescript-eslint": tsPlugin },
+    linterOptions: { reportUnusedDisableDirectives: "error" },
+    rules: {
+      "no-restricted-syntax": ["error", ...ORTAK_YASAKLAR, FACTORY_TZ_LITERAL],
+      "@typescript-eslint/naming-convention": NAMING_CONVENTION,
+      "@typescript-eslint/no-explicit-any": "error",
+      // Flat config MERGE eder: üstteki blokta açılan `no-console` burada
+      // AÇIKÇA kapatılmazsa yine geçerli olur (ölçüldü — 5 hata).
+      "no-console": "off",
       ...BOYUT_KURALLARI,
     },
   },

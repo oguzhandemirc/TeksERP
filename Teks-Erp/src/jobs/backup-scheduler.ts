@@ -28,6 +28,7 @@ import { runBackupJob } from "../services/backup.service";
 import { readBackupHour } from "../services/system-setting.service";
 import { reportJobFailure } from "./job-failure";
 import { factoryDayStart } from "../constants/time";
+import { bilgi, hata, uyari } from "../lib/logger";
 
 const SETTING_KEY = "backup.lastNightlyAt";
 const CHECK_INTERVAL_MS = 15 * 60 * 1000; // 15dk
@@ -64,8 +65,7 @@ async function setLastRun(at: Date): Promise<void> {
 async function runIfDue(): Promise<void> {
   if (checking) {
     if (checkingSince !== null && Date.now() - checkingSince > WATCHDOG_MS) {
-      console.error(
-        `[backup] WATCHDOG: önceki koşum ${Math.round((Date.now() - checkingSince) / 60000)} dk'dır ` +
+      hata("backup", `WATCHDOG: önceki koşum ${Math.round((Date.now() - checkingSince) / 60000)} dk'dır ` +
           "bitmedi — bayrak zorla bırakılıyor. Asılı pg_dump/offsite kopya olabilir, elle kontrol edin.",
       );
       checking = false;
@@ -103,9 +103,9 @@ async function runIfDue(): Promise<void> {
 
     const result = await runBackupJob("nightly");
     if (result.ok) {
-      console.log(`[backup] gece yedeği tamam — ${result.message}`);
+      bilgi("backup", `gece yedeği tamam — ${result.message}`);
     } else {
-      console.error(`[backup] gece yedeği BAŞARISIZ — ${result.message}`);
+      hata("backup", `gece yedeği BAŞARISIZ — ${result.message}`);
     }
   } catch (err) {
     // Konsol + SystemLog + (havuz zaman aşımıysa) /health sayacı — F-CORE-OPS-004.
@@ -128,23 +128,21 @@ export function startBackupScheduler(): void {
   // yedek / önizleme / kopya özellikleri çalışmaya devam eder.
   // İkisi birden açık kalırsa her gece İKİ yedek alınır.
   if (process.env.BACKUP_SCHEDULE_ENABLED === "false") {
-    console.log(
-      "[backup] scheduler KAPALI (BACKUP_SCHEDULE_ENABLED=false) — gece yedeği " +
+    bilgi("backup", "scheduler KAPALI (BACKUP_SCHEDULE_ENABLED=false) — gece yedeği " +
         "harici bir zamanlanmış görev tarafından alınıyor olmalı.",
     );
     return;
   }
   if (!process.env.BACKUP_DIR) {
     // Dev ortamında normal. Üretimde bu satır log'da görünüyorsa YEDEK ALINMIYOR.
-    console.warn("[backup] BACKUP_DIR tanımsız — otomatik gece yedeği DEVRE DIŞI.");
+    uyari("backup", "BACKUP_DIR tanımsız — otomatik gece yedeği DEVRE DIŞI.");
     return;
   }
   setTimeout(() => {
     void runIfDue();
     timer = setInterval(() => void runIfDue(), CHECK_INTERVAL_MS);
   }, STARTUP_DELAY_MS);
-  console.log(
-    "[backup] scheduler aktif — yedek saati Yedekler ekranından ayarlanır " +
+  bilgi("backup", "scheduler aktif — yedek saati Yedekler ekranından ayarlanır " +
       "(SystemSetting backup.hour → BACKUP_HOUR env → 03:00)",
   );
 }

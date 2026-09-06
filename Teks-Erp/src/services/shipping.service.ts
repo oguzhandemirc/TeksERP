@@ -116,6 +116,7 @@ import { collectBoundKeys } from "./helpers/label-context-fit";
 import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
+import { uyari } from "../lib/logger";
 import {
   parseQueryParams,
   isCursorRequested,
@@ -1605,8 +1606,7 @@ export class ShippingService {
     // şeridine çevirmeli. Alan EKLEMELİ olduğu için eski istemcileri kırmaz.
     const truncated = sacksDesc.length === POOL_SACK_CAP;
     if (truncated) {
-      console.warn(
-        `[listCustomerPoolSacks] müşteri ${customerId}: havuz çuvalı ${POOL_SACK_CAP} tavanına ulaştı — en eskiler kesildi.`,
+      uyari("listCustomerPoolSacks", `müşteri ${customerId}: havuz çuvalı ${POOL_SACK_CAP} tavanına ulaştı — en eskiler kesildi.`,
       );
     }
     return { success: true, data: { customer, sacks: data, truncated, limit: POOL_SACK_CAP } };
@@ -3170,8 +3170,7 @@ export class ShippingService {
       const { autoDraftInvoiceAfterDispatch } = await import("./helpers/shipment-auto-draft.helper");
       return await autoDraftInvoiceAfterDispatch(shipmentId, userId);
     } catch (err) {
-      console.warn(
-        `[auto-draft] Kanca modülü yüklenemedi (sevk ${shipmentId} etkilenmedi):`,
+      uyari("auto-draft", `Kanca modülü yüklenemedi (sevk ${shipmentId} etkilenmedi):`,
         err instanceof Error ? err.message : err,
       );
       return null;

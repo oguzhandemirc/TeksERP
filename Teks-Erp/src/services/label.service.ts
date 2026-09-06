@@ -77,6 +77,7 @@ const TABLE_LABEL_PRINT = "LABEL_PRINT_EVENT";
 // döngüsü doğardı ve hiçbir bekçi görmezdi. Değer taşımayan bir modülden değer
 // import edilemeyeceği için koruma artık yapısaldır.
 import type { LabelPayload, SwatchLabelPayload } from "../types/label.types";
+import { hata } from "../lib/logger";
 export type { NameSource, LabelPayload, SwatchLabelPayload } from "../types/label.types";
 
 
@@ -1977,7 +1978,7 @@ export class LabelService {
       labelData = (await this.getRollLabel(rollId, opts)).data;
     } catch (e) {
       // Etiket çözülemezse snapshot'a dokunma — ama SESSİZ kalma.
-      console.error("[label] seedRollLabelSnapshot çözümü başarısız:", e);
+      hata("label", "seedRollLabelSnapshot çözümü başarısız:", e);
       return { success: true, data: { seeded: false } };
     }
 

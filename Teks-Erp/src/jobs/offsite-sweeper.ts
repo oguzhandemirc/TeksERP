@@ -21,6 +21,7 @@
 
 import { sweepOffsiteBackups, recordSweep } from "../services/helpers/offsite-backup.helper";
 import { reportJobFailure } from "./job-failure";
+import { bilgi, uyari } from "../lib/logger";
 
 /**
  * Süpürme sıklığı. Gece yedeği 02:00'de alınıyor; saatlik süpürme "sabaha kadar
@@ -42,7 +43,7 @@ let running = false;
 
 async function sweepOnce(): Promise<void> {
   if (running) {
-    console.warn("[offsite] önceki süpürme hâlâ sürüyor — bu tur atlandı.");
+    uyari("offsite", "önceki süpürme hâlâ sürüyor — bu tur atlandı.");
     return;
   }
   running = true;
@@ -54,7 +55,7 @@ async function sweepOnce(): Promise<void> {
       // Hedef yoksa bu bir İŞ HATASI değil, bir KURULUM eksiğidir: her saat
       // SystemLog'a hata yazmak gürültü olur ve gerçek hataları gömer.
       // Uyarı `/api/admin/health` üzerinden zaten görünür.
-      console.warn(`[offsite] ${res.warnings.join(" | ")}`);
+      uyari("offsite", `${res.warnings.join(" | ")}`);
       return;
     }
     if (!res.ok) {
@@ -63,8 +64,7 @@ async function sweepOnce(): Promise<void> {
       reportJobFailure("offsite-sweep", new Error(res.warnings.join(" | ") || "bilinmeyen hata"));
       return;
     }
-    console.log(
-      `[offsite] süpürme tamam — yerel ${res.localCount}, uzak ${res.remoteCount}, ` +
+    bilgi("offsite", `süpürme tamam — yerel ${res.localCount}, uzak ${res.remoteCount}, ` +
         `eksik 0 (${Math.round(res.durationMs / 1000)} sn)`,
     );
   } catch (err) {
@@ -83,7 +83,7 @@ export function startOffsiteSweeper(): void {
   // backend kopyalar) yapısal olarak imkânsız kılardı.
 
   if (!process.env.BACKUP_DIR) {
-    console.warn("[offsite] BACKUP_DIR tanımsız — offsite süpürme DEVRE DIŞI.");
+    uyari("offsite", "BACKUP_DIR tanımsız — offsite süpürme DEVRE DIŞI.");
     return;
   }
   if (!(process.env.BACKUP_RCLONE_REMOTE ?? "").trim()) {
@@ -99,8 +99,7 @@ export function startOffsiteSweeper(): void {
     // Eski hâli düz "TÜM YEDEKLER AYNI DİSKTE" diyordu ve panelden ayarlanmış
     // bir kurulumda bu YANLIŞ ALARM'dı — yedekler sorunsuz gidiyorken her
     // açılışta felaket uyarısı basılır, ekip de uyarıları okumamayı öğrenirdi.
-    console.warn(
-      "[offsite] BACKUP_RCLONE_REMOTE ortam değişkeni boş. Hedef PANELDEN " +
+    uyari("offsite", "BACKUP_RCLONE_REMOTE ortam değişkeni boş. Hedef PANELDEN " +
         "ayarlanmadıysa tüm yedekler veritabanıyla AYNI DİSKTE demektir ve tek " +
         "disk arızası/fidye yazılımı ikisini birden götürür. " +
         "Kontrol: Sistem → Yedekler → Makine Dışı Yedek.",
@@ -111,8 +110,7 @@ export function startOffsiteSweeper(): void {
     void sweepOnce();
     timer = setInterval(() => void sweepOnce(), SWEEP_INTERVAL_MS);
   }, STARTUP_DELAY_MS);
-  console.log(
-    `[offsite] süpürücü aktif — her ${Math.round(SWEEP_INTERVAL_MS / 60000)} dk'da bir ` +
+  bilgi("offsite", `süpürücü aktif — her ${Math.round(SWEEP_INTERVAL_MS / 60000)} dk'da bir ` +
       `${process.env.BACKUP_DIR} → ${process.env.BACKUP_RCLONE_REMOTE || "<panelden çözülecek>"}`,
   );
 }
