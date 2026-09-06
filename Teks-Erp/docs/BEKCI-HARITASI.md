@@ -1,8 +1,8 @@
 # Bekçi haritası — alan → test dosyası
 
-> Üretilmiş (anlama turu 2026-09-05, +7 bekçi 2026-09-06; 464 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
+> Üretilmiş (anlama turu 2026-09-05, +8 bekçi 2026-09-06/07; 465 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (90), `sevkiyat` (86), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (56), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (20), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (90), `sevkiyat` (86), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (56), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1688,10 +1688,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_wo_manual_complete.ts` | Manuel kapatmada kapanış dispozisyonu: beş statü uygulanır, dispozisyonsuz kapatma 400, fasondaki top 409 (rollback), TRANSFER klon üretir, kaynak COM | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts` | Kısa kesim → otomatik A1 kuralı tek dosyada: shortCutOverride/shortCutRevert sınırları (eşik altı uzunluk, mevcut/varsayılan kalite kodu, katalogdan A |  |  |  |
 
-## surum-deploy (20)
+## surum-deploy (21)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_deploy_log_rotation.ts` | `kur.ps1` pm2-logrotate'i GERÇEKTEN kuruyor mu (üç ayarıyla), blok sürüm çıkışını kesmiyor mu, rotasyonun hedefi (`out_file`/`error_file`/`time`) duruyor mu | | ✓ | 2026-09-07 |
 | `Electron/src/components/layout/GuncellemeDugmesi.test.tsx` | Topbar güncelleme düğmesi: durum eşlemesi tek kaynaktan, hata KIRMIZI basmaz; error/idle gösterilmez; web panelinde çizilmez; elle denetimde asgari an |  | ✓ | ⚠️ düşük: kaynak taraması process.cwd()'ye göreli ('src/...') — vitest kökü Electron/ olmazsa |
 | `Electron/src/lib/surum-notlari.test.ts` | Sürüm notu gösterimi: ilk kurulumda yalnız en yeni, sürüm atlayan makine aradaki TÜM yayınları görür, kurulu sürümü AŞAN kayıt gösterilmez, geri almad |  |  | ⚠️ yok |
 | `Electron/src/lib/version-compare.test.ts` | Sürüm karşılaştırma SAYISALDIR (2.10.0 > 2.9.0 — sözlüksel değil), eksik parça 0 sayılır, bozuk girdi kilit ÜRETMEZ (fail-open), gerçek minVersion kil |  |  | ⚠️ yok |

@@ -646,7 +646,9 @@ süreç listesini geri yükler.
 | Linux (pm2) | `~/.pm2/logs/` veya `out_file`/`error_file`; `pm2 logs` | PostgreSQL `log_directory` |
 
 > **⚠ pm2 log rotasyonu YAPMAZ.** NSSM 10MB'da dosyayı döndürüyordu; pm2'de bu
-> özellik **modül** olarak gelir ve kurulmadıkça log dosyası sınırsız büyür:
+> özellik **modül** olarak gelir ve kurulmadıkça log dosyası sınırsız büyür.
+> `kur.ps1` [8/9] 2026-09-06'dan beri bunu otomatik kurar (idempotent, her
+> sürümde tekrarlanır, internet yoksa uyarıp geçer). Elle kurmak gerekirse:
 >
 > ```bash
 > pm2 install pm2-logrotate

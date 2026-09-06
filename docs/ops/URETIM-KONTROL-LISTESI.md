@@ -87,8 +87,11 @@ sessiz bozulma riski. Akış ayrıntıları: `DEPLOY-RUNBOOK.md`. Migration notl
       Node + PostgreSQL'i rahat taşıyor (yedek rotasyonu son 14 dump'ı tutar).
 - [ ] Log konumları erişilebilir (`pm2 logs tekserp-backend`; dosya yolu
       `ecosystem.config.js` → `out_file`/`error_file`) ve hata yığını yok.
-- [ ] **`pm2-logrotate` kurulu** — pm2 log rotasyonu yapmaz, kurulmazsa dosya
-      sınırsız büyür (NSSM 10MB'da döndürüyordu).
+- [ ] **`pm2-logrotate` kurulu** — `kur.ps1` [8/9] bunu artık KENDİSİ kurar
+      (2026-09-06); madde "kuruldu mu" değil "kurulum çıktısında uyarı var mı"
+      diye okunur (internet yoksa script uyarıp geçer). Doğrulama: `pm2 ls`
+      çıktısında modül satırı. Kurulmazsa dosya sınırsız büyür (NSSM 10MB'da
+      döndürüyordu; fabrikada 5 haftada 57 MB ölçüldü).
 - [ ] **Yedekleme canlı:** `GET /api/admin/health` (token + `admin:settings`) →
       `lastBackup` **null DEĞİL** — ⚠️ `/health`'te bu alan YOK (2026-08-09'da beş
       alana donduruldu; `lastBackup` yetkili uca taşındı, eski madde mekanik olarak hep

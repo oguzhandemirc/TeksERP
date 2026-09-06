@@ -194,7 +194,7 @@ Ayrıntı + uzaktan erişim bağlamı: [`UZAK-ERISIM-KURULUM.md`](./UZAK-ERISIM-
 9. `npm run build` (= `tsc` → `dist/`). `package.json`'da `start`/`prod` script'i **YOK**; süreci pm2 yönetir.
 10. `pm2 start ecosystem.config.js` → `pm2 status` ile `online` teyit et, `pm2 logs tekserp-backend` ile açılış bannerını gör.
     - **TEK-PROCESS invariant:** PM2 **cluster** / `cluster` modülü / 2. replica EKLEME — presence sayımı + feature-flag cache + archive-scheduler + backup-scheduler sessizce bozulur (çift arşiv, çift gece yedeği). `ecosystem.config.js` `exec_mode: "fork"` + `instances: 1` ile gelir; **değiştirme**.
-    - **Log rotasyonu pm2'de otomatik DEĞİL:** `pm2 install pm2-logrotate` + `max_size 10M` / `retain 14`. Kurulmazsa log dosyası sınırsız büyür (NSSM bunu kendisi yapıyordu).
+    - **Log rotasyonu pm2'de otomatik DEĞİL** — ama `kur.ps1` [8/9] adımında `pm2 install pm2-logrotate` + `max_size 10M` / `retain 14` / `compress true` kurar (2026-09-06'dan beri; her sürümde tekrarlanır, sahadaki eski kurulumlar ilk güncellemede düzelir). Elle kurulumda bu üç komut ZORUNLU — yoksa log dosyası sınırsız büyür (NSSM bunu kendisi yapıyordu; fabrikada 5 haftada 57 MB tek dosya ölçüldü).
 11. **Reboot kalıcılığı:** `pm2 save` (her deploy sonrası tekrar). `pm2 startup` **Windows'u desteklemez** — listeyi geri yükleyecek ayrı bir tetikleyici (pm2-installer / Görev Zamanlayıcı `pm2 resurrect`) gerekir. Bu sunucuda çalışan mekanizmanın tespiti: `DEPLOY-RUNBOOK.md §7`.
 
 ### A6. Sağlık doğrulama

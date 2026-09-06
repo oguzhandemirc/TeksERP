@@ -559,6 +559,38 @@ if ($LASTEXITCODE -ne 0) { Fail "pm2 start basarisiz. Geri donus: $kok\kur.ps1 -
 & $pm2 save    # ZORUNLU: reboot'ta dogru klasor kalksin (dump.pm2 tazelenir)
 Ok "baslatildi ve kaydedildi (pm2 save)"
 
+# --- Log rotasyonu: pm2-logrotate -------------------------------------------
+# pm2 log dosyasini KENDISI DONDURMEZ (ecosystem.fabrika.js basliginda da yazili).
+# Modul kurulmazsa `logs\backend-out-0.log` sinirsiz buyur.
+#
+# OLCULDU (2026-09-06, fabrika): eski kurulumda tek dosya 5 haftada 57 MB
+# olmustu. Disk tehlikesi degil (221 GB bostu, ~5 MB/gun) ama dosya PRATIKTE
+# ACILAMAZ hale gelir - "gecen sali ne oldu" sorusunun cevabi icindeydi ve
+# ulasilamiyordu. NSSM bunu kendisi yapiyordu; pm2'ye gecerken kayboldu ve
+# yalniz kontrol listesinde kaldi, yani BIR INSANIN hatirlamasina bagliydi.
+# Burada olmasinin sebebi bu: `kur.ps1` HER surumde kosar, `ilk-kurulum.ps1`
+# yalnizca bir kez - sahadaki mevcut kurulumlar da ilk guncellemede duzelir.
+#
+# Idempotent: `pm2 install` kurulu modulu gunceller, mukerrer kurulum yapmaz.
+# Fail DEGIL: internet yoksa surum yine cikmali - rotasyonsuz calismak hic
+# calismamaktan iyidir (mDNS firewall kuralindaki ayni gerekce).
+try {
+  & $pm2 install pm2-logrotate 2>&1 | Out-Null
+  if ($LASTEXITCODE -eq 0) {
+    # 10M x 14 dosya ~ bir aylik gecmis (olculen ~5 MB/gun hizinda).
+    # Donen dosyalar sikistirilir; CANLI dosya sikistirilmaz, dogrudan okunur.
+    & $pm2 set pm2-logrotate:max_size 10M   2>&1 | Out-Null
+    & $pm2 set pm2-logrotate:retain   14    2>&1 | Out-Null
+    & $pm2 set pm2-logrotate:compress  true 2>&1 | Out-Null
+    Ok "log rotasyonu ayarlandi (10M x 14 dosya, eskiler sikistirilir)"
+  } else {
+    Uyar "pm2-logrotate kurulamadi (internet yok?) - log dosyasi DONMEYECEK, sinirsiz buyur."
+    Uyar "  -> internet gelince elle: $pm2 install pm2-logrotate"
+  }
+} catch {
+  Uyar "pm2-logrotate kurulamadi: $($_.Exception.Message)"
+}
+
 # --- Firewall: mDNS servis kesfi (UDP 5353) ---------------------------------
 # Sunucu kendini aga "_teks-erp._tcp" olarak ilan eder; yeni kurulan Electron
 # paneli boylece IP yazmadan bulur. Bu kural OLMADAN ilan fabrika aginda
