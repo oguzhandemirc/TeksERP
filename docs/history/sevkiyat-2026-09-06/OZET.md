@@ -99,8 +99,11 @@ Electron 214 dosya / 2.293 test · üç projede tip temiz, üç lint tavanı tem
   aday**, 44'ünde o tek aday operatörün gerçekten seçtiği sipariş. Motor (`specMatch`) ve uç
   (`GET /open-orders`) zaten var, sorgu 0,3 ms. Ama boşluğun **tavanı %51** — kalanı fazla
   mal ve spec uyuşmazlığı.
-- **Renk karşılıkları boş.** 28 aktif müşterinin 22'sinde hiç renk adı yok. Yeni bayrak
-  görünümü düzeltir, **boşluğu doldurmaz**.
+- ⚠️ **DÜZELTME (kullanıcı, 2026-09-06):** "çoğu müşteri bizim renk adımızı kullanır." Yani
+  28 müşterinin 22'sinde renk karşılığı olmaması bir **boşluk değil, normal hâl**. Bu turda
+  "asıl çözüm renk adlarını doldurmak" diye yazdığım cümle YANLIŞTI; panel açıklamasından ve
+  kural satırından kaldırıldı. Ayrık kipte fallback de kaldırıldı: bizim renk adımız artık
+  "MÜŞTERİ VARYANT" başlığı altında basılmıyor, sütun boş kalıyor (`54956c43`).
 - **Süpürge `--apply` koşulmadı** — artığı silmek ortam-bağımlı bekçilerin rengini
   değiştirebilir; ayrı ve bilinçli adım.
 - **44 betiğin 42'sinde ortam kapısı yok** — lint tavanı deseniyle dondurulmalı.
