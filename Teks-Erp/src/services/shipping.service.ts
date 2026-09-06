@@ -4828,7 +4828,12 @@ async function collectShipmentDocContent(
       // ⚠️ Birleşik dize AYNEN kalıyor: bayrak kapalıyken çıktı bayt-bayt aynı olsun
       // ve donmuş eski belgeler yeni alan olmadan da doğru basılabilsin.
       const custItemOnly = ci || cc ? [ci ?? r.item.name, widthStr].filter(Boolean).join(" ") : null;
-      const custColorOnly = ci || cc ? (cc ?? r.color?.name ?? null) : null;
+      // ⚠️ FALLBACK YOK ve bu BİLİNÇLİ (kullanıcı düzeltmesi 2026-09-06):
+      // "çoğu müşteri bizim renk adımızı kullanır." Yani renk karşılığının olmaması
+      // eksik veri DEĞİL, normal hâldir. Ayrık kipte bizim adımızı "MÜŞTERİ VARYANT"
+      // başlığı altında basmak onu müşterinin adıymış gibi gösterirdi — yanlış
+      // etiketleme. Karşılığı olmayan satırda sütun BOŞ kalır.
+      const custColorOnly = cc ?? null;
       const g =
         productMap.get(stokAdi) ??
         {
