@@ -21,12 +21,20 @@
 // Körlük zemini iki yerde: spec yol sayısı ve Express uç sayısı alt sınırın
 // altındaysa KIRMIZI — glob/uzantı kayarsa ya da router yaması tutmazsa
 // "hata yok" ile "hiçbir şey taranmadı" aynı yeşile çıkmasın (F11 dersi).
+//
+// ⭐ NEGATİF SONDA (2026-09-07, ölçüldü): `setupSwagger`ın üretim erken dönüşü
+//    kaldırılınca "üretimde /api-docs mount EDİLMEZ" KIRMIZI; `swaggerJSDoc(`
+//    çağrısı modül gövdesine geri taşınınca mekanik kontrol KIRMIZI.
+//    ⚠️ İkinci sonda ilk denemede ISIRMADI ve sebebi öğretici: modül gövdesindeki
+//    uyarı IMPORT anında basılır — bekçinin `console.warn` yakalayıcısı daha
+//    kurulmamıştır. Davranış kontrolü o regresyonu GÖREMEZ; mekanik kontrol
+//    bu yüzden var, süs değil.
 // =============================================================================
 import fs from "node:fs";
 import path from "node:path";
 import express from "express";
 import swaggerJSDoc from "swagger-jsdoc";
-import { swaggerOptions } from "../src/config/swagger";
+import { swaggerOptions, setupSwagger } from "../src/config/swagger";
 
 let pass = 0;
 let fail = 0;
@@ -171,6 +179,69 @@ async function main(): Promise<void> {
     "hayalet @openapi bloğu yok (spec'te var, kodda yok)",
     ghosts.length === 0,
     ghosts.length ? ghosts.slice(0, 5).join(" · ") : `${specOps.size} işlemin tamamı canlı uçla eşleşti`,
+  );
+
+  // ── ÜRETİMDE SPEC ÜRETİLMEZ, UYARI BASILMAZ (2026-09-07) ──────────────────
+  // Üretim paketi `deploy/paketle.ps1` içinde `tsc --removeComments` ile
+  // derlenir (bilinçli: yorumlar tasarım gerekçesi taşıyor). Bu, `@openapi`
+  // bloklarını da siler → üretimde spec ZORUNLU olarak boş. `/api-docs` zaten
+  // üretimde mount EDİLMEZ, yani boş spec'in hiçbir işlevsel etkisi yok.
+  //
+  // Ama spec MODÜL GÖVDESİNDE üretildiği sürece üretimde her açılışta ~500
+  // dosya boşuna taranıyor ve hata log'una "/api-docs boş görünecek" uyarısı
+  // düşüyordu — sahada ölçüldü (fabrika logu 2026-09-04/05, her restart'ta).
+  // Uyarı gerçek bir arızayı değil BİLİNÇLİ BİR KARARI bildiriyordu ve hata
+  // log'unu okuyana "sunucuda bir şey bozuk" dedirtiyordu.
+  const mountlar: string[] = [];
+  const sahteApp = { use: (yol: unknown) => { mountlar.push(String(yol)); } } as unknown as express.Express;
+  const uyarilar: string[] = [];
+  const orjWarn = console.warn;
+  const oncekiEnv = process.env.NODE_ENV;
+  try {
+    console.warn = (...a: unknown[]) => { uyarilar.push(String(a[0])); };
+    process.env.NODE_ENV = "production";
+    setupSwagger(sahteApp);
+  } finally {
+    console.warn = orjWarn;
+    process.env.NODE_ENV = oncekiEnv;
+  }
+  check("⭐ üretimde /api-docs mount EDİLMEZ", mountlar.length === 0, `${mountlar.length} mount`);
+  check(
+    "⭐ üretimde swagger uyarısı BASILMAZ (hata log'u kirlenmesin)",
+    uyarilar.length === 0,
+    uyarilar[0] ?? "sessiz",
+  );
+
+  // Karşı yön — kapı çıkışsız değil: dev'de gerçekten mount ediliyor.
+  const devMountlar: string[] = [];
+  const devApp = { use: (yol: unknown) => { devMountlar.push(String(yol)); } } as unknown as express.Express;
+  const devEnv = process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV = "development";
+    setupSwagger(devApp);
+  } finally {
+    process.env.NODE_ENV = devEnv;
+  }
+  check("dev'de /api-docs mount EDİLİR (kapı çıkışsız değil)", devMountlar.includes("/api-docs"));
+
+  // ⚠️ MEKANİK KONTROL ŞART: yukarıdaki iki kontrol spec'i modül gövdesine geri
+  // taşıyan bir değişikliği GÖREMEZ — o uyarı IMPORT anında basılır, yani bu
+  // dosyanın `console.warn` yakalayıcısı kurulmadan ÇOK ÖNCE. Sonda bunu ölçtü
+  // (2026-09-07): spec modül gövdesine geri kondu, bekçi YEŞİL kaldı.
+  const swSrc = fs.readFileSync(path.join(__dirname, "..", "src", "config", "swagger.ts"), "utf8");
+  const swKod = swSrc
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("//"))
+    .join("\n");
+  const kurulumIdx = swKod.indexOf("export const setupSwagger");
+  const cagrilar = [...swKod.matchAll(/swaggerJSDoc\s*\(/g)].map((m) => m.index ?? -1);
+  check("körlük zemini: swagger.ts okundu ve setupSwagger bulundu", kurulumIdx > 0 && cagrilar.length > 0,
+    `${cagrilar.length} çağrı`);
+  check(
+    "⭐ `swaggerJSDoc(` YALNIZ setupSwagger içinde çağrılıyor (modül gövdesinde değil)",
+    cagrilar.every((i) => i > kurulumIdx),
+    cagrilar.filter((i) => i <= kurulumIdx).length ? "modül gövdesinde çağrı var" : "hepsi fonksiyon içinde",
   );
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);

@@ -52,20 +52,36 @@ export const swaggerOptions: swaggerJSDoc.Options = {
 };
 
 const options = swaggerOptions;
-const swaggerSpec = swaggerJSDoc(options);
-
-// F11: sessiz bozulmayı görünür kıl — glob CWD/uzantı uyuşmazlığında spec boş kalır.
-const swaggerPaths = (swaggerSpec as { paths?: Record<string, unknown> }).paths;
-if (!swaggerPaths || Object.keys(swaggerPaths).length === 0) {
-    console.warn(
-        '[swagger] UYARI: OpenAPI spec BOŞ — hiçbir route/controller taranamadı ' +
-        '(apis glob CWD/uzantı uyuşmazlığı olabilir). /api-docs boş görünecek.',
-    );
-}
 
 export const setupSwagger = (app: Express): void => {
     // Production'da API dokümantasyonu GİZLENİR: /api-docs yalnız dev/test'te mount
     // edilir. Üretim sunucusunda iç API şemasını dışarıya açmamak için (güvenlik).
     if (process.env.NODE_ENV === "production") return;
+
+    // ⚠️ SPEC BURADA üretilir, MODÜL GÖVDESİNDE DEĞİL (2026-09-07).
+    // Üretim paketi `deploy/paketle.ps1` içinde `tsc --removeComments` ile
+    // derlenir (bilinçli karar: yorumlar tasarım gerekçesi taşıyor, kopyalanan
+    // `dist` kaynak kadar değerli olmasın). Bu bayrak `@openapi` bloklarını da
+    // siler, yani üretimde spec ZORUNLU OLARAK boştur — kusur değil, sonuç.
+    //
+    // Spec modül gövdesinde üretilince bunun iki bedeli vardı ve ikisi de
+    // sahada ölçüldü (fabrika logu 2026-09-04/05): üretimde her açılışta ~500
+    // dosya boşuna taranıyor, ve hata log'una "/api-docs boş görünecek" uyarısı
+    // düşüyordu — oysa /api-docs üretimde HİÇ mount edilmiyor. Uyarı gerçek bir
+    // arızayı değil, bilinçli bir kararı bildiriyordu; hata log'unu kirletmesi
+    // dışında bir etkisi yoktu ve "sunucuda bir şey bozuk" izlenimi veriyordu.
+    const swaggerSpec = swaggerJSDoc(options);
+
+    // F11: sessiz bozulmayı görünür kıl — glob CWD/uzantı uyuşmazlığında spec
+    // boş kalır. Uyarı ARTIK YALNIZ dev/test'te anlamlı, çünkü yalnız orada
+    // eyleme dönüşebilir (üretimde beklenen durum boş spec'tir).
+    const swaggerPaths = (swaggerSpec as { paths?: Record<string, unknown> }).paths;
+    if (!swaggerPaths || Object.keys(swaggerPaths).length === 0) {
+        console.warn(
+            '[swagger] UYARI: OpenAPI spec BOŞ — hiçbir route/controller taranamadı ' +
+            '(apis glob CWD/uzantı uyuşmazlığı olabilir). /api-docs boş görünecek.',
+        );
+    }
+
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 };
