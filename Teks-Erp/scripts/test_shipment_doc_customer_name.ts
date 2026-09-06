@@ -47,6 +47,7 @@ import {
   readShippingDocItemNameMode,
   DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE,
   readShippingDocCekiNameMode,
+  readShippingDocProductColorSplit,
   sanitizeDocumentsConfig,
 } from "../src/services/system-setting.service";
 import { updateSchema } from "../src/routes/feature-flag.routes";
@@ -121,6 +122,7 @@ async function setCekiMode(v: string | null): Promise<void> {
 function renderSample(
   mode: "bizdeki" | "musterideki" | "ikisi" | undefined,
   ceki?: "devral" | "bizdeki" | "musterideki" | "ikisi",
+  colorSplit?: boolean,
 ): string {
   const doc = SAMPLE_PRINTED_DOCS[PrintedDocType.SHIPMENT_DISPATCH] as unknown as ShipmentDispatchDoc;
   return renderShipmentDispatchHtml(
@@ -134,6 +136,7 @@ function renderSample(
     {
       ...(mode === undefined ? {} : { itemNameMode: mode }),
       ...(ceki === undefined ? {} : { cekiNameMode: ceki }),
+      ...(colorSplit === undefined ? {} : { productColorSplit: colorSplit }),
     },
   );
 }
@@ -643,6 +646,34 @@ async function run(): Promise<void> {
     where: { id: lineIdY },
     data: { customerItemName: onceki.i, customerColorName: onceki.c },
   });
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§9 — ÜRÜN LİSTESİNDE MÜŞTERİ RENGİ AYRI SÜTUN (`docProductColorSplit`)");
+  // ---------------------------------------------------------------------------
+  // NEDEN VAR: birleşik dizede müşterinin renk karşılığı YOKSA bizim renk adımız
+  // müşteri kumaş adının yanına yapışıyor — ölçüldü: sevk edilen 1.778 topun
+  // 690'ında (%39). `belge-etiket.md` "yarı çevrilmiş ad basılmasın" diyor.
+  // Kullanıcı kararı (2026-09-06): bayrakla yap, VARSAYILAN BUGÜNKÜ olsun.
+  check(
+    "kayıt YOKKEN okuyucu false döner (bugünkü birleşik dize)",
+    (await readShippingDocProductColorSplit()) === false,
+  );
+  check(
+    "⭐ bayrak HİÇ verilmeyen render = false verilen render (BİREBİR bayt)",
+    renderSample("musterideki") === renderSample("musterideki", undefined, false),
+  );
+  const ayrik = renderSample("musterideki", undefined, true);
+  check("⭐ bayrak AÇIKKEN çıktı değişiyor", renderSample("musterideki") !== ayrik);
+  check(
+    "⭐ ayrık kipte ürün listesine MÜŞTERİ VARYANT sütunu geliyor",
+    ayrik.includes("MÜŞTERİ VARYANT"),
+  );
+  check(
+    "⭐ `bizdeki` rejiminde bayrak AÇIK olsa da müşteri sütunu ÇIKMAZ (rejim üstte)",
+    !renderSample("bizdeki", undefined, true).includes("MÜŞTERİ VARYANT") ||
+      renderSample("bizdeki", undefined, true) === renderSample("bizdeki"),
+    "rejim `bizdeki` iken müşteri kolonları hiç doğmaz",
+  );
 }
 
 async function teardown(): Promise<void> {

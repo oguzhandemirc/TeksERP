@@ -399,6 +399,8 @@ export const SETTING_KEYS = {
   /** Kapsama rejimi — İKİNCİ EKSEN. `orderRequirement` "sipariş seçildi mi" (niyet),
    *  bu "mal deftere yazıldı mı" (sonuç) sorusunu ölçer. `off` = bugünkü davranış. */
   SHIPPING_ORDER_COVERAGE: "shipping.orderCoverage",
+  /** Ürün listesinde müşteri RENGİ ayrı sütun mu (default false = bugünkü birleşik dize). */
+  SHIPPING_DOC_PRODUCT_COLOR_SPLIT: "shipping.docProductColorSplit",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -734,6 +736,19 @@ export type ShippingOrderCoverage = "off" | "warn" | "block";
 export const SHIPPING_ORDER_COVERAGES: ShippingOrderCoverage[] = ["off", "warn", "block"];
 /** Varsayılan `off` — BUGÜNKÜ davranış; bayrak açılmadıkça hiçbir yeni kapı doğmaz. */
 export const DEFAULT_SHIPPING_ORDER_COVERAGE: ShippingOrderCoverage = "off";
+
+/**
+ * Ürün listesinde müşteri RENGİ ayrı sütuna çıksın mı. Varsayılan FALSE = bugünkü
+ * birleşik dize (`müşteri kumaş adı + renk + en` tek hücrede).
+ *
+ * ⚠️ NEDEN BAYRAK: bugünkü birleşik dizede, müşterinin renk karşılığı YOKSA bizim
+ * renk adımız müşteri kumaş adının yanına yapışıyor — ölçüldü: sevk edilen 1.778
+ * topun 690'ında (%39) tam bu hâl. `docs/kurallar/belge-etiket.md` "yarı çevrilmiş
+ * ad basılmasın" diyor, yani bugünkü çıktı kendi kuralımızın ihlali. Ama düzeltme
+ * MÜŞTERİYE GİDEN belgenin düzenini değiştirir; kullanıcı kararı (2026-09-06):
+ * "bayrakla yap, varsayılan bugünkü olsun."
+ */
+export const DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT = false;
 /** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
 export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
 /** Mobil idle ekran kilidi varsayılanı — açık. */
@@ -1339,6 +1354,8 @@ export interface FeatureFlags {
   /** Kapsama rejimi: 'off' (default — bugünkü davranış) | 'warn' | 'block'.
    *  Çuvaldaki malın seçili siparişlere YAZILABİLDİĞİNİ ölçer. */
   shippingOrderCoverage: ShippingOrderCoverage;
+  /** Ürün listesinde müşteri rengi AYRI sütun mu (default false = bugünkü birleşik dize). */
+  shippingDocProductColorSplit: boolean;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -1698,6 +1715,7 @@ export class SystemSettingService {
       shippingDocItemNameMode: await readShippingDocItemNameMode(cacheClient),
       shippingDocCekiNameMode: await readShippingDocCekiNameMode(cacheClient),
       shippingOrderCoverage: await readShippingOrderCoverage(cacheClient),
+      shippingDocProductColorSplit: await readShippingDocProductColorSplit(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -2364,6 +2382,17 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE,
         v,
         "Sevk belgesinde ürün adı: bizdeki (kendi adımız) / musterideki (müşterinin adı) / ikisi (iki kolon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingDocProductColorSplit")) {
+      const v = input.shippingDocProductColorSplit;
+      if (typeof v !== "boolean") throw AppError.badRequest("Ürün listesi renk sütunu true/false olmalı");
+      await this.set(
+        SETTING_KEYS.SHIPPING_DOC_PRODUCT_COLOR_SPLIT,
+        v,
+        "Ürün listesinde müşteri rengi AYRI sütun (kapalıysa bugünkü birleşik dize)",
         userId
       );
     }
@@ -3848,6 +3877,20 @@ export async function readShippingOrderCoverage(
     return v as ShippingOrderCoverage;
   }
   return DEFAULT_SHIPPING_ORDER_COVERAGE;
+}
+
+/** Ürün listesinde müşteri rengi ayrı sütun mu. Satır yoksa `false` (bugünkü çıktı). */
+export async function readShippingDocProductColorSplit(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_DOC_PRODUCT_COLOR_SPLIT },
+    select: { value: true },
+  });
+  return typeof setting?.value === "boolean"
+    ? setting.value
+    : DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT;
 }
 
 /**

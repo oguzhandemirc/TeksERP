@@ -749,6 +749,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalıyken (varsayılan) cihaz kaydında “simülasyon” açık bir kantardan okunan kg backend tarafından REDDEDİLİR (400) — simüle kantar 10-100 kg arası rastgele değer üretir ve çuval kg'si sevk irsaliyesine + çeki listesine basılır (müşteri/gümrük belgesi). Elle giriş (⋮ → “Elle kg gir”) bu ayardan ETKİLENMEZ; kantarsız/arızalı durumun kaçış yoludur. Yalnızca demo/eğitim kurulumunda açın.",
       },
       {
+        key: "shippingDocProductColorSplit",
+        title: "İrsaliye ürün listesinde müşteri rengi ayrı sütun",
+        summary:
+          "Müşteri adı tek hücrede birleşik yazmak yerine, renk kendi sütununa çıkar.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Muhasebeci"],
+        group: "Belge",
+        desc: "Kapalı (varsayılan, BUGÜNKÜ ÇIKTI): irsaliyenin ürün listesinde müşteri adı tek hücrede birleşik yazar — “müşteri kumaş adı + renk + en”. Sorun şu: müşterinin O RENGE karşılığı yoksa oraya BİZİM renk adımız yapışır ve müşteri yarı çevrilmiş bir ad görür. Ölçüldü (2026-09-06): sevk edilen 1.778 topun 690'ında (%39) tam bu durum var — çünkü sistemde 62 kumaş karşılığına karşılık yalnız 8 renk karşılığı girilmiş. Açık: renk kendi sütununa çıkar, böylece hangi yarının kime ait olduğu görünür (çeki listesindeki düzenin aynısı) ve karşılığı olmayan renkte sütun boş kalır. ⚠️ Bu ayar MÜŞTERİYE GİDEN belgenin sütun düzenini değiştirir — açmadan önce bir irsaliyenin önizlemesine bakın. Sütunu “Belge Kişiselleştirme”den gizleyebilir, başlığını değiştirebilirsiniz. NOT: asıl çözüm renk karşılıklarını doldurmaktır (Müşteriler → Müşteri Adları); bu ayar o boşluğun görünümünü düzeltir, boşluğu doldurmaz.",
+      },
+      {
         key: "shippingWeighRequiredEnabled",
         title: "Sevk öncesi tüm çuvallar tartılmış olsun",
         summary:

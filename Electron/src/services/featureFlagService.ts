@@ -362,6 +362,8 @@ export interface FeatureFlags {
   /** Kapsama rejimi: 'off' (default — bugünkü davranış) | 'warn' | 'block'.
    *  `shippingOrderRequirement` NİYETİ, bu SONUCU ölçer — iki ayrı eksen. */
   shippingOrderCoverage: ShippingOrderCoverage;
+  /** Ürün listesinde müşteri rengi AYRI sütun mu (default false = bugünkü birleşik dize). */
+  shippingDocProductColorSplit: boolean;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */

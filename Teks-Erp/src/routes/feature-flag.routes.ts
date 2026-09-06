@@ -328,6 +328,9 @@ export const updateSchema = z.strictObject({
   // shipping.orderCoverage — İKİNCİ EKSEN: mal seçili siparişlere yazılabildi mi
   // (default off = bugünkü davranış). `orderRequirement` niyeti, bu SONUCU ölçer.
   shippingOrderCoverage: z.enum(["off", "warn", "block"]).optional(),
+  // shipping.docProductColorSplit — ürün listesinde müşteri rengi ayrı sütun
+  // (default false = bugünkü birleşik dize, bayt-bayt aynı).
+  shippingDocProductColorSplit: z.boolean().optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).

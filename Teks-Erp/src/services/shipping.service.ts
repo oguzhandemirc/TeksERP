@@ -4823,9 +4823,22 @@ async function collectShipmentDocContent(
         ci || cc
           ? [ci ?? r.item.name, cc ?? r.color?.name ?? "", widthStr].filter(Boolean).join(" ")
           : null;
+      // AYRIŞTIRILMIŞ İKİZLER (2026-09-06) — `shipping.docProductColorSplit` açıkken
+      // renderer bunları KULLANIR, kapalıyken birleşik `customerName`i basar.
+      // ⚠️ Birleşik dize AYNEN kalıyor: bayrak kapalıyken çıktı bayt-bayt aynı olsun
+      // ve donmuş eski belgeler yeni alan olmadan da doğru basılabilsin.
+      const custItemOnly = ci || cc ? [ci ?? r.item.name, widthStr].filter(Boolean).join(" ") : null;
+      const custColorOnly = ci || cc ? (cc ?? r.color?.name ?? null) : null;
       const g =
         productMap.get(stokAdi) ??
-        { name: stokAdi, customerName: custName, rollCount: 0, totalMeters: D0() };
+        {
+          name: stokAdi,
+          customerName: custName,
+          customerItemOnly: custItemOnly,
+          customerColorOnly: custColorOnly,
+          rollCount: 0,
+          totalMeters: D0(),
+        };
       g.rollCount += 1;
       g.totalMeters = g.totalMeters.plus(r.currentQty);
       productMap.set(stokAdi, g);
