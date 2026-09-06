@@ -1,5 +1,11 @@
 // =============================================================================
 // BEKÇİ — YETKİ ATAMASININ KAYNAĞI ve TOKEN TAZELEME (BULGU-T2-012)
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `permission-management.service.ts:252`
+//    içindeki `tokenVersion: { increment: 1 }` satırı kaldırıldı → §2 KIRMIZI
+//    ("yetki verilince tokenVersion ARTAR" — 1 → 1). Satır geri konunca 9/9 yeşil.
+//    Yani bu bekçi, yetkinin DB'ye yazılıp da kullanıcıya ULAŞMAMASI sınıfını
+//    gerçekten yakalıyor.
 // Çalıştır: npx tsx scripts/test_permission_grant_source.ts
 // =============================================================================
 // Yetkiler JWT'den okunur, DB'den tazelenmez (`auth.middleware` → `req.user =

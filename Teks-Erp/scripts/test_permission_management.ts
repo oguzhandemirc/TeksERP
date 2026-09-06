@@ -7,6 +7,13 @@
 //   3. setUserPermissions hedef-state yapar (ekle+sil)
 //   4. setUserPermissions geçersiz id → 400
 //   5. applyTemplate merge ekler, replace değiştirir
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `permission-management.service.ts:314`
+//    içindeki `toRemove` hesabı boş diziye çevrildi (hedef-state'in SİLME yarısı
+//    öldürüldü, yalnız EKLEME kaldı) → İKİ kontrol KIRMIZI: "set: hedef-state
+//    (öncekiler silindi)" ve "applyTemplate replace: yalnız şablon". Geri konunca
+//    8/8 yeşil. Yani bekçi "replace fiilen merge'e dönüştü" sınıfını yakalıyor —
+//    bu sınıf sessizdir: kullanıcı fazladan yetkiyle kalır ve kimse fark etmez.
 // =============================================================================
 import bcrypt from "bcryptjs";
 import prisma from "../src/lib/prisma";

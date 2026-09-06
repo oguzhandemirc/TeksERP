@@ -22,6 +22,13 @@
 //   §5 Bayrak açılınca uçlar çalışıyor (KÖRLÜK ZEMİNİ — §2 "sunucu tamamen
 //      bozuk" sebebiyle de yeşil kalırdı)
 //   §6 Finance izinleri fabrikanın MOBİL rollerine sızmadı
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `finance.middleware.ts`teki
+//    `requireFinanceEnabled` gövdesi koşulsuz `next()` yapıldı → §2 ve §2b KIRMIZI
+//    (altı uç 403 yerine 200 döndü, `details.code` undefined). Geri konunca yeşil.
+//    ⚠️ SONDA YALNIZ SUNUCU AYAKTAYKEN ISIRIR: kapıyı ölçen altı kontrol HTTP
+//    bölümündedir ve sunucusuz ATLANIR — ilk denemede sonda "ısırmadı" göründü ve
+//    sebebi tam buydu. `PORT=4100 npx tsx src/server.ts` ile koşuldu ([TD-12a]).
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";

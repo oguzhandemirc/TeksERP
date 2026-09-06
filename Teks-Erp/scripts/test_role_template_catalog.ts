@@ -23,6 +23,11 @@
 //      değişikliği görünmez kılar.
 //
 // Koşum: npx tsx scripts/test_role_template_catalog.ts
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `role-template-catalog.ts`ten bir izin
+//    kodu (`shipping:repair-allocation`) çıkarıldı → "Her izin en az bir DAR
+//    rolde" KIRMIZI. Geri konunca 21/21 yeşil. Yani bekçi "yeni izin hiçbir role
+//    girmedi, kimse atayamıyor" sınıfını yakalıyor.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { PERMISSION_CATALOG } from "../src/constants/permission-catalog";

@@ -23,6 +23,12 @@
 //   §4 Makbuz iptali → VOIDED
 //   §5 ⭐ Tutarlar SNAPSHOT'tan basılır (yeniden hesaplanmaz)
 //   §6 İzin hizası: read ⊇ write (görüp basamama kapanı yok)
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `invoice.service.ts` onay yolundaki
+//    `freezeForSource(..., INVOICE_INTERNAL, ...)` çağrısı kaldırıldı → ÜÇ kontrol
+//    KIRMIZI (§1b belge dondu · §1c versiyon 1 ve aktif · §5a snapshot toplamı).
+//    Geri konunca 20/20 yeşil. Bekçi "fatura deftere işlendi ama resmi belge
+//    doğmadı" sınıfını yakalıyor — o sınıf sessizdir, hata ancak baskıda çıkar.
 // =============================================================================
 import { PrintedDocType, PrintedDocStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";

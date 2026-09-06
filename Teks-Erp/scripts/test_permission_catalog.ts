@@ -31,6 +31,13 @@
 //
 // Salt-okunur: hiçbir yazma/fixture yok, ortamdaki veriye bağımlı değil.
 // Koşum: npx tsx scripts/test_permission_catalog.ts
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `shipping.routes.ts`teki bir izin kodu
+//    katalogda OLMAYAN bir kodla (`shipping:uydurma-izin`) değiştirildi →
+//    "kodda geçen her izin kataloğun içinde — 1 EKSİK" KIRMIZI. Geri konunca
+//    21/21 yeşil. Yani bekçi "route uydurma bir izinle korunuyor, kimse
+//    atayamıyor" sınıfını yakalıyor — o sınıf sessizdir, uç 403 döner ve
+//    yönetici izni bulamaz.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";

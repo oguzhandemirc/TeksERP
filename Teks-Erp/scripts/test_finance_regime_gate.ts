@@ -41,6 +41,11 @@
 // mantıkla yeşil kalır. DAVRANIŞ BİREBİR KORUNDU — kontrol adları, eşikler ve
 // çıktı satırları taşımadan önceki hâliyle aynıdır (ölçüm: taşımadan önce ve
 // sonra "6 geçti, 0 başarısız" + aynı §1b listesi).
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `finance.routes.ts`teki
+//    `router.use(verifyToken, requireFinanceEnabled)` satırı silindi → §2 KIRMIZI
+//    ve KAPISIZ router'ları ADIYLA saydı (finance.routes + finance-allocation.routes).
+//    Geri konunca 6/6 yeşil. Bekçi "modül kapalıyken uç açık kalıyor" sınıfını yakalıyor.
 // =============================================================================
 import * as fs from "node:fs";
 import * as path from "node:path";
