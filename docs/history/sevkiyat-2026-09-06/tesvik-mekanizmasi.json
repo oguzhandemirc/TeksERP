@@ -1,0 +1,140 @@
+{
+  "label": "tesvik-mekanizmasi",
+  "tarih": "2026-09-06",
+  "alan": "Serbest rejimde TEŞVİK — (a) siparişsiz sevk onayı, (b) çuval içeriğiyle eşleşen sipariş önerisi",
+  "olcum_yuzeyi": "tekserp_saf_dev (fabrika 2026-09-05 yedeği, salt-okunur)",
+  "ozet": "(b) ölçülen değeri YÜKSEK ve iş küçük: içerik-eşleşmeli aday süzgeci 88 sevk edilmiş sevkiyatın 45'inde TEK aday üretiyor ve 44'ünde o tek aday operatörün gerçekten seçtiği sipariş; 88'in 84'ünde seçilen siparişlerin hepsi aday listesinde. Ortalama açık sipariş 22,9 (maks 56) → ortalama aday 2,0. Eşleştirme motoru (specMatch/buildPool) ve uç (GET /open-orders) zaten var, yeni tablo/index gerekmiyor, sorgu 0,3 ms. AMA (b) boşluğun yarısını kapatmaz: 11.384,7 m boşluğun tavanı 5.846,3 m (%51), kesin öneri kesiminde 3.763,2 m (%33); 23/42 sevkiyatta bağlanacak İKİNCİ sipariş hiç yok — boşluğun 6.515,5 m'si siparişin kapasitesinin aşılmasından (fazla mal), 4.869,2 m'si renk/en spec uyuşmazlığından doğuyor. (a) ise panelin ana yolunda neredeyse hiç ateşlemez: 89 sevk edilmiş sevkiyatın 88'i zaten siparişe bağlı; ve 'siparişe yazılmayan X m' uyarısı 2026-07-30'dan beri ekranda olduğu hâlde 42 boşluk bu tarihten sonra oluştu — uyarı tek başına davranışı değiştirmedi.",
+  "olcumler": {
+    "temel": {
+      "siparise_bagli_sevk_edilmis_sevkiyat": 88,
+      "bosluklu": 42,
+      "hic_tahsissiz": 5,
+      "kismi": 37,
+      "bosluk_m": 11384.7,
+      "bosluklu_sevkiyatlardaki_top": 975,
+      "bosluklu_sevkiyat_icerigi_m": 38026.9
+    },
+    "top_sinifi_bagli_kaleme_gore": {
+      "item_renk_en_tam": { "top": 805, "m": 31628.5 },
+      "en_farkli": { "top": 25, "m": 950.4 },
+      "renk_farkli": { "top": 27, "m": 968.1 },
+      "kalem_hic_yok": { "top": 118, "m": 4479.9 }
+    },
+    "bosluk_sebebi": {
+      "siparis_kapasitesi_asildi_fazla_mal": { "sevkiyat": 27, "bosluk_m": 6515.5 },
+      "kapasite_vardi_spec_uymadi": { "sevkiyat": 15, "bosluk_m": 4869.2 }
+    },
+    "oneri_kalitesi_tum_sevkiyatlar": {
+      "sevk_edilmis_sevkiyat": 89,
+      "siparise_bagli": 88,
+      "bagsiz": 1,
+      "bagsiz_metraj_m": 0.0,
+      "sevk_aninda_ortalama_acik_siparis": 22.9,
+      "maks_acik_siparis": 56,
+      "icerik_esleseli_ortalama_aday": 2.0,
+      "maks_aday": 10,
+      "tek_aday_cikan_sevkiyat": 45,
+      "tek_adayin_gercekten_secilenle_ayni_oldugu": 44,
+      "secilenlerin_hepsi_aday_listesindeydi": 84,
+      "hicbir_secilen_adayda_degil": 2,
+      "aday_yok": 1,
+      "liste_birden_coktan_teke_indi": 44
+    },
+    "b_ozelliginin_kurtarabilecegi_metraj": {
+      "toplam_bosluk_m": 11384.7,
+      "ek_aday_kalemi_olan_sevkiyat": 19,
+      "tek_ek_aday_kalemi_olan": 13,
+      "hic_ek_aday_olmayan": 23,
+      "kurtarilabilir_tavan_m": 5846.3,
+      "tek_adayda_kurtarilabilir_m": 3763.2,
+      "aday_yok_m": 5178.9
+    },
+    "yetim_toplar_118": {
+      "m": 4479.9,
+      "sevkiyat": 9,
+      "sevk_aninda_baska_acik_siparise_tek_aday": 40,
+      "coklu_aday": 8,
+      "aday_yok": 70,
+      "tek_aday_m": 1690.1,
+      "hicbir_sipariste_hic_yok": 64
+    },
+    "veri_boyu": {
+      "siparis": 382,
+      "acik_siparis": 342,
+      "siparis_kalemi": 385,
+      "musteri": 28,
+      "sube": 0,
+      "cuvaldaki_top": 1778,
+      "depo_top_WAREHOUSE": 462,
+      "havuz_cuval": 0,
+      "PLANNED_sevkiyat": 0,
+      "direct_shipment": 0,
+      "sack_allocation_satiri": 119
+    },
+    "perf": {
+      "aday_esleme_sorgusu_ms": 0.314,
+      "kullanilan_indexler": ["rolls_sackId_idx", "order_lines_itemId_createdAt_idx", "orders_pkey"]
+    },
+    "bugunku_bayrak_degerleri": {
+      "shipping.orderRequirement": "SATIR YOK -> kod varsayilani warn",
+      "shipping.confirmationEnabled": false,
+      "shipping.docItemNameMode": "musterideki",
+      "shipping.manualSackCountEnabled": true
+    }
+  },
+  "kod_haritasi": {
+    "sevkiyat_kurma_paneli": [
+      "Electron/src/pages/Operations/SackContentEdit/CreateShipmentDialog.tsx:59 (tek modal)",
+      "Electron/src/pages/Operations/SackContentEdit/CreateShipmentDialog.tsx:273 (sipariş seçici çağrısı)",
+      "Electron/src/pages/Operations/SackContentEdit/ShipmentOrderSelect.tsx:48 (GET /open-orders, debounce 200ms)",
+      "Electron/src/pages/Operations/SackContentEdit/ShipmentPreviewPanel.tsx:39 (Siparişe yazılmayan: X m çipi)",
+      "Electron/src/pages/Operations/SackContentEdit/SacksListView.tsx:390 ve SackEditorView.tsx:475 (iki giriş)"
+    ],
+    "aday_ucu": [
+      "Teks-Erp/src/routes/shipping.routes.ts:48 GET /open-orders",
+      "Teks-Erp/src/services/shipping.service.ts:4351 listOpenOrdersWithCoverage (take:300, orderBy deadline asc→orderDate asc, sackIds parametresi YOK)"
+    ],
+    "eslestirme_motoru": [
+      "Teks-Erp/src/services/helpers/allocation.helper.ts:36 specMatch",
+      "Teks-Erp/src/services/helpers/allocation.helper.ts:53 buildPool",
+      "Teks-Erp/src/services/helpers/allocation.helper.ts:211 distributeSacksToLines"
+    ],
+    "rejim_kapisi": [
+      "Teks-Erp/src/services/helpers/shipment-order-requirement.helper.ts (off|warn|block; assertOrderLinkAllowed, orderlessWarning)",
+      "Teks-Erp/src/routes/feature-flag.routes.ts:311 shippingOrderRequirement Zod",
+      "Electron/src/hooks/usePricingEnabled.ts:149 useShippingOrderRequirement"
+    ],
+    "dispatch_yollari": [
+      "Teks-Erp/src/services/shipping.service.ts:1703 createShipment (onay kapalı → aynı tx dispatch, :1846-1848)",
+      "Teks-Erp/src/services/shipping.service.ts:1992 createShipmentFromRolls (Hızlı Sevk)",
+      "Teks-Erp/src/services/shipping.service.ts:2807 dispatchShipment (PLANNED→DISPATCHED)",
+      "Teks-Erp/src/services/subcontractor.service.ts:6171 executeDirectShip (fason doğrudan sevk)"
+    ],
+    "onay_bilesenleri": [
+      "Electron/src/components/forms/ConfirmDialog.tsx:30 (async-aware çift-tık kilidi)",
+      "Electron/src/pages/Operations/SackStore/DispatchConfirmDialog.tsx:60 (ortak sevk onayı, canlı çuval dökümü)",
+      "Electron/src/components/ui/callout.tsx (tone danger/warning)"
+    ],
+    "siparissiz_cikis_yollari": [
+      "mobil/src/screens/Modules/TartiPaket/PaketlemeScreen.tsx:305 orderIds: undefined (HER mobil sevkiyat siparişsiz)",
+      "Electron/src/pages/Operations/Rolls/QuickShipDialog.tsx (sipariş seçici YOK, res.warnings gösterilmiyor — :103 sadece toast.success)",
+      "Teks-Erp/src/services/shipping.service.ts:2287 setShipmentOrders boş dizi = bağı kaldır (block kaçışı, yorumda yazılı)"
+    ],
+    "eksik_yuzey": [
+      "POST /api/shipping/shipments/:id/orders (shipping.routes.ts:520) — Electron ve mobil'de HİÇBİR çağıran yok; CreateShipmentDialog.tsx:142 ve orderlessWarning metni olmayan bir 'Siparişe Bağla' düğmesine yönlendiriyor"
+    ],
+    "emsal_desen": [
+      "Teks-Erp/src/services/helpers/sack-content-mismatch.helper.ts (uyar-engelleme; 'operatörü körleştirme' kuralı yazılı)",
+      "Electron/src/pages/Operations/SackContentEdit/ContentMismatchBanner.tsx"
+    ]
+  },
+  "olculmeyen": [
+    "Sevkiyatı hangi istemcinin (panel / tablet) kurduğu — shipments tablosunda kaynak kolonu yok; 88/89'un siparişe bağlı olmasından 'panel' çıkarımı yapıldı, kanıt değil.",
+    "Operatörün önizleme panelindeki 'Siparişe yazılmayan X m' çipini gerçekten gördüğü — telemetri yok; yalnız bileşenin o tarihte kodda olduğu doğrulandı (git 8442aef3, 2026-07-30).",
+    "'Sevk anında açık sipariş' rekonstrüksiyonu yaklaşıktır: orders.orderDate <= dispatchedAt + completedAt/cancelledAt penceresi kullanıldı. O anda PLANNED sevkiyatların tuttuğu kapasite (frozenPacked) geriye dönük kurulamıyor — 5 tahsissiz sevkiyatın 2'sinde spec tam eşleşiyor ve kapasite görünüyor olmasına rağmen tahsis 0; bu ikisi açıklanamadı.",
+    "118 yetim topun bilinçli mi (numune/fazla mal) kaza mı olduğu — sevkiyatta sebep kodu yok.",
+    "Boşluklu 42 sevkiyatın kaçında operatörün ikinci siparişi seçmemeyi BİLEREK tercih ettiği — niyet kaydı yok.",
+    "Öneri sıralamasının sahada tıklanma oranı — özellik yok, ölçülemez; yukarıdaki 44/45 rakamı 'öneri doğru olurdu' tavanıdır, 'operatör kabul ederdi' değil.",
+    "Tablet tarafında (b)'nin karşılığı — PaketlemeScreen'de sipariş seçici hiç yok, dolayısıyla 'listenin başına koyma' için önce bir liste yazılması gerekir; o ekranın iş yükü ölçülmedi."
+  ]
+}
