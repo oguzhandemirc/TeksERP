@@ -108,6 +108,12 @@ const warehouseIds: string[] = [];
 
 /** Bayraklar TESTTEN ÖNCEKİ hâline döner — bekçi ortamın ayarını kalıcı değiştiremez. */
 const OVER_KEY = SETTING_KEYS.PURCHASE_BLOCK_OVER_RECEIPT_ENABLED;
+// ⚠️ ETKİN DEĞER = `ticaret.enabled && purchase.blockOverReceiptEnabled`
+// (`resolvePurchaseBlockOverReceiptEnabled`). Bekçi eskiden yalnız ikinciyi
+// açıyor, ticaret modülünün ortamda AÇIK olduğunu VARSAYIYORDU — kapalıyken
+// aşım guard'ı hiç koşmuyor ve §9f "reddedilmedi" diye kırmızı veriyordu.
+// Temiz CI DB'sinde ve fabrika yedeğinde `ticaret.enabled = false`. ([TD-17])
+const TICARET_KEY = SETTING_KEYS.TICARET_ENABLED;
 const PRICE_KEY = SETTING_KEYS.GOODS_RECEIPT_REQUIRE_PRICE_ENABLED;
 const priorFlags = new Map<string, { existed: boolean; value: Prisma.JsonValue }>();
 
@@ -146,6 +152,7 @@ async function main(): Promise<void> {
 
   // ── FIXTURE (ortam verisine bağımlılık YASAK: her şey testin kendisi) ────
   await rememberFlag(OVER_KEY);
+  await rememberFlag(TICARET_KEY);
   await rememberFlag(PRICE_KEY);
   // Damga BAYRAKTAN BAĞIMSIZDIR; ikisini de KAPALI kurup ölçüyoruz ki §4/§5
   // (aşım + siparişte olmayan ürün) satırları gerçekten YAZILSIN — J1 açık
@@ -448,6 +455,8 @@ async function main(): Promise<void> {
   // kamyondayken MEŞRU satırı reddeder (ölçüldü: "…bu satırla 150 m olur").
   {
     await setFlag(OVER_KEY, true);
+    // Etkin değer iki bayrağın ÇARPIMI — ikisi de açılmadan guard hiç koşmaz.
+    await setFlag(TICARET_KEY, true);
     try {
       const po = await mkOrder([{ itemId: itemA, qty: 100 }]);
       const r = await mkReceipt(po.id);
@@ -473,6 +482,9 @@ async function main(): Promise<void> {
       );
     } finally {
       await setFlag(OVER_KEY, false);
+      // Ticaret modülünü açık BIRAKMA — nihai geri yükleme `priorFlags`ta ama
+      // bu bölümden sonraki kontroller de modülsüz ortamı görmeli.
+      await setFlag(TICARET_KEY, false);
     }
   }
 

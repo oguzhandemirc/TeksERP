@@ -49,6 +49,7 @@ import { goodsReceiptService } from "../src/services/goods-receipt.service";
 import { invoiceService } from "../src/services/invoice.service";
 import { ensureDefaultWarehouse } from "../src/jobs/default-warehouse.job";
 import { D } from "../src/services/helpers/finance.helper";
+import { SETTING_KEYS } from "../src/services/system-setting.service";
 
 let pass = 0;
 let fail = 0;
@@ -71,6 +72,40 @@ const cariIds: string[] = [];
 let supplierId: string | null = null;
 /** §9 fixture'ı — testin KENDİ yarattığı YARN kalemi (temizlikte silinir). */
 let yarnItemId: string | null = null;
+/**
+ * `iplik.enabled` satırının koşum ÖNCESİ hâli — `finally`de BİREBİR geri yüklenir.
+ * `undefined` = satır hiç yoktu (temiz CI DB'si ve fabrika yedeği böyle).
+ */
+let prevIplikFlag: { value: unknown } | null | undefined;
+
+/** İplik modülünü aç/geri al — §9'un ön koşulu. */
+async function setIplikFlag(on: boolean | null): Promise<void> {
+  if (prevIplikFlag === undefined) {
+    prevIplikFlag = await prisma.systemSetting.findUnique({
+      where: { key: SETTING_KEYS.IPLIK_ENABLED },
+      select: { value: true },
+    });
+  }
+  if (on === null) {
+    if (prevIplikFlag) {
+      await prisma.systemSetting
+        .upsert({
+          where: { key: SETTING_KEYS.IPLIK_ENABLED },
+          create: { key: SETTING_KEYS.IPLIK_ENABLED, value: prevIplikFlag.value as never, description: "restore" },
+          update: { value: prevIplikFlag.value as never },
+        })
+        .catch(() => {});
+    } else {
+      await prisma.systemSetting.deleteMany({ where: { key: SETTING_KEYS.IPLIK_ENABLED } }).catch(() => {});
+    }
+    return;
+  }
+  await prisma.systemSetting.upsert({
+    where: { key: SETTING_KEYS.IPLIK_ENABLED },
+    create: { key: SETTING_KEYS.IPLIK_ENABLED, value: on, description: "test" },
+    update: { value: on },
+  });
+}
 
 async function expectError(fn: () => Promise<unknown>): Promise<string> {
   try {
@@ -326,6 +361,12 @@ async function main(): Promise<void> {
   // karşılığında yükümlülük yok). İplik-ONLY fişte ise bağlı fatura kesmenin
   // HİÇBİR yolu yoktu.
   {
+    // ⚠️ ORTAM BAĞIMLILIĞI KALDIRILDI (2026-09-06): §9 `iplik.enabled`in ortamda
+    // AÇIK olduğunu VARSAYIYORDU. Kapalıyken iplik satırı modül kapısında düşer
+    // ve "faturaya girmedi" diye kırmızı verir — oysa ölçülen şey modülün kapalı
+    // olmasıdır, kodun hatası değil. Temiz CI DB'sinde ve fabrika yedeğinde bu
+    // satır KAPALI. Bekçi ön koşulunu KENDİ kurar ve `finally`de geri alır.
+    await setIplikFlag(true);
     // ⚠️ FIXTURE'I TEST KENDİSİ YARATIR. İlk yazımda ortamdaki bir YARN
     // kalemine güveniliyordu ve dev DB'sinde hiç yoktu → §9'un TAMAMI atlandı,
     // yani iki KRİTİK düzeltmenin yarısı ölçüsüz kaldı. CLAUDE.md'nin açık
@@ -637,6 +678,8 @@ main()
     fail++;
   })
   .finally(async () => {
+    // Bayrak BİREBİR geri: §9 iplik modülünü açtı; koşum öncesi hâline döndür.
+    await setIplikFlag(null).catch(() => {});
     // Kur fixture'ı: yalnız BU koşumda doğduysa silinir (ortamdaki gerçek kura
     // dokunulmaz — başka test/ekran onu okuyor olabilir).
     if (createdRateId) await prisma.exchangeRate.deleteMany({ where: { id: createdRateId } });

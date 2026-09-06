@@ -178,6 +178,12 @@ async function main(): Promise<void> {
   // başlangıç durumuna bakar.
   await setFlag(AUTO_KEY, false);
   await setFlag(CONF_KEY, false);
+  // ⚠️ ORTAM BAĞIMLILIĞI KALDIRILDI (2026-09-06): §2 `finance.enabled`in ortamda
+  // AÇIK olduğunu VARSAYIYORDU. Satır yoksa okuyucu varsayılana düşer ve taslak
+  // hiç doğmaz → §2a "0 fatura" ile kırmızı verirdi. Temiz CI veritabanında ve
+  // fabrikanın yedeğinde bu satır YOK; bekçi kendi ön koşulunu KENDİ kurar.
+  // ([TD-17] — "bekçi ortamdaki veriye bağımlı olmaz".)
+  await setFlag(FIN_KEY, true);
   const p1 = await makeRoll(itemA.id, 120, wh.id, { colorId: color.id, width: 150 });
   const p2 = await makeRoll(itemA.id, 80, wh.id, { colorId: color.id, width: 150 });
   const off = await quickShip([p1, p2], customer.id);
