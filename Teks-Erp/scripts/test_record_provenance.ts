@@ -15,6 +15,7 @@
 import fs from "fs";
 import path from "path";
 import prisma, { pool } from "../src/lib/prisma";
+import { ensureTestAdmin } from "./fixture-test-user";
 
 let pass = 0;
 let fail = 0;
@@ -105,8 +106,15 @@ async function main(): Promise<void> {
   // ── 4) CANLI TUR: create künye yazıyor, update createdById'yi KORUYOR ───
   // En kolay kaybedilen kural bu: update'te `{...data}` yayılırken createdById
   // yanlışlıkla ezilirse kaydın kökeni sessizce kaybolur.
+  // ⚠️ İKİNCİ KULLANICI GARANTİ EDİLİR (2026-09-06). Eskiden ortamda İKİ kullanıcı
+  // olduğu VARSAYILIYORDU; temiz CI veritabanında seed YALNIZ `admin` yaratır,
+  // `u2` null gelir ve bekçi `u2!.id` satırında TypeError ile ÇÖKERDİ (ölçüldü).
+  // Reçetenin kendi kuralı: aktör `fixture-test-user.ts`ten çözülür. [TD-17]
   const u1 = await prisma.user.findFirst({ select: { id: true } });
-  const u2 = await prisma.user.findFirst({ where: { id: { not: u1!.id } }, select: { id: true } });
+  const testAdmin = await ensureTestAdmin();
+  const u2 =
+    (await prisma.user.findFirst({ where: { id: { not: u1!.id } }, select: { id: true } })) ??
+    { id: testAdmin.id };
   const ts = Date.now();
   let colorId = "";
   try {
@@ -180,6 +188,13 @@ async function main(): Promise<void> {
 
   // A2 KABUL ÖLÇÜTÜ: iş emrinde "kim açtı" artık KOLONDAN gelir.
   // Faz A2 öncesi bu bilgi HİÇ yoktu, yalnız audit'ten okunabiliyordu.
+  // ⚠️ FIXTURE GARANTİ EDİLİR (2026-09-06): temiz CI veritabanında `createdById`
+  // dolu HİÇ iş emri yoktur ve kontrol "backfill koşmamış olabilir" diye kırmızı
+  // verirdi — oysa ölçtüğü şey KOLON YOLUNUN çalışması, veritabanının geçmişi değil.
+  const prvWo = await prisma.workOrder.create({
+    data: { workOrderNumber: `TEST-PRV-WO-${ts}`, createdById: u1!.id },
+    select: { id: true },
+  });
   const woWithActor = await prisma.workOrder.findFirst({
     where: { createdById: { not: null } }, select: { id: true },
   });
@@ -206,12 +221,22 @@ async function main(): Promise<void> {
   // Sıcak audit'te HİÇ satırı olmayan bir kayıt seçilir → `fromAudit` zorunlu
   // olarak arşiv sorgusunu koşar. `SystemLogArchive`'ın `user` ilişkisi YOKTUR;
   // sıcak tablonun select'i oraya kopyalanırsa çalışma-zamanında patlar.
-  const orphan = await prisma.$queryRaw<{ id: string }[]>`
-    SELECT c.id FROM customers c
-    WHERE c."createdById" IS NULL
-      AND NOT EXISTS (SELECT 1 FROM system_logs l
-                      WHERE l."tableName"='CUSTOMER' AND l."recordId"=c.id::text)
-    LIMIT 1`;
+  // ⚠️ FIXTURE'I TEST KENDİSİ YARATIR (2026-09-06). Eskiden ortamda "auditsiz bir
+  // müşteri" ARANIYORDU ve bulunamazsa kontrol KIRMIZI veriyordu — yani ölçtüğü
+  // şey kodun doğruluğu değil VERİTABANININ HÂLİYDİ. Fabrika yedeğinde ve temiz
+  // CI veritabanında böyle bir kayıt yok (her CUD audit yazar), o yüzden bu
+  // kontrol oralarda hep kırmızıydı. [TD-17]: bekçi ortamdaki veriye bağımlı olmaz.
+  //
+  // ⚠️ AUDIT'İ SONRADAN SİLİYORUZ: müşteriyi `prisma` ile doğrudan yaratmak audit
+  // yazmaz ama `createdById` de yazmaz; ikisini birden garantilemek için kayıt
+  // kurulur ve audit satırı (varsa) temizlenir — aranan hâl "sıcak audit'te HİÇ
+  // satırı olmayan kayıt"tır.
+  const orphanCustomer = await prisma.customer.create({
+    data: { code: `TEST-PRV-ORPHAN-${ts}`, name: `TEST PRV ARSIV YOLU ${ts}` },
+    select: { id: true },
+  });
+  await prisma.systemLog.deleteMany({ where: { tableName: "CUSTOMER", recordId: orphanCustomer.id } });
+  const orphan = [{ id: orphanCustomer.id }];
   if (orphan.length > 0) {
     let archiveOk = true;
     let detail = "";
@@ -263,6 +288,13 @@ async function main(): Promise<void> {
     hardDeletes.length === 0,
     hardDeletes.join(" · ") || "yalnız soft delete (deletedAt)",
   );
+
+  await prisma.workOrder.deleteMany({ where: { id: prvWo.id } }).catch(() => {});
+  // Fixture temizliği — arşiv-yolu müşterisi bu koşumun ürünüdür, kalıcı değil.
+  await prisma.systemLog
+    .deleteMany({ where: { tableName: "CUSTOMER", recordId: orphanCustomer.id } })
+    .catch(() => {});
+  await prisma.customer.deleteMany({ where: { id: orphanCustomer.id } }).catch(() => {});
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();

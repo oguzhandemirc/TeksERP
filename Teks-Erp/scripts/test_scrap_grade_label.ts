@@ -206,6 +206,45 @@ async function main(): Promise<void> {
     }
   }
 
+  // ⚠️ FIXTURE GARANTİ EDİLİR (2026-09-06): bu bölüm ortamda `skipLabel` true VE
+  // false kalite kademesine sahip TOPLAR olmasını bekliyordu; temiz CI
+  // veritabanında ikisi de yok ve §5/§5c "render edilemedi" ile kırmızı verirdi —
+  // oysa ölçtüğü şey etiketin İÇERİĞİ, veritabanının dolu olması değil. [TD-17]
+  const sgTs = Date.now();
+  const sgItem = await prisma.item.create({
+    data: { code: `TEST-SGL-${sgTs}`, name: `TEST FIRE KUMAS ${sgTs}`, itemType: "FABRIC" },
+    select: { id: true },
+  });
+  const kademeler: { id: string }[] = [];
+  const sgRolls: { id: string }[] = [];
+  for (const [ek, skip] of [["FIRE", true], ["IYI", false]] as [string, boolean][]) {
+    const kademe = await prisma.qualityGrade.create({
+      data: { code: `TEST-SGL-${ek}-${sgTs}`, name: `TEST ${ek} ${sgTs}`, skipLabel: skip },
+      select: { id: true },
+    });
+    kademeler.push(kademe);
+    const r = await prisma.roll.create({
+      data: {
+        barcode: `TEST-SGL-${ek}-R${sgTs}`,
+        itemId: sgItem.id,
+        initialQty: 50,
+        currentQty: 50,
+        // ⚠️ İKİ ALAN BİRLİKTE: kapı (`assertScrapLabelAllowed`) kademeyi
+        // İLİŞKİDEN değil ESKİ `qualityGrade` METİN kolonundan çözüyor
+        // (`where: { code, skipLabel: true }`). Yalnız `qualityGradeId` yazmak
+        // §5'i çalıştırır ama §6'yı SESSİZCE geçirir — ölçüldü: kapı hiç
+        // ısırmadı ve dört kontrol "GEÇTİ" ile kırmızı verdi.
+        qualityGrade: `TEST-SGL-${ek}-${sgTs}`,
+        qualityGradeId: kademe.id,
+        width: 150,
+        status: "WAREHOUSE",
+        entrySource: "SUPPLIER_RECEIPT",
+      },
+      select: { id: true },
+    });
+    sgRolls.push(r);
+  }
+
   const fireLabel = await renderFor({ qualityGradeRef: { skipLabel: true } });
   const goodLabel = await renderFor({ qualityGradeRef: { skipLabel: false } });
 
@@ -320,6 +359,15 @@ async function main(): Promise<void> {
     }
     check("§6g normal top kapıdan ETKİLENMİYOR", ok);
   }
+  // Fixture temizliği — FK sırası: hareketler → top → kademe → kalem.
+  const sgIds = sgRolls.map((r) => r.id);
+  await prisma.rollProperty.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
+  await prisma.warehouseMovement.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
+  await prisma.rollMovement.deleteMany({ where: { rollId: { in: sgIds } } }).catch(() => {});
+  await prisma.roll.deleteMany({ where: { id: { in: sgIds } } }).catch(() => {});
+  await prisma.qualityGrade.deleteMany({ where: { id: { in: kademeler.map((k) => k.id) } } }).catch(() => {});
+  await prisma.item.deleteMany({ where: { id: sgItem.id } }).catch(() => {});
+
 
   console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız${atlanan > 0 ? `, ${atlanan} atlandı` : ""} ===`);
 }

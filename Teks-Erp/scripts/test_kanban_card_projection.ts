@@ -84,9 +84,32 @@ async function main(): Promise<void> {
   check("production-flow sorgu bütçesi ≤ 90", total <= 90, `ölçülen=${total}`);
 
   // ── 2) Kart ile liste AYNI skaler kümeyi döndürüyor ────────────────────────
+  // ⚠️ FIXTURE GARANTİ EDİLİR (2026-09-06): karşılaştırma ortamda EN AZ BİR TOP
+  // olmasını istiyordu ve temiz CI veritabanında hiç top yok → kontrol
+  // "liste ya da kolon boş" ile kırmızı verirdi. Ölçtüğü şey iki yüzeyin AYNI
+  // skaler kümeyi döndürmesi, veritabanının dolu olması değil. [TD-17]
+  const kbTs = Date.now();
+  const kbItem = await prisma.item.create({
+    data: { code: `TEST-KCP-${kbTs}`, name: `TEST KANBAN KUMAS ${kbTs}`, itemType: "FABRIC" },
+    select: { id: true },
+  });
+  const kbRoll = await prisma.roll.create({
+    data: {
+      barcode: `TEST-KCP-R${kbTs}`,
+      itemId: kbItem.id,
+      initialQty: 100,
+      currentQty: 100,
+      qualityGrade: "1.KALITE",
+      width: 150,
+      status: "STOCK",
+      entrySource: "SUPPLIER_RECEIPT",
+    },
+    select: { id: true },
+  });
+  const flow2 = await inv.getProductionFlow({ includeQueues: true, includeSevk: true });
   const list = await inv.findAllRolls(req({ pageSize: "5" }));
   const listRoll = (list.data as object[])[0];
-  const cardRoll = flow.data?.hamStok.rolls[0] ?? flow.data?.depo.rolls[0] ?? flow.data?.fason.rolls[0];
+  const cardRoll = flow2.data?.hamStok.rolls[0] ?? flow2.data?.depo.rolls[0] ?? flow2.data?.fason.rolls[0];
   if (!listRoll || !cardRoll) {
     check("kart/liste karşılaştırması için veri var", false, "liste ya da kolon boş");
   } else {
@@ -194,6 +217,12 @@ async function main(): Promise<void> {
   } else {
     console.log("ℹ️  sipariş satırı < 2 — orderedMeters sondası atlandı");
   }
+
+  // Fixture temizliği — bu koşumun ürünü, kalıcı değil (FK sırası: top → kalem).
+  await prisma.rollProperty.deleteMany({ where: { rollId: kbRoll.id } }).catch(() => {});
+  await prisma.warehouseMovement.deleteMany({ where: { rollId: kbRoll.id } }).catch(() => {});
+  await prisma.roll.deleteMany({ where: { id: kbRoll.id } }).catch(() => {});
+  await prisma.item.deleteMany({ where: { id: kbItem.id } }).catch(() => {});
 
   console.log(`=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
   await prisma.$disconnect();
