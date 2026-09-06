@@ -16,6 +16,90 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-07",
+      "baslik": "Siparişe yazılamayan mal ekranı, en toleransı, toplu çuval dağıtma ve saha düzeltmeleri",
+      "surumler": {
+        "panel": "1.3.0"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Yeni ekran: Operasyon → Siparişe Yazılamayanlar. Sevkiyatta sipariş seçilmiş ama mal siparişe işlenmemişse burada listelenir ve düzeltilebilir. Siparişler ekranından da kısayol butonu var. Onaydan önce neyin değişeceği tek tek gösterilir. Ayrı yetki ister — sevkiyat yazma yetkisi tek başına yetmez, çünkü geçmiş bir sevkiyatın defterini değiştirir ve irsaliyenin yeni sürümünü doğurur."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevkiyat detayında \"siparişe yazılamayan metre\" rozeti çıkıyor. Bu sayı bugüne kadar hiçbir ekranda görünmüyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "En toleransı ayarı geldi: Sistem → Özellik Anahtarları → Sevkiyat & İade. Açıkken en farkı belirlediğiniz santimin altındaysa mal yine siparişe yazılır. Kumaş ve renk kesin eşleşmeye devam eder — yalnız en gevşer, çünkü yanlış rengi bir siparişe yazmak defteri sessizce bozar."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "\"Fazla sevk deftere yazılsın\" ayarı eklendi (varsayılan kapalı). Açıkken ısmarlanandan fazla gönderilen metraj da siparişe işlenir; fazla sevk kayıt altına alınır, sessiz kalmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sipariş kapsaması uyarısı eklendi (varsayılan kapalı). Sevkiyat kurulurken mal hiçbir siparişe yazılamıyorsa sistem uyarır; isterseniz engelleyecek şekilde de ayarlayabilirsiniz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Toplu çuval dağıtma: Paketleme → Çuvallar ekranında birden çok çuval seçip içeriğini depoya çıkarabiliyorsunuz. Önce önizleme çıkar ve etkilenen her top tek tek listelenir. Çuval kaydı silinmez, yalnız boşalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çeki listesinin ad rejimi artık irsaliyeden ayrı ayarlanıyor: çeki listesinde hem bizim adımız hem müşterideki ad yan yana basılabilir (iç kontrol listesi için), irsaliye kendi ayarında kalır."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "İrsaliyenin ürün listesinde müşterinin renk adı ayrı sütuna alınabiliyor (ayarla açılır, varsayılan bugünkü görünüm). Müşterinin o renge karşılığı yoksa sütun boş kalır; bizim renk adımız müşterinin adıymış gibi basılmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Paketleme → Çuvallar ekranında bir cari seçilince o carinin çuvalları yerine tüm müşterilerin çuvalları listeleniyordu. Filtre listeye ulaşmadan siliniyordu; düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Müşterinin ürün ve renk adı irsaliyeye basılıyordu ama sevkiyat detayında ve sipariş seçim ekranında görünmüyordu. İki ekran artık kâğıtla aynı adı gösteriyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Ürün adı ayrık gösterildiğinde bizim renk adımız \"müşteri varyantı\" diye etiketleniyordu; kaldırıldı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Çuval silindikten hemen sonra ekranda \"Çuval bulunamadı\" hatası çıkıyordu. İşlem başarılıydı, hata sahteydi; düzeltildi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Bir çuval siz düzenlerken sevkiyata bağlandıysa okutma ekranı artık anında kilit görünümüne geçiyor. Önceden ekran düzenlenebilir görünmeye devam ediyor ve aynı hata tekrar tekrar alınabiliyordu."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Okutma ekranlarında sessiz kalan durumlar artık sesle/titreşimle bildiriliyor: \"Bekleyen sevk yok\", \"Kart zaten açık\", \"Bu top zaten eklendi\". Tambur'da tek okutmaya binen çift titreşim tek sinyale indi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Bazı listeler ve raporlar daha az sorguyla açılıyor."
+        }
+      ]
+    },
+    {
       "id": "2026-09-04g",
       "baslik": "Belgelerde müşterideki ürün adı, bağlı cihazlar ekranı ve sunucu bulmada iyileştirme",
       "surumler": {
