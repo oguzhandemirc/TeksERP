@@ -401,6 +401,12 @@ export const SETTING_KEYS = {
   SHIPPING_ORDER_COVERAGE: "shipping.orderCoverage",
   /** Ürün listesinde müşteri RENGİ ayrı sütun mu (default false = bugünkü birleşik dize). */
   SHIPPING_DOC_PRODUCT_COLOR_SPLIT: "shipping.docProductColorSplit",
+  /** Tahsiste EN toleransı açık mı (default false = tam eşitlik, bugünkü davranış). */
+  SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED: "shipping.allocWidthToleranceEnabled",
+  /** Tolerans değeri (cm). Yalnız yukarıdaki bayrak açıkken uygulanır. */
+  SHIPPING_ALLOC_WIDTH_TOLERANCE_CM: "shipping.allocWidthToleranceCm",
+  /** Tahsis sipariş miktarını AŞABİLİR mi (fazla sevk deftere yazılsın mı). Default false. */
+  SHIPPING_ALLOW_OVER_ALLOCATION: "shipping.allowOverAllocation",
   /** Müşteri şubeleri (sevk noktaları) UI'da gösterilsin mi. Default TRUE (açık —
    *  mevcut davranış). "Her şube = ayrı müşteri" düzenine geçen firma kapatır:
    *  müşteri formundaki Şubeler sekmesi/taslağı + sipariş formundaki şube seçimi
@@ -749,6 +755,37 @@ export const DEFAULT_SHIPPING_ORDER_COVERAGE: ShippingOrderCoverage = "off";
  * "bayrakla yap, varsayılan bugünkü olsun."
  */
 export const DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT = false;
+
+/**
+ * TAHSİSTE EN TOLERANSI. Varsayılan KAPALI = tam eşitlik, yani bugünkü davranış.
+ *
+ * ⚠️ YALNIZ ENE uygulanır — kumaş ve renk KESİN eşleşir ve bu pazarlık dışıdır
+ * (kullanıcı beyanı 2026-09-06: "desen-renk kesin eşleşmeli, en değeri bazen
+ * değişiklik gösterebilir"). Yanlış rengi bir siparişe yazmak defteri sessizce
+ * bozar; yanlış eni yazmak sahada zaten kabul edilen bir sapmadır.
+ *
+ * ÖLÇÜM (fabrika yedeği 2026-09-05, `scripts/tahsis_teshis.ts`): en yüzünden
+ * yazılamayan 950 m / 25 top; gözlenen iki fark 0,1 cm ve 5 cm.
+ */
+export const DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED = false;
+export const DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM = 1;
+export const SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM = 10;
+
+/**
+ * FAZLA SEVKİN DEFTERE YAZILMASI. Varsayılan KAPALI = bugünkü davranış: tahsis
+ * sipariş kalemini AŞAMAZ, aşan metraj hiçbir satıra yazılmaz.
+ *
+ * ⚠️ NEDEN AYAR: ölçüm (fabrika yedeği 2026-09-05) 15.723 m / 398 topun "eşleşen
+ * kalem var ama kapasite dolu" sınıfında olduğunu gösterdi — yani mal çıkmış ama
+ * sipariş zaten dolduğu için deftere girmemiş. Kullanıcı kararı (2026-09-06):
+ * "deftere yazılabilmeli, fazla olarak görünsün."
+ *
+ * ⚠️ AÇIKKEN `OrderLine.shippedQty` ısmarlanan miktarı GEÇEBİLİR. Bu bilinçlidir:
+ * "Açık = ısmarlanan − sevk" hesabı negatife düşer ve arayüzler onu 0'a kelepçeler
+ * (bugün de öyle). Fazlalığın kendisi `shippedQty > quantity` karşılaştırmasıyla
+ * her yerden ölçülebilir — sessiz kalan bir sayı DEĞİL.
+ */
+export const DEFAULT_SHIPPING_ALLOW_OVER_ALLOCATION = false;
 /** Token süresi dolunca otomatik çıkış varsayılanı — açık. */
 export const DEFAULT_AUTO_LOGOUT_ON_EXPIRY = true;
 /** Mobil idle ekran kilidi varsayılanı — açık. */
@@ -1356,6 +1393,12 @@ export interface FeatureFlags {
   shippingOrderCoverage: ShippingOrderCoverage;
   /** Ürün listesinde müşteri rengi AYRI sütun mu (default false = bugünkü birleşik dize). */
   shippingDocProductColorSplit: boolean;
+  /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). */
+  shippingAllocWidthToleranceEnabled: boolean;
+  /** Tolerans (cm) — yalnız bayrak açıkken uygulanır. */
+  shippingAllocWidthToleranceCm: number;
+  /** Tahsis sipariş miktarını aşabilir mi (fazla sevk deftere yazılır). Default false. */
+  shippingAllowOverAllocation: boolean;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (default TRUE). Kapalıyken
    *  müşteri formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi
    *  gizlenir. Salt UI rehberi — backend ENFORCE ETMEZ, mevcut branchId verisi korunur. */
@@ -1716,6 +1759,9 @@ export class SystemSettingService {
       shippingDocCekiNameMode: await readShippingDocCekiNameMode(cacheClient),
       shippingOrderCoverage: await readShippingOrderCoverage(cacheClient),
       shippingDocProductColorSplit: await readShippingDocProductColorSplit(cacheClient),
+      shippingAllocWidthToleranceEnabled: await readShippingAllocWidthToleranceEnabled(cacheClient),
+      shippingAllocWidthToleranceCm: await readShippingAllocWidthToleranceCm(cacheClient),
+      shippingAllowOverAllocation: await readShippingAllowOverAllocation(cacheClient),
       customerBranchesEnabled: await readCustomerBranchesEnabled(cacheClient),
       travelerCardConfig: await readTravelerCardConfig(cacheClient),
       companyLetterhead: await readCompanyLetterhead(cacheClient),
@@ -1856,7 +1902,12 @@ export class SystemSettingService {
     // demektir ve panel bunu gönderir, ama okuma tarafı hiçbir zaman null
     // döndürmez (varsayılana çözülür). İkisini tek tiple anlatmak, ya paneli
     // 400'e düşürür ya da API sözleşmesine olmayan bir null sokar.
-    input: Omit<Partial<FeatureFlags>, "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct"> & {
+    input: Omit<
+      Partial<FeatureFlags>,
+      "fasonShrinkTolerancePct" | "duplicatesFuzzyThresholdPct" | "shippingAllocWidthToleranceCm"
+    > & {
+      /** null = fabrika varsayılanına dön (1 cm). */
+      shippingAllocWidthToleranceCm?: number | null;
       fasonShrinkTolerancePct?: number | null;
       duplicatesFuzzyThresholdPct?: number | null;
     },
@@ -2382,6 +2433,42 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_DOC_ITEM_NAME_MODE,
         v,
         "Sevk belgesinde ürün adı: bizdeki (kendi adımız) / musterideki (müşterinin adı) / ikisi (iki kolon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingAllowOverAllocation")) {
+      const v = input.shippingAllowOverAllocation;
+      if (typeof v !== "boolean") throw AppError.badRequest("Fazla sevk ayarı true/false olmalı");
+      await this.set(
+        SETTING_KEYS.SHIPPING_ALLOW_OVER_ALLOCATION,
+        v,
+        "Fazla sevk deftere yazılsın mı (kapalıysa sipariş miktarı aşılamaz)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "shippingAllocWidthToleranceEnabled")) {
+      const v = input.shippingAllocWidthToleranceEnabled;
+      if (typeof v !== "boolean") throw AppError.badRequest("En toleransı true/false olmalı");
+      await this.set(
+        SETTING_KEYS.SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED,
+        v,
+        "Tahsiste EN toleransı (kapalıysa tam eşitlik). Kumaş ve renk HER ZAMAN kesin eşleşir.",
+        userId
+      );
+    }
+    if (Object.prototype.hasOwnProperty.call(input, "shippingAllocWidthToleranceCm")) {
+      const v = input.shippingAllocWidthToleranceCm;
+      if (v !== null && (typeof v !== "number" || !Number.isFinite(v) || v <= 0 || v > SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM)) {
+        throw AppError.badRequest(`En toleransı 0 ile ${SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM} cm arasında olmalı`);
+      }
+      // `null` = "alanı temizledim" → fabrika varsayılanına döner (mükerrer eşiğiyle
+      // aynı kalıp); JSON kolonuna null yazmak "ayar yok" ile karışırdı.
+      await this.set(
+        SETTING_KEYS.SHIPPING_ALLOC_WIDTH_TOLERANCE_CM,
+        v === null ? DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM : v,
+        "Tahsiste kabul edilen en farkı (cm)",
         userId
       );
     }
@@ -3891,6 +3978,54 @@ export async function readShippingDocProductColorSplit(
   return typeof setting?.value === "boolean"
     ? setting.value
     : DEFAULT_SHIPPING_DOC_PRODUCT_COLOR_SPLIT;
+}
+
+/** EN toleransı açık mı. Satır yoksa `false` (tam eşitlik = bugünkü davranış). */
+export async function readShippingAllocWidthToleranceEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED },
+    select: { value: true },
+  });
+  return typeof setting?.value === "boolean"
+    ? setting.value
+    : DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED;
+}
+
+/**
+ * Tolerans değeri (cm). Kapalıysa ya da değer geçersizse **0** döner — yani
+ * çağıran ayrıca bayrağı sormak zorunda kalmaz ve unutulamaz.
+ */
+export async function readShippingAllocWidthToleranceCm(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<number> {
+  if (!(await readShippingAllocWidthToleranceEnabled(tx))) return 0;
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_ALLOC_WIDTH_TOLERANCE_CM },
+    select: { value: true },
+  });
+  const parsed = asNumber(setting?.value);
+  if (parsed === null || !Number.isFinite(parsed) || parsed <= 0) {
+    return DEFAULT_SHIPPING_ALLOC_WIDTH_TOLERANCE_CM;
+  }
+  return Math.min(parsed, SHIPPING_ALLOC_WIDTH_TOLERANCE_MAX_CM);
+}
+
+/** Fazla sevk deftere yazılsın mı. Satır yoksa `false` (bugünkü davranış). */
+export async function readShippingAllowOverAllocation(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SHIPPING_ALLOW_OVER_ALLOCATION },
+    select: { value: true },
+  });
+  return typeof setting?.value === "boolean"
+    ? setting.value
+    : DEFAULT_SHIPPING_ALLOW_OVER_ALLOCATION;
 }
 
 /**

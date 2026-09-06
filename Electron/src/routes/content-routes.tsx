@@ -118,6 +118,7 @@ import { AuditReportsHubPage } from "@/pages/Reports/Audit/AuditReportsHubPage";
 import { SystemLogSummaryPage } from "@/pages/Reports/Audit/SystemLogSummaryPage";
 import { UserActivityPage } from "@/pages/Reports/Audit/UserActivityPage";
 import { OrdersPage } from "@/pages/Operations/Orders/OrdersPage";
+import { AllocationRepairPage } from "@/pages/Operations/AllocationRepair/AllocationRepairPage";
 import { WorkOrdersPage } from "@/pages/Operations/WorkOrders/WorkOrdersPage";
 import { WorkOrderDetailPage } from "@/pages/Operations/WorkOrders/WorkOrderDetailPage";
 import { WorkOrderFormPage } from "@/pages/Operations/WorkOrders/WorkOrderFormPage";
@@ -782,6 +783,16 @@ export const contentRoutes: RouteObject[] = [
     element: (
       <ProtectedRoute requirePermission="order:read">
         <OrdersPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    // Defter onarımı — `shipping:write` YETMEZ: geçmiş bir sevkiyatın sipariş
+    // defterini değiştirir ve irsaliyenin yeni sürümünü doğurur.
+    path: "operations/allocation-repair",
+    element: (
+      <ProtectedRoute requirePermission="shipping:repair-allocation">
+        <AllocationRepairPage />
       </ProtectedRoute>
     ),
   },

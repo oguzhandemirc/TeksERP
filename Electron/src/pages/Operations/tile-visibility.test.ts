@@ -172,6 +172,10 @@ describe("karo bağlantıları", () => {
     const unconditional = operationsTiles.filter((t) => !t.visibleWhen).map((t) => t.key).sort();
     expect(unconditional).toEqual([
       "accounting-dispatch",
+      // 2026-09-06: defter onarımı — modül anahtarı YOK, sevkiyat çekirdek blokta.
+      // Görünürlüğü BAYRAK değil İZİN belirler (`shipping:repair-allocation`),
+      // o yüzden koşulsuz karolar listesindedir.
+      "allocation-repair",
       "kartela",
       "orders",
       "relabel-station",

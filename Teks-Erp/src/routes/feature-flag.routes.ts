@@ -331,6 +331,12 @@ export const updateSchema = z.strictObject({
   // shipping.docProductColorSplit — ürün listesinde müşteri rengi ayrı sütun
   // (default false = bugünkü birleşik dize, bayt-bayt aynı).
   shippingDocProductColorSplit: z.boolean().optional(),
+  // shipping.allocWidthTolerance* — tahsiste EN toleransı (default kapalı = tam eşitlik).
+  // ⚠️ Kumaş ve renk toleranstan ETKİLENMEZ.
+  shippingAllocWidthToleranceEnabled: z.boolean().optional(),
+  shippingAllocWidthToleranceCm: z.number().positive().max(10).nullable().optional(),
+  // shipping.allowOverAllocation — fazla sevk deftere yazilsin mi (default false).
+  shippingAllowOverAllocation: z.boolean().optional(),
   // customers.branchesEnabled — müşteri şubeleri (sevk noktaları) UI'da açık mı (default true, UI rehberi).
   customerBranchesEnabled: z.boolean().optional(),
   // tambur.overQuantityEnabled — çıkan top metresi giriş metresini aşabilsin mi (ENFORCE).

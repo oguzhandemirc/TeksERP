@@ -379,6 +379,22 @@ export class ShippingController {
     } catch (e) { next(e); }
   };
 
+  /** Onarılabilir sevkiyatlar — yazma yok. */
+  listRepairableShipments = async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.listRepairableShipments());
+    } catch (e) { next(e); }
+  };
+
+  /** Tek sevkiyatın defterini onar — irsaliye v+1 doğurur. */
+  repairShipmentAllocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(
+        await this.service.repairShipmentAllocation(req.params.id as string, req.user?.userId),
+      );
+    } catch (e) { next(e); }
+  };
+
   /** Toplu dağıtma ÖNİZLEME — yazma yok; etkilenen her top listelenir. */
   previewDistributeSacks = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {

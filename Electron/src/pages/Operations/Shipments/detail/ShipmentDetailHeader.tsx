@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Ban, FileText, Globe, Truck, Undo2 } from "lucide-react";
+import { AlertTriangle, Ban, FileText, Globe, Truck, Undo2 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -49,6 +49,20 @@ export function ShipmentDetailHeader({
               {d.destination === "EXPORT" && (
                 <Badge variant="outline" className="gap-0.5 border-info/40 text-[10px] text-info">
                   <Globe className="h-3 w-3" /> İhracat
+                </Badge>
+              )}
+              {/* DEFTER BOŞLUĞU (2026-09-06) — mal çıkmış ama sipariş defterine
+                  yazılamamış metraj. Bu sayı bugüne kadar YALNIZ audit izindeydi,
+                  hiçbir ekranda görünmüyordu; sipariş "Açık" kaldığı için aynı mal
+                  yeniden üretime verilebiliyordu. */}
+              {d.defterBoslugu != null && d.defterBoslugu > 0.001 && (
+                <Badge
+                  variant="outline"
+                  className="gap-0.5 border-amber-400/60 text-[10px] text-amber-700 dark:text-amber-400"
+                  title="Bu metraj sipariş defterine işlenmedi — sipariş 'Açık' kalır. Operasyon → Siparişe Yazılamayanlar ekranından onarılabilir."
+                >
+                  <AlertTriangle className="h-3 w-3" /> Deftere yazılmayan{" "}
+                  {Math.round(d.defterBoslugu)} m
                 </Badge>
               )}
             </span>

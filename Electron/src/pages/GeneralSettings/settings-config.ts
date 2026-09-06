@@ -749,6 +749,34 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalıyken (varsayılan) cihaz kaydında “simülasyon” açık bir kantardan okunan kg backend tarafından REDDEDİLİR (400) — simüle kantar 10-100 kg arası rastgele değer üretir ve çuval kg'si sevk irsaliyesine + çeki listesine basılır (müşteri/gümrük belgesi). Elle giriş (⋮ → “Elle kg gir”) bu ayardan ETKİLENMEZ; kantarsız/arızalı durumun kaçış yoludur. Yalnızca demo/eğitim kurulumunda açın.",
       },
       {
+        key: "shippingAllowOverAllocation",
+        title: "Sipariş miktarını aşan mal da siparişe yazılsın",
+        summary:
+          "Ismarlanandan fazla gönderilen metraj sipariş defterine “fazla sevk” olarak işlenir.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Muhasebeci"],
+        group: "Sipariş eşleştirme",
+        desc: "Kapalı (varsayılan, BUGÜNKÜ DAVRANIŞ): tahsis sipariş kalemini AŞAMAZ. Sipariş 100 m ve siz 130 m gönderdiyseniz 100 m yazılır, kalan 30 m HİÇBİR satıra işlenmez — mal çıkar, irsaliye basılır, ama sipariş defteri o 30 metreyi hiç görmez. Ölçüldü (2026-09-06): fabrikada bu sınıfta 15.723 m / 398 top var. Açık: fazlalık da eşleşen sipariş satırına yazılır ve “Sevk edilen” miktarı ısmarlanandan büyük görünür — yani fazla sevk KAYIT ALTINA ALINIR, sessiz kalmaz. ⚠️ Yalnız kumaş/renk/en'i TUTAN satırlara yazılır; sipariş dışı mal yine yazılmaz. ⚠️ “Açık miktar” hesabı negatife düşemez, ekranlarda 0 görünür; fazlalığı görmek için sevk miktarını ısmarlananla karşılaştırın.",
+      },
+      {
+        key: "shippingAllocWidthToleranceEnabled",
+        title: "Siparişe yazarken en farkını hoş gör",
+        summary:
+          "Topun eni sipariş satırındakinden az farklıysa yine o siparişe yazılsın.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Planlamacı"],
+        group: "Sipariş eşleştirme",
+        desc: "Sistem bir çuvaldaki malı siparişe yazarken KUMAŞ, RENK ve EN üçünün de tutmasını ister. En bugün TAM eşleşmek zorunda: sipariş 330 cm yazıyorsa 330,1 cm'lik top o siparişe YAZILAMAZ ve o metraj sipariş defterine hiç girmez (sipariş “Açık” kalır). Ölçüldü (2026-09-06): fabrikada bu yüzden 950 m / 25 top deftere girmemiş; gözlenen farklar 0,1 cm ve 5 cm. Açık: aşağıdaki farka kadar olan sapma hoş görülür. ⚠️ KUMAŞ VE RENK HER ZAMAN KESİN EŞLEŞİR — bu ayar onları GEVŞETMEZ; yanlış rengi bir siparişe yazmak defteri sessizce bozar. Toleransı gerçekten gördüğünüz sapmaya göre seçin; büyük değer farklı ürünleri birbirinin siparişine yazmaya başlar. Kapalı (varsayılan) = bugünkü davranış.",
+        numberField: {
+          numberKey: "shippingAllocWidthToleranceCm",
+          label: "Kabul edilen en farkı",
+          unit: "cm",
+          min: 1,
+          max: 10,
+          emptyWarning: "Boş bırakılırsa 1 cm kullanılır. Sahada gördüğünüz gerçek sapmadan büyük seçmeyin.",
+        },
+      },
+      {
         key: "shippingDocProductColorSplit",
         title: "İrsaliye ürün listesinde müşteri rengi ayrı sütun",
         summary:

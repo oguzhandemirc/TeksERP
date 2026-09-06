@@ -301,6 +301,10 @@ const WEB_ROLES: readonly RoleTemplateEntry[] = [
       "roll:manual-adjust",
       "shipping:read",
       "shipping:undo-dispatch",
+      // Defter onarımı aynı aileye girer: geçmiş bir sevkiyatın sipariş defterini
+      // düzeltmek de günlük sevk işinden AYRI bir yetkidir ve irsaliyenin yeni bir
+      // sürümünü doğurur. `shipping:undo-dispatch` ile aynı rolde durması bilinçli.
+      "shipping:repair-allocation",
       "workorder:read",
       "workorder:write",
       "station:read",

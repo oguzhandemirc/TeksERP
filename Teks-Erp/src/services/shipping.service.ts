@@ -71,10 +71,15 @@ import {
 // "Müşterideki ad" zinciri (2026-09-04) — etiketle AYNI cascade, tek kaynak.
 import { loadShipmentCustomerNames } from "./helpers/shipment-customer-name.helper";
 import { batchLoadAliases, batchLoadAliasesMulti, resolveName } from "./helpers/customer-name.helper";
+import { specMatch } from "./helpers/allocation.helper";
 import {
   resolveOrderCoverage,
   assertCoverageAllowed,
 } from "./helpers/shipment-coverage.helper";
+import {
+  readShippingAllocWidthToleranceCm,
+  readShippingAllowOverAllocation,
+} from "./system-setting.service";
 import {
   assertInvoiceTraceAllowed,
   invoiceTraceWarning,
@@ -855,6 +860,138 @@ export class ShippingService {
     });
     const n = removedRolls + removedSwatches;
     return { success: true, data: { removedRolls, removedSwatches }, message: n > 0 ? `${n} top/kartela depoya çıkarıldı` : "Çıkarılacak içerik yok" };
+  }
+
+  /**
+   * DEFTER ONARIMI — SİPARİŞE YAZILAMAMIŞ SEVKİYATLAR (2026-09-06).
+   *
+   * PROBLEM (ölçüldü, fabrika yedeği 2026-09-05): sevk edilmiş 89 sevkiyatın
+   * 42'sinde çuval içeriği sipariş defterine tam yazılmamış — 11.384,7 m. Bunların
+   * 42'sinde de sipariş SEÇİLİYDİ; sorun seçim değil YAZILAMAMA.
+   * `scripts/tahsis_teshis.ts` sebepleri sınıflandırdı ve en büyük küme
+   * "bugün YAZILABİLİRDİ" (15.905 m / 407 top) — yani spec de kapasite de bugün
+   * uygun; sevk anında değildi (kapasite doluydu ya da sipariş sonradan büyüdü).
+   *
+   * BU LİSTE O KÜMEYİ BULUR. Yazma YOK.
+   *
+   * ⚠️ Onarımın kendisi `setShipmentOrders` ile yapılır — defteri sıfırdan kurar,
+   * sipariş toplamlarını yeniden hesaplar ve irsaliyeyi v+1 olarak dondurur.
+   * Bu yüzden onarım AYRI BİR YETKİ ister (`shipping:repair-allocation`).
+   */
+  async listRepairableShipments(): Promise<ApiResponse<unknown>> {
+    const sevkiyatlar = await prisma.shipment.findMany({
+      where: { status: ShipmentStatus.DISPATCHED, orders: { some: {} } },
+      select: {
+        id: true, shipmentNo: true, dispatchedAt: true,
+        customer: { select: { id: true, name: true } },
+        sacks: {
+          select: {
+            branchId: true,
+            rolls: { where: { status: { notIn: SACK_ABSENT_STATUSES } }, select: { itemId: true, colorId: true, width: true, currentQty: true } },
+            allocations: { select: { qty: true } },
+          },
+        },
+        orders: {
+          select: {
+            order: {
+              select: {
+                orderNumber: true, branchId: true,
+                lines: { select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { dispatchedAt: "desc" },
+    });
+
+    const enTolerans = await readShippingAllocWidthToleranceCm();
+    const satirlar: unknown[] = [];
+    for (const sh of sevkiyatlar) {
+      const icerik = sh.sacks.reduce((a2, sk) => a2 + sk.rolls.reduce((b2, r) => b2 + Number(r.currentQty), 0), 0);
+      const yazilan = sh.sacks.reduce((a2, sk) => a2 + sk.allocations.reduce((b2, x) => b2 + Number(x.qty), 0), 0);
+      const bosluk = Math.round((icerik - yazilan) * 1000) / 1000;
+      if (bosluk <= 0.001) continue;
+
+      const kalemler = sh.orders.flatMap((so) =>
+        so.order.lines.map((l) => ({
+          itemId: l.itemId, colorId: l.colorId, width: l.width,
+          branchId: so.order.branchId,
+          kalan: Number(l.quantity) - Number(l.shippedQty),
+        })),
+      );
+      // "Bugün yazılabilir mi" — motorun kendi yüklemleri: spec + şube + kapasite.
+      let onarilabilir = 0;
+      for (const sk of sh.sacks) {
+        for (const r of sk.rolls) {
+          const uygun = kalemler.some(
+            (l) =>
+              specMatch(r, l, enTolerans) &&
+              (sk.branchId ?? null) === (l.branchId ?? null) &&
+              l.kalan > 0.001,
+          );
+          if (uygun) onarilabilir += Number(r.currentQty);
+        }
+      }
+      satirlar.push({
+        shipmentId: sh.id,
+        shipmentNo: sh.shipmentNo,
+        dispatchedAt: sh.dispatchedAt,
+        customer: sh.customer,
+        orderNumbers: sh.orders.map((so) => so.order.orderNumber),
+        icerikMetraj: Math.round(icerik * 1000) / 1000,
+        yazilanMetraj: Math.round(yazilan * 1000) / 1000,
+        bosluk,
+        /** Bugün yeniden denense yazılabilecek metraj — onarımın beklenen kazancı. */
+        onarilabilirMetraj: Math.round(Math.min(onarilabilir, bosluk) * 1000) / 1000,
+      });
+    }
+    return { success: true, data: satirlar };
+  }
+
+  /**
+   * TEK SEVKİYATIN DEFTERİNİ ONAR — mevcut `setShipmentOrders` motoruyla.
+   *
+   * ⚠️ Sipariş kümesi DEĞİŞTİRİLMEZ: sevkiyatın bugünkü siparişleri aynen geri
+   * verilir. Yaptığı tek şey tahsisi BUGÜNÜN verisiyle yeniden kurmaktır.
+   * Yeni bir sipariş eklemek ayrı bir karardır ve bu uçtan yapılmaz.
+   */
+  async repairShipmentAllocation(shipmentId: string, userId?: string): Promise<ApiResponse<unknown>> {
+    const sh = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: { id: true, shipmentNo: true, status: true, orders: { select: { orderId: true } } },
+    });
+    if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+    if (sh.status !== ShipmentStatus.DISPATCHED) {
+      throw AppError.conflict("Yalnız sevk EDİLMİŞ sevkiyatın defteri onarılır");
+    }
+    if (sh.orders.length === 0) {
+      throw AppError.conflict("Sevkiyata bağlı sipariş yok — onarılacak defter yok");
+    }
+    const oncesi = await this.olcTahsis(shipmentId);
+    await this.setShipmentOrders(shipmentId, sh.orders.map((o) => o.orderId), userId);
+    const sonrasi = await this.olcTahsis(shipmentId);
+    const kazanc = Math.round((sonrasi - oncesi) * 1000) / 1000;
+    await AuditService.log({
+      userId, action: "UPDATE", tableName: "SHIPMENT", recordId: shipmentId,
+      newData: { kind: "ALLOCATION_REPAIR", shipmentNo: sh.shipmentNo, oncesi, sonrasi, kazanc },
+    });
+    return {
+      success: true,
+      data: { shipmentNo: sh.shipmentNo, oncesi, sonrasi, kazanc },
+      message: kazanc > 0.001
+        ? `${sh.shipmentNo}: ${Math.round(kazanc)} m sipariş defterine yazıldı`
+        : `${sh.shipmentNo}: yazılabilecek yeni metraj bulunamadı (defter değişmedi)`,
+    };
+  }
+
+  /** Sevkiyatın toplam tahsis metrajı — onarım öncesi/sonrası ölçümü için. */
+  private async olcTahsis(shipmentId: string): Promise<number> {
+    const rows = await prisma.sackAllocation.aggregate({
+      where: { sack: { shipmentId } },
+      _sum: { qty: true },
+    });
+    return Math.round(Number(rows._sum.qty ?? 0) * 1000) / 1000;
   }
 
   /**
@@ -1654,7 +1791,13 @@ export class ShippingService {
         });
       }
     }
-    const allocations = distributeSacksToLines(poolSacks, allocLines);
+    // EN TOLERANSI (`shipping.allocWidthToleranceCm`, 2026-09-06) — 0 = tam eşitlik
+    // ve bu VARSAYILAN, yani bayrak açılmadıkça tahsis bugünküyle bayt-bayt aynı.
+    // Kumaş ve renk toleranstan ETKİLENMEZ (`specMatch` yalnız eni gevşetir).
+    const enTolerans = await readShippingAllocWidthToleranceCm();
+    // FAZLA SEVK (`shipping.allowOverAllocation`) — kapalı = bugünkü davranış.
+    const fazlaSevk = await readShippingAllowOverAllocation();
+    const allocations = distributeSacksToLines(poolSacks, allocLines, enTolerans, fazlaSevk);
     return { allocations, lineNeeds };
   }
 
@@ -4245,12 +4388,30 @@ export class ShippingService {
     ];
     const totalMeters = grossShipmentRolls.reduce((s, r) => s.plus(r.currentQty), D0());
 
+    // DEFTER BOŞLUĞU (2026-09-06) — "çıkan mal ↔ siparişe yazılan" farkı.
+    // Bugüne kadar bu sayı YALNIZ audit izinde vardı (`tahsissizMetraj`), yani
+    // hiçbir ekranda görünmüyordu. Ölçüldü: sevk edilmiş 89 sevkiyatın 42'sinde
+    // fark var (11.384,7 m) ve sipariş "Açık" kaldığı için aynı mal yeniden
+    // üretime verilebiliyordu. Sayı, siparişi OLAN sevkiyatlarda anlamlıdır.
+    const defterYazilan = shipment.sacks.reduce(
+      (a2, sk) => a2 + sk.allocations.reduce((b2, x) => b2 + Number(x.qty), 0),
+      0,
+    );
+    const defterCikan = shipment.sacks.reduce(
+      (a2, sk) => a2 + sk.rolls.reduce((b2, r) => b2 + Number(r.currentQty), 0),
+      0,
+    );
+    const defterBoslugu =
+      shipment.orders.length === 0 ? null : Math.max(0, Math.round((defterCikan - defterYazilan) * 1000) / 1000);
+
     return {
       success: true,
       data: {
         id: shipment.id,
         shipmentNo: shipment.shipmentNo,
         status: shipment.status,
+        /** Siparişe yazılamayan metraj; `null` = sevkiyatın siparişi yok (soru anlamsız). */
+        defterBoslugu,
         destination: shipment.destination,
         procedureCode: shipment.procedureCode,
         dispatchNote: shipment.dispatchNote,

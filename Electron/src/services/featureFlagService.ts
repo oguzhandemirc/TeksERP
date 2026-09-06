@@ -364,6 +364,12 @@ export interface FeatureFlags {
   shippingOrderCoverage: ShippingOrderCoverage;
   /** Ürün listesinde müşteri rengi AYRI sütun mu (default false = bugünkü birleşik dize). */
   shippingDocProductColorSplit: boolean;
+  /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). Kumaş ve renk KESİN. */
+  shippingAllocWidthToleranceEnabled: boolean;
+  /** Tolerans (cm) — yalnız bayrak açıkken uygulanır. */
+  shippingAllocWidthToleranceCm: number;
+  /** Tahsis sipariş miktarını aşabilir mi — fazla sevk deftere yazılır (default false). */
+  shippingAllowOverAllocation: boolean;
   /** Müşteri şubeleri (sevk noktaları) UI'da açık mı (true=default). Kapalıyken müşteri
    *  formundaki Şubeler sekmesi/taslağı ve sipariş formundaki şube seçimi gizlenir.
    *  Salt UI rehberi — mevcut kayıtlardaki branchId verisi korunur. */

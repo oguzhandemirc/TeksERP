@@ -21,6 +21,46 @@
 
 ---
 
+## 2026-09-06 (2) — §1d'nin gerçek sebebi ölçüldü: dört tahmin de yanlıştı [ÇEKİRDEK]
+
+Kullanıcı "bu siparişlerin gerçek sorununu nokta atışı tespit etmeliyiz" dedi. Teşhis aracı
+yazıldı (`scripts/tahsis_teshis.ts`, salt-okunur: motorun KENDİ yüklemlerini her top için
+sırayla koşturur) ve **dört tahmin de çürüdü**:
+
+| Tahmin | Ölçüm |
+|---|---|
+| "Sipariş seçilmemiş" | 42'sinde de **seçilmiş** (89 sevkiyatın 88'inde sipariş var) |
+| "Fazla mal gönderilmiş" | Fazla sevk edilmiş kalem **SIFIR** |
+| "Şube tutmuyor" | 64 çiftin **64'ü** eşleşiyor |
+| "En/renk tutmuyor" | Yalnız 950 m + 968 m — küçük kalem |
+
+GERÇEK DAĞILIM: **15.905 m bugün YAZILABİLİRDİ** (spec de kapasite de uygun → sebep sevk
+anındaki durum: kapasite doluydu ya da sipariş sonradan büyüdü) · **15.723 m kapasite dolu** ·
+4.480 m kumaş kalemde yok · 968 m renk · 950 m en.
+
+⚠️ Yol üstünde KENDİ AÇIKLAMAMI düzelttim: "tahsis top bazlıdır, top bölünmez" dedim ve
+YANLIŞTI — `distributeSacksToLines` `min(ihtiyaç, mevcut)` ile metraj bazlı böler.
+
+**KULLANICI KARARLARI ve uygulananlar:**
+- **En toleransı** (`shipping.allocWidthToleranceEnabled` + `…Cm`) — ⚠️ yalnız EN gevşer;
+  kumaş ve renk KESİN kalır ve bekçi bunu ayrıca ölçer. Varsayılan kapalı; bu fabrikada
+  **5 cm ile açıldı** (kullanıcı kararı).
+- **Fazla sevk deftere yazılsın** (`shipping.allowOverAllocation`, varsayılan kapalı) —
+  açıkken fazlalık eşleşen satıra yazılır, `shippedQty` ısmarlananı geçebilir.
+- **Onarım modülü** — yeni izin `shipping:repair-allocation` (`shipping:write` YETMEZ),
+  yeni ekran (Operasyon → Siparişe Yazılamayanlar) + Siparişler ekranından kısa yol butonu.
+  Motor `setShipmentOrders`: sipariş kümesi DEĞİŞMEZ, yalnız tahsis bugünün verisiyle
+  yeniden kurulur ve irsaliye v+1 donar. Onaydan önce ne değişeceği gösterilir.
+- **Görünürlük** — sevkiyat detayı artık `defterBoslugu` taşıyor ve panel rozetle gösteriyor.
+  Bu sayı bugüne kadar YALNIZ audit izindeydi; hiçbir ekranda yoktu.
+
+Bekçi: `test_allocation_repair` (17 kontrol, dört negatif sonda ölçüldü).
+
+⚠️ AÇIK KALAN: 15.905 m'lik onarılabilir küme **onarılmadı** — ekran hazır, düğmeye kullanıcı
+basar. Hangi sevkiyatın onarılacağı iş kararıdır.
+
+---
+
 ## 2026-09-06 — Sevkiyat turu: kapsama ekseni, çeki rejimi, ekran↔kâğıt hizası, toplu dağıtma [ÇEKİRDEK]
 
 Kullanıcı iş gerçeğini söyledi: *"fabrika düzensiz çalışıyor; elemanlar sipariş OLSA BİLE
