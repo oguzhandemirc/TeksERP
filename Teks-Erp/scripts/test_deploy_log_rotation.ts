@@ -17,19 +17,23 @@
 //   §1 `kur.ps1` pm2-logrotate KURUYOR
 //   §2 üç ayarın üçü de veriliyor (max_size · retain · compress)
 //   §3 kurulum FAIL DEĞİL — internetsiz makinede sürüm çıkışını kesmiyor
-//   §4 rotasyonun hedefi duruyor: `ecosystem.fabrika.js` hâlâ dosyaya yazıyor
+//   §4 rotasyonun hedefi duruyor: PAKETE GİREN `Teks-Erp/ecosystem.config.js`
+//      hâlâ dosyaya yazıyor (+ elle kurulum varyantı da)
 //
 // ⭐ NEGATİF SONDA (2026-09-06/07, BEŞİ DE ölçüldü — her biri ayrı koşum):
 //    ① `& $pm2 install pm2-logrotate` satırı yorumlandı            → §1 KIRMIZI
 //    ② `pm2-logrotate:max_size` satırı silindi                     → §2 KIRMIZI
 //    ③ `Uyar` → `Fail` (blok sürüm çıkışını keser hâle geldi)      → §3 KIRMIZI
-//    ④ `out_file:` yorumlandı                                      → §4 KIRMIZI
+//    ④ `Teks-Erp/ecosystem.config.js`te `out_file:` yorumlandı     → §4 KIRMIZI
 //    ⑤ `time: true` → `time: false`                                → §4 KIRMIZI
 //    Hepsi geri alındığında yeşil.
 //
-//    ⚠️ SONDANIN KENDİSİ ÜÇ KEZ BEKÇİYİ DÜZELTTİ: ①, ③ ve ④ İLK yazımda
+//    ⚠️ SONDANIN KENDİSİ DÖRT KEZ BEKÇİYİ DÜZELTTİ: ①, ③ ve ④ İLK yazımda
 //    ısırmadı, çünkü aranan metin bloğun YORUMUNDA ya da UYARI CÜMLESİNDE de
-//    geçiyordu. "Bekçi yeşil" ile "kural korunuyor" arasındaki fark tam burası.
+//    geçiyordu. Dördüncüsü daha kötüydü: §4 YANLIŞ DOSYAYI okuyordu
+//    (`deploy/ecosystem.fabrika.js` pakete GİRMEZ; `paketle.ps1` sahadaki
+//    dosyayı `Teks-Erp/ecosystem.config.js`ten kopyalar). "Bekçi yeşil" ile
+//    "kural korunuyor" arasındaki fark tam burası.
 // =============================================================================
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -43,7 +47,12 @@ function check(label: string, ok: boolean, detail = ""): void {
 }
 
 const kur = readFileSync(join(KOK, "deploy", "kur.ps1"), "utf8");
-const eco = readFileSync(join(KOK, "deploy", "ecosystem.fabrika.js"), "utf8");
+// ⚠️ PAKETE GİREN DOSYA BUDUR. `deploy/ecosystem.fabrika.js` DEĞİL — o, 2026-09-04
+// yan-yana kurulumunda BİR KEZ elle kopyalanmış bir varyanttır ve `paketle.ps1`
+// onu pakete koymaz (`Copy-Item "$proj\ecosystem.config.js"`). Bekçi ilk yazımda
+// yanlış dosyayı ölçüyordu: paketlenen dosyadan `out_file` silinse YEŞİL kalırdı.
+const eco = readFileSync(join(KOK, "Teks-Erp", "ecosystem.config.js"), "utf8");
+const ecoFabrika = readFileSync(join(KOK, "deploy", "ecosystem.fabrika.js"), "utf8");
 
 // ── BLOK SINIRI ─────────────────────────────────────────────────────────────
 // Aramalar SERBEST METİNDE değil, bloğun KOMUT SATIRLARINDA yapılır.
@@ -115,6 +124,18 @@ check("körlük zemini: ecosystem okundu", ecoKomutlari.length > 20, `${ecoKomut
 check("⭐ `out_file` GERÇEKTEN tanımlı (yorum satırı sayılmaz)", ecoVar(/^out_file:\s*\S/));
 check("⭐ `error_file` GERÇEKTEN tanımlı", ecoVar(/^error_file:\s*\S/));
 check("zaman damgası açık (`time: true`) — rotasyon sonrası satır tarihi kaybolmasın", ecoVar(/^time:\s*true/));
+
+// Elle kurulumda kullanılan varyant da aynı üç alanı taşımalı — yoksa yan yana
+// kurulan makinede rotasyon başka bir dosyayı döndürür.
+const fabKomutlari = ecoFabrika
+  .split("\n")
+  .map((l) => l.trim())
+  .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("*") && !l.startsWith("/*"));
+const fabVar = (re: RegExp): boolean => fabKomutlari.some((l) => re.test(l));
+check(
+  "elle kurulum varyantı (`deploy/ecosystem.fabrika.js`) da üç alanı taşıyor",
+  fabVar(/^out_file:\s*\S/) && fabVar(/^error_file:\s*\S/) && fabVar(/^time:\s*true/),
+);
 
 console.log(`\n=== Sonuç: ${pass} geçti, ${fail} başarısız ===`);
 process.exit(fail > 0 ? 1 : 0);
