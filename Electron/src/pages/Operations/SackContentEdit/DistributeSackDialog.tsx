@@ -40,7 +40,9 @@ export function DistributeSackDialog({ sack, onOpenChange, onDistributed }: Prop
           ? `Çuval ${sack!.sackNo} dağıtıldı ve silindi`
           : `Çuval ${sack!.sackNo} dağıtıldı — içerik depoya döndü`,
       );
-      invalidateSackHub(qc);
+      // Yalnız "dağıt + sil" yolunda çuval kaydı YOK olur; sadece dağıtımda
+      // çuval yaşamaya devam eder ve dökümü tazelenmeli (boşaldığı görülsün).
+      invalidateSackHub(qc, alsoDelete ? { silinenSackId: sack!.id } : undefined);
       onOpenChange(false);
       onDistributed?.(alsoDelete);
     },

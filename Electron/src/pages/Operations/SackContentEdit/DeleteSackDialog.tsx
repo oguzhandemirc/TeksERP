@@ -33,7 +33,9 @@ export function DeleteSackDialog({ sack, onOpenChange, onDeleted }: Props) {
     mutationFn: () => sackHubService.removeSack(sack!.id, hasContents),
     onSuccess: () => {
       toast.success(`Çuval ${sack!.sackNo} silindi`);
-      invalidateSackHub(qc);
+      // `silinenSackId` ŞART: bu çuval artık YOK, dökümü tazelenirse 404 döner
+      // ve genel interceptor başarılı silmenin üstüne kırmızı toast basar.
+      invalidateSackHub(qc, { silinenSackId: sack!.id });
       onOpenChange(false);
       onDeleted?.();
     },

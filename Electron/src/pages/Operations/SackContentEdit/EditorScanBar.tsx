@@ -1,4 +1,5 @@
 import { useState } from "react";
+import axios from "axios";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PackagePlus } from "lucide-react";
@@ -23,6 +24,16 @@ export function EditorScanBar({ sackId }: Props) {
     onSuccess: (res) => {
       invalidateSackHub(qc);
       toast.success(res.message ?? "Okutuldu");
+    },
+    // 409 = çuval BU ARADA sevkiyata atandı. Ekrandaki döküm bayat olduğu için
+    // `locked` hâlâ false ve okutma çubuğu duruyor; operatör aynı hatayı tekrar
+    // tekrar alıyor (sahada ölçüldü 2026-09-05: tek çuvala 3 dakikada 5 deneme).
+    // Toast'ı interceptor basar — burada YALNIZ dökümü tazeleriz, ekran kilit
+    // görünümüne geçer ve ikinci deneme mümkün olmaz. İkinci toast YASAK.
+    onError: (err) => {
+      if (axios.isAxiosError(err) && err.response?.status === 409) {
+        void qc.invalidateQueries({ queryKey: ["sack-contents", sackId] });
+      }
     },
   });
 
