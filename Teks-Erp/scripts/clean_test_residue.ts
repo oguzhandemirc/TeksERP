@@ -54,6 +54,25 @@ const TEST_DAMGALARI = ["TEST-", "TST-"];
 const orPrefix = (field: string, prefixes: string[]) =>
   prefixes.map((p) => ({ [field]: { startsWith: p } }));
 
+/**
+ * Hata gerekçesinin İLK ANLAMLI satırı. Prisma hataları çok satırlı ve ÇOĞU
+ * BOŞ SATIRLA BAŞLAR — düz `message.split("\n")[0]` boş string döndürür ve
+ * rapor "SİLİNEMEDİ: " diye gerekçesiz kalır. Bu dosyanın kendi başlığındaki
+ * kural ("silinemeyen satır SESSİZCE ATLANMAZ, raporlanır") o hâlde fiilen
+ * çiğnenmiş olur — ölçüldü 2026-09-06, 8 satır gerekçesiz raporlandı.
+ */
+function ilkSatir(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const anlamli = e.message
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  // Prisma kodu (P2003 = FK ihlali) varsa başa koy — asıl teşhis odur.
+  const kod = (e as { code?: string }).code;
+  const govde = anlamli[0] ?? e.name;
+  return kod ? `${kod} — ${govde}` : govde;
+}
+
 let planned = 0;
 let deleted = 0;
 let blocked = 0;
@@ -65,7 +84,7 @@ async function phase(label: string, run: () => Promise<number>): Promise<void> {
     if (n > 0) console.log(`  ↳ ${label}: ${n}`);
   } catch (e) {
     blocked++;
-    console.log(`  ⚠️  ${label} BAŞARISIZ: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`);
+    console.log(`  ⚠️  ${label} BAŞARISIZ: ${ilkSatir(e)}`);
   }
 }
 
@@ -110,6 +129,25 @@ async function main() {
     await phase("kartelalar", async () =>
       (await prisma.swatch.deleteMany({ where: { parentRollId: { in: rollIds } } })).count,
     );
+    // ⚠️ FK ZİNCİRİ 2026-09-06'DA TAMAMLANDI. Eksik olan BEŞ RESTRICT bağı,
+    // `--apply` ilk kez koşulduğunda 453 topun tamamını P2003 ile düşürdü ve
+    // gerekçe raporda BOŞ görünüyordu (bkz. `ilkSatir`). Şema envanterinden
+    // ölçüldü: `rolls`a bakan 17 FK'nın 11'i RESTRICT ve altısı burada eksikti.
+    await phase("fason sevk kalemleri", async () =>
+      (await prisma.subcontractorDispatchItem.deleteMany({ where: { rollId: { in: rollIds } } })).count,
+    );
+    await phase("fason kabul kalemleri", async () =>
+      (await prisma.subcontractorReceiptItem.deleteMany({ where: { newRollId: { in: rollIds } } })).count,
+    );
+    await phase("sayım satırları", async () =>
+      (await prisma.stockCountLine.deleteMany({ where: { rollId: { in: rollIds } } })).count,
+    );
+    await phase("plan sapmaları", async () =>
+      (await prisma.rollPlanDeviation.deleteMany({ where: { rollId: { in: rollIds } } })).count,
+    );
+    await phase("sapma kayıtları (RollVariance)", async () =>
+      (await prisma.rollVariance.deleteMany({ where: { rollId: { in: rollIds } } })).count,
+    );
     await phase("hata kayıtları", async () =>
       (await prisma.rollError.deleteMany({ where: { rollId: { in: rollIds } } })).count,
     );
@@ -127,6 +165,29 @@ async function main() {
     );
     await phase("çocuk toplar", async () =>
       (await prisma.roll.deleteMany({ where: { parentRollId: { in: rollIds } } })).count,
+    );
+    // ⚠️ ÜST KAYIT DA GİDER — 2026-09-06'da bu satır EKSİKTİ ve ısırdı: yalnız
+    // kalemleri silmek 429 fason sevkini KALEMSİZ bıraktı ve `test_consistency`
+    // §19 (snapshot toplamı ↔ kalem toplamı) 429 drift satırıyla kırmızı verdi.
+    // Ders: bir kaleme dokunan temizlik, o kalemin ÖZETİNİ tutan satırı da
+    // hesaba katmak zorundadır — yoksa temizlik bir tutarsızlık ÜRETİR.
+    // ⚠️ KAPSAM DAR: yalnız KALEMİ KALMAMIŞ ve TEST iş emrine bağlı sevk/fişler.
+    // "Boş olan her sevkiyatı sil" demek fabrikanın meşru boş kaydını da alırdı.
+    await phase("kalemsiz fason sevkleri (üst kayıt)", async () =>
+      (await prisma.subcontractorDispatch.deleteMany({
+        where: {
+          items: { none: {} },
+          workOrder: { OR: orPrefix("workOrderNumber", TEST_DAMGALARI) },
+        },
+      })).count,
+    );
+    await phase("kalemsiz fason fişleri (üst kayıt)", async () =>
+      (await prisma.subcontractorReceipt.deleteMany({
+        where: {
+          items: { none: {} },
+          workOrder: { OR: orPrefix("workOrderNumber", TEST_DAMGALARI) },
+        },
+      })).count,
     );
     await phase("toplar", async () => {
       const n = (await prisma.roll.deleteMany({ where: { id: { in: rollIds } } })).count;
@@ -187,7 +248,7 @@ async function main() {
       } catch (e) {
         blocked++;
         console.log(
-          `  ⚠️  ${r.name} — SİLİNEMEDİ: ${e instanceof Error ? e.message.split("\n")[0] : String(e)}`,
+          `  ⚠️  ${r.name} — SİLİNEMEDİ: ${ilkSatir(e)}`,
         );
       }
     }

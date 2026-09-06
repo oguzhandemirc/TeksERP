@@ -116,6 +116,52 @@ function main(): void {
   const hayalet = Object.keys(MUAFLAR).filter((f) => !dosyalar.includes(f));
   check("§3: muaf listesinde hayalet dosya yok", hayalet.length === 0, hayalet.join(", ") || "hepsi mevcut");
 
+  // ═══ §6 — PRISMA İLE SİLEN BETİKLER: KAPISIZ SAYISI YALNIZ DÜŞER ═══
+  // NEDEN AYRI BÖLÜM: §1 yıkıcılığı HAM SQL izinden ölçüyor (`TRUNCATE`,
+  // `INSERT INTO system_logs`). Ama bu repoda silme çoğunlukla Prisma
+  // `deleteMany` ile yapılıyor ve o izler §1'in radarına HİÇ girmiyordu —
+  // `clean_test_residue.ts` 15 modelden satır siliyordu ve kapısız olduğu
+  // 2026-09-06'ya kadar fark edilmedi.
+  //
+  // ⚠️ NEDEN TAVAN, NEDEN "HEPSİ KAPILI OLSUN" DEĞİL: ölçüm 2026-09-06 —
+  // test olmayan 44 betikten YALNIZ 2'sinde kapı var. Kalan 42'yi bir gecede
+  // kapılamak gerçekçi değil; hepsini birden kırmızı yapmak da bu bekçiyi ilk
+  // gün devre dışı bıraktırırdı (dosyanın kendi başlığındaki uyarı). Bu yüzden
+  // lint tavanı deseni: bugünkü sayı DONDURULUR ve yalnız DÜŞER. Yeni yazılan
+  // kapısız betik hemen kırmızı verir.
+  //
+  // ⚠️ `test_*` ve `fixture-*` KAPSAM DIŞI ve bu bilinçli: bekçi kendi
+  // fixture'ını yaratıp siler, hedefi zaten koşucunun üretim-DB kapısıyla
+  // korunur (`run-all-tests.ts`). Tek istisna `KAPI_ZORUNLU_TESTLER`.
+  const PRISMA_SILME = /\.deleteMany\(|\$executeRaw/;
+  /** ÖLÇÜLDÜ 2026-09-06: 44 yıkıcı betiğin 42'sinde kapı yok. Yalnız DÜŞER. */
+  const KAPISIZ_TAVAN = 42;
+  const prismaYikicilar: string[] = [];
+  const prismaKapisizlar: string[] = [];
+  for (const f of dosyalar) {
+    if (f.startsWith("test_") || f.startsWith("fixture-")) continue;
+    const kod = kodSatirlari(readFileSync(join(dizin, f), "utf8"));
+    if (!PRISMA_SILME.test(kod)) continue;
+    prismaYikicilar.push(f);
+    if (!kod.includes(KAPI)) prismaKapisizlar.push(f);
+  }
+  check(
+    "§6a körlük zemini: Prisma ile silen betik bulundu",
+    prismaYikicilar.length >= 10,
+    `${prismaYikicilar.length} betik`,
+  );
+  check(
+    `§6b ⭐ kapısız Prisma-yıkıcı betik sayısı TAVANI (${KAPISIZ_TAVAN}) aşmadı — tavan yalnız DÜŞER`,
+    prismaKapisizlar.length <= KAPISIZ_TAVAN,
+    `${prismaKapisizlar.length} kapısız / ${prismaYikicilar.length} yıkıcı`,
+  );
+  if (prismaKapisizlar.length < KAPISIZ_TAVAN) {
+    console.log(
+      `\nℹ️  TAVAN DÜŞÜRÜLEBİLİR: ${prismaKapisizlar.length} ölçüldü, dosyadaki tavan ${KAPISIZ_TAVAN}.` +
+        `\n   \`KAPISIZ_TAVAN = ${prismaKapisizlar.length}\` yaz ve hangi betiğe kapı eklediğini commit'e geç.`,
+    );
+  }
+
   // ═══ §5 — ortam kapısı eklenmiş testler onu KAYBETMEMELİ ═══
   const kapisizTest = KAPI_ZORUNLU_TESTLER.filter((f) => {
     const yol = join(dizin, f);
