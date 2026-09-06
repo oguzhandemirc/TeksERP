@@ -53,7 +53,7 @@ const SONDA_ISARETI = /negat[iİı]?f\s+sonda/i;
  * basar; sayıyı buraya yaz ve commit mesajında hangi bekçilere sonda eklendiğini
  * söyle. DÜŞÜRMEK bir karardır ve gerekçesi bu satırın yanına yazılır.
  */
-const TABAN = 87;
+const TABAN = 108;
 
 /** Taranan dosya sayısı bunun altına düşerse "0 ihlal" ile "hiç bakmadım" karışır. */
 const EN_AZ_DOSYA = 400;

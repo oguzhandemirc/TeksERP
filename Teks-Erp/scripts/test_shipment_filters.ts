@@ -18,6 +18,9 @@
 //   H) cursor limit=1 → 3 sevkiyat tekrar/atlama olmadan sayfalanır
 //   I) müşteri izolasyonu: yabancı müşteri filtresi 0 satır
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `listShipments`ta `safeFilters` boşaltıldı (sunucu süzmesi öldü)
+//    -> 4 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import type { Request } from "express";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";

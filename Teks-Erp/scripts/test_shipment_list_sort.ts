@@ -17,6 +17,9 @@
 //   4) Keyset sayfalama limit=1 ile sayfa sayfa gezildiğinde TAM ve TEKRARSIZ
 //      küme verir (union merge + cursor'ın asıl kırılma noktası).
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `resolveSortBy` çıktısı sabit `createdAt`e çivilendi (sıralama
+//    isteği yok sayıldı) -> 7 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import type { Request } from "express";
 import prisma from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";

@@ -5,6 +5,10 @@
 // düzeltildi (drift). Eskiden bu guard'ı P2003 (DB RESTRICT) örtük sağlıyordu;
 // artık CustomerService.hardDelete'te EXPLICIT sack sayımı olmalı.
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `customer.service.ts`teki `if (sackCount > 0) blockers.push(...)`
+//    satırı öldürüldü -> 5 kontrol KIRMIZI. Sınıf: çuvalı olan müşteri kalıcı
+//    silinir, çuvalların `customerId`si sessizce NULL olur.
+//    Geri alındığında yeşil.
 import prisma from "../src/lib/prisma";
 import { CustomerService } from "../src/services/customer.service";
 import { dailyCodePrefix, nextDailySeq } from "../src/utils/code-format";

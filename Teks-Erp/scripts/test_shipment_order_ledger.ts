@@ -37,6 +37,10 @@
 //      sıra bozulunca da sonuç doğru çıkıyordu). O yüzden metin olarak ölçülür —
 //      `test_dispatch_without_color` §1 emsali.
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `performDispatchTx`ta `sackAllocation.createMany` girdisi boş diziye
+//    çevrildi (tahsis defteri hiç yazılmadı) -> 5 kontrol KIRMIZI. Sınıf: sipariş
+//    "Açık" görünmeye devam eder, mal çıkmış olmasına rağmen.
+//    Geri alındığında yeşil.
 import prisma, { pool } from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";
 import { OrderStatus, RollStatus, ShipmentStatus } from "@prisma/client";

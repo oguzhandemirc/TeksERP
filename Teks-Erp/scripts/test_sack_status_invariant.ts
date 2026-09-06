@@ -13,6 +13,8 @@
 // Test cross-domain: kartela + tambur + fason + shipping + label + belge + liste.
 // Bu yüzden mevcut hiçbir test dosyasının sahibi değil, ayrı dosyada yaşar.
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): aynı sonda (`PRESENT_ROLL_WHERE` -> `{}`) -> 2 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import prisma, { pool } from "../src/lib/prisma";
 import { ensureTestKartela, ensureTestSander } from "./fixture-subcontractor";
 import { withSackConstraintSuspended } from "./fixture-sack-constraint";

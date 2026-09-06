@@ -20,6 +20,8 @@
 //   J. Çuvalı dağıt (seçili/tümü → depo) + seçili topları başka çuvala toplu taşı + sevkteki çuval guard'ı.
 //   K. HAM (STOCK) top DOĞRUDAN sevk — durum düzeltme YOK (çuvala okut→sevk→SHIPPED); SCRAP guard.
 
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): aynı sonda (tahsis defteri yazılmadı) -> 11 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import { RollStatus, ShipmentStatus, OrderStatus, RollEntrySource } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";

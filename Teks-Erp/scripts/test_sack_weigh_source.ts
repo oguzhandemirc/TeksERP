@@ -12,6 +12,9 @@
 // sunucunun cihazı kendi çözüp `simulate`'i çapraz kontrol etmesi.
 // `MANUAL` MUAF — kantarsız/arızalı durumun kaçış yolu.
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `markSackContentChangedTx` gövdesi koşulsuz `return`e çevrildi (içerik
+//    değişince kg sıfırlama + `labelDirty` damgası öldü) -> 2 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { AppError } from "../src/utils/app-error";

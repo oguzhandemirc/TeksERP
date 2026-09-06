@@ -13,6 +13,10 @@
 //   3) Toplu muhasebe export'unda sevk satırları BRÜT'tür (iade geri eklenir) →
 //      ayrı "İade" bölümüyle birlikte "sevk − iade" TEK kez düşer (çift düşme yok).
 //   4) İade irsaliyesi iade ANINDA donar; iade iptalinde VOIDED'e çekilir.
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `summarizeShipmentReturns` dönüşü
+//    `{count:0, meters:0}` sabitine çevrildi → İKİ kontrol KIRMIZI. Geri konunca
+//    34/34 yeşil. Sınıf: muhasebe fişi iadeyi hiç görmez, brüt rakam sessizce nete döner.
 // =============================================================================
 import { PrintedDocType, PrintedDocStatus } from "@prisma/client";
 import type { Request } from "express";

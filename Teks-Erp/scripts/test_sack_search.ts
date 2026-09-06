@@ -12,6 +12,9 @@
 //   6. locateRoll: çuvaldaki top → çuval+sevkiyat; çuvalsız top → sack null
 //   7. locateRoll bilinmeyen barkod → 404
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `resolveScopeOr` koşulsuz `scopeWhere("ALL")` döndürüldü
+//    (kapsam süzmesi öldü; sevk edilmiş çuval da listede) -> 1 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import prisma from "../src/lib/prisma";
 import { SackSearchService } from "../src/services/sack-search.service";
 import { ShippingService } from "../src/services/shipping.service";

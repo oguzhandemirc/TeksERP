@@ -23,6 +23,8 @@
 // alınmalı. Sonrasına alınırsa hiçbir şey kazanılmaz ve bu SESSİZDİR — davranış
 // sondası dar pencerede çoğu zaman yeşil kalacağı için onu yakalayamaz.
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): aynı sonda (`resolveUndoBlockReason` -> null) -> 2 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import { readFileSync, readdirSync } from "fs";
 import { join } from "path";
 import prisma, { pool } from "../src/lib/prisma";

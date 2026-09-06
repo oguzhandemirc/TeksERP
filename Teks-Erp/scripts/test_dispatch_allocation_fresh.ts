@@ -23,6 +23,8 @@
 // §2 GÖRÜNÜRLÜK — tahsis edilemeyen metraj audit'e yazılır (sessizlik yerine sessizlik olmasın)
 // §3 ESNEKLİK — talep küçülse de sevk YAPILABİLİR (mal çıkar, engellenmez)
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): aynı sonda (tahsis defteri yazılmadı) -> 1 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import { ItemType, RollStatus } from "@prisma/client";
 import prisma, { pool } from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";

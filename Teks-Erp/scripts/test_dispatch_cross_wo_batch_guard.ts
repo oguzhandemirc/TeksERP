@@ -14,6 +14,9 @@
 //      dispatch.batchId WO-B'nin partisi (yabancı parti DEĞİL).
 //
 // Çalıştır: npx tsx scripts/test_dispatch_cross_wo_batch_guard.ts
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `subcontractor.service.ts`teki
+//    `if (foreignById.size > 0)` FOREIGN_BATCH kapısı kapatıldı -> 2 kontrol
+//    KIRMIZI. Geri alındığında yeşil.
 import prisma from "../src/lib/prisma";
 import { ensureTestDyeHouse } from "./fixture-subcontractor";
 import { SubcontractorService } from "../src/services/subcontractor.service";

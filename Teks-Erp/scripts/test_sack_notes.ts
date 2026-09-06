@@ -16,6 +16,9 @@
 //  10. Audit satırı düşer (SACK / UPDATE / kind=SACK_NOTES)
 // =============================================================================
 
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `markSackContentChangedTx` gövdesi koşulsuz `return`e çevrildi (içerik
+//    değişince kg sıfırlama + `labelDirty` damgası öldü) -> 1 kontrol KIRMIZI.
+//    Geri alındığında yeşil.
 import { RollStatus, RollEntrySource, ShipmentStatus } from "@prisma/client";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";

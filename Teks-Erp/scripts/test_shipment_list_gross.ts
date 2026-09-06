@@ -20,6 +20,11 @@
 //
 // Negatif özellik yerleşik: 1. ve 2. maddeler "raporlanan ≠ canlı" olduğunu da
 // doğrular — geri-ekleme kaldırılırsa bu iki kontrol kırmızı verir.
+//
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `attachTotals` içindeki iade
+//    geri-eklemesi (`.plus(returnedMeters...)`) kaldırıldı → ÜÇ kontrol KIRMIZI.
+//    Geri konunca 26/26 yeşil. Sınıf: liste NET gösterir, detay BRÜT — iki yüzey
+//    aynı sevkiyat için farklı rakam basar ve kimse hangisinin doğru olduğunu bilmez.
 // =============================================================================
 import { PrintedDocType } from "@prisma/client";
 import type { Request } from "express";

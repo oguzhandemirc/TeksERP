@@ -16,6 +16,10 @@
 //   §7 ⭐ Electron aynası: panelin gönderdiği HER filtre anahtarı controller'da
 //      okunuyor mu (okunmayan anahtar = filtre sessizce düşer, YANLIŞ liste)
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `PRESENT_ROLL_WHERE` boş nesneye çevrildi (HAYALET TOP
+//    yüklemi öldü) -> 2 kontrol KIRMIZI. Sınıf: liste "Top: 0" derken filtre o
+//    çuvalı "Dolu" sayar — iki yüzey farklı küme söyler.
+//    Geri alındığında yeşil.
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import prisma from "../src/lib/prisma";

@@ -7,6 +7,10 @@
 //   3. createShipment aynı token'la iki kez → TEK sevkiyat, aynı shipmentNo
 //   4. Token'sız çağrı eskisi gibi çalışır (geri uyum)
 // =============================================================================
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `readCreateShipmentReplay` ve `readOpenSackReplay` koşulsuz `null`
+//    döndürüldü (idempotency replay öldü) -> bekçi KIRMIZI. Sınıf: ağ-retry
+//    mükerrer sevkiyat / mükerrer boş çuval üretir.
+//    Geri alındığında yeşil.
 import { randomUUID } from "crypto";
 import prisma from "../src/lib/prisma";
 import { ShippingService } from "../src/services/shipping.service";

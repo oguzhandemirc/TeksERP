@@ -1,8 +1,8 @@
 # Bekçi haritası — alan → test dosyası
 
-> Üretilmiş (anlama turu 2026-09-05, +5 bekçi 2026-09-06; 460 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
+> Üretilmiş (anlama turu 2026-09-05, +7 bekçi 2026-09-06; 464 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (90), `sevkiyat` (85), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (55), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (20), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (90), `sevkiyat` (86), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (56), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (20), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -496,10 +496,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/test/smoke.test.ts` | Altyapı doğrulaması: jest-expo preset + ts transform koşuyor mu (tek assertion). |  |  |  |
 | `mobil/src/utils/queryBuilder.test.ts` | buildQueryString: varsayılanlar yazılmaz, varsayılan-dışı + arama yazılır, filtreler filter[key] ve diziler virgülle, boş filtre atlanır. |  |  |  |
 
-## sevkiyat (85)
+## sevkiyat (86)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_shipment_doc_freeze_timing.ts` | Sevk irsaliyesi sevk ANINDA donar (ilk baskıda değil): okuma yapılmadan v1/ACTIVE belge var; sevkten sonraki müşteri adı değişikliği donmuş belgeye SIZMAZ | ✓ | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_allocation_repair.ts` | Tahsis: EN toleransı (yalnız en gevşer, RENK ve KUMAŞ pazarlık dışı) · fazla sevk bayrağı (kapalı=aşılamaz, açık=yazılır) · defter onarımı (sipariş büyüyünce boşluk kapanır, onarım sonrası liste düşer) · üç ayarın da varsayılanı BUGÜNKÜ davranış | ✓ | ✓ | 2026-09-06 |
 | `Electron/src/lib/shipping-flags.test.ts` | Sevkiyat enum aynaları: orderRequirement (off/warn/block, varsayılan warn), invoiceMode (dis/ic/ikisi, varsayılan dis), docItemNameMode (bizdeki/muste |  |  | ⚠️ orta: backend kümeleriyle BİREBİRLİK mekanik ölçülmüyor (module-flags.test.ts'in aksine ka |
 | `Electron/src/pages/Operations/AccountingDispatch/ShipmentInvoiceDraft.test.tsx` | Satırlar BACKEND UCUNDAN gelir — diyalog eskiden sevk fişi raporundan kendi satırlarını kurup fiyatı hiç çözmüyordu (hepsi 0); taslak ucu çağrılmazsa  |  |  |  |
@@ -1040,10 +1041,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/store/deviceSettingsStore.test.ts` | Cihaz-içi kalıcı tercihler (metraj MANUEL/OTOMATİK vb.) diske yazılır ve sonraki init'te geri okunur; sahte disk ile kalıcılık ve bozuk kayıt dalları  |  |  |  |
 | `mobil/src/store/docPageSize.test.ts` | Kâğıt boyu hafızası BELGE TİPİ başına; bozuk disk kaydı baskı yolunu düşürmez (yalnız o giriş atılır); döngü ÜÇ durumlu ve 'kalıcı ayarı kullan'a geri |  |  | ⚠️ §3 döngü kuralı testin İÇİNDE yeniden yazılmış; gerçek cyclePageSize ekranda yaşıyor, ayrı |
 
-## cuval (55)
+## cuval (56)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_sack_touch_gate.ts` | Çuval/sevkiyat DOKUNMA kapıları: depodaki çuval geçer, sevkiyata atanmış çuval 409, olmayan çuval fail-closed; `touchShipmentPlannedTx` PLANNED dışında 409; çağrı yeri TABANI (kapı bir uçtan sökülemez) | ✓ | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_sack_bulk_distribute.ts` | TOPLU çuval dağıtma: önizleme YAZMAZ ve etkilenen HER topu satır olarak döndürür (soyut sayı yetmez); sevkiyata atanmış çuval toplu yoldan da dağıtılamaz (arka kapı yok); engelli çuval ATLANIR ve sebebi raporlanır; çuval SİLİNMEZ | ✓ | ✓ | 2026-09-06 |
 | `Electron/src/components/data-table/FilterBar.sentinel.test.tsx` | multi-lookup sentinelOption: sabit satır katalog üstünde çizilir, seçiliyken tetikte ETİKETİYLE görünür (ham 'none' değil), URL'e sentinel değeri yazı |  |  | ⚠️ yok |
 | `Electron/src/pages/Operations/SackContentEdit/SackEditorView.ship.test.tsx` | §1 editörde 'Sevk Et' var ve tıklanınca LİSTEDEKİ İLE AYNI `CreateShipmentDialog` tek elemanlı seçimle açılır (kısayol BYPASS değil: sipariş zorunlulu |  |  |  |

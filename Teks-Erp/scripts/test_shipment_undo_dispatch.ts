@@ -43,6 +43,10 @@
 // finally'de; tüm kayıtlar `TEST-` önekli.
 // =============================================================================
 
+// ⭐ NEGATİF SONDA (2026-09-06, ölçüldü): `resolveUndoBlockReason` koşulsuz `null` döndürüldü (storno kapısı
+//    tamamen açıldı) -> bekçi KIRMIZI. Sınıf: faturalanmış / iadeli / hiç
+//    çıkmamış sevkiyat da geri alınabilir hale gelir.
+//    Geri alındığında yeşil.
 import prisma, { pool } from "../src/lib/prisma";
 import { shippingService } from "../src/services/shipping.service";
 import { returnService } from "../src/services/return.service";
