@@ -138,6 +138,26 @@ async function run(): Promise<void> {
   check("⭐ minimal niyet snapshot'ında ad UYDURULMUYOR (null döner)",
     eC !== null && eC.itemName === null && eC.colorName === null, JSON.stringify(eC));
   check("minimal snapshot'ta da baskı tarihi var (etiket VAR ama adı bilinmiyor)", !!eC?.printedAt);
+
+  // ── §5 BELGE DÖKÜMÜ AYNI ÜÇ ADI TAŞIR ─────────────────────────────────────
+  // ⭐ Ekran ile BELGE ayrışmasın: döküm AYRI bir uçtan beslenir
+  //    (`getContentDump`) ve ekran düzeltilip belge unutulursa PDF/Excel yine
+  //    tek ad basar. Kullanıcı ikisini de istedi ("excel ve pdf").
+  console.log("\n§5 — PDF/Excel dökümü de üç adı taşır");
+  const dump = (await search.getContentDump([SACK])).data as {
+    rolls: { barcode: string | null; itemName: string; musterideki: { itemName: string | null }; etiket: { itemName: string | null } | null }[];
+  }[];
+  const dRolls = dump[0]?.rolls ?? [];
+  const dA = dRolls.find((r) => r.barcode === `${P}-R-A`);
+  const dB = dRolls.find((r) => r.barcode === `${P}-R-B`);
+  check("körlük zemini: döküm üç topu da getirdi", dRolls.length === 3, `${dRolls.length}`);
+  check("⭐ dökümde müşterideki ad var", dA?.musterideki.itemName === `${P} MUSTERI-URUN-A`,
+    `${dA?.musterideki.itemName}`);
+  check("⭐ dökümde karşılığı olmayan üründe null (bizimki basılmıyor)",
+    dB?.musterideki.itemName === null, `${dB?.musterideki.itemName}`);
+  check("⭐ dökümde etikette yazan ad var", dA?.etiket?.itemName === `${P} ETIKETTE-URUN`,
+    `${dA?.etiket?.itemName}`);
+  check("dökümde hiç basılmamış etiket null", dB?.etiket === null);
 }
 
 async function teardown(): Promise<void> {

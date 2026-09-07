@@ -1,15 +1,15 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, CheckCircle2, Loader2, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell, PageBody } from "@/components/layout/PageShell";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RefreshButton } from "@/components/RefreshButton";
 import { allocationRepairService, type RepairableShipment } from "./service";
 import { RepairPreviewDialog } from "./RepairPreviewDialog";
+import { RepairCompareSheets } from "./RepairCompareSheets";
+import { OzetSerit, SevkiyatTablosu } from "./RepairTable";
 
 /**
  * SİPARİŞE YAZILAMAYAN SEVKİYATLAR — defter onarımı.
@@ -27,10 +27,16 @@ import { RepairPreviewDialog } from "./RepairPreviewDialog";
  *
  * ⚠️ "Onarılabilir" sütunu BUGÜNÜN verisiyle hesaplanır: 0 ise mal gerçekten
  * yazılamıyor demektir (sipariş dolu ya da spec tutmuyor) — düğme kapalıdır.
+ *
+ * ⚠️ NUMARALAR TIKLANABİLİR (2026-09-07): buradaki satırlar zaten gözden
+ * kaçmış işlerdir; "bu sevkiyat neydi, o sipariş neydi" sorusu onarımdan ÖNCE
+ * sorulur. Sipariş soldan, sevkiyat sağdan açılır ve ikisi aynı anda durur.
  */
 export function AllocationRepairPage() {
   const qc = useQueryClient();
   const [onizleme, setOnizleme] = useState<RepairableShipment | null>(null);
+  const [siparisId, setSiparisId] = useState<string | null>(null);
+  const [sevkiyatId, setSevkiyatId] = useState<string | null>(null);
 
   const liste = useQuery({
     queryKey: ["allocation-repair"],
@@ -67,7 +73,9 @@ export function AllocationRepairPage() {
         description="Mal çıkmış ama sipariş defterine işlenmemiş sevkiyatlar — tek tek onarılır."
         actions={<RefreshButton queryKey="allocation-repair" />}
       />
-      <PageBody>
+      {/* p-6: PageBody varsayilan olarak dolgu TASIMAZ (bkz. PageShell basligi) —
+          verilmeyince ozet kutulari basligin dibine yapisiyordu. */}
+      <PageBody className="p-6">
         {liste.isLoading ? (
           <div className="space-y-2">
             <Skeleton className="h-16 w-full" />
@@ -84,6 +92,8 @@ export function AllocationRepairPage() {
             <SevkiyatTablosu
               satirlar={satirlar}
               onSec={setOnizleme}
+              onSiparis={setSiparisId}
+              onSevkiyat={setSevkiyatId}
               calisanId={mut.isPending ? (mut.variables as string | undefined) : undefined}
             />
           </div>
@@ -96,126 +106,13 @@ export function AllocationRepairPage() {
         onOpenChange={(o) => !o && setOnizleme(null)}
         onOnar={(id) => mut.mutate(id)}
       />
+
+      <RepairCompareSheets
+        orderId={siparisId}
+        shipmentId={sevkiyatId}
+        onOrderClose={() => setSiparisId(null)}
+        onShipmentClose={() => setSevkiyatId(null)}
+      />
     </PageShell>
-  );
-}
-
-/** Üstteki özet şeridi — "ne kadar mal defterde yok" tek bakışta. */
-function OzetSerit({
-  sevkiyat,
-  bosluk,
-  onarilabilirSevkiyat,
-  kazanc,
-}: {
-  sevkiyat: number;
-  bosluk: number;
-  onarilabilirSevkiyat: number;
-  kazanc: number;
-}) {
-  if (sevkiyat === 0) {
-    return (
-      <div className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-950/40">
-        <CheckCircle2 className="h-5 w-5" />
-        <span>Siparişe yazılamayan sevkiyat yok — defter temiz.</span>
-      </div>
-    );
-  }
-  return (
-    <div className="grid gap-3 sm:grid-cols-2">
-      <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-800 dark:bg-amber-950/40">
-        <div className="flex items-center gap-1.5 text-sm font-medium">
-          <AlertTriangle className="h-4 w-4" /> Deftere işlenmemiş
-        </div>
-        <div className="mt-1 text-2xl font-semibold">{Math.round(bosluk).toLocaleString("tr-TR")} m</div>
-        <div className="text-xs text-muted-foreground">{sevkiyat} sevkiyatta</div>
-      </div>
-      <div className="rounded-md border bg-muted/40 px-4 py-3">
-        <div className="flex items-center gap-1.5 text-sm font-medium">
-          <Wrench className="h-4 w-4" /> Bugün onarılabilir
-        </div>
-        <div className="mt-1 text-2xl font-semibold">{Math.round(kazanc).toLocaleString("tr-TR")} m</div>
-        <div className="text-xs text-muted-foreground">{onarilabilirSevkiyat} sevkiyatta</div>
-      </div>
-    </div>
-  );
-}
-
-/** Sevkiyat listesi — onarılabilir olanlar üstte. */
-function SevkiyatTablosu({
-  satirlar,
-  onSec,
-  calisanId,
-}: {
-  satirlar: RepairableShipment[];
-  onSec: (s: RepairableShipment) => void;
-  calisanId?: string;
-}) {
-  const sirali = [...satirlar].sort((a, b) => b.onarilabilirMetraj - a.onarilabilirMetraj);
-  if (sirali.length === 0) return null;
-  return (
-    <div className="overflow-x-auto rounded-md border">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/50 text-left">
-          <tr className="[&>th]:px-3 [&>th]:py-2 [&>th]:font-medium">
-            <th>Sevkiyat</th>
-            <th>Müşteri</th>
-            <th>Sipariş</th>
-            <th className="text-right">Çıkan</th>
-            <th className="text-right">Yazılan</th>
-            <th className="text-right">Eksik</th>
-            <th className="text-right">Onarılabilir</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {sirali.map((s) => {
-            const onarilir = s.onarilabilirMetraj > 0.001;
-            return (
-              <tr key={s.shipmentId} className="border-t [&>td]:px-3 [&>td]:py-2">
-                <td className="font-medium">
-                  {s.shipmentNo}
-                  <div className="text-xs text-muted-foreground">
-                    {s.dispatchedAt ? new Date(s.dispatchedAt).toLocaleDateString("tr-TR") : "—"}
-                  </div>
-                </td>
-                <td>{s.customer?.name ?? "—"}</td>
-                <td className="text-xs text-muted-foreground">{s.orderNumbers.join(", ") || "—"}</td>
-                <td className="text-right">{Math.round(s.icerikMetraj)}</td>
-                <td className="text-right">{Math.round(s.yazilanMetraj)}</td>
-                <td className="text-right font-semibold text-amber-700 dark:text-amber-400">
-                  {Math.round(s.bosluk)}
-                </td>
-                <td className="text-right font-semibold">
-                  {onarilir ? (
-                    <span className="text-emerald-700 dark:text-emerald-400">
-                      {Math.round(s.onarilabilirMetraj)}
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">0</span>
-                  )}
-                </td>
-                <td className="text-right">
-                  <Button
-                    size="sm"
-                    variant={onarilir ? "default" : "outline"}
-                    disabled={!onarilir || calisanId === s.shipmentId}
-                    onClick={() => onSec(s)}
-                    title={
-                      onarilir
-                        ? "Ne yazılacağını göster"
-                        : "Bugün de yazılamıyor — sipariş dolu ya da kumaş/renk/en tutmuyor"
-                    }
-                    className="gap-1.5"
-                  >
-                    {calisanId === s.shipmentId && <Loader2 className="h-4 w-4 animate-spin" />}
-                    İncele
-                  </Button>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
   );
 }

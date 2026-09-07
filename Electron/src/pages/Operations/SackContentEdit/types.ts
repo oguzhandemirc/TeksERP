@@ -209,6 +209,34 @@ export function isSackAbsent(status: string | undefined): boolean {
 }
 
 // ── Tek çuval dökümü (GET /sacks/:id/contents) — editör + arama detayı ───────
+/**
+ * MÜŞTERİDEKİ AD — müşteri kartındaki karşılık (alias kademesi).
+ * ⚠️ `null` = karşılık YOK. Bizim adımız buraya KOPYALANMAZ (2026-09-06
+ * kullanıcı düzeltmesi: çoğu müşteri bizim adımızı kullanır).
+ */
+export interface MusteriAdi {
+  itemName: string | null;
+  colorName: string | null;
+}
+
+/**
+ * ETİKETTE YAZAN — topun ÜSTÜNDEKİ kâğıdın baskı anındaki hâli
+ * (`Roll.lastLabelSnapshot`). Canlı veriden TÜRETİLMEZ; ölçmek istediğimiz şey
+ * kâğıt ile kaydın AYRIŞMASI.
+ *
+ * `null` = ortada hiç etiket yok. Adların `null` olması ise "etiket var ama
+ * içeriği bilinmiyor" demektir (minimal niyet snapshot'ı) — ikisi AYRI durum.
+ */
+export interface EtiketKaydi {
+  itemName: string | null;
+  colorName: string | null;
+  customerName: string | null;
+  orderNumber: string | null;
+  operatorName: string | null;
+  printedAt: string | null;
+  stok: boolean;
+}
+
 export interface SackContentRoll {
   id: string;
   barcode: string | null;
@@ -221,6 +249,9 @@ export interface SackContentRoll {
   labelDirty?: boolean;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
+  /** ⭐ Üç ad karşılaştırması — bkz. `MusteriAdi` / `EtiketKaydi`. */
+  musterideki?: MusteriAdi;
+  etiket?: EtiketKaydi | null;
 }
 
 export interface SackContentSwatch {
@@ -228,6 +259,7 @@ export interface SackContentSwatch {
   barcode: string | null;
   item: { id: string; name: string };
   color: { id: string; name: string; hex: string | null } | null;
+  musterideki?: MusteriAdi;
 }
 
 /**
@@ -278,6 +310,9 @@ export interface SackContentDumpRoll {
   width: number | null;
   qty: number;
   qualityGrade: string | null;
+  musterideki?: MusteriAdi;
+  etiket?: EtiketKaydi | null;
+  labelDirty?: boolean;
 }
 
 export interface SackContentDumpSwatch {
@@ -285,6 +320,7 @@ export interface SackContentDumpSwatch {
   barcode: string | null;
   itemName: string;
   colorName: string | null;
+  musterideki?: MusteriAdi;
 }
 
 export interface SackContentDumpSack {

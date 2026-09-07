@@ -465,6 +465,78 @@ async function musteriAdiCozucu(
   });
 }
 
+/** `getContentDump` sorgusunun döndürdüğü ham çuval — döküm satırının girdisi. */
+interface DokumKaynagi {
+  id: string;
+  sackNo: string;
+  seq: number | null;
+  weightKg: Prisma.Decimal | null;
+  notes: string | null;
+  customer: { id: string; name: string } | null;
+  branch: { id: string; code: string | null; name: string } | null;
+  shipment: { id: string; shipmentNo: string; status: ShipmentStatus } | null;
+  rolls: {
+    id: string;
+    barcode: string | null;
+    currentQty: Prisma.Decimal;
+    width: Prisma.Decimal | null;
+    qualityGrade: string | null;
+    labelDirty: boolean;
+    lastLabelSnapshot: Prisma.JsonValue;
+    labelPrintedAt: Date | null;
+    item: { id: string; name: string };
+    color: { id: string; name: string } | null;
+  }[];
+  swatches: {
+    id: string;
+    barcode: string | null;
+    item: { id: string; name: string };
+    color: { id: string; name: string } | null;
+  }[];
+}
+
+/**
+ * Döküm satırı — tek çuvalın belge/Excel şekli. Metottan ayrı: boyut tavanı
+ * YENİ kodda zorunlu ve üç ad eklenince `getContentDump` sınırı aştı.
+ */
+function dokumSatiri(
+  s: DokumKaynagi,
+  musterideki: (i: string, c: string | null) => { itemName: string | null; colorName: string | null },
+) {
+  const rolls = s.rolls.map((r) => ({
+    id: r.id,
+    barcode: r.barcode,
+    itemName: r.item.name,
+    colorName: r.color?.name ?? null,
+    width: r.width === null ? null : Number(r.width),
+    qty: Number(r.currentQty),
+    qualityGrade: r.qualityGrade,
+    musterideki: musterideki(r.item.id, r.color?.id ?? null),
+    etiket: etiketiOku(r.lastLabelSnapshot, r.labelPrintedAt),
+    labelDirty: r.labelDirty,
+  }));
+  return {
+    id: s.id,
+    sackNo: s.sackNo,
+    seq: s.seq,
+    weightKg: s.weightKg === null ? null : Number(s.weightKg),
+    notes: s.notes,
+    customer: s.customer,
+    branch: s.branch,
+    shipment: s.shipment,
+    rollCount: rolls.length,
+    totalQty: rolls.reduce((a, r) => a + r.qty, 0),
+    rolls,
+    swatches: s.swatches.map((w) => ({
+      id: w.id,
+      barcode: w.barcode,
+      itemName: w.item.name,
+      colorName: w.color?.name ?? null,
+      musterideki: musterideki(w.item.id, w.color?.id ?? null),
+    })),
+  };
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -997,8 +1069,14 @@ export class SackSearchService {
             currentQty: true,
             width: true,
             qualityGrade: true,
-            item: { select: { name: true } },
-            color: { select: { name: true } },
+            // ⭐ Belgeye de ÜÇ AD (2026-09-07): dökümü çıktı alan kişi bizim
+            //    adımızı, müşterinin adını ve ETİKETTE YAZANI yan yana görmeli —
+            //    ekranla aynı gerekçe (`getSackContents` başlığı).
+            labelDirty: true,
+            lastLabelSnapshot: true,
+            labelPrintedAt: true,
+            item: { select: { id: true, name: true } },
+            color: { select: { id: true, name: true } },
           },
         },
         swatches: {
@@ -1006,43 +1084,21 @@ export class SackSearchService {
           select: {
             id: true,
             barcode: true,
-            item: { select: { name: true } },
-            color: { select: { name: true } },
+            item: { select: { id: true, name: true } },
+            color: { select: { id: true, name: true } },
           },
         },
       },
     });
 
-    const data = sacks.map((s) => {
-      const rolls = s.rolls.map((r) => ({
-        id: r.id,
-        barcode: r.barcode,
-        itemName: r.item.name,
-        colorName: r.color?.name ?? null,
-        width: r.width === null ? null : Number(r.width),
-        qty: Number(r.currentQty),
-        qualityGrade: r.qualityGrade,
-      }));
-      return {
-        id: s.id,
-        sackNo: s.sackNo,
-        seq: s.seq,
-        weightKg: s.weightKg === null ? null : Number(s.weightKg),
-        notes: s.notes,
-        customer: s.customer,
-        branch: s.branch,
-        shipment: s.shipment,
-        rollCount: rolls.length,
-        totalQty: rolls.reduce((a, r) => a + r.qty, 0),
-        rolls,
-        swatches: s.swatches.map((w) => ({
-          id: w.id,
-          barcode: w.barcode,
-          itemName: w.item.name,
-          colorName: w.color?.name ?? null,
-        })),
-      };
-    });
+    // Alias çözücü çuval BAŞINA kurulur: seçilen çuvallar farklı müşterilere ait
+    // olabilir ve tek bir müşteriyle çözmek yanlış adı basardı.
+    const cozucu = new Map<string, (i: string, c: string | null) => { itemName: string | null; colorName: string | null }>();
+    for (const s2 of sacks) {
+      cozucu.set(s2.id, await musteriAdiCozucu(s2.customer?.id ?? null, [...s2.rolls, ...s2.swatches]));
+    }
+
+    const data = sacks.map((s) => dokumSatiri(s, cozucu.get(s.id)!));
 
     return { success: true, data };
   }

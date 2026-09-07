@@ -51,10 +51,19 @@ const sheetVariants = cva(
 
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
-    VariantProps<typeof sheetVariants> {}
+    VariantProps<typeof sheetVariants> {
+  /**
+   * Karartmayı çizme — İKİ sheet'i AYNI ANDA yan yana göstermek için (soldan
+   * biri, sağdan biri). İki karartma üst üste binince aradaki ekran simsiyah
+   * olur ve karşılaştırma imkânsızlaşır. Kapatma yolu kaybolmaz: X düğmesi ve
+   * Esc yığını yerinde kalır; yalnız "dışarı tıkla" kapanışı düşer (sekme
+   * içinde zaten yalnız KENDİ karartmasına tıklayınca kapanıyordu).
+   */
+  hideOverlay?: boolean;
+}
 
 const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Content>, SheetContentProps>(
-  ({ side = "right", className, children, onInteractOutside, onEscapeKeyDown, ...props }, ref) => {
+  ({ side = "right", className, children, hideOverlay, onInteractOutside, onEscapeKeyDown, ...props }, ref) => {
     const tabContainer = useTabPortalContainer();
     const isTabActive = useIsTabActive();
     const scoped = tabContainer != null;
@@ -69,7 +78,7 @@ const SheetContent = React.forwardRef<React.ElementRef<typeof SheetPrimitive.Con
     const registerEsc = scoped && requestClose != null;
     return (
       <SheetPortal container={scoped ? tabContainer : undefined}>
-        {scoped ? (
+        {hideOverlay ? null : scoped ? (
           <div
             ref={ownOverlayRef}
             data-ui-overlay=""

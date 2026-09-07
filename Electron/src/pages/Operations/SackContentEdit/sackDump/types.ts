@@ -20,6 +20,18 @@ export interface SackDumpRoll {
   width: number | null;
   qty: number;
   qualityGrade: string | null;
+  /**
+   * ⭐ Müşterideki karşılık — YOKSA null; bizim adımız buraya kopyalanmaz.
+   * ⚠️ OPSİYONEL bilerek: panel, bu alanları henüz döndürmeyen bir backend'e
+   * karşı da çalışabilmeli (sürüm sırası backend ÖNCE ama saha her zaman öyle
+   * kalmaz). Alan yoksa kolon boş basılır, ekran çökmez.
+   */
+  musteriItemName?: string | null;
+  musteriColorName?: string | null;
+  /** ⭐ Topun ÜSTÜNDEKİ kâğıtta yazan (baskı anında donmuş) + bayat mı. */
+  etiketAd?: string | null;
+  etiketBasildi?: boolean;
+  etiketBayat?: boolean;
 }
 
 /** Döküm bölümü — tek çuval (başlık + toplar + kartelalar). */
@@ -35,7 +47,13 @@ export interface SackDump {
   /** Sevkiyata atanmışsa sevk no (çıktıda "Sevkiyat: X") — depodaysa null. */
   shipmentNo: string | null;
   rolls: SackDumpRoll[];
-  swatches: { barcode: string | null; itemName: string; colorName: string | null }[];
+  swatches: {
+    barcode: string | null;
+    itemName: string;
+    colorName: string | null;
+    musteriItemName?: string | null;
+    musteriColorName?: string | null;
+  }[];
 }
 
 /** Döküm çıktı seçenekleri. */
@@ -77,11 +95,20 @@ export function fromDumpRows(rows: SackContentDumpSack[]): SackDump[] {
       width: r.width,
       qty: r.qty,
       qualityGrade: r.qualityGrade || null,
+      musteriItemName: r.musterideki?.itemName ?? null,
+      musteriColorName: r.musterideki?.colorName ?? null,
+      // Etiketteki iki ad TEK hücrede birleşir: belge kolonu dar ve asıl
+      // sorulan "kâğıt ile kayıt tutuyor mu", ürün/renk ayrımı değil.
+      etiketAd: r.etiket ? [r.etiket.itemName, r.etiket.colorName].filter(Boolean).join(" · ") || null : null,
+      etiketBasildi: !!r.etiket,
+      etiketBayat: !!r.labelDirty,
     })),
     swatches: s.swatches.map((w) => ({
       barcode: w.barcode,
       itemName: w.itemName,
       colorName: w.colorName,
+      musteriItemName: w.musterideki?.itemName ?? null,
+      musteriColorName: w.musterideki?.colorName ?? null,
     })),
   }));
 }

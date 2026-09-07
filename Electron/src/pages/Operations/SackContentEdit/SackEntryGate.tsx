@@ -277,6 +277,25 @@ export function shouldShowEntryGate(state: unknown, searchParams: URLSearchParam
   const st = state as Record<string, unknown> | null;
   if (st && SCAN_SEED_KEYS.some((k) => typeof st[k] === "string")) return false;
   if (searchParams.get("search")) return false;
-  for (const k of searchParams.keys()) if (k.startsWith("filter[")) return false;
+
+  // ⚠️ KAPININ KENDİ YAZDIĞI FİLTRE KAPIYI KAPATMAZ (2026-09-07 saha hatası).
+  //
+  // Kullanıcı kapıdan bir cari seçiyor → adrese `filter[customerId]` yazılıyor →
+  // sekme o adresi hatırlıyor → menüden tekrar girildiğinde kapı "hedefle
+  // açıldı" sanıp kendini gizliyor ve SON SEÇİLEN carinin çuvallarını
+  // getiriyordu. Operatör başka bir cariye geçmek istediğinde yolu yoktu.
+  //
+  // Ayrım şu: kapıyı SUSTURAN şey "ekran bir hedefle açıldı" olmalı — okutma
+  // tohumu, kayıtlı görünüm, genel aramadan yönlendirme. Kapının KENDİ
+  // yazdığı `customerId` bunlardan biri DEĞİL; onu hedef saymak kapıyı tek
+  // kullanımlık yapıyordu.
+  for (const k of searchParams.keys()) {
+    if (!k.startsWith("filter[")) continue;
+    if (k === KAPI_FILTRESI) continue;
+    return false;
+  }
   return true;
 }
+
+/** Kapının kendi yazdığı filtre — bunu "hedefle açıldı" saymayız (yukarı bak). */
+const KAPI_FILTRESI = "filter[customerId]";

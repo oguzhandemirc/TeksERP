@@ -23,6 +23,7 @@ import { useFeatureFlags, useShippingInvoiceMode } from "@/hooks/usePricingEnabl
 import { ShipmentInvoiceDraft } from "./ShipmentInvoiceDraft";
 import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
 import type { DispatchCursorResponse, DispatchListItem } from "./types";
+import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
 
 const QUERY_KEY = "accounting-dispatch";
 
@@ -42,6 +43,8 @@ const FORCE = { status: "DISPATCHED" } as const;
  */
 export function AccountingDispatchPage() {
   const [receiptFor, setReceiptFor] = useState<DispatchListItem | null>(null);
+  /** Belgenin RESMİ hâli (sürüm çubuğu + geçmiş) — "Fiş"ten ayrı yüzey. */
+  const [belgeFor, setBelgeFor] = useState<DispatchListItem | null>(null);
   const [invoiceFor, setInvoiceFor] = useState<DispatchListItem | null>(null);
   // İÇ fatura taslağı — yalnız TİCARET REJİMİNDE. Fabrikada ön muhasebe modülü
   // kapalı olduğu için düğme hiç çizilmez (fabrika sıfır-fark).
@@ -56,6 +59,7 @@ export function AccountingDispatchPage() {
     () =>
       buildDispatchColumns(
         setReceiptFor,
+        setBelgeFor,
         setInvoiceFor,
         setDraftFor,
         financeEnabled,
@@ -184,6 +188,18 @@ export function AccountingDispatchPage() {
       />
 
       <DispatchReceiptDialog receiptFor={receiptFor} onClose={() => setReceiptFor(null)} />
+
+      {/* Resmi belge yüzeyi — sevkiyat ekranıyla AYNI bileşen (`PrintedDocDialog`):
+          sürüm çubuğu, geçmiş, "güncel görünüm" ve revize hepsi orada yaşıyor.
+          Buraya ikinci bir kopya yazmak iki yüzeyin ayrışması demekti. */}
+      <PrintedDocDialog
+        docType={belgeFor?.kind === "DIRECT" ? "SUBCONTRACTOR_DIRECT_SHIP" : "SHIPMENT_DISPATCH"}
+        sourceId={belgeFor?.id ?? null}
+        open={!!belgeFor}
+        onOpenChange={(o) => !o && setBelgeFor(null)}
+        title={`Sevk İrsaliyesi${belgeFor ? ` — ${belgeFor.shipmentNo}` : ""}`}
+        writePermission="shipping:write"
+      />
       <InvoiceDialog row={invoiceFor} onClose={() => setInvoiceFor(null)} queryKey={QUERY_KEY} />
       <ShipmentInvoiceDraft
         row={draftFor}

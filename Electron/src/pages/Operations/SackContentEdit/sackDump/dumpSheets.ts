@@ -92,7 +92,14 @@ function sackSheet(d: SackDump, name: string): SheetSpec {
     columns: [
       { header: "Barkod", key: "barcode", width: 20 },
       { header: "Kumaş", key: "item", width: 26 },
+      // ⭐ ÜÇ AD (2026-09-07): dökümü çıktı alan kişi bizim adımızı, müşterinin
+      //    adını ve ETİKETTE YAZANI yan yana görsün. Müşteri karşılığı yoksa
+      //    hücre BOŞ kalır — bizim adımızı oraya kopyalamak "müşteri bunu böyle
+      //    çağırıyor" yalanını üretirdi.
+      { header: "Müşteri kumaş", key: "musteriItem", width: 26 },
       { header: "Renk", key: "color", width: 18 },
+      { header: "Müşteri renk", key: "musteriColor", width: 18 },
+      { header: "Etikette", key: "etiket", width: 26 },
       { header: "En (cm)", key: "width", width: 10, numFmt: QTY_FMT },
       { header: "Metre", key: "qty", width: 12, numFmt: QTY_FMT },
       { header: "Kalite", key: "quality", width: 12 },
@@ -100,7 +107,13 @@ function sackSheet(d: SackDump, name: string): SheetSpec {
     rows: d.rolls.map((r) => ({
       barcode: r.barcode ?? "Açık Kumaş",
       item: r.itemName,
+      musteriItem: r.musteriItemName ?? "",
       color: r.colorName ?? "Ham",
+      musteriColor: r.musteriColorName ?? "",
+      // "basılmamış" ile "basıldı ama adı kayıtlı değil" AYRI durumlardır.
+      etiket: !r.etiketBasildi
+        ? "basılmamış"
+        : `${r.etiketBayat ? "BAYAT — " : ""}${r.etiketAd ?? "(ad kayıtlı değil)"}`,
       width: r.width ?? "",
       qty: r.qty,
       quality: r.qualityGrade ?? "",

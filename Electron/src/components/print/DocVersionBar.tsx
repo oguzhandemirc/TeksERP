@@ -82,11 +82,23 @@ export function DocVersionBar({
   const meta = STATUS_META[current.status];
   // Bazı belgelerde (sevk irsaliyesi) revize yalnız geriye-dönük kayıtta anlamlı;
   // güncel dondurulmuş kayıtta aynı içeriği tekrar dondurur → tuşu gizle.
+  //
+  // ⭐ İSTİSNA — ŞABLON DEĞİŞTİYSE REVİZE ANLAMLIDIR (2026-09-07 saha turu).
+  // Kullanıcının sözü: *"güncel görünüme aldıktan sonra artık geçerli görünümün
+  // o olması gerekir."* Haklı: "Güncel görünüm" bugüne kadar yalnız bir
+  // ÖNİZLEMEYDİ — belgeyi güncel şablonla çizip gösteriyor ama hiçbir şeyi
+  // kalıcı yapmıyordu. Kalıcı yapan tuş (`Revize Et`) ise tam da bu belge
+  // türünde gizliydi.
+  //
+  // Gizleme gerekçesi "aynı içerik yeniden donar → boşa v2" idi ve İÇERİK
+  // değişmediği sürece doğru. Ama `templateStale` demek çıktının GERÇEKTEN
+  // farklı olması demek; orada revize boşa v2 değil, istenen şeyin ta kendisi.
+  // Yani kural tam da gerektiği yerde tuşu gizliyordu.
   const showReissue =
     canReissue &&
     current.status !== "VOIDED" &&
     !viewingOld &&
-    (!reissueOnlyWhenReconstructed || current.reconstructed);
+    (!reissueOnlyWhenReconstructed || current.reconstructed || !!templateStale);
 
   return (
     <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2 rounded-md border bg-background px-2 py-1.5">
@@ -164,12 +176,17 @@ export function DocVersionBar({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant={templateStale ? "default" : "outline"}
             className="h-7 gap-1"
             onClick={() => setReissueOpen(true)}
-            title="Belge içeriğini güncel veriyle yeni versiyon olarak dondur"
+            title={
+              templateStale
+                ? "Bu görünümü KALICI yap — belge güncel şablonla yeni versiyon olarak donar"
+                : "Belge içeriğini güncel veriyle yeni versiyon olarak dondur"
+            }
           >
-            <RefreshCw className="h-3.5 w-3.5" /> Revize Et
+            <RefreshCw className="h-3.5 w-3.5" />
+            {templateStale ? "Bu görünümü kalıcı yap" : "Revize Et"}
           </Button>
         )}
       </div>

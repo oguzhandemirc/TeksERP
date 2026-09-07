@@ -1,6 +1,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
-import { FilePlus2, FileText, Receipt } from "lucide-react";
+import { FilePlus2, FileStack, FileText, Receipt } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ReturnsBadge } from "@/components/operations/ReturnsBadge";
 import { PermissionGate } from "@/components/PermissionGate";
@@ -18,6 +18,15 @@ import type { DispatchListItem } from "./types";
 
 export function buildDispatchColumns(
   onReceipt: (row: DispatchListItem) => void,
+  /**
+   * Belgenin RESMİ hâlini açar (sürüm çubuğu + geçmiş + güncel görünüm).
+   *
+   * ⚠️ "Fiş" ile AYNI ŞEY DEĞİL: fiş bu ekranın çalışma yüzeyidir (yazdır /
+   * toplu etiket / Excel), belge ise DONMUŞ KAYDIN kendisidir — kaçıncı
+   * revizyon, ne zaman dondu, eski sürümler. Sevkiyat ekranında bu yüzey vardı,
+   * muhasebede yoktu (2026-09-07 saha turu).
+   */
+  onBelge: (row: DispatchListItem) => void,
   onInvoice: (row: DispatchListItem) => void,
   /** İÇ fatura taslağı açar. Görünürlük `canDraftInvoice` ile çözülür. */
   onDraftInvoice: (row: DispatchListItem) => void,
@@ -213,19 +222,33 @@ export function buildDispatchColumns(
     {
       id: "receipt",
       header: "",
-      size: 110,
+      size: 190,
       cell: ({ row }) => (
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          onClick={(e) => {
-            e.stopPropagation();
-            onReceipt(row.original);
-          }}
-        >
-          <FileText className="h-3.5 w-3.5" /> Fiş
-        </Button>
+        <div className="flex items-center gap-1.5">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReceipt(row.original);
+            }}
+          >
+            <FileText className="h-3.5 w-3.5" /> Fiş
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5"
+            title="Belgenin resmi hâli — kaçıncı revizyon, ne zaman donduruldu, eski sürümler"
+            onClick={(e) => {
+              e.stopPropagation();
+              onBelge(row.original);
+            }}
+          >
+            <FileStack className="h-3.5 w-3.5" /> Belge
+          </Button>
+        </div>
       ),
     },
   ];

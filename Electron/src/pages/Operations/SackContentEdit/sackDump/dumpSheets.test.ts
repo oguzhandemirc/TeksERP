@@ -189,9 +189,16 @@ describe("fromDumpRows", () => {
       notes: "not",
       shipmentNo: "SVK-1",
       rolls: [
-        { barcode: "B1", itemName: "PATOS", colorName: "Mavi", width: 280, qty: 700, qualityGrade: "1.KALITE" },
+        // ⭐ Üç-ad alanları: backend göndermezse `null`/`false` olur — eski
+        //    backend'e karşı çalışan panel çökmez, kolonlar boş basılır.
+        {
+          barcode: "B1", itemName: "PATOS", colorName: "Mavi", width: 280, qty: 700,
+          qualityGrade: "1.KALITE",
+          musteriItemName: null, musteriColorName: null,
+          etiketAd: null, etiketBasildi: false, etiketBayat: false,
+        },
       ],
-      swatches: [{ barcode: "SW1", itemName: "PATOS", colorName: null }],
+      swatches: [{ barcode: "SW1", itemName: "PATOS", colorName: null, musteriItemName: null, musteriColorName: null }],
     });
   });
 });

@@ -61,7 +61,23 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
     gcTime: 0, // her açılışta taze — bayat dökümle geri alma onaylanmasın
   });
   const p = previewQ.data?.data;
-  const release = releaseChoice ?? (p ? !p.confirmationEnabled : false);
+  // ⭐ SEVK ONAYI KAPALIYSA SEÇENEK YOKTUR (2026-09-07 saha turu).
+  //
+  // Kullanıcının sözü: *"planlı sevkiyat diye bir şey yok ama şu an planlı
+  // sevkiyat durumuna düşüyor, onu da iptal edince çuvallar ekranına geliyor."*
+  //
+  // `shipping.confirmationEnabled` KAPALI olan bir kurulumda PLANNED bir ARA
+  // DURAK değildir: sevkiyat kurulur kurulmaz sevk edilir, "Sevk Kapısı" diye
+  // bir adım yoktur. Geri almada onay kutusunun işaretini kaldırmak, o
+  // kurulumda karşılığı olmayan bir duruma düşürüyor ve operatör bunu ikinci
+  // bir iptalle temizlemek zorunda kalıyordu — iki adımda yapılan şey aslında
+  // tek adımdı.
+  //
+  // Bu yüzden kutu YALNIZ onay AÇIKKEN çizilir; kapalıyken geri alma daima
+  // serbest bırakır ve diyalog bunu cümleyle söyler. Varsayılan zaten buydu;
+  // değişen şey, yanlış seçimin artık MÜMKÜN OLMAMASI.
+  const secimVar = !!p?.confirmationEnabled;
+  const release = secimVar ? (releaseChoice ?? false) : true;
 
   const undoMut = useMutation({
     mutationFn: () => shipmentService.undoDispatch(shipmentId!, reason.trim(), release),
@@ -164,31 +180,44 @@ export function UndoDispatchDialog({ shipmentId, onOpenChange }: Props) {
               </div>
             )}
 
-            {/* Sonrası ne olacak — kullanıcı onaydan ÖNCE seçer. Varsayılan rejime
-                bağlı (bkz. bileşen notu); metin seçime göre değişir ki "planlı
-                durumda bekliyor, nereden devam edeceğim" sorusu doğmasın. */}
-            <label
-              htmlFor="undo-release-sacks"
-              className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2"
-            >
-              <Checkbox
-                id="undo-release-sacks"
-                className="mt-0.5"
-                checked={release}
-                onCheckedChange={(c) => setReleaseChoice(Boolean(c))}
-              />
-              <span className="text-xs">
-                <span className="font-medium text-foreground">Sevkiyatı da kapat — çuvallar depoya dönsün</span>
+            {/* Sonrası ne olacak. Onay AÇIKSA kullanıcı seçer; KAPALIYSA seçenek
+                yoktur ve tek cümleyle söylenir (bkz. `secimVar` notu). */}
+            {secimVar ? (
+              <label
+                htmlFor="undo-release-sacks"
+                className="flex cursor-pointer items-start gap-2 rounded-md border px-3 py-2"
+              >
+                <Checkbox
+                  id="undo-release-sacks"
+                  className="mt-0.5"
+                  checked={release}
+                  onCheckedChange={(c) => setReleaseChoice(Boolean(c))}
+                />
+                <span className="text-xs">
+                  <span className="font-medium text-foreground">
+                    Sevkiyatı da kapat — çuvallar depoya dönsün
+                  </span>
+                  <br />
+                  <span className="text-muted-foreground">
+                    {release
+                      ? "Sevkiyat iptal olur; çuvallar ve toplar depoda serbest kalır, sipariş bağı kalkar. Yeniden göndermek için Paketleme'den yeni sevkiyat kurulur (yeni sevk no)."
+                      : "Sevkiyat planlı durumda bekler (çuvallar üstünde kilitli kalır); Sevk Kapısı'ndan ya da Sevkiyatlar'dan \"Sevk Et\" ile aynı numarayla yeniden çıkarılır."}
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <div className="rounded-md border px-3 py-2 text-xs">
+                <span className="font-medium text-foreground">
+                  Sevkiyat kapanır — çuvallar çuval hazırlamaya döner
+                </span>
                 <br />
                 <span className="text-muted-foreground">
-                  {release
-                    ? "Sevkiyat iptal olur; çuvallar ve toplar depoda serbest kalır, sipariş bağı kalkar. Yeniden göndermek için Paketleme'den yeni sevkiyat kurulur (yeni sevk no)."
-                    : p.confirmationEnabled
-                      ? "Sevkiyat planlı durumda bekler (çuvallar üstünde kilitli kalır); Sevk Kapısı'ndan ya da Sevkiyatlar'dan \"Sevk Et\" ile aynı numarayla yeniden çıkarılır."
-                      : "Sevkiyat planlı durumda bekler (çuvallar üstünde kilitli kalır); Sevkiyatlar'dan \"Sevk Et\" ile aynı numarayla yeniden çıkarılır."}
+                  Bu kurulumda sevk onayı kapalı, yani “planlı sevkiyat” diye bir ara durak yok.
+                  Çuvallar ve toplar depoda serbest kalır, sipariş bağı kalkar. Yeniden göndermek
+                  için Paketleme’den yeni sevkiyat kurulur (yeni sevk no).
                 </span>
-              </span>
-            </label>
+              </div>
+            )}
 
             <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
               Sevk irsaliyesi <strong>İPTAL</strong> edilecek (silinmez — İPTAL filigranıyla basılabilir

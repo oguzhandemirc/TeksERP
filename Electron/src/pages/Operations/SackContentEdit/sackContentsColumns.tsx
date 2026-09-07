@@ -8,6 +8,71 @@ const fmtM = (n: number) => `${n.toLocaleString("tr-TR", { useGrouping: false, m
  * Çuval içeriği (TOP) sütunları — seçilebilir DataTable. Kartelalar ayrı listede.
  * Seçim kolonu (checkbox) DataTable tarafından otomatik eklenir; burada yok.
  */
+/**
+ * İki ad üst üste: üstte BİZDEKİ, altında müşterideki karşılık.
+ * ⚠️ Karşılık yoksa alt satır HİÇ ÇİZİLMEZ — bizim adımızı oraya koymak
+ * "müşteri bunu böyle çağırıyor" yalanını üretirdi (2026-09-06 düzeltmesi).
+ */
+function IkiAd({ bizdeki, musterideki }: { bizdeki: string; musterideki: string | null }) {
+  return (
+    <div className="min-w-0 leading-tight">
+      <div className="truncate text-sm">{bizdeki}</div>
+      {musterideki && (
+        <div className="truncate text-[11px] text-muted-foreground" title={`Müşterideki ad: ${musterideki}`}>
+          ↳ {musterideki}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Dışa aktarımda tek hücreye sığan etiket özeti. */
+function etiketOzet(r: SackContentRoll): string {
+  const e = r.etiket;
+  if (!e) return "basılmamış";
+  const ad = [e.itemName, e.colorName].filter(Boolean).join(" · ");
+  if (r.labelDirty) return `BAYAT${ad ? ` — ${ad}` : ""}`;
+  return ad || "basıldı (ad yok)";
+}
+
+/**
+ * Etiket hücresi — üç hâl:
+ *   · hiç basılmamış → "—" (sahada o topun üstünde kâğıt yok)
+ *   · bayat          → uyarı + kâğıtta yazan ad (kayıtla ayrışmış)
+ *   · güncel         → ✓ (ayrıntı başlıkta; tabloyu şişirmez)
+ */
+function EtiketHucresi({ r }: { r: SackContentRoll }) {
+  const e = r.etiket;
+  if (!e) return <span className="text-xs text-muted-foreground">— basılmamış</span>;
+
+  const ad = [e.itemName, e.colorName].filter(Boolean).join(" · ");
+  const baslik = [
+    e.printedAt ? `Basıldı: ${new Date(e.printedAt).toLocaleString("tr-TR")}` : null,
+    e.customerName ? `Etiketteki müşteri: ${e.customerName}` : null,
+    e.orderNumber ? `Sipariş: ${e.orderNumber}` : null,
+    e.operatorName ? `Basan: ${e.operatorName}` : null,
+    ad ? `Etikette: ${ad}` : "Etiket adı kayıtlı değil",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  if (r.labelDirty) {
+    return (
+      <div className="min-w-0 leading-tight" title={baslik}>
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 dark:text-amber-500">
+          <AlertTriangle className="h-3 w-3" /> bayat
+        </span>
+        {ad && <div className="truncate text-[11px] text-muted-foreground">{ad}</div>}
+      </div>
+    );
+  }
+  return (
+    <span className="text-xs text-muted-foreground" title={baslik}>
+      ✓{ad ? "" : " (ad yok)"}
+    </span>
+  );
+}
+
 export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
   {
     accessorKey: "barcode",
@@ -48,7 +113,14 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
     id: "item",
     header: "Kumaş",
     meta: { label: "Kumaş", exportValue: (r) => r.item.name },
-    cell: ({ row }) => <span className="text-sm">{row.original.item.name}</span>,
+    // ⭐ ÜÇ AD KARŞILAŞTIRMASI (2026-09-07): üstte BİZDEKİ ad, altında küçük gri
+    //    satırda MÜŞTERİDEKİ karşılık. Karşılık yoksa alt satır HİÇ ÇİZİLMEZ —
+    //    bizim adımızı oraya kopyalamak "müşteri bunu böyle çağırıyor" yalanını
+    //    üretirdi. Üçüncü ad (etikette yazan) AYRI kolonda, çünkü asıl sorulan
+    //    soru "kâğıt ile kayıt tutuyor mu".
+    cell: ({ row }) => (
+      <IkiAd bizdeki={row.original.item.name} musterideki={row.original.musterideki?.itemName ?? null} />
+    ),
   },
   {
     id: "color",
@@ -57,12 +129,26 @@ export const sackContentsColumns: ColumnDef<SackContentRoll>[] = [
     cell: ({ row }) => {
       const c = row.original.color;
       return (
-        <span className="inline-flex items-center gap-1.5 text-sm">
-          {c?.hex && <span className="h-2.5 w-2.5 rounded-full border" style={{ backgroundColor: c.hex }} />}
-          {c?.name ?? "Ham"}
-        </span>
+        <div className="flex items-start gap-1.5">
+          {c?.hex && (
+            <span className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full border" style={{ backgroundColor: c.hex }} />
+          )}
+          <IkiAd bizdeki={c?.name ?? "Ham"} musterideki={row.original.musterideki?.colorName ?? null} />
+        </div>
       );
     },
+  },
+  {
+    id: "etiket",
+    header: "Etiket",
+    meta: {
+      label: "Etiket",
+      exportValue: (r) => etiketOzet(r),
+    },
+    // ⭐ TOPUN ÜSTÜNDEKİ KÂĞIT. Üçü aynıysa göze batmaz (yalnız ✓); ayrıştığında
+    //    kendini gösterir. "Etiket hiç basılmamış" ile "bayat etiket" AYRI
+    //    durumlardır ve sahada farklı sorunlardır — ayrı gösterilir.
+    cell: ({ row }) => <EtiketHucresi r={row.original} />,
   },
   {
     id: "width",

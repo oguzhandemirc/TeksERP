@@ -76,6 +76,9 @@
 
 - **[ÇEKİRDEK]** Sevk Kapısı karosu `visibleWhen` SAF bayrak (`ctx.shipmentConfirmationEnabled`); 'VEYA çıkış bekleyen PLANNED' dalı ve `board?limit=1` sondası KALKTI, `OperationsVisibilityContext` tek alan — sayaç geri EKLENMEZ. Route `/operations/sack-store` bayrağa bakmaz: derin bağlantı açılır. · bekçi: `Electron/src/pages/Operations/tile-visibility.test.ts (ctx anahtar listesi kilit` <sub>(CLAUDE.md:79)</sub>
 
+- **[ÇEKİRDEK]** Çuvalın içi ÜÇ ADI yan yana gösterir (bizdeki · müşterideki · TOPUN ETİKETİNDE yazan); müşteri karşılığı yoksa sütun BOŞ kalır (bizim adımız müşterinin adıymış gibi basılmaz) ve etiket adı `lastLabelSnapshot`tan gelir, canlı kayıttan TÜRETİLMEZ. Ekran ve PDF/Excel dökümü AYRI uçlardan beslenir, ikisi birlikte değişir. · bekçi: `scripts/test_sack_contents_uc_ad.ts` <sub>(arşiv:2026-09-07 saha turu)</sub>
+- **[ÇEKİRDEK]** 'Siparişe yazılamayanlar' ekranında numaralar TIKLANABİLİR ve sipariş SOLDAN, sevkiyat SAĞDAN, İKİSİ AYNI ANDA açılır (`hideOverlay`); liste ucu numaranın yanında `orders: [{id, orderNumber}]` taşır — numaradan id aramak mükerrer numarada yanlış siparişi açardı. · bekçi: `Electron RepairTable.test.tsx` + `scripts/test_allocation_repair.ts §5` <sub>(arşiv:2026-09-07 saha turu)</sub>
+
 ### Tuzaklar
 
 - **[ÇEKİRDEK]** Yeniden üretime almada fason firma seçicisi LOAD-BEARING: firma `stepPlanning` overlay'iyle gitmezse 'Fasona gönder' sessiz no-op (backend firmayı çözemezse sevki atlar); buton metni ile davranış AYNI yüklemden (`willDispatch`). Ölü etiket uyarısı burada KESİN ve DAR (etiketli VE ilk adım fason). · bekçi: `Electron ReworkRollsDialog.test.tsx` <sub>(CLAUDE.md:83, arşiv:756)</sub>
@@ -87,7 +90,7 @@
 ### Kararlar
 
 - **[PROFİL]** Sevkiyat detayında iade satırı ÇUVALDA KALIR: `returned` işaretli, soluk + amber 'İade' rozeti, salt-okunur, metraj üstü ÇİZİLMEZ (brüt toplama dahildir, irsaliyede durur); ayrı 'Bu sevkiyattan iade edilenler' kartı AYNEN kalır — rozet onun yerine geçmez, topun konumunu söyler. <sub>(CLAUDE.md:47)</sub>
-- **[PROFİL]** 'Sevkiyatı da kapat' kutusunun varsayılanı İSTEMCİDE, önizlemenin `confirmationEnabled` alanından: kapalı rejim → işaretli (PLANNED beklemenin karşılığı yok), açık → işaretsiz; kullanıcı değiştirir. Kapatılan sevkiyat aynı numarayla çıkmaz — Paketleme'den YENİ sevkiyat (eski irsaliye VOIDED). · bekçi: `scripts/test_shipment_undo_dispatch.ts §10 (önizleme confirmationEnabled boolean` <sub>(CLAUDE.md:79, arşiv:469)</sub>
+- **[PROFİL]** 'Sevkiyatı da kapat' kutusu YALNIZ `confirmationEnabled` AÇIKKEN çizilir (2026-09-07); kapalı rejimde seçenek yoktur — geri alma daima serbest bırakır ve pencere bunu cümleyle söyler (o rejimde PLANNED bir ara durak değildir, işaretsiz seçim karşılığı olmayan duruma düşürüyordu). Kapatılan sevkiyat aynı numarayla çıkmaz — Paketleme'den YENİ sevkiyat (eski irsaliye VOIDED). · bekçi: `scripts/test_shipment_undo_dispatch.ts §10 (önizleme confirmationEnabled boolean` <sub>(CLAUDE.md:79, arşiv:469, arşiv:2026-09-07 saha turu)</sub>
 - **[PROFİL]** [PROFİL] 'Sevkiyatlar' (operasyon: tüm statüler, iptal) ile 'Sevkiyatlar (Muhasebe)' (salt-okunur DISPATCHED + fiş + dönem Excel + fatura izi) ayrı ekran ama izinle AYRILMADI (sevkiyatçının belgelere erişimi gerekir); muhasebe ekranı finance.enabled açıkken terfi eder (dış muhasebe köprüsü). <sub>(arşiv:53, CLAUDE.md:45)</sub>
 
 ## Tablet (mobil)

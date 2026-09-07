@@ -972,7 +972,7 @@ export class ShippingService {
           select: {
             order: {
               select: {
-                orderNumber: true, branchId: true,
+                id: true, orderNumber: true, branchId: true,
                 lines: { select: { id: true, itemId: true, colorId: true, width: true, quantity: true, shippedQty: true } },
               },
             },
@@ -1016,6 +1016,10 @@ export class ShippingService {
         dispatchedAt: sh.dispatchedAt,
         customer: sh.customer,
         orderNumbers: sh.orders.map((so) => so.order.orderNumber),
+        // ⚠️ `orderNumbers` KALDIRILMADI: sahadaki panel onu okuyor. Yeni alan
+        // numarayı TIKLANABİLİR yapmak için id taşır — numara ile sipariş aramak
+        // ikinci bir okuma yolu (ve mükerrer numarada yanlış siparişi açardı).
+        orders: sh.orders.map((so) => ({ id: so.order.id, orderNumber: so.order.orderNumber })),
         icerikMetraj: Math.round(icerik * 1000) / 1000,
         yazilanMetraj: Math.round(yazilan * 1000) / 1000,
         bosluk,

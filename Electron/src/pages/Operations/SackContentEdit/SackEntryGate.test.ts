@@ -40,10 +40,30 @@ describe("shouldShowEntryGate — §1", () => {
     expect(shouldShowEntryGate({ scanCode: null }, sp())).toBe(true);
   });
 
-  it("arama ya da herhangi bir filtre ile açılan ekranda kapı ÇİZİLMEZ", () => {
+  it("arama ya da BAŞKA bir filtre ile açılan ekranda kapı ÇİZİLMEZ", () => {
     expect(shouldShowEntryGate(null, sp("search=CV2509"))).toBe(false);
-    expect(shouldShowEntryGate(null, sp("filter%5BcustomerId%5D=none"))).toBe(false);
     expect(shouldShowEntryGate(null, sp("filter%5Bscope%5D=DISPATCHED"))).toBe(false);
+  });
+
+  // ⭐ 2026-09-07 SAHA HATASI: kapı kendi yazdığı filtreyi "hedef" sayıyordu.
+  //
+  // Akış: kapıdan cari seç → adrese `filter[customerId]` yazılır → sekme o
+  // adresi hatırlar → menüden tekrar girildiğinde kapı kendini gizler ve SON
+  // seçilen carinin çuvallarını getirirdi. Operatörün başka cariye geçme yolu
+  // yoktu. Kapıyı susturması gereken şey "ekran bir HEDEFLE açıldı"dır —
+  // okutma tohumu, kayıtlı görünüm, genel aramadan yönlendirme. Kapının KENDİ
+  // yazdığı `customerId` bunlardan biri değildir.
+  it("⭐ kapının KENDİ yazdığı cari filtresi kapıyı kapatmaz (menüden dönünce yine sorar)", () => {
+    expect(shouldShowEntryGate(null, sp("filter%5BcustomerId%5D=abc"))).toBe(true);
+    expect(shouldShowEntryGate(null, sp("filter%5BcustomerId%5D=none"))).toBe(true);
+  });
+
+  // Kapı yalnız KENDİ filtresini yok sayar; yanında başka bir filtre varsa
+  // ekran gerçekten bir hedefle açılmıştır ve kapı yine çizilmez.
+  it("cari filtresinin YANINDA başka filtre varsa kapı yine ÇİZİLMEZ", () => {
+    expect(
+      shouldShowEntryGate(null, sp("filter%5BcustomerId%5D=abc&filter%5Bscope%5D=POOL")),
+    ).toBe(false);
   });
 });
 

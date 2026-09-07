@@ -28,9 +28,18 @@ interface Props {
    *  vurgulanır + "yalnız eşleşenler" süzgeci; "Tam Sayfa"ya da taşınır. */
   matchItem?: string;
   matchColor?: string;
+  /** İki panel aynı anda açıkken karartma çizilmez — bkz. `ui/sheet`. */
+  hideOverlay?: boolean;
 }
 
-export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem, matchColor }: Props) {
+export function ShipmentDetailSheet({
+  shipmentId,
+  open,
+  onOpenChange,
+  matchItem,
+  matchColor,
+  hideOverlay,
+}: Props) {
   const [noteOpen, setNoteOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [undoOpen, setUndoOpen] = useState(false);
@@ -78,7 +87,7 @@ export function ShipmentDetailSheet({ shipmentId, open, onOpenChange, matchItem,
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-auto sm:max-w-2xl">
+      <SheetContent side="right" hideOverlay={hideOverlay} className="w-full overflow-auto sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <span className="font-mono">{d?.shipmentNo ?? "Sevkiyat"}</span>

@@ -261,7 +261,22 @@ async function main(): Promise<void> {
   if (fail > 0) process.exit(1);
 }
 
+// ⚠️ ARALIKLI DÜŞÜŞ, ÇIKTISI YANILTICIYDI (2026-09-07): paket içinde iki kez
+// düştü ve koşucu satırı "21/21 geçti" + ❌ gösterdi. Sebebi şu: gövde ortada
+// FIRLATIYOR (kontrol başarısızlığı DEĞİL), `finally` o ana kadarki sayıyla
+// özeti basıyor ve `fail` sıfır kalıyor. Yani ekrandaki cümle "her kontrol
+// geçti" derken süreç hata koduyla ölüyordu.
+//
+// Sebep henüz bulunamadı (tek başına ve sonraki koşumlarda hep yeşil). O
+// bulunana kadar en azından ÇIKTI DÜRÜST olsun: fırlatan hata özete girsin ve
+// yığın izi görünsün — bir dahaki düşüşte teşhis için tekrar koşum gerekmesin.
 main().catch((e) => {
-  console.error("TEST FAIL:", e);
+  console.error("\n❌ TEST YARIDA KESİLDİ (kontrol hatası değil, FIRLATAN hata):");
+  console.error(e instanceof Error ? (e.stack ?? e.message) : e);
+  console.error(
+    "\n⚠️ Yukarıdaki özet satırı YANILTICI olabilir: yalnız kesilmeden ÖNCEKİ " +
+      "kontrolleri sayar. Paket içinde düşüp tek başına geçiyorsa sıra/yarış " +
+      "kaynaklı bir çakışma arayın.",
+  );
   process.exit(1);
 });

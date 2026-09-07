@@ -16,6 +16,80 @@
   ],
   "yayinlar": [
     {
+      "id": "2026-09-07b",
+      "baslik": "Saha turu düzeltmeleri: çuval içeriğinde üç ad, çuval adedi, muhasebe fişi ve ekran temizlikleri",
+      "surumler": {
+        "panel": "1.3.1"
+      },
+      "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Çuvalın içini gördüğünüz ekranda artık üç ad yan yana: bizdeki ad, müşterideki ad ve topun üstündeki etikette yazan ad. Üçü ayrışmışsa mal çıkmadan önce görürsünüz. Müşterinin o ürüne/renge karşılığı yoksa sütun boş kalır — bizim adımız müşterinin adıymış gibi yazılmaz. Aynı üç ad çuval içeriğinin yazdırma ve Excel dökümüne de girdi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevkiyat kurarken \"araca yüklenen çuval adedi\" kutusu geldi. Mal tek çuval kaydına yazılıp birden çok çuvalla gönderiliyorsa fiili sayıyı buraya yazarsınız ve irsaliyeye o sayı basılır. Boş bırakırsanız belgede yalnız sistemin saydığı rakam çıkar; sonradan sevkiyat detayından da düzeltilebilir. Kutu, ayarlardan açık olan kurulumlarda görünür."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Muhasebe → Sevk Fişleri ekranına \"Belge\" düğmesi eklendi: fişin en son basılan hâli sevkiyat ekranındaki gibi buradan da açılıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Siparişe Yazılamayanlar ekranında sevkiyat ve sipariş numaraları tıklanabilir oldu. Sipariş soldan, sevkiyat sağdan açılıyor ve ikisi aynı anda açık kalabiliyor — düzeltmeden önce \"bu mal gerçekten şu siparişin açık kalemine mi ait\" sorusu tek ekranda cevaplanıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Siparişe Yazılamayanlar ekranının onay penceresi yeniden yazıldı: üç toplam sayı ve dört paragraf yazı yerine artık hangi siparişin hangi ürün/renk/en satırına kaç metre yazılacağı satır satır gösteriliyor. Uzun anlatım (i) balonuna taşındı."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Boş çuvalda \"Sil\" düğmesi çıkmıyordu. Artık toplu seçimde hem dağıtma hem silme var; silme teyit ister ve dolu çuval önce dağıtılıp sonra silinir."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Bir sevkiyatı geri alırken \"sevkiyatı da kapat\" seçeneği, sevk onayı kapalı olan kurulumlarda karşılığı olmayan bir duruma düşürebiliyordu: sevkiyat planlı hâlde bekliyor, operatör bir de onu iptal etmek zorunda kalıyordu. Artık o kurulumda seçenek hiç çıkmıyor; geri alma tek adımda çuvalları çuval hazırlamaya döndürüyor ve pencere bunu cümleyle söylüyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Paketleme → Çuvallar ekranına cariyi seçtiğiniz kapıdan girdikten sonra menüden tekrar girildiğinde kapı bir daha sorulmuyor, son seçilen carinin çuvalları geliyordu. Artık her girişte yeniden soruyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Şube kullanımı kapalı olan kurulumlarda çuval listesinde şube sütunu ve şube süzgeci görünüyordu; artık çizilmiyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Özellik Anahtarları ekranında ayar sıfırlama onayı işletim sisteminin kendi penceresiyle çıkıyordu; artık programın kendi onay penceresi kullanılıyor. Uzun ayar açıklamaları da satır aralarından (i) balonuna alındı, liste okunur hâle geldi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Belge Şablonları ekranında alan sıralama okları hizadan kayıyor ve bazı satırlarda alt satıra düşüyordu; alan adları da kısaltılıyordu. Hizalama düzeltildi, adlar tam yazılıyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Bir belgeyi güncel görünüme aldıktan sonra o görünümü kalıcı yapma düğmesi çıkmıyordu; belge eski hâlinde donmuş kalıyordu. Artık düğme görünüyor ve basıldığında belgenin yeni sürümü dondurularak geçerli hâl oluyor."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Siparişe Yazılamayanlar ekranında üstteki iki özet kutusu başlığın dibine yapışıyordu; boşluk düzeltildi."
+        }
+      ]
+    },
+    {
       "id": "2026-09-07",
       "baslik": "Siparişe yazılamayan mal ekranı, en toleransı, toplu çuval dağıtma ve saha düzeltmeleri",
       "surumler": {

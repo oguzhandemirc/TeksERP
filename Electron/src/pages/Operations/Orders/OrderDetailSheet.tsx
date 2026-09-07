@@ -70,6 +70,10 @@ interface Props {
   onEdit?: (order: Order) => void;
   /** "Bu kumaştan iş emri oluştur" — tek kumaşın açık kalemlerini WO formuna seed'ler. */
   onCreateWorkOrder?: (lines: PickedOrderLine[]) => void;
+  /** Karşılaştırma yüzeylerinde sipariş SOLDAN açılır (sevkiyat sağda kalsın). */
+  side?: "left" | "right";
+  /** İki panel aynı anda açıkken karartma çizilmez — bkz. `ui/sheet`. */
+  hideOverlay?: boolean;
 }
 
 export function OrderDetailSheet({
@@ -78,6 +82,8 @@ export function OrderDetailSheet({
   onOpenChange,
   onEdit,
   onCreateWorkOrder,
+  side = "right",
+  hideOverlay,
 }: Props) {
   const qc = useQueryClient();
   const [closeOpen, setCloseOpen] = useState(false);
@@ -189,7 +195,7 @@ export function OrderDetailSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-2xl overflow-auto">
+      <SheetContent side={side} hideOverlay={hideOverlay} className="w-full sm:max-w-2xl overflow-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <span className="font-mono">{order?.orderNumber}</span>

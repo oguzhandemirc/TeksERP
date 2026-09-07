@@ -8,7 +8,7 @@
 // "çuval başına sayfa" davranışının kağıt karşılığı.
 // =============================================================================
 
-import { dumpTotalQty, type SackDump, type SackDumpOptions } from "./types";
+import { dumpTotalQty, type SackDump, type SackDumpOptions, type SackDumpRoll } from "./types";
 
 const esc = (s: string): string =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -31,6 +31,29 @@ function metaLine(d: SackDump): string {
   return parts.join(" · ");
 }
 
+
+/**
+ * Bizdeki ad + (varsa) müşterideki karşılık, alt alta.
+ * ⚠️ Karşılık YOKSA alt satır HİÇ basılmaz — bizim adımızı oraya koymak
+ * "müşteri bunu böyle çağırıyor" yalanını üretirdi (2026-09-06 düzeltmesi).
+ */
+function adHucresi(bizdeki: string, musterideki?: string | null): string {
+  const ust = dash(bizdeki);
+  if (!musterideki) return ust;
+  return `${ust}<div class="alt">↳ ${esc(musterideki)}</div>`;
+}
+
+/**
+ * Topun ÜSTÜNDEKİ kâğıtta yazan. Üç hâl ayrı ayrı görünür:
+ * basılmamış · bayat (kayıtla ayrışmış) · güncel.
+ */
+function etiketHucresi(r: SackDumpRoll): string {
+  if (!r.etiketBasildi) return `<span class="alt">basılmamış</span>`;
+  const ad = r.etiketAd ? esc(r.etiketAd) : `<span class="alt">(ad kayıtlı değil)</span>`;
+  return r.etiketBayat ? `<strong>BAYAT</strong><div class="alt">${ad}</div>` : ad;
+}
+
+
 function rollTable(d: SackDump): string {
   if (d.rolls.length === 0) {
     return `<p class="empty">Çuval boş — top yok.</p>`;
@@ -39,8 +62,9 @@ function rollTable(d: SackDump): string {
     .map(
       (r) => `<tr>
         <td class="mono">${r.barcode ? esc(r.barcode) : "Açık Kumaş"}</td>
-        <td>${dash(r.itemName)}</td>
-        <td>${r.colorName ? esc(r.colorName) : "Ham"}</td>
+        <td>${adHucresi(r.itemName, r.musteriItemName)}</td>
+        <td>${adHucresi(r.colorName ?? "Ham", r.musteriColorName)}</td>
+        <td>${etiketHucresi(r)}</td>
         <td class="num">${r.width != null ? `${fmtNum(r.width)} cm` : "—"}</td>
         <td class="num">${fmtNum(r.qty)}</td>
         <td>${dash(r.qualityGrade)}</td>
@@ -49,12 +73,12 @@ function rollTable(d: SackDump): string {
     .join("");
   return `<table>
     <thead><tr>
-      <th>Barkod</th><th>Kumaş</th><th>Renk</th>
+      <th>Barkod</th><th>Kumaş</th><th>Renk</th><th>Etikette</th>
       <th class="num">En</th><th class="num">Metre</th><th>Kalite</th>
     </tr></thead>
     <tbody>${body}</tbody>
     <tfoot><tr>
-      <td colspan="4"><strong>ARA TOPLAM — ${d.rolls.length} top</strong></td>
+      <td colspan="5"><strong>ARA TOPLAM — ${d.rolls.length} top</strong></td>
       <td class="num"><strong>${fmtNum(dumpTotalQty(d))}</strong></td>
       <td></td>
     </tr></tfoot>
@@ -147,6 +171,8 @@ export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {})
     tbody tr:nth-child(even) { background: #f7f7f7; }
     tfoot td { background: #eee; border-top: 2px solid #333; }
     .empty { font-size: 10px; color: #666; font-style: italic; margin: 4px 0; }
+    /* Müşterideki ad / etiket ayrıntısı — ana adın altında, sönük. */
+    .alt { font-size: 9px; color: #666; }
     .swatches { margin-top: 8px; }
     .swatches .sub { font-size: 10px; font-weight: 700; color: #444; letter-spacing: .04em; margin-bottom: 2px; }
     .swatches ul { margin: 0; padding-left: 16px; font-size: 10px; }

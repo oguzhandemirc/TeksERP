@@ -3284,3 +3284,69 @@ Kaçış ADIYLA taşınır ve nerede kullanıldığı greplenebilir kalır.
 
 **Kayıt:** `docs/standart/KUTUPHANELER.md` §2 satırı + §9 (altı satırlık karar
 kaydı, sonuç "paket YOK").
+
+## 2026-09-07 — Saha turu: 13 madde, üç ad ve "yan yana karşılaştırma" [PROFİL/ÇEKİRDEK karma]
+
+Kullanıcı fabrikada paneli baştan sona gezdi ve 13 madde bildirdi. Çoğu yerel
+düzeltme; üçü kural doğurdu.
+
+**① ÇUVALIN İÇİNDE ÜÇ AD YAN YANA** [ÇEKİRDEK]. Çuvalın içi, mal sevk edilmeden
+önceki SON bakış anıdır ve orada üç ad ayrışabilir: ① bizdeki (canlı kayıt)
+② müşterideki (alias kademesi) ③ TOPUN ÜSTÜNDEKİ KÂĞITTA yazan
+(`lastLabelSnapshot`, baskı anında donmuş). Bugüne kadar üçünü yan yana gösteren
+hiçbir yüzey yoktu. Kullanıcının sözü: *"üçünü karşılaştırsak nasıl olur?"*
+
+İki değişmez ölçülüyor (`scripts/test_sack_contents_uc_ad.ts`, 17 kontrol, üç
+negatif sonda): **(a)** müşteri karşılığı YOKSA `null` döner — bizim adımız
+"müşterideki ad" diye BASILMAZ (2026-09-06 kullanıcı düzeltmesinin devamı: çoğu
+müşteri bizim adımızı kullanır, uydurma alias defteri kirletir). **(b)** etiket
+adı SNAPSHOT'tan gelir, canlı veriden TÜRETİLMEZ — türetilseydi ölçmek istenen
+ayrışmanın (kâğıt ↔ kayıt) kendisi gizlenirdi.
+
+Ekran ile BELGE ayrı uçlardan beslendiği için (`getSackContents` ↔
+`getContentDump`) bekçinin §5'i dökümü de ölçer: ekran düzeltilip belge
+unutulursa PDF/Excel yine tek ad basardı.
+
+**② YAN YANA KARŞILAŞTIRMA — İKİ PANEL AYNI ANDA** [ÇEKİRDEK]. "Siparişe
+yazılamayanlar" ekranındaki satırlar tanım gereği gözden kaçmış işlerdir;
+onarmadan önce sorulan soru hep aynı: *sevkiyattan çıkan mal, siparişte açık
+duran kaleme gerçekten uyuyor mu?* Numaralar tıklanabilir yapıldı — sipariş
+SOLDAN, sevkiyat SAĞDAN açılıyor ve **ikisi aynı anda açık kalıyor**.
+
+Bunun için `ui/sheet`e opt-in `hideOverlay` eklendi: iki panel de kendi
+karartmasını çizseydi aradaki şerit çift kararırdı. Yan etkisi FAYDALIDIR —
+alttaki tablo tıklanabilir kalır, kullanıcı paneller açıkken başka bir sipariş
+numarasına geçebilir. Kapatma yolu kaybolmaz (X + Esc yığını); düşen tek şey
+"dışarı tıkla kapat" ve sekme içinde o zaten yalnız KENDİ karartmasına
+tıklayınca çalışıyordu.
+
+**Numara değil id taşınır:** liste ucu `orderNumbers`in YANINA
+`orders: [{id, orderNumber}]` koydu. Numaradan id'yi arayarak bulmak ikinci bir
+okuma yoluydu ve mükerrer numarada YANLIŞ siparişi açardı — sessiz yanlış,
+görünür eksikten kötüdür. `orderNumbers` KALDIRILMADI (sahadaki panel onu
+okuyor); iki alanın aynı kümeyi göstermesi bekçide ölçülür.
+
+**③ SEÇENEK SUNMAK, KARŞILIĞI OLMAYAN DURUM ÜRETMEMELİ** [ÇEKİRDEK]. Sevkiyatı
+geri alma penceresinde "sevkiyatı da kapat" kutusunun işaretini kaldırmak,
+`shipping.confirmationEnabled` KAPALI olan bir kurulumda sevkiyatı PLANNED'a
+düşürüyordu. O kurulumda PLANNED bir ARA DURAK DEĞİLDİR — "Sevk Kapısı" diye bir
+adım yoktur — ve operatör bunu ikinci bir iptalle temizlemek zorunda kalıyordu.
+Kullanıcının sözü: *"planlı sevkiyat diye bir şey yok ama şu an planlı sevkiyat
+durumuna düşüyor."* Kutu artık yalnız onay AÇIKKEN çizilir; kapalıyken geri alma
+daima serbest bırakır ve pencere bunu cümleyle söyler. **Varsayılan zaten buydu;
+değişen şey yanlış seçimin artık MÜMKÜN OLMAMASI.** Sınıfın adı: bir bayrak
+kapalıyken o bayrağın ürettiği duruma götüren seçenek de çizilmez.
+
+**④ Araca yüklenen çuval adedi giriş ANINDA** [PROFİL]. Alan sevkiyat DETAYINDA
+zaten vardı; eksik olan giriş anıydı — kamyon yüklenirken sayı bilinir, üç ekran
+sonra hatırlanmaz. Yurtiçi sevkte mal çuvallara AYRILMIYOR (tartı gerekmediği
+için 100 top tek çuval kaydına yazılıp gönderiliyor); sistem "1 çuval" sayıyor,
+araca 10 çuval çıkıyor ve bu fark ne ekranda ne İRSALİYEDE görünüyordu. Alan bir
+ANNOTATION'dır: donmuş belge çekirdeğine girmez, sürüm doğurmaz — o yüzden
+sevkiyat kurulduktan SONRA ayrı yazımla kaydedilir.
+
+**Kalan dokuz madde** yerel düzeltmedir ve sürüm notunda tek tek yazılıdır
+(yerli onay penceresi · uzun açıklamaların (i) balonuna taşınması · şube kapalı
+kurulumda şube sütunu · cari kapısının kendi yazdığı filtreyi "hedef" sayması ·
+boş çuvalda sil düğmesi · muhasebe fişinin son hâli · "bu görünümü kalıcı yap" ·
+belge şablonlarında ok hizası · özet kutularının başlığa yapışması).

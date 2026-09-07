@@ -20,6 +20,7 @@
 //    ② `specMatch`ten tolerans parametresi düşürülürse §2 kırmızı
 //    ③ fazla sevk turu kaldırılırsa §4 kırmızı ④ onarım `setShipmentOrders`
 //    çağırmazsa §5 kırmızı. Dördü de ölçüldü.
+//    ⑥ (2026-09-07) `orders` alanı listeden düşerse §5 kırmızı (ölçüldü).
 //    ⑤ (2026-09-07) önizleme motor yerine ayrı bir tahminle yazılırsa §5b
 //    kırmızı — `distributeSacksToLines` çağrısı sabit diziyle değiştirildi.
 // =============================================================================
@@ -241,9 +242,25 @@ async function run(): Promise<void> {
 
   const liste1 = (await shippingService.listRepairableShipments()).data as {
     shipmentId: string; bosluk: number; onarilabilirMetraj: number;
+    orderNumbers: string[]; orders?: { id: string; orderNumber: string }[];
   }[];
   const kayit1 = liste1.find((x) => x.shipmentId === s3.id);
   check("⭐ boşluklu sevkiyat listede ve boşluk 60 m", !!kayit1 && Math.abs(kayit1.bosluk - 60) < 0.01, `${kayit1?.bosluk}`);
+
+  // ⭐ 2026-09-07: sipariş numarası panelde TIKLANABİLİR olmalı ve bunun için id
+  //    gerekir. Numaradan id'yi ARAYARAK bulmak ikinci bir okuma yoluydu ve
+  //    mükerrer numarada YANLIŞ siparişi açardı. `orderNumbers` sahadaki panel
+  //    okuduğu için KALDIRILMADI — iki alan aynı kümeyi göstermek zorunda.
+  check(
+    "⭐ liste sipariş id'sini de taşıyor (numara tıklanabilir olsun)",
+    kayit1?.orders?.length === 1 && kayit1.orders[0]!.id === ord3,
+    JSON.stringify(kayit1?.orders),
+  );
+  check(
+    "⭐ `orders` ile `orderNumbers` AYNI kümeyi gösteriyor (ayrışan yüzey yok)",
+    JSON.stringify(kayit1?.orders?.map((o) => o.orderNumber)) === JSON.stringify(kayit1?.orderNumbers),
+    `${JSON.stringify(kayit1?.orderNumbers)}`,
+  );
   check(
     "⭐ kapasite dolu olduğu için 'onarılabilir' 0 (kapı kör değil)",
     !!kayit1 && kayit1.onarilabilirMetraj < 0.01,
