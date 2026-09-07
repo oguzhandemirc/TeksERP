@@ -30,7 +30,7 @@ function statusBadge(sack: SackSearchRow): { label: string; className: string } 
  * Yalnız `sackNo` ve `createdAt` sıralanabilir (SortableHeader); diğer başlıklar düz.
  * Her sütun `meta.label` taşır (göster/gizle menüsü + CSV başlığı).
  */
-export const sacksColumns: ColumnDef<SackSearchRow>[] = [
+const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
   {
     id: "status",
     header: "Durum",
@@ -214,3 +214,11 @@ export const sacksColumns: ColumnDef<SackSearchRow>[] = [
     ),
   },
 ];
+
+/**
+ * ŞUBE KOLONU YALNIZ ŞUBE AÇIKSA (2026-09-07). Kapalı kurulumda kolon hep "—"
+ * basıyor ve tabloyu boşuna genişletiyordu; `SacksListView` bayrağı sorar.
+ */
+export function sacksKolonlari(subeAcik: boolean): ColumnDef<SackSearchRow>[] {
+  return subeAcik ? SACKS_KOLONLARI : SACKS_KOLONLARI.filter((c) => c.id !== "branch");
+}

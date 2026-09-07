@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, PackageOpen } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, PackageOpen, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -47,15 +47,76 @@ function sonucToast(res: ApiResponse<BulkDistributeResult>): void {
  * Onu listeden düşürmek yerine sebebiyle gösteririz — kullanıcı neyin
  * yapılmayacağını ONAYDAN ÖNCE görür.
  */
+/**
+ * Toplu işin gövdesi (bileşenden ayrı: boyut tavanı YENİ kodda zorunlu).
+ *
+ * SİLME YOLU: toplu dağıtma ucu çuvalı SİLMEZ; silme tek-çuval ucundan
+ * (`removeSack(id, withContents)`) geçer ve o uç zaten "boşalt + sil" yapar.
+ * Sıralı koşulur — tek tx'e sokmak için yeni bir toplu uç yazmak gerekirdi ve
+ * bu ekranın hacmi (≤200 çuval) onu hak etmiyor.
+ */
+async function topluCalistir(
+  silme: boolean,
+  uygun: { sackId: string }[],
+  engelli: { sackNo: string; engel?: string | null }[],
+): Promise<ApiResponse<BulkDistributeResult>> {
+  if (!silme) return sackHubService.distributeSacksBulk(uygun.map((s) => s.sackId));
+  for (const c of uygun) await sackHubService.removeSack(c.sackId, true);
+  return {
+    success: true,
+    message: `${uygun.length} çuval boşaltıldı ve silindi`,
+    data: { atlanan: engelli.map((e) => ({ sackNo: e.sackNo, sebep: e.engel ?? "engel" })) },
+  } as ApiResponse<BulkDistributeResult>;
+}
+
+/** Başlık — "sil" ile "dağıt" AYRI fiillerdir ve kullanıcı ikisini karıştırıyordu. */
+function Baslik({ silme }: { silme: boolean }) {
+  return (
+    <>
+      {silme ? <Trash2 className="h-5 w-5" /> : <PackageOpen className="h-5 w-5" />}{" "}
+      {silme ? "Seçili çuvalları boşalt ve sil" : "Seçili çuvalları dağıt"}
+    </>
+  );
+}
+
+/** Ne olacağını açıkça söyler: silmede de toplar KAYBOLMAZ, depoya döner. */
+function Aciklama({ silme }: { silme: boolean }) {
+  if (silme) {
+    return (
+      <>
+        Çuvalların <strong>içindeki toplar önce serbest depoya çıkar</strong>, sonra çuval kaydı{" "}
+        <strong>silinir</strong>. Toplar kaybolmaz, geri okutulabilir.
+      </>
+    );
+  }
+  return (
+    <>
+      Çuvalların <strong>içindeki toplar serbest depoya</strong> çıkar. Çuval kaydı silinmez,
+      toplar geri okutulabilir.
+    </>
+  );
+}
+
 export function BulkDistributeSacksDialog({
   sackIds,
   onOpenChange,
   onDone,
+  mod = "dagit",
 }: {
   sackIds: string[] | null;
   onOpenChange: (open: boolean) => void;
   onDone?: () => void;
+  /**
+   * `dagit` = içerik depoya çıkar, ÇUVAL KAYDI KALIR.
+   * `sil`   = önce dağıtır, SONRA çuval kaydını siler (2026-09-07 saha isteği:
+   *           "dağıt tuşu olsa bile sil tuşu aktif olsun, önce dağıttırıp sonra
+   *           sildiririz, bunu yaparken de teyit ettir").
+   * Önizleme ve engel listesi İKİSİNDE DE aynı uçtan gelir — sevkiyata atanmış
+   * çuval ikisinde de yapılamaz ve sebebiyle gösterilir.
+   */
+  mod?: "dagit" | "sil";
 }) {
+  const silme = mod === "sil";
   const qc = useQueryClient();
   const open = !!sackIds && sackIds.length > 0;
   const [acik, setAcik] = useState<Set<string>>(new Set());
@@ -71,7 +132,11 @@ export function BulkDistributeSacksDialog({
   const engelli = useMemo(() => (veri?.sacks ?? []).filter((s) => s.engel), [veri]);
 
   const mut = useMutation({
-    mutationFn: () => sackHubService.distributeSacksBulk(uygun.map((s) => s.sackId)),
+    // SİLME YOLU: toplu dağıtma ucu çuvalı SİLMEZ; silme tek-çuval ucundan
+    // (`removeSack(id, withContents)`) geçer ve o uç zaten "boşalt + sil"
+    // yapar. Sıralı koşulur — tek tx'e sokmak için yeni bir toplu uç yazmak
+    // gerekirdi ve bu ekranın hacmi (≤200 çuval) onu hak etmiyor.
+    mutationFn: () => topluCalistir(silme, uygun, engelli),
     onSuccess: (res) => {
       sonucToast(res);
       invalidateSackHub(qc);
@@ -94,11 +159,10 @@ export function BulkDistributeSacksDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <PackageOpen className="h-5 w-5" /> Seçili çuvalları dağıt
+            <Baslik silme={silme} />
           </DialogTitle>
           <DialogDescription>
-            Çuvalların <strong>içindeki toplar serbest depoya</strong> çıkar. Çuval kaydı silinmez,
-            toplar geri okutulabilir.
+            <Aciklama silme={silme} />
           </DialogDescription>
         </DialogHeader>
 
@@ -119,9 +183,10 @@ export function BulkDistributeSacksDialog({
             onClick={() => mut.mutate()}
             disabled={mut.isPending || yukleniyor || uygun.length === 0}
             className="gap-1.5"
+            variant={silme ? "destructive" : "default"}
           >
             {mut.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-            {uygun.length} çuvalı dağıt
+            {uygun.length} çuvalı {silme ? "boşalt ve sil" : "dağıt"}
           </Button>
         </DialogFooter>
       </DialogContent>

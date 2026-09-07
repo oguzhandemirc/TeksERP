@@ -22,7 +22,8 @@ import { colorService } from "@/pages/Colors/service";
 import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
-import { sacksColumns } from "./sacksColumns";
+import { sacksKolonlari } from "./sacksColumns";
+import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { fromDumpRows } from "./sackDump";
 import { RollLocateCard } from "./RollLocateCard";
@@ -44,7 +45,7 @@ import {
 
 // Filtreler URL-driven (FilterBar → useSearchParams → useDataTable cursor reset).
 // Kapsam omit edilirse backend POOL+PLANNED (sevk edilmemiş) döner — sağlıklı varsayılan.
-const SACK_FILTERS: FilterDef[] = [
+const SACK_FILTERS_TUM: FilterDef[] = [
   {
     kind: "select",
     key: "scope",
@@ -192,8 +193,22 @@ interface Props {
  * Depodaki çuvallar seçilebilir (havuzdan sevkiyat) ve tıklayınca editöre açılır;
  * sevkteki çuvallar salt-okunur önizleme sheet'ine düşer.
  */
+/**
+ * ŞUBE KAPALIYSA ŞUBE SÜZGECİ ÇİZİLMEZ (2026-09-07).
+ *
+ * `customer.branchesEnabled` kapalı bir kurulumda şube diye bir kavram YOKTUR;
+ * süzgeç ve kolon yine de duruyordu ve hep "—" basıyordu. Emsal `CreateShipmentDialog`
+ * — orada zaten `useCustomerBranchesEnabled()` sorulur; bu ekran sormuyordu.
+ */
+function sackFiltreleri(subeAcik: boolean): FilterDef[] {
+  return subeAcik
+    ? SACK_FILTERS_TUM
+    : SACK_FILTERS_TUM.filter((f) => !("key" in f && f.key === "branchId"));
+}
+
 export function SacksListView({ onEditSack }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const subeAcik = useCustomerBranchesEnabled();
   const [located, setLocated] = useState<LocatedRoll | null>(null);
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
@@ -206,7 +221,7 @@ export function SacksListView({ onEditSack }: Props) {
   const { table, query, search, setSearch, pagination, fetchAll } = useDataTable<SackSearchRow>({
     queryKey: "sack-search",
     fetchFn: sackHubService.listSacks,
-    columns: sacksColumns,
+    columns: sacksKolonlari(subeAcik),
     defaultPageSize: 50,
     // Yalnız depodaki (sevk edilmemiş) çuvallar seçilebilir → havuzdan sevk kurulur.
     enableSelection: (row) => isWarehouseSack(row.original),
@@ -297,7 +312,7 @@ export function SacksListView({ onEditSack }: Props) {
         }
       />
 
-      <FilterBar filters={SACK_FILTERS} />
+      <FilterBar filters={sackFiltreleri(subeAcik)} />
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
 

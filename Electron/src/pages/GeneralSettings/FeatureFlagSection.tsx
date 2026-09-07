@@ -16,6 +16,7 @@ import type {
   NumberFlagKey,
   SettingFieldDef,
 } from "./settings-config";
+import { InfoPopover } from "./SettingHint";
 import { FlagToggle, ReadOnlyRow, SettingMeta } from "./SettingRow";
 import { SettingsSaveBar } from "./SettingsSaveBar";
 import { useRegisterSettingsDirty } from "./settings-dirty";
@@ -431,7 +432,17 @@ export function FeatureFlagSection({
       f.options.find((o) => o.value === f.defaultValue)?.label ?? f.defaultValue;
     return (
       <div key={f.enumKey} className="space-y-1.5">
-        <p className="text-sm font-medium">{f.title}</p>
+        {/* ⚠️ UZUN AÇIKLAMA (i) BALONUNDA (2026-09-07). Aç/kapa satırları bunu
+            zaten yapıyordu (`SettingRow`, varsayılan `hint="popover"`); açılır
+            liste ve sayı satırları `desc`i DÜZ PARAGRAF basıyordu ve bu fark
+            eski enum bayraklarının açıklamaları kısa olduğu için göze
+            batmıyordu. Yeni bayrakların açıklaması uzun olunca ekran okunamaz
+            hâle geldi — kullanıcının sözü: "bu tasarım anlayışını neden
+            bozdun". Satırda yalnız TEK CÜMLELİK `summary` kalır. */}
+        <div className="flex items-center gap-1.5">
+          <p className="text-sm font-medium">{f.title}</p>
+          {f.desc ? <InfoPopover desc={f.desc} /> : null}
+        </div>
         <SettingMeta defaultLabel={`Varsayılan: ${defaultLabel}`} audience={f.audience} />
         <p className="text-xs text-muted-foreground">{f.summary}</p>
         {canEdit ? (
@@ -451,7 +462,6 @@ export function FeatureFlagSection({
           <div className="text-sm font-semibold">{selected?.label ?? value}</div>
         )}
         {selected && <p className="text-xs text-muted-foreground">{selected.hint}</p>}
-        <p className="text-xs text-muted-foreground/80">{f.desc}</p>
       </div>
     );
   };
@@ -463,12 +473,14 @@ export function FeatureFlagSection({
     onChange: (n: number) => void,
   ) => (
     <div key={f.key} className="space-y-1.5">
-      <p className="text-sm font-medium">{f.title}</p>
+      <div className="flex items-center gap-1.5">
+        <p className="text-sm font-medium">{f.title}</p>
+        {f.desc ? <InfoPopover desc={f.desc} /> : null}
+      </div>
       <SettingMeta
         defaultLabel={`Varsayılan: ${f.fallback}${f.unit ? ` ${f.unit}` : ""}`}
         audience={f.audience}
       />
-      <p className="text-xs text-muted-foreground">{f.desc}</p>
       {canEdit ? (
         <div className="flex items-center gap-1.5">
           <Input

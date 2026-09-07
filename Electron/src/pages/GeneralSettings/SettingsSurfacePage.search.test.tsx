@@ -193,12 +193,35 @@ describe("Özellik Anahtarları — arama süzer, gezinmez", () => {
   });
 
   // Sekme değiştirmenin TEK yolu tıklamaktır → onay kapısı tek kapı olarak kalır.
-  it("sekmeye TIKLAMAK taslak varken onay sorar; iptal edilirse sekme değişmez", () => {
+  //
+  // ⚠️ ONAY ARTIK `window.confirm` DEĞİL (2026-09-07): işletim sisteminin kendi
+  // penceresi açılıyordu ("Adnan Şahin ERP" başlıklı Windows kutusu) ve saha
+  // turunda "bizim uyarımız olmalı" diye bildirildi.
+  //
+  // ⚠️ TEK TEST, İKİ İDDİA — bilerek birleştirildi: bu dosyada render'lar test
+  // arasında sökülmüyor (`makeDirty` her testte yeniden çiziyor) ve Radix
+  // diyaloğu AÇILDIĞINDA arkadaki her şeyi `aria-hidden` yapıyor. İkinci bir
+  // diyalog açan test yazılsaydı, bir öncekinin açık kalan diyaloğu sekmeleri
+  // erişilemez kılar ve bekçi konusuyla ilgisiz bir sebeple kırmızı verirdi.
+  it("sekmeye TIKLAMAK taslak varken UYGULAMA İÇİ onay sorar; iptalde sekme değişmez", () => {
     const toggle = makeDirty();
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /^Siparişler$/i }));
-    fireEvent.click(screen.getByRole("tab", { name: /^Siparişler$/i }));
-    expect(confirmSpy).toHaveBeenCalled();
+
+    // ⚠️ SEKME BİR KEZ YAKALANIR: `mouseDown` Radix'te sekme değişimini ZATEN
+    // tetikliyor ve diyalog açılınca arkadaki her şey `aria-hidden` oluyor —
+    // ikinci `getByRole("tab")` o yüzden "bulunamadı" derdi. Eski `window.confirm`
+    // senkron olup DOM'a dokunmadığı için bu tuzak görünmüyordu.
+    const sekme = screen.getByRole("tab", { name: /^Siparişler$/i });
+    fireEvent.mouseDown(sekme);
+    fireEvent.click(sekme);
+
+    // ⭐ İşletim sistemi penceresi HİÇ açılmaz — bildirilen şikâyet buydu.
+    expect(confirmSpy).not.toHaveBeenCalled();
+    // Bizim diyaloğumuz açıldı.
+    expect(screen.getByRole("button", { name: /Geç, kaydetme/i })).toBeInTheDocument();
+
+    // Vazgeç → sekme değişmedi, taslak duruyor.
+    fireEvent.click(screen.getByRole("button", { name: /^Vazgeç$/i }));
     expect(toggle.checked).toBe(false);
     expect(screen.getByText(DIRTY_BADGE)).toBeInTheDocument();
     confirmSpy.mockRestore();

@@ -28,6 +28,8 @@ import { invalidateSackHub } from "./useSackData";
 import { ShipmentOrderSelect } from "./ShipmentOrderSelect";
 import { ShipmentPreviewPanel } from "./ShipmentPreviewPanel";
 import { destinationLabels, type SackSearchRow, type ShipmentDestination } from "./types";
+import { shipmentService } from "@/pages/Operations/Shipments/service";
+import { ShipmentSackCountField } from "./ShipmentSackCountField";
 
 /**
  * Diyaloğun GERÇEKTEN okuduğu çuval alanları.
@@ -114,6 +116,12 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
 
   const unweighed = rows.filter((s) => s.weightKg == null).length;
 
+  // Araca yüklenen gerçek çuval adedi — gerekçe `ShipmentSackCountField` başlığında.
+  const [manualSackText, setManualSackText] = useState("");
+  const manualSack = manualSackText.trim() === "" ? null : Number.parseInt(manualSackText.trim(), 10);
+  const manualSackGecersiz =
+    manualSackText.trim() !== "" && (!Number.isFinite(manualSack) || manualSack! < 1 || manualSack! > 9999);
+
   const createMut = useMutation({
     mutationFn: () =>
       sackHubService.createShipment({
@@ -125,7 +133,18 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
         clientToken,
         orderless,
       }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
+      // Beyan AYRI uçtan yazılır: `createShipment` sözleşmesine alan eklemek
+      // Zod'un iki ucunu birden değiştirmeyi gerektirirdi ve bu alan bir
+      // ANNOTATION'dır (belge çekirdeğine girmez, sürüm doğurmaz). Kurulum
+      // başarılı olduktan sonra yazılır; yazım düşse bile sevkiyat sağlamdır.
+      if (manualSack != null && !manualSackGecersiz) {
+        try {
+          await shipmentService.setManualSackCount(res.data.id, manualSack);
+        } catch {
+          toast.warning("Sevkiyat kuruldu ama çuval adedi yazılamadı — detaydan girebilirsiniz.");
+        }
+      }
       // Sevk onayı KAPALIYKEN (varsayılan) backend oluşturur oluşturmaz sevk eder
       // (dispatched=true, stok düştü); AÇIKKEN yalnız PLANNED kurulur.
       toast.success(
@@ -252,6 +271,13 @@ export function CreateShipmentDialog({ sacks, onOpenChange, onCreated }: Props) 
             </div>
             )}
           </div>
+
+          <ShipmentSackCountField
+            value={manualSackText}
+            onChange={setManualSackText}
+            systemCount={sackIds.length}
+            invalid={manualSackGecersiz}
+          />
 
           {/* Sipariş seçimi */}
           <div className="rounded-md border p-3">

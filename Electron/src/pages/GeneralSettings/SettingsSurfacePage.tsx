@@ -4,6 +4,7 @@ import { Search, X } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageShell } from "@/components/layout/PageShell";
 import { RefreshButton } from "@/components/RefreshButton";
+import { ConfirmDialog } from "@/components/forms/ConfirmDialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FEATURE_FLAGS_QUERY_KEY, useFeatureFlags } from "@/hooks/usePricingEnabled";
@@ -146,23 +147,33 @@ export function SettingsSurfacePage({
     dirtyRef.current = d;
   }, []);
 
+  // ⚠️ `window.confirm` KULLANILMAZ (2026-09-07): işletim sisteminin kendi
+  // penceresini açar, uygulamanın diliyle/tasarımıyla alakası yoktur ve
+  // başlığında "Adnan Şahin ERP" yazan bir Windows kutusu çıkar. Panelin her
+  // yerinde `ConfirmDialog` kullanılıyor (emsal: `CustomerFormDialog`); burası
+  // tek istisnaydı ve saha turunda göze battı.
+  const [bekleyenSekme, setBekleyenSekme] = useState<string | null>(null);
+
+  const sekmeyeGec = useCallback(
+    (next: string) => {
+      dirtyRef.current = false;
+      setSearchParams(
+        (prev) => {
+          prev.set("tab", next);
+          return prev;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
   const handleTabChange = (next: string) => {
-    if (
-      dirtyRef.current &&
-      !window.confirm(
-        "Bu sekmede kaydedilmemiş değişiklikler var. Kaydetmeden geçmek istiyor musunuz?",
-      )
-    ) {
+    if (dirtyRef.current) {
+      setBekleyenSekme(next);
       return;
     }
-    dirtyRef.current = false;
-    setSearchParams(
-      (prev) => {
-        prev.set("tab", next);
-        return prev;
-      },
-      { replace: true },
-    );
+    sekmeyeGec(next);
   };
 
   return (
@@ -299,6 +310,20 @@ export function SettingsSurfacePage({
         </div>
       </Tabs>
       </SettingsDirtyProvider>
+      <ConfirmDialog
+        open={bekleyenSekme !== null}
+        onOpenChange={(o) => !o && setBekleyenSekme(null)}
+        title="Kaydedilmemiş değişiklikler"
+        description="Bu sekmede kaydedilmemiş değişiklikler var. Kaydetmeden geçerseniz girdikleriniz kaybolur."
+        confirmLabel="Geç, kaydetme"
+        cancelLabel="Vazgeç"
+        destructive
+        onConfirm={() => {
+          const hedef = bekleyenSekme;
+          setBekleyenSekme(null);
+          if (hedef) sekmeyeGec(hedef);
+        }}
+      />
     </PageShell>
   );
 }

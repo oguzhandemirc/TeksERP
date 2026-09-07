@@ -28,7 +28,7 @@ const SELECT_CLS =
   "h-7 w-full rounded-md border border-input bg-background px-1.5 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50";
 const NUM_CLS =
   "h-7 w-full rounded-md border border-input bg-background px-2 text-xs shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50";
-const GRID = "grid grid-cols-[1.5rem_1fr_4.5rem_6.5rem_3.5rem] items-center gap-x-3";
+const GRID = "grid grid-cols-[1.5rem_minmax(7rem,1fr)_4.5rem_6.5rem_3.5rem] items-center gap-x-3";
 
 function Row({
   row,
@@ -66,11 +66,13 @@ function Row({
         <span aria-hidden="true" />
       )}
 
+      {/* Ad KESİLMEZ: "Müşteri stok adı" ile "Müşteri varyant" tek satıra
+          sığmayınca ikisi de "Müşteri..." oluyor ve ayırt edilemiyordu. */}
       <div className="min-w-0">
-        <div className={cn("truncate text-sm", !v.visible && "text-muted-foreground line-through")}>
+        <div className={cn("text-sm leading-tight", !v.visible && "text-muted-foreground line-through")}>
           {row.label}
         </div>
-        {row.hint && <div className="truncate text-[11px] text-muted-foreground">{row.hint}</div>}
+        {row.hint && <div className="text-[11px] leading-tight text-muted-foreground">{row.hint}</div>}
       </div>
 
       {v.canLabel ? (
@@ -110,7 +112,12 @@ function Row({
         <span aria-hidden="true" />
       )}
 
-      {v.canStyle && !v.canLabel ? (
+      {/* ⚠️ KOLON SATIRINDA BU HÜCRE HİÇ BASILMAZ (2026-09-07). "Kolon başlığı"
+          alanı `col-span-2` ile punto+kalınlık hücrelerinin İKİSİNİN yerine
+          geçiyor; buraya ayrıca bir `<span>` konunca satır 6 hücreye çıkıyor,
+          ızgara 5 kolon olduğu için OKLAR ALT SATIRA düşüyor ve sola
+          yaslanıyordu. Ekranda "hizasız oklar" diye görünen şey buydu. */}
+      {v.canLabel ? null : v.canStyle ? (
         <select
           value={v.weight ?? ""}
           disabled={styleDisabled}
