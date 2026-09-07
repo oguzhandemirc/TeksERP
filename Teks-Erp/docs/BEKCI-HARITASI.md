@@ -1691,10 +1691,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_wo_manual_complete.ts` | Manuel kapatmada kapanış dispozisyonu: beş statü uygulanır, dispozisyonsuz kapatma 400, fasondaki top 409 (rollback), TRANSFER klon üretir, kaynak COM | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts` | Kısa kesim → otomatik A1 kuralı tek dosyada: shortCutOverride/shortCutRevert sınırları (eşik altı uzunluk, mevcut/varsayılan kalite kodu, katalogdan A |  |  |  |
 
-## surum-deploy (21)
+## surum-deploy (22)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_deploy_move_retry.ts` | `kur.ps1` [5/9] dosya kilidi yarışı: taşıma ISRAR ediyor (`TasiIsrarla`), son denemede hatayı AYNEN fırlatıyor (yutulursa otomatik geri alma hiç koşmaz), taşıyan DÖRT yerin dördü de yardımcıyı kullanıyor (çıplak `Move-Item` yok), [4/9] ile [5/9] arasında yatışma beklemesi var | | ✓ | 2026-09-07 |
 | `Teks-Erp/scripts/test_deploy_log_rotation.ts` | `kur.ps1` pm2-logrotate'i GERÇEKTEN kuruyor mu (üç ayarıyla), blok sürüm çıkışını kesmiyor mu, rotasyonun hedefi (`out_file`/`error_file`/`time`) duruyor mu | | ✓ | 2026-09-07 |
 | `Electron/src/components/layout/GuncellemeDugmesi.test.tsx` | Topbar güncelleme düğmesi: durum eşlemesi tek kaynaktan, hata KIRMIZI basmaz; error/idle gösterilmez; web panelinde çizilmez; elle denetimde asgari an |  | ✓ | ⚠️ düşük: kaynak taraması process.cwd()'ye göreli ('src/...') — vitest kökü Electron/ olmazsa |
 | `Electron/src/lib/surum-notlari.test.ts` | Sürüm notu gösterimi: ilk kurulumda yalnız en yeni, sürüm atlayan makine aradaki TÜM yayınları görür, kurulu sürümü AŞAN kayıt gösterilmez, geri almad |  |  | ⚠️ yok |

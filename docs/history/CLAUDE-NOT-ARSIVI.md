@@ -3350,3 +3350,46 @@ sevkiyat kurulduktan SONRA ayrı yazımla kaydedilir.
 kurulumda şube sütunu · cari kapısının kendi yazdığı filtreyi "hedef" sayması ·
 boş çuvalda sil düğmesi · muhasebe fişinin son hâli · "bu görünümü kalıcı yap" ·
 belge şablonlarında ok hizası · özet kutularının başlığa yapışması).
+
+## 2026-09-07 — Kurulum yarışı: `pm2 delete` döndüğünde süreç ölmemiş olabilir [ÇEKİRDEK]
+
+2.9.8 kurulumunun BİRİNCİ denemesi `[5/9]`de düştü: `Move-Item app` "dosya
+başka bir işlem tarafından kullanılıyor". Sunucudaki oturumun teşhisi doğruydu
+— kapanan node sürecinin **çalışma dizini `app\`** ve işletim sistemi dizin
+tanıtıcısını `pm2 delete` döndükten SONRA bırakıyor.
+
+**Neden bugüne kadar görünmedi:** bu bir yarış ve önceki iki kurulumda
+kazanılmıştı. Aynı paket, aynı komut üç dakika sonra sorunsuz geçti. Yani
+"iki kurulumda çalıştı" bir kanıt değildi — sınıfın adı budur ve `kur.ps1`
+başlığındaki diğer yarış notlarıyla (cwd `app\` içinde bırakılmaz) aynı aileden.
+
+**Düşme zararsız atlatıldı** ve script'in tasarımı burada kendini gösterdi:
+eşik ÖNCESİydi, `app.eski-*` hiç oluşmadı, hiçbir şey yer değiştirmedi, mevcut
+kurulum yeniden başlatıldı, kesinti 3 sn. Veri/migration/ayar/audit_guard el
+değmemiş doğrulandı. Ama kurulumu insanın ikinci kez başlatmasına bırakıyordu
+ve `kur.ps1`in kendi çıktısı ("kilidi bul, yeniden koş") ile "başarısız
+kurulumu tekrar deneme" kuralı çelişiyordu — oturum haklı olarak insana sordu.
+
+**Düzeltme:** `TasiIsrarla` (5 deneme × 1,5 sn) + `[4/9]` sonrası 1,2 sn
+yatışma. Taşıyan DÖRT yerin dördü de yardımcıdan geçiyor ([5/9] · otomatik geri
+alma · `-GeriAl` aracının iki taşıması); biri çıplak `Move-Item`a dönerse yarış
+oradan geri gelir, bekçi bunu ölçüyor.
+
+**Yardımcı hatayı YUTMAZ** — son denemede aynen fırlatır. Yutsaydı düşen bir
+taşımadan sonra kurulum yarım veriyle devam eder, otomatik geri alma hiç
+koşmazdı; sessiz ve mümkün olan en kötü sonuç. Bekçinin en önemli tek kontrolü
+bu (`scripts/test_deploy_move_retry.ts`, 11 kontrol, üç negatif sonda).
+
+**"Sürecin ölüp ölmediğine" bakılmıyor:** tanıtıcı sahibi her zaman pm2'nin
+bildiği süreç değil (Defender, Explorer önizlemesi, açık bir kabuk). Ölçülebilir
+tek şey TAŞIMANIN KENDİSİ — o deneniyor.
+
+**Düzeltme 2.9.8 PAKETİNDE YOK** (kurulum bittikten sonra yazıldı); bir sonraki
+backend paketiyle sahaya gider. Gevşek `kur.ps1`i tek başına göndermek, paketin
+içindekiyle ayrışırdı — 2026-09-07 sabahı bilerek kapatılan tuzağın aynısı.
+
+**Not — sürüm sayımı yanlıştı:** sahadaki sürüm 2.9.6 değil 2.9.7'ydi (aynı
+sabah kurulmuş, `backend-v2.9.7` etiketi var). Sunucudaki oturuma "2.9.6 → 2.9.8"
+yazıldı; gerçek delta iki servis dosyası + yeniden derlenmiş `dist-web`ti.
+`dist-web` PAKETE GİRER ve Electron kaynağından derlenir — panel değişikliği
+yapılan her turda değişir, ayrıca beyan edilmeli.

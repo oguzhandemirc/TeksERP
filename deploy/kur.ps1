@@ -128,6 +128,43 @@ function Pm2Kos {
   return $LASTEXITCODE
 }
 
+# =============================================================================
+# ⚠ `pm2 delete` DONDUGUNDE SUREC HENUZ OLMEMIS OLABILIR (SAHADA OLCULDU,
+#   2026-09-07 sabahi, 2.9.8 kurulumunun BIRINCI denemesi):
+#
+#     [4/9] pm2 delete   -> donuyor
+#     [5/9] Move-Item app -> "dosya baska bir islem tarafindan kullaniliyor"
+#
+#   Sebep: kapanan node surecinin CALISMA DIZINI `app\` ve isletim sistemi
+#   dizin tanitiscisini pm2 komutu donduktan SONRA birakiyor. Bu bir YARIS:
+#   ayni paket, ayni komut uc dakika sonra sorunsuz gecti. Onceki iki kurulumda
+#   yaris kazanilmisti, bunda kaybedildi - yani "calisiyordu" bir kanit degildi.
+#
+#   Dusme ZARARSIZ atlatildi (esik oncesi, script kendini geri aldi, kesinti
+#   3 sn) ama kurulumu insanin ikinci kez baslatmasina birakiyordu. Simdi
+#   tasima ISRAR EDIYOR: kisa araliklarla birkac kez dener.
+#
+# ⚠ NEDEN "SUREC OLDU MU" DIYE BAKMIYORUZ: tanitici sahibi her zaman pm2'nin
+#   bildigi surec degil (Windows Defender, Explorer onizlemesi, acik bir kabuk).
+#   Olculebilir tek sey TASIMANIN KENDISI - onu deniyoruz.
+#
+# Son deneme de duserse hata AYNEN firlatilir: cagri yerindeki `try/catch`
+# otomatik geri almayi kosar, davranis bugunkuyle ayni kalir.
+# =============================================================================
+function TasiIsrarla($kaynak, $hedef, $deneme = 5, $bekleMs = 1500) {
+  for ($i = 1; $i -le $deneme; $i++) {
+    try {
+      Move-Item $kaynak $hedef -Force -ErrorAction Stop
+      if ($i -gt 1) { Write-Host "     (tasima $i. denemede gecti - dizin tanitiscisi gec birakilmisti)" -ForegroundColor DarkGray }
+      return
+    } catch {
+      if ($i -eq $deneme) { throw }
+      Write-Host "     tasima mesgul, $([math]::Round($bekleMs/1000,1)) sn sonra tekrar ($i/$deneme)..." -ForegroundColor DarkYellow
+      Start-Sleep -Milliseconds $bekleMs
+    }
+  }
+}
+
 $kok       = $Kok
 $appDir    = "$kok\app"
 $eskiKlon  = "$kok\tekserp\Teks-Erp"      # ilk gecis: git klonundan gelen kurulum
@@ -222,8 +259,8 @@ if ($GeriAl) {
   Pm2Kos delete $uygulama | Out-Null
   $damga = Get-Date -Format "yyyyMMdd_HHmmss"
   try {
-    if (Test-Path $appDir) { Move-Item $appDir "$kok\app.basarisiz-$damga" -Force -ErrorAction Stop }
-    Move-Item $hedef $appDir -Force -ErrorAction Stop
+    if (Test-Path $appDir) { TasiIsrarla $appDir "$kok\app.basarisiz-$damga" }
+    TasiIsrarla $hedef $appDir
   } catch {
     # Tasima dustu (acik kilit?). pm2 az once silindi - mevcut app\ hala yerindeyse
     # onu geri kaldir; fabrika kapali kalmasin.
@@ -418,6 +455,10 @@ Ok "$([System.IO.Path]::GetFileName($dump))  ($([math]::Round((Get-Item $dump).L
 # --- [4/9] Uygulamayi durdur ------------------------------------------------
 Adim "[4/9] pm2 uygulamasi durduruluyor..."
 Pm2Kos delete $uygulama | Out-Null   # delete: ecosystem env blogu degismis olabilir
+# pm2 komutu donunce surec HENUZ olmemis olabilir; tanitici birakilsin diye kisa
+# bir yatisma. Tek basina YETMEZ (yaris suresi degisken) - asil sed [5/9]'daki
+# `TasiIsrarla`. Bu bekleme yalnizca ilk denemenin dusme olasiligini dusurur.
+Start-Sleep -Milliseconds 1200
 Ok "durduruldu"
 
 # --- Buradan sonrasi icin otomatik geri alma --------------------------------
@@ -469,7 +510,7 @@ function GeriAlOtomatik($sebep) {
   # Ilk hatada dur; app.eski-* saglam kalir, elle komutlar asagida.
   try {
     if (Test-Path $appDir) { Remove-Item $appDir -Recurse -Force -ErrorAction Stop }
-    Move-Item $eskiAd $appDir -Force -ErrorAction Stop
+    TasiIsrarla $eskiAd $appDir
   } catch {
     Write-Host "  !! Geri alma YARIDA KALDI: $($_.Exception.Message)" -ForegroundColor Red
     Write-Host "     Eski kurulum SAGLAM: $eskiAd" -ForegroundColor Yellow
@@ -496,7 +537,7 @@ Adim "[5/9] Yeni surum yerlestiriliyor..."
 try {
   # Move-Item: ilk geciste kaynak farkli bir ust klasorde (tekserp\Teks-Erp),
   # Rename-Item bunu yapamaz.
-  Move-Item $mevcut $eskiAd -Force -ErrorAction Stop
+  TasiIsrarla $mevcut $eskiAd
   # Ilk gecis sonrasi C:\...\tekserp\ kabugu (icinde .git) geride kalir;
   # BILEREK silinmez - geri donus tamamlanana kadar dursun (sonda hatirlatilir).
   New-Item -ItemType Directory -Path $appDir | Out-Null
