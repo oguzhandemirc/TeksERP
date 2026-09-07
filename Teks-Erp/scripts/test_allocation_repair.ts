@@ -20,6 +20,8 @@
 //    ② `specMatch`ten tolerans parametresi düşürülürse §2 kırmızı
 //    ③ fazla sevk turu kaldırılırsa §4 kırmızı ④ onarım `setShipmentOrders`
 //    çağırmazsa §5 kırmızı. Dördü de ölçüldü.
+//    ⑤ (2026-09-07) önizleme motor yerine ayrı bir tahminle yazılırsa §5b
+//    kırmızı — `distributeSacksToLines` çağrısı sabit diziyle değiştirildi.
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { Prisma, RollStatus, ShipmentStatus } from "@prisma/client";
@@ -261,9 +263,37 @@ async function run(): Promise<void> {
     `${kayit2?.onarilabilirMetraj} m`,
   );
 
+  // ── §5b ÖNİZLEME YALAN SÖYLEMEZ (2026-09-07) ──────────────────────────────
+  // ⭐ Bu bekçinin en önemli tek kontrolü burada: önizleme, ONARIMIN GERÇEKTEN
+  //    YAZDIĞI metrajı söylemek zorunda. Önizleme ayrı bir "tahmin" fonksiyonu
+  //    ile yazılsaydı ikisi sessizce ayrışırdı ve kullanıcı onaya bakarak yanlış
+  //    karar verirdi ("ayrışan yüzey" sınıfı). Ölçüt: ön-izlemenin satır
+  //    toplamı == onarımın kazancı.
+  const onz = (await shippingService.previewRepairAllocation(s3.id)).data as {
+    yazilacakMetraj: number;
+    kalemler: { orderNumber: string; itemName: string; yazilacak: number; acikOnce: number; acikSonra: number }[];
+  };
+  check("⭐ önizleme SATIR bazlı döküm veriyor (soyut toplam değil)", onz.kalemler.length > 0,
+    `${onz.kalemler.length} kalem`);
+  check("önizleme kaleminde sipariş no + ürün adı var (tablo kolonları dolu)",
+    !!onz.kalemler[0]?.orderNumber && !!onz.kalemler[0]?.itemName,
+    JSON.stringify(onz.kalemler[0] ?? null));
+  check(
+    "kalem aritmetiği tutuyor: açıkÖnce − yazılacak = açıkSonra",
+    onz.kalemler.every((k) => Math.abs(k.acikOnce - k.yazilacak - k.acikSonra) < 0.01),
+  );
+  const onzToplam = onz.kalemler.reduce((a2, k) => a2 + k.yazilacak, 0);
+  check("önizleme toplamı kalemlerin toplamına eşit", Math.abs(onzToplam - onz.yazilacakMetraj) < 0.01,
+    `${onzToplam} ↔ ${onz.yazilacakMetraj}`);
+
   const onarim = (await shippingService.repairShipmentAllocation(s3.id, ADMIN)).data as {
     oncesi: number; sonrasi: number; kazanc: number;
   };
+  check(
+    "⭐ ÖNİZLEME = SONUÇ — vaat edilen metraj gerçekten yazıldı",
+    Math.abs(onz.yazilacakMetraj - onarim.kazanc) < 0.01,
+    `önizleme ${onz.yazilacakMetraj} m ↔ onarım ${onarim.kazanc} m`,
+  );
   check(
     "⭐ onarım defteri BÜYÜTTÜ (40 → 100)",
     Math.abs(onarim.sonrasi - 100) < 0.01 && onarim.kazanc > 0.01,

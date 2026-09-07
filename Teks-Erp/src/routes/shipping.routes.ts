@@ -262,6 +262,19 @@ router.get(
 );
 /**
  * @swagger
+ * /api/shipping/repair/allocations/{id}/preview:
+ *   get:
+ *     summary: Onarım önizlemesi — hangi sipariş satırına kaç metre yazılacak (yazma yok)
+ *     tags: [Shipping]
+ */
+router.get(
+  "/repair/allocations/:id/preview",
+  verifyToken,
+  REPAIR,
+  controller.previewRepairAllocation,
+);
+/**
+ * @swagger
  * /api/shipping/repair/allocations/{id}:
  *   post:
  *     summary: Tek sevkiyatın sipariş defterini onar (irsaliye v+1 doğurur)

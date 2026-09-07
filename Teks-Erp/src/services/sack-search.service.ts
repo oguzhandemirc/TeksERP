@@ -22,6 +22,7 @@ import { isDailyCode, normalizeScanCode } from "../utils/code-format";
 import { applyDateRange, buildTextSearch, readFilterList, readIdCondition } from "../utils/query-parser";
 import { SACK_ABSENT_STATUSES } from "./helpers/sack-invariants.helper";
 import { ACTIVE_TAG_WHERE, ACTIVE_TAG_SELECT, toTagBadges } from "./helpers/sack-tag.helper";
+import { batchLoadAliasesMulti } from "./helpers/customer-name.helper";
 
 const PLANNED_STATUSES: ShipmentStatus[] = [ShipmentStatus.PLANNED];
 
@@ -413,6 +414,57 @@ export async function buildSackSearchWhere(params: SackSearchParams): Promise<{
   return { where: { AND: andClauses }, rollFilter, hasContentFilter };
 }
 
+/**
+ * Etikette YAZAN — `Roll.lastLabelSnapshot`tan okunur, CANLI VERİDEN TÜRETİLMEZ.
+ *
+ * İki snapshot biçimi var ve ayrımı korunur:
+ *   · denormalize   → ad alanları DOLU (baskı anında yazıldı)
+ *   · minimal niyet → yalnız `{orderLineId}`/`{customerId}`/`{stock}` — ad YOK
+ * İkincisinde ad UYDURULMAZ, `null` döner. Adı canlı veriden türetmek, ölçmek
+ * istediğimiz ayrışmayı (kâğıt ↔ kayıt) tam olarak gizlerdi.
+ *
+ * `null` dönüşü = ortada hiç etiket yok; "bayat etiket" ile "etiketsiz top"
+ * sahada farklı sorunlardır ve ayrı kalırlar.
+ */
+function etiketiOku(snapRaw: unknown, printedAt: Date | null) {
+  const snap = (snapRaw ?? null) as Record<string, unknown> | null;
+  if (!snap && !printedAt) return null;
+  const metin = (k: string) => (typeof snap?.[k] === "string" ? (snap[k] as string) : null);
+  return {
+    itemName: metin("itemName"),
+    colorName: metin("colorName"),
+    customerName: metin("customerName"),
+    orderNumber: metin("orderNumber"),
+    operatorName: metin("operatorName"),
+    printedAt: printedAt ? printedAt.toISOString() : metin("printedAt"),
+    stok: snap?.stock === true,
+  };
+}
+
+/**
+ * Müşteri karşılığı çözücüsü — satır başına `{itemName, colorName}` döndürür.
+ *
+ * ⚠️ Karşılık YOKSA `null` döner; BİZİM adımız "müşterideki ad" diye BASILMAZ
+ * (2026-09-06 kullanıcı düzeltmesi: çoğu müşteri bizim adımızı kullanır,
+ * uydurma alias defteri kirletir).
+ */
+async function musteriAdiCozucu(
+  customerId: string | null,
+  satirlar: { item: { id: string }; color: { id: string } | null }[],
+): Promise<(itemId: string, colorId: string | null) => { itemName: string | null; colorName: string | null }> {
+  if (!customerId) return () => ({ itemName: null, colorName: null });
+  const { itemAlias, colorAlias } = await batchLoadAliasesMulti(
+    prisma,
+    [customerId],
+    satirlar.map((r) => r.item.id),
+    satirlar.map((r) => r.color?.id).filter((x): x is string => !!x),
+  );
+  return (itemId, colorId) => ({
+    itemName: itemAlias.get(`${customerId}:${itemId}`) ?? null,
+    colorName: colorId ? (colorAlias.get(`${customerId}:${colorId}`) ?? null) : null,
+  });
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -709,6 +761,10 @@ export class SackSearchService {
         // (gürültü) ve BELGEYE/ETİKETE hiç girmez (schema.prisma doc'u).
         // NULL = bu alandan önce tartılmış (legacy) → rozet gösterilmez.
         weightSource: true,
+        // Müşteri karşılığı (alias) BU müşteriye göre çözülür. Depodaki çuvalda
+        // sevkiyat YOKTUR; o yüzden çuvalın KENDİ müşterisi de gerekir.
+        customerId: true,
+        customer: { select: { id: true, name: true } },
         // Çuvalın ÜSTÜNDEKİ etiket bayat mı (müşteri değişimi → farklı şablon).
         // Toplarınki `rolls[].labelDirty`; bu, ÇUVALIN KENDİ etiketi.
         labelDirty: true,
@@ -738,6 +794,15 @@ export class SackSearchService {
             // Etiket bayat mı — müşteri değişimi/relabel sonrası "yeniden bas"
             // uyarısını ve toplu yeniden-basma aksiyonunu besler.
             labelDirty: true,
+            // ⭐ ÜÇLÜ KARŞILAŞTIRMA (2026-09-07 saha isteği): bu ekran, mal sevk
+            // edilmeden önceki SON bakış anıdır ve üç ad orada ayrışabilir —
+            // bizdeki · müşterideki · TOPUN ÜSTÜNDEKİ KÂĞITTA YAZAN. Üçüncüsü
+            // `lastLabelSnapshot`ta baskı anında DONMUŞTUR; canlı veriden
+            // türetilemez, çünkü asıl soru "kâğıt ile kayıt ayrıştı mı".
+            // `labelPrintedAt` NULL = ortada hiç etiket yok (ayrı bir durum:
+            // "bayat etiket" ile "etiketsiz top" farklı sahada farklı sorunlar).
+            lastLabelSnapshot: true,
+            labelPrintedAt: true,
             item: { select: { id: true, name: true } },
             color: { select: { id: true, name: true, hex: true } },
           },
@@ -754,7 +819,36 @@ export class SackSearchService {
       },
     });
     if (!sack) throw AppError.notFound("Çuval bulunamadı");
-    return { success: true, data: sack };
+
+    // ── ÜÇ AD YAN YANA ────────────────────────────────────────────────────────
+    // ① bizdeki (canlı kayıt) ② müşterideki (alias kademesi) ③ etikette yazan
+    // (baskı anında donmuş). Üçü de AYNI satırda gösterilir; ayrıştıklarında
+    // görünür olsunlar diye. Saha gerekçesi: etikette A müşterisi yazan bir top
+    // B'nin çuvalına düşerse bugün bunu gösteren HİÇBİR ekran yok.
+    //
+    // Alias kademesi müşteri kartındaki karşılıktır; yoksa `null` döner —
+    // BİZİM adımız "müşterideki ad" diye BASILMAZ (2026-09-06 kullanıcı
+    // düzeltmesi: çoğu müşteri bizim adımızı kullanır, uydurma alias yaratma).
+    const musterideki = await musteriAdiCozucu(
+      sack.customerId ?? sack.shipment?.customer?.id ?? null,
+      [...sack.rolls, ...sack.swatches],
+    );
+
+    return {
+      success: true,
+      data: {
+        ...sack,
+        rolls: sack.rolls.map((r) => ({
+          ...r,
+          musterideki: musterideki(r.item.id, r.color?.id ?? null),
+          etiket: etiketiOku(r.lastLabelSnapshot, r.labelPrintedAt),
+        })),
+        swatches: sack.swatches.map((w) => ({
+          ...w,
+          musterideki: musterideki(w.item.id, w.color?.id ?? null),
+        })),
+      },
+    };
   }
 
   /**

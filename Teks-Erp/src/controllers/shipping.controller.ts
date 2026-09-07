@@ -387,6 +387,15 @@ export class ShippingController {
   };
 
   /** Tek sevkiyatın defterini onar — irsaliye v+1 doğurur. */
+  /** Onarım ÖNİZLEMESİ — hangi sipariş satırına kaç metre. Yazma YOK. */
+  previewRepairAllocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      res.status(200).json(await this.service.previewRepairAllocation(req.params.id as string));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   repairShipmentAllocation = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       res.status(200).json(

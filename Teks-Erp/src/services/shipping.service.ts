@@ -251,6 +251,82 @@ interface AllocationAuditTrail {
   tahsissizMetraj?: number;
 }
 
+/**
+ * Onarım önizlemesinin satır tablosu — motorun istediği `SackAllocLine` biçimi
+ * ile ekranın istediği okunur bağlam (sipariş no / ürün / renk / en) TEK
+ * geçişte kurulur; ikisi ayrı yerlerde kurulsaydı satır eşleşmesi elle
+ * yapılırdı ve sessizce kayabilirdi.
+ */
+function onarimSatirlariniKur(
+  orders: {
+    order: {
+      orderNumber: string; branchId: string | null; createdAt: Date; deadline: Date | null;
+      lines: {
+        id: string; itemId: string; colorId: string | null; width: Prisma.Decimal | null;
+        quantity: Prisma.Decimal; shippedQty: Prisma.Decimal; createdAt: Date;
+        item: { name: string }; color: { name: string } | null;
+      }[];
+    };
+  }[],
+): {
+  bilgi: Map<string, { orderNumber: string; itemName: string; colorName: string | null; width: number | null; acikOnce: number }>;
+  lines: SackAllocLine[];
+} {
+  const bilgi = new Map<string, { orderNumber: string; itemName: string; colorName: string | null; width: number | null; acikOnce: number }>();
+  const lines = orders.flatMap((so) =>
+    so.order.lines.map((l) => {
+      const acik = Number(l.quantity) - Number(l.shippedQty);
+      bilgi.set(l.id, {
+        orderNumber: so.order.orderNumber,
+        itemName: l.item.name,
+        colorName: l.color?.name ?? null,
+        width: l.width == null ? null : Number(l.width),
+        acikOnce: Math.round(acik * 1000) / 1000,
+      });
+      return {
+        id: l.id, itemId: l.itemId, colorId: l.colorId, width: l.width,
+        branchId: so.order.branchId,
+        need: new Prisma.Decimal(Math.max(acik, 0)),
+        deadline: so.order.deadline,
+        orderDate: so.order.createdAt,
+        lineCreatedAt: l.createdAt,
+      };
+    }),
+  );
+  return { bilgi, lines };
+}
+
+/**
+ * Dağıtım sonucunu ekranın tablosuna çevirir. Aynı sipariş satırına BİRDEN ÇOK
+ * çuvaldan gelen metraj TEK satırda toplanır — kullanıcı çuval kırılımını değil
+ * "hangi siparişe kaç metre" sorusunu soruyor. En çok yazılan satır üstte.
+ */
+function onarimKalemleriniKur(
+  dagitim: { orderLineId: string; qty: Prisma.Decimal }[],
+  bilgi: Map<string, { orderNumber: string; itemName: string; colorName: string | null; width: number | null; acikOnce: number }>,
+) {
+  const satirToplam = new Map<string, number>();
+  for (const d of dagitim) {
+    satirToplam.set(d.orderLineId, (satirToplam.get(d.orderLineId) ?? 0) + Number(d.qty));
+  }
+  return [...satirToplam.entries()]
+    .map(([lineId, yazilacak]) => {
+      const b = bilgi.get(lineId)!;
+      const y = Math.round(yazilacak * 1000) / 1000;
+      return {
+        orderLineId: lineId,
+        orderNumber: b.orderNumber,
+        itemName: b.itemName,
+        colorName: b.colorName,
+        width: b.width,
+        acikOnce: b.acikOnce,
+        yazilacak: y,
+        acikSonra: Math.round((b.acikOnce - y) * 1000) / 1000,
+      };
+    })
+    .sort((a2, b2) => b2.yazilacak - a2.yazilacak);
+}
+
 export class ShippingService {
   // =========================================================================
   // ÇUVAL DEPO HAVUZU — çuval aç / okut / tart (sevkiyattan bağımsız)
@@ -948,6 +1024,96 @@ export class ShippingService {
       });
     }
     return { success: true, data: satirlar };
+  }
+
+  /**
+   * ONARIM ÖNİZLEMESİ — HANGİ SATIRA KAÇ METRE (2026-09-07 saha isteği).
+   *
+   * ⚠️ NEDEN AYRI UÇ: liste "bu sevkiyatta 1374 m yazılabilir" diyordu ve onay
+   * ekranı da aynı toplamı tekrar ediyordu. Kullanıcının sözü: *"neler olacağını
+   * tam anlayamıyorum, daha çok yazı istemiyorum, anlayabilmek istiyorum."*
+   * Anlamak için gereken tek şey TOPLAM DEĞİL DAĞILIM: hangi siparişin hangi
+   * ürün-renk-en satırına kaç metre gidecek, o satır sonra ne kadar açık kalacak.
+   *
+   * ⚠️ ÖLÇÜM MOTORUN KENDİSİYLE YAPILIR (`distributeSacksToLines`) — onarımın
+   * çağıracağı fonksiyonun aynısı. Ayrı bir "tahmin" yazılsaydı önizleme ile
+   * sonuç sessizce ayrışırdı ve önizleme YALAN söylerdi; bu depoda o sınıfın adı
+   * "ayrışan yüzey"dir. Yazma YOK.
+   */
+  async previewRepairAllocation(shipmentId: string): Promise<ApiResponse<unknown>> {
+    const sh = await prisma.shipment.findUnique({
+      where: { id: shipmentId },
+      select: {
+        id: true, shipmentNo: true, status: true,
+        customer: { select: { id: true, name: true } },
+        sacks: {
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: {
+            id: true, branchId: true,
+            rolls: {
+              where: { status: { notIn: SACK_ABSENT_STATUSES } },
+              select: { itemId: true, colorId: true, width: true, currentQty: true },
+            },
+            allocations: { select: { qty: true } },
+          },
+        },
+        orders: {
+          select: {
+            order: {
+              select: {
+                id: true, orderNumber: true, branchId: true, createdAt: true, deadline: true,
+                lines: {
+                  select: {
+                    id: true, itemId: true, colorId: true, width: true,
+                    quantity: true, shippedQty: true, createdAt: true,
+                    item: { select: { name: true } },
+                    color: { select: { name: true } },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+    if (!sh) throw AppError.notFound("Sevkiyat bulunamadı");
+
+    const enTolerans = await readShippingAllocWidthToleranceCm();
+    const fazlaSevk = await readShippingAllowOverAllocation();
+
+    const { bilgi, lines } = onarimSatirlariniKur(sh.orders);
+
+    const dagitim = distributeSacksToLines(
+      sh.sacks.map((sk) => ({
+        sackId: sk.id,
+        branchId: sk.branchId,
+        rolls: sk.rolls.map((r) => ({ itemId: r.itemId, colorId: r.colorId, width: r.width, currentQty: r.currentQty })),
+      })),
+      lines,
+      enTolerans,
+      fazlaSevk,
+    );
+
+    const kalemler = onarimKalemleriniKur(dagitim, bilgi);
+
+    const icerik = sh.sacks.reduce((a2, sk) => a2 + sk.rolls.reduce((c, r) => c + Number(r.currentQty), 0), 0);
+    const yazili = sh.sacks.reduce((a2, sk) => a2 + sk.allocations.reduce((c, x) => c + Number(x.qty), 0), 0);
+    const toplamYazilacak = kalemler.reduce((a2, k) => a2 + k.yazilacak, 0);
+
+    return {
+      success: true,
+      data: {
+        shipmentId: sh.id,
+        shipmentNo: sh.shipmentNo,
+        customer: sh.customer,
+        icerikMetraj: Math.round(icerik * 1000) / 1000,
+        yazilanMetraj: Math.round(yazili * 1000) / 1000,
+        yazilacakMetraj: Math.round(toplamYazilacak * 1000) / 1000,
+        enToleransCm: enTolerans,
+        fazlaSevkYazilir: fazlaSevk,
+        kalemler,
+      },
+    };
   }
 
   /**
