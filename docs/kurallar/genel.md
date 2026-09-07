@@ -31,6 +31,7 @@
 ### Değişmezler
 
 - **[ÇEKİRDEK]** bonjour-service bilinçli istisnadır: sürüm SABİT (`1.4.4`, `^` YOK — sonraki ana sürümler ESM-only olup `require()` yolunu sessizce kırar) ve kullanım tek dosyada tembel `require` + try/catch (paket kaybolsa da sunucu ayakta kalır). <sub>(CLAUDE.md:152)</sub>
+- **[ÇEKİRDEK]** Node süreç uyarıları YIĞIN İZİYLE log'a düşer (`lib/process-warnings.ts`, boot'ta kurulur): Node'un önerdiği `--trace-deprecation` canlıda YENİDEN BAŞLATMA demek, oysa `warning` olayının `w.stack`i çağrı yerini BAYRAKSIZ DA taşır. İz ETİKETSİZ basılır (`logger.yiginIzi`), imza çağrı yerini içerir (aynı metin başka yerden gelirse ayrı sorundur). ⚠️ `util.deprecate` uyarıları SÜREÇ BAŞINA BİR KEZ basar — log'dan SIKLIK okunamaz. · bekçi: `scripts/test_process_warnings.ts` <sub>(arşiv:2026-09-07 D-2)</sub>
 - **[ÇEKİRDEK]** helmet İKİ AYRI ÖRNEK kurulur (HSTS/CSP-upgrade LAN'a sızarsa panel kullanıcının HSTS önbelleğinde kilitlenir; geri dönüş sunucuda değil tarayıcıdadır) ve dispatcher'ın FONKSİYON ADI `helmetMiddleware` OLMAK ZORUNDA — Express katman adını fonksiyondan alır, isimsiz arrow sıra bekçisini kör eder. · bekçi: `scripts/test_middleware_order.ts` <sub>(CLAUDE.md:95)</sub>
 
 ### Yasaklar
@@ -65,13 +66,13 @@
 
 - Tarihsiz dört sözleşme üyesinin (izinli paketler · Electron ağacı · audit · TR mesaj) kök dizinde SATIRI YOK ve olmamalı — bunlar alt-CLAUDE / Ortak Konvansiyonlar metinleridir; archiveOnly listesi 'dizin satırı gerekmez' anlamındadır, 'arşive taşı' değil.
 
-## Bekçiler — bu alana dokununca koş (33 backend · 0 istemci)
+## Bekçiler — bu alana dokununca koş (34 backend · 0 istemci)
 
 `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tek testte tip kapısı atlanır) · Electron `npx vitest run <yol>` · mobil `npx jest <yol>`.
 
 **Ne ölçtükleri, DB gerektirip gerektirmedikleri ve bayatlık işaretleri: `Teks-Erp/docs/BEKCI-HARITASI.md` → bu alanın bölümü.** ⚠️ = orada gerekçesi yazılı bayatlık şüphesi.
 
-Backend: `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`⚠️, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_record_provenance`, `test_remote_access_guard`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`⚠️, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`
+Backend: `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_device_activity`, `test_device_pairing_flag`, `test_discovery_identity`, `test_dispatch_allocation_fresh`, `test_label_snapshot_audit_split`, `test_manual_attributes_reason`⚠️, `test_merge_field_picks`, `test_o19_operator_trace`, `test_observability_cache`, `test_observability_contract`, `test_period_close`, `test_permission_grant_source`, `test_phase0_quickwins`, `test_process_warnings`, `test_record_provenance`, `test_remote_access_guard`, `test_report_day_boundary`, `test_reports`, `test_roll_entry_station`, `test_sack_notes`, `test_settings_password`, `test_shipment_invoice`, `test_superadmin`⚠️, `test_superadmin_provision`, `test_superadmin_visible`, `test_system_log`, `test_totp`, `test_user_credentials_guard`, `test_web_hardening`, `test_work_session_close_all`, `test_work_session_stamping`
 
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 

@@ -3393,3 +3393,60 @@ sabah kurulmuş, `backend-v2.9.7` etiketi var). Sunucudaki oturuma "2.9.6 → 2.
 yazıldı; gerçek delta iki servis dosyası + yeniden derlenmiş `dist-web`ti.
 `dist-web` PAKETE GİRER ve Electron kaynağından derlenir — panel değişikliği
 yapılan her turda değişir, ayrıca beyan edilmeli.
+
+## 2026-09-07 — `pg` DeprecationWarning (D-2): önerilen teşhis ÖLÇÜMLE ELENDİ [ÇEKİRDEK]
+
+Sunucudaki oturum sahada iki satır buldu (`backend-err-5.log`, `backend-err-0.log`):
+`Calling client.query() when the client is already executing a query is
+deprecated and will be removed in pg@9.0`. Zamanlarına bakıp iki aday önerdi —
+`auth.middleware.touchSessionLastSeen` ve `device.service.resolveDevice` — ve
+"üç yazımı `await` et" dedi. Adayları kendisi kanıtlamadığını da dürüstçe yazdı.
+
+**Öneri kabul EDİLMEDİ; mekanizma ölçüldü ve aday elendi.**
+
+**① Uyarının koşulu İKİ değil ÜÇ eşzamanlı sorgudur.** `pg/lib/client.js:690`:
+`if (this._queryQueue.length > 0) queryQueueLengthDeprecationNotice()`. İki
+sorguda birincisi `activeQuery` olur, kuyruk BOŞ kalır ve uyarı DOĞMAZ. Ölçüldü:
+iki sorgu → 0 uyarı, üç sorgu → 1 uyarı.
+
+**② Uyarı SÜREÇ BAŞINA BİR KEZ basılır** (`util.deprecate`). Sahadaki iki satır
+"iki kez oldu" değil "iki ayrı süreçte en az bir kez oldu" demektir; bu log'dan
+SIKLIK ölçülemez.
+
+**③ Prisma bu uyarıyı havuz üzerinden ÜRETEMEZ.** Her `prisma.*` çağrısı
+`pool.query()`ye gider, havuz BOŞTA bir client verir ve meşgul client'ı ikinci
+bir çağırana ASLA vermez (doluysa sıraya alır). Dört ayrı hipotez ölçüldü,
+dördü de **0 uyarı**: (a) havuzdan dört serbest sorgu (b) tx içinde
+`Promise.all` ile üç `tx.*` (c) tx zaman aşımı, sorgu hâlâ uçarken
+(d) tx zaman aşımı + ardından eşzamanlı yük. Prisma pinlenmiş client'ta da
+sorguları sıraya alıyor.
+
+**④ Canlı sunucuda yeniden üretilemedi:** yerel sunucu `--trace-deprecation` ile
+açıldı, 120+ paralel kimlikli istek (`x-device-id` yolu dahil) atıldı → 0 uyarı.
+
+Yani `touchSessionLastSeen` ve `resolveDevice` **sebep olamaz**: ikisi de havuz
+üzerinden gider ve zaten iki tanedir. Sıcak yolu (her kimlikli istek) kanıtsız
+bir varsayım için değiştirmek yanlış olurdu.
+
+**Geriye kalan tek yer PİNLENMİŞ bir `Client`tır.** Backend'de yalnız iki tane
+var (`helpers/pg-admin-client.ts`, `db-copy-verify.service.ts`) ve ikisi de
+sıralı `await` kullanıyor. Sebep henüz bilinmiyor — ve **tahminle kapatılmayacak.**
+
+**Yapılan iş: tahmin değil, ÖLÇÜM ALTYAPISI.** Node'un kendi çıktısı
+"nereden geldiğini görmek için `--trace-deprecation` ile başlat" diyor ve o
+bayrak canlıda yeniden başlatma, yani kesinti demekti. **Ölçüldü: `warning`
+olayının `w.stack` alanı çağrı yerini BAYRAKSIZ DA taşıyor** — Node yalnız
+EKRANA basmıyor. `src/lib/process-warnings.ts` bu dinleyiciyi kurar; bir sonraki
+paketle sahaya gider ve uyarı bir daha çıktığında ÇAĞRI YERİNİ log'a yazar.
+
+İmza `ad|mesaj|ilk yığın karesi`dir — aynı metin başka bir yerden gelirse AYRI
+sorundur, susturulmaz.
+
+**Ciddiyet (oturumun değerlendirmesi doğru):** bugün sorun değil, `pg` ikinci
+sorguyu sıraya alıyor. `pg@9`da fırlatacak. Yükseltmeden ÖNCE kapatılmalı;
+bugünün acili değil.
+
+**Bekçinin kendi hatası da kayda geçti:** §4 (tekrar basılmıyor) ilk yazımda
+pg'nin uyarısıyla ölçülüyordu; o zaten süreç başına bir kez bastığı için sonda
+`gorulen` kümesini kaldırdığında bile YEŞİL kaldı — **vakumen yeşil**. Tekrar
+artık `process.emitWarning` ile ölçülüyor.

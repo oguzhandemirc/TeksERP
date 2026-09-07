@@ -63,6 +63,20 @@ export function hata(alan: string, mesaj: string, ek?: unknown): void {
   }
 }
 
+/**
+ * Yığın izini ETİKETSİZ, ham olarak stderr'e basar (`hata()`nın alt satırlarıyla
+ * AYNI biçim). `Error` elde olmayan yerler için — süreç `warning` olayı gibi.
+ *
+ * ⚠️ Neden ayrı bir kapı: yığın izini basmak `console`a dokunmayı gerektirir ve
+ * `no-console` yalnız BU dosyada kapalıdır. İstisnayı çağıran dosyaya yaymak
+ * yerine kanal ADLI bir yol açar; kaçışın nerede kullanıldığı greplenebilir
+ * kalır (`satir()` emsali).
+ */
+export function yiginIzi(stack: string): void {
+  // İlk satır uyarının kendi metnidir; onu `uyari()`/`hata()` zaten bastı.
+  console.error(stack.split("\n").slice(1).join("\n"));
+}
+
 /** Uyarı — işlem sürdü ama bir şey eksik/riskli. */
 export function uyari(alan: string, mesaj: string, ek?: unknown): void {
   const kuyruk = metin(ek);
