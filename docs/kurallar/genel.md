@@ -10,6 +10,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** Kapanış 5sn'lik zorla-çıkışa düşerse log FAZI ve AÇIK BAĞLANTI SAYISINI basar (bağlantı > 0 → asılı istek, 0 → zincir fazın kendisinde durmuş); tek cümlelik "tamamlanmadı" YETMEZ. Sebep erişim log'undan ÇIKARILAMAZ — o, isteği yalnız BİTTİĞİNDE yazar, asılı istek hiç iz bırakmaz. <sub>(arşiv:2026-09-10 prod log ③)</sub>
 - **[ÇEKİRDEK]** Her CUD operasyonu `AuditService.log()` ile `SystemLog`a yazılır; tek istisna `UserPreference` (kişisel UI blob'u). · bekçi: `Teks-Erp/scripts/test_audit_depth.ts (kapsam kısmi)` <sub>(CLAUDE.md:285)</sub>
 - **[ÇEKİRDEK]** Audit best-effort'tur: yazım hatası isteği DÜŞÜRMEZ ve çağrı transaction DIŞINDA yapılır. Başarısızlık sayacı `/health`te DEĞİL `/api/admin/health`tedir (`auditWriteFailures`) — `/health`in alan kümesi DONDURULMUŞ, yeni operasyonel metrik `buildRichHealth`e eklenir. <sub>(CLAUDE.md:285)</sub>
 - **[ÇEKİRDEK]** Validation hata mesajları Türkçe yazılır. <sub>(CLAUDE.md:297)</sub>
@@ -80,3 +81,4 @@ Backend: `test_audit_depth`, `test_audit_labels`, `test_boss_overview`, `test_de
 ## Arşiv notları (tam metin, gerekçe ve ölçüm)
 
 - 2026-09-01 · 2026-09-01 — Patron modülü: fabrikaya GELEN PORT AÇMADAN uzaktan takip — `CLAUDE-NOT-ARSIVI.md:1791-2032`
+- 2026-09-10 · 2026-09-10 — Fabrika prod log'undan üç bulgu (kapanış teşhisi ③) [ÇEKİRDEK] — `CLAUDE-NOT-ARSIVI.md` §2026-09-10
