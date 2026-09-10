@@ -28,6 +28,8 @@
 //   ⑤ `applyColumnCfg` başlığı KAÇIRMAZ              → 1 kırmızı (§6, XSS)
 //   ⑥ `updateSchema` satırı silinir                  → 3 kırmızı (§5)
 //   ⑦ `docConfigSchema.labels` silinir               → 1 kırmızı (§6 önizleme)
+//   ⑧ (2026-09-10) `adRejimi` fiş yükünden düşürülür  → 5 kırmızı (§10)
+//   ⑨ (2026-09-10) rejim fişte SABİTLENİR (canlı okunmaz) → 2 kırmızı (§10)
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
 import { ItemType, Prisma, PrintedDocType, RollStatus, ShipmentStatus } from "@prisma/client";
@@ -674,6 +676,70 @@ async function run(): Promise<void> {
       renderSample("bizdeki", undefined, true) === renderSample("bizdeki"),
     "rejim `bizdeki` iken müşteri kolonları hiç doğmaz",
   );
+
+  // ---------------------------------------------------------------------------
+  console.log("\n§10 — MUHASEBE FİŞİ AYNI REJİMİ ALIR (2026-09-10 saha bulgusu)");
+  // ---------------------------------------------------------------------------
+  // ⭐ SAHADA AYRIŞTI: fabrikadan gelen iki dosya AYNI sevkiyata aitti —
+  //    PDF'te `BS-6650 EKRU` (müşterinin adı), Excel'de `LİNEN EKRU` (bizim
+  //    adımız). İkisi de AYNI donmuş belgeden besleniyordu; snapshot iki adı da
+  //    taşıyordu. Ayrışan şey KARARdı: rejimi yalnız irsaliyeyi çizen taraf
+  //    biliyordu, fiş ucu hiç sormuyordu. Ayarın kendi açıklaması ise "kapsam
+  //    sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor — vaat yerine gelmiyordu.
+  //
+  // Bu bölüm fiş ucunun rejimi TAŞIDIĞINI ve rejimin CANLI okunduğunu ölçer.
+  // Excel'in o rejimi kolona çevirmesi panel bekçisinin işi
+  // (`Electron/.../accounting-export.test.ts` — "ad rejimi" bölümü).
+  await setMode("musterideki");
+  await setCekiMode(null);
+  const fisMusteri = (await shippingService.getDispatchReport(SHIPMENT)).data as {
+    adRejimi?: { urunBizdeki: boolean; urunMusterideki: boolean; cekiBizdeki: boolean; cekiMusterideki: boolean };
+    products: { name: string; customerName?: string | null }[];
+  };
+  check(
+    "⭐ fiş ucu ad rejimini TAŞIYOR (Excel kararı tahmin etmesin)",
+    !!fisMusteri.adRejimi,
+    JSON.stringify(fisMusteri.adRejimi),
+  );
+  check(
+    "⭐ `musterideki` → fişte müşteri kolonu AÇIK, bizimki KAPALI (irsaliyeyle aynı)",
+    fisMusteri.adRejimi?.urunMusterideki === true && fisMusteri.adRejimi?.urunBizdeki === false,
+  );
+  check(
+    "çeki `devral` → genel rejimi izliyor (fişte de)",
+    fisMusteri.adRejimi?.cekiMusterideki === true && fisMusteri.adRejimi?.cekiBizdeki === false,
+  );
+  check(
+    "müşteri adı SATIRDA duruyor — rejim kolonu açtı, veri zaten vardı",
+    typeof fisMusteri.products[0]?.customerName === "string",
+    String(fisMusteri.products[0]?.customerName),
+  );
+
+  // Rejim CANLI okunur: ayarı çevir, AYNI donmuş belgeden farklı rejim gelsin.
+  await setMode("bizdeki");
+  const fisBizdeki = (await shippingService.getDispatchReport(SHIPMENT)).data as {
+    adRejimi?: { urunBizdeki: boolean; urunMusterideki: boolean };
+  };
+  check(
+    "⭐ REJİM DONMAZ: ayar değişince fiş de yeni rejimle geliyor (belge aynı belge)",
+    fisBizdeki.adRejimi?.urunBizdeki === true && fisBizdeki.adRejimi?.urunMusterideki === false,
+    JSON.stringify(fisBizdeki.adRejimi),
+  );
+
+  // Çeki KENDİ rejimini izleyebilir — ürün listesinden bağımsız.
+  await setCekiMode("ikisi");
+  const fisCeki = (await shippingService.getDispatchReport(SHIPMENT)).data as {
+    adRejimi?: { urunMusterideki: boolean; cekiBizdeki: boolean; cekiMusterideki: boolean };
+  };
+  check(
+    "⭐ çeki kendi rejimini izliyor (ürün `bizdeki` iken çeki `ikisi`)",
+    fisCeki.adRejimi?.urunMusterideki === false &&
+      fisCeki.adRejimi?.cekiBizdeki === true &&
+      fisCeki.adRejimi?.cekiMusterideki === true,
+    JSON.stringify(fisCeki.adRejimi),
+  );
+  await setCekiMode(null);
+  await setMode(null);
 }
 
 async function teardown(): Promise<void> {

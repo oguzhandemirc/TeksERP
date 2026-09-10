@@ -113,6 +113,7 @@ Dizin ve arşiv tarihleri: `docs/kurallar/README.md`. Tasarım belgeleri: `docs/
 ## Çalışma düzeni
 
 - **Geliştirme döngüsü:** `docs/GELISTIRME-DONGUSU.md` — `.env` `tekserp_demo`'yu gösterir; giriş `admin` / `123123` (seed yalnız admin üretir, sırlar buraya yazılmaz); yeni kullanıcı panelden.
+- **Oturum sınırı:** iş kapandığında (commit/push · sürüm · alan değişimi) oturum `/clear` ile tazelenir; bağlamı 500k token üstünde koşan istekler toplam tüketimin %74'üdür (ölçüldü 2026-09-10, 10.180 istek). Dosya döken tarama işi ana bağlama değil subagent'a verilir.
 - **Bekçiler:** değişiklikten sonra ilgili alanın bekçileri koşulur — liste alan dosyasının sonunda, tam harita `Teks-Erp/docs/BEKCI-HARITASI.md`. Tek bekçi: `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>`; tam paket `npm test` **~6,5 dakika** sürer (455 dosya, sıralı; ölçüldü 2026-09-05) ve PR/push öncesi koşulur. Yeni bekçi negatif sondayla kırmızı verdiği doğrulanarak yazılır (`docs/RECETELER.md` § bekçi).
 - **Reçeteler:** `docs/RECETELER.md` — yeni bayrak · enum değeri · route+izin · migration · bekçi · Electron sayfası · mobil ekran · sürüm çıkarma.
 - **Kod yazım standardı:** `docs/standart/README.md` — rutin sorular (katman içerikleri, servis/model şablonu, boyut, kütüphane seçimi, eşzamanlılık karar tablosu, test kadansı). Kural biçimi tek satır + zorlama etiketi; devralınan kod `lint-baseline.json`'da donar.

@@ -16,6 +16,7 @@
 // =============================================================================
 
 import type { PrintedDocStatus } from "@prisma/client";
+import { cozAdRejimi, musteriAdiVeya } from "./shipment-name-mode";
 import type { PrintedDocSnapshot } from "../printed-document.service";
 import {
   resolveDocStyle,
@@ -497,28 +498,29 @@ export function renderShipmentDispatchHtml(
   // ⚠️ Kolon ANAHTARLARI ayrı (`name` ↔ `customerName`): tek anahtarla iki farklı
   // içerik basılsaydı Belge Kişiselleştirme'de "Stok adı"nı gizleyen fabrika,
   // ayarı değiştirdiği an müşteri adını da gizlemiş olurdu.
-  const nameMode = meta.itemNameMode ?? "bizdeki";
-  const showOurName = nameMode !== "musterideki";
-  const showCustName = nameMode !== "bizdeki";
+  // ⚠️ KARAR BURADA VERİLMEZ — `cozAdRejimi` tek karar yeridir (2026-09-10).
+  // Muhasebe fişinin Excel'i AYNI helper'ı kullanır; rejim burada inline
+  // hesaplandığı sürece iki yüzey sessizce ayrışıyordu (sahada ayrıştı da:
+  // aynı sevkiyatın PDF'i müşteri adını, Excel'i bizim adımızı bastı).
+  //
   // ÇEKİ BÖLÜMÜ AYRI REJİM (2026-09-06). Çeki listesi tek başına da basılabiliyor
   // (`DispatchPrintOptions`) ve ambar elemanının kontrol listesi olarak kullanılıyor;
   // orada "hem bizdeki hem müşterideki ad" anlamlı, müşteriye giden ÜRÜN LİSTESİNDE
-  // değil. Tek global rejim ikisini birden çeviriyordu.
-  // `devral` (varsayılan) → genel rejim; yani bayrak yazılmadıkça TEK BAYT değişmez.
-  const cekiRaw = meta.cekiNameMode ?? "devral";
-  const cekiMode = cekiRaw === "devral" ? nameMode : cekiRaw;
-  const cekiShowOurName = cekiMode !== "musterideki";
-  const cekiShowCustName = cekiMode !== "bizdeki";
+  // değil. `devral` (varsayılan) → genel rejim; bayrak yazılmadıkça TEK BAYT değişmez.
+  const rejim = cozAdRejimi(meta);
+  const showOurName = rejim.urunBizdeki;
+  const showCustName = rejim.urunMusterideki;
+  const cekiShowOurName = rejim.cekiBizdeki;
+  const cekiShowCustName = rejim.cekiMusterideki;
   // ÜRÜN LİSTESİNDE MÜŞTERİ RENGİ AYRI SÜTUN MU (`shipping.docProductColorSplit`).
   // Kapalı (varsayılan) = bugünkü birleşik dize; ölçüldü: sevk edilen 1.778 topun
   // 690'ında (%39) müşterinin renk karşılığı yok ve BİZİM renk adımız müşteri kumaş
   // adının yanına yapışıyor — `belge-etiket.md`'nin "yarı çevrilmiş ad basılmasın"
   // kuralının fiilî ihlali. Açıkken renk kendi sütununa çıkar ve hangi yarının kimin
   // olduğu görünür. Bayrak kullanıcı kararıyla eklendi (2026-09-06).
-  const colorSplit = meta.productColorSplit === true;
+  const colorSplit = rejim.renkAyriSutun;
   /** Müşteri adı yoksa bizimkine düş — tek kaynak (üç hücre de bunu çağırır). */
-  const custOr = (cust: string | null | undefined, ours: string): string =>
-    (cust ?? "").trim() || ours;
+  const custOr = musteriAdiVeya;
 
   // 1) ÜRÜN LİSTESİ — kolonlar cfg.columns.urun ile aç/kapa + sıralanır.
   const urunSection = listSectionOn(cfg, meta, "urun")

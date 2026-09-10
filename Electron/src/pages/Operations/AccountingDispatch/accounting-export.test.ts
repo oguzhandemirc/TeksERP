@@ -287,3 +287,77 @@ describe("accountingExportFileName", () => {
     expect(accountingExportFileName({ from: null, to: null, field: null })).toBe("Sevk_Edilenler");
   });
 });
+
+// =============================================================================
+// AD REJİMİ — Excel, irsaliyeyle AYNI adı basmalı (2026-09-10 saha bulgusu)
+// -----------------------------------------------------------------------------
+// Fabrikadan gelen iki dosya AYNI sevkiyata aitti: PDF'te `BS-6650 EKRU`
+// (müşterinin adı), Excel'de `LİNEN EKRU` (bizim adımız). İkisi de aynı DONMUŞ
+// belgeden besleniyordu — ayrışan şey KARARdı: rejimi yalnız irsaliyeyi çizen
+// taraf biliyordu, Excel hiç sormuyordu. Ayarın kendi açıklaması ise "kapsam
+// sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor.
+//
+// ⭐ NEGATİF SONDA (ölçüldü 2026-09-10): `r.urunMusterideki` dalı kaldırılıp
+//    kolon her zaman `name`e bağlanınca §2 ve §3 KIRMIZI; `adRejimi ?? VARSAYILAN`
+//    yerine "her zaman müşterideki" yazılınca §1 KIRMIZI.
+// =============================================================================
+const adliReport = (
+  adRejimi: DispatchReport["adRejimi"],
+): DispatchReport => ({
+  ...report,
+  products: [{ name: "LİNEN EKRU 330cm.", customerName: "BS-6650 EKRU 330cm.", rollCount: 3, totalMeters: 151 }],
+  cekiRows: [
+    { rollId: "r1", sackCode: "CV1", barcode: "T1", desen: "LİNEN", varyant: "EKRU", customerDesen: "BS-6650", customerVaryant: null, meters: 151, kg: 0 },
+  ],
+  adRejimi,
+});
+
+describe("buildDispatchReportSheets — ad rejimi", () => {
+  it("§1 ⭐ rejim YOKSA (eski sunucu) bugünkü davranış: yalnız BİZİM adımız", () => {
+    const sheets = buildDispatchReportSheets(adliReport(undefined));
+    expect(sheets[0]!.columns.map((c) => c.key)).toEqual(["name", "rollCount", "totalMeters"]);
+    expect(sheets[2]!.columns.map((c) => c.key)).toEqual(["sackCode", "barcode", "desen", "varyant", "meters", "kg"]);
+  });
+
+  it("§2 ⭐ 'müşterideki' seçiliyken Excel MÜŞTERİNİN adını basar (irsaliyeyle aynı)", () => {
+    const sheets = buildDispatchReportSheets(
+      adliReport({ urunBizdeki: false, urunMusterideki: true, cekiBizdeki: false, cekiMusterideki: true, renkAyriSutun: false }),
+    );
+    expect(sheets[0]!.columns.map((c) => c.key)).toEqual(["musteriAdi", "rollCount", "totalMeters"]);
+    expect(sheets[0]!.rows[0]).toMatchObject({ musteriAdi: "BS-6650 EKRU 330cm." });
+    // TOPLAM etiketi ÖNDEKİ ad kolonuna yazılır; yoksa toplam satırı etiketsiz kalırdı.
+    expect(sheets[0]!.totalRow).toMatchObject({ musteriAdi: "TOPLAM" });
+    expect(sheets[2]!.columns.map((c) => c.key)).toEqual(["sackCode", "barcode", "musteriDesen", "musteriVaryant", "meters", "kg"]);
+    expect(sheets[2]!.rows[0]).toMatchObject({ musteriDesen: "BS-6650" });
+  });
+
+  it("§2b ⭐ müşteri karşılığı YOKSA bizim adımız basılır (hücre boş kalmaz)", () => {
+    const sheets = buildDispatchReportSheets(
+      adliReport({ urunBizdeki: false, urunMusterideki: true, cekiBizdeki: false, cekiMusterideki: true, renkAyriSutun: false }),
+    );
+    // `customerVaryant: null` — irsaliyedeki fail-open kuralının aynısı.
+    expect(sheets[2]!.rows[0]).toMatchObject({ musteriVaryant: "EKRU" });
+  });
+
+  it("§3 ⭐ 'ikisi de' seçiliyken İKİ ad da ayrı kolonda çıkar", () => {
+    const sheets = buildDispatchReportSheets(
+      adliReport({ urunBizdeki: true, urunMusterideki: true, cekiBizdeki: true, cekiMusterideki: true, renkAyriSutun: false }),
+    );
+    expect(sheets[0]!.columns.map((c) => c.key)).toEqual(["name", "musteriAdi", "rollCount", "totalMeters"]);
+    expect(sheets[2]!.columns.map((c) => c.key)).toEqual(["sackCode", "barcode", "desen", "varyant", "musteriDesen", "musteriVaryant", "meters", "kg"]);
+  });
+
+  it("§4 çeki KENDİ rejimini izler — ürün listesinden bağımsız çevrilebilir", () => {
+    const sheets = buildDispatchReportSheets(
+      adliReport({ urunBizdeki: true, urunMusterideki: false, cekiBizdeki: true, cekiMusterideki: true, renkAyriSutun: false }),
+    );
+    expect(sheets[0]!.columns.map((c) => c.key)).toEqual(["name", "rollCount", "totalMeters"]);
+    expect(sheets[2]!.columns.map((c) => c.key)).toContain("musteriDesen");
+  });
+
+  it("§5 kolon çizilmiyorsa satıra o anahtar EKLENMEZ", () => {
+    const sheets = buildDispatchReportSheets(adliReport(undefined));
+    expect(sheets[0]!.rows[0]).not.toHaveProperty("musteriAdi");
+    expect(sheets[2]!.rows[0]).not.toHaveProperty("musteriDesen");
+  });
+});

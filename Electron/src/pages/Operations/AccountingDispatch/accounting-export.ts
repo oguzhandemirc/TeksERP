@@ -179,19 +179,61 @@ function dispatchReportNotes(report: DispatchReport): string[] {
   return notes;
 }
 
-/** Tek sevk fişi → 3 sayfa (Kumaş / Çuval / Çeki) — Fiş dialog'undan Excel. */
+/** Müşteri adı yoksa bizimkine düş — irsaliyedeki fail-open kuralının aynısı. */
+const musteriAdiVeya = (cust: string | null | undefined, ours: string): string =>
+  (cust ?? "").trim() || ours;
+
+/**
+ * Ad rejimi yoksa (eski sunucu) BUGÜNKÜ davranış: yalnız bizim adımız.
+ * Yeni bayrağın varsayılanı = bugünkü davranış kuralının birebir uygulaması.
+ */
+const VARSAYILAN_REJIM = {
+  urunBizdeki: true,
+  urunMusterideki: false,
+  cekiBizdeki: true,
+  cekiMusterideki: false,
+  renkAyriSutun: false,
+} as const;
+
+/**
+ * Tek sevk fişi → 3 sayfa (Kumaş / Çuval / Çeki) — Fiş dialog'undan Excel.
+ *
+ * ⚠️ AD REJİMİNİ UYGULAR (2026-09-10). Eskiden uygulamıyordu ve sahada aynı
+ * sevkiyatın PDF'i `BS-6650 EKRU` (müşterinin adı), Excel'i `LİNEN EKRU` (bizim
+ * adımız) basıyordu — ikisi de AYNI donmuş belgeden. Ayarın kendi açıklaması
+ * "kapsam sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor; vaat yerine gelmiyordu.
+ *
+ * ⚠️ KARAR SUNUCUDA: hangi kolonun çizileceğini `report.adRejimi` söyler, burada
+ * yeniden hesaplanmaz. `renkAyriSutun` BİLEREK uygulanmaz — o bir YERLEŞİM
+ * kararıdır ve ayarın kendi metnine göre yalnız MÜŞTERİYE GİDEN belgeyi
+ * ilgilendirir; fiş iç dosyadır, müşteri adı tek birleşik hücrede kalır.
+ */
 export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
   const t = report.totals;
+  const r = report.adRejimi ?? VARSAYILAN_REJIM;
   return [
     {
       name: "Kumaş Listesi",
       columns: [
-        { header: "Stok Adı", key: "name", width: 40 },
+        ...(r.urunBizdeki ? [{ header: "Stok Adı", key: "name", width: 40 }] : []),
+        ...(r.urunMusterideki
+          ? [{ header: "Müşterideki Stok Adı", key: "musteriAdi", width: 40 }]
+          : []),
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
         { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
       ],
-      rows: report.products,
-      totalRow: { name: "TOPLAM", rollCount: t.totalRolls, totalMeters: t.totalMeters },
+      // Kolon çizilmiyorsa satıra anahtar da EKLENMEZ — okuyucusu olmayan bir
+      // alan, "bu veri de gidiyor mu" sorusunu boş yere açar.
+      rows: r.urunMusterideki
+        ? report.products.map((p) => ({ ...p, musteriAdi: musteriAdiVeya(p.customerName, p.name) }))
+        : report.products,
+      // "TOPLAM" hangi ad kolonu ÖNDEYSE oraya yazılır — yalnız müşteri adı
+      // çizildiğinde `name` boş kalır ve toplam satırı etiketsiz görünürdü.
+      totalRow: {
+        ...(r.urunBizdeki ? { name: "TOPLAM" } : { musteriAdi: "TOPLAM" }),
+        rollCount: t.totalRolls,
+        totalMeters: t.totalMeters,
+      },
       notes: dispatchReportNotes(report),
     },
     {
@@ -210,12 +252,28 @@ export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
       columns: [
         { header: "Çuval", key: "sackCode", width: 12 },
         { header: "Barkod", key: "barcode", width: 18 },
-        { header: "Desen", key: "desen", width: 24 },
-        { header: "Varyant", key: "varyant", width: 18 },
+        ...(r.cekiBizdeki
+          ? [
+              { header: "Desen", key: "desen", width: 24 },
+              { header: "Varyant", key: "varyant", width: 18 },
+            ]
+          : []),
+        ...(r.cekiMusterideki
+          ? [
+              { header: "Müşterideki Desen", key: "musteriDesen", width: 24 },
+              { header: "Müşterideki Varyant", key: "musteriVaryant", width: 18 },
+            ]
+          : []),
         { header: "Metre", key: "meters", width: 12, numFmt: NUM1 },
         { header: "Kg", key: "kg", width: 10, numFmt: NUM1 },
       ],
-      rows: report.cekiRows,
+      rows: r.cekiMusterideki
+        ? report.cekiRows.map((c) => ({
+            ...c,
+            musteriDesen: musteriAdiVeya(c.customerDesen, c.desen),
+            musteriVaryant: musteriAdiVeya(c.customerVaryant, c.varyant),
+          }))
+        : report.cekiRows,
     },
   ];
 }

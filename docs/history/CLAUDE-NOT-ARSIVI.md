@@ -3450,3 +3450,55 @@ bugünün acili değil.
 pg'nin uyarısıyla ölçülüyordu; o zaten süreç başına bir kez bastığı için sonda
 `gorulen` kümesini kaldırdığında bile YEŞİL kaldı — **vakumen yeşil**. Tekrar
 artık `process.emitWarning` ile ölçülüyor.
+
+## 2026-09-10 — Aynı sevkiyat, iki ad: muhasebe fişi ad rejimini hiç sormuyordu [ÇEKİRDEK]
+
+Fabrikadan aynı sevkiyata ait iki dosya geldi (`SVK0909260004`): PDF'te ürün
+adı `BS-6650 EKRU 330cm.` (müşterinin adı), Excel'de `LİNEN EKRU 330cm.`
+(bizim adımız). Veri sağlamdı — alias doğru kurulmuş, belge doğru donmuştu.
+
+**Sebep bir YOL farkıydı, veri farkı değil.** İkisi de aynı `PrintedDocument`
+snapshot'ından besleniyor ve snapshot İKİ ADI DA taşıyor (`name` ↔
+`customerName`, `desen/varyant` ↔ `customerDesen/customerVaryant`). Ayrışan şey
+KARARdı:
+
+- **PDF** → `renderShipmentDispatchHtml`, rejimi (`shipping.docItemNameMode` +
+  `docCekiNameMode` + `docProductColorSplit`) baskı anında CANLI okuyor.
+- **Excel** → `getDispatchReport` → panelin `buildDispatchReportSheets`'i. Bu yol
+  rejimi HİÇ sormuyordu; panelin `DispatchReport` tipinde müşteri adı alanları
+  **tanımlı bile değildi**, yani backend gönderse de düşüyordu.
+
+Aynı diyaloğun içindeydiler: `DispatchReceiptDialog` başlığı bunu zaten yazıyor —
+*"önizleme + baskı backend'in HTML çıktısıdır… Excel + toplu etiket için
+yapılandırılmış veri (getReport) AYRICA çekilir."* Ayrışmanın yeri o "ayrıca"ydı.
+
+**Bunun bir hata olduğunun kanıtı ayarın kendi metnindeydi:** *"NOT: kapsam sevk
+irsaliyesi + MUHASEBE FİŞİDİR."* Vaat yazılıydı, uygulama eksikti.
+
+**Düzeltme — karar tek yere taşındı.** `document-render/shipment-name-mode.ts`:
+`cozAdRejimi()` (üç ayarı "hangi kolon çizilir"e çevirir, `devral`ı çözer) +
+`musteriAdiVeya()` (fail-open). Renderer'daki inline bayraklar oradan okuyor;
+`getDispatchReport` aynı helper'ı çağırıp sonucu `adRejimi` alanıyla fişe
+taşıyor; Excel kolonlarını o alandan kuruyor ve **kararı yeniden hesaplamıyor.**
+
+**Bilinçli sınır:** `renkAyriSutun` Excel'de UYGULANMAZ. O bir YERLEŞİM kararı ve
+ayarın kendi metnine göre yalnız MÜŞTERİYE GİDEN belgeyi ilgilendiriyor; fiş iç
+dosyadır, müşteri adı tek birleşik hücrede kalır. Ad SEÇİMİ ikisinde de aynı.
+
+**Fasondan doğrudan sevk** ayarın kapsamı dışında (ayar metni böyle diyor); o uç
+`adRejimi`yi ADIYLA `bizdeki`ye sabitliyor — alanı boş bırakmak Excel'i tahmine
+zorlardı.
+
+**Geriye uyum:** `adRejimi` opsiyonel. Eski sunucuya bağlanan yeni panel bugünkü
+gibi bizim adımızı basar (yeni davranışın varsayılanı = bugünkü davranış).
+
+**Bekçiler:** `test_shipment_doc_customer_name.ts §10` (fiş rejimi taşıyor ·
+rejim DONMAZ, ayar değişince aynı belge yeni rejimle geliyor · çeki kendi
+rejimini izliyor) — sondalar: `adRejimi` düşürülünce 5 kırmızı, rejim
+sabitlenince 2 kırmızı. Panel tarafı `accounting-export.test.ts` "ad rejimi"
+bölümü — sondalar: müşteri kolonu dalı kaldırılınca 2 kırmızı, varsayılan rejim
+"müşterideki"ye çevrilince 4 kırmızı.
+
+**Yan bulgu:** gelen Excel'de 2 sayfa vardı (Kumaş + Çeki); güncel panel 3 sayfa
+üretiyor (arada Çuval Listesi). Yani dosya eski bir panel derlemesinden çıkmış —
+o makinede güncellemenin oturup oturmadığı ayrıca kontrol edilmeli.

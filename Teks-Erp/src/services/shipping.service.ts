@@ -79,7 +79,11 @@ import {
 import {
   readShippingAllocWidthToleranceCm,
   readShippingAllowOverAllocation,
+  readShippingDocItemNameMode,
+  readShippingDocCekiNameMode,
+  readShippingDocProductColorSplit,
 } from "./system-setting.service";
+import { cozAdRejimi, type AdRejimi } from "./document-render/shipment-name-mode";
 import {
   assertInvoiceTraceAllowed,
   invoiceTraceWarning,
@@ -4728,6 +4732,11 @@ export class ShippingService {
    * dipnot basar). Dökümü sevkiyat detayındaki "İadeler" ve muhasebe dönem
    * export'unun "İade" sayfasındadır.
    */
+  /**
+   * Ad rejimini CANLI okur — baskı yolundaki `buildRenderExtras` ile AYNI üç ayar.
+   * Rejim snapshot'a girmez: ayarı değiştirmek eski fişi de yeni ayarla bastırır
+   * (belge içeriği donuk, SUNUM canlı).
+   */
   async getDispatchReport(shipmentId: string): Promise<ApiResponse<unknown>> {
     const doc = (
       await printedDocumentService.getCurrent(PrintedDocType.SHIPMENT_DISPATCH, shipmentId)
@@ -4746,6 +4755,17 @@ export class ShippingService {
         docStatus: doc?.status ?? null,
         docVersion: doc?.version ?? null,
         returns: await summarizeShipmentReturns(prisma, shipmentId),
+        // ⚠️ AD REJİMİ FİŞE DE GİDER (2026-09-10 saha bulgusu). Snapshot iki adı
+        // da taşıyor (`name` ↔ `customerName`); HANGİSİNİN basılacağı ayardan
+        // gelir ve baskı anında CANLI okunur. Bu alan olmadan muhasebe fişinin
+        // Excel'i kararı hiç sormuyor, hep bizim adımızı basıyordu — oysa ayarın
+        // kendi açıklaması "kapsam sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor.
+        // Karar `cozAdRejimi`de, yani irsaliyeyi çizen helper'ın AYNISINDA.
+        adRejimi: cozAdRejimi({
+          itemNameMode: await readShippingDocItemNameMode(),
+          cekiNameMode: await readShippingDocCekiNameMode(),
+          productColorSplit: await readShippingDocProductColorSplit(),
+        }) satisfies AdRejimi,
       },
     };
   }
@@ -4828,6 +4848,13 @@ export class ShippingService {
         sacks: [],
         cekiRows,
         totals: { totalRolls: ds.rolls.length, totalMeters: Number(totalMeters), totalKg: 0, sackCount: 0 },
+        // ⚠️ AD REJİMİ BURADA SABİT "bizdeki" (2026-09-10). Fasondan DOĞRUDAN sevk
+        // ayarın kapsamı DIŞINDADIR — ayarın kendi açıklaması bunu söylüyor
+        // ("fasondan DOĞRUDAN sevk irsaliyesi bu ayarın dışındadır") ve bu uç
+        // zaten müşteri adı alanlarını hiç kurmuyor (`desen: r.item.name`).
+        // Alanı BOŞ bırakmak yerine ADIYLA sabitlemek, Excel'in "rejim yok →
+        // ne yapayım" diye tahmin etmesini engeller.
+        adRejimi: cozAdRejimi({ itemNameMode: "bizdeki" }) satisfies AdRejimi,
         // Çuval sevkiyatı fişiyle AYNI kontrat — istemci tek `DispatchReport` tipiyle
         // çalışır ve alan eksik gelirse Excel dipnotu `returns.count` okurken PATLAR.
         //

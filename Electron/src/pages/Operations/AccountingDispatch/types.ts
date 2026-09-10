@@ -71,7 +71,13 @@ export interface DispatchReport {
     status: string;
     date: string;
   };
-  products: Array<{ name: string; rollCount: number; totalMeters: number }>;
+  products: Array<{
+    name: string;
+    /** Müşterideki ad — donmuş belgede zaten var; yoksa/boşsa bizimki basılır. */
+    customerName?: string | null;
+    rollCount: number;
+    totalMeters: number;
+  }>;
   sacks: Array<{ code: string; seq: number; totalMeters: number; totalKg: number; packageCount: number }>;
   cekiRows: Array<{
     rollId: string;
@@ -79,9 +85,29 @@ export interface DispatchReport {
     barcode: string | null;
     desen: string;
     varyant: string;
+    /** Müşterideki desen/varyant — ürün satırıyla AYNI zincir, aynı fail-open. */
+    customerDesen?: string | null;
+    customerVaryant?: string | null;
     meters: number;
     kg: number;
   }>;
+  /**
+   * HANGİ ADIN basılacağı — sunucudan gelir, burada YENİDEN HESAPLANMAZ.
+   *
+   * ⚠️ 2026-09-10 saha bulgusu: aynı sevkiyatın PDF'i müşterinin adını, Excel'i
+   * bizim adımızı basıyordu. İkisi de aynı donmuş belgeden besleniyordu; ayrışan
+   * şey KARARdı — rejimi yalnız irsaliyeyi çizen taraf biliyordu. Kararı burada
+   * yeniden kurmak aynı ayrışmayı yeniden üretirdi.
+   *
+   * Opsiyonel: eski sunucu göndermez → Excel bugünkü gibi bizim adımızı basar.
+   */
+  adRejimi?: {
+    urunBizdeki: boolean;
+    urunMusterideki: boolean;
+    cekiBizdeki: boolean;
+    cekiMusterideki: boolean;
+    renkAyriSutun: boolean;
+  };
   totals: { totalRolls: number; totalMeters: number; totalKg: number; sackCount: number };
   /** İçerik DONMUŞ belgeden mi geldi (sevk anı, irsaliyeyle birebir)? false =
    *  sevkiyat henüz sevk edilmemiş → TASLAK fiş (canlı çuval içeriği). */
