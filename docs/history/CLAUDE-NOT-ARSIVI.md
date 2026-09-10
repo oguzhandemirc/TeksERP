@@ -4780,3 +4780,93 @@ silinince o geçmiş kalıcı kayboluyordu. Makine önizlemesi de "N oturum temi
 ### Üç kapı
 
 Migration **yok** (şemaya dokunulmadı). Yeni izin **yok**. APK **yok**. Backend ÖNCE, panel sonra.
+
+
+---
+
+## 2026-09-11 — Fasoncu karnesi kısmi doğrudan sevkte YANLIŞ fire/açık üretiyor (TEŞHİS, düzeltilmedi) [ÇEKİRDEK]
+
+`initialQty` onarım turunun yan gözlemi olarak çıktı, ayrı bir bulgudur ve
+ÖLÇÜLDÜ. Düzeltme YAPILMADI — gerekçe aşağıda.
+
+### Formül ve kusurun yeri
+
+`subcontract-scorecard.report.service.ts` (`collectDispatchItems` + `toRow`).
+Evren: dönemde sevk edilmiş, `cancelledAt IS NULL` **ve `directShippedAt IS NULL`**
+olan sevklerin kalemleri. Kalem başına `giden = dispatchedQty`,
+`dönen = Σ COALESCE(receivedQty, newRoll.currentQty)` + çekme düzeltmesi
+(`RollVariance`, source SUBCONTRACTOR_RETURN). Kapalı kalem fire paydasına girer,
+açık kalem `openQty += max(0, giden − dönen)`.
+
+Kısmi doğrudan sevk bu tanımın DIŞINDA kalıyor:
+
+- Bölünme çocuğu hiçbir kümede yok — sevk KALEMİ değil, `createFasonShipChild`
+  ile doğan bir top.
+- Ebeveyn kalemin `dispatchedQty`si (D) çocuğun müşteriye giden S metresini
+  İÇERİYOR; "dönen" ise yalnız makbuzlardan geliyor. Kalem kapanınca S FİRE olur,
+  açıkken açık bakiye S kadar şişer.
+- Alt kümeyle TAM sevk edilen topun kalemi hiç makbuz ya da `remainderClosedAt`
+  damgası almaz ve sevk kısmi kaldığı için `directShippedAt` NULL kalır → kalem
+  SONSUZA DEK AÇIK görünür.
+
+### Ölçüm (gerçek `dispatch`/`executeDirectShip`/`receive`/`closeRemainder` ile)
+
+| Senaryo | Sistem | Doğrusu |
+|---|---|---|
+| K0 kontrol: 300 gitti / 300 döndü | fire 0 · açık 0 | ✅ temel durum doğru |
+| K1: 300 → 100 müşteriye → 200 TAM kabul | **fire 100 m (%33,3)** | 0 |
+| K2: 300 → 100 müşteriye → 100 kısmi kabul → 100 kapama | **fire 200 m (%66,7)** | 100/200 (%50) |
+| K3: 300 → 100 müşteriye, kalan fasonda | **açık 300 m** | 200 m |
+| K4: 2×200, biri tamamen müşteriye, diğeri tam kabul | **açık 1 kalem / 200 m**, `OPEN_OUTSTANDING`=1 | açık 0 |
+
+### Çürütme denemeleri — telafi YOK
+
+`dispatchedQty` hiçbir yerde düzeltilmiyor (`subcontractorDispatchItem` üzerindeki
+5 update sitesinin hiçbiri metraja dokunmuyor: `remainderClosedAt` damga/geri alma
+×2, `dispatchId` taşıma ×3). `executeDirectShip` makbuz satırı ya da
+`remainderClosedAt` yazmıyor. Çekme sapması `receivedQty`ye göre hesaplanıyor,
+S'i kapsamıyor. Yol CANLI: panel `DirectShipModal` her top için `rollShipQtys`
+gönderiyor.
+
+**Bekçi neden yakalamadı:** `test_subcontract_scorecard` yalnız TAM doğrudan
+sevki fixture'la kuruyor (`directShippedAt` elle dolu); kısmi ve alt küme hiç
+sınanmamış.
+
+### Etki alanı
+
+- Aynı fonksiyon Patron ekranını besliyor (`boss/overview.service.ts`).
+- K4 yalnız karneyle sınırlı DEĞİL: tek kaynak `fason-open-dispatch.helper.ts`
+  (`OPEN_OUTSTANDING`/`OUTSTANDING_ITEM`) alt kümeyle doğrudan sevk edilmiş kalemi
+  "açık" sayıyor ve helper'ın **38 tüketici sitesi** var (WO listesi, iptal, kart
+  uyarısı, bekleyen dönüşler…). **Tüketici etkisi ÖLÇÜLMEDİ** — yalnız helper'ın
+  1 döndürdüğü ölçüldü.
+
+### Veri durumu
+
+`tekserp_demo`: karne evreni 377 sevk / 377 kalem / 1 firma; `DirectShipment` 0,
+`directShipmentId` dolu top 0, doğrudan sevk operasyonu 0 → etkilenen kalem 0.
+**KOD YOLU VAR, VERİ YOK.** Canlı ölçülmedi.
+
+### Neden bu turda DÜZELTİLMEDİ
+
+Üç gerekçe: ① yarıçapı geniş (38 tüketici, etkisi ölçülmemiş) ② gecenin yetkili
+kapsamı defter B bölümüydü, bu yeni bir sınıf ③ **ticari karar boyutu var** —
+"fasoncunun sorumluluğundaki giden metre" tanımı hakedişe ve firma seçimine girer,
+mühendislik değil ürün kararıdır.
+
+### Düzeltme yönü (uygulanmadı)
+
+Fasoncunun sorumluluğundaki giden = `dispatchedQty` − Σ müşteriye giden (bölünme
+çocukları + alt kümeyle tam sevk edilen top); alt kümeyle tam sevk edilen topun
+kalemi KAPANMIŞ sayılmalı. Bekçiye kısmi ve alt küme senaryoları eklenmeli.
+
+### Kod çapaları
+
+- `Teks-Erp/scripts/olcum_scorecard_kismi_dogrudan_sevk.ts` — senaryo + ölçüm;
+  canlı kopyada `--salt-okuma` ile yalnız teşhis koşar (`hedefDbEngeli` prod adında durur)
+- `src/services/reports/subcontract-scorecard.report.service.ts`
+- `src/services/helpers/fason-open-dispatch.helper.ts`
+
+### Üç kapı
+
+Migration yok · izin yok · APK yok. (Düzeltme yapılmadı; bu not yalnız bulguyu kaydeder.)
