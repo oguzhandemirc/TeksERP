@@ -93,15 +93,15 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
     },
   });
 
+  // ⚠️ TOP KİMLİĞİ DEĞİŞKENDEN GELİR, KAPANIŞTAN DEĞİL. `onPrint` parent'ta
+  // sheet'i kapatır (`rollId` → null) ve `mutate` gövdeyi BİR SONRAKİ render'ın
+  // kapanışıyla koşar; `rollId!` o anda "null" stringine dönüşüp
+  // `POST /labels/rolls/null/print` 400'ü üretiyordu (sahada ölçüldü 2026-09-04).
   const printMut = useMutation({
-    mutationFn: (ctx?: { stock?: boolean }) =>
+    mutationFn: (v: { rollId: string; stock?: boolean; orderLineId?: string | null }) =>
       labelService.recordPrintEvent(
-        rollId!,
-        ctx?.stock
-          ? { stock: true }
-          : payload?.orderLineId
-            ? { orderLineId: payload.orderLineId }
-            : undefined,
+        v.rollId,
+        v.stock ? { stock: true } : v.orderLineId ? { orderLineId: v.orderLineId } : undefined,
       ),
     onError: (err: Error) => {
       // Audit hatası baskıyı engellemez — sadece log.
@@ -110,18 +110,21 @@ export function LabelPreviewSheet({ visible, rollId, onDismiss, onPrint, onNewLa
   });
 
   const handlePrint = () => {
-    if (!payload) return;
+    if (!payload || !rollId) return;
+    // Kimlik ÖNCE yakalanır: `onPrint` sheet'i kapatabilir.
+    const v = { rollId, orderLineId: payload.orderLineId };
     onPrint?.(payload);
     // Audit izi (async, beklenmiyor)
-    printMut.mutate(undefined);
+    printMut.mutate(v);
   };
 
   // "Müşterisiz (Stok)" — müşteri bilgisi OLMADAN bas. Parent {stock:true} ile
   // yazıcıyı tetikler; audit snapshot'ı stok işaretler (bozuk müşteri düzelir).
   const handlePrintStock = () => {
-    if (!payload) return;
+    if (!payload || !rollId) return;
+    const v = { rollId, stock: true };
     onPrintStock?.();
-    printMut.mutate({ stock: true });
+    printMut.mutate(v);
   };
 
   const openEdit = () => {
