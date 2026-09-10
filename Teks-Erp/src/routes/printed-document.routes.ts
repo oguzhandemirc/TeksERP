@@ -8,6 +8,7 @@ import { Router, Request, Response, NextFunction } from "express";
 import { PrintedDocumentController } from "../controllers/printed-document.controller";
 import { verifyToken } from "../middlewares/auth.middleware";
 import { requireAnyPermission } from "../middlewares/rbac.middleware";
+import { DOCUMENT_DESIGN_READ } from "../constants/document-design";
 import { AppError } from "../utils/app-error";
 
 const controller = new PrintedDocumentController();
@@ -186,10 +187,14 @@ function requireDocPermission(kind: "read" | "write") {
  *     responses:
  *       200: { description: text/html önizleme çıktısı }
  */
+// İZİN: ekranı AÇAN izinle aynı küme olmalı (emsal: `traveler-card.routes.ts`
+// sample-html). "Belge Şablonları" 2026-08-05'te `DOCUMENT_DESIGN_READ`e taşındı
+// ama bu uç `admin:settings`te KALDI → dar izinli tasarımcı ekranı açıyor, soldaki
+// ayarı yapıyor, sağdaki önizleme sessizce 403 alıyordu (sahada ölçüldü 2026-09-07).
 router.post(
   "/:docType/sample-html",
   verifyToken,
-  requireAnyPermission("admin:settings"),
+  requireAnyPermission(...DOCUMENT_DESIGN_READ),
   controller.getSampleHtml
 );
 

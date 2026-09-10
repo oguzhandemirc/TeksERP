@@ -250,9 +250,25 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     shuttingDown = true;
     satir("");
     bilgi("shutdown", `${signal} alındı — sunucu kapatılıyor (uçuştaki istekler bitiriliyor)...`);
+    // ⚠️ TEŞHİS (2026-09-10): zorla-çıkış eskiden TEK cümle basıyordu ve sebep
+    // hiçbir yerde kalmıyordu — sahada 5 kapanışın 2'si böyle bitti (2026-09-07)
+    // ve log'dan hangi adımda takıldığı ÇIKARILAMADI. Erişim log'u isteği yalnız
+    // BİTTİĞİNDE yazar, yani asılı bir istek hiç iz bırakmaz; faz + açık bağlantı
+    // sayısı o körlüğü kapatan iki sayıdır (bağlantı > 0 ise asılı istek, 0 ise
+    // zincir fazın kendisinde durmuş).
+    let shutdownPhase = "sinyal alındı";
     const forceTimer = setTimeout(() => {
-        uyari("shutdown", "Kapanış 5s'de tamamlanmadı — zorla çıkılıyor.");
-        process.exit(1);
+        const bailOut = (connectionNote: string): void => {
+            uyari(
+                "shutdown",
+                `Kapanış 5s'de tamamlanmadı — zorla çıkılıyor. Faz: ${shutdownPhase}${connectionNote}`,
+            );
+            process.exit(1);
+        };
+        // `getConnections` geri çağrısı da gelmeyebilir (kapanan dinleyici) —
+        // 250ms sonra sayı OLMADAN çıkılır; teşhis için faz tek başına da değerli.
+        setTimeout(() => bailOut(""), 250).unref();
+        server.getConnections((_err, count) => bailOut(`, açık bağlantı: ${count}`));
     }, 5000);
     forceTimer.unref();
     // Son gecikme delta'ları kaybolmasın (dev'de nodemon her kayıtta restart eder!)
@@ -262,14 +278,17 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
     // olsaydı iki bütçe toplanır ve yukarıdaki 5sn'lik zorla-çıkış sayacını
     // yakma riski doğardı). `stopMdnsAdvertiser` kendi içinde de 1sn kapı taşır
     // ve asla reject etmez — goodbye paketi gitmezse kapanış yine de ilerler.
+    shutdownPhase = "gecikme flush + mDNS";
     void Promise.race([
         Promise.allSettled([flushLatencyNow().catch(() => {}), stopMdnsAdvertiser()]),
         new Promise((resolve) => setTimeout(resolve, 2000).unref()),
     ]).finally(() => {
+        shutdownPhase = "dinleyiciler kapatılıyor";
         // Tünel dinleyicisi ÖNCE kapanır: yeni uzak istek kabul edilmesin ama
         // LAN'daki uçuştaki istekler normal akışında bitsin.
         remoteServer?.close();
         server.close(() => {
+            shutdownPhase = "DB kapatılıyor";
             bilgi("shutdown", "Sunucu kapandı.");
             // O3-3: DB kaynaklarını temiz bırak (eski lib/prisma.ts shutdown handler'ından
             // TAŞINDI — çift handler F10 graceful shutdown'ı boşa çıkarıyordu). Sıra önemli:
@@ -284,6 +303,7 @@ function gracefulShutdown(signal: string, exitCode = 0): void {
                 process.exit(exitCode);
             })();
         });
+        shutdownPhase = "uçuştaki istekler bekleniyor";
     });
 }
 process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));

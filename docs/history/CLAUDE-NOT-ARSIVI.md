@@ -3714,3 +3714,84 @@ olarak "commit ederken fark edilmezse bir daha hiç fark edilmez" sınıfı.
 **Dört negatif sonda:** backend `src/`e Türkçe ad → kırmızı (adıyla) · panel
 `src/`e Türkçe ad → kırmızı · `partialListeners`/`radius`/`verifyPart` → YEŞİL
 (yanlış pozitif yok) · bir ad çevrilince küme sıkışıyor.
+
+## 2026-09-10 — FABRİKA PROD LOG'UNDAN ÜÇ BULGU [ÇEKİRDEK]
+
+Kaynak: `errorlogs/` — 04.09–10.09 arası **47.645 istek**, 6 açılış. **5xx SIFIR**,
+çökme yok, yakalanmamış istisna yok. 223 adet 4xx'in neredeyse tamamı tasarlandığı
+gibi çalışan akışların normal adımıydı (44 `by-card` 400'ü kurşun bypass'ın kendisi
+— hepsi aynı saniyede `bypass-complete` 200 ile eşleşiyor, 44↔44; 5 `initial-entry`
+409'u mükerrer kapısı, beşinde de operatör onaylayıp devam etmiş). Log'un asıl
+değeri **üç sessiz sınıfı** görünür kılması oldu.
+
+### ① BELGE ŞABLONU ÖNİZLEMESİ DAR İZİNLİ TASARIMCIYA 403 VERİYORDU
+
+`POST /api/printed-documents/:docType/sample-html` **yalnız `admin:settings`**
+taşıyordu; ekranın kendisi 2026-08-05'te `DOCUMENT_DESIGN_READ`e taşınmıştı.
+`document-template:read` ile giren büro personeli ekranı açıyor, soldaki ayarı
+yapıyor, sağdaki önizleme sessizce 403 alıyordu. Belge tasarım yüzeyinin DÖRT
+ucundan üçü (`free-document`, `traveler-template`, `traveler-card/sample-html`)
+o turda taşınmıştı — bu biri ATLANMIŞTI. `traveler-card.routes.ts:133-141`'de
+aynı hatanın düzeltme yorumu birebir duruyor, yani sınıf zaten biliniyordu.
+
+**Bekçi neden yakalamadı:** `test_document_template_permission.ts` iki sabit
+listeyi (backend ↔ Electron) ve dört route'u ölçüyordu; **önizleme uçlarının
+ikisi de senaryo listesinde YOKTU**. Boşluk tam oradan sızdı. İkisi de eklendi,
+körlük zemini 6→8. Negatif sonda: eski guard geri konunca 2 kırmızı.
+
+### ② "BAS" AUDİT İZİ `null`A GİDİYORDU — SESSİZ KAYIP
+
+`POST /api/labels/rolls/null/print` → 400. `LabelPreviewSheet.handlePrint` önce
+`onPrint(payload)` çağırıyor, parent (`TamburScreen.tsx:6601`) o sırada sheet'i
+kapatıp `rollId`yi null'a çekiyor; `printMut.mutate()` gövdesi ise **bir sonraki
+render'ın kapanışıyla** koşuyor ve `rollId!` "null" stringine dönüşüyordu.
+
+Bu **2026-08-13'teki "kesimde kat sessizce düşüyordu"** notunun ikizi: her ikisinde
+de mutation gövdesi kimliği/alanı KAPANIŞTAN okuyor. Kural aynı: **mutation'a giden
+her kimlik ve alan DEĞİŞKENDEN geçer, kapanıştan değil** — kapanış bir sonraki
+render'ın olabilir.
+
+Zararı sessizdir ve bu yüzden ağır: fiziksel baskı ÇALIŞIYOR, yalnız `LABEL_PRINTED`
+audit'i düşmüyor. Kimse "etiket basılmadı" diye şikâyet etmez; eksik olan yalnız izdir.
+`onPrintStock` yolu da aynı hatayı taşıyordu. Üç projede aynı şekil tarandı: `mutationFn`
+içinde nullable `!` kullanan 8 yer daha var ama hepsinde diyalog mutation'dan SONRA
+kapanıyor — ulaşılabilir değiller, dokunulmadı.
+
+### ③ KAPANIŞ 5sn'yi DOLDURDUĞUNDA SEBEP HİÇBİR YERDE KALMIYORDU
+
+6 kapanışın 2'si (09-07 03:35 ve 05:48) `process.exit(1)` ile zorla bitti ve log'da
+tek cümle vardı: "Kapanış 5s'de tamamlanmadı". Hangi adımda takıldığı ÇIKARILAMIYOR.
+İki teşhis denemesi ÖLÇÜMLE ÇÜRÜTÜLDÜ ve bu not onları da kaydeder ki üçüncü kez
+denenmesin:
+
+- **"Boştaki keep-alive soketi bloklar"** → YANLIŞ. Node 19'dan beri `server.close()`
+  onları zaten kapatıyor; gerçek sunucuyla SIGTERM provası keep-alive soket açıkken
+  **0,53 sn**'de temiz kapandı.
+- **"`Promise.all([tx.*])` / advisory kilit"** → YANLIŞ. Üç proje AST ile tarandı,
+  sıfır bulgu; interaktif tx + 8021 kilidi yerelde denendi, uyarı çıkmadı.
+
+Kalan neden ölçüldü: **yarım kalan bir istek**. Sunucuya eksik başlıklı bir istek
+gönderilip SIGTERM atıldığında fabrikadaki iz BİREBİR üredi — 5,12 sn, "Sunucu
+kapandı." satırı YOK. Kritik körlük şu: **erişim log'u isteği yalnız BİTTİĞİNDE
+yazar**, yani asılı bir istek hiç iz bırakmaz ve log'a bakarak asla bulunamaz.
+
+Bu yüzden düzeltme değil ÖLÇÜM eklendi: kapanışa faz etiketi + zorla-çıkış anında
+açık bağlantı sayısı. Bağlantı > 0 ise asılı istek, 0 ise zincir fazın kendisinde
+durmuş. Bir sonraki kapanış nedeni ADIYLA söyleyecek — tahminle kapatılmadı.
+
+### Log'un kapatmadığı iki şey (kayda geçsin)
+
+- **192.168.1.56 panel 2.5.0'da kalmış** ve rapor menüsünün TAMAMI 404 veriyor
+  (11 uç). Auto-update `b57c9c68` ile **2.8.2**'de geldi — o pakette updater kodu
+  YOK, makine kendini asla güncellemeyecek. Elle kurulum şart. Yan bulgu: sistemde
+  hangi makinenin hangi sürümü koştuğunu gösteren HİÇBİR yüzey yok (`Device`'ta
+  sürüm kolonu yok), bu yüzden bir panel haftalarca 4 sürüm geride görünmez kaldı.
+- **Sevkiyat defter onarımı görüldü ama uygulanmadı:** `shipping:repair-allocation`
+  09-07 03:35'te yazıldı, 14:56'da iki `preview` açıldı, **tek POST yok**.
+
+### Zaten kapalı çıkanlar
+
+`a48f5329` (2026-09-06, "fabrika logundan cikan iki saha sorunu") bu paketteki çuval
+404'ünü ve okutma 409'unu kapatmış: düzeltme öncesi 11 silmenin 11'i 404 üretiyordu,
+sonrasında 11 silme 0 hata; okutma 409'u 6→0 (383 okutmada). Offsite açılış uyarısı
+da aynı gün `7b84d5ea` ile yanlış-alarm gerekçesiyle kaldırılmış.
