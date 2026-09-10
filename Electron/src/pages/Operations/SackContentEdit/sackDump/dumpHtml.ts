@@ -140,8 +140,21 @@ export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {})
   const weighed = dumps.filter((d) => d.weightKg != null);
   const totalKg = weighed.reduce((a, d) => a + (d.weightKg ?? 0), 0);
 
-  const title =
-    dumps.length === 1 ? `ÇUVAL İÇERİK DÖKÜMÜ — ${dumps[0]!.sackNo}` : `ÇUVAL İÇERİK DÖKÜMÜ — ${dumps.length} çuval`;
+  // Kapsam etiketi verilmişse başlık ONU söyler (grup dökümünde "ACME — P2").
+  // Grup numarası geri kullanılabilir olduğu için kâğıdın hangi gruba ait
+  // olduğunu YAZMASI, aşağıdaki basım anıyla birlikte, tek ayırt edicidir.
+  // Kapsam etiketi tek cariye aitse cari adı BAŞLIĞA girer — çağıranın adı
+  // ayrıca taşımasına gerek yok ve "hangi carinin P2'si" sorusu kâğıtta cevaplı.
+  const cariler = [...new Set(dumps.map((d) => d.customerName).filter((v): v is string => !!v))];
+  const kapsam =
+    opts.scopeLabel && cariler.length === 1
+      ? `${cariler[0]} — ${opts.scopeLabel}`
+      : opts.scopeLabel;
+  const title = kapsam
+    ? `ÇUVAL İÇERİK DÖKÜMÜ — ${kapsam}`
+    : dumps.length === 1
+      ? `ÇUVAL İÇERİK DÖKÜMÜ — ${dumps[0]!.sackNo}`
+      : `ÇUVAL İÇERİK DÖKÜMÜ — ${dumps.length} çuval`;
 
   // Genel toplam yalnız çok çuvalda anlamlı (tek çuvalda ara toplamla aynı olurdu).
   const grand =

@@ -111,6 +111,9 @@ export function PackingGroupBar({ customerId }: { customerId: string | null }) {
           <SackContentDumpMenu
             label="Grup Dökümü"
             align="end"
+            // Kâğıt kendini TARİHLER ve hangi gruba ait olduğunu YAZAR — grup
+            // numarası boşalınca yeniden kullanıldığı için tek ayırt edici bu.
+            scopeLabel={gruplar.find((g) => g.id === secili)?.name}
             load={async () => fromDumpRows((await sackHubService.contentDump([], secili)).data)}
             hasNotes
           />

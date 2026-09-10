@@ -8,6 +8,7 @@
 //   §6 Grup ve iz sütunları SIRALANMAZ; not ve kg sıralanır (keyset kısıtı)
 //   §7 Döküm ad rejimi: `musterideki` karşılığı yoksa hücre BOŞ kalır
 //   §8 Excel kolon kümesi ad rejimine göre daralır
+//   §9 Grup çıktısı ÇALIŞMA KÂĞIDIDIR: başlıkta cari + grup + basım anı
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-10):
 //   (a) şeritteki `next.delete("cursor")` silindi -> §2 KIRMIZI
@@ -160,5 +161,28 @@ describe("§8 Excel kolon kümesi rejime göre daralır", () => {
   it("ikisi (varsayılan) → dört sütun da var", () => {
     const h = basliklar("ikisi");
     expect(h).toEqual(expect.arrayContaining(["Kumaş", "Müşteri kumaş", "Renk", "Müşteri renk"]));
+  });
+});
+
+describe("§9 grup çıktısı çalışma kâğıdıdır", () => {
+  it("⭐ başlık cari + grup adını taşır", () => {
+    const html = buildSackDumpHtml([dump()], { scopeLabel: "P2" });
+    expect(html).toContain("ACME — P2");
+  });
+
+  it("⭐ başlık BASIM ANINI taşır (iki kâğıdı ayıran ikinci şey)", () => {
+    const html = buildSackDumpHtml([dump()], { scopeLabel: "P2" });
+    expect(html).toContain("Basım:");
+  });
+
+  it("Excel özetinde Kapsam sütunu YALNIZ grup dökümünde çizilir", () => {
+    const ile = buildSackDumpSheets([dump()], { scopeLabel: "P2" }).find((s) => s.name === "Özet")!;
+    const siz = buildSackDumpSheets([dump()], {}).find((s) => s.name === "Özet")!;
+    expect(ile.columns.map((c) => c.header)).toContain("Kapsam");
+    expect(siz.columns.map((c) => c.header)).not.toContain("Kapsam");
+  });
+
+  it("kapsam etiketi yoksa başlık bugünkü haliyle kalır (regresyon)", () => {
+    expect(buildSackDumpHtml([dump()], {})).toContain("ÇUVAL İÇERİK DÖKÜMÜ — CV1");
   });
 });

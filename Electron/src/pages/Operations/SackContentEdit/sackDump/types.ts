@@ -70,6 +70,16 @@ export interface SackDumpOptions {
    * (üç-ad sütunlarının zaten uyduğu kural).
    */
   nameMode?: SackDumpNameMode;
+  /**
+   * KAPSAM ETİKETİ — kâğıdın hangi seçime ait olduğunu söyler ("ACME A.Ş. — P2").
+   *
+   * ⚠️ PAKETLEME GRUBU DÖKÜMÜNDE ZORUNLU GİBİ DAVRAN. Grup adı (P1, P2…) bir
+   * KİMLİK DEĞİL PARK YERİDİR: grup boşalınca numara yeniden kullanılır. Bunun
+   * zararsız olmasının tek dayanağı, kâğıdın kendini TARİHLEMESİ ve hangi
+   * gruba ait olduğunu YAZMASIDIR — aksi hâlde geçen haftanın "P2" kâğıdı ile
+   * bugünkü P2 ayırt edilemez. Başlık: kapsam + basım anı.
+   */
+  scopeLabel?: string;
 }
 
 export const dumpTotalQty = (d: SackDump): number => d.rolls.reduce((a, r) => a + r.qty, 0);

@@ -27,6 +27,8 @@ interface Props {
   /** Not onay kutusunu göstermek için: seçimde not var mı (liste ekranı bilir). */
   hasNotes?: boolean;
   label: string;
+  /** Kapsam etiketi — grup dökümünde ZORUNLU gibi davran (bkz. `SackDumpOptions.scopeLabel`). */
+  scopeLabel?: string;
   disabled?: boolean;
   align?: "start" | "end";
 }
@@ -43,7 +45,7 @@ interface Props {
  * karıştırır (çeki listesi diyaloğundaki `notedCount > 0` kalıbı). Hiçbir yere
  * kaydedilmez; oturum içinde bileşen yaşadıkça korunur.
  */
-export function SackContentDumpMenu({ dumps, load, hasNotes, label, disabled, align = "start" }: Props) {
+export function SackContentDumpMenu({ dumps, load, hasNotes, label, scopeLabel, disabled, align = "start" }: Props) {
   const [withNotes, setWithNotes] = useState(false);
   // AD REJİMİ — varsayılanı AYAR verir, buradaki seçim TEK SEFERLİKTİR ve ayarı
   // EZMEZ (kâğıt boyu seçicisiyle aynı kalıp). Menü kapanınca da korunur:
@@ -55,7 +57,7 @@ export function SackContentDumpMenu({ dumps, load, hasNotes, label, disabled, al
   const resolve = async (): Promise<SackDump[]> => (load ? await load() : (dumps ?? []));
   // Notlu çuval yoksa açık kalmış bayrak sessizce etkisiz olsun (yanlış "dahil" izlenimi yok).
   const notesAvailable = hasNotes ?? (dumps ? dumpHasNotes(dumps) : false);
-  const opts = { withNotes: withNotes && notesAvailable, nameMode };
+  const opts = { withNotes: withNotes && notesAvailable, nameMode, scopeLabel };
 
   return (
     <ExportMenu

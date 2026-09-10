@@ -47,8 +47,12 @@ function uniqueSheetName(base: string, used: Set<string>): string {
 }
 
 /** Özet sayfası — çuval başına bir satır. */
-function summarySheet(dumps: SackDump[], withNotes: boolean): SheetSpec {
+function summarySheet(dumps: SackDump[], withNotes: boolean, scopeLabel?: string): SheetSpec {
   const columns = [
+    // KAPSAM sütunu yalnız etiket verilmişse (grup dökümü) çizilir — kâğıdın
+    // hangi gruba ait olduğu Excel'de de okunabilsin. Grup numarası geri
+    // kullanılabilir; kapsam + basım anı iki kâğıdı ayıran tek şeydir.
+    ...(scopeLabel ? [{ header: "Kapsam", key: "scope", width: 28 }] : []),
     { header: "Çuval No", key: "sackNo", width: 18 },
     { header: "Müşteri", key: "customer", width: 28 },
     { header: "Şube", key: "branch", width: 20 },
@@ -62,6 +66,7 @@ function summarySheet(dumps: SackDump[], withNotes: boolean): SheetSpec {
   ];
 
   const rows = dumps.map((d) => ({
+    ...(scopeLabel ? { scope: scopeLabel } : {}),
     sackNo: d.sackNo,
     customer: d.customerName ?? "Müşterisiz (genel stok)",
     branch: d.branchName ?? "",
@@ -163,7 +168,7 @@ function swatchSheet(dumps: SackDump[]): SheetSpec | null {
 export function buildSackDumpSheets(dumps: SackDump[], opts: SackDumpOptions = {}): SheetSpec[] {
   const withNotes = !!opts.withNotes;
   const used = new Set<string>(["Özet", "Kartelalar"]); // ayrılmış adlar
-  const sheets: SheetSpec[] = [summarySheet(dumps, withNotes)];
+  const sheets: SheetSpec[] = [summarySheet(dumps, withNotes, opts.scopeLabel)];
   const mode: SackDumpNameMode = opts.nameMode ?? "ikisi";
   for (const d of dumps) sheets.push(sackSheet(d, uniqueSheetName(d.sackNo, used), mode));
   const sw = swatchSheet(dumps);

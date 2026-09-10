@@ -4426,6 +4426,17 @@ izi üstünde kalır (doğru davranış). Gruba özel söz söylemenin yeri GRUP
   kuruldu → 1 kırmızı · `musterideki` FAIL-OPEN yapıldı → 1 kırmızı · Excel mod
   koşulları kaldırıldı → 2 kırmızı.
 
+### Sonradan kapatılan açık (aynı gün)
+
+Kural "grup çıktısının başlığı cari + grup + üretim anı taşır" diye yazılmıştı
+ama ilk uygulamada başlık YALNIZ cari ve basım anını taşıyordu — **grup adı
+yoktu**. Bu, numaranın geri kullanılabilir olmasının TEK dayanağını boşa
+çıkarıyordu: geçen haftanın "P2" kâğıdı ile bugünkü P2 ayırt edilemezdi.
+`SackDumpOptions.scopeLabel` eklendi; başlık tek cariyse cari adını kendisi
+ekliyor ve Excel özetine "Kapsam" sütunu YALNIZ grup dökümünde çiziliyor.
+Bekçi: `packingGroupUi.test.ts §9` (negatif sonda: etiket başlıktan düşürüldü →
+kırmızı).
+
 ### Üç kapı
 
 Migration **yok** (bu turda şema değişmedi). Yeni izin **yok**. APK **yok** —
