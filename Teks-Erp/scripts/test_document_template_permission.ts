@@ -43,6 +43,8 @@ import featureFlagRouter from "../src/routes/feature-flag.routes";
 import freeDocumentRouter from "../src/routes/free-document.routes";
 import documentProfileRouter from "../src/routes/document-profile.routes";
 import travelerTemplateRouter from "../src/routes/traveler-template.routes";
+import travelerCardRouter from "../src/routes/traveler-card.routes";
+import printedDocumentRouter from "../src/routes/printed-document.routes";
 
 const READ_KOD = "document-template:read";
 const WRITE_KOD = "document-template:write";
@@ -200,6 +202,11 @@ const SENARYOLAR: Senaryo[] = [
   { ad: "POST /api/traveler-templates", router: travelerTemplateRouter, method: "post", yol: "/", yazmaMi: true },
   { ad: "POST /api/traveler-templates/:id/default", router: travelerTemplateRouter, method: "post", yol: "/:id/default", yazmaMi: true },
   { ad: "PUT /api/document-profiles/:id", router: documentProfileRouter, method: "put", yol: "/:id", yazmaMi: true },
+  // CANLI ÖNİZLEME UÇLARI (2026-09-10): ekranı AÇAN izinle aynı kümede olmalılar.
+  // İkisi de bir kez `admin:settings`te unutuldu; refakat kartınınki 2026-08-05'te,
+  // belge şablonununki prod log'unda 403 olarak görülene kadar (6 günde 4 kez) kaldı.
+  { ad: "POST /api/traveler-cards/sample-html", router: travelerCardRouter, method: "post", yol: "/sample-html", yazmaMi: false },
+  { ad: "POST /api/printed-documents/:docType/sample-html", router: printedDocumentRouter, method: "post", yol: "/:docType/sample-html", yazmaMi: false },
 ];
 
 let zincirOkunan = 0;
@@ -235,8 +242,8 @@ for (const s of SENARYOLAR) {
 // Körlük zemini: bir refactor router şeklini değiştirirse yukarıdaki döngü
 // sıfır senaryo üzerinde vakumen yeşil kalırdı.
 check(
-  "Körlük zemini — en az 6 route zinciri gerçekten okundu",
-  zincirOkunan >= 6,
+  "Körlük zemini — en az 8 route zinciri gerçekten okundu",
+  zincirOkunan >= 8,
   `okunan=${zincirOkunan}/${SENARYOLAR.length}`,
 );
 
