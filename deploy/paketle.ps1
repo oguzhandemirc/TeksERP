@@ -119,7 +119,7 @@ if (-not (Test-Path $surumBelgesi)) {
 }
 # Icerigin BOS olmadigini bekci olcer (scripts/test_surum_belgesi.ts); burada
 # yalnizca VARLIK kontrolu var - PowerShell'de markdown ayristirmak yanlis yer.
-Ok "surum belgesi: docs/surumler/backend-$yeniSurum.md"
+Write-Host "  + surum belgesi: docs/surumler/backend-$yeniSurum.md" -ForegroundColor DarkGray
 
 & node (Join-Path $repo "scripts/backend-surum.mjs") --uygula --surum $yeniSurum | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "package.json > version yazilamadi." }
@@ -449,7 +449,7 @@ $belgeMetni = $belgeMetni -replace '(?m)^\*\*Paket:\*\*.*$',  "**Paket:** ``$([S
 $belgeMetni = $belgeMetni -replace '(?m)^\*\*SHA256:\*\*.*$', "**SHA256:** ``$sha``"
 $belgeMetni = $belgeMetni -replace '(?m)^\*\*Commit:\*\*.*$', "**Commit:** ``$commit``"
 Set-Content $surumBelgesi $belgeMetni -NoNewline
-Ok "surum belgesi guncellendi (paket adi + SHA256 + commit yazildi)"
+Write-Host "  + surum belgesi guncellendi (paket adi + SHA256 + commit)" -ForegroundColor DarkGray
 
 Set-Location $repo
 Write-Host ""
