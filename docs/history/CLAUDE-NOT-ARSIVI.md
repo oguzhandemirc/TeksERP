@@ -3863,10 +3863,22 @@ olduğu şey (dolu görünen boş alan) bekçinin kendisinde vardı.**
 "Paketleme/çuvallar ekranında partilere ayırmalı mıyız? Bir carinin birden fazla
 zamanda yapılacak sevkiyatı hazırda bekliyorsa?"
 
-### Ölçüm — dert gerçek ve tehlikeli yarısı sessiz
+### Ölçüm
 
-`PaketlemeScreen` cari-kapsamlı: `/pool/sacks?customerId` o carinin BÜTÜN havuz
-çuvallarını tek düz liste veriyor. Üç somut sonuç ölçüldü:
+⚠️ **DÜZELTME (aynı gün):** aşağıdaki üç ölçüm TABLET ekranına
+(`mobil/.../PaketlemeScreen`) aittir ve orada DOĞRUDUR — ama fabrikanın
+kullandığı yüzey o DEĞİL. Kullanıcı beyanı: *"tabletteki sevkiyat ekranlarını şu
+an kullanmıyoruz"* (geçici). Fabrikanın kullandığı yüzey PANELDE:
+**Operasyon → Paketleme/Çuvallar** (`Electron/src/pages/Operations/SackContentEdit/`).
+
+Bunun bağlayıcı sonucu: **panelde "sessiz yanlış sevk" tehlikesi YOKTUR.**
+`CreateShipmentDialog` sevkiyatı SEÇİLİ çuvallardan kurar (`sacks:
+ShipmentDialogSack[]`), "hepsini gönder" diye bir buton yoktur. Yani grubun
+panel tarafındaki gerekçesi güvenlik değil DÜZEN: bloklara ayırma, gruba not,
+grup filtresi, grup çıktısı. Tehlike argümanı yalnız tablet açıldığı gün
+geçerlidir ve o gün "Hemen Sevk Et" daraltılmalıdır.
+
+Tablet ölçümü (bugün kullanılmıyor, açıldığı gün geçerli):
 
 - Liste 20'den uzunsa yalnız **son 20 çuval** çiziliyor (`SACK_WINDOW = 20`),
   gerisi gizli.
@@ -4013,10 +4025,17 @@ listede kalır.
 
 ### Dilimler
 
-① backend (BU NOT — bitti) → ② tablet Paketleme ekranı: grup blokları, "Parti
-Ata", not, filtre, sevk butonunun DARALTILMASI, sevkte "notu sevkiyata kopyala?"
-sorusu → ③ Excel/PDF çalışma kâğıdı (mevcut çuval-içeriği üreticisinden doğar,
-ikinci rakam üretmez) → ④ panel aynası.
+① backend (BU NOT — bitti) → ② PANEL "Paketleme/Çuvallar" ekranı (Electron +
+web AYNI kod tabanı, `build:web`): grup şeridi (cari seçiliyken), "Grup" sütunu,
+mevcut toplu-aksiyon çubuğuna "Parti Ata", grup notu/adı, sunucu tarafı grup
+filtresi → ③ grup çıktısı (mevcut "İçerik Dökümü" üreticisinden doğar, ikinci
+rakam üretmez; başlıkta cari + grup + üretim anı) → ④ tablet, ancak o ekranlar
+yeniden açıldığında; oradaki iş "Hemen Sevk Et"in DARALTILMASI.
+
+⚠️ ② için tasarım kararı: grup listede İÇ İÇE BLOK BAŞLIĞI olarak çizilmez.
+Çuval listesi cursor'lu bir tablodur; blok başlığı sayfalamayla kavga eder ve
+"liste + cursor + özet şeridi TEK where'den doğar" kuralını bozar. Blok hissi
+şerit + sütun + sunucu süzmesiyle kurulur.
 
 ## 2026-09-10 — KÜNYESİZ İSTEMCİ GÖRÜNMEZDİ: sürüm UA'dan okunuyor [ÇEKİRDEK]
 
