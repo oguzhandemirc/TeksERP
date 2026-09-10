@@ -24,7 +24,7 @@ Kanonik kaynak **kod + `CLAUDE.md` dosyaları**dır. 2026-09-05 yeniden yapılan
 |---|---|---|
 | `kurallar/` | Alan kural dosyaları (24 + README) — üretildi 2026-09-05, sonra elle bakılır | Canlı |
 | `standart/` | Kod yazım standardı (8 + README): `ILKELER` · `BACKEND` · `VERITABANI` · `ESZAMANLILIK` · `ELECTRON` · `MOBIL` · `KUTUPHANELER` · `TEST-VE-DERLEME`. Olay-türevi kural değil, RUTİN konvansiyon; her kural `[kimlik] · zorlama · kanıt · devralınan` taşır | Canlı |
-| `design/` | Domain tasarımları (18) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı | Canlı |
+| `design/` | Domain tasarımları (19) — yalnız CANLI olanlar; her birinin durum banner'ı 2026-09-05'te koda karşı doğrulandı. `SEKTOR-YOL-HARITASI.md` (2026-09-11) bir ÜRÜN belgesidir: 90 doğrulanmış eksik defter, karar bekliyor | Canlı |
 | `ops/` | Deploy/runbook/kurulum reçeteleri (24) — yalnız TEKRAR KOŞULAN olanlar | Operasyonel, bakımlı |
 | `qa/` | Manuel kabul senaryoları | Bakımlı |
 | `history/` | Arşiv (salt-okunur): karar notları tam metni, harcanmış tek-seferlik deploy/devir notları, tamamlanmış planlar, eski incelemeler, `denetim-2026-08/` (kök `audit/` kampanyası), `anlama-turu-2026-09-05/` | Donmuş; sayılar/satır referansları bayat |
