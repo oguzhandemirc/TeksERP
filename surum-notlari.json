@@ -17,7 +17,7 @@
   "yayinlar": [
     {
       "id": "2026-09-10",
-      "baslik": "Sevk irsaliyesi çıktıları düzeldi, eski paneller envanterde görünüyor, sevk fişi Excel'i irsaliyedeki adı basıyor",
+      "baslik": "Sevk irsaliyesi tek pencerede toplandı, çıktıları düzeldi, eski paneller envanterde görünüyor",
       "surumler": {
         "panel": "1.3.2"
       },
@@ -26,6 +26,11 @@
           "kapsam": "panel",
           "tip": "duzeltme",
           "metin": "Sistem → Bağlı İstemciler listesinde eski panel kurulumları da görünüyor. Önceden bir makinedeki panel kendi künyesini bildiremeyecek kadar eskiyse listede “sürümü bilinmiyor” olarak değil, HİÇ görünmüyordu — yani tam da güncellenmesi gereken makineler kaçıyordu. Fabrikada 2.5.0'da kalmış bir panel bu yüzden haftalarca fark edilmedi; o makinede rapor menüsünün tamamı çalışmıyordu. Artık künyesini bildirmeyen panelin sürümü bağlantı bilgisinden okunuyor ve satırda “sürümünü bildirmiyor — adres bilgisinden okundu” notu çıkıyor. Makine güncellenip künyesini bildirmeye başlayınca not kendiliğinden kalkar. Tabletler için bu yol kullanılmaz: tabletin adres bilgisi uygulama sürümünü taşımaz, oradan okumak olmayan bir sürüm numarası gösterirdi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "iyilestirme",
+          "metin": "Sevk irsaliyesi artık tek pencerede açılıyor. Önceden aynı belgenin üç ayrı yüzeyi vardı: Sevkiyatlar ekranındaki “İrsaliye”, Muhasebe → Sevk Edilenler satırındaki “Fiş” ve aynı satırdaki “Belge”. Üçü de aynı çıktıyı gösteriyordu ama her biri diğerinin eksiğiydi — Excel yalnız Fiş'te, sürüm geçmişi ve “Revize Et” yalnız Belge'de, baskı seçenekleri ve irsaliye açıklaması yalnız Sevkiyatlar'daki pencerede vardı. Muhasebeci Excel almak için bir pencereyi, kaçıncı revizyon olduğunu görmek için ötekini açmak zorundaydı; sevkiyatçı ise PDF kaydedemiyordu. Artık tek pencere var ve hepsi orada: Yazdır (menüsünde “Top etiketlerini bas”), İndir (PDF Kaydet · Excel 3 sayfa), Baskı Seçenekleri (basılacak listeler, sayfa birleştirme, çuval notu/izi, bu baskıya özel not) ve A4/A5 seçici. Muhasebe satırındaki iki düğme tek “İrsaliye” düğmesine indi. Fasondan doğrudan sevk satırları da aynı pencereden açılır; orada çuval olmadığı için liste seçimi ve irsaliye açıklaması çıkmaz. Belgenin kendisi ve çıktısı değişmedi — yalnız nereden basıldığı değişti."
         },
         {
           "kapsam": "panel",
@@ -40,7 +45,7 @@
         {
           "kapsam": "panel",
           "tip": "duzeltme",
-          "metin": "Muhasebe → Sevk Fişleri → Fiş → Excel çıktısı, ürün adını “Sevk belgesinde ürün adı” ayarına göre basıyor. Önceden aynı sevkiyatın yazdırılan hâli müşterinin adını, Excel'i bizim adımızı gösterebiliyordu — ikisi de aynı kayıttan geliyordu, sadece Excel ayarı hiç sormuyordu. Ayarın açıklaması zaten “kapsam sevk irsaliyesi ve muhasebe fişidir” diyordu. “İkisi de” seçiliyken Excel'e ayrı sütun eklenir; müşterinin o ürüne karşılığı yoksa bizim adımız yazılır, hücre boş kalmaz. Çeki listesi kendi ayarını izlemeye devam eder."
+          "metin": "Sevk fişinin Excel çıktısı (Muhasebe → Sevk Edilenler → İrsaliye → İndir → Excel), ürün adını “Sevk belgesinde ürün adı” ayarına göre basıyor. Önceden aynı sevkiyatın yazdırılan hâli müşterinin adını, Excel'i bizim adımızı gösterebiliyordu — ikisi de aynı kayıttan geliyordu, sadece Excel ayarı hiç sormuyordu. Ayarın açıklaması zaten “kapsam sevk irsaliyesi ve muhasebe fişidir” diyordu. “İkisi de” seçiliyken Excel'e ayrı sütun eklenir; müşterinin o ürüne karşılığı yoksa bizim adımız yazılır, hücre boş kalmaz. Çeki listesi kendi ayarını izlemeye devam eder."
         },
         {
           "kapsam": "panel",
