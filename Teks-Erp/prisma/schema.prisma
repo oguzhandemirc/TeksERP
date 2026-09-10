@@ -2122,6 +2122,7 @@ model Customer {
   colorAliases     CustomerColorAlias[]
   shipments        Shipment[]
   sacks            Sack[]
+  packingGroups    PackingGroup[]
   rollReturns      RollReturn[]
   /// Bu firmadan alınan mal kabul fişleri (tedarikçi rolü — CompanyType.SUPPLIER).
   goodsReceipts    GoodsReceipt[]            @relation("GoodsReceiptSupplier")
@@ -4512,6 +4513,14 @@ model Sack {
   customerId   String?           @db.Uuid
   branchId     String?           @db.Uuid
   shipmentId   String?           @db.Uuid // NULL = çuval depo havuzunda; dolu = sevkiyata atanmış
+  /// Paketleme grubu (çalışma yaftası) — NULL = "Gruplanmamış" (bugünkü davranış).
+  /// SEVKTE TEMİZLENMEZ: sevk edilmiş çuval hangi hazırlıkta toplandığını
+  /// hatırlar. İki kazancı var — ① sevk anında "grubun notu sevkiyata
+  /// kopyalansın mı?" sorusu sorulabiliyor, ② storno (`releaseSacks`) çuvalı
+  /// havuza geri koyduğunda hazırlık grubu da OLDUĞU GİBİ geri geliyor
+  /// ("mal hiç çıkmadı" sözleşmesiyle tutarlı). Alanı sevkte NULL'lamak,
+  /// tam da kaçınmak istediğimiz "her çıkış yoluna bir kanca" işiydi.
+  packingGroupId String?        @db.Uuid
   /// Çuvalın bulunduğu depo (2026-08-14, ticaret paketi). NULLABLE — fabrika
   /// sıfır-fark: tek depolu kurulumda hiçbir yüzey okumaz, eski satırlar NULL
   /// kalabilir. Doğumda damgalanır (openSack/split), NULL kalmış eski çuval İLK
@@ -4566,6 +4575,11 @@ model Sack {
   customer           Customer?           @relation(fields: [customerId], references: [id])
   branch             CustomerBranch?     @relation(fields: [branchId], references: [id])
   shipment           Shipment?           @relation(fields: [shipmentId], references: [id])
+  /// SetNull: grup normalde SİLİNMEZ (boşalınca yalnız görünmez olur), ama bir
+  /// gün boş bir grup sert silinirse tanımı gereği çuvalı yoktur — bu yüzden
+  /// SetNull bilgi kaybetmez ve Restrict'in ileride çıkaracağı ham FK hatasını
+  /// baştan engeller.
+  packingGroup       PackingGroup?       @relation(fields: [packingGroupId], references: [id], onDelete: SetNull)
   /// Restrict: içinde çuval duran depo silinemez (Roll.warehouseId ile aynı karar —
   /// SET NULL, konum bilgisini sessizce yok ederdi).
   warehouse          Warehouse?          @relation(fields: [warehouseId], references: [id], onDelete: Restrict)
@@ -4591,6 +4605,8 @@ model Sack {
   // Havuz/liste sorguları: müşteri + oluşturma sırası (FIFO = createdAt).
   @@index([customerId, createdAt])
   @@index([warehouseId])
+  /// Grup bloklarının listesi ve "grubu boş mu" yüklemi bu ağaçtan okunur.
+  @@index([packingGroupId])
   /// Şube-kırılımlı çuval listesi. DB'de KISMİ (`"branchId" IS NOT NULL`) —
   /// `sacks_warehouseId_idx` emsali (migration 20260905140000).
   @@index([branchId])
@@ -4696,6 +4712,83 @@ model SackTagAssignment {
   /// yüzeyinden geçer — rozet, filtre, belge.
   @@index([clearedAt])
   @@map("sack_tag_assignments")
+}
+
+// =============================================================================
+// PAKETLEME GRUBU — havuzdaki çuvalları "aynı sevke hazırlananlar" diye ayıran
+// ÇALIŞMA YAFTASI (2026-09-10 saha isteği)
+// =============================================================================
+// Saha derdi: bir carinin farklı zamanlarda çıkacak iki hazırlığı aynı havuzda
+// yan yana bekliyor ve Paketleme ekranı hepsini TEK düz liste olarak gösteriyor.
+// "Hemen Sevk Et" de seçim tanımadığı için içi dolu HER çuvalı gönderiyordu —
+// yani salı tırı için basılan buton gelecek haftanın çuvallarını da alıyordu.
+//
+// ⚠️ REZERVASYON DEĞİL. Yafta stok düşmez, çuvalı kilitlemez, deftere yazmaz ve
+// başka bir sevkin o çuvalı almasını ENGELLEMEZ; yalnız "bunlar bir arada
+// dursun" der. Gerçek rezervasyon ayrı bir karardır (`shipping.reservationEnabled`,
+// kendi append-only defteriyle kurulur ve `SackAllocation`a DOKUNMAZ).
+//
+// ⚠️ NUMARA KİMLİK DEĞİL, PARK YERİDİR. Görünen ad ekrandan ibarettir: belgeye,
+// etikete, irsaliyeye BASILMAZ. Bu yüzden numara geri kullanılabilir. Çıktılar
+// (Excel/PDF) birer ÇALIŞMA KÂĞIDIDIR ve başlıkları cari + grup + ÜRETİM ANI
+// taşır — iki kâğıt yan yana geldiğinde hangisinin hangisi olduğu oradan okunur.
+// Kimlik `PackingGroup.id`dir (`Batch` ile aynı karar: P01…P99 sarar, kimlik UUID).
+// =============================================================================
+
+/// Paketleme grubu — bir carinin havuzdaki çuvallarını "aynı sevke hazırlananlar"
+/// diye ayıran çalışma yaftası. Katalog DEĞİL (fabrika yönetmez, operatör anlık
+/// açar), defter DEĞİL (satır güncellenir) — mutasyona uğrayan çalışma nesnesi.
+model PackingGroup {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// İdempotency anahtarı — tablet "Parti Ata"ya basar, ağ zaman aşımına düşer ve
+  /// aynı isteği tekrar gönderirse İKİNCİ bir grup doğmasın. Token'sız eski
+  /// istemci → NULL (davranış değişmez).
+  ///
+  /// ⚠️ REPLAY'İN DÖRDÜNCÜ DURUMU (`helpers/token-replay.helper.ts`): token'la
+  /// bulunan grup bu arada BOŞALMIŞSA ("ölü") cached kaydı dönmek yanlış cevaptır
+  /// — operatöre boş bir grup gösterirdi. O durumda 409 verilir.
+  clientToken String? @unique @db.Uuid
+
+  /// Gruplar CARİYE ÖZELDİR: her carinin kendi "1. Grup"u olabilir ve bunlar
+  /// çakışmaz. Paketleme ekranı zaten cari-kapsamlı olduğu için operatör iki
+  /// carinin aynı numarasını yan yana hiç görmez.
+  customerId String @db.Uuid
+
+  /// Ekranda görünen ad — otomatik ("2. Grup") ya da operatörün elle yazdığı
+  /// serbest metin ("Cuma tırı"). Tekillik CANLI gruplar arasında UYGULAMA
+  /// katmanında zorlanır (advisory 8031); DB'de partial unique KURULAMAZ, çünkü
+  /// "canlı" tanımı ÇOCUK satıra bakar (havuzda çuvalı var mı) ve bir unique
+  /// index başka tabloyu okuyamaz.
+  name String @db.VarChar(64)
+
+  /// Otomatik numaranın SAYISAL karşılığı — sayaç YALNIZ bunu okur.
+  /// Operatör adı elle yazdıysa NULL: "Cuma tırı" bir sıra numarası değildir ve
+  /// sayacı ileri taşımamalıdır (aksi hâlde elle yazılan bir ad sonraki otomatik
+  /// numarayı belirsizce zıplatırdı).
+  seq Int?
+
+  /// Grup notu — `Sack.notes` ile AYNI SINIF (annotation): ne ölçüm ne içerik.
+  /// Fabrika genelinde aranabilen tek ayırt edici alan budur; numara cariye özel
+  /// olduğu için "P2'yi bul" araması anlamsızdır, not araması anlamlıdır.
+  note String? @db.VarChar(500)
+
+  createdById String? @db.Uuid
+  updatedById String? @db.Uuid
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  /// Üyelik ÇUVALIN üstünde (`Sack.packingGroupId`), ayrı pivot tablo DEĞİL:
+  /// çuvalı havuzdan çıkaran her MEVCUT yol (sevk · dağıtma · storno) grubu
+  /// kendiliğinden doğru tutsun. Ayrı üyelik listesi olsaydı o beş yola birer
+  /// temizlik kancası gerekirdi ve unutulan biri hayalet üyelik bırakırdı.
+  sacks Sack[]
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  /// Sayaç ve liste sorgusu: "bu carinin grupları" (eşitlik önce, sıra sonra).
+  @@index([customerId, seq])
+  @@map("packing_groups")
 }
 
 /// Sevkiyat — çuval depo havuzundan seçilen çuvallarla kurulan "kamyon". Tek müşteri+şube.

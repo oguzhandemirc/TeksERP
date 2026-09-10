@@ -163,6 +163,8 @@ export const FLAG_MODULE: Readonly<Record<FlagRowKey | SystemSettingKey, FlagOwn
   shippingDocCekiNameMode: "cekirdek",
   shippingOrderCoverage: "cekirdek",
   shippingDocProductColorSplit: "cekirdek",
+  packingGroupsEnabled: "cekirdek",
+  packingGroupNumbering: "cekirdek",
   shippingAllocWidthToleranceEnabled: "cekirdek",
   shippingAllocWidthToleranceCm: "cekirdek",
   shippingAllowOverAllocation: "cekirdek",

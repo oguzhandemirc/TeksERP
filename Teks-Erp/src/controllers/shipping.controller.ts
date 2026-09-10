@@ -6,6 +6,7 @@ import { buildDispatchAccountingExport } from "../services/accounting-export.ser
 import { getStampContext } from "../services/helpers/work-session.helper";
 import { detectMismatchesForSacks } from "../services/helpers/sack-content-mismatch.helper";
 import { SackTagService, MAX_BULK_TAG_SACKS } from "../services/sack-tag.service";
+import { PackingGroupService } from "../services/packing-group.service";
 import { HEX_RE } from "../services/helpers/sack-tag.helper";
 import "../types/express-augment";
 
@@ -36,6 +37,27 @@ const tagUpdateSchema = z
     isActive: z.boolean().optional(),
   })
   .strict();
+// ---- Paketleme grubu (çalışma yaftası) -------------------------------------
+/** Tavan: tek seferde gruplanabilecek çuval sayısı (havuz tavanı 2000'in altında). */
+const MAX_GROUP_SACKS = 500;
+const packingGroupCreateSchema = z.object({
+  customerId: z.string().uuid("Geçersiz müşteri ID"),
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçin").max(MAX_GROUP_SACKS),
+  /** Verilirse otomatik numara ÜRETİLMEZ (override) — sayaç da ilerlemez. */
+  name: z.string().trim().min(1).max(64).optional(),
+  note: z.string().trim().max(500).optional(),
+  clientToken: z.string().uuid("Geçersiz istemci anahtarı").optional(),
+});
+const packingGroupSacksSchema = z.object({
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "En az bir çuval seçin").max(MAX_GROUP_SACKS),
+});
+const packingGroupUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1, "Grup adı boş olamaz").max(64).optional(),
+    note: z.string().trim().max(500).nullable().optional(),
+  })
+  .strict();
+
 /** Tekil: çuvalın iz kümesini DEĞİŞTİR (replace). Boş dizi = tüm izleri kaldır. */
 const sackTagsSchema = z.object({ tagIds: z.array(z.string().uuid("Geçersiz etiket ID")).max(50) });
 /**
@@ -282,6 +304,47 @@ export class ShippingController {
     try {
       const result = await this.service.getSackNotes(req.params.id as string);
       res.status(200).json(result);
+    } catch (e) { next(e); }
+  };
+
+  // ---- Paketleme grubu (çalışma yaftası) -----------------------------------
+
+  listPackingGroups = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const customerId = z.string().uuid("Geçersiz müşteri ID").parse(req.query.customerId);
+      res.status(200).json(await PackingGroupService.list(customerId));
+    } catch (e) { next(e); }
+  };
+
+  createPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = packingGroupCreateSchema.parse(req.body ?? {});
+      res.status(201).json(await PackingGroupService.createWithSacks({ ...body, userId: req.user?.userId }));
+    } catch (e) { next(e); }
+  };
+
+  addSacksToPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = packingGroupSacksSchema.parse(req.body ?? {});
+      res.status(200).json(
+        await PackingGroupService.addSacks(req.params.id as string, body.sackIds, req.user?.userId),
+      );
+    } catch (e) { next(e); }
+  };
+
+  removeSacksFromPackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = packingGroupSacksSchema.parse(req.body ?? {});
+      res.status(200).json(await PackingGroupService.removeSacks(body.sackIds, req.user?.userId));
+    } catch (e) { next(e); }
+  };
+
+  updatePackingGroup = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const body = packingGroupUpdateSchema.parse(req.body ?? {});
+      res.status(200).json(
+        await PackingGroupService.update(req.params.id as string, body, req.user?.userId),
+      );
     } catch (e) { next(e); }
   };
 

@@ -331,6 +331,8 @@ export const updateSchema = z.strictObject({
   // shipping.docProductColorSplit — ürün listesinde müşteri rengi ayrı sütun
   // (default false = bugünkü birleşik dize, bayt-bayt aynı).
   shippingDocProductColorSplit: z.boolean().optional(),
+  packingGroupsEnabled: z.boolean().optional(),
+  packingGroupNumbering: z.enum(["artan", "bosluk-doldur"]).optional(),
   // shipping.allocWidthTolerance* — tahsiste EN toleransı (default kapalı = tam eşitlik).
   // ⚠️ Kumaş ve renk toleranstan ETKİLENMEZ.
   shippingAllocWidthToleranceEnabled: z.boolean().optional(),

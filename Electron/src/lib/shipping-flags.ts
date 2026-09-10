@@ -176,3 +176,26 @@ export function isShippingDocCekiNameMode(v: unknown): v is ShippingDocCekiNameM
 export function isShippingOrderCoverage(v: unknown): v is ShippingOrderCoverage {
   return v === "off" || v === "warn" || v === "block";
 }
+
+/**
+ * PAKETLEME GRUBU numara sayacının rejimi. `artan` = sahanın istediği davranış.
+ * Backend aynası: `system-setting.service.ts` → `PACKING_GROUP_NUMBERINGS`.
+ */
+export type PackingGroupNumbering = "artan" | "bosluk-doldur";
+
+export const PACKING_GROUP_NUMBERING_OPTIONS: ReadonlyArray<{
+  value: PackingGroupNumbering;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "artan",
+    label: "Artan (varsayılan)",
+    hint: "Yeni grup, açık grupların en büyük numarasının bir fazlasını alır. “3. Grup sevk edildi, 5. Grup duruyor” ise yeni grup 6 olur — boşalan numaraya geri dönülmez, aynı gün iki farklı “3. Grup” dolaşmaz.",
+  },
+  {
+    value: "bosluk-doldur",
+    label: "Boşluğu doldur",
+    hint: "Yeni grup en küçük boş numarayı alır (1 ve 3 doluysa yeni grup 2 olur). Numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir.",
+  },
+];

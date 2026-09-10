@@ -39,6 +39,13 @@ export interface FeatureFlags {
    *  ENFORCE bu istemcidedir (createdById filtresini istemci gönderir) —
    *  yetki duvarı değil ekran sadeleştirmesi. */
   kk1HistoryAllEntriesEnabled: boolean;
+  /** Paketleme grubu (çalışma yaftası) açık mı (default false = bugünkü düz
+   *  liste + "Hemen Sevk Et hepsini gönderir"). Açıkken Paketleme ekranı
+   *  çuvalları gruplara bloklar ve sevk butonu yalnız AÇIK GRUBU gönderir.
+   *  ENFORCE İKİ TARAFLI: ekran bu bayrağa göre çizilir, backend yazma uçlarını
+   *  aynı bayrakla fail-closed kapatır. `packingGroupNumbering` aynalanmadı —
+   *  numarayı sunucu üretir, tablet hiç hesaplamaz. */
+  packingGroupsEnabled: boolean;
   /** Simüle kantardan gelen çuval tartısı kaydedilebilsin mi (default false).
    *  Backend ENFORCE eder — kapalıyken SIMULATED beyanlı tartı 400 döner. Elle
    *  giriş (MANUAL) muaftır. Yalnız demo/eğitim kurulumu açar. */
@@ -128,6 +135,11 @@ export const DEFAULT_FEATURE_FLAGS: FeatureFlags = {
   // Varsayılan KAPALI — bayrak yüklenemezken okutma zorunluluğu dayatılmaz
   // (fail-open: doğrulama ek güvencedir, yokluğu akışı durdurmamalı).
   kk1LabelScanVerifyEnabled: false,
+  // Fail-closed yön: bayrak okunamazsa gruplar ÇİZİLMEZ ve ekran bugünkü düz
+  // listeye düşer. Ters yön tehlikeli olurdu — grup başlıkları görünüp sevk
+  // butonu "yalnız bu grubu gönder" dese ama sunucu bayrağı kapalı bilse,
+  // operatör gönderdiğini sandığından fazlasını gönderirdi.
+  packingGroupsEnabled: false,
   shippingSimulatedWeightEnabled: false,
   returnGradingEnabled: false,
   kartelaMeasurementEnabled: false,

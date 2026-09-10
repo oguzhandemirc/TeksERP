@@ -8,6 +8,7 @@ import type {
   ShippingDocCekiNameMode,
   ShippingOrderCoverage,
   ShippingInvoiceMode,
+  PackingGroupNumbering,
 } from "@/lib/shipping-flags";
 import {
   type CompanyLetterhead,
@@ -364,6 +365,10 @@ export interface FeatureFlags {
   shippingOrderCoverage: ShippingOrderCoverage;
   /** Ürün listesinde müşteri rengi AYRI sütun mu (default false = bugünkü birleşik dize). */
   shippingDocProductColorSplit: boolean;
+  /** Paketleme grubu (çalışma yaftası) açık mı — default false = bugünkü düz liste. */
+  packingGroupsEnabled: boolean;
+  /** Grup numara rejimi: 'artan' (default) | 'bosluk-doldur'. */
+  packingGroupNumbering: PackingGroupNumbering;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). Kumaş ve renk KESİN. */
   shippingAllocWidthToleranceEnabled: boolean;
   /** Tolerans (cm) — yalnız bayrak açıkken uygulanır. */

@@ -234,6 +234,72 @@ router.delete("/sacks/tags/:id", verifyToken, WRITE, controller.deleteSackTag);
  */
 router.get("/sacks/:id/tags", verifyToken, READ, controller.getSackTagsOfSack);
 router.post("/sacks/:id/tags", verifyToken, WRITE, controller.setSackTagsOfSack);
+
+// ===========================================================================
+// PAKETLEME GRUBU — havuz çuvallarını "aynı sevke hazırlananlar" diye ayıran
+// çalışma yaftası. Rezervasyon DEĞİL (bkz. `packing-group.service.ts` başlığı).
+// ===========================================================================
+// Yazma uçları `packing.groupsEnabled` bayrağına FAIL-CLOSED kapılıdır (kapı
+// serviste, TEK nokta). Okuma kapılı değil: bayrak kapalıyken zaten boş döner.
+/**
+ * @openapi
+ * /api/shipping/packing-groups:
+ *   get:
+ *     tags: [Shipping]
+ *     summary: Bir carinin CANLI paketleme grupları (havuzda çuvalı olanlar)
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: query, name: customerId, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Grup listesi + sayaçlar } }
+ *   post:
+ *     tags: [Shipping]
+ *     summary: "Parti Ata" — seçili çuvallardan yeni grup kur
+ *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       201: { description: Grup oluşturuldu }
+ *       403: { description: "Özellik kapalı (PACKING_GROUPS_DISABLED)" }
+ *       409: { description: "Ad çakıştı / çuval gruplanamadı" }
+ */
+router.get("/packing-groups", verifyToken, READ, controller.listPackingGroups);
+router.post("/packing-groups", verifyToken, WRITE, controller.createPackingGroup);
+/**
+ * @openapi
+ * /api/shipping/packing-groups/remove-sacks:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Çuvalları gruptan çıkar ("Gruplanmamış"a döner)
+ *     security: [{ bearerAuth: [] }]
+ *     responses: { 200: { description: Çıkarıldı } }
+ */
+// ⚠️ SIRA: sabit yol `/:id`li yollardan ÖNCE gelmeli, yoksa "remove-sacks" bir
+// grup id'si sanılır ve uuid-param middleware'i 400 verir.
+router.post("/packing-groups/remove-sacks", verifyToken, WRITE, controller.removeSacksFromPackingGroup);
+/**
+ * @openapi
+ * /api/shipping/packing-groups/{id}/sacks:
+ *   post:
+ *     tags: [Shipping]
+ *     summary: Var olan CANLI gruba çuval ekle
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Eklendi }
+ *       409: { description: "Grup boşalmış (PACKING_GROUP_DEAD)" }
+ */
+router.post("/packing-groups/:id/sacks", verifyToken, WRITE, controller.addSacksToPackingGroup);
+/**
+ * @openapi
+ * /api/shipping/packing-groups/{id}:
+ *   patch:
+ *     tags: [Shipping]
+ *     summary: Grup adını (override) ve notunu güncelle
+ *     security: [{ bearerAuth: [] }]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *     responses: { 200: { description: Güncellendi } }
+ */
+router.patch("/packing-groups/:id", verifyToken, WRITE, controller.updatePackingGroup);
 // Çuval içeriği düzeltme (rol/kartela çıkar/taşı)
 router.post("/rolls/:rollId/remove-from-sack", verifyToken, WRITE, controller.removeRollFromSack);
 router.post("/rolls/:rollId/move-sack", verifyToken, WRITE, controller.moveRollToSack);

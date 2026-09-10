@@ -401,6 +401,11 @@ export const SETTING_KEYS = {
   SHIPPING_ORDER_COVERAGE: "shipping.orderCoverage",
   /** Ürün listesinde müşteri RENGİ ayrı sütun mu (default false = bugünkü birleşik dize). */
   SHIPPING_DOC_PRODUCT_COLOR_SPLIT: "shipping.docProductColorSplit",
+  /** Paketleme grubu (çalışma yaftası) açık mı — default false = BUGÜNKÜ davranış:
+   *  düz çuval listesi ve "Hemen Sevk Et" içi dolu HER çuvalı gönderir. */
+  PACKING_GROUPS_ENABLE: "packing.groupsEnabled",
+  /** Grup numarası sayacının rejimi: `artan` (default) | `bosluk-doldur`. */
+  PACKING_GROUP_NUMBERING: "packing.groupNumbering",
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik, bugünkü davranış). */
   SHIPPING_ALLOC_WIDTH_TOLERANCE_ENABLED: "shipping.allocWidthToleranceEnabled",
   /** Tolerans değeri (cm). Yalnız yukarıdaki bayrak açıkken uygulanır. */
@@ -732,6 +737,28 @@ export const SHIPPING_DOC_CEKI_NAME_MODES: ShippingDocCekiNameMode[] = [
 ];
 /** Varsayılan `devral` — bayrak yazılana kadar TEK BAYT değişmez. */
 export const DEFAULT_SHIPPING_DOC_CEKI_NAME_MODE: ShippingDocCekiNameMode = "devral";
+
+/**
+ * Paketleme grubu numara sayacının rejimi.
+ *
+ *  • `artan` (VARSAYILAN, 2026-09-10 kullanıcı kararı) — yeni grup CANLI grupların
+ *    en büyük numarasının bir fazlasını alır. "P3 sevk edildi, P5 duruyor" ise yeni
+ *    grup P6'dır; boşalan numaraya GERİ DÖNÜLMEZ. Böylece aynı cari için aynı gün
+ *    iki farklı "P3" dolaşmaz.
+ *  • `bosluk-doldur` — yeni grup EN KÜÇÜK boş numarayı alır (P1 ve P3 doluysa P2).
+ *    Numaralar sıkı kalır, ama sevk edilen bir numara aynı gün yeniden doğabilir.
+ *
+ * ⚠️ İKİ REJİM DE canlı gruplara bakar: carinin havuzu tamamen boşaldığında canlı
+ * grup kalmadığı için sayaç KENDİLİĞİNDEN 1'e döner. Yani `artan` rejiminde bile
+ * numara sonsuza büyümez — yalnız havuz hiç boşalmadığı sürece ilerler.
+ */
+export type PackingGroupNumbering = "artan" | "bosluk-doldur";
+export const PACKING_GROUP_NUMBERINGS: PackingGroupNumbering[] = [
+  "artan",
+  "bosluk-doldur",
+];
+/** Varsayılan `artan` — sahanın istediği rejim (boşalan numaraya geri dönme). */
+export const DEFAULT_PACKING_GROUP_NUMBERING: PackingGroupNumbering = "artan";
 
 /**
  * Sevkiyat KAPSAMA rejimi: çuvaldaki mal seçili sipariş satırlarına yazılabildi mi.
@@ -1393,6 +1420,10 @@ export interface FeatureFlags {
   shippingOrderCoverage: ShippingOrderCoverage;
   /** Ürün listesinde müşteri rengi AYRI sütun mu (default false = bugünkü birleşik dize). */
   shippingDocProductColorSplit: boolean;
+  /** Paketleme grubu açık mı (default false = bugünkü düz liste + "hepsini sevk et"). */
+  packingGroupsEnabled: boolean;
+  /** Grup numara rejimi: 'artan' (default) | 'bosluk-doldur'. */
+  packingGroupNumbering: PackingGroupNumbering;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). */
   shippingAllocWidthToleranceEnabled: boolean;
   /** Tolerans (cm) — yalnız bayrak açıkken uygulanır. */
@@ -1759,6 +1790,8 @@ export class SystemSettingService {
       shippingDocCekiNameMode: await readShippingDocCekiNameMode(cacheClient),
       shippingOrderCoverage: await readShippingOrderCoverage(cacheClient),
       shippingDocProductColorSplit: await readShippingDocProductColorSplit(cacheClient),
+      packingGroupsEnabled: await readPackingGroupsEnabled(cacheClient),
+      packingGroupNumbering: await readPackingGroupNumbering(cacheClient),
       shippingAllocWidthToleranceEnabled: await readShippingAllocWidthToleranceEnabled(cacheClient),
       shippingAllocWidthToleranceCm: await readShippingAllocWidthToleranceCm(cacheClient),
       shippingAllowOverAllocation: await readShippingAllowOverAllocation(cacheClient),
@@ -2511,6 +2544,36 @@ export class SystemSettingService {
         SETTING_KEYS.SHIPPING_DOC_CEKI_NAME_MODE,
         v,
         "Çeki listesinde ad: devral (genel rejim) / bizdeki / musterideki / ikisi (iki kolon)",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packingGroupsEnabled")) {
+      if (typeof input.packingGroupsEnabled !== "boolean") {
+        throw AppError.badRequest("packingGroupsEnabled boolean olmalı");
+      }
+      await this.set(
+        SETTING_KEYS.PACKING_GROUPS_ENABLE,
+        String(input.packingGroupsEnabled),
+        "Paketleme grubu (çalışma yaftası) açık mı — kapalıyken çuval listesi düz",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "packingGroupNumbering")) {
+      const v = input.packingGroupNumbering;
+      if (
+        typeof v !== "string" ||
+        !PACKING_GROUP_NUMBERINGS.includes(v as PackingGroupNumbering)
+      ) {
+        throw AppError.badRequest(
+          "Paketleme grubu numara rejimi 'artan' veya 'bosluk-doldur' olmalı"
+        );
+      }
+      await this.set(
+        SETTING_KEYS.PACKING_GROUP_NUMBERING,
+        v,
+        "Grup numarası: artan (boşalan numaraya dönme) / bosluk-doldur (en küçük boş)",
         userId
       );
     }
@@ -4044,6 +4107,41 @@ export async function readShippingAllowOverAllocation(
  * UNCACHED (enforcement yolu — `getFeatureFlags` cache'i üzerinden okunmaz); kayıt
  * yoksa false. `getFeatureFlags` bu fonksiyonu in-memory client ile çağırır.
  */
+/**
+ * Paketleme grubu açık mı. Satır YOKSA `false` — yani bugünkü davranış: Paketleme
+ * ekranı düz liste, "Hemen Sevk Et" içi dolu her çuvalı gönderir.
+ */
+export async function readPackingGroupsEnabled(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<boolean> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKING_GROUPS_ENABLE },
+    select: { value: true },
+  });
+  return asBoolean(setting?.value);
+}
+
+/**
+ * Grup numara rejimi. Satır yoksa / değer kümede değilse `artan` (saha kararı).
+ * `includes` sigortası: elle SQL ya da eski dump çöp yazarsa sayaç sessizce
+ * rejim değiştirmesin.
+ */
+export async function readPackingGroupNumbering(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<PackingGroupNumbering> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.PACKING_GROUP_NUMBERING },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && PACKING_GROUP_NUMBERINGS.includes(v as PackingGroupNumbering)) {
+    return v as PackingGroupNumbering;
+  }
+  return DEFAULT_PACKING_GROUP_NUMBERING;
+}
+
 export async function readKursunBypassEnabled(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<boolean> {

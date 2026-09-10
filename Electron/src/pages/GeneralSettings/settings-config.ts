@@ -29,6 +29,7 @@ import {
   SHIPPING_ORDER_COVERAGE_OPTIONS,
   SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
   SHIPPING_INVOICE_MODE_OPTIONS,
+  PACKING_GROUP_NUMBERING_OPTIONS,
 } from "@/lib/shipping-flags";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
@@ -787,6 +788,16 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         desc: "Kapalı (varsayılan, BUGÜNKÜ ÇIKTI): irsaliyenin ürün listesinde müşteri adı tek hücrede birleşik yazar — “müşteri kumaş adı + renk + en”. Müşterinin o renge KENDİ adı yoksa oraya bizim renk adımız girer. ⚠️ Bu çoğu zaman DOĞRUDUR: müşterilerin çoğu bizim renk adımızı kullanır, yani eksik veri değil normal hâldir. Ayarın çözdüğü şey dar: kumaş adı müşterinin, renk adı bizim olduğunda tek hücrede yan yana durdukları için okuyucu hangi yarının kime ait olduğunu ayırt edemez. Açık: renk kendi sütununa çıkar ve YALNIZ müşterinin kendi renk adı varsa dolar — yoksa sütun BOŞ kalır (bizim adımız “müşteri varyantı” diye etiketlenmez). ⚠️ Bu ayar MÜŞTERİYE GİDEN belgenin sütun düzenini değiştirir; açmadan önce bir irsaliyenin önizlemesine bakın. Sütunu “Belge Kişiselleştirme”den gizleyebilir, başlığını değiştirebilirsiniz.",
       },
       {
+        key: "packingGroupsEnabled",
+        title: "Paketleme grubu (çuvalları partilere ayır)",
+        summary:
+          "Havuzdaki çuvallar “1. Grup / 2. Grup” diye ayrılır; sevk butonu yalnız açık grubu gönderir.",
+        defaultOn: false,
+        audience: ["Sevkiyat", "Depocu"],
+        group: "Paketleme",
+        desc: "Kapalı (varsayılan, BUGÜNKÜ DAVRANIŞ): Paketleme ekranı carinin bütün havuz çuvallarını tek düz liste gösterir ve “Hemen Sevk Et” içi dolu HER çuvalı gönderir. Bir carinin farklı zamanlarda çıkacak iki hazırlığı yan yana beklediğinde bu, salı tırı için basılan butonun gelecek haftanın çuvallarını da almasına yol açar. Açık: operatör çuvalları seçip “Parti Ata” der, grup otomatik numara alır (adı elle de yazılabilir), gruba not bırakılabilir ve sevk butonu yalnız açık grubun çuvallarını gönderir. ⚠️ Grup bir REZERVASYON DEĞİLDİR: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez — yalnız “bunlar bir arada dursun” der. ⚠️ Grup numarası ekranda kalır; çuval etiketine ve irsaliyeye BASILMAZ (bu yüzden boşalan numara yeniden kullanılabilir). Grubun Excel/PDF çıktısı bir ÇALIŞMA KÂĞIDIDIR ve başlığında cari + grup + üretim anı yazar. Son çuvalı sevk edilen grup kendiliğinden kapanır.",
+      },
+      {
         key: "shippingWeighRequiredEnabled",
         title: "Sevk öncesi tüm çuvallar tartılmış olsun",
         summary:
@@ -808,6 +819,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
     ],
     enumFlags: [
+      {
+        enumKey: "packingGroupNumbering",
+        title: "Paketleme grubu numarası nasıl artsın",
+        summary:
+          "Sevk edilip boşalan numara yeniden kullanılsın mı, yoksa hep ileri mi gitsin.",
+        defaultValue: "artan",
+        options: PACKING_GROUP_NUMBERING_OPTIONS,
+        audience: ["Sevkiyat", "Depocu"],
+        group: "Paketleme",
+        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. Numara bir KİMLİK değil PARK YERİDİR: ekranda kalır, hiçbir belgeye basılmaz, grup boşalınca serbest kalır. “Artan” (varsayılan): yeni grup, açık grupların en büyüğünün bir fazlasını alır — boşalan numaraya geri dönülmez, böylece aynı cari için aynı gün iki farklı “3. Grup” dolaşmaz. “Boşluğu doldur”: yeni grup en küçük boş numarayı alır, numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir. ⚠️ İki rejim de yalnız AÇIK gruplara bakar: carinin havuzu tamamen boşaldığında sayaç kendiliğinden 1’e döner, yani numara sonsuza büyümez.",
+      },
       {
         enumKey: "shippingOrderRequirement",
         title: "Sevkiyat siparişe bağlansın mı",

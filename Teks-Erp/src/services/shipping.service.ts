@@ -121,6 +121,7 @@ import { ApiResponse } from "../types/api.types";
 import type { CursorPaginatedResponse } from "./base.service";
 import type { Request } from "express";
 import { uyari } from "../lib/logger";
+import { PackingGroupService } from "./packing-group.service";
 import {
   parseQueryParams,
   isCursorRequested,
@@ -1739,6 +1740,9 @@ export class ShippingService {
         // weighedAt: kartta "✓ 14:22" (tartıldı izi) — tek-dokunuş tartıdan sonra
         // operatör hangi çuvalın tartıldığını modal açmadan görmeli.
         id: true, sackNo: true, weightKg: true, weighedAt: true, branchId: true, notes: true,
+        // Paketleme grubu (çalışma yaftası) — istemci listeyi bu alana göre
+        // bloklar. NULL = "Gruplanmamış" (bugünkü ve varsayılan hâl).
+        packingGroupId: true,
         branch: { select: { id: true, code: true, name: true } },
         // İZLER (çuval etiketi) — tablette SALT-OKUNUR çip. Tek kaynak
         // `ACTIVE_TAG_SELECT`: rozet/filtre/belge ayrışmasın. Havuz çuvalı tanımı
@@ -1763,6 +1767,7 @@ export class ShippingService {
       const totalQty = present.reduce((s, r) => s.plus(r.currentQty), D0());
       return {
         id: sk.id, sackNo: sk.sackNo, weightKg: sk.weightKg != null ? Number(sk.weightKg) : null,
+        packingGroupId: sk.packingGroupId,
         weighedAt: sk.weighedAt, notes: sk.notes,
         // ⚠️ Yanına ayrı hesaplanmış bir etiket SAYACI EKLENMEZ: Sevk Kapısı ile
         // `/pool` zaten iki farklı rakam üretiyor, üçüncüsü olmasın. Çip listesi
@@ -1783,7 +1788,11 @@ export class ShippingService {
       uyari("listCustomerPoolSacks", `müşteri ${customerId}: havuz çuvalı ${POOL_SACK_CAP} tavanına ulaştı — en eskiler kesildi.`,
       );
     }
-    return { success: true, data: { customer, sacks: data, truncated, limit: POOL_SACK_CAP } };
+    // Gruplar AYNI yanıtta: istemci ikinci bir tur atmasın (liste ile grup
+    // başlıkları ayrı anlarda gelirse ekran bir kare boyunca "gruplanmamış"
+    // gösterirdi). Bayrak kapalıyken servis boş dizi döner.
+    const groups = (await PackingGroupService.list(customerId)).data ?? [];
+    return { success: true, data: { customer, sacks: data, groups, truncated, limit: POOL_SACK_CAP } };
   }
 
   // =========================================================================
