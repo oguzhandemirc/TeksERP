@@ -1,27 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MessageSquareText, Printer, Tag } from "lucide-react";
+import { MessageSquareText, Tag } from "lucide-react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { printHtmlString } from "@/lib/print";
 import { useRoleAccess } from "@/hooks/useRoleAccess";
 import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { DocVersionBar } from "@/components/print/DocVersionBar";
 import { PrintNoteField } from "@/components/print/PrintNoteField";
-import { PdfSaveButton } from "@/components/print/PdfSaveButton";
-import {
-  PrintPageSizeToggle,
-  readDocPageSize,
-  type DocPageSize,
-} from "@/components/print/PrintPageSizeToggle";
+import { PrintedDocToolbar, RowFlagCheck } from "@/components/print/PrintedDocToolbar";
+import { readDocPageSize, type DocPageSize } from "@/components/print/PrintPageSizeToggle";
 import {
   printedDocumentService,
   type PrintedDocType,
@@ -31,9 +24,23 @@ import { DOC_DEFS, DOC_TYPE_TO_KEY } from "@/services/documentConfig";
 
 // =============================================================================
 // Generic resmi belge görüntüleyici — herhangi bir PrintedDocType + sourceId için
-// önizleme + versiyon çubuğu + "güncel şablon" + tek-seferlik baskı notu + yazdır/PDF.
-// ShipmentDispatchNote'un docType-agnostik hali; yeni belgeler tek bileşenle bağlanır.
+// önizleme + versiyon çubuğu + tek araç çubuğu (yazdır / indir / baskı seçenekleri).
 // =============================================================================
+// Belge türüne ÖZGÜ kalemler (Excel, toplu etiket, iade uyarısı, liste seçimi)
+// buraya GÖMÜLMEZ: slot olarak sayfa katmanından gelir. Aksi hâlde jenerik
+// bileşen tek tek belge türlerini tanır ve `components/print/` → `pages/…`
+// yönünde ters bağımlılık doğardı.
+// =============================================================================
+
+/** Sayfa katmanının sahiplendiği tek-seferlik render parametreleri. Bir anahtar
+ *  verildiğinde o parametrenin YERLEŞİK kontrolü çizilmez — iki kutucuk aynı
+ *  bayrağı sürerse kullanıcı hangisinin geçerli olduğunu bilemez. */
+export interface PrintedDocPrintParams {
+  sections?: string[];
+  merge?: boolean;
+  rowNotes?: boolean;
+  rowTags?: boolean;
+}
 
 interface Props {
   docType: PrintedDocType;
@@ -46,6 +53,18 @@ interface Props {
   writePermission: string;
   /** Kaynak henüz donmamışken canlı TASLAK önizlemesine izin ver (sevk öncesi). */
   allowDraft?: boolean;
+  /** "Revize Et" YALNIZ geriye-dönük (ya da şablonu bayat) belgede çıksın. */
+  reissueOnlyWhenReconstructed?: boolean;
+  /** "Yazdır ▾" menüsüne ek kalemler. */
+  toolbarPrintMenu?: ReactNode;
+  /** "İndir ▾" menüsüne ek kalemler. */
+  toolbarDownloads?: ReactNode;
+  /** "Baskı seçenekleri ▾" popover'ına ek gövde. */
+  optionsExtras?: ReactNode;
+  /** Önizlemenin üstündeki bilgi şeridi (iade uyarısı, belge notu…). */
+  infoBar?: ReactNode;
+  /** Sayfa katmanının sürdüğü ek tek-seferlik render parametreleri. */
+  printParams?: PrintedDocPrintParams;
 }
 
 export function PrintedDocDialog({
@@ -57,6 +76,12 @@ export function PrintedDocDialog({
   description,
   writePermission,
   allowDraft = false,
+  reissueOnlyWhenReconstructed = false,
+  toolbarPrintMenu,
+  toolbarDownloads,
+  optionsExtras,
+  infoBar,
+  printParams,
 }: Props) {
   const { hasPermission } = useRoleAccess();
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null);
@@ -78,8 +103,19 @@ export function PrintedDocDialog({
   // A5 ayarı A4 kâğıda küçük basıyordu).
   const [pageSize, setPageSize] = useState<DocPageSize | undefined>(undefined);
   const docDef = DOC_DEFS.find((d) => d.key === DOC_TYPE_TO_KEY[docType]);
-  const supportsRowNotes = docDef?.supportsRowNotes ?? false;
-  const supportsRowTags = docDef?.supportsRowTags ?? false;
+  // Sayfa katmanı bayrağı sahiplendiyse yerleşik kutucuk çizilmez (çift sürücü).
+  const ownRowNotes = docDef?.supportsRowNotes === true && printParams?.rowNotes === undefined;
+  const ownRowTags = docDef?.supportsRowTags === true && printParams?.rowTags === undefined;
+
+  const htmlOpts = {
+    currentTemplate,
+    printNote: debouncedNote,
+    rowNotes: printParams?.rowNotes ?? rowNotes,
+    rowTags: printParams?.rowTags ?? rowTags,
+    sections: printParams?.sections,
+    merge: printParams?.merge,
+    pageSize,
+  };
 
   const docQuery = useQuery({
     queryKey: ["printed-doc", docType, sourceId],
@@ -97,11 +133,11 @@ export function PrintedDocDialog({
   });
 
   const htmlQuery = useQuery({
-    queryKey: ["printed-doc-html", docType, sourceId, selectedVersion, currentTemplate, debouncedNote, rowNotes, rowTags, pageSize ?? "doc"],
+    queryKey: ["printed-doc-html", docType, sourceId, selectedVersion, JSON.stringify(htmlOpts)],
     queryFn: () =>
       selectedVersion != null
-        ? printedDocumentService.getHtml(docType, sourceId!, selectedVersion, { currentTemplate, printNote: debouncedNote, rowNotes, rowTags, pageSize })
-        : printedDocumentService.getHtml(docType, sourceId!, undefined, { draft: allowDraft, currentTemplate, printNote: debouncedNote, rowNotes, rowTags, pageSize }),
+        ? printedDocumentService.getHtml(docType, sourceId!, selectedVersion, htmlOpts)
+        : printedDocumentService.getHtml(docType, sourceId!, undefined, { draft: allowDraft, ...htmlOpts }),
     enabled: open && Boolean(sourceId),
     staleTime: 0,
   });
@@ -135,9 +171,43 @@ export function PrintedDocDialog({
   const loading =
     htmlQuery.isLoading || docQuery.isLoading || (selectedVersion != null && versionQuery.isLoading);
 
+  const optionsContent = (
+    <>
+      <PrintNoteField value={printNote} onChange={setPrintNote} />
+      {ownRowNotes && (
+        <RowFlagCheck
+          id="row-notes"
+          checked={rowNotes}
+          onChange={setRowNotes}
+          icon={<MessageSquareText className="h-3.5 w-3.5" />}
+          label="Çuval notlarını bu baskıda göster"
+          hint="Kalıcı ayar değişmez; notu olan çuval yoksa etkisi yok."
+        />
+      )}
+      {ownRowTags && (
+        <RowFlagCheck
+          id="row-tags"
+          checked={rowTags}
+          onChange={setRowTags}
+          icon={<Tag className="h-3.5 w-3.5" />}
+          label="Çuval izlerini (etiket) bu baskıda göster"
+          hint="Bu belge müşteriye gider; kalıcı ayar değişmez."
+        />
+      )}
+      {optionsExtras}
+      <p className="border-t pt-2 text-[10px] leading-relaxed text-muted-foreground">
+        Seçimler yalnız bu baskı içindir — belge ayarına kaydedilmez ve yeni belge
+        versiyonu doğurmaz.
+      </p>
+    </>
+  );
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-4xl flex-col gap-3">
+      <DialogContent
+        aria-describedby={undefined}
+        className="flex h-[90vh] max-h-[90vh] max-w-5xl flex-col gap-3"
+      >
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           {description && <DialogDescription>{description}</DialogDescription>}
@@ -151,38 +221,28 @@ export function PrintedDocDialog({
             activeVersion={currentDoc?.version ?? shownMeta.version}
             onSelectVersion={setSelectedVersion}
             canReissue={hasPermission(writePermission)}
+            reissueOnlyWhenReconstructed={reissueOnlyWhenReconstructed}
             currentTemplate={currentTemplate}
             onCurrentTemplateChange={setCurrentTemplate}
             templateStale={currentDoc?.templateStale ?? false}
           />
         )}
-        {!loading && sourceId && <PrintNoteField value={printNote} onChange={setPrintNote} />}
-        {!loading && sourceId && supportsRowNotes && (
-          <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={rowNotes}
-              onChange={(e) => setRowNotes(e.target.checked)}
-              className="h-3.5 w-3.5"
-            />
-            <MessageSquareText className="h-3.5 w-3.5" />
-            Çuval notlarını bu baskıda göster
-            <span className="text-[10px]">(kalıcı ayar değişmez; notu olan çuval yoksa etkisi yok)</span>
-          </label>
+
+        {sourceId && (
+          <PrintedDocToolbar
+            html={html}
+            fileName={`${title}-${shownMeta?.documentNo ?? ""}`}
+            fetching={htmlQuery.isFetching}
+            printMenu={toolbarPrintMenu}
+            downloads={toolbarDownloads}
+            optionsContent={optionsContent}
+            pageSize={pageSize}
+            onPageSizeChange={setPageSize}
+            docPageSize={docPageSize}
+          />
         )}
-        {!loading && sourceId && supportsRowTags && (
-          <label className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
-            <input
-              type="checkbox"
-              checked={rowTags}
-              onChange={(e) => setRowTags(e.target.checked)}
-              className="h-3.5 w-3.5"
-            />
-            <Tag className="h-3.5 w-3.5" />
-            Çuval izlerini (etiket) bu baskıda göster
-            <span className="text-[10px]">(bu belge müşteriye gider; kalıcı ayar değişmez)</span>
-          </label>
-        )}
+
+        {infoBar}
 
         <div className="min-h-0 flex-1 overflow-hidden rounded-md border bg-muted/30">
           {loading ? (
@@ -195,29 +255,6 @@ export function PrintedDocDialog({
             </div>
           )}
         </div>
-
-        <DialogFooter className="sm:justify-between">
-          {/* Tek seferlik kâğıt boyu — kalıcı ayarı da donmuş belgeyi de DEĞİŞTİRMEZ. */}
-          {!loading && html ? (
-            <PrintPageSizeToggle
-              value={pageSize}
-              onChange={setPageSize}
-              docPageSize={docPageSize}
-              disabled={htmlQuery.isFetching}
-            />
-          ) : (
-            <span />
-          )}
-          <div className="flex gap-2">
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-            Kapat
-          </Button>
-          <PdfSaveButton html={html} fileName={`${title}-${shownMeta?.documentNo ?? ""}`} disabled={!html} />
-          <Button type="button" className="gap-1" disabled={!html} onClick={() => html && printHtmlString(html)}>
-            <Printer className="h-4 w-4" /> Yazdır
-          </Button>
-          </div>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
