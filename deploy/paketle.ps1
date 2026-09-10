@@ -96,6 +96,31 @@ if ($Surum) {
   if ($LASTEXITCODE -ne 0 -or -not $yeniSurum) { Fail "Surum numarasi hesaplanamadi." }
   Write-Host "  surum=$yeniSurum (yama hanesi otomatik)"
 }
+# ── SURUM BELGESI KAPISI ────────────────────────────────────────────────────
+# ⚠ NEDEN BURADA: surum COZULDUKTEN hemen sonra, AGIR isten (npm ci + tsc + zip
+#   ~3 dk) ONCE. Kapi sonda olsaydi eksik belge 3. dakikada bulunurdu.
+#
+# ⚠ NEDEN VAR: paketi KURAN taraf (bugun fabrikadaki Claude oturumu) DOSYA okur,
+#   paketi uretenin sohbetini degil. 2026-09-10'da bu belge olmadigi icin kurana
+#   "2.9.6 -> 2.9.8" denildi; sahadaki 2.9.7'ydi ve delta yanlis sayildi.
+#   Ayni turda `dist-web`in yeniden derlendigi de beyan edilmemisti.
+#
+# ⚠ AYNI DESEN PANELDE ZATEN VAR (`check-surum-notlari.mjs --panel=<surum>`);
+#   burada eksik olan simetriydi. `docs/history/SURUM-*-DEPLOY.md` denemesi
+#   2026-08-25'te oldu cunku hicbir kapi onu istemiyordu — insanin hatirlamasina
+#   birakilan disiplin olur.
+$surumBelgesi = Join-Path $repo "docs/surumler/backend-$yeniSurum.md"
+if (-not (Test-Path $surumBelgesi)) {
+  Write-Host ""
+  Write-Host "  X Surum belgesi YOK: docs/surumler/backend-$yeniSurum.md" -ForegroundColor Red
+  Write-Host "    Sablonu kopyala ve doldur:  docs/surumler/SABLON.md" -ForegroundColor Yellow
+  Write-Host "    Belgeyi KURAN okur; paket onsuz uretilmez." -ForegroundColor Yellow
+  Fail "Surum belgesi eksik -> paketleme durdu."
+}
+# Icerigin BOS olmadigini bekci olcer (scripts/test_surum_belgesi.ts); burada
+# yalnizca VARLIK kontrolu var - PowerShell'de markdown ayristirmak yanlis yer.
+Ok "surum belgesi: docs/surumler/backend-$yeniSurum.md"
+
 & node (Join-Path $repo "scripts/backend-surum.mjs") --uygula --surum $yeniSurum | Out-Null
 if ($LASTEXITCODE -ne 0) { Fail "package.json > version yazilamadi." }
 
@@ -412,6 +437,19 @@ Remove-Item $stage -Recurse -Force
 
 $zipMB = [math]::Round((Get-Item $zip).Length / 1MB, 1)
 $sha   = (Get-FileHash $zip -Algorithm SHA256).Hash
+
+# --- Surum belgesinin uc alanini DOLDUR -------------------------------------
+# ⚠ NEDEN MAKINE YAZIYOR: paket adi, SHA256 ve commit paketleme BITMEDEN
+#   bilinemez. Insanin SHA256 kopyalamasi ise tam da hatanin cikacagi yerdir —
+#   64 karakterlik bir ozet elle tasinirsa dogrulugu kimse fark etmeden bozulur
+#   ve kuran tarafta "SHA tutmuyor, DUR" kurali YANLIS sebeple tetiklenir.
+#   Belge boylece kendini dogrular: icindeki ozet, uretilen zip'in ozetidir.
+$belgeMetni = Get-Content $surumBelgesi -Raw
+$belgeMetni = $belgeMetni -replace '(?m)^\*\*Paket:\*\*.*$',  "**Paket:** ``$([System.IO.Path]::GetFileName($zip))``"
+$belgeMetni = $belgeMetni -replace '(?m)^\*\*SHA256:\*\*.*$', "**SHA256:** ``$sha``"
+$belgeMetni = $belgeMetni -replace '(?m)^\*\*Commit:\*\*.*$', "**Commit:** ``$commit``"
+Set-Content $surumBelgesi $belgeMetni -NoNewline
+Ok "surum belgesi guncellendi (paket adi + SHA256 + commit yazildi)"
 
 Set-Location $repo
 Write-Host ""

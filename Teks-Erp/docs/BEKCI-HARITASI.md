@@ -1692,10 +1692,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_wo_manual_complete.ts` | Manuel kapatmada kapanış dispozisyonu: beş statü uygulanır, dispozisyonsuz kapatma 400, fasondaki top 409 (rollback), TRANSFER klon üretir, kaynak COM | ✓ |  |  |
 | `mobil/src/screens/Modules/Tambur/shortCutQuality.test.ts` | Kısa kesim → otomatik A1 kuralı tek dosyada: shortCutOverride/shortCutRevert sınırları (eşik altı uzunluk, mevcut/varsayılan kalite kodu, katalogdan A |  |  |  |
 
-## surum-deploy (24)
+## surum-deploy (25)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Teks-Erp/scripts/test_surum_belgesi.ts` | Backend sürüm belgesi (`docs/surumler/backend-<sürüm>.md`): yedi başlık var mı · doldurulmamış `<...>` yer tutucusu kalmış mı (`_(paketleme doldurur)_` MEŞRU — o üçünü makine yazar) · dosya adındaki sürüm başlıkla tutuyor mu · migration/sözleşme/önceki-saha-sürümü GERÇEKTEN cevaplanmış mı. `paketle.ps1` yalnız VARLIK ölçer, içeriği bu bekçi ölçer | | ✓ | 2026-09-10 |
 | `Teks-Erp/scripts/test_identifier_language.ts` | Üretim kodunda ([IL-16]) tanımlayıcı dili: ASCII yazılmış TÜRKÇE KELİME yakalanır (ESLint yalnız Türkçe KARAKTERİ ölçüyor). Taban SAYI değil AD KÜMESİ — yeni olan ADIYLA söylenir; küme yalnız küçülür. `scripts/` kapsam DIŞI (bekçilerde Türkçe yerleşik). Yanlış pozitifler ölçülerek elendi (`partial` ×26, `listener` ×7) | | ✓ | 2026-09-10 |
 | `Teks-Erp/scripts/test_process_warnings.ts` | Node süreç uyarısı YIĞIN İZİYLE log'a düşüyor mu: etiketli tek satır + altında ETİKETSİZ iz, `--trace-deprecation` bayrağı OLMADAN (canlıda yeniden başlatma gerektirmez), aynı YERDEN gelen uyarı bir kez basılır. Sonda pg'nin gerçek koşulunu tetikler (aynı client'a ÜÇÜNCÜ sorgu) | ✓ | ✓ | 2026-09-07 |
 | `Teks-Erp/scripts/test_deploy_move_retry.ts` | `kur.ps1` [5/9] dosya kilidi yarışı: taşıma ISRAR ediyor (`TasiIsrarla`), son denemede hatayı AYNEN fırlatıyor (yutulursa otomatik geri alma hiç koşmaz), taşıyan DÖRT yerin dördü de yardımcıyı kullanıyor (çıplak `Move-Item` yok), [4/9] ile [5/9] arasında yatışma beklemesi var | | ✓ | 2026-09-07 |

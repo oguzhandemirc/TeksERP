@@ -33,6 +33,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** Backend paketi SÜRÜM BELGESİZ üretilmez: `docs/surumler/backend-<sürüm>.md` yoksa `paketle.ps1` DURUR (kapı sürüm çözüldükten hemen sonra, ağır işten ÖNCE). Yedi başlık zorunlu (özet · ne değişti · sözleşme · migration · kurulum notu · geri alma · doğrulama); paket adı/SHA256/commit'i MAKİNE yazar, elle kopyalanmaz. Belge KURANA yazılır (teknik dil serbest) — operatör notu `surum-notlari.json`dur ve backend oraya GİRMEZ. · bekçi: `scripts/test_surum_belgesi.ts` <sub>(arşiv:2026-09-10 sürüm belgesi)</sub>
 - **[ÇEKİRDEK]** Mobilde sürüm İKİ EKSENLİ: `minVersion` (APK) + `minPaketTarihi` (OTA paketi, `Updates.createdAt`; JS düzeltmesi versionName'i değiştirmez); `paketTarihi=null` ESKİ SAYILMAZ; tanımsızsa yalnız minVersion. Tablet kilidi KOŞULLU (kurulabilir düzeltme + gönderilmemiş kayıt yok). Önce paket çıkar. · bekçi: `Teks-Erp/scripts/test_client_policy.ts; mobil clientPolicy.service.test.ts` <sub>(CLAUDE.md:328, CLAUDE.md:128)</sub>
 
 ## Panel (Electron)

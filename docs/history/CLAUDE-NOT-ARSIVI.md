@@ -3795,3 +3795,61 @@ durmuş. Bir sonraki kapanış nedeni ADIYLA söyleyecek — tahminle kapatılma
 404'ünü ve okutma 409'unu kapatmış: düzeltme öncesi 11 silmenin 11'i 404 üretiyordu,
 sonrasında 11 silme 0 hata; okutma 409'u 6→0 (383 okutmada). Offsite açılış uyarısı
 da aynı gün `7b84d5ea` ile yanlış-alarm gerekçesiyle kaldırılmış.
+
+## 2026-09-10 — Backend sürüm belgesi: paneldeki kapının simetriği kuruldu [ÇEKİRDEK]
+
+Kullanıcı sordu: *"neden bir update-notes gibi bir klasör içine her sürüm için
+yazacağın notları yazmıyorsun kalıcı olarak?"* — ve haklıydı, ama boşluk
+sandığı yerde değildi.
+
+**NE VARDI:** `surum-notlari.json` — 13 yayın, **platform ayrımlı zaten**
+(`kapsam: panel|tablet|her-ikisi`), git'te versiyonlu, uygulama içinde gösteriliyor,
+`check-surum-notlari.mjs` ile kapıya bağlı. Operatör notları YAZILIYORDU.
+
+**NE YOKTU:** backend'in hiçbir sürüm belgesi. `surum-notlari.json` "sunucu"
+kapsamını BİLEREK reddediyor (operatör sunucuyu görmez — doğru karar), ama sonuç
+şuydu: 2.9.0→2.9.9 arasında backend'de ne değiştiği okunabilir hiçbir yerde
+yoktu. `docs/history/SURUM-*-DEPLOY.md` deseni denenmiş ve **2026-08-25'te
+ölmüştü** — çünkü hiçbir kapı onu istemiyordu.
+
+**ZARARI ÖLÇÜLDÜ, VARSAYILMADI.** Aynı gün, aynı oturumda:
+- Kurana "2.9.6 → 2.9.8" denildi; sahadaki **2.9.7**'ydi. "Bu turda değişti"
+  sayılan üç maddenin ikisi zaten canlıydı. Sunucudaki oturum yakaladı.
+- `dist-web`in yeniden derlendiği beyan edilmemişti; yine o oturum yakaladı.
+- Kurulum talimatı (SHA, beklenen sürüm, migration beklentisi, sınırlar,
+  doğrulama listesi) **her seferinde elden yazılıyordu** — ve o mesaj zaten
+  eksik olan belgenin ta kendisiydi.
+
+**ÇÖZÜM: yeni sistem icat etmek değil, PANELDE ÇALIŞAN DESENİ BACKEND'E TAŞIMAK.**
+- `docs/surumler/backend-<sürüm>.md` — sürüme bağlı, tarihe değil (git etiketiyle
+  aynı ada oturur). Ad sahibini taşır → panel/tablet ileride katılırsa yapı değişmez.
+- **Yedi sabit başlık.** Serbest metin altı ay sonra doldurulamaz; sabit başlık
+  soruyu SORMAYA zorlar — `dist-web` tam da "ne değişti" başlığı olmadığı için
+  atlanmıştı.
+- **Kapı `paketle.ps1`de**, sürüm çözüldükten hemen sonra, ağır işten (npm ci +
+  tsc + zip ≈ 3 dk) ÖNCE. Eksik belge 0. dakikada bulunur, 3. dakikada değil.
+- **İŞ BÖLÜMÜ:** PowerShell yalnız "dosya var mı" der (markdown ayrıştırmak orada
+  yanlış yer); içeriğin DOLU olduğunu bekçi ölçer. İkisi ayrı olmasaydı boş bir
+  dosya açıp paketi geçirmek mümkün olurdu — kapı tam da kapatmak için var olduğu
+  şeye izin verirdi.
+- **ÜÇ ALANI MAKİNE YAZAR** (paket adı · SHA256 · commit): paketleme bitmeden
+  bilinemezler ve 64 karakterlik bir özeti insanın kopyalaması tam da hatanın
+  çıkacağı yerdir. Belge böylece kendini doğrular: içindeki özet, üretilen zip'in
+  özetidir. Bekçi `_(paketleme doldurur)_` işaretini MEŞRU sayar, kalan her
+  `<...>` yer tutucusunu kırmızı verir.
+
+**GEÇMİŞ SÜRÜMLER YAZILMADI** (2.9.0–2.9.8). Arşivde varlar; geçmişi uydurmak
+belgeyi güvenilmez yapardı. Bekçi VAR OLAN dosyaları ölçer, eksik olanı istemez —
+eksik olanı `paketle.ps1` ister, yalnız üretilmekte olan sürüm için.
+
+**REDDEDİLEN ALTERNATİF:** `surum-notlari.json`ı dosyalara bölmek. Onu üç şey
+okuyor (kopyalama script'i, kapı, uygulama içi görüntüleyici); "daha okunabilir
+olsun" diye çalışan bir VERİ artefaktını üç tüketicisiyle birlikte kırmak sıfır
+kazanç, gerçek risk. JSON veri artefaktıdır, markdown belge artefaktıdır —
+ayrı şeyler, ayrı okurlar.
+
+**BEKÇİNİN KENDİ KUSURU SONDAYLA BULUNDU:** "cevaplanmış mı" kontrolü `\s*`
+kullanıyordu ve SATIR SONUNU GEÇİP bir sonraki satırı cevap sayıyordu —
+`**Var mı:**` boş bırakılınca altındaki `**Toplam migration:** 238` satırını
+okuyup YEŞİL kalıyordu. `[ \t]*` ile düzeltildi. **Bekçinin kapatmak için var
+olduğu şey (dolu görünen boş alan) bekçinin kendisinde vardı.**
