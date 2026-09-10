@@ -266,10 +266,10 @@ export async function computeWoInput(
         // GİRDİ KÖKÜ (W dışından geldi)
         count += 1;
         meters = meters.plus(r.initialQty);
-      } else if (parentIsMember && r.directShipmentId != null) {
-        // fasondan-sevk charge-split çocuğu: parent decrement edildi → charge geri ekle
-        meters = meters.plus(r.initialQty);
       }
+      // ⚠️ Fasondan-sevk charge-split çocuğu İÇİN AYRI DAL YOK: ebeveynin
+      // `initialQty`si artık düşürülmüyor (giriş snapshot'ı dokunulmazdır),
+      // yani charge zaten kökte tam duruyor — çocuğu eklemek çift sayardı.
     }
     out.set(wo, { count, meters });
   }

@@ -10,6 +10,7 @@
 
 ### Değişmezler
 
+- **[ÇEKİRDEK]** `Roll` YALNIZ kumaş kaleminden doğar: `createInitialEntry` kapısı FAIL-CLOSED'dur ("`FABRIC` ise geç", "`CONSUMABLE` değilse geç" DEĞİL) — enuma dördüncü tür eklendiği gün sessizce barkodlu top doğmasın. İplik kg defterine gider (`YarnMovement`); kapı serviste olduğu için dört çağıranı (mal kabul · elle ekleme · tambur manuel ×2) birden kapatır. · bekçi: `test_goods_receipt.ts` §A10 <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** `rollScope` FAIL-CLOSED: tanınmayan kapsam 400 atar. `delete where.rollScope` koşulsuz koştuğu ve istemci `status:'ALL'` gönderdiği için sessiz kalmak CANCELLED/SHIPPED/SCRAP dahil TÜM tabloyu döndürür — hata yok, log yok. <sub>(CLAUDE.md:92)</sub>
 - **[ÇEKİRDEK]** Yarı mamul rafta duran, üretime sokulabilir maldır: ARZDAN DÜŞÜLMEZ, ayrı GÖSTERİLİR. `malzemeAcigi = max(0, uretilecek − (ham + yariMamul))` — ikisi birden düşülür. Arzdan düşmek olmayan bir kumaş açığı uydurur (negatif sonda: 400 m talepte 200 m sahte açık). · bekçi: `Teks-Erp/scripts/test_semi_finished_surfaces.ts §4 ("toplam korunuyor")` <sub>(CLAUDE.md:90)</sub>
 - **[ÇEKİRDEK]** Aynı stok sorusuna bakan üç yüzey TEK rakam basar: Stok Karnesi ↔ Envanter rozeti ↔ Kanban kolonu. Kanban stok kolonu bu yüzden `currentStepId: null` koşulunu taşır ve kapsam tanımları Envanter `rollScope` zinciriyle BİREBİRDİR; ayrışırlarsa aynı soruya iki rakam doğar. · bekçi: `Teks-Erp/scripts/test_production_flow_columns.ts (kolon toplamı ↔ Envanter kapsa` <sub>(CLAUDE.md:91)</sub>

@@ -115,6 +115,7 @@ const receiptIds: string[] = [];
 const warehouseIds: string[] = [];
 /** §H fixture'ı — testin KENDİ yarattığı YARN kalemi (ortam verisine bağımlılık YASAK). */
 let yarnItemId: string | null = null;
+let sarfItemId: string | null = null;
 /** §J fixture'ları — bayrak bölümü KENDİ kalemlerini/siparişlerini yaratır:
  *  ortamdaki bir kalemin fiyat satırı olup olmadığına bağlı bir bekçi, dolu
  *  dev DB'sinde yeşil, temiz CI DB'sinde kırmızı olurdu (ve tersi). */
@@ -222,6 +223,36 @@ async function main(): Promise<void> {
     select: { weightKg: true },
   });
   check("A9b) Ağırlık topa yazıldı (12.5 kg)", kgRoll != null && Number(kgRoll.weightKg) === 12.5, String(kgRoll?.weightKg));
+
+  // ── A10) ⭐ `Roll` YALNIZ KUMAŞ DOĞURUR — kapı FAIL-CLOSED ────────────────
+  // İplik dalı (`itemType === YARN`) satırı kg defterine götürür; geri kalan HER
+  // tür `createInitialEntry`'ye düşüyordu ve orada tür kontrolü YOKTU → bir varil
+  // boya (`CONSUMABLE`) barkodlu bir KUMAŞ TOPU doğurup metrajla envantere
+  // yazılıyordu. Kapı "FABRIC ise geç" kurulur: enuma dördüncü tür eklendiği gün
+  // sessizce top doğurmasın.
+  const sarfItem = await prisma.item.create({
+    data: { code: `${TAG}-SARF`, name: `${TAG} Boya`, itemType: ItemType.CONSUMABLE, unit: ItemUnit.KG },
+    select: { id: true },
+  });
+  sarfItemId = sarfItem.id;
+  const sarfReceipt = await goodsReceiptService.create({ warehouseId: wh.id });
+  const sarfReceiptId = (sarfReceipt.data as { id: string }).id;
+  receiptIds.push(sarfReceiptId);
+  const sarfOut = (await goodsReceiptService.addLines(sarfReceiptId, [
+    { itemId: sarfItem.id, initialQty: 25 },
+  ])) as unknown as { created: string[]; failed: Array<{ reason: string }> };
+  check(
+    "A10) ⭐ SARF kalemi satırı REDDEDİLDİ (top doğmadı)",
+    sarfOut.created.length === 0 && sarfOut.failed.length === 1,
+    `created=${sarfOut.created.length} failed=${sarfOut.failed.length}`,
+  );
+  check(
+    "A10b) Red sebebi kalem TÜRÜNÜ söylüyor (operatör ne yapacağını bilsin)",
+    Boolean(sarfOut.failed[0]?.reason?.includes("top olarak eklenemez")),
+    sarfOut.failed[0]?.reason?.slice(0, 80) ?? "",
+  );
+  const sarfRolls = await prisma.roll.count({ where: { itemId: sarfItem.id } });
+  check("A10c) ⭐ Sarf kaleminden HİÇ top doğmadı (envanter kirlenmedi)", sarfRolls === 0, `top=${sarfRolls}`);
 
   const ledger = await prisma.warehouseMovement.findMany({
     where: { rollId: { in: rollRows.map((r) => r.id) } },
@@ -1233,6 +1264,9 @@ main()
         await prisma.yarnStock.deleteMany({ where: { itemId: yarnItemId } });
         await prisma.yarnMovement.deleteMany({ where: { itemId: yarnItemId } });
         await prisma.item.deleteMany({ where: { id: yarnItemId } });
+      }
+      if (sarfItemId) {
+        await prisma.item.deleteMany({ where: { id: sarfItemId } });
       }
       // §J temizliği — SIRA ZORUNLU: sipariş kalemi → kalem FK'sı RESTRICT'tir,
       // yani siparişler kalemlerden ÖNCE düşmeli (kalem satırları PO silinince

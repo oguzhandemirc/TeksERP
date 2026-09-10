@@ -872,10 +872,20 @@ export class InventoryService {
     // aynı sertlik).
     const item = await prisma.item.findUnique({
       where: { id: data.itemId },
-      select: { id: true, isActive: true },
+      select: { id: true, isActive: true, itemType: true },
     });
     if (!item || !item.isActive) {
       throw AppError.notFound("Ürün bulunamadı veya pasif (silinmiş)");
+    }
+    // `Roll` yalnız KUMAŞ doğurur. Kapı FAIL-CLOSED: "CONSUMABLE değilse geç"
+    // değil, "FABRIC ise geç" — enuma dördüncü tür eklendiği gün sessizce
+    // barkodlu top doğurmasın. İplik kg defterine gider (`YarnMovement`).
+    if (item.itemType !== ItemType.FABRIC) {
+      throw AppError.badRequest(
+        item.itemType === ItemType.YARN
+          ? "İplik kalemi top olarak eklenemez — iplik girişi kg defterine yapılır."
+          : "Bu kalem türü top olarak eklenemez; yalnız kumaş kalemi top doğurur.",
+      );
     }
 
     // Renk verilmişse: var ve aktif olmalı + Item'ın allowed listesindeyse listede

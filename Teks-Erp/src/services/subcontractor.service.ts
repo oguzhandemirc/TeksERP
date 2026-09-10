@@ -595,9 +595,12 @@ async function createFasonShipChild(
     data: { rollId: child.id, workOrderStepId: stepId, qtyIn: shipQty, enteredAt: new Date() },
   });
   // Orijinali atomik decrement: kalan metreye in, fasonda AT_SUBCONTRACTOR kal.
+  // ⚠️ YALNIZ `currentQty` düşer — `initialQty` ÜRETİM ANI SNAPSHOT'ıdır, gösterim
+  // değil; düşürmek WO üretilen metrajını geriye azaltır ve `rollWhole` kapısını
+  // deler (aynı yasak ve üç kusuru: `tambur.service.ts` parent-kısalma bloğu).
   const dec = await tx.roll.updateMany({
     where: { id: parent.id, status: RollStatus.AT_SUBCONTRACTOR, currentQty: { gte: shipQty } },
-    data: { currentQty: { decrement: shipQty }, initialQty: { decrement: shipQty } },
+    data: { currentQty: { decrement: shipQty } },
   });
   if (dec.count !== 1) {
     throw AppError.conflict("Top bu sırada değişti — kısmi sevk yapılamadı. Listeyi yenileyin.");

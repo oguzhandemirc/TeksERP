@@ -26,6 +26,7 @@
 
 ### Yasaklar
 
+- **[ÇEKİRDEK]** Fasondan kısmi doğrudan sevkte ebeveynin `initialQty`si DÜŞÜRÜLMEZ — yalnız `currentQty` iner; `initialQty` üretim anı snapshot'ıdır, düşürmek WO üretilen metrajını geriye azaltır ve `rollWhole` kapısını deler (Tambur parent-kısalma bloğunun aynı yasağı; fason yolu 2026-08-29 temizliğinde atlanmıştı). Charge kökte tam durduğu için `computeWoInput` çocuğa AYRI dal açmaz. · bekçi: `test_input_rolls_directship.ts` <sub>(arşiv:2026-09-11)</sub>
 - **[ÇEKİRDEK]** Fason 'açık + outstanding sevk' koşulunun TEK KAYNAĞI `helpers/fason-open-dispatch.helper.ts` (`OPEN_OUTSTANDING`·`OUTSTANDING_ITEM`·`outstandingItemOfOpenDispatch`); elle kopya YASAK — eski kopyalar `directShippedAt`/`receipt.cancelledAt` süzgecini taşımıyordu (WO sonsuza dek gizli kalıyordu). · bekçi: `scripts/test_fason_open_dispatch_single_source.ts (AST; muafiyet iki yönlü)` <sub>(CLAUDE.md:75)</sub>
 - **[ÇEKİRDEK]** Fasondaki/kartelalık/emekli/sevk edilmiş top (`ALWAYS_BLOCKED`: AT_SUBCONTRACTOR, AT_KARTELA, *_CONSUMED, SHIPPED…) HİÇBİR düzeltme yoluyla (Düzelt / Etiket / dahili çağrı) değiştirilemez; kapsam topun DURUMUNDAN çözülür, `Boolean(reason)` ile genişlemez. · bekçi: `scripts/test_roll_edit_unified.ts` <sub>(CLAUDE.md:126)</sub>
 

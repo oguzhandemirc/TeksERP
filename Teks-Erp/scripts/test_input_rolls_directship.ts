@@ -105,6 +105,23 @@ async function main(): Promise<void> {
       child != null && Number(child.initialQty) === 100 && child.status === RollStatus.SUBCONTRACTOR_CONSUMED,
       `child=${child ? Number(child.initialQty) + "m/" + child.status : "yok"}`);
 
+    // KRİTİK: ebeveynin GİRİŞ metrajı DOKUNULMAZ. `initialQty` üretim anı
+    // snapshot'ıdır; düşürmek WO üretilen metrajını geriye azaltır ve
+    // `rollWhole = initialQty.equals(currentQty)` kapısını deler (Tambur
+    // parent-kısalma bloğunun aynı yasağı; fason yolu o temizlikte atlanmıştı).
+    const parentAfter = await prisma.roll.findUnique({
+      where: { id: roll.id },
+      select: { initialQty: true, currentQty: true },
+    });
+    check("ebeveyn initialQty=300 DEĞİŞMEDİ (giriş snapshot'ı)",
+      Number(parentAfter?.initialQty) === 300,
+      `initialQty=${parentAfter ? Number(parentAfter.initialQty) : "yok"}`);
+    check("ebeveyn currentQty=200 (yalnız kalan düşer)",
+      Number(parentAfter?.currentQty) === 200,
+      `currentQty=${parentAfter ? Number(parentAfter.currentQty) : "yok"}`);
+    check("ebeveyn artık BÜTÜN değil (rollWhole kapısı: initialQty !== currentQty)",
+      Number(parentAfter?.initialQty) !== Number(parentAfter?.currentQty));
+
     // KRİTİK: sayım şişmemeli (çocuk sayılmamalı), metraj korunmalı.
     const after = await inputOf(wo.id);
     check("kısmi sevk SONRASI inputRolls.count=1 (fasondan-sevk çocuğu SAYILMAZ)", after.count === 1, `count=${after.count}`);
