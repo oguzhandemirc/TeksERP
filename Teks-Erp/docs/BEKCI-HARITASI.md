@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (86), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (64), `ayar` (58), `cuval` (58), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (58), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -497,10 +497,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/test/smoke.test.ts` | Altyapı doğrulaması: jest-expo preset + ts transform koşuyor mu (tek assertion). |  |  |  |
 | `mobil/src/utils/queryBuilder.test.ts` | buildQueryString: varsayılanlar yazılmaz, varsayılan-dışı + arama yazılır, filtreler filter[key] ve diziler virgülle, boş filtre atlanır. |  |  |  |
 
-## sevkiyat (86)
+## sevkiyat (87)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Electron/src/pages/Operations/Shipments/ShipmentDocDialog.test.tsx` | Sevk irsaliyesi TEK yüzey (2026-09-10 birleştirme): DIRECT ↔ çuval sevkiyatı ayrı docType + ayrı rapor ucu · Excel/etiket veri seti YALNIZ menü açılınca çekilir · slot'suz `PrintedDocDialog` hiçbir sevkiyat kalemi çizmez |  | ✓ | 2026-09-10 |
 | `Teks-Erp/scripts/test_shipment_doc_freeze_timing.ts` | Sevk irsaliyesi sevk ANINDA donar (ilk baskıda değil): okuma yapılmadan v1/ACTIVE belge var; sevkten sonraki müşteri adı değişikliği donmuş belgeye SIZMAZ | ✓ | ✓ | 2026-09-06 |
 | `Teks-Erp/scripts/test_allocation_repair.ts` | Tahsis: EN toleransı (yalnız en gevşer, RENK ve KUMAŞ pazarlık dışı) · fazla sevk bayrağı (kapalı=aşılamaz, açık=yazılır) · defter onarımı (sipariş büyüyünce boşluk kapanır, onarım sonrası liste düşer) · önizleme onarımın motoruyla ölçülür (ayrı tahmin yok) · liste sipariş **id**'sini de taşır ve `orders` ↔ `orderNumbers` aynı kümedir | ✓ | ✓ | 2026-09-07 |
 | `Electron/src/pages/Operations/AllocationRepair/RepairTable.test.tsx` | Onarım ekranında numaralar tıklanabilir: sevkiyat no her zaman, sipariş no YALNIZ id geldiyse (eski sunucuda düz metin, uydurma arama yok) · her numara KENDİ id'sini gönderir · sipariş SOLDAN + iki panel karartmasız (aynı anda açık kalır) · sipariş paneli salt-okunur |  | ✓ | 2026-09-07 |
@@ -912,10 +913,11 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/navigation/pairingGate.test.ts` | shouldShowPairingGate: bayrak KAPALI + cihaz PENDING → kapı YOK (2026-09-04 saha bulgusu); sunucu kararı (pairingRequired) bayat uç bayrağını ezer. |  | ✓ |  |
 | `mobil/src/screens/Modules/Tambur/resolveShortCutConfig.test.ts` | Kısa kesim eşiğinde fabrika ayarı ↔ cihaz override birleşimi: 'server' fabrikayı aynen geçirir, 'off' cihazda kapatır (thresholdM null), 'on' fabrika  |  | ✓ |  |
 
-## belge (64)
+## belge (65)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
+| `Electron/src/pages/Operations/Shipments/ShipmentDocDialog.test.tsx` | Sevk irsaliyesi TEK yüzey (2026-09-10 birleştirme): DIRECT ↔ çuval sevkiyatı ayrı docType + ayrı rapor ucu · Excel/etiket veri seti YALNIZ menü açılınca çekilir · slot'suz `PrintedDocDialog` hiçbir sevkiyat kalemi çizmez |  | ✓ | 2026-09-10 |
 | `Electron/src/lib/print-merge.test.ts` | Toplu baskı birleştirme: tek belge AYNEN döner; her belge kendi gölge kökünde (stil sızıntısı yapısal olarak imkânsız); @page sökülüp adlandırılmış sa |  |  | ⚠️ yok |
 | `Electron/src/pages/Finance/Cheques/chequeBordro.test.ts` | §1 Excel kolonları ile PDF/Yazdır başlıkları BİREBİR (tek spec) · §2 kolon kümesi+SIRA+satır değerleri (sıra 1..N, boş alan "") · §3 AYNI YÖN kuralı:  |  | ✓ |  |
 | `Electron/src/pages/Finance/Cheques/chequeDeliveryNote.test.ts` | §1 resmî bordro kapı yüklemi anlık bordronun `bordroBlockReason`ını AYNEN kullanır (kopya yok) · §2 tarih zorunlu ve MUTLAK AN; bozuk/boşta gövde hiç  |  | ✓ |  |

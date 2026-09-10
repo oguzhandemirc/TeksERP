@@ -4202,3 +4202,92 @@ Migration **yok** (ayar `SystemSetting` JSON'unda). Yeni izin **yok** (mevcut
 `document-template:write` yeterli — `DOCUMENT_DESIGN_FLAG_KEYS` testinden geçer:
 "yanlış girilirse etkisi belge çıktısıyla sınırlı mı?" → evet). APK **yok**
 (mobil sevk irsaliyesi basmıyor).
+
+---
+
+## 2026-09-10 — Üç belge yüzeyi tek modalde birleşti (F1) [ÇEKİRDEK]
+
+Kullanıcı sözü: *"2 tane ayrı modal olması çok kafa karıştırıcı."* Plan:
+`docs/design/BELGE-YUZEYI-BIRLESTIRME.md` (uygulandı ve SİLİNDİ — hikâyesi bu nottur; git `5d72338a`).
+
+### Dert
+
+Muhasebe → Sevkiyatlar satırında **Fiş** ve **Belge** diye iki düğme vardı ve
+ikisi de AYNI HTML'i (`renderShipmentDispatchHtml`) gösteriyordu. Ölçüldüğünde
+asıl sorun bu değildi: aynı belgenin **üç** yüzeyi vardı (Sevkiyatlar → İrsaliye
+`ShipmentDispatchNote`, Muhasebe → Fiş `DispatchReceiptDialog`, Muhasebe → Belge
+`PrintedDocDialog`) ve üçü de birbirinin eksiğiydi — Excel yalnız Fiş'te, sürüm
+çubuğu Fiş'te YOK, baskı seçenekleri ve belge notu yalnız İrsaliye'de, PDF yalnız
+Belge'de. Muhasebeci Excel için birini, sürüm için ötekini açmak zorundaydı;
+sevkiyatçı PDF alamıyordu.
+
+### Karar — SLOT, registry DEĞİL
+
+`PrintedDocDialog` 24 çağıranı olan JENERİK bileşendir. Sevk irsaliyesine özgü
+şeyleri (Excel, toplu top etiketi, iade uyarısı, belge notu, liste seçimi) onun
+içine gömmek `components/print/` → `pages/Operations/…` yönünde ters bağımlılık
+kurardı ve jenerik bileşen bir belge TÜRÜNÜ tanır hâle gelirdi. Bunun yerine
+`PrintedDocDialog` **slot** alır, sayfa katmanı doldurur:
+`toolbarPrintMenu` · `toolbarDownloads` · `optionsExtras` · `infoBar` ·
+`printParams`. Slot geçmeyen 22 çağıranın belge ÇIKTISI bayt-bayt aynı kalır
+(değişen yalnız araç çubuğu düzeni — bilinçli, tek tasarım).
+
+`printParams`ın ikinci işi var: bir anahtarı sayfa katmanı sahiplenince o
+parametrenin YERLEŞİK kontrolü çizilmez. İki kutucuk aynı bayrağı sürseydi
+kullanıcı hangisinin geçerli olduğunu bilemezdi.
+
+### Ne değişti
+
+- **YENİ** `components/print/PrintedDocToolbar.tsx` — tek çubuk:
+  `[Yazdır ▾] [İndir ▾] [Baskı seçenekleri ▾] [A4|A5]`. Eskiden bu kalemler
+  diyalog gövdesine dikey serpiliyordu (not alanı + iki tik + footer).
+  "Yazdır" ek kalem YOKSA sade düğmedir, menü açmaz.
+- **YENİ** `pages/Operations/Shipments/ShipmentDocDialog.tsx` + `shipmentDocSlots.tsx`
+  — sevkiyata özgü her şeyi kuran tek yüzey; `SHIPMENT_DISPATCH` ve
+  `SUBCONTRACTOR_DIRECT_SHIP` ikisini de bilir.
+- `PdfSaveButton.tsx` — `usePdfSave` hook'u ayrıldı (düğme + menü kalemi tek
+  kaynaktan; `window.api` yokluğu iki yerde ayrı kontrol edilmesin).
+- `DispatchPrintOptions` → `DispatchPrintOptionsContent` (kendi popover'ı yok;
+  ortak "Baskı seçenekleri ▾" gövdesine slot olarak girer).
+- `BulkRollLabelButton` — opsiyonel KONTROLLÜ mod (`open`/`onOpenChange`):
+  düğme çizilmez, açılışı çağıran sürer. Menü kalemi kendisi kapandığı için
+  düğme menünün içinde kalsaydı önizleme de sökülürdü.
+- Muhasebe satırındaki **iki düğme tek düğmeye** indi ("İrsaliye").
+- **SİLİNDİ** `ShipmentDispatchNote.tsx`, `DispatchReceiptDialog.tsx`. Bununla
+  birlikte `ShipmentDispatchNote.tsx:186`'daki BAYAT yorum da gitti
+  ("PrintedDocDialog'a SHIPMENT_DISPATCH hiç düşmüyor" — 2026-09-07'den beri
+  muhasebe ekranı tam olarak onu yapıyordu).
+
+### Ölçülmüş iki davranış düzeltmesi
+
+1. **Rapor tembel oldu.** Eski Fiş her açılışta `getReport`/`getDirectReport`
+   koşuyordu; belgeye BAKMAK için açan kullanıcı o isteği hiç kullanmıyordu.
+   Artık slot ("İndir ▾" / etiket kalemi) mount olunca isteniyor.
+2. **`allowDraft` sabitlenmedi.** `ShipmentDispatchNote` her zaman `draft:true`
+   geçiyordu, muhasebe "Fiş" hiç geçmiyordu. Yeni bileşende sevkiyat
+   DURUMUNDAN türüyor (`status !== "DISPATCHED"`). Durum bilinmiyorsa taslak
+   AÇIK kalır — Hızlı Sevk'ten dönen sevkiyat bayrağa göre PLANNED de olabilir
+   (`createShipmentFromRolls`), sabit `DISPATCHED` varsaymak o dalda belgeyi
+   boş gösterirdi.
+
+`reissueOnlyWhenReconstructed` korundu: sevk irsaliyesi içeriği sevk anında
+donar, normal revize aynı içeriği tekrar dondururdu. Düşürülseydi muhasebeye
+anlamsız bir "Revize Et" düğmesi çıkardı.
+
+### Bekçi
+
+`Electron/src/pages/Operations/Shipments/ShipmentDocDialog.test.tsx` (4 vaka).
+**Negatif sonda — dördü de kırmızı görüldü:** (a) docType'ı sabit
+`SHIPMENT_DISPATCH` yapmak → §1b kırmızı; (b) `reportQ.enabled`ından
+`reportWanted`ı düşürmek → §2 kırmızı; (c) Excel kalemini jenerik araç çubuğuna
+gömmek ve (d) etiket kalemini "Yazdır" menüsüne gömmek → §3 kırmızı.
+
+⚠️ Sondanın kendisi bir tuzak gösterdi: §3 ilk yazılışında `window.api.pdf`
+stub'ı yoktu, "İndir ▾" hiç çizilmiyordu ve "Excel kalemi yok" iddiası BOŞTA
+kalıyordu (sonda C yeşil geçti). Stub eklenince kırmızıya döndü. Menü içindeki
+bir kalemi ölçen test, menünün gerçekten AÇILDIĞINI da ölçmek zorundadır.
+
+### Üç kapı
+
+Migration **yok** · yeni izin **yok** (`shipping:write` yeterli) · APK **yok**
+(mobil sevk irsaliyesi basmıyor). Backend HİÇ değişmedi.
