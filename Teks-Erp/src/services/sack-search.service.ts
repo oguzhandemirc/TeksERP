@@ -159,6 +159,15 @@ export interface SackSearchParams {
   /** Çuval notu olan / olmayan. `hasNote` liste satırında zaten dönüyor. */
   hasNote?: boolean;
   /**
+   * Not METNİNDE arama (harf-duyarsız `contains`). `hasNote` ikili süzmesinin
+   * kardeşi: o "notu var mı" der, bu "notunda ne yazıyor" der.
+   *
+   * ⚠️ Serbest `search` kutusuna EKLENMEDİ ve bu bilinçli: o kutu kimlik arar
+   * (çuval no / cari / sevkiyat no) ve not metnini oraya karıştırmak "TR-4521"
+   * yazan bir notu çuval numarası sanılan satırlarla karıştırırdı.
+   */
+  noteText?: string;
+  /**
    * Boş çuval (içinde fiziksel top DA kartela DA yok) / dolu çuval.
    *
    * ⚠️ Top ADEDİ aralığı ("2-5 top içerenler") bilinçli YOK: ilişki sayımına
@@ -366,6 +375,13 @@ export async function buildSackSearchWhere(params: SackSearchParams): Promise<{
 
   // NOT — `setSackNotes` boş metni NULL'a çevirdiği için tek yüklem yeterli
   // (liste satırındaki `hasNote: !!notes` ile birebir).
+  // Not METNİ — `hasNote` ile birlikte gelirse VE'lenir (daraltır, çelişmez).
+  // Türkçe harf katlaması YOK: `mode: "insensitive"` PG'nin kendi lower()'ı ile
+  // çalışır ve not alanı bir KİMLİK değildir (kimlik alanına sed konmaz kuralı
+  // buraya UZANMAZ — burada aranan şey serbest metin).
+  if (params.noteText?.trim())
+    andClauses.push({ notes: { contains: params.noteText.trim(), mode: "insensitive" } });
+
   if (params.hasNote != null)
     andClauses.push(params.hasNote ? { notes: { not: null } } : { notes: null });
 
@@ -564,6 +580,42 @@ function dokumSatiri(
   };
 }
 
+/**
+ * SIRALAMA ALLOWLIST'İ — yalnız `Sack`ın KENDİ SKALER kolonları.
+ *
+ * ⚠️ Neden ilişki ve türetilmiş alan YOK: sayfalama keyset cursor'ludur
+ * (`dynamicCursorWhere` tek bir skaler kolon üzerinde `gt`/`lt` kurar).
+ *   • `packingGroup.name` / iz adı → İLİŞKİ. Prisma sıralayabilir ama cursor
+ *     onu ifade edemez → sayfa sınırında satır atlanır/tekrarlanır. "Grupları
+ *     bir arada gör" ihtiyacını grup FİLTRESİ karşılıyor (`packingGroupId`).
+ *   • metraj / top adedi → bu sorguda YOK; sayfa çekildikten SONRA ayrı bir
+ *     `groupBy` ile hesaplanıyor. SQL sıralamasına giremez; sıralamak için
+ *     listeyi offset'e çevirmek gerekirdi (yasak).
+ * Yeni alan eklerken: kolon `select`te DE olmalı — `buildNextDynamicCursor`
+ * cursor değerini satırdan okur.
+ */
+const SACK_SORTABLE = ["createdAt", "sackNo", "notes", "weightKg"] as const;
+type SackSortField = (typeof SACK_SORTABLE)[number];
+/** NULL taşıyabilen sıralama kolonları → `nulls: "last"` + cursor'da null fazı. */
+const SACK_NULLABLE_SORT = new Set<SackSortField>(["notes", "weightKg"]);
+
+function resolveSackSort(params: SackSearchParams): {
+  sortField: SackSortField;
+  sortOrder: "asc" | "desc";
+  sortNullable: boolean;
+  orderByPrimary: Prisma.SackOrderByWithRelationInput;
+} {
+  const sortField: SackSortField = SACK_SORTABLE.includes(params.sortBy as SackSortField)
+    ? (params.sortBy as SackSortField)
+    : "createdAt";
+  const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
+  const sortNullable = SACK_NULLABLE_SORT.has(sortField);
+  const orderByPrimary = (
+    sortNullable ? { [sortField]: { sort: sortOrder, nulls: "last" as const } } : { [sortField]: sortOrder }
+  ) as Prisma.SackOrderByWithRelationInput;
+  return { sortField, sortOrder, sortNullable, orderByPrimary };
+}
+
 export class SackSearchService {
   /**
    * Çuval arama — içerik (ürün/renk/en) ve/veya kimlik (kod/sevkiyat/müşteri)
@@ -572,20 +624,24 @@ export class SackSearchService {
    */
   async searchSacks(params: SackSearchParams): Promise<CursorPaginatedResponse<unknown>> {
     const limit = Math.min(Math.max(1, params.limit ?? 50), 100);
-    const sortField: "createdAt" | "sackNo" = params.sortBy === "sackNo" ? "sackNo" : "createdAt";
-    const sortOrder: "asc" | "desc" = params.sortOrder === "asc" ? "asc" : "desc";
+    const { sortField, sortOrder, sortNullable, orderByPrimary } = resolveSackSort(params);
 
     // Süzgeç kurucusu ORTAK (`buildSackSearchWhere`) — ileride özet/gruplama
     // ucu da onu çağıracak; ikinci bir kopya liste ile özeti ayrıştırırdı.
     const { where, rollFilter, hasContentFilter } = await buildSackSearchWhere(params);
     const cursor = decodeDynamicCursor(params.cursor);
     const finalWhere: Prisma.SackWhereInput = cursor
-      ? { AND: [where, dynamicCursorWhere(cursor, sortField, sortOrder) as Prisma.SackWhereInput] }
+      ? {
+          AND: [
+            where,
+            dynamicCursorWhere(cursor, sortField, sortOrder, sortNullable) as Prisma.SackWhereInput,
+          ],
+        }
       : where;
 
     const rows = await prisma.sack.findMany({
       where: finalWhere,
-      orderBy: [{ [sortField]: sortOrder }, { id: sortOrder }],
+      orderBy: [orderByPrimary, { id: sortOrder }],
       take: limit + 1,
       select: {
         id: true,

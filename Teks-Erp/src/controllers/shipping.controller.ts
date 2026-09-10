@@ -69,11 +69,17 @@ const sackTagsSchema = z.object({ tagIds: z.array(z.string().uuid("Geçersiz eti
  * dahili çağrı) kapıyı ATLARDI.
  */
 const bulkTagsSchema = z.object({
-  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).min(1, "Çuval seçilmedi").max(MAX_BULK_TAG_SACKS),
+  // Grup kapsamı verilirse `sackIds` BOŞ gelebilir — id'leri sunucu çözer
+  // (ekrandaki sayfa grubun tamamı olmayabilir; bkz. `bulkTags` başlığı).
+  sackIds: z.array(z.string().uuid("Geçersiz çuval ID")).max(MAX_BULK_TAG_SACKS).default([]),
+  packingGroupId: z.string().uuid("Geçersiz grup ID").optional(),
   add: z.array(z.string().uuid("Geçersiz etiket ID")).max(50).optional(),
   remove: z.array(z.string().uuid("Geçersiz etiket ID")).max(50).optional(),
   removeAll: z.boolean().optional(),
-});
+})
+  .refine((v) => v.sackIds.length > 0 || v.packingGroupId, {
+    message: "Çuval seçin ya da bir grup belirtin",
+  });
 const addKartelaSchema = z.object({
   itemId: z.string().uuid("Geçersiz ürün ID"),
   colorId: z.string().uuid("Geçersiz renk ID").nullable().optional(),
@@ -803,6 +809,8 @@ export class ShippingController {
         branchId: filtIds("branchId"),
         weighed: bool(filt("weighed")),
         hasNote: bool(filt("hasNote")),
+        // Not METNİ araması — `hasNote` kardeşi, serbest `search` kutusundan AYRI.
+        noteText: filt("noteText") || undefined,
         empty: bool(filt("empty")),
         // ⚠️ `dateField` YOKSA createdAt: `applyDateRange` alan adı olmayan bir
         // aralığı SESSİZCE yok sayar (2026-08-12 dersi). Panel alanı her zaman

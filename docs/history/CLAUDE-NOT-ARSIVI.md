@@ -4310,3 +4310,125 @@ bir kalemi ölçen test, menünün gerçekten AÇILDIĞINI da ölçmek zorundad�
 
 Migration **yok** · yeni izin **yok** (`shipping:write` yeterli) · APK **yok**
 (mobil sevk irsaliyesi basmıyor). Backend HİÇ değişmedi.
+
+
+---
+
+## 2026-09-10 — Paketleme grubu Dilim 2: panel yüzeyi, sıralama sınırı, döküm ad rejimi, hızlı iz [ÇEKİRDEK/PROFİL]
+
+Önceki not: *Paketleme grubu: çuvalları sevk hazırlığına göre ayıran çalışma
+yaftası* (backend). Bu not onun panel yarısı ve saha turunda eklenen dört isteği.
+
+### Saha istekleri (kullanıcı, 2026-09-10)
+
+1. Grup panelde görünsün — "Electron ve web panelinde". (Aynı kod tabanı:
+   `build:web` ile ikisi de derleniyor; tek iş.)
+2. Filtreleme ve sıralama da olsun; not ve ize göre de.
+3. Çıktıda kumaş/renk adı bizden mi müşteriden mi — bayrağa bağla ve **ilgili
+   modala koy**.
+4. Çuvala hızlı iz ekleme tuşu; partiye iz ekleme; iz ekle/kaldır/değiştir kolay olsun.
+
+### Karar — ŞERİT + SÜTUN, iç içe blok başlığı DEĞİL
+
+**[ÇEKİRDEK]** Gruplar listenin İÇİNDE blok başlığı olarak çizilmez. Çuval
+listesi keyset cursor ile sayfalanır; blok başlığı ikinci sayfada grubun yarısını
+bırakır ve "liste + cursor + özet şeridi TEK where'den doğar" kuralını bozar.
+Bunun yerine listenin üstünde **grup şeridi** (çipler) ve satırda **Grup sütunu**:
+çip listeyi SUNUCUDA süzer, yani seçilen grubun TAMAMI gelir.
+
+**[ÇEKİRDEK]** Şerit YALNIZ bayrak açık VE süzgeçte TEK cari varken çizilir.
+Gruplar cariye özeldir; çok carili listede iki farklı "P1" yan yana gelir ve
+numara benzersizmiş yanılgısı üretir.
+
+**[ÇEKİRDEK]** Çip filtreyi yazarken `cursor` URL'den SİLİNİR. Bırakılsaydı yeni
+süzgeç ESKİ süzgecin sayfa imleciyle devam eder ve liste sebepsiz boş görünürdü.
+
+### Karar — SIRALAMA SINIRI ölçüldü ve yazıldı
+
+**[ÇEKİRDEK]** `sortBy` allowlist'i yalnız `Sack`ın SKALER kolonlarını kabul eder:
+`createdAt | sackNo | notes | weightKg` (son ikisi bu turda eklendi, `nulls: "last"`
++ cursor'da null fazı). Kabul EDİLMEYENLER ve gerekçeleri:
+
+- **grup ve iz** → İLİŞKİ. Prisma sıralayabilir ama `dynamicCursorWhere` tek bir
+  skaler kolon üzerinde `gt`/`lt` kurar; ilişki sıralaması sayfa sınırında satır
+  atlatır/tekrarlatır.
+- **metraj ve top adedi** → bu sorguda YOK; sayfa çekildikten SONRA ayrı bir
+  `groupBy` ile hesaplanıyor. SQL sıralamasına giremez.
+
+Kullanıcıya söylendi: bu ikisi için doğru araç sıralama değil FİLTRE. Sıralamak
+isteniyorsa listeyi offset sayfalamaya çevirmek gerekir — büyük tabloda yasak.
+
+**[ÇEKİRDEK]** Not METNİNDE arama eklendi (`noteText`, `contains` +
+`mode:"insensitive"`). Serbest `search` kutusuna KARIŞTIRILMADI: o kutu kimlik
+arar (çuval no / cari / sevkiyat no) ve not metnini oraya katmak "TR-4521" yazan
+bir notu çuval numarası sanılan satırlarla karıştırırdı.
+
+### Karar — GRUBUN TAMAMINA işlem yapan uçlar kapsamı SUNUCUDA çözer
+
+**[ÇEKİRDEK]** `getContentDump` ve `SackTagService.bulkTags` artık
+`packingGroupId` kabul eder ve çuval id'lerini kendileri çözer (kapsam:
+`shipmentId: null`, grubun canlı tanımı). İstemcinin seçili satırlarından kurulan
+kapsam, liste cursor'lu olduğu için grubun YARISINI işlerdi — "P2'nin dökümünü
+al" dendiğinde eksik döküm, "gruba iz bırak" dendiğinde yarım gruba iz. İkisi de
+sessiz yanlış cevap sınıfı.
+
+### Karar — DÖKÜM AD REJİMİ
+
+**[PROFİL]** `shipping.sackDumpNameMode`: `ikisi` (VARSAYILAN = bugünkü çıktı) |
+`bizdeki` | `musterideki`. Ayar VARSAYILANI belirler; **döküm penceresi tek
+seferlik ezer ve ayarı DEĞİŞTİRMEZ** (kâğıt boyu seçicisiyle aynı kalıp —
+kullanıcı "flagı direkt ilgili modala koyabilirsin" dedi, ikisi birden yapıldı:
+kalıcı ayar panelde, tek seferlik seçim menüde).
+
+**[ÇEKİRDEK]** `musterideki` FAIL-OPEN DEĞİL: müşterinin karşılığı yoksa hücre
+BOŞ kalır, bizim adımız müşterinin adıymış gibi basılmaz. ⚠️ Bu, sevk
+irsaliyesindeki `docItemNameMode` ile BİLEREK ters yöndedir — orası müşteriye
+giden RESMİ belgedir ve boş hücre kabul edilemez; bu döküm İÇ çalışma kâğıdıdır
+ve "bunun müşteri karşılığı yok" ambarcı için gerçek bir bilgidir (kullanıcı
+kararı: "kararı sen ver" → boş bırakılsın). Excel'de mod sütun KÜMESİNİ daraltır;
+sütunu gizlemek ile boş bırakmak farklı sözlerdir (biri "bu kâğıtta o dil yok",
+diğeri "karşılığı yok").
+
+**[ÇEKİRDEK]** Kartela satırı da AYNI rejimden geçer — top tablosu müşteri adını
+basarken kartelanın bizim adımızı basması tek kâğıtta iki dil olurdu.
+
+### Karar — İZ KOLAYLIKLARI
+
+**[ÇEKİRDEK]** Hızlı iz tuşu HER satırda (İz sütununda, ikon boyutunda) ve
+izsiz çuvalda da durur — eskiden boş hücrede hiçbir giriş yoktu, iz bırakmak için
+satırı seçip toplu menüye gitmek gerekiyordu. Aynı üç-durumlu popover kullanılır
+(bırak → kaldır → dokunma), yani ekleme/kaldırma/değiştirme tek yerden. Katalog
+sorgusu yalnız popover AÇILINCA koşar; her satır bir istek atmaz.
+
+**[PROFİL]** "Partiye iz" = GRUBUN ÇUVALLARINA iz (kullanıcı kararı: "kararı sen
+ver"). Grubun KENDİ iz tablosu AÇILMADI — iz zaten "nesnenin kendisini
+değiştirmeyen işaret" olarak tanımlı ve o nesne çuvaldır; çuval gruptan çıkınca
+izi üstünde kalır (doğru davranış). Gruba özel söz söylemenin yeri GRUP NOTUDUR.
+
+### Kod çapaları
+
+- `Electron/src/pages/Operations/SackContentEdit/PackingGroupBar.tsx` (şerit +
+  grup menüsü + düzenleme penceresi) · `AssignPackingGroupDialog.tsx` ("Parti Ata")
+- `sacksColumns.tsx` — Grup sütunu, hızlı iz tuşu, `notes`/`weightKg` sıralanabilir
+- `SacksListView.tsx` — şerit yerleşimi, "Parti Ata" toplu aksiyonu
+- `SackTagsBulkMenu.tsx` — `compact` (satır içi) + `packingGroupId` (grup kapsamı)
+- `sackDump/dumpHtml.ts` + `dumpSheets.ts` — ad rejimi · `SackContentDumpMenu.tsx` — tek seferlik seçim
+- Backend: `sack-search.service.ts` (grup filtresi · sıralama allowlist'i · not metni ·
+  döküm grup kapsamı) · `sack-tag.service.ts` (bulk grup kapsamı) ·
+  `system-setting.service.ts` (`sackDumpNameMode`)
+
+### Bekçi
+
+- `Teks-Erp/scripts/test_packing_group.ts` §13/§14 (30 kontrol). Negatif sonda:
+  filtre WHERE'i silindi → 3 kırmızı; dökümdeki grup çözümü silindi → §14 düştü.
+- `Electron/.../packingGroupUi.test.ts` (16 kontrol, §1-§8). Negatif sonda (dördü
+  de ölçüldü): `cursor` silme kaldırıldı → 1 kırmızı · grup sütunu adı `seq`ten
+  kuruldu → 1 kırmızı · `musterideki` FAIL-OPEN yapıldı → 1 kırmızı · Excel mod
+  koşulları kaldırıldı → 2 kırmızı.
+
+### Üç kapı
+
+Migration **yok** (bu turda şema değişmedi). Yeni izin **yok**. APK **yok** —
+tablet bu turda hiç değişmedi (saha beyanı: tabletteki sevkiyat ekranları şu an
+kullanılmıyor, geçici). Panel Electron paketiyle gider; `build:web` aynı kodu
+web'e de taşır.

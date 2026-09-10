@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
-import { ClipboardList, Eye, PackageOpen, Scale, Tag, Truck } from "lucide-react";
+import { Boxes, ClipboardList, Eye, PackageOpen, Scale, Tag, Truck } from "lucide-react";
 import { SackLabelDialog } from "@/components/labels/SackLabelDialog";
 import { Button } from "@/components/ui/button";
 import { ContextMenuItem } from "@/components/ui/context-menu";
@@ -23,12 +23,14 @@ import { qualityGradeService } from "@/pages/QualityGrades/service";
 import { sackTagService } from "@/pages/SackTags/service";
 import { sackHubService } from "./service";
 import { sacksKolonlari } from "./sacksColumns";
-import { useCustomerBranchesEnabled } from "@/hooks/usePricingEnabled";
+import { useCustomerBranchesEnabled, usePackingGroupsEnabled } from "@/hooks/usePricingEnabled";
 import { SackContentDumpMenu } from "./SackContentDumpMenu";
 import { fromDumpRows } from "./sackDump";
 import { RollLocateCard } from "./RollLocateCard";
 import { PickListPrintDialog } from "./PickListPrintDialog";
 import { CreateShipmentDialog } from "./CreateShipmentDialog";
+import { PackingGroupBar } from "./PackingGroupBar";
+import { AssignPackingGroupDialog } from "./AssignPackingGroupDialog";
 import { WeighSackDialog } from "./WeighSackDialog";
 import { SackDetailSheet } from "./SackDetailSheet";
 import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
@@ -209,11 +211,14 @@ function sackFiltreleri(subeAcik: boolean): FilterDef[] {
 export function SacksListView({ onEditSack }: Props) {
   const [searchParams, setSearchParams] = useSearchParams();
   const subeAcik = useCustomerBranchesEnabled();
+  const groupsEnabled = usePackingGroupsEnabled();
   const [located, setLocated] = useState<LocatedRoll | null>(null);
   const [pickListIds, setPickListIds] = useState<string[] | null>(null);
   const [shipSacks, setShipSacks] = useState<SackSearchRow[] | null>(null);
   /** Toplu dağıtma diyaloğu — seçili çuval id'leri; null = kapalı. */
   const [bulkDistribute, setBulkDistribute] = useState<string[] | null>(null);
+  /** "Parti Ata" diyaloğu — seçili çuvallar; null = kapalı. */
+  const [groupSacks, setGroupSacks] = useState<SackSearchRow[] | null>(null);
   const [detail, setDetail] = useState<SackSearchRow | null>(null);
   const [weighSack, setWeighSack] = useState<SackSearchRow | null>(null);
   const [labelSack, setLabelSack] = useState<SackSearchRow | null>(null);
@@ -266,6 +271,13 @@ export function SacksListView({ onEditSack }: Props) {
   // "böyle bir çuval yok" sanır. Okutma yolunda bu telafi zaten vardı
   // (`scanCodeDispatched`), yazarak arama yolunda YOKTU. Varsayılan kapsam
   // DEĞİŞTİRİLMEDİ (bilinçli): "depoda ne var" sorusu sevk edilmişlerle bulanmasın.
+  // Şeridin ön koşulu: süzgeçte TEK cari var mı (CSV de bir string'dir).
+  const cariFiltresi = (searchParams.get("filter[customerId]") ?? "")
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v) => v && v !== CUSTOMERLESS_FILTER_VALUE);
+  const tekCariId = cariFiltresi.length === 1 ? (cariFiltresi[0] ?? null) : null;
+
   const scopeFilter = searchParams.get("filter[scope]") ?? "";
   const showDispatchedHint =
     !query.isLoading &&
@@ -313,6 +325,11 @@ export function SacksListView({ onEditSack }: Props) {
       />
 
       <FilterBar filters={sackFiltreleri(subeAcik)} />
+
+      {/* PAKETLEME GRUBU ŞERİDİ — yalnız bayrak açık VE tek cari seçiliyken.
+          Gruplar cariye özeldir; çok carili listede iki farklı "P1" yan yana
+          gelir ve numara benzersizmiş yanılgısı üretirdi. */}
+      {groupsEnabled && <PackingGroupBar customerId={tekCariId} />}
 
       {located && <RollLocateCard roll={located} onClear={() => setLocated(null)} />}
 
@@ -394,6 +411,20 @@ export function SacksListView({ onEditSack }: Props) {
             {/* İZ — tek popover (bırak + kaldır aynı hamlede; üç durumlu
                 kutucuklar). Sonuç PARÇALI olabilir; atlananlar uyarıyla söylenir. */}
             <SackTagsBulkMenu rows={rows} onDone={() => table.resetRowSelection()} />
+            {/* PARTİ ATA — grup bir yaftadır, sevk akışına kural EKLEMEZ:
+                "Sevk Et" yine seçimden çalışır. Bayrak kapalıyken çizilmez. */}
+            {groupsEnabled && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                disabled={rows.length === 0}
+                title="Seçili çuvalları bir hazırlık grubuna al (rezervasyon değil)"
+                onClick={() => setGroupSacks(rows)}
+              >
+                <Boxes className="h-4 w-4" /> Parti Ata ({rows.length})
+              </Button>
+            )}
             {/* DAĞIT — kullanıcının kafasındaki "listeden çuval sil" işi. Gerçekte
                 çuval SİLİNMEZ, içeriği depoya çıkar; diyalog bunu söyler ve
                 etkilenen HER topu listeler (yıkıcı işlem kuralı). */}
@@ -418,6 +449,12 @@ export function SacksListView({ onEditSack }: Props) {
       />
 
       <PickListPrintDialog sackIds={pickListIds} onOpenChange={(o) => !o && setPickListIds(null)} />
+      <AssignPackingGroupDialog
+        sacks={groupSacks}
+        onOpenChange={(o) => !o && setGroupSacks(null)}
+        onDone={() => table.resetRowSelection()}
+      />
+
       {/* Toplu dağıtma — önizlemeli, engelli çuvalları sebebiyle gösterir. */}
       <BulkDistributeSacksDialog
         sackIds={bulkDistribute}

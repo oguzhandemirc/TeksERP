@@ -105,6 +105,34 @@ function normalizeHex(raw: string): string {
   return hex.toUpperCase();
 }
 
+/**
+ * Toplu iz kapsamı — çuval id'leri.
+ *
+ * ⚠️ PAKETLEME GRUBU verilirse id'leri SUNUCU çözer. İstemci grubun çuvallarını
+ * kendisi sayıp gönderemez: liste cursor'lu sayfalıdır, ekrandaki sayfa grubun
+ * TAMAMI olmayabilir. "Gruba iz bırak" dendiğinde yarım gruba iz bırakmak sessiz
+ * yanlış cevaptır (grup dökümüyle BİREBİR aynı ders).
+ *
+ * Kapsam HAVUZ çuvallarıdır (`shipmentId: null`) — grubun canlı tanımı.
+ */
+async function resolveBulkTagScope(
+  sackIds: string[],
+  packingGroupId: string | undefined,
+): Promise<string[]> {
+  if (packingGroupId) {
+    const rows = await prisma.sack.findMany({
+      where: { packingGroupId, shipmentId: null },
+      select: { id: true },
+    });
+    const ids = rows.map((r) => r.id);
+    if (ids.length === 0) throw AppError.badRequest("Bu grupta havuz çuvalı kalmamış");
+    return ids;
+  }
+  const ids = [...new Set(sackIds)];
+  if (ids.length === 0) throw AppError.badRequest("Çuval seçilmedi");
+  return ids;
+}
+
 export const SackTagService = {
   // =========================================================================
   // KATALOG (ReasonPreset kalıbı)
@@ -327,7 +355,14 @@ export const SackTagService = {
    * seçmez. `add` + `remove` aynı çağrıda SERBEST (yeniden etiketleme tek hamle).
    */
   async bulkTags(
-    input: { sackIds: string[]; add?: string[]; remove?: string[]; removeAll?: boolean },
+    input: {
+      sackIds: string[];
+      add?: string[];
+      remove?: string[];
+      removeAll?: boolean;
+      /** Grup kapsamı — bkz. `resolveBulkTagScope`. */
+      packingGroupId?: string;
+    },
     userId?: string,
   ): Promise<ApiResponse<BulkTagResult>> {
     const removeAll = input.removeAll === true;
@@ -341,8 +376,7 @@ export const SackTagService = {
     if (!removeAll && add.length === 0 && remove.length === 0) {
       throw AppError.badRequest("Uygulanacak etiket seçilmedi");
     }
-    const sackIds = [...new Set(input.sackIds)];
-    if (sackIds.length === 0) throw AppError.badRequest("Çuval seçilmedi");
+    const sackIds = await resolveBulkTagScope(input.sackIds, input.packingGroupId);
     if (sackIds.length > MAX_BULK_TAG_SACKS) {
       throw AppError.badRequest(`Tek seferde en fazla ${MAX_BULK_TAG_SACKS} çuval işlenebilir`);
     }

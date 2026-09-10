@@ -9,6 +9,7 @@ import {
   isShippingInvoiceMode,
   type ShipmentOrderRequirement,
   type ShippingInvoiceMode,
+  type SackDumpNameMode,
 } from "@/lib/shipping-flags";
 
 const QUERY_KEY = ["feature-flags"];
@@ -165,6 +166,25 @@ export function useShippingInvoiceMode(): ShippingInvoiceMode {
 export function useKursunBypassEnabled(): boolean {
   const q = useFeatureFlags();
   return q.data?.data?.kursunBypassEnabled ?? false;
+}
+
+/**
+ * Paketleme grubu (çalışma yaftası) açık mı. Yüklenene kadar FALSE.
+ *
+ * ⚠️ Fail yönü KAPALI ve bu bilinçli: bayrak yüklenemediğinde ekran bugünkü düz
+ * listeye düşer. Ters yön tehlikeli olurdu — grup şeridi çizilip sunucu bayrağı
+ * kapalı bilseydi "Parti Ata" 403 verir, operatör sebebini göremezdi.
+ */
+export function usePackingGroupsEnabled(): boolean {
+  const q = useFeatureFlags();
+  return q.data?.data?.packingGroupsEnabled ?? false;
+}
+
+/** Çuval/grup içerik dökümünde ad rejimi VARSAYILANI (pencere tek seferlik ezebilir). */
+export function useSackDumpNameMode(): SackDumpNameMode {
+  const q = useFeatureFlags();
+  const v = q.data?.data?.sackDumpNameMode;
+  return v === "bizdeki" || v === "musterideki" || v === "ikisi" ? v : "ikisi";
 }
 
 /** Müşteri şubeleri (sevk noktaları) açık mı. Yüklenene kadar true (default açık). */

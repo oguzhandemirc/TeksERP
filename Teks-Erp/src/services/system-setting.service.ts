@@ -403,6 +403,8 @@ export const SETTING_KEYS = {
   SHIPPING_DOC_PRODUCT_COLOR_SPLIT: "shipping.docProductColorSplit",
   /** Paketleme grubu (çalışma yaftası) açık mı — default false = BUGÜNKÜ davranış:
    *  düz çuval listesi ve "Hemen Sevk Et" içi dolu HER çuvalı gönderir. */
+  /** Çuval/grup İÇERİK DÖKÜMÜNDE ad rejimi (default `ikisi` = bugünkü çıktı). */
+  SACK_DUMP_NAME_MODE: "shipping.sackDumpNameMode",
   PACKING_GROUPS_ENABLE: "packing.groupsEnabled",
   /** Grup numarası sayacının rejimi: `artan` (default) | `bosluk-doldur`. */
   PACKING_GROUP_NUMBERING: "packing.groupNumbering",
@@ -759,6 +761,27 @@ export const PACKING_GROUP_NUMBERINGS: PackingGroupNumbering[] = [
 ];
 /** Varsayılan `artan` — sahanın istediği rejim (boşalan numaraya geri dönme). */
 export const DEFAULT_PACKING_GROUP_NUMBERING: PackingGroupNumbering = "artan";
+
+/**
+ * Çuval/grup İÇERİK DÖKÜMÜNDE (Excel + PDF) kumaş ve renk adı hangi dilden basılır.
+ *
+ *  • `ikisi` (VARSAYILAN = BUGÜNKÜ ÇIKTI) — PDF'te "bizdeki ↳ müşterideki" tek
+ *    hücrede, Excel'de "Müşteri kumaş"/"Müşteri renk" ayrı sütunlarda.
+ *  • `bizdeki` — yalnız bizim adımız.
+ *  • `musterideki` — yalnız müşterinin adı. ⚠️ FAIL-OPEN DEĞİL: karşılık yoksa
+ *    hücre BOŞ kalır, bizim adımız müşterinin adıymış gibi BASILMAZ. Bu, sevk
+ *    irsaliyesindeki `docItemNameMode` ile BİLEREK ters yöndedir — orası
+ *    müşteriye giden resmi belgedir ve boş hücre kabul edilemez; burası İÇ
+ *    çalışma kâğıdıdır ve ambarcının "bunun müşteri karşılığı yok"u görmesi
+ *    gerekir (kullanıcı kararı 2026-09-10).
+ *
+ * ⚠️ Bu ayar VARSAYILANI belirler; döküm penceresi TEK SEFERLİK başka bir mod
+ * seçebilir ve o seçim ayarı EZMEZ (kâğıt boyu seçicisiyle aynı kalıp).
+ */
+export type SackDumpNameMode = "ikisi" | "bizdeki" | "musterideki";
+export const SACK_DUMP_NAME_MODES: SackDumpNameMode[] = ["ikisi", "bizdeki", "musterideki"];
+/** Varsayılan `ikisi` — bayrak yazılana kadar döküm BAYT BAYT bugünküyle aynı. */
+export const DEFAULT_SACK_DUMP_NAME_MODE: SackDumpNameMode = "ikisi";
 
 /**
  * Sevkiyat KAPSAMA rejimi: çuvaldaki mal seçili sipariş satırlarına yazılabildi mi.
@@ -1424,6 +1447,8 @@ export interface FeatureFlags {
   packingGroupsEnabled: boolean;
   /** Grup numara rejimi: 'artan' (default) | 'bosluk-doldur'. */
   packingGroupNumbering: PackingGroupNumbering;
+  /** Çuval/grup içerik dökümünde ad: 'ikisi' (default) | 'bizdeki' | 'musterideki'. */
+  sackDumpNameMode: SackDumpNameMode;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). */
   shippingAllocWidthToleranceEnabled: boolean;
   /** Tolerans (cm) — yalnız bayrak açıkken uygulanır. */
@@ -1792,6 +1817,7 @@ export class SystemSettingService {
       shippingDocProductColorSplit: await readShippingDocProductColorSplit(cacheClient),
       packingGroupsEnabled: await readPackingGroupsEnabled(cacheClient),
       packingGroupNumbering: await readPackingGroupNumbering(cacheClient),
+      sackDumpNameMode: await readSackDumpNameMode(cacheClient),
       shippingAllocWidthToleranceEnabled: await readShippingAllocWidthToleranceEnabled(cacheClient),
       shippingAllocWidthToleranceCm: await readShippingAllocWidthToleranceCm(cacheClient),
       shippingAllowOverAllocation: await readShippingAllowOverAllocation(cacheClient),
@@ -2556,6 +2582,21 @@ export class SystemSettingService {
         SETTING_KEYS.PACKING_GROUPS_ENABLE,
         String(input.packingGroupsEnabled),
         "Paketleme grubu (çalışma yaftası) açık mı — kapalıyken çuval listesi düz",
+        userId
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(input, "sackDumpNameMode")) {
+      const v = input.sackDumpNameMode;
+      if (typeof v !== "string" || !SACK_DUMP_NAME_MODES.includes(v as SackDumpNameMode)) {
+        throw AppError.badRequest(
+          "Döküm ad rejimi 'ikisi', 'bizdeki' veya 'musterideki' olmalı"
+        );
+      }
+      await this.set(
+        SETTING_KEYS.SACK_DUMP_NAME_MODE,
+        v,
+        "Çuval/grup içerik dökümünde kumaş+renk adı: ikisi / bizdeki / musterideki",
         userId
       );
     }
@@ -4127,6 +4168,24 @@ export async function readPackingGroupsEnabled(
  * `includes` sigortası: elle SQL ya da eski dump çöp yazarsa sayaç sessizce
  * rejim değiştirmesin.
  */
+/**
+ * Döküm ad rejimi. Satır yoksa / değer kümede değilse `ikisi` (bugünkü çıktı).
+ */
+export async function readSackDumpNameMode(
+  tx?: Pick<typeof prisma, "systemSetting">,
+): Promise<SackDumpNameMode> {
+  const client = tx ?? prisma;
+  const setting = await client.systemSetting.findUnique({
+    where: { key: SETTING_KEYS.SACK_DUMP_NAME_MODE },
+    select: { value: true },
+  });
+  const v = setting?.value;
+  if (typeof v === "string" && SACK_DUMP_NAME_MODES.includes(v as SackDumpNameMode)) {
+    return v as SackDumpNameMode;
+  }
+  return DEFAULT_SACK_DUMP_NAME_MODE;
+}
+
 export async function readPackingGroupNumbering(
   tx?: Pick<typeof prisma, "systemSetting">,
 ): Promise<PackingGroupNumbering> {

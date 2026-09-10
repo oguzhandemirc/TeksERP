@@ -11,6 +11,7 @@ import type {
   LocatedRoll,
   OpenedSack,
   OpenOrder,
+  PackingGroup,
   PickListRow,
   SackContentDumpSack,
   SackCustomerBucket,
@@ -103,10 +104,61 @@ export const sackHubService = {
    * orası ürün·renk·en bazında GRUPLU özet döner, bu uç her topu ayrı satır verir
    * (barkod dahil). Excel/PDF/yazdır içerik dökümünün kaynağı.
    */
-  contentDump: (sackIds: string[]): Promise<ApiResponse<SackContentDumpSack[]>> =>
+  contentDump: (
+    sackIds: string[],
+    /**
+     * Grup kapsamı — verilirse çuval id'lerini SUNUCU çözer ve `sackIds`
+     * gönderilmez. ⚠️ Ekrandaki sayfa grubun TAMAMI olmayabilir (liste
+     * cursor'lu): grubun dökümünü seçili satırlardan kurmak eksik döküm üretir.
+     */
+    packingGroupId?: string,
+  ): Promise<ApiResponse<SackContentDumpSack[]>> =>
     apiClient
-      .post<ApiResponse<SackContentDumpSack[]>>(`/api/shipping/sack-search/content-dump`, { sackIds })
+      .post<ApiResponse<SackContentDumpSack[]>>(
+        `/api/shipping/sack-search/content-dump`,
+        packingGroupId ? { packingGroupId } : { sackIds },
+      )
       .then((r) => r.data),
+
+  // ── Paketleme grubu (çalışma yaftası) ──────────────────────────────────────
+  /** Bir carinin CANLI grupları (havuzda çuvalı olanlar). Ölü grup dönmez. */
+  listPackingGroups: (customerId: string): Promise<ApiResponse<PackingGroup[]>> =>
+    apiClient
+      .get<ApiResponse<PackingGroup[]>>(`/api/shipping/packing-groups?customerId=${encodeURIComponent(customerId)}`)
+      .then((r) => r.data),
+
+  /** "Parti Ata" — seçili çuvallardan YENİ grup. `name` verilirse otomatik
+   *  numara üretilmez (override) ve sayaç ilerlemez. */
+  createPackingGroup: (body: {
+    customerId: string;
+    sackIds: string[];
+    name?: string;
+    note?: string;
+    /** İdempotency — deneme başına bir üretilir; retry aynı token'la (backend replay). */
+    clientToken?: string;
+  }): Promise<ApiResponse<PackingGroup>> =>
+    apiClient.post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups`, body).then((r) => r.data),
+
+  /** Var olan CANLI gruba çuval ekle (boşalmış grup 409 verir). */
+  addSacksToPackingGroup: (groupId: string, sackIds: string[]): Promise<ApiResponse<PackingGroup>> =>
+    apiClient
+      .post<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}/sacks`, { sackIds })
+      .then((r) => r.data),
+
+  /** Çuvalları gruptan çıkar ("Gruplanmamış"a döner). Grup SİLİNMEZ; son çuval
+   *  da çıkarsa kendiliğinden görünmez olur. */
+  removeSacksFromPackingGroup: (sackIds: string[]): Promise<ApiResponse<{ count: number }>> =>
+    apiClient
+      .post<ApiResponse<{ count: number }>>(`/api/shipping/packing-groups/remove-sacks`, { sackIds })
+      .then((r) => r.data),
+
+  /** Grup adını (override) ve/veya notunu güncelle. Ad elle değişirse sunucu
+   *  `seq`i DÜŞÜRÜR — numara artık o grubu tarif etmiyor. */
+  updatePackingGroup: (
+    groupId: string,
+    body: { name?: string; note?: string | null },
+  ): Promise<ApiResponse<PackingGroup>> =>
+    apiClient.patch<ApiResponse<PackingGroup>>(`/api/shipping/packing-groups/${groupId}`, body).then((r) => r.data),
 
   // ── Sipariş rehberi + müşteri havuzu ───────────────────────────────────────
   /**
@@ -202,6 +254,12 @@ export const sackHubService = {
     add?: string[];
     remove?: string[];
     removeAll?: boolean;
+    /**
+     * Grup kapsamı — verilirse çuval id'lerini SUNUCU çözer. ⚠️ Ekrandaki sayfa
+     * grubun tamamı olmayabilir (liste cursor'lu); grubun izini seçili
+     * satırlardan kurmak YARIM gruba iz bırakırdı.
+     */
+    packingGroupId?: string;
   }): Promise<ApiResponse<{ added: number; removed: number; skipped: { sackId: string; reason: string }[] }>> =>
     apiClient
       .post<ApiResponse<{ added: number; removed: number; skipped: { sackId: string; reason: string }[] }>>(

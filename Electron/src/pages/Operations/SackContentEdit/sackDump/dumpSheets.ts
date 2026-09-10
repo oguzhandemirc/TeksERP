@@ -1,3 +1,4 @@
+import type { SackDumpNameMode } from "@/lib/shipping-flags";
 // =============================================================================
 // Çuval İÇERİK DÖKÜMÜ — Excel sayfaları (buildWorkbook girdisi)
 // =============================================================================
@@ -86,19 +87,23 @@ function summarySheet(dumps: SackDump[], withNotes: boolean): SheetSpec {
 }
 
 /** Tek çuvalın top sayfası. */
-function sackSheet(d: SackDump, name: string): SheetSpec {
+function sackSheet(d: SackDump, name: string, mode: SackDumpNameMode): SheetSpec {
   return {
     name,
     columns: [
       { header: "Barkod", key: "barcode", width: 20 },
-      { header: "Kumaş", key: "item", width: 26 },
       // ⭐ ÜÇ AD (2026-09-07): dökümü çıktı alan kişi bizim adımızı, müşterinin
       //    adını ve ETİKETTE YAZANI yan yana görsün. Müşteri karşılığı yoksa
       //    hücre BOŞ kalır — bizim adımızı oraya kopyalamak "müşteri bunu böyle
       //    çağırıyor" yalanını üretirdi.
-      { header: "Müşteri kumaş", key: "musteriItem", width: 26 },
-      { header: "Renk", key: "color", width: 18 },
-      { header: "Müşteri renk", key: "musteriColor", width: 18 },
+      // ⭐ AD REJİMİ (2026-09-10): `bizdeki` müşteri sütunlarını hiç çizmez,
+      //    `musterideki` bizimkileri çizmez; `ikisi` (varsayılan) bugünkü kümedir.
+      //    Sütunu GİZLEMEK ile BOŞ BIRAKMAK farklı sözler: gizlenen sütun "bu
+      //    kâğıtta o dil yok" der, boş hücre "karşılığı yok" der.
+      ...(mode === "musterideki" ? [] : [{ header: "Kumaş", key: "item", width: 26 }]),
+      ...(mode === "bizdeki" ? [] : [{ header: "Müşteri kumaş", key: "musteriItem", width: 26 }]),
+      ...(mode === "musterideki" ? [] : [{ header: "Renk", key: "color", width: 18 }]),
+      ...(mode === "bizdeki" ? [] : [{ header: "Müşteri renk", key: "musteriColor", width: 18 }]),
       { header: "Etikette", key: "etiket", width: 26 },
       { header: "En (cm)", key: "width", width: 10, numFmt: QTY_FMT },
       { header: "Metre", key: "qty", width: 12, numFmt: QTY_FMT },
@@ -159,7 +164,8 @@ export function buildSackDumpSheets(dumps: SackDump[], opts: SackDumpOptions = {
   const withNotes = !!opts.withNotes;
   const used = new Set<string>(["Özet", "Kartelalar"]); // ayrılmış adlar
   const sheets: SheetSpec[] = [summarySheet(dumps, withNotes)];
-  for (const d of dumps) sheets.push(sackSheet(d, uniqueSheetName(d.sackNo, used)));
+  const mode: SackDumpNameMode = opts.nameMode ?? "ikisi";
+  for (const d of dumps) sheets.push(sackSheet(d, uniqueSheetName(d.sackNo, used), mode));
   const sw = swatchSheet(dumps);
   if (sw) sheets.push(sw);
   return sheets;

@@ -4,6 +4,7 @@ import { safeFormat } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { SortableHeader } from "@/components/data-table/SortableHeader";
 import { isDarkHex } from "@/pages/SackTags/service";
+import { SackTagsBulkMenu } from "./SackTagsBulkMenu";
 import { sackStatusLabels, sackStatusOf, type SackSearchRow } from "./types";
 
 const fmtQty = (n: number) =>
@@ -136,7 +137,7 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
   },
   {
     id: "weightKg",
-    header: "Kg",
+    header: () => <SortableHeader field="weightKg" label="Kg" />,
     // Tartılmamış çuval toplamda 0 sayılır (null → 0) — toplam "tartılanların kg'ı".
     meta: { label: "Kg", summable: true },
     cell: ({ row }) => {
@@ -151,8 +152,30 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
     },
   },
   {
+    // PAKETLEME GRUBU (çalışma yaftası) — "bu çuval hangi hazırlıkta".
+    // ⚠️ İz sütunuyla AYNI GEREKÇEYLE sıralanmaz: grup bir İLİŞKİDİR, keyset
+    // cursor skaler kolon ister. "Grupları bir arada gör" işini üstteki grup
+    // ŞERİDİ (filtre) yapar — tıklanan grup listeyi sunucuda süzer.
+    // ⚠️ Ad `packingGroup.name`den okunur, `seq`ten KURULMAZ: operatör grubu
+    // elle adlandırdığında (`seq` null olur) numara üretmek boş çip basardı.
+    id: "packingGroup",
+    header: "Grup",
+    meta: { label: "Grup", exportValue: (s) => s.packingGroup?.name ?? "" },
+    cell: ({ row }) => {
+      const g = row.original.packingGroup;
+      if (!g) return <span className="text-muted-foreground">—</span>;
+      return (
+        <span className="inline-flex whitespace-nowrap rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">
+          {g.name}
+        </span>
+      );
+    },
+  },
+  {
     id: "note",
-    header: "Not",
+    // Not SIRALANABİLİR (skaler kolon → keyset cursor onu ifade edebiliyor).
+    // Tartısız/notsuz satırlar SONA düşer (`nulls: "last"`).
+    header: () => <SortableHeader field="notes" label="Not" />,
     meta: { label: "Not", exportValue: (s) => s.notePreview ?? "" },
     cell: ({ row }) => {
       const s = row.original;
@@ -174,8 +197,9 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
     // ÇUVAL İZİ (2026-09-04) — paketlemecinin bıraktığı işaretler.
     // ⚠️ SIRALANMAZ ve `sortBy=tag` EKLENMEZ: bir çuvalda N iz var, tek skaler
     // yok; cursor'lu sıralama skaler kolon üzerinden WHERE kurar ve ilişki
-    // sıralaması sessizce mükerrer/eksik satır üretirdi. Backend allowlist
-    // `sackNo|createdAt` KALIR.
+    // sıralaması sessizce mükerrer/eksik satır üretirdi. Backend allowlist'i
+    // yalnız SKALER kolon kabul eder (`createdAt|sackNo|notes|weightKg`);
+    // iz ve grup oraya GİREMEZ, ikisi de ilişkidir.
     // Rozet ile "Etiket" süzgeci sunucuda AYNI yüklemden (`ACTIVE_TAG_WHERE`)
     // beslenir — sevkte temizlenen iz ikisinde de görünmez.
     id: "tags",
@@ -183,9 +207,19 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
     meta: { label: "İz", exportValue: (s) => s.tags.map((t) => t.name).join(", ") },
     cell: ({ row }) => {
       const tags = row.original.tags;
-      if (tags.length === 0) return <span className="text-muted-foreground">—</span>;
+      // HIZLI İZ (2026-09-10): iz bırakmak için satırı seçip toplu menüye gitmek
+      // gerekiyordu. Tuş HER satırda durur — izsiz çuvala iz bırakmanın yolu da
+      // budur (eskiden boş hücrede hiçbir giriş yoktu).
+      const hizli = <SackTagsBulkMenu rows={[row.original]} onDone={() => {}} compact />;
+      if (tags.length === 0)
+        return (
+          <span className="flex items-center gap-1">
+            <span className="text-muted-foreground">—</span>
+            {hizli}
+          </span>
+        );
       return (
-        <span className="flex max-w-[220px] flex-wrap gap-1">
+        <span className="flex max-w-[240px] flex-wrap items-center gap-1">
           {tags.map((t) => (
             <span
               key={t.id}
@@ -201,6 +235,7 @@ const SACKS_KOLONLARI: ColumnDef<SackSearchRow>[] = [
               {t.name}
             </span>
           ))}
+          {hizli}
         </span>
       );
     },

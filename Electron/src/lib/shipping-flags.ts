@@ -199,3 +199,31 @@ export const PACKING_GROUP_NUMBERING_OPTIONS: ReadonlyArray<{
     hint: "Yeni grup en küçük boş numarayı alır (P1 ve P3 doluysa yeni grup P2 olur). Numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir.",
   },
 ];
+
+/**
+ * Çuval/grup İÇERİK DÖKÜMÜNDE kumaş+renk adı hangi dilden basılır.
+ * Backend aynası: `system-setting.service.ts` → `SACK_DUMP_NAME_MODES`.
+ */
+export type SackDumpNameMode = "ikisi" | "bizdeki" | "musterideki";
+
+export const SACK_DUMP_NAME_MODE_OPTIONS: ReadonlyArray<{
+  value: SackDumpNameMode;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "ikisi",
+    label: "İkisi (varsayılan)",
+    hint: "Bugünkü çıktı: PDF'te bizim adımızın altında müşterinin adı, Excel'de “Müşteri kumaş” / “Müşteri renk” ayrı sütunlarda.",
+  },
+  {
+    value: "bizdeki",
+    label: "Bizdeki ad",
+    hint: "Yalnız bizim kumaş ve renk adımız basılır; müşteri sütunları hiç çizilmez.",
+  },
+  {
+    value: "musterideki",
+    label: "Müşterideki ad",
+    hint: "Yalnız müşterinin adı basılır. Müşterinin o kumaşa/renge karşılığı yoksa hücre BOŞ kalır — bizim adımız müşterinin adıymış gibi basılmaz.",
+  },
+];

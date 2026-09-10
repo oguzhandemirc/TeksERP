@@ -36,10 +36,22 @@ import type { SackSearchRow } from "./types";
 export function SackTagsBulkMenu({
   rows,
   onDone,
+  compact,
+  packingGroupId,
+  triggerLabel,
 }: {
   rows: SackSearchRow[];
   /** İş bitince çağrılır — çağıran `table.resetRowSelection()` yapar. */
   onDone: () => void;
+  /** Satır içi HIZLI İZ tuşu — ikon boyutunda, metinsiz. */
+  compact?: boolean;
+  /**
+   * Grup kapsamı — verilirse iz GRUBUN TÜM havuz çuvallarına uygulanır ve
+   * id'leri sunucu çözer. `rows` yalnız kutucukların üç-durumlu görünümünü
+   * kurmak için kullanılır (ekrandaki örneklem).
+   */
+  packingGroupId?: string;
+  triggerLabel?: string;
 }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -63,7 +75,11 @@ export function SackTagsBulkMenu({
   const payload = buildBulkPayload(sackIds, intents, removeAll);
 
   const apply = useMutation({
-    mutationFn: () => sackHubService.bulkTags(payload!),
+    // Grup kapsamında çuval id'lerini SUNUCU çözer — `sackIds` gönderilmez.
+    mutationFn: () =>
+      sackHubService.bulkTags(
+        packingGroupId ? { ...payload!, sackIds: [], packingGroupId } : payload!,
+      ),
     onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ["sack-search"] });
       const s = summarizeBulkResult(res.data);
@@ -85,13 +101,39 @@ export function SackTagsBulkMenu({
       }}
     >
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1.5" disabled={rows.length === 0}>
-          <Bookmark className="h-4 w-4" /> İz ({rows.length})
-        </Button>
+        {compact ? (
+          // HIZLI İZ — satır içi ikon tuşu. Katalog sorgusu yalnız popover
+          // AÇILINCA koşar (`enabled: open`), yani her satır bir istek atmaz.
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 shrink-0 opacity-60 hover:opacity-100"
+            title="İz bırak / kaldır"
+            onClick={(e) => e.stopPropagation()} // satır tıklaması editörü açmasın
+          >
+            <Bookmark className="h-3.5 w-3.5" />
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            // Grup kapsamında seçim GEREKMEZ — kapsamı sunucu çözer.
+            disabled={!packingGroupId && rows.length === 0}
+          >
+            <Bookmark className="h-4 w-4" /> {triggerLabel ?? `İz (${rows.length})`}
+          </Button>
+        )}
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="start">
         <div className="border-b px-3 py-2">
-          <div className="text-sm font-medium">Seçili {rows.length} çuvala iz</div>
+          <div className="text-sm font-medium">
+            {packingGroupId
+              ? "Grubun TÜM çuvallarına iz"
+              : compact
+                ? "Bu çuvala iz"
+                : `Seçili ${rows.length} çuvala iz`}
+          </div>
           <div className="text-xs text-muted-foreground">
             Kutuya dokundukça: bırak → kaldır → dokunma.
           </div>

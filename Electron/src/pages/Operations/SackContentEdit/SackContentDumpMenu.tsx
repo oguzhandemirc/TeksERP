@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { PackageSearch } from "lucide-react";
-import { DropdownMenuCheckboxItem } from "@/components/ui/dropdown-menu";
+import { DropdownMenuCheckboxItem, DropdownMenuLabel } from "@/components/ui/dropdown-menu";
+import { useSackDumpNameMode } from "@/hooks/usePricingEnabled";
+import { SACK_DUMP_NAME_MODE_OPTIONS, type SackDumpNameMode } from "@/lib/shipping-flags";
 import { ExportMenu } from "@/components/data-table/ExportMenu";
 import {
   dumpHasNotes,
@@ -43,11 +45,17 @@ interface Props {
  */
 export function SackContentDumpMenu({ dumps, load, hasNotes, label, disabled, align = "start" }: Props) {
   const [withNotes, setWithNotes] = useState(false);
+  // AD REJİMİ — varsayılanı AYAR verir, buradaki seçim TEK SEFERLİKTİR ve ayarı
+  // EZMEZ (kâğıt boyu seçicisiyle aynı kalıp). Menü kapanınca da korunur:
+  // operatör aynı kâğıdı iki kez alırken tercihini yeniden seçmesin.
+  const varsayilanMod = useSackDumpNameMode();
+  const [mod, setMod] = useState<SackDumpNameMode | null>(null);
+  const nameMode = mod ?? varsayilanMod;
 
   const resolve = async (): Promise<SackDump[]> => (load ? await load() : (dumps ?? []));
   // Notlu çuval yoksa açık kalmış bayrak sessizce etkisiz olsun (yanlış "dahil" izlenimi yok).
   const notesAvailable = hasNotes ?? (dumps ? dumpHasNotes(dumps) : false);
-  const opts = { withNotes: withNotes && notesAvailable };
+  const opts = { withNotes: withNotes && notesAvailable, nameMode };
 
   return (
     <ExportMenu
@@ -60,15 +68,31 @@ export function SackContentDumpMenu({ dumps, load, hasNotes, label, disabled, al
       onPdf={async () => saveSackDumpPdf(await resolve(), opts)}
       onExcel={async () => saveSackDumpExcel(await resolve(), opts)}
       footer={
-        notesAvailable ? (
-          <DropdownMenuCheckboxItem
-            checked={withNotes}
-            onCheckedChange={(v) => setWithNotes(!!v)}
-            onSelect={(e) => e.preventDefault()} // işaretleme menüyü kapatmasın
-          >
-            Çuval notunu dahil et
-          </DropdownMenuCheckboxItem>
-        ) : undefined
+        <>
+          {notesAvailable && (
+            <DropdownMenuCheckboxItem
+              checked={withNotes}
+              onCheckedChange={(v) => setWithNotes(!!v)}
+              onSelect={(e) => e.preventDefault()} // işaretleme menüyü kapatmasın
+            >
+              Çuval notunu dahil et
+            </DropdownMenuCheckboxItem>
+          )}
+          <DropdownMenuLabel className="text-[11px] font-normal text-muted-foreground">
+            Kumaş + renk adı
+          </DropdownMenuLabel>
+          {SACK_DUMP_NAME_MODE_OPTIONS.map((o) => (
+            <DropdownMenuCheckboxItem
+              key={o.value}
+              checked={nameMode === o.value}
+              title={o.hint}
+              onCheckedChange={() => setMod(o.value)}
+              onSelect={(e) => e.preventDefault()}
+            >
+              {o.label}
+            </DropdownMenuCheckboxItem>
+          ))}
+        </>
       }
     />
   );

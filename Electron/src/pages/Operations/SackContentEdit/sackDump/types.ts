@@ -1,3 +1,4 @@
+import type { SackDumpNameMode } from "@/lib/shipping-flags";
 // =============================================================================
 // Çuval İÇERİK DÖKÜMÜ — normalize veri şekli + iki kaynaktan mapper
 // =============================================================================
@@ -60,6 +61,15 @@ export interface SackDump {
 export interface SackDumpOptions {
   /** Çuval notunu bas/indir — kök CLAUDE.md kuralı: iç not her yerde OPT-IN. */
   withNotes?: boolean;
+  /**
+   * Kumaş+renk adı hangi dilden basılsın. Varsayılanı `shipping.sackDumpNameMode`
+   * ayarı belirler; döküm penceresi TEK SEFERLİK ezer ve ayarı DEĞİŞTİRMEZ.
+   *
+   * ⚠️ `musterideki` FAIL-OPEN DEĞİL: karşılık yoksa hücre BOŞ kalır. Bizim
+   * adımızı oraya kopyalamak "müşteri bunu böyle çağırıyor" yalanını üretirdi
+   * (üç-ad sütunlarının zaten uyduğu kural).
+   */
+  nameMode?: SackDumpNameMode;
 }
 
 export const dumpTotalQty = (d: SackDump): number => d.rolls.reduce((a, r) => a + r.qty, 0);

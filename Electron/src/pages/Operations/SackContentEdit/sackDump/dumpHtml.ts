@@ -1,3 +1,4 @@
+import type { SackDumpNameMode } from "@/lib/shipping-flags";
 // =============================================================================
 // Çuval İÇERİK DÖKÜMÜ — yazdırılabilir HTML (yazdır VE PDF aynı stringi kullanır)
 // =============================================================================
@@ -37,11 +38,19 @@ function metaLine(d: SackDump): string {
  * ⚠️ Karşılık YOKSA alt satır HİÇ basılmaz — bizim adımızı oraya koymak
  * "müşteri bunu böyle çağırıyor" yalanını üretirdi (2026-09-06 düzeltmesi).
  */
-function adHucresi(bizdeki: string, musterideki?: string | null): string {
+function adHucresi(
+  bizdeki: string,
+  musterideki: string | null | undefined,
+  mode: SackDumpNameMode,
+): string {
+  // `musterideki`: karşılık yoksa hücre BOŞ — bizim adımız müşterininmiş gibi
+  // basılmaz (ayar açıklamasındaki söz burada tutulur).
+  if (mode === "musterideki") return musterideki ? esc(musterideki) : "";
   const ust = dash(bizdeki);
-  if (!musterideki) return ust;
+  if (mode === "bizdeki" || !musterideki) return ust;
   return `${ust}<div class="alt">↳ ${esc(musterideki)}</div>`;
 }
+
 
 /**
  * Topun ÜSTÜNDEKİ kâğıtta yazan. Üç hâl ayrı ayrı görünür:
@@ -54,7 +63,7 @@ function etiketHucresi(r: SackDumpRoll): string {
 }
 
 
-function rollTable(d: SackDump): string {
+function rollTable(d: SackDump, mode: SackDumpNameMode): string {
   if (d.rolls.length === 0) {
     return `<p class="empty">Çuval boş — top yok.</p>`;
   }
@@ -62,8 +71,8 @@ function rollTable(d: SackDump): string {
     .map(
       (r) => `<tr>
         <td class="mono">${r.barcode ? esc(r.barcode) : "Açık Kumaş"}</td>
-        <td>${adHucresi(r.itemName, r.musteriItemName)}</td>
-        <td>${adHucresi(r.colorName ?? "Ham", r.musteriColorName)}</td>
+        <td>${adHucresi(r.itemName, r.musteriItemName, mode)}</td>
+        <td>${adHucresi(r.colorName ?? "Ham", r.musteriColorName, mode)}</td>
         <td>${etiketHucresi(r)}</td>
         <td class="num">${r.width != null ? `${fmtNum(r.width)} cm` : "—"}</td>
         <td class="num">${fmtNum(r.qty)}</td>
@@ -85,14 +94,16 @@ function rollTable(d: SackDump): string {
   </table>`;
 }
 
-function swatchBlock(d: SackDump): string {
+function swatchBlock(d: SackDump, mode: SackDumpNameMode): string {
   if (d.swatches.length === 0) return "";
   const items = d.swatches
     .map(
       (s) =>
-        `<li><span class="mono">${s.barcode ? esc(s.barcode) : "Kartela"}</span> — ${dash(s.itemName)}${
-          s.colorName ? ` · ${esc(s.colorName)}` : ""
-        }</li>`,
+        // Kartela satırı da AYNI ad rejiminden geçer — top tablosu müşteri adını
+        // basarken kartelanın bizim adımızı basması tek kâğıtta iki dil olurdu.
+        `<li><span class="mono">${s.barcode ? esc(s.barcode) : "Kartela"}</span> — ${
+          adHucresi(s.itemName, s.musteriItemName, mode) || "—"
+        }${s.colorName || s.musteriColorName ? ` · ${adHucresi(s.colorName ?? "Ham", s.musteriColorName, mode)}` : ""}</li>`,
     )
     .join("");
   return `<div class="swatches">
@@ -106,13 +117,13 @@ function noteBlock(d: SackDump, withNotes: boolean): string {
   return `<div class="note"><strong>Not:</strong> ${esc(d.notes)}</div>`;
 }
 
-function sackSection(d: SackDump, withNotes: boolean): string {
+function sackSection(d: SackDump, withNotes: boolean, mode: SackDumpNameMode): string {
   return `<section class="sack">
     <h2>${esc(d.sackNo)}</h2>
     <div class="meta">${metaLine(d)}</div>
     ${noteBlock(d, withNotes)}
-    ${rollTable(d)}
-    ${swatchBlock(d)}
+    ${rollTable(d, mode)}
+    ${swatchBlock(d, mode)}
   </section>`;
 }
 
@@ -122,6 +133,7 @@ function sackSection(d: SackDump, withNotes: boolean): string {
  */
 export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {}): string {
   const withNotes = !!opts.withNotes;
+  const mode: SackDumpNameMode = opts.nameMode ?? "ikisi";
   const totalRolls = dumps.reduce((a, d) => a + d.rolls.length, 0);
   const totalQty = dumps.reduce((a, d) => a + dumpTotalQty(d), 0);
   const totalSwatches = dumps.reduce((a, d) => a + d.swatches.length, 0);
@@ -183,7 +195,7 @@ export function buildSackDumpHtml(dumps: SackDump[], opts: SackDumpOptions = {})
       ${dumps.length} çuval · ${totalRolls} top · ${fmtNum(totalQty)} m · Basım: ${esc(new Date().toLocaleString("tr-TR"))}
       ${withNotes ? " · çuval notları dahil" : ""}
     </div>
-    ${dumps.map((d) => sackSection(d, withNotes)).join("")}
+    ${dumps.map((d) => sackSection(d, withNotes, mode)).join("")}
     ${grand}
   </body></html>`;
 }

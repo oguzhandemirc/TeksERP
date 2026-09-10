@@ -30,6 +30,7 @@ import {
   SHIPPING_DOC_ITEM_NAME_MODE_OPTIONS,
   SHIPPING_INVOICE_MODE_OPTIONS,
   PACKING_GROUP_NUMBERING_OPTIONS,
+  SACK_DUMP_NAME_MODE_OPTIONS,
 } from "@/lib/shipping-flags";
 import { IS_ELECTRON } from "@/lib/runtime-env";
 
@@ -819,6 +820,17 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
       },
     ],
     enumFlags: [
+      {
+        enumKey: "sackDumpNameMode",
+        title: "Çuval/grup içerik dökümünde ad",
+        summary:
+          "Excel ve PDF dökümünde kumaş+renk adı bizden mi, müşteriden mi, ikisi birden mi.",
+        defaultValue: "ikisi",
+        options: SACK_DUMP_NAME_MODE_OPTIONS,
+        audience: ["Sevkiyat", "Depocu"],
+        group: "Paketleme",
+        desc: "Bu ayar dökümün VARSAYILANINI belirler; döküm penceresinden tek seferlik başka bir mod seçilebilir ve o seçim bu ayarı EZMEZ. “İkisi” (varsayılan) bugünkü çıktıdır — PDF'te bizim adımızın altında müşterinin adı, Excel'de “Müşteri kumaş” / “Müşteri renk” ayrı sütunlarda. “Bizdeki”: yalnız bizim adımız, müşteri sütunları hiç çizilmez. “Müşterideki”: yalnız müşterinin adı; ⚠️ müşterinin o kumaşa/renge karşılığı yoksa hücre BOŞ kalır — bizim adımız müşterinin adıymış gibi basılmaz. Bu, sevk irsaliyesindeki ad rejiminden BİLEREK farklıdır: irsaliye müşteriye giden resmi belgedir ve orada boş hücre kabul edilemez, bu döküm ise İÇ çalışma kâğıdıdır ve “bunun müşteri karşılığı yok” bilgisi ambarcı için gerçek bir bilgidir.",
+      },
       {
         enumKey: "packingGroupNumbering",
         title: "Paketleme grubu numarası nasıl artsın",

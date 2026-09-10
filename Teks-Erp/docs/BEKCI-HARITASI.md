@@ -2,7 +2,7 @@
 
 > Üretilmiş (anlama turu 2026-09-05, +10 bekçi 2026-09-06/07; 467 backend bekçisi + 296 istemci testi — Electron 211, mobil 85). **Koşma:** backend tek bekçi `cd Teks-Erp && npx tsx scripts/run-all-tests.ts <ad-parçası>` (tip kapısı tek testte atlanır; `SKIP_TYPECHECK=1` acil); tam paket `npm test` (sıralı; 455 dosya, **~6,5 dakika** — 369 sn koşum + 28 sn tip geçidi, ölçüldü 2026-09-05 — 'saatler sürer' cümlesi YANLIŞTI, `docs/standart/TEST-VE-DERLEME.md` [TD-02]). Electron `cd Electron && npx vitest run <yol>`; mobil `cd mobil && npx jest <yol>`. ⚠️ = bayatlık şüphesi (başlık yorumu ya da ölçüm; ayrıntı raporda).
 
-Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (58), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
+Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `diger` (91), `sevkiyat` (87), `etiket` (83), `finans` (79), `siparis` (72), `modul-bayrak` (68), `belge` (65), `ayar` (58), `cuval` (59), `rapor` (51), `kesif-cihaz` (47), `tambur` (47), `depo` (40), `parti` (34), `renk` (31), `db-invariant` (30), `iptal-fire` (29), `refakat-karti` (29), `audit` (28), `tutarlilik` (27), `top-duzeltme` (26), `kk1` (23), `mukerrer` (22), `kursun` (21), `kalite` (21), `surum-deploy` (21), `rota` (19), `offline-kuyruk` (18), `superadmin` (16), `ozellik` (16), `kartela` (11), `sebep-katalogu` (11), `iplik` (6), `uzak-erisim` (5), `yari-mamul` (3)
 
 
 ## yetki-izin (98)
@@ -1046,7 +1046,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `mobil/src/store/deviceSettingsStore.test.ts` | Cihaz-içi kalıcı tercihler (metraj MANUEL/OTOMATİK vb.) diske yazılır ve sonraki init'te geri okunur; sahte disk ile kalıcılık ve bozuk kayıt dalları  |  |  |  |
 | `mobil/src/store/docPageSize.test.ts` | Kâğıt boyu hafızası BELGE TİPİ başına; bozuk disk kaydı baskı yolunu düşürmez (yalnız o giriş atılır); döngü ÜÇ durumlu ve 'kalıcı ayarı kullan'a geri |  |  | ⚠️ §3 döngü kuralı testin İÇİNDE yeniden yazılmış; gerçek cyclePageSize ekranda yaşıyor, ayrı |
 
-## cuval (58)
+## cuval (59)
 
 | Dosya | Ne ölçüyor | DB | Negatif sonda | |
 |---|---|---|---|---|
@@ -1089,6 +1089,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_sack_label.ts` | SACK etiketini: alan kataloğu, barcode===sackNo tek-kod kuralı, ölü topun sayılmaması, şablon yokken FAIL-CLOSED 400 (roll etiketine sapmaz), 4 dilde  | ✓ |  |  |
 | `Teks-Erp/scripts/test_sack_mismatch.ts` | Çuval içeriği uyuşmazlık sinyallerinin NE ZAMAN SUSTUĞUNU: düz müşteri karşılaştırması yok; yalnız şablon rotası/kumaş-renk alias/2. kalite farkı kırm | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_sack_note_document.ts` | Sevk irsaliyesindeki AÇIKLAMA (çuval yorumu) kolonunun görünürlük matrisini (kalıcı ayar OR tek-seferlik bayrak), varsayılan kapalılığını, escape'i ve | ✓ |  |  |
+| `Electron/src/pages/Operations/SackContentEdit/packingGroupUi.test.ts` | Paketleme grubu panel yüzeyi: şeridin bayrak+TEK cari ön koşulu, çip filtre yazarken `cursor`u SİLMESİ (bayat imleç = boş liste yalanı), gruplanmamış sentinelinin ayrı sabitten gelmesi, grup dökümü ve gruba izin kapsamını SUNUCUYA bırakması, grup sütununun adı `packingGroup.name`den okuması, grup+iz sütunlarının SIRALANMAMASI (keyset kısıtı) ve döküm ad rejiminin `musterideki`de BOŞ bırakması + Excel kolon kümesinin daralması | | ✓ |  |
 | `Teks-Erp/scripts/test_packing_group.ts` | Paketleme grubunu (çalışma yaftası): advisory 8031 kilidinin sayaç fonksiyonunun İLK ifadesi olması, `artan` rejiminin boşalan numaraya DÖNMEMESİ, `bosluk-doldur`un en küçük boşu vermesi, havuz boşalınca sayacın 1'e dönmesi, ölü grubun listelenmemesi ama SİLİNMEMESİ, bayrak kapalıyken yazmanın 403 olması, sevkiyattaki/başka carinin çuvalının claim'de 409 vermesi, tek-grup üyeliği, ad override'ın seq'i düşürmesi ve clientToken replay'inin dördüncü durumu (boşalmış grup → 409) | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_sack_notes.ts` | Sack.notes yazma sözleşmesini: trim/boş→NULL, 500'e kırpma, 404, içerik değişince yorumun KORUNMASI ve PLANNED/DISPATCHED çuvala yazılabilirliği (409  | ✓ |  |  |
 | `Teks-Erp/scripts/test_sack_pool_lifecycle.ts` | Çuval havuzu yaşam döngüsünü: onay bayrağı kapalı (tek adım DISPATCHED) / açık (PLANNED→dispatch), alt küme, fazla mal, siparişsiz sevk, FIFO tahsis,  | ✓ |  |  |

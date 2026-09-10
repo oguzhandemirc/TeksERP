@@ -333,6 +333,7 @@ export const updateSchema = z.strictObject({
   shippingDocProductColorSplit: z.boolean().optional(),
   packingGroupsEnabled: z.boolean().optional(),
   packingGroupNumbering: z.enum(["artan", "bosluk-doldur"]).optional(),
+  sackDumpNameMode: z.enum(["ikisi", "bizdeki", "musterideki"]).optional(),
   // shipping.allocWidthTolerance* — tahsiste EN toleransı (default kapalı = tam eşitlik).
   // ⚠️ Kumaş ve renk toleranstan ETKİLENMEZ.
   shippingAllocWidthToleranceEnabled: z.boolean().optional(),

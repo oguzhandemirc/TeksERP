@@ -39,6 +39,42 @@ export const CUSTOMERLESS_FILTER_VALUE = "none";
 export const UNTAGGED_FILTER_VALUE = "none";
 
 /**
+ * "Gruplanmamış" süzgeç sentineli — `filter[packingGroupId]=none`.
+ * `UNTAGGED_FILTER_VALUE` ile AYNI ham değeri taşır ama AYRI sabittir: ikisi
+ * farklı alanların sentinelidir ve biri değişirse diğeri değişmemeli.
+ * Backend aynası: `sack-search.service.ts` → `splitTagFilter` (İKİ filtre için ORTAK).
+ */
+export const UNGROUPED_FILTER_VALUE = "none";
+
+/**
+ * Paketleme grubu (çalışma yaftası) — bir carinin havuz çuvallarını "aynı sevke
+ * hazırlananlar" diye ayırır. REZERVASYON DEĞİL: stok düşmez, çuvalı kilitlemez,
+ * başka bir sevkin o çuvalı almasını engellemez.
+ *
+ * ⚠️ Adı EKRANDA kalır — belgeye/etikete/irsaliyeye basılmaz. Bu yüzden numarası
+ * (P1, P2…) boşalınca yeniden kullanılabilir; kimlik `id`dir.
+ */
+export interface PackingGroup {
+  id: string;
+  name: string;
+  seq: number | null;
+  note: string | null;
+  sackCount: number;
+  rollCount: number;
+  swatchCount: number;
+  totalQty: number;
+  weightKg: number | null;
+  createdAt: string;
+}
+
+/** Liste satırındaki grup çipi — ad SUNUCUDAN gelir, id'den türetilmez. */
+export interface SackRowPackingGroup {
+  id: string;
+  name: string;
+  seq: number | null;
+}
+
+/**
  * Çuval izi rozeti (etiket) — liste satırı + çeki listesi ortak şekli.
  * Backend `SackTagBadge` aynası (`helpers/sack-tag.helper.ts`).
  * ⚠️ `isActive:false` = katalogdan çıkarılmış: rozet SOLUK çizilir ama
@@ -146,6 +182,8 @@ export interface SackSearchRow {
   tags: SackTagBadge[];
   /** `tags.length > 0` — süzgeçle aynı kümeden türer, ayrı hesaplanmaz. */
   hasTag: boolean;
+  /** Paketleme grubu — null = "Gruplanmamış". Ad SUNUCUDAN gelir. */
+  packingGroup: SackRowPackingGroup | null;
   /** İçerik filtresi (kumaş/renk/en) yokken null — eşleşme sütunu gizlenir. */
   matchRollCount: number | null;
   matchQty: number | null;

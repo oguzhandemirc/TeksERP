@@ -9,6 +9,7 @@ import type {
   ShippingOrderCoverage,
   ShippingInvoiceMode,
   PackingGroupNumbering,
+  SackDumpNameMode,
 } from "@/lib/shipping-flags";
 import {
   type CompanyLetterhead,
@@ -369,6 +370,8 @@ export interface FeatureFlags {
   packingGroupsEnabled: boolean;
   /** Grup numara rejimi: 'artan' (default) | 'bosluk-doldur'. */
   packingGroupNumbering: PackingGroupNumbering;
+  /** Çuval/grup içerik dökümünde ad: 'ikisi' (default) | 'bizdeki' | 'musterideki'. */
+  sackDumpNameMode: SackDumpNameMode;
   /** Tahsiste EN toleransı açık mı (default false = tam eşitlik). Kumaş ve renk KESİN. */
   shippingAllocWidthToleranceEnabled: boolean;
   /** Tolerans (cm) — yalnız bayrak açıkken uygulanır. */
