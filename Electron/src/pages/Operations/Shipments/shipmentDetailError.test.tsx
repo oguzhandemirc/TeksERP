@@ -44,7 +44,7 @@ vi.mock("./service", async (importOriginal) => {
 });
 
 // Yazdırma/iptal diyalogları ağ konuşur ve ölçülen şey onlar değil.
-vi.mock("./ShipmentDispatchNote", () => ({ ShipmentDispatchNote: () => null }));
+vi.mock("./ShipmentDocDialog", () => ({ ShipmentDocDialog: () => null }));
 vi.mock("./CancelShipmentDialog", () => ({ CancelShipmentDialog: () => null }));
 vi.mock("./UndoDispatchDialog", () => ({ UndoDispatchDialog: () => null }));
 vi.mock("./DirectShipPrintDialog", () => ({ DirectShipPrintDialog: () => null }));

@@ -17,7 +17,7 @@ import { RollDetailSheet } from "./RollDetailSheet";
 import { BulkCancelRollsDialog } from "./BulkCancelRollsDialog";
 import { ReworkRollsDialog } from "./ReworkRollsDialog";
 import { QuickShipDialog } from "./QuickShipDialog";
-import { ShipmentDispatchNote } from "@/pages/Operations/Shipments/ShipmentDispatchNote";
+import { ShipmentDocDialog } from "@/pages/Operations/Shipments/ShipmentDocDialog";
 import { canQuickShip, type QuickShipRoll } from "./quickShipService";
 import { canAdjustRollQty } from "./qtyAdjustService";
 import { RollQtyAdjustDialog } from "./RollQtyAdjustDialog";
@@ -514,7 +514,7 @@ export function RollsTableBody({
       )}
       {/* Sevk sonrası kestirme: irsaliye. Kullanıcı sevk ekranını aramaz —
           kâğıt zaten sevk anında istenen tek şeydir. */}
-      <ShipmentDispatchNote
+      <ShipmentDocDialog
         shipmentId={shippedId}
         open={Boolean(shippedId)}
         onOpenChange={(open) => !open && setShippedId(null)}

@@ -31,6 +31,11 @@ interface Props {
   variant?: "default" | "outline" | "secondary" | "ghost";
   size?: "default" | "sm" | "lg" | "icon";
   className?: string;
+  /** Kontrollü mod: verilirse DÜĞME ÇİZİLMEZ, açılışı çağıran sürer (menü kalemi
+   *  gibi kendisi kapanan tetikleyicilerden açmak için — düğme menünün içinde
+   *  kalsaydı menü kapanırken önizleme de sökülürdü). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function BulkRollLabelButton({
@@ -39,11 +44,16 @@ export function BulkRollLabelButton({
   variant = "outline",
   size = "sm",
   className,
+  open: controlledOpen,
+  onOpenChange,
 }: Props) {
   // Yapılandırılmış seri/COM yazıcı varsa toplu etiket TEK native job'la,
   // tarayıcı diyaloğu olmadan basılır.
   const { directEnabled, printRollsBulk, peripheralId } = useLabelPrinter();
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const controlled = controlledOpen !== undefined;
+  const open = controlled ? controlledOpen : uncontrolledOpen;
+  const setOpen = (o: boolean) => (controlled ? onOpenChange?.(o) : setUncontrolledOpen(o));
 
   // Önizleme: İLK topun aktif-dil WYSIWYG'i. peripheralId ile çözülür ki
   // önizleme bu PC'ye seçili yazıcının diliyle BİREBİR aynı olsun.
@@ -75,17 +85,19 @@ export function BulkRollLabelButton({
 
   return (
     <>
-      <Button
-        variant={variant}
-        size={size}
-        className={className}
-        disabled={rollIds.length === 0}
-        onClick={() => setOpen(true)}
-        title={rollIds.length === 0 ? "Basılacak top yok" : `${rollIds.length} top etiketi`}
-      >
-        <Tags className="mr-1 h-4 w-4" />
-        {label} ({rollIds.length})
-      </Button>
+      {!controlled && (
+        <Button
+          variant={variant}
+          size={size}
+          className={className}
+          disabled={rollIds.length === 0}
+          onClick={() => setOpen(true)}
+          title={rollIds.length === 0 ? "Basılacak top yok" : `${rollIds.length} top etiketi`}
+        >
+          <Tags className="mr-1 h-4 w-4" />
+          {label} ({rollIds.length})
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
         <DialogContent className="max-w-2xl">

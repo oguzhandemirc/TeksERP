@@ -16,14 +16,13 @@ import { BulkInvoiceAction } from "./BulkInvoiceAction";
 import { accountingDispatchService } from "./service";
 import { buildDispatchColumns } from "./columns";
 import { ACCOUNTING_FILTERS } from "./filters";
-import { DispatchReceiptDialog } from "./DispatchReceiptDialog";
 import { InvoiceDialog } from "./InvoiceDialog";
 import { useAccountingExport } from "./useAccountingExport";
 import { useFeatureFlags, useShippingInvoiceMode } from "@/hooks/usePricingEnabled";
 import { ShipmentInvoiceDraft } from "./ShipmentInvoiceDraft";
 import { InvoiceDetailDialog } from "@/pages/Finance/InvoiceDetailDialog";
 import type { DispatchCursorResponse, DispatchListItem } from "./types";
-import { PrintedDocDialog } from "@/components/print/PrintedDocDialog";
+import { ShipmentDocDialog } from "@/pages/Operations/Shipments/ShipmentDocDialog";
 
 const QUERY_KEY = "accounting-dispatch";
 
@@ -32,8 +31,8 @@ const FORCE = { status: "DISPATCHED" } as const;
 
 /**
  * Saha #2 — Muhasebe / Sevk Edilenler. DISPATCHED listesi (sevk tarihi sıralı, tarih +
- * müşteri + şube + yön + fatura + iade filtreli) + sevk fişi (DispatchReceiptDialog) +
- * fatura işareti (InvoiceDialog). Rakamlar BRÜT — iade düşülmez, "N iade" rozeti farkı
+ * müşteri + şube + yön + fatura + iade filtreli) + sevk irsaliyesi (ShipmentDocDialog —
+ * sevkiyat ekranıyla AYNI yüzey) + fatura işareti (InvoiceDialog). Rakamlar BRÜT — iade düşülmez, "N iade" rozeti farkı
  * söyler (bkz. kök CLAUDE.md 2026-08-02).
  *
  * Excel çıkışları:
@@ -42,8 +41,7 @@ const FORCE = { status: "DISPATCHED" } as const;
  *    ayrı PDF/Excel, sevk no adıyla).
  */
 export function AccountingDispatchPage() {
-  const [receiptFor, setReceiptFor] = useState<DispatchListItem | null>(null);
-  /** Belgenin RESMİ hâli (sürüm çubuğu + geçmiş) — "Fiş"ten ayrı yüzey. */
+  /** Sevk irsaliyesi — sevkiyat ekranıyla AYNI bileşen (tek yüzey, tek düğme). */
   const [belgeFor, setBelgeFor] = useState<DispatchListItem | null>(null);
   const [invoiceFor, setInvoiceFor] = useState<DispatchListItem | null>(null);
   // İÇ fatura taslağı — yalnız TİCARET REJİMİNDE. Fabrikada ön muhasebe modülü
@@ -58,7 +56,6 @@ export function AccountingDispatchPage() {
   const columns = useMemo(
     () =>
       buildDispatchColumns(
-        setReceiptFor,
         setBelgeFor,
         setInvoiceFor,
         setDraftFor,
@@ -187,18 +184,16 @@ export function AccountingDispatchPage() {
         }
       />
 
-      <DispatchReceiptDialog receiptFor={receiptFor} onClose={() => setReceiptFor(null)} />
-
-      {/* Resmi belge yüzeyi — sevkiyat ekranıyla AYNI bileşen (`PrintedDocDialog`):
-          sürüm çubuğu, geçmiş, "güncel görünüm" ve revize hepsi orada yaşıyor.
-          Buraya ikinci bir kopya yazmak iki yüzeyin ayrışması demekti. */}
-      <PrintedDocDialog
-        docType={belgeFor?.kind === "DIRECT" ? "SUBCONTRACTOR_DIRECT_SHIP" : "SHIPMENT_DISPATCH"}
-        sourceId={belgeFor?.id ?? null}
+      {/* Belge yüzeyi — sevkiyat ekranıyla AYNI bileşen: sürüm çubuğu, geçmiş,
+          "güncel görünüm", baskı seçenekleri, Excel ve toplu etiket hepsi orada
+          yaşıyor. Buraya ikinci bir kopya yazmak iki yüzeyin ayrışması demekti. */}
+      <ShipmentDocDialog
+        shipmentId={belgeFor?.id ?? null}
         open={!!belgeFor}
         onOpenChange={(o) => !o && setBelgeFor(null)}
-        title={`Sevk İrsaliyesi${belgeFor ? ` — ${belgeFor.shipmentNo}` : ""}`}
-        writePermission="shipping:write"
+        kind={belgeFor?.kind}
+        shipmentNo={belgeFor?.shipmentNo}
+        status={belgeFor?.status}
       />
       <InvoiceDialog row={invoiceFor} onClose={() => setInvoiceFor(null)} queryKey={QUERY_KEY} />
       <ShipmentInvoiceDraft

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { PermissionGate } from "@/components/PermissionGate";
 import { StatusBadge } from "@/components/operations/StatusBadge";
 import { shipmentStatusLabels, shipmentStatusTones, type ShipmentDetail } from "../types";
-import { ShipmentDispatchNote } from "../ShipmentDispatchNote";
+import { ShipmentDocDialog } from "../ShipmentDocDialog";
 import { CancelShipmentDialog } from "../CancelShipmentDialog";
 import { UndoDispatchDialog } from "../UndoDispatchDialog";
 import { DispatchConfirmDialog } from "@/pages/Operations/SackStore/DispatchConfirmDialog";
@@ -125,10 +125,12 @@ export function ShipmentDetailHeader({
         }
       />
 
-      <ShipmentDispatchNote
+      <ShipmentDocDialog
         shipmentId={shipmentId}
         open={noteOpen}
         onOpenChange={setNoteOpen}
+        shipmentNo={d?.shipmentNo}
+        status={d?.status}
         returns={d ? { count: d.summary.returnedCount, meters: d.summary.returnedMeters } : undefined}
       />
       <CancelShipmentDialog

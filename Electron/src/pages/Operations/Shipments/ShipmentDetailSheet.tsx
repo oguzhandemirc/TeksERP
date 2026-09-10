@@ -16,7 +16,7 @@ import { apiErrorText } from "@/lib/api-error";
 import { cn } from "@/lib/utils";
 import { shipmentService } from "./service";
 import { shipmentStatusLabels, shipmentStatusTones } from "./types";
-import { ShipmentDispatchNote } from "./ShipmentDispatchNote";
+import { ShipmentDocDialog } from "./ShipmentDocDialog";
 import { ShipmentSheetBody } from "./ShipmentSheetBody";
 import { normalizeSearch, rollMatchesQuery, rollMatchesContext, csvIds } from "./roll-search";
 
@@ -248,10 +248,12 @@ export function ShipmentDetailSheet({
           </div>
         )}
 
-        <ShipmentDispatchNote
+        <ShipmentDocDialog
           shipmentId={shipmentId}
           open={noteOpen}
           onOpenChange={setNoteOpen}
+          shipmentNo={d?.shipmentNo}
+          status={d?.status}
           returns={d ? { count: d.summary.returnedCount, meters: d.summary.returnedMeters } : undefined}
         />
         <CancelShipmentDialog shipmentId={cancelOpen ? shipmentId : null} onOpenChange={(o) => setCancelOpen(o)} />
