@@ -1201,6 +1201,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_session_registry.ts` | Oturum defteri sözleşmesi: aynı-tip politika (kick/notify/off), revokeAllForUser, idempotent revoke, middleware'in jti'siz/iptal edilmiş token'ı 401 y | ✓ |  |  |
 | `Teks-Erp/scripts/test_work_session.ts` | Çalışma oturumu yaşam döngüsü: open/close/takeover/idle/force-close, makine devralma 409 MACHINE_OCCUPIED, eşzamanlı çift open'da tam biri kazanır (P2 | ✓ |  |  |
 | `Teks-Erp/scripts/test_work_session_close_all.ts` | Kalıntı oturum öz-onarımı: başka kullanıcının açık oturumu BENİMSENMEZ (NEW_LOGIN ile kapanır), closeForDevice idempotent ve cihaz kapsamlı. | ✓ |  |  |
+| `Teks-Erp/scripts/test_work_session_history_guard.ts` | Oturum geçmişi silinmez (defter.md): oturumlu istasyon/makine kalıcı silme 409 + satırlar yerinde, önizleme engeli döker; AST: src/'de workSession.delete* ve ham DELETE work_sessions yok | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_work_session_stamping.ts` | Üretim atfı: oturum makinesi Roll.createdMachineId / RollOperation / movement'a akar, oturumsuz mobil 409 WORK_SESSION_REQUIRED, web'de null ile işlem | ✓ |  |  |
 | `Teks-Erp/scripts/test_workstation_permission.ts` | settings:workstation dar izni admin: alanına genişlemez, GET /api/peripherals bu izni kabul eder ve Electron aynasındaki sabit backend koduyla birebir |  |  |  |
 | `mobil/src/components/ServerDiscoveryList.contract.test.ts` | Adres girme yuzeyi IKI TANE (kilit ekranindaki ServerAddressSheet + Ayarlar/ServerSettingsScreen) ve kesif LISTESI IKISINDE DE bagli olmali — yalniz A |  | ✓ |  |
@@ -1524,6 +1525,7 @@ Alanlar: `yetki-izin` (98), `is-emri` (95), `ui-bilesen` (94), `fason` (89), `di
 | `Teks-Erp/scripts/test_system_log.ts` | Audit yazımının best-effort olmasını (hata isteği düşürmez, sağlık sayacı artar) + SystemLog liste/cursor/filtre, detay ve arşivleme yolunu. | ✓ |  |  |
 | `Teks-Erp/scripts/test_user_credentials_guard.ts` | GET /api/admin/users/:id/credentials ucunda EŞİĞİ (admin:users + admin:settings birlikte) ve İZİ (başarılı okuma audit'e düşer, reddedilen düşmez) kil | ✓ |  |  |
 | `Teks-Erp/scripts/test_work_session_close_all.ts` | Kalıntı oturum öz-onarımı: başka kullanıcının açık oturumu BENİMSENMEZ (NEW_LOGIN ile kapanır), closeForDevice idempotent ve cihaz kapsamlı. | ✓ |  |  |
+| `Teks-Erp/scripts/test_work_session_history_guard.ts` | Oturum geçmişi silinmez (defter.md): oturumlu istasyon/makine kalıcı silme 409 + satırlar yerinde, önizleme engeli döker; AST: src/'de workSession.delete* ve ham DELETE work_sessions yok | ✓ | ✓ |  |
 | `Teks-Erp/scripts/test_work_session_stamping.ts` | Üretim atfı: oturum makinesi Roll.createdMachineId / RollOperation / movement'a akar, oturumsuz mobil 409 WORK_SESSION_REQUIRED, web'de null ile işlem | ✓ |  |  |
 
 ## tutarlilik (27)

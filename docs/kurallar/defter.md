@@ -18,6 +18,7 @@ Durum tabloları **"şu an ne"**yi tutar; defterler **"ne oldu"**yu tutar ve "ne
 - **[ÇEKİRDEK]** Bir varlığın durumunu/miktarını değiştiren HER kod yolu o varlığın defterine satır yazar; tek-kayıt yolu yazıp toplu yol yazmıyorsa bu bir DELİKTİR, üslup farkı değil. Ham `updateMany` ile durum değiştirip defter kapısını atlamak yasaktır. · bekçi: `YOK (yazılacak)` <sub>(arşiv:2026-09-10)</sub>
 - **[ÇEKİRDEK]** Append-only defter satırı GÜNCELLENMEZ ve SİLİNMEZ; bu yüzden `updatedAt` almaz ve kronolojisi `createdAt`'tir. Bir tablo hem defter hem durum kaynağı OLAMAZ — ikisi gerekiyorsa iki tablodur. · bekçi: `test_db_invariants.ts (kısmi)` <sub>(arşiv:2026-09-10, [DB-09])</sub>
 - **[ÇEKİRDEK]** Defter İŞ VERİSİDİR: arşivlenmez, budanmaz. Büyüme index/partition ile karşılanır, satır silerek değil. <sub>(arşiv:2026-09-10)</sub>
+- **[ÇEKİRDEK]** Çalışma oturumu (`WorkSession`) geçmişi hiçbir yoldan silinmez; oturumu olan istasyon/makine kalıcı silinemez (409 `workSessionCount`), pasife alınır. · bekçi: `test_work_session_history_guard.ts` <sub>(arşiv:2026-09-11)</sub>
 
 ### Yasaklar
 
@@ -54,7 +55,6 @@ Eski dört sınıf 2026-09-10'da ikiye indi. Diğer her "sil" bir DURUM GEÇİŞ
 Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, kural satırına dönüşür.
 
 - **`WarehouseMovement` GERÇEK STOK DEFTERİNE dönüşecek.** `warehouseId` atayan HER yol deftere bağlanır — statü terfisi (`STOCK → WAREHOUSE`) dahil; bugün terfi bilinçli olarak satır yazmıyor ve defter yalnız dışarıdan gelen malı görüyor. Hedef: Σhareket ↔ canlı stok mutabakatı ve as-of kesit. Ön koşul: `CANCEL_REVERSAL` + `RETURN_REVERSAL` ters yolları.
-- **`workSession` geçmişi SİLİNMEYECEK.** `guarded-hard-remove.ts` istasyon/makine silerken oturum satırlarını temizliyor; gerekçesi "denetim SystemLog'da kalır" ama audit 6 ayda arşivlenir, yani gerekçe geçersiz. Yeni hüküm: guard kalır, silme gider — istasyon/makine `isActive:false` olur, oturum geçmişi durur ve kalıcı silmeyi ENGELLER.
 - **`RollProperty` / `WorkOrderTargetProperty` ③a'dır** (yukarı bak) — 7 site sil-yazdan versiyonlamaya geçecek.
 
 ## Mevcut defter envanteri (2026-09-10 ölçümü)
@@ -80,12 +80,14 @@ Kullanıcı kararı; uygulaması ayrı iştir. Bu bölüm iş bitince silinir, k
 ## Geçersiz kılınan kurallar
 
 - **ESKİ → YENİ:** "Hard delete DÖRT ölçülmüş sınıfla sınırlıdır (① bağımlılık-guard'lı · ② alias/karar satırı · ③ pivot replace · ④ taslak)" → **İKİ sınıf** (④ taslak · ③b yapılandırma pivotu); ① ve ② kalktı, ③ ticari/yapılandırma diye bölündü. Kaynak: kök `CLAUDE.md` (2026-09-10'da düzeltildi) ve `docs/standart/VERITABANI.md` §9.
+- **ESKİ → YENİ:** "Yalnız oturum izi olan makine/istasyon kalıcı silinebilir, oturum satırları tx içinde temizlenir (denetim SystemLog'da kalır)" (`guarded-hard-remove.ts` yorumu) → oturum geçmişi silinmez ve kalıcı silmeyi ENGELLER; audit arşivlendiği için gerekçe geçersizdi. Kaynak: arşiv 2026-09-11.
 - **ESKİ → YENİ:** `VERITABANI.md` §9 "sekiz hard delete sitesinin sekizi de meşru" ölçümü BAYAT çıktı — 2026-09-10'da 87 site sayıldı (17 `.delete()` + 70 `.deleteMany()`); eski ölçüm `.deleteMany()`i hiç görmemişti.
 
 ## Bekçiler
 
-**Bu alanın kapısı YOK — kurallar bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Ölçüldü:
+**Bu alanın genel kapısı YOK — kuralların çoğu bugün ölçülmemiştir** ([DB-35]: kapısız kural bir niyet beyanıdır). Ölçüldü:
 
+- `scripts/test_work_session_history_guard.ts` — TEK ölçülen kural: oturum geçmişi silinmez (istasyon/makine 409 + önizleme dökümü + AST: `src/`de `workSession.delete*` ve ham `DELETE work_sessions` yok). Panel metni: `Electron/src/pages/Stations/machineDeleteDescription.test.ts`.
 - `scripts/test_warehouse_ledger.ts` ve `test_warehouse_movements.ts` yalnız OKUMA/süzme yüzeyini ölçüyor, "hangi olay satır yazmalı" invariant'ını DEĞİL.
 - `scripts/consistency-check.sql`'de `warehouse_movements` mutabakatı HİÇ YOK.
 

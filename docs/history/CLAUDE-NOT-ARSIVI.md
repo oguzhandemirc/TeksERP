@@ -4717,3 +4717,66 @@ kaldırılınca sarf kaleminden `created=1` ve `top=1` doğdu.
 ### Üç kapı
 
 Migration **yok**. Yeni izin **yok**. APK **yok** (tablet bu yollara dokunmuyor).
+
+## 2026-09-11 — Çalışma oturumu geçmişi silinmez: istasyon/makine kalıcı silmesini ENGELLER [ÇEKİRDEK]
+
+### Soru / ölçüm
+
+`guarded-hard-remove.ts` istasyon ve makine kalıcı silerken `tx.workSession.deleteMany`
+ile oturum satırlarını temizliyordu (2026-09-10 sayımındaki `workSession` 2 site). Kod
+yorumunun gerekçesi "denetim SystemLog'da append-only kalır" idi. Gerekçe GEÇERSİZ:
+audit 6 ayda `system_log_archives`a arşivlenir ve iş kaynağı olarak okunamaz;
+`WorkSession` ise teknik iz değil İŞ VERİSİDİR — "kim, ne zaman, hangi istasyonda/makinede
+çalıştı" sorusunun tek cevabı. Sonuç: hiç üretim yapmamış ama oturum açılmış makine
+silinince o geçmiş kalıcı kayboluyordu. Makine önizlemesi de "N oturum temizlenecek
+(denetim izi SystemLog'da kalır)" diyerek bunu onaylatıyordu.
+
+### Karar (kullanıcı, defter-öncelikli doktrinin "guard kalır, silme gider" hükmü)
+
+- İki `deleteMany` KALKTI. Oturum satırı hiçbir silme yolundan silinmez.
+- Oturum sayısı istasyon ve makine guard listelerine **engel** olarak girdi
+  (`workSessionCount`): 409 + "N çalışma oturumu kaydı var — kalıcı silinemez.
+  İstasyonu/Makineyi pasife alın." Çözüm yolu `isActive:false` (iki modelde de zaten var).
+- İstasyon sayımı `OR: [stationId, machine.stationId]` — makinesiz istasyon oturumu da
+  istasyonun makinelerindeki oturum da engeller. Guard sırası: kalıcı engeller (üretim izi,
+  oturum) kaldırılabilir engellerden (cihaz eşleşmesi, donanım) ÖNCE — kullanıcı "önce
+  eşleşmeyi kaldır"a uyup ardından yine reddedilmesin.
+- FK zaten iki tarafta Restrict: guard ile tx arasındaki yarışta açılan oturum P2003 → 400
+  ile düşer, satır kaybolmaz.
+- **Makine önizlemesi** (`GET /api/machines/:id/delete-preview`): oturum artık `blockers`
+  içinde; sayı guard'ın kendisinden okunur (ikinci sayım yüzeyi yok); `recentWorkSessions`
+  en yeni 5 oturumu (kullanıcı adı, başlangıç, bitiş) döker ki "hiç kullanılmadı sanılan
+  makine neden silinmiyor" kendini açıklasın. Aynı turda silmede boşa çıkacak donanım soyut
+  sayıdan kayıt dökümüne çevrildi (`peripheralsToDetach`) — yıkıcı işlemde etkilenen her
+  kayıt listelenir kuralı. `workSessionCount`/`peripheralDetachCount` alanları korundu.
+- **Eski istemci:** oturumu olan makinede `deletable=false` gelir → eski panel blocker
+  mesajını gösterir, eski "temizlenecek" dalına hiç girmez. `minVersion` gerekmez.
+
+### Kod çapaları
+
+- `Teks-Erp/src/services/helpers/guarded-hard-remove.ts:173` — istasyon guard'ı
+- `Teks-Erp/src/services/helpers/guarded-hard-remove.ts:249` — makine guard'ı
+- `Teks-Erp/src/services/helpers/guarded-hard-remove.ts:282` — `machineDeletePreview`
+- `Teks-Erp/src/routes/station.routes.ts` — delete-preview Swagger açıklaması
+- `Electron/src/pages/Stations/machineDeleteDescription.ts` — onay metni (sayfadan çıkarıldı)
+
+### Bekçi
+
+- `Teks-Erp/scripts/test_work_session_history_guard.ts` (19): A önizleme engel + döküm,
+  409, satır/makine/donanım yerinde · B makinesiz istasyon oturumu 409 · C oturumlu makineli
+  istasyon 409 · D körlük zemini: oturumsuz makine silinebilir · E AST: `src/` altında
+  `workSession.delete/deleteMany` çağrısı ve ham `DELETE FROM work_sessions` YOK.
+- `Electron/src/pages/Stations/machineDeleteDescription.test.ts` (3): "temizlen" geçmez,
+  her oturum + "… ve N oturum daha", her donanım adıyla.
+- `test_guarded_hard_remove.ts` güncellendi: oturum senaryosu yeni bekçiye taşındı, ham
+  `username: "admin"` bağımlılığı kalktı, donanım dökümü ölçülüyor.
+- **Negatif sondalar:** eski davranış (guard `0` + `deleteMany` geri) → 14 kırmızı ·
+  yalnız guard kapalı (`deleteMany` yok) → 8 kırmızı (E yeşil kalır, guard kontrolleri
+  AST'den bağımsız) · panel metni "temizlenecek"e döndü → 1 kırmızı. Hepsi geri alındı.
+- Yeşil: `work_session` 4/4 · `station` 9/9 · `guarded_hard_remove` 16/16 ·
+  `hard_delete_guard_coverage` 3/3; backend `typecheck:scripts` + eslint; Electron
+  typecheck + lint tavanı.
+
+### Üç kapı
+
+Migration **yok** (şemaya dokunulmadı). Yeni izin **yok**. APK **yok**. Backend ÖNCE, panel sonra.

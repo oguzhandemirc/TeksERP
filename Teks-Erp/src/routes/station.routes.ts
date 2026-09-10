@@ -328,11 +328,13 @@ machineRouter.get("/:id", verifyToken, requirePermission("station:read"), machin
  * /api/machines/{id}/delete-preview:
  *   get:
  *     tags: [Machines]
- *     summary: Makine kalıcı silme önizlemesi (silinebilir mi + temizlenecek oturum sayısı)
+ *     summary: Makine kalıcı silme önizlemesi (silinebilir mi + engeller + boşa çıkacak donanım)
  *     description: |
- *       `deletable` = üretim izi (işlem/hareket/top girişi) ve eşleşme (cihaz/donanım)
- *       yoksa true. `workSessionCount` = silmede tx içinde temizlenecek oturum satırı
- *       sayısı (denetim izi SystemLog'da kalır). `blockers` = engel varsa somut sebepler.
+ *       `deletable` = üretim izi (işlem/hareket/top girişi), çalışma oturumu ve tablet
+ *       eşleşmesi yoksa true. Oturum geçmişi SİLİNMEZ, silmeyi engeller:
+ *       `workSessionCount` toplamı, `recentWorkSessions` en yeni 5 oturumun dökümü.
+ *       `peripheralsToDetach` = silmede machineId=null'a çekilecek donanımlar (bloklamaz).
+ *       `blockers` = engel varsa somut sebepler.
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       200: { description: Önizleme }

@@ -143,22 +143,10 @@ async function main() {
       machineId: machine.id,
     },
   });
-  // Çalışma oturumu (login izi) — üretim DEĞİL. Yeni politika: silmeyi ENGELLEMEZ,
-  // silmede temizlenir. Fixture: admin + geçici cihaz + KAPALI oturum.
-  const admin = await prisma.user.findFirst({ where: { username: "admin" } });
-  if (!admin) throw new Error("Fixture bulunamadı: admin kullanıcı");
+  // Oturum geçmişi silmeyi ENGELLER — o senaryo test_work_session_history_guard.ts'te;
+  // burada oturumsuz makine: cihaz eşleşmesi engeli + donanım detach.
   const device = await prisma.device.create({
     data: { deviceId: `TEST-GHR-DEV-${suffix}`.slice(0, 64), name: `TEST-GHR-TABLET-${suffix}` },
-  });
-  await prisma.workSession.create({
-    data: {
-      userId: admin.id,
-      deviceId: device.id,
-      machineId: machine.id,
-      stationId: mStation.id,
-      endedAt: new Date(),
-      endReason: "LOGOUT",
-    },
   });
 
   try {
@@ -193,30 +181,31 @@ async function main() {
         pv1d.peripheralDetachCount === 1
     );
 
-    // --- 9) Cihaz ataması kalkınca → donanım+oturum ENGELLEMEZ → preview deletable=true ---
+    // --- 9) Cihaz ataması kalkınca → donanım ENGELLEMEZ → preview deletable=true ---
     await prisma.device.update({ where: { id: device.id }, data: { machineId: null } });
     const pv2 = await invoke(machineDeletePreview, machine.id);
     const pv2d = pv2.body.data as {
       deletable: boolean;
       workSessionCount: number;
       peripheralDetachCount: number;
+      peripheralsToDetach: { id: string }[];
     };
     check(
-      "Preview (donanım+oturum, cihazsız) → deletable=true + workSession=1 + donanım detach=1",
+      "Preview (donanımlı, cihazsız, oturumsuz) → deletable=true + donanım detach=1 (kayıt kayıt)",
       pv2.status === 200 &&
         pv2d.deletable === true &&
-        pv2d.workSessionCount === 1 &&
-        pv2d.peripheralDetachCount === 1,
+        pv2d.workSessionCount === 0 &&
+        pv2d.peripheralDetachCount === 1 &&
+        pv2d.peripheralsToDetach.length === 1 &&
+        pv2d.peripheralsToDetach[0].id === peripheral.id,
       JSON.stringify(pv2d)
     );
 
-    // --- 10) Donanım+oturum ENGELLEMİYOR → 200 kalıcı silindi; donanım DETACH (silinmez), oturum temizlenir ---
+    // --- 10) Donanım ENGELLEMİYOR → 200 kalıcı silindi; donanım DETACH (silinmez) ---
     const m200 = await invoke(machineHardRemove, machine.id);
-    check("Donanım+oturumlu makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
+    check("Donanımlı makine → 200 kalıcı silindi", m200.status === 200, m200.body.message);
     const machineGone = await prisma.machine.findUnique({ where: { id: machine.id } });
     check("Makine DB'den gitti", machineGone === null);
-    const sessionsGone = await prisma.workSession.count({ where: { machineId: machine.id } });
-    check("Oturum satırı tx içinde temizlendi", sessionsGone === 0);
     // Donanım SİLİNMEZ, machineId=null'a çekilir (boşa çıkar, ayarı korunur → başka makineye atanabilir).
     const peripheralAfter = await prisma.peripheralDevice.findUnique({ where: { id: peripheral.id } });
     check(
@@ -229,7 +218,6 @@ async function main() {
     });
     check("Makine audit DELETE kaydı düştü", mAudit >= 1);
   } finally {
-    await prisma.workSession.deleteMany({ where: { machineId: machine.id } });
     await prisma.peripheralDevice.deleteMany({ where: { id: peripheral.id } });
     await prisma.machine.deleteMany({ where: { id: machine.id } });
     await prisma.device.deleteMany({ where: { id: device.id } });

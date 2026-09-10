@@ -27,6 +27,7 @@ import type { MachineFormValues } from "@/pages/Machines/schema";
 import { MachineFormDialog } from "@/pages/Machines/MachineFormDialog";
 import { StationCard } from "@/pages/Stations/StationCard";
 import { StationFilterBar, type MachinePresence } from "@/pages/Stations/StationFilterBar";
+import { buildMachineDeleteDescription } from "@/pages/Stations/machineDeleteDescription";
 
 import { stationCapabilityService } from "@/pages/StationCapabilities/service";
 import type { StationCapabilitySummary } from "@/pages/StationCapabilities/types";
@@ -254,36 +255,17 @@ export function ProductionStationsPage() {
     void p.then(() => setMachineDlg({ open: false, initial: null }));
   };
 
-  // Silme önizlemesi — modal açıldığında (deleteMachine set) çekilir. Silinebilir mi
-  // + kaç oturum temizlenecek. Üretim izi varsa deletable=false → onay pasif.
+  // Silme önizlemesi — modal açıldığında (deleteMachine set) çekilir. Üretim izi ya da
+  // oturum geçmişi varsa deletable=false → onay pasif.
   const deletePreviewQ = useQuery({
     queryKey: ["machine-delete-preview", deleteMachine?.id],
     queryFn: () => getMachineDeletePreview(deleteMachine!.id),
     enabled: !!deleteMachine,
   });
   const preview = deletePreviewQ.data;
-
-  const deleteDescription = (() => {
-    if (!deleteMachine) return undefined;
-    if (deletePreviewQ.isLoading) return "Kontrol ediliyor…";
-    if (!preview) return "Önizleme alınamadı — makineyi pasife almayı deneyin.";
-    if (!preview.deletable) {
-      return (
-        `"${deleteMachine.name}" kalıcı silinemez — ` +
-        preview.blockers.map((b) => b.message).join("; ") +
-        `. Bunun yerine makineyi pasife alın (üretim geçmişi korunur).`
-      );
-    }
-    const sess =
-      preview.workSessionCount > 0
-        ? ` Bu makinede yalnız ${preview.workSessionCount} oturum (login) kaydı var, üretim izi yok — silmede o kayıt(lar) da temizlenecek (denetim izi SystemLog'da kalır).`
-        : "";
-    const periph =
-      preview.peripheralDetachCount > 0
-        ? ` ${preview.peripheralDetachCount} donanım bu makineden çözülüp boşa çıkacak (donanım kaydı + ayarı korunur, atamasız kalır — sonra başka makineye atayabilirsiniz).`
-        : "";
-    return `"${deleteMachine.name}" kalıcı olarak silinecek. Bu işlem geri alınamaz.${sess}${periph}`;
-  })();
+  const deleteDescription = deleteMachine
+    ? buildMachineDeleteDescription(deleteMachine.name, preview, deletePreviewQ.isLoading)
+    : undefined;
 
   const handleMachineDelete = () => {
     if (!deleteMachine) return;
