@@ -17,11 +17,26 @@
   "yayinlar": [
     {
       "id": "2026-09-10",
-      "baslik": "Sevk fişi Excel'i irsaliyedeki adı basıyor, yedek saati kumandası dürüstleşti",
+      "baslik": "Sevk irsaliyesi çıktıları düzeldi, eski paneller envanterde görünüyor, sevk fişi Excel'i irsaliyedeki adı basıyor",
       "surumler": {
         "panel": "1.3.2"
       },
       "maddeler": [
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Sistem → Bağlı İstemciler listesinde eski panel kurulumları da görünüyor. Önceden bir makinedeki panel kendi künyesini bildiremeyecek kadar eskiyse listede “sürümü bilinmiyor” olarak değil, HİÇ görünmüyordu — yani tam da güncellenmesi gereken makineler kaçıyordu. Fabrikada 2.5.0'da kalmış bir panel bu yüzden haftalarca fark edilmedi; o makinede rapor menüsünün tamamı çalışmıyordu. Artık künyesini bildirmeyen panelin sürümü bağlantı bilgisinden okunuyor ve satırda “sürümünü bildirmiyor — adres bilgisinden okundu” notu çıkıyor. Makine güncellenip künyesini bildirmeye başlayınca not kendiliğinden kalkar. Tabletler için bu yol kullanılmaz: tabletin adres bilgisi uygulama sürümünü taşımaz, oradan okumak olmayan bir sürüm numarası gösterirdi."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "yeni",
+          "metin": "Sevk irsaliyesinde çuval ve çeki listelerinin başına “Sevk Edilen Firma / Sevkiyat Fiş No / tarih” şeridi konabiliyor. Önceden bu bilgiler yalnız ilk sayfanın antetinde vardı; ürün listesinden sonraki sayfalar çıplak tablo olarak çıkıyor ve kâğıda bakan kimin malı olduğunu göremiyordu. Şerit tablonun kendi başlığına girdiği için liste sayfayı taşarsa devam sayfasında da tekrar eder. İlk basılan listeye konmaz — o sayfada zaten tam antet vardır. Ayar KAPALI gelir: Genel Ayarlar → Belge Kişiselleştirme → Sevk İrsaliyesi → “Liste başlarında kimlik şeridi”. Kapalı kaldığı sürece hiçbir belgenin çıktısı değişmez; açmak daha önce oluşturulmuş irsaliyelerin yeniden baskısını da etkiler. Listeler tek sayfada birleştirilerek basıldığında şerit çıkmaz."
+        },
+        {
+          "kapsam": "panel",
+          "tip": "duzeltme",
+          "metin": "Belge baskı penceresinde A4/A5 kâğıt boyu seçici var — yalnız o baskı için, ayara dokunmadan. Saha şikâyeti şuydu: liste çıktıları kâğıdın küçük bir bölümüne basılıyor ve yazılar küçük kalıyordu. Sebebi Belge Kişiselleştirme'de sayfa boyutunun A5 seçili olmasıydı; A5 sayfa A4 kâğıda büyütülmeden ortalanıyor, üstelik A5'te punto da küçültülüyordu. Kâğıt boyu belgeye oluşturulduğu anda donduğu için ayarı sonradan A4 yapmak eski irsaliyeleri düzeltmiyordu — seçici tam bu yüzden var: donmuş belgeyi doğru kâğıda bastırır. Ayrıca Belge Kişiselleştirme'de sayfa boyutu A5 seçilirse artık uyarı çıkıyor."
+        },
         {
           "kapsam": "panel",
           "tip": "duzeltme",
