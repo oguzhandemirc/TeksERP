@@ -48,6 +48,65 @@ import { readOffsiteRemote } from "../system-setting.service";
  */
 const COPY_PREFIXES = [NIGHTLY_PREFIX, PREMIGRATE_PREFIX, PRE_RESTORE_PREFIX] as const;
 
+/**
+ * HEDEF BİÇİMİ — TEK KAYNAK.
+ *
+ * ⚠️⚠️ SESSİZ KALAN TEK KRİTİK HATA SINIFI (K-1, sahada yaşandı 2026-09-05):
+ * panelden hedef `gdrive` diye — İKİ NOKTA ÜST ÜSTE OLMADAN — kaydedilmişti.
+ * rclone iki noktasız ve GÖRELİ bir argümanı uzak bağlantı değil yerel yol
+ * sayar ve backend'in cwd'sine göre çözer. Sonuç: tüm "makine dışı" yedekler
+ * `C:\TeksERP\app\gdrive\` altına, yani VERİTABANIYLA AYNI DİSKE kopyalandı.
+ * Panel ve sağlık ucu buna YEŞİL dedi:
+ *
+ *     {"configured":true,"ok":true,"localCount":4,"remoteCount":4,"warnings":[]}
+ *
+ * Çünkü süpürme kendi kendini doğruluyor: `copy` ve `lsf` AYNI yanlış hedefe
+ * gittiği için sayılar HER ZAMAN tutar. Diğer her arıza log ya da hata
+ * üretiyor; bu, operatöre "yedeğin güvende" diyordu.
+ *
+ * ⚠️ ENGELLENEN ŞEY DAR VE ADLIDIR: **göreli/belirsiz** hedef. `\\NAS\yedek`
+ * (UNC) ve `D:\yedek` (mutlak) MEŞRU hedeflerdir ve reddedilmez — yasak,
+ * "bir uzak bağlantı ADI gibi görünüp sessizce cwd altına düşen" biçimdir.
+ * Kuralı "iki nokta şart" diye kurmak UNC'yi ve POSIX mutlak yollarını da
+ * keserdi; ölçülen risk o değildi.
+ *
+ * ⚠️ İKİ KAPI BİRDEN, ve ikincisi asıl olan:
+ *   (a) YAZARKEN reddet (`PATCH /backups/offsite` → 400). Yeni yanlışı önler.
+ *   (b) OKURKEN reddet (`sweepOffsiteBackups` → `configured:false`). ZATEN
+ *       KAYITLI olan yanlışı görünür kılar. Yalnız (a) yazılsaydı sahadaki
+ *       bozuk kurulum sonsuza dek yeşil kalırdı — hatanın kendisi buydu.
+ *
+ * ⚠️ Boş dize GEÇERLİ sayılır (burada değil, çağıranda): "kapalı" demektir ve
+ * panelden hedefi silmenin tek yoludur.
+ */
+/** `gdrive:` / `gdrive:yedek` — rclone UZAK bağlantısı (sürücü harfi DEĞİL). */
+export function isRcloneRemote(v: string): boolean {
+  const t = v.trim();
+  if (/^[A-Za-z]:[\\/]/.test(t)) return false; // C:\... → sürücü harfi, uzak değil
+  return /^[A-Za-z0-9_-]+:/.test(t);
+}
+
+/** `/mnt/yedek` · `D:\yedek` · `\\NAS\yedek` — açıkça yazılmış bir yol. */
+export function isAbsolutePath(v: string): boolean {
+  const t = v.trim();
+  return t.startsWith("/") || t.startsWith("\\\\") || /^[A-Za-z]:[\\/]/.test(t);
+}
+
+/**
+ * Hedef KABUL EDİLEBİLİR mi — uzak bağlantı ya da açıkça yazılmış bir yol.
+ * `false` = göreli/belirsiz = K-1'in tam şekli.
+ */
+export function isAcceptableTarget(v: string): boolean {
+  return isRcloneRemote(v) || isAbsolutePath(v);
+}
+
+/** Operatöre gösterilen tek cümle — hem 400'de hem süpürme uyarısında AYNI. */
+export const OFFSITE_REMOTE_HATASI =
+  "Hedef ya `ad:` biçiminde bir rclone bağlantısı (örn. `gdrive:` / `gdrive:tekserp-yedek`) " +
+  "ya da tam bir yol olmalı (`\\\\SUNUCU\\yedek` veya `D:\\yedek`). " +
+  "Göreli bir ad yazılırsa rclone onu sunucudaki uygulama klasörünün altında bir klasör sayar — " +
+  "yedekler veritabanıyla AYNI DİSKE kopyalanır ve her şey BAŞARILI görünür.";
+
 /** rclone ikilisinin yolu. Windows'ta PATH'te olmayabilir → env ile verilir. */
 const RCLONE_BIN = (): string => (process.env.BACKUP_RCLONE_BIN ?? "rclone").trim() || "rclone";
 const BACKUP_DIR = (): string | undefined => process.env.BACKUP_DIR;
@@ -100,6 +159,11 @@ export interface OffsiteSweepResult {
   missing: string[];
   /** Süpürme başarılı mı (rclone sıfır kodla döndü VE eksik yok). */
   ok: boolean;
+  /**
+   * Hedef `ad:` biçiminde DEĞİL → rclone onu yerel yola çözer (K-1).
+   * `configured:false` ile birlikte gelir; paneldeki uyarıyı ayırt etmek için.
+   */
+  remoteIsLocalPath?: boolean;
   warnings: string[];
   durationMs: number;
   finishedAt: string;
@@ -171,6 +235,14 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     );
     return done({});
   }
+  // ⭐ K-1 OKUMA KAPISI: hedef DOLU ama `ad:` biçiminde değilse rclone onu YEREL
+  //    YOL sayar ve süpürme sessizce yeşil döner (copy+lsf aynı yanlış yere
+  //    gider, sayılar tutar). `configured:false` DÖNÜLÜR — "yapılandırılmamış"
+  //    demek burada doğrudur: makine dışı yedek YOKTUR.
+  if (!isAcceptableTarget(remote)) {
+    warnings.push(`OFFSITE HEDEF GEÇERSİZ ("${remote}") — ${OFFSITE_REMOTE_HATASI}`);
+    return done({ remoteIsLocalPath: true });
+  }
 
   let local: string[];
   try {
@@ -236,6 +308,11 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     return done({ configured: true, localCount: local.length });
   }
 
+  // Hedef geçerli AMA bu makinede bir yol ise (sürücü harfi / POSIX mutlak),
+  // süpürme başarılı olsa bile "makine dışı" değildir. Engellenmez — operatör
+  // bunu bilerek seçmiş olabilir (geçici alan, ikinci disk) — ama İŞARETLENİR.
+  const yerelHedef = !isRcloneRemote(remote) && !remote.trim().startsWith("\\\\");
+
   const remoteSet = new Set(remoteList);
   const missing = local.filter((n) => !remoteSet.has(n));
   if (missing.length > 0) {
@@ -246,11 +323,23 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     );
   }
 
+  if (yerelHedef) {
+    warnings.push(
+      `Hedef ("${remote}") bu MAKİNEDE bir yol — kopya alınıyor ama "makine dışı" DEĞİL. ` +
+        "Disk arızası/fidye yazılımı ikisini birden götürebilir.",
+    );
+  }
+
   return done({
     configured: true,
     localCount: local.length,
     remoteCount: remoteList.length,
     missing,
+    remoteIsLocalPath: yerelHedef,
+    // ⚠️ `ok` YEREL HEDEFTE DE true olabilir: kopyalama gerçekten yapıldı ve
+    // kapsam tuttu. "Başarılı" ile "yeterli" ayrı sorulardır — ikincisini
+    // `remoteIsLocalPath` + uyarı söyler. `ok:false` demek, çalışan bir
+    // yapılandırmayı arıza gibi göstermek olurdu.
     ok: missing.length === 0 && copyRes.code === 0 && !copyRes.timedOut,
   });
 }
@@ -280,6 +369,11 @@ export async function getOffsiteHealth(): Promise<Record<string, unknown>> {
       missingCount: lastSweep.missing.length,
       // İlk beş ad yeter — sağlık ucu bir rapor değil, bir işarettir.
       missing: lastSweep.missing.slice(0, 5),
+      // ⭐ K-1 işareti: hedef bu MAKİNEDE bir yola çözülüyorsa panel bunu AYIRT
+      //    ETMELİ — "hiç ayarlanmamış" ile "ayarlanmış ama aynı makinede" ayrı
+      //    sorunlardır ve ikincisi operatöre YEŞİL görünüyordu.
+      //    ⚠️ UNC (`\\\\SUNUCU\\yedek`) işaretlenmez: o BAŞKA bir makinedir.
+      remoteIsLocalPath: lastSweep.remoteIsLocalPath === true,
       durationMs: lastSweep.durationMs,
       finishedAt: lastSweep.finishedAt,
       warnings: lastSweep.warnings,
@@ -294,6 +388,12 @@ export async function getOffsiteHealth(): Promise<Record<string, unknown>> {
 export async function testOffsiteRemote(): Promise<{ ok: boolean; message: string }> {
   const remote = await readOffsiteRemote();
   if (!remote) return { ok: false, message: "Uzak hedef ayarlanmamış." };
+  // ⭐ Biçim kapısı rclone'dan ÖNCE: iki noktasız hedefte `lsd` BAŞARILI döner
+  //    (yerel klasörü listeler) ve test düğmesi "bağlantı tamam" derdi — tam da
+  //    K-1'in operatörü yanılttığı yer.
+  if (!isAcceptableTarget(remote)) {
+    return { ok: false, message: `Hedef "${remote}" geçersiz. ${OFFSITE_REMOTE_HATASI}` };
+  }
   const res = await runProcess(RCLONE_BIN(), ["lsd", remote, ...configArgs()], {
     timeoutMs: LIST_TIMEOUT_MS,
     captureStdout: true,

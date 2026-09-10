@@ -454,7 +454,15 @@ Ok "$([System.IO.Path]::GetFileName($dump))  ($([math]::Round((Get-Item $dump).L
 
 # --- [4/9] Uygulamayi durdur ------------------------------------------------
 Adim "[4/9] pm2 uygulamasi durduruluyor..."
-Pm2Kos delete $uygulama | Out-Null   # delete: ecosystem env blogu degismis olabilir
+# ⚠ `pm2 delete <kayitli-olmayan-uygulama>` stderr'e "Process or Namespace not
+#   found" yazar ve bu satir EKRANA DUSER (stderr YONLENDIRILEMEZ - PowerShell
+#   5.1'de olumcul olur, bkz. `Pm2Kos` basligi). ILK kurulumda ve pm2 kaydi
+#   dusmus bir sunucuda bu NORMALDIR: silinecek bir sey yoktur.
+#   Operator o satiri hata sanmasin diye cikis kodu okunup ADIYLA aciklanir.
+$silKod = Pm2Kos delete $uygulama   # delete: ecosystem env blogu degismis olabilir
+if ($silKod -ne 0) {
+  Write-Host "     (pm2'de kayitli '$uygulama' yoktu - yukaridaki 'not found' satiri BEKLENEN, hata degil)" -ForegroundColor DarkGray
+}
 # pm2 komutu donunce surec HENUZ olmemis olabilir; tanitici birakilsin diye kisa
 # bir yatisma. Tek basina YETMEZ (yaris suresi degisken) - asil sed [5/9]'daki
 # `TasiIsrarla`. Bu bekleme yalnizca ilk denemenin dusme olasiligini dusurur.
@@ -667,14 +675,25 @@ try {
     # ⚠ AYARLAR AYRI RAPORLANIR: modul kurulup ayarlar yazilamazsa rotasyon
     #   pm2 VARSAYILANLARIYLA kalir (retain 30, sikistirma yok) ve eskiden
     #   ekranda yine "kuruldu" yazardi - mesaj gercegi soylemezdi.
-    $ayarKod = 0
-    $ayarKod += Pm2Kos set pm2-logrotate:max_size 10M
-    $ayarKod += Pm2Kos set pm2-logrotate:retain   14
-    $ayarKod += Pm2Kos set pm2-logrotate:compress true
-    if ($ayarKod -eq 0) {
+    # ⚠ CIKIS KODLARI TOPLANMAZ (2026-09-10). Eskiden `$ayarKod += ...` yaziyordu;
+    #   toplam bir cikis kodu DEGILDIR ve hangi ayarin yazilamadigini soylemez.
+    #   Negatif kod donen bir cagri (Windows'ta olur) toplami sifira bile
+    #   cekebilirdi - yani "hepsi yazildi" YALANI. Artik her ayar ADIYLA izlenir
+    #   ve basarisiz olanlar operatore tek tek bildirilir.
+    $ayarlar = @(
+      @{ Ad = "max_size"; Deger = "10M"  },
+      @{ Ad = "retain";   Deger = "14"   },
+      @{ Ad = "compress"; Deger = "true" }
+    )
+    $yazilamayan = @()
+    foreach ($a in $ayarlar) {
+      if ((Pm2Kos set "pm2-logrotate:$($a.Ad)" $a.Deger) -ne 0) { $yazilamayan += $a.Ad }
+    }
+    if ($yazilamayan.Count -eq 0) {
       Ok "log rotasyonu ayarlandi (10M x 14 dosya, eskiler sikistirilir)"
     } else {
-      Uyar "pm2-logrotate KURULDU ama ayarlar yazilamadi - rotasyon pm2 varsayilanlariyla kosuyor."
+      Uyar "pm2-logrotate KURULDU ama $($yazilamayan.Count) ayar yazilamadi: $($yazilamayan -join ', ')"
+      Uyar "  -> rotasyon o ayarlarda pm2 VARSAYILANIYLA kosuyor (retain 30, sikistirma yok)."
       Uyar "  -> elle: $pm2 set pm2-logrotate:max_size 10M ; retain 14 ; compress true"
     }
   } else {

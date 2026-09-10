@@ -20,6 +20,17 @@
 //     "yereldeki her şey uzakta" demek DEĞİL. Aylar önce bir kez düşmüş tek bir
 //     dosya, listeleme karşılaştırması olmadan sonsuza dek eksik kalır.
 //  4. Uzak hedeften HİÇBİR ŞEY SİLİNMEZ.
+//  5. (2026-09-10, K-1) GÖRELİ hedef sessizce kabul edilmez. `gdrive` (iki
+//     noktasız) rclone'da yerel yola çözülür ve tüm yedekler DB ile aynı diske
+//     gider — üstelik `copy` ve `lsf` aynı yanlış yere gittiği için gösterge
+//     YEŞİL kalır. İki kapı: yazarken 400, OKURKEN `configured:false`. İkincisi
+//     asıl olan — zaten kayıtlı yanlışı yalnız o görünür kılar.
+//
+// ⭐ NEGATİF SONDA (ölçüldü 2026-09-10, üçü de geri alındı):
+//    ① okuma kapısı kaldırıldı                    → 3 kırmızı
+//    ② sürücü harfi rclone bağlantısı sayıldı     → 1 kırmızı
+//    ③ "makine dışı değil" uyarısı susturuldu     → 1 kırmızı
+//    ④ PATCH şemasındaki `refine` kaldırıldı        → 1 kırmızı
 // =============================================================================
 import fs from "fs";
 import os from "os";
@@ -65,6 +76,7 @@ function sourceContract(): void {
   console.log("\n--- §1 Kaynak sözleşmesi ---");
   const helper = stripComments(fs.readFileSync(HELPER, "utf8"));
   const job = stripComments(fs.readFileSync(JOB, "utf8"));
+  const admin = stripComments(fs.readFileSync(path.join(SRC, "routes/admin.routes.ts"), "utf8"));
   const server = stripComments(fs.readFileSync(SERVER, "utf8"));
 
   check("körlük zemini: yardımcı okundu", helper.length > 800, `${helper.length} bayt`);
@@ -113,6 +125,37 @@ function sourceContract(): void {
   check(
     "server.ts süpürücüyü AYRI çağırıyor",
     /startOffsiteSweeper\(\)/.test(server) && /startBackupScheduler\(\)/.test(server),
+  );
+
+  // ── AÇILIŞ UYARISI: TAHMİN DEĞİL ÖLÇÜM (2026-09-10) ───────────────────────
+  // ⚠️ SAHADA YANLIŞ ALARM'DI: `startOffsiteSweeper` boot'ta `BACKUP_RCLONE_REMOTE`
+  //    env'ine bakıp "tüm yedekler aynı diskte OLABİLİR" uyarısı basıyordu.
+  //    Hedefin YETKİLİ kaynağı PANEL ayarıdır (env yalnız yedek) ve fabrikada
+  //    hedef panelden tanımlıydı, süpürme çalışıyordu — yani her açılışta hata
+  //    log'una bir felaket cümlesi düşüyordu. Uyarı körlüğü asıl risktir.
+  //
+  //    Sinyal KAYBOLMADI, TAŞINDI: ilk süpürme 90 sn sonra hedefi GERÇEKTEN
+  //    çözer ve yoksa `!res.configured` dalı kesin cümleyle uyarır. Aşağıdaki
+  //    iki kontrol ikisini birlikte kilitler — biri olmadan diğeri tehlikeli:
+  //    uyarıyı kaldırıp süpürmedekini de kaldırmak sinyali TAMAMEN öldürürdü.
+  check(
+    "⭐ boot'ta env'e bakıp uyarı basılmıyor (yanlış alarm kaynağı)",
+    !/BACKUP_RCLONE_REMOTE/.test(job.split("setTimeout")[0] ?? job) ||
+      !/uyari\("offsite"/.test(job.split("setTimeout")[0] ?? job),
+    "açılış bloğunda env tabanlı uyarı yok",
+  );
+  // ⭐ K-1 YAZMA KAPISI kaynakta: PATCH şeması PAYLAŞILAN doğrulayıcıyı çağırır.
+  //    Kendi regex'ini yazsaydı iki kural sessizce ayrışırdı — yazarken kabul
+  //    edilen bir değer okurken reddedilebilirdi (ya da tersi).
+  check(
+    "⭐ PATCH şeması `isAcceptableTarget`i ÇAĞIRIYOR (kendi regex'ini yazmıyor)",
+    /isAcceptableTarget\(/.test(admin) && !/\[A-Za-z0-9_-\]\+:/.test(admin),
+    "biçim kuralı tek kaynakta",
+  );
+  check(
+    "⭐ ama SİNYAL DURUYOR: süpürme hedefi çözemezse uyarıyor",
+    /!res\.configured/.test(job) && /uyari\("offsite"/.test(job),
+    "uyarı tahminden ölçüme taşındı, silinmedi",
   );
 
   // Ön ekler tek kaynaktan
@@ -320,6 +363,69 @@ exit 64
   check(
     "hedef boşken 'OFFSITE HEDEF AYARLANMADI' uyarısı korunur",
     !r.configured && r.warnings.some((w) => /OFFSITE HEDEF AYARLANMADI/.test(w)),
+  );
+
+  // ── §3 K-1: HEDEF BİÇİMİ (sessiz kalan tek kritik hata sınıfı) ────────────
+  // ⚠️ SAHADA YAŞANDI (2026-09-05): hedef `gdrive` diye — İKİ NOKTA OLMADAN —
+  //    kaydedilmişti. rclone göreli bir adı yerel yol sayıp backend'in cwd'sine
+  //    göre çözdü; tüm "makine dışı" yedekler `app\gdrive\` altına, yani
+  //    VERİTABANIYLA AYNI DİSKE gitti. Panel YEŞİL dedi, çünkü `copy` ve `lsf`
+  //    AYNI yanlış hedefe gidiyor ve sayılar her zaman tutuyor.
+  //
+  // ⭐ ÖLÇÜLEN EN ÖNEMLİ ŞEY: bozuk hedefte süpürme YEŞİL DÖNMEMELİ. Yazma kapısı
+  //    tek başına yetmez — SAHADA ZATEN KAYITLI olan yanlışı yalnız okuma kapısı
+  //    görünür kılar. Hatanın kendisi tam olarak buydu.
+  console.log("\n--- §3 K-1: hedef biçimi ---");
+  const { isAcceptableTarget, isRcloneRemote } = await import(
+    "../src/services/helpers/offsite-backup.helper"
+  );
+
+  for (const [deger, beklenen] of [
+    ["gdrive:", true],
+    ["gdrive:tekserp-yedek", true],
+    ["/mnt/yedek", true],
+    ["D:\\yedek", true],
+    ["\\\\SUNUCU\\yedek", true],
+    ["gdrive", false],       // ⭐ K-1'in TAM ŞEKLİ
+    ["yedek/klasor", false],
+    ["../disari", false],
+  ] as [string, boolean][]) {
+    check(`biçim: "${deger}" → ${beklenen ? "kabul" : "RED"}`, isAcceptableTarget(deger) === beklenen);
+  }
+  check("⭐ sürücü harfi rclone bağlantısı SAYILMAZ (`D:\\yedek` uzak değil)", !isRcloneRemote("D:\\yedek"));
+  check("`gdrive:` rclone bağlantısı sayılır", isRcloneRemote("gdrive:"));
+
+  // Süpürme: GÖRELİ hedefte yeşil dönmemeli.
+  process.env.BACKUP_RCLONE_REMOTE = "gdrive";
+  r = await sweepOffsiteBackups();
+  check(
+    "⭐ göreli hedefte süpürme YEŞİL DÖNMÜYOR (K-1'in sessizliği kapandı)",
+    !r.configured && !r.ok,
+    `configured=${r.configured} ok=${r.ok}`,
+  );
+  check(
+    "⭐ uyarı hedefi ADIYLA söylüyor (operatör ne yazdığını görsün)",
+    r.warnings.some((w) => /OFFSITE HEDEF GEÇERSİZ/.test(w) && w.includes("gdrive")),
+    r.warnings.join(" | ").slice(0, 120),
+  );
+  check("yerel-yol işareti taşınıyor", r.remoteIsLocalPath === true);
+
+  // Süpürme: MUTLAK yerel yol MEŞRU (engellenmez) ama İŞARETLENİR.
+  // ⚠️ Sahte rclone GERİ YÜKLENİR: yukarıdaki "rclone bulunamazsa" sondası
+  //    `BACKUP_RCLONE_BIN`i olmayan bir dosyaya çevirmişti; bunu geri almadan
+  //    bu blok rclone hatası ölçer, hedef biçimini değil.
+  process.env.BACKUP_RCLONE_BIN = fake;
+  process.env.BACKUP_RCLONE_REMOTE = remoteDir;
+  r = await sweepOffsiteBackups();
+  check(
+    "⭐ mutlak yerel yol ENGELLENMİYOR (operatör bilerek seçmiş olabilir)",
+    r.configured && r.ok,
+    `configured=${r.configured} ok=${r.ok}`,
+  );
+  check(
+    "⭐ ama 'makine dışı DEĞİL' diye uyarılıyor (başarılı ≠ yeterli)",
+    r.remoteIsLocalPath === true && r.warnings.some((w) => /makine dışı/i.test(w)),
+    r.warnings.join(" | ").slice(0, 120),
   );
 
   fs.rmSync(tmp, { recursive: true, force: true });

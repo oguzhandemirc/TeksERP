@@ -447,6 +447,21 @@ export interface BackupListing {
   pm2AppName: string; // geri-yükleme sırasında durdurulacak pm2 süreç adı
   running: boolean; // yedek şu an koşuyor mu (panel butonu kilitlenir)
   lastResult: BackupRunResult | null; // son işin sonucu (başarısızlık panelde görünsün)
+  /**
+   * Backend'in KENDİ gece zamanlayıcısı açık mı (`BACKUP_SCHEDULE_ENABLED`).
+   *
+   * ⚠️ O-1 (2026-09-05 sahada ölçüldü): sahada bu `false` — gece yedeğini harici
+   * bir Windows Görev Zamanlayıcı görevi alıyor (bilinçli: backend çökmüşken de
+   * yedek alınsın). Ama panel "Otomatik yedek saati" alanını yine düzenlenebilir
+   * gösteriyor ve `BACKUP_HOUR` varsayılanını basıyordu. Kullanıcı saati
+   * değiştirdi, `system_settings`te satır bile oluşmadı, gerçek yedek başka
+   * saatte alınmaya devam etti. **Panel bir saat gösteriyor, sistem başka saatte
+   * yedek alıyor ve ikisinin ilgisi yok** — operatör bunu ancak dışarıdan
+   * ölçerek anlayabilirdi. ÖLÜ KUMANDA sınıfı.
+   *
+   * Bu alan panelin o kumandayı devre dışı bırakması ve sebebini yazması için.
+   */
+  scheduleEnabled: boolean;
 }
 
 export async function listBackups(): Promise<BackupListing> {
@@ -459,6 +474,11 @@ export async function listBackups(): Promise<BackupListing> {
     pm2AppName: process.env.name || "teks-erp-backend",
     running,
     lastResult,
+    // Kapı `backup-scheduler` ile BİREBİR aynı yüklem olmalı — orada
+    // `=== "false"` yazıyor (yani tanımsız = AÇIK). Burada `!== "false"` yazmak
+    // aynı cümlenin tersidir; iki yerde iki farklı yüklem yazmak, panelin
+    // "açık" dediği bir kurulumda zamanlayıcının kapalı olması demekti.
+    scheduleEnabled: process.env.BACKUP_SCHEDULE_ENABLED !== "false",
   };
   const dir = BACKUP_DIR;
   if (!dir) return { files: [], backupDir: null, ...base };

@@ -15,7 +15,8 @@
 //
 // NE ÖLÇER: dokümandaki cümlenin kodda karşılığı olduğunu.
 //   §1 `kur.ps1` pm2-logrotate KURUYOR
-//   §2 üç ayarın üçü de veriliyor (max_size · retain · compress)
+//   §2 üç ayarın üçü de DEĞERİYLE veriliyor (max_size 10M · retain 14 ·
+//      compress true) ve çıkış kodları TOPLANMIYOR (hangi ayar düştü, adıyla)
 //   §3 kurulum FAIL DEĞİL — internetsiz makinede sürüm çıkışını kesmiyor
 //   §4 rotasyonun hedefi duruyor: PAKETE GİREN `Teks-Erp/ecosystem.config.js`
 //   §5 ecosystem TEK KAYNAK; pm2 adı `-UygulamaAdi` → env → dosya zinciriyle gelir
@@ -90,12 +91,29 @@ check(
 // Yalnız `install` yetmez: modül varsayılanları (retain 30, sıkıştırma yok)
 // bu makinenin ölçülen hacmine göre seçilmedi. Üçü de ADIYLA aranır.
 console.log("\n§2 — üç ayar da veriliyor");
-for (const ayar of ["max_size", "retain", "compress"]) {
+// ⚠️ 2026-09-10'da ÇAĞRI ŞEKLİ DEĞİŞTİ: üç `Pm2Kos set` satırı yerine ADLI bir
+//    tablo + döngü var (çıkış kodlarını TOPLAMAK yanlıştı — hangi ayarın
+//    yazılamadığını söylemiyordu ve negatif kod toplamı sıfıra bile çekebilirdi).
+//    Bekçi ŞEKLİ değil KURALI ölçmeli: üç ayar adı da yazılıyor ve `Pm2Kos set`
+//    `pm2-logrotate:` önekiyle çağrılıyor.
+check(
+  "⭐ ayarlar `Pm2Kos set pm2-logrotate:<ad>` ile veriliyor",
+  komutVar(/Pm2Kos\s+set\s+"?pm2-logrotate:/),
+);
+for (const [ayar, deger] of [["max_size", "10M"], ["retain", "14"], ["compress", "true"]]) {
   check(
-    `⭐ \`pm2 set pm2-logrotate:${ayar}\` veriliyor`,
-    komutVar(new RegExp(`(?:&\\s+\\$pm2|Pm2Kos)\\s+set\\s+pm2-logrotate:${ayar}\\s+\\S`)),
+    `⭐ \`pm2-logrotate:${ayar}\` ayarı ${deger} olarak veriliyor`,
+    komutVar(new RegExp(`Ad\\s*=\\s*"${ayar}"[^\\n]*Deger\\s*=\\s*"${deger}"`)) ||
+      komutVar(new RegExp(`(?:&\\s+\\$pm2|Pm2Kos)\\s+set\\s+"?pm2-logrotate:${ayar}"?\\s+${deger}\\b`)),
   );
 }
+// ⭐ ÇIKIŞ KODLARI TOPLANMAZ: toplam bir kod DEĞİLDİR ve hangi ayarın düştüğünü
+//    söylemez. Sunucudaki oturumun 2026-09-07 notu; ölçülebilir hâle getirildi.
+check(
+  "⭐ çıkış kodları TOPLANMIYOR (`+=` ile kod biriktirme yok)",
+  !/\$\w*[Kk]od\s*\+=/.test(komutlar.join("\n")),
+  "başarısız ayarlar ADIYLA raporlanır",
+);
 
 // ── §3 SÜRÜM ÇIKIŞINI KESMİYOR ──────────────────────────────────────────────
 // İnternetsiz makinede `pm2 install` düşer. Rotasyonsuz çalışmak HİÇ

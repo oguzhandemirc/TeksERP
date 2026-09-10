@@ -629,6 +629,41 @@ main()
       // döndürse de YEŞİL kalırdı.
       check("§S: değişken YOKKEN → 'backend' (varsayılan)", backend === "backend", backend);
       check("§S: 'true' → 'backend'", acikca === "backend", acikca);
+
+      // ── O-1: PANEL AYNI GERÇEĞİ GÖRÜYOR MU ────────────────────────────────
+      // ⭐ Sahada "Otomatik yedek saati" ÖLÜ BİR KUMANDAYDI: zamanlayıcı kapalı,
+      //    panel saati düzenlenebilir gösteriyor, kullanıcı değiştiriyor ve
+      //    hiçbir şey olmuyordu. Panelin kumandayı kilitleyebilmesi için
+      //    `GET /backups` bu olguyu TAŞIMAK zorunda.
+      // ⚠️ YÜKLEM `backup-scheduler`ınkiyle AYNI olmalı (`=== "false"` → kapalı,
+      //    yani TANIMSIZ = AÇIK). İki yerde iki farklı yüklem yazmak, panelin
+      //    "açık" dediği bir kurulumda zamanlayıcının kapalı olması demekti.
+      const { listBackups } = await import("../src/services/backup.service");
+      process.env.BACKUP_SCHEDULE_ENABLED = "false";
+      const kapali = await listBackups();
+      delete process.env.BACKUP_SCHEDULE_ENABLED;
+      const tanimsiz = await listBackups();
+      process.env.BACKUP_SCHEDULE_ENABLED = "true";
+      const acik = await listBackups();
+
+      check(
+        "⭐ O-1: `GET /backups` zamanlayıcı KAPALI olduğunu bildiriyor",
+        kapali.scheduleEnabled === false,
+        String(kapali.scheduleEnabled),
+      );
+      check(
+        "⭐ O-1: değişken YOKKEN açık bildiriliyor (varsayılan = bugünkü davranış)",
+        tanimsiz.scheduleEnabled === true,
+        String(tanimsiz.scheduleEnabled),
+      );
+      check("O-1: 'true' → açık", acik.scheduleEnabled === true, String(acik.scheduleEnabled));
+      check(
+        "⭐ O-1: uç ile zamanlayıcı AYNI yüklemi kullanıyor (üç değerde de)",
+        kapali.scheduleEnabled === (harici !== "harici") &&
+          tanimsiz.scheduleEnabled === (backend === "backend") &&
+          acik.scheduleEnabled === (acikca === "backend"),
+        "ayrışırsa panel yanlış kumandayı açar/kapatır",
+      );
     } finally {
       if (eski === undefined) delete process.env.BACKUP_SCHEDULE_ENABLED;
       else process.env.BACKUP_SCHEDULE_ENABLED = eski;

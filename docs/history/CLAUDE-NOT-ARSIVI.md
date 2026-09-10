@@ -3502,3 +3502,150 @@ bölümü — sondalar: müşteri kolonu dalı kaldırılınca 2 kırmızı, var
 **Yan bulgu:** gelen Excel'de 2 sayfa vardı (Kumaş + Çeki); güncel panel 3 sayfa
 üretiyor (arada Çuval Listesi). Yani dosya eski bir panel derlemesinden çıkmış —
 o makinede güncellemenin oturup oturmadığı ayrıca kontrol edilmeli.
+
+## 2026-09-10 — Üç küçük iş: offsite yanlış alarmı + `kur.ps1` iki notu [ÇEKİRDEK]
+
+Üçü de sunucudaki oturumun kurulum raporlarından çıktı; üçü de kurulumu
+engellemiyordu ama üçü de aynı sınıfın örneği: **söylediği şeyi ölçmeyen kod.**
+
+**① `[offsite]` YANLIŞ ALARMI.** `startOffsiteSweeper` boot'ta
+`BACKUP_RCLONE_REMOTE` env'ine bakıp "hedef panelden ayarlanmadıysa tüm yedekler
+aynı diskte" uyarısı basıyordu. Hedefin YETKİLİ kaynağı PANEL ayarıdır
+(`readOffsiteRemote` → önce `SETTING_KEYS.BACKUP_OFFSITE_REMOTE`, env yalnız
+yedek) ve fabrikada hedef tanımlıydı, süpürme çalışıyordu (2026-09-07'de rclone'a
+doğrudan sorularak doğrulandı: yerelde 14 dump, Drive'da 14). Yani her açılışta
+hata log'una bir felaket cümlesi düşüyordu — üstelik bir satır sonra kendi
+"hedef panelden çözülecek" satırı vardı.
+
+Boot'ta ayarı okumak açılışı DB hazırlığına bağlardı — ama okumaya GEREK YOK:
+ilk süpürme 90 sn sonra hedefi GERÇEKTEN çözüyor ve yoksa `!res.configured`
+dalı kesin cümleyle uyarıyor. **Sinyal silinmedi, ölçüldüğü ana taşındı.**
+Bekçi ikisini BİRLİKTE kilitliyor: boot uyarısı geri gelirse de, süpürmedeki
+uyarı silinirse de kırmızı (`test_offsite_sweep.ts`, iki sonda ölçüldü).
+
+Kural olarak yazıldı: durumu ancak iş koşunca bilinen bir kontrol, uyarısını da
+o koşumdan basar. Uyarı körlüğü gerçek felaketi de gizler.
+
+**② ÇIKIŞ KODLARI TOPLANMIYOR.** `kur.ps1` logrotate bloğu
+`$ayarKod += Pm2Kos set ...` yazıyordu. Toplam bir çıkış kodu DEĞİLDİR: hangi
+ayarın yazılamadığını söylemez ve negatif kod dönen bir çağrı (Windows'ta olur)
+toplamı sıfıra çekip "hepsi başarılı" yalanını üretebilir. Bloğun kendi yorumu
+zaten "eskiden ekranda yine 'kuruldu' yazardı — mesaj gerçeği söylemezdi"
+diyordu; aynı hata bir kademe aşağıda tekrarlanıyordu. Artık ayarlar ADLI bir
+tabloda, başarısızlar adıyla toplanıp tek tek raporlanıyor.
+
+**③ `[4/9]` "not found" SATIRI.** `pm2 delete <kayıtlı-olmayan>` stderr'e
+"Process or Namespace not found" yazar ve satır EKRANA DÜŞER — stderr
+yönlendirilemez (PowerShell 5.1'de `$ErrorActionPreference="Stop"` altında
+ölümcül; `Pm2Kos` başlığındaki ölçüm). İlk kurulumda bu NORMALDİR. Çıkış kodu
+okunup satır adıyla açıklanıyor: *"pm2'de kayıtlı '<ad>' yoktu — yukarıdaki
+'not found' satırı BEKLENEN, hata değil."*
+
+**Bekçi kendi şeklini değil KURALINI ölçmeli:** `test_deploy_log_rotation` §2
+eskiden üç `Pm2Kos set` satırını literal arıyordu ve tablo+döngüye geçince
+kırmızı verdi. Kural "üç ayar DEĞERİYLE yazılıyor"dur; kontrol ona çevrildi ve
+üstüne "kod toplama yok" kontrolü eklendi. Üç sonda ölçüldü (ayar silme · `+=`
+geri koyma · değer değiştirme).
+
+## 2026-09-10 — K-1 kapatıldı: offsite hedefi sessizce yerel klasöre düşebiliyordu [ÇEKİRDEK]
+
+**Bugün bir arıza YOK.** Fabrikada gece yedeği alınıyor ve Google Drive'a
+gidiyor; kullanıcı sunucuda doğruladı, sunucudaki oturum da 2026-09-07'de
+rclone'a doğrudan sorarak ölçtü (yerelde 14 dump, Drive'da 14). Kapatılan şey
+bir arıza değil, **bir yalanın mümkün olması.**
+
+**YAŞANAN (2026-09-05, K-1):** panelden hedef `gdrive` diye — İKİ NOKTA ÜST ÜSTE
+OLMADAN — kaydedilmişti. rclone göreli bir argümanı uzak bağlantı değil yerel
+yol sayar ve backend'in cwd'sine göre çözer. Bütün "makine dışı" yedekler
+`C:\TeksERP\app\gdrive\` altına, yani veritabanıyla AYNI DİSKE kopyalandı.
+Panel ve sağlık ucu buna yeşil dedi:
+
+    {"configured":true,"ok":true,"localCount":4,"remoteCount":4,"warnings":[]}
+
+**Yeşilliğin mekanizması:** süpürme kendi kendini doğruluyor. `copy` ve `lsf`
+AYNI yanlış hedefe gittiği için sayılar HER ZAMAN tutar. Diğer her arıza log ya
+da hata üretiyor; bu, operatöre "yedeğin güvende" diyordu — sessiz kalan tek
+kritik hata sınıfı.
+
+**İKİ KAPI, ve ikincisi asıl olan:**
+1. **Yazarken** — `PATCH /backups/offsite` şeması reddediyor (400).
+2. **Okurken** — `sweepOffsiteBackups` `configured:false` dönüyor. Yalnız (1)
+   yazılsaydı SAHADA ZATEN KAYITLI olan yanlış sonsuza dek yeşil kalırdı; K-1'in
+   kendisi tam olarak buydu. Test düğmesi de biçimi rclone'dan ÖNCE bakıyor —
+   iki noktasız hedefte `lsd` BAŞARILI döner (yerel klasörü listeler) ve
+   "bağlantı tamam" derdi.
+
+**YASAK DAR VE ADLI: göreli/belirsiz hedef.** İlk yazımda kural "iki nokta şart"
+diye kurulmuştu ve bekçinin kendi fixture'ı (mutlak tmp dizini) kırmızı verdi —
+kural UNC (`\\SUNUCU\yedek`) ve POSIX mutlak yollarını da kesiyordu, oysa ikisi
+de MEŞRU offsite hedefidir. Ölçülen risk o değildi: risk "bir uzak bağlantı ADI
+gibi görünüp sessizce cwd altına düşen" biçimdi. Bekçi kuralı daralttı.
+
+**Geçerli ama bu makinede olan hedef ENGELLENMEZ** (`D:\yedek`, ikinci disk,
+geçici alan — operatör bilerek seçmiş olabilir): `ok:true` kalır ama
+`remoteIsLocalPath` işaretlenir ve uyarı basılır. "Başarılı" ile "yeterli" ayrı
+sorulardır; çalışan bir yapılandırmayı arıza gibi göstermek yanlış olurdu.
+UNC işaretlenmez — o BAŞKA bir makinedir.
+
+**Bekçi:** `test_offsite_sweep.ts §3` (54 kontrol). Dört negatif sonda ısırdı:
+okuma kapısı kaldırıldı (3 kırmızı) · sürücü harfi rclone bağlantısı sayıldı
+(1) · "makine dışı değil" uyarısı susturuldu (1) · PATCH şemasındaki `refine`
+kaldırıldı (1). Şema kapısı PAYLAŞILAN doğrulayıcıyı çağırıyor; kendi regex'ini
+yazsaydı yazma ile okuma kuralı sessizce ayrışırdı.
+
+**Raporun 2. maddesi (rclone `listremotes` ile bölüm doğrulaması) YAPILMADI ve
+gerekmiyor:** iki noktalı ama tanımsız bir hedefte (`gdrve:`) rclone zaten hata
+veriyor → `ok:false`. Sessiz olan tek şekil iki noktasızdı ve o kapandı. Her
+süpürmeye bir süreç çağrısı daha eklemenin kazancı yok.
+
+## 2026-09-10 — O-1 kapatıldı: "Otomatik yedek saati" ölü bir kumandaydı [ÇEKİRDEK]
+
+Kullanıcı sunucudaki oturuma "gece yedeğini bizim backend mi alıyor?" diye sordu
+ve cevap iki sistemi ayırdı — aynı cevap O-1'in hâlâ açık olduğunu da gösterdi.
+
+**SAHADAKİ DÜZEN (doğrulandı 2026-09-10):**
+- **Dump'ı backend ALMIYOR.** Windows Görev Zamanlayıcı görevi
+  (`TeksERP-DB-Backup-Yeni`, SYSTEM, her gece 03:00) `yedekle.ps1`i koşuyor;
+  o da `pg_dump`ı doğrudan çağırıp `pg_restore --list` ile doğruluyor.
+  Backend'e hiç bağlı değil — **bilinçli**: backend çökmüş ya da durdurulmuşken
+  bile gece yedeği alınır (devir sırasında API kapalıyken fiilen test edilmiş).
+- **Drive'a göndermeyi backend YAPIYOR** (saat başı `[offsite]` süpürücüsü).
+- Backend'in kendi zamanlayıcısı KAPALI ve bunu açılışta söylüyor.
+
+**BİLİNMESİ GEREKEN SINIR:** "yedek var" ile "yedek makine dışında" ayrı
+şeylerdir; ikincisi backend'in ayakta olmasını gerektirir. Backend uzun süre
+kapalı kalırsa dump'lar yerelde birikir, offsite'a çıkmaz (backend dönünce
+süpürme telafi eder — `missing` kümesi tam da bunun için var).
+
+**O-1 — ÖLÜ KUMANDA.** Bu düzende paneldeki "Otomatik yedek saati" hiçbir şey
+yapmıyordu: alan yalnız backend'in kendi zamanlayıcısını yönetiyor, o da kapalı.
+Kullanıcı saati değiştirdi, gerçek yedek başka saatte alınmaya devam etti —
+**panel bir saat gösteriyor, sistem başka saatte yedek alıyor ve ikisinin ilgisi
+yok.** Operatör bunu ancak dışarıdan ölçerek anlayabilirdi.
+
+**Düzeltme:** `GET /backups` artık `scheduleEnabled` taşıyor; panel kumandayı
+DEVRE DIŞI bırakıyor ve sebebini yazıyor: *"gece yedeğini harici bir zamanlanmış
+görev alıyor — backend kapalıyken de yedek alınsın diye böyle kurulmuş. Saat
+buradan değişmez; gerçek saat sunucudaki görevden ayarlanır."*
+
+**Kumanda GİZLENMEDİ, kilitlendi.** Gizlemek "böyle bir ayar yok" derdi; oysa
+ayar var ve başka bir yerden yönetiliyor — operatörün bilmesi gereken tam olarak
+bu. Kullanıcının soracağı tek soru "peki nereden değişir" ve cevabı ekranda.
+
+**Yüklem TEK:** uç `BACKUP_SCHEDULE_ENABLED !== "false"` diyor, yani
+`backup-scheduler`ın `=== "false"` kapısının birebir tersi — **tanımsız = AÇIK**.
+İki yerde iki farklı yüklem yazmak, panelin "açık" dediği bir kurulumda
+zamanlayıcının kapalı olması demekti; bekçi üç değerde de ikisini karşılaştırıyor.
+
+**Geriye uyum:** alan opsiyonel; göndermeyen eski sunucuda kumanda bugünkü gibi
+açık kalır. Sorgu henüz dönmemişken de açık — yükleme anında kilitlenmiyor.
+
+**Bekçiler:** `test_backup.ts §S` (+4 kontrol) ve
+`Electron BackupScheduleCard.test.tsx` (5 kontrol). Dört negatif sonda ısırdı:
+alan yükten düşürüldü (4 kırmızı) · yüklem ters çevrildi (2) · `disabled`daki
+kapı kaldırıldı (1) · `!== false` yerine `=== true` (1 — eski sunucuda kumandayı
+yanlışlıkla kilitlerdi).
+
+**Sunucudaki oturumun ikinci notu:** `TeksERP-DB-Backup` adında ikinci bir görev
+daha var — eski kurulumun görevi, **Disabled**, donmuş `tekserp` veritabanını
+yedekliyordu. Silinmedi, kapatıldı. Bilerek duruyor.

@@ -34,6 +34,8 @@ import { triggerManualBackup, listBackups, resolveBackupPath } from "../services
 import {
   getOffsiteHealth,
   testOffsiteRemote,
+  isAcceptableTarget,
+  OFFSITE_REMOTE_HATASI,
   writeRcloneDriveToken,
   rcloneConfigPath,
   RCLONE_BIN,
@@ -1876,7 +1878,19 @@ const offsiteConfigSchema = z
   .object({
     // Boş string MEŞRU ve "kapat" demektir — aksi halde panelden hedefi silmek
     // imkânsız olurdu (silince env geri gelirdi).
-    remote: z.string().trim().max(200).optional(),
+    //
+    // ⭐ K-1 YAZMA KAPISI (2026-09-05 sahada yaşandı): hedef `gdrive` diye —
+    //    İKİ NOKTA ÜST ÜSTE OLMADAN — kaydedilince rclone onu yerel göreli yol
+    //    sayıyor ve tüm "makine dışı" yedekler `app\gdrive\` altına, yani
+    //    veritabanıyla AYNI DİSKE gidiyor. Panel buna YEŞİL diyordu.
+    //    Biçim kuralı `offsite-backup.helper`da TEK KAYNAKTIR; süpürme de
+    //    OKURKEN aynı kuralı uygular (zaten kayıtlı yanlış görünür kalsın).
+    remote: z
+      .string()
+      .trim()
+      .max(200)
+      .refine((v) => v === "" || isAcceptableTarget(v), { message: OFFSITE_REMOTE_HATASI })
+      .optional(),
     localDir: z.string().trim().max(400).optional(),
   })
   .refine((v) => v.remote !== undefined || v.localDir !== undefined, {

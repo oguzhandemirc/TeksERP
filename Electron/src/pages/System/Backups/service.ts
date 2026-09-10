@@ -37,6 +37,17 @@ export interface BackupListing {
   pm2AppName: string; // geri yüklemede durdurulacak pm2 süreç adı
   running: boolean; // sunucuda yedek koşuyor mu
   lastResult: BackupRunResult | null; // son yedek işinin sonucu
+  /**
+   * Backend'in KENDİ gece zamanlayıcısı açık mı.
+   *
+   * ⚠️ `false` ise "Otomatik yedek saati" ÖLÜ BİR KUMANDADIR: saati değiştirmek
+   * hiçbir şey yapmaz, gerçek yedeği harici bir görev (Windows Görev
+   * Zamanlayıcı) alır. Sahada durum tam olarak budur ve panel bunu söylemeden
+   * saati düzenlenebilir gösteriyordu (O-1).
+   *
+   * Opsiyonel: eski sunucu göndermez → kumanda bugünkü gibi açık kalır.
+   */
+  scheduleEnabled?: boolean;
 }
 
 /** Saf veri erişimi (React'e bağlı değil) — hook'lar `hooks.ts`te. */
