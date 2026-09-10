@@ -3992,9 +3992,15 @@ alındı → 1 kırmızı · `artan` dalı `seqs.length + 1` yapıldı → dosya
 **Migration VAR** — iki dosya: `20260910120000_paketleme_grubu` (tablo + kolon +
 index + FK) ve `20260910123000_paketleme_grubu_client_token`. İkincisi ayrı,
 çünkü birincisi uygulanmıştı ve uygulanmış migration dosyası düzenlenmez.
-İkisi de ADDITIVE ve idempotent. **Yeni izin YOK.** **APK GEREKİR** (Dilim 2 —
-tablet Paketleme ekranı); backend tek başına gidebilir, eski tablet bayrağı
-görmez ve bugünkü düz listede kalır.
+İkisi de ADDITIVE ve idempotent. **Yeni izin YOK.** **APK GEREKMEZ — Dilim 2 OTA
+ile gider** (düzeltme, aynı gün: not ilk yazıldığında "APK gerekir" deniyordu ve
+bu YANLIŞTI). Tablet tarafı saf JS: ekran + servis çağrısı. APK ayrımının ölçütü
+`mobil/CLAUDE.md`de yazılı — yeni native modül · izin · ikon · SDK; Dilim 2'de
+bunların hiçbiri yok, `runtimeVersion` değişmiyor, `versionCode`a dokunulmuyor.
+Mekanik kapı: `npm run yayinla:check -- --musteri=<kod>` (native parmak izi) —
+kanal TAHMİN EDİLMEZ, o komuta sorulur. Backend tek başına da gidebilir: bayrak
+varsayılan kapalı olduğu için eski tablet hiçbir şey görmez ve bugünkü düz
+listede kalır.
 
 ### Dilimler
 
