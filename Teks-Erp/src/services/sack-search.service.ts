@@ -102,6 +102,12 @@ export const UNTAGGED_FILTER_VALUE = "none";
  * notu): servisi doğrudan çağıran her yol (script, bekçi, dahili çağrı) ham CSV
  * gönderebilir ve o zaman "a,b" TEK değer olarak `in:`e girip P2007 verir.
  */
+/**
+ * "none" sentinelini UUID listesinden ayırır. İKİ tüketicisi var: iz filtresi
+ * (`tagId` → izsiz) ve paketleme grubu filtresi (`packingGroupId` → gruplanmamış).
+ * İkisi de aynı soruyu soruyor ("bu bağı HİÇ olmayanlar"), ikinci bir kopya
+ * yazılmadı — kopya, sentinelin bir tarafta unutulmasıyla P2007 üretirdi.
+ */
 function splitTagFilter(v: string | string[] | undefined): { ids: string[]; untagged: boolean } {
   const raw = readFilterList(v);
   const untagged = raw.some((x) => x.toLowerCase() === UNTAGGED_FILTER_VALUE);
@@ -198,6 +204,17 @@ export interface SackSearchParams {
   tagId?: string | string[];
   /** İzi olan / hiç izi olmayan çuvallar (`hasNote` kardeşi). */
   hasTag?: boolean;
+  /**
+   * PAKETLEME GRUBU (çalışma yaftası) — bu gruplardan birine ait çuvallar.
+   *
+   * ⚠️ Çoklu seçim **VEYA** (alan içi OR standardı — iz/kumaş/renk ile aynı).
+   *
+   * ⚠️ `UNTAGGED_FILTER_VALUE` ("none") sentineli BURADA DA geçerli ve
+   * "Gruplanmamış" demektir; `splitTagFilter` onu UUID listesinden AYIRIR
+   * (kolon `@db.Uuid`, düz metin P2007 üretir — `CUSTOMERLESS_FILTER_VALUE`
+   * ile birebir aynı ders).
+   */
+  packingGroupId?: string | string[];
   scope?: SackSearchScope;
   shipmentNo?: string;
   sackCode?: string;
@@ -402,6 +419,16 @@ export async function buildSackSearchWhere(params: SackSearchParams): Promise<{
     andClauses.push({ OR: tagOr });
   }
 
+  // PAKETLEME GRUBU — iz filtresiyle AYNI kalıp (VEYA + "none" sentineli).
+  const { ids: groupIds, untagged: ungrouped } = splitTagFilter(params.packingGroupId);
+  if (groupIds.length || ungrouped) {
+    const groupOr: Prisma.SackWhereInput[] = [];
+    const gCond = readIdCondition(groupIds);
+    if (gCond) groupOr.push({ packingGroupId: gCond });
+    if (ungrouped) groupOr.push({ packingGroupId: null });
+    andClauses.push({ OR: groupOr });
+  }
+
   // İZİ VAR / YOK — `hasNote` kardeşi. `tagId` sentineli ile aynı kümeyi iki
   // adla anlatır; ikisi birlikte gelirse VE'lenir (daraltır, çelişmez).
   if (params.hasTag != null)
@@ -573,6 +600,11 @@ export class SackSearchService {
         // `$queryRaw` + `LEFT(notes, N)` ister — bu ölçekte (sayfa başına ≤100 satır)
         // değmez. Tam metin çuval detayında / `getSackNotes` ile alınır.
         notes: true,
+        // Paketleme grubu — satırdaki "Grup" çipi ve şerit sayacı bundan doğar.
+        // ⚠️ Grup ADI burada okunur, istemcide `packingGroupId`den TÜRETİLMEZ:
+        // türetseydik ad iki kaynaktan gelir ve yeniden adlandırmadan sonra
+        // liste bayat ad basardı.
+        packingGroup: { select: { id: true, name: true, seq: true } },
         // ÇUVAL İZLERİ (rozet) — `ACTIVE_TAG_SELECT` ile. Yüklem (`clearedAt: null`)
         // filtreninkiyle AYNI kaynaktan gelir; ayrı yazılsaydı rozet ile "Etiket"
         // süzgeci sessizce ayrışırdı (sevkte temizlenen iz birinde görünür,
@@ -650,6 +682,7 @@ export class SackSearchService {
         // etiket sayacı eklenmemesinin aynı gerekçesi).
         tags: toTagBadges(s.tags),
         hasTag: s.tags.length > 0,
+        packingGroup: s.packingGroup,
         customer: s.customer,
         branch: s.branch,
         shipment: s.shipment, // null = havuzda; dolu = sevkiyatta
@@ -1036,8 +1069,31 @@ export class SackSearchService {
    * için istemci her kullanımda `Number(...)` sarmak zorunda kalıyor; yeni uçta o
    * tuzak tekrarlanmaz.
    */
-  async getContentDump(sackIds: string[]): Promise<ApiResponse<unknown>> {
-    const ids = [...new Set(sackIds)];
+  async getContentDump(
+    sackIds: string[],
+    /**
+     * PAKETLEME GRUBU kapsamı — verilirse çuval id'leri SUNUCUDA çözülür.
+     *
+     * ⚠️ İstemci grubun çuvallarını kendisi sayıp gönderemez: liste cursor'lu
+     * sayfalıdır, yani ekrandaki sayfa grubun TAMAMI olmayabilir. "P2'nin
+     * dökümünü al" dendiğinde eksik sayfayla eksik döküm üretmek, sessiz yanlış
+     * cevabın ta kendisiydi.
+     *
+     * Kapsam HAVUZ çuvallarıdır (`shipmentId: null`) — grubun canlı tanımıyla
+     * aynı yüklem. Sevk edilmiş çuval grubun geçmişidir, çalışma kâğıdına girmez.
+     */
+    packingGroupId?: string,
+  ): Promise<ApiResponse<unknown>> {
+    let ids = [...new Set(sackIds)];
+    if (packingGroupId) {
+      const rows = await prisma.sack.findMany({
+        where: { packingGroupId, shipmentId: null },
+        select: { id: true },
+        orderBy: { createdAt: "asc" },
+      });
+      ids = rows.map((r) => r.id);
+      if (ids.length === 0) throw AppError.badRequest("Bu grupta havuz çuvalı kalmamış");
+    }
     if (ids.length === 0) throw AppError.badRequest("En az bir çuval seçilmeli");
     if (ids.length > MAX_SELECTED_SACKS) {
       throw AppError.badRequest(`Bir dökümde en fazla ${MAX_SELECTED_SACKS} çuval olabilir`);

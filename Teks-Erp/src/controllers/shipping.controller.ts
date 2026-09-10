@@ -819,6 +819,9 @@ export class ShippingController {
         // `@db.Uuid` kolonda P2007 → 400 olurdu.
         tagId: filtIds("tagId"),
         hasTag: bool(filt("hasTag")),
+        // PAKETLEME GRUBU — iz filtresiyle AYNI kalıp: `multi-lookup` +
+        // "gruplanmamış" sentineli ("none"), sentineli servis ayırıyor.
+        packingGroupId: filtIds("packingGroupId"),
         scope,
         search: typeof req.query.search === "string" ? req.query.search.trim() || undefined : undefined,
         sortBy: typeof req.query.sortBy === "string" ? req.query.sortBy : undefined,
@@ -900,8 +903,18 @@ export class ShippingController {
   /** İçerik dökümü — çeki listesinin GRUPLU özeti değil, TOP BAZLI döküm. */
   getContentDump = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const body = z.object({ sackIds: z.array(z.string().uuid()).min(1).max(200) }).parse(req.body);
-      const result = await sackSearchService.getContentDump(body.sackIds);
+      // Grup kapsamı verilirse `sackIds` BOŞ gelebilir — id'leri sunucu çözer
+      // (ekrandaki sayfa grubun tamamı olmayabilir; bkz. servis başlığı).
+      const body = z
+        .object({
+          sackIds: z.array(z.string().uuid()).max(200).default([]),
+          packingGroupId: z.string().uuid("Geçersiz grup ID").optional(),
+        })
+        .refine((v) => v.sackIds.length > 0 || v.packingGroupId, {
+          message: "Çuval seçin ya da bir grup belirtin",
+        })
+        .parse(req.body);
+      const result = await sackSearchService.getContentDump(body.sackIds, body.packingGroupId);
       res.status(200).json(result);
     } catch (e) { next(e); }
   };

@@ -15,6 +15,8 @@
 //  §10 Ad override `seq`i DÜŞÜRÜR ve sayacı ilerletmez
 //  §11 clientToken replay: aynı grup döner; grup boşalmışsa 409 (dördüncü durum)
 //  §12 Ölü grup DİRİLTİLMEZ (addSacks → 409)
+//  §13 Liste filtresi: grup id + "gruplanmamış" sentineli + satırdaki grup adı
+//  §14 Grup dökümü çuval id'lerini SUNUCUDA çözer (eksik sayfa = eksik döküm değil)
 // =============================================================================
 
 // ⭐ NEGATİF SONDA (2026-09-10, ölçüldü):
@@ -25,6 +27,9 @@
 //       KIRMIZI (2 kontrol).
 //   (d) `assertPackingGroupsEnabled` gövdesi `return` yapıldı -> §7 KIRMIZI.
 //   (e) `claimSacksIntoGroupTx` WHERE'inden `shipmentId: null` silindi -> §8 KIRMIZI.
+//   (f) grup filtresinin WHERE bloğu silindi -> §13 KIRMIZI (3 kontrol).
+//   (g) `getContentDump`taki grup çözümü silindi -> §14 kırmızı ("En az bir çuval
+//       seçilmeli" ile düşer; ölçüldü).
 //   Hepsi geri alındığında yeşil.
 
 import { readFileSync } from "node:fs";
@@ -39,6 +44,7 @@ import { PACKING_GROUP_LOCK_NS } from "../src/services/helpers/packing-group.hel
 import { BATCH_NUMBER_LOCK_NS } from "../src/services/batch.service";
 import { SETTING_KEYS } from "../src/services/system-setting.service";
 import { ShippingService } from "../src/services/shipping.service";
+import { sackSearchService } from "../src/services/sack-search.service";
 import { hedefDbEngeli } from "./lib/hedef-db-kapisi";
 
 const engel = hedefDbEngeli();
@@ -227,6 +233,46 @@ async function main(): Promise<void> {
     const sNew = await makeSack(customerId);
     await expectErr("§12 ⭐ ölü gruba çuval eklenemez → 409",
       () => PackingGroupService.addSacks(gTok1.id, [sNew]), 409);
+
+    // ---- §13: liste filtresi ---------------------------------------------
+    const sFilt1 = await makeSack(customerId);
+    const sFilt2 = await makeSack(customerId);
+    const gFilt = await createGroup([sFilt1], "Filtre grubu");
+    const listGrouped = await sackSearchService.searchSacks({
+      customerId, scope: "POOL", packingGroupId: gFilt.id, limit: 100,
+    });
+    const gRows = (listGrouped.data ?? []) as Array<{ id: string; packingGroup: { id: string; name: string } | null }>;
+    check("§13 grup filtresi yalnız o grubun çuvallarını döndü",
+      gRows.length === 1 && gRows[0]?.id === sFilt1, `${gRows.length} satır`);
+    check("§13 ⭐ satır grup ADINI taşıyor (istemci türetmiyor)",
+      gRows[0]?.packingGroup?.name === "Filtre grubu", String(gRows[0]?.packingGroup?.name));
+
+    const listUngrouped = await sackSearchService.searchSacks({
+      customerId, scope: "POOL", packingGroupId: "none", limit: 100,
+    });
+    const uRows = (listUngrouped.data ?? []) as Array<{ id: string; packingGroup: unknown }>;
+    check("§13 ⭐ \"gruplanmamış\" sentineli gruplu çuvalı DIŞLADI",
+      uRows.some((r) => r.id === sFilt2) && !uRows.some((r) => r.id === sFilt1));
+    check("§13 sentinel P2007 üretmedi (uuid kolonda düz metin)", uRows.length > 0);
+
+    // ---- §14: grup dökümü kapsamı ----------------------------------------
+    await PackingGroupService.addSacks(gFilt.id, [sFilt2]);
+    // İstemci TEK çuval göndermiş gibi davran; sunucu grubu çözüp İKİSİNİ de almalı.
+    const dump = await sackSearchService.getContentDump([], gFilt.id);
+    const dumpSacks = (dump.data ?? []) as unknown[];
+    check("§14 ⭐ döküm grubun TÜM havuz çuvallarını çözdü (ekrandaki sayfa değil)",
+      dumpSacks.length === 2, `${dumpSacks.length} çuval`);
+    let bosGrupHata = "";
+    try {
+      const bos = await createGroup([await makeSack(customerId)], "Boş kalacak grup");
+      await PackingGroupService.removeSacks(
+        ((await sackSearchService.searchSacks({ customerId, scope: "POOL", packingGroupId: bos.id, limit: 10 })
+          .then((r) => (r.data ?? []) as Array<{ id: string }>))).map((r) => r.id),
+      );
+      await sackSearchService.getContentDump([], bos.id);
+    } catch (e) { bosGrupHata = e instanceof AppError ? e.message : "?"; }
+    check("§14 boşalmış grubun dökümü net Türkçe 400 veriyor",
+      bosGrupHata.includes("havuz çuvalı kalmamış"), bosGrupHata || "(hata YOK)");
 
     // ---- §5: havuz boşalınca sayaç 1'e döner ------------------------------
     await prisma.sack.updateMany({
