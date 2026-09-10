@@ -3649,3 +3649,68 @@ yanlışlıkla kilitlerdi).
 **Sunucudaki oturumun ikinci notu:** `TeksERP-DB-Backup` adında ikinci bir görev
 daha var — eski kurulumun görevi, **Disabled**, donmuş `tekserp` veritabanını
 yedekliyordu. Silinmedi, kapatıldı. Bilerek duruyor.
+
+## 2026-09-10 — Tanımlayıcı dili: kuralın yarısı ölçülmüyordu [ÇEKİRDEK]
+
+Kullanıcı sordu: *"değişken isimlerini hep Türkçe mi verdik, karışık mı? bununla
+ilgili bir standardımız var mı?"* Kural VARDI ([IL-16]: "Tanımlayıcılar
+İNGİLİZCE ve ASCII") ama **zorlama yalnız yarısını tutuyordu**: ESLint
+`naming-convention` sadece TÜRKÇE KARAKTERİ (ç, ğ, ı, ö, ş, ü) yasaklıyor.
+`cozAdRejimi`, `zamanlayiciAcik`, `musteriAdiVeya`, `TasiIsrarla` gibi ASCII
+yazılmış TÜRKÇE KELİMELER kapıdan geçiyordu.
+
+**Ölçüm (2026-09-10):** backend `src/` 72 · panel `src/` 43 · bekçiler 299.
+Dağılım tesadüf değil — ama yazılı bir kural da değildi, kendiliğinden oluşmuş
+bir alışkanlıktı. **Aynı oturumda ben 8 tanımlayıcı bu şekilde ekledim ve hiçbir
+kapı ses çıkarmadı.** Ölçülmeyen kural bir temennidir.
+
+**KARAR (kullanıcı):** kodu kurala uydur + tekrarı engelle.
+
+**① Yeniden adlandırma.** Bu oturumda üretim koduna eklenen adlar İngilizceye
+çevrildi: `AdRejimi`→`DocNameMode` · `cozAdRejimi`→`resolveDocNameMode` ·
+`musteriAdiVeya`→`customerNameOr` · `surecUyarilariniLogla`→`logProcessWarnings`
+· `yiginIzi`→`stackTrace` · `zamanlayiciAcik`→`schedulerEnabled` ·
+`OzetSerit`→`RepairSummary` · `SevkiyatTablosu`→`RepairShipmentTable` … ve
+karşılık gelen alan adları (`adRejimi`→`docNameMode`). **Devralınan adlara
+dokunulmadı** — 134 ad dondurulmuş durumda.
+
+**⚠️ İKİ ŞEY BİLEREK ÇEVRİLMEDİ:** (a) `scripts/` bekçileri — 299 Türkçe ad,
+yerleşik düzen, bekçi iç araçtır ve sözleşme taşımaz; çeviri hiçbir şey
+kazandırmazdı. (b) `deploy/kur.ps1` — dosya baştan sona Türkçe (`Adim`, `Ok`,
+`Uyar`, `Pm2Kos`) ve kendi içinde tutarlı; [IL-16] TS tanımlayıcılarının kuralı.
+
+**⚠️ BİR AD ÇEVRİLİRKEN ÇAKIŞMA DOĞDU:** Excel sütun anahtarı `musteriAdi`
+→ `customerName` yapılınca `products[].customerName` (donmuş belge alanı) ile
+çakıştı ve bekçi "anahtar eklenmemeli" kontrolü kırmızı verdi — HAM veri ile
+ÇÖZÜLMÜŞ (fail-open uygulanmış) değeri aynı ada koymak, ikisini ayırt
+edilemez yapardı. Çözülmüş değer `docCustomerName`e taşındı ("belgede basılan").
+Sonda olmasa sessiz geçerdi.
+
+**② Kapı: `scripts/test_identifier_language.ts`.** Neden ESLint değil: Türkçe
+kelime sözlüğü bir regex'e konsaydı yanlış pozitif patlaması olurdu — TR etiketli
+VERİ anahtarları ([EL-34] onları açıkça muaf tutuyor), `ceki`/`desen` gibi
+yerleşik domain terimleri. Bekçi bunları ADIYLA ve GEREKÇESİYLE muaf tutabilir.
+
+**Taban SAYI DEĞİL AD KÜMESİDİR** ve bu bir düzeltmedir: ilk yazım sayı tutuyordu
+ve bir ad eklenip başka biri silinince sayı aynı kalıyor, yeni Türkçe ad sessizce
+geçiyordu. Ayrıca kırmızı mesajı "son 5 bulgu"yu basıyordu — YENİ olanı değil.
+Ad kümesi ikisini birden çözer.
+
+**BEKÇİ İLK YAZIMDA VAKUMEN YEŞİLDİ.** Taban dosyası yalnız tavan DÜŞÜNCE
+yazılıyordu; ilk koşumda sayım tavana eşit olduğu için dosya hiç oluşmadı ve her
+koşum tavanı KENDİ SAYIMINDAN üretti. `src/`e Türkçe bir ad eklendi, bekçi yeşil
+kaldı. Sonda olmasa fark edilmezdi — bu oturumdaki İKİNCİ vakum-yeşil vakası
+(diğeri `test_process_warnings` §4).
+
+**Yanlış pozitifler ÖLÇÜLEREK elendi, tahminle değil:** ham `includes` `radius`
+("adi"), `DefectSeverity` ("veri"), `TamburUndoPreview` ("tambURUNdo") yakalıyordu
+→ eşleme camelCase PARÇASINA taşındı ve `veri`/`adi`/`sira` kökleri listeden
+çıkarıldı. Kalan çakışmalar `EN_CAKISMA` kümesinde adıyla: `partial` ×26,
+`listener` ×7. Bulgu 324 → 134'e indi.
+
+**Kapıda koşuyor** (`pre-commit`, yalnız `src/` değişince, 0,4 sn) — çünkü bu tam
+olarak "commit ederken fark edilmezse bir daha hiç fark edilmez" sınıfı.
+
+**Dört negatif sonda:** backend `src/`e Türkçe ad → kırmızı (adıyla) · panel
+`src/`e Türkçe ad → kırmızı · `partialListeners`/`radius`/`verifyPart` → YEŞİL
+(yanlış pozitif yok) · bir ad çevrilince küme sıkışıyor.

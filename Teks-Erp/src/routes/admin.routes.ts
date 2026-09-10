@@ -35,7 +35,7 @@ import {
   getOffsiteHealth,
   testOffsiteRemote,
   isAcceptableTarget,
-  OFFSITE_REMOTE_HATASI,
+  OFFSITE_REMOTE_ERROR,
   writeRcloneDriveToken,
   rcloneConfigPath,
   RCLONE_BIN,
@@ -1889,7 +1889,7 @@ const offsiteConfigSchema = z
       .string()
       .trim()
       .max(200)
-      .refine((v) => v === "" || isAcceptableTarget(v), { message: OFFSITE_REMOTE_HATASI })
+      .refine((v) => v === "" || isAcceptableTarget(v), { message: OFFSITE_REMOTE_ERROR })
       .optional(),
     localDir: z.string().trim().max(400).optional(),
   })

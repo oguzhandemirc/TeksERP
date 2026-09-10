@@ -17,7 +17,7 @@ import { startExchangeRateScheduler } from './jobs/exchange-rate.job';
 import { AuditService } from './services/audit.service';
 import { flushLatencyNow } from './services/latency-persist.service';
 import { assertBaseServiceGuards } from './services/base.service';
-import { surecUyarilariniLogla } from './lib/process-warnings';
+import { logProcessWarnings } from './lib/process-warnings';
 import { readWebHardeningConfig, isWebHardeningDeclared } from './middlewares/web-hardening';
 import { readRemoteAccessConfig } from './middlewares/remote-access.middleware';
 import { hata, uyari, bilgi, satir } from "./lib/logger";
@@ -54,7 +54,7 @@ const remoteAccess = readRemoteAccessConfig();
 // "nereden geldiğini görmek için --trace-deprecation ile başlat" diyor ve o
 // bayrak canlıda YENİDEN BAŞLATMA demek. Dinleyici erken kurulur ki açılış
 // sırasındaki uyarılar da yakalansın. (bkz. lib/process-warnings.ts)
-surecUyarilariniLogla();
+logProcessWarnings();
 
 // F29: BaseController mass-assignment koruması (sanitizeWriteData) Prisma DMMF'e
 // bağlı — kaynağı çözülemezse fail-open olur. Boot'ta fail-CLOSED doğrula.

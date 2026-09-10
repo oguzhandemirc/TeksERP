@@ -28,7 +28,7 @@
 //   ⑤ `applyColumnCfg` başlığı KAÇIRMAZ              → 1 kırmızı (§6, XSS)
 //   ⑥ `updateSchema` satırı silinir                  → 3 kırmızı (§5)
 //   ⑦ `docConfigSchema.labels` silinir               → 1 kırmızı (§6 önizleme)
-//   ⑧ (2026-09-10) `adRejimi` fiş yükünden düşürülür  → 5 kırmızı (§10)
+//   ⑧ (2026-09-10) `docNameMode` fiş yükünden düşürülür  → 5 kırmızı (§10)
 //   ⑨ (2026-09-10) rejim fişte SABİTLENİR (canlı okunmaz) → 2 kırmızı (§10)
 // =============================================================================
 import prisma, { pool } from "../src/lib/prisma";
@@ -693,21 +693,21 @@ async function run(): Promise<void> {
   await setMode("musterideki");
   await setCekiMode(null);
   const fisMusteri = (await shippingService.getDispatchReport(SHIPMENT)).data as {
-    adRejimi?: { urunBizdeki: boolean; urunMusterideki: boolean; cekiBizdeki: boolean; cekiMusterideki: boolean };
+    docNameMode?: { showOurName: boolean; showCustomerName: boolean; cekiShowOurName: boolean; cekiShowCustomerName: boolean };
     products: { name: string; customerName?: string | null }[];
   };
   check(
     "⭐ fiş ucu ad rejimini TAŞIYOR (Excel kararı tahmin etmesin)",
-    !!fisMusteri.adRejimi,
-    JSON.stringify(fisMusteri.adRejimi),
+    !!fisMusteri.docNameMode,
+    JSON.stringify(fisMusteri.docNameMode),
   );
   check(
     "⭐ `musterideki` → fişte müşteri kolonu AÇIK, bizimki KAPALI (irsaliyeyle aynı)",
-    fisMusteri.adRejimi?.urunMusterideki === true && fisMusteri.adRejimi?.urunBizdeki === false,
+    fisMusteri.docNameMode?.showCustomerName === true && fisMusteri.docNameMode?.showOurName === false,
   );
   check(
     "çeki `devral` → genel rejimi izliyor (fişte de)",
-    fisMusteri.adRejimi?.cekiMusterideki === true && fisMusteri.adRejimi?.cekiBizdeki === false,
+    fisMusteri.docNameMode?.cekiShowCustomerName === true && fisMusteri.docNameMode?.cekiShowOurName === false,
   );
   check(
     "müşteri adı SATIRDA duruyor — rejim kolonu açtı, veri zaten vardı",
@@ -718,25 +718,25 @@ async function run(): Promise<void> {
   // Rejim CANLI okunur: ayarı çevir, AYNI donmuş belgeden farklı rejim gelsin.
   await setMode("bizdeki");
   const fisBizdeki = (await shippingService.getDispatchReport(SHIPMENT)).data as {
-    adRejimi?: { urunBizdeki: boolean; urunMusterideki: boolean };
+    docNameMode?: { showOurName: boolean; showCustomerName: boolean };
   };
   check(
     "⭐ REJİM DONMAZ: ayar değişince fiş de yeni rejimle geliyor (belge aynı belge)",
-    fisBizdeki.adRejimi?.urunBizdeki === true && fisBizdeki.adRejimi?.urunMusterideki === false,
-    JSON.stringify(fisBizdeki.adRejimi),
+    fisBizdeki.docNameMode?.showOurName === true && fisBizdeki.docNameMode?.showCustomerName === false,
+    JSON.stringify(fisBizdeki.docNameMode),
   );
 
   // Çeki KENDİ rejimini izleyebilir — ürün listesinden bağımsız.
   await setCekiMode("ikisi");
   const fisCeki = (await shippingService.getDispatchReport(SHIPMENT)).data as {
-    adRejimi?: { urunMusterideki: boolean; cekiBizdeki: boolean; cekiMusterideki: boolean };
+    docNameMode?: { showCustomerName: boolean; cekiShowOurName: boolean; cekiShowCustomerName: boolean };
   };
   check(
     "⭐ çeki kendi rejimini izliyor (ürün `bizdeki` iken çeki `ikisi`)",
-    fisCeki.adRejimi?.urunMusterideki === false &&
-      fisCeki.adRejimi?.cekiBizdeki === true &&
-      fisCeki.adRejimi?.cekiMusterideki === true,
-    JSON.stringify(fisCeki.adRejimi),
+    fisCeki.docNameMode?.showCustomerName === false &&
+      fisCeki.docNameMode?.cekiShowOurName === true &&
+      fisCeki.docNameMode?.cekiShowCustomerName === true,
+    JSON.stringify(fisCeki.docNameMode),
   );
   await setCekiMode(null);
   await setMode(null);

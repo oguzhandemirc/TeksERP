@@ -5,7 +5,7 @@
 //   §3 İki panel AYNI ANDA açık kalabilsin diye karartma çizilmez.
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-07 — üçü de KIRMIZI verdi, geri alındı):
-//   ① `SiparisNolari` id varken de düz metin basınca §2'nin ilk vakası düştü
+//   ① `OrderNumberLinks` id varken de düz metin basınca §2'nin ilk vakası düştü
 //      (§1 ve eski-sunucu vakası YEŞİL kaldı — sonda dar, kapsam ayrışık).
 //   ② `hideOverlay` `RepairCompareSheets`ten düşünce §3 düştü.
 //   ③ `side="left"` düşünce §3'ün ikinci vakası düştü.
@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { renderWithProviders } from "@/test/render";
-import { SevkiyatTablosu } from "./RepairTable";
+import { RepairShipmentTable } from "./RepairTable";
 import type { RepairableShipment } from "./service";
 
 const TEMEL: RepairableShipment = {
@@ -35,34 +35,34 @@ const TEMEL: RepairableShipment = {
   onarilabilirMetraj: 400,
 };
 
-const onSec = vi.fn();
-const onSiparis = vi.fn();
-const onSevkiyat = vi.fn();
+const onSelect = vi.fn();
+const onOrder = vi.fn();
+const onShipment = vi.fn();
 
 function ciz(satir: RepairableShipment) {
   renderWithProviders(
-    <SevkiyatTablosu satirlar={[satir]} onSec={onSec} onSiparis={onSiparis} onSevkiyat={onSevkiyat} />,
+    <RepairShipmentTable rows={[satir]} onSelect={onSelect} onOrder={onOrder} onShipment={onShipment} />,
   );
 }
 
 describe("onarım tablosu — tıklanabilir numaralar", () => {
   beforeEach(() => {
-    onSec.mockReset();
-    onSiparis.mockReset();
-    onSevkiyat.mockReset();
+    onSelect.mockReset();
+    onOrder.mockReset();
+    onShipment.mockReset();
   });
 
   it("⭐ §1 sevkiyat numarasına tıklayınca sevkiyat paneli id ile istenir", async () => {
     ciz(TEMEL);
     await userEvent.click(screen.getByRole("button", { name: "TEST-SVK-1" }));
-    expect(onSevkiyat).toHaveBeenCalledWith("sh-1");
+    expect(onShipment).toHaveBeenCalledWith("sh-1");
   });
 
   it("⭐ §2 id gelen sipariş numarası TIKLANABİLİR ve KENDİ id'sini gönderir", async () => {
     ciz(TEMEL);
     await userEvent.click(screen.getByRole("button", { name: "TEST-SIP-2" }));
     // İkinci numara ikinci id'yi açmalı — sıra kayması sessizce yanlış siparişi açardı.
-    expect(onSiparis).toHaveBeenCalledWith("o2");
+    expect(onOrder).toHaveBeenCalledWith("o2");
   });
 
   it("⭐ §2 ESKİ SUNUCU (orders yok) → numara okunur ama tıklanamaz", () => {
@@ -76,8 +76,8 @@ describe("onarım tablosu — tıklanabilir numaralar", () => {
   it("İncele düğmesi numaralardan bağımsız çalışır (onarım yolu bozulmadı)", async () => {
     ciz(TEMEL);
     await userEvent.click(screen.getByRole("button", { name: /İncele/ }));
-    expect(onSec).toHaveBeenCalledTimes(1);
-    expect(onSiparis).not.toHaveBeenCalled();
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(onOrder).not.toHaveBeenCalled();
   });
 });
 

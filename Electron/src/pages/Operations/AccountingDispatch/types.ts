@@ -101,12 +101,12 @@ export interface DispatchReport {
    *
    * Opsiyonel: eski sunucu göndermez → Excel bugünkü gibi bizim adımızı basar.
    */
-  adRejimi?: {
-    urunBizdeki: boolean;
-    urunMusterideki: boolean;
-    cekiBizdeki: boolean;
-    cekiMusterideki: boolean;
-    renkAyriSutun: boolean;
+  docNameMode?: {
+    showOurName: boolean;
+    showCustomerName: boolean;
+    cekiShowOurName: boolean;
+    cekiShowCustomerName: boolean;
+    productColorSplit: boolean;
   };
   totals: { totalRolls: number; totalMeters: number; totalKg: number; sackCount: number };
   /** İçerik DONMUŞ belgeden mi geldi (sevk anı, irsaliyeyle birebir)? false =

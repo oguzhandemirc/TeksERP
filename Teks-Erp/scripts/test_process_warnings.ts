@@ -29,17 +29,17 @@
 //    ilk yazımda iki sorguyla kurulmuştu ve hiçbir şey ölçmüyordu.
 //
 // ⭐ NEGATİF SONDA (ölçüldü 2026-09-07):
-//    ① `yiginIzi(w.stack)` satırı silinince §2 KIRMIZI
-//    ② `gorulen` kümesi kaldırılınca §4 KIRMIZI (⚠️ İLK YAZIMDA ISIRMADI:
+//    ① `stackTrace(w.stack)` satırı silinince §2 KIRMIZI
+//    ② `seen` kümesi kaldırılınca §4 KIRMIZI (⚠️ İLK YAZIMDA ISIRMADI:
 //       tekrar testi pg'nin uyarısıyla yapılmıştı, o zaten süreç başına bir
 //       kez basıyor → sonda vakumen yeşil kaldı. Tekrar artık `emitWarning`
 //       ile ölçülüyor.)
-//    ③ `kuruldu` bayrağı kaldırılınca §4 YEŞİL KALDI ve bu DOĞRU: iki dinleyici
-//       kurulsa bile `gorulen` kümesi ikinciyi susturuyor. Bayrak ikinci sed,
+//    ③ `installed` bayrağı kaldırılınca §4 YEŞİL KALDI ve bu DOĞRU: iki dinleyici
+//       kurulsa bile `seen` kümesi ikinciyi susturuyor. Bayrak ikinci sed,
 //       tek başına ölçülebilir bir davranış taşımıyor — bekçi ona güvenmiyor.
 // =============================================================================
 import { pool } from "../src/lib/prisma";
-import { surecUyarilariniLogla } from "../src/lib/process-warnings";
+import { logProcessWarnings } from "../src/lib/process-warnings";
 
 let pass = 0;
 let fail = 0;
@@ -65,8 +65,8 @@ function kanaliSerbestBirak(): void {
 }
 
 async function run(): Promise<void> {
-  surecUyarilariniLogla();
-  surecUyarilariniLogla(); // ikinci kurulum no-op olmalı (§4)
+  logProcessWarnings();
+  logProcessWarnings(); // ikinci kurulum no-op olmalı (§4)
 
   // ⚠️ ÜÇ sorgu: pg'nin koşulu "kuyrukta bekleyen var" — ikisi kuyruğa hiç
   //    girmez (biri aktif olur), üçüncüsü uyarıyı doğurur.
@@ -81,14 +81,14 @@ async function run(): Promise<void> {
 
   // ── TEKRAR TESTİ AYRI BİR UYARIYLA ────────────────────────────────────────
   // ⚠️ pg'nin uyarısı `util.deprecate` ile sarılı ve SÜREÇ BAŞINA BİR KEZ basar.
-  //    İlk yazımda tekrar testi ONUNLA yapılmıştı: sonda `gorulen` kümesini
+  //    İlk yazımda tekrar testi ONUNLA yapılmıştı: sonda `seen` kümesini
   //    kaldırdığında bile YEŞİL kaldı, çünkü ikinci uyarı zaten hiç doğmuyordu.
   //    "Vakumen yeşil" — bekçi hiçbir şey ölçmüyordu. Tekrar KENDİ süzgecimizin
   //    işi olduğu için TEKRARLAYAN bir uyarıyla ölçülür.
   //
   // ⚠️ İMZA ÇAĞRI YERİNİ İÇERİR (bilinçli): aynı metin farklı yerlerden gelirse
   //    AYRI sorunlardır ve ayrı basılmalı. Bu yüzden tekrar TEK çağrı yerinden
-  //    üretilir — üç ayrı satırdan atılsaydı üç imza doğardı ve test yanlış
+  //    üretilir — üç ayrı satırdan atılsaydı üç signature doğardı ve test yanlış
   //    şeyi ölçerdi (ilk denemede tam bunu yaptı, 3 satır çıktı).
   const tekrarOncesi = satirlar.length;
   for (let i = 0; i < 3; i++) process.emitWarning("TEST-TEKRAR uyarısı", "TeksErpTestWarning");
@@ -143,7 +143,7 @@ async function run(): Promise<void> {
     `${tekrarSatirlari.length} satır`,
   );
   check(
-    "ikinci `surecUyarilariniLogla()` çağrısı dinleyiciyi ÇİFTLEMEDİ",
+    "ikinci `logProcessWarnings()` çağrısı dinleyiciyi ÇİFTLEMEDİ",
     satirlar.filter((l) => l.startsWith("UYARI [node]") && l.includes("already executing")).length === 1,
     `${satirlar.filter((l) => l.startsWith("UYARI [node]") && l.includes("already executing")).length} pg satırı`,
   );

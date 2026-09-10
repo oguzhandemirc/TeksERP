@@ -9,7 +9,7 @@ import { RefreshButton } from "@/components/RefreshButton";
 import { allocationRepairService, type RepairableShipment } from "./service";
 import { RepairPreviewDialog } from "./RepairPreviewDialog";
 import { RepairCompareSheets } from "./RepairCompareSheets";
-import { OzetSerit, SevkiyatTablosu } from "./RepairTable";
+import { RepairSummary, RepairShipmentTable } from "./RepairTable";
 
 /**
  * SİPARİŞE YAZILAMAYAN SEVKİYATLAR — defter onarımı.
@@ -35,8 +35,8 @@ import { OzetSerit, SevkiyatTablosu } from "./RepairTable";
 export function AllocationRepairPage() {
   const qc = useQueryClient();
   const [onizleme, setOnizleme] = useState<RepairableShipment | null>(null);
-  const [siparisId, setSiparisId] = useState<string | null>(null);
-  const [sevkiyatId, setSevkiyatId] = useState<string | null>(null);
+  const [orderId, setOrderId] = useState<string | null>(null);
+  const [shipmentId, setShipmentId] = useState<string | null>(null);
 
   const liste = useQuery({
     queryKey: ["allocation-repair"],
@@ -83,18 +83,18 @@ export function AllocationRepairPage() {
           </div>
         ) : (
           <div className="space-y-4">
-            <OzetSerit
-              sevkiyat={satirlar.length}
-              bosluk={toplamBosluk}
-              onarilabilirSevkiyat={onarilabilir.length}
-              kazanc={toplamKazanc}
+            <RepairSummary
+              shipmentCount={satirlar.length}
+              gap={toplamBosluk}
+              repairableCount={onarilabilir.length}
+              gain={toplamKazanc}
             />
-            <SevkiyatTablosu
-              satirlar={satirlar}
-              onSec={setOnizleme}
-              onSiparis={setSiparisId}
-              onSevkiyat={setSevkiyatId}
-              calisanId={mut.isPending ? (mut.variables as string | undefined) : undefined}
+            <RepairShipmentTable
+              rows={satirlar}
+              onSelect={setOnizleme}
+              onOrder={setOrderId}
+              onShipment={setShipmentId}
+              busyId={mut.isPending ? (mut.variables as string | undefined) : undefined}
             />
           </div>
         )}
@@ -108,10 +108,10 @@ export function AllocationRepairPage() {
       />
 
       <RepairCompareSheets
-        orderId={siparisId}
-        shipmentId={sevkiyatId}
-        onOrderClose={() => setSiparisId(null)}
-        onShipmentClose={() => setSevkiyatId(null)}
+        orderId={orderId}
+        shipmentId={shipmentId}
+        onOrderClose={() => setOrderId(null)}
+        onShipmentClose={() => setShipmentId(null)}
       />
     </PageShell>
   );

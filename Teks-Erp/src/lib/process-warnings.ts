@@ -1,4 +1,4 @@
-import { uyari, yiginIzi } from "./logger";
+import { uyari, stackTrace } from "./logger";
 
 /**
  * NODE SÜREÇ UYARILARINI YIĞIN İZİYLE LOG'A YAZAR.
@@ -30,29 +30,29 @@ import { uyari, yiginIzi } from "./logger";
  */
 
 /** Aynı uyarıyı tekrar tekrar basmamak için görülen imzalar. */
-const gorulen = new Set<string>();
+const seen = new Set<string>();
 /** Sınırsız büyümeye karşı tavan — dolduktan sonra yeni imza basılmaz. */
-const TAVAN = 50;
+const MAX_DISTINCT = 50;
 
-function imza(w: Error): string {
+function signature(w: Error): string {
   const ilkKare = (w.stack ?? "").split("\n")[1]?.trim() ?? "";
   return `${w.name}|${w.message}|${ilkKare}`;
 }
 
-let kuruldu = false;
+let installed = false;
 
 /** `server.ts` açılışında BİR KEZ çağrılır. İkinci çağrı no-op. */
-export function surecUyarilariniLogla(): void {
-  if (kuruldu) return;
-  kuruldu = true;
+export function logProcessWarnings(): void {
+  if (installed) return;
+  installed = true;
   process.on("warning", (w: Error) => {
-    const k = imza(w);
-    if (gorulen.has(k)) return;
-    if (gorulen.size >= TAVAN) return;
-    gorulen.add(k);
+    const k = signature(w);
+    if (seen.has(k)) return;
+    if (seen.size >= MAX_DISTINCT) return;
+    seen.add(k);
     uyari("node", `${w.name}: ${w.message}`);
     // Çağrı yeri — asıl değerli kısım. Etiketsiz, `hata()`nın yığın basımıyla
     // aynı biçim: bir olay = bir etiketli satır + altında ham iz.
-    if (w.stack) yiginIzi(w.stack);
+    if (w.stack) stackTrace(w.stack);
   });
 }

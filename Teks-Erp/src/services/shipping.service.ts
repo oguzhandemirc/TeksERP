@@ -83,7 +83,7 @@ import {
   readShippingDocCekiNameMode,
   readShippingDocProductColorSplit,
 } from "./system-setting.service";
-import { cozAdRejimi, type AdRejimi } from "./document-render/shipment-name-mode";
+import { resolveDocNameMode, type DocNameMode } from "./document-render/shipment-name-mode";
 import {
   assertInvoiceTraceAllowed,
   invoiceTraceWarning,
@@ -4760,12 +4760,12 @@ export class ShippingService {
         // gelir ve baskı anında CANLI okunur. Bu alan olmadan muhasebe fişinin
         // Excel'i kararı hiç sormuyor, hep bizim adımızı basıyordu — oysa ayarın
         // kendi açıklaması "kapsam sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor.
-        // Karar `cozAdRejimi`de, yani irsaliyeyi çizen helper'ın AYNISINDA.
-        adRejimi: cozAdRejimi({
+        // Karar `resolveDocNameMode`de, yani irsaliyeyi çizen helper'ın AYNISINDA.
+        docNameMode: resolveDocNameMode({
           itemNameMode: await readShippingDocItemNameMode(),
           cekiNameMode: await readShippingDocCekiNameMode(),
           productColorSplit: await readShippingDocProductColorSplit(),
-        }) satisfies AdRejimi,
+        }) satisfies DocNameMode,
       },
     };
   }
@@ -4854,7 +4854,7 @@ export class ShippingService {
         // zaten müşteri adı alanlarını hiç kurmuyor (`desen: r.item.name`).
         // Alanı BOŞ bırakmak yerine ADIYLA sabitlemek, Excel'in "rejim yok →
         // ne yapayım" diye tahmin etmesini engeller.
-        adRejimi: cozAdRejimi({ itemNameMode: "bizdeki" }) satisfies AdRejimi,
+        docNameMode: resolveDocNameMode({ itemNameMode: "bizdeki" }) satisfies DocNameMode,
         // Çuval sevkiyatı fişiyle AYNI kontrat — istemci tek `DispatchReport` tipiyle
         // çalışır ve alan eksik gelirse Excel dipnotu `returns.count` okurken PATLAR.
         //

@@ -33,7 +33,7 @@ export function RepairCompareSheets({
 }) {
   // `OrderDetailSheet` id değil KAYDIN KENDİSİNİ ister (kalem listesi, alias,
   // rejim… hepsi order nesnesinden okunur) — tabloda yalnız id var.
-  const siparis = useQuery({
+  const orderQuery = useQuery({
     queryKey: ["orders", "detail", orderId],
     queryFn: () => orderService.getById(orderId!),
     enabled: !!orderId,
@@ -43,8 +43,8 @@ export function RepairCompareSheets({
   return (
     <>
       <OrderDetailSheet
-        order={siparis.data?.data ?? null}
-        open={!!orderId && !!siparis.data?.data}
+        order={orderQuery.data?.data ?? null}
+        open={!!orderId && !!orderQuery.data?.data}
         onOpenChange={(o) => !o && onOrderClose()}
         side="left"
         hideOverlay

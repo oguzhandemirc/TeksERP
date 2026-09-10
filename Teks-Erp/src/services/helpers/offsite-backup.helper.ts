@@ -101,7 +101,7 @@ export function isAcceptableTarget(v: string): boolean {
 }
 
 /** Operatöre gösterilen tek cümle — hem 400'de hem süpürme uyarısında AYNI. */
-export const OFFSITE_REMOTE_HATASI =
+export const OFFSITE_REMOTE_ERROR =
   "Hedef ya `ad:` biçiminde bir rclone bağlantısı (örn. `gdrive:` / `gdrive:tekserp-yedek`) " +
   "ya da tam bir yol olmalı (`\\\\SUNUCU\\yedek` veya `D:\\yedek`). " +
   "Göreli bir ad yazılırsa rclone onu sunucudaki uygulama klasörünün altında bir klasör sayar — " +
@@ -240,7 +240,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
   //    gider, sayılar tutar). `configured:false` DÖNÜLÜR — "yapılandırılmamış"
   //    demek burada doğrudur: makine dışı yedek YOKTUR.
   if (!isAcceptableTarget(remote)) {
-    warnings.push(`OFFSITE HEDEF GEÇERSİZ ("${remote}") — ${OFFSITE_REMOTE_HATASI}`);
+    warnings.push(`OFFSITE HEDEF GEÇERSİZ ("${remote}") — ${OFFSITE_REMOTE_ERROR}`);
     return done({ remoteIsLocalPath: true });
   }
 
@@ -311,7 +311,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
   // Hedef geçerli AMA bu makinede bir yol ise (sürücü harfi / POSIX mutlak),
   // süpürme başarılı olsa bile "makine dışı" değildir. Engellenmez — operatör
   // bunu bilerek seçmiş olabilir (geçici alan, ikinci disk) — ama İŞARETLENİR.
-  const yerelHedef = !isRcloneRemote(remote) && !remote.trim().startsWith("\\\\");
+  const targetIsLocal = !isRcloneRemote(remote) && !remote.trim().startsWith("\\\\");
 
   const remoteSet = new Set(remoteList);
   const missing = local.filter((n) => !remoteSet.has(n));
@@ -323,7 +323,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     );
   }
 
-  if (yerelHedef) {
+  if (targetIsLocal) {
     warnings.push(
       `Hedef ("${remote}") bu MAKİNEDE bir yol — kopya alınıyor ama "makine dışı" DEĞİL. ` +
         "Disk arızası/fidye yazılımı ikisini birden götürebilir.",
@@ -335,7 +335,7 @@ export async function sweepOffsiteBackups(): Promise<OffsiteSweepResult> {
     localCount: local.length,
     remoteCount: remoteList.length,
     missing,
-    remoteIsLocalPath: yerelHedef,
+    remoteIsLocalPath: targetIsLocal,
     // ⚠️ `ok` YEREL HEDEFTE DE true olabilir: kopyalama gerçekten yapıldı ve
     // kapsam tuttu. "Başarılı" ile "yeterli" ayrı sorulardır — ikincisini
     // `remoteIsLocalPath` + uyarı söyler. `ok:false` demek, çalışan bir
@@ -392,7 +392,7 @@ export async function testOffsiteRemote(): Promise<{ ok: boolean; message: strin
   //    (yerel klasörü listeler) ve test düğmesi "bağlantı tamam" derdi — tam da
   //    K-1'in operatörü yanılttığı yer.
   if (!isAcceptableTarget(remote)) {
-    return { ok: false, message: `Hedef "${remote}" geçersiz. ${OFFSITE_REMOTE_HATASI}` };
+    return { ok: false, message: `Hedef "${remote}" geçersiz. ${OFFSITE_REMOTE_ERROR}` };
   }
   const res = await runProcess(RCLONE_BIN(), ["lsd", remote, ...configArgs()], {
     timeoutMs: LIST_TIMEOUT_MS,

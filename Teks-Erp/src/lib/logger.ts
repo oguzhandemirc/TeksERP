@@ -72,7 +72,7 @@ export function hata(alan: string, mesaj: string, ek?: unknown): void {
  * yerine kanal ADLI bir yol açar; kaçışın nerede kullanıldığı greplenebilir
  * kalır (`satir()` emsali).
  */
-export function yiginIzi(stack: string): void {
+export function stackTrace(stack: string): void {
   // İlk satır uyarının kendi metnidir; onu `uyari()`/`hata()` zaten bastı.
   console.error(stack.split("\n").slice(1).join("\n"));
 }

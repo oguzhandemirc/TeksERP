@@ -27,7 +27,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
         { header: "Sevk No", key: "shipmentNo", width: 18 },
         { header: "Sevk Tarihi", key: "dispatchedAt", width: 18, numFmt: DATE },
         { header: "Müşteri Kodu", key: "customerCode", width: 14 },
-        { header: "Müşteri", key: "customerName", width: 28 },
+        { header: "Müşteri", key: "docCustomerName", width: 28 },
         { header: "Vergi No", key: "taxNumber", width: 14 },
         { header: "Şube", key: "branchName", width: 18 },
         { header: "İhracat Kodu", key: "branchCode", width: 14 },
@@ -80,7 +80,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
       columns: [
         { header: "Sevk No", key: "shipmentNo", width: 18 },
         { header: "Sevk Tarihi", key: "dispatchedAt", width: 18, numFmt: DATE },
-        { header: "Müşteri", key: "customerName", width: 28 },
+        { header: "Müşteri", key: "docCustomerName", width: 28 },
         { header: "Sipariş No", key: "orderNos", width: 20 },
         { header: "Kumaş", key: "itemName", width: 24 },
         { header: "Renk", key: "colorName", width: 18 },
@@ -94,7 +94,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
       name: "İcmal · Müşteri",
       columns: [
         { header: "Müşteri Kodu", key: "customerCode", width: 14 },
-        { header: "Müşteri", key: "customerName", width: 28 },
+        { header: "Müşteri", key: "docCustomerName", width: 28 },
         { header: "Vergi No", key: "taxNumber", width: 14 },
         { header: "Sevk Adedi", key: "shipmentCount", width: 11, numFmt: INT },
         { header: "Çuval", key: "sackCount", width: 9, numFmt: INT },
@@ -128,7 +128,7 @@ export function buildAccountingWorkbookSheets(data: AccountingExportData): Sheet
       name: "İade",
       columns: [
         { header: "İade Tarihi", key: "returnedAt", width: 18, numFmt: DATE },
-        { header: "Müşteri", key: "customerName", width: 28 },
+        { header: "Müşteri", key: "docCustomerName", width: 28 },
         { header: "Geldiği Sevk No", key: "fromShipmentNo", width: 18 },
         { header: "Barkod", key: "barcode", width: 18 },
         { header: "Kumaş", key: "itemName", width: 24 },
@@ -180,19 +180,19 @@ function dispatchReportNotes(report: DispatchReport): string[] {
 }
 
 /** Müşteri adı yoksa bizimkine düş — irsaliyedeki fail-open kuralının aynısı. */
-const musteriAdiVeya = (cust: string | null | undefined, ours: string): string =>
+const customerNameOr = (cust: string | null | undefined, ours: string): string =>
   (cust ?? "").trim() || ours;
 
 /**
  * Ad rejimi yoksa (eski sunucu) BUGÜNKÜ davranış: yalnız bizim adımız.
  * Yeni bayrağın varsayılanı = bugünkü davranış kuralının birebir uygulaması.
  */
-const VARSAYILAN_REJIM = {
-  urunBizdeki: true,
-  urunMusterideki: false,
-  cekiBizdeki: true,
-  cekiMusterideki: false,
-  renkAyriSutun: false,
+const DEFAULT_NAME_MODE = {
+  showOurName: true,
+  showCustomerName: false,
+  cekiShowOurName: true,
+  cekiShowCustomerName: false,
+  productColorSplit: false,
 } as const;
 
 /**
@@ -203,34 +203,34 @@ const VARSAYILAN_REJIM = {
  * adımız) basıyordu — ikisi de AYNI donmuş belgeden. Ayarın kendi açıklaması
  * "kapsam sevk irsaliyesi + MUHASEBE FİŞİDİR" diyor; vaat yerine gelmiyordu.
  *
- * ⚠️ KARAR SUNUCUDA: hangi kolonun çizileceğini `report.adRejimi` söyler, burada
- * yeniden hesaplanmaz. `renkAyriSutun` BİLEREK uygulanmaz — o bir YERLEŞİM
+ * ⚠️ KARAR SUNUCUDA: hangi kolonun çizileceğini `report.docNameMode` söyler, burada
+ * yeniden hesaplanmaz. `productColorSplit` BİLEREK uygulanmaz — o bir YERLEŞİM
  * kararıdır ve ayarın kendi metnine göre yalnız MÜŞTERİYE GİDEN belgeyi
  * ilgilendirir; fiş iç dosyadır, müşteri adı tek birleşik hücrede kalır.
  */
 export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
   const t = report.totals;
-  const r = report.adRejimi ?? VARSAYILAN_REJIM;
+  const r = report.docNameMode ?? DEFAULT_NAME_MODE;
   return [
     {
       name: "Kumaş Listesi",
       columns: [
-        ...(r.urunBizdeki ? [{ header: "Stok Adı", key: "name", width: 40 }] : []),
-        ...(r.urunMusterideki
-          ? [{ header: "Müşterideki Stok Adı", key: "musteriAdi", width: 40 }]
+        ...(r.showOurName ? [{ header: "Stok Adı", key: "name", width: 40 }] : []),
+        ...(r.showCustomerName
+          ? [{ header: "Müşterideki Stok Adı", key: "docCustomerName", width: 40 }]
           : []),
         { header: "Top", key: "rollCount", width: 9, numFmt: INT },
         { header: "Toplam Metre", key: "totalMeters", width: 14, numFmt: NUM1 },
       ],
       // Kolon çizilmiyorsa satıra anahtar da EKLENMEZ — okuyucusu olmayan bir
       // alan, "bu veri de gidiyor mu" sorusunu boş yere açar.
-      rows: r.urunMusterideki
-        ? report.products.map((p) => ({ ...p, musteriAdi: musteriAdiVeya(p.customerName, p.name) }))
+      rows: r.showCustomerName
+        ? report.products.map((p) => ({ ...p, docCustomerName: customerNameOr(p.customerName, p.name) }))
         : report.products,
       // "TOPLAM" hangi ad kolonu ÖNDEYSE oraya yazılır — yalnız müşteri adı
       // çizildiğinde `name` boş kalır ve toplam satırı etiketsiz görünürdü.
       totalRow: {
-        ...(r.urunBizdeki ? { name: "TOPLAM" } : { musteriAdi: "TOPLAM" }),
+        ...(r.showOurName ? { name: "TOPLAM" } : { docCustomerName: "TOPLAM" }),
         rollCount: t.totalRolls,
         totalMeters: t.totalMeters,
       },
@@ -252,26 +252,26 @@ export function buildDispatchReportSheets(report: DispatchReport): SheetSpec[] {
       columns: [
         { header: "Çuval", key: "sackCode", width: 12 },
         { header: "Barkod", key: "barcode", width: 18 },
-        ...(r.cekiBizdeki
+        ...(r.cekiShowOurName
           ? [
               { header: "Desen", key: "desen", width: 24 },
               { header: "Varyant", key: "varyant", width: 18 },
             ]
           : []),
-        ...(r.cekiMusterideki
+        ...(r.cekiShowCustomerName
           ? [
-              { header: "Müşterideki Desen", key: "musteriDesen", width: 24 },
-              { header: "Müşterideki Varyant", key: "musteriVaryant", width: 18 },
+              { header: "Müşterideki Desen", key: "docCustomerDesen", width: 24 },
+              { header: "Müşterideki Varyant", key: "docCustomerVaryant", width: 18 },
             ]
           : []),
         { header: "Metre", key: "meters", width: 12, numFmt: NUM1 },
         { header: "Kg", key: "kg", width: 10, numFmt: NUM1 },
       ],
-      rows: r.cekiMusterideki
+      rows: r.cekiShowCustomerName
         ? report.cekiRows.map((c) => ({
             ...c,
-            musteriDesen: musteriAdiVeya(c.customerDesen, c.desen),
-            musteriVaryant: musteriAdiVeya(c.customerVaryant, c.varyant),
+            docCustomerDesen: customerNameOr(c.customerDesen, c.desen),
+            docCustomerVaryant: customerNameOr(c.customerVaryant, c.varyant),
           }))
         : report.cekiRows,
     },

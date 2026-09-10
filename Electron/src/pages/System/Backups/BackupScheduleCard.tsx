@@ -42,7 +42,7 @@ export function BackupScheduleCard() {
   const hour = useBackupHour();
   const qc = useQueryClient();
   // Alan eski sunucuda YOK → `undefined`; o zaman bugünkü davranış (açık).
-  const zamanlayiciAcik = useBackups().data?.scheduleEnabled !== false;
+  const schedulerEnabled = useBackups().data?.scheduleEnabled !== false;
 
   const mutation = useMutation({
     mutationFn: (backupHour: number) => featureFlagService.update({ backupHour }),
@@ -62,7 +62,7 @@ export function BackupScheduleCard() {
         <Clock className="h-4 w-4 shrink-0 text-muted-foreground" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">Otomatik yedek saati</p>
-          {zamanlayiciAcik ? (
+          {schedulerEnabled ? (
             <p className="text-xs text-muted-foreground">
               Her gün bu saatte tam yedek alınır (<b>sunucunun</b> yerel saati). Sunucu o
               saatte kapalıysa açıldığında telafi edilir.
@@ -82,7 +82,7 @@ export function BackupScheduleCard() {
           <Select
             value={String(hour)}
             onValueChange={(v) => mutation.mutate(Number(v))}
-            disabled={mutation.isPending || !zamanlayiciAcik}
+            disabled={mutation.isPending || !schedulerEnabled}
           >
             <SelectTrigger className="h-9 w-28 shrink-0">
               <SelectValue />

@@ -2,25 +2,25 @@ import { AlertTriangle, CheckCircle2, Loader2, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { RepairableShipment } from "./service";
 
-const NO_LINK = "cursor-pointer underline decoration-dotted underline-offset-4 hover:text-primary";
+const LINK_CLS = "cursor-pointer underline decoration-dotted underline-offset-4 hover:text-primary";
 
 /** Üstteki özet şeridi — "ne kadar mal defterde yok" tek bakışta. */
-export function OzetSerit({
-  sevkiyat,
-  bosluk,
-  onarilabilirSevkiyat,
-  kazanc,
+export function RepairSummary({
+  shipmentCount,
+  gap,
+  repairableCount,
+  gain,
 }: {
-  sevkiyat: number;
-  bosluk: number;
-  onarilabilirSevkiyat: number;
-  kazanc: number;
+  shipmentCount: number;
+  gap: number;
+  repairableCount: number;
+  gain: number;
 }) {
-  if (sevkiyat === 0) {
+  if (shipmentCount === 0) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-950/40">
         <CheckCircle2 className="h-5 w-5" />
-        <span>Siparişe yazılamayan sevkiyat yok — defter temiz.</span>
+        <span>Siparişe yazılamayan shipmentCount yok — defter temiz.</span>
       </div>
     );
   }
@@ -30,15 +30,15 @@ export function OzetSerit({
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <AlertTriangle className="h-4 w-4" /> Deftere işlenmemiş
         </div>
-        <div className="mt-1 text-2xl font-semibold">{Math.round(bosluk).toLocaleString("tr-TR")} m</div>
-        <div className="text-xs text-muted-foreground">{sevkiyat} sevkiyatta</div>
+        <div className="mt-1 text-2xl font-semibold">{Math.round(gap).toLocaleString("tr-TR")} m</div>
+        <div className="text-xs text-muted-foreground">{shipmentCount} sevkiyatta</div>
       </div>
       <div className="rounded-md border bg-muted/40 px-4 py-3">
         <div className="flex items-center gap-1.5 text-sm font-medium">
           <Wrench className="h-4 w-4" /> Bugün onarılabilir
         </div>
-        <div className="mt-1 text-2xl font-semibold">{Math.round(kazanc).toLocaleString("tr-TR")} m</div>
-        <div className="text-xs text-muted-foreground">{onarilabilirSevkiyat} sevkiyatta</div>
+        <div className="mt-1 text-2xl font-semibold">{Math.round(gain).toLocaleString("tr-TR")} m</div>
+        <div className="text-xs text-muted-foreground">{repairableCount} sevkiyatta</div>
       </div>
     </div>
   );
@@ -51,20 +51,20 @@ export function OzetSerit({
  * Numaradan id'yi arayarak "yine de tıklanabilir yapmak" mükerrer numarada
  * YANLIŞ siparişi açardı — sessiz yanlış, görünür eksikten kötüdür.
  */
-function SiparisNolari({
-  satir,
-  onSiparis,
+function OrderNumberLinks({
+  row,
+  onOrder,
 }: {
-  satir: RepairableShipment;
-  onSiparis: (orderId: string) => void;
+  row: RepairableShipment;
+  onOrder: (orderId: string) => void;
 }) {
-  if (satir.orders?.length) {
+  if (row.orders?.length) {
     return (
       <span className="text-xs">
-        {satir.orders.map((o, i) => (
+        {row.orders.map((o, i) => (
           <span key={o.id}>
             {i > 0 && ", "}
-            <button type="button" className={NO_LINK} onClick={() => onSiparis(o.id)} title="Sipariş detayını aç">
+            <button type="button" className={LINK_CLS} onClick={() => onOrder(o.id)} title="Sipariş detayını aç">
               {o.orderNumber}
             </button>
           </span>
@@ -72,31 +72,31 @@ function SiparisNolari({
       </span>
     );
   }
-  return <span className="text-xs text-muted-foreground">{satir.orderNumbers.join(", ") || "—"}</span>;
+  return <span className="text-xs text-muted-foreground">{row.orderNumbers.join(", ") || "—"}</span>;
 }
 
 /** Tek satır — tablo gövdesinden ayrı: numaralar tıklanabilir olunca uzadı. */
-function SevkiyatSatiri({
+function RepairShipmentRow({
   s,
-  onSec,
-  onSiparis,
-  onSevkiyat,
-  calisanId,
+  onSelect,
+  onOrder,
+  onShipment,
+  busyId,
 }: {
   s: RepairableShipment;
-  onSec: (s: RepairableShipment) => void;
-  onSiparis: (orderId: string) => void;
-  onSevkiyat: (shipmentId: string) => void;
-  calisanId?: string;
+  onSelect: (s: RepairableShipment) => void;
+  onOrder: (orderId: string) => void;
+  onShipment: (shipmentId: string) => void;
+  busyId?: string;
 }) {
-  const onarilir = s.onarilabilirMetraj > 0.001;
+  const repairable = s.onarilabilirMetraj > 0.001;
   return (
     <tr className="border-t [&>td]:px-3 [&>td]:py-2">
       <td className="font-medium">
         <button
           type="button"
-          className={NO_LINK}
-          onClick={() => onSevkiyat(s.shipmentId)}
+          className={LINK_CLS}
+          onClick={() => onShipment(s.shipmentId)}
           title="Sevkiyat detayını aç"
         >
           {s.shipmentNo}
@@ -107,7 +107,7 @@ function SevkiyatSatiri({
       </td>
       <td>{s.customer?.name ?? "—"}</td>
       <td>
-        <SiparisNolari satir={s} onSiparis={onSiparis} />
+        <OrderNumberLinks row={s} onOrder={onOrder} />
       </td>
       <td className="text-right">{Math.round(s.icerikMetraj)}</td>
       <td className="text-right">{Math.round(s.yazilanMetraj)}</td>
@@ -115,7 +115,7 @@ function SevkiyatSatiri({
         {Math.round(s.bosluk)}
       </td>
       <td className="text-right font-semibold">
-        {onarilir ? (
+        {repairable ? (
           <span className="text-emerald-700 dark:text-emerald-400">
             {Math.round(s.onarilabilirMetraj)}
           </span>
@@ -126,17 +126,17 @@ function SevkiyatSatiri({
       <td className="text-right">
         <Button
           size="sm"
-          variant={onarilir ? "default" : "outline"}
-          disabled={!onarilir || calisanId === s.shipmentId}
-          onClick={() => onSec(s)}
+          variant={repairable ? "default" : "outline"}
+          disabled={!repairable || busyId === s.shipmentId}
+          onClick={() => onSelect(s)}
           title={
-            onarilir
+            repairable
               ? "Ne yazılacağını göster"
               : "Bugün de yazılamıyor — sipariş dolu ya da kumaş/renk/en tutmuyor"
           }
           className="gap-1.5"
         >
-          {calisanId === s.shipmentId && <Loader2 className="h-4 w-4 animate-spin" />}
+          {busyId === s.shipmentId && <Loader2 className="h-4 w-4 animate-spin" />}
           İncele
         </Button>
       </td>
@@ -145,21 +145,21 @@ function SevkiyatSatiri({
 }
 
 /** Sevkiyat listesi — onarılabilir olanlar üstte. */
-export function SevkiyatTablosu({
-  satirlar,
-  onSec,
-  onSiparis,
-  onSevkiyat,
-  calisanId,
+export function RepairShipmentTable({
+  rows,
+  onSelect,
+  onOrder,
+  onShipment,
+  busyId,
 }: {
-  satirlar: RepairableShipment[];
-  onSec: (s: RepairableShipment) => void;
-  onSiparis: (orderId: string) => void;
-  onSevkiyat: (shipmentId: string) => void;
-  calisanId?: string;
+  rows: RepairableShipment[];
+  onSelect: (s: RepairableShipment) => void;
+  onOrder: (orderId: string) => void;
+  onShipment: (shipmentId: string) => void;
+  busyId?: string;
 }) {
-  const sirali = [...satirlar].sort((a, b) => b.onarilabilirMetraj - a.onarilabilirMetraj);
-  if (sirali.length === 0) return null;
+  const sorted = [...rows].sort((a, b) => b.onarilabilirMetraj - a.onarilabilirMetraj);
+  if (sorted.length === 0) return null;
   return (
     <div className="overflow-x-auto rounded-md border">
       <table className="w-full text-sm">
@@ -176,14 +176,14 @@ export function SevkiyatTablosu({
           </tr>
         </thead>
         <tbody>
-          {sirali.map((s) => (
-            <SevkiyatSatiri
+          {sorted.map((s) => (
+            <RepairShipmentRow
               key={s.shipmentId}
               s={s}
-              onSec={onSec}
-              onSiparis={onSiparis}
-              onSevkiyat={onSevkiyat}
-              calisanId={calisanId}
+              onSelect={onSelect}
+              onOrder={onOrder}
+              onShipment={onShipment}
+              busyId={busyId}
             />
           ))}
         </tbody>

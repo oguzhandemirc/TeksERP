@@ -17,17 +17,17 @@ import type {
  * helper'da yaşar. Karar burada verilir; renderer da, rapor ucu da buradan sorar.
  *
  * ⚠️ `musterideki` FAIL-OPEN: karşılığı olmayan üründe BİZİM adımız basılır
- * (`musteriAdiVeya`). Boş ürün adı taşıyan bir irsaliye hukuken sakattır.
+ * (`customerNameOr`). Boş ürün adı taşıyan bir irsaliye hukuken sakattır.
  */
-export interface AdRejimi {
+export interface DocNameMode {
   /** Ürün listesinde bizim adımızın kolonu çizilir mi. */
-  urunBizdeki: boolean;
+  showOurName: boolean;
   /** Ürün listesinde müşteri adının kolonu çizilir mi. */
-  urunMusterideki: boolean;
+  showCustomerName: boolean;
   /** Çeki listesinde bizim desen/varyantımız çizilir mi. */
-  cekiBizdeki: boolean;
+  cekiShowOurName: boolean;
   /** Çeki listesinde müşterinin desen/varyantı çizilir mi. */
-  cekiMusterideki: boolean;
+  cekiShowCustomerName: boolean;
   /**
    * Ürün listesinde müşteri RENGİ ayrı sütuna çıkar mı
    * (`shipping.docProductColorSplit`).
@@ -37,7 +37,7 @@ export interface AdRejimi {
    * fişinin Excel'i bunu uygulamaz: orada müşteri adı tek birleşik hücrede
    * kalır. Ad seçimi ikisinde de AYNIdır; ayrışan yalnız kolon düzenidir.
    */
-  renkAyriSutun: boolean;
+  productColorSplit: boolean;
 }
 
 /**
@@ -46,24 +46,24 @@ export interface AdRejimi {
  * ⚠️ `cekiNameMode: "devral"` BURADA çözülür — çağıranların her biri kendi
  * çözseydi biri unutulduğunda çeki listesi sessizce genel rejimden ayrılırdı.
  */
-export function cozAdRejimi(ayar: {
+export function resolveDocNameMode(settings: {
   itemNameMode?: ShippingDocItemNameMode;
   cekiNameMode?: ShippingDocCekiNameMode;
   productColorSplit?: boolean;
-}): AdRejimi {
-  const urun = ayar.itemNameMode ?? "bizdeki";
-  const cekiHam = ayar.cekiNameMode ?? "devral";
-  const ceki = cekiHam === "devral" ? urun : cekiHam;
+}): DocNameMode {
+  const item = settings.itemNameMode ?? "bizdeki";
+  const cekiRaw = settings.cekiNameMode ?? "devral";
+  const ceki = cekiRaw === "devral" ? item : cekiRaw;
   return {
-    urunBizdeki: urun !== "musterideki",
-    urunMusterideki: urun !== "bizdeki",
-    cekiBizdeki: ceki !== "musterideki",
-    cekiMusterideki: ceki !== "bizdeki",
-    renkAyriSutun: ayar.productColorSplit === true,
+    showOurName: item !== "musterideki",
+    showCustomerName: item !== "bizdeki",
+    cekiShowOurName: ceki !== "musterideki",
+    cekiShowCustomerName: ceki !== "bizdeki",
+    productColorSplit: settings.productColorSplit === true,
   };
 }
 
 /** Müşteri adı yoksa bizimkine düş — fail-open kuralının tek gövdesi. */
-export function musteriAdiVeya(cust: string | null | undefined, ours: string): string {
+export function customerNameOr(cust: string | null | undefined, ours: string): string {
   return (cust ?? "").trim() || ours;
 }

@@ -60,6 +60,19 @@ if (staged.some((f) => f.startsWith("Teks-Erp/prisma/") || f.startsWith("Teks-Er
   adimlar.push({ ad: "migration hijyeni", cwd: ".", cmd: ["node", ["scripts/check-migrations.mjs"]] });
 }
 
+// TANIMLAYICI DİLİ ([IL-16]): üretim kodunda İngilizce. ESLint bunu ölçemiyor —
+// yalnız Türkçe KARAKTERİ yasaklıyor, ASCII yazılmış Türkçe KELİMEYİ değil.
+// ⚠️ KAPIDA OLMASI ŞART: bu tam olarak "commit ederken fark edilmezse bir daha
+// hiç fark edilmez" sınıfı. 2026-09-10'da tek oturumda 8 tanımlayıcı bu şekilde
+// girdi ve hiçbir şey ses çıkarmadı. Yalnız `src/` değişince koşar (0,4 sn).
+if (staged.some((f) => /^(Teks-Erp|Electron|mobil)\/src\/.*\.tsx?$/.test(f))) {
+  adimlar.push({
+    ad: "tanımlayıcı dili",
+    cwd: "Teks-Erp",
+    cmd: ["npx", ["tsx", "scripts/test_identifier_language.ts"]],
+  });
+}
+
 // Doküman kapısı: ölü link + CLAUDE.md boyut tavanı.
 if (staged.some((f) => f.endsWith(".md"))) {
   adimlar.push({ ad: "doküman kapısı", cwd: ".", cmd: ["node", ["scripts/check-docs.mjs"]] });
