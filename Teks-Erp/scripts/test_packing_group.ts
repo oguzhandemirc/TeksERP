@@ -17,6 +17,7 @@
 //  §12 Ölü grup DİRİLTİLMEZ (addSacks → 409)
 //  §13 Liste filtresi: grup id + "gruplanmamış" sentineli + satırdaki grup adı
 //  §14 Grup dökümü çuval id'lerini SUNUCUDA çözer (eksik sayfa = eksik döküm değil)
+//  §15 Replay GÖVDE KAPISI (F117): aynı token BAŞKA çuval kümesiyle → 409
 // =============================================================================
 
 // ⭐ NEGATİF SONDA (2026-09-10, ölçüldü):
@@ -30,12 +31,13 @@
 //   (f) grup filtresinin WHERE bloğu silindi -> §13 KIRMIZI (3 kontrol).
 //   (g) `getContentDump`taki grup çözümü silindi -> §14 kırmızı ("En az bir çuval
 //       seçilmeli" ile düşer; ölçüldü).
+//   (h) `assertReplayPayloadMatches` çağrısı silindi -> §15 KIRMIZI.
 //   Hepsi geri alındığında yeşil.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { Prisma, RollStatus, RollEntrySource } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
 import prisma from "../src/lib/prisma";
 import { AppError } from "../src/utils/app-error";
@@ -133,9 +135,6 @@ async function main(): Promise<void> {
     join(__dirname, "../src/services/helpers/period-guard.helper.ts"), "utf-8",
   );
   check("§2 envanterde yazılı", /\/\/\s+8031\s+PACKING_GROUP_LOCK_NS/.test(envanter));
-
-  const item = await prisma.item.findFirst({ where: { isActive: true }, select: { id: true }, orderBy: { code: "asc" } });
-  if (!item) throw new Error("Seed Item bulunamadı — önce `npm run seed`");
 
   const c1 = await prisma.customer.create({
     data: { code: `TST-PG-${TS}`, name: `PAKETLEME GRUBU TEST ${TS}` }, select: { id: true },
@@ -273,6 +272,19 @@ async function main(): Promise<void> {
     } catch (e) { bosGrupHata = e instanceof AppError ? e.message : "?"; }
     check("§14 boşalmış grubun dökümü net Türkçe 400 veriyor",
       bosGrupHata.includes("havuz çuvalı kalmamış"), bosGrupHata || "(hata YOK)");
+
+    // ---- §15: replay gövde kapısı ----------------------------------------
+    const tok2 = "22222222-3333-4444-8555-" + String(TS + 7).slice(-12).padStart(12, "0");
+    const sA = await makeSack(customerId);
+    const sB = await makeSack(customerId);
+    const gA = await createGroup([sA], undefined, tok2);
+    check("§15 token'lı grup kuruldu", !!gA.id);
+    // AYNI token, BAŞKA çuval kümesi → cached kaydı dönmek yanlış cevaptır.
+    await expectErr("§15 ⭐ aynı token BAŞKA çuval kümesiyle → 409",
+      () => PackingGroupService.createWithSacks({ customerId, sackIds: [sB], clientToken: tok2 }), 409);
+    // Aynı token AYNI kümeyle → idempotent başarı (kapı meşru retry'ı kesmez).
+    const gA2 = await createGroup([sA], undefined, tok2);
+    check("§15 aynı token AYNI kümeyle idempotent başarı", gA2.id === gA.id);
 
     // ---- §5: havuz boşalınca sayaç 1'e döner ------------------------------
     await prisma.sack.updateMany({

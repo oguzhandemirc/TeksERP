@@ -68,6 +68,11 @@ export const MERGE_MAP: Record<MergeEntity, MoveRule[]> = {
     { kind: "MOVE", model: "DirectShipment", table: "direct_shipments", column: "customerId", label: "Doğrudan sevkiyat" },
     { kind: "MOVE", model: "RollReturn", table: "roll_returns", column: "customerId", label: "İade" },
     { kind: "MOVE", model: "Sack", table: "sacks", column: "customerId", label: "Çuval" },
+    // Paketleme grubu (çalışma yaftası) da TAŞINIR: grup cariye özeldir ve
+    // birleştirilen carinin açık hazırlıkları kaybolmamalı. Çuvallar `sacks`
+    // satırıyla zaten taşınıyor; grup kaydı taşınmasaydı FK, birleştirmede
+    // ölmüş bir cariye bakar kalırdı.
+    { kind: "MOVE", model: "PackingGroup", table: "packing_groups", column: "customerId", label: "Paketleme grubu" },
     { kind: "MOVE", model: "Roll", table: "rolls", column: "labelCustomerId", label: "Top (etiket müşterisi)" },
     { kind: "MOVE", model: "Route", table: "routes", column: "customerId", label: "Rota şablonu" },
     {

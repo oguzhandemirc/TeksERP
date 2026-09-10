@@ -109,6 +109,9 @@ export async function nextPackingGroupSeqTx(
 
 export const GROUP_WITH_SACKS_SELECT = {
   id: true,
+  // Replay gövde kapısının (F117) kimlik alanı — token'lı grup BAŞKA bir cariye
+  // aitse cached kaydı dönmek yanlış cevap olurdu.
+  customerId: true,
   name: true,
   seq: true,
   note: true,

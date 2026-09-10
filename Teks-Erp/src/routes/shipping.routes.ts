@@ -253,7 +253,7 @@ router.post("/sacks/:id/tags", verifyToken, WRITE, controller.setSackTagsOfSack)
  *     responses: { 200: { description: Grup listesi + sayaçlar } }
  *   post:
  *     tags: [Shipping]
- *     summary: "Parti Ata" — seçili çuvallardan yeni grup kur
+ *     summary: '"Parti Ata" — seçili çuvallardan yeni grup kur'
  *     security: [{ bearerAuth: [] }]
  *     responses:
  *       201: { description: Grup oluşturuldu }

@@ -44,6 +44,7 @@ import {
   readPackingGroupNumbering,
   readPackingGroupsEnabled,
 } from "./system-setting.service";
+import { assertReplayPayloadMatches } from "./helpers/idempotent-replay.helper";
 import {
   GROUP_WITH_SACKS_SELECT,
   LIVE_GROUP_WHERE,
@@ -111,6 +112,20 @@ export const PackingGroupService = {
         select: GROUP_WITH_SACKS_SELECT,
       });
       if (replay) {
+        // GÖVDE KAPISI (F117): aynı token BAŞKA bir yükle gelirse cached kaydı
+        // dönmek YANLIŞ cevaptır — operatör "atadım" sanır, seçtiği çuvallar
+        // gruplanmamış kalır. Kimlik: cari + ÇUVAL KÜMESİ.
+        assertReplayPayloadMatches(
+          [
+            { ad: "customerId", mevcut: replay.customerId, gelen: input.customerId },
+            {
+              ad: "sackIds",
+              mevcut: [...replay.sacks.map((sk) => sk.id)].sort().join(","),
+              gelen: [...sackIds].sort().join(","),
+            },
+          ],
+          "Bu istemci anahtarı BAŞKA bir çuval kümesiyle kullanılmış — listeyi yenileyip yeniden deneyin.",
+        );
         // REPLAY'İN DÖRDÜNCÜ DURUMU: token'lı grup bu arada BOŞALMIŞSA cached
         // kaydı dönmek yanlış cevaptır — operatöre boş bir grup gösterirdi ve
         // seçtiği çuvallar gruplanmamış kalırdı. Doğru hamle yeni bir deneme.
@@ -229,7 +244,9 @@ export const PackingGroupService = {
     await AuditService.log({
       userId,
       action: "UPDATE",
-      tableName: "sacks",
+      // Çuvalın KENDİ geçmişine yazılır ("SACK"), grup kataloğuna değil —
+      // iz atamalarıyla aynı emsal (`sack-tag.service.ts`).
+      tableName: "SACK",
       recordId: ids[0],
       newData: { packingGroupId: null, sackIds: ids },
     });

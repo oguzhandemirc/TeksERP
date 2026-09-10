@@ -88,6 +88,10 @@ export const TABLE_LABELS: Record<string, string> = {
   // altına yazılır (çuvalın kendi geçmişi orada okunuyor — `SACK_NOTES` emsali),
   // katalog düzenlemesi ise bir çuval olayı DEĞİLDİR.
   sack_tags: "Çuval İzi Kataloğu",
+  // Paketleme grubu (çalışma yaftası). ⚠️ Ayrı satır: grubun KENDİ düzenlemesi
+  // (ad/not/kuruluş) bir çuval olayı değildir; çuvalın gruba girip çıkması ise
+  // `SACK` altına yazılır — iz atamalarıyla aynı emsal.
+  packing_groups: "Paketleme Grubu",
   SHIPMENT: "Sevkiyat",
   // Sevk defteri — mali etkisi olan tek defter (sipariş karşılanması ondan
   // türer). 2026-08-29'a dek değişim geçmişi HİÇ yoktu (BULGU-T2-003).
