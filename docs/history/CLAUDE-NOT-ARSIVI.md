@@ -4443,3 +4443,277 @@ Migration **yok** (bu turda şema değişmedi). Yeni izin **yok**. APK **yok** �
 tablet bu turda hiç değişmedi (saha beyanı: tabletteki sevkiyat ekranları şu an
 kullanılmıyor, geçici). Panel Electron paketiyle gider; `build:web` aynı kodu
 web'e de taşır.
+
+---
+
+## 2026-09-10 — DEFTER-ÖNCELİKLİ MİMARİ: hard delete yok · izlenebilirlik defterle · geri alma ters kayıttır [ÇEKİRDEK]
+
+Kullanıcı üç ilke koydu ve bunlar tek bir doktrinin üç yüzüdür:
+
+1. **Programda hard delete istemiyorum.**
+2. **İzlenebilirlik/sorgulanabilirlik istiyorum, bunu hareket (transaction) tablolarıyla yapmak istiyorum.**
+3. **Bir şeyi geri aldığımızda onu gerçekten geri almak değil, aynı işlemin tersini yapmak istiyorum — geri alma o işi hiç yapılmamış gibi göstermemeli, yıkıcı yöntem olmamalı.**
+
+Doktrinin adı: **defter-öncelikli (ledger-first)**. Durum tabloları "şu an ne"yi
+tutar; defterler "ne oldu"yu tutar ve **"ne oldu" asla değişmez**. Emsali SAP'nin
+malzeme belgesidir: silinemez, yalnız storno atılır (MBST). Bizde `CariTransaction.reversesTxnId`,
+`WarehouseEventType.SHIPMENT_REVERSAL` ve `RollVariance.reversedAt` zaten bu
+desendir — sorun eksiklik değil **tutarsızlıktı**.
+
+### Saha sorusu ve ölçüm
+
+Soru şöyle başladı: "audit hangi tabloda" → "audit'ten iş verisi okuyor muyuz,
+bu yanlış değil mi" → "eksik transaction tablolarımız var mı". Üç tarama koşuldu
+(şema · servis katmanı · 13 alanlık sektör kapsamı) ve ortak kök şu çıktı: proje
+defter mimarisini DOĞRU kurmuş ama **tutarlı uygulamamış**; boşluk hissedilen her
+yerde geliştirici `system_logs`'a (audit) uzanmış — oysa audit 6 ayda arşivlenir
+ve iş verisi taşıyamaz.
+
+**ÖLÇÜM DÜZELTMESİ (bu notun en önemli parçası).** `docs/standart/VERITABANI.md`
+§9 "sekiz hard delete sitesinin sekizi de meşru istisna" diyordu. 2026-09-10'da
+yeniden sayıldı: **87 site** var —
+
+- 17 doğrudan `prisma|tx|db.<model>.delete(` çağrısı
+- 70 `.deleteMany(` çağrısı
+- ayrıca `base.service.ts:1280` jenerik `hardDelete()`, master-data servislerinin
+  ortak yolu (site sayısına dahil değil, çarpan)
+
+Eski "sekiz" ölçümü yalnız bir alt kümeyi (muhtemelen tekil `.delete()`in bir
+kısmını) saymış; `.deleteMany()` hiç görülmemiş. **Kapısız kural bir niyet
+beyanıdır** ([DB-35]) — burada niyet ile gerçek arasındaki fark 11 kattı.
+
+`.deleteMany()` model dağılımı (ilk sıralar): `rollOperation` 7 · `rollProperty` 5 ·
+`workOrderToOrderLine` 4 · `rollMovement` 4 · `sackAllocation` 3 · `workSession` 2 ·
+`userPermission` 2 · `paymentAllocation` 2 · `itemAllowedColor` 2 · `stationProperty` 2 …
+
+### Karar
+
+**A. Hard delete varsayılan olarak KAPALI.** Eski dört sınıf ikiye iner:
+
+| Eski sınıf | Yeni hüküm |
+|---|---|
+| ① Bağımlılık-guard'lı silme (master-data permanent · boş çuval · cihaz unpair) | **KALKAR** → `isActive:false` / `SackStatus.VOIDED` / `DeviceEvent` defter satırı. Guard kalır, silme gider. |
+| ② Alias / karar satırı | **KALKAR** → `revokedAt`/`revokedById`; yeni satır eskisini geçersizler, UNIQUE partial'a döner |
+| ③ Pivot / çocuk satır replace | **İKİYE BÖLÜNÜR** — aşağı bak |
+| ④ Deftere hiç yazmamış taslak (atomik claim'li) | **KALIR** — hiçbir şey olmadıysa geri alınacak bir şey de yoktur |
+
+**③'ün bölünmesi doktrinin en ince yeri.** Ölçüt: *satırın parasal/ticari/kalite
+sonucu var mı?*
+
+- **③a TİCARİ pivot** (`ItemPrice` · `SackAllocation` · `PaymentAllocation` ·
+  `WorkOrderToOrderLine` · belge satırları): versiyonlanır ya da ters kayıt alır.
+  Sil-yaz YASAK.
+- **③b YAPILANDIRMA pivotu** (`RollProperty` · `StationProperty` ·
+  `ItemAllowedColor` · `ItemAllowedProperty` · `RouteStepProperty` ·
+  `PermissionTemplateItem` · `CustomerTemplateRoute` · `LabelContextDefault` ·
+  `PeripheralTemplateRoute` · `SubcontractorToCategory` · `StationColor`):
+  sil-yaz KALIR — ama **değişikliğin KENDİSİ** bir karar defterine yazılır.
+  Yüzlerce ayar satırını versiyonlamak tabloyu şişirir ve hiçbir soruyu
+  cevaplamaz; cevaplanan soru "bu ayarı kim ne zaman değiştirdi"dir ve onun yeri
+  pivot satırı değil karar satırıdır.
+
+**B. İzlenebilirlik audit'ten değil defterden okunur.** `system_logs` teknik izdir,
+6 ayda arşivlenir, **iş kararına giremez**. Bir soru iş kararına giriyorsa cevabı
+bir hareket tablosunda ya da kalıcı kolonda durur. Ölçüt tek cümle: *bilgi iş
+kararına giriyorsa deftere, yalnız denetime giriyorsa audit'e.*
+
+**C. Geri alma = ters kayıt.** Sözleşme:
+
+> Geri alma, ileri işlemin **ters kaydını bugüne yazar**; ileri kaydı ne siler ne
+> değiştirir. İşlem sonrası DURUM ileri-öncesi durumla aynı olabilir; DEFTER asla
+> aynı olmaz.
+
+Bundan çıkan üç yasak: (i) defter satırı silmek, (ii) ileri damgayı `null`'lamak
+(`dispatchedAt`/`dispatchedById`/`weighedAt` gibi), (iii) ileri satırın üzerine
+yazmak.
+
+### Doktrinin bugün ihlal edildiği yerler (bu notun açtığı iş)
+
+Üç taramanın kesişimi. Her biri ayrı iştir, bu not yalnız kuralı koyar:
+
+- `shipping.service.ts:3634` — sevk geri almada `dispatchedAt`/`dispatchedById` → `null`.
+  `Shipment` modelinde `cancelledAt`/`cancelledById`/`cancelReason` kolonu HİÇ YOK
+  (37 modelde var, iptal edilebilen tek belgede yok). SoD izni `shipping:undo-dispatch`ın
+  kalıcı izi yok.
+- `inventory.service.ts:3761` `restoreCancelledRoll` — iptal kolonlarını `null`lar,
+  `WarehouseMovement` yazmaz; `WarehouseEventType`te `CANCEL_REVERSAL` yok.
+- `return.service.ts:942` `cancelReturn` — ileri yol `:576` `RETURN` yazıyor, geri yol
+  hiçbir şey yazmıyor; enum'da `RETURN_REVERSAL` yok.
+- ⚠️ **DÜZELTME (2026-09-11)** — "fason asimetrisi metrajı İKİ KEZ saydırıyor" iddiası
+  ÖLÇÜLDÜ ve YANLIŞ çıktı. `tekserp_demo`da çift-sayma adayı **0 top / 0 m**:
+  fasona çıkan 364 topun (`AT_SUBCONTRACTOR` 31 + `SUBCONTRACTOR_CONSUMED` 333)
+  HİÇBİRİNİN `warehouseId`'si yok, dolayısıyla hiçbirinin ENTRY satırı da yok —
+  çıkış satırı da gerekmiyor. `writeWarehouseMovement` from/to boşken zaten satır
+  yazmıyor (`warehouse-ledger.helper.ts:49`). Fason dönüşünde doğan topa ENTRY
+  yazmak DOĞRU: mal gerçekten dışarıdan geldi ve ebeveyn defterde hiç yoktu.
+- `subcontractor.service.ts:6438` — fasondan doğrudan sevkte mal firmadan çıkıyor,
+  depo defterinde iz yok.
+- `subcontractor.service.ts:5152`/`:5683` — doğan topların iptali ham `updateMany`,
+  `inventory.softDelete` kapısını hiç geçmiyor → askıda ENTRY.
+- `inventory.service.ts:3934` `hardDelete` (arşivleme) — kardeş `softDelete` `:3606`
+  CANCEL yazarken bu yol yazmıyor.
+- `kartela.service.ts:330`/`:680` — kartela sevki ve tüketiminde çıkış satırı yok.
+- `RollOperation` 7 yerde `deleteMany` — şema başlığı append-only diyor, kod siliyor.
+  "Bu topa kurşun uygulandı mı" sorusunun cevabı geriye dönük değişiyor.
+- `RollMovement` — `updatedAt` taşıyor (`:3591`), bir satır iki olay tutuyor,
+  4 yerde siliniyor; üstelik `recompute` statüyü BU tablodan türetiyor
+  (`workorder-manual-move.service.ts:662`) → hem defter hem durum kaynağı.
+- `ChequeEvent` — `ENDORSE`/`PAY`/`BOUNCE`/`RETURN` ileri olaylarının ters yolu YOK
+  (`cheque.service.ts:1454` yalnız `[PORTFOLIO, AT_BANK, ISSUED]` kabul eder);
+  `CariTxnSource`ta `CHEQUE_BOUNCE_CANCEL` de yok → cari bakiye kalıcı yanlış kalır.
+- `PaymentAllocation` — çözme hard delete (`payment-allocation.service.ts:369`, `:868`);
+  `Invoice.paidTotal`/`Payment.allocatedTotal`/`Cheque.allocatedTotal` düşer, satır kalmaz.
+- `Sack.weightKg` — yeniden tartı üzerine yazar (`shipping.service.ts:1539`),
+  sıfırlama tamamen siler (`:1633`). İrsaliyeye giden brüt kg'ın önceki değeri
+  hiçbir kalıcı kolonda yok.
+- `permission-management.service.ts:351`/`:434` — izin geri alma hard delete; SoD
+  üçlüsünün geçmişi kalıcı değil.
+- `master-data-merge.service.ts:148` — birleştirme geri alınamaz, taşınan satır
+  dökümü yalnız audit yükünde.
+
+### ÖLÇÜM (2026-09-11) — `WarehouseMovement` bir STOK DEFTERİ DEĞİLDİR
+
+Yukarıdaki düzeltmeyi kovalarken asıl bulgu çıktı ve tek tek eksik çağrılardan
+DAHA ÖNEMLİ: defter satırı yalnız topun `warehouseId`'si DOLUYKEN yazılır
+(`warehouse-ledger.helper.ts:49` — from/to boşsa sessizce atlar). Üretimdeki top
+depoya `finalize`/statü terfisiyle girer ve terfi bilinçli olarak satır YAZMAZ
+("konum değişmiyor", helper başlığı). Sonuç: defter yalnız **dışarıdan gelen malın**
+geliş/gidişini tutar, deponun kendisini değil.
+
+`tekserp_demo` ölçümü (defter başlangıcı 2026-09-01, 842 satır):
+
+- Defter sonrası doğan **1.231 topun yalnız 751'inde** defter satırı var; 838'inde
+  `warehouseId` dolu → **87 top depoda ama defterde hiç yok**.
+- Mutabakat (yalnız defter sonrası kohort): defter net **68.834,8 m** ↔ canlı depo
+  **74.204,1 m** → fark **−5.369,3 m**.
+- `CANCELLED` 69 topun **0'ında** CANCEL satırı var — hepsinin `warehouseId`'si
+  boş olduğu için. Yani `softDelete`'in defter yazımı pratikte hiç ateşlenmiyor.
+- Kartela: `AT_KARTELA` 6 + `KARTELA_CONSUMED` 8 topun ENTRY'si de çıkışı da 0.
+- Sevk: defter sonrası doğan 3 `SHIPPED` topun 3'ünde de SHIPMENT satırı var (✅).
+- İade: 2 iadenin 2'sinde de RETURN satırı var (✅); iptal edilmiş iade yok, o yüzden
+  `RETURN_REVERSAL` boşluğu veriyle DOĞRULANMADI — kod boşluğu olarak durur.
+
+**Karar gerektiren soru:** defter "dışarıdan gelen malın geçmişi" olarak mı kalacak
+(bugünkü tutarlı hâli), yoksa gerçek bir STOK DEFTERİNE mi dönüşecek (her depoya
+giriş/çıkış, terfi dahil)? İkincisi doktrinin (izlenebilirlik defterle) gereğidir
+ama `warehouseId` atayan HER yolun deftere bağlanmasını ister. Bu ayrı bir karardır.
+
+### Bilinen bedeller (baştan kabul edildi)
+
+1. **UNIQUE kısıtları kırılır.** Silinmeyen satır çakışır; kısıtlar
+   `WHERE "revokedAt" IS NULL` partial'ına döner. Desen zaten var
+   (`item_price_default_uq`), yaygınlaştırılacak. Her yeni partial `test_db_invariants`
+   envanterine yazılır ([DB-30], iki yönlü).
+2. **Her okuma süzmek zorunda.** Klasik soft-delete tuzağı; bir yerde süzme unutulur,
+   geçersiz satır listeye sızar. Tek-helper + AST bekçisi rejimi bu kolonlara da uygulanır.
+3. **Defter arşivlenemez.** Audit 6 ayda arşivlenir; defter İŞ VERİSİDİR, arşivlenemez.
+   `WarehouseMovement` en hızlı büyüyecek tablo olur; büyüme planı (tarih partition,
+   index) baştan düşünülür.
+
+### Neden şimdi ve neden çekirdek
+
+Ürün tek fabrikadan tüm tekstil sektörüne açılıyor. Denetlenebilirlik (GOTS/OEKO-TEX
+lot izlenebilirliği, müşteri denetimi, ticari ihtilaf) satılabilirliğin parçasıdır ve
+sonradan eklenemez: silinmiş satır geri gelmez. Bu yüzden [ÇEKİRDEK] — her kurulumda,
+her modülde geçerlidir, bayrakla açılıp kapanmaz.
+
+### Kod çapaları
+
+- Ölçüm: `grep -rn "\(tx\|prisma\|db\|client\)\.[a-zA-Z]*\.delete(" src/` → 17 ·
+  `grep -rn "\.deleteMany(" src/` → 70 · `base.service.ts:1280` jenerik `hardDelete`
+- Doğru emsaller (örnek alınacak): `CariTransaction.reversesTxnId` `schema.prisma:6634` ·
+  `RollVariance.reversedAt` `:3217` · `WarehouseEventType.SHIPMENT_REVERSAL` `:6082` ·
+  `PrintedDocument` versiyon defteri `:4388` · `invoice.service.ts:883` (claim'li taslak silme)
+- Alan kuralları: `docs/kurallar/defter.md` (bu notla açıldı)
+
+### Bekçi
+
+**Bu turda bekçi YAZILMADI** — not yalnız kuralı koyar. Kapı ihtiyacı ölçüldü:
+`scripts/test_warehouse_ledger.ts` ve `test_warehouse_movements.ts` yalnız OKUMA
+yüzeyini ölçüyor, "hangi olay satır yazmalı" invariant'ını değil;
+`scripts/consistency-check.sql`'de `warehouse_movements` mutabakatı HİÇ YOK.
+Yani yukarıdaki ihlallerin hiçbirini bugün hiçbir bekçi kırmızıya düşürmez.
+Gereken iki kapı ayrı iştir: ① defter mutabakatı (Σ hareket ↔ canlı durum),
+② yeni `delete`/`deleteMany` sitesi için AST tripwire (allowlist'li).
+
+### Üç kapı
+
+Migration **yok** (bu not şema değiştirmez; doktrinin uygulanması ayrı migration'lar
+doğuracak). Yeni izin **yok**. APK **yok**.
+
+
+---
+
+## 2026-09-11 — Fasondan kısmi sevkte `initialQty` düşürülüyordu + sarf kalemi top doğuruyordu [ÇEKİRDEK]
+
+Defter doktrini turunun (2026-09-10) açtığı taramada çıkan İKİ canlı hata. İkisi de
+düzeltildi, ikisi de negatif sondayla kırmızı görüldü.
+
+### ① `initialQty` geriye dönük düşürülüyordu — kapatılmış bir sınıfın kaçak sitesi
+
+**Ölçüm.** `grep -rn "initialQty: { decrement"` tüm `src/` + `scripts/` içinde TEK
+isabet veriyordu: `subcontractor.service.ts` `createFasonShipChild` — fasondan
+doğrudan müşteriye KISMİ sevkte ana top bölünürken `currentQty` ile birlikte
+`initialQty` de düşüyordu.
+
+Bu desen 2026-08-29 denetiminde **zaten yargılanmış ve yasaklanmıştı**
+(`tambur.service.ts` parent-kısalma bloğu, üç ölçülmüş kusur: ① WO üretilen metrajı
+geriye azalıyor — IE1408260004 −76,7 m, sahada 120 top · ② `rollWhole =
+initialQty.equals(currentQty)` kesimden sonra TRUE kalıp metraj düzeltme kapısını
+deliyor · ③ "Tümden Geri Al" sapma defterine OLMAYAN AŞIM satırı yazıyor). Fason
+satırı o temizlikten ALTI HAFTA ÖNCE yazılmış ve taramada atlanmıştı. Yeni bir sınıf
+değil, kapatılmış sınıfın hayatta kalan sitesi.
+
+**Ağırlaştırıcı:** `directShip` TERMİNALDİR (`subcontractor.service.ts` — "Bu sevk
+fasondan sevk edilmiş — geri alınamaz"), yani düşürülen giriş metrajı KALICIYDI.
+
+**Bağlı düzeltme (bekçi yakaladı).** `coverage.helper.ts` `computeWoInput` içinde
+hatanın TELAFİSİ duruyordu — yorumu birebir söylüyordu: *"fasondan-sevk charge-split
+çocuğu: parent decrement edildi → charge geri ekle"*. Ebeveyn artık tam metrajını
+koruduğu için bu dal çift sayıyordu (300 m top + 100 m çocuk = 400 m). Dal kaldırıldı;
+charge zaten kökte tam duruyor.
+
+**Veri etkisi.** `tekserp_demo`da 0 `DirectShipment` var → demo'da etkilenen top yok.
+**Canlıda ÖLÇÜLMEDİ** — `DirectShipment` kullanan kurulumda `initialQty`si düşmüş
+ebeveynler taranmalı (imza: `parentRollId` ile bağlı `directShipmentId` dolu çocuğu
+olan ve `initialQty < Σ(çocuk initialQty) + currentQty` olan toplar).
+
+### ② Sarf kalemi mal kabulde barkodlu KUMAŞ TOPU doğuruyordu — kapı yoktu
+
+**Ölçüm.** `goods-receipt.service.ts` yalnız `ItemType.YARN`ı ayırıyordu; geri kalan
+HER tür `inventory.createInitialEntry`'ye düşüyordu ve orada `ItemType`
+karşılaştırması HİÇ YOKTU. Route zod'unda `colorId`/`width` opsiyonel olduğu için
+sarf satırı doğrulamayı da geçiyordu. Kodda ÜÇ ayrı yorum bu boşluğu zaten
+işaretlemişti (`yarn.service.ts` "CONSUMABLE bilinçli olarak DIŞARIDA",
+`goods-receipt.service.ts` "üçüncü satır tipinin genişleme noktası",
+`invoice.service.ts` "aynı deliği yeniden açar") — ama kapı hiç takılmamıştı.
+
+**Kapı FAIL-CLOSED kuruldu:** `createInitialEntry` "CONSUMABLE değilse geç" değil
+**"FABRIC ise geç"** der. Enuma dördüncü tür eklendiği gün sessizce top doğurmaz.
+Kapı serviste olduğu için DÖRT çağıranın hepsini birden kapatır (mal kabul · elle top
+ekleme · tambur manuel ×2) — iplik kaleminden elle top eklemeyi de artık engeller.
+
+**Veri etkisi.** `tekserp_demo`da 0 `CONSUMABLE` kalem var (170 FABRIC + 4 YARN) →
+hata LATENT'ti, hiç ateşlenmemişti. Negatif sondada gerçekliği kanıtlandı: kapı
+kaldırılınca sarf kaleminden `created=1` ve `top=1` doğdu.
+
+### Kod çapaları
+
+- `src/services/subcontractor.service.ts` — `createFasonShipChild`, `initialQty` decrement kaldırıldı
+- `src/services/helpers/coverage.helper.ts` — `computeWoInput`, telafi dalı kaldırıldı
+- `src/services/inventory.service.ts` — `createInitialEntry`, `ItemType.FABRIC` fail-closed kapısı
+
+### Bekçi
+
+- `scripts/test_input_rolls_directship.ts` — 3 yeni kontrol (ebeveyn `initialQty`
+  değişmedi · `currentQty` düştü · `rollWhole` artık FALSE). **Negatif sonda:** decrement
+  geri kondu → 3 kırmızı (`initialQty=200`, `rollWhole` TRUE, `totalMeters=200`).
+- `scripts/test_goods_receipt.ts` §A10/A10b/A10c — sarf satırı `failed[]`e düşer, sebep
+  kalem türünü söyler, hiç top doğmaz. **Negatif sonda:** kapı `if (false)` yapıldı →
+  3 kırmızı (`created=1`, `top=1`).
+- Yeşil: `test_input_rolls_directship` 7/7 · `test_goods_receipt` 2/2 ·
+  `wo_input_attach_window` · `wo_branch_redye` · `direct_ship` 4/4.
+
+### Üç kapı
+
+Migration **yok**. Yeni izin **yok**. APK **yok** (tablet bu yollara dokunmuyor).

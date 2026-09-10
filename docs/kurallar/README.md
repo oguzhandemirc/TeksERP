@@ -4,6 +4,7 @@
 
 | Alan | Dosya | Kural | Ezilme | Bekçi | Arşiv tarihleri |
 |---|---|---|---|---|---|
+| **Defter · Hareket tablosu · Ters kayıt · Hard delete** | `docs/kurallar/defter.md` | 16 | 2 | 0 | 2026-09-10 |
 | Sevkiyat · Çuval · Brüt · Storno/İade | `docs/kurallar/sevkiyat.md` | 40 | 6 | 136 | 2026-08-02, 2026-08-03, 2026-08-05, 2026-08-21, 2026-08-22, 2026-08-25 |
 | Fason · Kartela | `docs/kurallar/fason.md` | 29 | 6 | 95 | 2026-08-04, 2026-08-19 |
 | Tambur · Finalize · Kesim · Geri alma | `docs/kurallar/tambur.md` | 41 | 8 | 68 | 2026-08-04, 2026-08-12, 2026-08-13, 2026-09-03 |

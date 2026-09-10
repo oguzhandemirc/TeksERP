@@ -110,17 +110,18 @@ Kırmızı bir envanter kontrolü "bu nesneyi kim koydu ve neden" sorusudur; cev
 
 ## 9 · Soft delete ve meşru hard delete istisnaları
 
-Varsayılan silme SOFT'tur (kök `CLAUDE.md` § Veri ve defter). Kod gerçeği ölçüldü: **sekiz hard delete sitesinin sekizi de meşru istisna** çıktı (`olcum/faz0-acik-olcumler.json` › `M_04_hard_delete_hukumleri`). Bunlar dört SINIFA girer:
+> ⚠️ **REVİZE (2026-09-10)** — defter-öncelikli doktrin bu bölümü ezdi. Dört sınıf İKİYE indi (① ve ② KALKTI; ③ ticari/yapılandırma diye bölündü). "Sekiz site" ölçümü BAYAT: yeniden sayıldı **87** (17 `.delete(` + 70 `.deleteMany(`). Kanonik metin ve defter envanteri: `docs/kurallar/defter.md`.
 
-| Sınıf | Ne yapar | Siteler |
+Varsayılan silme SOFT'tur (kök `CLAUDE.md` § Veri ve defter). Bugün geçerli İKİ meşru sınıf:
+
+| Sınıf | Neden meşru | Emsal |
 |---|---|---|
-| ① Bağımlılık-guard'lı silme | silmeden önce bağımlı sayar → 409 | `sack-tag.service.ts:218` (assignment count + FK Restrict) · `batch.service.ts:337` (beş iz kapısı: top / fason sevki / çocuk parti / merge) |
-| ② Alias / karar satırı | satırın kendi içeriğinden başka içeriği yok; "sil" = "kararı geri al" | `customer-alias.service.ts:94` · `:198` (koşullu: `assigned=true` soft temizlenir) · `duplicate-review.service.ts:151` (MERGED geri açılamaz → 409) |
-| ③ Pivot / çocuk satır replace | üst kayıt yaşar, çocuk kümesi yenilenir | `label-template.service.ts:886` (primary varyant korunur → 400) · `permission-management.service.ts:1041` (DALLI: sistem rolü `isActive:false`, yalnız fabrikanın kendi şablonu silinir) |
-| ④ Deftere hiç yazmamış taslak | belge hiçbir bakiye üretmedi | `invoice.service.ts:883` (`deleteMany({id, status: DRAFT})` — ATOMİK CLAIM, `count===0` → taze okuma → 409) |
+| **④ Deftere hiç yazmamış taslak** | hiçbir bakiye/defter satırı üretmedi — geri alınacak "olay" yok | `invoice.service.ts:883` (`deleteMany({id, status: DRAFT})` — ATOMİK CLAIM, `count===0` → taze okuma → 409) |
+| **③b Yapılandırma pivotu replace** | satırın parasal/ticari/kalite sonucu yok; "kim değiştirdi" KARAR satırına yazılır | `RollProperty` · `StationProperty` · `ItemAllowedColor` · `RouteStepProperty` |
 
-- **[DB-31]** Hard delete yalnız yukarıdaki dört sınıftan birine girerek yazılır; sınıfa girmiyorsa soft delete kullan · zorlama: insan:`prisma.x.delete` çağrısının meşru olup olmadığı sınıf sorusudur, AST ayıramaz · kanıt: sekiz sitenin sekizi de sınıflandı (M-04 hükümleri) · devralınan: yok
-- **[DB-32]** Yeni bir hard delete YOLU açmak bir KARARDIR: yukarıdaki tabloya gerekçesiyle girer, `AuditService.log()` ile iz bırakır ve silmeden önce guard'ı/claim'i yazılır · zorlama: insan:liste elle tutulur — kapsamı ölçen bekçi yok · kanıt: sekiz sitenin hepsi audit yazıyor; `invoice.service.ts:883` claim'li silmenin örnek alınacak biçimidir · devralınan: yok
+- **[DB-31]** Hard delete yalnız bu İKİ sınıftan birine girerek yazılır; girmiyorsa DURUM GEÇİŞİ yaz (`isActive:false` / `VOIDED` / `revokedAt`+`revokedById`) · zorlama: insan:sınıf sorusudur — allowlist'li tripwire YAZILACAK · kanıt: 87 site (2026-09-10) · devralınan: 87 sitenin tamamı
+- **[DB-32]** Yeni hard delete yolu açmak KARARDIR ve varsayılan cevap HAYIR'dır: `defter.md` sınıf tablosuna gerekçesiyle girer, audit yazar, guard'ı/claim'i ÖNCE yazılır · zorlama: insan:liste elle tutulur · kanıt: `invoice.service.ts:883` · devralınan: yok
+- **[DB-38]** Defter satırı SİLİNMEZ ve GÜNCELLENMEZ; geri alma ters satır yazar, ileri damgayı (`dispatchedAt` · `weighedAt` · `invoicedAt` · `remainderClosedAt`) `null`'lamaz · zorlama: bekçi:YOK — defter mutabakatı bekçisi yazılacak · kanıt: `RollOperation` 7 · `RollMovement` 4 · `PaymentAllocation` 2 `deleteMany` (2026-09-10) · devralınan: 13 site
 
 ## 10 · Sorgu, Decimal, zaman
 
