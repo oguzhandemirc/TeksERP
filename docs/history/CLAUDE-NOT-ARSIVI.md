@@ -3919,11 +3919,20 @@ YALNIZ canlı gruplara baktığı için carinin havuzu tamamen boşaldığında 
 kendiliğinden 1'e döner — `artan` rejiminde bile numara sonsuza büyümez.
 Alternatif rejim `bosluk-doldur` yazıldı ve panelden seçilebilir.
 
-**[PROFİL] Görünen ad `"1. Grup"`** (`formatPackingGroupName`, tek satır).
-"P1" YAZILMADI ve bu bilinçli: fabrikada "parti" bugün ÜRETİM partisidir
-(`Batch`, refakat kartına basılı, KK1'de geçiyor). Çuvala da "P3" deseydik aynı
-fabrikada iki farklı P3 dolaşır ve telefonda "P3'ü yükle" cümlesi belirsizleşirdi.
-Saha "parti" demeye devam edebilir; YAZILAN şey ayrışıyor.
+**[PROFİL] Görünen ad `"P1"`** (`formatPackingGroupName`, tek satır).
+⚠️ Bu, notun ilk hâlindeki kararın TERSİ — aynı gün kullanıcı kararıyla
+değiştirildi. İlk yazımda `"1. Grup"` seçilmişti; gerekçe, fabrikada "parti"
+kelimesinin bugün ÜRETİM partisi olmasıydı (`Batch`, P01…P99, refakat kartına
+basılı, KK1'de geçiyor) ve aynı fabrikada iki farklı "P3"ün dolaşacak olmasıydı.
+Kullanıcı çakışmayı görüp BİLEREK kabul etti: saha zaten "P1" diyor ve sahanın
+kendi kelimesini ekranda değiştirmek, çakışmadan daha pahalı.
+
+Çakışmanın zararsızlığı ÖLÇÜLDÜ ve bir KOŞULA bağlı: grup adı HİÇBİR BELGEYE
+BASILMIYOR (etiket · irsaliye · rapor — hepsinin dışında), yani iki P3 bir
+KAYDI bozamaz; olsa olsa telefonda bir cümleyi belirsizleştirir. ⚠️ Muafiyet
+adın EKRANDA KALMASINA bağlıdır — grup adı bir gün belgeye ya da rapora
+girecekse (aynı kâğıtta iki farklı P3) bu ön ek yeniden düşünülmelidir. Koşul
+`formatPackingGroupName` başlığında yazılı.
 
 **[ÇEKİRDEK] Bir çuval TEK grupta** (kullanıcı kararı). `packingGroupId` tekil
 kolon; başka gruptaki çuval seçilirse TAŞINIR. Aksi hâlde "sevk butonu grubu

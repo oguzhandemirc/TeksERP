@@ -26,14 +26,22 @@ export const PACKING_GROUP_LOCK_NS: number = 8031;
 /**
  * Grubun EKRANDA görünen adı. Tek satır, tek yer.
  *
- * ⚠️ "P1" YAZILMADI ve bu bilinçli: fabrikada "parti" bugün ÜRETİM partisidir
- * (`Batch`, P01…P99, refakat kartına basılı, KK1'de geçiyor). Çuvala da "P3"
- * deseydik aynı fabrikada iki farklı P3 dolaşır ve telefonda "P3'ü yükle"
- * cümlesi belirsizleşirdi. Saha "parti" demeye devam edebilir; YAZILAN şey
- * ayrışıyor. Biçim değişecekse burada tek satır değişir.
+ * ⚠️ "P" ÖN EKİ ÜRETİM PARTİSİYLE ÇAKIŞIR ve bu BİLEREK kabul edildi
+ * (kullanıcı kararı 2026-09-10): fabrikada "parti" bugün `Batch`tir (P01…P99,
+ * refakat kartına basılı, KK1'de geçiyor) ve saha paketleme grubuna da "P1"
+ * diyor. Sahanın kendi kelimesini değiştirmek yerine çakışmanın ZARARSIZ
+ * olduğu ölçüldü: grup adı HİÇBİR BELGEYE BASILMIYOR (etiket · irsaliye ·
+ * rapor — hepsinin dışında), yani çakışma bir KAYDI bozamaz; olsa olsa
+ * telefonda bir cümleyi belirsizleştirir.
+ *
+ * ⚠️ Bu muafiyet ADIN EKRANDA KALMASINA BAĞLIDIR. Bir gün grup adı bir belgeye
+ * ya da rapora girecekse çakışma zararsız olmaktan çıkar (aynı kâğıtta iki
+ * farklı P3) — o karar verilirken bu ön ek de yeniden düşünülmelidir.
+ *
+ * Biçim değişecekse burada tek satır değişir; ekranlar bu fonksiyondan okur.
  */
 export function formatPackingGroupName(seq: number): string {
-  return `${seq}. Grup`;
+  return `P${seq}`;
 }
 
 /** "Canlı grup" yüklemi — TEK KAYNAK. Havuzda en az bir çuvalı olan grup. */

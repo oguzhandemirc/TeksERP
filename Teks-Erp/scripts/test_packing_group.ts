@@ -160,7 +160,7 @@ async function main(): Promise<void> {
 
     // ---- §3: `artan` — boşalan numaraya geri dönülmez ----------------------
     const g1 = await createGroup([s0]);
-    check("§3 ilk grup seq=1", g1.seq === 1 && g1.name === "1. Grup", `${g1.name}/${g1.seq}`);
+    check("§3 ilk grup seq=1", g1.seq === 1 && g1.name === "P1", `${g1.name}/${g1.seq}`);
     const s2 = await makeSack(customerId);
     const g2 = await createGroup([s2]);
     const s3 = await makeSack(customerId);

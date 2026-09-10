@@ -791,11 +791,11 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         key: "packingGroupsEnabled",
         title: "Paketleme grubu (çuvalları partilere ayır)",
         summary:
-          "Havuzdaki çuvallar “1. Grup / 2. Grup” diye ayrılır; sevk butonu yalnız açık grubu gönderir.",
+          "Havuzdaki çuvallar “P1 / P2” diye ayrılır; sevk butonu yalnız açık grubu gönderir.",
         defaultOn: false,
         audience: ["Sevkiyat", "Depocu"],
         group: "Paketleme",
-        desc: "Kapalı (varsayılan, BUGÜNKÜ DAVRANIŞ): Paketleme ekranı carinin bütün havuz çuvallarını tek düz liste gösterir ve “Hemen Sevk Et” içi dolu HER çuvalı gönderir. Bir carinin farklı zamanlarda çıkacak iki hazırlığı yan yana beklediğinde bu, salı tırı için basılan butonun gelecek haftanın çuvallarını da almasına yol açar. Açık: operatör çuvalları seçip “Parti Ata” der, grup otomatik numara alır (adı elle de yazılabilir), gruba not bırakılabilir ve sevk butonu yalnız açık grubun çuvallarını gönderir. ⚠️ Grup bir REZERVASYON DEĞİLDİR: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez — yalnız “bunlar bir arada dursun” der. ⚠️ Grup numarası ekranda kalır; çuval etiketine ve irsaliyeye BASILMAZ (bu yüzden boşalan numara yeniden kullanılabilir). Grubun Excel/PDF çıktısı bir ÇALIŞMA KÂĞIDIDIR ve başlığında cari + grup + üretim anı yazar. Son çuvalı sevk edilen grup kendiliğinden kapanır.",
+        desc: "Kapalı (varsayılan, BUGÜNKÜ DAVRANIŞ): Paketleme ekranı carinin bütün havuz çuvallarını tek düz liste gösterir ve “Hemen Sevk Et” içi dolu HER çuvalı gönderir. Bir carinin farklı zamanlarda çıkacak iki hazırlığı yan yana beklediğinde bu, salı tırı için basılan butonun gelecek haftanın çuvallarını da almasına yol açar. Açık: operatör çuvalları seçip “Parti Ata” der, grup otomatik numara alır (P1, P2, …) (adı elle de yazılabilir), gruba not bırakılabilir ve sevk butonu yalnız açık grubun çuvallarını gönderir. ⚠️ Grup bir REZERVASYON DEĞİLDİR: stok düşmez, çuvalı kilitlemez, başka bir sevkin o çuvalı almasını engellemez — yalnız “bunlar bir arada dursun” der. ⚠️ Grup numarası ekranda kalır; çuval etiketine ve irsaliyeye BASILMAZ (bu yüzden boşalan numara yeniden kullanılabilir). Grubun Excel/PDF çıktısı bir ÇALIŞMA KÂĞIDIDIR ve başlığında cari + grup + üretim anı yazar. Son çuvalı sevk edilen grup kendiliğinden kapanır.",
       },
       {
         key: "shippingWeighRequiredEnabled",
@@ -828,7 +828,7 @@ export const SETTINGS_CATEGORIES: SettingsCategory[] = [
         options: PACKING_GROUP_NUMBERING_OPTIONS,
         audience: ["Sevkiyat", "Depocu"],
         group: "Paketleme",
-        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. Numara bir KİMLİK değil PARK YERİDİR: ekranda kalır, hiçbir belgeye basılmaz, grup boşalınca serbest kalır. “Artan” (varsayılan): yeni grup, açık grupların en büyüğünün bir fazlasını alır — boşalan numaraya geri dönülmez, böylece aynı cari için aynı gün iki farklı “3. Grup” dolaşmaz. “Boşluğu doldur”: yeni grup en küçük boş numarayı alır, numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir. ⚠️ İki rejim de yalnız AÇIK gruplara bakar: carinin havuzu tamamen boşaldığında sayaç kendiliğinden 1’e döner, yani numara sonsuza büyümez.",
+        desc: "Yalnız “Paketleme grubu” ayarı açıkken bir anlamı vardır. Numara bir KİMLİK değil PARK YERİDİR: ekranda kalır, hiçbir belgeye basılmaz, grup boşalınca serbest kalır. “Artan” (varsayılan): yeni grup, açık grupların en büyüğünün bir fazlasını alır — boşalan numaraya geri dönülmez, böylece aynı cari için aynı gün iki farklı P3 dolaşmaz. “Boşluğu doldur”: yeni grup en küçük boş numarayı alır, numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir. ⚠️ İki rejim de yalnız AÇIK gruplara bakar: carinin havuzu tamamen boşaldığında sayaç kendiliğinden P1’e döner, yani numara sonsuza büyümez.",
       },
       {
         enumKey: "shippingOrderRequirement",

@@ -191,11 +191,11 @@ export const PACKING_GROUP_NUMBERING_OPTIONS: ReadonlyArray<{
   {
     value: "artan",
     label: "Artan (varsayılan)",
-    hint: "Yeni grup, açık grupların en büyük numarasının bir fazlasını alır. “3. Grup sevk edildi, 5. Grup duruyor” ise yeni grup 6 olur — boşalan numaraya geri dönülmez, aynı gün iki farklı “3. Grup” dolaşmaz.",
+    hint: "Yeni grup, açık grupların en büyük numarasının bir fazlasını alır. “P3 sevk edildi, P5 duruyor” ise yeni grup P6 olur — boşalan numaraya geri dönülmez, aynı gün iki farklı P3 dolaşmaz.",
   },
   {
     value: "bosluk-doldur",
     label: "Boşluğu doldur",
-    hint: "Yeni grup en küçük boş numarayı alır (1 ve 3 doluysa yeni grup 2 olur). Numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir.",
+    hint: "Yeni grup en küçük boş numarayı alır (P1 ve P3 doluysa yeni grup P2 olur). Numaralar sıkı kalır ama sevk edilen bir numara aynı gün yeniden doğabilir.",
   },
 ];
